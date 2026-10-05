@@ -1,0 +1,24 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "https://cypherdj.invalid/vertrag/1/ws_nachricht.schema.json",
+ "title": "WebSocket-Nachricht mit Form der daten je typ (SCHNITTSTELLEN.md §9.2 bis §9.4)",
+ "allOf": [
+  {"$ref": "ws_umschlag.schema.json"},
+  {"if": {"properties": {"typ": {"const": "hallo"}}}, "then": {"properties": {"daten": {"$ref": "ws_daten.schema.json#/$defs/hallo"}}}},
+  {"if": {"properties": {"typ": {"const": "willkommen"}}}, "then": {"properties": {"daten": {"$ref": "ws_daten.schema.json#/$defs/willkommen"}}}},
+  {"if": {"properties": {"typ": {"const": "takt"}}}, "then": {"properties": {"daten": {"$ref": "takt_zustand.schema.json"}}}},
+  {"if": {"properties": {"typ": {"const": "ereignis"}}}, "then": {"properties": {"daten": {"$ref": "ws_daten.schema.json#/$defs/ereignis"}}}},
+  {"if": {"properties": {"typ": {"const": "zug_anfrage"}}}, "then": {"properties": {"daten": {"$ref": "ws_daten.schema.json#/$defs/zug_anfrage"}}}},
+  {"if": {"properties": {"typ": {"const": "ansage"}}}, "then": {"properties": {"daten": {"$ref": "ws_daten.schema.json#/$defs/ansage"}}}},
+  {"if": {"properties": {"typ": {"const": "rpc_antwort"}}}, "then": {"properties": {"daten": {"$ref": "ws_daten.schema.json#/$defs/rpc_antwort"}}}},
+  {"if": {"properties": {"typ": {"const": "rpc_fehler"}}}, "then": {"properties": {"daten": {"$ref": "ws_daten.schema.json#/$defs/rpc_fehler"}}}},
+  {"if": {"properties": {"typ": {"const": "auftrag"}}}, "then": {"properties": {"daten": {"$ref": "auftrag.schema.json"}}}},
+  {"if": {"properties": {"typ": {"const": "rpc"}}}, "then": {"properties": {"daten": {"$ref": "ws_daten.schema.json#/$defs/rpc"}}}},
+  {"if": {"properties": {"typ": {"const": "takt_bericht"}}}, "then": {"properties": {"daten": {"$ref": "takt_bericht.schema.json"}}}},
+  {"if": {"properties": {"typ": {"const": "hoerschein"}}}, "then": {"properties": {"daten": {"$ref": "hoerschein.schema.json"}}}},
+  {"if": {"properties": {"typ": {"const": "auftrag_status"}}}, "then": {"properties": {"daten": {"$ref": "auftrag_status.schema.json"}}}},
+  {"if": {"properties": {"typ": {"const": "material_fertig"}}}, "then": {"properties": {"daten": {"$ref": "material_fertig.schema.json"}}}},
+  {"if": {"properties": {"typ": {"const": "zug_status"}}}, "then": {"properties": {"daten": {"$ref": "ws_daten.schema.json#/$defs/zug_status"}}}},
+  {"if": {"properties": {"typ": {"const": "zuruf"}}}, "then": {"properties": {"daten": {"$ref": "ws_daten.schema.json#/$defs/zuruf"}}}}
+ ]
+}

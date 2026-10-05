@@ -1,0 +1,67 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "https://cypherdj.invalid/vertrag/1/takt_zustand.schema.json",
+ "title": "Takt-Zustand, Lage (SCHNITTSTELLEN.md §14.7); bericht_vorher null, wenn der Bericht fehlt (§18 Punkt 3)",
+ "type": "object",
+ "required": ["takt", "phrase", "beat", "bpm", "set_basis_bpm", "autonomie", "ki_gestoppt", "decks", "erzeuger", "plaene",
+  "vorschlaege", "hoerscheine", "fristen", "bericht_vorher", "auftraege", "neu_in_kiste", "ereignisse_seit"],
+ "properties": {
+  "takt": {"type": "integer", "minimum": 1},
+  "phrase": {"type": "integer", "minimum": 1},
+  "beat": {"$ref": "defs.schema.json#/$defs/beat"},
+  "bpm": {"$ref": "defs.schema.json#/$defs/bpm"},
+  "set_basis_bpm": {"$ref": "defs.schema.json#/$defs/bpm"},
+  "autonomie": {"type": "integer", "minimum": 0, "maximum": 3},
+  "ki_gestoppt": {"type": "boolean"},
+  "decks": {"type": "array", "items": {"$ref": "#/$defs/deck"}},
+  "erzeuger": {"type": "array", "items": {"type": "object"}},
+  "plaene": {"type": "array", "items": {
+   "type": "object", "required": ["id", "quelle", "status", "teile"],
+   "properties": {"id": {"$ref": "defs.schema.json#/$defs/plan_id"}, "quelle": {"$ref": "defs.schema.json#/$defs/quelle"},
+    "status": {"enum": ["wartet", "laeuft", "teilweise", "fertig", "verriegelt"]},
+    "teile": {"type": "array", "items": {"type": "string", "pattern": "^[a-z_]+$"}}}}},
+  "vorschlaege": {"type": "array", "items": {
+   "type": "object", "required": ["id", "verfaellt_takt"],
+   "properties": {"id": {"$ref": "defs.schema.json#/$defs/kurz_id"}, "verfaellt_takt": {"type": "integer"}}}},
+  "hoerscheine": {"type": "array", "items": {
+   "type": "object", "required": ["id", "kanal", "gueltig_bis_takt", "urteil"],
+   "properties": {"id": {"$ref": "defs.schema.json#/$defs/hs_id"}, "kanal": {"$ref": "defs.schema.json#/$defs/hoer_kanal"},
+    "gueltig_bis_takt": {"type": "integer"}, "urteil": {"enum": ["ok", "zu_laut", "zu_leise", "nicht_sync", "unsicher"]}}}},
+  "fristen": {"type": "array", "items": {
+   "type": "object", "required": ["deck", "ende_takt", "rest_takte"],
+   "properties": {"deck": {"$ref": "defs.schema.json#/$defs/deck_nr"}, "ende_takt": {"type": "integer"}, "rest_takte": {"type": "integer"}}}},
+  "bericht_vorher": {"anyOf": [{"type": "null"}, {"$ref": "takt_bericht.schema.json"}]},
+  "auftraege": {"type": "array", "items": {
+   "type": "object", "required": ["auftrag_id", "art", "stand", "erwartet_fertig_takt"],
+   "properties": {"auftrag_id": {"$ref": "defs.schema.json#/$defs/auftrag_id"},
+    "art": {"enum": ["generieren", "einlesen", "nachrendern", "korrigieren"]},
+    "stand": {"enum": ["wartet", "laeuft", "fertig", "fehler"]}, "erwartet_fertig_takt": {"type": ["integer", "null"]}}}},
+  "neu_in_kiste": {"type": "array", "items": {"$ref": "defs.schema.json#/$defs/material_id"}},
+  "ereignisse_seit": {"type": "array", "items": {"type": "object", "required": ["art"], "properties": {"art": {"type": "string"}}}}
+ },
+ "$defs": {
+  "deck": {
+   "type": "object",
+   "required": ["deck", "material_id", "titel", "status", "hoerbar", "quell_beat", "beats_bis_ende", "ende_takt",
+    "struktur_jetzt", "loop", "hoerweg", "fader_db", "lufs_m", "baender_db", "versatz_ms", "halter"],
+   "properties": {
+    "deck": {"$ref": "defs.schema.json#/$defs/deck_nr"},
+    "material_id": {"$ref": "defs.schema.json#/$defs/material_id"},
+    "titel": {"type": "string"},
+    "status": {"description": "§5.5 Status als Name", "enum": ["leer", "geladen", "laeuft", "loop", "roll", "rueckfall"]},
+    "hoerbar": {"type": "boolean"},
+    "quell_beat": {"type": "number"},
+    "beats_bis_ende": {"description": "null = unendlich (im Loop, §5.5)", "type": ["number", "null"]},
+    "ende_takt": {"type": ["integer", "null"]},
+    "struktur_jetzt": {"enum": ["intro", "aufbau", "drop", "break", "outro", "unbekannt", null]},
+    "loop": {"description": "Vertrag zeigt nur null; die Felder eines laufenden Loops legt §14.7 nicht fest", "type": ["object", "null"]},
+    "hoerweg": {"enum": ["direkt", "stretcher", "puffer"]},
+    "fader_db": {"$ref": "defs.schema.json#/$defs/db"},
+    "lufs_m": {"type": "number"},
+    "baender_db": {"$ref": "defs.schema.json#/$defs/baender_db"},
+    "versatz_ms": {"type": ["number", "null"]},
+    "halter": {"type": "object", "additionalProperties": {"type": "string", "pattern": "^(frei|mensch|plan:[a-z0-9_-]{1,24}|andreas|cypher|leitstand|erzeuger|werkstatt|pruefstand)$"}}
+   }
+  }
+ }
+}

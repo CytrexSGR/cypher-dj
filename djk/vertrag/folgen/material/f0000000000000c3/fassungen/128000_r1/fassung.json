@@ -1,0 +1,67 @@
+{
+ "schema": 1,
+ "material_id": "f0000000000000c3",
+ "basis_bpm": 128.0,
+ "fassung": 1,
+ "korrekturen_bis_zeile": 0,
+ "datei": "basis.f32",
+ "frames": 1440000,
+ "sha256": "06c832522db4f3e1654536e0b9275056dc7a0ff64f9175bae7ee81721c85bbc7",
+ "erster_schlag_frame": 0,
+ "beats": 64.0,
+ "erste_eins_quell_beat": 0,
+ "analyse_quelle": "basis",
+ "stems": {},
+ "schuesse": [],
+ "headroom_db": -12.0,
+ "stimmung_korrektur_cent": 0.0,
+ "lautheit": {
+  "lufs_integriert": -9.4,
+  "echtspitze_dbtp": -5.1,
+  "crest_db": 10.0,
+  "lufs_je_takt": []
+ },
+ "struktur": {
+  "phrasen": [
+   {
+    "ab_beat": 0.0,
+    "bis_beat": 64.0,
+    "art": "unbekannt"
+   }
+  ]
+ },
+ "hotcues": [],
+ "loops": [],
+ "tore": {
+  "raster": {
+   "ok": true,
+   "wert_ms": 0.0,
+   "grenze_ms": 8.0,
+   "anschlaege": 64
+  },
+  "headroom": {
+   "ok": true,
+   "wert_dbtp": -5.1,
+   "grenze_dbtp": -1.0
+  },
+  "klarheit": {
+   "ok": true,
+   "wert": 1.0,
+   "grenze": 0.1
+  },
+  "streckfaktor": {
+   "ok": true,
+   "wert": 1.0,
+   "grenze": 0.2
+  },
+  "eins": {
+   "ok": true,
+   "beat_this": 0,
+   "zweitverfahren": 0
+  }
+ },
+ "nur_fuer_andreas": false,
+ "warnungen": [
+  "Fixture der Golden-Folgen, kein Musikmaterial"
+ ]
+}

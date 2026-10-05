@@ -1,0 +1,5 @@
+# Drittpakete der Strukturvorschlag-Experimente (djk/strukturvorschlag, per grep der import-Zeilen, Stand 2026-10-05).
+# Untere Grenzen nach djk/werkstatt/.venv (numpy 2.4.5, pytest 8.4.2). Alles andere dort ist Standardbibliothek oder
+# liegt im Ordner selbst (strukturvorschlag, synth).
+numpy>=2.4
+pytest>=8.4

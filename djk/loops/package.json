@@ -1,0 +1,9 @@
+{
+  "name": "cypherdj-loops",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Loop-Boxen aus der CLI (Plan MVP 2, ADR 025)",
+  "engines": { "node": ">=22.18" },
+  "scripts": { "test": "node --test --test-concurrency=1 tests/*.test.mjs" }
+}

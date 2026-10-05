@@ -1,0 +1,10 @@
+# cypherdj.target: der Verbund, „die App“ im Sinn von A25 (ADR 001). Scheibe 18 legt diese Datei an; jede Unit hängt
+# sich selbst an, mit [Unit] PartOf=cypherdj.target und [Install] WantedBy=cypherdj.target, ohne diese Datei zu ändern
+# (ROADMAP §8.1). Gestartet mit "systemctl --user start cypherdj.target", sobald Andreas die Units eingeschaltet hat
+# (ROADMAP §8.11); bis dahin nie "enable".
+[Unit]
+Description=cypherdj Verbund (Kern, Notbahn, Satelliten)
+After=pipewire.service
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# djk-schleuse: nimmt N Sekunden vom Kern-Master auf und schickt sie durch die Ohren-Schleuse (klang.schleuse).
+# Aufruf: djk-schleuse [--instanz X] [--sekunden N] [--referenz ref.wav] [--ziel ordner]
+#   --instanz   Prüfinstanz a..i (Vorgabe $CYPHERDJ_INSTANZ, sonst leer = Betrieb)
+#   --sekunden  Aufnahmedauer, Vorgabe 16     --ziel  Vorgabe ~/messungen/klang/<datum-zeit>/
+# Schreibt <ziel>/master.wav und <ziel>/urteil.json. Rückgabe = die der Schleuse (0 bestanden, 1 durchgefallen, 2 Fehler).
+# Präfix des Kern-Masters (an Prüfinstanz f gemessen): cypherdj-kern-<i>:master_ (Betrieb: cypherdj-kern:master_).
+set -euo pipefail
+DJK=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
+PY=$DJK/werkstatt/.venv/bin/python
+I=${CYPHERDJ_INSTANZ:-}; S=16; REF=""; Z=""
+while [ $# -gt 0 ]; do
+  [ $# -ge 2 ] || { [ "$1" = -h ] || [ "$1" = --help ] || { echo "djk-schleuse: $1 braucht einen Wert" >&2; exit 2; }; }
+  case "$1" in
+    --instanz) I=$2; shift 2;; --sekunden) S=$2; shift 2;; --referenz) REF=$2; shift 2;; --ziel) Z=$2; shift 2;;
+    -h|--help) sed -n '2,/^set /p' "$0" | sed '$d; s/^# \{0,1\}//'; exit 0;;
+    *) echo "djk-schleuse: unbekannte Option $1" >&2; exit 2;;
+  esac
+done
+case "$I" in ""|[a-i]) ;; *) echo "djk-schleuse: Instanz '$I' ungültig (a..i oder leer)" >&2; exit 2;; esac
+if [[ ! "$S" =~ ^[1-9][0-9]{0,2}$ ]] || [ "$S" -gt 600 ]; then
+  echo "djk-schleuse: --sekunden '$S' ungültig (Ganzzahl 1..600)" >&2; exit 2
+fi
+if [ -z "$I" ]; then
+  echo "djk-schleuse: Betriebs-Aufnahme gesperrt, bis die Quantum-Frage gemessen ist (Aufnehmer tritt mit -p 256 und lock-quantum in die Betriebsgruppe)" >&2; exit 2
+fi
+[ -z "$Z" ] && Z=$HOME/messungen/klang/$(date +%Y%m%d-%H%M%S)
+mkdir -p "$Z"
+PRAEFIX=cypherdj-kern${I:+-$I}:master_
+# CYPHERDJ_INSTANZ ist PFLICHT (leer = Betrieb): sonst hängt sich der Aufnehmer in die Betriebsgruppe (aufnehmer.cpp:73-81).
+# DJK_AUFNEHMER ersetzt den Aufnehmer durch ein Stub-Skript, DJK_AUFNEHMER_FRIST die Frist in Sekunden (nur für Tests, ohne PipeWire).
+FRIST=${DJK_AUFNEHMER_FRIST:-$((S + 15))}
+if [ -n "${DJK_AUFNEHMER:-}" ]; then CMD=("$DJK_AUFNEHMER")
+else CMD=(pw-jack -p 256 "$DJK/pruefstand/aufnehmer/build/cypherdj-aufnehmer"); fi
+# Aufnehmer im Hintergrund mit Frist; bei TERM/INT wird er mitbeendet (kein verwaister Aufnehmer, der die Senke hält).
+AP=""
+aufraeumen() { [ -n "$AP" ] && kill -TERM "$AP" 2>/dev/null && wait "$AP" 2>/dev/null; exit "${1:-143}"; }
+trap 'aufraeumen 143' TERM INT
+CYPHERDJ_INSTANZ="$I" timeout --kill-after=5 "$FRIST" "${CMD[@]}" --quelle "$PRAEFIX" --datei "$Z/master.wav" --sekunden "$S" &
+AP=$!
+RC=0; wait "$AP" || RC=$?
+AP=""
+if [ "$RC" = 124 ] || [ "$RC" = 137 ]; then echo "FEHLER: Aufnehmer hängt (nach ${FRIST} s abgebrochen, Rückgabe $RC)" >&2; exit 2; fi
+[ "$RC" = 0 ] || { echo "djk-schleuse: Aufnahme von $PRAEFIX gescheitert (Rückgabe $RC)" >&2; exit 2; }
+# Messfehler vor Klangurteil: Lücken oder Ring-Überläufe im Seitenwagen machen die Aufnahme unbrauchbar.
+"$PY" - "$Z/master.wav.json" <<'PYEOF' || exit 2
+import json, sys
+try:
+    j = json.load(open(sys.argv[1]))
+    l, u = int(j["luecken"]), int(j["ueberlauf"])
+except Exception as e:
+    print(f"FEHLER: Aufnahme-Seitenwagen {sys.argv[1]} nicht lesbar ({e})", file=sys.stderr); sys.exit(2)
+if l > 0 or u > 0:
+    print(f"FEHLER: Aufnahme lückenhaft (Lücken {l}, Überläufe {u}, luecken_bei {j.get('luecken_bei')})", file=sys.stderr); sys.exit(2)
+PYEOF
+ARGS=("$Z/master.wav" --json "$Z/urteil.json")
+[ -n "$REF" ] && ARGS+=(--referenz "$REF")
+PYTHONPATH=$DJK "$PY" -m klang.schleuse "${ARGS[@]}"

@@ -1,0 +1,6 @@
+# Scheibe 35: Rohdaten der Läufe am Ziel bleiben lokal (Aufnahme vier Kanäle float32, OSC-Protokoll des Abonnenten);
+# Auswertung, Lauf-Daten, Kern-Ausgabe und Softcontroller-Protokoll werden versioniert (wie tests/deck/, Scheibe 31).
+laeufe/*/ziel.f32
+laeufe/*/abonnent.jsonl
+laeufe/*/aufnahme.bereit
+__pycache__/

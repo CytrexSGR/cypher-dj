@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>djk</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Crect width=%2216%22 height=%2216%22 rx=%223%22 fill=%22%232fd6c3%22/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+<script type="module" src="app.js"></script>
+</head>
+<body>
+<header id="kopf">
+  <div class="marke">djk <span>MVP</span></div>
+  <div class="ansicht" role="group" aria-label="View">
+    <button data-ansicht="dj" class="an" aria-pressed="true" title="DJ view: two decks, mixer, loops">DJ</button>
+    <button data-ansicht="studio" aria-pressed="false" title="Studio view: three Strudel instances side by side for a live jam">STUDIO</button>
+  </div>
+  <div class="uhr">
+    <div class="feld"><label>BAR</label><b id="takt">–</b></div>
+    <div class="schlaege" id="schlaege"><i></i><i></i><i></i><i></i></div>
+    <div class="feld"><label>PHRASE</label><b id="phrase">–</b></div>
+    <div class="feld tempo"><label for="bpm">BPM</label><button id="bpm-minus" title="1 BPM slower (Shift: 0.1)" aria-label="Master tempo down">−</button><input id="bpm" value="–" inputmode="decimal" autocomplete="off" spellcheck="false" title="Master tempo: type a value, Enter sets it from the next bar" aria-label="Master tempo in BPM"><button id="bpm-plus" title="1 BPM faster (Shift: 0.1)" aria-label="Master tempo up">+</button></div>
+  </div>
+  <div class="kopfmix">
+    <label class="phones">PHONES</label>
+      <div class="kopfhoerer">
+        <div class="summe klein"><span>MIX</span><div class="knopf regler" data-griff="mix" data-pfad="cue/mix" role="slider" tabindex="0" aria-label="Headphone cue/master mix"><svg viewBox="0 0 60 60"><circle class="ring" cx="30" cy="30" r="24"/><path class="bogen"/><line class="zeiger" x1="30" y1="30" x2="30" y2="10"/></svg></div><output data-wert="cue/mix">–</output></div>
+        <div class="summe klein"><span>LEVEL</span><div class="knopf regler" data-griff="pegel" data-pfad="cue/pegel" role="slider" tabindex="0" aria-label="Headphone level"><svg viewBox="0 0 60 60"><circle class="ring" cx="30" cy="30" r="24"/><path class="bogen"/><line class="zeiger" x1="30" y1="30" x2="30" y2="10"/></svg></div><output data-wert="cue/pegel">–</output></div>
+      </div>
+  </div>
+  <div class="fxwege" id="fx" role="group" aria-label="Beat FX">
+    <div class="fxrouting" role="group" aria-label="Beat FX routing">
+      <label>ROUTING</label>
+      <button id="fx-routing" data-fx-routing title="Beat FX routing for both units and all channels · POST FADER: effect after the channel fader, headphone cue does not hear it · INSERT: effect before the fader, headphone cue hears it · click: switch">POST FADER</button>
+    </div>
+    <div class="fxeinheit" id="fx-1" data-einheit="1" role="group" aria-label="Beat FX 1">
+      <label>FX1</label>
+      <button data-fx-art title="Effect type · click: next · right click: previous · wheel">ECHO</button>
+      <div class="fxbeat"><button data-fx-beat-minus title="Shorter">◀</button><b data-fx-beat>1</b><button data-fx-beat-plus title="Longer">▶</button></div>
+      <div class="summe klein"><span>WET</span><div class="knopf fxknopf" data-fx="wet" role="slider" tabindex="0" aria-label="FX1 dry/wet"><svg viewBox="0 0 60 60"><circle class="ring" cx="30" cy="30" r="24"/><path class="bogen"/><line class="zeiger" x1="30" y1="30" x2="30" y2="10"/></svg></div></div>
+      <div class="summe klein"><span data-fx-param1-name>FEEDBACK</span><div class="knopf fxknopf" data-fx="param1" role="slider" tabindex="0" aria-label="FX1 parameter 1"><svg viewBox="0 0 60 60"><circle class="ring" cx="30" cy="30" r="24"/><path class="bogen"/><line class="zeiger" x1="30" y1="30" x2="30" y2="10"/></svg></div></div>
+      <div class="summe klein"><span>P2</span><div class="knopf fxknopf" data-fx="param2" role="slider" tabindex="0" aria-label="FX1 parameter 2 (reserved)"><svg viewBox="0 0 60 60"><circle class="ring" cx="30" cy="30" r="24"/><path class="bogen"/><line class="zeiger" x1="30" y1="30" x2="30" y2="10"/></svg></div></div>
+      <div class="summe klein"><span>P3</span><div class="knopf fxknopf" data-fx="param3" role="slider" tabindex="0" aria-label="FX1 parameter 3 (reserved)"><svg viewBox="0 0 60 60"><circle class="ring" cx="30" cy="30" r="24"/><path class="bogen"/><line class="zeiger" x1="30" y1="30" x2="30" y2="10"/></svg></div></div>
+      <button data-fx-an title="Beat FX 1 on/off">ON</button>
+      <button data-fx-reset title="Reset FX1 parameters to default">RESET</button>
+    </div>
+    <div class="fxeinheit" id="fx-2" data-einheit="2" role="group" aria-label="Beat FX 2">
+      <label>FX2</label>
+      <button data-fx-art title="Effect type · click: next · right click: previous · wheel">ECHO</button>
+      <div class="fxbeat"><button data-fx-beat-minus title="Shorter">◀</button><b data-fx-beat>1</b><button data-fx-beat-plus title="Longer">▶</button></div>
+      <div class="summe klein"><span>WET</span><div class="knopf fxknopf" data-fx="wet" role="slider" tabindex="0" aria-label="FX2 dry/wet"><svg viewBox="0 0 60 60"><circle class="ring" cx="30" cy="30" r="24"/><path class="bogen"/><line class="zeiger" x1="30" y1="30" x2="30" y2="10"/></svg></div></div>
+      <div class="summe klein"><span data-fx-param1-name>FEEDBACK</span><div class="knopf fxknopf" data-fx="param1" role="slider" tabindex="0" aria-label="FX2 parameter 1"><svg viewBox="0 0 60 60"><circle class="ring" cx="30" cy="30" r="24"/><path class="bogen"/><line class="zeiger" x1="30" y1="30" x2="30" y2="10"/></svg></div></div>
+      <div class="summe klein"><span>P2</span><div class="knopf fxknopf" data-fx="param2" role="slider" tabindex="0" aria-label="FX2 parameter 2 (reserved)"><svg viewBox="0 0 60 60"><circle class="ring" cx="30" cy="30" r="24"/><path class="bogen"/><line class="zeiger" x1="30" y1="30" x2="30" y2="10"/></svg></div></div>
+      <div class="summe klein"><span>P3</span><div class="knopf fxknopf" data-fx="param3" role="slider" tabindex="0" aria-label="FX2 parameter 3 (reserved)"><svg viewBox="0 0 60 60"><circle class="ring" cx="30" cy="30" r="24"/><path class="bogen"/><line class="zeiger" x1="30" y1="30" x2="30" y2="10"/></svg></div></div>
+      <button data-fx-an title="Beat FX 2 on/off">ON</button>
+      <button data-fx-reset title="Reset FX2 parameters to default">RESET</button>
+    </div>
+  </div>
+  <div class="ansage" id="ansage" title="Events reported by the control centre"></div>
+  <div class="cypher" id="cypher">
+    <span id="vorschlag" class="vorschlag" hidden></span>
+    <button id="t-annehmen" class="taste-c ja" hidden title="Accept Cypher's proposal (only you can start it)">Accept</button>
+    <button id="t-verwerfen" class="taste-c" hidden title="Reject Cypher's proposal">Reject</button>
+    <button id="t-stopp" class="taste-c stopp" title="Stop Cypher: no more proposals, loads or plans until released">Stop Cypher</button>
+    <button id="t-freigabe" class="taste-c" hidden title="Let Cypher act again">Release</button>
+  </div>
+  <div class="verbindungen">
+    <span class="punkt" id="v-kern" title="Audio core (via page server)">CORE</span>
+    <span class="punkt" id="v-leitstand" title="Control centre WebSocket (read only)">CONTROL</span>
+  </div>
+</header>
+
+<main id="pult">
+  <section class="deck" data-deck="1" style="--farbe:var(--a)"></section>
+  <section id="deck-c" class="deckflaeche" style="--farbe:var(--c)">
+    <div class="deckkopf"><span class="buchstabe">C</span><span class="decktitel">STRUDEL</span>
+      <div class="rollen" role="tablist" aria-label="Strudel instance">
+        <button role="tab" data-rolle="1" class="an" aria-selected="true" style="--farbe:var(--c)">DRUMS</button>
+        <button role="tab" data-rolle="2" aria-selected="false" style="--farbe:var(--c2)">BASS</button>
+        <button role="tab" data-rolle="3" aria-selected="false" style="--farbe:var(--c3)">MELODY</button>
+      </div>
+      <div class="recreihe">
+        <div class="reclaenge" role="radiogroup" aria-label="Recording length in bars">
+          <button data-recbeats="1">¼</button><button data-recbeats="2">½</button><button data-recbeats="4" class="an">1</button>
+          <button data-recbeats="8">2</button><button data-recbeats="16">4</button><button data-recbeats="32">8</button>
+        </div>
+        <button id="rec-knopf" class="recknopf" title="Record DRUMS (erz/1, pre-fader) into a new loop">REC</button>
+      </div>
+    </div>
+    <div class="instanzen">
+      <div class="instanz an" data-strom="1" style="--farbe:var(--c)">
+        <div class="instanzname">DRUMS</div>
+        <textarea id="muster-feld" class="muster-feld" spellcheck="false" autocomplete="off" placeholder='s("bd*4, hh*8")'
+          aria-label="Drums pattern (Ctrl+Enter plays from the next bar)"></textarea>
+        <div class="musterzeile">
+          <button id="muster-auto" class="muster-auto an" aria-pressed="true" title="AUTO on: Cypher plays on its own. Off: the last pattern keeps playing until you send one.">AUTO</button>
+          <span id="muster-stand" class="muster-stand">–</span>
+          <span id="muster-fehler" class="muster-fehler" role="status"></span>
+          <button id="muster-uebernehmen" class="muster-uebernehmen" hidden>take over</button>
+          <button id="muster-senden" class="muster-senden" title="Play from the next bar (Ctrl+Enter)">PLAY ⏎</button>
+          <button id="muster-stopp" class="muster-stopp" title="Stop from the next bar, your text stays (Ctrl+Backspace)">STOP</button>
+          <button id="muster-zurueck" class="muster-zurueck" title="Back to what is playing (Ctrl+.)">REVERT</button>
+        </div>
+        <div class="spurbaender" aria-label="Automation lanes"></div>
+      </div>
+      <div class="instanz" data-strom="2" style="--farbe:var(--c2)">
+        <div class="instanzname">BASS</div>
+        <textarea class="muster-feld" spellcheck="false" autocomplete="off" placeholder='s("bat_synth*4")'
+          aria-label="Bass pattern (Ctrl+Enter plays from the next bar)"></textarea>
+        <div class="musterzeile">
+          <button class="muster-auto an" aria-pressed="true" title="AUTO on: Cypher plays on its own. Off: the last pattern keeps playing until you send one.">AUTO</button>
+          <span class="muster-stand">–</span>
+          <span class="muster-fehler" role="status"></span>
+          <button class="muster-uebernehmen" hidden>take over</button>
+          <button class="muster-senden" title="Play from the next bar (Ctrl+Enter)">PLAY ⏎</button>
+          <button class="muster-stopp" title="Stop from the next bar, your text stays (Ctrl+Backspace)">STOP</button>
+          <button class="muster-zurueck" title="Back to what is playing (Ctrl+.)">REVERT</button>
+        </div>
+        <div class="spurbaender" aria-label="Automation lanes"></div>
+      </div>
+      <div class="instanz" data-strom="3" style="--farbe:var(--c3)">
+        <div class="instanzname">MELODY</div>
+        <textarea class="muster-feld" spellcheck="false" autocomplete="off" placeholder='s("bat_stab*2")'
+          aria-label="Melody pattern (Ctrl+Enter plays from the next bar)"></textarea>
+        <div class="musterzeile">
+          <button class="muster-auto an" aria-pressed="true" title="AUTO on: Cypher plays on its own. Off: the last pattern keeps playing until you send one.">AUTO</button>
+          <span class="muster-stand">–</span>
+          <span class="muster-fehler" role="status"></span>
+          <button class="muster-uebernehmen" hidden>take over</button>
+          <button class="muster-senden" title="Play from the next bar (Ctrl+Enter)">PLAY ⏎</button>
+          <button class="muster-stopp" title="Stop from the next bar, your text stays (Ctrl+Backspace)">STOP</button>
+          <button class="muster-zurueck" title="Back to what is playing (Ctrl+.)">REVERT</button>
+        </div>
+        <div class="spurbaender" aria-label="Automation lanes"></div>
+      </div>
+    </div>
+  </section>
+  <section id="mischer" class="mix-oben">
+    <div class="zug" data-deck="1" style="--farbe:var(--a)"><div class="zugname">A</div></div>
+    <div class="mitte">
+      <label>MASTER</label>
+      <div class="summe">
+        <div class="knopf regler" data-griff="pegel" data-pfad="master/pegel" role="slider" tabindex="0" aria-label="Master level"><svg viewBox="0 0 60 60"><circle class="ring" cx="30" cy="30" r="24"/><path class="bogen"/><line class="zeiger" x1="30" y1="30" x2="30" y2="10"/></svg></div>
+        <output data-wert="master/pegel">–</output>
+      </div>
+      <div class="summe glue">
+        <div class="knopf regler" data-griff="kleber" data-pfad="master/kleber" role="slider" tabindex="0" aria-label="Master glue compressor"><svg viewBox="0 0 60 60"><circle class="ring" cx="30" cy="30" r="24"/><path class="bogen"/><line class="zeiger" x1="30" y1="30" x2="30" y2="10"/></svg></div>
+        <div class="glutext"><span>GLUE</span><output data-wert="master/kleber">–</output></div>
+      </div>
+      <div class="meterzeile"><div class="meter senkrecht" data-kanal="master"><i></i></div></div>
+      <output class="pegelzahl" data-pegelzahl="master">−∞</output>
+      <div class="fxzuweisung mfx">
+        <button data-fxzuweisung="1" data-kanal="master" title="Assign master to Beat FX 1">1</button>
+        <button data-fxzuweisung="2" data-kanal="master" title="Assign master to Beat FX 2">2</button>
+      </div>
+    </div>
+    <div class="zug" data-deck="2" style="--farbe:var(--b)"><div class="zugname">B</div></div>
+    <div class="xfader">
+      <span class="seite a">A</span>
+      <div class="regler waagrecht" data-pfad="xfader" data-griff="xfader" aria-label="Crossfader" role="slider" tabindex="0">
+        <div class="bahn"><div class="kappe"></div></div>
+      </div>
+      <span class="seite b">B</span>
+      <output data-wert="xfader">–</output>
+    </div>
+  </section>
+  <section id="mischer-unten" class="mix-unten">
+    <div class="zugplatz">
+      <div class="zug an" data-kanalzug="erz/1" style="--farbe:var(--c)"><div class="zugname">DR</div></div>
+      <div class="zug" data-kanalzug="erz/2" style="--farbe:var(--c2)"><div class="zugname">BA</div></div>
+      <div class="zug" data-kanalzug="erz/3" style="--farbe:var(--c3)"><div class="zugname">ME</div></div>
+    </div>
+    <div class="zug" data-boxzug="1" style="--farbe:var(--l1)"><div class="zugname">L1</div></div>
+    <div class="zug" data-boxzug="2" style="--farbe:var(--l2)"><div class="zugname">L2</div></div>
+  </section>
+  <section class="deck" data-deck="2" style="--farbe:var(--b)"></section>
+  <section id="deck-d" class="deckflaeche" style="--farbe:var(--l1)">
+    <div class="deckkopf"><span class="buchstabe">D</span><span class="decktitel">LOOPS</span></div>
+    <div id="boxen">
+      <div class="box" data-box="1" style="--farbe:var(--l1)"></div>
+      <div class="box" data-box="2" style="--farbe:var(--l2)"></div>
+    </div>
+  </section>
+</main>
+
+<section id="bestand">
+  <div class="kopfzeile">
+    <button id="schublade" title="Show or hide the library (L)">▾</button>
+    <h2>LIBRARY</h2>
+    <div class="reiter"><button data-reiter="tracks" class="an">TRACKS</button><button data-reiter="loops">LOOPS</button><button data-reiter="library">LIBRARY</button><button data-reiter="sets">SETS</button></div>
+    <input id="suche" type="search" placeholder="Search title or key" autocomplete="off">
+    <span id="bestand-info"></span>
+    <span id="meldung" role="status"></span>
+  </div>
+  <div class="tabelle" data-tabelle="tracks">
+    <table>
+      <thead><tr><th>Title</th><th>Key</th><th>Orig BPM</th><th>Deck BPM</th><th>Length</th><th>Bars</th><th>LUFS</th><th>Gates</th><th></th></tr></thead>
+      <tbody id="liste"></tbody>
+    </table>
+  </div>
+  <div class="tabelle" data-tabelle="loops" hidden>
+    <table>
+      <thead><tr><th>Loop</th><th>Bars</th><th>Source</th><th>Made</th><th></th></tr></thead>
+      <tbody id="loopliste"></tbody>
+    </table>
+  </div>
+  <div class="tabelle" data-tabelle="library" hidden>
+    <div class="lib-filter"><input id="lib-suche" type="search" placeholder="Search the library (Enter)" autocomplete="off">
+      <input id="lib-key" placeholder="Key" size="4"><input id="lib-bpm" placeholder="BPM 124-130" size="9"></div>
+    <table>
+      <thead><tr><th>Title</th><th>Artist</th><th>BPM</th><th>Key</th><th>Genre</th><th>Length</th><th></th><th></th></tr></thead>
+      <tbody id="libliste"></tbody>
+    </table>
+  </div>
+  <div class="tabelle" data-tabelle="sets" hidden>
+    <div class="set-kopf"><select id="set-wahl"></select>
+      <input id="set-name" placeholder="New set name" size="16"><button id="set-neu">NEW SET</button>
+      <span id="set-zusammenfassung"></span><select id="set-import"><option value="">Import Traktor playlist…</option></select><button id="set-alle" title="Run all tracks of this set through the workshop">PREPARE ALL</button><button id="set-loeschen" title="Move set to trash">DELETE SET</button></div>
+    <table>
+      <thead><tr><th>Title</th><th>Artist</th><th>BPM</th><th>Key</th><th>Genre</th><th>Length</th><th>Status</th><th></th></tr></thead>
+      <tbody id="setliste"></tbody>
+    </table>
+  </div>
+</section>
+
+<template id="deck-vorlage">
+  <div class="deckkopf">
+    <span class="buchstabe"></span>
+    <span class="decktitel">DECK <span class="nr"></span></span>
+    <span class="status" data-status>EMPTY</span>
+  </div>
+  <div class="titel" data-titel>No track loaded</div>
+  <div class="meta" data-meta>Pick a track in the library and press LOAD</div>
+  <div class="position">
+    <div><label>BAR</label><b data-bar>–</b><span class="von" data-von></span></div>
+    <div class="rest"><label>LEFT</label><b data-rest>–</b></div>
+  </div>
+  <canvas class="lauf" data-lauf></canvas>
+  <canvas class="ueber" data-ueber></canvas>
+  <div class="bedienreihe">
+    <div class="raster" role="radiogroup" aria-label="Snap grid for jump, cue and loop">
+      <button data-raster="0.25" title="Snap to ¼ beat">¼</button><button data-raster="1" title="Snap to 1 beat">1</button><button data-raster="4" class="an" title="Snap to the bar">BAR</button><button data-raster="16" title="Snap to 4 bars">4 BARS</button><button data-raster="0" title="No snap">OFF</button>
+    </div>
+    <div class="pads" data-pads title="Cue 1–8: empty = set a SHOT or LOOP cue here (choose below) · set = jump in · 🗑 then a pad = delete"></div>
+    <div class="loopreihe" data-loops></div>
+    <div class="gridreihe" data-grid title="Beat grid: ◀ ▶ move the grid 5 ms (shift: 1 ms) · right click on the value = back to analysis · FIX = keep for next load">
+      <button data-gridschritt="-1" title="Grid earlier (shift: fine)">◀</button><output data-gridwert>0.0 ms</output><button data-gridschritt="1" title="Grid later (shift: fine)">▶</button><button data-gridset title="Stop on the real downbeat, then SET: the beat under the playhead becomes bar 1">SET</button><button data-gridfix title="Keep this grid for this track (next load, next session)">FIX</button>
+    </div>
+  </div>
+  <div class="meter waagrecht" data-kanal><i></i></div>
+  <div class="tasten">
+    <button class="taste cue" data-pfad data-taste="cue">CUE</button>
+    <button class="taste play" data-pfad data-taste="play">PLAY</button>
+    <div class="cuewahl" role="radiogroup" aria-label="Type of the next cue">
+      <label>CUE</label><button data-cueart="shot" class="an" title="Next empty pad sets a jump cue">SHOT</button><button data-cueart="loop" title="Next empty pad sets a loop cue (length from 1 2 4 8 16; in a running loop: that loop)">LOOP</button>
+      <button data-muell title="Delete: press, then the pad to delete">🗑</button>
+      <label class="nachbox">LOOP →</label><button data-nachbox="1" title="Save the running loop to the loop library and load it into L1">L1</button><button data-nachbox="2" title="Save the running loop to the loop library and load it into L2">L2</button>
+    </div>
+  </div>
+</template>
+
+<template id="zug-vorlage">
+  <div class="knoepfe">
+    <div class="knopfzeile"><div class="knopf regler" data-griff="trim" data-teil="trim"><svg viewBox="0 0 60 60"><circle class="ring" cx="30" cy="30" r="24"/><path class="bogen"/><line class="zeiger" x1="30" y1="30" x2="30" y2="10"/></svg></div><div class="beschrift"><label>GAIN</label><output data-wert-teil="trim">–</output></div></div>
+    <div class="knopfzeile"><div class="knopf regler" data-griff="eq" data-teil="eq/hoch"><svg viewBox="0 0 60 60"><circle class="ring" cx="30" cy="30" r="24"/><path class="bogen"/><line class="zeiger" x1="30" y1="30" x2="30" y2="10"/></svg></div><div class="beschrift"><label>HIGH</label><output data-wert-teil="eq/hoch">–</output></div><button class="kill schalter" data-teil="kill/hoch" title="Kill (mute this band)">K</button></div>
+    <div class="knopfzeile"><div class="knopf regler" data-griff="eq" data-teil="eq/mitte"><svg viewBox="0 0 60 60"><circle class="ring" cx="30" cy="30" r="24"/><path class="bogen"/><line class="zeiger" x1="30" y1="30" x2="30" y2="10"/></svg></div><div class="beschrift"><label>MID</label><output data-wert-teil="eq/mitte">–</output></div><button class="kill schalter" data-teil="kill/mitte" title="Kill (mute this band)">K</button></div>
+    <div class="knopfzeile"><div class="knopf regler" data-griff="eq" data-teil="eq/tief"><svg viewBox="0 0 60 60"><circle class="ring" cx="30" cy="30" r="24"/><path class="bogen"/><line class="zeiger" x1="30" y1="30" x2="30" y2="10"/></svg></div><div class="beschrift"><label>LOW</label><output data-wert-teil="eq/tief">–</output></div><button class="kill schalter" data-teil="kill/tief" title="Kill (mute this band)">K</button></div>
+    <div class="knopfzeile"><div class="knopf regler" data-griff="filter" data-teil="filter"><svg viewBox="0 0 60 60"><circle class="ring" cx="30" cy="30" r="24"/><path class="bogen"/><line class="zeiger" x1="30" y1="30" x2="30" y2="10"/></svg></div><div class="beschrift"><label>FILTER</label><output data-wert-teil="filter">–</output></div></div>
+  </div>
+  <div class="faderspalte">
+    <div class="regler senkrecht" data-griff="fader" data-teil="fader" role="slider" tabindex="0"><div class="bahn"><div class="kappe"></div></div></div>
+    <div class="meter senkrecht" data-kanal><i></i></div>
+    <output class="faderwert" data-wert-teil="fader">–</output>
+    <button class="pfl schalter" data-teil="pfl" title="Pre-fader listen: send this deck to the headphones">PFL</button>
+    <div class="fxzuweisung">
+      <button data-fxzuweisung="1" title="Assign to Beat FX 1">1</button>
+      <button data-fxzuweisung="2" title="Assign to Beat FX 2">2</button>
+    </div>
+    <div class="xzuweisung" data-teil="xseite" title="Crossfader assign: A side, through (not on the crossfader), B side"><button data-stufe="0">A</button><button data-stufe="1">THRU</button><button data-stufe="2">B</button></div>
+  </div>
+</template>
+<template id="box-vorlage">
+  <div class="steuer">
+    <div class="boxkopf"><span class="boxname"></span><span class="status" data-boxstatus>EMPTY</span></div>
+    <div class="looptitel" data-looptitel>No loop</div>
+    <div class="loopmeta" data-loopmeta>Pick one under LIBRARY › LOOPS</div>
+    <canvas class="loopwelle" data-loopwelle></canvas>
+    <div class="gridreihe" data-grid title="Loop grid: ◀ ▶ 5 ms (shift: 1 ms) · right click on the value = 0 · FIX = keep in the loop">
+      <button data-gridschritt="-1" title="Grid earlier (shift: fine)">◀</button><output data-gridwert>0.0 ms</output><button data-gridschritt="1" title="Grid later (shift: fine)">▶</button><button data-gridfix title="Keep this grid in the loop">FIX</button>
+    </div>
+    <button class="taste play boxplay" data-boxplay disabled title="Starts or stops on the next bar one">PLAY</button>
+  </div>
+</template>
+</body>
+</html>

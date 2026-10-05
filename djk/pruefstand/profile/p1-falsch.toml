@@ -1,0 +1,14 @@
+name = "p1-falsch"
+zweck = "Fehlerfall zum Lastprofil P1: die Werkstatt-Last startet nicht (Python ohne demucs); der Prüfstand muss das melden (last_belegt verfehlt, Rückgabe 1), statt einen Lastlauf zu behaupten. Läuft NUR mit Freigabe (Last-Regel Plan 16)."
+dauer_s = 30.0
+
+[quelle]
+art = "kern"
+argumente = ["--konfig", "{ordner}/kern.toml"]
+
+[last]
+profil = "p1"
+demucs_python = "/usr/bin/false"
+
+[erwartung]
+last_belegt = true

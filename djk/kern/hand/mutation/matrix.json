@@ -1,0 +1,108 @@
+{
+ "_original": {
+  "bau": "ok",
+  "rot": [],
+  "gruen": 39
+ },
+ "M01_blockgrenze": {
+  "bau": "ok",
+  "rot": [
+   "test_naht:test_hand_und_midi_liefern_denselben_griff",
+   "test_naht:hand_bricht_plan_am_versatz_sample",
+   "test_uebersetzer:sample_am_versatz_nicht_am_blockanfang"
+  ],
+  "gruen": 36,
+  "regel": "Ereignis wirkt am Versatz, nicht an der Blockgrenze (§7.3 P1, 09 Probe b naiv_block)"
+ },
+ "M02_x_durch_128": {
+  "bau": "ok",
+  "rot": [
+   "test_kurven:fader_db_tabelle_ueber_midi",
+   "test_kurven:linear_crossfader_ueber_midi",
+   "test_naht:test_hand_und_midi_liefern_denselben_griff",
+   "test_naht:test_hand_und_midi_gleich_am_stellwerk_erster_wert_nur_stellung",
+   "test_uebersetzer:cc_absolut_stellung_wert_durch_127"
+  ],
+  "gruen": 34,
+  "regel": "Stellung = Wert / 127 (Anschlag 127 = 1,0)"
+ },
+ "M03_zweierkomplement_als_versatz64": {
+  "bau": "ok",
+  "rot": [
+   "test_naht:encoder_beider_kodierungen_richtig_herum_am_regler",
+   "test_naht:encoder_aus_kill_ganz_unten",
+   "test_uebersetzer:zweierkomplement_vorzeichenrichtig",
+   "test_uebersetzer:fehlerfall_falsche_kodierung_dreht_die_richtung",
+   "test_uebersetzer:deck_tempo_und_tasten_mit_werten"
+  ],
+  "gruen": 34,
+  "regel": "zweierkomplement vorzeichenrichtig (F4)"
+ },
+ "M04_versatz64_als_zweierkomplement": {
+  "bau": "ok",
+  "rot": [
+   "test_naht:encoder_beider_kodierungen_richtig_herum_am_regler",
+   "test_uebersetzer:versatz64_vorzeichenrichtig",
+   "test_uebersetzer:fehlerfall_falsche_kodierung_dreht_die_richtung",
+   "test_uebersetzer:deck_tempo_und_tasten_mit_werten"
+  ],
+  "gruen": 35,
+  "regel": "versatz64 vorzeichenrichtig (F4)"
+ },
+ "M05_note_on_0_ist_druck": {
+  "bau": "ok",
+  "rot": [
+   "test_uebersetzer:taste_note_druck_und_loslassen",
+   "test_uebersetzer:schalter_nur_beim_druck_beruehrung_nur_beim_beruehren",
+   "test_uebersetzer:deck_tempo_und_tasten_mit_werten"
+  ],
+  "gruen": 36,
+  "regel": "Note-On mit Velocity 0 ist Loslassen"
+ },
+ "M06_ziel_ungeprueft": {
+  "bau": "ok",
+  "rot": [
+   "test_mapping:fehlerhafte_mappings_mit_art_und_zeile",
+   "test_mapping:fehlertext_nennt_zeile_und_ziel"
+  ],
+  "gruen": 37,
+  "regel": "unbekanntes Ziel wird abgelehnt (§7.2)"
+ },
+ "M07_kodierung_ungeprueft": {
+  "bau": "ok",
+  "rot": [
+   "test_mapping:fehlerhafte_mappings_mit_art_und_zeile"
+  ],
+  "gruen": 38,
+  "regel": "falsche Kodierung wird abgelehnt (§7.2)"
+ },
+ "M08_zeile_immer_1": {
+  "bau": "ok",
+  "rot": [
+   "test_mapping:fehlerhafte_mappings_mit_art_und_zeile",
+   "test_mapping:pflichtfelder_und_leere_datei"
+  ],
+  "gruen": 37,
+  "regel": "Fehler nennt die Zeile"
+ },
+ "M09_umschalten_immer_an": {
+  "bau": "ok",
+  "rot": [
+   "test_naht:taste_schaltet_kill_um"
+  ],
+  "gruen": 38,
+  "regel": "Taste schaltet den Schalter um (F5)"
+ },
+ "M10_blinkt_als_an": {
+  "bau": "ok",
+  "rot": [
+   "test_led:nachricht_je_zustand"
+  ],
+  "gruen": 38,
+  "regel": "LED-Zustand blinkt sendet den Wert blinkt (§7.2, §7.4)"
+ },
+ "_zurueck": {
+  "bau": "ok",
+  "rot": []
+ }
+}

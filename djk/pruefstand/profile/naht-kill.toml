@@ -1,0 +1,18 @@
+name = "naht-kill"
+zweck = "Fehlerfall für den Naht-Messer, Notbahn daneben: die Prüfquelle schreibt den Ring und spielt selbst an die Senke, kill -9 nach 6 s ohne Neustart; die Notbahn übernimmt nach höchstens einem Block Stille mit Knack (M2b 9 von 9), der Naht-Messer muss den Sprung melden, die Schleife gleicht dem Takt davor Frame für Frame."
+dauer_s = 30.0
+
+[quelle]
+art = "pruefquelle"
+
+[[eingriff]]
+nach_s = 6.0
+art = "kill9"
+ziel = "quelle"
+
+[erwartung]
+notbahn_uebernahmen_min = 1
+schleife_in_jedem_eingriff = true
+stille_bloecke_max = 1
+spruenge_je_eingriff_min = 1
+schleife_abweichung_max = 0

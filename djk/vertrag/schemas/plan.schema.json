@@ -1,0 +1,83 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "https://cypherdj.invalid/vertrag/1/plan.schema.json",
+ "title": "Plan, kanonisch in Beats (SCHNITTSTELLEN.md §14.1)",
+ "type": "object",
+ "required": ["id", "quelle", "spielart", "wahl_id", "einstieg_quell_beat", "hoerscheine", "grund", "teile"],
+ "properties": {
+  "id": {"$ref": "defs.schema.json#/$defs/plan_id"},
+  "quelle": {"$ref": "defs.schema.json#/$defs/quelle"},
+  "spielart": {"description": "null bei plan_einreichen ohne Spielart (§10)", "type": ["string", "null"]},
+  "wahl_id": {"anyOf": [{"$ref": "defs.schema.json#/$defs/kurz_id"}, {"type": "null"}]},
+  "einstieg_quell_beat": {"type": ["number", "null"]},
+  "hoerscheine": {"type": "array", "items": {"$ref": "defs.schema.json#/$defs/hs_id"}},
+  "grund": {"type": "string"},
+  "teile": {"type": "array", "items": {"$ref": "#/$defs/teil"}}
+ },
+ "$defs": {
+  "politik": {"description": "§4: 0 musik, 1 zustand, 2 raster", "enum": [0, 1, 2]},
+  "raster_beats": {"description": "§4.4: nur bei Politik 2 wirksam", "enum": [0, 0.25, 1, 4, 32]},
+  "teil": {
+   "type": "object",
+   "required": ["nr", "art"],
+   "properties": {
+    "nr": {"type": "integer", "minimum": 0},
+    "art": {"enum": ["regler", "deck", "tempo"]}
+   },
+   "allOf": [
+    {"if": {"properties": {"art": {"const": "regler"}}}, "then": {"$ref": "#/$defs/regler_teil"}},
+    {"if": {"properties": {"art": {"const": "deck"}}}, "then": {"$ref": "#/$defs/deck_teil"}},
+    {"if": {"properties": {"art": {"const": "tempo"}}}, "then": {"$ref": "#/$defs/tempo_teil"}}
+   ]
+  },
+  "regler_teil": {
+   "description": "→ /k/teil (§4.3)",
+   "type": "object",
+   "required": ["nr", "art", "pfad", "ab_beat", "dauer_beats", "nach", "form", "politik", "gruppe", "hoerschein"],
+   "properties": {
+    "pfad": {"$ref": "defs.schema.json#/$defs/regler_pfad"},
+    "ab_beat": {"$ref": "defs.schema.json#/$defs/beat"},
+    "dauer_beats": {"$ref": "defs.schema.json#/$defs/dauer_beats"},
+    "nach": {"type": "number"},
+    "form": {"enum": [0, 1]},
+    "politik": {"description": "§4.3 Feld 10: 2 ist hier nicht erlaubt", "enum": [0, 1]},
+    "gruppe": {"$ref": "defs.schema.json#/$defs/gruppe"},
+    "hoerschein": {"$ref": "defs.schema.json#/$defs/hoerschein_feld"}
+   }
+  },
+  "deck_teil": {
+   "description": "→ /k/deck/* (§4.4), mit plan, gruppe, hoerschein. Hotcue-Nummer (/k/deck/hotcue nr) heißt im Plan-Teil hotcue_nr, Roll-Art (/k/deck/roll art) roll_art, weil nr und art dort Teil-Nummer und Teil-Art sind (§14.1, 2026-09-25).",
+   "type": "object",
+   "required": ["nr", "art", "deck", "aktion", "ab_beat", "politik", "gruppe", "hoerschein"],
+   "properties": {
+    "deck": {"$ref": "defs.schema.json#/$defs/deck_nr"},
+    "aktion": {"enum": ["start", "stopp", "loop", "roll", "sprung", "hotcue"]},
+    "ab_beat": {"$ref": "defs.schema.json#/$defs/beat"},
+    "politik": {"$ref": "#/$defs/politik"},
+    "gruppe": {"$ref": "defs.schema.json#/$defs/gruppe"},
+    "hoerschein": {"$ref": "defs.schema.json#/$defs/hoerschein_feld"},
+    "quell_beat": {"type": "number"},
+    "laenge_beats": {"type": "number", "minimum": 0, "maximum": 128},
+    "delta_beats": {"type": "number"},
+    "raster_beats": {"$ref": "#/$defs/raster_beats"},
+    "hotcue_nr": {"type": "integer", "minimum": 1, "maximum": 8},
+    "roll_art": {"enum": [0, 1]}
+   },
+   "allOf": [
+    {"if": {"properties": {"aktion": {"const": "start"}}}, "then": {"required": ["quell_beat"]}},
+    {"if": {"properties": {"aktion": {"enum": ["loop", "roll"]}}}, "then": {"required": ["laenge_beats"]}},
+    {"if": {"properties": {"aktion": {"const": "sprung"}}}, "then": {"required": ["delta_beats"]}}
+   ]
+  },
+  "tempo_teil": {
+   "description": "→ /k/tempo/rampe (§4.2)",
+   "type": "object",
+   "required": ["nr", "art", "ab_beat", "ziel_bpm", "dauer_beats"],
+   "properties": {
+    "ab_beat": {"$ref": "defs.schema.json#/$defs/beat"},
+    "ziel_bpm": {"type": "number", "minimum": 60, "maximum": 200},
+    "dauer_beats": {"type": "number", "minimum": 1}
+   }
+  }
+ }
+}

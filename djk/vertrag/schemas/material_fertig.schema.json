@@ -1,0 +1,20 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "https://cypherdj.invalid/vertrag/1/material_fertig.schema.json",
+ "title": "material_fertig, Werkstatt → Leitstand (SCHNITTSTELLEN.md §12.2)",
+ "type": "object",
+ "required": ["auftrag_id", "material_id", "basis_bpm", "fassung", "pfad", "tore", "nur_fuer_andreas", "warnungen", "dauer_s"],
+ "properties": {
+  "auftrag_id": {"$ref": "defs.schema.json#/$defs/auftrag_id"},
+  "material_id": {"$ref": "defs.schema.json#/$defs/material_id"},
+  "basis_bpm": {"$ref": "defs.schema.json#/$defs/bpm"},
+  "fassung": {"type": "integer", "minimum": 1},
+  "pfad": {"type": "string", "minLength": 1},
+  "tore": {"$ref": "defs.schema.json#/$defs/tore"},
+  "nur_fuer_andreas": {"type": "boolean"},
+  "warnungen": {"type": "array", "items": {"type": "string"}},
+  "dauer_s": {"description": "je Schritt Sekunden, null für nicht gelaufene Schritte", "type": "object",
+   "additionalProperties": {"type": ["number", "null"], "minimum": 0},
+   "propertyNames": {"enum": ["generieren", "dekodieren", "raster", "warp", "stems", "fingerabdruck", "tore", "veroeffentlichen"]}}
+ }
+}

@@ -1,0 +1,9 @@
+# Scheibe 16: Bauordner, Aufnahmen und OSC-Protokolle bleiben lokal (groß); Berichte, lauf.json, auswertung.json,
+# last.json, last.csv und Journale der Läufe werden versioniert. *.log schließt die Wurzel-.gitignore schon aus.
+/build/
+__pycache__/
+.pytest_cache/
+laeufe/**/*.wav
+laeufe/**/*.jsonl
+laeufe/**/aufnahme.bereit
+laeufe/**/anker.txt

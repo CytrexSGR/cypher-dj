@@ -1,0 +1,19 @@
+name = "kill-kern"
+zweck = "Abnahme: kill -9 auf den Kern aus Scheibe 08 (ohne Neustart), Kern mit eigenen Ausgängen an der Prüfsenke (10k), Prüfklick, Notbahn daneben mit Kante kern:master_L; die Notbahn schleift, kein Klick fehlt, die Schleife gleicht dem Takt davor Sample für Sample, das Klick-Raster in der Schleife ±1 Sample."
+dauer_s = 32.0
+
+[quelle]
+art = "kern"
+argumente = ["--konfig", "{ordner}/kern.toml"]
+
+[[eingriff]]
+nach_s = 10.0
+art = "kill9"
+ziel = "quelle"
+
+[erwartung]
+fehlende_klicks_max = 0
+schleife_in_jedem_eingriff = true
+schleife_abweichung_max = 0
+notbahn_uebernahmen_min = 1
+raster_schleife_max = 1.0

@@ -1,0 +1,6 @@
+# Bauordner dieses Ordners (djk/kern/dsp/ hat eine eigene .gitignore, Scheibe 04)
+/build/
+/build-asan/
+/build-tsan/
+/build-tsan-mut/
+/build-asan35/

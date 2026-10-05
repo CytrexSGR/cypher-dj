@@ -1,0 +1,23 @@
+# cypherdj-oberflaeche (VORLAGE, nicht installiert): die MVP-Seite (Scheibe 60m). djk/units/ hat für sie noch keine
+# Unit; diese Vorlage ist der Vorschlag dafür und die Quelle, aus der djk-start die transiente Unit baut.
+# Satellit nach ADR 016 wie der Leitstand: Restart=always, ein Startfehler (Rückgabe 2) startet nicht in Schleife neu.
+# Ports aus CYPHERDJ_INSTANZ (Vorgabe 47300, Kern 47100, Abo 47150, Leitstand-WS 47200); djk-start füllt
+# @OBERFLAECHE_ARGS@ mit --kern-port, --leitstand-ws und --arbeitsbestand aus kern.toml und leitstand.toml.
+[Unit]
+Description=cypherdj-oberflaeche (MVP-Seite, Hand an den Kern)
+PartOf=cypherdj.target
+After=cypherdj-leitstand.service
+
+[Service]
+Type=simple
+WorkingDirectory=%h/cypher-dj/djk/oberflaeche
+ExecStart=/usr/bin/node %h/cypher-dj/djk/oberflaeche/server.ts @OBERFLAECHE_ARGS@
+Environment=NODE_NO_WARNINGS=1
+# Persönliche Pfade (CYPHERDJ_MEDIATHEK ...): Datei außerhalb des Repos, fehlt sie, läuft die Unit ohne (Vorlage djk/konfig/umgebung.env.beispiel).
+EnvironmentFile=-%h/.config/cypherdj/umgebung.env
+Restart=always
+RestartSec=1
+RestartPreventExitStatus=2
+
+[Install]
+WantedBy=cypherdj.target

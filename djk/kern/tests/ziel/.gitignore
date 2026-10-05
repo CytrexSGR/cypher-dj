@@ -1,0 +1,13 @@
+# Abnahme-Läufe: Aufnahmen, Protokolle und Merker bleiben lokal (groß); Ergebnisse, meta.txt und Berichte versioniert
+ergebnisse/**/*.wav
+ergebnisse/**/*.jsonl
+ergebnisse/**/*.bereit
+__pycache__/
+# Scheibe 25: Rohdaten der Läufe am Ziel bleiben lokal (Aufnahme vier Kanäle float32, 0,77 MB je Sekunde; OSC-Protokoll)
+laeufe/*/ziel.f32
+laeufe/*/protokoll.jsonl
+laeufe/*/aufnahme.bereit
+laeufe/**/*.wav
+laeufe/**/*.jsonl
+laeufe/**/*.bereit
+laeufe/**/ziel.f32

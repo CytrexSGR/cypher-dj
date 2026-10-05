@@ -1,0 +1,7 @@
+.venv/
+gewichte/
+kontrollen/
+__pycache__/
+*.pyc
+pip_plan*.json
+pruef/

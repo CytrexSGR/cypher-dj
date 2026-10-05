@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "djk.strukturvorschlag/1",
+  "title": "Strukturvorschlaege je Track",
+  "type": "object",
+  "required": ["schema", "version", "datei", "dauer_s", "raster", "vorschlaege"],
+  "properties": {
+    "schema": {"const": "djk.strukturvorschlag/1"},
+    "version": {"type": "string"},
+    "datei": {"type": "string", "description": "absoluter Pfad der Audiodatei"},
+    "dauer_s": {"type": "number"},
+    "raster": {
+      "type": "object",
+      "required": ["quelle", "bpm", "anker_s", "takt_s"],
+      "properties": {
+        "quelle": {"enum": ["traktor", "eigen"]},
+        "zeitachse": {"enum": ["traktor", "dekodiert"], "description": "traktor: Positionen auf Traktors Zeitachse (Grid-START/1000 + k * takt_s), dieselbe Achse wie Traktors CUE_V2 START/1000; im dekodierten Audio (ffmpeg) liegt der Kick im Median rund 20 ms VOR dieser Position (gemessen, passt zum MP3-Encoder-Vorlauf). dekodiert: eigene Schaetzung auf der ffmpeg-Achse."},
+        "bpm": {"type": "number"},
+        "anker_s": {"type": "number", "description": "Beginn von Takt 0 (Traktor-Grid START/1000 oder eigene Schaetzung)"},
+        "takt_s": {"type": "number"},
+        "phrasen_versatz": {"type": "integer", "minimum": 0, "maximum": 7, "description": "Takt k ist Phrasengrenze, wenn (k - versatz) % 8 == 0"},
+        "takte": {"type": "integer"}
+      }
+    },
+    "tags": {"type": "object"},
+    "parameter": {"type": "object"},
+    "vorschlaege": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["sekunde", "takt", "klasse", "staerke", "quelle"],
+        "properties": {
+          "sekunde": {"type": "number", "description": "Position in s ab Dateibeginn auf der Achse raster.zeitachse (bei quelle=traktor Traktors Achse, nicht die ffmpeg-Achse), immer auf einer Takt-Eins"},
+          "takt": {"type": "integer", "description": "Taktnummer relativ zum Anker (Takt 0 = anker_s), kann negativ sein"},
+          "phrase": {"enum": [4, 8, 16, 32, null], "description": "groesste Phrasenlaenge, deren Grenze hier liegt"},
+          "klasse": {"enum": ["anfang", "break", "drop/rein", "mehr rein", "vocal?", "weniger", "wechsel"]},
+          "staerke": {"type": "number", "minimum": 0, "maximum": 1},
+          "wert_db": {"type": "number", "description": "Rohwert der Neuheit, gewichtete Summe |Delta dB|"},
+          "baender_db": {"type": "object", "properties": {"tief": {"type": "number"}, "mitte": {"type": "number"}, "hoch": {"type": "number"}}},
+          "quelle": {"const": "strukturvorschlag"}
+        }
+      }
+    },
+    "laufzeit_s": {"type": "object"}
+  }
+}

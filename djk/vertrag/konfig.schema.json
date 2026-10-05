@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cypherdj.invalid/vertrag/konfig.schema.json",
+  "title": "Konfigurationsschlüssel nach SCHNITTSTELLEN.md §2.1 (Vertrag 1)",
+  "description": "Je Datei ein Schema unter $defs. Unbekannte Schlüssel sind ein Startfehler (additionalProperties false), jede Datei beginnt mit version = 1. x-typ ist der Typ, wie ihn §2.1 schreibt; pruefe_konfig.py vergleicht Schlüssel, x-typ und default mit dem Text.",
+  "$defs": {
+    "kern.toml": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version"],
+      "properties": {
+        "version": {"const": 1},
+        "start_bpm": {"type": "number", "x-typ": "float", "default": 128.0},
+        "udp_port": {"type": "integer", "x-typ": "int", "default": 47100},
+        "arbeitsbestand": {"type": "string", "x-typ": "Pfad", "default": "/dev/shm/cypherdj/material"},
+        "speicher_budget_mib": {"type": "integer", "x-typ": "int", "default": 3800},
+        "controller_geraet": {"type": "string", "x-typ": "str", "default": ""},
+        "ziel_lufs": {"type": "number", "x-typ": "float", "default": -16.0},
+        "hoerbar_db": {"type": "number", "x-typ": "float", "default": -26.0},
+        "tief_offen_db": {"type": "number", "x-typ": "float", "default": -12.0},
+        "max_stretcher": {"type": "integer", "x-typ": "int", "default": 4},
+        "stretcher_threads": {"type": "integer", "x-typ": "int", "default": 2},
+        "limiter_dbtp": {"type": "number", "x-typ": "float", "default": -1.0},
+        "pruefmodus": {"type": "boolean", "x-typ": "bool", "default": false},
+        "hand_osc": {"type": "boolean", "x-typ": "bool", "default": false, "x-quelle": "Scheibe 35, Befund B-O (Entscheidung der Hauptinstanz, Weg 1): /test/hand auch ohne pruefmodus."},
+        "filter_guete": {"type": "number", "x-typ": "float", "default": 0.707, "minimum": 0.5, "maximum": 4.0, "x-quelle": "A27 Weg (a), Nachtrag 04 (docs/architektur/stand/04-kanalzug-dsp.md); über 4 gesperrt bis zum Hörvergleich (Subbass +12 dB)."},
+        "hoerschein_pflicht": {"type": "boolean", "x-typ": "bool", "default": true, "x-quelle": "Ohr Task 13, SCHNITTSTELLEN §17 I3a: schaltet PrueferI3 an; aus für Kern-Tests, die Kanäle ohne Hörschein öffnen (kern35.h, test_kern_stopp.cpp)."}
+      }
+    },
+    "leitstand.toml": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version"],
+      "properties": {
+        "version": {"const": 1},
+        "ws_port": {"type": "integer", "x-typ": "int", "default": 47200},
+        "abo_port": {"type": "integer", "x-typ": "int", "default": 47110},
+        "set_basis_bpm": {"type": "number", "x-typ": "float", "default": 128.0},
+        "autonomie_start": {"type": "integer", "x-typ": "int", "default": 1, "minimum": 0, "maximum": 3},
+        "bestand": {"type": "string", "x-typ": "Pfad", "default": "~/cypher-dj/bestand"},
+        "sets": {"type": "string", "x-typ": "Pfad", "default": "~/cypher-dj/sets/djk"},
+        "rechner_socket": {"type": "string", "x-typ": "Pfad", "default": "$XDG_RUNTIME_DIR/cypherdj/rechner.sock"},
+        "zug_vorlauf_takte": {"type": "integer", "x-typ": "int", "default": 12},
+        "antwort_frist_takte": {"type": "integer", "x-typ": "int", "default": 4},
+        "nachrender_ruhe_takte": {"type": "integer", "x-typ": "int", "default": 16},
+        "grenzen_tief_verriegeln": {"type": "boolean", "x-typ": "bool", "default": false}
+      }
+    },
+    "werkstatt.toml": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version"],
+      "properties": {
+        "version": {"const": 1},
+        "comfy_musik_url": {"type": "string", "x-typ": "str", "x-vorgabe": "aus Skill cypher-musik"},
+        "bestand": {"type": "string", "x-typ": "Pfad", "default": "~/cypher-dj/bestand"},
+        "threads": {"type": "integer", "x-typ": "int", "default": 4},
+        "stems_gpu": {"type": "boolean", "x-typ": "bool", "default": false},
+        "stems_cpu_im_set": {"type": "string", "x-typ": "str", "default": "nur_256", "enum": ["nie", "nur_256"]},
+        "luft_db": {"type": "number", "x-typ": "float", "default": -12.0},
+        "tor_raster_ms": {"type": "number", "x-typ": "float", "default": 8.0},
+        "tor_klarheit": {"type": "number", "x-typ": "float", "default": 0.1},
+        "tor_streckfaktor": {"type": "number", "x-typ": "float", "default": 0.2},
+        "tor_headroom_dbtp": {"type": "number", "x-typ": "float", "default": -1.0},
+        "stimmung_max_cent": {"type": "number", "x-typ": "float", "default": 35.0}
+      }
+    }
+  }
+}

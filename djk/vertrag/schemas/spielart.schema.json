@@ -1,0 +1,19 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "https://cypherdj.invalid/vertrag/1/spielart.schema.json",
+ "title": "Spielart als Parametersatz (SCHNITTSTELLEN.md §14.4, Tabelle)",
+ "type": "object",
+ "required": ["name", "takte", "verlauf", "einstieg_db", "rampe_takte", "basstausch_takt", "a_raus_ab_takt", "grenze_sub", "grenze_tief", "pump_db"],
+ "properties": {
+  "name": {"type": "string", "minLength": 1},
+  "takte": {"type": "integer", "minimum": 1},
+  "verlauf": {"enum": ["linear", "kante"]},
+  "einstieg_db": {"type": "number"},
+  "rampe_takte": {"type": "integer", "minimum": 0},
+  "basstausch_takt": {"type": "integer", "minimum": 1},
+  "a_raus_ab_takt": {"type": "integer", "minimum": 1},
+  "grenze_sub": {"$ref": "defs.schema.json#/$defs/anteil"},
+  "grenze_tief": {"$ref": "defs.schema.json#/$defs/anteil"},
+  "pump_db": {"type": "number"}
+ }
+}

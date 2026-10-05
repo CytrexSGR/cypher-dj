@@ -1,0 +1,15 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "https://cypherdj.invalid/vertrag/1/vorschlag.schema.json",
+ "title": "Vorschlag (SCHNITTSTELLEN.md §14.3)",
+ "type": "object",
+ "required": ["id", "plan_id", "text", "start_beat", "verfaellt_beat", "kanal"],
+ "properties": {
+  "id": {"$ref": "defs.schema.json#/$defs/kurz_id"},
+  "plan_id": {"$ref": "defs.schema.json#/$defs/plan_id"},
+  "text": {"type": "string"},
+  "start_beat": {"$ref": "defs.schema.json#/$defs/beat"},
+  "verfaellt_beat": {"$ref": "defs.schema.json#/$defs/beat"},
+  "kanal": {"description": "§4.7 /k/vorschlag_kanal: \"\" = keiner", "anyOf": [{"$ref": "defs.schema.json#/$defs/kanal"}, {"const": ""}]}
+ }
+}

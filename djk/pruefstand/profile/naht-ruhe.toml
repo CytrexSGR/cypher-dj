@@ -1,0 +1,12 @@
+name = "naht-ruhe"
+zweck = "Negativ-Kontrolle zum Naht- und Stille-Messer in voller Auflösung: Prüfquelle über Ring und eigene Ausgänge, Notbahn daneben, 60 s ohne Eingriff: 0 Sprünge, 0 Stille, 0 Übernahmen."
+dauer_s = 60.0
+
+[quelle]
+art = "pruefquelle"
+
+[erwartung]
+spruenge_max = 0
+stille_ereignisse_max = 0
+notbahn_uebernahmen_max = 0
+raster_versatz_max = 0.0

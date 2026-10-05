@@ -1,0 +1,30 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "https://cypherdj.invalid/vertrag/1/auftrag.schema.json",
+ "title": "Werkstatt-Auftrag, Leitstand → Werkstatt, WS-Typ auftrag (SCHNITTSTELLEN.md §12.1)",
+ "type": "object",
+ "required": ["auftrag_id", "art", "vorrang", "set_basis_bpm", "parameter"],
+ "properties": {
+  "auftrag_id": {"$ref": "defs.schema.json#/$defs/auftrag_id"},
+  "art": {"enum": ["generieren", "einlesen", "nachrendern", "korrigieren"]},
+  "vorrang": {"description": "1 höchster", "type": "integer", "minimum": 1},
+  "set_basis_bpm": {"$ref": "defs.schema.json#/$defs/bpm"},
+  "parameter": {"type": "object"}
+ },
+ "allOf": [
+  {"if": {"properties": {"art": {"const": "generieren"}}}, "then": {"properties": {"parameter": {"type": "object",
+   "required": ["stil", "text", "dauer_s", "ziel_bpm"],
+   "properties": {"stil": {"type": "string"}, "text": {"type": "string"}, "dauer_s": {"type": "integer", "minimum": 1},
+    "ziel_bpm": {"$ref": "defs.schema.json#/$defs/bpm"}, "tonart": {"type": "string"}, "seed": {"type": "integer"},
+    "anzahl": {"type": "integer", "minimum": 1, "maximum": 4}}}}}},
+  {"if": {"properties": {"art": {"const": "einlesen"}}}, "then": {"properties": {"parameter": {"type": "object",
+   "required": ["quelle_pfad"], "properties": {"quelle_pfad": {"type": "string", "minLength": 1}}}}}},
+  {"if": {"properties": {"art": {"const": "nachrendern"}}}, "then": {"properties": {"parameter": {"type": "object",
+   "required": ["material_id", "basis_bpm", "mit_stems", "mit_schuessen"],
+   "properties": {"material_id": {"$ref": "defs.schema.json#/$defs/material_id"}, "basis_bpm": {"$ref": "defs.schema.json#/$defs/bpm"},
+    "mit_stems": {"description": "Typ im Vertrag nicht festgelegt (OSC nutzt 0/1)", "type": ["boolean", "integer"]},
+    "mit_schuessen": {"type": ["boolean", "integer"]}}}}}},
+  {"if": {"properties": {"art": {"const": "korrigieren"}}}, "then": {"properties": {"parameter": {"type": "object",
+   "required": ["material_id"], "properties": {"material_id": {"$ref": "defs.schema.json#/$defs/material_id"}}}}}}
+ ]
+}

@@ -1,0 +1,10 @@
+{
+  "name": "djk-hand",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "djk-hand: Cyphers Hand an djk als MCP-Server (stdio → HTTP Seiten-Server mit x-djk-quelle: cypher)",
+  "engines": { "node": ">=22.18" },
+  "scripts": { "start": "node hand.ts", "test": "node --test --test-concurrency=1 tests/*.test.mjs" },
+  "dependencies": { "@modelcontextprotocol/sdk": "1.30.0" }
+}

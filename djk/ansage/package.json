@@ -1,0 +1,6 @@
+{
+  "name": "cypherdj-ansage",
+  "private": true,
+  "type": "module",
+  "description": "Ansage-Zeile (ADR 019): liest den Leitstand-WebSocket; Abhängigkeiten kommen über djk/leitstand/"
+}

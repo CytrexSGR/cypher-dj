@@ -1,0 +1,12 @@
+{
+  "name": "cypherdj-spieler-cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Cyphers Leitstand-Werkzeug fuer die CLI-Hauptinstanz: eine Zeile rein, JSON raus (siehe docs/architektur/stand/spieler-cli.md).",
+  "engines": { "node": ">=22.18" },
+  "bin": { "djk-spiel": "./spieler.ts" },
+  "scripts": {
+    "test": "node --test --test-concurrency=1 \"tests/*.test.ts\""
+  }
+}

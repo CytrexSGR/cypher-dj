@@ -1,0 +1,15 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "https://cypherdj.invalid/vertrag/1/urteil.schema.json",
+ "title": "Urteil (SCHNITTSTELLEN.md §14.9)",
+ "type": "object",
+ "required": ["id", "art", "bezug", "gewinner", "sample", "von"],
+ "properties": {
+  "id": {"$ref": "defs.schema.json#/$defs/kurz_id"},
+  "art": {"enum": ["gut", "daneben", "ab"]},
+  "bezug": {"type": "object", "minProperties": 1},
+  "gewinner": {"description": "im Vertrag nur als null gezeigt (A/B-Paare, Scheibe 9)", "type": ["string", "null"]},
+  "sample": {"$ref": "defs.schema.json#/$defs/sample"},
+  "von": {"$ref": "defs.schema.json#/$defs/quelle"}
+ }
+}

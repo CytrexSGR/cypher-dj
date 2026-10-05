@@ -1,0 +1,18 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "https://cypherdj.invalid/vertrag/1/korrektur.schema.json",
+ "title": "Eine Zeile von korrekturen.jsonl (SCHNITTSTELLEN.md §13.3)",
+ "type": "object",
+ "required": ["zeit", "von", "art", "fassung", "ab_quell_beat", "bis_quell_beat", "versatz_ms", "nr", "text"],
+ "properties": {
+  "zeit": {"$ref": "defs.schema.json#/$defs/zeit_iso"},
+  "von": {"enum": ["andreas", "werkstatt"]},
+  "art": {"enum": ["raster", "eins", "hotcue", "urteil"]},
+  "fassung": {"$ref": "defs.schema.json#/$defs/fassung_name"},
+  "ab_quell_beat": {"type": ["number", "null"]},
+  "bis_quell_beat": {"type": ["number", "null"]},
+  "versatz_ms": {"type": ["number", "null"]},
+  "nr": {"type": ["integer", "null"], "minimum": 1, "maximum": 8},
+  "text": {"type": "string"}
+ }
+}

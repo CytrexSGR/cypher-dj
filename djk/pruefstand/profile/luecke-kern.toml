@@ -1,0 +1,17 @@
+name = "luecke-kern"
+zweck = "Fehlerfall für den Lückenzähler des Kerns (SCHNITTSTELLEN §5.4): der Kern aus Scheibe 08 verbrennt im Prüfmodus jeden 500. Zyklus 1,5 Perioden; /zustand/kern zählt die ausgelassenen Perioden, am Ziel verschiebt jede das Klick-Raster um eine Periode; beide Zahlen gleich ±1."
+dauer_s = 60.0
+
+[quelle]
+art = "kern"
+argumente = ["--konfig", "{ordner}/kern.toml"]
+
+[kern]
+test_last_alle = 500
+test_last_perioden = 1.5
+
+[erwartung]
+# 60 s bei 256 sind 11 250 Zyklen, also 22 Spins (Scheibe 08: am Ziel 21, Kern 21 in ihrem Fenster).
+kern_luecken_min = 15
+ziel_luecken_min = 15
+kern_ziel_luecken_abweichung_max = 1

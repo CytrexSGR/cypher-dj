@@ -1,0 +1,74 @@
+{
+ "name": "techno-k1",
+ "herkunft": "Cypher 2026-09-29, erste Session auf Kit techno (Klang K1). Andreas: 'baue ein kit und bereite eine session die du machst mit strudel studio vor'. Noch ohne Sidechain/Hall (K2): Bass deshalb auf den Offbeats, nie gleichzeitig mit der Kick (DeSantis 113/114), Tonart F-Moll.",
+ "bpm": 130,
+ "kit": "techno",
+ "klaenge": {
+  "bass": {
+   "quelle": "Surge Werkspatch",
+   "kandidaten": [
+    "Basses/Sub 1",
+    "Basses/Attacky",
+    "Basses/Bass 1"
+   ],
+   "hinweis": "Ohr-Auswahl offen; je Kandidat Master-Aufnahme + Schleuse, Tiefband gegen Kick messen",
+   "gewaehlt": "Basses/Sub 1",
+   "alternative": "Basses/Attacky (mehr Obertöne 80-250 Hz, für kleine Boxen; sub +2,6 / tief +1,4 dB über Kick)"
+  },
+  "melodie": {
+   "quelle": "Surge Werkspatch",
+   "kandidaten": [
+    "Plucks/Convex",
+    "Plucks/Clean",
+    "Keys/Digi Harpsi"
+   ],
+   "hinweis": "Stab/Keys mit kurzem Ausklang bevorzugen; Namen gegen die installierte Bibliothek prüfen",
+   "gewaehlt": "Plucks/Convex"
+  }
+ },
+ "bloecke": [
+  {
+   "name": "intro",
+   "takte": 16,
+   "strom1": "s(\"bd:0*4, [~ hh:1]*4, [~ ~ ~ sh:0]*4\").gain(\"1 0.9\")",
+   "strom2": "silence",
+   "strom3": "silence"
+  },
+  {
+   "name": "groove",
+   "takte": 32,
+   "strom1": "s(\"bd:0*4, [~ cp:0]*2, [~ hh:1]*4, [~ ~ ~ oh:0]*2, [~ perc:0 ~ ~]*2\").gain(\"1 0.95\")",
+   "strom2": "note(\"[~ f1]*4\").velocity(\"0.9 0.75\")",
+   "strom3": "silence"
+  },
+  {
+   "name": "aufbau",
+   "takte": 16,
+   "strom1": "s(\"bd:0*4, [~ cp:0]*2, hh:1*16, [~ ~ ~ oh:0]*2, [~ perc:0 ~ perc:3]*2\").gain(\"1 0.8 0.9 0.8\")",
+   "strom2": "note(\"[~ f1]*4, [~ ~ ~ ab1]*2\").velocity(\"0.9 0.75\")",
+   "strom3": "note(\"<[f3,ab3,c4] ~ [eb3,g3,c4] ~>\").velocity(0.7)"
+  },
+  {
+   "name": "pause",
+   "takte": 16,
+   "strom1": "s(\"[~ hh:1]*4, [~ ~ ~ sh:0]*4\").gain(0.8)",
+   "strom2": "note(\"<f1 ~ eb1 ~>\").velocity(0.8)",
+   "strom3": "note(\"<[f3,ab3,c4] [eb3,g3,c4] [db3,f3,ab3] [c3,e3,g3]>\").velocity(0.6)"
+  },
+  {
+   "name": "drop",
+   "takte": 32,
+   "strom1": "s(\"bd:0*4, [~ cp:0]*2, [~ sd:0]*2, [~ hh:1]*4, hh:3*16, [~ ~ ~ oh:0]*2, [~ perc:0 ~ perc:3]*2\").gain(\"1 0.85\")",
+   "strom2": "note(\"[~ f1]*4, [~ ~ ~ ab1]*2\").velocity(\"0.95 0.75\")",
+   "strom3": "note(\"<[f3,ab3,c4] ~ [eb3,g3,c4] ~>*2\").velocity(0.7)"
+  }
+ ],
+ "fader": {
+  "erz/1": 1.0,
+  "erz/2": 0.8,
+  "erz/3": 0.5,
+  "einheit": "Stellung 0..1 (/test/hand), 1 = 0 dB"
+ },
+ "tempo": "Kern-Uhr: --kern-konfig mit start_bpm = 130.0 (siehe ~/messungen/2026-09-29-klang-k1/session/kern-f.toml)",
+ "geprueft": "2026-09-29 Instanz f, stumme Senke: alle 5 Blöcke Schleuse bestanden (LUFS -25,8 … -17,4, TP ≤ -2,5, Korr 0,95-0,99), Rohdaten ~/messungen/2026-09-29-klang-k1/session/"
+}

@@ -1,0 +1,17 @@
+name = "kill-notbahn"
+zweck = "Die Notbahn stirbt (kill -9), der Kern aus 08 spielt selbst an die Senke weiter: daneben schwieg die Notbahn ohnehin, am Ziel fehlt kein Klick und keine Periode. Misst die Zeile „Notbahn stirbt“ aus ARCHITEKTUR §7 für die Notbahn daneben."
+dauer_s = 32.0
+
+[quelle]
+art = "kern"
+argumente = ["--konfig", "{ordner}/kern.toml"]
+
+[[eingriff]]
+nach_s = 10.0
+art = "kill9"
+ziel = "notbahn"
+
+[erwartung]
+fehlende_klicks_max = 0
+notbahn_uebernahmen_max = 0
+ziel_luecken_max = 0

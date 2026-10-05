@@ -1,0 +1,571 @@
+{
+ "_original": {
+  "bau": "ok",
+  "rot": [],
+  "gruen": 120
+ },
+ "M01_ereignis_am_blockanfang": {
+  "bau": "ok",
+  "rot": [
+   "test_ablauf:start_mitten_im_block_am_exakten_sample",
+   "test_ablauf:setzen_von_und_nach_stumm_ueber_minus_60",
+   "test_ablauf:schaltrampe_beim_setzen_als_s_kurve",
+   "test_ablauf:stumm_nach_stumm_bleibt_stumm_und_kein_umweg_ueber_minus_60",
+   "test_ablauf:rampe_aus_stumm_und_s_kurve",
+   "test_ablauf:tempo_132_nach_annahme_schaltpunkte_bleiben_auf_dem_takt",
+   "test_ablauf:angrenzende_rampe_beginnt_beim_endwert_der_vorigen",
+   "test_ablauf:setzen_fremder_plan_vor_rampe_am_selben_beat",
+   "test_angriffe:a3_negativ_kontrolle_nacheinander",
+   "test_angriffe:a4_knopf_unbekannt_erster_wert_nur_stellung_kein_sprung",
+   "test_angriffe:a4_negativ_kontrolle_knopf_wie_angenommen",
+   "test_angriffe:a5_positiv_kontrolle_ein_griff_ueber_der_totzone_bricht_ab",
+   "test_hand:erster_wert_nur_stellung_dann_totzone_dann_uebernahme",
+   "test_hand:ohne_plan_keine_totzone",
+   "test_hand:beruehrung_uebernimmt_sofort_ohne_wert",
+   "test_hand:hand_bricht_auch_wartende_teile_ab",
+   "test_hand:hand_am_selben_sample_wie_teilstart_gewinnt",
+   "test_hand:relativ_mit_totzone_ueber_die_summe",
+   "test_hand:rueckgabe_nach_32_beats_ohne_hand",
+   "test_hand:stellung_vergessen_nach_neuverbindung",
+   "test_hand:deck_halter_32_beats_nach_der_transport_taste",
+   "test_hand:halter_am_start_sample_nach_rueckgabe_im_selben_zyklus",
+   "test_melder:hand_geste_erstes_letztes_und_hoechstens_20_hz",
+   "test_portiert:t01_negativ_kontrolle_ohne_handgriff_laeuft_der_plan_vollstaendig",
+   "test_portiert:t02_handgriff_bei_takt_19_fader_teil_endet_am_selben_sample_kill_laeuft_weiter",
+   "test_portiert:t03_kill_und_griff_am_sample_nicht_an_der_blockgrenze",
+   "test_portiert:t05_hand_bricht_nicht_den_ganzen_plan",
+   "test_portiert:t06_uebernahme_skaliert_und_relativ_ohne_sprung",
+   "test_portiert:t07_tempo_132_ab_takt_18_schaltpunkte_bleiben_auf_ihrem_takt",
+   "test_portiert:t09_kopplung_hand_an_bass_a_nimmt_bass_b_mit_hand_an_fader_a_nicht",
+   "test_portiert:t10_gleichzeitig_hand_und_planschritt_am_selben_sample_die_hand_gewinnt",
+   "test_pruefer:nach_handgriff_sieht_den_handwert_und_greift_ein",
+   "test_pruefer:nach_handgriff_auch_fuer_die_transport_taste",
+   "test_pruefer:gruppe_gefallen_bei_hand_und_abbruch_nicht_ohne_gruppe",
+   "folge:hand_gewinnt.jsonl",
+   "folge:zu_spaet.jsonl",
+   "folge:i4_ueberlappung.jsonl",
+   "folge:ki_stopp.jsonl",
+   "folgenleser:gruen_minimal(1!=0)"
+  ],
+  "gruen": 81,
+  "regel": "Start und Griff am Sample, nicht an der Blockgrenze (§1.1, §7.3 P1)"
+ },
+ "M02_hand_bricht_ganzen_plan": {
+  "bau": "ok",
+  "rot": [
+   "test_hand:erster_wert_nur_stellung_dann_totzone_dann_uebernahme",
+   "test_portiert:t02_handgriff_bei_takt_19_fader_teil_endet_am_selben_sample_kill_laeuft_weiter",
+   "test_portiert:t03_kill_und_griff_am_sample_nicht_an_der_blockgrenze",
+   "test_portiert:t05_hand_bricht_nicht_den_ganzen_plan",
+   "test_portiert:t09_kopplung_hand_an_bass_a_nimmt_bass_b_mit_hand_an_fader_a_nicht",
+   "test_portiert:t10_gleichzeitig_hand_und_planschritt_am_selben_sample_die_hand_gewinnt",
+   "folge:hand_gewinnt.jsonl"
+  ],
+  "gruen": 113,
+  "regel": "Hand bricht nur Regler und Gruppe (ADR 023 P2)"
+ },
+ "M03_ohne_gruppe": {
+  "bau": "ok",
+  "rot": [
+   "test_einsortieren:abbruch_wartender_teile_samt_gruppe",
+   "test_hand:erster_wert_nur_stellung_dann_totzone_dann_uebernahme",
+   "test_hand:hand_bricht_auch_wartende_teile_ab",
+   "test_portiert:t09_kopplung_hand_an_bass_a_nimmt_bass_b_mit_hand_an_fader_a_nicht",
+   "test_pruefer:vor_teilstart_lehnt_ab_und_die_gruppe_faellt",
+   "test_pruefer:gruppe_gefallen_bei_hand_und_abbruch_nicht_ohne_gruppe",
+   "folge:hand_gewinnt.jsonl"
+  ],
+  "gruen": 113,
+  "regel": "Gruppe fällt gemeinsam (§4.3 Feld 11)"
+ },
+ "M04_ohne_schiedsrichter": {
+  "bau": "ok",
+  "rot": [
+   "test_angriffe:a4_knopf_unbekannt_erster_wert_nur_stellung_kein_sprung",
+   "test_angriffe:a4_negativ_kontrolle_knopf_wie_angenommen",
+   "test_angriffe:a5_positiv_kontrolle_ein_griff_ueber_der_totzone_bricht_ab",
+   "test_hand:erster_wert_nur_stellung_dann_totzone_dann_uebernahme",
+   "test_hand:beruehrung_uebernimmt_sofort_ohne_wert",
+   "test_hand:hand_bricht_auch_wartende_teile_ab",
+   "test_hand:hand_am_selben_sample_wie_teilstart_gewinnt",
+   "test_hand:relativ_mit_totzone_ueber_die_summe",
+   "test_portiert:t02_handgriff_bei_takt_19_fader_teil_endet_am_selben_sample_kill_laeuft_weiter",
+   "test_portiert:t03_kill_und_griff_am_sample_nicht_an_der_blockgrenze",
+   "test_portiert:t04_schiedsrichter_die_hand_wirkt_der_plan_nicht",
+   "test_portiert:t06_uebernahme_skaliert_und_relativ_ohne_sprung",
+   "test_portiert:t09_kopplung_hand_an_bass_a_nimmt_bass_b_mit_hand_an_fader_a_nicht",
+   "test_portiert:t10_gleichzeitig_hand_und_planschritt_am_selben_sample_die_hand_gewinnt",
+   "test_pruefer:gruppe_gefallen_bei_hand_und_abbruch_nicht_ohne_gruppe",
+   "folge:hand_gewinnt.jsonl"
+  ],
+  "gruen": 104,
+  "regel": "Hand übernimmt, Plan hört auf (§7.3 P3)"
+ },
+ "M05_erster_wert_wirkt": {
+  "bau": "ok",
+  "rot": [
+   "test_angriffe:a4_knopf_unbekannt_erster_wert_nur_stellung_kein_sprung",
+   "test_hand:erster_wert_nur_stellung_dann_totzone_dann_uebernahme",
+   "test_hand:stellung_vergessen_nach_neuverbindung",
+   "test_hand:verspaeteter_griff_wirkt_am_zyklusanfang",
+   "test_melder:hand_geste_erstes_letztes_und_hoechstens_20_hz",
+   "test_melder:nur_stellung_meldet_keine_hand",
+   "test_pruefer:nach_handgriff_sieht_den_handwert_und_greift_ein",
+   "folge:hand_gewinnt.jsonl",
+   "folge:ki_stopp.jsonl"
+  ],
+  "gruen": 111,
+  "regel": "erster Wert nur Stellung (§7.3 P2)"
+ },
+ "M06_ohne_totzone": {
+  "bau": "ok",
+  "rot": [
+   "test_angriffe:a4_knopf_unbekannt_erster_wert_nur_stellung_kein_sprung",
+   "test_angriffe:a4_negativ_kontrolle_knopf_wie_angenommen",
+   "test_angriffe:a5_ein_rauschschritt_unter_der_totzone_bricht_nichts_ab",
+   "test_hand:erster_wert_nur_stellung_dann_totzone_dann_uebernahme",
+   "test_hand:relativ_mit_totzone_ueber_die_summe",
+   "test_portiert:t06_uebernahme_skaliert_und_relativ_ohne_sprung"
+  ],
+  "gruen": 114,
+  "regel": "Totzone 3/128 (§7.3 P3)"
+ },
+ "M07_sprung_statt_skaliert": {
+  "bau": "ok",
+  "rot": [
+   "test_angriffe:a4_knopf_unbekannt_erster_wert_nur_stellung_kein_sprung",
+   "test_angriffe:a4_negativ_kontrolle_knopf_wie_angenommen",
+   "test_hand:erster_wert_nur_stellung_dann_totzone_dann_uebernahme",
+   "test_hand:stellung_vergessen_nach_neuverbindung",
+   "test_portiert:t02_handgriff_bei_takt_19_fader_teil_endet_am_selben_sample_kill_laeuft_weiter",
+   "test_portiert:t06_uebernahme_skaliert_und_relativ_ohne_sprung"
+  ],
+  "gruen": 114,
+  "regel": "Übernahme skaliert ohne Sprung (§7.3 P3)"
+ },
+ "M08_relativ_als_absolut": {
+  "bau": "ok",
+  "rot": [
+   "test_hand:relativ_mit_totzone_ueber_die_summe",
+   "test_portiert:t06_uebernahme_skaliert_und_relativ_ohne_sprung"
+  ],
+  "gruen": 118,
+  "regel": "Encoder relativ (§7.3 P3)"
+ },
+ "M09_ohne_rueckgabe": {
+  "bau": "ok",
+  "rot": [
+   "test_hand:rueckgabe_nach_32_beats_ohne_hand",
+   "test_hand:deck_halter_32_beats_nach_der_transport_taste",
+   "test_portiert:t02_handgriff_bei_takt_19_fader_teil_endet_am_selben_sample_kill_laeuft_weiter",
+   "folge:ki_stopp.jsonl"
+  ],
+  "gruen": 116,
+  "regel": "Rückgabe nach 32 Beats (§7.3 P4, P5)"
+ },
+ "M10_startwert_nicht_ist_wert": {
+  "bau": "ok",
+  "rot": [
+   "test_ablauf:teil_rampe_golden",
+   "test_ablauf:halter_und_meldungen_bei_start_und_ende",
+   "test_ablauf:setzen_von_und_nach_stumm_ueber_minus_60",
+   "test_ablauf:schaltrampe_beim_setzen_als_s_kurve",
+   "test_ablauf:stumm_nach_stumm_bleibt_stumm_und_kein_umweg_ueber_minus_60",
+   "test_ablauf:abbruch_haelt_laufenden_teil_am_ist_wert",
+   "test_angriffe:a3_ueberlappung_im_selben_plan_abgelehnt_kein_sprung",
+   "test_angriffe:a3_negativ_kontrolle_nacheinander",
+   "test_angriffe:a4_knopf_unbekannt_erster_wert_nur_stellung_kein_sprung",
+   "test_angriffe:a4_negativ_kontrolle_knopf_wie_angenommen",
+   "test_hand:erster_wert_nur_stellung_dann_totzone_dann_uebernahme",
+   "test_ki:ki_spur_ueber_4_beats_stumm",
+   "test_portiert:t01_negativ_kontrolle_ohne_handgriff_laeuft_der_plan_vollstaendig",
+   "test_portiert:t02_handgriff_bei_takt_19_fader_teil_endet_am_selben_sample_kill_laeuft_weiter",
+   "test_portiert:t06_uebernahme_skaliert_und_relativ_ohne_sprung",
+   "test_portiert:t12_rampe_startet_am_ist_wert_nicht_am_wert_bei_annahme",
+   "test_pruefer:je_zyklus_bricht_vor_dem_oeffnen_ab",
+   "test_pruefer:je_zyklus_haelt_an_und_setzt_fort",
+   "folge:ki_stopp.jsonl"
+  ],
+  "gruen": 101,
+  "regel": "Rampe startet am Ist-Wert (§4.3)"
+ },
+ "M11_setzen_ziel_nicht_uebergeben": {
+  "bau": "ok",
+  "rot": [
+   "test_ablauf:setzen_und_rampe_am_selben_sample",
+   "test_ablauf:setzen_fremder_plan_vor_rampe_am_selben_beat",
+   "folge:teil_rampe.jsonl",
+   "folge:hand_gewinnt.jsonl",
+   "folge:i4_ueberlappung.jsonl"
+  ],
+  "gruen": 115,
+  "regel": "Rampe beginnt beim Zielwert eines Setzens am selben Sample (§4.3)"
+ },
+ "M12_ohne_stumm_regel": {
+  "bau": "ok",
+  "rot": [
+   "test_ablauf:setzen_von_und_nach_stumm_ueber_minus_60",
+   "test_ablauf:stumm_nach_stumm_bleibt_stumm_und_kein_umweg_ueber_minus_60",
+   "test_ablauf:rampe_aus_stumm_und_s_kurve",
+   "test_ki:ki_spur_ueber_4_beats_stumm",
+   "test_portiert:t01_negativ_kontrolle_ohne_handgriff_laeuft_der_plan_vollstaendig",
+   "test_portiert:t02_handgriff_bei_takt_19_fader_teil_endet_am_selben_sample_kill_laeuft_weiter",
+   "test_portiert:t06_uebernahme_skaliert_und_relativ_ohne_sprung",
+   "folge:hand_gewinnt.jsonl",
+   "folge:ki_stopp.jsonl"
+  ],
+  "gruen": 111,
+  "regel": "Rampen von/nach stumm über -60 dB (§1.2)"
+ },
+ "M13_i4_nur_fremde_plaene": {
+  "bau": "ok",
+  "rot": [
+   "test_angriffe:a3_ueberlappung_im_selben_plan_abgelehnt_kein_sprung",
+   "test_einsortieren:i4_ueberlappung_auch_im_selben_plan",
+   "test_einsortieren:i4_setzen_und_rampe_am_selben_beat_nach_startfolge",
+   "folge:i4_ueberlappung.jsonl"
+  ],
+  "gruen": 116,
+  "regel": "I4 auch im selben Plan (§17)"
+ },
+ "M14_zu_spaet_trotzdem": {
+  "bau": "ok",
+  "rot": [
+   "test_einsortieren:zu_spaet_politik_0_verworfen_politik_1_angenommen",
+   "test_portiert:t08_verriegelung_a4_nichts_wird_ungehoert_hoerbar",
+   "folge:zu_spaet.jsonl",
+   "folgenleser:gruen_erlaube(1!=0)"
+  ],
+  "gruen": 116,
+  "regel": "Politik 0 zu spät verworfen (§16.1)"
+ },
+ "M15_startsample_bei_annahme": {
+  "bau": "ok",
+  "rot": [
+   "test_ablauf:tempo_132_nach_annahme_schaltpunkte_bleiben_auf_dem_takt",
+   "test_portiert:t07_tempo_132_ab_takt_18_schaltpunkte_bleiben_auf_ihrem_takt"
+  ],
+  "gruen": 118,
+  "regel": "Startsample je Zyklus nach der Tempo-Karte (§4.3, Beat-Zeit)"
+ },
+ "M16_ki_stopp_ohne_abbruch": {
+  "bau": "ok",
+  "rot": [
+   "test_ki:stopp_bricht_cypher_teile_ab_andere_laufen",
+   "test_ki:stopp_taste_ohne_quittung_mit_wirkung",
+   "folge:ki_stopp.jsonl"
+  ],
+  "gruen": 117,
+  "regel": "KI-Stopp bricht cypher-Teile ab (§4.7)"
+ },
+ "M17_ki_ohne_sperre": {
+  "bau": "ok",
+  "rot": [
+   "test_ki:nach_dem_stopp_cypher_abgelehnt_bis_frei_von_andreas",
+   "folge:ki_stopp.jsonl"
+  ],
+  "gruen": 118,
+  "regel": "nach dem Stopp cypher abgelehnt (§4.7)"
+ },
+ "M18_ohne_halterpruefung_am_start": {
+  "bau": "ok",
+  "rot": [
+   "test_hand:halter_am_start_sample_nach_rueckgabe_im_selben_zyklus",
+   "test_portiert:t11_verriegelung_die_uebrigen_gruende_treffen_einzeln"
+  ],
+  "gruen": 118,
+  "regel": "Start prüft Halter mensch (§4.3)"
+ },
+ "M19_ohne_nur_hand": {
+  "bau": "ok",
+  "rot": [
+   "test_einsortieren:unbekannt_nur_hand_bereich_stems"
+  ],
+  "gruen": 119,
+  "regel": "Wer darf: nur Hand (§1.5)"
+ },
+ "M20_s_kurve_linear": {
+  "bau": "ok",
+  "rot": [
+   "test_ablauf:setzen_von_und_nach_stumm_ueber_minus_60",
+   "test_ablauf:schaltrampe_beim_setzen_als_s_kurve",
+   "test_ablauf:rampe_aus_stumm_und_s_kurve"
+  ],
+  "gruen": 117,
+  "regel": "Form 1 S-Kurve (§4.3 Feld 9)"
+ },
+ "M21_beruehrung_ohne_uebernahme": {
+  "bau": "ok",
+  "rot": [
+   "test_hand:beruehrung_uebernimmt_sofort_ohne_wert",
+   "test_hand:hand_bricht_auch_wartende_teile_ab",
+   "test_portiert:t02_handgriff_bei_takt_19_fader_teil_endet_am_selben_sample_kill_laeuft_weiter",
+   "test_portiert:t03_kill_und_griff_am_sample_nicht_an_der_blockgrenze",
+   "test_portiert:t04_schiedsrichter_die_hand_wirkt_der_plan_nicht",
+   "test_portiert:t06_uebernahme_skaliert_und_relativ_ohne_sprung",
+   "test_portiert:t09_kopplung_hand_an_bass_a_nimmt_bass_b_mit_hand_an_fader_a_nicht",
+   "test_pruefer:gruppe_gefallen_bei_hand_und_abbruch_nicht_ohne_gruppe"
+  ],
+  "gruen": 112,
+  "regel": "Berührung übernimmt sofort (§7.3 P3)"
+ },
+ "M22_pruefer_vor_teilstart_nie": {
+  "bau": "ok",
+  "rot": [
+   "test_echtzeit:fehlerfall_allokierender_pruefer_wird_gezaehlt",
+   "test_portiert:t08_verriegelung_a4_nichts_wird_ungehoert_hoerbar",
+   "test_portiert:t11_verriegelung_die_uebrigen_gruende_treffen_einzeln",
+   "test_pruefer:vor_teilstart_lehnt_ab_und_die_gruppe_faellt",
+   "test_pruefer:vor_teilstart_mit_hoerschein_und_negativ_kontrolle",
+   "test_pruefer:pruefwert_vor_und_mit_bestimmen_den_oeffner",
+   "test_pruefer:basstausch_als_paar_am_selben_sample_gueltig"
+  ],
+  "gruen": 113,
+  "regel": "Naht: vor_teilstart wird gefragt (§17)"
+ },
+ "M23_pruefer_je_zyklus_nie": {
+  "bau": "ok",
+  "rot": [
+   "test_echtzeit:dauerlauf_mit_vollem_pruefer_0_allokationen",
+   "test_portiert:t08_verriegelung_a4_nichts_wird_ungehoert_hoerbar",
+   "test_pruefer:je_zyklus_bricht_vor_dem_oeffnen_ab",
+   "test_pruefer:je_zyklus_haelt_an_und_setzt_fort",
+   "test_pruefer:vorschau_stimmt_mit_dem_ablauf_ueberein"
+  ],
+  "gruen": 115,
+  "regel": "Naht: je_zyklus wird gerufen (§17)"
+ },
+ "M24_pruefer_nach_handgriff_nie": {
+  "bau": "ok",
+  "rot": [
+   "test_pruefer:nach_handgriff_sieht_den_handwert_und_greift_ein",
+   "test_pruefer:nach_handgriff_auch_fuer_die_transport_taste"
+  ],
+  "gruen": 118,
+  "regel": "Naht: nach_handgriff wird gerufen (§17)"
+ },
+ "M25_vorschau_ohne_starts": {
+  "bau": "ok",
+  "rot": [
+   "test_pruefer:pruefwert_vor_und_mit_bestimmen_den_oeffner",
+   "test_pruefer:basstausch_als_paar_am_selben_sample_gueltig",
+   "test_pruefer:vorschau_stimmt_mit_dem_ablauf_ueberein"
+  ],
+  "gruen": 117,
+  "regel": "Naht: Vorschau kennt die Starts des Zyklus"
+ },
+ "M26_regler_ohne_drossel": {
+  "bau": "ok",
+  "rot": [
+   "test_melder:regler_waehrend_der_rampe_hoechstens_50_hz"
+  ],
+  "gruen": 119,
+  "regel": "/e/regler höchstens 50 Hz (§5.7)"
+ },
+ "M27_hand_ohne_nachzuegler": {
+  "bau": "ok",
+  "rot": [
+   "test_melder:hand_geste_erstes_letztes_und_hoechstens_20_hz"
+  ],
+  "gruen": 119,
+  "regel": "/e/hand letztes Ereignis der Geste (§5.8)"
+ },
+ "M28_allokation_im_prozess": {
+  "bau": "ok",
+  "rot": [
+   "test_echtzeit:dauerlauf_64_regler_hand_ki_0_allokationen",
+   "test_echtzeit:dauerlauf_mit_vollem_pruefer_0_allokationen"
+  ],
+  "gruen": 118,
+  "regel": "keine Allokation im Prozessaufruf (ADR 002)"
+ },
+ "M29_i4_zwei_setzen_erlaubt": {
+  "bau": "ok",
+  "rot": [
+   "test_einsortieren:i4_setzen_und_rampe_am_selben_beat_nach_startfolge"
+  ],
+  "gruen": 119,
+  "regel": "I4: zwei Setzen am selben Beat überlappen (09 herleitung.py)"
+ },
+ "M30_i4_setzen_nach_rampe_erlaubt": {
+  "bau": "ok",
+  "rot": [
+   "test_einsortieren:i4_setzen_und_rampe_am_selben_beat_nach_startfolge"
+  ],
+  "gruen": 119,
+  "regel": "I4: Setzen nach der Rampe am selben Beat überlappt (§17 Reihenfolge)"
+ },
+ "M31_halter_am_zyklusanfang": {
+  "bau": "ok",
+  "rot": [
+   "test_hand:halter_am_start_sample_nach_rueckgabe_im_selben_zyklus"
+  ],
+  "gruen": 119,
+  "regel": "Halter am Start-Sample, nicht am Zyklusanfang (Rückgabe im selben Zyklus)"
+ },
+ "M32_ohne_vormerkung": {
+  "bau": "ok",
+  "rot": [
+   "test_pruefer:basstausch_als_paar_am_selben_sample_gueltig"
+  ],
+  "gruen": 119,
+  "regel": "Prüfer sieht alle Teile eines Samples (§17 Reihenfolge)"
+ },
+ "M33_verspaetet_mit_grund": {
+  "bau": "ok",
+  "rot": [
+   "test_ablauf:verspaetet_politik_1_restrampe_bis_zum_ende_beat"
+  ],
+  "gruen": 119,
+  "regel": "Quittung 5 mit Grund \"\" (§16.1, Lesart i, Andreas 2026-09-25)"
+ },
+ "M34_gruppe_gefallen_nie": {
+  "bau": "ok",
+  "rot": [
+   "test_pruefer:vor_teilstart_lehnt_ab_und_die_gruppe_faellt",
+   "test_pruefer:nach_handgriff_sieht_den_handwert_und_greift_ein",
+   "test_pruefer:gruppe_gefallen_bei_hand_und_abbruch_nicht_ohne_gruppe"
+  ],
+  "gruen": 117,
+  "regel": "Naht: gruppe_gefallen wird gerufen (§4.4 Deck-Teile fallen mit)"
+ },
+ "M35_gruppe_abbrechen_wirkungslos": {
+  "bau": "ok",
+  "rot": [
+   "test_pruefer:nach_handgriff_sieht_den_handwert_und_greift_ein"
+  ],
+  "gruen": 119,
+  "regel": "Naht: Eingriff::gruppe_abbrechen bricht die Gruppe ab"
+ },
+ "M36_deck_taste_ohne_halter": {
+  "bau": "ok",
+  "rot": [
+   "test_hand:deck_halter_32_beats_nach_der_transport_taste"
+  ],
+  "gruen": 119,
+  "regel": "Deck-Halter nach der Transport-Taste (§7.3 P5)"
+ },
+ "M37_transport_als_regler_gemeldet": {
+  "bau": "ok",
+  "rot": [
+   "test_hand:deck_halter_32_beats_nach_der_transport_taste"
+  ],
+  "gruen": 119,
+  "regel": "transport ist kein Regler: nur /e/halter (§5.9)"
+ },
+ "M38_vorgaenger_wert_vor_dem_start": {
+  "bau": "ok",
+  "rot": [
+   "test_ablauf:angrenzende_rampe_beginnt_beim_endwert_der_vorigen",
+   "test_pruefer:vorschau_stimmt_mit_dem_ablauf_ueberein"
+  ],
+  "gruen": 118,
+  "regel": "angrenzende Rampe beginnt beim Ist-Wert am Ziel-Sample (§4.3)"
+ },
+ "M39_ki_blende_dem_pruefer_vorgelegt": {
+  "bau": "ok",
+  "rot": [
+   "test_pruefer:intern_teile_werden_nicht_vorgelegt"
+  ],
+  "gruen": 119,
+  "regel": "KI-Stopp-Blende wird nie blockiert (ADR 013, pruefer.h intern)"
+ },
+ "M40_abbruch_ohne_plan_fremde_quelle": {
+  "bau": "ok",
+  "rot": [
+   "test_einsortieren:abbruch_quittiert_angenommen_und_fertig_ohne_plan_nur_eigene_quelle"
+  ],
+  "gruen": 119,
+  "regel": "/k/abbruch ohne Plan nur eigene Quelle (Festlegung F5)"
+ },
+ "M41_folgenleser_ignoriert_erwarte_nicht": {
+  "bau": "ok",
+  "rot": [
+   "folgenleser:rot_nicht(0!=1)"
+  ],
+  "gruen": 119,
+  "regel": "Werkzeug: erwarte_nicht ist eine Negativ-Kontrolle (FORMAT.md Punkt 16)"
+ },
+ "M42_folgenleser_gruen_ohne_pruefung": {
+  "bau": "ok",
+  "rot": [
+   "folgenleser:rot_nur_uebersprungen(0!=1)"
+  ],
+  "gruen": 119,
+  "regel": "Werkzeug: keine Prüfung ist kein Beleg"
+ },
+ "M43_folgenleser_ohne_punkt_8": {
+  "bau": "ok",
+  "rot": [
+   "folgenleser:rot_unerwartet(0!=1)"
+  ],
+  "gruen": 119,
+  "regel": "Werkzeug: unverbrauchte /q 4 bis 8 macht rot (FORMAT.md Punkt 8)"
+ },
+ "M44_folgenleser_ohne_verbrauch": {
+  "bau": "ok",
+  "rot": [
+   "folge:hand_gewinnt.jsonl",
+   "folge:zu_spaet.jsonl",
+   "folge:i4_ueberlappung.jsonl",
+   "folge:ki_stopp.jsonl",
+   "folgenleser:rot_verbraucht(0!=1)"
+  ],
+  "gruen": 115,
+  "regel": "Werkzeug: eine Nachricht erfüllt höchstens einen Schritt (FORMAT.md Punkt 6)"
+ },
+ "M45_uebergabe_ueber_frei": {
+  "bau": "ok",
+  "rot": [
+   "test_ablauf:setzen_und_rampe_am_selben_sample"
+  ],
+  "gruen": 119,
+  "regel": "Übergabe am selben Sample ohne Halter frei dazwischen (§5.7, §5.9)"
+ },
+ "M47_start_vor_hand": {
+  "bau": "ok",
+  "rot": [
+   "test_hand:hand_am_selben_sample_wie_teilstart_gewinnt"
+  ],
+  "gruen": 119,
+  "regel": "Hand gewinnt am selben Sample: vor den Starts angewandt (ADR 023 P2)"
+ },
+ "M48_stumm_umweg_ueber_minus_60": {
+  "bau": "ok",
+  "rot": [
+   "test_ablauf:stumm_nach_stumm_bleibt_stumm_und_kein_umweg_ueber_minus_60"
+  ],
+  "gruen": 119,
+  "regel": "Rampe von oder nach stumm nie lauter als beide Enden (F3)"
+ },
+ "M49_schaltrampe_linear": {
+  "bau": "ok",
+  "rot": [
+   "test_ablauf:setzen_von_und_nach_stumm_ueber_minus_60",
+   "test_ablauf:schaltrampe_beim_setzen_als_s_kurve"
+  ],
+  "gruen": 118,
+  "regel": "Schaltrampe als S-Kurve wie Scheibe 04 (F2)"
+ },
+ "M50_regler_vorgabe_falsch": {
+  "bau": "ok",
+  "rot": [
+   "regler_gegen_vertrag"
+  ],
+  "gruen": 119,
+  "regel": "Regler-Tabelle gleich §1.5 (Vorgabe fx/<n>/rueckweg 0 dB)"
+ },
+ "M46_startwert_nicht_gemeldet": {
+  "bau": "ok",
+  "rot": [
+   "test_ablauf:setzen_von_und_nach_stumm_ueber_minus_60"
+  ],
+  "gruen": 119,
+  "regel": "/e/regler beim Teilstart mit dem Wert am Start-Sample (§5.7, §1.2)"
+ },
+ "_zurueck": {
+  "bau": "ok",
+  "rot": [],
+  "gruen": 120
+ }
+}

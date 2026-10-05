@@ -1,0 +1,14 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "https://cypherdj.invalid/vertrag/1/aufnahme.schema.json",
+ "title": "aufnahme.json (SCHNITTSTELLEN.md §15)",
+ "type": "object",
+ "required": ["erstes_kern_sample", "notbahn_versatz_samples", "frames", "luecken"],
+ "properties": {
+  "erstes_kern_sample": {"$ref": "defs.schema.json#/$defs/sample"},
+  "notbahn_versatz_samples": {"type": "integer", "minimum": 0},
+  "frames": {"type": "integer", "minimum": 0},
+  "luecken": {"type": "array", "items": {"type": "array", "prefixItems": [{"type": "integer", "minimum": 0}, {"type": "integer", "minimum": 1}],
+   "minItems": 2, "maxItems": 2}}
+ }
+}

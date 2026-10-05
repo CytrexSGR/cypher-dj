@@ -1,0 +1,14 @@
+name = "ruhe-kern"
+zweck = "Negativ-Kontrolle der Abnahme: Kern aus Scheibe 08 mit Prüfklick und eigenen Ausgängen, Notbahn daneben, ohne Eingriff: 0 Lücken im Kern und am Ziel, kein Klick fehlt, keine Übernahme, Raster ohne Streuung."
+dauer_s = 600.0
+
+[quelle]
+art = "kern"
+argumente = ["--konfig", "{ordner}/kern.toml"]
+
+[erwartung]
+fehlende_klicks_max = 0
+notbahn_uebernahmen_max = 0
+kern_luecken_max = 0
+ziel_luecken_max = 0
+raster_versatz_max = 0.0

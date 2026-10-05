@@ -1,0 +1,26 @@
+{
+  "name": "cypherdj-leitstand",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Leitstand: WebSocket-Hub, Kern-Anbindung, Takt-Strom, Journal (SCHNITTSTELLEN §9, §15, §16.3, §18)",
+  "engines": { "node": ">=22.18" },
+  "scripts": {
+    "start": "node src/leitstand.ts",
+    "test": "node --test --test-concurrency=1 \"tests/*.test.ts\" \"../ansage/tests/*.test.ts\"",
+    "typen": "tsc --noEmit -p tsconfig.json",
+    "folgen": "node pruef/laeufer.ts pruef/folgen/*.jsonl ../vertrag/folgen/autonomie_1_eq.jsonl",
+    "abnahme": "node pruef/abnahme_21.ts",
+    "positivliste": "node pruef/mutation_positivliste.ts"
+  },
+  "dependencies": {
+    "ajv": "8.20.0",
+    "smol-toml": "1.9.0",
+    "ws": "8.21.3"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.4",
+    "@types/ws": "8.18.1",
+    "typescript": "5.9.3"
+  }
+}

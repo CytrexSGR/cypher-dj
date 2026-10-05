@@ -1,0 +1,15 @@
+name = "luecke-ziel-null"
+zweck = "Negativ-Kontrolle zum Stille-Messer: derselbe Aufbau mit 0,5 Perioden je 500. Zyklus (10 K0b); die Quelle verbrennt genauso oft, am Ziel entsteht keine Stille."
+dauer_s = 30.0
+
+[quelle]
+art = "pruefquelle_direkt"
+spin_alle = 500
+spin_anteil = 0.5
+
+[notbahn]
+an = false
+
+[erwartung]
+spins_min = 5
+stille_ereignisse_max = 0

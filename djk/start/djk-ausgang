@@ -1,0 +1,115 @@
+#!/usr/bin/env python3
+"""djk-ausgang: lesende Inventur einer Ziel-Senke, VOR jedem --ton-frei aufzurufen (Plan M-1 Task 2 und Task 9 R1).
+Ändert nichts: nur `pw-link -l`, `pactl list short sinks`, `pactl list sink-inputs`, `pactl get-default-sink`, `pw-dump`.
+
+Aufruf: djk-ausgang [--senke NAME]
+  NAME     node.name, Beschreibung oder ein Ziel-Präfix "<Senke>:<Portbasis>" (wie --master an djk-start; ziel.py
+           löst es auf). Vorgabe: die Standard-Senke (pactl get-default-sink).
+Ausgabe: je Client, der an der Senke hängt (pw-link) oder als Sink-Input auf sie zeigt (pactl): Name, Herkunft, und ob
+         er djk-eigen ist (Name beginnt mit "cypherdj-") oder fremd; am Ende die Bilanz.
+Rückgabe: 0 keine fremden Clients an der Senke, 4 mindestens ein fremder Client (Ausgabe nennt sie), 2 Aufruf oder
+          Senke unbekannt. Ein "eigener" Client kann trotzdem einer anderen Sitzung gehören (zum Beispiel der Vorhörer):
+          die Inventur sagt, wer da hängt, nicht wem er gehört.
+Prüfstand: Umgebung DJK_FIX_PWLINK, DJK_FIX_SINKS, DJK_FIX_INPUTS, DJK_FIX_DEFAULT (Dateien mit der aufgezeichneten
+           Ausgabe der Befehle oben) und DJK_PW_DUMP ersetzen die lebenden Befehle."""
+import os
+import re
+import subprocess
+import sys
+
+HIER = os.path.dirname(os.path.realpath(__file__))
+sys.path.insert(0, HIER)
+import ziel  # noqa: E402
+
+
+def lauf(fix, befehl):
+    """Ausgabe eines lesenden Befehls, oder der Inhalt der Prüfstand-Datei."""
+    pfad = os.environ.get(fix)
+    if pfad:
+        with open(pfad, encoding="utf-8") as f:
+            return f.read()
+    try:
+        r = subprocess.run(befehl, capture_output=True, text=True, timeout=10, env={**os.environ, "LC_ALL": "C"})
+    except (OSError, subprocess.SubprocessError) as e:
+        print(f"djk-ausgang: {' '.join(befehl)}: {e}", file=sys.stderr)
+        sys.exit(2)
+    if r.returncode != 0:
+        print(f"djk-ausgang: {' '.join(befehl)} failed (rc {r.returncode}): {r.stderr.strip()}", file=sys.stderr)
+        sys.exit(2)
+    return r.stdout
+
+
+def eigen(name):
+    return name.startswith("cypherdj-")
+
+
+def main(argv):
+    senke = None
+    a = list(argv)
+    if a[:1] == ["--senke"]:
+        if len(a) != 2 or a[1].startswith("-") or not a[1]:
+            print("djk-ausgang: --senke needs a name", file=sys.stderr)
+            return 2
+        senke = a[1]
+    elif a:
+        print("usage: djk-ausgang [--senke NAME]", file=sys.stderr)
+        return 2
+    if senke is None:
+        senke = lauf("DJK_FIX_DEFAULT", ["pactl", "get-default-sink"]).strip()
+        if not senke:
+            print("djk-ausgang: no default sink; pass --senke", file=sys.stderr)
+            return 2
+    liste = ziel.knoten(os.environ.get("DJK_PW_DUMP") or None)
+    bekannt = dict(liste)
+    node = None
+    for kand in (senke, re.sub(r":[A-Za-z0-9_]+$", "", senke)):
+        treffer = [n for n, d in liste if n == kand] or [n for n, d in liste if d == kand]
+        if len(treffer) > 1:
+            print(f"djk-ausgang: {kand!r} matches several devices ({', '.join(treffer)}); pass the node.name", file=sys.stderr)
+            return 2
+        if treffer:
+            node = treffer[0]
+            break
+    if node is None:
+        print(f"djk-ausgang: sink {senke!r} not found among the audio devices (pw-dump)", file=sys.stderr)
+        return 2
+
+    clients = {}  # name -> Liste der Belege
+    # pw-link -l: Portzeile in Spalte 0, darunter "  |<- client:port" (Eingänge der Senke)
+    aktuell = None
+    for zeile in lauf("DJK_FIX_PWLINK", ["pw-link", "-l"]).splitlines():
+        if zeile and not zeile[0].isspace():
+            aktuell = zeile.strip()
+            continue
+        m = re.match(r"\s*\|<-\s*(.+)$", zeile)
+        if m and aktuell and aktuell.startswith(node + ":"):
+            von = m.group(1).strip()
+            clients.setdefault(von.rpartition(":")[0] or von, []).append(f"pw-link {von} -> {aktuell.rpartition(':')[2]}")
+    # pactl: Sink-Inputs, deren Ziel diese Senke ist
+    ids = {}
+    for z in lauf("DJK_FIX_SINKS", ["pactl", "list", "short", "sinks"]).splitlines():
+        t = z.split("\t")
+        if len(t) >= 2:
+            ids[t[0]] = t[1]
+    for block in re.split(r"\n(?=\S)", lauf("DJK_FIX_INPUTS", ["pactl", "list", "sink-inputs"])):
+        nr = re.match(r"\S.*#(\d+)", block)
+        z = re.search(r"^\s+(?:Ziel|Sink):\s*(\d+)\s*$", block, re.M)
+        n = re.search(r'^\s+application\.name = "(.*)"', block, re.M)
+        if nr and z and n and ids.get(z.group(1)) == node:
+            clients.setdefault(n.group(1), []).append(f"pactl sink-input #{nr.group(1)}")
+
+    print(f"djk-ausgang: sink {node} ({bekannt[node]}), read-only")
+    if not clients:
+        print("  no client hangs on this sink")
+    for c in sorted(clients):
+        print(f"  {'eigen' if eigen(c) else 'FREMD':<6} {c}")
+        for b in clients[c]:
+            print(f"           {b}")
+    fremd = [c for c in clients if not eigen(c)]
+    print(f"  total: {len(clients) - len(fremd)} djk-own, {len(fremd)} foreign"
+          + ("" if not fremd else f" ({', '.join(sorted(fremd))}): no --ton-frei while they hang here"))
+    return 4 if fremd else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

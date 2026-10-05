@@ -1,0 +1,17 @@
+{
+ "kuenstler": ["Liebing", "Slam", "Tracid", "Toksin", "Devine", "Bodzin", "Sutekh", "Huntemann", "Rother", "909"],
+ "quellen": {
+   "battery": "${CYPHERDJ_KLANG_BATTERY}",
+   "maschine": "${CYPHERDJ_KLANG_MASCHINE}"
+ },
+ "rollen": {
+  "bd": {"ordner": {"battery": ["Kick"], "maschine": ["Kick"]}, "muster": [0, 4, 8, 12], "spitze_db": -6.0, "max": 16, "max_spitze_ms": 20, "max_dauer_s": 1.5},
+  "cp": {"ordner": {"battery": ["Clap"], "maschine": ["Clap"]}, "muster": [4, 12], "spitze_db": -8.0, "max": 12, "max_dauer_s": 1.0},
+  "sd": {"ordner": {"battery": ["Snare"], "maschine": ["Snare"]}, "muster": [4, 12], "spitze_db": -8.0, "max": 12, "max_dauer_s": 1.0, "name_ohne": ["Rim"]},
+  "hh": {"ordner": {"battery": ["HiHat"], "maschine": ["Hihat"]}, "muster": [2, 6, 10, 14], "spitze_db": -10.0, "max": 12, "name_enthaelt": ["Closed"], "max_dauer_s": 0.6},
+  "oh": {"ordner": {"battery": ["HiHat"], "maschine": ["Hihat"]}, "muster": [2, 6, 10, 14], "spitze_db": -10.0, "max": 12, "name_enthaelt": ["Open"], "max_dauer_s": 2.0},
+  "sh": {"ordner": {"battery": ["Shaker"], "maschine": ["Shaker"]}, "muster": [1, 3, 5, 7, 9, 11, 13, 15], "spitze_db": -14.0, "max": 8, "max_dauer_s": 0.6},
+  "perc": {"ordner": {"battery": ["Metallic", "Wooden"], "maschine": ["Percussion"]}, "muster": [3, 7, 11], "spitze_db": -10.0, "max": 12, "max_dauer_s": 1.2}
+  },
+ "pegel_zusatz": {"rim": -12, "ht": -10, "mt": -10, "lt": -10, "cr": -16, "rd": -16, "kick_sub": -6, "kick_click": -12}
+}

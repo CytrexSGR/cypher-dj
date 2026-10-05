@@ -1,0 +1,121 @@
+#!/usr/bin/env node
+// djk-loop (Plan MVP 2, ADR 025, SCHNITTSTELLEN §4.9, Scheibe 2 §4.9 /k/loop/rec): Loop-Boxen aus der CLI, für Cypher
+// und Andreas. Meldet sich beim Kern an (/k/hallo), schickt /k/loop/* mit Quelle cypher (Stop Cypher greift) oder
+// andreas und wartet auf Quittung und /e/loop bzw. (rec) /e/mitschnitt. Rückgabe 0 angenommen, 1 abgelehnt oder keine
+// Antwort, 2 falscher Aufruf.
+// Aufruf: djk-loop [--instanz i] [--quelle cypher|andreas] liste | laden <box> <name> | start <box> | stopp <box> |
+//                  rec <beats> <name> | kit <loop> [<klang>]   (beats 1, 2, 4, 8, 16, 32; 4 Beats = 1 Takt)
+// kit (MVP 2 Scheibe 3, E2): Loop wird Klang im Zusatz-Kit (Vorgabe rec, Prüfinstanz rec-<i>); der Erzeuger lädt
+// ihn ohne Neustart nach. Kein Kern-Verkehr.
+import dgram from 'node:dgram';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { parseArgs } from 'node:util';
+import { kodiere, dekodiere } from '../vertrag/attrappe_kern/osc.mjs';
+import { loopZuKlang } from './kit_schreiben.mjs';
+
+const AUFRUF = 'Aufruf: djk-loop [--instanz i] [--quelle cypher|andreas] liste | laden <box> <name> | start <box> | ' +
+              'stopp <box> | rec <beats> <name> | kit <loop> [<klang>] [--kit battery] [--kit-zusatz rec]';
+const STATUS = ['leer', 'bereit', 'wartet', 'läuft', 'endet', 'tempo'];
+const MITSCHNITT_STATUS = ['fertig geschrieben', 'abgelehnt oder abgebrochen'];
+const raus = (text, rc) => { (rc ? process.stderr : process.stdout).write(`djk-loop: ${text}\n`); process.exit(rc); };
+
+let opt, pos;
+try {
+  ({ values: opt, positionals: pos } = parseArgs({ allowPositionals: true, options: {
+    instanz: { type: 'string', default: process.env.CYPHERDJ_INSTANZ ?? '' },
+    quelle: { type: 'string', default: 'cypher' },
+    'kern-port': { type: 'string' },
+    ordner: { type: 'string' },
+    kit: { type: 'string', default: 'battery' },
+    'kit-zusatz': { type: 'string' },
+    'kits-ordner': { type: 'string', default: path.join(os.homedir(), '.config/cypherdj/kits') },
+  } }));
+} catch (e) { raus(`${e.message}\n${AUFRUF}`, 2); }
+const I = opt.instanz;
+if (I && !/^[a-i]$/.test(I)) raus(`Instanz ${I}: erlaubt sind a bis i`, 2);
+if (opt.quelle !== 'cypher' && opt.quelle !== 'andreas') raus(`Quelle ${opt.quelle}: cypher oder andreas`, 2);
+const V = I ? 1000 * (I.charCodeAt(0) - 96) : 0;
+const KERN = Number(opt['kern-port'] ?? 47100 + V);
+const ORDNER = opt.ordner ?? (I ? `/dev/shm/cypherdj-${I}/loops` : path.join(os.homedir(), '.config/cypherdj/loops'));
+const [befehl, ...rest] = pos;
+
+if (befehl === 'liste') {
+  const namen = fs.existsSync(ORDNER) ? fs.readdirSync(ORDNER).filter((n) => /^[a-z0-9_-]{1,32}$/.test(n)).sort() : [];
+  for (const n of namen) {
+    try {
+      const j = JSON.parse(fs.readFileSync(path.join(ORDNER, n, 'loop.json'), 'utf8'));
+      const beats = j.beats ?? 4 * j.takte;  // alte Dateien: takte (bis Scheibe 2)
+      process.stdout.write(`${n}\t${beats} Beat(s)\t${j.quelle ?? ''}\n`);
+    } catch { process.stdout.write(`${n}\tunlesbar\n`); }
+  }
+  raus(`${namen.length} Loop(s) in ${ORDNER}`, 0);
+}
+
+if (befehl === 'kit') {
+  if (rest.length < 1 || rest.length > 2) raus(AUFRUF, 2);
+  const zusatz = opt['kit-zusatz'] ?? (I ? `rec-${I}` : 'rec');
+  try {
+    const r = loopZuKlang({ loopOrdner: ORDNER, kitsOrdner: opt['kits-ordner'], basis: opt.kit, zusatz, loop: rest[0], klang: rest[1] });
+    raus(`Loop ${rest[0]} ist jetzt Klang ${r.klang} (Kit ${zusatz}, Note ${r.note}): s("${r.klang}")`, 0);
+  } catch (e) { raus(`kit: ${e.message}`, 1); }
+}
+
+const id = BigInt(Date.now()) * 1000n + BigInt(process.pid % 1000);
+const rec = befehl === 'rec';
+let box = -1, beats = 0, wartezeit_ms = 1500;
+let sendung;
+if (rec && rest.length === 2) {
+  beats = Number(rest[0]);
+  if (![1, 2, 4, 8, 16, 32].includes(beats)) raus(`Beats ${rest[0]}: 1, 2, 4, 8, 16 oder 32 (4 Beats = 1 Takt)`, 2);
+  sendung = ['/k/loop/rec', 'hsis', [id, opt.quelle, beats, rest[1]]];
+  wartezeit_ms = 5000 + beats * 1000;  // Ausrichtung (bis zu beats Beats) plus Aufnahme (dieselbe Länge), ~0,47 s je Beat
+} else if (befehl === 'laden' && rest.length === 2) {
+  box = Number(rest[0]);
+  sendung = ['/k/loop/laden', 'hsis', [id, opt.quelle, box, rest[1]]];
+} else if ((befehl === 'start' || befehl === 'stopp') && rest.length === 1) {
+  box = Number(rest[0]);
+  sendung = [`/k/loop/${befehl}`, 'hsi', [id, opt.quelle, box]];
+} else {
+  raus(AUFRUF, 2);
+}
+if (!rec && !(box === 1 || box === 2)) raus(`Box ${rest[0]}: 1 oder 2`, 2);
+
+const sock = dgram.createSocket('udp4');
+const name = `djk-loop-${process.pid}`;
+let angenommen = false;
+let ende = false;
+const fertig = (text, rc) => {
+  if (ende) return;
+  ende = true;
+  sock.send(kodiere('/k/tschuess', 's', [name]), KERN, '127.0.0.1', () => { sock.close(); raus(text, rc); });
+};
+sock.on('message', (buf) => {
+  let m;
+  try { m = dekodiere(buf); } catch { return; }
+  if (m.adresse === '/k/willkommen' && !angenommen) sock.send(kodiere(...sendung), KERN, '127.0.0.1');
+  else if (m.adresse === '/q' && m.werte[0] === id) {
+    // Scheibe 3 (E4, Review Scheibe 2 Fund 6): §5.1 status 1 angenommen, 2 gestartet, 3 fertig, 5 verspätet ausgeführt
+    // gelten; 4 verspätet verworfen, 6 abgelehnt, 7 abgebrochen, 8 storniert sind ein Scheitern (vorher galt 4 als ok).
+    const st = m.werte[2];
+    if ([4, 6, 7, 8].includes(st)) fertig(`${sendung[0]} ${st === 6 ? 'abgelehnt' : `nicht ausgeführt (Status ${st})`}: ${m.werte[5]}`, 1);
+    else angenommen = true;
+  } else if (!rec && m.adresse === '/e/loop' && m.werte[0] === box && angenommen) {
+    const [, st, n, bts] = m.werte;
+    fertig(`Box ${box}: ${STATUS[st] ?? st}${n ? ` (${n}, ${bts} Beat(s))` : ''}`, 0);
+  } else if (rec && m.adresse === '/e/mitschnitt' && m.werte[0] === rest[1] && angenommen) {
+    const [n, bts, st, ab_beat] = m.werte;
+    fertig(`Mitschnitt ${n}: ${MITSCHNITT_STATUS[st] ?? st} (${bts} Beat(s), ab Beat ${ab_beat})`, st === 0 ? 0 : 1);
+  }
+});
+sock.bind(0, '127.0.0.1', () => {
+  const hallo = () => sock.send(kodiere('/k/hallo', 'sii', [name, sock.address().port, 1]), KERN, '127.0.0.1');
+  hallo();
+  // Der Kern streicht Abonnenten nach 5 s ohne /k/hallo (netz.h frist_ns); ein langer REC wartet länger
+  // (Abschluss-Review Scheibe 3 Fund 1: rec 16 meldete Scheitern, obwohl die Datei stand). Alle 2 s erneuern.
+  const lebt = setInterval(hallo, 2000);
+  lebt.unref();
+  setTimeout(() => fertig(angenommen ? `${sendung[0]} angenommen, kein ${rec ? '/e/mitschnitt' : '/e/loop'}` :
+    `keine Antwort vom Kern auf udp ${KERN}`, angenommen && !rec ? 0 : 1), wartezeit_ms);  // rec ohne Datei: 1
+});

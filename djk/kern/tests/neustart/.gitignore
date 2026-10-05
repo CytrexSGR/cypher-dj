@@ -1,0 +1,8 @@
+# Scheibe 18: Rohdaten der Abschuss-Serien bleiben lokal (Aufnahme 4 Kanäle float32, 0,77 MB je Sekunde; OSC-Protokoll)
+laeufe/*/ziel.f32
+laeufe/*/abonnent.jsonl
+laeufe/*/aufnahme.bereit
+__pycache__/
+# Querprobe über den Prüfstand aus 16 (Laufordner quer16-*): dessen Rohdaten ebenso
+laeufe/*/aufnahme.wav
+laeufe/*/osc.jsonl

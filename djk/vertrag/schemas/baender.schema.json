@@ -1,0 +1,21 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "https://cypherdj.invalid/vertrag/1/baender.schema.json",
+ "title": "djk/vertrag/baender.json (SCHNITTSTELLEN.md §6.2)",
+ "type": "object",
+ "required": ["version", "rate_hz", "fenster_samples", "baender", "k_filter"],
+ "properties": {
+  "version": {"const": 1},
+  "rate_hz": {"const": 48000},
+  "fenster_samples": {"const": 48},
+  "baender": {"type": "array", "minItems": 6, "maxItems": 6, "items": {
+   "type": "object", "required": ["index", "name", "unten_hz", "oben_hz", "sos"],
+   "properties": {"index": {"type": "integer", "minimum": 0, "maximum": 5},
+    "name": {"enum": ["sub", "tief", "tiefmitte", "mitte", "praesenz", "hoch"]},
+    "unten_hz": {"type": "number"}, "oben_hz": {"type": "number"}, "sos": {"$ref": "#/$defs/sos"}}}},
+  "k_filter": {"type": "object", "required": ["sos"], "properties": {"sos": {"$ref": "#/$defs/sos"}}}
+ },
+ "$defs": {
+  "sos": {"type": "array", "minItems": 1, "items": {"type": "array", "items": {"type": "number"}, "minItems": 6, "maxItems": 6}}
+ }
+}

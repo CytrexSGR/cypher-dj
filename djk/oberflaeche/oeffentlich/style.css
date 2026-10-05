@@ -1,0 +1,474 @@
+/* djk MVP-Oberfläche (Scheibe 60m). Farben aus Andreas' Pult (pult.html) und Deck (deck/index.html, 22.09.). */
+:root {
+  --bg: #0e0f12; --panel: #16181e; --panel2: #1c1f27; --line: #2a2d36; --text: #e8e8ec; --dim: #8a8d98;
+  --a: #2fd6c3; --b: #e0a33e; --c: #b48cff; --c2: #8c9bff; --c3: #e08cff; --kill: #ff5a1f; --gut: #58d66b; --warn: #ffb020;
+  --kopf: 64px; --lib: 40px; --lib-auf: 60vh; --abstand: 12px;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); overflow: hidden;
+  font: 15px/1.3 system-ui, -apple-system, "Segoe UI", sans-serif; user-select: none; }
+body { display: grid; grid-template-rows: var(--kopf) 1fr var(--lib); gap: var(--abstand); padding: var(--abstand);
+  grid-template-columns: minmax(0, 1fr); }   /* der Kopf darf die Spalte nicht über die Fensterbreite drücken (Deck B ragte 77 px raus) */
+label { color: var(--dim); font-size: 11px; letter-spacing: .16em; font-weight: 600; }
+output, b, td.zahl { font-variant-numeric: tabular-nums; }
+button { font: inherit; color: var(--text); background: var(--panel2); border: 1px solid var(--line); border-radius: 10px;
+  cursor: pointer; touch-action: manipulation; }
+button:hover { border-color: #3c404c; }
+button:focus-visible, .regler:focus-visible { outline: 2px solid var(--farbe, var(--a)); outline-offset: 2px; }
+
+/* Kopf */
+#kopf { display: flex; align-items: center; gap: 14px; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 12px; padding: 0 12px; min-width: 0; overflow: hidden; }
+.marke { font-weight: 800; font-size: 22px; letter-spacing: .04em; }
+.marke span { font-size: 11px; color: var(--dim); letter-spacing: .2em; margin-left: 4px; }
+.uhr { display: flex; align-items: center; gap: 14px; }
+.feld { display: flex; align-items: baseline; gap: 8px; }
+.feld b { font-size: 30px; font-weight: 700; min-width: 2.2ch; }
+#bpm { box-sizing: content-box; width: 6.4ch; font-variant-numeric: tabular-nums; font: inherit; font-size: 30px; font-weight: 700; color: inherit; background: transparent; border: 1px solid transparent; border-radius: 4px; padding: 0 2px; text-align: right; }
+#bpm:hover, #bpm:focus { border-color: currentColor; outline: none; }
+.feld.tempo button { font: inherit; font-size: 16px; line-height: 1; width: 22px; height: 22px; padding: 0; color: inherit; background: transparent; border: 1px solid currentColor; border-radius: 4px; opacity: .6; cursor: pointer; align-self: center; }
+.feld.tempo button:hover { opacity: 1; }
+.schlaege { display: flex; gap: 6px; }
+.schlaege i { width: 22px; height: 22px; border-radius: 5px; background: var(--line); }
+.schlaege i.an { background: var(--text); }
+.schlaege i.an:first-child { background: var(--kill); }
+.ansage { flex: 1; color: var(--dim); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ansage.warnung { color: var(--warn); }
+.verbindungen { display: flex; gap: 10px; }
+.punkt { font-size: 11px; letter-spacing: .14em; font-weight: 700; color: var(--dim); padding: 6px 10px 6px 24px;
+  border: 1px solid var(--line); border-radius: 20px; position: relative; }
+.punkt::before { content: ""; position: absolute; left: 9px; top: 50%; width: 8px; height: 8px; margin-top: -4px;
+  border-radius: 50%; background: #5a2020; }
+.punkt.an::before { background: var(--gut); }
+.punkt.an { color: var(--text); }
+.punkt.an.ohne-hand::before { background: var(--warn); }
+.punkt.ohne-hand { color: var(--warn); }
+
+/* Pult */
+/* Plan Oberfläche T6: Raster nach Traktor (A/C links, Mixer über beide Reihen, B/D rechts); minmax: ein langer Titel
+   darf die Seite nicht verbreitern */
+#pult { display: grid; grid-template-columns: minmax(0, 1fr) 980px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-areas: "a mix b" "c mix d"; gap: var(--abstand); min-height: 0; }
+.deck[data-deck="1"] { grid-area: a; } .deck[data-deck="2"] { grid-area: b; }
+#deck-c { grid-area: c; } #deck-d { grid-area: d; } #mischer { grid-area: mix; }
+.deckflaeche { background: var(--panel); border: 1px solid var(--line); border-top: 3px solid var(--farbe);
+  border-radius: 12px; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+.platzhalter { flex: 1; display: grid; place-items: center; color: var(--dim); border: 1px dashed var(--line); border-radius: 8px; font-size: 13px; }
+.deck, #mischer, #bestand { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; min-height: 0; }
+.deck { padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; border-top: 3px solid var(--farbe); }
+.deckkopf { display: flex; align-items: center; gap: 12px; }
+.buchstabe { width: 36px; height: 36px; border-radius: 8px; background: var(--farbe); color: #0e0f12; font-weight: 800;
+  font-size: 22px; display: grid; place-items: center; }
+.decktitel { color: var(--dim); font-size: 12px; letter-spacing: .18em; font-weight: 700; }
+.status { margin-left: auto; font-size: 12px; letter-spacing: .14em; font-weight: 700; padding: 5px 12px;
+  border-radius: 20px; border: 1px solid var(--line); color: var(--dim); }
+.status.laeuft { color: #0e0f12; background: var(--farbe); border-color: var(--farbe); }
+.status.geladen { color: var(--text); }
+.titel { font-size: 28px; font-weight: 750; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.meta { color: var(--dim); font-size: 14px; min-height: 18px; }
+.position { display: flex; align-items: baseline; justify-content: space-between; }
+.position > div { display: flex; align-items: baseline; gap: 8px; }
+.position b { font-size: 32px; font-weight: 750; line-height: 1; }
+.position .rest b { font-size: 26px; color: var(--dim); }
+.von { color: var(--dim); font-size: 20px; }
+.verlauf { position: relative; height: 26px; background: var(--panel2); border-radius: 6px; overflow: hidden; }
+.verlauf .phrase { position: absolute; top: 0; bottom: 0; width: 1px; background: #343845; }
+.verlauf i { position: absolute; top: 0; bottom: 0; left: 0; width: 0; background: color-mix(in srgb, var(--farbe) 35%, transparent);
+  border-right: 2px solid var(--farbe); }
+.meter { background: var(--panel2); border-radius: 4px; position: relative; overflow: hidden; }
+.meter i { position: absolute; background: linear-gradient(90deg, var(--gut) 0 70%, var(--warn) 70% 90%, var(--kill) 90%); }
+.meter.waagrecht { height: 10px; }
+.meter.waagrecht i { left: 0; top: 0; bottom: 0; width: 0; background-size: 100% 100%; }
+.meter.senkrecht { width: 12px; }
+.meter.senkrecht i { left: 0; right: 0; bottom: 0; height: 0;
+  background: linear-gradient(0deg, var(--gut) 0 70%, var(--warn) 70% 90%, var(--kill) 90%); }
+.tasten { margin-top: auto; display: grid; grid-template-columns: 1fr 1.4fr; gap: 12px; }
+.taste { height: 72px; font-size: 22px; font-weight: 800; letter-spacing: .12em; border-radius: 14px; }
+.taste.play.an { background: var(--farbe); color: #0e0f12; border-color: var(--farbe); }
+.taste.cue.gedrueckt, .taste.play.gedrueckt { transform: translateY(1px); border-color: var(--text); }
+.taste:disabled { opacity: .35; cursor: default; }
+
+/* Mischer */
+#mischer { display: grid; grid-template-columns: 1fr 1fr 1fr 150px; grid-template-rows: minmax(0, 1fr) auto minmax(160px, .5fr); gap: 10px 8px; padding: 14px; }
+#fx-platz { grid-column: 1 / -1; }
+.zug { display: grid; grid-template-columns: 1fr 72px; grid-template-rows: auto minmax(0, 1fr); gap: 10px; border-top: 3px solid var(--farbe); padding-top: 10px; min-height: 0; }
+.knoepfe { display: flex; flex-direction: column; justify-content: space-between; }
+.knopfzeile { display: grid; grid-template-columns: 46px 1fr 44px; align-items: center; gap: 8px; height: 52px; }
+.knopf { width: 46px; height: 46px; cursor: ns-resize; touch-action: none; }
+.knopf svg { width: 100%; height: 100%; display: block; }
+.knopf .ring { fill: var(--panel2); stroke: var(--line); stroke-width: 4; }
+.knopf .bogen { fill: none; stroke: var(--farbe); stroke-width: 4; stroke-linecap: round; }
+.knopf .zeiger { stroke: var(--text); stroke-width: 3.5; stroke-linecap: round; }
+.knopf.gegriffen .ring { stroke: var(--farbe); }
+.beschrift { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.beschrift output { font-size: 15px; font-weight: 650; white-space: nowrap; }
+output.vorgabe { color: var(--dim); font-weight: 500; }
+.kill { height: 40px; font-size: 11px; font-weight: 800; letter-spacing: .1em; border-radius: 8px; color: var(--dim); }
+.kill.an { background: var(--kill); color: #0e0f12; border-color: var(--kill); }
+.faderspalte { display: grid; grid-template-columns: 1fr 12px; grid-template-rows: 1fr auto auto; gap: 6px 8px; min-height: 0; }
+.faderwert { grid-column: 1 / span 2; text-align: center; font-size: 14px; font-weight: 600; }
+.pfl { grid-column: 1 / span 2; height: 34px; font-size: 12px; font-weight: 800; letter-spacing: .12em; border-radius: 8px; color: var(--dim); }
+.pfl.an { background: var(--warn); color: #0e0f12; border-color: var(--warn); }
+.regler.senkrecht { cursor: ns-resize; touch-action: none; display: flex; justify-content: center; min-height: 0; }
+.regler.senkrecht .bahn { position: relative; width: 10px; height: calc(100% - 36px); margin: 18px 0; background: var(--panel2); border-radius: 5px;
+  border: 1px solid var(--line); }
+.regler.senkrecht .kappe { position: absolute; left: 50%; width: 62px; height: 34px; margin-left: -31px; margin-bottom: -17px;
+  bottom: 0; border-radius: 6px; background: #2b2f3a; border: 1px solid #454a58;
+  box-shadow: inset 0 -2px 0 rgba(0,0,0,.35); }
+.regler.senkrecht .kappe::after { content: ""; position: absolute; left: 8px; right: 8px; top: 50%; height: 2px; margin-top: -1px; background: var(--farbe); }
+.regler.gegriffen .kappe { border-color: var(--farbe); }
+.mitte { display: flex; flex-direction: column; align-items: center; gap: 6px; padding-top: 10px; min-height: 0; --farbe: #c9ccd6; }
+.summe { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.summe output { font-size: 13px; font-weight: 650; white-space: nowrap; }
+.summe span { color: var(--dim); font-size: 10px; letter-spacing: .14em; font-weight: 600; }
+.meterzeile { flex: 1; min-height: 24px; display: flex; }
+.mitte .meter { width: 16px; }
+.phones { margin-top: 2px; border-top: 1px solid var(--line); padding-top: 6px; width: 100%; text-align: center; }
+.kopfhoerer { display: flex; gap: 10px; }
+.summe.klein .knopf { width: 50px; height: 50px; }
+.summe.klein output { font-size: 12px; }
+.pegelzahl { font-size: 12px; color: var(--dim); }
+.xfader { grid-column: 1 / -1; display: grid; grid-template-columns: 40px 1fr 40px 90px; align-items: center; gap: 10px;
+  padding-top: 8px; border-top: 1px solid var(--line); }
+.seite { font-weight: 800; font-size: 18px; text-align: center; }
+.seite.a { color: var(--a); } .seite.b { color: var(--b); }
+.regler.waagrecht { height: 56px; display: flex; align-items: center; cursor: ew-resize; touch-action: none; --farbe: var(--text); }
+.regler.waagrecht .bahn { position: relative; width: 100%; height: 10px; background: var(--panel2); border-radius: 5px; border: 1px solid var(--line); }
+.regler.waagrecht .bahn::before { content: ""; position: absolute; left: 50%; top: -8px; bottom: -8px; width: 1px; background: #3a3e4a; }
+.regler.waagrecht .kappe { position: absolute; top: 50%; width: 40px; height: 50px; margin: -25px 0 0 -20px; left: 50%;
+  border-radius: 6px; background: #2b2f3a; border: 1px solid #454a58; }
+.regler.waagrecht .kappe::after { content: ""; position: absolute; top: 8px; bottom: 8px; left: 50%; width: 2px; margin-left: -1px; background: var(--text); }
+.xfader output { font-size: 14px; font-weight: 600; text-align: right; }
+
+/* Bestand */
+#bestand { display: flex; flex-direction: column; padding: 12px 16px 8px; }
+.kopfzeile { display: flex; align-items: baseline; gap: 16px; padding-bottom: 8px; }
+.kopfzeile h2 { margin: 0; font-size: 12px; letter-spacing: .2em; color: var(--dim); }
+#bestand-info { color: var(--dim); font-size: 13px; }
+#meldung { margin-left: auto; font-size: 14px; font-weight: 600; }
+#meldung.fehler { color: var(--kill); } #meldung.ok { color: var(--gut); }
+.tabelle { flex: 1; overflow: auto; min-height: 0; }
+table { width: 100%; border-collapse: collapse; }
+th { position: sticky; top: 0; background: var(--panel); text-align: left; font-size: 11px; letter-spacing: .14em;
+  color: var(--dim); font-weight: 600; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+td { padding: 2px 10px; border-bottom: 1px solid #1f2229; font-size: 15px; height: 28px; }
+tr:hover td { background: #1a1d24; }
+td.titelzelle { font-weight: 650; }
+td.zahl { color: #c8cad2; }
+td.aktion { text-align: right; white-space: nowrap; width: 1%; }
+.laden { padding: 3px 14px; font-size: 12px; font-weight: 800; letter-spacing: .1em; margin-left: 8px; border-radius: 7px; }
+.laden.a { border-color: color-mix(in srgb, var(--a) 60%, var(--line)); color: var(--a); }
+.laden.b { border-color: color-mix(in srgb, var(--b) 60%, var(--line)); color: var(--b); }
+.laden.a:hover { background: var(--a); color: #0e0f12; } .laden.b:hover { background: var(--b); color: #0e0f12; }
+tr.auf-1 td.titelzelle { color: var(--a); } tr.auf-2 td.titelzelle { color: var(--b); }
+.tor-ok { color: var(--gut); } .tor-nein { color: var(--dim); }
+
+.cypher { display: flex; align-items: center; gap: 8px; }
+.cypher [hidden] { display: none; }
+.vorschlag { max-width: 340px; color: var(--text, #e8e8e8); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.taste-c { font: inherit; font-size: 13px; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--dim); background: transparent; color: inherit; cursor: pointer; }
+.taste-c.ja { border-color: var(--ok, #4caf50); color: var(--ok, #4caf50); font-weight: 600; }
+.taste-c.stopp { border-color: var(--warn); color: var(--warn); }
+.taste-c:disabled { opacity: .4; cursor: default; }
+
+/* Crossfader-Zuweisung je Deck (2026-09-27): A / THRU / B, die geltende Seite leuchtet in der Deckfarbe */
+.xzuweisung { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; grid-column: 1 / -1; }
+.xzuweisung button { font-family: inherit; font-weight: 600; font-size: 10px; line-height: 1; letter-spacing: .06em; padding: 6px 0; border: 1px solid var(--line);
+  background: transparent; color: var(--dim, #8a93a3); border-radius: 4px; cursor: pointer; }
+.xzuweisung button.an { background: var(--farbe); color: #111; border-color: var(--farbe); }
+.xzuweisung button.an.vorgabe { opacity: .55; }
+.zugname { grid-column: 1 / -1; font: 600 12px/1 var(--mono, monospace); letter-spacing: .12em; color: var(--farbe); }
+/* MVP 2 Scheibe 2: REC-Knopf mit Längenwahl im Kopf von C (ADR 025 Folgeplan, §4.9 /k/loop/rec) */
+.zugkopf { display: flex; align-items: center; gap: 8px; }  /* REC sitzt in der Kopfzeile, der Kanalzug bleibt auf der Höhe von A und B */
+.recreihe { margin-left: auto; display: flex; align-items: center; gap: 6px; letter-spacing: 0; }
+.reclaenge { display: flex; gap: 2px; }
+.reclaenge button { font-family: inherit; font-weight: 600; font-size: 10px; line-height: 1; padding: 2px 6px; border: 1px solid var(--line); background: transparent;
+  color: var(--dim); border-radius: 4px; cursor: pointer; }
+.reclaenge button.an { background: var(--farbe); color: #111; border-color: var(--farbe); }
+.recknopf { font-family: inherit; font-weight: 800; font-size: 10px; line-height: 1; letter-spacing: .1em; padding: 2px 10px; border: 1px solid var(--kill);
+  background: transparent; color: var(--kill); border-radius: 4px; cursor: pointer; }
+.recknopf { min-width: 76px; }
+.recknopf.wartet { animation: blinken .5s steps(2) infinite; }  /* scharf, wartet auf die Taktgrenze */
+.recknopf.an { background: var(--kill); color: #111; }            /* nimmt auf */
+.recknopf.fertig { background: #5ad17a; border-color: #5ad17a; color: #111; }
+.recknopf.gescheitert { background: transparent; border-color: var(--kill); color: var(--kill); }
+/* MVP 2: unten die Bibliothek und rechts zwei Loop-Boxen (ADR 025) */
+:root { --l1: #ff6fa8; --l2: #7ad0ff; }
+#boxen { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; flex: 1; min-height: 0; }
+.box { display: flex; flex-direction: column; gap: 8px; background: var(--panel2); border: 1px solid var(--line);
+  border-top: 3px solid var(--farbe); border-radius: 10px; padding: 10px; min-height: 0; overflow: hidden; }
+.box .zug { grid-template-columns: 1fr 70px; }
+.box .knoepfe { flex-direction: row; flex-wrap: wrap; gap: 4px; }
+.box .knopfzeile { grid-template-columns: 40px auto; height: 48px; }
+.box .knopf { width: 40px; height: 40px; }
+.box .kill { display: none; }
+.steuer { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.boxkopf { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.boxname { white-space: nowrap; font: 600 12px/1 var(--mono, monospace); letter-spacing: .12em; color: var(--farbe); }
+.looptitel { font-size: 18px; font-weight: 750; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.loopmeta { color: var(--dim); font-size: 12px; }
+.boxplay { height: 64px; font-size: 18px; margin-top: auto; }
+.box .zug { border-top: 0; padding-top: 0; }
+.reiter { display: flex; gap: 4px; }
+.reiter button { font-size: 11px; letter-spacing: .14em; padding: 4px 10px; border-radius: 6px; }
+.reiter button.an { border-color: var(--text); }
+#loopliste button.laden.l1 { color: var(--l1); border-color: var(--l1); }
+#loopliste button.laden.l2 { color: var(--l2); border-color: var(--l2); }
+#loopliste tr.defekt td { opacity: .55; }
+#loopliste tr.defekt .titelzelle .name { text-decoration: line-through; text-decoration-thickness: 1px; }
+#loopliste tr.defekt .titelzelle .grund { margin-left: 10px; font-weight: 400; }
+.taste.blinkt { animation: blinken .5s steps(2) infinite; }
+@keyframes blinken { 50% { opacity: .45; } }
+/* MVP 2 Scheibe 3: → STRUDEL in der Loop-Liste; die Antwort steht am Knopf */
+.zustrudel { font-family: inherit; font-weight: 600; font-size: 10px; line-height: 1; padding: 3px 8px; margin-left: 6px; border: 1px solid var(--line);
+  background: transparent; color: var(--text); border-radius: 4px; cursor: pointer; white-space: nowrap; }
+.zustrudel.fertig { background: #5ad17a; border-color: #5ad17a; color: #111; font-family: var(--mono, monospace); }
+.zustrudel.fehler { border-color: var(--kill); color: var(--kill); }
+/* ===== Raster nach Traktor Pro 4 (Andreas 2026-09-27 ~21:00, Screenshot_20260927_203207: „so adaptieren wir es“) =====
+   Schmaler Mixer in der Mitte, je Deck-Reihe eigene Züge (oben A · Master · B, unten C · L1 · L2); Decks bekommen die
+   Breite; Library fest unten (klappbar); Phones und Crossfader im Kopf; Beat-FX kommt in Plan 3 als Leiste oben. */
+:root { --kopf: 52px; --lib: 30vh; --lib-zu: 34px; --zug: 74px; }
+body { grid-template-rows: var(--kopf) minmax(0, 1fr) var(--lib); gap: 8px; padding: 8px; }
+body.lib-zu { grid-template-rows: var(--kopf) minmax(0, 1fr) var(--lib-zu); }
+#kopf { gap: 20px; padding: 0 14px; border-radius: 8px; }
+.feld b { font-size: 22px; } #bpm { font-size: 22px; } .marke { font-size: 18px; } .schlaege i { width: 16px; height: 16px; }
+.kopfmix { display: flex; align-items: center; gap: 10px; }
+.kopfmix .phones { border: 0; padding: 0; width: auto; margin: 0; }
+.kopfmix .kopfhoerer { gap: 6px; }
+.kopfmix .summe.klein { flex-direction: row; gap: 4px; }
+.kopfmix .summe.klein .knopf { width: 30px; height: 30px; }
+.kopfmix .summe.klein output { display: none; }
+.kopfmix .xfader { grid-column: auto; border: 0; padding: 0; width: 240px; grid-template-columns: 16px 1fr 16px 56px; gap: 6px; }
+.kopfmix .regler.waagrecht { height: 34px; }
+.kopfmix .regler.waagrecht .kappe { width: 22px; height: 30px; margin: -15px 0 0 -11px; }
+.kopfmix .seite { font-size: 13px; } .kopfmix .xfader output { font-size: 12px; }
+
+#pult { grid-template-columns: minmax(0, 1fr) calc(3 * var(--zug) + 24px) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "a mo b" "c mu d"; gap: 8px; }
+.deck[data-deck="1"] { grid-area: a; } .deck[data-deck="2"] { grid-area: b; }
+#deck-c { grid-area: c; } #deck-d { grid-area: d; }
+#mischer.mix-oben { grid-area: mo; } #mischer-unten { grid-area: mu; }
+#mischer.mix-oben, #mischer-unten { display: grid; grid-template-columns: repeat(3, var(--zug)); gap: 4px; padding: 6px 4px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px; min-height: 0; }
+
+/* Kanalzug als schmale Spalte: Name, GAIN, HI, MID, LO, FILTER (Beschrift klein darüber, KILL daneben), PFL, Fader, A|THRU|B */
+.zug { display: flex; flex-direction: column; gap: 2px; border-top: 2px solid var(--farbe); padding-top: 4px; min-height: 0; }
+.zug .zugname { font-size: 10px; text-align: center; }
+.zug .knoepfe { display: flex; flex-direction: column; gap: 0; justify-content: flex-start; }
+.zug .knopfzeile { display: grid; grid-template-columns: 34px 1fr; grid-template-rows: 11px 34px; grid-template-areas: "l l" "k x";
+  height: auto; gap: 0 2px; align-items: center; }
+.zug .knopfzeile > .knopf { grid-area: k; width: 34px; height: 34px; }
+.zug .beschrift { grid-area: l; } .zug .beschrift label { font-size: 9px; letter-spacing: .1em; }
+.zug .beschrift output { display: none; }
+.zug .kill { grid-area: x; height: 22px; padding: 0; font-size: 8px; border-radius: 5px; }
+.zug .faderspalte { flex: 1; display: grid; grid-template-columns: 1fr 8px; grid-template-rows: auto auto minmax(60px, 1fr) auto auto; gap: 3px 3px; min-height: 0; }
+.zug .pfl { grid-row: 1; height: 22px; font-size: 9px; border-radius: 5px; }
+.zug .fxzuweisung { grid-row: 2; grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, 1fr); gap: 2px; }
+.zug .fxzuweisung button { font-family: inherit; font-weight: 800; font-size: 8px; padding: 3px 0; border-radius: 5px; border: 1px solid var(--line); color: var(--dim); }
+.zug .fxzuweisung button[data-fxzuweisung="1"].an { background: var(--text); border-color: var(--text); color: #0e0f12; }
+.zug .fxzuweisung button[data-fxzuweisung="2"].an { background: var(--warn); border-color: var(--warn); color: #0e0f12; }
+.zug .regler.senkrecht { grid-row: 3; min-height: 0; }
+.zug .regler.senkrecht .bahn { width: 6px; height: calc(100% - 20px); margin: 10px 0; }
+.zug .regler.senkrecht .kappe { width: 36px; height: 20px; margin-left: -18px; margin-bottom: -10px; }
+.zug .meter.senkrecht { grid-row: 3; grid-column: 2; width: 6px; }
+.zug .faderwert { grid-row: 4; font-size: 10px; }
+.zug .xzuweisung { grid-row: 5; } .zug .xzuweisung button { font-size: 8px; padding: 3px 0; }
+.mitte { gap: 4px; padding-top: 4px; }
+.mitte .knopf { width: 36px; height: 36px; } .mitte .summe output { font-size: 10px; }
+.mitte .meter { width: 10px; }
+.mitte .summe.glue { flex-direction: row; gap: 6px; align-items: center; }   /* K2: eine Zeile, der Meter darunter behält seine Höhe */
+.mitte .summe.glue .knopf { width: 30px; height: 30px; }
+.glutext { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.15; }
+.mitte .fxzuweisung { display: grid; grid-template-columns: repeat(2, 1fr); gap: 2px; width: 60px; }
+.mitte .fxzuweisung button { font-family: inherit; font-weight: 800; font-size: 8px; padding: 3px 0; border-radius: 5px; border: 1px solid var(--line); color: var(--dim); }
+.mitte .fxzuweisung button[data-fxzuweisung="1"].an { background: var(--text); border-color: var(--text); color: #0e0f12; }
+.mitte .fxzuweisung button[data-fxzuweisung="2"].an { background: var(--warn); border-color: var(--warn); color: #0e0f12; }
+
+/* Deck nach Traktor: eine Kopfzeile, breite Welle, dünne Übersicht, flache Transportzeile */
+.deck { padding: 8px 10px; gap: 6px; border-top-width: 2px; border-radius: 8px; }
+.deckkopf { gap: 8px; }
+.buchstabe { width: 24px; height: 24px; font-size: 15px; border-radius: 5px; }
+.decktitel { font-size: 10px; }
+.status { font-size: 9px; padding: 2px 8px; }
+.titel { font-size: 17px; } .meta { font-size: 11px; min-height: 0; }
+.position b { font-size: 20px; } .position .rest b { font-size: 15px; } .von { font-size: 13px; }
+.deck .lauf { display: block; width: 100%; flex: 1 1 100px; min-height: 60px; background: #0b0d11; border-radius: 4px; }
+.deck .ueber { display: block; width: 100%; flex: 0 0 26px; height: 26px; background: #0b0d11; border-radius: 4px; }
+.deck .meter.waagrecht { height: 4px; }
+.tasten { margin-top: 0; display: flex; gap: 6px; }
+.taste { height: 30px; font-size: 12px; padding: 0 18px; border-radius: 6px; flex: none; }
+.taste.play { order: -1; min-width: 70px; }
+
+/* C Strudel und D Loops */
+.deckflaeche { background: var(--panel); border: 1px solid var(--line); border-top: 2px solid var(--farbe);
+  border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; min-height: 0; }
+.platzhalter { flex: 1; display: grid; place-items: center; color: var(--dim); border: 1px dashed var(--line); border-radius: 6px; font-size: 12px; }
+#boxen { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; flex: 1; min-height: 0; }
+.box { display: flex; flex-direction: column; gap: 6px; background: var(--panel2); border: 1px solid var(--line);
+  border-top: 2px solid var(--farbe); border-radius: 6px; padding: 6px 8px; min-height: 0; overflow: hidden; }
+.box .steuer { flex: 1; min-height: 0; gap: 4px; }
+.looptitel { font-size: 13px; } .loopmeta { font-size: 10px; }
+.loopwelle, .box .loopwelle { display: block; width: 100%; flex: 1 1 60px; min-height: 40px; background: #0b0d11; border-radius: 4px; }
+.boxplay { height: 30px; font-size: 12px; margin-top: 0; }
+
+/* Library fest unten, klappbar (Plan T7 baut Knopf und Suche) */
+#bestand { padding: 6px 12px 4px; border-radius: 8px; }
+.kopfzeile { padding-bottom: 4px; }
+td { height: 24px; font-size: 13px; }
+.box .taste.play.boxplay { order: 0; }   /* „PLAY zuerst“ gilt nur für die Transportzeile der Decks */
+/* Traktor-Mitte (Andreas 2026-09-27 ~21:35: „da sind filter und band eq nebeneinander“, „die kill knöpfe hätten jetzt
+   auch kleiner sein können“): zwei Spalten je Zug — links GAIN und FILTER, rechts HI, MID, LO; K als kleiner Knopf am Regler */
+:root { --zug: 96px; }
+.zug .knoepfe { display: grid; grid-template-columns: 1fr 1fr; grid-auto-flow: row; gap: 2px 4px; }
+.zug .knopfzeile { position: relative; grid-template-columns: 34px; grid-template-areas: "l" "k"; justify-items: center; }
+.zug .knopfzeile:nth-child(1) { grid-column: 1; grid-row: 1; }   /* GAIN */
+.zug .knopfzeile:nth-child(5) { grid-column: 1; grid-row: 2; }   /* FILTER */
+.zug .knopfzeile:nth-child(2) { grid-column: 2; grid-row: 1; }   /* HI */
+.zug .knopfzeile:nth-child(3) { grid-column: 2; grid-row: 2; }   /* MID */
+.zug .knopfzeile:nth-child(4) { grid-column: 2; grid-row: 3; }   /* LO */
+.zug .beschrift { text-align: center; }
+.zug .kill { position: absolute; right: -4px; bottom: 0; width: 14px; height: 14px; font-size: 8px; line-height: 12px;
+  border-radius: 3px; padding: 0; }
+/* Plan Oberfläche T7: Library klappbar (body.lib-zu), Suche in der Kopfzeile */
+body.lib-zu #bestand .tabelle { display: none; }
+#schublade { width: 26px; padding: 0; font-size: 12px; border-radius: 5px; }
+#suche { background: var(--panel2); border: 1px solid var(--line); border-radius: 5px; color: var(--text); padding: 3px 8px; width: 240px; font: inherit; font-size: 12px; user-select: text; }
+#mischer.mix-oben, #mischer-unten { grid-template-rows: minmax(0, 1fr); align-content: stretch; }   /* alte #mischer-Zeilen (3 Reihen) aufheben */
+
+/* Plan 2: Strudel-Feld in Deck C */
+.muster-feld { flex: 1; min-height: 80px; resize: none; background: #0b0d11; color: var(--text); border: 1px solid var(--line);
+  border-radius: 6px; padding: 8px 10px; font: 14px/1.45 ui-monospace, "JetBrains Mono", monospace; user-select: text; tab-size: 2; }
+.muster-feld:focus { outline: 1px solid var(--farbe); }
+.musterzeile { display: flex; align-items: center; gap: 8px; font-size: 12px; min-width: 0; }
+.muster-stand { color: var(--dim); white-space: nowrap; }
+.muster-fehler { flex: 1; min-width: 0; font-family: ui-monospace, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.muster-fehler.fehler { color: var(--kill); } .muster-fehler.ok { color: var(--gut); }
+.musterzeile button { font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 5px; }
+.muster-senden { border-color: var(--farbe); color: var(--farbe); }
+.muster-stopp { border-color: var(--rot, #e5484d); color: var(--rot, #e5484d); }
+.muster-uebernehmen { border-color: var(--warn); color: var(--warn); }
+.muster-auto { color: var(--dim); }
+.muster-auto.an { background: var(--farbe); border-color: var(--farbe); color: #0e0f12; }
+
+/* Plan E9: Deck-Bedienung (Raster, Cue-Pads, Loop) */
+.bedienreihe { display: flex; align-items: center; gap: 10px; font-size: 11px; min-width: 0; flex-wrap: nowrap; }
+.bedienreihe button { font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; min-width: 22px; }
+.bedienreihe button:disabled { opacity: 0.35; }
+.raster, .pads, .loopreihe, .gridreihe { display: flex; gap: 3px; }
+.gridreihe output { min-width: 58px; text-align: center; font: 12px/24px var(--mono, monospace); white-space: nowrap; }
+.gridreihe [data-gridfix].offen { background: var(--farbe); border-color: var(--farbe); color: #0e0f12; }
+.raster button.an, .loopreihe button.an { background: var(--farbe); border-color: var(--farbe); color: #0e0f12; }
+.pad { width: 24px; }
+.pad.leer { border-style: dashed; color: var(--dim); }
+.pad.shot { background: #58d66b; border-color: #58d66b; color: #0e0f12; }
+.pad.loop { background: #2fd6c3; border-color: #2fd6c3; color: #0e0f12; }
+.loopreihe [data-loopan] { margin-left: 4px; }
+.lauf { cursor: grab; touch-action: none; }
+.lauf:active { cursor: grabbing; }
+.ueber { cursor: pointer; }
+
+/* Plan 3: Beat-FX-Einheit im Kopf */
+.fxeinheit { display: flex; align-items: center; gap: 6px; font-size: 11px; }
+.fxeinheit > label { color: var(--dim); font-weight: 700; letter-spacing: 0.1em; }
+.fxeinheit button { font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; }
+.fxwege { display: flex; gap: 14px; flex-wrap: wrap; }
+.fxeinheit [data-fx-art] { min-width: 64px; }
+.fxbeat { display: flex; align-items: center; gap: 3px; }
+.fxbeat b { min-width: 18px; text-align: center; font-size: 13px; }
+.fxeinheit .summe.klein { flex-direction: row; gap: 4px; align-items: center; }
+.fxeinheit .summe.klein > span { font-size: 9px; color: var(--dim); min-width: 44px; text-align: right; }
+.fxeinheit [data-fx-an].an { background: var(--warn); border-color: var(--warn); color: #0e0f12; }
+.fxrouting { display: flex; align-items: center; gap: 6px; font-size: 11px; }
+.fxrouting > label { color: var(--dim); font-weight: 700; letter-spacing: 0.1em; }
+.fxrouting button { font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; min-width: 76px; }
+.fxrouting [data-fx-routing].an { background: var(--warn); border-color: var(--warn); color: #0e0f12; }
+.fxeinheit .summe.klein .knopf { width: 30px; height: 30px; }   /* wie MIX/LEVEL daneben */
+.cypher .taste-c { white-space: nowrap; }
+
+/* Traktor-Weg der Cues: Art wählen, Mülleimer */
+.cuewahl { display: flex; align-items: center; gap: 3px; margin-left: auto; }
+.cuewahl label { margin-right: 4px; }
+.cuewahl button { padding: 0 10px; min-height: 34px; }
+.cuewahl [data-cueart="shot"].an { background: #58d66b; border-color: #58d66b; color: #0e0f12; }
+.cuewahl [data-cueart="loop"].an { background: #2fd6c3; border-color: #2fd6c3; color: #0e0f12; }
+.cuewahl [data-muell] { margin-left: 8px; }
+.cuewahl [data-muell].an { background: var(--warn); border-color: var(--warn); color: #0e0f12; }
+.cuewahl .nachbox { margin-left: 14px; }
+.cuewahl [data-nachbox] { color: var(--l1); }
+.cuewahl [data-nachbox="2"] { color: var(--l2); }
+
+/* Crossfader in der Mitte: unter den Kanalzügen A | Master | B, über die volle Breite des oberen Mischers (Andreas 2026-09-29) */
+#mischer.mix-oben { grid-template-rows: minmax(0, 1fr) auto; }
+.mix-oben .xfader { grid-column: 1 / -1; border: 0; padding: 4px 2px 2px; grid-template-columns: 14px 1fr 14px; gap: 6px; }
+.mix-oben .xfader output { display: none; }
+.mix-oben .regler.waagrecht { height: 34px; }
+.mix-oben .regler.waagrecht .kappe { width: 22px; height: 30px; margin: -15px 0 0 -11px; }
+.mix-oben .seite { font-size: 12px; }
+
+/* Studio S1: drei Instanzen in Deck C (DJ-Ansicht: Reiter, eine sichtbar) und drei Kanalzüge an einem Platz */
+.rollen { display: flex; gap: 4px; margin-left: 12px; }
+.rollen button { font-size: 10px; font-weight: 800; letter-spacing: .08em; padding: 3px 10px; border-radius: 5px; color: var(--dim); border: 1px solid var(--line); }
+.rollen button.an { background: var(--farbe); border-color: var(--farbe); color: #0e0f12; }
+.instanzen { flex: 1; display: flex; min-height: 0; }
+.instanz { flex: 1; display: none; flex-direction: column; gap: 6px; min-height: 0; min-width: 0; border-top: 2px solid var(--farbe); padding-top: 4px; }
+.instanz.an { display: flex; }
+.instanzname { font-size: 10px; font-weight: 800; letter-spacing: .1em; color: var(--farbe); }
+.zugplatz { display: grid; min-height: 0; }
+.zugplatz > .zug { grid-area: 1 / 1; }
+.zugplatz > .zug:not(.an) { display: none; }
+
+/* Studio S1: Vollansicht STUDIO (Andreas 2026-09-29: „strudel studio vollansicht für strudel live jam session").
+   Nur die SICHT wechselt: Kern, Decks und Loops laufen weiter. Oben drei Instanzen nebeneinander, unten ihre drei
+   Kanalzüge mit L1/L2, rechts die Loop-Boxen; vom oberen Mischer bleibt nur MASTER. */
+.ansicht { display: flex; gap: 2px; }
+.ansicht button { font-size: 10px; font-weight: 800; letter-spacing: .08em; padding: 4px 10px; border-radius: 5px; color: var(--dim); border: 1px solid var(--line); }
+.ansicht button.an { background: var(--text); border-color: var(--text); color: #0e0f12; }
+body.studio #pult { grid-template-columns: calc(5 * var(--zug) + 36px) minmax(0, 1fr) calc(var(--zug) + 10px);
+  grid-template-rows: minmax(0, 1.4fr) minmax(0, 1fr); grid-template-areas: "c c mo" "mu d mo"; }
+body.studio .deck[data-deck] { display: none; }
+body.studio #mischer.mix-oben { grid-template-columns: var(--zug); }
+body.studio #mischer.mix-oben > .zug, body.studio #mischer.mix-oben > .xfader { display: none; }
+body.studio .rollen { display: none; }
+body.studio .instanzen { gap: 10px; }
+body.studio .instanz { display: flex; }
+body.studio .zugplatz { display: contents; }
+body.studio .zugplatz > .zug { display: flex; grid-area: auto; }
+body.studio #mischer-unten { grid-template-columns: repeat(5, var(--zug)); justify-content: start; }
+body.studio .muster-feld { font-size: 15px; }
+/* Studio S7: Spurbänder (Automationsspuren als Linien) nur in STUDIO */
+.spurbaender { display: none; }
+body.studio .spurbaender { display: flex; flex-direction: column; gap: 4px; margin-top: 0; }
+/* Kopfspalte 104 px als 2x2-Raster, die Meldung darunter einzeilig über die ganze Breite und immer da (feste Höhe):
+   keine Meldung ändert je die Höhe der Zeile oder der Strudel-Felder (Rereview2 Q1) */
+.spurband { display: grid; grid-template-columns: 104px minmax(0, 1fr); grid-template-rows: 72px 14px; gap: 2px 4px; align-items: start; }
+.spurband[hidden] { display: none; }
+.spurband-kopf { grid-column: 1; grid-row: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 2px; align-content: start; font-size: 11px; }
+.spurband-kopf > select { grid-column: 1 / -1; }
+/* Reiterzeile im Bandkopf: FADER | FILTER | CUTOFF, nur ein Band sichtbar; der Punkt zeigt eine laufende Spur, auch bei verdecktem Band */
+.spurreiter { grid-column: 1 / -1; display: flex; gap: 1px; }
+.spurband-kopf .spurreiter button { flex: 1 1 auto; min-width: 0; font-size: 9px; letter-spacing: 0; padding: 1px 1px; position: relative; }
+.spurband-kopf .spurreiter button.gewaehlt { background: var(--farbe); color: #000; }
+.spurband-kopf .spurreiter button.laeuft::after { content: ''; position: absolute; top: 1px; right: 1px; width: 5px; height: 5px; border-radius: 50%; background: var(--gut); border: 1px solid #000; }
+.spurband-kopf button, .spurband-kopf select { font-size: 11px; padding: 1px 2px; min-width: 0; }
+.spurband-kopf button.an { background: var(--farbe); color: #000; }
+.spurband > svg { grid-column: 2; grid-row: 1; }
+.spurband .meldung { grid-column: 1 / -1; grid-row: 2; height: 14px; line-height: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.spurband svg { display: block; width: 100%; height: 72px; background: #111; border: 1px solid #333; touch-action: none; cursor: crosshair; }
+.spurband .taktlinie { stroke: #2a2a2a; stroke-width: 1; }
+.spurband .linie { fill: none; stroke: var(--farbe); stroke-width: 2; }
+.spurband .spurpunkt { fill: var(--farbe); stroke: #000; stroke-width: 1; cursor: grab; }
+.spurband .kopf { stroke: #fff; stroke-width: 1.5; pointer-events: none; }
+.spurband .fremd { fill: none; stroke: #bbb; stroke-width: 1.5; stroke-dasharray: 4 3; pointer-events: none; }
+.spurband .meldung { font-size: 11px; }
+.spurband .meldung.fehler { color: var(--kill); } .spurband .meldung.ok { color: var(--gut); }
+
+/* Studio S1 Abnahme (2026-09-29, gemessen am rechten Monitor 2560 px): mit dem Umschalter DJ | STUDIO brach die
+   FX-Leiste wieder zweizeilig um (fxwege 1361 px bei flex-wrap: wrap). Einzeilig mit kleinerem Kopf-Abstand: FX endet
+   bei x = 2219, Stop Cypher beginnt bei 2243. */
+#kopf { gap: 12px; }
+#fx { flex-wrap: nowrap; }
+.deck.tempo-fremd [data-meta] { color: #e0a040; }
+
+.lib-filter { display: flex; gap: 6px; margin: 4px 0; } .lib-filter input { min-width: 0; }
+
+.set-kopf { display: flex; gap: 6px; align-items: center; margin: 4px 0; flex-wrap: wrap; } .st-ready { color: #6c6; } .st-missing, .st-fehler { color: #e66; } .st-laeuft, .st-wartet { color: #e0a040; }

@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# djk-stop: räumt ab, was djk-start angelegt hat. Stoppt Oberfläche, Leitstand, Notbahn und Kern (umgekehrte
+# Reihenfolge), setzt Fehlzustände zurück, entlädt die stumme Senke nur, wenn djk-start sie selbst angelegt hat
+# (Modul-ID in der Zustandsdatei), und löscht die Zustandsdatei. Der Arbeitsbestand in /dev/shm bleibt liegen
+# (tmpfs, beim nächsten Start wieder da; weg mit dem Neustart des Rechners).
+# Aufruf: djk-stop [--instanz a..i] [--still] [--alles [--trocken]]
+#   --alles    Sammelstopp: zusätzlich die djk-eigenen Prozesse der Instanz, die in keiner Unit laufen, der Cue-Server
+#              (djk/cues/server.ts) und der Vorhörer (djk/vorhoerer/build/cypherdj-vorhoerer). Erkannt an Exe-Pfad,
+#              Skript und CYPHERDJ_INSTANZ (eigene.py); fremde Prozesse bleiben unberührt, es wird nie per
+#              PID-Substitution beendet (KILL-REGEL), die PID wird gelesen, geprüft, dann gezielt beendet. Ohne
+#              --instanz gilt die Instanz Betrieb: dazu zählt ein von Hand gestarteter Vorhörer.
+#   --trocken  (nur mit --alles) nur auflisten, was beendet würde, nichts ändern.
+# Rückgabe: 0 keine Unit der Instanz mehr geladen, 1 etwas blieb übrig (Liste auf stderr), 2 Aufruf.
+set -uo pipefail
+I=${CYPHERDJ_INSTANZ:-}; STILL=0; ALLES=0; TROCKEN=0
+HIER=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
+DJK=${DJK:-$(cd "$HIER/.." && pwd)}
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --instanz)
+      if [ $# -lt 2 ] || [[ "$2" == -* ]]; then echo "djk-stop: option --instanz needs a value (a..i, or '' for Betrieb)" >&2; exit 2; fi
+      I=$2; shift 2;;
+    --still) STILL=1; shift;;
+    --alles) ALLES=1; shift;; --trocken) TROCKEN=1; shift;;
+    -h|--help) sed -n '2,/^set -uo/p' "$0" | sed '$d; s/^# \{0,1\}//'; exit 0;;
+    *) echo "djk-stop: unknown option $1" >&2; exit 2;;
+  esac
+done
+[ "$TROCKEN" = 1 ] && [ "$ALLES" = 0 ] && { echo "djk-stop: --trocken only with --alles" >&2; exit 2; }
+case "$I" in "") SFX="";; [a-i]) SFX="-$I";; *) echo "djk-stop: instance '$I' invalid" >&2; exit 2;; esac
+RUN=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/cypherdj$SFX
+STATE=$RUN/start.env
+sag() { [ "$STILL" = 1 ] || echo "$@"; }
+if [ "$ALLES" = 1 ]; then
+  # Erst die Prozesse außerhalb der Units (Cue-Server samt Vorhörer), dann wie gehabt die Units.
+  if [ "$TROCKEN" = 1 ]; then
+    for n in wirt-bass wirt-melodie erzeuger erzeuger2 erzeuger3 oberflaeche leitstand notbahn kern; do
+      u=cypherdj-$n$SFX.service
+      systemctl --user list-units --all --no-legend --plain "$u" 2>/dev/null | grep -q . && echo "  would stop $u"
+    done
+    python3 "$HIER/eigene.py" --djk "$DJK" --instanz "$I" --liste
+    echo "djk-stop: dry run, nothing changed"
+    exit 0
+  fi
+  python3 "$HIER/eigene.py" --djk "$DJK" --instanz "$I" --beenden || echo "djk-stop: a djk process did not stop (see above)" >&2
+fi
+for n in wirt-bass wirt-melodie erzeuger erzeuger2 erzeuger3 oberflaeche leitstand notbahn kern; do
+  u=cypherdj-$n$SFX.service
+  if systemctl --user list-units --all --no-legend --plain "$u" 2>/dev/null | grep -q .; then
+    systemctl --user stop "$u" 2>/dev/null
+    systemctl --user reset-failed "$u" 2>/dev/null
+    sag "  stopped $u"
+  fi
+done
+MODID=""
+# shellcheck disable=SC1090
+[ -f "$STATE" ] && MODID=$(sed -n 's/^MODID=//p' "$STATE")
+if [ -n "$MODID" ]; then
+  if pactl list short modules | grep -E "^$MODID[[:space:]]+module-null-sink[[:space:]].*sink_name=cypher_stumm" -q; then
+    pactl unload-module "$MODID" && sag "  unloaded silent sink (module $MODID)"
+  fi
+fi
+rm -f "$STATE"
+# Kern-Zustand (Scheibe 18) gilt für einen Neustart NACH ABSTURZ (systemd startet den Kern neu, er setzt fort). Nach
+# einem bewussten Stopp soll der nächste Start frisch sein: sonst stellt der Kern Reglerstände und Decks des vorigen
+# Laufs wieder her, die Seite zeigt aber die Vorgaben (Befund 2026-09-27: Seite −∞, Kern 0 dB). Nur löschen, was kein
+# Prozess mehr hält; der Arbeitsbestand (material/) bleibt.
+for f in "/dev/shm/cypherdj$SFX/zustand" "/dev/shm/cypherdj$SFX/bus" "/dev/shm/cypherdj$SFX/kanten" "/dev/shm/cypherdj$SFX/neustarts"; do
+  if [ -e "$f" ]; then
+    if fuser -s "$f" 2>/dev/null; then echo "djk-stop: $f is still held, left in place" >&2
+    else rm -f "$f" && sag "  removed core state $f"; fi
+  fi
+done
+REST=$(systemctl --user list-units --all --no-legend --plain "cypherdj-kern$SFX.service" "cypherdj-notbahn$SFX.service" \
+  "cypherdj-leitstand$SFX.service" "cypherdj-oberflaeche$SFX.service" "cypherdj-wirt-bass$SFX.service" "cypherdj-wirt-melodie$SFX.service" "cypherdj-erzeuger$SFX.service" "cypherdj-erzeuger2$SFX.service" "cypherdj-erzeuger3$SFX.service" 2>/dev/null)
+if [ -n "$REST" ]; then echo "djk-stop: still loaded:" >&2; echo "$REST" >&2; exit 1; fi
+sag "djk-stop: cypherdj$SFX is down, 0 units"
+exit 0

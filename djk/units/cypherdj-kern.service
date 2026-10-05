@@ -1,0 +1,37 @@
+# cypherdj-kern: der Echtzeit-Kern (ARCHITEKTUR §2, §7; ADR 001, ADR 016 mit Nachtrag 2026-09-25). Scheibe 18.
+# Nie "systemctl --user enable" oder "link": das Einschalten des Verbunds entscheidet Andreas (ROADMAP §8.4, §8.11).
+# Prüfläufe starten ihn transient mit genau diesen Eigenschaften (djk/kern/tests/neustart/unit_eigenschaften.py liest
+# diese Datei; nur ExecStart und Environment setzt der Prüflauf selbst).
+# Ausgang daneben (10k): der Kern spielt mit --master direkt an die Senke, die Notbahn sitzt daneben mit
+# --kante cypherdj-kern:master_L (cypherdj-notbahn.service). Vorgabe stumm: die geteilte Null-Senke cypher_stumm; das
+# echte Interface erst mit --ton-frei nach Andreas' Freigabe (SCHNITTSTELLEN §8).
+# RestartSec=0: kürzester Neustart (10 Probe c: erster Block nach 19 bis 48 ms). RestartSteps und RestartMaxDelaySec
+# stehen nach ADR 016 da, wirken bei RestartSec=0 in systemd 255 aber nicht (10 F2 Probe f, service.c Z. 309 bis 314:
+# 1659 Neustarts in 5 s); die Politik gegen Absturz-Schleifen entscheidet M11 (Scheibe 48).
+# WATCHDOG=1 schickt der Kern nur bei Echtzeit-Fortschritt; hängt er, tötet systemd ihn nach 200 ms (ADR 016 Punkt 2),
+# geprüft mit 250 ms Genauigkeit (sd-event), gemessen bis rund 450 ms (Befund B5, Stand 18). Darum zuerst der
+# Selbst-Wächter (--waechter-ms 100, eigener Prozess, fängt auch SIGSTOP): tötet nach 100 ms Stillstand von w;
+# systemd bleibt die zweite Linie. Solange der Kern hängt, wartet die Notbahn über die Kante mit (Stand 16).
+# Echtzeit-Priorität und gesperrter Speicher: aus dem User-Manager (DefaultLimitRTPRIO=95, DefaultLimitMEMLOCK=4 GiB).
+[Unit]
+Description=cypherdj Kern (Uhr, Befehle, Ausgänge, Neustart-Zustand)
+PartOf=cypherdj.target
+After=pipewire.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=notify
+NotifyAccess=main
+ExecStart=/usr/bin/pw-jack -p 256 %h/cypher-dj/djk/kern/build/cypherdj-kern --master cypher_stumm:playback_F --waechter-ms 100
+Restart=always
+RestartSec=0
+RestartSteps=5
+RestartMaxDelaySec=2s
+WatchdogSec=200ms
+WatchdogSignal=SIGKILL
+TimeoutStartSec=5s
+TimeoutStopSec=2s
+KillMode=mixed
+
+[Install]
+WantedBy=cypherdj.target

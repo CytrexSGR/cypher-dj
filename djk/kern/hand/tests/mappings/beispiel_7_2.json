@@ -1,0 +1,8 @@
+{"version":1,"geraet":"beispiel","quelle_port":"Midi-Bridge:<Gerät> (capture)","ziel_port":"Midi-Bridge:<Gerät> (playback)",
+ "eintraege":[
+  {"nachricht":{"typ":"cc","kanal":1,"nr":20},"ziel":"deck/1/eq/tief","art":"relativ","kodierung":"zweierkomplement",
+   "kurve":{"typ":"linear","min":-26.0,"max":6.0},"kill_unter_min":true},
+  {"nachricht":{"typ":"cc","kanal":1,"nr":7},"ziel":"deck/1/fader","art":"absolut","kurve":{"typ":"fader_db","min":-200.0,"max":0.0}},
+  {"nachricht":{"typ":"note","kanal":1,"nr":36},"ziel":"deck/1/hotcue/1","art":"taste","quant":"sofort"},
+  {"nachricht":{"typ":"note","kanal":16,"nr":0},"ziel":"taste/stopp","art":"taste"}],
+ "leds":[{"name":"vorschlag","nachricht":{"typ":"note","kanal":16,"nr":10},"werte":{"aus":0,"an":127,"blinkt":64}}]}

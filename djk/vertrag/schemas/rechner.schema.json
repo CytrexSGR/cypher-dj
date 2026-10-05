@@ -1,0 +1,41 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "https://cypherdj.invalid/vertrag/1/rechner.schema.json",
+ "title": "Rechner, Unix-Socket, JSON-Zeilen (SCHNITTSTELLEN.md §11)",
+ "$defs": {
+  "anfrage": {"type": "object", "required": ["id", "methode", "parameter"],
+   "properties": {"id": {"type": "integer", "minimum": 0}, "methode": {"enum": ["spielarten", "passung", "kandidaten", "expandiere", "vorhersage"]},
+    "parameter": {"type": "object"}},
+   "allOf": [
+    {"if": {"properties": {"methode": {"const": "spielarten"}}}, "then": {"properties": {"parameter": {"$ref": "#/$defs/spielarten_parameter"}}}},
+    {"if": {"properties": {"methode": {"const": "passung"}}}, "then": {"properties": {"parameter": {"$ref": "#/$defs/passung_parameter"}}}},
+    {"if": {"properties": {"methode": {"const": "kandidaten"}}}, "then": {"properties": {"parameter": {"$ref": "#/$defs/kandidaten_parameter"}}}},
+    {"if": {"properties": {"methode": {"const": "expandiere"}}}, "then": {"properties": {"parameter": {"$ref": "#/$defs/expandiere_parameter"}}}},
+    {"if": {"properties": {"methode": {"const": "vorhersage"}}}, "then": {"properties": {"parameter": {"$ref": "#/$defs/vorhersage_parameter"}}}}]},
+  "antwort": {"oneOf": [
+   {"type": "object", "required": ["id", "ergebnis"], "not": {"required": ["fehler"]},
+    "properties": {"id": {"type": "integer", "minimum": 0}, "ergebnis": {"description": "Objekt oder Liste (spielarten, kandidaten)", "type": ["object", "array"]}}},
+   {"type": "object", "required": ["id", "fehler"], "not": {"required": ["ergebnis"]},
+    "properties": {"id": {"type": "integer", "minimum": 0}, "fehler": {"type": "object", "required": ["code", "text"],
+     "properties": {"code": {"type": "string", "minLength": 1}, "text": {"type": "string"}}}}}]},
+  "spielarten_parameter": {"type": "object"},
+  "spielarten_ergebnis": {"type": "array", "items": {"$ref": "spielart.schema.json"}},
+  "passung_parameter": {"type": "object", "required": ["a", "b"],
+   "properties": {"a": {"$ref": "defs.schema.json#/$defs/material_id"}, "b": {"$ref": "defs.schema.json#/$defs/material_id"}}},
+  "kandidaten_parameter": {"type": "object", "required": ["deck_laufend", "material_laufend", "quell_beat", "frist_takt", "anzahl", "ausschluss"],
+   "properties": {"deck_laufend": {"$ref": "defs.schema.json#/$defs/deck_nr"}, "material_laufend": {"$ref": "defs.schema.json#/$defs/material_id"},
+    "quell_beat": {"type": "number"}, "frist_takt": {"type": "integer"}, "anzahl": {"type": "integer", "minimum": 1, "maximum": 3},
+    "ausschluss": {"type": "array", "items": {"$ref": "defs.schema.json#/$defs/material_id"}}}},
+  "kandidaten_ergebnis": {"type": "array", "items": {"$ref": "kandidat.schema.json"}},
+  "expandiere_parameter": {"type": "object", "required": ["wahl", "lage"],
+   "properties": {"wahl": {"$ref": "wahl.schema.json"}, "lage": {"$ref": "takt_zustand.schema.json"}}},
+  "expandiere_ergebnis": {"type": "object", "required": ["plan", "vorhersage"],
+   "properties": {"plan": {"$ref": "plan.schema.json"}, "vorhersage": {"type": "object"}}},
+  "vorhersage_parameter": {"type": "object", "required": ["plan"], "properties": {"plan": {"$ref": "plan.schema.json"}}},
+  "vorhersage_ergebnis": {"type": "object", "required": ["ueberdeckung_je_takt", "lufs_je_takt", "grenzen_ok", "warnungen"],
+   "properties": {"ueberdeckung_je_takt": {"type": "object", "additionalProperties": {"type": "array", "items": {"type": ["number", "null"]}},
+     "propertyNames": {"enum": ["sub", "tief", "tiefmitte", "mitte", "praesenz", "hoch"]}},
+    "lufs_je_takt": {"type": "array", "items": {"type": "number"}}, "grenzen_ok": {"type": "boolean"},
+    "warnungen": {"type": "array", "items": {"type": "string"}}}}
+ }
+}

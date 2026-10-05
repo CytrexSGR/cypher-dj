@@ -1,0 +1,21 @@
+version = 1
+# Standard-Konfiguration des Kerns nach SCHNITTSTELLEN.md §2.1 (Vertragsversion 1), Scheibe 08.
+# Vorgaben gesetzt, nicht gemessen, wo nicht anders vermerkt. Unbekannte Schlüssel sind ein Startfehler.
+# Ort im Betrieb: ~/.config/cypherdj/kern.toml (Prüfinstanz <i>: ~/.config/cypherdj-<i>/kern.toml, ROADMAP Z2).
+# Prüfinstanzen: der Kern verschiebt udp_port um 1000·k und schreibt /cypherdj/ in Pfaden zu /cypherdj-<i>/ um;
+# diese Datei bleibt dafür unverändert.
+
+start_bpm = 128.0                             # Tempo einer neuen Zeitachse ohne Anker (§1.1)
+udp_port = 47100                              # Befehle (§2)
+arbeitsbestand = "/dev/shm/cypherdj/material" # §6.4
+speicher_budget_mib = 3800                    # gesperrtes Budget unter 4 GiB (10 Probe d)
+controller_geraet = ""                        # Mapping-Datei unter controller/
+ziel_lufs = -16.0                             # Lautheit je Kanal bei Fader 0 dB, am Ohr ungemessen
+hoerbar_db = -26.0                            # §1.6, M18
+tief_offen_db = -12.0                         # §1.6, M18
+max_stretcher = 4                             # §4.4, ADR 020
+stretcher_threads = 2                         # höchstens 2 R3 je Thread (01 NP K1), M3
+limiter_dbtp = -1.0                           # Master-Limiter
+pruefmodus = false                            # erlaubt /test/* (§19.0)
+hand_osc = false                              # erlaubt /test/hand auch ohne pruefmodus (Oberfläche, Scheibe 35, §19.0)
+filter_guete = 0.707                          # Güte des DJ-Filters, 0.5 bis 4 (A27, Nachtrag 04; über 4 gesperrt bis zum Hörvergleich)

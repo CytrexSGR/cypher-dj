@@ -1,0 +1,21 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "https://cypherdj.invalid/vertrag/1/passung.schema.json",
+ "title": "Passung (SCHNITTSTELLEN.md §14.6, Felder wie Dossier 08 §5)",
+ "type": "object",
+ "required": ["a", "b", "trim_b_db", "verschiebung_beats", "ueberdeckung", "kollision_30ms", "tonart", "stimmung_differenz_cent", "stretch_zur_basis_prozent"],
+ "properties": {
+  "a": {"$ref": "defs.schema.json#/$defs/material_id"},
+  "b": {"$ref": "defs.schema.json#/$defs/material_id"},
+  "trim_b_db": {"type": "number"},
+  "verschiebung_beats": {"type": "number"},
+  "ueberdeckung": {"$ref": "defs.schema.json#/$defs/ueberdeckung"},
+  "kollision_30ms": {"type": "object", "additionalProperties": {
+   "type": "object", "required": ["rate", "flam_anteil", "je_takt"],
+   "properties": {"rate": {"$ref": "defs.schema.json#/$defs/anteil"}, "flam_anteil": {"$ref": "defs.schema.json#/$defs/anteil"}, "je_takt": {"type": "number", "minimum": 0}}}},
+  "tonart": {"type": "object", "required": ["camelot_abstand", "chroma_kosinus"],
+   "properties": {"camelot_abstand": {"type": "integer", "minimum": 0, "maximum": 6}, "chroma_kosinus": {"type": "number", "minimum": -1, "maximum": 1}}},
+  "stimmung_differenz_cent": {"type": "number"},
+  "stretch_zur_basis_prozent": {"type": "object", "required": ["a", "b"], "properties": {"a": {"type": "number"}, "b": {"type": "number"}}}
+ }
+}

@@ -1,0 +1,30 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "https://cypherdj.invalid/vertrag/1/hoerschein.schema.json",
+ "title": "Hörschein (SCHNITTSTELLEN.md §14.5); deck, quell_von, quell_bis null bei Pad und Erzeuger (§4.5: NaN), deck_gegen_deck_ms und flam_anteil null ohne Partner",
+ "type": "object",
+ "required": ["id", "kanal", "inhalt", "deck", "bpm", "gemessen_von_beat", "gemessen_bis_beat", "gueltig_bis_beat",
+  "quell_von", "quell_bis", "erneuerung", "sync_ms", "deck_gegen_deck_ms", "flam_anteil", "lufs_kurz", "pegel_diff_db",
+  "baender_db", "urteil", "gruende"],
+ "properties": {
+  "id": {"$ref": "defs.schema.json#/$defs/hs_id"},
+  "kanal": {"$ref": "defs.schema.json#/$defs/hoer_kanal"},
+  "inhalt": {"$ref": "defs.schema.json#/$defs/inhalt"},
+  "deck": {"anyOf": [{"$ref": "defs.schema.json#/$defs/deck_nr"}, {"type": "null"}]},
+  "bpm": {"$ref": "defs.schema.json#/$defs/bpm"},
+  "gemessen_von_beat": {"$ref": "defs.schema.json#/$defs/beat"},
+  "gemessen_bis_beat": {"$ref": "defs.schema.json#/$defs/beat"},
+  "gueltig_bis_beat": {"$ref": "defs.schema.json#/$defs/beat"},
+  "quell_von": {"type": ["number", "null"]},
+  "quell_bis": {"type": ["number", "null"]},
+  "erneuerung": {"type": "integer", "minimum": 0},
+  "sync_ms": {"type": "number"},
+  "deck_gegen_deck_ms": {"type": ["number", "null"]},
+  "flam_anteil": {"anyOf": [{"$ref": "defs.schema.json#/$defs/anteil"}, {"type": "null"}]},
+  "lufs_kurz": {"type": "number"},
+  "pegel_diff_db": {"type": "number"},
+  "baender_db": {"$ref": "defs.schema.json#/$defs/baender_db"},
+  "urteil": {"enum": ["ok", "zu_laut", "zu_leise", "nicht_sync", "unsicher"]},
+  "gruende": {"type": "array", "items": {"type": "string"}}
+ }
+}

@@ -1,0 +1,4 @@
+build/
+build-*/
+daten/
+__pycache__/

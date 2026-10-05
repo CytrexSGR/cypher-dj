@@ -1,0 +1,42 @@
+#!/usr/bin/env node
+// djk-muster (Plan 2026-09-27, Plan strudel-feld): ein Strudel-Muster für Strom 1 setzen. Prüft den Text wie der Erzeuger
+// (kompiliere.mjs), nennt Fehler mit Zeile (Rückgabe 2) und legt ihn sonst atomar ab (muster_ablage.mjs, mit --von, Vorgabe
+// cypher); der Erzeuger übernimmt ihn am nächsten Takt. Ist AUTO aus (autonom.json, Schalter auf der Seite, Andreas
+// 2026-09-28): Rückgabe 4, nichts geschrieben, kein --trotzdem. --als-andreas ist nur für den Seiten-Server (das Feld ist
+// Andreas, Plan-Review M3) und steht deshalb nicht in der Hilfe.
+// Aufruf: djk-muster [--instanz i] [--strom 1|2|3] [--von name] (--text '<muster>' | <datei> | -)   [--ziel <datei>: statt /dev/shm/cypherdj[-i]/…]
+import fs from 'node:fs';
+import path from 'node:path';
+import { parseArgs } from 'node:util';
+import { schreibeMuster, autonomAn } from './src/muster_ablage.mjs';
+
+const HILFE = "Aufruf: djk-muster [--instanz i] [--strom 1|2|3] [--von name] (--text '<muster>' | <datei> | -) [--ziel <.../strom1.js>]\n";
+const { values: opt, positionals } = parseArgs({ allowPositionals: true, options: {
+  instanz: { type: 'string', default: process.env.CYPHERDJ_INSTANZ ?? '' },
+  strom: { type: 'string', default: '1' },   // Studio S1: 1 Drums, 2 Bass, 3 Melodie; der Ordner bestimmt den Strom
+  basis: { type: 'string' },                 // nur für Tests: statt /dev/shm/cypherdj[-i]
+  text: { type: 'string' },
+  ziel: { type: 'string' },
+  von: { type: 'string', default: 'cypher' },
+  'als-andreas': { type: 'boolean', default: false },
+  hilfe: { type: 'boolean', default: false },
+} });
+if (opt.hilfe) { process.stdout.write(HILFE); process.exit(0); }
+const quelle = positionals[0];
+const text = opt.text ?? (quelle === '-' || quelle === undefined ? fs.readFileSync(0, 'utf8') : fs.readFileSync(quelle, 'utf8'));
+const strom = Number(opt.strom);
+if (![1, 2, 3].includes(strom)) { process.stderr.write('djk-muster: --strom must be 1, 2 or 3\n'); process.exit(2); }
+const basis = opt.basis ?? `/dev/shm/cypherdj${opt.instanz ? `-${opt.instanz}` : ''}`;
+const ziel = opt.ziel ?? path.join(basis, strom === 1 ? 'erzeuger' : `erzeuger${strom}`, 'strom1.js');
+const ordner = path.dirname(ziel);
+if (path.basename(ziel) !== 'strom1.js') { process.stderr.write('djk-muster: --ziel muss auf strom1.js enden\n'); process.exit(2); }
+const abweisen = () => {
+  process.stderr.write('djk-muster: AUTO ist aus, Andreas hat übernommen; nichts gesetzt\n');
+  process.exit(4);
+};
+if (!opt['als-andreas'] && !autonomAn(ordner)) abweisen();   // früh: vor dem Kompilieren
+const r = schreibeMuster(ordner, text, opt.von, Date.now(), () => opt['als-andreas'] || autonomAn(ordner));
+if (r.abgewiesen) abweisen();
+if (r.fehler) { process.stderr.write(`djk-muster: ${r.fehler}\n`); process.exit(2); }
+process.stdout.write(`djk-muster: gesetzt (${ziel}, von ${opt.von}); gilt ab dem nächsten Takt\n`);
+process.exit(0);   // Review F5: ein Timer aus dem Muster hält den Prozess sonst offen

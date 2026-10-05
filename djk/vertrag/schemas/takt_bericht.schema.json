@@ -1,0 +1,27 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "https://cypherdj.invalid/vertrag/1/takt_bericht.schema.json",
+ "title": "Takt-Bericht, Analyse → Leitstand (SCHNITTSTELLEN.md §14.8)",
+ "type": "object",
+ "required": ["takt", "phrase", "frist_takte", "decks", "deck_gegen_deck", "ueberdeckung", "summe", "plan_abweichung"],
+ "properties": {
+  "takt": {"type": "integer", "minimum": 1},
+  "phrase": {"type": "integer", "minimum": 1},
+  "frist_takte": {"type": ["integer", "null"]},
+  "decks": {"type": "array", "items": {
+   "type": "object", "required": ["deck", "baender_db", "versatz_ms", "lufs_takt"],
+   "properties": {"deck": {"$ref": "defs.schema.json#/$defs/deck_nr"}, "baender_db": {"$ref": "defs.schema.json#/$defs/baender_db"},
+    "versatz_ms": {"type": ["number", "null"]}, "lufs_takt": {"type": "number"}}}},
+  "deck_gegen_deck": {"anyOf": [{"type": "null"}, {
+   "type": "object", "required": ["paar", "median_ms", "flam_anteil", "n"],
+   "properties": {"paar": {"type": "array", "items": {"$ref": "defs.schema.json#/$defs/deck_nr"}, "minItems": 2, "maxItems": 2},
+    "median_ms": {"type": ["number", "null"]}, "flam_anteil": {"anyOf": [{"$ref": "defs.schema.json#/$defs/anteil"}, {"type": "null"}]},
+    "n": {"type": "integer", "minimum": 0}}}]},
+  "ueberdeckung": {"anyOf": [{"type": "null"}, {"$ref": "defs.schema.json#/$defs/ueberdeckung"}]},
+  "summe": {"type": "object", "required": ["lufs_takt", "spitze_dbfs"],
+   "properties": {"lufs_takt": {"type": "number"}, "spitze_dbfs": {"type": "number"}}},
+  "plan_abweichung": {"anyOf": [{"type": "null"}, {
+   "type": "object", "required": ["plan_id", "ueberdeckung_max", "lufs_lu"],
+   "properties": {"plan_id": {"$ref": "defs.schema.json#/$defs/plan_id"}, "ueberdeckung_max": {"type": "number"}, "lufs_lu": {"type": "number"}}}]}
+ }
+}

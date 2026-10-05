@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>djk · waveform prototype</title>
+<style>
+  :root { --bg:#12151b; --panel:#1a1e26; --text:#c9d1dc; --dim:#6b7585; --a:#2fd3b5; }
+  html, body { margin:0; background:var(--bg); color:var(--text); font:13px/1.3 "Inter", system-ui, sans-serif; }
+  .deck { margin:16px; background:var(--panel); border-radius:8px; padding:12px 14px; border-top:2px solid var(--a); }
+  .kopf { display:flex; gap:18px; align-items:baseline; margin-bottom:8px; }
+  .kopf b { font-size:18px; color:#fff; }
+  .kopf span { color:var(--dim); letter-spacing:.08em; font-size:11px; }
+  .kopf output { color:#fff; font-variant-numeric:tabular-nums; }
+  canvas { display:block; width:100%; }
+  #lauf { height:200px; background:#0b0d11; border-radius:4px; }
+  #ueber { height:56px; margin-top:6px; background:#0b0d11; border-radius:4px; cursor:pointer; }
+  .leiste { display:flex; gap:10px; margin-top:10px; align-items:center; }
+  button { background:#232833; color:#fff; border:1px solid #333b48; border-radius:4px; padding:8px 20px;
+           font:600 13px system-ui; letter-spacing:.1em; cursor:pointer; }
+  button.an { background:var(--a); color:#062; }
+  #mess { margin-left:auto; color:var(--dim); font:12px ui-monospace, monospace; }
+</style>
+</head>
+<body>
+<section class="deck">
+  <div class="kopf">
+    <span>DECK A</span><b>Adam Beyer – Antistius</b>
+    <span>BAR</span><output id="bar">–</output>
+    <span>BPM</span><output>128.00</output>
+    <span>ZOOM</span><output id="zoom">16 bars</output>
+  </div>
+  <canvas id="lauf"></canvas>
+  <canvas id="ueber"></canvas>
+  <div class="leiste">
+    <button id="play">PLAY</button>
+    <span style="color:var(--dim)">drag the waveform: move · mouse wheel: zoom · click the overview: jump</span>
+    <span id="mess"></span>
+  </div>
+</section>
+<script>
+const SR = 48000, HOP = 256, SPB = 22500;             // 128 BPM
+const ERSTER_SCHLAG = 3129, EINS = 2;                 // fassung.json: erster_schlag_frame, erste_eins_quell_beat
+let W;                                                // Uint8Array, 5 Bytes je Spalte
+let spalten = 0, takte = 16;
+const lauf = document.getElementById('lauf'), ueber = document.getElementById('ueber');
+const cl = lauf.getContext('2d'), cu = ueber.getContext('2d');
+
+// Farbe je Spalte aus den drei Bändern: tief warm (rot/orange), mittel grün, hoch kalt/hell.
+function farbe(t, m, h, p) {
+  const sum = t + m + h + 1e-6;
+  const c = (0.5 * m + h) / sum;                       // 0 = nur tief, 1 = nur hoch
+  const hue = c < 0.5 ? 0 + c * 2 * 80 : 80 + (c - 0.5) * 2 * 140;   // rot → gelbgrün → blau
+  const light = 38 + 30 * (p / 255);
+  return `hsl(${hue | 0},90%,${light | 0}%)`;
+}
+
+// Kopf: AudioContext-Zeit, zwischen Meldungen mit performance.now() hochgerechnet (Spec E4).
+let ctx, puffer, quelle = null, startCtx = 0, startPos = 0, spielt = false;
+function position() {                                  // in Frames
+  if (!spielt) return startPos;
+  const ts = ctx.getOutputTimestamp();
+  const t = ts.contextTime + (performance.now() - ts.performanceTime) / 1000;
+  return startPos + Math.max(0, t - startCtx) * SR;
+}
+
+function groesse(c) {
+  const r = c.getBoundingClientRect();
+  if (c.width !== Math.round(r.width) || c.height !== Math.round(r.height)) { c.width = Math.round(r.width); c.height = Math.round(r.height); }
+}
+
+function spalteMax(a, b) {                             // Spalten [a,b): Spitze Maximum, Bänder Mittel
+  let p = 0, t = 0, m = 0, h = 0;
+  a = Math.max(0, a | 0); b = Math.min(spalten, Math.max(a + 1, b | 0));
+  for (let i = a; i < b; i++) {
+    const o = i * 5;
+    if (W[o] > p) p = W[o]; t += W[o + 1]; m += W[o + 2]; h += W[o + 3];
+  }
+  const n = b - a; return [p, t / n, m / n, h / n];
+}
+
+const KACHEL = 2048;                                     // Pixel je Kachel
+let kacheln = new Map(), kachelZoom = 0, kachelHoehe = 0;
+function kachel(i, fpp, hh) {                            // Kachel i: Frames [i·KACHEL·fpp, …)
+  if (kachelZoom !== fpp || kachelHoehe !== hh) { kacheln = new Map(); kachelZoom = fpp; kachelHoehe = hh; }
+  let k = kacheln.get(i);
+  if (k) return k;
+  k = new OffscreenCanvas(KACHEL, hh);
+  const c = k.getContext('2d'), mitte = hh / 2;
+  for (let x = 0; x < KACHEL; x++) {
+    const f0 = (i * KACHEL + x) * fpp;
+    if (f0 < 0 || f0 >= spalten * HOP) continue;
+    const [p, t, m, h] = spalteMax(f0 / HOP, (f0 + fpp) / HOP);
+    const y = (p / 255) * (mitte - 4);
+    c.fillStyle = farbe(t, m, h, p); c.fillRect(x, mitte - y, 1, 2 * y);
+    const yt = (t / 255) * (mitte - 4) * 0.55;             // tiefes Band als dunkler Kern
+    if (yt > 1) { c.fillStyle = 'rgba(120,10,10,0.45)'; c.fillRect(x, mitte - yt, 1, 2 * yt); }
+  }
+  kacheln.set(i, k);
+  return k;
+}
+
+function zeichneLauf(pos) {
+  groesse(lauf);
+  const w = lauf.width, hh = lauf.height;
+  const fensterFrames = takte * 4 * SPB, fpp = fensterFrames / w;       // Frames je Pixel
+  const links = pos - fensterFrames / 2, px = links / fpp;              // linker Rand in Welt-Pixeln
+  cl.fillStyle = '#0b0d11'; cl.fillRect(0, 0, w, hh);
+  for (let i = Math.floor(px / KACHEL); i * KACHEL < px + w; i++) {
+    if (i < 0) continue;
+    cl.drawImage(kachel(i, fpp, hh), Math.round(i * KACHEL - px), 0);
+  }
+  // Raster: Beats dünn, Takt-Eins kräftig mit Nummer
+  const k0 = Math.ceil((links - ERSTER_SCHLAG) / SPB), k1 = Math.floor((links + fensterFrames - ERSTER_SCHLAG) / SPB);
+  cl.font = '11px ui-monospace, monospace';
+  for (let k = k0; k <= k1; k++) {
+    const x = Math.round((ERSTER_SCHLAG + k * SPB - links) / fpp) + 0.5;
+    const eins = ((k - EINS) % 4 + 4) % 4 === 0;
+    if (!eins && fpp > SPB / 6) continue;                                // bei weitem Zoom nur Takte
+    cl.strokeStyle = eins ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.12)';
+    cl.beginPath(); cl.moveTo(x, 0); cl.lineTo(x, hh); cl.stroke();
+    if (eins) { cl.fillStyle = 'rgba(255,255,255,0.55)'; cl.fillText(String(Math.floor((k - EINS) / 4) + 1), x + 3, 12); }
+  }
+  cl.fillStyle = '#fff'; cl.fillRect((w / 2 | 0) - 1, 0, 2, hh);           // Kopf steht fest in der Mitte
+}
+
+let ueberBild = null;
+function zeichneUeber(pos) {
+  groesse(ueber);
+  const w = ueber.width, hh = ueber.height, mitte = hh / 2;
+  if (!ueberBild || ueberBild.width !== w) {                              // einmal je Breite vorrendern
+    ueberBild = new OffscreenCanvas(w, hh);
+    const c = ueberBild.getContext('2d');
+    const spp = spalten / w;
+    for (let x = 0; x < w; x++) {
+      const [p, t, m, h] = spalteMax(x * spp, (x + 1) * spp);
+      const y = (p / 255) * (mitte - 2);
+      c.fillStyle = farbe(t, m, h, p); c.fillRect(x, mitte - y, 1, 2 * y);
+    }
+  }
+  cu.clearRect(0, 0, w, hh); cu.drawImage(ueberBild, 0, 0);
+  const x = pos / (spalten * HOP) * w;
+  cu.fillStyle = 'rgba(11,13,17,0.55)'; cu.fillRect(0, 0, x, hh);          // Gespieltes abgedunkelt
+  const fx = takte * 4 * SPB / (spalten * HOP) * w;                        // Fenster der Laufansicht
+  cu.strokeStyle = 'rgba(255,255,255,0.35)'; cu.strokeRect(x - fx / 2, 0.5, fx, hh - 1);
+  cu.fillStyle = '#fff'; cu.fillRect(x - 1, 0, 2, hh);
+}
+
+// Messung: Zeichenzeit und Bildabstand je Bild (window.mess für devtools)
+const mess = window.mess = { zeichnen: [], abstand: [] };
+let letzt = 0;
+function bild(ts) {
+  const t0 = performance.now();
+  const pos = position();
+  zeichneLauf(pos); zeichneUeber(pos);
+  const k = Math.floor((pos - ERSTER_SCHLAG) / SPB) - EINS;
+  document.getElementById('bar').textContent = k < 0 ? '–' : `${Math.floor(k / 4) + 1}.${(k % 4) + 1}`;
+  mess.zeichnen.push(performance.now() - t0); if (letzt) mess.abstand.push(ts - letzt); letzt = ts;
+  if (mess.zeichnen.length > 600) { mess.zeichnen.shift(); mess.abstand.shift(); }
+  if (mess.zeichnen.length % 30 === 0) {
+    const z = [...mess.zeichnen].sort((a, b) => a - b), a = [...mess.abstand].sort((a, b) => a - b);
+    document.getElementById('mess').textContent =
+      `draw p50 ${z[z.length >> 1].toFixed(2)} ms · p99 ${z[Math.floor(z.length * .99)].toFixed(2)} ms · frame ${a[a.length >> 1].toFixed(1)} ms`;
+  }
+  requestAnimationFrame(bild);
+}
+
+async function spiele(ab) {
+  if (!ctx) ctx = new AudioContext({ sampleRate: SR });
+  if (!puffer) {
+    document.getElementById('play').textContent = 'LOADING…';
+    puffer = await ctx.decodeAudioData(await (await fetch('ton.opus')).arrayBuffer());
+  }
+  if (quelle) { quelle.onended = null; quelle.stop(); }
+  quelle = ctx.createBufferSource(); quelle.buffer = puffer; quelle.connect(ctx.destination);
+  startCtx = ctx.currentTime + 0.05; startPos = ab;
+  quelle.start(startCtx, ab / SR); spielt = true;
+  document.getElementById('play').textContent = 'PAUSE'; document.getElementById('play').classList.add('an');
+}
+function halte() {
+  startPos = position(); spielt = false;
+  if (quelle) { quelle.onended = null; quelle.stop(); quelle = null; }
+  document.getElementById('play').textContent = 'PLAY'; document.getElementById('play').classList.remove('an');
+}
+document.getElementById('play').onclick = () => (spielt ? halte() : spiele(startPos));
+ueber.onclick = (e) => {
+  const r = ueber.getBoundingClientRect(), ziel = (e.clientX - r.left) / r.width * spalten * HOP;
+  const k = Math.round((ziel - ERSTER_SCHLAG) / SPB / 4) * 4;             // auf eine Takt-Eins-nahe Stelle
+  const f = Math.max(0, ERSTER_SCHLAG + (k + EINS) * SPB);
+  spielt ? spiele(f) : (startPos = f);
+};
+// Ziehen im Zoomfenster (Andreas 2026-09-27): Welle folgt der Maus; lief der Ton, spielt er ab der neuen Stelle weiter
+let zug = null;
+lauf.addEventListener('pointerdown', (e) => {
+  try { lauf.setPointerCapture(e.pointerId); } catch { /* künstliches Ereignis */ }
+  const r = lauf.getBoundingClientRect();
+  zug = { x: e.clientX, pos: position(), lief: spielt, fpp: (takte * 4 * SPB) / r.width };
+  if (spielt) halte();
+  startPos = zug.pos;
+  lauf.style.cursor = 'grabbing';
+});
+lauf.addEventListener('pointermove', (e) => {
+  if (!zug) return;
+  startPos = Math.max(0, Math.min(spalten * HOP - 1, zug.pos - (e.clientX - zug.x) * zug.fpp));
+});
+const loslassen = () => {
+  if (!zug) return;
+  const lief = zug.lief; zug = null; lauf.style.cursor = 'grab';
+  if (lief) spiele(startPos);
+};
+lauf.addEventListener('pointerup', loslassen);
+lauf.addEventListener('pointercancel', loslassen);
+lauf.style.cursor = 'grab';
+lauf.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  takte = Math.min(64, Math.max(2, e.deltaY > 0 ? takte * 2 : takte / 2));
+  document.getElementById('zoom').textContent = `${takte} bars`;
+}, { passive: false });
+
+fetch('welle.bin').then((r) => r.arrayBuffer()).then((b) => {
+  W = new Uint8Array(b); spalten = W.length / 5;
+  startPos = ERSTER_SCHLAG + (EINS + 4 * 32) * SPB;                        // Takt 33, damit etwas los ist
+  requestAnimationFrame(bild);
+});
+</script>
+</body>
+</html>

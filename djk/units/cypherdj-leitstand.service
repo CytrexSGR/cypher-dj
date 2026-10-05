@@ -1,0 +1,21 @@
+# cypherdj-leitstand (Scheibe 12): WebSocket-Hub, Kern-Anbindung, Takt-Strom, Journal. Kein Echtzeit-Prozess.
+# Hängt sich an cypherdj.target (legt Scheibe 18 an), ohne die Target-Datei zu ändern (ROADMAP §8.1).
+# Einschalten als dauerhafte Unit entscheidet Andreas (ROADMAP §8.11); geprüft wird nur transient.
+# Satellit nach ADR 016: Restart=always; ein Konfigurationsfehler (Rückgabe 2) startet nicht in Schleife neu.
+[Unit]
+Description=cypherdj-leitstand (Hub, Kern-Anbindung, Takt-Strom, Journal)
+Documentation=file:%h/cypher-dj/docs/architektur/SCHNITTSTELLEN.md
+PartOf=cypherdj.target
+After=cypherdj-kern.service
+
+[Service]
+Type=simple
+WorkingDirectory=%h/cypher-dj/djk/leitstand
+ExecStart=/usr/bin/node %h/cypher-dj/djk/leitstand/src/leitstand.ts
+Environment=NODE_NO_WARNINGS=1
+Restart=always
+RestartSec=1
+RestartPreventExitStatus=2
+
+[Install]
+WantedBy=cypherdj.target

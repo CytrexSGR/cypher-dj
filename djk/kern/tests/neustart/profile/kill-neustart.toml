@@ -1,0 +1,36 @@
+# Scheibe 18, Querprobe über den Chaos-Prüfstand aus Scheibe 16 (djk/pruefstand/pruefstand.py): dessen eigenes Messgerät
+# (Klick-Einsätze am Ziel, Raster nach Rückkehr, fehlende Klicks) gegen den Kern mit Neustart-Zustand.
+# Aufruf: python3 djk/pruefstand/pruefstand.py lauf djk/kern/tests/neustart/profile/kill-neustart.toml --ordner <dir>
+# Notbahn daneben mit Kante (Vorgabe von 16 seit dem 2026-09-26), Kern mit --master an die Senke (setzt 16 selbst).
+# Vorher /dev/shm/cypherdj-a/zustand löschen: 16 löscht nur den Ring (Plan-Befund B2).
+name = "kill-neustart"
+zweck = "Scheibe 18: dreimal kill -9 auf den Kern mit Neustart-Zustand; systemd startet ihn neu, er setzt auf dem Raster fort, kein Klick fehlt."
+dauer_s = 40.0
+instanz = "a"
+
+[quelle]
+art = "kern"
+argumente = ["--konfig", "{ordner}/kern.toml", "--waechter-ms", "100"]
+neustart = true
+eigenschaften = ["Type=notify", "NotifyAccess=main", "RestartSec=0", "WatchdogSec=200ms", "WatchdogSignal=SIGKILL", "TimeoutStartSec=5s"]
+
+[[eingriff]]
+nach_s = 10.0
+art = "kill9"
+ziel = "quelle"
+
+[[eingriff]]
+nach_s = 20.5
+art = "kill9"
+ziel = "quelle"
+
+[[eingriff]]
+nach_s = 30.25
+art = "kill9"
+ziel = "quelle"
+
+[erwartung]
+fehlende_klicks_max = 0
+raster_versatz_max = 1.0
+schleife_in_jedem_eingriff = true
+notbahn_uebernahmen_min = 3

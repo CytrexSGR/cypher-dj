@@ -1,0 +1,7 @@
+# Werkstatt, Scheibe 05. torch, numpy, scipy kommen aus dem System (--system-site-packages).
+beat_this==1.1.0
+essentia==2.1b6.dev1389
+soundfile==0.14.0
+soxr==1.1.0
+einops==0.8.2
+rotary-embedding-torch==0.9.1

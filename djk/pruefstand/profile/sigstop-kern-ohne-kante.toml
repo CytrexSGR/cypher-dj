@@ -1,0 +1,21 @@
+name = "sigstop-kern-ohne-kante"
+zweck = "Vergleich zum Befund sigstop-kern (2026-09-26: 3 s Stille, keine Übernahme): derselbe Hänger, die Notbahn daneben aber OHNE Kante kern:master_L -> kante. Zeigt, ob die Kante die Notbahn an den hängenden Kern bindet."
+dauer_s = 30.0
+
+[quelle]
+art = "kern"
+argumente = ["--konfig", "{ordner}/kern.toml"]
+
+[notbahn]
+kante = false
+
+[[eingriff]]
+nach_s = 10.0
+art = "sigstop"
+ziel = "quelle"
+halten_s = 3.0
+
+[erwartung]
+schleife_in_jedem_eingriff = true
+schleife_abweichung_max = 0
+rueckgabe_in_jedem_eingriff = true

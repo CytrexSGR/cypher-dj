@@ -1,0 +1,32 @@
+# Python-Drittpakete für den Code unter djk/ (ohne strukturvorschlag: dort requirements-experimente.txt).
+# Ermittelt per grep der import-Zeilen (Stand 2026-10-05); untere Grenzen = Haupt.Neben-Stand in djk/werkstatt/.venv
+# (pip list): numpy 2.4.5, scipy 1.17.1, jsonschema 4.26.0, referencing 0.37.0, pytest 8.4.2, soundfile 0.14.0,
+# pandas 3.0.2, scikit-learn 1.8.0, joblib 1.5.3. Nur unter diesen Ständen gelaufen, die Grenzen sind nicht gegen ältere geprüft.
+# Python für ctest: die CMake-Tests rufen ${Python3_EXECUTABLE} auf (find_package(Python3), beim Konfigurieren das erste
+# python3 im PATH, im Build-Cache festgehalten) und vereinzelt literal "python3" aus dem PATH (kern/stellwerk/CMakeLists.txt:93).
+# Die Pakete müssen also in genau diesem Interpreter liegen: venv aktivieren BEVOR cmake konfiguriert, oder
+# -DPython3_EXECUTABLE=<venv>/bin/python übergeben. Entwickelt unter Python 3.12 (Ubuntu 24.04).
+# Der apt-Stand von python3-jsonschema (24.04) ist für djk/vertrag/schema_lader.py (Draft202012Validator + referencing) zu alt.
+
+# Kern-Tests (ctest) und Vertragsprüfungen
+numpy>=2.4
+scipy>=1.17
+jsonschema>=4.26
+referencing>=0.37
+
+# Python-Tests (pytest) unter djk/
+pytest>=8.4
+
+# Audio-Dateien lesen und schreiben (Werkstatt, Klang, Prüfstand-Auswertung)
+soundfile>=0.14
+
+# Tonart und Energie (djk/tonart_energie)
+pandas>=3.0
+scikit-learn>=1.8
+joblib>=1.5
+
+# Schwergewichte, nur für die jeweils genannte Arbeit; nicht für ctest. Einkommentieren, wenn gebraucht:
+#   torch (CUDA-Build passend zur Karte, nicht blind von PyPI): werkstatt/einzeln.py, lauf_raster.py, pruefstand/last/demucs_last.py
+#   essentia, beat_this (Werkstatt, tonart_energie): siehe djk/werkstatt/anforderungen.txt für die gepinnten Stände
+#   demucs 4.0.1 (nur pruefstand/last/demucs_last.py, Lastprofil p1)
+#   carla (carla_backend, kein PyPI-Paket, aus der Carla-Installation): djk/wirte/carla

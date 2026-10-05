@@ -1,0 +1,9 @@
+{
+  "name": "cypherdj-erzeuger",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Strudel-Erzeuger (Plan 2026-09-27, ADR 010/017/024): Muster zu Ereignissen mit Beat-Stempel an den Kern",
+  "engines": { "node": ">=22.18" },
+  "scripts": { "test": "node --test --test-concurrency=1 tests/*.test.mjs" }
+}

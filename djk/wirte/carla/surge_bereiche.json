@@ -1,0 +1,3961 @@
+{
+ "normiert": [
+  0,
+  0.25,
+  0.5,
+  0.75,
+  1
+ ],
+ "parameter": {
+  "a_drift": {
+   "carla": "A Osc Drift",
+   "index": 3,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_env1_attack": {
+   "carla": "A Amp EG Attack",
+   "index": 4,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_env1_decay": {
+   "carla": "A Amp EG Decay",
+   "index": 6,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_env1_release": {
+   "carla": "A Amp EG Release",
+   "index": 9,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_env1_sustain": {
+   "carla": "A Amp EG Sustain",
+   "index": 11,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_env2_attack": {
+   "carla": "A Filter EG Attack",
+   "index": 12,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_env2_decay": {
+   "carla": "A Filter EG Decay",
+   "index": 14,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_env2_release": {
+   "carla": "A Filter EG Release",
+   "index": 17,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_env2_sustain": {
+   "carla": "A Filter EG Sustain",
+   "index": 19,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_f_balance": {
+   "carla": "A Filter Balance",
+   "index": 22,
+   "punkte": [
+    -1.0,
+    -0.5,
+    0.0,
+    0.5,
+    1.0
+   ]
+  },
+  "a_feedback": {
+   "carla": "A Feedback",
+   "index": 24,
+   "punkte": [
+    -1.0,
+    -0.5,
+    0.0,
+    0.5,
+    1.0
+   ]
+  },
+  "a_filter1_cutoff": {
+   "carla": "A Filter 1 Cutoff",
+   "index": 25,
+   "punkte": [
+    -60.0,
+    -27.5,
+    5.0,
+    37.500008,
+    70.0
+   ]
+  },
+  "a_filter1_envmod": {
+   "carla": "A Filter 1 FEG Mod Amount",
+   "index": 26,
+   "punkte": [
+    -96.0,
+    -48.0,
+    0.0,
+    48.000015,
+    96.0
+   ]
+  },
+  "a_filter1_keytrack": {
+   "carla": "A Filter 1 Keytrack",
+   "index": 27,
+   "punkte": [
+    -1.0,
+    -0.5,
+    0.0,
+    0.5,
+    1.0
+   ]
+  },
+  "a_filter1_resonance": {
+   "carla": "A Filter 1 Resonance",
+   "index": 28,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_filter2_cutoff": {
+   "carla": "A Filter 2 Cutoff",
+   "index": 31,
+   "punkte": [
+    -60.0,
+    -27.5,
+    5.0,
+    37.500008,
+    70.0
+   ]
+  },
+  "a_filter2_envmod": {
+   "carla": "A Filter 2 FEG Mod Amount",
+   "index": 32,
+   "punkte": [
+    -96.0,
+    -48.0,
+    0.0,
+    48.000015,
+    96.0
+   ]
+  },
+  "a_filter2_keytrack": {
+   "carla": "A Filter 2 Keytrack",
+   "index": 33,
+   "punkte": [
+    -1.0,
+    -0.5,
+    0.0,
+    0.5,
+    1.0
+   ]
+  },
+  "a_filter2_resonance": {
+   "carla": "A Filter 2 Resonance",
+   "index": 34,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_fm_depth": {
+   "carla": "A FM Depth",
+   "index": 37,
+   "punkte": [
+    -48.0,
+    -30.0,
+    -12.0,
+    6.000004,
+    24.0
+   ]
+  },
+  "a_level_noise": {
+   "carla": "A Noise Volume",
+   "index": 40,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_level_o1": {
+   "carla": "A Osc 1 Volume",
+   "index": 41,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_level_o2": {
+   "carla": "A Osc 2 Volume",
+   "index": 42,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_level_o3": {
+   "carla": "A Osc 3 Volume",
+   "index": 43,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_level_pfg": {
+   "carla": "A Pre-Filter Gain",
+   "index": 44,
+   "punkte": [
+    -48.0,
+    -24.0,
+    0.0,
+    24.000008,
+    48.0
+   ]
+  },
+  "a_level_ring12": {
+   "carla": "A Ring Modulation 1x2 Volume",
+   "index": 45,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_level_ring23": {
+   "carla": "A Ring Modulation 2x3 Volume",
+   "index": 46,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_lfo0_attack": {
+   "carla": "A LFO 1 Attack",
+   "index": 47,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo0_decay": {
+   "carla": "A LFO 1 Decay",
+   "index": 48,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo0_deform": {
+   "carla": "A LFO 1 Deform",
+   "index": 49,
+   "punkte": [
+    -1.0,
+    -0.5,
+    0.0,
+    0.5,
+    1.0
+   ]
+  },
+  "a_lfo0_delay": {
+   "carla": "A LFO 1 Delay",
+   "index": 50,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo0_hold": {
+   "carla": "A LFO 1 Hold",
+   "index": 51,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo0_magnitude": {
+   "carla": "A LFO 1 Amplitude",
+   "index": 52,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_lfo0_phase": {
+   "carla": "A LFO 1 Phase",
+   "index": 53,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_lfo0_rate": {
+   "carla": "A LFO 1 Rate",
+   "index": 54,
+   "punkte": [
+    -7.0,
+    -3.0,
+    1.0,
+    5.000001,
+    9.0
+   ]
+  },
+  "a_lfo0_release": {
+   "carla": "A LFO 1 Release",
+   "index": 55,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo0_sustain": {
+   "carla": "A LFO 1 Sustain",
+   "index": 57,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_lfo10_attack": {
+   "carla": "A Scene LFO 5 Attack",
+   "index": 60,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo10_decay": {
+   "carla": "A Scene LFO 5 Decay",
+   "index": 61,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo10_deform": {
+   "carla": "A Scene LFO 5 Deform",
+   "index": 62,
+   "punkte": [
+    -1.0,
+    -0.5,
+    0.0,
+    0.5,
+    1.0
+   ]
+  },
+  "a_lfo10_delay": {
+   "carla": "A Scene LFO 5 Delay",
+   "index": 63,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo10_hold": {
+   "carla": "A Scene LFO 5 Hold",
+   "index": 64,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo10_magnitude": {
+   "carla": "A Scene LFO 5 Amplitude",
+   "index": 65,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_lfo10_phase": {
+   "carla": "A Scene LFO 5 Phase",
+   "index": 66,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_lfo10_rate": {
+   "carla": "A Scene LFO 5 Rate",
+   "index": 67,
+   "punkte": [
+    -7.0,
+    -3.0,
+    1.0,
+    5.000001,
+    9.0
+   ]
+  },
+  "a_lfo10_release": {
+   "carla": "A Scene LFO 5 Release",
+   "index": 68,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo10_sustain": {
+   "carla": "A Scene LFO 5 Sustain",
+   "index": 70,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_lfo11_attack": {
+   "carla": "A Scene LFO 6 Attack",
+   "index": 73,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo11_decay": {
+   "carla": "A Scene LFO 6 Decay",
+   "index": 74,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo11_deform": {
+   "carla": "A Scene LFO 6 Deform",
+   "index": 75,
+   "punkte": [
+    -1.0,
+    -0.5,
+    0.0,
+    0.5,
+    1.0
+   ]
+  },
+  "a_lfo11_delay": {
+   "carla": "A Scene LFO 6 Delay",
+   "index": 76,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo11_hold": {
+   "carla": "A Scene LFO 6 Hold",
+   "index": 77,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo11_magnitude": {
+   "carla": "A Scene LFO 6 Amplitude",
+   "index": 78,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_lfo11_phase": {
+   "carla": "A Scene LFO 6 Phase",
+   "index": 79,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_lfo11_rate": {
+   "carla": "A Scene LFO 6 Rate",
+   "index": 80,
+   "punkte": [
+    -7.0,
+    -3.0,
+    1.0,
+    5.000001,
+    9.0
+   ]
+  },
+  "a_lfo11_release": {
+   "carla": "A Scene LFO 6 Release",
+   "index": 81,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo11_sustain": {
+   "carla": "A Scene LFO 6 Sustain",
+   "index": 83,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_lfo1_attack": {
+   "carla": "A LFO 2 Attack",
+   "index": 86,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo1_decay": {
+   "carla": "A LFO 2 Decay",
+   "index": 87,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo1_deform": {
+   "carla": "A LFO 2 Deform",
+   "index": 88,
+   "punkte": [
+    -1.0,
+    -0.5,
+    0.0,
+    0.5,
+    1.0
+   ]
+  },
+  "a_lfo1_delay": {
+   "carla": "A LFO 2 Delay",
+   "index": 89,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo1_hold": {
+   "carla": "A LFO 2 Hold",
+   "index": 90,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo1_magnitude": {
+   "carla": "A LFO 2 Amplitude",
+   "index": 91,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_lfo1_phase": {
+   "carla": "A LFO 2 Phase",
+   "index": 92,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_lfo1_rate": {
+   "carla": "A LFO 2 Rate",
+   "index": 93,
+   "punkte": [
+    -7.0,
+    -3.0,
+    1.0,
+    5.000001,
+    9.0
+   ]
+  },
+  "a_lfo1_release": {
+   "carla": "A LFO 2 Release",
+   "index": 94,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo1_sustain": {
+   "carla": "A LFO 2 Sustain",
+   "index": 96,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_lfo2_attack": {
+   "carla": "A LFO 3 Attack",
+   "index": 99,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo2_decay": {
+   "carla": "A LFO 3 Decay",
+   "index": 100,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo2_deform": {
+   "carla": "A LFO 3 Deform",
+   "index": 101,
+   "punkte": [
+    -1.0,
+    -0.5,
+    0.0,
+    0.5,
+    1.0
+   ]
+  },
+  "a_lfo2_delay": {
+   "carla": "A LFO 3 Delay",
+   "index": 102,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo2_hold": {
+   "carla": "A LFO 3 Hold",
+   "index": 103,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo2_magnitude": {
+   "carla": "A LFO 3 Amplitude",
+   "index": 104,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_lfo2_phase": {
+   "carla": "A LFO 3 Phase",
+   "index": 105,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_lfo2_rate": {
+   "carla": "A LFO 3 Rate",
+   "index": 106,
+   "punkte": [
+    -7.0,
+    -3.0,
+    1.0,
+    5.000001,
+    9.0
+   ]
+  },
+  "a_lfo2_release": {
+   "carla": "A LFO 3 Release",
+   "index": 107,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo2_sustain": {
+   "carla": "A LFO 3 Sustain",
+   "index": 109,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_lfo3_attack": {
+   "carla": "A LFO 4 Attack",
+   "index": 112,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo3_decay": {
+   "carla": "A LFO 4 Decay",
+   "index": 113,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo3_deform": {
+   "carla": "A LFO 4 Deform",
+   "index": 114,
+   "punkte": [
+    -1.0,
+    -0.5,
+    0.0,
+    0.5,
+    1.0
+   ]
+  },
+  "a_lfo3_delay": {
+   "carla": "A LFO 4 Delay",
+   "index": 115,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo3_hold": {
+   "carla": "A LFO 4 Hold",
+   "index": 116,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo3_magnitude": {
+   "carla": "A LFO 4 Amplitude",
+   "index": 117,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_lfo3_phase": {
+   "carla": "A LFO 4 Phase",
+   "index": 118,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_lfo3_rate": {
+   "carla": "A LFO 4 Rate",
+   "index": 119,
+   "punkte": [
+    -7.0,
+    -3.0,
+    1.0,
+    5.000001,
+    9.0
+   ]
+  },
+  "a_lfo3_release": {
+   "carla": "A LFO 4 Release",
+   "index": 120,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo3_sustain": {
+   "carla": "A LFO 4 Sustain",
+   "index": 122,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_lfo4_attack": {
+   "carla": "A LFO 5 Attack",
+   "index": 125,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo4_decay": {
+   "carla": "A LFO 5 Decay",
+   "index": 126,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo4_deform": {
+   "carla": "A LFO 5 Deform",
+   "index": 127,
+   "punkte": [
+    -1.0,
+    -0.5,
+    0.0,
+    0.5,
+    1.0
+   ]
+  },
+  "a_lfo4_delay": {
+   "carla": "A LFO 5 Delay",
+   "index": 128,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo4_hold": {
+   "carla": "A LFO 5 Hold",
+   "index": 129,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo4_magnitude": {
+   "carla": "A LFO 5 Amplitude",
+   "index": 130,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_lfo4_phase": {
+   "carla": "A LFO 5 Phase",
+   "index": 131,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_lfo4_rate": {
+   "carla": "A LFO 5 Rate",
+   "index": 132,
+   "punkte": [
+    -7.0,
+    -3.0,
+    1.0,
+    5.000001,
+    9.0
+   ]
+  },
+  "a_lfo4_release": {
+   "carla": "A LFO 5 Release",
+   "index": 133,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo4_sustain": {
+   "carla": "A LFO 5 Sustain",
+   "index": 135,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_lfo5_attack": {
+   "carla": "A LFO 6 Attack",
+   "index": 138,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo5_decay": {
+   "carla": "A LFO 6 Decay",
+   "index": 139,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo5_deform": {
+   "carla": "A LFO 6 Deform",
+   "index": 140,
+   "punkte": [
+    -1.0,
+    -0.5,
+    0.0,
+    0.5,
+    1.0
+   ]
+  },
+  "a_lfo5_delay": {
+   "carla": "A LFO 6 Delay",
+   "index": 141,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo5_hold": {
+   "carla": "A LFO 6 Hold",
+   "index": 142,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo5_magnitude": {
+   "carla": "A LFO 6 Amplitude",
+   "index": 143,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_lfo5_phase": {
+   "carla": "A LFO 6 Phase",
+   "index": 144,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_lfo5_rate": {
+   "carla": "A LFO 6 Rate",
+   "index": 145,
+   "punkte": [
+    -7.0,
+    -3.0,
+    1.0,
+    5.000001,
+    9.0
+   ]
+  },
+  "a_lfo5_release": {
+   "carla": "A LFO 6 Release",
+   "index": 146,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo5_sustain": {
+   "carla": "A LFO 6 Sustain",
+   "index": 148,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_lfo6_attack": {
+   "carla": "A Scene LFO 1 Attack",
+   "index": 151,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo6_decay": {
+   "carla": "A Scene LFO 1 Decay",
+   "index": 152,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo6_deform": {
+   "carla": "A Scene LFO 1 Deform",
+   "index": 153,
+   "punkte": [
+    -1.0,
+    -0.5,
+    0.0,
+    0.5,
+    1.0
+   ]
+  },
+  "a_lfo6_delay": {
+   "carla": "A Scene LFO 1 Delay",
+   "index": 154,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo6_hold": {
+   "carla": "A Scene LFO 1 Hold",
+   "index": 155,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo6_magnitude": {
+   "carla": "A Scene LFO 1 Amplitude",
+   "index": 156,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_lfo6_phase": {
+   "carla": "A Scene LFO 1 Phase",
+   "index": 157,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_lfo6_rate": {
+   "carla": "A Scene LFO 1 Rate",
+   "index": 158,
+   "punkte": [
+    -7.0,
+    -3.0,
+    1.0,
+    5.000001,
+    9.0
+   ]
+  },
+  "a_lfo6_release": {
+   "carla": "A Scene LFO 1 Release",
+   "index": 159,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo6_sustain": {
+   "carla": "A Scene LFO 1 Sustain",
+   "index": 161,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_lfo7_attack": {
+   "carla": "A Scene LFO 2 Attack",
+   "index": 164,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo7_decay": {
+   "carla": "A Scene LFO 2 Decay",
+   "index": 165,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo7_deform": {
+   "carla": "A Scene LFO 2 Deform",
+   "index": 166,
+   "punkte": [
+    -1.0,
+    -0.5,
+    0.0,
+    0.5,
+    1.0
+   ]
+  },
+  "a_lfo7_delay": {
+   "carla": "A Scene LFO 2 Delay",
+   "index": 167,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo7_hold": {
+   "carla": "A Scene LFO 2 Hold",
+   "index": 168,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo7_magnitude": {
+   "carla": "A Scene LFO 2 Amplitude",
+   "index": 169,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_lfo7_phase": {
+   "carla": "A Scene LFO 2 Phase",
+   "index": 170,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_lfo7_rate": {
+   "carla": "A Scene LFO 2 Rate",
+   "index": 171,
+   "punkte": [
+    -7.0,
+    -3.0,
+    1.0,
+    5.000001,
+    9.0
+   ]
+  },
+  "a_lfo7_release": {
+   "carla": "A Scene LFO 2 Release",
+   "index": 172,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo7_sustain": {
+   "carla": "A Scene LFO 2 Sustain",
+   "index": 174,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_lfo8_attack": {
+   "carla": "A Scene LFO 3 Attack",
+   "index": 177,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo8_decay": {
+   "carla": "A Scene LFO 3 Decay",
+   "index": 178,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo8_deform": {
+   "carla": "A Scene LFO 3 Deform",
+   "index": 179,
+   "punkte": [
+    -1.0,
+    -0.5,
+    0.0,
+    0.5,
+    1.0
+   ]
+  },
+  "a_lfo8_delay": {
+   "carla": "A Scene LFO 3 Delay",
+   "index": 180,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo8_hold": {
+   "carla": "A Scene LFO 3 Hold",
+   "index": 181,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo8_magnitude": {
+   "carla": "A Scene LFO 3 Amplitude",
+   "index": 182,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_lfo8_phase": {
+   "carla": "A Scene LFO 3 Phase",
+   "index": 183,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_lfo8_rate": {
+   "carla": "A Scene LFO 3 Rate",
+   "index": 184,
+   "punkte": [
+    -7.0,
+    -3.0,
+    1.0,
+    5.000001,
+    9.0
+   ]
+  },
+  "a_lfo8_release": {
+   "carla": "A Scene LFO 3 Release",
+   "index": 185,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo8_sustain": {
+   "carla": "A Scene LFO 3 Sustain",
+   "index": 187,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_lfo9_attack": {
+   "carla": "A Scene LFO 4 Attack",
+   "index": 190,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo9_decay": {
+   "carla": "A Scene LFO 4 Decay",
+   "index": 191,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo9_deform": {
+   "carla": "A Scene LFO 4 Deform",
+   "index": 192,
+   "punkte": [
+    -1.0,
+    -0.5,
+    0.0,
+    0.5,
+    1.0
+   ]
+  },
+  "a_lfo9_delay": {
+   "carla": "A Scene LFO 4 Delay",
+   "index": 193,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo9_hold": {
+   "carla": "A Scene LFO 4 Hold",
+   "index": 194,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo9_magnitude": {
+   "carla": "A Scene LFO 4 Amplitude",
+   "index": 195,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_lfo9_phase": {
+   "carla": "A Scene LFO 4 Phase",
+   "index": 196,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_lfo9_rate": {
+   "carla": "A Scene LFO 4 Rate",
+   "index": 197,
+   "punkte": [
+    -7.0,
+    -3.0,
+    1.0,
+    5.000001,
+    9.0
+   ]
+  },
+  "a_lfo9_release": {
+   "carla": "A Scene LFO 4 Release",
+   "index": 198,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "a_lfo9_sustain": {
+   "carla": "A Scene LFO 4 Sustain",
+   "index": 200,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_lowcut": {
+   "carla": "A Highpass",
+   "index": 203,
+   "punkte": [
+    -72.0,
+    -50.25,
+    -28.5,
+    -6.749992,
+    15.0
+   ]
+  },
+  "a_noisecol": {
+   "carla": "A Noise Color",
+   "index": 210,
+   "punkte": [
+    -1.0,
+    -0.5,
+    0.0,
+    0.5,
+    1.0
+   ]
+  },
+  "a_osc1_param0": {
+   "carla": "A Osc 1 Shape",
+   "index": 214,
+   "punkte": [
+    -1.0,
+    -0.5,
+    0.0,
+    0.5,
+    1.0
+   ]
+  },
+  "a_osc1_param1": {
+   "carla": "A Osc 1 Width 1",
+   "index": 215,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_osc1_param2": {
+   "carla": "A Osc 1 Width 2",
+   "index": 216,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_osc1_param3": {
+   "carla": "A Osc 1 Sub Mix",
+   "index": 217,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_osc1_param5": {
+   "carla": "A Osc 1 Unison Detune",
+   "index": 219,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_osc1_pitch": {
+   "carla": "A Osc 1 Pitch",
+   "index": 221,
+   "punkte": [
+    -7.0,
+    -3.5,
+    0.0,
+    3.500001,
+    7.0
+   ]
+  },
+  "a_osc2_param0": {
+   "carla": "A Osc 2 Shape",
+   "index": 226,
+   "punkte": [
+    -1.0,
+    -0.5,
+    0.0,
+    0.5,
+    1.0
+   ]
+  },
+  "a_osc2_param1": {
+   "carla": "A Osc 2 Width 1",
+   "index": 227,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_osc2_param2": {
+   "carla": "A Osc 2 Width 2",
+   "index": 228,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_osc2_param3": {
+   "carla": "A Osc 2 Sub Mix",
+   "index": 229,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_osc2_param5": {
+   "carla": "A Osc 2 Unison Detune",
+   "index": 231,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_osc2_pitch": {
+   "carla": "A Osc 2 Pitch",
+   "index": 233,
+   "punkte": [
+    -7.0,
+    -3.5,
+    0.0,
+    3.500001,
+    7.0
+   ]
+  },
+  "a_osc3_param0": {
+   "carla": "A Osc 3 Shape",
+   "index": 238,
+   "punkte": [
+    -1.0,
+    -0.5,
+    0.0,
+    0.5,
+    1.0
+   ]
+  },
+  "a_osc3_param1": {
+   "carla": "A Osc 3 Width 1",
+   "index": 239,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_osc3_param2": {
+   "carla": "A Osc 3 Width 2",
+   "index": 240,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_osc3_param3": {
+   "carla": "A Osc 3 Sub Mix",
+   "index": 241,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_osc3_param5": {
+   "carla": "A Osc 3 Unison Detune",
+   "index": 243,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_osc3_pitch": {
+   "carla": "A Osc 3 Pitch",
+   "index": 245,
+   "punkte": [
+    -7.0,
+    -3.5,
+    0.0,
+    3.500001,
+    7.0
+   ]
+  },
+  "a_pan": {
+   "carla": "A Pan",
+   "index": 248,
+   "punkte": [
+    -1.0,
+    -0.5,
+    0.0,
+    0.5,
+    1.0
+   ]
+  },
+  "a_pan2": {
+   "carla": "A Width",
+   "index": 249,
+   "punkte": [
+    -1.0,
+    -0.5,
+    0.0,
+    0.5,
+    1.0
+   ]
+  },
+  "a_pitch": {
+   "carla": "A Pitch",
+   "index": 252,
+   "punkte": [
+    -7.0,
+    -3.5,
+    0.0,
+    3.500001,
+    7.0
+   ]
+  },
+  "a_portamento": {
+   "carla": "A Portamento",
+   "index": 254,
+   "punkte": [
+    -8.0,
+    -5.5,
+    -3.0,
+    -0.5,
+    2.0
+   ]
+  },
+  "a_send_fx_1": {
+   "carla": "A Send FX 1 Level",
+   "index": 261,
+   "punkte": [
+    0.0,
+    0.39685,
+    0.793701,
+    1.190551,
+    1.587401
+   ]
+  },
+  "a_send_fx_2": {
+   "carla": "A Send FX 2 Level",
+   "index": 262,
+   "punkte": [
+    0.0,
+    0.39685,
+    0.793701,
+    1.190551,
+    1.587401
+   ]
+  },
+  "a_send_fx_3": {
+   "carla": "A Send FX 3 Level",
+   "index": 263,
+   "punkte": [
+    0.0,
+    0.39685,
+    0.793701,
+    1.190551,
+    1.587401
+   ]
+  },
+  "a_send_fx_4": {
+   "carla": "A Send FX 4 Level",
+   "index": 264,
+   "punkte": [
+    0.0,
+    0.39685,
+    0.793701,
+    1.190551,
+    1.587401
+   ]
+  },
+  "a_vca_level": {
+   "carla": "A VCA Gain",
+   "index": 271,
+   "punkte": [
+    -48.0,
+    -24.0,
+    0.0,
+    24.000008,
+    48.0
+   ]
+  },
+  "a_vca_velsense": {
+   "carla": "A Velocity > VCA Gain",
+   "index": 272,
+   "punkte": [
+    -48.0,
+    -36.0,
+    -24.0,
+    -11.999996,
+    0.0
+   ]
+  },
+  "a_volume": {
+   "carla": "A Volume",
+   "index": 273,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "a_ws_drive": {
+   "carla": "A Waveshaper Drive",
+   "index": 274,
+   "punkte": [
+    -24.0,
+    -12.0,
+    0.0,
+    12.000004,
+    24.0
+   ]
+  },
+  "b_drift": {
+   "carla": "B Osc Drift",
+   "index": 276,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_env1_attack": {
+   "carla": "B Amp EG Attack",
+   "index": 277,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_env1_decay": {
+   "carla": "B Amp EG Decay",
+   "index": 279,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_env1_release": {
+   "carla": "B Amp EG Release",
+   "index": 282,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_env1_sustain": {
+   "carla": "B Amp EG Sustain",
+   "index": 284,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_env2_attack": {
+   "carla": "B Filter EG Attack",
+   "index": 285,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_env2_decay": {
+   "carla": "B Filter EG Decay",
+   "index": 287,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_env2_release": {
+   "carla": "B Filter EG Release",
+   "index": 290,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_env2_sustain": {
+   "carla": "B Filter EG Sustain",
+   "index": 292,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_f_balance": {
+   "carla": "B Filter Balance",
+   "index": 295,
+   "punkte": [
+    -1.0,
+    -0.5,
+    0.0,
+    0.5,
+    1.0
+   ]
+  },
+  "b_feedback": {
+   "carla": "B Feedback",
+   "index": 297,
+   "punkte": [
+    -1.0,
+    -0.5,
+    0.0,
+    0.5,
+    1.0
+   ]
+  },
+  "b_filter1_cutoff": {
+   "carla": "B Filter 1 Cutoff",
+   "index": 298,
+   "punkte": [
+    -60.0,
+    -27.5,
+    5.0,
+    37.500008,
+    70.0
+   ]
+  },
+  "b_filter1_envmod": {
+   "carla": "B Filter 1 FEG Mod Amount",
+   "index": 299,
+   "punkte": [
+    -96.0,
+    -48.0,
+    0.0,
+    48.000015,
+    96.0
+   ]
+  },
+  "b_filter1_keytrack": {
+   "carla": "B Filter 1 Keytrack",
+   "index": 300,
+   "punkte": [
+    -1.0,
+    -0.5,
+    0.0,
+    0.5,
+    1.0
+   ]
+  },
+  "b_filter1_resonance": {
+   "carla": "B Filter 1 Resonance",
+   "index": 301,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_filter2_cutoff": {
+   "carla": "B Filter 2 Cutoff",
+   "index": 304,
+   "punkte": [
+    -60.0,
+    -27.5,
+    5.0,
+    37.500008,
+    70.0
+   ]
+  },
+  "b_filter2_envmod": {
+   "carla": "B Filter 2 FEG Mod Amount",
+   "index": 305,
+   "punkte": [
+    -96.0,
+    -48.0,
+    0.0,
+    48.000015,
+    96.0
+   ]
+  },
+  "b_filter2_keytrack": {
+   "carla": "B Filter 2 Keytrack",
+   "index": 306,
+   "punkte": [
+    -1.0,
+    -0.5,
+    0.0,
+    0.5,
+    1.0
+   ]
+  },
+  "b_filter2_resonance": {
+   "carla": "B Filter 2 Resonance",
+   "index": 307,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_fm_depth": {
+   "carla": "B FM Depth",
+   "index": 310,
+   "punkte": [
+    -48.0,
+    -30.0,
+    -12.0,
+    6.000004,
+    24.0
+   ]
+  },
+  "b_level_noise": {
+   "carla": "B Noise Volume",
+   "index": 313,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_level_o1": {
+   "carla": "B Osc 1 Volume",
+   "index": 314,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_level_o2": {
+   "carla": "B Osc 2 Volume",
+   "index": 315,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_level_o3": {
+   "carla": "B Osc 3 Volume",
+   "index": 316,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_level_pfg": {
+   "carla": "B Pre-Filter Gain",
+   "index": 317,
+   "punkte": [
+    -48.0,
+    -24.0,
+    0.0,
+    24.000008,
+    48.0
+   ]
+  },
+  "b_level_ring12": {
+   "carla": "B Ring Modulation 1x2 Volume",
+   "index": 318,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_level_ring23": {
+   "carla": "B Ring Modulation 2x3 Volume",
+   "index": 319,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_lfo0_attack": {
+   "carla": "B LFO 1 Attack",
+   "index": 320,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo0_decay": {
+   "carla": "B LFO 1 Decay",
+   "index": 321,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo0_deform": {
+   "carla": "B LFO 1 Deform",
+   "index": 322,
+   "punkte": [
+    -1.0,
+    -0.5,
+    0.0,
+    0.5,
+    1.0
+   ]
+  },
+  "b_lfo0_delay": {
+   "carla": "B LFO 1 Delay",
+   "index": 323,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo0_hold": {
+   "carla": "B LFO 1 Hold",
+   "index": 324,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo0_magnitude": {
+   "carla": "B LFO 1 Amplitude",
+   "index": 325,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_lfo0_phase": {
+   "carla": "B LFO 1 Phase",
+   "index": 326,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_lfo0_rate": {
+   "carla": "B LFO 1 Rate",
+   "index": 327,
+   "punkte": [
+    -7.0,
+    -3.0,
+    1.0,
+    5.000001,
+    9.0
+   ]
+  },
+  "b_lfo0_release": {
+   "carla": "B LFO 1 Release",
+   "index": 328,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo0_sustain": {
+   "carla": "B LFO 1 Sustain",
+   "index": 330,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_lfo10_attack": {
+   "carla": "B Scene LFO 5 Attack",
+   "index": 333,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo10_decay": {
+   "carla": "B Scene LFO 5 Decay",
+   "index": 334,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo10_deform": {
+   "carla": "B Scene LFO 5 Deform",
+   "index": 335,
+   "punkte": [
+    -1.0,
+    -0.5,
+    0.0,
+    0.5,
+    1.0
+   ]
+  },
+  "b_lfo10_delay": {
+   "carla": "B Scene LFO 5 Delay",
+   "index": 336,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo10_hold": {
+   "carla": "B Scene LFO 5 Hold",
+   "index": 337,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo10_magnitude": {
+   "carla": "B Scene LFO 5 Amplitude",
+   "index": 338,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_lfo10_phase": {
+   "carla": "B Scene LFO 5 Phase",
+   "index": 339,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_lfo10_rate": {
+   "carla": "B Scene LFO 5 Rate",
+   "index": 340,
+   "punkte": [
+    -7.0,
+    -3.0,
+    1.0,
+    5.000001,
+    9.0
+   ]
+  },
+  "b_lfo10_release": {
+   "carla": "B Scene LFO 5 Release",
+   "index": 341,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo10_sustain": {
+   "carla": "B Scene LFO 5 Sustain",
+   "index": 343,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_lfo11_attack": {
+   "carla": "B Scene LFO 6 Attack",
+   "index": 346,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo11_decay": {
+   "carla": "B Scene LFO 6 Decay",
+   "index": 347,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo11_deform": {
+   "carla": "B Scene LFO 6 Deform",
+   "index": 348,
+   "punkte": [
+    -1.0,
+    -0.5,
+    0.0,
+    0.5,
+    1.0
+   ]
+  },
+  "b_lfo11_delay": {
+   "carla": "B Scene LFO 6 Delay",
+   "index": 349,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo11_hold": {
+   "carla": "B Scene LFO 6 Hold",
+   "index": 350,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo11_magnitude": {
+   "carla": "B Scene LFO 6 Amplitude",
+   "index": 351,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_lfo11_phase": {
+   "carla": "B Scene LFO 6 Phase",
+   "index": 352,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_lfo11_rate": {
+   "carla": "B Scene LFO 6 Rate",
+   "index": 353,
+   "punkte": [
+    -7.0,
+    -3.0,
+    1.0,
+    5.000001,
+    9.0
+   ]
+  },
+  "b_lfo11_release": {
+   "carla": "B Scene LFO 6 Release",
+   "index": 354,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo11_sustain": {
+   "carla": "B Scene LFO 6 Sustain",
+   "index": 356,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_lfo1_attack": {
+   "carla": "B LFO 2 Attack",
+   "index": 359,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo1_decay": {
+   "carla": "B LFO 2 Decay",
+   "index": 360,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo1_deform": {
+   "carla": "B LFO 2 Deform",
+   "index": 361,
+   "punkte": [
+    -1.0,
+    -0.5,
+    0.0,
+    0.5,
+    1.0
+   ]
+  },
+  "b_lfo1_delay": {
+   "carla": "B LFO 2 Delay",
+   "index": 362,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo1_hold": {
+   "carla": "B LFO 2 Hold",
+   "index": 363,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo1_magnitude": {
+   "carla": "B LFO 2 Amplitude",
+   "index": 364,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_lfo1_phase": {
+   "carla": "B LFO 2 Phase",
+   "index": 365,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_lfo1_rate": {
+   "carla": "B LFO 2 Rate",
+   "index": 366,
+   "punkte": [
+    -7.0,
+    -3.0,
+    1.0,
+    5.000001,
+    9.0
+   ]
+  },
+  "b_lfo1_release": {
+   "carla": "B LFO 2 Release",
+   "index": 367,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo1_sustain": {
+   "carla": "B LFO 2 Sustain",
+   "index": 369,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_lfo2_attack": {
+   "carla": "B LFO 3 Attack",
+   "index": 372,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo2_decay": {
+   "carla": "B LFO 3 Decay",
+   "index": 373,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo2_deform": {
+   "carla": "B LFO 3 Deform",
+   "index": 374,
+   "punkte": [
+    -1.0,
+    -0.5,
+    0.0,
+    0.5,
+    1.0
+   ]
+  },
+  "b_lfo2_delay": {
+   "carla": "B LFO 3 Delay",
+   "index": 375,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo2_hold": {
+   "carla": "B LFO 3 Hold",
+   "index": 376,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo2_magnitude": {
+   "carla": "B LFO 3 Amplitude",
+   "index": 377,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_lfo2_phase": {
+   "carla": "B LFO 3 Phase",
+   "index": 378,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_lfo2_rate": {
+   "carla": "B LFO 3 Rate",
+   "index": 379,
+   "punkte": [
+    -7.0,
+    -3.0,
+    1.0,
+    5.000001,
+    9.0
+   ]
+  },
+  "b_lfo2_release": {
+   "carla": "B LFO 3 Release",
+   "index": 380,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo2_sustain": {
+   "carla": "B LFO 3 Sustain",
+   "index": 382,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_lfo3_attack": {
+   "carla": "B LFO 4 Attack",
+   "index": 385,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo3_decay": {
+   "carla": "B LFO 4 Decay",
+   "index": 386,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo3_deform": {
+   "carla": "B LFO 4 Deform",
+   "index": 387,
+   "punkte": [
+    -1.0,
+    -0.5,
+    0.0,
+    0.5,
+    1.0
+   ]
+  },
+  "b_lfo3_delay": {
+   "carla": "B LFO 4 Delay",
+   "index": 388,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo3_hold": {
+   "carla": "B LFO 4 Hold",
+   "index": 389,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo3_magnitude": {
+   "carla": "B LFO 4 Amplitude",
+   "index": 390,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_lfo3_phase": {
+   "carla": "B LFO 4 Phase",
+   "index": 391,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_lfo3_rate": {
+   "carla": "B LFO 4 Rate",
+   "index": 392,
+   "punkte": [
+    -7.0,
+    -3.0,
+    1.0,
+    5.000001,
+    9.0
+   ]
+  },
+  "b_lfo3_release": {
+   "carla": "B LFO 4 Release",
+   "index": 393,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo3_sustain": {
+   "carla": "B LFO 4 Sustain",
+   "index": 395,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_lfo4_attack": {
+   "carla": "B LFO 5 Attack",
+   "index": 398,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo4_decay": {
+   "carla": "B LFO 5 Decay",
+   "index": 399,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo4_deform": {
+   "carla": "B LFO 5 Deform",
+   "index": 400,
+   "punkte": [
+    -1.0,
+    -0.5,
+    0.0,
+    0.5,
+    1.0
+   ]
+  },
+  "b_lfo4_delay": {
+   "carla": "B LFO 5 Delay",
+   "index": 401,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo4_hold": {
+   "carla": "B LFO 5 Hold",
+   "index": 402,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo4_magnitude": {
+   "carla": "B LFO 5 Amplitude",
+   "index": 403,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_lfo4_phase": {
+   "carla": "B LFO 5 Phase",
+   "index": 404,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_lfo4_rate": {
+   "carla": "B LFO 5 Rate",
+   "index": 405,
+   "punkte": [
+    -7.0,
+    -3.0,
+    1.0,
+    5.000001,
+    9.0
+   ]
+  },
+  "b_lfo4_release": {
+   "carla": "B LFO 5 Release",
+   "index": 406,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo4_sustain": {
+   "carla": "B LFO 5 Sustain",
+   "index": 408,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_lfo5_attack": {
+   "carla": "B LFO 6 Attack",
+   "index": 411,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo5_decay": {
+   "carla": "B LFO 6 Decay",
+   "index": 412,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo5_deform": {
+   "carla": "B LFO 6 Deform",
+   "index": 413,
+   "punkte": [
+    -1.0,
+    -0.5,
+    0.0,
+    0.5,
+    1.0
+   ]
+  },
+  "b_lfo5_delay": {
+   "carla": "B LFO 6 Delay",
+   "index": 414,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo5_hold": {
+   "carla": "B LFO 6 Hold",
+   "index": 415,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo5_magnitude": {
+   "carla": "B LFO 6 Amplitude",
+   "index": 416,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_lfo5_phase": {
+   "carla": "B LFO 6 Phase",
+   "index": 417,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_lfo5_rate": {
+   "carla": "B LFO 6 Rate",
+   "index": 418,
+   "punkte": [
+    -7.0,
+    -3.0,
+    1.0,
+    5.000001,
+    9.0
+   ]
+  },
+  "b_lfo5_release": {
+   "carla": "B LFO 6 Release",
+   "index": 419,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo5_sustain": {
+   "carla": "B LFO 6 Sustain",
+   "index": 421,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_lfo6_attack": {
+   "carla": "B Scene LFO 1 Attack",
+   "index": 424,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo6_decay": {
+   "carla": "B Scene LFO 1 Decay",
+   "index": 425,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo6_deform": {
+   "carla": "B Scene LFO 1 Deform",
+   "index": 426,
+   "punkte": [
+    -1.0,
+    -0.5,
+    0.0,
+    0.5,
+    1.0
+   ]
+  },
+  "b_lfo6_delay": {
+   "carla": "B Scene LFO 1 Delay",
+   "index": 427,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo6_hold": {
+   "carla": "B Scene LFO 1 Hold",
+   "index": 428,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo6_magnitude": {
+   "carla": "B Scene LFO 1 Amplitude",
+   "index": 429,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_lfo6_phase": {
+   "carla": "B Scene LFO 1 Phase",
+   "index": 430,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_lfo6_rate": {
+   "carla": "B Scene LFO 1 Rate",
+   "index": 431,
+   "punkte": [
+    -7.0,
+    -3.0,
+    1.0,
+    5.000001,
+    9.0
+   ]
+  },
+  "b_lfo6_release": {
+   "carla": "B Scene LFO 1 Release",
+   "index": 432,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo6_sustain": {
+   "carla": "B Scene LFO 1 Sustain",
+   "index": 434,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_lfo7_attack": {
+   "carla": "B Scene LFO 2 Attack",
+   "index": 437,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo7_decay": {
+   "carla": "B Scene LFO 2 Decay",
+   "index": 438,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo7_deform": {
+   "carla": "B Scene LFO 2 Deform",
+   "index": 439,
+   "punkte": [
+    -1.0,
+    -0.5,
+    0.0,
+    0.5,
+    1.0
+   ]
+  },
+  "b_lfo7_delay": {
+   "carla": "B Scene LFO 2 Delay",
+   "index": 440,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo7_hold": {
+   "carla": "B Scene LFO 2 Hold",
+   "index": 441,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo7_magnitude": {
+   "carla": "B Scene LFO 2 Amplitude",
+   "index": 442,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_lfo7_phase": {
+   "carla": "B Scene LFO 2 Phase",
+   "index": 443,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_lfo7_rate": {
+   "carla": "B Scene LFO 2 Rate",
+   "index": 444,
+   "punkte": [
+    -7.0,
+    -3.0,
+    1.0,
+    5.000001,
+    9.0
+   ]
+  },
+  "b_lfo7_release": {
+   "carla": "B Scene LFO 2 Release",
+   "index": 445,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo7_sustain": {
+   "carla": "B Scene LFO 2 Sustain",
+   "index": 447,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_lfo8_attack": {
+   "carla": "B Scene LFO 3 Attack",
+   "index": 450,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo8_decay": {
+   "carla": "B Scene LFO 3 Decay",
+   "index": 451,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo8_deform": {
+   "carla": "B Scene LFO 3 Deform",
+   "index": 452,
+   "punkte": [
+    -1.0,
+    -0.5,
+    0.0,
+    0.5,
+    1.0
+   ]
+  },
+  "b_lfo8_delay": {
+   "carla": "B Scene LFO 3 Delay",
+   "index": 453,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo8_hold": {
+   "carla": "B Scene LFO 3 Hold",
+   "index": 454,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo8_magnitude": {
+   "carla": "B Scene LFO 3 Amplitude",
+   "index": 455,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_lfo8_phase": {
+   "carla": "B Scene LFO 3 Phase",
+   "index": 456,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_lfo8_rate": {
+   "carla": "B Scene LFO 3 Rate",
+   "index": 457,
+   "punkte": [
+    -7.0,
+    -3.0,
+    1.0,
+    5.000001,
+    9.0
+   ]
+  },
+  "b_lfo8_release": {
+   "carla": "B Scene LFO 3 Release",
+   "index": 458,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo8_sustain": {
+   "carla": "B Scene LFO 3 Sustain",
+   "index": 460,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_lfo9_attack": {
+   "carla": "B Scene LFO 4 Attack",
+   "index": 463,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo9_decay": {
+   "carla": "B Scene LFO 4 Decay",
+   "index": 464,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo9_deform": {
+   "carla": "B Scene LFO 4 Deform",
+   "index": 465,
+   "punkte": [
+    -1.0,
+    -0.5,
+    0.0,
+    0.5,
+    1.0
+   ]
+  },
+  "b_lfo9_delay": {
+   "carla": "B Scene LFO 4 Delay",
+   "index": 466,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo9_hold": {
+   "carla": "B Scene LFO 4 Hold",
+   "index": 467,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo9_magnitude": {
+   "carla": "B Scene LFO 4 Amplitude",
+   "index": 468,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_lfo9_phase": {
+   "carla": "B Scene LFO 4 Phase",
+   "index": 469,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_lfo9_rate": {
+   "carla": "B Scene LFO 4 Rate",
+   "index": 470,
+   "punkte": [
+    -7.0,
+    -3.0,
+    1.0,
+    5.000001,
+    9.0
+   ]
+  },
+  "b_lfo9_release": {
+   "carla": "B Scene LFO 4 Release",
+   "index": 471,
+   "punkte": [
+    -8.0,
+    -4.75,
+    -1.5,
+    1.750001,
+    5.0
+   ]
+  },
+  "b_lfo9_sustain": {
+   "carla": "B Scene LFO 4 Sustain",
+   "index": 473,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_lowcut": {
+   "carla": "B Highpass",
+   "index": 476,
+   "punkte": [
+    -72.0,
+    -50.25,
+    -28.5,
+    -6.749992,
+    15.0
+   ]
+  },
+  "b_noisecol": {
+   "carla": "B Noise Color",
+   "index": 483,
+   "punkte": [
+    -1.0,
+    -0.5,
+    0.0,
+    0.5,
+    1.0
+   ]
+  },
+  "b_osc1_param0": {
+   "carla": "B Osc 1 Shape",
+   "index": 487,
+   "punkte": [
+    -1.0,
+    -0.5,
+    0.0,
+    0.5,
+    1.0
+   ]
+  },
+  "b_osc1_param1": {
+   "carla": "B Osc 1 Width 1",
+   "index": 488,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_osc1_param2": {
+   "carla": "B Osc 1 Width 2",
+   "index": 489,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_osc1_param3": {
+   "carla": "B Osc 1 Sub Mix",
+   "index": 490,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_osc1_param5": {
+   "carla": "B Osc 1 Unison Detune",
+   "index": 492,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_osc1_pitch": {
+   "carla": "B Osc 1 Pitch",
+   "index": 494,
+   "punkte": [
+    -7.0,
+    -3.5,
+    0.0,
+    3.500001,
+    7.0
+   ]
+  },
+  "b_osc2_param0": {
+   "carla": "B Osc 2 Shape",
+   "index": 499,
+   "punkte": [
+    -1.0,
+    -0.5,
+    0.0,
+    0.5,
+    1.0
+   ]
+  },
+  "b_osc2_param1": {
+   "carla": "B Osc 2 Width 1",
+   "index": 500,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_osc2_param2": {
+   "carla": "B Osc 2 Width 2",
+   "index": 501,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_osc2_param3": {
+   "carla": "B Osc 2 Sub Mix",
+   "index": 502,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_osc2_param5": {
+   "carla": "B Osc 2 Unison Detune",
+   "index": 504,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_osc2_pitch": {
+   "carla": "B Osc 2 Pitch",
+   "index": 506,
+   "punkte": [
+    -7.0,
+    -3.5,
+    0.0,
+    3.500001,
+    7.0
+   ]
+  },
+  "b_osc3_param0": {
+   "carla": "B Osc 3 Shape",
+   "index": 511,
+   "punkte": [
+    -1.0,
+    -0.5,
+    0.0,
+    0.5,
+    1.0
+   ]
+  },
+  "b_osc3_param1": {
+   "carla": "B Osc 3 Width 1",
+   "index": 512,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_osc3_param2": {
+   "carla": "B Osc 3 Width 2",
+   "index": 513,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_osc3_param3": {
+   "carla": "B Osc 3 Sub Mix",
+   "index": 514,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_osc3_param5": {
+   "carla": "B Osc 3 Unison Detune",
+   "index": 516,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_osc3_pitch": {
+   "carla": "B Osc 3 Pitch",
+   "index": 518,
+   "punkte": [
+    -7.0,
+    -3.5,
+    0.0,
+    3.500001,
+    7.0
+   ]
+  },
+  "b_pan": {
+   "carla": "B Pan",
+   "index": 521,
+   "punkte": [
+    -1.0,
+    -0.5,
+    0.0,
+    0.5,
+    1.0
+   ]
+  },
+  "b_pan2": {
+   "carla": "B Width",
+   "index": 522,
+   "punkte": [
+    -1.0,
+    -0.5,
+    0.0,
+    0.5,
+    1.0
+   ]
+  },
+  "b_pitch": {
+   "carla": "B Pitch",
+   "index": 525,
+   "punkte": [
+    -7.0,
+    -3.5,
+    0.0,
+    3.500001,
+    7.0
+   ]
+  },
+  "b_portamento": {
+   "carla": "B Portamento",
+   "index": 527,
+   "punkte": [
+    -8.0,
+    -5.5,
+    -3.0,
+    -0.5,
+    2.0
+   ]
+  },
+  "b_send_fx_1": {
+   "carla": "B Send FX 1 Level",
+   "index": 534,
+   "punkte": [
+    0.0,
+    0.39685,
+    0.793701,
+    1.190551,
+    1.587401
+   ]
+  },
+  "b_send_fx_2": {
+   "carla": "B Send FX 2 Level",
+   "index": 535,
+   "punkte": [
+    0.0,
+    0.39685,
+    0.793701,
+    1.190551,
+    1.587401
+   ]
+  },
+  "b_send_fx_3": {
+   "carla": "B Send FX 3 Level",
+   "index": 536,
+   "punkte": [
+    0.0,
+    0.39685,
+    0.793701,
+    1.190551,
+    1.587401
+   ]
+  },
+  "b_send_fx_4": {
+   "carla": "B Send FX 4 Level",
+   "index": 537,
+   "punkte": [
+    0.0,
+    0.39685,
+    0.793701,
+    1.190551,
+    1.587401
+   ]
+  },
+  "b_vca_level": {
+   "carla": "B VCA Gain",
+   "index": 544,
+   "punkte": [
+    -48.0,
+    -24.0,
+    0.0,
+    24.000008,
+    48.0
+   ]
+  },
+  "b_vca_velsense": {
+   "carla": "B Velocity > VCA Gain",
+   "index": 545,
+   "punkte": [
+    -48.0,
+    -36.0,
+    -24.0,
+    -11.999996,
+    0.0
+   ]
+  },
+  "b_volume": {
+   "carla": "B Volume",
+   "index": 546,
+   "punkte": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ]
+  },
+  "b_ws_drive": {
+   "carla": "B Waveshaper Drive",
+   "index": 547,
+   "punkte": [
+    -24.0,
+    -12.0,
+    0.0,
+    12.000004,
+    24.0
+   ]
+  },
+  "volume": {
+   "carla": "Global Volume",
+   "index": 773,
+   "punkte": [
+    -48.0,
+    -36.0,
+    -24.0,
+    -11.999996,
+    0.0
+   ]
+  }
+ },
+ "surge": "1.3.4 LV2"
+}

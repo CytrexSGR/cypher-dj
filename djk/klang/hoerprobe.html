@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Listening test</title>
+<style>
+  :root { --bg:#14161a; --fg:#e6e8eb; --mut:#8b929c; --line:#2a2e35; --acc:#4cc38a; --play:#e0a23b; --btn:#20242b; }
+  @media (prefers-color-scheme: light) { :root { --bg:#f6f7f9; --fg:#1b1e23; --mut:#5d6570; --line:#d8dce2; --acc:#1a8f5a; --play:#b57a12; --btn:#fff; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.4 system-ui, sans-serif; }
+  header { position:sticky; top:0; background:var(--bg); border-bottom:1px solid var(--line); padding:12px 16px; z-index:1; }
+  h1 { margin:0 0 4px; font-size:18px; }
+  .note { color:var(--mut); margin:0; }
+  #counts { margin:6px 0 0; display:flex; flex-wrap:wrap; gap:6px 16px; font-variant-numeric:tabular-nums; }
+  #counts span b { color:var(--acc); }
+  main { padding:8px 16px 32px; }
+  .role { display:flex; gap:12px; align-items:flex-start; padding:10px 0; border-bottom:1px solid var(--line); }
+  .role h2 { flex:0 0 64px; margin:8px 0 0; font-size:15px; text-transform:uppercase; letter-spacing:.05em; }
+  .cands { display:flex; flex-wrap:wrap; gap:8px; flex:1; min-width:0; }
+  .cand { display:flex; flex-direction:column; gap:4px; align-items:stretch; min-width:64px; }
+  .cand button { font:inherit; color:var(--fg); background:var(--btn); border:1px solid var(--line); border-radius:6px; padding:8px 12px; min-height:40px; cursor:pointer; }
+  .cand button:hover { border-color:var(--mut); }
+  .cand button.playing { border-color:var(--play); color:var(--play); }
+  .cand button.ctx { font-size:12px; padding:4px 8px; min-height:28px; color:var(--mut); }
+  .cand label { font-size:12px; color:var(--mut); display:flex; gap:4px; align-items:center; justify-content:center; cursor:pointer; }
+  .cand.kept button.main { border-color:var(--acc); }
+  .artist { font-size:11px; color:var(--mut); text-align:center; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:96px; }
+  #err { color:#e5484d; margin:0; }
+  #banner { display:none; margin:8px 0 0; padding:8px 12px; border:1px solid var(--play); border-radius:6px; color:var(--play); font-weight:600; }
+  .orphans .item { display:flex; gap:8px; align-items:center; font-size:13px; color:var(--mut); }
+  .orphans .item span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:60ch; }
+  .orphans .item button { font:inherit; font-size:12px; color:var(--fg); background:var(--btn); border:1px solid var(--line); border-radius:6px; padding:2px 8px; cursor:pointer; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Listening test</h1>
+  <p class="note" id="note"></p>
+  <p class="note">Click a number to play, <kbd>Space</kbd> to stop, tick "keep" to select (max 8 per role).</p>
+  <div id="counts"></div>
+  <p id="banner" role="alert">Previews were re-rendered — reload the page</p>
+  <p id="err" role="alert"></p>
+</header>
+<main id="rows"></main>
+<script>
+"use strict";
+let DATA = null, playing = null, stale = false;
+const $ = (s) => document.querySelector(s);
+
+async function post(path, body) {
+  const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(Object.assign({ version: DATA && DATA.version }, body)) });
+  if (r.status === 409) { stale = true; $("#banner").style.display = "block"; throw new Error("index changed"); }
+  if (!r.ok) throw new Error(path + " " + r.status);
+  return r.json();
+}
+function fail(e) { if (stale) return; $("#err").textContent = String(e.message || e); }
+
+function setNote() {
+  const t = new Set();
+  for (const es of Object.values(DATA.index)) for (const e of es) if (typeof e.ziel_lufs === "number") t.add(e.ziel_lufs);
+  const target = t.size === 1 ? [...t][0] : -18;
+  const per = t.size > 1 ? "per role" : "to " + String(target).replace("-", "−") + " LUFS";
+  $("#note").textContent = "All previews are loudness-matched " + per + " — judge tone, not volume.";
+}
+function counts() {
+  const c = $("#counts"); c.textContent = "";
+  for (const r of Object.keys(DATA.index)) {
+    const s = document.createElement("span");
+    s.innerHTML = r + " <b>" + (DATA.auswahl[r] || []).length + "</b>/8";
+    c.appendChild(s);
+  }
+}
+function orphans() {
+  const rows = $("#rows");
+  const found = [];
+  for (const [rolle, qs] of Object.entries(DATA.auswahl)) {
+    const known = new Set((DATA.index[rolle] || []).map((e) => e.quelle));
+    for (const q of qs) if (!known.has(q)) found.push([rolle, q]);
+  }
+  if (!found.length) return;
+  const row = document.createElement("section"); row.className = "role orphans";
+  const h = document.createElement("h2"); h.textContent = "⚠"; row.appendChild(h);
+  const box = document.createElement("div"); box.className = "cands"; box.style.flexDirection = "column";
+  const t = document.createElement("div"); t.textContent = "Selected but not in current previews"; box.appendChild(t);
+  for (const [rolle, q] of found) {
+    const it = document.createElement("div"); it.className = "item";
+    const sp = document.createElement("span"); sp.title = q; sp.textContent = rolle + ": " + q; it.appendChild(sp);
+    const b = document.createElement("button"); b.textContent = "remove";
+    b.onclick = async () => {
+      try { const r = await fetch("/entferne", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rolle, quelle: q }) });
+            if (!r.ok) throw new Error("/entferne " + r.status);
+            DATA.auswahl = (await r.json()).auswahl; build(); counts(); } catch (e) { fail(e); }
+    };
+    it.appendChild(b); box.appendChild(it);
+  }
+  row.appendChild(box); rows.appendChild(row);
+}
+function mark() {
+  document.querySelectorAll("button[data-k]").forEach((b) => b.classList.toggle("playing", b.dataset.k === playing));
+}
+async function play(rolle, nr, kontext) {
+  $("#err").textContent = "";
+  try { await post("/play", { rolle, nr, kontext: !!kontext }); } catch (e) { fail(e); return; }
+  playing = rolle + "/" + nr + (kontext ? "/k" : "");
+  mark();
+}
+async function stop() {
+  playing = null; mark();
+  try { await post("/stop", {}); } catch (e) { fail(e); }
+}
+function build() {
+  const rows = $("#rows"); rows.textContent = "";
+  for (const [rolle, es] of Object.entries(DATA.index)) {
+    const row = document.createElement("section"); row.className = "role";
+    const h = document.createElement("h2"); h.textContent = rolle; row.appendChild(h);
+    const cands = document.createElement("div"); cands.className = "cands"; row.appendChild(cands);
+    const solo = es.filter((e) => !e.kontext);
+    for (const e of solo) {
+      const ctx = es.find((x) => x.kontext && x.nr === e.nr);
+      const c = document.createElement("div"); c.className = "cand";
+      const b = document.createElement("button"); b.className = "main"; b.textContent = e.nr;
+      b.dataset.k = rolle + "/" + e.nr;
+      b.title = (e.kuenstler || "") + "  " + (typeof e.lufs === "number" ? e.lufs + " LUFS" : "");
+      b.onclick = () => play(rolle, e.nr, false);
+      c.appendChild(b);
+      if (ctx) {
+        const k = document.createElement("button"); k.className = "ctx"; k.textContent = "in groove";
+        k.dataset.k = rolle + "/" + e.nr + "/k";
+        k.onclick = () => play(rolle, e.nr, true);
+        c.appendChild(k);
+      }
+      const lab = document.createElement("label");
+      const cb = document.createElement("input"); cb.type = "checkbox";
+      cb.checked = (DATA.auswahl[rolle] || []).includes(e.quelle);
+      c.classList.toggle("kept", cb.checked);
+      cb.onchange = async () => {
+        try {
+          const r = await post("/waehle", { rolle, nr: e.nr, an: cb.checked });
+          DATA.auswahl = r.auswahl; c.classList.toggle("kept", cb.checked); counts(); $("#err").textContent = "";
+        } catch (x) { cb.checked = !cb.checked; fail(x); }
+      };
+      lab.appendChild(cb); lab.appendChild(document.createTextNode("keep"));
+      c.appendChild(lab);
+      if (e.kuenstler) { const a = document.createElement("div"); a.className = "artist"; a.textContent = e.kuenstler; c.appendChild(a); }
+      cands.appendChild(c);
+    }
+    rows.appendChild(row);
+  }
+  orphans();
+}
+// Space stoppt IMMER, auch bei Fokus auf Checkbox/Knopf: kein Haken per Tastatur (nur per Klick).
+document.addEventListener("keydown", (ev) => {
+  if (ev.code === "Space") { ev.preventDefault(); if (!ev.repeat) stop(); }
+});
+document.addEventListener("keyup", (ev) => { if (ev.code === "Space") ev.preventDefault(); });
+fetch("/index").then((r) => r.json()).then((d) => { DATA = d; setNote(); build(); counts(); }).catch(fail);
+</script>
+</body>
+</html>

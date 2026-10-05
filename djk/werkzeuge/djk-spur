@@ -1,0 +1,52 @@
+#!/usr/bin/env node
+// djk-spur (Studio S6, Spec docs/specs/2026-09-29-djk-automationsspuren-design.md): Automationsspur starten, stoppen,
+// zeigen. Nur ein Aufrufer der Seite (POST /spur, POST /spur/stopp, GET /spur); prüfen, planen und riegeln tut der Server.
+// Quelle cypher (Kopf x-djk-quelle), außer mit --als-andreas: das ist für Andreas' eigenen Aufruf, nicht für Cypher.
+import fs from 'node:fs';
+import { parseArgs } from 'node:util';
+
+const HILFE = 'usage: djk-spur [--instanz f] [--seite URL] [--als-andreas] start FILE [--ab takt|phrase] | stop NAME | show\n';
+let parsed;
+try { parsed = parseArgs({ allowPositionals: true, options: {
+  instanz: { type: 'string', default: process.env.CYPHERDJ_INSTANZ ?? '' },
+  seite: { type: 'string' },
+  'als-andreas': { type: 'boolean', default: false },
+  ab: { type: 'string', default: 'takt' },
+  hilfe: { type: 'boolean', default: false },
+} }); } catch (e) { process.stderr.write(`djk-spur: ${e.message}\n${HILFE}`); process.exit(2); }
+const { values: o, positionals: p } = parsed;
+if (o.hilfe) { process.stdout.write(HILFE); process.exit(0); }
+if (o.instanz && !/^[a-i]$/.test(o.instanz)) { process.stderr.write('djk-spur: --instanz a..i\n'); process.exit(2); }
+const V = o.instanz ? 1000 * (o.instanz.charCodeAt(0) - 96) : 0;   // wie djk-start
+const SEITE = o.seite ?? `http://127.0.0.1:${47300 + V}`;
+const kopf = { 'content-type': 'application/json', ...(o['als-andreas'] ? {} : { 'x-djk-quelle': 'cypher' }) };
+const takt = (beat) => Math.floor(beat / 4) + 1;
+const teilZeilen = (liste) => (Array.isArray(liste) ? liste : []).map((x) => `part ${x.teil} ${x.pfad} rejected: ${x.grund}\n`).join('');
+
+async function rufe(methode, pfad, koerper) {
+  let r;
+  try { r = await fetch(SEITE + pfad, { method: methode, headers: kopf, ...(koerper ? { body: JSON.stringify(koerper) } : {}) }); }
+  catch (e) { process.stderr.write(`djk-spur: page not reachable at ${SEITE} (${e.cause?.code ?? e.message})\n`); process.exit(1); }
+  let j;
+  try { j = await r.json(); } catch { process.stderr.write(`djk-spur: ${r.status} non-JSON answer\n`); process.exit(1); }
+  if (!r.ok) { process.stderr.write(`djk-spur: ${r.status} ${j.fehler ?? ''}${j.pfad ? ` ${j.pfad}` : ''}${j.text ? `: ${j.text}` : ''}\n`); process.exit(1); }
+  return j;
+}
+
+const [was, arg] = p;
+if (was === 'start' && arg) {
+  let spur;
+  try { spur = JSON.parse(fs.readFileSync(arg, 'utf8')); }
+  catch (e) { process.stderr.write(`djk-spur: ${arg}: ${e.message}\n`); process.exit(2); }
+  const j = await rufe('POST', '/spur', { spur, ab: o.ab });
+  process.stdout.write(`${j.name} starts at bar ${j.anker_takt}, ends at bar ${takt(j.ende_beat)} (channel ${j.teile}, synth ${j.wirt}, pattern ${j.muster})\n`);
+  const abgelehnt = teilZeilen(j.abgelehnt);
+  if (abgelehnt) { process.stdout.write(abgelehnt); process.exitCode = 1; }   // F3: ein abgelehnter Teil ist kein sauberer Start
+} else if (was === 'stop' && arg) {
+  await rufe('POST', '/spur/stopp', { name: arg });
+  process.stdout.write(`${arg} stopped\n`);
+} else if (was === 'show') {
+  const liste = await rufe('GET', '/spur');
+  if (!Array.isArray(liste)) { process.stderr.write('djk-spur: answer is not a list\n'); process.exit(1); }
+  for (const s of liste) process.stdout.write(`${s.name}\t${s.quelle}\tbar ${takt(s.anker_beat)} to bar ${takt(s.ende_beat)}\n${teilZeilen(s.abgelehnt)}`);
+} else { process.stderr.write(HILFE); process.exit(2); }

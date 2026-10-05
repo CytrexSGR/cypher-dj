@@ -1,0 +1,5 @@
+# Aufnahmen und /uhr-Protokolle bleiben lokal (groß); Ergebnisse, Meta-Dateien und Berichte werden versioniert
+*.wav
+*.jsonl
+*.bereit
+__pycache__/

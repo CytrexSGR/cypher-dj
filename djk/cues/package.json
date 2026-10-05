@@ -1,0 +1,13 @@
+{
+  "name": "djk-cues",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Hotcues an der 3-Band-Wellenform setzen (Andreas, 2026-09-26): Trackliste mit MIK-Tags, Raster aus TBPM, Cue-Dateien je Track",
+  "engines": { "node": ">=22.18" },
+  "scripts": {
+    "start": "node server.ts",
+    "test": "node --test --test-concurrency=1 tests/*.test.mjs",
+    "pruef": "node pruef/bild.mjs"
+  }
+}

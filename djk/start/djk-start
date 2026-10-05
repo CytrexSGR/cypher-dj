@@ -1,0 +1,402 @@
+#!/usr/bin/env bash
+# djk-start: ein Befehl für die Spiel-Sitzung. Prüft Ports und Geräte, legt den Arbeitsbestand an, startet Kern,
+# Notbahn (daneben), Leitstand und Oberfläche als transiente User-Units (systemd-run, nie enable) in dieser
+# Reihenfolge mit Wartebedingungen und zeigt URL und Zustand. djk-stop räumt alles ab.
+#
+# Aufruf: djk-start [--master PRÄFIX] [--cue PRÄFIX | --ohne-cue] [--ton-frei] [--strudel [--strudel-kit NAME] [--strudel-kit2 NAME] [--strudel-kit3 NAME] [--instrumente]] [--instanz a..i]
+#                   [--kern-konfig DATEI] [--leitstand-konfig DATEI] [--ohne-pruefmodus]
+#         djk-start --zustand [--instanz a..i]
+#         djk-start --vorlagen-nach DIR [--master ...]   (füllt die Betriebs-Drop-ins, installiert nichts)
+#   --master/--cue  Präfix "<Senke>:<Portbasis>" des Ziels, an das "L" und "R" gehängt werden (SCHNITTSTELLEN §8),
+#                   z. B. alsa_output.pci-0000_16_00.6.iec958-stereo:playback_F. <Senke> darf der node.name (pw-link -i)
+#                   oder die Beschreibung (node.description) sein: ziel.py löst beides auf; geprüft wird nach node.name,
+#                   an Kern und Notbahn (laufen unter pw-jack) geht die Beschreibungsform (Plan M-1 B4). Vorgabe: die
+#                   stumme Senke cypher_stumm (Prüfinstanz: cypher_stumm-<i>), Master auf playback_F, Cue auf
+#                   playback_R; fehlt sie, legt djk-start sie an und djk-stop entlädt sie wieder. Die stumme Senke
+#                   gibt es nur mit dem stummen Vorgabe-Master: --cue auf ihr bei echtem Master wird abgewiesen (Rückgabe 2).
+#   --ohne-cue      Kein Cue-Ziel. Bei einem echten Master (--ton-frei) ist das die einzige Form ohne Cue-Senke:
+#                   Zwischenstufe Digital-Out allein, kein Profilwechsel (Plan M-1 Entscheidung 7).
+#                   Grenze Pro Audio: der Kern baut das Ziel als Präfix + "L"/"R" (kern main.cpp: snprintf "%s%s").
+#                   Die Ports des Pro-Audio-Profils heißen playback_AUX0..AUX5; das ist kein Präfix + L/R, und welches
+#                   Paar am Kopfhörer liegt, ist nicht gemessen. Ohne Kernumbau ist Pro Audio nicht anschließbar;
+#                   djk-start rät nichts, es meldet bei fehlenden Ports die tatsächlich vorhandenen.
+#                   Vor --ton-frei: djk-ausgang (liest nur) zeigt, wer schon an der Senke hängt.
+#   --ton-frei      Riegel auf: ein Ziel, das nicht mit den eigenen stummen Präfixen beginnt (cypher_stumm:,
+#                   cypher_stumm-<i>:, cypherdj-pruef-), wird nur damit verbunden (echter Ausgang, nur nach Andreas'
+#                   Freigabe). Ohne: Abbruch mit Rückgabe 3.
+#   Prüfmodus       Vorgabe bis Scheibe 35 (hand_osc): der Kern startet mit --pruefmodus, sonst kommt die Hand der Seite
+#                   (/test/hand) nicht an. djk-start sagt das beim Start an (NOTFALL.md §3). MVP.md sagt für den
+#                   Betrieb: nicht der Prüfmodus; ab hand_osc wird die Vorgabe umgedreht.
+#   --ohne-pruefmodus  Kern ohne /test/* (die Seite sendet dann ins Leere). --pruefmodus bleibt als Schreibweise der
+#                   Vorgabe erlaubt.
+#   --kern-konfig   udp_port und arbeitsbestand daraus gehen an Kern, Leitstand (--kern-port, --kern-konfig) und
+#                   Oberfläche (--kern-port, --arbeitsbestand); ws_port aus --leitstand-konfig an die Oberfläche. Die
+#                   Notbahn braucht beides nicht (sie liest den Ring der Instanz), meldet /nb aber fest an 47110+1000·k:
+#                   ein abweichender abo_port gibt beim Start eine Warnung.
+#   --instanz       Prüfinstanz (ROADMAP Z2): Units, JACK-Namen, Pfade mit -<i>, Ports +1000·k. Vorgabe
+#                   $CYPHERDJ_INSTANZ, sonst leer (Betrieb).
+# Rückgabe: 0 läuft, 2 Aufruf oder Aufbau (Programm, Ziel, PipeWire fehlt), 3 Riegel, 4 belegt (Port, Unit,
+# Shared Memory), 5 Start gescheitert (alles wieder abgeräumt).
+set -uo pipefail
+HIER=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
+DJK=${DJK:-$(cd "$HIER/.." && pwd)}
+VORL=$HIER/vorlagen
+# Persönliche Pfade (Musik, Mediathek, Samples ...): Vorlage djk/konfig/umgebung.env.beispiel, Datei außerhalb des Repos.
+# Schon gesetzte CYPHERDJ_*-Variablen des Aufrufers gewinnen gegen die Datei (Tests, Prüfinstanzen).
+UMG=${CYPHERDJ_UMGEBUNG:-$HOME/.config/cypherdj/umgebung.env}   # CYPHERDJ_UMGEBUNG: andere Datei (Tests)
+if [ -f "$UMG" ]; then
+  _gesetzt=$(export -p | grep '^declare -x CYPHERDJ_')
+  set -a; . "$UMG"; set +a
+  [ -z "$_gesetzt" ] || eval "$_gesetzt"
+fi
+
+I=${CYPHERDJ_INSTANZ:-}; MASTER=""; CUE=""; OHNE_CUE=0; TON_FREI=0; STRUDEL=0; INSTR=0; KIT=techno; KIT2=battery; KIT3=battery; KERN_KONFIG=""; LS_KONFIG=""; PRUEF=1
+MODUS=start; VORLAGEN_NACH=""
+# Option mit Wert: fehlt er (letztes Argument) oder ist er selbst eine Option, Abbruch 2. Nur --instanz darf leer sein.
+wert() {
+  if [ "$2" -lt 2 ] || { [ -z "$3" ] && [ "$1" != --instanz ]; } || [[ "$3" == -* ]]; then
+    echo "djk-start: option $1 needs a value (see --help)" >&2; exit 2
+  fi
+}
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --master|--cue|--strudel-kit|--strudel-kit2|--strudel-kit3|--instanz|--kern-konfig|--leitstand-konfig|--vorlagen-nach) wert "$1" $# "${2-}";;
+  esac
+  case "$1" in
+    --master) MASTER=$2; shift 2;; --cue) CUE=$2; shift 2;; --ohne-cue) OHNE_CUE=1; shift;; --strudel) STRUDEL=1; shift;; --instrumente) INSTR=1; shift;; --strudel-kit) KIT=$2; shift 2;; --strudel-kit2) KIT2=$2; shift 2;; --strudel-kit3) KIT3=$2; shift 2;;
+    --ton-frei) TON_FREI=1; shift;; --instanz) I=$2; shift 2;;
+    --kern-konfig) KERN_KONFIG=$(readlink -f -- "$2"); shift 2;;
+    --leitstand-konfig) LS_KONFIG=$(readlink -f -- "$2"); shift 2;;
+    --pruefmodus) PRUEF=1; shift;; --ohne-pruefmodus) PRUEF=0; shift;; --zustand) MODUS=zustand; shift;;
+    --vorlagen-nach) MODUS=vorlagen; VORLAGEN_NACH=$2; shift 2;;
+    -h|--help) sed -n '2,/^set -uo/p' "$0" | sed '$d; s/^# \{0,1\}//'; exit 0;;
+    *) echo "djk-start: unknown option $1 (see --help)" >&2; exit 2;;
+  esac
+done
+[ "$INSTR" = 1 ] && [ "$STRUDEL" != 1 ] && { echo "djk-start: --instrumente needs --strudel" >&2; exit 2; }
+case "$I" in
+  "") SFX=""; V=0;;
+  [a-i]) SFX="-$I"; V=$(( 1000 * ($(printf '%d' "'$I") - 96) ));;
+  *) echo "djk-start: instance '$I' invalid, use a..i or empty" >&2; exit 2;;
+esac
+
+U_KERN=cypherdj-kern$SFX; U_NB=cypherdj-notbahn$SFX; U_LS=cypherdj-leitstand$SFX; U_OF=cypherdj-oberflaeche$SFX
+UNITS=("$U_KERN" "$U_NB" "$U_LS" "$U_OF")
+KERN_CLIENT=cypherdj-kern$SFX; NB_CLIENT=cypherdj-notbahn$SFX
+STUMM=cypher_stumm$SFX
+RUN=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/cypherdj$SFX
+STATE=$RUN/start.env
+[ "$OHNE_CUE" = 1 ] && [ -n "$CUE" ] && { echo "djk-start: --cue and --ohne-cue exclude each other (see --help)" >&2; exit 2; }
+[ -z "$MASTER" ] && MASTER=$STUMM:playback_F
+if [ "$OHNE_CUE" = 1 ]; then CUE=""; elif [ -z "$CUE" ] && [ "$MASTER" = "$STUMM:playback_F" ]; then CUE=$STUMM:playback_R; fi
+
+# Ports aus den Konfigurationen (sonst Vorgaben §2.1), Instanz-Versatz wie Kern, Leitstand und Oberfläche.
+# Geprüft, bevor ein Wert in Bash-Arithmetik oder eine Befehlszeile gerät: Ports ganzzahlig im Bereich des Kerns
+# (1024 bis 56535, Platz für +1000·k), Arbeitsbestand und Konfig-Pfade absolut und ohne Leer- oder Sonderzeichen.
+# Eine ausdrücklich genannte Datei muss es geben; die Vorgabe-Datei darf fehlen.
+KK=${KERN_KONFIG:-$HOME/.config/cypherdj$SFX/kern.toml}
+LK=${LS_KONFIG:-$HOME/.config/cypherdj$SFX/leitstand.toml}
+KW=$(python3 - "$KK" "${KERN_KONFIG:+1}" "$LK" "${LS_KONFIG:+1}" <<'PY'
+import re, sys, tomllib
+PFAD = re.compile(r"/[A-Za-z0-9._/+@%:~-]*")
+def fehler(t):
+    print(f"djk-start: {t}", file=sys.stderr); sys.exit(2)
+def lies(pfad, pflicht):
+    if not PFAD.fullmatch(pfad):
+        fehler(f"config path {pfad!r} must be absolute, without spaces or quotes")
+    try:
+        with open(pfad, "rb") as f:
+            return tomllib.load(f)
+    except FileNotFoundError:
+        if pflicht:
+            fehler(f"{pfad}: file not found")
+        return {}
+    except tomllib.TOMLDecodeError as e:
+        fehler(f"{pfad}: not valid TOML ({e})")
+    except OSError as e:
+        fehler(f"{pfad}: {e.strerror}")
+def port(d, pfad, k, vorgabe):
+    w = d.get(k, vorgabe)
+    if type(w) is not int or not 1024 <= w <= 56535:
+        fehler(f"{pfad}: key '{k}' must be an integer 1024..56535, is {w!r}")
+    return w
+kk, lk = lies(sys.argv[1], sys.argv[2] == "1"), lies(sys.argv[3], sys.argv[4] == "1")
+ab = kk.get("arbeitsbestand", "/dev/shm/cypherdj/material")
+if type(ab) is not str or not PFAD.fullmatch(ab) or "/../" in ab + "/":
+    fehler(f"{sys.argv[1]}: key 'arbeitsbestand' must be an absolute path without spaces, quotes or '..', is {ab!r}")
+print(port(kk, sys.argv[1], "udp_port", 47100), port(lk, sys.argv[3], "abo_port", 47110),
+      port(lk, sys.argv[3], "ws_port", 47200), ab)
+PY
+) || exit 2
+read -r KW_KERN KW_ABO KW_WS ARBEITSBESTAND <<< "$KW"
+P_KERN=$(( KW_KERN + V ))
+P_LS_ABO=$(( KW_ABO + V ))
+P_WS=$(( KW_WS + V ))
+P_OF_ABO=$(( 47150 + V )); P_OF=$(( 47300 + V ))
+P_ERZ=$(( 47160 + V )); U_ERZ=cypherdj-erzeuger$SFX
+[ -n "$I" ] && ARBEITSBESTAND=${ARBEITSBESTAND/\/cypherdj\//\/cypherdj-$I\/}
+URL=http://127.0.0.1:$P_OF/
+
+zustand() {
+  echo "cypherdj$SFX:"
+  local u a p r
+  for u in "${UNITS[@]}"; do
+    a=$(systemctl --user show -p ActiveState --value "$u.service" 2>/dev/null)
+    p=$(systemctl --user show -p MainPID --value "$u.service" 2>/dev/null)
+    r=$(systemctl --user show -p NRestarts --value "$u.service" 2>/dev/null)
+    printf '  %-26s %-9s pid %-8s restarts %s\n' "$u" "${a:-inactive}" "${p:-0}" "${r:-0}"
+  done
+  echo "  output   master ${MASTER}L + ${MASTER}R${CUE:+, cue ${CUE}L + ${CUE}R}$([ "$TON_FREI" = 1 ] && echo '  (REAL OUTPUT, --ton-frei)')"
+  [ -n "${KERN_MASTER:-}" ] && [ "$KERN_MASTER" != "$MASTER" ] && echo "  kern     names under pw-jack: master ${KERN_MASTER}L/R${KERN_CUE:+, cue ${KERN_CUE}L/R}"
+  echo "  ports    kern udp $P_KERN, leitstand ws $P_WS, page $P_OF"
+  echo "  kern     $([ "$PRUEF" = 1 ] && echo 'test mode (--pruefmodus, hand of the page arrives)' || echo 'without test mode (page hand does not arrive)')"
+  echo "  material $ARBEITSBESTAND"
+  echo "  open     $URL"
+}
+
+if [ "$MODUS" = zustand ]; then
+  # shellcheck disable=SC1090
+  [ -f "$STATE" ] && . "$STATE"
+  zustand
+  n=0; for u in "${UNITS[@]}"; do [ "$(systemctl --user is-active "$u.service" 2>/dev/null)" = active ] && n=$((n + 1)); done
+  [ "$n" = 4 ]; exit $?
+fi
+
+# Nur die eigenen stummen Präfixe; "stumm" irgendwo im Namen eines echten Geräts öffnet den Riegel nicht.
+riegel_ok() { case "$1" in cypher_stumm:*|cypher_stumm-[a-i]:*|cypherdj-pruef-*) return 0;; *) [ "$TON_FREI" = 1 ];; esac; }
+# Ein Ziel ist "<Senke>:<Portbasis>". Ohne Doppelpunkt ist es ein falscher Aufruf (früher: Rückgabe 2 ohne Grund, wenn
+# der Riegel nicht schon vorher zuschlug).
+for z in "$MASTER" ${CUE:+"$CUE"}; do
+  [[ "$z" =~ ^.+:[A-Za-z0-9_]+$ ]] || { echo "djk-start: target '$z' is not '<sink>:<port base>' (e.g. $STUMM:playback_F); the kern appends L and R. Nothing started." >&2; exit 2; }
+done
+# 1 Riegel, vor allem anderen: nichts wird angelegt, wenn das Ziel nicht erlaubt ist. Auf der Eingabe des Aufrufers
+# und (nach der Auflösung unten) noch einmal auf beiden Namensformen.
+riegel() {
+  local z
+  for z in "$@"; do
+    if ! riegel_ok "${z}L"; then
+      echo "djk-start: refused: ${z}L is a real output (not cypher_stumm[-<i>]: nor cypherdj-pruef-*). Pass --ton-frei only with Andreas' go (SCHNITTSTELLEN §8). Nothing started." >&2
+      exit 3
+    fi
+  done
+}
+riegel "$MASTER" ${CUE:+"$CUE"}
+# Die stumme Senke legt djk-start nur an, wenn der Master auf ihr liegt (Schritt 4). Ein Cue auf ihr bei anderem Master
+# hätte nie Ports: klar abweisen statt "output not found" (Plan M-1 Blocker 3).
+if [ -n "$CUE" ] && [ "${CUE#"$STUMM":}" != "$CUE" ] && [ "$MASTER" != "$STUMM:playback_F" ]; then
+  echo "djk-start: cue $CUE is on the silent sink $STUMM, which djk-start only creates for the silent master ($STUMM:playback_F); with master $MASTER it would not exist. Use --ohne-cue (master alone) or a cue on a real device. Nothing started." >&2
+  exit 2
+fi
+# Auflösung in node.name (pw-link, Prüfungen) und Beschreibung (Kern und Notbahn unter pw-jack), ziel.py.
+aufloesen() {  # $1 Ziel -> "<node-form>\t<kern-form>"
+  python3 "$HIER/ziel.py" "$1" || exit 2
+}
+R=$(aufloesen "$MASTER") || exit 2; MASTER=${R%%$'\t'*}; KMASTER=${R#*$'\t'}
+KCUE=""; if [ -n "$CUE" ]; then R=$(aufloesen "$CUE") || exit 2; CUE=${R%%$'\t'*}; KCUE=${R#*$'\t'}; fi
+riegel "$KMASTER" ${KCUE:+"$KCUE"}
+# Namen mit Leerzeichen gehören in Anführungszeichen (einheit.py zerlegt @CUE_ARG@ mit shlex, systemd liest sie so).
+q() { case "$1" in *[!A-Za-z0-9._:/+=,-]*) printf '"%s"' "$1";; *) printf '%s' "$1";; esac; }
+CUE_ARG=""; [ -n "$KCUE" ] && CUE_ARG="--cue $(q "$KCUE")"
+TF_ARG=""; [ "$TON_FREI" = 1 ] && TF_ARG="--ton-frei"
+KERN_ARGS=""; [ -n "$KERN_KONFIG" ] && KERN_ARGS="--konfig $KERN_KONFIG"; [ "$PRUEF" = 1 ] && KERN_ARGS="$KERN_ARGS --pruefmodus"
+LS_ARGS="--kern-port $P_KERN"; [ -n "$LS_KONFIG" ] && LS_ARGS="--konfig $LS_KONFIG $LS_ARGS"
+[ -n "$KERN_KONFIG" ] && LS_ARGS="$LS_ARGS --kern-konfig $KERN_KONFIG"
+# MVP 2 (ADR 025): Loop-Ordner je Instanz wie im Kern (main.cpp); die Seite liest ihn für /loops
+if [ -n "$I" ]; then LOOPS=/dev/shm/cypherdj-$I/loops; else LOOPS=$HOME/.config/cypherdj/loops; fi
+mkdir -p "$LOOPS"
+OF_ARGS="--kern-port $P_KERN --leitstand-ws $P_WS --arbeitsbestand $ARBEITSBESTAND --loops $LOOPS"
+# Mediathek (Plan 2026-10-03 T2): Prüfinstanzen können eine andere DB bekommen; ohne die Variable gilt die Vorgabe der Seite
+if [ -n "${CYPHERDJ_MEDIATHEK:-}" ]; then
+  [[ "$CYPHERDJ_MEDIATHEK" =~ ^/[A-Za-z0-9._/+=,:-]+$ && "$CYPHERDJ_MEDIATHEK" != *..* ]] || { echo "djk-start: CYPHERDJ_MEDIATHEK must be an absolute path without spaces, quotes or '..', is '$CYPHERDJ_MEDIATHEK'. Nothing started." >&2; exit 2; }
+  OF_ARGS="$OF_ARGS --mediathek $CYPHERDJ_MEDIATHEK"
+fi
+VARS=(--var "MASTER=$KMASTER" --var "CUE_ARG=$CUE_ARG" --var "TON_FREI=$TF_ARG" --var "KERN_ARGS=$KERN_ARGS"
+      --var "KERN_CLIENT=$KERN_CLIENT" --var "LEITSTAND_ARGS=$LS_ARGS" --var "OBERFLAECHE_ARGS=$OF_ARGS")
+
+if [ "$MODUS" = vorlagen ]; then
+  mkdir -p "$VORLAGEN_NACH"
+  for u in kern notbahn leitstand; do
+    python3 "$HIER/einheit.py" --rendern "$VORLAGEN_NACH/cypherdj-$u.service.d/betrieb.conf" \
+      --unit "$DJK/units/cypherdj-$u.service" --dropin "$VORL/cypherdj-$u.service.d/betrieb.conf" "${VARS[@]}" || exit 2
+  done
+  python3 "$HIER/einheit.py" --rendern "$VORLAGEN_NACH/cypherdj-oberflaeche.service" \
+    --unit "$VORL/cypherdj-oberflaeche.service" "${VARS[@]}" || exit 2
+  find "$VORLAGEN_NACH" -type f | sort; echo "filled, not installed"; exit 0
+fi
+
+# 2 Programme und PipeWire
+for p in "$DJK/kern/build/cypherdj-kern" "$DJK/notbahn/build/cypherdj-notbahn" /usr/bin/node /usr/bin/pw-jack; do
+  [ -x "$p" ] || { echo "djk-start: missing program $p" >&2; exit 2; }
+done
+for d in "$DJK/units/cypherdj-kern.service" "$DJK/units/cypherdj-notbahn.service" "$DJK/units/cypherdj-leitstand.service"; do
+  [ -f "$d" ] || { echo "djk-start: missing unit $d" >&2; exit 2; }
+done
+pw-link -o >/dev/null 2>&1 || { echo "djk-start: PipeWire not reachable (pw-link failed)" >&2; exit 2; }
+
+# 3 Belegt: Units, Ports, Shared Memory. Alle Funde auf einmal melden.
+BELEGT=()
+for u in "${UNITS[@]}"; do
+  if systemctl --user list-units --all --no-legend --plain "$u.service" 2>/dev/null | grep -q .; then
+    BELEGT+=("unit $u.service is already loaded ($(systemctl --user is-active "$u.service" 2>/dev/null)); run djk-stop${I:+ --instanz $I} first")
+  elif [ -n "$(systemctl --user show -p FragmentPath --value "$u.service" 2>/dev/null)" ]; then
+    BELEGT+=("unit $u.service is installed as a file; start the installed target instead of djk-start")
+  fi
+done
+port_frei() {  # $1 tcp|udp, $2 port, $3 wofür
+  local z
+  if [ "$1" = tcp ]; then z=$(ss -Hlntp "sport = :$2" 2>/dev/null); else z=$(ss -Hlnup "sport = :$2" 2>/dev/null); fi
+  [ -z "$z" ] && return 0
+  BELEGT+=("port $2/$1 ($3) is in use by $(echo "$z" | grep -o 'users:(([^)]*' | head -1 | sed 's/users:((//')")
+}
+port_frei udp "$P_KERN" "kern commands"; port_frei udp "$P_LS_ABO" "leitstand subscriber"
+port_frei tcp "$P_WS" "leitstand websocket"; port_frei udp "$P_OF_ABO" "page subscriber"; port_frei tcp "$P_OF" "page"
+for f in "/dev/shm/cypherdj$SFX/bus" "/dev/shm/cypherdj$SFX/zustand"; do
+  [ -e "$f" ] && fuser -s "$f" 2>/dev/null && BELEGT+=("$f is held by another process (foreign kern or notbahn)")
+done
+if [ ${#BELEGT[@]} -gt 0 ]; then
+  printf 'djk-start: busy, nothing started:\n'  >&2
+  printf '  - %s\n' "${BELEGT[@]}" >&2
+  exit 4
+fi
+
+# 4 Ziele: die stumme Vorgabe-Senke wird angelegt, ein ausdrückliches Ziel muss da sein.
+MODID=""
+ports_da() { pw-link -i | grep -qx "${1}L" && pw-link -i | grep -qx "${1}R"; }
+if ! ports_da "$MASTER" && [ "$MASTER" = "$STUMM:playback_F" ]; then
+  MODID=$(pactl load-module module-null-sink sink_name="$STUMM" channels=4 \
+    channel_map=front-left,front-right,rear-left,rear-right sink_properties=node.description="$STUMM") \
+    || { echo "djk-start: could not create silent sink $STUMM" >&2; exit 2; }
+  for _ in $(seq 1 50); do ports_da "$CUE" && ports_da "$MASTER" && break; sleep 0.1; done
+fi
+for z in "$MASTER" ${CUE:+"$CUE"}; do
+  if ! ports_da "$z"; then
+    echo "djk-start: output ${z}L/R not found (pw-link -i). Nothing started." >&2
+    # Gibt es das Gerät, aber mit anderen Portnamen (Pro Audio: playback_AUX0..), sagen, welche da sind: der Kern
+    # baut nur Präfix + L/R und kann sie nicht anschließen (Kopfkommentar, Grenze Pro Audio). Geraten wird nichts.
+    vorh=$(pw-link -i 2>/dev/null | grep -F -- "${z%:*}:" | sed 's/^/    /')
+    [ -n "$vorh" ] && printf '  the device exists, its input ports are:\n%s\n  the kern connects only <prefix>L/<prefix>R (Pro Audio AUX ports cannot be reached without a kern change)\n' "$vorh" >&2
+    [ -n "$MODID" ] && pactl unload-module "$MODID"
+    exit 2
+  fi
+done
+MIDI=$(pw-link -o 2>/dev/null | grep -ci 'midi' || true)
+
+# 5 Arbeitsbestand und Zustandsdatei (djk-stop liest sie)
+mkdir -p "$ARBEITSBESTAND" "$RUN" || { echo "djk-start: cannot create $ARBEITSBESTAND" >&2; [ -n "$MODID" ] && pactl unload-module "$MODID"; exit 2; }
+# Slice 2 (F03): Kanten der Wirte, vom Kern bei Änderung gelesen und nach Kern- oder Wirt-Neustart nachverbunden. Am Start leer
+# (vor den Wirten); ohne --instrumente bleibt sie leer.
+KANTEN_DATEI="/dev/shm/cypherdj$SFX/kanten"
+mkdir -p "/dev/shm/cypherdj$SFX" && : > "$KANTEN_DATEI" || { echo "djk-start: cannot create $KANTEN_DATEI" >&2; [ -n "$MODID" ] && pactl unload-module "$MODID"; exit 2; }
+{ echo "MODID=$MODID"; echo "MASTER='$MASTER'"; echo "CUE='$CUE'"; echo "KERN_MASTER='$KMASTER'"; echo "KERN_CUE='$KCUE'"; echo "TON_FREI=$TON_FREI"; echo "PRUEF=$PRUEF"; echo "GESTARTET='$(date -Is)'"; } > "$STATE"
+
+abbruch() {
+  echo "djk-start: $1" >&2
+  [ -n "${2:-}" ] && journalctl --user -u "$2.service" --since "${T0:-today}" -n 12 --no-pager -o cat 2>/dev/null | sed 's/^/    | /' >&2
+  "$HIER/djk-stop" ${I:+--instanz "$I"} --still >&2
+  echo "djk-start: rolled back, nothing left running" >&2
+  exit 5
+}
+# Tot: gescheitert, beendet (mit --collect schon abgeräumt) oder in der Neustart-Pause. Dann wartet djk-start nicht aus.
+tot() {
+  local s
+  s=$(systemctl --user show -p ActiveState -p SubState "$1.service" 2>/dev/null | tr '\n' ' ')
+  case "$s" in *ActiveState=failed*|*ActiveState=inactive*|*ActiveState=deactivating*|*SubState=auto-restart*) return 0;; esac
+  return 1
+}
+warte() {  # $1 Sekunden, $2 Unit, Rest: Bedingung. Bricht früh ab, sobald die Unit tot ist.
+  local s=$1 u=$2; shift 2
+  local n=$(( s * 10 )) k
+  for k in $(seq 1 "$n"); do
+    "$@" && return 0
+    if tot "$u"; then TOT="$u is dead ($(systemctl --user show -p ActiveState -p SubState -p Result --value "$u.service" 2>/dev/null | tr '\n' ' ' | sed 's/ $//'))"; return 1; fi
+    sleep 0.1
+  done
+  "$@"
+}
+TOT=""
+w() { [ -n "$TOT" ] && echo "$TOT: $1" || echo "$1"; }
+starte() {  # $1 Unit, $2 Unit-Datei, $3 Drop-in (oder leer)
+  local args
+  mapfile -t args < <(python3 "$HIER/einheit.py" --unit "$2" ${3:+--dropin "$3"} --djk "$DJK" "${VARS[@]}") \
+    || abbruch "cannot build unit $1" ""
+  [ ${#args[@]} -gt 2 ] || abbruch "cannot build unit $1" ""
+  systemd-run --user --quiet --collect --unit="$1" ${I:+--setenv=CYPHERDJ_INSTANZ=$I} "${args[@]}" 2>&1 \
+    | sed 's/^/    /' >&2
+  [ "${PIPESTATUS[0]}" = 0 ] || abbruch "unit $1 failed to start" "$1"
+}
+aktiv() { [ "$(systemctl --user is-active "$1.service" 2>/dev/null)" = active ]; }
+lauscht() { [ -n "$(ss -Hln"$1" "sport = :$2" 2>/dev/null)" ]; }
+jack_port() { pw-link -o | grep -qx "$1"; }
+verbunden() { pw-link -l | grep -A8 -x "$1" | grep -q -- "|-> *$2"; }
+
+T0=$(date '+%Y-%m-%d %H:%M:%S')
+echo "djk-start: cypherdj$SFX, load $(cut -d' ' -f1-3 /proc/loadavg)"
+if [ "$PRUEF" = 1 ]; then
+  echo "  test mode  ON: kern runs with --pruefmodus, so the page's hand (/test/hand) arrives; default until slice 35"
+  echo "             (hand_osc). MVP.md: not for the real set. Off with --ohne-pruefmodus (NOTFALL.md §3)."
+else
+  echo "  kern runs without --pruefmodus (--ohne-pruefmodus): the page's faders and buttons do NOT reach the kern."
+fi
+[ "$P_LS_ABO" = $(( 47110 + V )) ] || echo "  warning    leitstand abo_port $P_LS_ABO: notbahn reports /nb fixed to udp $(( 47110 + V )), leitstand will not see it"
+# Kern: Type=notify, systemd-run kehrt erst nach READY=1 zurück; dann Befehls-Port, Ausgänge am Ziel.
+starte "$U_KERN" "$DJK/units/cypherdj-kern.service" "$VORL/cypherdj-kern.service.d/betrieb.conf"
+warte 5 "$U_KERN" aktiv "$U_KERN" || abbruch "$(w "kern not active")" "$U_KERN"
+warte 5 "$U_KERN" lauscht u "$P_KERN" || abbruch "$(w "kern does not listen on udp $P_KERN")" "$U_KERN"
+warte 5 "$U_KERN" verbunden "$KERN_CLIENT:master_L" "${MASTER}L" || abbruch "$(w "kern master_L not connected to ${MASTER}L")" "$U_KERN"
+# Final-Review Paket 2 MINOR-4: der Kern bricht bei einem gescheiterten Start-Verbinden nicht mehr ab (er holt es nach);
+# deshalb hier jede Ausgangskante prüfen, nicht nur master_L.
+for kz in "master_R ${MASTER}R" ${CUE:+"cue_L ${CUE}L" "cue_R ${CUE}R"}; do
+  warte 5 "$U_KERN" verbunden "$KERN_CLIENT:${kz%% *}" "${kz#* }" || abbruch "$(w "kern ${kz%% *} not connected to ${kz#* }")" "$U_KERN"
+done
+echo "  kern       ready   (udp $P_KERN, master -> ${MASTER}L/R)"
+# Notbahn daneben: Ports da, Kante vom Kern verbunden, Ausgänge am Ziel.
+starte "$U_NB" "$DJK/units/cypherdj-notbahn.service" "$VORL/cypherdj-notbahn.service.d/betrieb.conf"
+warte 5 "$U_NB" jack_port "$NB_CLIENT:master_L" || abbruch "$(w "notbahn ports missing")" "$U_NB"
+warte 5 "$U_NB" verbunden "$KERN_CLIENT:master_L" "$NB_CLIENT:kante" || abbruch "$(w "notbahn edge from kern not connected")" "$U_NB"
+warte 5 "$U_NB" verbunden "$NB_CLIENT:master_L" "${MASTER}L" || abbruch "$(w "notbahn master_L not connected to ${MASTER}L")" "$U_NB"
+for kz in "master_R ${MASTER}R" ${CUE:+"cue_L ${CUE}L" "cue_R ${CUE}R"}; do
+  warte 5 "$U_NB" verbunden "$NB_CLIENT:${kz%% *}" "${kz#* }" || abbruch "$(w "notbahn ${kz%% *} not connected to ${kz#* }")" "$U_NB"
+done
+aktiv "$U_KERN" || abbruch "kern died while notbahn started" "$U_KERN"
+echo "  notbahn    ready   (beside, edge from $KERN_CLIENT:master_L)"
+starte "$U_LS" "$DJK/units/cypherdj-leitstand.service" "$VORL/cypherdj-leitstand.service.d/betrieb.conf"
+warte 10 "$U_LS" lauscht t "$P_WS" || abbruch "$(w "leitstand does not listen on tcp $P_WS")" "$U_LS"
+echo "  leitstand  ready   (ws $P_WS)"
+starte "$U_OF" "$VORL/cypherdj-oberflaeche.service" ""
+warte 10 "$U_OF" lauscht t "$P_OF" || abbruch "$(w "page does not listen on tcp $P_OF")" "$U_OF"
+C=$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 "$URL")
+[ "$C" = 200 ] || abbruch "page answers $C instead of 200" "$U_OF"
+echo "  page       ready   ($URL)"
+echo "  loops $LOOPS"
+if [ "$STRUDEL" = 1 ]; then  # Plan 2026-09-27 + Studio S1: drei Strudel-Erzeuger (Drums, Bass, Melodie), je Unit, Port, Ordner
+  for s in 1 2 3; do
+    ZIEL=""
+    case $s in 1) K=$KIT; N=""; ZUSATZ="--kit-zusatz rec$SFX";; 2) K=$KIT2; N=2; ZUSATZ=""; [ "$INSTR" = 1 ] && ZIEL="--ziel midi:1:1";; 3) K=$KIT3; N=3; ZUSATZ=""; [ "$INSTR" = 1 ] && ZIEL="--ziel midi:2:1";; esac
+    [ -f "$HOME/.config/cypherdj/kits/$K/kit.json" ] || abbruch "kit $K missing (djk/erzeuger/kit_bauen.py)" ""
+    ORD="/dev/shm/cypherdj$SFX/erzeuger$N"; U="cypherdj-erzeuger$N$SFX"; P=$(( P_ERZ + s - 1 ))
+    mkdir -p "$ORD"
+    systemd-run --user --quiet --collect --unit="$U" ${I:+--setenv=CYPHERDJ_INSTANZ=$I} \
+      -p Restart=always -p RestartSec=1 -p RestartPreventExitStatus=2 -p PartOf=cypherdj.target \
+      /usr/bin/node --permission --allow-fs-read="$DJK" --allow-fs-read="$HOME/strudel" \
+      --allow-fs-read="$HOME/.config/cypherdj/kits" --allow-fs-read="$ORD" --allow-fs-write="$ORD" \
+      "$DJK/erzeuger/erzeuger.mjs" --kern-port "$P_KERN" --abo-port "$P" --kit "$K" $ZUSATZ $ZIEL \
+      --name "erzeuger$N" --strom "$s" --kanal "erz/$s" --muster "$ORD/strom1.js" 2>&1 | sed 's/^/    /' >&2
+    UNITS+=("$U")
+    warte 10 "$U" lauscht u "$P" || abbruch "$(w "erzeuger $s does not listen on udp $P")" "$U"
+  done
+  echo "  strudel    ready   (drums kit $KIT+rec$SFX, bass kit $KIT2, melody kit $KIT3; pattern: djk/erzeuger/djk-muster${I:+ --instanz $I} [--strom 2|3] --text '<pattern>')"
+fi
+if [ "$INSTR" = 1 ]; then  # Studio S5.1: Carla-Wirt je Instrument (ADR 009), node.async, Rückweg in erz/2 bzw. erz/3.
+  # Derselbe Weg wie das Nachrüsten im laufenden Studio (djk-instrumente); hier nur die Wirte, die Erzeuger haben --ziel schon.
+  "$HIER/djk-instrumente" ${I:+--instanz "$I"} --nur-wirte | sed 's/^/  /' || abbruch "instruments failed (djk-instrumente)" "cypherdj-wirt-bass$SFX"  # pipefail: Rückgabe von djk-instrumente
+  UNITS+=("cypherdj-wirt-bass$SFX" "cypherdj-wirt-melodie$SFX")
+  echo "  instruments ready (Surge XT: bass midi_aus_1 -> erz/2, melody midi_aus_2 -> erz/3; the kern re-links a restarted wirt's links within about 1 s of its ports appearing, from $KANTEN_DATEI)"
+  echo "  sounds: djk/wirte/carla/djk-klang${I:+ --instanz $I} bass|melodie zeige|setze|lade|speichere|hoere · djk-klang liste"
+elif [ "$STRUDEL" = 1 ]; then
+  echo "  instruments not loaded; add them live without stopping anything: $HIER/djk-instrumente${I:+ --instanz $I}"
+fi
+for u in "${UNITS[@]}"; do aktiv "$u" || abbruch "$u died during start" "$u"; done
+echo "  midi       $MIDI output ports visible (controller mapping: SCHNITTSTELLEN §7)"
+echo
+zustand
+echo "stop with: $HIER/djk-stop${I:+ --instanz $I}"

@@ -1,0 +1,214 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cypherdj.invalid/vertrag/folge.schema.json",
+  "title": "Eine Zeile einer Golden-Folge (SCHNITTSTELLEN.md §19.0, Vertrag 1)",
+  "description": "Aufbau je Zeile. Die Semantik (Zeitachse, Kennungen, Vergleich, Ende) steht in folgen/FORMAT.md; pruefe_folgen.py prüft beides. Weitere Felder sind erlaubt und werden vom Läufer ignoriert (Vertragsregel für JSON-Nachrichten: neue optionale Felder). Die Schritt-Arten nach wert und die Felder bereich, herleitung, ab_sample kamen mit Scheibe 09 dazu (FORMAT.md Punkt 13 ff.).",
+  "oneOf": [
+    {"$ref": "#/$defs/sende"},
+    {"$ref": "#/$defs/hand"},
+    {"$ref": "#/$defs/erwarte"},
+    {"$ref": "#/$defs/wert"},
+    {"$ref": "#/$defs/erwarte_nicht"},
+    {"$ref": "#/$defs/erlaube"},
+    {"$ref": "#/$defs/buendel"},
+    {"$ref": "#/$defs/deck_wert"},
+    {"$ref": "#/$defs/messung"},
+    {"$ref": "#/$defs/aktion"},
+    {"$ref": "#/$defs/ws_sende"},
+    {"$ref": "#/$defs/ws_erwarte"},
+    {"$ref": "#/$defs/rechner_frage"},
+    {"$ref": "#/$defs/rechner_antwort"}
+  ],
+  "$defs": {
+    "sample": {"type": "integer", "minimum": 0},
+    "notiz": {"type": "string"},
+    "herleitung": {"type": "string"},
+    "bereich": {"enum": ["zeitachse", "regler", "ki", "deck", "hoerschein", "schuss", "erzeuger", "invariante", "pruefstand", "leitstand", "rechner"]},
+    "zahl_oder_sonder": {"oneOf": [{"type": "number"}, {"enum": ["NaN", "inf", "-inf"]}]},
+    "osc": {
+      "type": "array",
+      "minItems": 2,
+      "prefixItems": [
+        {"type": "string", "pattern": "^/[a-z0-9_/]+$"},
+        {"type": "string", "pattern": "^,[ihfds]*$"}
+      ],
+      "items": {"type": ["number", "string", "null"]}
+    },
+    "sende": {
+      "type": "object",
+      "required": ["t", "sample", "osc"],
+      "properties": {
+        "t": {"const": "sende"},
+        "sample": {"$ref": "#/$defs/sample"},
+        "osc": {"$ref": "#/$defs/osc"},
+        "absicht": {"enum": ["unbekannte_adresse", "falsche_typen"]},
+        "notiz": {"$ref": "#/$defs/notiz"},
+        "bereich": {"$ref": "#/$defs/bereich"},
+        "herleitung": {"$ref": "#/$defs/herleitung"}
+      }
+    },
+    "hand": {
+      "type": "object",
+      "required": ["t", "sample", "pfad", "midi_roh"],
+      "properties": {
+        "t": {"const": "hand"},
+        "sample": {"$ref": "#/$defs/sample"},
+        "pfad": {"type": "string"},
+        "midi_roh": {"type": "number", "minimum": 0, "maximum": 1},
+        "notiz": {"$ref": "#/$defs/notiz"},
+        "bereich": {"$ref": "#/$defs/bereich"},
+        "herleitung": {"$ref": "#/$defs/herleitung"}
+      }
+    },
+    "erwarte": {
+      "type": "object",
+      "required": ["t", "bis_sample", "osc"],
+      "properties": {
+        "t": {"const": "erwarte"},
+        "ab_sample": {"$ref": "#/$defs/sample"},
+        "bis_sample": {"$ref": "#/$defs/sample"},
+        "osc": {"$ref": "#/$defs/osc"},
+        "toleranz": {"type": "number", "minimum": 0},
+        "notiz": {"$ref": "#/$defs/notiz"},
+        "bereich": {"$ref": "#/$defs/bereich"},
+        "herleitung": {"$ref": "#/$defs/herleitung"}
+      }
+    },
+    "wert": {
+      "type": "object",
+      "required": ["t", "sample", "pfad", "wert", "toleranz"],
+      "properties": {
+        "t": {"const": "wert"},
+        "sample": {"$ref": "#/$defs/sample"},
+        "pfad": {"type": "string"},
+        "wert": {"$ref": "#/$defs/zahl_oder_sonder"},
+        "toleranz": {"type": "number", "minimum": 0},
+        "notiz": {"$ref": "#/$defs/notiz"},
+        "bereich": {"$ref": "#/$defs/bereich"},
+        "herleitung": {"$ref": "#/$defs/herleitung"}
+      }
+    },
+    "erwarte_nicht": {
+      "type": "object",
+      "required": ["t", "ab_sample", "bis_sample", "osc"],
+      "properties": {
+        "t": {"const": "erwarte_nicht"},
+        "ab_sample": {"$ref": "#/$defs/sample"},
+        "bis_sample": {"$ref": "#/$defs/sample"},
+        "osc": {"$ref": "#/$defs/osc"},
+        "toleranz": {"type": "number", "minimum": 0},
+        "bereich": {"$ref": "#/$defs/bereich"},
+        "herleitung": {"$ref": "#/$defs/herleitung"}
+      }
+    },
+    "erlaube": {
+      "type": "object",
+      "required": ["t", "ab_sample", "bis_sample", "osc", "herleitung"],
+      "properties": {
+        "t": {"const": "erlaube"},
+        "ab_sample": {"$ref": "#/$defs/sample"},
+        "bis_sample": {"$ref": "#/$defs/sample"},
+        "osc": {"$ref": "#/$defs/osc"},
+        "toleranz": {"type": "number", "minimum": 0},
+        "bereich": {"$ref": "#/$defs/bereich"},
+        "herleitung": {"$ref": "#/$defs/herleitung"}
+      }
+    },
+    "buendel": {
+      "type": "object",
+      "required": ["t", "sample", "nachrichten"],
+      "properties": {
+        "t": {"const": "buendel"},
+        "sample": {"$ref": "#/$defs/sample"},
+        "nachrichten": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/osc"}},
+        "bereich": {"$ref": "#/$defs/bereich"},
+        "herleitung": {"$ref": "#/$defs/herleitung"}
+      }
+    },
+    "deck_wert": {
+      "type": "object",
+      "required": ["t", "sample", "deck", "feld", "wert", "toleranz"],
+      "properties": {
+        "t": {"const": "deck_wert"},
+        "sample": {"$ref": "#/$defs/sample"},
+        "deck": {"type": "integer", "minimum": 1, "maximum": 4},
+        "feld": {"enum": ["status", "quell_beat", "beats_bis_ende", "faktor"]},
+        "wert": {"$ref": "#/$defs/zahl_oder_sonder"},
+        "toleranz": {"type": "number", "minimum": 0},
+        "bereich": {"$ref": "#/$defs/bereich"},
+        "herleitung": {"$ref": "#/$defs/herleitung"}
+      }
+    },
+    "messung": {
+      "type": "object",
+      "required": ["t", "sample", "name", "wert", "toleranz"],
+      "properties": {
+        "t": {"const": "messung"},
+        "sample": {"$ref": "#/$defs/sample"},
+        "name": {"enum": ["schleife_frames", "stille_ms", "rueckgabe_raster_abw_samples"]},
+        "wert": {"type": "number"},
+        "toleranz": {"type": "number", "minimum": 0},
+        "bereich": {"$ref": "#/$defs/bereich"},
+        "herleitung": {"$ref": "#/$defs/herleitung"}
+      }
+    },
+    "aktion": {
+      "type": "object",
+      "required": ["t", "sample", "was"],
+      "properties": {
+        "t": {"const": "aktion"},
+        "sample": {"$ref": "#/$defs/sample"},
+        "was": {"enum": ["kern_kill9"]},
+        "bereich": {"$ref": "#/$defs/bereich"},
+        "herleitung": {"$ref": "#/$defs/herleitung"}
+      }
+    },
+    "ws_sende": {
+      "type": "object",
+      "required": ["t", "sample", "typ", "daten"],
+      "properties": {
+        "t": {"const": "ws_sende"},
+        "sample": {"$ref": "#/$defs/sample"},
+        "typ": {"type": "string"},
+        "daten": {"type": "object"},
+        "bereich": {"$ref": "#/$defs/bereich"},
+        "herleitung": {"$ref": "#/$defs/herleitung"}
+      }
+    },
+    "ws_erwarte": {
+      "type": "object",
+      "required": ["t", "bis_sample", "typ", "daten"],
+      "properties": {
+        "t": {"const": "ws_erwarte"},
+        "ab_sample": {"$ref": "#/$defs/sample"},
+        "bis_sample": {"$ref": "#/$defs/sample"},
+        "typ": {"type": "string"},
+        "daten": {"type": "object"},
+        "toleranz": {"type": "number", "minimum": 0},
+        "bereich": {"$ref": "#/$defs/bereich"},
+        "herleitung": {"$ref": "#/$defs/herleitung"}
+      }
+    },
+    "rechner_frage": {
+      "type": "object",
+      "required": ["t", "zeile"],
+      "properties": {
+        "t": {"const": "rechner_frage"},
+        "zeile": {"type": "object"},
+        "bereich": {"$ref": "#/$defs/bereich"},
+        "herleitung": {"$ref": "#/$defs/herleitung"}
+      }
+    },
+    "rechner_antwort": {
+      "type": "object",
+      "required": ["t", "zeile"],
+      "properties": {
+        "t": {"const": "rechner_antwort"},
+        "zeile": {"type": "object"},
+        "toleranz": {"type": "number", "minimum": 0},
+        "bereich": {"$ref": "#/$defs/bereich"},
+        "herleitung": {"$ref": "#/$defs/herleitung"}
+      }
+    }
+  }
+}

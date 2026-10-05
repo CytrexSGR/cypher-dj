@@ -1,0 +1,18 @@
+name = "luecke-ziel"
+zweck = "Fehlerfall für den Stille-Messer: die Prüfquelle spielt direkt an die Senke (ohne Ring, ohne Notbahn) und verbrennt jeden 500. Zyklus 1,5 Perioden (10 K1b); jede ausgefallene Periode muss am Ziel als Stille gezählt werden, so oft wie die Quelle im Aufnahmefenster verbrannt hat."
+dauer_s = 30.0
+
+[quelle]
+art = "pruefquelle_direkt"
+spin_alle = 500
+spin_anteil = 1.5
+
+[notbahn]
+an = false
+
+[erwartung]
+# 30 s bei 256 sind 5 625 Zyklen, also 11 Spins im Fenster; jeder Spin über einer Periode kostet eine Periode am Ziel
+# (10 K1b). Verlangt: Stille-Ereignisse gleich Spins im Aufnahmefenster ±1 (ein Spin am Fensterrand), und es gab Spins.
+spins_min = 5
+stille_ereignisse_min = 5
+spin_luecken_abweichung_max = 1

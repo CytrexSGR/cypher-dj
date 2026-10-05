@@ -1,0 +1,30 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "https://cypherdj.invalid/vertrag/1/kandidat.schema.json",
+ "title": "Kandidat (SCHNITTSTELLEN.md §14.6)",
+ "type": "object",
+ "required": ["material_id", "titel", "fassung", "einstieg_quell_beat", "passung", "spielarten", "empfehlung", "nur_fuer_andreas"],
+ "properties": {
+  "material_id": {"$ref": "defs.schema.json#/$defs/material_id"},
+  "titel": {"type": "string"},
+  "fassung": {"$ref": "defs.schema.json#/$defs/fassung_name"},
+  "einstieg_quell_beat": {"type": "number", "minimum": 0},
+  "passung": {"$ref": "passung.schema.json"},
+  "spielarten": {"type": "array", "items": {
+   "type": "object", "required": ["name", "takte", "vorhersage", "ok"],
+   "properties": {
+    "name": {"type": "string"}, "takte": {"type": "integer", "minimum": 1},
+    "vorhersage": {"$ref": "#/$defs/vorhersage_kurz"},
+    "ok": {"type": "boolean"}}}},
+  "empfehlung": {"type": "string"},
+  "nur_fuer_andreas": {"type": "boolean"}
+ },
+ "$defs": {
+  "vorhersage_kurz": {"description": "§10 waehle, §14.6: ueberdeckung_max sub, tief und lufs_abw_max_lu",
+   "type": "object", "required": ["ueberdeckung_max", "lufs_abw_max_lu"],
+   "properties": {
+    "ueberdeckung_max": {"type": "object", "required": ["sub", "tief"],
+     "properties": {"sub": {"$ref": "defs.schema.json#/$defs/anteil"}, "tief": {"$ref": "defs.schema.json#/$defs/anteil"}}},
+    "lufs_abw_max_lu": {"type": "number", "minimum": 0}}}
+ }
+}

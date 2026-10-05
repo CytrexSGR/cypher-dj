@@ -1,0 +1,12 @@
+{
+  "name": "cypherdj-vertrag",
+  "private": true,
+  "description": "Maschinenlesbarer Vertrag (SCHNITTSTELLEN.md): nur für die Typprüfung von osc_adressen.ts",
+  "type": "module",
+  "scripts": {
+    "typpruefung": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
+}

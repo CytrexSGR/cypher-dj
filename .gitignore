@@ -1,0 +1,13 @@
+# build output
+djk/*/build*/
+djk/kern/build*/
+__pycache__/
+*.pyc
+.venv/
+node_modules/
+# your own material never goes into git
+bestand/
+*.wav
+*.mp3
+*.flac
+*.f32

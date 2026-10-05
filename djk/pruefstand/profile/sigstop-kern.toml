@@ -1,0 +1,18 @@
+name = "sigstop-kern"
+zweck = "Hänger: SIGSTOP auf den Kern aus Scheibe 08 für 3 s, dann SIGCONT (ohne Watchdog, der kommt mit Scheibe 18); die Notbahn daneben schleift treu und gibt nach SIGCONT zurück (/nb 1 → 3 → 0); das Raster nach Rückkehr wird gemessen und berichtet."
+dauer_s = 30.0
+
+[quelle]
+art = "kern"
+argumente = ["--konfig", "{ordner}/kern.toml"]
+
+[[eingriff]]
+nach_s = 10.0
+art = "sigstop"
+ziel = "quelle"
+halten_s = 3.0
+
+[erwartung]
+schleife_in_jedem_eingriff = true
+schleife_abweichung_max = 0
+rueckgabe_in_jedem_eingriff = true

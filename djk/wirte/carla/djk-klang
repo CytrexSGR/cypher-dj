@@ -1,0 +1,168 @@
+#!/usr/bin/env python3
+"""djk-klang (Studio S5.3): Klänge der Surge-Wirte bauen, speichern, laden — live, ohne Neustart.
+  djk-klang [--instanz f] bass zeige [REGEX]        Werte des laufenden Klangs (Surge-XML), Name per Regex gefiltert
+  djk-klang [--instanz f] bass setze NAME=WERT …    z. B. a_filter1_type=2 a_filter1_type.deactivated=0
+  djk-klang [--instanz f] bass fahre NAME ZIEL SEKUNDEN [VON]   stufenlos, ohne Abriss
+  djk-klang [--instanz f] bass lade NAME|PFAD        eigener Klang, Werkspatch "Kategorie/Name" oder Pfad zu .fxp
+  djk-klang [--instanz f] bass speichere NAME        laufenden Klang als $CYPHERDJ_KLAENGE/NAME.fxp (alter → .alt/)
+  djk-klang [--instanz f] bass hoere [NOTE [DAUER]]  Note direkt am Wirt, hörbar auf erz/2 (bass) bzw. erz/3 (melodie)
+  djk-klang liste [REGEX]                            eigene Klänge und Werkspatches
+Der Wirt schreibt jeden geladenen Klang nach ~/.config/cypherdj<-i>/klang-<gruppe>.fxp und startet damit wieder.
+Eigene Klänge: $CYPHERDJ_KLAENGE, sonst ~/.config/cypherdj/klaenge. Ausgaben englisch (Oberflächen-Regel)."""
+import argparse
+import base64
+import json
+import os
+import re
+import sys
+import time
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import klang  # noqa: E402
+from wirtsteuerung import sende  # noqa: E402
+
+EIGENE = Path(os.environ.get("CYPHERDJ_KLAENGE", Path.home() / ".config/cypherdj/klaenge"))
+WERK = Path.home() / ".local/share/cypherdj/surge-daten/usr/share/surge-xt/patches_factory"
+GRUPPEN = {"bass": 36, "melodie": 60}  # Gruppe → Vorgabe-Note für hoere
+BEREICHE = json.loads((Path(__file__).resolve().parent / "surge_bereiche.json").read_text())["parameter"]
+
+
+def finde_klang(name: str, eigene: Path, werk: Path) -> Path:
+    p = Path(name)
+    if p.suffix == ".fxp" and p.is_file():
+        return p
+    for kandidat in (eigene / f"{name}.fxp", werk / f"{name}.fxp"):
+        if kandidat.is_file():
+            return kandidat
+    raise FileNotFoundError(f"no sound {name!r} (searched {eigene} and {werk})")
+
+
+def speichere(eigene: Path, name: str, fxp: bytes, stempel: str) -> Path:
+    if not re.fullmatch(r"[\w\-. ]+", name) or name.startswith(".") or ".." in name:
+        raise ValueError(f"invalid name {name!r}")
+    eigene.mkdir(parents=True, exist_ok=True)
+    ziel = eigene / f"{name}.fxp"
+    if ziel.exists():
+        alt = eigene / ".alt"
+        alt.mkdir(exist_ok=True)
+        ziel.replace(alt / f"{name}-{stempel}.fxp")
+    tmp = eigene / f".{name}.fxp.neu"
+    tmp.write_bytes(fxp)
+    tmp.replace(ziel)
+    return ziel
+
+
+def liste(eigene: Path, werk: Path, muster: str) -> list:
+    try:
+        rx = re.compile(muster, re.I)
+    except re.error as e:
+        raise ValueError(f"bad pattern {muster!r}: {e}") from None
+    aus = []
+    if eigene.is_dir():
+        aus += [("own", p.stem) for p in sorted(eigene.glob("*.fxp"))]
+    if werk.is_dir():
+        aus += [("factory", str(p.relative_to(werk).with_suffix(""))) for p in sorted(werk.rglob("*.fxp"))]
+    return [(art, n) for art, n in aus if rx.search(n)]
+
+
+def zuweisungen(args: list) -> dict:
+    aus = {}
+    for x in args:
+        if "=" not in x:
+            raise ValueError(f"expected NAME=VALUE, got {x!r}")
+        k, v = x.split("=", 1)
+        aus[k] = v
+    return aus
+
+
+def aufteilen(zuw: dict, bereiche: dict):
+    """Fahrbare Werte (stufenlose Parameter, ohne .attribut) gehen ohne Abriss über fahre; der Rest braucht den Zustand."""
+    fahr = {k: v for k, v in zuw.items() if "." not in k and k in bereiche}
+    return fahr, {k: v for k, v in zuw.items() if k not in fahr}
+
+
+def dauer(text: str) -> float:
+    try:
+        return float(text[:-1] if text.endswith("s") else text)
+    except ValueError:
+        raise ValueError(f"duration in seconds, got {text!r}") from None
+
+
+def rufe(sock: str, befehl: dict) -> dict:
+    try:
+        r = sende(sock, befehl)
+    except (FileNotFoundError, ConnectionRefusedError):
+        sys.exit(f"djk-klang: wirt not running ({sock})")
+    except (TimeoutError, OSError, ValueError) as e:  # hängt, bricht ab oder antwortet leer (Final-Review S5.3)
+        sys.exit(f"djk-klang: no answer from wirt ({sock}): {e}")
+    if not r.get("ok"):
+        sys.exit(f"djk-klang: {r.get('fehler')}")
+    return r
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(prog="djk-klang", description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
+    ap.add_argument("--instanz", default=os.environ.get("CYPHERDJ_INSTANZ", ""))
+    ap.add_argument("ziel", help="bass | melodie | liste")
+    ap.add_argument("rest", nargs="*")
+    a = ap.parse_args(argv)
+    if a.instanz and not re.fullmatch(r"[a-i]", a.instanz):
+        ap.error("--instanz a..i")
+    if a.ziel == "liste":
+        for art, n in liste(EIGENE, WERK, a.rest[0] if a.rest else ""):
+            print(f"{art}\t{n}")
+        return 0
+    if a.ziel not in GRUPPEN or not a.rest:
+        ap.error("GROUP (bass|melodie) COMMAND …")
+    sfx = f"-{a.instanz}" if a.instanz else ""
+    sock = f"/dev/shm/cypherdj{sfx}/wirt-{a.ziel}.sock"
+    was, args = a.rest[0], a.rest[1:]
+    if was == "zeige":
+        for name, attr in klang.werte(rufe(sock, {"befehl": "zustand"})["xml"], args[0] if args else ""):
+            print(f"{name:34s} {attr}")
+    elif was == "setze":
+        fahr, rest = aufteilen(zuweisungen(args), BEREICHE)
+        for k, v in fahr.items():
+            rufe(sock, {"befehl": "fahre", "name": k, "bis": float(v), "dauer": 0})
+        if rest:
+            patch = base64.b64decode(rufe(sock, {"befehl": "zustand"})["patch_b64"])
+            neu = klang.patch_mit_xml(patch, klang.setze(klang.xml_aus_patch(patch), rest))
+            tmp = Path(f"/dev/shm/cypherdj{sfx}/klang-{a.ziel}-setze.fxp")
+            tmp.write_bytes(klang.fxp_bauen(neu, "edited"))
+            rufe(sock, {"befehl": "lade", "pfad": str(tmp)})
+            print(f"reloaded state for {', '.join(rest)} (cuts notes that are sounding)")
+        print(f"set {len(fahr) + len(rest)} value(s) on {a.ziel} ({len(fahr)} without reload)")
+    elif was == "fahre":
+        if len(args) not in (3, 4):
+            ap.error("fahre NAME TARGET SECONDS [FROM]")
+        befehl = {"befehl": "fahre", "name": args[0], "bis": float(args[1]), "dauer": dauer(args[2])}
+        if len(args) == 4:
+            befehl["von"] = float(args[3])
+        rufe(sock, befehl)
+        print(f"ramping {args[0]} to {args[1]} over {befehl['dauer']} s on {a.ziel}")
+    elif was == "lade":
+        if not args:
+            ap.error("lade NAME|PATH")
+        pfad = finde_klang(" ".join(args), EIGENE, WERK)
+        print(f"loaded {rufe(sock, {'befehl': 'lade', 'pfad': str(pfad.resolve())})['name']!r} ({pfad})")
+    elif was == "speichere":
+        if len(args) != 1:
+            ap.error("speichere NAME")
+        patch = base64.b64decode(rufe(sock, {"befehl": "zustand"})["patch_b64"])
+        print(f"saved {speichere(EIGENE, args[0], klang.fxp_bauen(patch, args[0]), time.strftime('%Y%m%dT%H%M%S'))}")
+    elif was == "hoere":
+        note = int(args[0]) if args else GRUPPEN[a.ziel]
+        sek = float(args[1]) if len(args) > 1 else 1.0
+        rufe(sock, {"befehl": "note", "note": note, "velocity": 100, "dauer": sek})
+        print(f"note {note} for {sek} s on {a.ziel}")
+    else:
+        ap.error(f"unknown command {was!r}")
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except (ValueError, FileNotFoundError) as e:
+        sys.exit(f"djk-klang: {e}")

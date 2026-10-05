@@ -1,0 +1,60 @@
+{
+ "schema": 1,
+ "material_id": "f0000000000000c3",
+ "titel": "Fixture f0000000000000c3",
+ "herkunft": {
+  "art": "datei",
+  "prompt": null,
+  "stil": null,
+  "seed": null,
+  "generator": "djk/vertrag/erzeuge_material.py",
+  "erzeugt_am": null,
+  "auftrag_id": null
+ },
+ "text": {
+  "quelle": "keiner",
+  "zeilen": []
+ },
+ "quelle": {
+  "datei": "original.wav",
+  "sr": 48000,
+  "kanaele": 2,
+  "dauer_s": 30.0,
+  "sha256": "06c832522db4f3e1654536e0b9275056dc7a0ff64f9175bae7ee81721c85bbc7"
+ },
+ "tempo_karte_quelle": [
+  [
+   0.0,
+   0.0
+  ],
+  [
+   30.0,
+   64.0
+  ]
+ ],
+ "raster": {
+  "werkzeug": "fixture",
+  "zweitwerkzeug": "fixture",
+  "abweichung_ms_p90": 0.0,
+  "pulsklarheit": 1.0,
+  "erster_schlag_quelle_s": 0.0,
+  "taktart": 4,
+  "tempo_vielfaches": 1,
+  "erste_eins_quell_beat": 0,
+  "erste_eins_zweitverfahren": 0
+ },
+ "lautheit_quelle": {
+  "lufs_integriert": -9.4,
+  "echtspitze_dbtp": -5.1,
+  "crest_db": 10.0
+ },
+ "tonart": {
+  "camelot": null,
+  "r": null,
+  "vorsprung": null,
+  "stimmung_cent": null,
+  "stimmung_r": null,
+  "stimmung_cent_zweitwerkzeug": null,
+  "aus_stems": false
+ }
+}

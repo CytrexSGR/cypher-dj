@@ -1,0 +1,82 @@
+{
+ "schema": 1,
+ "material_id": "f0000000000000e5",
+ "basis_bpm": 128.0,
+ "fassung": 1,
+ "korrekturen_bis_zeile": 0,
+ "datei": "basis.f32",
+ "frames": 720000,
+ "sha256": "cc0854960ad1a49b04e8db01a74db70d23b03db98d973525ed8dfe64ebae4626",
+ "erster_schlag_frame": 0,
+ "beats": 32.0,
+ "erste_eins_quell_beat": 0,
+ "analyse_quelle": "basis",
+ "stems": {},
+ "schuesse": [
+  {
+   "nr": 1,
+   "datei": "schuesse/1.f32",
+   "frames": 4800,
+   "quell_beat": 0.0,
+   "name": "klick 1"
+  },
+  {
+   "nr": 2,
+   "datei": "schuesse/2.f32",
+   "frames": 4800,
+   "quell_beat": 0.0,
+   "name": "klick 2"
+  }
+ ],
+ "headroom_db": -12.0,
+ "stimmung_korrektur_cent": 0.0,
+ "lautheit": {
+  "lufs_integriert": -16.0,
+  "echtspitze_dbtp": -5.1,
+  "crest_db": 10.0,
+  "lufs_je_takt": []
+ },
+ "struktur": {
+  "phrasen": [
+   {
+    "ab_beat": 0.0,
+    "bis_beat": 32.0,
+    "art": "unbekannt"
+   }
+  ]
+ },
+ "hotcues": [],
+ "loops": [],
+ "tore": {
+  "raster": {
+   "ok": true,
+   "wert_ms": 0.0,
+   "grenze_ms": 8.0,
+   "anschlaege": 32
+  },
+  "headroom": {
+   "ok": true,
+   "wert_dbtp": -5.1,
+   "grenze_dbtp": -1.0
+  },
+  "klarheit": {
+   "ok": true,
+   "wert": 1.0,
+   "grenze": 0.1
+  },
+  "streckfaktor": {
+   "ok": true,
+   "wert": 1.0,
+   "grenze": 0.2
+  },
+  "eins": {
+   "ok": true,
+   "beat_this": 0,
+   "zweitverfahren": 0
+  }
+ },
+ "nur_fuer_andreas": false,
+ "warnungen": [
+  "Fixture der Golden-Folgen, kein Musikmaterial"
+ ]
+}

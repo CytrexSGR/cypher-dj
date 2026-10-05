@@ -1,0 +1,16 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "https://cypherdj.invalid/vertrag/1/ws_umschlag.schema.json",
+ "title": "Umschlag jeder Leitstand-WebSocket-Nachricht (SCHNITTSTELLEN.md §9.1); daten nur als Objekt geprüft, die Form je typ prüft ws_nachricht.schema.json",
+ "type": "object",
+ "required": ["v", "seq", "von", "typ", "zeit", "daten"],
+ "properties": {
+  "v": {"const": 1},
+  "seq": {"type": "integer", "minimum": 0},
+  "von": {"description": "leitstand oder eine Rolle aus §9.2", "enum": ["leitstand", "spieler", "mcp", "analyse", "werkstatt", "ansage", "anzeige", "pruefstand"]},
+  "typ": {"enum": ["hallo", "willkommen", "takt", "ereignis", "zug_anfrage", "ansage", "rpc_antwort", "rpc_fehler", "auftrag",
+   "rpc", "takt_bericht", "hoerschein", "auftrag_status", "material_fertig", "zug_status", "zuruf"]},
+  "zeit": {"$ref": "defs.schema.json#/$defs/zeit"},
+  "daten": {"type": "object"}
+ }
+}

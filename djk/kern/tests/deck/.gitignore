@@ -1,0 +1,6 @@
+# Scheibe 31: Rohdaten der Läufe am Ziel bleiben lokal (Aufnahme vier Kanäle float32, 0,77 MB je Sekunde; OSC-Protokoll
+# des Abonnenten, rund 20 MB je Stunde); Ergebnis, Lauf-Daten und Kern-Ausgabe werden versioniert.
+laeufe/*/ziel.f32
+laeufe/*/abonnent.jsonl
+laeufe/*/aufnahme.bereit
+__pycache__/

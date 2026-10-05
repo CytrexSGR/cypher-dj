@@ -1,0 +1,22 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "https://cypherdj.invalid/vertrag/1/journal_zeile.schema.json",
+ "title": "Eine Zeile von journal.jsonl (SCHNITTSTELLEN.md §15); sample, beat, takt null, solange der Leitstand noch keine Kern-Zeit kennt",
+ "type": "object",
+ "required": ["sample", "beat", "takt", "mono_ns", "von", "typ", "daten"],
+ "properties": {
+  "sample": {"type": ["integer", "null"]},
+  "beat": {"type": ["number", "null"]},
+  "takt": {"type": ["integer", "null"], "minimum": 1},
+  "mono_ns": {"type": "integer", "minimum": 0},
+  "von": {"enum": ["kern", "leitstand", "spieler", "analyse", "werkstatt", "notbahn", "andreas"]},
+  "typ": {"type": "string", "pattern": "^[a-z_/]+$"},
+  "daten": {"type": "object"}
+ },
+ "allOf": [
+  {"if": {"properties": {"typ": {"const": "set_start"}}}, "then": {"properties": {"daten": {
+   "type": "object", "required": ["set_id", "generation", "vertrag", "konfiguration"],
+   "properties": {"set_id": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}_[0-9]{4}$"}, "generation": {"type": "integer", "minimum": 0},
+    "vertrag": {"const": 1}, "konfiguration": {"type": "object"}}}}}}
+ ]
+}

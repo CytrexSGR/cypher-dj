@@ -1,0 +1,5 @@
+# Scheibe 31, nur im ASan-Bau (CYPHERDJ_SANITIZE): Material, das bei Programmende noch in einem Deck steckt. Der Kern gibt
+# Material nur über den Rückgabe-Ring an den Lader zurück, nie im Callback frei; ein Kern, der endet oder (im Test) als
+# abgestürzt gilt, gibt es nicht mehr zurück, das Betriebssystem räumt es mit dem Prozess weg. test_kern_deck und
+# test_kern_deck_neustart enden mit geladenen Decks (Neustart: der „abgestürzte“ Kern mit Absicht).
+leak:cdj::Lader::lade

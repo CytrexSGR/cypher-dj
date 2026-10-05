@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+# djk-instrumente: Surge-XT-Instrumente (Carla-Wirte, ADR 009) an ein LAUFENDES Studio hängen, ohne Kern, Notbahn,
+# Leitstand, Seite oder Drums (erzeuger1) anzuhalten. Andreas 2026-10-03: „in einer live session muss man auch andere
+# dinge laden können". djk-start --instrumente ruft denselben Weg mit --nur-wirte.
+#
+# Aufruf: djk-instrumente [--instanz a..i] [--nur-wirte]
+#   Schritte, je Gruppe (bass: midi_aus_1 -> erz/2, melodie: midi_aus_2 -> erz/3), jeder idempotent:
+#   1 Wirt-Unit cypherdj-wirt-<g> starten (läuft sie schon: übersprungen), auf "bereit" warten.
+#   2 Kanten midi_aus -> Wirt, Wirt -> rueck_erz_<n>_L/R verbinden und in /dev/shm/cypherdj<i>/kanten anhängen; der Kern
+#     liest die Datei bei Änderung neu (kern main.cpp lade_kanten_datei) und verbindet nach Neustarts nach.
+#   3 (ohne --nur-wirte) erzeuger2/erzeuger3 ohne --ziel midi:… mit derselben Befehlszeile plus --ziel neu starten. Das
+#     Muster bleibt (Datei im Erzeuger-Ordner), es klingt ab dem nächsten Takt über Surge statt über das Kit. Die
+#     anderen Units werden nicht angefasst.
+# Rückgabe: 0 Instrumente hängen, 2 Aufruf/Aufbau (kein Kern, kein Surge), 5 ein Schritt scheiterte (Bericht auf stderr;
+# Gestartetes bleibt stehen, djk-stop räumt ab).
+set -uo pipefail
+# Aus der Hand (MCP über stdio) kommt eine abgespeckte Umgebung ohne Laufzeit-Ordner und Sitzungsbus: ohne sie sehen
+# systemctl --user und pw-link nichts (gemessen 2026-10-03, „kern is not running" bei laufendem Kern).
+export XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
+export DBUS_SESSION_BUS_ADDRESS=${DBUS_SESSION_BUS_ADDRESS:-unix:path=$XDG_RUNTIME_DIR/bus}
+HIER=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
+DJK=${DJK:-$(cd "$HIER/.." && pwd)}
+I=${CYPHERDJ_INSTANZ:-}; NUR_WIRTE=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --instanz) [ $# -ge 2 ] || { echo "djk-instrumente: --instanz needs a value" >&2; exit 2; }; I=$2; shift 2;;
+    --nur-wirte) NUR_WIRTE=1; shift;;
+    -h|--help) sed -n '2,/^set -uo/p' "$0" | sed '$d; s/^# \{0,1\}//'; exit 0;;
+    *) echo "djk-instrumente: unknown option $1 (see --help)" >&2; exit 2;;
+  esac
+done
+case "$I" in "") SFX="";; [a-i]) SFX="-$I";; *) echo "djk-instrumente: instance '$I' invalid, use a..i or empty" >&2; exit 2;; esac
+KERN_CLIENT=cypherdj-kern$SFX
+KANTEN_DATEI="/dev/shm/cypherdj$SFX/kanten"
+aktiv() { [ "$(systemctl --user is-active "$1.service" 2>/dev/null)" = active ]; }
+fehler() { echo "djk-instrumente: $1" >&2; [ -n "${2:-}" ] && journalctl --user -u "$2.service" -n 12 --no-pager -o cat 2>/dev/null | sed 's/^/    | /' >&2; exit 5; }
+
+aktiv "cypherdj-kern$SFX" || { echo "djk-instrumente: kern cypherdj-kern$SFX is not running (start the studio with djk-start${I:+ --instanz $I} --strudel)" >&2; exit 2; }
+pw-link -o 2>/dev/null | grep -qx "$KERN_CLIENT:midi_aus_1" || { echo "djk-instrumente: $KERN_CLIENT:midi_aus_1 missing (kern without MIDI streams?)" >&2; exit 2; }
+[ -f "$HOME/.local/lib/cypherdj/lv2/Surge XT.lv2/manifest.ttl" ] || { echo "djk-instrumente: Surge XT missing (djk/wirte/carla/installiere_surge.sh)" >&2; exit 2; }
+[ -f "$KANTEN_DATEI" ] || : > "$KANTEN_DATEI"
+
+W_IN=events-in; W_OUT1=audio-out1; W_OUT2=audio-out2
+SD="$HOME/.local/share/cypherdj/surge-daten/usr/share/surge-xt"; mkdir -p "$HOME/.config/cypherdj$SFX"
+for g in bass:1:2 melodie:2:3; do
+  G=${g%%:*}; R=${g#*:}; PORT=${R%%:*}; ERZ=${R#*:}
+  U="cypherdj-wirt-$G$SFX"; C="cypherdj-wirt-$G$SFX"; ST="/dev/shm/cypherdj$SFX/wirt-$G.json"
+  if aktiv "$U"; then
+    echo "  wirt $G    already running"
+  else
+    # Eine tote, noch geladene Unit (failed, ohne --collect-Abräumung) blockiert den Namen: zurücksetzen.
+    systemctl --user reset-failed "$U.service" 2>/dev/null
+    rm -f "$ST"
+    WH="$HOME/.local/state/cypherdj/wirt-$G$SFX"; mkdir -p "$WH/.local/share"
+    if [ -d "$SD" ]; then ln -sfn "$SD" "$WH/.local/share/surge-xt"; fi
+    systemd-run --user --quiet --collect --unit="$U" -p Restart=always -p RestartSec=2 -p RestartPreventExitStatus=2 \
+      -p PartOf=cypherdj.target --setenv=HOME="$WH" \
+      --setenv=PIPEWIRE_PROPS="{ node.async = true node.group = cypherdj$SFX node.lock-quantum = true }" \
+      /usr/bin/pw-jack -p 256 /usr/bin/python3 "$DJK/wirte/carla/wirt.py" --name "$C" \
+      --lv2 https://surge-synthesizer.github.io/lv2/surge-xt --lv2-pfad "$HOME/.local/lib/cypherdj/lv2" --status "$ST" \
+      --sock "/dev/shm/cypherdj$SFX/wirt-$G.sock" --aktiv "$HOME/.config/cypherdj$SFX/klang-$G.fxp" \
+      || fehler "wirt $G: systemd-run failed" "$U"
+    for _ in $(seq 60); do grep -q '"bereit": true' "$ST" 2>/dev/null && break; sleep 0.5; done
+    grep -q '"bereit": true' "$ST" 2>/dev/null || fehler "wirt $G not ready ($ST)" "$U"
+    echo "  wirt $G    started"
+  fi
+  # Kanten: verbinden (eine schon bestehende meldet pw-link als Fehler, deshalb vorher prüfen) und festhalten
+  for k in "$KERN_CLIENT:midi_aus_$PORT	$C:$W_IN" "$C:$W_OUT1	$KERN_CLIENT:rueck_erz_${ERZ}_L" "$C:$W_OUT2	$KERN_CLIENT:rueck_erz_${ERZ}_R"; do
+    Q=${k%%	*}; Z=${k#*	}
+    pw-link -l | grep -A8 -x "$Q" | grep -q -- "|-> *$Z\$" || pw-link "$Q" "$Z" || fehler "wirt $G: link $Q -> $Z failed" "$U"
+    grep -qxF "$k" "$KANTEN_DATEI" || printf '%s\n' "$k" >> "$KANTEN_DATEI"
+  done
+done
+[ "$NUR_WIRTE" = 1 ] && exit 0
+
+# 3 Erzeuger 2/3 auf MIDI umsetzen: Befehlszeile aus der laufenden Unit (sie ist die Wahrheit über Kit, Ports, Pfade).
+for e in 2:1 3:2; do
+  N=${e%%:*}; P=${e#*:}; U="cypherdj-erzeuger$N$SFX"; ZIEL="midi:$P:1"
+  if ! aktiv "$U"; then echo "  erzeuger$N  not running, skipped (start the studio with --strudel)"; continue; fi
+  ARGV=$(systemctl --user show -p ExecStart --value "$U.service" | sed -n 's/.*argv\[\]=\([^;]*\) ;.*/\1/p' | head -1)
+  [ -n "$ARGV" ] || fehler "erzeuger$N: cannot read its command line" "$U"
+  if [[ " $ARGV " == *" --ziel $ZIEL "* ]]; then echo "  erzeuger$N  already on $ZIEL"; continue; fi
+  read -r -a A <<< "$ARGV"
+  [[ " $ARGV " == *" --ziel "* ]] && fehler "erzeuger$N runs with a different --ziel ($ARGV); not touched" ""
+  ABO=""; for ((j = 0; j < ${#A[@]}; j++)); do [ "${A[j]}" = --abo-port ] && ABO=${A[j+1]}; done
+  systemctl --user stop "$U.service" || fehler "erzeuger$N: stop failed" "$U"
+  for _ in $(seq 50); do systemctl --user list-units --all --no-legend --plain "$U.service" | grep -q . || break; sleep 0.1; done
+  systemd-run --user --quiet --collect --unit="$U" ${I:+--setenv=CYPHERDJ_INSTANZ=$I} \
+    -p Restart=always -p RestartSec=1 -p RestartPreventExitStatus=2 -p PartOf=cypherdj.target \
+    "${A[@]}" --ziel "$ZIEL" || fehler "erzeuger$N: restart failed" "$U"
+  if [ -n "$ABO" ]; then
+    for _ in $(seq 100); do [ -n "$(ss -Hlnu "sport = :$ABO" 2>/dev/null)" ] && break; sleep 0.1; done
+    [ -n "$(ss -Hlnu "sport = :$ABO" 2>/dev/null)" ] || fehler "erzeuger$N does not listen on udp $ABO after restart" "$U"
+  fi
+  echo "  erzeuger$N  now plays into $ZIEL (pattern kept)"
+done
+echo "instruments live: bass midi_aus_1 -> erz/2, melody midi_aus_2 -> erz/3 · sounds: djk/wirte/carla/djk-klang${I:+ --instanz $I} bass|melodie lade NAME"

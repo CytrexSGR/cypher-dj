@@ -1,0 +1,12 @@
+# Naht-Probe (Scheibe 11, Task 17): so bindet Strang A das Stellwerk ein. Baut nur die Bibliothek, keine Tests.
+cmake_minimum_required(VERSION 3.21)
+project(stellwerk_naht CXX)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+add_subdirectory(.. stellwerk)
+add_executable(naht main.cpp)
+target_link_libraries(naht cypherdj::stellwerk cypherdj::stellwerk_sim)
+option(NAHT_FEHLERFALL "Haken mit geänderter Signatur: der Bau muss scheitern" OFF)
+if(NAHT_FEHLERFALL)
+  target_compile_definitions(naht PRIVATE NAHT_FEHLERFALL)
+endif()

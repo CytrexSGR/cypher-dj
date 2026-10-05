@@ -1,0 +1,13 @@
+name = "p1-kern"
+zweck = "Lastprofil P1 neben dem Kern aus Scheibe 08 mit Prüfklick über Ring und Notbahn, 5 min: erzeugte CPU- und Speicherlast belegt, dazu Frame-Lücken und Aufwachen des Kerns für ARCHITEKTUR §7."
+dauer_s = 300.0
+
+[quelle]
+art = "kern"
+argumente = ["--konfig", "{ordner}/kern.toml"]
+
+[last]
+profil = "p1"
+
+[erwartung]
+last_belegt = true

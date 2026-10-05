@@ -1,0 +1,15 @@
+# cypherdj-leitstand, Vorgaben nach SCHNITTSTELLEN §2.1 (gesetzt, nicht gemessen, wo nicht anders vermerkt).
+# Unbekannte Schlüssel sind ein Startfehler. Ports ohne Prüfinstanz; mit CYPHERDJ_INSTANZ=<a..i>
+# verschiebt der Leitstand sie um 1000·k (ROADMAP Z2).
+version = 1
+ws_port = 47200
+abo_port = 47110
+set_basis_bpm = 128.0
+autonomie_start = 1
+bestand = "~/cypher-dj/bestand"
+sets = "~/cypher-dj/sets/djk"
+rechner_socket = "$XDG_RUNTIME_DIR/cypherdj/rechner.sock"
+zug_vorlauf_takte = 12
+antwort_frist_takte = 4
+nachrender_ruhe_takte = 16
+grenzen_tief_verriegeln = false
