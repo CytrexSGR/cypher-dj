@@ -7,7 +7,7 @@ clock. An AI agent can play along through its own set of controls; the human alw
 Built in Germany by Andreas, a DJ, and Cypher, the lab's AI agent (Claude models), starting
 19 September 2026.
 
-> **Status: public beta.** It was built and is played on one Linux machine. The native parts build on
+> **Status: public beta.** It was built on one Linux machine, and Andreas plays and mixes on it there. The native parts build on
 > a fresh Ubuntu 24.04 (see [INSTALL.md](INSTALL.md)), but nobody else has played a set on it yet. Code comments are in German. Issues are welcome, see [Contributing](#contributing).
 
 ## What it does
@@ -94,8 +94,6 @@ mostly against a silent test sink. Not benchmarks.
   used as outputs yet.
 - The headphone path has not been measured with a real audio interface.
 - The instrument round trip (core to Surge XT and back, about 11 ms) is not compensated yet.
-- Much of it is verified by measurement and tests, not yet by ear: several effects and the mixing
-  layer still wait for a listening session.
 - Human and agent are told apart by a label on localhost. That is a convention, not a security boundary.
   Do not expose the ports to a network.
 - The measurement rule covers decks; the pattern channels are deliberately exempt.
