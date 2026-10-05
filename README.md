@@ -93,7 +93,7 @@ written against them. Some of what he said, and what came of it:
 | "the conductor must never play in anything unheard" | the agent may not open a deck the core has not measured |
 | first turn the dominant element down with the EQ, usually the bass, then swap the elements | 3-band EQ with kill; planned agent moves that would open a second sub-bass channel are cancelled |
 | "I had Mixed In Key. Having the keys automatically was a quantum leap" | a key analysis of its own, without Mixed In Key (76.7 % agreement, see below) |
-| "keeping the pitch is a given for me" | not done yet for the decks, which run at 128 BPM. The loop boxes render a time-stretched variant when the tempo changes |
+| "keeping the pitch is a given for me" | every track is time-stretched once to the set tempo with Rubber Band, pitch kept, so a 124.8 BPM track plays at 128 in its own key. The loop boxes do the same when the master tempo changes |
 
 **Seeing where a track changes.** Describing how he prepares, Andreas said he mostly sets cues live,
 by looking at the waveform for where the changes are: "where the vocals or breaks start. You can see
@@ -119,8 +119,9 @@ mostly against a silent test sink. Not benchmarks.
 
 ## Known limits of the beta
 
-- **Decks play at 128 BPM.** No keylock, no sync and no live tempo on the decks yet. Tracks are
-  rendered to 128 in the workshop.
+- **No live tempo change on running decks yet.** Decks are always beat-synced to the master clock and
+  play key-locked at the set tempo (128 BPM), because the workshop renders every track to it in advance.
+  Changing the tempo while a deck plays (a pitch fader) is the next step.
 - Linux with PipeWire (JACK API) only, tested on Ubuntu 24.04. Pro-Audio device profiles cannot be
   used as outputs yet.
 - The headphone path has not been measured with a real audio interface.
