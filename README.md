@@ -24,6 +24,8 @@ Built in Germany by Andreas, a DJ, and Cypher, the lab's AI agent (Claude models
   process; the core plays the resulting events at the sample
 - Real instruments: Surge XT hosted in Carla, played by the patterns
 - One clock: decks, loop boxes, patterns and effects are scheduled on the same sample counter in the core
+- Live master tempo from 60 to 200 BPM, ramped over a bar: the pattern channels, the loop boxes
+  (key-locked, pitch kept) and recordings follow it
 
 **Prepare**
 - A workshop that reads a track once: loudness, key, tempo map and beat grid, then renders it to the set
@@ -119,9 +121,10 @@ mostly against a silent test sink. Not benchmarks.
 
 ## Known limits of the beta
 
-- **No live tempo change on running decks yet.** Decks are always beat-synced to the master clock and
-  play key-locked at the set tempo (128 BPM), because the workshop renders every track to it in advance.
-  Changing the tempo while a deck plays (a pitch fader) is the next step.
+- **Decks do not follow live tempo changes yet.** The master tempo can be changed live, and patterns
+  and loop boxes follow it, but while a deck is playing the core refuses a tempo change. Decks are
+  always beat-synced and key-locked at the set tempo (128 BPM), because the workshop renders every
+  track to it in advance. Stretching running decks is the next step.
 - Linux with PipeWire (JACK API) only, tested on Ubuntu 24.04. Pro-Audio device profiles cannot be
   used as outputs yet.
 - The headphone path has not been measured with a real audio interface.
