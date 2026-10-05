@@ -10,6 +10,8 @@ Built in Germany by Andreas, a DJ, and Cypher, the lab's AI agent (Claude models
 > **Status: public beta.** It was built on one Linux machine, and Andreas plays and mixes on it there. The native parts build on
 > a fresh Ubuntu 24.04 (see [INSTALL.md](INSTALL.md)), but nobody else has played a set on it yet. Code comments are in German. Issues are welcome, see [Contributing](#contributing).
 
+![DJ view: two decks with 3-band waveforms, mixer, Strudel channel and loop boxes](docs/screens/dj-view.png)
+
 ## What it does
 
 **Play**
@@ -43,6 +45,32 @@ Built in Germany by Andreas, a DJ, and Cypher, the lab's AI agent (Claude models
 - Any move by hand overrides the agent, and a stop control halts it
 - In the conductor process, autonomy levels from 0 (listen) to 3 (transitions on its own). The
   default is 1: the agent suggests, the human decides
+
+## More in the box
+
+The lists above are the headline. Also in there:
+
+- **Studio view**: the three Strudel channels side by side, each with an automation lane for fader,
+  filter and cutoff over 4 to 32 bars
+- **Resampling**: record the master into the loop library (1 to 32 beats, starting on the beat), cut a
+  running deck loop sample-exact into a loop box, or turn a recorded loop into a Strudel sound
+  (`s("rec0")`) that the drum channel can play right away
+- **Sounds**: browse, load and save Surge XT patches for the bass and melody channels
+- **Mixer details**: per-channel trim, a glue compressor on the master, effect routing post-fader or
+  insert, a headphone cue/master blend, level meters per channel
+- **Grid by hand**: nudge a track's grid, set bar one on the real downbeat, and keep it for that track
+- **Cue pads** as jump cues or loop cues, quantized to the grid
+- **Sets**: collect tracks for a planned set and prepare all of them in one go
+- **The agent's side**: 34 tools in the MCP server. Besides playing it can listen to a deck behind its
+  closed fader, read the levels of the last seconds, wait on the master clock for a number of bars, run
+  automation tracks and ramps over bars, and cancel everything it started. When it has an idea while the
+  human plays, it proposes; the human accepts or rejects with one key
+- **Cue tool**: key and BPM filters with a harmonic-mix option (±1 on the Camelot wheel), named cues,
+  4-, 8- and 16-bar loops, quantize, and taking over existing Traktor cues
+
+![Studio view: three Strudel channels with automation lanes](docs/screens/studio-view.png)
+
+![Cue tool: whole-track overview, 3-band waveform and eight cue pads](docs/screens/cue-tool.png)
 
 ## How it was built
 
