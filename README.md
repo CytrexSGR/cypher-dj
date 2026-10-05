@@ -45,6 +45,9 @@ Built in Germany by Andreas, a DJ, and Cypher, the lab's AI agent (Claude models
 - Any move by hand overrides the agent, and a stop control halts it
 - In the conductor process, autonomy levels from 0 (listen) to 3 (transitions on its own). The
   default is 1: the agent suggests, the human decides
+- A skill for Claude Code in [`skills/djk-live/`](skills/djk-live/SKILL.md) that teaches an agent how to play
+  *with* a human: think about what a move does before making it, crossfade instead of swapping, one change
+  every 8 bars and announce it first. Copy the folder into the skills folder of Claude Code (`.claude/skills` in your home directory) to use it
 
 ## More in the box
 
