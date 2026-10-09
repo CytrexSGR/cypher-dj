@@ -128,7 +128,8 @@ mostly against a silent test sink. Not benchmarks.
 - Linux with PipeWire (JACK API) only, tested on Ubuntu 24.04. Pro-Audio device profiles cannot be
   used as outputs yet.
 - The headphone path has not been measured with a real audio interface.
-- The instrument round trip (core to Surge XT and back, about 11 ms) is not compensated yet.
+- The instrument round trip (core to Surge XT and back, about 11 ms) is compensated by sending notes early;
+  the value is measured for one audio buffer size (256 frames).
 - Human and agent are told apart by a label on localhost. That is a convention, not a security boundary.
   Do not expose the ports to a network.
 - The measurement rule covers decks; the pattern channels are deliberately exempt.
