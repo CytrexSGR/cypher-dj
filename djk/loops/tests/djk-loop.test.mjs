@@ -110,7 +110,7 @@ test('kit: Loop wird Klang rec0 im Zusatz-Kit, zweimal derselbe Name wird abgele
   const a = ['--ordner', path.join(d, 'loops'), '--kits-ordner', path.join(d, 'kits'), 'kit', 'c-1'];
   const r1 = await lauf(1, a);
   assert.equal(r1.rc, 0, r1.fehler);
-  assert.match(r1.aus, /ist jetzt Klang rec0 \(Kit rec, Note 1\)/);
+  assert.match(r1.aus, /ist jetzt Klang rec0 \(Kit rec, Note 0\)/);
   const r2 = await lauf(1, [...a, 'rec0']);
   assert.equal(r2.rc, 1);
   assert.match(r2.fehler, /rec0 gibt es im Kit rec schon/);

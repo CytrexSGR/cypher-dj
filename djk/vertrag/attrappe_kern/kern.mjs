@@ -363,6 +363,11 @@ export const verbindung = {
       const neueGeneration = !alt || alt.gen !== K.generation;
       K.abos.set(a.name, { name: a.name, port: a.port, protokoll: a.protokoll, letzte: K.jetzt, gen: K.generation });
       K.aus('/k/willkommen', [PROTOKOLL, K.generation, BigInt(K.jetzt), K.uhr.beat(K.jetzt), K.uhr.bpm(K.jetzt), KERN_VERSION], a.port);
+      // Keylock 3b (§1.5): ein neuer Abonnent bekommt den Stand des Knopfs als /e/regler keylock (wie der Kern, netz.cpp hallo)
+      if (!alt && K.r.get('keylock')) {
+        const r = K.r.get('keylock');
+        K.aus('/e/regler', ['keylock', r.wert, r.halter, BigInt(K.jetzt), K.uhr.beat(K.jetzt)], a.port);
+      }
       if (neueGeneration && K.generation > 0) {
         K.aus('/e/neustart', [K.generation, BigInt(K.neustartSample)], a.port);
         for (const b of K.befehle.values()) {
@@ -397,7 +402,7 @@ export const verbindung = {
     tempo: {
       pruefeEin(K, t) {
         if (!(t.ziel >= 60 && t.ziel <= 200) || !(t.dauer >= 1)) return 'ausserhalb_bereich';
-        if (K.decks?.some((d) => d && [2, 3, 4, 5].includes(d.status))) return 'kein_stretcher';
+        // Welle 3 (ADR 028): laufende Decks folgen der Rampe im Varispeed (bis Welle 2 hier kein_stretcher)
         const wartend = K.teile.filter((u) => u.art === 'tempo' && u.status === 'wartet').length;
         // wie Kern 08 (B6 d): überlappende Tempo-Rampe -> 6 ueberlappung
         // Bedingung wie ueberlappt() aus regler.mjs (Task 6), hier ausgeschrieben: kern.mjs entsteht in Task 4; vor karte_voll wie tempoplan.cpp
@@ -406,7 +411,6 @@ export const verbindung = {
         return null;
       },
       pruefeStart(K, t) {
-        if (K.decks?.some((d) => d && [2, 3, 4, 5].includes(d.status))) return 'kein_stretcher';
         if (K.uhr.segmenteNachRampe(t.ab_eff) > 64) return 'karte_voll';
         return null;
       },

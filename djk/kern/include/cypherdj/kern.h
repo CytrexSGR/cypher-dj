@@ -16,6 +16,8 @@
 #include <atomic>
 #include <cstdint>
 #include <memory>
+#include <string>
+#include <vector>
 
 #include "cypherdj/deck_werk.h"
 #include "cypherdj/dsp/analyse_baender.h"
@@ -59,7 +61,8 @@ struct Befehl {
     LOOP_RASTER = 30,   // Plan Grid (§4.9 /k/loop/raster): deck = box, versatz_f
     HOERSCHEIN = 31, HOERSCHEIN_WEG = 32,  // Ohr T12 (§4.5 /k/hoerschein, /k/hoerschein/weg)
     FX_ROUTING = 33,  // Ohr T17 (§4.10 /k/fx/routing): an = routing (0 Post Fader, 1 Insert); nur Andreas' Hand
-    LOOP_VARIANTE = 34  // Keylock (Plan 2026-09-30): deck = box, zeiger = Loop* (Variante, Besitz geht an den Kern) oder nullptr
+    // 34, 35: frei (bis Task 7 die Befehle der Keylock-Varianten, ADR 027; die Box dehnt jetzt live mit dem Dehner)
+    DECK_TAUSCH = 36  // Welle 3 (ADR 028, §4.4 /k/deck/basis_tausch): deck, bpm = basis_bpm, fassung, ab_beat
   };
   int32_t art;
   int32_t an;          // KLICK: 0 oder 1; KI_STUFE: Stufe 0 bis 3
@@ -124,7 +127,9 @@ struct Ereignis {
                         // fx_param = param1, beats_bis_ende = param2, faktor = param3 (reserviert), status = an
     FX_ZUWEISUNG = 26,  // §5.12 /e/fx/zuweisung: deck = einheit (1,2), pfad = kanal, status = zugewiesen (0/1)
     RASTER = 27,        // Plan Grid, §5.9 /e/raster: deck, material_id, quell_beat, wert = Änderung in ms, sample
-    FX_ROUTING = 28     // Ohr T17, §5.12 /e/fx/routing: status = routing (0 Post Fader, 1 Insert)
+    FX_ROUTING = 28,    // Ohr T17, §5.12 /e/fx/routing: status = routing (0 Post Fader, 1 Insert)
+    BOX = 29            // Keylock 7b.3, §5.5b /zustand/box: deck = box, status, keylock_unterlauf, keylock_aufgegeben,
+                        // keylock_ring_voll, keylock_kein_platz (7c.3)
   };
   int32_t art;
   int32_t status;   // QUITTUNG: §5.1; KI: gestoppt 0/1
@@ -137,6 +142,9 @@ struct Ereignis {
   double bpm;       // UHR, TAKT
   double k;         // UHR: bpm_pro_s
   int32_t generation;  // UHR; NEUSTART (§5.9 /e/neustart: generation, sample = erstes Sample der Generation)
+  int64_t verloren;    // UHR (Glanz 2.6): Ereignisse, die Kern::melde bisher verwarf (Ring voll); das Netz gleicht daran ab
+  int32_t keylock_aus;  // UHR (Keylock Task 3): 1 = Regler keylock aus (0, die Null-Vorgabe, heißt an); das Netz meldet den
+                        // Stand neuen Abonnenten (Task 3b)
   char quelle[48];  // QUITTUNG
   char grund[32];   // QUITTUNG: "" oder ein Code aus §16.2; KI: grund; INVARIANTE: art
   int32_t dauer_us, aufwach_us, nframes, wartend;  // ZYKLUS
@@ -154,6 +162,11 @@ struct Ereignis {
   char material_id[24];
   double basis_bpm, quell_beat, beats_bis_ende, faktor;
   float vorlauf_ms;
+  int32_t hoerweg;          // DECK (§5.5): 0 direkt bzw. Varispeed, 1 Stretcher (Keylock: der Ring klingt mit)
+  int32_t stretcher_fuell;  // DECK (§5.5): Arbeitsvorlauf in Blöcken (Keylock: Ring), −1 ohne Stretcher
+  int32_t keylock_unterlauf, keylock_aufgegeben;  // DECK (§5.5, Keylock Task 3): Zähler des Decks seit dem Laden des Kerns
+  int32_t keylock_ring_voll;                      // BOX (§5.5b, Keylock 7b.3): Abschnitte, die nicht in den Ring passten
+  int32_t keylock_kein_platz;                     // BOX (§5.5b, Keylock 7c.3): Ansätze ohne freien Platz der Leihe
   const void* zeiger;  // MAPPING_ALT: das abgelöste hand::Mapping
   float pegel[7];      // PEGEL: spitze_db, echtspitze_dbtp, lufs_m, lufs_s, band_tief_db, band_mitte_db, band_hoch_db
   int32_t erz_zahl[5];  // ERZ_QUITTUNG: verworfen, verworfen_anderes_muster, eingefuegt, zu_spaet, ungehoert
@@ -216,13 +229,70 @@ class Kern {
   // Ohr T14 (§17 I3a, kern.toml hoerschein_pflicht, Vorgabe an): schaltet den Prüfer im Stellwerk. Nicht im Callback.
   void hoerschein_pflicht(bool an) noexcept { pruefer_i3_->schalte(an); }
   const Deck& deck(int n) const { return decks_->deck[n - 1]; }  // n = 1 bis 4
+  const LoopBoxen& loopboxen() const { return *loops_; }  // Task 7: Diagnose und Tests (nur aus dem Callback-Faden lesen)
   bool ein_deck_laeuft() const noexcept;
+  void tausch_frei(int d);  // Welle 3: wartende basis_tausch-Fassung zurück an den Lader
   bool deck_offen(int n) const noexcept;         // §1.6 offen(deck/n): Trim + Fader > hoerbar_db
   bool deck_laeuft_offen(int n) const noexcept;  // §4.4 Sperre für Laden und Entladen: läuft und offen (2026-09-27)
   bool deck_hoerbar(int n) const noexcept;  // §1.6 hörbar(deck/n): effektiver Pegel > hoerbar_db und läuft
   // Scheibe 31, Neustart (kern_deck_zustand.cpp): nach wiederherstellen() das Material der Decks aus dem Zustand
   // einblenden und die Decks auf ihren Anker setzen; einmal vor jack_activate. Rückgabe: wieder eingeblendete Decks.
   int decks_nachladen(Lader& lader);
+  // Keylock (Plan 2026-10-06-keylock-echtzeit.md, Task 2, Vertrag 17): an legt je Deck einen Dehner an (Fabrik
+  // dehner_neu; mit stub/dehner_stub.cpp nullptr, dann bleibt es Varispeed) und schaltet den Keylock der Decks ein. NUR
+  // vor dem ersten zyklus() und nur einmal (Prüfung m5): die Dehner entstehen hier, an die Decks hängt sie der erste
+  // zyklus() selbst; danach false, nichts geändert. Vorgabe aus: Betrieb und alle übrigen Tests fahren Varispeed (Klicks ±1 deterministisch), bis Task 3 den
+  // Knopf bringt. Die Fäden des Dehners: keylock_vorbereiten() (Vorbereiter, alle Decks) und keylock_fuellen(n)
+  // (Arbeits-Thread von Deck n); Task 2 ruft sie in den Tests synchron nach jedem zyklus().
+  bool setze_keylock_vorgabe(bool an);
+  // Umbauplan Bungee S2 (kern.toml `keylock_maschine`): R3 (Vorgabe) oder Bungee, bei Bungee fein = Korn 256 statt 512. Vor
+  // setze_keylock_vorgabe / keylock_bauen; danach ohne Wirkung. Bungee fährt synchron im Callback (keylock_antrieb), ohne Fäden:
+  // keylock_faeden_laufen() ist dann false. Ohne Bungee-Bau (CYPHERDJ_BUNGEE aus) liefert die Fabrik keinen Dehner, Keylock aus.
+  void setze_keylock_maschine(DehnerMaschine m, bool fein = false) noexcept;
+  bool keylock_vorgabe() const noexcept;
+  void keylock_vorbereiten();
+  void keylock_fuellen(int deck);
+  // n = 1 bis 6 (1 bis 4 Decks, 5 und 6 Boxen); nullptr ohne Keylock. Diagnose, Tests und (seit 7b.3) boxen_zustand im Callback
+  DehnerBasis* keylock_dehner(int deck) const noexcept;
+  // Keylock Task 2.5 (Fassung 4.1 Punkt 2; Vertrag 3, 12, 14, 18): die Fäden im Kern, angelegt von keylock_bauen (unten):
+  // ein Vorbereiter für alle Decks, je Deck mit Dehner ein Arbeits-Thread, ein Wächter. Laufen sie, sind
+  // keylock_vorbereiten/keylock_fuellen ohne Wirkung. Der Arbeits-Thread füllt in JEDEM Takt, auch bei stehendem Deck und bei Keylock aus (Pflicht aus der
+  // Nachprüfung N3: sonst quittiert er die Leer-Epoche nie und Laden/Entladen warten unbegrenzt). Der Wächter meldet
+  // (stderr, Zähler) einen Arbeits-Thread, der eine vergebene Epoche nicht binnen KEYLOCK_WAECHTER_FRIST_MS quittiert, und
+  // einen Vorbereiter, der so lange keinen Durchgang macht. Priorität: SCHED_OTHER, bis keylock_prioritaet(jack_prio)
+  // (Vertrag 12) Vorbereiter und Arbeits-Threads auf SCHED_FIFO jack_prio − 5 setzt; jack_prio <= 0 (ohne JACK, Tests):
+  // bleibt. Scheitert es (kein Recht), je Faden eine stderr-Zeile, Zähler keylock_prio_fehler(), Weiterlauf mit
+  // SCHED_OTHER; Rückgabe: Zahl der gescheiterten Fäden. keylock_faeden_stoppen(): Join, auch aus ~Kern.
+  // Task 2.5b: Betriebsweg. keylock_ankuendigen() vor dem ersten Zyklus (main.cpp: vor jack_activate, kostet nichts);
+  // keylock_bauen(jack_prio) danach aus einem Nicht-Echtzeit-Faden (main.cpp: nach READY): baut die Dehner, startet die
+  // Fäden, setzt die Priorität und stellt erst dann die Vorgabe (der nächste Zyklus hängt an, Decks im Lauf setzen neu
+  // an). false: Keylock aus, ohne Dehner an den Decks (Faden nicht anlegbar oder Stub), mit stderr-Zeile.
+  // keylock_ab(): Kern-Sample, ab dem die Dehner an den Decks hängen (−1: noch nicht; nur aus dem Callback-Faden lesen).
+  bool keylock_ankuendigen();
+  // Keylock Task 3: der Weg von main.cpp mit kern.toml `keylock`: false -> nichts angekündigt (Kern ohne Dehner, Rückgabe
+  // false), true -> keylock_ankuendigen().
+  bool keylock_nach_konfig(bool an) { return an && keylock_ankuendigen(); }
+  // sperren (Task 2.5c, main.cpp: true): danach nur den neu angelegten Dehner-Speicher und die Stapel der Keylock-Fäden
+  // per mlock sperren, nicht mlockall; gesperrte Bytes und ein Fehler (errno, 0 ohne) für Meldung und Tests.
+  bool keylock_bauen(int jack_prio, bool sperren = false);
+  uint64_t keylock_gesperrt() const noexcept;
+  int keylock_sperr_fehler() const noexcept;
+  int64_t keylock_ab() const noexcept;
+  int keylock_prioritaet(int jack_prio);
+  void keylock_faeden_stoppen();
+  bool keylock_faeden_laufen() const noexcept;
+  uint64_t keylock_prio_fehler() const noexcept;
+  uint64_t keylock_waechter_meldungen() const noexcept;
+  // Politik und Priorität eines Fadens (0 Vorbereiter, 1 bis 4 Arbeits-Thread Deck n, 5 Wächter); false: nicht angelegt
+  bool keylock_faden_sched(int platz, int& politik, int& prio) const noexcept;
+  void keylock_test_halte(int deck, bool an) noexcept;  // nur Tests: der Arbeits-Thread von Deck n setzt aus (Wächter-Probe)
+  // Keylock Task 7 Step 1 (Gate G1): Zähler und Kosten aller Quellen als eine JSON-Zeile {"keylock":...} für die Schlusszeile
+  // von main.cpp. Liest Zustand der Fäden ohne Atom (kosten_render): nur nach keylock_faeden_stoppen und ohne Callback.
+  std::string keylock_schluss_json() const;
+  // Keylock Task 3 (Fassung 4): Stand des globalen Reglers `keylock`, wie der Callback ihn zuletzt übernommen hat (Diagnose,
+  // Tests; nur aus dem Callback-Faden lesen), und der Schalter der Loop-Boxen (folgt dem Regler).
+  bool keylock_knopf() const noexcept;
+  bool keylock_boxen() const noexcept;
 
   // Scheibe 35: Kern-Hand (kern_hand.cpp). hand_midi() im Callback vor zyklus() je Ereignis des Eingangs hand_in, höchstens
   // MAX_MIDI je Zyklus (mehr zählt hand_ueberlauf()); übersetzt wird erst in zyklus(), nach dem Einsortieren der
@@ -276,13 +346,24 @@ class Kern {
   void einsortieren31(const Befehl& c);
   void decks_uebernehmen();
   void decks_zustand(int64_t n0, int n);
+  void boxen_zustand(int64_t n0, int n);  // Keylock 7b.3: /zustand/box (§5.5b), Takt wie decks_zustand
   void decks_block(int64_t s0, int m);
   void decks_verlauf(int regler, const float* verlauf);
+  void keylock_verlauf(int regler, const float* verlauf, int64_t s0, int m);  // Keylock Task 3: Regler keylock am Sample
   void decks_verlauf_ende(int m);
   void decks_frist(int64_t n0, int n);
   void decks_abbruch(const char* quelle, const char* plan);
   void decks_set_neu();
   void deck_ausfuehren(DeckAktion& a, int64_t s);
+  void entladen_ausfuehren(int d, int64_t id, const char* quelle);  // Keylock Task 2b: sofort oder wartend (Vertrag 4)
+  void keylock_uebernehmen() noexcept;  // Keylock Task 2d: gestellte Vorgabe im Callback an die Decks hängen
+  void keylock_wecken() noexcept;       // Keylock Task 2.5: am Ende jedes Zyklus Vorbereiter und Arbeits-Threads wecken
+  void keylock_antrieb() noexcept;      // Bungee S2: am Ende jedes Zyklus Post und Dehner aller Quellen selbst fahren (ohne Fäden)
+  bool keylock_faeden_starten();        // Task 2.5b: nur noch aus keylock_bauen (erst Fäden, dann Vorgabe)
+  struct KlBereichRoh {
+    uintptr_t a, e;
+  };
+  void keylock_sperren(const std::vector<KlBereichRoh>& vorher);  // Task 2.5c
   float effektiv_db(int d) const noexcept;
   // Scheibe 31, Neustart (kern_deck_zustand.cpp): Decks und wartende Deck-Befehle ins Echtzeit-Fach und zurück
   int decks_abbild(cdj_z_echtzeit& f, int n) const noexcept;

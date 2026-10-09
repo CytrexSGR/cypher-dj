@@ -28,6 +28,18 @@ for (const [grund, hs] of faelle) {
   });
 }
 
+test('i3 pad/*: Cyphers pad/1/fader öffnet ohne Hörschein (Andreas 2026-10-05); deck/2/fader desselben Falls bleibt gesperrt', () => {
+  const r = fahre([
+    ...basis,
+    sende(3000, teil(3, 'cypher', 'p1', 0, 'pad/1/fader', 32, 0, -15)),
+    erwarte(S(32), q(3, 'cypher', 3, S(32))),
+    wert(S(32), 'pad/1/fader', -15),
+    sende(3100, oeffne(4, '', 40)),
+    erwarte(S(40), q(4, 'cypher', 6, S(40), 'kein_hoerschein')),
+  ], { cfg });
+  gruen(r);
+});
+
 test('Negativ-Kontrolle i3: gültiger Hörschein öffnet (fertig), nur leiser machen braucht keinen', () => {
   const r = fahre([
     ...basis,

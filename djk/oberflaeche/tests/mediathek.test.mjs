@@ -214,3 +214,165 @@ test('Mediathek.felder: Werk-Felder je material_id, bestand_mid über Geschwiste
   assert.equal(f.get(mid(5)).bpm, 140);
   assert.equal(f.has('0000000000000000'), false);               // unbekannt → fehlt in der Map
 });
+
+// ---- Klänge (Plan 2026-10-06-klaenge, T1): GET /klaenge ----
+const pf = (r) => r.j.treffer.map((x) => path.basename(x.pfad ?? x.name));
+const loopAnlegen = (dir, name) => { fs.mkdirSync(path.join(dir, name), { recursive: true });
+  fs.writeFileSync(path.join(dir, name, 'loop.json'), JSON.stringify({ schema: 1, name, datei: 'loop.f32', beats: 4, bpm: 128, frames: 90000, quelle: 'test' }));
+  fs.writeFileSync(path.join(dir, name, 'loop.f32'), Buffer.alloc(90000 * 8)); };
+
+test('Klänge: Text trifft Pfad/pack/kategorie/instrument/titel, keine Tracks, kein Platzhalter', async (t) => {
+  const m = tmpMt(t);
+  const s = await stapel(t, { mediathek: m.db });
+  const r = await hole(s.url, '/klaenge?text=piano');
+  assert.equal(r.code, 200);
+  assert.deepEqual(pf(r).sort(), ['GrandPiano C3 mf.aif', 'Piano C3.aif']);
+  assert.equal(r.j.gesamt, 2); assert.equal(r.j.gesamt_genau, true);
+  assert.deepEqual(pf(await hole(s.url, '/klaenge?text=PLATE')), ['Plate.aif'], 'Pfad, ohne Groß/Klein');
+  assert.deepEqual(pf(await hole(s.url, '/klaenge?text=convolution')), ['Plate.aif'], 'pack');
+  assert.deepEqual(pf(await hole(s.url, '/klaenge?text=grand')), ['GrandPiano C3 mf.aif'], 'kategorie');
+  assert.equal((await hole(s.url, '/klaenge?text=dark%20pad')).j.treffer.length, 1, 'titel trifft, Pfad hat nur Bindestriche');
+  assert.deepEqual((await hole(s.url, '/klaenge?text=nichts-davon')).j.treffer, []);
+  assert.deepEqual((await hole(s.url, '/klaenge?text=%25')).j.treffer, [], 'Prozentzeichen ist kein Platzhalter');
+  assert.deepEqual((await hole(s.url, '/klaenge?text=wolf')).j.treffer, [], 'Tracks sind keine Klänge');
+  assert.equal((await hole(s.url, '/klaenge')).j.gesamt, 4, 'ohne Filter alle vier Klänge, ein Treffer je sha trotz zweitem Fundort');
+});
+
+test('Klänge: Felder je Treffer und Einsatzstufe', async (t) => {
+  const m = tmpMt(t);
+  const s = await stapel(t, { mediathek: m.db });
+  const [a, b] = (await hole(s.url, '/klaenge?text=piano')).j.treffer;
+  for (const x of [a, b]) for (const k of ['sha', 'pfad', 'pfad_da', 'typ', 'pack', 'kategorie', 'dauer_s', 'bpm', 'camelot', 'einsatz']) assert.ok(k in x, k);
+  const ableton = [a, b].find((x) => x.pfad.endsWith('Piano C3.aif') && !x.pfad.includes('Grand'));
+  const offen = [a, b].find((x) => x.pfad.includes('Grand'));
+  assert.equal(ableton.einsatz, 'nur_live'); assert.equal(ableton.sha, sha(11)); assert.equal(ableton.pack, 'Upright'); assert.equal(ableton.pfad_da, false);
+  assert.equal(offen.einsatz, 'werkstatt'); assert.equal(offen.pack, 'Multisamples'); assert.equal(offen.kategorie, 'Grand Piano'); assert.equal(offen.instrument, 'piano');
+  assert.equal(offen.dauer_s, 2.0); assert.equal(offen.pfad_da, true); assert.equal(offen.quelle, 'mediathek');
+});
+
+test('Klänge: Filter typ, einsatz, pack, bpm, camelot', async (t) => {
+  const m = tmpMt(t);
+  const s = await stapel(t, { mediathek: m.db });
+  assert.deepEqual(pf(await hole(s.url, '/klaenge?typ=impuls')), ['Plate.aif']);
+  assert.deepEqual(pf(await hole(s.url, '/klaenge?einsatz=werkstatt')).sort(), ['GrandPiano C3 mf.aif', 'Plate.aif', 'dark-pad-01.wav']);
+  assert.deepEqual(pf(await hole(s.url, '/klaenge?einsatz=nur_live')), ['Piano C3.aif']);
+  assert.deepEqual(pf(await hole(s.url, '/klaenge?pack=multisamples')), ['GrandPiano C3 mf.aif']);
+  assert.deepEqual(pf(await hole(s.url, '/klaenge?bpm=126-130')), ['dark-pad-01.wav']);
+  assert.deepEqual(pf(await hole(s.url, '/klaenge?bpm=100-110')), []);
+  assert.deepEqual(pf(await hole(s.url, '/klaenge?camelot=8a')), ['dark-pad-01.wav']);
+  assert.equal((await hole(s.url, '/klaenge?bpm=abc')).code, 400);
+  assert.equal((await hole(s.url, '/klaenge?typ=track')).code, 400, 'Tracks sind kein Klang-Typ');
+});
+
+test('Klänge: eigene Loops kommen als sofort vor den Mediathek-Treffern', async (t) => {
+  const m = tmpMt(t);
+  const loops = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-kl-loops-')); t.after(() => fs.rmSync(loops, { recursive: true, force: true }));
+  loopAnlegen(loops, 'abnahme-x'); loopAnlegen(loops, 'piano-schleife');
+  const s = await stapel(t, { mediathek: m.db, loops });
+  const r = await hole(s.url, '/klaenge?text=abnahme');
+  assert.equal(r.j.treffer.length, 1);
+  assert.deepEqual([r.j.treffer[0].einsatz, r.j.treffer[0].typ, r.j.treffer[0].quelle, r.j.treffer[0].name], ['sofort', 'loop', 'loopbib', 'abnahme-x']);
+  const p = (await hole(s.url, '/klaenge?text=piano')).j.treffer;
+  assert.equal(p.length, 3);
+  assert.equal(p[0].quelle, 'loopbib', 'Loop-Bibliothek zuerst');
+  assert.deepEqual(p.slice(1).map((x) => x.quelle), ['mediathek', 'mediathek']);
+  assert.equal((await hole(s.url, '/klaenge?text=abnahme&einsatz=werkstatt')).j.treffer.length, 0, 'Einsatzfilter gilt auch für Loops');
+});
+
+test('Klänge: limit (Vorgabe 30, höchstens 200), gesamt bleibt', async (t) => {
+  const m = tmpMt(t);
+  const s = await stapel(t, { mediathek: m.db });
+  const r = await hole(s.url, '/klaenge?limit=1');
+  assert.equal(r.j.treffer.length, 1); assert.equal(r.j.gesamt, 4); assert.equal(r.j.gesamt_genau, true);
+  assert.equal((await hole(s.url, '/klaenge?limit=0')).j.treffer.length, 1);
+  assert.equal((await hole(s.url, '/klaenge?limit=999')).j.treffer.length, 4);
+  const db = new DatabaseSync(m.db);
+  for (let i = 100; i < 140; i++) {
+    db.prepare('INSERT INTO objekt(inhalt_sha256, dauer_s) VALUES (?,1)').run(sha(i));
+    db.prepare('INSERT INTO angabe(inhalt_sha256, feld, wert, quelle, erhoben_am) VALUES (?,?,?,?,?)').run(sha(i), 'typ', 'oneshot', 'tag', '2026-01-01');
+    db.prepare('INSERT INTO fundort(host, pfad, inhalt_sha256, erreichbar) VALUES (?,?,?,1)').run(HOST, `/nix/da/viele-${i}.wav`, sha(i));
+  }
+  db.close();
+  const v = await hole(s.url, '/klaenge');
+  assert.equal(v.j.treffer.length, 30, 'Vorgabe 30'); assert.equal(v.j.gesamt, 44);
+});
+
+test('Klänge: Mediathek fehlt → 200 mediathek:"fehlt", eigene Loops kommen trotzdem', async (t) => {
+  const loops = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-kl-loops-')); t.after(() => fs.rmSync(loops, { recursive: true, force: true }));
+  loopAnlegen(loops, 'abnahme-x');
+  const s = await stapel(t, { mediathek: '/nicht/da/mediathek.sqlite', loops });
+  const r = await hole(s.url, '/klaenge?text=abnahme');
+  assert.equal(r.code, 200); assert.equal(r.j.mediathek, 'fehlt'); assert.equal(r.j.treffer.length, 1);
+  assert.deepEqual((await hole(s.url, '/klaenge?text=nichts-davon')).j, { treffer: [], gesamt: 0, gesamt_genau: true, mediathek: 'fehlt' });
+});
+
+// ---- Klänge-Karte (Plan 2026-10-06-klaenge, T2): GET /klaenge/karte ----
+test('Karte: Zahlen je Typ, Packs, Loop-Bibliothek, Stand, exakt gegen die Fixture', async (t) => {
+  const m = tmpMt(t);
+  const loops = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-kl-loops-')); t.after(() => fs.rmSync(loops, { recursive: true, force: true }));
+  loopAnlegen(loops, 'abnahme-x'); loopAnlegen(loops, 'zweite');
+  const s = await stapel(t, { mediathek: m.db, loops });
+  const r = await hole(s.url, '/klaenge/karte');
+  assert.equal(r.code, 200);
+  const z = (gesamt, sofort, werkstatt, nur_live) => ({ gesamt, sofort, werkstatt, nur_live });
+  assert.deepEqual(r.j.je_typ, { oneshot: z(2, 0, 1, 1), loop: z(3, 2, 1, 0), impuls: z(1, 0, 1, 0), mitschnitt: z(0, 0, 0, 0), erzeugt: z(0, 0, 0, 0), stimme: z(0, 0, 0, 0) },
+    'Tracks zählen nicht, die zwei Loops der Bibliothek zählen als sofort und im Gesamt von loop');
+  assert.deepEqual(r.j.packs, [{ pack: 'Convolution Reverb', gesamt: 1, nur_live: 0 }, { pack: 'Multisamples', gesamt: 1, nur_live: 0 }, { pack: 'Upright', gesamt: 1, nur_live: 1 }]);
+  assert.equal(r.j.loopbib, 2);
+  assert.equal(r.j.mediathek_stand, new Date(fs.statSync(m.db).mtimeMs).toISOString());
+  assert.ok(Math.abs(Date.parse(r.j.erzeugt_am) - Date.now()) < 60000);
+  // Negativ-Kontrolle: nach einem Scan (DB-mtime neu) kommt die neue Zahl, nicht die zwischengespeicherte
+  const db = new DatabaseSync(m.db);
+  db.prepare('INSERT INTO objekt(inhalt_sha256, dauer_s) VALUES (?,1)').run(sha(200));
+  db.prepare('INSERT INTO angabe(inhalt_sha256, feld, wert, quelle, erhoben_am) VALUES (?,?,?,?,?)').run(sha(200), 'typ', 'stimme', 'tag', '2026-01-01');
+  db.prepare('INSERT INTO fundort(host, pfad, inhalt_sha256, erreichbar) VALUES (?,?,?,1)').run(HOST, '/nix/da/stimme.wav', sha(200));
+  db.close();
+  const spaeter = new Date(Date.now() + 5000); fs.utimesSync(m.db, spaeter, spaeter);
+  assert.equal((await hole(s.url, '/klaenge/karte')).j.je_typ.stimme.gesamt, 1);
+});
+
+test('Karte: Mediathek fehlt → 200 mediathek:"fehlt", Nullzahlen, Loop-Bibliothek zählt', async (t) => {
+  const loops = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-kl-loops-')); t.after(() => fs.rmSync(loops, { recursive: true, force: true }));
+  loopAnlegen(loops, 'abnahme-x');
+  const s = await stapel(t, { mediathek: '/nicht/da/mediathek.sqlite', loops });
+  const r = await hole(s.url, '/klaenge/karte');
+  assert.equal(r.code, 200); assert.equal(r.j.mediathek, 'fehlt'); assert.equal(r.j.loopbib, 1);
+  assert.deepEqual(r.j.je_typ.loop, { gesamt: 1, sofort: 1, werkstatt: 0, nur_live: 0 }); assert.deepEqual(r.j.packs, []);
+});
+
+test('Klänge: Klang nur auf fremdem Host fehlt in Suche und Karte (Host-Filter)', async (t) => {
+  const m = tmpMt(t);
+  const s = await stapel(t, { mediathek: m.db });
+  assert.deepEqual((await hole(s.url, '/klaenge?text=fremd')).j.treffer, [], 'weder Pfad noch pack des Fremd-Objekts');
+  assert.equal((await hole(s.url, '/klaenge')).j.gesamt, 4);
+  assert.equal((await hole(s.url, '/klaenge?typ=oneshot')).j.gesamt, 2);
+  const k = (await hole(s.url, '/klaenge/karte')).j;
+  assert.equal(k.je_typ.oneshot.gesamt, 2); assert.ok(!k.packs.some((x) => x.pack === 'Fremdpack'));
+  // Positiv-Kontrolle: das Objekt ist in der DB und nur der Host trennt es
+  const db = new DatabaseSync(m.db, { readOnly: true });
+  assert.equal(db.prepare("SELECT count(*) n FROM fundort WHERE pfad LIKE '%Fremdklang%'").get().n, 1); db.close();
+});
+
+test('Klänge: Text vergleicht den Pfad erst ab der Wurzel, nicht das Präfix', async (t) => {
+  const m = tmpMt(t);
+  const s = await stapel(t, { mediathek: m.db });
+  assert.deepEqual((await hole(s.url, '/klaenge?text=live')).j.treffer, [], 'Wort nur im Wurzel-Präfix (Zwerg_live)');
+  assert.deepEqual((await hole(s.url, '/klaenge?text=_')).j.treffer, [], 'Unterstrich nur im Präfix');
+  assert.deepEqual((await hole(s.url, '/klaenge?text=zwerg')).j.treffer, []);
+  assert.deepEqual(pf(await hole(s.url, '/klaenge?text=upright')), ['Piano C3.aif'], 'Positiv-Kontrolle: Name unterhalb der Wurzel trifft');
+  assert.deepEqual(pf(await hole(s.url, '/klaenge?text=packs/upright')), ['Piano C3.aif'], 'relativer Teil mit Ordner trifft');
+});
+
+test('Klänge: limit=abc fällt auf 30, nicht auf 50', async (t) => {
+  const m = tmpMt(t);
+  const db = new DatabaseSync(m.db);
+  for (let i = 300; i < 360; i++) {
+    db.prepare('INSERT INTO objekt(inhalt_sha256, dauer_s) VALUES (?,1)').run(sha(i));
+    db.prepare('INSERT INTO angabe(inhalt_sha256, feld, wert, quelle, erhoben_am) VALUES (?,?,?,?,?)').run(sha(i), 'typ', 'oneshot', 'tag', '2026-01-01');
+    db.prepare('INSERT INTO fundort(host, pfad, inhalt_sha256, erreichbar) VALUES (?,?,?,1)').run(HOST, `/nix/da/viele-${i}.wav`, sha(i));
+  }
+  db.close();
+  const s = await stapel(t, { mediathek: m.db });
+  assert.equal((await hole(s.url, '/klaenge?limit=abc')).j.treffer.length, 30);
+  assert.equal((await hole(s.url, '/klaenge?limit=')).j.treffer.length, 30);
+});

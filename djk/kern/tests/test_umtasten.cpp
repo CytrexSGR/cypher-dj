@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <ctime>
 #include <vector>
 
 #include "cypherdj/loop.h"
@@ -53,12 +54,14 @@ int main() {
       z = z * 1664525u + 1013904223u;
       x = (float)((double)(z >> 8) / 8388608.0 - 1.0) * 0.5f;
     }
-    const auto t0 = std::chrono::steady_clock::now();
+    // CPU-Zeit des Threads statt Wanduhr: Verdrängung durch andere Prozesse (ctest -j, laufender Bau) zählt nicht mit.
+    auto cpu_ms = [] { timespec ts; clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts); return (double)ts.tv_sec * 1e3 + (double)ts.tv_nsec / 1e6; };
+    const double t0 = cpu_ms();
     cdj::umtasten(ein.data(), n_ein, aus.data(), n_aus);
-    const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+    const double ms = cpu_ms() - t0;
     bool endlich = true;
     for (float x : aus) endlich = endlich && std::isfinite(x) && std::fabs(x) < 1.0f;
-    std::printf("umtasten 1536000 -> 720000 (32 Beats, 60 BPM): %.0f ms (Soll < 400)\n", ms);
+    std::printf("umtasten 1536000 -> 720000 (32 Beats, 60 BPM): %.0f ms CPU (Soll < 400)\n", ms);
     PRUEF(endlich);
     PRUEF(ms < 400.0);
   }

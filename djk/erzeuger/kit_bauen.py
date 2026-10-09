@@ -22,7 +22,7 @@ class FachlicherAbbruch(ValueError):
 RATE = 48000
 BPM, TAKTE = 130.0, 2  # Rollenmuster wie klang/probe.py
 MAX_SPITZE_DB = -1.0  # mit --rollen darf kein Klang lauter sein
-MAX_KLAENGE = 112  # ab Note 112 liegt das Zusatz-Kit rec
+MAX_KLAENGE = 112  # historisch; seit F08 (Glanz 2.4.2) liegt das Zusatz-Kit auf 128 + note
 AUSBLENDE = 240  # 5 ms, damit ein gekürzter Klang nicht knackt
 
 

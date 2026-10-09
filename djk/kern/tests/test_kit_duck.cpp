@@ -43,7 +43,7 @@ int main() {
   PRUEF(beide != nullptr);
   if (beide) {
     PRUEF(beide->klang[0].duck);
-    PRUEF(beide->klang[10].duck);
+    PRUEF(beide->klang[cdj::KIT_NOTEN + 10].duck);
     PRUEF(!beide->klang[1].duck);
   }
   fs::remove_all(d);

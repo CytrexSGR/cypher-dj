@@ -2,7 +2,7 @@
 // Öffnen sendet nichts an den Kern: gesendet wird nur auf einen Griff (Zeiger, Rad, Klick) oder LOAD.
 // Lesen: /strom (Kern über den Seiten-Server), Leitstand-WS als Rolle "anzeige" (takt, ansage, ereignis).
 import { DECKS, ERZEUGER, LOOPBOXEN, GRIFF, art, griffZuMidi, formatiere, vorgabe, setzeZielKurve } from './kurven.js';
-import { KOPIE_TEXT, HAND_PRUEFMODUS_TEXT, cypherStand } from './meldungen.js';
+import { KOPIE_TEXT, HAND_PRUEFMODUS_TEXT, cypherStand, ausgangAnzeige, keylockStand, keylockAnfrage, keylockMeldung, variText } from './meldungen.js';
 import { leseWelle, Kopf, Laufansicht, Uebersicht, SR, laengeFrames } from './welle.js';
 import { bindeSpurbaender } from './spurband_ansicht.js';
 
@@ -340,13 +340,14 @@ function zeigeDeck(n) {
   }
   $('[data-titel]', d).textContent = e?.titel ?? id;
   $('[data-meta]', d).textContent = e
-    ? `${e.camelot ?? '–'} · orig ${e.quelle_bpm.toFixed(1)} BPM · plays at ${e.basis_bpm.toFixed(0)} · ${fmtZeit(e.dauer_s)}`
+    ? `${e.camelot ?? '–'} · orig ${e.quelle_bpm.toFixed(1)} BPM · plays at ${Number(g?.basis_bpm ?? e.basis_bpm).toFixed(0)} · ${fmtZeit(e.dauer_s)}`
     : id;
-  // Plan Tempo-Folge: Decks haben noch keinen Keylock und starten nur bei ihrer Basis (Kern: kein_stretcher).
+  // Welle 3 (ADR 028): bei Master ≠ Basis folgt das Deck im Varispeed, die Tonhöhe wandert um 12·log2(Master/Basis) Halbtöne.
+  // Keylock 3b: VARI nur, wenn das Deck wirklich im Varispeed klingt (Knopf UND Hörweg aus /zustand/deck, meldungen.js variText)
   const basis = g?.basis_bpm ?? e?.basis_bpm;
-  const fremd = Boolean(basis) && zustand.bpm != null && Math.abs(zustand.bpm / basis - 1) >= 1e-6;
-  d.classList.toggle('tempo-fremd', fremd);
-  if (fremd) $('[data-meta]', d).textContent += ` · master at ${zustand.bpm.toFixed(2)}: set ${basis.toFixed(0)} BPM to play (no keylock yet)`;
+  const vari = variText({ bpm: zustand.bpm, basis, knopf: keylockStand(zustand.regler), hoerweg: z?.hoerweg });
+  d.classList.toggle('tempo-fremd', vari !== null);
+  if (vari) $('[data-meta]', d).textContent += ` · ${vari}`;
   const gesamt = e ? takteVon(e) : null;
   const eins = e?.erste_eins_quell_beat ?? 0;
   if (!z) { $('[data-bar]', d).textContent = '1.1'; $('[data-von]', d).textContent = gesamt ? `/ ${gesamt}` : ''; return; }
@@ -523,9 +524,8 @@ async function loopAktion(body) {
 }
 
 // Plan Tempo-Folge: Master-Tempo. Enter im Feld oder − / + (Shift: 0,1); der Kern fährt es ab der nächsten Eins
-// über einen Takt. Die Ablehnung steht als Meldung da (läuft ein Deck: kein Keylock, kein Tempowechsel).
-const TEMPO_GRUND = { kein_stretcher: 'a deck is playing; without keylock the tempo only changes while the decks are stopped',
-  bereich: '60 to 200 BPM', ueberlappung: 'a tempo change is already running', karte_voll: 'too many tempo changes queued' };
+// über einen Takt. Die Ablehnung steht als Meldung da. Laufende Decks folgen im Varispeed (Welle 3, ADR 028).
+const TEMPO_GRUND = { bereich: '60 to 200 BPM', ueberlappung: 'a tempo change is already running', karte_voll: 'too many tempo changes queued' };
 let tempoZiel = null;   // Code-Review F6: − / + rechnen vom zuletzt bestellten Ziel, nicht vom Momentanwert in der Rampe
 async function setzeTempo(bpm) {
   try {
@@ -538,7 +538,31 @@ async function setzeTempo(bpm) {
     else tempoZiel = bpm;
   } catch (e) { melde(`Page server unreachable: ${e.message}`, true); }
 }
+// Keylock 3 (Plan 2026-10-06-keylock-echtzeit.md, Fassung 4): EIN globaler Knopf `keylock` (Vorgabe an) für Decks und
+// Loop-Boxen; gesetzt über /regler (sofort, Quelle andreas), angezeigt aus /e/regler. 3b: ohne Meldung unbekannt (KEY ?).
+function zeigeKeylock() {
+  const k = $('#keylock');
+  if (!k) return;
+  const an = keylockStand(zustand.regler);
+  k.classList.toggle('an', an === true);
+  k.classList.toggle('unbekannt', an === null);
+  k.textContent = an === null ? 'KEY ?' : 'KEY';
+  k.setAttribute('aria-pressed', an === null ? 'mixed' : String(an));
+}
+async function schalteKeylock() {
+  const body = keylockAnfrage(keylockStand(zustand.regler));
+  try {
+    const r = await fetch('/regler', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    const j = await r.json();
+    window.djkGesendet.push({ keylock: body.nach, code: r.status, antwort: j });
+    const m = keylockMeldung(r.status, j);
+    if (m) melde(m, true);
+  } catch (e) { melde(`Page server unreachable: ${e.message}`, true); }
+}
+
 function bindeTempo() {
+  $('#keylock')?.addEventListener('click', schalteKeylock);
+  zeigeKeylock();
   const f = $('#bpm');
   f.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { const v = Number(f.value.replace(',', '.')); f.blur(); if (Number.isFinite(v)) setzeTempo(v); else melde('Tempo: not a number', true); }
@@ -898,6 +922,7 @@ function strom() {
         for (const [n, z] of Object.entries(f.decks)) zustand.decks[n] = z;
         for (const [n, g] of Object.entries(f.geladen)) zustand.geladen[n] = g.material_id;
         for (const p of Object.keys(f.regler)) zeigeWert(p);
+        zeigeKeylock();   // Keylock 3
         DECKS.forEach(zeigeDeck);
         for (const [n, l] of Object.entries(f.loops ?? {})) zustand.loops[n] = l;
         if (Array.isArray(f.fx)) f.fx.forEach((x, u) => { if (x) fxVomKern(u, x); });
@@ -918,7 +943,10 @@ function strom() {
         if (document.activeElement !== $('#bpm')) $('#bpm').value = f.bpm.toFixed(2);
         if (zustand.bpm !== f.bpm) { zustand.bpm = f.bpm; zeigeDeck(1); zeigeDeck(2); }
         break;
-      case '/e/regler': zustand.regler[f.pfad] = f.wert; zeigeWert(f.pfad); break;
+      case '/e/regler':
+        zustand.regler[f.pfad] = f.wert; zeigeWert(f.pfad);
+        if (f.pfad === 'keylock') { zeigeKeylock(); zeigeDeck(1); zeigeDeck(2); }   // Keylock 3: Taste und VARI
+        break;
       case '/zustand/deck':
         zustand.decks[f.deck] = f;
         deckAnsicht[f.deck]?.kopf.melde(f.quell_beat, zustand.bpm ?? 128, performance.now(), f.status >= 2);
@@ -1409,6 +1437,26 @@ function bild() {
   window.djkBild.push(performance.now() - jetzt); if (window.djkBild.length > 600) window.djkBild.shift();
   requestAnimationFrame(bild);
 }
+// Glanz 2.1 (F22): Punkt OUT aus GET /ausgang, jede Sekunde. Es gibt nur ein Meldungsfeld (melde, Zeile 70): ein Alarm
+// kommt wieder, sobald das Feld leer ist; die kurze Notiz eines geheilten Falls schreibt nie über die stehende
+// Prüfmodus-Meldung (Zeile 84), und nach dem Alarm kommt diese zurück.
+let ausgangFaelle = null, ausgangAlarm = false;
+async function ausgang() {
+  let a;
+  try { a = await (await fetch('/ausgang')).json(); } catch { return; }
+  const z = ausgangAnzeige(a, ausgangFaelle);
+  const p = $('#v-out');
+  p.classList.remove('an', 'alarm', 'leer'); p.classList.add(z.klasse); p.title = z.titel;
+  if (z.klasse === 'alarm') {
+    if (!ausgangAlarm || $('#meldung').textContent === '') melde(z.meldung.text, true, true);
+  } else if (ausgangAlarm) {
+    if (pruefmodusAus) melde(HAND_PRUEFMODUS_TEXT, true, true);
+    else melde(z.klasse === 'an' ? 'Digital output back on' : '', false);
+  } else if (z.meldung && !pruefmodusAus) {
+    melde(z.meldung.text, true, false);
+  }
+  ausgangAlarm = z.klasse === 'alarm'; ausgangFaelle = a.faelle;
+}
 // ---------- Aufbau: am Ende der Datei, nach allen Definitionen (dreimal am 2026-09-28 griff der Aufbau auf ein const,
 // das weiter unten stand: Temporal Dead Zone; hier unten gilt jedes const der Datei schon) ----------
 zeigeCypher();
@@ -1436,3 +1484,4 @@ ladeLoops();
 requestAnimationFrame(bild);
 strom();
 leitstand();
+ausgang(); setInterval(ausgang, 1000);

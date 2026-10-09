@@ -16,39 +16,11 @@
 
 #include "cypherdj/erzeuger.h"
 #include "cypherdj/netz.h"
+#include "gegenstelle.h"
 #include "pruef.h"
 
 namespace v = cypherdj::osc;
 namespace fs = std::filesystem;
-
-struct Gegenstelle {
-  int sock;
-  int port;
-  char buf[2048];
-  cdj::osc::Nachricht m;
-  Gegenstelle() {
-    sock = socket(AF_INET, SOCK_DGRAM, 0);
-    sockaddr_in a{};
-    a.sin_family = AF_INET;
-    a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    bind(sock, (sockaddr*)&a, sizeof a);
-    socklen_t l = sizeof a;
-    getsockname(sock, (sockaddr*)&a, &l);
-    port = ntohs(a.sin_port);
-  }
-  ~Gegenstelle() { close(sock); }
-  bool warte(const char* adresse, int ms) {
-    for (int t = 0; t < ms; ++t) {
-      pollfd pf{sock, POLLIN, 0};
-      if (poll(&pf, 1, 1) > 0) {
-        ssize_t r = recv(sock, buf, sizeof buf, 0);
-        if (r > 0 && cdj::osc::lesen(buf, (size_t)r, m) && !std::strcmp(m.adresse, adresse)) return true;
-      }
-    }
-    return false;
-  }
-  const char* s(int i) const { return (i < m.anzahl && m.werte[i].typ == 's') ? m.werte[i].s : "<fehlt>"; }
-};
 
 static std::vector<char> bundle(std::initializer_list<const cdj::osc::Schreiber*> msgs) {
   std::vector<char> b(16, 0);
@@ -133,7 +105,7 @@ int main() {
     PRUEF(bef->hole(b) && b.art == cdj::Befehl::ERZ_STROM && b.id == 56 && b.zeiger);
     if (b.zeiger) {
       const auto* k = static_cast<const cdj::Kit*>(b.zeiger);
-      PRUEF(k->n == 2 && k->klang[0].frames == 2 && k->klang[112].frames == 1 && k->name == "gut+rec");
+      PRUEF(k->n == 2 && k->klang[0].frames == 2 && k->klang[cdj::KIT_NOTEN + 112].frames == 1 && k->name == "gut+rec");
       delete k;
     }
     b = cdj::Befehl{};
@@ -238,6 +210,26 @@ int main() {
         PRUEF(fe->n == 1 && std::isinf(fe->ev[0].begin));
         delete fe;
       }
+    }
+    // 15. F08 (Glanz 2.4.2): Noten bis 255 (Zusatz-Kit auf 128 + note), 256 ist ein Formfehler
+    {
+      cdj::osc::Schreiber hoch(v::erz_ev);
+      hoch.i(1).i(3).i(10).i(255).d(8.0).d(0.25).f(1.0f);
+      const auto paket_h = bundle({&f, &hoch});
+      netz.paket(paket_h.data(), paket_h.size());
+      b = cdj::Befehl{};
+      PRUEF(bef->hole(b) && b.art == cdj::Befehl::ERZ_FENSTER && b.zeiger);
+      if (b.zeiger) {
+        PRUEF(static_cast<const cdj::ErzFenster*>(b.zeiger)->ev[0].note == 255);
+        delete static_cast<const cdj::ErzFenster*>(b.zeiger);
+      }
+      cdj::osc::Schreiber zu(v::erz_ev);
+      zu.i(1).i(3).i(11).i(256).d(8.0).d(0.25).f(1.0f);
+      const auto paket_z = bundle({&f, &zu});
+      netz.paket(paket_z.data(), paket_z.size());
+      PRUEF(g.warte("/e/protokollfehler", 200) && !std::strcmp(g.s(1), "protokoll"));
+      b = cdj::Befehl{};
+      PRUEF(!bef->hole(b));
     }
     // 10. Quittung und Freigaben aus dem Callback
     cdj::Ereignis q{};

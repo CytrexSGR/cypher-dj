@@ -15,12 +15,13 @@ export function ladeKit(ordner) {
 }
 
 // MVP 2 Scheibe 3 (E2): Basis-Kit und Zusatz-Kit (Mitschnitte) wie der Kern mit kit:<a>+<b>. Fehlt das Zusatz-Kit,
-// gilt nur das Basis-Kit.
+// gilt nur das Basis-Kit. Zusatz-Kit auf 128 + note wie im Kern (F08).
+const ZUSATZ_NOTE = 128;  // = KIT_NOTEN im Kern (kit.h)
 export function ladeKits(ordnerBasis, ordnerZusatz) {
   const a = ladeKit(ordnerBasis);
   if (!ordnerZusatz || !fs.existsSync(`${ordnerZusatz}/kit.json`)) return a;
   const b = ladeKit(ordnerZusatz);
-  for (const [n, note] of b.note) a.note.set(n, note);
+  for (const [n, note] of b.note) a.note.set(n, ZUSATZ_NOTE + note);
   for (const [s, anzahl] of b.bank) a.bank.set(s, (a.bank.get(s) ?? 0) + anzahl);
   return { name: `${a.name}+${b.name}`, note: a.note, bank: a.bank };
 }

@@ -19,7 +19,7 @@
     <div class="feld"><label>BAR</label><b id="takt">–</b></div>
     <div class="schlaege" id="schlaege"><i></i><i></i><i></i><i></i></div>
     <div class="feld"><label>PHRASE</label><b id="phrase">–</b></div>
-    <div class="feld tempo"><label for="bpm">BPM</label><button id="bpm-minus" title="1 BPM slower (Shift: 0.1)" aria-label="Master tempo down">−</button><input id="bpm" value="–" inputmode="decimal" autocomplete="off" spellcheck="false" title="Master tempo: type a value, Enter sets it from the next bar" aria-label="Master tempo in BPM"><button id="bpm-plus" title="1 BPM faster (Shift: 0.1)" aria-label="Master tempo up">+</button></div>
+    <div class="feld tempo"><label for="bpm">BPM</label><button id="bpm-minus" title="1 BPM slower (Shift: 0.1)" aria-label="Master tempo down">−</button><input id="bpm" value="–" inputmode="decimal" autocomplete="off" spellcheck="false" title="Master tempo: type a value, Enter sets it from the next bar" aria-label="Master tempo in BPM"><button id="bpm-plus" title="1 BPM faster (Shift: 0.1)" aria-label="Master tempo up">+</button><button id="keylock" class="an" aria-pressed="true" title="Keylock for all sources (decks and loop boxes): pitch stays put at any tempo. Off: pitch follows the tempo (varispeed)" aria-label="Keylock for all sources">KEY</button></div>
   </div>
   <div class="kopfmix">
     <label class="phones">PHONES</label>
@@ -67,6 +67,7 @@
   <div class="verbindungen">
     <span class="punkt" id="v-kern" title="Audio core (via page server)">CORE</span>
     <span class="punkt" id="v-leitstand" title="Control centre WebSocket (read only)">CONTROL</span>
+    <span class="punkt leer" id="v-out" title="Digital output (IEC958 switch)">OUT</span>
   </div>
 </header>
 

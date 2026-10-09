@@ -129,6 +129,9 @@ Kanäle: `deck/1` bis `deck/4` (Andreas sagt A = 1, B = 2), `erz/1` bis `erz/8` 
 | `fx/<n>/rueckweg` | dB | −200 bis 0 | 0 | 10 ms | alle |
 | `duck/tiefe` | dB | −24 bis 0 | 0 | 10 ms | alle |
 | `duck/release` | ms | 50 bis 600 | 200 | sofort | alle |
+| `keylock` | Schalter | 0/1 | 1 | sofort | alle |
+
+`keylock` (Keylock Task 3; ADR 029 kommt mit Task 4): EIN Schalter für alle Quellen, kein Deck-Argument. An (Vorgabe): Decks und Loop-Boxen spielen über den Dehner (Rubber Band R3 im Arbeits-Thread, je Quelle einer) in ihrer Tonhöhe, jedes Ereignis mit Varispeed-Brücke bis `s_h`; eine wartende Box setzt mit Vorlauf an und klingt zur Eins aus dem Ring (ADR 029 Abschnitt Loop-Boxen, seit Task 7; vorgerenderte Varianten nach ADR 027 gibt es nicht mehr). Aus: Decks und Loop-Boxen spielen Varispeed (Tonhöhe folgt dem Tempo). Die REC-Umrechnung eines Mitschnitts bleibt offline (ADR 027 Entscheidung 6) und hängt nicht am Knopf. Ein neuer Abonnent bekommt beim ersten `/k/hallo` den Stand als `/e/regler keylock` (§5.7). Wirkt am Sample, auch bei laufendem Deck. Ohne Dehner (kern.toml `keylock = false`, §2.1) bleibt der Knopf bei den Decks ohne Wirkung.
 
 `duck/*` (K2): der Kern senkt erz/2 und erz/3 ab jedem gespielten Kit-Klang `bd:*`, am Sample des Ereignisses (Sidechain, ohne Verzug).
 
@@ -197,6 +200,8 @@ Unbekannte Schlüssel sind ein Startfehler (Tippfehler fallen sofort auf). Jede 
 | `kern.toml` | `start_bpm` | float | 128.0 | Tempo einer neuen Zeitachse ohne Anker (§1.1) |
 | | `filter_guete` | float | 0.707 | Güte des DJ-Filters, 0,5 bis 4 (A27, 04-Nachtrag; über 4 gesperrt, bis Andreas gehört hat) |
 | | `hoerschein_pflicht` | bool | true | schaltet `PrueferI3` an (I3a, §17); Ohr Task 13 |
+| | `keylock` | bool | true | Dehner und Keylock-Fäden im Kern (Keylock Task 3; ADR 029 kommt mit Task 4); false: ohne Dehner, Decks im Varispeed, der Regler `keylock` (§1.5) wirkt nur auf die Loop-Boxen |
+| | `keylock_maschine` | str | `r3` | Maschine des Keylocks (Umbauplan Bungee S2): `r3` Rubber Band in Fäden (Rückfall), `bungee` Bungee synchron im Callback ohne Fäden (Korn 512), `bungee_fein` (Korn 256); Bungee nur im Kern mit `CYPHERDJ_BUNGEE`, sonst Keylock aus |
 | | `udp_port` | int | 47100 | Befehle (§2) |
 | | `arbeitsbestand` | Pfad | `/dev/shm/cypherdj/material` | §6.4 |
 | | `speicher_budget_mib` | int | 3800 | gesperrtes Budget unter der 4-GiB-Grenze (10 Probe d), Entladen nach ADR 015 |
@@ -277,7 +282,7 @@ schickt `/k/hallo` sofort, wenn 100 ms lang kein `/uhr` kam, und danach alle 50 
 
 | Adresse | Typen | Felder | Wirkung, Quittung |
 |---|---|---|---|
-| `/k/set/neu` | `,hsd` | `id`, `quelle`, `start_bpm` | neue Zeitachse: Beat 0 am nächsten Zyklus, Karte konstant `start_bpm`, `generation` = 0. Abgelehnt (`deck_laeuft`), solange ein Deck läuft |
+| `/k/set/neu` | `,hsd` | `id`, `quelle`, `start_bpm` | neue Zeitachse: Beat 0 am nächsten Zyklus, Karte konstant `start_bpm`, `generation` = 0. Abgelehnt (`deck_laeuft`), solange ein Deck läuft; klingende Loop-Boxen blenden über 144 Frames aus (Audit F15) |
 | `/k/tempo/rampe` | `,hsddd` | `id`, `quelle`, `ab_beat`, `ziel_bpm` (60 bis 200), `dauer_beats` (≥ 1,0) | Rampe linear in der Zeit ab `ab_beat` vom dann gültigen Tempo. Zu spät: Start am nächsten Zyklus, Ende-Beat unverändert, gemeldet `verspaetet_ausgefuehrt`. Karte voll: `abgelehnt`, Grund `karte_voll` |
 | `/k/storno` | `,hsh` | `id`, `quelle`, `ziel_id` | zieht einen noch nicht gestarteten Befehl derselben Quelle zurück; Quittung für `ziel_id`: `storniert`, für den Storno selbst `angenommen` und `gestartet`, kein `fertig` (Andreas 2026-09-25) |
 
@@ -333,15 +338,17 @@ den Mix). `mit_stems` muss zur Fassung passen (`fassung.json` `analyse_quelle`, 
 oder vier Stems, nie beides (3 Minuten: rund 69 MB bzw. 276 MB, gerechnet wie ADR 015).
 
 **Hörweg** (ADR 020): ein Deck spielt **direkt** (ohne Stretcher), solange `|bpm/basis_bpm − 1| < 10⁻⁶`; sonst übernimmt
-der warme Schatten-Stretcher mit 20-ms-Kosinusblende vor dem ersten abweichenden Sample. Bis Scheibe 5 gibt es nur
-den Direktweg: der Kern lehnt `/k/tempo/rampe` mit Grund `kein_stretcher` ab, solange ein Deck läuft. `vorlauf_ms` in
+der warme Schatten-Stretcher mit 20-ms-Kosinusblende vor dem ersten abweichenden Sample. **Seit Welle 3 (ADR 028)** gibt es
+statt des Stretchers den **Varispeed**: weicht das Tempo ab, liest das Deck am Beat der Kern-Karte (Quell-Beat = Master-Beat,
+Catmull-Rom, Tonhöhe wandert um 12·log2(bpm/basis_bpm) Halbtöne); Start und `/k/tempo/rampe` werden bei jedem Tempo
+angenommen. Tonhöhentreu wird es über `/k/deck/basis_tausch` auf eine Fassung im neuen Tempo. `vorlauf_ms` in
 `/zustand/deck` sagt, wie früh Deck-Befehle kommen müssen.
 
 | Adresse | Typen | Felder | Wirkung |
 |---|---|---|---|
 | `/k/deck/laden` | `,hsisdii` | `id`, `quelle`, `deck` (1 bis 4), `material_id`, `basis_bpm`, `fassung` (r ≥ 1), `mit_stems` (0/1) | nur wenn das Deck nicht zugleich läuft und offen ist (sonst `deck_hoerbar`; ein stehendes Deck lädt auch bei offenem Fader, 2026-09-27). Lader blendet `/dev/shm/cypherdj/material/<id>/fassungen/<bpm·1000>_r<fassung>/` ein (`basis.f32` oder die vier Stems, siehe oben), prüft gegen `fassung.json` (§13.2), reicht den Zeiger in den Callback; `deck/<n>/fader` → −200, `pfl` → 0, `trim` nach §1.5; Quittung `gestartet` beim Tausch, `fertig`; Ereignis `/e/geladen`. Fehler: `abgelehnt`, Grund `material_fehlt` \| `pruefung` \| `budget_speicher` |
 | `/k/deck/entladen` | `,hsi` | `id`, `quelle`, `deck` | nur wenn nicht zugleich laufend und offen (2026-09-27); gibt Speicher nach Rückgabe aus dem Callback frei |
-| `/k/deck/start` | `,hssssiddi` | `id`, `quelle`, `plan`, `gruppe`, `hoerschein`, `deck`, `ab_beat`, `quell_beat`, `politik` | bei `ab_beat` erklingt `quell_beat` (128-Frame-Blende, wenn das Deck schon läuft); das Deck folgt danach der Tempo-Karte (Faktor = `bpm / basis_bpm`) |
+| `/k/deck/start` | `,hssssiddi` | `id`, `quelle`, `plan`, `gruppe`, `hoerschein`, `deck`, `ab_beat`, `quell_beat`, `politik` | bei `ab_beat` erklingt `quell_beat` (128-Frame-Blende, wenn das Deck schon läuft; aus dem Stand 48 Frames Einblende, Audit F10); das Deck folgt danach der Tempo-Karte (Faktor = `bpm / basis_bpm`) |
 | `/k/deck/stopp` | `,hssssidi` | `id`, `quelle`, `plan`, `gruppe`, `hoerschein`, `deck`, `ab_beat`, `politik` | Stopp mit 10-ms-Rampe. Ein Stopp aus einem Plan wartet, solange er den letzten hörbaren Kanal träfe (I2). Nur ein **ausgeführter** Stopp mit Quelle `andreas` (oder die Play-Taste) unterbindet den Frist-Wächter für dieses Material |
 | `/k/deck/loop` | `,hssssiddid` | `id`, `quelle`, `plan`, `gruppe`, `hoerschein`, `deck`, `ab_beat`, `laenge_beats` (1/32 bis 128; 0 = Loop aus), `politik`, `raster_beats` | Loop ab der Quellposition bei `ab_beat` (Band, 128-Frame-Blende an der Naht) |
 | `/k/deck/roll` | `,hssssiddiid` | `id`, `quelle`, `plan`, `gruppe`, `hoerschein`, `deck`, `ab_beat`, `laenge_beats` (0 = aus), `art` (0 Band mit Schatten, 1 Puffer hinter dem Keylock ab Scheibe 5), `politik`, `raster_beats` | beim Aus kehrt das Deck zur Schattenposition zurück |
@@ -395,7 +402,7 @@ ein Schuss mit Quelle ungleich `andreas` einen gültigen Hörschein des Pads mit
 | `/erz/strom` | `,hsiss` | `id`, `quelle`, `strom` (1 bis 16), `ziel` (`midi:<p>:<c>` mit Port 1 bis 4 und Kanal 1 bis 16, `pad:<n>`, oder `kit:<name>` nach ADR 024), `kanal` (Kern-Kanal, auf dem der Klang zurückkommt: `erz/<m>` oder `pad/<n>`) | Ziel eines Stroms festlegen; `kanal` braucht der Kern für I3c |
 | Bundle (Zeitmarke 1 = „sofort“) mit `/erz/fenster` und n × `/erz/ev` | | | ein Fenster atomar ersetzen |
 | `/erz/fenster` | `,iiiiddh` | `strom`, `sendung` (monoton), `modus` (66 = `'B'`), `reserve`, `ab_beat`, `bis_beat`, `t_send_us` | Kopf; wie in `proben/06-erzeuger-muster/uhr` gemessen |
-| `/erz/ev` | `,iiiiddf` | `strom`, `muster`, `ev_id`, `note` (0 bis 127), `beat`, `dauer_beats`, `velocity` (0 bis 1) | **geändert gegenüber Probe 06:** `t_us` entfällt, `velocity` neu. **Schwanz (Scheibe 3):** danach 0 bis n Paare `if` (`nr`, `wert`), siehe unten |
+| `/erz/ev` | `,iiiiddf` | `strom`, `muster`, `ev_id`, `note` (0 bis 255; ab 128 das Zusatz-Kit `<b>` bei `kit:<a>+<b>`; MIDI-Ströme 0 bis 127), `beat`, `dauer_beats`, `velocity` (0 bis 1) | **geändert gegenüber Probe 06:** `t_us` entfällt, `velocity` neu. **Schwanz (Scheibe 3):** danach 0 bis n Paare `if` (`nr`, `wert`), siehe unten |
 | `/erz/cc` | `,iiidf` | `strom`, `ev_id`, `cc`, `beat`, `wert` (0 bis 1) | reserviert (später) |
 
 Semantik „Fenster ersetzen“: für `strom` werden alle **noch nicht gespielten** Ereignisse in `[max(ab_beat, jetzt),
@@ -415,12 +422,12 @@ Note ohne Klang im Kit verfällt still. Das Netz lädt und prüft das Kit; Fehle
 Text mit Grund im Protokoll. `midi:` und `pad:` sind noch nicht gebaut (Status 6, `ausserhalb_bereich`).
 **Zwei Kits in einem Strom (MVP 2 Scheibe 3, 2026-09-27):** `ziel` = `kit:<a>+<b>` (genau ein `+`) lädt beide
 Ordner in EIN Kit, damit ein Muster Klänge aus beiden spielt (`s("bd rec0")`). Fehlt `<b>/kit.json` ganz, gilt nur
-`<a>`; ein kaputtes `<b>` oder dieselbe Note in beiden ist `pruefung`. `<b>` ist das Kit der Mitschnitte (`rec`,
+`<a>`; ein kaputtes `<b>` ist `pruefung`; die Klänge von `<b>` liegen auf `128 + note` (Glanz 2.4.2, F08: battery 112 und rec 38 Klänge passen nicht in 128), der Erzeuger rechnet `s` → Note genauso. `<b>` ist das Kit der Mitschnitte (`rec`,
 Prüfinstanz `rec-<i>`, im selben Kit-Ordner): `djk-loop kit <loop> [<klang>]` und „→ STRUDEL“ auf der Seite legen
 dort einen Loop als Klang `<klang>:0` ab (Name `[a-z][a-z0-9_]{0,15}`, Vorgabe `rec0`, `rec1` …; kein Bankname aus
-`<a>`; Note = die niedrigste in beiden Kits freie; höchstens 10 s). Der Erzeuger sieht die geänderte `kit.json` vor
+`<a>`; Note = die niedrigste im Zusatz-Kit freie; höchstens 10 s). Der Erzeuger sieht die geänderte `kit.json` vor
 dem nächsten Takt und meldet den Strom mit demselben `ziel` neu an; der Kern lädt beide Kits neu, klingende Stimmen
-des alten Kits enden dabei hart (bekannt, Plan-Review Fund 17).
+des alten Kits klingen 240 Frames (5 ms) aus einer Kopie aus (Glanz 2.4.1, F11); sind alle 32 Stimmen belegt, klingt die älteste ebenso aus (F16), vorher wird eine freie gesucht.
 **I3c ist in Stufe 1 ausgesetzt:** `ungehoert` ist immer 0, Muster auf offenem Kanal klingen (Muster kommen auf
 Andreas' Zuruf, er öffnet den Kanal selbst). Fenster-Bundles bleiben unter 1 400 Bytes (§2); der Erzeuger teilt ein
 Fenster nach der kodierten Größe in lückenlose Teilfenster (ein `/erz/ev` ohne Schwanz: 60 Bytes).
@@ -431,16 +438,16 @@ der Vorgabe; ein Ereignis ohne Paare ist genau das bisherige `/erz/ev`. Eine unb
 älterer Kern bleibt mit einem neueren Erzeuger spielfähig). Neue Parameter sind neue Codes, kein neuer Typ. Heute:
 `0` `begin`, `1` `end` (Anteil 0 bis 1 der Klanglänge wie Strudel, Vorgabe 0 und 1): der Kern spielt die Frames
 `[floor(begin · frames), floor(end · frames))` des Klangs; außerhalb von [0, 1] (auch ±Inf) geklemmt, leerer Bereich =
-kein Ton; NaN bei einem bekannten Parameter ist ein Formfehler (`protokoll`). Höchstens 12 Paare je `/erz/ev`
+kein Ton. Liegt am ersten Frame eines Ausschnitts mit begin > 0 oder am letzten gespielten Frame (Schnitt oder Dateiende) ein Wert über −60 dBFS, blendet der Kern linear ein (32 Frames) bzw. aus (96 Frames), höchstens 1/4 des Ausschnitts (Glanz 2.5.1, F46/F50; Längen ungehört). Leise Kanten und der Klanganfang bei begin 0 bleiben bitgleich. NaN bei einem bekannten Parameter ist ein Formfehler (`protokoll`). Höchstens 12 Paare je `/erz/ev`
 (7 + 2 · 12 = 31 Werte, der Kern liest bis 32). Formfehler im Bundle: `/e/protokollfehler` mit `protokoll`.
 
 ### 4.9 Loop-Boxen (MVP 2, ADR 025)
 
 | Adresse | Typen | Felder | Wirkung |
 |---|---|---|---|
-| `/k/loop/laden` | `,hsis` | `id`, `quelle`, `box` (1 oder 2), `name` (`[a-z0-9_-]{1,32}`) | Loop aus `<loop_ordner>/<name>/` in die Box; eine laufende Box spielt den neuen auf demselben Raster weiter |
-| `/k/loop/start` | `,hsi` | `id`, `quelle`, `box` | die Box setzt auf der nächsten Takt-Eins ein |
-| `/k/loop/stopp` | `,hsi` | `id`, `quelle`, `box` | die Box endet auf der nächsten Takt-Eins; wartet sie noch auf den Einsatz, steht sie sofort |
+| `/k/loop/laden` | `,hsis` | `id`, `quelle`, `box` (1 oder 2), `name` (`[a-z0-9_-]{1,32}`) | Loop aus `<loop_ordner>/<name>/` in die Box; eine laufende Box blendet im nächsten Block über 960 Frames gleich laut in den neuen (Raster gleich); mit Keylock bei T ≠ 128 (Task 7, Dehner in der Box) klingt der neue danach rund 115 bis 135 ms im Varispeed (Brücke), dann im Keylock; ein wartender Loop der Quelle cypher fällt mit jedem Stopp (§4.7, Befehl oder Taste) (Audit F13) |
+| `/k/loop/start` | `,hsi` | `id`, `quelle`, `box` | die Box setzt auf der nächsten Takt-Eins ein; liegt der erste Wert über −60 dBFS, blendet sie über 32 Frames ein (Audit F15) |
+| `/k/loop/stopp` | `,hsi` | `id`, `quelle`, `box` | die Box endet auf der nächsten Takt-Eins; wartet sie noch auf den Einsatz, steht sie sofort; die letzten 144 Frames vor der Eins blendet sie auf 0 (kürzer, wenn der Stopp später kommt, mindestens 32 Frames: dann endet sie bis 32 Samples nach der Eins); zurückgenommen blendet sie vom Ist-Wert wieder auf (Audit F15) |
 | `/k/loop/raster` | `,hsii` | `id`, `quelle`, `box`, `versatz_frames` (größer als −`frames`, kleiner als `frames` des geladenen Loops) | Plan Grid: das Raster im Loop liegt `versatz_frames` Frames später; die Box spielt `(Position + versatz_frames) mod frames`; absolut, sofort. Leere Box: `nicht_geladen`; Betrag ≥ `frames`: `ausserhalb_bereich` |
 | `/k/loop/rec` | `,hsis` | `id`, `quelle`, `beats` (1, 2, 4, 8, 16 oder 32), `name` (`[a-z0-9_-]{1,32}`) | Mitschnitt von `erz/1` vor Trim: N = `beats` Beats ab dem nächsten Vielfachen von N Beats, in einen vom Netz angelegten Puffer |
 
@@ -523,12 +530,25 @@ Zyklus, der den Taktanfang enthält.
 (letzte Sekunde), `cb_p99_us` (letzte Sekunde), `aufwach_max_us` (letzte Sekunde), `stretcher_aktiv`,
 `befehle_wartend`, `ki_gestoppt` (0/1).
 
-### 5.5 Deck-Zustand `/zustand/deck ,iisdidddfiif` (50 Hz je geladenem Deck)
+### 5.5 Deck-Zustand `/zustand/deck ,iisdidddfiifii` (50 Hz je geladenem Deck)
 
 `deck`, `status` (0 leer, 1 geladen, 2 läuft, 3 Loop, 4 Roll, 5 Rückfall), `material_id`, `basis_bpm`, `fassung`,
 `quell_beat` (**hörbare** Position), `beats_bis_ende` (Master-Beats bis zum Materialende, ∞ im Loop), `faktor`,
 `vorlauf_ms` (Mindestvorlauf für Deck-Befehle, §3), `hoerweg` (0 direkt, 1 Stretcher, 2 Puffer), `stretcher_fuell`
-(Arbeitsvorlauf in Blöcken; −1 ohne Stretcher), `versatz_intern_ms` (Phasenregler: Ist gegen `sample_at`).
+(Arbeitsvorlauf in Blöcken; −1 ohne Stretcher), `versatz_intern_ms` (Phasenregler: Ist gegen `sample_at`),
+`keylock_unterlauf` (Keylock: Ring fehlte oder passte nicht zum Sample, das Deck spielte die Varispeed-Brücke; seit
+Kern-Start), `keylock_aufgegeben` (Keylock: Ansatz nach 8 verpassten Fristen aufgegeben, Varispeed bis zum nächsten
+Ereignis; seit Kern-Start). Beide 0 ohne Dehner.
+
+### 5.5b Box-Zustand `/zustand/box ,iiiiii` (50 Hz je Loop-Box mit Loop)
+
+Keylock Task 7b.3 (additiv, wie die Deck-Zähler in §5.5): `box` (1, 2), `status` (wie `/e/loop`: 0 leer, 1 bereit,
+2 wartet, 3 läuft, 4 endet), `keylock_unterlauf` (Ring fehlte oder passte nicht zum Sample, die Box spielte die
+Varispeed-Brücke; seit Kern-Start), `keylock_aufgegeben` (Ansatz nach 8 verpassten Fristen aufgegeben, Varispeed bis zum
+nächsten Ereignis; seit Kern-Start), `keylock_ring_voll` (Abschnitte des Box-Dehners, die nicht in den Ring passten; soll 0
+sein; seit Kern-Start), `keylock_kein_platz` (Keylock 7c.3: Ansätze, für die kein Platz der Leihe frei war; der Loop spielt
+dann im Varispeed bis zum nächsten Ereignis; seit Kern-Start). Alle vier 0 ohne Dehner. Gesendet im selben Zyklus wie `/zustand/deck` (Vielfaches von 960 Samples),
+für jede Box mit geladenem Loop. Die Attrappe (`attrappe_kern`) spielt keine Boxen und sendet es nicht.
 
 ### 5.6 Pegel `/pegel ,sfffffff` (20 Hz je aktivem Kanal, dazu `master`, `cue`)
 
@@ -583,7 +603,7 @@ höchstens 50 Hz je Regler, und immer bei Teilstart, Teilende und Halterwechsel.
 
 | Adresse | Typen | Felder | wann |
 |---|---|---|---|
-| `/e/loop` | `,iisiidf` | `box`, `status` (0 leer, 1 bereit, 2 wartet, 3 läuft, 4 endet, 5 tempo: seit 2026-09-30 nicht mehr gemeldet, ADR 026), `name`, `beats`, `fx_art`, `fx_beats`, `fx_wet` | bei jeder Änderung einer Box (Laden, Befehl, Einsatz und Ende am Sample, Tempo); `fx_*` bis Scheibe 3 immer 0, 1, 0 |
+| `/e/loop` | `,iisiidf` | `box`, `status` (0 leer, 1 bereit, 2 wartet, 3 läuft, 4 endet, 5 tempo: seit 2026-09-30 nicht mehr gemeldet, ADR 026), `name`, `beats`, `fx_art`, `fx_beats`, `fx_wet` | bei jeder Änderung einer Box (Laden, Befehl, Einsatz und Ende am Sample, Tempo); `fx_*` bis Scheibe 3 immer 0, 1, 0. Laden in eine klingende Box: die Meldung beim Laden trägt noch den alten Namen, der neue kommt mit der Übernahme (nächster Block, Audit F13) |
 | `/e/mitschnitt` | `,siid` | `name`, `beats`, `status` (0 fertig, 1 abgelehnt oder Schreibfehler), `ab_beat` | wenn ein Mitschnitt endet: fertig geschrieben, abgelehnt (Tempo, Überlappung, Stop Cypher) oder abgebrochen (`/k/set/neu`) |
 
 ### 5.12 Beat-FX (AUFTRAG 2026-09-28: zwei Einheiten, drei Parameter)
@@ -1285,7 +1305,7 @@ RMS-Fenster) an der hörbaren Position, Suchfenster ±200 ms, Band mit der höch
 | `karte_voll` | Kern | Tempo-Karte voll |
 | `ki_gestoppt` | Kern, Leitstand | Stopp-Taste aktiv |
 | `rechner_fehlt` | Leitstand | Rechner nicht erreichbar |
-| `kein_stretcher` | Kern | Tempo-Änderung, obwohl der Stretcher-Weg noch nicht gebaut ist (bis Scheibe 5) |
+| `kein_stretcher` | Kern | Roll Art 1 (hinter dem Keylock); Tempo-Änderung und Start bei fremdem Tempo nur bis Welle 2 (ADR 028) |
 | `autonomie` | Leitstand | Stufe erlaubt es nicht |
 | `grenze_sub` | Leitstand | Vorhersage einer Wahl reißt `grenze_sub` (§11, `vorhersage` `grenzen_ok`; Dossier 09 V4) |
 | `neustart` | Leitstand | Teil durch Kern-Neustart verloren, Grund von `teil_abgebrochen` (§16.3) |
@@ -1332,6 +1352,7 @@ Erzeuger-Ereignis auf einem offenen Kanal, und nach jedem Handgriff. Die Hand (M
     unabhängig von Bus, Crossfader und Master), braucht in `hoerschein` einen gültigen Hörschein dieses Kanals; bei
     Decks muss zusätzlich die Quellposition bei `ab_beat` in `[quell_von, quell_bis + 64]` liegen. Erzeuger-Kanäle `erz/*` sind ausgenommen (Andreas 2026-09-29):
     ihr Inhalt ist Cyphers eigenes Muster. Der Kern hält dort nur Stop Cypher; AUTO hält der Seiten-Server (409 `auto_aus` für Cyphers `/spur` und `/regler` auf `erz/<n>`, `wirt:<gruppe>`, `strom:<n>`), Stop Cypher dort zusätzlich Wirt und Muster-Fahrten.
+    Ebenso Pad-Kanäle `pad/*` (Andreas 2026-10-05: „diese fader solltest du selber steuern können alle“): der Kern öffnet sie ohne Hörschein; ob der Box-Inhalt Cyphers eigener Mitschnitt ist, prüft die Seite (409 `kein_hoerschein`, `server.ts` `eigenePad`). Deck-Kanäle bleiben gesperrt.
   - **I3b Pad:** ein `/k/schuss` (Quelle ungleich `andreas`) auf ein offenes Pad braucht einen gültigen Hörschein mit
     genau diesem Schuss (§4.6).
   - **I3c Erzeuger:** Ereignisse eines Musters auf einem offenen Erzeuger-Kanal spielen nur mit gültigem Hörschein
@@ -1513,3 +1534,4 @@ reserviert), Plugin-Inserts, Zerleger-MCP, Oberfläche.
 | 2026-09-28 | 1 | Plan Grid: §4.9 `/k/loop/raster`, `loop.json` optional `versatz_frames`. Neue Adresse, Version bleibt 1 |
 | 2026-09-28 | 1 | Plan Ohr, Task 1: §6.2 `cap` 65536 → 16384 (16,4 s statt 65,5 s Verlauf, 16 statt 64 MiB gesperrter Speicher; der Leser liest fortlaufend nach, der Ring muss nur 4 Takte fassen); Kanal 14 `master` und Kanal 15 `cue` als Satz ergänzt. Version bleibt 1 |
 | 2026-09-28 | 1 | Plan Ohr, Task 15 (FX-Routing wie Traktor, Andreas: Ja): §4.10 `/k/fx/routing`, §5.12 `/e/fx/routing`. Neue Adressen, Version bleibt 1 |
+| 2026-10-06 | 1 | Welle 2 Klickfrei (Audit F10, F13, F15): §4.2 /k/set/neu, §4.4 /k/deck/start, §4.9 /k/loop/laden, /k/loop/start, /k/loop/stopp mit Blenden, §5.11 /e/loop beim Laden in eine klingende Box; Kill der Hand läuft die 5-ms-Schaltrampe aus §1.5, /e/regler meldet dabei nur 0/1 (F18). Längen gehört 06.10. (Andreas: „passt alles“). Keine neuen Adressen, Version bleibt 1 |

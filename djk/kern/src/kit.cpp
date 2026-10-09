@@ -37,7 +37,7 @@ std::unique_ptr<Kit> lade_kit(const std::string& ordner, std::string* fehler) {
   for (const auto& k : j["klaenge"]) {
     if (!k.is_object() || !k.contains("note") || !k["note"].is_number_integer()) return fail("klang ohne ganze note");
     const int note = k["note"].get<int>();
-    if (note < 0 || note >= KIT_KLAENGE) return fail("note " + std::to_string(note) + " ausserhalb 0..127");
+    if (note < 0 || note >= KIT_NOTEN) return fail("note " + std::to_string(note) + " ausserhalb 0..127");
     KitKlang& kl = kit->klang[note];
     if (kl.frames > 0) return fail("note " + std::to_string(note) + " doppelt");
     const std::string datei = k.value("datei", std::string());
@@ -74,13 +74,9 @@ std::unique_ptr<Kit> lade_kits(const std::string& ordner_a, const std::string& o
   if (!probe) return a;  // b gibt es noch nicht
   std::unique_ptr<Kit> b = lade_kit(ordner_b, fehler);
   if (!b) return b;
-  for (int n = 0; n < KIT_KLAENGE; ++n) {
+  for (int n = 0; n < KIT_NOTEN; ++n) {  // F08: b auf KIT_NOTEN + n, eine Kollision ist ausgeschlossen
     if (b->klang[n].frames <= 0) continue;
-    if (a->klang[n].frames > 0) {
-      if (fehler) *fehler = ordner_b + "/kit.json: note " + std::to_string(n) + " schon in " + a->name;
-      return nullptr;
-    }
-    a->klang[n] = std::move(b->klang[n]);
+    a->klang[KIT_NOTEN + n] = std::move(b->klang[n]);
     ++a->n;
   }
   a->name += "+" + b->name;

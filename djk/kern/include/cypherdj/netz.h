@@ -59,13 +59,12 @@ class Netz {
   void setze_kit_ordner(std::string ordner) { kit_ordner_ = std::move(ordner); }
   // MVP 2 (ADR 025): Loop-Ordner (§4.9), /k/loop/laden liest <ordner>/<name>/
   void setze_loop_ordner(std::string ordner) { loop_ordner_ = std::move(ordner); }
-  // Keylock Slice 3: Einstellungen des Render-Fadens (Test-Zugang: Render-Funktion, Ruhezeit des Tempos, Priorität). Vor dem
+  // Keylock Slice 4: Einstellungen des Render-Fadens der REC-Umrechnung (Test-Zugang: Render-Funktion, Priorität). Vor dem
   // ersten Auftrag; der Faden entsteht erst mit ihm.
   void setze_keylock(const KeylockOpt& o) { kl_opt_ = o; }
   // Keylock Slice 3b (F6): Shutdown. Bricht einen laufenden Render ab und startet keinen weiteren (auch nicht aus
   // ereignisse_senden() nach dem Stopp des Netz-Fadens). laufen() ruft es am Ende selbst; Tests rufen es direkt.
   void keylock_beenden();
-
   // Scheibe 18, Abonnenten über einen Neustart (SCHNITTSTELLEN §4.1, §5.1, §5.9, §6.3). Beide vor dem Netz-Faden.
   // verbinde_zustand: Abonnenten bei jeder Änderung und jedem /k/hallo ins Abonnenten-Fach schreiben, /q/stand aus
   // dem neuesten Echtzeit-Fach lesen. nullptr: wie Scheibe 08 (kein Fach, kein /q/stand).
@@ -102,29 +101,17 @@ class Netz {
   bool loop_paket(const cypherdj::osc::Adresse* a, const osc::Nachricht& m);
   bool loop_ereignis(const Ereignis& e);
   std::string loop_ordner_;
-  // Keylock Slice 3 (netz_loop.cpp): Render-Faden, Kopie der Originale je Box, Auslöser. Alles nur im Netz-Faden.
-  static constexpr int KEYLOCK_BOXEN = 2;  // = LOOP_BOXEN (static_assert in netz_loop.cpp)
-  void keylock_tempo(double bpm);    // aus /uhr: seit wann ist das Tempo unverändert?
-  void keylock_zyklus();             // Ergebnisse abholen und einreihen, Aufträge auslösen
-  bool keylock_bereit();             // Render-Faden da (beim ersten Gebrauch gebaut); false: Keylock aus (Slice 3b, F5)
-  void keylock_alt(const void* zeiger);  // Slice 3b (F2): ein Loop kam über LOOP_ALT zurück (abgewiesen oder abgelöst)
+  // Keylock Slice 4 (netz_loop.cpp): Render-Faden der REC-Umrechnung (Task 7: die Keylock-Varianten der Boxen sind
+  // ausgebaut, die Box dehnt live mit dem Dehner). Alles nur im Netz-Faden.
+  void keylock_zyklus();             // umgerechnete Mitschnitte abholen, Datei schreiben, /e/mitschnitt
+  bool keylock_bereit();             // Render-Faden da (beim ersten Gebrauch gebaut); false: nicht anlegbar (Slice 3b, F5)
   KeylockOpt kl_opt_;
   std::unique_ptr<KeylockRender> kl_;
   bool kl_aus_ = false;              // der Render-Faden ließ sich nicht bauen: nie wieder versuchen
   bool kl_beendet_ = false;          // Shutdown: nichts mehr auslösen oder einreihen
-  // Slice 3b (F2): geladene Loops je Box in der Reihenfolge des Einreihens (Zeiger, Kopie). Der Kern nimmt ein Laden an oder
-  // weist es ab (Stopp Cypher); abgewiesen kommt derselbe Zeiger über LOOP_ALT zurück, ein abgelöster Loop ebenso. Aktuell
-  // ist der letzte Eintrag, der nicht zurückkam: kl_quelle_ folgt ihm.
-  struct KlGeladen {
-    const void* zeiger;
-    std::shared_ptr<const KeylockQuelle> quelle;
-  };
-  std::vector<KlGeladen> kl_geladen_[KEYLOCK_BOXEN];
-  std::shared_ptr<const KeylockQuelle> kl_quelle_[KEYLOCK_BOXEN];          // Original je Box (Kopie)
-  std::shared_ptr<const KeylockQuelle> kl_auftrag_quelle_[KEYLOCK_BOXEN];  // zuletzt beauftragt (Quelle, Tempo) je Box
-  double kl_auftrag_bpm_[KEYLOCK_BOXEN] = {0.0, 0.0};
-  double kl_bpm_ = 0.0;      // Tempo, an dem die Ruhezeit hängt (Anker; ändert sich nur bei |Δ| >= 1e-9)
-  int64_t kl_seit_ns_ = 0;   // steady_clock, seit wann kl_bpm_ gilt
+  // Keylock Task 3b: Stand des Reglers keylock aus der letzten /uhr (Ereignis::keylock_aus) für neue Abonnenten (/e/regler)
+  bool kl_knopf_aus_ = false;
+  bool kl_knopf_bekannt_ = false;  // mindestens eine /uhr gesehen (sonst bekommt ein neuer Abonnent nichts)
   int sock_ = -1;
   int port_ = 0;
   bool pruefmodus_;

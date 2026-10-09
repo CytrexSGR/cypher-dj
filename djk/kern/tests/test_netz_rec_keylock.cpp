@@ -5,8 +5,8 @@
 // Das Netz läuft gegen einen echten Kern ohne JACK (wie test_netz_keylock_kern); der Mitschnitt kommt als Ereignis in den
 // Ring (was der Kern bei fertigem Mitschnitt täte, Beweis des Kerns: test_kern_mitschnitt), ein Ton 130,81 Hz wird
 // "aufgenommen".
-//  (a) 135 BPM, 4 Beats: Datei genau 90 000 Frames, Frequenz der Datei 130,81 Hz ± 3 ct; Wiedergabe bei 135 (Loop laden,
-//      Variante, Master) ebenfalls ± 3 ct. Vorher (umtasten): −92 ct an der Datei und in der Wiedergabe.
+//  (a) 135 BPM, 4 Beats: Datei genau 90 000 Frames, Frequenz der Datei 130,81 Hz ± 3 ct. Vorher (umtasten): −92 ct. Die
+//      Wiedergabe bei 135 (bis Task 7 über die Keylock-Variante) prüft test_kern_box_keylock K3 mit dem Dehner.
 //  (b) 128 BPM: Datei bitgleich mit dem Puffer, kein R3-Aufruf (Haken zählt 0). Gegenprobe im selben Aufbau: 135 ruft ihn.
 //  (c) Länge exakt bei 130, 140, 100 BPM; außerhalb des Bereichs (rendere_rec direkt und im Netz) abgelehnt.
 //  (e) Fehler der Umrechnung (leer, Ausnahme, falsche Länge): keine Datei, keine .neu-Leiche, genau eine stderr-Zeile,
@@ -14,8 +14,6 @@
 // Slice 3c (Prüfung 3b/4, F-D, F-E):
 //  (g) /e/mitschnitt trägt im asynchronen Pfad (135 BPM, spät vom Netz-Faden gesendet) dieselben Felder wie im synchronen
 //      (128 BPM): Name, Fassung, Status, Beat. Die Seite beendet ihren REC-Knopf über den Namen (app.js: f.name === recAktiv).
-//  (h) Reihenfolge der Aufträge im Render-Faden: REC vor Varianten (Entscheidung Slice 4: auf REC wartet jemand, eine Variante
-//      ist Zusatz). Ein Variantenauftrag und ein REC warten hinter einem laufenden Render; nach der Freigabe kommt REC zuerst.
 #include <fcntl.h>
 
 #include <atomic>
@@ -31,6 +29,7 @@
 #include <vector>
 
 #include "cypherdj/loop.h"
+#include "cypherdj/loopbox.h"
 #include "cypherdj/loop_stretch.h"
 #include "cypherdj/netz.h"
 #include "cypherdj/uhr.h"
@@ -180,7 +179,10 @@ struct Aufbau {
     const auto t0 = Uhr::now();
     while (Uhr::now() - t0 < std::chrono::milliseconds(ms)) {
       zyklus(1);
-      if (g.warte("/e/mitschnitt", 1)) {
+      // Je Zyklus schickt das Netz mehr als ein Paket (/uhr, /pegel ...); g.warte holt alles Anstehende (gegenstelle.h),
+      // so läuft der Socket auch unter Last nicht voll und /e/mitschnitt geht nicht verloren.
+      const bool da = g.warte("/e/mitschnitt", 1);
+      if (da) {
         *status = g.m.werte[2].i;
         if (mel) {
           mel->name = g.s(0);
@@ -237,40 +239,8 @@ int main() {
     const double ff = d.size() == 2 * 90000 ? frequenz(d.data(), 2, 10000, 80000) : 0.0;
     std::printf("(a) Frequenz der Datei %.3f Hz = %+.1f ct gegen %.2f Hz (Soll |ct| <= 3; mit umtasten: -92)\n", ff, cent(ff, F_TON), F_TON);
     PRUEF(ff > 0 && std::fabs(cent(ff, F_TON)) <= 3.0);
-    // Wiedergabe bei 135: Loop laden, die Keylock-Variante (R3 bei 135) rechnet der Render-Faden, Box starten
-    a.x.teil("pad/1/fader", 0.0f, 0.0, 0.0);
-    { cdj::osc::Schreiber s(v::k_loop_laden); s.h(7).s("andreas").i(1).s("rec135"); a.netz.paket(s.daten(), s.groesse()); }
-    const auto t0 = Uhr::now();
-    while (Uhr::now() - t0 < std::chrono::milliseconds(1200)) {
-      a.zyklus(1);
-      std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    }
-    auto st2 = a.x.neu(cdj::Befehl::LOOP_START, "andreas");
-    st2.deck = 1;
-    a.x.sende(st2);
-    const int64_t s_start = a.x.kern->sample();
-    while (a.x.kern->sample() < s_start + 16 * 22500) a.zyklus(1);
-    int64_t erst = -1;
-    for (int64_t i = s_start; i < (int64_t)a.x.l.size(); ++i)
-      if (std::fabs(a.x.l[(size_t)i]) > 0.05f) {
-        erst = i;
-        break;
-      }
-    // Fenster innerhalb eines Durchlaufs (1,78 s): die Naht eines Tons, der nicht zur Loop-Länge passt, knackt und zählt sonst mit
-    const double fm = erst < 0 ? 0.0 : frequenz(a.x.l.data(), 1, erst + 12000, erst + 72000);
-    std::printf("(a) Wiedergabe bei 135 BPM: Frequenz im Master %.3f Hz = %+.1f ct (Soll |ct| <= 3; Varispeed-Mitschnitt: -92)\n", fm, cent(fm, F_TON));
-    PRUEF(fm > 0 && std::fabs(cent(fm, F_TON)) <= 3.0);
-    // Aufräumen: ein Loop vom Stapel ersetzt den geladenen, das Netz gibt Loop und Variante frei
-    cdj::Loop ende;
-    ende.name = "ende";
-    ende.beats = 1;
-    ende.frames = SPB;
-    ende.daten.assign((size_t)SPB * 2, 0.0f);
-    auto ld = a.x.neu(cdj::Befehl::LOOP_LADEN, "andreas");
-    ld.deck = 1;
-    ld.zeiger = &ende;
-    a.x.sende(ld);
-    a.zyklus(40);
+    // Die Wiedergabe bei 135 (vorher über die Keylock-Variante des Render-Fadens) prüft seit Task 7 test_kern_box_keylock K3
+    // mit dem Dehner in der Box.
   }
   {  // (b) 128 BPM: bitgleich, kein R3; Gegenprobe 135 ruft ihn
     Haken h;
@@ -315,7 +285,7 @@ int main() {
       const std::string text((std::istreambuf_iterator<char>(js)), std::istreambuf_iterator<char>());
       PRUEF(text.find("aufnahme_bpm") != std::string::npos);
     }
-    // außerhalb [60, 200]: rendere_rec lehnt ab (wie rendere_keylock); Negativ-Kontrolle: die Grenzen selbst gehen
+    // außerhalb [60, 200]: rendere_rec lehnt ab; Negativ-Kontrolle: die Grenzen selbst gehen
     std::vector<float> ein((size_t)2 * 200000, 0.1f);
     const int64_t R = 90000;
     const int64_t roh_t[] = {50000, 57000, 57600, 100000, 192000, 195000, 200000};  // T = 128·90000/roh
@@ -370,14 +340,30 @@ int main() {
     cdj::KeylockOpt opt;
     opt.rec_fn = h.fn();
     Aufbau a("test_netz_rec_keylock_e2", 135.0, opt);
-    a.melde(neuer_mitschnitt("rechalt", 4, 135.0, F_TON));
+    // Der Fehlerfall: ein Netz, das auf die Umrechnung WARTET, hängt bis h.frei(). Warten kostet keine CPU-Zeit, darum taugt
+    // weder CPU-Zeit noch eine knappe Wanduhr-Grenze (die reißt auf einem ausgelasteten Rechner, ohne dass etwas hängt).
+    // Gemessen wird der Fortschritt: melde und 50 Zyklen laufen in einem eigenen Faden, die Wanduhr ist nur das Sicherheitsnetz
+    // (10 s, ein gesundes Netz braucht ~20 ms). Hängt es, scheitert die Prüfung nach 10 s, statt dass ctest den Test abschießt.
+    std::atomic<int> getan{0};
+    std::atomic<bool> fertig{false};
     const auto t0 = Uhr::now();
-    for (int i = 0; i < 50; ++i) a.zyklus(1);
+    std::thread netz_faden([&] {
+      a.melde(neuer_mitschnitt("rechalt", 4, 135.0, F_TON));
+      for (int i = 0; i < 50; ++i) {
+        a.zyklus(1);
+        ++getan;
+      }
+      fertig = true;
+    });
+    while (!fertig && Uhr::now() - t0 < std::chrono::seconds(10)) std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    const bool kam_weiter = fertig;
     const long long ms = (long long)std::chrono::duration_cast<std::chrono::milliseconds>(Uhr::now() - t0).count();
     int32_t st = -1;
-    std::printf("(e2) 50 Netz-Zyklen bei angehaltener Umrechnung: %lld ms, Datei da %d (Soll 0), Aufrufe %d\n", ms,
-                (int)fs::exists(fs::path(a.ab.pfad) / "rechalt"), h.aufrufe.load());
-    PRUEF(ms < 1000 && !fs::exists(fs::path(a.ab.pfad) / "rechalt"));
+    std::printf("(e2) 50 Netz-Zyklen bei angehaltener Umrechnung: %d getan, fertig %d (Soll 50, 1) nach %lld ms, Datei da %d (Soll 0), Aufrufe %d\n",
+                getan.load(), (int)kam_weiter, ms, (int)fs::exists(fs::path(a.ab.pfad) / "rechalt"), h.aufrufe.load());
+    if (!kam_weiter) h.frei();  // Hänger: die Umrechnung lösen, sonst joint der Test nie
+    netz_faden.join();
+    PRUEF(kam_weiter && getan == 50 && !fs::exists(fs::path(a.ab.pfad) / "rechalt"));
     PRUEF(!a.g.warte("/e/mitschnitt", 50));  // solange nichts gerechnet ist, gibt es auch kein /e/mitschnitt
     h.frei();
     PRUEF(a.warte_ereignis(15000, &st) && st == 0 && fs::exists(fs::path(a.ab.pfad) / "rechalt" / "loop.f32"));
@@ -402,88 +388,6 @@ int main() {
     PRUEF(async.name == "async135" && async.fassung == 4 && async.status == 0 && async.beat == BEAT);
     // Feld für Feld gleich (bis auf den Namen, der je Pfad ein anderer ist)
     PRUEF(async.fassung == sync.fassung && async.status == sync.status && async.beat == sync.beat);
-  }
-  {  // (h) F-E: REC-Aufträge vor Varianten. Der Render-Faden hängt in der Variante von Box 1; dahinter warten die Variante
-     // von Box 2 (zuerst eingereiht) und ein REC (danach). Nach der Freigabe muss der REC vor der Variante von Box 2 rechnen.
-    std::mutex m;
-    std::condition_variable cv;
-    std::vector<std::string> reihe;  // Reihenfolge der Render-Aufrufe
-    bool halten = true;              // nur der erste Variantenrender wartet
-    int varianten = 0;
-    cdj::KeylockOpt opt;
-    opt.fn = [&](const std::vector<float>& d, double bpm) {
-      std::unique_lock<std::mutex> lk(m);
-      const int nr = varianten++;
-      reihe.push_back("V" + std::to_string(nr));
-      if (nr == 0) cv.wait(lk, [&] { return !halten; });
-      return std::vector<float>(2 * (size_t)std::llround((double)(d.size() / 2) * 128.0 / bpm), 0.125f);
-    };
-    opt.rec_fn = [&](const float*, int64_t, int64_t frames) {
-      std::lock_guard<std::mutex> lk(m);
-      reihe.push_back("R");
-      return std::vector<float>((size_t)frames * 2, 0.0f);
-    };
-    opt.ruhe_ns = 50'000'000LL;
-    Aufbau a("test_netz_rec_keylock_h", 135.0, opt);
-    loop_anlegen(a.ab.pfad, "eins", 1, 0.25f);
-    loop_anlegen(a.ab.pfad, "zwei", 1, 0.5f);
-    auto warte = [&](size_t n, int ms) {
-      const auto t0 = Uhr::now();
-      while (Uhr::now() - t0 < std::chrono::milliseconds(ms)) {
-        a.zyklus(1);
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        std::lock_guard<std::mutex> lk(m);
-        if (reihe.size() >= n) return true;
-      }
-      return false;
-    };
-    auto laden = [&](int box, const char* name, int h) {
-      cdj::osc::Schreiber s(v::k_loop_laden);
-      s.h(h).s("andreas").i(box).s(name);
-      a.netz.paket(s.daten(), s.groesse());
-    };
-    laden(1, "eins", 7);
-    PRUEF(warte(1, 5000));  // Render der Variante von Box 1 läuft und hängt
-    laden(2, "zwei", 8);
-    const auto t0 = Uhr::now();
-    while (Uhr::now() - t0 < std::chrono::milliseconds(400)) {  // der Auftrag für Box 2 steht hinter dem hängenden Render
-      a.zyklus(1);
-      std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    }
-    a.melde(neuer_mitschnitt("rech", 4, 135.0, F_TON));  // REC kommt nach dem Variantenauftrag
-    for (int i = 0; i < 100; ++i) {
-      a.zyklus(1);
-      std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    }
-    {
-      std::lock_guard<std::mutex> lk(m);
-      PRUEF(reihe.size() == 1);  // nichts ist an dem hängenden Render vorbeigekommen
-      halten = false;
-    }
-    cv.notify_all();
-    PRUEF(warte(3, 15000));
-    int32_t st = -1;
-    PRUEF(a.warte_ereignis(15000, &st) && st == 0);
-    std::string folge;
-    {
-      std::lock_guard<std::mutex> lk(m);
-      for (const auto& x : reihe) folge += x + " ";
-    }
-    std::printf("(h) Reihenfolge der Render-Aufrufe: %s(Soll: V0 R V1)\n", folge.c_str());
-    PRUEF(folge == "V0 R V1 ");
-    // Aufräumen wie in (a): je ein Loop vom Stapel ersetzt die geladenen, das Netz gibt Loops und Varianten frei
-    cdj::Loop ende[2];
-    for (int i = 0; i < 2; ++i) {
-      ende[i].name = "ende";
-      ende[i].beats = 1;
-      ende[i].frames = SPB;
-      ende[i].daten.assign((size_t)SPB * 2, 0.0f);
-      auto ld = a.x.neu(cdj::Befehl::LOOP_LADEN, "andreas");
-      ld.deck = i + 1;
-      ld.zeiger = &ende[i];
-      a.x.sende(ld);
-    }
-    a.zyklus(40);
   }
   {  // (f) Slice 3b (F5): der Render-Faden startet nicht (std::system_error): der Mitschnitt lässt sich nicht umrechnen und wird nicht
      // roh geschrieben (falsche Länge und Tonhöhe): Status 1, keine Datei, der Kern läuft weiter (kein std::terminate).

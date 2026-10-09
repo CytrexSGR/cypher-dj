@@ -42,7 +42,7 @@ export const ADRESSEN = {
   '/k/latenz': { typen: ',hssi', abschnitt: '4.7', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'ziel', 'samples'], bereiche: {} },
   '/erz/strom': { typen: ',hsiss', abschnitt: '4.8', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'strom', 'ziel', 'kanal'], bereiche: { strom: [1, 16] } },
   '/erz/fenster': { typen: ',iiiiddh', abschnitt: '4.8', richtung: 'an_kern', nurPruefmodus: false, felder: ['strom', 'sendung', 'modus', 'reserve', 'ab_beat', 'bis_beat', 't_send_us'], bereiche: { strom: [1, 16] } },
-  '/erz/ev': { typen: ',iiiiddf', schwanz: 'if', abschnitt: '4.8', richtung: 'an_kern', nurPruefmodus: false, felder: ['strom', 'muster', 'ev_id', 'note', 'beat', 'dauer_beats', 'velocity'], bereiche: { strom: [1, 16], note: [0, 127], velocity: [0, 1] } },
+  '/erz/ev': { typen: ',iiiiddf', schwanz: 'if', abschnitt: '4.8', richtung: 'an_kern', nurPruefmodus: false, felder: ['strom', 'muster', 'ev_id', 'note', 'beat', 'dauer_beats', 'velocity'], bereiche: { strom: [1, 16], note: [0, 255], velocity: [0, 1] } },
   '/erz/cc': { typen: ',iiidf', abschnitt: '4.8', richtung: 'an_kern', nurPruefmodus: false, felder: ['strom', 'ev_id', 'cc', 'beat', 'wert'], bereiche: { strom: [1, 16], wert: [0, 1] } },
   '/k/loop/laden': { typen: ',hsis', abschnitt: '4.9', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'box', 'name'], bereiche: { box: [1, 2] } },
   '/k/loop/start': { typen: ',hsi', abschnitt: '4.9', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'box'], bereiche: { box: [1, 2] } },
@@ -58,7 +58,8 @@ export const ADRESSEN = {
   '/uhr': { typen: ',hhddd', abschnitt: '5.2', richtung: 'vom_kern', nurPruefmodus: false, felder: ['sample', 'mono_ns', 'beat', 'bpm', 'bpm_pro_s'], bereiche: {} },
   '/takt': { typen: ',iihdd', abschnitt: '5.3', richtung: 'vom_kern', nurPruefmodus: false, felder: ['takt', 'phrase', 'sample', 'beat', 'bpm'], bereiche: { takt: [1, null], phrase: [1, null] } },
   '/zustand/kern': { typen: ',iihiiiiiiii', abschnitt: '5.4', richtung: 'vom_kern', nurPruefmodus: false, felder: ['generation', 'quantum', 'sample', 'frame_luecken', 'ausgelassene_perioden', 'cb_max_us', 'cb_p99_us', 'aufwach_max_us', 'stretcher_aktiv', 'befehle_wartend', 'ki_gestoppt'], bereiche: {} },
-  '/zustand/deck': { typen: ',iisdidddfiif', abschnitt: '5.5', richtung: 'vom_kern', nurPruefmodus: false, felder: ['deck', 'status', 'material_id', 'basis_bpm', 'fassung', 'quell_beat', 'beats_bis_ende', 'faktor', 'vorlauf_ms', 'hoerweg', 'stretcher_fuell', 'versatz_intern_ms'], bereiche: { deck: [1, 4], stretcher_fuell: [-1, null] } },
+  '/zustand/deck': { typen: ',iisdidddfiifii', abschnitt: '5.5', richtung: 'vom_kern', nurPruefmodus: false, felder: ['deck', 'status', 'material_id', 'basis_bpm', 'fassung', 'quell_beat', 'beats_bis_ende', 'faktor', 'vorlauf_ms', 'hoerweg', 'stretcher_fuell', 'versatz_intern_ms', 'keylock_unterlauf', 'keylock_aufgegeben'], bereiche: { deck: [1, 4], stretcher_fuell: [-1, null] } },
+  '/zustand/box': { typen: ',iiiiii', abschnitt: '5.5b', richtung: 'vom_kern', nurPruefmodus: false, felder: ['box', 'status', 'keylock_unterlauf', 'keylock_aufgegeben', 'keylock_ring_voll', 'keylock_kein_platz'], bereiche: { box: [1, 2] } },
   '/pegel': { typen: ',sfffffff', abschnitt: '5.6', richtung: 'vom_kern', nurPruefmodus: false, felder: ['kanal', 'spitze_db', 'echtspitze_dbtp', 'lufs_m', 'lufs_s', 'band_tief_db', 'band_mitte_db', 'band_hoch_db'], bereiche: {} },
   '/e/regler': { typen: ',sfshd', abschnitt: '5.7', richtung: 'vom_kern', nurPruefmodus: false, felder: ['pfad', 'wert', 'halter', 'sample', 'beat'], bereiche: {} },
   '/e/hand': { typen: ',sfhd', abschnitt: '5.8', richtung: 'vom_kern', nurPruefmodus: false, felder: ['pfad', 'wert', 'sample', 'beat'], bereiche: {} },
@@ -141,7 +142,8 @@ export interface Werte {
   '/uhr': [sample: bigint, mono_ns: bigint, beat: number, bpm: number, bpm_pro_s: number];
   '/takt': [takt: number, phrase: number, sample: bigint, beat: number, bpm: number];
   '/zustand/kern': [generation: number, quantum: number, sample: bigint, frame_luecken: number, ausgelassene_perioden: number, cb_max_us: number, cb_p99_us: number, aufwach_max_us: number, stretcher_aktiv: number, befehle_wartend: number, ki_gestoppt: number];
-  '/zustand/deck': [deck: number, status: number, material_id: string, basis_bpm: number, fassung: number, quell_beat: number, beats_bis_ende: number, faktor: number, vorlauf_ms: number, hoerweg: number, stretcher_fuell: number, versatz_intern_ms: number];
+  '/zustand/deck': [deck: number, status: number, material_id: string, basis_bpm: number, fassung: number, quell_beat: number, beats_bis_ende: number, faktor: number, vorlauf_ms: number, hoerweg: number, stretcher_fuell: number, versatz_intern_ms: number, keylock_unterlauf: number, keylock_aufgegeben: number];
+  '/zustand/box': [box: number, status: number, keylock_unterlauf: number, keylock_aufgegeben: number, keylock_ring_voll: number, keylock_kein_platz: number];
   '/pegel': [kanal: string, spitze_db: number, echtspitze_dbtp: number, lufs_m: number, lufs_s: number, band_tief_db: number, band_mitte_db: number, band_hoch_db: number];
   '/e/regler': [pfad: string, wert: number, halter: string, sample: bigint, beat: number];
   '/e/hand': [pfad: string, wert: number, sample: bigint, beat: number];

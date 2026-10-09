@@ -11,6 +11,7 @@ import numpy as np
 from . import kontrollen as K
 from .audio import lade_mono
 from .eins import eins_beat_this, eins_tiefband
+from .phase import verfeinere_schlaege
 from .karte import karte_aus_schlaegen, karte_fest, rest_gegen_wahrheit, vergleiche
 from .raster_werkzeuge import SR_BEAT_THIS, SR_ESSENTIA, beat_this, essentia_schlaege
 from .tempo_wahl import tor_streckfaktor, waehle_vielfaches
@@ -48,6 +49,8 @@ def miss(name, pfad, wahrheit=None, eins_zeiten=None, cd=None, geraet="cpu"):
     zeit["beat_this"] = time.perf_counter() - t
     t = time.perf_counter()
     ticks, ess_bpm_global, ess_konfidenz = essentia_schlaege(x44)
+    schlaege_bt = np.asarray(schlaege, dtype=float)
+    schlaege, verfeinerung = verfeinere_schlaege(x44, SR_ESSENTIA, schlaege_bt)   # 2026-10-09: auf die Anschlaege
     zeit["essentia"] = time.perf_counter() - t
     t = time.perf_counter()
     k1 = karte_aus_schlaegen(schlaege)
@@ -60,7 +63,8 @@ def miss(name, pfad, wahrheit=None, eins_zeiten=None, cd=None, geraet="cpu"):
     vgl = vergleiche(karte, ke)
     gerade = vergleiche(karte_fest(schlaege), k1)
     einig = vgl["form_p90_ms"] is not None and vgl["form_p90_ms"] <= TOR_RASTER_MS
-    warnungen = [] if einig else [f"Raster-Werkzeuge uneinig: Form p90 {vgl['form_p90_ms']} ms "
+    warnungen = ([] if verfeinerung["verfeinert"] else [f"Raster nicht an Anschlaegen verfeinert: {verfeinerung['grund']}"])
+    warnungen += [] if einig else [f"Raster-Werkzeuge uneinig: Form p90 {vgl['form_p90_ms']} ms "
                                   f"(beat_this {bpm:.3f}, Essentia {ke1.bpm_gesamt():.3f} BPM)"]
     zeit["karte"] = time.perf_counter() - t
     t = time.perf_counter()
@@ -90,7 +94,8 @@ def miss(name, pfad, wahrheit=None, eins_zeiten=None, cd=None, geraet="cpu"):
                     "tempo_vielfaches": v, "erste_eins_quell_beat": eins_bt,
                     "erste_eins_zweitverfahren": eins_tb},
          "tempo_karte_quelle": karte.als_liste(),
-         "roh": {"schlaege_s": [round(float(s), 4) for s in schlaege],
+         "verfeinerung": verfeinerung,
+         "roh": {"schlaege_s": [round(float(s), 4) for s in schlaege_bt],
                  "downbeats_s": [round(float(s), 4) for s in downbeats],
                  "essentia_ticks_s": [round(float(s), 6) for s in ticks]}}
     if wahrheit is not None:

@@ -34,7 +34,7 @@ sag() { [ "$STILL" = 1 ] || echo "$@"; }
 if [ "$ALLES" = 1 ]; then
   # Erst die Prozesse außerhalb der Units (Cue-Server samt Vorhörer), dann wie gehabt die Units.
   if [ "$TROCKEN" = 1 ]; then
-    for n in wirt-bass wirt-melodie erzeuger erzeuger2 erzeuger3 oberflaeche leitstand notbahn kern; do
+    for n in digitalwache wirt-bass wirt-melodie erzeuger erzeuger2 erzeuger3 oberflaeche leitstand notbahn kern; do
       u=cypherdj-$n$SFX.service
       systemctl --user list-units --all --no-legend --plain "$u" 2>/dev/null | grep -q . && echo "  would stop $u"
     done
@@ -44,7 +44,7 @@ if [ "$ALLES" = 1 ]; then
   fi
   python3 "$HIER/eigene.py" --djk "$DJK" --instanz "$I" --beenden || echo "djk-stop: a djk process did not stop (see above)" >&2
 fi
-for n in wirt-bass wirt-melodie erzeuger erzeuger2 erzeuger3 oberflaeche leitstand notbahn kern; do
+for n in digitalwache wirt-bass wirt-melodie erzeuger erzeuger2 erzeuger3 oberflaeche leitstand notbahn kern; do
   u=cypherdj-$n$SFX.service
   if systemctl --user list-units --all --no-legend --plain "$u" 2>/dev/null | grep -q .; then
     systemctl --user stop "$u" 2>/dev/null
@@ -60,7 +60,7 @@ if [ -n "$MODID" ]; then
     pactl unload-module "$MODID" && sag "  unloaded silent sink (module $MODID)"
   fi
 fi
-rm -f "$STATE"
+rm -f "$STATE" "$RUN/digitalout.json"
 # Kern-Zustand (Scheibe 18) gilt für einen Neustart NACH ABSTURZ (systemd startet den Kern neu, er setzt fort). Nach
 # einem bewussten Stopp soll der nächste Start frisch sein: sonst stellt der Kern Reglerstände und Decks des vorigen
 # Laufs wieder her, die Seite zeigt aber die Vorgaben (Befund 2026-09-27: Seite −∞, Kern 0 dB). Nur löschen, was kein
@@ -72,7 +72,7 @@ for f in "/dev/shm/cypherdj$SFX/zustand" "/dev/shm/cypherdj$SFX/bus" "/dev/shm/c
   fi
 done
 REST=$(systemctl --user list-units --all --no-legend --plain "cypherdj-kern$SFX.service" "cypherdj-notbahn$SFX.service" \
-  "cypherdj-leitstand$SFX.service" "cypherdj-oberflaeche$SFX.service" "cypherdj-wirt-bass$SFX.service" "cypherdj-wirt-melodie$SFX.service" "cypherdj-erzeuger$SFX.service" "cypherdj-erzeuger2$SFX.service" "cypherdj-erzeuger3$SFX.service" 2>/dev/null)
+  "cypherdj-leitstand$SFX.service" "cypherdj-oberflaeche$SFX.service" "cypherdj-wirt-bass$SFX.service" "cypherdj-wirt-melodie$SFX.service" "cypherdj-erzeuger$SFX.service" "cypherdj-erzeuger2$SFX.service" "cypherdj-erzeuger3$SFX.service" "cypherdj-digitalwache$SFX.service" 2>/dev/null)
 if [ -n "$REST" ]; then echo "djk-stop: still loaded:" >&2; echo "$REST" >&2; exit 1; fi
 sag "djk-stop: cypherdj$SFX is down, 0 units"
 exit 0

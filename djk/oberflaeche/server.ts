@@ -10,6 +10,7 @@
 //   keine halbe Kopie. Beim Start räumt er Reste toter Kopien (.kopie-<pid>-<n>) weg.
 // Aufruf: node djk/oberflaeche/server.ts [--port N] [--kern-port N] [--abo-port N] [--leitstand-ws N] [--bestand DIR]
 //   [--mediathek DATEI]  (Vorgabe $CYPHERDJ_MEDIATHEK, z. B. /path/to/mediathek.sqlite; nur lesen)
+//   [--digitalout DATEI]  (Glanz 2.1, F22: Standdatei der Digital-Out-Wache; fehlt sie, gilt 'unbewacht')
 //   [--arbeitsbestand DIR]  (Vorgabe /dev/shm/cypherdj/material, mit Prüfinstanz /dev/shm/cypherdj-<i>/material)
 //   [--ziel-kurve kern|attrappe_linear]  (Vorgabe kern; Prüfstapel gegen die Attrappe: attrappe_linear)
 //   [--kern-pruefmodus an|aus]  (ohne Angabe unbekannt: gelernt aus /e/protokollfehler des Kerns auf /test/hand;
@@ -36,10 +37,11 @@ import { WelleCache, WelleFehler, loopQuelle, fassungQuelle } from './welle_cach
 import { RASTER_WAHL, abBeat, sprungDelta, rasterRunden, hotcueDatei, leseHotcues, schreibeHotcues, type Hotcue, type Fassung, rasterSchritt, RASTER_MAX, rasterDatei, leseRaster, schreibeRaster, einsSetzen } from './deck_bedienung.ts';
 // @ts-expect-error reines .mjs ohne Typen (djk/loops)
 import { loopZuKlang } from '../loops/kit_schreiben.mjs';
-import { AB, PFAD, oeffnet, kanalOffen, FEHL_STATUS } from './hand_bedienung.ts';
+import { AB, PFAD, oeffnet, kanalOffen, FEHL_STATUS, ersterFreierBeat } from './hand_bedienung.ts';
 import { Sammlungen, SammlungFehler, uebersicht } from './sammlung.ts';
-import { Mediathek, Vorbereiter, MediathekFehler, MEDIATHEK_VORGABE, bestandIds, parseBpm, parseLimit } from './mediathek.ts';
+import { Mediathek, Vorbereiter, MediathekFehler, KLANG_TYPEN, type KlangTreffer, MEDIATHEK_VORGABE, bestandIds, parseBpm, parseLimit } from './mediathek.ts';
 import { pruefeSpur, plane, oeffnetKanal, beatZuMono, wirtRuf, stromVonZiel, faelligeMuster, SPUR_NAME, type MusterPlan, type Fahrt } from './spur.ts';
+import { leseAusgang } from './ausgang.ts';
 import { OhrLeser, hoerAntwort, sync as ohrSync, K as OHR_K, type DeckLage, Hoerscheinstelle, type Hoerschein, type DeckStand as OhrDeckStand } from './ohr.ts';
 // @ts-expect-error reines .mjs ohne Typen (djk/erzeuger); muster_stand lädt Strudel NICHT (Plan-Review M3)
 import { PegelPuffer } from './pegel_puffer.ts';
@@ -65,6 +67,7 @@ export interface ServerOptionen {
   // Kurve, nach der die Seite Griffe rechnet (oeffentlich/kurven.js): 'kern' (Vorgabe) oder 'attrappe_linear' (Attrappe 13)
   zielKurve?: string;
   loops?: string;  // MVP 2: Loop-Ordner (Vorgabe aus CYPHERDJ_INSTANZ)
+  digitalout?: string;  // Glanz 2.1: Standdatei der Digital-Out-Wache
   kits?: string;   // MVP 2 Scheibe 3: Kit-Ordner (Vorgabe ~/.config/cypherdj/kits, wie der Kern)
   kit?: string;    // Basis-Kit des Erzeugers (Vorgabe battery); Zusatz-Kit rec bzw. rec-<i>
   welleCache?: string;  // Plan Oberfläche T2: Vorgabe ~/.cache/cypherdj/welle
@@ -226,6 +229,20 @@ export class Oberflaeche {
       const s = ohrSync(saetzeDeck, saetzePartner, u.bpm);
       r.j.sync = { sync_ms: s.sync_ms, deck_gegen_deck_ms: s.deck_gegen_deck_ms, n: s.n, validiert: false };
       r.j.hoerschein = this.hoerscheinstelle.letzter(deck);   // Ohr T10
+      // Task 1.5: der Mess-Abgriff liegt NACH dem Trim (adr/008), also relativ korrigieren, nicht absolut.
+      // Einheit dB; absoluter Soll für deck/N/trim (derselbe Pfad wie /regler), geklemmt auf die Reglertabelle ±24.
+      // Kein Vorschlag, wenn der alte Trim unbekannt ist (stand.regler startet nach Seiten-Neustart leer, der Kern
+      // schickt Neuabonnenten keine Regler: `trim_unbekannt`) oder wenn eine Seite stumm ist (ohr db10 −200).
+      const v = r.j.vergleich;
+      const pd = v.pegel_diff_db;
+      if (typeof pd === 'number' && Number.isFinite(pd) && v.neu.lufs > -200 && v.laufend.lufs > -200) {
+        const trimAlt = this.stand.regler[`deck/${deck}/trim`];
+        if (typeof trimAlt === 'number' && Number.isFinite(trimAlt)) {
+          v.trim_vorschlag_db = Math.max(-24, Math.min(24, Math.round((trimAlt - pd) * 10) / 10));
+        } else {
+          v.trim_unbekannt = true;
+        }
+      }
     }
     this.json(a, r.code, r.j);
   }
@@ -418,8 +435,10 @@ export class Oberflaeche {
       this.stand.fxRouting = 'post_fader';
       if (this.fxRoutingWunsch !== 'post_fader') this.fxRoutingSenden(this.fxRoutingWunsch, 'andreas');
     }
+    if (neuerKern || gebremst) this.fahrtEnde.clear();                 // Plan Glanz 1.2: ob ein gebremster Start den Beat auf 0 setzt, ist ungeprüft
     if (neuerKern || gebremst) this.loopRasterLive = {};              // Plan Grid, Review F5
     if (neuerKern || gebremst) this.stand.loops = {};                  // Boxen liegen nicht im Neustart-Zustand
+    if (neuerKern || gebremst) for (const k of Object.keys(this.loopLadung)) delete this.loopLadung[k];   // Ladung ohne Echo gilt für den neuen Kern nicht (boxInhaltName zöge sie vor)
     if (d.adresse === '/pegel') this.pegelPuffer.nimm({ kanal: String(f.kanal), spitze_db: Number(f.spitze_db) });   // vor der Drossel: Spitzen gehen nicht verloren
     if (!DURCHREICHEN.has(d.adresse)) return;
     const ms = DROSSEL_MS[d.adresse];
@@ -651,6 +670,11 @@ export class Oberflaeche {
   private deckLoopSichern(d: Record<string, unknown>, a: http.ServerResponse): void {
     if (d.deck !== 1 && d.deck !== 2) return this.json(a, 400, { fehler: 'unbekanntes_deck' });
     if (d.box !== undefined && d.box !== 1 && d.box !== 2) return this.json(a, 400, { fehler: 'unbekannte_box' });
+    // Plan Glanz 1.3 (Review B1): der Deck-Schnitt ist nie Cyphers Mitschnitt; in eine offene oder von Cyphers Rampe befahrene Box
+    // tauscht der Kern ihn auch mitten im Lauf. Vor dem Schreiben der Datei sperren; Andreas nie.
+    if ((d.box === 1 || d.box === 2) && this.quelle() === 'cypher' && this.boxBelegt(d.box)) {
+      return this.json(a, 409, { fehler: 'box_offen_oder_faehrt', text: 'loop box is open or my pad ramp is running; a deck cut would play unheard material' });
+    }
     const st = this.deckStand(d.deck);
     if (!st) return this.json(a, 409, { fehler: 'kein_kernstand' });
     const l = this.loopVon(st);
@@ -826,15 +850,29 @@ export class Oberflaeche {
   // Plan Hand D4: Quittungen je Befehls-id (Ring 200), damit eine Anfrage von Cypher ihr Ergebnis mitbekommt
   private readonly quittungen = new Map<number, Felder[]>();
   private kiGestoppt = false;
+  // Andreas 2026-10-05 (Hommage-Take): ein fester Wert fiel 0,19 Beat in die eigene laufende Fahrt, der Kern lehnte ab.
+  // Je Pfad das Ende von Cyphers letzter Fahrt; ein neuer Cypher-Teil beginnt frühestens dort. Andreas' Teile nie.
+  // Je Pfad ALLE offenen Cypher-Teile (id, ab, dauer). Gelöscht bei Quittung 4/6/7/8, nach ihrem Ende (nächster Aufruf),
+  // bei Stop Cypher, /abbruch und neuem Kern.
+  private readonly fahrtEnde = new Map<string, { id: number; ab: number; dauer: number }[]>();
   private setzeKiGestoppt(an: boolean): void {
     const war = this.kiGestoppt;
     this.kiGestoppt = an;
+    if (an && !war) this.fahrtEnde.clear();
+    // Naht F13: der Kern verwirft bei Stop Cypher Cyphers wartende Loops ohne Echo; ihre Ladung gilt dann nicht mehr.
+    if (an && !war) for (const [k, p] of Object.entries(this.loopLadung)) if (p.quelle === 'cypher') delete this.loopLadung[k];
     if (an && !war) void this.cypherSpurenAbbrechen();   // Studio S6 F1: Stop Cypher hält auch Wirt und Muster
   }
   private readonly cypherQuittungen: Felder[] = [];   // die letzten 20 mit Quelle cypher, für /lage
   private merkeQuittung(f: Felder): void {
     if (f.quelle === 'cypher') { this.cypherQuittungen.push(f); if (this.cypherQuittungen.length > 20) this.cypherQuittungen.shift(); }
     const id = Number(f.id), l = this.quittungen.get(id) ?? [];
+    if ([4, 6, 7, 8].includes(Number(f.status))) {   // abgelehnt, abgebrochen: das Ende dieser Fahrt gibt es nicht
+      for (const [pfad, teile] of this.fahrtEnde) {
+        const rest = teile.filter((e) => e.id !== id);
+        if (rest.length) this.fahrtEnde.set(pfad, rest); else this.fahrtEnde.delete(pfad);
+      }
+    }
     l.push(f); this.quittungen.set(id, l);
     if (this.quittungen.size > 200) this.quittungen.delete(this.quittungen.keys().next().value as number);
   }
@@ -874,8 +912,10 @@ export class Oberflaeche {
       if (st !== null && !leseMusterStand(this.musterOrdner(st)).autonom) return this.json(a, 409, { fehler: 'auto_aus', strom: st, text: 'AUTO is off: Andreas holds this stream' });
     }
     let hoerscheinId = '';
-    if (this.quelle() === 'cypher' && oeffnet(this.stand.regler, pfad, nach)) {
-      // Ohr T10: nur deck/1|2 kennt Hörscheine (Pads bleiben unverändert gesperrt, §4.5 nur Decks; Erzeuger frei seit 2026-09-29).
+    const padBox = /^pad\/([12])\//.exec(pfad)?.[1];
+    const eigenePad = padBox !== undefined && this.boxEigen(Number(padBox));   // wie /loop: eigener Mitschnitt (laufend UND wartend)
+    if (this.quelle() === 'cypher' && !eigenePad && oeffnet(this.stand.regler, pfad, nach)) {
+      // Ohr T10: nur deck/1|2 kennt Hörscheine (§4.5); erz/* frei seit 2026-09-29, pad/* frei für Cyphers eigenen Mitschnitt (eigenePad, Glanz 1.3).
       const m = /^(deck\/[12])\//.exec(pfad);
       const kanal = m ? m[1] : null;
       const deckNr = kanal ? Number(kanal.split('/')[1]) : null;
@@ -890,11 +930,23 @@ export class Oberflaeche {
       }
       hoerscheinId = schein.hs_id;
     }
-    const felder = { id: Number(++this.id), quelle: this.quelle(), plan: this.planVon(), teil: 0, pfad, ab_beat: this.abVon(ab),
-      dauer_beats: takte * 4, nach, form: form === 's' ? 1 : 0, politik: 0, gruppe: '', hoerschein: hoerscheinId };
+    let abBeat = this.abVon(ab), verschobenAuf: number | undefined;
+    const id = Number(++this.id);
+    if (this.quelle() === 'cypher') {
+      const beat = this.kern.uhr?.beat ?? 0;
+      const offen = (this.fahrtEnde.get(pfad) ?? []).filter((e) => e.ab + e.dauer >= beat);   // Abgelaufenes räumt sich hier ab
+      const frei = ersterFreierBeat(offen, abBeat, takte * 4);
+      if (frei !== abBeat) { abBeat = frei; verschobenAuf = frei; }
+      offen.push({ id, ab: abBeat, dauer: takte * 4 });
+      this.fahrtEnde.set(pfad, offen);
+    }
+    // Keylock 3b (NITPICK): der Knopf mit Politik 1 (zu spät -> sofort ausgeführt, Quittung 5 statt 4 zu_spaet)
+    const felder = { id, quelle: this.quelle(), plan: this.planVon(), teil: 0, pfad, ab_beat: abBeat,
+      dauer_beats: takte * 4, nach, form: form === 's' ? 1 : 0, politik: pfad === 'keylock' ? 1 : 0, gruppe: '', hoerschein: hoerscheinId };
     this.kern.sende('/k/teil', felder);
     this.gesendet++;
-    this.json(a, 200, { ok: true, felder, quittung: await this.warteQuittung(felder.id, felder.ab_beat) });
+    this.json(a, 200, { ok: true, felder, ...(verschobenAuf !== undefined ? { verschoben_auf: verschobenAuf } : {}),
+      quittung: await this.warteQuittung(felder.id, verschobenAuf !== undefined ? undefined : felder.ab_beat) });   // verschoben: nur das kurze Fenster (Sofort-Ablehnungen des Kerns), nicht bis zum Startbeat
   }
 
   // Studio S6: laufende Automationsspuren (Name → Lauf) und die fahrbaren Surge-Parameter (surge_bereiche.json)
@@ -1211,16 +1263,20 @@ export class Oberflaeche {
       const rel = Number(z.quell_beat) - (st?.eins ?? 0);
       const hs = this.hoerscheinstelle.letzter(n);   // Ohr T10
       return { deck: n, status: z.status, material_id: z.material_id, titel: e?.titel ?? '', camelot: e?.camelot ?? null,
+        basis_bpm: z.basis_bpm, faktor: z.faktor, hoerweg: z.hoerweg ?? null,   // Keylock 3b: 1 = Tonhöhe gehalten (Ring), 0 = Varispeed/direkt
         quell_beat: Math.round(Number(z.quell_beat) * 100) / 100, takt_im_track: rel < 0 ? null : Math.floor(rel / 4) + 1,
         beats_bis_ende: z.beats_bis_ende === Infinity ? null : z.beats_bis_ende, loop: l, offen: kanalOffen(this.stand.regler, `deck/${n}`),
         hoerschein: hs ? { urteil: hs.urteil, gueltig_bis_takt: Math.floor(hs.gueltig_bis_beat / 4) + 1, gruende: hs.gruende } : null };
     });
-    const regler = Object.fromEntries(Object.entries(this.stand.regler)
+    const regler: Record<string, number | null> = Object.fromEntries(Object.entries(this.stand.regler)
       .filter(([p, w]) => /^(deck\/[12]|pad\/[12]|erz\/[1-3])\/(fader|trim|eq\/|kill\/|filter)|^(xfader|master\/pegel)$/.test(p) || (p in LAGE_ABWEICHEND && w !== LAGE_ABWEICHEND[p]) || (/^(deck\/[12]|pad\/[12]|erz\/[1-3])\/send\/2$/.test(p) && w !== -200))   // erst abweichend von der Vorgabe sichtbar (K2: Kleber, Duck, Hall-Rückweg und -Send)ar
       .map(([p, w]) => [p, p === 'master/kleber' ? Math.round(w * 100) / 100 : Math.round(w * 10) / 10]));
+    // Keylock 3b (Prüfung MINOR 4): der Knopf steht immer da, 1 an, 0 aus, null unbekannt (noch keine Meldung vom Kern; der Kern
+    // schickt sie jedem neuen Abonnenten beim ersten /k/hallo)
+    regler.keylock = typeof this.stand.regler.keylock === 'number' ? this.stand.regler.keylock : null;
     return { uhr: { beat: Math.round(beat * 100) / 100, takt: Math.floor(beat / 4) + 1, schlag: Math.floor(((beat % 4) + 4) % 4) + 1,
       bpm: u?.bpm ?? null }, ki: { gestoppt: this.kiGestoppt }, decks, regler, boxen: this.stand.loops, fx: this.stand.fx,
-      fx_routing: this.stand.fxRouting, quittungen: this.cypherQuittungen.slice(-10), studio: this.studioLage() };
+      fx_routing: this.stand.fxRouting, quittungen: this.cypherQuittungen.slice(-10), studio: this.studioLage(), ausgang: leseAusgang(this.opt.digitalout) };
   }
 
   // Plan Hand D1: Quelle je Anfrage. Kopf x-djk-quelle: cypher → jeder Kern-Befehl dieser Anfrage (auch über await)
@@ -1243,6 +1299,8 @@ export class Oberflaeche {
         return this.vorbereiten(await this.koerper(q), a);
       }
     }
+    if (q.method === 'GET' && url.pathname === '/klaenge/karte') return this.klaengeKarte(a);
+    if (q.method === 'GET' && url.pathname === '/klaenge') return this.klaengeSuche(url, a);
     if (q.method === 'GET' && url.pathname === '/mediathek/listen') { try { return this.json(a, 200, this.mediathek.listen()); } catch (e) { return this.mediathekFehler(e, a); } }
     if (url.pathname === '/sammlungen' || url.pathname.startsWith('/sammlungen/')) return this.sammlungRoute(q, url, a);
     if (q.method === 'GET' && url.pathname === '/konfig') {
@@ -1255,6 +1313,7 @@ export class Oberflaeche {
       return this.griff(await this.koerper(q), a);
     }
     if (q.method === 'GET' && url.pathname === '/lage') return this.json(a, 200, this.lage());
+    if (q.method === 'GET' && url.pathname === '/ausgang') return this.json(a, 200, leseAusgang(this.opt.digitalout));   // Glanz 2.1 (F22)
     if (q.method === 'POST' && (url.pathname === '/deck/start' || url.pathname === '/deck/stopp')) {   // Plan Hand T5
       const abweisung = this.fremdePost(q);
       if (abweisung) return this.json(a, abweisung, { fehler: abweisung === 415 ? 'nur_json' : 'fremde_herkunft' });
@@ -1267,6 +1326,7 @@ export class Oberflaeche {
       const felder = { id: Number(++this.id), quelle: 'cypher', plan: 'cypher', teile: '*' };
       this.kern.sende('/k/abbruch', felder);
       this.gesendet++;
+      this.fahrtEnde.clear();
       await this.cypherSpurenAbbrechen();   // Studio S6: „alle meine Rampen“
       return this.json(a, 200, { ok: true, felder });
     }
@@ -1469,6 +1529,52 @@ export class Oberflaeche {
     } catch (e) { this.mediathekFehler(e, a); }
   }
 
+  // Klänge (Plan 2026-10-06-klaenge, T1): eigene Loop-Bibliothek (sofort, ladbar) vor den Mediathek-Klängen. Fehlt die Mediathek,
+  // bleibt die Antwort 200 mit mediathek:'fehlt' (die Loops spielen trotzdem), sonst wie /mediathek.
+  private klaengeSuche(url: URL, a: http.ServerResponse): void {
+    try {
+      const p = url.searchParams;
+      const typ = p.get('typ') || undefined, einsatz = p.get('einsatz') || undefined, bpmRoh = p.get('bpm');
+      if (typ !== undefined && !(KLANG_TYPEN as readonly string[]).includes(typ)) throw new MediathekFehler(400, 'typ_ungueltig');
+      if (einsatz !== undefined && !['sofort', 'werkstatt', 'nur_live'].includes(einsatz)) throw new MediathekFehler(400, 'einsatz_ungueltig');
+      const bpm = bpmRoh ? parseBpm(bpmRoh) : undefined;
+      const text = p.get('text') || undefined, pack = p.get('pack') || undefined, camelot = p.get('camelot') || undefined;
+      const limit = Number.isFinite(Math.floor(Number(p.get('limit') || NaN))) ? parseLimit(p.get('limit')) : 30;
+      // Loop-Bibliothek: Loops sind 128 bpm, ohne pack/camelot; nur ladbare spielen jetzt
+      const loopsOk = (typ === undefined || typ === 'loop') && (einsatz === undefined || einsatz === 'sofort') && pack === undefined && camelot === undefined
+        && (bpm === undefined || (bpm[0] <= 128 && 128 <= bpm[1]));
+      const eigene: KlangTreffer[] = !loopsOk ? [] : leseLoops(this.loopOrdner())
+        .filter((l) => l.ladbar && (text === undefined || l.name.includes(text.toLowerCase())))
+        .map((l): KlangTreffer => ({ sha: null, pfad: null, pfad_da: true, typ: 'loop', pack: null, kategorie: null, instrument: null, titel: l.name,
+          dauer_s: l.beats * 60 / 128, bpm: 128, camelot: null, einsatz: 'sofort', quelle: 'loopbib', name: l.name }));
+      if (!this.mediathek.vorhanden()) return this.json(a, 200, { treffer: eigene.slice(0, limit), gesamt: eigene.length, gesamt_genau: true, mediathek: 'fehlt' });
+      const m = (einsatz === 'sofort') ? { treffer: [] as KlangTreffer[], gesamt: 0 }
+        : this.mediathek.klaenge({ text, typ, pack, einsatz, bpm, camelot, limit: Math.max(1, limit - Math.min(eigene.length, limit)) });
+      this.json(a, 200, { treffer: [...eigene, ...m.treffer].slice(0, limit), gesamt: eigene.length + m.gesamt, gesamt_genau: true });
+    } catch (e) { this.mediathekFehler(e, a); }
+  }
+
+  // Karte: die Mediathek-Zahlen ändern sich nur nach einem Scan, darum je DB-Stand zwischengespeichert; die Loop-Bibliothek wird jedes Mal frisch gezählt.
+  private karteCache: { stand: number; karte: ReturnType<Mediathek['karte']> } | null = null;
+  private klaengeKarte(a: http.ServerResponse): void {
+    try {
+      const loopbib = leseLoops(this.loopOrdner()).filter((l) => l.ladbar).length;
+      const je: Record<string, { gesamt: number; sofort: number; werkstatt: number; nur_live: number }> = {};
+      for (const t of KLANG_TYPEN) je[t] = { gesamt: 0, sofort: 0, werkstatt: 0, nur_live: 0 };
+      let packs: { pack: string; gesamt: number; nur_live: number }[] = [], stand: string | null = null;
+      const fehlt = !this.mediathek.vorhanden();
+      if (!fehlt) {
+        const st = this.mediathek.stand();
+        if (this.karteCache === null || this.karteCache.stand !== st) this.karteCache = { stand: st, karte: this.mediathek.karte() };
+        const k = this.karteCache.karte;
+        for (const t of KLANG_TYPEN) je[t] = { gesamt: k.je_typ[t].gesamt, sofort: 0, werkstatt: k.je_typ[t].werkstatt, nur_live: k.je_typ[t].nur_live };
+        packs = k.packs; stand = k.mediathek_stand;
+      }
+      je.loop.gesamt += loopbib; je.loop.sofort += loopbib;
+      this.json(a, 200, { je_typ: je, packs, loopbib, mediathek_stand: stand, erzeugt_am: new Date().toISOString(), ...(fehlt ? { mediathek: 'fehlt' } : {}) });
+    } catch (e) { this.mediathekFehler(e, a); }
+  }
+
   private mediathekFehler(e: unknown, a: http.ServerResponse): void {
     if (e instanceof MediathekFehler) return this.json(a, e.code, { fehler: e.fehler });
     this.opt.log?.({ typ: 'mediathek_fehler', text: (e as Error).message });
@@ -1583,8 +1689,12 @@ export class Oberflaeche {
   // Laden: Eintrag aus dem Index, dann Kopie in den Arbeitsbestand (geprüft), erst dann /k/deck/laden.
   private async laden(d: Record<string, unknown>, a: http.ServerResponse): Promise<void> {
     const deck = d.deck;
-    const eintrag = leseBestand(this.opt.bestand).find((e) => e.material_id === d.material_id
+    // Ohne genannte Fassung die neueste derselben Basis: der Index ist nach Fassung aufsteigend sortiert, ein find()
+    // nahm r1 und ließ jede Korrektur (r2, r3 … aus `korrigieren`) liegen (gemessen 2026-10-09, Phase-Korrektur).
+    const passend = leseBestand(this.opt.bestand).filter((e) => e.material_id === d.material_id
       && e.fassung === (d.fassung ?? e.fassung) && e.basis_bpm === (d.basis_bpm ?? e.basis_bpm));
+    const eintrag = passend.filter((e) => e.basis_bpm === passend[0].basis_bpm)
+      .reduce<typeof passend[number] | undefined>((m, e) => (m === undefined || e.fassung > m.fassung ? e : m), undefined);
     if (deck !== 1 && deck !== 2) return this.json(a, 400, { fehler: 'unbekanntes_deck', deck });
     // Befund 4: nicht im Index ist ein anderer Fall als eine fehlende Datei der Fassung (material_fehlt aus der Kopie)
     if (!eintrag) return this.json(a, 400, { fehler: 'nicht_im_index', material_id: d.material_id });
@@ -1730,8 +1840,18 @@ export class Oberflaeche {
     if (aktion !== 'laden' && aktion !== 'start' && aktion !== 'stopp') return this.json(a, 400, { fehler: 'unbekannte_aktion', aktion });
     if (box !== 1 && box !== 2) return this.json(a, 400, { fehler: 'unbekannte_box', box });
     // Plan Hand T7: Laden/Starten einer OFFENEN Box brächte ungehörten Inhalt; für cypher gesperrt, bis das Ohr steht
-    if (aktion !== 'stopp' && this.quelle() === 'cypher' && kanalOffen(this.stand.regler, `pad/${box}`)) {
-      return this.json(a, 409, { fehler: 'ziel_ungehoert', text: 'loop box is open; that would play unheard material' });
+    // Ausnahme (Andreas 2026-10-05 „du hast freie fahrt“): ein Loop, den Cypher selbst vom Master mitgeschnitten hat, ist
+    // gehörtes eigenes Material wie ein Strudel-Muster; fremd geschnittene Loops (Deck) bleiben gesperrt.
+    const boxName = aktion === 'laden' ? d.name : this.boxInhaltName(box);
+    if (aktion !== 'stopp' && this.quelle() === 'cypher' && !this.eigenerMitschnitt(boxName)) {
+      if (kanalOffen(this.stand.regler, `pad/${box}`)) {
+        return this.json(a, 409, { fehler: 'ziel_ungehoert', text: 'loop box is open; that would play unheard material' });
+      }
+      // Plan Glanz 1.3 (Review M2): pad/* öffnet für Cypher ohne Hörschein, weil die Box seinen Mitschnitt trägt; diese Prüfung gilt
+      // nur im Moment der Anfrage. Darum kein fremder Inhalt, solange ein Cypher-Teil auf pad/<box>/… offen ist.
+      if (this.boxBelegt(box)) {
+        return this.json(a, 409, { fehler: 'box_offen_oder_faehrt', text: 'my pad ramp on this box is still running; foreign material would play unheard' });
+      }
     }
     if (aktion === 'laden') delete this.loopRasterLive[String(box)];   // Review F5
     this.angefasst.add(`box:${box}`);   // Slice 5 F3
@@ -1756,21 +1876,24 @@ export class Oberflaeche {
   }
 
   // Plan Tempo-Folge (§4.2 /k/tempo/rampe): das Master-Tempo fährt ab der nächsten Takt-Eins über einen Takt auf bpm
-  // (60 bis 200, auf 0,01 gerundet). Nur Andreas: Tempo ist Richtung. Der Kern lehnt mit kein_stretcher ab, solange
-  // ein Deck läuft; die Antwort trägt die Quittung.
+  // (60 bis 200, auf 0,01 gerundet). Andreas und Cypher; bei Stop Cypher lehnt die Seite Cypher mit 409 ki_gestoppt ab. Laufende Decks
+  // folgen im Varispeed (Welle 3, ADR 028); die Antwort trägt die Quittung.
   private async tempo(d: Record<string, unknown>, a: http.ServerResponse): Promise<void> {
-    if (this.quelle() === 'cypher') return this.json(a, 403, { fehler: 'nur_andreas', text: 'the master tempo is Andreas\'s' });
+    // Andreas 2026-10-05: „du willst ernsthaft das ich dir 138 bpm vortippe?“ – Tempo ist auch Cyphers Hand; Stop Cypher hält es.
+    if (this.quelle() === 'cypher' && this.kiGestoppt) return this.json(a, 409, { fehler: 'ki_gestoppt' });
     const bpm = typeof d.bpm === 'number' && Number.isFinite(d.bpm) ? Math.round(d.bpm * 100) / 100 : NaN;
     if (!(bpm >= 60 && bpm <= 200)) return this.json(a, 400, { fehler: 'bereich', text: 'bpm must be a number from 60 to 200' });
     const felder = { id: Number(++this.id), quelle: this.quelle(), ab_beat: this.abVon('takt'), ziel_bpm: bpm, dauer_beats: 4 };
     this.kern.sende('/k/tempo/rampe', felder);
     this.gesendet++;
-    this.json(a, 200, { ok: true, gesendet: '/k/tempo/rampe', felder, quittung: await this.warteQuittung(felder.id, felder.ab_beat) });
+    const quittung = await this.warteQuittung(felder.id, felder.ab_beat);
+    this.json(a, 200, { ok: true, gesendet: '/k/tempo/rampe', felder, quittung });
   }
+
   // MVP 2 Scheibe 2/3 (§4.9 /k/loop/rec): REC auf C. beats 1, 2, 4, 8, 16 oder 32; Name nur syntaktisch geprüft (ob er schon
   // vergeben ist, weiß erst der Kern nach der Aufnahme: /e/mitschnitt Status 1).
-  // Plan djk-hand-mcp-studio (Review): die Antwort wartet auf die Kern-Quittung (wie /regler), damit Status 6 (Tempo ≠ 128 BPM
-  // als ausserhalb_bereich, Stop Cypher ki_gestoppt, ueberlappung) beim Aufrufer ankommt statt still zu verpuffen.
+  // Plan djk-hand-mcp-studio (Review): die Antwort wartet auf die Kern-Quittung (wie /regler), damit Status 6 (Stop Cypher ki_gestoppt,
+  // ueberlappung, eine Tempo-Rampe im Mitschnittfenster; jedes feste Tempo ist erlaubt, kern.cpp:196) beim Aufrufer ankommt statt still zu verpuffen.
   private async loopRec(d: Record<string, unknown>, a: http.ServerResponse): Promise<void> {
     const beats = d.beats;
     const name = d.name;
@@ -1780,6 +1903,33 @@ export class Oberflaeche {
     this.kern.sende('/k/loop/rec', felder);
     this.gesendet++;
     this.json(a, 200, { ok: true, gesendet: '/k/loop/rec', felder, quittung: await this.warteQuittung(felder.id) });
+  }
+  // Plan Glanz 1.3: trägt die Box Cyphers Fahrt (offener Teil auf pad/<box>/… in fahrtEnde, Abgelaufenes zählt nicht) oder ist sie offen?
+  // Inhalt der Box für die Herkunftsprüfung: eine ausstehende Ladung (gesendet, Echo /e/loop fehlt noch) zählt schon; sonst wäre
+  // der Deck-Schnitt zwischen Senden und Echo noch „der alte, eigene Name“ (Re-Review Glanz 1.3, Wettlauf)
+  private boxInhaltName(box: number): string { return this.loopLadung[String(box)]?.name ?? this.boxLoopName(box); }
+  // Naht F13 (Klickfrei): ein in eine klingende Box geladener Loop übernimmt im nächsten Block (bis Keylock Task 7 wartete
+  // er bis zu 4 s auf seine Keylock-Variante), bis dahin spielt die Box den alten.
+  // Eigen ist sie für Cyphers Fader nur, wenn der laufende UND ein wartender Inhalt Cyphers Mitschnitt sind.
+  private boxEigen(box: number): boolean {
+    const wartend = this.loopLadung[String(box)]?.name;
+    const laufend = this.boxLoopName(box);
+    return (laufend === '' ? wartend !== undefined : this.eigenerMitschnitt(laufend)) && (wartend === undefined || this.eigenerMitschnitt(wartend));
+  }
+  // zählt nur fader und trim: eq/filter/send können eine Box nicht öffnen
+  private boxFaehrt(box: number): boolean {
+    const beat = this.kern.uhr?.beat ?? 0;
+    for (const [pfad, l] of this.fahrtEnde) if ((pfad === `pad/${box}/fader` || pfad === `pad/${box}/trim`) && l.some((e) => e.ab + e.dauer >= beat)) return true;
+    return false;
+  }
+  private boxBelegt(box: number): boolean { return kanalOffen(this.stand.regler, `pad/${box}`) || this.boxFaehrt(box); }
+  private boxLoopName(box: unknown): string {
+    return String((this.stand.loops[String(box)] as Record<string, unknown> | undefined)?.name ?? '');
+  }
+  private eigenerMitschnitt(name: unknown): boolean {
+    if (typeof name !== 'string' || !LOOP_NAME.test(name)) return false;
+    const e = leseLoops(this.loopOrdner()).find((l) => l.name === name);
+    return !!e && e.ladbar && e.quelle === 'mitschnitt';
   }
   // MVP 2 Scheibe 3 (E2): Loop wird Klang im Zusatz-Kit (rec, Prüfinstanz rec-<i>); der Erzeuger lädt ihn nach.
   private loopKit(d: Record<string, unknown>, a: http.ServerResponse): void {
@@ -1850,7 +2000,7 @@ async function main(): Promise<void> {
   const { values: v } = parseArgs({ options: {
     port: { type: 'string' }, 'kern-port': { type: 'string' }, 'abo-port': { type: 'string' },
     'leitstand-ws': { type: 'string' }, bestand: { type: 'string' }, arbeitsbestand: { type: 'string' }, log: { type: 'string' },
-    'kern-pruefmodus': { type: 'string' }, 'ziel-kurve': { type: 'string' }, loops: { type: 'string' }, mediathek: { type: 'string' }, sammlungen: { type: 'string' },
+    'kern-pruefmodus': { type: 'string' }, 'ziel-kurve': { type: 'string' }, loops: { type: 'string' }, mediathek: { type: 'string' }, sammlungen: { type: 'string' }, kit: { type: 'string' }, digitalout: { type: 'string' },
   } });
   const zk = v['ziel-kurve'];
   if (zk !== undefined && !ZIEL_KURVEN.includes(zk)) throw new Error(`--ziel-kurve ${zk}: erlaubt sind ${ZIEL_KURVEN.join(' oder ')}`);
@@ -1869,8 +2019,10 @@ async function main(): Promise<void> {
     kernPruefmodus: pm === undefined ? null : pm === 'an',
     zielKurve: zk,
     loops: v.loops,
+    digitalout: v.digitalout,
     mediathek: v.mediathek,
     sammlungen: v.sammlungen,
+    kit: v.kit,   // Basis-Kit des Drums-Erzeugers (djk-start --strudel-kit): sonst zählt loop_klang freie Noten gegen battery
     log: (z) => { if (logDatei !== null) fs.writeSync(logDatei, JSON.stringify({ t: Date.now(), ...z }) + '\n'); },
   });
   await o.starte();

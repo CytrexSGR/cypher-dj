@@ -1,7 +1,9 @@
 // Plan 2026-09-27 Task 3: Erzeuger-Schlange (SCHNITTSTELLEN §4.8, ADR 024) ohne Kern. Einsatz genau am Sample des
 // Beats, auch an Blockgrenzen; Fenster ersetzen mit Zählern; zu spät; Strom ohne Kit still; velocity; Stimmen enden
 // mit dem Kit. Fehlerfall: test_erzeuger_mutation (Einsatz am Blockanfang) muss scheitern.
+#include <algorithm>
 #include <cmath>
+#include <memory>
 #include <vector>
 
 #include "cypherdj/erzeuger.h"
@@ -64,6 +66,13 @@ int64_t einsatz(const std::vector<float>& a, int64_t von) {
   return -1;
 }
 
+double groesster_sprung(const std::vector<float>& y, int64_t von, int64_t bis) {
+  double m = 0.0;
+  for (int64_t i = std::max<int64_t>(von, 1); i < bis && i < (int64_t)y.size(); ++i)
+    m = std::max(m, (double)std::fabs(y[i] - y[i - 1]));
+  return m;
+}
+
 }  // namespace
 
 int main() {
@@ -122,8 +131,10 @@ int main() {
     PRUEF(w.aus_l[4 * SPB] == 0.5f + 0.125f && w.aus_r[4 * SPB] == 0.5f - 0.125f);
     PRUEF(einsatz(w.aus_l, 4 * SPB + 3) == -1);
   }
-  {  // 6. Kit tauschen: das alte kommt zurück, seine klingenden Stimmen enden sofort
-    Welt w;
+  {  // 6. Kit tauschen (F11, Glanz 2.4.1): das alte kommt zurück; seine klingende Stimme klingt aus einer Kopie über
+     // ERZ_AUSKLANG Frames aus. Vorher (kit_tausch, Erhebung): Sprung 0,4965 an der Tauschgrenze.
+    auto wp = std::make_unique<Welt>();
+    Welt& w = *wp;
     cdj::Kit lang;
     lang.klang[36].frames = 48000;
     lang.klang[36].daten.assign(96000, 0.5f);
@@ -133,10 +144,49 @@ int main() {
     w.bis(2 * SPB);
     PRUEF(w.erz.stimmen() == 1);
     PRUEF(w.erz.setze_strom(1, &kit, ERZ1) == &lang);
-    PRUEF(w.erz.stimmen() == 0);
+    PRUEF(w.erz.stimmen() == 0 && w.erz.ausklaenge() == 1);
     const int64_t getauscht = w.s;  // bis() rendert bis zur Blockgrenze: vorher Gerendertes zählt nicht
+    std::fill(lang.klang[36].daten.begin(), lang.klang[36].daten.end(), 9.0f);  // „freigegeben“: der Ausklang liest es nicht mehr
     w.bis(3 * SPB);
-    PRUEF(einsatz(w.aus_l, getauscht) == -1);
+    PRUEF(w.aus_l[getauscht - 1] == 0.5f);
+    const double s = groesster_sprung(w.aus_l, getauscht, getauscht + cdj::ERZ_AUSKLANG + 1);
+    std::printf("F11 Kit-Tausch: groesster Sprung %.5f (Schwelle %.5f, vorher 0,5)\n", s, 0.5 / cdj::ERZ_AUSKLANG);
+    PRUEF(s <= 0.5 / cdj::ERZ_AUSKLANG + 1e-7);
+    PRUEF(w.aus_l[getauscht] < 0.5f && w.aus_l[getauscht] > 0.49f);  // keine 9,0: Kopie, kein Lesen im alten Kit
+    PRUEF(einsatz(w.aus_l, getauscht + cdj::ERZ_AUSKLANG) == -1 && w.erz.ausklaenge() == 0);
+  }
+  {  // 6b. F11 wie im Betrieb: das alte Kit wird nach dem Tausch wirklich freigegeben (netz_erz.cpp:204). Im ASan-Bau
+     // wäre jedes Lesen danach ein heap-use-after-free; im Normalbau prüft Fall 6 dasselbe über die 9,0.
+    auto wp = std::make_unique<Welt>();
+    Welt& w = *wp;
+    auto lang = std::make_unique<cdj::Kit>();
+    lang->klang[36].frames = 48000;
+    lang->klang[36].daten.assign(96000, 0.5f);
+    lang->n = 1;
+    w.erz.setze_strom(1, lang.get(), ERZ1);
+    w.erz.fenster(fenster(1, 0.0, 8.0, {{1.0, 36, 1, 1.0f}}), w.jetzt());
+    w.bis(2 * SPB);
+    PRUEF(w.erz.setze_strom(1, &kit, ERZ1) == lang.get());
+    lang.reset();
+    const int64_t getauscht = w.s;
+    w.bis(3 * SPB);
+    PRUEF(w.aus_l[getauscht] < 0.5f && w.aus_l[getauscht] > 0.49f && w.erz.ausklaenge() == 0);
+  }
+  {  // F11 Negativ-Kontrolle: dasselbe Kit erneut setzen ändert nichts, die Stimme läuft bitgleich weiter
+    auto wp = std::make_unique<Welt>();
+    Welt& w = *wp;
+    cdj::Kit lang;
+    lang.klang[36].frames = 48000;
+    lang.klang[36].daten.assign(96000, 0.5f);
+    lang.n = 1;
+    w.erz.setze_strom(1, &lang, ERZ1);
+    w.erz.fenster(fenster(1, 0.0, 8.0, {{1.0, 36, 1, 1.0f}}), w.jetzt());
+    w.bis(2 * SPB);
+    PRUEF(w.erz.setze_strom(1, &lang, ERZ1) == nullptr);
+    PRUEF(w.erz.stimmen() == 1 && w.erz.ausklaenge() == 0);
+    const int64_t s0 = w.s;
+    w.bis(3 * SPB);
+    PRUEF(w.aus_l[s0] == 0.5f && w.aus_l[s0 + 1000] == 0.5f);
   }
   {  // Scheibe 3: begin/end (§4.8 Parameter-Schwanz). Klang 8 Frames 1..8; [0,25; 0,75) spielt Frames 2..5 = 3,4,5,6.
     cdj::Kit k8;
@@ -158,13 +208,218 @@ int main() {
     w.erz.fenster(fenster(1, 8.0, 12.0, {mitte, leer, geklemmt, voll}), w.jetzt());
     w.bis(12 * SPB);
     const int64_t a = 8 * SPB;
-    PRUEF(w.aus_l[a] == 3.0f && w.aus_l[a + 1] == 4.0f && w.aus_l[a + 2] == 5.0f && w.aus_l[a + 3] == 6.0f);
+    PRUEF(w.aus_l[a] == 1.5f && w.aus_l[a + 1] == 4.0f && w.aus_l[a + 2] == 5.0f && w.aus_l[a + 3] == 3.0f);  // F46: je 1 Frame Rampe (1/4 von 4)
     PRUEF(w.aus_l[a + 4] == 0.0f);
     PRUEF(einsatz(w.aus_l, a + 4) == 10 * SPB);  // der leere Bereich bei Beat 9 klingt nicht
     const int64_t c = 10 * SPB;
-    PRUEF(w.aus_l[c] == 1.0f && w.aus_l[c + 7] == 8.0f && w.aus_l[c + 8] == 0.0f);
+    PRUEF(w.aus_l[c] == 1.0f && w.aus_l[c + 5] == 6.0f && w.aus_l[c + 8] == 0.0f);
+    PRUEF_NAH(w.aus_l[c + 6], 7.0 * 2 / 3, 1e-5);
+    PRUEF_NAH(w.aus_l[c + 7], 8.0 / 3, 1e-5);  // F50: lautes Dateiende, 2 Frames
     const int64_t d = 11 * SPB;
-    PRUEF(w.aus_l[d] == 1.0f && w.aus_l[d + 7] == 8.0f && w.aus_l[d + 8] == 0.0f);
+    PRUEF(w.aus_l[d] == 1.0f && w.aus_l[d + 5] == 6.0f && w.aus_l[d + 8] == 0.0f);
+    PRUEF_NAH(w.aus_l[d + 6], 7.0 * 2 / 3, 1e-5);
+    PRUEF_NAH(w.aus_l[d + 7], 8.0 / 3, 1e-5);
+  }
+  {  // F46 (Glanz 2.5.1): Ausschnitt mit lauter Kante setzt mit Rampe ein und hört mit Rampe auf. Reiz wie probe_erz
+     // (Erhebung 01.10.): Sinus 100 Hz, 0,5; begin 0,3125 und end 0,5625 liegen auf Spitzen. Vorher: Sprung 0,5000.
+    cdj::Kit ks;
+    ks.klang[36].frames = 48001;  // Frame 48000 liegt auf einem Nulldurchgang: das Klangende ist leise
+    for (int i = 0; i < 48001; ++i) {
+      const float x = (float)(0.5 * std::sin(2 * M_PI * 100 * i / 48000.0));
+      ks.klang[36].daten.push_back(x);
+      ks.klang[36].daten.push_back(x);
+    }
+    ks.n = 1;
+    const auto& d = ks.klang[36].daten;
+    const double natuerlich = 0.5 * 2 * M_PI * 100 / 48000.0;  // 0,00654
+    const int64_t a = 2 * SPB;                                 // Einsatz auf Beat 2
+    {  // Fehlerfall: begin 0,3125 → Frame 15000, end 0,5625 → Frame 27000 (12000 Frames)
+      auto wp = std::make_unique<Welt>();
+      Welt& w = *wp;
+      w.erz.setze_strom(1, &ks, ERZ1);
+      cdj::ErzEv e{2.0, 36, 1, 1.0f};
+      e.begin = 0.3125f;
+      e.end = 0.5625f;
+      w.erz.fenster(fenster(1, 0.0, 8.0, {e}), w.jetzt());
+      w.bis(4 * SPB);
+      const double s = groesster_sprung(w.aus_l, 1, (int64_t)w.aus_l.size());
+      std::printf("F46 Ausschnitt: groesster Sprung %.5f (Schwelle %.5f, vorher 0,50000)\n", s, 0.5 / 32 + natuerlich);
+      PRUEF(s <= 0.5 / 32 + natuerlich);
+      PRUEF(w.aus_l[a] != 0.0f && std::fabs(w.aus_l[a]) <= 0.5f / 33.0f + 1e-6f);  // erstes Sample: 1/33 der Kante
+      PRUEF(w.aus_l[a + cdj::ERZ_EIN] == d[2 * (15000 + cdj::ERZ_EIN)]);           // nach der Einblende bitgleich
+      PRUEF(w.aus_l[a + 11999 - cdj::ERZ_AUS] == d[2 * (26999 - cdj::ERZ_AUS)]);   // vor der Ausblende bitgleich
+      PRUEF(std::fabs(w.aus_l[a + 11999]) <= 0.5f / (cdj::ERZ_AUS + 1) + 1e-6f && w.aus_l[a + 12000] == 0.0f);
+    }
+    {  // Negativ-Kontrolle 1: begin 0 / end 1, Klangende leise: jedes Sample bitgleich zum Klang
+      auto wp = std::make_unique<Welt>();
+      Welt& w = *wp;
+      w.erz.setze_strom(1, &ks, ERZ1);
+      w.erz.fenster(fenster(1, 0.0, 8.0, {{2.0, 36, 1, 1.0f}}), w.jetzt());
+      w.bis(a + 48001 + N);
+      bool gleich = true;
+      for (int64_t i = 0; i < 48001; ++i) gleich = gleich && w.aus_l[a + i] == d[2 * i] && w.aus_r[a + i] == d[2 * i + 1];
+      PRUEF(gleich && w.aus_l[a + 48001] == 0.0f);
+    }
+    {  // Negativ-Kontrolle 2: Schnitt auf einem Nulldurchgang (begin 0,3 → Frame 14400, |x| < -60 dBFS): keine Einblende
+      auto wp = std::make_unique<Welt>();
+      Welt& w = *wp;
+      w.erz.setze_strom(1, &ks, ERZ1);
+      cdj::ErzEv e{2.0, 36, 1, 1.0f};
+      e.begin = 0.3f;
+      w.erz.fenster(fenster(1, 0.0, 8.0, {e}), w.jetzt());
+      w.bis(a + 1000 + N);
+      bool gleich = true;
+      for (int64_t i = 0; i < 1000; ++i) gleich = gleich && w.aus_l[a + i] == d[2 * (14400 + i)];
+      PRUEF(gleich);
+    }
+    {  // F50 Kernseite: Datei endet laut (wie rec anlauf:0, -5,7 dBFS) → Ausblende am Dateiende; Anfang bleibt hart
+      cdj::Kit kr;
+      kr.klang[36].frames = 4800;
+      kr.klang[36].daten.assign(2 * 4800, 0.5f);
+      kr.n = 1;
+      auto wp = std::make_unique<Welt>();
+      Welt& w = *wp;
+      w.erz.setze_strom(1, &kr, ERZ1);
+      w.erz.fenster(fenster(1, 0.0, 8.0, {{2.0, 36, 1, 1.0f}}), w.jetzt());
+      w.bis(a + 4800 + N);
+      PRUEF(w.aus_l[a] == 0.5f);  // Anschlag am Dateianfang: Absicht, keine Rampe
+      PRUEF(std::fabs(w.aus_l[a + 4799]) <= 0.5f / (cdj::ERZ_AUS + 1) + 1e-6f && w.aus_l[a + 4800] == 0.0f);
+      PRUEF(groesster_sprung(w.aus_l, a + 1, a + 4801) <= 0.5 / cdj::ERZ_AUS);
+    }
+  }
+  {  // F16 (Glanz 2.5.2): freie Stimme zuerst. Reiz wie stimmen.cpp (Erhebung 01.10.): 8-s-Klang auf Beat 0, dazu ein
+     // stummer 50-ms-Klang alle 1/4 Beat. Vorher wurde der lange Klang beim 33. Ereignis reihum geraubt.
+    cdj::Kit kl;
+    kl.klang[0].frames = 8 * 48000;
+    for (int i = 0; i < 8 * 48000; ++i) {
+      const float x = 0.5f * (float)std::sin(2 * M_PI * 220 * i / 48000.0);
+      kl.klang[0].daten.push_back(x);
+      kl.klang[0].daten.push_back(x);
+    }
+    kl.klang[1].frames = 2400;
+    kl.klang[1].daten.assign(2 * 2400, 0.0f);  // stumm: hörbar ist nur Klang 0
+    kl.n = 2;
+    auto wp = std::make_unique<Welt>();
+    Welt& w = *wp;
+    w.erz.setze_strom(1, &kl, ERZ1);
+    cdj::ErzFenster f = fenster(1, 0.0, 16.0, {{0.0, 0, 1, 1.0f}});
+    for (int j = 1; j < 63; ++j) f.ev[f.n++] = cdj::ErzEv{0.25 * j, 1, 1, 1.0f};
+    w.erz.fenster(f, w.jetzt());
+    w.bis(8 * 48000 + N);
+    int64_t letzt = -1;
+    for (int64_t i = 0; i < (int64_t)w.aus_l.size(); ++i)
+      if (w.aus_l[i] != 0.0f) letzt = i;
+    std::printf("F16: 8-s-Klang klingt bis Sample %lld (Soll 383999)\n", (long long)letzt);
+    PRUEF(letzt == 8 * 48000 - 1);  // letzter Frame -0,0144 · 1/97 (F50-Ausblende) ist nicht 0
+  }
+  {  // F16 Raub mit Ausklang: 33 lange Gleichwert-Klänge (0,5), alle 1/4 Beat. Der 33. (Beat 8, Sample 180000) raubt den
+     // ältesten (Beat 0); der klingt nach der Blockgrenze 180224 über ERZ_AUSKLANG Frames aus, statt um 0,5 zu springen.
+    cdj::Kit dc;
+    dc.klang[0].frames = 8 * 48000;
+    dc.klang[0].daten.assign(2 * 8 * 48000, 0.5f);
+    dc.n = 1;
+    auto wp = std::make_unique<Welt>();
+    Welt& w = *wp;
+    w.erz.setze_strom(1, &dc, ERZ1);
+    cdj::ErzFenster f = fenster(1, 0.0, 16.0, {});
+    for (int j = 0; j < 33; ++j) f.ev[f.n++] = cdj::ErzEv{0.25 * j, 0, 1, 1.0f};
+    w.erz.fenster(f, w.jetzt());
+    w.bis(706 * N);
+    PRUEF(w.erz.stimmen() == 32);
+    PRUEF(w.aus_l[180223] == 16.5f);  // 31 + geraubte (Rest des Blocks) + neue ab 180000
+    const double s = groesster_sprung(w.aus_l, 180224, 180224 + cdj::ERZ_AUSKLANG + 1);
+    std::printf("F16 Raub: groesster Sprung nach der Blockgrenze %.5f (Schwelle %.5f, vorher 0,5)\n", s, 0.5 / cdj::ERZ_AUSKLANG);
+    PRUEF(s <= 0.5 / cdj::ERZ_AUSKLANG + 1e-5);
+  }
+  {  // F08 (Glanz 2.4.2): Note 255 spielt ihren eigenen Klang, nicht den von 255 & 127
+    cdj::Kit z;
+    const int hoch = cdj::KIT_KLAENGE - 1;  // vor F08 127, danach 255
+    z.klang[hoch].frames = 1;
+    z.klang[hoch].daten = {0.25f, 0.25f};
+    z.klang[hoch & 127].frames = 1;
+    z.klang[hoch & 127].daten = {0.75f, 0.75f};
+    z.n = 2;
+    auto wp = std::make_unique<Welt>();
+    Welt& w = *wp;
+    w.erz.setze_strom(1, &z, ERZ1);
+    w.erz.fenster(fenster(1, 0.0, 8.0, {{4.0, 255, 1, 1.0f}}), w.jetzt());
+    w.bis(8 * SPB);
+    std::printf("F08 Note 255: %.2f (Soll 0,25, vorher 0,75)\n", w.aus_l[4 * SPB]);
+    PRUEF(w.aus_l[4 * SPB] == 0.25f);
+  }
+  {  // F16/F11 Fix A (Prüfung 06.10.): Raub im Block B, Kit-Tausch vor Block B+1. Dann gibt es 33 Ausklänge (1 Raub + 32
+     // Tausch) bei 32 Stimmen. ERZ_AUSKLANG < Block: jeder Ausklang endet im Block nach seiner Entstehung, aber der
+     // Raub-Ausklang ist beim Tausch noch voll. Mit nur ERZ_STIMMEN Plätzen überschriebe der Tausch einen von ihnen: harter
+     // Abbruch (Prüfer: 0,566). Grenze: 33 Ausklänge je ERZ_AUSKLANG+1 Rampenschritt (0,5 · 33 / 241 = 0,0685) + Toleranz;
+     // Prüfer-Kontrolle ohne vorigen Raub (32 Ausklänge) 0,066.
+    auto k1 = std::make_unique<cdj::Kit>(), k2 = std::make_unique<cdj::Kit>();
+    for (cdj::Kit* k : {k1.get(), k2.get()}) {
+      k->klang[0].frames = 8 * 48000;
+      k->klang[0].daten.assign(2 * 8 * 48000, 0.5f);
+      k->n = 1;
+    }
+    auto wp = std::make_unique<Welt>();
+    Welt& w = *wp;
+    w.erz.setze_strom(1, k1.get(), ERZ1);
+    cdj::ErzFenster f = fenster(1, 0.0, 16.0, {});
+    for (int j = 0; j < 33; ++j) f.ev[f.n++] = cdj::ErzEv{0.25 * j, 0, 1, 1.0f};
+    w.erz.fenster(f, w.jetzt());
+    w.bis(704 * N);  // Block mit Sample 180000 ist [179968, 180224): der 33. Einsatz raubt dort
+    const int64_t t = w.s;
+    w.erz.setze_strom(1, k2.get(), ERZ1);  // Kit-Tausch als Befehl vor dem nächsten Block
+    PRUEF(w.erz.stimmen() == 0 && w.erz.ausklaenge() == 33);
+    w.bis(t + 2 * N);
+    const double s = groesster_sprung(w.aus_l, t, t + cdj::ERZ_AUSKLANG + 2);
+    const double grenze = 0.5 * 33 / (cdj::ERZ_AUSKLANG + 1) + 1e-5;
+    std::printf("F16 Fix A: Raub + Tausch, groesster Sprung %.5f (Grenze %.5f, Pruefer vorher 0,566)\n", s, grenze);
+    PRUEF(s <= grenze);
+  }
+  {  // F16 Fix B1 (Prüfung 06.10.): 32 belegte Stimmen verschiedenen Alters, die 33. raubt die ÄLTESTE. Klang i hat den
+     // Wert 0,01 · (i + 1), Einsatz i alle 1/64 Beat (351,56 Samples). Nach dem Ausklang bleibt die Summe der Klänge 1..32.
+    auto kk = std::make_unique<cdj::Kit>();
+    for (int i = 0; i < 33; ++i) {
+      kk->klang[i].frames = 16384;
+      kk->klang[i].daten.assign(2 * 16384, 0.01f * (float)(i + 1));
+    }
+    kk->n = 33;
+    auto wp = std::make_unique<Welt>();
+    Welt& w = *wp;
+    w.erz.setze_strom(1, kk.get(), ERZ1);
+    cdj::ErzFenster f = fenster(1, 0.0, 1.0, {});
+    for (int j = 0; j < 33; ++j) f.ev[f.n++] = cdj::ErzEv{j / 64.0, j, 1, 1.0f};
+    w.erz.fenster(f, w.jetzt());
+    w.bis(14000);
+    double soll = 0.0;
+    for (int i = 1; i < 33; ++i) soll += 0.01 * (i + 1);
+    std::printf("F16 Fix B1: Summe nach dem Raub %.4f (Soll %.4f: Klang 0 geraubt)\n", (double)w.aus_l[13000], soll);
+    PRUEF(w.erz.stimmen() == 32 && w.erz.ausklaenge() == 0);
+    PRUEF_NAH(w.aus_l[13000], soll, 1e-3);
+  }
+  {  // F11 Fix B2: Kit-Tausch mit 20 klingenden Stimmen: jede bekommt einen eigenen Ausklang. Summensprung höchstens 20
+     // Rampenschritte 0,5 / (ERZ_AUSKLANG + 1); auf einem gemeinsamen Platz bliebe einer, der Rest bräche hart ab.
+    auto k1 = std::make_unique<cdj::Kit>(), k2 = std::make_unique<cdj::Kit>();
+    for (cdj::Kit* k : {k1.get(), k2.get()}) {
+      k->klang[0].frames = 48000;
+      k->klang[0].daten.assign(2 * 48000, 0.5f);
+      k->n = 1;
+    }
+    auto wp = std::make_unique<Welt>();
+    Welt& w = *wp;
+    w.erz.setze_strom(1, k1.get(), ERZ1);
+    cdj::ErzFenster f = fenster(1, 0.0, 1.0, {});
+    for (int j = 0; j < 20; ++j) f.ev[f.n++] = cdj::ErzEv{j / 64.0, 0, 1, 1.0f};
+    w.erz.fenster(f, w.jetzt());
+    w.bis(8192);
+    PRUEF(w.erz.stimmen() == 20);
+    const int64_t t = w.s;
+    w.erz.setze_strom(1, k2.get(), ERZ1);
+    PRUEF(w.erz.stimmen() == 0 && w.erz.ausklaenge() == 20);
+    w.bis(t + 2 * N);
+    const double s = groesster_sprung(w.aus_l, t, t + cdj::ERZ_AUSKLANG + 2);
+    const double grenze = 0.5 * 20 / (cdj::ERZ_AUSKLANG + 1) + 1e-5;
+    std::printf("F11 Fix B2: 20 Stimmen im Tausch, groesster Sprung %.5f (Grenze %.5f)\n", s, grenze);
+    PRUEF(s <= grenze);
+    PRUEF(w.aus_l[t + cdj::ERZ_AUSKLANG] == 0.0f && w.erz.ausklaenge() == 0);
   }
   PRUEF_ENDE();
 }

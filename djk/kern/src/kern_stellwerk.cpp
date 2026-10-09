@@ -190,7 +190,7 @@ void Kern::einsortieren25(const Befehl& c) {
       if (n == -1) decks_abbruch(c.quelle, c.plan);  // Scheibe 31: wartende Deck-Teile des Plans (§4.3)
       break;
     }
-    case Befehl::KI_STOPP: sw_->ki_stopp(c.id, q); break;  // §4.7
+    case Befehl::KI_STOPP: sw_->ki_stopp(c.id, q); break;  // §4.7 (F13: wartende cypher-Loops verwirft Kern::audio)
     case Befehl::KI_FREI: sw_->ki_frei(c.id, q); break;
     case Befehl::KI_SPUR:
       kopiere(ki_spur_neu_, c.liste, sizeof ki_spur_neu_);  // gilt erst mit der Quittung fertig des Stellwerks
@@ -325,13 +325,14 @@ void Kern::audio(int64_t n0, int n) {
     for (int i = 0; i < na; ++i) {
       mixer_->verlauf(a[i].regler, a[i].verlauf);
       decks_verlauf(a[i].regler, a[i].verlauf);  // Scheibe 31: stem/* ins Deck
+      keylock_verlauf(a[i].regler, a[i].verlauf, s0, m);  // Keylock Task 3: Regler keylock an Decks und Boxen
     }
     decks_block(s0, m);  // Scheibe 31: Decks in die Eingänge deck/1..4, Starts und Stopps am Sample
     ErzAusloeser ausl;
     erz_->block(karte, s0, m, erz_l_, erz_r_, midi_aus_, zyklus_n0_, &ausl);  // Plan 2026-09-27 + Studio S5 (MIDI-Ströme)
-    // K2: der Duck setzt AM Kick-Ereignis ein, nicht um den Wirt-Rundweg verzögert: ein gehaltener Bass läge sonst die
-    // ersten ~11 ms ungeduckt unter dem Kick-Anschlag; eine Note, die mit dem Kick startet, kommt erst nach ~545 Samples an
-    // und trifft auf den schon abgesenkten Duck (Abnahme 2026-09-30: gemessen 545 Samples Rundweg).
+    // K2: der Duck setzt AM Kick-Ereignis ein, nicht um den Wirt-Rundweg verzögert. Seit Glanz 2.7 (F19) gehen MIDI-Noten um den
+    // Rundweg früher hinaus: eine Bassnote mit dem Kick kommt gleichzeitig mit ihm an (vorher ~545 Samples später, Abnahme
+    // 2026-09-30) und trifft den Duck in seinem Attack (240 Samples, duck.h:17) statt im schon abgesenkten Pegel.
 #ifdef CYPHERDJ_MUTATION_DUCK_VERSATZ_NULL
     for (int i = 0; i < ausl.n; ++i) mixer_->duck_ausloesen(0);   // Mutation: Duck am Blockanfang, ohne Auslöser-Sample
 #else
@@ -371,6 +372,10 @@ void Kern::audio(int64_t n0, int n) {
     }
     BoxMeldung bm[4];  // MVP 2: Loop-Boxen in pad/1, pad/2 (nach Erzeuger und Klicks, vor dem Mixer)
     Mitschnitt* mt_fertig = nullptr;  // MVP 2 Scheibe 2: derselbe Aufruf kopiert erz/1 in einen laufenden Mitschnitt
+    // F13 x §4.7 (Prüfung 2.3 Befund 1): jeder Weg eines KI-Stopps (Befehl KI_STOPP, Stopp-Taste der Hand, Neustart-
+    // Zustand, teile_nachreichen) endet im Stellwerk-Zustand ki_gestoppt; hier, vor dem Block, in dem ein wartender Loop
+    // übernehmen könnte, gehen wartende cypher-Loops zurück. Ein Punkt für alle Wege, nicht je Aufrufer.
+    if (sw_->ki_gestoppt()) loops_->cypher_wartende_verwerfen();
     const int nb = loops_->block(karte, s0, m, erz_l_, erz_r_, bm, 4, &mt_fertig);
     loops_frei(s0);  // Keylock: Varianten, die eine Blende zu Ende gebracht hat, zurück an den Netz-Faden
     for (int i = 0; i < nb; ++i) loop_melden(bm[i].box, bm[i].sample, karte.beat_at((double)bm[i].sample));

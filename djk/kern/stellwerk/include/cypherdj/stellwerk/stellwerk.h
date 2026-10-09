@@ -84,6 +84,9 @@ class Stellwerk {
   // ---- Ausgaben ----
   int aenderungen(const Aenderung** aus) const { *aus = aend_; return n_aend_; }
   float wert(int regler) const { return reg_[regler].wert; }
+  // F18 (Welle 2): Wert nach außen (Neustart-Zustand, Tasten-Umschalter, /e/regler, Prüfer-Sicht). Läuft eine
+  // Hand-Schaltrampe (kill/*), ihr Ziel 0/1; sonst der Wert. Der Verlauf je Sample (aenderungen) trägt die Rampe.
+  float wert_fest(int regler) const { return fest(reg_[regler]); }
   const Halter& halter(int regler) const { return reg_[regler].halter; }
   bool ki_gestoppt() const { return ki_gestoppt_; }
   int ereignisse(const Ereignis** aus) const { *aus = ereignis_; return n_ereignis_; }
@@ -138,7 +141,13 @@ class Stellwerk {
     float hand_wert;
     int64_t hand_sample, hand_gemeldet_sample;
     bool hand_ausstehend;
+    // F18 (Welle 2): Schaltrampe eines Hand-Griffs an einem Schalter (kill/*), S-Kurve hr_von -> hr_ziel ab hr_sA
+    bool hr_an;
+    float hr_von, hr_ziel;
+    int64_t hr_sA;
+    int32_t hr_schalt;
   };
+  static float fest(const ReglerZustand& z) { return z.hr_an ? z.hr_ziel : z.wert; }
 
   // kern.cpp
   Ereignis* neues_ereignis(EreignisArt art, int64_t sample);
@@ -173,6 +182,7 @@ class Stellwerk {
   // ablauf.cpp
   void starte(int idx, int64_t sample, int i, double beat);
   int rechne_strecke(int idx, int i, int j);   // Verlauf des Teils über [i, j); Rückgabe: Index des Endes oder -1
+  void rechne_hand_rampe(int r, int i, int j);   // F18: Schaltrampe der Hand über [i, j)
 
   const Uhr& uhr_;
   Pruefer leer_pruefer_;
@@ -199,6 +209,7 @@ class Stellwerk {
   int n_ausstehend_hand_ = 0;
   int n_mensch_ = 0;
   int n_direkt_ = 0;
+  int n_hand_rampen_ = 0;   // F18: Regler mit laufender Hand-Schaltrampe
   bool ki_gestoppt_ = false;
   uint32_t ki_spur_ = 0;      // Bit k = Kanal k gehört zur KI-Spur
   bool stems_[5] = {};

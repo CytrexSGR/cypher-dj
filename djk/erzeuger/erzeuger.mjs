@@ -77,13 +77,26 @@ function wecke() {  // kurz vor dem Taktanfang: die nächsten zwei Takte ersetze
     log(`Takt ${n} nicht geschickt: ${e.message} (der Erzeuger läuft weiter)`);
   }
   if (unbekannt.size) log(`im Kit ${opt.kit} unbekannt: ${[...unbekannt].join(', ')}`);
-  if (planer.felder.size) {  // Scheibe 3: einmal je Musterwechsel, danach still bis zum nächsten Muster
-    log(`Muster ${planer.nr}: Strudel-Felder ohne Weg in den Kern (klingen nicht): ${[...planer.felder].join(', ')}`);
-    planer.felder.clear();
-    planer.felderGemeldet = planer.nr;
-  }
+  felderMelden();
   clearTimeout(wecker);
   wecker = setTimeout(wecke, Math.max(5, msBisBeat(4 * (n + 1) - WECHSEL_ABSTAND)));
+}
+
+// Task 1.4: zuletzt geschriebener Stand; schreibeStatus ersetzt die ganze Datei, die Meldestelle ergänzt ihn nur
+let letzterStand = { taub: [], taub_muster: null };   // auch bei kaputtem ersten Muster vorhanden
+let gemeldet = { nr: 0, n: 0 };   // für welches Muster und wie viele Felder status.json schon taub trägt
+
+// Nach jedem Takt: taub + taub_muster schreiben, sobald ein neues Muster einen Takt gespielt hat (auch leer: taub_muster
+// === nr heißt „geprüft“) und wenn ein späterer Takt ein weiteres Feld findet. Log nur bei Zuwachs.
+function felderMelden() {
+  if (!planer.nr) return;
+  const gleich = gemeldet.nr === planer.nr;
+  const zuwachs = planer.felder.size > (gleich ? gemeldet.n : 0);
+  if (gleich && !zuwachs) return;
+  gemeldet = { nr: planer.nr, n: planer.felder.size };
+  if (zuwachs) log(`Muster ${planer.nr}: Strudel-Felder ohne Weg in den Kern (klingen nicht): ${[...planer.felder].join(', ')}`);
+  letzterStand = { ...letzterStand, taub: [...planer.felder], taub_muster: planer.nr };  // Task 1.4: Cypher sieht es über studio
+  status(letzterStand);
 }
 
 function musterLesen() {
@@ -96,12 +109,12 @@ function musterLesen() {
   const r = kompiliere(text);
   if (r.fehler) {
     log(`${opt.muster}: ${r.fehler} (das alte Muster bleibt)`);
-    status({ nr: planer.nr, ab_beat: null, fehler: r.fehler });
+    status(letzterStand = { ...letzterStand, nr: planer.nr, ab_beat: null, fehler: r.fehler });  // altes Muster bleibt: sein taub auch
     return;
   }
   const ab = planer.setze(r.muster, uhr ? beatJetzt() : -Infinity);
   log(`Muster ${planer.nr} gilt ab Beat ${ab}`);
-  status({ nr: planer.nr, ab_beat: Number.isFinite(ab) ? ab : null, fehler: null });
+  status(letzterStand = { nr: planer.nr, ab_beat: Number.isFinite(ab) ? ab : null, fehler: null, taub: [], taub_muster: null });
 }
 
 // Plan 2 T6: status.json neben dem Muster (ab welchem Beat es gilt), für das Feld der Seite. Ohne Schreibrecht läuft der

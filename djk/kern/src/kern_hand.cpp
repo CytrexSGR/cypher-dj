@@ -76,7 +76,6 @@ void Kern::hand_zyklus(int64_t n0, int n) {
 }
 
 namespace {
-constexpr double TEMPO_GLEICH = 1e-6;  // wie kern_deck.cpp: Direktweg, solange |bpm/basis_bpm − 1| < 10⁻⁶
 }
 
 bool Kern::hand_taste(hand::Taste t, int32_t wert, int64_t s) noexcept {
@@ -188,9 +187,12 @@ bool Kern::hand_deck(int deck, hand::DeckAktion aktion, hand::Quant quant, int32
     w.vorschau[d] = true;  // stehend am Cue-Punkt: Vorschau ab dem Cue-Punkt, solange gedrückt
     return hand_aktion_neu(d, 1, s, cue_frame(d)) != nullptr;
   }
-  // Play auf stehendem Deck. Im Direktweg nur beim Tempo der Basis (Plan 31 F8: kein Stretcher im MVP)
+  // Play auf stehendem Deck, bei jedem Master-Tempo: seit Keylock in Echtzeit (ADR 029, 2026-10-08) folgt das Deck jedem
+  // Tempo wie der Cypher-Start (/k/deck/start). Die alte Sperre „nur beim Tempo der Basis“ (Plan 31 F8, kein Stretcher im
+  // MVP) liess Andreas nach jeder BPM-Änderung kein gestopptes Deck mehr starten (gemessen 2026-10-09 bei 135 BPM).
+  // Während einer laufenden Tempo-Rampe bleibt Play ohne Wirkung: die Phase am Ziel-Beat wäre noch nicht bestimmt.
   const Material* m = dk.material();
-  if (std::fabs(k.bpm_at(static_cast<double>(s)) / m->basis_bpm - 1.0) >= TEMPO_GLEICH || plan_.eintraege() > 0) return false;
+  if (plan_.eintraege() > 0) return false;
   const double master = k.beat_at(static_cast<double>(s));
 #ifdef CYPHERDJ_MUTATION_HAND_OHNE_PHASE
   // Fehlerfall Plan 35 Task 5: „Start sofort ohne Phase“: am Griff, am Frame der Position, gleich welche Quantisierung
@@ -213,7 +215,12 @@ bool Kern::hand_deck(int deck, hand::DeckAktion aktion, hand::Quant quant, int32
   }
   // Quantize wie am CDJ: gestartet wird vom nächsten Beat des Tracks, sonst läuft ein mitten im Track gestopptes Deck
   // um den Bruchteil versetzt zum Master (Befund 2026-09-27, Andreas: „nicht mehr sync“).
+#ifndef CYPHERDJ_MUTATION_HAND_START_SPAET
   DeckAktion* x = hand_aktion_neu(d, 1, ss, auf_beat(dk, pos));
+#else
+  // Fehlerfall der Prüfung 2.3 (M1): Hand-Start 5000 Samples zu spät, phasentreu (die Klicks bleiben auf dem Raster)
+  DeckAktion* x = hand_aktion_neu(d, 1, ss + 5000, auf_beat(dk, pos) + 5000);
+#endif
   if (x) x->loop_halten = true;   // Play nach Pause: der Loop bleibt (Review F2)
   return x != nullptr;
 }
@@ -226,7 +233,7 @@ void Kern::hand_ausfuehren(DeckAktion& a, int64_t s) {
   const Karte& k = plan_.karte();
   switch (a.art) {
     case 1: {  // Start am Sample s mit Frame ziel_frame
-      dk.start(s, a.ziel_frame, a.loop_halten);
+      dk.start(s, a.ziel_frame, a.loop_halten, a.seq);  // Keylock 6a: Schlüssel eines geplanten Starts
       if (w.stopp_offen[d]) quittung(w.stopp_id[d], w.stopp_quelle[d], 3, s, k.beat_at(static_cast<double>(s)));
       w.stopp_offen[d] = false;
       w.frist_gemeldet[d] = 0;

@@ -125,6 +125,27 @@ test('unbekannte Strudel-Felder werden gemeldet (speed), bekannte nicht', () => 
   assert.deepEqual([...w.p.felder], ['speed']);
 });
 
+// Task 1.4 Review Fund 1: Felder sammeln über alle Takte des Musters, nicht nur bis zur ersten Meldung
+test('Felder eines späten Zweigs (alle 4 Takte) kommen nach dem ersten Takt noch dazu', () => {
+  const w = welt();
+  w.p.setze(m('stack(s("bd").lpf(800), s("<~ ~ ~ bd>").room(0.3))'), -Infinity);
+  w.p.takt(0);
+  assert.deepEqual([...w.p.felder], ['cutoff']);
+  for (let n = 1; n < 6; n++) w.p.takt(n);
+  assert.deepEqual([...w.p.felder].sort(), ['cutoff', 'room']);
+});
+
+// Fund 2: ein neues Muster verdrängt die Felder des alten
+test('zwei Musterwechsel vor dem nächsten Takt: Felder des verdrängten Musters sind weg', () => {
+  const w = welt();
+  w.p.setze(m('s("bd")'), -Infinity);
+  w.p.takt(0);
+  w.p.setze(m('s("bd").lpf(800)'), 1);
+  w.p.setze(m('s("bd").gain(0.8)'), 1.5);
+  w.p.takt(1);
+  assert.deepEqual([...w.p.felder], []);
+});
+
 test('slice meldet keine Felder (Strudels internes _slices ist kein Parameter)', () => {
   const w = welt();
   w.p.setze(m('s("bd*4").slice(4, "0 1 2 3")'), -Infinity);

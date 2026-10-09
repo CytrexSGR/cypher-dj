@@ -16,52 +16,10 @@
 #include <thread>
 
 #include "cypherdj/netz.h"
+#include "gegenstelle.h"
 #include "pruef.h"
 
 namespace v = cypherdj::osc;
-
-struct Gegenstelle {
-  int sock;
-  int port;
-  int kern_port;
-  char buf[2048];
-  cdj::osc::Nachricht m;
-  explicit Gegenstelle(int kp) : kern_port(kp) {
-    sock = socket(AF_INET, SOCK_DGRAM, 0);
-    sockaddr_in a{};
-    a.sin_family = AF_INET;
-    a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    bind(sock, (sockaddr*)&a, sizeof a);
-    socklen_t l = sizeof a;
-    getsockname(sock, (sockaddr*)&a, &l);
-    port = ntohs(a.sin_port);
-  }
-  ~Gegenstelle() { close(sock); }
-  void sende(const cdj::osc::Schreiber& s) {
-    sockaddr_in a{};
-    a.sin_family = AF_INET;
-    a.sin_port = htons((uint16_t)kern_port);
-    a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    sendto(sock, s.daten(), s.groesse(), 0, (sockaddr*)&a, sizeof a);
-  }
-  bool warte(const char* adresse, int ms) {
-    for (int t = 0; t < ms; ++t) {
-      pollfd pf{sock, POLLIN, 0};
-      if (poll(&pf, 1, 1) > 0) {
-        ssize_t r = recv(sock, buf, sizeof buf, 0);
-        if (r > 0 && cdj::osc::lesen(buf, (size_t)r, m) && !std::strcmp(m.adresse, adresse)) return true;
-      }
-    }
-    m.anzahl = 0;
-    m.typen = "";
-    return false;
-  }
-  const char* s(int i) const { return (i < m.anzahl && m.werte[i].typ == 's') ? m.werte[i].s : "<fehlt>"; }
-  int32_t i(int k) const { return (k < m.anzahl && m.werte[k].typ == 'i') ? m.werte[k].i : -999; }
-  int64_t h(int k) const { return (k < m.anzahl && m.werte[k].typ == 'h') ? m.werte[k].h : -999; }
-  float f(int k) const { return (k < m.anzahl && m.werte[k].typ == 'f') ? m.werte[k].f : -999.0f; }
-  double d(int k) const { return (k < m.anzahl && m.werte[k].typ == 'd') ? m.werte[k].d : -999.0; }
-};
 
 static bool eins_im_ring(cdj::Befehlsring* rb, cdj::Befehl& b) {
   for (int t = 0; t < 200; ++t) {

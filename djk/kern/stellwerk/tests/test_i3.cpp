@@ -166,7 +166,7 @@ FALL(quelle_andreas_ohne_schein_kein) {
 }
 
 FALL(erzeuger_kanal_oeffnet_ohne_schein) {
-  // Andreas 2026-09-29: erz/* öffnen ohne Hörschein; Deck- und Pad-Kanäle bleiben gesperrt.
+  // Andreas 2026-09-29: erz/* öffnen ohne Hörschein; Deck-Kanäle bleiben gesperrt (pad/* seit 2026-10-05 offen).
   HoerscheinRegister reg;   // leer
   TestDeck deck;
   for (int n = 1; n <= 8; n++) {
@@ -175,7 +175,12 @@ FALL(erzeuger_kanal_oeffnet_ohne_schein) {
     PRUEFE(lauf(reg, deck, true, "", Quelle::cypher, f) == Grund::kein);
   }
   PRUEFE(lauf(reg, deck, true, "", Quelle::cypher, "deck/2/fader") == Grund::kein_hoerschein);
-  PRUEFE(lauf(reg, deck, true, "", Quelle::cypher, "pad/1/fader") == Grund::kein_hoerschein);
+  // Andreas 2026-10-05: „diese fader solltest du selber steuern können alle“. pad/* öffnet im Kern ohne Hörschein;
+  // ob der Box-Inhalt Cyphers eigener Mitschnitt ist, prüft die Seite (server.ts eigenePad).
+  PRUEFE(lauf(reg, deck, true, "", Quelle::cypher, "pad/1/fader") == Grund::kein);
+  PRUEFE(lauf(reg, deck, true, "", Quelle::cypher, "pad/2/fader") == Grund::kein);
+  // Der Kern öffnet auch den Trim (i3.cpp:82 nimmt fader und trim): dieselbe Ausnahme
+  PRUEFE(lauf(reg, deck, true, "", Quelle::cypher, "pad/1/trim") == Grund::kein);
 }
 
 FALL(fader_oeffnet_nicht_ohne_schein_kein) {

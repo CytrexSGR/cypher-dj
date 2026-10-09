@@ -35,6 +35,10 @@ Stellwerk::Stellwerk(const Uhr& uhr, Pruefer* pruefer) : uhr_(uhr), pruefer_(pru
 void Stellwerk::setze_direkt(int r, float wert) {
   if (r < 0 || r >= tab_.anzahl()) return;
   ReglerZustand& z = reg_[r];
+  if (z.hr_an) {   // F18: ein direktes Setzen (Laden, Neustart-Zustand) beendet eine Hand-Schaltrampe
+    z.hr_an = false;
+    n_hand_rampen_--;
+  }
   if (z.wert == wert) return;
   z.wert = wert;
   if (!z.direkt) {
@@ -93,9 +97,9 @@ void Stellwerk::melde_regler(int r, int64_t sample) {
   Ereignis* e = neues_ereignis(EreignisArt::regler, sample);
   if (!e) return;
   e->regler = static_cast<int16_t>(r);
-  e->wert = z.wert;
+  e->wert = fest(z);
   halter_text(z.halter, e->halter, TEXT);
-  z.gemeldet = z.wert;
+  z.gemeldet = fest(z);
   z.gemeldet_sample = sample;
 }
 

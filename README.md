@@ -24,12 +24,13 @@ Built in Germany by Andreas, a DJ, and Cypher, the lab's AI agent (Claude models
   process; the core plays the resulting events at the sample
 - Real instruments: Surge XT hosted in Carla, played by the patterns
 - One clock: decks, loop boxes, patterns and effects are scheduled on the same sample counter in the core
-- Live master tempo from 60 to 200 BPM, ramped over a bar: the pattern channels, the loop boxes
-  (key-locked, pitch kept) and recordings follow it
+- Live master tempo from 60 to 200 BPM, ramped over a bar: the decks and the loop boxes (key-locked,
+  pitch kept), the pattern channels and recordings follow it
 
 **Prepare**
 - A workshop that reads a track once: loudness, key, tempo map and beat grid, then renders it to the set
-  tempo so it is ready to play
+  tempo so it is ready to play. The grid is snapped to the kick transients where they can be measured
+  cleanly (within about 1 ms of Ableton Live's warp markers on the tracks compared)
 - A cue tool: a 3-band waveform of the whole track, hot cues set from the keyboard
 - Import of grid and cues from a Traktor collection
 - A library with sets that can be prepared ahead of time
@@ -121,10 +122,9 @@ mostly against a silent test sink. Not benchmarks.
 
 ## Known limits of the beta
 
-- **Decks do not follow live tempo changes yet.** The master tempo can be changed live, and patterns
-  and loop boxes follow it, but while a deck is playing the core refuses a tempo change. Decks are
-  always beat-synced and key-locked at the set tempo (128 BPM), because the workshop renders every
-  track to it in advance. Stretching running decks is the next step.
+- **Decks keep their pitch at any master tempo, in real time, including during a tempo ramp.** After each
+  deck event (start, jump, hotcue) a bridge of about 0.1 s plays in varispeed until the stretcher takes over.
+  A deck started by hand does not start while a tempo ramp is still running (about one bar after a change).
 - Linux with PipeWire (JACK API) only, tested on Ubuntu 24.04. Pro-Audio device profiles cannot be
   used as outputs yet.
 - The headphone path has not been measured with a real audio interface.

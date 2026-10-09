@@ -157,40 +157,8 @@ bool Netz::loop_paket(const v::Adresse* a, const osc::Nachricht& m) {
   b.art = Befehl::LOOP_LADEN;
   kopiere(b.pfad, name, sizeof b.pfad);
   b.zeiger = l.get();
-  // Keylock Slice 3: der Render-Faden liest nie den Zeiger, den der Kern besitzt (er könnte freigegeben sein), sondern eine
-  // Kopie der Originaldaten. Sie entsteht vor dem Einreihen, danach gehört l dem Kern.
-  auto quelle = std::make_shared<KeylockQuelle>();
-  quelle->name = l->name;
-  quelle->beats = l->beats;
-  quelle->frames = l->frames;
-  quelle->versatz = l->versatz;
-  quelle->daten = l->daten;
-  const int i = b.deck - 1;
-  // Slice 3b (F2): Ob der Kern den Loop wirklich lädt, weiß das Netz erst später. Weist er ihn ab (Stopp Cypher), kommt derselbe
-  // Zeiger über LOOP_ALT zurück (kern.cpp, LOOP_LADEN): keylock_alt() nimmt die Kopie dann zurück. Der Eintrag entsteht VOR dem
-  // Einreihen (ein bad_alloc im push_back träfe sonst einen schon an den Kern gegebenen Loop) und geht bei Misserfolg wieder.
-  kl_geladen_[i].push_back({l.get(), quelle});
-  if (einreihen(b)) {
-    l.release();  // der Kern besitzt ihn jetzt; zurück kommt er als LOOP_ALT
-    kl_quelle_[i] = std::move(quelle);  // neuer Loop: Varianten des alten gelten nicht mehr
-    kl_auftrag_quelle_[i].reset();
-    keylock_zyklus();  // (b) Laden bei festem Tempo ≠ 128 löst sofort aus
-  } else {
-    kl_geladen_[i].pop_back();
-  }
+  if (einreihen(b)) l.release();  // der Kern besitzt ihn jetzt; zurück kommt er als LOOP_ALT (Task 7: ohne Varianten-Render)
   return true;
-}
-
-// Keylock Slice 3: Tempo-Ruhe. Das Tempo gilt als fest, wenn es seit kl_ruhe Nanosekunden (steady_clock) unverändert ist.
-static int64_t steady_ns() {
-  return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
-}
-
-void Netz::keylock_tempo(double bpm) {
-  if (!(std::fabs(bpm - kl_bpm_) < 1e-9)) {  // Anker bleibt stehen, solange es nur um < 1e-9 kriecht
-    kl_bpm_ = bpm;
-    kl_seit_ns_ = steady_ns();
-  }
 }
 
 void Netz::keylock_beenden() {
@@ -204,13 +172,13 @@ bool Netz::keylock_bereit() {
   if (kl_beendet_ || kl_aus_) return false;
   if (!kl_) {
     try {
-      kl_ = std::make_unique<KeylockRender>(KEYLOCK_BOXEN, kl_opt_);
+      kl_ = std::make_unique<KeylockRender>(kl_opt_);
     } catch (const std::exception& x) {
-      std::fprintf(stderr, "keylock: Render-Faden nicht anlegbar (%s), Keylock bleibt aus, die Boxen bleiben im Varispeed\n", x.what());
+      std::fprintf(stderr, "keylock: Render-Faden nicht anlegbar (%s), REC bei T != 128 wird nicht umgerechnet\n", x.what());
       kl_aus_ = true;
       return false;
     } catch (...) {
-      std::fprintf(stderr, "keylock: Render-Faden nicht anlegbar, Keylock bleibt aus, die Boxen bleiben im Varispeed\n");
+      std::fprintf(stderr, "keylock: Render-Faden nicht anlegbar, REC bei T != 128 wird nicht umgerechnet\n");
       kl_aus_ = true;
       return false;
     }
@@ -222,96 +190,35 @@ bool Netz::keylock_bereit() {
   return true;
 }
 
-// Ein Loop kam über LOOP_ALT zurück: abgewiesen (dann war es der aktuelle) oder abgelöst (ein neuerer steht hinter ihm). Er fällt
-// aus der Liste; war er der aktuelle, folgt kl_quelle_ dem vorletzten, der Loop, den der Kern noch hat.
-void Netz::keylock_alt(const void* zeiger) {
-  for (int i = 0; i < KEYLOCK_BOXEN; ++i) {
-    auto& li = kl_geladen_[i];
-    for (auto it = li.begin(); it != li.end(); ++it) {
-      if (it->zeiger != zeiger) continue;
-      const bool aktuell = it->quelle == kl_quelle_[i];
-      li.erase(it);
-      if (aktuell) {
-        kl_quelle_[i] = li.empty() ? nullptr : li.back().quelle;
-        kl_auftrag_quelle_[i].reset();  // für den Loop, der bleibt, darf wieder gerendert werden
-      }
-      return;
-    }
-  }
-}
-
+// Keylock Slice 4: umgerechnete REC-Mitschnitte (Task 7: der einzige Auftrag des Render-Fadens) abholen, Datei schreiben, dann
+// /e/mitschnitt (Status 1 bei Fehler der Umrechnung oder des Schreibens; die Kern-Quittung kam schon beim Start des Mitschnitts).
 void Netz::keylock_zyklus() {
-  static_assert(KEYLOCK_BOXEN == LOOP_BOXEN, "Keylock: Boxen des Netzes und des Kerns");
-  if (kl_beendet_) return;  // Slice 3b (F6): Shutdown, nichts mehr abholen, einreihen oder starten
-  // 0. Slice 4: umgerechnete REC-Mitschnitte: Datei schreiben, dann /e/mitschnitt (Status 1 bei Fehler der Umrechnung oder des
-  // Schreibens; die Kern-Quittung kam schon beim Start des Mitschnitts und bleibt unberührt)
-  if (kl_) {
-    KeylockRender::RecErgebnis r;
-    while (kl_->rec_hole(r)) {
-      int32_t status = r.fehler ? 1 : 0;
-      if (status == 0) {
-        std::string fehler;
-        if (!schreibe_loop(loop_ordner_, *r.mt, &fehler)) {
-          std::fprintf(stderr, "/k/loop/rec: %s\n", fehler.c_str());
-          status = 1;
-        }
-      }
-      osc::Schreiber s(v::e_mitschnitt);
-      s.s(r.meldung.pfad).i(r.meldung.fassung).i(status).d(r.meldung.beat);
-      an_alle(s);
-      r = KeylockRender::RecErgebnis{};  // Mitschnitt freigeben
-    }
-  }
-  // 1. fertige Varianten: nur einreihen, wenn Loop (Zeigergleichheit der Kopie) und Tempo noch zum Auftrag passen
-  if (kl_) {
-    KeylockRender::Ergebnis e;
-    while (kl_->hole(e)) {
-      const int i = e.box - 1;
-      const bool gleich = kl_auftrag_quelle_[i] == e.quelle && std::fabs(kl_auftrag_bpm_[i] - e.bpm) < 1e-9;
-      const bool passt = gleich && kl_quelle_[i] == e.quelle && std::fabs(kl_bpm_ - e.bpm) < 1e-9;
-      if (e.fehler) {
-        // Überholt: neues Tempo darf wieder rendern. Nur den eigenen Vermerk löschen (gleich), nicht den eines neueren Auftrags,
-        // der schon läuft: sonst rendert derselbe Auftrag zweimal (Slice 3b, F3: Tempofolge 131 wirft, 135 → 131 135 135)
-        if (!passt && gleich) kl_auftrag_quelle_[i].reset();
-        continue;  // passt: der Versuch gilt als gemacht, kein Dauerlauf; die Box bleibt im Varispeed
-      }
-      if (!passt || !e.loop) {  // Loop oder Tempo haben gewechselt: verwerfen (e.loop wird freigegeben)
-        if (gleich) kl_auftrag_quelle_[i].reset();
-        continue;
-      }
-      Befehl b{};
-      b.art = Befehl::LOOP_VARIANTE;
-      b.id = 0;
-      kopiere(b.quelle, "keylock", sizeof b.quelle);  // nicht "cypher": die Stopp-Taste gilt der KI, nicht dem Netz
-      b.deck = e.box;
-      b.zeiger = e.loop.get();
-      if (einreihen(b, false)) {
-        e.loop.release();  // der Kern besitzt sie jetzt; zurück kommt sie als LOOP_ALT
-      } else {
-        // Ring voll (Slice 3b, F4): die Variante wird freigegeben und NICHT neu gerechnet, bis sich Tempo oder Loop ändern (der
-        // Vermerk bleibt stehen; vorher: Endlos-Render, je Versuch 100 ms im Netz-Faden und eine /q-Meldung an alle). Keine
-        // /q-Meldung: Quelle "keylock" gehört nicht zum Vertrag. Eine Zeile im Journal.
-        std::fprintf(stderr, "keylock: Box %d %.2f BPM: Befehlsring voll, Variante verworfen, kein neuer Render bis Tempo oder Loop wechseln\n",
-                     e.box, e.bpm);
+  if (kl_beendet_ || !kl_) return;  // Slice 3b (F6): Shutdown, nichts mehr abholen
+  KeylockRender::RecErgebnis r;
+  while (kl_->rec_hole(r)) {
+    int32_t status = r.fehler ? 1 : 0;
+    if (status == 0) {
+      std::string fehler;
+      if (!schreibe_loop(loop_ordner_, *r.mt, &fehler)) {
+        std::fprintf(stderr, "/k/loop/rec: %s\n", fehler.c_str());
+        status = 1;
       }
     }
-  }
-  // 2. Auslöser: Tempo seit ≥ ruhe fest, weicht von 128 ab, Box hat einen Loop, noch kein Auftrag für genau dieses Tempo
-  if (!(kl_bpm_ > 0.0) || std::fabs(kl_bpm_ - LOOP_BPM) <= 1e-6) return;
-  if (steady_ns() - kl_seit_ns_ < kl_opt_.ruhe_ns) return;
-  for (int i = 0; i < KEYLOCK_BOXEN; ++i) {
-    if (!kl_quelle_[i]) continue;
-    if (kl_auftrag_quelle_[i] == kl_quelle_[i] && std::fabs(kl_auftrag_bpm_[i] - kl_bpm_) < 1e-9) continue;
-    if (!keylock_bereit()) return;  // Keylock aus (Faden nicht zu bauen oder Shutdown): die Box bleibt im Varispeed
-    kl_auftrag_quelle_[i] = kl_quelle_[i];
-    kl_auftrag_bpm_[i] = kl_bpm_;
-    kl_->auftrag(i + 1, kl_quelle_[i], kl_bpm_);
+    osc::Schreiber s(v::e_mitschnitt);
+    s.s(r.meldung.pfad).i(r.meldung.fassung).i(status).d(r.meldung.beat);
+    an_alle(s);
+    r = KeylockRender::RecErgebnis{};  // Mitschnitt freigeben
   }
 }
 
 bool Netz::loop_ereignis(const Ereignis& e) {
+  if (e.art == Ereignis::BOX) {  // Keylock 7b.3, §5.5b /zustand/box ,iiiiii (7c.3: kein_platz)
+    osc::Schreiber s(v::zustand_box);
+    s.i(e.deck).i(e.status).i(e.keylock_unterlauf).i(e.keylock_aufgegeben).i(e.keylock_ring_voll).i(e.keylock_kein_platz);
+    an_alle(s);
+    return true;
+  }
   if (e.art == Ereignis::LOOP_ALT) {
-    keylock_alt(e.zeiger);  // Slice 3b (F2): vor dem delete, der Zeiger wird nur verglichen
     delete static_cast<const Loop*>(e.zeiger);
     return true;
   }

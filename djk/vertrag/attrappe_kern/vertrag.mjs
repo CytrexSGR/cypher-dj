@@ -65,7 +65,8 @@ export const AUSGABEN = {
   '/uhr': f('hhddd', 'sample mono_ns beat bpm bpm_pro_s'),
   '/takt': f('iihdd', 'takt phrase sample beat bpm'),
   '/zustand/kern': f('iihiiiiiiii', 'generation quantum sample frame_luecken ausgelassene_perioden cb_max_us cb_p99_us aufwach_max_us stretcher_aktiv befehle_wartend ki_gestoppt'),
-  '/zustand/deck': f('iisdidddfiif', 'deck status material_id basis_bpm fassung quell_beat beats_bis_ende faktor vorlauf_ms hoerweg stretcher_fuell versatz_intern_ms'),
+  '/zustand/deck': f('iisdidddfiifii', 'deck status material_id basis_bpm fassung quell_beat beats_bis_ende faktor vorlauf_ms hoerweg stretcher_fuell versatz_intern_ms keylock_unterlauf keylock_aufgegeben'),
+  '/zustand/box': f('iiiiii', 'box status keylock_unterlauf keylock_aufgegeben keylock_ring_voll keylock_kein_platz'),  // Keylock 7b.3 (die Attrappe spielt keine Boxen und sendet es nicht)
   '/pegel': f('sfffffff', 'kanal spitze_db echtspitze_dbtp lufs_m lufs_s band_tief_db band_mitte_db band_hoch_db'),
   '/e/regler': f('sfshd', 'pfad wert halter sample beat'),
   '/e/hand': f('sfhd', 'pfad wert sample beat'),
@@ -138,6 +139,7 @@ for (const [p, info] of Object.entries({
   'fx/1/rueckkopplung': R(LIN, 0, 0.95, 0.5), 'fx/2/rueckkopplung': R(LIN, 0, 0.95, 0.5),
   'fx/1/rueckweg': R(DB, -200, 0, 0), 'fx/2/rueckweg': R(DB, -200, 0, 0), 'fx/3/rueckweg': R(DB, -200, 0, 0), 'fx/4/rueckweg': R(DB, -200, 0, 0),
   'duck/tiefe': R(DB, -24, 0, 0), 'duck/release': R(LIN, 50, 600, 200),
+  keylock: R(SCHALTER, 0, 1, 1),   // Keylock Task 3 (Fassung 4): EIN Knopf für alle Quellen, alle dürfen
 })) REGLER.set(p, { ...info, kanal: null });
 
 export const kanalVon = (pfad) => REGLER.get(pfad)?.kanal ?? null;

@@ -152,7 +152,7 @@ int Kern::decks_nachladen(Lader& lader) {
     sw_->stems_geladen(d + 1, m->mit_stems != 0);
     const int64_t f = std::llround(frame_von(x.anker_quell_beat, dk.schlag0(), m->basis_bpm));
     if (x.laeuft) {
-      dk.setze_lauf(std::llround(k.sample_at(x.anker_master_beat)), f);
+      dk.setze_lauf_beat(std::llround(k.sample_at(x.anker_master_beat)), x.anker_master_beat, f);  // Welle 3: Anker in Beats
     } else {
       dk.setze_position(f);
     }

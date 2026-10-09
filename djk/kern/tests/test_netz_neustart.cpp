@@ -108,7 +108,8 @@ int main() {
     hallo(a, "pruefstand", y.port, 1'100'000'000);
     hallo(a, "wirt", w.port, 1'200'000'000);
     auto mx = x.alle();
-    PRUEF(mx.size() == 1 && mx[0].adresse == "/k/willkommen" && mx[0].i[1] == 0);  // Negativ: Generation 0, kein neustart
+    // Negativ: Generation 0, kein neustart; Keylock 3b: dazu der Stand des Knopfs (/uhr gesehen) als letzte Meldung
+    PRUEF(mx.size() == 2 && mx[0].adresse == "/k/willkommen" && mx[0].i[1] == 0 && mx[1].adresse == "/e/regler");
     tschuess(a, "pruefstand", 1'300'000'000);
     y.alle();
     w.alle();
@@ -162,14 +163,15 @@ int main() {
   // 4) x meldet sich (sein Herzschlag): /k/willkommen, /e/neustart, /q/stand für 7 (läuft) und 8 (wartet), nicht 9
   hallo(b, "leitstand", x.port, t_neu + 800'000'000);
   mx = x.alle();
-  PRUEF(mx.size() == 5);
-  if (mx.size() == 5) {
+  PRUEF(mx.size() == 6);  // Keylock 3b: zuletzt /e/regler keylock (Stand nach dem Neustart des Kerns)
+  if (mx.size() == 6) {
     PRUEF(mx[0].adresse == "/k/willkommen" && mx[0].i[1] == 1);
     PRUEF(mx[1].adresse == "/e/neustart" && mx[1].i[0] == 1 && mx[1].h[0] == 1'665'536);
     PRUEF(mx[2].adresse == "/e/fx/routing" && mx[2].i[0] == 0);  // Ohr T17
     PRUEF(mx[3].adresse == "/q/stand" && mx[3].h[0] == 7 && mx[3].i[0] == 2 && mx[3].h[1] == 1'440'000);
     PRUEF(mx[3].s[0] == "leitstand" && mx[3].s[1].empty());
     PRUEF(mx[4].adresse == "/q/stand" && mx[4].h[0] == 8 && mx[4].i[0] == 1);
+    PRUEF(mx[5].adresse == "/e/regler");
   }
 
   // 5) Negativ-Kontrolle: der nächste Herzschlag in derselben Generation bekommt nur /k/willkommen
@@ -180,7 +182,8 @@ int main() {
   // 6) Ein neuer Abonnent in Generation 1 bekommt dasselbe wie x beim ersten Mal
   hallo(b, "analyse", neu.port, t_neu + 900'000'000);
   auto mn = neu.alle();
-  PRUEF(mn.size() == 5 && mn[1].adresse == "/e/neustart" && mn[2].adresse == "/e/fx/routing" && mn[4].adresse == "/q/stand");
+  PRUEF(mn.size() == 6 && mn[1].adresse == "/e/neustart" && mn[2].adresse == "/e/fx/routing" && mn[4].adresse == "/q/stand" &&
+        mn[5].adresse == "/e/regler");  // Keylock 3b: zuletzt der Knopf
 
   // 7) Die 5-s-Frist der übernommenen Abonnenten beginnt mit dem Neustart: "wirt" meldet sich nie
   b.abonnenten_pruefen(t_neu + 4'900'000'000LL);

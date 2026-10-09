@@ -66,7 +66,9 @@ static void fall_versatz(const std::string& ab) {
               "Beat 2 + %lld; Vorhalt Limiter %d; Hülle %.5f -> %.5f\n",
               (long long)s_hand, (long long)sp, (long long)(sp - 142'777), (long long)start_ring,
               (long long)(start_ring - 2 * SPB), x.vh, alt, neu);
-  PRUEF(start_ring >= 2 * SPB + x.vh - 1 && start_ring <= 2 * SPB + x.vh + 1);  // Deck-Start und Griff: derselbe Pfad
+  // Deck-Start und Griff: derselbe Pfad. F10 (Welle 2): der Start aus dem Stand blendet über DECK_START_EIN Frames linear
+  // ein, die Hülle kreuzt die halbe Höhe DECK_START_EIN / 2 Samples nach dem Startsample.
+  PRUEF(start_ring >= 2 * SPB + x.vh + cdj::DECK_START_EIN / 2 - 1 && start_ring <= 2 * SPB + x.vh + cdj::DECK_START_EIN / 2 + 1);
 
   // 2) Negativ-Kontrolle: Nachricht ohne Eintrag (CC 4/99), Pitch-Bend, zu kurz: ohne Wirkung und ohne Meldung
   const uint64_t ohne = x.kern->hand_ohne_wirkung();

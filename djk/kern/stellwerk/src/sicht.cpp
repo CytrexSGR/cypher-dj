@@ -14,7 +14,7 @@ class SichtImpl final : public Sicht, public Eingriff {
   const ReglerTabelle& tabelle() const override { return sw_.tab_; }
   int64_t zyklus_anfang() const override { return sw_.zyklus_s0_; }
   int zyklus_laenge() const override { return sw_.zyklus_n_; }
-  float wert(int r) const override { return sw_.reg_[r].wert; }
+  float wert(int r) const override { return sw_.wert_fest(r); }
   const Halter& halter(int r) const override { return sw_.reg_[r].halter; }
   bool ki_gestoppt() const override { return sw_.ki_gestoppt_; }
   float vorschau(int r, int64_t s) const override { return rechne(r, s, false, MAX_TEILE); }

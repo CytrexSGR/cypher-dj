@@ -27,6 +27,12 @@ export class MediathekFehler extends Error {
 }
 
 export interface Anfrage { text?: string; camelot?: string; bpm?: [number, number]; genre?: string; limit?: number }
+export const KLANG_TYPEN = ['oneshot', 'loop', 'impuls', 'mitschnitt', 'erzeugt', 'stimme'] as const;
+export interface KlangAnfrage { text?: string; typ?: string; pack?: string; einsatz?: string; bpm?: [number, number]; camelot?: string; limit?: number }
+export interface KlangTreffer {
+  sha: string | null; pfad: string | null; pfad_da: boolean; typ: string; pack: string | null; kategorie: string | null; instrument: string | null;
+  titel: string | null; dauer_s: number | null; bpm: number | null; camelot: string | null; einsatz: 'sofort' | 'werkstatt' | 'nur_live'; quelle: 'mediathek' | 'loopbib'; name?: string;
+}
 export interface Treffer {
   werk_id: number; titel: string | null; kuenstler: string | null; mix: string | null; bpm: number | null; camelot: string | null;
   genre: string | null; dauer_s: number | null; material_id: string | null; pfad_da: boolean; im_bestand: boolean;
@@ -266,6 +272,83 @@ export class Mediathek {
       });
       return { treffer, gesamt, gesamt_genau: genau };
     } finally { db.close(); }
+  }
+
+  // Klänge (Plan 2026-10-06-klaenge, T1): Einzelklänge statt Werke. Ein Treffer je Objekt (sha), Fundort = erster Pfad dieses Hosts.
+  // Felder je Objekt aus der Sicht `aktuell` (ein Wert je Feld, Rang schon aufgelöst), keine Werk-Zusammenführung:
+  // Klänge haben keine Geschwister. Text: Pfad ab der Fundort-Wurzel (nicht das Präfix davor), pack, kategorie, instrument, titel (Teilstring, ohne Groß/Klein, `%` ist keiner).
+  klaenge(a: KlangAnfrage): { treffer: KlangTreffer[]; gesamt: number } {
+    const db = this.oeffne();
+    try {
+      const limit = Math.min(LIMIT_MAX, Math.max(1, a.limit ?? 30));
+      const typen = a.typ ? [a.typ] : [...KLANG_TYPEN];
+      const w: string[] = [`f.host = ?`, `k.typ IN (${typen.map(() => '?').join(',')})`];
+      const par: (string | number)[] = [this.host, ...typen];
+      if (a.text) {
+        const m = maskiere(a.text.toLowerCase());
+        w.push(`(lower(substr(f.pfad, coalesce(length(f.wurzel), 0) + 1)) LIKE ? ESCAPE '\\' OR lower(k.pack) LIKE ? ESCAPE '\\' OR lower(k.kategorie) LIKE ? ESCAPE '\\' OR lower(k.instrument) LIKE ? ESCAPE '\\' OR lower(k.titel) LIKE ? ESCAPE '\\')`);
+        par.push(m, m, m, m, m);
+      }
+      if (a.pack) { w.push(`lower(k.pack) LIKE ? ESCAPE '\\'`); par.push(maskiere(a.pack.toLowerCase())); }
+      if (a.camelot) { w.push(`lower(k.camelot) = ?`); par.push(a.camelot.toLowerCase()); }
+      if (a.bpm) { w.push(`CAST(k.bpm AS REAL) BETWEEN ? AND ?`); par.push(a.bpm[0], a.bpm[1]); }
+      if (a.einsatz === 'nur_live') w.push(`k.schutz = 'ableton'`);
+      if (a.einsatz === 'werkstatt') w.push(`(k.schutz IS NULL OR k.schutz <> 'ableton')`);
+      // Vorauswahl (Superset, die Endprüfung steht in w): Typ-Angaben und Text-Treffer als sha-Menge, damit die Sicht `aktuell`
+      // nur für wenige Objekte aufgelöst wird (gemessen auf 81 000 Objekten: ganze Sicht 2,1 s, so 0,6 s)
+      const cparam: (string | number)[] = [...typen];
+      let cand = `SELECT inhalt_sha256 FROM angabe WHERE feld = 'typ' AND ersetzt_durch IS NULL AND wert IN (${typen.map(() => '?').join(',')})`;
+      if (a.text) {
+        const m = maskiere(a.text.toLowerCase());
+        cand += ` INTERSECT SELECT inhalt_sha256 FROM (SELECT inhalt_sha256 FROM fundort WHERE host = ? AND lower(substr(pfad, coalesce(length(wurzel), 0) + 1)) LIKE ? ESCAPE '\\'
+          UNION SELECT inhalt_sha256 FROM angabe WHERE ersetzt_durch IS NULL AND feld IN ('pack','kategorie','instrument','titel') AND lower(wert) LIKE ? ESCAPE '\\')`;
+        cparam.push(this.host, m, m);
+      }
+      const von = `WITH cand AS (${cand}), k AS (SELECT inhalt_sha256 AS s, max(CASE WHEN feld='typ' THEN wert END) AS typ, max(CASE WHEN feld='pack' THEN wert END) AS pack,
+          max(CASE WHEN feld='kategorie' THEN wert END) AS kategorie, max(CASE WHEN feld='instrument' THEN wert END) AS instrument,
+          max(CASE WHEN feld='titel' THEN wert END) AS titel, max(CASE WHEN feld='bpm' THEN wert END) AS bpm,
+          max(CASE WHEN feld='camelot' THEN wert END) AS camelot, max(CASE WHEN feld='schutz' THEN wert END) AS schutz
+        FROM aktuell WHERE inhalt_sha256 IN (SELECT inhalt_sha256 FROM cand) AND feld IN ('typ','pack','kategorie','instrument','titel','bpm','camelot','schutz') GROUP BY inhalt_sha256)
+        SELECT o.inhalt_sha256 AS sha, min(f.pfad) AS pfad, o.dauer_s, k.typ, k.pack, k.kategorie, k.instrument, k.titel, k.bpm, k.camelot, k.schutz
+        FROM fundort f JOIN objekt o ON o.inhalt_sha256 = f.inhalt_sha256 JOIN k ON k.s = o.inhalt_sha256 WHERE ${w.join(' AND ')} GROUP BY o.inhalt_sha256`;
+      const z = db.prepare(`SELECT *, count(*) OVER () AS gesamt FROM (${von}) ORDER BY pfad LIMIT ?`).all(...cparam, ...par, limit) as { gesamt: number; sha: string; pfad: string; dauer_s: number | null; typ: string; pack: string | null;
+        kategorie: string | null; instrument: string | null; titel: string | null; bpm: string | null; camelot: string | null; schutz: string | null }[];
+      const zahl = (s: string | null): number | null => { const n = Number(s); return s !== null && s !== '' && Number.isFinite(n) ? n : null; };
+      const treffer = z.map((r): KlangTreffer => ({ sha: r.sha, pfad: r.pfad, pfad_da: fs.existsSync(r.pfad), typ: r.typ, pack: r.pack, kategorie: r.kategorie,
+        instrument: r.instrument, titel: r.titel, dauer_s: r.dauer_s, bpm: zahl(r.bpm), camelot: r.camelot,
+        einsatz: r.schutz === 'ableton' ? 'nur_live' : 'werkstatt', quelle: 'mediathek' }));
+      return { treffer, gesamt: z.length > 0 ? z[0].gesamt : 0 };
+    } finally { db.close(); }
+  }
+
+  // Karte (Plan 2026-10-06-klaenge, T2): Zahlen je Klang-Typ (gesamt, werkstatt, nur_live) und die größten Packs, ein Treffer je Objekt
+  // mit Fundort auf diesem Host (wie klaenge). `sofort` kennt die Mediathek nicht, das kommt aus der Loop-Bibliothek (Server).
+  karte(): { je_typ: Record<string, { gesamt: number; werkstatt: number; nur_live: number }>; packs: { pack: string; gesamt: number; nur_live: number }[]; mediathek_stand: string } {
+    const db = this.oeffne();
+    try {
+      const typen = [...KLANG_TYPEN];
+      const mit = `WITH cand AS (SELECT DISTINCT a.inhalt_sha256 AS s FROM angabe a WHERE a.feld = 'typ' AND a.ersetzt_durch IS NULL AND a.wert IN (${typen.map(() => '?').join(',')})
+          AND EXISTS (SELECT 1 FROM fundort f WHERE f.inhalt_sha256 = a.inhalt_sha256 AND f.host = ?)),
+        k AS (SELECT inhalt_sha256 AS s, max(CASE WHEN feld='typ' THEN wert END) AS typ, max(CASE WHEN feld='pack' THEN wert END) AS pack, max(CASE WHEN feld='schutz' THEN wert END) AS schutz
+          FROM aktuell WHERE inhalt_sha256 IN (SELECT s FROM cand) AND feld IN ('typ','pack','schutz') GROUP BY inhalt_sha256)`;
+      const par = [...typen, this.host];
+      const z = db.prepare(`${mit} SELECT typ, count(*) AS gesamt, sum(CASE WHEN schutz = 'ableton' THEN 1 ELSE 0 END) AS live FROM k WHERE typ IN (${typen.map(() => '?').join(',')}) GROUP BY typ`)
+        .all(...par, ...typen) as { typ: string; gesamt: number; live: number }[];
+      const je_typ: Record<string, { gesamt: number; werkstatt: number; nur_live: number }> = {};
+      for (const t of typen) je_typ[t] = { gesamt: 0, werkstatt: 0, nur_live: 0 };
+      for (const r of z) je_typ[r.typ] = { gesamt: r.gesamt, werkstatt: r.gesamt - r.live, nur_live: r.live };
+      const packs = (db.prepare(`${mit} SELECT pack, count(*) AS gesamt, sum(CASE WHEN schutz = 'ableton' THEN 1 ELSE 0 END) AS nur_live FROM k
+        WHERE typ IN (${typen.map(() => '?').join(',')}) AND pack IS NOT NULL GROUP BY pack ORDER BY gesamt DESC, pack LIMIT 40`).all(...par, ...typen) as { pack: string; gesamt: number; nur_live: number }[])
+        .map((r) => ({ pack: r.pack, gesamt: r.gesamt, nur_live: r.nur_live }));
+      return { je_typ, packs, mediathek_stand: new Date(fs.statSync(this.pfad).mtimeMs).toISOString() };
+    } finally { db.close(); }
+  }
+
+  /** Änderungsmarke für den Zwischenspeicher der Karte: mtime der DB und ihrer WAL-Datei (der Scan schreibt über WAL). */
+  stand(): number {
+    let m = 0;
+    for (const f of [this.pfad, `${this.pfad}-wal`]) { try { m = Math.max(m, fs.statSync(f).mtimeMs); } catch { /* fehlt */ } }
+    return m;
   }
 
   // Für POST /mediathek/vorbereiten: Pfad (lokal, vorhanden) und Titel zur material_id

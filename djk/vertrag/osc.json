@@ -293,7 +293,7 @@
       {"name": "strom", "typ": "i", "einheit": "nummer", "bereich": [1, 16]},
       {"name": "muster", "typ": "i", "einheit": "nummer"},
       {"name": "ev_id", "typ": "i", "einheit": "nummer"},
-      {"name": "note", "typ": "i", "einheit": "note", "bereich": [0, 127]},
+      {"name": "note", "typ": "i", "einheit": "note", "bereich": [0, 255]},
       {"name": "beat", "typ": "d", "einheit": "beat"},
       {"name": "dauer_beats", "typ": "d", "einheit": "beats"},
       {"name": "velocity", "typ": "f", "einheit": "anteil", "bereich": [0, 1]}]},
@@ -393,7 +393,7 @@
       {"name": "stretcher_aktiv", "typ": "i", "einheit": "anzahl"},
       {"name": "befehle_wartend", "typ": "i", "einheit": "anzahl"},
       {"name": "ki_gestoppt", "typ": "i", "einheit": "schalter"}]},
-    {"adresse": "/zustand/deck", "typen": ",iisdidddfiif", "abschnitt": "5.5", "richtung": "vom_kern", "felder": [
+    {"adresse": "/zustand/deck", "typen": ",iisdidddfiifii", "abschnitt": "5.5", "richtung": "vom_kern", "felder": [
       {"name": "deck", "typ": "i", "einheit": "nummer", "bereich": [1, 4]},
       {"name": "status", "typ": "i", "einheit": "code", "werte": "deck_status"},
       {"name": "material_id", "typ": "s", "einheit": "text"},
@@ -405,7 +405,16 @@
       {"name": "vorlauf_ms", "typ": "f", "einheit": "ms"},
       {"name": "hoerweg", "typ": "i", "einheit": "code", "werte": "hoerweg"},
       {"name": "stretcher_fuell", "typ": "i", "einheit": "bloecke", "bereich": [-1, null], "notiz": "-1 ohne Stretcher"},
-      {"name": "versatz_intern_ms", "typ": "f", "einheit": "ms"}]},
+      {"name": "versatz_intern_ms", "typ": "f", "einheit": "ms"},
+      {"name": "keylock_unterlauf", "typ": "i", "einheit": "anzahl", "notiz": "Keylock: Ring fehlte oder passte nicht (Varispeed-Brücke), seit Kern-Start"},
+      {"name": "keylock_aufgegeben", "typ": "i", "einheit": "anzahl", "notiz": "Keylock: Ansatz nach 8 verpassten Fristen aufgegeben, seit Kern-Start"}]},
+    {"adresse": "/zustand/box", "typen": ",iiiiii", "abschnitt": "5.5b", "richtung": "vom_kern", "felder": [
+      {"name": "box", "typ": "i", "einheit": "nummer", "bereich": [1, 2]},
+      {"name": "status", "typ": "i", "einheit": "code", "notiz": "wie /e/loop: 0 leer, 1 bereit, 2 wartet, 3 läuft, 4 endet"},
+      {"name": "keylock_unterlauf", "typ": "i", "einheit": "anzahl", "notiz": "Keylock: Ring fehlte oder passte nicht (Varispeed-Brücke), seit Kern-Start"},
+      {"name": "keylock_aufgegeben", "typ": "i", "einheit": "anzahl", "notiz": "Keylock: Ansatz nach 8 verpassten Fristen aufgegeben, seit Kern-Start"},
+      {"name": "keylock_ring_voll", "typ": "i", "einheit": "anzahl", "notiz": "Keylock: Abschnitte des Dehners, die nicht in den Ring passten (soll 0), seit Kern-Start"},
+      {"name": "keylock_kein_platz", "typ": "i", "einheit": "anzahl", "notiz": "Keylock 7c.3: Ansätze ohne freien Platz der Leihe (Loop im Varispeed bis zum nächsten Ereignis), seit Kern-Start"}]},
     {"adresse": "/pegel", "typen": ",sfffffff", "abschnitt": "5.6", "richtung": "vom_kern", "felder": [
       {"name": "kanal", "typ": "s", "einheit": "pfad"},
       {"name": "spitze_db", "typ": "f", "einheit": "db"},

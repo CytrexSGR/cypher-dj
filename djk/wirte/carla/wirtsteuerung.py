@@ -175,6 +175,40 @@ class Steuerung:
             os.replace(tmp, self.aktiv)
 
 
+class NotenSteuerung:
+    """Glanz Welle 4: Steuerung eines SFZ-Wirts (Carlas eingebauter Sampler, kein Surge). Nur note und halte; lade,
+    zustand und fahre gehören zu Surge und werden mit Grund abgelehnt. Gleiche Notenlogik wie Steuerung."""
+
+    def __init__(self, host):
+        self.host = host
+        self.offen = []  # (zeit_aus, note)
+
+    def bearbeite(self, befehl: dict, jetzt: float) -> dict:
+        try:
+            art = befehl.get("befehl")
+            if art == "note":
+                note, vel = int(befehl["note"]), int(befehl.get("velocity", 100))
+                dauer = float(befehl.get("dauer", 1.0))
+                if not (0 <= note <= 127 and 1 <= vel <= 127 and 0 < dauer <= 30):
+                    raise ValueError("note 0..127, velocity 1..127, dauer 0..30 s")
+                self.host.send_midi_note(0, 0, note, vel)
+                self.offen.append((jetzt + dauer, note))
+                return {"ok": True}
+            if art == "halte":
+                return {"ok": True, "gehalten": 0}
+            if art in ("lade", "zustand", "fahre"):
+                return {"ok": False, "fehler": f"{art}: this host plays an sfz sampler, not Surge; only note works"}
+            return {"ok": False, "fehler": f"unbekannter Befehl {art!r}"}
+        except Exception as e:
+            return {"ok": False, "fehler": f"{type(e).__name__}: {e}"}
+
+    def takt(self, jetzt: float) -> None:
+        faellig = [n for t, n in self.offen if t <= jetzt]
+        self.offen = [(t, n) for t, n in self.offen if t > jetzt]
+        for n in faellig:
+            self.host.send_midi_note(0, 0, n, 0)
+
+
 def sende(sock_pfad: str, befehl: dict, timeout: float = 10.0) -> dict:
     """Client-Seite desselben Protokolls (djk-klang, tonprobe)."""
     s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)

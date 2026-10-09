@@ -33,7 +33,7 @@ int main() {
     if (props.contains(n)) PRUEF(props[n]["x-typ"].get<std::string>() == cdj::KERN_SCHLUESSEL[i].typ);
   }
   PRUEF(im_schema == im_leser);
-  PRUEF(im_leser.size() == 16);
+  PRUEF(im_leser.size() == 18);  // Keylock Task 3: keylock dazu; Bungee S2: keylock_maschine
 
   // Jede Vorgabe aus dem Schema als TOML-Zeile: der Leser nimmt sie an (Negativ-Kontrolle)
   std::ostringstream toml;
@@ -75,5 +75,33 @@ int main() {
     }
     PRUEF(nein);
   }
+  // Keylock Task 3: kern.toml keylock (bool, Vorgabe true): false -> Kern ohne Dehner (main.cpp, Kern::keylock_nach_konfig)
+  PRUEF(cdj::lies_kern_toml_text("version = 1\n", "ohne").keylock == true);
+  PRUEF(cdj::lies_kern_toml_text("version = 1\nkeylock = false\n", "keylock-aus").keylock == false);
+  PRUEF(cdj::lies_kern_toml_text("version = 1\nkeylock = true\n", "keylock-an").keylock == true);
+  bool kein_bool = false;
+  try {
+    cdj::lies_kern_toml_text("version = 1\nkeylock = 0\n", "keylock-zahl");
+  } catch (const cdj::KonfigFehler& e) {
+    kein_bool = std::string(e.what()).find("'keylock'") != std::string::npos;
+  }
+  PRUEF(kein_bool);
+  bool im_schema_kl = props.contains("keylock") && props["keylock"]["default"] == true;
+  PRUEF(im_schema_kl);
+  // Bungee S2: keylock_maschine r3 (Vorgabe, Rückfall) | bungee | bungee_fein; alles andere ist ein Startfehler
+  PRUEF(cdj::lies_kern_toml_text("version = 1\n", "ohne").keylock_maschine == "r3");
+  PRUEF(cdj::lies_kern_toml_text("version = 1\nkeylock_maschine = \"bungee\"\n", "b").keylock_maschine == "bungee");
+  PRUEF(cdj::lies_kern_toml_text("version = 1\nkeylock_maschine = \"bungee_fein\"\n", "bf").keylock_maschine == "bungee_fein");
+  PRUEF(cdj::lies_kern_toml_text("version = 1\nkeylock_maschine = \"r3\"\n", "r").keylock_maschine == "r3");
+  for (const char* z : {"keylock_maschine = \"rubberband\"\n", "keylock_maschine = 1\n", "keylock_maschine = \"\"\n"}) {
+    bool nein = false;
+    try {
+      cdj::lies_kern_toml_text(std::string("version = 1\n") + z, "maschine-falsch");
+    } catch (const cdj::KonfigFehler& e) {
+      nein = std::string(e.what()).find("'keylock_maschine'") != std::string::npos;
+    }
+    PRUEF(nein);
+  }
+  PRUEF(props.contains("keylock_maschine") && props["keylock_maschine"]["default"] == "r3");
   PRUEF_ENDE();
 }

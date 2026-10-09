@@ -68,6 +68,7 @@ static jack_port_t* g_aus[4];
 static uint64_t g_eingeblendet = 0;  // nur im Callback
 static cdj::Betrieb* g_betrieb = nullptr;  // Scheibe 18
 static std::atomic<int> g_cb_tid{0};       // Scheibe 31: Faden des Callbacks, für die Seitenfehler-Zählung (M8)
+static std::atomic<int> g_cb_prio{-1};     // Keylock Task 2.5 (Vertrag 12): Echtzeit-Priorität des JACK-Fadens, 0 ohne
 static std::atomic<uint64_t> g_graph_ereignisse{0};  // Fixup M1: Zähler für die Diagnosezeile im Verbinder
 static cdj::WaechterSeite* g_ws = nullptr;  // Scheibe 18: Selbst-Wächter, nullptr wenn aus
 static jack_port_t* g_hand_in = nullptr;    // Scheibe 35: JACK-MIDI vom Controller (§7.1)
@@ -95,8 +96,15 @@ static void graph_ereignis() {
 }
 
 static int process(jack_nframes_t n, void*) {
-  if (g_cb_tid.load(std::memory_order_relaxed) == 0)  // Scheibe 31: einmal im ersten Zyklus (ein Systemaufruf)
+  if (g_cb_tid.load(std::memory_order_relaxed) == 0) {  // Scheibe 31: einmal im ersten Zyklus (ein Systemaufruf)
     g_cb_tid.store(gettid(), std::memory_order_relaxed);
+    // Keylock Task 2.5 (Vertrag 12): Priorität aus dem JACK-Faden selbst, einmal; sched_getscheduler/sched_getparam mit
+    // 0 = dieser Faden sind reine Systemaufrufe (pthread_getschedparam nähme die Sperre des Fadens in glibc)
+    const int pol = sched_getscheduler(0) & ~SCHED_RESET_ON_FORK;  // Prüfung F5: rtkit setzt das Bit mit
+    sched_param sp{};
+    const bool rt = (pol == SCHED_FIFO || pol == SCHED_RR) && sched_getparam(0, &sp) == 0;
+    g_cb_prio.store(rt ? sp.sched_priority : 0, std::memory_order_release);
+  }
   jack_nframes_t cf;
   jack_time_t cu, nu;
   float per;
@@ -425,6 +433,12 @@ int main(int argc, char** argv) {
     }
   g_ring = ring;
   // Scheibe 18: Neustart-Zustand lesen und übernehmen (SCHNITTSTELLEN §6.3), gespeicherte Abonnenten ans Netz
+  // Keylock Task 2.5b (Vertrag 17, Prüfung F2): Vorgabe 1 im Betrieb, hier nur angekündigt (kostet nichts); Dehner und
+  // Fäden baut keylock_bauen nach READY in einem eigenen Faden, die Decks spielen bis dahin Varispeed
+  const bool keylock = g_kern->keylock_nach_konfig(konf.keylock);  // Task 3: kern.toml keylock (§2.1)
+  if (konf.keylock_maschine != "r3")  // Bungee S2: kern.toml keylock_maschine; r3 ist der Rückfall und die Vorgabe
+    g_kern->setze_keylock_maschine(cdj::DehnerMaschine::Bungee, konf.keylock_maschine == "bungee_fein");
+  std::fprintf(stderr, "Keylock-Maschine: %s\n", konf.keylock_maschine.c_str());
   g_betrieb = new cdj::Betrieb();
   const cdj::Wiederaufnahme wa = g_betrieb->starte(cdj::ZustandDatei::pfad_fuer(inst), *g_kern, ohne_zustand);
   std::fprintf(stderr, "Zustand %s: %s, %s, Generation %d, Stand %llu, %d Segmente, %d Befehle, %d Abonnenten\n",
@@ -447,7 +461,11 @@ int main(int argc, char** argv) {
   jack_set_port_connect_callback(g_client, [](jack_port_id_t, jack_port_id_t, int, void*) { graph_ereignis(); }, nullptr);
   std::signal(SIGINT, on_signal);
   std::signal(SIGTERM, on_signal);
-  if (jack_activate(g_client) != 0) { std::fprintf(stderr, "jack_activate fehlgeschlagen\n"); return 1; }
+  if (jack_activate(g_client) != 0) {
+    std::fprintf(stderr, "jack_activate fehlgeschlagen\n");
+    g_kern->keylock_faeden_stoppen();  // Prüfung F4 (seit 2.5b laufen hier noch keine; bleibt als Schutz)
+    return 1;
+  }
   if (mlockall(MCL_CURRENT) != 0) std::perror("mlockall");  // nicht MCL_FUTURE (10 NP K7)
   // Review Slice 4 Q1: ein gescheitertes Verbinden beim Start ist nicht mehr tödlich. Vorher endete der Kern mit 1, die
   // Unit startete sofort neu, und die Bremse (F20) zählte das als Absturz ohne Fortschritt: fehlte das Ziel nur kurz, war
@@ -484,6 +502,21 @@ int main(int argc, char** argv) {
                konf.speicher_budget_mib, ohne_sperre ? ", Lader OHNE Sperre (Prüfschalter)" : "", g_cb_tid.load());
   std::thread faden([&] { netz.laufen(g_stop); });
   std::thread lader_faden([&] { lader.laufen(*lringe, g_stop, lopt); });  // Scheibe 31
+  // Keylock Task 2.5b: Dehner und Fäden nach dem ersten Zyklus in einem eigenen Faden (Prüfung F2: nicht im Startpfad);
+  // Priorität (Vertrag 12) = JACK-Priorität − 5 aus dem JACK-Faden; Task 2.5c: danach nur den Dehner-Speicher sperren
+  // (keylock_bauen sperren = true, kein zweites mlockall); erst nach Netz- und Lade-Faden, damit ihre Stapel schon vorher
+  // da sind und nicht als neu gelten.
+  std::thread kl_bau;
+  if (keylock)
+    kl_bau = std::thread([] {
+      const int64_t t0 = mono_ns();
+      const int jp = g_cb_prio.load(std::memory_order_acquire);
+      if (jp <= 0) std::fprintf(stderr, "Keylock: JACK-Faden ohne Echtzeit-Priorität (%d), Keylock-Fäden bleiben SCHED_OTHER\n", jp);
+      if (g_kern->keylock_bauen(jp, true)) {
+        std::fprintf(stderr, "Keylock bereit nach %.1f ms (6 Dehner: 4 Decks, 2 Boxen; %s), die Quellen hängen ab dem nächsten Zyklus\n",
+                     (double)(mono_ns() - t0) / 1e6, g_kern->keylock_faeden_laufen() ? "Fäden laufen" : "synchron im Callback, keine Fäden");
+      }
+    });
   // Scheibe 35, Plan E8: Verbinder im Hauptfaden, beim Start und alle 500 ms, wenn quelle_port da, aber nicht mit
   // hand_in verbunden ist. Jede neue Verbindung: erster Wert nur Stellung (§7.3 Punkt 2). Verbunden wird nur MIDI
   // (kein Ton, kein Riegel nötig, §8).
@@ -657,7 +690,9 @@ int main(int argc, char** argv) {
   if (g_ws) __atomic_store_n(&g_ws->ende, 1, __ATOMIC_RELEASE);  // geordnetes Ende: Wächter geht still
   long long cb_minflt = -1, cb_majflt = -1;  // Scheibe 31: vor dem Abmelden, solange der Faden lebt
   seitenfehler(g_cb_tid.load(), cb_minflt, cb_majflt);
+  if (kl_bau.joinable()) kl_bau.join();  // Task 2.5b: ein laufender Bau (rund 270 ms) endet vor dem Abbau
   jack_deactivate(g_client);
+  g_kern->keylock_faeden_stoppen();  // Keylock Task 2.5: Join (Wecker plus höchstens 20 ms Warten je Faden)
   faden.join();
   lader_faden.join();
   jack_client_close(g_client);
@@ -676,5 +711,7 @@ int main(int argc, char** argv) {
                cb_minflt, cb_majflt, (long long)(lader.gesperrt() >> 20),
                (unsigned long long)g_kern->hand_ereignisse(), (unsigned long long)g_kern->hand_ohne_wirkung(),
                (unsigned long long)g_kern->hand_ueberlauf(), (unsigned long long)neuverbindungen);
+  // Keylock Task 7 Step 1 (Gate G1): Kosten und Zähler je Quelle, nach dem Join der Keylock-Fäden (oben)
+  std::fprintf(stderr, "%s\n", g_kern->keylock_schluss_json().c_str());
   return 0;
 }

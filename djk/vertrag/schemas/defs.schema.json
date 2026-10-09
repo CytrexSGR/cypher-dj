@@ -15,7 +15,7 @@
   "regler_pfad": {
    "description": "§1.5 Regler-Pfade (ein Bus hat keinen ziel-Regler; rueckkopplung nur fx/1, fx/2)",
    "type": "string",
-   "pattern": "^((deck/[1-4]|erz/[1-8]|pad/[12])/(fader|trim|eq/(tief|mitte|hoch)|kill/(tief|mitte|hoch)|filter|send/[1-4]|ziel|xseite|pfl)|bus/[1-4]/(fader|trim|eq/(tief|mitte|hoch)|kill/(tief|mitte|hoch)|filter|send/[1-4]|xseite|pfl)|deck/[1-4]/stem/(drums|bass|vocals|other)|duck/(tiefe|release)|xfader|master/(pegel|kleber)|cue/(mix|pegel|split)|fx/[12]/(notenwert|rueckkopplung)|fx/[1-4]/rueckweg)$"
+   "pattern": "^((deck/[1-4]|erz/[1-8]|pad/[12])/(fader|trim|eq/(tief|mitte|hoch)|kill/(tief|mitte|hoch)|filter|send/[1-4]|ziel|xseite|pfl)|bus/[1-4]/(fader|trim|eq/(tief|mitte|hoch)|kill/(tief|mitte|hoch)|filter|send/[1-4]|xseite|pfl)|deck/[1-4]/stem/(drums|bass|vocals|other)|duck/(tiefe|release)|keylock|xfader|master/(pegel|kleber)|cue/(mix|pegel|split)|fx/[12]/(notenwert|rueckkopplung)|fx/[1-4]/rueckweg)$"
   },
   "fassung_name": {"description": "§4.5, §13.1: <bpm·1000>_r<n>", "type": "string", "pattern": "^[1-9][0-9]*_r[1-9][0-9]*$"},
   "inhalt": {"description": "§4.5: Deck <material_id>/<bpm·1000>_r<n>, Pad .../s<nr>, Erzeuger muster/<m>", "type": "string",

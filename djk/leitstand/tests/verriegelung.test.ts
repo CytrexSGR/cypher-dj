@@ -15,7 +15,8 @@ function umgebung(extra: Partial<Pruefumgebung> = {}, meldungen: Dekodiert[] = [
   const std: Dekodiert[] = [
     { adresse: '/e/geladen', felder: { deck: 2, material_id: B2, basis_bpm: 128, fassung: 1, mit_stems: 0, sample: 0 } },
     { adresse: '/zustand/deck', felder: { deck: 2, status: 2, material_id: B2, basis_bpm: 128, fassung: 1, quell_beat: 12,
-      beats_bis_ende: 200, faktor: 1, vorlauf_ms: 0, hoerweg: 0, stretcher_fuell: -1, versatz_intern_ms: 0 } },
+      beats_bis_ende: 200, faktor: 1, vorlauf_ms: 0, hoerweg: 0, stretcher_fuell: -1, versatz_intern_ms: 0,
+      keylock_unterlauf: 0, keylock_aufgegeben: 0 } },
     { adresse: '/e/geladen', felder: { deck: 1, material_id: 'f0000000000000a1', basis_bpm: 128, fassung: 1, mit_stems: 0, sample: 0 } },
     { adresse: '/e/regler', felder: { pfad: 'deck/1/fader', wert: 0, halter: 'frei', sample: 0, beat: 0 } },
   ];
@@ -39,6 +40,13 @@ const codes = (p: Plan, u: Pruefumgebung) => pruefe(p, u).map((g) => g.grund);
 test('Negativ-Kontrollen: gültiger Plan, Leiser ohne Hörschein', () => {
   assert.deepEqual(codes(plan(B_REIN), umgebung()), []);
   assert.deepEqual(codes(plan([{ regler: 'deck/1/fader', art: 'rampe', ab_takt: 9, dauer_takte: 4, nach: -40 }], ''), umgebung()), []);
+});
+
+test('Keylock 3: Teil keylock 0 (cypher) wird angenommen, deck/1/keylock nicht; der Spiegel übernimmt /e/regler keylock', () => {
+  assert.deepEqual(codes(plan([{ regler: 'keylock', art: 'setze', ab_takt: 9, nach: 0 }], ''), umgebung()), []);
+  assert.deepEqual(codes(plan([{ regler: 'deck/1/keylock', art: 'setze', ab_takt: 9, nach: 0 }], ''), umgebung()), ['unbekannter_regler']);
+  const u = umgebung({}, [{ adresse: '/e/regler', felder: { pfad: 'keylock', wert: 0, halter: 'frei', sample: 0, beat: 0 } }]);
+  assert.equal(u.spiegel.wert('keylock'), 0);
 });
 
 test('Form an Teilen: unbekannter Regler, nur Hand, außerhalb des Bereichs', () => {

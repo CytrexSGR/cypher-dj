@@ -12,51 +12,8 @@
 
 #include "cypherdj/kern.h"
 #include "cypherdj/netz.h"
+#include "gegenstelle.h"
 #include "pruef.h"
-
-struct Gegenstelle {
-  int sock;
-  int port;
-  int kern_port;
-  char buf[2048];
-  cdj::osc::Nachricht m;
-  explicit Gegenstelle(int kp) : kern_port(kp) {
-    sock = socket(AF_INET, SOCK_DGRAM, 0);
-    sockaddr_in a{};
-    a.sin_family = AF_INET;
-    a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    bind(sock, (sockaddr*)&a, sizeof a);
-    socklen_t l = sizeof a;
-    getsockname(sock, (sockaddr*)&a, &l);
-    port = ntohs(a.sin_port);
-  }
-  ~Gegenstelle() { close(sock); }
-  void sende(const cdj::osc::Schreiber& s) {
-    sockaddr_in a{};
-    a.sin_family = AF_INET;
-    a.sin_port = htons((uint16_t)kern_port);
-    a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    sendto(sock, s.daten(), s.groesse(), 0, (sockaddr*)&a, sizeof a);
-  }
-  // wartet bis zu ms auf eine Nachricht mit dieser Adresse (andere werden übersprungen); sonst ist m leer
-  bool warte(const char* adresse, int ms) {
-    for (int t = 0; t < ms; ++t) {
-      pollfd pf{sock, POLLIN, 0};
-      if (poll(&pf, 1, 1) > 0) {
-        ssize_t r = recv(sock, buf, sizeof buf, 0);
-        if (r > 0 && cdj::osc::lesen(buf, (size_t)r, m) && !std::strcmp(m.adresse, adresse)) return true;
-      }
-    }
-    m.anzahl = 0;
-    m.typen = "";
-    return false;
-  }
-  // Werte der letzten Nachricht; außerhalb der Nachricht ein Wert, der keine Prüfung besteht
-  const char* s(int i) const { return (i < m.anzahl && m.werte[i].typ == 's') ? m.werte[i].s : "<fehlt>"; }
-  int32_t i(int k) const { return (k < m.anzahl && m.werte[k].typ == 'i') ? m.werte[k].i : -999; }
-  int64_t h(int k) const { return (k < m.anzahl && m.werte[k].typ == 'h') ? m.werte[k].h : -999; }
-  double d(int k) const { return (k < m.anzahl && m.werte[k].typ == 'd') ? m.werte[k].d : -999.0; }
-};
 
 static int befehle_im_ring(cdj::Befehlsring* rb, cdj::Befehl* letzter) {
   int n = 0;

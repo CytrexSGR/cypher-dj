@@ -21,8 +21,9 @@ const ReglerDef& d(const char* pfad) {
 }  // namespace
 
 FALL(zahl_der_regler_und_kanaele) {
-  // 4 Decks x 21 (mit transport), 8 Erzeuger x 16, 2 Pads x 16, 4 Busse x 15 (ohne ziel), 16 globale: 320
-  PRUEFE_GLEICH(tab().anzahl(), 320);
+  // 4 Decks x 21 (mit transport), 8 Erzeuger x 16, 2 Pads x 16, 4 Busse x 15 (ohne ziel), 17 globale (seit Keylock 3
+  // mit `keylock`): 321
+  PRUEFE_GLEICH(tab().anzahl(), 321);
   PRUEFE_GLEICH(tab().kanaele(), 20);
   PRUEFE_GLEICH(tab().kanal_suche("deck/1"), 0);
   PRUEFE_GLEICH(tab().kanal_suche("bus/4"), 17);
@@ -67,6 +68,23 @@ FALL(wer_darf_nur_hand) {
     PRUEFE(d(p).nur_hand);
   for (const char* p : {"deck/1/fader", "bus/1/trim", "erz/2/send/3", "fx/1/notenwert", "fx/4/rueckweg", "pad/2/eq/hoch", "duck/tiefe", "duck/release"})
     PRUEFE(!d(p).nur_hand);
+}
+
+// Keylock Task 3 (Plan 2026-10-06-keylock-echtzeit.md, Fassung 4): EIN globaler Schalter `keylock` für alle Quellen
+// (Decks, Loop-Boxen, Loop auf dem Deck), Vorgabe 1, kein Deck-Argument, kein `deck/<n>/keylock`; jede Quelle darf.
+FALL(keylock_globaler_schalter) {
+  const ReglerDef& k = d("keylock");
+  PRUEFE_GLEICH(k.kanal, -1);
+  PRUEFE_GLEICH(k.deck, 0);
+  PRUEFE(k.rolle == Rolle::keylock);
+  PRUEFE_NAH(k.min, 0, 0);
+  PRUEFE_NAH(k.max, 1, 0);
+  PRUEFE_NAH(k.vorgabe, 1, 0);
+  PRUEFE_GLEICH(k.schalt_samples, 0);
+  PRUEFE(!k.nur_hand);
+  PRUEFE(!k.db && k.keine_rampe && k.ganzzahlig && !k.transport);
+  PRUEFE(k.kurve.typ == KurvenTyp::schalter);
+  for (const char* p : {"deck/1/keylock", "deck/4/keylock", "pad/1/keylock"}) PRUEFE_GLEICH(tab().suche(p), -1);
 }
 
 FALL(deck_halter_eintraege) {

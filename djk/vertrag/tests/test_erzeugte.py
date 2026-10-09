@@ -38,7 +38,9 @@ def test_schluesselwort_als_feldname_wird_abgelehnt():
 def test_bezeichner_sind_eindeutig_und_vollstaendig():
     daten = json.loads(OSC.read_text(encoding="utf-8"))
     namen = [erzeuge_osc.bezeichner(e["adresse"]) for e in daten["adressen"]]
-    assert len(set(namen)) == 69 and "k_loop_rec" in namen and "e_mitschnitt" in namen and "k_loop_laden" in namen and "e_loop" in namen and "k_deck_hotcue_setzen" in namen and "q_stand" in namen
+    # eindeutig: so viele verschiedene Bezeichner wie Adressen in osc.json (Zahl aus der Quelle, nicht fest)
+    assert len(daten["adressen"]) > 0 and len(set(namen)) == len(namen) == len({e["adresse"] for e in daten["adressen"]})
+    assert "k_loop_rec" in namen and "e_mitschnitt" in namen and "k_loop_laden" in namen and "e_loop" in namen and "k_deck_hotcue_setzen" in namen and "q_stand" in namen
 
 
 # Scheibe 3 (Resampling, E1 in Form des Plan-Reviews Q2): /erz/ev trägt nach den festen Feldern einen optionalen

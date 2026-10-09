@@ -34,7 +34,8 @@ def test_text_ohne_z1_ist_rot(tmp_path):
     falsch.write_text("\n".join(z for z in vertragstext.lies().split("\n") if "`/test/klick ,hssi`" not in z),
                       encoding="utf-8")
     fehler = pruefe_osc.pruefe(falsch, OSC, False)
-    assert "Anzahl ungleich: Text 68, osc.json 69" in fehler
+    n = len(json.loads(OSC.read_text(encoding="utf-8"))["adressen"])
+    assert f"Anzahl ungleich: Text {n - 1}, osc.json {n}" in fehler
     assert "/test/klick steht in osc.json, fehlt im Text" in fehler
 
 

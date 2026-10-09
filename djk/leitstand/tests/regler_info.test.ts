@@ -20,6 +20,7 @@ function universum(): string[] {
   for (const n of [1, 2, 3, 4]) u.push(`fx/${n}/notenwert`, `fx/${n}/rueckkopplung`, `fx/${n}/rueckweg`);
   u.push('xfader', 'master/pegel', 'cue/mix', 'cue/pegel', 'cue/split');
   u.push('duck/tiefe', 'duck/release', 'master/kleber');
+  u.push('keylock', 'deck/1/keylock', 'pad/1/keylock');   // Keylock 3: nur der globale Knopf
   return u;
 }
 
@@ -40,6 +41,11 @@ test('§1.5: Bereiche, Vorgaben, nur Hand', () => {
   assert.equal(reglerInfo('duck/release')?.vorgabe, 200);
   assert.equal(reglerInfo('master/kleber')?.vorgabe, 0);
   assert.equal(reglerInfo('master/kleber')?.nurHand, true);
+  // Keylock 3 (Fassung 4): EIN Knopf für alle Quellen, Schalter 0..1, Vorgabe 1, nicht nur Hand, kein Kanal
+  assert.deepEqual([reglerInfo('keylock')?.vorgabe, reglerInfo('keylock')?.nurHand, reglerInfo('keylock')?.kanal], [1, false, null]);
+  assert.equal(imBereich(reglerInfo('keylock')!, 0, 0), true);
+  assert.equal(imBereich(reglerInfo('keylock')!, 0.5, 0), false);
+  assert.equal(imBereich(reglerInfo('keylock')!, 1, 4), false);
   assert.equal(imBereich(reglerInfo('deck/1/eq/tief')!, 6, 0), true);
   assert.equal(imBereich(reglerInfo('deck/1/eq/tief')!, 6.5, 0), false);
   assert.equal(imBereich(reglerInfo('deck/1/kill/tief')!, 1, 0), true);

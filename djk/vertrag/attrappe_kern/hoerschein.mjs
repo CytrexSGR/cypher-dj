@@ -30,6 +30,7 @@ function i3a(K, t, s) {
   const k = kanalVon(t.pfad);
   if (!SPIELKANAELE.includes(k)) return null;
   if (k.startsWith('erz/')) return null;   // wie Kern e9baf64 (stellwerk/src/i3.cpp): Strudel-Kanäle öffnen ohne Hörschein (Andreas 2026-09-29)
+  if (k.startsWith('pad/')) return null;   // Andreas 2026-10-05: „diese fader solltest du selber steuern können alle“; Herkunft des Box-Inhalts prüft die Seite (server.ts eigenePad)
   const v = sicht(K, s);
   if (offen(K, v, k)) return null;
   const nachher = t.pfad.endsWith('/fader') ? t.nach + v.wert(`${k}/trim`) : t.nach + v.wert(`${k}/fader`);

@@ -10,8 +10,8 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 const HAND = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'hand.ts');
 const NAMEN = ['lage', 'bestand', 'laden', 'deck_start', 'deck_stopp', 'sprung', 'loop', 'pad', 'loop_nach_box', 'box',
   'regler', 'fx', 'fx_zuweisung', 'strudel', 'abbrechen', 'warte', 'hoeren',
-  'studio', 'loops', 'rec', 'loop_klang', 'spur', 'spur_stopp', 'spuren', 'stille', 'pegel', 'klang', 'instrumente', 'bibliothek', 'vorbereiten',
-  'sets', 'set_zeige', 'set_lege', 'set_vorbereiten'];
+  'studio', 'loops', 'rec', 'loop_klang', 'spur', 'spur_stopp', 'spuren', 'stille', 'pegel', 'klang', 'instrumente', 'bibliothek', 'klaenge', 'bestand_karte', 'vorbereiten',
+  'sets', 'set_zeige', 'set_lege', 'set_vorbereiten', 'tempo'];
 
 async function aufbau(t, antworten, env) {
   const gesehen = [];
@@ -217,6 +217,12 @@ test('djk-hand instrumente: AUTO aus auf Strom 2 → auto_aus, Skript nicht geru
   assert.ok(!r.isError, r.content[0].text);
   assert.deepEqual(JSON.parse(r.content[0].text).ausgabe, ['wirt bass    started']);
   assert.equal(fs.readFileSync(spur, 'utf8').trim(), '');   // Seite auf Zufallsport → keine Instanz
+  const f = await c.callTool({ name: 'instrumente', arguments: { melodie: 'fluegel' } });   // Glanz Welle 4
+  assert.ok(!f.isError, f.content[0].text);
+  assert.equal(fs.readFileSync(spur, 'utf8').trim().split('\n').at(-1), '--melodie fluegel');
+  const x = await c.callTool({ name: 'instrumente', arguments: { melodie: 'orgel' } });
+  assert.equal(x.isError, true);
+  assert.equal(fs.readFileSync(spur, 'utf8').split('\n').length - 1, 2);   // zwei Aufrufe; die ungültige Wahl ruft das Skript nicht
 });
 
 test('djk-hand bibliothek/vorbereiten: Query an GET /mediathek, POST dann Status bis fertig', async (t) => {
@@ -232,6 +238,30 @@ test('djk-hand bibliothek/vorbereiten: Query an GET /mediathek, POST dann Status
   const v = await c.callTool({ name: 'vorbereiten', arguments: { material_id: 'aa' } });
   assert.ok(!v.isError, v.content[0].text);
   assert.equal(JSON.parse(v.content[0].text).status, 'neu');
+});
+
+test('djk-hand klaenge: Query-String kommt an, Antwort unverändert, Fehler wird Werkzeugfehler', async (t) => {
+  const antwort = { treffer: [{ sha: 'x', einsatz: 'nur_live', quelle: 'mediathek' }], gesamt: 1, gesamt_genau: true };
+  const { c, gesehen } = await aufbau(t, (m, u) => (u.startsWith('/klaenge?text=piano') ? [200, antwort] : u.startsWith('/klaenge?bpm=') ? [400, { fehler: 'bpm_ungueltig' }] : undefined));
+  const r = await c.callTool({ name: 'klaenge', arguments: { text: 'piano', typ: 'oneshot', einsatz: 'nur_live', limit: 5 } });
+  assert.ok(!r.isError, r.content[0].text);
+  assert.ok(gesehen.some((x) => x.methode === 'GET' && x.pfad === '/klaenge?text=piano&typ=oneshot&einsatz=nur_live&limit=5'), JSON.stringify(gesehen.map((x) => x.pfad)));
+  assert.deepEqual(JSON.parse(r.content[0].text), antwort);
+  const f = await c.callTool({ name: 'klaenge', arguments: { bpm: 'abc' } });
+  assert.equal(f.isError, true); assert.match(f.content[0].text, /bpm_ungueltig/);
+});
+
+test('djk-hand bestand_karte: GET /klaenge/karte, Antwort unverändert, Seitenfehler wird Werkzeugfehler', async (t) => {
+  const karte = { je_typ: { oneshot: { gesamt: 2, sofort: 0, werkstatt: 1, nur_live: 1 } }, packs: [], loopbib: 3, mediathek_stand: '2026-10-06T00:00:00.000Z', erzeugt_am: '2026-10-06T01:00:00.000Z' };
+  let ok = true;
+  const { c, gesehen } = await aufbau(t, (m, u) => (u === '/klaenge/karte' ? (ok ? [200, karte] : [500, { fehler: 'mediathek_abfrage' }]) : undefined));
+  const r = await c.callTool({ name: 'bestand_karte', arguments: {} });
+  assert.ok(!r.isError, r.content[0].text);
+  assert.ok(gesehen.some((x) => x.methode === 'GET' && x.pfad === '/klaenge/karte'));
+  assert.deepEqual(JSON.parse(r.content[0].text), karte);
+  ok = false;
+  const f = await c.callTool({ name: 'bestand_karte', arguments: {} });
+  assert.equal(f.isError, true); assert.match(f.content[0].text, /mediathek_abfrage/);
 });
 
 test('djk-hand vorbereiten: Statusabfrage 404 bricht sofort ab und wird Werkzeugfehler (Negativfall zum Erfolgspfad)', async (t) => {
@@ -264,4 +294,36 @@ test('djk-hand Sets: Liste, Ansicht, Track hineinlegen (legt Set bei Bedarf an),
   assert.deepEqual(gesehen.filter((x) => x.methode === 'POST').map((x) => [x.pfad, x.koerper]),
     [['/sammlungen', { name: 'Neu' }], ['/sammlungen/neu/posten', { art: 'track', material_id: '0021a3a9c077b9d5' }]]);
   assert.equal(JSON.parse((await c.callTool({ name: 'set_vorbereiten', arguments: { slug: 'a' } })).content[0].text).eingereiht, 3);
+});
+
+test('djk-hand tempo: POST /tempo {bpm}, Kern-Quittung 6 wird Werkzeugfehler, 400 bereich auch', async (t) => {
+  let antwort = [200, { ok: true, felder: { id: 1, ziel_bpm: 140 }, quittung: { status: 5, grund: '' } }];
+  const { c, gesehen } = await aufbau(t, (m, u) => (u === '/tempo' ? antwort : undefined));
+  const ok = await c.callTool({ name: 'tempo', arguments: { bpm: 140 } });
+  assert.ok(!ok.isError, ok.content[0].text);
+  assert.deepEqual(gesehen.find((x) => x.pfad === '/tempo').koerper, { bpm: 140 });
+  antwort = [409, { fehler: 'ki_gestoppt' }];   // die Seite antwortet bei Stop Cypher selbst (server.ts:1768)
+  const nein = await c.callTool({ name: 'tempo', arguments: { bpm: 140 } });
+  assert.equal(nein.isError, true); assert.match(nein.content[0].text, /ki_gestoppt/);
+  antwort = [400, { fehler: 'bereich' }];
+  const aus = await c.callTool({ name: 'tempo', arguments: { bpm: 250 } });
+  assert.equal(aus.isError, true); assert.match(aus.content[0].text, /bereich/);
+  assert.deepEqual(gesehen.filter((x) => x.pfad === '/tempo').at(-1).koerper, { bpm: 250 });
+  antwort = [200, { ok: true, felder: { id: 3 }, quittung: { status: 6, grund: 'ueberlappung' } }];
+  const kern = await c.callTool({ name: 'tempo', arguments: { bpm: 140 } });
+  assert.equal(kern.isError, true); assert.match(kern.content[0].text, /ueberlappung/);
+});
+
+// Keylock 3 (Plan 2026-10-06-keylock-echtzeit.md, Fassung 4): EIN Knopf `keylock` für alle Quellen; tempo sagt das, regler
+// kennt den Pfad, vom alten Render-und-Tausch (decks[].keylock, rendert, tauscht) steht nichts mehr da.
+test('djk-hand Keylock 3: tempo nennt den globalen Knopf keylock, regler den Pfad, kein Render-und-Tausch', async (t) => {
+  const { c } = await aufbau(t, () => undefined);
+  const werkzeuge = (await c.listTools()).tools;
+  const tempo = werkzeuge.find((x) => x.name === 'tempo').description;
+  const regler = werkzeuge.find((x) => x.name === 'regler').description;
+  assert.match(tempo, /All sources keep their pitch \(keylock, on by default; `keylock` via regler\)/);
+  assert.doesNotMatch(tempo, /decks\[\]\.keylock|renders the track|swaps the deck|rendert|tauscht/);
+  assert.match(regler, /\bkeylock\b/);
+  assert.match(tempo, /null unknown/); assert.match(tempo, /Exceptions with keylock on/);   // 3b
+  assert.doesNotMatch(regler + tempo, /deck\/<n>\/keylock|deck\/[1-4]\/keylock/);
 });

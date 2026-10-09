@@ -13,6 +13,20 @@ const lies = (ordner) => {
 };
 const bank = (name) => name.split(':')[0];
 
+// F50 (Glanz 2.5.3): ein Mitschnitt beginnt und endet mitten im Signal. An einer lauten Kante (über -60 dBFS) linear
+// ein- und ausblenden, höchstens 1/4 der Länge. Längen wie Loop-Box-Start (32) und kit_bauen.py AUSBLENDE (240), UNGEHÖRT.
+const EIN = 32, AUS = 240, KANTE = 0.001;
+export function kantenBlenden(buf, frames) {
+  if (buf.length !== frames * 8) return buf;                // falsche Länge: unverändert, der Kern lehnt sie ab (kit.cpp:51)
+  const x = new Float32Array(new Uint8Array(buf).buffer);   // ausgerichtete Kopie (Buffer aus dem Pool ist es nicht immer)
+  const laut = (f) => Math.max(Math.abs(x[2 * f]), Math.abs(x[2 * f + 1])) > KANTE;
+  const ein = laut(0) ? Math.min(EIN, Math.floor(frames / 4)) : 0;
+  const aus = laut(frames - 1) ? Math.min(AUS, Math.floor(frames / 4)) : 0;
+  for (let i = 0; i < ein; i++) { const g = (i + 1) / (ein + 1); x[2 * i] *= g; x[2 * i + 1] *= g; }
+  for (let j = 0; j < aus; j++) { const f = frames - 1 - j, g = (j + 1) / (aus + 1); x[2 * f] *= g; x[2 * f + 1] *= g; }
+  return ein || aus ? Buffer.from(x.buffer) : buf;
+}
+
 // Sperre je Zusatz-Kit (Abschluss-Review Scheibe 3 Fund 3: CLI und Seite zugleich verloren Einträge). mkdir ist
 // atomar; eine Sperre älter als 10 s gilt als liegengeblieben (abgestürzter Schreiber) und wird übernommen.
 function mitSperre(ordner, fn) {
@@ -58,18 +72,18 @@ function schreibe({ loopOrdner, kitsOrdner, basis, zusatz, loop, klang }) {
   if (!NAME.test(name)) throw new Error(`Name ${name}: [a-z][a-z0-9_]{0,15}`);
   if (baenkeBasis.has(name)) throw new Error(`${name} ist im Kit ${basis} schon ein Klang`);
   if (baenkeZusatz.has(name)) throw new Error(`${name} gibt es im Kit ${zusatz} schon`);
-  const belegt = new Set([...kb.klaenge, ...kz.klaenge].map((k) => k.note));
+  // F08 (Glanz 2.4.2): das Zusatz-Kit hat einen eigenen Notenraum (Kern und Erzeuger legen es auf 128 + note)
+  const belegt = new Set(kz.klaenge.map((k) => k.note));
   let note = 0;
   while (belegt.has(note)) ++note;
-  if (note > 127) throw new Error('keine freie Note mehr (128 Klänge in beiden Kits)');
+  if (note > 127) throw new Error(`keine freie Note mehr (128 Klänge im Kit ${zusatz})`);
   const datei = `${name}_0.f32`;
   const tmp = path.join(zOrdner, `.${datei}.${process.pid}.neu`);
   const v = Number.isInteger(lj.versatz_frames) ? ((lj.versatz_frames % frames) + frames) % frames : 0;
-  if (v === 0) fs.copyFileSync(path.join(quelle, lj.datei ?? 'loop.f32'), tmp);
-  else {   // Plan Grid (D8): so beginnt der Klang auf der Takt-Eins, die Andreas im Loop gerichtet hat
-    const roh = fs.readFileSync(path.join(quelle, lj.datei ?? 'loop.f32'));
-    fs.writeFileSync(tmp, Buffer.concat([roh.subarray(v * 8), roh.subarray(0, v * 8)]));
-  }
+  const roh = fs.readFileSync(path.join(quelle, lj.datei ?? 'loop.f32'));
+  // Plan Grid (D8): bei Versatz beginnt der Klang auf der Takt-Eins, die Andreas im Loop gerichtet hat
+  const gedreht = v === 0 ? roh : Buffer.concat([roh.subarray(v * 8), roh.subarray(0, v * 8)]);
+  fs.writeFileSync(tmp, kantenBlenden(gedreht, frames));
   fs.renameSync(tmp, path.join(zOrdner, datei));
   kz.klaenge.push({ note, name: `${name}:0`, datei, frames, quelle: `loop:${loop}` });
   const tmpJ = path.join(zOrdner, `.kit.json.${process.pid}.neu`);

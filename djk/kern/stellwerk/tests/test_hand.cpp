@@ -90,6 +90,81 @@ FALL(hand_am_selben_sample_wie_teilstart_gewinnt) {
   PRUEFE_NAH(l.wert_bei("deck/1/kill/tief", T(21) + 240), 0, 0);   // Hand (Bass an), nicht Plan (1)
 }
 
+// F18 (Audit 2026-10-01, Welle 2 Slice 2.3): ein Kill-Griff der Hand ist keine Stufe, sondern die Schaltrampe des Reglers
+// (kill/*: 240 Samples = 5 ms, SCHNITTSTELLEN §1.5) als S-Kurve vom Ist-Wert. Vorher schrieb hand.cpp:139 den Zielwert
+// am Griff-Sample (größter Schritt 1,0).
+FALL(kill_hand_mit_schaltrampe) {
+  Lauf l;
+  l.beobachte("deck/1/kill/tief");
+  l.griff(1000, "deck/1/kill/tief", 0.0f);   // erster Wert: nur Stellung
+  l.griff(50000, "deck/1/kill/tief", 1.0f);  // Kill an
+  l.bis(50100);
+  const int r = l.r("deck/1/kill/tief");
+  PRUEFE_NAH(l.sw->wert_fest(r), 1, 0);                                   // nach außen gilt das Ziel (Neustart, Taste)
+  PRUEFE(l.sw->wert(r) > 0.0f && l.sw->wert(r) < 1.0f);                   // innen läuft die Rampe
+  l.bis(60000);
+  const int n = l.sw->tabelle().def(r).schalt_samples;
+  PRUEFE_GLEICH(n, 240);
+  PRUEFE_NAH(l.wert_bei("deck/1/kill/tief", 49999), 0, 0);
+  PRUEFE_NAH(l.wert_bei("deck/1/kill/tief", 50000), 0, 0);              // Griff-Sample: noch der Ist-Wert (wie ablauf.cpp:32)
+  PRUEFE_NAH(l.wert_bei("deck/1/kill/tief", 50000 + n / 2), 0.5, 1e-6);  // S-Kurve: Mitte genau 0,5
+  PRUEFE_NAH(l.wert_bei("deck/1/kill/tief", 50000 + n), 1, 0);
+  PRUEFE_NAH(l.wert_bei("deck/1/kill/tief", 59999), 1, 0);
+  PRUEFE(l.max_schritt("deck/1/kill/tief") <= 1.5 / n + 1e-6);          // S-Kurve: größter Schritt 1,5/n
+  PRUEFE(l.sw->halter(r).art == HalterArt::mensch);
+}
+
+// F18: Umkehr mitten in der Rampe (Kill an, nach 100 Samples wieder aus) beginnt beim Ist-Wert, kein Sprung.
+FALL(kill_hand_umkehr_mitten_in_der_rampe) {
+  Lauf l;
+  l.beobachte("deck/1/kill/tief");
+  l.griff(1000, "deck/1/kill/tief", 0.0f);
+  l.griff(50000, "deck/1/kill/tief", 1.0f);
+  l.griff(50100, "deck/1/kill/tief", 0.0f);
+  l.bis(60000);
+  const float umkehr = l.wert_bei("deck/1/kill/tief", 50100);
+  PRUEFE(umkehr > 0.3f && umkehr < 0.45f);                              // S(99/240) = 0,37
+  PRUEFE_NAH(l.wert_bei("deck/1/kill/tief", 50100 + 240), 0, 0);
+  PRUEFE(l.max_schritt("deck/1/kill/tief") <= 1.5 / 240 + 1e-6);
+}
+
+// F18 am echten Weg der Taste: regler_umschalten wird ein relativer Griff ±1 (hand_ein.cpp:40, naht_stellwerk.cpp:26-28),
+// ohne „erster Wert nur Stellung“. An und wieder aus, je die 5-ms-S-Kurve.
+FALL(kill_taste_relativ_mit_schaltrampe) {
+  Lauf l;
+  l.beobachte("deck/1/kill/tief");
+  l.griff(50000, "deck/1/kill/tief", 1.0f, GriffArt::relativ);
+  l.griff(80000, "deck/1/kill/tief", -1.0f, GriffArt::relativ);
+  l.bis(90000);
+  PRUEFE_NAH(l.wert_bei("deck/1/kill/tief", 50000), 0, 0);
+  PRUEFE_NAH(l.wert_bei("deck/1/kill/tief", 50120), 0.5, 1e-6);
+  PRUEFE_NAH(l.wert_bei("deck/1/kill/tief", 50240), 1, 0);
+  PRUEFE_NAH(l.wert_bei("deck/1/kill/tief", 80120), 0.5, 1e-6);
+  PRUEFE_NAH(l.wert_bei("deck/1/kill/tief", 80240), 0, 0);
+  PRUEFE(l.max_schritt("deck/1/kill/tief") <= 1.5 / 240 + 1e-6);
+}
+
+// F18: nach außen ist kill/* ein Schalter 0/1 (§1.5): /e/regler und /e/hand tragen nie einen Zwischenwert der Rampe; die
+// erste /e/regler nach dem Griff (Halterwechsel, §5.7) trägt das Ziel 1, nicht den Ist-Wert 0 (test_kern_mixer schalter()).
+FALL(kill_hand_meldet_nur_schalterwerte) {
+  Lauf l;
+  const int r = l.r("deck/1/kill/tief");
+  l.griff(50000, "deck/1/kill/tief", 1.0f, GriffArt::relativ);
+  l.griff(51000, "deck/1/kill/tief", -1.0f, GriffArt::relativ);
+  l.bis(60000);
+  int n = 0, schief = 0;
+  float erste = -1.0f;
+  for (const Ereignis& e : l.ereignisse) {
+    if ((e.art != EreignisArt::regler && e.art != EreignisArt::hand) || e.regler != r) continue;
+    ++n;
+    if (e.wert != 0.0f && e.wert != 1.0f) ++schief;
+    if (e.art == EreignisArt::regler && erste < 0.0f && e.sample >= 50000) erste = e.wert;
+  }
+  PRUEFE(n >= 2);
+  PRUEFE_GLEICH(schief, 0);
+  PRUEFE_NAH(erste, 1, 0);
+}
+
 FALL(relativ_mit_totzone_ueber_die_summe) {
   Lauf l;
   l.sw->setze_direkt(l.r("deck/1/filter"), 0.0f);

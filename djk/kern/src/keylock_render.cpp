@@ -1,4 +1,4 @@
-// Keylock Slice 3: Render-Faden, siehe keylock_render.h.
+// Keylock Slice 4: Render-Faden der REC-Umrechnung, siehe keylock_render.h.
 #include "cypherdj/keylock_render.h"
 
 #include <sched.h>
@@ -30,11 +30,8 @@ void niedrige_prioritaet() {
 
 }  // namespace
 
-KeylockRender::KeylockRender(int boxen, const KeylockOpt& opt)
-    : opt_(opt), auftraege_((size_t)boxen), fertig_((size_t)boxen), fertig_da_((size_t)boxen, false) {
-  // die Vorgabe-Funktionen sehen abbruch_: ein laufender Render endet zwischen zwei R3-Stücken (Slice 3b, F6)
-  if (!opt_.fn)
-    opt_.fn = [this](const std::vector<float>& d, double b) { return rendere_keylock(d, b, &abbruch_); };
+KeylockRender::KeylockRender(const KeylockOpt& opt) : opt_(opt) {
+  // die Vorgabe-Funktion sieht abbruch_: ein laufender Render endet zwischen zwei R3-Stücken (Slice 3b, F6)
   if (!opt_.rec_fn)
     opt_.rec_fn = [this](const float* d, int64_t roh, int64_t frames) { return rendere_rec(d, roh, frames, &abbruch_); };
   // Slice 3b (F5): ein Fadenstart, der scheitert (std::system_error bei Thread-Mangel), darf den Kern nicht mitnehmen
@@ -43,9 +40,9 @@ KeylockRender::KeylockRender(int boxen, const KeylockOpt& opt)
     faden_ = std::thread([this] { faden(); });
     faden_laeuft_ = true;
   } catch (const std::exception& x) {
-    std::fprintf(stderr, "keylock: Render-Faden startet nicht (%s), Keylock bleibt aus, die Boxen bleiben im Varispeed\n", x.what());
+    std::fprintf(stderr, "keylock: Render-Faden startet nicht (%s), REC bei T != 128 wird nicht umgerechnet\n", x.what());
   } catch (...) {
-    std::fprintf(stderr, "keylock: Render-Faden startet nicht, Keylock bleibt aus, die Boxen bleiben im Varispeed\n");
+    std::fprintf(stderr, "keylock: Render-Faden startet nicht, REC bei T != 128 wird nicht umgerechnet\n");
   }
 }
 
@@ -123,82 +120,11 @@ KeylockRender::RecErgebnis KeylockRender::rechne_rec(RecErgebnis a) {
   return a;
 }
 
-void KeylockRender::auftrag(int box, std::shared_ptr<const KeylockQuelle> q, double bpm) {
-  if (box < 1 || box > (int)auftraege_.size() || !q || !faden_laeuft_ || abbruch_.load()) return;
-  {
-    std::lock_guard<std::mutex> lk(m_);
-    Auftrag& a = auftraege_[(size_t)box - 1];
-    a.da = true;  // ersetzt einen noch nicht gestarteten
-    a.nr = ++zaehler_;
-    a.quelle = std::move(q);
-    a.bpm = bpm;
-  }
-  cv_.notify_one();
-}
-
-bool KeylockRender::hole(Ergebnis& e) {
-  std::lock_guard<std::mutex> lk(m_);
-  for (size_t i = 0; i < fertig_.size(); ++i)
-    if (fertig_da_[i]) {
-      e = std::move(fertig_[i]);
-      fertig_[i] = Ergebnis{};
-      fertig_da_[i] = false;
-      return true;
-    }
-  return false;
-}
-
-KeylockRender::Ergebnis KeylockRender::rechne(int box, const std::shared_ptr<const KeylockQuelle>& q, double bpm) {
-  Ergebnis e;
-  e.box = box;
-  e.quelle = q;
-  e.bpm = bpm;
-  const auto t0 = std::chrono::steady_clock::now();
-  // Slice 3b (F5): der ganze Auftrag steht im try (Render, Bau der Loop, Kopien), nicht nur die Render-Funktion: std::bad_alloc
-  // in make_unique<Loop> oder beim Kopieren des Namens würde den Faden verlassen und den Kern über std::terminate mitnehmen
-  try {
-    if (opt_.haken_start) opt_.haken_start();  // Test-Zugang
-    std::vector<float> v = opt_.fn(q->daten, bpm);
-    if (abbruch_.load()) {  // Netz wird beendet: das leere Ergebnis ist der Abbruch, kein Fehler des Renders
-      e.fehler = true;
-      return e;
-    }
-    if (v.empty() || v.size() % 2 != 0) {
-      std::fprintf(stderr, "keylock: Box %d %.2f BPM: Render lieferte nichts, die Box bleibt im Varispeed\n", box, bpm);
-      e.fehler = true;
-      return e;
-    }
-    if (opt_.haken_bau) opt_.haken_bau();  // Test-Zugang
-    auto l = std::make_unique<Loop>();
-    l->name = q->name;  // der Kern lehnt eine Variante mit anderem name oder anderen beats ab
-    l->beats = q->beats;
-    l->frames = (int64_t)(v.size() / 2);
-    l->bpm = bpm;  // T_r, das Tempo, bei dem gerendert wurde
-    l->versatz = q->versatz;
-    l->daten = std::move(v);
-    e.loop = std::move(l);
-  } catch (const std::exception& x) {
-    std::fprintf(stderr, "keylock: Box %d %.2f BPM: Render fehlgeschlagen (%s), die Box bleibt im Varispeed\n", box, bpm, x.what());
-    e.loop.reset();
-    e.fehler = true;
-    return e;
-  } catch (...) {
-    std::fprintf(stderr, "keylock: Box %d %.2f BPM: Render fehlgeschlagen, die Box bleibt im Varispeed\n", box, bpm);
-    e.loop.reset();
-    e.fehler = true;
-    return e;
-  }
-  const long long ms =
-      (long long)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0).count();
-  std::fprintf(stderr, "keylock: Box %d %.2f BPM fertig %lld ms\n", box, bpm, ms);
-  return e;
-}
-
 void KeylockRender::faden() {
   try {
     faden_schleife();
-  } catch (...) {  // nichts darf den Faden verlassen (std::terminate): Keylock endet, die Boxen bleiben im Varispeed
-    std::fprintf(stderr, "keylock: Render-Faden endet durch eine Ausnahme, Keylock bleibt aus\n");
+  } catch (...) {  // nichts darf den Faden verlassen (std::terminate): die REC-Umrechnung endet
+    std::fprintf(stderr, "keylock: Render-Faden endet durch eine Ausnahme, REC bei T != 128 wird nicht mehr umgerechnet\n");
   }
 }
 
@@ -206,47 +132,22 @@ void KeylockRender::faden_schleife() {
   if (opt_.niedrige_prio) niedrige_prioritaet();
   std::unique_lock<std::mutex> lk(m_);
   for (;;) {
-    int box = -1;
-    cv_.wait(lk, [&] {
-      if (stopp_) return true;
-      if (!rec_auftraege_.empty()) return true;
-      for (size_t i = 0; i < auftraege_.size(); ++i)
-        if (auftraege_[i].da) return true;
-      return false;
-    });
+    cv_.wait(lk, [&] { return stopp_ || !rec_auftraege_.empty(); });
     if (stopp_) break;  // ein wartender Auftrag startet nicht mehr
-    if (!rec_auftraege_.empty()) {  // Slice 4: REC zuerst, in Eingangsreihenfolge
-      RecErgebnis a = std::move(rec_auftraege_.front());
-      rec_auftraege_.pop_front();
-      lk.unlock();
-      RecErgebnis r = rechne_rec(std::move(a));
-      lk.lock();
-      if (stopp_) {  // der Mitschnitt wird hier freigegeben: Zeile im Protokoll
-        std::fprintf(stderr, "keylock: REC %s verworfen (Netz wird beendet, Datei nicht geschrieben)\n", r.mt->name);
-        break;
-      }
-      try {
-        rec_fertig_.push_back(std::move(r));
-      } catch (...) {  // bad_alloc der Warteschlange: r ist dann nicht verschoben worden und wird hier freigegeben
-        std::fprintf(stderr, "keylock: REC: Ergebnis nicht ablegbar (Speicher), keine Datei\n");
-      }
-      continue;
-    }
-    uint64_t aelteste = UINT64_MAX;  // der älteste wartende Auftrag zuerst (je Box gibt es nur den neuesten)
-    for (size_t i = 0; i < auftraege_.size(); ++i)
-      if (auftraege_[i].da && auftraege_[i].nr < aelteste) {
-        aelteste = auftraege_[i].nr;
-        box = (int)i + 1;
-      }
-    Auftrag a = std::move(auftraege_[(size_t)box - 1]);
-    auftraege_[(size_t)box - 1] = Auftrag{};
+    RecErgebnis a = std::move(rec_auftraege_.front());  // Slice 4: in Eingangsreihenfolge
+    rec_auftraege_.pop_front();
     lk.unlock();
-    Ergebnis e = rechne(box, a.quelle, a.bpm);
-    a.quelle.reset();
+    RecErgebnis r = rechne_rec(std::move(a));
     lk.lock();
-    if (stopp_) break;  // e wird hier freigegeben
-    fertig_[(size_t)box - 1] = std::move(e);  // ein nicht abgeholtes älteres wird freigegeben
-    fertig_da_[(size_t)box - 1] = true;
+    if (stopp_) {  // der Mitschnitt wird hier freigegeben: Zeile im Protokoll
+      std::fprintf(stderr, "keylock: REC %s verworfen (Netz wird beendet, Datei nicht geschrieben)\n", r.mt->name);
+      break;
+    }
+    try {
+      rec_fertig_.push_back(std::move(r));
+    } catch (...) {  // bad_alloc der Warteschlange: r ist dann nicht verschoben worden und wird hier freigegeben
+      std::fprintf(stderr, "keylock: REC: Ergebnis nicht ablegbar (Speicher), keine Datei\n");
+    }
   }
 }
 

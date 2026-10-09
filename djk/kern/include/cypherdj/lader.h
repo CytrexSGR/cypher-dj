@@ -46,6 +46,8 @@ struct LadeAuftrag {
   uint32_t seq;          // Reihenfolge der Deck-Befehle im Kern
   double basis_bpm;
   char material_id[24];
+  bool tausch;           // Welle 3: Fassung für /k/deck/basis_tausch (das Deck bleibt geladen, getauscht wird bei ab_beat)
+  double ab_beat;        // Welle 3: Ziel-Beat des Tauschs
 };
 
 struct LadeErgebnis {

@@ -11,6 +11,7 @@ void Tempoplan::neu(double start_bpm) {
   basis_.neu(start_bpm, 0);
   karte_.neu(start_bpm, 0);
   n_ = 0;
+  ++generation_;
 }
 
 bool Tempoplan::baue(Karte& ziel) const {
@@ -56,6 +57,7 @@ Einsortiert Tempoplan::rampe(int64_t id, const char* quelle, double ab_beat, dou
     return Einsortiert::karte_voll;
   }
   karte_ = kandidat;
+  ++generation_;
   return spaet ? Einsortiert::verspaetet : Einsortiert::angenommen;
 }
 
@@ -73,6 +75,7 @@ bool Tempoplan::storno(int64_t ziel_id, const char* quelle) {
       return false;
     }
     karte_ = kandidat;
+    ++generation_;
     return true;
   }
   return false;
@@ -89,6 +92,7 @@ bool Tempoplan::wiederherstellen(const Karte& basis, const Karte& karte, const R
   karte_ = karte;
   for (int i = 0; i < n; ++i) e_[i] = e[i];
   n_ = n;
+  ++generation_;
   return true;
 }
 

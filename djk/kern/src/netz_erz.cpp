@@ -19,6 +19,8 @@ namespace cdj {
 
 namespace v = cypherdj::osc;
 
+static_assert(v::bereich::erz_ev::note_max + 1 == KIT_KLAENGE, "Vertrag (osc.json erz/ev note) und Kit (kit.h) laufen auseinander");
+
 namespace {
 
 void kopiere(char* ziel, const char* quelle, size_t n) {
@@ -179,7 +181,7 @@ void Netz::erz_bundle(const char* p, size_t n) {
           default: break;  // unbekannte nr: überlesen (ein neuerer Erzeuger bleibt spielbar)
         }
       }
-      const bool ok = param_ok && std::isfinite(e.dauer) && e.dauer >= 0.0 && m.werte[f::strom].i == fe->strom && e.note >= 0 && e.note <= 127 && e.velocity >= 0.0f &&
+      const bool ok = param_ok && std::isfinite(e.dauer) && e.dauer >= 0.0 && m.werte[f::strom].i == fe->strom && e.note >= 0 && e.note <= v::bereich::erz_ev::note_max && e.velocity >= 0.0f &&
                       e.velocity <= 1.0f && e.beat >= fe->ab_beat && e.beat < fe->bis_beat &&
                       (fe->n == 0 || e.beat >= fe->ev[fe->n - 1].beat);
       if (!ok) { protokollfehler(m.adresse, "protokoll", 0); return; }

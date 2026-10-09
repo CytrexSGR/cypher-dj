@@ -125,7 +125,7 @@ void Kern::abbild(cdj_z_echtzeit& f) const noexcept {
   for (int r = 0; r < tab.anzahl() && nr < CDJ_Z_REGLER; ++r) {
     const sw::ReglerDef& d = tab.def(r);
     const sw::Halter& h = sw_->halter(r);
-    const float w = sw_->wert(r);
+    const float w = sw_->wert_fest(r);  // F18: nie ein Zwischenwert einer Hand-Rampe in den Neustart-Zustand
     if (h.art == sw::HalterArt::frei && (d.transport || w == d.vorgabe)) continue;
     cdj_z_regler& z = f.regler[nr++];
     std::memset(&z, 0, sizeof z);

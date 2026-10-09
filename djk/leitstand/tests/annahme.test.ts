@@ -30,7 +30,8 @@ function annahme(w: Welt, stufe = 1, mutationen: string[] = []): Annahme {
     ['/e/geladen', { deck: 1, material_id: 'f0000000000000a1', basis_bpm: 128, fassung: 1, mit_stems: 0, sample: 0 }],
     ['/e/geladen', { deck: 2, material_id: 'f0000000000000b2', basis_bpm: 128, fassung: 1, mit_stems: 0, sample: 0 }],
     ['/zustand/deck', { deck: 2, status: 2, material_id: 'f0000000000000b2', basis_bpm: 128, fassung: 1, quell_beat: 12,
-      beats_bis_ende: 200, faktor: 1, vorlauf_ms: 0, hoerweg: 0, stretcher_fuell: -1, versatz_intern_ms: 0 }],
+      beats_bis_ende: 200, faktor: 1, vorlauf_ms: 0, hoerweg: 0, stretcher_fuell: -1, versatz_intern_ms: 0,
+      keylock_unterlauf: 0, keylock_aufgegeben: 0 }],
     ['/e/regler', { pfad: 'deck/1/fader', wert: 0, halter: 'frei', sample: 0, beat: 0 }],
     ['/e/regler', { pfad: 'deck/3/fader', wert: -6, halter: 'frei', sample: 0, beat: 0 }],
   ] as Array<[string, Felder]>) {

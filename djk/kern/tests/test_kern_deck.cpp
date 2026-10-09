@@ -198,10 +198,16 @@ int main() {
   a.bewachen = false;
   const Q* st = a.quittung(s1, 2);
   PRUEF(st && st->sample == 8 * SPB);
-  std::vector<int64_t> e = a.einsaetze(8 * SPB - 100, 40 * SPB);
-  PRUEF(e.size() == 32);
-  bool raster = e.size() == 32;
-  for (size_t k = 0; k < e.size() && raster; ++k) raster = e[k] == 8 * SPB + (int64_t)k * SPB;
+  // F10 (Welle 2): der erste Klick liegt in der Einblende (DECK_START_EIN Frames ab dem Startsample) und bleibt unter der
+  // Einsatz-Schwelle 0,05; davor ist es still (mit der Mutation „Start am Blockanfang“ nicht), die übrigen 31 auf dem Raster.
+  PRUEF(a.spitze(8 * SPB - 100, 8 * SPB) <= 1e-6f && a.spitze(8 * SPB, 8 * SPB + 96) > 0.0f);
+  // Ankunft im Kern: die ersten 4 Samples des Startklicks tragen höchstens (k+1)/48 der Hülle, der volle Klick auf Beat 9
+  // (gleicher Pegel 0,25) nicht. Ohne Einblende Verhältnis 1, mit 48 Frames <= 0,05.
+  PRUEF(a.spitze(8 * SPB, 8 * SPB + 4) < 0.2f * a.spitze(9 * SPB, 9 * SPB + 4));
+  std::vector<int64_t> e = a.einsaetze(8 * SPB + cdj::DECK_START_EIN, 40 * SPB);
+  PRUEF(e.size() == 31);
+  bool raster = e.size() == 31;
+  for (size_t k = 0; k < e.size() && raster; ++k) raster = e[k] == 9 * SPB + (int64_t)k * SPB;
   PRUEF(raster);
   PRUEF(a.spitze(10 * SPB, 10 * SPB + 96) > 1.5f * a.spitze(9 * SPB, 9 * SPB + 96));  // Quell-Beat 4: Takt-Eins lauter
   PRUEF(g_allokationen == 0);
@@ -216,17 +222,18 @@ int main() {
     }
   PRUEF(n_zustand == 50 && gerade);
 
-  // 4) Tempo-Rampe bei laufendem Deck: kein_stretcher; neue Zeitachse: deck_laeuft
+  // 4) Tempo-Rampe bei laufendem Deck: seit Welle 3 angenommen (ADR 028; bis Welle 2 kein_stretcher). Ziel 128, damit die
+  //    Zeitachse der Abschnitte 5 bis 10 bleibt; die Rampe mit Tempowechsel prüft test_deck_varispeed. Neue Zeitachse: deck_laeuft
   cdj::Befehl r = a.neu(cdj::Befehl::TEMPO_RAMPE);
   r.ab_beat = 48.0;
-  r.ziel_bpm = 130.0;
+  r.ziel_bpm = 128.0;
   r.dauer_beats = 8.0;
   const int64_t rid = a.sende(r);
   cdj::Befehl sn = a.neu(cdj::Befehl::SET_NEU);
   sn.bpm = 128.0;
   const int64_t snid = a.sende(sn);
   a.zyklen(40 * SPB + 4 * N);
-  PRUEF(a.quittung(rid, 6) && a.quittung(rid, 6)->grund == "kein_stretcher");
+  PRUEF(a.quittung(rid, 1) && !a.quittung(rid, 6));
   PRUEF(a.quittung(snid, 6) && a.quittung(snid, 6)->grund == "deck_laeuft");
 
   // 5) Stopp bei Beat 44: 10-ms-Rampe, fertig 480 Samples später; danach still, Deck geladen
@@ -308,6 +315,31 @@ int main() {
                f.frist[i].sample == std::llround((ende_beat - soll[i]) * SPB);
   PRUEF(frist_ok);
 
+  // 9b) Welle 3: /e/frist im Varispeed. Rampe 128 → 132 ab Beat 2 über 2 Beats, Start bei Beat 8: das Deck folgt am Beat,
+  //     die Frist kommt am Sample des Master-Beats (Ende − n), gerechnet über die Karte, ±1 Sample.
+  {
+    Lauf g;
+    g.laden(1, "c1c0000000000305");
+    g.fader(1, 0.0f, 1.0);
+    cdj::Befehl r = g.neu(cdj::Befehl::TEMPO_RAMPE);
+    r.ab_beat = 2.0;
+    r.ziel_bpm = 132.0;
+    r.dauer_beats = 2.0;
+    const int64_t rid9 = g.sende(r);
+    g.start(1, 8.0, 0.0);  // Ende bei Beat 8 + 161
+    cdj::Karte k(128.0, 0);
+    PRUEF(k.rampe(2.0, 132.0, 2.0));
+    g.zyklen(std::llround(k.sample_at(175.0)));
+    PRUEF(g.quittung(rid9, 1) && !g.quittung(rid9, 6));
+    bool ok = g.frist.size() == 4;
+    for (size_t i = 0; i < g.frist.size() && ok; ++i) {
+      const int64_t soll_s = std::llround(k.sample_at(8.0 + 161.0 - soll[i]));
+      ok = g.frist[i].beats_bis_ende == soll[i] && std::llabs(g.frist[i].sample - soll_s) <= 1;
+      if (!ok) std::fprintf(stderr, "frist %zu: sample %lld, soll %lld\n", i, (long long)g.frist[i].sample, (long long)soll_s);
+    }
+    PRUEF(ok);
+  }
+
   // 10) Stems: vier Stems (mit_stems 1) und die Offline-Summe als Basis ergeben am Ring denselben Master, bitgleich;
   //     Positiv-Kontrolle: vocals stumm unterscheidet sich
   auto stems_lauf = [](const char* mid, int stems, bool vocals_stumm) {
@@ -347,6 +379,82 @@ int main() {
   const int64_t ksid = st2->sende(ks);
   st2->zyklen(22 * SPB);
   PRUEF(st2->quittung(ksid, 6) && st2->quittung(ksid, 6)->grund == "keine_stems");
+
+  // 11) Welle 3 Task 5: /k/deck/basis_tausch. Material 308 bei 128 und als 132er Fassung (Quell-Beat q bei
+  //     erster_schlag + q · 60/132 s). Rampe 128 → 132 ab Beat 2 über 2 Beats, Start bei Beat 8 (Varispeed), Tausch bei
+  //     Beat 24 auf die 132er: jeder Klick vor und nach dem Tausch am Sample von Master-Beat 8 + q (±1), danach Faktor 1.
+  klick("--material-id c1c0000000000308 --beats 96");
+  {
+    const std::string ab2 = AB + "_132";
+    const std::string c = "python3 " + DJK + "/kern/tests/deck/klick_fassung.py --ziel " + ab2 +
+                          " --material-id c1c0000000000308 --beats 96 --bpm 132 > /dev/null && mv " + ab2 +
+                          "/c1c0000000000308/fassungen/132000_r1 " + AB + "/c1c0000000000308/fassungen/ && rm -rf " + ab2;
+    PRUEF(std::system(c.c_str()) == 0);
+  }
+  auto tausch = [](Lauf& l, int deck, double bpm, double ab) {
+    cdj::Befehl b = l.neu(cdj::Befehl::DECK_TAUSCH, "werkstatt");
+    b.deck = deck;
+    b.bpm = bpm;
+    b.fassung = 1;
+    b.ab_beat = ab;
+    return l.sende(b);
+  };
+  {
+    Lauf h;
+    h.laden(1, "c1c0000000000308");
+    h.fader(1, 0.0f, 1.0);
+    cdj::Befehl r = h.neu(cdj::Befehl::TEMPO_RAMPE);
+    r.ab_beat = 2.0;
+    r.ziel_bpm = 132.0;
+    r.dauer_beats = 2.0;
+    h.sende(r);
+    h.start(1, 8.0, 0.0);
+    cdj::Karte k(128.0, 0);
+    PRUEF(k.rampe(2.0, 132.0, 2.0));
+    h.zyklen(std::llround(k.sample_at(6.0)));
+    const int64_t t_leer = tausch(h, 2, 132.0, 20.0);   // Deck 2 leer
+    const int64_t t_fehlt = tausch(h, 1, 140.0, 20.0);  // keine 140er Fassung im Arbeitsbestand
+    const int64_t tid = tausch(h, 1, 132.0, 24.0);
+    h.zyklen(std::llround(k.sample_at(60.0)));
+    PRUEF(h.quittung(t_leer, 6) && h.quittung(t_leer, 6)->grund == "nicht_geladen");
+    PRUEF(h.quittung(t_fehlt, 6) && h.quittung(t_fehlt, 6)->grund == "material_fehlt");
+    PRUEF(h.quittung(tid, 1) && h.quittung(tid, 2) && h.quittung(tid, 3) && !h.quittung(tid, 6));
+    PRUEF(h.quittung(tid, 2) && std::llabs(h.quittung(tid, 2)->sample - std::llround(k.sample_at(24.0))) <= 1);
+    const auto e = h.einsaetze(std::llround(k.sample_at(8.5)), std::llround(k.sample_at(59.5)));
+    int ausreisser = 0;
+    for (int64_t x : e) {
+      const double b = k.beat_at((double)x);
+      const int64_t soll = std::llround(k.sample_at(std::round(b)));
+      if (std::llabs(x - soll) > 1) {
+        ++ausreisser;
+        std::fprintf(stderr, "Tausch: Einsatz %lld bei Beat %.3f, soll %lld\n", (long long)x, b, (long long)soll);
+      }
+    }
+    PRUEF(e.size() == 51 && ausreisser == 0);
+    bool direkt_danach = false, basis_132 = false;
+    for (const auto& z : h.deck)
+      if (z.deck == 1 && z.sample > std::llround(k.sample_at(25.0))) {
+        direkt_danach = z.faktor == 1.0;
+        basis_132 = z.basis_bpm == 132.0;
+      }
+    PRUEF(direkt_danach && basis_132);
+  }
+  // Negativ-Kontrolle: Tausch auf dieselbe Fassung bei Faktor 1 ändert außerhalb der Blende nichts
+  {
+    Lauf o, t;
+    for (Lauf* l : {&o, &t}) {
+      l->laden(1, "c1c0000000000308");
+      l->fader(1, 0.0f, 1.0);
+      l->start(1, 4.0, 0.0);
+    }
+    tausch(t, 1, 128.0, 16.0);
+    o.zyklen(40 * SPB);
+    t.zyklen(40 * SPB);
+    float d = 0.0f;
+    for (int64_t s = 4 * SPB; s < 40 * SPB; ++s)
+      if (s < 16 * SPB || s >= 16 * SPB + cdj::DECK_TAUSCH_BLENDE) d = std::max(d, std::fabs(o.master[s] - t.master[s]));
+    PRUEF(d == 0.0f);
+  }
 
   fs::remove_all(AB);
   PRUEF_ENDE();

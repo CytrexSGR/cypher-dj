@@ -17,6 +17,7 @@ static void f32(const fs::path& p, std::vector<float> d) {
   o.write(reinterpret_cast<const char*>(d.data()), (std::streamsize)(d.size() * sizeof(float)));
 }
 static void text(const fs::path& p, const std::string& t) { std::ofstream(p) << t; }
+static const cdj::KitKlang* bei(const cdj::Kit& k, int n) { return n < cdj::KIT_KLAENGE ? &k.klang[n] : nullptr; }
 static std::string fehler_von(const fs::path& ordner) {
   std::string f;
   auto k = cdj::lade_kit(ordner.string(), &f);
@@ -75,17 +76,39 @@ int main() {
     if (m) {
       PRUEF(m->n == 3 && m->name == "gut+rec");
       PRUEF(m->klang[0].frames == 2 && m->klang[5].name == "hh:0");
-      PRUEF(m->klang[112].frames == 3 && m->klang[112].name == "rec0:0" && m->klang[112].daten[4] == 0.25f);
+      PRUEF(bei(*m, 128 + 112) && bei(*m, 128 + 112)->frames == 3 && bei(*m, 128 + 112)->name == "rec0:0" && bei(*m, 128 + 112)->daten[4] == 0.25f);  // F08: Zusatz-Kit auf 128 + note
     }
     // zweites Kit fehlt ganz (erster Start, noch kein Mitschnitt übergeben): nur das erste, kein Fehler
     auto nur = cdj::lade_kits((dir / "gut").string(), (dir / "rec_fehlt").string(), &f2);
     PRUEF(nur && nur->n == 2 && nur->name == "gut");
-    // Note in beiden → Fehler, nichts geladen
+    // F08 (Glanz 2.4.2): dieselbe Note in beiden ist kein Fehler mehr, b liegt auf 128 + note
     fs::create_directories(dir / "kollision");
     f32(dir / "kollision/x_0.f32", {0.1f, 0.1f});
     text(dir / "kollision/kit.json", R"({"schema":1,"klaenge":[{"note":5,"name":"x:0","datei":"x_0.f32","frames":1}]})");
     std::string f3;
-    PRUEF(!cdj::lade_kits((dir / "gut").string(), (dir / "kollision").string(), &f3) && f3.find("note 5") != std::string::npos);
+    auto k2 = cdj::lade_kits((dir / "gut").string(), (dir / "kollision").string(), &f3);
+    PRUEF(k2 && f3.empty());
+    if (k2) PRUEF(k2->n == 3 && k2->klang[5].name == "hh:0" && bei(*k2, 128 + 5) && bei(*k2, 128 + 5)->name == "x:0");
+    // F08 Fehlerfall am Bestand: 112 Klänge in a (wie battery) und 38 in b auf 73..110 (wie rec): 150 > 128
+    auto kit_mit = [&](const std::string& name, int ab, int anzahl) {
+      fs::create_directories(dir / name);
+      std::string j = R"({"schema":1,"name":")" + name + R"(","klaenge":[)";
+      for (int i = 0; i < anzahl; ++i) {
+        const std::string d = name + std::to_string(i) + ".f32";
+        f32(dir / name / d, {0.1f, 0.1f});
+        j += (i ? "," : "") + std::string(R"({"note":)") + std::to_string(ab + i) + R"(,"name":")" + name +
+             std::to_string(i) + R"(:0","datei":")" + d + R"(","frames":1})";
+      }
+      text(dir / name / "kit.json", j + "]}");
+    };
+    kit_mit("voll", 0, 112);
+    kit_mit("zus", 73, 38);
+    std::string f5;
+    auto gross = cdj::lade_kits((dir / "voll").string(), (dir / "zus").string(), &f5);
+    std::printf("F08: voll+zus %s %s\n", gross ? "geladen" : "abgelehnt:", f5.c_str());
+    PRUEF(gross && f5.empty());
+    if (gross) PRUEF(gross->n == 150 && gross->klang[73].name == "voll73:0" && bei(*gross, 128 + 73) &&
+                     bei(*gross, 128 + 73)->name == "zus0:0" && bei(*gross, 128 + 110) && bei(*gross, 128 + 110)->name == "zus37:0");
     // zweites Kit vorhanden, aber kaputt → Fehler (nicht still ohne es weiter)
     std::string f4;
     PRUEF(!cdj::lade_kits((dir / "gut").string(), (dir / "schema").string(), &f4) && f4.find("schema") != std::string::npos);

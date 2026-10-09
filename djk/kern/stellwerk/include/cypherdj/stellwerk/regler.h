@@ -14,7 +14,8 @@ enum class Rolle : uint8_t {
   fader, trim, eq_tief, eq_mitte, eq_hoch, kill_tief, kill_mitte, kill_hoch, filter, send, ziel,
   stem_drums, stem_bass, stem_vocals, stem_other, xseite, pfl,
   xfader, master_pegel, cue_mix, cue_pegel, cue_split, fx_notenwert, fx_rueckkopplung, fx_rueckweg, transport,
-  duck_tiefe, duck_release, master_kleber   // K2: am Ende angehängt, die Reihenfolge der Rollen bleibt
+  duck_tiefe, duck_release, master_kleber,  // K2: am Ende angehängt, die Reihenfolge der Rollen bleibt
+  keylock                                   // Keylock Task 3: globaler Schalter für alle Quellen, am Ende angehängt
 };
 
 // §7.2 kurve.typ plus zwei Formen für Schalter und Stufenregler (Festlegung dieser Scheibe)

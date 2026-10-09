@@ -9,6 +9,7 @@
 
 #include "cypherdj/loopbox.h"
 #include "pruef.h"
+#include "sprungmass.h"
 
 namespace {
 
@@ -41,6 +42,20 @@ struct Welt {
     }
   }
   double jetzt() const { return karte.beat_at((double)s); }
+  // Prüfung 2.3: Blöcke höchstens n Samples, genau bis ende (bis() rundet auf die Blockgrenze auf)
+  void bis_genau(int64_t ende, int n) {
+    while (s < ende) {
+      const int m = (int)std::min<int64_t>(n, ende - s);
+      std::fill(puffer_l.begin(), puffer_l.end(), 0.0f);
+      std::fill(puffer_r.begin(), puffer_r.end(), 0.0f);
+      cdj::BoxMeldung mm[8];
+      const int nm = boxen.block(karte, s, m, l, r, mm, 8);
+      meldungen.insert(meldungen.end(), mm, mm + nm);
+      aus_l.insert(aus_l.end(), l[L1], l[L1] + m);
+      aus_r.insert(aus_r.end(), r[L1], r[L1] + m);
+      s += m;
+    }
+  }
 };
 
 cdj::Loop rampe(int beats) {
@@ -65,29 +80,6 @@ cdj::Loop konstant(float w) {
   return lp;
 }
 
-// Keylock (Plan 2026-09-30): Variante von o für das Renderttempo tr, synthetisch (der Render kommt mit Slice 3).
-// Dieselben beats, frames' = llround(frames · 128 / tr), bpm = tr; der Wert ist die eigene Position (L +i, R −i).
-cdj::Loop variante_pos(const cdj::Loop& o, double tr) {
-  cdj::Loop v;
-  v.name = o.name;  // die Variante übernimmt den name des Originals (Slice 3 benennt sie so)
-  v.beats = o.beats;
-  v.frames = std::llround((double)o.frames * 128.0 / tr);
-  v.bpm = tr;
-  v.daten.resize((size_t)v.frames * 2);
-  for (int64_t i = 0; i < v.frames; ++i) {
-    v.daten[2 * i] = (float)i;
-    v.daten[2 * i + 1] = -(float)i;
-  }
-  return v;
-}
-
-// Variante mit Konstante (Blenden-Test: Sprung sichtbar, wenn die Blende fehlt)
-cdj::Loop variante_konst(const cdj::Loop& o, double tr, float w) {
-  cdj::Loop v = variante_pos(o, tr);
-  v.daten.assign((size_t)v.frames * 2, w);
-  return v;
-}
-
 bool gleich(const std::vector<float>& a, const std::vector<float>& b) {
   return a.size() == b.size() && std::memcmp(a.data(), b.data(), a.size() * sizeof(float)) == 0;
 }
@@ -107,6 +99,7 @@ int main() {
     const int64_t ein = 8 * SPB, aus = 16 * SPB;
     int falsch = 0;
     for (int64_t t = 0; t < 18 * SPB; ++t) {
+      if ((t >= ein && t < ein + cdj::LOOPBOX_EIN) || (t >= aus - cdj::LOOPBOX_AUS && t < aus)) continue;  // F15: Hülle
       const float soll = (t >= ein && t < aus) ? (float)(t % 360000) : 0.0f;
       if (w.aus_l[t] != soll || w.aus_r[t] != -soll) ++falsch;
     }
@@ -117,16 +110,30 @@ int main() {
     PRUEF(w.meldungen.size() == 2 && w.meldungen[0].status == cdj::BoxStatus::laeuft && w.meldungen[0].sample == ein &&
           w.meldungen[1].status == cdj::BoxStatus::bereit && w.meldungen[1].sample == aus);
   }
-  {  // 2. Tausch im Lauf: der neue Loop gilt ab dem nächsten Block, die Box läuft weiter
+  {  // 2. (F13, Welle 2) Tausch im Lauf: kein harter Wechsel. laden() gibt nichts sofort zurück, der alte Loop blendet über
+     // LOOPBOX_LADEN_BLENDE (960) Frames gleich laut (sin/cos) in den neuen, danach rein der neue; der alte kommt genau einmal über abholen().
+     // Konstant 1 -> konstant −1: hart wäre ein Sprung von 2,0 (Erhebung loop_tausch: 0,3645, sonde: 0,5959).
     Welt w;
-    const cdj::Loop sieben = konstant(7.0f);
-    w.boxen.laden(1, &vier);
-    w.boxen.start(1, w.jetzt());  // Beat 0: sofort
+    const cdj::Loop plus = konstant(1.0f), minus = konstant(-1.0f);
+    w.boxen.laden(1, &plus);
+    w.boxen.start(1, w.jetzt());
     w.bis(2 * SPB);
-    PRUEF(w.boxen.laden(1, &sieben) == &vier && w.boxen.status(1) == cdj::BoxStatus::laeuft);
-    const int64_t getauscht = w.s;  // bis() rendert bis zur Blockgrenze (45 056), nicht bis 2 · SPB
-    w.bis(3 * SPB);
-    PRUEF(w.aus_l[getauscht] == 7.0f && w.aus_l[getauscht - 1] == (float)(getauscht - 1));
+    PRUEF(w.boxen.laden(1, &minus) == nullptr && w.boxen.status(1) == cdj::BoxStatus::laeuft);
+    const int64_t S = w.s;
+    w.bis(S + 4096);
+    const sprung::Mass m = sprung::messe(w.aus_l, S - 10, S + 4096);
+    int nicht_neu = 0;
+    for (int64_t t = S + cdj::LOOPBOX_LADEN_BLENDE; t < S + 4096; ++t)
+      if (w.aus_l[t] != -1.0f) ++nicht_neu;
+    std::printf("f13_laden: größter Sprung %.5f bei %lld, Mitte %.5f, nach 960 nicht rein %d\n", m.d1, (long long)m.ort1,
+                w.aus_l[S + 480], nicht_neu);
+    PRUEF(m.d1 < 0.01);
+    PRUEF(nicht_neu == 0 && w.aus_l[S - 1] == 1.0f && std::fabs(w.aus_l[S + 480]) < 0.01f);  // sin/cos: Mitte 0
+    PRUEF(w.boxen.loop(1) == &minus && w.boxen.abholen() == &plus && w.boxen.abholen() == nullptr);
+    // Negativ-Kontrolle: Laden in eine stehende Box tauscht sofort und gibt den alten zurück (wie bisher)
+    Welt x;
+    x.boxen.laden(1, &plus);
+    PRUEF(x.boxen.laden(1, &minus) == &plus && x.boxen.loop(1) == &minus && x.boxen.abholen() == nullptr);
   }
   {  // 3. Stopp einer wartenden Box: sofort bereit, kein Einsatz; Start einer endenden Box: läuft weiter
     Welt w;
@@ -142,6 +149,158 @@ int main() {
     w.boxen.stopp(2, w.jetzt());
     w.boxen.start(2, w.jetzt());
     PRUEF(w.boxen.status(2) == cdj::BoxStatus::laeuft);
+  }
+  {  // F15 (Welle 2): Einsatz und Stopp mit Hülle. Konstant 0,5: ohne Hülle springt der Ausgang am Einsatz 0 -> 0,5 und am
+     // Stopp 0,5 -> 0. Soll: Einblende LOOPBOX_EIN, Ausblende LOOPBOX_AUS bis genau 0 am letzten Sample vor dem
+     // Stoppsample, dazwischen bitgenau 0,5.
+    const cdj::Loop halb = konstant(0.5f);
+    Welt w;
+    w.boxen.laden(1, &halb);
+    w.bis(SPB);
+    w.boxen.start(1, w.jetzt());  // Einsatz auf Beat 4
+    w.bis(5 * SPB + 3 * N);
+    w.boxen.stopp(1, w.jetzt());  // Stopp auf Beat 8
+    w.bis(9 * SPB);
+    const int64_t ein = 4 * SPB, aus = 8 * SPB;
+    const sprung::Mass m = sprung::messe(w.aus_l, ein - 10, aus + 10);
+    int innen_falsch = 0;
+    for (int64_t t = ein + cdj::LOOPBOX_EIN; t < aus - cdj::LOOPBOX_AUS; ++t)
+      if (w.aus_l[t] != 0.5f) ++innen_falsch;
+    const double grenze = std::max(0.5 / cdj::LOOPBOX_EIN, 0.5 / cdj::LOOPBOX_AUS);
+    std::printf("f15_huelle: größter Sprung %.5f bei %lld (Grenze %.5f), Einsatz %.6f, letzter Wert vor dem Stopp %.6f, innen falsch %d\n",
+                m.d1, (long long)m.ort1, grenze, w.aus_l[ein], w.aus_l[aus - 1], innen_falsch);
+    PRUEF(m.d1 <= grenze + 1e-6);
+    PRUEF(w.aus_l[ein - 1] == 0.0f && w.aus_l[ein] > 0.0f && w.aus_l[ein] <= 0.5f / cdj::LOOPBOX_EIN + 1e-7f);
+    PRUEF(w.aus_l[aus - 1] == 0.0f && w.aus_l[aus] == 0.0f && innen_falsch == 0);
+  }
+  {  // F15: Stopp spät angefordert (32 Samples vor der Eins, kürzer als LOOPBOX_AUS): kürzere Rampe ab der Anforderung,
+     // kein Sprung (Entscheidung zu Flanke 3 der Erhebung)
+    const cdj::Loop halb = konstant(0.5f);
+    Welt w;
+    w.boxen.laden(1, &halb);
+    w.boxen.start(1, 0.0);
+    w.bis(8 * SPB - 32);  // 179 968 = 703 · 256, Blockanfang
+    w.boxen.stopp(1, w.jetzt());
+    w.bis(9 * SPB);
+    const sprung::Mass m = sprung::messe(w.aus_l, 8 * SPB - 300, 8 * SPB + 10);
+    std::printf("f15_spaet: größter Sprung %.5f (Grenze %.5f), letzter Wert %.6f\n", m.d1, 0.5 / 32, w.aus_l[8 * SPB - 1]);
+    PRUEF(m.d1 <= 0.5 / 32 + 1e-6 && w.aus_l[8 * SPB - 1] == 0.0f);
+  }
+  {  // F15, Prüfung 2.3 Befund 5: Stopp kommt erst d Samples vor der Eins (d = 0: Eins auf dem Blockanfang). Vorher Rampe d
+     // Samples, bei d = 0 keine (Sprung 0,5). Jetzt mindestens LOOPBOX_AUS_MIN Samples ab der Anforderung: der Stopp endet
+     // dann bis zu LOOPBOX_AUS_MIN − d Samples nach der Eins, ohne Sprung > 0,5/LOOPBOX_AUS_MIN. Gegenprobe d = 32, 144.
+    const cdj::Loop halb = konstant(0.5f);
+    for (int d : {0, 1, 8, 32, 144}) {
+      Welt w;
+      w.boxen.laden(1, &halb);
+      w.boxen.start(1, 0.0);
+      const int64_t E = 64 * SPB;  // 1 440 000 = 5625 · 256: Eins auf einem Blockanfang
+      w.bis_genau(E - d, 1);
+      w.boxen.stopp(1, w.jetzt());
+      w.bis_genau(E + 4 * N, N);
+      const int64_t ende = E - d + std::max(d, cdj::LOOPBOX_AUS_MIN);  // Ende der Ausblende (Stoppsample oder später)
+      const sprung::Mass m = sprung::messe(w.aus_l, E - 400, E + 4 * N);
+      int laut_danach = 0;
+      for (int64_t t = ende - 1; t < E + 4 * N; ++t)
+        if (w.aus_l[t] != 0.0f) ++laut_danach;
+      const double grenze = 0.5 / std::max(std::min(std::max(d, cdj::LOOPBOX_AUS_MIN), cdj::LOOPBOX_AUS), 1);
+      std::printf("f15_spaet_eins d=%3d: größter Sprung %.5f (Grenze %.5f), Ende der Ausblende %lld (Eins %lld), danach laut %d\n", d,
+                  m.d1, grenze, (long long)ende, (long long)E, laut_danach);
+      PRUEF(m.d1 <= grenze + 1e-6 && laut_danach == 0 && w.boxen.status(1) == cdj::BoxStatus::bereit);
+      PRUEF(!w.meldungen.empty() && w.meldungen.back().status == cdj::BoxStatus::bereit && w.meldungen.back().sample == ende);
+    }
+  }
+  {  // F15: Stopp zurückgenommen, während die Rampe schon läuft: vom Ist-Wert wieder auf (blende.h), die Box läuft weiter
+    const cdj::Loop halb = konstant(0.5f);
+    Welt w;
+    w.boxen.laden(1, &halb);
+    w.boxen.start(1, 0.0);
+    w.bis(8 * SPB - 288);  // 179 712: die Rampe beginnt in diesem Block bei 179 856
+    w.boxen.stopp(1, w.jetzt());
+    w.bis(8 * SPB - 32);
+    w.boxen.start(1, w.jetzt());
+    w.bis(8 * SPB + 2000);
+    const sprung::Mass m = sprung::messe(w.aus_l, 8 * SPB - 400, 8 * SPB + 2000);
+    PRUEF(m.d1 <= 0.5 / cdj::LOOPBOX_AUS + 1e-6 && w.aus_l[8 * SPB - 33] < 0.5f);
+    PRUEF(w.aus_l[8 * SPB + 1500] == 0.5f && w.boxen.status(1) == cdj::BoxStatus::laeuft);
+  }
+  {  // F15 Negativ-Kontrolle: Einsatz unter LOOPBOX_KANTE (−66 dBFS) bleibt hart und bitgleich wie vor Welle 2
+    const cdj::Loop leise = konstant(0.0005f);
+    Welt w;
+    w.boxen.laden(1, &leise);
+    w.bis(SPB);
+    w.boxen.start(1, w.jetzt());
+    w.bis(5 * SPB);
+    PRUEF(w.aus_l[4 * SPB - 1] == 0.0f && w.aus_l[4 * SPB] == 0.0005f && w.aus_l[4 * SPB + 1] == 0.0005f);
+  }
+  {  // F15 x F13, Prüfung 2.3 Befund 4: /k/set/neu 512 Samples in einer Ladeblende (+0,5 -> −0,5, gleich laut). Der Schwanz
+     // nimmt beide Quellen der Blende mit (vorher nur den neuen Pfad: Sprung 0,46068). Gegenprobe ohne Blende: 0,00347.
+    const cdj::Loop plus = konstant(0.5f), minus = konstant(-0.5f);
+    for (int vor : {0, 512}) {
+      Welt w;
+      w.boxen.laden(1, &plus);
+      w.boxen.start(1, 0.0);
+      w.bis(2 * SPB);
+      if (vor > 0) {
+        w.boxen.laden(1, &minus);
+        w.bis(w.s + vor);
+      }
+      const int64_t S = w.s;
+      w.boxen.ausklingen(w.karte, S);
+      (void)w.boxen.leeren();
+      const cdj::Karte neu(128.0, 0);
+      std::vector<float> y(w.aus_l.end() - 10, w.aus_l.end());
+      for (int64_t t = 0; t < 4 * N; t += N) {
+        std::fill(w.puffer_l.begin(), w.puffer_l.end(), 0.0f);
+        std::fill(w.puffer_r.begin(), w.puffer_r.end(), 0.0f);
+        cdj::BoxMeldung m[8];
+        w.boxen.block(neu, t, N, w.l, w.r, m, 8);
+        y.insert(y.end(), w.l[L1], w.l[L1] + N);
+      }
+      const sprung::Mass m = sprung::messe(y, 2, (int64_t)y.size());
+      std::printf("f15_set_neu_in_blende vor=%d: letztes altes %.4f, erstes neues %.4f, größter Sprung %.5f (Grenze %.5f)\n", vor,
+                  y[9], y[10], m.d1, 0.5 / cdj::LOOPBOX_AUS);
+      PRUEF(m.d1 <= 0.5 / cdj::LOOPBOX_AUS + 1e-4);
+      PRUEF(y[10 + cdj::LOOPBOX_AUS - 1] == 0.0f);
+      while (w.boxen.abholen()) {
+      }
+    }
+  }
+  {  // F15 /k/set/neu (Welle 2): ausklingen() vor leeren() blendet eine klingende Box über LOOPBOX_AUS auf 0 aus, statt sie
+     // am Blockrand abzuschneiden (vorher: 0,5 -> 0 in einem Sample). Danach ist die Box still (bereit).
+    const cdj::Loop halb = konstant(0.5f);
+    Welt w;
+    w.boxen.laden(1, &halb);
+    w.boxen.start(1, 0.0);
+    w.bis(2 * SPB);
+    w.boxen.ausklingen(w.karte, w.s);
+    (void)w.boxen.leeren();
+    const cdj::Karte neu(128.0, 0);
+    std::vector<float> nach;
+    for (int64_t s = 0; s < 4 * N; s += N) {
+      std::fill(w.puffer_l.begin(), w.puffer_l.end(), 0.0f);
+      std::fill(w.puffer_r.begin(), w.puffer_r.end(), 0.0f);
+      cdj::BoxMeldung m[8];
+      w.boxen.block(neu, s, N, w.l, w.r, m, 8);
+      nach.insert(nach.end(), w.l[L1], w.l[L1] + N);
+    }
+    std::vector<float> y(w.aus_l.end() - 10, w.aus_l.end());
+    y.insert(y.end(), nach.begin(), nach.end());
+    const sprung::Mass m = sprung::messe(y, 2, (int64_t)y.size());
+    int nachher_laut = 0;
+    for (size_t t = cdj::LOOPBOX_AUS; t < nach.size(); ++t)
+      if (nach[t] != 0.0f) ++nachher_laut;
+    std::printf("f15_set_neu: größter Sprung %.5f (Grenze %.5f), erstes Sample %.5f, letztes des Schwanzes %.6f\n", m.d1,
+                0.5 / cdj::LOOPBOX_AUS, nach[0], nach[cdj::LOOPBOX_AUS - 1]);
+    PRUEF(m.d1 <= 0.5 / cdj::LOOPBOX_AUS + 1e-6);
+    PRUEF(nach[cdj::LOOPBOX_AUS - 1] == 0.0f && nachher_laut == 0 && w.boxen.status(1) == cdj::BoxStatus::bereit);
+    // Negativ-Kontrolle: ausklingen bei stehender Box ist wirkungslos
+    Welt x;
+    x.boxen.laden(1, &halb);
+    x.boxen.ausklingen(x.karte, 0);
+    (void)x.boxen.leeren();
+    x.bis(4 * N);
+    PRUEF(std::all_of(x.aus_l.begin(), x.aus_l.end(), [](float v) { return v == 0.0f; }));
   }
   {  // 4. (Plan Tempo-Folge) Tempo 130: die Box spielt, Position = (Beat mod beats) · SPB, also schneller als die
      // Samples. Der Rampen-Loop trägt seine Position als Wert; Catmull-Rom ist auf einer Geraden exakt.
@@ -194,6 +353,7 @@ int main() {
     int falsch = 0, geprueft = 0;
     for (int64_t t = 0; t < 4 * SPB; ++t) {
       const double b = w.karte.beat_at((double)t);
+      if (t < cdj::LOOPBOX_EIN) continue;  // F15: Einsatz bei Wert 5000
       const double soll = std::fmod((b - std::floor(b)) * (double)SPB + 5000.0, (double)SPB);
       if (soll < 3.0 || soll > (double)SPB - 3.0) continue;
       ++geprueft;
@@ -203,355 +363,34 @@ int main() {
     PRUEF(geprueft > 3 * SPB && falsch == 0);
   }
   // ---- Keylock (Plan 2026-09-30, Slice 2): die Box spielt eine vorgerenderte Variante ----
-  {  // K(a) 130 BPM, Variante bei T_r = 130: Lesekopf über die Variante, Schritt 1,000 (statt 1,0154 im Varispeed)
-    const cdj::Loop v130 = variante_pos(vier, 130.0);
-    const double spb2 = (double)v130.frames / 16.0;
-    // Fehlerfall vorher: ohne Variante liest die Box im Varispeed mit Schritt 130/128
-    Welt ohne(130.0);
-    ohne.boxen.laden(1, &vier);
-    ohne.boxen.start(1, 0.0);
-    ohne.bis(3 * SPB);
-    const double schritt_ohne = ((double)ohne.aus_l[60000] - (double)ohne.aus_l[1000]) / 59000.0;
-    // nachher: mit Variante
-    Welt w(130.0);
-    w.boxen.laden(1, &vier);
-    PRUEF(w.boxen.variante_setzen(1, &v130) == nullptr && w.boxen.variante(1) == &v130);
-    w.boxen.start(1, 0.0);
-    w.bis(3 * SPB);
-    const double schritt_mit = ((double)w.aus_l[60000] - (double)w.aus_l[1000]) / 59000.0;
-    double groesste = 0.0;
-    for (int64_t t = 0; t < 3 * SPB; ++t) {
-      const double soll = w.karte.beat_at((double)t) * spb2;  // Position in Variantenframes, < 16 Beats, kein Umlauf
-      groesste = std::max({groesste, std::fabs((double)w.aus_l[t] - soll), std::fabs((double)w.aus_r[t] + soll)});
-    }
-    std::printf("keylock130: Schritt ohne Variante %.5f (Varispeed 130/128 = %.5f), mit Variante %.5f, größte Abweichung von "
-                "beat·spb' %.4f\n", schritt_ohne, 130.0 / 128.0, schritt_mit, groesste);
-    PRUEF_NAH(schritt_ohne, 130.0 / 128.0, 1e-3);   // der Fehlerfall: das ist der schiefe Schritt
-    PRUEF_NAH(schritt_mit, 1.0, 1e-3);              // Keylock: Schritt ≈ 1
-    PRUEF(groesste < 0.05);
-    // Negativ-Kontrolle: Variante bei 130,04 (innerhalb ±0,05) gilt, Schritt 130,04/130 · 1,0
-    Welt n(130.04);
-    n.boxen.laden(1, &vier);
-    n.boxen.variante_setzen(1, &v130);
-    n.boxen.start(1, 0.0);
-    n.bis(3 * SPB);
-    double gr2 = 0.0;
-    for (int64_t t = 0; t < 3 * SPB; ++t)
-      gr2 = std::max(gr2, std::fabs((double)n.aus_l[t] - n.karte.beat_at((double)t) * spb2));
-    PRUEF(gr2 < 0.05);
-  }
-  {  // K(b) 128 BPM mit gesetzter Variante: Direktweg, BITGLEICH zum Lauf ohne Variante
-    const cdj::Loop v130 = variante_pos(vier, 130.0);
-    Welt ohne, mit;
-    ohne.boxen.laden(1, &vier);
-    mit.boxen.laden(1, &vier);
-    mit.boxen.variante_setzen(1, &v130);
-    ohne.boxen.start(1, 0.0);
-    mit.boxen.start(1, 0.0);
-    ohne.bis(6 * SPB);
-    mit.bis(6 * SPB);
-    std::printf("keylock128: bitgleich L %d R %d (%zu Samples)\n", (int)gleich(ohne.aus_l, mit.aus_l),
-                (int)gleich(ohne.aus_r, mit.aus_r), mit.aus_l.size());
-    PRUEF(gleich(ohne.aus_l, mit.aus_l) && gleich(ohne.aus_r, mit.aus_r));
-  }
-  {  // K(c) |bpm − T_r| > 0,05 (130,2): Variante ungenutzt, gleich Varispeed ohne Variante (bitgleich)
-    const cdj::Loop v130 = variante_pos(vier, 130.0);
-    Welt ohne(130.2), mit(130.2);
-    ohne.boxen.laden(1, &vier);
-    mit.boxen.laden(1, &vier);
-    mit.boxen.variante_setzen(1, &v130);
-    ohne.boxen.start(1, 0.0);
-    mit.boxen.start(1, 0.0);
-    ohne.bis(3 * SPB);
-    mit.bis(3 * SPB);
-    PRUEF(gleich(ohne.aus_l, mit.aus_l) && gleich(ohne.aus_r, mit.aus_r));
-  }
-  {  // K(c) Rampe 130 → 140 ab Beat 4: Variante nur vor der Rampe; danach (nach der Blende) gleich Varispeed ohne Variante
-    const cdj::Loop v130 = variante_pos(vier, 130.0);
-    Welt ohne(130.0), mit(130.0);
-    ohne.boxen.laden(1, &vier);
-    mit.boxen.laden(1, &vier);
-    mit.boxen.variante_setzen(1, &v130);
-    ohne.boxen.start(1, 0.0);
-    mit.boxen.start(1, 0.0);
-    PRUEF(ohne.karte.rampe(4.0, 140.0, 8.0) && mit.karte.rampe(4.0, 140.0, 8.0));
-    const int64_t ende = (int64_t)mit.karte.sample_at(13.0);
-    ohne.bis(ende);
-    mit.bis(ende);
-    const int64_t r0 = (int64_t)mit.karte.sample_at(4.0) / N * N;  // Anfang des Blocks, in dem die Rampe beginnt
-    int vor_falsch = 0, nach_falsch = 0;
-    const double spb2 = (double)v130.frames / 16.0;
-    for (int64_t t = 0; t < r0; ++t)  // vor der Rampe: Variante (Position in Variantenframes)
-      if (std::fabs((double)mit.aus_l[t] - mit.karte.beat_at((double)t) * spb2) > 0.05) ++vor_falsch;
-    for (int64_t t = r0 + 960 + N; t < ende; ++t)  // nach der Blende: Varispeed mit Original, wie ohne Variante
-      if (mit.aus_l[t] != ohne.aus_l[t] || mit.aus_r[t] != ohne.aus_r[t]) ++nach_falsch;
-    std::printf("keylock_rampe: vor der Rampe falsch %d, nach der Blende ungleich Varispeed %d\n", vor_falsch, nach_falsch);
-    PRUEF(vor_falsch == 0 && nach_falsch == 0);
-  }
-  {  // K(d) Blende: Varispeed → Variante ohne Sprung (Original 1,0, Variante 0,2), nach 960 Frames reine Variante
-    const cdj::Loop o = konstant(1.0f);
-    const cdj::Loop v = variante_konst(o, 130.0, 0.2f);
-    Welt w(130.0);
-    w.boxen.laden(1, &o);
-    w.boxen.start(1, 0.0);
-    w.bis(2 * SPB);
-    const int64_t S = w.s;
-    PRUEF(w.boxen.variante_setzen(1, &v) == nullptr);
-    w.bis(S + 4096);
-    double sprung = 0.0, letzter = w.aus_l[S - 1];
-    for (int64_t t = S; t < S + 4096; ++t) {
-      sprung = std::max(sprung, std::fabs((double)w.aus_l[t] - letzter));
-      letzter = w.aus_l[t];
-    }
-    int nicht_rein = 0, nicht_alt = 0, nicht_mono = 0;
-    for (int64_t t = S + 960; t < S + 4096; ++t)
-      if (std::fabs((double)w.aus_l[t] - 0.2) > 1e-6) ++nicht_rein;
-    for (int64_t t = 0; t < S; ++t)
-      if (std::fabs((double)w.aus_l[t] - 1.0) > 1e-6) ++nicht_alt;
-    for (int64_t t = S + 1; t < S + 960; ++t)
-      if (w.aus_l[t] > w.aus_l[t - 1] + 1e-6f) ++nicht_mono;
-    std::printf("keylock_blende: größter Sprung %.5f, nach 960 nicht rein %d, vorher nicht alt %d, nicht monoton %d, Mitte %.3f\n",
-                sprung, nicht_rein, nicht_alt, nicht_mono, w.aus_l[S + 480]);
-    PRUEF(sprung < 0.1 && nicht_rein == 0 && nicht_alt == 0 && nicht_mono == 0);
-    PRUEF(w.aus_l[S + 480] > 0.5 && w.aus_l[S + 480] < 0.7);  // linear: Mitte 0,6 (0,5·1,0 + 0,5·0,2)
-    // und zurück: Variante wird entfernt (klingt noch: geht erst nach der Blende zurück), gleiche Stetigkeit
-    const int64_t S2 = w.s;
-    PRUEF(w.boxen.variante_setzen(1, nullptr) == nullptr);  // klingt noch
-    PRUEF(w.boxen.abholen() == nullptr);
-    w.bis(S2 + 4096);
-    sprung = 0.0;
-    letzter = w.aus_l[S2 - 1];
-    for (int64_t t = S2; t < S2 + 4096; ++t) {
-      sprung = std::max(sprung, std::fabs((double)w.aus_l[t] - letzter));
-      letzter = w.aus_l[t];
-    }
-    int nicht_alt2 = 0;
-    for (int64_t t = S2 + 960; t < S2 + 4096; ++t)
-      if (std::fabs((double)w.aus_l[t] - 1.0) > 1e-6) ++nicht_alt2;
-    PRUEF(sprung < 0.1 && nicht_alt2 == 0);
-    PRUEF(w.boxen.abholen() == &v && w.boxen.abholen() == nullptr);  // nach der Blende zurück, genau einmal
-  }
-  {  // K(e) laden mit gesetzter Variante: Variante über abholen() zurück, alter Loop wie bisher; nichts leckt
-    auto* l1 = new cdj::Loop(rampe(4));
-    auto* l2 = new cdj::Loop(rampe(4));
-    auto* v1 = new cdj::Loop(variante_pos(*l1, 130.0));
-    Welt w(130.0);
-    PRUEF(w.boxen.laden(1, l1) == nullptr);
-    PRUEF(w.boxen.variante_setzen(1, v1) == nullptr);
-    w.boxen.start(1, 0.0);
-    w.bis(2 * SPB);  // spielt auf der Variante
-    const cdj::Loop* alt = w.boxen.laden(1, l2);
-    PRUEF(alt == l1);
-    PRUEF(w.boxen.variante(1) == nullptr);  // gehörte zum alten Loop
-    const cdj::Loop* fr = w.boxen.abholen();
-    PRUEF(fr == v1 && w.boxen.abholen() == nullptr && w.boxen.abholen_verloren() == 0);
-    w.bis(w.s + 2 * N);  // die Box spielt den neuen Loop ohne Absturz weiter (Zugriff auf gelöschte Variante = ASan)
-    delete alt;
-    delete fr;
-    delete l2;  // die Box selbst besitzt nichts
-    // Negativ-Kontrolle: laden ohne Variante gibt nichts über abholen() zurück; derselbe Zeiger behält die Variante
-    auto* l3 = new cdj::Loop(rampe(4));
-    auto* v3 = new cdj::Loop(variante_pos(*l3, 130.0));
-    Welt x(130.0);
-    x.boxen.laden(1, l3);
-    x.boxen.laden(1, l3);
-    PRUEF(x.boxen.abholen() == nullptr);
-    x.boxen.variante_setzen(1, v3);
-    PRUEF(x.boxen.laden(1, l3) == nullptr && x.boxen.variante(1) == v3 && x.boxen.abholen() == nullptr);
-    PRUEF(x.boxen.laden(1, nullptr) == l3 && x.boxen.abholen() == v3);  // Loop weg: Variante weg
-    delete l3;
-    delete v3;
-  }
-  {  // K(f) variante_setzen: nullptr gibt die Variante zurück, Box spielt wie heute (bitgleich) weiter; Randfälle
-    const cdj::Loop v130 = variante_pos(vier, 130.0);
-    Welt ohne, mit;
-    ohne.boxen.laden(1, &vier);
-    mit.boxen.laden(1, &vier);
-    PRUEF(mit.boxen.variante_setzen(3, &v130) == &v130);  // ungültige Box: zurück
-    PRUEF(mit.boxen.variante_setzen(2, &v130) == &v130);  // Box ohne Loop: zurück
-    PRUEF(mit.boxen.variante_setzen(1, nullptr) == nullptr);  // keine da
-    PRUEF(mit.boxen.variante_setzen(1, &v130) == nullptr);
-    PRUEF(mit.boxen.variante_setzen(1, &v130) == nullptr && mit.boxen.variante(1) == &v130);  // dieselbe: nullptr
-    ohne.boxen.start(1, 0.0);
-    mit.boxen.start(1, 0.0);
-    ohne.bis(2 * SPB);
-    mit.bis(2 * SPB);
-    PRUEF(mit.boxen.variante_setzen(1, nullptr) == &v130);  // 128 BPM: spielt Direktweg, nicht von der Variante
-    PRUEF(mit.boxen.variante(1) == nullptr && mit.boxen.abholen() == nullptr);
-    ohne.bis(4 * SPB);
-    mit.bis(4 * SPB);
-    PRUEF(gleich(ohne.aus_l, mit.aus_l) && gleich(ohne.aus_r, mit.aus_r));
-  }
-  {  // K(g) F1 (Slice 2b): bei genau 128 BPM hat der Direktweg Vorrang vor einer Variante mit T_r nahe 128
-    // (tempo_ok zuerst, dann Variante, dann Varispeed). Variante mit ANDEREM Inhalt: sonst wäre der Fehlerfall unsichtbar.
-    for (const double tr : {128.0, 127.97, 128.03}) {
-      const cdj::Loop v = variante_konst(vier, tr, 0.5f);
-      Welt ohne, mit;
-      ohne.boxen.laden(1, &vier);
-      mit.boxen.laden(1, &vier);
-      PRUEF(mit.boxen.variante_setzen(1, &v) == nullptr && mit.boxen.variante(1) == &v);  // angenommen, nur nicht gespielt
-      ohne.boxen.start(1, 0.0);
-      mit.boxen.start(1, 0.0);
-      ohne.bis(4 * SPB);
-      mit.bis(4 * SPB);
-      int64_t ungleich = 0;
-      for (size_t t = 0; t < ohne.aus_l.size(); ++t) ungleich += ohne.aus_l[t] != mit.aus_l[t];
-      std::printf("keylock128 nah: T_r %.2f: ungleiche Samples %lld von %zu\n", tr, (long long)ungleich, mit.aus_l.size());
-      PRUEF(gleich(ohne.aus_l, mit.aus_l) && gleich(ohne.aus_r, mit.aus_r));  // memcmp
-      PRUEF(std::memcmp(ohne.aus_l.data(), mit.aus_l.data(), ohne.aus_l.size() * sizeof(float)) == 0);
-    }
-    // Negativ-Kontrolle: bei 130 und Variante 130 bleibt die Variante aktiv (Schritt 1,000, nicht 130/128)
-    const cdj::Loop v = variante_pos(vier, 130.0);
-    Welt w(130.0);
-    w.boxen.laden(1, &vier);
-    w.boxen.variante_setzen(1, &v);
-    w.boxen.start(1, 0.0);
-    w.bis(3 * SPB);
-    const double schritt = ((double)w.aus_l[60000] - (double)w.aus_l[1000]) / 59000.0;
-    PRUEF_NAH(schritt, 1.0, 1e-3);
-  }
-  {  // K(h) F2 (Slice 2b): eine Variante, die nicht zum geladenen Loop gehört, wird nicht gespielt und kommt zurück
-    cdj::Loop a = rampe(16), b = rampe(16);  // gleiche beats, anderer name
+  {  // F13 x Stopp Cypher (§4.7): ein von cypher geladener, noch wartender Loop wird beim Stopp verworfen (nie hörbar), ein
+     // von andreas geladener nicht (Negativ-Kontrolle). Task 7: ohne Varianten übernimmt ein wartender Loop im nächsten Block;
+     // der Stopp muss ihn darum im selben Block verwerfen, in dem er geladen wurde (wie der Kern es vor block() tut).
+    cdj::Loop a = konstant(1.0f);
     a.name = "a";
+    cdj::Loop b = konstant(-1.0f);
     b.name = "b";
-    const cdj::Loop vb = variante_konst(b, 130.0, -1.0f);
-    const cdj::Loop va = variante_konst(a, 130.0, 0.25f);
-    Welt ohne(130.0), mit(130.0);
-    ohne.boxen.laden(1, &a);
-    mit.boxen.laden(1, &a);
-    PRUEF(mit.boxen.variante_setzen(1, &vb) == &vb);  // fremd: sofort zurück
-    PRUEF(mit.boxen.variante(1) == nullptr && mit.boxen.abgelehnt() == 1 && mit.boxen.abholen() == nullptr);
-    ohne.boxen.start(1, 0.0);
-    mit.boxen.start(1, 0.0);
-    ohne.bis(3 * SPB);
-    mit.bis(3 * SPB);
-    PRUEF(gleich(ohne.aus_l, mit.aus_l) && gleich(ohne.aus_r, mit.aus_r));  // vb wurde nicht gespielt
-    // die bisherige Variante bleibt, wenn eine fremde abgelehnt wird
-    PRUEF(mit.boxen.variante_setzen(1, &va) == nullptr && mit.boxen.variante(1) == &va);
-    PRUEF(mit.boxen.variante_setzen(1, &vb) == &vb && mit.boxen.variante(1) == &va && mit.boxen.abgelehnt() == 2);
-    // gleicher name, aber die Länge passt nicht zum Tempo der Variante (frames für 128 statt für 130)
-    cdj::Loop falsch = variante_pos(a, 130.0);
-    falsch.frames = a.frames;
-    falsch.daten.resize((size_t)falsch.frames * 2);
-    PRUEF(mit.boxen.variante_setzen(1, &falsch) == &falsch && mit.boxen.abgelehnt() == 3);
-    // ±1 Frame Rundung ist erlaubt, ±2 nicht
-    cdj::Loop pm1 = variante_pos(a, 130.0);
-    pm1.frames += 1;
-    pm1.daten.resize((size_t)pm1.frames * 2);
-    cdj::Loop pm2 = variante_pos(a, 130.0);
-    pm2.frames += 2;
-    pm2.daten.resize((size_t)pm2.frames * 2);
-    PRUEF(mit.boxen.variante_setzen(1, &pm1) == &va);  // angenommen, va geht zurück (klingt nicht: Box steht nicht)
-    PRUEF(mit.boxen.variante_setzen(1, &pm2) == &pm2 && mit.boxen.variante(1) == &pm1);
-    // F5: andere beats bei gleicher Länge (sonst nur die beats-Prüfung greift): abgelehnt, die Box spielt Varispeed wie ohne
-    cdj::Loop b8 = variante_pos(a, 130.0);
-    b8.beats = 8;
-    const int vor = mit.boxen.abgelehnt();
-    PRUEF(mit.boxen.variante_setzen(1, &b8) == &b8 && mit.boxen.abgelehnt() == vor + 1 && mit.boxen.variante(1) == &pm1);
-    // bpm, das kein Tempo ist
-    cdj::Loop nb = variante_pos(a, 130.0);
-    nb.bpm = 0.0;
-    PRUEF(mit.boxen.variante_setzen(1, &nb) == &nb);
-    nb.bpm = std::nan("");
-    PRUEF(mit.boxen.variante_setzen(1, &nb) == &nb);
-    // Negativ-Kontrolle: die passende Variante (gleicher name) wird angenommen und gespielt
-    Welt ok(130.0);
-    ok.boxen.laden(1, &a);
-    PRUEF(ok.boxen.variante_setzen(1, &va) == nullptr && ok.boxen.variante(1) == &va && ok.boxen.abgelehnt() == 0);
-    ok.boxen.start(1, 0.0);
-    ok.bis(3 * SPB);
-    PRUEF_NAH(ok.aus_l[2 * SPB], 0.25, 1e-6);  // Variante klingt (Konstante 0,25)
-  }
-  {  // K(i) F9: Länge der Variante: daten.size() == 2 · frames und frames > 0, sonst abgelehnt wie F2
-    const cdj::Loop gut = variante_pos(vier, 130.0);
-    cdj::Loop kurz = gut;
-    kurz.daten.resize(kurz.daten.size() - 2);
-    cdj::Loop leer = gut;
-    leer.frames = 0;
-    leer.daten.clear();
-    cdj::Loop lang = gut;
-    lang.daten.resize(lang.daten.size() + 2);
     Welt w(130.0);
-    w.boxen.laden(1, &vier);
-    PRUEF(w.boxen.variante_setzen(1, &kurz) == &kurz && w.boxen.variante(1) == nullptr);
-    PRUEF(w.boxen.variante_setzen(1, &leer) == &leer && w.boxen.variante(1) == nullptr);
-    PRUEF(w.boxen.variante_setzen(1, &lang) == &lang && w.boxen.variante(1) == nullptr && w.boxen.abgelehnt() == 3);
-    PRUEF(w.boxen.variante_setzen(1, &gut) == nullptr && w.boxen.variante(1) == &gut);  // Negativ-Kontrolle
-  }
-  {  // K(j) F5: Versatz der Box wird auf das Raster der Variante umgerechnet (v · frames'/beats / LOOP_SPB)
-    const cdj::Loop v130 = variante_pos(vier, 130.0);
-    const double spb2 = (double)v130.frames / 16.0;
-    const double F = (double)v130.frames;
-    for (const int64_t vers : {(int64_t)5000, (int64_t)-359999, (int64_t)0}) {
-      Welt w(130.0);
-      w.boxen.laden(1, &vier);
-      w.boxen.variante_setzen(1, &v130);
-      PRUEF(w.boxen.raster(1, vers) == 0);
-      w.boxen.start(1, 0.0);
-      w.bis(3 * SPB);
-      double groesste = 0.0;
-      int64_t geprueft = 0;
-      for (int64_t t = 0; t < 3 * SPB; ++t) {
-        double soll = std::fmod(w.karte.beat_at((double)t) * spb2 + (double)vers * spb2 / (double)SPB, F);
-        if (soll < 0) soll += F;
-        if (soll < 4.0 || soll > F - 4.0) continue;  // Umlauf: Catmull-Rom über die Naht ist kein Positionswert
-        groesste = std::max(groesste, std::fabs((double)w.aus_l[t] - soll));
-        ++geprueft;
-      }
-      std::printf("keylock_versatz %lld: geprüft %lld, größte Abweichung %.4f\n", (long long)vers, (long long)geprueft, groesste);
-      PRUEF(geprueft > 2 * SPB && groesste < 0.1);
-    }
-  }
-  {  // K(k) F3 (Slice 2b): ein Wechsel während einer laufenden Blende wartet deren Ende ab: kein Sprung, Zeiger genau einmal
-    const cdj::Loop o = konstant(1.0f);
-    const cdj::Loop v = variante_konst(o, 130.0, 0.2f);
-    Welt w(130.0);
-    w.boxen.laden(1, &o);
+    w.boxen.laden(1, &a);
     w.boxen.start(1, 0.0);
     w.bis(2 * SPB);
-    const int64_t S = w.s;
-    PRUEF(w.boxen.variante_setzen(1, &v) == nullptr);
-    w.bis(S + N);  // ein Block in der Blende (Original → Variante)
-    PRUEF(w.boxen.variante_setzen(1, nullptr) == nullptr);  // klingt noch
-    w.bis(S + 8192);
-    double sprung = 0.0;
-    int64_t wo = 0;
-    for (int64_t t = S; t < S + 8192; ++t) {
-      const double d = std::fabs((double)w.aus_l[t] - (double)w.aus_l[t - 1]);
-      if (d > sprung) { sprung = d; wo = t; }
-    }
-    std::printf("keylock_doppelwechsel: größter Sprung %.5f bei S+%lld, Ende %.3f\n", sprung, (long long)(wo - S),
-                w.aus_l[S + 8191]);
-    PRUEF(sprung < 0.1);
-    PRUEF(std::fabs((double)w.aus_l[S + 8191] - 1.0) < 1e-6);  // am Ende wieder das Original
-    PRUEF(w.boxen.abholen() == &v && w.boxen.abholen() == nullptr && w.boxen.abholen_verloren() == 0);
-    // live über die Karte: Variante klingt, Rampe 130 → 130,03 über 0,02 Beats (Variante gilt an den Rändern wieder)
+    PRUEF(w.boxen.laden(1, &b, true) == nullptr);
+    w.boxen.cypher_wartende_verwerfen();
+    PRUEF(w.boxen.abholen() == &b && w.boxen.abholen() == nullptr);
+    w.bis(w.s + 4 * N);
+    PRUEF(w.boxen.loop(1) == &a && w.aus_l[w.s - 1] == 1.0f);
     Welt x(130.0);
-    x.boxen.laden(1, &o);
-    x.boxen.variante_setzen(1, &v);
+    x.boxen.laden(1, &a);
     x.boxen.start(1, 0.0);
     x.bis(2 * SPB);
-    const double b = x.karte.beat_at((double)x.s) + 0.5;
-    PRUEF(x.karte.rampe(b, 130.03, 0.02));
-    const int64_t r0 = std::llround(x.karte.sample_at(b));
-    x.bis(r0 + 8192);
-    double sp2 = 0.0;
-    for (int64_t t = r0 - 2048; t < r0 + 8192; ++t) sp2 = std::max(sp2, std::fabs((double)x.aus_l[t] - (double)x.aus_l[t - 1]));
-    std::printf("keylock_kurzrampe: größter Sprung %.5f\n", sp2);
-    PRUEF(sp2 < 0.1);
-    PRUEF(x.boxen.abholen() == nullptr && x.boxen.abholen_verloren() == 0);  // die Variante bleibt der Box
+    PRUEF(x.boxen.laden(1, &b) == nullptr);  // andreas
+    x.boxen.cypher_wartende_verwerfen();
+    PRUEF(x.boxen.abholen() == nullptr);
+    x.bis(x.s + 2 * N + cdj::LOOPBOX_LADEN_BLENDE + N);
+    PRUEF(x.boxen.loop(1) == &b && x.aus_l[x.s - 1] == -1.0f);
+    PRUEF(x.boxen.abholen() == &a);
   }
-  {  // K(l) F7/F5 Gegenprobe: der Stopp einer Box mit Variante verwirft Pfad und Blende, nichts leckt, Variante bleibt
-    const cdj::Loop v = variante_pos(vier, 130.0);
-    Welt w(130.0);
-    w.boxen.laden(1, &vier);
-    w.boxen.variante_setzen(1, &v);
-    w.boxen.start(1, 0.0);
-    w.bis(2 * SPB);
-    w.boxen.stopp(1, w.jetzt());
-    w.bis(6 * SPB);
-    PRUEF(w.boxen.status(1) == cdj::BoxStatus::bereit && w.boxen.variante(1) == &v && w.boxen.abholen() == nullptr);
-  }
+
   {  // 6. (Plan MVP 2 Scheibe 2) Mitschnitt: erz/1 (Kanal 4) vor Trim wird ab dem nächsten Vielfachen von 4·takte
      // kopiert; Überlappung schlägt fehl; leeren() gibt einen laufenden Mitschnitt als abgebrochen zurück.
     Welt w;
@@ -719,7 +558,7 @@ int main() {
     w.boxen.start(1, 0.0);
     w.bis(2 * 90000);
     bool ok = true;
-    for (int64_t s = 0; s < 2 * 90000; ++s) ok = ok && w.aus_l[s] == (float)((s + 5000) % 90000);
+    for (int64_t s = cdj::LOOPBOX_EIN; s < 2 * 90000; ++s) ok = ok && w.aus_l[s] == (float)((s + 5000) % 90000);
     PRUEF(ok);
     // live ab dem nächsten Block (Review F2: bis() läuft in 256er-Blöcken, w.s steht auf 180 224, nicht 180 000)
     const int64_t ab = w.s;

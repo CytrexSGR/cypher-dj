@@ -26,6 +26,13 @@ struct KernKonfig {
   bool hand_osc = false;  // Scheibe 35, B-O Weg 1: /test/hand auch ohne Prüfmodus (Oberfläche 60m)
   double filter_guete = 0.707;  // Scheibe 25: Güte des DJ-Filters, 0,5 bis 4 (A27 Weg a, Nachtrag 04)
   bool hoerschein_pflicht = true;  // Ohr T13: schaltet PrueferI3 (I3a, §17) an
+  // Keylock Task 2.5 (Plan 2026-10-06-keylock-echtzeit.md, Vertrag 17): Vorgabe 1 im Betrieb (Kern::keylock_nach_konfig,
+  // dann keylock_bauen mit Fäden). Task 3: kern.toml-Schlüssel `keylock` (§2.1); false -> Kern ohne Dehner, der Regler
+  // keylock wirkt dann nur auf die Loop-Boxen.
+  bool keylock = true;
+  // Umbauplan Bungee S2: die Maschine des Keylocks. "r3" (Vorgabe, Rubber Band in Fäden), "bungee" (Bungee synchron im Callback,
+  // Korn 512) oder "bungee_fein" (Korn 256). Bungee nur in einem Kern, der mit CYPHERDJ_BUNGEE gebaut ist; sonst Keylock aus.
+  std::string keylock_maschine = "r3";
 };
 
 // Schlüssel mit TOML-Typ, wie §2.1 sie schreibt: "version", dann je Schlüssel "float", "int", "str", "Pfad", "bool"
@@ -33,7 +40,7 @@ struct KonfigSchluessel {
   const char* name;
   const char* typ;
 };
-extern const KonfigSchluessel KERN_SCHLUESSEL[17];
+extern const KonfigSchluessel KERN_SCHLUESSEL[19];
 
 class KonfigFehler : public std::runtime_error {
  public:

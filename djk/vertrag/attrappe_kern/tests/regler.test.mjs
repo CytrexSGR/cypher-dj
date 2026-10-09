@@ -95,3 +95,34 @@ test('Lesart i: Quittung 5 trägt Grund ""; Negativ-Kontrolle: Quittung 4 behäl
   ], { cfg });
   gruen(r);
 });
+
+// Keylock Task 3 (Plan 2026-10-06-keylock-echtzeit.md, Fassung 4): EIN globaler Schalter `keylock`, Vorgabe 1, Quelle
+// cypher darf, nur Setzen; kein `deck/<n>/keylock`.
+test('keylock: globaler Schalter, Vorgabe 1, cypher darf, kein Deck-Pfad', () => {
+  const r = fahre([
+    wert(500, 'keylock', 1),
+    sende(1000, teil(1, 'cypher', '', 0, 'keylock', 8, 0, 0)),
+    sende(1000, teil(2, 'cypher', '', 0, 'deck/1/keylock', 8, 0, 0)),
+    sende(1000, teil(3, 'cypher', '', 0, 'keylock', 16, 4, 1)),
+    erwarte(2000, q(1, 'cypher', 1)),
+    erwarte(2000, q(2, 'cypher', 6, null, 'unbekannter_regler')),
+    erwarte(2000, q(3, 'cypher', 6, null, 'ausserhalb_bereich')),
+    wert(S(8) - 1, 'keylock', 1),
+    wert(S(8) + 256, 'keylock', 0),
+  ], { cfg });
+  gruen(r);
+});
+
+// Keylock 3b (§1.5, Prüfung MINOR 4): ein neuer Abonnent bekommt den Stand des Knopfs als /e/regler keylock (wie der Kern).
+// Das erste /k/hallo des Läufers kommt vor jeder Änderung: also eine Meldung keylock 1 mit Stempel vor dem Teil; ein späterer
+// Herzschlag bringt keine weitere.
+test('keylock: neuer Abonnent bekommt /e/regler keylock mit dem Stand, Herzschlag nicht', () => {
+  const r = fahre([
+    sende(S(1), teil(1, 'cypher', '', 0, 'keylock', 4, 0, 0)),
+    wert(S(6), 'keylock', 0),
+  ], { cfg });
+  gruen(r);
+  const k = r.log.filter((m) => m.adresse === '/e/regler' && m.werte[0] === 'keylock');
+  assert.ok(k.length === 2 && k[0].werte[1] === 1 && k[0].s < S(1) && k[1].werte[1] === 0 && k[1].s >= S(4),
+    JSON.stringify(k.map((m) => [m.s, m.werte[1]])));
+});

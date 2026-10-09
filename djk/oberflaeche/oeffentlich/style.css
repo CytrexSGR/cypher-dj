@@ -28,6 +28,10 @@ button:focus-visible, .regler:focus-visible { outline: 2px solid var(--farbe, va
 #bpm:hover, #bpm:focus { border-color: currentColor; outline: none; }
 .feld.tempo button { font: inherit; font-size: 16px; line-height: 1; width: 22px; height: 22px; padding: 0; color: inherit; background: transparent; border: 1px solid currentColor; border-radius: 4px; opacity: .6; cursor: pointer; align-self: center; }
 .feld.tempo button:hover { opacity: 1; }
+/* Keylock 3: EIN Knopf für alle Quellen, neben dem Tempo */
+.feld.tempo #keylock { width: auto; padding: 0 7px; font-size: 12px; font-weight: 700; letter-spacing: .08em; margin-left: 6px; }
+.feld.tempo #keylock.an { opacity: 1; background: var(--a); color: #0e0f12; border-color: var(--a); }
+.feld.tempo #keylock.unbekannt { border-style: dashed; }
 .schlaege { display: flex; gap: 6px; }
 .schlaege i { width: 22px; height: 22px; border-radius: 5px; background: var(--line); }
 .schlaege i.an { background: var(--text); }
@@ -43,6 +47,9 @@ button:focus-visible, .regler:focus-visible { outline: 2px solid var(--farbe, va
 .punkt.an { color: var(--text); }
 .punkt.an.ohne-hand::before { background: var(--warn); }
 .punkt.ohne-hand { color: var(--warn); }
+.punkt.alarm::before { background: var(--kill); }
+.punkt.alarm { color: var(--kill); }
+.punkt.leer::before { background: var(--line); }
 
 /* Pult */
 /* Plan Oberfläche T6: Raster nach Traktor (A/C links, Mixer über beide Reihen, B/D rechts); minmax: ein langer Titel

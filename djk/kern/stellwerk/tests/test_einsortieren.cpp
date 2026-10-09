@@ -31,6 +31,25 @@ FALL(unbekannt_nur_hand_bereich_stems) {
   PRUEFE(l.grund(l.teil("deck/3/stem/bass", 8, 4, -6), Status::abgelehnt) == Grund::keine_stems);
 }
 
+// Keylock Task 3: der globale Schalter `keylock`, Quelle cypher darf (kein nur_hand), nur Setzen (keine Rampe), 0 und 1
+FALL(keylock_cypher_darf_setzen) {
+  Lauf l;
+  const int r = l.r("keylock");
+  PRUEFE(r >= 0);
+  PRUEFE_NAH(l.sw->wert(r), 1, 0);  // Vorgabe an
+  const int64_t a = l.teil("keylock", 8, 0, 0, "", 0, "", Quelle::cypher);
+  PRUEFE_GLEICH(l.bei(a, Status::angenommen), 0);
+  PRUEFE(l.grund(l.teil("keylock", 16, 4, 1), Status::abgelehnt) == Grund::ausserhalb_bereich);    // Schalter ohne Rampe
+  PRUEFE(l.grund(l.teil("keylock", 16, 0, 0.5f), Status::abgelehnt) == Grund::ausserhalb_bereich);  // nur 0 oder 1
+  PRUEFE(l.grund(l.teil("deck/1/keylock", 16, 0, 0), Status::abgelehnt) == Grund::unbekannter_regler);
+  l.bis(T(4));
+  PRUEFE_NAH(l.sw->wert(r), 0, 0);  // ab Beat 8 aus
+  const int64_t b = l.teil("keylock", 16, 0, 1, "", 0, "", Quelle::leitstand);
+  PRUEFE_GLEICH(l.bei(b, Status::angenommen), l.sw->jetzt());
+  l.bis(T(6));
+  PRUEFE_NAH(l.sw->wert(r), 1, 0);
+}
+
 FALL(zu_spaet_politik_0_verworfen_politik_1_angenommen) {
   Lauf l;
   l.bis(25600);

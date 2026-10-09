@@ -1,7 +1,7 @@
 // Scheibe 31: OSC der Decks im Netz-Faden (SCHNITTSTELLEN.md §4.4, §5.5, §5.9). Nimmt /k/deck/laden, entladen, start
 // und stopp an (Form und Bereiche; die Zustandsprüfungen macht der Callback), reicht sie über den Befehlsring weiter und
 // schickt /zustand/deck, /e/geladen und /e/frist an alle Abonnenten. Plan E9 (Deck-Bedienung): loop, sprung, hotcue,
-// hotcue_setzen und /e/hotcue. Roll, slip, basis_tausch bleiben bis zu ihren Scheiben (38, 52) wie unbekannt.
+// hotcue_setzen und /e/hotcue. Welle 3: basis_tausch. Roll und slip bleiben bis zu ihren Scheiben (38, 52) wie unbekannt.
 #include <cmath>
 #include <cstring>
 
@@ -111,6 +111,16 @@ bool Netz::deck_paket(const v::Adresse* a, const osc::Nachricht& m) {
     if (!quelle_ok(b.quelle)) return ab("ausserhalb_bereich");
     if (b.deck < 1 || b.deck > 4) return ab("unbekanntes_deck");
     if (b.nr < 1 || b.nr > 8 || std::isinf(b.quell_beat)) return ab("ausserhalb_bereich");
+  } else if (a->pfad == v::k_deck_basis_tausch.pfad) {  // Welle 3 (ADR 028, §4.4)
+    namespace f = v::feld::k_deck_basis_tausch;
+    b.art = Befehl::DECK_TAUSCH;
+    b.deck = m.werte[f::deck].i;
+    b.bpm = m.werte[f::basis_bpm].d;
+    b.fassung = m.werte[f::fassung].i;
+    b.ab_beat = m.werte[f::ab_beat].d;
+    if (!quelle_ok(b.quelle)) return ab("ausserhalb_bereich");
+    if (b.deck < 1 || b.deck > 4) return ab("unbekanntes_deck");
+    if (!(b.bpm > 0.0 && b.bpm < 1000.0) || b.fassung < 1 || !std::isfinite(b.ab_beat)) return ab("ausserhalb_bereich");
   } else if (a->pfad == v::k_deck_raster.pfad) {  // Plan Grid (§4.4)
     namespace f = v::feld::k_deck_raster;
     b.art = Befehl::DECK_RASTER;
@@ -132,10 +142,11 @@ bool Netz::deck_paket(const v::Adresse* a, const osc::Nachricht& m) {
 }
 
 bool Netz::deck_ereignis(const Ereignis& e) {
-  if (e.art == Ereignis::DECK) {  // §5.5 /zustand/deck ,iisdidddfiif
+  if (e.art == Ereignis::DECK) {  // §5.5 /zustand/deck ,iisdidddfiifii
     osc::Schreiber s(v::zustand_deck);
     s.i(e.deck).i(e.status).s(e.material_id).d(e.basis_bpm).i(e.fassung).d(e.quell_beat).d(e.beats_bis_ende)
-        .d(e.faktor).f(e.vorlauf_ms).i(0).i(-1).f(0.0f);  // hoerweg 0 direkt, stretcher_fuell −1, versatz 0
+        .d(e.faktor).f(e.vorlauf_ms).i(e.hoerweg).i(e.stretcher_fuell).f(0.0f)  // Keylock Task 2b: hoerweg, Ring; versatz 0
+        .i(e.keylock_unterlauf).i(e.keylock_aufgegeben);                         // Keylock Task 3: Zähler des Decks
     an_alle(s);
     return true;
   }

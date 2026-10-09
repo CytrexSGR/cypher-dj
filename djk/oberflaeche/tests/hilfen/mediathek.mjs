@@ -56,6 +56,8 @@ export function baueMediathek(dir) {
   const db = new DatabaseSync(path.join(dir, 'mediathek.sqlite'));
   db.exec(SCHEMA);
   for (const [q, r] of [['andreas', 0], ['werkstatt', 1], ['beatport', 2], ['tag', 6]]) db.prepare('INSERT INTO rang VALUES (?,?)').run(q, r);
+  fs.mkdirSync(path.join(daten, 'Zwerg_live/Core Library/Samples/Multisamples/Grand Piano'), { recursive: true });
+  fs.writeFileSync(path.join(daten, 'Zwerg_live/Core Library/Samples/Multisamples/Grand Piano/GrandPiano C3 mf.aif'), 'x');
   for (let w = 1; w <= 4; w++) db.prepare('INSERT INTO werk VALUES (?,?,?)').run(w, 'test', `w${w}`);
   const obj = (n, werk, dauer, erst) => db.prepare('INSERT INTO objekt(inhalt_sha256, werk_id, dauer_s, erstmals_gesehen) VALUES (?,?,?,?)').run(sha(n), werk, dauer, erst);
   obj(1, 1, 301.5, '2026-01-01'); obj(2, 1, 305.0, '2026-02-01'); obj(3, 2, 200.0, '2026-01-01'); obj(4, 3, 4.0, '2026-01-01'); obj(5, 4, 180.0, '2026-01-01');
@@ -77,10 +79,23 @@ export function baueMediathek(dir) {
   // Werk 4
   ang(5, 'typ', 'track', 'tag', '2026-01-01'); ang(5, 'titel', '$(touch PWNED); "x" \'y\'', 'beatport', '2026-03-01'); ang(5, 'kuenstler', 'Gamma', 'beatport', '2026-03-01');
   ang(5, 'bpm', '140', 'beatport', '2026-03-01'); ang(5, 'camelot', '1A', 'beatport', '2026-03-01');
+  // Klänge (Plan klaenge T1): 11 = oneshot Ableton-geschützt, 12 = oneshot offen mit Datei, 13 = impuls, 14 = loop; ohne Werk
+  obj(11, null, 1.5, '2026-01-01'); obj(12, null, 2.0, '2026-01-01'); obj(13, null, 0.8, '2026-01-01'); obj(14, null, 7.5, '2026-01-01');
+  const wz = path.join(daten, 'Zwerg_live');   // Wurzel mit Suchwort ('live', '_') im Präfix: die Textsuche darf es nicht treffen
+  const kp = { 11: path.join(wz, 'Packs/Upright/Samples/Piano C3.aif'), 12: path.join(wz, 'Core Library/Samples/Multisamples/Grand Piano/GrandPiano C3 mf.aif'),
+    13: path.join(wz, 'Core Library/Convolution Reverb/IRs/Plate.aif'), 14: path.join(wz, 'loops/dark-pad-01.wav') };
+  ang(11, 'typ', 'oneshot', 'tag', '2026-01-01'); ang(11, 'pack', 'Upright', 'tag', '2026-01-01'); ang(11, 'kategorie', 'Samples', 'tag', '2026-01-01'); ang(11, 'schutz', 'ableton', 'tag', '2026-01-01');
+  ang(12, 'typ', 'oneshot', 'tag', '2026-01-01'); ang(12, 'pack', 'Multisamples', 'tag', '2026-01-01'); ang(12, 'kategorie', 'Grand Piano', 'tag', '2026-01-01'); ang(12, 'instrument', 'piano', 'tag', '2026-01-01');
+  ang(13, 'typ', 'impuls', 'tag', '2026-01-01'); ang(13, 'pack', 'Convolution Reverb', 'tag', '2026-01-01');
+  ang(14, 'typ', 'loop', 'tag', '2026-01-01'); ang(14, 'bpm', '128', 'tag', '2026-01-01'); ang(14, 'camelot', '8A', 'tag', '2026-01-01'); ang(14, 'titel', 'Dark Pad 01', 'tag', '2026-01-01');
   const fund = (n, host, pfad) => db.prepare('INSERT INTO fundort(host, pfad, inhalt_sha256, erreichbar) VALUES (?,?,?,1)').run(host, pfad, sha(n));
   fund(1, HOST, path.join(daten, 'gibt-es-nicht-a1.mp3')); fund(2, HOST, dateien.a2);
   fund(3, HOST, path.join(daten, 'gibt-es-nicht-w2.mp3')); fund(3, 'anderer-host', dateien.fremd);
   fund(5, HOST, dateien.v4);
+  for (const n of [11, 12, 13, 14]) { fund(n, HOST, kp[n]); db.prepare('UPDATE fundort SET wurzel = ? WHERE pfad = ?').run(wz, kp[n]); }
+  // 15 = Klang NUR auf fremdem Host: darf in /klaenge und in der Karte nicht vorkommen
+  obj(15, null, 1.0, '2026-01-01'); ang(15, 'typ', 'oneshot', 'tag', '2026-01-01'); ang(15, 'pack', 'Fremdpack', 'tag', '2026-01-01'); fund(15, 'anderer-host', '/zz/Fremdklang.wav');
+  fund(11, 'anderer-host', '/zz/Piano C3 Kopie.aif');
   db.exec(`INSERT INTO liste VALUES (1,'traktor','Back Yard',NULL),(2,'traktor','_LOOPS',NULL),(3,'m3u','Mixed',NULL)`);
   const le = db.prepare('INSERT INTO listen_eintrag VALUES (?,?,?)');
   le.run(1, 1, sha(5)); le.run(1, 2, sha(1)); le.run(1, 3, sha(5)); le.run(3, 1, sha(3));
@@ -95,7 +110,7 @@ export function baueEinleser(dir, { schlaf = 0, ausgabe = '{"status":"neu","mate
   return { skript, log, laeufe: () => (fs.existsSync(log) ? fs.readFileSync(log, 'utf8').split('---\n').filter(Boolean) : []) };
 }
 
-export async function stapel(t, { mediathek, python, bestand, einleserModul, sammlungen } = {}) {
+export async function stapel(t, { mediathek, python, bestand, einleserModul, sammlungen, loops } = {}) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-mt-'));
   const ab = path.join(fs.mkdtempSync('/dev/shm/djk-mt-test-'), 'material');
   fs.mkdirSync(ab, { recursive: true });
@@ -107,7 +122,7 @@ export async function stapel(t, { mediathek, python, bestand, einleserModul, sam
   const bestandDir = bestand ?? baueBestand(path.join(tmp, 'bestand'), []);
   const log = [];
   const o = new Oberflaeche({ port: 47300 + K, kernPort: 47100 + K, aboPort: 47150 + K, leitstandWs: 47200 + K, bestand: bestandDir, arbeitsbestand: ab,
-    kernPruefmodus: true, loops: tmpd('loops'), kits: tmpd('kits'), welleCache: tmpd('welle'), musterOrdner: tmpd('muster'), hotcueOrdner: tmpd('hc'),
+    kernPruefmodus: true, loops: loops ?? tmpd('loops'), kits: tmpd('kits'), welleCache: tmpd('welle'), musterOrdner: tmpd('muster'), hotcueOrdner: tmpd('hc'),
     rasterOrdner: tmpd('raster'), huellen, wirtOrdner: tmpd('wirt'), mediathek, python, einleserModul, sammlungen, log: (z) => log.push(z) });
   await o.starte();
   for (let i = 0; i < 100 && o.kern.zustand !== 'verbunden'; i++) await warte(20);

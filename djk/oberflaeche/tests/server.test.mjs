@@ -42,7 +42,7 @@ const K = 8000; // Instanz h
 const warte = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Arbeitsbestand je Lauf in tmpfs wie im Betrieb (/dev/shm), die Attrappe liest nur dort (wie der echte Kern)
-async function stapel(t, mutationen = [], { bestand = BESTAND, vorher, kernPruefmodus, zielKurve, loops, kits, welleCache, musterOrdner, hotcueOrdner, rasterOrdner, huellen, wirtOrdner, klangBefehl, echteBegruessung } = {}) {
+async function stapel(t, mutationen = [], { bestand = BESTAND, vorher, kernPruefmodus, zielKurve, loops, kits, welleCache, musterOrdner, hotcueOrdner, rasterOrdner, huellen, wirtOrdner, klangBefehl, echteBegruessung, digitalout } = {}) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'djk60m-'));
   const ab = path.join(fs.mkdtempSync('/dev/shm/djk60m-test-'), 'material');
   fs.mkdirSync(ab, { recursive: true });
@@ -52,7 +52,7 @@ async function stapel(t, mutationen = [], { bestand = BESTAND, vorher, kernPruef
   await new Promise((ok, f) => { att.stdout.once('data', ok); att.once('exit', (c) => f(new Error(`attrappe rc ${c}`))); });
   const log = [];
   const huellenPfad = huellen ?? (() => { const p = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'djk-huellen-')), 'huellen'); schreibeLeerenRing(p); return p; })();
-  const o = new Oberflaeche({ port: 47300 + K, kernPort: 47100 + K, aboPort: 47150 + K, leitstandWs: 47200 + K, bestand, arbeitsbestand: ab, mutationen, kernPruefmodus, zielKurve, loops: loops ?? fs.mkdtempSync(path.join(os.tmpdir(), 'djk-loops-')), kits: kits ?? fs.mkdtempSync(path.join(os.tmpdir(), 'djk-kits-')), welleCache: welleCache ?? fs.mkdtempSync(path.join(os.tmpdir(), 'djk-welle-')), musterOrdner: musterOrdner ?? fs.mkdtempSync(path.join(os.tmpdir(), 'djk-muster-')), hotcueOrdner: hotcueOrdner ?? fs.mkdtempSync(path.join(os.tmpdir(), 'djk-hc-')), rasterOrdner: rasterOrdner ?? fs.mkdtempSync(path.join(os.tmpdir(), 'djk-raster-')), huellen: huellenPfad, wirtOrdner: wirtOrdner ?? fs.mkdtempSync(path.join(os.tmpdir(), 'djk-wirt-')), klangBefehl, log: (z) => log.push(z) });
+  const o = new Oberflaeche({ port: 47300 + K, kernPort: 47100 + K, aboPort: 47150 + K, leitstandWs: 47200 + K, bestand, arbeitsbestand: ab, mutationen, kernPruefmodus, zielKurve, loops: loops ?? fs.mkdtempSync(path.join(os.tmpdir(), 'djk-loops-')), kits: kits ?? fs.mkdtempSync(path.join(os.tmpdir(), 'djk-kits-')), welleCache: welleCache ?? fs.mkdtempSync(path.join(os.tmpdir(), 'djk-welle-')), musterOrdner: musterOrdner ?? fs.mkdtempSync(path.join(os.tmpdir(), 'djk-muster-')), hotcueOrdner: hotcueOrdner ?? fs.mkdtempSync(path.join(os.tmpdir(), 'djk-hc-')), rasterOrdner: rasterOrdner ?? fs.mkdtempSync(path.join(os.tmpdir(), 'djk-raster-')), huellen: huellenPfad, wirtOrdner: wirtOrdner ?? fs.mkdtempSync(path.join(os.tmpdir(), 'djk-wirt-')), klangBefehl, digitalout, log: (z) => log.push(z) });
   await o.starte();
   for (let i = 0; i < 100 && o.kern.zustand !== 'verbunden'; i++) await warte(20);
   assert.equal(o.kern.zustand, 'verbunden');
@@ -167,11 +167,11 @@ test('Öffnen sendet nichts; Laden und Griff kommen am Kern an; falsches Ziel 40
   s.zu();
 });
 
-function schreibeLoop(dir, name, beats, alt = false) {  // alt: Datei wie bis Scheibe 2 (takte statt beats)
+function schreibeLoop(dir, name, beats, alt = false, quelle = 'test') {  // alt: Datei wie bis Scheibe 2 (takte statt beats)
   fs.mkdirSync(path.join(dir, name), { recursive: true });
   const laenge = alt ? { takte: beats / 4 } : { beats };
   fs.writeFileSync(path.join(dir, name, 'loop.json'), JSON.stringify({ schema: 1, name, ...laenge, bpm: 128,
-    frames: beats * 22500, datei: 'loop.f32', quelle: 'test', erstellt: '2026-09-27 15:00' }));
+    frames: beats * 22500, datei: 'loop.f32', quelle, erstellt: '2026-09-27 15:00' }));
   fs.writeFileSync(path.join(dir, name, 'loop.f32'), Buffer.alloc(beats * 22500 * 8));
 }
 
@@ -984,10 +984,14 @@ test('/deck/raster SET: stehendes Deck, Eins auf den Beat unter dem Kopf und auf
   const vorher = o.gesendet;
   const r2 = await postJson(url, '/deck/raster', { deck: 1, set: true });
   assert.equal(r2.code, 200); assert.equal(r2.j.k, 0); assert.equal(o.gesendet, vorher);
-  // laufend: 409, nichts an den Kern
-  o.stand.decks['1'] = { ...o.stand.decks['1'], status: 2 };
+  // laufend: 409, nichts an den Kern. Das Deck läuft wirklich (Attrappe): ein nur lokal gesetzter Status wurde vom
+  // nächsten /zustand/deck der Attrappe wieder auf 'steht' überschrieben (Wackler ~1/8, 06.10., wie Hand T7).
+  o.kern.sende('/k/deck/start', { id: 901, quelle: 'andreas', plan: '', gruppe: '', hoerschein: '', deck: 1,
+    ab_beat: Math.ceil(o.kern.uhr.beat) + 1, quell_beat: e, politik: 1 });
+  await zustand(o, (x) => x.status === 2);
+  const vorher2 = o.gesendet;
   assert.equal((await postJson(url, '/deck/raster', { deck: 1, set: true })).code, 409);
-  assert.equal(o.gesendet, vorher);
+  assert.equal(o.gesendet, vorher2);
 });
 
 test('/deck/raster/fix (Plan Grid): speichert je Fassung, nach Laden und nach /e/neustart schickt der Server den Versatz', async (t) => {
@@ -1191,9 +1195,13 @@ test('Hand T7: cypher darf FX/Strudel nur bei AUTO an und ohne Stop Cypher; Andr
   assert.equal((await postJson(url, '/strudel', { text: 's("cp")' })).code, 200);
   assert.equal((await postJson(url, '/strudel/autonom', { an: true })).code, 200);
   // Stop Cypher: FX mit cypher → 409 ki_gestoppt
-  o.vomKern({ adresse: '/e/ki', felder: { gestoppt: 1, grund: 'hand', sample: 0 } });
+  // Über die echte Taste, nicht per vomKern: die Attrappe meldet alle 50 ms /zustand/kern mit IHREM ki_gestoppt und
+  // überschrieb einen nur eingespielten Stopp vor dem nächsten POST (Wackler im Gesamtlauf 06.10., intern).
+  assert.equal((await postJson(url, '/taste', { name: 'stopp' })).code, 200);
+  for (let i = 0; i < 100 && !o.kiGestoppt; i++) await warte(10);
   assert.equal((await postJson(url, '/fx', fx1, CYPHER)).j.fehler, 'ki_gestoppt');
-  o.vomKern({ adresse: '/e/ki', felder: { gestoppt: 0, grund: '', sample: 0 } });
+  assert.equal((await postJson(url, '/taste', { name: 'freigabe' })).code, 200);
+  for (let i = 0; i < 100 && o.kiGestoppt; i++) await warte(10);
   // Andreas' Schalter
   for (const [p, d] of [['/strudel/autonom', { an: true }], ['/deck/raster', { deck: 1, schritt_ms: 5 }], ['/deck/raster/fix', { deck: 1 }]]) {
     assert.equal((await postJson(url, p, d, CYPHER)).code, 403, p);
@@ -1290,6 +1298,73 @@ test('Ohr T8: mit laufendem, offenem Partner (Deck 2) ist deck_gegen_deck_ms ein
   const j = await r.json();
   assert.equal(j.sync.validiert, false);
   assert.ok(Number.isFinite(j.sync.deck_gegen_deck_ms), `deck_gegen_deck_ms=${j.sync.deck_gegen_deck_ms}, sync=${JSON.stringify(j.sync)}`);
+});
+
+// Task 1.5: Trim-Vorschlag relativ zum aktuellen Trim (der Mess-Abgriff liegt NACH dem Trim, live.md Posten 5)
+test('Ohr 1.5: /hoeren trägt vergleich.trim_vorschlag_db = round1(trim_alt − pegel_diff_db), relativ zum gemessenen Wert', async (t) => {
+  const ringPfad = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'djk-huellen-t15-')), 'huellen');
+  const { o, url } = await geladenesDeck(t, { huellen: ringPfad });
+  o.stand.regler['deck/1/trim'] = -3;
+  const u = o.kern.uhr;
+  const mitte = u.beat;
+  // LUFS kommt aus Satz.k (ohr.ts miss): Deck ~6 dB lauter als der Master
+  const deck = saetzeMitSchlag(mitte - 8, mitte + 8, u.bpm).map((x) => ({ ...x, k: 4e-3 }));
+  const master = saetzeMitSchlag(mitte - 8, mitte + 8, u.bpm);
+  schreibeRing(ringPfad, { [K1]: deck, [KMASTER]: master });
+  await warte(200);
+  const r = await fetch(url + '/hoeren?deck=1&takte=1');
+  assert.equal(r.status, 200, JSON.stringify(await r.clone().json()));
+  const j = await r.json();
+  const diff = j.vergleich.pegel_diff_db;
+  assert.ok(Number.isFinite(diff) && Math.abs(diff) > 1, `Deck lauter als Master gemessen (pegel_diff_db=${diff})`);
+  assert.equal(j.vergleich.trim_vorschlag_db, Math.round((-3 - diff) * 10) / 10, JSON.stringify(j.vergleich));
+  // Trim unbekannt (Seiten-Neustart, stand.regler leer): KEIN Vorschlag, dafür trim_unbekannt
+  delete o.stand.regler['deck/1/trim'];
+  const j0 = await (await fetch(url + '/hoeren?deck=1&takte=1')).json();
+  assert.ok(!('trim_vorschlag_db' in j0.vergleich), JSON.stringify(j0.vergleich));
+  assert.equal(j0.vergleich.trim_unbekannt, true);
+});
+
+async function hoerenMitK(t, kDeck, kMaster, trim = -3) {
+  const ringPfad = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'djk-huellen-t15k-')), 'huellen');
+  const { o, url } = await geladenesDeck(t, { huellen: ringPfad });
+  o.stand.regler['deck/1/trim'] = trim;
+  const u = o.kern.uhr;
+  const mitte = u.beat;
+  const mk = (k) => saetzeMitSchlag(mitte - 8, mitte + 8, u.bpm).map((x) => ({ ...x, k }));
+  schreibeRing(ringPfad, { [K1]: mk(kDeck), [KMASTER]: mk(kMaster) });
+  await warte(200);
+  const r = await fetch(url + '/hoeren?deck=1&takte=1');
+  assert.equal(r.status, 200, JSON.stringify(await r.clone().json()));
+  return (await r.json()).vergleich;
+}
+
+test('Ohr 1.5: Vorschlag wird auf [-24, +24] geklemmt (Deck ~40 dB lauter, Trim -3)', async (t) => {
+  const v = await hoerenMitK(t, 10, 1e-3);
+  assert.ok(v.pegel_diff_db > 30, `pegel_diff_db=${v.pegel_diff_db}`);
+  assert.equal(v.trim_vorschlag_db, -24);
+});
+
+test('Ohr 1.5: stummes Deck (db10 -200, pegel_diff ~ -186) -> kein Vorschlag', async (t) => {
+  const v = await hoerenMitK(t, 0, 1e-3);
+  assert.ok(v.neu.lufs <= -200 && v.pegel_diff_db < -100, JSON.stringify(v));
+  assert.ok(!('trim_vorschlag_db' in v) && !('trim_unbekannt' in v), JSON.stringify(v));
+});
+
+test('Ohr 1.5: pegel_diff_db keine Zahl (JSON null) -> kein Vorschlag', async (t) => {
+  const v = await hoerenMitK(t, Infinity, 1e-3);
+  assert.ok(typeof v.pegel_diff_db !== 'number' || !Number.isFinite(v.pegel_diff_db), JSON.stringify(v));
+  assert.ok(!('trim_vorschlag_db' in v), JSON.stringify(v));
+});
+
+test('Ohr 1.5: ohne vergleich (nichts gehört) kein trim_vorschlag_db', async (t) => {
+  const ringPfad = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'djk-huellen-t15n-')), 'huellen');
+  const { o, url } = await geladenesDeck(t, { huellen: ringPfad });
+  o.stand.regler['deck/1/trim'] = -3;
+  const r = await fetch(url + '/hoeren?deck=1&takte=1');
+  const j = await r.json();
+  assert.equal(r.status, 409, JSON.stringify(j));
+  assert.ok(!('vergleich' in j) && !('trim_vorschlag_db' in j), JSON.stringify(j));
 });
 
 // ---------- Ohr T10: Hörschein je Takt an den Kern, Öffnen mit Hörschein ----------
@@ -2019,20 +2094,78 @@ test('Riegel 2026-09-30: Stop Cypher überlebt einen Server-Neustart über /zust
   assert.equal((await postJson(url, '/fx', fx1, CYPHER)).code, 200);
 });
 
-test('Plan Tempo-Folge: POST /tempo schickt /k/tempo/rampe über einen Takt ab der nächsten Eins; cypher 403; falsche Werte 400', async (t) => {
+test('Welle 3 (ADR 028): POST /tempo bei laufendem Deck nimmt der Kern an (bis Welle 2 Quittung 6 kein_stretcher)', async (t) => {
+  const { o, url } = await geladenesDeck(t);
+  assert.equal((await postJson(url, '/deck/start', { deck: 1 })).code, 200);
+  for (let i = 0; i < 100 && !(Number(o.stand.decks['1']?.status) >= 2); i++) await warte(20);
+  assert.ok(Number(o.stand.decks['1']?.status) >= 2, `Deck 1 läuft (status=${o.stand.decks['1']?.status})`);
+  const r = await postJson(url, '/tempo', { bpm: 132 });
+  assert.equal(r.code, 200, JSON.stringify(r.j));
+  assert.ok([1, 2].includes(r.j.quittung?.status), `angenommen oder laufend, nicht 6: ${JSON.stringify(r.j.quittung)}`);
+});
+
+test('Keylock 3 (Fassung 4): EIN Knopf keylock für alle Quellen: POST /regler keylock 0 → 200, /k/teil, /lage zeigt ihn; Render-und-Tausch ist aus (kein /k/deck/basis_tausch bei Tempo 132)', async (t) => {
+  const { o, url, log } = await geladenesDeck(t);
+  assert.equal((await postJson(url, '/deck/start', { deck: 1 })).code, 200);
+  for (let i = 0; i < 100 && !(Number(o.stand.decks['1']?.status) >= 2); i++) await warte(20);
+  // 3b: /lage zeigt den Knopf immer (der Kern, hier die Attrappe, meldet ihn dem neuen Abonnenten beim ersten /k/hallo: 1),
+  // kein Feld keylock je Deck mehr
+  for (let i = 0; i < 100 && o.stand.regler.keylock === undefined; i++) await warte(20);
+  let lage = await (await fetch(url + '/lage')).json();
+  assert.equal(lage.regler.keylock, 1, JSON.stringify(lage.regler));
+  assert.equal('keylock' in lage.decks[0], false, JSON.stringify(lage.decks[0]));
+  assert.equal(lage.decks[0].hoerweg, 0, JSON.stringify(lage.decks[0]));   // 3b: Hörweg aus /zustand/deck (Attrappe: 0)
+  const r = await postJson(url, '/regler', { pfad: 'keylock', nach: 0, ab: 'jetzt' }, CYPHER);   // Quelle cypher darf
+  assert.equal(r.code, 200, JSON.stringify(r.j));
+  assert.equal(r.j.felder.pfad, 'keylock'); assert.equal(r.j.felder.quelle, 'cypher'); assert.equal(r.j.felder.dauer_beats, 0);
+  assert.equal(r.j.felder.politik, 1);   // 3b: zu spät heißt sofort, nicht verworfen
+  assert.ok([1, 2, 3].includes(r.j.quittung?.status), JSON.stringify(r.j.quittung));
+  for (let i = 0; i < 200 && o.stand.regler.keylock !== 0; i++) await warte(20);
+  assert.equal(o.stand.regler.keylock, 0);
+  lage = await (await fetch(url + '/lage')).json();
+  assert.equal(lage.regler.keylock, 0, JSON.stringify(lage.regler));
+  // kein Deck-Pfad
+  assert.equal((await postJson(url, '/regler', { pfad: 'deck/1/keylock', nach: 0 }, CYPHER)).code, 400);
+  // Render-und-Tausch (Welle 3 Task 6) ist ausgebaut: Tempo 132 bei laufendem Deck schickt keinen Tausch, rendert nichts
+  const tp = await postJson(url, '/tempo', { bpm: 132 });
+  assert.ok([1, 2].includes(tp.j.quittung?.status), JSON.stringify(tp.j));
+  await warte(1500);
+  assert.equal(log.filter((z) => z.typ === 'an_kern' && z.adresse === '/k/deck/basis_tausch').length, 0);
+  assert.equal(log.filter((z) => String(z.typ).startsWith('keylock')).length, 0, JSON.stringify(log.filter((z) => String(z.typ).startsWith('keylock'))));
+  // wieder an
+  assert.equal((await postJson(url, '/regler', { pfad: 'keylock', nach: 1, ab: 'jetzt' })).code, 200);
+  for (let i = 0; i < 200 && o.stand.regler.keylock !== 1; i++) await warte(20);
+  lage = await (await fetch(url + '/lage')).json();
+  assert.equal(lage.regler.keylock, 1, JSON.stringify(lage.regler));
+  // unbekannt (kein /e/regler keylock gesehen): ausdrücklich null, nicht stillschweigend an
+  delete o.stand.regler.keylock;
+  lage = await (await fetch(url + '/lage')).json();
+  assert.equal(lage.regler.keylock, null, JSON.stringify(lage.regler));
+});
+
+test('Plan Tempo-Folge: POST /tempo schickt /k/tempo/rampe über einen Takt ab der nächsten Eins; cypher darf, bei Stop Cypher 409 ki_gestoppt; falsche Werte 400', async (t) => {
   const { o, log, url } = await stapel(t);
   const vorher = o.gesendet;
   for (const body of [{ bpm: 59.99 }, { bpm: 200.01 }, { bpm: 'schnell' }, {}]) {
     assert.equal((await postJson(url, '/tempo', body)).code, 400, JSON.stringify(body));
   }
+  o.vomKern({ adresse: '/zustand/kern', felder: { generation: 1, ki_gestoppt: 1 } });
   const c = await postJson(url, '/tempo', { bpm: 130 }, CYPHER);
-  assert.equal(c.code, 403);
-  assert.equal(c.j.fehler, 'nur_andreas');
+  assert.equal(c.code, 409);
+  assert.equal(c.j.fehler, 'ki_gestoppt');
   assert.equal(o.gesendet, vorher, 'Abgelehntes geht nicht an den Kern');
+  o.vomKern({ adresse: '/zustand/kern', felder: { generation: 1, ki_gestoppt: 0 } });
+  const cy = await postJson(url, '/tempo', { bpm: 131 }, CYPHER);
+  assert.equal(cy.code, 200, JSON.stringify(cy.j));
+  const anC = log.filter((z) => z.typ === 'an_kern' && z.adresse === '/k/tempo/rampe').map((z) => z.felder);
+  assert.equal(anC.length, 1);
+  assert.equal(anC[0].quelle, 'cypher');
+  assert.equal(anC[0].ziel_bpm, 131);
   const r = await postJson(url, '/tempo', { bpm: 130.456 });
   assert.equal(r.code, 200, JSON.stringify(r.j));
   const an = log.filter((z) => z.typ === 'an_kern' && z.adresse === '/k/tempo/rampe').map((z) => z.felder);
-  assert.equal(an.length, 1);
+  assert.equal(an.length, 2);
+  an.shift();
   assert.equal(an[0].quelle, 'andreas');
   assert.equal(an[0].ziel_bpm, 130.46, 'auf 0,01 BPM gerundet');
   assert.equal(an[0].dauer_beats, 4);
@@ -2043,7 +2176,7 @@ test('Plan Tempo-Folge: POST /tempo schickt /k/tempo/rampe über einen Takt ab d
 // Paket 2 Slice 5 (F07): Loop-Boxen und FX nach einem Kern-Neustart wiederherstellen. Der Neustart-Zustand des Kerns trägt
 // keine Boxen und keine FX-Einheiten; der Server merkt sie vor dem Leeren und schickt sie 500 ms nach /e/neustart erneut.
 async function boxAn(o, url, loops, box, name, kopf, { status = 3, raster } = {}) {
-  schreibeLoop(loops, name, 4);
+  if (!fs.existsSync(path.join(loops, name))) schreibeLoop(loops, name, 4);
   assert.equal((await postJson(url, '/loop', { aktion: 'laden', box, name }, kopf)).code, 200);
   o.vomKern({ adresse: '/e/loop', felder: { box, status, name, beats: 4 } });
   if (raster !== undefined) assert.equal((await postJson(url, '/loop', { aktion: 'raster', box, versatz_frames: raster })).code, 200);
@@ -2332,4 +2465,328 @@ test('Final-Review FR2: ein geplanter Plan feuert nicht in einen inzwischen gebr
   assert.deepEqual(ohneRouting(kernBefehle(log, a0)), []);
   assert.ok(log.some((z) => z.typ === 'wiederherstellung_verworfen'), 'Log wiederherstellung_verworfen');
   assert.ok(!log.some((z) => z.typ === 'wiederherstellung'), 'nicht als wiederhergestellt gezählt');
+});
+
+// Plan Glanz 1.2: Cyphers neuer Teil auf demselben Pfad wartet auf das Ende der eigenen laufenden Fahrt (der Kern lehnt
+// sonst ab, einsortieren.cpp). Andreas' Teile werden nie verschoben. Phantom-Ende: eine abgelehnte oder abgebrochene Fahrt
+// zählt nicht.
+const teilFelder = (log) => log.filter((z) => z.typ === 'an_kern' && z.adresse === '/k/teil').map((z) => z.felder);
+async function fahrtStarten(url, o, log, pfad, body, kopf, status) {
+  const p = postJson(url, '/regler', { pfad, ab: 'jetzt', ...body }, kopf);
+  if (status === undefined) return p;
+  let id;
+  for (let i = 0; i < 100 && id === undefined; i++) { id = teilFelder(log).findLast((f) => f.pfad === pfad)?.id; await warte(10); }
+  assert.ok(id !== undefined, 'Teil ging an den Kern');
+  o.vomKern({ adresse: '/q', felder: { id, status, grund: status === 6 ? 'ausserhalb_bereich' : '', quelle: 'cypher' } });
+  return p;
+}
+
+import { ueberlappt, ersterFreierBeat } from '../hand_bedienung.ts';
+test('Glanz 1.2: Regler wartet auf die eigene laufende Fahrt desselben Pfads (verschoben_auf), Andreas und andere Pfade nie', async (t) => {
+  const { o, url, log } = await stapel(t);
+  const r1 = await postJson(url, '/regler', { pfad: 'erz/2/filter', nach: -1, takte: 8, ab: 'jetzt' }, CYPHER);
+  assert.equal(r1.code, 200, JSON.stringify(r1.j));
+  const b0 = r1.j.felder.ab_beat;
+  assert.equal(r1.j.felder.dauer_beats, 32); assert.equal(r1.j.verschoben_auf, undefined);
+  // 2. gleicher Pfad, sofort: landet am Ende der Fahrt
+  const r2 = await postJson(url, '/regler', { pfad: 'erz/2/filter', nach: 0, takte: 0, ab: 'jetzt' }, CYPHER);
+  assert.equal(r2.j.felder.ab_beat, b0 + 32, JSON.stringify(r2.j)); assert.equal(r2.j.verschoben_auf, b0 + 32);
+  // 3. Negativ-Kontrolle: gleicher Ablauf auf ANDEREM Pfad (erz/3/send/2) ist für sich unverschoben
+  const s1 = await postJson(url, '/regler', { pfad: 'erz/3/send/2', nach: -1, takte: 8, ab: 'jetzt' }, CYPHER);
+  assert.equal(s1.j.verschoben_auf, undefined); assert.ok(s1.j.felder.ab_beat < b0 + 31, 'erz/2/filter wirkt nicht auf erz/3/send/2');
+  // 4. Negativ-Kontrolle: Andreas auf DEMSELBEN Pfad mit laufender Cypher-Fahrt wird nie verschoben
+  const r4 = await postJson(url, '/regler', { pfad: 'erz/2/filter', nach: 0, takte: 0, ab: 'jetzt' });
+  assert.equal(r4.j.verschoben_auf, undefined); assert.ok(r4.j.felder.ab_beat < b0 + 31, `ab_beat ${r4.j.felder.ab_beat}`);
+  // verschoben: nur das kurze Fenster, nicht bis zum Startbeat (30 Beat = ~14 s); keine Fehlerquittung ohne Konflikt
+  assert.ok(r2.j.quittung === null || ![4, 6, 7, 8].includes(r2.j.quittung.status), JSON.stringify(r2.j.quittung));
+});
+
+test('Glanz 1.2: Phantom-Ende (Review M1): Quittung 6, 7, 4 oder 8 löscht das Ende; zweiter Aufruf bleibt unverschoben', async (t) => {
+  const { o, url, log } = await stapel(t);
+  for (const [i, status] of [6, 7, 4, 8].entries()) {
+    const pfad = `erz/${i + 1}/filter`;
+    const r1 = await fahrtStarten(url, o, log, pfad, { nach: -1, takte: 8 }, CYPHER, status);
+    assert.equal(r1.j.quittung.status, status, JSON.stringify(r1.j));
+    const r2 = await postJson(url, '/regler', { pfad, nach: 0, takte: 0, ab: 'jetzt' }, CYPHER);
+    assert.equal(r2.j.verschoben_auf, undefined, `Status ${status}: ${JSON.stringify(r2.j)}`);
+    assert.ok(r2.j.felder.ab_beat < r1.j.felder.ab_beat + 31, `Status ${status}`);
+  }
+  // Negativ-Kontrolle: Status 2 (läuft) lässt das Ende stehen
+  const r1 = await fahrtStarten(url, o, log, 'erz/5/filter', { nach: -1, takte: 8 }, CYPHER, 2);
+  const r2 = await postJson(url, '/regler', { pfad: 'erz/5/filter', nach: 0, takte: 0, ab: 'jetzt' }, CYPHER);
+  assert.equal(r2.j.verschoben_auf, r1.j.felder.ab_beat + 32);
+});
+
+test('Glanz 1.2: Phantom-Ende nach Stop Cypher, /abbruch und neuem Kern', async (t) => {
+  const { o, url, log } = await stapel(t);
+  const nachher = async (pfad) => (await postJson(url, '/regler', { pfad, nach: 0, takte: 0, ab: 'jetzt' }, CYPHER)).j;
+  // Stop Cypher
+  await postJson(url, '/regler', { pfad: 'erz/1/filter', nach: -1, takte: 8, ab: 'jetzt' }, CYPHER);
+  o.vomKern({ adresse: '/e/ki', felder: { gestoppt: 1 } });
+  o.vomKern({ adresse: '/e/ki', felder: { gestoppt: 0 } });
+  assert.equal((await nachher('erz/1/filter')).verschoben_auf, undefined, 'nach Stop Cypher');
+  // /abbruch
+  await postJson(url, '/regler', { pfad: 'erz/2/filter', nach: -1, takte: 8, ab: 'jetzt' }, CYPHER);
+  assert.equal((await postJson(url, '/abbruch', {}, CYPHER)).code, 200);
+  assert.equal((await nachher('erz/2/filter')).verschoben_auf, undefined, 'nach /abbruch');
+  // neuer Kern (andere Generation)
+  await postJson(url, '/regler', { pfad: 'erz/3/filter', nach: -1, takte: 8, ab: 'jetzt' }, CYPHER);
+  o.vomKern({ adresse: '/e/neustart', felder: { generation: 9, sample: 0 } });
+  assert.equal((await nachher('erz/3/filter')).verschoben_auf, undefined, 'nach neuem Kern');
+  // Negativ-Kontrolle: gleiche Generation (nur neu gemeldet) lässt das Ende stehen
+  const a = await postJson(url, '/regler', { pfad: 'erz/4/filter', nach: -1, takte: 8, ab: 'jetzt' }, CYPHER);
+  o.vomKern({ adresse: '/e/neustart', felder: { generation: 9, sample: 0 } });
+  assert.equal((await nachher('erz/4/filter')).verschoben_auf, a.j.felder.ab_beat + 32);
+});
+
+const grundVon = async (o, id) => { await warte(200); return o.quittungen.get(id)?.find((q) => Number(q.status) !== 1)?.grund ?? null; };
+const cy = (url, pfad, nach, takte, ab) => postJson(url, '/regler', { pfad, nach, takte, ab }, CYPHER).then((r) => r.j);
+
+test('Glanz 1.2 ueberlappt(): die Regel des Kerns (einsortieren.cpp:17-27) für Cyphers Teile', () => {
+  const R = (ab, dauer) => ({ ab, dauer });
+  assert.equal(ueberlappt(R(10, 0), R(10, 0)), true, 'zwei Setzen am selben Beat');
+  assert.equal(ueberlappt(R(10, 0), R(11, 0)), false);
+  assert.equal(ueberlappt(R(10, 8), R(12, 0)), true, 'Setzen in der Rampe');
+  assert.equal(ueberlappt(R(10, 8), R(10, 0)), false, 'Setzen am Rampenstart (gleiche Nummer)');
+  assert.equal(ueberlappt(R(10, 8), R(18, 0)), false, 'Setzen am Rampenende');
+  assert.equal(ueberlappt(R(10, 0), R(8, 8)), true, 'Rampe über ein Setzen');
+  assert.equal(ueberlappt(R(10, 0), R(10, 8)), false, 'Rampe startet auf dem Setzen');
+  assert.equal(ueberlappt(R(10, 8), R(14, 8)), true); assert.equal(ueberlappt(R(10, 8), R(18, 8)), false);
+  assert.equal(ersterFreierBeat([R(10, 0), R(11, 0), R(12, 0)], 10, 0), 13, 'drei feste auf einem Beat');
+  assert.equal(ersterFreierBeat([R(10, 8)], 20, 0), 20, 'hinter der Rampe frei');
+});
+
+test('Glanz 1.2: feste Werte und Rampen (Review): Fälle A, B, D und Anfang statt nur Ende; der Kern lehnt nichts ab', async (t) => {
+  const { o, url } = await stapel(t);
+  const beat = () => o.kern.uhr.beat;
+  // Positiv-Gegenprobe des Instruments: zwei Setzen auf demselben Beat direkt an den Kern → die Attrappe quittiert ueberlappung
+  const roh = (n) => ({ id: Number(++o.id), quelle: 'cypher', plan: 'cypher', teil: 0, pfad: 'erz/8/filter', ab_beat: 250, dauer_beats: 0, nach: n, form: 1, politik: 0, gruppe: '', hoerschein: '' });
+  const r1 = roh(-1), r2 = roh(0);
+  o.kern.sende('/k/teil', r1); o.kern.sende('/k/teil', r2);
+  assert.equal(await grundVon(o, r2.id), 'ueberlappung'); assert.notEqual(await grundVon(o, r1.id), 'ueberlappung');
+  // D: drei feste auf einem Beat (Uhr eingefroren) → b, b+1, b+2
+  o.abVon = () => 200;
+  const d = [await cy(url, 'erz/1/filter', -1, 0, 'jetzt'), await cy(url, 'erz/1/filter', -0.5, 0, 'jetzt'), await cy(url, 'erz/1/filter', 0, 0, 'jetzt')];
+  assert.deepEqual(d.map((x) => x.felder.ab_beat), [200, 201, 202]);
+  assert.deepEqual(d.map((x) => x.verschoben_auf), [undefined, 201, 202]);
+  for (const x of d) assert.notEqual(await grundVon(o, x.felder.id), 'ueberlappung');
+  // A: Rampe 300..308, fest 'jetzt' 302 → 308, fest 'jetzt' 302 → 309 (nicht auf den zweiten)
+  const ab = [300, 302, 302]; let i = 0; o.abVon = () => ab[i++];
+  const ra = [await cy(url, 'erz/2/filter', -1, 2, 'jetzt'), await cy(url, 'erz/2/filter', 0, 0, 'jetzt'), await cy(url, 'erz/2/filter', 0.5, 0, 'jetzt')];
+  assert.deepEqual(ra.map((x) => x.felder.ab_beat), [300, 308, 309]);
+  for (const x of ra) assert.notEqual(await grundVon(o, x.felder.id), 'ueberlappung');
+  // B: fest auf 400 (takt), dann fest 'jetzt' 397 → bleibt auf 397 (kein Konflikt, vorher fälschlich auf 400)
+  const bb = [400, 397]; i = 0; o.abVon = () => bb[i++];
+  const fb = [await cy(url, 'erz/3/filter', -1, 0, 'takt'), await cy(url, 'erz/3/filter', 0, 0, 'jetzt')];
+  assert.deepEqual(fb.map((x) => x.felder.ab_beat), [400, 397]); assert.equal(fb[1].verschoben_auf, undefined);
+  for (const x of fb) assert.notEqual(await grundVon(o, x.felder.id), 'ueberlappung');
+  // Anfang statt nur Ende: Rampe 128..160 (phrase), fest 'jetzt' 101 liegt davor → unverschoben
+  const ph = [128, 101]; i = 0; o.abVon = () => ph[i++];
+  const fp = [await cy(url, 'erz/4/filter', -1, 8, 'phrase'), await cy(url, 'erz/4/filter', 0, 0, 'jetzt')];
+  assert.deepEqual(fp.map((x) => x.felder.ab_beat), [128, 101]); assert.equal(fp[1].verschoben_auf, undefined);
+  for (const x of fp) assert.notEqual(await grundVon(o, x.felder.id), 'ueberlappung');
+  void beat;
+});
+
+test('Glanz 1.2: verschobener Teil, den der Kern sofort ablehnt (Andreas-Teil am Zielbeat), trägt die Ablehnung in der Antwort', async (t) => {
+  const { o, url } = await stapel(t);
+  const t0 = Date.now();
+  const x = await cy(url, 'erz/2/filter', -1, 8, 'jetzt');
+  const ziel = x.felder.ab_beat + 32;
+  // Andreas' fester Wert genau auf dem Beat, auf den Cyphers zweiter Teil geschoben wird
+  o.kern.sende('/k/teil', { id: Number(++o.id), quelle: 'andreas', plan: '', teil: 0, pfad: 'erz/2/filter', ab_beat: ziel, dauer_beats: 0, nach: 0.1, form: 1, politik: 0, gruppe: '', hoerschein: '' });
+  await warte(100);
+  const y = await cy(url, 'erz/2/filter', 0, 0, 'jetzt');
+  assert.equal(y.verschoben_auf, ziel);
+  assert.equal(y.quittung?.status, 6, JSON.stringify(y)); assert.equal(y.quittung.grund, 'ueberlappung');
+  assert.ok(Date.now() - t0 < 3000, 'wartet nicht bis zum Startbeat');
+  // Negativ-Kontrolle: verschoben ohne Konflikt (anderer Pfad, nur Cypher) → kein Fehlerstatus
+  await cy(url, 'erz/3/filter', -1, 8, 'jetzt');
+  const z = await cy(url, 'erz/3/filter', 0, 0, 'jetzt');
+  assert.ok(z.verschoben_auf !== undefined && (z.quittung === null || ![4, 6, 7, 8].includes(z.quittung.status)), JSON.stringify(z));
+});
+
+// Plan Glanz 1.3 (Server-Teil, Review-Befunde 1-3): Kern lässt pad/* für Cypher ohne Hörschein öffnen; die Herkunft des
+// Box-Inhalts prüft die Seite, und zwar bei der Anfrage UND bei jedem Inhaltswechsel danach (offene Box, offene Rampe).
+async function padStapel(t, extra = {}) {
+  const loops = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-loops-'));
+  schreibeLoop(loops, 'c-eigen', 4, false, 'mitschnitt');
+  schreibeLoop(loops, 'c-eigen2', 4, false, 'mitschnitt');
+  schreibeLoop(loops, 'a-fremd', 4, false, 'deck');
+  const st = await geladenesDeck(t, { loops, ...extra });
+  const teile = () => st.log.filter((z) => z.typ === 'an_kern' && z.adresse === '/k/teil');
+  const laden_ = () => st.log.filter((z) => z.typ === 'an_kern' && /^\/k\/loop\/(laden|start)$/.test(z.adresse));
+  return { ...st, loops, teile, laden: laden_ };
+}
+const ablaufen = (o, pfad) => { for (const e of o.fahrtEnde.get(pfad) ?? []) { e.ab = -10; e.dauer = 0; } };   // Rampe ist abgelaufen
+
+test('Glanz 1.3 (i)(ii): pad/1/fader öffnet für Cypher mit eigenem Mitschnitt ohne Hörschein; fremder Loop bleibt kein_hoerschein', async (t) => {
+  const { o, url, loops, teile } = await padStapel(t);
+  await boxAn(o, url, loops, 1, 'c-eigen', CYPHER, { status: 1 });
+  const r = await postJson(url, '/regler', { pfad: 'pad/1/fader', nach: -6, takte: 0 }, CYPHER);
+  assert.equal(r.code, 200, JSON.stringify(r.j));
+  assert.equal(teile().at(-1).felder.pfad, 'pad/1/fader'); assert.equal(teile().at(-1).felder.quelle, 'cypher'); assert.equal(teile().at(-1).felder.hoerschein, '');
+  // fremder Loop (Deck-Schnitt) in Box 2: gesperrt, nichts an den Kern; Andreas' Hand geht (Negativ-Kontrolle)
+  await boxAn(o, url, loops, 2, 'a-fremd', {}, { status: 1 });
+  const n0 = teile().length;
+  const f = await postJson(url, '/regler', { pfad: 'pad/2/fader', nach: -6, takte: 0 }, CYPHER);
+  assert.equal(f.code, 409); assert.equal(f.j.fehler, 'kein_hoerschein'); assert.equal(teile().length, n0);
+  const tr = await postJson(url, '/regler', { pfad: 'pad/2/trim', nach: 0, takte: 0 }, CYPHER);   // Trim wie Fader: 0 + (-200) bleibt zu, aber Fader-Wert unbekannt
+  assert.equal(tr.code, 200);   // öffnet nichts (Fader zu): kein Fall für die Wache
+  assert.equal((await postJson(url, '/regler', { pfad: 'pad/2/fader', nach: -6, takte: 0 })).code, 200);
+});
+
+test('Glanz 1.3 (iii): deck/loop/sichern mit box lädt für Cypher nichts in eine offene Box oder unter laufende Rampe', async (t) => {
+  const { o, url, loops, teile, laden } = await padStapel(t);
+  const e = eins();
+  await postJson(url, '/deck/sprung', { deck: 1, ziel: e + 8, raster: 0 });
+  await zustand(o, (x) => Math.abs(x.quell_beat - (e + 8)) < 1e-6);
+  await postJson(url, '/deck/loop', { deck: 1, laenge: 2, raster: 4 });
+  await zustand(o, (x) => x.beats_bis_ende === null || x.beats_bis_ende === Infinity);
+  await boxAn(o, url, loops, 1, 'c-eigen', CYPHER, { status: 1 });
+  // (b) Rampe auf Box 1 (Eq öffnet nichts, die Box ist zu) und die Befund-Rampe auf dem Fader
+  assert.equal((await postJson(url, '/regler', { pfad: 'pad/1/fader', nach: -6, takte: 4 }, CYPHER)).code, 200);
+  const n0 = laden().length;
+  const x = await postJson(url, '/deck/loop/sichern', { deck: 1, box: 1 }, CYPHER);
+  assert.equal(x.code, 409, JSON.stringify(x.j)); assert.equal(x.j.fehler, 'box_offen_oder_faehrt');
+  assert.equal(laden().length, n0, 'nichts an /k/loop/laden');
+  assert.deepEqual(fs.readdirSync(loops).sort(), ['c-eigen', 'c-eigen2', 'a-fremd'].sort(), 'auch keine Datei geschrieben');
+  // andere Box ohne Rampe: frei; ohne box (nur sichern): frei; Andreas: nie gesperrt
+  assert.equal((await postJson(url, '/deck/loop/sichern', { deck: 1, box: 2 }, CYPHER)).code, 200);
+  await warte(1100);   // der Name trägt HHMMSS
+  assert.equal((await postJson(url, '/deck/loop/sichern', { deck: 1 }, CYPHER)).code, 200);
+  await warte(1100);   // der Name trägt HHMMSS
+  assert.equal((await postJson(url, '/deck/loop/sichern', { deck: 1, box: 1 })).code, 200, 'Andreas');
+  // nach Rampenende: Cypher darf wieder (Negativ-Kontrolle)
+  ablaufen(o, 'pad/1/fader');
+  await warte(1100);   // der Name trägt HHMMSS
+  assert.equal((await postJson(url, '/deck/loop/sichern', { deck: 1, box: 1 }, CYPHER)).code, 200);
+  // (a) offene Box: gesperrt. Erst die laufende Rampe vom Anfang abbrechen: ihr Echo /e/regler überschrieb sonst den
+  // gesetzten Wert, die Box galt als zu, und der Schnitt in derselben Sekunde scheiterte am Namen (500, Wackler 06.10.).
+  assert.equal((await postJson(url, '/abbruch', {}, CYPHER)).code, 200);
+  await warte(300);
+  o.stand.regler['pad/1/fader'] = -6;
+  o.stand.regler['pad/1/trim'] = 0;
+  await warte(1100);   // der Name trägt HHMMSS
+  const n1 = laden().length;
+  const y = await postJson(url, '/deck/loop/sichern', { deck: 1, box: 1 }, CYPHER);
+  assert.equal(y.code, 409); assert.equal(y.j.fehler, 'box_offen_oder_faehrt'); assert.equal(laden().length, n1);
+});
+
+test('Glanz 1.3 (iv)(v): /loop laden und start fremden Inhalts sind unter laufender Rampe gesperrt; eigener Mitschnitt, Andreas, Rampenende nicht', async (t) => {
+  const { o, url, loops, teile, laden } = await padStapel(t);
+  await boxAn(o, url, loops, 1, 'c-eigen', CYPHER, { status: 1 });
+  assert.equal((await postJson(url, '/regler', { pfad: 'pad/1/fader', nach: -6, takte: 4 }, CYPHER)).code, 200);
+  const n0 = laden().length;
+  const x = await postJson(url, '/loop', { aktion: 'laden', box: 1, name: 'a-fremd' }, CYPHER);
+  assert.equal(x.code, 409, JSON.stringify(x.j)); assert.equal(x.j.fehler, 'box_offen_oder_faehrt');
+  assert.equal(laden().length, n0, 'nichts an den Kern');
+  assert.equal(o.loopLadung['1']?.name ?? 'c-eigen', 'c-eigen', 'Besitzerbuchführung unberührt');
+  assert.equal((await postJson(url, '/loop', { aktion: 'laden', box: 1, name: 'c-eigen2' }, CYPHER)).code, 200, 'eigener Mitschnitt darf');
+  assert.equal((await postJson(url, '/loop', { aktion: 'laden', box: 1, name: 'a-fremd' })).code, 200, 'Andreas nie gesperrt');
+  // /loop start: der geladene Loop ist jetzt fremd (Andreas lud ihn), Rampe läuft noch
+  o.vomKern({ adresse: '/e/loop', felder: { box: 1, status: 1, name: 'a-fremd', beats: 4 } });
+  const s = await postJson(url, '/loop', { aktion: 'start', box: 1 }, CYPHER);
+  assert.equal(s.code, 409); assert.equal(s.j.fehler, 'box_offen_oder_faehrt');
+  assert.equal((await postJson(url, '/loop', { aktion: 'start', box: 1 })).code, 200, 'Andreas');
+  // Rampenende: Cypher darf fremd laden (Negativ-Kontrolle)
+  ablaufen(o, 'pad/1/fader');
+  assert.equal((await postJson(url, '/loop', { aktion: 'laden', box: 1, name: 'a-fremd' }, CYPHER)).code, 200);
+  assert.equal((await postJson(url, '/loop', { aktion: 'start', box: 1 }, CYPHER)).code, 200);
+  // andere Box: nie betroffen
+  assert.equal((await postJson(url, '/loop', { aktion: 'laden', box: 2, name: 'a-fremd' }, CYPHER)).code, 200);
+});
+
+test('Glanz 1.3 Re-Review 1: ausstehende Ladung eines Deck-Schnitts (kein Echo) zählt als fremd; nach Echo eines eigenen Mitschnitts frei', async (t) => {
+  const { o, url, loops, teile } = await padStapel(t);
+  const e = eins();
+  await postJson(url, '/deck/sprung', { deck: 1, ziel: e + 8, raster: 0 });
+  await zustand(o, (x) => Math.abs(x.quell_beat - (e + 8)) < 1e-6);
+  await postJson(url, '/deck/loop', { deck: 1, laenge: 2, raster: 4 });
+  await zustand(o, (x) => x.beats_bis_ende === null || x.beats_bis_ende === Infinity);
+  await boxAn(o, url, loops, 1, 'c-eigen', CYPHER, { status: 1 });
+  const s = await postJson(url, '/deck/loop/sichern', { deck: 1, box: 1 }, CYPHER);   // geschlossen, ruhend: erlaubt; Echo fehlt
+  assert.equal(s.code, 200, JSON.stringify(s.j));
+  const n0 = teile().length;
+  const f = await postJson(url, '/regler', { pfad: 'pad/1/fader', nach: -6, takte: 0 }, CYPHER);
+  assert.equal(f.code, 409); assert.equal(f.j.fehler, 'kein_hoerschein'); assert.equal(teile().length, n0);
+  // Negativ-Kontrolle: Echo eines EIGENEN Mitschnitts löst die Ladung ab
+  assert.equal((await postJson(url, '/loop', { aktion: 'laden', box: 2, name: 'c-eigen2' }, CYPHER)).code, 200);
+  o.vomKern({ adresse: '/e/loop', felder: { box: 2, status: 1, name: 'c-eigen2', beats: 4 } });
+  assert.equal((await postJson(url, '/regler', { pfad: 'pad/2/fader', nach: -6, takte: 0 }, CYPHER)).code, 200);
+});
+
+test('Glanz 1.3 Re-Review 2: nur fader/trim-Rampen sperren das Nachladen; eq-Rampe nicht', async (t) => {
+  const { o, url, loops } = await padStapel(t);
+  await boxAn(o, url, loops, 1, 'c-eigen', CYPHER, { status: 1 });
+  assert.equal((await postJson(url, '/regler', { pfad: 'pad/1/eq/tief', nach: -12, takte: 4 }, CYPHER)).code, 200);
+  assert.equal((await postJson(url, '/loop', { aktion: 'laden', box: 1, name: 'a-fremd' }, CYPHER)).code, 200, 'eq-Rampe sperrt nicht');
+  o.vomKern({ adresse: '/e/loop', felder: { box: 1, status: 1, name: 'a-fremd', beats: 4 } });
+  assert.equal((await postJson(url, '/loop', { aktion: 'laden', box: 1, name: 'c-eigen' }, CYPHER)).code, 200);
+  o.vomKern({ adresse: '/e/loop', felder: { box: 1, status: 1, name: 'c-eigen', beats: 4 } });
+  assert.equal((await postJson(url, '/regler', { pfad: 'pad/1/trim', nach: -3, takte: 4 }, CYPHER)).code, 200);
+  const x = await postJson(url, '/loop', { aktion: 'laden', box: 1, name: 'a-fremd' }, CYPHER);
+  assert.equal(x.code, 409); assert.equal(x.j.fehler, 'box_offen_oder_faehrt', 'trim-Rampe sperrt');
+});
+
+async function ausstehendeLadung(t, neustart) {
+  {
+    const { o, log, url, loops, teile } = await padStapel(t);
+    await boxAn(o, url, loops, 1, 'a-fremd', {}, { status: 3 });   // Andreas' fremder Loop läuft in Box 1
+    assert.equal((await postJson(url, '/loop', { aktion: 'laden', box: 1, name: 'c-eigen' }, CYPHER)).code, 200);   // eigene Ladung, Echo steht aus
+    if (neustart) {
+      const n0 = kernBefehle(log).length;
+      const b = await nachNeustart(o, log, 31, n0, 2);   // laden a-fremd, start
+      assert.equal(b[0].felder.name, 'a-fremd');
+      o.vomKern({ adresse: '/e/loop', felder: { box: 1, status: 3, name: 'a-fremd', beats: 4 } });
+    }
+    // Naht F13: ohne Neustart erst nach der Übernahme (Echo mit dem eigenen Namen) eigen; vorher klingt noch a-fremd.
+    if (!neustart) o.vomKern({ adresse: '/e/loop', felder: { box: 1, status: 3, name: 'c-eigen', beats: 4 } });
+    const n1 = teile().length;
+    const r = await postJson(url, '/regler', { pfad: 'pad/1/fader', nach: -6, takte: 0 }, CYPHER);
+    if (neustart) { assert.equal(r.code, 409); assert.equal(r.j.fehler, 'kein_hoerschein'); assert.equal(teile().length, n1); }
+    else { assert.equal(r.code, 200, 'Negativ-Kontrolle: ohne Neustart ist die Box nach der Übernahme der eigenen Ladung eigen'); }
+  }
+}
+test('Glanz 1.3 Gesamt-Review: eine beim Kern-Neustart ausstehende eigene Ladung macht die wiederhergestellte fremde Box nicht zum eigenen Mitschnitt', (t) => ausstehendeLadung(t, true));
+test('Glanz 1.3 Gesamt-Review (Negativ-Kontrolle): ohne Neustart zählt die ausstehende eigene Ladung weiter', (t) => ausstehendeLadung(t, false));
+
+test('Glanz 2.1 F22: /ausgang und /lage.ausgang zeigen den Stand der Wache, ohne Datei unbewacht', async (t) => {
+  const p = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'djk-do-')), 'digitalout.json');
+  fs.writeFileSync(p, JSON.stringify({ version: 1, karte: 2, zustand: 'aus', faelle: 0, letzter: null, lebenszeichen: new Date().toISOString() }));
+  const { url } = await stapel(t, [], { digitalout: p });
+  assert.equal((await (await fetch(`${url}/ausgang`)).json()).zustand, 'aus');
+  assert.equal((await (await fetch(`${url}/lage`)).json()).ausgang.zustand, 'aus');
+  fs.rmSync(p);
+  assert.equal((await (await fetch(`${url}/ausgang`)).json()).zustand, 'unbewacht');   // Negativ: Datei weg
+});
+
+// Naht Klickfrei (F13) × Welle 1 (pad/*): der Kern lässt einen in eine klingende Box geladenen Loop bis zu 4 s warten
+// (/e/loop meldet erst den alten Namen) und verwirft bei Stop Cypher wartende cypher-Loops ohne Echo. Eigen ist eine
+// Box für Cyphers Fader nur, wenn der laufende UND der wartende Inhalt Cyphers Mitschnitt sind.
+test('Naht F13: eigener Loop wartet in einer Box, in der noch ein fremder klingt → pad-Fader bleibt kein_hoerschein, nach Übernahme frei', async (t) => {
+  const { o, url, loops, teile } = await padStapel(t);
+  await boxAn(o, url, loops, 1, 'a-fremd', {}, { status: 3 });                       // Andreas' Deck-Schnitt klingt
+  assert.equal((await postJson(url, '/loop', { aktion: 'laden', box: 1, name: 'c-eigen' }, CYPHER)).code, 200);
+  o.vomKern({ adresse: '/e/loop', felder: { box: 1, status: 3, name: 'a-fremd', beats: 4 } });   // F13: erst der alte Name
+  const n0 = teile().length;
+  const r = await postJson(url, '/regler', { pfad: 'pad/1/fader', nach: -6, takte: 0 }, CYPHER);
+  assert.equal(r.code, 409, JSON.stringify(r.j)); assert.equal(r.j.fehler, 'kein_hoerschein'); assert.equal(teile().length, n0);
+  o.vomKern({ adresse: '/e/loop', felder: { box: 1, status: 3, name: 'c-eigen', beats: 4 } });   // Übernahme
+  assert.equal((await postJson(url, '/regler', { pfad: 'pad/1/fader', nach: -6, takte: 0 }, CYPHER)).code, 200, 'Negativ-Kontrolle: nach Übernahme eigen');
+});
+
+test('Naht F13: Stop Cypher verwirft Cyphers wartende Ladung → nach der Freigabe gilt wieder der klingende fremde Inhalt', async (t) => {
+  const { o, url, loops, teile } = await padStapel(t);
+  await boxAn(o, url, loops, 1, 'a-fremd', {}, { status: 3 });
+  assert.equal((await postJson(url, '/loop', { aktion: 'laden', box: 1, name: 'c-eigen' }, CYPHER)).code, 200);
+  o.vomKern({ adresse: '/e/ki', felder: { gestoppt: 1 } });
+  o.vomKern({ adresse: '/e/ki', felder: { gestoppt: 0 } });
+  assert.equal(o.loopLadung['1'], undefined, 'wartende cypher-Ladung ist geräumt');
+  const r = await postJson(url, '/regler', { pfad: 'pad/1/fader', nach: -6, takte: 0 }, CYPHER);
+  assert.equal(r.code, 409, JSON.stringify(r.j)); assert.equal(teile().filter((z) => z.felder.pfad === 'pad/1/fader').length, 0);
+  // Negativ-Kontrolle: Andreas' wartende Ladung bleibt (Stop Cypher betrifft nur Cyphers)
+  assert.equal((await postJson(url, '/loop', { aktion: 'laden', box: 2, name: 'a-fremd' })).code, 200);
+  o.vomKern({ adresse: '/e/ki', felder: { gestoppt: 1 } });
+  assert.equal(o.loopLadung['2']?.name, 'a-fremd');
 });

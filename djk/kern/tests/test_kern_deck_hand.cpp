@@ -16,6 +16,7 @@
 //      Druck vor dem wartenden Start nimmt ihn zurück
 // Fehlerfall: derselbe Test gegen die Mutation „Start sofort ohne Phase“ (test_kern_deck_hand_mutation, WILL_FAIL): das
 // Deck startet am Griff am Frame seiner Position, die Klicks liegen um die Phase neben dem Master.
+#include <algorithm>
 #include <cmath>
 
 #include "kern35.h"
@@ -41,19 +42,41 @@ void bereit(Lauf& x) {  // Deck 1 laden, Fader auf −10 dB (ab Beat 1), Ruhe bi
 void druck(Lauf& x, int64_t s, int kanal, int nr) { x.midi_bei(s, static_cast<uint8_t>(0x90 | (kanal - 1)), static_cast<uint8_t>(nr), 127); }
 void loslassen(Lauf& x, int64_t s, int kanal, int nr) { x.midi_bei(s, static_cast<uint8_t>(0x80 | (kanal - 1)), static_cast<uint8_t>(nr), 0); }
 
+// Betragsmaximum links am Ring in [von, bis)
+double spitze(const Lauf& x, int64_t von, int64_t bis) {
+  double m = 0.0;
+  for (int64_t n = von; n < bis && n < (int64_t)x.l.size(); ++n) m = std::max(m, (double)std::fabs(x.l[n]));
+  return m;
+}
+
+// Einsatz am Ring: erstes Sample in [von, bis) mit l oder r ≠ 0 (-1: keins). Verträgt die F10-Einblende (Welle 2): deren
+// erstes Sample trägt 1/DECK_START_EIN des Materials, ist also ≠ 0, wo das Material ≠ 0 ist (Klick-Träger rechts läuft
+// durch). Ein Deck, das bei Sample S einsetzt, erscheint am Ring bei S + vh (Limiter-Vorhalt). Prüfung 2.3 Befund 2.
+int64_t einsatz(const Lauf& x, int64_t von, int64_t bis) {
+  for (int64_t n = von; n < bis && n < (int64_t)x.l.size(); ++n)
+    if (x.l[n] != 0.0f || x.r[n] != 0.0f) return n;
+  return -1;
+}
+
 // Klicklage K eines Starts auf einem ganzen Beat (Leitstand-Weg /k/deck/start, Bezug für alle Fälle)
 int64_t referenz_k(const std::string& ab) {
   Lauf x(ab, SOFT);
   bereit(x);
   x.start(1, 4.0);
   x.zyklen(9 * SPB);
-  const auto k = x.klicks(3 * SPB, 9 * SPB);
-  PRUEF(k.size() >= 4);
-  if (k.size() < 4) return 0;
+  // F10 (Welle 2): der Klick am Startsample liegt in der Einblende (DECK_START_EIN) und fällt unter die Klick-Schwelle
+  // 0,05; K wird am zweiten Klick (Beat 5) gemessen. Vor dem Start still, der Startklick trägt Signal.
+  PRUEF(spitze(x, 3 * SPB, 4 * SPB) <= 1e-6 && spitze(x, 4 * SPB, 4 * SPB + 1000) > 0.0);
+  const int64_t e0 = einsatz(x, 3 * SPB, 5 * SPB);
+  std::printf("referenz: Einsatz am Ring %lld, Soll %lld (Beat 4 + Vorhalt)\n", (long long)e0, (long long)(4 * SPB + x.vh));
+  PRUEF(e0 == 4 * SPB + x.vh);  // Startsample-Treue des Leitstand-Wegs
+  const auto k = x.klicks(4 * SPB + 1000, 9 * SPB);
+  PRUEF(k.size() >= 3);
+  if (k.size() < 3) return 0;
   PRUEF(k[1] - k[0] == SPB && k[2] - k[1] == SPB);
-  const int64_t K = k[0] - 4 * SPB;
+  const int64_t K = k[0] - 5 * SPB;
   PRUEF(K > 0 && K < 400);
-  std::printf("referenz: Klick des Starts auf Beat 4 bei Ring %lld = 4 Beats + K, K = %lld (Vorhalt Limiter %d)\n",
+  std::printf("referenz: Klick auf Beat 5 nach dem Start auf Beat 4 bei Ring %lld = 5 Beats + K, K = %lld (Vorhalt Limiter %d)\n",
               (long long)k[0], (long long)K, x.vh);
   return K;
 }
@@ -80,10 +103,15 @@ void fall_play_beat(const std::string& ab, int64_t K) {
   loslassen(x, s + 40, 1, 44);
   x.zyklen(16 * SPB);
   const Klicks k = nach(x, 10 * SPB - 100, 16 * SPB);
-  std::printf("play beat: Druck bei %lld (Phase 0,3), erster Klick %lld, Soll %lld (11 Beats + K), zweiter %lld\n",
-              (long long)s, (long long)k.erster, (long long)(11 * SPB + K), (long long)k.zweiter);
-  PRUEF(k.erster == 11 * SPB + K);
-  PRUEF(k.zweiter == 12 * SPB + K);
+  std::printf("play beat: Druck bei %lld (Phase 0,3), erster gezählter Klick %lld, Soll %lld (12 Beats + K), zweiter %lld\n",
+              (long long)s, (long long)k.erster, (long long)(12 * SPB + K), (long long)k.zweiter);
+  // F10 (Welle 2): Start aus dem Stand auf Beat 11, sein Klick liegt in der Einblende; gezählt ab dem zweiten (Beat 12)
+  PRUEF(k.erster == 12 * SPB + K);
+  PRUEF(k.zweiter == 13 * SPB + K);
+  // Startsample-Treue (Prüfung 2.3 Befund 2): das Deck setzt genau auf Beat 11 ein, einblende-fest gemessen
+  const int64_t e = einsatz(x, 10 * SPB - 100, 16 * SPB);
+  std::printf("play beat: Einsatz am Ring %lld, Soll %lld (11 Beats + Vorhalt)\n", (long long)e, (long long)(11 * SPB + x.vh));
+  PRUEF(e == 11 * SPB + x.vh);
   // Deck-Halter am Sample der Taste (§7.3 Punkt 5)
   const auto h = x.alle(cdj::Ereignis::HALTER, "deck/1/transport");
   PRUEF(!h.empty() && h.front().sample == s && std::string(h.front().text) == "mensch");
@@ -232,9 +260,14 @@ void fall_test_hand(const std::string& ab, int64_t K) {
   x.zyklen(16 * SPB);
   Klicks k = nach(x, 269'000, 16 * SPB);
   std::printf("/test/hand play, Sample 269000 vor dem Zyklus 269824: erster Klick %lld, Soll %lld\n", (long long)k.erster,
-              (long long)(12 * SPB + K));
-  PRUEF(k.erster == 12 * SPB + K);  // nächster erreichbarer Beat, keine phasentreue Verschiebung, kein Start am Blockanfang
-  PRUEF(k.zweiter == 13 * SPB + K);
+              (long long)(13 * SPB + K));
+  // nächster erreichbarer Beat 12, keine phasentreue Verschiebung, kein Start am Blockanfang. F10 (Welle 2): der Klick
+  // auf Beat 12 liegt in der Einblende, gezählt ab dem zweiten (Beat 13)
+  PRUEF(k.erster == 13 * SPB + K);
+  PRUEF(k.zweiter == 14 * SPB + K);
+  const int64_t e1 = einsatz(x, 269'000, 16 * SPB);
+  std::printf("/test/hand play: Einsatz am Ring %lld, Soll %lld (12 Beats + Vorhalt)\n", (long long)e1, (long long)(12 * SPB + x.vh));
+  PRUEF(e1 == 12 * SPB + x.vh);  // Startsample-Treue (Prüfung 2.3 Befund 2)
   PRUEF(x.kern->hand_ereignisse() == 1);
   // Cue laufend über /test/hand (Druck), Loslassen (0) ohne Vorschau ohne Wirkung
   x.test_hand("deck/1/cue", 1.0f, 17 * SPB);
@@ -247,7 +280,11 @@ void fall_test_hand(const std::string& ab, int64_t K) {
   x.test_hand("deck/1/play", 1.0f, vor);
   x.zyklen(24 * SPB);
   const auto kk = x.klicks(20 * SPB, 24 * SPB);
-  PRUEF(!kk.empty() && kk[0] == 21 * SPB + K);
+  PRUEF(!kk.empty() && kk[0] == 22 * SPB + K);  // Start auf Beat 21, F10: erster gezählter Klick Beat 22
+  const int64_t e2 = einsatz(x, 20 * SPB, 24 * SPB);
+  std::printf("/test/hand play Zukunft: Einsatz am Ring %lld, Soll %lld (21 Beats + Vorhalt)\n", (long long)e2,
+              (long long)(21 * SPB + x.vh));
+  PRUEF(e2 == 21 * SPB + x.vh);  // Startsample-Treue (Prüfung 2.3 Befund 2)
   PRUEF(x.kern->hand_ereignisse() == 3);  // play, cue-Druck, play; das Loslassen ohne Vorschau zählt nicht
 }
 
@@ -264,7 +301,7 @@ void fall_negativ(const std::string& ab, int64_t K) {
     PRUEF(x.alle(cdj::Ereignis::HALTER, "deck/2/transport").empty());
     PRUEF(!x.kern->deck(2).laeuft());
   }
-  // Tempo ungleich Basis: kein Stretcher im MVP (Plan 31 F8), Play ohne Wirkung
+  // Tempo ungleich Basis: seit Keylock in Echtzeit startet Play auch hier (2026-10-09; vorher ohne Wirkung, Plan 31 F8)
   {
     Lauf x(ab, MVP);
     bereit(x);
@@ -275,8 +312,8 @@ void fall_negativ(const std::string& ab, int64_t K) {
     const uint64_t ohne = x.kern->hand_ohne_wirkung();
     druck(x, x.kern->sample() + 2 * SPB + 9, 1, 44);
     x.zyklen(x.kern->sample() + 6 * SPB);
-    PRUEF(x.kern->hand_ohne_wirkung() == ohne + 1);
-    PRUEF(!x.kern->deck(1).laeuft());
+    PRUEF(x.kern->hand_ohne_wirkung() == ohne);
+    PRUEF(x.kern->deck(1).laeuft());
   }
   // zweiter Druck vor dem wartenden Start nimmt ihn zurück (quant beat: Start erst am Beat 11)
   {
@@ -288,7 +325,7 @@ void fall_negativ(const std::string& ab, int64_t K) {
     PRUEF(!x.kern->deck(1).laeuft());
     PRUEF(x.klicks(10 * SPB, 14 * SPB).empty());
   }
-  std::printf("negativ: leeres Deck, Tempo 130 gegen Basis 128 und zurückgenommener Start ohne Klick\n");
+  std::printf("negativ: leeres Deck und zurückgenommener Start ohne Klick; Tempo 130 gegen Basis 128 startet\n");
 }
 
 }  // namespace

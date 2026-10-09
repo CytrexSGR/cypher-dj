@@ -24,7 +24,9 @@
         "pruefmodus": {"type": "boolean", "x-typ": "bool", "default": false},
         "hand_osc": {"type": "boolean", "x-typ": "bool", "default": false, "x-quelle": "Scheibe 35, Befund B-O (Entscheidung der Hauptinstanz, Weg 1): /test/hand auch ohne pruefmodus."},
         "filter_guete": {"type": "number", "x-typ": "float", "default": 0.707, "minimum": 0.5, "maximum": 4.0, "x-quelle": "A27 Weg (a), Nachtrag 04 (docs/architektur/stand/04-kanalzug-dsp.md); über 4 gesperrt bis zum Hörvergleich (Subbass +12 dB)."},
-        "hoerschein_pflicht": {"type": "boolean", "x-typ": "bool", "default": true, "x-quelle": "Ohr Task 13, SCHNITTSTELLEN §17 I3a: schaltet PrueferI3 an; aus für Kern-Tests, die Kanäle ohne Hörschein öffnen (kern35.h, test_kern_stopp.cpp)."}
+        "hoerschein_pflicht": {"type": "boolean", "x-typ": "bool", "default": true, "x-quelle": "Ohr Task 13, SCHNITTSTELLEN §17 I3a: schaltet PrueferI3 an; aus für Kern-Tests, die Kanäle ohne Hörschein öffnen (kern35.h, test_kern_stopp.cpp)."},
+        "keylock_maschine": {"type": "string", "x-typ": "str", "default": "r3", "enum": ["r3", "bungee", "bungee_fein"], "x-quelle": "Umbauplan 2026-10-09-bungee-umbau S2: r3 = Rubber Band in Fäden (Rückfall, Vorgabe bis S8); bungee = Bungee synchron im Callback, Korn 512; bungee_fein = Korn 256. Bungee nur in einem mit CYPHERDJ_BUNGEE gebauten Kern."},
+        "keylock": {"type": "boolean", "x-typ": "bool", "default": true, "x-quelle": "Keylock Task 3 (Plan 2026-10-06-keylock-echtzeit.md): Dehner und Fäden im Kern; false: Kern ohne Dehner, die Decks spielen Varispeed, der Regler keylock (§1.5) wirkt nur auf die Loop-Boxen."}
       }
     },
     "leitstand.toml": {

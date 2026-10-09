@@ -32,7 +32,7 @@ Kern::Kern(double start_bpm, cdj_ring_kopf* ring, Befehlsring* befehle, Ereignis
   }
 }
 
-Kern::~Kern() = default;
+Kern::~Kern() { keylock_faeden_stoppen(); }  // Keylock Task 2.5: die Fäden enden vor Decks und Dehnern
 
 void Kern::melde(const Ereignis& e) {
   if (!ereignisse_->schiebe(e)) ++verloren_;
@@ -68,7 +68,8 @@ void Kern::einsortieren(const Befehl& c) {
       set_neu_teile_ab();  // Scheibe 25: Planteile der alten Zeitachse ebenso
       decks_set_neu();     // Scheibe 31: wartende Deck-Befehle ebenso; geladene Decks bleiben geladen
       erz_->leeren();      // Plan 2026-09-27: Erzeuger-Ereignisse der alten Zeitachse ebenso
-      if (Mitschnitt* mt = loops_->leeren()) mitschnitt_melden(mt, 1);  // MVP 2 Scheibe 2: laufender Mitschnitt = abgebrochen
+      loops_->ausklingen(plan_.karte(), sample_);  // F15 (Welle 2): klingende Boxen blenden auf der alten Karte aus
+      if (Mitschnitt* mt = loops_->leeren(sample_)) mitschnitt_melden(mt, 1);  // MVP 2 Scheibe 2: laufender Mitschnitt = abgebrochen
       for (int b = 1; b <= LOOP_BOXEN; ++b) loop_melden(b, sample_, beat0);
       plan_.neu(c.bpm);
       sample_ = 0;
@@ -94,7 +95,7 @@ void Kern::einsortieren(const Befehl& c) {
     }
     case Befehl::ERZ_FENSTER: {  // §4.8 Fenster ersetzen; das verbrauchte Fenster geht mit der Quittung zurück
       const auto* f = static_cast<const ErzFenster*>(c.zeiger);
-      const ErzZaehler z = erz_->fenster(*f, beat0);
+      const ErzZaehler z = erz_->fenster(*f, beat0);  // Glanz 2.7: MIDI-Ströme prüft der Erzeuger gegen gesendet_bis
       Ereignis x{};
       x.art = Ereignis::ERZ_QUITTUNG;
       x.sample = sample_;
@@ -124,7 +125,8 @@ void Kern::einsortieren(const Befehl& c) {
         break;
       }
       if (c.art == Befehl::LOOP_LADEN) {
-        const Loop* alt = loops_->laden(c.deck, static_cast<const Loop*>(c.zeiger));
+        const Loop* alt =
+            loops_->laden(c.deck, static_cast<const Loop*>(c.zeiger), !std::strcmp(c.quelle, "cypher"), sample_);
         if (alt) {
           Ereignis x{};
           x.art = Ereignis::LOOP_ALT;
@@ -132,7 +134,7 @@ void Kern::einsortieren(const Befehl& c) {
           x.zeiger = alt;
           melde(x);
         }
-        loops_frei(sample_);  // Keylock: die Variante des abgelösten Loops
+        loops_frei(sample_);  // was die Box selbst loswird (Task 7: auch verliehene Loops nach der Quittung)
         if (alt && alt == c.zeiger) {  // ungültige Box: der Loop kam gleich zurück
           quittung(c.id, c.quelle, 6, sample_, beat0, "ausserhalb_bereich");
           break;
@@ -140,7 +142,8 @@ void Kern::einsortieren(const Befehl& c) {
         quittung(c.id, c.quelle, 1, sample_, beat0);
         quittung(c.id, c.quelle, 3, sample_, beat0);
       } else {
-        const bool ok = c.art == Befehl::LOOP_START ? loops_->start(c.deck, beat0) : loops_->stopp(c.deck, beat0);
+        const bool ok = c.art == Befehl::LOOP_START ? loops_->start(c.deck, beat0, sample_)
+                                                    : loops_->stopp(c.deck, beat0, sample_);  // Task 7: Ereignis-Sample
         if (!ok) {
           quittung(c.id, c.quelle, 6, sample_, beat0, "nicht_geladen");
           break;
@@ -150,34 +153,12 @@ void Kern::einsortieren(const Befehl& c) {
       loop_melden(c.deck, sample_, beat0);
       break;
     }
-    case Befehl::LOOP_VARIANTE: {  // Keylock: vorgerenderte Variante der Box; die abgelöste geht wie ein alter Loop zurück
-      const Loop* v = static_cast<const Loop*>(c.zeiger);
-      if (!std::strcmp(c.quelle, "cypher") && sw_->ki_gestoppt()) {  // §4.7 Stopp-Taste: die Variante geht ungenutzt zurück
-        if (v) {
-          Ereignis x{};
-          x.art = Ereignis::LOOP_ALT;
-          x.sample = sample_;
-          x.zeiger = v;
-          melde(x);
-        }
-        break;
-      }
-      const Loop* alt = loops_->variante_setzen(c.deck, v);  // ungültige Box oder leere Box: v selbst
-      if (alt) {
-        Ereignis x{};
-        x.art = Ereignis::LOOP_ALT;
-        x.sample = sample_;
-        x.zeiger = alt;
-        melde(x);
-      }
-      break;
-    }
     case Befehl::LOOP_RASTER: {  // Plan Grid (§4.9 /k/loop/raster): sofort, absolut
       if (!std::strcmp(c.quelle, "cypher") && sw_->ki_gestoppt()) {
         quittung(c.id, c.quelle, 6, sample_, beat0, "ki_gestoppt");
         break;
       }
-      const int r = loops_->raster(c.deck, c.versatz_f);
+      const int r = loops_->raster(c.deck, c.versatz_f, sample_);
       if (r != 0) {
         quittung(c.id, c.quelle, 6, sample_, beat0, r == 1 ? "nicht_geladen" : "ausserhalb_bereich");
         break;
@@ -233,10 +214,7 @@ void Kern::einsortieren(const Befehl& c) {
       }
       break;
     case Befehl::TEMPO_RAMPE:
-      if (ein_deck_laeuft()) {  // Scheibe 31, §4.4: bis Scheibe 50 nur der Direktweg
-        quittung(c.id, c.quelle, 6, sample_, beat0, "kein_stretcher");
-        break;
-      }
+      // Welle 3 (ADR 028): laufende Decks folgen der Rampe im Varispeed (deck.cpp), bis Welle 2 hier kein_stretcher
       switch (plan_.rampe(c.id, c.quelle, c.ab_beat, c.ziel_bpm, c.dauer_beats, sample_)) {
         case Einsortiert::angenommen: quittung(c.id, c.quelle, 1, sample_, beat0); break;
         case Einsortiert::verspaetet: break;  // Quittung 5 am Start, in faellige()
@@ -262,6 +240,14 @@ void Kern::einsortieren(const Befehl& c) {
 void Kern::zyklus(int n, int64_t mono_ns) {
   if (mitschnitt_wartend_) mitschnitt_nachreichen();  // MVP 2 Scheibe 3 (E4)
   if (n > MAX_BLOCK) n = MAX_BLOCK;
+  keylock_uebernehmen();  // Keylock (Prüfung m5): gestellte Vorgabe übernehmen, danach kein setze_keylock_vorgabe mehr
+  // Glanz 2.7 (F19): MIDI-Ströme um den Wirt-Rundweg vorziehen; vor dem Einsortieren, damit ERZ_FENSTER ihn schon kennt.
+  // Wechselt das Quantum, springt der Vorhalt mit (bekannte Grenze, Plan Glanz 2.7).
+#ifdef CYPHERDJ_MUTATION_MIDI_VORHALT_FEST
+  erz_->setze_midi_vorhalt(537);  // Fehlerfall Prüfung R5: Vorhalt fest für Quantum 256, unabhängig von n
+#else
+  erz_->setze_midi_vorhalt((int64_t)ERZ_MIDI_RUNDWEG_ZYKLEN * n + ERZ_MIDI_VORHALT_REST);
+#endif
   // 1) Vergangene Segmente verwerfen, Befehle am Blockanfang einsortieren, Fälliges im Block melden (§1.3, §4.2)
   neue_zeitachse_ = false;
   plan_.verwerfe_vor(sample_);
@@ -286,8 +272,11 @@ void Kern::zyklus(int n, int64_t mono_ns) {
   u.bpm = karte.bpm_at((double)n0);
   u.k = karte.k_at((double)n0);
   u.generation = generation_;
+  u.verloren = (int64_t)verloren_;  // Glanz 2.6: ein verlorenes LOOP_ALT wird so im Netz erkennbar
+  u.keylock_aus = keylock_knopf() ? 0 : 1;  // Keylock Task 3: Stand des Reglers (Diagnose)
   melde(u);
   decks_zustand(n0, n);  // Scheibe 31: /zustand/deck direkt nach /uhr desselben Zyklus (§5.5)
+  boxen_zustand(n0, n);  // Keylock 7b.3: /zustand/box im selben Zyklus (§5.5b)
 
   // 3) Takt-Anfänge in diesem Block (§5.3): Beats 4(t-1) mit llround(sample_at) in [n0, n0+n)
   const double b_lo = karte.beat_at((double)n0 - 0.5);
@@ -349,6 +338,8 @@ void Kern::zyklus(int n, int64_t mono_ns) {
   w_ += (uint64_t)n;
   cdj_setze(&ring_->w, w_);
   sample_ = n0 + n;
+  keylock_wecken();  // Keylock Task 2.5: Vorbereiter und Arbeits-Threads (Aufträge und Ring-Verbrauch dieses Zyklus)
+  keylock_antrieb();  // Bungee S2: statt der Fäden, im Callback selbst (nur mit keylock_maschine = bungee)
 }
 
 void Kern::loops_frei(int64_t smp) {  // Keylock: Freigabe-Ring der Boxen leeren; jeder Zeiger geht einmal an den Netz-Faden

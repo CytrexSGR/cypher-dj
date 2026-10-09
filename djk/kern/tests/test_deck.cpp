@@ -12,6 +12,7 @@
 
 #include "cypherdj/deck.h"
 #include "pruef.h"
+#include "sprungmass.h"
 
 static bool g_waechter = false;
 static long g_allokationen = 0;
@@ -47,6 +48,7 @@ struct Probe {
 };
 
 static float rampe(int, int64_t f, int kanal) { return kanal == 0 ? (float)f : -(float)f; }
+static float sinus100(int, int64_t f, int) { return (float)(0.5 * std::sin(2.0 * M_PI * 100.0 * (double)f / 48000.0)); }
 
 int main() {
   Probe p(200000, 1, rampe);
@@ -65,22 +67,64 @@ int main() {
   PRUEF(still && !d.laeuft() && d.geladen());
   PRUEF_NAH(d.quell_beat_bei(0), 0.0, 0.0);
 
-  // 2) Start mitten im Block (der Kern teilt am Ziel-Sample): ab Sample 1000 erklingt Frame 500, bitgenau
+  // 2) Start mitten im Block (der Kern teilt am Ziel-Sample): ab Sample 1000 erklingt Frame 500. F10 (Welle 2): aus dem
+  // Stand blendet das Deck über DECK_START_EIN Frames ein (Gain (k+1)/N wie blende.h), danach bitgenau.
   leer();
   g_waechter = true;
   d.block(0, 1000, l.data(), r.data(), 0);
   d.start(1000, 500);
   d.block(1000, 3096, l.data() + 1000, r.data() + 1000, 1000);
   g_waechter = false;
-  bool genau = true;
+  bool genau = true, ein = true;
   for (int i = 0; i < 4096; ++i) {
     const float soll = i < 1000 ? 0.0f : (float)(500 + i - 1000);
+    if (i >= 1000 && i < 1000 + cdj::DECK_START_EIN) {
+      const float g = (float)(i - 1000 + 1) / (float)cdj::DECK_START_EIN;
+      ein = ein && std::fabs(l[i] - soll * g) <= 1e-5f * soll && std::fabs(r[i] + soll * g) <= 1e-5f * soll;
+      continue;
+    }
     genau = genau && l[i] == soll && r[i] == -soll;
   }
   PRUEF(genau);
+  PRUEF(ein);
+  PRUEF(g_allokationen == 0);
   PRUEF(d.laeuft() && d.frame_bei(4096) == 3596);
   PRUEF_NAH(d.quell_beat_bei(1000), 500.0 / 22500.0, 1e-12);
   PRUEF_NAH(d.beats_bis_ende_bei(1000), (200000.0 - 500.0) / 22500.0, 1e-12);
+  // 2b) F10 Fehlerfall am Sinus (Erhebung deck_probe P1: 0,5000, x76,4): Start aus dem Stand auf der Spitze (Frame 120 eines
+  // 100-Hz-Sinus, 0,5). Soll: größter Sprung <= 0,5/DECK_START_EIN + natürlich, danach bitgenau das Material.
+  {
+    Probe ps(48000, 1, sinus100);
+    cdj::Deck dsin;
+    dsin.lade(&ps.m, 0);
+    std::vector<float> yl(4096, 0.0f), yr(4096, 0.0f);
+    dsin.block(0, 1000, yl.data(), yr.data(), 0);
+    dsin.start(1000, 120);
+    dsin.block(1000, 3096, yl.data() + 1000, yr.data() + 1000, 1000);
+    const sprung::Mass m = sprung::messe(yl, 900, 1300);
+    const double grenze = 0.5 / cdj::DECK_START_EIN + sprung::natuerlich(100.0, 0.5);
+    std::printf("F10 Start aus dem Stand: größter Sprung %.5f bei %lld (Grenze %.5f)\n", m.d1, (long long)m.ort1, grenze);
+    PRUEF(m.d1 <= grenze + 1e-6);
+    bool danach = true;
+    for (int i = 1000 + cdj::DECK_START_EIN; i < 4096; ++i) danach = danach && yl[i] == sinus100(0, 120 + i - 1000, 0);
+    PRUEF(danach);
+  }
+  // 2c) F10 x F27: zweiter Kopfwechsel in der Einblende (Start auf schon laufendem Deck 20 Samples nach dem Start aus dem
+  // Stand, Spitze -> Tal). Der alte Kopf blendet vom Ist-Gain der Einblende aus, nicht von 1 (sonst Sprung ~0,28).
+  {
+    Probe ps(48000, 1, sinus100);
+    cdj::Deck d2;
+    d2.lade(&ps.m, 0);
+    std::vector<float> yl(4096, 0.0f), yr(4096, 0.0f);
+    d2.start(1000, 120);
+    d2.block(1000, 20, yl.data() + 1000, yr.data() + 1000, 0);
+    d2.start(1020, 360);  // Tal (−0,5), Deck läuft: 128-Frame-Blende
+    d2.block(1020, 3076, yl.data() + 1020, yr.data() + 1020, 0);
+    const sprung::Mass m = sprung::messe(yl, 900, 1400);
+    const double grenze = 0.5 / cdj::DECK_START_EIN + 1.0 / cdj::DECK_BLENDE + sprung::natuerlich(100.0, 0.5);
+    std::printf("F10 zweiter Start in der Einblende: größter Sprung %.5f bei %lld (Grenze %.5f)\n", m.d1, (long long)m.ort1, grenze);
+    PRUEF(m.d1 <= grenze + 1e-6);
+  }
 
   // 3) Start auf laufendem Deck: 128-Frame-Blende vom alten Lesekopf, danach bitgenau die neue Stelle
   leer();
@@ -110,7 +154,8 @@ int main() {
   leer();
   d.start(10000, 199990);
   d.block(10000, 100, l.data(), r.data(), 0);
-  PRUEF(l[9] == 199999.0f && l[10] == 0.0f && !d.laeuft() && d.position() == 200000);
+  PRUEF(std::fabs(l[9] - 199999.0f * 10.0f / (float)cdj::DECK_START_EIN) <= 0.05f && l[10] == 0.0f && !d.laeuft() &&
+        d.position() == 200000);
   PRUEF_NAH(d.beats_bis_ende_bei(10100), 0.0, 0.0);
 
   // 6) Stems: Summe ((drums + bass) + vocals) + other, 0 dB bitgleich; vocals stumm; Verlauf je Sample
@@ -126,6 +171,7 @@ int main() {
   ds.block(0, 100, l.data(), r.data(), 0);
   bool summe = true;
   for (int f = 0; f < 100; ++f) {
+    if (f < cdj::DECK_START_EIN) continue;  // F10: Einblende
     float soll = ((stemwert(0, f, 0) + stemwert(1, f, 0)) + stemwert(2, f, 0)) + stemwert(3, f, 0);
     summe = summe && l[f] == soll;
   }
@@ -136,6 +182,7 @@ int main() {
   bool ohne_vocals = true;
   for (int i = 0; i < 100; ++i) {
     const int f = 100 + i;
+    if (f < cdj::DECK_START_EIN) continue;
     ohne_vocals = ohne_vocals && l[i] == ((stemwert(0, f, 0) + stemwert(1, f, 0)) + 0.0f) + stemwert(3, f, 0);
   }
   PRUEF(ohne_vocals);
@@ -216,7 +263,7 @@ int main() {
   cdj::Deck dl2;
   dl2.lade(&p.m, 0);
   dl2.start(0, 9000);
-  dl2.loop_an(10000, 3000);
+  dl2.loop_an(0, 10000, 3000);
   PRUEF(dl2.loop_aktiv());
   std::vector<float> ll(20000), rr(20000);
   g_waechter = true;
@@ -243,7 +290,7 @@ int main() {
   for (int i = 3000; i < 8000; ++i) { mx = std::max(mx, l3[i]); mn = std::min(mn, l3[i]); }
   PRUEF(mn >= 10500.0f - cdj::DECK_BLENDE - 1.0f && mx <= 13500.0f);   // Fenster jetzt [10 500, 13 500), Blende davor
   // loop_aus: der Kopf läuft von der Stelle linear weiter, über die alte Naht hinaus
-  dl2.loop_aus();
+  dl2.loop_aus(0);  // Keylock Task 2: mit Sample (ohne Dehner ohne Wirkung)
   PRUEF(!dl2.loop_aktiv());
   std::vector<float> l4(8000), r4(8000);
   for (int s = 0; s < 8000; s += 256) dl2.block(28000 + s, std::min(256, 8000 - s), l4.data() + s, r4.data() + s, 0);
@@ -251,7 +298,7 @@ int main() {
   for (int i = 1; i < 8000; ++i) linear = linear && l4[i] == l4[i - 1] + 1.0f;
   PRUEF(linear && l4[7999] > 13500.0f);
   // Laden löscht den Loop
-  dl2.loop_an(10000, 3000);
+  dl2.loop_an(0, 10000, 3000);
   dl2.lade(&p.m, 36000);
   PRUEF(!dl2.loop_aktiv());
 
@@ -260,7 +307,7 @@ int main() {
   cdj::Deck dz;
   dz.lade(&p.m, 0);
   dz.start(0, 9000);
-  dz.loop_an(10000, 3000);   // Kopf bei Sample s liest 9000 + s: Frame 13 000 (Naht) bei Sample 4000
+  dz.loop_an(0, 10000, 3000);   // Kopf bei Sample s liest 9000 + s: Frame 13 000 (Naht) bei Sample 4000
   std::vector<float> l5(6000), r5(6000);
   for (int s = 0; s < 3900; s += 256) dz.block(s, std::min(256, 3900 - s), l5.data() + s, r5.data() + s, 0);
   const int64_t ende_z = dz.stopp(3900);   // Rampe 3900 … 4380 überquert die Naht bei 4000
@@ -270,7 +317,7 @@ int main() {
   PRUEF(!dz.laeuft());
   PRUEF(l5[5000] == 0.0f && l5[5999] == 0.0f);
   // Start beendet einen Loop
-  dz.loop_an(10000, 3000);
+  dz.loop_an(0, 10000, 3000);
   dz.start(6000, 20000);
   PRUEF(!dz.loop_aktiv());
   // Sprung in der Stopp-Rampe: der Stopp bleibt

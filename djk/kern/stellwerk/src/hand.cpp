@@ -136,7 +136,22 @@ void Stellwerk::hand_anwenden(const Griff& g, int64_t sample, int i, double beat
   }
   neu = std::min(d.max, std::max(d.min, neu));
   z.hand_beat = beat;
-  setze_wert(r, i, neu);
+  if (d.ganzzahlig && d.schalt_samples > 0) {
+    // F18 (Audit 2026-10-01): ein Schalter mit Schaltrampe (kill/*, 5 ms, §1.5) springt nicht, sondern läuft die
+    // Schaltrampe als S-Kurve vom Ist-Wert (dieselbe Formel wie ein Setzen, formel.h). Ein Griff mitten in der Rampe
+    // beginnt beim Ist-Wert. Am Griff-Sample steht noch der Ist-Wert (wie ein Teil am Start-Sample, ablauf.cpp:32).
+    if (!z.hr_an) {
+      z.hr_an = true;
+      n_hand_rampen_++;
+    }
+    z.hr_von = z.wert;
+    z.hr_ziel = neu;
+    z.hr_sA = sample;
+    z.hr_schalt = d.schalt_samples;
+    setze_wert(r, i, z.wert);
+  } else {
+    setze_wert(r, i, neu);
+  }
   if (z.halter.art != HalterArt::mensch) {
     Halter h;
     h.art = HalterArt::mensch;

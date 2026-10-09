@@ -15,8 +15,16 @@ def test_gruen():
     assert pruefe_konfig.pruefe(vertragstext.lies(), SCHEMA) == []
 
 
-def test_36_schluessel_am_text():
-    assert len(vertragstext.konfig_schluessel(vertragstext.lies())) == 36  # 34 + filter_guete (A27) + hand_osc (35 B-O)
+def schema_schluessel(schema):
+    """(Datei, Schlüssel) aus konfig.schema.json, ohne die Pflichtangabe version."""
+    return {(datei, k) for datei, teil in schema["$defs"].items() for k in teil["properties"] if k != "version"}
+
+
+def test_schluessel_am_text_wie_im_schema():
+    im_text = vertragstext.konfig_schluessel(vertragstext.lies())
+    im_schema = schema_schluessel(SCHEMA)
+    assert len(im_schema) > 0 and len(im_text) == len(im_schema)
+    assert {(d, k) for d, k, _, _ in im_text} == im_schema
 
 
 def test_falsche_vorgabe_ist_rot():

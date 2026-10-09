@@ -54,6 +54,7 @@ for (const [p, e] of Object.entries({
   'fx/1/rueckweg': r('db', -200, 0, 0), 'fx/2/rueckweg': r('db', -200, 0, 0),
   'fx/3/rueckweg': r('db', -200, 0, 0), 'fx/4/rueckweg': r('db', -200, 0, 0),
   'duck/tiefe': r('db', -24, 0, 0), 'duck/release': r('linear', 50, 600, 200),
+  keylock: r('schalter', 0, 1, 1),   // Keylock 3 (Fassung 4): EIN Knopf für alle Quellen, alle dürfen
 })) tabelle.set(p, { pfad: p, kanal: null, ...e });
 
 export const REGLER: ReadonlyMap<string, ReglerInfo> = tabelle;

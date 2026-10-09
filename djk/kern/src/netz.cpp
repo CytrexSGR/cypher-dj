@@ -172,6 +172,16 @@ void Netz::hallo(const osc::Nachricht& m, int64_t jetzt_ns) {
     sende_neustart(port);
     sende_stand(port);
   }
+  // Keylock 3b (Prüfung MINOR 4): der Kern meldet Regler nur bei Änderung (§5.7); ein neuer Abonnent (die Seite nach
+  // ihrem Neustart) wüsste sonst nicht, ob der Knopf aus steht. Stand aus der letzten /uhr, Halter frei (nur Setzen);
+  // zuletzt, nach /e/neustart, /e/fx/routing und /q/stand (deren Reihenfolge bleibt).
+#ifndef CYPHERDJ_MUTATION_KEYLOCK_HALLO_OHNE_KNOPF
+  if (erstes_in_generation && kl_knopf_bekannt_) {  // auch nach einem Kern-Neustart (Stand aus dem Zustand)
+    osc::Schreiber r(v::e_regler);
+    r.s("keylock").f(kl_knopf_aus_ ? 0.0f : 1.0f).s("frei").h(stand_sample_).d(stand_beat_);
+    an_port(port, r);
+  }
+#endif
   schreibe_abonnenten();
 }
 
@@ -500,7 +510,8 @@ void Netz::ereignisse_senden() {
       stand_sample_ = e.sample;
       stand_beat_ = e.beat;
       stand_bpm_ = e.bpm;
-      keylock_tempo(e.bpm);
+      kl_knopf_aus_ = e.keylock_aus != 0;  // Keylock Task 3b: Stand des Reglers keylock für neue Abonnenten
+      kl_knopf_bekannt_ = true;
       stand_generation_ = e.generation;
       osc::Schreiber s(v::uhr);
       s.h(e.sample).h(e.mono_ns).d(e.beat).d(e.bpm).d(e.k);
@@ -564,7 +575,7 @@ void Netz::ereignisse_senden() {
       if (!deck_ereignis(e) && !erz_ereignis(e)) loop_ereignis(e);  // Scheibe 31, Plan 2026-09-27, MVP 2
     }
   }
-  keylock_zyklus();  // Keylock Slice 3: fertige Varianten einreihen, Render auslösen
+  keylock_zyklus();  // Keylock Slice 4: umgerechnete REC-Mitschnitte schreiben
 }
 
 void Netz::zustand_senden(int64_t jetzt_ns) {

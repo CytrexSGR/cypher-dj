@@ -240,3 +240,22 @@ def test_s7_fahre_form_unbekannt_abgewiesen(tmp_path):
     s = Steuerung(FahrHost(), str(tmp_path), None, BEREICHE)
     r = s.bearbeite({"befehl": "fahre", "name": "a_filter1_cutoff", "bis": 0.0, "dauer": 1.0, "form": "kurvig"}, 100.0)
     assert r["ok"] is False and "form" in r["fehler"]
+
+
+def test_notensteuerung_spielt_noten_ohne_surge_zustand(tmp_path):
+    from wirtsteuerung import NotenSteuerung
+
+    class OhneZustand(FakeHost):
+        def save_plugin_state(self, pid, pfad):
+            raise AssertionError("SFZ-Wirt liest keinen Surge-Zustand")
+
+    h = OhneZustand()
+    s = NotenSteuerung(h)
+    assert s.bearbeite({"befehl": "note", "note": 60, "velocity": 30, "dauer": 0.5}, 10.0) == {"ok": True}
+    s.takt(10.5)
+    assert h.noten == [(0, 60, 30), (0, 60, 0)]
+    assert s.bearbeite({"befehl": "note", "note": 60, "velocity": 0}, 0.0)["ok"] is False
+    assert s.bearbeite({"befehl": "halte"}, 0.0) == {"ok": True, "gehalten": 0}
+    for art in ("lade", "zustand", "fahre"):
+        r = s.bearbeite({"befehl": art, "pfad": "/x.fxp", "name": "a_filter1_cutoff", "bis": 1}, 0.0)
+        assert r["ok"] is False and "sfz" in r["fehler"], r

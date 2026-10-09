@@ -146,7 +146,7 @@ const deckArt = {
     if (d.status === 0) return 'nicht_geladen';
     if (t.quelle === 'cypher' && deckHalterMensch(K, d, beat)) return 'deck_beruehrt';
     if (t.quelle === 'cypher' && K.ki?.gestoppt) return 'ki_gestoppt';
-    if (t.aktion === 'start' && Math.abs(K.uhr.bpm(s) / d.m.basis_bpm - 1) >= 1e-6) return 'kein_stretcher';
+    // Welle 3 (ADR 028): Start bei jedem Tempo, das Deck folgt im Varispeed (bis Welle 2 hier kein_stretcher)
     if (t.aktion === 'hotcue' && d.hotcues[t.nr] === undefined) return 'ausserhalb_bereich';
     if (t.aktion === 'basis_tausch') {
       const r = lesefassung(K, d.m.material_id, t.basis_bpm, t.fassung, d.m.mit_stems);
@@ -324,7 +324,7 @@ export default {
       if (!d || !d.m) continue;
       const p = pos(d, b);
       K.aus('/zustand/deck', [d.nr, d.status, d.m.material_id, d.m.basis_bpm, d.m.fassung, p, d.loop || d.roll ? Infinity : d.m.Q - p,
-        K.uhr.bpm(s0) / d.m.basis_bpm, VORLAUF_MS, 0, -1, 0]);
+        K.uhr.bpm(s0) / d.m.basis_bpm, VORLAUF_MS, 0, -1, 0, 0, 0]);   // Keylock Task 3: Zähler 0 (kein Dehner in der Attrappe)
     }
     if (Math.floor((s1 - 1) / 2400) !== Math.floor((s0 - 1) / 2400)) {
       for (const d of K.decks) if (d?.m) K.aus('/pegel', [`deck/${d.nr}`, -200, -200, -200, -200, -200, -200, -200]);

@@ -16,52 +16,10 @@
 
 #include "cypherdj/kern.h"
 #include "cypherdj/netz.h"
+#include "gegenstelle.h"
 #include "pruef.h"
 
 namespace v = cypherdj::osc;
-
-struct Gegenstelle {
-  int sock;
-  int port;
-  int kern_port;
-  char buf[2048];
-  cdj::osc::Nachricht m;
-  explicit Gegenstelle(int kp) : kern_port(kp) {
-    sock = socket(AF_INET, SOCK_DGRAM, 0);
-    sockaddr_in a{};
-    a.sin_family = AF_INET;
-    a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    bind(sock, (sockaddr*)&a, sizeof a);
-    socklen_t l = sizeof a;
-    getsockname(sock, (sockaddr*)&a, &l);
-    port = ntohs(a.sin_port);
-  }
-  ~Gegenstelle() { close(sock); }
-  void sende(const cdj::osc::Schreiber& s) {
-    sockaddr_in a{};
-    a.sin_family = AF_INET;
-    a.sin_port = htons((uint16_t)kern_port);
-    a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    sendto(sock, s.daten(), s.groesse(), 0, (sockaddr*)&a, sizeof a);
-  }
-  bool warte(const char* adresse, int ms) {
-    for (int t = 0; t < ms; ++t) {
-      pollfd pf{sock, POLLIN, 0};
-      if (poll(&pf, 1, 1) > 0) {
-        ssize_t r = recv(sock, buf, sizeof buf, 0);
-        if (r > 0 && cdj::osc::lesen(buf, (size_t)r, m) && !std::strcmp(m.adresse, adresse)) return true;
-      }
-    }
-    m.anzahl = 0;
-    m.typen = "";
-    return false;
-  }
-  const char* s(int i) const { return (i < m.anzahl && m.werte[i].typ == 's') ? m.werte[i].s : "<fehlt>"; }
-  int32_t i(int k) const { return (k < m.anzahl && m.werte[k].typ == 'i') ? m.werte[k].i : -999; }
-  int64_t h(int k) const { return (k < m.anzahl && m.werte[k].typ == 'h') ? m.werte[k].h : -999; }
-  double d(int k) const { return (k < m.anzahl && m.werte[k].typ == 'd') ? m.werte[k].d : -999.0; }
-  float f(int k) const { return (k < m.anzahl && m.werte[k].typ == 'f') ? m.werte[k].f : -999.0f; }
-};
 
 // Holt den nächsten Befehl aus dem Ring (wartet bis zu 500 ms, der Netz-Faden reiht asynchron ein).
 static bool hole(cdj::Befehlsring* rb, cdj::Befehl& b) {
@@ -191,10 +149,13 @@ int main() {
   e.art = cdj::Ereignis::DECK;
   e.deck = 1; e.status = 2; std::strcpy(e.material_id, "f0000000000000a1"); e.basis_bpm = 128.0; e.fassung = 1;
   e.quell_beat = 24.5; e.beats_bis_ende = 231.5; e.faktor = 1.0; e.vorlauf_ms = 10.666667f;
+  e.hoerweg = 0; e.stretcher_fuell = -1;  // Keylock Task 2b: die Felder trägt jetzt das Ereignis
+  e.keylock_unterlauf = 3; e.keylock_aufgegeben = 7;  // Keylock Task 3 (Fassung 4.1 Punkt 3): Zähler des Decks
   ere->schiebe(e);
   PRUEF(g.warte("/zustand/deck", 500));
-  PRUEF(!std::strcmp(g.m.typen, "iisdidddfiif") && g.i(0) == 1 && g.i(1) == 2 && !std::strcmp(g.s(2), "f0000000000000a1") &&
+  PRUEF(!std::strcmp(g.m.typen, "iisdidddfiifii") && g.i(0) == 1 && g.i(1) == 2 && !std::strcmp(g.s(2), "f0000000000000a1") &&
         g.d(3) == 128.0 && g.i(4) == 1 && g.d(5) == 24.5 && g.d(6) == 231.5 && g.d(7) == 1.0 && g.i(9) == 0 && g.i(10) == -1);
+  PRUEF(!std::strcmp(g.m.typen, "iisdidddfiifii") && g.i(12) == 3 && g.i(13) == 7);
   PRUEF_NAH(g.f(8), 10.666667, 1e-5);
   cdj::Ereignis ge{};
   ge.art = cdj::Ereignis::GELADEN;
@@ -239,6 +200,22 @@ int main() {
   ere->schiebe(ra);
   PRUEF(g.warte("/e/raster", 500) && !std::strcmp(g.m.typen, "isdfh") && g.i(0) == 1 &&
         !std::strcmp(g.s(1), "1ac28792d355a38b") && g.d(2) == 33.5 && g.f(3) == -5.0f && g.h(4) == 123456);
+  // Keylock 3b (Prüfung MINOR 4): ein NEUER Abonnent (etwa die Seite nach ihrem Neustart) bekommt den Stand des Knopfs als
+  // /e/regler keylock, aus /uhr (Ereignis::keylock_aus); ein Herzschlag eines Bekannten nicht.
+  for (int aus = 1; aus >= 0; --aus) {
+    cdj::Ereignis u{};
+    u.art = cdj::Ereignis::UHR;
+    u.sample = 480000; u.beat = 20.0; u.bpm = 128.0; u.keylock_aus = aus;
+    ere->schiebe(u);
+    PRUEF(g.warte("/uhr", 500));
+    Gegenstelle n(netz.port());
+    { cdj::osc::Schreiber s(v::k_hallo); s.s(aus ? "seite1" : "seite0").i(n.port).i(1); n.sende(s); }
+    PRUEF(n.warte("/e/regler", 500) && !std::strcmp(n.m.typen, "sfshd") && !std::strcmp(n.s(0), "keylock") &&
+          n.f(1) == (aus ? 0.0f : 1.0f) && n.h(3) == 480000);
+    { cdj::osc::Schreiber s(v::k_hallo); s.s(aus ? "seite1" : "seite0").i(n.port).i(1); n.sende(s); }
+    PRUEF(n.warte("/k/willkommen", 500) && !n.warte("/e/regler", 100));  // Herzschlag: kein zweites Mal
+    { cdj::osc::Schreiber s(v::k_tschuess); s.s(aus ? "seite1" : "seite0"); n.sende(s); }
+  }
   stop = true;
   faden.join();
   delete bef;  // ASan/LSan: Ringe wie in test_netz25 freigeben

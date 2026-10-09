@@ -17,6 +17,8 @@ bool ist_deck_kanal(const char* kanal_name) { return kanal_name && std::strncmp(
 
 bool ist_erzeuger_kanal(const char* kanal_name) { return kanal_name && std::strncmp(kanal_name, "erz/", 4) == 0; }
 
+bool ist_pad_kanal(const char* kanal_name) { return kanal_name && std::strncmp(kanal_name, "pad/", 4) == 0; }
+
 }  // namespace
 
 void HoerscheinRegister::setze(const Schein& s, double beat_jetzt) {
@@ -91,9 +93,11 @@ Grund PrueferI3::vor_teilstart(const Sicht& s, const TeilSicht& t) {
 
   // Andreas 2026-09-29: „ja sperre kann für strudel kanäle fallen“. Erzeuger-Kanäle erz/* öffnen ohne Hörschein: ihr
   // Inhalt ist Cyphers eigenes Muster. Der Kern hält hier nur Stop Cypher (ki_stopp); AUTO hält der Seiten-Server (409 auto_aus
-  // für Cyphers /spur und /regler auf erz/<n>, Studio S6 F4), Stop Cypher dort inkl. Wirt und Muster. Deck- und Pad-Kanäle bleiben gesperrt.
+  // für Cyphers /spur und /regler auf erz/<n>, Studio S6 F4), Stop Cypher dort inkl. Wirt und Muster. Deck-Kanäle bleiben gesperrt.
   const char* kanal_name = s.tabelle().kanal_name(d.kanal);
   if (ist_erzeuger_kanal(kanal_name)) return Grund::kein;
+  // Andreas 2026-10-05: pad/* wie erz/*; die Herkunftsprüfung (eigener Mitschnitt) liegt in der Seite.
+  if (ist_pad_kanal(kanal_name)) return Grund::kein;
 
   if (!t.hoerschein || !t.hoerschein[0]) return Grund::kein_hoerschein;
   const Schein* sch = reg_.finde(t.hoerschein);

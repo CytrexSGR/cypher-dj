@@ -13,6 +13,9 @@ hat dann analyse_quelle "stems" und keine Basis-Datei. --summe-als <material_id>
 Material ohne Stems, dessen basis.f32 die float32-Summe der vier Stems in genau dieser Reihenfolge ist (Offline-Summe
 für die Abnahme „vier Stems summieren am Ziel zur Offline-Summe“).
 
+Mit --sinus-links F trägt der linke Kanal statt der Klicks einen Dauer-Sinus F Hz (Spitze 0,5, Phase 0 bei Frame 0), der
+rechte die Klicks (Keylock Task 2.5: Tonhöhe links und Lage rechts aus EINEM Deck, test_kern_keylock_faeden).
+
 Fehlerfälle für den Lader: --nan-bei F schreibt NaN in Frame F (links und rechts); --falsche-pruefsumme trägt eine
 andere sha256 in fassung.json ein. Größe: --mib N macht die Basis N MiB groß (Klicks nur in den ersten --beats Beats,
 danach Nullen); --duenn legt sie als dünne Datei an (ftruncate, keine Daten, sha256 nur Form), für die Budget-Probe.
@@ -51,8 +54,9 @@ def klick_frame(q, erster, bpm):
 class Spur:
     """Erzeugt einen Kanal-Abschnitt [a, e) (Stereo, float32) für eine Stimme."""
 
-    def __init__(self, art, frames, erster, bpm, beats, eins):
+    def __init__(self, art, frames, erster, bpm, beats, eins, sinus_links=None):
         self.art, self.frames, self.erster, self.bpm, self.beats, self.eins = art, frames, erster, bpm, beats, eins
+        self.sinus_links = sinus_links
         self.form = klickform()
         self.ereignisse = []   # (frame, pegel, form)
         if art == "klick":
@@ -83,6 +87,9 @@ class Spur:
             if lo < hi:
                 x[lo - a:hi - a, 0] += pegel * form[lo - f:hi - f]
                 x[lo - a:hi - a, 1] += pegel * form[lo - f:hi - f]
+        if self.sinus_links:
+            t = np.arange(a, e, dtype=np.float64)
+            x[:, 0] = (0.5 * np.sin(2.0 * math.pi * self.sinus_links * t / RATE)).astype(np.float32)
         return x
 
 
@@ -188,6 +195,7 @@ def main(argv=None):
     ap.add_argument("--falsche-pruefsumme", action="store_true")
     ap.add_argument("--mib", type=int, help="Basis genau so viele MiB groß")
     ap.add_argument("--duenn", action="store_true", help="mit --mib: dünne Datei ohne Daten")
+    ap.add_argument("--sinus-links", type=float, help="linker Kanal: Dauer-Sinus mit dieser Frequenz (Hz) statt Klicks")
     a = ap.parse_args(argv)
     fpb = 60.0 / a.bpm * RATE
     a.frames = int(math.ceil(a.erster + (a.beats + a.nachlauf_beats) * fpb))
@@ -195,6 +203,8 @@ def main(argv=None):
         a.frames = a.mib * (1 << 20) // 8
     if a.stems and (a.duenn or a.mib):
         ap.error("--stems nicht zusammen mit --mib oder --duenn")
+    if a.sinus_links and a.stems:
+        ap.error("--sinus-links nicht zusammen mit --stems")
     pathlib.Path(a.ziel).mkdir(parents=True, exist_ok=True)
     args = (a.frames, a.erster, a.bpm, a.beats, a.eins)
     aus = []
@@ -213,7 +223,8 @@ def main(argv=None):
             b.nan_bei = None
             aus.append(ein_material(a.ziel, a.summe_als, b, {"basis": summe}, "basis"))
     else:
-        aus.append(ein_material(a.ziel, a.material_id, a, {"basis": Spur("klick", *args).abschnitt}, "basis"))
+        aus.append(ein_material(a.ziel, a.material_id, a,
+                                {"basis": Spur("klick", *args, sinus_links=a.sinus_links).abschnitt}, "basis"))
     for ordner, frames, sha in aus:
         print(json.dumps({"material_id": pathlib.Path(ordner).parents[1].name, "ordner": ordner, "frames": frames,
                           "sha256": sha, "dauer_s": round(frames / RATE, 3)}))

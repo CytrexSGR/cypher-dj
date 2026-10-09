@@ -7,13 +7,13 @@ namespace cypherdj::stellwerk {
 
 void Stellwerk::melde_hand(int r, int64_t sample) {
   ReglerZustand& z = reg_[r];
-  z.hand_wert = z.wert;
+  z.hand_wert = fest(z);
   z.hand_sample = sample;
   if (sample - z.hand_gemeldet_sample >= HAND_MELDUNG_ABSTAND) {
     Ereignis* e = neues_ereignis(EreignisArt::hand, sample);
     if (e) {
       e->regler = static_cast<int16_t>(r);
-      e->wert = z.wert;
+      e->wert = fest(z);
     }
     z.hand_gemeldet_sample = sample;
     return;
@@ -46,7 +46,7 @@ void Stellwerk::melder_zyklusende(int64_t s_letzt) {
   for (int k = 0; k < n_aend_; k++) {
     const int r = aend_[k].regler;
     ReglerZustand& z = reg_[r];
-    if (z.wert != z.gemeldet && !z.ausstehend) {
+    if (fest(z) != z.gemeldet && !z.ausstehend) {
       z.ausstehend = true;
       ausstehend_regler_[n_ausstehend_regler_++] = static_cast<int16_t>(r);
     }
@@ -54,7 +54,7 @@ void Stellwerk::melder_zyklusende(int64_t s_letzt) {
   for (int k = 0; k < n_ausstehend_regler_;) {
     const int r = ausstehend_regler_[k];
     ReglerZustand& z = reg_[r];
-    if (z.wert == z.gemeldet) {
+    if (fest(z) == z.gemeldet) {
       z.ausstehend = false;
       ausstehend_regler_[k] = ausstehend_regler_[--n_ausstehend_regler_];
     } else if (s_letzt - z.gemeldet_sample >= REGLER_MELDUNG_ABSTAND) {

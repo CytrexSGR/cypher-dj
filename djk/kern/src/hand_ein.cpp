@@ -38,7 +38,7 @@ int HandEin::ereignis(const uint8_t* daten, size_t groesse, uint32_t versatz, in
     case hand::AusgabeArt::regler_relativ:
     case hand::AusgabeArt::regler_beruehrung:
     case hand::AusgabeArt::regler_umschalten: {
-      const float jetzt = e.regler >= 0 ? st.wert(e.regler) : 0.0f;
+      const float jetzt = e.regler >= 0 ? st.wert_fest(e.regler) : 0.0f;  // F18: Umschalten nach dem Ziel der Rampe
       if (!hand::zu_griff(a, m, jetzt, &aus->griff)) return 0;
       aus->art = HandArt::griff;
       return 1;

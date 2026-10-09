@@ -3,7 +3,10 @@
 # Leitstand, Seite oder Drums (erzeuger1) anzuhalten. Andreas 2026-10-03: „in einer live session muss man auch andere
 # dinge laden können". djk-start --instrumente ruft denselben Weg mit --nur-wirte.
 #
-# Aufruf: djk-instrumente [--instanz a..i] [--nur-wirte]
+# Aufruf: djk-instrumente [--instanz a..i] [--nur-wirte] [--melodie surge|fluegel]
+#   --melodie fluegel (Glanz Welle 4): der Melodie-Wirt spielt den Flügel (Carla-SFZ, wirte/carla/instrument_bauen.py,
+#   baut ~/.config/cypherdj/instrumente/grand beim ersten Mal) statt Surge. Läuft der Wirt schon in der anderen Art, wird
+#   nur er neu gestartet; seine Kanten bleiben (gleicher Klientname). Vorgabe surge. klang/fahre gibt es nur mit Surge.
 #   Schritte, je Gruppe (bass: midi_aus_1 -> erz/2, melodie: midi_aus_2 -> erz/3), jeder idempotent:
 #   1 Wirt-Unit cypherdj-wirt-<g> starten (läuft sie schon: übersprungen), auf "bereit" warten.
 #   2 Kanten midi_aus -> Wirt, Wirt -> rueck_erz_<n>_L/R verbinden und in /dev/shm/cypherdj<i>/kanten anhängen; der Kern
@@ -20,15 +23,18 @@ export XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
 export DBUS_SESSION_BUS_ADDRESS=${DBUS_SESSION_BUS_ADDRESS:-unix:path=$XDG_RUNTIME_DIR/bus}
 HIER=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
 DJK=${DJK:-$(cd "$HIER/.." && pwd)}
-I=${CYPHERDJ_INSTANZ:-}; NUR_WIRTE=0
+I=${CYPHERDJ_INSTANZ:-}; NUR_WIRTE=0; MELODIE=surge
 while [ $# -gt 0 ]; do
   case "$1" in
     --instanz) [ $# -ge 2 ] || { echo "djk-instrumente: --instanz needs a value" >&2; exit 2; }; I=$2; shift 2;;
     --nur-wirte) NUR_WIRTE=1; shift;;
+    --melodie) [ $# -ge 2 ] || { echo "djk-instrumente: --melodie needs surge or fluegel" >&2; exit 2; }; MELODIE=$2; shift 2;;
     -h|--help) sed -n '2,/^set -uo/p' "$0" | sed '$d; s/^# \{0,1\}//'; exit 0;;
     *) echo "djk-instrumente: unknown option $1 (see --help)" >&2; exit 2;;
   esac
 done
+case "$MELODIE" in surge|fluegel) ;; *) echo "djk-instrumente: --melodie '$MELODIE' invalid, use surge or fluegel" >&2; exit 2;; esac
+FLUEGEL_SFZ="$HOME/.config/cypherdj/instrumente/grand/grand.sfz"
 case "$I" in "") SFX="";; [a-i]) SFX="-$I";; *) echo "djk-instrumente: instance '$I' invalid, use a..i or empty" >&2; exit 2;; esac
 KERN_CLIENT=cypherdj-kern$SFX
 KANTEN_DATEI="/dev/shm/cypherdj$SFX/kanten"
@@ -39,12 +45,25 @@ aktiv "cypherdj-kern$SFX" || { echo "djk-instrumente: kern cypherdj-kern$SFX is 
 pw-link -o 2>/dev/null | grep -qx "$KERN_CLIENT:midi_aus_1" || { echo "djk-instrumente: $KERN_CLIENT:midi_aus_1 missing (kern without MIDI streams?)" >&2; exit 2; }
 [ -f "$HOME/.local/lib/cypherdj/lv2/Surge XT.lv2/manifest.ttl" ] || { echo "djk-instrumente: Surge XT missing (djk/wirte/carla/installiere_surge.sh)" >&2; exit 2; }
 [ -f "$KANTEN_DATEI" ] || : > "$KANTEN_DATEI"
+if [ "$MELODIE" = fluegel ] && [ ! -f "$FLUEGEL_SFZ" ]; then
+  python3 "$DJK/wirte/carla/instrument_bauen.py" --ziel "$(dirname "$FLUEGEL_SFZ")" --name grand >/dev/null \
+    || { echo "djk-instrumente: grand piano could not be built (wirte/carla/instrument_bauen.py; Ableton Core Library missing?)" >&2; exit 2; }
+fi
 
 W_IN=events-in; W_OUT1=audio-out1; W_OUT2=audio-out2
 SD="$HOME/.local/share/cypherdj/surge-daten/usr/share/surge-xt"; mkdir -p "$HOME/.config/cypherdj$SFX"
 for g in bass:1:2 melodie:2:3; do
   G=${g%%:*}; R=${g#*:}; PORT=${R%%:*}; ERZ=${R#*:}
   U="cypherdj-wirt-$G$SFX"; C="cypherdj-wirt-$G$SFX"; ST="/dev/shm/cypherdj$SFX/wirt-$G.json"
+  ART=lv2; [ "$G" = melodie ] && [ "$MELODIE" = fluegel ] && ART=sfz:grand
+  if aktiv "$U"; then  # läuft er in der anderen Art (Status ohne "art" = vor Welle 4 = lv2), nur ihn tauschen
+    IST=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("art","lv2"))' "$ST" 2>/dev/null || echo lv2)
+    if [ "$IST" != "$ART" ]; then
+      systemctl --user stop "$U.service" || fehler "wirt $G: stop failed" "$U"
+      for _ in $(seq 50); do systemctl --user list-units --all --no-legend --plain "$U.service" | grep -q . || break; sleep 0.1; done
+      echo "  wirt $G    $IST stopped, switching to $ART"
+    fi
+  fi
   if aktiv "$U"; then
     echo "  wirt $G    already running"
   else
@@ -53,16 +72,21 @@ for g in bass:1:2 melodie:2:3; do
     rm -f "$ST"
     WH="$HOME/.local/state/cypherdj/wirt-$G$SFX"; mkdir -p "$WH/.local/share"
     if [ -d "$SD" ]; then ln -sfn "$SD" "$WH/.local/share/surge-xt"; fi
+    if [ "$ART" = lv2 ]; then
+      INSTR_ARGS=(--lv2 https://surge-synthesizer.github.io/lv2/surge-xt --lv2-pfad "$HOME/.local/lib/cypherdj/lv2"
+                  --aktiv "$HOME/.config/cypherdj$SFX/klang-$G.fxp")
+    else
+      INSTR_ARGS=(--sfz "$FLUEGEL_SFZ")
+    fi
     systemd-run --user --quiet --collect --unit="$U" -p Restart=always -p RestartSec=2 -p RestartPreventExitStatus=2 \
       -p PartOf=cypherdj.target --setenv=HOME="$WH" \
       --setenv=PIPEWIRE_PROPS="{ node.async = true node.group = cypherdj$SFX node.lock-quantum = true }" \
-      /usr/bin/pw-jack -p 256 /usr/bin/python3 "$DJK/wirte/carla/wirt.py" --name "$C" \
-      --lv2 https://surge-synthesizer.github.io/lv2/surge-xt --lv2-pfad "$HOME/.local/lib/cypherdj/lv2" --status "$ST" \
-      --sock "/dev/shm/cypherdj$SFX/wirt-$G.sock" --aktiv "$HOME/.config/cypherdj$SFX/klang-$G.fxp" \
+      /usr/bin/pw-jack -p 256 /usr/bin/python3 "$DJK/wirte/carla/wirt.py" --name "$C" "${INSTR_ARGS[@]}" --status "$ST" \
+      --sock "/dev/shm/cypherdj$SFX/wirt-$G.sock" \
       || fehler "wirt $G: systemd-run failed" "$U"
     for _ in $(seq 60); do grep -q '"bereit": true' "$ST" 2>/dev/null && break; sleep 0.5; done
     grep -q '"bereit": true' "$ST" 2>/dev/null || fehler "wirt $G not ready ($ST)" "$U"
-    echo "  wirt $G    started"
+    echo "  wirt $G    started ($ART)"
   fi
   # Kanten: verbinden (eine schon bestehende meldet pw-link als Fehler, deshalb vorher prüfen) und festhalten
   for k in "$KERN_CLIENT:midi_aus_$PORT	$C:$W_IN" "$C:$W_OUT1	$KERN_CLIENT:rueck_erz_${ERZ}_L" "$C:$W_OUT2	$KERN_CLIENT:rueck_erz_${ERZ}_R"; do

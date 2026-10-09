@@ -7,17 +7,25 @@ Plan `docs/superpowers/plans/2026-09-28-djk-hand-mcp.md` (Rev. 2 nach Review), S
 Prüfinstanz i: `--seite http://127.0.0.1:56300`. Jeder Aufruf geht als HTTP an den Seiten-Server mit dem Kopf
 `x-djk-quelle: cypher`; der Server setzt die Quelle `cypher` in jeden Kern-Befehl, Cyphers Befehle tragen `plan: cypher`.
 
-## Werkzeuge (27)
+## Werkzeuge (37)
 
 DJ: `lage` · `bestand` · `laden` · `deck_start` · `deck_stopp` · `sprung` · `loop` · `pad` · `loop_nach_box` · `box` ·
-`regler` (Rampe über Takte) · `fx` · `fx_zuweisung` · `abbrechen` · `warte` · `hoeren`.
+`regler` (Rampe über Takte) · `fx` · `fx_zuweisung` · `abbrechen` · `tempo` (Decks folgen seit 2026-10-06: Varispeed, dann Tausch auf eine Fassung im neuen Tempo, ADR 028) · `warte` · `hoeren`. Dazu die Studio-Werkzeuge
+unten und die Mediathek (`bibliothek` · `vorbereiten` · `sets` · `set_zeige` · `set_lege` · `set_vorbereiten`) sowie `instrumente`. `instrumente {melodie: "fluegel"}` legt einen gesampelten Flügel (Ableton Core Library,
+4 Anschlagstufen, Carla-SFZ) auf MELODY statt Surge, `"surge"` zurück (2026-10-06).
+
+Klänge (Plan `docs/superpowers/plans/2026-10-06-klaenge.md`): `klaenge` sucht alle Klänge außer Tracks (One-Shots, Loops,
+Impulsantworten, Mitschnitte, Erzeugtes, Stimmen) in Mediathek und eigener Loop-Bibliothek; jeder Treffer trägt `einsatz`:
+`sofort` (spielt jetzt, eigene Loops über `box`), `werkstatt` (offene Datei, braucht Kit-Bau oder Laden) oder `nur_live`
+(verschlüsseltes Ableton-Pack-Sample, nie laden). `bestand_karte` zählt den Bestand je Typ und Einsatzstufe, die größten
+Packs und die Loop-Bibliothek. Klang gesucht: erst `klaenge`, dann bauen.
 
 Studio (Plan `docs/superpowers/plans/2026-09-29-djk-hand-mcp-studio.md`, 2026-09-30):
 
 | Werkzeug | Route | Riegel für cypher |
 |---|---|---|
 | `strudel` | `POST /strudel` | AUTO des Stroms, Stop Cypher |
-| `studio` | `GET /strudel?strom=1..3` | lesend |
+| `studio` | `GET /strudel?strom=1..3` | lesend; `status.taub` = Strudel-Felder, die hier nicht klingen (siehe „Taube Felder“) |
 | `stille` | 3× `POST /strudel` `silence` | wie `strudel`, meldet Teilfehler je Strom |
 | `pegel` | `GET /pegel?sek=1..10` (ungedrosselter Puffer vor der SSE-Drossel) | lesend |
 | `klang` | `POST /klang` (spawnt `djk/wirte/carla/djk-klang`; `fahre` direkt an den Wirt mit Spur `klang-<gruppe>`) | AUTO Strom 2 (bass) / 3 (melodie), Stop Cypher, `fremdePost`; `zeige`/`liste` frei; Werte mit `-` vorne 400 |
@@ -37,6 +45,10 @@ laufenden Master je Band, Pegel-Differenz, EQ-Vorschlag (tief/mitte/hoch in dB) 
 zu) → `warte 4` (Sätze brauchen ein volles 4-Takt-Fenster) → `hoeren` → `regler` (EQ/Trim, geschlossen erlaubt) →
 `warte 4` → `hoeren` erneut (die Messung sitzt nach dem EQ).
 
+`vergleich.trim_vorschlag_db` ist der **absolute** Sollwert für `deck/N/trim` in dB (alter Trim minus Pegel-Differenz, auf ±24
+geklemmt; der Mess-Abgriff liegt nach dem Trim, ADR 008), nur am geschlossenen Deck gültig. `trim_unbekannt: true` statt
+des Vorschlags: die Seite kennt den alten Trim nicht (nach ihrem Neustart); keiner auch, wenn eine Seite stumm ist.
+
 Seit Slice 3 stellt der Seiten-Server aus dieser Messung je Takt einen Hörschein aus (`urteil` in der `hoeren`-Antwort
 und in `lage.decks[].hoerschein`) und schickt ihn bei `urteil: 'ok'` an den Kern. `regler` auf `deck/1`/`deck/2`, das
 den Kanal öffnet (trim + fader über −26 dB), hängt dann automatisch `hoerschein: hs_id` an — kein eigener Aufruf
@@ -52,8 +64,9 @@ jetzt mit `urteil` und `gruende` des letzten Scheins im Körper.
 | Release hebt Stop Cypher auf | Seiten-Server schickt bei der Taste `freigabe` `/k/ki/frei` (Review B2) |
 | Crossfader, Master, PFL, Cue, Bus-Fader, Kanal-Ziel sind Andreas' Hand | Kern (`nur_hand`) |
 | Andreas' Griff an einem Regler bricht meine Rampe ab / sperrt ihn für mich | Kern (Quittung 7 `hand`, `regler_beim_menschen`) |
-| Geschlossenen Kanal öffnen (trim + fader > −26 dB, §1.6; Decks und Pads; Strudel-Kanäle `erz/*` sind seit 2026-09-29 frei, Andreas: „ja sperre kann für strudel kanäle fallen“, Kern e9baf64) | **Kern** (I3a, `PrueferI3::vor_teilstart`, Quittung 6 `kein_hoerschein`; Ohr T14, kern.cpp: `Stellwerk(uhr_, &pruefer_)`) UND Seiten-Server (409 `kein_hoerschein` mit `urteil`/`gruende` des letzten Scheins, sonst mit gültigem Hörschein aus `hoeren`, `/k/teil` mit `hoerschein: hs_id`); Andreas (Quelle `andreas`) nimmt der Kern aus (§17 „die Hand wird nie blockiert") |
-| Sprung / Hotcue spielen / Start auf offenem Deck, Box laden/start auf offener Box | Seiten-Server (409 `ziel_ungehoert`, I3d) |
+| Geschlossenen Kanal öffnen (trim + fader > −26 dB, §1.6; Decks; Strudel-Kanäle `erz/*` sind seit 2026-09-29 frei, Andreas: „ja sperre kann für strudel kanäle fallen“, Kern e9baf64; **Box-Kanäle `pad/*` sind frei, solange die Box meinen eigenen Mitschnitt trägt**, ein fremder Loop bleibt `kein_hoerschein`) | **Kern** (I3a, `PrueferI3::vor_teilstart`, Quittung 6 `kein_hoerschein`; Ohr T14, kern.cpp: `Stellwerk(uhr_, &pruefer_)`) UND Seiten-Server (409 `kein_hoerschein` mit `urteil`/`gruende` des letzten Scheins, sonst mit gültigem Hörschein aus `hoeren`, `/k/teil` mit `hoerschein: hs_id`); Andreas (Quelle `andreas`) nimmt der Kern aus (§17 „die Hand wird nie blockiert") |
+| Sprung / Hotcue spielen / Start auf offenem Deck, Box laden/start auf offener Box (Ausnahme seit 2026-10-05: eigener Master-Mitschnitt, `quelle: mitschnitt`) | Seiten-Server (409 `ziel_ungehoert`, I3d) |
+| Fremdes Material (alles außer meinem Mitschnitt) in eine Box laden/starten, solange meine Fader-/Trim-Rampe auf `pad/<n>/` läuft; `loop_nach_box` zusätzlich auch auf eine offene Box (die Prüfung gilt sonst nur im Moment der Anfrage) | Seiten-Server (409 `box_offen_oder_faehrt`) |
 | FX, Strudel nur bei AUTO an | Seiten-Server / djk-muster (409 `auto_aus`) |
 | AUTO-Schalter, Grid (Deck und Loop), `/griff`, `/taste` | Seiten-Server (403) |
 | FX-Routing (Insert oder Post Fader): Andreas' Taste, ich kann es nicht schalten; ich höre den Effekt im Vorhören (`hoeren`) nur, wenn er auf Insert steht | Seiten-Server (403 `nur_andreas`) UND Kern (`nur_hand`) |
@@ -87,3 +100,13 @@ Strom weist Cyphers Spuren und `/regler` auf `erz/<n>`, `wirt:<gruppe>`, `strom:
 überstehen einen Neustart des Seiten-Servers (`spuren.json` neben den Wirt-Sockets); Muster-Fahrten folgen dem Kern-Beat,
 auch nach einem Tempowechsel; `djk-spur start` endet mit Rückgabe 1, wenn ein Teil abgelehnt wurde, und nennt ihn
 (`part <teil> <pfad> rejected: <grund>`); ich kann Andreas' Spuren nicht stoppen (403 `nur_andreas`).
+
+## Stand 2026-10-05 ()
+
+- **Tempo:** Werkzeug `tempo {bpm 60..200}` (`POST /tempo`): 4-Beat-Rampe ab dem nächsten Takt; Stop Cypher hält es (409 `ki_gestoppt`). Loop-Boxen, REC und Strudel folgen; Decks spielen nur bei 128, der Kern lehnt den Wechsel bei laufendem Deck ab (`kein_stretcher`), und ein Deck startet nicht, solange eine Tempo-Rampe aussteht.
+- **Box-Fader/Trim (`pad/*`):** frei für eigene Mitschnitte (Seite stellt für die Box keinen Hörschein aus, Glanz 1.3); eine Box mit fremdem Loop bleibt 409 `kein_hoerschein`. Fremdes Material: `box laden`/`start` auf eine OFFENE Box → 409 `ziel_ungehoert`; bei laufender eigener Fader-/Trim-Rampe auf der Box → 409 `box_offen_oder_faehrt`; `loop_nach_box` (Deck-Schnitt) auf eine offene Box oder bei laufender Rampe → 409 `box_offen_oder_faehrt`. Automationsspuren (`spur`) öffnen Boxen weiterhin nicht.
+- **Quittung lesen, nicht nur HTTP 200:** `/regler` antwortet 200 auch bei Kern-Ablehnung; maßgeblich ist `quittung.status` (6 = abgelehnt, `grund`).
+- **Überlappung:** überlappt ein neuer Cypher-Teil mit einem eigenen offenen Teil desselben Pfads, schiebt die Seite ihn hinter das Fahrtende; die Antwort trägt `verschoben_auf` (Beat). Ablehnungen genau am Startbeat erscheinen dann nicht in der Antwort, nur in `lage` (`quittungen`). Andreas' Teile werden nie verschoben.
+- **Taube Felder:** `studio` zeigt `status.taub` (Strudel-Felder des Musters, die hier nicht klingen: `cutoff` = lpf, `hcutoff` = hpf, `room`, `delay`, `fmi` …). Untergrenze, gültig ab `status.taub_muster == status.nr`; später gehörte Felder kommen dazu. Nicht darauf bauen, Klangfarbe über `klang`.
+- **loop_klang:** Seite bekommt `--kit <drums-kit>` von djk-start; vorher rechnete sie gegen battery und meldete „keine freie Note“. Kit-Grenze 10 s je Loop (bei 128 höchstens 16 Beats).
+- **FX-Beats:** nur 0.25, 0.5, 1, 2, 4, 8, 16 (0.75 → 400 `beats`). Arten: 1 Echo, 2 Flanger, 3 Phaser, 4 Filter.

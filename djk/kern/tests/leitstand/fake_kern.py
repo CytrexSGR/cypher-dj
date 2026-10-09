@@ -3,7 +3,7 @@ UDP in Echtzeit (Blöcke zu 256 bei 48 kHz), Tempo-Karte aus djk/vertrag/karte.p
 Fehlerarten für die Fehlerfälle des Läufers: ohne_fertig, extra_ablehnung, set_neu_stumm, bpm_daneben, uhr_pause
 (ab Sample 48 000 für 0,5 s Wanduhr kein Block, zählt die /k/hallo in der Pause).
 Zusätze für die Schritt-Arten von 09 (FORMAT.md Punkt 16): Bündel an /erz/fenster beantwortet er mit /erz/quittung;
-Arten deck (/zustand/deck für Deck 1 alle 4 Blöcke, quell_beat = Beat der Kern-Uhr), regler (/e/regler deck/2/fader:
+Arten deck (/zustand/deck für Deck 1 und /zustand/box für Box 1 alle 4 Blöcke, quell_beat = Beat der Kern-Uhr), regler (/e/regler deck/2/fader:
 -200 bei 48 128, Sprung auf -15 bei 96 000, dann Rampe bis 0 bei 144 000 im Takt von 960 Samples), extra_invariante
 (/e/invariante hoerschein beim Rampenstart), ohne_neustart (nach dem Neustart weder neue Generation noch /e/neustart).
 Als eigener Prozess (python3 fake_kern.py --port P --zustand DATEI [--frisch] [--fehler F]) übersteht er kill -9:
@@ -155,8 +155,9 @@ class FakeKern:
                     self.an_alle("/e/regler", ",sfshd", ["deck/2/fader", w, "cypher", s, self.karte.beat(s)])
         if self.fehler == "deck" and (n0 // N) % 4 == 0:
             qb = self.karte.beat(n0)
-            self.an_alle("/zustand/deck", ",iisdidddfiif", [1, 2, "f0000000000000a1", 128.0, 1, qb, 100.0 - qb, 1.0,
-                                                            0.0, 0, 0, 0.0])
+            self.an_alle("/zustand/deck", ",iisdidddfiifii", [1, 2, "f0000000000000a1", 128.0, 1, qb, 100.0 - qb, 1.0,
+                                                              0.0, 0, 0, 0.0, 0, 0])  # Keylock Task 3: Zähler
+            self.an_alle("/zustand/box", ",iiiiii", [1, 3, 0, 0, 0, 0])  # Keylock 7b.3/7c.3 (§5.5b): Zähler der Box 1
         b = 4.0 * math.ceil(self.karte.beat(max(n0 - 0.5, 0.0)) / 4.0)  # karte.py kennt keine Samples vor 0
         while True:
             s = ziel_sample(self.karte, b)

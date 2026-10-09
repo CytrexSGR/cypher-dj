@@ -53,7 +53,7 @@ int main() {
       PRUEF(n[g] == 1);
     PRUEF(n[static_cast<int>(cdj::MixRolle::duck_tiefe)] == 1 && n[static_cast<int>(cdj::MixRolle::duck_release)] == 1);
     PRUEF(n[static_cast<int>(cdj::MixRolle::master_kleber)] == 1);
-    PRUEF(n[static_cast<int>(cdj::MixRolle::spaeter)] == 16 + 4);                    // stem/* (31), fx/notenwert, fx/rueckkopplung (47)
+    PRUEF(n[static_cast<int>(cdj::MixRolle::spaeter)] == 16 + 4 + 1);  // stem/* (31), fx/notenwert, fx/rueckkopplung (47); keylock (Kern, Keylock 3)
     PRUEF(n[static_cast<int>(cdj::MixRolle::fx_rueckweg)] == 4);                     // fx/1..4/rueckweg (K2 Slice 2)
     int abweichend = 0;
     for (int r = 0; r < p.tab.anzahl(); ++r) {

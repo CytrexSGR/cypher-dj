@@ -10,13 +10,14 @@
 
 namespace cdj {
 
-const KonfigSchluessel KERN_SCHLUESSEL[17] = {
+const KonfigSchluessel KERN_SCHLUESSEL[19] = {
     {"version", "version"},          {"start_bpm", "float"},       {"udp_port", "int"},
     {"arbeitsbestand", "Pfad"},      {"speicher_budget_mib", "int"}, {"controller_geraet", "str"},
     {"ziel_lufs", "float"},          {"hoerbar_db", "float"},      {"tief_offen_db", "float"},
     {"max_stretcher", "int"},        {"stretcher_threads", "int"}, {"limiter_dbtp", "float"},
     {"pruefmodus", "bool"},          {"filter_guete", "float"},    {"hand_osc", "bool"},
-    {"hoerschein_pflicht", "bool"},
+    {"hoerschein_pflicht", "bool"},  {"keylock", "bool"},
+    {"keylock_maschine", "str"},
     {nullptr, nullptr},
 };
 
@@ -95,6 +96,12 @@ KernKonfig lies_kern_toml_text(std::string_view text, const std::string& quelle)
       k.filter_guete = als_zahl(wert, s, quelle);
     } else if (s == "hoerschein_pflicht") {  // Ohr T13: schaltet PrueferI3 (I3a, §17) an
       k.hoerschein_pflicht = als_schalter(wert, s, quelle);
+    } else if (s == "keylock") {  // Keylock Task 3: false -> Kern ohne Dehner (Decks und Knopf im Varispeed)
+      k.keylock = als_schalter(wert, s, quelle);
+    } else if (s == "keylock_maschine") {  // Umbauplan Bungee S2: r3 | bungee | bungee_fein
+      k.keylock_maschine = als_text(wert, s, quelle);
+      if (k.keylock_maschine != "r3" && k.keylock_maschine != "bungee" && k.keylock_maschine != "bungee_fein")
+        fehler(quelle, "Schlüssel 'keylock_maschine' muss \"r3\", \"bungee\" oder \"bungee_fein\" sein");
     } else {
       fehler(quelle, "unbekannter Schlüssel '" + std::string(s) + "'");  // §2.1: Tippfehler fallen sofort auf
     }

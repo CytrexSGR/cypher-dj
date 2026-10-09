@@ -71,6 +71,8 @@ test('loop: ab Quellposition bei ab_beat, Wiederholung, Status 3, Sprung im Loop
   gruen(r);
   const z = r.log.filter((m) => m.adresse === '/zustand/deck' && m.s > S(33) && m.s < S(38));
   assert.ok(z.length > 0 && z.every((m) => m.werte[6] === Infinity && m.werte[1] === 3));
+  // Keylock Task 3 (Fassung 4.1 Punkt 3): 14 Felder, die Zähler keylock_unterlauf und keylock_aufgegeben (Attrappe ohne Dehner: 0)
+  assert.ok(z.every((m) => m.werte.length === 14 && m.werte[12] === 0 && m.werte[13] === 0));
 });
 
 test('roll: Band mit Schatten, beim Aus zurück zur Schattenposition', () => {
@@ -137,12 +139,23 @@ test('laden auf stehendem Deck mit offenem Fader: erlaubt (§4.4, 2026-09-27)', 
   gruen(r);
 });
 
-test('Tempo-Rampe bei laufendem Deck: abgelehnt kein_stretcher', () => {
+test('Welle 3 (ADR 028): Tempo-Rampe bei laufendem Deck angenommen, das Deck folgt im Varispeed (bis Welle 2 kein_stretcher)', () => {
   const r = fahre([
     sende(1000, laden(1, 1)),
     sende(2000, start(2, 'leitstand', 1, 4, 0)),
     sende(S(5), ['/k/tempo/rampe', 'hsddd', 3, 'leitstand', 16, 130, 8]),
-    erwarte(S(6), q(3, 'leitstand', 6, null, 'kein_stretcher')),
+    erwarte(S(6), q(3, 'leitstand', 1)),
+  ], { cfg });
+  gruen(r);
+});
+
+test('Welle 3 (ADR 028): Start bei fremdem Tempo angenommen (Rampe auf 130 vorher, Deck-Basis 128)', () => {
+  const r = fahre([
+    sende(1000, ['/k/tempo/rampe', 'hsddd', 3, 'leitstand', 4, 130, 4]),
+    sende(1000, laden(1, 1)),
+    sende(S(10), start(2, 'leitstand', 1, 16, 0)),
+    erwarte(S(11), q(2, 'leitstand', 1)),
+    erwarte(S(20), q(2, 'leitstand', 2)),   // ausgeführt: bis Welle 2 kam hier 6 kein_stretcher
   ], { cfg });
   gruen(r);
 });

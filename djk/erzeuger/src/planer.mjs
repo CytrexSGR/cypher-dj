@@ -25,8 +25,7 @@ export class Planer {
     this.sendung = 0;
     this.nr = 0;
     this.evId = 0;
-    this.felderGemeldet = 0;      // Muster-Nr, für die schon gemeldet wurde
-    this.felder = new Set();      // Strudel-Felder ohne Weg in den Kern (Scheibe 3: gemeldet, nicht still)
+    this.felder = new Set();      // Strudel-Felder des GELTENDEN Musters ohne Weg in den Kern; wächst über seine Takte, setze() leert es
   }
 
   naechsterTakt(jetzt) { return Math.ceil((jetzt + WECHSEL_ABSTAND) / 4) * 4; }
@@ -35,6 +34,7 @@ export class Planer {
     const ab = this.plan.length && Number.isFinite(jetzt) ? this.naechsterTakt(jetzt) : -Infinity;
     this.plan = this.plan.filter((p) => p.ab < ab);
     this.plan.push({ ab, muster, nr: ++this.nr });
+    this.felder = new Set();   // neues Muster: Felder des verdrängten gelten nicht mehr
     if (Number.isFinite(this.horizont) && Number.isFinite(jetzt)) {
       const von = Number.isFinite(ab) ? ab : this.naechsterTakt(jetzt);
       if (von < this.horizont) this.schicke(von, this.horizont);
@@ -53,7 +53,7 @@ export class Planer {
 
   schicke(a, b) {
     const { evs, unbekannt, felder } = ereignisse(this.plan, this.kit, a, b);
-    if (this.felderGemeldet !== this.nr) for (const f of felder) this.felder.add(f);
+    for (const f of felder) this.felder.add(f);
     for (const t of teile(evs, a, b)) {
       const n = [['/erz/fenster', T_FENSTER, [this.strom, ++this.sendung, 66, 0, t.ab, t.bis, BigInt(Math.round(this.jetztUs()))]]];
       for (const e of t.evs) {

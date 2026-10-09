@@ -4,3 +4,7 @@
 /build-tsan/
 /build-tsan-mut/
 /build-asan35/
+
+# Glanz 1.6 (2026-10-06): Ohr-Build-Ordner
+build-ohr/
+build-ohr-asan/

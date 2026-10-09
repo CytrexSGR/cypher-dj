@@ -106,6 +106,10 @@ ReglerTabelle::ReglerTabelle() {
   }
   neu("duck/tiefe", -1, Rolle::duck_tiefe, -24, 0, 0, MS(10), false, true, false, false, linear(-24, 0));
   neu("duck/release", -1, Rolle::duck_release, 50, 600, 200, 0, false, false, true, false, linear(50, 600));
+  // Keylock Task 3 (Plan 2026-10-06-keylock-echtzeit.md, Fassung 4; Andreas 06.10.: „an jeder dj software gibts nen knopf
+  // der über alles die tonhöhe gleichhält“): EIN Schalter für Decks, Loop-Boxen und Loop auf dem Deck, Vorgabe 1, kein
+  // Deck-Argument (sonst keine_stems, Prüfer B1), alle Quellen; Argumentfolge wie transport.
+  neu("keylock", -1, Rolle::keylock, 0, 1, 1, 0, false, false, true, true, K_SCHALTER);
   for (int i = 0; i < n_; i++) sortiert_[i] = static_cast<int16_t>(i);
   std::sort(sortiert_, sortiert_ + n_, [&](int16_t a, int16_t b) { return std::strcmp(def_[a].pfad, def_[b].pfad) < 0; });
 }

@@ -93,17 +93,9 @@ std::vector<float> stretche_mitte(const float* daten, size_t F, double verhaeltn
 
 }  // namespace
 
-std::vector<float> rendere_keylock(const std::vector<float>& daten, double bpm, const std::atomic<bool>* abbruch) {
-  if (!std::isfinite(bpm) || bpm < LOOP_MIN_BPM || bpm > LOOP_KEYLOCK_MAX_BPM || std::fabs(bpm - LOOP_BPM) < 1e-9) return {};
-  if (daten.empty() || daten.size() % 2 != 0) return {};
-  const size_t F = daten.size() / 2;
-  const double verhaeltnis = LOOP_BPM / bpm;
-  return stretche_mitte(daten.data(), F, verhaeltnis, (size_t)std::llround((double)F * verhaeltnis), abbruch);
-}
-
 // Keylock Slice 4: REC-Umrechnung. Der Mitschnitt dauert roh_frames beim Tempo T der Aufnahme (beats · 48000 · 60 / T) und
 // soll frames = beats · LOOP_SPB Frames bei 128 BPM werden: Zeitverhältnis frames / roh_frames = T / 128, Tonhöhe 1,0.
-// Das ist dieselbe R3-Rechnung wie bei den Varianten, nur mit der Länge als Vorgabe. T ergibt sich zu 128 · frames / roh.
+// Die R3-Rechnung der früheren Varianten (bis Task 7), mit der Länge als Vorgabe. T ergibt sich zu 128 · frames / roh.
 std::vector<float> rendere_rec(const float* daten, int64_t roh_frames, int64_t frames, const std::atomic<bool>* abbruch) {
   if (!daten || roh_frames <= 0 || frames <= 0 || roh_frames == frames) return {};
   const double t = LOOP_BPM * (double)frames / (double)roh_frames;  // Tempo der Aufnahme

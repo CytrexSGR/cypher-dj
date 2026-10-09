@@ -19,6 +19,8 @@
 #   P14 Erkennung "tot" (Funktion aus djk-start) an Wegwerf-Units: Neustart-Pause (Rückgabe 1, Restart=always) -> tot;
 #       Negativ-Kontrolle: laufende Unit -> nicht tot
 #   P13 toter Satellit (Leitstand-Konfiguration mit unbekanntem Schlüssel, Rückgabe 2): Abbruch 5 in unter 5 s, 0 Units
+#   P17 Digital-Out-Wache (Glanz 2.1, F22): mit CYPHERDJ_DIGITALWACHE_PCI startet sie und schreibt den Stand, djk-stop räumt
+#       ab; kaputte PCI -> Warnung, Studio läuft; ohne Variable an der stummen Senke keine Wache
 # Rückgabe: 0 alle Punkte OK, 1 mindestens einer FEHL, 2 Aufbau (Last, Schloss).
 . "$(dirname "$0")/../../konfig/echtzeit_schloss.sh"   # CYPHERDJ_ECHTZEIT_SCHLOSS
 set -uo pipefail
@@ -210,6 +212,30 @@ EXEC=$(systemctl --user show -p ExecStart --value "cypherdj-oberflaeche-$I")  # 
 rm -rf "/dev/shm/cypherdj-$I/loops/p16-probe"
 [ "$R" = 0 ] && [[ "$EXEC" == *"--loops /dev/shm/cypherdj-$I/loops"* ]] && [[ "$L" == *'"name":"p16-probe"'* ]] && grep -q "loops /dev/shm/cypherdj-$I/loops" "$O/p16.txt"
 pruef $? "P16 Loops: Start $R, /loops kennt p16-probe $([[ "$L" == *p16-probe* ]] && echo ja || echo nein), Zeile 'loops' $(grep -c "loops /dev/shm/cypherdj-$I/loops" "$O/p16.txt")"
+# P17 Glanz 2.1 (F22): Digital-Out-Wache. An der stummen Prüf-Senke startet sie nur mit CYPHERDJ_DIGITALWACHE_PCI (hier
+# die ungenutzte Rembrandt-HDMI-Karte 0000:16:00.1: wird nur gelesen, ihr Schalter steht auf on); djk-stop räumt Unit und
+# Standdatei ab. Fehlerfall: startet die Wache nicht (Aufruffehler, Rückgabe 2), läuft das Studio mit Warnung weiter.
+# Negativ-Kontrolle: ohne die Variable keine Wache-Unit und keine Wache-Zeile.
+DW_PCI=0000:16:00.1; RUN_I=/run/user/$(id -u)/cypherdj-$I
+CYPHERDJ_DIGITALWACHE_PCI=$DW_PCI "$START/djk-start" "${ZIEL[@]}" > "$O/p17.txt" 2>&1; R=$?
+DWA=$(systemctl --user is-active "cypherdj-digitalwache-$I.service" 2>/dev/null)
+DWS=$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(d["pci"], d["zustand"])' "$RUN_I/digitalout.json" 2>/dev/null)
+EXEC_OF=$(systemctl --user show -p ExecStart --value "cypherdj-oberflaeche-$I")
+AUS=$(curl -s --max-time 2 "http://127.0.0.1:$OPORT/ausgang" | python3 -c 'import json,sys; print(json.load(sys.stdin)["zustand"])' 2>/dev/null)
+"$START/djk-stop" --instanz "$I" > "$O/p17stop.txt" 2>&1
+DW2=$(systemctl --user list-units --all --no-legend --plain "cypherdj-digitalwache-$I.service" 2>/dev/null | wc -l)
+DWF=$([ -e "$RUN_I/digitalout.json" ] && echo liegt || echo weg)
+CYPHERDJ_DIGITALWACHE_PCI=kaputt "$START/djk-start" "${ZIEL[@]}" > "$O/p17k.txt" 2>&1; RK=$?
+AK=$(aktive); DWK=$(systemctl --user list-units --all --no-legend --plain "cypherdj-digitalwache-$I.service" 2>/dev/null | wc -l)
+"$START/djk-stop" --instanz "$I" > /dev/null 2>&1
+"$START/djk-start" "${ZIEL[@]}" > "$O/p17n.txt" 2>&1; RN=$?
+DWN=$(systemctl --user list-units --all --no-legend --plain "cypherdj-digitalwache-$I.service" 2>/dev/null | wc -l)
+"$START/djk-stop" --instanz "$I" > /dev/null 2>&1
+[ "$R" = 0 ] && [ "$DWA" = active ] && [ "$DWS" = "$DW_PCI gut" ] && [[ "$EXEC_OF" == *"--digitalout $RUN_I/digitalout.json"* ]] && [ "$AUS" = gut ] && grep -q 'digitalout  watched' "$O/p17.txt" \
+  && [ "$DW2" = 0 ] && [ "$DWF" = weg ] \
+  && [ "$RK" = 0 ] && [ "$AK" = 4 ] && [ "$DWK" = 0 ] && grep -q 'digital-out watch did not start' "$O/p17k.txt" \
+  && [ "$RN" = 0 ] && [ "$DWN" = 0 ] && ! grep -q 'digital' "$O/p17n.txt"
+pruef $? "P17 Wache: Start $R, Unit $DWA, Stand '$DWS', Seite '$AUS', nach Stopp Units $DW2, Datei $DWF; kaputt: Start $RK, aktiv $AK, Wache-Units $DWK; ohne Variable: Start $RN, Units $DWN"
 pactl unload-module "$MOD"; MOD=""
 SREST=$(pactl list short sinks | grep -c "cypherdj-pruef-$I-\|stumm-$I")
 pruef $([ "$SREST" = 0 ] && [ "$(geladen)" = 0 ]; echo $?) "Ende: Units $(geladen), Senken der Instanz $SREST"

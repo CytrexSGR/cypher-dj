@@ -154,7 +154,10 @@ for (let i = 0; i < 8 && (!hoerschein || hoerschein.urteil !== 'ok'); i++) {
   console.log(`  Takt ${i + 1}: hoerschein=${JSON.stringify(hoerschein)}`);
   if (hoerschein && hoerschein.urteil !== 'ok' && !korrigiert && i >= 2
       && (hoerschein.urteil === 'zu_laut' || hoerschein.urteil === 'zu_leise') && Number.isFinite(hoerschein.pegel_diff_db)) {
-    const korrektur = Math.max(-24, Math.min(24, Math.round(-hoerschein.pegel_diff_db * 10) / 10));
+    // relativ zum aktuellen Trim (Mess-Abgriff liegt nach dem Trim): die Seite liefert den Vorschlag fertig
+    const vorschlag = h.j.vergleich?.trim_vorschlag_db;
+    if (!Number.isFinite(vorschlag)) throw new Error(`hoeren trägt kein vergleich.trim_vorschlag_db (${JSON.stringify(h.j.vergleich)})`);
+    const korrektur = Math.max(-24, Math.min(24, vorschlag));
     console.log(`  Pegel-Korrektur (wie AUFRUF.md „hoeren → regler eq/trim → hoeren erneut"): trim ${korrektur} dB (pegel_diff_db war ${hoerschein.pegel_diff_db.toFixed(2)})`);
     await ruf('regler', { pfad: 'deck/2/trim', nach: korrektur, takte: 0 });
     korrigiert = true;

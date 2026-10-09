@@ -689,7 +689,12 @@ Bestand unter `~/cypher-dj/bestand/` und Set-Journale unter `~/cypher-dj/sets/dj
 | 021 | `adr/021-grundlage-und-scheiben.md` | KI-Entwurf als Grundlage; Messungen und Hörtermin vor den teuren Scheiben; gemeinsamer Ton bei festen 128 zuerst | angenommen |
 | 022 | `adr/022-generierung-mit-vorlauf.md` | Generierung auf der GPU-Maschine mit Minuten Vorlauf, Kiste als Warteschlange | vorläufig, M14 steht aus |
 | 023 | `adr/023-stellwerk-und-invarianten.md` | Annahme im Leitstand, Ausführung, Invarianten I1 bis I4 (I3: neuer Inhalt nur mit Hörschein; hörbar nur, wenn das Deck läuft) und Frist-Wächter im Kern | angenommen |
+| 024 | `adr/024-kit-im-kern.md` | `/erz/strom` bekommt die Zielform `kit:<name>`: der Kern spielt `klang[note]` eines Kits (Einzelschüsse) sample-genau in den Eingang eines Erzeuger-Kanals, ohne Rückweg | angenommen |
+| 025 | `adr/025-loop-boxen.md` | Zwei Loop-Boxen im Kern auf `pad/1` und `pad/2`: ein Loop ist N Takte bei 128 BPM, phasenstarr zur Kern-Uhr, Start und Stopp auf der nächsten Takt-Eins, Beat-FX in der Box | angenommen |
+| 026 | `adr/026-loops-folgen-der-uhr.md` | Loops bleiben bei 128 BPM gespeichert und folgen der Kern-Uhr per Varispeed (Catmull-Rom), REC nimmt in jedem festen Tempo auf, das Tempo stellt Andreas an der Seite | angenommen |
 | 027 | `adr/027-keylock-fuer-loop-boxen.md` | Keylock für Loop-Boxen: eine Variante je Box im Ruhetempo vorab mit R3 offline im Netz-Prozess gerendert, Direktweg bei 128 vorrangig, REC bei ≠ 128 mit R3 statt Resampling | umgesetzt im Branch `keylock`, Hörprobe steht aus |
+| 028 | `adr/028-decks-folgen-dem-tempo.md` | Decks folgen dem Live-Tempo: Varispeed sofort (Lesekopf aus dem Master-Beat), die Tonhöhe über Fassungstausch | Varispeed angenommen; Fassungstausch (Entscheidung 4) abgelöst durch ADR 029 |
+| 029 | `adr/029-keylock-echtzeit.md` | Ein Keylock-Knopf für alle Quellen: R3 in Arbeits-Threads mit Vorlauf-Ring (Dehner), Render-und-Tausch ausgebaut | umgesetzt für Decks und Loop auf dem Deck (Code auf main, Stand 2026-10-08), Loop-Boxen kommen mit Task 7, Hörprobe steht aus, Betriebs-Kern laut ADR unverändert |
 
 ---
 

@@ -4,10 +4,23 @@
 // fest in [0, 200). Beat 8,5 liegt 18 Samples, Beat 9,5 246 Samples hinter einem Blockanfang: der Fehlerfall
 // test_kern_erzeuger_mutation (Einsatz am Blockanfang) ändert den Abstand um 228 und scheitert. Dazu Quittung als
 // Ereignis, /pegel erz/1; Negativ-Kontrolle: Fader −200 → kein Einsatz am Master.
+#include <cstdlib>
+#include <memory>
+#include <new>
+
 #include "cypherdj/erzeuger.h"
 #include "kern35.h"
 
-bool g_waechter = false;
+bool g_waechter = false;  // kern35.h: zählt Allokationen in zyklus(), wenn Lauf::bewachen gesetzt ist
+static long g_allokationen = 0;
+void* operator new(std::size_t n) {
+  if (g_waechter) ++g_allokationen;
+  void* p = std::malloc(n ? n : 1);
+  if (!p) throw std::bad_alloc();
+  return p;
+}
+void operator delete(void* p) noexcept { std::free(p); }
+void operator delete(void* p, std::size_t) noexcept { std::free(p); }
 
 using namespace k35;
 
@@ -53,6 +66,42 @@ static void lauf(const std::string& ab, float fader_db, std::vector<int64_t>* ei
   PRUEF(x.alle(cdj::Ereignis::ERZ_ALT).empty());  // kein Tausch, also nichts freizugeben
 }
 
+// Glanz 2.4.1 (F11) am Kern-Weg (kern.cpp:82): ERZ_STROM tauscht das Kit, während ein 2-s-Klang klingt. Im Zyklus
+// keine Allokation, genau ein ERZ_ALT mit dem alten Kit.
+static void tausch(const std::string& ab) {
+  auto a = std::make_unique<cdj::Kit>(), b = std::make_unique<cdj::Kit>();
+  for (cdj::Kit* k : {a.get(), b.get()}) {
+    k->klang[36].frames = 96000;
+    k->klang[36].daten.assign(2 * 96000, 0.5f);
+    k->n = 1;
+  }
+  Lauf x(ab, nullptr);
+  x.bewachen = true;
+  auto s = x.neu(cdj::Befehl::ERZ_STROM, "erzeuger");
+  s.nr = 1;
+  std::snprintf(s.pfad, sizeof s.pfad, "erz/1");
+  s.zeiger = a.get();
+  x.sende(s);
+  auto* f = new cdj::ErzFenster{};
+  f->strom = 1; f->sendung = 1; f->ab_beat = 8.0; f->bis_beat = 12.0;
+  f->ev[f->n++] = cdj::ErzEv{8.0, 36, 1, 1.0f};
+  auto c = x.neu(cdj::Befehl::ERZ_FENSTER, "erzeuger");
+  c.zeiger = f;
+  x.sende(c);
+  x.zyklen(9 * SPB);
+  auto t = x.neu(cdj::Befehl::ERZ_STROM, "erzeuger");
+  t.nr = 1;
+  std::snprintf(t.pfad, sizeof t.pfad, "erz/1");
+  t.zeiger = b.get();
+  x.sende(t);
+  x.zyklen(10 * SPB);
+  const auto alt = x.alle(cdj::Ereignis::ERZ_ALT);
+  std::printf("F11 Kern-Weg: Allokationen im Zyklus %ld, ERZ_ALT %zu\n", g_allokationen, alt.size());
+  PRUEF(g_allokationen == 0);
+  PRUEF(alt.size() == 1 && alt[0].zeiger == a.get());
+  delete f;
+}
+
 int main() {
   Arbeitsbestand ab("test_kern_erzeuger");
   std::vector<int64_t> k;
@@ -73,5 +122,6 @@ int main() {
   // Negativ-Kontrolle: Fader unten → kein Einsatz
   lauf(ab.pfad, -200.0f, &k, &q, &p);
   PRUEF(k.empty() && q == 1);
+  tausch(ab.pfad);
   PRUEF_ENDE();
 }

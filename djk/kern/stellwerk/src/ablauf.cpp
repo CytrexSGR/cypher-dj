@@ -13,6 +13,10 @@ namespace cypherdj::stellwerk {
 void Stellwerk::starte(int idx, int64_t sample, int i, double beat) {
   Teil& t = teil_[idx];
   ReglerZustand& z = reg_[t.regler];
+  if (z.hr_an) {   // F18: ein Teil übernimmt vom Ist-Wert, die Hand-Schaltrampe endet hier
+    z.hr_an = false;
+    n_hand_rampen_--;
+  }
   float w0 = z.wert;
   if (z.laufend >= 0) {   // Vorgänger am selben Regler (Setzen am selben Sample oder angrenzende Rampe): fertig
     Teil& v = teil_[z.laufend];
@@ -143,7 +147,8 @@ void Stellwerk::prozess(int64_t s0, int n) {
   }
   bool starts_ok = false;
   for (int k = 0; k < n_starts_; k++) starts_ok = starts_ok || (teil_[starts_[k]].belegt && teil_[starts_[k]].im_zyklus);
-  const bool ruhig = n_laufende_ == 0 && !starts_ok && n_hand_zyklus == 0 && n_rueck == 0 && n_direkt_ == 0;
+  const bool ruhig = n_laufende_ == 0 && !starts_ok && n_hand_zyklus == 0 && n_rueck == 0 && n_direkt_ == 0 &&
+                     n_hand_rampen_ == 0;
 
   if (ruhig) {
     z_.zyklen_ruhig++;
@@ -198,6 +203,9 @@ void Stellwerk::prozess(int64_t s0, int n) {
         if (e >= 0) beenden(idx, Status::fertig, Grund::kein, s0 + e, HalterArt::frei);   // nimmt idx aus laufende_
         else q++;
       }
+      if (n_hand_rampen_ > 0)   // F18: Schaltrampen der Hand (hand.cpp)
+        for (int r = 0; r < tab_.anzahl(); r++)
+          if (reg_[r].hr_an) rechne_hand_rampe(r, i, j);
       i = j;
     }
     // Hand-Warteschlange nachrücken
@@ -215,6 +223,33 @@ void Stellwerk::prozess(int64_t s0, int n) {
   }
   melder_zyklusende(s_ende - 1);
   jetzt_ = s_ende;
+}
+
+// F18: Hand-Schaltrampe über [i, j), wie der Setzen-Zweig von rechne_strecke (S-Kurve, am Ende genau das Ziel).
+void Stellwerk::rechne_hand_rampe(int r, int i, int j) {
+  ReglerZustand& z = reg_[r];
+  const int slot = slot_fuer(r, i);
+  float* vl = nullptr;
+  if (slot >= 0) {
+    vl = verlauf_[slot];
+    const float alt = verlauf_bis_[slot] > 0 ? vl[verlauf_bis_[slot] - 1] : z.wert;
+    for (int k = verlauf_bis_[slot]; k < i; k++) vl[k] = alt;
+  }
+  bool fertig = false;
+  float v = z.wert;
+  int k = i;
+  for (; k < j; k++) {
+    const double u = formel::anteil_setzen(zyklus_s0_ + k, z.hr_sA, z.hr_schalt, &fertig);
+    v = formel::wert(u, fertig, true, z.hr_von, z.hr_ziel, z.hr_ziel);
+    if (vl) vl[k] = v;
+    if (fertig) break;
+  }
+  z.wert = v;
+  if (slot >= 0) verlauf_bis_[slot] = fertig ? k + 1 : j;
+  if (fertig) {
+    z.hr_an = false;
+    n_hand_rampen_--;
+  }
 }
 
 }  // namespace cypherdj::stellwerk

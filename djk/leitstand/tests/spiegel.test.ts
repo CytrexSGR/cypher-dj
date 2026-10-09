@@ -20,7 +20,8 @@ test('Spiegel: Regler und Halter aus /e/regler und /e/halter, Vorgabe sonst; Dec
   s.aufnehmen({ adresse: '/e/geladen', felder: { deck: 2, material_id: 'f0000000000000b2', basis_bpm: 128, fassung: 1, mit_stems: 0, sample: 0 } });
   assert.equal(s.inhalt('deck/2'), 'f0000000000000b2/128000_r1');   // §4.5
   s.aufnehmen({ adresse: '/zustand/deck', felder: { deck: 2, status: 2, material_id: 'f0000000000000b2', basis_bpm: 128, fassung: 1,
-    quell_beat: 12, beats_bis_ende: 200, faktor: 1, vorlauf_ms: 0, hoerweg: 0, stretcher_fuell: -1, versatz_intern_ms: 0 } });
+    quell_beat: 12, beats_bis_ende: 200, faktor: 1, vorlauf_ms: 0, hoerweg: 0, stretcher_fuell: -1, versatz_intern_ms: 0,
+      keylock_unterlauf: 0, keylock_aufgegeben: 0 } });
   beat = 30;
   assert.equal(s.quellBeatBei(2, 40), 32);                           // 12 + (40 − 20)·1
   assert.equal(s.laeuft(2), true);

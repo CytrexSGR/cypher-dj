@@ -18,8 +18,9 @@ export const ART_JE_ADRESSE: Record<string, string> = {
 };
 
 // Hochfrequente Ströme gehen nicht ins Journal (§18 Punkt 5, §15 Pflichtliste): /uhr je Zyklus wären
-// 187,5 Zeilen je Sekunde, /zustand/kern und /pegel je 20 Hz, /zustand/deck 50 Hz je Deck.
-export const NICHT_INS_JOURNAL = new Set(['/uhr', '/zustand/kern', '/zustand/deck', '/pegel']);
+// 187,5 Zeilen je Sekunde, /zustand/kern und /pegel je 20 Hz, /zustand/deck 50 Hz je Deck, /zustand/box 50 Hz je Box
+// (Keylock 7b.3, §5.5b).
+export const NICHT_INS_JOURNAL = new Set(['/uhr', '/zustand/kern', '/zustand/deck', '/zustand/box', '/pegel']);
 
 // Jede Adresse, die dieser Leitstand liest oder schreibt; tests/adressen.test.ts prüft, dass der Vertrag
 // (djk/vertrag/osc_adressen.ts) sie alle kennt.
@@ -30,6 +31,7 @@ export const GENUTZT = [
   '/k/teil', '/k/abbruch', '/k/tempo/rampe', '/k/deck/start', '/k/deck/stopp', '/k/deck/loop', '/k/deck/roll',
   '/k/deck/sprung', '/k/deck/hotcue', '/k/hoerschein', '/k/hoerschein/weg', '/k/ki/spur', '/k/ki/stufe', '/k/led',
   '/k/vorschlag_kanal', '/e/regler', '/e/taste', '/zustand/deck', '/zustand/kern', '/test/hand',
+  '/zustand/box',  // Keylock 7b.3: nur gelesen, um es aus dem Journal zu halten
 ];
 
 export type AnsageArt = 'vorschlag' | 'plan' | 'rueckfall' | 'warnung' | 'info';

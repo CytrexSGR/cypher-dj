@@ -37,6 +37,10 @@ class Tempoplan {
   void neu(double start_bpm);
 
   const Karte& karte() const { return karte_; }
+  // Keylock (Plan 2026-10-06-keylock-echtzeit.md, Vertrag 10): wächst, wenn sich die Karte im Inhalt ändert (Rampe
+  // angenommen oder verspätet, Storno, /k/set/neu, Wiederherstellen), NICHT bei verwerfe_vor. Adresse fest (Deck liest sie).
+  uint32_t generation() const { return generation_; }
+  const uint32_t* generation_zeiger() const { return &generation_; }
 
   // Einsortieren am Blockanfang n0. ab_beat endlich, ziel_bpm 60 bis 200, dauer_beats >= 1 (prüft das Netz).
   Einsortiert rampe(int64_t id, const char* quelle, double ab_beat, double ziel_bpm, double dauer_beats, int64_t n0);
@@ -70,6 +74,7 @@ class Tempoplan {
   Karte karte_;
   RampeEintrag e_[MAX_WARTEND];
   int n_ = 0;
+  uint32_t generation_ = 1;
 };
 
 template <class F>
