@@ -55,6 +55,16 @@
       <button data-fx-an title="Beat FX 2 on/off">ON</button>
       <button data-fx-reset title="Reset FX2 parameters to default">RESET</button>
     </div>
+    <div class="fxeinheit colorfx" id="colorfx" role="radiogroup" aria-label="Sound color FX (all channels, the FILTER knob of each channel is its COLOR knob)">
+      <label>COLOR</label>
+      <button data-colorart="1" role="radio" title="SPACE: reverb · left: mids and lows · right: mids and highs · PARAMETER: feedback">SPACE</button>
+      <button data-colorart="2" role="radio" title="DUB ECHO: echo 3/4 beat · left: mids only · right: highs only · PARAMETER: feedback">DUB ECHO</button>
+      <button data-colorart="3" role="radio" title="SWEEP · left: gate, tighter · right: band pass, narrower · PARAMETER: gate / center frequency">SWEEP</button>
+      <button data-colorart="4" role="radio" title="NOISE: white noise through a filter · left: low pass falls · right: high pass rises · PARAMETER: noise level">NOISE</button>
+      <button data-colorart="5" role="radio" title="CRUSH · left: distortion · right: crushed through a rising high pass · PARAMETER: strength">CRUSH</button>
+      <button data-colorart="0" role="radio" title="FILTER · left: low pass · right: high pass (pressing the lit type again also returns here)">FILTER</button>
+      <span class="colorparam"><span>PARAMETER</span><input type="range" id="colorparam" min="0" max="1" step="0.01" value="0.5" aria-label="Sound color FX parameter"><output data-colorparam>–</output></span>
+    </div>
   </div>
   <div class="ansage" id="ansage" title="Events reported by the control centre"></div>
   <div class="cypher" id="cypher">
@@ -101,6 +111,7 @@
           <button id="muster-senden" class="muster-senden" title="Play from the next bar (Ctrl+Enter)">PLAY ⏎</button>
           <button id="muster-stopp" class="muster-stopp" title="Stop from the next bar, your text stays (Ctrl+Backspace)">STOP</button>
           <button id="muster-zurueck" class="muster-zurueck" title="Back to what is playing (Ctrl+.)">REVERT</button>
+          <button class="muster-sichern" title="Save the pattern that is playing now (not the text in the box) to the library">SAVE</button><input class="muster-name" placeholder="name" size="12" maxlength="48" aria-label="Pattern name" hidden>
         </div>
         <div class="spurbaender" aria-label="Automation lanes"></div>
       </div>
@@ -116,6 +127,7 @@
           <button class="muster-senden" title="Play from the next bar (Ctrl+Enter)">PLAY ⏎</button>
           <button class="muster-stopp" title="Stop from the next bar, your text stays (Ctrl+Backspace)">STOP</button>
           <button class="muster-zurueck" title="Back to what is playing (Ctrl+.)">REVERT</button>
+          <button class="muster-sichern" title="Save the pattern that is playing now (not the text in the box) to the library">SAVE</button><input class="muster-name" placeholder="name" size="12" maxlength="48" aria-label="Pattern name" hidden>
         </div>
         <div class="spurbaender" aria-label="Automation lanes"></div>
       </div>
@@ -131,6 +143,7 @@
           <button class="muster-senden" title="Play from the next bar (Ctrl+Enter)">PLAY ⏎</button>
           <button class="muster-stopp" title="Stop from the next bar, your text stays (Ctrl+Backspace)">STOP</button>
           <button class="muster-zurueck" title="Back to what is playing (Ctrl+.)">REVERT</button>
+          <button class="muster-sichern" title="Save the pattern that is playing now (not the text in the box) to the library">SAVE</button><input class="muster-name" placeholder="name" size="12" maxlength="48" aria-label="Pattern name" hidden>
         </div>
         <div class="spurbaender" aria-label="Automation lanes"></div>
       </div>
@@ -150,6 +163,7 @@
       </div>
       <div class="meterzeile"><div class="meter senkrecht" data-kanal="master"><i></i></div></div>
       <output class="pegelzahl" data-pegelzahl="master">−∞</output>
+      <button class="pfl schalter" data-pfad="master/pfl" title="Master cue: send the master to the PFL side of the headphones (MIX left = only what has PFL on)">PFL</button>
       <div class="fxzuweisung mfx">
         <button data-fxzuweisung="1" data-kanal="master" title="Assign master to Beat FX 1">1</button>
         <button data-fxzuweisung="2" data-kanal="master" title="Assign master to Beat FX 2">2</button>
@@ -187,11 +201,16 @@
 <section id="bestand">
   <div class="kopfzeile">
     <button id="schublade" title="Show or hide the library (L)">▾</button>
-    <h2>LIBRARY</h2>
+    <button id="gross" title="Big browser (G)" aria-pressed="false">⤢</button>
+    <div class="bereich" role="tablist" aria-label="Bottom panel"><button data-bereich="library" class="an" role="tab" title="Library: tracks, loops, sets">LIBRARY</button><button data-bereich="effekte" role="tab" title="Effects: compressor per channel">EFFECTS</button></div>
     <div class="reiter"><button data-reiter="tracks" class="an">TRACKS</button><button data-reiter="loops">LOOPS</button><button data-reiter="library">LIBRARY</button><button data-reiter="sets">SETS</button></div>
     <input id="suche" type="search" placeholder="Search title or key" autocomplete="off">
     <span id="bestand-info"></span>
     <span id="meldung" role="status"></span>
+  </div>
+  <div class="effekte" id="effekte" hidden>
+    <div class="fxstreifen-reihe" id="fxstreifen"></div>
+    <div class="fxdetail" id="fxdetail" aria-label="Compressor detail of the selected channel (⤢ opens it)"></div>
   </div>
   <div class="tabelle" data-tabelle="tracks">
     <table>
@@ -206,19 +225,35 @@
     </table>
   </div>
   <div class="tabelle" data-tabelle="library" hidden>
-    <div class="lib-filter"><input id="lib-suche" type="search" placeholder="Search the library (Enter)" autocomplete="off">
-      <input id="lib-key" placeholder="Key" size="4"><input id="lib-bpm" placeholder="BPM 124-130" size="9"></div>
-    <table>
-      <thead><tr><th>Title</th><th>Artist</th><th>BPM</th><th>Key</th><th>Genre</th><th>Length</th><th></th><th></th></tr></thead>
-      <tbody id="libliste"></tbody>
-    </table>
+    <div class="stoebern">
+      <nav class="st-baum" id="st-baum" aria-label="Folders and facets"></nav>
+      <div class="st-mitte">
+        <div class="st-kopf">
+          <div class="st-typen" role="tablist" aria-label="Media type">
+            <button data-typ="track" class="an" role="tab">ALL TRACKS</button><button data-typ="loop" role="tab">LOOPS</button><button data-typ="oneshot" role="tab">SAMPLES</button><button data-typ="strudel" role="tab">STRUDEL</button>
+          </div>
+          <div class="lib-filter">
+            <input id="lib-suche" type="search" placeholder="Search: words, artist:, label:, genre:, release:, catalog:, isrc:, pack:, folder: … (Enter)" autocomplete="off" title="Words match as prefixes. field:value searches one field, quotes keep spaces: label:drumcode  artist:&quot;dj x&quot;  pack:battery kick. Patterns: words are substrings of name, code and role; only name: and rolle:.">
+            <input id="lib-key" placeholder="Key" size="4" title="Camelot key, e.g. 8A"><label class="klein" title="Include ±1 and the relative key"><input type="checkbox" id="lib-nachbarn"> ±1</label>
+            <input id="lib-bpm" placeholder="BPM 124-130" size="9">
+            <select id="lib-energie" title="Energy"><option value="">Energy</option><option value="0">low (1–5)</option><option value="1">mid (6–7)</option><option value="2">high (8–10)</option></select>
+          </div>
+        </div>
+        <div class="st-liste">
+          <table><thead><tr id="st-kopfzeile"></tr></thead><tbody id="libliste"></tbody></table>
+        </div>
+        <div class="st-seiten"><button id="st-zurueck" title="Previous page">‹</button><span id="st-seite"></span><button id="st-weiter" title="Next page">›</button></div>
+      </div>
+      <aside class="st-detail" id="st-detail" aria-label="Details"></aside>
+    </div>
+    <div id="listen-menue" class="listen-menue" role="menu" hidden></div>
   </div>
   <div class="tabelle" data-tabelle="sets" hidden>
     <div class="set-kopf"><select id="set-wahl"></select>
       <input id="set-name" placeholder="New set name" size="16"><button id="set-neu">NEW SET</button>
       <span id="set-zusammenfassung"></span><select id="set-import"><option value="">Import Traktor playlist…</option></select><button id="set-alle" title="Run all tracks of this set through the workshop">PREPARE ALL</button><button id="set-loeschen" title="Move set to trash">DELETE SET</button></div>
     <table>
-      <thead><tr><th>Title</th><th>Artist</th><th>BPM</th><th>Key</th><th>Genre</th><th>Length</th><th>Status</th><th></th></tr></thead>
+      <thead><tr><th>Title</th><th>Artist</th><th>BPM</th><th>Key</th><th title="Energy 1–10: Mixed In Key where present, otherwise our own analysis">Energy</th><th>Genre</th><th>Length</th><th>Status</th><th></th></tr></thead>
       <tbody id="setliste"></tbody>
     </table>
   </div>
@@ -233,7 +268,7 @@
   <div class="titel" data-titel>No track loaded</div>
   <div class="meta" data-meta>Pick a track in the library and press LOAD</div>
   <div class="position">
-    <div><label>BAR</label><b data-bar>–</b><span class="von" data-von></span></div>
+    <div><label>BAR</label><b data-bar>–</b><span class="von" data-von></span> <span class="eins-hinweis" data-einshinweis hidden></span></div>
     <div class="rest"><label>LEFT</label><b data-rest>–</b></div>
   </div>
   <canvas class="lauf" data-lauf></canvas>

@@ -12,7 +12,8 @@ import { baueBestand } from './bestand.mjs';
 import { schreibeLeerenRing } from './ring.mjs';
 export const HIER = path.dirname(fileURLToPath(import.meta.url));
 export const REPO = path.resolve(HIER, '..', '..', '..', '..');
-export const K = 8000; // Instanz h
+import { K, TEST_INSTANZ } from './instanz.mjs';
+export { K };
 export const HOST = os.hostname();
 export const warte = (ms) => new Promise((r) => setTimeout(r, ms));
 export const sha = (n) => crypto.createHash('sha256').update(`objekt-${n}`).digest('hex');
@@ -55,7 +56,7 @@ export function baueMediathek(dir) {
   for (const p of Object.values(dateien)) fs.writeFileSync(p, 'x');
   const db = new DatabaseSync(path.join(dir, 'mediathek.sqlite'));
   db.exec(SCHEMA);
-  for (const [q, r] of [['andreas', 0], ['werkstatt', 1], ['beatport', 2], ['tag', 6]]) db.prepare('INSERT INTO rang VALUES (?,?)').run(q, r);
+  for (const [q, r] of [['andreas', 0], ['werkstatt', 1], ['beatport', 2], ['tag_mik', 3], ['tag', 6], ['analyse', 7]]) db.prepare('INSERT INTO rang VALUES (?,?)').run(q, r);
   fs.mkdirSync(path.join(daten, 'Zwerg_live/Core Library/Samples/Multisamples/Grand Piano'), { recursive: true });
   fs.writeFileSync(path.join(daten, 'Zwerg_live/Core Library/Samples/Multisamples/Grand Piano/GrandPiano C3 mf.aif'), 'x');
   for (let w = 1; w <= 4; w++) db.prepare('INSERT INTO werk VALUES (?,?,?)').run(w, 'test', `w${w}`);
@@ -69,11 +70,13 @@ export function baueMediathek(dir) {
   ang(1, 'kuenstler', 'Alpha', 'beatport', '2026-03-01');
   ang(1, 'bpm', '126', 'beatport', '2026-03-01'); ang(2, 'bpm', '127.5', 'beatport', '2026-03-05');   // Gleichstand im Rang → jüngstes gewinnt
   ang(1, 'camelot', '8A', 'beatport', '2026-03-01');
+  ang(1, 'energie', '7', 'tag_mik', '2026-01-01'); ang(2, 'energie', '6', 'analyse', '2026-10-10');  // MIK schlägt die Analyse
   ang(1, 'genre', 'Techno', 'tag', '2026-01-01'); ang(2, 'genre', 'Tech House', 'tag', '2026-05-01');  // Gleichstand → 2026-05
   ang(2, 'mix', 'Extended Mix', 'beatport', '2026-03-01');
   // Werk 2
   ang(3, 'typ', 'track', 'tag', '2026-01-01'); ang(3, 'titel', 'House Thing', 'beatport', '2026-03-01'); ang(3, 'kuenstler', 'Beta', 'beatport', '2026-03-01');
   ang(3, 'bpm', '122', 'beatport', '2026-03-01'); ang(3, 'camelot', '5B', 'beatport', '2026-03-01'); ang(3, 'genre', 'House', 'tag', '2026-01-01');
+  ang(3, 'energie', '5', 'analyse', '2026-10-10');   // ohne MIK füllt die Analyse
   // Werk 3: Loop
   ang(4, 'typ', 'loop', 'tag', '2026-01-01'); ang(4, 'titel', 'Tech Loop', 'beatport', '2026-03-01'); ang(4, 'bpm', '126', 'beatport', '2026-03-01');
   // Werk 4
@@ -110,20 +113,20 @@ export function baueEinleser(dir, { schlaf = 0, ausgabe = '{"status":"neu","mate
   return { skript, log, laeufe: () => (fs.existsSync(log) ? fs.readFileSync(log, 'utf8').split('---\n').filter(Boolean) : []) };
 }
 
-export async function stapel(t, { mediathek, python, bestand, einleserModul, sammlungen, loops } = {}) {
+export async function stapel(t, { mediathek, python, bestand, einleserModul, sammlungen, loops, katalog, vorhoeren, musterBibliothek, musterSets, musterOrdner, welleFfmpeg, welleZeitlimit, loopWerkzeug } = {}) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-mt-'));
   const ab = path.join(fs.mkdtempSync('/dev/shm/djk-mt-test-'), 'material');
   fs.mkdirSync(ab, { recursive: true });
   const att = spawn(process.execPath, [path.join(REPO, 'djk/vertrag/attrappe_kern.mjs'), '--frisch', '--arbeitsbestand', ab,
-    '--zustand', path.join(tmp, 'zustand.json')], { env: { ...process.env, CYPHERDJ_INSTANZ: 'h' }, stdio: ['ignore', 'pipe', 'pipe'] });
+    '--zustand', path.join(tmp, 'zustand.json')], { env: { ...process.env, CYPHERDJ_INSTANZ: TEST_INSTANZ }, stdio: ['ignore', 'pipe', 'pipe'] });
   await new Promise((ok, f) => { att.stdout.once('data', ok); att.once('exit', (c) => f(new Error(`attrappe rc ${c}`))); });
   const huellen = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'djk-huellen-')), 'huellen'); schreibeLeerenRing(path.dirname(huellen) + '/huellen');
   const tmpd = (n) => fs.mkdtempSync(path.join(os.tmpdir(), `djk-${n}-`));
   const bestandDir = bestand ?? baueBestand(path.join(tmp, 'bestand'), []);
   const log = [];
   const o = new Oberflaeche({ port: 47300 + K, kernPort: 47100 + K, aboPort: 47150 + K, leitstandWs: 47200 + K, bestand: bestandDir, arbeitsbestand: ab,
-    kernPruefmodus: true, loops: loops ?? tmpd('loops'), kits: tmpd('kits'), welleCache: tmpd('welle'), musterOrdner: tmpd('muster'), hotcueOrdner: tmpd('hc'),
-    rasterOrdner: tmpd('raster'), huellen, wirtOrdner: tmpd('wirt'), mediathek, python, einleserModul, sammlungen, log: (z) => log.push(z) });
+    kernPruefmodus: true, loops: loops ?? tmpd('loops'), kits: tmpd('kits'), welleCache: tmpd('welle'), musterOrdner: musterOrdner ?? tmpd('muster'), musterBibliothek, musterSets, hotcueOrdner: tmpd('hc'),
+    rasterOrdner: tmpd('raster'), huellen, wirtOrdner: tmpd('wirt'), mediathek, katalog, vorhoeren, python, welleFfmpeg, welleZeitlimit, loopWerkzeug, einleserModul, sammlungen, log: (z) => log.push(z) });
   await o.starte();
   for (let i = 0; i < 100 && o.kern.zustand !== 'verbunden'; i++) await warte(20);
   assert.equal(o.kern.zustand, 'verbunden');

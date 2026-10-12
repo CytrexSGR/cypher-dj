@@ -1,0 +1,16 @@
+[package]
+name = "cypher_hall"
+version = "0.1.0"
+edition = "2021"
+description = "Cypher Hall als VST3 (nih-plug): dünne Hülle um hall_dsp"
+license = "GPL-3.0-or-later"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+hall_dsp = { path = "../hall_dsp" }
+nih_plug = { workspace = true }
+
+[features]
+pruef_alloc = ["nih_plug/assert_process_allocs"]

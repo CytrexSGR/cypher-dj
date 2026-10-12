@@ -81,6 +81,17 @@ ReglerTabelle::ReglerTabelle() {
       }
       neu(pf("xseite"), k, Rolle::xseite, 0, 2, 1, 0, true, false, true, true, stufen(0, 2));
       neu(pf("pfl"), k, Rolle::pfl, 0, 1, 0, 0, true, false, true, true, K_SCHALTER);
+      if (!bus) {   // Kompressor je Quellkanal (Plan 2026-10-11-effekt-sektion.md): nach EQ/Filter, vor dem Fader; alle dürfen
+        neu(pf("komp/an"), k, Rolle::komp_an, 0, 1, 0, 0, false, false, true, true, K_SCHALTER);
+        neu(pf("komp/schwelle"), k, Rolle::komp_schwelle, -60, 0, -18, MS(10), false, false, false, false, linear(-60, 0));
+        neu(pf("komp/ratio"), k, Rolle::komp_ratio, 1, 20, 4, MS(10), false, false, false, false, linear(1, 20));
+        neu(pf("komp/attack"), k, Rolle::komp_attack, 0.1f, 100, 10, MS(10), false, false, false, false, linear(0.1f, 100));
+        neu(pf("komp/release"), k, Rolle::komp_release, 10, 1000, 120, MS(10), false, false, false, false, linear(10, 1000));
+        neu(pf("komp/makeup"), k, Rolle::komp_makeup, 0, 24, 0, MS(10), false, false, false, false, linear(0, 24));
+        neu(pf("komp/mix"), k, Rolle::komp_mix, 0, 1, 1, MS(10), false, false, false, false, linear(0, 1));
+        // Sidechain: 0 = eigenes Signal, sonst Quellkanal + 1 (deck/1 = 1 … erz/1 = 5 … pad/2 = 14), Schlüssel ist dessen Eingang
+        neu(pf("komp/sc"), k, Rolle::komp_sc, 0, 14, 0, 0, false, false, true, true, stufen(0, 14));
+      }
       if (deck) neu(pf("transport"), k, Rolle::transport, 0, 0, 0, 0, true, false, true, true, K_SCHALTER, i);
     }
   }
@@ -110,6 +121,12 @@ ReglerTabelle::ReglerTabelle() {
   // der über alles die tonhöhe gleichhält“): EIN Schalter für Decks, Loop-Boxen und Loop auf dem Deck, Vorgabe 1, kein
   // Deck-Argument (sonst keine_stems, Prüfer B1), alle Quellen; Argumentfolge wie transport.
   neu("keylock", -1, Rolle::keylock, 0, 1, 1, 0, false, false, true, true, K_SCHALTER);
+  // MASTER CUE (Andreas 2026-10-10: „master braucht auch pfl“): Master in die PFL-Summe des Kopfhörers, nur Hand
+  neu("master/pfl", master, Rolle::master_pfl, 0, 1, 0, 0, true, false, true, true, K_SCHALTER);
+  // SOUND COLOR FX (Andreas 2026-10-11: „lass erstmal wie am xz machen“): Art und PARAMETER global wie am Pult, der
+  // COLOR-Regler ist <k>/filter. Art 0 FILTER, 1 SPACE, 2 DUB ECHO, 3 SWEEP, 4 NOISE, 5 CRUSH; alle dürfen.
+  neu("color/art", -1, Rolle::color_art, 0, 5, 0, 0, false, false, true, true, stufen(0, 5));
+  neu("color/param", -1, Rolle::color_param, 0, 1, 0.5f, MS(10), false, false, false, false, linear(0, 1));
   for (int i = 0; i < n_; i++) sortiert_[i] = static_cast<int16_t>(i);
   std::sort(sortiert_, sortiert_ + n_, [&](int16_t a, int16_t b) { return std::strcmp(def_[a].pfad, def_[b].pfad) < 0; });
 }

@@ -60,6 +60,14 @@ foreach(f ${TESTDATEIEN})
 endforeach()
 
 # §7.2: das Beispiel im Test ist bytegleich das Beispiel im Vertrag
+# Das python3 aus dem PATH (System, mit numpy) vorgeben: seit 2026-10-03 liegt ein uv-Python 3.11 ohne numpy in
+# ~/.local/bin, FindPython nahm es dort als ersten Treffer, und die Python-Tests brachen am Import ab (2026-10-11).
+if(NOT DEFINED Python3_EXECUTABLE)
+  find_program(CYPHERDJ_PYTHON3 NAMES python3)
+  if(CYPHERDJ_PYTHON3)
+    set(Python3_EXECUTABLE ${CYPHERDJ_PYTHON3})
+  endif()
+endif()
 find_package(Python3 COMPONENTS Interpreter)
 if(Python3_FOUND AND EXISTS ${VERTRAG_TEXT} AND EXISTS ${D}/tests/mappings/beispiel_7_2.json)
   add_test(NAME beispiel_gleich_vertrag

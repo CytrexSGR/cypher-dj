@@ -10,6 +10,8 @@
 //   keine halbe Kopie. Beim Start räumt er Reste toter Kopien (.kopie-<pid>-<n>) weg.
 // Aufruf: node djk/oberflaeche/server.ts [--port N] [--kern-port N] [--abo-port N] [--leitstand-ws N] [--bestand DIR]
 //   [--mediathek DATEI]  (Vorgabe $CYPHERDJ_MEDIATHEK, z. B. /path/to/mediathek.sqlite; nur lesen)
+//   [--katalog DATEI]    (Vorgabe $CYPHERDJ_KATALOG, sonst katalog.sqlite neben der Mediathek; nur lesen)
+//   [--welle-cache ORDNER]  (Vorgabe: Betrieb ~/.cache/cypherdj/welle, Prüfinstanz /dev/shm/cypherdj-<i>/welle)
 //   [--digitalout DATEI]  (Glanz 2.1, F22: Standdatei der Digital-Out-Wache; fehlt sie, gilt 'unbewacht')
 //   [--arbeitsbestand DIR]  (Vorgabe /dev/shm/cypherdj/material, mit Prüfinstanz /dev/shm/cypherdj-<i>/material)
 //   [--ziel-kurve kern|attrappe_linear]  (Vorgabe kern; Prüfstapel gegen die Attrappe: attrappe_linear)
@@ -33,12 +35,18 @@ const TASTEN = ['annehmen', 'verwerfen', 'stopp', 'freigabe'];
 import { arbeitsbestandVorgabe, inArbeitsbestand, KopieFehler, raeumeAuf } from './arbeitsbestand.ts';
 import { HAND_PRUEFMODUS_TEXT } from './oeffentlich/meldungen.js';
 import { leseLoops, loopOrdnerVorgabe, LOOP_NAME, leseLoopVersatz, schreibeLoopVersatz, schreibeLoopAusFassung } from './loops.ts';
-import { WelleCache, WelleFehler, loopQuelle, fassungQuelle } from './welle_cache.ts';
-import { RASTER_WAHL, abBeat, sprungDelta, rasterRunden, hotcueDatei, leseHotcues, schreibeHotcues, type Hotcue, type Fassung, rasterSchritt, RASTER_MAX, rasterDatei, leseRaster, schreibeRaster, einsSetzen } from './deck_bedienung.ts';
+import { pruefeAutomation, planeSpur, spurLaenge, naechsterDurchgang, leseLoopAutomation, schreibeLoopAutomation, type AutoSpur } from './loop_automation.ts';
+import { beatsVon, importiereLoop, loopNameVon, findeImport, raeumeImportReste, LoopImportFehler, type ImportOptionen } from './loop_import.ts';
+import { WelleCache, WelleFehler, loopQuelle, fassungQuelle, dateiQuelle, welleCacheVorgabe } from './welle_cache.ts';
+import { RASTER_WAHL, abBeat, sprungDelta, rasterRunden, hotcueDatei, leseHotcues, schreibeHotcues, type Hotcue, type Fassung, rasterSchritt, RASTER_MAX, rasterDatei, leseRaster, schreibeRaster, einsSetzen, rasterErbe, einsNachFix, einsZeile, haengeKorrekturAn, letzteEinsZeile, hatHandEins, hotcuesErbe } from './deck_bedienung.ts';
 // @ts-expect-error reines .mjs ohne Typen (djk/loops)
 import { loopZuKlang } from '../loops/kit_schreiben.mjs';
 import { AB, PFAD, oeffnet, kanalOffen, FEHL_STATUS, ersterFreierBeat } from './hand_bedienung.ts';
 import { Sammlungen, SammlungFehler, uebersicht } from './sammlung.ts';
+import { MusterBibliothek, MusterFehler, type MusterEintrag } from './muster_bibliothek.ts';
+import { suchTerme } from './suchtext.ts';
+import { Katalog, KatalogFehler, KATALOG_TYPEN, SORT_VORGABE, SEITE_VORGABE, SEITE_MAX, katalogVorgabe, type Typ, type Zeile, type Filter } from './katalog.ts';
+import { Vorhoeren, VorhoerFehler, kernNurCueVorgabe, vorhoeerKlientVorgabe } from './vorhoeren.ts';
 import { Mediathek, Vorbereiter, MediathekFehler, KLANG_TYPEN, type KlangTreffer, MEDIATHEK_VORGABE, bestandIds, parseBpm, parseLimit } from './mediathek.ts';
 import { pruefeSpur, plane, oeffnetKanal, beatZuMono, wirtRuf, stromVonZiel, faelligeMuster, SPUR_NAME, type MusterPlan, type Fahrt } from './spur.ts';
 import { leseAusgang } from './ausgang.ts';
@@ -52,7 +60,7 @@ const OEFFENTLICH = path.join(HIER, 'oeffentlich');
 const REPO = path.resolve(HIER, '..', '..');
 // Python für welle.py (braucht numpy): CYPHERDJ_PYTHON, sonst die venv der Werkstatt (Arbeitsrechner), sonst die venv
 // im Repo-Wurzelordner (INSTALL §3: `python3 -m venv .venv`), sonst python3 aus dem PATH.
-function pythonVorgabe(): string {
+export function pythonVorgabe(): string {
   const kandidaten = [process.env.CYPHERDJ_PYTHON, path.join(REPO, 'djk', 'werkstatt', '.venv', 'bin', 'python'), path.join(REPO, '.venv', 'bin', 'python')];
   return kandidaten.find((p) => p !== undefined && p !== '' && fs.existsSync(p)) ?? 'python3';
 }
@@ -70,7 +78,9 @@ export interface ServerOptionen {
   digitalout?: string;  // Glanz 2.1: Standdatei der Digital-Out-Wache
   kits?: string;   // MVP 2 Scheibe 3: Kit-Ordner (Vorgabe ~/.config/cypherdj/kits, wie der Kern)
   kit?: string;    // Basis-Kit des Erzeugers (Vorgabe battery); Zusatz-Kit rec bzw. rec-<i>
-  welleCache?: string;  // Plan Oberfläche T2: Vorgabe ~/.cache/cypherdj/welle
+  welleCache?: string;  // Plan Oberfläche T2: Vorgabe je Instanz (S5-Review B4): Betrieb ~/.cache/cypherdj/welle, Prüfinstanz /dev/shm/cypherdj-<i>/welle
+  welleFfmpeg?: string[];  // Tests: anderer Aufruf statt ffmpeg (z. B. eine langsame Attrappe)
+  welleZeitlimit?: (dauerS?: number) => number;  // Tests: Zeitlimit der Dekodierung in ms
   python?: string;      // Vorgabe: pythonVorgabe() (welle.py braucht numpy)
   musterOrdner?: string;  // Plan 2: Vorgabe /dev/shm/cypherdj[-i]/erzeuger
   hotcueOrdner?: string;  // Plan E9: Vorgabe ~/.config/cypherdj/hotcues
@@ -78,8 +88,13 @@ export interface ServerOptionen {
   huellen?: string;  // Ohr T5: Vorgabe /dev/shm/cypherdj[-i]/huellen
   wirtOrdner?: string;  // Studio S6: Ordner der Wirt-Sockets (Vorgabe /dev/shm/cypherdj[-i])
   sammlungen?: string;   // Sets: Ordner, Vorgabe <REPO>/bibliothek/sets
+  musterBibliothek?: string;   // S2b: eigene Strudel-Muster, Vorgabe <REPO>/bibliothek/muster
+  musterSets?: string;         // S2b: Muster-Quellen track.mjs und Dirigent-Blöcke, Vorgabe <REPO>/sets
+  loopWerkzeug?: ImportOptionen['werkzeug'];   // Tests: Attrappen vor ffmpeg/rubberband des Loop-Imports (S6)
+  katalog?: string;      // Browser (Plan 2026-10-10): katalog.sqlite, Vorgabe $CYPHERDJ_KATALOG bzw. neben der Mediathek
   mediathek?: string;    // Mediathek T2: Vorgabe $CYPHERDJ_MEDIATHEK (nur lesen; fehlt sie: 503 mediathek_fehlt)
   einleserModul?: string;  // Mediathek T2: Python-Modul für POST /mediathek/vorbereiten (Vorgabe werkstatt.einzeln); Python selbst: `python`
+  vorhoeren?: Vorhoeren;   // S7: Vorhören als Kern-Eingang (Tests: Attrappe statt Vorhörer-Prozess)
   klangBefehl?: string;  // Task 3: Programm für POST /klang (Vorgabe djk/wirte/carla/djk-klang); Tests biegen es auf ein Stub-Skript um
 }
 
@@ -89,13 +104,15 @@ const KLANG_AUS_MAX = 32768, KLANG_ERR_MAX = 8192;
 export type Pruefmodus = 'an' | 'aus' | 'unbekannt';
 
 // Drosselung je Schlüssel: höchstens eine Meldung je Intervall, die letzte gewinnt (nachgereicht)
-const DROSSEL_MS: Record<string, number> = { '/uhr': 50, '/zustand/deck': 100, '/pegel': 100 };
+const DROSSEL_MS: Record<string, number> = { '/uhr': 50, '/zustand/deck': 100, '/pegel': 100, '/zustand/komp': 100 };
 const DURCHREICHEN = new Set(['/uhr', '/zustand/deck', '/pegel', '/e/regler', '/e/hand', '/e/geladen', '/e/hotcue', '/e/fx',
-  '/e/fx/zuweisung', '/e/fx/routing', '/q', '/e/protokollfehler', '/e/halter', '/e/neustart', '/k/willkommen', '/e/ki', '/e/loop', '/e/mitschnitt', '/e/raster']);
+  '/e/fx/zuweisung', '/e/fx/routing', '/q', '/e/protokollfehler', '/e/halter', '/e/neustart', '/k/willkommen', '/e/ki', '/e/loop', '/e/mitschnitt', '/e/raster',
+  '/zustand/komp']);   // Effekt-Sektion 2026-10-11: Absenkung je aktivem Kompressor (10 Hz)
 
 interface Eintrag {
   material_id: string; titel: string; camelot: string | null; quelle_bpm: number; dauer_s: number; lufs: number;
   tore_ok: boolean; basis_bpm: number; fassung: number; beats: number | null; erste_eins_quell_beat: number;
+  eins_unsicher: boolean;   // tore.eins.unsicher der Fassung (2026-10-11): die Seite zeigt „downbeat?“
 }
 
 export function leseBestand(dir: string): Eintrag[] {
@@ -107,18 +124,29 @@ export function leseBestand(dir: string): Eintrag[] {
         f.basis_bpm, f.fassung, f.lufs, f.tore_ok FROM fassung f JOIN material m USING (material_id)
         ORDER BY m.titel, f.basis_bpm, f.fassung`).all() as Record<string, unknown>[];
     return zeilen.map((z) => {
+      const mo = path.join(dir, String(z.material_id));
       const fj = path.join(dir, String(z.material_id), 'fassungen', `${Math.round(Number(z.basis_bpm) * 1000)}_r${z.fassung}`, 'fassung.json');
       let beats: number | null = null;
-      let eins = 0;
+      let eins = 0, unsicher = false, bewertet = false;
       try {
-        const j = JSON.parse(fs.readFileSync(fj, 'utf8')) as { beats?: number; erste_eins_quell_beat?: number };
+        const j = JSON.parse(fs.readFileSync(fj, 'utf8')) as { beats?: number; erste_eins_quell_beat?: number; tore?: { eins?: { unsicher?: unknown } } };
         beats = j.beats ?? null;
         eins = j.erste_eins_quell_beat ?? 0;
+        unsicher = j.tore?.eins?.unsicher === true;
+        bewertet = (j.tore?.eins as { bewertet?: unknown } | undefined)?.bewertet === true;
       } catch { /* Fassung ohne json: Anzeige ohne Länge */ }
+      // Seitenwert von lauf_eins (eins_bewertung.json neben material.json), solange die Fassung selbst nicht bewertet ist
+      if (!bewertet) {
+        try {
+          const sw = JSON.parse(fs.readFileSync(path.join(mo, 'eins_bewertung.json'), 'utf8')) as { unsicher?: unknown };
+          unsicher = sw.unsicher === true && !hatHandEins(mo);
+        } catch { /* keine oder unlesbare Seitendatei: nichts zeigen */ }
+      }
       return {
         material_id: String(z.material_id), titel: String(z.titel), camelot: (z.camelot as string) ?? null,
         quelle_bpm: Number(z.quelle_bpm), dauer_s: Number(z.dauer_s), lufs: Number(z.lufs), tore_ok: z.tore_ok === 1,
         basis_bpm: Number(z.basis_bpm), fassung: Number(z.fassung), beats, erste_eins_quell_beat: eins,
+        eins_unsicher: unsicher,
       };
     });
   } finally { db.close(); }
@@ -132,7 +160,10 @@ const TYPEN: Record<string, string> = {
 interface SpurLauf { quelle: string; anker: number; ende: number; fahrten: Fahrt[]; timer: NodeJS.Timeout[]; offen: MusterPlan[]; gruppen: Set<string>; ids: number[]; teile: { id: number; teil: number; pfad: string }[] }
 
 // K2: Regler, die /lage erst zeigt, wenn sie von der Vorgabe (SCHNITTSTELLEN §1.5) abweichen
-const LAGE_ABWEICHEND: Record<string, number> = { 'master/kleber': 0, 'duck/tiefe': 0, 'duck/release': 200, 'fx/2/rueckweg': 0 };
+// Kompressor je Quellkanal (2026-10-11): in der Lage, sobald ein Feld von seiner Vorgabe abweicht
+const KOMP_VORGABE: Record<string, number> = { an: 0, schwelle: -18, ratio: 4, attack: 10, release: 120, makeup: 0, mix: 1, sc: 0 };
+const kompAbweichend = (p: string, w: number): boolean => { const m = /^(?:deck\/[1-4]|erz\/[1-8]|pad\/[12])\/komp\/(\w+)$/.exec(p); return !!m && m[1] in KOMP_VORGABE && w !== KOMP_VORGABE[m[1]]; };
+const LAGE_ABWEICHEND: Record<string, number> = { 'master/kleber': 0, 'duck/tiefe': 0, 'duck/release': 200, 'fx/2/rueckweg': 0, 'color/art': 0, 'color/param': 0.5 };
 
 export class Oberflaeche {
   readonly opt: ServerOptionen;
@@ -153,6 +184,8 @@ export class Oberflaeche {
   private readonly welle: WelleCache;
   private readonly ohr: OhrLeser;   // Ohr T5: Hüllkurven-Ring (§6.2), liest deck/1, deck/2, master
   private ohrTakt: NodeJS.Timeout | null = null;
+  // Effekt-Sektion Schritt 4: je Box die geplante Loop-Automation (Name, bis wohin geplant, nächste Teilnummer)
+  private loopAuto: Record<string, { name: string; auto: AutoSpur[]; beats: number; geplantBis: number[]; teil: number }> = {};   // geplantBis je Spur
   // Ohr T10: Hörscheinstelle hält je Kanal den letzten Schein; `hoerscheine` ist dieselbe Objekt-Referenz wie
   // `hoerscheinstelle.scheine` (kein Copy), damit ein Test (oder eine spätere Anzeige) direkt hineinschreiben bzw.
   // lesen kann und die Hoerscheinstelle denselben Stand sieht.
@@ -177,7 +210,37 @@ export class Oberflaeche {
     const i = process.env.CYPHERDJ_INSTANZ ?? '';
     return this.opt.huellen ?? `/dev/shm/cypherdj${i ? `-${i}` : ''}/huellen`;
   }
-  private rasterGespeichert(f: Fassung): number { return leseRaster(rasterDatei(this.rasterOrdner(), f)); }
+  // Gespeicherter Versatz der Fassung; fehlt ihre Datei, gilt die der nächstälteren Fassung (rasterErbe, Bericht grid-phase M7).
+  private readonly einsGelesen = new Map<string, { eins: number; esf: number }>();
+  private einsDerFassung(mid: string, bpm: number, fassung: number): { eins: number; esf: number } | null {
+    const k = `${mid}|${bpm}|${fassung}`, c = this.einsGelesen.get(k);
+    if (c !== undefined) return c;
+    try {
+      const q = fassungQuelle(this.opt.bestand, mid, bpm, fassung);
+      const j = JSON.parse(fs.readFileSync(path.join(path.dirname(q.datei), 'fassung.json'), 'utf8')) as Record<string, unknown>;
+      const e = { eins: Number(j.erste_eins_quell_beat), esf: Number(j.erster_schlag_frame) };
+      if (!Number.isFinite(e.eins) || !Number.isFinite(e.esf)) return null;
+      this.einsGelesen.set(k, e);
+      return e;
+    } catch { return null; }
+  }
+  private rasterErbeVon(f: Fassung): { v: number; von: number | null } {
+    return rasterErbe(this.rasterOrdner(), f, { fpb: 48000 * 60 / f.basis_bpm, einsVon: (r) => this.einsDerFassung(f.material_id, f.basis_bpm, r) });
+  }
+  private rasterGespeichert(f: Fassung): number { return this.rasterErbeVon(f).v; }
+  // Nur FIX (der ausdrückliche Speicherakt, Review B4; SET bleibt flüchtig wie der Raster-Versatz): die ganzen Beats im Versatz sind die Eins; sie gehört ins Material (korrekturen.jsonl art=eins), damit sie in
+  // jeder Folgefassung von selbst stimmt (kette.korrigieren). Ein Fehler hier darf das Grid nicht blockieren: nur loggen.
+  private einsZurueck(st: { f: Fassung; eins: number }, v: number, quelle: 'FIX'): void {
+    try {
+      const mo = path.join(this.opt.bestand, st.f.material_id);
+      const fpb = 48000 * 60 / st.f.basis_bpm;
+      const ziel = einsNachFix({ v, fpb, eins: st.eins, letzte: letzteEinsZeile(mo) });
+      if (ziel === null) return;
+      const k = Math.round(v / fpb);
+      haengeKorrekturAn(mo, einsZeile(st.f, ziel, k, quelle));
+      this.opt.log?.({ typ: 'eins_korrektur', quelle, material_id: st.f.material_id, fassung: st.f.fassung, eins: ziel, beats: k });
+    } catch (e) { this.opt.log?.({ typ: 'eins_korrektur_fehler', material_id: st.f.material_id, fehler: (e as Error).message }); }
+  }
   private rasterSenden(deck: number, f: Fassung, v: number): void {
     this.kern.sende('/k/deck/raster', { id: Number(++this.id), quelle: this.quelle(), deck, material_id: f.material_id,
       basis_bpm: f.basis_bpm, fassung: f.fassung, versatz_frames: v });
@@ -302,31 +365,46 @@ export class Oberflaeche {
     const st = this.deckStand(d.deck);
     if (!st) return this.json(a, 409, { fehler: 'kein_kernstand' });
     const v = this.rasterWert(st.deck, st.f).versatz_frames;
+    // Review F1: ein nur geerbter Satz hängt an der Audio-Stelle (rechnet mit dem gespeicherten Raster), ein eigener an der
+    // Raster-Position. Vor dem neuen Raster mit dem alten Versatz festschreiben, sonst hängt das Ergebnis von der Reihenfolge ab.
+    const hd = hotcueDatei(this.hotcueOrdner(), st.f);
+    if (!fs.existsSync(hd)) { const e = this.hotcuesErbeVon(st.f); if (e.von !== null) schreibeHotcues(hd, e.hotcues); }
     schreibeRaster(rasterDatei(this.rasterOrdner(), st.f), v);
     this.opt.log?.({ typ: 'raster_fix', deck: st.deck, versatz_frames: v });
+    this.einsZurueck(st, v, 'FIX');
     this.json(a, 200, { ok: true, ...this.rasterWert(st.deck, st.f) });
   }
   // Nach /e/geladen und nach /e/neustart: gespeicherten (bzw. beim Neustart den live) Versatz an den Kern (D3, D7)
   private rasterWieder(deck: number, f: Fassung, nachNeustart: boolean): void {
     if (!f?.material_id) return;
-    const v = nachNeustart ? this.rasterWert(deck, f).versatz_frames : this.rasterGespeichert(f);
+    const erbe = this.rasterErbeVon(f);
+    const v = nachNeustart ? this.rasterWert(deck, f).versatz_frames : erbe.v;
     this.rasterLive[String(deck)] = { schluessel: Oberflaeche.fassungSchluessel(f), v };
     if (v === 0) return;
     this.rasterSenden(deck, f, v);
-    this.opt.log?.({ typ: 'raster_wieder', deck, versatz_frames: v });
+    this.opt.log?.({ typ: 'raster_wieder', deck, versatz_frames: v, ...(erbe.von !== null && v === erbe.v ? { geerbt_von: erbe.von } : {}) });
   }
 
   private readonly mediathek: Mediathek;
+  private readonly katalog: Katalog;
   private readonly vorbereiter: Vorbereiter;
+  private readonly vorhoeren: Vorhoeren;
   private readonly sammlungen: Sammlungen;
+  private readonly muster: MusterBibliothek;
   private warteschlange: string[] = [];
   constructor(opt: ServerOptionen) {
     this.opt = opt;
     const python = opt.python ?? pythonVorgabe();
-    this.welle = new WelleCache(opt.welleCache ?? path.join(os.homedir(), '.cache', 'cypherdj', 'welle'),
-      python, path.join(HIER, 'welle.py'), opt.log);
+    this.welle = new WelleCache(opt.welleCache ?? welleCacheVorgabe(process.env.CYPHERDJ_INSTANZ ?? ''),
+      python, path.join(HIER, 'welle.py'), opt.log, { ffmpeg: opt.welleFfmpeg, zeitlimit: opt.welleZeitlimit });
     this.mediathek = new Mediathek(opt.mediathek ?? MEDIATHEK_VORGABE);
+    this.katalog = new Katalog(opt.katalog ?? katalogVorgabe(opt.mediathek ?? MEDIATHEK_VORGABE));
+    const inst = process.env.CYPHERDJ_INSTANZ ?? '';
+    const shmOrdner = `/dev/shm/cypherdj${inst ? `-${inst}` : ''}`;
+    this.vorhoeren = opt.vorhoeren ?? new Vorhoeren({ kopfhoererDa: () => Vorhoeren.kopfhoererDaVorgabe(inst), kernNurCue: () => kernNurCueVorgabe(shmOrdner),
+      klient: () => vorhoeerKlientVorgabe(REPO, inst, opt.log), kantenDatei: path.join(shmOrdner, 'kanten'), instanz: inst });
     this.sammlungen = new Sammlungen(opt.sammlungen ?? path.join(REPO, 'bibliothek', 'sets'));
+    this.muster = new MusterBibliothek({ eigen: opt.musterBibliothek ?? path.join(REPO, 'bibliothek', 'muster'), sets: opt.musterSets ?? path.join(REPO, 'sets') });
     this.vorbereiter = new Vorbereiter({ python: python,
       cwd: path.join(REPO, 'djk', 'werkstatt'), bestand: opt.bestand, modul: opt.einleserModul, log: opt.log });
     this.ohr = new OhrLeser(this.huellenPfad(), [OHR_K.deck1, OHR_K.deck2, OHR_K.master]);
@@ -344,8 +422,10 @@ export class Oberflaeche {
     this.ladeAktiveLoops();   // gemerkter Deck-Loop von vor dem Neustart
     const reste = raeumeAuf(this.opt.arbeitsbestand);
     if (reste > 0) this.opt.log?.({ typ: 'aufgeraeumt', anzahl: reste, arbeitsbestand: this.opt.arbeitsbestand });
+    const importReste = raeumeImportReste(this.loopOrdner());   // S6: Arbeitsordner eines abgestürzten Loop-Imports
+    if (importReste > 0) this.opt.log?.({ typ: 'loop_import_aufgeraeumt', anzahl: importReste });
     await this.kern.starte();
-    this.ohrTakt = setInterval(() => { this.ohr.lies(); this.hoerscheinTakt(); }, 100);  // Ohr T5/T10: Ring 100 ms nachlesen, je neuem Takt Hörscheine
+    this.ohrTakt = setInterval(() => { this.ohr.lies(); this.hoerscheinTakt(); this.loopAutoTakt(); }, 100);  // Ohr T5/T10: Ring 100 ms nachlesen, je neuem Takt Hörscheine
     this.http = http.createServer((q, a) => { this.anfrage(q, a).catch((e: Error) => this.json(a, 500, { fehler: e.message })); });
     await new Promise<void>((ok, fehler) => {
       this.http!.once('error', fehler);
@@ -363,6 +443,7 @@ export class Oberflaeche {
     if (this.ohrTakt) { clearInterval(this.ohrTakt); this.ohrTakt = null; }
     if (this.pumpeTimer) clearTimeout(this.pumpeTimer);
     this.vorbereiter.stoppe();
+    await this.vorhoeren.ende();
     await this.kern.stoppe();
     await new Promise<void>((ok) => (this.http ? this.http.close(() => ok()) : ok()));
   }
@@ -484,7 +565,7 @@ export class Oberflaeche {
   private fx(d: Record<string, unknown>, a: http.ServerResponse): void {
     const anteil = (x: unknown) => typeof x === 'number' && x >= 0 && x <= 1;
     if (d.einheit !== 1 && d.einheit !== 2) return this.json(a, 400, { fehler: 'einheit' });
-    if (typeof d.art !== 'number' || ![1, 2, 3, 4].includes(d.art)) return this.json(a, 400, { fehler: 'art' });
+    if (typeof d.art !== 'number' || !(Number.isInteger(d.art) && d.art >= 1 && d.art <= 12)) return this.json(a, 400, { fehler: 'art' });
     if (typeof d.beats !== 'number' || !Oberflaeche.FX_BEATS.includes(d.beats)) return this.json(a, 400, { fehler: 'beats' });
     if (!anteil(d.wet) || !anteil(d.param1) || !anteil(d.param2) || !anteil(d.param3)) return this.json(a, 400, { fehler: 'wet_param' });
     if (typeof d.an !== 'boolean') return this.json(a, 400, { fehler: 'an' });
@@ -699,6 +780,12 @@ export class Oberflaeche {
     this.json(a, 200, { ok: true, name });
   }
 
+  // Hotcues der Fassung; fehlt ihre Datei, die der nächstälteren, auf dieselbe Audio-Stelle verschoben (hotcuesErbe)
+  private hotcuesErbeVon(f: Fassung): { hotcues: Record<string, Hotcue>; von: number | null } {
+    return hotcuesErbe(this.hotcueOrdner(), f, { fpb: 48000 * 60 / f.basis_bpm,
+      esf: (r) => this.einsDerFassung(f.material_id, f.basis_bpm, r)?.esf ?? null,
+      rasterV: (r) => this.rasterErbeVon({ ...f, fassung: r }).v });
+  }
   // Hotcues (D5, D6): {deck, nr, aktion: setzen|spielen|loeschen, quell_beat?, art?, laenge?, raster}
   private deckHotcue(d: Record<string, unknown>, a: http.ServerResponse): void {
     const raster = this.rasterAus(d);
@@ -708,7 +795,7 @@ export class Oberflaeche {
     const st = this.deckStand(d.deck);
     if (!st) return this.json(a, 409, { fehler: 'kein_kernstand' });
     const datei = hotcueDatei(this.hotcueOrdner(), st.f);
-    const alle = leseHotcues(datei);
+    const alle = this.hotcuesErbeVon(st.f).hotcues;   // neue Fassung ohne eigene Datei: der geerbte Satz wird beim Schreiben ihre eigene
     const setze = (q: number) => {
       this.kern.sende('/k/deck/hotcue_setzen', { id: Number(++this.id), quelle: this.quelle(), deck: st.deck, nr: d.nr, quell_beat: q });
       this.gesendet++;
@@ -757,13 +844,13 @@ export class Oberflaeche {
   private hotcuesAus(deck: number, a: http.ServerResponse): void {
     const st = this.deckStand(deck);
     if (!st) return this.json(a, 200, {});
-    this.json(a, 200, leseHotcues(hotcueDatei(this.hotcueOrdner(), st.f)));
+    this.json(a, 200, this.hotcuesErbeVon(st.f).hotcues);
   }
 
   // Nach /e/geladen (und nach einem Kern-Neustart) die gespeicherten Hotcues der Fassung an den Kern (D5).
   private hotcuesWieder(deck: number, f: Fassung): void {
     if (!f?.material_id) return;
-    const alle = leseHotcues(hotcueDatei(this.hotcueOrdner(), f));
+    const { hotcues: alle, von } = this.hotcuesErbeVon(f);
     let n = 0;
     for (const [nr, h] of Object.entries(alle)) {
       if (!Number.isFinite(h?.quell_beat)) continue;
@@ -771,7 +858,7 @@ export class Oberflaeche {
       this.gesendet++;
       n++;
     }
-    if (n > 0) this.opt.log?.({ typ: 'hotcues_wieder', deck, anzahl: n });
+    if (n > 0) this.opt.log?.({ typ: 'hotcues_wieder', deck, anzahl: n, ...(von !== null ? { geerbt_von: von } : {}) });
   }
 
   // Plan-Review M3: jede Webseite im Browser kann an 127.0.0.1 POSTen. Nur json (erzwingt beim Browser einen Preflight, den
@@ -837,6 +924,34 @@ export class Oberflaeche {
   private json(a: http.ServerResponse, code: number, daten: unknown): void {
     a.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
     a.end(JSON.stringify(daten));
+  }
+
+  // Browser S6: Loop aus der Mediathek in die Loop-Bibliothek (danach lädt die Seite ihn wie jeden Loop per POST /loop).
+  // Rechnen darf nur ein Import zur Zeit und nur mit nice 19 / ionice idle (loop_import.ts); dieselbe Quelle wird nicht doppelt angelegt.
+  private async loopAusKatalog(d: Record<string, unknown>, a: http.ServerResponse): Promise<void> {
+    try {
+      const z = this.katalog.eintrag(String(d.sha ?? ''));
+      if (!z) throw new KatalogFehler(404, 'unbekannt');
+      if (z.typ !== 'loop') throw new KatalogFehler(409, 'kein_loop');
+      if (z.schutz === 'ableton') throw new KatalogFehler(409, 'nur_live');
+      if (!z.pfad || !fs.existsSync(z.pfad)) throw new KatalogFehler(409, 'datei_fehlt');
+      const beats = beatsVon(z);
+      const dir = this.loopOrdner();
+      const da = findeImport(dir, z.sha);
+      if (da) return this.json(a, 200, { ...da, schon_da: true });
+      const t0 = Date.now();
+      let naht: Record<string, unknown> = {};
+      const name = await importiereLoop({ bericht: (x) => { naht = x; }, pfad: z.pfad, beats, bpm: z.bpm, name: loopNameVon(z.name ?? z.titel ?? 'loop', dir), dir, werkzeug: this.opt.loopWerkzeug,
+        herkunft: { quelle: 'mediathek', sha: z.sha, pfad: z.pfad, bpm: z.bpm, takte: z.takte } });
+      this.opt.log?.({ typ: 'loop_importiert', name, beats, sha: z.sha, ms: Date.now() - t0, ...naht });
+      this.json(a, 201, { name, beats });
+    } catch (e) {
+      if (e instanceof LoopImportFehler) {
+        if (e.code >= 500 || e.code === 422) this.opt.log?.({ typ: 'loop_import_fehler', fehler: e.fehler, text: e.text });
+        return this.json(a, e.code, e.text ? { fehler: e.fehler, text: e.text } : { fehler: e.fehler });
+      }
+      this.katalogFehler(e, a);
+    }
   }
 
   private async koerper(q: http.IncomingMessage): Promise<Record<string, unknown>> {
@@ -942,7 +1057,7 @@ export class Oberflaeche {
     }
     // Keylock 3b (NITPICK): der Knopf mit Politik 1 (zu spät -> sofort ausgeführt, Quittung 5 statt 4 zu_spaet)
     const felder = { id, quelle: this.quelle(), plan: this.planVon(), teil: 0, pfad, ab_beat: abBeat,
-      dauer_beats: takte * 4, nach, form: form === 's' ? 1 : 0, politik: pfad === 'keylock' ? 1 : 0, gruppe: '', hoerschein: hoerscheinId };
+      dauer_beats: takte * 4, nach, form: form === 's' ? 1 : 0, politik: pfad === 'keylock' || pfad === 'color/art' ? 1 : 0, gruppe: '', hoerschein: hoerscheinId };
     this.kern.sende('/k/teil', felder);
     this.gesendet++;
     this.json(a, 200, { ok: true, felder, ...(verschobenAuf !== undefined ? { verschoben_auf: verschobenAuf } : {}),
@@ -1209,6 +1324,45 @@ export class Oberflaeche {
   }
 
   // Review Hand M7: Cyphers Befehle tragen plan 'cypher', damit /k/abbruch sie (auch wartende Deck-Teile) trifft
+  // Effekt-Sektion Schritt 4 (10 Hz aus dem Ohr-Takt): je laufender Box mit Automation den nächsten Durchgang als /k/teil
+  // planen, kurz vor seinem Anfang (Plan loopauto:<box>, Quelle andreas: die Automation gehört dem Loop, nicht Cypher);
+  // läuft die Box nicht mehr oder trägt einen anderen Loop, bricht /k/abbruch die offenen Fahrten ab.
+  private loopAutoTakt(): void {
+    const beat = this.kern.uhr?.beat;
+    if (beat === undefined) return;
+    for (const b of ['1', '2']) {
+      const st = this.stand.loops[b] as { status?: number; name?: string; beats?: number } | undefined;
+      const name = st?.status === 3 ? String(st.name ?? '') : '';
+      let la = this.loopAuto[b];
+      if (la && la.name !== name) { this.loopAutoEnde(b); la = undefined; }
+      if (!name) continue;
+      if (!la) {
+        const beats = Number(st?.beats);
+        const auto = leseLoopAutomation(this.loopOrdner(), name);
+        if (!auto.length || !(beats > 0)) continue;
+        la = this.loopAuto[b] = { name, auto, beats, geplantBis: auto.map(() => -Infinity), teil: 0 };
+      }
+      for (const [i, s] of la.auto.entries()) {   // je Spur eigene Länge (Durchgänge), eigener Anfang
+        const laenge = spurLaenge(s, la.beats);
+        const c = naechsterDurchgang(beat, laenge, la.geplantBis[i]);
+        if (c === null) continue;
+        const erster = la.geplantBis[i] === -Infinity;
+        for (const t of planeSpur(s, laenge, c, erster)) {
+          this.kern.sende('/k/teil', { id: Number(++this.id), quelle: 'andreas', plan: `loopauto:${b}`, teil: la.teil++, pfad: `pad/${b}/${t.pfad}`,
+            ab_beat: t.ab_beat, dauer_beats: t.dauer_beats, nach: t.nach, form: 0, politik: 0, gruppe: '', hoerschein: '' });
+          this.gesendet++;
+        }
+        la.geplantBis[i] = c;
+      }
+    }
+  }
+  private loopAutoEnde(b: string): void {
+    if (!this.loopAuto[b]) return;
+    delete this.loopAuto[b];
+    this.kern.sende('/k/abbruch', { id: Number(++this.id), quelle: 'andreas', plan: `loopauto:${b}`, teile: '*' });
+    this.gesendet++;
+  }
+
   private planVon(): string { return this.quelle() === 'cypher' ? 'cypher' : ''; }
 
   // POST /deck/start {deck, ab?='takt', quell_beat?} (Plan Hand T5): synchron zum Master auf den Takt, ab der Takt-Eins der
@@ -1269,8 +1423,8 @@ export class Oberflaeche {
         hoerschein: hs ? { urteil: hs.urteil, gueltig_bis_takt: Math.floor(hs.gueltig_bis_beat / 4) + 1, gruende: hs.gruende } : null };
     });
     const regler: Record<string, number | null> = Object.fromEntries(Object.entries(this.stand.regler)
-      .filter(([p, w]) => /^(deck\/[12]|pad\/[12]|erz\/[1-3])\/(fader|trim|eq\/|kill\/|filter)|^(xfader|master\/pegel)$/.test(p) || (p in LAGE_ABWEICHEND && w !== LAGE_ABWEICHEND[p]) || (/^(deck\/[12]|pad\/[12]|erz\/[1-3])\/send\/2$/.test(p) && w !== -200))   // erst abweichend von der Vorgabe sichtbar (K2: Kleber, Duck, Hall-Rückweg und -Send)ar
-      .map(([p, w]) => [p, p === 'master/kleber' ? Math.round(w * 100) / 100 : Math.round(w * 10) / 10]));
+      .filter(([p, w]) => /^(deck\/[12]|pad\/[12]|erz\/[1-3])\/(fader|trim|eq\/|kill\/|filter)|^(xfader|master\/pegel)$/.test(p) || (p in LAGE_ABWEICHEND && w !== LAGE_ABWEICHEND[p]) || (/^(deck\/[12]|pad\/[12]|erz\/[1-3])\/send\/2$/.test(p) && w !== -200) || kompAbweichend(p, w))   // erst abweichend von der Vorgabe sichtbar (K2: Kleber, Duck, Hall-Rückweg und -Send)ar
+      .map(([p, w]) => [p, p === 'master/kleber' || p === 'color/param' ? Math.round(w * 100) / 100 : Math.round(w * 10) / 10]));
     // Keylock 3b (Prüfung MINOR 4): der Knopf steht immer da, 1 an, 0 aus, null unbekannt (noch keine Meldung vom Kern; der Kern
     // schickt sie jedem neuen Abonnenten beim ersten /k/hallo)
     regler.keylock = typeof this.stand.regler.keylock === 'number' ? this.stand.regler.keylock : null;
@@ -1290,6 +1444,7 @@ export class Oberflaeche {
     const url = new URL(q.url ?? '/', 'http://127.0.0.1');
     if (q.method === 'GET' && url.pathname === '/strom') return this.strom(q, a);
     if (q.method === 'GET' && url.pathname === '/bestand') return this.json(a, 200, leseBestand(this.opt.bestand));
+    if (q.method === 'GET' && url.pathname === '/mediathek/anschluss') return this.anschlussAus(url, a);
     if (url.pathname === '/mediathek' || url.pathname === '/mediathek/vorbereiten') {
       if (q.method === 'GET' && url.pathname === '/mediathek') return this.mediathekSuche(url, a);
       if (url.pathname === '/mediathek/vorbereiten' && q.method === 'GET') return this.vorbereitenStand(url, a);
@@ -1298,6 +1453,16 @@ export class Oberflaeche {
         if (abweisung) return this.json(a, abweisung, { fehler: abweisung === 415 ? 'nur_json' : 'fremde_herkunft' });
         return this.vorbereiten(await this.koerper(q), a);
       }
+    }
+    if (q.method === 'GET' && url.pathname === '/stoebern') return url.searchParams.get('typ') === 'strudel' ? this.stoebernMuster(url, a) : this.stoebern(url, a);
+    if (q.method === 'GET' && url.pathname === '/stoebern/detail') return this.stoebernDetail(url, a);
+    if (q.method === 'GET' && url.pathname === '/stoebern/baum') return url.searchParams.get('typ') === 'strudel' ? this.stoebernMusterBaum(a) : this.stoebernBaum(url, a);
+    if (q.method === 'POST' && url.pathname === '/muster') return this.musterSpeichern(q, a);
+    if (q.method === 'GET' && url.pathname === '/vorhoeren') return this.json(a, 200, await this.vorhoeren.stand());
+    if (q.method === 'POST' && url.pathname === '/vorhoeren') {   // S7: Vorhören als Kern-Eingang
+      const abweisung = this.fremdePost(q);
+      if (abweisung) return this.json(a, abweisung, { fehler: abweisung === 415 ? 'nur_json' : 'fremde_herkunft' });
+      return this.vorhoerenAus(await this.koerper(q), a);
     }
     if (q.method === 'GET' && url.pathname === '/klaenge/karte') return this.klaengeKarte(a);
     if (q.method === 'GET' && url.pathname === '/klaenge') return this.klaengeSuche(url, a);
@@ -1364,10 +1529,34 @@ export class Oberflaeche {
       return await this.tempo(await this.koerper(q), a);
     }
     if (q.method === 'GET' && url.pathname === '/loops') return this.json(a, 200, leseLoops(this.loopOrdner()));
+    if (q.method === 'POST' && url.pathname === '/loops/aus-katalog') {   // Browser S6
+      const abweisung = this.fremdePost(q);
+      if (abweisung) return this.json(a, abweisung, { fehler: abweisung === 415 ? 'nur_json' : 'fremde_herkunft' });
+      return this.loopAusKatalog(await this.koerper(q), a);
+    }
     if (q.method === 'POST' && url.pathname === '/loop') {   // Riegel 2026-09-30
       const abweisung = this.fremdePost(q);
       if (abweisung) return this.json(a, abweisung, { fehler: abweisung === 415 ? 'nur_json' : 'fremde_herkunft' });
       return this.loop(await this.koerper(q), a);
+    }
+    if (q.method === 'GET' && url.pathname === '/loop/automation') {   // Effekt-Sektion Schritt 4
+      const name = url.searchParams.get('name') ?? '';
+      if (!LOOP_NAME.test(name) || !leseLoops(this.loopOrdner()).some((l) => l.name === name)) return this.json(a, 404, { fehler: 'kein_loop' });
+      return this.json(a, 200, { name, automation: leseLoopAutomation(this.loopOrdner(), name) });
+    }
+    if (q.method === 'POST' && url.pathname === '/loop/automation') {
+      const abweisung = this.fremdePost(q);
+      if (abweisung) return this.json(a, abweisung, { fehler: abweisung === 415 ? 'nur_json' : 'fremde_herkunft' });
+      const d = await this.koerper(q);
+      const name = String(d.name ?? '');
+      const l = LOOP_NAME.test(name) ? leseLoops(this.loopOrdner()).find((x) => x.name === name) : undefined;
+      if (!l) return this.json(a, 404, { fehler: 'kein_loop' });
+      const r = pruefeAutomation(d.automation, l.beats);
+      if ('fehler' in r) return this.json(a, 400, { fehler: 'automation', text: r.fehler });
+      schreibeLoopAutomation(this.loopOrdner(), name, r.automation);
+      for (const [b, la] of Object.entries(this.loopAuto)) if (la.name === name) this.loopAutoEnde(b);   // neu planen ab dem nächsten Durchgang
+      this.opt.log?.({ typ: 'loop_automation', name, spuren: r.automation.length });
+      return this.json(a, 200, { ok: true, name, automation: r.automation });
     }
     if (q.method === 'GET' && url.pathname === '/loop/raster') {
       const w = this.loopRasterWert(Number(url.searchParams.get('box')));
@@ -1518,6 +1707,29 @@ export class Oberflaeche {
 
   // Mediathek T2 (Plan 2026-10-03): Suche über die ganze Mediathek (nur lesen) und Vorbereiten durch die Werkstatt.
   // Kein Kern-Befehl in diesen Routen; ins Deck kommt ein vorbereiteter Track wie jeder andere über POST /laden.
+  // Anschluss-Vorauswahl (Plan 2026-10-10-anschluss-vorauswahl, T3/T4): material_id oder deck (1|2), energie halten|heben|senken,
+  // fenster in Prozent (Vorgabe 6, 1..16), limit (Vorgabe 10).
+  private anschlussAus(url: URL, a: http.ServerResponse): void {
+    try {
+      const p = url.searchParams;
+      let mid = p.get('material_id');
+      const deck = p.get('deck');
+      if (mid && deck) return this.json(a, 400, { fehler: 'material_id_oder_deck' });
+      if (!mid && deck) {
+        if (deck !== '1' && deck !== '2') return this.json(a, 400, { fehler: 'deck_ungueltig' });
+        mid = (this.stand.geladen[deck]?.material_id as string | undefined) ?? null;
+        if (!mid) return this.json(a, 409, { fehler: 'deck_leer' });
+      }
+      if (!mid) return this.json(a, 400, { fehler: 'material_id_oder_deck' });
+      const energie = p.get('energie') ?? 'halten';
+      if (energie !== 'halten' && energie !== 'heben' && energie !== 'senken') return this.json(a, 400, { fehler: 'energie_ungueltig' });
+      const zahlOder = (s: string | null, vorgabe: number): number => { if (s === null || s === '') return vorgabe; const n = Number(s); return Number.isFinite(n) ? n : vorgabe; };
+      const fenster = Math.min(16, Math.max(1, zahlOder(p.get('fenster'), 6)));
+      const limit = Math.min(50, Math.max(1, Math.floor(zahlOder(p.get('limit'), 10))));
+      this.json(a, 200, this.mediathek.anschluss(mid, { fenster, energie, limit }, bestandIds(this.opt.bestand), (m) => this.vorbereiter.anzeige(m)));
+    } catch (e) { this.mediathekFehler(e, a); }
+  }
+
   private mediathekSuche(url: URL, a: http.ServerResponse): void {
     try {
       const p = url.searchParams;
@@ -1581,6 +1793,192 @@ export class Oberflaeche {
     this.json(a, 500, { fehler: 'mediathek_abfrage', text: (e as Error).message });
   }
 
+  // Browser (Plan 2026-10-10-mediathek-browser): eine Seite des Katalogs je Typ. Status nur für die angezeigten Zeilen.
+  private stoebern(url: URL, a: http.ServerResponse): void {
+    try {
+      const p = url.searchParams;
+      const typ = p.get('typ') ?? 'track';
+      if (!(KATALOG_TYPEN as readonly string[]).includes(typ)) throw new KatalogFehler(400, 'typ_ungueltig');
+      const t = typ as Typ;
+      const sort = p.get('sort') || SORT_VORGABE[t];
+      const ab = p.get('richtung') === 'ab';
+      const lroh = Math.floor(Number(p.get('limit') ?? SEITE_VORGABE));
+      const limit = Number.isFinite(lroh) ? Math.min(SEITE_MAX, Math.max(1, lroh)) : SEITE_VORGABE;
+      const sroh = Math.floor(Number(p.get('seite') ?? 0));
+      const seite = Number.isFinite(sroh) && sroh > 0 ? sroh : 0;
+      if (!Number.isSafeInteger(seite * limit)) throw new KatalogFehler(400, 'seite_ungueltig');   // 1e300 → sonst SQLite „datatype mismatch“ (Review MINOR 5)
+      const r = this.katalog.seite(t, this.stoebernFilter(p), sort, ab, seite, limit);
+      const bestand = t === 'track' ? bestandIds(this.opt.bestand) : new Set<string>();
+      this.json(a, 200, { typ: t, sort, richtung: ab ? 'ab' : 'auf', seite, limit, gesamt: r.gesamt, gebaut_am: r.gebaut_am,
+        treffer: r.zeilen.map((z) => this.stoebernTreffer(z, bestand)) });
+    } catch (e) { this.katalogFehler(e, a); }
+  }
+
+  // STRUDEL im Browser (S2b): ~250 Einträge, deshalb im Speicher filtern/sortieren statt FTS
+  private async stoebernMuster(url: URL, a: http.ServerResponse): Promise<void> {
+    try {
+      const p = url.searchParams;
+      let l = await this.muster.liste();
+      // Muster liegen im Speicher (~250): Textvergleich statt FTS. Wörter UND-verknüpft, je Wort Teilstring in Name, Code oder Rolle;
+      // name:/rolle: schränken auf ein Feld ein. Die Katalog-Felder (artist:, label:, folder: …) gibt es hier nicht: 400, kein stilles Ignorieren.
+      const { terme, ordner, zuviele } = suchTerme(p.get('text') ?? '', ['rolle']);
+      if (zuviele) throw new KatalogFehler(400, 'zu_viele_suchwoerter');
+      if ((p.get('ordner') ?? '') !== '') throw new KatalogFehler(400, 'filter_nicht_anwendbar');   // Muster liegen in keinem Ordner (S4-Review 6)
+      if (ordner.length || terme.some((x) => x.spalte !== null && x.spalte !== 'name' && x.spalte !== 'rolle')) throw new KatalogFehler(400, 'suchfeld_nicht_anwendbar');
+      for (const x of terme) {
+        const w = x.wert.toLowerCase();
+        l = l.filter((e) => x.spalte === 'name' ? e.name.toLowerCase().includes(w) : x.spalte === 'rolle' ? (e.rolle ?? '').includes(w)
+          : e.name.toLowerCase().includes(w) || e.text.toLowerCase().includes(w) || (e.rolle ?? '').includes(w));
+      }
+      Oberflaeche.filterPruefen(p, 'strudel');
+      const bpmRoh = p.get('bpm');
+      if (bpmRoh) { const [lo, hi] = parseBpm(bpmRoh); l = l.filter((e) => e.bpm !== null && e.bpm >= lo && e.bpm <= hi); }
+      const feld = p.get('feld'), wert = p.get('wert') ?? '';
+      if (feld === 'quelle') l = l.filter((e) => e.quelle === wert); else if (feld === 'rolle') l = l.filter((e) => (e.rolle ?? '') === wert);
+      else if (feld) throw new KatalogFehler(400, 'facette_ungueltig');
+      const sort = p.get('sort') || 'name', ab = p.get('richtung') === 'ab';
+      if (!['name', 'rolle', 'quelle', 'bpm', 'takte'].includes(sort)) throw new KatalogFehler(400, 'sort_ungueltig');
+      const wertVon = (e: MusterEintrag): string | number => (e[sort as keyof MusterEintrag] ?? '') as string | number;
+      l.sort((x, y) => { const u = wertVon(x), v = wertVon(y); const c = typeof u === 'number' && typeof v === 'number' ? u - v : String(u).localeCompare(String(v), 'en', { sensitivity: 'base' }); return (ab ? -c : c) || x.id.localeCompare(y.id); });
+      const limit = Math.min(SEITE_MAX, Math.max(1, Math.floor(Number(p.get('limit') ?? SEITE_VORGABE)) || SEITE_VORGABE));
+      const seite = Math.max(0, Math.floor(Number(p.get('seite') ?? 0)) || 0);
+      this.json(a, 200, { typ: 'strudel', sort, richtung: ab ? 'ab' : 'auf', seite, limit, gesamt: l.length, gebaut_am: '',
+        treffer: l.slice(seite * limit, (seite + 1) * limit).map((e) => ({ typ: 'strudel', ...e })) });
+    } catch (e) { this.katalogFehler(e, a); }
+  }
+
+  private async stoebernMusterBaum(a: http.ServerResponse): Promise<void> {
+    try {
+      const l = await this.muster.liste();
+      const zaehle = (werte: string[]): { wert: string; n: number }[] => {
+        const z = new Map<string, number>();
+        for (const w of werte) z.set(w, (z.get(w) ?? 0) + 1);
+        return [...z].map(([wert, n]) => ({ wert, n })).sort((x, y) => y.n - x.n || x.wert.localeCompare(y.wert));
+      };
+      this.json(a, 200, { ordner: [], facetten: { quelle: zaehle(l.map((e) => e.quelle)), rolle: zaehle(l.map((e) => e.rolle ?? '')) }, gebaut_am: '' });
+    } catch (e) { this.katalogFehler(e, a); }
+  }
+
+  // SAVE am Strudel-Deck: gespeichert wird, was die Instanz SPIELT, nie Text aus der Anfrage (Andreas: „das laufende Muster“)
+  private async musterSpeichern(q: http.IncomingMessage, a: http.ServerResponse): Promise<void> {
+    const abweisung = this.fremdePost(q);
+    if (abweisung) return this.json(a, abweisung, { fehler: abweisung === 415 ? 'nur_json' : 'fremde_herkunft' });
+    try {
+      const d = await this.koerper(q);
+      const strom = Oberflaeche.strom(d.strom);
+      if (strom === null) return this.json(a, 400, { fehler: 'strom' });
+      const laufend = leseMusterStand(this.musterOrdner(strom)).text;
+      const r = this.muster.speichere({ name: String(d.name ?? ''), text: laufend, rolle: (['drums', 'bass', 'melodie'] as const)[strom - 1], strom,
+        von: this.quelle(), ueberschreiben: d.ueberschreiben === true });
+      this.opt.log?.({ typ: 'muster_gespeichert', name: r.name, strom });
+      return this.json(a, 201, r);
+    } catch (e) { if (e instanceof MusterFehler) return this.json(a, e.code, { fehler: e.fehler }); throw e; }
+  }
+
+  // Detail-Spalte (S5): der Eintrag, alle gültigen Angaben mit Quelle (Mediathek) und der volle Pfad. Der Pfad geht nur hier an die
+  // Seite (sie ist lokal), nicht in die Trefferzeilen. Listen-Zeilen kennen nur die material_id: dann ?mid=.
+  private stoebernDetail(url: URL, a: http.ServerResponse): void {
+    try {
+      const sha = url.searchParams.get('sha'), mid = url.searchParams.get('mid');
+      if (sha === null && mid === null) throw new KatalogFehler(400, 'sha_ungueltig');
+      const z = sha !== null ? this.katalog.eintrag(sha) : this.katalog.eintragVonMid(mid ?? '');
+      if (!z) throw new KatalogFehler(404, 'unbekannt');
+      const bestand = z.typ === 'track' ? bestandIds(this.opt.bestand) : new Set<string>();
+      const angaben = this.mediathek.vorhanden() ? this.mediathek.angaben(z.shas.split(' ')) : [];
+      // Das Objekt, auf das gezeigt wurde (sha, oder mid als Präfix): bei einem unterlegenen Objekt DESSEN Datei, nicht die des Gewinners (B6)
+      const objekt = sha !== null ? sha : (z.shas.split(' ').find((x) => x.startsWith(mid ?? '')) ?? z.sha);
+      const treffer = this.stoebernTreffer(z, bestand);
+      let pfad = z.pfad;
+      if (objekt !== z.sha) {
+        pfad = this.mediathek.vorhanden() ? this.mediathek.pfadVon(objekt) : null;
+        treffer.pfad_da = pfad !== null && fs.existsSync(pfad);
+      }
+      this.json(a, 200, { eintrag: treffer, angaben, pfad, objekt_sha: objekt });
+    } catch (e) { this.katalogFehler(e, a); }
+  }
+
+  private stoebernBaum(url: URL, a: http.ServerResponse): void {
+    try {
+      const typ = url.searchParams.get('typ') ?? 'track';
+      if (!(KATALOG_TYPEN as readonly string[]).includes(typ)) throw new KatalogFehler(400, 'typ_ungueltig');
+      this.json(a, 200, this.katalog.baum(typ as Typ));
+    } catch (e) { this.katalogFehler(e, a); }
+  }
+
+  // Filter aus der URL (Task 2.2: Ordner, Facette; Task 3.1/4.2 erweitern)
+  // Welche Filter ein Typ hat (wie oeffentlich/stoebern.js FILTER_FUER). Ein anderer, gesetzter Filter ist ein 400, kein stilles Ignorieren.
+  private static readonly FILTER_JE_TYP: Record<string, string[]> = { track: ['camelot', 'bpm', 'energie'], loop: ['camelot', 'bpm'], oneshot: [], strudel: ['bpm'] };
+  private static filterPruefen(p: URLSearchParams, typ: string): void {
+    const ok = Oberflaeche.FILTER_JE_TYP[typ] ?? [];
+    for (const k of ['camelot', 'bpm', 'energie']) if ((p.get(k) ?? '') !== '' && !ok.includes(k)) throw new KatalogFehler(400, 'filter_nicht_anwendbar');
+  }
+
+  private stoebernFilter(p: URLSearchParams): Filter {
+    Oberflaeche.filterPruefen(p, p.get('typ') ?? 'track');
+    const f: Filter = {};
+    const text = p.get('text'); if (text) f.text = text;
+    const ordner = p.get('ordner'); if (ordner) f.ordner = ordner;
+    const feld = p.get('feld'); if (feld) f.facette = { feld, wert: p.get('wert') ?? '' };
+    const cam = p.get('camelot'); if (cam) { f.camelot = cam; f.nachbarn = p.get('nachbarn') === '1'; }
+    const bpm = p.get('bpm'); if (bpm) f.bpm = parseBpm(bpm);
+    const en = p.get('energie');
+    if (en !== null && en !== '') { if (!['0', '1', '2'].includes(en)) throw new KatalogFehler(400, 'energie_ungueltig'); f.energie = Number(en) as 0 | 1 | 2; }
+    return f;
+  }
+
+  private stoebernTreffer(z: Zeile, bestand: Set<string>): Record<string, unknown> {
+    const { shas, pfad, alle: _alle, id: _id, ...rest } = z;
+    const pfadDa = pfad !== null && fs.existsSync(pfad);
+    const basis: Record<string, unknown> = { ...rest, material_id: z.sha.slice(0, 16), pfad_da: pfadDa, nur_live: z.schutz === 'ableton' };
+    if (z.typ === 'loop') {   // S6: ob und warum der Loop in die Box geht — dieselbe Regel wie der Import (beatsVon), die Seite rechnet nichts nach
+      try { basis.import_beats = beatsVon(z); } catch (e) { if (e instanceof LoopImportFehler) basis.import_grund = e.fehler; else throw e; }
+    }
+    if (z.typ !== 'track') return basis;
+    const laden = shas.split(' ').map((s) => s.slice(0, 16)).find((m) => bestand.has(m)) ?? null;
+    const lauf = this.vorbereiter.stand(basis.material_id);
+    const status = laden ? 'ready' : lauf?.status === 'laeuft' ? 'laeuft' : lauf?.status === 'fehler' ? 'fehler' : pfadDa ? 'prepare' : 'missing';
+    return { ...basis, status, laden_mid: laden, ...(status === 'fehler' ? { grund: lauf?.grund ?? 'unbekannt', ...(lauf?.name ? { grund_stufe: lauf.name } : {}) } : {}) };
+  }
+
+  // Für die Sets: fehlender, fremder oder kaputter Katalog heißt „kein Eintrag“. Die Sets brauchen ihn nur für die Art-Prüfung,
+  // er ist abgeleitet und löschbar (Review S1 MAJOR 1). /stoebern meldet den Zustand selbst als 503.
+  private katalogEintrag(mid: string): Zeile | null {
+    try { return this.katalog.vorhanden() ? this.katalog.eintragMid(mid) : null; }
+    catch (e) { if (e instanceof KatalogFehler) return null; throw e; }
+  }
+
+  // Typ eines Postens für die Art-Prüfung: aus dem Katalog, ohne Katalog (fehlt, fremd, im Neubau) aus der Mediathek selbst
+  // (Review S2b Befund 1). null = unbekannt; dann gibt es nichts abzuweisen.
+  private postenTyp(mid: string): string | null {
+    const k = this.katalogEintrag(mid);
+    if (k) return k.typ;
+    try { return this.mediathek.vorhanden() ? (this.mediathek.felder([mid], new Set()).get(mid)?.typ ?? null) : null; }
+    catch (e) { if (e instanceof MediathekFehler) return null; throw e; }
+  }
+
+  private async vorhoerenAus(d: Record<string, unknown>, a: http.ServerResponse): Promise<void> {
+    try {
+      if (d.aktion === 'stopp') { this.vorhoeren.stoppe(); return this.json(a, 200, { ok: true }); }
+      if (d.aktion === 'springe') { this.vorhoeren.springe(Number(d.richtung) < 0 ? -1 : 1); return this.json(a, 200, { ok: true }); }
+      // sha (Browser-Zeile) oder mid (Listen-Zeilen tragen bei Tracks nur material_id; Review S7 m3), wie /stoebern/detail
+      const z = typeof d.sha === 'string' && d.sha ? this.katalog.eintrag(d.sha) : this.katalog.eintragVonMid(String(d.mid ?? ''));
+      if (!z) throw new KatalogFehler(404, 'unbekannt');
+      if (z.schutz === 'ableton') throw new KatalogFehler(409, 'nur_live');
+      if (!z.pfad || !fs.existsSync(z.pfad)) throw new KatalogFehler(409, 'datei_fehlt');
+      await this.vorhoeren.spiele({ pfad: z.pfad, typ: z.typ, sha: z.sha, bpm: z.bpm });
+      this.json(a, 200, { ok: true, ...(await this.vorhoeren.stand()) });
+    } catch (e) {
+      if (e instanceof VorhoerFehler) return this.json(a, e.code, { fehler: e.fehler });
+      this.katalogFehler(e, a);
+    }
+  }
+
+  private katalogFehler(e: unknown, a: http.ServerResponse): void {
+    if (e instanceof KatalogFehler || e instanceof MediathekFehler) return this.json(a, e.code, { fehler: e.fehler });
+    this.opt.log?.({ typ: 'katalog_fehler', text: (e as Error).message });
+    this.json(a, 500, { fehler: 'katalog_abfrage', text: (e as Error).message });
+  }
+
   // Sets (Plan 2026-10-03-sets-mit-tracks). Kein Kern-Befehl; Dateien unter opt.sammlungen.
   private async sammlungRoute(q: http.IncomingMessage, url: URL, a: http.ServerResponse): Promise<void> {
     try {
@@ -1589,28 +1987,38 @@ export class Oberflaeche {
         if (abweisung) return this.json(a, abweisung, { fehler: abweisung === 415 ? 'nur_json' : 'fremde_herkunft' });
       }
       if (url.pathname === '/sammlungen') {
-        if (q.method === 'GET') return this.json(a, 200, this.sammlungen.liste());
-        if (q.method === 'POST') { const d = await this.koerper(q); return this.json(a, 201, { slug: this.sammlungen.lege(String(d.name ?? '')) }); }
+        if (q.method === 'GET') return this.json(a, 200, this.sammlungen.liste(url.searchParams.get('art') ?? undefined));
+        if (q.method === 'POST') { const d = await this.koerper(q); return this.json(a, 201, { slug: this.sammlungen.lege(String(d.name ?? ''), [], String(d.art ?? 'set')) }); }
       }
       if (url.pathname === '/sammlungen/import' && q.method === 'POST') {
         const d = await this.koerper(q);
+        const art = String(d.art ?? 'set');
+        if (art !== 'set' && art !== 'playlist') return this.json(a, 400, { fehler: 'art_unbekannt' });   // Traktor-Listen sind Tracks
         const l = this.mediathek.listeMids(Number(d.liste_id));
-        const slug = this.sammlungen.lege(l.name, l.mids.map((m, i) => ({ id: `p${i + 1}`, art: 'track' as const, material_id: m })));
+        const slug = this.sammlungen.lege(l.name, l.mids.map((m, i) => ({ id: `p${i + 1}`, art: 'track' as const, material_id: m })), art);
         return this.json(a, 201, { slug, posten: l.mids.length });
       }
-      const m = url.pathname.match(/^\/sammlungen\/([^/]+)(\/posten|\/posten\/entfernen|\/vorbereiten|\/loeschen)?$/);
+      const m = url.pathname.match(/^\/sammlungen\/([^/]+)(\/posten|\/posten\/entfernen|\/posten\/verschieben|\/umbenennen|\/vorbereiten|\/loeschen)?$/);
       if (!m) return this.json(a, 404, { fehler: 'nicht_gefunden' });
       const slug = decodeURIComponent(m[1]), was = m[2] ?? '';
-      if (q.method === 'GET' && was === '') return this.json(a, 200, this.sammlungAnsicht(slug));
+      if (q.method === 'GET' && was === '') return this.json(a, 200, await this.sammlungAnsicht(slug));
       if (q.method === 'POST' && was === '/posten') {
         const d = await this.koerper(q);
-        const r = this.sammlungen.legeHinzu(slug, String(d.art ?? ''), String(d.material_id ?? ''), typeof d.notiz === 'string' ? d.notiz : undefined);
+        // Ein Loop/Sample darf nie als Track ins Set (sonst schickt PREPARE ALL ihn in die Werkstatt; Review M6)
+        const art = String(d.art ?? ''), ref = String(art === 'muster' ? d.ref ?? '' : d.material_id ?? '');
+        if (art !== 'muster') {
+          const typ = this.postenTyp(ref);
+          if (typ !== null && typ !== art && (art === 'track' || typ === 'track')) return this.json(a, 400, { fehler: 'art_passt_nicht' });
+        }
+        const r = await this.wiederhole(() => this.sammlungen.legeHinzu(slug, art, ref, typeof d.notiz === 'string' ? d.notiz : undefined));
         return this.json(a, r.schon_drin ? 200 : 201, r.schon_drin ? r : { id: r.id });
       }
-      if (q.method === 'POST' && was === '/posten/entfernen') { const d = await this.koerper(q); this.sammlungen.entferne(slug, String(d.id ?? '')); return this.json(a, 200, { ok: true }); }
+      if (q.method === 'POST' && was === '/posten/entfernen') { const d = await this.koerper(q); await this.wiederhole(() => this.sammlungen.entferne(slug, String(d.id ?? ''))); return this.json(a, 200, { ok: true }); }
+      if (q.method === 'POST' && was === '/posten/verschieben') { const d = await this.koerper(q); await this.wiederhole(() => this.sammlungen.verschiebe(slug, String(d.id ?? ''), Number(d.nach))); return this.json(a, 200, { ok: true }); }
+      if (q.method === 'POST' && was === '/umbenennen') { const d = await this.koerper(q); await this.wiederhole(() => this.sammlungen.benenne(slug, String(d.name ?? ''))); return this.json(a, 200, { ok: true }); }
       if (q.method === 'POST' && was === '/vorbereiten') {
-        const ansicht = this.sammlungAnsicht(slug) as { posten: { material_id: string; status: string }[] };
-        return this.json(a, 202, { eingereiht: this.reihe(ansicht.posten.filter((p) => p.status === 'prepare').map((p) => p.material_id)) });
+        const ansicht = await this.sammlungAnsicht(slug) as { posten: { art: string; material_id: string; status: string }[] };
+        return this.json(a, 202, { eingereiht: this.reihe(ansicht.posten.filter((p) => p.art === 'track' && p.status === 'prepare').map((p) => p.material_id)) });
       }
       if (q.method === 'POST' && was === '/loeschen') { this.sammlungen.loesche(slug); return this.json(a, 200, { ok: true }); }
       return this.json(a, 404, { fehler: 'nicht_gefunden' });
@@ -1620,25 +2028,50 @@ export class Oberflaeche {
     }
   }
 
-  private sammlungAnsicht(slug: string): Record<string, unknown> {
+  // Eine von einem Fremdprozess belegte Liste (409 liste_busy, sperre.ts): bis zu 4 mal nach 25 ms asynchron wiederholen, nie blockieren
+  private async wiederhole<T>(f: () => T): Promise<T> {
+    for (let i = 0; ; i++) {
+      try { return f(); }
+      catch (e) { if (!(e instanceof SammlungFehler) || e.fehler !== 'liste_busy' || i >= 4) throw e; await new Promise((ok) => setTimeout(ok, 25)); }
+    }
+  }
+
+  private async sammlungAnsicht(slug: string): Promise<Record<string, unknown>> {
     const s = this.sammlungen.lies(slug);
     const bestand = bestandIds(this.opt.bestand);
-    const mids = s.posten.filter((p) => p.art === 'track').map((p) => p.material_id);
+    const mids = s.posten.filter((p) => p.art === 'track').map((p) => p.material_id as string);
     const felder = this.mediathek.vorhanden() ? this.mediathek.felder(mids, bestand) : new Map();
+    const muster = s.posten.some((p) => p.art === 'muster') ? await this.muster.liste() : [];
     const posten = s.posten.map((p) => {
-      const f = felder.get(p.material_id);
+      if (p.art === 'muster') {
+        const e = muster.find((m) => m.id === p.ref);
+        return { ...p, titel: e?.name ?? p.ref ?? null, rolle: e?.rolle ?? null, bpm: e?.bpm ?? null, status: e ? 'ready' : 'missing',
+          eintrag: e ? { typ: 'strudel', ...e } : { typ: 'strudel', id: p.ref, name: p.ref, quelle: null, rolle: null, bpm: null, takte: null, text: '', ladbar: false } };
+      }
+      if (p.art !== 'track') {
+        const z = this.katalogEintrag(p.material_id ?? '');
+        return { ...p, titel: z?.name ?? null, kuenstler: null, mix: null, bpm: z?.bpm ?? null, camelot: z?.camelot ?? null, energie: null,
+          genre: null, dauer_s: z?.dauer_s ?? null, status: z?.pfad && fs.existsSync(z.pfad) ? 'ready' : 'missing', laden_mid: null,
+          eintrag: z ? this.stoebernTreffer(z, new Set()) : { typ: p.art, material_id: p.material_id, name: null, pfad_da: false, nur_live: false } };
+      }
+      const k = this.katalogEintrag(p.material_id as string);
+      if (k && k.typ !== 'track') return { ...p, titel: k.name, kuenstler: null, mix: null, bpm: k.bpm, camelot: k.camelot, energie: null,
+        genre: null, dauer_s: k.dauer_s, status: 'kein_track', laden_mid: null, eintrag: this.stoebernTreffer(k, new Set()) };
+      const f = felder.get(p.material_id as string);
       const lauf = this.vorbereiter.stand(p.material_id);
-      let status = 'unbekannt', laden: string | null = null, grund: string | undefined;
+      let status = 'unbekannt', laden: string | null = null, grund: string | undefined, grundStufe: string | undefined;
       if (f?.bestand_mid) { status = 'ready'; laden = f.bestand_mid; }
       else if (bestand.has(p.material_id)) { status = 'ready'; laden = p.material_id; }
       else if (lauf?.status === 'laeuft') status = 'laeuft';
       else if (this.warteschlange.includes(p.material_id)) status = 'wartet';
-      else if (lauf?.status === 'fehler') { status = 'fehler'; grund = lauf.grund; }
+      else if (lauf?.status === 'fehler') { status = 'fehler'; grund = lauf.grund; grundStufe = lauf.name; }
       else if (f) status = f.pfad_da ? 'prepare' : 'missing';
-      return { ...p, titel: f?.titel ?? null, kuenstler: f?.kuenstler ?? null, mix: f?.mix ?? null, bpm: f?.bpm ?? null, camelot: f?.camelot ?? null,
-        genre: f?.genre ?? null, dauer_s: f?.dauer_s ?? null, status, laden_mid: laden, ...(grund ? { grund } : {}) };
+      return { ...p, titel: f?.titel ?? null, kuenstler: f?.kuenstler ?? null, mix: f?.mix ?? null, bpm: f?.bpm ?? null, camelot: f?.camelot ?? null, energie: f?.energie ?? null,
+        genre: f?.genre ?? null, dauer_s: f?.dauer_s ?? null, status, laden_mid: laden, ...(grund ? { grund, ...(grundStufe ? { grund_stufe: grundStufe } : {}) } : {}),
+        eintrag: { typ: 'track', material_id: p.material_id, titel: f?.titel ?? null, kuenstler: f?.kuenstler ?? null, mix: f?.mix ?? null, bpm: f?.bpm ?? null, camelot: f?.camelot ?? null,
+          energie: f?.energie ?? null, genre: f?.genre ?? null, dauer_s: f?.dauer_s ?? null, status, laden_mid: laden, pfad_da: f?.pfad_da ?? false } };
     });
-    return { slug, name: s.name, notiz: s.notiz, posten, uebersicht: uebersicht(posten) };
+    return { slug, name: s.name, art: s.art ?? 'set', notiz: s.notiz, posten, uebersicht: uebersicht(posten.filter((p) => p.art === 'track')) };
   }
 
   private pumpeTimer: NodeJS.Timeout | null = null;
@@ -1954,15 +2387,29 @@ export class Oberflaeche {
   // Plan Oberfläche T2 (Spec E4): ?loop=<name> oder ?material=<id>&bpm=<basis>&fassung=<n>. Liest nur, sendet nichts an den Kern.
   private async welleAus(url: URL, a: http.ServerResponse): Promise<void> {
     try {
-      const loop = url.searchParams.get('loop'), material = url.searchParams.get('material');
+      const loop = url.searchParams.get('loop'), material = url.searchParams.get('material'), sha = url.searchParams.get('sha');
       const q = loop !== null ? loopQuelle(this.loopOrdner(), loop)
+        // Browser (S5): der Pfad kommt aus dem Katalog, nie aus der Anfrage. Ableton-geschützte Dateien sind für ffmpeg nicht lesbar (422).
+        : sha !== null ? (() => {
+          const z = this.katalog.eintrag(sha);
+          if (!z?.pfad) throw new WelleFehler(404, 'unbekannt');
+          if (z.schutz === 'ableton') throw new WelleFehler(422, 'nur_live');
+          // sha eines unterlegenen Objekts: dessen eigene Datei (Fundort auf diesem Host), nie stillschweigend die des Gewinners
+          const pfad = sha === z.sha ? z.pfad : (this.mediathek.vorhanden() ? this.mediathek.pfadVon(sha) : null);
+          if (!pfad) throw new WelleFehler(404, 'unbekannt');
+          return dateiQuelle(pfad, sha, z.dauer_s);
+        })()
         : material !== null ? fassungQuelle(this.opt.bestand, material, Number(url.searchParams.get('bpm')), Number(url.searchParams.get('fassung')))
         : (() => { throw new WelleFehler(400, 'quelle_fehlt'); })();
-      const datei = await this.welle.hole(q);
+      // Schließt die Seite die Anfrage (Auswahl gewechselt), bricht die Dekodierung ab, wenn sonst niemand auf sie wartet (S5-Review B2)
+      const ac = new AbortController();
+      a.on('close', () => { if (!a.writableFinished) ac.abort(); });
+      const datei = await this.welle.hole(q, ac.signal);
       a.writeHead(200, { 'content-type': 'application/octet-stream', 'cache-control': 'no-store' });
       fs.createReadStream(datei).on('error', () => a.destroy()).pipe(a);   // Review F6: Lesefehler beendet nur die Antwort
     } catch (e) {
-      const code = e instanceof WelleFehler ? e.code : 500;
+      if (a.destroyed) return;                                   // die Seite ist weg (Abbruch): nichts mehr zu melden
+      const code = e instanceof WelleFehler || e instanceof KatalogFehler ? e.code : 500;
       this.json(a, code, { fehler: (e as Error).message });
     }
   }
@@ -2000,7 +2447,7 @@ async function main(): Promise<void> {
   const { values: v } = parseArgs({ options: {
     port: { type: 'string' }, 'kern-port': { type: 'string' }, 'abo-port': { type: 'string' },
     'leitstand-ws': { type: 'string' }, bestand: { type: 'string' }, arbeitsbestand: { type: 'string' }, log: { type: 'string' },
-    'kern-pruefmodus': { type: 'string' }, 'ziel-kurve': { type: 'string' }, loops: { type: 'string' }, mediathek: { type: 'string' }, sammlungen: { type: 'string' }, kit: { type: 'string' }, digitalout: { type: 'string' },
+    'kern-pruefmodus': { type: 'string' }, 'ziel-kurve': { type: 'string' }, loops: { type: 'string' }, mediathek: { type: 'string' }, katalog: { type: 'string' }, sammlungen: { type: 'string' }, 'welle-cache': { type: 'string' }, 'muster-ordner': { type: 'string' }, 'muster-bibliothek': { type: 'string' }, 'muster-sets': { type: 'string' }, kit: { type: 'string' }, digitalout: { type: 'string' },
   } });
   const zk = v['ziel-kurve'];
   if (zk !== undefined && !ZIEL_KURVEN.includes(zk)) throw new Error(`--ziel-kurve ${zk}: erlaubt sind ${ZIEL_KURVEN.join(' oder ')}`);
@@ -2021,13 +2468,16 @@ async function main(): Promise<void> {
     loops: v.loops,
     digitalout: v.digitalout,
     mediathek: v.mediathek,
+    katalog: v.katalog,
     sammlungen: v.sammlungen,
+    welleCache: v['welle-cache'],
+    musterOrdner: v['muster-ordner'], musterBibliothek: v['muster-bibliothek'], musterSets: v['muster-sets'],   // Proben mit eigener Ablage (S2b)
     kit: v.kit,   // Basis-Kit des Drums-Erzeugers (djk-start --strudel-kit): sonst zählt loop_klang freie Noten gegen battery
     log: (z) => { if (logDatei !== null) fs.writeSync(logDatei, JSON.stringify({ t: Date.now(), ...z }) + '\n'); },
   });
   await o.starte();
   process.stdout.write(`oberflaeche: http://127.0.0.1:${o.opt.port}/ kern ${o.opt.kernPort} abo ${o.opt.aboPort} ` +
-    `leitstand ws ${o.opt.leitstandWs} bestand ${o.opt.bestand} arbeitsbestand ${o.opt.arbeitsbestand} loops ${o.opt.loops ?? loopOrdnerVorgabe(process.env.CYPHERDJ_INSTANZ ?? '')} kern-pruefmodus ${o.pruefmodus}\n`);
+    `leitstand ws ${o.opt.leitstandWs} bestand ${o.opt.bestand} arbeitsbestand ${o.opt.arbeitsbestand} loops ${o.opt.loops ?? loopOrdnerVorgabe(process.env.CYPHERDJ_INSTANZ ?? '')} kern-pruefmodus ${o.pruefmodus} welle-cache ${o.opt.welleCache ?? welleCacheVorgabe(process.env.CYPHERDJ_INSTANZ ?? '')}\n`);
   const ende = async (): Promise<void> => { await o.stoppe(); process.exit(0); };
   process.on('SIGTERM', () => void ende());
   process.on('SIGINT', () => void ende());

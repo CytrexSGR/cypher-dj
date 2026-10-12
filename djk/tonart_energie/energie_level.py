@@ -2,7 +2,9 @@
 
 Rechnet dieselben Merkmale wie der Cache-Lauf (merkmale.energie + Essentia-TF-Köpfe), ohne Tag-Werte
 (kein TBPM, kein Genre), und wendet das in modell/energie.joblib gespeicherte Modell an.
-Nur CPU (CUDA_VISIBLE_DEVICES=""). Kosten je Track ≈ 20 s auf einem Kern, fast alles MusiCNN/EffNet.
+Standard nur CPU (CUDA_VISIBLE_DEVICES=""), Kosten je Track ≈ 20 s auf einem Kern, fast alles MusiCNN/EffNet.
+GPU: CUDA_VISIBLE_DEVICES=0 vorher setzen, dazu LD_LIBRARY_PATH aus ~/cypher-dj/cues/cuda11/LD_PFAD (TensorFlow 2.5
+braucht CUDA 11 + cuDNN 8) und TF_FORCE_GPU_ALLOW_GROWTH=true. Gemessen 2026-10-10: Netze 3,6 s statt 7,7 s, Werte gleich.
 
 Aufruf: cd djk && ~/cypher-dj/cues/venv-mik/bin/python -m tonart_energie.energie_level <mp3> [...]
 """
@@ -13,7 +15,7 @@ import os
 import sys
 from pathlib import Path
 
-os.environ["CUDA_VISIBLE_DEVICES"] = ""
+os.environ.setdefault("CUDA_VISIBLE_DEVICES", "")
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
 # Ein Thread je Prozess. Muss VOR dem ersten Import von numpy/essentia stehen: gemessen am selben Track
 # ohne diese Zeilen 4,9 CPU-Kerne je Prozess (Wand 7,2 s, CPU 35,1 s), mit ihnen 0,98 (20,0 s / 19,7 s).

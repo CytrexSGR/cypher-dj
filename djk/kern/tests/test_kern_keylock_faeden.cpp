@@ -261,6 +261,22 @@ struct Lauf {
     while (kern->sample() < s) zyklus();
   }
   void sekunden(double t) { bis(kern->sample() + (int64_t)(t * 48000.0)); }
+  // Fix des Wackelns (11.10.): Bau und Anhängen laufen im eigenen Faden (keylock_bauen, rund 0,7 bis 0,9 s CPU) gegen den Callback, der
+  // in Wanduhr-Zeit taktet. Ein festes Fenster von 2,0 s (zuvor k.sekunden(2.0)) misst dann die Last des Rechners: bei Bau 1,96 s
+  // (gemessen unter Last) oder 2,85 s hing der Dehner nicht mehr oder zu spät, die Prüfungen am Anhängen wurden rot, obwohl der Kern
+  // richtig arbeitet. Jetzt: mindestens bis min_ende (wie zuvor), und weiter, solange fertig() nicht gilt (Obergrenze grenze_s
+  // Kern-Zeit, dann scheitert der Test an seinen Prüfungen), danach nach_s Kern-Zeit für Anhängen, Einschwingen und Messen. Die
+  // Prüfungen selbst (Bitgleichheit bis zum Anhängen, Ring binnen 1 s nach dem Anhängen, Tonhöhe danach) bleiben unverändert.
+  template <class F>
+  void bis_fertig(int64_t min_ende, F&& fertig, double nach_s, double grenze_s = 60.0) {
+    int64_t s_fertig = -1;
+    const int64_t grenze = min_ende + (int64_t)(grenze_s * 48000.0), nach = (int64_t)(nach_s * 48000.0);
+    for (;;) {
+      if (s_fertig < 0 && fertig()) s_fertig = kern->sample();
+      if (kern->sample() >= (s_fertig < 0 ? grenze : std::max(min_ende, s_fertig + nach))) break;
+      zyklus();
+    }
+  }
   const Q* quittung(int64_t i, int32_t st) const {
     for (const Q& x : q)
       if (x.id == i && x.status == st) return &x;
@@ -1037,7 +1053,7 @@ void test_spaet() {
   k.je_zyklus = [&] {
     if (s_ring < 0 && dk.keylock_ring_hoerbar()) s_ring = k.kern->sample();
   };
-  k.sekunden(2.0);
+  k.bis_fertig(s_bau + 96000, [&] { return bau_ns.load() >= 0; }, 1.0);
   k.je_zyklus = nullptr;
   bau.join();
   const int64_t ab = k.kern->keylock_ab();
@@ -1116,11 +1132,14 @@ void test_knopf_spaet() {
     k.sekunden(1.5);
     const cdj::Deck& dk = k.kern->deck(1);
     PRUEF(dk.laeuft() && !k.kern->keylock_knopf());
-    std::atomic<bool> gebaut{false};
-    std::thread bau([&] { gebaut = k.kern->keylock_bauen(0); });
+    std::atomic<bool> gebaut{false}, bau_ende{false};
+    std::thread bau([&] {
+      gebaut = k.kern->keylock_bauen(0);
+      bau_ende = true;
+    });
     int64_t hoer = 0, beteiligt = 0;
     k.je_zyklus = [&] { hoer += dk.keylock_ring_hoerbar() ? 1 : 0; beteiligt += dk.keylock_ring_beteiligt() ? 1 : 0; };
-    k.sekunden(2.0);
+    k.bis_fertig(k.kern->sample() + 96000, [&] { return bau_ende.load(); }, 1.0);
     bau.join();
     const int64_t e = k.kern->sample() - 4800;
     const double ct_aus = 1200.0 * std::log2(km::freq(k.ch[0], e - 4800, e) / 1000.0);
@@ -1160,12 +1179,15 @@ void test_knopf_spaet() {
     PRUEF(k2.betrieb->starte(pfad, *k2.kern).fortgesetzt);
     PRUEF(k2.kern->decks_nachladen(k2.lader) == 1);
     k2.zyklus();
-    std::atomic<bool> gebaut{false};
-    std::thread bau([&] { gebaut = k2.kern->keylock_bauen(0); });
+    std::atomic<bool> gebaut{false}, bau_ende{false};
+    std::thread bau([&] {
+      gebaut = k2.kern->keylock_bauen(0);
+      bau_ende = true;
+    });
     const cdj::Deck& dk = k2.kern->deck(1);
     int64_t hoer = 0;
     k2.je_zyklus = [&] { hoer += dk.keylock_ring_hoerbar() ? 1 : 0; };
-    k2.sekunden(2.0);
+    k2.bis_fertig(k2.kern->sample() + 96000, [&] { return bau_ende.load(); }, 1.0);
     k2.je_zyklus = nullptr;
     bau.join();
     std::printf("  knopf_spaet b: Neustart, Knopf aus gespeichert: Knopf %d, gebaut %d, angehängt %lld, Ring hörbar %lld Zyklen, "
@@ -1230,7 +1252,8 @@ void test_neustart() {
     k2.je_zyklus = [&] {
       if (erg[v].s_ring < 0 && dk.keylock_ring_hoerbar()) erg[v].s_ring = k2.kern->sample();
     };
-    k2.bis(erg[v].s0 + 96000);
+    if (v == 2) k2.bis_fertig(erg[v].s0 + 96000, [&] { return bau_ns.load() >= 0; }, 1.0);
+    else k2.bis(erg[v].s0 + 96000);
     k2.je_zyklus = nullptr;
     if (bau.joinable()) bau.join();
     erg[v].bau_ms = bau_ns.load() / 1e6;
@@ -1238,7 +1261,9 @@ void test_neustart() {
     erg[v].L = k2.ch[0];
   }
   // bitgleich bis zum Anhängen (Kanal Master links), dazu der erste hörbare Block nach dem Neustart
-  const int64_t bis = erg[2].ab > 0 ? erg[2].ab - 2 * B : erg[2].s0;  // vor dem Anhängen (Vorhalt des Limiters)
+  // vor dem Anhängen (Vorhalt des Limiters); höchstens so weit, wie der Bezug ohne Keylock aufgenommen wurde (er läuft feste 96000
+  // Samples, der Betriebsweg wartet auf den Bau: unter Last hängt er später an)
+  const int64_t bis = erg[2].ab > 0 ? std::min<int64_t>(erg[2].ab - 2 * B, erg[0].s0 + 96000 - 2 * B) : erg[2].s0;
   int64_t ungleich = 0, erstes_ton[2] = {-1, -1};
   for (int64_t i = erg[2].s0; i < bis; ++i)
     ungleich += erg[0].L[(size_t)i] != erg[2].L[(size_t)i] ? 1 : 0;

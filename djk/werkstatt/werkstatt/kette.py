@@ -25,7 +25,7 @@ from .fremdtags import lese_tags
 from .index import eintragen, oeffne
 from .karte import Karte
 from .lautheit import lautheit, lufs_je_takt
-from .stimmung import entscheide, essentia_cent, eigen, tonart
+from .stimmung import entscheide, essentia_cent, eigen, tonart, tonart_mik
 from .warp import frames_je_beat, lies_float_wav, schreibe_f32, timemap, warp
 
 VERLUSTBEHAFTET = {".mp3", ".ogg", ".m4a", ".aac", ".opus"}
@@ -53,10 +53,11 @@ def pulsklarheit_aus_c_drift(quelle):
     return None if e is None else float(e["klarheit_median"])
 
 
-def raster_messen(quelle, geraet="cpu"):
+def raster_messen(quelle, geraet="cpu", melde=None):
     """Scheibe 05 (`lauf_raster.miss`): Karte und `raster` in der Datenform von §13.2."""
     from .lauf_raster import c_drift_werte, miss
-    e = miss(Path(quelle).name, Path(quelle), cd=c_drift_werte().get(Path(quelle).name), geraet=geraet)
+    e = miss(Path(quelle).name, Path(quelle), cd=c_drift_werte().get(Path(quelle).name), geraet=geraet,
+             melde=None if melde is None else (lambda teil: melde("beats", teil=teil)))
     r = dict(e["raster"])
     # §13.2 (Andreas 2026-09-25, B11): abweichung_ms_p90 ist die Form ohne Versatz (05: form_p90_ms), der konstante
     # Versatz steht daneben, Werkzeug minus Zweitwerkzeug. 05 `vergleiche` meldet versatz_ms positiv, wenn Essentia
@@ -64,9 +65,12 @@ def raster_messen(quelle, geraet="cpu"):
     v = e["vergleich_essentia"]["versatz_ms"]
     r["versatz_zweitwerkzeug_ms"] = None if v is None else round(-float(v), 2)
     warn = list(e.get("warnungen", []))
-    if r["erste_eins_quell_beat"] is None:          # beat_this ohne Downbeat im Kartenbereich
-        r["erste_eins_quell_beat"] = r["erste_eins_zweitverfahren"] if r["erste_eins_zweitverfahren"] is not None else 0
-        warn.append("Takt-Eins ohne beat_this-Downbeat, Zweitverfahren oder 0 genommen")
+    # 2026-10-11: kein Rueckgriff auf das Tief-Band mehr (Rauschen bei 4-auf-den-Boden, Bericht grid-phase M4). Ohne
+    # Downbeat gilt die Lage des ersten Kicks, sonst 0; beides ist unsicher.
+    if r.get("erste_eins_quelle") == "keine":
+        warn.append("Takt-Eins ohne beat_this-Downbeat und ohne Kick-Lage, 0 genommen")
+    elif r.get("erste_eins_unsicher"):
+        warn.append(f"Takt-Eins unsicher (Anteil {r.get('erste_eins_anteil')}, Kick-Lage {r.get('erste_eins_kick')})")
     info = {"bpm_beat_this": e["bpm_beat_this"], "streckfaktor_05": e["streckfaktor"], "laufzeit_s": e["laufzeit_s"],
             "eins_beat_this": e["eins_beat_this"]}
     return e["tempo_karte_quelle"], r, info, warn
@@ -94,13 +98,28 @@ def raster_aus_wahrheit(karte, pulsklarheit=None):
     return {"werkzeug": "wahrheit", "zweitwerkzeug": "keins", "abweichung_ms_p90": None,
             "versatz_zweitwerkzeug_ms": None, "pulsklarheit": pulsklarheit,
             "erster_schlag_quelle_s": round(float(karte.sekunden[0]), 6), "taktart": 4,
-            "tempo_vielfaches": float(karte.vielfaches), "erste_eins_quell_beat": 0, "erste_eins_zweitverfahren": None}
+            "tempo_vielfaches": float(karte.vielfaches), "erste_eins_quell_beat": 0, "erste_eins_zweitverfahren": None,
+            "erste_eins_anteil": 1.0, "erste_eins_kick": None, "erste_eins_unsicher": False, "erste_eins_quelle": "mehrheit"}
 
 
-def tore(material, lautheit_fassung, streckfaktor, eins_beat_this):
+def tor_eins(raster, eins_beat_this, eins_hand=False):
+    """Tor `eins` (§12.3, geaendert 2026-10-11): urteilt auf Mehrheitsanteil und Kick (`unsicher` aus eins.entscheide_eins),
+    nicht mehr auf den Gleichstand mit dem Tief-Band. Von Hand gesetzte Eins (art=eins) gilt als sicher. Material von vor
+    der Entscheidung hat keinen Anteil: `bewertet` false, nicht unsicher (die Seite zeigt nichts), Tor nicht ok."""
+    zw = raster["erste_eins_zweitverfahren"]
+    bewertet = "erste_eins_unsicher" in raster
+    if eins_hand:
+        return {"ok": True, "beat_this": eins_beat_this, "zweitverfahren": zw, "bewertet": True, "unsicher": False,
+                "anteil": raster.get("erste_eins_anteil"), "kick": raster.get("erste_eins_kick"), "quelle": "andreas"}
+    unsicher = bool(raster.get("erste_eins_unsicher", False))
+    return {"ok": bewertet and not unsicher, "beat_this": eins_beat_this, "zweitverfahren": zw, "bewertet": bewertet,
+            "unsicher": unsicher, "anteil": raster.get("erste_eins_anteil"), "kick": raster.get("erste_eins_kick"),
+            "quelle": raster.get("erste_eins_quelle")}
+
+
+def tore(material, lautheit_fassung, streckfaktor, eins_beat_this, eins_hand=False):
     """Vorlaeufige Tore (§12.3) mit dem, was Scheibe 15 misst; `raster` bleibt bis Scheibe 23 unbestimmt."""
     klar = material["raster"]["pulsklarheit"]
-    eins_zw = material["raster"]["erste_eins_zweitverfahren"]
     tp = lautheit_fassung["echtspitze_dbtp"]
     return {"raster": {"ok": False, "wert_ms": None, "grenze_ms": TOR_RASTER_MS, "anschlaege": 0},
             "headroom": {"ok": tp <= TOR_HEADROOM_DBTP, "wert_dbtp": tp, "grenze_dbtp": TOR_HEADROOM_DBTP},
@@ -108,12 +127,11 @@ def tore(material, lautheit_fassung, streckfaktor, eins_beat_this):
                          "grenze": TOR_KLARHEIT},
             "streckfaktor": {"ok": abs(streckfaktor - 1.0) <= TOR_STRECKFAKTOR, "wert": round(streckfaktor, 4),
                              "grenze": TOR_STRECKFAKTOR},
-            "eins": {"ok": eins_beat_this is not None and eins_beat_this == eins_zw, "beat_this": eins_beat_this,
-                     "zweitverfahren": eins_zw}}
+            "eins": tor_eins(material["raster"], eins_beat_this, eins_hand)}
 
 
 def rendere(x, karte, material, basis_bpm, r, fassung_ordner, arbeit, korrekturen_bis_zeile, erste_eins,
-            hotcues, korrektur_cent, warnungen, eins_beat_this):
+            hotcues, korrektur_cent, warnungen, eins_beat_this, eins_hand=False, melde=None):
     """Eine Fassung in `fassung_ordner` (noch nicht veroeffentlicht). Rueckgabe (fassung_json, messwerte)."""
     t0 = time.perf_counter()
     fassung_ordner.mkdir(parents=True)
@@ -121,7 +139,8 @@ def rendere(x, karte, material, basis_bpm, r, fassung_ordner, arbeit, korrekture
     ein = arbeit / "luft.wav"
     schreibe_float_wav(luft(x), ein)
     aus = arbeit / "warp.wav"
-    befehl = warp(ein, aus, tm, korrektur_cent=korrektur_cent)
+    befehl = warp(ein, aus, tm, korrektur_cent=korrektur_cent,
+                  melde=None if melde is None else (lambda p: melde("render", prozent=p)))
     y = lies_float_wav(aus)
     schreibe_f32(y, fassung_ordner / "basis.f32")
     t_warp = time.perf_counter() - t0
@@ -129,7 +148,7 @@ def rendere(x, karte, material, basis_bpm, r, fassung_ordner, arbeit, korrekture
     l = lautheit(y)
     l["lufs_je_takt"] = lufs_je_takt(y, tm.erster_schlag_frame + erste_eins * fpb, 4 * fpb)
     streck = basis_bpm / (60.0 * float(np.polyfit(karte.sekunden, karte.beats, 1)[0]))
-    t = tore(material, l, streck, eins_beat_this)
+    t = tore(material, l, streck, eins_beat_this, eins_hand)
     warn = list(warnungen) + [WARNUNG_RASTER]
     for name, tor in t.items():
         if name != "raster" and not tor["ok"]:
@@ -151,10 +170,15 @@ def rendere(x, karte, material, basis_bpm, r, fassung_ordner, arbeit, korrekture
     return f, messwerte
 
 
-def einlesen(quelle, bestand, basis_bpm=128.0, karte=None, geraet="cpu", auftrag_id=None, titel=None):
+def einlesen(quelle, bestand, basis_bpm=128.0, karte=None, geraet="cpu", auftrag_id=None, titel=None, melde=None):
     """Neues Material mit Fassung r1. Liegt das Material schon im Bestand: nichts schreiben, Status 'vorhanden'.
-    karte: nur fuer Kontrollen mit bekannter Wahrheit; sonst misst Scheibe 05 die Karte."""
+    karte: nur fuer Kontrollen mit bekannter Wahrheit; sonst misst Scheibe 05 die Karte.
+    melde(name, prozent=None, teil=None): Fortschritt (fortschritt.py), Stufen decode, beats, key, render, save."""
     quelle, bestand = Path(quelle), Path(bestand)
+    gemeldet = melde is not None
+    if melde is None:
+        def melde(name, prozent=None, teil=None):
+            pass
     t0 = time.perf_counter()
     sha = sha256_datei(quelle)
     mid = sha[:16]
@@ -173,12 +197,14 @@ def einlesen(quelle, bestand, basis_bpm=128.0, karte=None, geraet="cpu", auftrag
                             str(mo / "original.flac")], check=True)
         (mo / "korrekturen.jsonl").touch()
         zeiten = {}
+        melde("decode")
         x = lade_stereo48(quelle)
         lq = lautheit(x)
         t = time.perf_counter()
         warnungen = []
+        melde("beats")
         if karte is None:
-            liste, raster, rinfo, w = raster_messen(quelle, geraet)
+            liste, raster, rinfo, w = raster_messen(quelle, geraet, melde) if gemeldet else raster_messen(quelle, geraet)
             warnungen += w
             eins_bt = rinfo["eins_beat_this"]
         else:
@@ -189,11 +215,13 @@ def einlesen(quelle, bestand, basis_bpm=128.0, karte=None, geraet="cpu", auftrag
         zeiten["raster"] = round(time.perf_counter() - t, 2)
         karte_r = karte_aus_liste(liste, raster["tempo_vielfaches"])   # Fassung genau aus material.json
         t = time.perf_counter()
+        melde("key")
         x48 = x.mean(axis=1)
         c1, rr = eigen(x48)
-        c2 = essentia_cent(lade_mono(quelle, 44100))
+        x44 = lade_mono(quelle, 44100)
+        c2 = essentia_cent(x44)
         stimmung = entscheide(c1, rr, c2)
-        ta = tonart(x48, c1)
+        ta = tonart_mik(x44, tonart(x48, c1))
         zeiten["stimmung"] = round(time.perf_counter() - t, 2)
         if stimmung["warnung"]:
             warnungen.append(stimmung["warnung"])
@@ -226,9 +254,11 @@ def einlesen(quelle, bestand, basis_bpm=128.0, karte=None, geraet="cpu", auftrag
             schreibe_json(mo / "tags.json", fremd)
         name = fassung_name(basis_bpm, 1)
         t = time.perf_counter()
+        melde("render")
         f, mw = rendere(x, karte_r, material, basis_bpm, 1, mo / "fassungen" / name, arbeit, 0,
-                        raster["erste_eins_quell_beat"], [], stimmung["korrektur_cent"], warnungen, eins_bt)
+                        raster["erste_eins_quell_beat"], [], stimmung["korrektur_cent"], warnungen, eins_bt, melde=melde)
         zeiten["rendern"] = round(time.perf_counter() - t, 2)
+        melde("save")
         versiegeln_liste = [mo / "material.json"] + list(mo.glob("original.*"))
         if hat_fremdtags:
             versiegeln_liste.append(mo / "tags.json")
@@ -308,15 +338,17 @@ def korrigieren(material_id, bestand, basis_bpm=128.0):
     karte = karte_aus_liste(material["tempo_karte_quelle"], material["raster"]["tempo_vielfaches"])
     karte = wende_raster_an(karte, zeilen, basis_bpm)
     eins, hotcues = eins_und_hotcues(material, zeilen)
+    eins_hand = any(z["art"] == "eins" and z["ab_quell_beat"] is not None and z["von"] == "andreas" for z in zeilen)
     r = r_alt + 1
     name = fassung_name(basis_bpm, r)
     arbeit = bestand / ".arbeit" / f"k-{material_id}-r{r}"
     aufraeumen(arbeit)
     arbeit.mkdir(parents=True)
     x = lade_stereo48(mo / material["quelle"]["datei"])
-    warn = [w for w in alt["warnungen"] if w.startswith(("Stimmung", "Takt-Eins", "Erster Schlag"))]
+    warn = [w for w in alt["warnungen"] if w.startswith(("Stimmung", "Takt-Eins", "Erster Schlag"))
+            and not (eins_hand and w.startswith("Takt-Eins unsicher"))]
     f, mw = rendere(x, karte, material, basis_bpm, r, arbeit / name, arbeit, len(zeilen), eins, hotcues,
-                    alt["stimmung_korrektur_cent"], warn, alt["tore"]["eins"]["beat_this"])
+                    alt["stimmung_korrektur_cent"], warn, alt["tore"]["eins"]["beat_this"], eins_hand)
     versiegeln(arbeit / name, ordner_selbst=False)
     fsync_baum(arbeit / name)
     rename_ohne_ueberschreiben(arbeit / name, mo / "fassungen" / name)

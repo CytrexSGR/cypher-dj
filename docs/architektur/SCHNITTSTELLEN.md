@@ -106,6 +106,8 @@ Kanäle: `deck/1` bis `deck/4` (Andreas sagt A = 1, B = 2), `erz/1` bis `erz/8` 
 `pad/1`, `pad/2` (Einzelschüsse; seit MVP 2 die Loop-Boxen L1 und L2, ADR 025), `bus/1` bis `bus/4` (Gruppenbusse, A17), `master`, `cue`. Jeder Kanal außer
 `master`/`cue` hat denselben Kanalzug; ein Bus hat keinen `ziel`-Regler (er geht immer auf den Master).
 
+`erz/8` ist der Vorhör-Eingang des Browsers (Nur-Cue): Er klingt nur über PFL im Cue, nie im Master/Bus/Send; `erz/8/fader`, `/ziel`, `/send/*`, `/pfl`, `/trim`, `/eq/*`, `/filter` sind ohne Wirkung (Trim, EQ und Filter bleiben neutral: Gehörschutz, der Cue hat keinen Limiter). `/erz/strom` mit Ziel `erz/8` wird mit Status 6 abgelehnt. Ein NaN aus erz/8 bleibt in seinem Kanalzug und erreicht weder die PFL-Summe noch die Master-Wache.
+
 | Pfad (`<k>` = Kanal) | Einheit | Bereich | Vorgabe | Schaltrampe bei `dauer_beats = 0` | Wer darf |
 |---|---|---|---|---|---|
 | `<k>/fader` | dB | −200 bis 0 | −200 (nach Laden immer) | 10 ms | alle; `bus/<n>/fader` nur Hand |
@@ -118,20 +120,38 @@ Kanäle: `deck/1` bis `deck/4` (Andreas sagt A = 1, B = 2), `erz/1` bis `erz/8` 
 | `deck/<n>/stem/drums`, `/stem/bass`, `/stem/vocals`, `/stem/other` | dB | −200 bis +6 | 0 | 10 ms | alle; nur bei mit Stems geladenem Deck (§4.4), sonst `abgelehnt`, Grund `keine_stems` |
 | `<k>/xseite` | 0 = A, 1 = durch, 2 = B | | 1 | sofort | nur Hand |
 | `<k>/pfl` | Schalter | 0/1 | 0 | sofort | nur Hand (und Taste „Cypher hören“) |
+| `<k>/komp/an` | Schalter | 0/1 | 0 | sofort | alle; nur Quellkanäle (deck, erz, pad) |
+| `<k>/komp/schwelle` | dB | −60 bis 0 | −18 | 10 ms | alle; nur Quellkanäle |
+| `<k>/komp/ratio` | 1 bis 20 | | 4 | 10 ms | alle; nur Quellkanäle |
+| `<k>/komp/attack` | ms | 0,1 bis 100 | 10 | 10 ms | alle; nur Quellkanäle |
+| `<k>/komp/release` | ms | 10 bis 1000 | 120 | 10 ms | alle; nur Quellkanäle |
+| `<k>/komp/makeup` | dB | 0 bis 24 | 0 | 10 ms | alle; nur Quellkanäle |
+| `<k>/komp/mix` | 0 bis 1 | | 1 | 10 ms | alle; nur Quellkanäle |
+| `<k>/komp/sc` | Stufen (Schlüssel: 0 eigenes Signal, sonst Quellkanal + 1: deck/1..4 = 1..4, erz/1..8 = 5..12, pad/1..2 = 13..14) | 0 bis 14 | 0 | sofort | alle; nur Quellkanäle |
 | `xfader` | −1 bis +1 | | 0 | 10 ms | nur Hand |
 | `master/pegel` | dB | −200 bis 0 | 0 | 10 ms | nur Hand |
 | `master/kleber` | 0 bis 1 | | 0 | 10 ms | nur Hand |
 | `cue/mix` | −1 (nur Cue) bis +1 (nur Master) | | −1 | 10 ms | nur Hand |
 | `cue/pegel` | dB | −200 bis 0 | −12 | 10 ms | nur Hand |
 | `cue/split` | Schalter | 0/1 | 0 | sofort | nur Hand |
+| `master/pfl` | Schalter (MASTER CUE: Master in die PFL-Seite des Cue) | 0/1 | 0 | sofort | nur Hand |
 | `fx/1/notenwert`, `fx/2/notenwert` | Beats | 1/32 bis 4 | 0,75 | sofort mit Überblendung (04 §3.3) | alle |
 | `fx/<n>/rueckkopplung` | 0 bis 0,95 | | 0,5 | 10 ms | alle |
 | `fx/<n>/rueckweg` | dB | −200 bis 0 | 0 | 10 ms | alle |
 | `duck/tiefe` | dB | −24 bis 0 | 0 | 10 ms | alle |
 | `duck/release` | ms | 50 bis 600 | 200 | sofort | alle |
 | `keylock` | Schalter | 0/1 | 1 | sofort | alle |
+| `color/art` | Stufen (SOUND COLOR FX: 0 FILTER, 1 SPACE, 2 DUB ECHO, 3 SWEEP, 4 NOISE, 5 CRUSH) | 0 bis 5 | 0 | sofort | alle |
+| `color/param` | 0 bis 1 (PARAMETER der SOUND COLOR FX) | | 0,5 | 10 ms | alle |
 
 `keylock` (Keylock Task 3; ADR 029 kommt mit Task 4): EIN Schalter für alle Quellen, kein Deck-Argument. An (Vorgabe): Decks und Loop-Boxen spielen über den Dehner (Rubber Band R3 im Arbeits-Thread, je Quelle einer) in ihrer Tonhöhe, jedes Ereignis mit Varispeed-Brücke bis `s_h`; eine wartende Box setzt mit Vorlauf an und klingt zur Eins aus dem Ring (ADR 029 Abschnitt Loop-Boxen, seit Task 7; vorgerenderte Varianten nach ADR 027 gibt es nicht mehr). Aus: Decks und Loop-Boxen spielen Varispeed (Tonhöhe folgt dem Tempo). Die REC-Umrechnung eines Mitschnitts bleibt offline (ADR 027 Entscheidung 6) und hängt nicht am Knopf. Ein neuer Abonnent bekommt beim ersten `/k/hallo` den Stand als `/e/regler keylock` (§5.7). Wirkt am Sample, auch bei laufendem Deck. Ohne Dehner (kern.toml `keylock = false`, §2.1) bleibt der Knopf bei den Decks ohne Wirkung.
+
+`<k>/komp/*` (Effekt-Sektion, 2026-10-11): Cypher Komp (Rust `komp_dsp` über `hall_ffi`, Giannoulis, Massberg, Reiss 2012) je
+Quellkanal nach EQ und Filter, vor dem Fader (PFL hört ihn), Knie fest 6 dB; mit `komp/sc` hört der Detektor auf den Eingang
+eines anderen Quellkanals (vor dessen Trim und EQ), etwa die Kick auf erz/1 (Wert 5); aus = bitgleich zum
+Kanalzug ohne Kompressor. Stand: `docs/architektur/stand/kompressor.md`.
+
+`color/*` (SOUND COLOR FX nach dem XDJ-XZ, 2026-10-11): `<k>/filter` ist der COLOR-Regler jedes Kanals, `color/art` und `color/param` gelten wie am Pult für alle Kanäle. Art 0 ist der DJ-Filter wie bisher (bitgleich), jede andere Art ersetzt ihn an derselben Stelle im Kanalzug (vor dem Abgriff, also vor PFL und Fader). In der Totzone |k| < 0,05 ist der Ausgang trocken; SPACE und DUB ECHO (3/4 Beat aus dem Master-Tempo) klingen nach dem Zurückdrehen aus, ein Artwechsel leert sie. Kurven: `djk/kern/dsp/include/cypherdj/dsp/colorfx.h`, Stand: `docs/architektur/stand/color-fx.md`.
 
 `duck/*` (K2): der Kern senkt erz/2 und erz/3 ab jedem gespielten Kit-Klang `bd:*`, am Sample des Ereignisses (Sidechain, ohne Verzug).
 
@@ -484,7 +504,7 @@ Datei bitgleich mit dem Puffer. Ist der Puffer voll, schreibt das Netz `<loop_or
 
 | Adresse | Typen | Felder | Wirkung |
 |---|---|---|---|
-| `/k/fx` | `,hsiidddddi` | `id`, `quelle`, `einheit` (1 FX1, 2 FX2), `art` (1 Echo, 2 Flanger, 3 Phaser, 4 Filter-LFO), `beats` (0,25, 0,5, 1, 2, 4, 8 oder 16), `wet` (0 bis 1, S8 FX Knob 1 Dry/Wet), `param1` (0 bis 1, S8 FX Knob 2, DSP-wirksam je Art: Echo/Flanger Rückkopplung, Phaser Resonanz, Filter Güte), `param2` (0 bis 1, S8 FX Knob 3, reserviert, ohne DSP-Wirkung), `param3` (0 bis 1, S8 FX Knob 4, reserviert, ohne DSP-Wirkung), `an` (0/1, die Einheit ON, S8 FX Button 1) | setzt die Parameter der Einheit; wirkt auf jede ihr zugewiesene Instanz (`/k/fx/zuweisung`); Wet gleitet über 480 Samples; ein Wechsel von Art oder Beats bei an gleitet erst auf 0 und leert den Zustand; aus schließt bei jeder Art nur den Eingang, der Nachhall klingt aus; LFO-Phase = frac(Beat / `beats`) |
+| `/k/fx` | `,hsiidddddi` | `id`, `quelle`, `einheit` (1 FX1, 2 FX2), `art` (1 Echo, 2 Flanger, 3 Phaser, 4 Filter-LFO, 5 Reverb (Cypher Hall, `beats` = Ausklingzeit T60), 6 Delay (eine Wiederholung), 7 Ping Pong (L/R), 8 Trans (Gate), 9 Roll, 10 Slip Roll (nimmt beim `beats`-Wechsel neu auf), 11 Vinyl Brake (`beats` = Bremsdauer), 12 Spiral (Zeit gleitet, Tonhöhe wandert); 5–12 seit 2026-10-11, Bereich aus `osc.json`), `beats` (0,25, 0,5, 1, 2, 4, 8 oder 16), `wet` (0 bis 1, S8 FX Knob 1 Dry/Wet), `param1` (0 bis 1, S8 FX Knob 2, DSP-wirksam je Art: Echo/Flanger Rückkopplung, Phaser Resonanz, Filter Güte, Reverb SIZE, Delay TONE, Ping Pong und Spiral Rückkopplung, Trans DUTY; Roll, Slip Roll, Vinyl ohne Wirkung), `param2` (0 bis 1, S8 FX Knob 3, reserviert, ohne DSP-Wirkung), `param3` (0 bis 1, S8 FX Knob 4, reserviert, ohne DSP-Wirkung), `an` (0/1, die Einheit ON, S8 FX Button 1) | setzt die Parameter der Einheit; wirkt auf jede ihr zugewiesene Instanz (`/k/fx/zuweisung`); Wet gleitet über 480 Samples; ein Wechsel von Art oder Beats bei an gleitet erst auf 0 und leert den Zustand (Ausnahme Beats bei Roll, Slip Roll, Vinyl, Spiral: kein Leeren); aus schließt bei jeder Art nur den Eingang, der Nachhall klingt aus; LFO-Phase = frac(Beat / `beats`) |
 | `/k/fx/zuweisung` | `,hsisi` | `id`, `quelle`, `einheit` (1, 2), `kanal` (`deck/1`, `deck/2`, `erz/1`, `erz/2`, `erz/3`, `pad/1`, `pad/2`, `master`), `an` (0/1, zugewiesen) | hängt `kanal` an die Instanz der Einheit oder löst ihn (nach dem Kanalzug, Hauptweg nach dem Fader, PFL trocken; bei `master` auf die Summe vor `master/pegel`); mehrere Kanäle dürfen an derselben Einheit hängen; ein Kanal mit beiden Zuweisungen läuft FX1 vor FX2 (seriell, wie an der Traktor Kontrol S8, §4.3.1: „first run through FX1, then FX2“); Zuweisung ab lässt die Instanz auslaufen (Eingang zu, Nachhall läuft), Zuweisung an lässt den Eingang wieder auf gleiten |
 | `/k/fx/routing` | `,hsi` | `id`, `quelle`, `routing` (0 Post Fader, 1 Insert; sonst Quittung 6 `ausserhalb_bereich`) | schaltet für beide Einheiten und alle Kanalzüge, wo der Beat-FX sitzt: Post Fader (Vorgabe, nach dem Fader, PFL und Cyphers Ohr hören ihn nicht) oder Insert (vor dem Fader, PFL und Hüllkurven-Ring hören ihn, wie Traktor FX Unit Routing); wirkt am nächsten Blockanfang, der Wechsel gleitet Wet über 480 Samples auf 0, tauscht den Weg, leert und gleitet zurück (die Echo-Fahne bricht ab); Quelle `cypher` bekommt Quittung 6 `nur_hand` (die Taste ist Andreas' Hand); Master-FX bleibt unberührt; der Kern behält den Wunsch über einen Neustart nicht (der Seiten-Server sendet ihn erneut); Quittungen 1/2/3 |
 
@@ -549,6 +569,12 @@ nächsten Ereignis; seit Kern-Start), `keylock_ring_voll` (Abschnitte des Box-De
 sein; seit Kern-Start), `keylock_kein_platz` (Keylock 7c.3: Ansätze, für die kein Platz der Leihe frei war; der Loop spielt
 dann im Varispeed bis zum nächsten Ereignis; seit Kern-Start). Alle vier 0 ohne Dehner. Gesendet im selben Zyklus wie `/zustand/deck` (Vielfaches von 960 Samples),
 für jede Box mit geladenem Loop. Die Attrappe (`attrappe_kern`) spielt keine Boxen und sendet es nicht.
+
+### 5.5c Kompressor-Zustand `/zustand/komp ,sf` (10 Hz je Quellkanal mit laufendem Kompressor)
+
+Effekt-Sektion (2026-10-11, additiv): `kanal` (`deck/<n>`, `erz/<n>`, `pad/<n>`), `gr_db` (Absenkung des Kompressors
+`<k>/komp/*` am Ende des letzten Blocks, ≥ 0). Gesendet auf jedem Vielfachen von 4800 Samples, nur für Kanäle mit
+`<k>/komp/an` 1; schaltet der Kompressor ab, endet der Strom (die Seite zeigt dann 0). Die Attrappe sendet es nicht.
 
 ### 5.6 Pegel `/pegel ,sfffffff` (20 Hz je aktivem Kanal, dazu `master`, `cue`)
 
@@ -783,13 +809,25 @@ Notbahn, KI-Stopp setzt der Kern selbst; Vorschlag, Plan, Hörschein, Autonomie 
 
 | Client | Ports | Eigenschaften |
 |---|---|---|
-| `cypherdj-kern` | Eingänge `rueck_erz_1_L/R` bis `rueck_erz_8_L/R`, `puls_erz_1` bis `_8`, `rueck_fx_1_L/R`, `rueck_fx_2_L/R`, `puls_fx_1`, `puls_fx_2`; Ausgänge `send_1_L/R`, `send_2_L/R` (später) | `node.group = "cypherdj"`, `node.lock-quantum = true`, Quantum aus der Unit (`PIPEWIRE_QUANTUM=256/48000`); keine Ausgänge ans Interface |
+| `cypherdj-kern` | Eingänge (gemessen 2026-10-11, `pw-link -i`, Instanz f) `hand_in`, `rueck_erz_1_L/R` bis `rueck_erz_8_L/R`; Ausgänge `master_L/R`, `cue_L/R`, `midi_aus_1` bis `midi_aus_4`. **Nicht vorhanden, nur Plan:** `puls_erz_1` bis `_8`, `rueck_fx_1/2_L/R`, `puls_fx_1/2`, `send_1/2_L/R` | `node.group = "cypherdj"`, `node.lock-quantum = true`, Quantum aus der Unit (`PIPEWIRE_QUANTUM=256/48000`); keine Ausgänge ans Interface |
+| (Datei) | `/dev/shm/cypherdj[-i]/kern-faehigkeiten.json` | `cypherdj-kern` schreibt `{pid, nur_cue}` atomar vor `jack_activate`; `nur_cue` = `"erz/8"` nur, wenn der Mixer den Kanal als Nur-Cue führt |
 | `cypherdj-notbahn` | Ausgänge `master_L`, `master_R`, `cue_L`, `cue_R` | `node.group = "cypherdj"`, `node.lock-quantum = true`; verbindet sich selbst mit den Ports aus ihren Aufrufparametern (`--master <jack-port-präfix> --cue <jack-port-präfix>` im `ExecStart` der Unit; kein TOML in C, auf DJ-Maschine gibt es keinen C/C++-TOML-Parser), nur nach dem Riegel unten |
 | `cypherdj-aufnahme` | Eingänge `in_1` bis `in_4` | an die vier Notbahn-Ausgänge |
-| `cypherdj-wirt-<gruppe>`, `cypherdj-klang-sunvox` (später) | Ausgänge `out_L/R`, `puls` | `node.async = true` (über `PIPEWIRE_PROPS`), Eingang MIDI von `midi_aus_<p>` |
+| `cypherdj-wirt-<gruppe>[-<i>]`, `cypherdj-klang-sunvox` (später) | Carla-Namen, gemessen: Ausgänge `audio-out1/2` (und `events-out`), Eingänge `audio-in1/2`, `events-in`; **kein** `out_L/R`, **kein** `puls` | `node.async = true` (über `PIPEWIRE_PROPS`), `-p 256`; Eingang MIDI von `midi_aus_<p>` (Kante `midi_aus_<p>` → `events-in`), Rückweg `audio-out1/2` → `rueck_erz_<n>_L/R`. Transiente Unit `cypherdj-wirt-<gruppe>[-<i>]` (`systemd-run`, kein Template `@`), kein Xvfb (Carla läuft ohne DISPLAY) |
 
-**Puls:** jeder Wirt schreibt auf `puls` in jedem Zyklus den Wert `(zyklus mod 1024) / 1024` in alle Samples. Ändert er
+**Puls (Plan, nicht umgesetzt: weder Wirt noch Kern kennen ihn, ADR 009 M7 steht aus):** jeder Wirt schreibt auf `puls` in jedem Zyklus den Wert `(zyklus mod 1024) / 1024` in alle Samples. Ändert er
 sich zwei Zyklen lang nicht, blendet der Kern den zugehörigen Rückweg über 5 ms aus und meldet `/e/rueckweg` (lebt = 0).
+
+**Wirt-Arten (`wirt.py`, Stand RB-338 W1):** `lv2` (Surge XT, `--lv2`), `sfz:<name>` (Carlas Sampler, `--sfz`), `vst3:<bundle>`
+(eigene Instrumente aus `djk/instrumente`, `--vst3 <Bundle>`; Bundle `~/.local/lib/cypherdj/vst3/rb338.vst3`, ein Symlink auf
+`.rb338-versionen/<stempel>/`, installiert von `djk/instrumente/installiere.sh`). Die Art steht im Status
+`/dev/shm/cypherdj[-i]/wirt-<gruppe>.json` (`art`); `djk-instrumente` ohne `--bass`/`--melodie` behält die Art laut Status.
+Socket-Befehle der Art `vst3` (`ParamSteuerung`): `note`, `halte` (wie bei Surge und SFZ: hält Rampen der Spur an, hier gibt es keine; `gehalten` 0, **beendet keine Note**, Stop Cypher schickt es), `panik` (Note-Off für alle 128 Noten, `gehalten` 128; nur von Hand und von der Wache), `param` `{"name","wert"}` (Plugin-Parameter
+per Name, **normiert 0..1**, außerhalb abgelehnt), `params` (alle Namen mit Ist-Wert, direkt nach dem Start die Vorgaben des Plugins);
+`lade`, `fahre`, `zustand` gehören zu Surge und werden mit Grund abgelehnt. CLAP lädt Carla 2.5.8 nicht; VST3 lädt es unter Linux
+(entgegen dem Kommentar `carla_backend.py:465`). Rohe MIDI-CC und Pitchbend erreichen ein nih-plug-VST3 über JACK-MIDI **nicht**
+(`IMidiMapping`), Noten, Velocity und Überlappung schon; deshalb löst die **Wache** des Wirts (`wirtwache.py`, alle 20 ms, eigener portloser JACK-Client) bei jeder neu dazugekommenen Verbindung an `events-in` `panik` aus, als Ersatz für das All-Off CC120/CC123 des Kerns nach einer Neuverbindung (Grenze: Trennen und Verbinden zwischen zwei Abfragen bleibt unbemerkt); Regler laufen deshalb über `param`, nicht über CC (ADR 009 Nr. 3 ist für
+nih-plug so nicht tragfähig, `set_parameter_mapped_control_index` wirkt, wird aber nicht benutzt).
 
 **Portnamen unter `pw-jack`:** die Null-Senke heißt aus JACK-Sicht nach ihrer Beschreibung, z. B.
 `cypher-stumm-probe:playback_FL` (01 §3.2); Tests verbinden mit JACK-Namen, nie automatisch.
@@ -1026,7 +1064,7 @@ basis' · 48000`.
 | `text` | obj | `{"quelle": "prompt" \| "keiner", "zeilen": [str]}`; bei MiniMax aus dem Prompt übernommen, nicht aus dem Audio erkannt; Texterkennung später mit dem Zerleger (Scheibe 6) |
 | `quelle` | obj | `datei`, `sr`, `kanaele`, `dauer_s`, `sha256` |
 | `tempo_karte_quelle` | arr | `[[quell_sekunde, quell_beat], ...]` je Schlag, aus dem Raster-Werkzeug |
-| `raster` | obj | `werkzeug` (`beat_this`), `zweitwerkzeug` (`essentia`), `abweichung_ms_p90` (Form: p90 der Abweichung zum Zweitwerkzeug nach Abzug des konstanten Versatzes), `versatz_zweitwerkzeug_ms` (dieser konstante Versatz, mit Vorzeichen, Werkzeug minus Zweitwerkzeug; beide Felder Andreas 2026-09-25, B11), `pulsklarheit`, `erster_schlag_quelle_s`, `taktart` (4), `tempo_vielfaches` (½, 1, 2), `erste_eins_quell_beat` (0 bis 3, Downbeat aus beat_this), `erste_eins_zweitverfahren` |
+| `raster` | obj | `werkzeug` (`beat_this`), `zweitwerkzeug` (`essentia`), `abweichung_ms_p90` (Form: p90 der Abweichung zum Zweitwerkzeug nach Abzug des konstanten Versatzes), `versatz_zweitwerkzeug_ms` (dieser konstante Versatz, mit Vorzeichen, Werkzeug minus Zweitwerkzeug; beide Felder Andreas 2026-09-25, B11), `pulsklarheit`, `erster_schlag_quelle_s`, `taktart` (4), `tempo_vielfaches` (½, 1, 2), `erste_eins_quell_beat` (0 bis 3; seit 2026-10-11 Mehrheit der beat_this-Downbeats, bei Anteil < 0,85 und Halbtakt-Abweichung des ersten Kicks dessen Lage, `eins.entscheide_eins`), `erste_eins_zweitverfahren` (Tief-Band, nur Messwert), `erste_eins_anteil`, `erste_eins_kick` (Lage des ersten Kicks oder null), `erste_eins_unsicher`, `erste_eins_quelle` (`mehrheit`, `kick`, `keine`) |
 | `lautheit_quelle` | obj | `lufs_integriert`, `echtspitze_dbtp`, `crest_db` der Quelldatei |
 | `tonart` | obj | `camelot`, `r`, `vorsprung`, `stimmung_cent`, `stimmung_r`, `stimmung_cent_zweitwerkzeug`, `aus_stems` |
 
@@ -1047,7 +1085,7 @@ basis' · 48000`.
 | `struktur` | obj | `phrasen`: `[{ab_beat, bis_beat, art: intro\|aufbau\|drop\|break\|outro\|unbekannt}]` (Quell-Beats, Phrasen ab der Takt-Eins) |
 | `hotcues` | arr | `[{nr, quell_beat, name, von: werkstatt\|andreas}]` (Vorschläge an Phrasen ab der Takt-Eins) |
 | `loops` | arr | `[{name, ab_beat, laenge_beats}]` |
-| `tore` | obj | `{raster:{ok, wert_ms, grenze_ms, anschlaege}, headroom:{ok, wert_dbtp, grenze_dbtp}, klarheit:{ok, wert, grenze}, streckfaktor:{ok, wert, grenze}, eins:{ok, beat_this, zweitverfahren}}` |
+| `tore` | obj | `{raster:{ok, wert_ms, grenze_ms, anschlaege}, headroom:{ok, wert_dbtp, grenze_dbtp}, klarheit:{ok, wert, grenze}, streckfaktor:{ok, wert, grenze}, eins:{ok, beat_this, zweitverfahren, bewertet, unsicher, anteil, kick, quelle}}`; Tor `eins` ok = bewertet und nicht unsicher (seit 2026-10-11, nicht mehr beat_this == Tief-Band); `unsicher` zeigt die Seite als „downbeat?“; von Hand gesetzte Eins (`korrekturen.jsonl` art=eins) gilt als sicher |
 | `nur_fuer_andreas` | bool | ein Tor gerissen |
 | `warnungen` | arr[str] | |
 
@@ -1535,3 +1573,4 @@ reserviert), Plugin-Inserts, Zerleger-MCP, Oberfläche.
 | 2026-09-28 | 1 | Plan Ohr, Task 1: §6.2 `cap` 65536 → 16384 (16,4 s statt 65,5 s Verlauf, 16 statt 64 MiB gesperrter Speicher; der Leser liest fortlaufend nach, der Ring muss nur 4 Takte fassen); Kanal 14 `master` und Kanal 15 `cue` als Satz ergänzt. Version bleibt 1 |
 | 2026-09-28 | 1 | Plan Ohr, Task 15 (FX-Routing wie Traktor, Andreas: Ja): §4.10 `/k/fx/routing`, §5.12 `/e/fx/routing`. Neue Adressen, Version bleibt 1 |
 | 2026-10-06 | 1 | Welle 2 Klickfrei (Audit F10, F13, F15): §4.2 /k/set/neu, §4.4 /k/deck/start, §4.9 /k/loop/laden, /k/loop/start, /k/loop/stopp mit Blenden, §5.11 /e/loop beim Laden in eine klingende Box; Kill der Hand läuft die 5-ms-Schaltrampe aus §1.5, /e/regler meldet dabei nur 0/1 (F18). Längen gehört 06.10. (Andreas: „passt alles“). Keine neuen Adressen, Version bleibt 1 |
+| 2026-10-11 | 1 | Takt-Eins (§13.2, §12.3): Mehrheitsanteil und erster Kick entscheiden, Tor `eins` urteilt darauf, Tief-Band-Rückgriff entfernt; SET/FIX schreibt art=eins ins Material, Raster-Dateien werden an neue Fassungen vererbt. Befund `~/messungen/2026-10-11-grid-phase/BERICHT.md`; Version bleibt 1 (neue Felder optional) |

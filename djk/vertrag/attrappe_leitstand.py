@@ -86,6 +86,8 @@ def _vorgaben() -> dict[str, float]:
             v[f"{k}/{p}"] = w
         if not k.startswith("bus/"):
             v[f"{k}/ziel"] = 0.0
+            v.update({f"{k}/komp/{p}": w for p, w in (("an", 0.0), ("schwelle", -18.0), ("ratio", 4.0), ("attack", 10.0),
+                                                       ("release", 120.0), ("makeup", 0.0), ("mix", 1.0), ("sc", 0.0))})
         if k.startswith("deck/"):
             for stem in ("drums", "bass", "vocals", "other"):
                 v[f"{k}/stem/{stem}"] = 0.0
@@ -93,6 +95,7 @@ def _vorgaben() -> dict[str, float]:
               "fx/1/notenwert": 0.75, "fx/2/notenwert": 0.75, "fx/1/rueckkopplung": 0.5, "fx/2/rueckkopplung": 0.5})
     v.update({f"fx/{n}/rueckweg": 0.0 for n in range(1, 5)})
     v.update({"duck/tiefe": 0.0, "duck/release": 200.0})
+    v.update({"color/art": 0.0, "color/param": 0.5})
     return v
 
 

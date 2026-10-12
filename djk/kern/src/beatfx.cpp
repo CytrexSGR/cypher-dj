@@ -19,7 +19,7 @@ inline float naeher(float ist, float ziel, float schritt) {
 }
 }  // namespace
 
-BeatFx::BeatFx() {
+BeatFx::BeatFx() : hall_(std::make_unique<Hall>(48000)) {   // Hall: 2,6 MB, nie im Callback angelegt
   for (int k = 0; k < 2; ++k) {
     echo_[k].reset(new float[ECHO_FRAMES]());
     flanger_[k].reset(new float[FLANGER_FRAMES]());
@@ -27,13 +27,14 @@ BeatFx::BeatFx() {
 }
 
 void BeatFx::setze(int art, double beats, float wet, float param, bool an) noexcept {
-  if (art < AUS || art > FILTER) art = AUS;
+  if (art < AUS || art > SPIRAL) art = AUS;
   ziel_art_ = art;
   ziel_beats_ = beats > 0.0 ? beats : 1.0;
   ziel_param_ = std::clamp(param, 0.0f, 1.0f);
   // OFF schließt bei jeder Art nur den Eingang: das Trockene läuft voll, der Nachhall klingt mit dem Wet aus (Spec E8;
   // Andreas 2026-09-28: „effekte laufen besser immer aus“)
   ziel_wet_ = std::clamp(wet, 0.0f, 1.0f);
+  if (an && ziel_ein_ == 0.0f) neu_ausloesen_ = true;   // ON: Roll nimmt auf, Vinyl bremst ab hier
   ziel_ein_ = an ? 1.0f : 0.0f;
 }
 
@@ -44,7 +45,37 @@ void BeatFx::leeren() noexcept {
     for (float& z : ap_z_[k]) z = 0.0f;
     ap_rueck_[k] = svf_ic1_[k] = svf_ic2_[k] = 0.0f;
   }
+  delay_lp_[0] = delay_lp_[1] = trans_g_[0] = trans_g_[1] = 0.0f;
+  std::memset(spiral_ap_, 0, sizeof spiral_ap_);
+  spiral_d_ = 0.0;
+  neu_ausloesen_ = true;
+  hall_->leeren();
+  std::memset(hall_ein_, 0, sizeof hall_ein_);
+  std::memset(hall_aus_, 0, sizeof hall_aus_);
+  hall_pos_ = 0;
   still_ = INT64_MAX / 2;
+}
+
+// REVERB: Ausklingzeit beats · SPB (T60 bei 1 kHz), SIZE = Länge der frühen Reflexionen und Vorverzögerung (minus die
+// HALL_BLOCK-Verzögerung des nassen Wegs). setze() nur bei Änderung (> 1 % Decay oder neue SIZE).
+void BeatFx::hall_stellen(double spb) noexcept {
+  const double decay = beats_ * spb / SR;
+  if (std::fabs(decay - hall_decay_) <= 0.01 * hall_decay_ && param_ == hall_size_) return;
+  hall_decay_ = decay;
+  hall_size_ = param_;
+  CypherHallEinstellung e = cypher_hall_vorgabe();
+  e.decay_s = decay;
+  e.groesse_ms = 10.0 + 110.0 * param_;
+  e.pre_ms = std::max(0.0, 2.0 + 28.0 * param_ - 1000.0 * HALL_BLOCK / SR);
+  e.frueh = 0.5;
+  e.rahmen = 1;
+  e.tief_faktor = 1.2;
+  e.hoch_faktor = 0.6;
+  e.lowcut_hz = 80.0;
+  e.highcut_hz = 12000.0;
+  e.duck = 0.0;
+  e.freeze = 0;
+  hall_->setze(e);
 }
 
 bool BeatFx::klingt() const noexcept {
@@ -53,7 +84,8 @@ bool BeatFx::klingt() const noexcept {
   // Nachhall: ECHO bis eine Verzögerung lang nichts Hörbares mehr in die Leitung ging, die anderen bis NACHHALL Samples
   // lang nichts Hörbares mehr aus dem Effekt kam
   if (ein_ > 0.0f || ziel_ein_ > 0.0f || art_ != ziel_art_) return true;
-  return wet_ > 0.0f && still_ <= (art_ == ECHO ? echo_d_ : NACHHALL);
+  const int64_t frist = art_ == PINGPONG ? 2 * echo_d_ : echoartig(art_) ? echo_d_ : NACHHALL;   // Ping Pong: Hin und zurück
+  return wet_ > 0.0f && still_ <= frist;
 }
 
 // Mischung für Flanger, Phaser, Filter: y ist der Effekt aus dem Eingang ein_·x. An: (1 − wet)·x + wet·y wie bisher; aus
@@ -116,9 +148,97 @@ float BeatFx::eins(int k, float x, double beat, double spb) noexcept {
       svf_ic2_[k] = static_cast<float>(2.0 * v2 - svf_ic2_[k]);
       return nachhall(k, x, static_cast<float>(v2));
     }
+    case DELAY: {  // eine Wiederholung nach beats · SPB, ohne Rückkopplung; TONE: Tiefpass 1 kHz · 2^(4,3 · p) (bis ~20 kHz)
+      const int d = static_cast<int>(std::clamp<long long>(std::llround(beats_ * spb), 1, ECHO_FRAMES - 1));
+      echo_d_ = d;
+      int lese = echo_pos_ - d;
+      if (lese < 0) lese += ECHO_FRAMES;
+      const float e = echo_[k][lese];
+      const float w = ein_ * x;
+      echo_[k][echo_pos_] = w;
+      if (k == 1) still_ = std::fabs(w) > STILL || std::fabs(echo_[0][echo_pos_]) > STILL ? 0 : still_ + 1;
+      const float a = static_cast<float>(1.0 - std::exp(-2.0 * M_PI * 1000.0 * std::exp2(4.3 * param_) / SR));
+      delay_lp_[k] += a * (e - delay_lp_[k]);
+      return x + wet_ * delay_lp_[k];
+    }
+    case TRANS: {  // Gate: offen in den ersten DUTY des Takts (beats), Phase aus dem absoluten Beat, Flanken 96 Samples
+      const float duty = 0.1f + 0.8f * param_;
+      const float ziel = p < duty ? 1.0f : 0.0f;
+      trans_g_[k] = naeher(trans_g_[k], ziel, 1.0f / 96.0f);
+      return nachhall(k, x, trans_g_[k] * ein_ * x);
+    }
+    case ROLL:
+    case SLIPROLL: {  // Aufnahme läuft immer mit; gelesen wird roll_start_ + (n mod L), an den Nähten 64 Samples Blende
+      echo_[k][echo_pos_] = x;
+      const int L = static_cast<int>(std::clamp<long long>(std::llround(beats_ * spb), 1, ECHO_FRAMES - 1));
+      const int ph = static_cast<int>(roll_n_ % L);
+      const float naht = std::min(1.0f, static_cast<float>(std::min(ph, L - ph)) / 64.0f);
+      const float v = echo_[k][(roll_start_ + ph) % ECHO_FRAMES];
+      return nachhall(k, x, ein_ * naht * v);
+    }
+    case VINYL: {  // Lesekopf mit Geschwindigkeit 1 − n/T, T = beats · SPB; letzte Achtel blendet aus, danach still
+      echo_[k][echo_pos_] = x;
+      const double v = vinyl_tempo(spb);
+      const float g = static_cast<float>(std::min(1.0, 8.0 * v));
+      return nachhall(k, x, v > 0.0 ? ein_ * g * lies(k, vinyl_lese_) : 0.0f);
+    }
+    case SPIRAL: {  // Echo, Verzögerung gleitet (τ 80 ms) zum Ziel, Allpass in der Rückkopplung; Rückkopplung 0..0,95
+      const double ziel = static_cast<double>(std::clamp<long long>(std::llround(beats_ * spb), 1, ECHO_FRAMES - 2));
+      if (k == 0) {
+        if (spiral_d_ <= 0.0) spiral_d_ = ziel;
+        spiral_d_ += (ziel - spiral_d_) * (1.0 - std::exp(-1.0 / (0.08 * SR)));
+        if (std::fabs(ziel - spiral_d_) < 0.01) spiral_d_ = ziel;
+        echo_d_ = static_cast<int>(spiral_d_) + 8 * SPIRAL_AP;
+      }
+      const float e = lies(k, static_cast<double>(echo_pos_) - spiral_d_);
+      float& z = spiral_ap_[k][spiral_ap_pos_];
+      const float ap = -0.5f * e + z;
+      z = e + 0.5f * ap;
+      const float w = ein_ * x + 0.95f * param_ * ap;
+      echo_[k][echo_pos_] = w;
+      if (k == 1) still_ = std::fabs(w) > STILL || std::fabs(echo_[0][echo_pos_]) > STILL ? 0 : still_ + 1;
+      return x + wet_ * e;
+    }
+    case REVERB: {  // Cypher Hall, nasser Weg um HALL_BLOCK verzögert; Mischung wie Flanger/Phaser/Filter
+      hall_ein_[k][hall_pos_] = ein_ * x;
+      return nachhall(k, x, hall_aus_[k][hall_pos_]);
+    }
     default:
       return x;
   }
+}
+
+// PINGPONG: Eingang (Mitte) in die linke Leitung; links wird nach rechts, rechts mal Rückkopplung zurück nach links
+// gespeist. Wiederholungen: L bei d (1), R bei 2d (r), L bei 3d (r²) …
+void BeatFx::pingpong(float& l, float& r, double spb) noexcept {
+  const int d = static_cast<int>(std::clamp<long long>(std::llround(beats_ * spb), 1, ECHO_FRAMES - 1));
+  echo_d_ = d;
+  int lese = echo_pos_ - d;
+  if (lese < 0) lese += ECHO_FRAMES;
+  const float el = echo_[0][lese], er = echo_[1][lese];
+  const float fb = 0.9f * param_;
+  const float wl = ein_ * 0.5f * (l + r) + fb * er;
+  const float wr = fb * el;
+  echo_[0][echo_pos_] = wl;
+  echo_[1][echo_pos_] = wr;
+  still_ = std::fabs(wl) > STILL || std::fabs(wr) > STILL ? 0 : still_ + 1;
+  l += wet_ * el;
+  r += wet_ * er;
+}
+
+// VINYL: Geschwindigkeit 1 − n/T, T = beats · SPB (begrenzt: der Lesekopf fällt höchstens T/2 zurück, die Leitung trägt das)
+double BeatFx::vinyl_tempo(double spb) const noexcept {
+  const double T = std::clamp(beats_ * spb, 1.0, 2.0 * (ECHO_FRAMES - 2000));
+  return std::max(0.0, 1.0 - static_cast<double>(roll_n_) / T);
+}
+
+float BeatFx::lies(int k, double pos) const noexcept {
+  double f = std::floor(pos);
+  const float t = static_cast<float>(pos - f);
+  long long i = static_cast<long long>(f) % ECHO_FRAMES;
+  if (i < 0) i += ECHO_FRAMES;
+  const long long j = (i + 1) % ECHO_FRAMES;
+  return echo_[k][i] * (1.0f - t) + echo_[k][j] * t;
 }
 
 void BeatFx::block(float* l, float* r, int n, double beat0, double bps) noexcept {
@@ -141,7 +261,7 @@ void BeatFx::block(float* l, float* r, int n, double beat0, double bps) noexcept
         art_ = ziel_art_;
         beats_ = ziel_beats_;
       }
-    } else if (ziel_art_ != art_ || (art_ != AUS && ziel_beats_ != beats_)) {
+    } else if (ziel_art_ != art_ || (art_ != AUS && ziel_beats_ != beats_ && !ohne_leeren(art_))) {
       wet_ = naeher(wet_, 0.0f, schritt);
       ein_ = naeher(ein_, 0.0f, schritt);
       if (wet_ == 0.0f && ein_ == 0.0f) {
@@ -150,6 +270,7 @@ void BeatFx::block(float* l, float* r, int n, double beat0, double bps) noexcept
         beats_ = ziel_beats_;
       }
     } else {
+      if (art_ == SLIPROLL && ziel_beats_ != beats_) neu_ausloesen_ = true;   // Slip Roll: neue Länge, neue Aufnahme
       beats_ = ziel_beats_;
       wet_ = naeher(wet_, ziel_wet_, schritt);
       ein_ = naeher(ein_, ziel_ein_, schritt);
@@ -162,11 +283,31 @@ void BeatFx::block(float* l, float* r, int n, double beat0, double bps) noexcept
 #endif
     ++gezaehlt_;
     if (art_ == AUS) continue;
-    if (wet_ == 0.0f && ein_ == 0.0f && art_ != ECHO) continue;   // trocken: bitgleich (Negativ-Kontrolle Wet 0)
-    l[i] = eins(0, l[i], beat, spb);
-    r[i] = eins(1, r[i], beat, spb);
-    if (art_ == ECHO && ++echo_pos_ == ECHO_FRAMES) echo_pos_ = 0;
+    if (wet_ == 0.0f && ein_ == 0.0f && !echoartig(art_)) continue;   // trocken: bitgleich (Negativ-Kontrolle Wet 0)
+    if (neu_ausloesen_ && (art_ == ROLL || art_ == SLIPROLL || art_ == VINYL)) {
+      neu_ausloesen_ = false;
+      roll_start_ = echo_pos_;
+      roll_n_ = 0;
+      vinyl_lese_ = echo_pos_;
+    }
+    if (art_ == PINGPONG) {
+      pingpong(l[i], r[i], spb);
+    } else {
+      l[i] = eins(0, l[i], beat, spb);
+      r[i] = eins(1, r[i], beat, spb);
+    }
+    if (art_ == ROLL || art_ == SLIPROLL || art_ == VINYL) {
+      if (art_ == VINYL) vinyl_lese_ += vinyl_tempo(spb);
+      ++roll_n_;
+    }
+    if (art_ == SPIRAL && ++spiral_ap_pos_ == SPIRAL_AP) spiral_ap_pos_ = 0;
+    if (puffernd(art_) && ++echo_pos_ == ECHO_FRAMES) echo_pos_ = 0;
     if (art_ == FLANGER && ++flanger_pos_ == FLANGER_FRAMES) flanger_pos_ = 0;
+    if (art_ == REVERB && ++hall_pos_ == HALL_BLOCK) {
+      hall_pos_ = 0;
+      hall_stellen(spb);
+      hall_->block(hall_ein_[0], hall_ein_[1], hall_aus_[0], hall_aus_[1], HALL_BLOCK);
+    }
   }
 }
 

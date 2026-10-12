@@ -182,6 +182,23 @@ void Netz::hallo(const osc::Nachricht& m, int64_t jetzt_ns) {
     an_port(port, r);
   }
 #endif
+  // Effekt-Sektion (2026-10-11): danach der gemerkte Stand aller gemeldeten Regler (Halter frei) und der Boxen
+#ifndef CYPHERDJ_MUTATION_HALLO_OHNE_STAND
+  if (erstes_in_generation) {
+    for (const auto& [pfad, w] : regler_stand_) {
+      osc::Schreiber r(v::e_regler);
+      r.s(pfad.c_str()).f(w.first).s("frei").h(stand_sample_).d(stand_beat_);
+      an_port(port, r);
+    }
+    for (int b = 1; b <= 2; ++b) {
+      const LoopStand& l = loop_stand_[b];
+      if (!l.da) continue;
+      osc::Schreiber s(v::e_loop);
+      s.i(b).i(l.status).s(l.name.c_str()).i(l.beats).i(l.fx_art).d(l.fx_beats).f(l.fx_wet);
+      an_port(port, s);
+    }
+  }
+#endif
   schreibe_abonnenten();
 }
 
@@ -526,6 +543,7 @@ void Netz::ereignisse_senden() {
       fenster_.zyklus(e);
       verteilung_.zaehle(e.dauer_us);  // Scheibe 25
     } else if (e.art == Ereignis::REGLER) {  // Scheibe 25, §5.7
+      regler_stand_[e.pfad] = {e.wert, e.text};   // Stand für neue Abonnenten
       osc::Schreiber s(v::e_regler);
       s.s(e.pfad).f(e.wert).s(e.text).h(e.sample).d(e.beat);
       an_alle(s);

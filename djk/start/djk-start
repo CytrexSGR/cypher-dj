@@ -3,7 +3,7 @@
 # Notbahn (daneben), Leitstand und Oberfläche als transiente User-Units (systemd-run, nie enable) in dieser
 # Reihenfolge mit Wartebedingungen und zeigt URL und Zustand. djk-stop räumt alles ab.
 #
-# Aufruf: djk-start [--master PRÄFIX] [--cue PRÄFIX | --ohne-cue] [--ton-frei] [--strudel [--strudel-kit NAME] [--strudel-kit2 NAME] [--strudel-kit3 NAME] [--instrumente [--melodie surge|fluegel]]] [--instanz a..i]
+# Aufruf: djk-start [--master PRÄFIX] [--cue PRÄFIX | --ohne-cue] [--ton-frei] [--strudel [--strudel-kit NAME] [--strudel-kit2 NAME] [--strudel-kit3 NAME] [--instrumente [--melodie surge|fluegel] [--bass surge|rb338]]] [--instanz a..i]
 #                   [--kern-konfig DATEI] [--leitstand-konfig DATEI] [--ohne-pruefmodus]
 #         djk-start --zustand [--instanz a..i]
 #         djk-start --vorlagen-nach DIR [--master ...]   (füllt die Betriebs-Drop-ins, installiert nichts)
@@ -53,7 +53,7 @@ if [ -f "$UMG" ]; then
   [ -z "$_gesetzt" ] || eval "$_gesetzt"
 fi
 
-I=${CYPHERDJ_INSTANZ:-}; MASTER=""; CUE=""; OHNE_CUE=0; TON_FREI=0; STRUDEL=0; INSTR=0; KIT=techno; KIT2=battery; KIT3=battery; MELODIE=surge; KERN_KONFIG=""; LS_KONFIG=""; PRUEF=1
+I=${CYPHERDJ_INSTANZ:-}; MASTER=""; CUE=""; OHNE_CUE=0; TON_FREI=0; STRUDEL=0; INSTR=0; KIT=techno; KIT2=battery; KIT3=battery; MELODIE=surge; BASS=""; KERN_KONFIG=""; LS_KONFIG=""; PRUEF=1
 MODUS=start; VORLAGEN_NACH=""
 # Option mit Wert: fehlt er (letztes Argument) oder ist er selbst eine Option, Abbruch 2. Nur --instanz darf leer sein.
 wert() {
@@ -63,10 +63,10 @@ wert() {
 }
 while [ $# -gt 0 ]; do
   case "$1" in
-    --master|--cue|--strudel-kit|--strudel-kit2|--strudel-kit3|--melodie|--instanz|--kern-konfig|--leitstand-konfig|--vorlagen-nach) wert "$1" $# "${2-}";;
+    --master|--cue|--strudel-kit|--strudel-kit2|--strudel-kit3|--melodie|--bass|--instanz|--kern-konfig|--leitstand-konfig|--vorlagen-nach) wert "$1" $# "${2-}";;
   esac
   case "$1" in
-    --master) MASTER=$2; shift 2;; --cue) CUE=$2; shift 2;; --ohne-cue) OHNE_CUE=1; shift;; --strudel) STRUDEL=1; shift;; --instrumente) INSTR=1; shift;; --melodie) MELODIE=$2; shift 2;; --strudel-kit) KIT=$2; shift 2;; --strudel-kit2) KIT2=$2; shift 2;; --strudel-kit3) KIT3=$2; shift 2;;
+    --master) MASTER=$2; shift 2;; --cue) CUE=$2; shift 2;; --ohne-cue) OHNE_CUE=1; shift;; --strudel) STRUDEL=1; shift;; --instrumente) INSTR=1; shift;; --melodie) MELODIE=$2; shift 2;; --bass) BASS=$2; shift 2;; --strudel-kit) KIT=$2; shift 2;; --strudel-kit2) KIT2=$2; shift 2;; --strudel-kit3) KIT3=$2; shift 2;;
     --ton-frei) TON_FREI=1; shift;; --instanz) I=$2; shift 2;;
     --kern-konfig) KERN_KONFIG=$(readlink -f -- "$2"); shift 2;;
     --leitstand-konfig) LS_KONFIG=$(readlink -f -- "$2"); shift 2;;
@@ -78,6 +78,8 @@ while [ $# -gt 0 ]; do
 done
 [ "$INSTR" = 1 ] && [ "$STRUDEL" != 1 ] && { echo "djk-start: --instrumente needs --strudel" >&2; exit 2; }
 [ "$MELODIE" != surge ] && [ "$INSTR" != 1 ] && { echo "djk-start: --melodie needs --instrumente" >&2; exit 2; }
+[ -n "$BASS" ] && [ "$INSTR" != 1 ] && { echo "djk-start: --bass needs --instrumente" >&2; exit 2; }
+case "$BASS" in ""|surge|rb338) ;; *) echo "djk-start: --bass '$BASS' invalid, use surge or rb338" >&2; exit 2;; esac
 case "$MELODIE" in surge|fluegel) ;; *) echo "djk-start: --melodie '$MELODIE' invalid, use surge or fluegel" >&2; exit 2;; esac
 case "$I" in
   "") SFX=""; V=0;;
@@ -210,6 +212,11 @@ LS_ARGS="--kern-port $P_KERN"; [ -n "$LS_KONFIG" ] && LS_ARGS="--konfig $LS_KONF
 if [ -n "$I" ]; then LOOPS=/dev/shm/cypherdj-$I/loops; else LOOPS=$HOME/.config/cypherdj/loops; fi
 mkdir -p "$LOOPS"
 OF_ARGS="--kern-port $P_KERN --leitstand-ws $P_WS --arbeitsbestand $ARBEITSBESTAND --loops $LOOPS --digitalout $RUN/digitalout.json"
+# Listen und eigene Strudel-Muster (Plan 2026-10-10, S2b): Prüfinstanzen schreiben in eine eigene Ablage, nie in die Bibliothek des
+# Betriebs (<repo>/bibliothek, Vorgabe der Seite). Sonst erscheinen Proben-Listen in Andreas' Lists-Ast (Review S2b Befund 7).
+if [ -n "$I" ]; then BIB=/dev/shm/cypherdj-$I/bibliothek; mkdir -p "$BIB/sets" "$BIB/muster"; OF_ARGS="$OF_ARGS --sammlungen $BIB/sets --muster-bibliothek $BIB/muster"
+  # Welle-Cache je Instanz (S5-Review B4): nie in den Cache des Betriebs (~/.cache/cypherdj/welle, Vorgabe der Seite)
+  mkdir -p "/dev/shm/cypherdj-$I/welle"; OF_ARGS="$OF_ARGS --welle-cache /dev/shm/cypherdj-$I/welle"; fi
 # loop_klang legt den Klang ins Zusatz-Kit neben dem Basis-Kit der Drums: die Seite muss dasselbe Kit kennen (2026-10-05)
 [ "$STRUDEL" = 1 ] && OF_ARGS="$OF_ARGS --kit $KIT"
 # Mediathek (Plan 2026-10-03 T2): Prüfinstanzen können eine andere DB bekommen; ohne die Variable gilt die Vorgabe der Seite
@@ -417,9 +424,9 @@ if [ "$STRUDEL" = 1 ]; then  # Plan 2026-09-27 + Studio S1: drei Strudel-Erzeuge
 fi
 if [ "$INSTR" = 1 ]; then  # Studio S5.1: Carla-Wirt je Instrument (ADR 009), node.async, Rückweg in erz/2 bzw. erz/3.
   # Derselbe Weg wie das Nachrüsten im laufenden Studio (djk-instrumente); hier nur die Wirte, die Erzeuger haben --ziel schon.
-  "$HIER/djk-instrumente" ${I:+--instanz "$I"} --nur-wirte --melodie "$MELODIE" | sed 's/^/  /' || abbruch "instruments failed (djk-instrumente)" "cypherdj-wirt-bass$SFX"  # pipefail: Rückgabe von djk-instrumente
+  "$HIER/djk-instrumente" ${I:+--instanz "$I"} --nur-wirte --melodie "$MELODIE" ${BASS:+--bass "$BASS"} | sed 's/^/  /' || abbruch "instruments failed (djk-instrumente)" "cypherdj-wirt-bass$SFX"  # pipefail: Rückgabe von djk-instrumente
   UNITS+=("cypherdj-wirt-bass$SFX" "cypherdj-wirt-melodie$SFX")
-  echo "  instruments ready (bass Surge XT midi_aus_1 -> erz/2, melody $MELODIE midi_aus_2 -> erz/3; the kern re-links a restarted wirt's links within about 1 s of its ports appearing, from $KANTEN_DATEI)"
+  echo "  instruments ready (bass ${BASS:-as before, Surge XT without a status} midi_aus_1 -> erz/2, melody $MELODIE midi_aus_2 -> erz/3; the kern re-links a restarted wirt's links within about 1 s of its ports appearing, from $KANTEN_DATEI)"
   echo "  sounds: djk/wirte/carla/djk-klang${I:+ --instanz $I} bass|melodie zeige|setze|lade|speichere|hoere · djk-klang liste"
 elif [ "$STRUDEL" = 1 ]; then
   echo "  instruments not loaded; add them live without stopping anything: $HIER/djk-instrumente${I:+ --instanz $I}"

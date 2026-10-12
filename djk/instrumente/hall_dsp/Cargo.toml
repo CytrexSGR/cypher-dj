@@ -1,0 +1,12 @@
+[package]
+name = "hall_dsp"
+version = "0.1.0"
+edition = "2021"
+description = "Cypher Hall: spektraler Hall (STFT, Energieabklingen je Bin) mit frühen Reflexionen, ohne Host"
+license = "GPL-3.0-or-later"
+
+[dependencies]
+realfft = "3.4"
+
+[dev-dependencies]
+realfft = "3.4"

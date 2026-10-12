@@ -128,8 +128,9 @@ struct Ereignis {
     FX_ZUWEISUNG = 26,  // §5.12 /e/fx/zuweisung: deck = einheit (1,2), pfad = kanal, status = zugewiesen (0/1)
     RASTER = 27,        // Plan Grid, §5.9 /e/raster: deck, material_id, quell_beat, wert = Änderung in ms, sample
     FX_ROUTING = 28,    // Ohr T17, §5.12 /e/fx/routing: status = routing (0 Post Fader, 1 Insert)
-    BOX = 29            // Keylock 7b.3, §5.5b /zustand/box: deck = box, status, keylock_unterlauf, keylock_aufgegeben,
+    BOX = 29,           // Keylock 7b.3, §5.5b /zustand/box: deck = box, status, keylock_unterlauf, keylock_aufgegeben,
                         // keylock_ring_voll, keylock_kein_platz (7c.3)
+    KOMP = 30           // Effekt-Sektion 2026-10-11, §5.5c /zustand/komp: pfad = Kanal, wert = Absenkung in dB (10 Hz, nur aktive)
   };
   int32_t art;
   int32_t status;   // QUITTUNG: §5.1; KI: gestoppt 0/1
@@ -346,7 +347,8 @@ class Kern {
   void einsortieren31(const Befehl& c);
   void decks_uebernehmen();
   void decks_zustand(int64_t n0, int n);
-  void boxen_zustand(int64_t n0, int n);  // Keylock 7b.3: /zustand/box (§5.5b), Takt wie decks_zustand
+  void boxen_zustand(int64_t n0, int n);
+  void komp_zustand(int64_t n0, int n);   // Effekt-Sektion: /zustand/komp (§5.5c) je aktivem Kompressor, 10 Hz  // Keylock 7b.3: /zustand/box (§5.5b), Takt wie decks_zustand
   void decks_block(int64_t s0, int m);
   void decks_verlauf(int regler, const float* verlauf);
   void keylock_verlauf(int regler, const float* verlauf, int64_t s0, int m);  // Keylock Task 3: Regler keylock am Sample

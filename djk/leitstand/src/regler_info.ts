@@ -38,6 +38,11 @@ function kanalzug(k: string): Record<string, Eintrag> {
     pfl: r('schalter', 0, 1, 0, true),
   };
   if (!bus) m.ziel = r('stufe', 0, 4, 0, true);
+  if (!bus) Object.assign(m, {   // Kompressor je Quellkanal (2026-10-11), alle dürfen
+    'komp/an': r('schalter', 0, 1, 0), 'komp/schwelle': r('linear', -60, 0, -18), 'komp/ratio': r('linear', 1, 20, 4),
+    'komp/attack': r('linear', 0.1, 100, 10), 'komp/release': r('linear', 10, 1000, 120), 'komp/makeup': r('linear', 0, 24, 0),
+    'komp/mix': r('linear', 0, 1, 1), 'komp/sc': r('stufe', 0, 14, 0),
+  });
   if (k.startsWith('deck/')) for (const s of ['drums', 'bass', 'vocals', 'other']) m[`stem/${s}`] = r('db', -200, 6, 0);
   return m;
 }
@@ -48,12 +53,13 @@ for (const k of [...SPIELKANAELE, ...BUSSE]) {
 }
 for (const [p, e] of Object.entries({
   xfader: r('linear', -1, 1, 0, true), 'master/pegel': r('db', -200, 0, 0, true), 'master/kleber': r('linear', 0, 1, 0, true), 'cue/mix': r('linear', -1, 1, -1, true),
-  'cue/pegel': r('db', -200, 0, -12, true), 'cue/split': r('schalter', 0, 1, 0, true),
+  'cue/pegel': r('db', -200, 0, -12, true), 'cue/split': r('schalter', 0, 1, 0, true), 'master/pfl': r('schalter', 0, 1, 0, true),
   'fx/1/notenwert': r('linear', 1 / 32, 4, 0.75), 'fx/2/notenwert': r('linear', 1 / 32, 4, 0.75),
   'fx/1/rueckkopplung': r('linear', 0, 0.95, 0.5), 'fx/2/rueckkopplung': r('linear', 0, 0.95, 0.5),
   'fx/1/rueckweg': r('db', -200, 0, 0), 'fx/2/rueckweg': r('db', -200, 0, 0),
   'fx/3/rueckweg': r('db', -200, 0, 0), 'fx/4/rueckweg': r('db', -200, 0, 0),
   'duck/tiefe': r('db', -24, 0, 0), 'duck/release': r('linear', 50, 600, 200),
+  'color/art': r('stufe', 0, 5, 0), 'color/param': r('linear', 0, 1, 0.5),   // SOUND COLOR FX, alle dürfen
   keylock: r('schalter', 0, 1, 1),   // Keylock 3 (Fassung 4): EIN Knopf für alle Quellen, alle dürfen
 })) tabelle.set(p, { pfad: p, kanal: null, ...e });
 

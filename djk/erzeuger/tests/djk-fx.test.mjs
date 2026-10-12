@@ -75,6 +75,24 @@ test('djk-fx: Einheit 1 als Vorgabe, param2/param3 Vorgabe 0,5', async (t) => {
   assert.deepEqual(k.empfangen.find((m) => m.adresse === '/k/fx').werte.slice(1), ['cypher', 1, 4, 4, 1, 0.7, 0.5, 0.5, 1]);
 });
 
+test('djk-fx: reverb ist art 5 (Ausklingzeit in Beats, param1 SIZE)', async (t) => {
+  const k = await kern();
+  t.after(() => k.s.close());
+  const r = await lauf(['--kern-port', String(k.port), 'reverb', '2', '0.6', '0.4'], ordner());
+  assert.equal(r.rc, 0, r.fehler);
+  assert.deepEqual(k.empfangen.find((m) => m.adresse === '/k/fx').werte.slice(1), ['cypher', 1, 5, 2, 0.6, 0.4, 0.5, 0.5, 1]);
+});
+
+test('djk-fx: delay 6 bis spiral 12', async (t) => {
+  for (const [name, art] of [['delay', 6], ['pingpong', 7], ['trans', 8], ['roll', 9], ['sliproll', 10], ['vinyl', 11], ['spiral', 12]]) {
+    const k = await kern();
+    t.after(() => k.s.close());
+    const r = await lauf(['--kern-port', String(k.port), name, '1', '0.5', '0.3'], ordner());
+    assert.equal(r.rc, 0, r.fehler);
+    assert.equal(k.empfangen.find((m) => m.adresse === '/k/fx').werte[3], art, name);
+  }
+});
+
 test('djk-fx zuweisen: Kurzname → /k/fx/zuweisung, /e/fx/zuweisung → Rückgabe 0', async (t) => {
   const k = await kern();
   t.after(() => k.s.close());

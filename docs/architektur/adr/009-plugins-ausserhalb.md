@@ -59,3 +59,17 @@ Latenz genau ein Block), K5, N3; Bitwig-Handbuch „Individually“ (10 §3b). D
 
 M7 zeigt, dass ein hängender Wirt trotz `node.async` den Treiber anhält (dann keine Plugins im Set bis zu einem
 Carla-Neubau) oder dass der Puls den toten Rückweg nicht zuverlässig erkennt.
+
+## Berichtigung 2026-10-11 (RB-338 W1, Probe `~/messungen/2026-10-11-rb338-probe/BERICHT.md`, Stand `stand/rb338-w1.md`)
+
+Gemessen oder im Code gelesen, abweichend vom Text oben (der Text oben bleibt als Entscheidungsstand von 2026-09-23 stehen):
+
+- **Status:** Die Wirte laufen im Betrieb (Surge XT, SFZ-Flügel, seit RB-338 W1 auch ein eigenes VST3). M7 (Wirt-Entkopplung) ist
+  im Betrieb nicht als eigene Messung nachgeholt; `node.async` ist in der Unit gesetzt.
+- **Nr. 2:** Die Units sind transient (`systemd-run`, `cypherdj-wirt-<gruppe>[-<i>]`), kein Template `cypherdj-wirt@<gruppe>`. Es gibt
+  **kein Xvfb**; Carla läuft headless ohne DISPLAY (auch das VST3). Der Rückweg ist der Wirt-Client selbst (`audio-out1/2` →
+  `rueck_erz_<n>_L/R` im Kern). Ein **Puls-Port gibt es nicht**, weder im Wirt noch im Kern.
+- **Nr. 3:** CC per `set_parameter_mapped_control_index` ist im Code nicht benutzt. Für nih-plug-VST3 erreichen rohe CC/Pitchbend das
+  Plugin über Carla nicht (`IMidiMapping`); die Carla-Zuordnung wirkt, W1 geht den Weg über den Wirt-Befehl `param`.
+- **Nr. 4:** Statt Latenz je Slot hält der Kern fest vor (`2·n + 25` Samples, `kern.cpp:252`).
+- **Ergänzung:** VST3 ist der einzige Weg für eigene (nih-plug-)Instrumente: Carla 2.5.8 lädt kein CLAP, nih-plug baut kein LV2.

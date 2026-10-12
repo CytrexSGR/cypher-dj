@@ -209,6 +209,66 @@ class NotenSteuerung:
             self.host.send_midi_note(0, 0, n, 0)
 
 
+class ParamSteuerung:
+    """RB-338 W1: Steuerung eines VST3-Wirts (eigene Instrumente, djk/instrumente). note und halte wie NotenSteuerung,
+    dazu param (ein Plugin-Parameter, normiert 0..1, per Name) und params (alle Namen mit Ist-Wert). lade, fahre und
+    zustand gehören zu Surge und werden mit Grund abgelehnt. halte hält nichts an (keine Rampen) und beendet keine Note; panik schickt Note-Off für alle Noten."""
+
+    def __init__(self, host):
+        self.host = host
+        self.offen = []  # (zeit_aus, note)
+        self.index = {host.get_parameter_info(0, i)["name"]: i for i in range(host.get_parameter_count(0))}
+        # M4: Carla meldet direkt nach dem Laden für alle Parameter 0,0, das Plugin spielt aber mit seinen Vorgaben.
+        # Jeden Parameter einmal auf seine Vorgabe setzen, damit params die Wahrheit zeigt.
+        for i in self.index.values():
+            host.set_parameter_value(0, i, host.get_parameter_ranges(0, i)["def"])
+
+    def bearbeite(self, befehl: dict, jetzt: float) -> dict:
+        try:
+            art = befehl.get("befehl")
+            if art == "note":
+                note, vel = int(befehl["note"]), int(befehl.get("velocity", 100))
+                dauer = float(befehl.get("dauer", 1.0))
+                if not (0 <= note <= 127 and 1 <= vel <= 127 and 0 < dauer <= 30):
+                    raise ValueError("note 0..127, velocity 1..127, dauer 0..30 s")
+                self.host.send_midi_note(0, 0, note, vel)
+                self.offen.append((jetzt + dauer, note))
+                return {"ok": True}
+            if art == "halte":  # wie Surge/SFZ: Rampen und Automationen der Spur anhalten; hier gibt es keine, Noten bleiben
+                return {"ok": True, "gehalten": 0}
+            if art == "panik":  # Note-Off für alle Noten; kommt von der Wache und von Hand, nie von Stop Cypher
+                return {"ok": True, "gehalten": self.panik()}
+            if art == "param":
+                name, wert = befehl["name"], float(befehl["wert"])
+                if name not in self.index:
+                    raise ValueError(f"unknown parameter {name!r}; known: {', '.join(self.index)}")
+                if not 0.0 <= wert <= 1.0:
+                    raise ValueError("wert 0..1 (normalized)")
+                self.host.set_parameter_value(0, self.index[name], wert)
+                return {"ok": True}
+            if art == "params":
+                return {"ok": True, "params": {n: self.host.get_current_parameter_value(0, i) for n, i in self.index.items()}}
+            if art in ("lade", "fahre", "zustand"):
+                return {"ok": False, "fehler": f"{art}: this host plays a vst3 instrument, not Surge; use param"}
+            return {"ok": False, "fehler": f"unbekannter Befehl {art!r}"}
+        except Exception as e:
+            return {"ok": False, "fehler": f"{type(e).__name__}: {e}"}
+
+    def panik(self) -> int:
+        """Note-Off für alle 128 Noten (Kanal 1): löst eine hängende Note, deren Off verloren ging. Gibt die Anzahl zurück.
+        Ein nih-plug-VST3 bekommt CC120/CC123 über Carla nicht (gemessen), deshalb der Umweg über Noten."""
+        self.offen = []
+        for n in range(128):
+            self.host.send_midi_note(0, 0, n, 0)
+        return 128
+
+    def takt(self, jetzt: float) -> None:
+        faellig = [n for t, n in self.offen if t <= jetzt]
+        self.offen = [(t, n) for t, n in self.offen if t > jetzt]
+        for n in faellig:
+            self.host.send_midi_note(0, 0, n, 0)
+
+
 def sende(sock_pfad: str, befehl: dict, timeout: float = 10.0) -> dict:
     """Client-Seite desselben Protokolls (djk-klang, tonprobe)."""
     s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)

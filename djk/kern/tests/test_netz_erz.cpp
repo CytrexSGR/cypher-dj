@@ -88,6 +88,18 @@ int main() {
       cdj::Befehl mb{};
       PRUEF(!bef->hole(mb));
     }
+    // Review-Kern m3: erz/8 ist der Nur-Cue-Vorhöreingang, ein Strom dort bliebe im Saal still → Status 6, kein Befehl
+    strom(netz, 61, "kit:gut", "erz/8");
+    PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 61 && g.m.werte[2].i == 6 && !std::strcmp(g.s(5), "ausserhalb_bereich"));
+    strom(netz, 62, "midi:1:1", "erz/8");
+    PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 62 && g.m.werte[2].i == 6);
+    {
+      cdj::Befehl mb{};
+      PRUEF(!bef->hole(mb));
+    }
+    strom(netz, 63, "kit:gut", "erz/7");   // Negativ-Kontrolle: erz/7 wird weiter angenommen
+    PRUEF(bef->hole(b) && b.art == cdj::Befehl::ERZ_STROM && b.id == 63);
+    if (b.zeiger) delete static_cast<const cdj::Kit*>(b.zeiger);
     strom(netz, 54, "kit:gut", "deck/1");
     PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 54 && g.m.werte[2].i == 6);
     strom(netz, 55, "kit:../gut", "erz/1");

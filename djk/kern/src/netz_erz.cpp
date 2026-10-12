@@ -67,7 +67,8 @@ bool Netz::erz_paket(const v::Adresse* a, const osc::Nachricht& m) {
   kopiere(b.pfad, m.werte[f::kanal].s, sizeof b.pfad);
   const char* ziel = m.werte[f::ziel].s;
   const int k = Mixer::kanal_index(b.pfad);
-  const bool kanal_ok = k >= 4 && k <= 13;  // erz/1..8, pad/1..2 (§1.5)
+  // erz/1..8, pad/1..2 (§1.5); erz/8 nicht: Nur-Cue-Vorhöreingang (S7, Review-Kern m3), ein Strom bliebe im Saal still
+  const bool kanal_ok = k >= 4 && k <= 13 && k != Mixer::kanal_index(VORHOER_KANAL);
   if (std::strncmp(ziel, "midi:", 5) == 0) {  // Studio S5: midi:<port 1..4>:<kanal 1..16>, kein Kit
     int port = 0, mk = 0;
     char rest = 0;

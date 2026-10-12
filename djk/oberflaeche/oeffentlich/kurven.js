@@ -29,6 +29,7 @@ export const ZIELE = new Set([
   ...ERZEUGER.flatMap((k) => [...KANALZUG, ...DECK_ZUWEISUNG].map((p) => `${k}/${p}`)),  // ohne Tasten
   ...LOOPBOXEN.flatMap((k) => [...KANALZUG, ...DECK_ZUWEISUNG].map((p) => `${k}/${p}`)),  // ohne Tasten
   'xfader', 'master/pegel', 'master/kleber', 'cue/mix', 'cue/pegel',   // kleber (K2): Schwelle des Summen-Kompressors, nur Hand
+  'master/pfl',   // MASTER CUE (2026-10-10): Master auf die PFL-Seite des Kopfhörers, nur Hand
 ]);
 
 // §1.5-Bereich je Regler-Art (Einheit wie im Vertrag)
@@ -42,6 +43,7 @@ export function art(pfad) {
   if (pfad === 'master/pegel' || pfad === 'cue/pegel') return 'pegel';
   if (pfad === 'cue/mix') return 'mix';
   if (pfad === 'master/kleber') return 'kleber';
+  if (pfad === 'master/pfl') return 'pfl';
   const m = /^(?:deck\/[12]|erz\/[1-3]|pad\/[12])\/(fader|trim|eq|kill|filter|pfl|xseite|play|cue)(\/|$)/.exec(pfad);
   if (!m) return null;
   return m[1] === 'play' || m[1] === 'cue' ? 'taste' : m[1];

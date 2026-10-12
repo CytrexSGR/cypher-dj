@@ -82,3 +82,32 @@ def test_dauer_parsen():
     assert dk.dauer("16") == 16.0 and dk.dauer("16s") == 16.0 and dk.dauer("0") == 0.0
     with pytest.raises(ValueError):
         dk.dauer("lang")
+
+
+def test_bass_param_und_params_senden_die_wirtbefehle(monkeypatch, capsys):
+    """RB-338 W1 4.2: param NAME WERT und params gehen als Wirt-Befehle an den Socket der Instanz."""
+    gesendet = []
+
+    def falsch_rufe(sock, befehl):
+        gesendet.append((sock, befehl))
+        return {"ok": True, "params": {"Cutoff": 0.5, "Env Mod": 0.4}} if befehl["befehl"] == "params" else {"ok": True}
+
+    monkeypatch.setattr(dk, "rufe", falsch_rufe)
+    assert dk.main(["--instanz", "f", "bass", "param", "Cutoff", "0.5"]) == 0
+    assert gesendet[-1] == ("/dev/shm/cypherdj-f/wirt-bass.sock", {"befehl": "param", "name": "Cutoff", "wert": 0.5})
+    assert dk.main(["--instanz", "f", "bass", "param", "Env", "Mod", "0.25"]) == 0
+    assert gesendet[-1][1] == {"befehl": "param", "name": "Env Mod", "wert": 0.25}
+    assert dk.main(["--instanz", "f", "bass", "params"]) == 0
+    assert gesendet[-1][1] == {"befehl": "params"}
+    assert capsys.readouterr().out.splitlines()[-2:] == ["Cutoff = 0.5", "Env Mod = 0.4"]
+
+
+def test_bass_param_ausserhalb_oder_unlesbar_sendet_nichts(monkeypatch):
+    gesendet = []
+    monkeypatch.setattr(dk, "rufe", lambda sock, befehl: gesendet.append(befehl) or {"ok": True})
+    for schlecht in (["param", "Cutoff", "1.5"], ["param", "Cutoff", "-0.1"], ["param", "Cutoff", "laut"]):
+        with pytest.raises(ValueError):
+            dk.main(["--instanz", "f", "bass"] + schlecht)
+    with pytest.raises(SystemExit):  # param ohne Wert: argparse-Fehler wie die anderen Unterbefehle
+        dk.main(["--instanz", "f", "bass", "param", "Cutoff"])
+    assert gesendet == []

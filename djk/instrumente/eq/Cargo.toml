@@ -1,0 +1,16 @@
+[package]
+name = "cypher_eq"
+version = "0.1.0"
+edition = "2021"
+description = "Cypher EQ als VST3 (nih-plug): dünne Hülle um eq_dsp"
+license = "GPL-3.0-or-later"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+eq_dsp = { path = "../eq_dsp" }
+nih_plug = { workspace = true }
+
+[features]
+pruef_alloc = ["nih_plug/assert_process_allocs"]

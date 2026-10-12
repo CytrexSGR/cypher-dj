@@ -11,7 +11,9 @@ import subprocess
 import sys
 
 # Regler-Pfade des Vertrags, die NICHT in den Kanalzug-DSP gehören (Mixer, Deck: Scheibe 25 und 31).
-NICHT_IM_KANALZUG = {'ziel', 'xseite', 'pfl', 'stem/drums', 'stem/bass', 'stem/vocals', 'stem/other'}
+NICHT_IM_KANALZUG = {'ziel', 'xseite', 'pfl', 'stem/drums', 'stem/bass', 'stem/vocals', 'stem/other',
+                     # Kompressor je Quellkanal (2026-10-11): lebt im Mixer (cdj::Komp), nicht im dsp-Kanalzug
+                     'komp/an', 'komp/schwelle', 'komp/ratio', 'komp/attack', 'komp/release', 'komp/makeup', 'komp/mix', 'komp/sc'}
 
 
 def zahl(t):

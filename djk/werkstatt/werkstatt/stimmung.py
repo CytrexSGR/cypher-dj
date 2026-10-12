@@ -44,9 +44,26 @@ def essentia_cent(x_mono44):
 
 
 def tonart(x_mono48, stimmung_cent):
+    """Eigenes Chroma (fa.py). Bleibt als Zweitmeinung `camelot_chroma`; lag bei 3/3 Testtracks neben MIK."""
     c = fa.chroma(np.asarray(x_mono48, dtype=float), stimmung_cent)
     t = fa.tonart_aus_chroma(c)
     return {"camelot": t["camelot"], "r": t["r"], "vorsprung": t["vorsprung"]}
+
+
+def tonart_mik(x_mono44, chroma=None):
+    """Tonart wie Mixed In Key sie schreiben wuerde: djk/tonart_energie (Essentia edma + Dur-Regel, Modus bestand;
+    76,7 % exakt gegen MIK auf artistfreiem Holdout, gemessen 2026-09). Seit 2026-10-10 die Tonart von material.json:
+    camelot aus diesem Verfahren, r = seine Konfidenz, vorsprung = edma-Staerke; das eigene Chroma steht als
+    `camelot_chroma` daneben."""
+    import sys
+    from pathlib import Path
+    djk = str(Path(__file__).resolve().parents[2])
+    if djk not in sys.path:
+        sys.path.append(djk)
+    from tonart_energie.tonart import tonart_signal
+    t = tonart_signal(np.asarray(x_mono44, dtype=np.float32), 44100, modus="bestand")
+    return {"camelot": t["camelot"], "r": t["konfidenz"], "vorsprung": t["staerke_edma"],
+            "verfahren": "tonart_energie/bestand", "camelot_chroma": None if chroma is None else chroma["camelot"]}
 
 
 def entscheide(c_eigen, r, c_zweit, max_cent=MAX_CENT, einig_cent=EINIG_CENT, r_min=R_MIN):

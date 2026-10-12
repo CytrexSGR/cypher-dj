@@ -65,7 +65,7 @@ def pfade(zelle):
 def expandiere(p):
     if p.startswith('<k>/'):
         rest = p[4:]
-        return [f'{k}/{rest}' for k in KANAELE if not (k.startswith('bus/') and rest == 'ziel')]
+        return [f'{k}/{rest}' for k in KANAELE if not (k.startswith('bus/') and (rest == 'ziel' or rest.startswith('komp/')))]
     if p.startswith('deck/<n>/'):
         return [f'deck/{i}/{p[9:]}' for i in range(1, 5)]
     if p.startswith('fx/<n>/'):

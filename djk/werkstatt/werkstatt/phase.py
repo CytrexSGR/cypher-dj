@@ -10,6 +10,7 @@ Instrument: Einsatz = letzter Punkt unter 20 % zwischen Fenster-Minimum und -Spi
 Zeit (WAV und MP3 320k gleich): -0,23 ms Median, p90 0,29 ms. Das Tiefband taugt dafuer nicht: Basslinien (303)
 ziehen es um Dutzende Millisekunden."""
 import numpy as np
+from scipy.fft import next_fast_len
 from scipy.signal import butter, hilbert, sosfiltfilt
 
 SR = 48000
@@ -22,11 +23,19 @@ TOR_ANTEIL = 0.6           # mindestens 60 % der Schlaege mit klarem Einsatz
 TOR_STREUUNG_MS = 20.0     # p90 - p10 der Einzelabstaende
 TOR_BETRAG_MS = 40.0       # mehr ist kein Phasenfehler, sondern ein anderes Problem (Halbschlag, Eins)
 MIN_BETRAG_MS = 1.0        # darunter lohnt keine neue Fassung
+TOR_POSITIONEN_MS = 3.0    # Mediane der vier Schlagpositionen im Takt duerfen hoechstens so weit auseinander liegen
+                           # (ganzer Song: +1 ms Spiel, gemessen 2026-10-09: saubere Tracks 0,2 bis 3,4 ms)
+
+
+def betrag_analytisch(y):
+    """|hilbert(y)| mit FFT-Laenge next_fast_len: ungepolstert brauchte ein 6-Minuten-Track 21,6 s je Aufruf
+    (18 219 897 Samples, grosse Primfaktoren), gepolstert 0,87 s (gemessen 2026-10-09)."""
+    return np.abs(hilbert(y, N=next_fast_len(len(y)))[:len(y)])
 
 
 def huelle(x, sr=SR):
     sos = butter(4, BAND_HZ, "bandpass", fs=sr, output="sos")
-    env = np.abs(hilbert(sosfiltfilt(sos, x)))
+    env = betrag_analytisch(sosfiltfilt(sos, x))
     n = max(1, int(GLATT_S * sr))
     return np.convolve(env, np.ones(n) / n, "same")
 
@@ -52,7 +61,7 @@ def einsaetze(x, zeiten, sr=SR):
     Clap hinter dem Kick ab."""
     env = huelle(x, sr)
     sos = butter(4, BREIT_HZ[0], "highpass", fs=sr, output="sos")
-    breit = np.abs(hilbert(sosfiltfilt(sos, x)))
+    breit = betrag_analytisch(sosfiltfilt(sos, x))
     n = max(1, int(GLATT_S * sr))
     breit = np.convolve(breit, np.ones(n) / n, "same")
     aus = np.full(len(zeiten), np.nan)
@@ -83,8 +92,13 @@ def phase_messen(x, zeiten, sr=SR):
         return m
     m["versatz_ms"] = round(float(np.median(d)), 2)
     m["streuung_ms"] = round(float(np.percentile(d, 90) - np.percentile(d, 10)), 2)
+    dz = (e - zeiten) * 1000.0   # je Schlag, NaN behalten: Zaehlung mod 4 (die Eins ist dafuer egal)
+    pos = [np.nanmedian(dz[j::4]) if np.any(~np.isnan(dz[j::4])) else np.nan for j in range(4)]
+    m["positionen_ms"] = [None if np.isnan(v) else round(float(v), 2) for v in pos]
     if m["anteil"] < TOR_ANTEIL:
         m["grund"] = f"Anteil klarer Anschlaege {m['anteil']} unter {TOR_ANTEIL}"
+    elif np.nanmax(pos) - np.nanmin(pos) > TOR_POSITIONEN_MS + 1.0:
+        m["grund"] = f"Schlagpositionen uneinig {m['positionen_ms']} ms (misst nicht den Kick)"
     elif m["streuung_ms"] > TOR_STREUUNG_MS:
         m["grund"] = f"Streuung {m['streuung_ms']} ms ueber {TOR_STREUUNG_MS}"
     elif abs(m["versatz_ms"]) > TOR_BETRAG_MS:
@@ -104,7 +118,6 @@ def sollzeiten(fassung, sr=SR):
 TAKT = 4                   # Schlaege je Abschnitt (die Timemap ankert alle 2 Schlaege, ein Takt kommt also an)
 GLATT_TAKTE = 5            # gleitender Median ueber so viele Takte: ein einzelner Ausreisser-Takt kippt nichts
 TOR_REST_MS = 12.0         # p90 - p10 der Einzelabstaende nach Abzug der geglaetteten Kurve
-TOR_POSITIONEN_MS = 3.0    # Mediane der vier Schlagpositionen im Takt duerfen hoechstens so weit auseinander liegen
 MIN_KLAR_JE_TAKT = 3       # ein Takt zaehlt nur mit so vielen klaren Anschlaegen
 # Warum TOR_POSITIONEN_MS (gemessen 2026-10-09): bei Lovelee Dae (House, 1999) misst das Hochband auf 1 und 3 eine Hihat
 # (-15 ms) und auf 2 und 4 den Clap hinter dem Kick (+13 ms), das Tiefband dagegen auf allen vier Positionen -3 ms.

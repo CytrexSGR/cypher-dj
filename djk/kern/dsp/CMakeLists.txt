@@ -36,6 +36,14 @@ if(NOT CYPHERDJ_DSP_TESTS)
 endif()
 
 enable_testing()
+# Das python3 aus dem PATH (System, mit numpy) vorgeben: seit 2026-10-03 liegt ein uv-Python 3.11 ohne numpy in
+# ~/.local/bin, FindPython nahm es dort als ersten Treffer, und die Python-Tests brachen am Import ab (2026-10-11).
+if(NOT DEFINED Python3_EXECUTABLE)
+  find_program(CYPHERDJ_PYTHON3 NAMES python3)
+  if(CYPHERDJ_PYTHON3)
+    set(Python3_EXECUTABLE ${CYPHERDJ_PYTHON3})
+  endif()
+endif()
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
 function(dsp_test name)
@@ -64,6 +72,7 @@ dsp_test(test_isolator)
 
 # --- Task 5: DJ-Filter ---
 dsp_test(test_djfilter)
+dsp_test(test_colorfx)
 
 # --- Nachtrag 04 (A27 Weg a): Filter-Güte als Konfig-Wert, mit Mutationsbau „Güte fest“ ---
 dsp_test(test_djfilter_guete)
@@ -117,7 +126,7 @@ if(NOT CYPHERDJ_DSP_SANITIZE)
 endif()
 
 # --- Task 10: Naht (Signaturen eingefroren, jeder Kopf allein übersetzbar) und Einbindung als Unterprojekt ---
-set(DSP_KOEPFE werte regler bahn biquad isolator djfilter denormal kanalzug)
+set(DSP_KOEPFE werte regler bahn biquad isolator djfilter colorfx denormal kanalzug)
 set(KOPF_TUS "")
 foreach(k ${DSP_KOEPFE})
   file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/kopf_${k}.cpp "#include <cypherdj/dsp/${k}.h>\n")

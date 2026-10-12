@@ -217,6 +217,137 @@ int main() {
     PRUEF(ok);
   }
 
+  // 5b. master/pfl (Andreas 2026-10-10: „master braucht auch pfl“, MASTER CUE wie am DJM): der Master geht auf die
+  //     PFL-Seite des Kopfhörers. Negativ-Kontrolle: Master läuft, cue/mix −1 (nur PFL), kein PFL → Cue exakt 0.
+  {
+    Pruefling p;
+    PRUEF(p.r("master/pfl") >= 0);
+    PRUEF(p.tab.def(p.r("master/pfl")).nur_hand);
+    p.setze("deck/2/fader", 0.0f);
+    p.block(1, x);
+    const float g_cue = static_cast<float>(dsp::db_zu_linear(-12.0));
+    bool still = true, gleich = true, summe = true;
+    float spitze = 0.0f;
+    for (int i = 0; i < 256; ++i) { still = still && p.cl[i] == 0.0f && p.cr[i] == 0.0f; spitze = std::max(spitze, std::fabs(p.ml[i])); }
+    PRUEF(still && spitze > 0.01f);
+    p.setze("master/pfl", 1.0f);
+    p.block(1, x);
+    for (int i = 0; i < 256; ++i) gleich = gleich && p.cl[i] == p.ml[i] * g_cue && p.cr[i] == p.mr[i] * g_cue;
+    PRUEF(gleich);
+    p.setze("deck/1/pfl", 1.0f);  // Deck 1 dazu: PFL-Summe = Abgriff Deck 1 + Master
+    std::memcpy(p.m->eingang_l(0), x, sizeof x);
+    std::memcpy(p.m->eingang_r(0), x, sizeof x);
+    p.block(1, x);
+    const float* al = p.m->kanalzug(0).abgriff(0);
+    for (int i = 0; i < 256; ++i) summe = summe && std::fabs(p.cl[i] - (al[i] + p.ml[i]) * g_cue) < 1e-7f;
+    PRUEF(summe);
+  }
+
+  // 5c. Nur-Cue-Kanal (Plan Mediathek-Browser S7): erz/8 ist der Vorhör-Eingang. Er klingt NUR im Cue, nie im Master,
+  //     egal wie Fader, Ziel und Sends stehen; PFL ist fest an. Negativ-Kontrolle: derselbe Aufbau ohne nur_cue
+  //     klingt im Master (der Test kann also scheitern).
+  {
+    const int k8 = cdj::Mixer::kanal_index("erz/8");
+    PRUEF(k8 == 11);
+    PRUEF(std::strcmp(cdj::VORHOER_KANAL, "erz/8") == 0);
+    auto aufbau = [&](Pruefling& p) {   // alles, was den Kanal in den Master tragen könnte, weit auf
+      p.setze("erz/8/fader", 0.0f);
+      p.setze("erz/8/send/2", 0.0f);
+      p.setze("fx/2/rueckweg", 0.0f);
+      p.setze("erz/8/pfl", 0.0f);       // PFL aus: nur_cue erzwingt es trotzdem
+    };
+    Pruefling ohne;
+    aufbau(ohne);
+    ohne.block(k8, x);
+    float m_ohne = 0.0f;
+    for (int i = 0; i < 256; ++i) m_ohne = std::max(m_ohne, std::fabs(ohne.ml[i]));
+    PRUEF(m_ohne > 0.01f);               // Negativ-Kontrolle: ohne Schutz klingt erz/8 im Master
+
+    Pruefling p;
+    p.m->setze_nur_cue(k8);
+    PRUEF(p.m->nur_cue(k8) && !p.m->nur_cue(4));
+    aufbau(p);
+    const float g_cue = static_cast<float>(dsp::db_zu_linear(-12.0));
+    bool master_still = true, cue_pfl = true;
+    for (int b = 0; b < 8; ++b) {        // mehrere Blöcke: auch der Hall-Nachlauf bleibt 0
+      p.block(k8, x);
+      const float* al = p.m->kanalzug(k8).abgriff(0);
+      for (int i = 0; i < 256; ++i) {
+        master_still = master_still && p.ml[i] == 0.0f && p.mr[i] == 0.0f;
+        cue_pfl = cue_pfl && p.cl[i] == al[i] * g_cue;
+      }
+    }
+    PRUEF(master_still);
+    PRUEF(cue_pfl);
+    for (int s = 0; s < 4; ++s) PRUEF(p.m->fx_l(s)[0] == 0.0f && p.m->fx_l(s)[255] == 0.0f);   // keine Send-Summe
+    p.setze("erz/8/ziel", 1.0f);         // auf bus/1 statt Master: bus/1 bleibt leer
+    p.setze("bus/1/fader", 0.0f);
+    p.block(k8, x);
+    bool bus_still = true;
+    for (int i = 0; i < 256; ++i) bus_still = bus_still && p.ml[i] == 0.0f;
+    PRUEF(bus_still);
+  }
+
+  // 5d. Review-Kern m2 (Gehörschutz): Trim, EQ und Filter von erz/8 sind fest neutral. Der Mixer ignoriert Sets dafür;
+  //     Hand oder KI kann den Kopfhörer nicht über erz/8 hochdrehen (Cue hat keinen Limiter). Negativ-Kontrolle: derselbe
+  //     Satz Regler auf erz/7 (kein Nur-Cue) ändert den Pegel (der Test kann also scheitern).
+  {
+    const int k8 = cdj::Mixer::kanal_index("erz/8");
+    auto lauf = [&](const char* kanal, int k, bool setzen, bool nur_cue) {
+      Pruefling p;
+      if (nur_cue) p.m->setze_nur_cue(k);
+      char pf[64];
+      if (setzen) {
+        std::snprintf(pf, sizeof pf, "%s/trim", kanal); p.setze(pf, 24.0f);
+        std::snprintf(pf, sizeof pf, "%s/eq/tief", kanal); p.setze(pf, 6.0f);
+        std::snprintf(pf, sizeof pf, "%s/eq/hoch", kanal); p.setze(pf, 6.0f);
+        std::snprintf(pf, sizeof pf, "%s/filter", kanal); p.setze(pf, 0.8f);
+      }
+      std::snprintf(pf, sizeof pf, "%s/pfl", kanal);
+      p.setze(pf, 1.0f);
+      float spitze = 0.0f;
+      std::vector<float> cl;
+      for (int b = 0; b < 4; ++b) {
+        p.block(k, x);
+        for (int i = 0; i < 256; ++i) { spitze = std::max(spitze, std::fabs(p.cl[i])); cl.push_back(p.cl[i]); }
+      }
+      return std::make_pair(spitze, cl);
+    };
+    const auto neutral = lauf("erz/8", k8, false, true);
+    const auto gesetzt = lauf("erz/8", k8, true, true);
+    PRUEF(neutral.first > 0.001f);
+    PRUEF(neutral.second == gesetzt.second);              // Trim +24, EQ +6, Filter: Cue unverändert (bitgleich)
+    const auto n7 = lauf("erz/7", 10, false, false);
+    const auto g7 = lauf("erz/7", 10, true, false);
+    PRUEF(g7.first > 2.0f * n7.first);                    // Negativ-Kontrolle: ohne Nur-Cue wirken dieselben Regler
+  }
+
+  // 5e. Review-Kern m4: ein NaN aus erz/8 (EQ, Filter, Eingang) legt den Master nicht still. Die F01-Wache prüft die
+  //     PFL-Summe getrennt: sie leert nur den Kanalzug des Verursachers, nicht Hall, Kleber, Beat-FX und die anderen
+  //     Kanalzüge. Referenz: derselbe Lauf ohne NaN, der Master muss bitgleich sein.
+  {
+    const int k8 = cdj::Mixer::kanal_index("erz/8");
+    Pruefling mit, ohne;
+    for (Pruefling* p : {&mit, &ohne}) { p->m->setze_nur_cue(k8); p->setze("erz/1/fader", 0.0f); p->setze("erz/1/send/2", -6.0f); p->setze("fx/2/rueckweg", -6.0f); }
+    bool master_gleich = true, endlich = true, cue_zurueck = false;
+    for (int blk = 0; blk < 30; ++blk) {
+      for (Pruefling* p : {&mit, &ohne}) {
+        std::memcpy(p->m->eingang_l(k8), x, sizeof(float) * 256);
+        std::memcpy(p->m->eingang_r(k8), x, sizeof(float) * 256);
+      }
+      if (blk == 10) mit.m->eingang_l(k8)[17] = std::nanf("");
+      mit.block(4, x);
+      ohne.block(4, x);
+      master_gleich = master_gleich && !std::memcmp(mit.ml, ohne.ml, sizeof mit.ml) && !std::memcmp(mit.mr, ohne.mr, sizeof mit.mr);
+      for (int i = 0; i < 256; ++i) endlich = endlich && std::isfinite(mit.ml[i]) && std::isfinite(mit.cl[i]);
+      if (blk >= 13) for (int i = 0; i < 256; ++i) cue_zurueck = cue_zurueck || std::fabs(mit.cl[i]) > 0.001f;
+    }
+    PRUEF(master_gleich);                    // Master bitgleich, auch im Block mit dem NaN und danach (Hall-Nachlauf lebt)
+    PRUEF(endlich);
+    PRUEF(cue_zurueck);                      // der Kopfhörer erholt sich
+    PRUEF(mit.m->nan_treffer() >= 1 && ohne.m->nan_treffer() == 0);
+  }
+
   // Audit 2026-10-01 F01 (Paket „Nie still"): ein einziges NaN auf einem geschlossenen Kanal (erz/5, Fader −200)
   // vergiftete die Filterzustände; NaN · 0 bleibt NaN, die Summe war ab da für immer NaN (am Ausgang still). Jetzt:
   // der Block mit dem Treffer ist still, ab dem übernächsten klingt erz/1 wieder endlich. Negativ-Kontrolle: bis zum

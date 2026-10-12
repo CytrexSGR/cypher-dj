@@ -1,0 +1,19 @@
+[package]
+name = "cypher_komp"
+version = "0.1.0"
+edition = "2021"
+description = "Cypher Komp als VST3 (nih-plug): dünne Hülle um komp_dsp"
+license = "GPL-3.0-or-later"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+komp_dsp = { path = "../komp_dsp" }
+nih_plug = { workspace = true }
+
+[features]
+pruef_alloc = ["nih_plug/assert_process_allocs"]
+
+[dev-dependencies]
+serde_json = "1"

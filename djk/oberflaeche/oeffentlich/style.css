@@ -319,7 +319,7 @@ body.lib-zu { grid-template-rows: var(--kopf) minmax(0, 1fr) var(--lib-zu); }
 .boxplay { height: 30px; font-size: 12px; margin-top: 0; }
 
 /* Library fest unten, klappbar (Plan T7 baut Knopf und Suche) */
-#bestand { padding: 6px 12px 4px; border-radius: 8px; }
+#bestand { padding: 6px 12px 4px; border-radius: 8px; position: relative; z-index: 2; }   /* liegt über allem, was aus dem Pult darüber ragt */
 .kopfzeile { padding-bottom: 4px; }
 td { height: 24px; font-size: 13px; }
 .box .taste.play.boxplay { order: 0; }   /* „PLAY zuerst“ gilt nur für die Transportzeile der Decks */
@@ -384,6 +384,55 @@ body.lib-zu #bestand .tabelle { display: none; }
 .fxbeat b { min-width: 18px; text-align: center; font-size: 13px; }
 .fxeinheit .summe.klein { flex-direction: row; gap: 4px; align-items: center; }
 .fxeinheit .summe.klein > span { font-size: 9px; color: var(--dim); min-width: 44px; text-align: right; }
+/* Effekt-Sektion (2026-10-11): unten im Tausch gegen die Library */
+body.lib-zu #bestand .effekte { display: none; }
+.bereich { display: flex; gap: 2px; }
+.bereich button { font-size: 13px; font-weight: 800; letter-spacing: 0.08em; padding: 2px 10px; border-radius: 6px; background: none; border: 1px solid transparent; color: var(--dim); }
+.bereich button.an { color: var(--text, #e6e6e6); border-color: var(--line); }
+body.bereich-effekte #bestand .reiter, body.bereich-effekte #bestand #suche, body.bereich-effekte #bestand #bestand-info, body.bereich-effekte #bestand .tabelle { display: none !important; }
+.effekte { flex: 1; min-height: 0; overflow: auto; padding-top: 8px; }
+.fxstreifen-reihe { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.fxstreifen { border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; display: flex; flex-direction: column; gap: 4px; font-size: 11px; }
+.fxstreifen .fxname { font-weight: 800; letter-spacing: 0.08em; color: var(--dim); display: flex; justify-content: space-between; align-items: center; }
+.fxstreifen button.komp-an { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px; }
+.fxstreifen button.komp-an.an { background: var(--warn); border-color: var(--warn); color: #0e0f12; }
+.fxstreifen label { display: grid; grid-template-columns: 44px 1fr 46px; align-items: center; gap: 4px; color: var(--dim); }
+.fxstreifen input[type=range] { width: 100%; min-width: 0; }
+.fxstreifen output { text-align: right; font-variant-numeric: tabular-nums; }
+.fxstreifen .gr { position: relative; height: 8px; background: rgba(255,255,255,0.06); border-radius: 3px; overflow: hidden; }
+.fxstreifen .gr i { position: absolute; right: 0; top: 0; bottom: 0; width: 0; background: var(--warn); transition: width 80ms linear; }
+.effekte { display: flex; gap: 12px; }
+.effekte .fxstreifen-reihe { flex: 1; align-content: start; }
+.fxstreifen { cursor: pointer; }
+.fxstreifen.gewaehlt { border-color: var(--warn); }
+.fxdetail { display: none; }
+body.lib-gross .effekte .fxstreifen-reihe { flex: 0 0 340px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+body.lib-gross .fxdetail { display: grid; flex: 1; grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); grid-template-rows: auto 1fr; gap: 10px 16px; align-content: start; font-size: 12px; }
+.fxdetail .fxkopf { grid-column: 1 / -1; display: flex; gap: 10px; align-items: center; }
+.fxdetail .fxkopf b { letter-spacing: 0.08em; }
+.fxdetail .fxkopf button.an { background: var(--warn); border-color: var(--warn); color: #0e0f12; }
+.fxdetail .regler-liste { display: flex; flex-direction: column; gap: 6px; }
+.fxdetail .regler-liste label { display: grid; grid-template-columns: 84px 1fr 64px; gap: 6px; align-items: center; color: var(--dim); }
+.fxdetail .regler-liste output { text-align: right; font-variant-numeric: tabular-nums; color: var(--text, #e6e6e6); }
+.fxdetail .bilder { display: flex; flex-direction: column; gap: 8px; }
+.fxdetail svg, .fxdetail canvas { width: 100%; max-width: 520px; background: rgba(255,255,255,0.03); border: 1px solid var(--line); border-radius: 6px; }
+.fxdetail .kurve { fill: none; stroke: var(--warn); stroke-width: 2; }
+.fxdetail .achse { stroke: var(--line); stroke-width: 1; }
+.fxdetail .schwelle { stroke: var(--dim); stroke-dasharray: 3 3; }
+.fxdetail .autobereich { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 6px; }
+.fxdetail .autokopf { display: flex; gap: 8px; align-items: center; }
+.fxdetail .autostatus { color: var(--dim); }
+.fxdetail .autospur { max-width: none; height: 140px; touch-action: none; cursor: crosshair; }
+.fxdetail .autopunkt { fill: var(--warn); stroke: #0e0f12; stroke-width: 1.5; cursor: grab; }
+.fxdetail .bildtitel { color: var(--dim); font-size: 10px; letter-spacing: 0.08em; }
+.fxstreifen .fxinhalt { font-size: 11px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fxstreifen .fxinhalt.laeuft { color: var(--text, #e6e6e6); }
+.fxstreifen .fxpegel { display: grid; grid-template-columns: 1fr 40px; gap: 4px; align-items: center; }
+.fxstreifen .fxpegel span { text-align: right; font-variant-numeric: tabular-nums; color: var(--dim); }
+.fxstreifen .grzahl { text-align: right; color: var(--dim); font-variant-numeric: tabular-nums; }
+.colorfx [data-colorart].an { background: var(--warn); border-color: var(--warn); color: #0e0f12; }   /* SOUND COLOR FX: die gewählte Art */
+.colorfx .colorparam { display: flex; align-items: center; gap: 4px; font-size: 9px; color: var(--dim); }
+.colorfx .colorparam input { width: 80px; }
 .fxeinheit [data-fx-an].an { background: var(--warn); border-color: var(--warn); color: #0e0f12; }
 .fxrouting { display: flex; align-items: center; gap: 6px; font-size: 11px; }
 .fxrouting > label { color: var(--dim); font-weight: 700; letter-spacing: 0.1em; }
@@ -440,7 +489,7 @@ body.studio .instanzen { gap: 10px; }
 body.studio .instanz { display: flex; }
 body.studio .zugplatz { display: contents; }
 body.studio .zugplatz > .zug { display: flex; grid-area: auto; }
-body.studio #mischer-unten { grid-template-columns: repeat(5, var(--zug)); justify-content: start; }
+body.studio #mischer-unten { grid-template-columns: repeat(5, var(--zug)); justify-content: start; overflow-y: auto; overflow-x: hidden; }   /* Kanalzüge mit PFL sind höher als der Platz: scrollen statt über die Library ragen (Andreas 11.10.: LIBRARY nicht klickbar) */
 body.studio .muster-feld { font-size: 15px; }
 /* Studio S7: Spurbänder (Automationsspuren als Linien) nur in STUDIO */
 .spurbaender { display: none; }
@@ -477,5 +526,91 @@ body.studio .spurbaender { display: flex; flex-direction: column; gap: 4px; marg
 .deck.tempo-fremd [data-meta] { color: #e0a040; }
 
 .lib-filter { display: flex; gap: 6px; margin: 4px 0; } .lib-filter input { min-width: 0; }
+/* Filterleiste wie das Suchfeld oben (#suche): dunkel statt Browser-Weiß; das Textfeld nimmt den freien Platz (S4) */
+.lib-filter input:not([type="checkbox"]), .lib-filter select { background: var(--panel2); border: 1px solid var(--line); border-radius: 5px; color: var(--text); padding: 3px 8px; font: inherit; font-size: 12px; user-select: text; }
+.lib-filter #lib-suche { flex: 1 1 24em; min-width: 12em; }
 
 .set-kopf { display: flex; gap: 6px; align-items: center; margin: 4px 0; flex-wrap: wrap; } .st-ready { color: #6c6; } .st-missing, .st-fehler { color: #e66; } .st-laeuft, .st-wartet { color: #e0a040; }
+
+/* Browser über die Mediathek (Plan 2026-10-10-mediathek-browser) */
+.stoebern { display: grid; grid-template-columns: minmax(140px, 220px) minmax(0, 1fr) minmax(220px, 340px); gap: 10px; height: 100%; min-height: 0; }
+.st-baum, .st-detail { overflow: auto; min-height: 0; font-size: 13px; border-right: 1px solid var(--line); padding-right: 6px; }
+.st-detail { border-right: 0; border-left: 1px solid var(--line); padding: 0 0 0 8px; }
+.st-mitte { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.st-kopf { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.st-typen button { font-weight: 600; } .st-typen button.an { background: var(--line); }
+.st-liste { flex: 1; overflow: auto; min-height: 0; }
+.st-seiten { display: flex; gap: 8px; align-items: center; justify-content: flex-end; color: var(--dim); font-size: 12px; padding-top: 4px; }
+#st-kopfzeile th.sortierbar { cursor: pointer; user-select: none; }
+#libliste tr.fehlt td { color: var(--dim); }
+#libliste tr.gewaehlt { outline: 1px solid var(--dim); background: var(--panel2); }
+/* Detail-Spalte (S5) */
+.st-detail h3 { font-size: 13px; margin: 0 0 6px; word-break: break-word; }
+.st-aktionen { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0; }
+.st-fakten { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 2px 10px; margin: 6px 0; font-size: 12px; }
+.st-fakten dt { color: var(--dim); } .st-fakten dd { margin: 0; user-select: text; }
+.st-fakten dd.st-ordner { word-break: break-all; }
+.st-wellefeld { min-height: 56px; display: flex; align-items: center; margin: 6px 0; font-size: 11px; color: var(--dim); }
+.st-welle { width: 100%; height: 56px; display: block; }
+.st-angaben { font-size: 12px; width: 100%; border-collapse: collapse; user-select: text; }
+.st-angaben th { text-align: left; color: var(--dim); font-weight: 400; }
+.st-angaben td, .st-angaben th { padding: 1px 6px 1px 0; vertical-align: top; word-break: break-word; }
+.st-angaben tr.ueberstimmt td { color: var(--dim); text-decoration: line-through; }
+.st-hinweis { font-size: 11px; color: var(--dim); margin: 6px 0; }
+.st-code { font-size: 11px; background: var(--panel2); border: 1px solid var(--line); border-radius: 5px; padding: 6px; margin: 6px 0; white-space: pre-wrap; word-break: break-word; max-height: 40vh; overflow: auto; user-select: text; }
+@media (max-width: 900px) { .stoebern { grid-template-columns: minmax(0, 1fr); } .st-baum, .st-detail { display: none; } }
+
+/* Ordner-Baum und Facetten (Plan S2, Task 2.3) */
+.st-knoten { cursor: pointer; padding: 1px 4px; border-radius: 4px; white-space: nowrap; display: flex; gap: 4px; align-items: baseline; min-width: 0; }
+.st-knoten .st-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.st-knoten .st-name.vorn { direction: rtl; text-align: left; }           /* Ellipse vorn: das Ende des Pfads unterscheidet */
+.st-knoten.an { background: var(--line); box-shadow: inset 3px 0 0 var(--text); font-weight: 600; }
+.st-knoten .zahl { flex: none; color: var(--dim); font-size: 11px; font-weight: 400; }
+.st-baum h4 { margin: 8px 0 2px; font-size: 11px; color: var(--dim); letter-spacing: .05em; }
+
+/* Großer Modus (Plan S2, Task 2.4): Browser fast bildschirmhoch, Decks als schmale Leiste oben (Köpfe bleiben sichtbar).
+   Keine Regel für .tabelle: display:block hob das hidden der Reiter auf (Plan-Review 2, 7 → 4 statt 7 → 26 Zeilen). */
+body.lib-gross { grid-template-rows: var(--kopf) 112px minmax(0, 1fr); }
+body.lib-gross #pult { overflow: hidden; }
+body.lib-gross #pult > * { overflow: hidden; }
+
+/* Listen (S2b): Lists-Ast im Baum, Menü „+ LIST ▾“, Zeilen der gezeigten Liste, SAVE am Strudel-Deck */
+.st-seiten[hidden], .listen-menue[hidden], .muster-name[hidden] { display: none; }
+.st-listenart { font-weight: 600; }
+.st-listenknoten { padding-left: 14px; display: flex; align-items: center; gap: 4px; }
+.st-listenknoten .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.st-listenknoten .zahl, .st-mini { flex: none; }
+.st-mini { font-size: 10px; padding: 0 4px; line-height: 16px; border-radius: 3px; opacity: .6; }
+.st-mini:hover { opacity: 1; }
+.st-eingabe { width: 100%; box-sizing: border-box; font-size: 12px; }
+.st-import { width: 100%; margin-top: 4px; font-size: 12px; }
+.listen-menue { position: fixed; z-index: 30; width: 230px; max-height: 260px; overflow: auto; background: #14171d; border: 1px solid var(--line);
+  border-radius: 6px; padding: 6px; font-size: 13px; box-shadow: 0 6px 18px rgba(0, 0, 0, .5); }
+.listen-kopf { color: var(--dim); font-size: 11px; letter-spacing: .05em; margin-bottom: 4px; }
+.listen-eintrag { cursor: pointer; padding: 2px 6px; border-radius: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.listen-eintrag:hover { background: var(--line); }
+.listen-eintrag .zahl { color: var(--dim); font-size: 11px; }
+.listen-menue .st-eingabe { margin-top: 6px; }
+#libliste tr.zieht { opacity: .4; }
+#libliste tr[draggable="true"] { cursor: grab; }
+#libliste td.aktion button.hoch, #libliste td.aktion button.runter, #libliste td.aktion button.raus { padding: 1px 6px; }
+.muster-sichern { border-color: var(--dim); color: var(--text); }
+.muster-name { width: 11ch; font-size: 11px; }
+
+.lib-filter[hidden], .lib-filter [hidden] { display: none; }
+
+/* Loop aus der Mediathek → L1/L2 (S6) */
+.loopbox-aktion { display: inline-flex; align-items: center; }
+.loopbox-grund { color: var(--dim); font-size: 11px; margin-left: 8px; }
+#libliste button.laden.in-box.l1, #st-detail button.laden.in-box.l1 { color: var(--l1); border-color: var(--l1); }
+#libliste button.laden.in-box.l2, #st-detail button.laden.in-box.l2 { color: var(--l2); border-color: var(--l2); }
+button.laden.in-box:disabled { opacity: .4; }
+
+/* Tor eins (2026-10-11): „downbeat?“ am Deck (neben BAR) und in der Bestandszeile, bernstein wie VARI */
+.eins-hinweis { color: #e0a040; font-size: 11px; font-weight: 650; letter-spacing: .04em; border: 1px solid #e0a040; border-radius: 3px; padding: 0 4px; margin-left: 4px; cursor: help; }
+.eins-hinweis[hidden] { display: none; }
+/* R3: engere Zellen in der Bibliotheksliste, damit bei 1233 px alle Spalten samt Status und Aktionen ohne waagrechtes Scrollen passen (vorher 690 px Tabelle in 611 px, der FAILED-Grund lag rechts außerhalb) */
+#libliste td, #st-kopfzeile th { padding-left: 5px; padding-right: 5px; }
+#libliste button.laden { margin-left: 4px; }
+.vorbereit-zeile { display: block; white-space: normal; overflow-wrap: anywhere; max-width: 24ch; margin: 3px 0 0 auto; text-align: right; font-size: 11px; font-weight: 600; color: var(--dim); letter-spacing: 0; }
+.vorbereit-zeile.vorbereit-fehler { color: #ff6b6b; font-weight: 700; }

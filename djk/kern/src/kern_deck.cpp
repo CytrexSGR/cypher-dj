@@ -1096,6 +1096,22 @@ void Kern::decks_zustand(int64_t n0, int n) {
 }
 
 // Keylock 7b.3 (§5.5b): je Box mit Loop im Takt von /zustand/deck die Zähler ihres Lesers und Dehners (0 ohne Dehner).
+// Effekt-Sektion (Plan 2026-10-11-effekt-sektion.md): je Quellkanal mit laufendem Kompressor die Absenkung, 10 Hz
+void Kern::komp_zustand(int64_t n0, int n) {
+  constexpr int64_t ABSTAND = 4800;
+  const int64_t naechstes = (n0 + ABSTAND - 1) / ABSTAND * ABSTAND;
+  if (naechstes >= n0 + n || !mixer_) return;
+  for (int k = 0; k < MIX_QUELLEN; ++k) {
+    if (!mixer_->komp_aktiv(k)) continue;
+    Ereignis e{};
+    e.art = Ereignis::KOMP;
+    e.sample = n0;
+    std::snprintf(e.pfad, sizeof e.pfad, "%s", Mixer::kanal_name(k));
+    e.wert = mixer_->komp_gr_db(k);
+    melde(e);
+  }
+}
+
 void Kern::boxen_zustand(int64_t n0, int n) {
   const int64_t naechstes = (n0 + DECK_ZUSTAND_ABSTAND - 1) / DECK_ZUSTAND_ABSTAND * DECK_ZUSTAND_ABSTAND;
   if (naechstes >= n0 + n || !loops_) return;

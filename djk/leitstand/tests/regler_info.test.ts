@@ -19,7 +19,8 @@ function universum(): string[] {
   const u = kanaele.flatMap((k) => glieder.map((g) => `${k}/${g}`));
   for (const n of [1, 2, 3, 4]) u.push(`fx/${n}/notenwert`, `fx/${n}/rueckkopplung`, `fx/${n}/rueckweg`);
   u.push('xfader', 'master/pegel', 'cue/mix', 'cue/pegel', 'cue/split');
-  u.push('duck/tiefe', 'duck/release', 'master/kleber');
+  u.push('duck/tiefe', 'duck/release', 'master/kleber', 'master/pfl');
+  u.push('color/art', 'color/param');
   u.push('keylock', 'deck/1/keylock', 'pad/1/keylock');   // Keylock 3: nur der globale Knopf
   return u;
 }

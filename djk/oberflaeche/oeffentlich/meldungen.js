@@ -75,3 +75,10 @@ export function variText({ bpm, basis, knopf, hoerweg }) {
   const st = 12 * Math.log2(bpm / basis);
   return `VARI ${st >= 0 ? '+' : '−'}${Math.abs(st).toFixed(1)} st (master ${bpm.toFixed(2)})`;
 }
+
+// Tor eins (2026-10-11): unsichere Takt-Eins sichtbar machen. Quelle ist tore.eins.unsicher der Fassung (/bestand
+// eins_unsicher). Andreas setzt die Eins mit SET (+ FIX); danach ist sie von Hand gesetzt und gilt als sicher.
+export const EINS_HINWEIS_TEXT = 'Bar 1 is a guess: majority of the downbeat detector is weak or the first kick disagrees. Check it by ear; SET, then FIX saves the downbeat (the hint goes away).';
+export function einsHinweis(eintrag) {
+  return eintrag?.eins_unsicher === true ? 'downbeat?' : null;
+}

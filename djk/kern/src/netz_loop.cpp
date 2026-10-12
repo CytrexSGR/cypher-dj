@@ -58,7 +58,7 @@ bool Netz::loop_paket(const v::Adresse* a, const osc::Nachricht& m) {
     for (double x : v::werte::fx_beats) beats_ok = beats_ok || x == b.dauer_beats;
     const double wet = m.werte[f::wet].d;
     const auto anteil = [](double x) { return x >= 0.0 && x <= 1.0; };
-    if (!quelle_ok(b.quelle) || b.deck < 1 || b.deck > 2 || !beats_ok || b.nr < 1 || b.nr > 4 || !anteil(wet) ||
+    if (!quelle_ok(b.quelle) || b.deck < 1 || b.deck > 2 || !beats_ok || b.nr < v::bereich::k_fx::art_min || b.nr > v::bereich::k_fx::art_max || !anteil(wet) ||
         !anteil(b.wert_beats) || !anteil(b.raster_beats) || !anteil(b.quell_beat) || (b.an != 0 && b.an != 1)) {
       quittung(b.id, b.quelle, 6, stand_sample_, stand_beat_, "ausserhalb_bereich");
       return true;
@@ -212,6 +212,12 @@ void Netz::keylock_zyklus() {
 }
 
 bool Netz::loop_ereignis(const Ereignis& e) {
+  if (e.art == Ereignis::KOMP) {  // Effekt-Sektion, §5.5c /zustand/komp ,sf
+    osc::Schreiber s(v::zustand_komp);
+    s.s(e.pfad).f(e.wert);
+    an_alle(s);
+    return true;
+  }
   if (e.art == Ereignis::BOX) {  // Keylock 7b.3, §5.5b /zustand/box ,iiiiii (7c.3: kein_platz)
     osc::Schreiber s(v::zustand_box);
     s.i(e.deck).i(e.status).i(e.keylock_unterlauf).i(e.keylock_aufgegeben).i(e.keylock_ring_voll).i(e.keylock_kein_platz);
@@ -274,6 +280,10 @@ bool Netz::loop_ereignis(const Ereignis& e) {
     return true;
   }
   if (e.art != Ereignis::LOOP) return false;
+  if (e.deck >= 1 && e.deck <= 2) {   // Stand für neue Abonnenten (Effekt-Sektion 2026-10-11)
+    LoopStand& l = loop_stand_[e.deck];
+    l.da = true; l.status = e.status; l.name = e.pfad; l.beats = e.fassung; l.fx_art = e.fx_art; l.fx_beats = e.fx_beats; l.fx_wet = e.fx_wet;
+  }
 
   osc::Schreiber s(v::e_loop);
   s.i(e.deck).i(e.status).s(e.pfad).i(e.fassung).i(e.fx_art).d(e.fx_beats).f(e.fx_wet);

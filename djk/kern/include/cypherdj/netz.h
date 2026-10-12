@@ -4,6 +4,8 @@
 // /zustand/kern an alle Abonnenten (§5). Abonnenten: höchstens 8, gestrichen nach 5 s ohne /k/hallo (§4.1).
 // Scheibe 01, erweitert in Scheibe 08.
 #pragma once
+#include <map>
+#include <string>
 
 #include <atomic>
 #include <cstddef>
@@ -111,6 +113,12 @@ class Netz {
   bool kl_beendet_ = false;          // Shutdown: nichts mehr auslösen oder einreihen
   // Keylock Task 3b: Stand des Reglers keylock aus der letzten /uhr (Ereignis::keylock_aus) für neue Abonnenten (/e/regler)
   bool kl_knopf_aus_ = false;
+  // Effekt-Sektion (2026-10-11): letzter Stand jedes gemeldeten Reglers und jeder Box. Der Kern meldet beides nur bei Änderung;
+  // ein neuer Abonnent (die Seite nach ihrem Neustart) wüsste sonst nicht, dass ein Kompressor an ist oder welcher Loop in
+  // welcher Box läuft (die Loop-Automation plante dann nicht mehr). Nur im Netz-Faden.
+  std::map<std::string, std::pair<float, std::string>> regler_stand_;
+  struct LoopStand { bool da = false; int32_t status = 0, beats = 0, fx_art = 0; std::string name; double fx_beats = 0; float fx_wet = 0; };
+  LoopStand loop_stand_[3];
   bool kl_knopf_bekannt_ = false;  // mindestens eine /uhr gesehen (sonst bekommt ein neuer Abonnent nichts)
   int sock_ = -1;
   int port_ = 0;

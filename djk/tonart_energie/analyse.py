@@ -55,7 +55,7 @@ def analysiere(pfad: str, modus: str = "bestand") -> dict:
 
 def _init() -> None:
     os.nice(max(0, 19 - os.nice(0)))
-    os.environ["CUDA_VISIBLE_DEVICES"] = ""
+    os.environ.setdefault("CUDA_VISIBLE_DEVICES", "")
     if not os.environ.get("ANALYSE_STDERR_OFFEN"):
         os.dup2(os.open(os.devnull, os.O_WRONLY), 2)                # TF-Geschwätz weg
     from . import energie_level

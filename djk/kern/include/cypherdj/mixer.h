@@ -10,7 +10,7 @@
 //   in die Master-Summe (K2 Slice 2); die Rückwege fx/1, fx/3, fx/4 sind ohne Wirkung (Plugin-Wirte: Scheibe 8).
 //   PFL: Abgriff nach Filter, vor dem Fader (ADR 008 Punkt 3) jedes Kanals mit <k>/pfl = 1 in die PFL-Summe.
 //   Master: Summe + Master-Eingang (Prüfklick Z1, „in die Summe vor dem Limiter“) → master/pegel.
-//   Cue: PFL · 0,5·(1 − cue/mix) + Master · 0,5·(1 + cue/mix); bei cue/split links (L+R)/2 davon, rechts (L+R)/2 des
+//   Cue: (PFL + master/pfl · Master) · 0,5·(1 − cue/mix) + Master · 0,5·(1 + cue/mix); bei cue/split links (L+R)/2 davon, rechts (L+R)/2 des
 //   Masters (Mixxx enginemixer.cpp Z. 394 f. und 830 bis 840, Dossier 04 §3.1); dann cue/pegel. Limiter mit Vorhalt
 //   und derselbe Vorhalt im Cue kommen mit Scheibe 43.
 //   Crossfader: Mixxx „additiv“ mit Exponent 1 (enginexfader.cpp, kTransformDefault): Seite A = 1 − max(0, x),
@@ -22,8 +22,10 @@
 // Konstruktor und setze_sofort() nur außerhalb des Callbacks (Start, Neustart-Zustand).
 #pragma once
 
+#include "cypherdj/komp.h"
 #include <cstdint>
 #include <memory>
+#include <atomic>
 
 #include <cypherdj/dsp/kanalzug.h>
 #include <cypherdj/dsp/master_limiter.h>
@@ -43,6 +45,9 @@ constexpr int MIX_BLOCK = cypherdj::dsp::kMaxFrames;  // größter Block je vera
 constexpr int HALL_RUHE_MAX = 1 << 20;             // Sättigung des Stillezählers im Hall (mixer.cpp)
 constexpr float KLEBER_AUS_DB = 60.0f;                   // master/kleber = 0: Schwelle des Summen-Kompressors unerreichbar hoch
 constexpr int MIX_ZIEL_BLENDE = 480;               // §1.5 <k>/ziel: 10-ms-Blende bei 48 kHz
+// Plan Mediathek-Browser S7: der Vorhör-Eingang des Browsers (djk/vorhoerer → rueck_erz_8_L/R). Nur-Cue: PFL fest an,
+// kein Weg in Master, Bus, Sends oder Beat-FX — unabhängig von Fader, Ziel und Sends (Andreas' Bedingung: nie auf den Master).
+constexpr const char* VORHOER_KANAL = "erz/8";
 
 // Was ein Regler des Stellwerks im Mixer bewirkt (die Zuweisungstabelle).
 enum class MixRolle : uint8_t {
@@ -53,7 +58,10 @@ enum class MixRolle : uint8_t {
   xfader, master_pegel, cue_mix, cue_pegel, cue_split,   // global
   duck_tiefe, duck_release,                              // K2 Sidechain: erz/2 und erz/3 unter dem Kick
   fx_rueckweg,                                           // K2 Slice 2: fx/<n>/rueckweg (nur fx/2 ist der Hall)
-  master_kleber                                          // K2 Slice 3: Schwelle des Summen-Klebers
+  master_kleber,                                         // K2 Slice 3: Schwelle des Summen-Klebers
+  master_pfl,                                            // MASTER CUE: Master auf die PFL-Seite des Cue
+  color_art, color_param,                                // SOUND COLOR FX (2026-10-11): Art und PARAMETER, global wie am XZ
+  komp                                                   // Kompressor je Quellkanal (2026-10-11): <k>/komp/<feld>
 };
 
 struct MixZuweisung {
@@ -61,6 +69,7 @@ struct MixZuweisung {
   int8_t kanal = -1;                                     // Kanal-Index 0..17 oder -1 (global)
   cypherdj::dsp::Regler regler = cypherdj::dsp::Regler::anzahl;  // nur bei MixRolle::kanalzug
   int8_t fx = -1;                                        // nur bei MixRolle::fx_rueckweg: 0..3 für fx/1..4
+  int8_t feld = -1;                                      // nur bei MixRolle::komp: 0 an, 1 schwelle … 6 mix, 7 sc
 };
 
 class Mixer {
@@ -78,6 +87,10 @@ class Mixer {
   // Scheibe 25: Güte des DJ-Filters in allen 18 Kanalzügen (kern.toml filter_guete, A27 Weg a); NaN verworfen, sonst
   // auf 0,5 bis 8 geklemmt (DjFilter::setze_guete). Nicht im Callback.
   void setze_filter_guete(double q);
+  // Absenkung des Kompressors von Quellkanal k (0..13) in dB, 0 wenn aus. Aus jedem Faden lesbar.
+  // Läuft der Kompressor von Quellkanal k (komp/an 1 im letzten Block)? Nur im Callback-Faden lesen.
+  bool komp_aktiv(int k) const { return k >= 0 && k < MIX_QUELLEN && komp_lief_[k]; }
+  float komp_gr_db(int k) const { return (k >= 0 && k < MIX_QUELLEN) ? komp_gr_[k].load(std::memory_order_relaxed) : 0.0f; }
   // Verlauf je Sample für den nächsten verarbeite()-Aufruf (Stellwerk-Aenderung, gültig bis dahin).
   void verlauf(int regler, const float* werte);
 
@@ -95,6 +108,8 @@ class Mixer {
   const cypherdj::dsp::Kanalzug& kanalzug(int k) const { return *kz_[k]; }
   float wert(int regler) const;   // letzter Wert eines Mixer-Reglers (nicht Kanalzug): für Tests
   int ziel_ist(int k) const { return ziel_ist_[k]; }
+  void setze_nur_cue(int k) { if (k >= 0 && k < MIX_QUELLEN) nur_cue_[k] = true; }   // nicht im Callback
+  bool nur_cue(int k) const { return k >= 0 && k < MIX_QUELLEN && nur_cue_[k]; }
   // Scheibe 25: Master-Limiter aus 14 am Ende des Masters (nach master/pegel), Decke limiter_dbtp (kern.toml §2.1).
   // Der Master ist um limiter_vorhalt() Samples verzögert; um genauso viel verzögert der Mixer die PFL-Summe, damit der
   // Cue den Master so hört wie der Saal (ADR 008 Punkt 3). Der Prüfklick master (Z1) geht am Limiter vorbei (F19).
@@ -158,10 +173,18 @@ class Mixer {
   MixZuweisung zuw_[cypherdj::stellwerk::MAX_REGLER];
   std::unique_ptr<cypherdj::dsp::Kanalzug> kz_[MIX_KANAELE];
   Wert ziel_[MIX_KANAELE], xseite_[MIX_KANAELE], pfl_[MIX_KANAELE];
-  Wert xfader_, master_pegel_, cue_mix_, cue_pegel_, cue_split_, duck_tiefe_, duck_release_, master_kleber_;
+  Wert xfader_, master_pegel_, cue_mix_, cue_pegel_, cue_split_, duck_tiefe_, duck_release_, master_kleber_, master_pfl_;
+  Wert color_art_, color_param_;   // SOUND COLOR FX: je Block in jeden Kanalzug (Art je Kanal wäre ein Regler je Kanal)
   Duck duck_;
   Wert fx_rueck_[4];                                     // fx/1..4/rueckweg (dB); wirksam ist nur Index 1
-  std::unique_ptr<Hall> hall_;                           // ~860 KB: im Konstruktor, nie im Callback
+  std::unique_ptr<Hall> hall_;                           // Cypher Hall: im Konstruktor angelegt, nie im Callback
+  // Kompressor je Quellkanal (Plan 2026-10-11-effekt-sektion.md): zwischen verarbeite_vor und verarbeite_nach
+  static constexpr int KOMP_FELDER = 8;                  // an, schwelle, ratio, attack, release, makeup, mix, sc
+  std::unique_ptr<Komp> komp_[MIX_QUELLEN];              // im Konstruktor angelegt, nie im Callback
+  Wert komp_w_[MIX_QUELLEN][KOMP_FELDER];
+  bool komp_lief_[MIX_QUELLEN] = {};
+  std::atomic<float> komp_gr_[MIX_QUELLEN] = {};        // Absenkung in dB nach dem letzten Block (Anzeige)
+  void komp_block(int k, int n);
   float hall_l_[MIX_BLOCK] = {}, hall_r_[MIX_BLOCK] = {};
   int hall_ruhe_ = 0;                                    // Samples seit dem letzten Block mit Send-Signal
   bool hall_wach_ = false;                               // Hall rechnet erst, wenn ein Send ihn gespeist hat
@@ -173,6 +196,7 @@ class Mixer {
   bool kleber_lief_ = false;
   int64_t nan_treffer_ = 0;                              // Audit F01                             // hat seit dem letzten Leeren gerechnet
   int ziel_ist_[MIX_KANAELE] = {};
+  bool nur_cue_[MIX_KANAELE] = {};   // S7: MIX_KANAELE, nicht MIX_QUELLEN: kanal() läuft auch für die Busse 14..17
   int blende_von_[MIX_KANAELE] = {};
   int blende_rest_[MIX_KANAELE] = {};
   float ein_l_[MIX_KANAELE][MIX_BLOCK] = {};

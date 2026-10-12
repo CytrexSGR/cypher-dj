@@ -1,0 +1,14 @@
+[package]
+name = "hall_ffi"
+version = "0.1.0"
+edition = "2021"
+description = "Cypher-Effekte mit C-ABI als statische Bibliothek für den djk-Kern: Hall (fx/2) und Kompressor (je Kanal)"
+license = "GPL-3.0-or-later"
+publish = false
+
+[lib]
+crate-type = ["staticlib", "rlib"]
+
+[dependencies]
+hall_dsp = { path = "../hall_dsp" }
+komp_dsp = { path = "../komp_dsp" }

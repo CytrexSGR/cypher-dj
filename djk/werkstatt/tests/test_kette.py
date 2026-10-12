@@ -171,7 +171,8 @@ def test_fremdtags_landen_in_tags_json(quelle, tmp_path):
     assert tags["tag_bpm_abweichung_prozent"] is not None and abs(tags["tag_bpm_abweichung_prozent"]) < 5.0
     m = lies_json(mo / "material.json")
     assert "tags" not in m and set(m["tonart"]) == {"camelot", "r", "vorsprung", "stimmung_cent", "stimmung_r",
-                                                      "stimmung_cent_zweitwerkzeug", "aus_stems"}  # unveraendert
+                                                      "stimmung_cent_zweitwerkzeug", "aus_stems",
+                                                      "verfahren", "camelot_chroma"}  # 2026-10-10: Tonart wie MIK
     assert stat.S_IMODE((mo / "tags.json").stat().st_mode) == 0o444
 
 

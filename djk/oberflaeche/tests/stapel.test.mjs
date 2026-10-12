@@ -1,6 +1,6 @@
 // Befund 2 (adversariale Prüfung): scheitert ein Kind beim Start des Prüfstapels, bleibt nichts liegen: kein
-// /dev/shm/djk60m-<i>-XXXXXX, kein laufendes Kind (Ports wieder frei), kein offenes Relais. Instanz f (Z2, Ports 53xxx),
-// damit der Test weder die Server-Tests (h) noch die Abnahme (g) stört. Kein Ton, kein Fenster.
+// /dev/shm/djk60m-<i>-XXXXXX, kein laufendes Kind (Ports wieder frei), kein offenes Relais. Instanz aus STAPEL_INSTANZ (Vorgabe f, Z2, Ports 53xxx),
+// damit der Test weder die Server-Tests (TEST_INSTANZ, Vorgabe h) noch die Abnahme (g) stört: das Mapping nimmt weder g noch h (Kollisionen: hilfen/instanz.mjs). Kein Ton, kein Fenster.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import dgram from 'node:dgram';
@@ -9,8 +9,9 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { starteStapel } from '../pruef/stapel.mjs';
+import { STAPEL_INSTANZ } from './hilfen/instanz.mjs';
 
-const I = 'f';
+const I = STAPEL_INSTANZ;       // hängt an CYPHERDJ_TEST_INSTANZ (Review S2 B6), Vorgabe f
 const K = 1000 * (I.charCodeAt(0) - 96);
 const reste = () => fs.readdirSync('/dev/shm').filter((n) => n.startsWith(`djk60m-${I}-`));
 const udpFrei = (port) => new Promise((ok) => { const s = dgram.createSocket('udp4'); s.once('error', () => ok(false)); s.bind(port, '127.0.0.1', () => s.close(() => ok(true))); });

@@ -19,7 +19,7 @@ volatile float g_mutation_senke = 0.0f;
 #endif
 }  // namespace
 
-Kanalzug::Kanalzug(double fs) : iso_(fs), filter_(fs) {
+Kanalzug::Kanalzug(double fs) : iso_(fs), filter_(fs), color_(fs) {
     for (int i = 0; i < kAnzahlRegler; ++i) bahn_[i] = Bahn(static_cast<Regler>(i), fs);
 }
 
@@ -27,11 +27,13 @@ void Kanalzug::zuruecksetzen() {
     for (int i = 0; i < kAnzahlRegler; ++i) bahn_[i].setze_sofort(kReglerInfo[i].vorgabe);
     iso_.leeren();
     filter_.leeren();
+    color_.leeren();
 }
 
 void Kanalzug::zustaende_leeren() {
     iso_.leeren();
     filter_.leeren();
+    color_.leeren();
 }
 
 void Kanalzug::setze_sofort(Regler r, float wert) { bahn_[static_cast<int>(r)].setze_sofort(wert); }
@@ -92,7 +94,9 @@ void Kanalzug::verarbeite_vor(const float* in_l, const float* in_r, int n) {
     iso_.verarbeite(a_l, a_r, a_l, a_r, n, g_band_[0], g_band_[1], g_band_[2]);
     Bahn& fb = bahn_[static_cast<int>(Regler::filter)];
     if (!fb.block(k_filter_, n)) std::fill(k_filter_, k_filter_ + n, static_cast<double>(fb.wert()));
-    filter_.verarbeite(a_l, a_r, n, k_filter_);
+    // SOUND COLOR FX: Art FILTER ist der DjFilter selbst (bitgleich zu vorher), jede andere Art ersetzt ihn
+    if (color_.art() == ColorArt::filter) filter_.verarbeite(a_l, a_r, n, k_filter_);
+    else color_.verarbeite(a_l, a_r, n, k_filter_);
     // ab hier: a_l/a_r ist der Abgriff nach Filter, vor dem Fader (ADR 008 Punkt 4, SCHNITTSTELLEN §6.2)
 }
 

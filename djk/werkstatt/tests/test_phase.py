@@ -119,3 +119,10 @@ def test_tonklick_ohne_hochband_wird_nicht_vermessen():
     e = einsaetze(x, RASTER)
     d = (e - RASTER)[~np.isnan(e)] * 1000
     assert len(d) == 0 or np.all(np.abs(d) < 5.0), np.round(d[:8], 1)
+
+
+def test_ganzer_song_clap_hinter_dem_kick_reisst():
+    """phase_messen bekommt dasselbe Positions-Tor wie abschnitte_messen (2026-10-09)."""
+    zeiten = RASTER + np.where(np.arange(len(RASTER)) % 2 == 1, 0.025, 0.0)
+    m = phase_messen(kicks(zeiten, 70.0), RASTER)
+    assert not m["ok"] and "Schlagpositionen" in m["grund"], m

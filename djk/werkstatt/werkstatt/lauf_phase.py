@@ -13,7 +13,9 @@ from pathlib import Path
 import numpy as np
 
 from .bestand import fassungen_von, korrektur_anhaengen, lies_json, standard_bestand
-from .kette import korrigieren
+from .eingang import lade_stereo48
+from .kette import karte_aus_liste, korrigieren, wende_raster_an
+from .warp import timemap
 from .phase import MIN_BETRAG_MS, SR, abschnitte_messen, phase_messen, sollzeiten
 from .warp import lies_f32
 
@@ -30,6 +32,23 @@ def miss_fassung(pfad, abschnitte=False):
     f = lies_json(pfad / "fassung.json")
     x = lies_f32(pfad / f["datei"]).mean(axis=1).astype(float)
     return f, (abschnitte_messen if abschnitte else phase_messen)(x, sollzeiten(f, SR), SR)
+
+
+def probe_vor_dem_schreiben(mo, basis_bpm, neue_zeilen):
+    """Rechnet die Karte mit allen Zeilen plus den neuen und die Timemap durch, BEVOR etwas angehaengt wird. Sonst
+    steht eine Zeile in korrekturen.jsonl, deren Fassung nie entsteht (2026-10-09, a7865c9b: Schlag 0 laege nach -9,52 ms
+    vor dem Dateianfang; zwei wirkungslose Zeilen, ein spaeteres korrigieren haette -19 ms gerechnet). None = ok."""
+    from .bestand import korrekturen_lesen
+    material = lies_json(mo / "material.json")
+    karte = karte_aus_liste(material["tempo_karte_quelle"], material["raster"]["tempo_vielfaches"])
+    try:
+        k = wende_raster_an(karte, korrekturen_lesen(mo) + neue_zeilen, basis_bpm)
+        # echte Laenge wie beim Rendern (kette.korrigieren: lade_stereo48 der Originaldatei); material.json fuehrt kein
+        # `frames`, der frueher eingesetzte Ersatz 10**12 schaltete den Dateiende-Waechter ab
+        timemap(k, basis_bpm, len(lade_stereo48(mo / material["quelle"]["datei"])))
+    except ValueError as e:
+        return str(e)
+    return None
 
 
 def nachziehen_abschnitte(mo, basis_bpm=128.0, schreiben=False):
@@ -53,6 +72,13 @@ def nachziehen_abschnitte(mo, basis_bpm=128.0, schreiben=False):
         aus["status"] = f"wuerde {len(zeilen)} Takte korrigieren"
         return aus
     jetzt = dt.datetime.now().isoformat(timespec="seconds")
+    neu = [{"zeit": jetzt, "von": "werkstatt", "art": "raster", "fassung": p.name, "ab_quell_beat": float(t["ab_beat"]),
+            "bis_quell_beat": float(t["bis_beat"]), "versatz_ms": t["versatz_ms"], "nr": None,
+            "text": "Phase je Takt gegen Anschlaege 2-8 kHz (abschnitte_messen)"} for t in zeilen]
+    grund = probe_vor_dem_schreiben(mo, basis_bpm, neu)
+    if grund:
+        aus["status"] = "probe: " + grund
+        return aus
     for t in zeilen:
         korrektur_anhaengen(mo, {"zeit": jetzt, "von": "werkstatt", "art": "raster", "fassung": p.name,
                                  "ab_quell_beat": float(t["ab_beat"]), "bis_quell_beat": float(t["bis_beat"]),
@@ -82,11 +108,15 @@ def nachziehen(mo, basis_bpm=128.0, schreiben=False):
         return aus
     material = lies_json(mo / "material.json")
     beats = [z[1] for z in material["tempo_karte_quelle"]]
-    korrektur_anhaengen(mo, {
-        "zeit": dt.datetime.now().isoformat(timespec="seconds"), "von": "werkstatt", "art": "raster",
-        "fassung": p.name, "ab_quell_beat": float(min(beats)) - 1e6, "bis_quell_beat": float(max(beats)) + 1e6,
-        "versatz_ms": m["versatz_ms"], "nr": None,
-        "text": f"Phase gegen Anschlaege 2-8 kHz, {m['klar']}/{m['schlaege']} klar, Streuung {m['streuung_ms']} ms"})
+    zeile = {"zeit": dt.datetime.now().isoformat(timespec="seconds"), "von": "werkstatt", "art": "raster",
+             "fassung": p.name, "ab_quell_beat": float(min(beats)) - 1e6, "bis_quell_beat": float(max(beats)) + 1e6,
+             "versatz_ms": m["versatz_ms"], "nr": None,
+             "text": f"Phase gegen Anschlaege 2-8 kHz, {m['klar']}/{m['schlaege']} klar, Streuung {m['streuung_ms']} ms"}
+    grund = probe_vor_dem_schreiben(mo, basis_bpm, [zeile])
+    if grund:
+        aus["status"] = "probe: " + grund
+        return aus
+    korrektur_anhaengen(mo, zeile)
     k = korrigieren(mo.name, mo.parent, basis_bpm)
     _, m2 = miss_fassung(mo / "fassungen" / k["fassung"])
     aus.update({"status": "korrigiert", "neu": k["fassung"], "nachher": m2})

@@ -1,0 +1,117 @@
+{
+ "quelle": "~/messungen/2026-10-11-grid-phase/tabelle_bestand_46.json (2026-10-11)",
+ "faelle": [
+  {
+   "mid": "580de55457b9bbba",
+   "titel": "Audiofly X – 1999 - Original Mix",
+   "zaehlung": [
+    0,
+    109,
+    0,
+    156
+   ],
+   "eins_material": 3,
+   "karte_von_s": 0.0,
+   "kick_beat": 1,
+   "kick_lage": 1,
+   "wahrheit": 1,
+   "hinweis": "Wahrheit = Handkorrektur von Andreas bzw. 'stumm' (6b09, 9b44); d976 ohne Wahrheit (Gegenbeispiel)"
+  },
+  {
+   "mid": "929d8039c3732eed",
+   "titel": "Adam Beyer – Antistius",
+   "zaehlung": [
+    40,
+    0,
+    117,
+    0
+   ],
+   "eins_material": 2,
+   "karte_von_s": 0.07,
+   "kick_beat": 0,
+   "kick_lage": 0,
+   "wahrheit": 0,
+   "hinweis": "Wahrheit = Handkorrektur von Andreas bzw. 'stumm' (6b09, 9b44); d976 ohne Wahrheit (Gegenbeispiel)"
+  },
+  {
+   "mid": "bfdd5a676e72a4e4",
+   "titel": "Adam Beyer – Dactyl - Original Mix",
+   "zaehlung": [
+    46,
+    34,
+    123,
+    20
+   ],
+   "eins_material": 2,
+   "karte_von_s": 0.06,
+   "kick_beat": 0,
+   "kick_lage": 0,
+   "wahrheit": 0,
+   "hinweis": "Wahrheit = Handkorrektur von Andreas bzw. 'stumm' (6b09, 9b44); d976 ohne Wahrheit (Gegenbeispiel)"
+  },
+  {
+   "mid": "1fc7086079167eab",
+   "titel": "Adam Beyer – Numero Uno (Digital Only)",
+   "zaehlung": [
+    17,
+    52,
+    95,
+    38
+   ],
+   "eins_material": 2,
+   "karte_von_s": 0.07,
+   "kick_beat": 0,
+   "kick_lage": 0,
+   "wahrheit": 0,
+   "hinweis": "Wahrheit = Handkorrektur von Andreas bzw. 'stumm' (6b09, 9b44); d976 ohne Wahrheit (Gegenbeispiel)"
+  },
+  {
+   "mid": "6b09f9aeb252fd75",
+   "titel": "Alan Fitzpatrick – A Small Decline - M",
+   "zaehlung": [
+    0,
+    3,
+    127,
+    1
+   ],
+   "eins_material": 2,
+   "karte_von_s": 0.06,
+   "kick_beat": 2,
+   "kick_lage": 2,
+   "wahrheit": 2,
+   "hinweis": "Wahrheit = Handkorrektur von Andreas bzw. 'stumm' (6b09, 9b44); d976 ohne Wahrheit (Gegenbeispiel)"
+  },
+  {
+   "mid": "9b444bee7d0805b8",
+   "titel": "Alan Fitzpatrick – Paranoize - Adam Be",
+   "zaehlung": [
+    241,
+    14,
+    4,
+    7
+   ],
+   "eins_material": 0,
+   "karte_von_s": 0.05,
+   "kick_beat": 0,
+   "kick_lage": 0,
+   "wahrheit": 0,
+   "hinweis": "Wahrheit = Handkorrektur von Andreas bzw. 'stumm' (6b09, 9b44); d976 ohne Wahrheit (Gegenbeispiel)"
+  },
+  {
+   "mid": "d976d76d77d943c3",
+   "titel": "Perc – Antifunk",
+   "zaehlung": [
+    3,
+    225,
+    0,
+    2
+   ],
+   "eins_material": 1,
+   "karte_von_s": 4.54,
+   "kick_beat": 4,
+   "kick_lage": 0,
+   "wahrheit": null,
+   "hinweis": "Wahrheit = Handkorrektur von Andreas bzw. 'stumm' (6b09, 9b44); d976 ohne Wahrheit (Gegenbeispiel)"
+  }
+ ]
+}

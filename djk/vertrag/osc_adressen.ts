@@ -49,7 +49,7 @@ export const ADRESSEN = {
   '/k/loop/stopp': { typen: ',hsi', abschnitt: '4.9', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'box'], bereiche: { box: [1, 2] } },
   '/k/loop/raster': { typen: ',hsii', abschnitt: '4.9', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'box', 'versatz_frames'], bereiche: { box: [1, 2] } },
   '/k/loop/rec': { typen: ',hsis', abschnitt: '4.9', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'beats', 'name'], bereiche: {} },
-  '/k/fx': { typen: ',hsiidddddi', abschnitt: '4.10', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'einheit', 'art', 'beats', 'wet', 'param1', 'param2', 'param3', 'an'], bereiche: { einheit: [1, 2], art: [1, 4], wet: [0, 1], param1: [0, 1], param2: [0, 1], param3: [0, 1], an: [0, 1] } },
+  '/k/fx': { typen: ',hsiidddddi', abschnitt: '4.10', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'einheit', 'art', 'beats', 'wet', 'param1', 'param2', 'param3', 'an'], bereiche: { einheit: [1, 2], art: [1, 12], wet: [0, 1], param1: [0, 1], param2: [0, 1], param3: [0, 1], an: [0, 1] } },
   '/k/fx/zuweisung': { typen: ',hsisi', abschnitt: '4.10', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'einheit', 'kanal', 'an'], bereiche: { einheit: [1, 2], an: [0, 1] } },
   '/k/fx/routing': { typen: ',hsi', abschnitt: '4.10', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'routing'], bereiche: { routing: [0, 1] } },
   '/erz/quittung': { typen: ',iiiiiii', abschnitt: '4.8', richtung: 'vom_kern', nurPruefmodus: false, felder: ['strom', 'sendung', 'verworfen', 'verworfen_anderes_muster', 'eingefuegt', 'zu_spaet', 'ungehoert'], bereiche: { strom: [1, 16] } },
@@ -60,6 +60,7 @@ export const ADRESSEN = {
   '/zustand/kern': { typen: ',iihiiiiiiii', abschnitt: '5.4', richtung: 'vom_kern', nurPruefmodus: false, felder: ['generation', 'quantum', 'sample', 'frame_luecken', 'ausgelassene_perioden', 'cb_max_us', 'cb_p99_us', 'aufwach_max_us', 'stretcher_aktiv', 'befehle_wartend', 'ki_gestoppt'], bereiche: {} },
   '/zustand/deck': { typen: ',iisdidddfiifii', abschnitt: '5.5', richtung: 'vom_kern', nurPruefmodus: false, felder: ['deck', 'status', 'material_id', 'basis_bpm', 'fassung', 'quell_beat', 'beats_bis_ende', 'faktor', 'vorlauf_ms', 'hoerweg', 'stretcher_fuell', 'versatz_intern_ms', 'keylock_unterlauf', 'keylock_aufgegeben'], bereiche: { deck: [1, 4], stretcher_fuell: [-1, null] } },
   '/zustand/box': { typen: ',iiiiii', abschnitt: '5.5b', richtung: 'vom_kern', nurPruefmodus: false, felder: ['box', 'status', 'keylock_unterlauf', 'keylock_aufgegeben', 'keylock_ring_voll', 'keylock_kein_platz'], bereiche: { box: [1, 2] } },
+  '/zustand/komp': { typen: ',sf', abschnitt: '5.5c', richtung: 'vom_kern', nurPruefmodus: false, felder: ['kanal', 'gr_db'], bereiche: {} },
   '/pegel': { typen: ',sfffffff', abschnitt: '5.6', richtung: 'vom_kern', nurPruefmodus: false, felder: ['kanal', 'spitze_db', 'echtspitze_dbtp', 'lufs_m', 'lufs_s', 'band_tief_db', 'band_mitte_db', 'band_hoch_db'], bereiche: {} },
   '/e/regler': { typen: ',sfshd', abschnitt: '5.7', richtung: 'vom_kern', nurPruefmodus: false, felder: ['pfad', 'wert', 'halter', 'sample', 'beat'], bereiche: {} },
   '/e/hand': { typen: ',sfhd', abschnitt: '5.8', richtung: 'vom_kern', nurPruefmodus: false, felder: ['pfad', 'wert', 'sample', 'beat'], bereiche: {} },
@@ -80,7 +81,7 @@ export const ADRESSEN = {
   '/e/protokollfehler': { typen: ',ss', abschnitt: '5.9', richtung: 'vom_kern', nurPruefmodus: false, felder: ['adresse', 'grund'], bereiche: {} },
   '/nb': { typen: ',iiih', abschnitt: '5.10', richtung: 'von_notbahn', nurPruefmodus: false, felder: ['zustand', 'takte_in_schleife', 'generation_gesehen', 'w'], bereiche: {} },
   '/e/loop': { typen: ',iisiidf', abschnitt: '5.11', richtung: 'vom_kern', nurPruefmodus: false, felder: ['box', 'status', 'name', 'beats', 'fx_art', 'fx_beats', 'fx_wet'], bereiche: { box: [1, 2], status: [0, 5], fx_art: [0, 4] } },
-  '/e/fx': { typen: ',iidddddi', abschnitt: '5.12', richtung: 'vom_kern', nurPruefmodus: false, felder: ['einheit', 'art', 'beats', 'wet', 'param1', 'param2', 'param3', 'an'], bereiche: { einheit: [1, 2], art: [0, 4], an: [0, 1] } },
+  '/e/fx': { typen: ',iidddddi', abschnitt: '5.12', richtung: 'vom_kern', nurPruefmodus: false, felder: ['einheit', 'art', 'beats', 'wet', 'param1', 'param2', 'param3', 'an'], bereiche: { einheit: [1, 2], art: [0, 12], an: [0, 1] } },
   '/e/fx/zuweisung': { typen: ',isi', abschnitt: '5.12', richtung: 'vom_kern', nurPruefmodus: false, felder: ['einheit', 'kanal', 'an'], bereiche: { einheit: [1, 2], an: [0, 1] } },
   '/e/fx/routing': { typen: ',i', abschnitt: '5.12', richtung: 'vom_kern', nurPruefmodus: false, felder: ['routing'], bereiche: { routing: [0, 1] } },
   '/e/mitschnitt': { typen: ',siid', abschnitt: '5.11', richtung: 'vom_kern', nurPruefmodus: false, felder: ['name', 'beats', 'status', 'ab_beat'], bereiche: { status: [0, 1] } },
@@ -144,6 +145,7 @@ export interface Werte {
   '/zustand/kern': [generation: number, quantum: number, sample: bigint, frame_luecken: number, ausgelassene_perioden: number, cb_max_us: number, cb_p99_us: number, aufwach_max_us: number, stretcher_aktiv: number, befehle_wartend: number, ki_gestoppt: number];
   '/zustand/deck': [deck: number, status: number, material_id: string, basis_bpm: number, fassung: number, quell_beat: number, beats_bis_ende: number, faktor: number, vorlauf_ms: number, hoerweg: number, stretcher_fuell: number, versatz_intern_ms: number, keylock_unterlauf: number, keylock_aufgegeben: number];
   '/zustand/box': [box: number, status: number, keylock_unterlauf: number, keylock_aufgegeben: number, keylock_ring_voll: number, keylock_kein_platz: number];
+  '/zustand/komp': [kanal: string, gr_db: number];
   '/pegel': [kanal: string, spitze_db: number, echtspitze_dbtp: number, lufs_m: number, lufs_s: number, band_tief_db: number, band_mitte_db: number, band_hoch_db: number];
   '/e/regler': [pfad: string, wert: number, halter: string, sample: bigint, beat: number];
   '/e/hand': [pfad: string, wert: number, sample: bigint, beat: number];

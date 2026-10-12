@@ -1,3 +1,4 @@
+import pytest
 import base64
 from pathlib import Path
 
@@ -259,3 +260,115 @@ def test_notensteuerung_spielt_noten_ohne_surge_zustand(tmp_path):
     for art in ("lade", "zustand", "fahre"):
         r = s.bearbeite({"befehl": art, "pfad": "/x.fxp", "name": "a_filter1_cutoff", "bis": 1}, 0.0)
         assert r["ok"] is False and "sfz" in r["fehler"], r
+
+
+# --- RB-338 W1: VST3-Wirt (ParamSteuerung) ---
+from wirtsteuerung import ParamSteuerung  # noqa: E402
+
+
+class FakeVst3Host:
+    def __init__(self):
+        self.noten = []
+        self.namen = ["Volume", "Cutoff", "Resonance"]
+        self.werte = [0.5, 0.3, 0.0]
+        self.ranges = [{"def": w} for w in self.werte]
+
+    def send_midi_note(self, plugin, kanal, note, vel):
+        self.noten.append((note, vel))
+
+    def get_parameter_count(self, plugin):
+        return len(self.namen)
+
+    def get_parameter_info(self, plugin, i):
+        return {"name": self.namen[i]}
+
+    def get_parameter_ranges(self, plugin, i):
+        return self.ranges[i]
+
+    def set_parameter_value(self, plugin, i, wert):
+        self.werte[i] = wert
+
+    def get_current_parameter_value(self, plugin, i):
+        return self.werte[i]
+
+    def save_plugin_state(self, plugin, pfad):
+        with open(pfad, "w") as f:
+            f.write("<CARLA-PRESET/>")
+        return True
+
+
+def test_param_steuerung_note_und_aus():
+    h = FakeVst3Host()
+    st = ParamSteuerung(h)
+    assert st.bearbeite({"befehl": "note", "note": 36, "velocity": 110, "dauer": 0.5}, 10.0) == {"ok": True}
+    st.takt(10.4)
+    assert h.noten == [(36, 110)]
+    st.takt(10.6)
+    assert h.noten == [(36, 110), (36, 0)]
+
+
+def test_param_steuerung_lehnt_surge_befehle_ab():
+    st = ParamSteuerung(FakeVst3Host())
+    for art in ("lade", "fahre", "zustand"):
+        r = st.bearbeite({"befehl": art}, 0.0)
+        assert r["ok"] is False and "vst3" in r["fehler"]
+
+
+def test_param_setzt_normiert_per_name():
+    h = FakeVst3Host()
+    st = ParamSteuerung(h)
+    assert st.bearbeite({"befehl": "param", "name": "Cutoff", "wert": 0.75}, 0.0) == {"ok": True}
+    assert h.werte[1] == 0.75
+
+
+def test_param_lehnt_unbekannt_und_ausserhalb_ab():
+    st = ParamSteuerung(FakeVst3Host())
+    r = st.bearbeite({"befehl": "param", "name": "Gibtsnicht", "wert": 0.5}, 0.0)
+    assert r["ok"] is False and "Gibtsnicht" in r["fehler"]
+    r = st.bearbeite({"befehl": "param", "name": "Cutoff", "wert": 1.5}, 0.0)
+    assert r["ok"] is False and "0..1" in r["fehler"]
+
+
+def test_params_listet_namen_und_werte():
+    st = ParamSteuerung(FakeVst3Host())
+    assert st.bearbeite({"befehl": "params"}, 0.0) == {"ok": True, "params": {"Volume": 0.5, "Cutoff": 0.3, "Resonance": 0.0}}
+
+
+def test_param_steuerung_gleicht_vorgaben_beim_start_ab():
+    h = FakeVst3Host()
+    h.werte = [0.0, 0.0, 0.0]
+    h.ranges = [{"def": 0.71}, {"def": 0.63}, {"def": 0.3}]
+    h.get_parameter_ranges = lambda plugin, i: h.ranges[i]
+    st = ParamSteuerung(h)
+    assert st.bearbeite({"befehl": "params"}, 0.0)["params"] == {"Volume": 0.71, "Cutoff": 0.63, "Resonance": 0.3}
+
+
+def test_param_steuerung_kaputte_parameterliste_wirft_im_konstruktor():
+    """wirt.py fängt das und beendet mit Startfehler (rc 2, Status-Eintrag) statt mit Traceback."""
+    h = FakeVst3Host()
+    h.get_parameter_info = lambda plugin, i: (_ for _ in ()).throw(RuntimeError("kaputt"))
+    with pytest.raises(RuntimeError):
+        ParamSteuerung(h)
+
+
+def test_halte_ist_wie_bei_sfz_und_beendet_keine_note():
+    """server.ts cypherSpurenAbbrechen schickt bei Stop Cypher {halte, spur: klang-bass}: eine gehaltene Note darf nicht abbrechen."""
+    h = FakeVst3Host()
+    st = ParamSteuerung(h)
+    st.bearbeite({"befehl": "note", "note": 36, "velocity": 100, "dauer": 5.0}, 0.0)
+    h.noten.clear()
+    assert st.bearbeite({"befehl": "halte", "spur": "klang-bass"}, 1.0) == {"ok": True, "gehalten": 0}
+    assert h.noten == []
+    st.takt(10.0)
+    assert h.noten == [(36, 0)]  # das geplante Off der Note kommt weiter wie vorgesehen
+
+
+def test_panik_ist_ein_eigener_befehl_und_schickt_note_off_fuer_alle():
+    h = FakeVst3Host()
+    st = ParamSteuerung(h)
+    st.bearbeite({"befehl": "note", "note": 36, "velocity": 100, "dauer": 5.0}, 0.0)
+    h.noten.clear()
+    assert st.bearbeite({"befehl": "panik"}, 1.0) == {"ok": True, "gehalten": 128}
+    assert h.noten == [(n, 0) for n in range(128)]
+    st.takt(10.0)
+    assert len(h.noten) == 128  # das wartende Off der Note 36 ist verworfen, kein zweites

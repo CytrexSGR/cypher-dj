@@ -297,6 +297,17 @@ int main() {
   a.zyklen(42 * SPB);
   PRUEF(a.quittung(p7, 6));
 
+  // 7b) REVERB (art 5) und SPIRAL (art 12, beide 2026-10-11) nimmt auch der Stellwerk-Weg an, art 13 nicht (live gefunden: zweite Grenze c.nr > 4)
+  const int64_t p7r = a.fx(2, 5, 2.0, 0.5f, 0.5f, 0.5, 0.5, 0);
+  a.zyklen(std::llround(42.5 * SPB));
+  PRUEF(a.quittung(p7r, 3) && !a.quittung(p7r, 6));
+  const int64_t p7t = a.fx(2, 12, 1.0, 0.5f, 0.5f, 0.5, 0.5, 0);
+  a.zyklen(std::llround(42.75 * SPB));
+  PRUEF(a.quittung(p7t, 3) && !a.quittung(p7t, 6));   // SPIRAL, die höchste Art
+  const int64_t p7s = a.fx(2, 13, 2.0, 0.5f, 0.5f, 0.5, 0.5, 0);
+  a.zyklen(43 * SPB);
+  PRUEF(a.quittung(p7s, 6));
+
   // 8) Reihenfolge FX1 → FX2 mit einem nicht vertauschbaren Paar: FILTER (FX1, zeitvariant, Wet 1, LFO-Periode
   // 4 Beats) vor ECHO (FX2, 1 Beat, Wet 1, Rückkopplung 0). Läuft FILTER zuerst, ist die Wiederholung bei Beat 49 eine
   // verzögerte Kopie des schon gefilterten Klicks bei Beat 48: Verhältnis 1. Liefe ECHO zuerst, gingen Klick und

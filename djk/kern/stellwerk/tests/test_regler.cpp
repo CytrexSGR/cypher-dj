@@ -21,9 +21,10 @@ const ReglerDef& d(const char* pfad) {
 }  // namespace
 
 FALL(zahl_der_regler_und_kanaele) {
-  // 4 Decks x 21 (mit transport), 8 Erzeuger x 16, 2 Pads x 16, 4 Busse x 15 (ohne ziel), 17 globale (seit Keylock 3
-  // mit `keylock`): 321
-  PRUEFE_GLEICH(tab().anzahl(), 321);
+  // 4 Decks x 21 (mit transport), 8 Erzeuger x 16, 2 Pads x 16, 4 Busse x 15 (ohne ziel), 18 globale (seit Keylock 3
+  // mit `keylock`, seit 2026-10-10 mit `master/pfl`, seit 2026-10-11 mit `color/art` und `color/param`), dazu 14 Quellkanäle
+  // x 8 `komp/*` (2026-10-11, mit komp/sc): 436
+  PRUEFE_GLEICH(tab().anzahl(), 436);
   PRUEFE_GLEICH(tab().kanaele(), 20);
   PRUEFE_GLEICH(tab().kanal_suche("deck/1"), 0);
   PRUEFE_GLEICH(tab().kanal_suche("bus/4"), 17);
@@ -64,9 +65,9 @@ FALL(bereiche_vorgaben_schaltrampen) {
 
 FALL(wer_darf_nur_hand) {
   for (const char* p : {"bus/1/fader", "deck/1/ziel", "deck/1/xseite", "deck/1/pfl", "xfader", "master/pegel", "master/kleber", "cue/mix",
-                        "cue/pegel", "cue/split"})
+                        "cue/pegel", "cue/split", "master/pfl"})
     PRUEFE(d(p).nur_hand);
-  for (const char* p : {"deck/1/fader", "bus/1/trim", "erz/2/send/3", "fx/1/notenwert", "fx/4/rueckweg", "pad/2/eq/hoch", "duck/tiefe", "duck/release"})
+  for (const char* p : {"deck/1/fader", "bus/1/trim", "erz/2/send/3", "fx/1/notenwert", "fx/4/rueckweg", "pad/2/eq/hoch", "duck/tiefe", "duck/release", "color/art", "color/param", "erz/1/komp/schwelle", "pad/2/komp/an"})
     PRUEFE(!d(p).nur_hand);
 }
 

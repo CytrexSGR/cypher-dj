@@ -11,12 +11,13 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
+import { bewerte, type EnergieWunsch, type Merkmale } from './anschluss.ts';
 
 // Umgebung: CYPHERDJ_MEDIATHEK (sqlite, optional). Ungesetzt zeigt die Vorgabe auf eine Datei, die es
 // nicht gibt: die Mediathek-Routen antworten dann 503 mediathek_fehlt, nichts stürzt.
 export const MEDIATHEK_VORGABE = process.env.CYPHERDJ_MEDIATHEK || path.join(os.homedir(), '.local', 'share', 'cypherdj', 'mediathek', 'mediathek.sqlite');
 export const LIMIT_VORGABE = 50, LIMIT_MAX = 200;
-const FELDER = ['titel', 'kuenstler', 'mix', 'bpm', 'camelot', 'genre', 'typ'];
+const FELDER = ['titel', 'kuenstler', 'mix', 'bpm', 'camelot', 'energie', 'genre', 'typ'];
 const ALLE_MAX = 1500;       // bis hierhin werden alle Kandidaten-Werke zusammengeführt (gesamt exakt, nach Titel sortiert)
 const BLOCK = 300;           // Objekte je IN-Abfrage
 const MID = /^[0-9a-f]{16}$/;
@@ -34,17 +35,21 @@ export interface KlangTreffer {
   titel: string | null; dauer_s: number | null; bpm: number | null; camelot: string | null; einsatz: 'sofort' | 'werkstatt' | 'nur_live'; quelle: 'mediathek' | 'loopbib'; name?: string;
 }
 export interface Treffer {
-  werk_id: number; titel: string | null; kuenstler: string | null; mix: string | null; bpm: number | null; camelot: string | null;
+  werk_id: number; titel: string | null; kuenstler: string | null; mix: string | null; bpm: number | null; camelot: string | null; energie: number | null;
   genre: string | null; dauer_s: number | null; material_id: string | null; pfad_da: boolean; im_bestand: boolean;
   vorbereitung: string | null;
 }
 export interface Antwort { treffer: Treffer[]; gesamt: number; gesamt_genau: boolean }
+export interface AnschlussTreffer extends Treffer { punkte: number; zug: string | null; gruende: string[] }
+export interface AnschlussAntwort { lauf: { material_id: string; titel: string | null } & Merkmale; treffer: AnschlussTreffer[]; bewertet: number }
+const ANSCHLUSS_TTL_MS = 10 * 60 * 1000;
 
 interface Obj { sha: string; dauer_s: number | null; erst: string }
 interface Wertzeile { inhalt_sha256: string; feld: string; wert: string; quelle: string; erhoben_am: string }
 
 const maskiere = (s: string): string => `%${s.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 const wenig = (s: string): string => s.toLowerCase();
+const zahl = (s: string | undefined): number | null => { const n = Number(s); return s !== undefined && s !== '' && Number.isFinite(n) ? n : null; };
 
 export function parseBpm(roh: string): [number, number] {
   const m = /^\s*(\d+(?:[.,]\d+)?)\s*(?:-\s*(\d+(?:[.,]\d+)?))?\s*$/.exec(roh);
@@ -69,8 +74,9 @@ export function bestandIds(dir: string): Set<string> {
 }
 
 export interface PostenFelder {
-  titel: string | null; kuenstler: string | null; mix: string | null; bpm: number | null; camelot: string | null; genre: string | null;
+  titel: string | null; kuenstler: string | null; mix: string | null; bpm: number | null; camelot: string | null; energie: number | null; genre: string | null;
   dauer_s: number | null; pfad_da: boolean; bestand_mid: string | null;
+  typ: string | null;   // track | loop | oneshot | … (Art-Prüfung der Listen, wenn der Katalog fehlt)
 }
 
 export class Mediathek {
@@ -94,6 +100,29 @@ export class Mediathek {
       if (!l) throw new MediathekFehler(404, 'liste_unbekannt');
       const z = db.prepare('SELECT inhalt_sha256 FROM listen_eintrag WHERE liste_id = ? AND inhalt_sha256 IS NOT NULL ORDER BY position').all(id) as { inhalt_sha256: string }[];
       return { name: l.name, mids: [...new Set(z.map((r) => r.inhalt_sha256.slice(0, 16)))] };
+    } finally { db.close(); }
+  }
+
+  // Detail im Browser: alle gültigen Angaben (nicht ersetzt) der Objekte, Rang aufgelöst; je Feld der Gewinner zuerst (gilt)
+  angaben(shas: string[]): { feld: string; wert: string; quelle: string; erhoben_am: string; gilt: boolean }[] {
+    if (shas.length === 0) return [];
+    const db = this.oeffne();
+    try {
+      const z = db.prepare(`SELECT a.feld, a.wert, a.quelle, a.erhoben_am, coalesce(r.rang, 999) AS rang FROM angabe a LEFT JOIN rang r ON r.quelle = a.quelle
+        WHERE a.ersetzt_durch IS NULL AND a.inhalt_sha256 IN (${shas.map(() => '?').join(',')}) ORDER BY a.feld, rang, a.erhoben_am DESC`).all(...shas) as
+        { feld: string; wert: string; quelle: string; erhoben_am: string; rang: number }[];
+      const gesehen = new Set<string>();
+      return z.map((r) => { const gilt = !gesehen.has(r.feld); gesehen.add(r.feld); return { feld: r.feld, wert: r.wert, quelle: r.quelle, erhoben_am: r.erhoben_am, gilt }; });
+    } finally { db.close(); }
+  }
+
+  // Datei EINES Objekts auf diesem Host (Detail-Spalte, S5-Review B6): bevorzugt eine, die da ist, sonst die erste; null ohne Fundort
+  pfadVon(sha: string): string | null {
+    if (!/^[0-9a-f]{64}$/.test(sha)) return null;
+    const db = this.oeffne();
+    try {
+      const p = (db.prepare('SELECT pfad FROM fundort WHERE host = ? AND inhalt_sha256 = ? ORDER BY pfad').all(this.host, sha) as { pfad: string }[]).map((r) => r.pfad);
+      return p.find((x) => fs.existsSync(x)) ?? p[0] ?? null;
     } finally { db.close(); }
   }
 
@@ -130,14 +159,13 @@ export class Mediathek {
       const werteJe = new Map<string, Wertzeile[]>();
       for (const z of this.werte(db, alle)) { const l = werteJe.get(z.inhalt_sha256) ?? []; l.push(z); werteJe.set(z.inhalt_sha256, l); }
       const fund = this.fundorte(db, [...obj.values()].map((o) => o.sha));
-      const zahl = (s: string | undefined): number | null => { const n = Number(s); return s !== undefined && s !== '' && Number.isFinite(n) ? n : null; };
       for (const [m, o] of obj) {
         const shas = shasJe.get(m)!;
         const f = this.werkFelder(shas.flatMap((s) => werteJe.get(s) ?? []), rang);
         const bestandMid = shas.map((s) => s.slice(0, 16)).find((x) => bestand.has(x)) ?? null;
         const pfadDa = bestandMid !== null || (fund.get(o.sha) ?? []).some((p) => fs.existsSync(p));
-        aus.set(m, { titel: f.titel ?? null, kuenstler: f.kuenstler ?? null, mix: f.mix ?? null, bpm: zahl(f.bpm), camelot: f.camelot ?? null,
-          genre: f.genre ?? null, dauer_s: o.dauer_s, pfad_da: pfadDa, bestand_mid: bestandMid });
+        aus.set(m, { titel: f.titel ?? null, kuenstler: f.kuenstler ?? null, mix: f.mix ?? null, bpm: zahl(f.bpm), camelot: f.camelot ?? null, energie: zahl(f.energie),
+          genre: f.genre ?? null, dauer_s: o.dauer_s, pfad_da: pfadDa, bestand_mid: bestandMid, typ: f.typ ?? null });
       }
       return aus;
     } finally { db.close(); }
@@ -213,6 +241,16 @@ export class Mediathek {
     return new Map([...sets[0]].filter(([s]) => sets.every((m) => m.has(s))));
   }
 
+  // Ein Treffer aus Werk, Werk-Feldern und Objekten (Fassung nach waehleFassung); gemeinsam für suche() und anschluss()
+  private baueTreffer(werk: number, f: Record<string, string>, objs: Obj[], fund: Map<string, string[]>, bestand: Set<string>,
+    vorbereitung: (mid: string) => string | null): Treffer {
+    const fa = this.waehleFassung(objs, fund, bestand);
+    const mid = fa.obj ? fa.obj.sha.slice(0, 16) : null;
+    return { werk_id: werk, titel: f.titel ?? null, kuenstler: f.kuenstler ?? null, mix: f.mix ?? null, bpm: zahl(f.bpm), camelot: f.camelot ?? null, energie: zahl(f.energie),
+      genre: f.genre ?? null, dauer_s: fa.obj?.dauer_s ?? null, material_id: mid, pfad_da: fa.da, im_bestand: mid !== null && bestand.has(mid),
+      vorbereitung: mid !== null ? vorbereitung(mid) : null };
+  }
+
   // Alle Objekte der Werke, in Reihenfolge erstmals_gesehen, sha (objekt hat keinen Index auf werk_id; ein Durchlauf je Aufruf)
   private geschwister(db: DatabaseSync, werke: number[]): Map<number, Obj[]> {
     const m = new Map<number, Obj[]>();
@@ -262,15 +300,60 @@ export class Mediathek {
       const gesamt = genau ? angenommen.length : kandWerke.length;
       const wahl = angenommen.slice(0, limit);
       const fund = this.fundorte(db, wahl.flatMap((x) => werke.get(x.werk)!.map((o) => o.sha)));
-      const treffer = wahl.map(({ werk, f }): Treffer => {
-        const fa = this.waehleFassung(werke.get(werk)!, fund, bestand);
-        const mid = fa.obj ? fa.obj.sha.slice(0, 16) : null;
-        const zahl = (s: string | undefined): number | null => { const n = Number(s); return s !== undefined && s !== '' && Number.isFinite(n) ? n : null; };
-        return { werk_id: werk, titel: f.titel ?? null, kuenstler: f.kuenstler ?? null, mix: f.mix ?? null, bpm: zahl(f.bpm), camelot: f.camelot ?? null,
-          genre: f.genre ?? null, dauer_s: fa.obj?.dauer_s ?? null, material_id: mid, pfad_da: fa.da, im_bestand: mid !== null && bestand.has(mid),
-          vorbereitung: mid !== null ? vorbereitung(mid) : null };
-      });
+      const treffer = wahl.map(({ werk, f }) => this.baueTreffer(werk, f, werke.get(werk)!, fund, bestand, vorbereitung));
       return { treffer, gesamt, gesamt_genau: genau };
+    } finally { db.close(); }
+  }
+
+  private trackCache: { bis: number; stand: number; werke: Map<number, { f: Record<string, string>; objs: Obj[] }> } | null = null;
+
+  // Alle Track-Werke mit ihren Werk-Feldern (Regeln wie suche()). Zwischengespeichert, bis 10 min um sind oder stand() (mtime von DB und WAL) sich ändert.
+  private trackFelder(db: DatabaseSync): Map<number, { f: Record<string, string>; objs: Obj[] }> {
+    const stand = this.stand();
+    if (this.trackCache && this.trackCache.bis > Date.now() && this.trackCache.stand === stand) return this.trackCache.werke;
+    const rang = this.rang(db);
+    const alle = [...new Set(this.kandidaten(db, {}).values())].sort((x, y) => x - y);
+    const aus = new Map<number, { f: Record<string, string>; objs: Obj[] }>();
+    for (let i = 0; i < alle.length; i += ALLE_MAX) {
+      const block = alle.slice(i, i + ALLE_MAX);
+      const geschw = this.geschwister(db, block);
+      const werkVon = new Map<string, number>();
+      for (const w of block) for (const o of geschw.get(w) ?? []) werkVon.set(o.sha, w);
+      const je = new Map<number, Wertzeile[]>();
+      for (const z of this.werte(db, [...werkVon.keys()])) { const w = werkVon.get(z.inhalt_sha256)!; const l = je.get(w) ?? []; l.push(z); je.set(w, l); }
+      for (const w of block) {
+        const f = this.werkFelder(je.get(w) ?? [], rang);
+        if (f.typ === 'track') aus.set(w, { f, objs: geschw.get(w) ?? [] });
+      }
+    }
+    this.trackCache = { bis: Date.now() + ANSCHLUSS_TTL_MS, stand, werke: aus };
+    return aus;
+  }
+
+  anschluss(mid: string, opt: { fenster: number; energie: EnergieWunsch; limit: number }, bestand: Set<string>,
+    vorbereitung: (mid: string) => string | null): AnschlussAntwort {
+    if (!MID.test(mid)) throw new MediathekFehler(400, 'material_id_ungueltig');
+    const db = this.oeffne();
+    try {
+      const obj = db.prepare('SELECT werk_id FROM objekt WHERE inhalt_sha256 >= ? AND inhalt_sha256 < ?').all(mid, `${mid}g`) as { werk_id: number | null }[];
+      if (obj.length !== 1) throw new MediathekFehler(404, 'material_unbekannt');
+      const werke = this.trackFelder(db);
+      const eigen = obj[0].werk_id === null ? undefined : werke.get(obj[0].werk_id);
+      if (!eigen) throw new MediathekFehler(409, 'kein_track');   // bekannt, aber Loop, Klang oder erzeugt (12 von 45 im Bestand DJ-Maschine)
+      const merk = (f: Record<string, string>): Merkmale => ({ bpm: zahl(f.bpm), camelot: f.camelot ?? null, energie: zahl(f.energie), genre: f.genre ?? null });
+      const lauf = merk(eigen.f);
+      const bewertet: { werk: number; f: Record<string, string>; b: NonNullable<ReturnType<typeof bewerte>> }[] = [];
+      for (const [w, { f }] of werke) {
+        if (w === obj[0].werk_id) continue;
+        const b = bewerte(lauf, merk(f), opt);
+        if (b) bewertet.push({ werk: w, f, b });
+      }
+      bewertet.sort((x, y) => y.b.punkte - x.b.punkte || x.werk - y.werk);
+      const wahl = bewertet.slice(0, opt.limit);
+      const fund = this.fundorte(db, wahl.flatMap((x) => werke.get(x.werk)!.objs.map((o) => o.sha)));
+      const treffer = wahl.map(({ werk, f, b }): AnschlussTreffer =>
+        ({ ...this.baueTreffer(werk, f, werke.get(werk)!.objs, fund, bestand, vorbereitung), punkte: b.punkte, zug: b.zug, gruende: b.gruende }));
+      return { lauf: { material_id: mid, titel: eigen.f.titel ?? null, ...lauf }, treffer, bewertet: bewertet.length };
     } finally { db.close(); }
   }
 
@@ -381,9 +464,79 @@ export class Mediathek {
 
 // ---- Vorbereiten: Kindprozess werkstatt.einzeln, höchstens einer je material_id, höchstens zwei zugleich ----
 
-export interface VorbereitStand { status: 'laeuft' | 'neu' | 'vorhanden' | 'fehler'; grund?: string }
+// Fortschritt (Zeilen `@@fortschritt {json}` auf stderr des Einlesers, djk/werkstatt/werkstatt/fortschritt.py): nur was die Werkstatt
+// wirklich meldet. prozent ist null, wo kein Werkzeug Prozente liefert. haengt = länger als haengtNachMs weder Meldung noch wachsende CPU-Zeit des Prozessbaums.
+export interface VorbereitStand {
+  status: 'laeuft' | 'neu' | 'vorhanden' | 'fehler'; grund?: string;
+  stufe?: number; von?: number; name?: string; prozent?: number | null; teil?: string | null;   // letzte gemeldete Stufe (auch bei fehler: wo es riss)
+  vergangen_s?: number; ohne_fortschritt_s?: number; haengt?: boolean;                          // nur während 'laeuft'
+}
+interface Fortschritt { stufe: number; von: number; name: string; prozent: number | null; teil: string | null }
+const FORTSCHRITT_PRAEFIX = '@@fortschritt ';
+// Eine Zeile kann Teilzeilen davor haben und mehrere Meldungen tragen: an jedem Präfix schneiden, aus jedem Stück genau EIN JSON-Objekt
+// (Klammerzählung, Zeichenketten beachtet) lesen. Fremdtext dahinter, auch mit `}`, schluckt die Meldung nicht. Stufe nur in 1..von.
+function ersterObjektText(t: string): string | null {
+  if (t[0] !== '{') return null;
+  let tiefe = 0, inStr = false;
+  for (let i = 0; i < t.length; i++) {
+    const c = t[i];
+    if (inStr) { if (c === '\\') i++; else if (c === '"') inStr = false; continue; }
+    if (c === '"') inStr = true; else if (c === '{') tiefe++; else if (c === '}' && --tiefe === 0) return t.slice(0, i + 1);
+  }
+  return null;
+}
+export function liesFortschrittsZeichen(zeile: string): Fortschritt[] {
+  const aus: Fortschritt[] = [];
+  for (const stueck of zeile.split(FORTSCHRITT_PRAEFIX).slice(1)) {
+    const text = ersterObjektText(stueck);
+    if (text === null) continue;
+    let j: Record<string, unknown>;
+    try { j = JSON.parse(text) as Record<string, unknown>; } catch { continue; }
+    if (!j || typeof j !== 'object') continue;
+    if (!Number.isInteger(j.stufe) || !Number.isInteger(j.von) || typeof j.name !== 'string') continue;
+    if ((j.von as number) < 1 || (j.stufe as number) < 1 || (j.stufe as number) > (j.von as number)) continue;
+    aus.push({ stufe: j.stufe as number, von: j.von as number, name: j.name,
+      prozent: typeof j.prozent === 'number' ? j.prozent : null, teil: typeof j.teil === 'string' ? j.teil : null });
+  }
+  return aus;
+}
+
+// Lebenszeichen von aussen: CPU-Zeit (Ticks) des Prozesses und aller lebenden Nachfahren aus /proc, dazu die schon eingesammelten
+// Kinder (cutime/cstime). Wächst sie, arbeitet die Werkstatt, auch wenn sie lange nichts meldet (Essentia hält den GIL, ffmpeg/flac
+// laufen als Kind). Ein schlafender oder blockierter Baum wächst nicht. Nicht lesbar (Prozess weg) = null.
+export function cpuTicksBaum(pid: number, lies: (pfad: string) => string = (p) => fs.readFileSync(p, 'utf8')): number | null {
+  const eigene = (p: number): number | null => {
+    try {
+      const st = lies(`/proc/${p}/stat`);
+      const f = st.slice(st.lastIndexOf(')') + 2).split(' ');   // ab Feld 3 (state); utime = Feld 14
+      const z = [11, 12, 13, 14].map((i) => Number(f[i]));
+      return z.every(Number.isFinite) ? z[0] + z[1] + z[2] + z[3] : null;
+    } catch { return null; }
+  };
+  const kinder = (p: number): number[] => {
+    const aus: number[] = [];
+    try {
+      for (const t of fs.readdirSync(`/proc/${p}/task`)) {
+        try { for (const k of lies(`/proc/${p}/task/${t}/children`).split(/\s+/)) if (k !== '') aus.push(Number(k)); } catch { /* Thread weg */ }
+      }
+    } catch { /* Prozess weg */ }
+    return aus;
+  };
+  const wurzel = eigene(pid);
+  if (wurzel === null) return null;
+  let summe = wurzel;
+  const offen = kinder(pid), gesehen = new Set<number>([pid]);
+  for (let p = offen.pop(); p !== undefined && gesehen.size < 512; p = offen.pop()) {
+    if (gesehen.has(p)) continue;
+    gesehen.add(p);
+    summe += eigene(p) ?? 0;
+    offen.push(...kinder(p));
+  }
+  return summe;
+}
 export interface VorbereiterOptionen {
   python: string; cwd: string; bestand: string; modul?: string; maxGleichzeitig?: number; zeitlimitMs?: number;
+  haengtNachMs?: number; jetzt?: () => number;   // Uhr (ms) für vergangene Zeit und „hängt“; Tests setzen sie
   log?: (zeile: Record<string, unknown>) => void;
 }
 
@@ -393,13 +546,27 @@ function imPfad(prog: string): boolean {
 
 export class Vorbereiter {
   private readonly staende = new Map<string, VorbereitStand>();
+  private readonly fortschritte = new Map<string, { start: number; letzte: number; f: Fortschritt | null; cpu: number }>();
   private readonly laeufe = new Map<string, ChildProcess>();
   private readonly max: number;
   private readonly ionice = imPfad('ionice');
   private readonly o: VorbereiterOptionen;
   constructor(o: VorbereiterOptionen) { this.o = o; this.max = o.maxGleichzeitig ?? 2; }
 
-  stand(mid: string): VorbereitStand | null { return this.staende.get(mid) ?? null; }
+  stand(mid: string): VorbereitStand | null {
+    const s = this.staende.get(mid);
+    if (s === undefined) return null;
+    const f = this.fortschritte.get(mid);
+    if (f === undefined) return s;
+    if (s.status !== 'laeuft') return s;
+    const jetzt = (this.o.jetzt ?? Date.now)();
+    const pid = this.laeufe.get(mid)?.pid;
+    const cpu = pid === undefined ? null : cpuTicksBaum(pid);   // null (Prozess weg, /proc unlesbar): kein Lebenszeichen
+    if (cpu !== null && cpu > f.cpu) { f.cpu = cpu; f.letzte = jetzt; }
+    const ohne = jetzt - f.letzte;
+    return { status: 'laeuft', ...(f.f ?? {}), vergangen_s: Math.floor((jetzt - f.start) / 1000), ohne_fortschritt_s: Math.floor(ohne / 1000),
+      haengt: ohne >= (this.o.haengtNachMs ?? 60_000) };
+  }
   // Text für die Trefferliste: null | "laeuft" | "fehler:<grund>"
   anzeige(mid: string): string | null {
     const s = this.staende.get(mid);
@@ -415,13 +582,25 @@ export class Vorbereiter {
     const kind = spawn('nice', args, { cwd: this.o.cwd, stdio: ['ignore', 'pipe', 'pipe'] });   // keine Shell: Titel und Pfad bleiben Argumente
     this.laeufe.set(mid, kind);
     this.staende.set(mid, { status: 'laeuft' });
-    let aus = '', fehl = '', fertig = false;
+    const jetzt0 = (this.o.jetzt ?? Date.now)();
+    const fort = { start: jetzt0, letzte: jetzt0, f: null as Fortschritt | null, cpu: 0 };
+    this.fortschritte.set(mid, fort);
+    let aus = '', fehl = '', fertig = false, zeilenRest = '';
     kind.stdout.on('data', (d: Buffer) => { aus += d; if (aus.length > 65536) aus = aus.slice(-32768); });
-    kind.stderr.on('data', (d: Buffer) => { fehl += d; if (fehl.length > 8192) fehl = fehl.slice(-4096); });
+    kind.stderr.on('data', (d: Buffer) => {
+      const teile = (zeilenRest + d.toString('utf8')).split(/\r\n|\r|\n/);
+      zeilenRest = (teile.pop() ?? '').slice(-4096);
+      for (const z of teile) {
+        const zeichen = z.includes(FORTSCHRITT_PRAEFIX) ? liesFortschrittsZeichen(z) : [];
+        for (const f of zeichen) { fort.f = f; fort.letzte = (this.o.jetzt ?? Date.now)(); }
+        if (zeichen.length === 0) { fehl += z + '\n'; if (fehl.length > 8192) fehl = fehl.slice(-4096); }
+      }
+    });
     const ende = (stand: VorbereitStand): void => {
       if (fertig) return;
       fertig = true; clearTimeout(zeit);
-      this.laeufe.delete(mid); this.staende.set(mid, stand);
+      this.laeufe.delete(mid); this.fortschritte.delete(mid);
+      this.staende.set(mid, stand.status === 'fehler' && fort.f ? { ...stand, stufe: fort.f.stufe, von: fort.f.von, name: fort.f.name } : stand);
       this.o.log?.({ typ: 'vorbereitet', material_id: mid, status: stand.status, grund: stand.grund });
     };
     const zeit = setTimeout(() => { kind.kill('SIGKILL'); ende({ status: 'fehler', grund: 'zeitlimit' }); }, this.o.zeitlimitMs ?? 20 * 60_000);

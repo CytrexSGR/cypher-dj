@@ -6,6 +6,8 @@ erster_schlag_frame + q * 60 / basis_bpm * 48000 (starres Raster, §13.1). Vor d
 letzten Eintrag gilt das Randtempo der Karte; daraus folgen erster_schlag_frame und die Ziellaenge.
 Float rein, Float raus; die -12 dB Luft (08 NP K5) setzt der Aufrufer vorher (pegel.py). Die
 Stimmungskorrektur laeuft im selben Aufruf (-p in Halbtoenen, §12.3)."""
+import os
+import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -30,6 +32,9 @@ class Timemap:
 
 ANKER_ABSTAND_BEATS = 2.0   # Planprobe 15 (2026-09-23): Anker je Ziel-Beat lassen R3 driften
                             # (konst134: 0,57 ms RMS, -1,81 ms/min), je 2 Ziel-Beats starr (0,14 ms RMS)
+
+
+ENDE_TOLERANZ_S = 0.05      # so weit darf der letzte Karteneintrag hinter dem Dateiende liegen (Andreas-Entscheid 2026-10-11)
 
 
 def ausduennen(ziel, mindest_frames):
@@ -60,7 +65,17 @@ def timemap(karte, basis_bpm, quell_frames, abstand_beats=ANKER_ABSTAND_BEATS):
     quelle = np.rint(s * SR).astype(np.int64)
     ziel = (erster + np.rint(q * fpb)).astype(np.int64)
     if quelle[-1] >= quell_frames:
-        raise ValueError("Karte reicht ueber das Dateiende")
+        # beat_this setzt den letzten Schlag aufs 20-ms-Raster direkt ans Dateiende, die Glaettung kann ihn ein paar
+        # Millisekunden darueber schieben (d70e478c: 315 Frames). Eintraege hinter dem Ende fallen als Anker weg; das
+        # Randtempo (per_ende) bleibt das der vollen Karte. Liegt der letzte mindestens ENDE_TOLERANZ_S dahinter (20 ms
+        # Raster + Glaettung erklaeren hoechstens ein paar Millisekunden, gemessen 6,6 und 9 ms), stimmt Karte oder
+        # Laenge nicht: weiter Fehler.
+        if quelle[-1] - quell_frames >= ENDE_TOLERANZ_S * SR:
+            raise ValueError("Karte reicht ueber das Dateiende")
+        drin = quelle < quell_frames
+        if drin.sum() < 2:
+            raise ValueError("Karte reicht ueber das Dateiende")
+        quelle, ziel = quelle[drin], ziel[drin]
     ende = int(ziel[-1] + round((quell_frames - quelle[-1]) / (per_ende * SR) * fpb))
     i = ausduennen(ziel, abstand_beats * fpb - 0.5)
     return Timemap(quelle[i], ziel[i], erster, ende)
@@ -72,9 +87,11 @@ def schreibe_timemap(tm, pfad):
             f.write(f"{int(a)} {int(b)}\n")
 
 
-def warp(ein_wav, aus_wav, tm, korrektur_cent=0.0, mit_timemap=True):
+def warp(ein_wav, aus_wav, tm, korrektur_cent=0.0, mit_timemap=True, melde=None):
     """rubberband R3 offline. ein_wav: Float-WAV 48 kHz Stereo (mit Luft). mit_timemap=False ist der
-    FEHLERFALL aus b_timemap (`ohne_r3`: nur Zieldauer). Rueckgabe: Befehl als Liste."""
+    FEHLERFALL aus b_timemap (`ohne_r3`: nur Zieldauer). Rueckgabe: Befehl als Liste.
+    melde(prozent): rubberband laeuft dann ohne -q; seine eigenen Prozentzeilen (zwei Durchgaenge, Studying und
+    Processing, je 0..100) werden zu 0..100 ueber beide Durchgaenge."""
     aus_wav = Path(aus_wav)
     cmd = ["rubberband", "-3", "-q", "--ignore-clipping"]
     if mit_timemap:
@@ -85,8 +102,40 @@ def warp(ein_wav, aus_wav, tm, korrektur_cent=0.0, mit_timemap=True):
     if korrektur_cent:
         cmd += ["-p", f"{korrektur_cent / 100.0:.6f}"]
     cmd += [str(ein_wav), str(aus_wav)]
-    subprocess.run(cmd, check=True, capture_output=True)
+    if melde is None:
+        subprocess.run(cmd, check=True, capture_output=True)
+    else:
+        _mit_prozenten([c for c in cmd if c != "-q"], melde)
     return cmd
+
+
+def _mit_prozenten(cmd, melde):
+    p = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    durchgang, rest, letzter, text = 1, b"", -1, b""
+    while True:
+        stueck = os.read(p.stderr.fileno(), 4096)
+        if not stueck:
+            break
+        text = (text + stueck)[-4096:]
+        rest += stueck
+        teile = re.split(rb"[\r\n]", rest)
+        rest = teile.pop()
+        for z in teile:
+            z = z.strip()
+            if z.startswith(b"Pass 2"):
+                durchgang = 2
+            m = re.fullmatch(rb"(\d{1,3})%", z)
+            if m:
+                wert = ((durchgang - 1) * 100 + int(m.group(1))) / 2.0
+                if wert > letzter:
+                    letzter = wert
+                    melde(wert)
+    rc = p.wait()
+    p.stderr.close()
+    if rc != 0:
+        raise subprocess.CalledProcessError(rc, cmd, stderr=text)
+    if letzter < 100.0:
+        melde(100.0)                                  # rubberband endete mit 0: fertig, auch wenn die letzte Zeile 99 war
 
 
 def lies_float_wav(pfad):

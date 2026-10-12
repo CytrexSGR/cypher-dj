@@ -2503,9 +2503,17 @@ void test_platz_generation() {
   int64_t s = 0;
   float l[1024], r[1024];
   int belegt_max = 0;
+  bool in_leck = false;
+  int belegt_leck_blk = 0;
+  auto jetzt_ns_p20 = [] {
+    timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (int64_t)ts.tv_sec * 1000000000LL + ts.tv_nsec;
+  };
   auto block = [&](int nb = B) {
     deck.block(s, nb, l, r, 0);
     belegt_max = std::max(belegt_max, deck.keylock_verliehen());
+    if (in_leck) belegt_leck_blk = std::max(belegt_leck_blk, deck.keylock_verliehen());
     s += nb;
     std::this_thread::sleep_for(std::chrono::microseconds(TAKT_US));
   };
@@ -2582,6 +2590,59 @@ void test_platz_generation() {
     while (deck.rueckgabe()) {
     }
   }
+  // Leck-Schwanz (Fix des Wackelns, 11.10.): die Zufallsfolge oben ist für das Leck kein Maß. Sie streut mit der Fadenfolge: ihre
+  // sofortigen Ereignisse und Neuansätze geben abgelöste Bänder über den Epochenweg frei, der höchste Stand der Leihe lag mit
+  // PLAN_LEIHE_ALT_BLEIBT bei 5 bis 8 (gemessen 11.10., n=20, ruhig: 5 von 20 Läufen erreichten 8, die übrigen 15 blieben grün).
+  // Darum danach eine Folge von Plänen auf dem glücklichen Pfad ohne jedes Ereignis, das eine Epoche vergibt: je getragener Plan löst
+  // ein Band im Wechsel ab (zweiter Freigabeweg). Mit dem Weg gibt der Vorbereiter es binnen weniger Blöcke frei; ohne ihn bleibt
+  // jedes dieser Bänder bis zur nächsten Epoche, die Leihe wird voll, unabhängig davon, wie die Fäden laufen. Nach jedem getragenen
+  // Plan wartet der Test, bis die Leihe höchstens 2 Bänder trägt oder 3 s Wanduhr um sind (Frist, nicht Takt: ein ausgehungerter
+  // Faden macht den Lauf nur langsamer, nicht rot). Der Schwanz zählt nur getragene Pläne (Mindestzahl unten).
+  int n_leck_trug = 0, n_leck_versuch = 0;
+  {
+    in_leck = true;
+    auto warte_frei = [&] {
+      const int64_t t_ende = jetzt_ns_p20() + 3'000'000'000LL;
+      while (deck.keylock_verliehen() > 2 && jetzt_ns_p20() < t_ende) block();
+    };
+    for (int j = 0; j < 30; ++j) block();
+    while (deck.rueckgabe()) {
+    }
+    warte_frei();
+    while (n_leck_trug < 2 * cdj::DECK_KEYLOCK_BAENDER && n_leck_versuch < 6 * cdj::DECK_KEYLOCK_BAENDER) {
+      ++n_leck_versuch;
+      if (!deck.laeuft()) {
+        deck.start(s, (int64_t)(z() % 100) * 22500);
+        for (int j = 0; j < 30; ++j) block();
+      }
+      if (!deck.keylock_an()) deck.keylock(s, true);
+      const double b = std::ceil(k.beat_at((double)(s + 7000 + (int64_t)(z() % 6000))));
+      const int64_t e = std::llround(k.sample_at(b));
+      cdj::Deck::KlAktion a;
+      a.id = ++id;
+      a.ab_beat = b;
+      a.art = cdj::Deck::KL_HOTCUE;
+      // phasentreu um Vielfache von 4 Beats (wie P13: kohärent, der Plan bleibt ein Wechsel in der Quelle und vergibt keine Epoche);
+      // ein beliebiger Versatz wie oben macht aus dem Plan einen Neuansatz, und der Epochenweg gibt das Altband frei
+      const int64_t dd0 = 4 * (1 + (int64_t)(z() % 5)) * 22500;
+      const int64_t dd = (n_leck_versuch % 2 && deck.frame_bei(e) > 6 * dd0) ? -dd0 : dd0;
+      while (s + B <= e) {
+        a.s_t = e;
+        a.f_neu = std::max<int64_t>(0, deck.frame_bei(e) + dd);
+        deck.kl_plane(s, a);
+        block();
+      }
+      if (s < e) block((int)(e - s));
+      const uint64_t ok0 = deck.keylock_geplant_ok();
+      deck.setze_kopf(e, a.f_neu, a.id, a.ab_beat);
+      if (deck.keylock_geplant_ok() > ok0) {
+        ++n_leck_trug;
+      }
+      while (deck.rueckgabe()) {
+      }
+    }
+    in_leck = false;
+  }
   for (int j = 0; j < 200; ++j) block();
   halt.store(true, std::memory_order_release);
   vorbereiter.join();
@@ -2622,6 +2683,12 @@ void test_platz_generation() {
   // und die Leihe nie voll (gemessen 09.10.: 4 im Fix-Stand, 8 = voll mit PLAN_LEIHE_ALT_BLEIBT, das am Ende sonst unsichtbar bleibt)
   PRUEF(deck.keylock_verliehen() <= 1 && deck.keylock_kein_platz() == 0 && belegt_max < cdj::DECK_KEYLOCK_BAENDER);
   PRUEF(deck.keylock_abbruch_zurueck() + deck.keylock_abbruch_bruecke() + deck.keylock_abbruch_gespielt() + deck.keylock_abbruch_frei() > 0);
+  // Leck-Schwanz: genug getragene Pläne (sonst misst er nichts), und die Leihe höchstens 4 zugleich (P13: 3 im glücklichen Pfad, hier eins
+  // mehr für den Plan in Flug); PLAN_LEIHE_ALT_BLEIBT füllt sie in jedem Lauf (je getragenem Plan ein Band mehr).
+  std::printf("  P20 Leck-Schwanz: %d getragene Pläne in %d Versuchen, Leihe höchstens %d zugleich, kein_platz %llu\n", n_leck_trug,
+              n_leck_versuch, belegt_leck_blk, (unsigned long long)deck.keylock_kein_platz());
+  PRUEF(n_leck_trug >= cdj::DECK_KEYLOCK_BAENDER);
+  PRUEF(belegt_leck_blk <= 4);
   ergebnis("geplant_platz_generation");
 }
 

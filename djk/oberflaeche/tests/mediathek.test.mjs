@@ -1,6 +1,6 @@
 // Mediathek T2 (Plan 2026-10-03-mediathek-anbindung): GET /mediathek, POST+GET /mediathek/vorbereiten
 // gegen eine künstliche Mediathek-DB (Schema aus cypher-mediathek/mediathek/db.py) und einen Attrappen-Einleser
-// (ein Shell-Skript als `python`, gibt die JSON-Zeile des Vertrags von werkstatt.einzeln aus). Instanz h, Port 55300, kein Kern-Ton.
+// (ein Shell-Skript als `python`, gibt die JSON-Zeile des Vertrags von werkstatt.einzeln aus). Instanz aus CYPHERDJ_TEST_INSTANZ (Vorgabe h), kein Kern-Ton.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -56,6 +56,7 @@ test('Mediathek: Rang gewinnt über die Objekte eines Werks, bei Gleichstand das
   assert.equal(w1.bpm, 127.5, 'gleicher Rang: das jüngere erhoben_am');
   assert.equal(w1.genre, 'Tech House', 'gleicher Rang: das jüngere erhoben_am');
   assert.equal(w1.camelot, '8A');
+  assert.equal(w1.energie, 7, 'tag_mik (Rang 3) schlägt analyse (Rang 7) über die Objekte des Werks');
   assert.equal(w1.material_id, mid(2), 'Fassung = die mit lokal vorhandener Datei (Objekt 2), nicht die erste (Objekt 1)');
   assert.equal(w1.dauer_s, 305.0);
   assert.equal(w1.pfad_da, true);
@@ -69,6 +70,7 @@ test('Mediathek: pfad_da false bei fehlender Datei und bei Fundort eines fremden
   const w2 = (await hole(s.url, '/mediathek?text=house')).j.treffer.find((x) => x.werk_id === 2);
   assert.equal(w2.pfad_da, false, 'lokaler Pfad fehlt; der Pfad des fremden Hosts existiert, zählt aber nicht');
   assert.equal(w2.material_id, mid(3));
+  assert.equal(w2.energie, 5, 'Werk ohne MIK: Energie aus der Analyse');
   fs.writeFileSync(path.join(m.daten, 'gibt-es-nicht-w2.mp3'), 'x');
   const danach = (await hole(s.url, '/mediathek?text=house')).j.treffer.find((x) => x.werk_id === 2);
   assert.equal(danach.pfad_da, true, 'jeder Aufruf prüft neu, kein Schnappschuss');
@@ -115,7 +117,10 @@ test('Vorbereiten: Doppel-POST → ein Lauf; Befehlszeile ohne Shell; Stand laeu
   const [r1, r2] = await Promise.all([post(s.url, '/mediathek/vorbereiten', { material_id: mid(5) }), post(s.url, '/mediathek/vorbereiten', { material_id: mid(5) })]);
   assert.deepEqual(r1, { code: 202, j: { material_id: mid(5), status: 'laeuft' } });
   assert.deepEqual(r2, { code: 202, j: { material_id: mid(5), status: 'laeuft' } });
-  assert.deepEqual(await hole(s.url, `/mediathek/vorbereiten?material_id=${mid(5)}`), { code: 200, j: { status: 'laeuft' } });
+  const lauf = (await hole(s.url, `/mediathek/vorbereiten?material_id=${mid(5)}`));
+  assert.equal(lauf.code, 200);
+  assert.equal(lauf.j.status, 'laeuft');
+  assert.equal(typeof lauf.j.vergangen_s, 'number', 'der Stand nennt die vergangene Zeit');
   const liste = (await hole(s.url, '/mediathek?text=gamma')).j.treffer[0];
   assert.equal(liste.vorbereitung, 'laeuft', 'die Trefferliste zeigt den Lauf');
   for (let i = 0; i < 100 && (await hole(s.url, `/mediathek/vorbereiten?material_id=${mid(5)}`)).j.status === 'laeuft'; i++) await warte(50);
@@ -375,4 +380,71 @@ test('Klänge: limit=abc fällt auf 30, nicht auf 50', async (t) => {
   const s = await stapel(t, { mediathek: m.db });
   assert.equal((await hole(s.url, '/klaenge?limit=abc')).j.treffer.length, 30);
   assert.equal((await hole(s.url, '/klaenge?limit=')).j.treffer.length, 30);
+});
+
+// Anschluss (Plan 2026-10-10-anschluss-vorauswahl, T3). Zusatz-Werke 5–8 zur Test-Mediathek; Lauf ist Werk 1
+// (Werk-Felder: bpm 127.5, camelot 8A, energie 7 von tag_mik, genre Tech House).
+function anschlussWerke(dbPfad) {
+  const db = new DatabaseSync(dbPfad);
+  let id = db.prepare('SELECT max(id) AS m FROM angabe').get().m;
+  const neu = (n, werk, felder) => {
+    db.prepare('INSERT INTO werk VALUES (?,?,?)').run(werk, 'test', `w${werk}`);
+    db.prepare('INSERT INTO objekt(inhalt_sha256, werk_id, dauer_s, erstmals_gesehen) VALUES (?,?,?,?)').run(sha(n), werk, 300, '2026-01-01');
+    for (const [feld, wert] of Object.entries({ typ: 'track', ...felder }))
+      db.prepare('INSERT INTO angabe(id, inhalt_sha256, feld, wert, quelle, erhoben_am) VALUES (?,?,?,?,?,?)').run(++id, sha(n), feld, wert, 'tag', '2026-01-01');
+  };
+  neu(21, 5, { titel: 'Nachbar', bpm: '128', camelot: '9A', genre: 'Tech House', energie: '6' });   // bester
+  neu(22, 6, { titel: 'Parallel', bpm: '126', camelot: '8B', genre: 'Techno', energie: '8' });       // zweiter
+  neu(23, 7, { titel: 'Gegenteil', bpm: '127', camelot: '11B', genre: 'Tech House', energie: '7' }); // raus: Gegenteil
+  neu(24, 8, { titel: 'Zu schnell', bpm: '150', camelot: '8A', genre: 'Tech House', energie: '7' }); // raus: Tempo
+  db.close();
+}
+
+test('Anschluss: bester zuerst, Gegenteil/Tempo/eigenes Werk raus, Begründung dabei; Fehlerfälle', async (t) => {
+  const m = tmpMt(t);
+  anschlussWerke(m.db);
+  const s = await stapel(t, { mediathek: m.db });
+  const r = await hole(s.url, `/mediathek/anschluss?material_id=${mid(2)}`);
+  assert.equal(r.code, 200, JSON.stringify(r.j));
+  assert.deepEqual(r.j.treffer.map((x) => x.titel), ['Nachbar', 'Parallel'], JSON.stringify(r.j.treffer));
+  assert.equal(r.j.lauf.camelot, '8A');
+  assert.equal(r.j.treffer[0].zug, 'nachbar');
+  assert.ok(r.j.treffer[0].gruende.includes('genre gleich'));
+  assert.ok(r.j.treffer.every((x) => x.werk_id !== 1), 'eigenes Werk nie');
+  assert.equal(r.j.bewertet, 2, 'Werk 2 (5B) ist kein erlaubter Zug von 8A, Werk 4 hat 140 BPM');
+  assert.equal(r.j.treffer[0].punkte, 0.952);
+  assert.equal(r.j.treffer[1].punkte, 0.619);
+  // Wunsch heben: Parallel (Energie 8 = hoch, +1 Klasse) steigt auf 0,694, Nachbar (gleiche Klasse) fällt auf 0,892
+  const h = await hole(s.url, `/mediathek/anschluss?material_id=${mid(2)}&energie=heben`);
+  assert.deepEqual(h.j.treffer.map((x) => [x.titel, x.punkte]), [['Nachbar', 0.892], ['Parallel', 0.694]]);
+  assert.deepEqual(await hole(s.url, '/mediathek/anschluss?material_id=zz'), { code: 400, j: { fehler: 'material_id_ungueltig' } });
+  assert.deepEqual(await hole(s.url, `/mediathek/anschluss?material_id=${mid(99)}`), { code: 404, j: { fehler: 'material_unbekannt' } });
+  assert.deepEqual(await hole(s.url, `/mediathek/anschluss?material_id=${mid(4)}`), { code: 409, j: { fehler: 'kein_track' } }, 'Werk 3 ist ein Loop');
+  assert.deepEqual(await hole(s.url, `/mediathek/anschluss?material_id=${mid(2)}&energie=laut`), { code: 400, j: { fehler: 'energie_ungueltig' } });
+  assert.deepEqual(await hole(s.url, '/mediathek/anschluss'), { code: 400, j: { fehler: 'material_id_oder_deck' } });
+});
+test('Anschluss per Deck: geladenes Material, leeres Deck 409, falsches Deck 400', async (t) => {
+  const m = tmpMt(t);
+  anschlussWerke(m.db);
+  const s = await stapel(t, { mediathek: m.db });
+  assert.deepEqual(await hole(s.url, '/mediathek/anschluss?deck=2'), { code: 409, j: { fehler: 'deck_leer' } });
+  assert.deepEqual(await hole(s.url, '/mediathek/anschluss?deck=3'), { code: 400, j: { fehler: 'deck_ungueltig' } });
+  s.o.stand.geladen['1'] = { deck: 1, material_id: mid(2) };   // wie /e/geladen vom Kern (server.ts:403)
+  const r = await hole(s.url, '/mediathek/anschluss?deck=1&limit=1');
+  assert.equal(r.code, 200, JSON.stringify(r.j));
+  assert.deepEqual(r.j.treffer.map((x) => x.titel), ['Nachbar']);
+});
+
+test('Anschluss: material_id und deck zugleich 400; fenster/limit klemmen auf die Untergrenze', async (t) => {
+  const m = tmpMt(t);
+  anschlussWerke(m.db);
+  const s = await stapel(t, { mediathek: m.db });
+  assert.deepEqual(await hole(s.url, `/mediathek/anschluss?material_id=${mid(2)}&deck=1`), { code: 400, j: { fehler: 'material_id_oder_deck' } });
+  assert.deepEqual(await hole(s.url, `/mediathek/anschluss?material_id=${mid(2)}&deck=9`), { code: 400, j: { fehler: 'material_id_oder_deck' } });
+  const f0 = await hole(s.url, `/mediathek/anschluss?material_id=${mid(2)}&fenster=0`);
+  assert.equal(f0.code, 200, JSON.stringify(f0.j));
+  assert.deepEqual(f0.j.treffer.map((x) => x.titel), ['Nachbar'], 'fenster 0 klemmt auf 1 %, nicht auf 6 %');
+  const l0 = await hole(s.url, `/mediathek/anschluss?material_id=${mid(2)}&limit=0`);
+  assert.equal(l0.j.treffer.length, 1, 'limit 0 klemmt auf 1');
+  assert.equal((await hole(s.url, `/mediathek/anschluss?material_id=${mid(2)}&limit=x`)).j.treffer.length, 2, 'nicht-numerisch: Vorgabe');
 });

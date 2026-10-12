@@ -16,6 +16,7 @@ export interface VorhoererOpt {
   ausgang: string; // --ausgang Präfix (Pflicht: ohne diese Klasse gar nicht anlegen)
   tonFrei?: boolean;
   ohneBlende?: boolean;
+  name?: string; // --name: JACK-Namensbasis (Vorgabe cypherdj-vorhoerer; der Browser-Vorhörer heißt cypherdj-vorhoerer-mt)
   instanz?: string; // CYPHERDJ_INSTANZ für Kind + eigenen OSC-Port; Vorgabe process.env.CYPHERDJ_INSTANZ
   port?: number; // OSC-Port-Override, sonst aus instanz (47740 + 1000·k)
   quantum?: number; // pw-jack -p, Vorgabe 256 wie docs/architektur/stand/vorhoerer.md „Starten“
@@ -35,6 +36,7 @@ export class VorhoererKlient extends EventEmitter {
   fehler: string | null = null;
   bereit = false;
   private endeGemeldet = false;
+  private aboTimer: NodeJS.Timeout | null = null;
   private opt: VorhoererOpt;
 
   constructor(opt: VorhoererOpt) {
@@ -51,6 +53,7 @@ export class VorhoererKlient extends EventEmitter {
     const args = [this.opt.bin, '--ausgang', this.opt.ausgang, '--port', String(this.ziel.port)];
     if (this.opt.tonFrei) args.push('--ton-frei');
     if (this.opt.ohneBlende) args.push('--ohne-blende');
+    if (this.opt.name) args.push('--name', this.opt.name);
     const env: NodeJS.ProcessEnv = { ...process.env };
     if (this.opt.instanz !== undefined) env.CYPHERDJ_INSTANZ = this.opt.instanz;
     // pw-jack: der Vorhörer ist ein JACK-Client, läuft hier über PipeWires JACK-Kompatibilität (wie
@@ -59,18 +62,27 @@ export class VorhoererKlient extends EventEmitter {
     this.proc.stdout?.on('data', (b: Buffer) => this.opt.log?.({ typ: 'vorhoerer_stdout', z: b.toString() }));
     this.proc.stderr?.on('data', (b: Buffer) => this.opt.log?.({ typ: 'vorhoerer_stderr', z: b.toString() }));
     let gestorben: string | null = null;
-    this.proc.on('exit', (code, signal) => { gestorben = `beendet code=${code} signal=${signal}`; this.opt.log?.({ typ: 'vorhoerer_beendet', code, signal }); this.bereit = false; this.proc = null; });
+    this.proc.on('exit', (code, signal) => { gestorben = `beendet code=${code} signal=${signal}`; this.opt.log?.({ typ: 'vorhoerer_beendet', code, signal }); this.bereit = false; this.proc = null; this.spielt = false; if (this.aboTimer) { clearInterval(this.aboTimer); this.aboTimer = null; } this.emit('beendet'); });   // S7 B2: Vorhoeren startet danach neu
     const ende = Date.now() + 5000;
     while (Date.now() < ende) {
       this.senden('/v/hallo', '');
       await new Promise((r) => setTimeout(r, 100));
-      if (this.bereit) return;
+      if (this.bereit) { this.aboErneuern(); return; }
       if (gestorben) throw new Error(`Vorhörer-Prozess ${gestorben}`);
     }
     throw new Error('Vorhörer antwortet nicht (5 s)');
   }
 
+  // Der Vorhörer hält höchstens 4 Abonnenten und wirft bei einem fünften den ältesten hinaus; ein erneutes /v/hallo rückt uns ans Ende
+  // der Reihe. Alle 2 s genügt: fremde Absender verdrängen den Server so höchstens bis zur nächsten Erneuerung.
+  aboErneuern(ms = 2000): void {
+    if (this.aboTimer) clearInterval(this.aboTimer);
+    this.aboTimer = setInterval(() => { try { this.senden('/v/hallo', ''); } catch { /* Socket zu */ } }, ms);
+    this.aboTimer.unref();
+  }
+
   async stoppe(): Promise<void> {
+    if (this.aboTimer) { clearInterval(this.aboTimer); this.aboTimer = null; }
     this.sock.close();
     const p = this.proc;
     if (p) { p.kill(); await new Promise((r) => p.once('exit', r)); }

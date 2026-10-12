@@ -1,0 +1,8 @@
+[package]
+name = "komp_dsp"
+version = "0.1.0"
+edition = "2021"
+description = "Cypher Komp: Feed-forward-Kompressor nach Giannoulis, Massberg, Reiss 2012, ohne Host"
+license = "GPL-3.0-or-later"
+
+[dependencies]

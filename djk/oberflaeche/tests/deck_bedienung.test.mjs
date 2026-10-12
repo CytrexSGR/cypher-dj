@@ -103,3 +103,210 @@ test('Plan Grid: Raster-Datei je Fassung schreiben und lesen, kaputt/fehlend/au�
   assert.equal(leseRaster(datei), 0);
   assert.ok(!fs.readdirSync(d).some((n) => n.includes('.neu')));
 });
+
+// --- Fassungsübergreifend: Raster-Datei der nächstälteren Fassung (2026-10-11, Bericht grid-phase M7) ---------------
+
+import { rasterErbe, einsNachFix, einsZeile, haengeKorrekturAn, letzteEinsZeile } from '../deck_bedienung.ts';
+
+const FPB = 22500;   // 128 BPM bei 48 kHz
+function rasterOrdnerMit(dateien) {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-erbe-'));
+  for (const [name, v] of Object.entries(dateien)) fs.writeFileSync(path.join(d, name), typeof v === 'string' ? v : JSON.stringify({ versatz_frames: v }));
+  return d;
+}
+const M = '929d8039c3732eed';
+const fass = (r, bpm = 128) => ({ material_id: M, basis_bpm: bpm, fassung: r });
+
+test('rasterErbe FEHLERFALL: r2 ohne Datei übernimmt die Korrektur von r1 (vorher 0, Andreas musste wieder um 2 Beats korrigieren)', () => {
+  const d = rasterOrdnerMit({ [`${M}_128000_r1.json`]: -45480 });
+  assert.equal(leseRaster(rasterDatei(d, fass(2))), 0);                                    // alter Weg: verloren
+  const e = rasterErbe(d, fass(2), { einsVon: () => ({ eins: 2, esf: 0 }), fpb: FPB });
+  assert.deepEqual(e, { v: -45480, von: 1 });                                              // ganze Beats UND Feinversatz
+});
+
+test('rasterErbe: eigene Datei der geladenen Fassung geht vor, Erbe nur bei fehlender Datei (Negativ-Kontrolle)', () => {
+  const d = rasterOrdnerMit({ [`${M}_128000_r1.json`]: -45480, [`${M}_128000_r2.json`]: 0 });
+  assert.deepEqual(rasterErbe(d, fass(2), { einsVon: () => ({ eins: 2, esf: 0 }), fpb: FPB }), { v: 0, von: null });   // 0 gespeichert heißt: 0
+});
+
+test('rasterErbe: die nächstältere Fassung zählt, nicht die älteste und nie eine neuere', () => {
+  const d = rasterOrdnerMit({ [`${M}_128000_r1.json`]: -45480, [`${M}_128000_r3.json`]: 120, [`${M}_128000_r5.json`]: 999 });
+  assert.deepEqual(rasterErbe(d, fass(4), { einsVon: () => ({ eins: 2, esf: 0 }), fpb: FPB }), { v: 120, von: 3 });
+  assert.deepEqual(rasterErbe(d, fass(2), { einsVon: () => ({ eins: 2, esf: 0 }), fpb: FPB }), { v: -45480, von: 1 });
+  assert.deepEqual(rasterErbe(d, fass(1), { einsVon: () => ({ eins: 2, esf: 0 }), fpb: FPB }), { v: -45480, von: null });   // r1 hat eine eigene Datei
+});
+
+test('rasterErbe: andere Basis oder anderes Material erben nicht', () => {
+  const d = rasterOrdnerMit({ [`${M}_128000_r1.json`]: -45480, [`ffffffffffffffff_130000_r1.json`]: 77 });
+  assert.deepEqual(rasterErbe(d, fass(2, 130), { einsVon: () => ({ eins: 2, esf: 0 }), fpb: FPB }), { v: 0, von: null });
+  assert.deepEqual(rasterErbe(d, { material_id: 'aaaaaaaaaaaaaaaa', basis_bpm: 128, fassung: 2 }, { einsVon: () => ({ eins: 2, esf: 0 }), fpb: FPB }), { v: 0, von: null });
+});
+
+test('rasterErbe: kaputte ältere Datei wird übersprungen, die davor gilt', () => {
+  const d = rasterOrdnerMit({ [`${M}_128000_r1.json`]: -45000, [`${M}_128000_r2.json`]: '{kaputt' });
+  assert.deepEqual(rasterErbe(d, fass(3), { einsVon: () => ({ eins: 2, esf: 0 }), fpb: FPB }), { v: -45000, von: 1 });
+});
+
+test('rasterErbe: nicht doppelt – hat die neue Fassung die Eins schon eingebaut (3 → 1, K −2), bleibt nur der Feinversatz', () => {
+  const d = rasterOrdnerMit({ [`${M}_128000_r1.json`]: -45480 });
+  const einsVon = (r) => ({ eins: r === 1 ? 3 : 1, esf: 0 });
+  assert.deepEqual(rasterErbe(d, fass(2), { einsVon, fpb: FPB }), { v: -480, von: 1 });
+  // Negativ-Kontrolle: Eins unverändert → nichts abgezogen
+  assert.deepEqual(rasterErbe(d, fass(2), { einsVon: () => ({ eins: 3, esf: 0 }), fpb: FPB }), { v: -45480, von: 1 });
+  // Eins unbekannt (fassung.json fehlt): nichts abgezogen
+  assert.deepEqual(rasterErbe(d, fass(2), { einsVon: () => null, fpb: FPB }), { v: -45480, von: 1 });
+});
+
+test('rasterErbe: Ergebnis über RASTER_MAX wird nicht vererbt', () => {
+  const d = rasterOrdnerMit({ [`${M}_128000_r1.json`]: RASTER_MAX });
+  assert.deepEqual(rasterErbe(d, fass(2), { einsVon: (r) => ({ eins: 2, esf: r === 1 ? 1000 : 0 }), fpb: FPB }), { v: 0, von: null });   // RASTER_MAX + 1000 Frames
+});
+
+test('einsNachFix: ganze Beats im Versatz sind die neue Eins (580de: Eins 3, −2 Beats → 1)', () => {
+  assert.equal(einsNachFix({ v: -45000, fpb: FPB, eins: 3, letzte: null }), 1);
+  assert.equal(einsNachFix({ v: -45480, fpb: FPB, eins: 2, letzte: null }), 0);            // 929d/bfdd: −2 Beat −10 ms
+  assert.equal(einsNachFix({ v: 45000, fpb: FPB, eins: 2, letzte: null }), 0);
+  assert.equal(einsNachFix({ v: -22500, fpb: FPB, eins: 0, letzte: null }), 3);
+});
+
+test('einsNachFix NEGATIV: Feinversatz allein, volle Takte, schon geschriebene Zeile → nichts zu schreiben', () => {
+  assert.equal(einsNachFix({ v: 480, fpb: FPB, eins: 2, letzte: null }), null);            // 10 ms
+  assert.equal(einsNachFix({ v: -10000, fpb: FPB, eins: 2, letzte: null }), null);         // < ½ Beat
+  assert.equal(einsNachFix({ v: -90000, fpb: FPB, eins: 2, letzte: null }), null);         // −4 Beats = Eins mod 4 gleich
+  assert.equal(einsNachFix({ v: -45000, fpb: FPB, eins: 3, letzte: 1 }), null);            // dieselbe Zeile steht schon
+});
+
+test('einsNachFix: zurückgenommene Korrektur überschreibt die offene Zeile', () => {
+  assert.equal(einsNachFix({ v: 0, fpb: FPB, eins: 3, letzte: 1 }), 3);
+});
+
+test('einsZeile + haengeKorrekturAn: gültige Zeile (Schema korrektur), append-only, letzteEinsZeile liest sie zurück', () => {
+  const mo = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-korr-'));
+  assert.equal(letzteEinsZeile(mo), null);                                                  // keine Datei
+  fs.writeFileSync(path.join(mo, 'korrekturen.jsonl'), '{"zeit":"2026-10-09T21:49:38","von":"werkstatt","art":"raster","fassung":"128000_r1","ab_quell_beat":-1000000.0,"bis_quell_beat":1000571.0,"versatz_ms":-6.75,"nr":null,"text":"x"}\n');
+  assert.equal(letzteEinsZeile(mo), null);                                                  // nur eine Raster-Zeile
+  const z = einsZeile(fass(1), 1, -2, 'FIX', new Date('2026-10-11T03:04:05Z'));
+  assert.deepEqual(z, { zeit: '2026-10-11T03:04:05', von: 'andreas', art: 'eins', fassung: '128000_r1', ab_quell_beat: 1,
+    bis_quell_beat: null, versatz_ms: null, nr: null, text: 'FIX: Eins um −2 Beats gesetzt, Lage 1' });
+  haengeKorrekturAn(mo, z);
+  const zeilen = fs.readFileSync(path.join(mo, 'korrekturen.jsonl'), 'utf8').trimEnd().split('\n');
+  assert.equal(zeilen.length, 2);
+  assert.equal(letzteEinsZeile(mo), 1);
+});
+
+// --- Review B1/B3 (2026-10-11): Verschiebung des ersten Schlags, Eins-Abzug nur aus dieser Raster-Korrektur -------------------
+
+const lage = (esf, v, eins) => esf + v + eins * FPB;   // absolute Lage der Eins im Audio (Frames)
+
+test('rasterErbe B1 FEHLERFALL 929d: r2 hat den ersten Schlag um −324 Frames verschoben (Auto-Phase), Andreas’ Lage bleibt exakt', () => {
+  const d = rasterOrdnerMit({ [`${M}_128000_r1.json`]: -45480 });
+  const einsVon = (r) => (r === 1 ? { eins: 2, esf: 3129 } : { eins: 2, esf: 2805 });
+  const e = rasterErbe(d, fass(2), { einsVon, fpb: FPB });
+  assert.deepEqual(e, { v: -45156, von: 1 });                                               // vorher −45480 = 6,75 ms daneben
+  assert.equal(lage(2805, e.v, 2), lage(3129, -45480, 2));                                  // Abstand 0 Frames
+});
+
+test('rasterErbe B1 FEHLERFALL 9b44: esf 2483 → 1975, Andreas’ −384 wird +124 (vorher 10,58 ms daneben)', () => {
+  const N = '9b444bee7d0805b8';
+  const d = rasterOrdnerMit({ [`${N}_128000_r1.json`]: -384 });
+  const einsVon = (r) => ({ eins: 0, esf: r === 1 ? 2483 : 1975 });
+  const e = rasterErbe(d, { material_id: N, basis_bpm: 128, fassung: 2 }, { einsVon, fpb: FPB });
+  assert.deepEqual(e, { v: 124, von: 1 });
+  assert.equal(lage(1975, e.v, 0), lage(2483, -384, 0));
+});
+
+test('rasterErbe B1 NEGATIV: gleicher erster Schlag und gleiche Eins → Wert unverändert (580de, 6b09, bfdd)', () => {
+  for (const [v, eins, esf] of [[-45000, 3, 0], [-720, 2, 2677], [-45480, 2, 2933]]) {
+    const d = rasterOrdnerMit({ [`${M}_128000_r1.json`]: v });
+    assert.deepEqual(rasterErbe(d, fass(2), { einsVon: () => ({ eins, esf }), fpb: FPB }), { v, von: 1 });
+  }
+});
+
+test('rasterErbe B3: Werkstatt-Eins 2 → 0 bei reinem Feinversatz −720 wird NICHT zurückgedreht', () => {
+  const d = rasterOrdnerMit({ [`${M}_128000_r1.json`]: -720 });
+  assert.deepEqual(rasterErbe(d, fass(2), { einsVon: (r) => ({ eins: r === 1 ? 2 : 0, esf: 0 }), fpb: FPB }), { v: -720, von: 1 });
+  assert.deepEqual(rasterErbe(d, fass(2), { einsVon: (r) => ({ eins: r === 1 ? 0 : 2, esf: 0 }), fpb: FPB }), { v: -720, von: 1 });
+});
+
+test('rasterErbe B3: ganze Beats im Versatz, aber die neue Eins passt nicht dazu (anderer Ursprung) → kein Abzug', () => {
+  const d = rasterOrdnerMit({ [`${M}_128000_r1.json`]: -45480 });   // K −2: 2 → 0 wäre passend, 2 → 1 nicht
+  assert.deepEqual(rasterErbe(d, fass(2), { einsVon: (r) => ({ eins: r === 1 ? 2 : 1, esf: 0 }), fpb: FPB }), { v: -45480, von: 1 });
+});
+
+// --- Hotcues erben (2026-10-11): quell_beat ist Beat der Karte, Frame = erster_schlag_frame + Versatz + quell_beat·fpb (kern deck.h:325) ---
+
+import { hotcuesErbe } from '../deck_bedienung.ts';
+
+function hotOrdnerMit(dateien) {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-hoterbe-'));
+  for (const [name, v] of Object.entries(dateien)) fs.writeFileSync(path.join(d, name), typeof v === 'string' ? v : JSON.stringify(v));
+  return d;
+}
+// Fassungsdaten je r: { eins, esf }; Raster-Ordner wie in der Seite (rasterErbe liefert den wirksamen Versatz je Fassung)
+function erbeMit(hot, raster, fassungen, f) {
+  const einsVon = (r) => fassungen[r] ?? null;
+  return hotcuesErbe(hot, f, { fpb: FPB, esf: (r) => fassungen[r]?.esf ?? null,
+    rasterV: (r) => rasterErbe(raster, { ...f, fassung: r }, { einsVon, fpb: FPB }).v });
+}
+const HOT1 = { 1: { quell_beat: 246, art: 'shot' }, 2: { quell_beat: 184, art: 'loop', laenge: 4 } };
+
+test('hotcuesErbe: erster Schlag verschoben (esf −324), kein Raster: gleiche Audio-Stelle = +324/fpb Beat', () => {
+  const h = hotOrdnerMit({ [`${M}_128000_r1.json`]: HOT1 });
+  const e = erbeMit(h, rasterOrdnerMit({}), { 1: { eins: 2, esf: 3129 }, 2: { eins: 2, esf: 2805 } }, fass(2));
+  assert.equal(e.von, 1);
+  assert.equal(e.hotcues[1].quell_beat, 246.0144); assert.equal(e.hotcues[1].art, 'shot');
+  assert.deepEqual(e.hotcues[2], { quell_beat: 184.0144, art: 'loop', laenge: 4 });
+  // Frame im Audio bleibt: 3129 + 246·fpb = 2805 + 246.0144·fpb
+  assert.ok(Math.abs((3129 + 246 * FPB) - (2805 + 246.0144 * FPB)) < 1);
+});
+
+test('hotcuesErbe: mit geerbtem Raster bleibt der Anker (esf+v) gleich, quell_beat unverändert (929d)', () => {
+  const h = hotOrdnerMit({ [`${M}_128000_r1.json`]: HOT1 });
+  const r = rasterOrdnerMit({ [`${M}_128000_r1.json`]: -45480 });
+  const e = erbeMit(h, r, { 1: { eins: 2, esf: 3129 }, 2: { eins: 2, esf: 2805 } }, fass(2));
+  assert.equal(e.hotcues[1].quell_beat, 246);
+});
+
+test('hotcuesErbe: Eins in die neue Fassung eingebaut (2 → 0, Raster −2 Beats): Hotcue wandert −2 Beats mit, 246 → 244', () => {
+  const h = hotOrdnerMit({ [`${M}_128000_r1.json`]: HOT1 });
+  const r = rasterOrdnerMit({ [`${M}_128000_r1.json`]: -45480 });
+  const e = erbeMit(h, r, { 1: { eins: 2, esf: 3129 }, 2: { eins: 0, esf: 3129 } }, fass(2));
+  assert.equal(e.hotcues[1].quell_beat, 244); assert.equal(e.hotcues[2].quell_beat, 182);
+});
+
+test('hotcuesErbe NEGATIV: gleicher Anker und gleiche Eins → unverändert; eigene Hotcues der neuen Fassung werden nie überschrieben', () => {
+  const eigene = { 3: { quell_beat: 10, art: 'shot' } };
+  const h = hotOrdnerMit({ [`${M}_128000_r1.json`]: HOT1, [`${M}_128000_r2.json`]: eigene });
+  const fa = { 1: { eins: 2, esf: 3129 }, 2: { eins: 2, esf: 2805 } };
+  assert.deepEqual(erbeMit(h, rasterOrdnerMit({}), fa, fass(2)), { hotcues: eigene, von: null });
+  // auch eine absichtlich leere Datei (alle gelöscht) ist eigen
+  const h2 = hotOrdnerMit({ [`${M}_128000_r1.json`]: HOT1, [`${M}_128000_r2.json`]: {} });
+  assert.deepEqual(erbeMit(h2, rasterOrdnerMit({}), fa, fass(2)), { hotcues: {}, von: null });
+  const h3 = hotOrdnerMit({ [`${M}_128000_r1.json`]: HOT1 });
+  assert.equal(erbeMit(h3, rasterOrdnerMit({}), { 1: { eins: 2, esf: 5 }, 2: { eins: 2, esf: 5 } }, fass(2)).hotcues[1].quell_beat, 246);
+});
+
+test('hotcuesErbe: Lücke r1 → r3 (r2 ohne Datei) erbt von r1, mit Verschiebung r1 → r3; ist r2 da, gilt r2', () => {
+  const fa = { 1: { eins: 2, esf: 3000 }, 2: { eins: 2, esf: 2900 }, 3: { eins: 2, esf: 2700 } };
+  const h = hotOrdnerMit({ [`${M}_128000_r1.json`]: HOT1 });
+  const e = erbeMit(h, rasterOrdnerMit({}), fa, fass(3));
+  assert.equal(e.von, 1); assert.equal(e.hotcues[1].quell_beat, Math.round((246 + 300 / FPB) * 1e4) / 1e4);
+  const h2 = hotOrdnerMit({ [`${M}_128000_r1.json`]: HOT1, [`${M}_128000_r2.json`]: { 1: { quell_beat: 50, art: 'shot' } } });
+  const e2 = erbeMit(h2, rasterOrdnerMit({}), fa, fass(3));
+  assert.equal(e2.von, 2); assert.equal(e2.hotcues[1].quell_beat, Math.round((50 + 200 / FPB) * 1e4) / 1e4);
+});
+
+test('hotcuesErbe: nirgends Hotcues → leer; andere Basis, anderes Material, neuere Fassung erben nicht', () => {
+  const fa = { 1: { eins: 2, esf: 1 }, 2: { eins: 2, esf: 1 } };
+  assert.deepEqual(erbeMit(hotOrdnerMit({}), rasterOrdnerMit({}), fa, fass(2)), { hotcues: {}, von: null });
+  const h = hotOrdnerMit({ [`${M}_130000_r1.json`]: HOT1, [`ffffffffffffffff_128000_r1.json`]: HOT1, [`${M}_128000_r3.json`]: HOT1 });
+  assert.deepEqual(erbeMit(h, rasterOrdnerMit({}), fa, fass(2)), { hotcues: {}, von: null });
+});
+
+test('hotcuesErbe: kaputte ältere Datei wird übersprungen; fehlt eine esf, bleibt die Stelle unverschoben', () => {
+  const h = hotOrdnerMit({ [`${M}_128000_r1.json`]: HOT1, [`${M}_128000_r2.json`]: '{kaputt' });
+  const e = erbeMit(h, rasterOrdnerMit({}), { 1: { eins: 2, esf: 1 }, 3: { eins: 2, esf: 1 } }, fass(3));
+  assert.equal(e.von, 1);
+  const e2 = erbeMit(hotOrdnerMit({ [`${M}_128000_r1.json`]: HOT1 }), rasterOrdnerMit({}), {}, fass(2));
+  assert.equal(e2.hotcues[1].quell_beat, 246);
+});

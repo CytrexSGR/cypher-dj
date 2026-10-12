@@ -88,7 +88,8 @@ void Kern::einsortieren25(const Befehl& c) {
   switch (c.art) {
     case Befehl::FX: {  // AUFTRAG 2026-09-28 (§4.10): Einheits-Parameter, am Blockanfang
       const int einheit = c.deck;
-      if (einheit < 1 || einheit > Mixer::FX_EINHEITEN || c.nr < 1 || c.nr > 4) {
+      namespace fxb = cypherdj::osc::bereich::k_fx;   // Arten aus dem Vertrag (seit 2026-10-11 bis 5 REVERB)
+      if (einheit < 1 || einheit > Mixer::FX_EINHEITEN || c.nr < fxb::art_min || c.nr > fxb::art_max) {
         quittung(c.id, c.quelle, 6, sample_, beat0, "ausserhalb_bereich");
         break;
       }

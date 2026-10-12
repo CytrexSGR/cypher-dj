@@ -7,7 +7,8 @@
 // Aufruf: djk-fx [--instanz i] [--einheit 1|2] <art> <beats> <depth> <param1> [param2] [param3]
 //         djk-fx [--instanz i] [--einheit 1|2] zuweisen <A|B|C|C2|C3|L1|L2|M> <an|aus>
 //         djk-fx [--instanz i] [--einheit 1|2] aus
-//   art: echo flanger phaser filter · beats: 0.25 0.5 1 2 4 8 16 · depth, param1..3: 0 bis 1 (param2/3 Vorgabe 0,5,
+//   art: echo flanger phaser filter reverb (beats = Ausklingzeit, param1 = SIZE) delay (param1 = TONE) pingpong
+//   (param1 = Rückkopplung) trans (param1 = DUTY) roll sliproll vinyl (beats = Bremsdauer) spiral (param1 = Rückkopplung) · beats: 0.25 0.5 1 2 4 8 16 · depth, param1..3: 0 bis 1 (param2/3 Vorgabe 0,5,
 //   ohne DSP-Wirkung, S8-Knöpfe 3/4) · Einheit Vorgabe 1
 // Rückgabe 0 übernommen, 1 abgelehnt oder keine Antwort, 2 falscher Aufruf, 4 AUTO aus.
 import dgram from 'node:dgram';
@@ -17,9 +18,9 @@ import { parseArgs } from 'node:util';
 import { kodiere, dekodiere } from '../vertrag/attrappe_kern/osc.mjs';
 import { autonomAn } from './src/muster_stand.mjs';
 
-const AUFRUF = 'Aufruf: djk-fx [--instanz i] [--einheit 1|2] <echo|flanger|phaser|filter> <beats> <depth 0..1> <param1 0..1> [param2] [param3] | zuweisen <A|B|C|C2|C3|L1|L2|M> <an|aus> | aus';
+const AUFRUF = 'Aufruf: djk-fx [--instanz i] [--einheit 1|2] <echo|flanger|phaser|filter|reverb|delay|pingpong|trans|roll|sliproll|vinyl|spiral> <beats> <depth 0..1> <param1 0..1> [param2] [param3] | zuweisen <A|B|C|C2|C3|L1|L2|M> <an|aus> | aus';
 const KANAL = { A: 'deck/1', B: 'deck/2', C: 'erz/1', C2: 'erz/2', C3: 'erz/3', L1: 'pad/1', L2: 'pad/2', M: 'master' };
-const ARTEN = ['echo', 'flanger', 'phaser', 'filter'];
+const ARTEN = ['echo', 'flanger', 'phaser', 'filter', 'reverb', 'delay', 'pingpong', 'trans', 'roll', 'sliproll', 'vinyl', 'spiral'];
 const BEATS = [0.25, 0.5, 1, 2, 4, 8, 16];
 const raus = (text, rc) => { (rc ? process.stderr : process.stdout).write(`djk-fx: ${text}\n`); process.exit(rc); };
 

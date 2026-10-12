@@ -330,7 +330,7 @@
       {"name": "id", "typ": "h", "einheit": "kennung"},
       {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle"},
       {"name": "einheit", "typ": "i", "einheit": "nummer", "bereich": [1, 2]},
-      {"name": "art", "typ": "i", "einheit": "code", "bereich": [1, 4]},
+      {"name": "art", "typ": "i", "einheit": "code", "bereich": [1, 12]},
       {"name": "beats", "typ": "d", "einheit": "beats", "werte": "fx_beats"},
       {"name": "wet", "typ": "d", "einheit": "anteil", "bereich": [0, 1]},
       {"name": "param1", "typ": "d", "einheit": "anteil", "bereich": [0, 1]},
@@ -415,6 +415,9 @@
       {"name": "keylock_aufgegeben", "typ": "i", "einheit": "anzahl", "notiz": "Keylock: Ansatz nach 8 verpassten Fristen aufgegeben, seit Kern-Start"},
       {"name": "keylock_ring_voll", "typ": "i", "einheit": "anzahl", "notiz": "Keylock: Abschnitte des Dehners, die nicht in den Ring passten (soll 0), seit Kern-Start"},
       {"name": "keylock_kein_platz", "typ": "i", "einheit": "anzahl", "notiz": "Keylock 7c.3: Ansätze ohne freien Platz der Leihe (Loop im Varispeed bis zum nächsten Ereignis), seit Kern-Start"}]},
+    {"adresse": "/zustand/komp", "typen": ",sf", "abschnitt": "5.5c", "richtung": "vom_kern", "felder": [
+      {"name": "kanal", "typ": "s", "einheit": "pfad", "notiz": "Quellkanal (deck/<n>, erz/<n>, pad/<n>) mit laufendem Kompressor"},
+      {"name": "gr_db", "typ": "f", "einheit": "db", "notiz": "Absenkung (≥ 0) am Ende des letzten Blocks; 10 Hz, nur solange <k>/komp/an 1 ist"}]},
     {"adresse": "/pegel", "typen": ",sfffffff", "abschnitt": "5.6", "richtung": "vom_kern", "felder": [
       {"name": "kanal", "typ": "s", "einheit": "pfad"},
       {"name": "spitze_db", "typ": "f", "einheit": "db"},
@@ -524,7 +527,7 @@
       {"name": "fx_wet", "typ": "f", "einheit": "anteil"}]},
     {"adresse": "/e/fx", "typen": ",iidddddi", "abschnitt": "5.12", "richtung": "vom_kern", "felder": [
       {"name": "einheit", "typ": "i", "einheit": "nummer", "bereich": [1, 2]},
-      {"name": "art", "typ": "i", "einheit": "code", "bereich": [0, 4]},
+      {"name": "art", "typ": "i", "einheit": "code", "bereich": [0, 12]},
       {"name": "beats", "typ": "d", "einheit": "beats"},
       {"name": "wet", "typ": "d", "einheit": "anteil"},
       {"name": "param1", "typ": "d", "einheit": "anteil"},

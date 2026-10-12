@@ -7,7 +7,7 @@
 
 namespace cypherdj::stellwerk {
 
-constexpr int MAX_REGLER = 384;
+constexpr int MAX_REGLER = 512;   // 2026-10-11: 384 → 512 für komp/* je Quellkanal (98 Regler)
 constexpr int MAX_KANAELE = 20;     // deck/1..4, erz/1..8, pad/1..2, bus/1..4, master, cue
 
 enum class Rolle : uint8_t {
@@ -15,7 +15,11 @@ enum class Rolle : uint8_t {
   stem_drums, stem_bass, stem_vocals, stem_other, xseite, pfl,
   xfader, master_pegel, cue_mix, cue_pegel, cue_split, fx_notenwert, fx_rueckkopplung, fx_rueckweg, transport,
   duck_tiefe, duck_release, master_kleber,  // K2: am Ende angehängt, die Reihenfolge der Rollen bleibt
-  keylock                                   // Keylock Task 3: globaler Schalter für alle Quellen, am Ende angehängt
+  keylock,                                  // Keylock Task 3: globaler Schalter für alle Quellen, am Ende angehängt
+  master_pfl,                               // MASTER CUE (2026-10-10): Master auf die PFL-Seite des Kopfhörers
+  color_art, color_param,                   // SOUND COLOR FX (2026-10-11): globale Art 0..5 und PARAMETER 0..1
+  komp_an, komp_schwelle, komp_ratio, komp_attack, komp_release, komp_makeup, komp_mix,  // Kompressor je Quellkanal (2026-10-11)
+  komp_sc                                   // Schlüssel des Kompressors: 0 eigenes Signal, 1..14 Quellkanal + 1
 };
 
 // §7.2 kurve.typ plus zwei Formen für Schalter und Stufenregler (Festlegung dieser Scheibe)

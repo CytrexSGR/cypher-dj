@@ -123,8 +123,10 @@ int main() {
   abgelehnt(41, "ausserhalb_bereich");  // Einheit 3 gibt es nicht (§4.10)
   { cdj::osc::Schreiber s(v::k_fx); s.h(42).s("andreas").i(2).i(1).d(3.0).d(1.0).d(0.0).d(0.0).d(0.0).i(1); g.sende(s); }
   abgelehnt(42, "ausserhalb_bereich");  // beats 3 gibt es nicht
-  { cdj::osc::Schreiber s(v::k_fx); s.h(43).s("andreas").i(2).i(5).d(1.0).d(1.0).d(0.0).d(0.0).d(0.0).i(1); g.sende(s); }
-  abgelehnt(43, "ausserhalb_bereich");  // art 5
+  { cdj::osc::Schreiber s(v::k_fx); s.h(43).s("andreas").i(2).i(13).d(1.0).d(1.0).d(0.0).d(0.0).d(0.0).i(1); g.sende(s); }
+  abgelehnt(43, "ausserhalb_bereich");  // art 13 (5 REVERB bis 12 SPIRAL seit 2026-10-11)
+  { cdj::osc::Schreiber s(v::k_fx); s.h(49).s("andreas").i(2).i(5).d(2.0).d(0.6).d(0.4).d(0.5).d(0.5).i(1); g.sende(s); }
+  PRUEF(hole(bef, b) && b.art == cdj::Befehl::FX && b.deck == 2 && b.nr == 5 && b.dauer_beats == 2.0);  // REVERB
   { cdj::osc::Schreiber s(v::k_fx); s.h(44).s("andreas").i(2).i(1).d(1.0).d(1.5).d(0.0).d(0.0).d(0.0).i(1); g.sende(s); }
   abgelehnt(44, "ausserhalb_bereich");  // wet > 1
   // /k/fx/zuweisung mit allen Feldern, Bereiche
@@ -215,6 +217,30 @@ int main() {
     { cdj::osc::Schreiber s(v::k_hallo); s.s(aus ? "seite1" : "seite0").i(n.port).i(1); n.sende(s); }
     PRUEF(n.warte("/k/willkommen", 500) && !n.warte("/e/regler", 100));  // Herzschlag: kein zweites Mal
     { cdj::osc::Schreiber s(v::k_tschuess); s.s(aus ? "seite1" : "seite0"); n.sende(s); }
+  }
+  // Effekt-Sektion (2026-10-11): ein neuer Abonnent bekommt nach dem Knopf den gemerkten Stand der Regler und Boxen
+  {
+    cdj::Ereignis r{};
+    r.art = cdj::Ereignis::REGLER;
+    std::strcpy(r.pfad, "erz/1/komp/an"); r.wert = 1.0f; std::strcpy(r.text, "cypher"); r.sample = 480000; r.beat = 20.0;
+    ere->schiebe(r);
+    PRUEF(g.warte("/e/regler", 500));
+    cdj::Ereignis l{};
+    l.art = cdj::Ereignis::LOOP;
+    l.deck = 1; l.status = 3; std::strcpy(l.pfad, "auto-a"); l.fassung = 8;
+    ere->schiebe(l);
+    PRUEF(g.warte("/e/loop", 500));
+    Gegenstelle n(netz.port());
+    { cdj::osc::Schreiber s(v::k_hallo); s.s("seite-neu").i(n.port).i(1); n.sende(s); }
+    bool regler = false;
+    for (int i = 0; i < 4 && !regler; ++i) {   // zuerst kommt der Knopf (keylock), dann der gemerkte Stand
+      if (!n.warte("/e/regler", 300)) break;
+      regler = !std::strcmp(n.s(0), "erz/1/komp/an") && n.f(1) == 1.0f;
+    }
+    const bool box = n.warte("/e/loop", 300) && n.i(0) == 1 && n.i(1) == 3 && !std::strcmp(n.s(2), "auto-a") && n.i(3) == 8;
+    PRUEF(regler);
+    PRUEF(box);
+    { cdj::osc::Schreiber s(v::k_tschuess); s.s("seite-neu"); n.sende(s); }
   }
   stop = true;
   faden.join();

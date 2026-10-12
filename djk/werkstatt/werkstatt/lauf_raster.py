@@ -10,7 +10,7 @@ import numpy as np
 
 from . import kontrollen as K
 from .audio import lade_mono
-from .eins import eins_beat_this, eins_tiefband
+from .eins import eins_beat_this, eins_tiefband, entscheide_eins, erster_kick
 from .phase import verfeinere_schlaege
 from .karte import karte_aus_schlaegen, karte_fest, rest_gegen_wahrheit, vergleiche
 from .raster_werkzeuge import SR_BEAT_THIS, SR_ESSENTIA, beat_this, essentia_schlaege
@@ -37,17 +37,22 @@ def eins_erwartet(karte, eins_zeiten):
     return int(np.argmax(np.bincount(np.rint(karte.beat_bei(z)).astype(int) % 4, minlength=4)))
 
 
-def miss(name, pfad, wahrheit=None, eins_zeiten=None, cd=None, geraet="cpu"):
+def miss(name, pfad, wahrheit=None, eins_zeiten=None, cd=None, geraet="cpu", melde=None):
+    """melde(teil): Zwischenschritte fuer die Fortschrittsanzeige (decoding, tracking, tempo, downbeats)."""
+    melde = melde or (lambda teil: None)
     last_vor = os.getloadavg()[0]
     zeit = {}
     t0 = time.perf_counter()
+    melde("decoding")
     x22 = lade_mono(pfad, SR_BEAT_THIS)
     x44 = lade_mono(pfad, SR_ESSENTIA)
     zeit["dekodieren"] = time.perf_counter() - t0
     t = time.perf_counter()
+    melde("tracking")
     schlaege, downbeats = beat_this(x22, geraet=geraet)
     zeit["beat_this"] = time.perf_counter() - t
     t = time.perf_counter()
+    melde("tempo")
     ticks, ess_bpm_global, ess_konfidenz = essentia_schlaege(x44)
     schlaege_bt = np.asarray(schlaege, dtype=float)
     schlaege, verfeinerung = verfeinere_schlaege(x44, SR_ESSENTIA, schlaege_bt)   # 2026-10-09: auf die Anschlaege
@@ -68,8 +73,11 @@ def miss(name, pfad, wahrheit=None, eins_zeiten=None, cd=None, geraet="cpu"):
                                   f"(beat_this {bpm:.3f}, Essentia {ke1.bpm_gesamt():.3f} BPM)"]
     zeit["karte"] = time.perf_counter() - t
     t = time.perf_counter()
+    melde("downbeats")
     eins_bt, zaehlung = eins_beat_this(downbeats, karte)
-    eins_tb, vorsprung, energie = eins_tiefband(x22, SR_BEAT_THIS, karte)
+    eins_tb, vorsprung, energie = eins_tiefband(x22, SR_BEAT_THIS, karte)      # nur noch Messwert, entscheidet nichts
+    kick = erster_kick(x44, SR_ESSENTIA, karte)
+    eins_ent = entscheide_eins(eins_bt, zaehlung, kick)
     zeit["eins"] = time.perf_counter() - t
     zeit["gesamt"] = time.perf_counter() - t0
     e = {"name": name, "datei": str(pfad), "dauer_s": round(len(x22) / SR_BEAT_THIS, 1),
@@ -83,7 +91,7 @@ def miss(name, pfad, wahrheit=None, eins_zeiten=None, cd=None, geraet="cpu"):
          "tempo_vielfaches": v, "streckfaktor": round(faktor, 4), "tor_streckfaktor_ok": tor_streckfaktor(faktor),
          "vergleich_essentia": vgl, "werkzeuge_einig": einig, "warnungen": warnungen,
          "karte_gegen_gerade": gerade,
-         "eins_beat_this": eins_bt, "eins_zaehlung": zaehlung, "eins_tiefband": eins_tb,
+         "eins_beat_this": eins_bt, "eins_entscheidung": eins_ent, "eins_kick": kick, "eins_zaehlung": zaehlung, "eins_tiefband": eins_tb,
          "eins_vorsprung": vorsprung, "eins_gleich": eins_bt is not None and eins_bt == eins_tb,
          "laufzeit_s": {k: round(w, 2) for k, w in zeit.items()},
          "last_vor_nach": [round(last_vor, 2), round(os.getloadavg()[0], 2)],
@@ -91,8 +99,10 @@ def miss(name, pfad, wahrheit=None, eins_zeiten=None, cd=None, geraet="cpu"):
                     "abweichung_ms_p90": vgl["form_p90_ms"],
                     "pulsklarheit": cd.get("klarheit_median") if cd else None,
                     "erster_schlag_quelle_s": round(float(karte.sekunden[0]), 6), "taktart": 4,
-                    "tempo_vielfaches": v, "erste_eins_quell_beat": eins_bt,
-                    "erste_eins_zweitverfahren": eins_tb},
+                    "tempo_vielfaches": v, "erste_eins_quell_beat": eins_ent["eins"],
+                    "erste_eins_zweitverfahren": eins_tb, "erste_eins_anteil": eins_ent["anteil"],
+                    "erste_eins_kick": eins_ent["kick_lage"], "erste_eins_unsicher": eins_ent["unsicher"],
+                    "erste_eins_quelle": eins_ent["quelle"]},
          "tempo_karte_quelle": karte.als_liste(),
          "verfeinerung": verfeinerung,
          "roh": {"schlaege_s": [round(float(s), 4) for s in schlaege_bt],

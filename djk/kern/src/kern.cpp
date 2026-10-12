@@ -16,6 +16,9 @@ Kern::Kern(double start_bpm, cdj_ring_kopf* ring, Befehlsring* befehle, Ereignis
   // Scheibe 25: Stellwerk und Mixer einmal hier (nicht im Callback), der Mixer mit der Regler-Tabelle des Stellwerks
   sw_ = std::make_unique<cypherdj::stellwerk::Stellwerk>(uhr_, pruefer_i3_.get());
   mixer_ = std::make_unique<Mixer>(sw_->tabelle());
+#ifndef CYPHERDJ_MUTATION_KERN_OHNE_NUR_CUE
+  mixer_->setze_nur_cue(Mixer::kanal_index(VORHOER_KANAL));   // S7: Vorhören nur im Kopfhörer, nie im Master
+#endif
   erz_ = std::make_unique<Erzeuger>();  // Plan 2026-09-27: 400 KB, darum hier und nicht im Callback
   for (int k = 0; k < MIX_KANAELE; ++k) {
     erz_l_[k] = mixer_->eingang_l(k);
@@ -277,6 +280,7 @@ void Kern::zyklus(int n, int64_t mono_ns) {
   melde(u);
   decks_zustand(n0, n);  // Scheibe 31: /zustand/deck direkt nach /uhr desselben Zyklus (§5.5)
   boxen_zustand(n0, n);  // Keylock 7b.3: /zustand/box im selben Zyklus (§5.5b)
+  komp_zustand(n0, n);   // Effekt-Sektion: Absenkung je aktivem Kompressor (§5.5c)
 
   // 3) Takt-Anfänge in diesem Block (§5.3): Beats 4(t-1) mit llround(sample_at) in [n0, n0+n)
   const double b_lo = karte.beat_at((double)n0 - 0.5);

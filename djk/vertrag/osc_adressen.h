@@ -177,6 +177,9 @@ static_assert(zustand_deck.typen.size() - 1 == zustand_deck.felder);
 // §5.5b /zustand/box ,iiiiii
 inline constexpr Adresse zustand_box{"/zustand/box", ",iiiiii", Richtung::vom_kern, false, 6};
 static_assert(zustand_box.typen.size() - 1 == zustand_box.felder);
+// §5.5c /zustand/komp ,sf
+inline constexpr Adresse zustand_komp{"/zustand/komp", ",sf", Richtung::vom_kern, false, 2};
+static_assert(zustand_komp.typen.size() - 1 == zustand_komp.felder);
 // §5.6 /pegel ,sfffffff
 inline constexpr Adresse pegel{"/pegel", ",sfffffff", Richtung::vom_kern, false, 8};
 static_assert(pegel.typen.size() - 1 == pegel.felder);
@@ -256,7 +259,7 @@ static_assert(test_hand.typen.size() - 1 == test_hand.felder);
 inline constexpr Adresse test_klick{"/test/klick", ",hssi", Richtung::an_kern, true, 4};
 static_assert(test_klick.typen.size() - 1 == test_klick.felder);
 
-inline constexpr std::array<Adresse, 78> alle{
+inline constexpr std::array<Adresse, 79> alle{
     k_hallo,
     k_tschuess,
     k_willkommen,
@@ -309,6 +312,7 @@ inline constexpr std::array<Adresse, 78> alle{
     zustand_kern,
     zustand_deck,
     zustand_box,
+    zustand_komp,
     pegel,
     e_regler,
     e_hand,
@@ -398,6 +402,7 @@ namespace takt { enum : std::size_t { takt = 0, phrase = 1, sample = 2, beat = 3
 namespace zustand_kern { enum : std::size_t { generation = 0, quantum = 1, sample = 2, frame_luecken = 3, ausgelassene_perioden = 4, cb_max_us = 5, cb_p99_us = 6, aufwach_max_us = 7, stretcher_aktiv = 8, befehle_wartend = 9, ki_gestoppt = 10 }; }
 namespace zustand_deck { enum : std::size_t { deck = 0, status = 1, material_id = 2, basis_bpm = 3, fassung = 4, quell_beat = 5, beats_bis_ende = 6, faktor = 7, vorlauf_ms = 8, hoerweg = 9, stretcher_fuell = 10, versatz_intern_ms = 11, keylock_unterlauf = 12, keylock_aufgegeben = 13 }; }
 namespace zustand_box { enum : std::size_t { box = 0, status = 1, keylock_unterlauf = 2, keylock_aufgegeben = 3, keylock_ring_voll = 4, keylock_kein_platz = 5 }; }
+namespace zustand_komp { enum : std::size_t { kanal = 0, gr_db = 1 }; }
 namespace pegel { enum : std::size_t { kanal = 0, spitze_db = 1, echtspitze_dbtp = 2, lufs_m = 3, lufs_s = 4, band_tief_db = 5, band_mitte_db = 6, band_hoch_db = 7 }; }
 namespace e_regler { enum : std::size_t { pfad = 0, wert = 1, halter = 2, sample = 3, beat = 4 }; }
 namespace e_hand { enum : std::size_t { pfad = 0, wert = 1, sample = 2, beat = 3 }; }
@@ -458,7 +463,7 @@ namespace k_loop_laden { inline constexpr double box_min = 1; inline constexpr d
 namespace k_loop_start { inline constexpr double box_min = 1; inline constexpr double box_max = 2; }
 namespace k_loop_stopp { inline constexpr double box_min = 1; inline constexpr double box_max = 2; }
 namespace k_loop_raster { inline constexpr double box_min = 1; inline constexpr double box_max = 2; }
-namespace k_fx { inline constexpr double einheit_min = 1; inline constexpr double einheit_max = 2; inline constexpr double art_min = 1; inline constexpr double art_max = 4; inline constexpr double wet_min = 0; inline constexpr double wet_max = 1; inline constexpr double param1_min = 0; inline constexpr double param1_max = 1; inline constexpr double param2_min = 0; inline constexpr double param2_max = 1; inline constexpr double param3_min = 0; inline constexpr double param3_max = 1; inline constexpr double an_min = 0; inline constexpr double an_max = 1; }
+namespace k_fx { inline constexpr double einheit_min = 1; inline constexpr double einheit_max = 2; inline constexpr double art_min = 1; inline constexpr double art_max = 12; inline constexpr double wet_min = 0; inline constexpr double wet_max = 1; inline constexpr double param1_min = 0; inline constexpr double param1_max = 1; inline constexpr double param2_min = 0; inline constexpr double param2_max = 1; inline constexpr double param3_min = 0; inline constexpr double param3_max = 1; inline constexpr double an_min = 0; inline constexpr double an_max = 1; }
 namespace k_fx_zuweisung { inline constexpr double einheit_min = 1; inline constexpr double einheit_max = 2; inline constexpr double an_min = 0; inline constexpr double an_max = 1; }
 namespace k_fx_routing { inline constexpr double routing_min = 0; inline constexpr double routing_max = 1; }
 namespace erz_quittung { inline constexpr double strom_min = 1; inline constexpr double strom_max = 16; }
@@ -471,7 +476,7 @@ namespace e_frist { inline constexpr double deck_min = 1; inline constexpr doubl
 namespace e_raster { inline constexpr double deck_min = 1; inline constexpr double deck_max = 4; }
 namespace e_hotcue { inline constexpr double deck_min = 1; inline constexpr double deck_max = 4; inline constexpr double nr_min = 1; inline constexpr double nr_max = 8; }
 namespace e_loop { inline constexpr double box_min = 1; inline constexpr double box_max = 2; inline constexpr double status_min = 0; inline constexpr double status_max = 5; inline constexpr double fx_art_min = 0; inline constexpr double fx_art_max = 4; }
-namespace e_fx { inline constexpr double einheit_min = 1; inline constexpr double einheit_max = 2; inline constexpr double art_min = 0; inline constexpr double art_max = 4; inline constexpr double an_min = 0; inline constexpr double an_max = 1; }
+namespace e_fx { inline constexpr double einheit_min = 1; inline constexpr double einheit_max = 2; inline constexpr double art_min = 0; inline constexpr double art_max = 12; inline constexpr double an_min = 0; inline constexpr double an_max = 1; }
 namespace e_fx_zuweisung { inline constexpr double einheit_min = 1; inline constexpr double einheit_max = 2; inline constexpr double an_min = 0; inline constexpr double an_max = 1; }
 namespace e_fx_routing { inline constexpr double routing_min = 0; inline constexpr double routing_max = 1; }
 namespace e_mitschnitt { inline constexpr double status_min = 0; inline constexpr double status_max = 1; }

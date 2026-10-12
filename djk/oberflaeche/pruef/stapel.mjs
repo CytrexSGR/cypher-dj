@@ -22,7 +22,7 @@ function bereit(p, name, muster) {
   });
 }
 
-export async function starteStapel(ordner, instanz = 'g', env = {}, { bestand = path.join(REPO, 'bestand'), vorher } = {}) {
+export async function starteStapel(ordner, instanz = 'g', env = {}, { bestand = path.join(REPO, 'bestand'), vorher, serverArgs = [] } = {}) {
   fs.mkdirSync(ordner, { recursive: true });
   const abWurzel = fs.mkdtempSync(`/dev/shm/djk60m-${instanz}-`);
   const k = 1000 * (instanz.charCodeAt(0) - 96);
@@ -73,7 +73,7 @@ export async function starteStapel(ordner, instanz = 'g', env = {}, { bestand = 
       '--kern-port', String(ports.relais), '--set-id', setId]);
     await bereit(ls, 'leitstand', 'leitstand:');
     const srv = starte('server', [path.join(OB, 'server.ts'), '--kern-port', String(ports.relais), '--log', path.join(ordner, 'server.jsonl'),
-      '--bestand', bestand, '--arbeitsbestand', ab, '--ziel-kurve', 'attrappe_linear'], env);
+      '--bestand', bestand, '--arbeitsbestand', ab, '--ziel-kurve', 'attrappe_linear', ...serverArgs], env);
     await bereit(srv, 'server', 'oberflaeche:');
     // Anzeige-Sonde: zweiter, unabhängiger Leser am Leitstand-WS (Rolle anzeige), protokolliert jede Nachricht
     sondeLog = fs.openSync(path.join(ordner, 'sonde.jsonl'), 'a');

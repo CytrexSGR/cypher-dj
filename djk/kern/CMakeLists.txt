@@ -57,6 +57,25 @@ else()
   add_subdirectory(${DJK}/third_party third_party)
 endif()
 
+# Cypher Hall (Rust, djk/instrumente/hall_ffi) für fx/2, seit 2026-10-11 statt Faust zita_rev1: cargo baut die statische
+# Bibliothek; sie hängt an cypherdj::dsp, damit jedes Ziel, das mixer.cpp übersetzt, sie mitbekommt.
+find_program(CARGO cargo REQUIRED)
+set(HALL_FFI_DIR ${DJK}/instrumente)
+set(HALL_FFI_LIB ${HALL_FFI_DIR}/target/release/libhall_ffi.a)
+# Seit 2026-10-11 trägt dieselbe Bibliothek auch Cypher Komp (komp_dsp): zwei Rust-Staticlibs kollidieren im Binary.
+file(GLOB HALL_FFI_QUELLEN CONFIGURE_DEPENDS ${HALL_FFI_DIR}/hall_ffi/src/*.rs ${HALL_FFI_DIR}/hall_dsp/src/*.rs
+     ${HALL_FFI_DIR}/komp_dsp/src/*.rs ${HALL_FFI_DIR}/hall_ffi/Cargo.toml ${HALL_FFI_DIR}/hall_dsp/Cargo.toml
+     ${HALL_FFI_DIR}/komp_dsp/Cargo.toml)
+add_custom_command(OUTPUT ${HALL_FFI_LIB}
+  COMMAND ${CARGO} build --release --quiet -p hall_ffi --manifest-path ${HALL_FFI_DIR}/Cargo.toml
+  DEPENDS ${HALL_FFI_QUELLEN} COMMENT "cargo: hall_ffi" VERBATIM)
+add_custom_target(cypherdj_hall_ffi_bau DEPENDS ${HALL_FFI_LIB})
+add_library(cypherdj_hall_ffi STATIC IMPORTED GLOBAL)
+set_target_properties(cypherdj_hall_ffi PROPERTIES IMPORTED_LOCATION ${HALL_FFI_LIB})
+add_dependencies(cypherdj_hall_ffi cypherdj_hall_ffi_bau)
+target_link_libraries(cypherdj_hall_ffi INTERFACE ${CMAKE_DL_LIBS} Threads::Threads m)
+target_link_libraries(cypherdj_dsp INTERFACE cypherdj_hall_ffi)
+
 file(GLOB KERN_QUELLEN CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp)
 list(REMOVE_ITEM KERN_QUELLEN ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp)
 # src/dehner_bungee.cpp gehört nicht in KERN_QUELLEN (die Mutationsziele mit eigener Quellenliste kennen Bungee nicht): nur die
@@ -261,6 +280,20 @@ target_include_directories(test_mixer PRIVATE include tests)
 target_compile_definitions(test_mixer PRIVATE CYPHERDJ_MUTATION_OHNE_LIMITER=1)
 target_link_libraries(test_mixer PRIVATE cypherdj::dsp cypherdj::stellwerk cypherdj_dsp_messer)
 add_test(NAME test_mixer COMMAND test_mixer)
+# S7 (Plan Mediathek-Browser): Nur-Cue im Mixer und seine Aktivierung im Kern müssen fehlen dürfen, ohne dass es keiner merkt.
+add_executable(test_mixer_nur_cue_mutation tests/test_mixer.cpp src/mixer.cpp src/beatfx.cpp)
+target_include_directories(test_mixer_nur_cue_mutation PRIVATE include tests)
+target_compile_definitions(test_mixer_nur_cue_mutation PRIVATE CYPHERDJ_MUTATION_OHNE_LIMITER=1 CYPHERDJ_MUTATION_NUR_CUE_AUS=1)
+target_link_libraries(test_mixer_nur_cue_mutation PRIVATE cypherdj::dsp cypherdj::stellwerk cypherdj_dsp_messer)
+add_test(NAME test_mixer_nur_cue_mutation COMMAND test_mixer_nur_cue_mutation)
+set_tests_properties(test_mixer_nur_cue_mutation PROPERTIES WILL_FAIL TRUE)
+# kern.cpp mutiert als eigenes Objekt vor der Bibliothek: der Linker nimmt dieses kern.o, nicht das aus cypherdj_kernbib
+add_executable(test_kern_vorhoeren_mutation tests/test_kern_vorhoeren.cpp src/kern.cpp)
+target_include_directories(test_kern_vorhoeren_mutation PRIVATE include tests)
+target_compile_definitions(test_kern_vorhoeren_mutation PRIVATE CYPHERDJ_MUTATION_KERN_OHNE_NUR_CUE=1 CYPHERDJ_DJK="${DJK}")
+target_link_libraries(test_kern_vorhoeren_mutation PRIVATE cypherdj_kernbib cypherdj::json cypherdj::toml)
+add_test(NAME test_kern_vorhoeren_mutation COMMAND test_kern_vorhoeren_mutation)
+set_tests_properties(test_kern_vorhoeren_mutation PROPERTIES WILL_FAIL TRUE)
 # Scheibe 25: Master-Limiter an einer echten Fassung (Werkzeug, kein Test; tests/limiter/messe.sh)
 foreach(v IN ITEMS kern_limiter_fassung kern_limiter_fassung_ohne)
   add_executable(${v} tests/limiter/limiter_fassung.cpp src/mixer.cpp src/beatfx.cpp)
@@ -274,6 +307,14 @@ add_executable(kern_kosten25 tests/kosten/kosten25.cpp)
 target_link_libraries(kern_kosten25 PRIVATE cypherdj_kernbib)
 
 # Scheibe 31: Selbsttest der Klick-Fassung (tests/deck/klick_fassung.py, das Material der Deck-Tests und der Abnahme).
+# Das python3 aus dem PATH (System, mit numpy) vorgeben: seit 2026-10-03 liegt ein uv-Python 3.11 ohne numpy in
+# ~/.local/bin, FindPython nahm es dort als ersten Treffer, und die Python-Tests brachen am Import ab (2026-10-11).
+if(NOT DEFINED Python3_EXECUTABLE)
+  find_program(CYPHERDJ_PYTHON3 NAMES python3)
+  if(CYPHERDJ_PYTHON3)
+    set(Python3_EXECUTABLE ${CYPHERDJ_PYTHON3})
+  endif()
+endif()
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 add_test(NAME test_klick_fassung COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/deck/test_klick_fassung.py)
 # Keylock Task 4.1: ziel_lauf.py darf nicht blind bestehen (stille Aufnahme, abgewiesener Befehl), ohne JACK.
@@ -712,3 +753,11 @@ deck_geplant_pruef(test_deck_geplant_pruef_frueh_frei_reihum_mutation platz_gene
 set_tests_properties(test_deck_geplant_pruef_frueh_frei_reihum_mutation PROPERTIES WILL_FAIL TRUE)
 # Leckprüfung P20 (S4b): das abgelöste Band bleibt bis zur nächsten Epoche, die Leihe läuft voll: P20 rot.
 deck_geplant_mutation(test_deck_geplant_leihe_alt_bleibt_p20_mutation CYPHERDJ_MUTATION_PLAN_LEIHE_ALT_BLEIBT platz_generation)
+# Effekt-Sektion 2026-10-11: ein neuer Abonnent bekommt den gemerkten Stand der Regler und Boxen nicht: test_netz_deck rot.
+add_executable(test_netz_deck_stand_mutation tests/test_netz_deck.cpp ${KERN_QUELLEN})
+target_include_directories(test_netz_deck_stand_mutation PRIVATE include tests ${DJK}/vertrag)
+target_compile_definitions(test_netz_deck_stand_mutation PRIVATE CYPHERDJ_MUTATION_HALLO_OHNE_STAND=1 CYPHERDJ_DJK="${DJK}")
+target_link_libraries(test_netz_deck_stand_mutation PRIVATE PkgConfig::JACK Threads::Threads cypherdj::toml cypherdj::dsp cypherdj::stellwerk
+                      cypherdj_dsp_messer cypherdj::json PkgConfig::CRYPTO cypherdj::hand PkgConfig::RUBBERBAND)
+add_test(NAME test_netz_deck_stand_mutation COMMAND test_netz_deck_stand_mutation)
+set_tests_properties(test_netz_deck_stand_mutation PROPERTIES WILL_FAIL TRUE)

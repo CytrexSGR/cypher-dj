@@ -1,5 +1,5 @@
 // Kanalzug eines Kanals (SCHNITTSTELLEN §1.5, §1.6; ADR 008 Entscheidung 1):
-//   Trim → LR8-Isolator mit Kill → DJ-Filter → [Abgriff: PFL und Mess-Abgriff] → Fader → Haupt
+//   Trim → LR8-Isolator mit Kill → DJ-Filter oder Color-FX → [Abgriff: PFL und Mess-Abgriff] → Fader → Haupt
 //                                                                             └→ Sends 1..4 (nach dem Fader)
 // DIE NAHT zu Scheibe 25 (Kern-Kanalzug). Spätere Scheiben (14, 22) ergänzen nur additiv:
 // keine bestehende Signatur ändern, keine Bedeutung ändern (tests/test_naht.cpp hält das fest).
@@ -17,6 +17,7 @@
 #include <cstdint>
 
 #include <cypherdj/dsp/bahn.h>
+#include <cypherdj/dsp/colorfx.h>
 #include <cypherdj/dsp/djfilter.h>
 #include <cypherdj/dsp/isolator.h>
 #include <cypherdj/dsp/regler.h>
@@ -65,6 +66,12 @@ public:
     void setze_filter_guete(double q) { filter_.setze_guete(q); }
     double filter_guete() const { return filter_.guete(); }
 
+    // SOUND COLOR FX (additiv zur Naht, 2026-10-11): Art 0..5 (ColorArt, 0 = FILTER = der DJ-Filter wie bisher),
+    // PARAMETER 0..1, Samples je Beat (DUB ECHO). Der Regler `filter` ist der COLOR-Regler aller Arten. Echtzeitfest;
+    // ein Artwechsel leert die Zustände der Color-FX. Semantik: ColorFx::setze.
+    void setze_color(int art, float param, double samples_pro_beat) { color_.setze(art, param, samples_pro_beat); }
+    ColorArt color_art() const { return color_.art(); }
+
     // 1 ≤ n ≤ kMaxFrames. `in` darf gleich `aus.haupt` sein.
     void verarbeite(const float* in_l, const float* in_r, int n, const KanalzugAusgang& aus);
 
@@ -90,6 +97,7 @@ private:
     Bahn bahn_[kAnzahlRegler];
     Isolator iso_;
     DjFilter filter_;
+    ColorFx color_;
     double werte_[kMaxFrames] = {};          // Arbeitsspeicher für Bahn::block
     double k_filter_[kMaxFrames] = {};
     float g_trim_[kMaxFrames] = {};

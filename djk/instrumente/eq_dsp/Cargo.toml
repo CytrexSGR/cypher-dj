@@ -1,0 +1,8 @@
+[package]
+name = "eq_dsp"
+version = "0.1.0"
+edition = "2021"
+description = "Cypher EQ: reine DSP-Bibliothek ohne Host (matched Biquads in SVF-Form, offline getestet)"
+license = "GPL-3.0-or-later"
+
+[dependencies]

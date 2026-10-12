@@ -1,4 +1,4 @@
-// Scheibe 60m, Task 2: Server gegen die Kern-Attrappe aus 13 (Instanz h, Arbeitsbestand = bestand/, kein Ton)
+// Scheibe 60m, Task 2: Server gegen die Kern-Attrappe aus 13 (Instanz aus CYPHERDJ_TEST_INSTANZ, Vorgabe h; Arbeitsbestand = bestand/, kein Ton)
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
@@ -16,6 +16,7 @@ import { KOPIE_TEXT, HAND_PRUEFMODUS_TEXT } from '../oeffentlich/meldungen.js';
 import { kodiere } from '../../vertrag/attrappe_kern/osc.mjs';
 import { schreibeLeerenRing, schreibeRing } from './hilfen/ring.mjs';
 import { K as OHR_K } from '../ohr.ts';
+import { K, TEST_INSTANZ } from './hilfen/instanz.mjs';
 const K1 = OHR_K.deck1, K2 = OHR_K.deck2, KMASTER = OHR_K.master;
 
 const HIER = path.dirname(fileURLToPath(import.meta.url));
@@ -38,7 +39,6 @@ function baueSynthetisch() {
 const STRUDEL_PAKETE = process.env.STRUDEL_PAKETE ?? path.join(os.homedir(), 'strudel', 'packages');
 const OHNE_STRUDEL = fs.existsSync(path.join(STRUDEL_PAKETE, 'core')) ? false : `Strudel-Pakete fehlen (${STRUDEL_PAKETE}/core; INSTALL §5, optional)`;
 const BESTAND = process.env.CYPHERDJ_BESTAND ? LEBEND : baueSynthetisch();
-const K = 8000; // Instanz h
 const warte = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Arbeitsbestand je Lauf in tmpfs wie im Betrieb (/dev/shm), die Attrappe liest nur dort (wie der echte Kern)
@@ -48,7 +48,7 @@ async function stapel(t, mutationen = [], { bestand = BESTAND, vorher, kernPruef
   fs.mkdirSync(ab, { recursive: true });
   vorher?.(ab);
   const att = spawn(process.execPath, [path.join(REPO, 'djk/vertrag/attrappe_kern.mjs'), '--frisch', '--arbeitsbestand', ab,
-    '--zustand', path.join(tmp, 'zustand.json')], { env: { ...process.env, CYPHERDJ_INSTANZ: 'h' }, stdio: ['ignore', 'pipe', 'pipe'] });
+    '--zustand', path.join(tmp, 'zustand.json')], { env: { ...process.env, CYPHERDJ_INSTANZ: TEST_INSTANZ }, stdio: ['ignore', 'pipe', 'pipe'] });
   await new Promise((ok, f) => { att.stdout.once('data', ok); att.once('exit', (c) => f(new Error(`attrappe rc ${c}`))); });
   const log = [];
   const huellenPfad = huellen ?? (() => { const p = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'djk-huellen-')), 'huellen'); schreibeLeerenRing(p); return p; })();
@@ -365,6 +365,82 @@ test('K2 Kleber: /griff master/kleber u 0,55 kommt am Kern an; cypher 403; falsc
   assert.equal(c.code, 403); assert.equal(c.j.fehler, 'nur_hand');
   for (const u of [1.01, -0.01, 'x', null]) assert.equal((await postJson(url, '/griff', { pfad: 'master/kleber', u })).code, 400, String(u));
   assert.equal(log.filter((z) => z.typ === 'an_kern').length, n1);
+  s.zu();
+});
+
+// Effekt-Sektion Schritt 4: Automation je Loop über /loop/automation; bei laufender Box plant der Server die Durchgänge als
+// /k/teil (Plan loopauto:<box>, Quelle andreas) und bricht sie ab, wenn die Box nicht mehr läuft
+test('Loop-Automation: speichern, lesen, ablehnen, je Durchgang planen, beim Stopp abbrechen', async (t) => {
+  const loops = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-loops-'));
+  schreibeLoop(loops, 'auto-a', 4, false, 'mitschnitt');
+  const { o, url } = await stapel(t, [], { loops });
+  const auto = [{ pfad: 'komp/schwelle', punkte: [[0, -10], [2, -30]] }];
+  assert.equal((await postJson(url, '/loop/automation', { name: 'auto-a', automation: auto })).code, 200);
+  assert.deepEqual((await (await fetch(`${url}/loop/automation?name=auto-a`)).json()).automation, auto);
+  assert.equal((await postJson(url, '/loop/automation', { name: 'auto-a', automation: [{ pfad: 'fader', punkte: [[0, 0]] }] })).code, 400);
+  assert.equal((await postJson(url, '/loop/automation', { name: 'gibts-nicht', automation: auto })).code, 404);
+  const gesendet = [];
+  const sende = o.kern.sende.bind(o.kern);
+  o.kern.sende = (adr, f) => { gesendet.push({ adr, ...f }); return sende(adr, f); };
+  for (let i = 0; i < 50 && o.kern.uhr === null; i++) await warte(50);
+  o.stand.loops['1'] = { box: 1, status: 3, name: 'auto-a', beats: 4 };
+  for (let i = 0; i < 60 && !gesendet.some((g) => g.adr === '/k/teil'); i++) await warte(50);
+  const teile = gesendet.filter((g) => g.adr === '/k/teil');
+  assert.ok(teile.length >= 3, JSON.stringify(gesendet));
+  assert.ok(teile.every((g) => g.plan === 'loopauto:1' && g.quelle === 'andreas' && g.pfad === 'pad/1/komp/schwelle'));
+  assert.equal(teile[0].dauer_beats, 0);                 // erster Durchgang: Setzen vorneweg
+  assert.equal(teile[0].ab_beat % 4, 0);                 // auf dem Anfang eines Durchgangs
+  o.stand.loops['1'] = { box: 1, status: 0, name: '', beats: 4 };
+  for (let i = 0; i < 20 && !gesendet.some((g) => g.adr === '/k/abbruch'); i++) await warte(50);
+  const abbruch = gesendet.find((g) => g.adr === '/k/abbruch');
+  assert.ok(abbruch && abbruch.plan === 'loopauto:1' && abbruch.teile === '*');
+});
+
+// Effekt-Sektion (2026-10-11): <k>/komp/* über /regler, in /lage nur abweichend von der Vorgabe; Busse haben keinen Kompressor
+test('Kompressor: erz/1/komp/* setzen, Lage nur abweichend, bus abgelehnt', async (t) => {
+  const { url } = await stapel(t);
+  const s = sse(url);
+  await warte(100);
+  const l0 = await (await fetch(`${url}/lage`)).json();
+  assert.ok(!Object.keys(l0.regler).some((p) => p.includes('/komp/')), 'Vorgabe: kein komp in der Lage');
+  for (const [pfad, nach] of [['erz/1/komp/an', 1], ['erz/1/komp/schwelle', -30], ['pad/2/komp/mix', 0.5]]) {
+    const r = await postJson(url, '/regler', { pfad, nach, ab: 'jetzt' }, CYPHER);
+    assert.equal(r.code, 200, JSON.stringify(r.j));
+  }
+  assert.equal((await postJson(url, '/regler', { pfad: 'bus/1/komp/an', nach: 1 }, CYPHER)).code, 400);   // Negativkontrolle
+  await warte(300);
+  const l = await (await fetch(`${url}/lage`)).json();
+  assert.equal(l.regler['erz/1/komp/an'], 1, JSON.stringify(l.regler));
+  assert.equal(l.regler['erz/1/komp/schwelle'], -30);
+  assert.equal(l.regler['pad/2/komp/mix'], 0.5);
+  assert.ok(!('erz/1/komp/ratio' in l.regler), 'unverändertes Feld bleibt unsichtbar');
+  s.zu();
+});
+
+// SOUND COLOR FX (2026-10-11): color/art und color/param über /regler, Art sofort (Politik 1 wie keylock), in /lage nur
+// abweichend von der Vorgabe (0 FILTER, 0,5)
+test('Color FX: color/art und color/param setzen, Art mit Politik 1, Lage nur abweichend', async (t) => {
+  const { url } = await stapel(t);
+  const s = sse(url);
+  await warte(100);
+  const l0 = await (await fetch(`${url}/lage`)).json();
+  for (const p of ['color/art', 'color/param']) assert.ok(!(p in l0.regler), `Vorgabe: ${p} nicht in der Lage`);
+  const ra = await postJson(url, '/regler', { pfad: 'color/art', nach: 1, ab: 'jetzt' }, CYPHER);
+  assert.equal(ra.code, 200, JSON.stringify(ra.j));
+  assert.equal(ra.j.felder.politik, 1);
+  const rp = await postJson(url, '/regler', { pfad: 'color/param', nach: 0.8, ab: 'jetzt' }, CYPHER);
+  assert.equal(rp.code, 200, JSON.stringify(rp.j));
+  assert.equal(rp.j.felder.politik, 0);
+  await warte(300);
+  const l = await (await fetch(`${url}/lage`)).json();
+  assert.equal(l.regler['color/art'], 1, JSON.stringify(l.regler));
+  assert.equal(l.regler['color/param'], 0.8);
+  assert.equal((await postJson(url, '/regler', { pfad: 'color/kaputt', nach: 1 }, CYPHER)).code, 400);   // Negativkontrolle
+  for (const [pfad, nach] of [['color/art', 0], ['color/param', 0.5]])
+    assert.equal((await postJson(url, '/regler', { pfad, nach, ab: 'jetzt' }, CYPHER)).code, 200);
+  await warte(300);
+  const l2 = await (await fetch(`${url}/lage`)).json();
+  for (const p of ['color/art', 'color/param']) assert.ok(!(p in l2.regler), `zurück: ${p} weg`);
   s.zu();
 });
 
@@ -766,12 +842,17 @@ test('/fx: gültig → /k/fx mit Quelle andreas, einheit und drei Parametern, fa
   assert.equal(f.length, 1);
   assert.deepEqual({ ...f[0].felder, id: 0 }, { id: 0, quelle: 'andreas', einheit: 1, art: 1, beats: 0.5, wet: 0.8, param1: 0.3, param2: 0.2, param3: 0.1, an: 1 });
   const basis = { einheit: 2, art: 2, beats: 4, wet: 0.5, param1: 0.5, param2: 0.5, param3: 0.5, an: false };
-  for (const falsch of [{ einheit: 3 }, { art: 5 }, { beats: 3 }, { wet: 1.2 }, { param1: -0.1 }, { param2: 1.1 }, { param3: -0.1 }, { an: 'ja' }]) {
+  for (const falsch of [{ einheit: 3 }, { art: 13 }, { art: 2.5 }, { beats: 3 }, { wet: 1.2 }, { param1: -0.1 }, { param2: 1.1 }, { param3: -0.1 }, { an: 'ja' }]) {
     const x = await postJson(url, '/fx', { ...basis, ...falsch });
     assert.equal(x.code, 400, JSON.stringify(falsch));
   }
   assert.equal((await post(url, '/fx', basis)).code, 415);
   assert.equal(log.filter((z) => z.typ === 'an_kern' && z.adresse === '/k/fx').length, n0 + 1, 'Abweisungen senden nichts');
+  for (const art of [5, 6, 7, 8, 9, 10, 11, 12]) {   // REVERB bis SPIRAL (2026-10-11)
+    const rv = await postJson(url, '/fx', { ...basis, art, beats: 2 });
+    assert.equal(rv.code, 200, JSON.stringify(rv.j));
+    assert.equal(log.filter((z) => z.typ === 'an_kern' && z.adresse === '/k/fx').at(-1).felder.art, art);
+  }
   assert.deepEqual(await (await fetch(`${url}/fx`)).json(), [null, null], 'GET /fx ohne /e/fx: [null, null]');
 });
 
@@ -1026,6 +1107,194 @@ test('/deck/raster/fix (Plan Grid): speichert je Fassung, nach Laden und nach /e
   await warte(600);
   assert.equal(log.filter((z) => z.typ === 'an_kern' && z.adresse === '/k/deck/raster').length, k0);
   assert.equal((await postJson(url, '/deck/raster/fix', { deck: 3 })).code, 400);
+});
+
+// --- Grid-Eins (2026-10-11, Bericht grid-phase): FIX/SET schreibt die Eins ins Material, neue Fassungen erben den Versatz ---
+function eigenerBestand(eins1 = 0, eins2 = null) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-grideins-'));
+  process.on('exit', () => { try { fs.rmSync(dir, { recursive: true, force: true }); } catch {} });
+  baueBestand(dir, [{ material_id: NIGHTSHIFT, titel: 'nightshift', frames: 48000 * 100 }]);
+  const r1 = path.join(dir, NIGHTSHIFT, 'fassungen', '128000_r1');
+  const fj = JSON.parse(fs.readFileSync(path.join(r1, 'fassung.json'), 'utf8'));
+  fs.writeFileSync(path.join(r1, 'fassung.json'), JSON.stringify({ ...fj, erste_eins_quell_beat: eins1 }));
+  if (eins2 !== null) {
+    const r2 = path.join(dir, NIGHTSHIFT, 'fassungen', '128000_r2');
+    fs.cpSync(r1, r2, { recursive: true });
+    fs.writeFileSync(path.join(r2, 'fassung.json'), JSON.stringify({ ...fj, fassung: 2, erste_eins_quell_beat: eins2 }));
+    const db = new DatabaseSync(path.join(dir, 'index.sqlite'));
+    db.prepare('INSERT INTO fassung VALUES (?,?,?,?,?,?,?,?)').run(NIGHTSHIFT, 128, 2, fj.frames, 0, 0, -14, 0);
+    db.close();
+  }
+  return dir;
+}
+const korrZeilen = (dir) => {
+  try { return fs.readFileSync(path.join(dir, NIGHTSHIFT, 'korrekturen.jsonl'), 'utf8').split('\n').filter(Boolean).map((z) => JSON.parse(z)); } catch { return []; }
+};
+
+test('FIX schreibt die Eins ins Material (art=eins), nur ganze Beats zählen; Feinversatz allein schreibt nichts', async (t) => {
+  const dir = eigenerBestand(0);
+  const ro = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-raster-'));
+  const { url, log } = await geladenesDeck(t, { rasterOrdner: ro, bestand: dir });
+  // NEGATIV-KONTROLLE zuerst: 10 ms Feinversatz → keine Zeile
+  await postJson(url, '/deck/raster', { deck: 1, versatz_frames: 480 });
+  assert.equal((await postJson(url, '/deck/raster/fix', { deck: 1 })).code, 200);
+  assert.deepEqual(korrZeilen(dir), []);
+  // FEHLERFALL: −2 Beats −10 ms (Andreas' Halbtakt-Korrektur) → Eins (0 − 2) mod 4 = 2 im Material
+  await postJson(url, '/deck/raster', { deck: 1, versatz_frames: -45480 });
+  assert.equal((await postJson(url, '/deck/raster/fix', { deck: 1 })).code, 200);
+  let z = korrZeilen(dir);
+  assert.equal(z.length, 1);
+  assert.deepEqual({ ...z[0], zeit: undefined }, { zeit: undefined, von: 'andreas', art: 'eins', fassung: '128000_r1', ab_quell_beat: 2,
+    bis_quell_beat: null, versatz_ms: null, nr: null, text: 'FIX: Eins um −2 Beats gesetzt, Lage 2' });
+  assert.match(z[0].zeit, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/);
+  assert.ok(log.some((l) => l.typ === 'eins_korrektur' && l.eins === 2));
+  // zweites FIX mit demselben Versatz: keine doppelte Zeile
+  await postJson(url, '/deck/raster/fix', { deck: 1 });
+  assert.equal(korrZeilen(dir).length, 1);
+  // Korrektur zurückgenommen (0): die offene Zeile wird überschrieben, Lage 0
+  await postJson(url, '/deck/raster', { deck: 1, versatz_frames: 0 });
+  await postJson(url, '/deck/raster/fix', { deck: 1 });
+  z = korrZeilen(dir);
+  assert.equal(z.length, 2); assert.equal(z[1].ab_quell_beat, 0);
+});
+
+test('SET schreibt NICHTS ins Material (flüchtig), erst FIX speichert die Eins (Review B4)', async (t) => {
+  const dir = eigenerBestand(0);
+  const { o, url } = await geladenesDeck(t, { bestand: dir });
+  const erster = JSON.parse(fs.readFileSync(path.join(dir, NIGHTSHIFT, 'fassungen', '128000_r1', 'fassung.json'), 'utf8')).erster_schlag_frame;
+  const k = (erster / 22500 + 1) < 3.5 ? 1 : -3;
+  await postJson(url, '/deck/sprung', { deck: 1, ziel: 5, raster: 0 });
+  await zustand(o, (x) => Math.abs(x.quell_beat - 5) < 1e-6);
+  const r = await postJson(url, '/deck/raster', { deck: 1, set: true });
+  assert.equal(r.code, 200, JSON.stringify(r.j)); assert.equal(r.j.k, k);
+  assert.deepEqual(korrZeilen(dir), []);                     // Probe-SET: keine Zeile in korrekturen.jsonl
+  assert.equal((await postJson(url, '/deck/raster/fix', { deck: 1 })).code, 200);
+  const z = korrZeilen(dir);
+  assert.equal(z.length, 1); assert.equal(z[0].art, 'eins'); assert.equal(z[0].ab_quell_beat, ((k % 4) + 4) % 4);
+  assert.match(z[0].text, /^FIX: /);
+});
+
+test('Neue Fassung ohne Raster-Datei erbt Versatz der nächstälteren (Fehlerfall 929d/9b44: r2 verlor die Korrektur von r1)', async (t) => {
+  const dir = eigenerBestand(2, 2);
+  const ro = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-raster-'));
+  fs.writeFileSync(path.join(ro, `${NIGHTSHIFT}_128000_r1.json`), JSON.stringify({ versatz_frames: -45480 }));
+  const { o, url, log } = await geladenesDeck(t, { rasterOrdner: ro, bestand: dir });   // lädt die neueste: r2
+  assert.equal(o.stand.decks['1'].fassung, 2);
+  for (let i = 0; i < 100 && !log.some((l) => l.typ === 'raster_wieder'); i++) await warte(20);
+  assert.deepEqual(log.filter((l) => l.typ === 'raster_wieder').at(-1), { typ: 'raster_wieder', deck: 1, versatz_frames: -45480, geerbt_von: 1 });
+  assert.equal(log.filter((z) => z.typ === 'an_kern' && z.adresse === '/k/deck/raster').at(-1).felder.versatz_frames, -45480);
+  assert.deepEqual(await (await fetch(`${url}/deck/raster?deck=1`)).json(), { versatz_frames: -45480, gespeichert_frames: -45480 });
+  assert.ok(!fs.existsSync(path.join(ro, `${NIGHTSHIFT}_128000_r2.json`)), 'geerbt wird gelesen, nicht geschrieben');
+});
+
+test('Neue Fassung hat die Eins schon eingebaut (2 → 0): nur der Feinversatz wird geerbt, nicht doppelt', async (t) => {
+  const dir = eigenerBestand(2, 0);
+  const ro = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-raster-'));
+  fs.writeFileSync(path.join(ro, `${NIGHTSHIFT}_128000_r1.json`), JSON.stringify({ versatz_frames: -45480 }));   // Eins 2, −2 Beats → 0
+  const { url, log } = await geladenesDeck(t, { rasterOrdner: ro, bestand: dir });
+  for (let i = 0; i < 100 && !log.some((l) => l.typ === 'raster_wieder'); i++) await warte(20);
+  assert.equal(log.filter((l) => l.typ === 'raster_wieder').at(-1).versatz_frames, -480);
+  assert.equal((await (await fetch(`${url}/deck/raster?deck=1`)).json()).versatz_frames, -480);
+});
+
+test('Eigene Raster-Datei der geladenen Fassung schlägt das Erbe (Negativ-Kontrolle)', async (t) => {
+  const dir = eigenerBestand(2, 2);
+  const ro = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-raster-'));
+  fs.writeFileSync(path.join(ro, `${NIGHTSHIFT}_128000_r1.json`), JSON.stringify({ versatz_frames: -45480 }));
+  fs.writeFileSync(path.join(ro, `${NIGHTSHIFT}_128000_r2.json`), JSON.stringify({ versatz_frames: 96 }));
+  const { url } = await geladenesDeck(t, { rasterOrdner: ro, bestand: dir });
+  assert.equal((await (await fetch(`${url}/deck/raster?deck=1`)).json()).versatz_frames, 96);
+});
+
+test('leseBestand B2: Seitendatei eins_bewertung.json zeigt „unsicher“ ohne Neurendern; Fassungs-Felder haben Vorrang; Hand-Eins löscht den Hinweis', () => {
+  const dir = eigenerBestand(0);
+  const seite = path.join(dir, NIGHTSHIFT, 'eins_bewertung.json');
+  assert.equal(leseBestand(dir)[0].eins_unsicher, false);                                   // keine Datei
+  fs.writeFileSync(seite, JSON.stringify({ unsicher: true, anteil: 0.41, quelle: 'mehrheit', kick_lage: null, eins_vorschlag: 2 }));
+  assert.equal(leseBestand(dir)[0].eins_unsicher, true);
+  fs.writeFileSync(seite, JSON.stringify({ unsicher: false }));
+  assert.equal(leseBestand(dir)[0].eins_unsicher, false);                                   // Negativ: sicher bewertet
+  fs.writeFileSync(seite, '{kaputt');
+  assert.equal(leseBestand(dir)[0].eins_unsicher, false);                                   // unlesbar: nichts zeigen
+  fs.writeFileSync(seite, JSON.stringify({ unsicher: true }));
+  const datei = path.join(dir, NIGHTSHIFT, 'fassungen', '128000_r1', 'fassung.json');
+  const fj = JSON.parse(fs.readFileSync(datei, 'utf8'));
+  fs.writeFileSync(datei, JSON.stringify({ ...fj, tore: { eins: { ok: true, beat_this: 2, zweitverfahren: 2, bewertet: true, unsicher: false } } }));
+  assert.equal(leseBestand(dir)[0].eins_unsicher, false);                                   // Fassungs-Feld gewinnt
+  fs.writeFileSync(datei, JSON.stringify(fj));
+  assert.equal(leseBestand(dir)[0].eins_unsicher, true);
+  fs.writeFileSync(path.join(dir, NIGHTSHIFT, 'korrekturen.jsonl'), JSON.stringify({ zeit: '2026-10-11T03:00:00', von: 'werkstatt', art: 'eins', fassung: '128000_r1', ab_quell_beat: 0, bis_quell_beat: null, versatz_ms: null, nr: null, text: '' }) + '\n');
+  assert.equal(leseBestand(dir)[0].eins_unsicher, true);                                    // Werkstatt-Zeile ist keine Handkorrektur
+  fs.appendFileSync(path.join(dir, NIGHTSHIFT, 'korrekturen.jsonl'), JSON.stringify({ zeit: '2026-10-11T03:01:00', von: 'andreas', art: 'eins', fassung: '128000_r1', ab_quell_beat: 1, bis_quell_beat: null, versatz_ms: null, nr: null, text: '' }) + '\n');
+  assert.equal(leseBestand(dir)[0].eins_unsicher, false);                                   // Andreas hat die Eins gesetzt
+});
+
+test('leseBestand: eins_unsicher aus tore.eins der Fassung; fehlt das Feld, false', () => {
+  const dir = eigenerBestand(0);
+  assert.equal(leseBestand(dir)[0].eins_unsicher, false);
+  const datei = path.join(dir, NIGHTSHIFT, 'fassungen', '128000_r1', 'fassung.json');
+  const fj = JSON.parse(fs.readFileSync(datei, 'utf8'));
+  fs.writeFileSync(datei, JSON.stringify({ ...fj, tore: { eins: { ok: false, beat_this: 2, zweitverfahren: 2, bewertet: true, unsicher: true } } }));
+  assert.equal(leseBestand(dir)[0].eins_unsicher, true);
+  fs.writeFileSync(datei, JSON.stringify({ ...fj, tore: { eins: { ok: true, beat_this: 2, zweitverfahren: 2, bewertet: true, unsicher: false } } }));
+  assert.equal(leseBestand(dir)[0].eins_unsicher, false);
+});
+
+test('Hotcues erbt die neue Fassung (esf verschoben); Setzen auf r2 schreibt den vollen Satz in ihre Datei, r1 bleibt, Eigene werden nie überschrieben', async (t) => {
+  const dir = eigenerBestand(2, 2);
+  const r2 = path.join(dir, NIGHTSHIFT, 'fassungen', '128000_r2', 'fassung.json');
+  const fj2 = JSON.parse(fs.readFileSync(r2, 'utf8'));
+  fs.writeFileSync(r2, JSON.stringify({ ...fj2, erster_schlag_frame: (fj2.erster_schlag_frame ?? 0) - 2250 }));   // −0,1 Beat (Auto-Phase)
+  const hc = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-hc-'));
+  const datei1 = path.join(hc, `${NIGHTSHIFT}_128000_r1.json`), datei2 = path.join(hc, `${NIGHTSHIFT}_128000_r2.json`);
+  fs.writeFileSync(datei1, JSON.stringify({ 1: { quell_beat: 40, art: 'shot' }, 2: { quell_beat: 48, art: 'loop', laenge: 4 } }));
+  const { url, log } = await geladenesDeck(t, { hotcueOrdner: hc, bestand: dir });                 // lädt r2
+  for (let i = 0; i < 100 && !log.some((l) => l.typ === 'hotcues_wieder'); i++) await warte(20);
+  assert.deepEqual(log.find((l) => l.typ === 'hotcues_wieder'), { typ: 'hotcues_wieder', deck: 1, anzahl: 2, geerbt_von: 1 });
+  assert.deepEqual(await (await fetch(`${url}/deck/hotcues?deck=1`)).json(),
+    { 1: { quell_beat: 40.1, art: 'shot' }, 2: { quell_beat: 48.1, art: 'loop', laenge: 4 } });    // dieselbe Audio-Stelle: +0,1 Beat
+  assert.ok(!fs.existsSync(datei2), 'geerbt wird nur gelesen');
+  // Setzen auf r2: der volle Satz (geerbt + neu) wird ihre eigene Datei, r1 unverändert
+  const r1Text = fs.readFileSync(datei1, 'utf8');
+  assert.equal((await postJson(url, '/deck/hotcue', { deck: 1, nr: 3, aktion: 'setzen', quell_beat: 20, raster: 1 })).code, 200);
+  assert.deepEqual(JSON.parse(fs.readFileSync(datei2, 'utf8')), { 1: { quell_beat: 40.1, art: 'shot' }, 2: { quell_beat: 48.1, art: 'loop', laenge: 4 }, 3: { quell_beat: 20, art: 'shot' } });
+  assert.equal(fs.readFileSync(datei1, 'utf8'), r1Text);
+  // Eigene Datei: nie überschrieben, ein späteres r1-Update ändert nichts mehr
+  fs.writeFileSync(datei1, JSON.stringify({ 1: { quell_beat: 99, art: 'shot' } }));
+  assert.equal((await (await fetch(`${url}/deck/hotcues?deck=1`)).json())[1].quell_beat, 40.1);
+});
+
+for (const reihenfolge of ['erst Cue, dann FIX', 'erst FIX, dann Cue']) {
+  test(`Hotcues Review F1: geerbter Satz und FIX mit ganzen Beats, ${reihenfolge}: derselbe Cue (Raster-Position wie auf r1)`, async (t) => {
+    const dir = eigenerBestand(2, 2);
+    const hc = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-hc-'));
+    const ro = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-raster-'));
+    fs.writeFileSync(path.join(hc, `${NIGHTSHIFT}_128000_r1.json`), JSON.stringify({ 1: { quell_beat: 40, art: 'shot' } }));
+    const { url } = await geladenesDeck(t, { hotcueOrdner: hc, rasterOrdner: ro, bestand: dir });   // lädt r2, Cue nur geerbt
+    const cue = () => postJson(url, '/deck/hotcue', { deck: 1, nr: 3, aktion: 'setzen', quell_beat: 20, raster: 1 });
+    const fix = async () => { await postJson(url, '/deck/raster', { deck: 1, versatz_frames: 22500 }); assert.equal((await postJson(url, '/deck/raster/fix', { deck: 1 })).code, 200); };
+    if (reihenfolge === 'erst Cue, dann FIX') { assert.equal((await cue()).code, 200); await fix(); } else { await fix(); assert.equal((await cue()).code, 200); }
+    const eigene = JSON.parse(fs.readFileSync(path.join(hc, `${NIGHTSHIFT}_128000_r2.json`), 'utf8'));
+    assert.equal(eigene[1].quell_beat, 40, `Cue 1 steht bei ${eigene[1].quell_beat}, auf r1 bei 40`);
+    assert.equal((await (await fetch(`${url}/deck/hotcues?deck=1`)).json())[1].quell_beat, 40);
+  });
+}
+
+test('Hotcues Review F1 NEGATIV: FIX ohne irgendeinen Cue legt keine Hotcue-Datei an', async (t) => {
+  const dir = eigenerBestand(2, 2);
+  const hc = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-hc-'));
+  const { url } = await geladenesDeck(t, { hotcueOrdner: hc, rasterOrdner: fs.mkdtempSync(path.join(os.tmpdir(), 'djk-raster-')), bestand: dir });
+  await postJson(url, '/deck/raster', { deck: 1, versatz_frames: 22500 });
+  assert.equal((await postJson(url, '/deck/raster/fix', { deck: 1 })).code, 200);
+  assert.deepEqual(fs.readdirSync(hc).filter((n) => n.startsWith(NIGHTSHIFT)), []);
+});
+
+test('Hotcues: neue Fassung ohne Hotcues irgendwo → leer, nichts geschrieben', async (t) => {
+  const dir = eigenerBestand(2, 2);
+  const hc = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-hc-'));
+  const { url } = await geladenesDeck(t, { hotcueOrdner: hc, bestand: dir });
+  assert.deepEqual(await (await fetch(`${url}/deck/hotcues?deck=1`)).json(), {});
+  assert.deepEqual(fs.readdirSync(hc).filter((n) => n.startsWith(NIGHTSHIFT)), []);
 });
 
 test('/loop raster (Plan Grid): Schritt an den Kern, raster_fix schreibt versatz_frames in loop.json, andere Felder bleiben', async (t) => {

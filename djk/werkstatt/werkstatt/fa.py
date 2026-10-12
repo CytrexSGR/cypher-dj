@@ -70,11 +70,22 @@ def lufs_integriert(x):
     g2 = ms[(lk > -70) & (lk > l1 - 10)]
     return float(-0.691 + 10 * np.log10(g2.mean())), lk
 
+def echtspitze(x, block=1 << 20, rand=4096):
+    """max |x| nach 4-fach-Ueberabtastung (resample_poly), blockweise: ganze Datei auf einmal kostete 4,4 GB
+    Spitze je 6-min-Track (gemessen 2026-10-09). Jeder Block wird mit `rand` Samples Kontext je Seite
+    ueberabgetastet (Filter: 81 Taps), am Dateirand wie im Ganzen mit Nullen; gezaehlt wird nur der Kern."""
+    n, tp = len(x), 0.0
+    for a in range(0, n, block):
+        lo, hi = max(0, a - rand), min(n, a + block + rand)
+        ov = signal.resample_poly(x[lo:hi], 4, 1, axis=0)
+        k0 = 4 * (a - lo)
+        tp = max(tp, float(np.max(np.abs(ov[k0:k0 + 4 * (min(n, a + block) - a)]))))
+    return tp
+
 def lautheit(x, bpm=None):
     li, mom = lufs_integriert(x)
     spitze = float(np.max(np.abs(x)))
-    ov = signal.resample_poly(x, 4, 1, axis=0)
-    tp = float(np.max(np.abs(ov)))
+    tp = echtspitze(x)
     rms = float(np.sqrt(np.mean(x ** 2)))
     d = {
         "lufs": None if li is None else round(li, 2),
@@ -219,18 +230,20 @@ def spitzen(x_mono, fmin=30.0, fmax=2000.0, n=32768, hop=8192, dyn_db=50):
     zaehlte Fensterlecks eines 52-Hz-Tons als A. 1,46-Hz-Bins trennen Halbtoene ab etwa 30 Hz."""
     if len(x_mono) < n:
         x_mono = np.pad(x_mono, (0, n - len(x_mono)))
-    fr = np.lib.stride_tricks.sliding_window_view(x_mono, n)[::hop] * np.hanning(n)
-    A = np.abs(np.fft.rfft(fr, axis=1)) + 1e-12
-    La = np.log(A)
+    rahmen = np.lib.stride_tricks.sliding_window_view(x_mono, n)[::hop]
+    fen = np.hanning(n)
     i0, i1 = int(fmin * n / SR) + 1, int(fmax * n / SR)
-    a, b, c = La[:, i0 - 1:i1 - 1], La[:, i0:i1], La[:, i0 + 1:i1 + 1]
-    ist = (b > a) & (b >= c) & (b > (La.max(axis=1, keepdims=True) - dyn_db / 8.686))
-    r, k = np.nonzero(ist)
-    al, be, ga = a[r, k], b[r, k], c[r, k]
-    d = 0.5 * (al - ga) / (al - 2 * be + ga - 1e-12)
-    f = (k + i0 + d) * SR / n
-    mag = np.exp(be - 0.25 * (al - ga) * d)
-    return f, mag
+    fs, ms = [], []
+    for j in range(0, len(rahmen), 64):          # rahmenweise unabhaengig: 64 Rahmen je Block statt 2 GB am Stueck
+        La = np.log(np.abs(np.fft.rfft(rahmen[j:j + 64] * fen, axis=1)) + 1e-12)
+        a, b, c = La[:, i0 - 1:i1 - 1], La[:, i0:i1], La[:, i0 + 1:i1 + 1]
+        ist = (b > a) & (b >= c) & (b > (La.max(axis=1, keepdims=True) - dyn_db / 8.686))
+        r, k = np.nonzero(ist)
+        al, be, ga = a[r, k], b[r, k], c[r, k]
+        d = 0.5 * (al - ga) / (al - 2 * be + ga - 1e-12)
+        fs.append((k + i0 + d) * SR / n)
+        ms.append(np.exp(be - 0.25 * (al - ga) * d))
+    return np.concatenate(fs), np.concatenate(ms)
 
 def stimmung_cent(f, mag):
     """Abweichung der Stimmung von A=440 Hz in Cent, gewichtetes Kreismittel ueber alle Spitzen."""

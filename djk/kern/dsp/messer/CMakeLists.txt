@@ -25,6 +25,14 @@ set(CYPHERDJ_MESSER_DJK "${CMAKE_CURRENT_SOURCE_DIR}/../../.." CACHE PATH "Wurze
 set(CYPHERDJ_BAENDER_JSON "${CYPHERDJ_MESSER_DJK}/vertrag/baender.json" CACHE FILEPATH "baender.json aus Scheibe 09")
 set(CYPHERDJ_EBUR128_DIR "${CYPHERDJ_MESSER_DJK}/third_party/libebur128" CACHE PATH "libebur128 aus Scheibe 02")
 
+# Das python3 aus dem PATH (System, mit numpy) vorgeben: seit 2026-10-03 liegt ein uv-Python 3.11 ohne numpy in
+# ~/.local/bin, FindPython nahm es dort als ersten Treffer, und die Python-Tests brachen am Import ab (2026-10-11).
+if(NOT DEFINED Python3_EXECUTABLE)
+  find_program(CYPHERDJ_PYTHON3 NAMES python3)
+  if(CYPHERDJ_PYTHON3)
+    set(Python3_EXECUTABLE ${CYPHERDJ_PYTHON3})
+  endif()
+endif()
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
 # --- libebur128 (MIT, Commit 67b33ab), einkompiliert --------------------------------------------

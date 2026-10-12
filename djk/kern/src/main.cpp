@@ -60,6 +60,7 @@
 #include "hand/mapping.h"
 
 static std::atomic<bool> g_stop{false};
+static char g_faehig_pfad[160] = "";  // S7: kern-faehigkeiten.json, beim sauberen Ende gelöscht (kein Rest mit toter PID)
 static jack_client_t* g_client = nullptr;
 static cdj::Kern* g_kern = nullptr;
 static cdj::Zyklusmesser* g_messer = nullptr;
@@ -461,6 +462,25 @@ int main(int argc, char** argv) {
   jack_set_port_connect_callback(g_client, [](jack_port_id_t, jack_port_id_t, int, void*) { graph_ereignis(); }, nullptr);
   std::signal(SIGINT, on_signal);
   std::signal(SIGTERM, on_signal);
+  {  // S7 (Review S7 M5): Fähigkeiten-Datei {pid, nur_cue}, atomar (Temp + rename), vor jack_activate. Der Seiten-Server
+     // prüft PID und /proc/<pid>/comm, ehe er den Vorhörer auf rueck_erz_8 schaltet; ein Kern ohne S7 schreibt sie nicht.
+    char ordner[128], tmp[176];
+    char* pfad = g_faehig_pfad;
+    cdj_shm_ordner(ordner, sizeof ordner, inst);
+    std::snprintf(pfad, sizeof g_faehig_pfad, "%s/kern-faehigkeiten.json", ordner);
+    std::snprintf(tmp, sizeof tmp, "%s.tmp", pfad);
+    if (FILE* f = std::fopen(tmp, "w")) {
+      const int k = cdj::Mixer::kanal_index(cdj::VORHOER_KANAL);
+      if (g_kern->mixer().nur_cue(k))
+        std::fprintf(f, "{\"pid\": %d, \"nur_cue\": \"%s\"}\n", (int)getpid(), cdj::VORHOER_KANAL);
+      else
+        std::fprintf(f, "{\"pid\": %d}\n", (int)getpid());
+      const bool ok = std::fclose(f) == 0;
+      if (!ok || std::rename(tmp, pfad) != 0) std::perror(pfad);
+    } else {
+      std::perror(tmp);
+    }
+  }
   if (jack_activate(g_client) != 0) {
     std::fprintf(stderr, "jack_activate fehlgeschlagen\n");
     g_kern->keylock_faeden_stoppen();  // Prüfung F4 (seit 2.5b laufen hier noch keine; bleibt als Schutz)
@@ -696,6 +716,7 @@ int main(int argc, char** argv) {
   faden.join();
   lader_faden.join();
   jack_client_close(g_client);
+  if (g_faehig_pfad[0]) unlink(g_faehig_pfad);   // S7 (Review-Kern n1)
   netz.ereignisse_senden();  // Scheibe 25: die letzten ZYKLUS-Ereignisse in die Verteilung
   const cdj::Verteilung& vt = netz.verteilung();
   std::fprintf(stderr,

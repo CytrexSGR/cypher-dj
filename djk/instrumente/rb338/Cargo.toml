@@ -1,0 +1,16 @@
+[package]
+name = "rb338"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[features]
+pruef_alloc = ["nih_plug/assert_process_allocs"]
+
+[dependencies]
+nih_plug = { workspace = true }
+rb_dsp = { path = "../rb_dsp" }

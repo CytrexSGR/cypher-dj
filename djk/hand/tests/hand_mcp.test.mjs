@@ -10,7 +10,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 const HAND = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'hand.ts');
 const NAMEN = ['lage', 'bestand', 'laden', 'deck_start', 'deck_stopp', 'sprung', 'loop', 'pad', 'loop_nach_box', 'box',
   'regler', 'fx', 'fx_zuweisung', 'strudel', 'abbrechen', 'warte', 'hoeren',
-  'studio', 'loops', 'rec', 'loop_klang', 'spur', 'spur_stopp', 'spuren', 'stille', 'pegel', 'klang', 'instrumente', 'bibliothek', 'klaenge', 'bestand_karte', 'vorbereiten',
+  'studio', 'loops', 'rec', 'loop_klang', 'spur', 'spur_stopp', 'spuren', 'stille', 'pegel', 'klang', 'instrumente', 'bibliothek', 'anschluss', 'stoebern', 'klaenge', 'bestand_karte', 'vorbereiten',
   'sets', 'set_zeige', 'set_lege', 'set_vorbereiten', 'tempo'];
 
 async function aufbau(t, antworten, env) {
@@ -280,7 +280,7 @@ test('djk-hand vorbereiten: Statusabfrage 404 bricht sofort ab und wird Werkzeug
 
 test('djk-hand Sets: Liste, Ansicht, Track hineinlegen (legt Set bei Bedarf an), alles vorbereiten', async (t) => {
   const { c, gesehen } = await aufbau(t, (m, u) => {
-    if (m === 'GET' && u === '/sammlungen') return [200, [{ slug: 'a', name: 'A', posten: 1 }]];
+    if (m === 'GET' && u === '/sammlungen?art=set') return [200, [{ slug: 'a', name: 'A', posten: 1 }]];
     if (m === 'GET' && u === '/sammlungen/a') return [200, { slug: 'a', name: 'A', posten: [], uebersicht: { tracks: 0 } }];
     if (m === 'GET' && u === '/sammlungen/neu') return [404, { fehler: 'unbekannt' }];
     if (m === 'POST' && u === '/sammlungen') return [201, { slug: 'neu' }];
@@ -326,4 +326,44 @@ test('djk-hand Keylock 3: tempo nennt den globalen Knopf keylock, regler den Pfa
   assert.match(regler, /\bkeylock\b/);
   assert.match(tempo, /null unknown/); assert.match(tempo, /Exceptions with keylock on/);   // 3b
   assert.doesNotMatch(regler + tempo, /deck\/<n>\/keylock|deck\/[1-4]\/keylock/);
+});
+
+test('djk-hand anschluss: deck oder material_id, energie, max als Query an GET /mediathek/anschluss', async (t) => {
+  const antwort = { lauf: { material_id: 'aa', camelot: '8A' }, treffer: [{ titel: 'X', punkte: 0.9 }], bewertet: 1 };
+  const { c, gesehen } = await aufbau(t, (m, u) => (u.startsWith('/mediathek/anschluss?deck=1') ? [200, antwort] : u.startsWith('/mediathek/anschluss?deck=2') ? [409, { fehler: 'deck_leer' }] : undefined));
+  const r = await c.callTool({ name: 'anschluss', arguments: { deck: 1, energie: 'heben', max: 5 } });
+  assert.ok(!r.isError, r.content[0].text);
+  assert.ok(gesehen.some((x) => x.pfad === '/mediathek/anschluss?deck=1&energie=heben&limit=5'), JSON.stringify(gesehen.map((x) => x.pfad)));
+  assert.deepEqual(JSON.parse(r.content[0].text), antwort);
+  const f = await c.callTool({ name: 'anschluss', arguments: { deck: 2 } });
+  assert.ok(f.isError, 'deck_leer wird Werkzeugfehler');
+});
+
+test('djk-hand stoebern: typ, text, Filter als Query an GET /stoebern; nachbarn als 1', async (t) => {
+  const antwort = { typ: 'oneshot', gesamt: 2, treffer: [{ name: 'Kick 01', sha: 'a'.repeat(64) }] };
+  const { c, gesehen } = await aufbau(t, (m, u) => (u.startsWith('/stoebern?') ? [200, antwort] : undefined));
+  const r = await c.callTool({ name: 'stoebern', arguments: { typ: 'oneshot', text: 'kick', camelot: '8A', nachbarn: true, limit: 5 } });
+  assert.ok(!r.isError, r.content[0].text);
+  assert.ok(gesehen.some((x) => x.pfad === '/stoebern?typ=oneshot&text=kick&camelot=8A&nachbarn=1&limit=5'), JSON.stringify(gesehen.map((x) => x.pfad)));
+  assert.deepEqual(JSON.parse(r.content[0].text), antwort);
+});
+
+test('djk-hand stoebern: Feld-Präfixe im Text werden kodiert durchgereicht; strudel ist ein Typ; Seitenfehler (400) wird Werkzeugfehler', async (t) => {
+  const { c, gesehen } = await aufbau(t, (m, u) => (u.includes('typ=musik') ? [400, { fehler: 'typ_ungueltig' }] : u.includes('typ=strudel') ? [400, { fehler: 'suchfeld_nicht_anwendbar' }] : u.startsWith('/stoebern?') ? [200, { gesamt: 0, treffer: [] }] : undefined));
+  const ok = await c.callTool({ name: 'stoebern', arguments: { typ: 'track', text: 'label:drumcode artist:"a b"' } });
+  assert.ok(!ok.isError, ok.content[0].text);
+  assert.ok(gesehen.some((x) => x.pfad === '/stoebern?typ=track&text=label%3Adrumcode+artist%3A%22a+b%22'), JSON.stringify(gesehen.map((x) => x.pfad)));
+  const f = await c.callTool({ name: 'stoebern', arguments: { typ: 'strudel', text: 'label:x' } });
+  assert.equal(f.isError, true); assert.match(f.content[0].text, /suchfeld_nicht_anwendbar/);
+  const u = await c.callTool({ name: 'stoebern', arguments: { typ: 'musik' } });
+  assert.equal(u.isError, true, 'Negativ: unbekannter Typ (Antwort der Seite 400) wird Werkzeugfehler'); assert.match(u.content[0].text, /typ_ungueltig/);
+});
+
+test('djk-hand fx: art 5 (reverb) steht im Schema und wird durchgereicht', async (t) => {
+  const { c, gesehen } = await aufbau(t, (m, u) => (u === '/fx' ? [200, { ok: true, felder: { id: 3 } }] : undefined));
+  const fx = (await c.listTools()).tools.find((x) => x.name === 'fx');
+  assert.deepEqual(fx.inputSchema.properties.art.enum, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+  const r = await c.callTool({ name: 'fx', arguments: { einheit: 1, art: 5, beats: 2, wet: 0.6, param1: 0.4, an: true } });
+  assert.ok(!r.isError, JSON.stringify(r.content));
+  assert.equal(gesehen.find((g) => g.pfad === '/fx').koerper.art, 5);
 });

@@ -6,7 +6,10 @@ unter pw-jack; node.async/node.group setzt die Unit über PIPEWIRE_PROPS. --sock
 Startfehler (Unit startet dann nicht in Schleife neu), 0 nach SIGTERM. Ein kaputter Aktiv-Klang ist KEIN Startfehler:
 der Wirt spielt dann die Surge-Init und trägt den Fehler in den Status.
 --sfz statt --lv2 (Glanz Welle 4): Carlas eingebauter SFZ-Sampler, z. B. der Flügel aus instrument_bauen.py. Dann gibt es
-nur note/halte am Socket, keinen Aktiv-Klang; eine nicht ladbare SFZ (instrument_bauen.pruefe) ist ein Startfehler."""
+nur note/halte am Socket, keinen Aktiv-Klang; eine nicht ladbare SFZ (instrument_bauen.pruefe) ist ein Startfehler.
+--vst3 (RB-338 W1): ein VST3-Bundle der eigenen Instrumente (djk/instrumente), Socket-Befehle note/halte/param/params
+(ParamSteuerung, Regler normiert 0..1); ein fehlendes Bundle oder eine nicht lesbare Parameterliste ist ein Startfehler
+(Rückgabe 2, Eintrag im Status)."""
 import argparse
 import json
 import os
@@ -21,10 +24,11 @@ sys.path.insert(0, "/usr/share/carla")
 from carla_backend import (BINARY_NATIVE, PLUGIN_SFZ, ENGINE_OPTION_OSC_ENABLED, ENGINE_OPTION_PATH_BINARIES,  # noqa: E402
                            ENGINE_OPTION_PATH_RESOURCES, ENGINE_OPTION_PLUGIN_PATH, ENGINE_OPTION_PREFER_PLUGIN_BRIDGES,
                            ENGINE_OPTION_PROCESS_MODE, ENGINE_OPTION_TRANSPORT_MODE, ENGINE_PROCESS_MODE_CONTINUOUS_RACK,
-                           ENGINE_TRANSPORT_MODE_INTERNAL, PLUGIN_LV2, PLUGIN_OPTION_SEND_ALL_SOUND_OFF, CarlaHostDLL)
+                           ENGINE_TRANSPORT_MODE_INTERNAL, PLUGIN_LV2, PLUGIN_OPTION_SEND_ALL_SOUND_OFF, PLUGIN_VST3, CarlaHostDLL)
 
 import instrument_bauen  # noqa: E402
-from wirtsteuerung import NotenSteuerung, Steuerung  # noqa: E402
+from wirtsteuerung import NotenSteuerung, ParamSteuerung, Steuerung  # noqa: E402
+from wirtwache import JackVerbindungen, Wache  # noqa: E402
 
 
 def lies_zeile(conn) -> bytes:
@@ -43,13 +47,15 @@ def main(argv=None) -> int:
     art = ap.add_mutually_exclusive_group(required=True)
     art.add_argument("--lv2", help="LV2-URI des Instruments (Surge XT)")
     art.add_argument("--sfz", help="SFZ-Datei für Carlas eingebauten Sampler")
+    art.add_argument("--vst3", help="Pfad zu einem .vst3-Bundle (eigene Instrumente, djk/instrumente)")
     ap.add_argument("--lv2-pfad", default=os.path.expanduser("~/.local/lib/cypherdj/lv2"))
     ap.add_argument("--status", required=True)
     ap.add_argument("--sock", default="", help="Unix-Socket für lade/zustand/note (leer = keiner)")
     ap.add_argument("--aktiv", default="", help="Klang-Datei .fxp: beim Start laden, bei jedem lade überschreiben")
     a = ap.parse_args(argv)
     status = {"name": a.name, "pid": os.getpid(), "bereit": False, "fehler": [], "sock": a.sock, "klang": None,
-              "art": f"sfz:{os.path.splitext(os.path.basename(a.sfz))[0]}" if a.sfz else "lv2"}
+              "art": (f"sfz:{os.path.splitext(os.path.basename(a.sfz))[0]}" if a.sfz
+                      else f"vst3:{os.path.splitext(os.path.basename(a.vst3.rstrip('/')))[0]}" if a.vst3 else "lv2")}
 
     def schreibe():
         tmp = a.status + ".neu"
@@ -63,6 +69,10 @@ def main(argv=None) -> int:
             status["fehler"].append(f"sfz: {len(maengel)} Mängel, zuerst: {maengel[0]}")
             schreibe()
             return 2
+    if a.vst3 and not os.path.isdir(a.vst3):
+        status["fehler"].append(f"vst3: {a.vst3} fehlt")
+        schreibe()
+        return 2
     host = CarlaHostDLL("/usr/lib/carla/libcarla_standalone2.so", False)
     host.set_engine_option(ENGINE_OPTION_PATH_BINARIES, 0, "/usr/lib/carla")
     host.set_engine_option(ENGINE_OPTION_PATH_RESOURCES, 0, "/usr/share/carla/resources")
@@ -81,6 +91,8 @@ def main(argv=None) -> int:
     # OHNE die Option innerhalb von 50 ms auf unter -160 dBFS ab (n=1 je Fall), die Option ändert daran nichts Messbares.
     if a.sfz:
         geladen = host.add_plugin(BINARY_NATIVE, PLUGIN_SFZ, os.path.abspath(a.sfz), "", "", 0, None, PLUGIN_OPTION_SEND_ALL_SOUND_OFF)
+    elif a.vst3:
+        geladen = host.add_plugin(BINARY_NATIVE, PLUGIN_VST3, os.path.abspath(a.vst3), "", "", 0, None, PLUGIN_OPTION_SEND_ALL_SOUND_OFF)
     else:
         geladen = host.add_plugin(BINARY_NATIVE, PLUGIN_LV2, "", "", a.lv2, 0, None, PLUGIN_OPTION_SEND_ALL_SOUND_OFF)
     if not geladen:
@@ -91,9 +103,23 @@ def main(argv=None) -> int:
     host.set_active(0, True)
     info = host.get_plugin_info(0)
     status.update({"plugin": info["name"], "maker": info["maker"]})
+    wache = None
     arbeit = a.status + ".arbeit"
     os.makedirs(arbeit, exist_ok=True)
-    if a.sfz:
+    if a.vst3:
+        try:
+            st, bereiche = ParamSteuerung(host), {}
+        except Exception as e:
+            status["fehler"].append(f"steuerung: {type(e).__name__}: {e}")
+            schreibe()
+            host.engine_close()
+            return 2
+        status["klang"] = status["art"]
+        try:  # Note-Off für alle, sobald der Kern die MIDI-Kante neu verbindet (sein All-Off erreicht ein nih-plug-VST3 nicht)
+            wache = Wache(JackVerbindungen(f"{a.name}:events-in", f"{a.name}-wacht").verbunden, st.panik)
+        except Exception as e:
+            status["fehler"].append(f"wache: {type(e).__name__}: {e} (hängende Noten nach Neuverbindung möglich)")
+    elif a.sfz:
         st, bereiche = NotenSteuerung(host), {}
         status["klang"] = status["art"]
     else:
@@ -136,6 +162,12 @@ def main(argv=None) -> int:
     while laeuft[0]:
         host.engine_idle()
         st.takt(time.monotonic())
+        if wache is not None:
+            wache.takt(time.monotonic())
+            if wache.fehler is not None:  # die Wache ist ausgefallen: sichtbar machen, der Wirt spielt weiter
+                status["fehler"].append(f"wache: {wache.fehler} (hängende Noten nach Neuverbindung möglich)")
+                schreibe()
+                wache = None
         if srv is None:
             time.sleep(0.02)
             continue

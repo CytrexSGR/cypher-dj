@@ -35,7 +35,7 @@ test('Sammlung: Track hinzufügen, gleicher Track nochmal → schon_drin, falsch
 test('Sammlung: kaputte set.json wird gelistet, nicht verworfen, Datei bleibt unangetastet', (t) => {
   const d = tmp(t); const s = new Sammlungen(d);
   fs.mkdirSync(path.join(d, 'kaputt')); fs.writeFileSync(path.join(d, 'kaputt', 'set.json'), '{nein');
-  assert.deepEqual(s.liste(), [{ slug: 'kaputt', name: 'kaputt', posten: 0, fehler: 'json_kaputt' }]);
+  assert.deepEqual(s.liste(), [{ slug: 'kaputt', name: 'kaputt', art: 'set', posten: 0, fehler: 'json_kaputt' }]);
   assert.throws(() => s.lies('kaputt'), (e) => e.code === 409 && e.fehler === 'json_kaputt');
   assert.equal(fs.readFileSync(path.join(d, 'kaputt', 'set.json'), 'utf8'), '{nein');
 });
@@ -47,12 +47,12 @@ test('Sets-Routen: anlegen, listen, Track hinzufügen, ansehen mit Feldern und S
   const s = await stapel(t, { mediathek: m.db, sammlungen: sets });
   assert.deepEqual(await post(s.url, '/sammlungen', { name: 'Back Yard' }), { code: 201, j: { slug: 'back-yard' } });
   assert.equal((await post(s.url, '/sammlungen', { name: '' })).j.fehler, 'name_ungueltig');
-  assert.deepEqual((await hole(s.url, '/sammlungen')).j, [{ slug: 'back-yard', name: 'Back Yard', posten: 0 }]);
+  assert.deepEqual((await hole(s.url, '/sammlungen')).j, [{ slug: 'back-yard', name: 'Back Yard', art: 'set', posten: 0 }]);
   assert.deepEqual(await post(s.url, '/sammlungen/back-yard/posten', { art: 'track', material_id: mid(5) }), { code: 201, j: { id: 'p1' } });
   assert.equal((await post(s.url, '/sammlungen/back-yard/posten', { art: 'track', material_id: mid(5) })).j.schon_drin, true);
   const g = await hole(s.url, '/sammlungen/back-yard');
   assert.equal(g.code, 200);
-  assert.equal(g.j.posten[0].kuenstler, 'Gamma'); assert.equal(g.j.posten[0].bpm, 140); assert.equal(g.j.posten[0].status, 'prepare');
+  assert.equal(g.j.posten[0].kuenstler, 'Gamma'); assert.equal(g.j.posten[0].bpm, 140); assert.equal(g.j.posten[0].energie, null); assert.equal(g.j.posten[0].status, 'prepare');
   assert.equal((await hole(s.url, '/sammlungen/nix')).code, 404);
   const fremd = await post(s.url, '/sammlungen', { name: 'X' }, { origin: 'http://evil.example' });
   assert.equal(fremd.code, 403);
@@ -127,4 +127,64 @@ test('Traktor-Import: nur Traktor-Listen mit Inhalt, Import legt Set in Listen-R
   assert.deepEqual(await post(s.url, '/sammlungen/import', { liste_id: 1 }), { code: 201, j: { slug: 'back-yard', posten: 2 } });
   assert.deepEqual((await hole(s.url, '/sammlungen/back-yard')).j.posten.map((p) => p.material_id), [mid(5), mid(1)]);
   assert.equal((await post(s.url, '/sammlungen/import', { liste_id: 3 })).code, 404);
+});
+
+import { standardKatalog, baueKatalog } from './hilfen/katalog.mjs';
+test('Sets: Posten loop und oneshot (quelle mediathek), Ansicht aus dem Katalog, Doppel erkannt, falsche Art 400', async (t) => {
+  const kat = standardKatalog(t);
+  const sets = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-sets-')); t.after(() => fs.rmSync(sets, { recursive: true, force: true }));
+  const s = await stapel(t, { katalog: kat.datei, sammlungen: sets });
+  const slug = (await post(s.url, '/sammlungen', { name: 'Kit Ideen' })).j.slug;
+  const kick = (await hole(s.url, '/stoebern?typ=oneshot')).j.treffer[0];                     // Kick 01 (nach Name)
+  const loop = (await hole(s.url, '/stoebern?typ=loop&sort=bpm&richtung=ab')).j.treffer[0];   // VEC_128_Bass
+  assert.equal((await post(s.url, `/sammlungen/${slug}/posten`, { art: 'oneshot', material_id: kick.material_id })).code, 201, 'neu = 201 (server.ts:1632)');
+  assert.equal((await post(s.url, `/sammlungen/${slug}/posten`, { art: 'loop', material_id: loop.material_id })).code, 201);
+  const doppel = await post(s.url, `/sammlungen/${slug}/posten`, { art: 'oneshot', material_id: kick.material_id });
+  assert.deepEqual([doppel.code, doppel.j.schon_drin], [200, true]);
+  assert.equal((await post(s.url, `/sammlungen/${slug}/posten`, { art: 'kit', material_id: kick.material_id })).code, 400);
+  const falsch = await post(s.url, `/sammlungen/${slug}/posten`, { art: 'track', material_id: loop.material_id });
+  assert.deepEqual([falsch.code, falsch.j.fehler], [400, 'art_passt_nicht'], 'ein Loop wird nie als Track abgelegt');
+  const datei = JSON.parse(fs.readFileSync(path.join(sets, slug, 'set.json'), 'utf8'));
+  assert.deepEqual(datei.posten.map((p) => [p.art, p.quelle]), [['oneshot', 'mediathek'], ['loop', 'mediathek']], 'Format Spec §7');
+  const a = (await hole(s.url, `/sammlungen/${slug}`)).j;
+  assert.deepEqual(a.posten.map((p) => [p.art, p.titel, p.status]), [['oneshot', 'Kick 01', 'ready'], ['loop', 'VEC_128_Bass', 'ready']]);
+  assert.equal(a.uebersicht.tracks, 0, 'Übersicht zählt nur Tracks');
+});
+
+test('Sets: PREPARE ALL schickt nur Tracks in die Werkstatt — auch ein alter Posten „Loop als track" nicht', async (t) => {
+  const m = tmpMt(t);
+  const loopDatei = path.join(m.daten, 'Zwerg_live/loops/dark-pad-01.wav');               // Objekt 14 (typ loop) bekommt seine Datei
+  fs.mkdirSync(path.dirname(loopDatei), { recursive: true }); fs.writeFileSync(loopDatei, 'x');
+  const kat = baueKatalog(fs.mkdtempSync(path.join(m.dir, 'k-')), [{ sha: sha(14), typ: 'loop', bpm: 128, pfad: loopDatei }]);
+  const ein = baueEinleser(m.dir, { schlaf: 1 });
+  const sets = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-sets-')); t.after(() => fs.rmSync(sets, { recursive: true, force: true }));
+  const s = await stapel(t, { mediathek: m.db, katalog: kat, sammlungen: sets, python: ein.skript });
+  const slug = (await post(s.url, '/sammlungen', { name: 'Gemischt' })).j.slug;
+  await post(s.url, `/sammlungen/${slug}/posten`, { art: 'track', material_id: mid(5) });      // Werk 4, Datei da → prepare
+  await post(s.url, `/sammlungen/${slug}/posten`, { art: 'loop', material_id: mid(14) });
+  // Der Fall aus Review M6: eine Set-Datei aus der Zeit vor diesem Task trägt den Loop als art 'track'.
+  // Mediathek.felder prüft den Typ nicht → ohne Fix Status prepare → Werkstatt.
+  const dp = path.join(sets, slug, 'set.json'), d = JSON.parse(fs.readFileSync(dp, 'utf8'));
+  d.posten.push({ id: 'p99', art: 'track', material_id: mid(14) });
+  fs.writeFileSync(dp, JSON.stringify(d));
+  assert.equal((await hole(s.url, `/sammlungen/${slug}`)).j.posten.find((x) => x.id === 'p99').status, 'kein_track');
+  const r = await post(s.url, `/sammlungen/${slug}/vorbereiten`, {});
+  assert.deepEqual([r.code, r.j.eingereiht], [202, 1]);
+  await warte(2500);
+  const laeufe = ein.laeufe();
+  assert.equal(laeufe.length, 1, `genau ein Werkstatt-Lauf: ${JSON.stringify(laeufe)}`);
+  assert.ok(laeufe[0].includes('vier.flac'), 'der Track (Werk 4)');
+  assert.ok(!laeufe[0].includes('dark-pad'), 'nie der Loop');
+});
+
+test('Sets: fremdes Katalog-Schema legt die Sets nicht lahm, /stoebern meldet 503 (Review MAJOR 1)', async (t) => {
+  const fremd = baueKatalog(fs.mkdtempSync(path.join(os.tmpdir(), 'djk-kat2-')), [{ n: 1, typ: 'track', titel: 'X', pfad: null }], { schema: '2' });
+  t.after(() => fs.rmSync(path.dirname(fremd), { recursive: true, force: true }));
+  const sets = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-sets-')); t.after(() => fs.rmSync(sets, { recursive: true, force: true }));
+  const s = await stapel(t, { katalog: fremd, sammlungen: sets });
+  const slug = (await post(s.url, '/sammlungen', { name: 'Nur Tracks' })).j.slug;
+  assert.equal((await post(s.url, `/sammlungen/${slug}/posten`, { art: 'track', material_id: mid(2) })).code, 201);
+  assert.equal((await hole(s.url, `/sammlungen/${slug}`)).code, 200);
+  assert.equal((await post(s.url, `/sammlungen/${slug}/vorbereiten`, {})).code, 202);
+  assert.deepEqual(await hole(s.url, '/stoebern?typ=track'), { code: 503, j: { fehler: 'katalog_schema' } });
 });

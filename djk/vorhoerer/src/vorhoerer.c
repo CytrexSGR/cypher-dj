@@ -13,6 +13,13 @@
  * abschaltbar mit --ohne-blende oder /v/blende 0). Ausgang nur an --ausgang <präfix> hinter dem Riegel (riegel.h);
  * ohne --ausgang verbindet er nichts. Kein Ton ohne /v/play; nach /v/laden steht er.
  * Aufruf: pw-jack -p 256 cypherdj-vorhoerer [--ausgang <präfix>] [--ton-frei] [--port N] [--ohne-blende]
+ *           [--name BASIS] [--riegel-pruefen] [--faehigkeiten DATEI]
+ * S7 (Plan Mediathek-Browser): --name setzt die JACK-Namensbasis (nur cypherdj-vorhoerer…, [a-z0-9-]{1,40}), damit der
+ * Browser-Vorhörer neben dem Cue-Werkzeug laufen kann. Als einziges Ziel jenseits des Riegels ist der Nur-Cue-Eingang des
+ * EIGENEN Kerns erlaubt (<cypherdj-kern[-i]>:rueck_erz_8_), und nur, wenn der laufende Kern es in
+ * /dev/shm/cypherdj[-i]/kern-faehigkeiten.json meldet (PID lebt, comm „cypherdj-kern“, nur_cue „erz/8“; --faehigkeiten
+ * ersetzt den Pfad für Tests); sonst Rückgabe 3, auch mit --ton-frei. --riegel-pruefen endet nach dem Riegel mit 0,
+ * ohne Socket und ohne JACK (Test).
  * Rückgabe: 0 regulär, 1 JACK/Netz, 2 Aufruf, 3 Riegel. Übersetzt mit -DVORHOERER_MUTANTE_BLOCK entsteht die Messmutante,
  * die den Loop-Rücksprung am Blockanfang statt am Sample B ausführt. */
 #define _GNU_SOURCE
@@ -188,14 +195,18 @@ static void spur_frei(spur* p) {
   free(p);
 }
 
+#define MAX_DEKODIER_S 1800
 static spur* dekodieren(const char* pfad, char* fehler, size_t nf) {
   if (access(pfad, R_OK) != 0) { snprintf(fehler, nf, "Datei nicht lesbar: %s", pfad); return NULL; }
   char r[16];
   snprintf(r, sizeof r, "%u", rate);
-  char* argv[] = {"ffmpeg", "-nostdin", "-v", "error", "-i", (char*)pfad, "-map", "0:a:0", "-ac", "2", "-ar", r,
+  /* Review S7 M1: höchstens die ersten MAX_DEKODIER_S Sekunden (30 min ≈ 0,7 GB); ein 5-h-Track bräuchte 7 GB und sprengte mlock */
+  char tmax[16];
+  snprintf(tmax, sizeof tmax, "%d", MAX_DEKODIER_S);
+  char* argv[] = {"ffmpeg", "-nostdin", "-v", "error", "-i", (char*)pfad, "-map", "0:a:0", "-t", tmax, "-ac", "2", "-ar", r,
                   "-f", "f32le", "pipe:1", NULL};
   int rohr[2];
-  if (pipe2(rohr, O_CLOEXEC) != 0) { snprintf(fehler, nf, "pipe: %s", strerror(errno)); return NULL; }
+  if (pipe2(rohr, O_CLOEXEC) != 0) { snprintf(fehler, nf, "pipe: %s: %s", strerror(errno), pfad); return NULL; }
   posix_spawn_file_actions_t fa;
   posix_spawn_file_actions_init(&fa);
   posix_spawn_file_actions_adddup2(&fa, rohr[1], 1);
@@ -204,18 +215,27 @@ static spur* dekodieren(const char* pfad, char* fehler, size_t nf) {
   const int e = posix_spawnp(&pid, "ffmpeg", &fa, NULL, argv, environ);
   posix_spawn_file_actions_destroy(&fa);
   close(rohr[1]);
-  if (e) { close(rohr[0]); snprintf(fehler, nf, "ffmpeg nicht startbar: %s", strerror(e)); return NULL; }
+  if (e) { close(rohr[0]); snprintf(fehler, nf, "ffmpeg nicht startbar: %s: %s", strerror(e), pfad); return NULL; }
   size_t kap = (size_t)rate * 2 * sizeof(float) * 60, len = 0;
   char* b = malloc(kap);
+  int abgebrochen = 0;
   for (;;) {
     if (len == kap) { char* nb = b ? realloc(b, kap *= 2) : NULL; if (!nb) { free(b); b = NULL; break; } b = nb; }
     if (!b) break;
+    /* Review S7 F2: ein neuerer Ladewunsch überholt diese Dekodierung. ffmpeg abschießen statt zu Ende zu lesen, sonst wartet die
+     * neueste Anfrage die volle Dekodierzeit der überholten (und bei einer hängenden Platte ihr Zeitlimit) ab. poll, damit auch ein
+     * stockender Lesevorgang nicht am Abbruch vorbeiläuft. */
+    struct pollfd pf = {.fd = rohr[0], .events = POLLIN};
+    const int pr = poll(&pf, 1, 50);
+    if (__atomic_load_n(&wunsch_da, __ATOMIC_ACQUIRE)) { abgebrochen = 1; break; }
+    if (pr == 0 || (pr < 0 && errno == EINTR)) continue;
     const ssize_t k = read(rohr[0], b + len, kap - len);
     if (k < 0 && errno == EINTR) continue;
     if (k <= 0) break;
     len += (size_t)k;
   }
   close(rohr[0]);
+  if (abgebrochen) { kill(pid, SIGKILL); waitpid(pid, NULL, 0); free(b); snprintf(fehler, nf, "abgebrochen: %s", pfad); return NULL; }
   int st = 0;
   waitpid(pid, &st, 0);
   const uint64_t frames = len / (2 * sizeof(float));
@@ -247,6 +267,10 @@ static void* lader(void* a) {
     wunsch_da = 0;
     pthread_mutex_unlock(&mx);
     spur* p = dekodieren(pfad, fehler, sizeof fehler);
+    pthread_mutex_lock(&mx);
+    const int neuer = wunsch_da;   /* Review S7 B1: kam inzwischen ein neuerer Ladewunsch, ist dieses Ergebnis überholt: verwerfen, nicht tauschen */
+    pthread_mutex_unlock(&mx);
+    if (neuer) { spur_frei(p); continue; }
     if (!p) { snprintf(m, sizeof m, "f%s", fehler); melden(m); continue; }
     spur_frei(atomic_exchange_explicit(&wartend, p, memory_order_acq_rel)); /* nie vom Callback gesehen */
     snprintf(m, sizeof m, "g%.1000s\t%.6f", p->pfad, p->dauer);
@@ -282,7 +306,14 @@ static void empfangen(int fd, const unsigned char* b, int n, const struct sockad
     struct sockaddr_in z = *von;
     if (m.n >= 1 && m.w[0].t != 's') z.sin_port = htons((uint16_t)m.w[0].i);
     for (int i = 0; i < n_abo; i++)
-      if (abo[i].sin_port == z.sin_port && abo[i].sin_addr.s_addr == z.sin_addr.s_addr) return;
+      if (abo[i].sin_port == z.sin_port && abo[i].sin_addr.s_addr == z.sin_addr.s_addr) {
+        /* Review: ein erneutes hallo erneuert das Abo (rückt ans Ende der Verdrängungsreihe). Der Seiten-Server sendet es alle 2 s;
+         * so verdrängen ihn fremde /v/hallo (ABOS = 4, der älteste fliegt) höchstens bis zur nächsten Erneuerung. */
+        const struct sockaddr_in gleich = abo[i];
+        memmove(abo + i, abo + i + 1, sizeof abo[0] * (size_t)(n_abo - i - 1));
+        abo[n_abo - 1] = gleich;
+        return;
+      }
     if (n_abo == ABOS) memmove(abo, abo + 1, sizeof abo[0] * (ABOS - 1)), n_abo--;
     abo[n_abo++] = z;
     fprintf(stderr, "abonnent %s:%u\n", inet_ntoa(z.sin_addr), ntohs(z.sin_port));
@@ -314,27 +345,88 @@ static int64_t mono_ns(void) {
   return (int64_t)t.tv_sec * 1000000000 + t.tv_nsec;
 }
 
+/* S7 (Review S7 M1): genau der Nur-Cue-Eingang des EIGENEN Kerns (erz/8, im Mixer nie Master) ist erlaubt; der Riegel
+ * (riegel.h) bleibt für alles andere — auch für rueck_erz_1..7, die in den Master gehen. */
+static int vorhoer_eingang(const char* ausgang, const char* inst) {
+  char soll[64];
+  cdj_name(soll, sizeof soll, "cypherdj-kern", inst);
+  strncat(soll, ":rueck_erz_8_", sizeof soll - strlen(soll) - 1);
+  return strcmp(ausgang, soll) == 0;
+}
+
+/* Review-Kern m1: der laufende Kern muss in kern-faehigkeiten.json {pid, nur_cue:"erz/8"} melden; PID lebt und ihr comm
+ * ist „cypherdj-kern“. Ein alter Kern ohne S7 schreibt die Datei nicht, ein toter hinterlässt eine tote PID. */
+static int kern_nur_cue(const char* pfad) {
+  char buf[512];
+  FILE* f = fopen(pfad, "r");
+  if (!f) return 0;
+  size_t n = fread(buf, 1, sizeof buf - 1, f);
+  fclose(f);
+  buf[n] = 0;
+  const char* p = strstr(buf, "\"pid\"");
+  if (!p || !(p = strchr(p, ':'))) return 0;
+  long pid = strtol(p + 1, NULL, 10);
+  if (pid <= 1) return 0;
+  const char* q = strstr(buf, "\"nur_cue\"");
+  if (!q || !(q = strchr(q, ':'))) return 0;
+  q++;
+  while (*q == ' ') q++;
+  if (strncmp(q, "\"erz/8\"", 7) != 0) return 0;
+  char cp[64], comm[32] = "";
+  snprintf(cp, sizeof cp, "/proc/%ld/comm", pid);
+  FILE* c = fopen(cp, "r");
+  if (!c) return 0;
+  if (!fgets(comm, sizeof comm, c)) comm[0] = 0;
+  fclose(c);
+  comm[strcspn(comm, "\n")] = 0;
+  return strcmp(comm, "cypherdj-kern") == 0;
+}
+
+/* --name: cypherdj-vorhoerer… (Review-Kern m5: nie cypherdj-kern oder cypherdj-notbahn), nur [a-z0-9-]{1,40} */
+static int name_gueltig(const char* n) {
+  size_t l = strlen(n);
+  if (l < 1 || l > 40) return 0;
+  if (strncmp(n, "cypherdj-vorhoerer", 18) != 0) return 0;
+  for (; *n; n++)
+    if (!((*n >= 'a' && *n <= 'z') || (*n >= '0' && *n <= '9') || *n == '-')) return 0;
+  return 1;
+}
+
 int main(int argc, char** argv) {
   const char* inst = cdj_instanz();
   if (cdj_instanz_k(inst) < 0) { fprintf(stderr, "CYPHERDJ_INSTANZ='%s' ungültig\n", inst); return 2; }
   const char* ausgang = NULL;
-  int ton_frei = 0, falsch = 0, port = cdj_port(47740, inst);
+  const char* name_basis = "cypherdj-vorhoerer";
+  const char* faehig = NULL;
+  int ton_frei = 0, falsch = 0, nur_pruefen = 0, port = cdj_port(47740, inst);
   for (int i = 1; i < argc && !falsch; i++) {
     if (!strcmp(argv[i], "--ausgang") && i + 1 < argc) ausgang = argv[++i];
     else if (!strcmp(argv[i], "--port") && i + 1 < argc) port = atoi(argv[++i]);
     else if (!strcmp(argv[i], "--ton-frei")) ton_frei = 1;
     else if (!strcmp(argv[i], "--ohne-blende")) ohne_blende = 1;
+    else if (!strcmp(argv[i], "--riegel-pruefen")) nur_pruefen = 1;
+    else if (!strcmp(argv[i], "--name") && i + 1 < argc) name_basis = argv[++i];
+    else if (!strcmp(argv[i], "--faehigkeiten") && i + 1 < argc) faehig = argv[++i];
     else falsch = 1;
   }
-  if (falsch || port <= 0 || port > 65535) {
-    fprintf(stderr, "Aufruf: cypherdj-vorhoerer [--ausgang <präfix>] [--ton-frei] [--port N] [--ohne-blende]\n");
+  if (falsch || port <= 0 || port > 65535 || !name_gueltig(name_basis)) {
+    fprintf(stderr, "Aufruf: cypherdj-vorhoerer [--ausgang <präfix>] [--ton-frei] [--port N] [--ohne-blende] [--riegel-pruefen] [--name BASIS] [--faehigkeiten DATEI]\n");
     return 2;
   }
-  char ziel[2][256];
+  char ziel[2][256], fp[192];
   for (int k = 0; k < 2 && ausgang; k++) {
     snprintf(ziel[k], sizeof ziel[k], "%s%s", ausgang, k ? "R" : "L");
-    if (!riegel_erlaubt(ziel[k], ton_frei)) { fprintf(stderr, "Riegel: %s ohne --ton-frei\n", ziel[k]); return 3; }
+    if (vorhoer_eingang(ausgang, inst)) {   // Ausnahme nur mit Nur-Cue-Meldung des Kerns, auch mit --ton-frei
+      if (!faehig) {
+        char ordner[128];
+        cdj_shm_ordner(ordner, sizeof ordner, inst);
+        snprintf(fp, sizeof fp, "%s/kern-faehigkeiten.json", ordner);
+        faehig = fp;
+      }
+      if (!kern_nur_cue(faehig)) { fprintf(stderr, "Riegel: %s, aber der Kern meldet kein Nur-Cue (%s)\n", ziel[k], faehig); return 3; }
+    } else if (!riegel_erlaubt(ziel[k], ton_frei)) { fprintf(stderr, "Riegel: %s ohne --ton-frei\n", ziel[k]); return 3; }
   }
+  if (nur_pruefen) return 0;  /* Prüfschalter: vor jedem Socket- und JACK-Aufruf */
   const int fd = socket(AF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
   struct sockaddr_in an = {.sin_family = AF_INET, .sin_port = htons((uint16_t)port)};
   an.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
@@ -344,7 +436,7 @@ int main(int argc, char** argv) {
   cdj_name(gruppe, sizeof gruppe, "cypherdj", inst);
   snprintf(props, sizeof props, "{ node.group = \"%s\" node.lock-quantum = true }", gruppe);
   setenv("PIPEWIRE_PROPS", props, 1);
-  cdj_name(name, sizeof name, "cypherdj-vorhoerer", inst);
+  cdj_name(name, sizeof name, name_basis, inst);
   struct sigaction sa = {.sa_handler = on_sig};
   sigaction(SIGINT, &sa, NULL);
   sigaction(SIGTERM, &sa, NULL);
@@ -373,7 +465,15 @@ int main(int argc, char** argv) {
   const int64_t takt = 1000000000 / 30;
   int64_t naechst = mono_ns() + takt;
   unsigned char b[V_OSC_MAX + 1];
+  /* Review S7 B3: der Riegel gilt laufend, nicht nur beim Start. Meldet der Kern kein Nur-Cue mehr (Rückweg auf einen alten Kern,
+   * Neustart), endet der Vorhörer; die Seite startet ihn bei Bedarf neu und prüft dann wieder. */
+  const char* wache = (ausgang && vorhoer_eingang(ausgang, inst)) ? faehig : NULL;
+  int64_t naechst_wache = mono_ns() + 500000000;
   while (!stop) {
+    if (wache && mono_ns() >= naechst_wache) {
+      naechst_wache = mono_ns() + 500000000;
+      if (!kern_nur_cue(wache)) { fprintf(stderr, "Riegel: der Kern meldet kein Nur-Cue mehr (%s), beende\n", wache); stop = 1; break; }
+    }
     int64_t warte = (naechst - mono_ns()) / 1000000;
     struct pollfd pf = {.fd = fd, .events = POLLIN};
     if (poll(&pf, 1, warte > 0 ? (int)warte : 0) > 0) {

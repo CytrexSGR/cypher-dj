@@ -44,6 +44,7 @@ const char* Mixer::kanal_name(int k) { return (k >= 0 && k < MIX_KANAELE) ? KANA
 
 Mixer::Mixer(const sw::ReglerTabelle& tab) : tab_(tab), n_regler_(tab.anzahl()) {
   hall_ = std::make_unique<Hall>();
+  for (auto& kp : komp_) kp = std::make_unique<Komp>();
   kleber_ = std::make_unique<Kleber>();
   limiter_ = std::make_unique<dsp::MasterLimiter>();  // Vorgabe: Decke −1 dBTP (limiter_dbtp)
   for (int k = 0; k < MIX_KANAELE; ++k) {
@@ -74,6 +75,9 @@ Mixer::Mixer(const sw::ReglerTabelle& tab) : tab_(tab), n_regler_(tab.anzahl()) 
         z.rolle = MixRolle::xseite;
       } else if (d.rolle == sw::Rolle::pfl) {
         z.rolle = MixRolle::pfl;
+      } else if (d.rolle >= sw::Rolle::komp_an && d.rolle <= sw::Rolle::komp_sc && k < MIX_QUELLEN) {
+        z.rolle = MixRolle::komp;
+        z.feld = static_cast<int8_t>(static_cast<int>(d.rolle) - static_cast<int>(sw::Rolle::komp_an));
       } else {
         z.rolle = MixRolle::spaeter;   // stem/* (Scheibe 31)
       }
@@ -87,6 +91,9 @@ Mixer::Mixer(const sw::ReglerTabelle& tab) : tab_(tab), n_regler_(tab.anzahl()) 
         case sw::Rolle::duck_tiefe: z.rolle = MixRolle::duck_tiefe; break;
         case sw::Rolle::duck_release: z.rolle = MixRolle::duck_release; break;
         case sw::Rolle::master_kleber: z.rolle = MixRolle::master_kleber; break;
+        case sw::Rolle::master_pfl: z.rolle = MixRolle::master_pfl; break;
+        case sw::Rolle::color_art: z.rolle = MixRolle::color_art; break;
+        case sw::Rolle::color_param: z.rolle = MixRolle::color_param; break;
         case sw::Rolle::fx_rueckweg:   // "fx/<n>/rueckweg"
           z.rolle = MixRolle::fx_rueckweg;
           z.fx = static_cast<int8_t>(std::min(3, std::max(0, d.pfad[3] - '1')));   // Pfad fx/<1..4>/rueckweg
@@ -113,6 +120,10 @@ Mixer::Wert* Mixer::wert_von(int regler) {
     case MixRolle::duck_tiefe: return &duck_tiefe_;
     case MixRolle::duck_release: return &duck_release_;
     case MixRolle::master_kleber: return &master_kleber_;
+    case MixRolle::master_pfl: return &master_pfl_;
+    case MixRolle::color_art: return &color_art_;
+    case MixRolle::color_param: return &color_param_;
+    case MixRolle::komp: return &komp_w_[z.kanal][z.feld];
     case MixRolle::fx_rueckweg: return &fx_rueck_[z.fx];
     default: return nullptr;
   }
@@ -139,6 +150,9 @@ void Mixer::setze_sofort(int regler, float wert) {
   if (regler < 0 || regler >= n_regler_) return;
   const MixZuweisung& z = zuw_[regler];
   if (z.rolle == MixRolle::kanalzug) {
+#ifndef CYPHERDJ_MUTATION_NUR_CUE_AUS
+    if (nur_cue_[z.kanal]) return;   // Review-Kern m2: Gehörschutz, Trim/EQ/Filter von erz/8 bleiben neutral
+#endif
     kz_[z.kanal]->setze_sofort(z.regler, wert);
     return;
   }
@@ -156,6 +170,9 @@ void Mixer::verlauf(int regler, const float* werte) {
   if (regler < 0 || regler >= n_regler_ || !werte) return;
   const MixZuweisung& z = zuw_[regler];
   if (z.rolle == MixRolle::kanalzug) {
+#ifndef CYPHERDJ_MUTATION_NUR_CUE_AUS
+    if (nur_cue_[z.kanal]) return;   // Review-Kern m2 (s. setze_sofort)
+#endif
     kz_[z.kanal]->verlauf(z.regler, werte);
     return;
   }
@@ -209,7 +226,48 @@ void Mixer::route(int k, int n, const float* l, const float* r) {
   }
 }
 
+// Kompressor des Quellkanals k auf dem Abgriff (nach EQ/Filter, vor dem Fader); Werte am Blockende wie duck/*, das Knie
+// fest 6 dB, kein Sidechain im Kern
+void Mixer::komp_block(int k, int n) {
+  const Wert* w = komp_w_[k];
+  CypherKompEinstellung e{w[1].w, w[2].w, 6.0, w[3].w, w[4].w, w[5].w, w[6].w, 0.0};
+  komp_[k]->setze(e);
+  // Sidechain (komp/sc): Schlüssel ist der Eingang des Quellkanals (vor Trim und EQ); er liegt für alle Kanäle schon vor,
+  // ehe die Kanalschleife läuft, also ohne Verzug, gleich in welcher Reihenfolge die Kanäle gerechnet werden
+  const int sc = ganz(w[7].w) - 1;
+  if (sc >= 0 && sc < MIX_QUELLEN && sc != k)
+    komp_[k]->block_sc(kz_[k]->abgriff_schreibbar(0), kz_[k]->abgriff_schreibbar(1), ein_l_[sc], ein_r_[sc], n);
+  else
+    komp_[k]->block(kz_[k]->abgriff_schreibbar(0), kz_[k]->abgriff_schreibbar(1), n);
+  komp_lief_[k] = true;
+  komp_gr_[k].store(komp_[k]->gr_db(), std::memory_order_relaxed);
+}
+
 void Mixer::kanal(int k, int n) {
+  // SOUND COLOR FX: globale Art und PARAMETER (Werte am Blockende wie duck/*), Echozeit aus dem Tempo der Uhr
+  kz_[k]->setze_color(ganz(color_art_.w), color_param_.w, fx_bps_ > 0.0 ? 1.0 / fx_bps_ : 0.0);
+#ifndef CYPHERDJ_MUTATION_NUR_CUE_AUS
+  if (nur_cue_[k]) {   // S7 Vorhören: Kanalzug rechnen (Trim/EQ/Filter wirken auf den Abgriff), Abgriff in PFL, sonst nichts
+    dsp::KanalzugAusgang aus;
+    aus.haupt_l = aus_l_;
+    aus.haupt_r = aus_r_;
+    for (int s = 0; s < dsp::kAnzahlSends; ++s) { aus.send_l[s] = nullptr; aus.send_r[s] = nullptr; }   // kanalzug.cpp:117-119: nullptr = Send übersprungen
+    kz_[k]->verarbeite(ein_l_[k], ein_r_[k], n, aus);
+    // Review-Kern m4: ein NaN aus diesem Kanal bleibt bei ihm. Es käme sonst in die PFL-Summe, und die F01-Wache
+    // (verarbeite) leerte Hall, Kleber, Beat-FX und alle Kanalzüge: der Master stünde einen Block still.
+    bool endlich = true;
+    for (int i = 0; i < n; ++i)
+      endlich = endlich && std::isfinite(kz_[k]->abgriff(0)[i]) && std::isfinite(kz_[k]->abgriff(1)[i]);
+    if (!endlich) {
+      kz_[k]->zustaende_leeren();
+      ++nan_treffer_;
+      return;
+    }
+    addiere(pfl_l_, kz_[k]->abgriff(0), n, 1.0f);
+    addiere(pfl_r_, kz_[k]->abgriff(1), n, 1.0f);
+    return;   // kein route(): weder Master noch Bus; keine Spitze (Hüllen „nie belegt", kern_stellwerk.cpp:414)
+  }
+#endif
   dsp::KanalzugAusgang aus;
   aus.haupt_l = aus_l_;
   aus.haupt_r = aus_r_;
@@ -218,10 +276,20 @@ void Mixer::kanal(int k, int n) {
     aus.send_r[s] = fx_r_[s];
   }
   const int fzi = fx_ziel_index(k);
-  if (fzi >= 0 && routing_ == ROUTING_INSERT) {   // Ohr T17: Insert, der Effekt sitzt vor dem Fader auf dem Abgriff
+  const bool komp_an = k < MIX_QUELLEN && ganz(komp_w_[k][0].w) == 1;
+  if (k < MIX_QUELLEN && !komp_an && komp_lief_[k]) {   // ausgeschaltet: nächstes Einschalten beginnt ohne alte Absenkung
+    komp_[k]->leeren();
+    komp_lief_[k] = false;
+    komp_gr_[k].store(0.0f, std::memory_order_relaxed);
+  }
+  if (komp_an || (fzi >= 0 && routing_ == ROUTING_INSERT)) {
+    // Kompressor (2026-10-11) und Insert-FX (Ohr T17) sitzen vor dem Fader auf dem Abgriff, der Kompressor zuerst;
+    // die Teilung vor/nach ist bitgleich zu verarbeite (test_kanalzug_teilung)
     kz_[k]->verarbeite_vor(ein_l_[k], ein_r_[k], n);
-    fx_kette(fzi, kz_[k]->abgriff_schreibbar(0), kz_[k]->abgriff_schreibbar(1), n);
+    if (komp_an) komp_block(k, n);
+    if (fzi >= 0 && routing_ == ROUTING_INSERT) fx_kette(fzi, kz_[k]->abgriff_schreibbar(0), kz_[k]->abgriff_schreibbar(1), n);
     kz_[k]->verarbeite_nach(n, aus);
+    if (fzi >= 0 && routing_ != ROUTING_INSERT) fx_kette(fzi, aus_l_, aus_r_, n);   // Post Fader wie unten
   } else {
     kz_[k]->verarbeite(ein_l_[k], ein_r_[k], n, aus);
     if (fzi >= 0) fx_kette(fzi, aus_l_, aus_r_, n);   // AUFTRAG 2026-09-28: Post Fader, nach dem Fader
@@ -356,7 +424,7 @@ void Mixer::verarbeite(int n, float* ml, float* mr, float* cl, float* cr) {
   for (int k = 0; k < MIX_QUELLEN; ++k) kanal(k, n);   // Quellen zuerst: sie füllen die Bus-Eingänge
   for (int k = MIX_QUELLEN; k < MIX_KANAELE; ++k) kanal(k, n);
   // K2 Slice 2: Rückweg fx/2 = Hall. Send 2 aller Kanäle (nach dem Fader) → Hall → mal fx/2/rueckweg → Summe.
-  // Der Faust-Hall rauscht auch bei Stille mit ~1e-20 (Denormal-Schutz): er darf erst rechnen und in die Summe, wenn
+  // Der Hall (bis 2026-10-11 Faust zita, rauschte bei Stille mit ~1e-20) darf erst rechnen und in die Summe, wenn
   // ein Send ihn gespeist hat (Vorgaben: Master bitgleich zu vorher), und läuft weiter, bis der Eingang länger still
   // war als seine längste Rückkopplungsleitung (32768 Samples, daher 65536 mit Reserve) UND der Nachhall unter 1e-9
   // (−180 dBFS) liegt (sonst bräche ein laufender Nachhall ab).
@@ -408,6 +476,7 @@ void Mixer::verarbeite(int n, float* ml, float* mr, float* cl, float* cr) {
       std::memset(pfl_l_, 0, b);
       std::memset(pfl_r_, 0, b);
       for (auto& kz : kz_) kz->zustaende_leeren();
+      for (auto& kp : komp_) kp->leeren();
       hall_->leeren();
       hall_wach_ = false;
       hall_ruhe_ = 0;
@@ -511,8 +580,9 @@ void Mixer::verarbeite(int n, float* ml, float* mr, float* cl, float* cr) {
   for (int i = 0; i < n; ++i) {
     const float mix = cue_mix_.vl ? cue_mix_.vl[i] : cue_mix_.w;
     const float g_pfl = 0.5f * (1.0f - mix), g_main = 0.5f * (1.0f + mix);
-    float hl = pfl_l_[i] * g_pfl + ml[i] * g_main;
-    float hr = pfl_r_[i] * g_pfl + mr[i] * g_main;
+    const float mc = (master_pfl_.vl ? master_pfl_.vl[i] : master_pfl_.w) >= 0.5f ? 1.0f : 0.0f;   // MASTER CUE
+    float hl = (pfl_l_[i] + mc * ml[i]) * g_pfl + ml[i] * g_main;
+    float hr = (pfl_r_[i] + mc * mr[i]) * g_pfl + mr[i] * g_main;
     if ((cue_split_.vl ? cue_split_.vl[i] : cue_split_.w) >= 0.5f) {
       const float kopf = 0.5f * (hl + hr);
       hr = 0.5f * (ml[i] + mr[i]);
@@ -558,6 +628,11 @@ void Mixer::verarbeite(int n, float* ml, float* mr, float* cl, float* cr) {
   nachfuehren(duck_tiefe_);
   nachfuehren(duck_release_);
   nachfuehren(master_kleber_);
+  nachfuehren(master_pfl_);
+  nachfuehren(color_art_);
+  nachfuehren(color_param_);
+  for (auto& kw : komp_w_)
+    for (Wert& w : kw) nachfuehren(w);
   for (Wert& w : fx_rueck_) nachfuehren(w);
 }
 

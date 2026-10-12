@@ -1,0 +1,9 @@
+{
+ "_quelle": "Startpunkte aus der Praxis (Senior, Mixing Secrets; Pirkle Kap. 18), nicht gemessen",
+ "Drum Bus":      {"thresh": -18.0, "ratio": 4.0,  "knee": 6.0,  "attack": 30.0, "release": 100.0, "makeup": 3.0,  "mix": 1.0, "extsc": false, "schp": 90.0},
+ "Bus Glue":      {"thresh": -12.0, "ratio": 2.0,  "knee": 12.0, "attack": 30.0, "release": 300.0, "makeup": 1.5,  "mix": 1.0, "extsc": false, "schp": 60.0},
+ "Bass":          {"thresh": -20.0, "ratio": 4.0,  "knee": 6.0,  "attack": 5.0,  "release": 120.0, "makeup": 3.0,  "mix": 1.0, "extsc": false, "schp": 0.0},
+ "Parallel":      {"thresh": -30.0, "ratio": 10.0, "knee": 0.0,  "attack": 3.0,  "release": 80.0,  "makeup": 10.0, "mix": 0.4, "extsc": false, "schp": 0.0},
+ "Lead":          {"thresh": -20.0, "ratio": 3.0,  "knee": 6.0,  "attack": 5.0,  "release": 80.0,  "makeup": 4.0,  "mix": 1.0, "extsc": false, "schp": 0.0},
+ "Kick Sidechain": {"thresh": -30.0, "ratio": 8.0, "knee": 0.0,  "attack": 1.0,  "release": 150.0, "makeup": 0.0,  "mix": 1.0, "extsc": true,  "schp": 0.0}
+}
