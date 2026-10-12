@@ -17,8 +17,13 @@ Built in Germany by Andreas, a DJ, and Cypher, the lab's AI agent (Claude models
 **Play**
 - Two decks with a beat grid, eight hot cues, loops, beat jump and quantized jumps (1/4 beat to 4 bars)
 - 3-band EQ with kill, filter, channel faders, crossfader, master and headphone cue
-- Beat FX on any channel or the master: echo, flanger, phaser, filter, timed in beats
-- A reverb send, and sidechain ducking of the bass and melody channels by the kick
+- Beat FX on any channel or the master, timed in beats: echo, flanger, phaser, filter, reverb, delay,
+  ping pong, trans, roll, slip roll, vinyl brake and spiral
+- Sound color FX on each channel's COLOR knob, as on a Pioneer mixer: filter, space, dub echo, sweep, noise
+  and crush
+- A compressor on every source channel (threshold, ratio, knee, attack, release, makeup, parallel mix) with
+  presets and an external sidechain, for example the kick ducking the bass
+- A reverb send into Cypher Hall, our own spectral reverb (see below)
 - Two loop boxes that record, resample and play back in time
 - Three [Strudel](https://strudel.cc) pattern channels (drums, bass, melody). Strudel runs as its own
   process; the core plays the resulting events at the sample
@@ -34,6 +39,10 @@ Built in Germany by Andreas, a DJ, and Cypher, the lab's AI agent (Claude models
 - A cue tool: a 3-band waveform of the whole track, hot cues set from the keyboard
 - Import of grid and cues from a Traktor collection
 - A library with sets that can be prepared ahead of time
+- A media library browser for tracks, loops and one-shot samples: folder tree, full-text search, filters
+  for key (with harmonic neighbours), BPM and energy, a waveform per item, headphone preview, and loops
+  straight into a loop box
+- Key and energy analysis for the whole library, with BPM filled in where it was missing
 
 **Measure before it is loud**
 - A native headphone previewer, separate from the browser, which only draws
@@ -52,12 +61,29 @@ Built in Germany by Andreas, a DJ, and Cypher, the lab's AI agent (Claude models
   *with* a human: think about what a move does before making it, crossfade instead of swapping, one change
   every 8 bars and announce it first. Copy the folder into the skills folder of Claude Code (`.claude/skills` in your home directory) to use it
 
+## Own instruments and effects
+
+Written in Rust, each as a DSP library plus a VST3 plugin (built with nih-plug), measured against
+references before they went in:
+
+- **Cypher EQ**: a parametric 8-band EQ (a filter bank of state-variable filters, 2x oversampled) whose
+  curves follow the analog target curve up to 20 kHz within 0.27 dB, where a plain bilinear design is
+  off by several dB near the top
+- **Cypher Hall**: a spectral reverb (energy decay per frequency bin, early reflections, frequency-wise
+  ducking, freeze). It is the reverb on the send and the REVERB beat FX
+- **Cypher Komp**: a feed-forward compressor after Giannoulis, Massberg and Reiss (2012) with soft knee,
+  parallel mix, external sidechain and a high-pass in the detector; six presets
+- **RB-338**: a 303-style bass voice with cutoff, resonance, envelope, decay, accent and slide, playable
+  from the bass pattern channel instead of Surge XT
+
 ## More in the box
 
 The lists above are the headline. Also in there:
 
 - **Studio view**: the three Strudel channels side by side, each with an automation lane for fader,
   filter and cutoff over 4 to 32 bars
+- **Effects section**: one strip per channel showing what plays and how much the compressor pulls, an
+  expanded view with every control, and automation per loop for compressor, filter, hall send and EQ
 - **Resampling**: record the master into the loop library (1 to 32 beats, starting on the beat), cut a
   running deck loop sample-exact into a loop box, or turn a recorded loop into a Strudel sound
   (`s("rec0")`) that the drum channel can play right away
