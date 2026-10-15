@@ -4,8 +4,9 @@ offene AIFF) ein SFZ mit Tonbereichen und lovel/hivel, gespielt von Carlas einge
 
 Carla wählt den Decoder nach der Endung: ".aif" lehnt es ab („ad_open(): no decoder backend"), ".aiff" und ".ogg"
 lädt libsndfile (gemessen 2026-10-06, ~/messungen/2026-10-06-welle4-fluegel/). Deshalb Symlinks mit Endung .aiff statt
-einer Umwandlung: kein Platz, die Originale bleiben in der Core Library. Lizenz: die Klänge dürfen in eigener Musik
-klingen, die Dateien gehören nicht ins Repo; hier liegen nur Verweise unter ~/.config.
+einer Umwandlung: kein Platz, die Originale bleiben in der Core Library. Die Samples liegen
+lokal und werden nicht weitergegeben, sie gehören nicht ins Repo; hier liegen nur Verweise unter ~/.config.
+Lizenz: siehe Ableton-EULA.
 
 Aufruf: instrument_bauen.py [--quelle DIR] [--ziel ~/.config/cypherdj/instrumente/grand] [--name grand]"""
 import argparse

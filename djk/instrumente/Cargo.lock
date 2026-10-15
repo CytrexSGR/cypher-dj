@@ -235,6 +235,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "cypher_saett"
+version = "0.1.0"
+dependencies = [
+ "nih_plug",
+ "saett_dsp",
+]
+
+[[package]]
 name = "deranged"
 version = "0.5.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -627,6 +635,14 @@ dependencies = [
  "primal-check",
  "strength_reduce",
  "transpose",
+]
+
+[[package]]
+name = "saett_dsp"
+version = "0.1.0"
+dependencies = [
+ "eq_dsp",
+ "rb_dsp",
 ]
 
 [[package]]

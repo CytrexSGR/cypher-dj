@@ -67,6 +67,7 @@ export const AUSGABEN = {
   '/zustand/kern': f('iihiiiiiiii', 'generation quantum sample frame_luecken ausgelassene_perioden cb_max_us cb_p99_us aufwach_max_us stretcher_aktiv befehle_wartend ki_gestoppt'),
   '/zustand/deck': f('iisdidddfiifii', 'deck status material_id basis_bpm fassung quell_beat beats_bis_ende faktor vorlauf_ms hoerweg stretcher_fuell versatz_intern_ms keylock_unterlauf keylock_aufgegeben'),
   '/zustand/box': f('iiiiii', 'box status keylock_unterlauf keylock_aufgegeben keylock_ring_voll keylock_kein_platz'),  // Keylock 7b.3 (die Attrappe spielt keine Boxen und sendet es nicht)
+  '/zustand/komp': f('sf', 'kanal gr_db'),   // Effekt-Sektion Schritt 2 (§5.5c), osc.json: /zustand/komp
   '/pegel': f('sfffffff', 'kanal spitze_db echtspitze_dbtp lufs_m lufs_s band_tief_db band_mitte_db band_hoch_db'),
   '/e/regler': f('sfshd', 'pfad wert halter sample beat'),
   '/e/hand': f('sfhd', 'pfad wert sample beat'),

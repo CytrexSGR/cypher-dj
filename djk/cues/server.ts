@@ -10,7 +10,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import crypto from 'node:crypto';
-import { ladeBibliothek, ladeListen, ladeTraktor, verschiebeTraktor, type Liste, type Track, type TraktorEintrag } from './bibliothek.ts';
+import { ladeBibliothek, ladeListen, ladeTraktor, verschiebeTraktor, traktorVersatz, type Liste, type Track, type TraktorEintrag } from './bibliothek.ts';
 import { dekodiereKopf, rechneUndCache } from './welle.ts';
 import { EingabeFehler, lade, sha1ErsteMib, speichere, zaehleAlle } from './speicher.ts';
 import { VorhoererKlient } from './vorhoerer-klient.ts';
@@ -45,7 +45,7 @@ export class CueServer {
   listen: Liste[] = [];
   traktor = new Map<string, TraktorEintrag>();
   vorlaeufe = new Map<string, number>();
-  // Encoder-Vorlauf der Datei (ffprobe stream start_time), einmal je Track gemerkt; Fehler → 0
+  // start_time der Datei (ffprobe stream start_time), einmal je Track gemerkt; Fehler → 0. Der Traktor-Versatz (2×, nur MP3) kommt aus traktorVersatz.
   vorlauf(t: Track): Promise<number> {
     const m = this.vorlaeufe.get(t.rel);
     if (m !== undefined) return Promise.resolve(m);
@@ -214,7 +214,7 @@ export class CueServer {
           const abs = path.join(this.opt.wurzel, t.rel);
           passt = d.schluessel.groesse === t.groesse && d.schluessel.sha1_erste_mib === sha1ErsteMib(abs);
         }
-        const tr = verschiebeTraktor(this.traktor.get(path.basename(t.rel).toLowerCase()) ?? null, await this.vorlauf(t));
+        const tr = verschiebeTraktor(this.traktor.get(path.basename(t.rel).toLowerCase()) ?? null, traktorVersatz(await this.vorlauf(t), t.rel));
         this.json(a, 200, { datei: d, schluessel_passt: passt, traktor: tr, tags: { titel: t.titel, artist: t.artist, bpm: t.bpm, tonart: t.tonart, energie: t.energie } });
         return;
       }

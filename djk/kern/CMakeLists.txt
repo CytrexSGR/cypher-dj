@@ -417,6 +417,14 @@ endif()
 # Wahrheit: richtig, Folgeblock, erster Wert wirkt, 1 ms Versatz, leer, Ruhe mit und ohne Griff.
 add_test(NAME test_auswertung_hand COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/hand/test_auswertung_hand.py)
 
+# L3 (Paket 0.3): alle Namenslisten (Tasten, Deck-Aktionen, Regler) gegeneinander. Der Hand-Unterordner baut seine Tests
+# nur allein (HAND_TESTS), also steht der Test auch hier; rein Text, ohne Build.
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/../vertrag/pruefe_namenslisten.py)
+  add_test(NAME namenslisten_gegen_vertrag
+           COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/../vertrag/pruefe_namenslisten.py"
+                   --wurzel "${CMAKE_CURRENT_SOURCE_DIR}/../..")
+endif()
+
 # Scheibe 35, Fehlerfall der Abnahme (Plan 35 E2): das MIDI-Ereignis wirkt am Anfang des Folgeblocks statt an seinem
 # Versatz (sample = s0 + n, wie 19 M01). test_kern_midi gegen diese Mutation muss scheitern (Griff bei 142 848 statt
 # 142 777); cypherdj-kern-mutation-folgeblock ist der Kern für den Fehlerfall am Ziel.

@@ -35,7 +35,9 @@ Built in Germany by Andreas, a DJ, and Cypher, the lab's AI agent (Claude models
 **Prepare**
 - A workshop that reads a track once: loudness, key, tempo map and beat grid, then renders it to the set
   tempo so it is ready to play. The grid is snapped to the kick transients where they can be measured
-  cleanly (within about 1 ms of Ableton Live's warp markers on the tracks compared)
+  cleanly. On the two tracks checked against Ableton Live's warp markers (both measured against the same detected
+  kick onsets), the median offset is about 1 ms. The spread from beat to beat is larger, and tracks that cannot be
+  measured cleanly keep the raw grid
 - A cue tool: a 3-band waveform of the whole track, hot cues set from the keyboard
 - Import of grid and cues from a Traktor collection
 - A library with sets that can be prepared ahead of time
@@ -73,6 +75,9 @@ references before they went in:
   ducking, freeze). It is the reverb on the send and the REVERB beat FX
 - **Cypher Komp**: a feed-forward compressor after Giannoulis, Massberg and Reiss (2012) with soft knee,
   parallel mix, external sidechain and a high-pass in the detector; six presets
+- **Cypher Saett**: a tanh saturator with first-order antiderivative antialiasing (Bilbao et al. 2017)
+  at 2x oversampling; on a hard-driven sawtooth the aliasing stays below -60 dB, against -50 dB without
+  oversampling. Available as a plugin, not yet in the core
 - **RB-338**: a 303-style bass voice with cutoff, resonance, envelope, decay, accent and slide, playable
   from the bass pattern channel instead of Surge XT
 
@@ -154,6 +159,7 @@ mostly against a silent test sink. Not benchmarks.
 - Linux with PipeWire (JACK API) only, tested on Ubuntu 24.04. Pro-Audio device profiles cannot be
   used as outputs yet.
 - The headphone path has not been measured with a real audio interface.
+- Bar-one (downbeat) detection is unreliable; set bar one by hand where it is wrong.
 - The instrument round trip (core to Surge XT and back, about 11 ms) is compensated by sending notes early;
   the value is measured for one audio buffer size (256 frames).
 - Human and agent are told apart by a label on localhost. That is a convention, not a security boundary.

@@ -7,12 +7,17 @@ Plan `docs/superpowers/plans/2026-09-28-djk-hand-mcp.md` (Rev. 2 nach Review), S
 Prüfinstanz i: `--seite http://127.0.0.1:56300`. Jeder Aufruf geht als HTTP an den Seiten-Server mit dem Kopf
 `x-djk-quelle: cypher`; der Server setzt die Quelle `cypher` in jeden Kern-Befehl, Cyphers Befehle tragen `plan: cypher`.
 
-## Werkzeuge (37)
+## Werkzeuge (39)
 
 DJ: `lage` · `bestand` · `laden` · `deck_start` · `deck_stopp` · `sprung` · `loop` · `pad` · `loop_nach_box` · `box` ·
 `regler` (Rampe über Takte) · `fx` · `fx_zuweisung` · `abbrechen` · `tempo` (Decks folgen seit 2026-10-06: Varispeed, dann Tausch auf eine Fassung im neuen Tempo, ADR 028) · `warte` · `hoeren`. Dazu die Studio-Werkzeuge
 unten und die Mediathek (`bibliothek` · `vorbereiten` · `sets` · `set_zeige` · `set_lege` · `set_vorbereiten`) sowie `instrumente`. `instrumente {melodie: "fluegel"}` legt einen gesampelten Flügel (Ableton Core Library,
 4 Anschlagstufen, Carla-SFZ) auf MELODY statt Surge, `"surge"` zurück (2026-10-06).
+
+Bibliothek durchsuchen: `stoebern` blättert die ganze Mediathek nach Typ (`track`, `loop`, `oneshot`, `strudel`) mit
+Textsuche, Feldfiltern, Camelot-Nachbarn, BPM- und Energiefilter, Sortierung und Seiten (nur lesend). `anschluss` nennt
+zum laufenden Deck (oder zu einer `material_id`) die passenden Bibliothekstracks, gereiht nach Tempo, Genre,
+Camelot-Zug und Energieklasse, mit `punkte`, `zug` und `gruende` je Treffer (nur lesend).
 
 Klänge (Plan `docs/superpowers/plans/2026-10-06-klaenge.md`): `klaenge` sucht alle Klänge außer Tracks (One-Shots, Loops,
 Impulsantworten, Mitschnitte, Erzeugtes, Stimmen) in Mediathek und eigener Loop-Bibliothek; jeder Treffer trägt `einsatz`:

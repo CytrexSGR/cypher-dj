@@ -11,7 +11,9 @@ test('camelotZug: alle erlaubten Züge, Gegenteil und Fremdes raus', () => {
   assert.deepEqual(camelotZug('8A', '8B', 'halten'), { zug: 'parallele', punkte: 0.85 });
   assert.deepEqual(camelotZug('8A', '7B', 'halten'), { zug: 'diagonale', punkte: 0.75 });
   assert.deepEqual(camelotZug('8B', '9A', 'halten'), { zug: 'diagonale', punkte: 0.75 });
-  assert.equal(camelotZug('8B', '7A', 'halten'), null, 'Gegenrichtung der Diagonale ist nicht erlaubt');
+  // beide Diagonalen (FMS-Pilot 2026-10-15): Moll→VII (8A→9B) ist in der Modulationszählung häufiger als Moll→VI
+  assert.deepEqual(camelotZug('8B', '7A', 'halten'), { zug: 'diagonale', punkte: 0.75 }, 'Gegenrichtung der Diagonale');
+  assert.deepEqual(camelotZug('8A', '9B', 'halten'), { zug: 'diagonale', punkte: 0.75 });
   assert.deepEqual(camelotZug('8A', '10A', 'halten'), { zug: 'boost', punkte: 0.5 });
   assert.deepEqual(camelotZug('8A', '6A', 'halten'), { zug: 'absenken', punkte: 0.45 });
   assert.equal(camelotZug('8A', '3A', 'halten'), null, 'Halbton nur beim Heben');
@@ -54,7 +56,8 @@ test('bewerte: Tempo-Fenster, Gewichte, Begründungen; raus wird null', () => {
 });
 
 test('camelotZug: Randfälle der Züge', () => {
-  assert.equal(camelotZug('8A', '9B', 'halten'), null, 'A→B nur mit d = −1, nicht +1');
+  assert.deepEqual(camelotZug('12A', '1B', 'halten'), { zug: 'diagonale', punkte: 0.75 }, 'Diagonale über 12 hinweg');
+  assert.equal(camelotZug('8A', '10B', 'halten'), null, 'A→B mit d = +2 bleibt raus');
   assert.deepEqual(camelotZug('8B', '8A', 'halten'), { zug: 'parallele', punkte: 0.85 });
   assert.equal(camelotZug('8A', '2A', 'halten'), null, 'Tritonus d = 6');
   assert.equal(camelotZug('8A', '1A', 'heben'), null, 'd = +5 ist kein Halbton, auch bei heben');
@@ -118,4 +121,23 @@ test('bewerte: Halbton nur bei steigender Energieklasse', () => {
   assert.equal(auf.zug, 'halbton');
   assert.equal(auf.punkte, 0.75); // 0,35 + 0,25 + 0,25·0,3 + 0,15·0,5
   assert.equal(bewerte(m('8A', 5), m('3A', null), opt).zug, 'halbton', 'Energie unbekannt: erlaubt');
+});
+
+test('bewerte: unsichere Tonart schließt nicht aus, sondern zählt wie unbekannt (FMS-Pilot 2026-10-15)', () => {
+  const lauf = { bpm: 128, camelot: '8A', energie: 7, genre: 'Techno' };
+  const k = (keySicher) => ({ bpm: 128, camelot: '11B', energie: 7, genre: 'Techno', keySicher });
+  const opt = { fenster: 6, energie: 'halten' };
+  // Fehlerfall vorher: 8A→11B (Gegenteil) flog immer raus, auch wenn 11B eine Dur/Moll-Verwechslung von 8A ist
+  assert.equal(bewerte(lauf, k(undefined), opt), null, 'ohne Angabe sicher: bisheriges Verhalten');
+  assert.equal(bewerte(lauf, k(true), opt), null, 'beide sicher: raus');
+  const u = bewerte(lauf, k(false), opt);
+  assert.ok(u, 'Kandidat mit unsicherer Tonart bleibt drin');
+  assert.equal(u.zug, null);
+  assert.equal(u.punkte, 0.825); // 0,35 + 0,25 + 0,25·0,3 + 0,15
+  assert.equal(u.gruende[2], 'key 8A→11B unsicher');
+  assert.ok(bewerte({ ...lauf, keySicher: false }, k(true), opt), 'unsicher auf der laufenden Seite reicht');
+  // Negativ-Kontrolle: ein erlaubter Zug bleibt bei unsicherer Tonart unverändert
+  const n = bewerte(lauf, { ...k(false), camelot: '9A' }, opt);
+  assert.equal(n.zug, 'nachbar');
+  assert.equal(n.punkte, 0.975);
 });

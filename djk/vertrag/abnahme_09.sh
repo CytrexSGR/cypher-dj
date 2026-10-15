@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Abnahme Scheibe 09 (vertrag-schemas-folgen), ohne die 60-s-Ratenmessung (die läuft getrennt unter dem Echtzeit-
 # Schloss: flock "$CYPHERDJ_ECHTZEIT_SCHLOSS" python3 djk/vertrag/messe_ringrate.py --dauer 60).
-# Aufruf: bash djk/vertrag/abnahme_09.sh [WURZEL]   (Vorgabe WURZEL = ~/cypher-dj)
+# Aufruf: bash djk/vertrag/abnahme_09.sh [WURZEL]   (Vorgabe WURZEL = der Baum, in dem dieses Skript liegt)
 # Rückgabe 0 nur, wenn jeder Punkt so ausgeht wie erwartet: Prüfungen grün (rc 0), jeder Fehlerfall rot (rc 1).
 set -u
-WURZEL=${1:-$HOME/cypher-dj}
+WURZEL=${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}
 V=$WURZEL/djk/vertrag
 TEXT=$WURZEL/docs/architektur/SCHNITTSTELLEN.md
 mkdir -p "${TMPDIR:-/tmp}"

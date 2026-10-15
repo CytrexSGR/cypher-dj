@@ -2,9 +2,12 @@
 // Anschluss-Vorauswahl (Plan 2026-10-10-anschluss-vorauswahl, T1): welcher Track passt auf den laufenden?
 // Reine Funktionen. Gewichte nach Andreas' Hörtest 2026-10-10 (Tempo zuerst, Energie nur in drei Klassen).
 // Camelot-Züge aus Plan 2026-10-10-tonart-referenz, Slice 5.
+// Diagonale beidseitig und unsichere Tonart (FMS-Pilot 2026-10-15, Urteil Andreas „1 ja 2 ja"): siehe camelotZug/bewerte.
 
 export type EnergieWunsch = 'halten' | 'heben' | 'senken';
-export interface Merkmale { bpm: number | null; camelot: string | null; energie: number | null; genre: string | null }
+// keySicher: false = Tonart aus einer Quelle, die gegen MIK schwach trifft (Traktor 42 % exakt, gemessen 2026-10-15);
+// fehlt das Feld, gilt die Tonart als sicher (bisheriges Verhalten)
+export interface Merkmale { bpm: number | null; camelot: string | null; energie: number | null; genre: string | null; keySicher?: boolean }
 export interface Bewertung { punkte: number; zug: string | null; gruende: string[] }
 
 const GEWICHT = { tempo: 0.35, genre: 0.25, key: 0.25, energie: 0.15 };
@@ -32,7 +35,9 @@ export function camelotZug(von: string | null, nach: string | null, wunsch: Ener
     return null;
   }
   if (d === 0) return { zug: 'parallele', punkte: 0.85 };
-  if ((a.b === 'A' && d === -1) || (a.b === 'B' && d === 1)) return { zug: 'diagonale', punkte: 0.75 };
+  // Beide Diagonalen teilen 6/7 Töne. MIK erlaubt nur A→B −1 / B→A +1; in der Modulationszählung (Tymoczko, Bach bis
+  // Beethoven) ist Moll→VII (8A→9B) aber häufiger als Moll→VI (8A→7B). Beim Hören prüfen (Plan tonart-referenz Z. 635).
+  if (d === 1 || d === -1) return { zug: 'diagonale', punkte: 0.75 };
   return null;
 }
 
@@ -71,8 +76,12 @@ export function bewerte(lauf: Merkmale, k: Merkmale, opt: { fenster: number; ene
   const tempoBekannt = gueltig(lauf.bpm) && gueltig(k.bpm);
   const abw = tempoBekannt ? Math.abs(k.bpm! - lauf.bpm!) / lauf.bpm! * 100 : 0;
   if (abw > opt.fenster + 1e-9) return null; // Grenze einschließlich (128→135,68 ergibt 6,000000000000005)
-  const zug = camelotZug(lauf.camelot, k.camelot, opt.energie);
-  if (zug === null) return null;
+  let zug = camelotZug(lauf.camelot, k.camelot, opt.energie);
+  // Kein erlaubter Zug schließt nur aus, wenn beide Tonarten sicher sind; sonst zählt der Key wie unbekannt (0,3),
+  // eine Dur/Moll-Verwechslung kostet damit Punkte statt den Kandidaten
+  const unsicher = zug === null && (lauf.keySicher === false || k.keySicher === false);
+  if (zug === null && !unsicher) return null;
+  if (unsicher) zug = undefined;
   const ev = energieKlasse(lauf.energie), ek = energieKlasse(k.energie);
   // Halbton nur mit steigendem Energy Level (Slice 5); bei unbekannter Energie bleibt er erlaubt
   if (zug && zug.zug === 'halbton' && ev !== null && ek !== null && ek <= ev) return null;
@@ -86,7 +95,8 @@ export function bewerte(lauf: Merkmale, k: Merkmale, opt: { fenster: number; ene
     gruende: [
       tempoBekannt ? `tempo ${zahl(lauf.bpm!)}→${zahl(k.bpm!)}` : 'tempo unbekannt',
       g === 1 ? 'genre gleich' : g === 0.6 ? 'genre verwandt' : g === 0.5 ? 'genre unbekannt' : 'genre anders',
-      zug ? `key ${lauf.camelot!.toUpperCase()}→${k.camelot!.toUpperCase()} ${zug.zug}` : 'key unbekannt',
+      zug ? `key ${lauf.camelot!.toUpperCase()}→${k.camelot!.toUpperCase()} ${zug.zug}`
+        : unsicher ? `key ${lauf.camelot!.toUpperCase()}→${k.camelot!.toUpperCase()} unsicher` : 'key unbekannt',
       ev === null || ek === null ? 'energie unbekannt' : `energie ${KLASSE[ev]}→${KLASSE[ek]}`,
     ],
   };

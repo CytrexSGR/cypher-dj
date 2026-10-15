@@ -1,6 +1,6 @@
 {
  "geltung": ["6.5", "9.1", "9.2", "9.3", "9.4", "10", "11", "12.1", "12.2", "13.2", "13.3", "14.1", "14.2", "14.3", "14.4", "14.5", "14.6", "14.7", "14.8", "14.9", "15", "19"],
- "ausserhalb": {"1.3#1": "Tempo-Segment in Pseudo-Notation, Kern-intern (§6.3), kein JSON auf einer Leitung", "7.2#1": "Controller-Mapping, Schema gehört Scheibe 19 (djk/kern/hand/)"},
+ "ausserhalb": {"1.3#1": "Tempo-Segment in Pseudo-Notation, Kern-intern (§6.3), kein JSON auf einer Leitung", "7.2#1": "Controller-Mapping, Schema gehört Scheibe 19 (djk/kern/hand/)", "8#1": "Feldliste der Datei kern-faehigkeiten.json ({pid, nur_cue}, §8), Pseudo-Notation ohne Anführungszeichen, kein Beispiel-JSON", "8#2": "Feldliste {\"name\",\"wert\"} des vst3-Socket-Befehls param (§8), Feldnamen ohne Typen, kein Beispiel-JSON"},
  "platzhalter": {"13.2#2": ["name"]},
  "beispiele": [
   {"id": "6.5#1", "anfang": "{\"version\":1,\"geaendert_sample\":", "klasse": "json", "schema": "kiste.schema.json"},

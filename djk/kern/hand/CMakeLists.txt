@@ -74,6 +74,12 @@ if(Python3_FOUND AND EXISTS ${VERTRAG_TEXT} AND EXISTS ${D}/tests/mappings/beisp
            COMMAND sh -c "\"${Python3_EXECUTABLE}\" \"${D}/werkzeug/beispiel_aus_vertrag.py\" \"${VERTRAG_TEXT}\" | cmp - \"${D}/tests/mappings/beispiel_7_2.json\"")
 endif()
 
+# L3 (Paket 0.3): alle Namenslisten (Tasten, Deck-Aktionen, Regler) gegeneinander, ohne Build, rein Text (< 1 s)
+if(Python3_FOUND AND EXISTS ${D}/../../vertrag/pruefe_namenslisten.py)
+  add_test(NAME namenslisten_gegen_vertrag
+           COMMAND "${Python3_EXECUTABLE}" "${D}/../../vertrag/pruefe_namenslisten.py" --wurzel "${D}/../../..")
+endif()
+
 # Werkzeug: Mapping-Dateien prüfen (auch für Scheibe 40); jede Datei unter djk/konfig/controller/ lädt ohne Fehler
 if(EXISTS ${D}/werkzeug/hand_pruefe.cpp)
   add_executable(hand_pruefe werkzeug/hand_pruefe.cpp)

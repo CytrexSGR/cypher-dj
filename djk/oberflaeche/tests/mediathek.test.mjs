@@ -384,15 +384,18 @@ test('Klänge: limit=abc fällt auf 30, nicht auf 50', async (t) => {
 
 // Anschluss (Plan 2026-10-10-anschluss-vorauswahl, T3). Zusatz-Werke 5–8 zur Test-Mediathek; Lauf ist Werk 1
 // (Werk-Felder: bpm 127.5, camelot 8A, energie 7 von tag_mik, genre Tech House).
-function anschlussWerke(dbPfad) {
+// Kandidaten-Tonarten aus tag_mik (sicher, darf ausschließen); Werk 2 hat 5B nur von beatport (unsicher, bleibt mit 0,3 drin)
+function anschlussWerke(dbPfad, keyQuelle = 'tag_mik') {
   const db = new DatabaseSync(dbPfad);
   let id = db.prepare('SELECT max(id) AS m FROM angabe').get().m;
   const neu = (n, werk, felder) => {
     db.prepare('INSERT INTO werk VALUES (?,?,?)').run(werk, 'test', `w${werk}`);
     db.prepare('INSERT INTO objekt(inhalt_sha256, werk_id, dauer_s, erstmals_gesehen) VALUES (?,?,?,?)').run(sha(n), werk, 300, '2026-01-01');
     for (const [feld, wert] of Object.entries({ typ: 'track', ...felder }))
-      db.prepare('INSERT INTO angabe(id, inhalt_sha256, feld, wert, quelle, erhoben_am) VALUES (?,?,?,?,?,?)').run(++id, sha(n), feld, wert, 'tag', '2026-01-01');
+      db.prepare('INSERT INTO angabe(id, inhalt_sha256, feld, wert, quelle, erhoben_am) VALUES (?,?,?,?,?,?)').run(++id, sha(n), feld, wert, feld === 'camelot' ? keyQuelle : 'tag', '2026-01-01');
   };
+  // Lauf-Tonart sicher machen: Werk 1 hat 8A sonst nur von beatport (Rang 2, schlägt tag_mik; unsicher) → andreas (Rang 0)
+  db.prepare('INSERT INTO angabe(id, inhalt_sha256, feld, wert, quelle, erhoben_am) VALUES (?,?,?,?,?,?)').run(++id, sha(1), 'camelot', '8A', 'andreas', '2026-01-01');
   neu(21, 5, { titel: 'Nachbar', bpm: '128', camelot: '9A', genre: 'Tech House', energie: '6' });   // bester
   neu(22, 6, { titel: 'Parallel', bpm: '126', camelot: '8B', genre: 'Techno', energie: '8' });       // zweiter
   neu(23, 7, { titel: 'Gegenteil', bpm: '127', camelot: '11B', genre: 'Tech House', energie: '7' }); // raus: Gegenteil
@@ -406,17 +409,21 @@ test('Anschluss: bester zuerst, Gegenteil/Tempo/eigenes Werk raus, Begründung d
   const s = await stapel(t, { mediathek: m.db });
   const r = await hole(s.url, `/mediathek/anschluss?material_id=${mid(2)}`);
   assert.equal(r.code, 200, JSON.stringify(r.j));
-  assert.deepEqual(r.j.treffer.map((x) => x.titel), ['Nachbar', 'Parallel'], JSON.stringify(r.j.treffer));
+  assert.deepEqual(r.j.treffer.map((x) => x.titel), ['Nachbar', 'Parallel', 'House Thing'], JSON.stringify(r.j.treffer));
   assert.equal(r.j.lauf.camelot, '8A');
   assert.equal(r.j.treffer[0].zug, 'nachbar');
   assert.ok(r.j.treffer[0].gruende.includes('genre gleich'));
   assert.ok(r.j.treffer.every((x) => x.werk_id !== 1), 'eigenes Werk nie');
-  assert.equal(r.j.bewertet, 2, 'Werk 2 (5B) ist kein erlaubter Zug von 8A, Werk 4 hat 140 BPM');
+  assert.equal(r.j.bewertet, 3, 'Gegenteil (sicher) raus, Werk 4 hat 140 BPM; Werk 2 (5B nur von beatport, unsicher) bleibt drin');
+  // House Thing: Tempo (1 − 4,3137/6)·0,35 = 0,0984 + Genre 0,6·0,25 + Key unsicher 0,3·0,25 + Energie −1 Klasse 0,5·0,15 = 0,398
+  assert.equal(r.j.treffer[2].punkte, 0.398);
+  assert.equal(r.j.treffer[2].zug, null);
+  assert.ok(r.j.treffer[2].gruende.includes('key 8A→5B unsicher'), JSON.stringify(r.j.treffer[2].gruende));
   assert.equal(r.j.treffer[0].punkte, 0.952);
   assert.equal(r.j.treffer[1].punkte, 0.619);
   // Wunsch heben: Parallel (Energie 8 = hoch, +1 Klasse) steigt auf 0,694, Nachbar (gleiche Klasse) fällt auf 0,892
   const h = await hole(s.url, `/mediathek/anschluss?material_id=${mid(2)}&energie=heben`);
-  assert.deepEqual(h.j.treffer.map((x) => [x.titel, x.punkte]), [['Nachbar', 0.892], ['Parallel', 0.694]]);
+  assert.deepEqual(h.j.treffer.map((x) => [x.titel, x.punkte]), [['Nachbar', 0.892], ['Parallel', 0.694], ['House Thing', 0.323]]);
   assert.deepEqual(await hole(s.url, '/mediathek/anschluss?material_id=zz'), { code: 400, j: { fehler: 'material_id_ungueltig' } });
   assert.deepEqual(await hole(s.url, `/mediathek/anschluss?material_id=${mid(99)}`), { code: 404, j: { fehler: 'material_unbekannt' } });
   assert.deepEqual(await hole(s.url, `/mediathek/anschluss?material_id=${mid(4)}`), { code: 409, j: { fehler: 'kein_track' } }, 'Werk 3 ist ein Loop');
@@ -446,5 +453,5 @@ test('Anschluss: material_id und deck zugleich 400; fenster/limit klemmen auf di
   assert.deepEqual(f0.j.treffer.map((x) => x.titel), ['Nachbar'], 'fenster 0 klemmt auf 1 %, nicht auf 6 %');
   const l0 = await hole(s.url, `/mediathek/anschluss?material_id=${mid(2)}&limit=0`);
   assert.equal(l0.j.treffer.length, 1, 'limit 0 klemmt auf 1');
-  assert.equal((await hole(s.url, `/mediathek/anschluss?material_id=${mid(2)}&limit=x`)).j.treffer.length, 2, 'nicht-numerisch: Vorgabe');
+  assert.equal((await hole(s.url, `/mediathek/anschluss?material_id=${mid(2)}&limit=x`)).j.treffer.length, 3, 'nicht-numerisch: Vorgabe');
 });

@@ -15,6 +15,9 @@ import { bewerte, type EnergieWunsch, type Merkmale } from './anschluss.ts';
 
 // Umgebung: CYPHERDJ_MEDIATHEK (sqlite, optional). Ungesetzt zeigt die Vorgabe auf eine Datei, die es
 // nicht gibt: die Mediathek-Routen antworten dann 503 mediathek_fehlt, nichts stürzt.
+// Tonart-Quellen, deren Key einen Kandidaten ausschließen darf (Anschluss). Gemessen 2026-10-15 gegen eindeutige MIK-Keys:
+// analyse 88 % exakt (n=5.390), traktor 42 % (n=1.660); tag, beatport und der Rest ungemessen und damit unsicher.
+const KEY_SICHER = new Set(['andreas', 'werkstatt', 'mik_bestaetigt', 'tag_mik', 'analyse']);
 export const MEDIATHEK_VORGABE = process.env.CYPHERDJ_MEDIATHEK || path.join(os.homedir(), '.local', 'share', 'cypherdj', 'mediathek', 'mediathek.sqlite');
 export const LIMIT_VORGABE = 50, LIMIT_MAX = 200;
 const FELDER = ['titel', 'kuenstler', 'mix', 'bpm', 'camelot', 'energie', 'genre', 'typ'];
@@ -173,15 +176,20 @@ export class Mediathek {
 
   // Werk-Felder aus den aktuell-Zeilen der Objekte eines Werks
   private werkFelder(zeilen: Wertzeile[], rang: Map<string, number>): Record<string, string> {
-    const bester = new Map<string, { rang: number; am: string; wert: string }>();
+    return this.werkFelderMitQuelle(zeilen, rang).f;
+  }
+
+  // dasselbe, dazu je Feld die Quelle des gewählten Werts (Anschluss braucht sie für keySicher)
+  private werkFelderMitQuelle(zeilen: Wertzeile[], rang: Map<string, number>): { f: Record<string, string>; q: Record<string, string> } {
+    const bester = new Map<string, { rang: number; am: string; wert: string; quelle: string }>();
     for (const z of zeilen) {
       const r = rang.get(z.quelle) ?? 999;
       const b = bester.get(z.feld);
-      if (!b || r < b.rang || (r === b.rang && z.erhoben_am > b.am)) bester.set(z.feld, { rang: r, am: z.erhoben_am, wert: z.wert });
+      if (!b || r < b.rang || (r === b.rang && z.erhoben_am > b.am)) bester.set(z.feld, { rang: r, am: z.erhoben_am, wert: z.wert, quelle: z.quelle });
     }
-    const f: Record<string, string> = {};
-    for (const [k, v] of bester) f[k] = v.wert;
-    return f;
+    const f: Record<string, string> = {}, q: Record<string, string> = {};
+    for (const [k, v] of bester) { f[k] = v.wert; q[k] = v.quelle; }
+    return { f, q };
   }
 
   // Fassung eines Werks: die erste mit lokal vorhandenem Pfad (Host = dieser Rechner, gegen das Dateisystem geprüft, nicht
@@ -305,15 +313,15 @@ export class Mediathek {
     } finally { db.close(); }
   }
 
-  private trackCache: { bis: number; stand: number; werke: Map<number, { f: Record<string, string>; objs: Obj[] }> } | null = null;
+  private trackCache: { bis: number; stand: number; werke: Map<number, { f: Record<string, string>; q: Record<string, string>; objs: Obj[] }> } | null = null;
 
   // Alle Track-Werke mit ihren Werk-Feldern (Regeln wie suche()). Zwischengespeichert, bis 10 min um sind oder stand() (mtime von DB und WAL) sich ändert.
-  private trackFelder(db: DatabaseSync): Map<number, { f: Record<string, string>; objs: Obj[] }> {
+  private trackFelder(db: DatabaseSync): Map<number, { f: Record<string, string>; q: Record<string, string>; objs: Obj[] }> {
     const stand = this.stand();
     if (this.trackCache && this.trackCache.bis > Date.now() && this.trackCache.stand === stand) return this.trackCache.werke;
     const rang = this.rang(db);
     const alle = [...new Set(this.kandidaten(db, {}).values())].sort((x, y) => x - y);
-    const aus = new Map<number, { f: Record<string, string>; objs: Obj[] }>();
+    const aus = new Map<number, { f: Record<string, string>; q: Record<string, string>; objs: Obj[] }>();
     for (let i = 0; i < alle.length; i += ALLE_MAX) {
       const block = alle.slice(i, i + ALLE_MAX);
       const geschw = this.geschwister(db, block);
@@ -322,8 +330,8 @@ export class Mediathek {
       const je = new Map<number, Wertzeile[]>();
       for (const z of this.werte(db, [...werkVon.keys()])) { const w = werkVon.get(z.inhalt_sha256)!; const l = je.get(w) ?? []; l.push(z); je.set(w, l); }
       for (const w of block) {
-        const f = this.werkFelder(je.get(w) ?? [], rang);
-        if (f.typ === 'track') aus.set(w, { f, objs: geschw.get(w) ?? [] });
+        const { f, q } = this.werkFelderMitQuelle(je.get(w) ?? [], rang);
+        if (f.typ === 'track') aus.set(w, { f, q, objs: geschw.get(w) ?? [] });
       }
     }
     this.trackCache = { bis: Date.now() + ANSCHLUSS_TTL_MS, stand, werke: aus };
@@ -340,12 +348,13 @@ export class Mediathek {
       const werke = this.trackFelder(db);
       const eigen = obj[0].werk_id === null ? undefined : werke.get(obj[0].werk_id);
       if (!eigen) throw new MediathekFehler(409, 'kein_track');   // bekannt, aber Loop, Klang oder erzeugt (12 von 45 im Bestand DJ-Maschine)
-      const merk = (f: Record<string, string>): Merkmale => ({ bpm: zahl(f.bpm), camelot: f.camelot ?? null, energie: zahl(f.energie), genre: f.genre ?? null });
-      const lauf = merk(eigen.f);
+      const merk = (f: Record<string, string>, q: Record<string, string>): Merkmale => ({ bpm: zahl(f.bpm), camelot: f.camelot ?? null,
+        energie: zahl(f.energie), genre: f.genre ?? null, keySicher: q.camelot === undefined || KEY_SICHER.has(q.camelot) });
+      const lauf = merk(eigen.f, eigen.q);
       const bewertet: { werk: number; f: Record<string, string>; b: NonNullable<ReturnType<typeof bewerte>> }[] = [];
-      for (const [w, { f }] of werke) {
+      for (const [w, { f, q }] of werke) {
         if (w === obj[0].werk_id) continue;
-        const b = bewerte(lauf, merk(f), opt);
+        const b = bewerte(lauf, merk(f, q), opt);
         if (b) bewertet.push({ werk: w, f, b });
       }
       bewertet.sort((x, y) => y.b.punkte - x.b.punkte || x.werk - y.werk);

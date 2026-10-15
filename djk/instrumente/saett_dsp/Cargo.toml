@@ -1,0 +1,12 @@
+[package]
+name = "saett_dsp"
+version = "0.1.0"
+edition = "2021"
+description = "Cypher Sättigung: tanh mit Antiderivative Antialiasing erster Ordnung (Bilbao 2017) bei doppelter Abtastrate, ohne Host"
+license = "GPL-3.0-or-later"
+
+[dependencies]
+eq_dsp = { path = "../eq_dsp" }
+
+[dev-dependencies]
+rb_dsp = { path = "../rb_dsp" }

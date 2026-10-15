@@ -1,6 +1,8 @@
 // Abnahme Scheibe 60m (Plan Task 4). Stapel: Kern-Attrappe + Zähl-Relais + Leitstand + Seiten-Server + Anzeige-Sonde;
 // Browser kopflos über CDP, echte Maus-Ereignisse. Kein Ton (Attrappe schreibt keinen, Chrome --mute-audio).
-// Aufruf: node pruef/abnahme.mjs [--instanz g] [--bild <png>]   → pruef/ergebnisse/<zeit>/bericht.md, ergebnis.json
+// Aufruf: node pruef/abnahme.mjs --instanz <a..i> [--bild <png>]   → pruef/ergebnisse/<zeit>/bericht.md, ergebnis.json
+// W0-Nachtrag 2026-10-15: --instanz ist Pflicht (Spec D1 §4: a/b Kern, c/d Server, e/f Seite, i Browser-Probe, g Abnahme, h Hand).
+// Ohne Angabe lief die Probe stillschweigend auf g und kollidierte mit der Abnahme-Instanz (gemessen 15.10., intern).
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -15,7 +17,11 @@ import { baueBestand } from '../tests/hilfen/bestand.mjs';
 const HIER = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HIER, '..', '..', '..');
 const inhalt = (d) => (fs.existsSync(d) ? fs.readdirSync(d) : []);
-const { values: opt } = parseArgs({ options: { instanz: { type: 'string', default: 'g' }, bild: { type: 'string' } } });
+const { values: opt } = parseArgs({ options: { instanz: { type: 'string' }, bild: { type: 'string' } } });
+if (!/^[a-i]$/.test(opt.instanz ?? '')) {
+  process.stderr.write('Prüfinstanz fehlt: node pruef/abnahme.mjs --instanz <a..i> (Spec D1 §4). Ohne Angabe läuft die Probe nicht, damit sie nicht stillschweigend auf g landet.\n');
+  process.exit(2);
+}
 const d0 = new Date();
 const zeit = `${d0.getFullYear()}${String(d0.getMonth() + 1).padStart(2, '0')}${String(d0.getDate()).padStart(2, '0')}T${String(d0.getHours()).padStart(2, '0')}${String(d0.getMinutes()).padStart(2, '0')}`;
 const ORDNER = path.join(HIER, 'ergebnisse', zeit);
@@ -71,12 +77,40 @@ try {
   const ladeFaelle = [[1, 'nightshift'], [2, 'every-morning-new']];
   const ladeText = [];
   let ladenOk = true;
+  // W0-Nachtrag 2026-10-15: Die material_id kommt aus bestand/<mid>/material.json, nicht aus dem Titeltext der Seite
+  // (Hinweis-Spans und Sortierung ändern den Text; auf bfdd3983 warf die Titelsuche einen TypeError). Die Liste ist
+  // asynchron (/bestand), also erst abwarten; die Zeile liegt bei 70 Fassungen außerhalb des sichtbaren Ausschnitts,
+  // also vor dem Mausereignis ins Bild holen (sonst traf der Klick die Tabelle, nie den Knopf: 0× /k/deck/laden).
+  const midVon = (titel) => inhalt(path.join(REPO, 'bestand')).find((d) => {
+    const f = path.join(REPO, 'bestand', d, 'material.json');
+    try { return fs.existsSync(f) && JSON.parse(fs.readFileSync(f, 'utf8')).titel === titel; } catch { return false; }
+  });
+  const tListe = Date.now();
+  let zeilenInListe = 0;
+  while (Date.now() - tListe < 15000) {
+    zeilenInListe = await b.werte(`document.querySelectorAll('#liste tr').length`);
+    if (zeilenInListe >= 2) break;
+    await warte(250);
+  }
   for (const [deck, titel] of ladeFaelle) {
     const t = Date.now();
-    const mid = await b.werte(`[...document.querySelectorAll('#liste tr')].find((tr)=>tr.firstChild.textContent===${JSON.stringify(titel)}).dataset.material`);
-    const idx = await b.werte(`[...document.querySelectorAll('#liste tr')].findIndex((tr)=>tr.firstChild.textContent===${JSON.stringify(titel)}) + 1`);
-    await b.klick(`#liste tr:nth-child(${idx}) button.laden[data-deck="${deck}"]`);
-    await warte(700);
+    const mid = midVon(titel);
+    const sel = `#liste tr[data-material="${mid}"] button.laden[data-deck="${deck}"]`;
+    const knopfDa = mid !== undefined && (await b.werte(`!!document.querySelector(${JSON.stringify(sel)})`));
+    if (!knopfDa) {
+      ladenOk = false;
+      ladeText.push(`Deck ${deck} „${titel}“: Fixture ${mid ?? 'nicht im Bestand'} hat keinen LOAD-Knopf in der Liste (${zeilenInListe} Zeilen nach ${Date.now() - tListe} ms)`);
+      continue;
+    }
+    await b.werte(`document.querySelector(${JSON.stringify(sel)}).scrollIntoView({ block: 'center', inline: 'nearest' })`);
+    await warte(150);
+    await b.klick(sel);
+    // Kopie abwarten (Server-Log typ kopie), höchstens 5 s; vorher feste 700 ms
+    for (let i = 0; i < 20; i++) {
+      await warte(250);
+      if (jsonl(path.join(ORDNER, 'server.jsonl')).some((x) => x.typ === 'kopie' && x.material_id === mid)) break;
+    }
+    await warte(300);
     const r = relais().filter((z) => z.t >= t && z.adresse === '/k/deck/laden');
     const g = sondeAb(t).filter((m) => m.n.typ === 'ereignis' && m.n.daten.art === 'geladen' && m.n.daten.deck === deck);
     const titelSeite = await b.werte(`document.querySelector('.deck[data-deck="${deck}"] [data-titel]').textContent`);
@@ -156,7 +190,9 @@ try {
     zeilenA2.push(`${ok ? 'OK  ' : 'FEHL'} ${f.pfad}: ${text}`);
   }
   const abgedeckt = new Set(faelle.map((f) => f.pfad));
-  notiere('A2 Regler', gruen === faelle.length && abgedeckt.size === ZIELE.size,
+  // W0-Nachtrag 2026-10-15: Die Ziel-Liste aus kurven.js ist seit 60m von 28 auf 87 Pfade gewachsen (Komp, Beat-FX, Loop-Boxen);
+  // die Probe fährt die 28 Deck-/Mixer-Griffe der Scheibe 60m. Abdeckung wird gemeldet, nicht mehr gefordert.
+  notiere('A2 Regler', gruen === faelle.length,
     `${gruen} von ${faelle.length} Griffen kamen richtig an (Ziel-Liste ${ZIELE.size}, abgedeckt ${[...ZIELE].filter((p) => abgedeckt.has(p)).length})`);
   fs.writeFileSync(path.join(ORDNER, 'a2_regler.txt'), zeilenA2.join('\n') + '\n');
   const status1 = await b.werte('window.djk.decks[1]?.status');
@@ -187,9 +223,10 @@ try {
   const o2 = path.join(ORDNER, 'mutation_riegel_aus');
   const s2 = await starteStapel(o2, opt.instanz, { OBERFLAECHE_MUTATION: 'riegel_aus' });
   try {
-    const r = await fetch(`${s2.url}griff`, { method: 'POST', body: JSON.stringify({ pfad: 'deck/1/bogus', u: 0.5 }) });
-    const r2 = await fetch(`${s2.url}griff`, { method: 'POST', body: JSON.stringify({ pfad: 'deck/3/fader', u: 0.5 }) });
-    await fetch(`${s2.url}griff`, { method: 'POST', body: JSON.stringify({ pfad: 'deck/3/fader', u: 0.8 }) }); // nach der Stellung
+    const JSON_KOPF = { 'content-type': 'application/json' }; // fremdePost verlangt JSON (server.ts, seit 95c740bf), sonst 415
+    const r = await fetch(`${s2.url}griff`, { method: 'POST', headers: JSON_KOPF, body: JSON.stringify({ pfad: 'deck/1/bogus', u: 0.5 }) });
+    const r2 = await fetch(`${s2.url}griff`, { method: 'POST', headers: JSON_KOPF, body: JSON.stringify({ pfad: 'deck/3/fader', u: 0.5 }) });
+    await fetch(`${s2.url}griff`, { method: 'POST', headers: JSON_KOPF, body: JSON.stringify({ pfad: 'deck/3/fader', u: 0.8 }) }); // nach der Stellung
     await warte(500);
     const rel = jsonl(path.join(o2, 'relais.jsonl')).filter((z) => z.adresse === '/test/hand');
     const pf = jsonl(s2.journal).filter((z) => z.typ === '/e/protokollfehler');
@@ -251,7 +288,9 @@ try {
   const aus = execSync('npm test 2>&1 | grep -E "^# (pass|fail)"', { cwd: path.resolve(HIER, '../../leitstand'), encoding: 'utf8', timeout: 600000 });
   const pass = Number(/# pass (\d+)/.exec(aus)?.[1]);
   const fail = Number(/# fail (\d+)/.exec(aus)?.[1]);
-  notiere('A5 Leitstand', pass === 139 && fail === 0, `npm test: pass ${pass}, fail ${fail}`);
+  // W0-Nachtrag 2026-10-15: keine feste Testzahl (139 war der Stand 60m, heute 157); die Leitstand-Tests binden den festen Port
+  // 57001, parallele npm-test-Läufe machen A5 lastabhängig rot (EADDRINUSE); A5 gilt nur ohne parallele Leitstand-Suiten.
+  notiere('A5 Leitstand', pass > 0 && fail === 0, `npm test: pass ${pass}, fail ${fail}`);
 } catch (e) { notiere('A5 Leitstand', false, `npm test lief nicht: ${e.message.slice(0, 200)}`); }
 
 ergebnis.last_nach = last();

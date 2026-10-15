@@ -114,8 +114,13 @@ export function ladeTraktor(nml: string, ordnerName: string): Map<string, Trakto
   return new Map([...aus].map(([k, v]) => [k, { cues: v.cues, raster_s: v.raster_s, bpm: v.bpm }]));
 }
 
-// Traktor zählt den Encoder-Vorlauf der MP3 mit, ffmpeg und der Browser schneiden ihn ab (stream start_time). Darum
-// liegen Traktors Grid und Cues auf unserer Zeitachse um den Vorlauf früher (Messung 2026-09-26, tests/vorlauf.test.mjs).
+// Traktors Grid und Cues liegen auf der ffmpeg-Zeitachse (und im Browser) zu spät: bei MP3 mit Encoder-Vorlauf um
+// 2·start_time, nicht 1× (Messung 2026-10-12, ~/messungen/2026-10-12-traktor-zeitbasis/, Traktor MP3+LAME n=108
+// Median −50,9 ms = 2·start_time; die frühere Annahme 1·start_time ließ ~25 ms Rest). Andere Formate: nicht messbar, 0.
+export function traktorVersatz(start_time_s: number, dateiname: string): number {
+  return /\.mp3$/i.test(dateiname) && start_time_s > 0 ? 2 * start_time_s : 0;
+}
+// Verschiebt Traktors Zeiten um den Versatz (aus traktorVersatz) nach früher; vorlauf_s trägt den angewandten Versatz.
 export function verschiebeTraktor<T extends { raster_s: number | null; cues: { s: number }[] }>(tr: T | null, vorlauf_s: number): (T & { vorlauf_s: number }) | null {
   if (!tr) return null;
   const v = (s: number) => Math.max(0, s - vorlauf_s);
