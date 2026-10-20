@@ -4,6 +4,7 @@
 # dinge laden können". djk-start --instrumente ruft denselben Weg mit --nur-wirte.
 #
 # Aufruf: djk-instrumente [--instanz a..i] [--nur-wirte] [--melodie surge|fluegel] [--bass surge|rb338]
+#         djk-instrumente [--instanz a..i] --arr1
 #   --bass rb338 (RB-338 W1): der Bass-Wirt spielt die eigene 303 (VST3 aus djk/instrumente, installiere.sh) statt Surge.
 #   Ohne --bass bleibt der Bass-Wirt, wie er läuft (läuft er nicht: Surge). klang/fahre gibt es nur mit Surge; rb338 kennt param.
 #   --melodie fluegel (Glanz Welle 4): der Melodie-Wirt spielt den Flügel (Carla-SFZ, wirte/carla/instrument_bauen.py,
@@ -16,6 +17,13 @@
 #   3 (ohne --nur-wirte) erzeuger2/erzeuger3 ohne --ziel midi:… mit derselben Befehlszeile plus --ziel neu starten. Das
 #     Muster bleibt (Datei im Erzeuger-Ordner), es klingt ab dem nächsten Takt über Surge statt über das Kit. Die
 #     anderen Units werden nicht angefasst.
+#   --arr1 (D1, Spec 2.4): NUR der Produktions-Slot 1, ein Surge-Wirt für die Instrument-Spur des Arrangements. Eigene
+#   Unit cypherdj-wirt-arr1<-i>, Status /dev/shm/cypherdj<-i>/wirt-arr1.json, Socket wirt-arr1.sock, Klang
+#   ~/.config/cypherdj<-i>/klang-arr1.fxp. Kanten arr_midi_1 -> Wirt -> arr_rueck_1_L/R in der Kanten-Datei. Fehlen
+#   nach "bereit" die eigenen Ports des Wirts, ist das ein Fehler (Rückgabe 5). Fehlt ein Kern-Port (der laufende Kern ist
+#   älter als D1 K2b), wird die Kante nur eingetragen und das so gemeldet; ein Kern ab D1 K2b hat die Ports arr_midi_1 und
+#   arr_rueck_1_L/R und verbindet die Kanten aus der Datei selbst (filtere_kanten). bass, melodie, erz/1-3, Studio-Ströme und Erzeuger bleiben unberührt;
+#   idempotent wie die anderen Gruppen. djk-stop räumt den Wirt ab.
 # Rückgabe: 0 Instrumente hängen, 2 Aufruf/Aufbau (kein Kern, kein Surge), 5 ein Schritt scheiterte (Bericht auf stderr;
 # Gestartetes bleibt stehen, djk-stop räumt ab).
 set -uo pipefail
@@ -25,11 +33,12 @@ export XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
 export DBUS_SESSION_BUS_ADDRESS=${DBUS_SESSION_BUS_ADDRESS:-unix:path=$XDG_RUNTIME_DIR/bus}
 HIER=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
 DJK=${DJK:-$(cd "$HIER/.." && pwd)}
-I=${CYPHERDJ_INSTANZ:-}; NUR_WIRTE=0; MELODIE=; BASS=
+I=${CYPHERDJ_INSTANZ:-}; NUR_WIRTE=0; MELODIE=; BASS=; ARR1=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --instanz) [ $# -ge 2 ] || { echo "djk-instrumente: --instanz needs a value" >&2; exit 2; }; I=$2; shift 2;;
     --nur-wirte) NUR_WIRTE=1; shift;;
+    --arr1) ARR1=1; shift;;
     --melodie) [ $# -ge 2 ] || { echo "djk-instrumente: --melodie needs surge or fluegel" >&2; exit 2; }; MELODIE=$2; shift 2;;
     --bass) [ $# -ge 2 ] || { echo "djk-instrumente: --bass needs surge or rb338" >&2; exit 2; }; BASS=$2; shift 2;;
     -h|--help) sed -n '2,/^set -uo/p' "$0" | sed '$d; s/^# \{0,1\}//'; exit 0;;
@@ -38,6 +47,9 @@ while [ $# -gt 0 ]; do
 done
 case "$MELODIE" in ""|surge|fluegel) ;; *) echo "djk-instrumente: --melodie '$MELODIE' invalid, use surge or fluegel" >&2; exit 2;; esac
 case "$BASS" in ""|surge|rb338) ;; *) echo "djk-instrumente: --bass '$BASS' invalid, use surge or rb338" >&2; exit 2;; esac
+if [ "$ARR1" = 1 ] && [ -n "$MELODIE$BASS" ]; then
+  echo "djk-instrumente: --arr1 is the production slot only; --bass and --melodie belong to the DJ instruments (separate call)" >&2; exit 2
+fi
 RB338_VST3="$HOME/.local/lib/cypherdj/vst3/rb338.vst3"
 if [ "$BASS" = rb338 ] && [ ! -d "$RB338_VST3" ]; then echo "djk-instrumente: rb338 missing (djk/instrumente/installiere.sh)" >&2; exit 2; fi
 FLUEGEL_SFZ="$HOME/.config/cypherdj/instrumente/grand/grand.sfz"
@@ -48,7 +60,10 @@ aktiv() { [ "$(systemctl --user is-active "$1.service" 2>/dev/null)" = active ];
 fehler() { echo "djk-instrumente: $1" >&2; [ -n "${2:-}" ] && journalctl --user -u "$2.service" -n 12 --no-pager -o cat 2>/dev/null | sed 's/^/    | /' >&2; exit 5; }
 
 aktiv "cypherdj-kern$SFX" || { echo "djk-instrumente: kern cypherdj-kern$SFX is not running (start the studio with djk-start${I:+ --instanz $I} --strudel)" >&2; exit 2; }
-pw-link -o 2>/dev/null | grep -qx "$KERN_CLIENT:midi_aus_1" || { echo "djk-instrumente: $KERN_CLIENT:midi_aus_1 missing (kern without MIDI streams?)" >&2; exit 2; }
+# Die DJ-Instrumente hängen an den MIDI-Strömen des Kerns; der Produktions-Slot nicht (seine Ports prüft die Kanten-Schleife)
+if [ "$ARR1" = 0 ]; then
+  pw-link -o 2>/dev/null | grep -qx "$KERN_CLIENT:midi_aus_1" || { echo "djk-instrumente: $KERN_CLIENT:midi_aus_1 missing (kern without MIDI streams?)" >&2; exit 2; }
+fi
 [ -f "$KANTEN_DATEI" ] || : > "$KANTEN_DATEI"
 if [ "$MELODIE" = fluegel ] && [ ! -f "$FLUEGEL_SFZ" ]; then
   python3 "$DJK/wirte/carla/instrument_bauen.py" --ziel "$(dirname "$FLUEGEL_SFZ")" --name grand >/dev/null \
@@ -57,8 +72,11 @@ fi
 
 W_IN=events-in; W_OUT1=audio-out1; W_OUT2=audio-out2
 SD="$HOME/.local/share/cypherdj/surge-daten/usr/share/surge-xt"; mkdir -p "$HOME/.config/cypherdj$SFX"
-for g in bass:1:2 melodie:2:3; do
-  G=${g%%:*}; R=${g#*:}; PORT=${R%%:*}; ERZ=${R#*:}
+# Gruppe:Kern-MIDI-Ausgang:Kern-Rückweg (ohne _L/_R)
+if [ "$ARR1" = 1 ]; then GRUPPEN="arr1:arr_midi_1:arr_rueck_1"; else GRUPPEN="bass:midi_aus_1:rueck_erz_2 melodie:midi_aus_2:rueck_erz_3"; fi
+port_da() { pw-link "$1" 2>/dev/null | grep -qxF -- "$2"; }  # $1 -o (Ausgänge) oder -i (Eingänge)
+for g in $GRUPPEN; do
+  G=${g%%:*}; R=${g#*:}; MIDI=${R%%:*}; RUECK=${R#*:}
   U="cypherdj-wirt-$G$SFX"; C="cypherdj-wirt-$G$SFX"; ST="/dev/shm/cypherdj$SFX/wirt-$G.json"
   ART=lv2; [ "$G" = melodie ] && [ "$MELODIE" = fluegel ] && ART=sfz:grand
   [ "$G" = bass ] && [ "$BASS" = rb338 ] && ART=vst3:rb338
@@ -110,14 +128,33 @@ for g in bass:1:2 melodie:2:3; do
     echo "  wirt $G    started ($ART)"
   fi
   # Kanten: verbinden (eine schon bestehende meldet pw-link als Fehler, deshalb vorher prüfen) und festhalten
-  for k in "$KERN_CLIENT:midi_aus_$PORT	$C:$W_IN" "$C:$W_OUT1	$KERN_CLIENT:rueck_erz_${ERZ}_L" "$C:$W_OUT2	$KERN_CLIENT:rueck_erz_${ERZ}_R"; do
+  for k in "$KERN_CLIENT:$MIDI	$C:$W_IN" "$C:$W_OUT1	$KERN_CLIENT:${RUECK}_L" "$C:$W_OUT2	$KERN_CLIENT:${RUECK}_R"; do
     Q=${k%%	*}; Z=${k#*	}
-    pw-link -l | grep -A8 -x "$Q" | grep -q -- "|-> *$Z\$" || pw-link "$Q" "$Z" || fehler "wirt $G: link $Q -> $Z failed" "$U"
+    if [ "$G" = arr1 ]; then
+      # eigene Ports des Wirts müssen nach "bereit" da sein; nur die Kern-Seite darf fehlen (Kern älter als K2b)
+      for pp in "-o $Q" "-i $Z"; do
+        case "${pp#* }" in "$C":*) port_da ${pp%% *} "${pp#* }" || fehler "wirt $G: own port ${pp#* } missing after ready ($ST)" "$U";; esac
+      done
+    fi
+    if [ "$G" = arr1 ] && ! { port_da -o "$Q" && port_da -i "$Z"; }; then
+      ARR_KERN_FEHLT=1
+      echo "  wirt $G    $Q -> $Z: edge recorded in kanten, not linked (the running kern has no production ports, older than D1 K2b)"
+    else
+      pw-link -l | grep -A8 -x "$Q" | grep -q -- "|-> *$Z\$" || pw-link "$Q" "$Z" || fehler "wirt $G: link $Q -> $Z failed" "$U"
+    fi
     # flock auf dem Ordner: dieselbe Sperre nimmt die Oberfläche, wenn sie ihre Vorhörer-Zeilen entfernt (vorhoeren.ts unterSperre);
     # sonst ginge eine hier angehängte Zeile zwischen Lesen und rename dort verloren (S7-Re-Review F3)
     flock -x -w 5 "$(dirname "$KANTEN_DATEI")" sh -c 'grep -qxF -- "$2" "$1" 2>/dev/null || printf "%s\n" "$2" >> "$1"' sh "$KANTEN_DATEI" "$k" || fehler "wirt $G: kanten lock failed" "$U"
   done
 done
+if [ "$ARR1" = 1 ]; then
+  if [ "${ARR_KERN_FEHLT:-0}" = 1 ]; then
+    echo "production slot 1: wirt ready, edges recorded in $KANTEN_DATEI; the running kern is older than D1 K2b (no arr ports): restart the studio (djk-stop, djk-start) and the kern links them"
+    exit 0
+  fi
+  echo "production slot 1 live: $KERN_CLIENT:arr_midi_1 -> Surge -> arr_rueck_1_L/R (edges in $KANTEN_DATEI)"
+  exit 0
+fi
 [ "$NUR_WIRTE" = 1 ] && exit 0
 
 # 3 Erzeuger 2/3 auf MIDI umsetzen: Befehlszeile aus der laufenden Unit (sie ist die Wahrheit über Kit, Ports, Pfade).

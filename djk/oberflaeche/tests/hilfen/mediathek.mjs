@@ -12,8 +12,9 @@ import { baueBestand } from './bestand.mjs';
 import { schreibeLeerenRing } from './ring.mjs';
 export const HIER = path.dirname(fileURLToPath(import.meta.url));
 export const REPO = path.resolve(HIER, '..', '..', '..', '..');
-import { K, TEST_INSTANZ } from './instanz.mjs';
+import { K, TEST_INSTANZ, belegeTestInstanz } from './instanz.mjs';
 export { K };
+belegeTestInstanz();   // Plan d1-s1 Task 1: zweite Suite auf demselben Buchstaben scheitert laut statt mit „attrappe rc 3“
 export const HOST = os.hostname();
 export const warte = (ms) => new Promise((r) => setTimeout(r, ms));
 export const sha = (n) => crypto.createHash('sha256').update(`objekt-${n}`).digest('hex');
@@ -113,25 +114,44 @@ export function baueEinleser(dir, { schlaf = 0, ausgabe = '{"status":"neu","mate
   return { skript, log, laeufe: () => (fs.existsSync(log) ? fs.readFileSync(log, 'utf8').split('---\n').filter(Boolean) : []) };
 }
 
-export async function stapel(t, { mediathek, python, bestand, einleserModul, sammlungen, loops, katalog, vorhoeren, musterBibliothek, musterSets, musterOrdner, welleFfmpeg, welleZeitlimit, loopWerkzeug } = {}) {
+export async function stapel(t, { mediathek, python, bestand, einleserModul, sammlungen, loops, katalog, vorhoeren, musterBibliothek, musterSets, musterOrdner, welleFfmpeg, welleZeitlimit, loopWerkzeug, proj } = {}) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-mt-'));
   const ab = path.join(fs.mkdtempSync('/dev/shm/djk-mt-test-'), 'material');
   fs.mkdirSync(ab, { recursive: true });
-  const att = spawn(process.execPath, [path.join(REPO, 'djk/vertrag/attrappe_kern.mjs'), '--frisch', '--arbeitsbestand', ab,
+  // Paket S3 (Auftrag 16 a, Muster der Leitstand-Tests aus K3): eigene kern.toml im tmp-Ordner, sonst liest die Attrappe die echte
+  // ~/.config/cypherdj-<i>/kern.toml (ein unbekannter Schlüssel dort ließe jeden Stapel mit rc 2 scheitern). arr_ordner ist der Arbeitsordner des
+  // Servers: ein Freeze der Attrappe (K3) schreibt seine Datei dorthin, nie nach ~/.cache/cypherdj-<i>/arr.
+  const arbeitsordner = proj?.arbeitsordner ?? path.join(tmp, 'arr');
+  const konfig = path.join(tmp, 'kern.toml');
+  fs.writeFileSync(konfig, `# Stapel-Test (tests/hilfen/mediathek.mjs)\narr_ordner = ${JSON.stringify(arbeitsordner)}\n`);
+  const att = spawn(process.execPath, [path.join(REPO, 'djk/vertrag/attrappe_kern.mjs'), '--frisch', '--arbeitsbestand', ab, '--konfig', konfig,
     '--zustand', path.join(tmp, 'zustand.json')], { env: { ...process.env, CYPHERDJ_INSTANZ: TEST_INSTANZ }, stdio: ['ignore', 'pipe', 'pipe'] });
   await new Promise((ok, f) => { att.stdout.once('data', ok); att.once('exit', (c) => f(new Error(`attrappe rc ${c}`))); });
-  const huellen = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'djk-huellen-')), 'huellen'); schreibeLeerenRing(path.dirname(huellen) + '/huellen');
-  const tmpd = (n) => fs.mkdtempSync(path.join(os.tmpdir(), `djk-${n}-`));
+  let laufend = null;   // Plan d1-s1 Task 1: erst nach gelungenem starte() gesetzt; Attrappe und Ordner räumen auch, wenn der Start scheitert
+  t.after(async () => {
+    if (laufend) await laufend.stoppe();
+    if (att.exitCode === null && att.signalCode === null) { const zu = new Promise((r) => att.once('exit', r)); att.kill('SIGTERM'); await zu; }
+    fs.rmSync(tmp, { recursive: true, force: true }); fs.rmSync(path.dirname(ab), { recursive: true, force: true });
+  });
+  // V2 Fix F16 (Spec 6.33): Hüllen und alle tmpd()-Ordner (loops, kits, welle, muster, hc, raster, wirt) im eigenen tmp-Ordner des Stapels, den
+  // t.after wegräumt; vorher lagen sie direkt unter TMPDIR und blieben je Stapel liegen (Suite-Lauf: 2348 Einträge). Übergebene Ordner bleiben.
+  const huellen = path.join(fs.mkdtempSync(path.join(tmp, 'djk-huellen-')), 'huellen'); schreibeLeerenRing(path.dirname(huellen) + '/huellen');
+  const tmpd = (n) => fs.mkdtempSync(path.join(tmp, `djk-${n}-`));
   const bestandDir = bestand ?? baueBestand(path.join(tmp, 'bestand'), []);
   const log = [];
-  const o = new Oberflaeche({ port: 47300 + K, kernPort: 47100 + K, aboPort: 47150 + K, leitstandWs: 47200 + K, bestand: bestandDir, arbeitsbestand: ab,
+  const optionen = { port: 47300 + K, kernPort: 47100 + K, aboPort: 47150 + K, leitstandWs: 47200 + K, bestand: bestandDir, arbeitsbestand: ab,
     kernPruefmodus: true, loops: loops ?? tmpd('loops'), kits: tmpd('kits'), welleCache: tmpd('welle'), musterOrdner: musterOrdner ?? tmpd('muster'), musterBibliothek, musterSets, hotcueOrdner: tmpd('hc'),
-    rasterOrdner: tmpd('raster'), huellen, wirtOrdner: tmpd('wirt'), mediathek, katalog, vorhoeren, python, welleFfmpeg, welleZeitlimit, loopWerkzeug, einleserModul, sammlungen, log: (z) => log.push(z) });
+    rasterOrdner: tmpd('raster'), huellen, wirtOrdner: tmpd('wirt'), mediathek, katalog, vorhoeren, python, welleFfmpeg, welleZeitlimit, loopWerkzeug, einleserModul, sammlungen, log: (z) => log.push(z),
+    // D1 S2: nie ~/.cache oder /dev/shm der Instanz. Fix3 G8: Projektwurzel, Arbeitsordner und damit auch <arbeitsordner>.zaehler (Spec 6.31) liegen im
+    // eigenen tmp-Ordner des Stapels, den t.after wegräumt (vorher tmpd(): je Lauf ein djk-proj-*, ein djk-arr-* und ein .zaehler unter TMPDIR, nie entfernt)
+    proj: { wurzel: path.join(tmp, 'proj'), ...(proj ?? {}), arbeitsordner } };
+  const o = new Oberflaeche(optionen);
   await o.starte();
+  laufend = o;
   for (let i = 0; i < 100 && o.kern.zustand !== 'verbunden'; i++) await warte(20);
   assert.equal(o.kern.zustand, 'verbunden');
-  t.after(async () => { await o.stoppe(); const zu = new Promise((r) => att.once('exit', r)); att.kill('SIGTERM'); await zu; fs.rmSync(tmp, { recursive: true, force: true }); fs.rmSync(path.dirname(ab), { recursive: true, force: true }); });
-  return { o, log, url: `http://127.0.0.1:${47300 + K}`, bestandDir };
+  // optionen: D1 S2 Fix4 J1, ein zweiter Server auf denselben Ordnern und derselben Attrappe (Server-Neustart im Test)
+  return { o, log, url: `http://127.0.0.1:${47300 + K}`, bestandDir, att, optionen };   // att: Plan d1-s1 Task 5 (SSE-Meldung kern)
 }
 
 export const hole = (url, pfad) => fetch(url + pfad).then(async (r) => ({ code: r.status, j: await r.json() }));

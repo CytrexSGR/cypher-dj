@@ -27,6 +27,7 @@ export const BEFEHLE = {
   '/k/deck/hotcue': f('hssssidiid', `${DECK_PLAN} nr politik raster_beats`),
   '/k/deck/hotcue_setzen': f('hsiid', 'id quelle deck nr quell_beat'),
   '/k/deck/raster': f('hsisdii', 'id quelle deck material_id basis_bpm fassung versatz_frames'),
+  '/k/deck/scrub': f('hsiid', 'id quelle deck phase delta_beats'),                       // Hörbares Ziehen 2026-10-17 (§4.4)
   '/k/deck/slip': f('hsii', 'id quelle deck an'),
   '/k/deck/basis_tausch': f('hsidid', 'id quelle deck basis_bpm fassung ab_beat'),
   '/k/hoerschein': f('hsssssddddfff', 'id quelle hs_id kanal inhalt urteil bpm_messung gueltig_bis_beat quell_von quell_bis sync_ms pegel_diff_db lufs_kurz'),
@@ -53,6 +54,12 @@ export const BEFEHLE = {
   '/k/loop/stopp': f('hsi', 'id quelle box'),
   '/k/loop/raster': f('hsii', 'id quelle box versatz_frames'),
   '/k/loop/rec': f('hsis', 'id quelle beats name'),
+  '/k/arr/laden': f('hsi', 'id quelle nr'),                                       // D1 K1 (§4.11)
+  '/k/arr/start': f('hsdi', 'id quelle start_beat quant'),
+  '/k/arr/stopp': f('hsi', 'id quelle quant'),
+  '/k/arr/loop': f('hsidd', 'id quelle an von_beat bis_beat'),
+  '/k/arr/metronom': f('hsifi', 'id quelle an pegel_db ziel'),
+  '/k/arr/freeze': f('hsiddi', 'id quelle spur von_beat bis_beat kennung'),        // Paket K3
   '/test/hand': f('sfh', 'pfad midi_roh sample'),
   '/test/klick': f('hssi', 'id quelle kanal an'),
 };
@@ -64,7 +71,7 @@ export const AUSGABEN = {
   '/k/willkommen': f('iihdds', 'protokoll generation sample beat bpm kern_version'),
   '/uhr': f('hhddd', 'sample mono_ns beat bpm bpm_pro_s'),
   '/takt': f('iihdd', 'takt phrase sample beat bpm'),
-  '/zustand/kern': f('iihiiiiiiii', 'generation quantum sample frame_luecken ausgelassene_perioden cb_max_us cb_p99_us aufwach_max_us stretcher_aktiv befehle_wartend ki_gestoppt'),
+  '/zustand/kern': f('iihiiiiiiiih', 'generation quantum sample frame_luecken ausgelassene_perioden cb_max_us cb_p99_us aufwach_max_us stretcher_aktiv befehle_wartend ki_gestoppt ereignisse_verloren'),
   '/zustand/deck': f('iisdidddfiifii', 'deck status material_id basis_bpm fassung quell_beat beats_bis_ende faktor vorlauf_ms hoerweg stretcher_fuell versatz_intern_ms keylock_unterlauf keylock_aufgegeben'),
   '/zustand/box': f('iiiiii', 'box status keylock_unterlauf keylock_aufgegeben keylock_ring_voll keylock_kein_platz'),  // Keylock 7b.3 (die Attrappe spielt keine Boxen und sendet es nicht)
   '/zustand/komp': f('sf', 'kanal gr_db'),   // Effekt-Sektion Schritt 2 (§5.5c), osc.json: /zustand/komp
@@ -92,6 +99,8 @@ export const AUSGABEN = {
   '/e/fx/zuweisung': f('isi', 'einheit kanal an'),                          // AUFTRAG 2026-09-28 (§5.12)
   '/e/fx/routing': f('i', 'routing'),                                       // Ohr Task 15 (§5.12)
   '/e/mitschnitt': f('siid', 'name beats status ab_beat'),
+  '/zustand/arr': f('iiidhdi', 'nr status loop_an projekt_beat ursprung_sample start_beat metronom_an'),   // D1 K1 (§5.13)
+  '/e/freeze': f('iiih', 'spur kennung status frames'),                                                    // Paket K3
 };
 
 export const STATUS = { angenommen: 1, gestartet: 2, fertig: 3, verspaetet_verworfen: 4, verspaetet_ausgefuehrt: 5, abgelehnt: 6, abgebrochen: 7, storniert: 8 };
@@ -102,8 +111,10 @@ export const GRUENDE = new Set(['zu_spaet', 'regler_beim_menschen', 'regler_verp
   'unbekannter_regler', 'unbekanntes_deck', 'ausserhalb_bereich', 'kein_hoerschein', 'hoerschein_anderer_kanal',
   'hoerschein_anderer_inhalt', 'hoerschein_anderes_tempo', 'hoerschein_abgelaufen', 'hoerschein_anderer_abschnitt',
   'ziel_ungehoert', 'keine_stems', 'invariante_sub_doppelt', 'invariante_master_leer', 'deck_beruehrt', 'deck_hoerbar',
-  'deck_laeuft', 'nicht_geladen', 'material_fehlt', 'pruefung', 'budget_speicher', 'karte_voll', 'ki_gestoppt',
-  'kein_stretcher', 'hand', 'abbruch', 'ki_stopp', 'unbekannte_adresse', 'falsche_typen', 'protokoll']);
+  'deck_laeuft', 'nicht_geladen', 'material_fehlt', 'pruefung', 'budget_speicher', 'karte_voll', 'tempo_rampe', 'ki_gestoppt',
+  'kein_stretcher', 'hand', 'abbruch', 'ki_stopp', 'unbekannte_adresse', 'falsche_typen', 'protokoll',
+  'form',                                                                                   // §16.2 Kern (netz.cpp /k/hoerschein)
+  'datei_fehlt', 'format', 'audio_fehlt', 'zu_gross', 'spur_bereich', 'reserviert']);       // D1 K1 (§4.11)
 
 // §1.5 Kanäle
 export const DECKS = [1, 2, 3, 4].map((n) => `deck/${n}`);
@@ -147,6 +158,12 @@ for (const [p, info] of Object.entries({
   'color/art': R(STUFE, 0, 5, 0), 'color/param': R(LIN, 0, 1, 0.5),   // SOUND COLOR FX, alle dürfen
   keylock: R(SCHALTER, 0, 1, 1),   // Keylock Task 3 (Fassung 4): EIN Knopf für alle Quellen, alle dürfen
 })) REGLER.set(p, { ...info, kanal: null });
+for (let n = 1; n <= 8; n++) {   // D1 K1 (§1.5): Spur-Regler des Arrangements, global, alle dürfen; Fader bis +6 dB (Spec 6.16)
+  REGLER.set(`spur/${n}/fader`, { ...R(DB, -200, 6, 0), kanal: null });
+  REGLER.set(`spur/${n}/pan`, { ...R(LIN, -1, 1, 0), kanal: null });
+  REGLER.set(`spur/${n}/mute`, { ...R(SCHALTER, 0, 1, 0), kanal: null });
+  REGLER.set(`spur/${n}/solo`, { ...R(SCHALTER, 0, 1, 0), kanal: null });
+}
 
 export const kanalVon = (pfad) => REGLER.get(pfad)?.kanal ?? null;
 export const istDeck = (k) => typeof k === 'string' && /^deck\/[1-4]$/.test(k);

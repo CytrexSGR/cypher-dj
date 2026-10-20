@@ -194,7 +194,6 @@ void Kern::einsortieren25(const Befehl& c) {
     case Befehl::KI_STOPP: sw_->ki_stopp(c.id, q); break;  // §4.7 (F13: wartende cypher-Loops verwirft Kern::audio)
     case Befehl::KI_FREI: sw_->ki_frei(c.id, q); break;
     case Befehl::KI_SPUR:
-      kopiere(ki_spur_neu_, c.liste, sizeof ki_spur_neu_);  // gilt erst mit der Quittung fertig des Stellwerks
       ki_spur_id_ = c.id;
       sw_->ki_spur(c.id, q, c.liste);
       break;
@@ -247,6 +246,11 @@ void Kern::einsortieren25(const Befehl& c) {
     case Befehl::HAND: {  // §19.0 /test/hand: bis zum Zyklus seines Samples in der Schlange
       int dn = 0;
       bool play = false;
+      if (arr_taste_pfad(c.pfad)) {  // D1 K1: arr/start_stopp wie die Hand-Zielart, Druck ab 0,5
+        if (c.wert >= 0.5f && arr_hand_start_stopp(c.sample < sample_ ? sample_ : c.sample)) ++hand_ereignisse_;
+        else ++hand_ohne_wirkung_;
+        break;
+      }
       if (deck_taste_pfad(c.pfad, &dn, &play)) {  // Scheibe 35 E5 a: deck/<n>/play|cue wie die Deck-Taste des Controllers
         if (hand_deck_taste(dn, play, c.wert >= 0.5f ? 1 : 0, c.sample)) ++hand_ereignisse_;
         else ++hand_ohne_wirkung_;
@@ -302,6 +306,18 @@ void Kern::pegel_melden(int64_t n0, int n) {
   melden("erz/3", 6);  // Studio S1: Melodie
   melden("pad/1", 12);  // MVP 2: Loop-Boxen, immer (ohne Loop −200)
   melden("pad/2", 13);
+  for (int i = 0; i < ARR_SPUREN; ++i) {  // D1 K1 (§5.6): spur/<n> je Spur mit Inhalt, Spitze nach dem Spur-Fader
+    const float sp = arr_->spitze_lesen(i);
+    if (!arr_->spur_belegt(i)) continue;
+    Ereignis e{};
+    e.art = Ereignis::PEGEL;
+    e.sample = n0;
+    const char name[7] = {'s', 'p', 'u', 'r', '/', static_cast<char>('1' + i), '\0'};
+    std::memcpy(e.pfad, name, sizeof name);
+    e.pegel[0] = sp > 1e-10f ? 20.0f * std::log10(sp) : -200.0f;
+    for (int j = 1; j < 7; ++j) e.pegel[j] = -200.0f;
+    melde(e);
+  }
   melden("master", Mixer::PEGEL_MASTER);
   melden("cue", Mixer::PEGEL_CUE);
 }
@@ -327,10 +343,18 @@ void Kern::audio(int64_t n0, int n) {
       mixer_->verlauf(a[i].regler, a[i].verlauf);
       decks_verlauf(a[i].regler, a[i].verlauf);  // Scheibe 31: stem/* ins Deck
       keylock_verlauf(a[i].regler, a[i].verlauf, s0, m);  // Keylock Task 3: Regler keylock an Decks und Boxen
+      arr_->verlauf(a[i].regler, a[i].verlauf);  // D1 K1: spur/<n>/* ins Modul Arrangement (Verlauf je Sample)
     }
     decks_block(s0, m);  // Scheibe 31: Decks in die Eingänge deck/1..4, Starts und Stopps am Sample
     ErzAusloeser ausl;
     erz_->block(karte, s0, m, erz_l_, erz_r_, midi_aus_, zyklus_n0_, &ausl);  // Plan 2026-09-27 + Studio S5 (MIDI-Ströme)
+    // D1 K1 (Spec 2.2): Arrangement nach dem Erzeuger, vor Rückwegen, Prüfklicks und Mixer. Summe in den Eingang von
+    // erz/4, Metronom in die Master-Summe vor dem Limiter oder in die PFL-Summe. Ein KI-Stopp beendet Cyphers Transport.
+    if (sw_->ki_gestoppt()) arr_->ki_stopp(s0, karte);
+    arr_->block(karte, s0, m, erz_l_[arr_kanal_], erz_r_[arr_kanal_], mixer_->summe_eingang_l(),
+                mixer_->summe_eingang_r(), mixer_->pfl_eingang_l(), mixer_->pfl_eingang_r());
+    arr_quittungen(karte);
+    arr_freeze_quittungen(karte);  // Paket K3: Freeze 2, 3, 7 und Rückgabe des Auftrags
     // K2: der Duck setzt AM Kick-Ereignis ein, nicht um den Wirt-Rundweg verzögert. Seit Glanz 2.7 (F19) gehen MIDI-Noten um den
     // Rundweg früher hinaus: eine Bassnote mit dem Kick kommt gleichzeitig mit ihm an (vorher ~545 Samples später, Abnahme
     // 2026-09-30) und trifft den Duck in seinem Attack (240 Samples, duck.h:17) statt im schon abgesenkten Pegel.
@@ -341,6 +365,9 @@ void Kern::audio(int64_t n0, int n) {
 #endif
     for (int e = 0; e < 8; ++e) {  // Studio S5: Rückwege der Wirte in den Eingang erz/<e+1>, vor Trim (§8)
       if (!rueck_l_[e] || !rueck_r_[e]) continue;
+#ifndef CYPHERDJ_MUTATION_ARR_RUECK_ERZ4
+      if (4 + e == arr_kanal_) continue;  // D1 K1 (Spec 2.3): erz/4 gehört der Produktion, rueck_erz_4 klingt nicht
+#endif
       float* l = erz_l_[4 + e];
       float* r = erz_r_[4 + e];
       const int64_t o = s0 - zyklus_n0_;
@@ -391,7 +418,7 @@ void Kern::audio(int64_t n0, int n) {
 }
 
 // Ohr (§6.2): je Block ein Datensatz je vollendetem 48-Sample-Fenster, für alle 16 Kanäle. Belegt heißt: Deck k<4
-// geladen; erz/1, pad/1, pad/2, master, cue immer; erz/2..8 nie (YAGNI, I3b/I3c nicht gebaut). Der Master-Analysator
+// geladen; erz/1..3, pad/1, pad/2, master, cue immer; erz/4 immer (D1 K1: Summe der Produktion); erz/5..8 nie. Der Master-Analysator
 // (immer belegt) bestimmt die Fenster; leere Kanäle schreiben Nullen, damit ihre Fenster bündig liegen, sobald sie
 // belegt werden. Echtzeit: keine Allokation, kein I/O.
 void Kern::huellen_block(int64_t s0, int m, const float* cue_l, const float* cue_r) {
@@ -412,7 +439,8 @@ void Kern::huellen_block(int64_t s0, int m, const float* cue_l, const float* cue
   for (int c = 0; c < HK; ++c) {
     if (c < 4) belegt[c] = decks_->deck[c].geladen();
     else if (c <= 6) belegt[c] = true;    // erz/1..3 (Studio S1)
-    else if (c <= 11) belegt[c] = false;  // erz/4..8: nie
+    else if (c == arr_kanal_) belegt[c] = true;  // D1 K1 (Spec 2.3): erz/4 = Summe der Produktion
+    else if (c <= 11) belegt[c] = false;  // erz/5..8: nie
     else belegt[c] = true;                // pad/1, pad/2, master, cue: immer
   }
   for (int c = 0; c < 14; ++c) {
@@ -469,8 +497,8 @@ void Kern::ereignisse_uebernehmen() {
       const char* qn = sw::name(s.quelle);
       const int st = static_cast<int>(s.status);
       if (schatten_.quittung(s.id, qn, st, s.sample, beat)) continue;  // Neustart: schon gemeldet
-      if (s.id == ki_spur_id_ && st == 3) {
-        std::memcpy(ki_spur_, ki_spur_neu_, sizeof ki_spur_);
+      if (s.id == ki_spur_id_ && st == 3) {   // D1 Spec 6.15: beide Listen (Kanäle, Spuren) in Normalform, nicht der letzte Text
+        sw_->ki_spur_text(ki_spur_, sizeof ki_spur_);
         ki_spur_id_ = 0;
       }
       quittung(s.id, qn, st, s.sample, beat, sw::name(s.grund));

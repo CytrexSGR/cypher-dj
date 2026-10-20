@@ -23,8 +23,8 @@ const ReglerDef& d(const char* pfad) {
 FALL(zahl_der_regler_und_kanaele) {
   // 4 Decks x 21 (mit transport), 8 Erzeuger x 16, 2 Pads x 16, 4 Busse x 15 (ohne ziel), 18 globale (seit Keylock 3
   // mit `keylock`, seit 2026-10-10 mit `master/pfl`, seit 2026-10-11 mit `color/art` und `color/param`), dazu 14 Quellkanäle
-  // x 8 `komp/*` (2026-10-11, mit komp/sc): 436
-  PRUEFE_GLEICH(tab().anzahl(), 436);
+  // x 8 `komp/*` (2026-10-11, mit komp/sc): 436; D1 K1: dazu 8 Spuren x 4 Spur-Regler (spur/<n>/*, global): 468
+  PRUEFE_GLEICH(tab().anzahl(), 468);
   PRUEFE_GLEICH(tab().kanaele(), 20);
   PRUEFE_GLEICH(tab().kanal_suche("deck/1"), 0);
   PRUEFE_GLEICH(tab().kanal_suche("bus/4"), 17);
@@ -32,10 +32,44 @@ FALL(zahl_der_regler_und_kanaele) {
   PRUEFE_GLEICH(tab().kanal_suche("deck/5"), -1);
 }
 
+FALL(spur_regler_global_mit_vorgaben) {
+  // D1 K1 (Spec 2.3): spur/1..8 je fader, pan, mute, solo an Kanal −1, keine neuen Kanäle, alle dürfen
+  PRUEFE_GLEICH(tab().kanaele(), 20);
+  for (int n = 1; n <= 8; n++) {
+    char p[32];
+    std::snprintf(p, sizeof p, "spur/%d/fader", n);
+    PRUEFE(d(p).kanal == -1 && d(p).rolle == Rolle::spur_fader && d(p).vorgabe == 0.0f && d(p).min == -200.0f &&
+           d(p).db && !d(p).nur_hand && d(p).schalt_samples == 480);
+    std::snprintf(p, sizeof p, "spur/%d/pan", n);
+    PRUEFE(d(p).kanal == -1 && d(p).rolle == Rolle::spur_pan && d(p).min == -1.0f && d(p).max == 1.0f && !d(p).nur_hand);
+    std::snprintf(p, sizeof p, "spur/%d/mute", n);
+    PRUEFE(d(p).rolle == Rolle::spur_mute && d(p).ganzzahlig && d(p).keine_rampe && d(p).schalt_samples == 0);
+    std::snprintf(p, sizeof p, "spur/%d/solo", n);
+    PRUEFE(d(p).rolle == Rolle::spur_solo && d(p).ganzzahlig && d(p).keine_rampe && d(p).schalt_samples == 0);
+  }
+  PRUEFE(tab().suche("spur/9/fader") < 0);   // Negativ-Kontrolle
+  PRUEFE(tab().suche("spur/0/pan") < 0);
+}
+
+FALL(spur_fader_bis_plus_6_db) {
+  // D1 Spec 6.16 (§4 Wertebereiche): spur/<n>/fader −200..+6 dB, Vorgabe 0. Hand-Kurve fader_db bis +6: ganz oben +6,
+  // 0 dB bei Stellung 10^(−6/20) ≈ 0,501. Kanal-Fader bleiben −200..0 (Negativ-Kontrolle).
+  for (int n = 1; n <= 8; n++) {
+    char p[32];
+    std::snprintf(p, sizeof p, "spur/%d/fader", n);
+    PRUEFE(d(p).min == -200.0f && d(p).max == 6.0f && d(p).vorgabe == 0.0f);
+    PRUEFE(d(p).kurve.typ == KurvenTyp::fader_db && d(p).kurve.max == 6.0f);
+    PRUEFE_NAH(ReglerTabelle::aus_x(d(p).kurve, 1.0f), 6.0f, 1e-5);
+    PRUEFE_NAH(ReglerTabelle::zu_x(d(p).kurve, 0.0f), 0.501187f, 1e-5);
+  }
+  PRUEFE(d("deck/1/fader").max == 0.0f && d("deck/1/fader").kurve.max == 0.0f);
+  PRUEFE_NAH(ReglerTabelle::aus_x(d("deck/1/fader").kurve, 1.0f), 0.0f, 1e-6);
+}
+
 FALL(kapazitaet_hat_luft_fuer_k2) {
   // K2 Task 0.2: Luft für neue Pfade, und ein voller Speicher darf nicht überlaufen
   PRUEFE(cypherdj::stellwerk::MAX_REGLER >= 384);
-  PRUEFE(cypherdj::stellwerk::MAX_REGLER - tab().anzahl() >= 60);
+  PRUEFE(cypherdj::stellwerk::MAX_REGLER - tab().anzahl() >= 44);   // D1 K1: 512 − 468 (Spec 2.3)
 }
 
 FALL(jeder_pfad_wird_gefunden_und_unbekannte_nicht) {

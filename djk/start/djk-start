@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # djk-start: ein Befehl für die Spiel-Sitzung. Prüft Ports und Geräte, legt den Arbeitsbestand an, startet Kern,
 # Notbahn (daneben), Leitstand und Oberfläche als transiente User-Units (systemd-run, nie enable) in dieser
-# Reihenfolge mit Wartebedingungen und zeigt URL und Zustand. djk-stop räumt alles ab.
+# Reihenfolge mit Wartebedingungen und zeigt URL und Zustand. djk-stop räumt alles ab, auch den Produktions-Wirt arr1
+# (djk-instrumente --arr1); liegt der noch von einem früheren Lauf, meldet djk-start belegt (Rückgabe 4).
 #
 # Aufruf: djk-start [--master PRÄFIX] [--cue PRÄFIX | --ohne-cue] [--ton-frei] [--strudel [--strudel-kit NAME] [--strudel-kit2 NAME] [--strudel-kit3 NAME] [--instrumente [--melodie surge|fluegel] [--bass surge|rb338]]] [--instanz a..i]
 #                   [--kern-konfig DATEI] [--leitstand-konfig DATEI] [--ohne-pruefmodus]
@@ -256,6 +257,12 @@ for u in "${UNITS[@]}"; do
     BELEGT+=("unit $u.service is installed as a file; start the installed target instead of djk-start")
   fi
 done
+# Der Produktions-Wirt (djk-instrumente --arr1, D1) hängt sich an ein laufendes Studio und steht nicht in UNITS; ein Rest
+# davon (Restart=always) liefe neben dem neuen Kern weiter. djk-stop räumt ihn ab.
+U_ARR1=cypherdj-wirt-arr1$SFX
+if systemctl --user list-units --all --no-legend --plain "$U_ARR1.service" 2>/dev/null | grep -q .; then
+  BELEGT+=("unit $U_ARR1.service (production slot wirt, djk-instrumente --arr1) is still loaded ($(systemctl --user is-active "$U_ARR1.service" 2>/dev/null)); run djk-stop${I:+ --instanz $I} first")
+fi
 port_frei() {  # $1 tcp|udp, $2 port, $3 wofür
   local z
   if [ "$1" = tcp ]; then z=$(ss -Hlntp "sport = :$2" 2>/dev/null); else z=$(ss -Hlnup "sport = :$2" 2>/dev/null); fi

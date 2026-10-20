@@ -35,3 +35,24 @@ test('CYPHERDJ_STAPEL_INSTANZ überschreibt das Mapping; die eigene Test-Instanz
   assert.throws(() => stapelMit({ CYPHERDJ_TEST_INSTANZ: 'b', CYPHERDJ_STAPEL_INSTANZ: 'b' }), /CYPHERDJ_STAPEL_INSTANZ/);
   assert.throws(() => stapelMit({ CYPHERDJ_TEST_INSTANZ: 'b', CYPHERDJ_STAPEL_INSTANZ: 'z' }), /CYPHERDJ_STAPEL_INSTANZ/);
 });
+
+// Plan 2026-10-15-d1-s1, Task 1: Sperre der Test-Instanz. Ein zweiter lebender Prozess auf demselben Buchstaben scheitert sofort mit
+// einer Meldung, die die Ursache nennt (statt verschränkt mit „attrappe rc 3“); eine verwaiste Sperre (Halter mit SIGKILL beendet) wird übernommen.
+test('belegeTestInstanz: zweiter Prozess auf demselben Buchstaben scheitert laut; nach dem Tod des Halters geht es wieder', async () => {
+  const { spawn, spawnSync } = await import('node:child_process');
+  const { TEST_INSTANZ } = await import('./hilfen/instanz.mjs');
+  const code = (warten) => `import(${JSON.stringify(hilfe)}).then((m) => { m.belegeTestInstanz(); console.log('belegt'); ${warten ? 'setTimeout(() => {}, 60000);' : ''} })`;
+  const env = { ...process.env, CYPHERDJ_TEST_INSTANZ: TEST_INSTANZ };
+  const halter = spawn(process.execPath, ['-e', code(true)], { env, stdio: ['ignore', 'pipe', 'pipe'] });
+  try {
+    await new Promise((ok, f) => { halter.stdout.once('data', ok); halter.once('exit', (c) => f(new Error(`halter rc ${c}`))); });
+    const zweiter = spawnSync(process.execPath, ['-e', code(false)], { env, encoding: 'utf8' });
+    assert.notEqual(zweiter.status, 0, 'der zweite Prozess darf nicht starten');
+    assert.match(zweiter.stderr, new RegExp(`Testinstanz ${TEST_INSTANZ} belegt \\(PID ${halter.pid},`));
+  } finally {
+    const weg = new Promise((r) => halter.once('exit', r)); halter.kill('SIGKILL'); await weg;
+  }
+  const danach = spawnSync(process.execPath, ['-e', code(false)], { env, encoding: 'utf8' });
+  assert.equal(danach.status, 0, `verwaiste Sperre wird übernommen: ${danach.stderr}`);
+  assert.equal(danach.stdout.trim(), 'belegt');
+});

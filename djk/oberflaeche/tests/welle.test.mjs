@@ -63,7 +63,8 @@ import { WelleCache, dateiQuelle, welleCacheVorgabe } from '../welle_cache.ts';
 import { pythonVorgabe } from '../server.ts';
 import { stapel, hole } from './hilfen/mediathek.mjs';
 import { baueKatalog } from './hilfen/katalog.mjs';
-import { TEST_INSTANZ } from './hilfen/instanz.mjs';
+import { TEST_INSTANZ, belegeTestInstanz } from './hilfen/instanz.mjs';
+belegeTestInstanz();   // Plan d1-s1 Task 1: startet selbst `node server.ts` auf TEST_INSTANZ
 
 const tmpd = (t, n) => { const d = fs.mkdtempSync(path.join(os.tmpdir(), n)); t.after(() => fs.rmSync(d, { recursive: true, force: true })); return d; };
 const sinus = (datei, sek = 1) => execFileSync('ffmpeg', ['-v', 'quiet', '-y', '-f', 'lavfi', '-i', `sine=f=440:d=${sek}`, '-ar', '44100', datei]);

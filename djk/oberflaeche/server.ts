@@ -22,22 +22,28 @@ import fs from 'node:fs';
 import { spawn } from 'node:child_process';
 import http from 'node:http';
 import { AsyncLocalStorage } from 'node:async_hooks';
-import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { DatabaseSync } from 'node:sqlite';
 import { KernAnbindung } from '../leitstand/src/kern.ts';
+import { json as sendeJson, koerper as leseKoerper, postAbgewiesen, quelleAusKopf } from './http/transport.ts';
+import { Router, type Route, type Bereich, type BereichKontext } from './http/router.ts';
+import { projBereich, type ProjOptionen } from './bereiche/proj/bereich.ts';
+import { ausgabeBereich } from './bereiche/proj/ausgabe.ts';   // Paket S3
 import type { Dekodiert, Felder } from '../leitstand/src/adressen.ts';
 import { ZIELE, ZIEL_KURVE, ZIEL_KURVEN } from './oeffentlich/kurven.js';
 
 const TASTEN = ['annehmen', 'verwerfen', 'stopp', 'freigabe'];
-import { arbeitsbestandVorgabe, inArbeitsbestand, KopieFehler, raeumeAuf } from './arbeitsbestand.ts';
+import { inArbeitsbestand, KopieFehler, raeumeAuf } from './arbeitsbestand.ts';
 import { HAND_PRUEFMODUS_TEXT } from './oeffentlich/meldungen.js';
-import { leseLoops, loopOrdnerVorgabe, LOOP_NAME, leseLoopVersatz, schreibeLoopVersatz, schreibeLoopAusFassung } from './loops.ts';
+import { leseLoops, LOOP_NAME, leseLoopVersatz, schreibeLoopVersatz, schreibeLoopAusFassung } from './loops.ts';
 import { pruefeAutomation, planeSpur, spurLaenge, naechsterDurchgang, leseLoopAutomation, schreibeLoopAutomation, type AutoSpur } from './loop_automation.ts';
 import { beatsVon, importiereLoop, loopNameVon, findeImport, raeumeImportReste, LoopImportFehler, type ImportOptionen } from './loop_import.ts';
-import { WelleCache, WelleFehler, loopQuelle, fassungQuelle, dateiQuelle, welleCacheVorgabe } from './welle_cache.ts';
+import { WelleCache, WelleFehler, loopQuelle, fassungQuelle, dateiQuelle } from './welle_cache.ts';
+import { OEFFENTLICH, REPO, REPO_PFADE, instanz, ports, shmOrdner, rasterOrdnerVorgabe, hotcueOrdnerVorgabe, huellenVorgabe, musterOrdnerVorgabe,
+  wirtOrdnerVorgabe, kitsOrdnerVorgabe, zusatzKit, strudelPakete, loopOrdnerVorgabe, welleCacheVorgabe, arbeitsbestandVorgabe } from './pfade.ts';
+import { tempoRampe, vorlaufBeats } from './tempo_rampe.ts';
 import { RASTER_WAHL, abBeat, sprungDelta, rasterRunden, hotcueDatei, leseHotcues, schreibeHotcues, type Hotcue, type Fassung, rasterSchritt, RASTER_MAX, rasterDatei, leseRaster, schreibeRaster, einsSetzen, rasterErbe, einsNachFix, einsZeile, haengeKorrekturAn, letzteEinsZeile, hatHandEins, hotcuesErbe } from './deck_bedienung.ts';
 // @ts-expect-error reines .mjs ohne Typen (djk/loops)
 import { loopZuKlang } from '../loops/kit_schreiben.mjs';
@@ -55,9 +61,6 @@ import { OhrLeser, hoerAntwort, sync as ohrSync, K as OHR_K, type DeckLage, Hoer
 import { PegelPuffer } from './pegel_puffer.ts';
 import { leseMusterStand, setzeAutonom } from '../erzeuger/src/muster_stand.mjs';
 
-const HIER = path.dirname(fileURLToPath(import.meta.url));
-const OEFFENTLICH = path.join(HIER, 'oeffentlich');
-const REPO = path.resolve(HIER, '..', '..');
 // Python für welle.py (braucht numpy): CYPHERDJ_PYTHON, sonst die venv der Werkstatt (Arbeitsrechner), sonst die venv
 // im Repo-Wurzelordner (INSTALL §3: `python3 -m venv .venv`), sonst python3 aus dem PATH.
 export function pythonVorgabe(): string {
@@ -92,6 +95,7 @@ export interface ServerOptionen {
   musterSets?: string;         // S2b: Muster-Quellen track.mjs und Dirigent-Blöcke, Vorgabe <REPO>/sets
   loopWerkzeug?: ImportOptionen['werkzeug'];   // Tests: Attrappen vor ffmpeg/rubberband des Loop-Imports (S6)
   katalog?: string;      // Browser (Plan 2026-10-10): katalog.sqlite, Vorgabe $CYPHERDJ_KATALOG bzw. neben der Mediathek
+  proj?: ProjOptionen;   // D1 S2: Projektwurzel, Arbeitsordner (Vorgaben je Instanz, bereiche/proj/sitzung.ts)
   mediathek?: string;    // Mediathek T2: Vorgabe $CYPHERDJ_MEDIATHEK (nur lesen; fehlt sie: 503 mediathek_fehlt)
   einleserModul?: string;  // Mediathek T2: Python-Modul für POST /mediathek/vorbereiten (Vorgabe werkstatt.einzeln); Python selbst: `python`
   vorhoeren?: Vorhoeren;   // S7: Vorhören als Kern-Eingang (Tests: Attrappe statt Vorhörer-Prozess)
@@ -104,10 +108,11 @@ const KLANG_AUS_MAX = 32768, KLANG_ERR_MAX = 8192;
 export type Pruefmodus = 'an' | 'aus' | 'unbekannt';
 
 // Drosselung je Schlüssel: höchstens eine Meldung je Intervall, die letzte gewinnt (nachgereicht)
-const DROSSEL_MS: Record<string, number> = { '/uhr': 50, '/zustand/deck': 100, '/pegel': 100, '/zustand/komp': 100 };
+const DROSSEL_MS: Record<string, number> = { '/uhr': 50, '/zustand/deck': 100, '/pegel': 100, '/zustand/komp': 100, '/zustand/arr': 50 };   // D1 S2: /zustand/arr 50 Hz beim Spielen, Drossel 50 ms (Spec 3.1)
 const DURCHREICHEN = new Set(['/uhr', '/zustand/deck', '/pegel', '/e/regler', '/e/hand', '/e/geladen', '/e/hotcue', '/e/fx',
   '/e/fx/zuweisung', '/e/fx/routing', '/q', '/e/protokollfehler', '/e/halter', '/e/neustart', '/k/willkommen', '/e/ki', '/e/loop', '/e/mitschnitt', '/e/raster',
-  '/zustand/komp']);   // Effekt-Sektion 2026-10-11: Absenkung je aktivem Kompressor (10 Hz)
+  '/zustand/komp',   // Effekt-Sektion 2026-10-11: Absenkung je aktivem Kompressor (10 Hz)
+  '/zustand/arr', '/e/freeze']);   // D1 S2 (Spec 3.4)
 
 interface Eintrag {
   material_id: string; titel: string; camelot: string | null; quelle_bpm: number; dauer_s: number; lufs: number;
@@ -202,14 +207,8 @@ export class Oberflaeche {
     const x = this.rasterLive[String(deck)];
     return { versatz_frames: x && x.schluessel === Oberflaeche.fassungSchluessel(f) ? x.v : g, gespeichert_frames: g };
   }
-  private rasterOrdner(): string {
-    const i = process.env.CYPHERDJ_INSTANZ ?? '';
-    return this.opt.rasterOrdner ?? (i ? `/dev/shm/cypherdj-${i}/raster` : path.join(os.homedir(), '.config', 'cypherdj', 'raster'));
-  }
-  private huellenPfad(): string {
-    const i = process.env.CYPHERDJ_INSTANZ ?? '';
-    return this.opt.huellen ?? `/dev/shm/cypherdj${i ? `-${i}` : ''}/huellen`;
-  }
+  private rasterOrdner(): string { return this.opt.rasterOrdner ?? rasterOrdnerVorgabe(); }
+  private huellenPfad(): string { return this.opt.huellen ?? huellenVorgabe(); }
   // Gespeicherter Versatz der Fassung; fehlt ihre Datei, gilt die der nächstälteren Fassung (rasterErbe, Bericht grid-phase M7).
   private readonly einsGelesen = new Map<string, { eins: number; esf: number }>();
   private einsDerFassung(mid: string, bpm: number, fassung: number): { eins: number; esf: number } | null {
@@ -395,18 +394,18 @@ export class Oberflaeche {
   constructor(opt: ServerOptionen) {
     this.opt = opt;
     const python = opt.python ?? pythonVorgabe();
-    this.welle = new WelleCache(opt.welleCache ?? welleCacheVorgabe(process.env.CYPHERDJ_INSTANZ ?? ''),
-      python, path.join(HIER, 'welle.py'), opt.log, { ffmpeg: opt.welleFfmpeg, zeitlimit: opt.welleZeitlimit });
+    this.welle = new WelleCache(opt.welleCache ?? welleCacheVorgabe(instanz()),
+      python, REPO_PFADE.welleSkript, opt.log, { ffmpeg: opt.welleFfmpeg, zeitlimit: opt.welleZeitlimit });
     this.mediathek = new Mediathek(opt.mediathek ?? MEDIATHEK_VORGABE);
     this.katalog = new Katalog(opt.katalog ?? katalogVorgabe(opt.mediathek ?? MEDIATHEK_VORGABE));
-    const inst = process.env.CYPHERDJ_INSTANZ ?? '';
-    const shmOrdner = `/dev/shm/cypherdj${inst ? `-${inst}` : ''}`;
-    this.vorhoeren = opt.vorhoeren ?? new Vorhoeren({ kopfhoererDa: () => Vorhoeren.kopfhoererDaVorgabe(inst), kernNurCue: () => kernNurCueVorgabe(shmOrdner),
-      klient: () => vorhoeerKlientVorgabe(REPO, inst, opt.log), kantenDatei: path.join(shmOrdner, 'kanten'), instanz: inst });
-    this.sammlungen = new Sammlungen(opt.sammlungen ?? path.join(REPO, 'bibliothek', 'sets'));
-    this.muster = new MusterBibliothek({ eigen: opt.musterBibliothek ?? path.join(REPO, 'bibliothek', 'muster'), sets: opt.musterSets ?? path.join(REPO, 'sets') });
+    const inst = instanz();
+    const shm = shmOrdner(inst);
+    this.vorhoeren = opt.vorhoeren ?? new Vorhoeren({ kopfhoererDa: () => Vorhoeren.kopfhoererDaVorgabe(inst), kernNurCue: () => kernNurCueVorgabe(shm),
+      klient: () => vorhoeerKlientVorgabe(REPO, inst, opt.log), kantenDatei: path.join(shm, 'kanten'), instanz: inst });
+    this.sammlungen = new Sammlungen(opt.sammlungen ?? REPO_PFADE.sammlungen);
+    this.muster = new MusterBibliothek({ eigen: opt.musterBibliothek ?? REPO_PFADE.musterBibliothek, sets: opt.musterSets ?? REPO_PFADE.musterSets });
     this.vorbereiter = new Vorbereiter({ python: python,
-      cwd: path.join(REPO, 'djk', 'werkstatt'), bestand: opt.bestand, modul: opt.einleserModul, log: opt.log });
+      cwd: REPO_PFADE.werkstatt, bestand: opt.bestand, modul: opt.einleserModul, log: opt.log });
     this.ohr = new OhrLeser(this.huellenPfad(), [OHR_K.deck1, OHR_K.deck2, OHR_K.master]);
     this.pruefmodus = this.pruefmodusAusKonfig();
     this.kern = new KernAnbindung({ kernPort: opt.kernPort, aboPort: opt.aboPort, name: 'oberflaeche' }, {
@@ -415,6 +414,13 @@ export class Oberflaeche {
       zustand: (neu) => this.verteile({ a: 'kern', f: { zustand: neu } }),
       unlesbar: (grund) => opt.log?.({ typ: 'unlesbar', grund }),
     });
+    this.router.melde({ name: 'oberflaeche', routen: () => this.routenOberflaeche() });
+    // D1 S2 (Spec 3.4): Audio-Quellen über denselben Katalog wie der Browser. Spec 6.30: die Meldung bleibt zweizeilig (erst this.proj, dann melden),
+    // weil stoppe() den Bereich braucht; S3 zieht seinen Anker auf diese zwei Zeilen nach.
+    this.proj = projBereich(this.bereichKontext(), { katalog: opt.katalog ?? katalogVorgabe(opt.mediathek ?? MEDIATHEK_VORGABE), ...opt.proj });
+    this.router.melde(this.proj);
+    this.ausgabe = ausgabeBereich(this.bereichKontext(), this.proj.zugang);   // Paket S3: /proj/freeze, /proj/export (Spec 3.4)
+    this.router.melde(this.ausgabe);
   }
 
   async starte(): Promise<void> {
@@ -437,6 +443,8 @@ export class Oberflaeche {
   async stoppe(): Promise<void> {
     if (this.gestoppt) return;   // zweimal (Test-Neustart und Aufräumen) darf nichts werfen
     this.gestoppt = true;
+    this.ausgabe.ausgabe.schliesse();   // Fix-Runde S3 R7: ein wartender Freeze endet jetzt mit freeze_fehler, nicht erst nach Stille oder Frist
+    this.proj.sitzung.schliesse();   // D1 S2: ausstehenden Mixer-Eintrag schreiben, Projekt-Sperre frei
     for (const l of this.spuren.values()) for (const t of l.timer) clearTimeout(t);
     for (const s of this.stroeme) s.end();
     for (const t of this.wartend.values()) clearTimeout(t);
@@ -480,8 +488,12 @@ export class Oberflaeche {
     // Riegel 2026-09-30: /e/ki kommt nur beim Wechsel; ein neu gestarteter Server holt den Stand aus dem periodischen
     // /zustand/kern (ki_gestoppt, Scheibe 25), sonst vergäße er ein gedrücktes Stop Cypher
     if (d.adresse === '/zustand/kern' && f.ki_gestoppt !== undefined) this.setzeKiGestoppt(Number(f.ki_gestoppt) === 1);
-    if (d.adresse === '/zustand/deck') this.stand.decks[String(f.deck)] = f;
-    if (d.adresse === '/e/geladen') this.stand.geladen[String(f.deck)] = f;
+    if (d.adresse === '/zustand/deck') { this.stand.decks[String(f.deck)] = f; this.zieheGeladenNach(f); }   // Fix-Runde S3 R8
+    if (d.adresse === '/e/geladen') {
+      const n = String(f.deck), z = this.stand.decks[n];
+      this.geladenSeit[n] = { vorher: z ? Oberflaeche.deckSchluessel(z) : null, bestaetigt: false };
+      this.stand.geladen[n] = f;
+    }
     if (d.adresse === '/e/geladen') this.hotcuesWieder(Number(f.deck), f as unknown as Fassung);   // Plan E9 D5
     if (d.adresse === '/e/geladen') this.rasterWieder(Number(f.deck), f as unknown as Fassung, false);   // Plan Grid D3
     if (d.adresse === '/e/neustart') {   // der Neustart-Zustand kennt keine Hotcues; /e/geladen kommt dann nicht
@@ -521,6 +533,8 @@ export class Oberflaeche {
     if (neuerKern || gebremst) this.stand.loops = {};                  // Boxen liegen nicht im Neustart-Zustand
     if (neuerKern || gebremst) for (const k of Object.keys(this.loopLadung)) delete this.loopLadung[k];   // Ladung ohne Echo gilt für den neuen Kern nicht (boxInhaltName zöge sie vor)
     if (d.adresse === '/pegel') this.pegelPuffer.nimm({ kanal: String(f.kanal), spitze_db: Number(f.spitze_db) });   // vor der Drossel: Spitzen gehen nicht verloren
+    // Spec D1 2.10: Haken ereignis? der Bereiche, für jedes Kern-Ereignis, nach der Zustandsführung und vor dem Durchreichen (Plan d1-s1 Task 9)
+    this.router.ereignis(d.adresse, f, (bereich, e) => this.opt.log?.({ typ: 'bereich_ereignis_fehler', bereich, adresse: d.adresse, fehler: e.message }));
     if (!DURCHREICHEN.has(d.adresse)) return;
     const ms = DROSSEL_MS[d.adresse];
     const n = { a: d.adresse, f };
@@ -550,8 +564,7 @@ export class Oberflaeche {
   // Studio S1: ein Ordner je Strom (1 Drums, 2 Bass, 3 Melodie). Strom 1 behält den alten Ordner, 2 und 3 hängen die
   // Nummer an (…/erzeuger2). Dateinamen im Ordner bleiben (strom1.js historisch; der Ordner bestimmt den Strom).
   private musterOrdner(strom = 1): string {
-    const i = process.env.CYPHERDJ_INSTANZ ?? '';
-    const basis = this.opt.musterOrdner ?? `/dev/shm/cypherdj${i ? `-${i}` : ''}/erzeuger`;
+    const basis = this.opt.musterOrdner ?? musterOrdnerVorgabe();
     return strom === 1 ? basis : `${basis}${strom}`;
   }
   private static strom(x: unknown): number | null {
@@ -631,11 +644,40 @@ export class Oberflaeche {
 
   // ---------- Plan E9: Deck-Bedienung (Sprung, Hotcues SHOT/LOOP, Loop) über /k/deck/* mit Quelle andreas ----------
   // Review E9 F3: je Instanz ein eigener Ordner (Prüfinstanz in /dev/shm wie die Loops), sonst teilen Prüfung und Betrieb
-  private hotcueOrdner(): string {
-    const i = process.env.CYPHERDJ_INSTANZ ?? '';
-    return this.opt.hotcueOrdner ?? (i ? `/dev/shm/cypherdj-${i}/hotcues` : path.join(os.homedir(), '.config', 'cypherdj', 'hotcues'));
-  }
+  private hotcueOrdner(): string { return this.opt.hotcueOrdner ?? hotcueOrdnerVorgabe(); }
   private readonly einsCache = new Map<string, { eins: number; erster: number }>();
+
+  // D1 S3 Auftrag 15 (Abnahme A0b, gemessen: jedes 409 von GET /deck/raster kam, bevor der Server /zustand/deck für das Deck hatte; die Uhr war da):
+  // die Fassung eines geladenen Decks für die Raster-Anzeige. /e/geladen (stand.geladen) kommt vor dem ersten /zustand/deck; meldet /zustand/deck
+  // noch das vorige Material, gilt das neue Laden. /zustand/deck derselben Fassung mit Status 0 heißt leer. null: kein Deck 1/2 oder nicht geladen.
+  // Fix-Runde S3 R8: stand.geladen wurde nie nachgezogen; meldete /zustand/deck danach anderes Material, lieferte die Route die alte Fassung. Je Deck
+  // merkt sich /e/geladen, was /zustand/deck bis dahin meldete (vorher). Ein /zustand/deck mit genau diesem vorigen Material, solange das neue nicht
+  // bestätigt ist, ist der Wettlauf aus Auftrag 15 und ändert nichts. Bestätigt es das geladene, gilt das; meldet es ein anderes, wird stand.geladen
+  // darauf nachgezogen (auch für das Wiedersenden nach /e/neustart), Status 0 heißt leer und leert stand.geladen.
+  private readonly geladenSeit: Record<string, { vorher: string | null; bestaetigt: boolean }> = {};
+  private static deckSchluessel(x: Record<string, unknown>): string { return `${String(x.material_id)}|${Number(x.basis_bpm)}|${Number(x.fassung)}`; }
+  private zieheGeladenNach(z: Record<string, unknown>): void {
+    const n = String(z.deck), g = this.stand.geladen[n] as Record<string, unknown> | undefined;
+    if (!g) return;
+    const seit = this.geladenSeit[n] ?? { vorher: null, bestaetigt: true }, kz = Oberflaeche.deckSchluessel(z), leer = !(Number(z.status) >= 1);
+    if (kz === Oberflaeche.deckSchluessel(g)) {
+      if (leer) { delete this.stand.geladen[n]; delete this.geladenSeit[n]; } else this.geladenSeit[n] = { vorher: null, bestaetigt: true };
+      return;
+    }
+    if (!seit.bestaetigt && kz === seit.vorher) return;                   // noch das vorige Material: das neue Laden gilt
+    if (leer) { delete this.stand.geladen[n]; delete this.geladenSeit[n]; return; }
+    this.stand.geladen[n] = { deck: z.deck, material_id: z.material_id, basis_bpm: z.basis_bpm, fassung: z.fassung } as Felder;
+    this.geladenSeit[n] = { vorher: null, bestaetigt: true };
+  }
+
+  private rasterFassung(deck: number): Fassung | null {
+    if (deck !== 1 && deck !== 2) return null;
+    const z = this.stand.decks[String(deck)] as Record<string, unknown> | undefined;
+    const g = this.stand.geladen[String(deck)] as Record<string, unknown> | undefined;
+    const fassung = (x: Record<string, unknown>): Fassung => ({ material_id: String(x.material_id), basis_bpm: Number(x.basis_bpm), fassung: Number(x.fassung) });
+    if (g && (!z || String(z.material_id) !== String(g.material_id))) return fassung(g);
+    return z && Number(z.status) >= 1 ? fassung(z) : null;
+  }
 
   // Kern-Stand eines geladenen Decks (1, 2): /zustand/deck, /uhr, Fassung und ihre Takt-Eins. null: nicht bedienbar.
   private deckStand(deck: unknown): { deck: number; z: Record<string, unknown>; beat: number; bpm: number; f: Fassung; eins: number; erster: number } | null {
@@ -697,6 +739,17 @@ export class Oberflaeche {
       return this.json(a, 400, { fehler: 'ziel_oder_delta' });
     }
     this.json(a, 200, { ok: true, felder: this.deckTeil('/k/deck/sprung', st, ab, raster, { delta_beats: delta }) });
+  }
+
+  // Hörbares Ziehen (2026-10-17): {deck, phase 0 los | 1 Griff | 2 Zug, delta (Quell-Beats seit dem Griff)}. Der Kern liest das Material
+  // an der Handposition; der Strom (~60 Hz) wird nicht quittiert und nicht gezählt, nur gesendet.
+  private deckScrub(d: Record<string, unknown>, a: http.ServerResponse): void {
+    if (d.deck !== 1 && d.deck !== 2) return this.json(a, 400, { fehler: 'unbekanntes_deck' });
+    if (d.phase !== 0 && d.phase !== 1 && d.phase !== 2) return this.json(a, 400, { fehler: 'phase' });
+    if (typeof d.delta !== 'number' || !Number.isFinite(d.delta) || Math.abs(d.delta) > 100000) return this.json(a, 400, { fehler: 'delta' });
+    const felder = { id: Number(++this.id), quelle: this.quelle(), deck: d.deck, phase: d.phase, delta_beats: d.delta };
+    this.kern.sende('/k/deck/scrub', felder);
+    this.json(a, 200, { ok: true });
   }
 
   private static readonly LOOP_LAENGEN = [1, 2, 4, 8, 16];
@@ -861,15 +914,6 @@ export class Oberflaeche {
     if (n > 0) this.opt.log?.({ typ: 'hotcues_wieder', deck, anzahl: n, ...(von !== null ? { geerbt_von: von } : {}) });
   }
 
-  // Plan-Review M3: jede Webseite im Browser kann an 127.0.0.1 POSTen. Nur json (erzwingt beim Browser einen Preflight, den
-  // dieser Server nicht beantwortet → 415 sonst) und nur ohne Origin oder mit der eigenen (→ 403 sonst).
-  private fremdePost(q: http.IncomingMessage): 403 | 415 | null {
-    if (!String(q.headers['content-type'] ?? '').toLowerCase().startsWith('application/json')) return 415;
-    const herkunft = q.headers.origin;   // Review F2: die Seite darf auch unter localhost geöffnet sein
-    if (herkunft !== undefined && herkunft !== `http://127.0.0.1:${this.opt.port}` && herkunft !== `http://localhost:${this.opt.port}`) return 403;
-    return null;
-  }
-
   // Plan 2 (Spec E5): Andreas' Muster aus dem Feld. Geprüft und geschrieben NICHT hier, sondern von djk-muster in einem
   // Kindprozess mit denselben Rechten wie der Erzeuger (node --permission, nur lesen in djk und Strudel, schreiben nur im
   // Muster-Ordner) und 2 s Zeitlimit (Plan-Review M3: ein Muster schrieb sonst Dateien, s("bd*1000000") hielt den Server
@@ -892,10 +936,10 @@ export class Oberflaeche {
     if (von === 'cypher' && this.kiGestoppt) return this.json(a, 409, { fehler: 'ki_gestoppt' });
     const ordner = this.musterOrdner(strom);
     fs.mkdirSync(ordner, { recursive: true });   // Review F4: im Kindprozess scheitert das Schreiben in einen neuen Ordner
-    const strudel = path.dirname(process.env.STRUDEL_PAKETE ?? path.join(os.homedir(), 'strudel', 'packages'));
+    const strudel = path.dirname(strudelPakete());
     const r = await new Promise<{ code: number | null; fehler: string; zeitlimit: boolean }>((fertig) => {
       const k = spawn(process.execPath, ['--max-old-space-size=512', '--permission', `--allow-fs-read=${path.join(REPO, 'djk')}`, `--allow-fs-read=${strudel}`,
-        `--allow-fs-read=${ordner}`, `--allow-fs-write=${ordner}`, path.join(REPO, 'djk', 'erzeuger', 'djk-muster'),
+        `--allow-fs-read=${ordner}`, `--allow-fs-write=${ordner}`, REPO_PFADE.djkMuster,
         '--ziel', path.join(ordner, 'strom1.js'), ...(von === 'cypher' ? ['--von', 'cypher'] : ['--von', 'andreas', '--als-andreas']), '-'], { stdio: ['pipe', 'ignore', 'pipe'] });
       let fehler = '';
       let zeitlimit = false;
@@ -921,10 +965,7 @@ export class Oberflaeche {
     this.json(a, 200, { ok: true });
   }
 
-  private json(a: http.ServerResponse, code: number, daten: unknown): void {
-    a.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
-    a.end(JSON.stringify(daten));
-  }
+  private json(a: http.ServerResponse, code: number, daten: unknown): void { sendeJson(a, code, daten); }   // http/transport.ts
 
   // Browser S6: Loop aus der Mediathek in die Loop-Bibliothek (danach lädt die Seite ihn wie jeden Loop per POST /loop).
   // Rechnen darf nur ein Import zur Zeit und nur mit nice 19 / ionice idle (loop_import.ts); dieselbe Quelle wird nicht doppelt angelegt.
@@ -954,13 +995,7 @@ export class Oberflaeche {
     }
   }
 
-  private async koerper(q: http.IncomingMessage): Promise<Record<string, unknown>> {
-    let s = '';
-    for await (const teil of q) { s += teil; if (s.length > 32768) throw new Error('zu groß'); }
-    const j = JSON.parse(s || '{}') as unknown;
-    if (typeof j !== 'object' || j === null || Array.isArray(j)) throw new Error('kein Objekt');
-    return j as Record<string, unknown>;
-  }
+  private koerper(q: http.IncomingMessage): Promise<Record<string, unknown>> { return leseKoerper(q); }   // http/transport.ts
 
   // Plan Hand D4: Quittungen je Befehls-id (Ring 200), damit eine Anfrage von Cypher ihr Ergebnis mitbekommt
   private readonly quittungen = new Map<number, Felder[]>();
@@ -1012,12 +1047,15 @@ export class Oberflaeche {
   private abVon(ab: string): number {
     const u = this.kern.uhr as unknown as { beat: number; bpm: number } | null;
     const beat = u?.beat ?? 0, bpm = u?.bpm ?? 128;
-    return abBeat(beat, Math.max(10.7 / 1000 * bpm / 60, 0.1), AB[ab]);
+    return abBeat(beat, vorlaufBeats(bpm), AB[ab]);                  // ein Vorlauf (tempo_rampe.ts), derselbe wie im Bereich proj
   }
   // POST /regler {pfad, nach, takte?=0, ab?='takt', form?='s'} → /k/teil (D3); D8 Öffnen-Sperre für cypher
   private async regler(d: Record<string, unknown>, a: http.ServerResponse): Promise<void> {
     const pfad = d.pfad, nach = d.nach, takte = d.takte ?? 0, ab = d.ab ?? 'takt', form = d.form ?? 's';
     if (typeof pfad !== 'string' || !PFAD.test(pfad)) return this.json(a, 400, { fehler: 'pfad' });
+    // D1 S2-Integration (Spec 6.22): Spur-Regler ändern sich nur über das Projekt (/proj/aendern, spur_aendern) und über den Rückweg /e/regler
+    // mit Halter mensch; PFAD bleibt Vokabular (Vertragstest), aber hier kommt nichts durch, sonst fuhre Cypher am Projekt vorbei.
+    if (pfad.startsWith('spur/')) return this.json(a, 409, { fehler: 'ueber_projekt', text: 'track faders are changed through the project (/proj/aendern, spur_aendern)' });
     if (typeof nach !== 'number' || !Number.isFinite(nach)) return this.json(a, 400, { fehler: 'nach' });
     if (typeof takte !== 'number' || !(takte >= 0 && takte <= 64)) return this.json(a, 400, { fehler: 'takte' });
     if (typeof ab !== 'string' || !(ab in AB)) return this.json(a, 400, { fehler: 'ab' });
@@ -1067,14 +1105,11 @@ export class Oberflaeche {
   // Studio S6: laufende Automationsspuren (Name → Lauf) und die fahrbaren Surge-Parameter (surge_bereiche.json)
   private readonly spuren = new Map<string, SpurLauf>();
   private readonly fahrbar: Set<string> = (() => {
-    try { return new Set(Object.keys(JSON.parse(fs.readFileSync(path.join(REPO, 'djk/wirte/carla/surge_bereiche.json'), 'utf8')).parameter)); }
+    try { return new Set(Object.keys(JSON.parse(fs.readFileSync(REPO_PFADE.surgeBereiche, 'utf8')).parameter)); }
     catch { return new Set<string>(); }
   })();
 
-  private wirtBasis(): string {
-    const i = process.env.CYPHERDJ_INSTANZ ?? '';
-    return this.opt.wirtOrdner ?? `/dev/shm/cypherdj${i ? `-${i}` : ''}`;
-  }
+  private wirtBasis(): string { return this.opt.wirtOrdner ?? wirtOrdnerVorgabe(); }
   private wirtSock(gruppe: string): string { return path.join(this.wirtBasis(), `wirt-${gruppe}.sock`); }
 
   // F2: laufende Spuren überstehen den Neustart des Seiten-Servers. Nach jeder Änderung atomar nach <wirtBasis>/spuren.json
@@ -1114,6 +1149,12 @@ export class Oberflaeche {
     if (ab !== 'takt' && ab !== 'phrase') return this.json(a, 400, { fehler: 'ab', text: 'ab: takt or phrase' });
     const r = pruefeSpur(d.spur, this.fahrbar);
     if ('fehler' in r) return this.json(a, 400, { fehler: 'spur', text: r.fehler });
+    // D1 S2-Integration (Spec 6.22, 6.30): Spur-Regler ändern sich nur über das Projekt, auch eine Automationsspur fährt sie nicht
+    const ueber = r.spur.fahrten.findIndex((f) => f.ziel.startsWith('spur/'));
+    if (ueber >= 0) {
+      return this.json(a, 409, { fehler: 'ueber_projekt', ziel: r.spur.fahrten[ueber].ziel, index: ueber,
+        text: 'track faders are changed through the project (/proj/aendern, spur_aendern), not by an automation track' });
+    }
     this.spurenAufraeumen();
     const quelle = this.quelle(), name = r.spur.name;
     if (quelle === 'cypher' && this.kiGestoppt) return this.json(a, 409, { fehler: 'ki_gestoppt' });
@@ -1266,8 +1307,8 @@ export class Oberflaeche {
       return r.ok ? this.json(a, 200, { ok: true, ...(r.ersetzt ? { ersetzt: r.ersetzt } : {}) }) : this.json(a, 409, { fehler: 'wirt', gruppe, text: String(r.fehler ?? 'wirt refused') });
     }
     if (!lesend && this.quelle() === 'cypher') { const sperre = this.klangSperre(gruppe as string); if (sperre) return this.json(a, 409, sperre); }
-    const inst = process.env.CYPHERDJ_INSTANZ ?? '';
-    const cmd = this.opt.klangBefehl ?? path.join(REPO, 'djk/wirte/carla/djk-klang');
+    const inst = instanz();
+    const cmd = this.opt.klangBefehl ?? REPO_PFADE.djkKlang;
     const voll = [...(inst ? ['--instanz', inst] : []), ...(aktion === 'liste' ? [] : [gruppe as string]), aktion, ...argv];
     const r = await new Promise<{ code: number | null; out: string; err: string; gekappt: boolean; fehler?: string }>((fertig) => {
       let out = '', err = '', gekappt = false, unten = false;
@@ -1436,216 +1477,189 @@ export class Oberflaeche {
   // Plan Hand D1: Quelle je Anfrage. Kopf x-djk-quelle: cypher → jeder Kern-Befehl dieser Anfrage (auch über await)
   // trägt cypher; sonst andreas. Befehle aus Kern-Ereignissen (Wiederherstellen) laufen außerhalb und bleiben andreas.
   private readonly qs = new AsyncLocalStorage<string>();
+  private readonly proj: ReturnType<typeof projBereich>;   // D1 S2: Bereich proj (Sitzung schliesst beim Stoppen)
+  readonly ausgabe: ReturnType<typeof ausgabeBereich>;   // Paket S3: Bereich proj-ausgabe (schliesst beim Stoppen, Fix-Runde R7)
+  private readonly router = new Router();   // Plan d1-s1 Task 9: Bereiche melden hier ihre Routen (oberflaeche zuerst, dann proj)
+  meldeBereich(b: Bereich): void { this.router.melde(b); }
+  routen(): ReturnType<Router['liste']> { return this.router.liste(); }
+  // Spec D1 2.10: dünne Fassade für Bereiche; sende nutzt denselben id-Zähler und zählt gesendet wie die Bestandsrouten
+  bereichKontext(): BereichKontext {
+    return {
+      // id kommt nur aus dem gemeinsamen Zähler (eine id in felder wirft); quelle ist die der Anfrage, wenn felder keine tragen
+      sende: (adresse, felder) => {
+        if ('id' in felder) throw new Error('sende: id vergibt der Server, felder darf keine tragen');
+        const id = Number(++this.id);
+        this.kern.sende(adresse, { id, quelle: this.quelle(), ...felder } as Felder); this.gesendet++; return id;
+      },
+      warteQuittung: (id, abBeat) => this.warteQuittung(id, abBeat),
+      quelle: () => (this.quelle() === 'cypher' ? 'cypher' : 'andreas'),
+      kiGestoppt: () => this.kiGestoppt,
+      verteile: (ereignis) => this.verteile(ereignis),
+      log: (zeile) => { this.opt.log?.(zeile); },
+    };
+  }
   private quelle(): string { return this.qs.getStore() ?? 'andreas'; }
   private anfrage(q: http.IncomingMessage, a: http.ServerResponse): Promise<void> {
-    return this.qs.run(q.headers['x-djk-quelle'] === 'cypher' ? 'cypher' : 'andreas', () => this.anfrageInnen(q, a));
+    return this.qs.run(quelleAusKopf(q), () => this.anfrageInnen(q, a));
   }
   private async anfrageInnen(q: http.IncomingMessage, a: http.ServerResponse): Promise<void> {
     const url = new URL(q.url ?? '/', 'http://127.0.0.1');
-    if (q.method === 'GET' && url.pathname === '/strom') return this.strom(q, a);
-    if (q.method === 'GET' && url.pathname === '/bestand') return this.json(a, 200, leseBestand(this.opt.bestand));
-    if (q.method === 'GET' && url.pathname === '/mediathek/anschluss') return this.anschlussAus(url, a);
-    if (url.pathname === '/mediathek' || url.pathname === '/mediathek/vorbereiten') {
-      if (q.method === 'GET' && url.pathname === '/mediathek') return this.mediathekSuche(url, a);
-      if (url.pathname === '/mediathek/vorbereiten' && q.method === 'GET') return this.vorbereitenStand(url, a);
-      if (url.pathname === '/mediathek/vorbereiten' && q.method === 'POST') {
-        const abweisung = this.fremdePost(q);
-        if (abweisung) return this.json(a, abweisung, { fehler: abweisung === 415 ? 'nur_json' : 'fremde_herkunft' });
-        return this.vorbereiten(await this.koerper(q), a);
-      }
+    const r = this.router.finde(q.method ?? '', url.pathname);
+    if (r) {
+      if (r.schutz === 'fremdePost' && q.method === 'POST' && postAbgewiesen(q, a, this.opt.port)) return;
+      return await r.handler(q, a, url);
     }
-    if (q.method === 'GET' && url.pathname === '/stoebern') return url.searchParams.get('typ') === 'strudel' ? this.stoebernMuster(url, a) : this.stoebern(url, a);
-    if (q.method === 'GET' && url.pathname === '/stoebern/detail') return this.stoebernDetail(url, a);
-    if (q.method === 'GET' && url.pathname === '/stoebern/baum') return url.searchParams.get('typ') === 'strudel' ? this.stoebernMusterBaum(a) : this.stoebernBaum(url, a);
-    if (q.method === 'POST' && url.pathname === '/muster') return this.musterSpeichern(q, a);
-    if (q.method === 'GET' && url.pathname === '/vorhoeren') return this.json(a, 200, await this.vorhoeren.stand());
-    if (q.method === 'POST' && url.pathname === '/vorhoeren') {   // S7: Vorhören als Kern-Eingang
-      const abweisung = this.fremdePost(q);
-      if (abweisung) return this.json(a, abweisung, { fehler: abweisung === 415 ? 'nur_json' : 'fremde_herkunft' });
-      return this.vorhoerenAus(await this.koerper(q), a);
-    }
-    if (q.method === 'GET' && url.pathname === '/klaenge/karte') return this.klaengeKarte(a);
-    if (q.method === 'GET' && url.pathname === '/klaenge') return this.klaengeSuche(url, a);
-    if (q.method === 'GET' && url.pathname === '/mediathek/listen') { try { return this.json(a, 200, this.mediathek.listen()); } catch (e) { return this.mediathekFehler(e, a); } }
-    if (url.pathname === '/sammlungen' || url.pathname.startsWith('/sammlungen/')) return this.sammlungRoute(q, url, a);
-    if (q.method === 'GET' && url.pathname === '/konfig') {
-      return this.json(a, 200, { leitstand_ws: `ws://127.0.0.1:${this.opt.leitstandWs}/`, ziel_kurve: this.opt.zielKurve ?? ZIEL_KURVE,
-        kern_pruefmodus: this.pruefmodus });
-    }
-    if (q.method === 'POST' && url.pathname === '/griff') {   // Riegel 2026-09-30
-      const abweisung = this.fremdePost(q);
-      if (abweisung) return this.json(a, abweisung, { fehler: abweisung === 415 ? 'nur_json' : 'fremde_herkunft' });
-      return this.griff(await this.koerper(q), a);
-    }
-    if (q.method === 'GET' && url.pathname === '/lage') return this.json(a, 200, this.lage());
-    if (q.method === 'GET' && url.pathname === '/ausgang') return this.json(a, 200, leseAusgang(this.opt.digitalout));   // Glanz 2.1 (F22)
-    if (q.method === 'POST' && (url.pathname === '/deck/start' || url.pathname === '/deck/stopp')) {   // Plan Hand T5
-      const abweisung = this.fremdePost(q);
-      if (abweisung) return this.json(a, abweisung, { fehler: abweisung === 415 ? 'nur_json' : 'fremde_herkunft' });
-      return await this.deckStartStopp(url.pathname === '/deck/start', await this.koerper(q), a);
-    }
-    if (q.method === 'POST' && url.pathname === '/abbruch') {   // Plan Hand T8: Cypher bricht die eigenen Teile ab
-      const abweisung = this.fremdePost(q);
-      if (abweisung) return this.json(a, abweisung, { fehler: abweisung === 415 ? 'nur_json' : 'fremde_herkunft' });
-      if (this.quelle() !== 'cypher') return this.json(a, 403, { fehler: 'nur_cypher', text: 'Andreas stops Cypher with Stop Cypher' });
-      const felder = { id: Number(++this.id), quelle: 'cypher', plan: 'cypher', teile: '*' };
-      this.kern.sende('/k/abbruch', felder);
-      this.gesendet++;
-      this.fahrtEnde.clear();
-      await this.cypherSpurenAbbrechen();   // Studio S6: „alle meine Rampen“
-      return this.json(a, 200, { ok: true, felder });
-    }
-    if (q.method === 'GET' && url.pathname === '/pegel') {   // Schnappschuss der letzten N Sekunden je Kanal
-      const roh = url.searchParams.get('sek');
-      const sek = roh === null ? 3 : Number(roh);
-      if (roh !== null && !/^\d+$/.test(roh) || !Number.isInteger(sek) || sek < 1 || sek > 10) return this.json(a, 400, { fehler: 'sek', text: 'sek must be an integer 1..10' });
-      return this.json(a, 200, { sek, kanaele: this.pegelPuffer.lies(sek) });
-    }
-    if (q.method === 'GET' && url.pathname === '/spur') return this.json(a, 200, this.spurListe());
-    if (q.method === 'POST' && (url.pathname === '/spur' || url.pathname === '/spur/stopp')) {   // Studio S6
-      const abweisung = this.fremdePost(q);
-      if (abweisung) return this.json(a, abweisung, { fehler: abweisung === 415 ? 'nur_json' : 'fremde_herkunft' });
-      const d = await this.koerper(q);
-      return url.pathname === '/spur' ? await this.spurStart(d, a) : await this.spurStopp(d, a);
-    }
-    if (q.method === 'POST' && url.pathname === '/regler') {   // Plan Hand
-      const abweisung = this.fremdePost(q);
-      if (abweisung) return this.json(a, abweisung, { fehler: abweisung === 415 ? 'nur_json' : 'fremde_herkunft' });
-      return await this.regler(await this.koerper(q), a);
-    }
-    if (q.method === 'POST' && url.pathname === '/taste') {   // Riegel 2026-09-30
-      const abweisung = this.fremdePost(q);
-      if (abweisung) return this.json(a, abweisung, { fehler: abweisung === 415 ? 'nur_json' : 'fremde_herkunft' });
-      return this.taste(await this.koerper(q), a);
-    }
-    if (q.method === 'POST' && url.pathname === '/laden') {   // Riegel 2026-09-30
-      const abweisung = this.fremdePost(q);
-      if (abweisung) return this.json(a, abweisung, { fehler: abweisung === 415 ? 'nur_json' : 'fremde_herkunft' });
-      return await this.laden(await this.koerper(q), a);
-    }
-    if (q.method === 'POST' && url.pathname === '/tempo') {   // Plan Tempo-Folge: Master-Tempo, Andreas' Hand
-      const abweisung = this.fremdePost(q);
-      if (abweisung) return this.json(a, abweisung, { fehler: abweisung === 415 ? 'nur_json' : 'fremde_herkunft' });
-      return await this.tempo(await this.koerper(q), a);
-    }
-    if (q.method === 'GET' && url.pathname === '/loops') return this.json(a, 200, leseLoops(this.loopOrdner()));
-    if (q.method === 'POST' && url.pathname === '/loops/aus-katalog') {   // Browser S6
-      const abweisung = this.fremdePost(q);
-      if (abweisung) return this.json(a, abweisung, { fehler: abweisung === 415 ? 'nur_json' : 'fremde_herkunft' });
-      return this.loopAusKatalog(await this.koerper(q), a);
-    }
-    if (q.method === 'POST' && url.pathname === '/loop') {   // Riegel 2026-09-30
-      const abweisung = this.fremdePost(q);
-      if (abweisung) return this.json(a, abweisung, { fehler: abweisung === 415 ? 'nur_json' : 'fremde_herkunft' });
-      return this.loop(await this.koerper(q), a);
-    }
-    if (q.method === 'GET' && url.pathname === '/loop/automation') {   // Effekt-Sektion Schritt 4
-      const name = url.searchParams.get('name') ?? '';
-      if (!LOOP_NAME.test(name) || !leseLoops(this.loopOrdner()).some((l) => l.name === name)) return this.json(a, 404, { fehler: 'kein_loop' });
-      return this.json(a, 200, { name, automation: leseLoopAutomation(this.loopOrdner(), name) });
-    }
-    if (q.method === 'POST' && url.pathname === '/loop/automation') {
-      const abweisung = this.fremdePost(q);
-      if (abweisung) return this.json(a, abweisung, { fehler: abweisung === 415 ? 'nur_json' : 'fremde_herkunft' });
-      const d = await this.koerper(q);
-      const name = String(d.name ?? '');
-      const l = LOOP_NAME.test(name) ? leseLoops(this.loopOrdner()).find((x) => x.name === name) : undefined;
-      if (!l) return this.json(a, 404, { fehler: 'kein_loop' });
-      const r = pruefeAutomation(d.automation, l.beats);
-      if ('fehler' in r) return this.json(a, 400, { fehler: 'automation', text: r.fehler });
-      schreibeLoopAutomation(this.loopOrdner(), name, r.automation);
-      for (const [b, la] of Object.entries(this.loopAuto)) if (la.name === name) this.loopAutoEnde(b);   // neu planen ab dem nächsten Durchgang
-      this.opt.log?.({ typ: 'loop_automation', name, spuren: r.automation.length });
-      return this.json(a, 200, { ok: true, name, automation: r.automation });
-    }
-    if (q.method === 'GET' && url.pathname === '/loop/raster') {
-      const w = this.loopRasterWert(Number(url.searchParams.get('box')));
-      return w ? this.json(a, 200, { versatz_frames: w.versatz_frames, gespeichert_frames: w.gespeichert_frames }) : this.json(a, 409, { fehler: 'kein_loop' });
-    }
-    if (q.method === 'GET' && url.pathname === '/deck/hotcues') return this.hotcuesAus(Number(url.searchParams.get('deck')), a);
-    if (q.method === 'GET' && url.pathname === '/deck/loop') {   // aktiver Deck-Loop für die Anzeige, {} ohne
-      const st = this.deckStand(Number(url.searchParams.get('deck')));
-      const l = st ? this.loopVon(st) : null;
-      return this.json(a, 200, l ? { start: Math.round(l.start * 1000) / 1000, laenge: l.laenge } : {});
-    }
-    if (q.method === 'GET' && url.pathname === '/deck/raster') {
-      const st = this.deckStand(Number(url.searchParams.get('deck')));
-      return st ? this.json(a, 200, this.rasterWert(st.deck, st.f)) : this.json(a, 409, { fehler: 'kein_kernstand' });
-    }
-    if (q.method === 'GET' && url.pathname === '/hoeren') return this.hoerenAus(url, a);
-    if (q.method === 'GET' && url.pathname === '/fx') return this.json(a, 200, this.stand.fx);   // [FX1, FX2] oder null je Einheit
-    if (q.method === 'GET' && url.pathname === '/fx/zuweisung') return this.json(a, 200, this.stand.fxZuweisung);
-    if (q.method === 'GET' && url.pathname === '/fx/routing') return this.json(a, 200, { routing: this.stand.fxRouting });
-    if (q.method === 'POST' && url.pathname === '/fx/routing') {   // Ohr T18: Andreas' Taste (Insert oder Post Fader), nie Cyphers
-      const abweisung = this.fremdePost(q);
-      if (abweisung) return this.json(a, abweisung, { fehler: abweisung === 415 ? 'nur_json' : 'fremde_herkunft' });
-      if (this.quelle() === 'cypher') return this.json(a, 403, { fehler: 'nur_andreas' });   // wie /strudel/autonom (Review M5)
-      const d = await this.koerper(q);
-      if (d.routing !== 'post_fader' && d.routing !== 'insert') return this.json(a, 400, { fehler: 'routing' });
-      const felder = this.fxRoutingSenden(d.routing, 'andreas');
-      this.fxRoutingWunsch = d.routing;
-      return this.json(a, 200, { ok: true, felder, quittung: await this.warteQuittung(felder.id) });
-    }
-    if (q.method === 'POST' && (url.pathname === '/fx' || url.pathname === '/fx/zuweisung')) {
-      const abweisung = this.fremdePost(q);
-      if (abweisung) return this.json(a, abweisung, { fehler: abweisung === 415 ? 'nur_json' : 'fremde_herkunft' });
-      const d = await this.koerper(q);
-      if (this.fxRiegel(a)) return;
-      return url.pathname === '/fx' ? this.fx(d, a) : this.fxZuweisung(d, a);
-    }
-    if (q.method === 'POST' && ['/deck/sprung', '/deck/hotcue', '/deck/loop', '/deck/loop/sichern', '/deck/raster', '/deck/raster/fix'].includes(url.pathname)) {   // Plan E9
-      const abweisung = this.fremdePost(q);
-      if (abweisung) return this.json(a, abweisung, { fehler: abweisung === 415 ? 'nur_json' : 'fremde_herkunft' });
-      const d = await this.koerper(q);
-      // Review Hand B1 / I3d: Sprung, Hotcue spielen auf einem OFFENEN Deck bringt ungehörten Inhalt; für cypher gesperrt,
-      // bis das Ohr Hörscheine ausstellt. Loop ist frei (wiederholt Gehörtes). Andreas' Weg bleibt unberührt.
-      if (this.quelle() === 'cypher' && (d.deck === 1 || d.deck === 2) && kanalOffen(this.stand.regler, `deck/${d.deck}`)
-        && (url.pathname === '/deck/sprung' || (url.pathname === '/deck/hotcue' && d.aktion === 'spielen'))) {
-        return this.json(a, 409, { fehler: 'ziel_ungehoert', text: 'deck is open; jumping there plays unheard material' });
-      }
-      if (url.pathname === '/deck/sprung') return this.deckSprung(d, a);
-      if (url.pathname === '/deck/loop') return this.deckLoop(d, a);
-      if (url.pathname === '/deck/loop/sichern') return this.deckLoopSichern(d, a);
-      if ((url.pathname === '/deck/raster' || url.pathname === '/deck/raster/fix') && this.quelle() === 'cypher') {
-        return this.json(a, 403, { fehler: 'nur_andreas' });   // das Grid ist sein Urteil (Review M5)
-      }
-      if (url.pathname === '/deck/raster') return this.deckRaster(d, a);
-      if (url.pathname === '/deck/raster/fix') return this.deckRasterFix(d, a);
-      return this.deckHotcue(d, a);
-    }
-    if (q.method === 'GET' && url.pathname === '/strudel') {
-      const strom = Oberflaeche.strom(url.searchParams.get('strom'));
-      if (strom === null) return this.json(a, 400, { fehler: 'strom' });
-      return this.json(a, 200, leseMusterStand(this.musterOrdner(strom)));
-    }
-    if (q.method === 'POST' && (url.pathname === '/strudel' || url.pathname === '/strudel/autonom')) {
-      const abweisung = this.fremdePost(q);
-      if (abweisung) return this.json(a, abweisung, { fehler: abweisung === 415 ? 'nur_json' : 'fremde_herkunft' });
-      if (url.pathname === '/strudel/autonom') {
-        if (this.quelle() === 'cypher') return this.json(a, 403, { fehler: 'nur_andreas' });   // sein AUTO-Schalter (Review M5)
-        const d = await this.koerper(q);
-        if (typeof d.an !== 'boolean') return this.json(a, 400, { fehler: 'an_muss_bool' });
-        const strom = Oberflaeche.strom(d.strom);
-        if (strom === null) return this.json(a, 400, { fehler: 'strom' });
-        setzeAutonom(this.musterOrdner(strom), d.an);
-        this.opt.log?.({ typ: 'autonom', an: d.an, strom });
-        if (d.an === false && strom === 1) this.fxCypherAuslaufen();   // FX-Riegel hängt an Strom 1 (Plan: unverändert)
-        return this.json(a, 200, { ok: true, autonom: d.an });
-      }
-      return await this.strudel(await this.koerper(q), a);
-    }
-    if (q.method === 'GET' && url.pathname === '/klang') {   // Task 3: was die Wirte gerade melden (wirt-<gruppe>.json), null ohne Datei
-      return this.json(a, 200, this.leseWirtMeldungen());
-    }
-    if (q.method === 'POST' && url.pathname === '/klang') {
-      const abweisung = this.fremdePost(q);
-      if (abweisung) return this.json(a, abweisung, { fehler: abweisung === 415 ? 'nur_json' : 'fremde_herkunft' });
-      return await this.klang(await this.koerper(q), a);
-    }
-    if (q.method === 'GET' && url.pathname === '/welle') return await this.welleAus(url, a);
-    if (q.method === 'GET' && url.pathname === '/fassung') return this.fassungAus(url, a);
     if (q.method === 'GET') return this.datei(url.pathname, a);
     this.json(a, 405, { fehler: 'methode' });
+  }
+
+  // Plan d1-s1 Task 9: die frühere if-Kette (bfdd3983 server.ts:1445-1648) als Routentabelle, Reihenfolge unverändert (erster Treffer
+  // gewinnt). schutz 'fremdePost' prüft der Router vor dem Handler, nur bei POST (415 vor 403, wie zuvor an jeder Stelle einzeln).
+  // Riegel (ki_gestoppt, nur_cypher, nur_andreas, AUTO) bleiben an ihrer Stelle im Handler: ihre Rangfolge hängt am Ort (Karte 01.10.).
+  private routenOberflaeche(): Route[] {
+    const F = 'fremdePost' as const, O = 'offen' as const;
+    return [
+      { methode: 'GET', pfad: '/strom', schutz: O, handler: (q, a) => this.strom(q, a) },
+      { methode: 'GET', pfad: '/bestand', schutz: O, handler: (_q, a) => this.json(a, 200, leseBestand(this.opt.bestand)) },
+      { methode: 'GET', pfad: '/mediathek/anschluss', schutz: O, handler: (_q, a, url) => this.anschlussAus(url, a) },
+      { methode: 'GET', pfad: '/mediathek', schutz: O, handler: (_q, a, url) => this.mediathekSuche(url, a) },
+      { methode: 'GET', pfad: '/mediathek/vorbereiten', schutz: O, handler: (_q, a, url) => this.vorbereitenStand(url, a) },
+      { methode: 'POST', pfad: '/mediathek/vorbereiten', schutz: F, handler: async (q, a) => this.vorbereiten(await this.koerper(q), a) },
+      { methode: 'GET', pfad: '/stoebern', schutz: O, handler: (_q, a, url) => (url.searchParams.get('typ') === 'strudel' ? this.stoebernMuster(url, a) : this.stoebern(url, a)) },
+      { methode: 'GET', pfad: '/stoebern/detail', schutz: O, handler: (_q, a, url) => this.stoebernDetail(url, a) },
+      { methode: 'GET', pfad: '/stoebern/baum', schutz: O, handler: (_q, a, url) => (url.searchParams.get('typ') === 'strudel' ? this.stoebernMusterBaum(a) : this.stoebernBaum(url, a)) },
+      { methode: 'POST', pfad: '/muster', schutz: F, handler: (q, a) => this.musterSpeichern(q, a) },
+      { methode: 'GET', pfad: '/vorhoeren', schutz: O, handler: async (_q, a) => this.json(a, 200, await this.vorhoeren.stand()) },
+      { methode: 'POST', pfad: '/vorhoeren', schutz: F, handler: async (q, a) => this.vorhoerenAus(await this.koerper(q), a) },   // S7: Vorhören als Kern-Eingang
+      { methode: 'GET', pfad: '/klaenge/karte', schutz: O, handler: (_q, a) => this.klaengeKarte(a) },
+      { methode: 'GET', pfad: '/klaenge', schutz: O, handler: (_q, a, url) => this.klaengeSuche(url, a) },
+      { methode: 'GET', pfad: '/mediathek/listen', schutz: O, handler: (_q, a) => { try { return this.json(a, 200, this.mediathek.listen()); } catch (e) { return this.mediathekFehler(e, a); } } },
+      { methode: '*', pfad: (p) => p === '/sammlungen' || p.startsWith('/sammlungen/'), schutz: F, handler: (q, a, url) => this.sammlungRoute(q, url, a) },
+      { methode: 'GET', pfad: '/konfig', schutz: O, handler: (_q, a) => this.json(a, 200, { leitstand_ws: `ws://127.0.0.1:${this.opt.leitstandWs}/`, ziel_kurve: this.opt.zielKurve ?? ZIEL_KURVE,
+        kern_pruefmodus: this.pruefmodus }) },
+      { methode: 'POST', pfad: '/griff', schutz: F, handler: async (q, a) => this.griff(await this.koerper(q), a) },   // Riegel 2026-09-30
+      { methode: 'GET', pfad: '/lage', schutz: O, handler: (_q, a) => this.json(a, 200, this.lage()) },
+      { methode: 'GET', pfad: '/ausgang', schutz: O, handler: (_q, a) => this.json(a, 200, leseAusgang(this.opt.digitalout)) },   // Glanz 2.1 (F22)
+      { methode: 'POST', pfad: ['/deck/start', '/deck/stopp'], schutz: F, handler: async (q, a, url) => await this.deckStartStopp(url.pathname === '/deck/start', await this.koerper(q), a) },   // Plan Hand T5
+      { methode: 'POST', pfad: '/abbruch', schutz: F, handler: async (_q, a) => {   // Plan Hand T8: Cypher bricht die eigenen Teile ab
+        if (this.quelle() !== 'cypher') return this.json(a, 403, { fehler: 'nur_cypher', text: 'Andreas stops Cypher with Stop Cypher' });
+        const felder = { id: Number(++this.id), quelle: 'cypher', plan: 'cypher', teile: '*' };
+        this.kern.sende('/k/abbruch', felder);
+        this.gesendet++;
+        this.fahrtEnde.clear();
+        await this.cypherSpurenAbbrechen();   // Studio S6: „alle meine Rampen“
+        return this.json(a, 200, { ok: true, felder });
+      } },
+      { methode: 'GET', pfad: '/pegel', schutz: O, handler: (_q, a, url) => {   // Schnappschuss der letzten N Sekunden je Kanal
+        const roh = url.searchParams.get('sek');
+        const sek = roh === null ? 3 : Number(roh);
+        if (roh !== null && !/^\d+$/.test(roh) || !Number.isInteger(sek) || sek < 1 || sek > 10) return this.json(a, 400, { fehler: 'sek', text: 'sek must be an integer 1..10' });
+        return this.json(a, 200, { sek, kanaele: this.pegelPuffer.lies(sek) });
+      } },
+      { methode: 'GET', pfad: '/spur', schutz: O, handler: (_q, a) => this.json(a, 200, this.spurListe()) },
+      { methode: 'POST', pfad: ['/spur', '/spur/stopp'], schutz: F, handler: async (q, a, url) => {   // Studio S6
+        const d = await this.koerper(q);
+        return url.pathname === '/spur' ? await this.spurStart(d, a) : await this.spurStopp(d, a);
+      } },
+      { methode: 'POST', pfad: '/regler', schutz: F, handler: async (q, a) => await this.regler(await this.koerper(q), a) },   // Plan Hand
+      { methode: 'POST', pfad: '/taste', schutz: F, handler: async (q, a) => this.taste(await this.koerper(q), a) },   // Riegel 2026-09-30
+      { methode: 'POST', pfad: '/laden', schutz: F, handler: async (q, a) => await this.laden(await this.koerper(q), a) },   // Riegel 2026-09-30
+      { methode: 'POST', pfad: '/tempo', schutz: F, handler: async (q, a) => await this.tempo(await this.koerper(q), a) },   // Plan Tempo-Folge: Master-Tempo, Andreas' Hand
+      { methode: 'GET', pfad: '/loops', schutz: O, handler: (_q, a) => this.json(a, 200, leseLoops(this.loopOrdner())) },
+      { methode: 'POST', pfad: '/loops/aus-katalog', schutz: F, handler: async (q, a) => this.loopAusKatalog(await this.koerper(q), a) },   // Browser S6
+      { methode: 'POST', pfad: '/loop', schutz: F, handler: async (q, a) => this.loop(await this.koerper(q), a) },   // Riegel 2026-09-30
+      { methode: 'GET', pfad: '/loop/automation', schutz: O, handler: (_q, a, url) => {   // Effekt-Sektion Schritt 4
+        const name = url.searchParams.get('name') ?? '';
+        if (!LOOP_NAME.test(name) || !leseLoops(this.loopOrdner()).some((l) => l.name === name)) return this.json(a, 404, { fehler: 'kein_loop' });
+        return this.json(a, 200, { name, automation: leseLoopAutomation(this.loopOrdner(), name) });
+      } },
+      { methode: 'POST', pfad: '/loop/automation', schutz: F, handler: async (q, a) => {
+        const d = await this.koerper(q);
+        const name = String(d.name ?? '');
+        const l = LOOP_NAME.test(name) ? leseLoops(this.loopOrdner()).find((x) => x.name === name) : undefined;
+        if (!l) return this.json(a, 404, { fehler: 'kein_loop' });
+        const r = pruefeAutomation(d.automation, l.beats);
+        if ('fehler' in r) return this.json(a, 400, { fehler: 'automation', text: r.fehler });
+        schreibeLoopAutomation(this.loopOrdner(), name, r.automation);
+        for (const [b, la] of Object.entries(this.loopAuto)) if (la.name === name) this.loopAutoEnde(b);   // neu planen ab dem nächsten Durchgang
+        this.opt.log?.({ typ: 'loop_automation', name, spuren: r.automation.length });
+        return this.json(a, 200, { ok: true, name, automation: r.automation });
+      } },
+      { methode: 'GET', pfad: '/loop/raster', schutz: O, handler: (_q, a, url) => {
+        const w = this.loopRasterWert(Number(url.searchParams.get('box')));
+        return w ? this.json(a, 200, { versatz_frames: w.versatz_frames, gespeichert_frames: w.gespeichert_frames }) : this.json(a, 409, { fehler: 'kein_loop' });
+      } },
+      { methode: 'GET', pfad: '/deck/hotcues', schutz: O, handler: (_q, a, url) => this.hotcuesAus(Number(url.searchParams.get('deck')), a) },
+      { methode: 'GET', pfad: '/deck/loop', schutz: O, handler: (_q, a, url) => {   // aktiver Deck-Loop für die Anzeige, {} ohne
+        const st = this.deckStand(Number(url.searchParams.get('deck')));
+        const l = st ? this.loopVon(st) : null;
+        return this.json(a, 200, l ? { start: Math.round(l.start * 1000) / 1000, laenge: l.laenge } : {});
+      } },
+      { methode: 'GET', pfad: '/deck/raster', schutz: O, handler: (_q, a, url) => {
+        // D1 S3 Auftrag 15: nur an das gebunden, was rasterWert braucht (geladenes Deck mit Fassung), nicht an deckStand (Uhr, /zustand/deck)
+        const deck = Number(url.searchParams.get('deck')), f = this.rasterFassung(deck);
+        return f ? this.json(a, 200, this.rasterWert(deck, f)) : this.json(a, 409, { fehler: 'kein_kernstand' });   // Form wie bisher (Route-Golden)
+      } },
+      { methode: 'GET', pfad: '/hoeren', schutz: O, handler: (_q, a, url) => this.hoerenAus(url, a) },
+      { methode: 'GET', pfad: '/fx', schutz: O, handler: (_q, a) => this.json(a, 200, this.stand.fx) },   // [FX1, FX2] oder null je Einheit
+      { methode: 'GET', pfad: '/fx/zuweisung', schutz: O, handler: (_q, a) => this.json(a, 200, this.stand.fxZuweisung) },
+      { methode: 'GET', pfad: '/fx/routing', schutz: O, handler: (_q, a) => this.json(a, 200, { routing: this.stand.fxRouting }) },
+      { methode: 'POST', pfad: '/fx/routing', schutz: F, handler: async (q, a) => {   // Ohr T18: Andreas' Taste (Insert oder Post Fader), nie Cyphers
+        if (this.quelle() === 'cypher') return this.json(a, 403, { fehler: 'nur_andreas' });   // wie /strudel/autonom (Review M5)
+        const d = await this.koerper(q);
+        if (d.routing !== 'post_fader' && d.routing !== 'insert') return this.json(a, 400, { fehler: 'routing' });
+        const felder = this.fxRoutingSenden(d.routing, 'andreas');
+        this.fxRoutingWunsch = d.routing;
+        return this.json(a, 200, { ok: true, felder, quittung: await this.warteQuittung(felder.id) });
+      } },
+      { methode: 'POST', pfad: ['/fx', '/fx/zuweisung'], schutz: F, handler: async (q, a, url) => {
+        const d = await this.koerper(q);
+        if (this.fxRiegel(a)) return;
+        return url.pathname === '/fx' ? this.fx(d, a) : this.fxZuweisung(d, a);
+      } },
+      { methode: 'POST', pfad: ['/deck/sprung', '/deck/scrub', '/deck/hotcue', '/deck/loop', '/deck/loop/sichern', '/deck/raster', '/deck/raster/fix'], schutz: F, handler: async (q, a, url) => {   // Plan E9
+        const d = await this.koerper(q);
+        // Review Hand B1 / I3d: Sprung, Hotcue spielen auf einem OFFENEN Deck bringt ungehörten Inhalt; für cypher gesperrt,
+        // bis das Ohr Hörscheine ausstellt. Loop ist frei (wiederholt Gehörtes). Andreas' Weg bleibt unberührt.
+        if (this.quelle() === 'cypher' && (d.deck === 1 || d.deck === 2) && kanalOffen(this.stand.regler, `deck/${d.deck}`)
+          && (url.pathname === '/deck/sprung' || (url.pathname === '/deck/scrub' && d.phase !== 0) || (url.pathname === '/deck/hotcue' && d.aktion === 'spielen'))) {
+          return this.json(a, 409, { fehler: 'ziel_ungehoert', text: 'deck is open; jumping there plays unheard material' });
+        }
+        if (url.pathname === '/deck/sprung') return this.deckSprung(d, a);
+        if (url.pathname === '/deck/scrub') return this.deckScrub(d, a);
+        if (url.pathname === '/deck/loop') return this.deckLoop(d, a);
+        if (url.pathname === '/deck/loop/sichern') return this.deckLoopSichern(d, a);
+        if ((url.pathname === '/deck/raster' || url.pathname === '/deck/raster/fix') && this.quelle() === 'cypher') {
+          return this.json(a, 403, { fehler: 'nur_andreas' });   // das Grid ist sein Urteil (Review M5)
+        }
+        if (url.pathname === '/deck/raster') return this.deckRaster(d, a);
+        if (url.pathname === '/deck/raster/fix') return this.deckRasterFix(d, a);
+        return this.deckHotcue(d, a);
+      } },
+      { methode: 'GET', pfad: '/strudel', schutz: O, handler: (_q, a, url) => {
+        const strom = Oberflaeche.strom(url.searchParams.get('strom'));
+        if (strom === null) return this.json(a, 400, { fehler: 'strom' });
+        return this.json(a, 200, leseMusterStand(this.musterOrdner(strom)));
+      } },
+      { methode: 'POST', pfad: ['/strudel', '/strudel/autonom'], schutz: F, handler: async (q, a, url) => {
+        if (url.pathname === '/strudel/autonom') {
+          if (this.quelle() === 'cypher') return this.json(a, 403, { fehler: 'nur_andreas' });   // sein AUTO-Schalter (Review M5)
+          const d = await this.koerper(q);
+          if (typeof d.an !== 'boolean') return this.json(a, 400, { fehler: 'an_muss_bool' });
+          const strom = Oberflaeche.strom(d.strom);
+          if (strom === null) return this.json(a, 400, { fehler: 'strom' });
+          setzeAutonom(this.musterOrdner(strom), d.an);
+          this.opt.log?.({ typ: 'autonom', an: d.an, strom });
+          if (d.an === false && strom === 1) this.fxCypherAuslaufen();   // FX-Riegel hängt an Strom 1 (Plan: unverändert)
+          return this.json(a, 200, { ok: true, autonom: d.an });
+        }
+        return await this.strudel(await this.koerper(q), a);
+      } },
+      { methode: 'GET', pfad: '/klang', schutz: O, handler: (_q, a) => this.json(a, 200, this.leseWirtMeldungen()) },   // Task 3: was die Wirte gerade melden (wirt-<gruppe>.json), null ohne Datei
+      { methode: 'POST', pfad: '/klang', schutz: F, handler: async (q, a) => await this.klang(await this.koerper(q), a) },
+      { methode: 'GET', pfad: '/welle', schutz: O, handler: async (_q, a, url) => await this.welleAus(url, a) },
+      { methode: 'GET', pfad: '/fassung', schutz: O, handler: (_q, a, url) => this.fassungAus(url, a) },
+    ];
   }
 
   private strom(q: http.IncomingMessage, a: http.ServerResponse): void {
@@ -1860,9 +1874,7 @@ export class Oberflaeche {
   }
 
   // SAVE am Strudel-Deck: gespeichert wird, was die Instanz SPIELT, nie Text aus der Anfrage (Andreas: „das laufende Muster“)
-  private async musterSpeichern(q: http.IncomingMessage, a: http.ServerResponse): Promise<void> {
-    const abweisung = this.fremdePost(q);
-    if (abweisung) return this.json(a, abweisung, { fehler: abweisung === 415 ? 'nur_json' : 'fremde_herkunft' });
+  private async musterSpeichern(q: http.IncomingMessage, a: http.ServerResponse): Promise<void> {   // fremdePost: Router (Task 9)
     try {
       const d = await this.koerper(q);
       const strom = Oberflaeche.strom(d.strom);
@@ -1981,11 +1993,7 @@ export class Oberflaeche {
 
   // Sets (Plan 2026-10-03-sets-mit-tracks). Kein Kern-Befehl; Dateien unter opt.sammlungen.
   private async sammlungRoute(q: http.IncomingMessage, url: URL, a: http.ServerResponse): Promise<void> {
-    try {
-      if (q.method === 'POST') {
-        const abweisung = this.fremdePost(q);
-        if (abweisung) return this.json(a, abweisung, { fehler: abweisung === 415 ? 'nur_json' : 'fremde_herkunft' });
-      }
+    try {   // fremdePost für POST: Router (Task 9)
       if (url.pathname === '/sammlungen') {
         if (q.method === 'GET') return this.json(a, 200, this.sammlungen.liste(url.searchParams.get('art') ?? undefined));
         if (q.method === 'POST') { const d = await this.koerper(q); return this.json(a, 201, { slug: this.sammlungen.lege(String(d.name ?? ''), [], String(d.art ?? 'set')) }); }
@@ -2261,7 +2269,7 @@ export class Oberflaeche {
     this.angefasst.add(`raster:${box}`);
     this.json(a, 200, { ok: true, versatz_frames: v, gespeichert_frames: w.gespeichert_frames });
   }
-  private loopOrdner(): string { return this.opt.loops ?? loopOrdnerVorgabe(process.env.CYPHERDJ_INSTANZ ?? ''); }
+  private loopOrdner(): string { return this.opt.loops ?? loopOrdnerVorgabe(instanz()); }
 
   // MVP 2 (§4.9): Loop-Boxen. Geprüft wird vor dem Senden; Abgelehntes geht nicht an den Kern (400).
   private loop(d: Record<string, unknown>, a: http.ServerResponse): void | Promise<void> {
@@ -2314,9 +2322,12 @@ export class Oberflaeche {
   private async tempo(d: Record<string, unknown>, a: http.ServerResponse): Promise<void> {
     // Andreas 2026-10-05: „du willst ernsthaft das ich dir 138 bpm vortippe?“ – Tempo ist auch Cyphers Hand; Stop Cypher hält es.
     if (this.quelle() === 'cypher' && this.kiGestoppt) return this.json(a, 409, { fehler: 'ki_gestoppt' });
-    const bpm = typeof d.bpm === 'number' && Number.isFinite(d.bpm) ? Math.round(d.bpm * 100) / 100 : NaN;
-    if (!(bpm >= 60 && bpm <= 200)) return this.json(a, 400, { fehler: 'bereich', text: 'bpm must be a number from 60 to 200' });
-    const felder = { id: Number(++this.id), quelle: this.quelle(), ab_beat: this.abVon('takt'), ziel_bpm: bpm, dauer_beats: 4 };
+    // D1 Spec 6.32: eine Tempo-Rampe verändert eine laufende Freeze-Datei; während der Sperre des Bereichs proj (S3) nimmt die Route nichts an
+    if (this.proj.sitzung.ladenGesperrt()) return this.json(a, 409, { fehler: 'beschaeftigt', text: 'a freeze is running; tempo changes wait until it is done' });
+    const u = this.kern.uhr as unknown as { beat: number; bpm: number } | null;
+    const rampe = tempoRampe(u?.beat ?? 0, u?.bpm ?? 128, d.bpm as number);   // D1 S2: derselbe Weg wie der Bereich proj (Spec 2.7)
+    if (!rampe) return this.json(a, 400, { fehler: 'bereich', text: 'bpm must be a number from 60 to 200' });
+    const felder = { id: Number(++this.id), quelle: this.quelle(), ...rampe };
     this.kern.sende('/k/tempo/rampe', felder);
     this.gesendet++;
     const quittung = await this.warteQuittung(felder.id, felder.ab_beat);
@@ -2374,10 +2385,9 @@ export class Oberflaeche {
       if (this.kiGestoppt) return this.json(a, 409, { fehler: 'ki_gestoppt' });
       if (!leseMusterStand(this.musterOrdner(1)).autonom) return this.json(a, 409, { fehler: 'auto_aus', strom: 1, text: 'AUTO is off for the drums instance: Andreas holds it' });
     }
-    const i = process.env.CYPHERDJ_INSTANZ ?? '';
     try {
-      const r = loopZuKlang({ loopOrdner: this.loopOrdner(), kitsOrdner: this.opt.kits ?? path.join(os.homedir(), '.config', 'cypherdj', 'kits'),
-        basis: this.opt.kit ?? 'battery', zusatz: i ? `rec-${i}` : 'rec', loop: name, klang: d.klang as string | undefined });
+      const r = loopZuKlang({ loopOrdner: this.loopOrdner(), kitsOrdner: this.opt.kits ?? kitsOrdnerVorgabe(),
+        basis: this.opt.kit ?? 'battery', zusatz: zusatzKit(), loop: name, klang: d.klang as string | undefined });
       this.json(a, 200, { ok: true, ...r });
     } catch (e) {
       this.json(a, 400, { fehler: 'kit', text: (e as Error).message });
@@ -2436,32 +2446,26 @@ export class Oberflaeche {
   }
 }
 
-function versatz(): number {
-  const i = process.env.CYPHERDJ_INSTANZ ?? '';
-  if (i === '') return 0;
-  if (!/^[a-i]$/.test(i)) throw new Error(`CYPHERDJ_INSTANZ=${i}: erlaubt sind a bis i (ROADMAP Z2)`);
-  return 1000 * (i.charCodeAt(0) - 96);
-}
-
 async function main(): Promise<void> {
   const { values: v } = parseArgs({ options: {
     port: { type: 'string' }, 'kern-port': { type: 'string' }, 'abo-port': { type: 'string' },
     'leitstand-ws': { type: 'string' }, bestand: { type: 'string' }, arbeitsbestand: { type: 'string' }, log: { type: 'string' },
     'kern-pruefmodus': { type: 'string' }, 'ziel-kurve': { type: 'string' }, loops: { type: 'string' }, mediathek: { type: 'string' }, katalog: { type: 'string' }, sammlungen: { type: 'string' }, 'welle-cache': { type: 'string' }, 'muster-ordner': { type: 'string' }, 'muster-bibliothek': { type: 'string' }, 'muster-sets': { type: 'string' }, kit: { type: 'string' }, digitalout: { type: 'string' },
+    'proj-wurzel': { type: 'string' }, 'arr-ordner': { type: 'string' },   // D1 S3 (Auftrag 14 e): Proben gegen den echten Server mit eigenen Ordnern
   } });
   const zk = v['ziel-kurve'];
   if (zk !== undefined && !ZIEL_KURVEN.includes(zk)) throw new Error(`--ziel-kurve ${zk}: erlaubt sind ${ZIEL_KURVEN.join(' oder ')}`);
   const pm = v['kern-pruefmodus'];
   if (pm !== undefined && pm !== 'an' && pm !== 'aus') throw new Error(`--kern-pruefmodus ${pm}: erlaubt sind an oder aus`);
-  const k = versatz();
+  const vorgabe = ports();   // wirft bei ungültiger CYPHERDJ_INSTANZ (Startfehler, Exit 2), wie zuvor versatz()
   const logDatei = v.log ? fs.openSync(v.log, 'a') : null;
   const o = new Oberflaeche({
-    port: v.port ? Number(v.port) : 47300 + k,
-    kernPort: v['kern-port'] ? Number(v['kern-port']) : 47100 + k,
-    aboPort: v['abo-port'] ? Number(v['abo-port']) : 47150 + k,
-    leitstandWs: v['leitstand-ws'] ? Number(v['leitstand-ws']) : 47200 + k,
-    bestand: v.bestand ?? path.join(REPO, 'bestand'),
-    arbeitsbestand: v.arbeitsbestand ?? arbeitsbestandVorgabe(process.env.CYPHERDJ_INSTANZ ?? ''),
+    port: v.port ? Number(v.port) : vorgabe.port,
+    kernPort: v['kern-port'] ? Number(v['kern-port']) : vorgabe.kernPort,
+    aboPort: v['abo-port'] ? Number(v['abo-port']) : vorgabe.aboPort,
+    leitstandWs: v['leitstand-ws'] ? Number(v['leitstand-ws']) : vorgabe.leitstandWs,
+    bestand: v.bestand ?? REPO_PFADE.bestand,
+    arbeitsbestand: v.arbeitsbestand ?? arbeitsbestandVorgabe(instanz()),
     mutationen: (process.env.OBERFLAECHE_MUTATION ?? '').split(',').filter(Boolean),
     kernPruefmodus: pm === undefined ? null : pm === 'an',
     zielKurve: zk,
@@ -2473,11 +2477,14 @@ async function main(): Promise<void> {
     welleCache: v['welle-cache'],
     musterOrdner: v['muster-ordner'], musterBibliothek: v['muster-bibliothek'], musterSets: v['muster-sets'],   // Proben mit eigener Ablage (S2b)
     kit: v.kit,   // Basis-Kit des Drums-Erzeugers (djk-start --strudel-kit): sonst zählt loop_klang freie Noten gegen battery
+    // Bereich proj: Projektwurzel und Arbeitsordner (Vorgaben der Instanz, wenn nicht übergeben); ein übergebener Arbeitsordner bringt seine
+    // eigene Zählerdatei <arbeitsordner>.zaehler mit (Spec 6.31)
+    proj: { ...(v['proj-wurzel'] ? { wurzel: v['proj-wurzel'] } : {}), ...(v['arr-ordner'] ? { arbeitsordner: v['arr-ordner'] } : {}) },
     log: (z) => { if (logDatei !== null) fs.writeSync(logDatei, JSON.stringify({ t: Date.now(), ...z }) + '\n'); },
   });
   await o.starte();
   process.stdout.write(`oberflaeche: http://127.0.0.1:${o.opt.port}/ kern ${o.opt.kernPort} abo ${o.opt.aboPort} ` +
-    `leitstand ws ${o.opt.leitstandWs} bestand ${o.opt.bestand} arbeitsbestand ${o.opt.arbeitsbestand} loops ${o.opt.loops ?? loopOrdnerVorgabe(process.env.CYPHERDJ_INSTANZ ?? '')} kern-pruefmodus ${o.pruefmodus} welle-cache ${o.opt.welleCache ?? welleCacheVorgabe(process.env.CYPHERDJ_INSTANZ ?? '')}\n`);
+    `leitstand ws ${o.opt.leitstandWs} bestand ${o.opt.bestand} arbeitsbestand ${o.opt.arbeitsbestand} loops ${o.opt.loops ?? loopOrdnerVorgabe(instanz())} kern-pruefmodus ${o.pruefmodus} welle-cache ${o.opt.welleCache ?? welleCacheVorgabe(instanz())}\n`);
   const ende = async (): Promise<void> => { await o.stoppe(); process.exit(0); };
   process.on('SIGTERM', () => void ende());
   process.on('SIGINT', () => void ende());

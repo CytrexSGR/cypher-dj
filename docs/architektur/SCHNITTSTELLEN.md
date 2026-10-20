@@ -143,6 +143,10 @@ Kanäle: `deck/1` bis `deck/4` (Andreas sagt A = 1, B = 2), `erz/1` bis `erz/8` 
 | `keylock` | Schalter | 0/1 | 1 | sofort | alle |
 | `color/art` | Stufen (SOUND COLOR FX: 0 FILTER, 1 SPACE, 2 DUB ECHO, 3 SWEEP, 4 NOISE, 5 CRUSH) | 0 bis 5 | 0 | sofort | alle |
 | `color/param` | 0 bis 1 (PARAMETER der SOUND COLOR FX) | | 0,5 | 10 ms | alle |
+| `spur/<n>/fader` | dB | −200 bis +6 | 0 | 10 ms | alle |
+| `spur/<n>/pan` | −1 (links) bis +1 (rechts), Gesetz −3 dB in der Mitte | | 0 | 10 ms | alle |
+| `spur/<n>/mute` | Schalter | 0/1 | 0 | sofort (10-ms-Blende im Modul Arrangement) | alle |
+| `spur/<n>/solo` | Schalter | 0/1 | 0 | sofort (10-ms-Blende im Modul Arrangement) | alle |
 
 `keylock` (Keylock Task 3; ADR 029 kommt mit Task 4): EIN Schalter für alle Quellen, kein Deck-Argument. An (Vorgabe): Decks und Loop-Boxen spielen über den Dehner (Rubber Band R3 im Arbeits-Thread, je Quelle einer) in ihrer Tonhöhe, jedes Ereignis mit Varispeed-Brücke bis `s_h`; eine wartende Box setzt mit Vorlauf an und klingt zur Eins aus dem Ring (ADR 029 Abschnitt Loop-Boxen, seit Task 7; vorgerenderte Varianten nach ADR 027 gibt es nicht mehr). Aus: Decks und Loop-Boxen spielen Varispeed (Tonhöhe folgt dem Tempo). Die REC-Umrechnung eines Mitschnitts bleibt offline (ADR 027 Entscheidung 6) und hängt nicht am Knopf. Ein neuer Abonnent bekommt beim ersten `/k/hallo` den Stand als `/e/regler keylock` (§5.7). Wirkt am Sample, auch bei laufendem Deck. Ohne Dehner (kern.toml `keylock = false`, §2.1) bleibt der Knopf bei den Decks ohne Wirkung.
 
@@ -152,6 +156,14 @@ eines anderen Quellkanals (vor dessen Trim und EQ), etwa die Kick auf erz/1 (Wer
 Kanalzug ohne Kompressor. Stand: `docs/architektur/stand/kompressor.md`.
 
 `color/*` (SOUND COLOR FX nach dem XDJ-XZ, 2026-10-11): `<k>/filter` ist der COLOR-Regler jedes Kanals, `color/art` und `color/param` gelten wie am Pult für alle Kanäle. Art 0 ist der DJ-Filter wie bisher (bitgleich), jede andere Art ersetzt ihn an derselben Stelle im Kanalzug (vor dem Abgriff, also vor PFL und Fader). In der Totzone |k| < 0,05 ist der Ausgang trocken; SPACE und DUB ECHO (3/4 Beat aus dem Master-Tempo) klingen nach dem Zurückdrehen aus, ein Artwechsel leert sie. Kurven: `djk/kern/dsp/include/cypherdj/dsp/colorfx.h`, Stand: `docs/architektur/stand/color-fx.md`.
+
+`spur/<n>/*` (D1, ADR 030, n = 1 bis 8): Spur-Regler des Arrangements, global (kein Kanal; Kanal −1 der
+Regler-Tabelle). Sie wirken im Modul Arrangement auf die Spur vor der Summe in den Eingang von `erz/4` (§4.11): Fader,
+Pan (links cos, rechts sin über (pan + 1)·π/4, in der Mitte −3 dB je Seite), Mute und Solo blenden über 10 ms (ist
+irgendeine Spur solo, sind alle anderen stumm). Der Spur-Fader reicht bis +6 dB (D1 Spec 6.16); seine Hand-Kurve ist die
+Fader-Kurve mit Obergrenze +6 (ganz oben +6 dB, 0 dB bei Stellung ≈ 0,501). Die Prüfung I3 (Hörschein) nimmt sie aus wie `erz/*` und `pad/*`.
+Die KI-Spur (§4.7) nimmt `spur/<n>` (oder kurz `spur/<ziffern>`) als Eintrag in ihrer eigenen Spur-Liste; ein KI-Stopp senkt
+dann `spur/<n>/fader` wie einen Kanal-Fader. S2 trägt dort die Spuren ein, die Cypher anlegt (D1 6.15).
 
 `duck/*` (K2): der Kern senkt erz/2 und erz/3 ab jedem gespielten Kit-Klang `bd:*`, am Sample des Ereignisses (Sidechain, ohne Verzug).
 
@@ -233,6 +245,8 @@ Unbekannte Schlüssel sind ein Startfehler (Tippfehler fallen sofort auf). Jede 
 | | `limiter_dbtp` | float | −1.0 | Master-Limiter |
 | | `pruefmodus` | bool | false | erlaubt `/test/*` (§19.0) |
 | | `hand_osc` | bool | false | erlaubt `/test/hand` auch ohne `pruefmodus` (Hand-Weg der Oberfläche, Scheibe 35, §19.0); alle anderen `/test/*` bleiben am `pruefmodus` |
+| | `arr_ordner` | Pfad | `""` | Arbeitsordner der Wiedergaben (§4.11, D1): leer = `~/.cache/cypherdj/arr`, Prüfinstanz `~/.cache/cypherdj-<i>/arr`; der Seiten-Server liest denselben Wert. Der Kern normalisiert ihn (`//`, `./`, `..`, Schrägstrich am Ende; D1 6.14) |
+| | `arr_budget_mib` | int | 1024 | Teilbetrag des gesperrten Speichers für Arrangement-Audio (§4.11), höchstens `speicher_budget_mib`; zählt zugleich gegen `speicher_budget_mib` (ein Konto mit dem Deck-Lader) |
 | `leitstand.toml` | `ws_port`, `abo_port` | int | 47200, 47110 | §2 |
 | | `set_basis_bpm` | float | 128.0 | feste Set-Basis bis Scheibe 5 |
 | | `autonomie_start` | int | 1 | §10 |
@@ -375,6 +389,7 @@ angenommen. Tonhöhentreu wird es über `/k/deck/basis_tausch` auf eine Fassung 
 | `/k/deck/sprung` | `,hssssiddid` | `id`, `quelle`, `plan`, `gruppe`, `hoerschein`, `deck`, `ab_beat`, `delta_beats`, `politik`, `raster_beats` | Beatjump; im aktiven Loop verschiebt er den Loop um `delta_beats`. Quelle `cypher` auf offenem Deck: I3d |
 | `/k/deck/hotcue` | `,hssssidiid` | `id`, `quelle`, `plan`, `gruppe`, `hoerschein`, `deck`, `ab_beat`, `nr` (1 bis 8), `politik`, `raster_beats` | läuft das Deck, phasentreu: `ziel = hc + wrap(phase(p) − phase(hc))` mit `p` = Quellposition bei `ab_beat`; steht es, genau `hc` (2026-09-28); `phase(x) = x − floor(x)`, `wrap` nach [−0,5; 0,5). Beispiel: `p` = 37,30, `hc` = 64,00 → Ziel 64,30. Quelle `cypher` auf offenem Deck: I3d |
 | `/k/deck/hotcue_setzen` | `,hsiid` | `id`, `quelle`, `deck`, `nr`, `quell_beat` (NaN = löschen) | Ereignis `/e/hotcue`; der Leitstand schreibt es in `korrekturen.jsonl` |
+| `/k/deck/scrub` | `,hsiid` | `id`, `quelle`, `deck`, `phase` (0 los, 1 Griff, 2 Zug), `delta_beats` (Strecke der Hand seit dem Griff in Quell-Beats) | Hörbares Ziehen (2026-10-17): sofort am Blockanfang, **ohne Quittung** (Strom bis ~60 Hz, die Seite drosselt). Das Deck liest das Material an der Handposition (Rate und Richtung folgen der Hand, Stillstand ist Stille, roh ohne Keylock). Stehendes Deck: die Hand setzt die Position, nach `phase` 0 bleibt der Kopf dort und das Deck steht. Laufendes Deck: das Ziel wandert mit dem Tempo weiter, die Hand schiebt es nudge-artig; nach `phase` 0 läuft das Deck um `delta_beats` versetzt weiter (derselbe Ort wie `/k/deck/sprung` mit Politik 1 und derselben Strecke). 128-Frame-Blenden zwischen Deck-Weg und Ziehen, Rate höchstens 8-fach. Mit aktivem Loop ohne Wirkung. `/k/deck/start`, `/sprung`, `/hotcue`, `/loop`, Raster, Laden beenden das Ziehen. Zustand: `/zustand/deck` zeigt beim stehenden Deck die Zugstelle. Quelle `cypher` auf offenem Deck: I3d wie Sprung |
 | `/k/deck/raster` | `,hsisdii` | `id`, `quelle`, `deck`, `material_id`, `basis_bpm`, `fassung`, `versatz_frames` (−192 000 bis 192 000, 4 s seit Grid SET) | Plan Grid: das Raster der geladenen Fassung liegt ab jetzt `versatz_frames` Frames später (Takt-Eins-Linie auf `erster_schlag_frame + versatz_frames`); absolut, sofort am Blockanfang. Der Quell-Beat unter dem Kopf bleibt, der Ton rückt um die Änderung (laufend mit 128-Frame-Blende gegen den Master, stehend als Position); Hotcues, Loop und Cue-Punkt ziehen mit. Laden setzt 0. Andere Fassung geladen: `nicht_geladen`. Ereignis `/e/raster` |
 | `/k/deck/slip` | `,hsii` | `id`, `quelle`, `deck`, `an` | Slip: der Schatten läuft während Loop, Roll, Sprung weiter; beim Aus springt das Deck zum Schatten |
 | `/k/deck/basis_tausch` | `,hsidid` | `id`, `quelle`, `deck`, `basis_bpm`, `fassung`, `ab_beat` | ab Scheibe 5: Tausch auf eine andere Fassung (neue Basis oder korrigiertes Raster) mit 20-ms-Blende; Quellposition wird umgerechnet (§13.1); braucht die Fassung im Arbeitsbestand; gleiche `mit_stems` wie geladen |
@@ -405,9 +420,9 @@ ein Schuss mit Quelle ungleich `andreas` einen gültigen Hörschein des Pads mit
 
 | Adresse | Typen | Felder | Wirkung |
 |---|---|---|---|
-| `/k/ki/stopp` | `,hs` | `id`, `quelle` | wie die Stopp-Taste: alle Teile mit Quelle `cypher` abgebrochen (Grund `ki_stopp`), Kanäle der KI-Spur über 4 Beats auf −200, weitere `cypher`-Befehle `abgelehnt` (`ki_gestoppt`) bis `/k/ki/frei` |
+| `/k/ki/stopp` | `,hs` | `id`, `quelle` | wie die Stopp-Taste: alle Teile mit Quelle `cypher` abgebrochen (Grund `ki_stopp`), Kanäle der KI-Spur über 4 Beats auf −200, weitere `cypher`-Befehle `abgelehnt` (`ki_gestoppt`) bis `/k/ki/frei`; Ausnahme `/k/arr/stopp` (Anhalten ist die sichere Richtung, D1 6.27, §4.11). Reihenfolge der Prüfungen für `/k/arr/*`: erst die Quelle, dann der KI-Stopp, dann der Bereich der Werte; ein `cypher`-Arrangement-Befehl mit ungültigen Werten endet im KI-Stopp also mit `ki_gestoppt`, nicht mit `ausserhalb_bereich` (Kern und Attrappe gleich, Fall `djk/vertrag/faelle/arr_ki_stopp.json`). Außerhalb von `/k/arr/*` (z. B. `/k/fx/routing`, `/k/fx`, `/k/loop/*`) prüft der Kern Quelle und Bereich noch gemeinsam: ein ungültiger `cypher`-Befehl endet dort im Kern mit `ausserhalb_bereich`, in der Attrappe mit `ki_gestoppt` (gemessen im K1-Re-Review 2, bekannte Grenze). Das Netz des Kerns kennt den Stopp aus dem letzten `/e/ki`; bis dieses Ereignis im Netz angekommen ist, lehnt es Bereichsfehler noch mit `ausserhalb_bereich` ab, gültige Befehle lehnt dann der Kern mit `ki_gestoppt` ab |
 | `/k/ki/frei` | `,hs` | `id`, `quelle` (nur `andreas`) | hebt den Stopp auf |
-| `/k/ki/spur` | `,hss` | `id`, `quelle`, `kanaele` (Komma-Liste, z. B. `deck/3,deck/4,erz/1`) | Kanäle der KI-Spur |
+| `/k/ki/spur` | `,hss` | `id`, `quelle`, `kanaele` (Komma-Liste, z. B. `deck/3,deck/4,erz/1`) | Kanäle der KI-Spur; seit D1 auch Spuren des Arrangements (§1.5) als `spur/<n>` oder kurz `spur/<ziffern>` (`spur/135` = Spuren 1, 3, 5; `spur/0` = keine): ein KI-Stopp senkt dann `spur/<n>/fader`. Zwei Listen (D1 6.15): Spur-Einträge ersetzen nur die Spur-Liste (S2 trägt Cyphers Spuren ein), Kanal-Einträge nur die Kanal-Liste (Leitstand); eine leere Liste leert die Kanäle, eine gemischte ersetzt beide. Der Neustart-Zustand trägt beide |
 | `/k/ki/stufe` | `,hsi` | `id`, `quelle`, `stufe` (0 bis 3) | nur für LEDs; die Stufe durchsetzen tut der Leitstand |
 | `/k/vorschlag_kanal` | `,hss` | `id`, `quelle`, `kanal` (`""` = keiner) | Kanal, den die Taste „Cypher hören“ auf Andreas' PFL legt |
 | `/k/led` | `,hssi` | `id`, `quelle`, `name` (§7.4), `zustand` (0 aus, 1 an, 2 blinkt, 3 blinkt schnell) | LED am Controller |
@@ -511,6 +526,52 @@ Datei bitgleich mit dem Puffer. Ist der Puffer voll, schreibt das Netz `<loop_or
 `param` wirkt je Art: Echo und Flanger Rückkopplung 0 bis 0,9, Phaser Resonanz 0 bis 0,9, Filter-LFO Güte 0,7 bis 8.
 Quittung 1, 2, 3 am Blockanfang; Fehler `/q` Status 6 `ausserhalb_bereich`. Quelle `cypher` lehnt `djk-fx` selbst ab,
 solange der AUTO-Schalter der Seite aus ist (wie `djk-muster`).
+
+### 4.11 Arrangement (D1, ADR 030)
+
+| Adresse | Typen | Felder | Wirkung |
+|---|---|---|---|
+| `/k/arr/laden` | `,hsi` | `id`, `quelle`, `nr` (≥ 0, Wiedergabe-Nummer der Instanz, D1 6.1) | der Arrangement-Lade-Faden liest `<arr_ordner>/wiedergabe-<nr>.json` (§2.1; kein Pfad im OSC; der Schlüssel `nr` in der Datei muss gleich sein, sonst `format`; jede Clip-`datei` ist ein absoluter Pfad unterhalb von `arr_ordner`, beide normalisiert verglichen, sonst `format`: `audio/<sha256>.f32` und die Freeze-Dateien `freeze-<spur>-<kennung>.f32` im Arbeitsordner selbst, D1 6.14; Clip-Werte nach D1 6.27: `gain_db` −96 bis +24, `ein_beats` und `aus_beats` ≥ 0 und zusammen höchstens `laenge_beats` + 1e-9, sonst `format`; NaN oder Inf irgendwo im Audio: `format`, die ganze Datei geprüft), lädt das Audio (gesperrt, geteilt nach sha256) und tauscht den Schnappschuss am Blockanfang; Quittung 1 und 3. Status 6: `datei_fehlt`, `format`, `audio_fehlt`, `zu_gross`, `spur_bereich`, `ki_gestoppt` (Quelle `cypher` bei Stopp-Taste); Status 4 `zu_spaet`, wenn der Auftrags- oder der Ergebnisring des Lade-Fadens voll ist (jede id endet genau einmal) |
+| `/k/arr/start` | `,hsdi` | `id`, `quelle`, `start_beat` (≥ 0), `quant` (0 sofort, 1 Beat, 2 Takt) | Einsatz frühestens am ersten Quant-Punkt ab jetzt + Vorhalt (2n + 25) + ein Zyklus; Takt hält (Kern-Beat − `start_beat`) ≡ 0 mod 4; ein laufender Transport endet sofort mit Kurzblende; Quittung 1, Quittung 2 am Einsatz-Sample. Endet ein wartender Start ohne Einsatz, bekommt er 7: `abbruch` (neuer Start, `/k/arr/stopp`), `hand` (`arr/start_stopp`), `ki_stopp` (KI-Stopp, Start von `cypher`); jede id endet genau einmal. Status 6: `nicht_geladen`, `ki_gestoppt`, `ausserhalb_bereich` |
+| `/k/arr/stopp` | `,hsi` | `id`, `quelle`, `quant` (0 sofort, 1 nächster Projekt-Beat, 2 nächster Projekt-Takt) | Kurzblende (96 Samples), offene Noten aus, Wirt-Slots All-Notes-Off; liegt die Naht vor dem Quant-Punkt, an der Naht; Quittung 1, Quittung 3 am Stopp-Sample; ein zweiter `/k/arr/stopp` vor dem Stopp-Sample ersetzt den ersten, der dann mit 7 `abbruch` endet (jede id endet genau einmal); auch von `cypher` während des KI-Stopps erlaubt (D1 6.27) |
+| `/k/arr/loop` | `,hsidd` | `id`, `quelle`, `an` (0/1), `von_beat` (≥ 0), `bis_beat` (mindestens `von_beat` + 1) | Loop-Klammer: erreicht der Projekt-Beat `bis_beat`, gilt sample-genau wieder `von_beat` (die letzten 96 Samples davor blenden aus); wirkt ab dem nächsten noch nicht gesendeten Noten-Fenster; liegt der Kopf beim Setzen auf oder hinter `bis_beat`, läuft der Transport linear (die Klammer greift erst, wenn `bis_beat` von unten erreicht wird, D1 2.2); Quittung 1 und 3. Status 6: `ki_gestoppt` (Quelle `cypher` bei Stopp-Taste, D1 6.27), `ausserhalb_bereich` |
+| `/k/arr/metronom` | `,hsifi` | `id`, `quelle`, `an` (0/1), `pegel_db` (−60 bis 0), `ziel` (0 master vor dem Limiter, 1 cue) | Klick auf ganzen Projekt-Beats, betont bei p mod 4 = 0 (voller Pegel, sonst halber); im Prüfmodus gesperrt, im Render immer aus; Quittung 1 und 3. Status 6: `ki_gestoppt` (Quelle `cypher` bei Stopp-Taste, D1 6.27), `ausserhalb_bereich` |
+| `/k/arr/freeze` | `,hsiddi` | `id`, `quelle`, `spur` (1 bis 8), `von_beat`, `bis_beat`, `kennung` | Echtzeit-Durchlauf nach der Start-Regel ab `von_beat` (Quant wählt der Kern wie bei der Hand-Zielart: 2, wenn ein Deck, eine Loop-Box oder ein Erzeuger-Strom läuft, sonst 0), Loop-Klammer ausgesetzt; das Spur-Signal vor dem Fader geht ab dem Einsatz `bis_beat` − `von_beat` + 2 Beats lang in die Datei `<arr_ordner>/freeze-<spur>-<kennung>.f32` (rohes f32 Stereo, 48 kHz), danach Stopp. Puffer und Datei gehören dem Arrangement-Lade-Faden, nicht dem Netz-Faden (D1 Spec 6.29). Die Kennung vergibt der Server je Instanz eindeutig (Wiedergabe-Zähler, D1 Spec 6.25); eine vorhandene Datei wird nie ersetzt (`/e/freeze` 2). `/q` 1, 2 am Einsatz, 3 am Ende des Nachlaufs, 7 mit `abbruch` (Stopp, Start, Laden, Hand-Taste, `/k/tempo/rampe` gleich welcher Quelle, D1 Spec 6.33, `/k/set/neu` am Sample 0 der neuen Zeitachse) oder `ki_stopp` (Cyphers Freeze); 6 mit `ki_gestoppt` (cypher im KI-Stopp, vor jeder Bereichsprüfung, §4.7), `ausserhalb_bereich` (Spur 1 bis 8, `bis_beat` − `von_beat` 1 bis 256, `kennung` ≥ 0), `datei_fehlt` (kein Arbeitsordner), `nicht_geladen`, `ueberlappung` (Transport oder Freeze läuft), `spur_bereich` (Spur leer), `tempo_rampe` (im Tempo-Plan ist eine Rampe offen, D1 Spec 6.33), `zu_gross` (Puffer nicht anlegbar). Ein Kern-Neustart beendet jeden Freeze ohne `/e/freeze`. Paket K3 |
+
+Das Modul Arrangement spielt eine Wiedergabe (Format `cypherdj-arr/1`, D1-Spec 3.2) auf der einen Uhr: Projekt-Beat
+p = Kern-Beat − Ursprung + `start_beat`; ein Ereignis auf p liegt auf llround(sample_at(p + Ursprung − `start_beat`)).
+Audio-Clips spielen aus einem festen Pool von 64 Stimmen ab ihrem Einsatz-Sample; ein Start mitten im Clip setzt mit 32
+Samples Einblende ein. Noten gehen an Senken, je um den Vorhalt der Senke
+früher und über die Loop-Klammer hinweg (D1 K2b): interne Spuren an die RB-338 im Kern (Vorhalt 0, eine Instanz je
+Spur-Slot; beim Transport-Start im Block des Einsatzes Vorgaben, die Parameter der Wiedergabe, Zurücksetzen und All-Off
+am Einsatz, dann die Noten; liegt der Einsatz im nächsten Block, blendet die Senke die Ausgabe der Spur in diesem
+Block linear auf 0 aus (Kurzblende, kein Sprung am Schnitt beim Neustart; Grenze: „der nächste Block“ hat dieselbe Größe
+wie dieser, so im Live-Kern mit gleich großen `MIX_BLOCK`-Teilblöcken und festem Quantum (`node.lock-quantum`) und im
+Render mit festem Quantum; steigt das Quantum zwischen Befehl und Einsatz, fällt die Blende aus und der Schnitt ist hart);
+ein Tausch mit anderen Parametern setzt sie geglättet neu; verlässt eine klingende Spur die RB-338 per Tausch (leer,
+Wirt-Spur), blendet sie über einen Block aus und wird zurückgesetzt; bei stehendem Transport ruht eine Spur nach 1 s
+exakter Stille), Wirt-Spuren an
+`arr_midi_<slot>` (§7.1; Kanal 1, Vorhalt 2n + 25 wie die MIDI-Ströme, Stopp und Neustart mit CC 123, ebenso ein
+Tausch, nach dem keine Spur den Slot mehr spielt; dessen Rückweg blendet dann über einen Block aus); deren Rückweg
+`arr_rueck_<slot>_L/R` (§8) geht in den Eingang der ersten Spur, die den Slot spielt. Offene Noten stehen in einer Liste fester Größe (256); beim Tausch eines
+Schnappschusses geht das Note-Off einer Note sofort hinaus, die fehlt oder ein anderes Ende hat; ein geänderter Clip
+blendet aus und setzt an der neuen Stelle wieder ein. Die Summe der Spuren (Spur-Regler `spur/<n>/*`, §1.5) geht in den
+Eingang von `erz/4`. `erz/4` ist für die Produktion reserviert: `/erz/strom` mit Ziel `erz/4` und Kanten auf
+`rueck_erz_4` lehnt der Kern mit Grund `reserviert` ab, der Rückweg `rueck_erz_4` klingt nicht. Speicher: das Audio
+zählt gegen `speicher_budget_mib` (ein Konto mit dem Deck-Lader) und gegen `arr_budget_mib` (§2.1); geteiltes Audio
+wird nur einmal gesperrt. Auch der Schnappschuss selbst (Kopf, Clips, Noten, Noten-Index) liegt in eigenen Seiten,
+gesperrt und auf dem Konto gebucht (der Kern sperrt beim Start nur `MCL_CURRENT`); ebenso der Kopf jedes Audios (Zeiger und Länge, die der Callback je Sample liest; eine Seite je Audio, auf dem Konto, nicht in `arr_budget_mib`). Das Arrangement liegt nicht im Neustart-Zustand (§6.3), die Spur-Regler schon; nach
+`/e/neustart` lädt der Seiten-Server die letzte Wiedergabe neu. Findet die Rückgabe eines abgelösten Schnappschusses
+keinen Platz im Ereignisring, wartet sie auf einem eigenen Platz; solange warten die `/k/arr/*`-Befehle in ihrer
+Reihenfolge (höchstens 16); ein weiterer endet mit 4 `zu_spaet`, nichts überholt. Verlorenes zählt
+`ereignisse_verloren` (§5.4). Bekannte Grenze (K1-Re-Review 4): Lehnt der Kern bei vollem Wartepuffer ein `/k/arr/laden` ab, während der eigene Platz schon belegt ist, geht die Rückgabe dieses Schnappschusses verloren (gezählt in `ereignisse_verloren`). Er bleibt dann mit seinem Audio bis zum Kern-Neustart gesperrt und auf dem Konto gebucht: eine bleibende Belastung von `speicher_budget_mib` und `arr_budget_mib`, die erst ein Neustart des Kerns zurückgibt.
+
+Bekannte Grenze (K1-Review 11): Der Kern bildet Audio mit `MAP_SHARED` ab (geteilt nach sha256, ohne Kopie). Würde
+eine abgebildete Datei an Ort und Stelle gekürzt oder überschrieben, löste das Lesen im Callback `SIGBUS` aus oder
+spielte fremde Daten. Deshalb gilt für jeden Schreiber im Arbeitsordner: Audio entsteht in einer Teil-Datei und kommt
+nur per `rename` an seinen Namen (`audio/<sha256>.f32`, ein Name heißt ein Inhalt; ein `rename` über eine bestehende
+Datei lässt das abgebildete alte Inode unberührt), nie per Kürzen oder Überschreiben; Freeze-Dateien entstehen mit
+`RENAME_NOREPLACE` (D1 6.25). Gelöscht wird eine Datei nur per `unlink`, das die Abbildung ebenfalls überlebt.
 ## 5. Ausgaben des Kerns (OSC an Abonnenten)
 
 ### 5.1 Quittung `/q ,hsihds`
@@ -544,11 +605,12 @@ höchstens 0,024 ms, 06 Probe a). Nur zum Aufwachen benutzen, nie als Befehlszei
 `takt`, `phrase`, `sample` (Sample des Taktanfangs), `beat` (= 4·(takt − 1)), `bpm` am Taktanfang. Gesendet im
 Zyklus, der den Taktanfang enthält.
 
-### 5.4 Kern-Zustand `/zustand/kern ,iihiiiiiiii` (20 Hz)
+### 5.4 Kern-Zustand `/zustand/kern ,iihiiiiiiiih` (20 Hz)
 
 `generation`, `quantum`, `sample`, `frame_luecken` (seit Generationsstart), `ausgelassene_perioden`, `cb_max_us`
 (letzte Sekunde), `cb_p99_us` (letzte Sekunde), `aufwach_max_us` (letzte Sekunde), `stretcher_aktiv`,
-`befehle_wartend`, `ki_gestoppt` (0/1).
+`befehle_wartend`, `ki_gestoppt` (0/1), `ereignisse_verloren` (Ereignisse des Kerns, die keinen Platz im Ereignisring
+fanden, seit Kern-Start: Quittungen, Rückgaben wie `ARR_ALT`; D1 K1).
 
 ### 5.5 Deck-Zustand `/zustand/deck ,iisdidddfiifii` (50 Hz je geladenem Deck)
 
@@ -585,7 +647,8 @@ Stand Scheibe 35 (Vorgriff aus 43): der Kern meldet `spitze_db` (Abtast-Spitze s
 Samples (20 Hz); `echtspitze_dbtp`, `lufs_m`, `lufs_s` und die drei Bänder misst erst Scheibe 43 und stehen bis dahin auf
 −200. Seit 2026-09-27 (Strudel Stufe 1, ADR 024) meldet der Kern auch `erz/1`, seit 2026-09-29 (Studio S1) `erz/2` und
 `erz/3` (nach dem Fader, immer, ohne Strom −200) und seit MVP 2 (ADR 025) `pad/1` und `pad/2` (ohne Loop −200); die übrigen Erz- und Busschienen melden noch
-nicht.
+nicht. Seit D1 (§4.11) meldet der Kern `spur/<n>` (Spitze nach dem Spur-Fader) für jede Spur mit Inhalt in der geladenen
+Wiedergabe.
 
 ### 5.7 Regler `/e/regler ,sfshd`
 
@@ -640,6 +703,13 @@ höchstens 50 Hz je Regler, und immer bei Teilstart, Teilende und Halterwechsel.
 | `/e/fx/zuweisung` | `,isi` | `einheit` (1, 2), `kanal`, `an` (zugewiesen) | bei jeder Änderung der Zuweisung |
 | `/e/fx/routing` | `,i` | `routing` (0 Post Fader, 1 Insert) | bei jeder Änderung und einmal nach `/e/neustart` mit der Vorgabe 0 |
 
+### 5.13 Arrangement (D1, ADR 030)
+
+| Adresse | Typen | Felder | wann |
+|---|---|---|---|
+| `/zustand/arr` | `,iiidhdi` | `nr` (Wiedergabe-Nummer, −1 ohne Wiedergabe), `status` (0 steht, 1 wartet, 2 spielt, 3 freeze), `loop_an`, `projekt_beat` (am Blockanfang), `ursprung_sample` (Kern-Sample des Transport-Starts, dort gilt p = `start_beat`; −1 ohne), `start_beat`, `metronom_an` | 50 Hz, solange er wartet oder spielt, sonst 2 Hz, dazu bei jeder Änderung; der Seiten-Server drosselt auf 50 ms |
+| `/e/freeze` | `,iiih` | `spur`, `kennung`, `status` (0 fertig, 1 abgebrochen, 2 Datei nicht geschrieben oder schon vorhanden), `frames` (Länge der Datei, 0 bei Status 1 und 2) | einmal je angenommenem Freeze (nach `/q` 1), erst wenn die Datei geschrieben ist (Paket K3) |
+
 ---
 
 ## 6. Shared Memory
@@ -660,12 +730,14 @@ Offset  Typ              Feld
 32      _Atomic uint64   w                  (geschriebene Frames, monoton über Kern-Neustarts)
 40      _Atomic uint64   takt_frames        (Länge des zuletzt vollendeten Master-Takts in Frames)
 48      _Atomic uint64   takt_anfang_w      (Wert von w am Anfang des laufenden Master-Takts, Takt-Eins der Kern-Uhr)
-56      uint8[8]         reserve
+56      _Atomic uint64   sample_minus_w     (D1: Kern-Sample minus w, Zweierkomplement; Frame f klingt am Kern-Sample f + Wert)
 64      float32[cap][4]  daten              (Frame f bei Index f % cap)
 ```
 
-Der Kern schreibt je Zyklus `nframes` Frames ab `w`, setzt `takt_frames` und `takt_anfang_w` (beide vor `w`, Release),
-dann `w += nframes`. Beim Start liest der Kern `w` und setzt fort. Die Notbahn liest einen Block hinter `w`; steht `w`
+Der Kern schreibt je Zyklus `nframes` Frames ab `w`, setzt `sample_minus_w`, `takt_frames` und `takt_anfang_w` (alle vor
+`w`, Release), dann `w += nframes`. `sample_minus_w` gilt für alle Frames seit dem letzten Sprung des Kern-Samples
+(`/k/set/neu`, Neustart); ein Mitschnitt richtet sich damit sample-genau am Kern aus (D1, Null-Test A7; Leser
+`cypherdj-mitschnitt`, nur lesend, Paket K3). Beim Start liest der Kern `w` und setzt fort. Die Notbahn liest einen Block hinter `w`; steht `w`
 einen Zyklus lang still, beginnt die Schleife (ADR 016): sie spielt ab dem Stillstand weiter aus ihrem **eigenen
 Verlauf** um genau `takt_frames` zurück, so bleibt das Master-Raster erhalten, bei jeder festen Set-Basis. Weil der Ring
 mit `cap` = 65 536 Frames (1,37 s) kürzer ist als ein Takt (90 000 Frames bei 128), hält die Notbahn einen eigenen
@@ -741,6 +813,7 @@ Laden aus der Kiste nimmt die höchste Fassung zur Set-Basis, mit Stems, wenn vo
 
 `cypherdj-kern:hand_in` (JACK-MIDI-Eingang; verbunden mit der Midi-Bridge-Quelle des Controllers),
 `cypherdj-kern:hand_led` (Ausgang zum Controller), `cypherdj-kern:midi_aus_1` bis `_4` (an Wirte, Geräte),
+`cypherdj-kern:arr_midi_1` und `_2` (D1 K2b: Wirt-Slots des Arrangements, Noten auf Kanal 1, All-Off nach Neuverbindung),
 `cypherdj-kern:clock` (später, MIDI-Clock 24 ppq). Verbunden wird mit den JACK-Namen; welche, steht im Mapping.
 
 ### 7.2 Mapping-Datei `~/.config/cypherdj/controller/<geraet>.json`
@@ -760,7 +833,10 @@ Laden aus der Kiste nimmt die höchste Fassung zur Set-Basis, mit Stems, wenn vo
   oder `versatz64`), `beruehrung` (Berührungssensor: Halterwechsel ohne Wert), `taste`.
 - `ziel`: ein Regler-Pfad (§1.5), eine Deck-Aktion `deck/<n>/<aktion>` (`play`, `cue`, `hotcue/<nr>`,
   `hotcue_setzen/<nr>`, `loop`, `loop_laenge`, `roll/<beats>`, `sprung_plus`, `sprung_minus`, `nudge`, `tap`, `slip`,
-  `pfl`, `laden`), `tempo` (Hand-Segment, relativ), oder `taste/<name>` (Namen wie in §5.8).
+  `pfl`, `laden`), `tempo` (Hand-Segment, relativ), `arr/start_stopp` (D1: Transport des Arrangements, `art`
+  `taste`, sofort ausgelöst und vom Kern selbst ausgeführt: läuft das Arrangement, Stopp mit Kurzblende, sonst Start
+  an der letzten Startposition mit `quant` 2, wenn ein Deck, eine Loop-Box oder ein Erzeuger-Strom läuft, sonst 0;
+  §4.11), oder `taste/<name>` (Namen wie in §5.8).
 - `quant` für Deck-Tasten: `sofort` (phasentreu), `beat`, `takt`.
 - `kurve.typ`: `linear` (Einheit linear zwischen `min` und `max`), `fader_db` (Fader-Kurve: 0 bis 1 → dB, unterhalb
   −60 dB stumm).
@@ -809,7 +885,8 @@ Notbahn, KI-Stopp setzt der Kern selbst; Vorschlag, Plan, Hörschein, Autonomie 
 
 | Client | Ports | Eigenschaften |
 |---|---|---|
-| `cypherdj-kern` | Eingänge (gemessen 2026-10-11, `pw-link -i`, Instanz f) `hand_in`, `rueck_erz_1_L/R` bis `rueck_erz_8_L/R`; Ausgänge `master_L/R`, `cue_L/R`, `midi_aus_1` bis `midi_aus_4`. **Nicht vorhanden, nur Plan:** `puls_erz_1` bis `_8`, `rueck_fx_1/2_L/R`, `puls_fx_1/2`, `send_1/2_L/R` | `node.group = "cypherdj"`, `node.lock-quantum = true`, Quantum aus der Unit (`PIPEWIRE_QUANTUM=256/48000`); keine Ausgänge ans Interface |
+| `cypherdj-kern` | Eingänge (gemessen 2026-10-11, `pw-link -i`, Instanz f) `hand_in`, `rueck_erz_1_L/R` bis `rueck_erz_8_L/R`; Ausgänge `master_L/R`, `cue_L/R`, `midi_aus_1` bis `midi_aus_4`; seit D1 K2b dazu Eingänge `arr_rueck_1_L/R`, `arr_rueck_2_L/R` und Ausgänge `arr_midi_1`, `arr_midi_2` (Wirt-Slots des Arrangements; die Kanten-Datei darf sie mit Wirten verbinden, nie mit dem Kern selbst). **Nicht vorhanden, nur Plan:** `puls_erz_1` bis `_8`, `rueck_fx_1/2_L/R`, `puls_fx_1/2`, `send_1/2_L/R` | `node.group = "cypherdj"`, `node.lock-quantum = true`, Quantum aus der Unit (`PIPEWIRE_QUANTUM=256/48000`); keine Ausgänge ans Interface |
+| (Datei) | `/dev/shm/cypherdj[-i]/arr-a4.jsonl` | Messpunkt A4 (D1 K2b): liegt die Datei da, hängt `cypherdj-kern` je Note-Ein eines Wirt-Slots eine JSON-Zeile mit den Feldern slot, ziel, einsatz, versatz und vorhalt an (Kern-Samples; `einsatz` −1: kein Einsatz über −40 dBFS nach 10 ms Stille binnen 200 ms); der Kern legt sie nie an |
 | (Datei) | `/dev/shm/cypherdj[-i]/kern-faehigkeiten.json` | `cypherdj-kern` schreibt `{pid, nur_cue}` atomar vor `jack_activate`; `nur_cue` = `"erz/8"` nur, wenn der Mixer den Kanal als Nur-Cue führt |
 | `cypherdj-notbahn` | Ausgänge `master_L`, `master_R`, `cue_L`, `cue_R` | `node.group = "cypherdj"`, `node.lock-quantum = true`; verbindet sich selbst mit den Ports aus ihren Aufrufparametern (`--master <jack-port-präfix> --cue <jack-port-präfix>` im `ExecStart` der Unit; kein TOML in C, auf DJ-Maschine gibt es keinen C/C++-TOML-Parser), nur nach dem Riegel unten |
 | `cypherdj-aufnahme` | Eingänge `in_1` bis `in_4` | an die vier Notbahn-Ausgänge |
@@ -1341,6 +1418,7 @@ RMS-Fenster) an der hörbaren Position, Suchfenster ±200 ms, Band mit der höch
 | `material_fehlt`, `pruefung`, `budget_speicher` | Kern | Laden |
 | `budget_stretcher` | Leitstand | mehr als 4 Echtzeit-Stretcher [VORLÄUFIG, 2026-09-23 13:3x: die Nachprüfung zu Dossier 01 misst R3 in FIFO-Arbeits-Threads mit Vorlauf mit 8 je Thread ohne Unterlauf (16 auf 2 und 32 auf 4 Threads, Grenze erst bei 16 je Thread; SCHED_OTHER statt FIFO: 23 Unterläufe). Die Grenze entscheidet M3 (Scheibe 30).] |
 | `karte_voll` | Kern | Tempo-Karte voll |
+| `tempo_rampe` | Kern | `/k/arr/freeze` (§4.11, D1 Spec 6.33): im Tempo-Plan ist eine Rampe offen (angenommen, Einsatz an der nächsten Takt-Eins noch aus, oder laufend) |
 | `ki_gestoppt` | Kern, Leitstand | Stopp-Taste aktiv |
 | `rechner_fehlt` | Leitstand | Rechner nicht erreichbar |
 | `kein_stretcher` | Kern | Roll Art 1 (hinter dem Keylock); Tempo-Änderung und Start bei fremdem Tempo nur bis Welle 2 (ADR 028) |
@@ -1348,6 +1426,8 @@ RMS-Fenster) an der hörbaren Position, Suchfenster ±200 ms, Band mit der höch
 | `grenze_sub` | Leitstand | Vorhersage einer Wahl reißt `grenze_sub` (§11, `vorhersage` `grenzen_ok`; Dossier 09 V4) |
 | `neustart` | Leitstand | Teil durch Kern-Neustart verloren, Grund von `teil_abgebrochen` (§16.3) |
 | `form` | Kern, Leitstand, MCP | Eingabe verletzt das Schema (Kern: seit Ohr T12 `inhalt` in `/k/hoerschein`, §4.5) |
+| `datei_fehlt`, `format`, `audio_fehlt`, `zu_gross`, `spur_bereich` | Kern | `/k/arr/laden` (§4.11): Wiedergabe-Datei fehlt, verletzt das Format, ein Audio fehlt, Budget oder Grenze (8 Spuren, 4096 Clips, 65 536 Noten) überschritten, Spur-Nummer oder Slot außerhalb |
+| `reserviert` | Kern | `erz/4` gehört der Produktion (§4.11): `/erz/strom` mit Ziel `erz/4`, Kanten auf `rueck_erz_4` |
 | `hand`, `abbruch`, `ki_stopp` | Kern | Abbruchgrund |
 | `unbekannte_adresse`, `falsche_typen`, `protokoll` | Kern | Protokollfehler |
 
@@ -1448,7 +1528,9 @@ Erzeuger-Ereignis auf einem offenen Kanal, und nach jedem Handgriff. Die Hand (M
      Quantisierung `beat`) am Sample, frühestens am Blockanfang des Zyklus, in dem der Befehl ankommt. Ebenso `taste/<name>` mit den Namen aus §5.8 ohne die
      Encoder-Werte (`autonomie`, `spielart`, `laenge`, `kiste_wahl`): `midi_roh` ab 0,5 ist der Druck, der Kern meldet
      daraus dasselbe `/e/taste` (`name`, `wert` 1, `sample`, `beat`) wie für die Taste des Controllers (die Stopp-Taste
-     wirkt wie `/k/ki/stopp`), darunter das Loslassen ohne Meldung; ein anderer Name ist `unbekannter_regler`.
+     wirkt wie `/k/ki/stopp`), darunter das Loslassen ohne Meldung; ein anderer Name ist `unbekannter_regler`. Seit D1
+     auch `arr/start_stopp` (§7.2): `midi_roh` ab 0,5 ist der Druck, der Kern meldet `/e/hand` und schaltet den
+     Transport des Arrangements.
    - **Prüfklick** (Roadmap Z1) `/test/klick ,hssi`: `id`, `quelle`, `kanal` (`master` oder ein Kanal aus §1.5), `an` (0
      oder 1). Nur mit `pruefmodus = true` (in Scheibe 01 der Aufrufparameter `--pruefmodus`), sonst
      `/e/protokollfehler`. Ab dem nächsten Schlag schreibt der Kern je Schlag einen kurzen Klick auf den Eingang von
@@ -1574,3 +1656,11 @@ reserviert), Plugin-Inserts, Zerleger-MCP, Oberfläche.
 | 2026-09-28 | 1 | Plan Ohr, Task 15 (FX-Routing wie Traktor, Andreas: Ja): §4.10 `/k/fx/routing`, §5.12 `/e/fx/routing`. Neue Adressen, Version bleibt 1 |
 | 2026-10-06 | 1 | Welle 2 Klickfrei (Audit F10, F13, F15): §4.2 /k/set/neu, §4.4 /k/deck/start, §4.9 /k/loop/laden, /k/loop/start, /k/loop/stopp mit Blenden, §5.11 /e/loop beim Laden in eine klingende Box; Kill der Hand läuft die 5-ms-Schaltrampe aus §1.5, /e/regler meldet dabei nur 0/1 (F18). Längen gehört 06.10. (Andreas: „passt alles“). Keine neuen Adressen, Version bleibt 1 |
 | 2026-10-11 | 1 | Takt-Eins (§13.2, §12.3): Mehrheitsanteil und erster Kick entscheiden, Tor `eins` urteilt darauf, Tief-Band-Rückgriff entfernt; SET/FIX schreibt art=eins ins Material, Raster-Dateien werden an neue Fassungen vererbt. Befund `~/messungen/2026-10-11-grid-phase/BERICHT.md`; Version bleibt 1 (neue Felder optional) |
+| 2026-10-15 | 1 | D1 K1 (Spec D1 2.2, 3.1, ADR 030): §4.11 `/k/arr/laden`, `/k/arr/start`, `/k/arr/stopp`, `/k/arr/loop`, `/k/arr/metronom`, `/k/arr/freeze` (der Kern führt freeze erst mit Paket K3 aus, bis dahin `unbekannte_adresse`), §5.13 `/zustand/arr` und `/e/freeze`, §16.2 sechs Gründe (`datei_fehlt`, `format`, `audio_fehlt`, `zu_gross`, `spur_bereich`, `reserviert`). Neue Adressen, Version bleibt 1 |
+| 2026-10-15 | 1 | D1 K1: §1.5 Spur-Regler `spur/<n>/fader`, `pan`, `mute`, `solo` (n = 1..8, global, alle dürfen, Vorgabe 0 dB), §4.7 `/k/ki/spur` nimmt `spur/<n>`; nach dem Review (D1 6.15, 6.16): Spur-Fader bis +6 dB, `/k/ki/spur` mit eigener Spur-Liste und Kurzform `spur/<ziffern>`, §4.11/§5.13 Feld `nr` statt `rev`. Neue Regler, Version bleibt 1 |
+| 2026-10-15 | 1 | D1 K1: §2.1 `arr_ordner` und `arr_budget_mib` (Teilbetrag von `speicher_budget_mib`). Neue Schlüssel mit Vorgabe, Version bleibt 1 |
+| 2026-10-15 | 1 | D1 K1: §5.6 `/pegel` meldet `spur/<n>`; §6.1 Ring-Kopf Byte 56 `sample_minus_w` (vorher reserviert, Größe unverändert). Version bleibt 1 |
+| 2026-10-15 | 1 | D1 K1: §7.2 Hand-Zielart `arr/start_stopp`, §19.0 `/test/hand` nimmt sie. Version bleibt 1 |
+| 2026-10-16 | 1 | Paket K3 (Spec D1 2.5, 3.1, 6.14, 6.25, 6.27, 6.29, 6.33): §4.11 `/k/arr/freeze` ausgeführt (Quittungen 1, 2, 3, 7, Gründe, Puffer und Datei im Lade-Faden, nie ersetzend), §5.13 `/e/freeze` Status 0 fertig, 1 abgebrochen, 2 Datei nicht geschrieben; §16.2 `tempo_rampe`; §6.1 Leser `cypherdj-mitschnitt`. Version bleibt 1 |
+| 2026-10-16 | 1 | Paket K3, Fix-Runde 2: §4.11 `/k/arr/freeze` nennt `/k/set/neu` unter den Abbruchgründen (Quittung 7 `abbruch` am Sample 0 der neuen Zeitachse, `/e/freeze` 1; so führt es der Kern seit der ersten Fix-Runde aus). Keine neue Adresse, Version bleibt 1 |
+| 2026-10-17 | 1 | Hörbares Ziehen (Scrub): §4.4 `/k/deck/scrub` (Griff, Zug, Los, ohne Quittung; das Deck liest das Material an der Handposition). Neue Adresse, Version bleibt 1 |

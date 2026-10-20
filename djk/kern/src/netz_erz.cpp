@@ -69,6 +69,12 @@ bool Netz::erz_paket(const v::Adresse* a, const osc::Nachricht& m) {
   const int k = Mixer::kanal_index(b.pfad);
   // erz/1..8, pad/1..2 (§1.5); erz/8 nicht: Nur-Cue-Vorhöreingang (S7, Review-Kern m3), ein Strom bliebe im Saal still
   const bool kanal_ok = k >= 4 && k <= 13 && k != Mixer::kanal_index(VORHOER_KANAL);
+#ifndef CYPHERDJ_MUTATION_ARR_ERZ4_FREI
+  if (k == Mixer::kanal_index(ARR_KANAL)) {  // D1 K1 (Spec 2.3): erz/4 gehört der Produktion
+    quittung(b.id, b.quelle, 6, stand_sample_, stand_beat_, "reserviert");
+    return true;
+  }
+#endif
   if (std::strncmp(ziel, "midi:", 5) == 0) {  // Studio S5: midi:<port 1..4>:<kanal 1..16>, kein Kit
     int port = 0, mk = 0;
     char rest = 0;

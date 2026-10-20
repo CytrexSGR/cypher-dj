@@ -78,6 +78,7 @@ int Uebersetzer::ereignis(const uint8_t* d, size_t groesse, int64_t zyklus_s0, u
         case ZielArt::deck: aus->art = AusgabeArt::deck; break;
         case ZielArt::tempo: aus->art = AusgabeArt::tempo; break;
         case ZielArt::taste: aus->art = AusgabeArt::taste; break;
+        case ZielArt::arr: aus->art = AusgabeArt::arr; break;   // die Mapping-Prüfung lässt nur taste zu
       }
       break;
     }
@@ -98,7 +99,9 @@ int Uebersetzer::ereignis(const uint8_t* d, size_t groesse, int64_t zyklus_s0, u
         aus->art = AusgabeArt::regler_umschalten;
         aus->wert = 1;
       } else {
-        aus->art = e.ziel_art == ZielArt::deck ? AusgabeArt::deck : AusgabeArt::taste;
+        aus->art = e.ziel_art == ZielArt::deck  ? AusgabeArt::deck
+                   : e.ziel_art == ZielArt::arr ? AusgabeArt::arr
+                                                : AusgabeArt::taste;
         aus->wert = druck ? 1 : 0;
       }
       break;
@@ -116,6 +119,7 @@ const char* name(AusgabeArt a) {
     case AusgabeArt::deck: return "deck";
     case AusgabeArt::tempo: return "tempo";
     case AusgabeArt::taste: return "taste";
+    case AusgabeArt::arr: return "arr";
   }
   return "?";
 }

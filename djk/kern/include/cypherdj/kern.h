@@ -21,6 +21,9 @@
 
 #include "cypherdj/deck_werk.h"
 #include "cypherdj/dsp/analyse_baender.h"
+#include "cypherdj/arrangement.h"
+#include "cypherdj/arr_rb_senke.h"
+#include "cypherdj/arr_wirt_senke.h"
 #include "cypherdj/erzeuger.h"
 #include "cypherdj/huellen.h"
 #include "cypherdj/loopbox.h"
@@ -62,7 +65,12 @@ struct Befehl {
     HOERSCHEIN = 31, HOERSCHEIN_WEG = 32,  // Ohr T12 (§4.5 /k/hoerschein, /k/hoerschein/weg)
     FX_ROUTING = 33,  // Ohr T17 (§4.10 /k/fx/routing): an = routing (0 Post Fader, 1 Insert); nur Andreas' Hand
     // 34, 35: frei (bis Task 7 die Befehle der Keylock-Varianten, ADR 027; die Box dehnt jetzt live mit dem Dehner)
-    DECK_TAUSCH = 36  // Welle 3 (ADR 028, §4.4 /k/deck/basis_tausch): deck, bpm = basis_bpm, fassung, ab_beat
+    DECK_TAUSCH = 36,  // Welle 3 (ADR 028, §4.4 /k/deck/basis_tausch): deck, bpm = basis_bpm, fassung, ab_beat
+    // D1 K1 (§4.11): ARR_LADEN zeiger = ArrSnapshot*, arr_nr; ARR_START ab_beat = start_beat, politik = quant;
+    // ARR_STOPP politik = quant; ARR_LOOP an, arr_von, arr_bis; ARR_METRONOM an, wert = pegel_db, nr = ziel
+    ARR_LADEN = 37, ARR_START = 38, ARR_STOPP = 39, ARR_LOOP = 40, ARR_METRONOM = 41,
+    ARR_FREEZE = 42,  // Paket K3 (§4.11 /k/arr/freeze): zeiger = ArrFreeze* (Auftrag samt Puffer, im Lade-Faden angelegt, 6.29)
+    DECK_SCRUB = 43   // Hörbares Ziehen (§4.4 /k/deck/scrub): deck, nr = phase (0 los, 1 Griff, 2 Zug), wert_beats = delta_beats
   };
   int32_t art;
   int32_t an;          // KLICK: 0 oder 1; KI_STUFE: Stufe 0 bis 3
@@ -106,6 +114,8 @@ struct Befehl {
   float sync_ms;           // HOERSCHEIN
   float pegel_diff_db;     // HOERSCHEIN
   float lufs_kurz;         // HOERSCHEIN
+  int64_t arr_nr;         // D1 K1: ARR_LADEN
+  double arr_von, arr_bis; // D1 K1: ARR_LOOP
 };
 
 struct Ereignis {
@@ -130,7 +140,12 @@ struct Ereignis {
     FX_ROUTING = 28,    // Ohr T17, §5.12 /e/fx/routing: status = routing (0 Post Fader, 1 Insert)
     BOX = 29,           // Keylock 7b.3, §5.5b /zustand/box: deck = box, status, keylock_unterlauf, keylock_aufgegeben,
                         // keylock_ring_voll, keylock_kein_platz (7c.3)
-    KOMP = 30           // Effekt-Sektion 2026-10-11, §5.5c /zustand/komp: pfad = Kanal, wert = Absenkung in dB (10 Hz, nur aktive)
+    KOMP = 30,          // Effekt-Sektion 2026-10-11, §5.5c /zustand/komp: pfad = Kanal, wert = Absenkung in dB (10 Hz, nur aktive)
+    ARR_ALT = 31,       // D1 K1: abgelöster oder abgelehnter ArrSnapshot zur Freigabe im Lade-Faden (zeiger)
+    ARR_ZUSTAND = 32,   // D1 K1, §5.13 /zustand/arr: arr_*
+    ARR_FREEZE = 33     // Paket K3: beendeter oder abgelehnter Freeze-Auftrag (zeiger = ArrFreeze*), status 0 fertig,
+                        // 1 abgebrochen, ARR_FREEZE_ABGELEHNT nur freigeben; der Lade-Faden schreibt die Datei (6.29),
+                        // das Netz meldet /e/freeze
   };
   int32_t art;
   int32_t status;   // QUITTUNG: §5.1; KI: gestoppt 0/1
@@ -175,7 +190,13 @@ struct Ereignis {
   double fx_beats;      // LOOP: Periode in Beats
   float fx_wet;         // LOOP: Anteil 0..1
   float fx_param;       // FX (Plan 3): param 0..1
+  // D1 K1, ARR_ZUSTAND (§5.13): nr, status, loop_an, projekt_beat, ursprung_sample, start_beat, metronom_an
+  int64_t arr_nr, arr_ursprung;
+  double arr_beat, arr_start_beat;
+  int32_t arr_status, arr_loop_an, arr_metronom_an;
 };
+
+constexpr int32_t ARR_FREEZE_ABGELEHNT = 3;  // Paket K3: Ereignis ARR_FREEZE eines abgelehnten Auftrags (Quittung 6 kam schon)
 
 using Befehlsring = SpscRing<Befehl, 256>;
 using Ereignisring = SpscRing<Ereignis, 8192>;
@@ -192,6 +213,7 @@ class Kern {
   int wartend() const { return plan_.wartend() + schatten_.wartend(); }  // §5.4 befehle_wartend
   bool neue_zeitachse() const { return neue_zeitachse_; }  // /k/set/neu im letzten Zyklus
   const Karte& karte() const { return plan_.karte(); }
+  int tempoplan_eintraege() const { return plan_.eintraege(); }   // Paket K3: offene Rampen (Spec 6.33, Tests)
   uint64_t ereignisse_verloren() const { return verloren_; }
 
   // Scheibe 18, Neustart-Zustand (SCHNITTSTELLEN §6.3, kern_zustand.cpp). abbild() schreibt Generation, wirksame Karte,
@@ -207,11 +229,42 @@ class Kern {
   void setze_pruef_cue(bool an) { pruef_cue_ = an; }
   // Scheibe 25, Befund B7 aus 18: nur ein Kern im Prüfmodus übernimmt eingeschaltete Prüfklicks aus dem Neustart-Zustand.
   // Vorgabe aus (fail-safe); main.cpp setzt ihn vor dem Lesen des Zustands, die Offline-Tests (kern25.h) setzen an.
-  void setze_pruefmodus(bool an) { pruefmodus_ = an; }
+  void setze_pruefmodus(bool an) {
+    pruefmodus_ = an;
+    arr_->sperre_metronom(an);   // D1 K1 (Spec 2.6): im Prüfmodus klingt das Metronom nie (Prüfklick bleibt ungestört)
+  }
   // Scheibe 25: Güte des DJ-Filters aller 18 Kanalzüge (kern.toml filter_guete, A27 Weg a). Nicht im Callback.
   void setze_filter_guete(double q) { mixer_->setze_filter_guete(q); }
   // Scheibe 25: Decke des Master-Limiters (kern.toml limiter_dbtp, §2.1). Nicht im Callback.
   void setze_limiter_dbtp(double decke) { mixer_->setze_limiter_dbtp(decke); }
+  // D1 K2b (Spec 2.4, 6.24): die RB-338, die der Kern für alle internen Spuren anlegt (setze_arr_senke_intern ersetzt
+  // sie); der Render (K3) treibt denselben Kern und bekommt sie damit ohne Zutun
+  const ArrRbSenke& arr_rb() const { return *arr_rb_; }
+  // D1 K2b: Wirt-Slots s = 1..2 (setze_arr_senke_wirt ersetzt sie). arr_rueck: Rückweg arr_rueck_<s>_L/R für den NÄCHSTEN
+  // zyklus() (wie rueck(), n Samples ab Index 0); arr_midi_aus: MIDI an arr_midi_<s> dieses Zyklus, gültig bis zum
+  // nächsten zyklus().
+  void arr_rueck(int slot, const float* l, const float* r) noexcept {
+    if (slot >= 1 && slot <= ARR_WIRT_SLOTS) arr_wirt_[slot - 1]->rueck(l, r);
+  }
+  const MidiAus& arr_midi_aus(int slot) const { return arr_wirt_[std::clamp(slot, 1, ARR_WIRT_SLOTS) - 1]->midi(); }
+  // D1 K2b: Messpunkt A4 je Wirt-Slot (arr_wirt_senke.h); nur ein Leser, der Hauptfaden (main.cpp)
+  bool arr_wirt_messung(int slot, ArrWirtMessung& m) noexcept {
+    return slot >= 1 && slot <= ARR_WIRT_SLOTS && arr_wirt_[slot - 1]->messung_holen(m);
+  }
+  // D1 K1: Senken der Arrangement-Noten (K2: RB-FFI für interne Spuren, je Wirt-Slot eine). Nicht im Callback.
+  void setze_arr_senke_intern(ArrSenke* s) { arr_->setze_senke_intern(s); }
+  void setze_arr_senke_wirt(int slot, ArrSenke* s) { arr_->setze_senke_wirt(slot, s); }
+  const Arrangement& arrangement() const { return *arr_; }   // Tests, Diagnose (nur aus dem Callback-Faden lesen)
+  // Paket K3 (cypherdj-render, Spec 2.5): nur die Regler-Werte eines Neustart-Fachs übernehmen, ohne Karte, Befehle,
+  // Decks, Halter und KI-Stopp; Regler mit Transport-Rolle bleiben. Rückgabe: übernommene Regler, −1 bei ungültigem
+  // Fach. Nicht im Callback, vor dem ersten Zyklus.
+  int regler_uebernehmen(const cdj_z_echtzeit& f) noexcept;
+  // Paket K3 (Spec 6.20, Render ohne Neustart-Zustand): einen Regler sofort setzen wie regler_uebernehmen, aber nur
+  // innerhalb min..max der Regler-Tabelle (ganzzahlige Regler nur ganz). false: unbekannt, Transport, außerhalb, NaN.
+  // Nicht im Callback, vor dem ersten Zyklus.
+  bool regler_setzen(const char* pfad, float wert) noexcept;
+  // Paket K3 (Spec 2.6: im Render immer aus). Nach setze_pruefmodus aufrufen, das setzt die Sperre neu.
+  void sperre_metronom(bool ja) { arr_->sperre_metronom(ja); }
 
   // Scheibe 25: für Tests und Werkzeuge (nicht im Callback benutzen)
   const cypherdj::stellwerk::Stellwerk& stellwerk() const { return *sw_; }
@@ -320,6 +373,10 @@ class Kern {
   bool hand_deck_taste(int deck, bool play, int32_t wert, int64_t s) noexcept;
   // Taste der Hand am Sample s (Controller und /test/hand taste/<name>): /e/taste, die Stopp-Taste wirkt wie /k/ki/stopp.
   bool hand_taste(hand::Taste t, int32_t wert, int64_t s) noexcept;
+  // D1 K1 (§7.2 arr/start_stopp): läuft das Arrangement oder wartet es, Stopp sofort mit Kurzblende; sonst Start an der
+  // letzten Startposition nach der Start-Regel, Quant 2 (Takt), wenn ein Deck, eine Loop-Box oder ein Erzeuger-Strom
+  // läuft, sonst 0 (sofort). Meldet /e/hand. false: ohne Wirkung (nichts geladen).
+  bool arr_hand_start_stopp(int64_t s) noexcept;
   int64_t cue_punkt(int deck) const noexcept { return cue_frame(deck - 1); }  // Frame; für Tests
 
  private:
@@ -348,6 +405,42 @@ class Kern {
   void decks_uebernehmen();
   void decks_zustand(int64_t n0, int n);
   void boxen_zustand(int64_t n0, int n);
+  // D1 K1 (kern_arr.cpp): Modul Arrangement
+  void einsortieren_arr(const Befehl& c, double beat0);
+  void arr_zustand(int64_t n0, int n);
+  void arr_quittungen(const Karte& k);
+  // Review MINOR 8.2/10.2: ein wartender Start, der ohne Einsatz endet, bekommt 7 mit Grund; jede id endet genau einmal
+  void arr_start_abbrechen(int64_t s, double b, const char* grund);
+  void arr_alt_melden(const ArrSnapshot* s);
+  // Review MINOR 8.2: ist der Ereignisring voll, wartet die Rückgabe auf arr_alt_offen_ und geht in jedem Zyklus erneut;
+  // solange der Platz belegt ist, warten /k/arr/*-Befehle in arr_warte_ (in ihrer Reihenfolge), damit kein Tausch
+  // einen zweiten Schnappschuss ohne Platz ablöst. Echtzeit: feste Felder, keine Allokation.
+  void arr_nachreichen();
+  bool arr_befehl_wartet(const Befehl& c);   // true: c ist eingereiht (später ausgeführt)
+  // Paket K3 (kern_arr.cpp): /k/arr/freeze. Quittung 1 bei Annahme, 2 am Einsatz, 3 am Ende des Nachlaufs, 7 bei Abbruch,
+  // 6 bei Ablehnung; jeder Auftrag geht genau einmal als ARR_FREEZE zurück. Passt er nicht in den Ring, wartet er hier in
+  // einer Kette über ArrFreeze::rueck_naechster (Fix 2/P1: ohne Obergrenze, keine Rückgabe geht verloren, auch nicht die
+  // des laufenden; vorher vier Plätze, der Rest zählte als verloren und sein Puffer blieb belegt, Fall 9).
+  // Ein Freeze reiht sich wie die übrigen /k/arr/*-Befehle hinter ein wartendes Laden (arr_warte_), die Reihenfolge bleibt.
+  void einsortieren_freeze(const Befehl& c, double beat0);
+  void arr_freeze_quittungen(const Karte& k);
+  void freeze_melden(ArrFreeze* f, int32_t status);
+  void freeze_nachreichen();
+  int64_t arr_freeze_id_ = 0;
+  char arr_freeze_quelle_[48] = {};
+  ArrFreeze* freeze_kopf_ = nullptr;     // älteste wartende Rückgabe (Reihenfolge bleibt)
+  ArrFreeze* freeze_schwanz_ = nullptr;
+  int freeze_wartend_ = 0;
+  bool dj_laeuft() const noexcept;   // Deck, Loop-Box oder Erzeuger-Strom läuft (Spec 2.2: dann Quant 2)
+  std::unique_ptr<Arrangement> arr_;
+  int arr_kanal_ = -1;              // Mixer-Index von erz/4 (ARR_KANAL)
+  int zyklus_n_ = 256;              // Größe des laufenden Zyklus (Start-Regel: Vorhalt 2n + 25 und + 1 Zyklus)
+  int64_t arr_start_id_ = 0, arr_stopp_id_ = 0;
+  const ArrSnapshot* arr_alt_offen_ = nullptr;   // abgelöster Schnappschuss, den der volle Ring nicht nahm
+  static constexpr int ARR_WARTE = 16;           // wie die Lade-Ringe (arr_lader.h)
+  Befehl arr_warte_[ARR_WARTE];
+  int arr_warte_n_ = 0;
+  char arr_start_quelle_[48] = {}, arr_stopp_quelle_[48] = {};
   void komp_zustand(int64_t n0, int n);   // Effekt-Sektion: /zustand/komp (§5.5c) je aktivem Kompressor, 10 Hz  // Keylock 7b.3: /zustand/box (§5.5b), Takt wie decks_zustand
   void decks_block(int64_t s0, int m);
   void decks_verlauf(int regler, const float* verlauf);
@@ -432,6 +525,8 @@ class Kern {
   std::unique_ptr<Erzeuger> erz_;
   float* erz_l_[MIX_KANAELE] = {};
   MidiAus midi_aus_[ERZ_MIDI_PORTS];
+  std::unique_ptr<ArrRbSenke> arr_rb_;                      // D1 K2b: RB-338 des Arrangements, im Konstruktor angelegt
+  std::unique_ptr<ArrWirtSenke> arr_wirt_[ARR_WIRT_SLOTS];  // D1 K2b: Wirt-Slots 1..2, im Konstruktor angelegt
   int64_t zyklus_n0_ = 0;
   int64_t rueck_unendlich_ = 0;  // Audit F01: nicht endliche Samples am Wirt-Rückweg (verworfen)
   const float* rueck_l_[8] = {};
@@ -447,8 +542,7 @@ class Kern {
   TeilSchatten schatten_;
   HandSchlange hand_;
   int ki_stufe_ = 0;
-  char ki_spur_[128] = {0};        // zuletzt vom Stellwerk angenommene KI-Spur (Quittung fertig)
-  char ki_spur_neu_[128] = {0};
+  char ki_spur_[128] = {0};        // KI-Spur nach der letzten Quittung fertig, beide Listen in Normalform (ki_spur_text)
   int64_t ki_spur_id_ = 0;
   bool ki_stopp_wieder_ = false;   // Neustart: KI-Stopp nachreichen
   int16_t mensch_wieder_[64] = {};  // Neustart: Regler mit Halter mensch

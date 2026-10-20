@@ -40,11 +40,14 @@ export async function starteBrowser({ breite = 1920, hoehe = 1080 } = {}) {
   await sende('Emulation.setDeviceMetricsOverride', { width: breite, height: hoehe, deviceScaleFactor: 1, mobile: false });
   const b = {
     konsole,
+    ereignisse,   // D1 V1: rohe CDP-Ereignisse (Input.dragIntercepted für zieheDnD)
     sende,
-    async oeffne(url) {
-      const geladen = new Promise((ok) => { const f = () => { if (ereignisse.some((e) => e.method === 'Page.loadEventFired')) ok(); else setTimeout(f, 20); }; ereignisse.length = 0; f(); });
+    // zeitlimitMs: nach so vielen ms aufgeben und false liefern statt ewig zu warten (A1 hing am 17.10. 19 min hier).
+    async oeffne(url, zeitlimitMs = Infinity) {
+      const bis = Date.now() + zeitlimitMs;
+      const geladen = new Promise((ok) => { const f = () => { if (ereignisse.some((e) => e.method === 'Page.loadEventFired')) ok(true); else if (Date.now() >= bis) ok(false); else setTimeout(f, 20); }; ereignisse.length = 0; f(); });
       await sende('Page.navigate', { url });
-      await geladen;
+      return geladen;
     },
     async werte(ausdruck) {
       const r = await sende('Runtime.evaluate', { expression: ausdruck, returnByValue: true, awaitPromise: true });
@@ -70,6 +73,24 @@ export async function starteBrowser({ breite = 1920, hoehe = 1080 } = {}) {
       await b.maus('mousePressed', m.x, m.y);
       for (let i = 1; i <= schritte; i++) await b.maus('mouseMoved', m.x + (dx * i) / schritte, m.y + (dy * i) / schritte);
       await b.maus('mouseReleased', m.x + dx, m.y + dy);
+    },
+    // D1 V1: echtes HTML5-Ziehen (dragstart der Seite liefert die Daten): Maus drücken und bewegen bei abgefangenem Drag,
+    // dann dragEnter/dragOver/drop am Ziel (x, y) mit den abgefangenen Daten. Gemessen 2026-10-15, Chrome 155 headless.
+    async zieheDnD(selektor, x, y) {
+      const m = await b.mitte(selektor);
+      await sende('Input.setInterceptDrags', { enabled: true });
+      const n0 = ereignisse.length;
+      await b.maus('mouseMoved', m.x, m.y, { buttons: 0 });
+      await b.maus('mousePressed', m.x, m.y);
+      await b.maus('mouseMoved', m.x + 10, m.y + 4);
+      await b.maus('mouseMoved', m.x + 30, m.y + 10);
+      let ev = null;
+      for (let i = 0; i < 50 && !ev; i++) { ev = ereignisse.slice(n0).find((e) => e.method === 'Input.dragIntercepted'); if (!ev) await new Promise((r) => setTimeout(r, 20)); }
+      await sende('Input.setInterceptDrags', { enabled: false });
+      if (!ev) { await b.maus('mouseReleased', m.x + 30, m.y + 10); return false; }
+      for (const type of ['dragEnter', 'dragOver', 'drop']) await sende('Input.dispatchDragEvent', { type, x, y, data: ev.params.data });
+      await b.maus('mouseReleased', x, y);
+      return true;
     },
     async bild(datei) {
       const r = await sende('Page.captureScreenshot', { format: 'png' });

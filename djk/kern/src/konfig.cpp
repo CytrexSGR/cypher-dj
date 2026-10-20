@@ -1,6 +1,7 @@
 #include "cypherdj/konfig.h"
 
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 
@@ -10,7 +11,7 @@
 
 namespace cdj {
 
-const KonfigSchluessel KERN_SCHLUESSEL[19] = {
+const KonfigSchluessel KERN_SCHLUESSEL[21] = {
     {"version", "version"},          {"start_bpm", "float"},       {"udp_port", "int"},
     {"arbeitsbestand", "Pfad"},      {"speicher_budget_mib", "int"}, {"controller_geraet", "str"},
     {"ziel_lufs", "float"},          {"hoerbar_db", "float"},      {"tief_offen_db", "float"},
@@ -18,6 +19,7 @@ const KonfigSchluessel KERN_SCHLUESSEL[19] = {
     {"pruefmodus", "bool"},          {"filter_guete", "float"},    {"hand_osc", "bool"},
     {"hoerschein_pflicht", "bool"},  {"keylock", "bool"},
     {"keylock_maschine", "str"},
+    {"arr_ordner", "Pfad"},          {"arr_budget_mib", "int"},     // D1 K1
     {nullptr, nullptr},
 };
 
@@ -102,6 +104,10 @@ KernKonfig lies_kern_toml_text(std::string_view text, const std::string& quelle)
       k.keylock_maschine = als_text(wert, s, quelle);
       if (k.keylock_maschine != "r3" && k.keylock_maschine != "bungee" && k.keylock_maschine != "bungee_fein")
         fehler(quelle, "Schlüssel 'keylock_maschine' muss \"r3\", \"bungee\" oder \"bungee_fein\" sein");
+    } else if (s == "arr_ordner") {  // D1 K1 (Spec 2.9)
+      k.arr_ordner = als_text(wert, s, quelle);
+    } else if (s == "arr_budget_mib") {  // D1 K1 (Spec 2.1)
+      k.arr_budget_mib = als_ganzzahl(wert, s, quelle);
     } else {
       fehler(quelle, "unbekannter Schlüssel '" + std::string(s) + "'");  // §2.1: Tippfehler fallen sofort auf
     }
@@ -113,6 +119,9 @@ KernKonfig lies_kern_toml_text(std::string_view text, const std::string& quelle)
     fehler(quelle, "Schlüssel 'speicher_budget_mib' muss zwischen 1 und 4095 liegen (10 Probe d)");
   if (!(k.filter_guete >= 0.5 && k.filter_guete <= 4.0))  // auch NaN; über 4 gesperrt bis zum Hörvergleich (Stand 04, Subbass +12 dB)
     fehler(quelle, "Schlüssel 'filter_guete' außerhalb 0,5 bis 4");
+  if (k.arr_budget_mib < 1 || k.arr_budget_mib > k.speicher_budget_mib)
+    fehler(quelle, "Schlüssel 'arr_budget_mib' muss zwischen 1 und speicher_budget_mib liegen (D1 2.1)");
+  if (!k.arr_ordner.empty() && k.arr_ordner[0] != '/') fehler(quelle, "Schlüssel 'arr_ordner' muss ein absoluter Pfad sein");
   if (k.stretcher_threads < 1) fehler(quelle, "Schlüssel 'stretcher_threads' muss mindestens 1 sein");
   if (k.max_stretcher < 0) fehler(quelle, "Schlüssel 'max_stretcher' darf nicht negativ sein");
   return k;
@@ -138,6 +147,23 @@ void wende_instanz_an(KernKonfig& k, const char* instanz) {
   const std::string alt = "/cypherdj/";
   const auto pos = k.arbeitsbestand.find(alt);
   if (pos != std::string::npos) k.arbeitsbestand.replace(pos, alt.size(), std::string("/cypherdj-") + instanz + "/");
+  const auto pa = k.arr_ordner.find(alt);
+  if (pa != std::string::npos) k.arr_ordner.replace(pa, alt.size(), std::string("/cypherdj-") + instanz + "/");
+}
+
+// D1 Spec 6.14: normalisiert (lexically_normal, ohne abschließenden Schrägstrich), damit die Prüfung „Audio nur unterhalb
+// von arr_ordner“ nicht an // oder einem Schrägstrich am Ende scheitert. Erst hier, nach Z2: wende_instanz_an sucht
+// "/cypherdj/" im Text, wie er in kern.toml steht.
+std::string arr_ordner_von(const KernKonfig& k, const char* instanz) {
+  std::string roh = k.arr_ordner;
+  if (roh.empty()) {
+    const char* home = std::getenv("HOME");
+    const std::string ordner = (instanz && instanz[0]) ? std::string("cypherdj-") + instanz : "cypherdj";
+    roh = std::string(home ? home : "") + "/.cache/" + ordner + "/arr";
+  }
+  std::string n = std::filesystem::path(roh).lexically_normal().string();
+  while (n.size() > 1 && n.back() == '/') n.pop_back();
+  return n;
 }
 
 }  // namespace cdj

@@ -13,9 +13,9 @@
   "hoer_kanal": {"description": "§4.5: Kanäle mit Hörschein", "type": "string", "pattern": "^(deck/[1-4]|erz/[1-8]|pad/[12])$"},
   "deck_nr": {"type": "integer", "minimum": 1, "maximum": 4},
   "regler_pfad": {
-   "description": "§1.5 Regler-Pfade (ein Bus hat keinen ziel-Regler; rueckkopplung nur fx/1, fx/2)",
+   "description": "§1.5 Regler-Pfade (ein Bus hat keinen ziel-Regler; rueckkopplung nur fx/1, fx/2; spur/1..8 seit D1)",
    "type": "string",
-   "pattern": "^((deck/[1-4]|erz/[1-8]|pad/[12])/(fader|trim|eq/(tief|mitte|hoch)|kill/(tief|mitte|hoch)|filter|send/[1-4]|ziel|xseite|pfl|komp/(an|schwelle|ratio|attack|release|makeup|mix|sc))|bus/[1-4]/(fader|trim|eq/(tief|mitte|hoch)|kill/(tief|mitte|hoch)|filter|send/[1-4]|xseite|pfl)|deck/[1-4]/stem/(drums|bass|vocals|other)|duck/(tiefe|release)|color/(art|param)|keylock|xfader|master/(pegel|kleber|pfl)|cue/(mix|pegel|split)|fx/[12]/(notenwert|rueckkopplung)|fx/[1-4]/rueckweg)$"
+   "pattern": "^((deck/[1-4]|erz/[1-8]|pad/[12])/(fader|trim|eq/(tief|mitte|hoch)|kill/(tief|mitte|hoch)|filter|send/[1-4]|ziel|xseite|pfl|komp/(an|schwelle|ratio|attack|release|makeup|mix|sc))|bus/[1-4]/(fader|trim|eq/(tief|mitte|hoch)|kill/(tief|mitte|hoch)|filter|send/[1-4]|xseite|pfl)|deck/[1-4]/stem/(drums|bass|vocals|other)|duck/(tiefe|release)|color/(art|param)|keylock|xfader|master/(pegel|kleber|pfl)|cue/(mix|pegel|split)|fx/[12]/(notenwert|rueckkopplung)|fx/[1-4]/rueckweg|spur/[1-8]/(fader|pan|mute|solo))$"
   },
   "fassung_name": {"description": "§4.5, §13.1: <bpm·1000>_r<n>", "type": "string", "pattern": "^[1-9][0-9]*_r[1-9][0-9]*$"},
   "inhalt": {"description": "§4.5: Deck <material_id>/<bpm·1000>_r<n>, Pad .../s<nr>, Erzeuger muster/<m>", "type": "string",
@@ -49,8 +49,9 @@
     "hoerschein_anderes_tempo", "hoerschein_abgelaufen", "hoerschein_anderer_abschnitt", "ziel_ungehoert", "keine_stems",
     "hoerschein_nicht_sync", "hoerschein_pegel", "invariante_sub_doppelt", "invariante_master_leer", "deck_beruehrt",
     "deck_hoerbar", "deck_laeuft", "nicht_geladen", "material_fehlt", "pruefung", "budget_speicher", "budget_stretcher",
-    "karte_voll", "ki_gestoppt", "rechner_fehlt", "kein_stretcher", "autonomie", "form", "hand", "abbruch", "ki_stopp",
-    "unbekannte_adresse", "falsche_typen", "protokoll", "neustart", "grenze_sub"]
+    "karte_voll", "tempo_rampe", "ki_gestoppt", "rechner_fehlt", "kein_stretcher", "autonomie", "form", "hand", "abbruch", "ki_stopp",
+    "unbekannte_adresse", "falsche_typen", "protokoll", "neustart", "grenze_sub",
+    "datei_fehlt", "format", "audio_fehlt", "zu_gross", "spur_bereich", "reserviert"]
   },
   "zeit": {"description": "§9.1 zeit: Kern-Zeitpunkt", "type": "object", "required": ["sample", "beat", "takt", "phrase"],
    "properties": {"sample": {"$ref": "#/$defs/sample"}, "beat": {"$ref": "#/$defs/beat"},

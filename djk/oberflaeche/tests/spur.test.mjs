@@ -7,6 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { pruefeSpur, plane, oeffnetKanal, beatZuMono, wirtRuf } from '../spur.ts';
 import { oeffnet } from '../hand_bedienung.ts';
+import { pruefeWirtOrdner } from './hilfen/wirt_sock.mjs';
 
 const FAHRBAR = new Set(['a_filter1_cutoff', 'a_filter1_resonance']);
 const ok = (fahrten, name = 'probe') => pruefeSpur({ name, fahrten }, FAHRBAR);
@@ -90,7 +91,7 @@ test('beatZuMono: Gerade durch (beat, mono_ns) mit bpm', () => {
 });
 
 test('wirtRuf: eine JSON-Zeile hin und zurück; fehlender Socket ist eine Antwort, kein Wurf', async (t) => {
-  const ordner = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-spur-'));
+  const ordner = pruefeWirtOrdner(fs.mkdtempSync(path.join(os.tmpdir(), 'djk-spur-')));   // V2 Fix-Runde 2 H4: Länge gegen sun_path
   const sock = path.join(ordner, 'wirt-bass.sock');
   const gesehen = [];
   const srv = net.createServer((c) => {

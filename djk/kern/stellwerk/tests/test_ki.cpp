@@ -1,4 +1,6 @@
 // Scheibe 11, Task 9: KI-Stopp, KI-Frei und KI-Spur nach SCHNITTSTELLEN §4.7 und §7.3 Punkt 8.
+#include <cstring>
+
 #include "pruef.h"
 #include "szenario.h"
 
@@ -53,6 +55,85 @@ FALL(ki_spur_ueber_4_beats_stumm) {
   PRUEFE_NAH(l.wert_bei("deck/3/fader", 1620224 + 90000), -200, 0);
   PRUEFE_NAH(l.wert_bei("deck/4/fader", 1620224 + 90000), -200, 0);
   PRUEFE_NAH(l.wert_bei("deck/2/fader", 1700000), -1, 0);   // Negativ-Kontrolle
+}
+
+FALL(ki_spur_mit_spur_reglern_ueber_4_beats_stumm) {
+  // D1 K1 (Spec 2.3): spur/<n> in der KI-Spur (eigene Liste): ihr Fader fällt wie ein Kanal-Fader; eine Spur außerhalb bleibt
+  Lauf l;
+  l.sw->ki_spur(1, Quelle::leitstand, "erz/4,spur/2");
+  l.sw->setze_direkt(l.r("spur/2/fader"), -3.0f);
+  l.sw->setze_direkt(l.r("spur/3/fader"), -1.0f);
+  l.beobachte("spur/2/fader");
+  l.beobachte("spur/3/fader");
+  l.nachlese_ereignisse();
+  l.bis(1620224);
+  l.sw->ki_stopp(46, Quelle::andreas);
+  l.bis(1800000);
+  PRUEFE_NAH(l.wert_bei("spur/2/fader", 1620224), -3, 1e-6);
+  PRUEFE_NAH(l.wert_bei("spur/2/fader", 1620224 + 45000), -31.5, 1e-3);
+  PRUEFE_NAH(l.wert_bei("spur/2/fader", 1620224 + 90000), -200, 0);
+  PRUEFE_NAH(l.wert_bei("spur/3/fader", 1700000), -1, 0);   // Negativ-Kontrolle: nicht in der KI-Spur
+}
+
+FALL(ki_spur_leitstand_und_s2_getrennt) {
+  // D1 Spec 6.15: S2 trägt Cyphers Spuren mit spur/<n> ein, der Leitstand seine Kanäle; keiner löscht die Liste des anderen.
+  // Kurzform spur/<ziffern> (spur/135 = Spuren 1, 3, 5), weil acht Einträge spur/<n> nicht in 47 Bytes passen.
+  Lauf l;
+  l.sw->ki_spur(1, Quelle::leitstand, "deck/3");
+  l.sw->ki_spur(2, Quelle::andreas, "spur/1,spur/3");   // S2
+  l.sw->ki_spur(3, Quelle::leitstand, "deck/3,deck/4");  // Leitstand erneuert seine Kanäle, die Spuren bleiben
+  l.sw->ki_spur(4, Quelle::andreas, "spur/135");         // S2 erneuert seine Spuren, die Kanäle bleiben
+  char t[128];
+  l.sw->ki_spur_text(t, sizeof t);
+  PRUEFE(std::strcmp(t, "deck/3,deck/4,spur/135") == 0);
+  l.sw->setze_direkt(l.r("deck/3/fader"), -3.0f);
+  l.sw->setze_direkt(l.r("deck/4/fader"), -6.0f);
+  for (const char* p : {"spur/1/fader", "spur/2/fader", "spur/3/fader", "spur/5/fader"}) l.sw->setze_direkt(l.r(p), -2.0f);
+  for (const char* p : {"deck/3/fader", "deck/4/fader", "spur/1/fader", "spur/2/fader", "spur/3/fader", "spur/5/fader"})
+    l.beobachte(p);
+  l.nachlese_ereignisse();
+  l.bis(1620224);
+  l.sw->ki_stopp(46, Quelle::andreas);
+  l.bis(1800000);
+  for (const char* p : {"deck/3/fader", "deck/4/fader", "spur/1/fader", "spur/3/fader", "spur/5/fader"})
+    PRUEFE_NAH(l.wert_bei(p, 1790000), -200, 0);
+  PRUEFE_NAH(l.wert_bei("spur/2/fader", 1790000), -2, 0);   // Andreas' Spur bleibt laut
+}
+
+FALL(ki_spur_leeren_je_art) {
+  // spur/0 leert nur die Spuren, die leere Liste nur die Kanäle (Bestand des Leitstands), gemischt ersetzt beides
+  Lauf l;
+  char t[128];
+  l.sw->ki_spur(1, Quelle::leitstand, "deck/3,spur/2");
+  l.sw->ki_spur_text(t, sizeof t);
+  PRUEFE(std::strcmp(t, "deck/3,spur/2") == 0);
+  l.sw->ki_spur(2, Quelle::andreas, "spur/0");
+  l.sw->ki_spur_text(t, sizeof t);
+  PRUEFE(std::strcmp(t, "deck/3") == 0);
+  l.sw->ki_spur(3, Quelle::andreas, "spur/48");
+  l.sw->ki_spur(4, Quelle::leitstand, "");
+  l.sw->ki_spur_text(t, sizeof t);
+  PRUEFE(std::strcmp(t, "spur/48") == 0);
+}
+
+FALL(ki_spur_kurzform_falsch_abgelehnt) {
+  Lauf l;
+  l.sw->ki_spur(1, Quelle::andreas, "spur/13");
+  l.sw->ki_spur(2, Quelle::andreas, "spur/");
+  l.sw->ki_spur(3, Quelle::andreas, "spur/19");
+  l.sw->ki_spur(4, Quelle::andreas, "spur/1a");
+  l.nachlese_ereignisse();
+  for (int id = 2; id <= 4; id++) PRUEFE(l.grund(id, Status::abgelehnt) == Grund::unbekannter_regler);
+  char t[128];
+  l.sw->ki_spur_text(t, sizeof t);
+  PRUEFE(std::strcmp(t, "spur/13") == 0);   // eine abgelehnte Liste ändert nichts
+}
+
+FALL(ki_spur_mit_spur_9_abgelehnt) {
+  Lauf l;
+  l.sw->ki_spur(7, Quelle::leitstand, "spur/9");
+  l.nachlese_ereignisse();
+  PRUEFE(l.grund(7, Status::abgelehnt) == Grund::unbekannter_regler);
 }
 
 FALL(fader_in_andreas_hand_bleibt_bei_ihm) {

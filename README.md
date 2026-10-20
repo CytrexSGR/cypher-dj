@@ -46,6 +46,20 @@ Built in Germany by Andreas, a DJ, and Cypher, the lab's AI agent (Claude models
   straight into a loop box
 - Key and energy analysis for the whole library, with BPM filled in where it was missing
 
+**Produce** (new in October 2026, first cut)
+- A PRODUCTION view next to DJ and STUDIO: arrangement with a timeline, library browser, detail area for the selected
+  clip, transport bar
+- Audio tracks: drag a sample from the library onto a track; clips snap to the grid and can be moved, trimmed, split,
+  duplicated, faded and looped inside their length
+- Instrument tracks with the built-in RB-338 or with Surge XT (one hosted slot in this cut); notes are drawn in a
+  piano roll with velocity and 1/16 quantize
+- Tempo, loop range and metronome; per track volume, pan, mute, solo and a meter
+- Projects are folders with a JSON file; every change is one undo step, and the undo history survives a restart
+- WAV export as an offline render by the same core that plays live. Hosted instrument tracks are frozen first, so the
+  file matches what was heard (see [Measured](#measured))
+- The agent builds and edits the same projects through its own tools (create tracks, write clips and notes, mix,
+  start the transport, export)
+
 **Measure before it is loud**
 - A native headphone previewer, separate from the browser, which only draws
 - The core measures every deck behind its closed fader: band energy, loudness, and overlap in the
@@ -150,6 +164,8 @@ mostly against a silent test sink. Not benchmarks.
 | Previewer, jumps | 8 of 8 targets sample-accurate | 2026-09-26 |
 | Waveform of a whole track | 608 ms first time, 32 ms from cache (median of 10 tracks) | 2026-09-26 |
 | Key detection | 76.7 % exact and 82.5 % within a neighbouring key, compared with Mixed In Key on 120 held-out tracks | 2026-09-26 |
+| Production export against live playback (3 tracks: audio loop, RB-338, frozen Surge XT, 32 beats) | residual peak -200 dBFS, i.e. sample-identical; shifting one track by a single sample turns the test red | 2026-10-17 |
+| Audio callback p99.9 with an arrangement playing, quantum 256 | 642 to 789 µs over three runs; 755 to 904 µs with exports rendering in parallel | 2026-10-17 |
 
 ## Known limits of the beta
 
@@ -169,6 +185,9 @@ mostly against a silent test sink. Not benchmarks.
   experimental cue-suggestion pipeline is included as a separate research tool.
 - Key detection is weak on major keys (the test library is almost all minor).
 - Learning from the human's judgement is planned, not built.
+- Production is a first cut: at most 8 tracks, one hosted instrument slot, no recording, automation, sends or plugin
+  inserts yet. Export is refused while the transport is running. The live track meters show sample peaks; loudness is
+  measured in the export only.
 - Resampling into the pattern channels and the instrument channels do not follow tempo changes yet.
 - Many moving parts: Rubber Band, JACK/PipeWire, ffmpeg, Node.js 22.18+, Python, and optionally
   Strudel, Carla and Surge XT. See [INSTALL.md](INSTALL.md).

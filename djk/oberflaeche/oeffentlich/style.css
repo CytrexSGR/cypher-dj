@@ -402,6 +402,7 @@ body.bereich-effekte #bestand .reiter, body.bereich-effekte #bestand #suche, bod
 .fxstreifen .gr { position: relative; height: 8px; background: rgba(255,255,255,0.06); border-radius: 3px; overflow: hidden; }
 .fxstreifen .gr i { position: absolute; right: 0; top: 0; bottom: 0; width: 0; background: var(--warn); transition: width 80ms linear; }
 .effekte { display: flex; gap: 12px; }
+.effekte[hidden] { display: none; }   /* LIBRARY und EFFECTS schalten um: ohne die Zeile schlug display:flex das hidden (17.10., Andreas) */
 .effekte .fxstreifen-reihe { flex: 1; align-content: start; }
 .fxstreifen { cursor: pointer; }
 .fxstreifen.gewaehlt { border-color: var(--warn); }

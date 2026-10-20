@@ -11,7 +11,7 @@ int main() {
   PRUEF(offsetof(cdj_ring_kopf, rate) == 8 && offsetof(cdj_ring_kopf, kanaele) == 12);
   PRUEF(offsetof(cdj_ring_kopf, cap) == 16 && offsetof(cdj_ring_kopf, reserve) == 20);
   PRUEF(offsetof(cdj_ring_kopf, w) == 32 && offsetof(cdj_ring_kopf, takt_frames) == 40);
-  PRUEF(offsetof(cdj_ring_kopf, takt_anfang_w) == 48 && offsetof(cdj_ring_kopf, reserve2) == 56);
+  PRUEF(offsetof(cdj_ring_kopf, takt_anfang_w) == 48 && offsetof(cdj_ring_kopf, sample_minus_w) == 56);
   PRUEF(CDJ_RING_BYTES == 64u + 65536u * 4u * 4u);
 
   PRUEF(cdj_instanz_k("") == 0);

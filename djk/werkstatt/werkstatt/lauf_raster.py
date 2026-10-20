@@ -37,15 +37,25 @@ def eins_erwartet(karte, eins_zeiten):
     return int(np.argmax(np.bincount(np.rint(karte.beat_bei(z)).astype(int) % 4, minlength=4)))
 
 
-def miss(name, pfad, wahrheit=None, eins_zeiten=None, cd=None, geraet="cpu", melde=None):
-    """melde(teil): Zwischenschritte fuer die Fortschrittsanzeige (decoding, tracking, tempo, downbeats)."""
+def essentia_karte(x44):
+    """Zweitwerkzeug samt seiner Karte: (ticks, bpm_global, konfidenz, karte). Haengt nicht von beat_this ab, laeuft in
+    der Kette in einem Kindprozess neben beat_this (parallel.Kind); hier die einzige Rechenvorschrift fuer beide Wege."""
+    ticks, bpm_global, konfidenz = essentia_schlaege(x44)
+    return ticks, bpm_global, konfidenz, karte_aus_schlaegen(ticks)
+
+
+def miss(name, pfad, wahrheit=None, eins_zeiten=None, cd=None, geraet="cpu", melde=None, vorab=None):
+    """melde(teil): Zwischenschritte fuer die Fortschrittsanzeige (decoding, tracking, tempo, downbeats).
+    vorab (nur die Kette): {"x22", "x44"} schon dekodiert, {"essentia": Kind} laeuft schon (essentia_karte(x44)).
+    Ohne vorab rechnet alles der Reihe nach wie bisher."""
     melde = melde or (lambda teil: None)
+    vorab = vorab or {}
     last_vor = os.getloadavg()[0]
     zeit = {}
     t0 = time.perf_counter()
     melde("decoding")
-    x22 = lade_mono(pfad, SR_BEAT_THIS)
-    x44 = lade_mono(pfad, SR_ESSENTIA)
+    x22 = vorab["x22"] if "x22" in vorab else lade_mono(pfad, SR_BEAT_THIS)
+    x44 = vorab["x44"] if "x44" in vorab else lade_mono(pfad, SR_ESSENTIA)
     zeit["dekodieren"] = time.perf_counter() - t0
     t = time.perf_counter()
     melde("tracking")
@@ -53,7 +63,8 @@ def miss(name, pfad, wahrheit=None, eins_zeiten=None, cd=None, geraet="cpu", mel
     zeit["beat_this"] = time.perf_counter() - t
     t = time.perf_counter()
     melde("tempo")
-    ticks, ess_bpm_global, ess_konfidenz = essentia_schlaege(x44)
+    ticks, ess_bpm_global, ess_konfidenz, ke1 = (vorab["essentia"].ergebnis() if "essentia" in vorab
+                                                  else essentia_karte(x44))
     schlaege_bt = np.asarray(schlaege, dtype=float)
     schlaege, verfeinerung = verfeinere_schlaege(x44, SR_ESSENTIA, schlaege_bt)   # 2026-10-09: auf die Anschlaege
     zeit["essentia"] = time.perf_counter() - t
@@ -62,7 +73,6 @@ def miss(name, pfad, wahrheit=None, eins_zeiten=None, cd=None, geraet="cpu", mel
     bpm = k1.bpm_gesamt()
     v, faktor = waehle_vielfaches(bpm, BASIS)
     karte = k1.gezaehlt(v)
-    ke1 = karte_aus_schlaegen(ticks)
     oktave = min((1.0, 2.0, 0.5), key=lambda o: abs(ke1.bpm_gesamt() * o / bpm - 1.0))
     ke = ke1.gezaehlt(v * oktave)
     vgl = vergleiche(karte, ke)

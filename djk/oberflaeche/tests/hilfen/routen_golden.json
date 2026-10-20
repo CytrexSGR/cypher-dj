@@ -1,0 +1,1987 @@
+{
+ "n": 170,
+ "ergebnis": [
+  {
+   "m": "GET",
+   "p": "/strom?x=1",
+   "code": 200,
+   "art": "text/event-stream",
+   "form": {
+    "a": "string",
+    "f": {
+     "decks": {},
+     "fx": [
+      "null"
+     ],
+     "fxRouting": "string",
+     "fxZuweisung": [
+      "{..}"
+     ],
+     "geladen": {},
+     "kern": "string",
+     "loops": {},
+     "pruefmodus": "string",
+     "regler": {}
+    }
+   }
+  },
+  {
+   "m": "GET",
+   "p": "/bestand",
+   "code": 200,
+   "art": "application/json; charset=utf-8",
+   "form": "[]"
+  },
+  {
+   "m": "GET",
+   "p": "/mediathek/anschluss",
+   "code": 400,
+   "art": "application/json; charset=utf-8",
+   "fehler": "material_id_oder_deck",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "GET",
+   "p": "/mediathek",
+   "code": 503,
+   "art": "application/json; charset=utf-8",
+   "fehler": "mediathek_fehlt",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "GET",
+   "p": "/mediathek/vorbereiten",
+   "code": 404,
+   "art": "application/json; charset=utf-8",
+   "fehler": "unbekannt",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "GET",
+   "p": "/stoebern",
+   "code": 503,
+   "art": "application/json; charset=utf-8",
+   "fehler": "katalog_fehlt",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "GET",
+   "p": "/stoebern?typ=strudel",
+   "code": 200,
+   "art": "application/json; charset=utf-8",
+   "form": {
+    "gebaut_am": "string",
+    "gesamt": "number",
+    "limit": "number",
+    "richtung": "string",
+    "seite": "number",
+    "sort": "string",
+    "treffer": "[]",
+    "typ": "string"
+   }
+  },
+  {
+   "m": "GET",
+   "p": "/stoebern/detail",
+   "code": 400,
+   "art": "application/json; charset=utf-8",
+   "fehler": "sha_ungueltig",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "GET",
+   "p": "/stoebern/baum",
+   "code": 503,
+   "art": "application/json; charset=utf-8",
+   "fehler": "katalog_fehlt",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "GET",
+   "p": "/stoebern/baum?typ=strudel",
+   "code": 200,
+   "art": "application/json; charset=utf-8",
+   "form": {
+    "facetten": {
+     "quelle": "[]",
+     "rolle": "[]"
+    },
+    "gebaut_am": "string",
+    "ordner": "[]"
+   }
+  },
+  {
+   "m": "GET",
+   "p": "/vorhoeren",
+   "code": 200,
+   "art": "application/json; charset=utf-8",
+   "form": {
+    "kopfhoerer": "boolean",
+    "spielt": "boolean"
+   }
+  },
+  {
+   "m": "GET",
+   "p": "/klaenge/karte",
+   "code": 200,
+   "art": "application/json; charset=utf-8",
+   "form": {
+    "erzeugt_am": "string",
+    "je_typ": {
+     "erzeugt": {
+      "gesamt": "number",
+      "nur_live": "number",
+      "sofort": "number",
+      "werkstatt": "number"
+     },
+     "impuls": {
+      "gesamt": "number",
+      "nur_live": "number",
+      "sofort": "number",
+      "werkstatt": "number"
+     },
+     "loop": {
+      "gesamt": "number",
+      "nur_live": "number",
+      "sofort": "number",
+      "werkstatt": "number"
+     },
+     "mitschnitt": {
+      "gesamt": "number",
+      "nur_live": "number",
+      "sofort": "number",
+      "werkstatt": "number"
+     },
+     "oneshot": {
+      "gesamt": "number",
+      "nur_live": "number",
+      "sofort": "number",
+      "werkstatt": "number"
+     },
+     "stimme": {
+      "gesamt": "number",
+      "nur_live": "number",
+      "sofort": "number",
+      "werkstatt": "number"
+     }
+    },
+    "loopbib": "number",
+    "mediathek": "string",
+    "mediathek_stand": "null",
+    "packs": "[]"
+   }
+  },
+  {
+   "m": "GET",
+   "p": "/klaenge",
+   "code": 200,
+   "art": "application/json; charset=utf-8",
+   "form": {
+    "gesamt": "number",
+    "gesamt_genau": "boolean",
+    "mediathek": "string",
+    "treffer": "[]"
+   }
+  },
+  {
+   "m": "GET",
+   "p": "/mediathek/listen",
+   "code": 503,
+   "art": "application/json; charset=utf-8",
+   "fehler": "mediathek_fehlt",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "GET",
+   "p": "/sammlungen",
+   "code": 200,
+   "art": "application/json; charset=utf-8",
+   "form": "[]"
+  },
+  {
+   "m": "GET",
+   "p": "/sammlungen/x",
+   "code": 404,
+   "art": "application/json; charset=utf-8",
+   "fehler": "unbekannt",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "GET",
+   "p": "/sammlungen/x/posten",
+   "code": 404,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nicht_gefunden",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "GET",
+   "p": "/konfig",
+   "code": 200,
+   "art": "application/json; charset=utf-8",
+   "form": {
+    "kern_pruefmodus": "string",
+    "leitstand_ws": "string",
+    "ziel_kurve": "string"
+   }
+  },
+  {
+   "m": "GET",
+   "p": "/lage",
+   "code": 200,
+   "art": "application/json; charset=utf-8",
+   "form": {
+    "ausgang": {
+     "alter_s": "null",
+     "faelle": "number",
+     "karte": "null",
+     "letzter": "null",
+     "zustand": "string"
+    },
+    "boxen": {},
+    "decks": [
+     {
+      "deck": "number",
+      "status": "number"
+     }
+    ],
+    "fx": [
+     "null"
+    ],
+    "fx_routing": "string",
+    "ki": {
+     "gestoppt": "boolean"
+    },
+    "quittungen": "[]",
+    "regler": {
+     "keylock": "null"
+    },
+    "studio": {
+     "klang": {
+      "bass": "null",
+      "melodie": "null"
+     },
+     "stroeme": [
+      "{..}"
+     ]
+    },
+    "uhr": {
+     "beat": "number",
+     "bpm": "null",
+     "schlag": "number",
+     "takt": "number"
+    }
+   }
+  },
+  {
+   "m": "GET",
+   "p": "/ausgang",
+   "code": 200,
+   "art": "application/json; charset=utf-8",
+   "form": {
+    "alter_s": "null",
+    "faelle": "number",
+    "karte": "null",
+    "letzter": "null",
+    "zustand": "string"
+   }
+  },
+  {
+   "m": "GET",
+   "p": "/pegel",
+   "code": 200,
+   "art": "application/json; charset=utf-8",
+   "form": {
+    "kanaele": {},
+    "sek": "number"
+   }
+  },
+  {
+   "m": "GET",
+   "p": "/spur",
+   "code": 200,
+   "art": "application/json; charset=utf-8",
+   "form": "[]"
+  },
+  {
+   "m": "GET",
+   "p": "/loops",
+   "code": 200,
+   "art": "application/json; charset=utf-8",
+   "form": "[]"
+  },
+  {
+   "m": "GET",
+   "p": "/loop/automation",
+   "code": 404,
+   "art": "application/json; charset=utf-8",
+   "fehler": "kein_loop",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "GET",
+   "p": "/loop/raster",
+   "code": 409,
+   "art": "application/json; charset=utf-8",
+   "fehler": "kein_loop",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "GET",
+   "p": "/deck/hotcues",
+   "code": 200,
+   "art": "application/json; charset=utf-8",
+   "form": {}
+  },
+  {
+   "m": "GET",
+   "p": "/deck/loop",
+   "code": 200,
+   "art": "application/json; charset=utf-8",
+   "form": {}
+  },
+  {
+   "m": "GET",
+   "p": "/deck/raster",
+   "code": 409,
+   "art": "application/json; charset=utf-8",
+   "fehler": "kein_kernstand",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "GET",
+   "p": "/hoeren",
+   "code": 400,
+   "art": "application/json; charset=utf-8",
+   "fehler": "deck",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "GET",
+   "p": "/fx",
+   "code": 200,
+   "art": "application/json; charset=utf-8",
+   "form": [
+    "null"
+   ]
+  },
+  {
+   "m": "GET",
+   "p": "/fx/zuweisung",
+   "code": 200,
+   "art": "application/json; charset=utf-8",
+   "form": [
+    {}
+   ]
+  },
+  {
+   "m": "GET",
+   "p": "/fx/routing",
+   "code": 200,
+   "art": "application/json; charset=utf-8",
+   "form": {
+    "routing": "string"
+   }
+  },
+  {
+   "m": "GET",
+   "p": "/strudel",
+   "code": 200,
+   "art": "application/json; charset=utf-8",
+   "form": {
+    "autonom": "boolean",
+    "status": "null",
+    "text": "string",
+    "von": "null",
+    "zeit": "null"
+   }
+  },
+  {
+   "m": "GET",
+   "p": "/klang",
+   "code": 200,
+   "art": "application/json; charset=utf-8",
+   "form": {
+    "bass": "null",
+    "melodie": "null"
+   }
+  },
+  {
+   "m": "GET",
+   "p": "/welle",
+   "code": 400,
+   "art": "application/json; charset=utf-8",
+   "fehler": "quelle_fehlt",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "GET",
+   "p": "/fassung",
+   "code": 400,
+   "art": "application/json; charset=utf-8",
+   "fehler": "unbekannte_fassung",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "GET",
+   "p": "/",
+   "code": 200,
+   "art": "text/html; charset=utf-8"
+  },
+  {
+   "m": "GET",
+   "p": "/nicht-da",
+   "code": 404,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nicht_gefunden",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "GET",
+   "p": "/app.js",
+   "code": 200,
+   "art": "text/javascript; charset=utf-8"
+  },
+  {
+   "m": "POST",
+   "p": "/mediathek/vorbereiten",
+   "kopf": "json",
+   "code": 400,
+   "art": "application/json; charset=utf-8",
+   "fehler": "material_id_ungueltig",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/mediathek/vorbereiten",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/mediathek/vorbereiten",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/mediathek",
+   "kopf": "json",
+   "code": 405,
+   "art": "application/json; charset=utf-8",
+   "fehler": "methode",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/mediathek",
+   "kopf": "text",
+   "code": 405,
+   "art": "application/json; charset=utf-8",
+   "fehler": "methode",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/mediathek",
+   "kopf": "fremd",
+   "code": 405,
+   "art": "application/json; charset=utf-8",
+   "fehler": "methode",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/muster",
+   "kopf": "json",
+   "code": 400,
+   "art": "application/json; charset=utf-8",
+   "fehler": "name_ungueltig",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/muster",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/muster",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/vorhoeren",
+   "kopf": "json",
+   "code": 400,
+   "art": "application/json; charset=utf-8",
+   "fehler": "mid_ungueltig",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/vorhoeren",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/vorhoeren",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/sammlungen",
+   "kopf": "json",
+   "code": 400,
+   "art": "application/json; charset=utf-8",
+   "fehler": "name_ungueltig",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/sammlungen",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/sammlungen",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/sammlungen/import",
+   "kopf": "json",
+   "code": 503,
+   "art": "application/json; charset=utf-8",
+   "fehler": "mediathek_fehlt",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/sammlungen/import",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/sammlungen/import",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/sammlungen/x/posten",
+   "kopf": "json",
+   "code": 400,
+   "art": "application/json; charset=utf-8",
+   "fehler": "art_unbekannt",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/sammlungen/x/posten",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/sammlungen/x/posten",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/sammlungen/x/posten/entfernen",
+   "kopf": "json",
+   "code": 404,
+   "art": "application/json; charset=utf-8",
+   "fehler": "unbekannt",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/sammlungen/x/posten/entfernen",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/sammlungen/x/posten/entfernen",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/sammlungen/x/posten/verschieben",
+   "kopf": "json",
+   "code": 404,
+   "art": "application/json; charset=utf-8",
+   "fehler": "unbekannt",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/sammlungen/x/posten/verschieben",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/sammlungen/x/posten/verschieben",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/sammlungen/x/umbenennen",
+   "kopf": "json",
+   "code": 400,
+   "art": "application/json; charset=utf-8",
+   "fehler": "name_ungueltig",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/sammlungen/x/umbenennen",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/sammlungen/x/umbenennen",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/sammlungen/x/vorbereiten",
+   "kopf": "json",
+   "code": 404,
+   "art": "application/json; charset=utf-8",
+   "fehler": "unbekannt",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/sammlungen/x/vorbereiten",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/sammlungen/x/vorbereiten",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/sammlungen/x/loeschen",
+   "kopf": "json",
+   "code": 404,
+   "art": "application/json; charset=utf-8",
+   "fehler": "unbekannt",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/sammlungen/x/loeschen",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/sammlungen/x/loeschen",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/sammlungen/x/unsinn",
+   "kopf": "json",
+   "code": 404,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nicht_gefunden",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/sammlungen/x/unsinn",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/sammlungen/x/unsinn",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/griff",
+   "kopf": "json",
+   "code": 400,
+   "art": "application/json; charset=utf-8",
+   "fehler": "unbekanntes_ziel",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/griff",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/griff",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/deck/start",
+   "kopf": "json",
+   "code": 400,
+   "art": "application/json; charset=utf-8",
+   "fehler": "unbekanntes_deck",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/deck/start",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/deck/start",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/deck/stopp",
+   "kopf": "json",
+   "code": 400,
+   "art": "application/json; charset=utf-8",
+   "fehler": "unbekanntes_deck",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/deck/stopp",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/deck/stopp",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/abbruch",
+   "kopf": "json",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_cypher",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/abbruch",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/abbruch",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/spur",
+   "kopf": "json",
+   "code": 400,
+   "art": "application/json; charset=utf-8",
+   "fehler": "spur",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/spur",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/spur",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/spur/stopp",
+   "kopf": "json",
+   "code": 400,
+   "art": "application/json; charset=utf-8",
+   "fehler": "name",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/spur/stopp",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/spur/stopp",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/regler",
+   "kopf": "json",
+   "code": 400,
+   "art": "application/json; charset=utf-8",
+   "fehler": "pfad",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/regler",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/regler",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/taste",
+   "kopf": "json",
+   "code": 400,
+   "art": "application/json; charset=utf-8",
+   "fehler": "unbekannte_taste",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/taste",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/taste",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/laden",
+   "kopf": "json",
+   "code": 400,
+   "art": "application/json; charset=utf-8",
+   "fehler": "unbekanntes_deck",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/laden",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/laden",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/tempo",
+   "kopf": "json",
+   "code": 400,
+   "art": "application/json; charset=utf-8",
+   "fehler": "bereich",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/tempo",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/tempo",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/loops/aus-katalog",
+   "kopf": "json",
+   "code": 400,
+   "art": "application/json; charset=utf-8",
+   "fehler": "sha_ungueltig",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/loops/aus-katalog",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/loops/aus-katalog",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/loop",
+   "kopf": "json",
+   "code": 400,
+   "art": "application/json; charset=utf-8",
+   "fehler": "unbekannte_aktion",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/loop",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/loop",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/loop/automation",
+   "kopf": "json",
+   "code": 404,
+   "art": "application/json; charset=utf-8",
+   "fehler": "kein_loop",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/loop/automation",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/loop/automation",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/fx/routing",
+   "kopf": "json",
+   "code": 400,
+   "art": "application/json; charset=utf-8",
+   "fehler": "routing",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/fx/routing",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/fx/routing",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/fx",
+   "kopf": "json",
+   "code": 400,
+   "art": "application/json; charset=utf-8",
+   "fehler": "einheit",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/fx",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/fx",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/fx/zuweisung",
+   "kopf": "json",
+   "code": 400,
+   "art": "application/json; charset=utf-8",
+   "fehler": "einheit",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/fx/zuweisung",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/fx/zuweisung",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/deck/sprung",
+   "kopf": "json",
+   "code": 400,
+   "art": "application/json; charset=utf-8",
+   "fehler": "unbekanntes_deck",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/deck/sprung",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/deck/sprung",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/deck/scrub",
+   "kopf": "json",
+   "code": 400,
+   "art": "application/json; charset=utf-8",
+   "fehler": "unbekanntes_deck",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/deck/scrub",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/deck/scrub",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/deck/hotcue",
+   "kopf": "json",
+   "code": 400,
+   "art": "application/json; charset=utf-8",
+   "fehler": "unbekanntes_deck",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/deck/hotcue",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/deck/hotcue",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/deck/loop",
+   "kopf": "json",
+   "code": 400,
+   "art": "application/json; charset=utf-8",
+   "fehler": "unbekanntes_deck",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/deck/loop",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/deck/loop",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/deck/loop/sichern",
+   "kopf": "json",
+   "code": 400,
+   "art": "application/json; charset=utf-8",
+   "fehler": "unbekanntes_deck",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/deck/loop/sichern",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/deck/loop/sichern",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/deck/raster",
+   "kopf": "json",
+   "code": 400,
+   "art": "application/json; charset=utf-8",
+   "fehler": "unbekanntes_deck",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/deck/raster",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/deck/raster",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/deck/raster/fix",
+   "kopf": "json",
+   "code": 400,
+   "art": "application/json; charset=utf-8",
+   "fehler": "unbekanntes_deck",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/deck/raster/fix",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/deck/raster/fix",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/strudel",
+   "kopf": "json",
+   "code": 400,
+   "art": "application/json; charset=utf-8",
+   "fehler": "kein_text",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/strudel",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/strudel",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/strudel/autonom",
+   "kopf": "json",
+   "code": 400,
+   "art": "application/json; charset=utf-8",
+   "fehler": "an_muss_bool",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/strudel/autonom",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/strudel/autonom",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/klang",
+   "kopf": "json",
+   "code": 400,
+   "art": "application/json; charset=utf-8",
+   "fehler": "aktion",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/klang",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/klang",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/nicht-da",
+   "kopf": "json",
+   "code": 405,
+   "art": "application/json; charset=utf-8",
+   "fehler": "methode",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/nicht-da",
+   "kopf": "text",
+   "code": 405,
+   "art": "application/json; charset=utf-8",
+   "fehler": "methode",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/nicht-da",
+   "kopf": "fremd",
+   "code": 405,
+   "art": "application/json; charset=utf-8",
+   "fehler": "methode",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/strom",
+   "kopf": "json",
+   "code": 405,
+   "art": "application/json; charset=utf-8",
+   "fehler": "methode",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/strom",
+   "kopf": "text",
+   "code": 405,
+   "art": "application/json; charset=utf-8",
+   "fehler": "methode",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/strom",
+   "kopf": "fremd",
+   "code": 405,
+   "art": "application/json; charset=utf-8",
+   "fehler": "methode",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/lage",
+   "kopf": "json",
+   "code": 405,
+   "art": "application/json; charset=utf-8",
+   "fehler": "methode",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/lage",
+   "kopf": "text",
+   "code": 405,
+   "art": "application/json; charset=utf-8",
+   "fehler": "methode",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/lage",
+   "kopf": "fremd",
+   "code": 405,
+   "art": "application/json; charset=utf-8",
+   "fehler": "methode",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "PUT",
+   "p": "/lage",
+   "code": 405,
+   "art": "application/json; charset=utf-8",
+   "fehler": "methode",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "PUT",
+   "p": "/mediathek/vorbereiten",
+   "code": 405,
+   "art": "application/json; charset=utf-8",
+   "fehler": "methode",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "DELETE",
+   "p": "/sammlungen/x",
+   "code": 404,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nicht_gefunden",
+   "form": {
+    "fehler": "string"
+   }
+  },
+  {
+   "m": "HEAD",
+   "p": "/lage",
+   "code": 405,
+   "art": "application/json; charset=utf-8",
+   "leer": true
+  },
+  {
+   "m": "HEAD",
+   "p": "/",
+   "code": 405,
+   "art": "application/json; charset=utf-8",
+   "leer": true
+  }
+ ]
+}

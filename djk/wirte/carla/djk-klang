@@ -5,10 +5,13 @@
   djk-klang [--instanz f] bass fahre NAME ZIEL SEKUNDEN [VON]   stufenlos, ohne Abriss
   djk-klang [--instanz f] bass lade NAME|PFAD        eigener Klang, Werkspatch "Kategorie/Name" oder Pfad zu .fxp
   djk-klang [--instanz f] bass speichere NAME        laufenden Klang als $CYPHERDJ_KLAENGE/NAME.fxp (alter → .alt/)
-  djk-klang [--instanz f] bass hoere [NOTE [DAUER]]  Note direkt am Wirt, hörbar auf erz/2 (bass) bzw. erz/3 (melodie)
+  djk-klang [--instanz f] bass hoere [NOTE [DAUER]]  Note direkt am Wirt, hörbar auf erz/2 (bass) bzw. erz/3 (melodie),
+                                                     arr1 auf der Spur, die Wirt-Slot 1 spielt (nur mit geladener Wiedergabe)
   djk-klang [--instanz f] bass param NAME WERT   RB-338: Regler normiert 0..1, z. B. Cutoff 0.6
   djk-klang [--instanz f] bass params            RB-338: alle Regler mit Wert
   djk-klang liste [REGEX]                            eigene Klänge und Werkspatches
+Gruppen: bass, melodie (DJ-Instrumente) und arr1 (D1: Produktions-Slot 1, Surge aus djk-instrumente --arr1), alle mit
+denselben Befehlen; der Socket ist /dev/shm/cypherdj<-i>/wirt-<gruppe>.sock.
 Der Wirt schreibt jeden geladenen Klang nach ~/.config/cypherdj<-i>/klang-<gruppe>.fxp und startet damit wieder.
 Eigene Klänge: $CYPHERDJ_KLAENGE, sonst ~/.config/cypherdj/klaenge. Ausgaben englisch (Oberflächen-Regel)."""
 import argparse
@@ -26,7 +29,7 @@ from wirtsteuerung import sende  # noqa: E402
 
 EIGENE = Path(os.environ.get("CYPHERDJ_KLAENGE", Path.home() / ".config/cypherdj/klaenge"))
 WERK = Path.home() / ".local/share/cypherdj/surge-daten/usr/share/surge-xt/patches_factory"
-GRUPPEN = {"bass": 36, "melodie": 60}  # Gruppe → Vorgabe-Note für hoere
+GRUPPEN = {"bass": 36, "melodie": 60, "arr1": 60}  # Gruppe → Vorgabe-Note für hoere (arr1: D1, Produktions-Slot 1)
 BEREICHE = json.loads((Path(__file__).resolve().parent / "surge_bereiche.json").read_text())["parameter"]
 
 
@@ -106,7 +109,7 @@ def rufe(sock: str, befehl: dict) -> dict:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="djk-klang", description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     ap.add_argument("--instanz", default=os.environ.get("CYPHERDJ_INSTANZ", ""))
-    ap.add_argument("ziel", help="bass | melodie | liste")
+    ap.add_argument("ziel", help="bass | melodie | arr1 | liste")
     ap.add_argument("rest", nargs="*")
     a = ap.parse_args(argv)
     if a.instanz and not re.fullmatch(r"[a-i]", a.instanz):
@@ -116,7 +119,7 @@ def main(argv=None) -> int:
             print(f"{art}\t{n}")
         return 0
     if a.ziel not in GRUPPEN or not a.rest:
-        ap.error("GROUP (bass|melodie) COMMAND …")
+        ap.error("GROUP (bass|melodie|arr1) COMMAND …")
     sfx = f"-{a.instanz}" if a.instanz else ""
     sock = f"/dev/shm/cypherdj{sfx}/wirt-{a.ziel}.sock"
     was, args = a.rest[0], a.rest[1:]

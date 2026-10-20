@@ -126,6 +126,20 @@ Material* Lader::lade(const LadeAuftrag& a, LadeGrund& grund, std::string& meldu
     return fehler(LadeGrund::budget_speicher, "Budget: " + std::to_string((gesperrt() + bedarf) >> 20) + " MiB > " +
                                                   std::to_string(budget_ >> 20) + " MiB");
   }
+#ifndef CYPHERDJ_MUTATION_LADER_KONTO_SPAET
+  // K1-Fix 6 (Spec D1 2.1): das gemeinsame Konto vor mmap, MAP_POPULATE und mlock buchen, sonst sperren Deck und
+  // Arrangement zusammen mehr als das Konto (gemessen 22 MiB bei 16 MiB); jeder Fehlerpfad danach bucht zurück
+  if (konto_ && !konto_->belaste(bedarf)) {
+    schliesse();
+    return fehler(LadeGrund::budget_speicher, "Konto: " + std::to_string((konto_->gesperrt() + bedarf) >> 20) +
+                                                  " MiB > " + std::to_string(konto_->budget() >> 20) + " MiB");
+  }
+  auto rueckbuchen = [&] {
+    if (konto_) konto_->entlaste(bedarf);
+  };
+#else
+  auto rueckbuchen = [] {};
+#endif
   auto* mat = new Material{};
   std::snprintf(mat->material_id, sizeof mat->material_id, "%s", a.material_id);
   mat->basis_bpm = fi.basis_bpm;
@@ -144,6 +158,7 @@ Material* Lader::lade(const LadeAuftrag& a, LadeGrund& grund, std::string& meldu
       ausblenden(mat, i);
       delete mat;
       schliesse();
+      rueckbuchen();
       return fehler(e == ENOMEM ? LadeGrund::budget_speicher : LadeGrund::pruefung, datei[i] + ": mmap " + std::strerror(e));
     }
     mat->abbild[i] = p;
@@ -154,6 +169,7 @@ Material* Lader::lade(const LadeAuftrag& a, LadeGrund& grund, std::string& meldu
       ausblenden(mat, i + 1);
       delete mat;
       schliesse();
+      rueckbuchen();
       return fehler(LadeGrund::budget_speicher, datei[i] + ": mlock " + std::strerror(e));
     }
   }
@@ -162,12 +178,14 @@ Material* Lader::lade(const LadeAuftrag& a, LadeGrund& grund, std::string& meldu
     if (opt.pruefsumme && sha256_hex(mat->abbild[i], bytes) != sha[i]) {
       ausblenden(mat, n);
       delete mat;
+      rueckbuchen();
       return fehler(LadeGrund::pruefung, datei[i] + ": sha256 stimmt nicht");
     }
     int64_t bei = 0;
     if (!stichprobe_endlich(mat->quelle[i], fi.frames, bei)) {
       ausblenden(mat, n);
       delete mat;
+      rueckbuchen();
       return fehler(LadeGrund::pruefung, datei[i] + ": NaN oder Inf in der Stichprobe bei Frame " + std::to_string(bei));
     }
     // Fehlerfall der Abnahme (M8, Prüfschalter): die Stichprobe liegt über die ganze Datei verteilt; bei einer Datei
@@ -176,6 +194,14 @@ Material* Lader::lade(const LadeAuftrag& a, LadeGrund& grund, std::string& meldu
     // 1 Seitenfehler beim Lesen statt rund 150). Die Einträge wieder weg: der Callback berührt die Seiten als Erster.
     if (!opt.sperren) madvise(mat->abbild[i], bytes, MADV_DONTNEED);
   }
+#ifdef CYPHERDJ_MUTATION_LADER_KONTO_SPAET
+  if (konto_ && !konto_->belaste(bedarf)) {   // Fehlerfall: Buchung erst nach dem Sperren
+    ausblenden(mat, n);
+    delete mat;
+    return fehler(LadeGrund::budget_speicher, "Konto: " + std::to_string((konto_->gesperrt() + bedarf) >> 20) +
+                                                  " MiB > " + std::to_string(konto_->budget() >> 20) + " MiB");
+  }
+#endif
   mat->gesperrt = bedarf;
   gesperrt_.fetch_add(bedarf, std::memory_order_relaxed);
   return mat;
@@ -185,6 +211,7 @@ void Lader::gib_frei(Material* m) {
   if (!m) return;
   ausblenden(m, m->n_quellen);
   gesperrt_.fetch_sub(m->gesperrt, std::memory_order_relaxed);
+  if (konto_) konto_->entlaste(m->gesperrt);
   delete m;
 }
 

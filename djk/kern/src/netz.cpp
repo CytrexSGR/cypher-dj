@@ -485,6 +485,15 @@ void Netz::paket(const char* p, size_t n, int64_t jetzt_ns) {
     int dn = 0;
     bool play = false;
     hand::Taste tk;
+    if (arr_taste_pfad(b.pfad)) {  // D1 K1: arr/start_stopp (§7.2), Bereichsprüfung wie bei den Tasten
+      if (!(b.wert >= v::bereich::test_hand::midi_roh_min && b.wert <= v::bereich::test_hand::midi_roh_max) ||
+          b.sample < 0) {
+        protokollfehler(adr, "ausserhalb_bereich", 0);
+        return;
+      }
+      einreihen(b);
+      return;
+    }
     if (test_taste_pfad(b.pfad, &tk)) {  // Zusatz 35: taste/<name>, Bereichsprüfung wie bei den Deck-Tasten
       if (!(b.wert >= v::bereich::test_hand::midi_roh_min && b.wert <= v::bereich::test_hand::midi_roh_max) ||
           b.sample < 0) {
@@ -513,7 +522,7 @@ void Netz::paket(const char* p, size_t n, int64_t jetzt_ns) {
       return;
     }
     einreihen(b);
-  } else if (!erz_paket(a, m) && !loop_paket(a, m) && !deck_paket(a, m)) {  // erz, loop zuerst: deck_paket liest werte[1] als s
+  } else if (!erz_paket(a, m) && !loop_paket(a, m) && !arr_paket(a, m) && !deck_paket(a, m)) {  // erz, loop, arr zuerst: deck_paket liest werte[1] als s
     // Adresse steht im Vertrag, ist aber noch nicht gebaut (Hörscheine, LEDs, Loop ...): bis zu ihrer Scheibe
     // wie unbekannt (Befund B6 h im Plan)
     protokollfehler(adr, "unbekannte_adresse", 0);
@@ -530,6 +539,7 @@ void Netz::ereignisse_senden() {
       kl_knopf_aus_ = e.keylock_aus != 0;  // Keylock Task 3b: Stand des Reglers keylock für neue Abonnenten
       kl_knopf_bekannt_ = true;
       stand_generation_ = e.generation;
+      ereignisse_verloren_ = e.verloren;  // D1 K1 Fix 10: für /zustand/kern
       osc::Schreiber s(v::uhr);
       s.h(e.sample).h(e.mono_ns).d(e.beat).d(e.bpm).d(e.k);
       an_alle(s);
@@ -590,10 +600,11 @@ void Netz::ereignisse_senden() {
       s.i(e.alt).i(e.neu).h(e.sample);
       an_alle(s);
     } else {
-      if (!deck_ereignis(e) && !erz_ereignis(e)) loop_ereignis(e);  // Scheibe 31, Plan 2026-09-27, MVP 2
+      if (!deck_ereignis(e) && !erz_ereignis(e) && !arr_ereignis(e)) loop_ereignis(e);  // Scheibe 31, Plan 2026-09-27, D1 K1, MVP 2
     }
   }
   keylock_zyklus();  // Keylock Slice 4: umgerechnete REC-Mitschnitte schreiben
+  arr_zyklus();      // D1 K1: Ergebnisse des Arrangement-Lade-Fadens
 }
 
 void Netz::zustand_senden(int64_t jetzt_ns) {
@@ -601,7 +612,8 @@ void Netz::zustand_senden(int64_t jetzt_ns) {
   w.ki_gestoppt = ki_gestoppt_;  // Scheibe 25
   osc::Schreiber s(v::zustand_kern);
   s.i(w.generation).i(w.quantum).h(w.sample).i(w.frame_luecken).i(w.ausgelassene_perioden).i(w.cb_max_us)
-      .i(w.cb_p99_us).i(w.aufwach_max_us).i(w.stretcher_aktiv).i(w.befehle_wartend).i(w.ki_gestoppt);
+      .i(w.cb_p99_us).i(w.aufwach_max_us).i(w.stretcher_aktiv).i(w.befehle_wartend).i(w.ki_gestoppt)
+      .h(ereignisse_verloren_);   // D1 K1 Fix 10
   an_alle(s);
 }
 

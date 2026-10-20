@@ -49,7 +49,9 @@
 #include "cypherdj/kanten.h"
 #include "cypherdj/kern.h"
 #include "cypherdj/konfig.h"
+#include "cypherdj/arr_lader.h"
 #include "cypherdj/lader.h"
+#include "cypherdj/midi_ausgabe.h"
 #include "cypherdj/netz.h"
 #include "cypherdj/riegel.h"
 #include "cypherdj/neustart.h"
@@ -81,6 +83,16 @@ static std::atomic<uint64_t> g_allaus_gesendet[cdj::ERZ_MIDI_PORTS] = {};   // B
 static std::atomic<uint64_t> g_allaus_luecken[cdj::ERZ_MIDI_PORTS] = {};    // Zyklen, in denen ein Write scheiterte
 static uint8_t g_allaus_tab[cdj::ALLE_AUS_N][3];  // einmal in main() gefüllt, vor jack_activate
 static jack_port_t* g_rueck[8][2] = {};                    // Studio S5: §8 rueck_erz_1_L/R bis _8
+// D1 K2b (Spec 2.4): Wirt-Slots des Arrangements, §7.1 arr_midi_<s> hinaus, §8 arr_rueck_<s>_L/R herein, je mit All-Off-Plan
+static jack_port_t* g_arr_midi[cdj::ARR_WIRT_SLOTS] = {};
+static jack_port_t* g_arr_rueck[cdj::ARR_WIRT_SLOTS][2] = {};
+static cdj::AllAusPlan g_arr_allaus_plan[cdj::ARR_WIRT_SLOTS];
+static std::atomic<uint64_t> g_arr_allaus_gesendet[cdj::ARR_WIRT_SLOTS] = {};
+static std::atomic<uint64_t> g_arr_allaus_luecken[cdj::ARR_WIRT_SLOTS] = {};
+// Review K2b F9: Verlust-Zähler der Senken, im Callback nach zyklus() gespiegelt (der Hauptfaden liest nur die Atomics):
+// MidiAus::verloren je Wirt-Slot, ArrRbSenke::verloren() und parameter_abgelehnt(). Nur Diagnose, kein Vertragsfeld.
+static std::atomic<uint64_t> g_arr_midi_verloren[cdj::ARR_WIRT_SLOTS] = {};
+static std::atomic<uint64_t> g_arr_rb_verloren{0}, g_arr_rb_abgelehnt{0};
 
 static void on_signal(int) { g_stop = true; }
 
@@ -94,6 +106,20 @@ static int64_t mono_ns() {
 static void graph_ereignis() {
   if (g_ws && cdj::karenz_verlaengern(&g_ws->scharf_ab, mono_ns() + 500000000LL))  // nur echte Verlängerungen zählen
     g_graph_ereignisse.fetch_add(1, std::memory_order_relaxed);
+}
+
+// D1 K2b: MIDI eines Wirt-Slots des Arrangements in diesem Zyklus: All-Off-Plan zuerst (F06), dann die Ereignisse nach
+// Versatz (midi_ausgabe.h), in derselben Reihenfolge wie die Schleife der Studio-Ströme midi_aus_<p> in process(), die
+// wörtlich bleibt (Spec 6.28). Nur im Callback.
+static void midi_ausgeben(jack_port_t* port, jack_nframes_t n, int64_t jetzt_ns, cdj::AllAusPlan& plan,
+                          std::atomic<uint64_t>& gesendet, std::atomic<uint64_t>& luecken, const cdj::MidiAus& m) {
+  if (!port) return;
+  void* mb = jack_port_get_buffer(port, n);
+  jack_midi_clear_buffer(mb);
+  const auto r = cdj::midi_zyklus(plan, jetzt_ns, g_allaus_tab, m, n,
+                                  [&](uint32_t t, const uint8_t* b) { return jack_midi_event_write(mb, t, b, 3) == 0; });
+  if (r == cdj::AllAusPlan::GESENDET) gesendet.fetch_add(1, std::memory_order_relaxed);
+  else if (r == cdj::AllAusPlan::PUFFER_VOLL) luecken.fetch_add(1, std::memory_order_relaxed);
 }
 
 static int process(jack_nframes_t n, void*) {
@@ -123,6 +149,9 @@ static int process(jack_nframes_t n, void*) {
   for (int e = 0; e < 8; ++e)  // Studio S5: Rückwege dieses Zyklus; unverbunden liefert JACK Nullen
     g_kern->rueck(e + 1, g_rueck[e][0] ? (const float*)jack_port_get_buffer(g_rueck[e][0], n) : nullptr,
                   g_rueck[e][1] ? (const float*)jack_port_get_buffer(g_rueck[e][1], n) : nullptr);
+  for (int s = 0; s < cdj::ARR_WIRT_SLOTS; ++s)  // D1 K2b: Rückwege der Wirt-Slots in die Spur, die den Slot spielt
+    g_kern->arr_rueck(s + 1, g_arr_rueck[s][0] ? (const float*)jack_port_get_buffer(g_arr_rueck[s][0], n) : nullptr,
+                      g_arr_rueck[s][1] ? (const float*)jack_port_get_buffer(g_arr_rueck[s][1], n) : nullptr);
   g_kern->zyklus((int)n, (int64_t)cu * 1000);                // cu: Blockanfang in µs (CLOCK_MONOTONIC)
   for (int p = 0; p < cdj::ERZ_MIDI_PORTS; ++p) {  // Studio S5: MIDI dieses Zyklus, nach Versatz sortiert
     if (!g_midi_aus[p]) continue;
@@ -143,6 +172,13 @@ static int process(jack_nframes_t n, void*) {
       if (ev.t < n) jack_midi_event_write(mb, ev.t, ev.b, 3);
     }
   }
+  for (int s = 0; s < cdj::ARR_WIRT_SLOTS; ++s)  // D1 K2b: Wirt-Slots des Arrangements (Noten um 2n + 25 vorgezogen)
+    midi_ausgeben(g_arr_midi[s], n, (int64_t)cu * 1000, g_arr_allaus_plan[s], g_arr_allaus_gesendet[s],
+                  g_arr_allaus_luecken[s], g_kern->arr_midi_aus(s + 1));
+  for (int s = 0; s < cdj::ARR_WIRT_SLOTS; ++s)  // F9: Zähler fortlaufend seit Start, gespiegelt für die Diagnosezeile
+    g_arr_midi_verloren[s].store((uint64_t)g_kern->arr_midi_aus(s + 1).verloren, std::memory_order_relaxed);
+  g_arr_rb_verloren.store(g_kern->arr_rb().verloren(), std::memory_order_relaxed);
+  g_arr_rb_abgelehnt.store(g_kern->arr_rb().parameter_abgelehnt(), std::memory_order_relaxed);
   if (g_kern->neue_zeitachse()) g_messer->neue_generation();
   float* aus[4];
   for (int k = 0; k < 4; ++k) aus[k] = (float*)jack_port_get_buffer(g_aus[k], n);
@@ -404,6 +440,19 @@ int main(int argc, char** argv) {
   lopt.sperren = !ohne_sperre;
   lopt.pruefsumme = !ohne_sperre;  // sha256 läse jede Seite und nähme dem Fehlerfall seine Seitenfehler
   g_kern->verbinde_lader(lringe);
+  // D1 K1 (Spec 2.1): ein Speicher-Konto für Decks und Arrangement; eigener Arrangement-Lade-Faden mit Ringen zum Netz
+  auto* konto = new cdj::SpeicherKonto((int64_t)konf.speicher_budget_mib << 20);
+  lader.verbinde_konto(konto);
+  const std::string arr_ordner = cdj::arr_ordner_von(konf, inst);
+  {
+    std::error_code ec;
+    std::filesystem::create_directories(arr_ordner + "/audio", ec);
+    if (ec) std::fprintf(stderr, "Arrangement: Arbeitsordner %s nicht anlegbar: %s\n", arr_ordner.c_str(), ec.message().c_str());
+  }
+  auto* aringe = new cdj::ArrLaderRinge();
+  cdj::ArrLader arr_lader(arr_ordner, konto, (int64_t)konf.arr_budget_mib << 20, !ohne_sperre);
+  netz.verbinde_arr(aringe);
+  netz.setze_arr_ordner(arr_ordner);  // Paket K3: Freeze im Arbeitsordner (Spec 6.14), geschrieben vom arr_faden (6.29)
   g_kern->verbinde_huellen(huellen);  // Ohr (§6.2), vor mlockall
   g_kern->setze_deck_konfig((float)konf.ziel_lufs, (float)konf.hoerbar_db);
   g_kern->setze_pruefmodus(pruefmodus);  // Scheibe 25, B7: vor dem Lesen des Neustart-Zustands
@@ -432,6 +481,17 @@ int main(int argc, char** argv) {
       std::snprintf(name, sizeof name, "rueck_erz_%d_%c", e + 1, s ? 'R' : 'L');
       g_rueck[e][s] = jack_port_register(g_client, name, JACK_DEFAULT_AUDIO_TYPE, JackPortIsInput, 0);
     }
+  for (int a = 0; a < cdj::ARR_WIRT_SLOTS; ++a) {  // D1 K2b (Spec 2.4): Wirt-Slots des Arrangements
+    char name[32];
+    std::snprintf(name, sizeof name, "arr_midi_%d", a + 1);
+    g_arr_midi[a] = jack_port_register(g_client, name, JACK_DEFAULT_MIDI_TYPE, JackPortIsOutput, 0);
+    for (int s = 0; s < 2; ++s) {
+      std::snprintf(name, sizeof name, "arr_rueck_%d_%c", a + 1, s ? 'R' : 'L');
+      g_arr_rueck[a][s] = jack_port_register(g_client, name, JACK_DEFAULT_AUDIO_TYPE, JackPortIsInput, 0);
+    }
+    if (!g_arr_midi[a] || !g_arr_rueck[a][0] || !g_arr_rueck[a][1])
+      std::fprintf(stderr, "Wirt-Slot %d des Arrangements: Ports nicht vollständig angelegt\n", a + 1);
+  }
   g_ring = ring;
   // Scheibe 18: Neustart-Zustand lesen und übernehmen (SCHNITTSTELLEN §6.3), gespeicherte Abonnenten ans Netz
   // Keylock Task 2.5b (Vertrag 17, Prüfung F2): Vorgabe 1 im Betrieb, hier nur angekündigt (kostet nichts); Dehner und
@@ -522,6 +582,7 @@ int main(int argc, char** argv) {
                konf.speicher_budget_mib, ohne_sperre ? ", Lader OHNE Sperre (Prüfschalter)" : "", g_cb_tid.load());
   std::thread faden([&] { netz.laufen(g_stop); });
   std::thread lader_faden([&] { lader.laufen(*lringe, g_stop, lopt); });  // Scheibe 31
+  std::thread arr_faden([&] { arr_lader.laufen(*aringe, g_stop); });   // D1 K1: Arrangement-Lade-Faden
   // Keylock Task 2.5b: Dehner und Fäden nach dem ersten Zyklus in einem eigenen Faden (Prüfung F2: nicht im Startpfad);
   // Priorität (Vertrag 12) = JACK-Priorität − 5 aus dem JACK-Faden; Task 2.5c: danach nur den Dehner-Speicher sperren
   // (keylock_bauen sperren = true, kein zweites mlockall); erst nach Netz- und Lade-Faden, damit ihre Stapel schon vorher
@@ -593,9 +654,11 @@ int main(int argc, char** argv) {
     }
     std::fclose(f);
     const std::vector<cdj::Kante> alle = cdj::lies_kanten(text);
-    size_t doppelt_oder_ueber = 0;
-    const std::vector<cdj::Kante> ok =
-        cdj::entdoppeln_begrenzen(cdj::filtere_kanten(alle, kern_praefix), cdj::KANTEN_MAX, &doppelt_oder_ueber);
+    size_t doppelt_oder_ueber = 0, reserviert = 0;
+    const std::vector<cdj::Kante> ok = cdj::entdoppeln_begrenzen(cdj::filtere_kanten(alle, kern_praefix, &reserviert),
+                                                                 cdj::KANTEN_MAX, &doppelt_oder_ueber);
+    if (reserviert)  // D1 K1 (Spec 2.3): Grund reserviert, erz/4 gehört der Produktion
+      std::fprintf(stderr, "Kanten-Datei %s: %zu Kanten auf rueck_erz_4 abgelehnt (reserviert)\n", kanten_pfad.c_str(), reserviert);
     soll_alle = soll_aus;
     soll_alle.insert(soll_alle.end(), ok.begin(), ok.end());
     std::fprintf(stderr, "Kanten-Datei %s: %zu Kanten gelesen, %zu angenommen, %zu verworfen (davon %zu Duplikate oder über %zu)%s (mono_ns %lld)\n",
@@ -636,6 +699,10 @@ int main(int argc, char** argv) {
       for (int p = 0; p < cdj::ERZ_MIDI_PORTS; ++p) {  // F06/B10: PipeWire baut asynchron um, deshalb 150 ms und 500 ms später
         if (!g_midi_aus[p] || k.quelle != jack_port_name(g_midi_aus[p])) continue;
         g_allaus_plan[p].setze(mono_ns());
+      }
+      for (int s = 0; s < cdj::ARR_WIRT_SLOTS; ++s) {  // D1 K2b: dasselbe für die Wirt-Slots des Arrangements
+        if (!g_arr_midi[s] || k.quelle != jack_port_name(g_arr_midi[s])) continue;
+        g_arr_allaus_plan[s].setze(mono_ns());
       }
       std::fprintf(stderr, "Kante neu verbunden: %s -> %s (mono_ns %lld, Neuverbindung %llu)\n", k.quelle.c_str(),
                    k.ziel.c_str(), (long long)mono_ns(), (unsigned long long)aus_neu);
@@ -701,6 +768,46 @@ int main(int argc, char** argv) {
           luecken_gemeldet[p] = l;
         }
       }
+      static uint64_t arr_allaus_gemeldet[cdj::ARR_WIRT_SLOTS] = {}, arr_verloren_gemeldet[cdj::ARR_WIRT_SLOTS] = {};
+      static uint64_t rb_verloren_gemeldet = 0, rb_abgelehnt_gemeldet = 0;
+      const uint64_t rb_v = g_arr_rb_verloren.load(std::memory_order_relaxed);
+      const uint64_t rb_a = g_arr_rb_abgelehnt.load(std::memory_order_relaxed);
+      // K2b-Rest (Re-Review F9): „gesendet“ steht nur, wenn ein neues All-Off hinausging; verlorenes MIDI eines Slots und die
+      // Zähler der RB-Senke (intern, kein Slot) haben je eine eigene Zeile mit eigener Kennung
+      if (rb_v != rb_verloren_gemeldet || rb_a != rb_abgelehnt_gemeldet)
+        std::fprintf(stderr, "RB-Senke (intern): Ereignisse verloren %llu, Parameter abgelehnt %llu (mono_ns %lld)\n",
+                     (unsigned long long)rb_v, (unsigned long long)rb_a, (long long)mono_ns());
+      for (int s = 0; s < cdj::ARR_WIRT_SLOTS; ++s) {  // D1 K2b: All-Off der Wirt-Slots, höchstens eine Zeile je 500 ms
+        const uint64_t g = g_arr_allaus_gesendet[s].load(std::memory_order_relaxed);
+        const uint64_t v = g_arr_midi_verloren[s].load(std::memory_order_relaxed);
+        if (g != arr_allaus_gemeldet[s]) {
+          std::fprintf(stderr, "MIDI All-Off an arr_midi_%d gesendet (%llu, Puffer voll in %llu Zyklen) (mono_ns %lld)\n",
+                       s + 1, (unsigned long long)g,
+                       (unsigned long long)g_arr_allaus_luecken[s].load(std::memory_order_relaxed), (long long)mono_ns());
+          arr_allaus_gemeldet[s] = g;
+        }
+        if (v != arr_verloren_gemeldet[s]) {
+          std::fprintf(stderr, "arr_midi_%d: MIDI verloren %llu (mono_ns %lld)\n", s + 1, (unsigned long long)v,
+                       (long long)mono_ns());
+          arr_verloren_gemeldet[s] = v;
+        }
+        // Messpunkt A4: jede Messung als JSON-Zeile an <shm>/arr-a4.jsonl, nur wenn die Datei schon da ist (die Messung
+        // legt sie an und räumt sie weg); sonst still verworfen
+        cdj::ArrWirtMessung me;
+        while (g_kern->arr_wirt_messung(s + 1, me)) {
+          const int fd = open((std::string(kdir) + "/arr-a4.jsonl").c_str(), O_WRONLY | O_APPEND | O_CLOEXEC);
+          if (fd < 0) continue;
+          char z[192];
+          const int nz = std::snprintf(z, sizeof z,
+                                       "{\"slot\":%d,\"ziel\":%lld,\"einsatz\":%lld,\"versatz\":%lld,\"vorhalt\":%lld}\n",
+                                       (int)me.slot, (long long)me.ziel, (long long)me.einsatz,
+                                       me.einsatz < 0 ? 0LL : (long long)(me.einsatz - me.ziel), (long long)me.vorhalt);
+          if (nz > 0 && write(fd, z, (size_t)nz) != nz) std::perror("arr-a4.jsonl");
+          close(fd);
+        }
+      }
+      rb_verloren_gemeldet = rb_v;
+      rb_abgelehnt_gemeldet = rb_a;
       naechster_verbinder += 500'000'000LL;
       if (naechster_verbinder < jetzt) naechster_verbinder = jetzt + 500'000'000LL;
     }
@@ -715,6 +822,7 @@ int main(int argc, char** argv) {
   g_kern->keylock_faeden_stoppen();  // Keylock Task 2.5: Join (Wecker plus höchstens 20 ms Warten je Faden)
   faden.join();
   lader_faden.join();
+  arr_faden.join();
   jack_client_close(g_client);
   if (g_faehig_pfad[0]) unlink(g_faehig_pfad);   // S7 (Review-Kern n1)
   netz.ereignisse_senden();  // Scheibe 25: die letzten ZYKLUS-Ereignisse in die Verteilung

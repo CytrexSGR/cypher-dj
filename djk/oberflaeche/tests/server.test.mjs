@@ -1,5 +1,5 @@
 // Scheibe 60m, Task 2: Server gegen die Kern-Attrappe aus 13 (Instanz aus CYPHERDJ_TEST_INSTANZ, Vorgabe h; Arbeitsbestand = bestand/, kein Ton)
-import test from 'node:test';
+import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import dgram from 'node:dgram';
@@ -16,7 +16,15 @@ import { KOPIE_TEXT, HAND_PRUEFMODUS_TEXT } from '../oeffentlich/meldungen.js';
 import { kodiere } from '../../vertrag/attrappe_kern/osc.mjs';
 import { schreibeLeerenRing, schreibeRing } from './hilfen/ring.mjs';
 import { K as OHR_K } from '../ohr.ts';
-import { K, TEST_INSTANZ } from './hilfen/instanz.mjs';
+import { K, TEST_INSTANZ, belegeTestInstanz } from './hilfen/instanz.mjs';
+import { pruefeWirtOrdner } from './hilfen/wirt_sock.mjs';
+belegeTestInstanz();   // Plan d1-s1 Task 1
+// Paket S3 (Auftrag 16 b): jeder Ordner, den ein Testkörper dieser Datei anlegt (hc, loops, muster, wirt, raster, kits, welle, Hüllen, …), liegt unter
+// einem tmp-Ordner dieser Datei, den after() am Ende wegräumt. Vorher blieben je Lauf 166 Einträge unter TMPDIR (gemessen 2026-10-16,
+// ~/messungen/2026-10-15-d1-s3/p16b_vorher_reste.txt). Kurzer Name: Wirt-Sockets darunter bleiben unter 108 Bytes. Unter TMPDIR bleiben nur die
+// Stapel-Ordner (djk60m-, eigenes t.after) und der Ordner des H2-Tests, der TMPDIR selbst vermisst.
+const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-st-'));
+after(() => fs.rmSync(TMP, { recursive: true, force: true }));
 const K1 = OHR_K.deck1, K2 = OHR_K.deck2, KMASTER = OHR_K.master;
 
 const HIER = path.dirname(fileURLToPath(import.meta.url));
@@ -27,7 +35,7 @@ const REPO = path.resolve(HIER, '..', '..', '..');
 const NIGHTSHIFT = '1ac28792d355a38b';
 const LEBEND = process.env.CYPHERDJ_BESTAND || path.join(REPO, 'bestand');
 function baueSynthetisch() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-prueftbestand-'));
+  const dir = fs.mkdtempSync(path.join(TMP, 'djk-prueftbestand-'));
   process.on('exit', () => { try { fs.rmSync(dir, { recursive: true, force: true }); } catch {} });
   // NIGHTSHIFT trägt die Deck-Tests (Sprünge bis ~40 Beats, Loops, Welle): 100 s; die übrigen sind kurz.
   const eintraege = [{ material_id: NIGHTSHIFT, titel: 'nightshift', frames: 48000 * 100 }];
@@ -44,16 +52,31 @@ const warte = (ms) => new Promise((r) => setTimeout(r, ms));
 // Arbeitsbestand je Lauf in tmpfs wie im Betrieb (/dev/shm), die Attrappe liest nur dort (wie der echte Kern)
 async function stapel(t, mutationen = [], { bestand = BESTAND, vorher, kernPruefmodus, zielKurve, loops, kits, welleCache, musterOrdner, hotcueOrdner, rasterOrdner, huellen, wirtOrdner, klangBefehl, echteBegruessung, digitalout } = {}) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'djk60m-'));
+  // V2 Fix-Runde 2 H2 (Spec 6.33, Muster tests/hilfen/mediathek.mjs): Hüllen und alle Vorgabe-Ordner (loops, kits, welle, muster, hc, raster, wirt) im
+  // eigenen tmp-Ordner des Stapels, den t.after wegräumt; vorher lagen sie direkt unter TMPDIR und blieben je Stapel liegen. Übergebene Ordner bleiben.
+  const tmpd = (n) => fs.mkdtempSync(path.join(tmp, `djk-${n}-`));
+  const wirt = wirtOrdner ?? tmpd('wirt');
   const ab = path.join(fs.mkdtempSync('/dev/shm/djk60m-test-'), 'material');
   fs.mkdirSync(ab, { recursive: true });
   vorher?.(ab);
-  const att = spawn(process.execPath, [path.join(REPO, 'djk/vertrag/attrappe_kern.mjs'), '--frisch', '--arbeitsbestand', ab,
+  // Paket S3 (Auftrag 16 a, Muster der Leitstand-Tests aus K3): eigene kern.toml im tmp-Ordner, sonst liest die Attrappe die echte
+  // ~/.config/cypherdj-<i>/kern.toml (ein unbekannter Schlüssel dort ließe jeden Stapel mit rc 2 scheitern); arr_ordner bleibt im tmp-Ordner.
+  const konfig = path.join(tmp, 'kern.toml');
+  fs.writeFileSync(konfig, `arr_ordner = ${JSON.stringify(path.join(tmp, 'arr'))}\n`);
+  const att = spawn(process.execPath, [path.join(REPO, 'djk/vertrag/attrappe_kern.mjs'), '--frisch', '--arbeitsbestand', ab, '--konfig', konfig,
     '--zustand', path.join(tmp, 'zustand.json')], { env: { ...process.env, CYPHERDJ_INSTANZ: TEST_INSTANZ }, stdio: ['ignore', 'pipe', 'pipe'] });
   await new Promise((ok, f) => { att.stdout.once('data', ok); att.once('exit', (c) => f(new Error(`attrappe rc ${c}`))); });
+  let laufend = null;   // Plan d1-s1 Task 1: erst nach gelungenem starte() gesetzt; Attrappe und Ordner räumen auch, wenn der Start scheitert
+  t.after(async () => {
+    if (laufend) await laufend.stoppe();
+    if (att.exitCode === null && att.signalCode === null) { const zu = new Promise((r) => att.once('exit', r)); att.kill('SIGTERM'); await zu; }
+    fs.rmSync(tmp, { recursive: true, force: true }); fs.rmSync(path.dirname(ab), { recursive: true, force: true });
+  });
   const log = [];
-  const huellenPfad = huellen ?? (() => { const p = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'djk-huellen-')), 'huellen'); schreibeLeerenRing(p); return p; })();
-  const o = new Oberflaeche({ port: 47300 + K, kernPort: 47100 + K, aboPort: 47150 + K, leitstandWs: 47200 + K, bestand, arbeitsbestand: ab, mutationen, kernPruefmodus, zielKurve, loops: loops ?? fs.mkdtempSync(path.join(os.tmpdir(), 'djk-loops-')), kits: kits ?? fs.mkdtempSync(path.join(os.tmpdir(), 'djk-kits-')), welleCache: welleCache ?? fs.mkdtempSync(path.join(os.tmpdir(), 'djk-welle-')), musterOrdner: musterOrdner ?? fs.mkdtempSync(path.join(os.tmpdir(), 'djk-muster-')), hotcueOrdner: hotcueOrdner ?? fs.mkdtempSync(path.join(os.tmpdir(), 'djk-hc-')), rasterOrdner: rasterOrdner ?? fs.mkdtempSync(path.join(os.tmpdir(), 'djk-raster-')), huellen: huellenPfad, wirtOrdner: wirtOrdner ?? fs.mkdtempSync(path.join(os.tmpdir(), 'djk-wirt-')), klangBefehl, digitalout, log: (z) => log.push(z) });
+  const huellenPfad = huellen ?? (() => { const p = path.join(tmpd('huellen'), 'huellen'); schreibeLeerenRing(p); return p; })();
+  const o = new Oberflaeche({ port: 47300 + K, kernPort: 47100 + K, aboPort: 47150 + K, leitstandWs: 47200 + K, bestand, arbeitsbestand: ab, mutationen, kernPruefmodus, zielKurve, loops: loops ?? tmpd('loops'), kits: kits ?? tmpd('kits'), welleCache: welleCache ?? tmpd('welle'), musterOrdner: musterOrdner ?? tmpd('muster'), hotcueOrdner: hotcueOrdner ?? tmpd('hc'), rasterOrdner: rasterOrdner ?? tmpd('raster'), huellen: huellenPfad, wirtOrdner: wirt, klangBefehl, digitalout, log: (z) => log.push(z) });
   await o.starte();
+  laufend = o;
   for (let i = 0; i < 100 && o.kern.zustand !== 'verbunden'; i++) await warte(20);
   assert.equal(o.kern.zustand, 'verbunden');
   // Die Attrappe steht auf Generation 0 und antwortet auf jedes erneute /k/hallo mit /k/willkommen 0. Tests, die einen
@@ -61,7 +84,6 @@ async function stapel(t, mutationen = [], { bestand = BESTAND, vorher, kernPruef
   // Darum fallen echte Begrüßungen nach dem Verbinden weg; Tests speisen /k/willkommen selbst ein.
   const empfange = o.kern.empfange.bind(o.kern);
   if (!echteBegruessung) o.kern.empfange = (buf) => { if (buf.includes('/k/willkommen')) return; return empfange(buf); };
-  t.after(async () => { await o.stoppe(); const zu = new Promise((r) => att.once('exit', r)); att.kill('SIGTERM'); await zu; fs.rmSync(tmp, { recursive: true, force: true }); fs.rmSync(path.dirname(ab), { recursive: true, force: true }); });
   return { o, log, ab, url: `http://127.0.0.1:${47300 + K}` };
 }
 
@@ -91,24 +113,43 @@ function indexZahlen(dir) {
   return z;
 }
 
-test('Prüfbestand: Fassungen und Materialien gleich index.sqlite, Länge aus fassung.json', () => {
-  const b = leseBestand(BESTAND);
-  const z = indexZahlen(BESTAND);
-  assert.ok(z.f >= 14, `Index hat ${z.f} Fassungen, mindestens die 14 aus Werkstatt 15 erwartet`);
-  assert.equal(b.length, z.f);
+// Plan d1-s1 Task 3: „wie Index“ heißt je Fassung dasselbe (material_id, basis_bpm, fassung) wie index.sqlite und eine Länge aus
+// fassung.json; KEIN festes Grundtempo (der lebende Bestand hat seit Oktober eine Fassung mit 132 BPM, Erhebung u4 15.10.).
+function pruefeWieIndex(dir, mindestens = 14) {
+  const b = leseBestand(dir);
+  const z = indexZahlen(dir);
+  assert.ok(z.f >= mindestens, `Index hat ${z.f} Fassungen, mindestens ${mindestens} erwartet`);
+  const db = new DatabaseSync(path.join(dir, 'index.sqlite'), { readOnly: true });
+  const zeilen = db.prepare('SELECT material_id, basis_bpm, fassung FROM fassung').all();
+  db.close();
+  const schluessel = (e) => `${e.material_id}|${Number(e.basis_bpm)}|${Number(e.fassung)}`;
+  assert.deepEqual(b.map(schluessel).sort(), zeilen.map(schluessel).sort(), 'jede Fassung des Index genau einmal, mit ihrem Grundtempo');
   assert.equal(new Set(b.map((e) => e.material_id)).size, z.m);
-  assert.ok(b.every((e) => e.basis_bpm === 128 && e.beats > 0));
+  assert.deepEqual(b.filter((e) => !(e.beats > 0)).map(schluessel), [], 'Länge aus fassung.json');
+  return b;
+}
+
+test('Prüfbestand: Fassungen und Materialien gleich index.sqlite, Länge aus fassung.json; mindestens 14 Fassungen mit 128 BPM für die Deck-Tests', () => {
+  const b = pruefeWieIndex(BESTAND);
+  assert.ok(b.filter((e) => e.basis_bpm === 128).length >= 14, 'die Deck-Tests brauchen 14 Fassungen mit basis_bpm 128');
+});
+
+test('pruefeWieIndex: eine Fassung mit 132 BPM ist kein Fehler, ein falsch gelesenes Grundtempo schon (Regression Test 104, Negativ-Kontrolle)', () => {
+  const dir = baueBestand(fs.mkdtempSync(path.join(TMP, 'djk-bestand132-')), [
+    { material_id: '5f00000000000001', titel: 'eins', basis_bpm: 132 }, { material_id: '5f00000000000002', titel: 'zwei' }]);
+  try {
+    assert.deepEqual(pruefeWieIndex(dir, 2).map((e) => e.basis_bpm).sort(), [128, 132]);
+    const db = new DatabaseSync(path.join(dir, 'index.sqlite'));
+    db.exec(`UPDATE fassung SET basis_bpm = 130 WHERE material_id = '5f00000000000001'`);   // Index sagt 130, Ordner und fassung.json 132
+    db.close();
+    assert.throws(() => pruefeWieIndex(dir, 2), /Länge aus fassung.json/, 'ohne passende fassung.json fehlt die Länge');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
 const lebendDa = fs.existsSync(path.join(LEBEND, 'index.sqlite'));
 test('Bestand wie Index 15 (lebender Arbeitsbestand): Fassungen und Materialien gleich index.sqlite, Länge aus fassung.json',
   { skip: lebendDa ? false : `kein lebender Arbeitsbestand (${path.join(LEBEND, 'index.sqlite')} fehlt; CYPHERDJ_BESTAND setzen)` }, () => {
-  const b = leseBestand(LEBEND);
-  const z = indexZahlen(LEBEND);
-  assert.ok(z.f >= 14, `Index hat ${z.f} Fassungen, mindestens die 14 aus Werkstatt 15 erwartet`);
-  assert.equal(b.length, z.f);
-  assert.equal(new Set(b.map((e) => e.material_id)).size, z.m);
-  assert.ok(b.every((e) => e.basis_bpm === 128 && e.beats > 0));
+  pruefeWieIndex(LEBEND);
 });
 
 test('/konfig meldet die Ziel-Kurve: Vorgabe kern, --ziel-kurve attrappe_linear für den Prüfstapel', async (t) => {
@@ -176,7 +217,7 @@ function schreibeLoop(dir, name, beats, alt = false, quelle = 'test') {  // alt:
 }
 
 test('Plan Tempo-Folge: /loops markiert defekte Loops (frames, bpm, Dateigröße), /loop laden lehnt sie mit Grund ab', async (t) => {
-  const loops = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-loops-'));
+  const loops = fs.mkdtempSync(path.join(TMP, 'djk-loops-'));
   const schreibe = (name, json, bytes) => {
     fs.mkdirSync(path.join(loops, name), { recursive: true });
     fs.writeFileSync(path.join(loops, name, 'loop.json'), JSON.stringify({ schema: 1, name, datei: 'loop.f32', quelle: 'test', ...json }));
@@ -204,7 +245,7 @@ test('Plan Tempo-Folge: /loops markiert defekte Loops (frames, bpm, Dateigröße
 });
 
 test('Loop-Boxen: /loops listet, /loop schickt laden, start, stopp an den Kern, /e/loop kommt durch (MVP 2)', async (t) => {
-  const loops = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-loops-'));
+  const loops = fs.mkdtempSync(path.join(TMP, 'djk-loops-'));
   schreibeLoop(loops, 'pruef-a', 4);
   schreibeLoop(loops, 'pruef-b', 1);
   schreibeLoop(loops, 'hoertest-alt', 8, true);  // Scheibe 3 (E3): alte takte-Datei bleibt in der Liste, als 8 Beats
@@ -293,7 +334,7 @@ test('Mutation riegel_aus: der Kern lehnt das falsche Ziel selbst ab (/e/protoko
 });
 
 test('Nachtrag: Kopie vor dem Laden, Fehlerfall kaputte und fehlende Fassung abgewiesen, keine halbe Kopie, 0 Befehle', async (t) => {
-  const tmpB = fs.mkdtempSync(path.join(os.tmpdir(), 'djk60n-b-'));
+  const tmpB = fs.mkdtempSync(path.join(TMP, 'djk60n-b-'));
   t.after(() => fs.rmSync(tmpB, { recursive: true, force: true }));
   const GUT = 'f0000000000000a1', SHA = 'f0000000000000b1', OHNE = 'f0000000000000b3', KURZ = 'f0000000000000b2';
   baueBestand(tmpB, [{ material_id: GUT, titel: 'Alpha' }, { material_id: SHA, titel: 'Bad sum', kaputt: 'sha' },
@@ -371,7 +412,7 @@ test('K2 Kleber: /griff master/kleber u 0,55 kommt am Kern an; cypher 403; falsc
 // Effekt-Sektion Schritt 4: Automation je Loop über /loop/automation; bei laufender Box plant der Server die Durchgänge als
 // /k/teil (Plan loopauto:<box>, Quelle andreas) und bricht sie ab, wenn die Box nicht mehr läuft
 test('Loop-Automation: speichern, lesen, ablehnen, je Durchgang planen, beim Stopp abbrechen', async (t) => {
-  const loops = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-loops-'));
+  const loops = fs.mkdtempSync(path.join(TMP, 'djk-loops-'));
   schreibeLoop(loops, 'auto-a', 4, false, 'mitschnitt');
   const { o, url } = await stapel(t, [], { loops });
   const auto = [{ pfad: 'komp/schwelle', punkte: [[0, -10], [2, -30]] }];
@@ -474,7 +515,7 @@ test('K2 Lage: duck/tiefe, duck/release, fx/2/rueckweg und erz/3/send/2 erschein
 
 // Befund 4: „Fassung fehlt im Index“ und „Audiodatei fehlt“ sind zwei Fälle mit zwei Codes und zwei englischen Texten
 test('Befund 4: nicht im Index und fehlende Audiodatei: eigene Codes, eigene englische Meldungen', async (t) => {
-  const tmpB = fs.mkdtempSync(path.join(os.tmpdir(), 'djk60n-b4-'));
+  const tmpB = fs.mkdtempSync(path.join(TMP, 'djk60n-b4-'));
   t.after(() => fs.rmSync(tmpB, { recursive: true, force: true }));
   const OHNE = 'f0000000000000b3';
   baueBestand(tmpB, [{ material_id: OHNE, titel: 'No audio', kaputt: 'ohne_audio' }]);
@@ -602,8 +643,8 @@ test('Annahme-Weg: Kern ohne Prüfmodus und ohne hand_osc → /taste 409 wie /gr
 });
 
 test('→ STRUDEL (MVP 2 Scheibe 3): /loop kit macht den Loop zum Klang rec0 im Zusatz-Kit, nichts an den Kern', async (t) => {
-  const loops = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-loops-'));
-  const kits = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-kits-'));
+  const loops = fs.mkdtempSync(path.join(TMP, 'djk-loops-'));
+  const kits = fs.mkdtempSync(path.join(TMP, 'djk-kits-'));
   fs.mkdirSync(path.join(kits, 'battery'));
   fs.writeFileSync(path.join(kits, 'battery/kit.json'), JSON.stringify({ schema: 1, name: 'battery',
     klaenge: [{ note: 0, name: 'bd:0', datei: 'bd_0.f32', frames: 1 }] }));
@@ -622,8 +663,8 @@ test('→ STRUDEL (MVP 2 Scheibe 3): /loop kit macht den Loop zum Klang rec0 im 
 });
 
 test('/welle (Plan Oberfläche T2): Loop-Welle gerechnet, zweiter Abruf aus dem Cache, falscher Name 400', async (t) => {
-  const loops = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-loops-'));
-  const cache = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-welle-'));
+  const loops = fs.mkdtempSync(path.join(TMP, 'djk-loops-'));
+  const cache = fs.mkdtempSync(path.join(TMP, 'djk-welle-'));
   const d = path.join(loops, 'w1');
   fs.mkdirSync(d);
   const frames = 90000, x = new Float32Array(frames * 2);
@@ -667,7 +708,7 @@ const postJson = (url, pfad, daten, kopf = {}) => fetch(url + pfad, { method: 'P
   body: JSON.stringify(daten) }).then(async (r) => ({ code: r.status, j: await r.json() }));
 
 test('/strudel (Plan 2): lesen, schreiben mit von andreas, Fehler mit Zeile, AUTO-Schalter', { skip: OHNE_STRUDEL }, async (t) => {
-  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-muster-'));
+  const d = fs.mkdtempSync(path.join(TMP, 'djk-muster-'));
   const { url } = await stapel(t, [], { musterOrdner: d });
   assert.deepEqual(await (await fetch(`${url}/strudel`)).json(), { text: '', von: null, zeit: null, status: null, autonom: true });
   const ok = await postJson(url, '/strudel', { text: 's("bd*4")' });
@@ -686,7 +727,7 @@ test('/strudel (Plan 2): lesen, schreiben mit von andreas, Fehler mit Zeile, AUT
 });
 
 test('/strudel (Plan-Review M3): ohne json 415, fremde Herkunft 403, eigene Herkunft 200; nichts geschrieben bei Abweisung', { skip: OHNE_STRUDEL }, async (t) => {
-  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-muster-'));
+  const d = fs.mkdtempSync(path.join(TMP, 'djk-muster-'));
   const { url } = await stapel(t, [], { musterOrdner: d });
   assert.equal((await post(url, '/strudel', { text: 's("bd")' })).code, 415);
   assert.equal((await post(url, '/strudel/autonom', { an: false })).code, 415);
@@ -697,8 +738,8 @@ test('/strudel (Plan-Review M3): ohne json 415, fremde Herkunft 403, eigene Herk
 });
 
 test('/strudel (Plan-Review M3): Muster läuft ohne Schreibrecht und mit Zeitlimit, Server bleibt bedienbar', { skip: OHNE_STRUDEL }, async (t) => {
-  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-muster-'));
-  const opfer = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'djk-opfer-')), 'geschrieben');
+  const d = fs.mkdtempSync(path.join(TMP, 'djk-muster-'));
+  const opfer = path.join(fs.mkdtempSync(path.join(TMP, 'djk-opfer-')), 'geschrieben');
   const { url } = await stapel(t, [], { musterOrdner: d });
   const boese = `s("bd").gain((process.getBuiltinModule('node:fs').writeFileSync(${JSON.stringify(opfer)}, 'x'), 1))`;
   const b = await postJson(url, '/strudel', { text: boese });
@@ -715,7 +756,7 @@ test('/strudel (Plan-Review M3): Muster läuft ohne Schreibrecht und mit Zeitlim
 });
 
 test('/strudel (Review F1–F4, F11): Reihenfolge, localhost, Endlosschleife, langer Körper, fehlender Ordner', { skip: OHNE_STRUDEL }, async (t) => {
-  const eltern = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-muster-'));
+  const eltern = fs.mkdtempSync(path.join(TMP, 'djk-muster-'));
   const d = path.join(eltern, 'erzeuger');   // F4: existiert noch nicht
   const { url } = await stapel(t, [], { musterOrdner: d });
   // F4: erster POST in einen fehlenden Ordner geht
@@ -752,7 +793,7 @@ test('/strudel (Review F1–F4, F11): Reihenfolge, localhost, Endlosschleife, la
 
 // ---------- Plan E9: Deck-Bedienung gegen die Attrappe (sie setzt sprung, hotcue, loop nach Vertrag um) ----------
 async function geladenesDeck(t, extra = {}) {
-  const hc = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-hc-'));
+  const hc = fs.mkdtempSync(path.join(TMP, 'djk-hc-'));
   const st = await stapel(t, [], { hotcueOrdner: hc, ...extra });
   const s = sse(st.url);
   t.after(() => s.zu());
@@ -783,6 +824,32 @@ test('/deck/sprung (Plan E9): stehendes Deck rastet ab der Takt-Eins ein, Attrap
   assert.equal((await postJson(url, '/deck/sprung', { deck: 3, ziel: 1, raster: 1 })).code, 400);
   assert.equal((await postJson(url, '/deck/sprung', { deck: 1, ziel: 1, raster: 3 })).code, 400);
   assert.equal((await post(url, '/deck/sprung', { deck: 1, ziel: 1, raster: 1 })).code, 415);
+});
+
+test('/deck/scrub (Hörbares Ziehen): Griff, Zug, Los gehen als /k/deck/scrub an den Kern, das stehende Deck folgt der Hand und bleibt dort', async (t) => {
+  const { o, url } = await geladenesDeck(t);
+  const gesendet = [];
+  const sende = o.kern.sende.bind(o.kern);
+  o.kern.sende = (adr, f) => { gesendet.push({ adr, ...f }); return sende(adr, f); };
+  const q0 = o.stand.decks['1'].quell_beat;
+  assert.equal((await postJson(url, '/deck/scrub', { deck: 1, phase: 1, delta: 0 })).code, 200);
+  assert.equal((await postJson(url, '/deck/scrub', { deck: 1, phase: 2, delta: 2.5 })).code, 200);
+  const z = await zustand(o, (x) => Math.abs(x.quell_beat - (q0 + 2.5)) < 1e-6);
+  assert.ok(Math.abs(z.quell_beat - (q0 + 2.5)) < 1e-6, `quell_beat ${z.quell_beat}, erwartet ${q0 + 2.5}`);   // folgt der Hand
+  assert.equal((await postJson(url, '/deck/scrub', { deck: 1, phase: 0, delta: 3 })).code, 200);
+  const z2 = await zustand(o, (x) => Math.abs(x.quell_beat - (q0 + 3)) < 1e-6);
+  assert.ok(Math.abs(z2.quell_beat - (q0 + 3)) < 1e-6);   // Los: der Kopf bleibt an der letzten Stelle
+  const s3 = gesendet.filter((g) => g.adr === '/k/deck/scrub');
+  assert.deepEqual(s3.map((g) => [g.deck, g.phase, g.delta_beats, g.quelle]), [[1, 1, 0, 'andreas'], [1, 2, 2.5, 'andreas'], [1, 0, 3, 'andreas']]);
+  // Ablehnungen: nichts geht an den Kern
+  const n0 = gesendet.length;
+  assert.equal((await postJson(url, '/deck/scrub', { deck: 3, phase: 1, delta: 0 })).code, 400);
+  assert.equal((await postJson(url, '/deck/scrub', { deck: 1, phase: 3, delta: 0 })).code, 400);
+  assert.equal((await postJson(url, '/deck/scrub', { deck: 1, phase: 1, delta: 'x' })).code, 400);
+  assert.equal((await postJson(url, '/deck/scrub', { deck: 1, phase: 1, delta: 1e9 })).code, 400);
+  assert.equal((await postJson(url, '/deck/scrub', { deck: 1, phase: 1 })).code, 400);
+  assert.equal((await post(url, '/deck/scrub', { deck: 1, phase: 1, delta: 0 })).code, 415);
+  assert.equal(gesendet.length, n0);
 });
 
 test('/deck/hotcue (Plan E9): setzen ab Takt-Eins gerundet und gespeichert, /e/hotcue, spielen, löschen, nach Laden wieder da', async (t) => {
@@ -888,7 +955,7 @@ test('Review E9 F1/F9: stehendes Deck springt sofort (Politik 1, kein Warten auf
 });
 
 test('AUTO aus, zwei Einheiten unabhängig: Cyphers laufender Effekt je Einheit klingt aus, Andreas\' bleibt', async (t) => {
-  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-muster-'));
+  const d = fs.mkdtempSync(path.join(TMP, 'djk-muster-'));
   const { o, url, log } = await stapel(t, [], { musterOrdner: d });
   const fx1 = { einheit: 1, art: 2, beats: 1, wet: 0.6, param1: 0.4, param2: 0.5, param3: 0.5, an: 1 };
   const fx2 = { einheit: 2, art: 1, beats: 0.5, wet: 0.7, param1: 0.2, param2: 0.5, param3: 0.5, an: 1 };
@@ -969,7 +1036,7 @@ test('/deck/loop GET: aktiver Loop (Start, Länge) für die Anzeige; aus_loop oh
 });
 
 test('/deck/loop/sichern: aktiver Deck-Loop wird sample-genau (mit Grid-Versatz) ein Loop der Bibliothek, optional gleich in L1', async (t) => {
-  const lo = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-loops-'));
+  const lo = fs.mkdtempSync(path.join(TMP, 'djk-loops-'));
   const { o, url, log } = await geladenesDeck(t, { loops: lo });
   const e = eins();
   const fj = JSON.parse(fs.readFileSync(path.join(BESTAND, NIGHTSHIFT, 'fassungen', '128000_r1', 'fassung.json'), 'utf8'));
@@ -1076,7 +1143,7 @@ test('/deck/raster SET: stehendes Deck, Eins auf den Beat unter dem Kopf und auf
 });
 
 test('/deck/raster/fix (Plan Grid): speichert je Fassung, nach Laden und nach /e/neustart schickt der Server den Versatz', async (t) => {
-  const ro = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-raster-'));
+  const ro = fs.mkdtempSync(path.join(TMP, 'djk-raster-'));
   const { o, url, log } = await geladenesDeck(t, { rasterOrdner: ro });
   await postJson(url, '/deck/raster', { deck: 1, schritt_ms: 5 });
   await postJson(url, '/deck/raster', { deck: 1, schritt_ms: 5 });
@@ -1111,7 +1178,7 @@ test('/deck/raster/fix (Plan Grid): speichert je Fassung, nach Laden und nach /e
 
 // --- Grid-Eins (2026-10-11, Bericht grid-phase): FIX/SET schreibt die Eins ins Material, neue Fassungen erben den Versatz ---
 function eigenerBestand(eins1 = 0, eins2 = null) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-grideins-'));
+  const dir = fs.mkdtempSync(path.join(TMP, 'djk-grideins-'));
   process.on('exit', () => { try { fs.rmSync(dir, { recursive: true, force: true }); } catch {} });
   baueBestand(dir, [{ material_id: NIGHTSHIFT, titel: 'nightshift', frames: 48000 * 100 }]);
   const r1 = path.join(dir, NIGHTSHIFT, 'fassungen', '128000_r1');
@@ -1133,7 +1200,7 @@ const korrZeilen = (dir) => {
 
 test('FIX schreibt die Eins ins Material (art=eins), nur ganze Beats zählen; Feinversatz allein schreibt nichts', async (t) => {
   const dir = eigenerBestand(0);
-  const ro = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-raster-'));
+  const ro = fs.mkdtempSync(path.join(TMP, 'djk-raster-'));
   const { url, log } = await geladenesDeck(t, { rasterOrdner: ro, bestand: dir });
   // NEGATIV-KONTROLLE zuerst: 10 ms Feinversatz → keine Zeile
   await postJson(url, '/deck/raster', { deck: 1, versatz_frames: 480 });
@@ -1176,7 +1243,7 @@ test('SET schreibt NICHTS ins Material (flüchtig), erst FIX speichert die Eins 
 
 test('Neue Fassung ohne Raster-Datei erbt Versatz der nächstälteren (Fehlerfall 929d/9b44: r2 verlor die Korrektur von r1)', async (t) => {
   const dir = eigenerBestand(2, 2);
-  const ro = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-raster-'));
+  const ro = fs.mkdtempSync(path.join(TMP, 'djk-raster-'));
   fs.writeFileSync(path.join(ro, `${NIGHTSHIFT}_128000_r1.json`), JSON.stringify({ versatz_frames: -45480 }));
   const { o, url, log } = await geladenesDeck(t, { rasterOrdner: ro, bestand: dir });   // lädt die neueste: r2
   assert.equal(o.stand.decks['1'].fassung, 2);
@@ -1189,7 +1256,7 @@ test('Neue Fassung ohne Raster-Datei erbt Versatz der nächstälteren (Fehlerfal
 
 test('Neue Fassung hat die Eins schon eingebaut (2 → 0): nur der Feinversatz wird geerbt, nicht doppelt', async (t) => {
   const dir = eigenerBestand(2, 0);
-  const ro = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-raster-'));
+  const ro = fs.mkdtempSync(path.join(TMP, 'djk-raster-'));
   fs.writeFileSync(path.join(ro, `${NIGHTSHIFT}_128000_r1.json`), JSON.stringify({ versatz_frames: -45480 }));   // Eins 2, −2 Beats → 0
   const { url, log } = await geladenesDeck(t, { rasterOrdner: ro, bestand: dir });
   for (let i = 0; i < 100 && !log.some((l) => l.typ === 'raster_wieder'); i++) await warte(20);
@@ -1199,7 +1266,7 @@ test('Neue Fassung hat die Eins schon eingebaut (2 → 0): nur der Feinversatz w
 
 test('Eigene Raster-Datei der geladenen Fassung schlägt das Erbe (Negativ-Kontrolle)', async (t) => {
   const dir = eigenerBestand(2, 2);
-  const ro = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-raster-'));
+  const ro = fs.mkdtempSync(path.join(TMP, 'djk-raster-'));
   fs.writeFileSync(path.join(ro, `${NIGHTSHIFT}_128000_r1.json`), JSON.stringify({ versatz_frames: -45480 }));
   fs.writeFileSync(path.join(ro, `${NIGHTSHIFT}_128000_r2.json`), JSON.stringify({ versatz_frames: 96 }));
   const { url } = await geladenesDeck(t, { rasterOrdner: ro, bestand: dir });
@@ -1245,7 +1312,7 @@ test('Hotcues erbt die neue Fassung (esf verschoben); Setzen auf r2 schreibt den
   const r2 = path.join(dir, NIGHTSHIFT, 'fassungen', '128000_r2', 'fassung.json');
   const fj2 = JSON.parse(fs.readFileSync(r2, 'utf8'));
   fs.writeFileSync(r2, JSON.stringify({ ...fj2, erster_schlag_frame: (fj2.erster_schlag_frame ?? 0) - 2250 }));   // −0,1 Beat (Auto-Phase)
-  const hc = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-hc-'));
+  const hc = fs.mkdtempSync(path.join(TMP, 'djk-hc-'));
   const datei1 = path.join(hc, `${NIGHTSHIFT}_128000_r1.json`), datei2 = path.join(hc, `${NIGHTSHIFT}_128000_r2.json`);
   fs.writeFileSync(datei1, JSON.stringify({ 1: { quell_beat: 40, art: 'shot' }, 2: { quell_beat: 48, art: 'loop', laenge: 4 } }));
   const { url, log } = await geladenesDeck(t, { hotcueOrdner: hc, bestand: dir });                 // lädt r2
@@ -1267,8 +1334,8 @@ test('Hotcues erbt die neue Fassung (esf verschoben); Setzen auf r2 schreibt den
 for (const reihenfolge of ['erst Cue, dann FIX', 'erst FIX, dann Cue']) {
   test(`Hotcues Review F1: geerbter Satz und FIX mit ganzen Beats, ${reihenfolge}: derselbe Cue (Raster-Position wie auf r1)`, async (t) => {
     const dir = eigenerBestand(2, 2);
-    const hc = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-hc-'));
-    const ro = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-raster-'));
+    const hc = fs.mkdtempSync(path.join(TMP, 'djk-hc-'));
+    const ro = fs.mkdtempSync(path.join(TMP, 'djk-raster-'));
     fs.writeFileSync(path.join(hc, `${NIGHTSHIFT}_128000_r1.json`), JSON.stringify({ 1: { quell_beat: 40, art: 'shot' } }));
     const { url } = await geladenesDeck(t, { hotcueOrdner: hc, rasterOrdner: ro, bestand: dir });   // lädt r2, Cue nur geerbt
     const cue = () => postJson(url, '/deck/hotcue', { deck: 1, nr: 3, aktion: 'setzen', quell_beat: 20, raster: 1 });
@@ -1282,8 +1349,8 @@ for (const reihenfolge of ['erst Cue, dann FIX', 'erst FIX, dann Cue']) {
 
 test('Hotcues Review F1 NEGATIV: FIX ohne irgendeinen Cue legt keine Hotcue-Datei an', async (t) => {
   const dir = eigenerBestand(2, 2);
-  const hc = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-hc-'));
-  const { url } = await geladenesDeck(t, { hotcueOrdner: hc, rasterOrdner: fs.mkdtempSync(path.join(os.tmpdir(), 'djk-raster-')), bestand: dir });
+  const hc = fs.mkdtempSync(path.join(TMP, 'djk-hc-'));
+  const { url } = await geladenesDeck(t, { hotcueOrdner: hc, rasterOrdner: fs.mkdtempSync(path.join(TMP, 'djk-raster-')), bestand: dir });
   await postJson(url, '/deck/raster', { deck: 1, versatz_frames: 22500 });
   assert.equal((await postJson(url, '/deck/raster/fix', { deck: 1 })).code, 200);
   assert.deepEqual(fs.readdirSync(hc).filter((n) => n.startsWith(NIGHTSHIFT)), []);
@@ -1291,14 +1358,14 @@ test('Hotcues Review F1 NEGATIV: FIX ohne irgendeinen Cue legt keine Hotcue-Date
 
 test('Hotcues: neue Fassung ohne Hotcues irgendwo → leer, nichts geschrieben', async (t) => {
   const dir = eigenerBestand(2, 2);
-  const hc = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-hc-'));
+  const hc = fs.mkdtempSync(path.join(TMP, 'djk-hc-'));
   const { url } = await geladenesDeck(t, { hotcueOrdner: hc, bestand: dir });
   assert.deepEqual(await (await fetch(`${url}/deck/hotcues?deck=1`)).json(), {});
   assert.deepEqual(fs.readdirSync(hc).filter((n) => n.startsWith(NIGHTSHIFT)), []);
 });
 
 test('/loop raster (Plan Grid): Schritt an den Kern, raster_fix schreibt versatz_frames in loop.json, andere Felder bleiben', async (t) => {
-  const loops = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-loops-'));
+  const loops = fs.mkdtempSync(path.join(TMP, 'djk-loops-'));
   schreibeLoop(loops, 'pruef-a', 4);
   const { o, log, url } = await stapel(t, [], { loops });
   o.vomKern({ adresse: '/e/loop', felder: { box: 1, status: 1, name: 'pruef-a', beats: 4 } });
@@ -1319,7 +1386,7 @@ test('/loop raster (Plan Grid): Schritt an den Kern, raster_fix schreibt versatz
 });
 
 test('Review F5 (Plan Grid): Loop neu geladen ohne FIX → Server meldet den Datei-Wert, wie der Kern ihn spielt', async (t) => {
-  const loops = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-loops-'));
+  const loops = fs.mkdtempSync(path.join(TMP, 'djk-loops-'));
   schreibeLoop(loops, 'pruef-a', 4);
   const { o, url } = await stapel(t, [], { loops });
   o.vomKern({ adresse: '/e/loop', felder: { box: 1, status: 1, name: 'pruef-a', beats: 4 } });
@@ -1413,6 +1480,15 @@ test('Hand Rev2 B1: Öffnen nach §1.6 (Trim + Fader > −26) und I3d (Sprung/Ho
   r = await postJson(url, '/deck/hotcue', { deck: 1, nr: 1, aktion: 'spielen', raster: 1 }, CYPHER);
   assert.equal(r.code, 409); assert.equal(n(), n0);
   assert.equal((await postJson(url, '/deck/sprung', { deck: 1, delta: 4, raster: 0 })).code, 200);
+  // Hörbares Ziehen auf offenem Deck: Griff und Zug wie der Sprung gesperrt, das Los (phase 0) nie
+  n0 = n();
+  for (const phase of [1, 2]) {
+    r = await postJson(url, '/deck/scrub', { deck: 1, phase, delta: 1 }, CYPHER);
+    assert.equal(r.code, 409); assert.equal(r.j.fehler, 'ziel_ungehoert');
+  }
+  assert.equal(n(), n0);
+  assert.equal((await postJson(url, '/deck/scrub', { deck: 1, phase: 0, delta: 1 }, CYPHER)).code, 200);
+  assert.equal((await postJson(url, '/deck/scrub', { deck: 1, phase: 1, delta: 0 })).code, 200);
   // Loop auf offenem Deck ist frei (wiederholt Gehörtes)
   assert.equal((await postJson(url, '/deck/loop', { deck: 1, laenge: 4, raster: 4 }, CYPHER)).code, 200);
 });
@@ -1447,7 +1523,7 @@ test('Hand T4/T5: GET /lage verdichtet; /deck/start synchron auf den Takt ab der
 });
 
 test('Hand T7: cypher darf FX/Strudel nur bei AUTO an und ohne Stop Cypher; Andreas-Schalter 403; offene Box gesperrt', { skip: OHNE_STRUDEL }, async (t) => {
-  const mo = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-muster-'));
+  const mo = fs.mkdtempSync(path.join(TMP, 'djk-muster-'));
   const { o, url, log } = await geladenesDeck(t, { musterOrdner: mo });
   const fx1 = { einheit: 1, art: 1, beats: 1, wet: 0.5, param1: 0.5, param2: 0.5, param3: 0.5, an: true };
   // AUTO an (Vorgabe ohne Datei): FX mit cypher geht, Quelle cypher
@@ -1523,7 +1599,7 @@ function saetzeMitSchlag(von, bis, bpm, { offsetMs = 5, decayMs = 20, amplitude 
 }
 
 test('Ohr T8: GET /hoeren?deck=1 trägt sync mit validiert:false, ohne Partner deck_gegen_deck_ms null', async (t) => {
-  const ringPfad = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'djk-huellen-t8-')), 'huellen');
+  const ringPfad = path.join(fs.mkdtempSync(path.join(TMP, 'djk-huellen-t8-')), 'huellen');
   const { o, url } = await geladenesDeck(t, { huellen: ringPfad });
   const u = o.kern.uhr;
   assert.ok(u, 'kern.uhr gesetzt');
@@ -1543,7 +1619,7 @@ test('Ohr T8: GET /hoeren?deck=1 trägt sync mit validiert:false, ohne Partner d
 });
 
 test('Ohr T8: mit laufendem, offenem Partner (Deck 2) ist deck_gegen_deck_ms eine endliche Zahl', async (t) => {
-  const ringPfad = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'djk-huellen-t8b-')), 'huellen');
+  const ringPfad = path.join(fs.mkdtempSync(path.join(TMP, 'djk-huellen-t8b-')), 'huellen');
   // I3a (Kern-Riegel, Ohr T14) nimmt Quelle andreas aus (§17 „die Hand wird nie blockiert"); dieser Test öffnet ohne
   // x-djk-quelle = andreas über /regler, braucht also keine Mutation mehr (Befund Slice 2, hoerschein.mjs).
   const { o, url, log } = await geladenesDeck(t, { huellen: ringPfad });
@@ -1571,7 +1647,7 @@ test('Ohr T8: mit laufendem, offenem Partner (Deck 2) ist deck_gegen_deck_ms ein
 
 // Task 1.5: Trim-Vorschlag relativ zum aktuellen Trim (der Mess-Abgriff liegt NACH dem Trim, live.md Posten 5)
 test('Ohr 1.5: /hoeren trägt vergleich.trim_vorschlag_db = round1(trim_alt − pegel_diff_db), relativ zum gemessenen Wert', async (t) => {
-  const ringPfad = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'djk-huellen-t15-')), 'huellen');
+  const ringPfad = path.join(fs.mkdtempSync(path.join(TMP, 'djk-huellen-t15-')), 'huellen');
   const { o, url } = await geladenesDeck(t, { huellen: ringPfad });
   o.stand.regler['deck/1/trim'] = -3;
   const u = o.kern.uhr;
@@ -1595,7 +1671,7 @@ test('Ohr 1.5: /hoeren trägt vergleich.trim_vorschlag_db = round1(trim_alt − 
 });
 
 async function hoerenMitK(t, kDeck, kMaster, trim = -3) {
-  const ringPfad = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'djk-huellen-t15k-')), 'huellen');
+  const ringPfad = path.join(fs.mkdtempSync(path.join(TMP, 'djk-huellen-t15k-')), 'huellen');
   const { o, url } = await geladenesDeck(t, { huellen: ringPfad });
   o.stand.regler['deck/1/trim'] = trim;
   const u = o.kern.uhr;
@@ -1627,7 +1703,7 @@ test('Ohr 1.5: pegel_diff_db keine Zahl (JSON null) -> kein Vorschlag', async (t
 });
 
 test('Ohr 1.5: ohne vergleich (nichts gehört) kein trim_vorschlag_db', async (t) => {
-  const ringPfad = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'djk-huellen-t15n-')), 'huellen');
+  const ringPfad = path.join(fs.mkdtempSync(path.join(TMP, 'djk-huellen-t15n-')), 'huellen');
   const { o, url } = await geladenesDeck(t, { huellen: ringPfad });
   o.stand.regler['deck/1/trim'] = -3;
   const r = await fetch(url + '/hoeren?deck=1&takte=1');
@@ -1741,7 +1817,7 @@ test('Ohr T18 /fx/routing: /e/fx/routing geht an jeden Strom (zweites Fenster) u
 });
 
 test('Studio S1: /strudel mit strom 2 schreibt in <ordner>2, strom 1 unberührt; AUTO je Strom; strom 4 → 400', { skip: OHNE_STRUDEL }, async (t) => {
-  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-muster-'));
+  const d = fs.mkdtempSync(path.join(TMP, 'djk-muster-'));
   const { url } = await stapel(t, [], { musterOrdner: d });
   assert.equal((await postJson(url, '/strudel', { text: 's("bat_synth*4")', strom: 2 })).code, 200);
   assert.equal(fs.readFileSync(`${d}2/strom1.js`, 'utf8'), 's("bat_synth*4")\n');
@@ -1839,7 +1915,11 @@ test('Studio S6 Review: POST /abbruch (cypher) bricht Cyphers Spuren ab, Andreas
   assert.deepEqual((await (await fetch(`${url}/spur`)).json()).map((x) => x.name), ['von-andreas']);
 });
 
+// V2 Fix-Runde 2 H4: hier entstehen die Wirt-Sockets der Tests. Ist der längste Socket-Pfad des Ordners länger als sun_path (107 Bytes, zu langer
+// TMPDIR), bricht der Test mit einer Meldung ab, die TMPDIR und die Länge nennt, statt mit EADDRINUSE oder einem Socket, der zum Nachbarn wird.
+// Geprüft wird nur, wo Sockets gebunden werden: der Vorgabe-Wirt-Ordner des Stapels (seit H2 eine Ebene tiefer) hat keine und bleibt ungeprüft.
 async function fakeWirt(t, ordner, gruppe, antwort = { ok: true }) {
+  pruefeWirtOrdner(ordner);
   const zeilen = [];
   const srv = net.createServer((c) => {
     let d = '';
@@ -1851,7 +1931,7 @@ async function fakeWirt(t, ordner, gruppe, antwort = { ok: true }) {
 }
 
 test('Studio S6 T6: Surge-Fahrten gehen mit Startzeit aus der Kern-Uhr an den Wirt, Stopp hält sie an', async (t) => {
-  const wo = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-wirt-'));
+  const wo = fs.mkdtempSync(path.join(TMP, 'djk-wirt-'));
   const { o, url } = await stapel(t, [], { wirtOrdner: wo });
   const bass = await fakeWirt(t, wo, 'bass');
   const spur = { name: 'bass-auf', fahrten: [{ ziel: 'wirt:bass/a_filter1_cutoff', ab_takt: 2, takte: 4, nach: -15, von: -45 }] };
@@ -1876,7 +1956,7 @@ test('Studio S6 T6: Surge-Fahrten gehen mit Startzeit aus der Kern-Uhr an den Wi
 });
 
 test('Studio S6 T7: Muster-Fahrt schreibt den Strom zwei Beats vor ihrer Takt-Eins, als cypher', { skip: OHNE_STRUDEL }, async (t) => {
-  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-muster-'));
+  const d = fs.mkdtempSync(path.join(TMP, 'djk-muster-'));
   const { url, log } = await stapel(t, [], { musterOrdner: d });
   const r = await postJson(url, '/spur', { spur: { name: 'still-2', fahrten: [{ ziel: 'strom:2', ab_takt: 2, muster: 'silence' }] } }, CYPHER);
   assert.equal(r.code, 200, JSON.stringify(r.j)); assert.equal(r.j.muster, 1);
@@ -1897,7 +1977,7 @@ test('Studio S6 T7: Muster-Fahrt schreibt den Strom zwei Beats vor ihrer Takt-Ei
 });
 
 test('Studio S6 Final-Review F1: Stop Cypher bricht Cyphers Spuren ab (Kern, Wirt halte, Muster), Andreas\' Spur bleibt', async (t) => {
-  const wo = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-wirt-'));
+  const wo = fs.mkdtempSync(path.join(TMP, 'djk-wirt-'));
   const { o, url, log } = await stapel(t, [], { wirtOrdner: wo });
   const bass = await fakeWirt(t, wo, 'bass');
   const spur = { name: 'sp', fahrten: [
@@ -1935,7 +2015,7 @@ test('Studio S6 Final-Review F9: /spur/stopp als cypher auf Andreas\' Spur 403 n
 });
 
 test('Studio S6 Final-Review F4: AUTO aus hält Cyphers Spuren und /regler auf dem Strom, Andreas nie, andere Ströme frei', async (t) => {
-  const wo = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-wirt-'));
+  const wo = fs.mkdtempSync(path.join(TMP, 'djk-wirt-'));
   const { url, log } = await stapel(t, [], { wirtOrdner: wo });
   const bass = await fakeWirt(t, wo, 'bass');
   const teile = () => log.filter((z) => z.typ === 'an_kern' && z.adresse === '/k/teil').length;
@@ -1971,7 +2051,7 @@ test('Studio S6 Final-Review F3: POST /spur meldet abgelehnte Teile wie GET /spu
 });
 
 test('Studio S6 Final-Review F8: der Server loggt spur_wirt_ersetzt, wenn der Wirt wartende Fahrten verworfen hat; sonst nicht', async (t) => {
-  const wo = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-wirt-'));
+  const wo = fs.mkdtempSync(path.join(TMP, 'djk-wirt-'));
   const { url, log } = await stapel(t, [], { wirtOrdner: wo });
   await fakeWirt(t, wo, 'bass', { ok: true, ersetzt: 2 });
   await fakeWirt(t, wo, 'melodie');
@@ -1984,7 +2064,7 @@ test('Studio S6 Final-Review F8: der Server loggt spur_wirt_ersetzt, wenn der Wi
 });
 
 test('Studio S6 Final-Review F5: Tempowechsel nach dem Start verschiebt den Muster-Zeitpunkt nicht (Beat statt Wanduhr)', { skip: OHNE_STRUDEL }, async (t) => {
-  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-muster-'));
+  const d = fs.mkdtempSync(path.join(TMP, 'djk-muster-'));
   const { o, url, log } = await stapel(t, [], { musterOrdner: d });
   const r = await postJson(url, '/spur', { spur: { name: 'mt', fahrten: [{ ziel: 'strom:2', ab_takt: 7, muster: 'silence' }] } }, CYPHER);
   assert.equal(r.code, 200, JSON.stringify(r.j));
@@ -2013,7 +2093,7 @@ async function neustart(t, o) {
 }
 
 test('Studio S6 Final-Review F2: laufende Spuren überstehen den Neustart des Seiten-Servers (Liste, /spur/stopp, /abbruch, Stop Cypher)', async (t) => {
-  const wo = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-wirt-'));
+  const wo = fs.mkdtempSync(path.join(TMP, 'djk-wirt-'));
   const { o, url } = await stapel(t, [], { wirtOrdner: wo });
   const bass = await fakeWirt(t, wo, 'bass');
   const start = async (name, ziel, kopf) => { const r = await postJson(url, '/spur', { spur: { name, fahrten: [{ ziel, ab_takt: 1, takte: 8, nach: ziel.startsWith('wirt') ? -15 : -0.6, ...(ziel.startsWith('wirt') ? { von: -45 } : {}) }] } }, kopf); assert.equal(r.code, 200, JSON.stringify(r.j)); return r.j; };
@@ -2044,8 +2124,8 @@ test('Studio S6 Final-Review F2: laufende Spuren überstehen den Neustart des Se
 });
 
 test('Studio S6 Final-Review F2: abgelaufene Spuren fallen beim Laden weg, Muster-Fahrten werden neu eingeplant', { skip: OHNE_STRUDEL }, async (t) => {
-  const wo = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-wirt-'));
-  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-muster-'));
+  const wo = fs.mkdtempSync(path.join(TMP, 'djk-wirt-'));
+  const d = fs.mkdtempSync(path.join(TMP, 'djk-muster-'));
   const { o, url } = await stapel(t, [], { wirtOrdner: wo, musterOrdner: d });
   const kurz = await postJson(url, '/spur', { spur: { name: 'kurz', fahrten: [{ ziel: 'erz/2/filter', ab_takt: 1, takte: 1, nach: -0.6 }] } }, CYPHER);
   const mus = await postJson(url, '/spur', { spur: { name: 'mus', fahrten: [{ ziel: 'strom:2', ab_takt: 4, muster: 'silence' }] } }, CYPHER);
@@ -2067,7 +2147,7 @@ test('Studio S6 Final-Review F2: abgelaufene Spuren fallen beim Laden weg, Muste
 });
 
 test('S7 T11: GET /spur liefert die Fahrten der laufenden Spur, auch nach dem Neustart des Seiten-Servers', async (t) => {
-  const wo = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-wirt-'));
+  const wo = fs.mkdtempSync(path.join(TMP, 'djk-wirt-'));
   const { o, url } = await stapel(t, [], { wirtOrdner: wo });
   const spur = { name: 'band-2-fader', fahrten: [
     { ziel: 'erz/2/fader', ab_takt: 1, nach: 0 }, { ziel: 'erz/2/fader', ab_takt: 1, takte: 4, nach: -30, form: 'linear' }] };
@@ -2105,7 +2185,7 @@ test('/loop rec wartet auf die Kern-Quittung: Status 6 kommt in der Antwort an, 
 });
 
 test('Plan Tempo-Folge: /loop laden und start warten auf die Kern-Quittung, Status 6 steht in der Antwort', async (t) => {
-  const loops = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-loops-'));
+  const loops = fs.mkdtempSync(path.join(TMP, 'djk-loops-'));
   schreibeLoop(loops, 'pruef-a', 4);
   const { o, log, url } = await stapel(t, [], { loops });
   const p = postJson(url, '/loop', { aktion: 'laden', box: 1, name: 'pruef-a' });
@@ -2126,8 +2206,8 @@ test('Plan Tempo-Folge: /loop laden und start warten auf die Kern-Quittung, Stat
 // Plan djk-hand-mcp-studio T1 (Review): loopKit-Riegel für Quelle cypher: Stop Cypher und AUTO Strom 1 aus (der Zusatz-Kit rec
 // hängt am Drums-Erzeuger). Andreas' Hand bleibt frei.
 test('/loop kit: cypher bei Stop Cypher → 409 ki_gestoppt, bei AUTO Strom 1 aus → 409 auto_aus; andreas und Normalfall frei', async (t) => {
-  const loops = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-loops-'));
-  const kits = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-kits-'));
+  const loops = fs.mkdtempSync(path.join(TMP, 'djk-loops-'));
+  const kits = fs.mkdtempSync(path.join(TMP, 'djk-kits-'));
   fs.mkdirSync(path.join(kits, 'battery'));
   fs.writeFileSync(path.join(kits, 'battery/kit.json'), JSON.stringify({ schema: 1, name: 'battery',
     klaenge: [{ note: 0, name: 'bd:0', datei: 'bd_0.f32', frames: 1 }] }));
@@ -2179,7 +2259,7 @@ test('GET /pegel: ungedrosselter Puffer liefert Spitze und Median je Kanal, sek 
 // Task 3 (djk-hand-Nachrüstung): POST/GET /klang. JEDER Test hier läuft über ein Stub-Skript (opt.klangBefehl), nie über den
 // echten djk-klang: der träfe den laufenden Surge unter /dev/shm/cypherdj/wirt-*.sock.
 function klangStub() {
-  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-klangstub-'));
+  const d = fs.mkdtempSync(path.join(TMP, 'djk-klangstub-'));
   const f = path.join(d, 'stub');
   fs.writeFileSync(f, `#!${process.execPath}
 const a = process.argv.slice(2);
@@ -2191,8 +2271,8 @@ process.stdout.write(JSON.stringify(a));
   return f;
 }
 async function klangStapel(t, extra = {}) {
-  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-muster-'));
-  const wo = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-wirt-'));
+  const d = fs.mkdtempSync(path.join(TMP, 'djk-muster-'));
+  const wo = fs.mkdtempSync(path.join(TMP, 'djk-wirt-'));
   const s = await stapel(t, [], { musterOrdner: d, wirtOrdner: wo, klangBefehl: klangStub(), ...extra });
   return { ...s, d, wo };
 }
@@ -2460,7 +2540,7 @@ async function nachNeustart(o, log, generation, vorher, erwartet) {
 }
 
 test('Slice 5 F07: laufende Box kommt mit Name, Besitzer, Live-Raster und start zurück; bereite/endende ohne start, leere gar nicht', async (t) => {
-  const loops = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-loops-'));
+  const loops = fs.mkdtempSync(path.join(TMP, 'djk-loops-'));
   const { o, log, url } = await stapel(t, [], { loops });
   await boxAn(o, url, loops, 1, 'pruef-a', CYPHER, { status: 3 });
   await boxAn(o, url, loops, 2, 'pruef-b', {}, { status: 1, raster: 96 });   // Raster nur von Andreas; Box bereit
@@ -2489,8 +2569,8 @@ test('Slice 5 F07: laufende Box kommt mit Name, Besitzer, Live-Raster und start 
 });
 
 test('Slice 5 F07 B12: bei Stop Cypher kommen Cyphers Boxen und FX nicht zurück, Andreas\' schon', async (t) => {
-  const loops = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-loops-'));
-  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-muster-'));
+  const loops = fs.mkdtempSync(path.join(TMP, 'djk-loops-'));
+  const d = fs.mkdtempSync(path.join(TMP, 'djk-muster-'));
   const { o, log, url } = await stapel(t, [], { loops, musterOrdner: d });
   await boxAn(o, url, loops, 1, 'pruef-a', CYPHER);
   await boxAn(o, url, loops, 2, 'pruef-b', {});
@@ -2507,7 +2587,7 @@ test('Slice 5 F07 B12: bei Stop Cypher kommen Cyphers Boxen und FX nicht zurück
 });
 
 test('Slice 5 F07 B13: höchstens eine Wiederherstellung je 30 s, die zweite wird gemeldet', async (t) => {
-  const loops = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-loops-'));
+  const loops = fs.mkdtempSync(path.join(TMP, 'djk-loops-'));
   const { o, log, url } = await stapel(t, [], { loops });
   await boxAn(o, url, loops, 1, 'pruef-a', {});
   const n0 = kernBefehle(log).length;
@@ -2519,7 +2599,7 @@ test('Slice 5 F07 B13: höchstens eine Wiederherstellung je 30 s, die zweite wir
 });
 
 test('Slice 5 F07: FX-Einheiten und Zuweisungen kommen mit Werten und Besitzer zurück, fx_von.json bleibt', async (t) => {
-  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-muster-'));
+  const d = fs.mkdtempSync(path.join(TMP, 'djk-muster-'));
   const { o, log } = await stapel(t, [], { musterOrdner: d });
   const von = JSON.stringify({ '1': { von: 'cypher', zeit: 1 }, '2': { von: 'andreas', zeit: 2 } });
   fs.writeFileSync(path.join(d, 'fx_von.json'), von);
@@ -2546,7 +2626,7 @@ async function stoppCypherS5(o) {
 }
 
 test('Slice 5 Review F1: der Besitzer wechselt erst mit bestätigter Ladung, nicht beim Versuch', async (t) => {
-  const loops = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-loops-'));
+  const loops = fs.mkdtempSync(path.join(TMP, 'djk-loops-'));
   // (a) Andreas' Box, Cyphers Versuch scheitert mit 400: die Box bleibt Andreas', auch bei Stop Cypher
   const s1 = await stapel(t, [], { loops });
   await boxAn(s1.o, s1.url, loops, 1, 'pruef-a', {});
@@ -2556,7 +2636,7 @@ test('Slice 5 Review F1: der Besitzer wechselt erst mit bestätigter Ladung, nic
   assert.deepEqual(a.map(formS5), ['/k/loop/laden|b1|andreas|pruef-a', '/k/loop/start|b1|andreas']);
 });
 test('Slice 5 Review F1: Andreas\' 400 auf Cyphers Box macht sie nicht zu seiner (bei Stop Cypher bleibt sie weg)', async (t) => {
-  const loops = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-loops-'));
+  const loops = fs.mkdtempSync(path.join(TMP, 'djk-loops-'));
   const { o, log, url } = await stapel(t, [], { loops });
   await boxAn(o, url, loops, 1, 'pruef-a', CYPHER);
   assert.equal((await postJson(url, '/loop', { aktion: 'laden', box: 1, name: 'gibtsnicht' }, {})).code, 400);
@@ -2564,7 +2644,7 @@ test('Slice 5 Review F1: Andreas\' 400 auf Cyphers Box macht sie nicht zu seiner
   assert.deepEqual(await nachNeustart(o, log, 72, kernBefehle(log).length, 0), []);
 });
 test('Slice 5 Review F1: Cyphers vom Kern abgelehnte Ladung (Stop Cypher) auf Andreas\' Box ändert den Besitzer nicht', async (t) => {
-  const loops = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-loops-'));
+  const loops = fs.mkdtempSync(path.join(TMP, 'djk-loops-'));
   const { o, log, url } = await stapel(t, [], { loops });
   await boxAn(o, url, loops, 1, 'pruef-a', {});
   schreibeLoop(loops, 'pruef-c', 4);
@@ -2574,7 +2654,7 @@ test('Slice 5 Review F1: Cyphers vom Kern abgelehnte Ladung (Stop Cypher) auf An
 });
 
 test('Slice 5 Review F2: unbekannter Besitzer gilt als cypher (bei Stop Cypher nichts, sonst Quelle cypher)', async (t) => {
-  const loops = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-loops-'));
+  const loops = fs.mkdtempSync(path.join(TMP, 'djk-loops-'));
   const { o, log } = await stapel(t, [], { loops });
   schreibeLoop(loops, 'pruef-a', 4);
   o.vomKern({ adresse: '/e/loop', felder: { box: 1, status: 1, name: 'pruef-a', beats: 4 } });   // geladen am Server vorbei (djk-loop)
@@ -2587,8 +2667,8 @@ test('Slice 5 Review F2: unbekannter Besitzer gilt als cypher (bei Stop Cypher n
 });
 
 test('Slice 5 Review F3: was in den 500 ms neu geladen oder gesetzt wird, bleibt von der Wiederherstellung unberührt', async (t) => {
-  const loops = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-loops-'));
-  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-muster-'));
+  const loops = fs.mkdtempSync(path.join(TMP, 'djk-loops-'));
+  const d = fs.mkdtempSync(path.join(TMP, 'djk-muster-'));
   const { o, log, url } = await stapel(t, [], { loops, musterOrdner: d });
   await boxAn(o, url, loops, 1, 'pruef-a', {});
   await boxAn(o, url, loops, 2, 'pruef-b', {});
@@ -2611,7 +2691,7 @@ test('Slice 5 Review F3: was in den 500 ms neu geladen oder gesetzt wird, bleibt
 });
 
 test('Slice 5 Review F4: /e/neustart mit unveränderter Generation (Neuanmeldung, Kern lief weiter) sendet nichts', async (t) => {
-  const loops = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-loops-'));
+  const loops = fs.mkdtempSync(path.join(TMP, 'djk-loops-'));
   const { o, log, url } = await stapel(t, [], { loops });
   await boxAn(o, url, loops, 1, 'pruef-a', {});
   assert.notEqual(o.generation, null);
@@ -2621,7 +2701,7 @@ test('Slice 5 Review F4: /e/neustart mit unveränderter Generation (Neuanmeldung
 });
 
 test('Slice 5 Review F5: ein nicht mehr ladbarer Loop wird nicht gesendet, gemeldet und nicht als Stück gezählt', async (t) => {
-  const loops = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-loops-'));
+  const loops = fs.mkdtempSync(path.join(TMP, 'djk-loops-'));
   const { o, log, url } = await stapel(t, [], { loops });
   await boxAn(o, url, loops, 1, 'pruef-a', {});
   fs.rmSync(path.join(loops, 'pruef-a'), { recursive: true, force: true });
@@ -2631,7 +2711,7 @@ test('Slice 5 Review F5: ein nicht mehr ladbarer Loop wird nicht gesendet, gemel
 });
 
 test('Slice 5 Review F6 (B14): wartet (2), läuft (3) und tempo (5) bekommen start, bereit (1) und endet (4) nicht', async (t) => {
-  const loops = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-loops-'));
+  const loops = fs.mkdtempSync(path.join(TMP, 'djk-loops-'));
   const { o, log, url } = await stapel(t, [], { loops });
   await boxAn(o, url, loops, 1, 'pruef-a', {});
   let g = 110;
@@ -2644,7 +2724,7 @@ test('Slice 5 Review F6 (B14): wartet (2), läuft (3) und tempo (5) bekommen sta
 });
 
 test('Slice 5 Review F7: Cyphers FX kommen bei AUTO aus nicht zurück, Andreas\' schon', async (t) => {
-  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-muster-'));
+  const d = fs.mkdtempSync(path.join(TMP, 'djk-muster-'));
   const { o, log, url } = await stapel(t, [], { musterOrdner: d });
   fs.writeFileSync(path.join(d, 'fx_von.json'), JSON.stringify({ '1': { von: 'cypher', zeit: 1 }, '2': { von: 'andreas', zeit: 1 } }));
   const fx = (e) => ({ einheit: e, art: 2, beats: 1, wet: 0.6, param1: 0.4, param2: 0.5, param3: 0.5, an: 1 });
@@ -2659,7 +2739,7 @@ test('Slice 5 Review F7: Cyphers FX kommen bei AUTO aus nicht zurück, Andreas\'
 
 // Slice 5 Nacharbeit 2: /e/neustart mit GLEICHER Generation (Abonnent hat sich nur neu gemeldet, der Kern lief weiter) lässt den Stand stehen
 test('Slice 5 F4: gleiche Generation leert den Stand nicht und sendet nichts; neue Generation leert wie bisher', async (t) => {
-  const loops = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-loops-'));
+  const loops = fs.mkdtempSync(path.join(TMP, 'djk-loops-'));
   const { o, log, url } = await stapel(t, [], { loops });
   await boxAn(o, url, loops, 1, 'pruef-a', {}, { raster: 96 });
   o.vomKern({ adresse: '/e/fx', felder: { einheit: 1, art: 2, beats: 1, wet: 0.6, param1: 0.4, param2: 0.5, param3: 0.5, an: 1 } });
@@ -2688,7 +2768,7 @@ test('Slice 5 F4: gleiche Generation leert den Stand nicht und sendet nichts; ne
 const willkommen = (generation) => ({ adresse: '/k/willkommen', felder: { vertrag: 1, generation, sample: 0, beat: 0, bpm: 128, version: 'x' } });
 const ohneRouting = (b) => b.filter((z) => z.adresse !== '/k/fx/routing');
 test('Final-Review FR1: /k/willkommen mit KLEINERER Generation (gebremster Kern) leert den Stand, sendet den Routing-Wunsch, stellt nichts wieder her', async (t) => {
-  const loops = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-loops-'));
+  const loops = fs.mkdtempSync(path.join(TMP, 'djk-loops-'));
   const { o, log, url } = await stapel(t, [], { loops });
   o.vomKern({ adresse: '/e/neustart', felder: { generation: 5, sample: 0 } });
   await warte(700);
@@ -2720,7 +2800,7 @@ test('Final-Review FR1: /k/willkommen mit KLEINERER Generation (gebremster Kern)
 });
 
 test('Final-Review FR2: ein geplanter Plan feuert nicht in einen inzwischen gebremsten Kern (Generation hat sich geändert)', async (t) => {
-  const loops = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-loops-'));
+  const loops = fs.mkdtempSync(path.join(TMP, 'djk-loops-'));
   const { o, log, url } = await stapel(t, [], { loops });
   o.vomKern({ adresse: '/e/neustart', felder: { generation: 5, sample: 0 } });
   await warte(700);
@@ -2878,7 +2958,7 @@ test('Glanz 1.2: verschobener Teil, den der Kern sofort ablehnt (Andreas-Teil am
 // Plan Glanz 1.3 (Server-Teil, Review-Befunde 1-3): Kern lässt pad/* für Cypher ohne Hörschein öffnen; die Herkunft des
 // Box-Inhalts prüft die Seite, und zwar bei der Anfrage UND bei jedem Inhaltswechsel danach (offene Box, offene Rampe).
 async function padStapel(t, extra = {}) {
-  const loops = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-loops-'));
+  const loops = fs.mkdtempSync(path.join(TMP, 'djk-loops-'));
   schreibeLoop(loops, 'c-eigen', 4, false, 'mitschnitt');
   schreibeLoop(loops, 'c-eigen2', 4, false, 'mitschnitt');
   schreibeLoop(loops, 'a-fremd', 4, false, 'deck');
@@ -3021,7 +3101,7 @@ test('Glanz 1.3 Gesamt-Review: eine beim Kern-Neustart ausstehende eigene Ladung
 test('Glanz 1.3 Gesamt-Review (Negativ-Kontrolle): ohne Neustart zählt die ausstehende eigene Ladung weiter', (t) => ausstehendeLadung(t, false));
 
 test('Glanz 2.1 F22: /ausgang und /lage.ausgang zeigen den Stand der Wache, ohne Datei unbewacht', async (t) => {
-  const p = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'djk-do-')), 'digitalout.json');
+  const p = path.join(fs.mkdtempSync(path.join(TMP, 'djk-do-')), 'digitalout.json');
   fs.writeFileSync(p, JSON.stringify({ version: 1, karte: 2, zustand: 'aus', faelle: 0, letzter: null, lebenszeichen: new Date().toISOString() }));
   const { url } = await stapel(t, [], { digitalout: p });
   assert.equal((await (await fetch(`${url}/ausgang`)).json()).zustand, 'aus');
@@ -3058,4 +3138,26 @@ test('Naht F13: Stop Cypher verwirft Cyphers wartende Ladung → nach der Freiga
   assert.equal((await postJson(url, '/loop', { aktion: 'laden', box: 2, name: 'a-fremd' })).code, 200);
   o.vomKern({ adresse: '/e/ki', felder: { gestoppt: 1 } });
   assert.equal(o.loopLadung['2']?.name, 'a-fremd');
+});
+
+// V2 Fix-Runde 2 H2 (Spec 6.33, wie tests/hilfen/mediathek.mjs F16): die Stapel-Hilfe dieser Datei legt Hüllen und alle Vorgabe-Ordner (loops, kits,
+// welle, muster, hc, raster, wirt) im eigenen tmp-Ordner an, den t.after wegräumt; ein ausdrücklich übergebener Ordner gehört dem Aufrufer und bleibt.
+// Vorher blieben je Stapel acht djk-*-Ordner unter TMPDIR liegen (ganzer Suite-Lauf: rund 1300 Einträge). Geprüft wird nur, was neu unter TMPDIR liegt.
+test('V2 Fix-Runde 2 H2: stapel() lässt unter TMPDIR nichts liegen, ein übergebener Ordner bleibt', async () => {
+  const eintraege = () => new Set(fs.readdirSync(os.tmpdir()));
+  const eigen = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-h2eigen-'));
+  fs.writeFileSync(path.join(eigen, 'bleibt.txt'), 'x');
+  const vorher = eintraege(), afters = [];
+  let waehrend = null;
+  try {
+    await stapel({ after: (f) => afters.push(f) }, [], { loops: eigen });
+    waehrend = [...eintraege()].filter((x) => !vorher.has(x));
+  } finally { for (const f of afters.reverse()) await f(); }
+  const neu = [...eintraege()].filter((x) => !vorher.has(x)).sort();
+  const bleibt = fs.existsSync(path.join(eigen, 'bleibt.txt'));
+  fs.rmSync(eigen, { recursive: true, force: true });                   // was dieser Test selbst angelegt hat
+  console.log(`H2 ${JSON.stringify({ tmpdir: os.tmpdir(), waehrend, nach_after: neu })}`);
+  assert.ok(waehrend.length >= 1, 'Positiv-Kontrolle: während des Laufs liegt der tmp-Ordner des Stapels unter TMPDIR');
+  assert.deepEqual(neu, [], 'nach t.after liegt unter TMPDIR nichts Neues');
+  assert.ok(bleibt, 'Negativ-Kontrolle: der übergebene loops-Ordner bleibt stehen');
 });

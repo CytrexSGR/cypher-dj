@@ -137,6 +137,12 @@ int main() {
   ere->schiebe(e);
   PRUEF(g.warte("/e/ki", 500) && !std::strcmp(g.m.typen, "ish") && g.i(0) == 1 && !std::strcmp(g.s(1), "ki_stopp"));
   PRUEF(g.warte("/zustand/kern", 500) && g.warte("/zustand/kern", 500) && g.i(10) == 1);  // ki_gestoppt
+  // D1 K1 Fix 10: /zustand/kern meldet die verlorenen Ereignisse des Kerns (aus /uhr-Ereignis, Feld verloren)
+  e = cdj::Ereignis{}; e.art = cdj::Ereignis::UHR; e.sample = 1'080'320; e.verloren = 7;
+  ere->schiebe(e);
+  PRUEF(g.warte("/uhr", 500));
+  PRUEF(g.warte("/zustand/kern", 500) && g.warte("/zustand/kern", 500) && !std::strcmp(g.m.typen, "iihiiiiiiiih") &&
+        g.h(11) == 7);   // ereignisse_verloren
   stop = true;
   faden.join();
 

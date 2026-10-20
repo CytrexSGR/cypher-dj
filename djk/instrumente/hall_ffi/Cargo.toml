@@ -2,7 +2,7 @@
 name = "hall_ffi"
 version = "0.1.0"
 edition = "2021"
-description = "Cypher-Effekte mit C-ABI als statische Bibliothek für den djk-Kern: Hall (fx/2) und Kompressor (je Kanal)"
+description = "Cypher-Effekte und -Instrumente mit C-ABI als statische Bibliothek für den djk-Kern: Hall (fx/2), Kompressor (je Kanal), RB-338 (Arrangement)"
 license = "GPL-3.0-or-later"
 publish = false
 
@@ -12,3 +12,9 @@ crate-type = ["staticlib", "rlib"]
 [dependencies]
 hall_dsp = { path = "../hall_dsp" }
 komp_dsp = { path = "../komp_dsp" }
+rb_dsp = { path = "../rb_dsp" }
+
+# Nur für die Tests: die Parameterschicht der RB-FFI gegen das Plugin (tests/rb_wie_plugin.rs). Nicht in der Staticlib.
+[dev-dependencies]
+rb338 = { path = "../rb338" }
+nih_plug = { workspace = true }

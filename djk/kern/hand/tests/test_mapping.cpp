@@ -141,6 +141,20 @@ FALL(fehlerhafte_mappings_mit_art_und_zeile) {
   }
 }
 
+FALL(arr_ziel_nur_als_taste) {
+  // D1 K1 (§7.2): arr/start_stopp lädt als Taste; als absolut falsche_art; arr/start ist kein Ziel
+  auto m = std::make_unique<Mapping>();
+  Fehler f;
+  const std::string kopf = R"({"version":1,"geraet":"arr","quelle_port":"q","ziel_port":"z","eintraege":[)";
+  PRUEFE(lade((kopf + R"({"nachricht":{"typ":"note","kanal":1,"nr":60},"ziel":"arr/start_stopp","art":"taste"}]})").c_str(),
+              tab(), m.get(), &f));
+  PRUEFE(m->eintrag[0].ziel_art == ZielArt::arr);
+  PRUEFE(!lade((kopf + R"({"nachricht":{"typ":"cc","kanal":1,"nr":60},"ziel":"arr/start_stopp","art":"absolut"}]})").c_str(),
+               tab(), m.get(), &f) && f.art == FehlerArt::falsche_art);
+  PRUEFE(!lade((kopf + R"({"nachricht":{"typ":"note","kanal":1,"nr":60},"ziel":"arr/start","art":"taste"}]})").c_str(),
+               tab(), m.get(), &f) && f.art == FehlerArt::unbekanntes_ziel);
+}
+
 FALL(fehlertext_nennt_zeile_und_ziel) {
   int zeile = 0;
   const std::string t = ersetze(datei("beispiel_7_2.json"), "\"deck/1/fader\"", "\"deck/1/fadr\"", &zeile);

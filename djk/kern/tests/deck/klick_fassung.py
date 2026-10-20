@@ -16,6 +16,10 @@ für die Abnahme „vier Stems summieren am Ziel zur Offline-Summe“).
 Mit --sinus-links F trägt der linke Kanal statt der Klicks einen Dauer-Sinus F Hz (Spitze 0,5, Phase 0 bei Frame 0), der
 rechte die Klicks (Keylock Task 2.5: Tonhöhe links und Lage rechts aus EINEM Deck, test_kern_keylock_faeden).
 
+Mit --kick trägt jeder Quell-Beat statt des Klicks eine Bassdrum (Sinus-Sweep 130 → 48 Hz, 0,3 s, Spitze 0,8, beide Kanäle);
+Material für die Messung des hörbaren Ziehens (test_kern_deck_scrub_messung): ein Kick hat tiefe Anteile und eine scharfe Flanke,
+an denen sich Sprünge in der Leseposition hören und messen lassen.
+
 Fehlerfälle für den Lader: --nan-bei F schreibt NaN in Frame F (links und rechts); --falsche-pruefsumme trägt eine
 andere sha256 in fassung.json ein. Größe: --mib N macht die Basis N MiB groß (Klicks nur in den ersten --beats Beats,
 danach Nullen); --duenn legt sie als dünne Datei an (ftruncate, keine Daten, sha256 nur Form), für die Budget-Probe.
@@ -51,6 +55,14 @@ def klick_frame(q, erster, bpm):
     return int(math.floor(x + 0.5)) if x >= 0 else -int(math.floor(-x + 0.5))
 
 
+def kickform():
+    n = int(0.3 * RATE)
+    t = np.arange(n, dtype=np.float64) / RATE
+    f = 48.0 + 82.0 * np.exp(-t / 0.04)                       # 130 Hz fällt auf 48 Hz
+    phase = 2.0 * math.pi * np.cumsum(f) / RATE
+    return (np.sin(phase) * np.exp(-t / 0.09)).astype(np.float32)
+
+
 class Spur:
     """Erzeugt einen Kanal-Abschnitt [a, e) (Stereo, float32) für eine Stimme."""
 
@@ -63,6 +75,10 @@ class Spur:
             for q in range(beats):
                 pegel = 0.5 if (q - eins) % 4 == 0 else 0.25
                 self.ereignisse.append((klick_frame(q, erster, bpm), pegel, self.form))
+        elif art == "kick":
+            form = kickform()
+            for q in range(beats):
+                self.ereignisse.append((klick_frame(q, erster, bpm), 0.8, form))
         elif art == "vocals":
             i = np.arange(KLICK_LAENGE, dtype=np.float64)
             tupfer = (np.exp(-i / 24.0) * np.sin(2.0 * math.pi * 1000.0 * i / RATE)).astype(np.float32)
@@ -195,6 +211,7 @@ def main(argv=None):
     ap.add_argument("--falsche-pruefsumme", action="store_true")
     ap.add_argument("--mib", type=int, help="Basis genau so viele MiB groß")
     ap.add_argument("--duenn", action="store_true", help="mit --mib: dünne Datei ohne Daten")
+    ap.add_argument("--kick", action="store_true", help="Bassdrum auf jedem Quell-Beat statt der Klicks")
     ap.add_argument("--sinus-links", type=float, help="linker Kanal: Dauer-Sinus mit dieser Frequenz (Hz) statt Klicks")
     a = ap.parse_args(argv)
     fpb = 60.0 / a.bpm * RATE
@@ -224,7 +241,7 @@ def main(argv=None):
             aus.append(ein_material(a.ziel, a.summe_als, b, {"basis": summe}, "basis"))
     else:
         aus.append(ein_material(a.ziel, a.material_id, a,
-                                {"basis": Spur("klick", *args, sinus_links=a.sinus_links).abschnitt}, "basis"))
+                                {"basis": Spur("kick" if a.kick else "klick", *args, sinus_links=a.sinus_links).abschnitt}, "basis"))
     for ordner, frames, sha in aus:
         print(json.dumps({"material_id": pathlib.Path(ordner).parents[1].name, "ordner": ordner, "frames": frames,
                           "sha256": sha, "dauer_s": round(frames / RATE, 3)}))

@@ -21,6 +21,8 @@ export const LOOPBOXEN = ['pad/1', 'pad/2'];  // Loop-Boxen L1, L2 (MVP 2, ADR 0
 const KANALZUG = ['fader', 'trim', 'eq/hoch', 'eq/mitte', 'eq/tief', 'kill/hoch', 'kill/mitte', 'kill/tief', 'filter', 'pfl'];
 const DECK_TASTEN = ['play', 'cue'];
 const DECK_ZUWEISUNG = ['xseite'];  // Crossfader-Seite A/THRU/B, §1.5 „nur Hand“ (2026-09-27)
+export const SPUREN = [1, 2, 3, 4, 5, 6, 7, 8];   // D1 K1: Spur-Regler des Arrangements (§1.5 spur/<n>/*)
+const SPUR_REGLER = ['fader', 'pan', 'mute', 'solo'];
 
 // Jeder Pfad, den die Seite greifen darf; alles andere lehnt der Server ab (unbekanntes_ziel), ohne zu senden.
 // 60m-Nachtrag: PFL je Deck, Master-Pegel, Kopfhörer (cue/mix, cue/pegel), alle §1.5 „nur Hand“.
@@ -30,12 +32,14 @@ export const ZIELE = new Set([
   ...LOOPBOXEN.flatMap((k) => [...KANALZUG, ...DECK_ZUWEISUNG].map((p) => `${k}/${p}`)),  // ohne Tasten
   'xfader', 'master/pegel', 'master/kleber', 'cue/mix', 'cue/pegel',   // kleber (K2): Schwelle des Summen-Kompressors, nur Hand
   'master/pfl',   // MASTER CUE (2026-10-10): Master auf die PFL-Seite des Kopfhörers, nur Hand
+  ...SPUREN.flatMap((n) => SPUR_REGLER.map((p) => `spur/${n}/${p}`)),   // D1 K1: Spur-Mixer der Produktion
 ]);
 
 // §1.5-Bereich je Regler-Art (Einheit wie im Vertrag)
 const BEREICH = {
   fader: [-200, 0], trim: [-24, 24], eq: [-200, 6], kill: [0, 1], filter: [-1, 1], xfader: [-1, 1],
   pfl: [0, 1], pegel: [-200, 0], mix: [-1, 1], xseite: [0, 2], kleber: [0, 1],
+  pan: [-1, 1], schalter: [0, 1], spur_fader: [-200, 6],   // D1 K1: spur/<n>/pan, spur/<n>/mute|solo, spur/<n>/fader (Spec 6.16)
 };
 
 export function art(pfad) {
@@ -44,6 +48,8 @@ export function art(pfad) {
   if (pfad === 'cue/mix') return 'mix';
   if (pfad === 'master/kleber') return 'kleber';
   if (pfad === 'master/pfl') return 'pfl';
+  const sp = /^spur\/[1-8]\/(fader|pan|mute|solo)$/.exec(pfad);   // D1 K1
+  if (sp) return sp[1] === 'fader' ? 'spur_fader' : sp[1] === 'pan' ? 'pan' : 'schalter';
   const m = /^(?:deck\/[12]|erz\/[1-3]|pad\/[12])\/(fader|trim|eq|kill|filter|pfl|xseite|play|cue)(\/|$)/.exec(pfad);
   if (!m) return null;
   return m[1] === 'play' || m[1] === 'cue' ? 'taste' : m[1];
@@ -61,6 +67,8 @@ const KERN = {
   xfader: { typ: 'linear', min: -1, max: 1, kill: false },
   mix: { typ: 'linear', min: -1, max: 1, kill: false },
   kleber: { typ: 'linear', min: 0, max: 1, kill: false },         // K2: master/kleber 0..1, u = Wert
+  pan: { typ: 'linear', min: -1, max: 1, kill: false },            // D1 K1: spur/<n>/pan
+  spur_fader: { typ: 'fader_db', min: -200, max: 6, kill: false }, // D1 Spec 6.16: K_SPUR_FADER, spur/<n>/fader bis +6 dB
 };
 KERN.pegel = KERN.fader;
 const klemme = (x) => Math.min(1, Math.max(0, x));
@@ -83,7 +91,7 @@ export function kernAusX(k, x) {
 
 // Griff-Kurven: Stellung 0..1 in der Hand ↔ Wert, den der Kern daraus macht (Anzeige = Kern-Wert)
 export const GRIFF = {};
-for (const a of ['fader', 'pegel', 'eq', 'trim', 'filter', 'xfader', 'mix', 'kleber']) {
+for (const a of ['fader', 'pegel', 'eq', 'trim', 'filter', 'xfader', 'mix', 'kleber', 'pan', 'spur_fader']) {
   GRIFF[a] = { wert: (x) => kernAusX(KERN[a], x), stellung: (w) => kernZuX(KERN[a], w) };
 }
 // EQ-Griff geteilt wie am Pioneer (Andreas 2026-09-28: „die eq an den kanälen sollten grundsätzlich alle immer erstmal
@@ -96,6 +104,7 @@ GRIFF.eq = {
 };
 GRIFF.kill = schalter();
 GRIFF.pfl = schalter();
+GRIFF.schalter = schalter();   // D1 K1: spur/<n>/mute, spur/<n>/solo
 GRIFF.xseite = { wert: (x) => Math.round(2 * x), stellung: (w) => w / 2 };  // FORMAT 22 g: xseite = round(2·midi_roh)
 
 function schalter() {
@@ -110,7 +119,7 @@ export function midiRoh(pfad, wert, kurve = ZIEL_KURVE) {
 }
 export function wertAusMidi(pfad, u, kurve = ZIEL_KURVE) {
   const a = art(pfad);
-  if (a === 'kill' || a === 'pfl') return u >= 0.5 ? 1 : 0;
+  if (a === 'kill' || a === 'pfl' || a === 'schalter') return u >= 0.5 ? 1 : 0;
   if (a === 'xseite') return Math.round(2 * u);
   if (kurve === 'kern' && KERN[a]) return kernAusX(KERN[a], u);
   const [lo, hi] = BEREICH[a];
@@ -127,7 +136,8 @@ export function griffZuMidi(pfad, x) {
 }
 
 // Vorgaben aus §1.5 (Fader nach dem Laden −200; cue/mix −1, cue/pegel −12, master/pegel 0)
-export const VORGABE = { fader: -200, trim: 0, eq: 0, kill: 0, filter: 0, xfader: 0, pfl: 0, mix: -1, pegel: 0, xseite: 1, kleber: 0 };
+export const VORGABE = { fader: -200, trim: 0, eq: 0, kill: 0, filter: 0, xfader: 0, pfl: 0, mix: -1, pegel: 0, xseite: 1, kleber: 0,
+  pan: 0, schalter: 0, spur_fader: 0 };   // spur_fader: 0 dB (die Gruppe regelt erz/4)
 export function vorgabe(pfad) {
   if (pfad === 'cue/pegel') return -12;
   return VORGABE[art(pfad)];
@@ -137,6 +147,8 @@ export function formatiere(pfad, w) {
   const a = art(pfad);
   if (w === undefined || w === null || Number.isNaN(w)) return '–';
   if (a === 'kill') return w >= 0.5 ? 'KILL' : '';
+  if (a === 'schalter') return w >= 0.5 ? (pfad.endsWith('/mute') ? 'MUTE' : 'SOLO') : '';
+  if (a === 'pan') return Math.abs(w) < 0.005 ? 'C' : `${w < 0 ? 'L' : 'R'} ${Math.round(Math.abs(w) * 100)}`;
   if (a === 'pfl') return w >= 0.5 ? 'PFL' : '';
   if (a === 'xseite') return ['A', 'THRU', 'B'][Math.round(w)] ?? '–';
   if (a === 'mix') {

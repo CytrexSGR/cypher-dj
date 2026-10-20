@@ -15,7 +15,8 @@ using namespace cypherdj::stellwerk;
 int main() {
   ReglerTabelle t;
   const char* pfade[] = {"deck/1/fader", "deck/2/fader", "master/pegel", "cue/pegel", "deck/1/eq/tief", "deck/1/eq/mitte",
-                         "deck/2/eq/hoch", "deck/1/trim", "deck/1/filter", "xfader", "cue/mix"};
+                         "deck/2/eq/hoch", "deck/1/trim", "deck/1/filter", "xfader", "cue/mix", "spur/1/fader",
+                         "spur/1/pan"};   // D1 K1: Spur-Fader bis +6 dB (Spec 6.16), Pan linear
   const int nx = 41;   // Stellung 0, 0.025 ... 1
   const float wdb[] = {-200, -120, -80, -60.5f, -60, -40, -30, -26, -20, -12, -6, -3, 0, 3, 6, 12, 24};
   std::printf("{\n");

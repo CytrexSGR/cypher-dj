@@ -46,9 +46,13 @@ try {
   await warte(500);
   const tv = Date.now();
   await warte(10000);
+  // Das Nachher-Fenster ist mindestens 10 s lang, aber nie kürzer als das Laden. Dauert das Laden länger (Lauf 1 am
+  // 17.10.: 19 min), werden die Nachher-Zahlen auf die Länge des Vorher-Fensters umgerechnet, sonst zählt die
+  // Prüfung die Ladezeit als Befehlsflut (~/messungen/2026-10-17-d1-abschluss/BERICHT.md, A1-Flake).
   const t0 = Date.now();
-  await b.oeffne(s.url);
-  await warte(10000);
+  const geladen = await b.oeffne(s.url, 30000);
+  const ladeMs = Date.now() - t0;
+  await warte(Math.max(0, 10000 - ladeMs));
   const t1 = Date.now();
   const zaehle = (a, e) => {
     const c = {};
@@ -57,21 +61,23 @@ try {
   };
   const vor = zaehle(tv, t0);
   const nach = zaehle(t0, t1);
+  const aufVorher = (n) => n * (t0 - tv) / (t1 - t0);
   const vonSeite = Object.entries(nach).filter(([k]) => k.startsWith('seite ') && k !== 'seite /k/hallo');
   const schluessel = [...new Set([...Object.keys(vor), ...Object.keys(nach)])].sort();
-  const abweichung = schluessel.filter((k) => Math.abs((vor[k] ?? 0) - (nach[k] ?? 0)) > 1);
+  const abweichung = schluessel.filter((k) => Math.abs((vor[k] ?? 0) - aufVorher(nach[k] ?? 0)) > Math.max(1, 0.05 * (vor[k] ?? 0)));
   const seiteGesendet = await b.werte('window.djkGesendet.length');
   const audio = await b.werte('document.querySelectorAll("audio,video").length');
   const abNachOeffnen = inhalt(s.ab);
   fs.writeFileSync(path.join(ORDNER, 'a1_fenster.json'), JSON.stringify({ vor, nach }, null, 2));
-  notiere('A1 Öffnen', vonSeite.length === 0 && abweichung.length === 0 && seiteGesendet === 0 && audio === 0 && abNachOeffnen.length === 0,
-    `Befehle des Seiten-Servers an den Kern nach dem Öffnen (ohne /k/hallo): ${vonSeite.reduce((x, [, n]) => x + n, 0)}; ` +
-    `je Absender und Adresse vorher/nachher (10 s/10 s): ${schluessel.map((k) => `${k} ${vor[k] ?? 0}/${nach[k] ?? 0}`).join(', ')}; ` +
+  notiere('A1 Öffnen', geladen && vonSeite.length === 0 && abweichung.length === 0 && seiteGesendet === 0 && audio === 0 && abNachOeffnen.length === 0,
+    `${geladen ? `geladen nach ${ladeMs} ms` : `Seite nach ${ladeMs} ms nicht geladen (Zeitlimit 30 s)`}; Befehle des Seiten-Servers an den Kern nach dem Öffnen (ohne /k/hallo): ${vonSeite.reduce((x, [, n]) => x + n, 0)}; ` +
+    `je Absender und Adresse vorher/nachher (${((t0 - tv) / 1000).toFixed(1)} s/${((t1 - t0) / 1000).toFixed(1)} s): ${schluessel.map((k) => `${k} ${vor[k] ?? 0}/${nach[k] ?? 0}`).join(', ')}; ` +
     `Abweichung > 1: ${abweichung.length}; Griffe der Seite ${seiteGesendet}; audio/video-Elemente ${audio}; Einträge im Arbeitsbestand ${abNachOeffnen.length}`);
   const verbunden = await b.werte('[document.querySelector("#v-kern").classList.contains("an"), document.querySelector("#v-leitstand").classList.contains("an")]');
   const layout = await b.werte('({sh: document.documentElement.scrollHeight, ih: innerHeight, sw: document.documentElement.scrollWidth, iw: innerWidth})');
   notiere('A0 Seite', verbunden[0] && verbunden[1] && layout.sh <= layout.ih && layout.sw <= layout.iw && b.konsole.length === 0,
-    `Kern ${verbunden[0] ? 'an' : 'aus'}, Leitstand ${verbunden[1] ? 'an' : 'aus'}, 1920×1080: scrollHeight ${layout.sh} ≤ ${layout.ih}, scrollWidth ${layout.sw} ≤ ${layout.iw}, Konsole ${b.konsole.length} Meldungen`);
+    `Kern ${verbunden[0] ? 'an' : 'aus'}, Leitstand ${verbunden[1] ? 'an' : 'aus'}, 1920×1080: scrollHeight ${layout.sh} ≤ ${layout.ih}, scrollWidth ${layout.sw} ≤ ${layout.iw}, Konsole ${b.konsole.length} Meldungen` +
+      `${b.konsole.length ? `: ${b.konsole.map((k) => `[${k.typ}] ${k.text}${k.url ? ` @${k.url}` : ''}`).join(' | ')}` : ''}`);
 
   // ---------- A3 Laden per Klick ----------
   const ladeFaelle = [[1, 'nightshift'], [2, 'every-morning-new']];
@@ -274,12 +280,15 @@ try {
     await warte(700);
     const titelSeite = await b3.werte(`document.querySelector('.deck[data-deck="1"] [data-titel]').textContent`);
     const positiv = rel().length === 1 && titelSeite === 'Alpha' && inhalt(s3.ab).join() === 'f0000000000000a1';
-    // Chrome meldet jede 400-Antwort als „Failed to load resource“; das ist hier gewollt, alles andere zählt
+    // Chrome meldet jede 400-Antwort als „Failed to load resource“; das ist hier gewollt, alles andere zählt. Die Ausnahme für den 409-Wettlauf
+    // von GET /deck/raster ist weg (D1 S3 Auftrag 15: der Server beantwortet ein geladenes Deck vor seinem ersten /zustand/deck; dreimal auf d
+    // A0b 0 Meldungen und hier 0 bekannte 409, ~/messungen/2026-10-15-d1-s3/p15_abnahme_nachher_*.txt). Ein 409 zählt jetzt wie jede Meldung.
     const konsole = b3.konsole.filter((k) => !/Failed to load resource: .* 400/.test(k.text));
     notiere('A6 Fehlerfall Kopie', ok && positiv && konsole.length === 0,
       `Rest toter Kopie beim Start weggeräumt: ${aufger?.anzahl ?? 0}; ${texte.join(', ')}; danach /k/deck/laden am Relais ${nachFehlern.laden}, ` +
       `Einträge im Arbeitsbestand ${nachFehlern.ab.length} (keine halbe Kopie); Positiv-Kontrolle „Alpha“: /k/deck/laden ${rel().length}×, Titel „${titelSeite}“, ` +
-      `Arbeitsbestand ${inhalt(s3.ab).join(',')}; Konsole ohne die 400er ${konsole.length} (mit ${b3.konsole.length})`);
+      `Arbeitsbestand ${inhalt(s3.ab).join(',')}; Konsole ohne die 400er ${konsole.length} (mit ${b3.konsole.length})` +
+      `${konsole.length ? `: ${konsole.map((k) => `[${k.typ}] ${k.text}${k.url ? ` @${k.url}` : ''}`).join(' | ')}` : ''}`);   // Texte mit ausgeben: eine unbekannte Meldung muss benennbar sein
   } finally { await b3.zu(); await s3.stoppe(); fs.rmSync(bst, { recursive: true, force: true }); }
 }
 

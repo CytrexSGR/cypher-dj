@@ -16,7 +16,7 @@
 
 namespace cdj {
 
-enum class HandArt : uint8_t { griff, deck, taste, tempo };
+enum class HandArt : uint8_t { griff, deck, taste, tempo, arr };   // arr: D1 K1, arr/start_stopp
 
 struct HandAktion {
   HandArt art = HandArt::taste;
@@ -62,6 +62,9 @@ inline bool deck_taste_pfad(const char* p, int* deck, bool* play) {
 
 // /test/hand taste/<name> (Zusatz Scheibe 35, Annahme-Weg der Oberfläche): dieselbe Taste wie am Controller, Namen aus §5.8
 // ohne die Encoder-Werte (autonomie, spielart, laenge, kiste_wahl). midi_roh ab 0,5 ist der Druck, darunter das Loslassen.
+// /test/hand arr/start_stopp (D1 K1): dieselbe Hand-Zielart wie aus dem Mapping (§7.2)
+inline bool arr_taste_pfad(const char* p) { return std::strcmp(p, "arr/start_stopp") == 0; }
+
 inline bool test_taste_pfad(const char* p, hand::Taste* t) {
   if (std::strncmp(p, "taste/", 6) != 0) return false;
   hand::Taste k;

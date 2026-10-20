@@ -8,6 +8,7 @@ Stimmungskorrektur, basis.f32, Lautheit der Fassung, vorlaeufige Tore, fassung.j
 veroeffentlichen, Index. Stems, Fingerabdruck, Kreuzenergien, Referenz-Huellkurven, Struktur, Hotcue-Vorschlaege und
 das Raster-Tor mit dem unabhaengigen Anschlag-Instrument kommen mit Scheibe 23; bis dahin gilt das Raster-Tor als
 unbestimmt und damit gerissen (§12.3: „weniger Anschlaege gelten als unbestimmt und damit als gerissen“)."""
+import contextvars
 import os
 import shutil
 import subprocess
@@ -18,6 +19,7 @@ import numpy as np
 
 from . import vertrag
 from .audio import lade_mono
+from .parallel import Kind, gleichzeitig
 from .bestand import (aufraeumen, fassung_name, fassungen_von, fsync_baum, korrekturen_lesen, lies_json,
                       rename_ohne_ueberschreiben, schreibe_json, sha256_datei, versiegeln)
 from .eingang import LUFT_DB, geklemmt, lade_stereo48, luft, quelle_info, schreibe_float_wav, spitze_dbfs
@@ -53,11 +55,17 @@ def pulsklarheit_aus_c_drift(quelle):
     return None if e is None else float(e["klarheit_median"])
 
 
-def raster_messen(quelle, geraet="cpu", melde=None):
-    """Scheibe 05 (`lauf_raster.miss`): Karte und `raster` in der Datenform von §13.2."""
+# Schon dekodierte Signale und laufende Kindprozesse (siehe `miss`, Parameter vorab). Ueber eine ContextVar statt eines
+# weiteren Arguments, damit der Aufruf `raster_messen(quelle, geraet[, melde])` unveraendert bleibt (Tests ersetzen ihn).
+_VORAB = contextvars.ContextVar("raster_vorab", default=None)
+
+
+def raster_messen(quelle, geraet="cpu", melde=None, vorab=None):
+    """Scheibe 05 (`lauf_raster.miss`): Karte und `raster` in der Datenform von §13.2. vorab: siehe `miss`."""
     from .lauf_raster import c_drift_werte, miss
+    vorab = vorab if vorab is not None else _VORAB.get()
     e = miss(Path(quelle).name, Path(quelle), cd=c_drift_werte().get(Path(quelle).name), geraet=geraet,
-             melde=None if melde is None else (lambda teil: melde("beats", teil=teil)))
+             melde=None if melde is None else (lambda teil: melde("beats", teil=teil)), vorab=vorab)
     r = dict(e["raster"])
     # §13.2 (Andreas 2026-09-25, B11): abweichung_ms_p90 ist die Form ohne Versatz (05: form_p90_ms), der konstante
     # Versatz steht daneben, Werkzeug minus Zweitwerkzeug. 05 `vergleiche` meldet versatz_ms positiv, wenn Essentia
@@ -170,6 +178,17 @@ def rendere(x, karte, material, basis_bpm, r, fassung_ordner, arbeit, korrekture
     return f, messwerte
 
 
+def _stimmung_und_lautheit(x, x44):
+    """Alles, was nur am Audio haengt (laeuft in einem Kindprozess neben dem Raster, siehe `einlesen`):
+    (Lautheit der Quelle, Stimmung eigen c1 und r, Stimmung Essentia c2, Tonart)."""
+    lq = lautheit(x)
+    x48 = x.mean(axis=1)
+    c1, rr = eigen(x48)
+    c2 = essentia_cent(x44)
+    ta = tonart_mik(x44, tonart(x48, c1))
+    return lq, c1, rr, c2, ta
+
+
 def einlesen(quelle, bestand, basis_bpm=128.0, karte=None, geraet="cpu", auftrag_id=None, titel=None, melde=None):
     """Neues Material mit Fassung r1. Liegt das Material schon im Bestand: nichts schreiben, Status 'vorhanden'.
     karte: nur fuer Kontrollen mit bekannter Wahrheit; sonst misst Scheibe 05 die Karte.
@@ -185,6 +204,7 @@ def einlesen(quelle, bestand, basis_bpm=128.0, karte=None, geraet="cpu", auftrag
     if (bestand / mid).exists():
         return {"material_id": mid, "status": "vorhanden"}
     auftrag_id = auftrag_id or f"e-{mid}"
+    kinder = []
     arbeit = bestand / ".arbeit" / auftrag_id
     aufraeumen(arbeit)                              # Rest eines abgebrochenen Laufs derselben Werkstatt
     try:
@@ -198,13 +218,25 @@ def einlesen(quelle, bestand, basis_bpm=128.0, karte=None, geraet="cpu", auftrag
         (mo / "korrekturen.jsonl").touch()
         zeiten = {}
         melde("decode")
-        x = lade_stereo48(quelle)
-        lq = lautheit(x)
+        # Dekodieren gleichzeitig (ffmpeg-Kindprozesse, dieselben Befehle wie zuvor, also dieselben Samples).
+        if karte is None:
+            x, x44, x22 = gleichzeitig((lade_stereo48, (quelle,)), (lade_mono, (quelle, 44100)),
+                                       (lade_mono, (quelle, 22050)))
+        else:
+            x, x44 = gleichzeitig((lade_stereo48, (quelle,)), (lade_mono, (quelle, 44100)))
         t = time.perf_counter()
         warnungen = []
         melde("beats")
+        # Unabhaengige Arbeit startet jetzt in Kindprozessen und laeuft neben beat_this: Lautheit der Quelle plus Stimmung
+        # und Tonart (haengen nur am Audio) sowie Essentia samt seiner Karte (haengt nicht von beat_this ab).
+        kinder.append(Kind(_stimmung_und_lautheit, (x, x44)))
+        kind_schluessel = kinder[-1]
         if karte is None:
+            from .lauf_raster import essentia_karte
+            kinder.append(Kind(essentia_karte, (x44,)))
+            _VORAB.set({"x22": x22, "x44": x44, "essentia": kinder[-1]})
             liste, raster, rinfo, w = raster_messen(quelle, geraet, melde) if gemeldet else raster_messen(quelle, geraet)
+            _VORAB.set(None)
             warnungen += w
             eins_bt = rinfo["eins_beat_this"]
         else:
@@ -216,12 +248,8 @@ def einlesen(quelle, bestand, basis_bpm=128.0, karte=None, geraet="cpu", auftrag
         karte_r = karte_aus_liste(liste, raster["tempo_vielfaches"])   # Fassung genau aus material.json
         t = time.perf_counter()
         melde("key")
-        x48 = x.mean(axis=1)
-        c1, rr = eigen(x48)
-        x44 = lade_mono(quelle, 44100)
-        c2 = essentia_cent(x44)
+        lq, c1, rr, c2, ta = kind_schluessel.ergebnis()      # lief seit dem Start der Stufe beats
         stimmung = entscheide(c1, rr, c2)
-        ta = tonart_mik(x44, tonart(x48, c1))
         zeiten["stimmung"] = round(time.perf_counter() - t, 2)
         if stimmung["warnung"]:
             warnungen.append(stimmung["warnung"])
@@ -271,11 +299,16 @@ def einlesen(quelle, bestand, basis_bpm=128.0, karte=None, geraet="cpu", auftrag
         eintragen(con, bestand / mid, basis_bpm)
         con.close()
         aufraeumen(arbeit)
+        for k in kinder:                            # nichts abgeholt (ersetztes raster_messen): Kind nicht liegen lassen
+            k.abbrechen()
         zeiten["gesamt"] = round(time.perf_counter() - t0, 2)
         return {"material_id": mid, "status": "neu", "fassung": name, "titel": material["titel"],
                 "stimmung": {"eigen": c1, "r": rr, "essentia": c2, **stimmung}, "messwerte": mw, "zeiten": zeiten,
                 "raster": rinfo, "tore": {k: v["ok"] for k, v in f["tore"].items()}, "lufs": f["lautheit"]["lufs_integriert"]}
     except BaseException:                           # Befund 3: gescheiterter Track laesst keine Kopie liegen
+        _VORAB.set(None)
+        for k in kinder:
+            k.abbrechen()
         aufraeumen(arbeit)
         raise
 

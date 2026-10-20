@@ -99,6 +99,39 @@ int main() {
     PRUEF(cdj::filtere_kanten({{kern + "cue_R", kern + "rueck_erz_3_R"}}, kern).empty());
     PRUEF(cdj::filtere_kanten({{kern + "midi_aus_1", kern + "hand_in"}}, kern).empty());
     PRUEF(cdj::filtere_kanten({{kern + "midi_aus_1", kern + "rueck_erz_2_L"}}, kern).empty());
+    // D1 K1: rueck_erz_4 ist reserviert (erz/4 = Produktion), gezählt; rueck_erz_3 und rueck_erz_40 nicht
+    size_t res = 99;
+    const auto r4 = cdj::filtere_kanten({{"w:out_L", kern + "rueck_erz_4_L"}, {"w:out_R", kern + "rueck_erz_4_R"},
+                                         {"w:out_L", kern + "rueck_erz_3_L"}}, kern, &res);
+    PRUEF(r4.size() == 1 && r4[0].ziel == kern + "rueck_erz_3_L" && res == 2);
+    size_t res2 = 99;
+    PRUEF(cdj::filtere_kanten({{"w:out_L", kern + "rueck_erz_40_L"}}, kern, &res2).size() == 1 && res2 == 0);
+  }
+  {  // D1 K2b: Wirt-Slots des Arrangements (arr_midi_<s> hinaus, arr_rueck_<s>_L/R herein), mit Riegel
+    const std::string kern = "cypherdj-kern-d:";
+    const std::vector<cdj::Kante> gut = {{kern + "arr_midi_1", "cypherdj-wirt-arr1-d:events-in"},
+                                         {"cypherdj-wirt-arr1-d:audio-out1", kern + "arr_rueck_1_L"},
+                                         {"cypherdj-wirt-arr1-d:audio-out2", kern + "arr_rueck_1_R"},
+                                         {kern + "arr_midi_2", "w2:events-in"}};
+    size_t res = 99;
+    PRUEF(cdj::filtere_kanten(gut, kern, &res) == gut && res == 0);
+    // falsche Richtung, falsche Form, Kern mit sich selbst (Riegel): alles verworfen
+    const std::vector<cdj::Kante> schlecht = {{kern + "arr_rueck_1_L", "w:in"},          // Eingang als Quelle
+                                              {"w:out", kern + "arr_midi_1"},            // Ausgang als Ziel
+                                              {kern + "arr_midi_", "w:in"},              // ohne Slot
+                                              {kern + "arr_midi_1x", "w:in"},
+                                              {"w:out", kern + "arr_rueck_1_X"},
+                                              {"w:out", kern + "arr_rueck_1L"},
+                                              {"w:out", kern + "arr_rueck__L"},
+                                              {kern + "arr_midi_1", kern + "arr_rueck_1_L"},   // Riegel
+                                              {kern + "master_L", kern + "arr_rueck_1_L"},     // Riegel
+                                              {kern + "arr_midi_1", kern + "hand_in"},         // Riegel
+                                              {"anderer:arr_midi_1", "w:in"}};                 // fremder Client
+    PRUEF(cdj::filtere_kanten(schlecht, kern).empty());
+    // Negativ-Kontrolle: rueck_erz_4 bleibt reserviert, die DJ-Kanten bleiben wie sie waren
+    size_t res4 = 99;
+    PRUEF(cdj::filtere_kanten({{"w:out_L", kern + "rueck_erz_4_L"}, {kern + "midi_aus_1", "w:in"}}, kern, &res4).size() == 1 &&
+          res4 == 1);
   }
   {  // MINOR-5: Duplikate und Obergrenze
     std::vector<cdj::Kante> v;

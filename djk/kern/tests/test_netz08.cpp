@@ -119,7 +119,7 @@ int main() {
   ere->schiebe(zy);
   PRUEF(g.warte("/zustand/kern", 500));
   PRUEF(g.warte("/zustand/kern", 500));  // die zweite Meldung trägt sicher den Zyklus
-  PRUEF(!std::strcmp(g.m.typen, "iihiiiiiiii") && g.i(1) == 256 && g.h(2) == 4096 && g.i(3) == 2 && g.i(4) == 3 &&
+  PRUEF(!std::strcmp(g.m.typen, "iihiiiiiiiih") && g.i(1) == 256 && g.h(2) == 4096 && g.i(3) == 2 && g.i(4) == 3 &&
         g.i(5) == 7 && g.i(6) == 7 && g.i(7) == 11 && g.i(9) == 1);
   int zustaende = 0;
   for (int t = 0; t < 1000; t += 50) zustaende += g.warte("/zustand/kern", 50) ? 1 : 0;

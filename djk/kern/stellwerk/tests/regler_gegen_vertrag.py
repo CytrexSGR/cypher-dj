@@ -68,6 +68,8 @@ def expandiere(p):
         return [f'{k}/{rest}' for k in KANAELE if not (k.startswith('bus/') and (rest == 'ziel' or rest.startswith('komp/')))]
     if p.startswith('deck/<n>/'):
         return [f'deck/{i}/{p[9:]}' for i in range(1, 5)]
+    if p.startswith('spur/<n>/'):                       # D1 K1: Spur-Regler des Arrangements, n = 1..8
+        return [f'spur/{i}/{p[9:]}' for i in range(1, 9)]
     if p.startswith('fx/<n>/'):
         rest = p[7:]
         return [f'fx/{i}/{rest}' for i in FX_N[rest]]
@@ -129,7 +131,7 @@ def main():
         '| 10 ms | alle; `bus/<n>/fader` nur Hand |', '| 10 ms | nur Hand |')
     assert falsch != text, 'Selbsttest: Zeilen im Vertrag nicht gefunden'
     f_falsch = abgleich(bib, vertrag(falsch))
-    soll = {p for p in bib if '/kill/' in p} | {p for p in bib if p.endswith('/fader') and not p.startswith('bus/')}
+    soll = {p for p in bib if '/kill/' in p} | {p for p in bib if p.endswith('/fader') and not p.startswith(('bus/', 'spur/'))}
     ist = {f.split(':')[0] for f in f_falsch}
     print(f'Selbsttest verfälschter Vertrag: {len(f_falsch)} Abweichungen, erwartet {len(soll)} (alle Kills, Fader außer Bus)')
     if ist != soll or len(f_falsch) != len(soll):

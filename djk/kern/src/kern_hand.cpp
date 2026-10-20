@@ -67,6 +67,10 @@ void Kern::hand_zyklus(int64_t n0, int n) {
       case HandArt::taste:  // §5.8 /e/taste für jede Taste; die Stopp-Taste wirkt wie /k/ki/stopp (§7.3 Punkt 8, E6)
         hand_taste(a.taste, a.wert, a.sample);
         break;
+      case HandArt::arr:  // D1 K1 (§7.2): Transport des Arrangements, vom Kern selbst ausgeführt
+        if (arr_hand_start_stopp(a.sample)) ++hand_ereignisse_;
+        else ++hand_ohne_wirkung_;
+        break;
       case HandArt::tempo:  // §7.3 Punkt 7: Hand-Tempo kommt mit Scheibe 51
         ++hand_ohne_wirkung_;
         break;
@@ -107,7 +111,9 @@ int64_t Kern::cue_frame(int d) const noexcept {
   if (w.cue_gesetzt[d]) return w.cue_f[d];
   const Deck& dk = w.deck[d];
   const Material* m = dk.material();
-  return m ? std::llround(frame_von(static_cast<double>(m->erste_eins_quell_beat), dk.schlag0(), m->basis_bpm)) : 0;
+  if (!m) return 0;
+  const double q = erste_volle_eins(static_cast<double>(m->erste_eins_quell_beat), dk.schlag0(), m->basis_bpm);
+  return std::llround(frame_von(q, dk.schlag0(), m->basis_bpm));
 }
 
 DeckAktion* Kern::hand_aktion_neu(int d, int art, int64_t s, int64_t f) {

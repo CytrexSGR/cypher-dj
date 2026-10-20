@@ -3,6 +3,7 @@
 // quell_beat_von() sind echtzeitfest.
 #pragma once
 
+#include <cmath>
 #include <array>
 #include <cstdint>
 #include <string>
@@ -54,6 +55,14 @@ inline double frame_von(double q, int64_t erster_schlag_frame, double basis_bpm)
 }
 inline double quell_beat_von(double frame, int64_t erster_schlag_frame, double basis_bpm) {
   return (frame - static_cast<double>(erster_schlag_frame)) * basis_bpm / FRAMES_JE_MINUTE;
+}
+// 2026-10-17: früheste Takt-Eins im Track (Frame >= 0), im Viertakt-Abstand zu `eins`. Beginnt die Beat-Karte spät (Wake up
+// fucked up: 178.8 s), stand das Deck nach dem Laden mitten im Track. Nie nach hinten verlegt (Karte knapp vor Frame 0).
+// Gleiche Regel wie die Seite (oberflaeche/oeffentlich/welle.js ersteVolleEins).
+inline double erste_volle_eins(double eins, int64_t erster_schlag_frame, double basis_bpm) {
+  const double k_start = std::ceil(quell_beat_von(0.0, erster_schlag_frame, basis_bpm) - 1e-9);
+  const double n = std::floor((eins - k_start) / 4.0);
+  return n > 0 ? eins - 4.0 * n : eins;
 }
 
 }  // namespace cdj

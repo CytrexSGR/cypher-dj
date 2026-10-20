@@ -26,10 +26,11 @@ export function baueBestand(dir, eintraege) {
   let seed = 0;
   for (const e of eintraege) {
     const frames = e.frames ?? 48000;
+    const bpm = e.basis_bpm ?? 128;   // Plan d1-s1 Task 3: eine Fassung mit anderem Grundtempo (lebender Bestand hat eine mit 132)
     db.prepare('INSERT INTO material VALUES (?,?,?,?,?,?,?,?,?,?,?,?)').run(e.material_id, e.titel, 'test', null, 124, frames / 48000,
       -14, '8A', 0, 0, 0, '');
-    db.prepare('INSERT INTO fassung VALUES (?,?,?,?,?,?,?,?)').run(e.material_id, 128, 1, frames, e.stems ? 1 : 0, 0, -14, 0);
-    const ordner = path.join(dir, e.material_id, 'fassungen', '128000_r1');
+    db.prepare('INSERT INTO fassung VALUES (?,?,?,?,?,?,?,?)').run(e.material_id, bpm, 1, frames, e.stems ? 1 : 0, 0, -14, 0);
+    const ordner = path.join(dir, e.material_id, 'fassungen', `${Math.round(bpm * 1000)}_r1`);
     fs.mkdirSync(ordner, { recursive: true });
     const a = audio(frames, ++seed);
     const sha = crypto.createHash('sha256').update(a).digest('hex');
@@ -43,9 +44,9 @@ export function baueBestand(dir, eintraege) {
       fs.writeFileSync(ziel, sa);
       stems[n] = { datei: rel, frames, sha256: crypto.createHash('sha256').update(sa).digest('hex') };
     }
-    const fj = { schema: 1, material_id: e.kaputt === 'fremd' ? 'f00000000000ffff' : e.material_id, basis_bpm: 128.0, fassung: 1,
+    const fj = { schema: 1, material_id: e.kaputt === 'fremd' ? 'f00000000000ffff' : e.material_id, basis_bpm: bpm, fassung: 1,
       korrekturen_bis_zeile: 0, datei, frames, sha256: e.kaputt === 'sha' ? '0'.repeat(64) : sha,
-      erster_schlag_frame: 0, beats: (frames / 48000) * (128 / 60), erste_eins_quell_beat: 0,
+      erster_schlag_frame: 0, beats: (frames / 48000) * (bpm / 60), erste_eins_quell_beat: 0,
       analyse_quelle: e.stems ? 'stems' : 'basis', stems, schuesse: [], headroom_db: -12, lautheit: { lufs_integriert: -14 } };
     if (e.kaputt !== 'ohne_json') fs.writeFileSync(path.join(ordner, 'fassung.json'), e.kaputt === 'json' ? '{"schema": 1, ' : JSON.stringify(fj, null, 1));
     if (e.kaputt !== 'ohne_audio') {

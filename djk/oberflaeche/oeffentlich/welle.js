@@ -71,6 +71,13 @@ const KACHEL = 2048;
 const KACHELN_MAX = 8;       // je Ansicht höchstens 8 Kacheln (sichtbar sind 1–2); ohne Deckel 116 MB je Deck (Review F8)
 
 // Laufansicht: Kopf fest in der Mitte, Welle läuft; Raster aus ersterSchlagFrame und framesProBeat, Takt-Eins bei eins.
+// Erste volle Takt-Eins im Track (2026-10-17): die Striche laufen über die ganze Fassung, auch vor dem analysierten Stück der
+// Beat-Karte. Takt 1 ist die früheste Eins, die noch im Track liegt (Schlag k mit Frame s0 + k·fpb ≥ 0, im Viertakt-Abstand zu eins).
+export function ersteVolleEins(eins, s0, fpb) {
+  const kStart = Math.ceil(-s0 / fpb - 1e-9);
+  return Math.min(eins, eins - 4 * Math.floor((eins - kStart) / 4));   // nur nach vorn verlegen, nie nach hinten (Karte knapp vor Frame 0)
+}
+
 export class Laufansicht {
   constructor(canvas) { this.c = canvas; this.g = canvas.getContext('2d'); this.w = null; this.takte = 16; this.kacheln = new Map(); this.schluessel = ''; }
   setzeWelle(w, raster) { this.w = w; this.raster = raster; this.kacheln = new Map(); }
@@ -99,7 +106,7 @@ export class Laufansicht {
     const g = this.g, w = c.width, hh = c.height;
     g.fillStyle = '#0b0d11'; g.fillRect(0, 0, w, hh);
     if (!this.w || w === 0) return;
-    const { ersterSchlagFrame: s0, framesProBeat: fpb, eins } = this.raster;
+    const { ersterSchlagFrame: s0, framesProBeat: fpb } = this.raster, eins = ersteVolleEins(this.raster.eins, s0, fpb);
     const fenster = this.takte * 4 * fpb, fpp = fenster / w, links = frame - fenster / 2, px = links / fpp;
     for (let i = Math.floor(px / KACHEL); i * KACHEL < px + w; i++) if (i >= 0) g.drawImage(this.kachel(i, fpp, hh), Math.round(i * KACHEL - px), 0);
     const k0 = Math.ceil((links - s0) / fpb), k1 = Math.floor((links + fenster - s0) / fpb);

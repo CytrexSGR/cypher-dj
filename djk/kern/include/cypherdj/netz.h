@@ -14,6 +14,7 @@
 #include <string>
 #include <vector>
 
+#include "cypherdj/arr_lader.h"
 #include "cypherdj/kern.h"
 #include "cypherdj/keylock_render.h"
 #include "cypherdj/osc.h"
@@ -61,6 +62,11 @@ class Netz {
   void setze_kit_ordner(std::string ordner) { kit_ordner_ = std::move(ordner); }
   // MVP 2 (ADR 025): Loop-Ordner (§4.9), /k/loop/laden liest <ordner>/<name>/
   void setze_loop_ordner(std::string ordner) { loop_ordner_ = std::move(ordner); }
+  // D1 K1 (Spec 2.1): Ringe zum Arrangement-Lade-Faden; vor dem Netz-Faden. nullptr: /k/arr/laden mit datei_fehlt.
+  void verbinde_arr(ArrLaderRinge* r) { arr_ringe_ = r; }
+  // Paket K3 (Spec 2.9, 6.14): Arbeitsordner der Instanz, derselbe wie der des Arrangement-Lade-Fadens (der schreibt dort
+  // freeze-<spur>-<kennung>.f32). Vor dem Netz-Faden. Leer: /k/arr/freeze mit datei_fehlt abgelehnt.
+  void setze_arr_ordner(std::string ordner) { arr_ordner_ = std::move(ordner); }
   // Keylock Slice 4: Einstellungen des Render-Fadens der REC-Umrechnung (Test-Zugang: Render-Funktion, Priorität). Vor dem
   // ersten Auftrag; der Faden entsteht erst mit ihm.
   void setze_keylock(const KeylockOpt& o) { kl_opt_ = o; }
@@ -103,6 +109,22 @@ class Netz {
   bool loop_paket(const cypherdj::osc::Adresse* a, const osc::Nachricht& m);
   bool loop_ereignis(const Ereignis& e);
   std::string loop_ordner_;
+  // D1 K1 (netz_arr.cpp): /k/arr/* annehmen (false: keine dieser Adressen), Ergebnisse des Lade-Fadens weiterreichen,
+  // /zustand/arr senden, abgelöste Schnappschüsse zurück an den Lade-Faden
+  bool arr_paket(const cypherdj::osc::Adresse* a, const osc::Nachricht& m);
+  bool arr_ereignis(const Ereignis& e);
+  void arr_zyklus();
+  void arr_zurueck(ArrSnapshot* s);
+  ArrLaderRinge* arr_ringe_ = nullptr;
+  // Paket K3 (netz_arr_freeze.cpp, Spec 6.29): /k/arr/freeze prüfen und als Auftrag zum Lade-Faden reihen; dessen
+  // Ergebnis als Befehl ARR_FREEZE in den Kern; Ereignis ARR_FREEZE zurück an den Lade-Faden; seine Meldung als /e/freeze.
+  // Der Netz-Faden legt keinen Puffer an und schreibt keine Datei.
+  bool arr_freeze_paket(const osc::Nachricht& m);
+  void arr_freeze_ergebnis(const ArrErgebnis& e);
+  void arr_freeze_ereignis(const Ereignis& e);
+  void arr_freeze_zurueck(ArrFreeze* f);
+  void arr_freeze_melden(const ArrFreezeMeldung& m);
+  std::string arr_ordner_;
   // Keylock Slice 4 (netz_loop.cpp): Render-Faden der REC-Umrechnung (Task 7: die Keylock-Varianten der Boxen sind
   // ausgebaut, die Box dehnt live mit dem Dehner). Alles nur im Netz-Faden.
   void keylock_zyklus();             // umgerechnete Mitschnitte abholen, Datei schreiben, /e/mitschnitt
@@ -143,6 +165,7 @@ class Netz {
   std::unique_ptr<cypherdj::stellwerk::ReglerTabelle> tabelle_;  // Pfade für /test/hand (dieselbe wie im Stellwerk)
   Verteilung verteilung_;
   int32_t ki_gestoppt_ = 0;                        // aus /e/ki, für /zustand/kern
+  int64_t ereignisse_verloren_ = 0;                // aus dem /uhr-Ereignis (Kern::verloren_), für /zustand/kern (D1 K1 Fix 10)
 };
 
 }  // namespace cdj

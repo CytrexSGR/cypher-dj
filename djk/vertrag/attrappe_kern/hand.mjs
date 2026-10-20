@@ -14,6 +14,7 @@ const RUHE_BEATS = 32;
 const HAND_ABSTAND = 2400;          // /e/hand höchstens 20 Hz je Pfad
 const TASTEN = new Set(['annehmen', 'verwerfen', 'cypher_vorschlag', 'cypher_hoeren', 'stopp', 'freigabe', 'urteil_gut',
   'urteil_daneben', 'autonomie', 'spielart', 'laenge', 'spielart_start', 'basstausch', 'kiste_laden', 'kiste_wahl', 'tempo_basis', 'zuruf']);
+const ARR_ZIELE = new Set(['arr/start_stopp']);   // D1 K1 (§7.2): Hand-Zielart des Arrangements
 const DECK_AKTION = /^deck\/([1-4])\/(play|cue|hotcue\/[1-8]|hotcue_setzen\/[1-8]|loop|loop_laenge|roll\/[0-9.]+|sprung_plus|sprung_minus|nudge|tap|slip|laden)$/;
 
 const norm = (info, v) => (v - info.min) / (info.max - info.min);
@@ -104,7 +105,8 @@ export default {
   befehle: {
     '/test/hand': (K, a, b, von) => {
       const pfad = a.pfad;
-      if (!REGLER.has(pfad) && !pfad.startsWith('taste/') && !DECK_AKTION.test(pfad)) return K.protokollfehler('/test/hand', 'unbekannter_regler', von);
+      if (!REGLER.has(pfad) && !pfad.startsWith('taste/') && !DECK_AKTION.test(pfad) && !ARR_ZIELE.has(pfad))
+        return K.protokollfehler('/test/hand', 'unbekannter_regler', von);
       if (pfad.startsWith('taste/') && !TASTEN.has(pfad.slice(6))) return K.protokollfehler('/test/hand', 'unbekannter_regler', von);
       let s = Number(a.sample);
       if (s < K.jetzt) s = K.jetzt;
@@ -131,6 +133,11 @@ export default {
   },
   anwenden(K, e, s) {
     if (e.pfad.startsWith('taste/')) return taste(K, e.pfad.slice(6), e.u, s);
+    if (ARR_ZIELE.has(e.pfad)) {   // D1 K1: wie der Kern /e/hand, Transport nur beim Druck
+      K.aus('/e/hand', [e.pfad, e.u, BigInt(s), K.uhr.beat(s)]);
+      if (e.u >= 0.5) K.arrStartStopp?.(s);
+      return;
+    }
     const m = DECK_AKTION.exec(e.pfad);
     if (m && !REGLER.has(e.pfad)) return deckAktion(K, Number(m[1]), m[2], e.u, s);
     return handAmRegler(K, e, s);

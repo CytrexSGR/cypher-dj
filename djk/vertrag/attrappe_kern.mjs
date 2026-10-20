@@ -44,6 +44,9 @@ if (fs.existsSync(konfig)) {
   try { cfg = { ...cfg, ...leseToml(fs.readFileSync(konfig, 'utf8'), VORGABE_CFG, konfig) }; } catch (e) { abbruch(e.message, 2); }
 } else if (opt.konfig) abbruch(`Konfiguration ${konfig} fehlt`, 2);
 cfg.arbeitsbestand = opt.arbeitsbestand ?? z2(cfg.arbeitsbestand);
+// Paket K3: Arbeitsordner der Wiedergaben wie im Kern (konfig.cpp arr_ordner_von, Z2): arr_ordner, sonst
+// ~/.cache/cypherdj[-<instanz>]/arr; dort legt /k/arr/freeze freeze-<spur>-<kennung>.f32 ab
+cfg.arr_ordner = path.normalize(cfg.arr_ordner ? z2(cfg.arr_ordner) : path.join(os.homedir(), '.cache', instanz ? `cypherdj-${instanz}` : 'cypherdj', 'arr')).replace(/(.)\/+$/, '$1');
 if (opt['start-bpm']) cfg.start_bpm = Number(opt['start-bpm']);
 const port = opt['udp-port'] ? Number(opt['udp-port']) : cfg.udp_port + 1000 * k;
 const zustandDatei = opt.zustand ?? z2('/dev/shm/cypherdj/zustand_attrappe.json');

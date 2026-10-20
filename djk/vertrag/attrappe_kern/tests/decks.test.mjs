@@ -169,3 +169,58 @@ test('Deck-Befehl auf leerem Deck -> nicht_geladen; unbekanntes Deck -> unbekann
   ], { cfg });
   gruen(r);
 });
+
+// Hörbares Ziehen (2026-10-17): /k/deck/scrub ohne Quittung; stehend folgt die Position der Hand, laufend versetzt das Los die Phase
+const scrub = (id, deck, phase, delta, quelle = 'andreas') => ['/k/deck/scrub', 'hsiid', id, quelle, deck, phase, delta];
+
+test('scrub stehend: die Position folgt der Hand, nach dem Los bleibt der Kopf; keine Quittung', () => {
+  const r = fahre([
+    sende(1000, laden(1, 1)),
+    sende(S(2), scrub(10, 1, 1, 0)),
+    sende(S(2) + 4000, scrub(11, 1, 2, 1.5)),
+    wert(S(2) + 8000, 'deck/1/quell_beat', 1.5),
+    sende(S(3), scrub(12, 1, 2, -0.25)),
+    sende(S(3) + 4000, scrub(13, 1, 0, -0.25)),
+    wert(S(4), 'deck/1/quell_beat', 0),                         // vor dem Anfang klemmt die Position auf 0
+    wert(S(4), 'deck/1/status', 1),
+  ], { cfg });
+  gruen(r);
+  const q_ = r.log.filter((y) => y.adresse === '/q' && [10, 11, 12, 13].includes(Number(y.werte[0])));
+  assert.equal(q_.length, 0, 'scrub quittiert nicht');
+  assert.ok(r.log.some((y) => y.adresse === '/zustand/deck'), 'Gegenprobe: das Log enthält Zustandsmeldungen (der Filter trifft etwas, wenn es etwas gäbe)');
+});
+
+test('scrub laufend: Griff ohne Strecke ändert die Phase nicht, das Los mit Strecke versetzt sie', () => {
+  const r = fahre([
+    sende(1000, laden(1, 1)),
+    sende(2000, start(2, 'leitstand', 1, 4, 0)),
+    wert(S(6), 'deck/1/quell_beat', 2),
+    sende(S(6) + 100, scrub(20, 1, 1, 0)),
+    sende(S(7), scrub(21, 1, 0, 0)),
+    wert(S(8), 'deck/1/quell_beat', 4),                         // Phase unverändert: Quell = Master − 4
+    sende(S(8) + 100, scrub(22, 1, 1, 0)),
+    sende(S(8) + 4000, scrub(23, 1, 2, 3)),
+    sende(S(9), scrub(24, 1, 0, 3)),
+    wert(S(10), 'deck/1/quell_beat', 9),                        // +3 Beats versetzt
+    wert(S(10), 'deck/1/status', 2),
+  ], { cfg });
+  gruen(r);
+});
+
+test('scrub Fehlerfälle: unbekanntes Deck, Phase 3 und NaN werden abgelehnt (Quittung 6); ohne Griff und ohne Material ohne Wirkung', () => {
+  const r = fahre([
+    sende(1000, laden(1, 1)),
+    sende(2000, scrub(30, 5, 1, 0)),
+    sende(2000, scrub(31, 1, 3, 0)),
+    sende(2000, scrub(32, 1, 2, NaN)),
+    erwarte(2400, q(30, 'andreas', 6, null, 'unbekanntes_deck')),
+    erwarte(2400, q(31, 'andreas', 6, null, 'ausserhalb_bereich')),
+    erwarte(2400, q(32, 'andreas', 6, null, 'ausserhalb_bereich')),
+    sende(S(2), scrub(33, 1, 2, 5)),                           // Zug ohne Griff: ohne Wirkung
+    wert(S(3), 'deck/1/quell_beat', 0),
+    sende(S(3), scrub(34, 2, 1, 0)),                           // Deck 2 leer: ohne Wirkung, keine Quittung
+    sende(S(3) + 2000, scrub(35, 2, 2, 4)),
+    wert(S(4), 'deck/2/quell_beat', 0),
+  ], { cfg });
+  gruen(r);
+});

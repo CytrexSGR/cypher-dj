@@ -121,6 +121,15 @@ bool Netz::deck_paket(const v::Adresse* a, const osc::Nachricht& m) {
     if (!quelle_ok(b.quelle)) return ab("ausserhalb_bereich");
     if (b.deck < 1 || b.deck > 4) return ab("unbekanntes_deck");
     if (!(b.bpm > 0.0 && b.bpm < 1000.0) || b.fassung < 1 || !std::isfinite(b.ab_beat)) return ab("ausserhalb_bereich");
+  } else if (a->pfad == v::k_deck_scrub.pfad) {  // Hörbares Ziehen (§4.4): sofort, ohne Quittung, bis ~60 Hz
+    namespace f = v::feld::k_deck_scrub;
+    b.art = Befehl::DECK_SCRUB;
+    b.deck = m.werte[f::deck].i;
+    b.nr = m.werte[f::phase].i;
+    b.wert_beats = m.werte[f::delta_beats].d;
+    if (!quelle_ok(b.quelle)) return ab("ausserhalb_bereich");
+    if (b.deck < 1 || b.deck > 4) return ab("unbekanntes_deck");
+    if (b.nr < 0 || b.nr > 2 || !(std::fabs(b.wert_beats) <= 100000.0)) return ab("ausserhalb_bereich");  // auch NaN
   } else if (a->pfad == v::k_deck_raster.pfad) {  // Plan Grid (§4.4)
     namespace f = v::feld::k_deck_raster;
     b.art = Befehl::DECK_RASTER;

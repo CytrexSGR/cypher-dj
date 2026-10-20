@@ -133,6 +133,65 @@ MUTATIONEN = [
 ]
 
 
+# ---- D1 K1 (A11): Spur-Regler in allen Fundorten, Gründe
+MUTATIONEN += [
+    (KURVEN_JS, "...SPUREN.flatMap((n) => SPUR_REGLER.map((p) => `spur/${n}/${p}`)),",
+     "...SPUREN.flatMap((n) => SPUR_REGLER.filter((p) => n !== 1 || p !== 'pan').map((p) => `spur/${n}/${p}`)),",
+     "Spur-Regler=Kern: R04 kurven.js ZIELE fehlt: spur/1/pan"),   # die Mutation aus Spec A11
+    (VERTRAG_MJS, "REGLER.set(`spur/${n}/solo`", "REGLER.set(`spur/${n}/soli`",
+     "Spur-Regler=Kern: R03 Attrappe REGLER fehlt: spur/1/solo"),
+    ("djk/leitstand/src/regler_info.ts", "tabelle.set(`spur/${n}/mute`, { pfad: `spur/${n}/mute`",
+     "tabelle.set(`spur/${n}/mutx`, { pfad: `spur/${n}/mutx`", "Spur-Regler=Kern: R05 regler_info.ts fehlt: spur/1/mute"),
+    ("docs/architektur/SCHNITTSTELLEN.md", "| `spur/<n>/solo` | Schalter |", "| `spur/<n>/solx` | Schalter |",
+     "Spur-Regler=Kern: R02 SCHNITTSTELLEN §1.5 fehlt: spur/1/solo"),
+    ("djk/kern/stellwerk/src/regler.cpp", '"spur/%d/pan"', '"spur/%d/balance"',
+     "Spur-Regler=Kern: R03 Attrappe REGLER steht ohne Vertrag: spur/1/pan"),
+    ("djk/oberflaeche/hand_bedienung.ts", "|^spur\\/[1-8]\\/(fader|pan|mute|solo)$", "|^spur\\/[1-8]\\/(fader|mute|solo)$",
+     "Spur-Regler: R06 hand_bedienung.PFAD lehnt spur/1/pan ab"),
+    ("djk/vertrag/schemas/defs.schema.json", "|spur/[1-8]/(fader|pan|mute|solo)", "|spur/[1-9]/(fader|pan|mute|solo)",
+     "Spur-Regler: R07 defs.schema.json regler_pfad nimmt spur/9/fader an"),
+    (VERTRAG_MJS, "'spur_bereich', 'reserviert']", "'spur_bereich']",
+     "Gründe: Attrappe GRUENDE fehlt: reserviert"),
+    ("djk/kern/src/kern_arr.cpp", 'return ab("nicht_geladen");', 'return ab("nicht_geladenx");',
+     "Gründe: Kern-Quelltext vergibt nicht_geladenx, osc.json kennt es nicht"),
+    ("djk/vertrag/osc.json", '"spur_bereich", "reserviert"]', '"spur_bereich"]',
+     "Gründe: Attrappe GRUENDE kennt reserviert, osc.json nicht"),
+    ("djk/vertrag/schemas/defs.schema.json", '"spur_bereich", "reserviert"]', '"spur_bereich"]',
+     "Gründe=osc.json: G05 defs.schema.json grund fehlt: reserviert"),
+]
+
+# ---- D1 K1 Slice 10: Hand-Zielart arr/start_stopp
+MUTATIONEN += [
+    (HAND_MJS, "new Set(['arr/start_stopp'])", "new Set([])", "Zielarten=§7.2: Z04 hand.mjs ARR_ZIELE fehlt: arr/start_stopp"),
+    (MAPPING_CPP, 'strcmp(z, "arr/start_stopp")', 'strcmp(z, "arr/startstopp")',
+     "Zielarten=§7.2: Z02 mapping.cpp fehlt: arr/start_stopp"),
+    (HAND_EIN_H, 'strcmp(p, "arr/start_stopp")', 'strcmp(p, "arr/start")',
+     "Zielarten=§7.2: Z03 hand_ein.h /test/hand steht ohne Vertrag: arr/start"),
+    (MAPPING_H, "taste, arr };", "taste };", "Zielarten: Z05 mapping.h ZielArt kennt arr nicht"),
+]
+
+
+# ---- D1 K1 Review (Spec 6.16): Spur-Fader −200..+6 dB, Vorgabe 0, in allen Fundorten mit Bereich
+MUTATIONEN += [
+    ("djk/oberflaeche/oeffentlich/kurven.js", "spur_fader: { typ: 'fader_db', min: -200, max: 6,",
+     "spur_fader: { typ: 'fader_db', min: -200, max: 0,", "Spur-Fader-Bereich=Kern: R04 kurven.js"),
+    (VERTRAG_MJS, "REGLER.set(`spur/${n}/fader`, { ...R(DB, -200, 6, 0)",
+     "REGLER.set(`spur/${n}/fader`, { ...R(DB, -200, 0, 0)", "Spur-Fader-Bereich=Kern: R03 Attrappe REGLER"),
+    ("djk/leitstand/src/regler_info.ts", "...r('db', -200, 6, 0) });", "...r('db', -200, 0, 0) });",
+     "Spur-Fader-Bereich=Kern: R05 regler_info.ts"),
+    ("docs/architektur/SCHNITTSTELLEN.md", "| `spur/<n>/fader` | dB | −200 bis +6 |", "| `spur/<n>/fader` | dB | −200 bis 0 |",
+     "Spur-Fader-Bereich=Kern: R02 SCHNITTSTELLEN §1.5"),
+]
+
+
+def test_spur_fader_bereich_wie_spec_6_16():
+    """D1 Spec 6.16 (und §4 Wertebereiche): spur/<n>/fader −200..+6 dB, Vorgabe 0, überall gleich."""
+    b = pn.spur_fader_bereiche(pn.Quelle(WURZEL))
+    assert b["R01 Kern regler.cpp"] == (-200.0, 6.0, 0.0), b
+    for name, ist in b.items():
+        assert all(abs(x - y) <= 1e-3 for x, y in zip(ist, (-200.0, 6.0, 0.0))), (name, ist)
+
+
 MUTATION_IDS = [f"{m[0].split('/')[-1]}:{m[3][:40]}" for m in MUTATIONEN]
 
 

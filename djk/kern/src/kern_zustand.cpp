@@ -139,6 +139,37 @@ void Kern::abbild(cdj_z_echtzeit& f) const noexcept {
   f.n_hoerscheine = 0;
 }
 
+// Paket K3 (cypherdj-render): Regler-Werte wie in wiederherstellen(), sonst nichts aus dem Fach
+int Kern::regler_uebernehmen(const cdj_z_echtzeit& f) noexcept {
+  if (f.n_regler < 0 || f.n_regler > CDJ_Z_REGLER) return -1;
+  const sw::ReglerTabelle& tab = sw_->tabelle();
+  int n = 0;
+  for (int i = 0; i < f.n_regler; ++i) {
+    const cdj_z_regler& z = f.regler[i];
+    char pfad[49] = {0};
+    std::memcpy(pfad, z.pfad, sizeof z.pfad);
+    const int r = tab.suche(pfad);
+    if (r < 0 || tab.def(r).transport || !std::isfinite(z.wert)) continue;
+    sw_->setze_direkt(r, z.wert);
+    mixer_->setze_sofort(r, z.wert);
+    arr_->setze_sofort(r, z.wert);
+    ++n;
+  }
+  return n;
+}
+
+// Paket K3 (Spec 6.20): ein Regler aus den Projekt-Werten, geprüft gegen die Regler-Tabelle
+bool Kern::regler_setzen(const char* pfad, float wert) noexcept {
+  const sw::ReglerTabelle& tab = sw_->tabelle();
+  const int r = tab.suche(pfad);
+  if (r < 0 || !std::isfinite(wert)) return false;
+  const sw::ReglerDef& d = tab.def(r);
+  if (d.transport || wert < d.min || wert > d.max || (d.ganzzahlig && wert != std::floor(wert))) return false;
+  sw_->setze_direkt(r, wert);
+  mixer_->setze_sofort(r, wert);
+  arr_->setze_sofort(r, wert);
+  return true;
+}
 bool Kern::wiederherstellen(const cdj_z_echtzeit& f) noexcept {
   if (f.n_befehle < 0 || f.n_befehle > CDJ_Z_BEFEHLE || f.generation < 0) return false;
   if (f.n_regler < 0 || f.n_regler > CDJ_Z_REGLER) return false;
@@ -205,6 +236,7 @@ bool Kern::wiederherstellen(const cdj_z_echtzeit& f) noexcept {
     if (!tab.def(r).transport && std::isfinite(z.wert)) {
       sw_->setze_direkt(r, z.wert);
       mixer_->setze_sofort(r, z.wert);
+      arr_->setze_sofort(r, z.wert);  // D1 K1: spur/<n>/* (das Arrangement selbst liegt nicht im Zustand, Spec 2.12)
     }
     if (!std::strcmp(halter, "mensch") && n_mensch_wieder_ < 64) mensch_wieder_[n_mensch_wieder_++] = (int16_t)r;
   }

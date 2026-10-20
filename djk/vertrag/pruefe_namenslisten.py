@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
 """Vertragstest L3: Namenslisten für Tasten, Deck-Aktionen und Regler-Pfade gegeneinander.
+D1 K1 (Spec A11): dazu die Spur-Regler spur/<n>/* in allen sieben Fundorten (Kern-Tabelle regler.cpp, §1.5,
+Attrappe REGLER, kurven.js ZIELE, regler_info.ts, hand_bedienung.PFAD, defs.schema.json regler_pfad) und die Gründe
+(§16.2 mit Kern als Vergeber gegen Attrappe GRUENDE, Attrappe GRUENDE gegen osc.json, Grund-Literale im Kern-Quelltext
+djk/kern/src gegen osc.json). D1 K1 Slice 10: die Hand-Zielarten arr/<aktion> aus §7.2 gegen mapping.cpp, mapping.h
+(ZielArt::arr), hand_ein.h (/test/hand) und Attrappe hand.mjs ARR_ZIELE.
 
 Quellen der Wahrheit: osc.json (Tasten), SCHNITTSTELLEN.md §7.2 (Deck-Aktionen; keine Maschinenquelle) und die
 Regler-Tabelle der Attrappe (vertrag.mjs REGLER) gegen kurven.js ZIELE, hand_bedienung.PFAD und die Mappings.
@@ -78,6 +83,10 @@ class Quelle:
                                  check=True, capture_output=True, text=True).stdout.split()
             return [f"{d}/{n}" for n in aus if n.endswith(".json")]
         return sorted(str(p.relative_to(self.wurzel)) for p in (self.wurzel / d).glob("*.json"))
+
+    def dateien(self, ordner: str, endung: str) -> list[str]:
+        """Dateien eines Ordners mit dieser Endung (relativ zur Wurzel); nur im Arbeitsbaum (wie node_json)."""
+        return sorted(str(p.relative_to(self.wurzel)) for p in (self.wurzel / ordner).glob("*" + endung))
 
     def node_json(self, ausdruck: str):
         """Wertet ein ES-Modul-Skript in node aus (nur Lesen). Nur im Arbeitsbaum möglich."""
@@ -452,6 +461,169 @@ def _pruefe_regler(q: Quelle, befunde: list[str]) -> None:
                 befunde.append(f"Mapping {Path(rel).name}: Regler-Ziel {ziel} kennt die Attrappe nicht")
 
 
+# ---------------------------------------------------------------- D1 K1: Spur-Regler in allen Fundorten (A11)
+def spur_regler_listen(q: Quelle) -> tuple[int, dict[str, list[str]]]:
+    """Spur-Regler je Fundort; n = SPUR_REGLER_SPUREN aus regler.h. Nur im Arbeitsbaum (node)."""
+    regler_h = q.lies("djk/kern/stellwerk/include/cypherdj/stellwerk/regler.h")
+    n = int(_such(r"constexpr int SPUR_REGLER_SPUREN = (\d+);", regler_h, "regler.h").group(1))
+    felder = re.findall(r'"spur/%d/([a-z_]+)"', q.lies("djk/kern/stellwerk/src/regler.cpp"))
+    if not felder:
+        raise ParserFehler("regler.cpp: kein Pfad spur/%d/…, Parser blind oder Quelle umgebaut")
+    spec = q.lies("docs/architektur/SCHNITTSTELLEN.md")
+    teil = spec[_index(spec, "### 1.5 Kanäle und Regler-Pfade", "§1.5"):_index(spec, "### 1.6", "§1.5")]
+    zeilen = re.findall(r"^\| `spur/<n>/([a-z_]+)` \|", teil, re.M)
+    if not zeilen:
+        raise ParserFehler("SCHNITTSTELLEN §1.5: keine Zeile spur/<n>/…, Parser blind oder Quelle umgebaut")
+    alle = lambda fs: sorted(f"spur/{i}/{f}" for i in range(1, n + 1) for f in fs)   # noqa: E731
+    aus = q.node_json(
+        "const v=await import('file://@@/djk/vertrag/attrappe_kern/vertrag.mjs');"
+        "const k=await import('file://@@/djk/oberflaeche/oeffentlich/kurven.js');"
+        "const l=await import('file://@@/djk/leitstand/src/regler_info.ts');"
+        "const s=(m)=>[...m].filter((p)=>p.startsWith('spur/'));"
+        "console.log(JSON.stringify({a:s(v.REGLER.keys()),z:s(k.ZIELE),l:s(l.REGLER.keys())}))")
+    return n, {"R01 Kern regler.cpp": alle(felder), "R02 SCHNITTSTELLEN §1.5": alle(zeilen),
+               "R03 Attrappe REGLER": sorted(aus["a"]), "R04 kurven.js ZIELE": sorted(aus["z"]),
+               "R05 regler_info.ts": sorted(aus["l"])}
+
+
+def _db(t: str) -> float:
+    return float(t.strip().replace("−", "-").replace("+", "").replace("f", ""))
+
+
+def spur_fader_bereiche(q: Quelle) -> dict[str, tuple[float, float, float]]:
+    """(min, max, vorgabe) von spur/<n>/fader je Fundort mit Wertebereich (D1 Spec 6.16: −200..+6, Vorgabe 0).
+    hand_bedienung.PFAD und defs.schema.json regler_pfad tragen nur den Pfad, keinen Bereich. Nur im Arbeitsbaum."""
+    cpp = q.lies("djk/kern/stellwerk/src/regler.cpp")
+    m = _such(r"Rolle::spur_fader, (-?[\d.]+)f?, (-?[\d.]+)f?, (-?[\d.]+)f?,", cpp, "regler.cpp spur_fader")
+    spec = q.lies("docs/architektur/SCHNITTSTELLEN.md")
+    teil = spec[_index(spec, "### 1.5 Kanäle und Regler-Pfade", "§1.5"):_index(spec, "### 1.6", "§1.5")]
+    z = _such(r"^\| `spur/<n>/fader` \| dB \| (\S+) bis (\S+) \| (\S+) \|", teil, "SCHNITTSTELLEN §1.5 spur/<n>/fader",
+              re.M)
+    aus = q.node_json(
+        "const v=await import('file://@@/djk/vertrag/attrappe_kern/vertrag.mjs');"
+        "const k=await import('file://@@/djk/oberflaeche/oeffentlich/kurven.js');"
+        "const l=await import('file://@@/djk/leitstand/src/regler_info.ts');"
+        "const p='spur/1/fader',a=v.REGLER.get(p),r=l.REGLER.get(p);"
+        "console.log(JSON.stringify({a:[a.min,a.max,a.vorgabe],l:[r.min,r.max,r.vorgabe],"
+        "k:[k.wertAusMidi(p,0),k.wertAusMidi(p,1),k.vorgabe(p)]}))")
+    return {"R01 Kern regler.cpp": (_db(m.group(1)), _db(m.group(2)), _db(m.group(3))),
+            "R02 SCHNITTSTELLEN §1.5": (_db(z.group(1)), _db(z.group(2)), _db(z.group(3))),
+            "R03 Attrappe REGLER": tuple(aus["a"]), "R04 kurven.js (Griff 0 und 1, Vorgabe)": tuple(aus["k"]),
+            "R05 regler_info.ts": tuple(aus["l"])}
+
+
+def _pruefe_spur_regler(q: Quelle, befunde: list[str]) -> None:
+    for name, ist in (bereiche := spur_fader_bereiche(q)).items():   # D1 Review: Bereich in allen Fundorten wie der Kern
+        if any(abs(a - b) > 1e-3 for a, b in zip(ist, bereiche["R01 Kern regler.cpp"])):
+            befunde.append(f"Spur-Fader-Bereich=Kern: {name} (min, max, vorgabe) {ist} statt {bereiche['R01 Kern regler.cpp']}")
+    n, listen = spur_regler_listen(q)
+    soll = listen["R01 Kern regler.cpp"]
+    for name, ist in listen.items():
+        if name != "R01 Kern regler.cpp":
+            _diff(befunde, "Spur-Regler=Kern", soll, ist, name)
+    pfad = re.compile(_such(r"export const PFAD = /(.*)/;", q.lies("djk/oberflaeche/hand_bedienung.ts"),
+                            "hand_bedienung.ts").group(1).replace("\\/", "/"))
+    try:
+        schema = json.loads(q.lies("djk/vertrag/schemas/defs.schema.json"))["$defs"]["regler_pfad"]["pattern"]
+    except (ValueError, KeyError) as fehler:
+        raise ParserFehler(f"defs.schema.json: kein $defs.regler_pfad.pattern ({fehler})") from fehler
+    for name in soll:
+        if not pfad.search(name):
+            befunde.append(f"Spur-Regler: R06 hand_bedienung.PFAD lehnt {name} ab")
+        if not re.fullmatch(schema, name):
+            befunde.append(f"Spur-Regler: R07 defs.schema.json regler_pfad lehnt {name} ab")
+    for falsch in (f"spur/{n + 1}/fader", "spur/0/fader", "spur/1/trim"):   # Gegenprobe: kein Muster zu weit
+        if pfad.search(falsch):
+            befunde.append(f"Spur-Regler: R06 hand_bedienung.PFAD nimmt {falsch} an")
+        if re.fullmatch(schema, falsch):
+            befunde.append(f"Spur-Regler: R07 defs.schema.json regler_pfad nimmt {falsch} an")
+
+
+# ---------------------------------------------------------------- D1 K1: Gründe (A11)
+_GRUND_LITERALE = [r'quittung\([^;]*?"([a-z_]+)"\s*\)', r'\bab\("([a-z_]+)"\)', r'Abbruch\("([a-z_]+)"',
+                   r'\bgrund = "([a-z_]+)"']
+
+
+def gruende_listen(q: Quelle) -> dict[str, list[str]]:
+    listen: dict[str, list[str]] = {}
+    try:
+        listen["G01 osc.json"] = json.loads(q.lies("djk/vertrag/osc.json"))["werte"]["gruende"]["liste"]
+    except (ValueError, KeyError) as fehler:
+        raise ParserFehler(f"osc.json: keine Liste werte.gruende ({fehler})") from fehler
+    spec = q.lies("docs/architektur/SCHNITTSTELLEN.md")
+    unter = spec[_index(spec, "### 16.2", "§16.2"):_index(spec, "### 16.3", "§16.2")]
+    kern: set[str] = set()
+    for zeile in unter.split("\n"):
+        if zeile.startswith("| `"):
+            spalten = vertragstext._tabellenspalten(zeile)
+            if "Kern" in spalten[1]:
+                kern |= set(vertragstext._namen(spalten[0]))
+    if not kern:
+        raise ParserFehler("SCHNITTSTELLEN §16.2: keine Zeile mit Vergeber Kern")
+    listen["G02 §16.2 vom Kern"] = sorted(kern)
+    literale: set[str] = set()
+    for rel in q.dateien("djk/kern/src", ".cpp"):
+        text = q.lies(rel)
+        for muster in _GRUND_LITERALE:
+            literale |= set(re.findall(muster, text))
+    if "ki_gestoppt" not in literale or len(literale) < 15:
+        raise ParserFehler(f"djk/kern/src: nur {len(literale)} Grund-Literale, Parser blind oder Quelle umgebaut")
+    listen["G03 Kern-Quelltext"] = sorted(literale)
+    try:
+        listen["G05 defs.schema.json grund"] = json.loads(q.lies("djk/vertrag/schemas/defs.schema.json"))["$defs"]["grund"]["enum"]
+    except (ValueError, KeyError) as fehler:
+        raise ParserFehler(f"defs.schema.json: kein $defs.grund.enum ({fehler})") from fehler
+    listen["G04 Attrappe GRUENDE"] = sorted(q.node_json(
+        "const v=await import('file://@@/djk/vertrag/attrappe_kern/vertrag.mjs');"
+        "console.log(JSON.stringify([...v.GRUENDE]))"))
+    return listen
+
+
+def _pruefe_gruende(q: Quelle, befunde: list[str]) -> None:
+    listen = gruende_listen(q)
+    vertrag = set(listen["G01 osc.json"])
+    for code in listen["G03 Kern-Quelltext"]:
+        if code not in vertrag:
+            befunde.append(f"Gründe: Kern-Quelltext vergibt {code}, osc.json kennt es nicht")
+    _diff(befunde, "Gründe=osc.json", sorted(vertrag), listen["G05 defs.schema.json grund"], "G05 defs.schema.json grund")
+    attrappe = listen["G04 Attrappe GRUENDE"]
+    for code in listen["G02 §16.2 vom Kern"]:
+        if code not in attrappe:
+            befunde.append(f"Gründe: Attrappe GRUENDE fehlt: {code} (§16.2 nennt den Kern als Vergeber)")
+    for code in attrappe:
+        if code not in vertrag:
+            befunde.append(f"Gründe: Attrappe GRUENDE kennt {code}, osc.json nicht")
+
+
+# ---------------------------------------------------------------- D1 K1: Hand-Zielart arr/<aktion> (A11)
+def zielart_listen(q: Quelle) -> dict[str, list[str]]:
+    wo = "SCHNITTSTELLEN §7.2"
+    spec = q.lies("docs/architektur/SCHNITTSTELLEN.md")
+    start = _index(spec, "- `ziel`: ein Regler-Pfad (§1.5)", wo)
+    stueck = spec[start:_index(spec, "- `quant`", wo, start)]
+    listen = {"Z01 SCHNITTSTELLEN §7.2": sorted(set(re.findall(r"`(arr/[a-z_]+)`", stueck)))}
+    if not listen["Z01 SCHNITTSTELLEN §7.2"]:
+        raise ParserFehler(f"{wo}: keine Zielart arr/<aktion> in der ziel-Zeile, Parser blind oder Quelle umgebaut")
+    listen["Z02 mapping.cpp"] = sorted(set(re.findall(r'strcmp\(z, "(arr/[a-z_]+)"\)', q.lies("djk/kern/hand/src/mapping.cpp"))))
+    listen["Z03 hand_ein.h /test/hand"] = sorted(set(re.findall(r'strcmp\(p, "(arr/[a-z_]+)"\)',
+                                                              q.lies("djk/kern/include/cypherdj/hand_ein.h"))))
+    listen["Z04 hand.mjs ARR_ZIELE"] = sorted(_namen(_such(r"const ARR_ZIELE = new Set\(\[([^\]]*)\]\)",
+                                                          q.lies("djk/vertrag/attrappe_kern/hand.mjs"), "hand.mjs").group(1)))
+    enum = _such(r"enum class ZielArt : uint8_t \{([^}]*)\}", _strip_cpp(q.lies("djk/kern/hand/include/hand/mapping.h")),
+                 "mapping.h ZielArt").group(1)
+    listen["Z05 mapping.h ZielArt"] = [x.strip() for x in enum.split(",") if x.strip()]
+    return listen
+
+
+def _pruefe_zielarten(q: Quelle, befunde: list[str]) -> None:
+    listen = zielart_listen(q)
+    soll = listen["Z01 SCHNITTSTELLEN §7.2"]
+    for name in ("Z02 mapping.cpp", "Z03 hand_ein.h /test/hand", "Z04 hand.mjs ARR_ZIELE"):
+        _diff(befunde, "Zielarten=§7.2", soll, listen[name], name)
+    if "arr" not in listen["Z05 mapping.h ZielArt"]:
+        befunde.append("Zielarten: Z05 mapping.h ZielArt kennt arr nicht, §7.2 nennt arr/<aktion>")
+
+
 def pruefe(q: Quelle) -> list[str]:
     befunde: list[str] = []
     genutzt: set = set()
@@ -459,10 +631,13 @@ def pruefe(q: Quelle) -> list[str]:
     _pruefe_aktionen(q, befunde, genutzt)
     _pruefe_mappings(q, befunde, tasten_vertrag)
     if q.rev:
-        print(f"Hinweis: --rev {q.rev}: Regler-Teil übersprungen (node wertet nur den Arbeitsbaum aus)",
-              file=sys.stderr)
+        print(f"Hinweis: --rev {q.rev}: Regler-Teil übersprungen, auch Spur-Regler und Gründe (node wertet nur den "
+              "Arbeitsbaum aus)", file=sys.stderr)
     else:
         _pruefe_regler(q, befunde)
+        _pruefe_spur_regler(q, befunde)   # D1 K1
+        _pruefe_gruende(q, befunde)       # D1 K1
+        _pruefe_zielarten(q, befunde)     # D1 K1 Slice 10
     for schluessel in AUSNAHMEN:
         if schluessel not in genutzt:
             befunde.append(f"Ausnahme veraltet (tritt nicht mehr auf, streichen): {schluessel}")

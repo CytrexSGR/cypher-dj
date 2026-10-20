@@ -1,0 +1,25 @@
+{
+  "zweck": "D1 Spec 6.27, SCHNITTSTELLEN §4.7 und §4.11: KI-Stopp am Arrangement. Gemeinsamer Fall für den Kern (test_kern_arr_ki Fall 7) und die Attrappe (attrappe_kern/tests/ki.test.mjs). Ablauf: die Schritte von 'vorher', dann die 'befehle' der Reihe nach, je einer pro Abstand. 'ende' ist die letzte Quittung der id (6 abgelehnt, 3 fertig, 2 gestartet), 'grund' ihr Grund. Reihenfolge (K1-Fix-2, §4.7): bei KI-Stopp lehnt jeder arr-Befehl von cypher außer /k/arr/stopp zuerst mit ki_gestoppt ab, vor jeder Bereichsprüfung; die fünf ungültigen cypher-Befehle (loop [0, 0.5], laden nr -1, metronom +5 dB, start -1, freeze [0, 0.5]) prüfen das. Paket K3 (Spec 6.27): /k/arr/freeze von cypher während des KI-Stopps ki_gestoppt, gültig wie ungültig.",
+  "vorher": [
+    {"adresse": "/k/arr/laden", "quelle": "andreas", "werte": {"nr": 1}},
+    {"adresse": "/k/arr/start", "quelle": "andreas", "werte": {"start_beat": 0.0, "quant": 0}},
+    {"adresse": "/k/ki/stopp", "quelle": "andreas", "werte": {}}
+  ],
+  "befehle": [
+    {"adresse": "/k/arr/laden", "quelle": "cypher", "werte": {"nr": 2}, "ende": 6, "grund": "ki_gestoppt"},
+    {"adresse": "/k/arr/start", "quelle": "cypher", "werte": {"start_beat": 0.0, "quant": 0}, "ende": 6, "grund": "ki_gestoppt"},
+    {"adresse": "/k/arr/loop", "quelle": "cypher", "werte": {"an": 1, "von_beat": 0.0, "bis_beat": 4.0}, "ende": 6, "grund": "ki_gestoppt"},
+    {"adresse": "/k/arr/metronom", "quelle": "cypher", "werte": {"an": 1, "pegel_db": -12.0, "ziel": 0}, "ende": 6, "grund": "ki_gestoppt"},
+    {"adresse": "/k/arr/loop", "quelle": "cypher", "werte": {"an": 1, "von_beat": 0.0, "bis_beat": 0.5}, "ende": 6, "grund": "ki_gestoppt"},
+    {"adresse": "/k/arr/laden", "quelle": "cypher", "werte": {"nr": -1}, "ende": 6, "grund": "ki_gestoppt"},
+    {"adresse": "/k/arr/metronom", "quelle": "cypher", "werte": {"an": 1, "pegel_db": 5.0, "ziel": 0}, "ende": 6, "grund": "ki_gestoppt"},
+    {"adresse": "/k/arr/start", "quelle": "cypher", "werte": {"start_beat": -1.0, "quant": 0}, "ende": 6, "grund": "ki_gestoppt"},
+    {"adresse": "/k/arr/freeze", "quelle": "cypher", "werte": {"spur": 1, "von_beat": 0.0, "bis_beat": 4.0, "kennung": 1}, "ende": 6, "grund": "ki_gestoppt"},
+    {"adresse": "/k/arr/freeze", "quelle": "cypher", "werte": {"spur": 1, "von_beat": 0.0, "bis_beat": 0.5, "kennung": 1}, "ende": 6, "grund": "ki_gestoppt"},
+    {"adresse": "/k/arr/stopp", "quelle": "cypher", "werte": {"quant": 0}, "ende": 3, "grund": ""},
+    {"adresse": "/k/arr/loop", "quelle": "andreas", "werte": {"an": 1, "von_beat": 0.0, "bis_beat": 4.0}, "ende": 3, "grund": ""},
+    {"adresse": "/k/arr/metronom", "quelle": "andreas", "werte": {"an": 1, "pegel_db": -12.0, "ziel": 0}, "ende": 3, "grund": ""},
+    {"adresse": "/k/arr/laden", "quelle": "andreas", "werte": {"nr": 3}, "ende": 3, "grund": ""},
+    {"adresse": "/k/arr/start", "quelle": "andreas", "werte": {"start_beat": 0.0, "quant": 0}, "ende": 2, "grund": ""}
+  ]
+}

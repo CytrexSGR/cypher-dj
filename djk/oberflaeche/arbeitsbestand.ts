@@ -40,10 +40,7 @@ export function fassungsOrdner(wurzel: string, material_id: string, basis_bpm: n
 }
 
 // Vorgabe wie kern.toml (§2.1) mit Prüfinstanz (Z2, kern.toml:5 „schreibt /cypherdj/ in Pfaden zu /cypherdj-<i>/ um“)
-export function arbeitsbestandVorgabe(instanz: string): string {
-  const p = '/dev/shm/cypherdj/material';
-  return instanz ? p.replace(/cypherdj\//g, `cypherdj-${instanz}/`) : p;
-}
+export { arbeitsbestandVorgabe } from './pfade.ts';   // Plan d1-s1 Task 7: Vorgabe lebt in pfade.ts
 
 // Ein Dateipfad aus fassung.json bestimmt, wo gelesen und geschrieben wird: nur relativ, ohne '..', ohne leere oder
 // '.'-Glieder, ohne Backslash und NUL, damit er unter dem Fassungsordner bleibt (Befund 1 der adversarialen Prüfung).

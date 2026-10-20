@@ -34,22 +34,41 @@ static bool ziffern(const std::string& s) {
   return true;
 }
 
-std::vector<Kante> filtere_kanten(const std::vector<Kante>& kanten, const std::string& kern_praefix) {
+// Rest eines Rückweg-Ports hinter dem Präfix: N_L oder N_R
+static bool nr_lr(const std::string& rest) {
+  return rest.size() >= 3 && (rest.back() == 'L' || rest.back() == 'R') && rest[rest.size() - 2] == '_' &&
+         ziffern(rest.substr(0, rest.size() - 2));
+}
+
+std::vector<Kante> filtere_kanten(const std::vector<Kante>& kanten, const std::string& kern_praefix,
+                                  size_t* reserviert) {
   std::vector<Kante> ok;
   const std::string midi = kern_praefix + "midi_aus_", rueck = kern_praefix + "rueck_erz_";
+  const std::string arr_midi = kern_praefix + "arr_midi_", arr_rueck = kern_praefix + "arr_rueck_";   // D1 K2b
+  const std::string erz4 = kern_praefix + "rueck_erz_4_";
+  if (reserviert) *reserviert = 0;
   for (const Kante& k : kanten) {
     bool zu = false;
     // Riegel: die Gegenseite darf kein Port des Kerns sein, sonst verbände die Datei den Kern mit sich selbst
     // (master_L -> rueck_erz_2_L, midi_aus_1 -> hand_in). Der Kern verbindet nur nach außen.
     const bool quelle_kern = k.quelle.compare(0, kern_praefix.size(), kern_praefix) == 0;
     const bool ziel_kern = k.ziel.compare(0, kern_praefix.size(), kern_praefix) == 0;
+#ifndef CYPHERDJ_MUTATION_KANTEN_OHNE_RIEGEL
     if (quelle_kern && ziel_kern) continue;
+#endif
     if (k.quelle.compare(0, midi.size(), midi) == 0) zu = ziffern(k.quelle.substr(midi.size()));
-    if (!zu && k.ziel.compare(0, rueck.size(), rueck) == 0) {
-      const std::string rest = k.ziel.substr(rueck.size());  // N_L oder N_R
-      zu = rest.size() >= 3 && (rest.back() == 'L' || rest.back() == 'R') && rest[rest.size() - 2] == '_' &&
-           ziffern(rest.substr(0, rest.size() - 2));
+    if (!zu && k.ziel.compare(0, rueck.size(), rueck) == 0) zu = nr_lr(k.ziel.substr(rueck.size()));
+#ifndef CYPHERDJ_MUTATION_ARR_KANTEN_ZU
+    // D1 K2b (Spec 2.4): Wirt-Slots des Arrangements, arr_midi_<s> -> Wirt und Wirt -> arr_rueck_<s>_{L,R}
+    if (!zu && k.quelle.compare(0, arr_midi.size(), arr_midi) == 0) zu = ziffern(k.quelle.substr(arr_midi.size()));
+    if (!zu && k.ziel.compare(0, arr_rueck.size(), arr_rueck) == 0) zu = nr_lr(k.ziel.substr(arr_rueck.size()));
+#endif
+#ifndef CYPHERDJ_MUTATION_ARR_KANTE_ERZ4
+    if (zu && k.ziel.compare(0, erz4.size(), erz4) == 0) {   // D1 K1: rueck_erz_4 ist reserviert
+      zu = false;
+      if (reserviert) ++*reserviert;
     }
+#endif
     if (zu) ok.push_back(k);
   }
   return ok;

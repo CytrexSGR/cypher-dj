@@ -2,7 +2,6 @@
 // Vorgabe ~/.config/cypherdj/loops, Prüfinstanz <i> /dev/shm/cypherdj-<i>/loops. Gelistet wird, was der Kern laden
 // würde: Name [a-z0-9_-]{1,32} (halbe .<name>.neu-Ordner nicht), schema 1, beats 1/2/4/8/16/32 (alte Dateien: takte 1/2/4/8 als beats = 4 · takte, wie der Kern).
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 
 export interface LoopEintrag { name: string; beats: number; quelle: string; erstellt: string; ladbar: boolean; grund: string }
@@ -21,9 +20,7 @@ function loopGrund(dir: string, name: string, j: Record<string, unknown>, beats:
 
 export const LOOP_NAME = /^[a-z0-9_-]{1,32}$/;
 
-export function loopOrdnerVorgabe(instanz: string): string {
-  return instanz ? `/dev/shm/cypherdj-${instanz}/loops` : path.join(os.homedir(), '.config', 'cypherdj', 'loops');
-}
+export { loopOrdnerVorgabe } from './pfade.ts';   // Plan d1-s1 Task 7: Vorgabe lebt in pfade.ts
 
 export function leseLoops(dir: string): LoopEintrag[] {
   if (!fs.existsSync(dir)) return [];

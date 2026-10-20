@@ -19,8 +19,10 @@ enum class Rolle : uint8_t {
   master_pfl,                               // MASTER CUE (2026-10-10): Master auf die PFL-Seite des Kopfhörers
   color_art, color_param,                   // SOUND COLOR FX (2026-10-11): globale Art 0..5 und PARAMETER 0..1
   komp_an, komp_schwelle, komp_ratio, komp_attack, komp_release, komp_makeup, komp_mix,  // Kompressor je Quellkanal (2026-10-11)
-  komp_sc                                   // Schlüssel des Kompressors: 0 eigenes Signal, 1..14 Quellkanal + 1
+  komp_sc,                                  // Schlüssel des Kompressors: 0 eigenes Signal, 1..14 Quellkanal + 1
+  spur_fader, spur_pan, spur_mute, spur_solo   // D1 K1: Spur-Regler des Arrangements, global (Kanal −1), spur/1..8
 };
+constexpr int SPUR_REGLER_SPUREN = 8;   // D1 K1 (Spec 2.3): spur/<n>/{fader,pan,mute,solo}, n = 1..8
 
 // §7.2 kurve.typ plus zwei Formen für Schalter und Stufenregler (Festlegung dieser Scheibe)
 enum class KurvenTyp : uint8_t { fader_db, linear, schalter, stufen };

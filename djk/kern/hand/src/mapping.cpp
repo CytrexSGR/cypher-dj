@@ -104,6 +104,13 @@ bool ziel_aufloesen(const char* z, const stellwerk::ReglerTabelle& tab, Eintrag*
     e->ziel_art = ZielArt::tempo;
     return true;
   }
+#ifndef CYPHERDJ_MUTATION_HAND_OHNE_ARR  // Fehlerfall: die Zielart fehlt im Leser (unbekanntes_ziel)
+  if (std::strcmp(z, "arr/start_stopp") == 0) {  // D1 K1 (§7.2): Transport des Arrangements
+    e->ziel_art = ZielArt::arr;
+    e->arr_aktion = ArrAktion::start_stopp;
+    return true;
+  }
+#endif
   if (std::strncmp(z, "taste/", 6) == 0) {
     e->ziel_art = ZielArt::taste;
     return taste_aus_text(z + 6, &e->taste);
@@ -172,6 +179,9 @@ bool art_passt(const Eintrag& e, const stellwerk::ReglerTabelle& tab, std::strin
       if (e.art != soll) *warum = std::string("taste/") + name(e.taste) + " nur " + name(soll);
       return e.art == soll;
     }
+    case ZielArt::arr:   // D1 K1: arr/start_stopp ist eine Taste
+      if (e.art != Art::taste) *warum = "arr/start_stopp nur taste";
+      return e.art == Art::taste;
   }
   return false;
 }

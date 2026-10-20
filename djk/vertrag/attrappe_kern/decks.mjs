@@ -16,7 +16,7 @@ const HALTER_BEATS = 32;
 const VORLAUF_MS = (2 * 256 * 1000) / SR;       // §3: Direktweg 2 Zyklen
 
 function neuesDeck(nr) {
-  return { nr, status: 0, m: null, anker: { b: 0, q: 0 }, schatten: null, loop: null, roll: null, slip: false, hotcues: {}, hotcuesHand: {}, rueckfall: false, unterbunden: null, halterBis: null };
+  return { nr, status: 0, m: null, anker: { b: 0, q: 0 }, schatten: null, loop: null, roll: null, slip: false, hotcues: {}, hotcuesHand: {}, rueckfall: false, unterbunden: null, halterBis: null, scrub: null };
 }
 
 // hörbare Quellposition bei Master-Beat b
@@ -286,6 +286,24 @@ export default {
         d.raster = a.versatz_frames;
         K.aus('/e/raster', [a.deck, d.m.material_id, pos(d, K.uhr.beat(s)), (a.versatz_frames - alt) / 48, BigInt(s)]);
         return null;
+      });
+    },
+    // Hörbares Ziehen (2026-10-17, §4.4): sofort, ohne Quittung (nur Ablehnungen). Die Attrappe hat keinen Ton: sie führt die Position
+    // wie der Kern. Stehend folgt die Position der Hand (Griff + Strecke), laufend bleibt der Anker und erst das Los versetzt ihn um die
+    // Strecke; ein Deck mit Loop oder ohne Material ignoriert den Zug.
+    '/k/deck/scrub': (K, a, b) => {
+      if (!(a.deck >= 1 && a.deck <= 4)) return K.q(b, 6, 'unbekanntes_deck');
+      if (!(a.phase >= 0 && a.phase <= 2) || !Number.isFinite(a.delta_beats)) return K.q(b, 6, 'ausserhalb_bereich');
+      K.sofortQ.push(() => {
+        const d = K.decks[a.deck];
+        if (d.status === 0 || d.loop) return;
+        const beat = K.uhr.beat(K.stempel);
+        const klemm = (x) => Math.max(0, Math.min(d.m.Q ?? Infinity, x));
+        if (a.phase === 1) { d.scrub = { q: pos(d, beat), lief: laeuft(d) }; return; }
+        if (!d.scrub) return;   // Griff verloren: ohne Wirkung
+        if (a.phase === 2) { if (!d.scrub.lief) d.anker = { b: beat, q: klemm(d.scrub.q + a.delta_beats) }; return; }
+        d.anker = d.scrub.lief && laeuft(d) ? { b: beat, q: klemm(pos(d, beat) + a.delta_beats) } : { b: beat, q: klemm(d.scrub.q + a.delta_beats) };
+        d.scrub = null;
       });
     },
     '/k/deck/slip': (K, a, b) => {

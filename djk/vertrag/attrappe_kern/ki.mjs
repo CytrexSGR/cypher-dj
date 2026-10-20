@@ -4,15 +4,20 @@
 // Quittung; I2 hält sie nicht an (die Stopp-Taste nimmt der KI sofort alles, ADR 013).
 
 import { SPIELKANAELE, KANALZUG_KANAELE, LEDS } from './vertrag.mjs';
+import { wertBei } from './regler.mjs';
 
 const STOPP_BEATS = 4;
+const STUMM_GRENZE = -120;   // SCHNITTSTELLEN §1.2: jeder Wert ≤ −120 dB ist stumm (typen.h STUMM_GRENZE)
 
 function kiStopp(K, s, quelle, grund) {
   for (const t of K.offeneTeile().filter((x) => x.quelle === 'cypher')) K.abbrechen(t, s, 'ki_stopp');
-  for (const k of K.ki.spur) {
+  for (const k of [...(K.ki.kanaele ?? K.ki.spur ?? []), ...(K.ki.spuren ?? [])]) {   // ?? : Zustand einer älteren Attrappe
     const pfad = `${k}/fader`;
     const r = K.r.get(pfad);
-    if (r.halter === 'mensch') continue;
+    // wie der Kern (ki.cpp ki_fader_ab): ein Fader, den Andreas hält oder dessen Ist-Wert schon stumm ist, bleibt unberührt (keine Ausblende,
+    // seine Teile laufen weiter); sonst fallen ALLE Teile an diesem Fader (nicht nur Cyphers), bevor die Ausblende beginnt (D1 S2int Fix7 U2)
+    if (r.halter === 'mensch' || wertBei(K, pfad, s) <= STUMM_GRENZE) continue;
+    for (const u of K.offeneTeile().filter((x) => x.pfad === pfad)) K.abbrechen(u, s, 'ki_stopp');
     const t = { b: { key: `kern:ki_stopp:${k}:${s}`, intern: true }, art: 'regler', quelle, plan: '', teil: 0, gruppe: '', hoerschein: '',
       pfad, nach: -200, form: 0, ab: K.uhr.beat(s), dauer: STOPP_BEATS, politik: 1, raster: 0, seq: ++K.seq };
     t.ab_eff = t.ab;
@@ -21,6 +26,7 @@ function kiStopp(K, s, quelle, grund) {
     K.teile.push(t);
     K.starte(t, s);
   }
+  K.arrKiStopp?.(s);   // D1 K1 (Spec 2.12): Cyphers Transport stoppt
   K.ki.gestoppt = true;
   K.leds.ki_gestoppt = 1;
   K.aus('/e/ki', [1, grund, BigInt(s)]);
@@ -35,7 +41,7 @@ function kiFrei(K, s, grund) {
 export default {
   name: 'ki',
   init(K) {
-    K.ki = { gestoppt: false, spur: [], stufe: 1, vorschlag: '' };
+    K.ki = { gestoppt: false, kanaele: [], spuren: [], stufe: 1, vorschlag: '' };   // D1 Spec 6.15: zwei Listen
     K.leds = K.leds ?? {};
     K.latenz = {};
     K.kiStopp = (s, quelle, grund) => kiStopp(K, s, quelle, grund);
@@ -48,9 +54,21 @@ export default {
       K.sofort(b, (s) => { kiFrei(K, s, 'frei'); return null; });
     },
     '/k/ki/spur': (K, a, b) => {
-      const liste = a.kanaele === '' ? [] : a.kanaele.split(',').map((x) => x.trim());
-      if (liste.some((k) => !SPIELKANAELE.includes(k))) return K.q(b, 6, 'unbekannter_regler');
-      K.sofort(b, () => { K.ki.spur = liste; return null; });
+      const liste = a.kanaele === '' ? [] : a.kanaele.split(',').map((x) => x.trim()).filter((x) => x !== '');
+      // D1 K1, Spec 6.15: auch spur/<ziffern> (spur/2, spur/135; spur/0 = keine), der Stopp senkt dann spur/<n>/fader.
+      // Spur-Einträge ersetzen nur die Spur-Liste (S2), Kanal-Einträge nur die Kanal-Liste (Leitstand); leer: Kanäle.
+      const spurEintrag = (k) => k.startsWith('spur/');
+      if (liste.some((k) => (spurEintrag(k) ? !/^spur\/(0|[1-8]+)$/.test(k) : !SPIELKANAELE.includes(k)))) {
+        return K.q(b, 6, 'unbekannter_regler');
+      }
+      const spuren = [...new Set(liste.filter(spurEintrag).flatMap((k) => (k === 'spur/0' ? [] : [...k.slice(5)].map((z) => `spur/${z}`))))];
+      const kanaele = liste.filter((k) => !spurEintrag(k));
+      const mitSpuren = liste.some(spurEintrag);
+      K.sofort(b, () => {
+        if (kanaele.length > 0 || !mitSpuren) K.ki.kanaele = kanaele;
+        if (mitSpuren) K.ki.spuren = spuren;
+        return null;
+      });
     },
     '/k/ki/stufe': (K, a, b) => {
       if (!(a.stufe >= 0 && a.stufe <= 3)) return K.q(b, 6, 'ausserhalb_bereich');

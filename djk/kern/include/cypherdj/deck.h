@@ -14,6 +14,7 @@
 // Keylock (Task 5): das Band trägt den Loop und wickelt selbst (DeckBand::band), Loop an und aus sind Ereignisse.
 #pragma once
 
+#include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <cstdint>
@@ -37,6 +38,18 @@ constexpr int DECK_KEYLOCK_BLENDE = STRECK_BLENDE;
 constexpr int DECK_KEYLOCK_EINSCHWING = STRECK_EINSCHWING;
 constexpr int DECK_KEYLOCK_BAENDER = 8;   // Plätze der StreckLeihe je Deck (Material in Gebrauch beim Dehner)
 constexpr int DECK_KEYLOCK_VERPASST = STRECK_VERPASST;
+// Hörbares Ziehen (Scrub, 2026-10-17): Regelgrößen des Nachführens der Leseposition an die Hand. Rate in Frames je Sample.
+constexpr int SCRUB_BLENDE = 128;             // Ein- und Ausblende zwischen Deck-Weg und Ziehen
+constexpr double SCRUB_RATE_MAX = 8.0;        // schneller als 8-fach wird nicht gelesen (Catmull-Rom, kein Aliasing-Filter)
+constexpr double SCRUB_BESCHL = 0.02;         // größte Änderung der Rate je Sample (0 auf 1 in 50 Samples)
+constexpr double SCRUB_TAU = 480.0;           // Samples: Zeitkonstante, mit der der Lagefehler abgebaut wird (10 ms)
+constexpr double SCRUB_STILL = 0.05;          // unter dieser Rate sinkt die Lautstärke linear auf 0 (Stillstand = Stille)
+constexpr double SCRUB_LAUT_SCHRITT = 1.0 / 256.0;  // Lautstärke ändert sich höchstens um 1/256 je Sample (5 ms von 0 auf 1)
+constexpr int SCRUB_STUFE_MIN = 480;          // Handstufen (≈ 60 Hz) werden über mindestens 10 ms ...
+constexpr int SCRUB_STUFE_MAX = 4800;         // ... und höchstens 100 ms zur stetigen Strecke
+constexpr int SCRUB_WACHHUND = 96000;         // 2 s ohne Meldung der Hand (Paket verloren, Seite weg): wie Loslassen
+constexpr int SCRUB_AUSSCHWING_MAX = 6000;    // nach dem Loslassen höchstens 125 ms nachführen, dann ausblenden
+
 constexpr int DECK_MAX_BLOCK = STRECK_MAX_BLOCK;  // größter Block (MIX_BLOCK)
 // Keylock 6a (Plan Task 6, Detailschnitt 3.8): Start aus dem Stand, geplant. Vorlage wie BOX_VORLAGE (loopbox.h, 7b.2): der
 // Ring klingt so viele Samples vor dem Einsatz s_t (das Band liefert davor Stille), s_h = s_t − STRECK_EINSCHWING − DECK_VORLAGE.
@@ -216,6 +229,18 @@ class Deck {
   // Rendert [s, s + n) und addiert auf l und r; vl_off ist der Index des Samples s in den Stem-Verläufen.
   void block(int64_t s, int n, float* l, float* r, int vl_off) noexcept;
 
+  // Hörbares Ziehen (Scrub): Die Hand zieht die Welle, das Deck liest das Material an der Handposition (Rate und Richtung folgen,
+  // Stillstand ist Stille, rückwärts hörbar), roh ohne Tonhöhenkorrektur. delta_f = Strecke der Hand seit dem Griff in Frames.
+  // Stehendes Deck: die Hand setzt die Position; Loslassen lässt den Kopf dort stehen. Laufendes Deck (Folgemodus): das Ziel wandert
+  // mit dem Tempo des Decks weiter, die Hand schiebt es nudge-artig; Loslassen setzt den Kopf um die Strecke versetzt, das Deck läuft
+  // dort weiter (derselbe Ort wie der Sprung um die Strecke, den die Seite bisher beim Loslassen schickte).
+  void scrub_an(int64_t s, double delta_f) noexcept;    // Griff (oder Neuansatz mit Strecke 0 an der alten Stelle)
+  void scrub_ziel(int64_t s, double delta_f) noexcept;  // neue Handstrecke seit dem Griff
+  void scrub_los(int64_t s, double delta_f) noexcept;   // Hand loslassen: ausschwingen, dann zurück zum Deck-Weg
+  bool scrubbt() const noexcept { return scrub_an_; }
+  double scrub_lage() const noexcept { return scrub_pos_; }    // Diagnose: Leseposition in Frames
+  double scrub_rate() const noexcept { return scrub_rate_; }   // Diagnose: Frames je Sample
+
   // ---- Keylock (Task 2). Vor dem Start und nicht im Callback: Dehner und Post der Quelle (nullptr: ohne Keylock, das
   // Deck spielt Varispeed wie Welle 3). Beide müssen das Deck überleben bzw. vor ihm ihre Fäden anhalten.
   void setze_keylock(DehnerBasis* d, StreckPost* post) noexcept;
@@ -363,6 +388,27 @@ class Deck {
 #endif
   }
   // Blende: alter Lesekopf (auch eines abgelösten Materials) klingt 128 Frames lang aus
+  // Hörbares Ziehen: Zustand. Alles feste Felder, gerechnet nur im Audio-Faden.
+  void scrub_block(int64_t s, int n, float* l, float* r, int vl_off) noexcept;
+  void scrub_ende(int64_t s) noexcept;  // Blockende nach dem Ausschwingen: Anker setzen, Ausblende beginnt
+  void scrub_ab() noexcept { scrub_an_ = false; scrub_los_ = false; scrub_aus_ = false; scrub_n_ = 0; }
+  float scrub_gewicht(int i) const noexcept {  // Anteil des Ziehens am Sample i des Blocks (der Deck-Weg bekommt 1 − Anteil)
+    const int n = scrub_n_ + (scrub_aus_ ? -(i + 1) : i + 1);
+    return static_cast<float>(std::clamp(n, 0, SCRUB_BLENDE)) / static_cast<float>(SCRUB_BLENDE);
+  }
+  bool scrub_an_ = false;     // Ziehen aktiv (auch während Ausschwingen und Ausblende)
+  bool scrub_los_ = false;    // Hand losgelassen, die Position schwingt aus
+  bool scrub_aus_ = false;    // Ausblende läuft (Anker des Decks sind gesetzt)
+  bool scrub_folgt_ = false;  // laufendes Deck: die Grundlage wandert mit dem Tempo des Decks
+  int scrub_n_ = 0;           // Blendenzähler 0 bis SCRUB_BLENDE (0: nur Deck-Weg, SCRUB_BLENDE: nur Ziehen)
+  double scrub_pos_ = 0.0, scrub_rate_ = 0.0, scrub_laut_ = 0.0;
+  double scrub_basis_ = 0.0;      // Grundlage der Hand-Strecke in Frames (Griffstelle, im Folgemodus mitwandernd)
+  double scrub_t_ = 0.0;          // geglättete Handstrecke
+  double scrub_t_v_ = 0.0;        // ihr Anstieg je Sample bis scrub_t_ziel_
+  double scrub_t_ziel_ = 0.0;     // zuletzt gemeldete Handstrecke
+  int scrub_t_rest_ = 0;          // Samples bis scrub_t_ziel_ erreicht ist
+  int64_t scrub_s_zuletzt_ = 0;   // Sample der letzten Meldung der Hand
+  int64_t scrub_s_los_ = 0;       // Sample des Loslassens
   const Material* alt_m_ = nullptr;
   int64_t alt_f_ = 0;
   float alt_gain_ = 1.0f;

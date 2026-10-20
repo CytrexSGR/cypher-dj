@@ -42,6 +42,16 @@ int main() {
   PRUEF_NAH(cdj::frame_von(16.5, 0, 128.0), 371250.0, 0.0);
   PRUEF_NAH(cdj::frame_von(16.5, 1234, 128.0), 372484.0, 0.0);
   PRUEF_NAH(cdj::frame_von(1.0, 0, 124.0), 23225.806451612903, 1e-9);
+  // erste_volle_eins: Karte am Anfang → unverändert; Karte spät (Wake up, 178.8 s Quelle bei 150 → 128 BPM) → Eins im
+  // ersten Takt des Tracks; knapp vor Frame 0 (Deck A live: −105) → unverändert
+  PRUEF_NAH(cdj::erste_volle_eins(2.0, 3129, 128.0), 2.0, 0.0);
+  PRUEF_NAH(cdj::erste_volle_eins(0.0, -105, 128.0), 0.0, 0.0);
+  {
+    const int64_t esf = 10059750;   // 447.1 Beats bei 22500 Frames je Beat
+    const double q = cdj::erste_volle_eins(1.0, esf, 128.0), f = cdj::frame_von(q, esf, 128.0);
+    PRUEF(f >= 0.0 && f < 4.0 * 22500.0);
+    PRUEF_NAH(std::fmod(1.0 - q, 4.0), 0.0, 0.0);
+  }
   PRUEF_NAH(cdj::quell_beat_von(cdj::frame_von(100.25, 777, 124.0), 777, 124.0), 100.25, 1e-12);
 
   // Positiv: Fixtures a1 (256 Beats, −16 LUFS) und c3 (64 Beats, −9,4 LUFS)

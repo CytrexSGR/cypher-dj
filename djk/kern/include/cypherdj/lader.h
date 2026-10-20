@@ -12,6 +12,7 @@
 #include <string>
 
 #include "cypherdj/fassung.h"
+#include "cypherdj/speicher_konto.h"
 #include "cypherdj/spsc_ring.h"
 
 namespace cdj {
@@ -76,6 +77,8 @@ class Lader {
   void gib_frei(Material* m);  // munlock, munmap, Budget zurück
   int64_t gesperrt() const { return gesperrt_.load(std::memory_order_relaxed); }
   int64_t budget() const { return budget_; }
+  // D1 K1 (Spec 2.1): gemeinsames Konto mit dem Arrangement-Lader; vor dem Lade-Faden. nullptr: nur das eigene Budget.
+  void verbinde_konto(SpeicherKonto* k) { konto_ = k; }
   const std::string& arbeitsbestand() const { return ab_; }
   // Ein Durchgang des Lade-Fadens: alle Rückgaben freigeben, höchstens einen Auftrag laden. true: es gab Arbeit.
   bool einmal(LaderRinge& r, const LaderOptionen& opt = {});
@@ -86,6 +89,7 @@ class Lader {
   std::string ab_;
   int64_t budget_;
   std::atomic<int64_t> gesperrt_{0};
+  SpeicherKonto* konto_ = nullptr;
 };
 
 }  // namespace cdj

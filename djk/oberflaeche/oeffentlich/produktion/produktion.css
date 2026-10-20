@@ -1,0 +1,125 @@
+/* PRODUCTION-Ansicht (D1 V1, Spec 2.11). Gilt nur unter body.produktion; DJ und STUDIO bleiben unberührt (style.css
+   wird nicht angefasst, Konfliktdatei V1/V2). Raster: Kopf oben über die ganze Breite, links der vorhandene #bestand
+   (derselbe Knoten, kein zweiter Browser) mit dem Reiter LIBRARY schmal, rechts #produktion: Transportleiste,
+   Arrangement, Detailbereich (leerer Rahmen bis V2). lib-zu klappt den Browser auf 34 px ein; lib-gross gilt hier nicht. */
+#produktion { display: none; }
+body.produktion, body.produktion.lib-zu, body.produktion.lib-gross {
+  grid-template-rows: var(--kopf) minmax(0, 1fr);
+  grid-template-columns: minmax(240px, 18vw) minmax(0, 1fr);
+  grid-template-areas: "kopf kopf" "bestand prod";
+}
+body.produktion.lib-zu { grid-template-columns: var(--lib-zu) minmax(0, 1fr); }
+body.produktion #kopf { grid-area: kopf; }
+body.produktion #pult { display: none; }
+body.produktion #bestand { grid-area: bestand; min-width: 0; }
+body.produktion #produktion { grid-area: prod; display: grid; min-width: 0; min-height: 0; gap: 6px;
+  grid-template-rows: auto minmax(0, 1fr) var(--detail, 26vh); position: relative; }
+
+/* Browser links, schmal: nur LIBRARY, Baum über der Liste, Detail aus, nur die Namensspalte */
+/* Welche Tabelle des Browsers zeigt: in PRODUCTION immer LIBRARY, unabhängig vom DJ-Zustand (Reiter, BOTTOM-PANEL EFFECTS). Vorher
+   klickte produktion.js die DJ-Knöpfe an; das schrieb djk-bereich und setzte den Fokus in die Suche. !important, weil
+   body.bereich-effekte alle .tabelle mit !important ausblendet; eingeklappt (lib-zu) gilt die Regel nicht. */
+body.produktion #bestand .tabelle:not([data-tabelle="library"]) { display: none !important; }
+body.produktion:not(.lib-zu) #bestand .tabelle[data-tabelle="library"] { display: block !important; }
+body.produktion #bestand .reiter, body.produktion #bestand .bereich, body.produktion #gross, body.produktion #suche,
+body.produktion #bestand-info, body.produktion .st-detail, body.produktion #effekte { display: none; }   /* #effekte: .effekte {display:flex} in style.css überstimmt hidden, auch in DJ (Nebenbefund) */
+body.produktion #bestand .kopfzeile { flex-wrap: wrap; gap: 6px; }
+body.produktion .stoebern { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(60px, 28%) minmax(0, 1fr); gap: 6px; }
+body.produktion .st-baum { display: block; border-right: 0; border-bottom: 1px solid var(--line); padding: 0 0 4px; }
+body.produktion .st-typen button { font-size: 10px; padding: 2px 6px; }
+body.produktion .lib-filter { flex-wrap: wrap; }
+body.produktion #st-kopfzeile th:not(:first-child), body.produktion #libliste td:not(:first-child) { display: none; }
+body.produktion #libliste tr[data-prod-zieh] { cursor: grab; }
+body.produktion.lib-zu #bestand { padding: 6px 4px; }
+body.produktion.lib-zu #bestand > :not(.kopfzeile), body.produktion.lib-zu #bestand .kopfzeile > :not(#schublade) { display: none; }
+
+/* Transportleiste */
+.p-transport { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 8px; padding: 4px 10px; min-width: 0; }
+.p-gruppe { display: flex; align-items: center; gap: 4px; }
+.p-transport button, .p-transport select, .p-transport input { font-size: 11px; font-weight: 700; letter-spacing: .06em; padding: 3px 8px;
+  border-radius: 5px; background: var(--panel2); color: var(--text); border: 1px solid var(--line); }
+.p-transport button.an { background: var(--a); color: #0e0f12; border-color: var(--a); }
+.p-transport button:disabled, .p-ecke button:disabled { opacity: .4; cursor: default; }
+.p-transport input { width: 7ch; font-variant-numeric: tabular-nums; user-select: text; }
+.p-name { font-weight: 800; max-width: 18ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.p-position { font: 700 18px ui-monospace, monospace; min-width: 8ch; text-align: right; }
+.p-meldung { flex: 1; min-width: 10ch; color: var(--dim); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.p-meldung.fehler { color: var(--kill); }
+.p-offline { font-size: 11px; font-weight: 700; letter-spacing: .08em; padding: 2px 8px; border-radius: 4px; color: var(--kill); border: 1px solid var(--kill); }
+.p-offline[hidden] { display: none; }
+.p-kern { color: var(--dim); font-size: 11px; }
+.p-verlauf { position: absolute; right: 10px; top: 44px; z-index: 20; margin: 0; padding: 6px 10px 6px 28px; max-height: 50vh; overflow: auto;
+  background: #14171d; border: 1px solid var(--line); border-radius: 6px; font-size: 12px; box-shadow: 0 6px 18px rgba(0, 0, 0, .5); }
+.p-verlauf[hidden] { display: none; }
+.p-verlauf li { white-space: nowrap; }
+.p-verlauf .p-verlauf-undo, .p-verlauf .p-verlauf-redo { color: var(--dim); }
+
+/* Arrangement: Ecke | Lineal, darunter Köpfe | Spurfläche in EINEM senkrecht scrollenden Körper */
+.p-arr { display: grid; grid-template-columns: 264px minmax(0, 1fr); grid-template-rows: 28px minmax(0, 1fr); min-height: 0;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; position: relative; }
+.p-ecke { display: flex; gap: 2px; align-items: center; padding: 0 4px; border-right: 1px solid var(--line); }
+.p-ecke button { font-size: 9px; font-weight: 700; padding: 2px 4px; border-radius: 4px; white-space: nowrap; }
+.p-lineal { display: block; width: 100%; height: 28px; cursor: pointer; touch-action: none; }
+.p-koerper { grid-column: 1 / -1; display: grid; grid-template-columns: 264px minmax(0, 1fr); overflow-y: auto; overflow-x: hidden; min-height: 0; }
+.p-koepfe { border-right: 1px solid var(--line); }
+.p-flaeche { position: relative; min-height: 100%; }
+.p-flaeche canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block; }
+.p-ueber { touch-action: none; }
+.p-leer { position: absolute; inset: 28px 0 0 0; display: flex; align-items: center; justify-content: center; color: var(--dim); font-size: 14px; pointer-events: none; }
+.p-leer[hidden] { display: none; }
+
+/* Spurkopf: 64 px wie eine Spurzeile (layout.js SPUR_HOEHE). Acht Spalten: Farbe | Name | Gerät | ↑ | ↓ | M | S | ✕ */
+.p-kopf { height: 64px; box-sizing: border-box; display: grid; grid-template-columns: 10px minmax(0, 1fr) auto 18px 18px 22px 22px 18px;
+  grid-template-rows: 20px 18px 14px; gap: 2px 4px; padding: 3px 6px 3px 0; border-bottom: 1px solid var(--line); font-size: 11px; }
+.p-farbe { grid-column: 1; grid-row: 1 / -1; width: 10px; padding: 0; border: 0; border-radius: 0; background: var(--farbe); }
+.p-spurname { grid-column: 2; grid-row: 1; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; align-self: center; }
+.p-namefeld { grid-column: 2 / 4; grid-row: 1; font: inherit; min-width: 0; }
+.p-geraet { grid-column: 3; grid-row: 1; color: var(--dim); font-size: 9px; letter-spacing: .08em; align-self: center; white-space: nowrap; }
+.p-hoch, .p-runter, .p-mute, .p-solo, .p-loeschen { grid-row: 1; font-size: 10px; font-weight: 800; padding: 0; border-radius: 4px; }
+.p-hoch { grid-column: 4; } .p-runter { grid-column: 5; } .p-mute { grid-column: 6; } .p-solo { grid-column: 7; } .p-loeschen { grid-column: 8; }
+.p-kopf button:disabled { opacity: .3; cursor: default; }
+.p-mute.an { background: var(--warn); color: #0e0f12; border-color: var(--warn); }
+.p-solo.an { background: var(--a); color: #0e0f12; border-color: var(--a); }
+.p-fader { grid-column: 2 / 6; grid-row: 2; min-width: 0; height: 14px; accent-color: var(--farbe); }
+.p-faderwert { grid-column: 6 / 9; grid-row: 2; font-size: 10px; text-align: right; }
+.p-pan { grid-column: 2; grid-row: 3; min-width: 0; height: 12px; }
+.p-panwert { grid-column: 3; grid-row: 3; font-size: 10px; }
+.p-pegel { grid-column: 4 / 9; grid-row: 3; align-self: center; height: 6px; }
+
+/* Detailbereich: leerer Rahmen, gefüllt in V2 (Clip-Bearbeitung, Piano-Roll) */
+.p-detail { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; min-height: 0; overflow: hidden; }
+.p-detail-kopf { font-size: 11px; font-weight: 700; letter-spacing: .16em; color: var(--dim); }
+.p-detail-leer { color: var(--dim); font-size: 13px; padding-top: 8px; }
+
+/* D1 V2 Slice 1: Spurfläche mit Tastaturfokus (Entf, Strg+D, Strg+E, Strg+L wirken nur dort) */
+.p-ueber:focus { outline: 1px solid rgba(47, 214, 195, .45); outline-offset: -1px; }
+
+/* D1 V2 Slice 2: Detailbereich (Clip-Ansicht) und Piano-Roll */
+.p-roll:focus { outline: 1px solid rgba(47, 214, 195, .45); outline-offset: -1px; }
+.p-detail { display: flex; flex-direction: column; gap: 4px; }
+.p-detail-kopf { display: flex; align-items: center; gap: 10px; min-height: 22px; }
+.p-detail-info { letter-spacing: 0; font-weight: 400; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.p-detail-knoepfe { margin-left: auto; display: flex; gap: 4px; }
+.p-detail button, .p-detail input, .p-detail select { font-size: 11px; font-weight: 700; padding: 2px 6px; border-radius: 5px;
+  background: var(--panel2); color: var(--text); border: 1px solid var(--line); }
+.p-detail button:disabled { opacity: .4; cursor: default; }
+.p-detail-leer[hidden], .p-clip-audio[hidden], .p-clip-midi[hidden] { display: none; }
+.p-clip-audio { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; font-size: 11px; color: var(--dim); }
+.p-clip-audio input:not([type="range"]) { width: 8ch; font-variant-numeric: tabular-nums; user-select: text; }
+.p-clip-audio input[data-f="name"] { width: 18ch; }
+.p-clip-midi { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 4px; }
+.p-roll-leiste { display: flex; gap: 12px; align-items: center; font-size: 11px; color: var(--dim); }
+.p-roll-leiste input { width: 5ch; }
+.p-roll-hilfe { margin-left: auto; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.p-roll { flex: 1; min-height: 0; width: 100%; display: block; border-radius: 4px; touch-action: none; }
+.p-detail-knoepfe button.an { background: #2fd6c3; color: #0e0f12; border-color: #2fd6c3; }
+
+/* D1 V2 Slice 3: FREEZE im Spurkopf einer Wirt-Spur (Spalte 5, Zeile 2; der Fader wird dort schmaler), EXPORT in der Transportleiste */
+.p-kopf[data-wirt] .p-fader { grid-column: 2 / 5; }
+.p-freeze { grid-column: 5; grid-row: 2; font-size: 11px; line-height: 1; padding: 0; border-radius: 4px; }
+.p-freeze.an { background: #8ad4ff; color: #0e0f12; border-color: #8ad4ff; }
+.p-freeze.laeuft { animation: p-puls .8s infinite alternate; }
+@keyframes p-puls { from { opacity: 1; } to { opacity: .35; } }
+.p-ausgabe-text { font-size: 11px; color: var(--dim); max-width: 44ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.p-ausgabe-text.warnung { color: var(--kill); }

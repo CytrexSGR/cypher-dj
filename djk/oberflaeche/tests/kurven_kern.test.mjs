@@ -8,7 +8,7 @@ import { GRIFF, art, griffZuMidi, midiRoh, wertAusMidi, formatiere, vorgabe, ZIE
 
 const REF = JSON.parse(fs.readFileSync(new URL('./hilfen/kern_kurven_referenz.json', import.meta.url), 'utf8'));
 const STETIG = ['deck/1/fader', 'deck/2/fader', 'master/pegel', 'cue/pegel', 'deck/1/eq/tief', 'deck/1/eq/mitte', 'deck/2/eq/hoch',
-  'deck/1/trim', 'deck/1/filter', 'xfader', 'cue/mix'];
+  'deck/1/trim', 'deck/1/filter', 'xfader', 'cue/mix', 'spur/1/fader', 'spur/1/pan'];   // D1 K1: Spur-Fader bis +6 dB
 
 test('Standard: Ziel-Kurve ist der Kern', () => assert.equal(ZIEL_KURVE, 'kern'));
 
@@ -97,7 +97,7 @@ test('Negativ-Kontrolle: harmlose Regler sind unter beiden Kurven gleich (Trim 0
   }
   assert.equal(griffZuMidi('deck/1/kill/tief', 1), 1);
   assert.equal(griffZuMidi('deck/1/pfl', 0), 0);
-  assert.equal(ZIELE.size, 87);  // K2: + master/kleber; 28 + deck/1/xseite, deck/2/xseite (2026-09-27) + erz/1 11 (Strudel) + pad/1, pad/2 je 11 (MVP 2)
+  assert.equal(ZIELE.size, 87 + 32);  // K2: + master/kleber; 28 + deck/1/xseite, deck/2/xseite (2026-09-27) + erz/1 11 (Strudel) + pad/1, pad/2 je 11 (MVP 2); D1 K1: spur/1..8 je fader, pan, mute, solo
 });
 
 test('float32 wie der Kern: Schwelle 0,001 und Kill entscheiden auf fround(x)', () => {

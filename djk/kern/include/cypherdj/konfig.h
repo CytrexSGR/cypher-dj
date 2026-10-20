@@ -33,6 +33,10 @@ struct KernKonfig {
   // Umbauplan Bungee S2: die Maschine des Keylocks. "r3" (Vorgabe, Rubber Band in Fäden), "bungee" (Bungee synchron im Callback,
   // Korn 512) oder "bungee_fein" (Korn 256). Bungee nur in einem Kern, der mit CYPHERDJ_BUNGEE gebaut ist; sonst Keylock aus.
   std::string keylock_maschine = "r3";
+  // D1 K1 (Spec 2.1, 2.9): Arbeitsordner der Wiedergaben je Instanz ("" = ~/.cache/cypherdj[-<i>]/arr) und Teilbetrag
+  // des gesperrten Speichers für Arrangement-Audio (zählt zugleich gegen speicher_budget_mib)
+  std::string arr_ordner = "";
+  int arr_budget_mib = 1024;
 };
 
 // Schlüssel mit TOML-Typ, wie §2.1 sie schreibt: "version", dann je Schlüssel "float", "int", "str", "Pfad", "bool"
@@ -40,7 +44,7 @@ struct KonfigSchluessel {
   const char* name;
   const char* typ;
 };
-extern const KonfigSchluessel KERN_SCHLUESSEL[19];
+extern const KonfigSchluessel KERN_SCHLUESSEL[21];
 
 class KonfigFehler : public std::runtime_error {
  public:
@@ -53,7 +57,9 @@ KernKonfig lies_kern_toml_text(std::string_view text, const std::string& quelle)
 KernKonfig lies_kern_toml(const std::string& pfad);
 // Standardpfad ~/.config/cypherdj[-<instanz>]/kern.toml (instanz "" oder a bis i, aus instanz.h)
 std::string standard_konfig_pfad(const char* instanz);
-// Wendet Z2 an: udp_port + 1000·k, "/cypherdj/" in arbeitsbestand -> "/cypherdj-<instanz>/".
+// Wendet Z2 an: udp_port + 1000·k, "/cypherdj/" in arbeitsbestand und arr_ordner -> "/cypherdj-<instanz>/".
 void wende_instanz_an(KernKonfig& k, const char* instanz);
+// D1 K1: wirksamer Arbeitsordner der Wiedergaben: arr_ordner, sonst $HOME/.cache/cypherdj[-<instanz>]/arr
+std::string arr_ordner_von(const KernKonfig& k, const char* instanz);
 
 }  // namespace cdj

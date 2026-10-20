@@ -165,6 +165,15 @@ FALL(quelle_andreas_ohne_schein_kein) {
   PRUEFE(lauf(reg, deck, true, "", Quelle::andreas) == Grund::kein);
 }
 
+FALL(spur_regler_ohne_schein) {
+  // D1 K1 (Spec 2.3): spur/* sind kein Kanal-Fader; Cypher öffnet sie ohne Hörschein (A9), wie erz und pad
+  HoerscheinRegister reg;   // leer
+  TestDeck deck;
+  for (const char* f : {"spur/1/fader", "spur/8/fader", "spur/3/pan"})
+    PRUEFE(lauf(reg, deck, true, "", Quelle::cypher, f) == Grund::kein);
+  PRUEFE(lauf(reg, deck, true, "", Quelle::cypher, "deck/2/fader") == Grund::kein_hoerschein);   // Gegenprobe
+}
+
 FALL(erzeuger_kanal_oeffnet_ohne_schein) {
   // Andreas 2026-09-29: erz/* öffnen ohne Hörschein; Deck-Kanäle bleiben gesperrt (pad/* seit 2026-10-05 offen).
   HoerscheinRegister reg;   // leer

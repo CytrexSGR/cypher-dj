@@ -15,12 +15,28 @@ Aus erkannten Schlagzeiten (Sekunden) wird eine glatte Karte Schlag-Nummer -> Qu
   3. Eintraege je ganzer Nummer: [quell_sekunde, quell_beat] mit quell_beat = v * Nummer
      (v = tempo_vielfaches aus §12.3; Halb- und Doppeltempo aendern nur die Zaehlung).
 """
+import logging
 from dataclasses import dataclass, field, replace
 import numpy as np
 from scipy.interpolate import make_smoothing_spline
 
+LOG = logging.getLogger(__name__)
 MIN_SCHLAEGE = 8
 TOLERANZ = 0.15      # Abstand gilt als ganzzahlig, wenn |r - rund(r)| <= 0,15 Perioden
+# Ketten verbinden (2026-10-17): zwei Ketten gehoeren zusammen, wenn sie dasselbe Raster tragen.
+FENSTER_VERBINDEN = 64     # Schlaege je Seite fuer die lokale Geraden-Anpassung (16 Takte). Messung am Bestand:
+                           # bei 16 Schlaegen verfehlt Meindl (die ersten Schlaege nach dem Bruch liegen 60 ms daneben),
+                           # bei 32 trifft er die Phase knapp (-0,064), bei 64 sicher (-0,012)
+PERIODEN_TOL = 0.01        # relative Periodenabweichung der Fenster-Geraden; am Bestand lagen die verbundenen
+                           # Paare bei hoechstens 0,4 %, ein echter Tempowechsel liegt bei 3 % und mehr
+PHASE_TOL = 0.1            # Phase der spaeteren Kette auf dem Raster der frueheren, in Perioden
+ANKER_FENSTER = 192        # Schlaege der bisher aufgenommenen Kette, die das Raster fuer den Anker tragen (48 Takte)
+ANKER_NAH = 64             # Schlaege der Kandidatin am nahen Ende fuer Periode und Phase
+EXTRAPOLATION_MAX = 400    # Anker: hoechstens so viele Schlaege Luecke zwischen dem Fenster der aufgenommenen Kette und der
+                           # naechsten Kandidatin. Periodenfehler der 64-Schlaege-Geraden bei 8 ms Streuung: 5e-5 s je
+                           # Schlag, ueber 400 Schlaege 21 ms = 0,05 Perioden bei 150 BPM, also unter der Haelfte von PHASE_TOL
+ANTEIL_MIN = 0.9           # Warnung, wenn die gewaehlte Kette weniger Schlaege traegt
+RAND_MAX_S = 30.0          # Warnung, wenn Anfang oder Ende der Kette so weit vom ersten/letzten Schlag liegen
 HALBFENSTER = 8      # lokale Periode: Mittel der Ein-Schlag-Abstaende, je 8 davor und danach
 BLOCK = 16           # Schlaege je Block der Kreuzvalidierung (4 Takte)
 KERNBREITEN = tuple(float(h) for h in 2.0 ** np.arange(2, 8.01, 0.5)) + (np.inf,)   # inf = Gerade
@@ -89,11 +105,162 @@ def _ohne_doppelte(z, p0):
         z = np.delete(z, i if fehler(i) < fehler(i + 1) else i + 1)
 
 
+def _anschluss(za, na, zb, nb):
+    """Passt Kette B (Zeiten zb, lokale Nummern nb ab 0) auf das Raster der davor liegenden Kette A?
+    Rueckgabe: die Nummer, die B's Nummer 0 im Raster von A traegt (Zaehlung der Luecke nach Raster,
+    nicht nach Schlaganzahl), oder None.
+
+    Je Kette eine Gerade durch die letzten bzw. ersten FENSTER_VERBINDEN Schlaege (lokal, damit ein
+    langsam driftendes Stueck die Pruefung nicht verwirft). Beide Geraden werden in der Mitte der
+    Luecke verglichen, also nur eine halbe Luecke weit extrapoliert:
+      1. Perioden gleich: |aB - aA| / aA <= PERIODEN_TOL;
+      2. Phase: der Rest von (Index nach A) - (Index nach B) zur naechsten ganzen Zahl <= PHASE_TOL
+         Perioden. Ein Halbschlag-Sprung (0,5) und ein Viertelschlag (0,25) fallen durch.
+    Beide Ketten brauchen mindestens MIN_SCHLAEGE Schlaege."""
+    if len(za) < MIN_SCHLAEGE or len(zb) < MIN_SCHLAEGE:
+        return None
+    ta, na_ = np.asarray(za[-FENSTER_VERBINDEN:], float), np.asarray(na[-FENSTER_VERBINDEN:], float)
+    tb, nb_ = np.asarray(zb[:FENSTER_VERBINDEN], float), np.asarray(nb[:FENSTER_VERBINDEN], float)
+    aa, ca = np.polyfit(na_, ta, 1)                    # z = ca + aa * Nummer(A)
+    ab, cb = np.polyfit(nb_, tb, 1)                    # z = cb + ab * lokale Nummer(B)
+    if not (aa > 0 and ab > 0) or abs(ab - aa) / aa > PERIODEN_TOL:
+        return None
+    tm = (float(za[-1]) + float(zb[0])) / 2.0
+    k_f = (tm - ca) / aa - (tm - cb) / ab              # Nummer im Raster von A, die B's lokaler 0 entspricht
+    k = int(np.rint(k_f))
+    if abs(k_f - k) > PHASE_TOL or k + int(nb[0]) <= int(na[-1]):
+        return None
+    return k
+
+
+def _verbinde(stuecke):
+    """Verbindet aufeinanderfolgende Ketten, deren Raster zusammenpasst (_anschluss). Die Nummern der
+    spaeteren Kette werden um die gezaehlte Luecke verschoben. Rueckgabe (stuecke, anzahl verbunden)."""
+    aus = [stuecke[0]]
+    verbunden = 0
+    for zb, nb in stuecke[1:]:
+        za, na = aus[-1]
+        k = _anschluss(za, na, zb, nb)
+        if k is None:
+            aus.append((zb, nb))
+        else:
+            aus[-1] = (np.concatenate([za, zb]), np.concatenate([na, nb + k]))
+            verbunden += 1
+    return aus, verbunden
+
+
+def _robuste_gerade(n, z, tol=PHASE_TOL, runden=3):
+    """Gerade z = c + a * n; Schlaege, die mehr als tol Perioden daneben liegen (Off-Beat-Reste am Rand einer Kette),
+    werden ausgelassen und die Gerade neu angepasst. Rueckgabe (a, c)."""
+    n = np.asarray(n, float)
+    z = np.asarray(z, float)
+    a, c = np.polyfit(n, z, 1)
+    for _ in range(runden):
+        gut = np.abs(z - (c + a * n)) <= tol * a
+        if gut.sum() < MIN_SCHLAEGE or gut.all():
+            break
+        a, c = np.polyfit(n[gut], z[gut], 1)
+    return float(a), float(c)
+
+
+def _anker(stuecke):
+    """Nimmt zusaetzlich zum Nachbar-Verbinden jede uebrige Kette auf, die das Raster der Hauptkette (laengste)
+    traegt, auch wenn Stoerketten dazwischen liegen (Off-Beat-Tracking im Break, Doppeltempo-Schlaege).
+
+    Von der Hauptkette nach aussen, je Seite Kette fuer Kette in der Reihenfolge der Zeit. Das Raster der bisher
+    aufgenommenen Kette wird aus ihren ANKER_FENSTER Randschlaegen an dieser Seite angepasst (robuste Gerade
+    Nummer -> Sekunde, _robuste_gerade) und ueber die Luecke verlaengert. Die Kandidatin wird aufgenommen, wenn
+      1. ihre Periode (Gerade durch ihre ANKER_NAH Schlaege am nahen Ende) innerhalb PERIODEN_TOL der Periode des
+         Rasters liegt,
+      2. der Median der Phase dieser ANKER_NAH Schlaege auf dem verlaengerten Raster (abzueglich der ganzen
+         Nummer) innerhalb PHASE_TOL liegt, und
+      3. die Luecke hoechstens EXTRAPOLATION_MAX Schlaege misst.
+    Drift ist doppelt begrenzt: das Raster wird nach jeder Aufnahme neu angepasst (nie eine Gerade der Hauptkette
+    ueber den ganzen Titel), und die Extrapolation ist gedeckelt. Das Fenster ist gross (ANKER_FENSTER), weil die
+    ersten Schlaege einer Kette hinter einer Stoerung selbst unsauber sind: am Bestand (Wake up fucked up) verfehlte
+    ein Fenster von 64 Schlaegen das Raster um 0,1 Schlaege, eines von 192 trifft es auf 0,01 bis 0,05. Eine
+    abgelehnte Kette (Stoerkette) faellt weg; die naechste Kandidatin wird gegen dasselbe Raster geprueft, die Luecke
+    bleibt Luecke, die Nummern springen nach Raster. Ein Tempowechsel faellt an 1. oder 2., ein Halbschlag-Versatz an 2.
+    Rueckgabe: (die eine Kette, info) mit info = {angeschlossen, stoerketten, stuecke: [Hauptkette und aufgenommene
+    Stuecke mit Schlagzahl, Beginn, Ende, Phase und Rest-Streuung in ms]}."""
+    haupt = max(range(len(stuecke)), key=lambda i: len(stuecke[i][0]))
+    zh, nh = np.asarray(stuecke[haupt][0], float), np.asarray(stuecke[haupt][1], int)
+
+    def rest_ms(z, n):
+        a, c = _robuste_gerade(n, z)
+        return float(np.std(z - (c + a * np.asarray(n, float))) * 1000.0)
+
+    stats = [{"rolle": "haupt", "schlaege": int(len(zh)), "von_s": float(zh[0]), "bis_s": float(zh[-1]),
+              "phase": 0.0, "rest_ms": rest_ms(zh, nh)}]
+    angeschlossen = 0
+    stoer = 0
+    seiten = []
+    for richtung, kandidaten in ((+1, stuecke[haupt + 1:]), (-1, stuecke[:haupt][::-1])):
+        zs, ns = [], []                                  # aufgenommene Stuecke dieser Seite, in Reihenfolge nach aussen
+        rand_z, rand_n = zh, nh                          # bisher aufgenommene Kette dieser Seite (mit Hauptkette)
+        for zb, nb in kandidaten:
+            zb, nb = np.asarray(zb, float), np.asarray(nb, int)
+            if len(zb) < MIN_SCHLAEGE:
+                stoer += 1
+                continue
+            if richtung > 0:
+                fz, fn = rand_z[-ANKER_FENSTER:], rand_n[-ANKER_FENSTER:]
+                bz, bn = zb[:ANKER_NAH], nb[:ANKER_NAH]
+                luecke = bz[0] - fz[-1]
+            else:
+                fz, fn = rand_z[:ANKER_FENSTER], rand_n[:ANKER_FENSTER]
+                bz, bn = zb[-ANKER_NAH:], nb[-ANKER_NAH:]
+                luecke = fz[0] - bz[-1]
+            af, cf = _robuste_gerade(fn, fz)             # z = cf + af * Nummer
+            ab = np.polyfit(bn, bz, 1)[0]
+            if not (af > 0 and ab > 0) or abs(ab - af) / af > PERIODEN_TOL or luecke / af > EXTRAPOLATION_MAX:
+                stoer += 1
+                continue
+            m = float(np.median((bz - cf) / af - bn))    # Nummer im Raster, die der lokalen 0 der Kandidatin entspricht
+            k = int(np.rint(m))
+            ph = m - k
+            nn = nb + k
+            if abs(ph) > PHASE_TOL or (richtung > 0 and nn[0] <= rand_n[-1]) or (richtung < 0 and nn[-1] >= rand_n[0]):
+                stoer += 1
+                continue
+            zs.append(zb)
+            ns.append(nn)
+            rand_z = np.concatenate([rand_z, zb]) if richtung > 0 else np.concatenate([zb, rand_z])
+            rand_n = np.concatenate([rand_n, nn]) if richtung > 0 else np.concatenate([nn, rand_n])
+            stats.append({"rolle": "rechts" if richtung > 0 else "links", "schlaege": int(len(zb)),
+                          "von_s": float(zb[0]), "bis_s": float(zb[-1]), "phase": round(float(ph), 4),
+                          "rest_ms": rest_ms(zb, nn)})
+            angeschlossen += 1
+        seiten.append((zs, ns))
+    (zr, nr), (zl, nl) = seiten
+    z = np.concatenate(zl[::-1] + [zh] + zr)
+    n = np.concatenate(nl[::-1] + [nh] + nr)
+    n = n - n[0]                                         # Nummern ab 0 (links der Hauptkette waren sie negativ)
+    stats.sort(key=lambda x: x["von_s"])
+    return (z, n.astype(int)), {"angeschlossen": angeschlossen, "stoerketten": stoer, "stuecke": stats}
+
+
+def _warnungen(z, zk, n_gesamt):
+    """Meldungen, wenn die gewaehlte Kette die Schlagliste nicht traegt: unter ANTEIL_MIN der Schlaege,
+    oder Anfang bzw. Ende mehr als RAND_MAX_S Sekunden vor bzw. hinter dem ersten/letzten erkannten Schlag."""
+    w = []
+    if len(zk) < ANTEIL_MIN * n_gesamt:
+        w.append(f"gewaehlte Kette traegt nur {len(zk)} von {n_gesamt} Schlaegen ({100.0 * len(zk) / n_gesamt:.0f} %)")
+    if zk[0] - z[0] > RAND_MAX_S:
+        w.append(f"Anfang verfehlt: Kette beginnt bei {zk[0]:.1f} s, erster Schlag bei {z[0]:.1f} s")
+    if z[-1] - zk[-1] > RAND_MAX_S:
+        w.append(f"Ende verfehlt: Kette endet bei {zk[-1]:.1f} s, letzter Schlag bei {z[-1]:.1f} s")
+    return w
+
+
 def nummeriere(zeiten, toleranz=TOLERANZ, halb=HALBFENSTER):
     """Laengste Kette konsistenter Schlaege und ihre Nummern.
 
-    Rueckgabe: (zeiten der Kette, nummern ab 0, info) mit info = {roh, ohne_doppelte, ketten,
-    kette_schlaege, periode_s}."""
+    Ketten, die nur ein einzelnes zu kurzes oder zu langes Intervall trennt, aber auf demselben Raster
+    liegen (gleiche Periode, Phase innerhalb PHASE_TOL), werden verbunden (_anschluss, _verbinde).
+
+    Rueckgabe: (zeiten der Kette, nummern ab 0, info) mit info = {roh, ohne_doppelte, ketten_roh,
+    ketten (nach dem Verbinden), ketten_verbunden, kette_schlaege, periode_s, warnungen}."""
     z = np.unique(np.asarray(zeiten, dtype=float))
     if len(z) < MIN_SCHLAEGE:
         raise ValueError(f"zu wenige Schlaege: {len(z)} < {MIN_SCHLAEGE}")
@@ -118,13 +285,23 @@ def nummeriere(zeiten, toleranz=TOLERANZ, halb=HALBFENSTER):
     ketten = [(int(a), int(b)) for a, b in zip(grenzen[:-1], grenzen[1:]) if b - a >= 2]
     if not ketten:
         raise ValueError("keine Kette aus mindestens zwei Schlaegen")
-    a, b = max(ketten, key=lambda k: k[1] - k[0])
-    if b - a < MIN_SCHLAEGE:
-        raise ValueError(f"laengste Kette zu kurz: {b - a} < {MIN_SCHLAEGE}")
-    nummern = np.concatenate([[0], np.cumsum(np.rint(r[a:b - 1]).astype(int))])
-    info = {"roh": roh, "ohne_doppelte": int(len(z)), "ketten": len(ketten),
-            "kette_schlaege": int(b - a), "periode_s": round(periode, 6)}
-    return z[a:b], nummern, info
+    stuecke = [(z[a:b], np.concatenate([[0], np.cumsum(np.rint(r[a:b - 1]).astype(int))])) for a, b in ketten]
+    stuecke, verbunden = _verbinde(stuecke)
+    n_ketten = len(stuecke)
+    if len(stuecke) > 1 and max(len(s[0]) for s in stuecke) >= MIN_SCHLAEGE:
+        (zk, nummern), anker = _anker(stuecke)
+    else:
+        zk, nummern = max(stuecke, key=lambda s: len(s[0]))
+        anker = {"angeschlossen": 0, "stoerketten": n_ketten - 1, "stuecke": []}
+    if len(zk) < MIN_SCHLAEGE:
+        raise ValueError(f"laengste Kette zu kurz: {len(zk)} < {MIN_SCHLAEGE}")
+    info = {"roh": roh, "ohne_doppelte": int(len(z)), "ketten_roh": len(ketten), "ketten": n_ketten,
+            "ketten_verbunden": verbunden, "ketten_angeschlossen": anker["angeschlossen"],
+            "stoerketten": anker["stoerketten"], "anker_stuecke": anker["stuecke"], "kette_schlaege": int(len(zk)), "periode_s": round(periode, 6),
+            "warnungen": _warnungen(z, zk, len(z))}
+    for w in info["warnungen"]:
+        LOG.warning("Beat-Karte: %s", w)
+    return zk, nummern, info
 
 
 def _modell(n, z, h):

@@ -25,7 +25,7 @@ typedef struct {
   uint64_t w;             /* 32: geschriebene Frames, monoton über Kern-Neustarts */
   uint64_t takt_frames;   /* 40: Länge des zuletzt vollendeten Master-Takts in Frames */
   uint64_t takt_anfang_w; /* 48: w am Anfang des laufenden Master-Takts */
-  uint8_t reserve2[8];    /* 56 */
+  uint64_t sample_minus_w; /* 56: D1 K1: Kern-Sample minus w (Zweierkomplement); Frame f klingt am Kern-Sample f + Wert */
 } cdj_ring_kopf;
 
 #ifdef __cplusplus
@@ -33,11 +33,13 @@ static_assert(sizeof(cdj_ring_kopf) == 64, "Ring-Kopf muss 64 Bytes haben");
 static_assert(offsetof(cdj_ring_kopf, w) == 32, "w bei 32");
 static_assert(offsetof(cdj_ring_kopf, takt_frames) == 40, "takt_frames bei 40");
 static_assert(offsetof(cdj_ring_kopf, takt_anfang_w) == 48, "takt_anfang_w bei 48");
+static_assert(offsetof(cdj_ring_kopf, sample_minus_w) == 56, "sample_minus_w bei 56");
 #else
 _Static_assert(sizeof(cdj_ring_kopf) == 64, "Ring-Kopf muss 64 Bytes haben");
 _Static_assert(offsetof(cdj_ring_kopf, w) == 32, "w bei 32");
 _Static_assert(offsetof(cdj_ring_kopf, takt_frames) == 40, "takt_frames bei 40");
 _Static_assert(offsetof(cdj_ring_kopf, takt_anfang_w) == 48, "takt_anfang_w bei 48");
+_Static_assert(offsetof(cdj_ring_kopf, sample_minus_w) == 56, "sample_minus_w bei 56");
 #endif
 
 static inline float* cdj_ring_daten(cdj_ring_kopf* r) { return (float*)((char*)r + CDJ_RING_KOPF); }

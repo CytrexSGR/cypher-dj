@@ -52,6 +52,10 @@ int HandEin::ereignis(const uint8_t* daten, size_t groesse, uint32_t versatz, in
     case hand::AusgabeArt::tempo:
       aus->art = HandArt::tempo;
       return 1;
+    case hand::AusgabeArt::arr:  // D1 K1: arr/start_stopp; Loslassen ohne Wirkung
+      if (a.wert == 0) return 0;
+      aus->art = HandArt::arr;
+      return 1;
     case hand::AusgabeArt::taste:
       if (e.art == hand::Art::taste && a.wert == 0) return 0;  // Loslassen einer Taste: keine Meldung, keine Wirkung
       aus->art = HandArt::taste;

@@ -461,6 +461,11 @@ void Mixer::verarbeite(int n, float* ml, float* mr, float* cl, float* cr) {
 #endif
     if (fx_master_[u].klingt()) fx_master_[u].block(sum_l_, sum_r_, n, fx_beat0_, fx_bps_);
 
+  addiere(sum_l_, summe_ein_l_, n, 1.0f);   // D1 K1: Metronom, Ziel master, vor Kleber und Limiter
+  addiere(sum_r_, summe_ein_r_, n, 1.0f);
+  addiere(pfl_l_, pfl_ein_l_, n, 1.0f);     // D1 K1: Metronom, Ziel cue
+  addiere(pfl_r_, pfl_ein_r_, n, 1.0f);
+
   // Audit F01 (zweite Linie): ein NaN/Inf aus irgendeiner Quelle oder aus einem Zustand (SVF, Rückkopplung, Faust)
   // bliebe in den Filterzuständen und machte Master und Cue bis zum Neustart still. Ist die Summe oder PFL nicht
   // endlich: dieser Block still, alle Zustände leer, gezählt. Selten; das Leeren der Beat-FX-Leitungen ist dann teuer
@@ -608,6 +613,10 @@ void Mixer::verarbeite(int n, float* ml, float* mr, float* cl, float* cr) {
     std::memset(ein_r_[k], 0, b);
   }
   std::memset(master_ein_l_, 0, b);
+  std::memset(summe_ein_l_, 0, b);   // D1 K1
+  std::memset(summe_ein_r_, 0, b);
+  std::memset(pfl_ein_l_, 0, b);
+  std::memset(pfl_ein_r_, 0, b);
   std::memset(master_ein_r_, 0, b);
   auto nachfuehren = [n](Wert& w) {
     if (w.vl) {

@@ -87,7 +87,7 @@ before(async () => {
   const kernKonfig = path.join(tmp, 'kern.toml');
   fs.writeFileSync(kernKonfig, `version = 1\narbeitsbestand = "${arbeitsbestand}"\n`);
   kp = await starte(path.join(DJK, 'vertrag', 'attrappe_kern.mjs'),
-    ['--udp-port', String(kernPort), '--arbeitsbestand', arbeitsbestand], 'attrappe_kern:');
+    ['--udp-port', String(kernPort), '--arbeitsbestand', arbeitsbestand, '--konfig', kernKonfig], 'attrappe_kern:');
   lp = await starte('src/leitstand.ts',
     ['--konfig', konfig, '--kern-port', String(kernPort), '--set-id', '2026-09-26_2000', '--kern-konfig', kernKonfig],
     'leitstand:', ohneInstanz());

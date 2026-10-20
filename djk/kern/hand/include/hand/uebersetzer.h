@@ -21,7 +21,8 @@ enum class AusgabeArt : uint8_t {
   regler_umschalten,  // Taste an einem Schalter-Regler gedrückt: der Schalter wechselt
   deck,               // Deck-Aktion: wert = 1 Druck / 0 Loslassen (taste) oder Rasten (loop_laenge, nudge)
   tempo,              // Hand-Segment: wert = Rasten (je TEMPO_SCHRITT_BPM)
-  taste               // taste/<name>: wert = 1 Druck / 0 Loslassen; autonomie 0..3; spielart, laenge, kiste_wahl Rasten
+  taste,              // taste/<name>: wert = 1 Druck / 0 Loslassen; autonomie 0..3; spielart, laenge, kiste_wahl Rasten
+  arr                 // D1 K1: arr/<aktion>: wert = 1 Druck / 0 Loslassen
 };
 
 struct Ausgabe {

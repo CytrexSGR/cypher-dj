@@ -11,7 +11,8 @@ const HAND = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'h
 const NAMEN = ['lage', 'bestand', 'laden', 'deck_start', 'deck_stopp', 'sprung', 'loop', 'pad', 'loop_nach_box', 'box',
   'regler', 'fx', 'fx_zuweisung', 'strudel', 'abbrechen', 'warte', 'hoeren',
   'studio', 'loops', 'rec', 'loop_klang', 'spur', 'spur_stopp', 'spuren', 'stille', 'pegel', 'klang', 'instrumente', 'bibliothek', 'anschluss', 'stoebern', 'klaenge', 'bestand_karte', 'vorbereiten',
-  'sets', 'set_zeige', 'set_lege', 'set_vorbereiten', 'tempo'];
+  'sets', 'set_zeige', 'set_lege', 'set_vorbereiten', 'tempo',
+  'proj_liste', 'proj_neu', 'proj_oeffnen', 'proj_lage', 'proj_aendern', 'proj_undo', 'proj_redo', 'proj_verlauf', 'proj_transport', 'proj_freeze', 'proj_export'];   // D1 S2 (Spec 3.5)
 
 async function aufbau(t, antworten, env) {
   const gesehen = [];
@@ -366,4 +367,221 @@ test('djk-hand fx: art 5 (reverb) steht im Schema und wird durchgereicht', async
   const r = await c.callTool({ name: 'fx', arguments: { einheit: 1, art: 5, beats: 2, wet: 0.6, param1: 0.4, an: true } });
   assert.ok(!r.isError, JSON.stringify(r.content));
   assert.equal(gesehen.find((g) => g.pfad === '/fx').koerper.art, 5);
+});
+
+// B4 (Spec 6.30): proj_lage liest /proj/aktuell?noten=zahl (Noten nur als Zahl je Clip), die rev kommt aus der schmalen Abfrage /proj/aktuell?nur=rev
+test('djk-hand proj_* (D1 S2, Spec 3.5): Routen, Quelle cypher, rev aus /proj/aktuell?nur=rev, kein Projekt, ki_gestoppt und Quittung 6 werden Werkzeugfehler', async (t) => {
+  let projekt = { rev: 4, name: 'P' };
+  const { c, gesehen } = await aufbau(t, (m, u) => {
+    if (u === '/proj/liste') return [200, [{ slug: 'p', name: 'P', geaendert: '2026-10-15T12:00:00.000Z' }]];
+    if (u === '/proj/aktuell?noten=zahl') return [200, projekt ? { slug: 'p', projekt, kern: { rev_geladen: 3, status: 0 } } : { slug: null, projekt: null, kern: null }];
+    if (u === '/proj/aktuell?nur=rev') return [200, projekt ? { slug: 'p', rev: projekt.rev } : { slug: null, rev: null }];
+    if (u === '/proj/aendern?antwort=kurz') return [409, { fehler: 'ki_gestoppt' }];
+    if (u === '/proj/undo?antwort=kurz' || u === '/proj/redo?antwort=kurz') return [200, { rev: 5, kern: {}, noten_zahl: {} }];
+    if (u === '/proj/transport') return [200, { ok: false, quittung: { status: 6, grund: 'nicht_geladen' } }];
+    if (u === '/proj/neu?antwort=kurz' || u === '/proj/oeffnen?antwort=kurz') return [200, { slug: 'p', rev: 4, spuren: [], noten_zahl: {}, kern: {} }];
+    if (u === '/proj/verlauf') return [200, [{ rev: 1, zeit: 1, quelle: 'cypher', label: 'x', art: 'aendern' }]];
+  });
+  assert.ok(!(await c.callTool({ name: 'proj_liste', arguments: {} })).isError);
+  await c.callTool({ name: 'proj_neu', arguments: { name: 'P' } });
+  await c.callTool({ name: 'proj_oeffnen', arguments: { slug: 'p' } });
+  assert.deepEqual(gesehen.find((x) => x.pfad === '/proj/neu?antwort=kurz').koerper, { name: 'P' });
+  assert.deepEqual(gesehen.find((x) => x.pfad === '/proj/oeffnen?antwort=kurz').koerper, { slug: 'p' });
+  assert.equal(JSON.parse((await c.callTool({ name: 'proj_lage', arguments: {} })).content[0].text).kern.rev_geladen, 3);
+  const a = await c.callTool({ name: 'proj_aendern', arguments: { label: 'Bass', befehle: [{ befehl: 'spur_neu', art: 'instrument' }] } });
+  assert.equal(a.isError, true); assert.match(a.content[0].text, /ki_gestoppt/);
+  assert.deepEqual(gesehen.find((x) => x.pfad === '/proj/aendern?antwort=kurz').koerper, { label: 'Bass', befehle: [{ befehl: 'spur_neu', art: 'instrument' }], rev: 4 },
+    'rev aus proj_lage');
+  await c.callTool({ name: 'proj_undo', arguments: { rev: 9 } });
+  assert.deepEqual(gesehen.find((x) => x.pfad === '/proj/undo?antwort=kurz').koerper, { rev: 9 }, 'angegebene rev gewinnt');
+  assert.ok(!(await c.callTool({ name: 'proj_redo', arguments: {} })).isError);
+  const tr = await c.callTool({ name: 'proj_transport', arguments: { aktion: 'start', beat: 8 } });
+  assert.equal(tr.isError, true); assert.match(tr.content[0].text, /nicht_geladen/);
+  assert.deepEqual(gesehen.find((x) => x.pfad === '/proj/transport').koerper, { aktion: 'start', beat: 8 });
+  assert.ok(!(await c.callTool({ name: 'proj_verlauf', arguments: {} })).isError);
+  projekt = null;
+  const ohne = await c.callTool({ name: 'proj_undo', arguments: {} });
+  assert.equal(ohne.isError, true); assert.match(ohne.content[0].text, /kein_projekt/);
+  assert.ok(gesehen.every((x) => x.quelle === 'cypher'));
+  assert.deepEqual([...new Set(gesehen.map((x) => `${x.methode} ${x.pfad}`))].sort(), ['GET /proj/aktuell?noten=zahl', 'GET /proj/aktuell?nur=rev', 'GET /proj/liste', 'GET /proj/verlauf',
+    'POST /proj/aendern?antwort=kurz', 'POST /proj/neu?antwort=kurz', 'POST /proj/oeffnen?antwort=kurz', 'POST /proj/redo?antwort=kurz', 'POST /proj/transport', 'POST /proj/undo?antwort=kurz']);
+});
+
+// D1 S2-Integration Fix3 G6 (Spec 6.32): proj_neu und proj_oeffnen fragen die schmale Antwort (?antwort=kurz) und geben sie unverändert weiter;
+// die Beschreibungen nennen das
+test('djk-hand proj_neu/proj_oeffnen (Spec 6.32): ?antwort=kurz, Antwort slug, rev, spuren, noten_zahl, kern ohne Noten; Beschreibung nennt es', async (t) => {
+  const kurz = { slug: 'p', rev: 3, spuren: [{ id: 's1', nr: 1, clips: [{ id: 'c1', noten_zahl: 10000 }] }], noten_zahl: { c1: 10000 }, kern: { wiedergabe: { nr: 2 } } };
+  const { c, gesehen } = await aufbau(t, (m, u) => {
+    if (/^\/proj\/(neu|oeffnen)\?antwort=kurz$/.test(u)) return [200, kurz];
+    if (/^\/proj\/(neu|oeffnen)$/.test(u)) return [200, { slug: 'p', projekt: { spuren: [{ clips: [{ noten: new Array(50).fill({}) }] }] } }];
+  });
+  for (const [name, args] of [['proj_neu', { name: 'P' }], ['proj_oeffnen', { slug: 'p' }]]) {
+    const r = await c.callTool({ name, arguments: args });
+    assert.ok(!r.isError, r.content[0].text);
+    assert.deepEqual(JSON.parse(r.content[0].text), kurz, name);
+  }
+  assert.deepEqual(gesehen.filter((x) => x.methode === 'POST').map((x) => x.pfad), ['/proj/neu?antwort=kurz', '/proj/oeffnen?antwort=kurz']);
+  const tools = (await c.listTools()).tools;
+  for (const name of ['proj_neu', 'proj_oeffnen']) assert.match(tools.find((x) => x.name === name).description, /noten_zahl/, name);
+});
+
+// D1 S2-Integration Fix6 T5 (Spec 6.37, Andreas F13): ich wechsle das Projekt nicht, solange Andreas' Transport läuft; der Server antwortet
+// 409 transport_laeuft. Die Beschreibungen von proj_neu und proj_oeffnen nennen den Grund und dass mein eigener Lauf dabei stoppt.
+test('djk-hand proj_neu/proj_oeffnen (Spec 6.37): Beschreibung nennt 409 transport_laeuft bei Andreas\' Transport', async (t) => {
+  const { c } = await aufbau(t, () => [200, {}]);
+  const tools = (await c.listTools()).tools;
+  for (const name of ['proj_neu', 'proj_oeffnen']) {
+    const d = tools.find((x) => x.name === name).description;
+    assert.match(d, /409 transport_laeuft/, name);
+    assert.match(d, /Andreas/, name);
+    assert.match(d, /a transport I started stops/, name);
+  }
+});
+
+// D1 S2-Integration Fix7 U3 (Spec 6.37, Andreas 16.10.: „Cypher stoppt nur einen Transport, den sie selbst gestartet hat“): proj_transport stopp
+// über Andreas' Lauf antwortet 409 transport_laeuft. Die Beschreibung nennt das und den Grund.
+test('djk-hand proj_transport (Spec 6.37): Beschreibung nennt 409 transport_laeuft und den Grund (ich stoppe nur meinen eigenen Transport)', async (t) => {
+  const { c } = await aufbau(t, () => [200, {}]);
+  const d = (await c.listTools()).tools.find((x) => x.name === 'proj_transport').description;
+  assert.match(d, /409 transport_laeuft/);
+  assert.match(d, /I stop only a transport I started/);
+  assert.match(d, /Andreas/);
+});
+
+// D1 S2-Integration Fix8 V2 (Spec 6.37 Nachtrag, rr7 T_start): auch start über Andreas' Lauf antwortet 409 transport_laeuft (ein Start beendete
+// seinen Lauf und gäbe mir den Transport). Die Beschreibung nennt start und den Grund.
+test('djk-hand proj_transport (Spec 6.37 Nachtrag): Beschreibung nennt 409 transport_laeuft auch für start über Andreas\' Lauf', async (t) => {
+  const { c } = await aufbau(t, () => [200, {}]);
+  const d = (await c.listTools()).tools.find((x) => x.name === 'proj_transport').description;
+  assert.match(d, /I start only while no transport Andreas started is running/);
+  assert.match(d, /start and stopp are refused with 409 transport_laeuft/);
+  assert.match(d, /a start would end his run/);
+});
+
+// D1 S2-Integration Fix2 F5 (Spec 6.31): proj_aendern, proj_undo und proj_redo fragen die schmale Antwort (?antwort=kurz) und geben sie unverändert
+// weiter: rev, kern, noten_zahl je Clip, kein Projekt
+test('djk-hand proj_aendern/undo/redo (Spec 6.31): ?antwort=kurz, Antwort mit rev, kern und noten_zahl, ohne Projekt', async (t) => {
+  const kurz = { rev: 7, kern: { wiedergabe: { nr: 3, quittung: { status: 3, grund: '' } } }, noten_zahl: { c1: 10000 } };
+  const { c, gesehen } = await aufbau(t, (m, u) => {
+    if (u === '/proj/aktuell?nur=rev') return [200, { slug: 'p', rev: 6 }];
+    if (/^\/proj\/(aendern|undo|redo)\?antwort=kurz$/.test(u)) return [200, kurz];
+    if (/^\/proj\/(aendern|undo|redo)$/.test(u)) return [200, { rev: 7, projekt: { spuren: [{ clips: [{ noten: new Array(50).fill({}) }] }] } }];
+  });
+  for (const [name, args] of [['proj_aendern', { label: 'x', befehle: [{ befehl: 'spur_neu', art: 'audio' }] }], ['proj_undo', {}], ['proj_redo', {}]]) {
+    const r = await c.callTool({ name, arguments: args });
+    assert.ok(!r.isError, r.content[0].text);
+    assert.deepEqual(JSON.parse(r.content[0].text), kurz, name);
+  }
+  assert.deepEqual(gesehen.filter((x) => x.methode === 'POST').map((x) => x.pfad), ['/proj/aendern?antwort=kurz', '/proj/undo?antwort=kurz', '/proj/redo?antwort=kurz']);
+});
+
+test('djk-hand proj_aendern beschreibt clip_neu mit loop_beats und name, Gain und Blenden mit den Grenzen aus Spec 6.17 und 6.27 (P7, P9)', async (t) => {
+  const { c } = await aufbau(t, () => [200, {}]);
+  const d = (await c.listTools()).tools.find((x) => x.name === 'proj_aendern').description;
+  assert.match(d, /wirt \(surge, slot 1\)/, 'Fix2 F10: in D1 ein Surge-Slot');
+  assert.doesNotMatch(d, /slot 1\|2/);
+  assert.match(d, /clip_neu \{[^}]*loop_beats\? \(null or missing = off, else 1\/16\.\.laenge_beats[^}]*name\?/);
+  assert.match(d, /gain_db\? \(-96\.\.24\)/);
+  assert.match(d, /fade_aus_beats\? \(fades >= 0, together at most laenge_beats\)/);
+  assert.match(d, /fader_db\? \(-200\.\.6\)/);
+});
+
+test('djk-hand spur (D1 S2-Integration Fix A5, Spec 6.22, 6.30): die Beschreibung nennt die Grenze spur/*, 409 ueber_projekt kommt als Werkzeugfehler mit Grund an', async (t) => {
+  const { c, gesehen } = await aufbau(t, (m, u) => (u === '/spur'
+    ? [409, { fehler: 'ueber_projekt', ziel: 'spur/1/fader', index: 0, text: 'track faders are changed through the project (/proj/aendern, spur_aendern), not by an automation track' }] : null));
+  const w = (await c.listTools()).tools.find((x) => x.name === 'spur');
+  assert.match(w.description, /spur\/1\.\.8.*ueber_projekt.*proj_aendern/s);
+  const r = await c.callTool({ name: 'spur', arguments: { name: 'f', fahrten: [{ ziel: 'spur/1/fader', ab_takt: 1, takte: 1, nach: -6 }] } });
+  assert.equal(r.isError, true);
+  const j = JSON.parse(r.content[0].text);
+  assert.deepEqual([j.fehler, j.ziel], ['ueber_projekt', 'spur/1/fader']); assert.match(j.text, /project/);
+  assert.deepEqual(gesehen.at(-1).koerper.spur.fahrten[0].ziel, 'spur/1/fader');
+});
+
+// Paket S3 (Spec D1 3.5, 6.31): proj_freeze und proj_export gehen als POST mit Quelle cypher an den Seiten-Server; proj_freeze fragt die schmale
+// Antwort (?antwort=kurz: rev, spur_id, freeze). 409 ki_gestoppt und 502 render_fehler sind Werkzeugfehler mit Grund und text, ein Ergebnis geht
+// unverändert durch. Die Beschreibungen nennen Dauer (Echtzeit) und Gründe.
+test('djk-hand proj_freeze und proj_export (Paket S3): Körper, Quelle cypher, schmale Antwort, Fehlerabbildung, Ergebnis unverändert', async (t) => {
+  const ergebnis = { datei: '/p/erster-track/export/erster-track-20261015-181500.wav', frames: 384000, spitze_db: -3.1, regler_quelle: 'kern',
+    lufs_i: -9.5, lra: 4.2, true_peak_dbtp: -1.1 };
+  const kurz = { rev: 18, spur_id: 's3', freeze: { datei: 'freeze-3-2048.f32', frames: 96000, kennung: 2048, sha256: 'a'.repeat(64), von_beat: 8 } };
+  let freezes = 0;
+  const { c, gesehen } = await aufbau(t, (m, u) => {
+    if (u === '/proj/freeze?antwort=kurz') return ++freezes === 1 ? [409, { fehler: 'ki_gestoppt', text: 'Stop Cypher is set' }] : [200, kurz];
+    if (u === '/proj/export') return gesehen.filter((x) => x.pfad === '/proj/export').length === 1 ? [200, ergebnis]
+      : [502, { fehler: 'render_fehler', text: 'the export render failed: the render ran out of memory', detail: 'Rückgabe 7' }];
+  });
+  const f = await c.callTool({ name: 'proj_freeze', arguments: { spur_id: 's3', an: true } });
+  assert.equal(f.isError, true); assert.deepEqual(JSON.parse(f.content[0].text), { fehler: 'ki_gestoppt', text: 'Stop Cypher is set' });
+  const f2 = await c.callTool({ name: 'proj_freeze', arguments: { spur_id: 's3', an: true } });
+  assert.ok(!f2.isError, f2.content[0].text);
+  assert.deepEqual(JSON.parse(f2.content[0].text), kurz, 'schmal: kein Projekt');
+  const e1 = await c.callTool({ name: 'proj_export', arguments: {} });
+  assert.ok(!e1.isError, e1.content[0].text);
+  assert.deepEqual(JSON.parse(e1.content[0].text), ergebnis);
+  const e2 = await c.callTool({ name: 'proj_export', arguments: { von_beat: 0, bis_beat: 32 } });
+  assert.equal(e2.isError, true); assert.match(e2.content[0].text, /render_fehler/); assert.match(e2.content[0].text, /ran out of memory/);
+  assert.deepEqual(gesehen.map((x) => [x.methode, x.pfad, x.quelle, x.koerper]), [
+    ['POST', '/proj/freeze?antwort=kurz', 'cypher', { spur_id: 's3', an: true }],
+    ['POST', '/proj/freeze?antwort=kurz', 'cypher', { spur_id: 's3', an: true }],
+    ['POST', '/proj/export', 'cypher', {}],
+    ['POST', '/proj/export', 'cypher', { von_beat: 0, bis_beat: 32 }],
+  ]);
+  const werkzeuge = (await c.listTools()).tools;
+  const fz = werkzeuge.find((x) => x.name === 'proj_freeze'), ex = werkzeuge.find((x) => x.name === 'proj_export');
+  assert.deepEqual(fz.inputSchema.required, ['spur_id', 'an']);
+  assert.deepEqual(Object.keys(ex.inputSchema.properties).sort(), ['bis_beat', 'von_beat']);
+  for (const g of ['real time', 'ki_gestoppt', 'transport_laeuft', 'beschaeftigt', 'spur_leer', 'freeze_fehler']) assert.ok(fz.description.includes(g), `proj_freeze nennt ${g}`);
+  for (const g of ['real time', 'ki_gestoppt', 'export_bereich', 'audio_fehlt', 'render_fehler', 'regler_quelle', 'lufs_i']) assert.ok(ex.description.includes(g), `proj_export nennt ${g}`);
+});
+
+// Fix-Runde S3, R6: proj_freeze und proj_export haben ein eigenes Zeitlimit (Undici bricht fetch nach 300 s ab, ein Export kann länger dauern).
+// Kurze Grenze über die Umgebung: die Seite antwortet erst nach 2,5 s, das Werkzeug meldet nach 0,3 s hand_frist mit klarer Meldung.
+// Negativ-Kontrolle: mit langer Grenze kommt dieselbe späte Antwort an. Die Vorgaben liegen über der längsten Dauer, die der Server erlaubt.
+test('R6: proj_freeze und proj_export mit eigenem Zeitlimit (Umgebung), klare Meldung hand_frist; lange Grenze wartet die Antwort ab', async (t) => {
+  const mitSeite = async (env, ms) => {
+    const s = http.createServer((q, a) => { q.resume(); q.on('end', () => setTimeout(() => {
+      a.writeHead(200, { 'content-type': 'application/json' }); a.end(JSON.stringify({ datei: '/x.wav', frames: 1, rev: 3, spur_id: 's1', freeze: null }));
+    }, ms)); });
+    await new Promise((ok) => s.listen(0, '127.0.0.1', ok));
+    const c = new Client({ name: 'test', version: '0' });
+    await c.connect(new StdioClientTransport({ command: process.execPath, args: [HAND, '--seite', `http://127.0.0.1:${s.address().port}`], env: { ...process.env, ...env } }));
+    t.after(async () => { await c.close(); s.closeAllConnections?.(); s.close(); });
+    return c;
+  };
+  const kurz = await mitSeite({ DJK_HAND_FRIST_PROJ_EXPORT_MS: '300', DJK_HAND_FRIST_PROJ_FREEZE_MS: '300' }, 2500);
+  for (const [name, args] of [['proj_export', {}], ['proj_freeze', { spur_id: 's1', an: true }]]) {
+    const t0 = Date.now();
+    const r = await kurz.callTool({ name, arguments: args });
+    const dauer = Date.now() - t0;
+    assert.equal(r.isError, true, `${name}: ${r.content[0].text}`);
+    const j = JSON.parse(r.content[0].text);
+    assert.equal(j.fehler, 'hand_frist', r.content[0].text);
+    assert.match(j.text, /no answer from the page server within 0\.3 s/);
+    assert.match(j.text, /may still finish|still be running/);
+    assert.ok(dauer < 2000, `${name}: nach der Grenze, nicht nach der Antwort (${dauer} ms)`);
+  }
+  const lang = await mitSeite({ DJK_HAND_FRIST_PROJ_EXPORT_MS: '10000' }, 600);
+  const r = await lang.callTool({ name: 'proj_export', arguments: {} });
+  assert.ok(!r.isError, r.content[0].text);
+  assert.equal(JSON.parse(r.content[0].text).datei, '/x.wav');
+});
+
+test('R6: Vorgabe-Zeitlimits liegen über der längsten erlaubten Dauer (und über 300 s), die Werkzeugbeschreibung nennt sie', async (t) => {
+  const { FREEZE_MAX_BEATS, FREEZE_NACHLAUF_BEATS } = await import('../../oberflaeche/projekt/freeze.ts');
+  // längste erlaubte Dauer nach den Grenzen des Servers (bereiche/proj/ausgabe.ts, sitzung.ts, lautheit.ts, befehle.ts TEMPO_MIN 60):
+  // Rampe bis 20 s, Quittung bis 4 s, Freeze-Frist (Beats + Nachlauf + 4) bei 60 BPM + 5 s; Export: Freeze + Render 4 · 1024 s + 60 s + ffmpeg 120 s
+  const freezeMs = 20_000 + 4_000 + (FREEZE_MAX_BEATS + FREEZE_NACHLAUF_BEATS + 4) * 1000 + 5_000;
+  const exportMs = freezeMs + 4 * 1024 * 1000 + 60_000 + 120_000;
+  const { c } = await aufbau(t, () => null);
+  const werkzeuge = (await c.listTools()).tools;
+  for (const [name, laengste] of [['proj_freeze', freezeMs], ['proj_export', exportMs]]) {
+    const b = werkzeuge.find((x) => x.name === name).description;
+    const m = /waits at most (\d+) min/.exec(b);
+    assert.ok(m, `${name}: Beschreibung nennt die Grenze: ${b.slice(-300)}`);
+    const ms = Number(m[1]) * 60_000;
+    assert.ok(ms > laengste, `${name}: ${ms} ms über der längsten erlaubten Dauer ${laengste} ms`);
+    assert.ok(ms > 300_000, `${name}: über der Undici-Grenze 300 s`);
+    assert.match(b, new RegExp(`DJK_HAND_FRIST_${name.toUpperCase()}_MS`));
+  }
 });

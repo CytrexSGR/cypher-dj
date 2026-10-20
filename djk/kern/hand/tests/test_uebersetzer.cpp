@@ -169,6 +169,24 @@ FALL(fremdes_und_kurzes_wird_gezaehlt_nicht_uebersetzt) {
   PRUEFE_GLEICH(z.ausgaben, 0);
 }
 
+FALL(arr_start_stopp_ist_eine_taste) {
+  // D1 K1 (§7.2): arr/start_stopp; Druck und Loslassen, Sample am Versatz
+  const char* text = R"({"version":1,"geraet":"arr","quelle_port":"q","ziel_port":"z","eintraege":[
+    {"nachricht":{"typ":"note","kanal":1,"nr":60},"ziel":"arr/start_stopp","art":"taste"}]})";
+  auto m = std::make_unique<Mapping>();
+  Fehler f;
+  PRUEFE(lade(text, stellwerk::ReglerTabelle(), m.get(), &f));
+  PRUEFE(m->eintrag[0].ziel_art == ZielArt::arr && m->eintrag[0].arr_aktion == ArrAktion::start_stopp);
+  Uebersetzer u(m.get());
+  Ausgabe x{};
+  const uint8_t an[3] = {0x90, 60, 100}, aus[3] = {0x80, 60, 0};
+  PRUEFE_GLEICH(u.ereignis(an, 3, 1000, 7, 256, &x), 1);
+  PRUEFE(x.art == AusgabeArt::arr && x.wert == 1 && x.sample == 1007);
+  PRUEFE_GLEICH(u.ereignis(aus, 3, 1000, 9, 256, &x), 1);
+  PRUEFE(x.art == AusgabeArt::arr && x.wert == 0);
+  PRUEFE(std::string(name(AusgabeArt::arr)) == "arr");
+}
+
 FALL(negativ_kontrolle_ohne_ereignis_keine_ausgabe) {
   Aufbau a;
   const UebersetzerZaehler& z = a.u->zaehler();

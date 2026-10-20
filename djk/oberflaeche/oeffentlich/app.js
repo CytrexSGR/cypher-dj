@@ -4,8 +4,10 @@
 import { DECKS, ERZEUGER, LOOPBOXEN, GRIFF, art, griffZuMidi, formatiere, vorgabe, setzeZielKurve } from './kurven.js';
 import { KOMP_PRESETS, KOMP_SCHLUESSEL, kennlinienPfad, AUTO_BEREICH, DURCHGAENGE, AUTO_VORLAGEN, vorlagePunkte, punktAusStelle, fxInhaltText } from './effekte.js';
 import { KOPIE_TEXT, HAND_PRUEFMODUS_TEXT, cypherStand, ausgangAnzeige, keylockStand, keylockAnfrage, keylockMeldung, variText, einsHinweis, EINS_HINWEIS_TEXT } from './meldungen.js';
-import { leseWelle, Kopf, Laufansicht, Uebersicht, SR, laengeFrames } from './welle.js';
+import { leseWelle, Kopf, Laufansicht, Uebersicht, SR, laengeFrames, ersteVolleEins } from './welle.js';
 import { bindeSpurbaender } from './spurband_ansicht.js';
+import { ScrubZieher } from './scrub.js';
+import { bindeProduktion } from './produktion/produktion.js';
 import { vorhoerFolgt, vorhoerCursor, SPALTEN, LISTEN_SPALTEN, LISTEN_TEXT, TYP_TEXT, stoebernUrl, zelle, baueBaum, listenArtFuer, ziehZiel, postenArtText, filterFuer, filterBereinigt, detailFakten, welleStatus, feldText, aktionenFuer, loopBoxStatus, IMPORT_FEHLER_TEXT, vorbereitText, statusText, setzeVorbereitLive, fehlerAnzeige } from './stoebern.js';
 
 const $ = (s, w = document) => w.querySelector(s);
@@ -364,8 +366,9 @@ function zeigeDeck(n) {
   const eg = g?.fassung ? zustand.bestand.find((x) => x.material_id === id && x.basis_bpm === g.basis_bpm && x.fassung === g.fassung) ?? e : e;
   const hinweis = einsHinweis(eg), hEl = $('[data-einshinweis]', d);
   if (hEl) { hEl.hidden = !hinweis; hEl.textContent = hinweis ?? ''; hEl.title = EINS_HINWEIS_TEXT; }
-  const gesamt = eg ? takteVon(eg) : null;
-  const eins = eg?.erste_eins_quell_beat ?? 0;
+  const r = deckAnsicht[n]?.raster;   // Zählung ab der ersten vollen Eins im Track, nicht erst ab dem analysierten Stück
+  const eins = r ? ersteVolleEins(eg?.erste_eins_quell_beat ?? r.eins ?? 0, r.ersterSchlagFrame, r.framesProBeat) : (eg?.erste_eins_quell_beat ?? 0);
+  const gesamt = eg?.beats ? Math.floor((eg.beats - eins) / 4) : null;
   if (!z) { $('[data-bar]', d).textContent = '1.1'; $('[data-von]', d).textContent = gesamt ? `/ ${gesamt}` : ''; return; }
   const rel = z.quell_beat - eins;
   const bar = Math.floor(rel / 4) + 1;
@@ -1840,8 +1843,9 @@ function bindeSchublade() {
     if (e.ctrlKey || e.metaKey || e.altKey) return;          // Review: Strg+L u. a. bleiben beim Browser
     if (e.key === 'l' || e.key === 'L') schublade(document.body.classList.contains('lib-zu'));
     if (e.key === 'g' || e.key === 'G') gross(!document.body.classList.contains('lib-gross'));
-    // Detail-Spalte (S5): ↑/↓ wählen die Zeile, S legt sie ins aktive Set. Nur bei offenem Library-Reiter und offener Schublade.
-    if (!$('[data-tabelle="library"]').hidden && !document.body.classList.contains('lib-zu') && $('#listen-menue').hidden && stz.treffer.length && !e.target.closest('select')) {
+    // Detail-Spalte (S5): ↑/↓ wählen die Zeile, S legt sie ins aktive Set. Nur bei sichtbarer Library (Reiter LIBRARY, oder PRODUCTION: dort zeigt sie
+    // produktion.css, das hidden-Attribut bleibt vom DJ-Reiter bestimmt) und offener Schublade.
+    if ((!$('[data-tabelle="library"]').hidden || document.body.classList.contains('produktion')) && !document.body.classList.contains('lib-zu') && $('#listen-menue').hidden && stz.treffer.length && !e.target.closest('select')) {
       if (e.key === 'ArrowDown') { e.preventDefault(); zeigeDetail(Math.min(stz.treffer.length - 1, stz.wahl + 1)); return; }
       if (e.key === 'ArrowUp') { e.preventDefault(); zeigeDetail(Math.max(0, stz.wahl - 1)); return; }
       if ((e.key === 's' || e.key === 'S') && stz.wahl >= 0) { inSet(stz.treffer[stz.wahl]); return; }
@@ -1879,6 +1883,7 @@ function strom() {
   const q = new EventSource('/strom');
   q.onmessage = (m) => {
     const { a, f } = JSON.parse(m.data);
+    try { produktion?.ereignis(a, f); } catch (e) { console.error('Production view:', e); }   // D1 V1: proj, /zustand/arr; ein Fehler dort hält die DJ-Anzeige nicht an
     switch (a) {
       case 'stand':
         Object.assign(zustand.regler, f.regler);
@@ -2136,15 +2141,19 @@ function waehleRolle(strom) {
   try { localStorage.setItem('djk-rolle', String(strom)); } catch { /* ohne Speicher: Vorgabe DRUMS */ }
 }
 // Studio S1: Ansicht DJ | STUDIO; wechselt nur die Sicht, nie den Klang. Gemerkt pro Browser (nur Bequemlichkeit).
+// D1 V1: dritter Wert PRODUCTION (Modul produktion/produktion.js, gekapselt wie die Spurbänder)
+const ANSICHTEN = ['dj', 'studio', 'produktion'];
+let produktion = null;
 function setzeAnsicht(a) {
-  document.body.classList.toggle('studio', a === 'studio');
+  for (const k of ['studio', 'produktion']) document.body.classList.toggle(k, a === k);
   for (const b of $$('[data-ansicht]')) { const an = b.dataset.ansicht === a; b.classList.toggle('an', an); b.setAttribute('aria-pressed', String(an)); }
   try { localStorage.setItem('djk-ansicht', a); } catch { /* ohne Speicher: DJ */ }
+  if (a === 'produktion') produktion?.zeige(); else produktion?.verberge();
 }
 function bindeAnsicht() {
   for (const b of $$('[data-ansicht]')) b.addEventListener('click', () => setzeAnsicht(b.dataset.ansicht));
   let a = 'dj';
-  try { a = localStorage.getItem('djk-ansicht') === 'studio' ? 'studio' : 'dj'; } catch { /* Vorgabe */ }
+  try { const g = localStorage.getItem('djk-ansicht'); a = ANSICHTEN.includes(g) ? g : 'dj'; } catch { /* Vorgabe */ }
   setzeAnsicht(a);
 }
 function bindeMusterFeld() {
@@ -2328,7 +2337,7 @@ async function padKlick(n, nr, e) {
 }
 function bindeDeckBedienung(n, d) {
   const a = deckAnsicht[n];
-  a.rasterWahl = 4; a.loopLaenge = 4; a.hotcues = {}; a.zieh = 0; a.cueArt = 'shot'; a.muell = false;
+  a.rasterWahl = 4; a.loopLaenge = 4; a.hotcues = {}; a.zieh = 0; a.ziehBasis = null; a.cueArt = 'shot'; a.muell = false;
   for (const b of $$('[data-cueart]', d)) b.addEventListener('click', () => {
     a.cueArt = b.dataset.cueart;
     for (const x of $$('[data-cueart]', d)) x.classList.toggle('an', x === b);
@@ -2374,25 +2383,56 @@ function bindeDeckBedienung(n, d) {
     const frame = (e.clientX - r.left) / r.width * laengeFrames(a.ueber.w);
     deckPost('/deck/sprung', { deck: n, ziel: (frame - a.raster.ersterSchlagFrame) / a.raster.framesProBeat, raster: a.rasterWahl }, 'Jump');
   });
-  // Ziehen im Zoomfenster: die Welle folgt der Hand, beim Loslassen EIN Sprung um die Strecke (D7, ohne Raster)
+  // Ziehen im Zoomfenster: die Welle folgt der Hand und der Kern spielt dazu (Hörbares Ziehen, 2026-10-17: /deck/scrub, ~60 Hz,
+  // roh ohne Keylock). Beim Loslassen bleibt der Kopf (stehendes Deck) bzw. läuft das Deck um die Strecke versetzt weiter (laufend,
+  // derselbe Ort wie der Sprung D7 ohne Raster). Mit Loop oder wenn der Griff den Kern nicht erreicht: wie bisher stumm ziehen und
+  // beim Loslassen EIN Sprung um die Strecke.
   const lauf = $('[data-lauf]', d);
   let x0 = null;
-  lauf.addEventListener('pointerdown', (e) => { if (a.raster && a.lauf.w) { x0 = e.clientX; lauf.setPointerCapture(e.pointerId); } });
+  const zieher = new ScrubZieher({ senden: async (phase, delta) => {
+    try {
+      const r = await fetch('/deck/scrub', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ deck: n, phase, delta }) });
+      return r.ok;
+    } catch { return false; }
+  } });
+  // Nach dem Los hält die Anzeige die Zugstrecke, bis die Meldungen des Kerns den neuen Kopf tragen (stehend: der Kern schwingt aus,
+  // 300 ms; laufend: bis der Kopf um die halbe Strecke vom alten Lauf abweicht), höchstens 800 ms. Ein neuer Griff gewinnt.
+  const ziehNull = (delta = 0) => {
+    const marke = a.ziehMarke = (a.ziehMarke ?? 0) + 1, t0 = performance.now();
+    const lief = a.ziehBasis === null, q0 = a.kopf.beat(t0), u0 = uhrKopf.beat(t0);
+    const iv = setInterval(() => {
+      if (x0 !== null || marke !== a.ziehMarke) { clearInterval(iv); return; }
+      const jetzt = performance.now();
+      const gelandet = lief ? Math.abs(a.kopf.beat(jetzt) - (q0 + uhrKopf.beat(jetzt) - u0)) > 0.5 * Math.abs(delta) : jetzt - t0 > 300;
+      if (gelandet || jetzt - t0 > 800) { a.zieh = 0; a.ziehBasis = null; clearInterval(iv); }
+    }, 20);
+  };
+  lauf.addEventListener('pointerdown', (e) => {
+    if (a.raster && a.lauf.w) {
+      x0 = e.clientX; lauf.setPointerCapture(e.pointerId);
+      zieher.beginne(!loopAktiv(zustand.decks[n]));
+      // stehendes Deck: die Meldungen des Kerns folgen der Hand, die Anzeige hält darum den Griffpunkt fest (laufend: Kopf + Strecke)
+      a.ziehBasis = (zustand.decks[n]?.status ?? 0) < 2 ? a.raster.ersterSchlagFrame + a.kopf.beat(performance.now()) * a.raster.framesProBeat : null;
+    }
+  });
   lauf.addEventListener('pointermove', (e) => {
     if (x0 === null) return;
     const fpp = a.lauf.takte * 4 * a.raster.framesProBeat / lauf.getBoundingClientRect().width;
     a.zieh = -(e.clientX - x0) * fpp;
+    zieher.bewege(e.clientX - x0, a.zieh / a.raster.framesProBeat);
   });
   const los = async (e) => {
     if (x0 === null) return;
     const dx = e.clientX - x0, delta = a.zieh / a.raster.framesProBeat;
     x0 = null;
-    if (Math.abs(dx) < 3) { a.zieh = 0; return; }
+    const r = await zieher.ende(delta);
+    if (Math.abs(dx) < 3) { a.zieh = 0; a.ziehBasis = null; return; }
+    if (r.gescrubbt && r.griffOk) { ziehNull(delta); return; }
     await deckPost('/deck/sprung', { deck: n, delta, raster: 0 }, 'Drag');
-    a.zieh = 0;
+    a.zieh = 0; a.ziehBasis = null;
   };
   lauf.addEventListener('pointerup', los);
-  lauf.addEventListener('pointercancel', () => { x0 = null; a.zieh = 0; });
+  lauf.addEventListener('pointercancel', () => { const delta = a.zieh / a.raster.framesProBeat; x0 = null; zieher.abbruch(); ziehNull(delta); });
   // Plan Grid (D4): ◀ ▶ 5 ms, Shift 1 ms; Rechtsklick auf den Wert: zurück auf die Analyse (0); FIX speichert
   for (const b of $$('[data-gridschritt]', d)) b.addEventListener('click', async (e) => {
     const j = await deckPost('/deck/raster', { deck: n, schritt_ms: Number(b.dataset.gridschritt) * (e.shiftKey ? 1 : 5) }, 'Grid');
@@ -2429,7 +2469,7 @@ function bild() {
   for (const n of DECKS) {
     const a = deckAnsicht[n];
     if (!a.raster) { a.lauf.zeichne(0); a.ueber.zeichne(0, 0); continue; }
-    const f = a.raster.ersterSchlagFrame + a.kopf.beat(jetzt) * a.raster.framesProBeat + (a.zieh ?? 0);
+    const f = (a.ziehBasis ?? (a.raster.ersterSchlagFrame + a.kopf.beat(jetzt) * a.raster.framesProBeat)) + (a.zieh ?? 0);
     const marken = hotcueMarken(a);
     a.lauf.zeichne(f, null, marken); a.ueber.zeichne(f, a.lauf.takte * 4 * a.raster.framesProBeat, marken);
   }
@@ -2471,6 +2511,7 @@ bindeColor();
 bindeEffekte();
 bindeMusterFeld();
 try { bindeSpurbaender(jsonPost, () => letzterBeat); } catch (e) { console.error('Studio S7 lanes:', e); }   // Studio S7
+try { produktion = bindeProduktion({ post: jsonPost, bpm: () => zustand.bpm ?? 128, stoebern: () => zustand.stoebern, bibliothek: () => { if (!stz.treffer.length) { stoebernLaden(); ladeBaum(); } } }); } catch (e) { console.error('Production view:', e); }   // D1 V1
 bindeAnsicht();
 bindeFx();
 bindeFxZuweisung();

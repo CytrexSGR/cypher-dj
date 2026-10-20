@@ -33,14 +33,16 @@ struct Nachricht {
 enum class Art : uint8_t { absolut, relativ, beruehrung, taste };
 // §7.2 kodierung (nur bei art relativ)
 enum class Kodierung : uint8_t { keine, zweierkomplement, versatz64 };
-// §7.2 ziel: Regler-Pfad, Deck-Aktion, tempo oder taste/<name>
-enum class ZielArt : uint8_t { regler, deck, tempo, taste };
+// §7.2 ziel: Regler-Pfad, Deck-Aktion, tempo, taste/<name> oder arr/<aktion> (D1 K1, am Ende angehängt)
+enum class ZielArt : uint8_t { regler, deck, tempo, taste, arr };
 // §7.2 Deck-Aktionen; `pfl` ist zugleich Regler-Pfad deck/<n>/pfl (§1.5) und wird als Regler geführt
 enum class DeckAktion : uint8_t {
   play, cue, hotcue, hotcue_setzen, loop, loop_laenge, roll, sprung_plus, sprung_minus, nudge, tap, slip, laden
 };
 // §7.2 quant (nur Deck-Tasten), Vorgabe sofort
 enum class Quant : uint8_t { sofort, beat, takt };
+// D1 K1 (§7.2): Aktionen des Arrangements; der Kern führt sie selbst aus (wirkt auch ohne Seiten-Server)
+enum class ArrAktion : uint8_t { start_stopp };
 // §5.8 Tasten-Namen, Reihenfolge wie im Vertrag
 enum class Taste : uint8_t {
   annehmen, verwerfen, cypher_vorschlag, cypher_hoeren, stopp, freigabe, urteil_gut, urteil_daneben, autonomie,
@@ -65,6 +67,7 @@ struct Eintrag {
   float roll_beats;          // roll/<beats>: 1/32 bis 128
   Quant quant;
   Taste taste;
+  ArrAktion arr_aktion;      // ZielArt::arr (D1 K1)
 };
 
 struct Led {

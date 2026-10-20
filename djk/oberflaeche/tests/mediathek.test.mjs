@@ -10,6 +10,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { Mediathek } from '../mediathek.ts';
 import { baueBestand } from './hilfen/bestand.mjs';
 import { REPO, HOST, sha, mid, baueEinleser, stapel, hole, post, ids, tmpMt, warte } from './hilfen/mediathek.mjs';
+import { GRUND_TEXT } from '../http/gruende.ts';   // Spec 6.34: jede Antwort mit Grund trägt einen englischen text
 
 test('Mediathek: Datei fehlt → 503 mediathek_fehlt (Suche und Vorbereiten), kein Absturz', async (t) => {
   const s = await stapel(t, { mediathek: '/nicht/da/mediathek.sqlite' });
@@ -99,7 +100,7 @@ test('Vorbereiten: Riegel (415, 403), Eingaben (400, 404, 409 datei_fehlt) — n
   const roh = await fetch(`${s.url}/mediathek/vorbereiten`, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: JSON.stringify({ material_id: mid(2) }) });
   assert.equal(roh.status, 415);
   const fremd = await post(s.url, '/mediathek/vorbereiten', { material_id: mid(2) }, { origin: 'http://evil.example' });
-  assert.deepEqual(fremd, { code: 403, j: { fehler: 'fremde_herkunft' } });
+  assert.deepEqual(fremd, { code: 403, j: { fehler: 'fremde_herkunft', text: GRUND_TEXT.fremde_herkunft } });
   assert.equal((await post(s.url, '/mediathek/vorbereiten', {})).j.fehler, 'material_id_ungueltig');
   assert.equal((await post(s.url, '/mediathek/vorbereiten', { material_id: '../../etc' })).code, 400);
   assert.deepEqual(await post(s.url, '/mediathek/vorbereiten', { material_id: '0123456789abcdef' }), { code: 404, j: { fehler: 'unbekannt' } });

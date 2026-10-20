@@ -48,6 +48,8 @@ constexpr int MIX_ZIEL_BLENDE = 480;               // §1.5 <k>/ziel: 10-ms-Blen
 // Plan Mediathek-Browser S7: der Vorhör-Eingang des Browsers (djk/vorhoerer → rueck_erz_8_L/R). Nur-Cue: PFL fest an,
 // kein Weg in Master, Bus, Sends oder Beat-FX — unabhängig von Fader, Ziel und Sends (Andreas' Bedingung: nie auf den Master).
 constexpr const char* VORHOER_KANAL = "erz/8";
+// D1 K1 (Spec 2.3): erz/4 ist für die Produktion reserviert; das Modul Arrangement speist die Summe seiner Spuren hier ein.
+constexpr const char* ARR_KANAL = "erz/4";
 
 // Was ein Regler des Stellwerks im Mixer bewirkt (die Zuweisungstabelle).
 enum class MixRolle : uint8_t {
@@ -101,6 +103,13 @@ class Mixer {
   float* eingang_r(int k) { return ein_r_[k]; }
   float* master_eingang_l() { return master_ein_l_; }
   float* master_eingang_r() { return master_ein_r_; }
+  // D1 K1 (Spec 2.6): Eingänge des Metronoms. summe_eingang_*: in die Master-Summe nach der Master-FX, VOR Kleber,
+  // master/pegel und Limiter (der Prüfklick master_eingang_* liegt dahinter). pfl_eingang_*: in die PFL-Summe vor ihrer
+  // Verzögerung um den Limiter-Vorhalt, so hört der Cue den Klick zeitgleich mit dem Master. verarbeite() leert beide.
+  float* summe_eingang_l() { return summe_ein_l_; }
+  float* summe_eingang_r() { return summe_ein_r_; }
+  float* pfl_eingang_l() { return pfl_ein_l_; }
+  float* pfl_eingang_r() { return pfl_ein_r_; }
 
   // Ein Block, 1 <= n <= MIX_BLOCK. Schreibt Master und Cue (überschreibt die Ziele).
   void verarbeite(int n, float* master_l, float* master_r, float* cue_l, float* cue_r);
@@ -202,6 +211,8 @@ class Mixer {
   float ein_l_[MIX_KANAELE][MIX_BLOCK] = {};
   float ein_r_[MIX_KANAELE][MIX_BLOCK] = {};
   float master_ein_l_[MIX_BLOCK] = {}, master_ein_r_[MIX_BLOCK] = {};
+  float summe_ein_l_[MIX_BLOCK] = {}, summe_ein_r_[MIX_BLOCK] = {};   // D1 K1: Metronom master
+  float pfl_ein_l_[MIX_BLOCK] = {}, pfl_ein_r_[MIX_BLOCK] = {};       // D1 K1: Metronom cue
   float fx_l_[cypherdj::dsp::kAnzahlSends][MIX_BLOCK] = {}, fx_r_[cypherdj::dsp::kAnzahlSends][MIX_BLOCK] = {};
   float sum_l_[MIX_BLOCK] = {}, sum_r_[MIX_BLOCK] = {};
   float pfl_l_[MIX_BLOCK] = {}, pfl_r_[MIX_BLOCK] = {};

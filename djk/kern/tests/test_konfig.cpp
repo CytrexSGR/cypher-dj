@@ -28,6 +28,7 @@ int main() {
   PRUEF(k.max_stretcher == 4 && k.stretcher_threads == 2);
   PRUEF(k.limiter_dbtp == -1.0);
   PRUEF(k.pruefmodus == false);
+  PRUEF(k.arr_ordner.empty() && k.arr_budget_mib == 1024);   // D1 K1: Vorgaben wie §2.1
 
   // Fehlerfall: Tippfehler im Schlüssel, Meldung nennt Schlüssel und Datei
   const std::string f1 = fehlertext("version = 1\nudp_prot = 47100\n");
@@ -65,5 +66,21 @@ int main() {
   setenv("HOME", "/home/x", 1);
   PRUEF(cdj::standard_konfig_pfad("a") == "/home/x/.config/cypherdj-a/kern.toml");
   PRUEF(cdj::standard_konfig_pfad("") == "/home/x/.config/cypherdj/kern.toml");
+  // D1 K1: Arbeitsordner der Wiedergaben je Instanz, Teilbetrag höchstens speicher_budget_mib
+  PRUEF(cdj::arr_ordner_von(k, "") == "/home/x/.cache/cypherdj/arr");
+  PRUEF(cdj::arr_ordner_von(k, "b") == "/home/x/.cache/cypherdj-b/arr");
+  cdj::KernKonfig kb = cdj::lies_kern_toml_text("version = 1\narr_ordner = \"/srv/cypherdj/arr\"\narr_budget_mib = 512\n", "t");
+  PRUEF(kb.arr_budget_mib == 512 && cdj::arr_ordner_von(kb, "") == "/srv/cypherdj/arr");
+  cdj::wende_instanz_an(kb, "b");
+  PRUEF(kb.arr_ordner == "/srv/cypherdj-b/arr");
+  PRUEF(fehlertext("version = 1\narr_budget_mib = 3900\n").find("arr_budget_mib") != std::string::npos);
+  PRUEF(fehlertext("version = 1\narr_budget_mib = 0\n").find("arr_budget_mib") != std::string::npos);
+  PRUEF(fehlertext("version = 1\narr_ordner = \"relativ/arr\"\n").find("arr_ordner") != std::string::npos);
+  // D1 Spec 6.14: arr_ordner normalisiert (abschließender Schrägstrich, //, ./ und ..), auch nach Z2
+  cdj::KernKonfig kn = cdj::lies_kern_toml_text("version = 1\narr_ordner = \"/srv//cypherdj/./x/../arr/\"\n", "t");
+  PRUEF(cdj::arr_ordner_von(kn, "") == "/srv/cypherdj/arr");
+  cdj::wende_instanz_an(kn, "b");
+  PRUEF(cdj::arr_ordner_von(kn, "b") == "/srv/cypherdj-b/arr");
+  PRUEF(cdj::arr_ordner_von(cdj::lies_kern_toml_text("version = 1\narr_ordner = \"/srv/arr/\"\n", "t"), "") == "/srv/arr");
   PRUEF_ENDE();
 }

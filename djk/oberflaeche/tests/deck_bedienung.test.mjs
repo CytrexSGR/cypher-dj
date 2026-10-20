@@ -86,6 +86,16 @@ test('SET (Takt-Eins am Kopf): ganze Beats in den Versatz, Eins fällt auf die E
   assert.equal(einsSetzen({ v: 0, quell: 3, eins: 0, fpb: 70000, erster }), null);
 });
 
+test('SET bei spät beginnender Beat-Karte (Wake up fucked up, 2026-10-17: „grid set out of range“): kleinster Schritt, |k| ≤ 2', () => {
+  const fpb = 22500, erster = 178.82 * 48000 * 150 / 128;   // Karte ab 178.8 s Quelle, Fassung auf 128 BPM
+  // vor der Karte: Quell-Beat negativ; Kopf auf Quell −300, Eins 0 → k0 = 0 (schon Eins), −301 → k0 = 3 → k = −1
+  assert.deepEqual(einsSetzen({ v: 0, quell: -300, eins: 0, fpb, erster }), { k: 0, v: 0 });
+  assert.deepEqual(einsSetzen({ v: 0, quell: -301, eins: 0, fpb, erster }), { k: -1, v: -22500 });
+  assert.deepEqual(einsSetzen({ v: 0, quell: -302, eins: 0, fpb, erster }), { k: 2, v: 45000 });
+  assert.deepEqual(einsSetzen({ v: 100, quell: 1, eins: 0, fpb, erster }), { k: 1, v: 22600 });
+  // Mutationsprobe ohne den neuen Zweig war: null (= „out of range“)
+});
+
 test('Plan Grid: Raster-Datei je Fassung schreiben und lesen, kaputt/fehlend/außerhalb = 0', () => {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-raster-'));
   const f = { material_id: '1ac28792d355a38b', basis_bpm: 128, fassung: 1 };

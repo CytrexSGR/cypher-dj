@@ -2,7 +2,6 @@
 // Schlüssel: Fassung → sha256 aus fassung.json (ändert sich mit dem Inhalt); Loop → Name + mtime + Größe von loop.f32.
 import { spawn, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { LOOP_NAME } from './loops.ts';
 
@@ -43,11 +42,7 @@ export function dateiQuelle(pfad: string, sha: string, dauerS?: number | null): 
 }
 
 // Cache je Instanz (S5-Review B4): Prüfinstanzen nie im Cache des Betriebs. Wie arbeitsbestandVorgabe: Instanz a bis i.
-export function welleCacheVorgabe(instanz: string): string {
-  if (instanz === '') return path.join(os.homedir(), '.cache', 'cypherdj', 'welle');
-  if (!/^[a-i]$/.test(instanz)) throw new Error(`Instanz ${instanz}: erlaubt sind a bis i`);
-  return `/dev/shm/cypherdj-${instanz}/welle`;
-}
+export { welleCacheVorgabe } from './pfade.ts';   // Plan d1-s1 Task 7: Vorgabe lebt in pfade.ts
 
 export const STROM_RATE = 48000;
 // ffmpeg-Argumente der Strom-Dekodierung (ohne den Programmnamen). Genau diese gehen in die Produktion UND in den Eichtest.

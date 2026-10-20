@@ -20,7 +20,7 @@ from .kette import einlesen
 from .lauf_bestand import ENDUNGEN
 
 BASIS_BPM = 128.0
-FAEDEN = 4
+FAEDEN = 8      # torch-Fäden für beat_this; Logits gemessen bitgleich für 4, 8 und 16 (messungen/2026-10-17-werkstatt-tempo)
 
 
 def main_bestand(arg):

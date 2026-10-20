@@ -783,6 +783,15 @@ void Kern::einsortieren31(const Befehl& c) {
     entladen_ausfuehren(d, c.id, c.quelle);
     return;
   }
+  if (c.art == Befehl::DECK_SCRUB) {  // Hörbares Ziehen (§4.4): sofort am Blockanfang, ohne Quittung (Strom bis ~60 Hz)
+    const Material* m = dk.material();
+    if (!m) return;  // nichts geladen: nichts zu ziehen
+    const double delta_f = c.wert_beats * (FRAMES_JE_MINUTE / m->basis_bpm);
+    if (c.nr == 1) dk.scrub_an(sample_, delta_f);
+    else if (c.nr == 2) dk.scrub_ziel(sample_, delta_f);  // ohne Griff (Paket verloren) ohne Wirkung; der Wachhund im Deck löst auch ein hängendes Ziehen
+    else dk.scrub_los(sample_, delta_f);
+    return;
+  }
   if (c.art == Befehl::DECK_RASTER) {  // Plan Grid (§4.4): sofort, absolut; andere Fassung geladen → nicht_geladen
     const Material* m = dk.material();
     if (!m || std::strcmp(m->material_id, c.material_id) != 0 || m->fassung != c.fassung || m->basis_bpm != c.bpm)

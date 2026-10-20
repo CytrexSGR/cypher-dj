@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { ZIELE, art, GRIFF, griffZuMidi, midiRoh, wertAusMidi, formatiere, vorgabe } from '../oeffentlich/kurven.js';
 
 test('Ziel-Liste: 41 Pfade, je Deck 13 (mit PFL und Crossfader-Zuweisung), erz/1 11, pad/1 und pad/2 je 11 (ohne Tasten) plus xfader, master/pegel, cue/mix, cue/pegel', () => {
-  assert.equal(ZIELE.size, 87);   // K2: plus master/kleber
+  assert.equal(ZIELE.size, 87 + 32);   // K2: plus master/kleber; D1 K1: spur/1..8 je fader, pan, mute, solo
   for (const p of ['deck/1/fader', 'deck/2/eq/tief', 'deck/1/kill/hoch', 'deck/2/play', 'deck/1/cue', 'xfader',
     'deck/1/pfl', 'deck/2/pfl', 'master/pegel', 'master/kleber', 'cue/mix', 'cue/pegel', 'erz/1/fader']) assert.ok(ZIELE.has(p), p);
 });
@@ -129,4 +129,31 @@ test('K2 Kleber: linear 0..1 (u = Wert), Vorgabe 0 = aus, Anzeige OFF / Prozent'
   assert.equal(vorgabe('master/kleber'), 0);
   assert.equal(formatiere('master/kleber', 0), 'OFF');
   assert.equal(formatiere('master/kleber', 0.55), '55%');
+});
+
+test('D1 K1: Spur-Regler spur/1..8 in der Ziel-Liste, Kurven wie der Kern (fader K_FADER, pan linear −1..1, Schalter)', () => {
+  for (const n of [1, 8]) for (const p of ['fader', 'pan', 'mute', 'solo']) assert.ok(ZIELE.has(`spur/${n}/${p}`), `spur/${n}/${p}`);
+  assert.ok(!ZIELE.has('spur/9/fader') && !ZIELE.has('spur/1/trim'));
+  assert.equal(art('spur/3/fader'), 'spur_fader');   // eigene Art: Bereich −200..+6 (Spec 6.16)
+  assert.equal(art('spur/3/pan'), 'pan');
+  assert.equal(art('spur/3/mute'), 'schalter');
+  assert.equal(midiRoh('spur/1/pan', 0), 0.5);
+  assert.equal(wertAusMidi('spur/1/pan', 1), 1);
+  assert.equal(wertAusMidi('spur/2/solo', 0.7), 1);
+  assert.equal(griffZuMidi('spur/2/mute', 0.2), 0);
+  assert.equal(vorgabe('spur/1/fader'), 0);
+  assert.equal(vorgabe('deck/1/fader'), -200);   // Negativ-Kontrolle: Kanal-Fader bleiben −200
+  assert.equal(formatiere('spur/1/pan', 0), 'C');
+  assert.equal(formatiere('spur/1/pan', -0.5), 'L 50');
+  assert.equal(formatiere('spur/1/mute', 1), 'MUTE');
+  assert.equal(formatiere('spur/1/solo', 1), 'SOLO');
+});
+
+test('D1 Spec 6.16: Spur-Fader −200..+6 dB wie der Kern (K_SPUR_FADER), Kanal-Fader bleiben bei 0 dB oben', () => {
+  assert.ok(Math.abs(wertAusMidi('spur/1/fader', 1) - 6) < 1e-6);
+  assert.equal(wertAusMidi('spur/1/fader', 0), -200);
+  assert.ok(Math.abs(wertAusMidi('spur/1/fader', 0.501187) - 0) < 1e-3);
+  assert.ok(Math.abs(midiRoh('spur/1/fader', 6) - 1) < 1e-6);
+  assert.equal(formatiere('spur/1/fader', 6), '+6.0 dB');
+  assert.ok(Math.abs(wertAusMidi('deck/1/fader', 1) - 0) < 1e-6);   // Negativ-Kontrolle
 });

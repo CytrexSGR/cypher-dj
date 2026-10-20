@@ -31,7 +31,10 @@ std::vector<Kante> fehlende_kanten(const std::vector<Kante>& soll, const KantenI
 std::vector<Kante> lies_kanten(const std::string& text);
 // B9: aus der Datei nur `<kern>midi_aus_N -> *` und `* -> <kern>rueck_erz_N_{L,R}` (kern_praefix = Client-Name plus ":").
 // Audio-Ausgänge des Kerns sind über die Datei nie verbindbar (Riegel), fremde Kanten ohne Kern-Port fallen weg.
-std::vector<Kante> filtere_kanten(const std::vector<Kante>& kanten, const std::string& kern_praefix);
+// D1 K1 (Spec 2.3): Kanten auf <kern>rueck_erz_4_* fallen weg (erz/4 gehört der Produktion); ihre Zahl in *reserviert.
+// D1 K2b (Spec 2.4): dazu die Wirt-Slots des Arrangements, `<kern>arr_midi_S -> *` und `* -> <kern>arr_rueck_S_{L,R}`.
+std::vector<Kante> filtere_kanten(const std::vector<Kante>& kanten, const std::string& kern_praefix,
+                                  size_t* reserviert = nullptr);
 
 // MINOR-5: Obergrenzen der Kanten-Datei; Duplikate (Quelle und Ziel gleich) entfallen, der Überschuss wird verworfen und
 // gezählt (verworfen darf nullptr sein).

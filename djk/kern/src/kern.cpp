@@ -25,6 +25,17 @@ Kern::Kern(double start_bpm, cdj_ring_kopf* ring, Befehlsring* befehle, Ereignis
     erz_r_[k] = mixer_->eingang_r(k);
   }
   loops_ = std::make_unique<LoopBoxen>();  // MVP 2: feste Puffer, darum hier und nicht im Callback
+  arr_ = std::make_unique<Arrangement>(sw_->tabelle());  // D1 K1: feste Puffer (rund 140 KB), nicht im Callback
+  arr_kanal_ = Mixer::kanal_index(ARR_KANAL);
+  // D1 K2b (Spec 2.4): die RB-338 spielt alle internen Spuren (je Spur-Slot eine Instanz)
+  arr_rb_ = std::make_unique<ArrRbSenke>(*arr_);
+#ifndef CYPHERDJ_MUTATION_ARR_OHNE_RB_SENKE
+  arr_->setze_senke_intern(arr_rb_.get());
+#endif
+  for (int s = 0; s < ARR_WIRT_SLOTS; ++s) {   // D1 K2b: je Wirt-Slot eine Senke (MIDI und Rückweg über main.cpp)
+    arr_wirt_[s] = std::make_unique<ArrWirtSenke>(s + 1, &zyklus_n_, &sample_);
+    arr_->setze_senke_wirt(s + 1, arr_wirt_[s].get());
+  }
   decks_anlegen();  // Scheibe 31: Decks, Regler-Indizes für offen und hörbar (kern_deck.cpp)
   std::memset(cue_l_, 0, sizeof cue_l_);
   std::memset(cue_r_, 0, sizeof cue_r_);
@@ -81,6 +92,14 @@ void Kern::einsortieren(const Befehl& c) {
       neue_zeitachse_ = true;
       quittung(c.id, c.quelle, 1, 0, 0.0);
       quittung(c.id, c.quelle, 2, 0, 0.0);
+#ifndef CYPHERDJ_MUTATION_ARR_FREEZE_SET_NEU_BLEIBT
+      // Fix L1: ein wartender oder laufender Freeze bricht ab wie bei Start, Stopp, Laden und Rampe (Quittung 7 abbruch
+      // und Rückgabe 1 am Sample 0 der neuen Achse); sonst liefe er auf ihr weiter und meldete sich als fertig
+      if (arr_->freeze_laeuft()) {
+        arr_->freeze_abbrechen(0, plan_.karte());
+        arr_freeze_quittungen(plan_.karte());
+      }
+#endif
       break;
     case Befehl::ERZ_STROM: {  // §4.8 /erz/strom mit kit:<name> (ADR 024): das Netz hat geladen und geprüft
       const Kit* alt = erz_->setze_strom(c.nr, static_cast<const Kit*>(c.zeiger), Mixer::kanal_index(c.pfad));
@@ -217,6 +236,11 @@ void Kern::einsortieren(const Befehl& c) {
       }
       break;
     case Befehl::TEMPO_RAMPE:
+#ifndef CYPHERDJ_MUTATION_ARR_FREEZE_RAMPE_OHNE_ABBRUCH
+      // Spec 6.33: eine Rampe, gleich von welcher Quelle, bricht einen wartenden oder laufenden Freeze ab wie ein Stopp
+      // (Quittung 7 abbruch und Rückgabe 1 in arr_freeze_quittungen); die Rampe selbst gilt wie immer
+      if (arr_->freeze_laeuft()) arr_->stopp(0, sample_, plan_.karte());
+#endif
       // Welle 3 (ADR 028): laufende Decks folgen der Rampe im Varispeed (deck.cpp), bis Welle 2 hier kein_stretcher
       switch (plan_.rampe(c.id, c.quelle, c.ab_beat, c.ziel_bpm, c.dauer_beats, sample_)) {
         case Einsortiert::angenommen: quittung(c.id, c.quelle, 1, sample_, beat0); break;
@@ -234,6 +258,20 @@ void Kern::einsortieren(const Befehl& c) {
         quittung(c.id, c.quelle, 6, sample_, beat0, "zu_spaet");
       }
       break;
+    case Befehl::ARR_LADEN:
+    case Befehl::ARR_START:
+    case Befehl::ARR_STOPP:
+    case Befehl::ARR_LOOP:
+    case Befehl::ARR_METRONOM:
+      if (!arr_befehl_wartet(c)) einsortieren_arr(c, beat0);  // D1 K1 (kern_arr.cpp); wartet hinter einer Rückgabe
+      break;
+    case Befehl::ARR_FREEZE:  // Paket K3 (kern_arr.cpp); wartet wie die übrigen /k/arr/* hinter einem wartenden Laden
+#ifdef CYPHERDJ_MUTATION_ARR_FREEZE_UEBERHOLT
+      einsortieren_freeze(c, beat0);  // Fehlerfall: überholt ein wartendes Laden und läuft auf der alten Wiedergabe an
+#else
+      if (!arr_befehl_wartet(c)) einsortieren_freeze(c, beat0);
+#endif
+      break;
     default:
       einsortieren25(c);  // Scheibe 25: Teile, Abbruch, KI, Hand (kern_stellwerk.cpp)
       break;
@@ -242,7 +280,9 @@ void Kern::einsortieren(const Befehl& c) {
 
 void Kern::zyklus(int n, int64_t mono_ns) {
   if (mitschnitt_wartend_) mitschnitt_nachreichen();  // MVP 2 Scheibe 3 (E4)
+  if (freeze_kopf_) freeze_nachreichen();             // Paket K3: Freeze-Rückgaben, die nicht in den Ring passten
   if (n > MAX_BLOCK) n = MAX_BLOCK;
+  zyklus_n_ = n;  // D1 K1: Start-Regel des Arrangements (Vorhalt 2n + 25 und ein Zyklus)
   keylock_uebernehmen();  // Keylock (Prüfung m5): gestellte Vorgabe übernehmen, danach kein setze_keylock_vorgabe mehr
   // Glanz 2.7 (F19): MIDI-Ströme um den Wirt-Rundweg vorziehen; vor dem Einsortieren, damit ERZ_FENSTER ihn schon kennt.
   // Wechselt das Quantum, springt der Vorhalt mit (bekannte Grenze, Plan Glanz 2.7).
@@ -255,8 +295,20 @@ void Kern::zyklus(int n, int64_t mono_ns) {
   neue_zeitachse_ = false;
   plan_.verwerfe_vor(sample_);
   if (nachreichen_in_ > 0 && --nachreichen_in_ == 0) teile_nachreichen();  // Scheibe 25: zweiter Zyklus nach Neustart
+  // D1 K2b: MIDI der Wirt-Slots leeren, bevor Start, Stopp und Tausch schreiben; auch vor arr_nachreichen() (Fix F1: ein
+  // nachgereichter Tausch schickt dort das Note-Aus einer klingenden Wirt-Note)
+#if !defined(CYPHERDJ_MUTATION_ARR_MIDI_LEER_SPAET) && !defined(CYPHERDJ_MUTATION_ARR_MIDI_LEER_NACH_NACHREICHEN)
+  for (auto& w : arr_wirt_) w->zyklus_anfang();
+#endif
+  arr_nachreichen();  // D1 K1: wartende ARR_ALT-Rückgabe und dahinter wartende /k/arr/*-Befehle zuerst
+#ifdef CYPHERDJ_MUTATION_ARR_MIDI_LEER_NACH_NACHREICHEN
+  for (auto& w : arr_wirt_) w->zyklus_anfang();  // Fehlerfall F1: was ein nachgereichter Tausch schreibt, geht verloren
+#endif
   Befehl c;
   while (befehle_->hole(c)) einsortieren(c);
+#ifdef CYPHERDJ_MUTATION_ARR_MIDI_LEER_SPAET
+  for (auto& w : arr_wirt_) w->zyklus_anfang();  // Fehlerfall: was ein Neustart beim Einsortieren schreibt, geht verloren
+#endif
   decks_uebernehmen();  // Scheibe 31: Rückgaben an den Lader, Lade-Ergebnisse tauschen, KI-Stopp
   hand_zyklus(sample_, n);  // Scheibe 35: MIDI dieses Zyklus am Versatz (nach /k/set/neu: Blockanfang der neuen Achse)
   const int64_t n0 = sample_;
@@ -281,6 +333,7 @@ void Kern::zyklus(int n, int64_t mono_ns) {
   decks_zustand(n0, n);  // Scheibe 31: /zustand/deck direkt nach /uhr desselben Zyklus (§5.5)
   boxen_zustand(n0, n);  // Keylock 7b.3: /zustand/box im selben Zyklus (§5.5b)
   komp_zustand(n0, n);   // Effekt-Sektion: Absenkung je aktivem Kompressor (§5.5c)
+  arr_zustand(n0, n);    // D1 K1: /zustand/arr (§5.13)
 
   // 3) Takt-Anfänge in diesem Block (§5.3): Beats 4(t-1) mit llround(sample_at) in [n0, n0+n)
   const double b_lo = karte.beat_at((double)n0 - 0.5);
@@ -337,6 +390,8 @@ void Kern::zyklus(int n, int64_t mono_ns) {
     takt_frames = (takt_b >= 4.0) ? s_takt - std::llround(karte.sample_at(takt_b - 4.0))
                                   : std::llround(karte.sample_at(takt_b + 4.0)) - s_takt;
   }
+  // D1 K1 (§6.1): Kern-Sample des Frames f = f + sample_minus_w; vor w gesetzt (Release), gilt bis zum nächsten Sprung
+  cdj_setze(&ring_->sample_minus_w, (uint64_t)(n0 - (int64_t)w_));
   cdj_setze(&ring_->takt_frames, (uint64_t)takt_frames);
   cdj_setze(&ring_->takt_anfang_w, (uint64_t)((int64_t)w_ + (s_takt - n0)));
   w_ += (uint64_t)n;

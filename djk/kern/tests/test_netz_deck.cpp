@@ -105,6 +105,18 @@ int main() {
   abgelehnt(35, "ausserhalb_bereich");  // Hotcue 0
   { cdj::osc::Schreiber s(v::k_deck_sprung); s.h(36).s("andreas").s("").s("").s("").i(5).d(32.0).d(2.0).i(1).d(0.0); g.sende(s); }
   abgelehnt(36, "unbekanntes_deck");
+  // Hörbares Ziehen: /k/deck/scrub mit allen Feldern im Ring, Bereiche
+  { cdj::osc::Schreiber s(v::k_deck_scrub); s.h(60).s("andreas").i(2).i(2).d(-1.75); g.sende(s); }
+  PRUEF(hole(bef, b) && b.art == cdj::Befehl::DECK_SCRUB && b.deck == 2 && b.nr == 2 && b.wert_beats == -1.75 &&
+        !std::strcmp(b.quelle, "andreas"));
+  { cdj::osc::Schreiber s(v::k_deck_scrub); s.h(61).s("andreas").i(1).i(3).d(0.0); g.sende(s); }
+  abgelehnt(61, "ausserhalb_bereich");  // Phase 3 gibt es nicht
+  { cdj::osc::Schreiber s(v::k_deck_scrub); s.h(62).s("andreas").i(1).i(2).d(NAN); g.sende(s); }
+  abgelehnt(62, "ausserhalb_bereich");  // Strecke NaN
+  { cdj::osc::Schreiber s(v::k_deck_scrub); s.h(63).s("andreas").i(5).i(1).d(0.0); g.sende(s); }
+  abgelehnt(63, "unbekanntes_deck");
+  { cdj::osc::Schreiber s(v::k_deck_scrub); s.h(64).s("dj").i(1).i(1).d(0.0); g.sende(s); }
+  abgelehnt(64, "ausserhalb_bereich");  // §1.4: unbekannte Quelle
   // Plan Grid: /k/deck/raster mit allen Feldern im Ring, Bereiche
   { cdj::osc::Schreiber s(v::k_deck_raster); s.h(50).s("andreas").i(2).s("1ac28792d355a38b").d(128.0).i(1).i(-240); g.sende(s); }
   PRUEF(hole(bef, b) && b.art == cdj::Befehl::DECK_RASTER && b.deck == 2 && !std::strcmp(b.material_id, "1ac28792d355a38b") &&

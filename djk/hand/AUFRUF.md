@@ -7,7 +7,7 @@ Plan `docs/superpowers/plans/2026-09-28-djk-hand-mcp.md` (Rev. 2 nach Review), S
 Prüfinstanz i: `--seite http://127.0.0.1:56300`. Jeder Aufruf geht als HTTP an den Seiten-Server mit dem Kopf
 `x-djk-quelle: cypher`; der Server setzt die Quelle `cypher` in jeden Kern-Befehl, Cyphers Befehle tragen `plan: cypher`.
 
-## Werkzeuge (39)
+## Werkzeuge (48)
 
 DJ: `lage` · `bestand` · `laden` · `deck_start` · `deck_stopp` · `sprung` · `loop` · `pad` · `loop_nach_box` · `box` ·
 `regler` (Rampe über Takte) · `fx` · `fx_zuweisung` · `abbrechen` · `tempo` (Decks folgen seit 2026-10-06: Varispeed, dann Tausch auf eine Fassung im neuen Tempo, ADR 028) · `warte` · `hoeren`. Dazu die Studio-Werkzeuge
@@ -41,6 +41,22 @@ Studio (Plan `docs/superpowers/plans/2026-09-29-djk-hand-mcp-studio.md`, 2026-09
 
 `/lage` trägt zusätzlich `studio: {stroeme:[{strom, autonom, von, text_kurz}], klang:{bass, melodie}}`
 (`klang` = Name aus `wirt-<g>.json`; nach `setze` „edited"). `abbrechen` und Stop Cypher halten auch `klang fahre`.
+
+## Produktion (D1, Spec 3.4 und 3.5)
+
+Das Projekt besitzt der Seiten-Server (`~/cypherdj-projekte/<slug>/`, Undo-Verlauf `undo.jsonl`), der Kern spielt eine Wiedergabe
+daraus. Ich ändere es nur mit Befehlslisten, nie mit Dateien.
+
+| Werkzeug | Route | Riegel für cypher |
+|---|---|---|
+| `proj_liste` · `proj_lage` · `proj_verlauf` | `GET /proj/liste` · `GET /proj/aktuell?noten=zahl` (Noten nur als `noten_zahl` je Clip, Spec 6.30) · `GET /proj/verlauf` | lesend |
+| `proj_neu` · `proj_oeffnen` | `POST /proj/neu {name}` · `POST /proj/oeffnen {slug}` | Stop Cypher (409 `ki_gestoppt`); läuft ein Transport, den Andreas gestartet hat (Seite, Hand-Taste oder unbekannt), 409 `transport_laeuft`, nichts gestoppt (Spec 6.37); ein von mir gestarteter Transport des alten Projekts stoppt |
+| `proj_aendern` | `POST /proj/aendern {rev, label, befehle}`; ohne `rev` holt das Werkzeug sie aus `GET /proj/aktuell?nur=rev` (auch undo/redo) | Stop Cypher; `rev_veraltet` (neu lesen); `regler_abgelehnt` (Andreas hält den Regler, nichts geändert); `deck_laeuft` bei `tempo_setzen`, solange ein Deck spielt; Audio nur mit `sha256` aus der Bibliothek (`sha_unbekannt`, `nur_live`, `quelle_fehlt`) |
+| `proj_undo` · `proj_redo` | `POST /proj/undo` · `POST /proj/redo {rev}` | Stop Cypher; `nichts_zu_tun` |
+| `proj_transport` | `POST /proj/transport {aktion, beat?}` | Stop Cypher; ein von mir gestarteter Transport stoppt bei Stop Cypher; `start` und `stopp` über einen Transport, den Andreas gestartet hat (Seite, Hand-Taste oder unbekannt), 409 `transport_laeuft`, nichts gesendet: ich stoppe nur, was ich gestartet habe, und ein Start beendete seinen Lauf (Spec 6.37) |
+
+Spuren, die ich anlege, stehen in der KI-Maske: Stop Cypher senkt ihre Fader (Spec 6.15). Andreas' Bewegungen an
+`spur/<n>/*` landen mit Quelle `andreas` im Projekt und im Verlauf. Projekt löschen gibt es über MCP nicht.
 
 ## Vorhören
 

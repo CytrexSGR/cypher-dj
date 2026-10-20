@@ -14,6 +14,8 @@ namespace {
 
 constexpr int MS(double ms) { return static_cast<int>(ms * SR / 1000.0 + 0.5); }
 constexpr Kurve K_FADER{KurvenTyp::fader_db, -200.0f, 0.0f, false};
+// D1 Spec 6.16: Spur-Fader bis +6 dB. Gleiche Kurve wie K_FADER, nur oben +6: ganz oben +6 dB, 0 dB bei Stellung ≈ 0,501
+constexpr Kurve K_SPUR_FADER{KurvenTyp::fader_db, -200.0f, 6.0f, false};
 constexpr Kurve K_EQ{KurvenTyp::linear, -26.0f, 6.0f, true};      // §7.2 Beispiel: linear -26..+6, kill_unter_min
 constexpr Kurve K_SCHALTER{KurvenTyp::schalter, 0.0f, 1.0f, false};
 
@@ -127,6 +129,19 @@ ReglerTabelle::ReglerTabelle() {
   // COLOR-Regler ist <k>/filter. Art 0 FILTER, 1 SPACE, 2 DUB ECHO, 3 SWEEP, 4 NOISE, 5 CRUSH; alle dürfen.
   neu("color/art", -1, Rolle::color_art, 0, 5, 0, 0, false, false, true, true, stufen(0, 5));
   neu("color/param", -1, Rolle::color_param, 0, 1, 0.5f, MS(10), false, false, false, false, linear(0, 1));
+  // D1 K1 (Spec 2.3): Spur-Regler des Arrangements, global (Kanal −1, keine neuen Kanäle), alle dürfen. Fader −200 bis
+  // +6 dB (Spec 6.16), Vorgabe 0 dB (die Gruppe regelt erz/4), Mute und Solo schalten ohne Rampe: die 10-ms-Blende macht
+  // das Modul Arrangement.
+  for (int n = 1; n <= SPUR_REGLER_SPUREN; n++) {
+    std::snprintf(p, sizeof p, "spur/%d/fader", n);
+    neu(p, -1, Rolle::spur_fader, -200, 6, 0, MS(10), false, true, false, false, K_SPUR_FADER);
+    std::snprintf(p, sizeof p, "spur/%d/pan", n);
+    neu(p, -1, Rolle::spur_pan, -1, 1, 0, MS(10), false, false, false, false, linear(-1, 1));
+    std::snprintf(p, sizeof p, "spur/%d/mute", n);
+    neu(p, -1, Rolle::spur_mute, 0, 1, 0, 0, false, false, true, true, K_SCHALTER);
+    std::snprintf(p, sizeof p, "spur/%d/solo", n);
+    neu(p, -1, Rolle::spur_solo, 0, 1, 0, 0, false, false, true, true, K_SCHALTER);
+  }
   for (int i = 0; i < n_; i++) sortiert_[i] = static_cast<int16_t>(i);
   std::sort(sortiert_, sortiert_ + n_, [&](int16_t a, int16_t b) { return std::strcmp(def_[a].pfad, def_[b].pfad) < 0; });
 }

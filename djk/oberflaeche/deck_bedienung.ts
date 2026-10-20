@@ -77,7 +77,11 @@ export function einsSetzen(o: { v: number; quell: number; eins: number; fpb: num
     const f = (o.erster + v) / o.fpb + o.eins;     // Lage der Eins in Beats ab Frame 0
     if (f >= -0.5 && f < 3.5) return Math.abs(v) <= RASTER_MAX ? { k, v } : null;
   }
-  return null;
+  // Beat-Karte beginnt spät im Track (2026-10-17, „Wake up fucked up“: erster Schlag bei 178.8 s): keine Eins des Quell-Beats
+  // `eins` kann je am Track-Anfang liegen. Dann der kleinste Schritt, der den Schlag unter dem Kopf zur Eins macht (|k| ≤ 2);
+  // die Anzeige zählt ohnehin ab der ersten vollen Eins im Track (welle.js ersteVolleEins).
+  const k = k0 > 2 ? k0 - 4 : k0, v = o.v + Math.round(k * o.fpb);
+  return Math.abs(v) <= RASTER_MAX ? { k, v } : null;
 }
 
 // Plan Grid (D3): gespeicherter Versatz je Fassung, Name wie die Hotcue-Datei, eigener Ordner.

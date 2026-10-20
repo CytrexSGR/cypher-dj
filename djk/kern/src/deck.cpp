@@ -205,6 +205,7 @@ void Deck::blende_von(const Material* alt, int64_t alt_f, float gain) noexcept {
 
 void Deck::tausche(int64_t s, const Material* neu) noexcept {
   if (!m_ || !neu || neu == m_) return;
+  scrub_ab();  // das Material unter der Hand wechselt
   const Material* alt = m_;
   const double fpb_alt = FRAMES_JE_MINUTE / alt->basis_bpm, fpb_neu = FRAMES_JE_MINUTE / neu->basis_bpm;
   const double kopf_alt = kopf_bei(s);
@@ -249,6 +250,7 @@ void Deck::tausche(int64_t s, const Material* neu) noexcept {
 
 void Deck::lade(const Material* m, int64_t s) noexcept {
   const Material* alt = m_;
+  scrub_ab();
   if (laeuft_ && alt) {
     float g = stopp_rest_ > 0 ? static_cast<float>(stopp_rest_) / DECK_STOPP_RAMPE : 1.0f;
     if (!ein_.offen()) g *= ein_.wert();  // F10: das alte Material steht noch in der Einblende
@@ -298,6 +300,7 @@ void Deck::naht(int64_t s, int64_t d) noexcept {
 }
 
 void Deck::start(int64_t s, int64_t f, bool loop_halten, uint64_t plan, double plan_b) noexcept {
+  scrub_ab();  // Start (Play, Cue) beendet das Ziehen
   if (laeuft_ && m_ && stopp_rest_ == 0 && loop_l_ == 0 && kl_wplan_traegt(plan, plan_b, f, 0, 0, 0.0)) {
     kl_wplan_zuende(s, f, true);  // Keylock 6b: Start auf laufendem Deck (Cue-Sprung), geplant
     loop_kopf_gesetzt(f);
@@ -359,6 +362,7 @@ void Deck::start(int64_t s, int64_t f, bool loop_halten, uint64_t plan, double p
 }
 
 void Deck::setze_kopf(int64_t s, int64_t f, uint64_t plan, double plan_b) noexcept {
+  scrub_ab();  // Sprung, Hotcue, Raster setzen den Kopf selbst
   if (laeuft_ && kl_wplan_traegt(plan, plan_b, f, 0, 0, 0.0)) {  // Keylock 6b: geplanter Sprung bzw. Hotcue, der Wechsel trägt
     kl_wplan_zuende(s, f, true);
     loop_kopf_gesetzt(f);
@@ -382,6 +386,7 @@ int64_t Deck::stopp(int64_t s, bool loop_halten) noexcept {
 }
 
 void Deck::setze_lauf(int64_t anker_s, int64_t anker_f) noexcept {
+  scrub_ab();
   laeuft_ = m_ != nullptr;
   stopp_rest_ = 0;
   ein_ = Blende();
@@ -392,6 +397,7 @@ void Deck::setze_lauf(int64_t anker_s, int64_t anker_f) noexcept {
 }
 
 void Deck::setze_lauf_beat(int64_t anker_s, double anker_b, int64_t anker_f) noexcept {
+  scrub_ab();
   laeuft_ = m_ != nullptr;
   stopp_rest_ = 0;
   ein_ = Blende();
@@ -425,6 +431,7 @@ double Deck::kopf_bei(int64_t s) const noexcept {
 }
 
 void Deck::setze_position(int64_t f) noexcept {
+  scrub_ab();
   if (laeuft_) kl_offen_ = KlOffen::LEER;
   laeuft_ = false;
   stopp_rest_ = 0;
@@ -501,6 +508,7 @@ double Deck::beats_bis_ende_bei(int64_t s) const noexcept {
 // Keylock (Task 5, Vertrag 6): Loop an und aus sind Ereignisse wie jedes andere: was klingt, blendet gegen die Varispeed-
 // Brücke aus, der Ansatz trägt das Band mit dem neuen Loop (bzw. ohne).
 void Deck::loop_an(int64_t s, int64_t a_f, int64_t laenge_f, double laenge_exakt, uint64_t plan, double plan_b) noexcept {
+  scrub_ab();  // der Loop übernimmt den Kopf
   const double lx = laenge_exakt > 0.0 ? laenge_exakt : static_cast<double>(laenge_f > 0 ? laenge_f : 0);
   if (laenge_f > 0 && kl_wplan_traegt(plan, plan_b, -1, a_f, laenge_f, lx)) {  // Keylock 6b: Loop an geplant, das Band wickelt schon
     loop_a_ = a_f;
@@ -1343,8 +1351,144 @@ void Deck::block(int64_t s, int n, float* l, float* r, int vl_off) noexcept {
                      ge, ge_an, gs, gs_an, a, b);
       if (vor) kl_vor_ = kl_les_.ring_hoerbar();  // 6a: der Ring klingt in der Vorlage
     }
+    if (scrub_an_) {  // Hörbares Ziehen: der Deck-Weg weicht dem Ziehen (Überblendung SCRUB_BLENDE Samples)
+      const float wd = 1.0f - scrub_gewicht(i);
+      a *= wd;
+      b *= wd;
+    }
     l[i] += a;
     r[i] += b;
+  }
+  if (scrub_an_) scrub_block(s, n, l, r, vl_off);
+}
+
+// ---- Hörbares Ziehen (Scrub) --------------------------------------------------------------------------------------------
+// Die Hand liefert alle ~16 ms eine Strecke (Treppe). Daraus wird eine stetige Strecke t (linear über die Zeit bis zur nächsten
+// Meldung, geschätzt aus dem Abstand der letzten beiden), Ziel z = Grundlage + t. Die Leseposition folgt: Rate = Geschwindigkeit
+// des Ziels + Lagefehler / TAU, die Rate selbst ändert sich höchstens um SCRUB_BESCHL je Sample (stetig, kein Sprung), und
+// die Lautstärke sinkt unter SCRUB_STILL linear auf 0, damit eine stehende Nadel Stille ist und nicht Gleichspannung.
+// Gelesen wird gebrochen (Catmull-Rom) mit den Stem-Gewichten des Decks.
+void Deck::scrub_an(int64_t s, double delta_f) noexcept {
+  if (!m_ || loop_l_ > 0) return;  // ohne Material nichts zu ziehen; mit Loop bleibt es beim Sprung der Seite
+  if (scrub_an_ && scrub_aus_) scrub_ab();  // die Ausblende läuft noch: abbrechen, neu ansetzen (selten)
+  if (scrub_an_) {
+    if (scrub_los_) {  // neuer Griff während des Ausschwingens: an der alten Zielstelle anknüpfen
+      scrub_basis_ += scrub_t_ziel_;
+      scrub_t_ -= scrub_t_ziel_;
+      scrub_t_ziel_ = 0.0;
+      scrub_los_ = false;
+      scrub_s_zuletzt_ = s - 800;
+    }
+    scrub_ziel(s, delta_f);
+    return;
+  }
+  const double tempo = (k_ && laeuft_) ? k_->bpm_at(static_cast<double>(s)) / m_->basis_bpm : 1.0;
+  scrub_folgt_ = laeuft_ && stopp_rest_ == 0;
+  scrub_pos_ = laeuft_ ? kopf_bei(s) : static_cast<double>(pos_f_);
+  scrub_rate_ = laeuft_ ? tempo : 0.0;  // ein laufendes Deck läuft im Griff erst einmal weiter (Rate stetig)
+  scrub_laut_ = std::min(1.0, std::fabs(scrub_rate_) / SCRUB_STILL);
+  scrub_basis_ = scrub_pos_;
+  scrub_t_ = scrub_t_v_ = scrub_t_ziel_ = 0.0;
+  scrub_t_rest_ = 0;
+  scrub_n_ = 0;
+  scrub_aus_ = scrub_los_ = false;
+  scrub_s_zuletzt_ = s - 800;
+  scrub_an_ = true;
+  scrub_ziel(s, delta_f);
+}
+
+void Deck::scrub_ziel(int64_t s, double delta_f) noexcept {
+  if (!scrub_an_ || scrub_aus_ || !std::isfinite(delta_f)) return;
+  const int64_t dt = s - scrub_s_zuletzt_;
+  const int L = static_cast<int>(std::clamp<int64_t>(dt, SCRUB_STUFE_MIN, SCRUB_STUFE_MAX));
+  scrub_t_ziel_ = delta_f;
+  scrub_t_v_ = (delta_f - scrub_t_) / static_cast<double>(L);
+  scrub_t_rest_ = L;
+#ifdef CYPHERDJ_MUTATION_SCRUB_OHNE_GLAETTUNG
+  scrub_t_ = delta_f;  // Fehlerfall: die Handstufe gilt sofort (Treppe), nur die Geschwindigkeit bleibt (siehe scrub_block)
+#endif
+  scrub_s_zuletzt_ = s;
+}
+
+void Deck::scrub_los(int64_t s, double delta_f) noexcept {
+  if (!scrub_an_ || scrub_aus_) return;
+  scrub_ziel(s, delta_f);
+  scrub_los_ = true;
+  scrub_s_los_ = s;
+}
+
+// Ausschwingen vorbei (Blockende s): das Deck übernimmt an der Leseposition, das Ziehen blendet SCRUB_BLENDE Samples aus.
+void Deck::scrub_ende(int64_t s) noexcept {
+  const double frames = static_cast<double>(m_->frames);
+  const double f = std::clamp(scrub_pos_, 0.0, frames);
+  scrub_aus_ = true;
+  if (laeuft_) {
+    const int64_t fi = std::llround(f);
+    loop_l_ = 0;  // Ziehen verlässt einen Loop, der unterwegs scharf wurde (am Griff gibt es keinen)
+    anker_s_ = s;
+    anker_f_ = fi;
+    anker_b_ = k_ ? k_->beat_at(static_cast<double>(s)) : 0.0;
+    loop_kopf_gesetzt(fi);
+    kl_ereignis(s);  // Keylock: neuer Ansatz an der neuen Stelle (Brücke im Varispeed), wie nach einem Sprung
+  } else {
+    pos_f_ = std::clamp<int64_t>(std::llround(f), 0, m_->frames);
+  }
+}
+
+void Deck::scrub_block(int64_t s, int n, float* l, float* r, int vl_off) noexcept {
+  const double frames = static_cast<double>(m_->frames);
+  if (scrub_folgt_ && !laeuft_) scrub_folgt_ = false;  // das Deck ist unterwegs stehen geblieben (Stopp, Ende): Hand hält die Stelle
+  const double tempo = (scrub_folgt_ && k_) ? k_->bpm_at(static_cast<double>(s)) / m_->basis_bpm : 1.0;
+  const double folge = scrub_folgt_ ? tempo : 0.0;
+  const bool verlauf = stem_vl_[0] || stem_vl_[1] || stem_vl_[2] || stem_vl_[3];
+  float g[STEM_ANZAHL] = {stem_lin_[0], stem_lin_[1], stem_lin_[2], stem_lin_[3]};
+  constexpr double RAND = 4096.0;  // Spielraum hinter den Materialgrenzen (dort ist Stille), dann klemmt die Position
+  for (int i = 0; i < n; ++i) {
+#ifdef CYPHERDJ_MUTATION_SCRUB_OHNE_GLAETTUNG
+    if (scrub_t_rest_ > 0) --scrub_t_rest_;  // Fehlerfall: die Strecke bleibt die Treppe der Hand
+#else
+    if (scrub_t_rest_ > 0) {
+      scrub_t_ += scrub_t_v_;
+      if (--scrub_t_rest_ == 0) scrub_t_ = scrub_t_ziel_;
+    }
+#endif
+    const double z = std::clamp(scrub_basis_ + scrub_t_, 0.0, frames);
+    const double vz = (scrub_t_rest_ > 0 ? scrub_t_v_ : 0.0) + folge;
+    const double soll = std::clamp(vz + (z - scrub_pos_) / SCRUB_TAU, -SCRUB_RATE_MAX, SCRUB_RATE_MAX);
+#ifdef CYPHERDJ_MUTATION_SCRUB_OHNE_GLAETTUNG
+    if (i == 0) scrub_pos_ = z;  // Fehlerfall: die Position springt am Blockanfang auf die Hand (Sägezahn), die Rate ist die der Hand
+    scrub_rate_ = std::clamp(vz, -SCRUB_RATE_MAX, SCRUB_RATE_MAX);
+    (void)soll;
+#else
+    scrub_rate_ += std::clamp(soll - scrub_rate_, -SCRUB_BESCHL, SCRUB_BESCHL);
+#endif
+    scrub_basis_ += folge;
+    if (verlauf)
+      for (int k = 0; k < STEM_ANZAHL; ++k)
+        if (stem_vl_[k]) g[k] = lin(stem_vl_[k][vl_off + i]);
+    float a, b;
+    lies_frei(m_, scrub_pos_, g, a, b);
+    const double lz = std::min(1.0, std::fabs(scrub_rate_) / SCRUB_STILL);  // Ziel der Lautstärke: Stillstand = Stille
+    scrub_laut_ += std::clamp(lz - scrub_laut_, -SCRUB_LAUT_SCHRITT, SCRUB_LAUT_SCHRITT);  // weich, sonst knackt die Umkehr (Rate ≈ 0)
+    const float lautst = static_cast<float>(scrub_laut_) * scrub_gewicht(i);
+    l[i] += a * lautst;
+    r[i] += b * lautst;
+    scrub_pos_ = std::clamp(scrub_pos_ + scrub_rate_, -RAND, frames + RAND);  // gelesen wird an der Stelle, dann weiter
+  }
+  scrub_n_ = std::clamp(scrub_n_ + (scrub_aus_ ? -n : n), 0, SCRUB_BLENDE);
+  if (!scrub_los_ && !scrub_aus_ && s + n - scrub_s_zuletzt_ > SCRUB_WACHHUND) {  // Wachhund: das Los kam nie an
+    scrub_los_ = true;
+    scrub_s_los_ = s + n;
+  }
+  if (!laeuft_) pos_f_ = std::clamp<int64_t>(std::llround(std::clamp(scrub_pos_, 0.0, frames)), 0, m_->frames);  // die Anzeige folgt
+  if (scrub_aus_) {
+    if (scrub_n_ == 0) scrub_ab();
+    return;
+  }
+  if (scrub_los_) {
+    const double z = std::clamp(scrub_basis_ + scrub_t_, 0.0, frames);
+    const bool da = scrub_t_rest_ == 0 && std::fabs(z - scrub_pos_) < 0.5 && std::fabs(scrub_rate_ - folge) < 0.005;
+    if (da || s + n - scrub_s_los_ > SCRUB_AUSSCHWING_MAX) scrub_ende(s + n);
   }
 }
 

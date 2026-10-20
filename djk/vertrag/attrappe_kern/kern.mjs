@@ -7,12 +7,16 @@
 import { Karte, SR, llround, taktVon, phraseVon } from './uhr.mjs';
 import { BEFEHLE, AUSGABEN, KERN_VERSION, PROTOKOLL, QUELLEN } from './vertrag.mjs';
 import { dekodiere } from './osc.mjs';
+import { wertBei } from './regler.mjs';
 
 export const BLOCK = 256;
 export const VORGABE_CFG = {
   version: 1, start_bpm: 128.0, udp_port: 47100, arbeitsbestand: '/dev/shm/cypherdj/material', speicher_budget_mib: 3800,
   controller_geraet: '', ziel_lufs: -16.0, hoerbar_db: -26.0, tief_offen_db: -12.0, max_stretcher: 4, stretcher_threads: 2,
   limiter_dbtp: -1.0, pruefmodus: false, hand_osc: false, filter_guete: 0.707, // §2.1 wie konfig.schema.json (35 B-O, A27)
+  // Paket K3 (S3-Befund 16.10.): jeder Schlüssel des Schemas, sonst startet die Attrappe mit einer echten kern.toml nicht
+  // (tests/konfig.test.mjs). arr_ordner "" heißt wie im Kern ~/.cache/cypherdj[-<i>]/arr (attrappe_kern.mjs).
+  hoerschein_pflicht: true, keylock: true, keylock_maschine: 'r3', arr_ordner: '', arr_budget_mib: 1024,
 };
 const ABO_FRIST = 5 * SR;          // §4.1: Abonnent nach 5 s Stille gestrichen
 const MAX_ABOS = 8;
@@ -105,7 +109,9 @@ export class Kern {
     if (def.felder[0] === 'id' && def.felder[1] === 'quelle') {
       b = { key: `${a.quelle}:${a.id}`, id: a.id, quelle: a.quelle, adresse: m.adresse, status: 0 };
       if (!QUELLEN.includes(a.quelle)) return this.q(b, 6, 'ausserhalb_bereich');
-      if (a.quelle === 'cypher' && this.ki?.gestoppt) return this.q(b, 6, 'ki_gestoppt');
+      // §4.7: weitere cypher-Befehle abgelehnt; D1 Spec 6.27: /k/arr/stopp bleibt erlaubt (Anhalten ist die sichere Richtung)
+      if (a.quelle === 'cypher' && this.ki?.gestoppt && (m.adresse !== '/k/arr/stopp' || this.mutation.has('arr_ki_stopp_ab')))
+        return this.q(b, 6, 'ki_gestoppt');
     }
     this.stempel = this.jetzt;
     h(this, a, b, von);
@@ -346,7 +352,7 @@ export class Kern {
       const p99 = sortiert.length ? sortiert[Math.min(sortiert.length - 1, Math.floor(sortiert.length * 0.99))] : 0;
       const wartend = [...this.befehle.values()].filter((b) => b.status === 1).length;
       this.aus('/zustand/kern', [this.generation, BLOCK, BigInt(s0), 0, this.stat.ausgelassen,
-        Math.round(Math.max(0, ...cb)), Math.round(p99), Math.round(Math.max(0, ...aw)), 0, wartend, this.ki?.gestoppt ? 1 : 0]);
+        Math.round(Math.max(0, ...cb)), Math.round(p99), Math.round(Math.max(0, ...aw)), 0, wartend, this.ki?.gestoppt ? 1 : 0, 0n]);   // ereignisse_verloren: die Attrappe verliert keine
     }
   }
 }
@@ -375,6 +381,15 @@ export const verbindung = {
           K.aus('/q/stand', [b.id, b.quelle, b.status === 5 ? 2 : b.status, BigInt(s), K.uhr.beat(s), ''], a.port);
         }
       }
+      // wie der Kern (netz.cpp hallo, Effekt-Sektion 2026-10-11): wer sich zum ersten Mal in dieser Generation meldet, bekommt den gemerkten
+      // Stand aller schon gemeldeten Regler (Halter frei). Ein Seiten-Server nach dem Ende der Abonnenten-Frist kennt so die Spur-Regler
+      // (D1 Spec 6.21, 6.35). keylock hat seine eigene Meldung oben; der Stand kommt zuletzt, nach /e/neustart und /q/stand, wie im Kern
+      // (ein Server leert seine Regler bei /e/neustart einer neuen Generation).
+      if (neueGeneration) {
+        for (const [pfad, r] of K.r) {
+          if (pfad !== 'keylock' && r.gemeldet > -Infinity) K.aus('/e/regler', [pfad, wertBei(K, pfad, K.jetzt), 'frei', BigInt(K.jetzt), K.uhr.beat(K.jetzt)], a.port);
+        }
+      }
     },
     '/k/tschuess': (K, a) => { K.abos.delete(a.name); },
     '/k/set/neu': (K, a, b) => {
@@ -384,6 +399,8 @@ export const verbindung = {
       K.setNeu = { bpm: a.start_bpm, b };
     },
     '/k/tempo/rampe': (K, a, b) => {
+      // D1 Spec 6.33: eine Rampe im Bereich (den prüft im Kern schon das Netz) bricht einen Freeze ab (arr.mjs)
+      if (a.ziel_bpm >= 60 && a.ziel_bpm <= 200 && a.dauer_beats >= 1 && Number.isFinite(a.ab_beat)) K.arrTempoRampe?.(K.jetzt);
       K.einsortieren(K.teilNeu(b, { ...a, politik: 1 }, 'tempo', { ziel: a.ziel_bpm }));
     },
     '/k/storno': (K, a, b) => {

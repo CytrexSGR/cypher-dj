@@ -22,7 +22,10 @@ function bereit(p, name, muster) {
   });
 }
 
-export async function starteStapel(ordner, instanz = 'g', env = {}, { bestand = path.join(REPO, 'bestand'), vorher, serverArgs = [] } = {}) {
+// proj (D1 S3, Auftrag 14 e: Proben gegen den echten Server): { wurzel, arbeitsordner } gibt dem Seiten-Server eigene Ordner für Projekte und
+// Wiedergaben (--proj-wurzel, --arr-ordner) und der Kern-Attrappe eine eigene kern.toml mit demselben arr_ordner (ein Freeze schreibt seine Datei
+// dorthin, nie nach ~/.cache/cypherdj-<i>/arr). Ohne proj bleibt alles wie bisher (die Projekt-Attrappe beantwortet /proj/* vor dem Server).
+export async function starteStapel(ordner, instanz = 'g', env = {}, { bestand = path.join(REPO, 'bestand'), vorher, serverArgs = [], proj = null } = {}) {
   fs.mkdirSync(ordner, { recursive: true });
   const abWurzel = fs.mkdtempSync(`/dev/shm/djk60m-${instanz}-`);
   const k = 1000 * (instanz.charCodeAt(0) - 96);
@@ -63,8 +66,14 @@ export async function starteStapel(ordner, instanz = 'g', env = {}, { bestand = 
       kinder.push(p);
       return p;
     };
+    const kernKonfig = [];
+    if (proj) {
+      fs.writeFileSync(path.join(ordner, 'kern.toml'), `# Prüfstapel (pruef/stapel.mjs, proj)\narr_ordner = ${JSON.stringify(proj.arbeitsordner)}\n`);
+      kernKonfig.push('--konfig', path.join(ordner, 'kern.toml'));
+      serverArgs = [...serverArgs, '--proj-wurzel', proj.wurzel, '--arr-ordner', proj.arbeitsordner];
+    }
     const att = starte('attrappe', [path.join(REPO, 'djk/vertrag/attrappe_kern.mjs'), '--frisch', '--arbeitsbestand',
-      ab, '--zustand', path.join(ordner, 'zustand_attrappe.json')]);
+      ab, ...kernKonfig, '--zustand', path.join(ordner, 'zustand_attrappe.json')]);
     await bereit(att, 'attrappe', 'attrappe_kern:');
     relais = await starteRelais({ hoeren: ports.relais, kern: ports.kern, log: path.join(ordner, 'relais.jsonl') });
     fs.writeFileSync(path.join(ordner, 'leitstand.toml'),

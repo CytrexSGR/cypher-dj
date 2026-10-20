@@ -1,6 +1,6 @@
 // Kern schreibt den Hüllkurven-Ring §6.2 am Mess-Abgriff (vor dem Fader, nach EQ und Filter, ADR 008): ein
 // geschlossenes Deck (Fader −200 dB, Vorgabe) ist im Kanal deck/1 sichtbar, erreicht aber master nicht; ein nie
-// belegter Kanal (erz/4) bleibt konstant null; das 48er-Raster hält auch über einen Sample-Sprung (/k/set/neu, M1).
+// belegter Kanal (erz/5; erz/4 ist seit D1 K1 die Summe der Produktion und belegt) bleibt konstant null; das 48er-Raster hält auch über einen Sample-Sprung (/k/set/neu, M1).
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -50,7 +50,7 @@ int main() {
 
   const auto deck1 = lies(h, r0, r1, 0);
   const auto master = lies(h, r0, r1, 14);
-  const auto erz4 = lies(h, r0, r1, 7);  // erz/4: nie belegt
+  const auto erz5 = lies(h, r0, r1, 8);  // erz/5: nie belegt (D1 K1: erz/4 ist belegt, test_kern_arr_erz4)
 
   bool deck1_sichtbar = false;
   for (const auto& s : deck1)
@@ -62,12 +62,12 @@ int main() {
     if (s.spitze >= 1e-6f) master_still = false;
   PRUEF(master_still);  // geschlossener Fader erreicht den Master nicht
 
-  bool erz4_null = true;
-  for (const auto& s : erz4)
+  bool erz5_null = true;
+  for (const auto& s : erz5)
     if (s.band[0] != 0.0f || s.band[1] != 0.0f || s.band[2] != 0.0f || s.band[3] != 0.0f || s.band[4] != 0.0f ||
         s.band[5] != 0.0f || s.spitze != 0.0f)
-      erz4_null = false;
-  PRUEF(erz4_null);
+      erz5_null = false;
+  PRUEF(erz5_null);
 
   // Fall 4: sample steigt je Datensatz um 48, (sample+1) % 48 == 0, beat steigt monoton.
   bool schritt48 = true, raster48 = true, monoton = true;
