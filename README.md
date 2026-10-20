@@ -183,13 +183,16 @@ mostly against a silent test sink. Not benchmarks.
 
 - **Decks keep their pitch at any master tempo, in real time, including during a tempo ramp.** After each
   deck event (start, jump, hotcue) a bridge of about 0.1 s plays in varispeed until the stretcher takes over.
-  A deck started by hand does not start while a tempo ramp is still running (about one bar after a change).
+  A deck started by hand does not start while a tempo change is pending or ramping: from the moment the tempo
+  changes until the end of its one-bar ramp, which begins on the next downbeat.
 - Linux with PipeWire (JACK API) only, tested on Ubuntu 24.04. Pro-Audio device profiles cannot be
   used as outputs yet.
-- The headphone path has not been measured with a real audio interface.
+- The headphone path has been checked for signal and level on one USB DAC; its latency and unplugging and
+  replugging a device have not been measured.
 - Bar-one (downbeat) detection is unreliable; set bar one by hand where it is wrong.
 - The instrument round trip (core to Surge XT and back, about 11 ms) is compensated by sending notes early;
-  the value is measured for one audio buffer size (256 frames).
+  the value was measured against the real instrument at one audio buffer size (256 frames); the offset scales
+  with the buffer size and has been checked in software at 128 and 512.
 - Human and agent are told apart by a label on localhost. That is a convention, not a security boundary.
   Do not expose the ports to a network.
 - The measurement rule covers decks; the pattern channels are deliberately exempt.
@@ -200,7 +203,8 @@ mostly against a silent test sink. Not benchmarks.
 - Production is a first cut: at most 8 tracks, one hosted instrument slot, no recording, automation, sends or plugin
   inserts yet. Export is refused while the transport is running. The live track meters show sample peaks; loudness is
   measured offline (per track or in the export).
-- Resampling into the pattern channels and the instrument channels do not follow tempo changes yet.
+- Sounds saved from a loop into the pattern channels play at their recorded speed, and parameter rides on the
+  hosted instrument keep their duration in seconds; neither follows tempo changes yet.
 - Many moving parts: Rubber Band, JACK/PipeWire, ffmpeg, Node.js 22.18+, Python, and optionally
   Strudel, Carla and Surge XT. See [INSTALL.md](INSTALL.md).
 - The library search expects a catalog database that is not part of this repository.
