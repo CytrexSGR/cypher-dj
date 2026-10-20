@@ -16,7 +16,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 // Der Vertragstest in tests/arr.test.mjs liest jede Meldung nach den Feldern aus osc_adressen.ts (K1-Fix 12).
 // Wie der Kern (Review): ein wartender Start, der ohne Einsatz endet, bekommt 7 (abbruch, hand, ki_stopp); der KI-Stopp
-// beendet einen von Cypher gestarteten Transport (Spec 2.12). Während des KI-Stopps lehnt kern.mjs alle cypher-Befehle
+// beendet einen laufenden Transport von Cypher nicht mehr (Entscheidung E-a, vorher Spec 2.12), wohl aber ihren wartenden Start
+// (7 ki_stopp) und ihren Freeze. Während des KI-Stopps lehnt kern.mjs alle cypher-Befehle
 // ab außer /k/arr/stopp (Spec 6.27, gemeinsamer Fall djk/vertrag/faelle/arr_ki_stopp.json).
 import { llround } from './uhr.mjs';
 
@@ -89,12 +90,12 @@ export default {
       }
       melde(K, s);
     };
-    K.arrKiStopp = (s) => {   // Spec 2.12: der KI-Stopp beendet einen von Cypher gestarteten Transport
+    K.arrKiStopp = (s) => {   // Entscheidung E-a (2026-10-20), wie Arrangement::ki_stopp: Cyphers wartender Start und ihr Freeze enden, ein laufender Transport nicht
       const a = K.arr;
-      if (a.status === 0 || !a.cypher) return;
+      if (a.status === 0 || !a.cypher || (a.status !== 1 && !a.freeze)) return;
       startAbbrechen(K, s, 'ki_stopp');
       a.status = 0;
-      freezeEnde(K, s, false, 'ki_stopp');   // Paket K3: Cyphers Freeze endet mit dem KI-Stopp
+      freezeEnde(K, s, false, 'ki_stopp');   // Paket K3: Cyphers Freeze endet mit dem KI-Stopp (ihr Auftrag, kein Klang für Andreas)
       melde(K, s);
     };
     // Spec 6.33 (kern.mjs /k/tempo/rampe ruft es für jede Rampe im Bereich, gleich von welcher Quelle): bricht den Freeze ab

@@ -1,6 +1,6 @@
 // Reine Abbildungen des Bereichs proj (Spec D1 2.3, 2.12, 3.4, 6.15): Grund → HTTP-Code, Projekt → Regler-Sollwerte, Regler-Ereignis →
-// Befehl (Rückweg), Cyphers Spuren aus dem Spurfeld von (Spec 6.22), Liste der KI-Spur-Maske. Kein Server, kein Kern, keine Datei.
-import { FADER_MAX, FADER_MIN, herkunft, type Projekt, type Spur } from '../../projekt/modell.ts';
+// Befehl (Rückweg). Kein Server, kein Kern, keine Datei.
+import { FADER_MAX, FADER_MIN, type Projekt, type Spur } from '../../projekt/modell.ts';
 import type { Quelle } from '../../projekt/verlauf.ts';
 
 // --- Gründe → HTTP ----------------------------------------------------------------------------------------------------
@@ -62,12 +62,3 @@ export function reglerZuBefehl(p: Projekt, pfad: string, wert: number): { befehl
   return { befehl: { befehl: 'spur_aendern', spur_id: s.id, [feld]: w }, label: `Mixer: ${s.name} ${k}` };
 }
 export const istSpurRegler = (pfad: string): boolean => REGLER_PFAD.test(pfad);
-
-// --- Cyphers Spuren (Spec 6.15, 6.22) -----------------------------------------------------------------------------------
-// Die KI-Maske wird vollständig aus dem Spurfeld von abgeleitet (nicht aus dem Verlauf): `von` ist unveränderlich, fehlt es, gilt andreas.
-export function cypherSpuren(p: Projekt): number[] {
-  return p.spuren.filter((s) => herkunft(s) === 'cypher').map((s) => s.nr).sort((a, b) => a - b);
-}
-// Liste für /k/ki/spur in der Form von K1 (ki.cpp:94-112, Commit 755edead): ein Eintrag spur/<ziffern> (spur/13 = Spuren 1 und 3), spur/0 = keine
-// Spur. Ein solcher Eintrag ersetzt nur die Spur-Maske; die Kanal-Liste des Leitstands bleibt stehen.
-export const kiSpurListe = (nrs: readonly number[]): string => (nrs.length ? 'spur/' + [...nrs].sort((a, b) => a - b).join('') : 'spur/0');

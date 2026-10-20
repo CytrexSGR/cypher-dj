@@ -21,6 +21,7 @@ export const AUSGABE_FEHLER = {
   kein_kernstand: 'The core has not reported its state yet: try again in a moment',
   deck_laeuft: 'A deck is playing: stop it first (freezing needs the project tempo on the master)',
   freeze_fehler: 'Freezing failed in the core',
+  wirt_fehlt: 'The Surge host for this track is not running: start it with djk-instrumente --arr1',
   render_fehler: 'The export render failed',
   export_bereich: 'The export range must be 1 to 1024 beats long',
 };
@@ -51,6 +52,7 @@ export function laufText(lauf, arr, jetzt) {
   const sek = typeof lauf.seit === 'number' ? ` · ${Math.max(0, Math.floor((jetzt - lauf.seit) / 1000))} s` : '';
   const wo = arr?.status === 3 && Number.isFinite(arr.projekt_beat) ? ` · bar ${positionText(arr.projekt_beat)}` : '';
   if (lauf.art === 'freeze') return lauf.an ? `Freezing ${lauf.name}${wo}${sek}` : `Unfreezing ${lauf.name}…`;
+  if (lauf.art === 'lautheit') return `Measuring loudness${sek}`;   // Paket 1.18 E-b: ein Lauf von proj_lautheit (Cypher), ausgabe_lauf {art: 'lautheit'}
   return `${arr?.status === 3 ? `Exporting: freezing${wo}` : 'Exporting: rendering'}${sek}`;
 }
 

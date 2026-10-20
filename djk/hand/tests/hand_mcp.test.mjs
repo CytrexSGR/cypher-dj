@@ -12,7 +12,7 @@ const NAMEN = ['lage', 'bestand', 'laden', 'deck_start', 'deck_stopp', 'sprung',
   'regler', 'fx', 'fx_zuweisung', 'strudel', 'abbrechen', 'warte', 'hoeren',
   'studio', 'loops', 'rec', 'loop_klang', 'spur', 'spur_stopp', 'spuren', 'stille', 'pegel', 'klang', 'instrumente', 'bibliothek', 'anschluss', 'stoebern', 'klaenge', 'bestand_karte', 'vorbereiten',
   'sets', 'set_zeige', 'set_lege', 'set_vorbereiten', 'tempo',
-  'proj_liste', 'proj_neu', 'proj_oeffnen', 'proj_lage', 'proj_aendern', 'proj_undo', 'proj_redo', 'proj_verlauf', 'proj_transport', 'proj_freeze', 'proj_export'];   // D1 S2 (Spec 3.5)
+  'proj_liste', 'proj_neu', 'proj_oeffnen', 'proj_lage', 'proj_aendern', 'proj_undo', 'proj_redo', 'proj_verlauf', 'proj_transport', 'proj_freeze', 'proj_export', 'proj_lautheit'];   // D1 S2 (Spec 3.5), Paket 1.18 E-b
 
 async function aufbau(t, antworten, env) {
   const gesehen = [];
@@ -549,8 +549,8 @@ test('R6: proj_freeze und proj_export mit eigenem Zeitlimit (Umgebung), klare Me
     t.after(async () => { await c.close(); s.closeAllConnections?.(); s.close(); });
     return c;
   };
-  const kurz = await mitSeite({ DJK_HAND_FRIST_PROJ_EXPORT_MS: '300', DJK_HAND_FRIST_PROJ_FREEZE_MS: '300' }, 2500);
-  for (const [name, args] of [['proj_export', {}], ['proj_freeze', { spur_id: 's1', an: true }]]) {
+  const kurz = await mitSeite({ DJK_HAND_FRIST_PROJ_EXPORT_MS: '300', DJK_HAND_FRIST_PROJ_FREEZE_MS: '300', DJK_HAND_FRIST_PROJ_LAUTHEIT_MS: '300' }, 2500);
+  for (const [name, args] of [['proj_export', {}], ['proj_freeze', { spur_id: 's1', an: true }], ['proj_lautheit', {}]]) {   // S3-Fix G5: auch proj_lautheit
     const t0 = Date.now();
     const r = await kurz.callTool({ name, arguments: args });
     const dauer = Date.now() - t0;
@@ -584,4 +584,80 @@ test('R6: Vorgabe-Zeitlimits liegen über der längsten erlaubten Dauer (und üb
     assert.ok(ms > 300_000, `${name}: über der Undici-Grenze 300 s`);
     assert.match(b, new RegExp(`DJK_HAND_FRIST_${name.toUpperCase()}_MS`));
   }
+});
+
+// Paket 1.18, E-a: der Knopf senkt keinen Fader; die Werkzeugbeschreibung sagt es und nennt die KI-Maske nicht mehr.
+test('djk-hand proj_aendern (Paket 1.18 E-a): Stop Cypher senkt keinen Fader, die alte Aussage über die Maske ist weg', async (t) => {
+  const { c } = await aufbau(t, () => undefined);
+  const aendern = (await c.listTools()).tools.find((x) => x.name === 'proj_aendern');
+  assert.ok(aendern.description.includes('lowers no fader'));
+  assert.ok(!aendern.description.includes('Stop-Cypher mask'), 'die alte Aussage über die Maske ist weg');
+});
+
+// Paket 1.18, E-a (Transport, Andreas 2026-10-20): Stop Cypher stoppt auch einen laufenden Transport nicht, den Cypher gestartet hat; ein noch wartender Start fällt (Auslegung KS-w). Die Beschreibung sagt beides.
+test('djk-hand proj_transport (Paket 1.18 E-a): Stop Cypher stoppt keinen laufenden Transport, auch keinen eigenen; ein wartender Start fällt; die alte Aussage ist weg', async (t) => {
+  const { c } = await aufbau(t, () => undefined);
+  const transport = (await c.listTools()).tools.find((x) => x.name === 'proj_transport');
+  assert.ok(transport.description.includes('Stop Cypher stops no running transport'));
+  assert.ok(transport.description.includes('still waiting for its downbeat'), 'ein wartender Start fällt (KS-w)');
+  assert.ok(!transport.description.includes('Stop Cypher also stops a transport I started'), 'die alte Aussage ist weg');
+});
+
+// Paket 1.18, E-c: die Beschreibung von proj_aendern nennt gruppe und variante_waehlen.
+test('djk-hand proj_aendern (Paket 1.18 E-c): gruppe in spur_neu und spur_aendern, variante_waehlen mit seinem Verhalten', async (t) => {
+  const { c } = await aufbau(t, () => undefined);
+  const d = (await c.listTools()).tools.find((x) => x.name === 'proj_aendern').description;
+  for (const g of ['gruppe?', 'variante_waehlen {gruppe, spur_id}', '(one undo step: the chosen variant plays', 'tracks outside the gruppe are untouched', 'null = leave the group']) assert.ok(d.includes(g), `nennt ${g}`);
+});
+
+// Paket 1.18, E-a, Review 9a: proj_neu und proj_oeffnen nennen die Übergabe durch Stop Cypher (danach 409 transport_laeuft, wie beim Lauf von Andreas).
+test('djk-hand proj_neu/proj_oeffnen (Paket 1.18 E-a): die Beschreibung nennt den nach Stop Cypher übernommenen Transport', async (t) => {
+  const { c } = await aufbau(t, () => undefined);
+  const tools = (await c.listTools()).tools;
+  for (const name of ['proj_neu', 'proj_oeffnen']) assert.ok(tools.find((x) => x.name === name).description.includes('took over with Stop Cypher'), name);
+});
+
+// Paket 1.18, E-b: proj_lautheit geht als POST mit Quelle cypher an /proj/lautheit, Körper nur mit den angegebenen Beats, Ergebnis unverändert,
+// Fehler mit Grund und text als Werkzeugfehler. pegel nennt die Produktionsspuren.
+test('djk-hand proj_lautheit (Paket 1.18 E-b): Körper, Quelle cypher, Ergebnis unverändert, Fehlerabbildung; Beschreibung von pegel', async (t) => {
+  const ergebnis = { von_beat: 0, bis_beat: 32, spuren: [{ spur_id: 's1', nr: 1, name: 'Kick', lufs_i: -17.1, lra: 0.4, true_peak_dbtp: -3.2, spitze_db: -3.3, stumm: false },
+    { spur_id: 's2', nr: 2, name: 'Bass', lufs_i: null, lra: null, true_peak_dbtp: null, spitze_db: -200, stumm: true }],
+    summe: { lufs_i: -12.4, lra: 1.2, true_peak_dbtp: -1.0, spitze_db: -1.1, regler_quelle: 'projekt' } };
+  const { c, gesehen } = await aufbau(t, (m, u) => {
+    if (u === '/proj/lautheit') return gesehen.filter((x) => x.pfad === '/proj/lautheit').length === 1 ? [200, ergebnis]
+      : [409, { fehler: 'wirt_fehlt', text: 'the Surge host for the production slot (arr1) is not running; start it with djk-instrumente --arr1' }];
+  });
+  const e1 = await c.callTool({ name: 'proj_lautheit', arguments: {} });
+  assert.ok(!e1.isError, e1.content[0].text);
+  assert.deepEqual(JSON.parse(e1.content[0].text), ergebnis);
+  const e2 = await c.callTool({ name: 'proj_lautheit', arguments: { von_beat: 4, bis_beat: 12 } });
+  assert.equal(e2.isError, true); assert.match(e2.content[0].text, /wirt_fehlt/); assert.match(e2.content[0].text, /djk-instrumente --arr1/);
+  assert.deepEqual(gesehen.map((x) => [x.methode, x.pfad, x.quelle, x.koerper]), [
+    ['POST', '/proj/lautheit', 'cypher', {}], ['POST', '/proj/lautheit', 'cypher', { von_beat: 4, bis_beat: 12 }]]);
+  const werkzeuge = (await c.listTools()).tools;
+  const la = werkzeuge.find((x) => x.name === 'proj_lautheit');
+  assert.deepEqual(Object.keys(la.inputSchema.properties).sort(), ['bis_beat', 'von_beat']);
+  for (const g of ['lufs_i', 'stumm', 'wirt_fehlt', 'ki_gestoppt', 'export_bereich', 'summe', 'proj_export', 'null (not -70)']) assert.ok(la.description.includes(g), `proj_lautheit nennt ${g}`);
+  const pegel = werkzeuge.find((x) => x.name === 'pegel');
+  for (const g of ['spur/1..8', 'proj_lautheit', 'sample peak']) assert.ok(pegel.description.includes(g), `pegel nennt ${g}`);
+});
+
+// Paket 1.18, S3-Fix G4/G5: die Beschreibungen nennen wirt_fehlt an Freeze, Export und Lautheit, das neue Feld unter_messgrenze und die Solo-Regel;
+// die Frist von proj_lautheit behauptet nicht, über der längsten Laufzeit des Servers zu liegen (9 Renders zu je 4 · 1024 s + 60 s, rund 646 min),
+// sondern nennt ihre Grenze, den Override und hand_frist.
+test('djk-hand (Paket 1.18 S3-Fix): wirt_fehlt bei Freeze und Export, unter_messgrenze und Solo bei proj_lautheit, ehrliche Frist von proj_lautheit', async (t) => {
+  const { c } = await aufbau(t, () => null);
+  const werkzeuge = (await c.listTools()).tools;
+  const text = (n) => werkzeuge.find((x) => x.name === n).description;
+  for (const n of ['proj_freeze', 'proj_export', 'proj_lautheit']) assert.match(text(n), /Refused:[^]*wirt_fehlt/, `${n}: wirt_fehlt steht in der Liste der Ablehnungen`);
+  const la = text('proj_lautheit');
+  assert.match(la, /unter_messgrenze/); assert.match(la, /[Ss]olo/);
+  // Negativ-Kontrolle: die zwei Werkzeuge mit der berechneten Frist behalten ihren Satz
+  for (const n of ['proj_freeze', 'proj_export']) assert.match(text(n), /above the longest run the server allows/);
+  assert.doesNotMatch(la, /above the longest run the server allows/, 'für proj_lautheit stimmt der Satz nicht');
+  assert.match(la, /waits at most 80 min \(tool limit, DJK_HAND_FRIST_PROJ_LAUTHEIT_MS;/);
+  assert.match(la, /hand_frist/); assert.match(la, /about 10\.8 h/);
+  // die Rechnung hinter der Zahl: Freeze (≈ 291 s) + 9 Renders zu 4 · 1024 s + 60 s + 9 ffmpeg-Messungen zu 120 s
+  const grenzfallMin = (291 + 9 * (4 * 1024 + 60) + 9 * 120) / 60;
+  assert.ok(grenzfallMin > 640 && grenzfallMin < 650, `Grenzfall ${grenzfallMin} min`);
 });

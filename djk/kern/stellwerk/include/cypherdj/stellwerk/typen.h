@@ -17,7 +17,6 @@ constexpr float STUMM_GRENZE = -120.0f;    // §1.2: jeder Wert <= -120 gilt als
 constexpr float STUMM_RAMPE = -60.0f;      // §1.2: Rampen von/nach stumm interpolieren bis -60 dB
 constexpr double TOTZONE = 3.0 / 128.0;    // §7.3 Punkt 3
 constexpr double RUECKGABE_BEATS = 32.0;   // §7.3 Punkte 4 und 5
-constexpr double KI_STOPP_BEATS = 4.0;     // §4.7
 constexpr int REGLER_MELDUNG_ABSTAND = SR / 50;  // §5.7: höchstens 50 Hz je Regler
 constexpr int HAND_MELDUNG_ABSTAND = SR / 20;    // §5.8: höchstens 20 Hz
 

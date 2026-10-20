@@ -115,7 +115,8 @@ int main() {
     t.lauf(110000);
     PRUEF(t.arr.hole_gestartet() == 99840 + 793);
   }
-  {  // 9: KI-Stopp beendet nur einen von cypher gestarteten Transport
+  {  // 9: E-a (2026-10-20): der KI-Stopp beendet einen LAUFENDEN Transport nicht, auch keinen von cypher gestarteten (vorher steht bei cy == 1, gestoppt bei 99840;
+     // der Einsatz war bei 90 000)
     for (int cy = 0; cy < 2; ++cy) {
       Treiber t;
       t.laden(schnapp());
@@ -123,8 +124,28 @@ int main() {
       t.lauf(99840);
       t.arr.ki_stopp(t.s, t.k);
       t.lauf(100352);
-      PRUEF(t.arr.status() == (cy == 1 ? ArrStatus::steht : ArrStatus::spielt));
-      if (cy == 1) PRUEF(t.arr.hole_gestoppt() == 99840);
+      PRUEF(t.arr.status() == ArrStatus::spielt);
+      PRUEF(t.arr.hole_gestoppt() == -1);
+    }
+  }
+  {  // 9b: E-a: ein noch WARTENDER Start von cypher (Einsatz bei 90 000 steht aus) endet beim KI-Stopp sofort, wie vorher; ein wartender von Andreas nicht
+    for (int cy = 0; cy < 2; ++cy) {
+      Treiber t;
+      t.laden(schnapp());
+      t.arr.start(0.0, 2, cy == 1, 0, V, 256, t.k);
+      t.lauf(40000);
+      PRUEF(t.arr.status() == ArrStatus::wartet);
+      const int64_t s0 = t.s;
+      t.arr.ki_stopp(t.s, t.k);
+      PRUEF(t.arr.status() == (cy == 1 ? ArrStatus::steht : ArrStatus::wartet));
+      t.lauf(100352);
+      if (cy == 1) {
+        PRUEF(t.arr.hole_gestoppt() == s0);
+        PRUEF(t.arr.hole_gestartet() == -1);
+      } else {
+        PRUEF(t.arr.hole_gestoppt() == -1);
+        PRUEF(t.arr.hole_gestartet() == 90000);
+      }
     }
   }
   {  // 10: Spec 2.2: start_beat auf oder hinter bis (Loop 0..8 an) spielt linear, die Klammer greift nicht. Audio-Impuls

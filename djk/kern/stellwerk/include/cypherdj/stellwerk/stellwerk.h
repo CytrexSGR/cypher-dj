@@ -217,7 +217,6 @@ class Stellwerk {
   uint32_t ki_spur_ = 0;      // Bit k = Kanal k gehört zur KI-Spur
   uint8_t ki_spur_arr_ = 0;   // D1 K1: Bit n − 1 = spur/<n> gehört zur KI-Spur (eigene Liste, die Spur-Regler sind global)
   int16_t spur_fader_[SPUR_REGLER_SPUREN] = {};   // D1 K1: Regler-Index von spur/<n>/fader
-  void ki_fader_ab(int r, int64_t s, double b0, Quelle quelle);   // KI-Stopp: Fader r über 4 Beats auf −200
   bool stems_[5] = {};
   int64_t jetzt_ = 0;
   int64_t zyklus_s0_ = 0;

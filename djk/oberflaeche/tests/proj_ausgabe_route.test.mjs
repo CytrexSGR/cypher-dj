@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { stapel, post, warte } from './hilfen/mediathek.mjs';
+import { stapel, post, warte, startArr1 } from './hilfen/mediathek.mjs';
 import { innen } from './hilfen/innen.mjs';
 import { ruf, CYPHER } from './hilfen/proj_stapel.mjs';
 
@@ -76,7 +76,8 @@ async function mitSurge(url, o) {
 const aktuell = async (url) => (await ruf(url, 'GET', '/proj/aktuell')).j;
 
 test('Freeze durch die Kern-Attrappe: Datei im Arbeitsordner, sha256, ausgabe_lauf während des Laufs, Sperre an den Routen (Noten, Tempo 409, Fader 200)', async (t) => {
-  const { o, url, optionen } = await stapel(t);
+  const st = await stapel(t); await startArr1(st, t);
+  const { o, url, optionen } = st;
   await mitSurge(url, o);
   const vorher = await aktuell(url);
   assert.equal(vorher.ausgabe_lauf, null);
@@ -114,7 +115,8 @@ test('Freeze durch die Kern-Attrappe: Datei im Arbeitsordner, sha256, ausgabe_la
 });
 
 test('Spec 6.33: offene Tempo-Rampe in der Attrappe → /proj/freeze 409 beschaeftigt mit Ursache, Projekt unverändert, Sperre frei', async (t) => {
-  const { o, url } = await stapel(t);
+  const st = await stapel(t); await startArr1(st, t);
+  const { o, url } = st;
   await mitSurge(url, o);
   const vorher = await aktuell(url);
   // eine Rampe 128 → 128: der Master bleibt beim Projekttempo (tempoAnMaster tut nichts), die Rampe ist im Kern offen (wartet oder läuft)
@@ -137,7 +139,8 @@ test('Export über die Route: Surge-Spur vorher eingefroren, WAV im Projektordne
   const alt = process.env.CYPHERDJ_RENDER;
   process.env.CYPHERDJ_RENDER = path.join(import.meta.dirname, 'hilfen', 'render_attrappe.mjs');
   t.after(() => { if (alt === undefined) delete process.env.CYPHERDJ_RENDER; else process.env.CYPHERDJ_RENDER = alt; });
-  const { o, url, optionen } = await stapel(t);
+  const st = await stapel(t); await startArr1(st, t);
+  const { o, url, optionen } = st;
   assert.deepEqual(o.routen().filter((r) => r.pfad === '/proj/export').map((r) => [r.bereich, r.methode, r.schutz]), [['proj-ausgabe', 'POST', 'fremdePost']]);
   const roh = await fetch(`${url}/proj/export`, { method: 'POST', body: '{}' });
   assert.deepEqual([roh.status, (await roh.json()).fehler], [415, 'nur_json'], 'Schutz fremdePost vor dem Handler');
@@ -188,7 +191,8 @@ test('Export über die Route: Surge-Spur vorher eingefroren, WAV im Projektordne
 // Fix-Runde S3, R7: Server-Stopp mitten im Freeze. stoppe() schließt die Ausgabe: der wartende Freeze endet sofort mit freeze_fehler (Ursache:
 // Server endet), Timer und Sperre frei, http.close wartet nicht auf die Stille-Grenze (2 s) oder die Frist. Vorher hielt der Freeze den Stopp.
 test('R7: stoppe() mitten im Freeze antwortet sofort freeze_fehler (server is shutting down), Sperre frei, stoppe() hängt nicht', async (t) => {
-  const { o, url } = await stapel(t);
+  const st = await stapel(t); await startArr1(st, t);
+  const { o, url } = st;
   await mitSurge(url, o);
   const vorher = await aktuell(url);
   // langer Clip: der Freeze läuft rund 31 s (66 Beats bei 128 BPM)

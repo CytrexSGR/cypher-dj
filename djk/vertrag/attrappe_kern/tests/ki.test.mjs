@@ -10,7 +10,7 @@ const gruen = (r) => assert.ok(r.ok, r.fehler.join('\n'));
 const AB = arbeitsbestand({ materialien: [{ beats: 400 }] });
 const cfg = { arbeitsbestand: AB };
 
-test('ki_stopp: alle cypher-Teile ab (ki_stopp), KI-Spur über 4 Beats stumm, danach ki_gestoppt; frei nur von andreas', () => {
+test('ki_stopp (E-a): alle cypher-Teile ab (ki_stopp), kein Fader gesenkt, danach ki_gestoppt; frei nur von andreas', () => {
   const r = fahre([
     ...deckRein(3, { id0: 10, ab: 8, mid: ID, quelle: 'cypher' }),
     sende(1000, ['/k/ki/spur', 'hss', 1, 'leitstand', 'deck/3,erz/1']),
@@ -20,8 +20,8 @@ test('ki_stopp: alle cypher-Teile ab (ki_stopp), KI-Spur über 4 Beats stumm, da
     erwarte(S(20) + 512, q(2, 'cypher', 7, null, 'ki_stopp')),
     erwarte(S(20) + 512, q(3, 'cypher', 7, null, 'ki_stopp')),
     erwarte(S(20) + 512, ['/e/ki', 'ish', 1, 'ki_stopp', null]),
-    wert(S(22) + 256, 'deck/3/fader', -30, 0.5),
-    wert(S(24) + 512, 'deck/3/fader', -200),
+    wert(S(22) + 256, 'deck/3/fader', 0),     // Entscheidung E-a: die KI-Spur (deck/3) wird nicht gesenkt (vorher −30, dann −200)
+    wert(S(24) + 512, 'deck/3/fader', 0),
     sende(S(26), teil(5, 'cypher', 'p2', 0, 'deck/1/eq/tief', 30, 0, -3)),
     erwarte(S(26) + 512, q(5, 'cypher', 6, null, 'ki_gestoppt')),
     sende(S(27), ['/k/ki/frei', 'hs', 6, 'leitstand']),
@@ -62,7 +62,7 @@ test('LED, Kiste, Mapping, Latenz, Stufe, Vorschlagskanal: angenommen; falsche N
   gruen(r);
 });
 
-test('D1 Spec 6.15: KI-Spur mit Cyphers Spuren (S2) und Kanälen (Leitstand) getrennt; Kurzform spur/<ziffern>, spur/0 leert', () => {
+test('D1 Spec 6.15 (E-a): KI-Spur-Listen mit Cyphers Spuren (S2) und Kanälen (Leitstand) getrennt geführt; der Stopp senkt keine', () => {
   const r = fahre([
     sende(1000, ['/k/ki/spur', 'hss', 1, 'leitstand', 'erz/1']),
     sende(1000, ['/k/ki/spur', 'hss', 2, 'andreas', 'spur/1,spur/2']),
@@ -74,15 +74,15 @@ test('D1 Spec 6.15: KI-Spur mit Cyphers Spuren (S2) und Kanälen (Leitstand) get
     erwarte(1600, q(5, 'andreas', 6, null, 'unbekannter_regler')),
     sende(S(2), teil(6, 'andreas', 'p', 0, 'erz/1/fader', 4, 0, -6)),
     sende(S(10), ['/k/ki/stopp', 'hs', 7, 'andreas']),
-    wert(S(16), 'erz/1/fader', -200),
-    wert(S(16), 'spur/1/fader', -200),
-    wert(S(16), 'spur/3/fader', -200),
-    wert(S(16), 'spur/2/fader', 0),   // Andreas' Spur bleibt laut
+    wert(S(16), 'erz/1/fader', -6),   // E-a: die Listen senken nichts, jeder Fader behält seinen Wert (vorher alle −200 außer spur/2)
+    wert(S(16), 'spur/1/fader', 0),
+    wert(S(16), 'spur/3/fader', 0),
+    wert(S(16), 'spur/2/fader', 0),
   ], { cfg });
   gruen(r);
 });
 
-test('D1 Spec 6.15: spur/0 leert nur die Spuren, die leere Liste nur die Kanäle', () => {
+test('D1 Spec 6.15 (E-a): spur/0 leert nur die Spuren, die leere Liste nur die Kanäle; keine Liste senkt etwas', () => {
   const r = fahre([
     sende(1000, ['/k/ki/spur', 'hss', 1, 'leitstand', 'erz/1,spur/2']),
     sende(1000, ['/k/ki/spur', 'hss', 2, 'andreas', 'spur/0']),
@@ -92,7 +92,7 @@ test('D1 Spec 6.15: spur/0 leert nur die Spuren, die leere Liste nur die Kanäle
     sende(S(10), ['/k/ki/stopp', 'hs', 6, 'andreas']),
     wert(S(16), 'erz/1/fader', -6),
     wert(S(16), 'spur/2/fader', 0),
-    wert(S(16), 'spur/4/fader', -200),
+    wert(S(16), 'spur/4/fader', 0),   // E-a: auch die Spur in der Liste (spur/4) bleibt offen (vorher −200)
   ], { cfg });
   gruen(r);
 });
@@ -125,30 +125,24 @@ test('D1 Spec 6.27: KI-Stopp am Arrangement wie im Kern (djk/vertrag/faelle/arr_
   assert.deepEqual(fehler, []);
 });
 
-// D1 S2-Integration Fix7 U2 (Re-Review Fix6, probe_attrappe_kernnah.diff v2): der KI-Stopp wie im Kern (djk/kern/stellwerk/src/ki.cpp
-// ki_fader_ab). Ein Fader, den Andreas hält oder dessen Ist-Wert schon stumm ist (≤ −120), bleibt unberührt: keine Ausblende, und seine Teile
-// laufen weiter (auch Andreas' wartende Rückfahrt). Sonst bricht der Stopp ALLE Teile an diesem Fader ab (nicht nur Cyphers) und blendet über
-// 4 Beats aus. Vorher blendete die Attrappe jeden Stopp aus und ließ fremde Teile stehen: der Stapel sah den Fehlerfall von Fix6 T2 nicht.
-// Ist-Wert der Rampe −200 → −3 bei Ankunft des Abbruchs (Beat 13, ein Viertel), aus der Attrappe gelesen; entscheidend ist: über −120, nicht −200
-const HALT = -45.68;
-test('U2 KI-Stopp kernnah: Fader mit Ist-Wert ≤ −120 bleibt (keine Ausblende, wartender Teil läuft), sonst alle Teile am Fader ab', () => {
+// Entscheidung E-a (2026-10-20), DJ-Spiel wie Produktion: der KI-Stopp senkt keinen Fader (djk/kern/stellwerk/src/ki.cpp). Cyphers Teile enden
+// (eine laufende Rampe hält am Ist-Wert, wie /k/abbruch), fremde Teile laufen weiter. Vorher (D1 S2-Integration Fix7 U2) bildete dieser Fall
+// ki_fader_ab nach: Ausblende über 4 Beats, Fader in Andreas' Hand und schon stumme Fader ausgenommen.
+test('E-a KI-Stopp: kein Fader wird gesenkt, Cyphers laufende Rampe hält am Ist-Wert, fremde Teile laufen weiter, auch an Fadern der KI-Spur', () => {
   const r = fahre([
     sende(1000, ['/k/ki/spur', 'hss', 1, 'andreas', 'spur/124']),
-    sende(S(1), teil(2, 'andreas', 'p', 0, 'spur/1/fader', 2, 0, -200)),        // stumm vor dem Stopp
-    sende(S(1), teil(3, 'andreas', 'ki_rueck', 1, 'spur/1/fader', 12, 4, -3)),  // wartet beim Stopp (wie die Rückfahrt)
-    sende(S(1), teil(4, 'andreas', 'p', 1, 'spur/2/fader', 14, 0, -6)),         // laut (0 dB), wartender fremder Teil
-    sende(S(1), teil(5, 'andreas', 'p', 2, 'spur/4/fader', 2, 0, -200)),
-    sende(S(1), teil(6, 'andreas', 'ki_rueck', 4, 'spur/4/fader', 8, 4, -3)),   // läuft beim Stopp (Ist über −120, r.wert reicht nicht)
-    sende(S(10), ['/k/ki/stopp', 'hs', 7, 'andreas']),
-    erwarte(S(10) + 512, ['/e/ki', 'ish', 1, 'ki_stopp', null]),
-    erwarte(S(12) + 512, q(3, 'andreas', 2, S(12))),                           // spur/1: nicht abgebrochen, startet
-    sende(S(13), ['/k/abbruch', 'hsss', 8, 'andreas', 'ki_rueck', '1']),        // der Abbruch kommt nach dem Start (Fix6 T2, Reihenfolge B)
-    erwarte(S(13) + 512, q(3, 'andreas', 7, null, 'abbruch')),
-    wert(S(15), 'spur/1/fader', HALT, 0.05),                                    // hält am Ist-Wert: keine Ausblende, die ihn auf −200 zöge
-    erwarte(S(10) + 512, q(4, 'andreas', 7, null, 'ki_stopp')),                 // spur/2: fremder Teil ab, Ausblende
-    wert(S(15), 'spur/2/fader', -200),
-    erwarte(S(10) + 512, q(6, 'andreas', 7, null, 'ki_stopp')),                 // spur/4: laufende Rampe ab, Ausblende
-    wert(S(15), 'spur/4/fader', -200),
+    sende(S(1), teil(2, 'andreas', 'p', 0, 'spur/1/fader', 2, 0, -6)),          // gesetzt auf −6, in der KI-Spur
+    sende(S(1), teil(3, 'cypher', 'c', 0, 'deck/1/eq/mitte', 4, 16, -16)),      // Cyphers Rampe Beat 4 bis 20: bei Beat 12 halb unterwegs
+    sende(S(1), teil(4, 'andreas', 'l', 0, 'deck/1/eq/hoch', 4, 16, -16)),      // Negativ-Kontrolle: Andreas' gleiche Rampe läuft weiter
+    sende(S(1), teil(6, 'andreas', 'm', 0, 'spur/2/fader', 4, 16, -16)),        // Andreas' Rampe an einem Fader der KI-Spur läuft ebenso weiter (Review S1)
+    sende(S(12), ['/k/ki/stopp', 'hs', 5, 'andreas']),
+    erwarte(S(12) + 512, q(3, 'cypher', 7, null, 'ki_stopp')),
+    erwarte(S(12) + 512, ['/e/ki', 'ish', 1, 'ki_stopp', null]),
+    wert(S(14), 'spur/1/fader', -6),                                            // in der KI-Spur, nicht gesenkt (vorher −200)
+    wert(S(14), 'deck/1/eq/mitte', -8, 0.2),                                    // hält am Ist-Wert vom Stopp
+    wert(S(18), 'deck/1/eq/mitte', -8, 0.2),                                    // und bleibt dort
+    wert(S(18), 'deck/1/eq/hoch', -14, 0.3),                                    // Andreas' Rampe läuft weiter
+    wert(S(18), 'spur/2/fader', -14, 0.3),                                      // auch in der KI-Spur
   ], { cfg });
   gruen(r);
 });

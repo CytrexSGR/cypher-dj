@@ -106,15 +106,15 @@ test('P2 verschieden (anderes Projekt, Kern ohne Wiedergabe, Nummer unbekannt): 
   }
 });
 
-test('P2 KI-Stopp (Nachsatz): bei gleicher Nummer bleibt der Fader von Cyphers Spuren, solange der Kern ki_gestoppt meldet; die übrigen Felder und Andreas\' Fader werden übernommen', async (t) => {
+test('P2 KI-Stopp (E-a): bei gleicher Nummer ist jeder Fader des Kerns eine Handbewegung, auch der von Cyphers Spur; Andreas\' Fader und die übrigen Felder ebenso', async (t) => {
   const { z, nr } = neustart(t);
   z.k.ki = true;
   z.s.ereignis('/zustand/arr', arrNr(nr));
-  ist(z.s, 'spur/1/fader', -12); ist(z.s, 'spur/2/fader', -40); ist(z.s, 'spur/2/pan', 0.5);   // spur/2 gehört cypher: -40 ist die Absenkung des KI-Stopps
+  ist(z.s, 'spur/1/fader', -12); ist(z.s, 'spur/2/fader', -40); ist(z.s, 'spur/2/pan', 0.5);   // spur/2 gehört cypher; der Stopp senkt sie nicht mehr
   const r = await z.s.oeffnen('wa', 'andreas');
   const sp = r.j.projekt.spuren;
-  assert.deepEqual([sp[0].fader_db, sp[1].fader_db, sp[1].pan], [-12, 0, 0.5]);
-  // Negativ-Kontrolle: ohne KI-Stopp ist -40 eine Handbewegung und wird übernommen
+  assert.deepEqual([sp[0].fader_db, sp[1].fader_db, sp[1].pan], [-12, -40, 0.5]);
+  // Gegenprobe ohne KI-Stopp: dasselbe Ergebnis (der Stopp ändert nichts am Öffnen)
   const { z: z2, nr: nr2 } = neustart(t);
   z2.s.ereignis('/zustand/arr', arrNr(nr2)); ist(z2.s, 'spur/2/fader', -40);
   assert.equal((await z2.s.oeffnen('wa', 'andreas')).j.projekt.spuren[1].fader_db, -40);

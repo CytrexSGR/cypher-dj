@@ -18,6 +18,10 @@
 //   RENDER_ATTRAPPE_PROTOKOLL=<datei>  hängt je Aufruf eine JSON-Zeile an: argv, Instanz, Inhalt der Spur-Regler-Datei, Wiedergabe
 //   RENDER_ATTRAPPE_SCHLAF_MS=<n>      vor dem Schreiben warten (Zeitlimit-Tests)
 //   RENDER_ATTRAPPE_AUSGABE=kaputt     WAV schreiben, Rückgabe 0, aber keine JSON-Zeile (Aufräumen nach unlesbarer Antwort)
+//   RENDER_ATTRAPPE_MISCHUNG=1         Paket 1.18 E-b: statt eines Sinus eine Mischung aus den Spuren der Wiedergabe-Datei, je Spur ein Sinus von 220 · nr Hz
+//                                      mit Spitze 0,2 · 10^(Fader/20), nur für Spuren mit Inhalt im Bereich, still bei Mute 1. Fader und Mute kommen aus --spur-regler (Vorgabe 0 dB, nicht stumm),
+//                                      in JEDEM Modus, auch mit Zustand (der echte Render nähme dann die Regler des Kerns; das prüft nur der Lauf auf einer Prüfinstanz).
+//                                      spitze_db ist die echte Spitze der Mischung (−200 bei Stille).
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -80,9 +84,25 @@ if (schlaf > 0) await new Promise((r) => setTimeout(r, schlaf));
 
 const frames = Math.round((bis - von) * 60 / bpm * 48000);
 const daten = Buffer.alloc(frames * 8);
-for (let i = 0; i < frames; i++) {
-  const x = 0.5 * Math.sin(2 * Math.PI * 440 * i / 48000);
-  daten.writeFloatLE(x, i * 8); daten.writeFloatLE(x, i * 8 + 4);
+let spitze = 0.5;
+if (process.env.RENDER_ATTRAPPE_MISCHUNG === '1') {
+  const regel = (n, k, vorgabe) => (regler && regler[`spur/${n}/${k}`] !== undefined ? regler[`spur/${n}/${k}`] : vorgabe);
+  // nur Spuren mit Inhalt im Bereich [von, bis): Audio-Clips und Noten tragen absolute Beats (Wiedergabe-Format, wiedergabe.ts)
+  const klingt = (sp) => [...(sp.clips ?? []), ...(sp.noten ?? [])].some((x) => x.beat === undefined ? x.start_beat < bis && x.start_beat + x.laenge_beats > von
+    : x.beat < bis && x.beat + x.laenge > von);
+  const stimmen = (w.spuren ?? []).filter((sp) => klingt(sp) && regel(sp.nr, 'mute', 0) !== 1).map((sp) => [220 * sp.nr, 0.2 * 10 ** (regel(sp.nr, 'fader', 0) / 20)]);
+  spitze = 0;
+  for (let i = 0; i < frames; i++) {
+    let x = 0;
+    for (const [hz, amp] of stimmen) x += amp * Math.sin(2 * Math.PI * hz * i / 48000);
+    daten.writeFloatLE(x, i * 8); daten.writeFloatLE(x, i * 8 + 4);
+    spitze = Math.max(spitze, Math.abs(x));
+  }
+} else {
+  for (let i = 0; i < frames; i++) {
+    const x = 0.5 * Math.sin(2 * Math.PI * 440 * i / 48000);
+    daten.writeFloatLE(x, i * 8); daten.writeFloatLE(x, i * 8 + 4);
+  }
 }
 const kopf = Buffer.alloc(44);
 kopf.write('RIFF', 0); kopf.writeUInt32LE(36 + daten.length, 4); kopf.write('WAVE', 8);
@@ -91,5 +111,5 @@ kopf.writeUInt32LE(48000, 24); kopf.writeUInt32LE(48000 * 8, 28); kopf.writeUInt
 kopf.write('data', 36); kopf.writeUInt32LE(daten.length, 40);
 try { fs.writeFileSync(a.aus, Buffer.concat([kopf, daten]), { flag: 'wx' }); } catch (e) { ende(e.code === 'EEXIST' ? 8 : 6, `WAV: ${e.message}`); }
 if (process.env.RENDER_ATTRAPPE_AUSGABE === 'kaputt') { process.stdout.write('fertig, aber ohne JSON\n'); process.exit(0); }
-process.stdout.write(JSON.stringify({ datei: a.aus, frames, spitze_db: -6.021, start_sample: 793, phase: 25, quantum: Number(a.quantum ?? 256), vorhalt: 84,
+process.stdout.write(JSON.stringify({ datei: a.aus, frames, spitze_db: process.env.RENDER_ATTRAPPE_MISCHUNG === '1' ? (spitze > 0 ? Math.round(20 * Math.log10(spitze) * 1000) / 1000 : -200) : -6.021, start_sample: 793, phase: 25, quantum: Number(a.quantum ?? 256), vorhalt: 84,
   regler: quelle === 'kern' ? 436 : Object.keys(regler).length, regler_quelle: quelle }) + '\n');

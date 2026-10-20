@@ -61,7 +61,7 @@ export async function starteProjAttrappe({ oben, port = 0, dekodierMs = 300, fre
   // pan −1..+1, pegel_db −60..0). Clip- und Notenbefehle rechnet S2 selbst (mitS2, D1 V2).
   // D1 V2: diese Befehle (und clip_neu für MIDI) laufen über S2 fuehreAus; dessen Ablehnung kommt mit S2-Grund und Server-Code zurück
   // V2 Fix F13: tempo_setzen auch über S2, damit ein anderes Tempo Freezes verwirft wie dort (befehle.ts verwerfeFreezes)
-  const S2_BEFEHLE = new Set(['clip_aendern', 'clip_teilen', 'clip_duplizieren', 'clip_loeschen', 'noten_neu', 'noten_aendern', 'noten_loeschen', 'tempo_setzen']);
+  const S2_BEFEHLE = new Set(['clip_aendern', 'clip_teilen', 'clip_duplizieren', 'clip_loeschen', 'noten_neu', 'noten_aendern', 'noten_loeschen', 'tempo_setzen', 'variante_waehlen']);   // Paket 1.18 E-c: variante_waehlen rechnet S2
   const ueberS2 = (b) => S2_BEFEHLE.has(b?.befehl) || (b?.befehl === 'clip_neu' && b.art === 'midi');
   function mitS2(p, b) {
     try { return fuehreAus(p, b).projekt; } catch (e) { if (e instanceof BefehlFehler) throw new Fehl(grundCode(e.grund), e.grund); throw e; }

@@ -97,5 +97,15 @@ for z in "cypher_stumm:playback_F" "cypher_stumm-i:playback_F" "cypherdj-pruef-i
   pruef $([ "$R" = 0 ]; echo $?) "A5 Negativ-Kontrolle Riegel $z: Rückgabe $R"
 done
 
+# A6 --arr1 (Paket 1.18): der Produktions-Wirt startet über djk-start; die Option ist bekannt (Vorlagen-Modus nimmt sie an), steht in --help und im
+#    Aufruf, und die Zeile mit djk-instrumente --arr1 steht im Startweg. Negativ-Kontrolle: eine unbekannte Option bleibt Rückgabe 2.
+rm -rf "$O/v"; lauf "$O/a6.txt" "$START/djk-start" "${VN[@]}" "$O/v" --arr1; R=$?
+pruef $([ "$R" = 0 ]; echo $?) "A6 djk-start --arr1 (Vorlagen-Modus): Rückgabe $R"
+lauf "$O/a6.txt" "$START/djk-start" --help; R=$?
+[ "$R" = 0 ] && grep -q -- "^  --arr1 " "$O/a6.txt"; pruef $? "A6 --help beschreibt --arr1: Rückgabe $R"
+grep -q 'djk-instrumente" ${I:+--instanz "$I"} --arr1' "$START/djk-start"; pruef $? "A6 der Startweg ruft djk-instrumente --arr1"
+lauf "$O/a6.txt" "$START/djk-start" "${VN[@]}" "$O/v" --arr2; R=$?
+[ "$R" = 2 ]; pruef $? "A6 Negativ-Kontrolle --arr2: Rückgabe $R"
+
 echo "ERGEBNIS $OK OK, $FEHL FEHL"
 [ "$FEHL" = 0 ]

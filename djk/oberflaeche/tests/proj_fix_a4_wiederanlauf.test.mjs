@@ -64,7 +64,7 @@ for (const wischen of [true, false]) test(`A4 Probe R6: Arbeitsordner gewischt=$
 });
 
 // --- Wiederanlauf: Kern gewinnt ganz ---------------------------------------------------------------------------------------------------
-test('A4 Wiederanlauf: weder erz/4 noch Loop noch Metronom neu gesetzt; die KI-Maske schon (sie kommt aus dem Projekt)', async (t) => {
+test('A4 Wiederanlauf: weder erz/4 noch Loop noch Metronom neu gesetzt; die KI-Maske wird geleert (E-a: spur/0)', async (t) => {
   const { z, nr } = neustart(t);
   z.s.ereignis('/zustand/arr', arrNr(nr));
   for (const n of [1, 2]) for (const [f, w] of [['fader', 0], ['pan', 0], ['mute', 0], ['solo', 0]]) ist(z.s, `spur/${n}/${f}`, w);
@@ -73,7 +73,7 @@ test('A4 Wiederanlauf: weder erz/4 noch Loop noch Metronom neu gesetzt; die KI-M
   assert.equal(z.k.teile(/^erz\/4\//).length, 0, 'kein erz/4');
   assert.equal(z.k.an('/k/arr/loop').length, 0, 'kein Loop'); assert.equal(z.k.an('/k/arr/metronom').length, 0, 'kein Metronom');
   assert.equal(z.k.an('/k/arr/laden').length, 0, 'keine neue Wiedergabe');
-  assert.deepEqual(z.k.an('/k/ki/spur').map((x) => x.felder.kanaele), ['spur/2']);
+  assert.deepEqual(z.k.an('/k/ki/spur').map((x) => x.felder.kanaele), ['spur/0']);
 });
 
 test('A4 Negativ-Kontrolle: verschiedene Nummer → erz/4, Loop, Metronom und alle 32 Spur-Regler werden gesetzt', async (t) => {
@@ -98,12 +98,12 @@ test('A4 unbekannter Ist-Wert: Kern liefert nur spur/1, Projekt hat spur/1 und s
   assert.deepEqual([sp[0].fader_db, sp[0].pan, sp[0].mute, sp[1].fader_db], [-12, 0.5, true, 0], 'spur/1 übernommen, spur/2 bleibt');
 });
 
-test('A4 unbekannter Fader einer Cypher-Spur während des KI-Stopps: nicht gesendet (die Absenkung des Kerns bleibt), Andreas\' Spur schon', async (t) => {
+test('A4 unbekannter Fader einer Cypher-Spur während des KI-Stopps (E-a): wird wie jeder andere aus dem Projekt gesendet', async (t) => {
   const { z, nr } = neustart(t);
   z.k.ki = true;
   z.s.ereignis('/zustand/arr', arrNr(nr));
   await z.s.oeffnen('wa', 'andreas');
-  assert.equal(z.k.teile(/^spur\/2\/fader$/).length, 0, 'spur/2 gehört cypher');
+  assert.equal(z.k.teile(/^spur\/2\/fader$/).length, 1, 'spur/2 gehört cypher, der Stopp senkt sie nicht');
   assert.equal(z.k.teile(/^spur\/1\/fader$/).length, 1);
   assert.equal(z.k.teile(/^spur\/2\/pan$/).length, 1);
 });

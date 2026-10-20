@@ -1,6 +1,7 @@
 // Scheibe 25: KI-Stopp, KI-Spur, KI-Stufe, Abbruch und /k/set/neu im Kern, offline über Kern::zyklus.
 //  1. Die Golden-Folge ki_stopp (SCHNITTSTELLEN §19.3, §4.7) ohne Läufer: alle cypher-Teile ab (Grund ki_stopp), die
-//     KI-Spur (deck/3) über 4 Beats auf −200, weitere cypher-Teile abgelehnt (ki_gestoppt), leitstand geht weiter
+//     KI-Spur (deck/3) wird nicht gesenkt (Entscheidung E-a, 2026-10-20; vorher über 4 Beats auf −200), weitere cypher-Teile abgelehnt
+//     (ki_gestoppt), leitstand geht weiter
 //     (Negativ-Kontrolle), /k/ki/frei nur von andreas.
 //  2. /k/ki/stufe: Quittung 1 und 3, der Kern merkt die Stufe (LEDs ab Scheibe 35); Stufe 4 lehnt das Netz ab.
 //  3. /k/abbruch (§4.3): der laufende Teil hält am Ist-Wert, der wartende entfällt; Formfehler in der Liste → 6.
@@ -52,8 +53,8 @@ int main() {
   for (const auto& e : k.ev)
     if (e.art == cdj::Ereignis::KI) (e.status ? ki1 : ki0)++;
   PRUEF(ki1 == 1 && ki0 == 1);
-  PRUEF_NAH(k.wert_bei("deck/3/fader", 1'125'000), -30.0, 0.7);  // KI-Spur über 4 Beats, ab −60 interpoliert
-  PRUEF(k.wert_bei("deck/3/fader", 1'172'400) == -200.0);
+  PRUEF_NAH(k.wert_bei("deck/3/fader", 1'125'000), 0.0, 0.0);  // E-a: die KI-Spur wird nicht gesenkt (vorher −30, dann −200)
+  PRUEF(k.wert_bei("deck/3/fader", 1'172'400) == 0.0);
   PRUEF_NAH(k.wert_bei("deck/3/eq/hoch", 1'215'000), -10.028, 0.03);  // hält am Ist-Wert
   PRUEF(std::isnan(k.wert_bei("deck/1/eq/mitte", 1'305'000)));        // wartender Teil entfiel: nie gemeldet
   PRUEF((q = k.q(5, 3)) && q->sample == 1'260'000);                   // leitstand fährt zu Ende

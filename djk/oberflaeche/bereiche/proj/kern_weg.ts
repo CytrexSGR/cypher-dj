@@ -29,34 +29,14 @@ export class KernWeg {
 
   // Regler setzen (/k/teil, Dauer 0, ab sofort, Politik 1: zu spät heißt sofort ausgeführt, Quittung 5). Alle parallel, Ergebnis je Pfad.
   setzeRegler(liste: readonly Soll[], quelle: Quelle): Promise<ReglerErgebnis[]> {
-    return this.teile(liste, abBeatVon(this.beat(), this.bpm(), 'jetzt'), 0, quelle);
+    return this.teile(liste, abBeatVon(this.beat(), this.bpm(), 'jetzt'), quelle);
   }
-  // Spec 6.35: Regler über eine Gleitzeit fahren (/k/teil mit dauer_beats, Form 0, Politik 1), ab jetzt plus `versatz` Beats, frühestens ab
-  // `fruehest`. Die Rückfahrt nach der KI-Freigabe: eine Rampe, die die Ausblende des Stopps überlappt, lehnt der Kern mit ueberlappung ab.
-  // Spec 6.36: `plan` und `teil` (je Regler) benennen die Teile, damit der Server genau sie mit /k/abbruch beenden kann (ohne Plan träfe ein
-  // Abbruch alle planlosen Teile derselben Quelle, Festlegung F5). Gesendet wird sofort (synchron); `ab` ist der Start-Beat, das Versprechen
-  // wartet auf die Quittungen (bei einem späten Start bis zu dessen Beat, höchstens 4 s).
-  // Spec 6.37: `kurz` wartet nur das kurze Fenster ab wie setzeRegler (Sofort-Ablehnungen des Kerns, etwa ueberlappung), nicht bis zum Start:
-  // für eine Antwort an die Seite, die nicht auf den späten Start einer Rückfahrt warten soll (angenommen, Status 1, gilt als gelungen).
-  fahreRegler(liste: readonly Soll[], dauerBeats: number, quelle: Quelle,
-    o: { fruehest?: number | null; versatz?: number; plan?: string; teil?: (pfad: string) => number; kurz?: boolean } = {},
-  ): { ab: number; ergebnis: Promise<ReglerErgebnis[]> } {
-    const jetzt = abBeatVon(this.beat(), this.bpm(), 'jetzt');
-    const ab = Math.max(jetzt + (o.versatz ?? 0), o.fruehest ?? -Infinity);
-    return { ab, ergebnis: this.teile(liste, ab, dauerBeats, quelle, o.plan, o.teil, o.kurz ? jetzt : ab) };
-  }
-  // Spec 6.36: /k/abbruch für die genannten Teile eines Plans (laufende halten am Ist-Wert, wartende entfallen; SCHNITTSTELLEN §4.3)
-  async abbruch(plan: string, teile: readonly number[], quelle: Quelle): Promise<Quittung> {
-    const id = this.ctx.sende('/k/abbruch', { quelle, plan, teile: teile.join(',') });
-    return this.ctx.warteQuittung(id);
-  }
-  // warteAb: bis zu welchem Beat auf eine Quittung ≠ 1 gewartet wird (Vorgabe: der Start ab)
-  private async teile(liste: readonly Soll[], ab: number, dauer: number, quelle: Quelle, plan?: string, teil?: (pfad: string) => number,
-    warteAb: number = ab): Promise<ReglerErgebnis[]> {
-    const ids = liste.map((r) => this.ctx.sende('/k/teil', { quelle, plan: plan ?? (quelle === 'cypher' ? 'cypher' : ''), teil: teil ? teil(r.pfad) : 0,
-      pfad: r.pfad, ab_beat: ab, dauer_beats: dauer, nach: r.wert, form: 0, politik: 1, gruppe: '', hoerschein: '' }));
+  // Alle Regler als /k/teil, parallel; Quittung je Regler. Cyphers Teile tragen den Plan "cypher" (/k/abbruch trifft sie).
+  private async teile(liste: readonly Soll[], ab: number, quelle: Quelle): Promise<ReglerErgebnis[]> {
+    const ids = liste.map((r) => this.ctx.sende('/k/teil', { quelle, plan: quelle === 'cypher' ? 'cypher' : '', teil: 0,
+      pfad: r.pfad, ab_beat: ab, dauer_beats: 0, nach: r.wert, form: 0, politik: 1, gruppe: '', hoerschein: '' }));
     return Promise.all(liste.map(async (r, i) => {
-      const q = await this.ctx.warteQuittung(ids[i], warteAb);
+      const q = await this.ctx.warteQuittung(ids[i], ab);
       return { pfad: r.pfad, wert: r.wert, quittung: q, ok: quittungOk(q) };
     }));
   }

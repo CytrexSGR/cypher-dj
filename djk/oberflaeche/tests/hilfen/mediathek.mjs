@@ -10,6 +10,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { Oberflaeche } from '../../server.ts';
 import { baueBestand } from './bestand.mjs';
 import { schreibeLeerenRing } from './ring.mjs';
+import { starteWirtProzess, schreibeWirtStatus } from './wirt_prozess.mjs';
 export const HIER = path.dirname(fileURLToPath(import.meta.url));
 export const REPO = path.resolve(HIER, '..', '..', '..', '..');
 import { K, TEST_INSTANZ, belegeTestInstanz } from './instanz.mjs';
@@ -152,6 +153,13 @@ export async function stapel(t, { mediathek, python, bestand, einleserModul, sam
   assert.equal(o.kern.zustand, 'verbunden');
   // optionen: D1 S2 Fix4 J1, ein zweiter Server auf denselben Ordnern und derselben Attrappe (Server-Neustart im Test)
   return { o, log, url: `http://127.0.0.1:${47300 + K}`, bestandDir, att, optionen };   // att: Plan d1-s1 Task 5 (SSE-Meldung kern)
+}
+
+// Paket 1.18 (Erhebung 2026-10-20): /proj/freeze lehnt ohne Produktions-Wirt arr1 mit wirt_fehlt ab. Der Stapel hat einen eigenen leeren Wirt-Ordner;
+// wer einen Freeze fährt, legt hier die Status-Datei an, die djk-instrumente --arr1 schreibt (wirt-arr1.json: bereit:true, pid eines lebenden
+// wirt.py; S3-Fix W2 — hier ein Stellvertreter, der bei t.after endet).
+export async function startArr1(stapelErgebnis, t) {
+  schreibeWirtStatus(stapelErgebnis.optionen.wirtOrdner, { pid: (await starteWirtProzess(t)).pid });
 }
 
 export const hole = (url, pfad) => fetch(url + pfad).then(async (r) => ({ code: r.status, j: await r.json() }));

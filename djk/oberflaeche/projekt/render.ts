@@ -11,6 +11,7 @@ export interface RenderAufruf {
   programm: string[];        // [Pfad zu cypherdj-render] oder im Test [node, render_attrappe.mjs]
   nr: number; von_beat: number; bis_beat: number; bpm: number;
   aus: string; arbeitsordner: string; spurRegler: string; instanz: string; zeitlimitMs: number;
+  ohneZustand?: boolean;     // Paket 1.18 E-b: --ohne-zustand, die Regler kommen allein aus spurRegler (Quelle projekt), nie aus dem Neustart-Zustand des Kerns
   abbruch?: AbortSignal;     // Fix-Runde 2 S3, F4: der Server endet; tötet die Gruppe wie das Zeitlimit
 }
 export interface RenderAntwort { datei: string; frames: number; spitze_db: number; regler_quelle: 'kern' | 'projekt' }
@@ -54,7 +55,7 @@ export function reglerAusProjekt(p: Projekt): Record<string, number> {
 
 export function renderArgumente(a: RenderAufruf): string[] {
   return ['--nr', String(a.nr), '--von-beat', String(a.von_beat), '--bis-beat', String(a.bis_beat), '--bpm', String(a.bpm),
-    '--aus', a.aus, '--arr-ordner', a.arbeitsordner, '--spur-regler', a.spurRegler];
+    '--aus', a.aus, '--arr-ordner', a.arbeitsordner, '--spur-regler', a.spurRegler, ...(a.ohneZustand ? ['--ohne-zustand'] : [])];
 }
 
 const AUS_MAX = 65536, ERR_MAX = 8192;

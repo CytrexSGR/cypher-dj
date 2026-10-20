@@ -14,7 +14,7 @@ test('KernLage: Uhr, Decks, Boxen, Regler, /zustand/arr; djLaeuft nach Spec 2.2 
   const l = new KernLage();
   assert.equal(l.djLaeuft(), false, 'nichts bekannt: quant 0');
   l.nimm('/uhr', { sample: 0n, mono_ns: 0n, beat: 12.5, bpm: 124, bpm_pro_s: 0 });
-  assert.deepEqual(l.uhr, { beat: 12.5, bpm: 124, sample: 0 });   // sample seit Fix4 J1 (Spec 6.35: Stopp-Beat aus /e/ki sample)
+  assert.deepEqual(l.uhr, { beat: 12.5, bpm: 124 });
   l.nimm('/zustand/deck', { deck: 1, status: 1 }); assert.equal(l.djLaeuft(), false, 'geladen ist nicht laufend');
   l.nimm('/zustand/deck', { deck: 1, status: 2 }); assert.equal(l.djLaeuft(), true); assert.equal(l.deckLaeuft(), true);
   l.nimm('/zustand/deck', { deck: 1, status: 0 }); assert.equal(l.djLaeuft(), false);
@@ -71,15 +71,6 @@ test('abbildung: Rückweg /e/regler → spur_aendern (Nummer → ID, 0/1 → boo
   assert.equal(AB.reglerZuBefehl(p, 'spur/5/fader', -3), null, 'keine Spur auf Slot 5');
   assert.equal(AB.reglerZuBefehl(p, 'erz/4/fader', -3), null);
   assert.equal(AB.reglerZuBefehl(p, 'spur/1/fader', NaN), null);
-});
-
-test('abbildung: Cyphers Spuren aus dem Feld von (Spec 6.22, nicht aus dem Verlauf), Liste der KI-Maske', () => {
-  const p = specProjekt();
-  assert.deepEqual(AB.cypherSpuren(p), [], 'ohne von gilt andreas');
-  p.spuren[2].von = 'cypher'; assert.deepEqual(AB.cypherSpuren(p), [3]);
-  p.spuren[0].von = 'cypher'; p.spuren[1].von = 'andreas'; assert.deepEqual(AB.cypherSpuren(p), [1, 3], 'nach Nummer sortiert');
-  assert.equal(AB.kiSpurListe([3, 1]), 'spur/13');                                 // K1-Form (ki.cpp:94-112, 755edead): spur/<ziffern>
-  assert.equal(AB.kiSpurListe([]), 'spur/0');                                      // spur/0 = keine Spur
 });
 
 test('konfig: arr_ordner aus kern.toml (mit Instanz umgeschrieben), leer oder fehlend: Vorgabe ~/.cache/cypherdj[-<i>]/arr', (t) => {

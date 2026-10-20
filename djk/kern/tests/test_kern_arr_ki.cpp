@@ -1,9 +1,11 @@
 // D1 K1 Slice 8: KI-Stopp und Neustart am Arrangement (Spec D1 2.12, 2.3). Bei KI-Stopp lehnt der Kern /k/arr/laden und
 // /k/arr/start der Quelle cypher ab (ki_gestoppt; der Schnappschuss geht als ARR_ALT zurück), Andreas lädt und startet
-// weiter; ein KI-Stopp beendet einen von cypher gestarteten Transport, einen von Andreas nicht; spur/<n> in der KI-Spur
-// fällt mit dem KI-Stopp über 4 Beats auf −200. Neustart-Zustand: spur/<n>/* kommen wieder, das Arrangement nicht.
-// Spec 6.15 (Fälle 5, 6): S2 trägt Cyphers Spuren in die KI-Spur ein, der Leitstand seine Kanäle; ein KI-Stopp senkt beide,
-// Andreas' Spur bleibt laut, Cyphers Transport stoppt; nach einem Neustart gelten beide Listen weiter.
+// weiter; ein KI-Stopp beendet einen LAUFENDEN Transport nicht, auch keinen von cypher gestarteten (Entscheidung E-a, 2026-10-20, Andreas: „was klingt,
+// klingt weiter“; vorher Spec 2.12 beendete er Cyphers Transport, Fälle 2 und 5). Was noch nicht klingt, verwirft er weiter: Cyphers wartenden Start (Fall 9,
+// 7 ki_stopp) und ihren Freeze (test_kern_arr_freeze Fall 3). Neustart-Zustand: spur/<n>/* kommen wieder, das Arrangement nicht.
+// Entscheidung E-a (2026-10-20): ein KI-Stopp senkt keinen Fader mehr (vorher: spur/<n> in der KI-Spur fiel über 4 Beats auf −200).
+// Spec 6.15 (Fälle 5, 6): S2 trägt Cyphers Spuren in die KI-Spur ein, der Leitstand seine Kanäle; die Listen werden geführt und überstehen
+// einen Neustart, der Stopp senkt aber keinen Fader; Cyphers Transport läuft weiter.
 // Spec 6.27 (Fall 7, K1-Fix 4): der gemeinsame Fall djk/vertrag/faelle/arr_ki_stopp.json, den auch die Attrappe fährt
 // (ki.test.mjs): laden, start, loop, metronom und (Paket K3) freeze von cypher abgelehnt (ki_gestoppt), stopp von cypher
 // erlaubt.
@@ -53,7 +55,7 @@ int main() {
     PRUEF(x.quittung(l_an, 3) && x.quittung(s_an, 2));
     PRUEF(x.kern->arrangement().status() == ArrStatus::spielt);
   }
-  for (int cy = 0; cy < 2; ++cy) {  // 2: KI-Stopp beendet nur Cyphers Transport
+  for (int cy = 0; cy < 2; ++cy) {  // 2: E-a: der KI-Stopp beendet keinen laufenden Transport, auch Cyphers nicht (vorher steht bei cy == 1)
     arr35::Lauf x(ab.pfad, "test_kern_arr_ki");
     x.laden(1, spur);
     x.start(0.0, 0, cy ? "cypher" : "andreas");
@@ -61,9 +63,14 @@ int main() {
     PRUEF(x.kern->arrangement().status() == ArrStatus::spielt);
     x.sende(x.neu(B::KI_STOPP, "andreas"));
     x.lauf(12 * N);
-    PRUEF(x.kern->arrangement().status() == (cy ? ArrStatus::steht : ArrStatus::spielt));
+    PRUEF(x.kern->arrangement().status() == ArrStatus::spielt);
+    x.lauf(200 * N);                                       // und bleibt es, bis Andreas stoppt
+    PRUEF(x.kern->arrangement().status() == ArrStatus::spielt);
+    const int64_t st = x.stopp(0, "andreas");
+    x.lauf(x.kern->sample() + 4 * N);
+    PRUEF(x.quittung(st, 3) && x.kern->arrangement().status() == ArrStatus::steht);
   }
-  {  // 3: KI-Spur mit spur/2: der Fader fällt über 4 Beats auf −200, spur/3 bleibt
+  {  // 3: KI-Spur mit spur/2: der Fader bleibt bei −3 (E-a; vorher fiel er über 4 Beats auf −200), spur/3 ebenso
     arr35::Lauf x(ab.pfad, "test_kern_arr_ki");
     x.teil("spur/2/fader", -3.0f, 0.0, 0.0);
     x.teil("spur/3/fader", -1.0f, 0.0, 0.0);
@@ -73,7 +80,7 @@ int main() {
     x.lauf(10 * N);
     x.sende(x.neu(B::KI_STOPP, "andreas"));
     x.lauf(10 * N + 4 * 22500 + 2 * N);
-    PRUEF(x.wert("spur/2/fader") == -200.0);
+    PRUEF(x.wert("spur/2/fader") == -3.0);
     PRUEF(x.wert("spur/3/fader") == -1.0);
   }
   {  // 4: Neustart-Zustand: Spur-Regler kommen wieder (auch im Modul), das Arrangement nicht
@@ -90,8 +97,8 @@ int main() {
     PRUEF(y.wert("spur/1/fader") == -6.0);
     PRUEF(y.kern->arrangement().snapshot() == nullptr);   // der Server lädt nach /e/neustart neu (Spec 2.12, S2)
   }
-  {  // 5: Leitstand deck/3, S2 spur/1 und spur/3 (Cyphers Spuren), Transport von Cypher; KI-Stopp senkt deck/3, spur/1,
-     // spur/3 auf −200, spur/2 (Andreas) bleibt, der Transport steht
+  {  // 5: Leitstand deck/3, S2 spur/1 und spur/3 (Cyphers Spuren), Transport von Cypher; der KI-Stopp senkt keinen dieser Fader (E-a),
+     // der Transport von Cypher läuft weiter
     arr35::Lauf x(ab.pfad, "test_kern_arr_ki");
     x.laden(1, spur);
     for (const char* p : {"deck/3/fader", "spur/1/fader", "spur/2/fader", "spur/3/fader"}) x.teil(p, -2.0f, 0.0, 0.0);
@@ -107,11 +114,10 @@ int main() {
     PRUEF(x.kern->arrangement().status() == ArrStatus::spielt);
     x.sende(x.neu(B::KI_STOPP, "andreas"));
     x.lauf(10 * N + 4 * 22500 + 2 * N);
-    for (const char* p : {"deck/3/fader", "spur/1/fader", "spur/3/fader"}) PRUEF(x.wert(p) == -200.0);
-    PRUEF(x.wert("spur/2/fader") == -2.0);
-    PRUEF(x.kern->arrangement().status() == ArrStatus::steht);
+    for (const char* p : {"deck/3/fader", "spur/1/fader", "spur/2/fader", "spur/3/fader"}) PRUEF(x.wert(p) == -2.0);
+    PRUEF(x.kern->arrangement().status() == ArrStatus::spielt);
   }
-  {  // 6: Neustart-Zustand trägt beide Listen (Leitstand deck/3, S2 spur/2): nach dem Neustart senkt ein KI-Stopp beide
+  {  // 6: Neustart-Zustand trägt beide Listen (Leitstand deck/3, S2 spur/2): nach dem Neustart senkt ein KI-Stopp keinen Fader (E-a)
     arr35::Lauf x(ab.pfad, "test_kern_arr_ki");
     cdj::Befehl l = x.neu(B::KI_SPUR, "leitstand");
     std::snprintf(l.liste, sizeof l.liste, "deck/3");
@@ -129,8 +135,8 @@ int main() {
     y.lauf(4 * N);
     y.sende(y.neu(B::KI_STOPP, "andreas"));
     y.lauf(4 * N + 4 * 22500 + 2 * N);
-    PRUEF(y.wert("deck/3/fader") == -200.0);
-    PRUEF(y.wert("spur/2/fader") == -200.0);
+    PRUEF(y.wert("deck/3/fader") == -2.0);
+    PRUEF(y.wert("spur/2/fader") == -2.0);
   }
   {  // 7: Spec 6.27, SCHNITTSTELLEN §4.7/§4.11: gemeinsamer Fall mit der Attrappe (djk/vertrag/faelle/arr_ki_stopp.json)
     const nlohmann::json f = nlohmann::json::parse(std::ifstream(CYPHERDJ_DJK "/vertrag/faelle/arr_ki_stopp.json"));
@@ -300,6 +306,27 @@ int main() {
                     b.at("quelle").get<std::string>().c_str(), b.at("werte").dump().c_str(), status, grund.c_str(), ende,
                     b.at("grund").get<std::string>().c_str());
       PRUEF(ok);
+    }
+  }
+  for (int cy = 0; cy < 2; ++cy) {  // 9: E-a: was noch nicht klingt, verwirft der KI-Stopp weiter: ein wartender Start von Cypher endet mit 7 ki_stopp (kein 2),
+                                    // ein wartender von Andreas setzt am Takt ein (2); danach läuft er, bis Andreas stoppt (3)
+    arr35::Lauf x(ab.pfad, "test_kern_arr_ki");
+    x.laden(1, spur);
+    x.lauf(2 * N);
+    const int64_t s_w = x.start(0.0, 2, cy ? "cypher" : "andreas");   // Takt: Einsatz bei 90 000
+    x.lauf(4 * N);
+    PRUEF(x.kern->arrangement().status() == ArrStatus::wartet);
+    x.sende(x.neu(B::KI_STOPP, "andreas"));
+    x.lauf(100000);
+    if (cy) {
+      PRUEF(x.quittung(s_w, 7) && x.quittung(s_w, 7)->grund == "ki_stopp" && !x.quittung(s_w, 2));
+      PRUEF(x.kern->arrangement().status() == ArrStatus::steht);
+    } else {
+      PRUEF(x.quittung(s_w, 2) && !x.quittung(s_w, 7));
+      PRUEF(x.kern->arrangement().status() == ArrStatus::spielt);
+      const int64_t st = x.stopp(0, "andreas");
+      x.lauf(110000);
+      PRUEF(x.quittung(st, 3) && x.kern->arrangement().status() == ArrStatus::steht);
     }
   }
   PRUEF_ENDE();

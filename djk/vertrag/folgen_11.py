@@ -145,7 +145,7 @@ def i4_ueberlappung():
 
 def ki_stopp():
     f = Folge("ki_stopp", "ki_stopp", ["11", "13", "25", "35"],
-              "/k/ki/stopp: alle cypher-Teile ab, KI-Spur über 4 Beats stumm, danach ki_gestoppt, frei nur durch andreas")
+              "/k/ki/stopp: alle cypher-Teile ab, kein Fader gesenkt (E-a), danach ki_gestoppt, frei nur durch andreas")
     f.hand_auf("deck/3/fader", 2)
     i = f.nid()
     f.sende(f.S(4), osc("/k/ki/spur", i, "leitstand", "deck/3,erz/1"), "ki", "§4.7 /k/ki/spur")
@@ -160,9 +160,9 @@ def ki_stopp():
         f.q(c, "cypher", ABGEBROCHEN, None, None, "ki_stopp", stopp + MARGE, ab=stopp,
             herleitung="§4.7: alle Teile mit Quelle cypher abgebrochen, Grund ki_stopp")
     f.erwarte(stopp + MARGE, osc("/e/ki", 1, None, None), "ki", ab=stopp, herleitung="§5.9 /e/ki gestoppt 1")
-    f.wert(f.S(50), "deck/3/fader", h.rampe_wert("deck/3/fader", 0.0, -200.0, 48.0, 4.0, 50.0), 0.7, "ki",
-           "§4.7 KI-Spur über 4 Beats auf −200, §1.2 bis −60 interpoliert; Toleranz für bis zu 1 000 Samples Ankunft")
-    f.wert(f.S(52) + MARGE, "deck/3/fader", -200.0, 0.0, "ki", "nach 4 Beats stumm (§1.2)")
+    f.wert(f.S(50), "deck/3/fader", 0.0, 0.0, "ki",
+           "Entscheidung E-a (2026-10-20): der Stopp senkt keinen Fader, auch nicht den der KI-Spur (vorher über 4 Beats auf −200)")
+    f.wert(f.S(52) + MARGE, "deck/3/fader", 0.0, 0.0, "ki", "E-a: nach 4 Beats unverändert (vorher stumm, §1.2)")
     f.wert(f.S(54), "deck/3/eq/hoch", h.rampe_wert("deck/3/eq/hoch", 0.0, -20.0, 40.0, 16.0, 48.0) - 0.028, 0.03, "ki",
            "§4.3 /k/abbruch-Semantik: laufender Teil hält am Ist-Wert (Ankunft zwischen Beat 48 und 48,044)")
     f.wert(f.S(58), "deck/1/eq/mitte", 0.0, 0.0, "ki", "wartender cypher-Teil entfällt")

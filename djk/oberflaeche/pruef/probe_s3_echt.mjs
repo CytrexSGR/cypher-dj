@@ -16,6 +16,7 @@ import { parseArgs } from 'node:util';
 import { starteStapel } from './stapel.mjs';
 import { starteBrowser } from './cdp.mjs';
 import { baueKatalog } from '../tests/hilfen/katalog.mjs';
+import { starteWirtProzess, schreibeWirtStatus } from '../tests/hilfen/wirt_prozess.mjs';
 
 const HIER = path.dirname(fileURLToPath(import.meta.url));
 const { values: opt } = parseArgs({ options: { instanz: { type: 'string', default: process.env.CYPHERDJ_PROBE_INSTANZ ?? 'i' } } });
@@ -64,6 +65,12 @@ const taste = async (key, code, modifiers = 0) => {
   await b.sende('Input.dispatchKeyEvent', { type: 'keyUp', key, code, modifiers, windowsVirtualKeyCode: vk });
 };
 const geladen = async () => { for (let i = 0; i < 150; i++) { const a = await aktuell(); if (a.kern?.rev_geladen === a.projekt?.wiedergabe_rev && a.kern?.status === 0) return true; await warte(50); } return false; };
+
+const WIRT = `/dev/shm/cypherdj-${opt.instanz}`;   // Wirt-Ordner der Prüfinstanz (nie der Betrieb): die Status-Datei, die djk-instrumente --arr1 schreibt
+fs.mkdirSync(WIRT, { recursive: true });
+// S3-Fix W2: der Server prüft bereit:true und eine lebende pid namens wirt.py; ein Stellvertreter (tests/hilfen/wirt_prozess.mjs) steht dafür ein
+const wirtProzess = await starteWirtProzess({ after: () => {} });   // beendet wird im finally unten (beende)
+schreibeWirtStatus(WIRT, { pid: wirtProzess.pid });
 
 try {
   // Projekt über die echte API (wie Cypher über MCP): Kick (Audio aus dem Katalog), Snare (leer), Bass (RB-338), Lead (Surge, 8 Beats), Loop 0..16,
@@ -197,6 +204,8 @@ try {
 } catch (e) {
   notiere('ABBRUCH', false, e.stack ?? String(e));
 } finally {
+  fs.rmSync(path.join(WIRT, 'wirt-arr1.json'), { force: true });
+  await wirtProzess.beende();
   await b.zu();
   await s.stoppe();
   fs.rmSync(fix, { recursive: true, force: true });

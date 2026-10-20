@@ -19,7 +19,6 @@ HS_ABSCHNITT_NACHLAUF = 64.0  # §17 I3a: Quellposition in [quell_von, quell_bis
 HS_GUELTIG_BEATS = 64.0   # §14.5: gueltig_bis_beat = gemessen_bis_beat + 64
 TOTZONE = 3.0 / 128.0     # §7.3 Punkt 3
 HALTER_RUECKGABE_BEATS = 32.0  # §7.3 Punkt 4
-KI_STOPP_BEATS = 4.0      # §4.7 /k/ki/stopp
 FRIST_BEATS = 32.0        # §17 Frist-Wächter
 RUECKFALL_LAENGE = 16.0   # §17 Frist-Wächter
 

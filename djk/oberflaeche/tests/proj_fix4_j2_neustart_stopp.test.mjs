@@ -1,7 +1,5 @@
-// D1 S2-Integration, vierte Fix-Runde J2 (Spec 6.35 zu 2.12 und 6.21, Nebenbefund N7 aus REVIEW-3-opus m6): Ein Kern-Neustart während des
-// KI-Stopps lässt die gestoppten Spuren stumm. nachNeustart setzte alle 32 Spur-Regler aus dem Projekt mit Quelle andreas, ohne die Ausnahme,
-// die der Wiederanlauf (6.21) für den Fader von Cyphers Spuren macht: der Kern stellt Stopp und −200 aus seinem Zustand wieder her, der Server
-// hob die Fader danach auf den Projektwert, Cyphers Spuren waren im Stopp laut.
+// D1 S2-Integration, vierte Fix-Runde J2 (Spec 6.35), umgeschrieben nach Entscheidung E-a (2026-10-20): ein Kern-Neustart während des KI-Stopps
+// setzt alle Spur-Regler aus dem Projekt, auch den Fader von Cyphers Spuren. Vorher blieb dieser Fader bei der Absenkung des Kerns.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { neustart, warteBis } from './hilfen/proj_kontext.mjs';
@@ -21,13 +19,11 @@ async function offenUndNeustart(t, gestoppt) {
   return z;
 }
 
-test('J2 Kern-Neustart im KI-Stopp: der Fader von Cyphers Spur wird nicht gesetzt, alles andere schon', async (t) => {
+test('J2 Kern-Neustart im KI-Stopp (E-a): alle 32 Spur-Regler werden gesetzt, auch der Fader von Cyphers Spur', async (t) => {
   const z = await offenUndNeustart(t, true);
   const teile = z.k.teile(/^spur\//).map((x) => x.felder.pfad);
-  console.log(`J2 stopp ${JSON.stringify({ zahl: teile.length, spur2: teile.filter((p) => p.startsWith('spur/2/')) })}`);
-  assert.ok(!teile.includes('spur/2/fader'), 'spur/2 gehört cypher: ihr Fader bleibt bei der Absenkung des Kerns');
-  assert.equal(teile.length, 31);
-  for (const p of ['spur/1/fader', 'spur/2/pan', 'spur/2/mute', 'spur/2/solo', 'spur/3/fader']) assert.ok(teile.includes(p), p);
+  assert.equal(teile.length, 32);
+  for (const p of ['spur/1/fader', 'spur/2/fader', 'spur/2/pan', 'spur/2/mute', 'spur/2/solo', 'spur/3/fader']) assert.ok(teile.includes(p), p);
 });
 
 test('J2 Negativ-Kontrolle ohne Stopp: alle 32 Spur-Regler werden gesetzt', async (t) => {
@@ -37,10 +33,10 @@ test('J2 Negativ-Kontrolle ohne Stopp: alle 32 Spur-Regler werden gesetzt', asyn
   assert.ok(teile.includes('spur/2/fader'));
 });
 
-// Am Stapel: echter KI-Stopp in der Kern-Attrappe, die Ausblende läuft ab, dann /e/neustart. Gemessen wird der Fader in der Attrappe.
-test('J2 Stapel: KI-Stopp, Ausblende, /e/neustart → Cyphers Spur bleibt in der Attrappe stumm, Andreas\' Spur bleibt offen', async (t) => {
+// Am Stapel: echter KI-Stopp in der Kern-Attrappe, dann /e/neustart. Gemessen wird der Fader in der Attrappe: beide Spuren bleiben offen.
+test('J2 Stapel (E-a): KI-Stopp, /e/neustart → Cyphers Spur und Andreas\' Spur bleiben in der Attrappe offen', async (t) => {
   const { o, url } = await stapel(t);
-  await ruf(url, 'POST', '/proj/neu', { name: 'Stumm' });
+  await ruf(url, 'POST', '/proj/neu', { name: 'Offen' });
   let r = await ruf(url, 'POST', '/proj/aendern', { rev: 0, label: 'Meine', befehle: [{ befehl: 'spur_neu', art: 'instrument' }] }, CYPHER);
   r = await ruf(url, 'POST', '/proj/aendern', { rev: r.j.rev, label: 'Andreas', befehle: [{ befehl: 'spur_neu', art: 'audio' }] });
   assert.equal(r.code, 200);
@@ -48,11 +44,14 @@ test('J2 Stapel: KI-Stopp, Ausblende, /e/neustart → Cyphers Spur bleibt in der
   assert.ok(await bis(() => wert('spur/1/fader') === 0 && wert('spur/2/fader') === 0), 'beide Fader offen');
   const ctx = o.bereichKontext();
   await ctx.warteQuittung(ctx.sende('/k/ki/stopp', { quelle: 'andreas' }));
-  assert.ok(await bis(() => wert('spur/1/fader') === -200, 4000), 'die Ausblende des Stopps ist durch');
+  assert.ok(await bis(() => innen(o).kiGestoppt), 'der Stopp gilt');
+  // beide Fader im Kern verstellen: nur ein Setzen durch nachNeustart bringt sie auf 0 zurück (auch Cyphers Spur, kein Ausnahmefall)
+  for (const pfad of ['spur/1/fader', 'spur/2/fader']) {
+    await ctx.warteQuittung(ctx.sende('/k/teil', { quelle: 'andreas', plan: '', teil: 0, pfad, ab_beat: 0, dauer_beats: 0, nach: -30, form: 0, politik: 1, gruppe: '', hoerschein: '' }));
+  }
+  assert.ok(await bis(() => wert('spur/1/fader') === -30 && wert('spur/2/fader') === -30), 'Vorbedingung: beide verstellt');
   const bpm = (await ruf(url, 'GET', '/lage')).j.uhr.bpm;
   innen(o).vomKern('/e/neustart', { generation: 4242, sample: 0 });
-  await warte(Math.max(500, 2 * 60000 / bpm));
-  const nach = { cypher: wert('spur/1/fader'), andreas: wert('spur/2/fader') };
-  console.log(`J2 stapel ${JSON.stringify(nach)}`);
-  assert.deepEqual(nach, { cypher: -200, andreas: 0 });
+  await warte(Math.max(800, 5 * 60000 / bpm));
+  assert.deepEqual({ cypher: wert('spur/1/fader'), andreas: wert('spur/2/fader') }, { cypher: 0, andreas: 0 });
 });

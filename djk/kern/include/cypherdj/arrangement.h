@@ -102,7 +102,7 @@ class Arrangement {
   void stopp(int quant, int64_t s, const Karte& k);
   // Loop-Klammer, am Blockanfang s; bis − von ≥ 1 prüft der Aufrufer
   void loop(bool an, double von, double bis, int64_t s, const Karte& k);
-  void ki_stopp(int64_t s, const Karte& k);                  // beendet einen von cypher gestarteten Transport bei s
+  void ki_stopp(int64_t s, const Karte& k);                  // E-a: beendet bei s einen wartenden Start und den Freeze von cypher, keinen laufenden Transport
   void metronom(bool an, float pegel_db, int ziel);          // ziel 0 master (vor dem Limiter), 1 cue (PFL-Summe)
 
   // ---- Spur-Regler spur/<n>/{fader,pan,mute,solo}, Werte je Sample aus dem Stellwerk

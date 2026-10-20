@@ -15,9 +15,10 @@ import { bindeVerlauf } from './verlauf_anzeige.js';
 import { bindeClips } from './clip_bedienung.js';
 import { bindeDetail } from './detail.js';
 import { bindeAusgabe } from './freeze_export.js';
+import { bindeVariantenReihen } from './varianten.js';
 import { AUSGABE_FEHLER, mehrdeutigText } from './ausgabe.js';
 
-const BINDER = [bindeZeitachse, bindeProjektwahl, bindeSpuren, bindeAblage, bindeTransport, bindeVerlauf, bindeClips, bindeDetail, bindeAusgabe];
+const BINDER = [bindeZeitachse, bindeProjektwahl, bindeSpuren, bindeAblage, bindeTransport, bindeVerlauf, bindeClips, bindeDetail, bindeAusgabe, bindeVariantenReihen];
 
 const GERUEST = `
 <div class="p-transport" role="toolbar" aria-label="Transport">
@@ -46,6 +47,7 @@ const GERUEST = `
     <button data-p="undo" title="Undo (Ctrl+Z)" disabled>↶ UNDO</button><button data-p="redo" title="Redo (Ctrl+Shift+Z)" disabled>↷ REDO</button>
     <button data-p="verlauf" aria-expanded="false" title="History of changes">HISTORY ▾</button>
   </div>
+  <div class="p-gruppe p-varianten" data-p="varianten" role="group" aria-label="Variants" hidden></div>
   <span class="p-offline" data-p="offline" role="status" title="The project server does not answer: this is the last state it sent" hidden>OFFLINE</span>
   <span class="p-meldung" data-p="meldung" role="status"></span>
   <span class="p-kern" data-p="kern" title="Arrangement in the core: loaded revision and transport state"></span>
@@ -70,7 +72,7 @@ export const FEHLER_TEXT = {
   rev_veraltet: 'The project changed elsewhere: reloaded, please repeat',
   regler_abgelehnt: 'The core refused a mixer change: nothing was changed',
   nichts_zu_tun: 'Nothing to undo or redo', kein_projekt: 'No project open', unbekannt: 'No such project', name_ungueltig: 'A project name needs 1 to 80 characters',
-  ki_gestoppt: 'Stop Cypher is set', deck_laeuft: 'A deck is playing: the tempo stays until it stops', nicht_geladen: 'The core has no arrangement loaded yet',
+  ki_gestoppt: 'Stop Cypher is set', ki_stopp: 'Stop Cypher was pressed: the start was dropped', deck_laeuft: 'A deck is playing: the tempo stays until it stops', nicht_geladen: 'The core has no arrangement loaded yet',
   zu_gross: AUSGABE_FEHLER.zu_gross, server_fehler: 'The project server did not answer: showing the last state', netz: 'Page server unreachable', keine_antwort: 'No answer from the core',
   spur_bereich: 'At most 8 tracks', slot_belegt: 'D1 has one Surge slot', spur_unbekannt: 'That track no longer exists', clip_unbekannt: 'That clip no longer exists',
   index_bereich: 'No such track position', tempo_bereich: 'Tempo: 60 to 200 BPM', loop_bereich: 'The loop needs at least 1 beat',

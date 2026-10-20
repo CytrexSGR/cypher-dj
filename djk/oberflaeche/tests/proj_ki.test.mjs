@@ -10,55 +10,21 @@ test('KI-Maske beim Öffnen (Spec 6.15): auch ohne Cyphers Spuren geht die Liste
   assert.equal(s.aktuell().j.projekt.rev, 0);
 });
 
-test('KI-Stopp beendet einen von Cypher gestarteten Transport (Spec 2.12); einen von Andreas nicht', async (t) => {
+// Entscheidung E-a (Andreas 2026-10-20): der Server stoppt nach dem KI-Stopp keinen Transport mehr, auch keinen von Cypher gestarteten (vorher Spec 2.12: /k/arr/stopp als
+// andreas); der Kern lässt einen laufenden weiterlaufen und verwirft nur einen noch wartenden Start von Cypher (7 ki_stopp). Die Übergabe an Andreas und die Sperre für
+// Cypher prüft proj_e_a_transport.test.mjs.
+test('KI-Stopp: der Server stoppt keinen Transport (E-a), weder einen von Cypher noch einen von Andreas gestarteten', async (t) => {
   const { s, k } = sitzung(t);
   await s.neu('S', 'andreas');
   await s.transport({ aktion: 'start' }, 'cypher'); k.leere();
   s.ereignis('/e/ki', { gestoppt: 1, grund: 'hand', sample: 0n });
-  assert.ok(await warteBis(() => k.an('/k/arr/stopp').length === 1));
-  assert.deepEqual(k.an('/k/arr/stopp')[0].felder, { quelle: 'andreas', quant: 0 });
+  await new Promise((r) => setTimeout(r, 80));
+  assert.equal(k.an('/k/arr/stopp').length, 0, 'Cyphers Transport läuft weiter (vorher stoppte der Server ihn als andreas)');
   s.ereignis('/e/ki', { gestoppt: 0, grund: 'frei', sample: 0n });
   await s.transport({ aktion: 'start' }, 'andreas'); k.leere();
   s.ereignis('/e/ki', { gestoppt: 1, grund: 'hand', sample: 0n });
   await new Promise((r) => setTimeout(r, 50));
-  assert.equal(k.an('/k/arr/stopp').length, 0);
-});
-
-test('KI-Maske (Spec 6.15, 6.22): Cyphers Spuren tragen sich ein, Andreas\' Spuren nicht; Löschen trägt aus; nach Wiederöffnen aus dem Feld von', async (t) => {
-  const { s, k } = sitzung(t);
-  await s.neu('M', 'andreas'); k.leere();
-  await s.aendern({ rev: 0, label: 'Cypher', befehle: [{ befehl: 'spur_neu', art: 'instrument' }] }, 'cypher');
-  assert.deepEqual(k.an('/k/ki/spur').map((x) => x.felder.kanaele), ['spur/1']);
-  await s.aendern({ rev: 1, label: 'Andreas', befehle: [{ befehl: 'spur_neu', art: 'audio' }] }, 'andreas');
-  assert.equal(k.an('/k/ki/spur').length, 1, 'Liste unverändert: nichts gesendet');
-  await s.oeffnen('m', 'andreas');
-  assert.equal(k.an('/k/ki/spur').at(-1).felder.kanaele, 'spur/1', 'Urheber aus dem Feld von, nicht aus undo.jsonl');
-  await s.aendern({ rev: 2, label: 'weg', befehle: [{ befehl: 'spur_loeschen', spur_id: 's1' }] }, 'andreas');
-  assert.equal(k.an('/k/ki/spur').at(-1).felder.kanaele, 'spur/0');
-});
-
-test('KI-Maske (P3b): jedes Undo und Redo sendet die Liste neu; eine Änderung ohne neue Spur sendet nichts', async (t) => {
-  const { s, k } = sitzung(t);
-  await s.neu('U', 'andreas');
-  await s.aendern({ rev: 0, label: 'Cypher', befehle: [{ befehl: 'spur_neu', art: 'audio' }] }, 'cypher'); k.leere();
-  await s.umkehr('undo', { rev: 1 }, 'andreas');
-  assert.deepEqual(k.an('/k/ki/spur').map((x) => x.felder.kanaele), ['spur/0'], 'Undo trägt die Spur aus');
-  await s.umkehr('redo', { rev: 2 }, 'andreas');
-  assert.deepEqual(k.an('/k/ki/spur').map((x) => x.felder.kanaele), ['spur/0', 'spur/1'], 'Redo trägt sie wieder ein');
-  await s.aendern({ rev: 3, label: 'Mixer', befehle: [{ befehl: 'spur_aendern', spur_id: 's1', pan: 0.5 }] }, 'andreas');
-  assert.equal(k.an('/k/ki/spur').length, 2, 'unverändert: nichts gesendet');
-});
-
-test('KI-Maske (P3b): eine abgelehnte Maske wird bei der nächsten Änderung erneut versucht', async (t) => {
-  let ablehnen = false;
-  const { s, k } = sitzung(t, {}, undefined);
-  k.regel = (adresse) => (adresse === '/k/ki/spur' && ablehnen ? { status: 6, grund: 'abgelehnt' } : { status: 3, grund: '' });
-  await s.neu('R', 'andreas');
-  ablehnen = true;
-  await s.aendern({ rev: 0, label: 'Cypher', befehle: [{ befehl: 'spur_neu', art: 'audio' }] }, 'cypher');
-  ablehnen = false; k.leere();
-  await s.aendern({ rev: 1, label: 'Mixer', befehle: [{ befehl: 'spur_aendern', spur_id: 's1', pan: 0.5 }] }, 'andreas');
-  assert.deepEqual(k.an('/k/ki/spur').map((x) => x.felder.kanaele), ['spur/1']);
+  assert.equal(k.an('/k/arr/stopp').length, 0, 'Negativ-Kontrolle: Andreas\' Transport ebenso');
 });
 
 test('Neustart des Kerns (Spec 2.12): letzte Wiedergabe neu laden, 32 Spur-Regler, Loop, Metronom, KI-Maske', async (t) => {

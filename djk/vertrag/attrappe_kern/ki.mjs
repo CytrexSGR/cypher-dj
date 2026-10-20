@@ -1,32 +1,13 @@
 // KI-Stopp und -Freigabe, KI-Spur, Stufe, Vorschlagskanal, LEDs, Kiste, Mapping, Latenz (SCHNITTSTELLEN §4.7) und der
 // Prüfklick /test/klick (ROADMAP Z1). Die Attrappe hat weder Controller noch Ton: LEDs, Kiste, Mapping und Latenz
-// werden angenommen und gespeichert, sonst ohne Wirkung. Die Ausblende der KI-Spur ist ein kerninterner Teil ohne
-// Quittung; I2 hält sie nicht an (die Stopp-Taste nimmt der KI sofort alles, ADR 013).
+// werden angenommen und gespeichert, sonst ohne Wirkung. Entscheidung E-a (2026-10-20): der KI-Stopp hält nur Cyphers Hand an (Teile ab,
+// ihr wartender Start und ihr Freeze enden, weitere Befehle abgelehnt; ein laufender Transport läuft weiter) und senkt keinen Fader; die KI-Spur-Listen werden geführt und senken nichts.
 
 import { SPIELKANAELE, KANALZUG_KANAELE, LEDS } from './vertrag.mjs';
-import { wertBei } from './regler.mjs';
-
-const STOPP_BEATS = 4;
-const STUMM_GRENZE = -120;   // SCHNITTSTELLEN §1.2: jeder Wert ≤ −120 dB ist stumm (typen.h STUMM_GRENZE)
 
 function kiStopp(K, s, quelle, grund) {
   for (const t of K.offeneTeile().filter((x) => x.quelle === 'cypher')) K.abbrechen(t, s, 'ki_stopp');
-  for (const k of [...(K.ki.kanaele ?? K.ki.spur ?? []), ...(K.ki.spuren ?? [])]) {   // ?? : Zustand einer älteren Attrappe
-    const pfad = `${k}/fader`;
-    const r = K.r.get(pfad);
-    // wie der Kern (ki.cpp ki_fader_ab): ein Fader, den Andreas hält oder dessen Ist-Wert schon stumm ist, bleibt unberührt (keine Ausblende,
-    // seine Teile laufen weiter); sonst fallen ALLE Teile an diesem Fader (nicht nur Cyphers), bevor die Ausblende beginnt (D1 S2int Fix7 U2)
-    if (r.halter === 'mensch' || wertBei(K, pfad, s) <= STUMM_GRENZE) continue;
-    for (const u of K.offeneTeile().filter((x) => x.pfad === pfad)) K.abbrechen(u, s, 'ki_stopp');
-    const t = { b: { key: `kern:ki_stopp:${k}:${s}`, intern: true }, art: 'regler', quelle, plan: '', teil: 0, gruppe: '', hoerschein: '',
-      pfad, nach: -200, form: 0, ab: K.uhr.beat(s), dauer: STOPP_BEATS, politik: 1, raster: 0, seq: ++K.seq };
-    t.ab_eff = t.ab;
-    t.dauer_eff = t.dauer;
-    t.status = 'wartet';
-    K.teile.push(t);
-    K.starte(t, s);
-  }
-  K.arrKiStopp?.(s);   // D1 K1 (Spec 2.12): Cyphers Transport stoppt
+  K.arrKiStopp?.(s);   // E-a: Cyphers wartender Start und ihr Freeze enden, ein laufender Transport nicht (vorher D1 K1 Spec 2.12: jeder)
   K.ki.gestoppt = true;
   K.leds.ki_gestoppt = 1;
   K.aus('/e/ki', [1, grund, BigInt(s)]);
@@ -55,8 +36,8 @@ export default {
     },
     '/k/ki/spur': (K, a, b) => {
       const liste = a.kanaele === '' ? [] : a.kanaele.split(',').map((x) => x.trim()).filter((x) => x !== '');
-      // D1 K1, Spec 6.15: auch spur/<ziffern> (spur/2, spur/135; spur/0 = keine), der Stopp senkt dann spur/<n>/fader.
-      // Spur-Einträge ersetzen nur die Spur-Liste (S2), Kanal-Einträge nur die Kanal-Liste (Leitstand); leer: Kanäle.
+      // D1 K1, Spec 6.15: auch spur/<ziffern> (spur/2, spur/135; spur/0 = keine); seit E-a nur geführt, der Stopp senkt nichts.
+      // Spur-Einträge ersetzen nur die Spur-Liste (S2 sendet nur spur/0), Kanal-Einträge nur die Kanal-Liste (Leitstand); leer: Kanäle.
       const spurEintrag = (k) => k.startsWith('spur/');
       if (liste.some((k) => (spurEintrag(k) ? !/^spur\/(0|[1-8]+)$/.test(k) : !SPIELKANAELE.includes(k)))) {
         return K.q(b, 6, 'unbekannter_regler');

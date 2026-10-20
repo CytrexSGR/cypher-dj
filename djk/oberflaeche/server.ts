@@ -419,7 +419,7 @@ export class Oberflaeche {
     // weil stoppe() den Bereich braucht; S3 zieht seinen Anker auf diese zwei Zeilen nach.
     this.proj = projBereich(this.bereichKontext(), { katalog: opt.katalog ?? katalogVorgabe(opt.mediathek ?? MEDIATHEK_VORGABE), ...opt.proj });
     this.router.melde(this.proj);
-    this.ausgabe = ausgabeBereich(this.bereichKontext(), this.proj.zugang);   // Paket S3: /proj/freeze, /proj/export (Spec 3.4)
+    this.ausgabe = ausgabeBereich(this.bereichKontext(), this.proj.zugang, { wirtOrdner: () => this.wirtBasis() });   // Paket S3: /proj/freeze, /proj/export (Spec 3.4)
     this.router.melde(this.ausgabe);
   }
 

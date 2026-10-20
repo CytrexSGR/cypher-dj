@@ -234,10 +234,13 @@ tr.auf-1 td.titelzelle { color: var(--a); } tr.auf-2 td.titelzelle { color: var(
 /* ===== Raster nach Traktor Pro 4 (Andreas 2026-09-27 ~21:00, Screenshot_20260927_203207: „so adaptieren wir es“) =====
    Schmaler Mixer in der Mitte, je Deck-Reihe eigene Züge (oben A · Master · B, unten C · L1 · L2); Decks bekommen die
    Breite; Library fest unten (klappbar); Phones und Crossfader im Kopf; Beat-FX kommt in Plan 3 als Leiste oben. */
-:root { --kopf: 52px; --lib: 30vh; --lib-zu: 34px; --zug: 74px; }
+/* Kopfleiste (2026-10-20, Andreas am rechten Monitor 2560 px, 100 %): mit FX1/FX2 samt P2/P3/ON/RESET, COLOR und
+   PRODUCTION ist der Kopf 3306 px breit. Bei overflow: hidden fielen COLOR, Stop Cypher und CORE/CONTROL/OUT rechts
+   aus dem Bild. Jetzt bricht der Kopf um, wenn er nicht passt: die Zeile wächst mit, nichts wird abgeschnitten. */
+:root { --kopf: minmax(52px, auto); --lib: 30vh; --lib-zu: 34px; --zug: 74px; }
 body { grid-template-rows: var(--kopf) minmax(0, 1fr) var(--lib); gap: 8px; padding: 8px; }
 body.lib-zu { grid-template-rows: var(--kopf) minmax(0, 1fr) var(--lib-zu); }
-#kopf { gap: 20px; padding: 0 14px; border-radius: 8px; }
+#kopf { gap: 20px; padding: 0 14px; border-radius: 8px; flex-wrap: wrap; row-gap: 4px; }
 .feld b { font-size: 22px; } #bpm { font-size: 22px; } .marke { font-size: 18px; } .schlaege i { width: 16px; height: 16px; }
 .kopfmix { display: flex; align-items: center; gap: 10px; }
 .kopfmix .phones { border: 0; padding: 0; width: auto; margin: 0; }

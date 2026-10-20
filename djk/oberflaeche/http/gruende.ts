@@ -16,6 +16,7 @@ export const GRUND_TEXT: Readonly<Record<string, string>> = {
   regler_abgelehnt: 'the core refused a mixer change; nothing was changed',
   deck_laeuft: 'a deck is playing; the project tempo can only be set when no deck plays',
   ki_gestoppt: 'Stop Cypher is set',
+  ki_stopp: 'Stop Cypher was pressed; the start was dropped and nothing was started',
   katalog_fehlt: 'the sample catalogue is not available',
   sha_unbekannt: 'that sample is not in the catalogue',
   nur_live: 'that sample is protected (Ableton Live only)',
@@ -28,6 +29,7 @@ export const GRUND_TEXT: Readonly<Record<string, string>> = {
   kein_kern: 'the core is not running',
   transport_laeuft: 'a transport is running; stop it first',
   beschaeftigt: 'the server is busy; try again in a moment',
+  wirt_fehlt: 'the Surge host for the production slot (arr1) is not running; start it with djk-instrumente --arr1',
   ueber_projekt: 'track mixer changes go through the project',
   intern: 'internal server error; nothing was changed',
   // Projekt-Befehle (projekt/befehle.ts)

@@ -189,20 +189,6 @@ FALL(gruppe_gefallen_bei_hand_und_abbruch_nicht_ohne_gruppe) {
   PRUEFE_GLEICH(p.gefallen.size(), 1);                     // Negativ-Kontrolle: ohne Gruppe keine Meldung
 }
 
-FALL(intern_teile_werden_nicht_vorgelegt) {
-  ProbePruefer p;   // lehnt jedes Öffnen ohne Hörschein ab; die KI-Stopp-Blende öffnet nichts, wird aber gar nicht gefragt
-  p.i1_start = true;
-  Lauf l(128.0, &p);
-  l.sw->ki_spur(1, Quelle::leitstand, "deck/1,deck/2");
-  l.sw->setze_direkt(l.r("deck/1/fader"), 0.0f);
-  l.sw->setze_direkt(l.r("deck/2/fader"), 0.0f);   // beide tief offen: i1_start würde jeden vorgelegten Teil ablehnen
-  l.bis(25600);
-  l.sw->ki_stopp(2, Quelle::andreas);
-  l.bis(25600 + 100000);
-  PRUEFE_NAH(l.sw->wert(l.r("deck/1/fader")), -200, 0);   // Blende lief trotz Prüfer
-  PRUEFE_NAH(l.sw->wert(l.r("deck/2/fader")), -200, 0);
-}
-
 FALL(vorschau_stimmt_mit_dem_ablauf_ueberein) {
   ProbePruefer p;
   Lauf l(128.0, &p);

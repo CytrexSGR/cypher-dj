@@ -115,8 +115,8 @@ MUT = {
         ("src/kern.cpp", "if (!tab_.def(r).transport) melde_regler(r, sample);", "melde_regler(r, sample);")]),
     "M38_vorgaenger_wert_vor_dem_start": ("angrenzende Rampe beginnt beim Ist-Wert am Ziel-Sample (§4.3)", [
         ("src/ablauf.cpp", "    else if (!v.angehalten) w0 = wert_von(v, sample, beat, nullptr);   // Ist-Wert am Ziel-Sample\n", "")]),
-    "M39_ki_blende_dem_pruefer_vorgelegt": ("KI-Stopp-Blende wird nie blockiert (ADR 013, pruefer.h intern)", [
-        ("src/ablauf.cpp", "    else if (!t.intern) g = pruefe_vor_start(idx);", "    else g = pruefe_vor_start(idx);")]),
+    # M39 (KI-Stopp-Blende dem Prüfer vorgelegt) entfällt mit Paket 1.18, E-a: ohne ki_fader_ab erzeugt nichts mehr interne Teile, die Mutation war
+    # äquivalent (alle Fälle grün, Review S1 2026-10-20). Teil::intern bleibt stehen (Plan Offen 5).
     "M40_abbruch_ohne_plan_fremde_quelle": ("/k/abbruch ohne Plan nur eigene Quelle (Festlegung F5)", [
         ("src/einsortieren.cpp", "    if (!p[0] && t.quelle != quelle) continue;\n", "")]),
     "M41_folgenleser_ignoriert_erwarte_nicht": ("Werkzeug: erwarte_nicht ist eine Negativ-Kontrolle (FORMAT.md Punkt 16)", [

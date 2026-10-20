@@ -4,7 +4,7 @@
 # Reihenfolge mit Wartebedingungen und zeigt URL und Zustand. djk-stop räumt alles ab, auch den Produktions-Wirt arr1
 # (djk-instrumente --arr1); liegt der noch von einem früheren Lauf, meldet djk-start belegt (Rückgabe 4).
 #
-# Aufruf: djk-start [--master PRÄFIX] [--cue PRÄFIX | --ohne-cue] [--ton-frei] [--strudel [--strudel-kit NAME] [--strudel-kit2 NAME] [--strudel-kit3 NAME] [--instrumente [--melodie surge|fluegel] [--bass surge|rb338]]] [--instanz a..i]
+# Aufruf: djk-start [--master PRÄFIX] [--cue PRÄFIX | --ohne-cue] [--ton-frei] [--strudel [--strudel-kit NAME] [--strudel-kit2 NAME] [--strudel-kit3 NAME] [--instrumente [--melodie surge|fluegel] [--bass surge|rb338]]] [--arr1] [--instanz a..i]
 #                   [--kern-konfig DATEI] [--leitstand-konfig DATEI] [--ohne-pruefmodus]
 #         djk-start --zustand [--instanz a..i]
 #         djk-start --vorlagen-nach DIR [--master ...]   (füllt die Betriebs-Drop-ins, installiert nichts)
@@ -15,6 +15,8 @@
 #                   stumme Senke cypher_stumm (Prüfinstanz: cypher_stumm-<i>), Master auf playback_F, Cue auf
 #                   playback_R; fehlt sie, legt djk-start sie an und djk-stop entlädt sie wieder. Die stumme Senke
 #                   gibt es nur mit dem stummen Vorgabe-Master: --cue auf ihr bei echtem Master wird abgewiesen (Rückgabe 2).
+#   --arr1          Startet nach dem Studio den Produktions-Wirt arr1 (djk-instrumente --arr1): die Surge-Spur des Arrangements (D1). Ohne
+#                   ihn lehnen /proj/freeze, /proj/export und /proj/lautheit (sobald eine Surge-Spur einzufrieren wäre) mit wirt_fehlt ab. Unabhängig von --strudel und --instrumente; djk-stop räumt ihn ab.
 #   --ohne-cue      Kein Cue-Ziel. Bei einem echten Master (--ton-frei) ist das die einzige Form ohne Cue-Senke:
 #                   Zwischenstufe Digital-Out allein, kein Profilwechsel (Plan M-1 Entscheidung 7).
 #                   Grenze Pro Audio: der Kern baut das Ziel als Präfix + "L"/"R" (kern main.cpp: snprintf "%s%s").
@@ -54,7 +56,7 @@ if [ -f "$UMG" ]; then
   [ -z "$_gesetzt" ] || eval "$_gesetzt"
 fi
 
-I=${CYPHERDJ_INSTANZ:-}; MASTER=""; CUE=""; OHNE_CUE=0; TON_FREI=0; STRUDEL=0; INSTR=0; KIT=techno; KIT2=battery; KIT3=battery; MELODIE=surge; BASS=""; KERN_KONFIG=""; LS_KONFIG=""; PRUEF=1
+I=${CYPHERDJ_INSTANZ:-}; MASTER=""; CUE=""; OHNE_CUE=0; TON_FREI=0; STRUDEL=0; INSTR=0; ARR1=0; KIT=techno; KIT2=battery; KIT3=battery; MELODIE=surge; BASS=""; KERN_KONFIG=""; LS_KONFIG=""; PRUEF=1
 MODUS=start; VORLAGEN_NACH=""
 # Option mit Wert: fehlt er (letztes Argument) oder ist er selbst eine Option, Abbruch 2. Nur --instanz darf leer sein.
 wert() {
@@ -67,7 +69,7 @@ while [ $# -gt 0 ]; do
     --master|--cue|--strudel-kit|--strudel-kit2|--strudel-kit3|--melodie|--bass|--instanz|--kern-konfig|--leitstand-konfig|--vorlagen-nach) wert "$1" $# "${2-}";;
   esac
   case "$1" in
-    --master) MASTER=$2; shift 2;; --cue) CUE=$2; shift 2;; --ohne-cue) OHNE_CUE=1; shift;; --strudel) STRUDEL=1; shift;; --instrumente) INSTR=1; shift;; --melodie) MELODIE=$2; shift 2;; --bass) BASS=$2; shift 2;; --strudel-kit) KIT=$2; shift 2;; --strudel-kit2) KIT2=$2; shift 2;; --strudel-kit3) KIT3=$2; shift 2;;
+    --master) MASTER=$2; shift 2;; --cue) CUE=$2; shift 2;; --ohne-cue) OHNE_CUE=1; shift;; --strudel) STRUDEL=1; shift;; --instrumente) INSTR=1; shift;; --arr1) ARR1=1; shift;; --melodie) MELODIE=$2; shift 2;; --bass) BASS=$2; shift 2;; --strudel-kit) KIT=$2; shift 2;; --strudel-kit2) KIT2=$2; shift 2;; --strudel-kit3) KIT3=$2; shift 2;;
     --ton-frei) TON_FREI=1; shift;; --instanz) I=$2; shift 2;;
     --kern-konfig) KERN_KONFIG=$(readlink -f -- "$2"); shift 2;;
     --leitstand-konfig) LS_KONFIG=$(readlink -f -- "$2"); shift 2;;
@@ -437,6 +439,10 @@ if [ "$INSTR" = 1 ]; then  # Studio S5.1: Carla-Wirt je Instrument (ADR 009), no
   echo "  sounds: djk/wirte/carla/djk-klang${I:+ --instanz $I} bass|melodie zeige|setze|lade|speichere|hoere · djk-klang liste"
 elif [ "$STRUDEL" = 1 ]; then
   echo "  instruments not loaded; add them live without stopping anything: $HIER/djk-instrumente${I:+ --instanz $I}"
+fi
+if [ "$ARR1" = 1 ]; then  # Paket 1.18: der Produktions-Wirt arr1 (Surge-Spuren des Arrangements, D1 Spec 2.4); ohne ihn lehnen /proj/freeze, /proj/export und /proj/lautheit mit wirt_fehlt ab
+  "$HIER/djk-instrumente" ${I:+--instanz "$I"} --arr1 | sed 's/^/  /' || abbruch "production host failed (djk-instrumente --arr1)" "cypherdj-wirt-arr1$SFX"  # pipefail: Rückgabe von djk-instrumente
+  echo "  production host arr1 ready (Surge track slot 1 of the arrangement; /proj/freeze, /proj/export and /proj/lautheit need it for Surge tracks)"
 fi
 for u in "${UNITS[@]}"; do aktiv "$u" || abbruch "$u died during start" "$u"; done
 echo "  midi       $MIDI output ports visible (controller mapping: SCHNITTSTELLEN §7)"

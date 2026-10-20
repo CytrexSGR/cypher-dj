@@ -161,8 +161,12 @@ void Arrangement::loop(bool an, double von, double bis, int64_t s, const Karte& 
   geaendert_ = true;
 }
 
+// Entscheidung E-a (Andreas 2026-10-20: „was klingt, klingt weiter“, „du solltest dann nur nicht mehr eingreifen“; Cypher, 2026-10-20: ein Start nach dem
+// Knopf wäre ein Eingriff nach dem Stopp): der KI-Stopp beendet einen LAUFENDEN Transport von cypher nicht mehr, Andreas übernimmt ihn (vorher D1 Spec 2.12,
+// 6.37). Was noch nicht klingt, verwirft er wie bisher: einen wartenden Start von cypher (status wartet, Einsatz steht aus; Quittung 7 ki_stopp aus
+// kern_arr.cpp) und ihren Freeze (ein Auftrag für sie, Spec 6.27, kein Klang).
 void Arrangement::ki_stopp(int64_t s, const Karte& k) {
-  if (von_cypher_ && status_ != ArrStatus::steht && stopp_s_ != s) stopp(0, s, k);
+  if (von_cypher_ && status_ != ArrStatus::steht && stopp_s_ != s && (freeze_ || status_ == ArrStatus::wartet)) stopp(0, s, k);
 }
 
 void Arrangement::beginne(const Karte& k, int64_t s) {

@@ -10,57 +10,18 @@ void Stellwerk::ki_stopp(int64_t id, Quelle quelle) {
   const int64_t s = jetzt_;
   quittung_befehl(id, quelle, Status::angenommen, s, Grund::kein);
   ki_gestoppt_ = true;
-  // alle Teile mit Quelle cypher ab, samt Gruppe (Grund ki_stopp)
+  // Entscheidung E-a (2026-10-20): der Stopp hält nur Cyphers Hand an. Alle Teile mit Quelle cypher enden samt Gruppe (Grund ki_stopp), ein
+  // laufender Teil hält am Ist-Wert (wie /k/abbruch); kein Fader wird gesenkt, die KI-Spur-Listen (ki_spur) senken nichts mehr.
   for (int j = 0; j < MAX_TEILE; j++) {
     const Teil& t = teil_[j];
     if (t.belegt && t.quelle == Quelle::cypher) beenden_mit_gruppe(j, Status::abgebrochen, Grund::ki_stopp, s, HalterArt::frei);
   }
-  // Kanäle der KI-Spur über 4 Beats auf -200 (Festlegung: ein Fader, den Andreas hält, bleibt bei ihm)
-  const double b0 = uhr_.beat(s);
-  for (int k = 0; k < tab_.kanaele(); k++)
-    if (ki_spur_ & (1u << k)) ki_fader_ab(tab_.regler_von(k, Rolle::fader), s, b0, quelle);
-  // D1 K1 (Spec 2.3): die Spur-Fader der KI-Spur über die eigene Liste ebenso
-  for (int n = 0; n < SPUR_REGLER_SPUREN; n++)
-#ifdef CYPHERDJ_MUTATION_KI_OHNE_SPUR_ARR
-    if (false && (ki_spur_arr_ & (1u << n))) ki_fader_ab(spur_fader_[n], s, b0, quelle);   // Fehlerfall: Spuren bleiben laut
-#else
-    if (ki_spur_arr_ & (1u << n)) ki_fader_ab(spur_fader_[n], s, b0, quelle);
-#endif
   Ereignis* e = neues_ereignis(EreignisArt::ki, s);
   if (e) {
     e->gestoppt = true;
     e->grund = Grund::ki_stopp;
   }
   quittung_befehl(id, quelle, Status::fertig, s, Grund::kein);
-}
-
-void Stellwerk::ki_fader_ab(int r, int64_t s, double b0, Quelle quelle) {
-  if (r < 0) return;
-  ReglerZustand& z = reg_[r];
-  if (z.halter.art == HalterArt::mensch || z.wert <= STUMM_GRENZE) return;
-  for (int j = 0; j < MAX_TEILE; j++) {
-    const Teil& t = teil_[j];
-    if (t.belegt && t.regler == r) beenden_mit_gruppe(j, Status::abgebrochen, Grund::ki_stopp, s, HalterArt::frei);
-  }
-  const int idx = neuer_teil();
-  if (idx < 0) {
-    z_.teile_voll++;
-    return;
-  }
-  Teil& t = teil_[idx];
-  t.status = Status::angenommen;
-  t.id = 0;
-  t.quelle = quelle;
-  t.nr = 0;
-  t.regler = static_cast<int16_t>(r);
-  t.ab_beat = b0;
-  t.dauer_beats = KI_STOPP_BEATS;
-  t.nach = STUMM;
-  t.politik = 1;
-  t.intern = true;
-  t.seq = ++seq_;
-  t.plan_seq = t.seq;
-  t.start_sample = s;
 }
 
 void Stellwerk::ki_frei(int64_t id, Quelle quelle) {
@@ -76,7 +37,7 @@ void Stellwerk::ki_frei(int64_t id, Quelle quelle) {
 }
 
 // D1 Spec 6.15: zwei Listen, die sich nicht gegenseitig löschen. Einträge spur/<ziffern> (spur/2, spur/135; spur/0 =
-// keine Spur) ersetzen nur die Spur-Liste (S2 trägt Cyphers Spuren ein), Kanal-Einträge nur die Kanal-Liste (Leitstand).
+// keine Spur) ersetzen nur die Spur-Liste (S2 sendet seit E-a nur spur/0), Kanal-Einträge nur die Kanal-Liste (Leitstand).
 // Eine leere Liste leert die Kanal-Liste (Bestand), eine gemischte ersetzt beide.
 void Stellwerk::ki_spur(int64_t id, Quelle quelle, const char* kanaele) {
   uint32_t neu = 0;

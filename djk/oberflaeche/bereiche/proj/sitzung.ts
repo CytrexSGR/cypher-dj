@@ -7,8 +7,7 @@
 // einmal prüfen (409 rev_veraltet) → echte Ablehnung des Kerns: zurückdrehen, 409 regler_abgelehnt, nichts gespeichert (Quittung null heißt kein Kern:
 // angenommen, kern.regler kein_kern) → Wiedergabe schreiben, wenn nötig (Freeze-Sperre erneut geprüft), dann EINMAL speichern und ins Log → laden,
 // Loop, Metronom, Tempo nachziehen → SSE proj. Der Rückweg der Hand speichert zusammengefasst (höchstens alle 250 ms, ein Eintrag je Geste).
-// Stand Slice 6 (S2-Integration): vollständig. Dazu Transport, Tempo-Regel, Rückweg der Hand, KI-Stopp, KI-Maske (aus dem Spurfeld von,
-// Spec 6.22) und der Neustart des Kerns.
+// Stand Slice 6 (S2-Integration): vollständig. Dazu Transport, Tempo-Regel, Rückweg der Hand, KI-Stopp, KI-Maske (immer spur/0) und der Neustart des Kerns.
 import fs from 'node:fs';
 import path from 'node:path';
 import type { BereichKontext } from '../../http/router.ts';
@@ -16,11 +15,11 @@ import { Katalog } from '../../katalog.ts';
 import { Projekte, projektWurzelVorgabe } from '../../projekt/ablage.ts';
 import { fuehreListeAus, setzeDekodiert, vergleiche } from '../../projekt/befehle.ts';
 import { DekodierCache, type DekodierEreignis } from '../../projekt/dekodier.ts';
-import { MAX_BEAT, herkunft, kanonisch, type DekodiertZustand, type Projekt } from '../../projekt/modell.ts';
+import { MAX_BEAT, kanonisch, type DekodiertZustand, type Projekt } from '../../projekt/modell.ts';
 import { PatchFehler, wende } from '../../projekt/patch.ts';
 import { aendere, rueckgaengig, wiederholen, type Haken, type Meta, type Verlauf, type Wirkung } from '../../projekt/verlauf.ts';
 import { WiedergabeFehler, WiedergabeZaehler, schreibeWiedergabe, uebersetze, wiedergabeDatei } from '../../projekt/wiedergabe.ts';
-import { ERZ4_NUR_HAND, alleSpurRegler, cypherSpuren, erz4Soll, istSpurRegler, kiSpurListe, reglerZuBefehl, type Soll } from './abbildung.ts';
+import { ERZ4_NUR_HAND, alleSpurRegler, erz4Soll, istSpurRegler, reglerZuBefehl, type Soll } from './abbildung.ts';
 import { arrOrdner, zaehlerDateiVorgabe } from './konfig.ts';
 import { grundText } from '../../http/gruende.ts';
 import { KernLage } from './lage.ts';
@@ -51,7 +50,7 @@ export interface ProjOptionen {
 // verfällt mit ihm: ein anderes Projekt lädt beim Öffnen ohnehin seine eigene Wiedergabe.
 interface Merk { laden: boolean; loop: boolean; tempo: boolean }
 // Spec 6.34: was GET /proj/aktuell als ausgabe_lauf zeigt, solange S3 einen Freeze oder Export fährt (Spur nur beim Freeze)
-export type AusgabeLauf = { art: 'freeze'; spur_id: string } | { art: 'export' };
+export type AusgabeLauf = { art: 'freeze'; spur_id: string } | { art: 'export' } | { art: 'lautheit' };
 interface Offen { slug: string; projekt: Projekt; verlauf: Verlauf; merk: Merk }
 type Koerper = Record<string, unknown>;
 
@@ -66,17 +65,6 @@ const ohneNoten = (p: Projekt): unknown => ({ ...p, spuren: p.spuren.map((s) => 
 // zur Frist), das Projekt bleibt die Wahrheit. Für Antworten und Protokoll getrennt gezählt.
 const reglerBefund = (e: ReglerErgebnis[]): { regler_fehler: ReglerErgebnis[]; regler_ohne_kern: number } =>
   ({ regler_fehler: e.filter((r) => quittungAbgelehnt(r.quittung)), regler_ohne_kern: e.filter((r) => r.quittung === null).length });
-// Spec 6.35: die Rückfahrt nach der KI-Freigabe dauert so lange wie die Ausblende des Stopps (SCHNITTSTELLEN §4.7, ki.cpp KI_STOPP_BEATS)
-export const KI_BEATS = 4;
-// Spec 6.36: die Rückfahrt ist ein benannter Plan, Teil-Nummer = Spur-Nummer. So bricht der Server genau ihre Teile ab (neuer Stopp, Andreas'
-// Hand an der Seite), nie fremde. Der Halter im Kern heißt dann plan:ki_rueck (§4.3).
-export const RUECK_PLAN = 'ki_rueck';
-// Spec 6.37 (Fix8 V1): der eigene Weg für Fader, die nicht zu Cyphers Spuren gehören und beim Öffnen in einer laufenden Ausblende stehen. Ein
-// eigener Plan, damit weder ein Stopp (offeneRueckfahrt kennt nur ki_rueck) noch die Freigabe ihn trifft.
-export const ZIEL_PLAN = 'proj_ziel';
-const spurNr = (pfad: string): number => Number(pfad.split('/')[1]);
-const STUMM_GRENZE = -120;          // SCHNITTSTELLEN §1.2: jeder Wert ≤ −120 dB ist stumm (typen.h STUMM_GRENZE)
-const STUMM = -200;                 // SCHNITTSTELLEN §1.2: der Stumm-Wert, wie die Ausblende des KI-Stopps ihn setzt
 export const RUECKWEG_MS = 250;     // Spec 6.30: höchstens eine Speicherung des Rückwegs je 250 ms
 export const GESTE_RUHE_MS = 500;   // Spec 6.30: so lange Ruhe schließt eine Geste (ein Verlaufseintrag je Geste)
 
@@ -93,16 +81,7 @@ export class ProjSitzung {
   private readonly rampeWarteMs: number;
   private readonly uhrStillMs: number;
   private offen: Offen | null = null;
-  private letzteKiListe: string | null = null;      // zuletzt vom Kern angenommene Liste für /k/ki/spur
   private transportQuelle: Quelle | null = null;     // wer den laufenden Transport gestartet hat (Spec 2.12)
-  private kiStand: boolean | null = null;            // Spec 6.35: zuletzt gesehener KI-Stopp (null: noch nichts gehört); gestoppt → frei ist die Freigabe
-  private kiStoppBeat: number | null = null;         // Beat des letzten Stopps aus /e/ki sample (null: unbekannt)
-  // Spec 6.36, 6.37: gesendete Rückfahrten je Fader-Pfad → Start (ab), Ende (ab + 4) und laufende Nummer der Sendung (eine spätere Sendung an
-  // denselben Fader, etwa Andreas' neues Ziel, wird von der Antwort einer früheren nie gelöscht)
-  private readonly rueckfahrt = new Map<string, { ab: number; ende: number; nr: number }>();
-  private rueckfahrtNr = 0;
-  // Spec 6.37 (Fix8 V1): wartende Setzungen des eigenen Wegs (setzeNachAusblende) je Fader-Pfad → Start und Nummer der Sendung. Nie in rueckfahrt.
-  private readonly zielWeg = new Map<string, { ab: number; nr: number }>();
   private kette: Promise<unknown> = Promise.resolve();
   private readonly rueckwegWartend = new Map<string, number>();     // Rückweg: letzter Wert je Pfad, noch nicht gespeichert
   private rueckwegTimer: ReturnType<typeof setTimeout> | null = null;
@@ -231,60 +210,10 @@ export class ProjSitzung {
     this.offen = { slug, projekt, verlauf: o.verlauf, merk: { laden: false, loop: false, tempo: false } };
     // Spec 6.21: die Wiedergabe-Nummer entscheidet, wer beim Mixer gewinnt (gleiche Nummer: Wiederanlauf, die Spur-Regler des Kerns gewinnen)
     const wieder = await this.istWiederanlauf(projekt);
-    // Spec 6.37 (Re-Review Fix5 R3: der Kern lehnte die Fader des neuen Projekts wegen der Überlappung ab, die Rückfahrt des alten lief zu Ende):
-    // spielt der Kern ein anderes Projekt, laufende und wartende Rückfahrten vor dem Setzen der neuen Regler abbrechen; danach gelten die Werte
-    // dieses Projekts. Beim Wiederanlauf ist es die Rückfahrt dieses Projekts: sie fährt auf seinen Wert weiter (6.36, Fix5 K4).
-    // Spec 6.37 (Re-Review Fix6 RR6-1, rr6_r3w R3w: wartete die Rückfahrt noch, fiel das Setzen in die Ausblende des Stopps, der Kern lehnte es
-    // ab, und die Spur stand danach ohne Stopp stumm): eine WARTENDE Rückfahrt wird wie bei Andreas' Griff (vollziehe) nicht gestrichen, sondern
-    // mit dem Wert dieses Projekts als Ziel ab demselben Start neu geplant (rueckfahrtAufZiel, zweiter Versuch bei ueberlappung). Eine laufende
-    // bricht ab, und der Abgleich setzt den Wert direkt (Fix6 T3).
-    // Spec 6.37 (Re-Review Fix7 RR7-1, rr7 M_frei: U1 plante auch eine Spur um, die in B Andreas gehört; ein neuer Stopp setzte sie stumm, die
-    // Freigabe fuhr nur Cyphers Spuren zurück, Andreas' Spur stand danach bei −200 ohne Stopp): in this.rueckfahrt stehen nur Fader von Cyphers
-    // Spuren des offenen Projekts. Jeder andere Fader (Andreas' Spur, freier Slot), der wegen der laufenden Ausblende nicht sofort gesetzt werden
-    // kann, bekommt den Wert dieses Projekts zum Ende der Ausblende auf dem eigenen Weg (zielNachAusblende, Plan proj_ziel); den fassen weder
-    // Stopp noch Freigabe an. Wartet dort noch der Wert eines vorher geöffneten Projekts, gilt dasselbe für ihn.
-    const ziel = new Map<string, number>();                              // Pfad → Start der wartenden Rückfahrt oder des wartenden eigenen Wegs
-    if (!wieder) {
-      const beat = this.lage.uhr?.beat ?? -Infinity;
-      for (const [p, e] of this.rueckfahrt) if (e.ab > beat) ziel.set(p, e.ab);
-      for (const [p, e] of this.zielWeg) if (e.ab > beat && !ziel.has(p)) ziel.set(p, e.ab);
-      await Promise.all([this.rueckfahrtAbbrechen(null), this.zielWegAbbrechen(null)]);
-    }
-    // Spec 6.36: Cyphers Spuren, die im Kern stumm stehen, obwohl kein Stopp gilt (Freigabe ohne offenes Projekt oder ohne Server), fahren
-    // nach dem Abgleich über 4 Beats auf ihren Projektwert; das Setzen im Abgleich lässt sie darum aus.
-    const rueck = await this.verfalleneRueckfahrt(projekt, ziel);
-    const cypherFader = new Set(cypherSpuren(projekt).map((n) => `spur/${n}/fader`));
-    const wartend = alleSpurRegler(projekt).filter((r) => ziel.has(r.pfad));
-    // Unmittelbar vor dem Senden (kein await dazwischen): im Stopp wird nichts neu geplant, der Abgleich setzt Cyphers Fader stumm (imStoppStumm)
-    const umplanen = this.ctx.kiGestoppt() ? [] : wartend.filter((r) => cypherFader.has(r.pfad));
-    const andreasZiel = wartend.filter((r) => !cypherFader.has(r.pfad));   // nicht Cyphers: auch im Stopp (er senkt sie nicht)
-    const [kern, gefahren, spaeter] = await Promise.all([this.synchronisiere(quelle, true, wieder,
-      [...rueck.aus, ...umplanen.map((r) => r.pfad), ...andreasZiel.map((r) => r.pfad)]),
-    this.rueckfahrtAufZiel(umplanen, ziel), this.rueckfahrtAufZiel(andreasZiel, ziel, true)]);
-    // Fix8 V1, Probe M_stopp (gemessen: Öffnen während der Ausblende eines geltenden Stopps, keine Rückfahrt beteiligt, der Kern lehnte Andreas'
-    // Fader mit ueberlappung ab, die Spur endete bei −200): lehnt der Kern das Setzen eines Faders, der nicht zu Cyphers Spuren gehört, wegen
-    // Überlappung ab, kommt sein Wert auf dem eigenen Weg zum Ende der Ausblende (Stopp-Beat + 4; unbekannt: der zweite Versuch nach jetzt + 4).
-    const fehler = kern.regler_fehler as ReglerErgebnis[];
-    const nachholen = fehler.filter((r) => r.quittung?.grund === 'ueberlappung' && /^spur\/\d+\/fader$/.test(r.pfad) && !cypherFader.has(r.pfad));
-    let nach: ReglerErgebnis[] = [];
-    if (nachholen.length) {
-      const ab = this.kiStoppBeat !== null ? this.kiStoppBeat + KI_BEATS : -Infinity;
-      nach = await this.rueckfahrtAufZiel(nachholen.map((r) => ({ pfad: r.pfad, wert: r.wert })), new Map(nachholen.map((r) => [r.pfad, ab])), true);
-      kern.regler_fehler = fehler.filter((r) => !nachholen.includes(r));
-    }
-    if (gefahren.length) kern.rueckfahrt_ziel = gefahren.map((r) => r.pfad);
-    if (spaeter.length || nach.length) kern.ziel_nach_ausblende = [...spaeter, ...nach].map((r) => r.pfad);
-    if (gefahren.length || spaeter.length || nach.length) {
-      const befund = reglerBefund([...gefahren, ...spaeter, ...nach]);
-      kern.regler_fehler = [...(kern.regler_fehler as ReglerErgebnis[]), ...befund.regler_fehler];
-      kern.regler_ohne_kern = (kern.regler_ohne_kern as number) + befund.regler_ohne_kern;
-    }
+    const kern = await this.synchronisiere(quelle, true, wieder);
     if (wieder) {
       const n = this.uebernimmMixer(this.offen);
       kern.wiederanlauf = true; kern.mixer_uebernommen = n;
-    }
-    if (rueck.soll.length && this.offen && !this.ctx.kiGestoppt()) {
-      kern.rueckfahrt = { pfade: rueck.soll.map((r) => r.pfad), ...reglerBefund(await this.fahreZurueck(rueck.soll, {})) };
     }
     const offenes = this.offen;
     this.ctx.log({ typ: 'proj_offen', slug, nachgezogen: o.nachgezogen, quelle, wiederanlauf: wieder });
@@ -310,22 +239,20 @@ export class ProjSitzung {
     if (o) try { o.verlauf.schliesse(); } catch { /* der Server endet ohnehin */ }
   }
 
-  // Wiedergabe laden, Spur-Regler (alle 32), auf Wunsch erz/4 neutral, Loop, Metronom, KI-Maske; alles parallel, Quittungen abgewartet
+  // Wiedergabe laden, Spur-Regler (alle 32), auf Wunsch erz/4 neutral, Loop, Metronom, Leeren der KI-Maske; alles parallel, Quittungen abgewartet
   // wiederanlauf (Spec 6.21, 6.30): der Kern gewinnt ganz. Keine neue Wiedergabe, kein erz/4, kein Loop, kein Metronom; von den Spur-Reglern
-  // nur die mit unbekanntem Ist-Wert (für genau diese gewinnt das Projekt). Die KI-Maske kommt immer aus dem Projekt (Spec 6.22).
-  // aus (Spec 6.36): Pfade, die das Setzen auslässt (Cyphers stumme Fader, die danach zurückfahren oder, Stopp-Stand unbekannt, stumm bleiben).
-  private async synchronisiere(quelle: Quelle, erz4: boolean, wiederanlauf = false, aus: readonly string[] = []): Promise<Record<string, unknown>> {
+  // nur die mit unbekanntem Ist-Wert (für genau diese gewinnt das Projekt).
+  private async synchronisiere(quelle: Quelle, erz4: boolean, wiederanlauf = false): Promise<Record<string, unknown>> {
     const o = this.brauchOffen();
-    const ohne = new Set(aus);
-    const soll: Soll[] = (wiederanlauf ? this.unbekannteSpurRegler(o.projekt)
-      : [...(erz4 ? erz4Soll(quelle) : []), ...this.imStoppStumm(o.projekt, alleSpurRegler(o.projekt))]).filter((r) => !ohne.has(r.pfad));
+    const soll: Soll[] = wiederanlauf ? this.unbekannteSpurRegler(o.projekt)
+      : [...(erz4 ? erz4Soll(quelle) : []), ...alleSpurRegler(o.projekt)];
     // Spec 6.32: die Sperre zusätzlich unmittelbar vor Laden und Loop (gesperrt: am Offen merken, nicht senden; die Freigabe holt es nach).
     // Die erste Linie ist sperreLaden(), das während eines Öffnens ablehnt; dies ist die zweite.
     const [wiedergabe, regler, loop, metronom, ki] = await Promise.all([
       wiederanlauf ? Promise.resolve({ nr: o.projekt.wiedergabe_rev, quittung: null, wiederanlauf: true }) : this.ladeOderMerke(quelle),
       this.kern.setzeRegler(soll, quelle),
       wiederanlauf ? Promise.resolve(null) : this.loopOderMerke(o, quelle),
-      wiederanlauf ? Promise.resolve(null) : this.kern.metronom(o.projekt, quelle), this.kiMaske(true)]);
+      wiederanlauf ? Promise.resolve(null) : this.kern.metronom(o.projekt, quelle), this.leereKiMaske()]);
     // P6: nur bei Quelle cypher werden ziel und xseite nicht gesendet (der Kern lehnt nur_hand ab) und als Meldung geführt
     const nurHand = erz4 && !wiederanlauf && quelle === 'cypher'
       ? ERZ4_NUR_HAND.filter((r) => { const ist = this.lage.reglerWert(r.pfad); return ist !== null && ist !== r.wert; })
@@ -341,59 +268,17 @@ export class ProjSitzung {
     return this.lage.arr !== null && this.lage.arr.nr === p.wiedergabe_rev;
   }
   // Spec 6.30: Spur-Regler, deren Ist-Wert der Server nicht kennt (der Kern schickt den Regler-Stand nur beim ersten Hallo einer Generation;
-  // ein Server, der binnen 5 s neu startet, bekommt ihn nicht). Für genau diese gewinnt beim Wiederanlauf das Projekt. Ausgenommen der Fader
-  // von Cyphers Spuren während des KI-Stopps: die Absenkung des Kerns (ki.cpp) bleibt, wie in uebernimmMixer.
+  // ein Server, der binnen 5 s neu startet, bekommt ihn nicht). Für genau diese gewinnt beim Wiederanlauf das Projekt.
   private unbekannteSpurRegler(p: Projekt): Soll[] {
-    return this.ohneGestoppteFader(p, alleSpurRegler(p)).filter((r) => this.lage.reglerWert(r.pfad) === null);
-  }
-  // Spec 6.21 Nachsatz, 6.35: während des KI-Stopps bleibt der Fader von Cyphers Spuren bei der Absenkung des Kerns (ki.cpp). Gilt für den
-  // Wiederanlauf (unbekannte Regler) und für den Kern-Neustart (nachNeustart): der neue Kern stellt Stopp und −200 aus seinem Zustand wieder her.
-  private ohneGestoppteFader(p: Projekt, liste: Soll[]): Soll[] {
-    if (!this.ctx.kiGestoppt()) return liste;
-    const cypherFader = new Set(cypherSpuren(p).map((n) => `spur/${n}/fader`));
-    return liste.filter((r) => !cypherFader.has(r.pfad));
-  }
-  // Spec 6.36 (gemessen Fix5 K3: Öffnen im Stopp setzte Cyphers Fader auf den Projektwert, die Spur klang mitten im Stopp): beim Öffnen gewinnt das
-  // Projekt, aber während des KI-Stopps steht der Fader von Cyphers Spuren auf stumm, wie die Ausblende ihn setzt (auch eine Spur, die im Kern
-  // vorher zu einem anderen Projekt gehörte). Die Freigabe fährt sie danach zurück.
-  private imStoppStumm(p: Projekt, liste: Soll[]): Soll[] {
-    if (!this.ctx.kiGestoppt()) return liste;
-    const cypherFader = new Set(cypherSpuren(p).map((n) => `spur/${n}/fader`));
-    return liste.map((r) => (cypherFader.has(r.pfad) ? { pfad: r.pfad, wert: STUMM } : r));
-  }
-  // Spec 6.36: Cyphers Fader, die im Kern bekannt stumm stehen (≤ −120), im Projekt aber nicht, und weder in Andreas' Hand noch schon in einer
-  // Rückfahrt sind. soll: was nach dem Abgleich zurückfährt; aus: was das Setzen im Abgleich auslässt. Den Stopp-Stand braucht es dafür; kennt
-  // der Server ihn noch nicht (Start), wartet er höchstens arrFristMs auf /zustand/kern (20 Hz). Bleibt er unbekannt, fährt nichts zurück und
-  // die Fader bleiben stumm (sichere Richtung). Im Stopp: nichts (der Abgleich setzt sie stumm, imStoppStumm).
-  // ohne (Spec 6.37): Fader, deren wartende Rückfahrt das Öffnen ohnehin neu plant.
-  private async verfalleneRueckfahrt(p: Projekt, ohne: ReadonlyMap<string, number> = new Map()): Promise<{ soll: Soll[]; aus: string[] }> {
-    const nr = new Set(cypherSpuren(p));
-    const kandidat = alleSpurRegler(p).filter((r) => {
-      if (!/^spur\/\d+\/fader$/.test(r.pfad) || !nr.has(spurNr(r.pfad)) || r.wert <= STUMM_GRENZE || ohne.has(r.pfad)) return false;
-      const ist = this.lage.reglerWert(r.pfad), halter = this.lage.reglerHalter(r.pfad);
-      return ist !== null && ist <= STUMM_GRENZE && halter !== 'mensch' && halter !== `plan:${RUECK_PLAN}`;
-    });
-    if (!kandidat.length) return { soll: [], aus: [] };
-    for (let t0 = Date.now(); this.kiStand === null && Date.now() - t0 < this.arrFristMs;) await schlaf(10);
-    if (this.kiStand === null) return { soll: [], aus: kandidat.map((r) => r.pfad) };
-    if (this.ctx.kiGestoppt()) return { soll: [], aus: [] };
-    return { soll: kandidat, aus: kandidat.map((r) => r.pfad) };
+    return alleSpurRegler(p).filter((r) => this.lage.reglerWert(r.pfad) === null);
   }
   // Ist-Werte der Spur-Regler, die der Kern gemeldet hat, als EINE Änderung ins Projekt (Quelle andreas, undo-fähig). Unbekannte Werte
-  // bleiben. Nachsatz: die Fader-Absenkung des KI-Stopps ist keine Handbewegung, der Fader von Cyphers Spuren bleibt, solange ki_gestoppt gilt.
+  // bleiben. Entscheidung E-a: der KI-Stopp senkt keinen Fader, jeder Ist-Wert ist eine Handbewegung oder der Projektstand.
   private uebernimmMixer(o: Offen): number {
     const befehle: Record<string, unknown>[] = [];
     for (const s of o.projekt.spuren) {
       for (const k of ['fader', 'pan', 'mute', 'solo'] as const) {
-        if (k === 'fader' && herkunft(s) === 'cypher' && this.ctx.kiGestoppt()) continue;
         const pfad = `spur/${s.nr}/${k}`, wert = this.lage.reglerWert(pfad);
-        // Spec 6.35: die Absenkung kommt nie ins Projekt, auch nicht nach der Freigabe. Kam die Freigabe, während kein Server lief (oder ging
-        // die Rückfahrt nicht durch), steht der Fader einer Cypher-Spur im Kern noch stumm: das ist die Absenkung des Stopps, keine Hand.
-        // Preis: zieht Andreas den Fader einer Cypher-Spur ohne laufenden Server ganz zu, übernimmt der Wiederanlauf das nicht.
-        if (k === 'fader' && herkunft(s) === 'cypher' && wert !== null && wert <= STUMM_GRENZE) continue;
-        // Spec 6.36 (Fix5 K4, gemessen: Server-Neustart mitten in der Rückfahrt schrieb −54,2 ins Projekt, der Kern endete auf −3): eine laufende
-        // Rückfahrt ist keine Hand. Ihr Halter heißt plan:ki_rueck, ihr Zwischenwert kommt nicht ins Projekt; sie endet ohnehin auf dem Projektwert.
-        if (this.lage.reglerHalter(pfad) === `plan:${RUECK_PLAN}`) continue;
         const b = wert === null ? null : reglerZuBefehl(o.projekt, pfad, wert);
         if (b) befehle.push(b.befehl);
       }
@@ -449,16 +334,12 @@ export class ProjSitzung {
     return typeof nr === 'number' ? { nr } : nr;
   }
 
-  // Spec 6.15, 6.22: Cyphers Spuren (Feld von) in die KI-Maske. Gesendet wird nur, wenn sich die Liste ändert; immer beim Öffnen und nach einem
-  // Neustart des Kerns. Absender ist der Server (andreas): die Maske gehört dem Leitstand, nicht der KI. Eine abgelehnte Liste gilt nicht als
-  // gesendet und wird bei der nächsten Gelegenheit erneut versucht.
-  private async kiMaske(immer: boolean): Promise<Record<string, unknown> | null> {
-    const o = this.brauchOffen();
-    const liste = kiSpurListe(cypherSpuren(o.projekt));
-    if (!immer && liste === this.letzteKiListe) return null;
-    const q = await this.kern.kiSpur(liste, 'andreas');
-    if (quittungOk(q)) this.letzteKiListe = liste;
-    return { kanaele: liste, quittung: q };
+  // Entscheidung E-a (2026-10-20): der KI-Stopp senkt keinen Fader mehr, Cyphers Spuren stehen in keiner Maske. Beim Öffnen und nach einem
+  // Neustart des Kerns geht trotzdem spur/0 hinaus: ein Kern, der von einem früheren Server noch eine Spur-Maske trägt, verliert sie. Absender ist
+  // der Server (andreas), die Maske gehört dem Leitstand, nicht der KI.
+  private async leereKiMaske(): Promise<Record<string, unknown>> {
+    const q = await this.kern.kiSpur('spur/0', 'andreas');
+    return { kanaele: 'spur/0', quittung: q };
   }
 
   // --- Dekodier-Cache (Spec 2.8) ----------------------------------------------------------------------------------------
@@ -542,7 +423,7 @@ export class ProjSitzung {
       // Quittungen prüft, dass o.projekt noch genau der Stand ist, gegen den sie gerechnet wurde (sonst 409 rev_veraltet).
       const projekt = o.projekt;
       return this.vollziehe(o, quelle, probe.regler_aenderungen, (h) => aendere(o.verlauf, projekt, befehle as never, meta, h, { ergebnis: probe }),
-        quellen, probe.betrifft_wiedergabe, probe.projekt);
+        quellen, probe.betrifft_wiedergabe);
     });
   }
 
@@ -565,7 +446,7 @@ export class ProjSitzung {
       // Spec 6.31 (Leistung): die Probe ist der Stand; der Verlauf wendet den Patch nicht noch einmal an (gültig wie in aendern, über die rev-Prüfung)
       const projekt = o.projekt;
       return this.vollziehe(o, quelle, vergleich.regler_aenderungen, (h) => f(o.verlauf, projekt, { quelle }, h, { ziel, stand: probe, vergleich }), new Map(),
-        vergleich.betrifft_wiedergabe, probe);
+        vergleich.betrifft_wiedergabe);
     });
   }
 
@@ -573,42 +454,10 @@ export class ProjSitzung {
   // Spec 6.30 (Leistung): betrifft die Änderung die Wiedergabe, entsteht diese vor dem Speichern (im Haken speichere), und die EINE Speicherung
   // trägt ihre Nummer schon als wiedergabe_rev. Vorher speicherte ladeWiedergabe den Stand gleich danach ein zweites Mal.
   private async vollziehe(o: Offen, quelle: Quelle, regler: Soll[], schreibe: (h: Haken) => Wirkung, quellen: Map<string, string>,
-    betrifftWiedergabe: boolean, neuStand: Projekt): Promise<Antwort> {
+    betrifftWiedergabe: boolean): Promise<Antwort> {
     const alt = o.projekt;
-    // Spec 6.36: Andreas' Hand gewinnt auch während der Rückfahrt. Setzt er einen Fader, dessen Rückfahrt läuft, bricht der Server erst sie ab
-    // (nur deren Teile), dann setzt er Andreas' Wert; sonst lehnte der Kern das Setzen mit ueberlappung ab (409, zurückgedreht).
-    // Spec 6.37 (Re-Review Fix5 R2: der Abbruch lief, bevor feststand, ob der Kern den Wert annimmt; in die Ausblende hinein lehnte er ab, die
-    // Spur stand ohne Stopp stumm): wartet die Rückfahrt noch auf das Ende der Ausblende, wird Andreas' Wert ihr Ziel. Abbruch der wartenden,
-    // dann dieselbe Rückfahrt auf seinen Wert ab demselben Start. Nicht während eines Stopps: dann gibt es keine Rückfahrt (der Stopp bricht sie
-    // ab), die Ausblende bleibt, wie bisher.
-    // Spec 6.37 (Fix8 V1): dasselbe für den eigenen Weg (Andreas' Spur nach einem Projektwechsel, zielNachAusblende): sein neuer Wert wird dessen Ziel.
-    // Spec 6.37 (D1 S3 Auftrag 17 a, Re-Review Fix8 Probe L: Andreas löschte während einer wartenden Rückfahrt Cyphers Spur und legte auf demselben
-    // Slot eine eigene an; sein Fader landete in this.rueckfahrt, ein neuer Stopp setzte ihn −200, die Freigabe fuhr ihn nicht zurück): in
-    // this.rueckfahrt stehen nach jeder Änderung nur Fader von Cyphers Spuren des NEUEN Stands. Gehört ein Slot mit Rückfahrt dort nicht mehr Cypher,
-    // wird sie abgebrochen; wartete sie noch und setzt die Änderung diesen Fader, kommt sein Wert zum selben Start auf den eigenen Weg (proj_ziel),
-    // den weder Stopp noch Freigabe anfassen. Gleich für beide Quellen.
-    let direkt = regler;
-    const ziel = new Map<string, number>();                              // Pfad → Start der wartenden Rückfahrt
-    const eigen = new Map<string, number>();                             // Pfad → Start des wartenden eigenen Wegs
-    const beat = this.lage.uhr?.beat ?? -Infinity;
-    const cypherNeu = new Set(cypherSpuren(neuStand).map((n) => `spur/${n}/fader`));
-    const gesetztePfade = new Set(regler.map((r) => r.pfad));
-    const fremd = [...this.rueckfahrt.keys()].filter((p) => !cypherNeu.has(p));
-    for (const p of fremd) { const e = this.rueckfahrt.get(p)!; if (e.ab > beat && gesetztePfade.has(p)) eigen.set(p, e.ab); }
-    if (fremd.length) await this.rueckfahrtAbbrechen(fremd);
-    if (quelle === 'andreas') {
-      const fader = regler.map((r) => r.pfad).filter((p) => /^spur\/\d+\/fader$/.test(p));
-      for (const p of fader) {
-        const e = this.rueckfahrt.get(p), w = this.zielWeg.get(p);
-        if (e && e.ab > beat) ziel.set(p, e.ab); else if (w && w.ab > beat && !eigen.has(p)) eigen.set(p, w.ab);
-      }
-      await Promise.all([this.rueckfahrtAbbrechen(fader), this.zielWegAbbrechen(fader)]);
-    }
-    if (ziel.size || eigen.size) direkt = regler.filter((r) => !ziel.has(r.pfad) && !eigen.has(r.pfad));
-    const [gesetzt, gefahren, spaeter] = await Promise.all([this.kern.setzeRegler(direkt, quelle),
-      this.rueckfahrtAufZiel(regler.filter((r) => ziel.has(r.pfad)), ziel), this.rueckfahrtAufZiel(regler.filter((r) => eigen.has(r.pfad)), eigen, true)]);
-    const ergebnis = [...gesetzt, ...gefahren, ...spaeter];
-    const zurueck = (stand: Projekt): Promise<void> => this.reglerZurueck(stand, gesetzt, quelle, gefahren, ziel, spaeter, eigen);
+    const gesetzt = await this.kern.setzeRegler(regler, quelle);
+    const zurueck = (stand: Projekt): Promise<void> => this.reglerZurueck(stand, gesetzt, quelle);
     // Spec 6.30: nach dem await die rev noch einmal gegen den offenen Stand. S3 setzt ihn über uebernimm() synchron, auch während diese
     // Änderung auf ihre Quittungen wartet; geprüft wurde sie gegen alt. Ihre Regler gehen dann auf den offenen Stand zurück.
     if (this.offen !== o || o.projekt !== alt || o.projekt.rev !== alt.rev) {
@@ -617,7 +466,7 @@ export class ProjSitzung {
       throw new ProjFehler(409, 'rev_veraltet', { rev: o.projekt.rev });
     }
     // Spec 6.30: nur eine echte Ablehnung dreht zurück. Ohne Kern (Quittung null) gilt die Änderung wie eine Noten-Änderung (kern.regler: kein_kern).
-    const abgelehnt = ergebnis.filter((r) => quittungAbgelehnt(r.quittung));
+    const abgelehnt = gesetzt.filter((r) => quittungAbgelehnt(r.quittung));
     if (abgelehnt.length) {
       await zurueck(alt);
       throw new ProjFehler(409, 'regler_abgelehnt', { regler: abgelehnt });
@@ -647,9 +496,7 @@ export class ProjSitzung {
     if (typeof wiedergabe?.nr !== 'number') neu.wiedergabe_rev = alt.wiedergabe_rev;   // ohne neue Wiedergabe gilt die alte Nummer
     o.projekt = neu;
     const kern: Record<string, unknown> = {};
-    if (ergebnis.length) kern.regler = ergebnis.some((r) => r.quittung === null) ? 'kein_kern' : 'ok';
-    if (gefahren.length) kern.rueckfahrt_ziel = gefahren.map((r) => r.pfad);   // Spec 6.37: Andreas' Wert fährt nach dem Ende der Ausblende ein
-    if (spaeter.length) kern.ziel_nach_ausblende = spaeter.map((r) => r.pfad);
+    if (gesetzt.length) kern.regler = gesetzt.some((r) => r.quittung === null) ? 'kein_kern' : 'ok';
     // Spec 6.30: die Freeze-Sperre gilt bis zum Laden. bereiteWiedergabe prüfte sie nach den Regler-Quittungen, zwischen dort und /k/arr/laden liegt
     // kein await. War sie gesetzt, bleibt die Änderung gespeichert und das Laden folgt nach der Freigabe.
     const nr = wiedergabe?.nr;
@@ -663,40 +510,14 @@ export class ProjSitzung {
     if (alt.tempo_bpm !== neu.tempo_bpm) {                                                               // Spec 2.7: ein Tempo-Weg
       if (this.sperren > 0) { o.merk.tempo = true; kern.tempo = { aufgeschoben: true }; } else kern.tempo = await this.kern.tempo(neu.tempo_bpm, quelle);
     }
-    const ki = await this.kiMaske(false);
-    if (ki) kern.ki = ki;
     this.ctx.verteile({ a: 'proj', f: { slug: o.slug, rev: neu.rev, label: w.eintrag.label, quelle } });
     return { code: 200, j: { rev: neu.rev, projekt: neu, kern } };
   }
-  // Angenommene Regler einer abgelehnten Änderung auf den alten Stand zurück. Spec 6.37: eine Rückfahrt, die die Änderung auf Andreas' Wert
-  // umgeplant hat (gefahren, Start je Pfad in ziel), fährt wieder auf den alten Wert, ab demselben Start (direkt setzen ginge nicht in die Ausblende).
-  private async reglerZurueck(alt: Projekt, ergebnis: ReglerErgebnis[], quelle: Quelle, gefahren: ReglerErgebnis[] = [],
-    ziel: ReadonlyMap<string, number> = new Map(), spaeter: ReglerErgebnis[] = [], eigen: ReadonlyMap<string, number> = new Map()): Promise<void> {
+  // Angenommene Regler einer abgelehnten Änderung auf den alten Stand zurück.
+  private async reglerZurueck(alt: Projekt, ergebnis: ReglerErgebnis[], quelle: Quelle): Promise<void> {
     const vorher = new Map(alleSpurRegler(alt).map((r) => [r.pfad, r.wert] as const));
-    const auf = (liste: ReglerErgebnis[]): Soll[] =>
-      liste.filter((r) => r.ok && vorher.has(r.pfad)).map((r) => ({ pfad: r.pfad, wert: vorher.get(r.pfad) as number }));
-    const zurueck = auf(ergebnis), wieder = auf(gefahren), wiederEigen = auf(spaeter);
-    await Promise.all([wieder.length ? this.rueckfahrtAbbrechen(wieder.map((r) => r.pfad)) : null,
-      wiederEigen.length ? this.zielWegAbbrechen(wiederEigen.map((r) => r.pfad)) : null]);
-    await Promise.all([zurueck.length ? this.kern.setzeRegler(zurueck, quelle) : null, this.rueckfahrtAufZiel(wieder, ziel),
-      this.rueckfahrtAufZiel(wiederEigen, eigen, true)]);
-  }
-  // Spec 6.37: Rückfahrten auf ein neues Ziel (Andreas' Wert), je Pfad ab dem Start der abgebrochenen (ziel: Pfad → Start). Gewartet wird nur das
-  // kurze Fenster (die Antwort an die Seite wartet nicht auf den Start). Lehnt der Kern wegen Überlappung ab (Start nur genähert, wie in
-  // kiFreigabe), ein zweiter Versuch nach dem spätesten Ende der Ausblende (jetzt + 4).
-  // eigen (Fix8 V1): statt der Rückfahrt der eigene Weg (setzeNachAusblende) für einen Fader, der nicht zu Cyphers Spuren gehört. Der zweite
-  // Versuch gilt dort auch im Stopp: der Stopp senkt diese Spur nicht.
-  private async rueckfahrtAufZiel(liste: readonly Soll[], ziel: ReadonlyMap<string, number>, eigen = false): Promise<ReglerErgebnis[]> {
-    if (!liste.length) return [];
-    const weg = (soll: readonly Soll[], o: { fruehest?: number; versatz?: number; kurz: boolean }): Promise<ReglerErgebnis[]> =>
-      (eigen ? this.setzeNachAusblende(soll, o) : this.fahreZurueck(soll, o));
-    const starts = [...new Set(liste.map((r) => ziel.get(r.pfad) as number))];
-    const erst = (await Promise.all(starts.map((ab) => weg(liste.filter((r) => ziel.get(r.pfad) === ab), { fruehest: ab, kurz: true })))).flat();
-    const ueber = erst.filter((r) => r.quittung?.grund === 'ueberlappung');
-    // Kam inzwischen ein neuer Stopp, kein zweiter Versuch (er liefe nach dessen Ausblende auf, mitten im Stopp; wie in kiFreigabe)
-    if (!ueber.length || (!eigen && this.ctx.kiGestoppt())) return erst;
-    const zweit = await weg(ueber.map((r) => ({ pfad: r.pfad, wert: r.wert })), { versatz: KI_BEATS, kurz: true });
-    return [...erst.filter((r) => !ueber.includes(r)), ...zweit];
+    const zurueck = ergebnis.filter((r) => r.ok && vorher.has(r.pfad)).map((r) => ({ pfad: r.pfad, wert: vorher.get(r.pfad) as number }));
+    if (zurueck.length) await this.kern.setzeRegler(zurueck, quelle);
   }
 
   // --- Transport (Spec 2.2, 2.7) -----------------------------------------------------------------------------------------
@@ -723,7 +544,17 @@ export class ProjSitzung {
       this.sperreFremderStart(quelle);
       this.sperreTransport();                                            // Spec 6.32: vor der Tempo-Rampe
       const tempo = await this.tempoVorStart(o.projekt.tempo_bpm, quelle);
+      // Paket 1.18, E-a (Entscheidung von Cypher 2026-10-20, Andreas kann umstellen): fällt Stop Cypher in die Wartezeit auf die Tempo-Rampe, beendet der Kern
+      // Cyphers Rampe mit 7 ki_stopp. Dann dieselbe Antwort wie beim verworfenen wartenden Start (200, ok false, 7 ki_stopp) statt 409 tempo_abgelehnt; es ging
+      // kein Start hinaus, und transportQuelle ist unberührt.
+      const tq = tempo.quittung as { status?: number; grund?: string } | null | undefined;
+      if (tempo.fehler === 'tempo_abgelehnt' && tq?.status === 7 && tq.grund === 'ki_stopp') return { code: 200, j: { ok: false, quittung: tq, tempo } };
       if (tempo.fehler) throw new ProjFehler(tempo.fehler === 'kein_kern' ? 503 : 409, tempo.fehler as string, { tempo });
+      // Review 9a: fiel Stop Cypher in die schon laufende Rampe, geht Cyphers Start nicht mehr hinaus (dieselbe Antwort, kein 6 ki_gestoppt vom Kern)
+      if (quelle === 'cypher' && this.ctx.kiGestoppt()) {
+        const quittung = { status: 7, grund: 'ki_stopp', text: 'Stop Cypher was pressed; the start was dropped and nothing was started' };
+        return { code: 200, j: { ok: false, quittung, tempo } };
+      }
       this.sperreFremderStart(quelle);
       this.sperreTransport();                                            // und unmittelbar vor /k/arr/start (die Sperre kann während der Rampe kommen)
       const quant = this.lage.djLaeuft() ? 2 : 0;
@@ -762,6 +593,7 @@ export class ProjSitzung {
     const ende = r.ab_beat + r.dauer_beats, t0 = Date.now();
     let beat = this.lage.uhr?.beat ?? -Infinity, seit = t0;
     while (!(this.lage.uhr && this.lage.uhr.beat >= ende)) {
+      if (quelle === 'cypher' && this.ctx.kiGestoppt()) break;          // Stop Cypher: nicht bis zum Rampenende warten, die Start-Route verwirft
       const jetzt = Date.now(), b = this.lage.uhr?.beat ?? -Infinity;
       if (b > beat) { beat = b; seit = jetzt; } else if (jetzt - seit > this.uhrStillMs) {
         return { gesetzt: true, fehler: 'kein_kern', text: grundText('kein_kern'), ab_beat: r.ab_beat };
@@ -835,7 +667,7 @@ export class ProjSitzung {
   zugangHaken(): Haken { return this.haken(this.brauchOffen()); }
   // Spec 6.34: S3 meldet Beginn (art, beim Freeze spur_id) und Ende (null) jedes Laufs; nur diese Form geht an die Seite
   setzeAusgabeLauf(l: AusgabeLauf | null): void {
-    this.ausgabeLauf = l === null ? null : l.art === 'freeze' ? { art: 'freeze', spur_id: l.spur_id } : { art: 'export' };
+    this.ausgabeLauf = l === null ? null : l.art === 'freeze' ? { art: 'freeze', spur_id: l.spur_id } : { art: l.art };
   }
   // Spec 6.25: die nächste Nummer des einen Wiedergabe-Zählers der Instanz (derselbe wie für /k/arr/laden, mit Zustandsdatei, Spec 6.30), für die
   // Freeze-Kennung. Eine Kennung kommt so nie zweimal und nie gleich einer Wiedergabe-Nummer.
@@ -883,123 +715,22 @@ export class ProjSitzung {
   ereignis(adresse: string, f: Record<string, unknown>): void {
     const { neustart } = this.lage.nimm(adresse, f);
     if (adresse === '/e/regler' && f.halter === 'mensch' && istSpurRegler(String(f.pfad))) this.rueckweg(String(f.pfad), Number(f.wert));
-    // /zustand/arr status 0 setzt transportQuelle bewusst nicht zurück: der Kern beendet Cyphers Transport beim KI-Stopp selbst (kern_arr.cpp:190,
-    // kern_stellwerk.cpp:353), sein status 0 kann vor /e/ki eintreffen. Das zweite Stopp als andreas ist dann ohne Wirkung;
-    // ein neuer Start überschreibt die Quelle.
+    // /zustand/arr status 0 setzt transportQuelle bewusst nicht zurück; ein neuer Start überschreibt die Quelle.
     // Spec 6.37 (REVIEW-5-opus M2): die Hand-Taste am Gerät führt der Kern selbst aus (kern_arr.cpp arr_hand_start_stopp) und meldet danach
     // /e/hand arr/start_stopp mit wert 1 (nur beim Druck; die Attrappe meldet auch das Loslassen mit 0). Ein Start oder Stopp dort gehört
-    // Andreas: Stop Cypher stoppt danach nichts, bis Cypher selbst wieder startet.
+    // Andreas: Cypher bedient ihn danach nicht (fremderLauf), bis Andreas stoppt und Cypher selbst wieder startet.
     if (adresse === '/e/hand' && f.pfad === 'arr/start_stopp' && Number(f.wert) >= 0.5) this.transportQuelle = 'andreas';
-    if (adresse === '/e/ki' && Number(f.gestoppt) === 1 && this.transportQuelle === 'cypher') this.kiStoppTransport();
-    this.kiWechsel(adresse, f);
+    // Entscheidung E-a (Andreas 2026-10-20: „stop cypher sollte nicht alles stoppen weil ich ja übernehme, du solltest dann nur nicht mehr eingreifen“):
+    // Stop Cypher stoppt auch Cyphers eigenen laufenden Transport nicht mehr (vorher Spec 6.37: kiStoppTransport, /k/arr/stopp als andreas), der Kern
+    // beendet ihn auch nicht (Arrangement::ki_stopp). Er gehört ab dem Stopp Andreas: Cypher bedient ihn danach nicht mehr, im Stopp nicht (Riegel,
+    // ki_gestoppt), nach der Freigabe nicht (fremderLauf, transport_laeuft), bis Andreas ihn stoppt und Cypher neu startet. Ein noch WARTENDER Start von
+    // Cypher (status 1) wird übergeben wie ein laufender, der Kern verwirft ihn aber (Quittung 7 ki_stopp, wie wartende Deck-Befehle): danach meldet
+    // er status 0, und fremderLauf (nur status 1 oder 2) sperrt nichts mehr. Zweiter Weg, falls /e/ki verloren geht: das periodische /zustand/kern
+    // (ki_gestoppt), aus dem auch server.ts den Riegel nachführt.
+    const kiAn = adresse === '/e/ki' ? f.gestoppt : adresse === '/zustand/kern' ? f.ki_gestoppt : undefined;
+    if (Number(kiAn) === 1 && this.transportQuelle === 'cypher') this.transportQuelle = 'andreas';
     if (neustart) this.nachNeustart();
   }
-  // Spec 6.35: Stopp und Freigabe aus /e/ki (mit Sample) oder, falls das verloren ging, aus dem periodischen /zustand/kern (ki_gestoppt).
-  // Nur der Wechsel gestoppt → frei ist eine Freigabe; ein Server, der erst nach dem Stopp startet, kennt den Stopp aus /zustand/kern.
-  private kiWechsel(adresse: string, f: Record<string, unknown>): void {
-    const roh = adresse === '/e/ki' ? f.gestoppt : adresse === '/zustand/kern' ? f.ki_gestoppt : undefined;
-    if (roh === undefined) return;
-    const gestoppt = Number(roh) === 1, war = this.kiStand;
-    this.kiStand = gestoppt;
-    if (gestoppt && adresse === '/e/ki') this.kiStoppBeat = this.lage.beatVonSample(Number(f.sample));
-    else if (gestoppt && war !== true) this.kiStoppBeat = null;
-    if (gestoppt && war !== true) this.rueckfahrtAbbrechen(null, true);   // Spec 6.36, 6.37: nur beim Wechsel (/zustand/kern kommt mit 20 Hz)
-    if (war === true && !gestoppt) this.kiFreigabe();
-  }
-  // Spec 6.36: Rückfahrten, die noch warten oder laufen (Ende nach dem jetzigen Beat), dazu jede, deren Teil der Kern als Halter meldet
-  // (plan:ki_rueck, etwa von einem Server vor einem Neustart). pfade: nur diese Fader (null: alle).
-  private offeneRueckfahrt(pfade: readonly string[] | null): string[] {
-    const beat = this.lage.uhr?.beat ?? -Infinity;
-    for (const [p, e] of this.rueckfahrt) if (e.ende <= beat) this.rueckfahrt.delete(p);
-    const kandidaten = pfade ?? [...new Set([...this.rueckfahrt.keys(), ...Array.from({ length: 8 }, (_, i) => `spur/${i + 1}/fader`)])];
-    return kandidaten.filter((p) => this.rueckfahrt.has(p) || this.lage.reglerHalter(p) === `plan:${RUECK_PLAN}`);
-  }
-  // Spec 6.36: ein neuer KI-Stopp gewinnt. Der Kern bricht beim Stopp nur Teile an Fadern über der Stummgrenze ab (ki.cpp ki_fader_ab); eine
-  // Rückfahrt, die noch wartet (Fader −200, Start erst am Ende der Ausblende), liefe sonst nach dem Stopp auf den Projektwert. Der Server bricht
-  // seine Rückfahrt darum selbst ab, sobald er den Stopp sieht, synchron im Ereignis (nicht in der Kette, die gerade warten kann).
-  // Spec 6.37 (Re-Review Fix5 R1, am Kern gemessen: startet die wartende Rückfahrt, bevor der Abbruch ankommt, hält der Abbruch den Fader bei
-  // etwa −59 dB, mitten im Stopp): stumm (beim Stopp) setzt nach der Quittung des Abbruchs −200 nach, solange der Stopp gilt. Gleich in welcher
-  // Reihenfolge Abbruch und Start den Kern erreichen, endet die Spur so stumm: kam der Abbruch zuerst, steht der Fader schon bei −200 und das
-  // Setzen ist ohne Wirkung; lief die Rückfahrt beim Stopp schon, blendet der Kern selbst aus und lehnt das Setzen ab (ueberlappung, nur Protokoll).
-  private rueckfahrtAbbrechen(pfade: readonly string[] | null, stumm = false): Promise<Quittung> | null {
-    const offen = this.offeneRueckfahrt(pfade);
-    for (const p of offen) this.rueckfahrt.delete(p);
-    if (!offen.length) return null;
-    const q = this.kern.abbruch(RUECK_PLAN, offen.map(spurNr), 'andreas');
-    void q.then(async (x) => {
-      this.ctx.log({ typ: 'proj_rueckfahrt_abbruch', pfade: offen, quittung: x });
-      if (!stumm || !this.ctx.kiGestoppt()) return;
-      const erg = await this.kern.setzeRegler(offen.map((p) => ({ pfad: p, wert: STUMM })), 'andreas');
-      this.ctx.log({ typ: 'proj_rueckfahrt_stumm', pfade: offen, ...reglerBefund(erg) });
-    }).catch((e) => this.ctx.log({ typ: 'proj_rueckfahrt_fehler', fehler: (e as Error).message }));
-    return q;
-  }
-  // Spec 6.35 (Andreas 16.10.: „Zurück, über 4 Beats“): nach der KI-Freigabe fahren Cyphers Spuren (die Maske aus dem Feld von, die der Stopp
-  // gesenkt hat) über 4 Beats auf ihren Fader-Wert im Projekt zurück, Quelle andreas wie der Stopp. Gemessen (messungen fix4, probe_ki_frei):
-  // Kern und Attrappe melden bei der Freigabe nur /e/ki 0, die Fader bleiben bei −200; eine Rampe, die die Ausblende des Stopps (4 Beats ab dem
-  // Stopp, interner Teil) überlappt, lehnen beide mit ueberlappung ab, eine ab deren Ende nimmt der Kern an. Deshalb frühestens ab dem Ende der
-  // Ausblende; ist der Stopp-Beat unbekannt oder nur genähert und lehnt der Kern ab, ein zweiter Versuch nach deren spätestem Ende (jetzt + 4).
-  // Gesendet wird in der Kette (Stand des Projekts), gewartet auf die Quittungen außerhalb: eine spätere Rampe quittiert erst bei ihrem Start.
-  private kiFreigabe(): void {
-    const stopp = this.kiStoppBeat;
-    this.kiStoppBeat = null;
-    void this.seriell(async () => {
-      const o = this.offen;
-      if (!o || this.ctx.kiGestoppt()) return null;
-      const nrs = new Set(cypherSpuren(o.projekt).map((n) => `spur/${n}/fader`));
-      const soll = alleSpurRegler(o.projekt).filter((r) => nrs.has(r.pfad));
-      if (!soll.length) return null;
-      return { o, soll, erste: this.fahreZurueck(soll, { fruehest: stopp === null ? null : stopp + KI_BEATS }) };
-    }).then(async (x) => {
-      if (!x) return;
-      let erg = await x.erste;
-      const ueber = erg.filter((r) => r.quittung?.grund === 'ueberlappung');
-      // Spec 6.37: ein Fader, dessen Rückfahrt inzwischen neu geplant ist (Andreas' Griff, rueckfahrtAufZiel), fährt nicht noch einmal auf den alten Wert
-      const nochmal = ueber.filter((r) => !this.rueckfahrt.has(r.pfad));
-      if (nochmal.length && this.offen === x.o && !this.ctx.kiGestoppt()) {
-        const zweit = await this.fahreZurueck(nochmal.map((r) => ({ pfad: r.pfad, wert: r.wert })), { versatz: KI_BEATS });
-        erg = [...erg.filter((r) => !nochmal.includes(r)), ...zweit];
-      }
-      this.ctx.log({ typ: 'proj_ki_freigabe', slug: x.o.slug, stopp_beat: stopp, pfade: x.soll.map((r) => r.pfad), ...reglerBefund(erg) });
-    }).catch((e) => this.ctx.log({ typ: 'proj_ki_freigabe_fehler', fehler: (e as Error).message }));
-  }
-
-  // Spec 6.37 (Fix8 V1): den Wert eines Faders, der nicht zu Cyphers Spuren gehört, zum Ende der Ausblende setzen (Dauer 0, Plan proj_ziel, Teil =
-  // Spur-Nummer; ein Setzen am Ende einer Rampe überlappt sie nicht, SCHNITTSTELLEN I4). Gemerkt bis zum Start, synchron mit dem Senden.
-  private setzeNachAusblende(soll: readonly Soll[], o: { fruehest?: number; versatz?: number; kurz?: boolean }): Promise<ReglerErgebnis[]> {
-    const f = this.kern.fahreRegler(soll, 0, 'andreas', { ...o, plan: ZIEL_PLAN, teil: spurNr });
-    const nr = ++this.rueckfahrtNr;
-    for (const r of soll) this.zielWeg.set(r.pfad, { ab: f.ab, nr });
-    return f.ergebnis.then((erg) => {
-      for (const r of erg) if (!r.ok && this.zielWeg.get(r.pfad)?.nr === nr) this.zielWeg.delete(r.pfad);   // abgelehnt: nichts wartet
-      return erg;
-    });
-  }
-  // Spec 6.37 (Fix8 V1): wartende Setzungen des eigenen Wegs abbrechen (pfade: nur diese, null: alle). Nur Andreas' Griff, ein Projektwechsel und
-  // reglerZurueck rufen das; Stopp und Freigabe nie.
-  private zielWegAbbrechen(pfade: readonly string[] | null): Promise<Quittung> | null {
-    const beat = this.lage.uhr?.beat ?? -Infinity;
-    for (const [p, e] of this.zielWeg) if (e.ab <= beat) this.zielWeg.delete(p);
-    const offen = [...this.zielWeg.keys()].filter((p) => pfade === null || pfade.includes(p));
-    for (const p of offen) this.zielWeg.delete(p);
-    if (!offen.length) return null;
-    const q = this.kern.abbruch(ZIEL_PLAN, offen.map(spurNr), 'andreas');
-    void q.then((x) => this.ctx.log({ typ: 'proj_ziel_abbruch', pfade: offen, quittung: x }))
-      .catch((e) => this.ctx.log({ typ: 'proj_ziel_fehler', fehler: (e as Error).message }));
-    return q;
-  }
-
-  // Spec 6.36: eine Rückfahrt als benannter Plan senden und bis zu ihrem Ende merken (synchron mit dem Senden, damit ein Stopp sie immer sieht)
-  private fahreZurueck(soll: readonly Soll[], o: { fruehest?: number | null; versatz?: number; kurz?: boolean }): Promise<ReglerErgebnis[]> {
-    const f = this.kern.fahreRegler(soll, KI_BEATS, 'andreas', { ...o, plan: RUECK_PLAN, teil: spurNr });
-    const nr = ++this.rueckfahrtNr;
-    for (const r of soll) this.rueckfahrt.set(r.pfad, { ab: f.ab, ende: f.ab + KI_BEATS, nr });
-    return f.ergebnis.then((erg) => {
-      for (const r of erg) if (!r.ok && this.rueckfahrt.get(r.pfad)?.nr === nr) this.rueckfahrt.delete(r.pfad);   // abgelehnt: keine Fahrt
-      return erg;
-    });
-  }
-
   // Spec 3.4 Rückweg: Andreas' Hand an spur/<n>/* landet im Projekt (Quelle andreas). Spec 6.30: zusammengefasst. Je Pfad zählt der letzte Wert;
   // gespeichert wird höchstens einmal je RUECKWEG_MS (das erste Ereignis nach einer Pause sofort), und eine Geste ist ein Verlaufseintrag: sie
   // endet nach GESTE_RUHE_MS ohne Ereignis. Vorher speicherte jedes Hand-Ereignis das ganze Projekt.
@@ -1042,15 +773,6 @@ export class ProjSitzung {
     } catch (e) { this.ctx.log({ typ: 'proj_rueckweg_fehler', pfade: liste.map(([p]) => p), fehler: (e as Error).message }); }
   }
 
-  // Spec 2.12: KI-Stopp beendet einen von Cypher gestarteten Transport (der Kern lehnt Cyphers Befehle ab; der Server stoppt als andreas)
-  private kiStoppTransport(): void {
-    this.transportQuelle = null;
-    void this.seriell(async () => {
-      const q = await this.kern.stopp('andreas');
-      this.ctx.log({ typ: 'proj_ki_stopp_transport', quittung: q });
-    }).catch((e) => this.ctx.log({ typ: 'proj_ki_stopp_fehler', fehler: (e as Error).message }));
-  }
-
   // Spec 2.12: nach /e/neustart (neue Generation) die letzte Wiedergabe neu laden, Spur-Regler, Loop, Metronom und KI-Maske neu setzen.
   // Spec 6.32, Ausnahme Kern-Neustart: nachNeustart lädt IMMER, auch während der Freeze-Sperre. Ein Neustart beendet jeden Freeze im Kern, es gibt
   // nichts mehr abzubrechen, und ohne Laden spielte der neue Kern nichts. Pflicht für S3: kommt während eines Freeze ein Kern-Neustart oder geht
@@ -1058,7 +780,7 @@ export class ProjSitzung {
   // Ist das Laden gemerkt (eine Änderung kam während der Sperre durch), ist die Datei zu wiedergabe_rev veraltet: dann eine neue schreiben.
   // Nach dem gelungenen Laden sind die Merk-Flags erledigt (Laden und Loop gehen hier mit dem Stand von jetzt an den Kern), damit die Freigabe nicht
   // noch einmal lädt. Das gemerkte Tempo bleibt: nachNeustart sendet kein Tempo, holeNach tut es nach der Freigabe.
-  // Spec 6.35: im KI-Stopp setzt nachNeustart die Spur-Regler mit derselben Ausnahme wie der Wiederanlauf (6.21): Cyphers Spuren bleiben stumm.
+  // Spec 6.35 (E-a): nachNeustart setzt alle Spur-Regler aus dem Projekt, auch im KI-Stopp; Cyphers Spuren sind nicht ausgenommen.
   private nachNeustart(): void {
     void this.seriell(async () => {
       const o = this.offen;
@@ -1068,12 +790,11 @@ export class ProjSitzung {
         ? { nr, quittung: await this.kern.laden(nr, 'andreas') } : await this.ladeWiedergabe('andreas');
       if (typeof wiedergabe.nr === 'number' && quittungOk(wiedergabe.quittung as Quittung)) { o.merk.laden = false; o.merk.loop = false; }
       this.transportQuelle = null;
-      this.zielWeg.clear();                                              // Fix8 V1: der neue Kern kennt die Pläne nicht mehr, die Regler folgen
       // Spec 6.31, 6.32: wartende Handwerte ins Projekt, unmittelbar vor dem Senden der Regler (nach der Lade-Quittung, kein await dazwischen),
       // damit auch, was während des Ladens kam, an den neuen Kern geht und Kern und Projekt denselben Wert haben
       this.rueckwegSpeichern();
-      const [regler, loop, metronom, ki] = await Promise.all([this.kern.setzeRegler(this.ohneGestoppteFader(o.projekt, alleSpurRegler(o.projekt)), 'andreas'),
-        this.kern.loop(o.projekt, 'andreas'), this.kern.metronom(o.projekt, 'andreas'), this.kiMaske(true)]);
+      const [regler, loop, metronom, ki] = await Promise.all([this.kern.setzeRegler(alleSpurRegler(o.projekt), 'andreas'),
+        this.kern.loop(o.projekt, 'andreas'), this.kern.metronom(o.projekt, 'andreas'), this.leereKiMaske()]);
       this.ctx.log({ typ: 'proj_neustart', slug: o.slug, wiedergabe, ...reglerBefund(regler), loop, metronom, ki });
     }).catch((e) => this.ctx.log({ typ: 'proj_neustart_fehler', fehler: (e as Error).message }));
   }

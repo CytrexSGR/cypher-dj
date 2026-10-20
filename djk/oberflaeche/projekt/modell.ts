@@ -14,6 +14,7 @@ export const GAIN_MIN = -96;           // Spec 6.27: Clip-Gain −96..+24 dB, de
 export const GAIN_MAX = 24;
 export const FADER_MAX = 6;            // Spec 6.16: Spur-Fader −200..+6 dB in allen Fundorten
 export const SAMPLERATE = 48000;
+export const GRUPPE_MAX = 32;          // Paket 1.18 E-c: Länge des Gruppennamens einer Spur (Varianten)
 export const SPUR_FARBEN = ['#e0563b', '#3b8de0', '#9b59d0', '#3bb07a', '#e0a83b', '#d03b8d', '#3bc7d0', '#8a8f98'];
 
 export type DekodiertZustand = 'nein' | 'laeuft' | 'fertig' | 'fehler';
@@ -40,8 +41,9 @@ export interface Freeze { datei: string; frames: number; kennung: number; sha256
 // von (Spec 6.22): wer die Spur angelegt hat, gesetzt bei spur_neu aus der Quelle, in D1 unveränderlich; fehlt es (älteres Projekt), gilt andreas
 export type Herkunft = 'andreas' | 'cypher';
 export const herkunft = (s: { von?: Herkunft }): Herkunft => s.von ?? 'andreas';
+// gruppe (Paket 1.18, E-c): optional; Spuren mit demselben Text sind Varianten (Befehl variante_waehlen), der Text hat 1 bis GRUPPE_MAX Zeichen
 export interface Spur {
-  id: string; von?: Herkunft; nr: number; name: string; farbe: string; art: 'audio' | 'instrument';
+  id: string; von?: Herkunft; gruppe?: string; nr: number; name: string; farbe: string; art: 'audio' | 'instrument';
   geraet?: Geraet; freeze?: Freeze | null;
   fader_db: number; pan: number; mute: boolean; solo: boolean; clips: Clip[];
 }
@@ -261,8 +263,10 @@ function pruefeSpur(s: unknown, wo: string): Spur {
   if (!istObjekt(s)) return werfe(wo, 'Objekt erwartet');
   const basis = ['id', 'nr', 'name', 'farbe', 'art', 'fader_db', 'pan', 'mute', 'solo', 'clips'];
   if (s.art !== 'audio' && s.art !== 'instrument') werfe(`${wo}.art`, 'audio oder instrument erwartet');
-  const o = s.art === 'audio' ? felder(s, wo, basis, ['von']) : felder(s, wo, [...basis, 'geraet'], ['freeze', 'von']);
+  const o = s.art === 'audio' ? felder(s, wo, basis, ['von', 'gruppe']) : felder(s, wo, [...basis, 'geraet'], ['freeze', 'von', 'gruppe']);
   if ('von' in o && o.von !== 'andreas' && o.von !== 'cypher') werfe(`${wo}.von`, 'andreas oder cypher erwartet');
+  // ohne Leerzeichen am Rand, wie die Befehle (Review S2)
+  if ('gruppe' in o && text(o.gruppe, `${wo}.gruppe`, GRUPPE_MAX).trim() !== o.gruppe) werfe(`${wo}.gruppe`, 'ohne Leerzeichen am Rand erwartet');
   if (typeof o.id !== 'string' || !ID.test(o.id)) werfe(`${wo}.id`, 'ID erwartet');
   zahlIn(o.nr, `${wo}.nr`, 1, MAX_SPUREN, true);
   text(o.name, `${wo}.name`, 80);

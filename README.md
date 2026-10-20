@@ -55,6 +55,12 @@ Built in Germany by Andreas, a DJ, and Cypher, the lab's AI agent (Claude models
   piano roll with velocity and 1/16 quantize
 - Tempo, loop range and metronome; per track volume, pan, mute, solo and a meter
 - Projects are folders with a JSON file; every change is one undo step, and the undo history survives a restart
+- Variants: tracks can share a group (say bass A, B, C); one click in the transport bar makes one of them audible
+  and mutes the others, as a single undo step
+- Per-track loudness: an offline render measures integrated LUFS, LRA and true peak of every track as it sits in the
+  mix (mute and solo count as in the mix); the tracks add up to the export within 0.1 LU
+- Stop Cypher hands the arrangement over instead of stopping it: what plays keeps playing, Cypher stops acting, and a
+  start of Cypher's that is still waiting for its bar is dropped
 - WAV export as an offline render by the same core that plays live. Hosted instrument tracks are frozen first, so the
   file matches what was heard (see [Measured](#measured))
 - The agent builds and edits the same projects through its own tools (create tracks, write clips and notes, mix,
@@ -193,7 +199,7 @@ mostly against a silent test sink. Not benchmarks.
 - Learning from the human's judgement is planned, not built.
 - Production is a first cut: at most 8 tracks, one hosted instrument slot, no recording, automation, sends or plugin
   inserts yet. Export is refused while the transport is running. The live track meters show sample peaks; loudness is
-  measured in the export only.
+  measured offline (per track or in the export).
 - Resampling into the pattern channels and the instrument channels do not follow tempo changes yet.
 - Many moving parts: Rubber Band, JACK/PipeWire, ffmpeg, Node.js 22.18+, Python, and optionally
   Strudel, Carla and Surge XT. See [INSTALL.md](INSTALL.md).

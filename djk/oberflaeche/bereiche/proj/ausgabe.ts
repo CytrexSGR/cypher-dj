@@ -13,14 +13,18 @@
 // einen Zähler (nie geladen, danach gelöscht), cypherdj-render mit nice 19 und den Spur-Reglern aus project.json als Datei, WAV unter
 // <projektordner>/export/ (nie ersetzt), Lautheit per ffmpeg. Die Antwort ist schmal (kein Projekt, Spec 6.31): datei, frames, spitze_db,
 // regler_quelle, lufs_i, lra, true_peak_dbtp, bei Fehlschlag der Messung loudness_fehler.
+// Lautheit je Spur (Paket 1.18, E-b, POST /proj/lautheit): derselbe Anfang (Bereich, Wirt-Freeze, Export-Wiedergabe), dann ein Render je belegter Spur
+// ohne Neustart-Zustand des Kerns (--ohne-zustand): die Regler kommen allein aus einer Datei, in der alle anderen Spuren stumm stehen, dazu ein Render
+// aller Spuren für die Summe. Die WAVs liegen in einem temporären Ordner und gehen im finally weg.
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import type http from 'node:http';
 import type { Bereich, BereichKontext } from '../../http/router.ts';
 import { json, koerper } from '../../http/transport.ts';
 import { grundText } from '../../http/gruende.ts';
-import { instanz, renderProgramm } from '../../pfade.ts';
-import { KENNUNG_MAX, kanonisch, spurSicht, sucheSpur, type Freeze, type Projekt } from '../../projekt/modell.ts';
+import { instanz, renderProgramm, wirtOrdnerVorgabe } from '../../pfade.ts';
+import { KENNUNG_MAX, SAMPLERATE, kanonisch, spurSicht, sucheSpur, type Freeze, type Projekt, type Spur } from '../../projekt/modell.ts';
 import type { Meta } from '../../projekt/verlauf.ts';
 import { aendereStand, StandFehler } from '../../projekt/stand.ts';
 import {
@@ -46,12 +50,13 @@ export interface AusgabeOptionen {
   instanz?: () => string;         // Instanz für den Render (Vorgabe pfade.instanz())
   jetzt?: () => Date;             // Uhr für den Dateinamen (Vorgabe new Date())
   ffmpeg?: string[];              // ffmpeg für die Lautheit (Vorgabe ['ffmpeg'])
+  wirtOrdner?: () => string;      // Ordner der Wirt-Status-Dateien (Vorgabe pfade.wirtOrdnerVorgabe(), der Server gibt seinen mit)
 }
 
 const STATUS: Record<string, number> = {
   argument_ungueltig: 400, export_bereich: 400, spur_unbekannt: 400, keine_wirtspur: 400, spur_leer: 400, zu_gross: 400,
   kein_projekt: 409, ki_gestoppt: 409, beschaeftigt: 409, transport_laeuft: 409, nicht_geladen: 409, kein_kernstand: 409, deck_laeuft: 409,
-  audio_fehlt: 409, veraltet: 409,
+  audio_fehlt: 409, veraltet: 409, wirt_fehlt: 409,
   freeze_fehler: 502, render_fehler: 502,
 };
 
@@ -122,6 +127,17 @@ function freezeAbgelehnt(grund: string): never {
   return fehl('freeze_fehler', `the core refused the freeze (${grund || 'no reason given'})`);
 }
 
+// S3-Fix W2: gilt die Status-Datei eines Wirts (wirt.py schreibt {name, pid, bereit, fehler, sock, klang, art, fahrbar}) noch? Ja nur, wenn bereit
+// true ist, pid eine ganze Zahl > 0 ist, /proc/<pid> lebt und der Prozess wirt.py ausführt (ein Argument der Befehlszeile heißt wirt.py: so fängt es eine
+// wiederverwendete pid ab). Jeder Lese- oder Formatfehler heißt: nein.
+export function wirtLebt(datei: string): boolean {
+  try {
+    const st = JSON.parse(fs.readFileSync(datei, 'utf8')) as { bereit?: unknown; pid?: unknown } | null;
+    if (st?.bereit !== true || typeof st.pid !== 'number' || !Number.isInteger(st.pid) || st.pid <= 0) return false;
+    return fs.readFileSync(`/proc/${st.pid}/cmdline`, 'utf8').split('\0').some((a) => path.basename(a) === 'wirt.py');
+  } catch { return false; }
+}
+
 export const EXPORT_MAX_BEATS = 1024;
 
 // Export-Wiedergabe: Wirt-Spuren ohne Freeze sind hier stumm (sonst wären sie vorher eingefroren worden) und fehlen, denn der Render lehnt jede
@@ -157,6 +173,52 @@ export function kurzeFreezeAntwort(r: { rev: number; projekt: Projekt }, spurId:
 }
 
 export type ExportAntwort = Pick<RenderAntwort, 'frames' | 'spitze_db' | 'regler_quelle'> & { datei: string } & Lautheit;
+
+// Paket 1.18, E-b. Unter dieser Spitze (dBFS) gilt ein Render als Stille: die Lautheit ist null, nicht der Gate-Boden −70 von ffmpeg.
+export const STILLE_DB = -90;
+const STUMM_GRENZE = -120;          // SCHNITTSTELLEN §1.2: jeder Fader-Wert ≤ −120 dB ist stumm
+const OHNE_LAUTHEIT: Lautheit = { lufs_i: null, lra: null, true_peak_dbtp: null };
+// S3-Fix G2: ffmpeg (ebur128) meldet −70.0 LUFS, wenn kein Block das absolute Gate −70 passiert: das ist der Boden, keine Messung. Eine solche leise,
+// aber nicht stille Spur (Spitze über STILLE_DB) bekommt lufs_i null und lra null (LRA 0 wäre erfunden), den gemessenen True Peak und unter_messgrenze true.
+const GATE_BODEN_LUFS = -70;
+export function untermessgrenze(l: Lautheit): { l: Lautheit; unter: boolean } {
+  if (l.lufs_i === null || l.lufs_i > GATE_BODEN_LUFS) return { l, unter: false };
+  return { l: { lufs_i: null, lra: null, true_peak_dbtp: l.true_peak_dbtp }, unter: true };
+}
+export interface SpurLautheit extends Lautheit { spur_id: string; nr: number; name: string; spitze_db: number; stumm: boolean; unter_messgrenze: boolean }
+export interface LautheitAntwort {
+  von_beat: number; bis_beat: number;
+  spuren: SpurLautheit[];
+  summe: Lautheit & { spitze_db: number; unter_messgrenze: boolean; regler_quelle: RenderAntwort['regler_quelle'] };
+}
+
+// Spuren, die im Bereich [von, bis) etwas spielen: ein Clip, der ihn berührt (MIDI-Clips mit Noten), oder ein Freeze, der ihn berührt. Eine Wirt-Spur
+// ohne Freeze spielt nicht (exportSicht lässt sie weg).
+export function belegteSpuren(p: Projekt, von: number, bis: number): Spur[] {
+  return p.spuren.filter((s) => {
+    if (s.freeze) {
+      const f0 = s.freeze.von_beat ?? 0, f1 = f0 + (s.freeze.frames / SAMPLERATE) * (p.tempo_bpm / 60);
+      return f0 < bis && f1 > von;
+    }
+    if (istWirt(s)) return false;
+    return s.clips.some((c) => c.start_beat < bis && c.start_beat + c.laenge_beats > von && (c.art === 'audio' || c.noten.length > 0));
+  });
+}
+
+// Spur-Regler für den Render EINER Spur (Datei --spur-regler): alle anderen Slots stumm, Solo überall aus, Fader und Pan der Spur aus dem Projekt,
+// ihr Mute auch (eine stumme Spur rendert Stille). Pfade und Wertebereiche wie lies_spur_regler (render.cpp).
+export function reglerEinzeln(s: Spur): Record<string, number> {
+  const r: Record<string, number> = {};
+  for (let n = 1; n <= 8; n++) {
+    r[`spur/${n}/mute`] = n === s.nr ? (s.mute ? 1 : 0) : 1;
+    r[`spur/${n}/solo`] = 0;
+  }
+  r[`spur/${s.nr}/fader`] = s.fader_db;
+  r[`spur/${s.nr}/pan`] = s.pan;
+  return r;
+}
+
+const LAUF_TEXT: Record<AusgabeLauf['art'], string> = { freeze: 'a freeze', export: 'an export', lautheit: 'a loudness measurement' };
 
 // Ende eines Freeze aus Sicht des Wartenden: /e/freeze (status, frames), ein neuer Kern, Stille, Frist
 type FreezeEnde = { art: 'e_freeze'; status: number; frames: number } | { art: 'neustart' } | { art: 'stille' } | { art: 'frist' } | { art: 'geschlossen' };
@@ -219,7 +281,8 @@ export class Ausgabe {
 
   private offen(): ProjOffen { return this.zugang.offen() ?? fehl('kein_projekt', 'no project is open'); }
   private pruefeSchreiben(): void { if (this.ctx.quelle() === 'cypher' && this.ctx.kiGestoppt()) fehl('ki_gestoppt', 'Stop Cypher is set'); }
-  private pruefeFrei(): void { if (this.lauf) fehl('beschaeftigt', `${this.lauf.art === 'freeze' ? 'a freeze' : 'an export'} is running`); }
+  // S3-Fix G1: der Text nennt die Art des laufenden Laufs (Freeze, Export, Lautheitsmessung)
+  private pruefeFrei(): void { if (this.lauf) fehl('beschaeftigt', `${LAUF_TEXT[this.lauf.art]} is running`); }
   private belege(l: AusgabeLauf): void {
     if (this.geschlossen) fehl('beschaeftigt', 'the server is shutting down');
     this.pruefeFrei();
@@ -259,6 +322,16 @@ export class Ausgabe {
     } catch (e) { throw this.nachFehler(e); } finally { this.gib(); }
   }
 
+  // Der Produktions-Wirt arr1 (djk-instrumente --arr1) schreibt /dev/shm/cypherdj[-i]/wirt-arr1.json (wirt.py: name, pid, bereit, …). Fehlt der Wirt, spielt
+  // im Kern keine Surge für Slot 1, und der Freeze wäre eine leere Datei ohne Fehlermeldung (Erhebung 2026-10-20). Darum lehnt der Freeze vorher ab.
+  // Die Datei allein genügt nicht (S3-Fix W2): wirt.py und djk-stop löschen sie nie, sie bleibt mit bereit:true und toter pid liegen (wirtLebt()).
+  private pruefeWirt(): void {
+    const ordner = (this.opt.wirtOrdner ?? (() => wirtOrdnerVorgabe()))();
+    if (!wirtLebt(path.join(ordner, 'wirt-arr1.json'))) {
+      fehl('wirt_fehlt', 'the Surge host for the production slot (arr1) is not running; start it with djk-instrumente --arr1 and repeat');
+    }
+  }
+
   // Freeze an: Prüfungen, dann die Sperre (Spec 6.33: vor tempoAnMaster), Echtzeit-Durchlauf, Eintrag, Freigabe in jedem Ausgang
   private async friereEinUndSetze(spurId: string, name: string): Promise<{ rev: number; projekt: Projekt }> {
     const vorher = sucheSpur(this.offen().projekt, spurId) ?? fehl('spur_unbekannt', `there is no track ${spurId}`);
@@ -269,6 +342,7 @@ export class Ausgabe {
     }
     if (this.arr === null) fehl('kein_kernstand', 'the core has not reported its arrangement state yet');
     if (this.arr.status !== 0) fehl('transport_laeuft', 'stop the transport first');
+    this.pruefeWirt();
     const frei = this.zugang.sperreLaden();                             // wirft 409 beschaeftigt, solange ein Öffnen oder Anlegen läuft (6.32)
     try {
       await this.zugang.tempoAnMaster();                                 // das eingefrorene Audio ist in Sekunden fest: Master = Projekttempo
@@ -366,7 +440,9 @@ export class Ausgabe {
     return { rev: jetzt.projekt.rev, projekt: jetzt.projekt };
   }
 
-  async exportiere(d: Record<string, unknown>): Promise<ExportAntwort> {
+  // Prüfungen von Export und Lautheit: nur von_beat und bis_beat, Bereich 1 bis EXPORT_MAX_BEATS Beats ab Beat 0 (Vorgabe: Loop-Klammer), kein anderer
+  // Lauf, kein Transport, kein Audio in Vorbereitung.
+  private pruefeBereich(d: Record<string, unknown>): { von: number; bis: number } {
     for (const k of Object.keys(d)) if (k !== 'von_beat' && k !== 'bis_beat') fehl('argument_ungueltig', `unknown field ${k}`);
     for (const k of ['von_beat', 'bis_beat']) {
       if (d[k] !== undefined && (typeof d[k] !== 'number' || !Number.isFinite(d[k]))) fehl('argument_ungueltig', `${k}: a number is required`);
@@ -381,18 +457,29 @@ export class Ausgabe {
     if (this.arr && this.arr.status !== 0) fehl('transport_laeuft', 'stop the transport first');
     const fehlt = fehlendesAudio(o.projekt, von, bis);
     if (fehlt.length) fehl('audio_fehlt', `audio clip ${fehlt.join(', ')} is still being prepared; try again in a moment`);
+    return { von, bis };
+  }
+
+  // Spec 2.5: Wirt-Spuren vorher einfrieren, eine nach der anderen (mit Sperre wie /proj/freeze, Spec 6.23, 6.33), dann die Export-Wiedergabe schreiben
+  // (nie geladen; der Aufrufer löscht die Datei). was: für die Meldung „new notes … during the <was>“.
+  private async friereEinUndSchreibe(was: string): Promise<{ jetzt: ProjOffen; p: Projekt; w: { nr: number; datei: string } }> {
+    for (const id of this.offen().projekt.spuren.map((s) => s.id)) {
+      const s = sucheSpur(this.offen().projekt, id);
+      if (!s || !brauchtFreeze(s)) continue;
+      await this.friereEinUndSetze(id, s.name);
+    }
+    const jetzt = this.offen();
+    const p = jetzt.projekt;
+    const offen = p.spuren.filter(brauchtFreeze).map((s) => s.name);
+    if (offen.length) fehl('veraltet', `new notes on ${offen.join(', ')} during the ${was}; nothing was written`);
+    return { jetzt, p, w: this.zugang.schreibeWiedergabe(exportSicht(p)) };
+  }
+
+  async exportiere(d: Record<string, unknown>): Promise<ExportAntwort> {
+    const { von, bis } = this.pruefeBereich(d);
     this.belege({ art: 'export' });
     try {
-      for (const id of o.projekt.spuren.map((s) => s.id)) {             // Spec 2.5: Wirt-Spuren vorher einfrieren, eine nach der anderen
-        const s = sucheSpur(this.offen().projekt, id);
-        if (!s || !brauchtFreeze(s)) continue;
-        await this.friereEinUndSetze(id, s.name);                        // mit Sperre wie /proj/freeze (Spec 6.23, 6.33)
-      }
-      const jetzt = this.offen();
-      const p = jetzt.projekt;
-      const offen = p.spuren.filter(brauchtFreeze).map((s) => s.name);
-      if (offen.length) fehl('veraltet', `new notes on ${offen.join(', ')} during the export; nothing was written`);
-      const w = this.zugang.schreibeWiedergabe(exportSicht(p));
+      const { jetzt, p, w } = await this.friereEinUndSchreibe('export');
       const ordner = path.join(jetzt.ordner, 'export');
       let r: RenderAntwort, ziel: string;
       try {
@@ -421,6 +508,54 @@ export class Ausgabe {
       const antwort: ExportAntwort = { datei: ziel, frames: r.frames, spitze_db: r.spitze_db, regler_quelle: r.regler_quelle, ...lautheit };
       this.ctx.log({ typ: 'proj_export', slug: jetzt.slug, nr: w.nr, von_beat: von, bis_beat: bis, ...antwort });
       return antwort;
+    } catch (e) { throw this.nachFehler(e); } finally { this.gib(); }
+  }
+
+  // Paket 1.18, E-b (POST /proj/lautheit): Lautheit je belegter Spur und als Summe, offline, auf Anfrage. Gleicher Anfang wie der Export (Bereich, Wirt-
+  // Spuren einfrieren, Export-Wiedergabe). Ein Render je Spur mit --ohne-zustand und einer Regler-Datei, in der alle anderen Spuren stumm stehen
+  // (Fader und Pan der Spur aus dem Projekt, Master wie ein frisch gestarteter Kern, der Limiter bleibt), dazu ein Render aller Spuren für die Summe
+  // mit den Reglern des Projekts. Eine Spur mit Mute, Fader aus oder (bei irgendeinem Solo im Projekt) ohne Solo wird nicht gerendert (stumm: true). Unter
+  // STILLE_DB Spitze sind die Zahlen null; liegt die Lautheit auf dem Gate-Boden von ffmpeg, ist lufs_i null und unter_messgrenze true (S3-Fix G2).
+  async lautheit(d: Record<string, unknown>): Promise<LautheitAntwort> {
+    const { von, bis } = this.pruefeBereich(d);
+    this.belege({ art: 'lautheit' });
+    let tmp: string | null = null;
+    try {
+      const { jetzt, p, w } = await this.friereEinUndSchreibe('loudness measurement');
+      try {
+        const dir = tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-lautheit-'));
+        const dauerMs = (bis - von) * 60_000 / p.tempo_bpm;
+        this.renderAbbruch = new AbortController();
+        if (this.geschlossen) this.renderAbbruch.abort();
+        const render = async (name: string, regler: Record<string, number>): Promise<{ r: RenderAntwort; l: Lautheit; unter: boolean }> => {
+          const datei = path.join(dir, `${name}.json`), aus = path.join(dir, `${name}.wav`);
+          fs.writeFileSync(datei, JSON.stringify(regler));
+          const r = await rendere({ programm: (this.opt.render ?? (() => [renderProgramm()]))(), nr: w.nr, von_beat: von, bis_beat: bis, bpm: p.tempo_bpm,
+            aus, arbeitsordner: this.zugang.arbeitsordner(), spurRegler: datei, ohneZustand: true, instanz: (this.opt.instanz ?? instanz)(),
+            zeitlimitMs: Math.ceil(4 * dauerMs) + 60_000, abbruch: this.renderAbbruch!.signal });
+          return { r, ...(r.spitze_db <= STILLE_DB ? { l: OHNE_LAUTHEIT, unter: false } : untermessgrenze(await messeLautheit(aus, this.opt.ffmpeg))) };
+        };
+        const spuren: SpurLautheit[] = [];
+        const solo = p.spuren.some((x) => x.solo);                        // S3-Fix G3: mit irgendeinem Solo im Projekt klingt im Mix nur, was Solo trägt
+        for (const s of belegteSpuren(p, von, bis)) {
+          const kopf = { spur_id: s.id, nr: s.nr, name: s.name };
+          if (s.mute || s.fader_db <= STUMM_GRENZE || (solo && !s.solo)) {
+            spuren.push({ ...kopf, ...OHNE_LAUTHEIT, spitze_db: -200, stumm: true, unter_messgrenze: false });
+            continue;
+          }
+          const { r, l, unter } = await render(`spur-${s.nr}`, reglerEinzeln(s));
+          spuren.push({ ...kopf, ...l, spitze_db: r.spitze_db, stumm: r.spitze_db <= STILLE_DB, unter_messgrenze: unter });
+        }
+        const sum = await render('summe', reglerAusProjekt(p));
+        const antwort: LautheitAntwort = { von_beat: von, bis_beat: bis, spuren,
+          summe: { ...sum.l, spitze_db: sum.r.spitze_db, unter_messgrenze: sum.unter, regler_quelle: sum.r.regler_quelle } };
+        this.ctx.log({ typ: 'proj_lautheit', slug: jetzt.slug, nr: w.nr, von_beat: von, bis_beat: bis, spuren: spuren.length });
+        return antwort;
+      } finally {
+        this.renderAbbruch = null;
+        fs.rmSync(w.datei, { force: true });                             // die Export-Wiedergabe verdrängt sonst die geladene (BEHALTE 5)
+        if (tmp) fs.rmSync(tmp, { recursive: true, force: true });
+      }
     } catch (e) { throw this.nachFehler(e); } finally { this.gib(); }
   }
 }
@@ -454,6 +589,7 @@ export function ausgabeBereich(ctx: BereichKontext, zugang: ProjZugang, opt: Aus
         return kurz ? kurzeFreezeAntwort(x, d.spur_id as string) : x;
       }) },
       { methode: 'POST', pfad: '/proj/export', schutz: 'fremdePost', handler: antworte((d) => a.exportiere(d)) },
+      { methode: 'POST', pfad: '/proj/lautheit', schutz: 'fremdePost', handler: antworte((d) => a.lautheit(d)) },
     ],
     ereignis: (adresse, felder) => a.ereignis(adresse, felder),
   };

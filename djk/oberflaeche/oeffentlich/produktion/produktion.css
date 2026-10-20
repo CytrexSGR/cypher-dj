@@ -123,3 +123,11 @@ body.produktion.lib-zu #bestand > :not(.kopfzeile), body.produktion.lib-zu #best
 @keyframes p-puls { from { opacity: 1; } to { opacity: .35; } }
 .p-ausgabe-text { font-size: 11px; color: var(--dim); max-width: 44ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .p-ausgabe-text.warnung { color: var(--kill); }
+
+/* Paket 1.18, E-c: Varianten-Tasten A, B, C … je Gruppe in der Transportleiste */
+.p-varianten[hidden] { display: none; }
+.p-var-reihe { display: inline-flex; align-items: center; gap: 2px; margin-right: 8px; }
+.p-var-name { font-size: 10px; letter-spacing: .08em; color: var(--dim); max-width: 12ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-right: 2px; }
+/* .p-transport vorn: sonst gewinnt .p-transport button (0,1,1) gegen .p-var (Review S2, gemessen per getComputedStyle) */
+.p-transport .p-var { min-width: 22px; padding: 2px 4px; font-size: 10px; font-weight: 800; border-radius: 4px; }
+.p-transport .p-var.an { background: var(--a); color: #0e0f12; border-color: var(--a); }

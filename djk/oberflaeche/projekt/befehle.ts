@@ -8,7 +8,7 @@
 // die Bewegung, die der Verlauf zusammenfasst (Spec 6.5); `{voll: true}` erzwingt den allgemeinen Weg (Test: beide ergeben dasselbe).
 // `rev` und `wiedergabe_rev` fasst kein Befehl an: sie zählt der Verlauf (verlauf.ts).
 import {
-  FADER_MAX, FADER_MIN, GAIN_MAX, GAIN_MIN, LOOP_MIN, MAX_BEAT, MAX_CLIPS, MAX_NOTEN, RB_PARAMETER, SPUR_FARBEN, TEMPO_MAX, TEMPO_MIN, WIRT_SLOTS,
+  FADER_MAX, FADER_MIN, GAIN_MAX, GAIN_MIN, GRUPPE_MAX, LOOP_MIN, MAX_BEAT, MAX_CLIPS, MAX_NOTEN, RB_PARAMETER, SPUR_FARBEN, TEMPO_MAX, TEMPO_MIN, WIRT_SLOTS,
   istObjekt, kanonisch, neueId, neueNotenId, notenNummer, notenZaehler,
   pruefeFehler, spurSicht, sucheClip, sucheSpur, wiedergabeSicht, type Clip, type Herkunft, type Geraet, type MidiClip, type Note, type Projekt, type Spur,
   type DekodiertZustand,
@@ -51,6 +51,11 @@ function text(a: Args, k: string, max: number, opt = true): string | undefined {
   const x = a[k];
   if (x === undefined && opt) return undefined;
   return typeof x === 'string' && x.trim().length >= 1 && x.length <= max ? x : ab('argument_ungueltig', `${k}: Text mit 1 bis ${max} Zeichen erwartet`);
+}
+// Paket 1.18, E-c (Review S2): der Gruppenname trägt keine Leerzeichen am Rand, sonst wären ' bass' und 'bass' zwei Gruppen; wie modell.ts beim Laden
+function gruppeArg(a: Args, opt = true): string | undefined {
+  const g = text(a, 'gruppe', GRUPPE_MAX, opt);
+  return g !== undefined && g.trim() !== g ? ab('argument_ungueltig', 'gruppe: ohne Leerzeichen am Rand') : g;
 }
 function idArg(a: Args, k: string): string {
   const x = a[k];
@@ -160,7 +165,7 @@ const MIXER = ['fader_db', 'pan', 'mute', 'solo'] as const;
 interface Kontext { quelle: Herkunft }
 const PRO_BEFEHL: Record<string, (p: Projekt, a: Args, ctx: Kontext) => void> = {
   spur_neu(p, a, ctx) {
-    erlaube(a, 'art', 'name', 'geraet');
+    erlaube(a, 'art', 'name', 'geraet', 'gruppe');
     const art = a.art;
     if (art !== 'audio' && art !== 'instrument') ab('argument_ungueltig', 'art: audio oder instrument erwartet');
     if (art === 'audio' && a.geraet !== undefined) ab('argument_ungueltig', 'geraet: nur für Instrument-Spuren');
@@ -168,7 +173,9 @@ const PRO_BEFEHL: Record<string, (p: Projekt, a: Args, ctx: Kontext) => void> = 
     const nr = [1, 2, 3, 4, 5, 6, 7, 8].find((n) => !p.spuren.some((s) => s.nr === n)) ?? ab('spur_bereich', 'keine freie Nummer');
     const geraet = art === 'instrument' ? baueGeraet(p, a.geraet ?? { art: 'intern' }) : undefined;
     const name = text(a, 'name', 80) ?? (art === 'audio' ? `Audio ${nr}` : geraet!.art === 'intern' ? 'RB-338' : 'Surge');
-    const spur: Spur = { id: neueId(p, 'spur'), von: ctx.quelle, nr, name, farbe: SPUR_FARBEN[(nr - 1) % SPUR_FARBEN.length], art,
+    const gruppe = gruppeArg(a);
+    const spur: Spur = { id: neueId(p, 'spur'), von: ctx.quelle, ...(gruppe !== undefined ? { gruppe } : {}), nr, name,
+      farbe: SPUR_FARBEN[(nr - 1) % SPUR_FARBEN.length], art,
       ...(geraet ? { geraet } : {}), ...(geraet?.art === 'wirt' ? { freeze: null } : {}),
       fader_db: 0, pan: 0, mute: false, solo: false, clips: [] };
     p.spuren.push(spur);
@@ -176,16 +183,20 @@ const PRO_BEFEHL: Record<string, (p: Projekt, a: Args, ctx: Kontext) => void> = 
 
   spur_aendern(p, a) {
     if (a.von !== undefined) ab('argument_ungueltig', 'von: unveränderlich (Spec 6.22), die Herkunft einer Spur ändert kein Befehl');
-    erlaube(a, 'spur_id', 'name', 'farbe', 'fader_db', 'pan', 'mute', 'solo', 'geraet');
+    erlaube(a, 'spur_id', 'name', 'farbe', 'fader_db', 'pan', 'mute', 'solo', 'geraet', 'gruppe');
     const s = spurVon(p, idArg(a, 'spur_id'));
-    if (['name', 'farbe', 'fader_db', 'pan', 'mute', 'solo', 'geraet'].every((k) => a[k] === undefined)) ab('argument_ungueltig', 'keine Änderung angegeben');
+    if (['name', 'farbe', 'fader_db', 'pan', 'mute', 'solo', 'geraet', 'gruppe'].every((k) => a[k] === undefined)) {
+      ab('argument_ungueltig', 'keine Änderung angegeben');
+    }
     const name = text(a, 'name', 80);
+    const gruppe = a.gruppe === null ? null : gruppeArg(a);       // null nimmt die Spur aus ihrer Gruppe
     if (a.farbe !== undefined && (typeof a.farbe !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(a.farbe))) ab('argument_ungueltig', 'farbe: #rrggbb erwartet');
     const fader = zahl(a, 'fader_db', FADER_MIN, FADER_MAX, { opt: true }), pan = zahl(a, 'pan', -1, 1, { opt: true });
     const mute = flagge(a, 'mute', true), solo = flagge(a, 'solo', true);
     if (a.geraet !== undefined && s.art !== 'instrument') ab('argument_ungueltig', 'geraet: nur für Instrument-Spuren');
     const geraet = a.geraet !== undefined ? baueGeraet(p, a.geraet, s.id) : undefined;
     if (name !== undefined) s.name = name;
+    if (gruppe === null) delete s.gruppe; else if (gruppe !== undefined) s.gruppe = gruppe;
     if (a.farbe !== undefined) s.farbe = a.farbe;
     if (fader !== undefined) s.fader_db = fader;
     if (pan !== undefined) s.pan = pan;
@@ -195,6 +206,16 @@ const PRO_BEFEHL: Record<string, (p: Projekt, a: Args, ctx: Kontext) => void> = 
       s.geraet = geraet;
       if (geraet.art === 'wirt') s.freeze = null; else delete s.freeze;
     }
+  },
+
+  // Paket 1.18, E-c: die gewählte Spur laut (mute false), alle anderen Spuren derselben Gruppe stumm (mute true); Spuren außerhalb der Gruppe
+  // bleiben unberührt. Ein Befehl, also ein Undo-Schritt. Die Spur muss zur Gruppe gehören (sonst argument_ungueltig).
+  variante_waehlen(p, a) {
+    erlaube(a, 'gruppe', 'spur_id');
+    const gruppe = gruppeArg(a, false) as string;
+    const gewaehlt = spurVon(p, idArg(a, 'spur_id'));
+    if (gewaehlt.gruppe !== gruppe) ab('argument_ungueltig', `spur_id: ${gewaehlt.id} gehört nicht zur Gruppe ${gruppe}`);
+    for (const s of p.spuren) if (s.gruppe === gruppe) s.mute = s !== gewaehlt;
   },
 
   spur_loeschen(p, a) {
@@ -456,7 +477,8 @@ const SPUR_LEICHT = ['name', 'farbe', 'fader_db', 'pan', 'mute', 'solo'];
 function istLeicht(projekt: Projekt, b: unknown): boolean {
   if (!istObjekt(b) || typeof b.befehl !== 'string') return false;
   switch (b.befehl) {
-    case 'spur_aendern': return b.geraet === undefined;                       // ein Gerätewechsel berührt Freeze, Slots und Klang
+    // ein Gerätewechsel berührt Freeze, Slots und Klang; gruppe kann neu entstehen, und leichterUnterschied sieht nur Schlüssel, die schon da sind
+    case 'spur_aendern': return b.geraet === undefined && b.gruppe === undefined;
     case 'loop_setzen': case 'metronom_setzen': return true;
     case 'tempo_setzen': return !projekt.spuren.some((s) => s.freeze);        // Tempo verwirft Freezes und ändert deren Länge in Beats
     default: return false;

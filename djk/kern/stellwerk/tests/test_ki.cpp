@@ -42,7 +42,8 @@ FALL(stopp_bricht_cypher_teile_ab_andere_laufen) {
   PRUEFE_GLEICH(ki, 1);
 }
 
-FALL(ki_spur_ueber_4_beats_stumm) {
+FALL(ki_spur_senkt_nichts) {
+  // Entscheidung E-a (2026-10-20): der Stopp senkt keinen Fader, auch nicht in der KI-Spur (vorher: über 4 Beats auf −200)
   Aufbau a;
   Lauf& l = a.l;
   l.sw->setze_direkt(l.r("deck/2/fader"), -1.0f);   // nicht in der KI-Spur
@@ -50,15 +51,15 @@ FALL(ki_spur_ueber_4_beats_stumm) {
   l.sw->ki_stopp(46, Quelle::andreas);
   l.bis(1800000);
   PRUEFE_NAH(l.wert_bei("deck/3/fader", 1620224), -3, 1e-6);
-  PRUEFE_NAH(l.wert_bei("deck/3/fader", 1620224 + 45000), -31.5, 1e-3);
-  PRUEFE_NAH(l.wert_bei("deck/4/fader", 1620224 + 45000), -33, 1e-3);
-  PRUEFE_NAH(l.wert_bei("deck/3/fader", 1620224 + 90000), -200, 0);
-  PRUEFE_NAH(l.wert_bei("deck/4/fader", 1620224 + 90000), -200, 0);
+  PRUEFE_NAH(l.wert_bei("deck/3/fader", 1620224 + 45000), -3, 1e-6);
+  PRUEFE_NAH(l.wert_bei("deck/4/fader", 1620224 + 45000), -6, 1e-6);
+  PRUEFE_NAH(l.wert_bei("deck/3/fader", 1620224 + 90000), -3, 0);
+  PRUEFE_NAH(l.wert_bei("deck/4/fader", 1620224 + 90000), -6, 0);
   PRUEFE_NAH(l.wert_bei("deck/2/fader", 1700000), -1, 0);   // Negativ-Kontrolle
 }
 
-FALL(ki_spur_mit_spur_reglern_ueber_4_beats_stumm) {
-  // D1 K1 (Spec 2.3): spur/<n> in der KI-Spur (eigene Liste): ihr Fader fällt wie ein Kanal-Fader; eine Spur außerhalb bleibt
+FALL(ki_spur_mit_spur_reglern_senkt_nichts) {
+  // D1 K1 (Spec 2.3) trug spur/<n> in die KI-Spur ein, der Stopp senkte sie. Entscheidung E-a: auch sie bleibt stehen.
   Lauf l;
   l.sw->ki_spur(1, Quelle::leitstand, "erz/4,spur/2");
   l.sw->setze_direkt(l.r("spur/2/fader"), -3.0f);
@@ -69,9 +70,8 @@ FALL(ki_spur_mit_spur_reglern_ueber_4_beats_stumm) {
   l.bis(1620224);
   l.sw->ki_stopp(46, Quelle::andreas);
   l.bis(1800000);
-  PRUEFE_NAH(l.wert_bei("spur/2/fader", 1620224), -3, 1e-6);
-  PRUEFE_NAH(l.wert_bei("spur/2/fader", 1620224 + 45000), -31.5, 1e-3);
-  PRUEFE_NAH(l.wert_bei("spur/2/fader", 1620224 + 90000), -200, 0);
+  PRUEFE_NAH(l.wert_bei("spur/2/fader", 1620224 + 45000), -3, 1e-6);
+  PRUEFE_NAH(l.wert_bei("spur/2/fader", 1620224 + 90000), -3, 0);
   PRUEFE_NAH(l.wert_bei("spur/3/fader", 1700000), -1, 0);   // Negativ-Kontrolle: nicht in der KI-Spur
 }
 
@@ -95,9 +95,10 @@ FALL(ki_spur_leitstand_und_s2_getrennt) {
   l.bis(1620224);
   l.sw->ki_stopp(46, Quelle::andreas);
   l.bis(1800000);
-  for (const char* p : {"deck/3/fader", "deck/4/fader", "spur/1/fader", "spur/3/fader", "spur/5/fader"})
-    PRUEFE_NAH(l.wert_bei(p, 1790000), -200, 0);
-  PRUEFE_NAH(l.wert_bei("spur/2/fader", 1790000), -2, 0);   // Andreas' Spur bleibt laut
+  // Entscheidung E-a: die Listen werden geführt, senken aber nichts; jeder Fader behält seinen Wert
+  PRUEFE_NAH(l.wert_bei("deck/3/fader", 1790000), -3, 0);
+  PRUEFE_NAH(l.wert_bei("deck/4/fader", 1790000), -6, 0);
+  for (const char* p : {"spur/1/fader", "spur/2/fader", "spur/3/fader", "spur/5/fader"}) PRUEFE_NAH(l.wert_bei(p, 1790000), -2, 0);
 }
 
 FALL(ki_spur_leeren_je_art) {
@@ -136,17 +137,28 @@ FALL(ki_spur_mit_spur_9_abgelehnt) {
   PRUEFE(l.grund(7, Status::abgelehnt) == Grund::unbekannter_regler);
 }
 
-FALL(fader_in_andreas_hand_bleibt_bei_ihm) {
-  Aufbau a;
-  Lauf& l = a.l;
-  l.griff(1000, "deck/3/fader", 0.5f);
-  l.griff(1600000, "deck/3/fader", 0.6f);   // Andreas hält den Fader (Rückgabe erst 32 Beats später)
+FALL(cypher_rampe_auf_fader_haelt_am_stoppwert) {
+  // Entscheidung E-a, DJ-Spiel: Cypher fährt eine Rampe auf einen Kanal-Fader (Beat 64 bis 96, 0 auf −20 dB). Der Stopp bei Beat 72 hält sie am
+  // Ist-Wert (wie /k/abbruch), danach bleibt der Fader dort stehen. Andreas' Rampe (Quelle leitstand) am Nachbarfader läuft weiter.
+  Lauf l;
+  l.sw->setze_direkt(l.r("deck/1/fader"), 0.0f);
+  l.sw->setze_direkt(l.r("deck/2/fader"), 0.0f);
+  l.beobachte("deck/1/fader");
+  l.beobachte("deck/2/fader");
+  const int64_t c = l.teil("deck/1/fader", 64, 32, -20, "k1", 0);
+  l.teil("deck/2/fader", 64, 32, -20, "l1", 0, "", Quelle::leitstand);
+  l.sw->ki_spur(47, Quelle::leitstand, "deck/1");                            // Cyphers Fader steht in der KI-Spur: vorher fiel er beim Stopp auf −200 (Review S1)
+  l.nachlese_ereignisse();
   l.bis(1620224);
-  const float gehalten = l.sw->wert(l.r("deck/3/fader"));
   l.sw->ki_stopp(46, Quelle::andreas);
-  l.bis(1800000);
-  PRUEFE_NAH(l.wert_bei("deck/3/fader", 1790000), gehalten, 0);
-  PRUEFE_NAH(l.wert_bei("deck/4/fader", 1790000), -200, 0);
+  l.bis(2200000);
+  PRUEFE_GLEICH(l.bei(c, Status::abgebrochen), 1620224);
+  PRUEFE(l.grund(c, Status::abgebrochen) == Grund::ki_stopp);
+  const float am_stopp = l.wert_bei("deck/1/fader", 1620224 + 1000);
+  PRUEFE_NAH(am_stopp, -5.0, 0.1);                                          // 8 von 32 Beats
+  PRUEFE_NAH(l.wert_bei("deck/1/fader", 1620224 + 90000), am_stopp, 0);      // bleibt stehen (vorher: auf −200 ausgeblendet)
+  PRUEFE_NAH(l.wert_bei("deck/1/fader", 2190000), am_stopp, 0);
+  PRUEFE(l.wert_bei("deck/2/fader", 2190000) < -19.0);                        // Negativ-Kontrolle: die Rampe von Andreas läuft zu Ende
 }
 
 FALL(nach_dem_stopp_cypher_abgelehnt_bis_frei_von_andreas) {

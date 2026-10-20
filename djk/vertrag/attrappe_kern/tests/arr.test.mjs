@@ -91,7 +91,13 @@ test('arr: freeze bricht bei Stopp ab (7 abbruch, /e/freeze 1); ohne Arbeitsordn
   gruen(r);
 });
 
-test('arr: wartender Start endet mit 7 (zweiter Start abbruch, Stopp abbruch), KI-Stopp beendet Cyphers Transport (Spec 2.12)', () => {
+// Entscheidung E-a (2026-10-20): der KI-Stopp beendet einen LAUFENDEN Transport nicht mehr, auch keinen von Cypher gestarteten (einen noch wartenden
+// Start von Cypher verwirft er weiter, 7 ki_stopp: der nächste Fall). Vorher (Spec 2.12) meldete der letzte erwarte-Schritt dieses Tests /zustand/arr
+// mit status 0; er hätte aber jede frühere Meldung mit status 0 (nach dem Stopp 23) verbraucht, der Test war für das KI-Stopp-Ende nicht bindend.
+// Jetzt zählt das Protokoll nach dem KI-Stopp: jede /zustand/arr ab Sample 21 000 sagt status 2.
+const zustandNach = (r, ab, bis) => r.log.filter((m) => m.adresse === '/zustand/arr' && m.s > ab && m.s <= bis).map((m) => m.werte[1]);
+
+test('arr: wartender Start endet mit 7 (zweiter Start abbruch, Stopp abbruch); der KI-Stopp beendet Cyphers laufenden Transport nicht (E-a)', () => {
   const r = fahre([
     sende(0, laden(20, 1)),
     sende(512, start(21, 0, 2)),            // wartet auf den Takt (90 000)
@@ -103,11 +109,15 @@ test('arr: wartender Start endet mit 7 (zweiter Start abbruch, Stopp abbruch), K
     sende(8192, start(24, 0, 0, 'cypher')),
     erwarte(12000, q(24, 'cypher', 2)),
     sende(20000, ['/k/ki/stopp', 'hs', 25, 'andreas']),
-    erwarte(24000, ['/zustand/arr', 'iiidhdi', 1, 0, 0, null, null, 0, 0]),
+    erwarte(40000, ['/e/ki', 'ish', 1, 'ki_stopp', null]),
   ], { cfg });
   gruen(r);
+  const nach = zustandNach(r, 21000, 40000);
+  assert.ok(nach.length >= 10, `Positiv-Kontrolle: Meldungen nach dem KI-Stopp gesehen (${nach.length})`);
+  assert.deepEqual([...new Set(nach)], [2], 'Cyphers Transport läuft nach dem KI-Stopp weiter');
 });
 
+// E-a (2026-10-20), Fall unverändert: was noch nicht klingt, verwirft der KI-Stopp weiter (wie wartende Deck-Befehle von Cypher); Gegenstück: der vorige Fall.
 test('arr: KI-Stopp beendet einen wartenden Start von Cypher mit 7 ki_stopp, einen von Andreas nicht', () => {
   const r = fahre([
     sende(0, laden(30, 1)),

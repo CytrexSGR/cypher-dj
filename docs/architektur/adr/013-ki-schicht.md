@@ -45,6 +45,8 @@ Laufzeit 15 Takte doppelter Sub entstanden (09 NP K1); eine Wahl statt eines Pla
    ungeprüft“; ein EQ auf +6 dB an Andreas' laufendem Deck öffnet keinen Kanal und ist trotzdem Einspielen ohne ihn.
 5. **Cypher-Stopp** (Taste am Controller, wirkt im Kern auch ohne Leitstand): alle Teile mit Quelle `cypher` ab, Kanäle
    der KI-Spur in einem Takt auf −200 dB, übrige Regler bleiben stehen, weitere Cypher-Befehle abgelehnt bis „Freigabe“.
+   *Überholt durch Paket 1.18, Entscheidung E-a (Andreas, 2026-10-20):* der Stopp senkt keinen Kanal mehr; laufende Teile von Cypher halten
+   am Ist-Wert, ein laufender Transport läuft weiter und gehört Andreas (D1-SPEC Nachträge 39 und 40).
 6. **Sichtbarkeit vor jeder Oberfläche:** LEDs am Controller (Vorschlag offen, Plan läuft, Rückfall aktiv), eine
    **Ansage-Zeile** im Terminal (ein Satz mit Takt: was Cypher als Nächstes vorhat), die Taste „Cypher hören“, der
    Spielzettel als Text. Kein Sprachausgang (Kein Ton ohne Frage).

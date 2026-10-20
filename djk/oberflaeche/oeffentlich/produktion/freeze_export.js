@@ -14,13 +14,14 @@ export function bindeAusgabe(ctx) {
   $('meldung').before(gruppe);
   st.lauf = null;            // { art: 'freeze'|'export', spur_id?, name?, an?, seit } während einer Anfrage (seit: Start dieser Seite, performance.now())
   // V2 Fix F14 (Spec 6.34): ein Lauf, den diese Seite nicht selbst gestartet hat (Reload mitten im Lauf, eine zweite Seite, Cypher), aus
-  // GET /proj/aktuell ausgabe_lauf; er sperrt FREEZE und EXPORT wie ein eigener und wird nachgefragt, bis er endet
+  // GET /proj/aktuell ausgabe_lauf; er sperrt FREEZE und EXPORT wie ein eigener und wird nachgefragt, bis er endet. Paket 1.18: auch art 'lautheit'
+  // (Cyphers Messung, proj_lautheit): die Seite zeigt "Measuring loudness" und sperrt wie bei einem fremden Export.
   st.fremdLauf = null;
   const laufJetzt = () => st.lauf ?? st.fremdLauf;
   let frage = 0;
   ctx.ausgabeLauf = (x) => {
     clearTimeout(frage);
-    if (!x || (x.art !== 'freeze' && x.art !== 'export') || st.lauf) { if (st.fremdLauf) { st.fremdLauf = null; knoepfe(); } return; }
+    if (!x || (x.art !== 'freeze' && x.art !== 'export' && x.art !== 'lautheit') || st.lauf) { if (st.fremdLauf) { st.fremdLauf = null; knoepfe(); } return; }
     const s = x.art === 'freeze' ? st.projekt?.spuren.find((y) => y.id === x.spur_id) : null;
     const gleich = st.fremdLauf && st.fremdLauf.art === x.art && st.fremdLauf.spur_id === x.spur_id;
     st.fremdLauf = gleich ? st.fremdLauf : { art: x.art, ...(x.art === 'freeze' ? { spur_id: x.spur_id, name: s?.name ?? x.spur_id, an: !s?.freeze } : {}), seit: null };   // H3: kein Start bekannt

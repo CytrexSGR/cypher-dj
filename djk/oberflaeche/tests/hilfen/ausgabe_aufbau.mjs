@@ -14,6 +14,7 @@ import { wiedergabeDatei } from '../../projekt/wiedergabe.ts';
 import { aendere } from '../../projekt/verlauf.ts';
 import { baueKatalog } from './katalog.mjs';
 import { wav, warteBis } from './proj_kontext.mjs';
+import { starteWirtProzess, schreibeWirtStatus } from './wirt_prozess.mjs';
 
 export const RENDER_ATTRAPPE = [process.execPath, path.join(import.meta.dirname, 'render_attrappe.mjs')];
 
@@ -29,11 +30,17 @@ const warte = (ms) => new Promise((r) => setTimeout(r, ms));
 //   { art: 'weg' }                       Quittung 1, danach keine Meldung mehr (Kern verloren: Stille)
 //   { art: 'haengt' }                    Quittung 1, Status 3 im Takt bis zum Testende (für Neustart, ausgabe_lauf)
 //   { art: 'ohne_quittung' }             warteQuittung null
-export async function aufbau(t, { tempo = 120, kern = { art: 'ok' }, opt = {}, mitKick = true } = {}) {
+// mitWirt (Paket 1.18): false = die Status-Datei wirt-arr1.json fehlt im Wirt-Ordner (wirtDir), der Produktions-Wirt läuft nicht; true = Datei mit
+// bereit:true und der pid eines lebenden Stellvertreters (wirt_prozess.mjs, endet bei t.after)
+export async function aufbau(t, { tempo = 120, kern = { art: 'ok' }, opt = {}, mitKick = true, mitWirt = true } = {}) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-s3-ablauf-'));
   const uhren = new Set();
   t.after(() => { for (const u of uhren) clearInterval(u); fs.rmSync(tmp, { recursive: true, force: true }); });
   const wurzel = path.join(tmp, 'projekte'), arbeitsordner = path.join(tmp, 'arr');
+  // Paket 1.18: eigener Wirt-Ordner, damit ein Freeze nie vom Betrieb unter /dev/shm/cypherdj abhängt; mitWirt: false = der Wirt arr1 läuft nicht
+  const wirtDir = path.join(tmp, 'wirt');
+  fs.mkdirSync(wirtDir);
+  if (mitWirt) schreibeWirtStatus(wirtDir, { pid: (await starteWirtProzess(t)).pid });   // S3-Fix W2: bereit:true und eine lebende pid namens wirt.py
   const kick = wav(path.join(tmp, 'daten'), 'kick.wav', 0.5);
   const katalog = baueKatalog(path.join(tmp, 'kat'), [{ n: 1, typ: 'oneshot', pfad: kick, dauer_s: 0.5, sha: 'a'.repeat(64) }]);
   const protokoll = { gesendet: [], reihenfolge: [], uebernommen: [], verteilt: [], log: [], wiedergaben: [] };
@@ -113,7 +120,7 @@ export async function aufbau(t, { tempo = 120, kern = { art: 'ok' }, opt = {}, m
     },
     schreibeWiedergabe: (p) => { const w = echt.schreibeWiedergabe(p); protokoll.wiedergaben.push(w); return w; },
   };
-  const optionen = { zugabeMs: 300, stilleMs: 400, render: () => RENDER_ATTRAPPE, instanz: () => 'c', jetzt: () => new Date(2026, 9, 15, 18, 15, 0), ...opt };
+  const optionen = { zugabeMs: 300, stilleMs: 400, render: () => RENDER_ATTRAPPE, instanz: () => 'c', wirtOrdner: () => wirtDir, jetzt: () => new Date(2026, 9, 15, 18, 15, 0), ...opt };
   ausgabe = new Ausgabe(ctx, zugang, optionen);
   vomKern('/k/willkommen', { generation: 1 });
   vomKern('/uhr', { beat: 0, bpm: tempo, sample: 0n });             // Master steht schon auf dem Projekttempo: keine Rampe
@@ -150,6 +157,6 @@ export async function aufbau(t, { tempo = 120, kern = { art: 'ok' }, opt = {}, m
     await echt.uebernimm(w, { quelle: 'andreas', label });
   };
   const offen = () => echt.offen();                                  // {slug, ordner, projekt (lebend), verlauf}
-  return { ausgabe, b, s, zugang, echt, ctx, zustand, protokoll, arbeitsordner, aendern, vorbei, vomKern, arrMeldung, projekt, lead, freezes, wiedergabe, tmp,
+  return { wirtDir, ausgabe, b, s, zugang, echt, ctx, zustand, protokoll, arbeitsordner, aendern, vorbei, vomKern, arrMeldung, projekt, lead, freezes, wiedergabe, tmp,
     offen, optionen };
 }
