@@ -60,6 +60,8 @@ Built in Germany by Andreas, a DJ, and Cypher, the lab's AI agent (Claude models
 - The agent builds and edits the same projects through its own tools (create tracks, write clips and notes, mix,
   start the transport, export)
 
+![PRODUCTION view: three tracks (audio kick, RB-338 bass, frozen Surge XT lead), 8-bar loop, piano roll of the bass line](docs/screens/production-view.png)
+
 **Measure before it is loud**
 - A native headphone previewer, separate from the browser, which only draws
 - The core measures every deck behind its closed fader: band energy, loudness, and overlap in the
@@ -76,6 +78,10 @@ Built in Germany by Andreas, a DJ, and Cypher, the lab's AI agent (Claude models
 - A skill for Claude Code in [`skills/djk-live/`](skills/djk-live/SKILL.md) that teaches an agent how to play
   *with* a human: think about what a move does before making it, crossfade instead of swapping, one change
   every 8 bars and announce it first. Copy the folder into the skills folder of Claude Code (`.claude/skills` in your home directory) to use it
+
+![Media library browser: one-shot samples filtered by instrument, with pack and length](docs/screens/library-browser.png)
+
+![Effects strip: a compressor on every source channel](docs/screens/effects.png)
 
 ## Own instruments and effects
 
