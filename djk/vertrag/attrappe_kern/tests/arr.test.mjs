@@ -20,7 +20,7 @@ test('arr: Laden quittiert 1 und 3 und meldet nr in /zustand/arr', () => {
     sende(1000, laden(1, 17)),
     erwarte(3000, q(1, 'andreas', 1)),
     erwarte(3000, q(1, 'andreas', 3)),
-    erwarte(3000, ['/zustand/arr', 'iiidhdi', 17, 0, 0, 0, -1, 0, 0]),
+    erwarte(3000, ['/zustand/arr', 'iiidhdif', 17, 0, 0, 0, -1, 0, 0, 0]),
   ], { cfg });
   gruen(r);
 });
@@ -35,7 +35,7 @@ test('arr: Start auf den Takt (Kern-Beat 4 = 90 000), Quittung 2 dort, Status 2'
     sende(512, start(4, 0, 2)),
     erwarte(1000, q(4, 'andreas', 1)),
     erwarte(100000, q(4, 'andreas', 2, 90000)),
-    erwarte(100000, ['/zustand/arr', 'iiidhdi', 1, 2, 0, 0, 90000, 0, 0]),
+    erwarte(100000, ['/zustand/arr', 'iiidhdif', 1, 2, 0, 0, 90000, 0, 0, 0]),
   ], { cfg });
   gruen(r);
 });
@@ -51,8 +51,10 @@ test('arr: Stopp, Bereichsfehler (auch freeze), cypher bei KI-Stopp abgelehnt', 
     erwarte(6000, q(8, 'andreas', 6, null, 'ausserhalb_bereich')),
     sende(6144, ['/k/arr/freeze', 'hsiddi', 9, 'andreas', 1, 0.0, 0.5, 1]),
     erwarte(8000, q(9, 'andreas', 6, null, 'ausserhalb_bereich')),
-    sende(8192, ['/k/ki/stopp', 'hs', 10, 'andreas']),
-    sende(9000, laden(11, 2, 'cypher')),
+    sende(8000, ['/k/arr/freeze', 'hsiddi', 12, 'andreas', 33, 0.0, 4.0, 1]),   // E3: ARR_SPUREN = 32, Spur 33 gibt es nicht
+    erwarte(9000, q(12, 'andreas', 6, null, 'ausserhalb_bereich')),
+    sende(9200, ['/k/ki/stopp', 'hs', 10, 'andreas']),
+    sende(10000, laden(11, 2, 'cypher')),
     erwarte(12000, q(11, 'cypher', 6, null, 'ki_gestoppt')),
   ], { cfg });
   gruen(r);
@@ -68,13 +70,29 @@ test('arr: freeze läuft mit Status 3, endet nach bis − von + 2 Beats mit /e/f
     sende(4000, laden(21, 1)),
     sende(8000, freeze(22, 1, 0.0, 4.0, 7)),
     erwarte(9000, q(22, 'andreas', 1)),
-    erwarte(9000, ['/zustand/arr', 'iiidhdi', 1, 3, 0, 0, null, 0, 0]),
+    erwarte(9000, ['/zustand/arr', 'iiidhdif', 1, 3, 0, 0, null, 0, 0, 0]),
     erwarte(10000, q(22, 'andreas', 2)),
     erwarte(150000, q(22, 'andreas', 3)),
     erwarte(150000, ['/e/freeze', 'iiih', 1, 7, 0, 135000]),
   ], { cfg: { ...cfg, arr_ordner: ordner } });
   gruen(r);
   assert.equal(fs.statSync(path.join(ordner, 'freeze-1-7.f32')).size, 135000 * 8);
+  fs.rmSync(ordner, { recursive: true, force: true });
+});
+
+// E3 (Review-Nachzug): die obere Kante des Slot-Bereichs. Spur 32 wird angenommen (Gegenprobe zu Spur 33 oben).
+test('arr: freeze auf Spur 32 (E3: 32 Slots) läuft wie auf Spur 1', () => {
+  const ordner = fs.mkdtempSync(path.join(os.tmpdir(), 'attrappe-arr-'));
+  const r = fahre([
+    sende(4000, laden(21, 1)),
+    sende(8000, freeze(22, 32, 0.0, 4.0, 7)),
+    erwarte(9000, q(22, 'andreas', 1)),
+    erwarte(10000, q(22, 'andreas', 2)),
+    erwarte(150000, q(22, 'andreas', 3)),
+    erwarte(150000, ['/e/freeze', 'iiih', 32, 7, 0, 135000]),
+  ], { cfg: { ...cfg, arr_ordner: ordner } });
+  gruen(r);
+  assert.equal(fs.statSync(path.join(ordner, 'freeze-32-7.f32')).size, 135000 * 8);
   fs.rmSync(ordner, { recursive: true, force: true });
 });
 

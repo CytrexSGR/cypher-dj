@@ -2314,7 +2314,12 @@ function hotcueMarken(a) {
 }
 // Aktiver Deck-Loop vom Seiten-Server (Start, Länge); geholt, wenn der Loop-Zustand des Decks kippt und nach Loop-Griffen
 async function holeLoop(n) {
-  try { deckAnsicht[n].loop = await (await fetch(`/deck/loop?deck=${n}`)).json(); } catch { /* nächster Anlass */ }
+  try { deckAnsicht[n].loop = await (await fetch(`/deck/loop?deck=${n}`)).json(); } catch { return; /* nächster Anlass */ }
+  const l = deckAnsicht[n].loop?.laenge;   // Längenwahl folgt dem scharfen Loop (nach Neuladen stand sie sonst auf 4)
+  if (l && LOOP_LAENGEN.includes(l) && l !== deckAnsicht[n].loopLaenge) {
+    deckAnsicht[n].loopLaenge = l;
+    for (const x of $$(`.deck[data-deck="${n}"] [data-loopl]`)) x.classList.toggle('an', Number(x.dataset.loopl) === l);
+  }
 }
 // Loop aktiv: läuft darin (Status 3) oder scharf bei stehendem Deck (Kern meldet dann beats_bis_ende null, gemessen Instanz i)
 function loopAktiv(z) { return !!z && (z.status === 3 || (z.status >= 1 && z.beats_bis_ende === null)); }   // INFINITY kommt als null
@@ -2366,22 +2371,43 @@ function bindeDeckBedienung(n, d) {
     const b = document.createElement('button');
     b.textContent = String(l); b.dataset.loopl = String(l); b.title = `Loop length ${l} beat${l > 1 ? 's' : ''}`;
     b.classList.toggle('an', l === a.loopLaenge);
-    b.addEventListener('click', () => { a.loopLaenge = l; for (const x of $$('[data-loopl]', d)) x.classList.toggle('an', x === b); });
+    b.addEventListener('click', async () => {
+      a.loopLaenge = l; for (const x of $$('[data-loopl]', d)) x.classList.toggle('an', x === b);
+      // Traktor: bei laufendem Loop gilt die Länge sofort, der Start bleibt; ohne Loop nur Vorauswahl für den nächsten
+      // Anzeige sofort (der Server merkt sich die Länge synchron, gemessen 3 bis 22 ms), holeLoop korrigiert
+      if (!loopAktiv(zustand.decks[n])) return;
+      if (a.loop?.laenge) a.loop = { ...a.loop, laenge: l };
+      if (await deckPost('/deck/loop', { deck: n, laenge: l, raster: 0, behalte_start: true }, 'Loop length')) holeLoop(n);
+    });
     loops.append(b);
   }
   const an = document.createElement('button');
   an.textContent = 'LOOP'; an.dataset.loopan = ''; an.title = 'Loop on/off at the snap grid';
   an.addEventListener('click', async () => {
     await deckPost('/deck/loop', { deck: n, laenge: an.classList.contains('an') ? 0 : a.loopLaenge, raster: a.rasterWahl }, 'Loop');
-    setTimeout(() => holeLoop(n), 400);
+    holeLoop(n);
   });
   loops.append(an);
+  // Loop Move (Traktor): ◀ ▶ springen um die Loop-Länge; bei scharfem Loop wandern Loop und Kopf zusammen (der Kern verschiebt den
+  // Loop beim Sprung mit), ohne Loop ist es ein Beat-Jump um die gewählte Länge
+  for (const [richtung, zeichen, text] of [[-1, '◀', 'left'], [1, '▶', 'right']]) {
+    const m = document.createElement('button');
+    m.textContent = zeichen; m.dataset.loopmove = String(richtung);
+    m.title = `Loop move ${text}: jump the loop and playhead ${richtung < 0 ? 'back' : 'ahead'} by the loop length (no loop: jump by the selected length)`;
+    m.addEventListener('click', async () => {
+      if (loopAktiv(zustand.decks[n]) && !a.loop?.laenge) await holeLoop(n);
+      const laenge = loopAktiv(zustand.decks[n]) && a.loop?.laenge ? a.loop.laenge : a.loopLaenge;
+      if (await deckPost('/deck/sprung', { deck: n, delta: richtung * laenge, raster: 0 }, 'Loop move')) holeLoop(n);
+    });
+    loops.append(m);
+  }
   // Springen in der Übersicht: Klick → Quell-Beat, der Server rastet ein (stehend) bzw. hält die Phase (laufend)
   $('[data-ueber]', d).addEventListener('click', (e) => {
     if (!a.ueber.w || !a.raster) return;
     const r = e.currentTarget.getBoundingClientRect();
     const frame = (e.clientX - r.left) / r.width * laengeFrames(a.ueber.w);
-    deckPost('/deck/sprung', { deck: n, ziel: (frame - a.raster.ersterSchlagFrame) / a.raster.framesProBeat, raster: a.rasterWahl }, 'Jump');
+    deckPost('/deck/sprung', { deck: n, ziel: (frame - a.raster.ersterSchlagFrame) / a.raster.framesProBeat, raster: a.rasterWahl }, 'Jump')
+      .then(() => holeLoop(n));   // der Kern verschiebt einen scharfen Loop beim Sprung mit, der Server zieht den Start nach
   });
   // Ziehen im Zoomfenster: die Welle folgt der Hand und der Kern spielt dazu (Hörbares Ziehen, 2026-10-17: /deck/scrub, ~60 Hz,
   // roh ohne Keylock). Beim Loslassen bleibt der Kopf (stehendes Deck) bzw. läuft das Deck um die Strecke versetzt weiter (laufend,
@@ -2429,6 +2455,7 @@ function bindeDeckBedienung(n, d) {
     if (Math.abs(dx) < 3) { a.zieh = 0; a.ziehBasis = null; return; }
     if (r.gescrubbt && r.griffOk) { ziehNull(delta); return; }
     await deckPost('/deck/sprung', { deck: n, delta, raster: 0 }, 'Drag');
+    holeLoop(n);   // ein scharfer Loop wandert mit
     a.zieh = 0; a.ziehBasis = null;
   };
   lauf.addEventListener('pointerup', los);

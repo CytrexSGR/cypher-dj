@@ -49,23 +49,23 @@ test('J3 Probe B6: Projekt ohne Zähler öffnen, höchste Spur, Clip und Note l�
   const clip = p.spuren[0].clips[0].id;
   console.log(`J3 B6 ${JSON.stringify({ note, spur, clip })}`);
   assert.deepEqual({ note, spur, clip }, { note: 'n3', spur: 's3', clip: 'c2' });
-  assert.deepEqual(offen.naechste_id, { spur: 3, clip: 2 }, 'das Öffnen setzt naechste_id (Maximum plus 1)');
+  assert.deepEqual(offen.naechste_id, { spur: 3, clip: 2, gruppe: 1 }, 'das Öffnen setzt naechste_id (Maximum plus 1; 1.10 Task 9: dazu der Gruppen-Zähler 1)');
   assert.equal(offen.naechste_noten_id, 3, 'und den Noten-Zähler');
 });
 
 test('J3 Negativ-Kontrolle: vorhandene Zähler bleiben beim Öffnen stehen (höher als das Maximum plus 1, nie gesenkt)', async (t) => {
   const { offen, ae } = await oeffneAlt(t, { id: { spur: 9, clip: 7 }, noten: 12 });
-  assert.deepEqual([offen.naechste_id, offen.naechste_noten_id], [{ spur: 9, clip: 7 }, 12]);
+  assert.deepEqual([offen.naechste_id, offen.naechste_noten_id], [{ spur: 9, clip: 7, gruppe: 1 }, 12]);   // 1.10 Task 9: fehlender Gruppen-Zähler kommt dazu, die vorhandenen bleiben
   const p = await ae([{ befehl: 'spur_neu', art: 'audio' }]);
   assert.equal(p.spuren.at(-1).id, 's9');
 });
 
 test('J3 pruefeProjekt: setzt fehlende Zähler, ein vorhandener Teil-Zähler bleibt, ein leeres Projekt beginnt bei 1', () => {
   const g = pruefeProjekt(altProjekt(null));
-  assert.deepEqual([g.projekt.naechste_id, g.projekt.naechste_noten_id], [{ spur: 3, clip: 2 }, 3]);
+  assert.deepEqual([g.projekt.naechste_id, g.projekt.naechste_noten_id], [{ spur: 3, clip: 2, gruppe: 1 }, 3]);   // 1.10 Task 9: Gruppen-Zähler 1
   const teil = altProjekt(null); teil.naechste_id = { spur: 5 };
-  assert.deepEqual(pruefeProjekt(teil).projekt.naechste_id, { spur: 5, clip: 2 }, 'nur der fehlende Teil kommt dazu');
+  assert.deepEqual(pruefeProjekt(teil).projekt.naechste_id, { spur: 5, clip: 2, gruppe: 1 }, 'nur der fehlende Teil kommt dazu');
   const ohne = neuesProjekt('Leer'); delete ohne.naechste_id; delete ohne.naechste_noten_id;
   const leer = pruefeProjekt(ohne).projekt;
-  assert.deepEqual([leer.naechste_id, leer.naechste_noten_id], [{ spur: 1, clip: 1 }, 1]);
+  assert.deepEqual([leer.naechste_id, leer.naechste_noten_id], [{ spur: 1, clip: 1, gruppe: 1 }, 1]);   // 1.10 Task 9: Gruppen-Zähler 1
 });

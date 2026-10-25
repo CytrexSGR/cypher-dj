@@ -8,7 +8,7 @@ namespace cypherdj::stellwerk {
 constexpr int SR = 48000;                  // §1.1
 constexpr int BLOCK_MAX = 1024;            // größtes Quantum, für das Puffer angelegt sind (V1: 256)
 constexpr int MAX_TEILE = 256;             // offene Teile (angenommen oder gestartet) zugleich
-constexpr int MAX_BEWEGT = 128;            // Regler mit Verlauf je Zyklus
+constexpr int MAX_BEWEGT = 256;            // Regler mit Verlauf je Zyklus
 constexpr int MAX_HAND = 256;              // wartende Griffe
 constexpr int MAX_EREIGNISSE = 2048;       // Ausgaben zwischen zwei Abholungen
 constexpr int TEXT = 48;                   // OSC-Zeichenketten: höchstens 47 Bytes plus Null (§1.4)

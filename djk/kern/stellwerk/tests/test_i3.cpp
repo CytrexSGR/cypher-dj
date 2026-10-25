@@ -169,7 +169,7 @@ FALL(spur_regler_ohne_schein) {
   // D1 K1 (Spec 2.3): spur/* sind kein Kanal-Fader; Cypher öffnet sie ohne Hörschein (A9), wie erz und pad
   HoerscheinRegister reg;   // leer
   TestDeck deck;
-  for (const char* f : {"spur/1/fader", "spur/8/fader", "spur/3/pan"})
+  for (const char* f : {"spur/1/fader", "spur/8/fader", "spur/3/pan", "grp/1/fader", "grp/8/fader", "grp/3/pan", "pm/fader"})
     PRUEFE(lauf(reg, deck, true, "", Quelle::cypher, f) == Grund::kein);
   PRUEFE(lauf(reg, deck, true, "", Quelle::cypher, "deck/2/fader") == Grund::kein_hoerschein);   // Gegenprobe
 }

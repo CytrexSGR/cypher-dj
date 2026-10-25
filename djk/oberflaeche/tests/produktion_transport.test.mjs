@@ -1,7 +1,7 @@
 // PRODUCTION V1: reine Teile des Transports (transport.js)
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { kernText, kopfStand, ARR_ALTER_MS } from '../oeffentlich/produktion/transport.js';
+import { kernText, kopfStand, ARR_ALTER_MS, limiterAn } from '../oeffentlich/produktion/transport.js';
 
 test('V1 Transport: Kern-Anzeige liest das Feld nr aus /zustand/arr (Spec 3.1), nicht rev', () => {
   assert.equal(kernText({ nr: 7, status: 2 }), 'core rev 7 · playing');
@@ -35,4 +35,10 @@ test('V1 Transport: Abspielkopf rechnet nach 1 s ohne /zustand/arr nicht weiter 
   assert.deepEqual(kopfStand({ arr: null, arrZeit: null, t: 5000, hochrechne: rechne, loop }), { kopfBeat: null, unbekannt: false });
   // der Loop faltet weiter (kopfImLoop), solange die Meldung jung ist
   assert.ok(stand(1000, 1900).kopfBeat < 8);
+});
+
+test('1.10 Slice 2: die Lampe SET LIMITER ist an, sobald limiter_db unter −0,1 liegt (kein Wert, 0, Rauschen: aus)', () => {
+  assert.equal(limiterAn({ limiter_db: -3 }), true);
+  assert.equal(limiterAn({ limiter_db: -0.11 }), true);
+  for (const f of [{ limiter_db: 0 }, { limiter_db: -0.05 }, {}, null, undefined, { limiter_db: 'x' }, { limiter_db: Number.NaN }]) assert.equal(limiterAn(f), false, JSON.stringify(f));
 });

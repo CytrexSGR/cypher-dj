@@ -9,6 +9,7 @@ export function element(tag = 'div') {
       contains: (k) => e.klassen.has(k),
     },
     append(...k) { for (const x of k) { x.eltern = e; e.kinder.push(x); } },
+    replaceChildren(...k) { e.kinder = []; for (const x of k) { x.eltern = e; e.kinder.push(x); } },   // 1.10: Ausgang-Wahl im Spurkopf (spurkoepfe.js zeigeWerte)
     before() {}, remove() { if (e.eltern) e.eltern.kinder = e.eltern.kinder.filter((x) => x !== e); },
     addEventListener(n, f) { (e.ereignisse[n] ??= []).push(f); },
     setAttribute(n, v) { e.attribute[n] = String(v); },

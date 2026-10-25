@@ -12,7 +12,7 @@ const NAMEN = ['lage', 'bestand', 'laden', 'deck_start', 'deck_stopp', 'sprung',
   'regler', 'fx', 'fx_zuweisung', 'strudel', 'abbrechen', 'warte', 'hoeren',
   'studio', 'loops', 'rec', 'loop_klang', 'spur', 'spur_stopp', 'spuren', 'stille', 'pegel', 'klang', 'instrumente', 'bibliothek', 'anschluss', 'stoebern', 'klaenge', 'bestand_karte', 'vorbereiten',
   'sets', 'set_zeige', 'set_lege', 'set_vorbereiten', 'tempo',
-  'proj_liste', 'proj_neu', 'proj_oeffnen', 'proj_lage', 'proj_aendern', 'proj_undo', 'proj_redo', 'proj_verlauf', 'proj_transport', 'proj_freeze', 'proj_export', 'proj_lautheit'];   // D1 S2 (Spec 3.5), Paket 1.18 E-b
+  'proj_liste', 'proj_neu', 'proj_oeffnen', 'proj_lage', 'proj_aendern', 'proj_undo', 'proj_redo', 'proj_verlauf', 'proj_transport', 'proj_freeze', 'proj_export', 'proj_lautheit', 'geraete_lage', 'proj_aufnahme', 'proj_warp'];   // D1 S2 (Spec 3.5), Paket 1.18 E-b, Paket 1.13 Warp
 
 async function aufbau(t, antworten, env) {
   const gesehen = [];
@@ -490,12 +490,30 @@ test('djk-hand spur (D1 S2-Integration Fix A5, Spec 6.22, 6.30): die Beschreibun
   const { c, gesehen } = await aufbau(t, (m, u) => (u === '/spur'
     ? [409, { fehler: 'ueber_projekt', ziel: 'spur/1/fader', index: 0, text: 'track faders are changed through the project (/proj/aendern, spur_aendern), not by an automation track' }] : null));
   const w = (await c.listTools()).tools.find((x) => x.name === 'spur');
-  assert.match(w.description, /spur\/1\.\.8.*ueber_projekt.*proj_aendern/s);
+  assert.match(w.description, /spur\/1\.\.32.*ueber_projekt.*proj_aendern/s);
   const r = await c.callTool({ name: 'spur', arguments: { name: 'f', fahrten: [{ ziel: 'spur/1/fader', ab_takt: 1, takte: 1, nach: -6 }] } });
   assert.equal(r.isError, true);
   const j = JSON.parse(r.content[0].text);
   assert.deepEqual([j.fehler, j.ziel], ['ueber_projekt', 'spur/1/fader']); assert.match(j.text, /project/);
   assert.deepEqual(gesehen.at(-1).koerper.spur.fahrten[0].ziel, 'spur/1/fader');
+});
+
+test('1.10 Slice 1: proj_aendern nennt die Gruppen-Befehle und ihre Gründe, pegel die neuen Kanäle, regler die Mixer-Pfade mit ueber_projekt', async (t) => {
+  const { c } = await aufbau(t, () => null);
+  const werkzeuge = (await c.listTools()).tools;
+  const text = (n) => werkzeuge.find((x) => x.name === n).description;
+  for (const b of ['gruppenspur_neu', 'gruppenspur_aendern', 'gruppenspur_loeschen', 'ziel_setzen', 'master_aendern']) assert.ok(text('proj_aendern').includes(b), b);
+  for (const g of ['routing_zyklus', 'routing_grenze', 'ziel_unbekannt', 'gruppe_unbekannt']) assert.ok(text('proj_aendern').includes(g), g);
+  assert.ok(text('pegel').includes('grp/1..8') && text('pegel').includes('pm'));
+  // Prüfung 2, C3: die Grenze steht an beiden Werkzeugen, die den Server erreichen: regler (POST /regler) und spur (POST /spur, Automationsspur)
+  for (const w of ['regler', 'spur']) assert.ok(text(w).includes('grp/1..8') && text(w).includes('pm/fader') && text(w).includes('ueber_projekt'), w);
+  assert.match(text('spur'), /spur\/1\.\.32.*ueber_projekt.*proj_aendern/s, 'der Wortlaut aus dem Bestandstest (spur, Fix A5) bleibt');
+  assert.ok(!text('proj_aendern').includes('gruppen_neu'), 'Negativ-Kontrolle: der Name kollidiert nicht mit dem Feld gruppe der Varianten');
+  // die Art der Gruppe heißt im Befehl "gruppe" (nicht "group"), der Text muss den Befehlswortlaut tragen
+  assert.ok(text('proj_aendern').includes('{art: "gruppe", id}'), 'Art der Gruppe im Befehlswortlaut');
+  assert.ok(text('proj_aendern').includes('Solo on a track keeps its group sounding'), 'Solo-Regel (P7)');
+  // N1: die I08-Beschreibung (arm, eingang) bleibt, der Text wird ergänzt, nicht ersetzt
+  assert.match(text('proj_aendern'), /arm\? \(true\|false\), eingang\? \(\{art: intern/, 'N1: I08-Text bleibt');
 });
 
 // Paket S3 (Spec D1 3.5, 6.31): proj_freeze und proj_export gehen als POST mit Quelle cypher an den Seiten-Server; proj_freeze fragt die schmale
@@ -530,9 +548,28 @@ test('djk-hand proj_freeze und proj_export (Paket S3): Körper, Quelle cypher, s
   const werkzeuge = (await c.listTools()).tools;
   const fz = werkzeuge.find((x) => x.name === 'proj_freeze'), ex = werkzeuge.find((x) => x.name === 'proj_export');
   assert.deepEqual(fz.inputSchema.required, ['spur_id', 'an']);
-  assert.deepEqual(Object.keys(ex.inputSchema.properties).sort(), ['bis_beat', 'von_beat']);
+  assert.deepEqual(Object.keys(ex.inputSchema.properties).sort(), ['abgriff', 'bis_beat', 'von_beat']);   // 1.10 Slice 2: abgriff neu
   for (const g of ['real time', 'ki_gestoppt', 'transport_laeuft', 'beschaeftigt', 'spur_leer', 'freeze_fehler']) assert.ok(fz.description.includes(g), `proj_freeze nennt ${g}`);
   for (const g of ['real time', 'ki_gestoppt', 'export_bereich', 'audio_fehlt', 'render_fehler', 'regler_quelle', 'lufs_i']) assert.ok(ex.description.includes(g), `proj_export nennt ${g}`);
+});
+
+// 1.10 Slice 2 (E2, Task 21): proj_export nimmt abgriff, die Beschreibungen sagen, wo der Export abgegriffen wird und wo die Lautheit gemessen wird.
+test('1.10 Slice 2: proj_export kennt abgriff (produktion | set), nennt ueber_decke und limiter_db_max und sagt nicht mehr, die Lautheit werde hinter dem Limiter gemessen', async (t) => {
+  const ergebnis = { datei: '/p/x/export/x.wav', frames: 96000, spitze_db: 1.2, regler_quelle: 'kern', abgriff: 'produktion', ueber_decke: true, limiter_db_max: 2.1,
+    lufs_i: -8.5, lra: 3, true_peak_dbtp: 1.4 };
+  const { c, gesehen } = await aufbau(t, (m, u) => (u === '/proj/export' ? [200, ergebnis] : null));
+  const werkzeuge = (await c.listTools()).tools;
+  const ex = werkzeuge.find((x) => x.name === 'proj_export'), la = werkzeuge.find((x) => x.name === 'proj_lautheit').description;
+  assert.deepEqual(ex.inputSchema.properties.abgriff.enum, ['produktion', 'set']);
+  for (const s of ['production master', 'ueber_decke', 'limiter_db_max', 'set limiter']) assert.ok(ex.description.includes(s), s);
+  assert.ok(!ex.description.includes('loudness is measured after the master limiter'));
+  assert.ok(!la.includes('after the master limiter') && la.includes('production master'));
+  assert.ok(!la.includes('as long as the core master is at its defaults'));
+  const e1 = await c.callTool({ name: 'proj_export', arguments: { abgriff: 'set' } });
+  assert.ok(!e1.isError, e1.content[0].text);
+  assert.deepEqual(JSON.parse(e1.content[0].text), ergebnis, 'Ergebnis unverändert');
+  await c.callTool({ name: 'proj_export', arguments: {} });
+  assert.deepEqual(gesehen.filter((x) => x.pfad === '/proj/export').map((x) => x.koerper), [{ abgriff: 'set' }, {}], 'ohne Angabe wählt der Server produktion');
 });
 
 // Fix-Runde S3, R6: proj_freeze und proj_export haben ein eigenes Zeitlimit (Undici bricht fetch nach 300 s ab, ein Export kann länger dauern).
@@ -639,11 +676,11 @@ test('djk-hand proj_lautheit (Paket 1.18 E-b): Körper, Quelle cypher, Ergebnis 
   assert.deepEqual(Object.keys(la.inputSchema.properties).sort(), ['bis_beat', 'von_beat']);
   for (const g of ['lufs_i', 'stumm', 'wirt_fehlt', 'ki_gestoppt', 'export_bereich', 'summe', 'proj_export', 'null (not -70)']) assert.ok(la.description.includes(g), `proj_lautheit nennt ${g}`);
   const pegel = werkzeuge.find((x) => x.name === 'pegel');
-  for (const g of ['spur/1..8', 'proj_lautheit', 'sample peak']) assert.ok(pegel.description.includes(g), `pegel nennt ${g}`);
+  for (const g of ['spur/1..32', 'proj_lautheit', 'sample peak']) assert.ok(pegel.description.includes(g), `pegel nennt ${g}`);
 });
 
 // Paket 1.18, S3-Fix G4/G5: die Beschreibungen nennen wirt_fehlt an Freeze, Export und Lautheit, das neue Feld unter_messgrenze und die Solo-Regel;
-// die Frist von proj_lautheit behauptet nicht, über der längsten Laufzeit des Servers zu liegen (9 Renders zu je 4 · 1024 s + 60 s, rund 646 min),
+// die Frist von proj_lautheit behauptet nicht, über der längsten Laufzeit des Servers zu liegen (33 Renders zu je 4 · 1024 s + 60 s, rund 2357 min),
 // sondern nennt ihre Grenze, den Override und hand_frist.
 test('djk-hand (Paket 1.18 S3-Fix): wirt_fehlt bei Freeze und Export, unter_messgrenze und Solo bei proj_lautheit, ehrliche Frist von proj_lautheit', async (t) => {
   const { c } = await aufbau(t, () => null);
@@ -656,8 +693,59 @@ test('djk-hand (Paket 1.18 S3-Fix): wirt_fehlt bei Freeze und Export, unter_mess
   for (const n of ['proj_freeze', 'proj_export']) assert.match(text(n), /above the longest run the server allows/);
   assert.doesNotMatch(la, /above the longest run the server allows/, 'für proj_lautheit stimmt der Satz nicht');
   assert.match(la, /waits at most 80 min \(tool limit, DJK_HAND_FRIST_PROJ_LAUTHEIT_MS;/);
-  assert.match(la, /hand_frist/); assert.match(la, /about 10\.8 h/);
-  // die Rechnung hinter der Zahl: Freeze (≈ 291 s) + 9 Renders zu 4 · 1024 s + 60 s + 9 ffmpeg-Messungen zu 120 s
-  const grenzfallMin = (291 + 9 * (4 * 1024 + 60) + 9 * 120) / 60;
-  assert.ok(grenzfallMin > 640 && grenzfallMin < 650, `Grenzfall ${grenzfallMin} min`);
+  assert.match(la, /hand_frist/); assert.match(la, /about 39\.3 h/);
+  // die Rechnung hinter der Zahl: Freeze (≈ 291 s) + 33 Renders zu 4 · 1024 s + 60 s + 33 ffmpeg-Messungen zu 120 s
+  const grenzfallMin = (291 + 33 * (4 * 1024 + 60) + 33 * 120) / 60;
+  assert.ok(grenzfallMin > 2350 && grenzfallMin < 2365, `Grenzfall ${grenzfallMin} min`);
+});
+
+// I08 Task 10: geraete_lage ist rein lesend (Zuordnen und Freigeben sind nach F3 Andreas' Sache).
+test('geraete_lage liest GET /geraete und gibt die Antwort wörtlich zurück', async (t) => {
+  const { c, gesehen } = await aufbau(t, (m, u) => (m === 'GET' && u === '/geraete' ? [200, { erkennung: 'ok', eingaenge: [{ k: 1, frei_fuer_cypher: false }] }] : null));
+  const r = JSON.parse((await c.callTool({ name: 'geraete_lage', arguments: {} })).content[0].text);
+  assert.deepEqual(r.eingaenge, [{ k: 1, frei_fuer_cypher: false }]);
+  assert.deepEqual(gesehen.map((g) => [g.methode, g.pfad]), [['GET', '/geraete']]);
+});
+
+// 1.8 Task 28: proj_aufnahme (Start und Stopp der Aufnahme auf armierte Audio-Spuren) geht als POST /proj/aufnahme mit der Quelle cypher.
+test('proj_aufnahme: start und stopp gehen als POST /proj/aufnahme mit der Quelle cypher; ohne Aktion 400 im Werkzeug', async (t) => {
+  const { c, gesehen } = await aufbau(t, (m, u) => (m === 'POST' && u === '/proj/aufnahme' ? [200, { aufnahme: 'laeuft', kennung: 5 }] : null));
+  const r1 = JSON.parse((await c.callTool({ name: 'proj_aufnahme', arguments: { aktion: 'start', von_beat: 4 } })).content[0].text);
+  assert.equal(r1.kennung, 5);
+  await c.callTool({ name: 'proj_aufnahme', arguments: { aktion: 'stopp' } });
+  assert.deepEqual(gesehen.map((g) => [g.methode, g.pfad, g.quelle, g.koerper]), [
+    ['POST', '/proj/aufnahme', 'cypher', { aktion: 'start', von_beat: 4 }],
+    ['POST', '/proj/aufnahme', 'cypher', { aktion: 'stopp' }]]);
+  const falsch = await c.callTool({ name: 'proj_aufnahme', arguments: { aktion: 'spulen' } });
+  assert.ok(falsch.isError, 'das Schema lehnt eine unbekannte Aktion ab');
+  assert.equal(gesehen.length, 2, 'und schickt nichts');
+});
+
+// Paket 1.13 Warp: proj_warp geht als GET an /proj/warp, die Query trägt nur die angegebenen Felder, Quelle cypher, Ergebnis unverändert, Fehler mit Grund
+// als Werkzeugfehler; die Beschreibungen nennen die Warp-Felder und die neuen Befehle von proj_aendern.
+test('djk-hand proj_warp (Paket 1.13): GET mit Query, Quelle cypher, Ergebnis unverändert, Fehlerabbildung; proj_aendern nennt die Warp-Befehle', async (t) => {
+  const lage = { clip_id: 'c1', start_beat: 4, laenge_beats: 8, warp: { an: true, modus: 'repitch', quelle: 'takte', eins_unsicher: false, transpose_st: 0, detune_ct: 0,
+    versatz_beats: 0, marker_zahl: 2, marker: [{ quell_s: 0, beat: 0, projekt_beat: 4, segment_bpm: 125 }, { quell_s: 3.84, beat: 8, projekt_beat: 12, segment_bpm: null }] },
+    bei: { projekt_beat: 6, quell_s: 0.96 } };
+  const { c, gesehen } = await aufbau(t, (m, u) => {
+    if (u?.startsWith('/proj/warp?clip_id=c1')) return [200, lage];
+    if (u?.startsWith('/proj/warp')) return [404, { fehler: 'clip_unbekannt', text: 'that clip does not exist' }];
+  });
+  const a = await c.callTool({ name: 'proj_warp', arguments: { clip_id: 'c1', bei_beat: 6 } });
+  assert.ok(!a.isError, a.content[0].text);
+  assert.deepEqual(JSON.parse(a.content[0].text), lage);
+  const b = await c.callTool({ name: 'proj_warp', arguments: { clip_id: 'c9' } });
+  assert.equal(b.isError, true); assert.match(b.content[0].text, /clip_unbekannt/);
+  const e = await c.callTool({ name: 'proj_warp', arguments: { clip_id: 'c1', von_beat: 4, bis_beat: 12 } });
+  assert.ok(!e.isError, e.content[0].text);
+  assert.deepEqual(gesehen.map((x) => [x.methode, x.pfad, x.quelle]), [
+    ['GET', '/proj/warp?clip_id=c1&bei_beat=6', 'cypher'], ['GET', '/proj/warp?clip_id=c9', 'cypher'], ['GET', '/proj/warp?clip_id=c1&von_beat=4&bis_beat=12', 'cypher']]);
+  const werkzeuge = (await c.listTools()).tools;
+  const pw = werkzeuge.find((x) => x.name === 'proj_warp');
+  assert.deepEqual(pw.inputSchema.required, ['clip_id']);
+  assert.deepEqual(Object.keys(pw.inputSchema.properties).sort(), ['bei_beat', 'bis_beat', 'clip_id', 'von_beat']);
+  for (const g of ['segment_bpm', 'quell_s', 'eins_unsicher', 'projekt_beat', 'warp_setzen', 'clip_unbekannt']) assert.ok(pw.description.includes(g), `proj_warp nennt ${g}`);
+  const pa = werkzeuge.find((x) => x.name === 'proj_aendern').description;
+  for (const g of ['warp_setzen', 'warp_auto', 'versatz_beats', 'kein_tempo', 'transpose_repitch', 'offset_bei_warp', 'warp_marker', 'hinweise']) assert.ok(pa.includes(g), `proj_aendern nennt ${g}`);
+  assert.ok(werkzeuge.find((x) => x.name === 'proj_lage').description.includes('marker_zahl'), 'proj_lage nennt marker_zahl');
 });

@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 
 from . import fortschritt
-from .bestand import standard_bestand
+from .bestand import standard_ablage, standard_bestand
 from .kette import einlesen
 from .lauf_bestand import ENDUNGEN
 
@@ -41,7 +41,8 @@ def _lauf(quelle, bestand, titel):
     try:
         import torch
         torch.set_num_threads(FAEDEN)
-        e = einlesen(quelle, bestand, basis_bpm=BASIS_BPM, titel=titel, melde=fortschritt.melder())
+        e = einlesen(quelle, bestand, basis_bpm=BASIS_BPM, titel=titel, melde=fortschritt.melder(),
+                    vorab=standard_ablage())   # liegt die Nachtanalyse vor, wird nur noch gerendert
         return {"status": e["status"], "material_id": e["material_id"]}
     except Exception as ex:
         print(f"einzeln: {_kurz(ex)}", file=sys.stderr)

@@ -1,12 +1,12 @@
 // D1 S2-Kern, Modell: project.json cypherdj-projekt/1 (Spec 3.3), Prüfung, Erzeugung, IDs. Reine Funktionen, keine Datei.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { neuesProjekt, pruefeProjekt, neueId, neueNotenId, wiedergabeSicht, kanonisch, FORMAT } from '../projekt/modell.ts';
+import { neuesProjekt, pruefeProjekt, neueId, neueNotenId, wiedergabeSicht, kanonisch, FORMAT, MAX_SPUREN } from '../projekt/modell.ts';
 import { specProjekt, kopie, SHA_A } from './hilfen/projekt.mjs';
 
 test('neuesProjekt: gültig, leer, Vorgaben nach Spec (Tempo, 4/4, Loop, Metronom aus/master)', () => {
   const p = neuesProjekt('First Track');
-  assert.equal(p.format, FORMAT); assert.equal(p.format, 'cypherdj-projekt/1');
+  assert.equal(p.format, FORMAT); assert.equal(p.format, 'cypherdj-projekt/2');   // 1.10 Task 9: /2 (gruppen, master); /1 wird beim Laden gehoben
   assert.equal(p.name, 'First Track'); assert.equal(p.rev, 0); assert.equal(p.wiedergabe_rev, 0);
   assert.deepEqual(p.taktart, [4, 4]); assert.deepEqual(p.spuren, []);
   assert.equal(p.metronom.an, false); assert.equal(p.metronom.ziel, 'master');
@@ -22,7 +22,7 @@ test('das Beispiel aus Spec 3.3 ist ein gültiges Projekt (Negativ-Kontrolle: di
 });
 
 const ABLEHNUNGEN = [
-  ['format falsch', (p) => { p.format = 'cypherdj-projekt/2'; }, /format/],
+  ['format falsch', (p) => { p.format = 'cypherdj-projekt/3'; }, /format/],   // 1.10 Task 9: /2 ist jetzt gültig und scheiterte an „gruppen: fehlt“
   ['name leer', (p) => { p.name = ''; }, /name/],
   ['name zu lang', (p) => { p.name = 'x'.repeat(81); }, /name/],
   ['rev negativ', (p) => { p.rev = -1; }, /rev/],
@@ -38,9 +38,9 @@ const ABLEHNUNGEN = [
   ['metronom ziel unbekannt', (p) => { p.metronom.ziel = 'ausgang'; }, /metronom/],
   ['metronom pegel über 0', (p) => { p.metronom.pegel_db = 3; }, /metronom/],
   ['unbekanntes Feld', (p) => { p.zusatz = 1; }, /zusatz/],
-  ['neun Spuren', (p) => { for (let i = 0; i < 6; i++) p.spuren.push({ ...kopie(p.spuren[0]), id: `x${i}`, nr: 4 + i, clips: [] }); }, /spuren/],
+  ['elf Spuren', (p) => { for (let i = 0; i < MAX_SPUREN - 2; i++) p.spuren.push({ ...kopie(p.spuren[0]), id: `x${i}`, nr: 4 + i, clips: [] }); }, /spuren/],
   ['nr 0', (p) => { p.spuren[0].nr = 0; }, /nr/],
-  ['nr 9', (p) => { p.spuren[0].nr = 9; }, /nr/],
+  ['nr MAX_SPUREN + 1', (p) => { p.spuren[0].nr = MAX_SPUREN + 1; }, /nr/],
   ['nr doppelt', (p) => { p.spuren[1].nr = 1; }, /nr/],
   ['spur-id doppelt', (p) => { p.spuren[1].id = 's1'; }, /id/],
   ['farbe kein Hex', (p) => { p.spuren[0].farbe = 'rot'; }, /farbe/],
@@ -84,11 +84,12 @@ for (const [name, mut, muster] of ABLEHNUNGEN) {
   });
 }
 
-test('pruefeProjekt: Nicht-Objekte und Grenzen (8 Spuren erlaubt, 4096 Clips / 65536 Noten Deckel)', () => {
+test('pruefeProjekt: Nicht-Objekte und Grenzen (10 Spuren erlaubt, 4096 Clips / 65536 Noten Deckel)', () => {
   for (const x of [null, 5, 'x', [], undefined]) assert.ok(pruefeProjekt(x).fehler);
   const p = specProjekt();
-  for (let i = 4; i <= 8; i++) p.spuren.push({ id: `s${i}`, nr: i, name: `A${i}`, farbe: '#000000', art: 'audio', fader_db: 0, pan: 0, mute: false, solo: false, clips: [] });
-  assert.equal(p.spuren.length, 8); assert.ok(pruefeProjekt(p).projekt);
+  for (let i = 4; i <= MAX_SPUREN; i++) p.spuren.push({ id: `s${i}`, nr: i, name: `A${i}`, farbe: '#000000', art: 'audio', fader_db: 0, pan: 0, mute: false, solo: false, clips: [] });
+  assert.equal(p.spuren.length, MAX_SPUREN); assert.ok(pruefeProjekt(p).projekt, 'nr MAX_SPUREN ist gültig (T05)');
+  p.spuren.push({ ...kopie(p.spuren[0]), id: `s${MAX_SPUREN + 1}`, nr: MAX_SPUREN + 1, clips: [] }); assert.match(pruefeProjekt(p).fehler, /spuren|nr/);
   const q = specProjekt();   // 65537 Noten in einem Clip
   q.spuren[1].clips[0].noten = Array.from({ length: 65537 }, (_, i) => ({ id: `n${i}`, beat: 0, laenge: 1, ton: 36, vel: 100 }));
   assert.match(pruefeProjekt(q).fehler, /noten/);

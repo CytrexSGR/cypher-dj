@@ -85,3 +85,12 @@ test('V2 Ausgabe H3: fremder Lauf ohne Sekunden, eigener mit', () => {
   assert.equal(laufText({ art: 'freeze', an: true, name: 'Lead', seit: t0 }, { status: 3, projekt_beat: 5 }, t0 + 2500), 'Freezing Lead · bar 2.2.1 · 2 s');
   assert.equal(laufText({ art: 'export', seit: t0 }, { status: 0 }, t0 + 4000), 'Exporting: rendering · 4 s');
 });
+
+test('1.10 Slice 2: ergebnisText nennt, dass der Export über der Decke des Set-Limiters liegt, nur dann', () => {
+  const j = { datei: '/p/export/x.wav', frames: 96000, spitze_db: 2.4, lufs_i: -9.1, true_peak_dbtp: 2.6, abgriff: 'produktion', ueber_decke: true, limiter_db_max: 3.4 };
+  const e = ergebnisText(j);
+  assert.match(e.text, /ABOVE SET LIMITER CEILING \(set limiter would take 3\.4 dB\)/); assert.equal(e.warnung, true); assert.equal(e.titel, j.datei);
+  const still = ergebnisText({ ...j, spitze_db: -4, ueber_decke: false, limiter_db_max: 0 });
+  assert.doesNotMatch(still.text, /SET LIMITER/); assert.equal(still.warnung, false);
+  assert.doesNotMatch(ergebnisText({ datei: '/x.wav', frames: 48000, spitze_db: -6 }).text, /SET LIMITER/, 'alte Antwort ohne Felder: unverändert');
+});

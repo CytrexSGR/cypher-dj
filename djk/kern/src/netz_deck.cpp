@@ -102,6 +102,25 @@ bool Netz::deck_paket(const v::Adresse* a, const osc::Nachricht& m) {
         (!hot && !(std::fabs(b.wert_beats) <= 100000.0)) || (hot && (b.nr < 1 || b.nr > 8)) ||  // Review F5: 1e300
         (loop && !(b.wert_beats == 0.0 || (b.wert_beats >= 1.0 / 32 && b.wert_beats <= 128.0))))
       return ab("ausserhalb_bereich");
+  } else if (a->pfad == v::k_deck_loop_laenge.pfad) {  // §4.4: Loop mit festem Start (Länge ändern, Start bleibt)
+    namespace f = v::feld::k_deck_loop_laenge;
+    b.art = Befehl::DECK_LOOP_LAENGE;
+    kopiere(b.plan, m.werte[f::plan].s, sizeof b.plan);
+    kopiere(b.gruppe, m.werte[f::gruppe].s, sizeof b.gruppe);
+    kopiere(b.hoerschein, m.werte[f::hoerschein].s, sizeof b.hoerschein);
+    b.deck = m.werte[f::deck].i;
+    b.ab_beat = m.werte[f::ab_beat].d;
+    b.quell_beat = m.werte[f::start_beat].d;
+    b.wert_beats = m.werte[f::laenge_beats].d;
+    b.politik = m.werte[f::politik].i;
+    b.raster_beats = m.werte[f::raster_beats].d;
+    if (!quelle_ok(b.quelle)) return ab("ausserhalb_bereich");
+    if (b.deck < 1 || b.deck > 4) return ab("unbekanntes_deck");
+    bool raster_ok = false;
+    for (double r : v::werte::raster_beats) raster_ok = raster_ok || b.raster_beats == r;
+    if (!std::isfinite(b.ab_beat) || !std::isfinite(b.quell_beat) || b.politik < 0 || b.politik > 2 || (b.politik == 2 && !raster_ok) ||
+        !(b.wert_beats >= 1.0 / 32 && b.wert_beats <= 128.0))
+      return ab("ausserhalb_bereich");
   } else if (a->pfad == v::k_deck_hotcue_setzen.pfad) {
     namespace f = v::feld::k_deck_hotcue_setzen;
     b.art = Befehl::DECK_HOTCUE_SETZEN;

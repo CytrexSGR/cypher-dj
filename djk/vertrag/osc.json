@@ -62,7 +62,7 @@
     "invariante_art": {"abschnitt": "5.9", "liste": ["sub_doppelt", "master_leer", "hoerschein"]},
     "protokollfehler_grund": {"abschnitt": "16.2", "liste": ["unbekannte_adresse", "falsche_typen", "protokoll"]},
     "nb_zustand": {"abschnitt": "5.10", "codes": {"0": "durchreichen", "1": "schleife", "2": "ausgeblendet", "3": "rueckgabe"}},
-    "gruende": {"abschnitt": "16.2", "liste": ["zu_spaet", "regler_beim_menschen", "regler_verplant", "ueberlappung", "nur_hand", "unbekannter_regler", "unbekanntes_deck", "ausserhalb_bereich", "kein_hoerschein", "hoerschein_anderer_kanal", "hoerschein_anderer_inhalt", "hoerschein_anderes_tempo", "hoerschein_abgelaufen", "hoerschein_anderer_abschnitt", "ziel_ungehoert", "keine_stems", "hoerschein_nicht_sync", "hoerschein_pegel", "invariante_sub_doppelt", "invariante_master_leer", "deck_beruehrt", "deck_hoerbar", "deck_laeuft", "nicht_geladen", "material_fehlt", "pruefung", "budget_speicher", "budget_stretcher", "karte_voll", "tempo_rampe", "ki_gestoppt", "rechner_fehlt", "kein_stretcher", "autonomie", "form", "hand", "abbruch", "ki_stopp", "unbekannte_adresse", "falsche_typen", "protokoll", "grenze_sub", "neustart", "datei_fehlt", "format", "audio_fehlt", "zu_gross", "spur_bereich", "reserviert"]}
+    "gruende": {"abschnitt": "16.2", "liste": ["zu_spaet", "regler_beim_menschen", "regler_verplant", "ueberlappung", "nur_hand", "unbekannter_regler", "unbekanntes_deck", "ausserhalb_bereich", "kein_hoerschein", "hoerschein_anderer_kanal", "hoerschein_anderer_inhalt", "hoerschein_anderes_tempo", "hoerschein_abgelaufen", "hoerschein_anderer_abschnitt", "ziel_ungehoert", "keine_stems", "hoerschein_nicht_sync", "hoerschein_pegel", "invariante_sub_doppelt", "invariante_master_leer", "deck_beruehrt", "deck_hoerbar", "deck_laeuft", "nicht_geladen", "material_fehlt", "pruefung", "budget_speicher", "budget_stretcher", "karte_voll", "tempo_rampe", "ki_gestoppt", "rechner_fehlt", "kein_stretcher", "autonomie", "form", "hand", "abbruch", "ki_stopp", "unbekannte_adresse", "falsche_typen", "protokoll", "grenze_sub", "neustart", "datei_fehlt", "format", "audio_fehlt", "zu_gross", "spur_bereich", "reserviert", "kein_eingang", "aufnahme_laeuft", "zu_viele_scharf", "eingang_fehlt", "kein_platz"]}
   },
   "adressen": [
     {"adresse": "/k/hallo", "typen": ",sii", "abschnitt": "4.1", "richtung": "an_kern", "felder": [
@@ -150,6 +150,18 @@
       {"name": "deck", "typ": "i", "einheit": "nummer", "bereich": [1, 4]},
       {"name": "ab_beat", "typ": "d", "einheit": "beat"},
       {"name": "laenge_beats", "typ": "d", "einheit": "beats", "bereich": [0, 128], "notiz": "1/32 bis 128; 0 = Loop aus"},
+      {"name": "politik", "typ": "i", "einheit": "code", "werte": "politik"},
+      {"name": "raster_beats", "typ": "d", "einheit": "beats", "werte": "raster_beats", "notiz": "gilt nur bei Politik 2"}]},
+    {"adresse": "/k/deck/loop_laenge", "typen": ",hssssidddid", "abschnitt": "4.4", "richtung": "an_kern", "felder": [
+      {"name": "id", "typ": "h", "einheit": "kennung"},
+      {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle"},
+      {"name": "plan", "typ": "s", "einheit": "text"},
+      {"name": "gruppe", "typ": "s", "einheit": "text"},
+      {"name": "hoerschein", "typ": "s", "einheit": "text"},
+      {"name": "deck", "typ": "i", "einheit": "nummer", "bereich": [1, 4]},
+      {"name": "ab_beat", "typ": "d", "einheit": "beat"},
+      {"name": "start_beat", "typ": "d", "einheit": "beat", "notiz": "Quell-Beat des Loop-Starts, der bleibt; endlich, im Material"},
+      {"name": "laenge_beats", "typ": "d", "einheit": "beats", "bereich": [0.03125, 128], "notiz": "1/32 bis 128; keine 0 (Aus ist /k/deck/loop)"},
       {"name": "politik", "typ": "i", "einheit": "code", "werte": "politik"},
       {"name": "raster_beats", "typ": "d", "einheit": "beats", "werte": "raster_beats", "notiz": "gilt nur bei Politik 2"}]},
     {"adresse": "/k/deck/roll", "typen": ",hssssiddiid", "abschnitt": "4.4", "richtung": "an_kern", "felder": [
@@ -255,7 +267,7 @@
     {"adresse": "/k/ki/spur", "typen": ",hss", "abschnitt": "4.7", "richtung": "an_kern", "felder": [
       {"name": "id", "typ": "h", "einheit": "kennung"},
       {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle"},
-      {"name": "kanaele", "typ": "s", "einheit": "text", "notiz": "Komma-Liste von Kanälen, etwa deck/3,deck/4,erz/1; Spuren als spur/<ziffern> (D1 6.15, eigene Liste)"}]},
+      {"name": "kanaele", "typ": "s", "einheit": "text", "notiz": "Komma-Liste von Kanälen, etwa deck/3,deck/4,erz/1; Spuren nur als spur/0 (keine Spur); Spur-Masken entfallen seit E3"}]},
     {"adresse": "/k/ki/stufe", "typen": ",hsi", "abschnitt": "4.7", "richtung": "an_kern", "felder": [
       {"name": "id", "typ": "h", "einheit": "kennung"},
       {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle"},
@@ -381,10 +393,25 @@
     {"adresse": "/k/arr/freeze", "typen": ",hsiddi", "abschnitt": "4.11", "richtung": "an_kern", "felder": [
       {"name": "id", "typ": "h", "einheit": "kennung"},
       {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle"},
-      {"name": "spur", "typ": "i", "einheit": "nummer", "bereich": [1, 8]},
+      {"name": "spur", "typ": "i", "einheit": "nummer", "bereich": [1, 32]},
       {"name": "von_beat", "typ": "d", "einheit": "beat", "bereich": [0.0, null]},
       {"name": "bis_beat", "typ": "d", "einheit": "beat"},
       {"name": "kennung", "typ": "i", "einheit": "nummer", "bereich": [0, null], "notiz": "Datei <arr_ordner>/freeze-<spur>-<kennung>.f32 (Paket K3)"}]},
+    {"adresse": "/k/rec/spur", "typen": ",hsiii", "abschnitt": "4.12", "richtung": "an_kern", "felder": [
+      {"name": "id", "typ": "h", "einheit": "kennung"},
+      {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle"},
+      {"name": "spur", "typ": "i", "einheit": "nummer", "bereich": [1, 32]},
+      {"name": "scharf", "typ": "i", "einheit": "schalter", "bereich": [0, 1]},
+      {"name": "eingang", "typ": "i", "einheit": "code", "bereich": [0, 20], "notiz": "0 keiner, 11..13 = erz/1..3 (intern); 20 = Master vor dem Fader (später); externe Eingänge 1..4 kommen mit 1.8 Slice 2"}]},
+    {"adresse": "/k/rec/start", "typen": ",hsiii", "abschnitt": "4.12", "richtung": "an_kern", "felder": [
+      {"name": "id", "typ": "h", "einheit": "kennung"},
+      {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle"},
+      {"name": "kennung", "typ": "i", "einheit": "nummer", "bereich": [0, null], "notiz": "Dateien aufnahme-<spur>-<kennung>.f32 und .json im Arbeitsordner"},
+      {"name": "nachlauf_samples", "typ": "i", "einheit": "samples", "bereich": [0, 480000], "notiz": "Slice 1: 0; Latenzausgleich (Slice 2) nimmt so viel Nachlauf auf"},
+      {"name": "frist_samples", "typ": "i", "einheit": "samples", "bereich": [0, 1440000], "notiz": "Frist für den Transportstart nach diesem Befehl; 0 = Vorgabe 96000 (2 s), sonst 48000 bis 1440000. Sie endet, sobald das Arrangement wartet (Quant); danach gilt dessen Wartezeit (Nachbesserung 1, M1). Der Server sendet 480000 (10 s)"}]},
+    {"adresse": "/k/rec/stopp", "typen": ",hs", "abschnitt": "4.12", "richtung": "an_kern", "felder": [
+      {"name": "id", "typ": "h", "einheit": "kennung"},
+      {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle"}]},
     {"adresse": "/erz/quittung", "typen": ",iiiiiii", "abschnitt": "4.8", "richtung": "vom_kern", "felder": [
       {"name": "strom", "typ": "i", "einheit": "nummer", "bereich": [1, 16]},
       {"name": "sendung", "typ": "i", "einheit": "anzahl"},
@@ -579,16 +606,36 @@
       {"name": "an", "typ": "i", "einheit": "code", "bereich": [0, 1]}]},
     {"adresse": "/e/fx/routing", "typen": ",i", "abschnitt": "5.12", "richtung": "vom_kern", "felder": [
       {"name": "routing", "typ": "i", "einheit": "code", "bereich": [0, 1]}]},
-    {"adresse": "/zustand/arr", "typen": ",iiidhdi", "abschnitt": "5.13", "richtung": "vom_kern", "felder": [
+    {"adresse": "/zustand/arr", "typen": ",iiidhdif", "abschnitt": "5.13", "richtung": "vom_kern", "felder": [
       {"name": "nr", "typ": "i", "einheit": "nummer", "notiz": "Wiedergabe-Nummer (D1 6.1), −1 ohne Wiedergabe"},
       {"name": "status", "typ": "i", "einheit": "code", "bereich": [0, 3], "notiz": "0 steht, 1 wartet, 2 spielt, 3 freeze"},
       {"name": "loop_an", "typ": "i", "einheit": "schalter", "bereich": [0, 1]},
       {"name": "projekt_beat", "typ": "d", "einheit": "beat", "notiz": "am Blockanfang"},
       {"name": "ursprung_sample", "typ": "h", "einheit": "sample", "notiz": "Kern-Sample des Transport-Starts (p = start_beat im ersten Durchlauf), −1 ohne"},
       {"name": "start_beat", "typ": "d", "einheit": "beat"},
-      {"name": "metronom_an", "typ": "i", "einheit": "schalter", "bereich": [0, 1]}]},
+      {"name": "metronom_an", "typ": "i", "einheit": "schalter", "bereich": [0, 1]},
+      {"name": "limiter_db", "typ": "f", "einheit": "db", "bereich": [-200, 0], "notiz": "Absenkung des Set-Limiters, ≤ 0; hält 0,5 s nach dem letzten Eingriff über 0,1 dB (1.10, E2)"}]},
+    {"adresse": "/zustand/ein", "typen": ",ihhhh", "abschnitt": "5.14", "richtung": "vom_kern", "felder": [
+      {"name": "verbunden", "typ": "i", "einheit": "code", "notiz": "Bitmaske: Bit k-1 = ein_k_L und ein_k_R verbunden (k 1..4), Bit 8 = midi_ein_1 (I08)"},
+      {"name": "midi_gesehen", "typ": "h", "einheit": "anzahl"},
+      {"name": "midi_verloren", "typ": "h", "einheit": "anzahl"},
+      {"name": "midi_sample", "typ": "h", "einheit": "sample", "notiz": "Kern-Sample des letzten MIDI-Ereignisses, −1 ohne"},
+      {"name": "flanke_sample", "typ": "h", "einheit": "sample", "notiz": "Kern-Sample der letzten Impuls-Flanke auf ein_1 (Messung MIDI gegen Audio), −1 ohne"}]},
+    {"adresse": "/zustand/rec", "typen": ",iiihd", "abschnitt": "5.14", "richtung": "vom_kern", "felder": [
+      {"name": "status", "typ": "i", "einheit": "code", "bereich": [0, 4], "notiz": "0 steht, 2 wartet auf den Einsatz des Arrangements, 3 nimmt auf, 4 Nachlauf"},
+      {"name": "kennung", "typ": "i", "einheit": "nummer"},
+      {"name": "scharf", "typ": "i", "einheit": "anzahl"},
+      {"name": "luecken", "typ": "h", "einheit": "anzahl", "notiz": "abgelehnte Chunks dieses Takes im Callback (Ring voll)"},
+      {"name": "projekt_beat", "typ": "d", "einheit": "beat"}]},
+    {"adresse": "/e/aufnahme", "typen": ",iiihhi", "abschnitt": "5.14", "richtung": "vom_kern", "felder": [
+      {"name": "spur", "typ": "i", "einheit": "nummer", "bereich": [1, 32]},
+      {"name": "kennung", "typ": "i", "einheit": "nummer"},
+      {"name": "status", "typ": "i", "einheit": "code", "bereich": [0, 3], "notiz": "0 ok, 1 mit Lücken, 2 abgebrochen (reserviert: der Kern sendet es in Slice 1 nie; ein Abbruch beim Kern-Ende schreibt nur die Begleitdatei), 3 kein_platz (Platte voll, das bis dahin Geschriebene bleibt)"},
+      {"name": "frames", "typ": "h", "einheit": "frames"},
+      {"name": "start_sample", "typ": "h", "einheit": "sample"},
+      {"name": "luecken", "typ": "i", "einheit": "anzahl", "notiz": "Sprungstellen in der Datei, mit Stille gefüllt"}]},
     {"adresse": "/e/freeze", "typen": ",iiih", "abschnitt": "5.13", "richtung": "vom_kern", "felder": [
-      {"name": "spur", "typ": "i", "einheit": "nummer", "bereich": [1, 8]},
+      {"name": "spur", "typ": "i", "einheit": "nummer", "bereich": [1, 32]},
       {"name": "kennung", "typ": "i", "einheit": "nummer"},
       {"name": "status", "typ": "i", "einheit": "code", "bereich": [0, 2], "notiz": "0 fertig, 1 abgebrochen, 2 Datei nicht geschrieben oder schon vorhanden (Paket K3)"},
       {"name": "frames", "typ": "h", "einheit": "frames"}]},

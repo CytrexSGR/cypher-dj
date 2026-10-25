@@ -59,9 +59,9 @@ FALL(ki_spur_senkt_nichts) {
 }
 
 FALL(ki_spur_mit_spur_reglern_senkt_nichts) {
-  // D1 K1 (Spec 2.3) trug spur/<n> in die KI-Spur ein, der Stopp senkte sie. Entscheidung E-a: auch sie bleibt stehen.
+  // E3 P1: Spuren stehen in keiner KI-Liste mehr; nur spur/0 (keine Spur) wird neben Kanälen angenommen. Der Stopp lässt Spur-Fader stehen.
   Lauf l;
-  l.sw->ki_spur(1, Quelle::leitstand, "erz/4,spur/2");
+  l.sw->ki_spur(1, Quelle::leitstand, "erz/4,spur/0");
   l.sw->setze_direkt(l.r("spur/2/fader"), -3.0f);
   l.sw->setze_direkt(l.r("spur/3/fader"), -1.0f);
   l.beobachte("spur/2/fader");
@@ -70,22 +70,22 @@ FALL(ki_spur_mit_spur_reglern_senkt_nichts) {
   l.bis(1620224);
   l.sw->ki_stopp(46, Quelle::andreas);
   l.bis(1800000);
+  PRUEFE(l.bei(1, Status::fertig) >= 0);   // spur/0 neben einem Kanal: angenommen und fertig quittiert
   PRUEFE_NAH(l.wert_bei("spur/2/fader", 1620224 + 45000), -3, 1e-6);
   PRUEFE_NAH(l.wert_bei("spur/2/fader", 1620224 + 90000), -3, 0);
-  PRUEFE_NAH(l.wert_bei("spur/3/fader", 1700000), -1, 0);   // Negativ-Kontrolle: nicht in der KI-Spur
+  PRUEFE_NAH(l.wert_bei("spur/3/fader", 1700000), -1, 0);
 }
 
 FALL(ki_spur_leitstand_und_s2_getrennt) {
-  // D1 Spec 6.15: S2 trägt Cyphers Spuren mit spur/<n> ein, der Leitstand seine Kanäle; keiner löscht die Liste des anderen.
-  // Kurzform spur/<ziffern> (spur/135 = Spuren 1, 3, 5), weil acht Einträge spur/<n> nicht in 47 Bytes passen.
+  // D1 Spec 6.15, seit E3 P1: S2 sendet spur/0, der Leitstand seine Kanäle; spur/0 löscht die Kanal-Liste nicht, ein Kanal-Eintrag erneuert nur sie.
   Lauf l;
   l.sw->ki_spur(1, Quelle::leitstand, "deck/3");
-  l.sw->ki_spur(2, Quelle::andreas, "spur/1,spur/3");   // S2
-  l.sw->ki_spur(3, Quelle::leitstand, "deck/3,deck/4");  // Leitstand erneuert seine Kanäle, die Spuren bleiben
-  l.sw->ki_spur(4, Quelle::andreas, "spur/135");         // S2 erneuert seine Spuren, die Kanäle bleiben
+  l.sw->ki_spur(2, Quelle::andreas, "spur/0");           // S2
+  l.sw->ki_spur(3, Quelle::leitstand, "deck/3,deck/4");  // Leitstand erneuert seine Kanäle
+  l.sw->ki_spur(4, Quelle::andreas, "spur/0");           // S2 erneuert: die Kanäle bleiben
   char t[128];
   l.sw->ki_spur_text(t, sizeof t);
-  PRUEFE(std::strcmp(t, "deck/3,deck/4,spur/135") == 0);
+  PRUEFE(std::strcmp(t, "deck/3,deck/4") == 0);
   l.sw->setze_direkt(l.r("deck/3/fader"), -3.0f);
   l.sw->setze_direkt(l.r("deck/4/fader"), -6.0f);
   for (const char* p : {"spur/1/fader", "spur/2/fader", "spur/3/fader", "spur/5/fader"}) l.sw->setze_direkt(l.r(p), -2.0f);
@@ -95,46 +95,57 @@ FALL(ki_spur_leitstand_und_s2_getrennt) {
   l.bis(1620224);
   l.sw->ki_stopp(46, Quelle::andreas);
   l.bis(1800000);
-  // Entscheidung E-a: die Listen werden geführt, senken aber nichts; jeder Fader behält seinen Wert
+  // Entscheidung E-a: die Liste wird geführt, senkt aber nichts; jeder Fader behält seinen Wert
   PRUEFE_NAH(l.wert_bei("deck/3/fader", 1790000), -3, 0);
   PRUEFE_NAH(l.wert_bei("deck/4/fader", 1790000), -6, 0);
   for (const char* p : {"spur/1/fader", "spur/2/fader", "spur/3/fader", "spur/5/fader"}) PRUEFE_NAH(l.wert_bei(p, 1790000), -2, 0);
 }
 
 FALL(ki_spur_leeren_je_art) {
-  // spur/0 leert nur die Spuren, die leere Liste nur die Kanäle (Bestand des Leitstands), gemischt ersetzt beides
+  // spur/0 lässt die Kanäle stehen (Bestand des Leitstands), die leere Liste leert sie, ki_spur_text trägt nie einen Spur-Teil
   Lauf l;
   char t[128];
-  l.sw->ki_spur(1, Quelle::leitstand, "deck/3,spur/2");
+  l.sw->ki_spur(1, Quelle::leitstand, "deck/3,spur/0");
   l.sw->ki_spur_text(t, sizeof t);
-  PRUEFE(std::strcmp(t, "deck/3,spur/2") == 0);
+  PRUEFE(std::strcmp(t, "deck/3") == 0);
   l.sw->ki_spur(2, Quelle::andreas, "spur/0");
   l.sw->ki_spur_text(t, sizeof t);
   PRUEFE(std::strcmp(t, "deck/3") == 0);
-  l.sw->ki_spur(3, Quelle::andreas, "spur/48");
-  l.sw->ki_spur(4, Quelle::leitstand, "");
+  l.sw->ki_spur(3, Quelle::leitstand, "");
   l.sw->ki_spur_text(t, sizeof t);
-  PRUEFE(std::strcmp(t, "spur/48") == 0);
+  PRUEFE(std::strcmp(t, "") == 0);
+  PRUEFE(std::strstr(t, "spur") == nullptr);
 }
 
-FALL(ki_spur_kurzform_falsch_abgelehnt) {
+FALL(ki_spur_nummern_abgelehnt_wie_unbekannter_kanal) {
+  // E3 P1: spur/1, spur/135, spur/10 (und Schreibfehler) gehen den Weg eines unbekannten Kanals (erz/9): abgelehnt, unbekannter_regler, Liste unverändert
   Lauf l;
-  l.sw->ki_spur(1, Quelle::andreas, "spur/13");
-  l.sw->ki_spur(2, Quelle::andreas, "spur/");
-  l.sw->ki_spur(3, Quelle::andreas, "spur/19");
-  l.sw->ki_spur(4, Quelle::andreas, "spur/1a");
+  l.sw->ki_spur(1, Quelle::leitstand, "deck/3");
+  l.sw->ki_spur(2, Quelle::andreas, "erz/9");   // Referenz: so endet ein unbekannter Kanal
+  const char* alt[] = {"spur/1", "spur/135", "spur/10", "spur/13", "spur/", "spur/1a", "deck/3,spur/2", "spur/9"};
+  for (int i = 0; i < 8; i++) l.sw->ki_spur(10 + i, Quelle::andreas, alt[i]);
   l.nachlese_ereignisse();
-  for (int id = 2; id <= 4; id++) PRUEFE(l.grund(id, Status::abgelehnt) == Grund::unbekannter_regler);
+  PRUEFE(l.grund(2, Status::abgelehnt) == Grund::unbekannter_regler);
+  for (int i = 0; i < 8; i++) PRUEFE(l.grund(10 + i, Status::abgelehnt) == Grund::unbekannter_regler);
   char t[128];
   l.sw->ki_spur_text(t, sizeof t);
-  PRUEFE(std::strcmp(t, "spur/13") == 0);   // eine abgelehnte Liste ändert nichts
+  PRUEFE(std::strcmp(t, "deck/3") == 0);   // eine abgelehnte Liste ändert nichts
 }
 
-FALL(ki_spur_mit_spur_9_abgelehnt) {
+FALL(ki_spur_liste_atomar) {
+  // Eine abgelehnte Liste ändert nichts, auch nicht den Teil vor dem schlechten Eintrag (Bestand deck/3 bleibt)
   Lauf l;
-  l.sw->ki_spur(7, Quelle::leitstand, "spur/9");
+  l.sw->ki_spur(1, Quelle::leitstand, "deck/3");
+  l.sw->ki_spur(2, Quelle::andreas, "deck/4,spur/2");
+  l.sw->ki_spur(3, Quelle::andreas, "spur/0,spur/1");
   l.nachlese_ereignisse();
-  PRUEFE(l.grund(7, Status::abgelehnt) == Grund::unbekannter_regler);
+  PRUEFE(l.bei(1, Status::fertig) >= 0);
+  PRUEFE(l.grund(2, Status::abgelehnt) == Grund::unbekannter_regler);
+  PRUEFE(l.grund(3, Status::abgelehnt) == Grund::unbekannter_regler);
+  PRUEFE(l.bei(2, Status::fertig) < 0 && l.bei(3, Status::fertig) < 0);
+  char t[128];
+  l.sw->ki_spur_text(t, sizeof t);
+  PRUEFE(std::strcmp(t, "deck/3") == 0);
 }
 
 FALL(cypher_rampe_auf_fader_haelt_am_stoppwert) {

@@ -13,7 +13,7 @@ import { Oberflaeche } from '../server.ts';
 import { baueBestand } from './hilfen/bestand.mjs';
 import { schreibeLeerenRing } from './hilfen/ring.mjs';
 import { innen } from './hilfen/innen.mjs';
-import { K, belegeTestInstanz } from './hilfen/instanz.mjs';
+import { K, belegeTestInstanz, serverInstanzSetzen } from './hilfen/instanz.mjs';
 
 belegeTestInstanz();
 
@@ -22,6 +22,7 @@ async function ohneKern(t) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-raster-get-'));
   const d = (n) => { const x = path.join(tmp, n); fs.mkdirSync(x, { recursive: true }); return x; };
   const huellen = path.join(d('h'), 'huellen'); schreibeLeerenRing(huellen);
+  serverInstanzSetzen(t);   // I08 Nachzug R2 (m4)
   const o = new Oberflaeche({ port: 47300 + K, kernPort: 47100 + K, aboPort: 47150 + K, leitstandWs: 47200 + K, bestand: baueBestand(d('bestand'), []),
     arbeitsbestand: d('ab'), kernPruefmodus: true, loops: d('loops'), kits: d('kits'), welleCache: d('welle'), musterOrdner: d('muster'), hotcueOrdner: d('hc'),
     rasterOrdner: d('raster'), huellen, wirtOrdner: d('wirt'), mediathek: path.join(tmp, 'keine.sqlite'), katalog: path.join(tmp, 'kein-k.sqlite'),

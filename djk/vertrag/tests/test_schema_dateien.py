@@ -67,5 +67,5 @@ def test_gruende_wie_16_2_plus_neustart():
     """defs.schema.json: die Codes aus §16.2 am Text gelesen (seit 2026-09-25 mit neustart und grenze_sub; das
     „| {"neustart"}" bleibt für den Fall, dass er dort wieder fehlt)."""
     enum = sl.alle_schemas()["defs.schema.json"]["$defs"]["grund"]["enum"]
-    assert len(enum) == len(set(enum)) == 49   # D1 K1 (§4.11): sechs Gründe des Arrangements; Paket K3: tempo_rampe (6.33)
+    assert len(enum) == len(set(enum)) == 54   # D1 K1 (§4.11): sechs Gründe des Arrangements; Paket K3: tempo_rampe (6.33); 1.8: + 5 (kein_eingang, aufnahme_laeuft, zu_viele_scharf, eingang_fehlt, kein_platz)
     assert set(enum) == set(vertragstext.gruende(vertragstext.lies())) | {"neustart"}

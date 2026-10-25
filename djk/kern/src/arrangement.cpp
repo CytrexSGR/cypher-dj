@@ -39,10 +39,14 @@ ArrZustand Arrangement::zustand(const Karte& k, int64_t s) const {
 const ArrSnapshot* Arrangement::tausche(const ArrSnapshot* neu, int64_t s, const Karte& k) {
   if (freeze_) stopp(0, s, k);   // Paket K3: eine neue Wiedergabe bricht den Freeze ab
   const ArrSnapshot* alt = snap_;
-  stimmen_tauschen(neu, s);   // unverändert: neu binden; geändert oder weg: Ausklang aus eigener Kopie
+  stimmen_tauschen(neu, s, k);   // unverändert: neu binden; geändert oder weg: Ausklang aus eigener Kopie
   noten_tauschen(neu, s);     // offene Noten ohne Gegenstück: Off sofort
   senken_wechsel(neu, s);     // Spuren, die ihre Senke verlassen: Ausblende (RB), All Notes Off an den Slot (Wirt)
   snap_ = neu;
+  for (bool& b : grp_belegt_) b = false;   // 1.10: Gruppen mit Mitgliedern (Pegel-Meldung)
+  if (snap_)
+    for (const ArrSpur& sp : snap_->spur)
+      if (sp.art != ArrArt::leer && sp.ausgang > 0) grp_belegt_[sp.ausgang - 1] = true;
   if (status_ == ArrStatus::spielt) einstieg_ = true;   // neue oder geänderte Clips am laufenden Ort ansetzen
   geaendert_ = true;
   return alt;
@@ -103,6 +107,7 @@ bool Arrangement::start(double start_beat, int quant, bool von_cypher, int64_t s
   if (start_s_ < frueh) start_s_ = frueh;   // Rundung von sample_at(beat_at(frueh)) darf nicht vor frueh fallen
 #endif
   stopp_s_ = -1;
+  beendet_s_ = -1;   // 1.8: neuer Lauf
   status_ = ArrStatus::wartet;
   von_cypher_ = von_cypher;
   for (int i = 0; i < ARR_SPUREN; ++i) {   // Noten vor dem Einsatz gehen nie hinaus; Senken setzen zurück (K2: RB-FFI)
@@ -122,6 +127,7 @@ void Arrangement::stopp(int quant, int64_t s, const Karte& k) {
     for (int i = 0; i < n_offen_; ++i) offen_[i].aus = offen_[i].an;   // vorab gesendete Noten: Off auf ihr On
     alle_noten_aus(s);
     gestoppt_bei_ = s;
+    beendet_s_ = s;   // 1.8
     geaendert_ = true;
     return;
   }
@@ -185,6 +191,7 @@ void Arrangement::beende(int64_t s) {
   stimmen_stopp(s);   // Kurzblende ab s
   alle_noten_aus(s);  // offene Noten aus, Senken All-Notes-Off
   gestoppt_bei_ = s;
+  beendet_s_ = s;   // 1.8
   geaendert_ = true;
 }
 
@@ -207,17 +214,29 @@ void Arrangement::segment(const Karte& k, int64_t a, int64_t b, int64_t s0) {
     clips_starten(k, a, b);
     naht = naht_sample(k);
   }
-  stimmen_spielen(a, b, s0, naht);
+  stimmen_spielen(k, a, b, s0, naht);
   metronom_segment(k, a, b, s0);
 }
 
-// Ruhe ohne Wiedergabe: nur die Regler nachführen; die Mute/Solo-Blende steht sofort auf ihrem Ziel (es klingt nichts)
+// Ruhe ohne Wiedergabe und ohne Klang: nur die Regler nachführen; die Mute/Solo-Blende steht sofort auf ihrem Ziel (es klingt nichts).
+// Der PM-Abgriff ist Stille (1.10). Ziele bleiben, wie sie sind: ohne Schnappschuss gibt es keine neuen.
 void Arrangement::ruhe(int m) {
+  std::memset(pm_l_, 0, sizeof(float) * static_cast<size_t>(m));
+  std::memset(pm_r_, 0, sizeof(float) * static_cast<size_t>(m));
   auto ende = [&](int i, int f) { return w_[i][f].vl ? w_[i][f].vl[m - 1] : w_[i][f].w; };
   bool solo = false;
-  for (int i = 0; i < ARR_SPUREN; ++i) solo = solo || ende(i, 3) >= 0.5f;
+  for (int i = 0; i < ARR_PM; ++i) solo = solo || ende(i, 3) >= 0.5f;
+  bool msolo[ARR_GRUPPEN] = {};
   for (int i = 0; i < ARR_SPUREN; ++i)
-    ms_gain_[i] = (ende(i, 2) >= 0.5f || (solo && ende(i, 3) < 0.5f)) ? 0.0f : 1.0f;
+    if (ziel_[i] > 0 && ende(i, 3) >= 0.5f) msolo[ziel_[i] - 1] = true;
+  for (int i = 0; i < ARR_SPUREN; ++i) {
+    const bool gs = ziel_[i] > 0 && ende(ARR_SPUREN + ziel_[i] - 1, 3) >= 0.5f;
+    ms_gain_[i] = (ende(i, 2) >= 0.5f || (solo && ende(i, 3) < 0.5f && !gs)) ? 0.0f : 1.0f;
+  }
+  for (int g = 0; g < ARR_GRUPPEN; ++g) {
+    const int s = ARR_SPUREN + g;
+    ms_gain_[s] = (ende(s, 2) >= 0.5f || (solo && ende(s, 3) < 0.5f && !msolo[g])) ? 0.0f : 1.0f;
+  }
   verlaeufe_nachfuehren(m);
 }
 

@@ -1,5 +1,5 @@
 {
- "n": 170,
+ "n": 180,
  "ergebnis": [
   {
    "m": "GET",
@@ -450,6 +450,52 @@
    "fehler": "unbekannte_fassung",
    "form": {
     "fehler": "string"
+   }
+  },
+  {
+   "m": "GET",
+   "p": "/geraete",
+   "code": 200,
+   "art": "application/json; charset=utf-8",
+   "form": {
+    "eingaenge": [
+     {
+      "audio": "null",
+      "audio_hinweis": "string",
+      "da": "boolean",
+      "frei_fuer_cypher": "boolean",
+      "k": "number",
+      "latenz": "null",
+      "name": "string",
+      "pegel_db": "null",
+      "profil": "null",
+      "verbunden": "null"
+     }
+    ],
+    "erkennung": "string",
+    "kern": {
+     "ein": "null"
+    },
+    "midi": {
+     "da": "boolean",
+     "frei_fuer_cypher": "boolean",
+     "port": "null",
+     "profil": "null",
+     "verbunden": "null"
+    },
+    "profile": [
+     {
+      "audio": "boolean",
+      "audio_hinweis": "string",
+      "id": "string",
+      "midi": "boolean",
+      "name": "string"
+     }
+    ],
+    "quellen": {
+     "audio": "[]",
+     "midi": "[]"
+    }
    }
   },
   {
@@ -1831,6 +1877,150 @@
   {
    "m": "POST",
    "p": "/klang",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/geraete/eingang",
+   "kopf": "json",
+   "code": 400,
+   "art": "application/json; charset=utf-8",
+   "fehler": "argument_ungueltig",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/geraete/eingang",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/geraete/eingang",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/geraete/midi",
+   "kopf": "json",
+   "code": 200,
+   "art": "application/json; charset=utf-8",
+   "form": {
+    "eingaenge": [
+     {
+      "audio": "null",
+      "audio_hinweis": "string",
+      "da": "boolean",
+      "frei_fuer_cypher": "boolean",
+      "k": "number",
+      "latenz": "null",
+      "name": "string",
+      "pegel_db": "null",
+      "profil": "null",
+      "verbunden": "null"
+     }
+    ],
+    "erkennung": "string",
+    "kern": {
+     "ein": "null"
+    },
+    "midi": {
+     "da": "boolean",
+     "frei_fuer_cypher": "boolean",
+     "port": "null",
+     "profil": "null",
+     "verbunden": "null"
+    },
+    "ok": "boolean",
+    "profile": [
+     {
+      "audio": "boolean",
+      "audio_hinweis": "string",
+      "id": "string",
+      "midi": "boolean",
+      "name": "string"
+     }
+    ],
+    "quellen": {
+     "audio": "[]",
+     "midi": "[]"
+    }
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/geraete/midi",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/geraete/midi",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/geraete/latenz",
+   "kopf": "json",
+   "code": 400,
+   "art": "application/json; charset=utf-8",
+   "fehler": "argument_ungueltig",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/geraete/latenz",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/geraete/latenz",
    "kopf": "fremd",
    "code": 403,
    "art": "application/json; charset=utf-8",

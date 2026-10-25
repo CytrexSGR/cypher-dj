@@ -3,6 +3,7 @@
 // Regler-Datei abhängt. Die Lautheit misst das echte ffmpeg. Kein Netz, kein Kern, kein Ton. Der Lauf mit dem echten cypherdj-render folgt auf einer Prüfinstanz.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { MAX_SPUREN } from '../projekt/modell.ts';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -41,8 +42,8 @@ test('Lautheit: je belegter Spur ein Render ohne Neustart-Zustand, alle anderen 
   assert.equal(aufrufe.length, 4);
   assert.ok(aufrufe.every((x) => x.argv.includes('--ohne-zustand') && x.argv.includes('--spur-regler')));
   const reglerVon = (k) => aufrufe[k].regler;
-  assert.deepEqual(Object.entries(reglerVon(0)).filter(([p]) => p.endsWith('/mute')).map(([, v]) => v), [0, 1, 1, 1, 1, 1, 1, 1], 'Spur 1 allein');
-  assert.deepEqual(Object.entries(reglerVon(1)).filter(([p]) => p.endsWith('/mute')).map(([, v]) => v), [1, 0, 1, 1, 1, 1, 1, 1], 'Spur 2 allein');
+  assert.deepEqual(Object.entries(reglerVon(0)).filter(([p]) => p.endsWith('/mute')).map(([, v]) => v), [0, ...Array(MAX_SPUREN - 1).fill(1)], 'Spur 1 allein');
+  assert.deepEqual(Object.entries(reglerVon(1)).filter(([p]) => p.endsWith('/mute')).map(([, v]) => v), [1, 0, ...Array(MAX_SPUREN - 2).fill(1)], 'Spur 2 allein');
   assert.ok(Object.entries(reglerVon(0)).filter(([p]) => p.endsWith('/solo')).every(([, v]) => v === 0));
   assert.deepEqual(reglerVon(3), { 'spur/1/fader': 0, 'spur/1/pan': 0, 'spur/1/mute': 0, 'spur/1/solo': 0, 'spur/2/fader': 0, 'spur/2/pan': 0, 'spur/2/mute': 0,
     'spur/2/solo': 0, 'spur/3/fader': 0, 'spur/3/pan': 0, 'spur/3/mute': 0, 'spur/3/solo': 0 }, 'die Summe rendert mit den Reglern des Projekts');
@@ -116,7 +117,7 @@ test('Lautheit: belegteSpuren und reglerEinzeln (reine Teile)', async (t) => {
   assert.deepEqual(belegteSpuren(p, 4, 8).map((s) => s.nr), [2], 'Kick liegt bei Beat 0..1, Bass 0..16');
   const r = reglerEinzeln({ ...p.spuren[1], fader_db: -9, pan: 0.5, mute: false });
   assert.equal(r['spur/2/fader'], -9); assert.equal(r['spur/2/pan'], 0.5); assert.equal(r['spur/2/mute'], 0);
-  assert.equal(Object.keys(r).filter((k) => k.endsWith('/mute') && r[k] === 1).length, 7);
+  assert.equal(Object.keys(r).filter((k) => k.endsWith('/mute') && r[k] === 1).length, MAX_SPUREN - 1);
   assert.ok(Object.keys(r).filter((k) => k.endsWith('/solo')).every((k) => r[k] === 0));
 });
 
@@ -183,4 +184,19 @@ test('Lautheit G3: Solo auf Spur 2 macht Spur 1 stumm (kein Render), Spur 2 wird
   const ohne = await mitUmgebung(MISCHUNG(a), () => ruf(() => a.ausgabe.lautheit({ von_beat: 0, bis_beat: 4 })));
   assert.deepEqual(ohne.body.spuren.map((s) => [s.nr, s.stumm, typeof s.lufs_i]), [[1, false, 'number'], [2, false, 'number']]);
   assert.equal(renderAufrufe(a).length, 3, 'ohne Solo: zwei Spuren und die Summe');
+});
+
+// 1.10 Gesamtreview M2: die Vorprüfung rechnet Solo wie der Mischer (arr_ausgang.cpp Schritt 1: solo_irgendwo && !solo && !gruppe_solo).
+test('Lautheit 1.10: Solo auf einer Gruppe macht Spuren außerhalb stumm und lässt ihre Mitglieder klingen; Spur-Solo daneben hält Gruppen-Mitglieder', async (t) => {
+  const a = await aufbau(t, { tempo: 120 });
+  await a.aendern([{ befehl: 'gruppenspur_neu', name: 'G', mitglieder: ['s2'] }], 'Gruppe');
+  const gid = a.projekt().gruppen[0].id;
+  await a.aendern([{ befehl: 'gruppenspur_aendern', gruppe_id: gid, solo: true }], 'Solo G');
+  const r = await mitUmgebung(MISCHUNG(a), () => ruf(() => a.ausgabe.lautheit({ von_beat: 0, bis_beat: 4 })));
+  assert.equal(r.code, 200, JSON.stringify(r.body));
+  assert.deepEqual([nr(r, 1).stumm, nr(r, 1).lufs_i], [true, null], 'Spur 1 außerhalb der Solo-Gruppe');
+  assert.deepEqual([nr(r, 2).stumm, typeof nr(r, 2).lufs_i], [false, 'number'], 'Spur 2 in der Solo-Gruppe');
+  await a.aendern([{ befehl: 'spur_aendern', spur_id: 's1', solo: true }], 'Solo Kick');
+  const b = await mitUmgebung(MISCHUNG(a), () => ruf(() => a.ausgabe.lautheit({ von_beat: 0, bis_beat: 4 })));
+  assert.deepEqual(b.body.spuren.map((s) => [s.nr, s.stumm]), [[1, false], [2, false]], 'Spur-Solo und Gruppen-Solo: beide klingen');
 });

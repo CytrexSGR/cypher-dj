@@ -16,7 +16,7 @@ import { KOPIE_TEXT, HAND_PRUEFMODUS_TEXT } from '../oeffentlich/meldungen.js';
 import { kodiere } from '../../vertrag/attrappe_kern/osc.mjs';
 import { schreibeLeerenRing, schreibeRing } from './hilfen/ring.mjs';
 import { K as OHR_K } from '../ohr.ts';
-import { K, TEST_INSTANZ, belegeTestInstanz } from './hilfen/instanz.mjs';
+import { K, TEST_INSTANZ, belegeTestInstanz, serverInstanzSetzen } from './hilfen/instanz.mjs';
 import { pruefeWirtOrdner } from './hilfen/wirt_sock.mjs';
 belegeTestInstanz();   // Plan d1-s1 Task 1
 // Paket S3 (Auftrag 16 b): jeder Ordner, den ein Testkörper dieser Datei anlegt (hc, loops, muster, wirt, raster, kits, welle, Hüllen, …), liegt unter
@@ -74,6 +74,7 @@ async function stapel(t, mutationen = [], { bestand = BESTAND, vorher, kernPruef
   });
   const log = [];
   const huellenPfad = huellen ?? (() => { const p = path.join(tmpd('huellen'), 'huellen'); schreibeLeerenRing(p); return p; })();
+  serverInstanzSetzen(t);   // I08 Nachzug R2 (m4)
   const o = new Oberflaeche({ port: 47300 + K, kernPort: 47100 + K, aboPort: 47150 + K, leitstandWs: 47200 + K, bestand, arbeitsbestand: ab, mutationen, kernPruefmodus, zielKurve, loops: loops ?? tmpd('loops'), kits: kits ?? tmpd('kits'), welleCache: welleCache ?? tmpd('welle'), musterOrdner: musterOrdner ?? tmpd('muster'), hotcueOrdner: hotcueOrdner ?? tmpd('hc'), rasterOrdner: rasterOrdner ?? tmpd('raster'), huellen: huellenPfad, wirtOrdner: wirt, klangBefehl, digitalout, log: (z) => log.push(z) });
   await o.starte();
   laufend = o;
@@ -656,7 +657,8 @@ test('→ STRUDEL (MVP 2 Scheibe 3): /loop kit macht den Loop zum Klang rec0 im 
   const r = await postJson(url, '/loop', { aktion: 'kit', name: 'c-1' });
   assert.equal(r.code, 200, JSON.stringify(r));
   assert.equal(r.j.klang, 'rec0');
-  assert.ok(fs.existsSync(path.join(kits, 'rec/kit.json')), 'ohne CYPHERDJ_INSTANZ im Server-Prozess: Kit rec');
+  assert.ok(fs.existsSync(path.join(kits, `rec-${TEST_INSTANZ}/kit.json`)), `Server mit Testinstanz ${TEST_INSTANZ} (I08 Nachzug R2, m4): Zusatz-Kit rec-<instanz>, nicht rec des Betriebs`);
+  assert.ok(!fs.existsSync(path.join(kits, 'rec')), 'das Kit des Betriebs (rec) entsteht nicht');
   assert.equal((await postJson(url, '/loop', { aktion: 'kit', name: 'gibts-nicht' })).code, 400);
   assert.equal((await postJson(url, '/loop', { aktion: 'kit', name: 'c-1', klang: 'bd' })).code, 400);
   assert.equal(o.gesendet, vorher, 'kit schickt nichts an den Kern');
@@ -1035,6 +1037,145 @@ test('/deck/loop GET: aktiver Loop (Start, Länge) für die Anzeige; aus_loop oh
   assert.deepEqual(await (await fetch(`${url}/deck/loop?deck=1`)).json(), {});
 });
 
+test('/deck/sprung bei scharfem Loop: der Kern verschiebt den Loop mit, das Loop-Gedächtnis (GET /deck/loop, /lage) zieht um dasselbe Delta nach', async (t) => {
+  const { o, url } = await geladenesDeck(t);
+  const e = eins();
+  await postJson(url, '/deck/sprung', { deck: 1, ziel: e + 8, raster: 0 });
+  await zustand(o, (x) => Math.abs(x.quell_beat - (e + 8)) < 1e-6);
+  await postJson(url, '/deck/loop', { deck: 1, laenge: 4, raster: 4 });
+  await zustand(o, (x) => !Number.isFinite(x.beats_bis_ende));
+  assert.deepEqual(await (await fetch(`${url}/deck/loop?deck=1`)).json(), { start: e + 8, laenge: 4 });
+  assert.equal((await postJson(url, '/deck/sprung', { deck: 1, delta: -1, raster: 0 })).code, 200);
+  await zustand(o, (x) => Math.abs(x.quell_beat - (e + 7)) < 1e-6);
+  assert.deepEqual(await (await fetch(`${url}/deck/loop?deck=1`)).json(), { start: e + 7, laenge: 4 }, 'Start um -1 nachgezogen');
+  const lage = await (await fetch(`${url}/lage`)).json();
+  assert.equal(lage.decks.find((d) => d.deck === 1).loop.start, e + 7, 'auch /lage zeigt den neuen Start');
+  // Negativ-Kontrolle: ohne Loop kein Gedächtnis, Sprung ändert nichts daran
+  await postJson(url, '/deck/loop', { deck: 1, laenge: 0, raster: 4 });
+  await zustand(o, (x) => Number.isFinite(x.beats_bis_ende));
+  assert.equal((await postJson(url, '/deck/sprung', { deck: 1, delta: 2, raster: 0 })).code, 200);
+  assert.deepEqual(await (await fetch(`${url}/deck/loop?deck=1`)).json(), {});
+});
+
+test('/deck/loop behalte_start (Längenknöpfe): bei laufendem Loop ändert sich nur die Länge, der Start bleibt; ohne behalte_start wandert der Start an den Kopf', async (t) => {
+  const { o, url } = await geladenesDeck(t);
+  const e = eins();
+  o.kern.sende('/k/deck/start', { id: 911, quelle: 'andreas', plan: '', gruppe: '', hoerschein: '', deck: 1,
+    ab_beat: Math.ceil(o.kern.uhr.beat) + 1, quell_beat: e, politik: 1 });
+  await zustand(o, (x) => x.status === 2);
+  assert.equal((await postJson(url, '/deck/loop', { deck: 1, laenge: 2, raster: 1 })).code, 200);
+  await zustand(o, (x) => x.status === 3);
+  const s0 = (await (await fetch(`${url}/deck/loop?deck=1`)).json()).start;
+  const bereich = async (ms) => {
+    const q = [];
+    for (let i = 0; i < ms / 20; i++) { q.push(Number(o.stand.decks['1'].quell_beat)); await warte(20); }
+    return [Math.min(...q), Math.max(...q)];
+  };
+  let [lo, hi] = await bereich(1500);
+  assert.ok(hi < s0 + 2.05, `vor der Änderung im Loop [${s0}, ${s0 + 2}), gesehen bis ${hi}`);
+  const r = await postJson(url, '/deck/loop', { deck: 1, laenge: 4, raster: 0, behalte_start: true });
+  assert.equal(r.code, 200, JSON.stringify(r.j));
+  assert.equal(r.j.felder.laenge_beats, 4);
+  assert.deepEqual(await (await fetch(`${url}/deck/loop?deck=1`)).json(), { start: s0, laenge: 4 }, 'Gedächtnis: Start bleibt, Länge neu');
+  await warte(600);   // ab_beat liegt einen Vorlauf voraus
+  [lo, hi] = await bereich(3000);
+  assert.ok(lo >= s0 - 0.05 && hi > s0 + 2.5 && hi < s0 + 4.05, `Loop [${s0}, ${s0 + 4}), gesehen ${lo}..${hi}`);
+  // Negativ-Kontrolle: ohne behalte_start (alter Weg) setzt der Kern den Start an den Kopf
+  const kopf = Number(o.stand.decks['1'].quell_beat);
+  assert.equal((await postJson(url, '/deck/loop', { deck: 1, laenge: 8, raster: 0 })).code, 200);
+  const l2 = await (await fetch(`${url}/deck/loop?deck=1`)).json();
+  assert.ok(Math.abs(l2.start - s0) > 0.3 || Math.abs(kopf - s0) < 0.3, `alter Weg: Start ${l2.start} (Kopf ${kopf}, bisher ${s0})`);
+  // behalte_start ohne Loop (Länge 0 / Deck steht ohne Loop): gewöhnlicher Weg, kein Fehler
+  assert.equal((await postJson(url, '/deck/loop', { deck: 1, laenge: 0, raster: 0, behalte_start: true })).code, 200);
+});
+
+test('Loop Move (◀ ▶): Sprung um ±Länge bei scharfem Loop verschiebt Loop und Kopf, Gedächtnis folgt; links zurück', async (t) => {
+  const { o, url } = await geladenesDeck(t);
+  const e = eins();
+  await postJson(url, '/deck/sprung', { deck: 1, ziel: e + 8, raster: 0 });
+  await zustand(o, (x) => Math.abs(x.quell_beat - (e + 8)) < 1e-6);
+  await postJson(url, '/deck/loop', { deck: 1, laenge: 4, raster: 4 });
+  await zustand(o, (x) => !Number.isFinite(x.beats_bis_ende));
+  const lage = async () => (await (await fetch(`${url}/lage`)).json()).decks.find((x) => x.deck === 1);
+  assert.deepEqual((await lage()).loop, { start: e + 8, laenge: 4 });
+  assert.equal((await postJson(url, '/deck/sprung', { deck: 1, delta: 4, raster: 0 })).code, 200);
+  await zustand(o, (x) => Math.abs(x.quell_beat - (e + 12)) < 1e-6);
+  assert.deepEqual((await lage()).loop, { start: e + 12, laenge: 4 }, 'rechts: Loop +4');
+  assert.equal((await postJson(url, '/deck/sprung', { deck: 1, delta: -4, raster: 0 })).code, 200);
+  await zustand(o, (x) => Math.abs(x.quell_beat - (e + 8)) < 1e-6);
+  assert.deepEqual((await lage()).loop, { start: e + 8, laenge: 4 }, 'links: zurück auf 8');
+  assert.equal((await postJson(url, '/deck/sprung', { deck: 1, delta: -4, raster: 0 })).code, 200);
+  await zustand(o, (x) => Math.abs(x.quell_beat - (e + 4)) < 1e-6);
+  assert.deepEqual((await lage()).loop, { start: e + 4, laenge: 4 });
+});
+
+test('Loop-Raster (Plan 2026-10-21): stehendes Deck neben dem Beat → Start auf der Rasterstelle, der Kern spielt genau dort; Raster 0 = Kopf', async (t) => {
+  const { o, url, log } = await geladenesDeck(t);
+  const e = eins();
+  await postJson(url, '/deck/sprung', { deck: 1, ziel: e + 8.3, raster: 0 });
+  await zustand(o, (x) => Math.abs(x.quell_beat - (e + 8.3)) < 1e-6);
+  const r = await postJson(url, '/deck/loop', { deck: 1, laenge: 4, raster: 1 });
+  assert.equal(r.code, 200, JSON.stringify(r.j));
+  assert.equal(r.j.felder.start_beat, e + 8, 'Start auf dem Beat, nicht am Kopf');
+  assert.equal(log.filter((z) => z.typ === 'an_kern').at(-1).adresse, '/k/deck/loop_laenge');
+  await zustand(o, (x) => !Number.isFinite(x.beats_bis_ende));   // GET /deck/loop zeigt erst, wenn der Kern den Loop hält (loopScharf)
+  assert.deepEqual(await (await fetch(`${url}/deck/loop?deck=1`)).json(), { start: e + 8, laenge: 4 });
+  // Die Ankunft im Kern am stehenden Deck ist hier nicht beobachtbar (ein Start beendet den Loop, decks.mjs:114, deck.cpp:356);
+  // sie zeigt der zweite Test am laufenden Deck über dieselbe Adresse.
+  // Negativ-Kontrolle: Raster 0 bei stehendem Deck → alter Weg, Start am Kopf
+  await postJson(url, '/deck/loop', { deck: 1, laenge: 0, raster: 0 });
+  await zustand(o, (x) => Number.isFinite(x.beats_bis_ende));
+  assert.equal((await postJson(url, '/deck/loop', { deck: 1, laenge: 4, raster: 0 })).code, 200);
+  assert.equal(log.filter((z) => z.typ === 'an_kern').at(-1).adresse, '/k/deck/loop');
+  await zustand(o, (x) => !Number.isFinite(x.beats_bis_ende));
+  const l0 = await (await fetch(`${url}/deck/loop?deck=1`)).json();
+  assert.ok(Math.abs(l0.start - (e + 8.3)) < 1e-6, `Raster 0: Start am Kopf, war ${l0.start}`);
+});
+
+test('Loop-Raster: laufendes Deck mit Phasenversatz → Start auf dem nächsten Beat (auch bei Takt-Raster); Ablehnung nimmt das Gedächtnis zurück', async (t) => {
+  const { o, url } = await geladenesDeck(t);
+  const e = eins();
+  o.kern.sende('/k/deck/start', { id: 960, quelle: 'andreas', plan: '', gruppe: '', hoerschein: '', deck: 1,
+    ab_beat: Math.ceil(o.kern.uhr.beat) + 1, quell_beat: e + 0.3, politik: 1 });
+  await zustand(o, (x) => x.status === 2);
+  const r = await postJson(url, '/deck/loop', { deck: 1, laenge: 4, raster: 4 });
+  assert.equal(r.code, 200, JSON.stringify(r.j));
+  const s = r.j.felder.start_beat;
+  assert.ok(Math.abs((s - e) - Math.round(s - e)) < 1e-9, `Start ${s} liegt auf einem Beat ab der Eins ${e}`);
+  // sofort statt auf die nächste Takt-Eins des Masters (Andreas 21.10.: „der loop knopf reagiert nur verzögert“): der Start liegt
+  // schon auf dem Track-Raster, ein Warten aufs Master-Raster kostete bis zu 4 Beats
+  assert.equal(r.j.felder.raster_beats, 0, 'kein Warten aufs Master-Raster');
+  assert.ok(r.j.felder.ab_beat - o.kern.uhr.beat < 1, `ab_beat ${r.j.felder.ab_beat} liegt höchstens einen Vorlauf voraus (Uhr ${o.kern.uhr.beat})`);
+  await zustand(o, (x) => x.status === 3);
+  const q = [];
+  for (let i = 0; i < 175; i++) { q.push(Number(o.stand.decks['1'].quell_beat)); await warte(20); }
+  assert.ok(Math.max(...q) < s + 4.05 && Math.max(...q) > s + 3, `Naht bei ${s + 4}, gesehen bis ${Math.max(...q)}`);
+  // Ablehnung (Loop ginge aus dem Material, NIGHTSHIFT 100 s ≈ 213,3 Beats; Start ~203 + 16 > 213,3): Gedächtnis zurück auf „kein Loop“.
+  // (Abweichung vom Plan-Test: im Loop gilt L2b, der alte Weg; die Ablehnung am Gerasterten sieht man erst nach Loop-Ende.)
+  assert.equal((await postJson(url, '/deck/loop', { deck: 1, laenge: 0, raster: 0 })).code, 200);
+  await zustand(o, (x) => x.status === 2);
+  assert.equal((await postJson(url, '/deck/sprung', { deck: 1, delta: 200, raster: 0 })).code, 200);
+  await warte(600);
+  assert.equal(o.aktiverLoop['1'], undefined, 'vor dem Test: kein Loop gemerkt');
+  assert.equal((await postJson(url, '/deck/loop', { deck: 1, laenge: 16, raster: 1 })).code, 200);
+  assert.equal(o.aktiverLoop['1']?.laenge, 16, 'sofort gemerkt');
+  await warte(1200);   // Quittung 6 kommt nach ab_beat
+  assert.equal(o.aktiverLoop['1'], undefined, 'abgelehnt: das Gedächtnis fällt auf den Stand davor (kein Loop) zurück');
+});
+
+test('Loop-Raster L2b: LOOP bei schon laufendem Loop geht den alten Weg ab dem Kopf (der gewickelte Kopf ist nur dem Kern bekannt)', async (t) => {
+  const { o, url, log } = await geladenesDeck(t);
+  const e = eins();
+  o.kern.sende('/k/deck/start', { id: 970, quelle: 'andreas', plan: '', gruppe: '', hoerschein: '', deck: 1,
+    ab_beat: Math.ceil(o.kern.uhr.beat) + 1, quell_beat: e + 1, politik: 1 });
+  await zustand(o, (x) => x.status === 2);
+  assert.equal((await postJson(url, '/deck/loop', { deck: 1, laenge: 2, raster: 1 })).code, 200);
+  await zustand(o, (x) => x.status === 3);
+  await warte(1500);   // mehrere Nähte: quell − (ab − beat) liegt jetzt nicht mehr am Kopf
+  assert.equal((await postJson(url, '/deck/loop', { deck: 1, laenge: 4, raster: 4 })).code, 200);
+  assert.equal(log.filter((z) => z.typ === 'an_kern').at(-1).adresse, '/k/deck/loop', 'im Loop: alter Weg');
+});
+
 test('/deck/loop/sichern: aktiver Deck-Loop wird sample-genau (mit Grid-Versatz) ein Loop der Bibliothek, optional gleich in L1', async (t) => {
   const lo = fs.mkdtempSync(path.join(TMP, 'djk-loops-'));
   const { o, url, log } = await geladenesDeck(t, { loops: lo });
@@ -1405,7 +1546,7 @@ test('Hand T1: Kopf x-djk-quelle cypher → Kern-Befehle mit Quelle cypher; ohne
   const { o, url, log } = await geladenesDeck(t);
   const letzte = (adr) => log.filter((z) => z.typ === 'an_kern' && z.adresse === adr).at(-1)?.felder;
   assert.equal((await postJson(url, '/deck/loop', { deck: 1, laenge: 4, raster: 4 }, CYPHER)).code, 200);
-  assert.equal(letzte('/k/deck/loop').quelle, 'cypher');
+  assert.equal(letzte('/k/deck/loop_laenge').quelle, 'cypher');
   assert.equal((await postJson(url, '/deck/loop', { deck: 1, laenge: 0, raster: 4 })).code, 200);
   assert.equal(letzte('/k/deck/loop').quelle, 'andreas');
   // async Weg (await in laden): Quelle trägt über await

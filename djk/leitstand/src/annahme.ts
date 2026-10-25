@@ -401,7 +401,7 @@ export class Annahme {
 
   // ---------- Wiederaufnahme aus dem Journal (Leitstand-Neustart) ----------
 
-  wiederaufnehmen(zeilen: Array<{ typ: string; von: string; daten: Record<string, unknown> }>): number {
+  wiederaufnehmen(zeilen: Iterable<{ typ: string; von: string; daten: Record<string, unknown> }>): number {
     if (this.mut('wiederaufnahme_aus')) return 0;
     this.stumm = true;
     let n = 0;

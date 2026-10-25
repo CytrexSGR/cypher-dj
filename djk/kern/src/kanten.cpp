@@ -74,6 +74,51 @@ std::vector<Kante> filtere_kanten(const std::vector<Kante>& kanten, const std::s
   return ok;
 }
 
+static bool ein_port_name(const std::string& n) {
+  if (n == "midi_ein_1") return true;
+  return n.size() == 7 && n.compare(0, 4, "ein_") == 0 && n[4] >= '1' && n[4] <= '4' && n[5] == '_' && (n[6] == 'L' || n[6] == 'R');
+}
+
+// Port eines Kern-Clients irgendeiner Instanz? Client heißt cypherdj-kern oder cypherdj-kern-<i>, dahinter folgt ':' (instanz.h cdj_name).
+static bool kern_client(const std::string& quelle) {
+  static const std::string basis = "cypherdj-kern";
+  if (quelle.compare(0, basis.size(), basis) != 0) return false;
+  const char c = quelle.size() > basis.size() ? quelle[basis.size()] : '\0';
+  return c == ':' || c == '-';
+}
+
+std::vector<Kante> lies_eingangs_kanten(const std::string& text, const std::string& kern_praefix) {
+  std::vector<Kante> aus;
+  for (const Kante& k : lies_kanten(text)) {
+#ifndef CYPHERDJ_MUTATION_EIN_KANTEN_OHNE_RIEGEL
+#ifdef CYPHERDJ_MUTATION_EIN_KANTEN_NUR_EIGENES
+    if (k.quelle.compare(0, kern_praefix.size(), kern_praefix) == 0) continue;  // Fehlerfall (m6): nur der eigene Kern fällt weg
+#else
+    if (k.quelle.compare(0, kern_praefix.size(), kern_praefix) == 0 || kern_client(k.quelle)) continue;  // Riegel: nie Kern -> Kern, jede Instanz
+#endif
+#endif
+#ifndef CYPHERDJ_MUTATION_EIN_KANTEN_ZIEL_FREI
+    if (!ein_port_name(k.ziel)) continue;
+#endif
+    aus.push_back({k.quelle, kern_praefix + k.ziel});
+  }
+  return aus;
+}
+
+std::vector<Kante> wegfallende_kanten(const std::vector<Kante>& alt, const std::vector<Kante>& soll) {
+  std::vector<Kante> weg;
+#ifndef CYPHERDJ_MUTATION_EIN_KANTEN_KEIN_TRENNEN  // Fehlerfall: nichts wird getrennt, alte und neue Quelle laufen summiert
+  for (const Kante& a : alt) {
+    bool noch = false;
+    for (const Kante& s : soll) noch = noch || s == a;
+    if (!noch) weg.push_back(a);
+  }
+#else
+  (void)alt; (void)soll;
+#endif
+  return weg;
+}
+
 std::vector<Kante> entdoppeln_begrenzen(const std::vector<Kante>& kanten, size_t max, size_t* verworfen) {
   std::vector<Kante> aus;
   for (const Kante& k : kanten) {

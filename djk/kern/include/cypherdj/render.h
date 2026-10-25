@@ -26,11 +26,19 @@ namespace cdj {
 // 1 585 064 kB. Darüber lehnt rendere() mit fehler "aufruf" ab (cypherdj-render: Rückgabe 2 mit Text).
 constexpr double RENDER_MAX_BEATS = 2048.0;
 
-// Spec 6.20/6.25: ein Spur-Regler des Projekts, Pfad spur/<1..8>/{fader,pan,mute,solo}, Wert in Kern-Einheiten
+// Spec 6.20/6.25: ein Mixer-Regler des Projekts, Pfad spur/<1..ARR_SPUREN = 32>/{fader,pan,mute,solo}, grp/<1..ARR_GRUPPEN = 8>/{fader,pan,mute,solo}
+// oder pm/fader (1.10), Wert in Kern-Einheiten
 struct SpurRegler {
   std::string pfad;
   float wert = 0.0f;
 };
+
+// 1.10 Slice 2 (E2): welches Signal der Export trägt. produktion: der PM-Ausgang des Kerns (Kern::pm_abgriff_*), vor erz/4, Kleber, master/pegel und
+// Set-Limiter; l[0] klingt am Kern-Sample start_sample. set: der Master hinter dem Set-Limiter wie bisher; l[0] klingt am Kern-Sample start_sample +
+// vorhalt. Der Ring-Master liegt in beiden Fällen um den Vorhalt hinter dem PM: für den Null-Test gegen den Live-Mitschnitt gilt dieselbe Ausrichtung.
+// Nachzug N7: der Ring-Master ist der PM durch den Isolator von erz/4 (Allpass, Betrag flach, Phase gedreht); ein Sample-Vergleich produktion gegen set
+// ist darum nie null, die Referenz ist der Abgriff durch cypherdj::dsp::Isolator mit Gains 1,0.
+enum class RenderAbgriff { set, produktion };
 
 struct RenderAuftrag {
   std::string arr_ordner;                  // Arbeitsordner der Instanz: wiedergabe-<nr>.json, audio/, freeze-*.f32
@@ -49,6 +57,7 @@ struct RenderAuftrag {
   std::vector<SpurRegler> spur_regler;
   ArrSenke* senke_intern = nullptr;        // Ersatz für Tests; nullptr: die RB-338 des Kerns (K2b)
   int gegenprobe_spur = 0;                 // > 0: jeder Audio-Clip dieser Spur 1 Frame weiter in der Quelle (A7, 5.)
+  RenderAbgriff abgriff = RenderAbgriff::set;   // Vorgabe des Programms: wie bisher (P11)
 };
 
 struct RenderErgebnis {
@@ -65,11 +74,14 @@ struct RenderErgebnis {
   int regler = 0;                          // übernommene Regler (kern: aus dem Fach, −1 ungültig; projekt: Spur-Regler)
   std::string regler_quelle;               // "kern", "projekt" oder "" (weder noch, nur Tests)
   float spitze = 0.0f;                     // größter Betrag im Master, linear
+  std::string abgriff = "set";             // "produktion" oder "set": das tatsächlich gelesene Signal
+  bool ueber_decke = false;                // Sample-Spitze des Exports größer als limiter_dbtp (kern.toml); die True-Peak-Lücke steht im Kommentar zu P10 des Plans
+  float limiter_db_max = 0.0f;             // größte Absenkung des Set-Limiters während des Renders als positive dB-Zahl (0 = griff nie ein)
 };
 
 RenderErgebnis rendere(const RenderAuftrag& a);
 
-// Spec 6.20/6.25: --spur-regler <datei.json>, EIN JSON-Objekt Pfad -> Zahl. Nur spur/<1..8>/{fader,pan,mute,solo}, Werte
+// Spec 6.20/6.25: --spur-regler <datei.json>, EIN JSON-Objekt Pfad -> Zahl. Nur spur/<1..ARR_SPUREN = 32>/{fader,pan,mute,solo}, grp/<1..8>/… und pm/fader, Werte
 // in den Grenzen der Regler-Tabelle (fader −200..+6 dB, pan −1..+1, mute und solo 0 oder 1). false mit fehler bei fehlender
 // oder unlesbarer Datei, kein JSON, kein Objekt, fremdem Pfad, keiner Zahl, Wert außerhalb.
 bool lies_spur_regler(const std::string& pfad, std::vector<SpurRegler>& aus, std::string& fehler);

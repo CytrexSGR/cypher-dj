@@ -22,12 +22,15 @@ export function nutzlast(t) {
   return { sha: t.sha, dauer_s: t.dauer_s, ...(name ? { name } : {}) };
 }
 
-// Befehl für POST /proj/aendern oder ein Fehlergrund (englischer Text zeigt die Seite)
+// Befehl für POST /proj/aendern oder ein Fehlergrund (englischer Text zeigt die Seite).
+// Paket 1.13 (F2): warp 'auto' lässt den Server aus den Library-Daten entscheiden: Loops und Tracks mit Tempo laufen sofort im Projekttempo (Länge und
+// Warp kommen vom Server), One-Shots und Einträge ohne Tempo bleiben ungewarpt; dann gilt laenge_beats von hier (Sekunden · Projekttempo).
+// Das Projekttempo ändert die Ablage nie.
 export function ablageBefehl(projekt, nutz, spurIndex, beat, raster) {
   const spur = projekt?.spuren?.[spurIndex];
   if (!spur) return { fehler: 'keine_spur' };
   if (spur.art !== 'audio') return { fehler: 'keine_audiospur' };
   return { befehl: { befehl: 'clip_neu', spur_id: spur.id, art: 'audio', start_beat: Math.max(0, rasten(beat, raster)),
-    laenge_beats: (nutz.dauer_s * projekt.tempo_bpm) / 60, sha256: nutz.sha, ...(nutz.name ? { name: nutz.name } : {}) } };
+    laenge_beats: (nutz.dauer_s * projekt.tempo_bpm) / 60, sha256: nutz.sha, warp: 'auto', ...(nutz.name ? { name: nutz.name } : {}) } };
 }
 export const ABLAGE_TEXT = { keine_spur: 'Drop the sample on a track', keine_audiospur: 'Samples go on audio tracks only' };

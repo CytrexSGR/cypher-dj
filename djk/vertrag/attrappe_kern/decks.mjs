@@ -133,6 +133,7 @@ const deckArt = {
     if (!erlaubt.includes(t.politik)) return 'ausserhalb_bereich';
     if (t.politik === 2 && !RASTER.has(t.raster)) return 'ausserhalb_bereich';
     if ((t.aktion === 'loop' || t.aktion === 'roll') && !(t.laenge === 0 || (t.laenge >= 1 / 32 && t.laenge <= 128))) return 'ausserhalb_bereich';
+    if (t.aktion === 'loop_laenge' && !(Number.isFinite(t.start) && t.laenge >= 1 / 32 && t.laenge <= 128)) return 'ausserhalb_bereich';
     if (t.aktion === 'roll' && t.rollArt !== 0 && t.rollArt !== 1) return 'ausserhalb_bereich';
     if (t.aktion === 'roll' && t.rollArt === 1) return 'kein_stretcher';
     if (t.aktion === 'hotcue' && !(t.nr >= 1 && t.nr <= 8)) return 'ausserhalb_bereich';
@@ -148,6 +149,7 @@ const deckArt = {
     if (t.quelle === 'cypher' && K.ki?.gestoppt) return 'ki_gestoppt';
     // Welle 3 (ADR 028): Start bei jedem Tempo, das Deck folgt im Varispeed (bis Welle 2 hier kein_stretcher)
     if (t.aktion === 'hotcue' && d.hotcues[t.nr] === undefined) return 'ausserhalb_bereich';
+    if (t.aktion === 'loop_laenge' && (t.start < 0 || t.start + t.laenge > d.m.Q)) return 'ausserhalb_bereich';   // Kern: Start + längster Durchlauf im Material
     if (t.aktion === 'basis_tausch') {
       const r = lesefassung(K, d.m.material_id, t.basis_bpm, t.fassung, d.m.mit_stems);
       if (r.grund) return r.grund;
@@ -179,6 +181,12 @@ const deckArt = {
         d.loop = null;
         if (laeuft(d)) d.status = d.roll ? 4 : 2;
       }
+    } else if (t.aktion === 'loop_laenge') {   // Kern art 5 mit festem Start: der Kopf läuft weiter, die Naht wickelt ihn (pos)
+      const p = pos(d, b);
+      if (d.slip && !d.schatten) d.schatten = { ...d.anker };
+      d.anker = { b, q: p };
+      d.loop = { ls: t.start, L: t.laenge };
+      if (laeuft(d)) d.status = d.roll ? 4 : 3;
     } else if (t.aktion === 'roll') {
       if (t.laenge > 0) {
         d.roll = { ab: b, ls: pos(d, b), L: t.laenge };
@@ -256,6 +264,7 @@ export default {
     '/k/deck/start': deckTeil('start', (a) => ({ quell_beat: a.quell_beat })),
     '/k/deck/stopp': deckTeil('stopp', () => ({})),
     '/k/deck/loop': deckTeil('loop', (a) => ({ laenge: a.laenge_beats })),
+    '/k/deck/loop_laenge': deckTeil('loop_laenge', (a) => ({ start: a.start_beat, laenge: a.laenge_beats })),
     '/k/deck/roll': deckTeil('roll', (a) => ({ laenge: a.laenge_beats, rollArt: a.art })),
     '/k/deck/sprung': deckTeil('sprung', (a) => ({ delta: a.delta_beats })),
     '/k/deck/hotcue': deckTeil('hotcue', (a) => ({ nr: a.nr })),

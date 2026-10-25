@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { uebersetze, schreibeWiedergabe, WiedergabeFehler } from '../projekt/wiedergabe.ts';
 import { fuehreAus } from '../projekt/befehle.ts';
+import { MAX_SPUREN, pruefeProjekt } from '../projekt/modell.ts';
 import { tmpOrdner, specProjekt, kopie, SHA_A, SHA_B } from './hilfen/projekt.mjs';
 
 const AUDIO = '/arbeit/arr/audio';
@@ -103,7 +104,7 @@ test('Standard-Lookup: frames aus der Dateigröße des Dekodier-Caches (8 Bytes 
   assert.equal(c.frames, 1234); assert.equal(c.datei, path.join(d, `${SHA_A}.f32`));
 });
 
-test('Grenzen 8 Spuren / 4096 Clips / 65536 Noten: genau am Deckel geht, einer drüber → zu_gross', () => {
+test('Grenzen 10 Spuren / 4096 Clips / 65536 Noten: genau am Deckel geht, einer drüber → zu_gross', () => {
   const clips = (n) => Array.from({ length: n }, (_, i) => ({ id: `c${i}`, art: 'audio', name: 'k', start_beat: i, laenge_beats: 1, quelle: { sha256: SHA_A, pfad_hinweis: '' }, dekodiert: 'fertig', offset_s: 0, gain_db: 0, fade_ein_beats: 0, fade_aus_beats: 0 }));
   const p = specProjekt(); p.spuren[0].clips = clips(4096);
   assert.equal(uebersetze(p, opt()).spuren[0].clips.length, 4096);
@@ -114,7 +115,9 @@ test('Grenzen 8 Spuren / 4096 Clips / 65536 Noten: genau am Deckel geht, einer d
   assert.equal(uebersetze(q, opt()).spuren[1].noten.length, 65536);
   q.spuren[1].clips[0].noten = noten(65537);
   assert.throws(() => uebersetze(q, opt()), (e) => e.grund === 'zu_gross' && /noten/.test(e.message));
-  const s = specProjekt(); for (let i = 4; i <= 9; i++) s.spuren.push({ id: `s${i}`, nr: i, name: 'x', farbe: '#000000', art: 'audio', fader_db: 0, pan: 0, mute: false, solo: false, clips: [] });
+  const s = specProjekt(); for (let i = 4; i <= MAX_SPUREN; i++) s.spuren.push({ id: `s${i}`, nr: i, name: 'x', farbe: '#000000', art: 'audio', fader_db: 0, pan: 0, mute: false, solo: false, clips: [] });
+  assert.equal(uebersetze(s, opt()).spuren.length, MAX_SPUREN, 'mit MAX_SPUREN Spuren wird die Wiedergabe gebaut (T11)');
+  s.spuren.push({ id: `s${MAX_SPUREN + 1}`, nr: MAX_SPUREN + 1, name: 'x', farbe: '#000000', art: 'audio', fader_db: 0, pan: 0, mute: false, solo: false, clips: [] });
   assert.throws(() => uebersetze(s, opt()), (e) => e.grund === 'zu_gross' && /spuren/.test(e.message));
 });
 
@@ -150,4 +153,34 @@ test('schreibeWiedergabe: legt den Ordner an; eine kleinere Nummer wird nicht so
   const f = schreibeWiedergabe(d, uebersetze(p, opt({ nr: 2 })));
   assert.ok(fs.existsSync(f), 'gerade geschriebene Datei bleibt, auch wenn ihre Nummer klein ist');
   assert.ok(fs.readdirSync(d).filter((n) => n.startsWith('wiedergabe-')).length <= 6);
+});
+
+test('1.10 Wiedergabe: ohne Routing bleibt die Datei /1 und byteweise wie bisher (auch für ein gehobenes /1-Projekt); mit Gruppen /2 mit ausgang und gruppen', () => {
+  const alt = specProjekt();
+  const neutral = pruefeProjekt(kopie(alt)).projekt;            // /1 → /2 gehoben
+  const a = uebersetze(alt, opt()), b = uebersetze(neutral, opt());
+  assert.equal(JSON.stringify(a), JSON.stringify(b), 'AK3: Migration ändert die Wiedergabe nicht');
+  assert.equal(b.format, 'cypherdj-arr/1'); assert.ok(!('gruppen' in b)); assert.ok(b.spuren.every((s) => !('ausgang' in s)));
+  const p = kopie(neutral);
+  p.gruppen.push({ id: 'g4', nr: 4, name: 'Music', farbe: '#3b8de0', fader_db: -6, pan: 0.5, mute: true, solo: false, gefaltet: false });
+  p.spuren[1].ausgang = { art: 'gruppe', id: 'g4' };
+  const w = uebersetze(p, opt());
+  assert.equal(w.format, 'cypherdj-arr/2');
+  assert.deepEqual(w.gruppen, [{ nr: 4, ausgang: { art: 'master' } }], 'Name und Pegel stehen nicht in der Wiedergabe');
+  assert.deepEqual(w.spuren.map((s) => s.ausgang ?? null), [null, { art: 'gruppe', nr: 4 }, null]);
+  // eine leere Gruppe allein genügt für /2 (der Kern soll die Liste kennen)
+  const q = kopie(neutral); q.gruppen.push({ id: 'g1', nr: 1, name: 'G', farbe: '#3b8de0', fader_db: 0, pan: 0, mute: false, solo: false, gefaltet: false });
+  assert.equal(uebersetze(q, opt()).format, 'cypherdj-arr/2');
+  // Negativ-Kontrolle: dieselbe Spur ohne Ziel (nach dem Löschen der Gruppe) ergibt wieder die /1-Datei
+  const r = kopie(p); r.gruppen = []; delete r.spuren[1].ausgang;
+  assert.equal(JSON.stringify(uebersetze(r, opt())), JSON.stringify(a));
+});
+
+test('1.10 Wiedergabe: eine Spur, die auf eine unbekannte Gruppe zeigt, scheitert mit ziel_unbekannt (kein stilles master)', () => {
+  const p = pruefeProjekt(kopie(specProjekt())).projekt;
+  p.spuren[1].ausgang = { art: 'gruppe', id: 'g9' };
+  assert.throws(() => uebersetze(p, opt()), (e) => e instanceof WiedergabeFehler && e.grund === 'ziel_unbekannt');
+  // Negativ-Kontrolle: mit der Gruppe g9 übersetzt dieselbe Spur
+  p.gruppen.push({ id: 'g9', nr: 8, name: 'G', farbe: '#3b8de0', fader_db: 0, pan: 0, mute: false, solo: false, gefaltet: false });
+  assert.deepEqual(uebersetze(p, opt()).spuren[1].ausgang, { art: 'gruppe', nr: 8 });
 });

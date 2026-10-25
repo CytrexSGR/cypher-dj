@@ -82,7 +82,8 @@ Grund PrueferI3::vor_teilstart(const Sicht& s, const TeilSicht& t) {
   const ReglerDef& d = s.tabelle().def(t.regler);
   // D1 K1 (Spec 2.3): die Spur-Regler des Arrangements (spur/*) sind kein Kanal-Fader; I3 nimmt sie aus wie erz und pad
   if (d.rolle == Rolle::spur_fader || d.rolle == Rolle::spur_pan || d.rolle == Rolle::spur_mute ||
-      d.rolle == Rolle::spur_solo)
+      d.rolle == Rolle::spur_solo || d.rolle == Rolle::grp_fader || d.rolle == Rolle::grp_pan ||
+      d.rolle == Rolle::grp_mute || d.rolle == Rolle::grp_solo || d.rolle == Rolle::pm_fader)
 #ifdef CYPHERDJ_MUTATION_I3_SPUR_GESPERRT
     return t.quelle == Quelle::cypher ? Grund::kein_hoerschein : Grund::kein;   // Fehlerfall: Cypher braucht einen Schein
 #else

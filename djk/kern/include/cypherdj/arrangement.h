@@ -1,7 +1,7 @@
 // D1 K1 (Spec D1 2.2, 2.3, 2.6): Modul Arrangement im Kern. Spielt einen Wiedergabe-Schnappschuss (arr_wiedergabe.h)
 // sample-genau auf der einen Uhr. Projekt-Beat p = Kern-Beat − ursprung + start_beat; ein Ereignis auf Projekt-Beat p
 // liegt auf llround(sample_at(p + ursprung − start_beat)) (Konvention des Kerns). Teile: Transport mit Start-Regel,
-// Quantisierung und Loop-Klammer (arrangement.cpp), Audio-Clip-Stimmen (arr_stimmen.cpp), Spur-Mixer spur/1..8
+// Quantisierung und Loop-Klammer (arrangement.cpp), Audio-Clip-Stimmen (arr_stimmen.cpp), Spur-Mixer spur/1..32, Gruppen grp/1..8 und Produktions-Master (1.10)
 // (arr_ausgang.cpp), Noten an Senken (arr_noten.cpp), Metronom (arr_metronom.cpp). Die Summe geht in den Eingang
 // von erz/4. Echtzeit: außer Konstruktor und setze_*/sperre_* (vor dem Start) läuft alles im Callback: keine
 // Allokation, keine Sperre, kein I/O.
@@ -18,12 +18,15 @@
 namespace cdj {
 
 constexpr int ARR_BLOCK = 1024;         // größter Teilblock (= MIX_BLOCK; Kern::audio teilt danach)
-constexpr int ARR_STIMMEN = 64;         // gleichzeitig klingende Audio-Clips (fester Pool)
+constexpr int ARR_STIMMEN = 8 * ARR_SPUREN;    // gleichzeitig klingende Audio-Clips (fester Pool), je Spur wie bei 8 Spuren (E3)
 constexpr int ARR_NAHT = 96;            // Kurzblende an Naht, Stopp und Tausch (2 ms, wie ERZ_AUS)
 constexpr int ARR_EIN = 32;             // Kurz-Einblende beim Einstieg mitten in einen Clip (wie ERZ_EIN)
 constexpr int ARR_STUMM_BLENDE = 480;   // Mute und Solo: 10 ms
-constexpr int ARR_OFFEN = 256;          // offene Noten (Off ausstehend), Liste fester Größe
+constexpr int ARR_OFFEN = 32 * ARR_SPUREN;     // offene Noten (Off ausstehend), Liste fester Größe, je Spur wie bei 8 Spuren (E3)
 constexpr int ARR_KLICK_LAENGE = 96;    // Metronom-Klick, Form wie der Prüfklick (klick.h)
+constexpr int ARR_ZIEL_BLENDE = 480;    // 1.10: Ziel-Wechsel einer Spur (master ↔ Gruppe) blendet über 10 ms
+constexpr int ARR_PM = ARR_SPUREN + ARR_GRUPPEN;   // Streifen-Index des Produktions-Masters: 0..31 Spuren, 32..39 Gruppen, 40 PM
+constexpr int ARR_STREIFEN = ARR_PM + 1;
 
 // Wohin Noten gehen (Spec 2.4). K2 hängt die RB-FFI (intern) und die Wirt-Slots an, Tests eine Prüfsenke. Alle
 // Methoden laufen im Callback: keine Allokation, keine Sperre, kein I/O.
@@ -57,7 +60,7 @@ enum class ArrStatus : int32_t { steht = 0, wartet = 1, spielt = 2, freeze = 3 }
 constexpr double ARR_FREEZE_NACHLAUF = 2.0;      // Beats nach bis_beat (Spec 3.1)
 constexpr double ARR_FREEZE_MAX_BEATS = 256.0;   // bis − von höchstens: Puffer für 60 BPM rund 99 MB
 struct ArrFreeze {
-  int spur = 0;                    // 1..8
+  int spur = 0;                    // 1..32 (ARR_SPUREN)
   int32_t kennung = 0;             // Datei <arr_ordner>/freeze-<spur>-<kennung>.f32
   double von_beat = 0.0, bis_beat = 0.0;
   std::vector<float> daten;        // 2 · kap Werte, L und R verschränkt
@@ -123,14 +126,25 @@ class Arrangement {
   int64_t letzte_naht() const { return letzte_naht_; }       // Kern-Sample des letzten Wraps, −1: keiner
   bool spur_belegt(int i) const { return snap_ && snap_->spur[i].art != ArrArt::leer; }
   float spitze_lesen(int i) { const float v = spitze_[i]; spitze_[i] = 0.0f; return v; }   // nach dem Fader, linear
+  float spitze_gruppe_lesen(int g) { return spitze_lesen(ARR_SPUREN + g); }   // 1.10: nach dem Gruppen-Fader, linear
+  float spitze_pm_lesen() { return spitze_lesen(ARR_PM); }                    // nach dem PM-Fader
+  bool gruppe_belegt(int g) const { return grp_belegt_[g]; }                  // mindestens eine Spur im Schnappschuss schickt in die Gruppe
+  // Produktions-Master des zuletzt gerechneten Teilblocks (m Werte, nach dem PM-Fader, ohne Metronom): Summe in erz/4 und Export-Abgriff
+  const float* pm_l() const { return pm_l_; }
+  const float* pm_r() const { return pm_r_; }
   float wert(int spur, int feld) const { return w_[spur][feld].w; }   // feld 0 fader (dB), 1 pan, 2 mute, 3 solo
   int stimmen() const;
+  int warp_stimmen() const;          // Paket 1.13: davon gewarpt (nur Prüfung und Kosten)
   uint64_t stimmen_verloren() const { return stimmen_verloren_; }
   int offene_noten() const { return n_offen_; }
   uint64_t noten_verloren() const { return noten_verloren_; }
   // Ereignisse für Quittungen und /zustand/arr: Sample des letzten Einsatzes und Endes (−1: keiner); nach dem Lesen −1
   int64_t hole_gestartet() { const int64_t v = gestartet_bei_; gestartet_bei_ = -1; return v; }
   int64_t hole_gestoppt() { const int64_t v = gestoppt_bei_; gestoppt_bei_ = -1; return v; }
+  // 1.8: Lesezugriffe für das Modul Aufnahme (Kern-Sample des Einsatzes, des Endes des letzten Laufs, des geplanten Stopps; −1: keiner)
+  int64_t einsatz_sample() const noexcept { return start_s_; }
+  int64_t beendet_sample() const noexcept { return beendet_s_; }
+  int64_t stopp_sample() const noexcept { return stopp_s_; }
   bool hole_geaendert() { const bool v = geaendert_; geaendert_ = false; return v; }
 
   // ---- Freeze (arr_freeze.cpp, Paket K3), im Callback am Blockanfang s. Start wie start() ab f->von_beat, Loop-Klammer
@@ -181,15 +195,17 @@ class Arrangement {
     int64_t ein_n = 0, aus_n = 0;    // Ein- und Ausblende des Clips in Samples
     int64_t ramp_ein_ab = -1;        // Kurz-Einblende ab diesem Sample, −1: keine
     int64_t ab_aus = -1;             // Kurzblende (Stopp) beginnt hier, ARR_NAHT lang, −1: keine
+    double p_off = 0.0;              // Paket 1.13: start_beat_ − ursprung_ beim Start dieser Stimme (ein Neustart ändert beides, die Ausblende behält ihre Abbildung)
     int ak_n = 0, ak_pos = 0;        // Ausklang
     float ak[2 * ARR_NAHT] = {};
   };
   void clips_starten(const Karte& k, int64_t a, int64_t b);
   void stimme_starten(const Karte& k, const ArrClip& c, int spur, int64_t s_start, int64_t clip_s0, bool rampe);
   void stimmen_einstieg(const Karte& k, int64_t a);
-  void stimme_ausklang(Stimme& v, int64_t s);
-  void stimmen_spielen(int64_t a, int64_t b, int64_t s0, int64_t naht);
-  void stimmen_tauschen(const ArrSnapshot* neu, int64_t s);
+  void stimme_ausklang(Stimme& v, int64_t s, const Karte& k);
+  void stimmen_spielen(const Karte& k, int64_t a, int64_t b, int64_t s0, int64_t naht);
+  void stimme_warp_spielen(Stimme& v, int64_t a, int64_t b, int64_t s0, int64_t naht);   // Paket 1.13: Quellposition aus W(b), RE-PITCH
+  void stimmen_tauschen(const ArrSnapshot* neu, int64_t s, const Karte& k);
   void stimmen_stopp(int64_t s);
   void stimmen_naht();
 
@@ -240,18 +256,31 @@ class Arrangement {
   double von_ = 0.0, bis_ = 0.0;
   int64_t letzte_naht_ = -1;
   int64_t gestartet_bei_ = -1, gestoppt_bei_ = -1;
+  int64_t beendet_s_ = -1;   // 1.8: Ende des letzten Laufs, gelöscht beim nächsten start()
   bool geaendert_ = false;
 
   bool einstieg_ = false;            // am nächsten Teilblock Clips ansetzen, die am laufenden Ort schon klingen müssten
   Stimme st_[ARR_STIMMEN];
   uint64_t stimmen_verloren_ = 0;
-  Wert w_[ARR_SPUREN][4];            // je Spur 0 fader (dB), 1 pan, 2 mute, 3 solo
+  double wp_[ARR_BLOCK] = {};        // Paket 1.13: Projekt-Beat je Sample des Teilblocks, einmal je Teilblock für alle gewarpten Stimmen
+  Wert w_[ARR_STREIFEN][4];          // je Streifen (Spur, Gruppe, PM) 0 fader (dB), 1 pan, 2 mute, 3 solo; PM nur 0
   int16_t regler_spur_[cypherdj::stellwerk::MAX_REGLER];
   int8_t regler_feld_[cypherdj::stellwerk::MAX_REGLER];
-  float ms_gain_[ARR_SPUREN];        // Mute/Solo-Blende 0..1
-  float spitze_[ARR_SPUREN] = {};
+  float ms_gain_[ARR_STREIFEN];      // Mute/Solo-Blende 0..1
+  float spitze_[ARR_STREIFEN] = {};
+  bool solo_t_[ARR_BLOCK] = {};      // E3 P5: je Sample des Blocks, ob irgendeine Spur Solo hat (einmal je Block vorberechnet)
   float bus_l_[ARR_SPUREN][ARR_BLOCK] = {};
   float bus_r_[ARR_SPUREN][ARR_BLOCK] = {};
+  bool msolo_t_[ARR_GRUPPEN][ARR_BLOCK] = {};   // 1.10: je Sample, ob ein Mitglied der Gruppe Solo hat (nur bei Solo-Verlauf)
+  float grp_l_[ARR_GRUPPEN][ARR_BLOCK] = {};    // 1.10: Eingang der Gruppen (Summe der Mitglieder nach deren Fader und Pan)
+  float grp_r_[ARR_GRUPPEN][ARR_BLOCK] = {};
+  float pm_l_[ARR_BLOCK] = {};                  // 1.10: Produktions-Master
+  float pm_r_[ARR_BLOCK] = {};
+  int8_t ziel_[ARR_SPUREN] = {};                // gültiges Ziel der Spur: 0 master, 1..8 Gruppe
+  int8_t ziel_alt_[ARR_SPUREN] = {};            // Ziel vor dem letzten Wechsel (nur während der Blende)
+  float ziel_w_[ARR_SPUREN];                    // Anteil des neuen Ziels 0..1, 1 = Blende fertig (regler_binden setzt 1)
+  bool grp_belegt_[ARR_GRUPPEN] = {};
+  void ziele_pruefen();                         // am Blockanfang: Ziel-Wechsel aus dem Schnappschuss einleiten
 
   ArrSenke* senke_intern_ = nullptr;
   ArrSenke* senke_wirt_[ARR_WIRT_SLOTS] = {};

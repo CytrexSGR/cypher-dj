@@ -148,7 +148,7 @@ bool Netz::arr_ereignis(const Ereignis& e) {
   if (e.art != Ereignis::ARR_ZUSTAND) return false;
   osc::Schreiber s(v::zustand_arr);
   s.i(static_cast<int32_t>(e.arr_nr)).i(e.arr_status).i(e.arr_loop_an).d(e.arr_beat).h(e.arr_ursprung)
-      .d(e.arr_start_beat).i(e.arr_metronom_an);
+      .d(e.arr_start_beat).i(e.arr_metronom_an).f(e.arr_limiter_db);
   an_alle(s);
   return true;
 }

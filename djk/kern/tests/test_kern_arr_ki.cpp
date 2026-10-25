@@ -4,8 +4,8 @@
 // klingt weiter“; vorher Spec 2.12 beendete er Cyphers Transport, Fälle 2 und 5). Was noch nicht klingt, verwirft er weiter: Cyphers wartenden Start (Fall 9,
 // 7 ki_stopp) und ihren Freeze (test_kern_arr_freeze Fall 3). Neustart-Zustand: spur/<n>/* kommen wieder, das Arrangement nicht.
 // Entscheidung E-a (2026-10-20): ein KI-Stopp senkt keinen Fader mehr (vorher: spur/<n> in der KI-Spur fiel über 4 Beats auf −200).
-// Spec 6.15 (Fälle 5, 6): S2 trägt Cyphers Spuren in die KI-Spur ein, der Leitstand seine Kanäle; die Listen werden geführt und überstehen
-// einen Neustart, der Stopp senkt aber keinen Fader; Cyphers Transport läuft weiter.
+// Spec 6.15, E3 P1 (Fälle 3, 5, 6): der Leitstand trägt Kanäle in die KI-Spur ein, S2 sendet nur spur/0, jede andere Spur-Angabe wird abgelehnt; die
+// Kanal-Liste wird geführt und steht im Neustart-Zustand (Fälle 3, 6); der Stopp senkt keinen Fader, Cyphers Transport läuft weiter (Fall 5).
 // Spec 6.27 (Fall 7, K1-Fix 4): der gemeinsame Fall djk/vertrag/faelle/arr_ki_stopp.json, den auch die Attrappe fährt
 // (ki.test.mjs): laden, start, loop, metronom und (Paket K3) freeze von cypher abgelehnt (ki_gestoppt), stopp von cypher
 // erlaubt.
@@ -14,6 +14,7 @@
 // mit ki_gestoppt, nicht ausserhalb_bereich; Fall 7 im Kern allein, Fall 8 durch Netz und Kern wie im Betrieb.
 // Mutation CYPHERDJ_MUTATION_ARR_KI_NACH_BEREICH (das Netz prüft den Bereich zuerst, wie vorher) macht Fall 8 rot.
 #include <cstdio>
+#include <cstring>
 #include <fstream>
 #include <memory>
 #include <string>
@@ -70,18 +71,33 @@ int main() {
     x.lauf(x.kern->sample() + 4 * N);
     PRUEF(x.quittung(st, 3) && x.kern->arrangement().status() == ArrStatus::steht);
   }
-  {  // 3: KI-Spur mit spur/2: der Fader bleibt bei −3 (E-a; vorher fiel er über 4 Beats auf −200), spur/3 ebenso
+  {  // 3: KI-Spur mit spur/0 (E3 P1: einzige Spur-Angabe) und Kanal deck/3: angenommen, die Liste im Zustand ist deck/3; spur/2 wird wie ein
+     // unbekannter Kanal abgelehnt (Quittung 6 unbekannter_regler, wie erz/9)
     arr35::Lauf x(ab.pfad, "test_kern_arr_ki");
-    x.teil("spur/2/fader", -3.0f, 0.0, 0.0);
-    x.teil("spur/3/fader", -1.0f, 0.0, 0.0);
     cdj::Befehl k = x.neu(B::KI_SPUR, "leitstand");
-    std::snprintf(k.liste, sizeof k.liste, "spur/2");
+    std::snprintf(k.liste, sizeof k.liste, "deck/3,spur/0");
     x.sende(k);
     x.lauf(10 * N);
-    x.sende(x.neu(B::KI_STOPP, "andreas"));
-    x.lauf(10 * N + 4 * 22500 + 2 * N);
-    PRUEF(x.wert("spur/2/fader") == -3.0);
-    PRUEF(x.wert("spur/3/fader") == -1.0);
+    PRUEF(x.quittung(k.id, 3) != nullptr);
+    {  // deck/3 steht in der Liste (Neustart-Zustand), spur/0 trägt keinen Spur-Teil bei
+      auto fach = std::make_unique<cdj_z_echtzeit>();
+      x.kern->abbild(*fach);
+      PRUEF(std::strcmp(fach->ki_spur, "deck/3") == 0);
+    }
+    cdj::Befehl k2 = x.neu(B::KI_SPUR, "leitstand");
+    std::snprintf(k2.liste, sizeof k2.liste, "spur/2");
+    x.sende(k2);
+    cdj::Befehl k9 = x.neu(B::KI_SPUR, "leitstand");
+    std::snprintf(k9.liste, sizeof k9.liste, "erz/9");
+    x.sende(k9);
+    x.lauf(20 * N);
+    PRUEF(x.quittung(k2.id, 6) && x.quittung(k2.id, 6)->grund == "unbekannter_regler");
+    PRUEF(x.quittung(k9.id, 6) && x.quittung(k9.id, 6)->grund == "unbekannter_regler");
+    {  // abgelehnte Listen ändern nichts
+      auto fach = std::make_unique<cdj_z_echtzeit>();
+      x.kern->abbild(*fach);
+      PRUEF(std::strcmp(fach->ki_spur, "deck/3") == 0);
+    }
   }
   {  // 4: Neustart-Zustand: Spur-Regler kommen wieder (auch im Modul), das Arrangement nicht
     arr35::Lauf x(ab.pfad, "test_kern_arr_ki");
@@ -97,7 +113,7 @@ int main() {
     PRUEF(y.wert("spur/1/fader") == -6.0);
     PRUEF(y.kern->arrangement().snapshot() == nullptr);   // der Server lädt nach /e/neustart neu (Spec 2.12, S2)
   }
-  {  // 5: Leitstand deck/3, S2 spur/1 und spur/3 (Cyphers Spuren), Transport von Cypher; der KI-Stopp senkt keinen dieser Fader (E-a),
+  {  // 5: Leitstand deck/3, S2 spur/0 (spur/1,spur/3 werden abgelehnt, E3 P1), Transport von Cypher; der KI-Stopp senkt keinen dieser Fader (E-a),
      // der Transport von Cypher läuft weiter
     arr35::Lauf x(ab.pfad, "test_kern_arr_ki");
     x.laden(1, spur);
@@ -106,37 +122,50 @@ int main() {
     std::snprintf(l.liste, sizeof l.liste, "deck/3");
     x.sende(l);
     cdj::Befehl s2 = x.neu(B::KI_SPUR, "andreas");   // S2 (Server) mit Quelle der Seite
-    std::snprintf(s2.liste, sizeof s2.liste, "spur/1,spur/3");
+    std::snprintf(s2.liste, sizeof s2.liste, "spur/0");
     x.sende(s2);
+    cdj::Befehl s2alt = x.neu(B::KI_SPUR, "andreas");   // die alte Maske: abgelehnt wie ein unbekannter Kanal
+    std::snprintf(s2alt.liste, sizeof s2alt.liste, "spur/1,spur/3");
+    x.sende(s2alt);
     x.start(0.0, 0, "cypher");
     x.lauf(10 * N);
     PRUEF(x.quittung(s2.id, 3) != nullptr);
+    PRUEF(x.quittung(s2alt.id, 6) && x.quittung(s2alt.id, 6)->grund == "unbekannter_regler");
     PRUEF(x.kern->arrangement().status() == ArrStatus::spielt);
     x.sende(x.neu(B::KI_STOPP, "andreas"));
     x.lauf(10 * N + 4 * 22500 + 2 * N);
     for (const char* p : {"deck/3/fader", "spur/1/fader", "spur/2/fader", "spur/3/fader"}) PRUEF(x.wert(p) == -2.0);
     PRUEF(x.kern->arrangement().status() == ArrStatus::spielt);
   }
-  {  // 6: Neustart-Zustand trägt beide Listen (Leitstand deck/3, S2 spur/2): nach dem Neustart senkt ein KI-Stopp keinen Fader (E-a)
+  {  // 6: Neustart-Zustand trägt die Kanal-Liste (Leitstand deck/3; S2 spur/0 nimmt der Kern an, es bleibt kein Spur-Teil)
     arr35::Lauf x(ab.pfad, "test_kern_arr_ki");
     cdj::Befehl l = x.neu(B::KI_SPUR, "leitstand");
     std::snprintf(l.liste, sizeof l.liste, "deck/3");
     x.sende(l);
     cdj::Befehl s2 = x.neu(B::KI_SPUR, "andreas");
-    std::snprintf(s2.liste, sizeof s2.liste, "spur/2");
+    std::snprintf(s2.liste, sizeof s2.liste, "spur/0");
     x.sende(s2);
-    x.teil("deck/3/fader", -2.0f, 0.0, 0.0);
-    x.teil("spur/2/fader", -2.0f, 0.0, 0.0);
     x.lauf(10 * N);
+    PRUEF(x.quittung(l.id, 3) != nullptr && x.quittung(s2.id, 3) != nullptr);
     auto fach = std::make_unique<cdj_z_echtzeit>();
     x.kern->abbild(*fach);
+    PRUEF(std::strcmp(fach->ki_spur, "deck/3") == 0);   // kein Spur-Teil im Zustand
     arr35::Lauf y(ab.pfad, "test_kern_arr_ki_neu");
     PRUEF(y.kern->wiederherstellen(*fach));
     y.lauf(4 * N);
-    y.sende(y.neu(B::KI_STOPP, "andreas"));
-    y.lauf(4 * N + 4 * 22500 + 2 * N);
-    PRUEF(y.wert("deck/3/fader") == -2.0);
-    PRUEF(y.wert("spur/2/fader") == -2.0);
+    auto fach2 = std::make_unique<cdj_z_echtzeit>();
+    y.kern->abbild(*fach2);
+    PRUEF(std::strcmp(fach2->ki_spur, "deck/3") == 0);   // der Textpuffer des Kerns trägt die Liste (nur der zurückgespielte Text)
+    // Das Stellwerk hat die Liste zurückbekommen (teile_nachreichen): spur/0 lässt die Kanäle stehen, und der Text, den die Quittung fertig neu
+    // aus dem Stellwerk schreibt, ist wieder deck/3. Fehlte die Liste im Stellwerk, stünde hier "".
+    cdj::Befehl n0 = y.neu(B::KI_SPUR, "andreas");
+    std::snprintf(n0.liste, sizeof n0.liste, "spur/0");
+    y.sende(n0);
+    y.lauf(8 * N);
+    PRUEF(y.quittung(n0.id, 3) != nullptr);
+    auto fach3 = std::make_unique<cdj_z_echtzeit>();
+    y.kern->abbild(*fach3);
+    PRUEF(std::strcmp(fach3->ki_spur, "deck/3") == 0);   // die Liste kommt aus dem Stellwerk
   }
   {  // 7: Spec 6.27, SCHNITTSTELLEN §4.7/§4.11: gemeinsamer Fall mit der Attrappe (djk/vertrag/faelle/arr_ki_stopp.json)
     const nlohmann::json f = nlohmann::json::parse(std::ifstream(CYPHERDJ_DJK "/vertrag/faelle/arr_ki_stopp.json"));
@@ -328,6 +357,21 @@ int main() {
       x.lauf(110000);
       PRUEF(x.quittung(st, 3) && x.kern->arrangement().status() == ArrStatus::steht);
     }
+  }
+  for (const char* schlecht : {"spur/2", "erz/9"}) {  // 8: gültiges, dann abgelehntes /k/ki/spur im selben Zyklus: der Neustart-Zustand trägt die gültige Liste
+    arr35::Lauf x(ab.pfad, "test_kern_arr_ki");
+    cdj::Befehl gut = x.neu(B::KI_SPUR, "leitstand");
+    std::snprintf(gut.liste, sizeof gut.liste, "deck/3");
+    x.sende(gut);
+    cdj::Befehl schl = x.neu(B::KI_SPUR, "leitstand");
+    std::snprintf(schl.liste, sizeof schl.liste, "%s", schlecht);
+    x.sende(schl);
+    x.lauf(10 * N);
+    PRUEF(x.quittung(gut.id, 3) != nullptr);
+    PRUEF(x.quittung(schl.id, 6) && x.quittung(schl.id, 6)->grund == "unbekannter_regler");
+    auto fach = std::make_unique<cdj_z_echtzeit>();
+    x.kern->abbild(*fach);
+    PRUEF(std::strcmp(fach->ki_spur, "deck/3") == 0);
   }
   PRUEF_ENDE();
 }

@@ -31,9 +31,11 @@ test('V2 Vertrag S2: clip_neu nimmt den Namen aus dem Library-Titel', () => {
   const p = specProjekt();
   const zeile = { typ: 'oneshot', sha: 'a'.repeat(64), name: 'Kick 909 Hard', pfad_da: true, dauer_s: 0.5 };
   const b = ablageBefehl(p, nutzlast(zeile), 0, 4, 1);
-  const neu = fuehreAus(p, b.befehl).projekt;
+  assert.equal(b.befehl.warp, 'auto', 'Paket 1.13: die Ablage bittet um Auto-Warp; den löst der Server aus dem Katalog (sitzung.ts), dieser Test rechnet ohne Server');
+  const ohneServer = { ...b.befehl, warp: undefined };
+  const neu = fuehreAus(p, ohneServer).projekt;
   assert.equal(neu.spuren[0].clips.at(-1).name, 'Kick 909 Hard');
-  const ohne = fuehreAus(p, { ...b.befehl, name: undefined, pfad_hinweis: '/x/snare_12.wav' }).projekt;
+  const ohne = fuehreAus(p, { ...ohneServer, name: undefined, pfad_hinweis: '/x/snare_12.wav' }).projekt;
   assert.equal(ohne.spuren[0].clips.at(-1).name, 'snare_12', 'Negativ-Kontrolle: ohne Titel nimmt S2 den Dateinamen');
 });
 

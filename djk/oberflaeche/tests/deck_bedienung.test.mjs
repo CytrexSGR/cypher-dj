@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { naechsterRaster, abBeat, sprungDelta, rasterRunden, hotcueDatei, leseHotcues, schreibeHotcues, rasterSchritt, RASTER_MAX, rasterDatei, leseRaster, schreibeRaster, einsSetzen } from '../deck_bedienung.ts';
+import { naechsterRaster, abBeat, sprungDelta, rasterRunden, hotcueDatei, leseHotcues, schreibeHotcues, rasterSchritt, RASTER_MAX, rasterDatei, leseRaster, schreibeRaster, einsSetzen, loopStart } from '../deck_bedienung.ts';
 
 test('naechsterRaster: kleinstes Vielfaches ≥ b; Raster 0 = b', () => {
   assert.equal(naechsterRaster(17.2, 4), 20);
@@ -319,4 +319,21 @@ test('hotcuesErbe: kaputte ältere Datei wird übersprungen; fehlt eine esf, ble
   assert.equal(e.von, 1);
   const e2 = erbeMit(hotOrdnerMit({ [`${M}_128000_r1.json`]: HOT1 }), rasterOrdnerMit({}), {}, fass(2));
   assert.equal(e2.hotcues[1].quell_beat, 246);
+});
+
+test('loopStart: steht → Rasterstelle ab der Eins; läuft → Kopf bei ab, auf den Beat (¼ bei Raster ¼); Raster 0 = Kopf', () => {
+  // Deck steht (Messung 21.10.: 84,198 bei Takt-Raster)
+  assert.equal(loopStart({ laeuft: false, quell: 84.198, beat: 500, ab: 500.1, raster: 4, eins: 0 }), 84);
+  assert.equal(loopStart({ laeuft: false, quell: 85.9, beat: 500, ab: 500.1, raster: 4, eins: 0 }), 84);
+  assert.equal(loopStart({ laeuft: false, quell: 9.6, beat: 0, ab: 0.1, raster: 4, eins: 1 }), 9);
+  assert.equal(loopStart({ laeuft: false, quell: 9.6, beat: 0, ab: 0.1, raster: 1, eins: 1 }), 10);
+  // Deck läuft: Kopf bei ab = 62,3 + (64 − 63,5) = 62,8 → nächster Beat 63, auch bei Takt-Raster nur auf den Beat
+  assert.equal(loopStart({ laeuft: true, quell: 62.3, beat: 63.5, ab: 64, raster: 4, eins: 0 }), 63);
+  assert.equal(loopStart({ laeuft: true, quell: 62.3, beat: 63.5, ab: 64, raster: 1, eins: 0 }), 63);
+  assert.equal(loopStart({ laeuft: true, quell: 62.3, beat: 63.5, ab: 64, raster: 0.25, eins: 0 }), 62.75);
+  // Raster aus: Kopf (steht) bzw. Kopf bei ab (läuft), ungerundet
+  assert.equal(loopStart({ laeuft: false, quell: 84.198, beat: 500, ab: 500.1, raster: 0, eins: 0 }), 84.198);
+  assert.ok(Math.abs(loopStart({ laeuft: true, quell: 62.3, beat: 63.5, ab: 64, raster: 0, eins: 0 }) - 62.8) < 1e-9);
+  // nie vor dem Material: Eins bei 3, Kopf 0 → nicht −1, sondern 3 (5 von 80 Fassungen im Bestand haben Eins 3)
+  assert.equal(loopStart({ laeuft: false, quell: 0, beat: 0, ab: 0.1, raster: 4, eins: 3 }), 3);
 });

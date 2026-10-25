@@ -1,5 +1,4 @@
 // Stellwerk-RT: KI-Stopp (§4.7, §7.3 Punkt 8, ADR 013). Wirkt im Kern, auch ohne Leitstand.
-#include <cstdio>
 #include <cstring>
 
 #include "cypherdj/stellwerk/stellwerk.h"
@@ -11,7 +10,7 @@ void Stellwerk::ki_stopp(int64_t id, Quelle quelle) {
   quittung_befehl(id, quelle, Status::angenommen, s, Grund::kein);
   ki_gestoppt_ = true;
   // Entscheidung E-a (2026-10-20): der Stopp hält nur Cyphers Hand an. Alle Teile mit Quelle cypher enden samt Gruppe (Grund ki_stopp), ein
-  // laufender Teil hält am Ist-Wert (wie /k/abbruch); kein Fader wird gesenkt, die KI-Spur-Listen (ki_spur) senken nichts mehr.
+  // laufender Teil hält am Ist-Wert (wie /k/abbruch); kein Fader wird gesenkt, die KI-Kanal-Liste (ki_spur) senkt nichts mehr.
   for (int j = 0; j < MAX_TEILE; j++) {
     const Teil& t = teil_[j];
     if (t.belegt && t.quelle == Quelle::cypher) beenden_mit_gruppe(j, Status::abgebrochen, Grund::ki_stopp, s, HalterArt::frei);
@@ -36,12 +35,12 @@ void Stellwerk::ki_frei(int64_t id, Quelle quelle) {
   quittung_befehl(id, quelle, Status::fertig, jetzt_, Grund::kein);
 }
 
-// D1 Spec 6.15: zwei Listen, die sich nicht gegenseitig löschen. Einträge spur/<ziffern> (spur/2, spur/135; spur/0 =
-// keine Spur) ersetzen nur die Spur-Liste (S2 sendet seit E-a nur spur/0), Kanal-Einträge nur die Kanal-Liste (Leitstand).
-// Eine leere Liste leert die Kanal-Liste (Bestand), eine gemischte ersetzt beide.
-void Stellwerk::ki_spur(int64_t id, Quelle quelle, const char* kanaele) {
+// E3 P1 (D1 Spec 6.15 davor): Spuren stehen in keiner KI-Liste mehr. Von den Spur-Einträgen gilt nur spur/0 (keine Spur, S2 sendet
+// seit E-a nur das); jede andere Spur-Angabe (spur/1, spur/135, spur/10) wird wie ein unbekannter Kanal abgelehnt. Kanal-Einträge
+// ersetzen die Kanal-Liste (Leitstand); eine leere Liste leert sie, spur/0 allein lässt sie stehen.
+// Rückgabe: true, wenn die Liste angenommen wurde (der Kern merkt sich nur dann die Kennung für den Neustart-Zustand).
+bool Stellwerk::ki_spur(int64_t id, Quelle quelle, const char* kanaele) {
   uint32_t neu = 0;
-  uint8_t neu_arr = 0;   // D1 K1: spur/<n>, n = 1..8
   bool kanaele_da = false, spuren_da = false;
   const char* p = kanaele ? kanaele : "";
   char name[16];
@@ -52,38 +51,25 @@ void Stellwerk::ki_spur(int64_t id, Quelle quelle, const char* kanaele) {
     while (*p && *p != ',') p++;
     if (*p == ',') p++;
     if (n == 0) continue;
-    if (std::strncmp(name, "spur/", 5) == 0) {
-      bool gut = n > 5;
-      if (n == 6 && name[5] == '0') {   // spur/0: keine Spur
-        spuren_da = true;
-        continue;
-      }
-      for (int i = 5; i < n && gut; i++) {
-        gut = name[i] >= '1' && name[i] < '1' + SPUR_REGLER_SPUREN;
-        if (gut) neu_arr |= static_cast<uint8_t>(1u << (name[i] - '1'));
-      }
-      if (!gut) {
-        quittung_befehl(id, quelle, Status::abgelehnt, jetzt_, Grund::unbekannter_regler);
-        return;
-      }
+    if (std::strcmp(name, "spur/0") == 0) {   // spur/0: keine Spur
       spuren_da = true;
       continue;
     }
-    const int k = tab_.kanal_suche(name);
+    const int k = tab_.kanal_suche(name);   // auch spur/<n> endet hier: kein Kanal, abgelehnt
     if (k < 0 || tab_.regler_von(k, Rolle::fader) < 0) {
       quittung_befehl(id, quelle, Status::abgelehnt, jetzt_, Grund::unbekannter_regler);
-      return;
+      return false;
     }
     neu |= 1u << k;
     kanaele_da = true;
   }
   quittung_befehl(id, quelle, Status::angenommen, jetzt_, Grund::kein);
 #ifdef CYPHERDJ_MUTATION_KI_SPUR_ERSETZT_ALLES
-  kanaele_da = spuren_da = true;   // Fehlerfall: jede Liste ersetzt beide, S2 und Leitstand löschen sich gegenseitig
+  kanaele_da = spuren_da = true;   // Fehlerfall: spur/0 allein leert die Kanal-Liste, S2 löscht die Kanäle des Leitstands
 #endif
   if (kanaele_da || !spuren_da) ki_spur_ = neu;   // leer oder mit Kanälen: Kanal-Liste
-  if (spuren_da) ki_spur_arr_ = neu_arr;
   quittung_befehl(id, quelle, Status::fertig, jetzt_, Grund::kein);
+  return true;
 }
 
 void Stellwerk::ki_spur_text(char* aus, size_t n) const {
@@ -96,14 +82,6 @@ void Stellwerk::ki_spur_text(char* aus, size_t n) const {
     if (!(ki_spur_ & (1u << k))) continue;
     if (w) haenge(",");
     haenge(tab_.kanal_name(k));
-  }
-  if (ki_spur_arr_) {
-    if (w) haenge(",");
-    haenge("spur/");
-    for (int s = 0; s < SPUR_REGLER_SPUREN; s++) {
-      const char z[2] = {static_cast<char>('1' + s), 0};
-      if (ki_spur_arr_ & (1u << s)) haenge(z);
-    }
   }
   aus[w] = 0;
 }

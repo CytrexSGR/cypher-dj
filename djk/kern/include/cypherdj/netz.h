@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "cypherdj/arr_lader.h"
+#include "cypherdj/aufnahme_faden.h"
 #include "cypherdj/kern.h"
 #include "cypherdj/keylock_render.h"
 #include "cypherdj/osc.h"
@@ -64,6 +65,7 @@ class Netz {
   void setze_loop_ordner(std::string ordner) { loop_ordner_ = std::move(ordner); }
   // D1 K1 (Spec 2.1): Ringe zum Arrangement-Lade-Faden; vor dem Netz-Faden. nullptr: /k/arr/laden mit datei_fehlt.
   void verbinde_arr(ArrLaderRinge* r) { arr_ringe_ = r; }
+  void verbinde_rec(AufnahmeFaden* f) { rec_faden_ = f; }   // 1.8: der Aufnahme-Faden (main.cpp), Besitz bleibt dort
   // Paket K3 (Spec 2.9, 6.14): Arbeitsordner der Instanz, derselbe wie der des Arrangement-Lade-Fadens (der schreibt dort
   // freeze-<spur>-<kennung>.f32). Vor dem Netz-Faden. Leer: /k/arr/freeze mit datei_fehlt abgelehnt.
   void setze_arr_ordner(std::string ordner) { arr_ordner_ = std::move(ordner); }
@@ -116,6 +118,12 @@ class Netz {
   void arr_zyklus();
   void arr_zurueck(ArrSnapshot* s);
   ArrLaderRinge* arr_ringe_ = nullptr;
+  // 1.8 (netz_rec.cpp): /k/rec/* annehmen (false: keine dieser Adressen), abgelöste RecSpur freigeben, Take-Meldungen des Aufnahme-Fadens als /e/aufnahme senden
+  bool rec_paket(const cypherdj::osc::Adresse* a, const osc::Nachricht& m);
+  void rec_zyklus();
+  void rec_alt_frei(RecSpur* p);
+  void rec_melden(const TakeMeldung& m);
+  AufnahmeFaden* rec_faden_ = nullptr;
   // Paket K3 (netz_arr_freeze.cpp, Spec 6.29): /k/arr/freeze prüfen und als Auftrag zum Lade-Faden reihen; dessen
   // Ergebnis als Befehl ARR_FREEZE in den Kern; Ereignis ARR_FREEZE zurück an den Lade-Faden; seine Meldung als /e/freeze.
   // Der Netz-Faden legt keinen Puffer an und schreibt keine Datei.

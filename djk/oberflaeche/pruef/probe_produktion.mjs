@@ -679,7 +679,8 @@ try {
       `Undo-Knopf: mute ${mNach}, Redo-Titel „${redoTitel}“; Redo-Knopf: mute ${mRedo}, Redo danach gesperrt (Negativ-Kontrolle) ${redoSperre}`);
     // Zeichenzeit: 8 Spuren × 16 Audio-Clips mit Welle, spielend, 3 s
     const voll = neuesProjekt('Load');
-    for (let i = 0; i < 8; i++) voll.spuren.push({ id: `l${i}`, nr: i + 1, name: `T${i + 1}`, farbe: '#e0563b', art: 'audio', fader_db: 0, pan: 0, mute: false, solo: false,
+    const LAST_SPUREN = Number(process.env.CYPHERDJ_PROBE_SPUREN ?? 8);                      // E3 Task 12: mit 32 misst derselbe Punkt die volle Spurzahl
+    for (let i = 0; i < LAST_SPUREN; i++) voll.spuren.push({ id: `l${i}`, nr: i + 1, name: `T${i + 1}`, farbe: '#e0563b', art: 'audio', fader_db: 0, pan: 0, mute: false, solo: false,
       clips: Array.from({ length: 16 }, (_, k) => ({ id: `l${i}c${k}`, art: 'audio', name: 'kick', start_beat: k * 4, laenge_beats: 1, quelle: { sha256: SHA.kick, pfad_hinweis: null }, dekodiert: 'fertig', offset_s: 0, gain_db: 0, fade_ein_beats: 0, fade_aus_beats: 0 })) });
     const r = await (await fetch(URL + 'attrappe/saat', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ projekt: voll }) })).json();
     await fetch(URL + 'attrappe/sse', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ a: 'proj', f: { slug: r.slug, rev: 1, label: 'seed', quelle: 'cypher' } }) });
@@ -691,7 +692,7 @@ try {
     const bilder = await w(`[...window.djkProdBild]`);
     await b.klick('[data-p="stopp"]'); await warte(300);
     const sort = [...bilder].sort((x, y) => x - y), p99 = sort[Math.floor(sort.length * 0.99)] ?? Infinity;
-    notiere('6.4 Zeichenzeit', bilder.length > 60 && p99 < 8, `${bilder.length} Bilder in 3 s mit Scrollen (Spuren je Rad-Schritt neu gezeichnet), p50 ${sort[Math.floor(sort.length / 2)]?.toFixed(2)} ms, p99 ${p99.toFixed(2)} ms (Grenze 8 ms), 8 Spuren × 16 Clips`);
+    notiere('6.4 Zeichenzeit', bilder.length > 60 && p99 < 8, `${bilder.length} Bilder in 3 s mit Scrollen (Spuren je Rad-Schritt neu gezeichnet), p50 ${sort[Math.floor(sort.length / 2)]?.toFixed(2)} ms, p99 ${p99.toFixed(2)} ms (Grenze 8 ms), max ${sort[sort.length - 1]?.toFixed(2)} ms, ${LAST_SPUREN} Spuren × 16 Clips`);
   }
   // 6.4b Zeichnen kostet im Bildtakt keine Messung und keine Textknoten-Schreibung ohne Änderung (Fix 11): 1,5 s spielen, FOLLOW läuft
   if (TEIL >= 6) {

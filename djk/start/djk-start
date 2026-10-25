@@ -5,6 +5,7 @@
 # (djk-instrumente --arr1); liegt der noch von einem früheren Lauf, meldet djk-start belegt (Rückgabe 4).
 #
 # Aufruf: djk-start [--master PRÄFIX] [--cue PRÄFIX | --ohne-cue] [--ton-frei] [--strudel [--strudel-kit NAME] [--strudel-kit2 NAME] [--strudel-kit3 NAME] [--instrumente [--melodie surge|fluegel] [--bass surge|rb338]]] [--arr1] [--instanz a..i]
+#   CYPHERDJ_KATALOG=<absoluter Pfad>  (Umgebung, keine Option) andere katalog.sqlite für die Oberfläche der Prüfinstanz; ohne: neben der Mediathek.
 #                   [--kern-konfig DATEI] [--leitstand-konfig DATEI] [--ohne-pruefmodus]
 #         djk-start --zustand [--instanz a..i]
 #         djk-start --vorlagen-nach DIR [--master ...]   (füllt die Betriebs-Drop-ins, installiert nichts)
@@ -226,6 +227,12 @@ if [ -n "$I" ]; then BIB=/dev/shm/cypherdj-$I/bibliothek; mkdir -p "$BIB/sets" "
 if [ -n "${CYPHERDJ_MEDIATHEK:-}" ]; then
   [[ "$CYPHERDJ_MEDIATHEK" =~ ^/[A-Za-z0-9._/+=,:-]+$ && "$CYPHERDJ_MEDIATHEK" != *..* ]] || { echo "djk-start: CYPHERDJ_MEDIATHEK must be an absolute path without spaces, quotes or '..', is '$CYPHERDJ_MEDIATHEK'. Nothing started." >&2; exit 2; }
   OF_ARGS="$OF_ARGS --mediathek $CYPHERDJ_MEDIATHEK"
+fi
+# Katalog (Paket 1.13, Zielabnahme): Prüfinstanzen können einen anderen Katalog bekommen; ohne die Variable gilt die Vorgabe der Seite (katalog.sqlite neben der Mediathek).
+# Die transiente Unit erbt die Umgebung des Aufrufers nicht, darum geht der Pfad als Option mit.
+if [ -n "${CYPHERDJ_KATALOG:-}" ]; then
+  [[ "$CYPHERDJ_KATALOG" =~ ^/[A-Za-z0-9._/+=,:-]+$ && "$CYPHERDJ_KATALOG" != *..* ]] || { echo "djk-start: CYPHERDJ_KATALOG must be an absolute path without spaces, quotes or '..', is '$CYPHERDJ_KATALOG'. Nothing started." >&2; exit 2; }
+  OF_ARGS="$OF_ARGS --katalog $CYPHERDJ_KATALOG"
 fi
 VARS=(--var "MASTER=$KMASTER" --var "CUE_ARG=$CUE_ARG" --var "TON_FREI=$TF_ARG" --var "KERN_ARGS=$KERN_ARGS"
       --var "KERN_CLIENT=$KERN_CLIENT" --var "LEITSTAND_ARGS=$LS_ARGS" --var "OBERFLAECHE_ARGS=$OF_ARGS")

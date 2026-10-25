@@ -12,10 +12,12 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
 
+#include "cypherdj/eingang.h"
 #include "cypherdj/kern.h"
 #include "hand/mapping.h"
 #include "pruef.h"
@@ -61,6 +63,17 @@ struct Lauf {
   std::vector<Q> q;
   std::vector<cdj::Ereignis> ev;  // alle außer UHR und ZYKLUS
   std::vector<Midi> midi;
+  // I08: Eingangsquellen je Paar (1..4): Kern-Sample -> Wert, beide Kanäle gleich; ohne Quelle liefert der Test dem Kern nullptr
+  std::function<float(int64_t)> ein_quelle[cdj::EIN_PAARE + 1];
+  std::vector<float> ein_puf[cdj::EIN_PAARE + 1];
+  // 1.8: Quellen für erz/1..3 über den vorhandenen Rückweg (Kern::rueck): Kern-Sample -> Wert links, rechts das Negative. Der Rückweg addiert bitgleich (|Wert| <= 8).
+  std::function<float(int64_t)> erz_quelle[3];
+  std::vector<float> erz_puf_l[3], erz_puf_r[3];
+  std::vector<Midi> midi_ein;
+  void midi_ein_bei(int64_t s, uint8_t a, uint8_t b, uint8_t c) {
+    PRUEF(s / N * N >= kern->sample());
+    midi_ein.push_back({s / N * N, {a, b, c}, static_cast<uint32_t>(s % N)});
+  }
   int64_t id = 100;
   bool bewachen = false;
   bool abholen = true;  // MVP 2 Scheibe 3 (E4): false = Ereignisring nicht leeren (Probe „Ring voll“)
@@ -153,6 +166,24 @@ struct Lauf {
         if (m.s0 == n0) {
           kern->hand_midi(m.d, 3, m.versatz);
           m.s0 = -1;  // einmal (nach /k/set/neu beginnt die Zeitachse wieder bei 0)
+        }
+      for (int p = 1; p <= cdj::EIN_PAARE; ++p) {  // I08: Eingänge dieses Zyklus
+        if (!ein_quelle[p]) { kern->ein(p, nullptr, nullptr); continue; }
+        ein_puf[p].resize(N);
+        for (int i = 0; i < N; ++i) ein_puf[p][i] = ein_quelle[p](n0 + i);
+        kern->ein(p, ein_puf[p].data(), ein_puf[p].data());
+      }
+      for (int k = 0; k < 3; ++k) {  // 1.8: erz/1..3
+        if (!erz_quelle[k]) continue;   // ohne Quelle bleibt der Rückweg, den ein Test selbst gesetzt hat (kern->rueck), unberührt
+        erz_puf_l[k].resize(N);
+        erz_puf_r[k].resize(N);
+        for (int i = 0; i < N; ++i) { erz_puf_l[k][i] = erz_quelle[k](n0 + i); erz_puf_r[k][i] = -erz_puf_l[k][i]; }
+        kern->rueck(k + 1, erz_puf_l[k].data(), erz_puf_r[k].data());
+      }
+      for (Midi& m : midi_ein)
+        if (m.s0 == n0) {
+          kern->midi_ein(m.d, 3, m.versatz);
+          m.s0 = -1;
         }
       const uint64_t w0 = cdj_lade(&ring->w);
       g_waechter = bewachen;

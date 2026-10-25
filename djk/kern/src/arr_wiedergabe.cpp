@@ -102,6 +102,9 @@ void je_bereich(ArrSnapshot& s, F f) {
     f(static_cast<void*>(s.noten_id.data()), arr_seiten(s.noten_id.capacity() * sizeof(uint64_t)));
   if (s.noten_id_index.capacity())
     f(static_cast<void*>(s.noten_id_index.data()), arr_seiten(s.noten_id_index.capacity() * sizeof(int32_t)));
+  if (s.warps.capacity()) f(static_cast<void*>(s.warps.data()), arr_seiten(s.warps.capacity() * sizeof(ArrWarp)));   // Paket 1.13
+  if (s.warp_beat.capacity()) f(static_cast<void*>(s.warp_beat.data()), arr_seiten(s.warp_beat.capacity() * sizeof(double)));
+  if (s.warp_frame.capacity()) f(static_cast<void*>(s.warp_frame.data()), arr_seiten(s.warp_frame.capacity() * sizeof(double)));
 }
 }  // namespace
 
@@ -306,35 +309,81 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
     } catch (const json::parse_error& e) {
       format(std::string("kein JSON: ") + e.what());
     }
-    if (text(j, "format", "") != "cypherdj-arr/1") format("format ist nicht cypherdj-arr/1");
+    const std::string fmt = text(j, "format", "");
+    const bool v2 = fmt == "cypherdj-arr/2";
+    if (fmt != "cypherdj-arr/1" && !v2) format("format ist weder cypherdj-arr/1 noch cypherdj-arr/2");
     // Spec 3.2, 6.1: Schlüssel "nr" (Wiedergabe-Nummer der Instanz, wie S2 sie schreibt), gleich der Nummer im Dateinamen
     if (ganz(j, "nr", "") != nummer) format("nr in der Datei weicht von " + std::to_string(nummer) + " ab");
     const json& spuren = feld(j, "spuren", "");
     if (!spuren.is_array()) format("spuren ist keine Liste");
-    if (spuren.size() > static_cast<size_t>(ARR_SPUREN)) throw Abbruch("spur_bereich", "mehr als 8 Spuren");
+    if (spuren.size() > static_cast<size_t>(ARR_SPUREN))
+      throw Abbruch("spur_bereich", "mehr als " + std::to_string(ARR_SPUREN) + " Spuren");
     snap->nr = nummer;
+    // 1.10: Gruppen (nur /2). Tiefe 1: ausgang einer Gruppe ist master; jede Nummer 1..ARR_GRUPPEN höchstens einmal.
+    bool gruppe_da[ARR_GRUPPEN + 1] = {};
+    if (j.contains("gruppen")) {
+      if (!v2) format("gruppen gibt es erst in cypherdj-arr/2");
+      const json& gl = j.at("gruppen");
+      if (!gl.is_array()) format("gruppen ist keine Liste");
+      for (size_t gi = 0; gi < gl.size(); ++gi) {
+        const json& g = gl[gi];
+        const std::string wg = "gruppen[" + std::to_string(gi) + "].";
+        const int64_t gn = ganz(g, "nr", wg);
+        if (gn < 1 || gn > ARR_GRUPPEN) format(wg + "nr außerhalb 1 bis " + std::to_string(ARR_GRUPPEN));
+        if (gruppe_da[gn]) format(wg + "nr doppelt");
+        gruppe_da[gn] = true;
+        const json& ag = feld(g, "ausgang", wg);
+        if (text(ag, "art", wg + "ausgang.") != "master") format(wg + "ausgang: Gruppen verschachteln nicht (nur master)");
+      }
+    }
     // Zählen, dann reservieren: die Zeiger in ArrSpur zeigen in die Vektoren, die danach nie wachsen
-    size_t n_clips = 0, n_noten = 0;
+    size_t n_clips = 0, n_noten = 0, n_warps = 0, n_punkte = 0;
     for (const json& s : spuren) {
-      if (s.contains("clips") && s.at("clips").is_array()) n_clips += s.at("clips").size();
+      if (s.contains("clips") && s.at("clips").is_array()) {
+        n_clips += s.at("clips").size();
+        for (const json& c : s.at("clips"))   // Paket 1.13: Warps und Marker zählen, bevor reserviert wird (die Zeiger bleiben gültig)
+          if (c.is_object() && c.contains("warp") && c.at("warp").is_object() && c.at("warp").contains("w") && c.at("warp").at("w").is_array()) {
+            ++n_warps;
+            n_punkte += c.at("warp").at("w").size();
+          }
+      }
       if (s.contains("noten") && s.at("noten").is_array()) n_noten += s.at("noten").size();
     }
     if (n_clips > static_cast<size_t>(ARR_CLIPS_MAX)) throw Abbruch("zu_gross", "mehr als 4096 Clips");
     if (n_noten > static_cast<size_t>(ARR_NOTEN_MAX)) throw Abbruch("zu_gross", "mehr als 65536 Noten");
+    if (n_punkte > static_cast<size_t>(ARR_WARP_PUNKTE_MAX))
+      throw Abbruch("zu_gross", "mehr als " + std::to_string(ARR_WARP_PUNKTE_MAX) + " Warp-Marker in allen Clips");
     snap->clips.reserve(n_clips);
     snap->noten.reserve(n_noten);
     snap->noten_id.reserve(n_noten);
     snap->noten_id_index.reserve(n_noten);
+    snap->warps.reserve(n_warps);
+    snap->warp_beat.reserve(n_punkte);
+    snap->warp_frame.reserve(n_punkte);
     std::map<std::string, ArrAudio*> je_sha;  // jedes Audio einmal je Schnappschuss
     std::set<int> nr_gesehen;
     for (size_t si = 0; si < spuren.size(); ++si) {
       const json& s = spuren[si];
       const std::string wo = "spuren[" + std::to_string(si) + "].";
       const int64_t nr = ganz(s, "nr", wo);
-      if (nr < 1 || nr > ARR_SPUREN) throw Abbruch("spur_bereich", wo + "nr " + std::to_string(nr) + " außerhalb 1 bis 8");
+      if (nr < 1 || nr > ARR_SPUREN)
+        throw Abbruch("spur_bereich", wo + "nr " + std::to_string(nr) + " außerhalb 1 bis " + std::to_string(ARR_SPUREN));
       if (!nr_gesehen.insert(static_cast<int>(nr)).second) throw Abbruch("spur_bereich", wo + "nr doppelt");
       ArrSpur& sp = snap->spur[nr - 1];
       sp.nr = static_cast<int>(nr);
+      if (s.contains("ausgang")) {   // 1.10: master (Vorgabe) oder eine Gruppe aus der Liste; nur in /2
+        if (!v2) format(wo + "ausgang gibt es erst in cypherdj-arr/2");
+        const json& ag = s.at("ausgang");
+        const std::string a_art = text(ag, "art", wo + "ausgang.");
+        if (a_art == "gruppe") {
+          const int64_t gn = ganz(ag, "nr", wo + "ausgang.");
+          if (gn < 1 || gn > ARR_GRUPPEN) format(wo + "ausgang.nr außerhalb 1 bis " + std::to_string(ARR_GRUPPEN));
+          if (!gruppe_da[gn]) format(wo + "ausgang.nr " + std::to_string(gn) + " steht nicht in gruppen");
+          sp.ausgang = static_cast<int8_t>(gn);
+        } else if (a_art != "master") {
+          format(wo + "ausgang.art " + a_art + " unbekannt (master oder gruppe)");
+        }
+      }
       const std::string art = text(s, "art", wo);
       if (art == "audio") {
         sp.art = ArrArt::audio;
@@ -347,7 +396,7 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
           const json& p = s.at("parameter");
           if (!p.is_object()) format(wo + "parameter ist kein Objekt");
           for (auto it = p.begin(); it != p.end(); ++it) {
-            if (sp.n_param >= ARR_PARAMETER) format(wo + "mehr als 8 parameter");
+            if (sp.n_param >= ARR_PARAMETER) format(wo + "mehr als " + std::to_string(ARR_PARAMETER) + " parameter");
             if (it.key().empty() || it.key().size() >= sizeof sp.param[0].name) format(wo + "parameter-Name zu lang");
             if (!it.value().is_number()) format(wo + "parameter." + it.key() + " ist keine Zahl");
             const double w = it.value().get<double>();
@@ -423,6 +472,47 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
             format(wc + "frames weicht für dasselbe sha256 ab");
           }
           x.audio = a;
+#ifndef CYPHERDJ_MUTATION_ARR_WARP_IN_V1
+          if (c.contains("warp") && !v2) format(wc + "warp gibt es erst in cypherdj-arr/2");   // auch null, wie ausgang (Fehlerfall: auch /1 nimmt einen Warp)
+#endif
+          if (c.contains("warp") && !c.at("warp").is_null()) {   // Paket 1.13
+            const std::string ww = wc + "warp.";
+            const json& wj = c.at("warp");
+            if (!wj.is_object()) format(wc + "warp ist kein Objekt");
+            const int64_t modus = ganz(wj, "modus", ww);
+            if (modus != ARR_WARP_REPITCH) format(ww + "modus " + std::to_string(modus) + " ist nicht gebaut (nur 0 = repitch)");
+            const json& wl = feld(wj, "w", ww);
+            if (!wl.is_array()) format(ww + "w ist keine Liste");
+#ifdef CYPHERDJ_MUTATION_ARR_WARP_OHNE_GRENZE   // Fehlerfall: ein Marker und mehr als 4096 gelten als gültig
+            if (wl.empty())
+#else
+            if (wl.size() < 2 || wl.size() > static_cast<size_t>(ARR_WARP_MARKER_MAX))
+#endif
+              format(ww + "w hat " + std::to_string(wl.size()) + " Marker, erlaubt sind 2 bis " + std::to_string(ARR_WARP_MARKER_MAX));
+            const size_t p0 = snap->warp_beat.size();
+            for (size_t mi = 0; mi < wl.size(); ++mi) {
+              const json& m = wl[mi];
+              const std::string wm = ww + "w[" + std::to_string(mi) + "]";
+              if (!m.is_array() || m.size() != 2 || !m[0].is_number() || !m[1].is_number()) format(wm + " ist kein Paar [beat, frame]");
+              const double b = m[0].get<double>(), fr = m[1].get<double>();
+              if (!std::isfinite(b) || !std::isfinite(fr)) format(wm + " nicht endlich");
+              if (std::fabs(b) > 1e6) format(wm + " beat außerhalb ±1e6");
+              if (fr < 0.0 || fr > 1.1e12) format(wm + " frame außerhalb 0 bis 1,1e12");
+#ifndef CYPHERDJ_MUTATION_ARR_WARP_OHNE_STEIGEND   // Fehlerfall: fallende Marker laden (W(b) wäre nicht mehr eindeutig)
+              if (mi > 0 && !(b > snap->warp_beat.back())) format(wm + " beat nicht streng steigend");
+              if (mi > 0 && !(fr > snap->warp_frame.back())) format(wm + " frame nicht streng steigend");
+#endif
+              snap->warp_beat.push_back(b);
+              snap->warp_frame.push_back(fr);
+            }
+            ArrWarp w;
+            w.modus = static_cast<int32_t>(modus);
+            w.n = static_cast<int32_t>(wl.size());
+            w.beat = snap->warp_beat.data() + p0;
+            w.frame = snap->warp_frame.data() + p0;
+            snap->warps.push_back(w);
+            x.warp = &snap->warps.back();
+          }
           snap->clips.push_back(x);
         }
         std::sort(snap->clips.begin() + static_cast<long>(c0), snap->clips.end(),

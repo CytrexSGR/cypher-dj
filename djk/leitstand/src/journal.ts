@@ -4,6 +4,7 @@
 // vorhandene Datei an (gleiche set_id), beginnt sein Teil mit "fortsetzung" (gleiche Felder).
 import fs from 'node:fs';
 import path from 'node:path';
+import { StringDecoder } from 'node:string_decoder';
 
 export type Von = 'kern' | 'leitstand' | 'spieler' | 'analyse' | 'werkstatt' | 'notbahn' | 'andreas';
 
@@ -23,6 +24,27 @@ export const SET_ID_FORM = /^[0-9]{4}-[0-9]{2}-[0-9]{2}_[0-9]{4}$/;
 export function setIdAus(d: Date): string {
   const z = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}_${z(d.getHours())}${z(d.getMinutes())}`;
+}
+
+// Liest ein Journal Zeile für Zeile in Blöcken, nie als eine Zeichenkette: readFileSync scheitert ab 512 MB an der
+// V8-Grenze (M, 2026-10-22: Betriebs-Journal 555 MB). Leere und kaputte Zeilen werden übersprungen; fehlt die Datei: nichts.
+export function* journalZeilen(pfad: string, block = 1 << 20): Generator<JournalZeile> {
+  let fd: number;
+  try { fd = fs.openSync(pfad, 'r'); } catch { return; }
+  const dec = new StringDecoder('utf8');
+  const buf = Buffer.alloc(block);
+  let rest = '';
+  const zeile = (z: string): JournalZeile[] => { if (!z.trim()) return []; try { return [JSON.parse(z) as JournalZeile]; } catch { return []; } };
+  try {
+    for (let n = fs.readSync(fd, buf, 0, block, null); n > 0; n = fs.readSync(fd, buf, 0, block, null)) {
+      const teile = (rest + dec.write(buf.subarray(0, n))).split('\n');
+      rest = teile.pop()!;
+      for (const z of teile) yield* zeile(z);
+    }
+    yield* zeile(rest + dec.end());
+  } finally {
+    fs.closeSync(fd);
+  }
 }
 
 export class Journal {

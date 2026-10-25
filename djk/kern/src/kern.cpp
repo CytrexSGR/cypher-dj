@@ -25,7 +25,7 @@ Kern::Kern(double start_bpm, cdj_ring_kopf* ring, Befehlsring* befehle, Ereignis
     erz_r_[k] = mixer_->eingang_r(k);
   }
   loops_ = std::make_unique<LoopBoxen>();  // MVP 2: feste Puffer, darum hier und nicht im Callback
-  arr_ = std::make_unique<Arrangement>(sw_->tabelle());  // D1 K1: feste Puffer (rund 140 KB), nicht im Callback
+  arr_ = std::make_unique<Arrangement>(sw_->tabelle());  // D1 K1: feste Puffer (rund 340 KB bei 32 Spuren), nicht im Callback
   arr_kanal_ = Mixer::kanal_index(ARR_KANAL);
   // D1 K2b (Spec 2.4): die RB-338 spielt alle internen Spuren (je Spur-Slot eine Instanz)
   arr_rb_ = std::make_unique<ArrRbSenke>(*arr_);
@@ -90,6 +90,10 @@ void Kern::einsortieren(const Befehl& c) {
       generation_ = 0;
       takt_letzt_ = takt_vorletzt_ = -1;  // Taktfelder der neuen Zeitachse beginnen bei Beat 0
       neue_zeitachse_ = true;
+#ifndef CYPHERDJ_MUTATION_EIN_ACHSE_OHNE_RESET  // I08 Review-Nachzug MINOR 4: Flanke und MIDI-Sample der alten Achse gelten nicht mehr
+      midi_ein_.achse_neu();
+      ein_bank_.achse_neu();
+#endif
       quittung(c.id, c.quelle, 1, 0, 0.0);
       quittung(c.id, c.quelle, 2, 0, 0.0);
 #ifndef CYPHERDJ_MUTATION_ARR_FREEZE_SET_NEU_BLEIBT
@@ -272,6 +276,11 @@ void Kern::einsortieren(const Befehl& c) {
       if (!arr_befehl_wartet(c)) einsortieren_freeze(c, beat0);
 #endif
       break;
+    case Befehl::REC_SPUR:
+    case Befehl::REC_START:
+    case Befehl::REC_STOPP:
+      einsortieren_rec(c, beat0);   // 1.8 (kern_arr.cpp)
+      break;
     default:
       einsortieren25(c);  // Scheibe 25: Teile, Abbruch, KI, Hand (kern_stellwerk.cpp)
       break;
@@ -310,6 +319,7 @@ void Kern::zyklus(int n, int64_t mono_ns) {
   for (auto& w : arr_wirt_) w->zyklus_anfang();  // Fehlerfall: was ein Neustart beim Einsortieren schreibt, geht verloren
 #endif
   decks_uebernehmen();  // Scheibe 31: Rückgaben an den Lader, Lade-Ergebnisse tauschen, KI-Stopp
+  midi_ein_stempeln();      // I08: roher MIDI-Eingang, jetzt auf der Achse dieses Zyklus
   hand_zyklus(sample_, n);  // Scheibe 35: MIDI dieses Zyklus am Versatz (nach /k/set/neu: Blockanfang der neuen Achse)
   const int64_t n0 = sample_;
   for (MidiAus& m : midi_aus_) m.leer();  // Studio S5: MIDI dieses Zyklus

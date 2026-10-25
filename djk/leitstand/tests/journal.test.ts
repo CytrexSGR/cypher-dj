@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-import { Journal, setIdAus, type JournalZeile } from '../src/journal.ts';
+import { Journal, journalZeilen, setIdAus, type JournalZeile } from '../src/journal.ts';
 import { pruefer, SCHEMA_JOURNAL } from '../src/vertrag.ts';
 
 const SET = '2026-09-24_2100';
@@ -64,4 +64,17 @@ test('Zeilen gültig gegen das Journal-Schema aus 09; Fehlerfall ohne mono_ns, f
   const { mono_ns: _weg, ...ohne } = ok;
   assert.equal(v(ohne).ok, false);
   assert.equal(v({ ...start(), daten: { set_id: 'kette', generation: 0, vertrag: 1, konfiguration: {} } }).ok, false);
+});
+
+// Leitstand-Neustart las das Journal mit readFileSync als EINE Zeichenkette; ab 512 MB (V8-Grenze 0x1fffffe8 Zeichen)
+// bricht das ab (M, 2026-10-22: Betriebs-Journal 555 MB, Instanz b startete nicht). journalZeilen liest blockweise.
+test('journalZeilen liest blockweise: Zeilen und UTF-8 über Blockgrenzen ganz, kaputte Zeilen übersprungen', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jz-'));
+  const pfad = path.join(dir, 'journal.jsonl');
+  const soll = [{ typ: 'a', daten: { t: 'Größe ÄÖÜ ß 🎛' } }, { typ: 'b', daten: { n: 1 } }, { typ: 'c', daten: { t: 'x'.repeat(50) } }];
+  fs.writeFileSync(pfad, `${JSON.stringify(soll[0])}\n{kaputt\n\n${JSON.stringify(soll[1])}\n${JSON.stringify(soll[2])}`);
+  for (const block of [1, 3, 7, 64, 1 << 20]) {
+    assert.deepEqual([...journalZeilen(pfad, block)], soll, `Blockgröße ${block}`);
+  }
+  assert.deepEqual([...journalZeilen(path.join(dir, 'fehlt.jsonl'))], []);
 });

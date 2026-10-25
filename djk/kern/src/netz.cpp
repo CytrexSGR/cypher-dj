@@ -522,7 +522,7 @@ void Netz::paket(const char* p, size_t n, int64_t jetzt_ns) {
       return;
     }
     einreihen(b);
-  } else if (!erz_paket(a, m) && !loop_paket(a, m) && !arr_paket(a, m) && !deck_paket(a, m)) {  // erz, loop, arr zuerst: deck_paket liest werte[1] als s
+  } else if (!erz_paket(a, m) && !loop_paket(a, m) && !arr_paket(a, m) && !rec_paket(a, m) && !deck_paket(a, m)) {  // erz, loop, arr zuerst: deck_paket liest werte[1] als s
     // Adresse steht im Vertrag, ist aber noch nicht gebaut (Hörscheine, LEDs, Loop ...): bis zu ihrer Scheibe
     // wie unbekannt (Befund B6 h im Plan)
     protokollfehler(adr, "unbekannte_adresse", 0);
@@ -561,6 +561,20 @@ void Netz::ereignisse_senden() {
       osc::Schreiber s(v::pegel);
       s.s(e.pfad);
       for (int i = 0; i < 7; ++i) s.f(e.pegel[i]);
+      an_alle(s);
+    } else if (e.art == Ereignis::EIN_ZUSTAND) {  // I08, §5.14
+      osc::Schreiber s(v::zustand_ein);
+#ifdef CYPHERDJ_MUTATION_EIN_ZUSTAND_VERTAUSCHT  // Fehlerfall: gesehen und verloren vertauscht
+      s.i(e.status).h(e.ein_verloren).h(e.ein_gesehen).h(e.ein_midi_sample).h(e.ein_flanke);
+#else
+      s.i(e.status).h(e.ein_gesehen).h(e.ein_verloren).h(e.ein_midi_sample).h(e.ein_flanke);
+#endif
+      an_alle(s);
+    } else if (e.art == Ereignis::REC_ALT) {  // 1.8: abgelöster RecSpur (nur hier freigeben, nie im Callback)
+      rec_alt_frei(static_cast<RecSpur*>(const_cast<void*>(e.zeiger)));
+    } else if (e.art == Ereignis::REC_ZUSTAND) {  // 1.8, §5.14 /zustand/rec
+      osc::Schreiber s(v::zustand_rec);
+      s.i(e.status).i(static_cast<int32_t>(e.id)).i(e.rec_scharf).h(e.rec_luecken).d(e.arr_beat);
       an_alle(s);
     } else if (e.art == Ereignis::MAPPING_ALT) {  // Scheibe 35: abgelöstes Mapping freigeben (nur hier, nie im Callback)
       delete static_cast<const hand::Mapping*>(e.zeiger);
@@ -605,6 +619,7 @@ void Netz::ereignisse_senden() {
   }
   keylock_zyklus();  // Keylock Slice 4: umgerechnete REC-Mitschnitte schreiben
   arr_zyklus();      // D1 K1: Ergebnisse des Arrangement-Lade-Fadens
+  rec_zyklus();      // 1.8: Take-Meldungen des Aufnahme-Fadens
 }
 
 void Netz::zustand_senden(int64_t jetzt_ns) {

@@ -4,6 +4,7 @@
 // GRID der Transportleiste (zeitachse.js rasten); Fades rasten nicht (frei wie in jeder DAW).
 import { rasten } from './zeitachse.js';
 import { CLIP_KOPF, clipKasten, spurIndexBei } from './layout.js';
+import { beatBeiQuelle, warpAn } from './warp.js';
 
 export const GRIFF_PX = 6;          // Breite der Kürz-Griffe an den Clip-Rändern
 export const FADE_PX = 7;           // Fang-Abstand der Fade-Griffe in der Namenszeile eines Audio-Clips
@@ -98,13 +99,19 @@ export function kuerzeLinks(clip, dBeat, raster, bpm) {
   const ende = clip.start_beat + clip.laenge_beats;
   let start = Math.min(rasten(clip.start_beat + dBeat, raster), ende - minLaenge(clip, raster));
   start = Math.max(0, start);
-  if (clip.art === 'audio') start = Math.max(start, clip.start_beat - (clip.offset_s * bpm) / 60);
+  // Paket 1.13: gewarpt wandert der Inhalt in Beats (versatz_beats), nicht in Sekunden; nie vor den Anfang der Quelle (Beat der Quellsekunde 0)
+  const gewarpt = warpAn(clip);
+  if (clip.art === 'audio') {
+    const frei = gewarpt ? clip.warp.versatz_beats - beatBeiQuelle(clip.warp.marker, 0) : (clip.offset_s * bpm) / 60;
+    start = Math.max(start, clip.start_beat - frei);
+  }
   start = runde(start);
   const d = runde(start - clip.start_beat);
   if (d === 0) return [];
   const laenge = runde(ende - start);
   if (clip.art === 'audio') {
-    const b = nurAnders(clip, { start_beat: start, laenge_beats: laenge, offset_s: Math.max(0, runde(clip.offset_s + (d * 60) / bpm)), ...fadesFuer(clip, laenge) });
+    const inhalt = gewarpt ? { versatz_beats: runde(clip.warp.versatz_beats + d) } : { offset_s: Math.max(0, runde(clip.offset_s + (d * 60) / bpm)) };
+    const b = nurAnders(clip, { start_beat: start, laenge_beats: laenge, ...inhalt, ...fadesFuer(clip, laenge) });
     return b ? [b] : [];
   }
   const aus = [{ befehl: 'clip_aendern', clip_id: clip.id, start_beat: start, laenge_beats: laenge }];
@@ -208,6 +215,7 @@ export const FELDER = {
   start_beat: { min: 0, max: 100000, text: 'Start: 0 or later' },
   laenge_beats: { min: 0, max: 100000, offen: true, text: 'Length: more than 0 beats' },
   offset_s: { min: 0, max: 1e7, text: 'Offset: 0 s or later' },
+  versatz_beats: { min: -100000, max: 100000, text: 'Offset: within ±100000 beats' },   // Paket 1.13: Inhalt eines gewarpten Clips
   fade_ein_beats: { min: 0, max: 100000, text: 'Fade in: 0 or longer' },
   fade_aus_beats: { min: 0, max: 100000, text: 'Fade out: 0 or longer' },
 };
@@ -218,6 +226,7 @@ export function feldBefehl(clip, feld, eingabe) {
   if (String(eingabe).trim() === '' || !Number.isFinite(v) || v > regel.max || (regel.offen ? v <= regel.min : v < regel.min)) return { fehler: regel.text };
   const neu = { ...clip, [feld]: v };
   if (clip.art === 'audio' && neu.fade_ein_beats + neu.fade_aus_beats > neu.laenge_beats + 1e-9) return { fehler: 'The fades are longer than the clip' };
-  return v === clip[feld] ? { befehl: null } : { befehl: { befehl: 'clip_aendern', clip_id: clip.id, [feld]: v } };
+  const alt = feld === 'versatz_beats' ? clip.warp?.versatz_beats : clip[feld];
+  return v === alt ? { befehl: null } : { befehl: { befehl: 'clip_aendern', clip_id: clip.id, [feld]: v } };
 }
 export const zahlText = (x, stellen = 3) => String(Math.round(x * 10 ** stellen) / 10 ** stellen);

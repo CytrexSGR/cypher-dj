@@ -28,11 +28,6 @@ Stellwerk::Stellwerk(const Uhr& uhr, Pruefer* pruefer) : uhr_(uhr), pruefer_(pru
     z.hand_gemeldet_sample = INT64_MIN / 2;
   }
   for (Teil& t : teil_) t.belegt = false;
-  for (int n = 1; n <= SPUR_REGLER_SPUREN; n++) {   // D1 K1: Spur-Fader für die KI-Spur
-    char p[32];
-    std::snprintf(p, sizeof p, "spur/%d/fader", n);
-    spur_fader_[n - 1] = static_cast<int16_t>(tab_.suche(p));
-  }
   std::memset(verlauf_, 0, sizeof verlauf_);   // Seiten jetzt anfassen, nicht im ersten Callback
   std::memset(ereignis_, 0, sizeof ereignis_);
 }

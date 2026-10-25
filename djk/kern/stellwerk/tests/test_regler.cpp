@@ -1,4 +1,5 @@
 // Scheibe 11, Task 4: Regler-Tabelle gegen SCHNITTSTELLEN §1.5 und Standard-Kurven gegen §7.2.
+#include <cstdio>
 #include <cstring>
 
 #include "pruef.h"
@@ -23,8 +24,9 @@ const ReglerDef& d(const char* pfad) {
 FALL(zahl_der_regler_und_kanaele) {
   // 4 Decks x 21 (mit transport), 8 Erzeuger x 16, 2 Pads x 16, 4 Busse x 15 (ohne ziel), 18 globale (seit Keylock 3
   // mit `keylock`, seit 2026-10-10 mit `master/pfl`, seit 2026-10-11 mit `color/art` und `color/param`), dazu 14 Quellkanäle
-  // x 8 `komp/*` (2026-10-11, mit komp/sc): 436; D1 K1: dazu 8 Spuren x 4 Spur-Regler (spur/<n>/*, global): 468
-  PRUEFE_GLEICH(tab().anzahl(), 468);
+  // x 8 `komp/*` (2026-10-11, mit komp/sc): 436; D1 K1/E3: dazu 32 Spuren x 4 Spur-Regler (spur/<n>/*, global): 564;
+  // 1.10 Slice 1: dazu 8 Gruppen x 4 Gruppen-Regler (grp/<n>/*) und pm/fader: 597
+  PRUEFE_GLEICH(tab().anzahl(), 597);
   PRUEFE_GLEICH(tab().kanaele(), 20);
   PRUEFE_GLEICH(tab().kanal_suche("deck/1"), 0);
   PRUEFE_GLEICH(tab().kanal_suche("bus/4"), 17);
@@ -33,9 +35,9 @@ FALL(zahl_der_regler_und_kanaele) {
 }
 
 FALL(spur_regler_global_mit_vorgaben) {
-  // D1 K1 (Spec 2.3): spur/1..8 je fader, pan, mute, solo an Kanal −1, keine neuen Kanäle, alle dürfen
+  // D1 K1 (Spec 2.3, E3: 32 Slots): spur/1..32 je fader, pan, mute, solo an Kanal −1, keine neuen Kanäle, alle dürfen
   PRUEFE_GLEICH(tab().kanaele(), 20);
-  for (int n = 1; n <= 8; n++) {
+  for (int n = 1; n <= SPUR_REGLER_SPUREN; n++) {
     char p[32];
     std::snprintf(p, sizeof p, "spur/%d/fader", n);
     PRUEFE(d(p).kanal == -1 && d(p).rolle == Rolle::spur_fader && d(p).vorgabe == 0.0f && d(p).min == -200.0f &&
@@ -47,14 +49,16 @@ FALL(spur_regler_global_mit_vorgaben) {
     std::snprintf(p, sizeof p, "spur/%d/solo", n);
     PRUEFE(d(p).rolle == Rolle::spur_solo && d(p).ganzzahlig && d(p).keine_rampe && d(p).schalt_samples == 0);
   }
-  PRUEFE(tab().suche("spur/9/fader") < 0);   // Negativ-Kontrolle
+  PRUEFE(tab().suche("spur/32/fader") >= 0);   // letzter Slot (T03)
+  PRUEFE(tab().suche("spur/33/fader") < 0);    // Negativ-Kontrolle: n+1 (T01)
+  PRUEFE(tab().suche("spur/9/fader") >= 0);    // seit E3 gültig
   PRUEFE(tab().suche("spur/0/pan") < 0);
 }
 
 FALL(spur_fader_bis_plus_6_db) {
   // D1 Spec 6.16 (§4 Wertebereiche): spur/<n>/fader −200..+6 dB, Vorgabe 0. Hand-Kurve fader_db bis +6: ganz oben +6,
   // 0 dB bei Stellung 10^(−6/20) ≈ 0,501. Kanal-Fader bleiben −200..0 (Negativ-Kontrolle).
-  for (int n = 1; n <= 8; n++) {
+  for (int n = 1; n <= SPUR_REGLER_SPUREN; n++) {
     char p[32];
     std::snprintf(p, sizeof p, "spur/%d/fader", n);
     PRUEFE(d(p).min == -200.0f && d(p).max == 6.0f && d(p).vorgabe == 0.0f);
@@ -69,7 +73,11 @@ FALL(spur_fader_bis_plus_6_db) {
 FALL(kapazitaet_hat_luft_fuer_k2) {
   // K2 Task 0.2: Luft für neue Pfade, und ein voller Speicher darf nicht überlaufen
   PRUEFE(cypherdj::stellwerk::MAX_REGLER >= 384);
-  PRUEFE(cypherdj::stellwerk::MAX_REGLER - tab().anzahl() >= 44);   // D1 K1: 512 − 468 (Spec 2.3)
+  // D1 K1 (Spec 2.3) verlangte 512 − 468 >= 44. E1 (2026-10-20): Reserve gegen 1024. 32 Spuren statt 8 brauchen
+  // 24 · 4 = 96 Regler mehr (468 → 564, Paket E3), dazu dieselbe Luft von 44. Bei MAX_REGLER 512 sind es nur 44: rot.
+  PRUEFE(cypherdj::stellwerk::MAX_REGLER - tab().anzahl() >= 24 * 4 + 44);
+  std::printf("Regler %d von %d, Reserve %d\n", tab().anzahl(), cypherdj::stellwerk::MAX_REGLER,
+              cypherdj::stellwerk::MAX_REGLER - tab().anzahl());
 }
 
 FALL(jeder_pfad_wird_gefunden_und_unbekannte_nicht) {
@@ -164,6 +172,68 @@ FALL(kurve_schalter_und_stufen) {
   PRUEFE_NAH(ReglerTabelle::aus_x(d("deck/1/kill/tief").kurve, 0.5f), 1, 0);
   PRUEFE_NAH(ReglerTabelle::aus_x(d("deck/1/ziel").kurve, 0.6f), 2, 0);
   PRUEFE_NAH(ReglerTabelle::zu_x(d("deck/1/xseite").kurve, 2.0f), 1.0, 0);
+}
+
+FALL(spur_nr_liest_mehrstellige_nummern) {
+  using cypherdj::stellwerk::spur_nr;
+  PRUEFE_GLEICH(spur_nr("spur/1/fader"), 1);
+  PRUEFE_GLEICH(spur_nr("spur/8/solo"), 8);
+  PRUEFE_GLEICH(spur_nr("spur/10/fader"), 10);   // der Fehlerfall von arr_ausgang.cpp:46 (heute Index 0)
+  PRUEFE_GLEICH(spur_nr("spur/32/mute"), 32);
+  PRUEFE_GLEICH(spur_nr("spur/0/fader"), 0);     // 0 ist keine Spur
+  PRUEFE_GLEICH(spur_nr("spur/01/fader"), 0);    // keine führende Null
+  PRUEFE_GLEICH(spur_nr("spur/10"), 0);          // ohne Feld
+  PRUEFE_GLEICH(spur_nr("spur//fader"), 0);
+  PRUEFE_GLEICH(spur_nr("spur/1000/fader"), 0);  // höchstens drei Ziffern
+  PRUEFE_GLEICH(spur_nr("erz/4/fader"), 0);      // Negativ-Kontrolle: anderer Kanal
+  PRUEFE_GLEICH(spur_nr(""), 0);
+  PRUEFE_GLEICH(spur_nr("spur/1x/fader"), 0);    // Ziffernfolge muss mit '/' enden
+  PRUEFE_GLEICH(spur_nr("spur/10/"), 0);         // Feld darf nicht leer sein
+}
+
+FALL(gruppen_regler_und_pm_global_mit_vorgaben) {
+  // 1.10 Slice 1: grp/1..8 je fader, pan, mute, solo an Kanal −1, alle dürfen, Werte und Rampen wie spur/*; pm/fader −200..+6, Vorgabe 0
+  PRUEFE_GLEICH(tab().kanaele(), 20);   // keine neuen Kanäle
+  for (int n = 1; n <= GRP_REGLER_GRUPPEN; n++) {
+    char p[32];
+    std::snprintf(p, sizeof p, "grp/%d/fader", n);
+    PRUEFE(d(p).kanal == -1 && d(p).rolle == Rolle::grp_fader && d(p).vorgabe == 0.0f && d(p).min == -200.0f && d(p).max == 6.0f &&
+           d(p).db && !d(p).nur_hand && d(p).schalt_samples == 480 && d(p).kurve.typ == KurvenTyp::fader_db && d(p).kurve.max == 6.0f);
+    std::snprintf(p, sizeof p, "grp/%d/pan", n);
+    PRUEFE(d(p).kanal == -1 && d(p).rolle == Rolle::grp_pan && d(p).min == -1.0f && d(p).max == 1.0f && !d(p).nur_hand);
+    std::snprintf(p, sizeof p, "grp/%d/mute", n);
+    PRUEFE(d(p).rolle == Rolle::grp_mute && d(p).ganzzahlig && d(p).keine_rampe && d(p).schalt_samples == 0);
+    std::snprintf(p, sizeof p, "grp/%d/solo", n);
+    PRUEFE(d(p).rolle == Rolle::grp_solo && d(p).ganzzahlig && d(p).keine_rampe && d(p).schalt_samples == 0);
+  }
+  const ReglerDef& pm = d("pm/fader");
+  PRUEFE(pm.kanal == -1 && pm.rolle == Rolle::pm_fader && pm.min == -200.0f && pm.max == 6.0f && pm.vorgabe == 0.0f && pm.db && !pm.nur_hand &&
+         pm.schalt_samples == 480);
+  // Negativ-Kontrollen: n+1, 0, fremde Felder, PM hat nur den Fader
+  for (const char* p : {"grp/9/fader", "grp/0/pan", "grp/1/trim", "grp/1/send/1", "pm/pan", "pm/mute", "pm/fader/x"}) PRUEFE_GLEICH(tab().suche(p), -1);
+}
+
+FALL(neue_regler_stehen_hinter_spur_32_ohne_index_verschiebung) {
+  // spur/32/solo war der letzte Eintrag (Index 563, E3); die neuen Regler hängen dahinter, kein bestehender Index wandert
+  PRUEFE_GLEICH(tab().suche("spur/32/solo"), 563);
+  PRUEFE_GLEICH(tab().suche("grp/1/fader"), 564);
+  PRUEFE_GLEICH(tab().suche("grp/8/solo"), 595);
+  PRUEFE_GLEICH(tab().suche("pm/fader"), 596);
+  PRUEFE_GLEICH(tab().suche("deck/1/fader"), 0);
+}
+
+FALL(grp_nr_liest_nummern) {
+  using cypherdj::stellwerk::grp_nr;
+  PRUEFE_GLEICH(grp_nr("grp/1/fader"), 1);
+  PRUEFE_GLEICH(grp_nr("grp/8/solo"), 8);
+  PRUEFE_GLEICH(grp_nr("grp/12/pan"), 12);       // der Parser prüft die Form, den Bereich prüft der Binder
+  PRUEFE_GLEICH(grp_nr("grp/0/fader"), 0);
+  PRUEFE_GLEICH(grp_nr("grp/01/fader"), 0);
+  PRUEFE_GLEICH(grp_nr("grp/1"), 0);
+  PRUEFE_GLEICH(grp_nr("grp//fader"), 0);
+  PRUEFE_GLEICH(grp_nr("spur/1/fader"), 0);      // Negativ-Kontrolle: anderer Namensraum
+  PRUEFE_GLEICH(grp_nr("pm/fader"), 0);
+  PRUEFE_GLEICH(cypherdj::stellwerk::spur_nr("grp/1/fader"), 0);   // und umgekehrt
 }
 
 PRUEF_MAIN

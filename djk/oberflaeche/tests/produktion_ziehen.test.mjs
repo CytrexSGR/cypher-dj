@@ -25,7 +25,7 @@ test('V1 Ziehen: Nutzlast nur für ziehbare LIBRARY-Zeilen', () => {
 
 test('V1 Ziehen: Ablage auf eine Audio-Spur gerastet, Länge in Beats aus Dauer und Projekttempo', () => {
   const r = ablageBefehl(projekt, nutzlast(kick), 0, 4.3, 1);
-  assert.deepEqual(r, { befehl: { befehl: 'clip_neu', spur_id: 's1', art: 'audio', start_beat: 4, laenge_beats: 1, sha256: SHA, name: 'Kick 1' } });
+  assert.deepEqual(r, { befehl: { befehl: 'clip_neu', spur_id: 's1', art: 'audio', start_beat: 4, laenge_beats: 1, sha256: SHA, warp: 'auto', name: 'Kick 1' } });
   assert.equal(ablageBefehl(projekt, nutzlast(kick), 0, 6.1, 4).befehl.start_beat, 8);
   assert.equal(ablageBefehl(projekt, nutzlast(kick), 0, -3, 1).befehl.start_beat, 0, 'nie vor Beat 0');
   // Negativ-Kontrolle: Raster aus lässt den Ablage-Beat stehen

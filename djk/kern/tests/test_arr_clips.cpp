@@ -113,17 +113,25 @@ int main() {
       }
     }
   }
-  {  // 9: Pool-Grenze: 65 gleichzeitige Clips -> 64 Stimmen, eine gezählt verloren
-    Treiber t;
-    auto a = Audio::gleich(100000);
-    Bau b;
-    b.spur(1, ArrArt::audio);
-    for (int i = 0; i < 65; ++i) b.clip(1, ("c" + std::to_string(i)).c_str(), 0.0, 1.0, &a->a);
-    t.laden(b.fertig());
-    t.arr.start(0.0, 0, false, 0, V, 256, t.k);
-    t.lauf(1024);
-    PRUEF(t.arr.stimmen() == 64);
-    PRUEF(t.arr.stimmen_verloren() == 1);
+  {  // 9: Pool-Grenze (E3: 32 Audio-Spuren mit je 8 gleichzeitig klingenden Clips = ARR_STIMMEN = 256, nichts geht verloren).
+     // Gegenprobe: mehr Clips als der Pool -> 256 Stimmen, genau so viele gezählt verloren wie überzählig (1 und 3: ein
+     // Zähler, der bei jedem Verlust auf 1 setzt statt zu zählen, fiele bei 3 auf).
+    for (const int mehr : {0, 1, 3}) {
+      Treiber t;
+      auto a = Audio::gleich(100000);
+      Bau b;
+      for (int n = 1; n <= cdj::ARR_SPUREN; ++n) {
+        b.spur(n, ArrArt::audio);
+        for (int i = 0; i < 8; ++i) b.clip(n, ("c" + std::to_string(n) + "_" + std::to_string(i)).c_str(), 0.0, 1.0, &a->a);
+      }
+      for (int k = 0; k < mehr; ++k) b.clip(1, ("c_zuviel" + std::to_string(k)).c_str(), 0.0, 1.0, &a->a);
+      t.laden(b.fertig());
+      t.arr.start(0.0, 0, false, 0, V, 256, t.k);
+      t.lauf(1024);
+      PRUEF(cdj::ARR_STIMMEN == 8 * cdj::ARR_SPUREN);
+      PRUEF(t.arr.stimmen() == 256);
+      PRUEF(t.arr.stimmen_verloren() == static_cast<uint64_t>(mehr));
+    }
   }
   {  // 10: Negativ-Kontrolle: Clip hinter der Loop-Klammer klingt nie
     Treiber t;

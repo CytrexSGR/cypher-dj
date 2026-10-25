@@ -360,7 +360,7 @@ int main() {
                   abw, spitze(einfach, 0, static_cast<int64_t>(einfach.size())));
       PRUEF(spitze(einfach, 0, static_cast<int64_t>(einfach.size())) > 0.1f && abw < 1e-6f);
     } else {
-      PRUEF(ruhend_vor == 7 && ruhend == 8);   // die RB-Stimme von Spur 3 ist zurückgesetzt
+      PRUEF(ruhend_vor == cdj::ARR_SPUREN - 1 && ruhend == cdj::ARR_SPUREN);   // die RB-Stimme von Spur 3 ist zurückgesetzt
       x.stopp(0);
       w.bis(x.kern->sample() + 3 * 48000);
       const int64_t Z = x.kern->sample();

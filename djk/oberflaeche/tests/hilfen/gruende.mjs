@@ -8,7 +8,7 @@ import { BEREICH_GRUENDE } from '../../bereiche/proj/abbildung.ts';
 const W = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const lies = (d) => fs.readFileSync(path.join(W, d), 'utf8');
 const ts = (ordner) => fs.readdirSync(path.join(W, ordner)).filter((f) => f.endsWith('.ts')).map((f) => `${ordner}/${f}`);
-export const KLASSEN = 'BefehlFehler|AblageFehler|VerlaufFehler|DekodierFehler|PatchFehler|ProjFehler|KatalogFehler|WiedergabeFehler|AusgabeFehler|FreezeFehler|StandFehler';
+export const KLASSEN = 'BefehlFehler|AblageFehler|VerlaufFehler|DekodierFehler|PatchFehler|ProjFehler|KatalogFehler|WiedergabeFehler|AusgabeFehler|FreezeFehler|StandFehler|GeraeteFehler';
 export const S3_QUELLE = /^(AusgabeFehler|FreezeFehler|StandFehler|fehl|grund-Feld) /;   // Fundstellen, die nur über /proj/freeze und /proj/export kommen
 
 // Gründe einer Datei d mit Inhalt t (Muster je Ort); dazu(grund, fundstelle)
@@ -23,6 +23,11 @@ export function gruendeAusDatei(d, t, dazu) {
     }
   }
   if (d.startsWith('bereiche/')) for (const m of t.matchAll(/\bfehl\(\s*'([a-z_]+)'/g)) dazu(m[1], `fehl ${d}`);
+  // I08 Task 8: bereiche/geraete wirft GeraeteFehler und reicht den Grund von nurAndreas(quelle[, 'grund']) durch (Vorgabe im Kopf: grund = 'nur_andreas')
+  if (d.startsWith('bereiche/geraete/')) {
+    for (const m of t.matchAll(/\bnurAndreas\([^,)]*,\s*'([a-z_]+)'/g)) dazu(m[1], `nurAndreas ${d}`);
+    for (const m of t.matchAll(/\bnurAndreas = \([^)]*\bgrund = '([a-z_]+)'/g)) dazu(m[1], `nurAndreas ${d}`);
+  }
   if (d.startsWith('projekt/')) for (const m of t.matchAll(/\breadonly grund = '([a-z_]+)'/g)) dazu(m[1], `grund-Feld ${d}`);
 }
 
@@ -36,6 +41,15 @@ export function gruendeAusDemCode() {
   for (const [x, d] of [['intern', 'bereiche/proj/bereich.ts'], ['slot_belegt', 'projekt/befehle.ts'], ['ueber_projekt', 'server.ts']]) {
     if (lies(d).includes(`'${x}'`)) dazu(x, `genannt ${d}`);
   }
+  return g;
+}
+
+// Gründe der Geräte-Konfiguration (bereiche/geraete, Task 8). Eigene Sicht, nicht in gruendeAusDemCode: die Seite kennt die Geräte-Gründe erst mit
+// Task 9 und ff. in FEHLER_TEXT; der V2-Gründe-Test würde sonst heute rot. Geprüft wird gegen GRUND_TEXT (tests/geraete_aendern.test.mjs).
+export function gruendeGeraete() {
+  const g = new Map();
+  const dazu = (grund, wo) => { if (!g.has(grund)) g.set(grund, new Set()); g.get(grund).add(wo); };
+  for (const d of ts('bereiche/geraete')) gruendeAusDatei(d, lies(d), dazu);
   return g;
 }
 

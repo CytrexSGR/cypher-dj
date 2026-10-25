@@ -69,7 +69,7 @@ test('J4 Probe I1 mit echter Log-Datei: angelegt, gelöscht, project.json veralt
   assert.equal(r.vorher_rev, 3, 'project.json stand auf rev 3, das Log auf rev 9');
   assert.equal(r.zaehler_offen.rev, 9, 'nachgezogen bis rev 9');
   assert.deepEqual(r.neu, { note: 'n4', clip: 'c3', spur: 's3' }, 'keine ID aus dem Log kommt zurück (vorher: n3, c2, s2)');
-  assert.deepEqual(r.zaehler_gespeichert, { naechste_id: { spur: 3, clip: 3 }, naechste_noten_id: 4 }, 'der nachgezogene Stand trägt die gehobenen Zähler');
+  assert.deepEqual(r.zaehler_gespeichert, { naechste_id: { spur: 3, clip: 3, gruppe: 1 }, naechste_noten_id: 4 }, 'der nachgezogene Stand trägt die gehobenen Zähler');
 });
 
 test('J4 Negativ-Kontrolle ohne Absturz: dieselben IDs wie nach dem Nachziehen', async (t) => {
@@ -81,6 +81,6 @@ test('J4 Negativ-Kontrolle ohne Absturz: dieselben IDs wie nach dem Nachziehen',
 test('J4 Negativ-Kontrolle: ein Log ohne neue IDs (nur Mixer) hebt keinen Zähler', async (t) => {
   const r = await lauf(t, { absturz: true, nurMixer: true });
   assert.equal(r.zaehler_offen.rev, 5);
-  assert.deepEqual(r.zaehler_gespeichert, { naechste_id: { spur: 2, clip: 2 }, naechste_noten_id: 3 });
+  assert.deepEqual(r.zaehler_gespeichert, { naechste_id: { spur: 2, clip: 2, gruppe: 1 }, naechste_noten_id: 3 });   // 1.10 Task 9: Gruppen-Zähler 1
   assert.deepEqual(r.neu, { note: 'n3', clip: 'c2', spur: 's2' }, 'n3, c2, s2 gab es nie: sie sind frei');
 });

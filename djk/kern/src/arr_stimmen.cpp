@@ -3,6 +3,8 @@
 // Kurz-Einblende (Einstieg mitten im Clip) · Kurzblende an der Naht (endet auf dem Naht-Sample) · Kurzblende beim
 // Stopp (beginnt auf dem Stopp-Sample). Ein geänderter Clip blendet beim Tausch aus einer eigenen Kopie der nächsten
 // ARR_NAHT Frames aus (Muster Erzeuger-Ausklang F11): das alte Audio darf danach sofort zur Freigabe.
+// Paket 1.13 (Warp, Slice 1): hat der Clip einen Warp, ersetzt W(b) die Zeile „Quellframe = offset + pos“: Quellposition aus dem
+// Projekt-Beat des Samples (Tempo-Karte), gelesen mit Catmull-Rom (RE-PITCH). Der ungewarpte Weg bleibt Zeile für Zeile der alte.
 #include <algorithm>
 #include <cmath>
 
@@ -14,10 +16,23 @@ namespace {
 
 constexpr double EPS = 1e-9;
 
+// Zwei Warps sind gleich, wenn Modus und alle Marker gleich sind (die Zeiger zeigen in verschiedene Schnappschüsse)
+bool warp_gleich(const ArrWarp* a, const ArrWarp* b) {
+  if (a == nullptr || b == nullptr) return a == b;
+#ifdef CYPHERDJ_MUTATION_ARR_WARP_TAUSCH_GLEICH
+  return true;   // Fehlerfall: ein geänderter Warp gilt als unverändert, die Stimme bindet neu und springt ohne Blende auf die neue Abbildung
+#else
+  if (a->modus != b->modus || a->n != b->n) return false;
+  for (int i = 0; i < a->n; ++i)
+    if (a->beat[i] != b->beat[i] || a->frame[i] != b->frame[i]) return false;
+  return true;
+#endif
+}
+
 bool gleich(const ArrClip& a, const ArrClip& b) {
   return a.start_beat == b.start_beat && a.laenge_beats == b.laenge_beats && a.audio == b.audio &&
          a.offset_frames == b.offset_frames && a.gain == b.gain && a.ein_beats == b.ein_beats &&
-         a.aus_beats == b.aus_beats;
+         a.aus_beats == b.aus_beats && warp_gleich(a.warp, b.warp);
 }
 
 const ArrClip* finde_clip(const ArrSpur& sp, uint64_t id) {
@@ -31,6 +46,12 @@ const ArrClip* finde_clip(const ArrSpur& sp, uint64_t id) {
 int Arrangement::stimmen() const {
   int n = 0;
   for (const Stimme& v : st_) n += v.aktiv ? 1 : 0;
+  return n;
+}
+
+int Arrangement::warp_stimmen() const {
+  int n = 0;
+  for (const Stimme& v : st_) n += (v.aktiv && v.clip && v.clip->warp) ? 1 : 0;
   return n;
 }
 
@@ -56,6 +77,7 @@ void Arrangement::stimme_starten(const Karte& k, const ArrClip& c, int spur, int
   v->aus_n = c.aus_beats > 0.0 ? v->ende - sample_von_p(k, c.start_beat + c.laenge_beats - c.aus_beats, ursprung_) : 0;
   v->ramp_ein_ab = rampe ? s_start : -1;
   v->ab_aus = -1;
+  v->p_off = start_beat_ - ursprung_;
   v->ak_n = v->ak_pos = 0;
 }
 
@@ -104,21 +126,36 @@ void Arrangement::stimmen_einstieg(const Karte& k, int64_t a) {
   }
 }
 
-void Arrangement::stimme_ausklang(Stimme& v, int64_t s) {
+void Arrangement::stimme_ausklang(Stimme& v, int64_t s, const Karte& k) {
   const ArrClip& c = *v.clip;
+#ifdef CYPHERDJ_MUTATION_ARR_WARP_AUSKLANG_URSPRUNG
+  const double d_proj = 0.0;   // Fehlerfall: die Ausklang-Kopie rechnet mit Ursprung und Start von jetzt (Fall 12 rot, Fall 11 bleibt grün)
+#else
+  const double d_proj = v.p_off - (start_beat_ - ursprung_);   // wie im Spielweg: 0.0, solange sich Ursprung und Start seit dem Stimmenstart nicht verschoben haben
+#endif
   for (int q = 0; q < ARR_NAHT; ++q) {
     const int64_t t = s + q;
     const int64_t pos = t - v.clip_s0;
     const int64_t f = c.offset_frames + pos;
+    // Paket 1.13: gewarpt kommt die Quellposition aus W(b) zum Projekt-Beat des Samples t (die Karte ist die von jetzt)
+    const double fr = c.warp ? warp_frame(*c.warp, projekt_beat(k, static_cast<double>(t)) + d_proj - c.start_beat) : 0.0;
+    const bool lesbar = c.warp ? fr < static_cast<double>(c.audio->frames) : f < c.audio->frames;
     float l = 0.0f, r = 0.0f;
-    if (t < v.ende && pos >= 0 && f < c.audio->frames && (v.ab_aus < 0 || t < v.ab_aus + ARR_NAHT)) {
+    if (t < v.ende && pos >= 0 && lesbar && (v.ab_aus < 0 || t < v.ab_aus + ARR_NAHT)) {
       float g = c.gain * static_cast<float>(ARR_NAHT - q) / ARR_NAHT;
       if (pos < v.ein_n) g *= static_cast<float>(pos) / static_cast<float>(v.ein_n);
       if (v.ende - t < v.aus_n) g *= static_cast<float>(v.ende - t) / static_cast<float>(v.aus_n);
       if (v.ramp_ein_ab >= 0 && t - v.ramp_ein_ab < ARR_EIN) g *= static_cast<float>(t - v.ramp_ein_ab) / ARR_EIN;
       if (v.ab_aus >= 0 && t >= v.ab_aus) g *= static_cast<float>(ARR_NAHT - (t - v.ab_aus)) / ARR_NAHT;
-      l = c.audio->daten[2 * f] * g;
-      r = c.audio->daten[2 * f + 1] * g;
+      if (c.warp) {
+        float wl, wr;
+        warp_lies(c.audio->daten, c.audio->frames, fr, wl, wr);
+        l = wl * g;
+        r = wr * g;
+      } else {
+        l = c.audio->daten[2 * f] * g;
+        r = c.audio->daten[2 * f + 1] * g;
+      }
     }
     v.ak[2 * q] = l;
     v.ak[2 * q + 1] = r;
@@ -128,7 +165,58 @@ void Arrangement::stimme_ausklang(Stimme& v, int64_t s) {
   v.ak_pos = 0;
 }
 
-void Arrangement::stimmen_spielen(int64_t a, int64_t b, int64_t s0, int64_t naht) {
+// Paket 1.13: eine gewarpte Stimme. Gains und Enden wie im ungewarpten Weg unten (Test: Warp mit Steigung 1 = ungewarpt); die
+// Quellposition kommt aus W(b) zum Projekt-Beat wp_[t − a] und wird mit Catmull-Rom gelesen. Endet mit dem Clip oder der Datei.
+void Arrangement::stimme_warp_spielen(Stimme& v, int64_t a, int64_t b, int64_t s0, int64_t naht) {
+  const ArrClip& c = *v.clip;
+  const ArrWarp& w = *c.warp;
+  const float* d = c.audio->daten;
+  const int64_t n = c.audio->frames;
+  float* bl = bus_l_[v.spur];
+  float* br = bus_r_[v.spur];
+#ifdef CYPHERDJ_MUTATION_ARR_WARP_NEUSTART_URSPRUNG
+  const double d_proj = 0.0;   // Fehlerfall: die Stimme rechnet mit Ursprung und Start von jetzt, die Ausblende eines Neustarts springt
+#else
+  const double d_proj = v.p_off - (start_beat_ - ursprung_);   // 0.0, solange sich Ursprung und Start seit dem Stimmenstart nicht verschoben haben
+#endif
+  for (int64_t t = a; t < b; ++t) {
+    const int64_t pos = t - v.clip_s0;
+    const double fr = warp_frame(w, wp_[t - a] + d_proj - c.start_beat);
+#ifdef CYPHERDJ_MUTATION_ARR_WARP_OHNE_DATEIENDE
+    if (t >= v.ende) {   // Fehlerfall: die Stimme lebt über das Dateiende hinaus bis zum Clip-Ende
+#else
+    if (t >= v.ende || fr >= static_cast<double>(n)) {
+#endif
+      v.aktiv = false;
+      break;
+    }
+    if (pos < 0) continue;
+    float g = c.gain;
+    if (pos < v.ein_n) g *= static_cast<float>(pos) / static_cast<float>(v.ein_n);
+    if (v.ende - t < v.aus_n) g *= static_cast<float>(v.ende - t) / static_cast<float>(v.aus_n);
+    if (v.ramp_ein_ab >= 0 && t - v.ramp_ein_ab < ARR_EIN) g *= static_cast<float>(t - v.ramp_ein_ab) / ARR_EIN;
+#ifdef CYPHERDJ_MUTATION_ARR_NAHT_HART
+    (void)naht;   // Fehlerfall: harter Schnitt an der Naht
+#else
+    if (naht >= 0 && naht - t < ARR_NAHT) g *= static_cast<float>(naht - t) / ARR_NAHT;   // endet auf der Naht
+#endif
+    if (v.ab_aus >= 0 && t >= v.ab_aus) {
+      const int64_t q = t - v.ab_aus;
+      if (q >= ARR_NAHT) {
+        v.aktiv = false;
+        break;
+      }
+      g *= static_cast<float>(ARR_NAHT - q) / ARR_NAHT;
+    }
+    float l, r;
+    warp_lies(d, n, fr, l, r);
+    bl[t - s0] += l * g;
+    br[t - s0] += r * g;
+  }
+}
+
+void Arrangement::stimmen_spielen(const Karte& k, int64_t a, int64_t b, int64_t s0, int64_t naht) {
+  bool wp_da = false;   // wp_ ist für diesen Teilblock gefüllt (erst, wenn eine gewarpte Stimme klingt)
   for (Stimme& v : st_) {
     if (!v.aktiv) continue;
     float* bl = bus_l_[v.spur];
@@ -143,6 +231,19 @@ void Arrangement::stimmen_spielen(int64_t a, int64_t b, int64_t s0, int64_t naht
         br[t - s0] += v.ak[2 * v.ak_pos + 1];
         ++v.ak_pos;
       }
+      continue;
+    }
+    if (v.clip->warp) {
+      if (!wp_da) {
+        for (int64_t t = a; t < b; ++t)
+#ifdef CYPHERDJ_MUTATION_ARR_WARP_BLOCKANFANG
+          wp_[t - a] = projekt_beat(k, static_cast<double>(a));   // Fehlerfall: der Beat steht für den ganzen Teilblock auf seinem Anfang
+#else
+          wp_[t - a] = projekt_beat(k, static_cast<double>(t));
+#endif
+        wp_da = true;
+      }
+      stimme_warp_spielen(v, a, b, s0, naht);
       continue;
     }
     const ArrClip& c = *v.clip;
@@ -178,7 +279,7 @@ void Arrangement::stimmen_spielen(int64_t a, int64_t b, int64_t s0, int64_t naht
   }
 }
 
-void Arrangement::stimmen_tauschen(const ArrSnapshot* neu, int64_t s) {
+void Arrangement::stimmen_tauschen(const ArrSnapshot* neu, int64_t s, const Karte& k) {
   for (Stimme& v : st_) {
     if (!v.aktiv || !v.clip) continue;
     const ArrClip* c2 = (neu && neu->spur[v.spur].art == ArrArt::audio) ? finde_clip(neu->spur[v.spur], v.clip_id) : nullptr;
@@ -186,7 +287,7 @@ void Arrangement::stimmen_tauschen(const ArrSnapshot* neu, int64_t s) {
     c2 = nullptr;   // Fehlerfall: jede Stimme blendet aus, auch eine unveränderte
 #endif
     if (c2 && gleich(*v.clip, *c2)) v.clip = c2;   // spielt ohne Blende weiter, liest jetzt aus dem neuen Schnappschuss
-    else stimme_ausklang(v, s);
+    else stimme_ausklang(v, s, k);
   }
 }
 

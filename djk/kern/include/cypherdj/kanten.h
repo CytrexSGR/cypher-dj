@@ -36,6 +36,15 @@ std::vector<Kante> lies_kanten(const std::string& text);
 std::vector<Kante> filtere_kanten(const std::vector<Kante>& kanten, const std::string& kern_praefix,
                                   size_t* reserviert = nullptr);
 
+// I08: Eingangs-Kanten-Datei <shm>/eingaenge-kanten (vom Seiten-Server atomar geschrieben). Zeile QUELLE<TAB>PORT, PORT = ein_<k>_L|R (k 1..4)
+// oder midi_ein_1, OHNE Kern-Präfix; der Kern setzt sein Präfix davor. Quellen mit Kern-Präfix fallen weg (Kern nie mit sich selbst), ebenso die Ports jedes
+// Kern-Clients, auch einer anderen Instanz (cypherdj-kern, cypherdj-kern-<i>; instanz.h cdj_name): sonst liefe eine Kern-zu-Kern-Schleife über die Instanzen.
+std::vector<Kante> lies_eingangs_kanten(const std::string& text, const std::string& kern_praefix);
+
+// I08 Review-Nachzug (MAJOR 2): Kanten, die in `alt` standen und im Soll nicht mehr vorkommen (andere Quelle gewählt, Zuordnung gelöscht,
+// Datei weg). Der Kern trennt nur diese, nie eine Kante, die er nicht selbst aus der Eingangs-Datei verbunden hatte.
+std::vector<Kante> wegfallende_kanten(const std::vector<Kante>& alt, const std::vector<Kante>& soll);
+
 // MINOR-5: Obergrenzen der Kanten-Datei; Duplikate (Quelle und Ziel gleich) entfallen, der Überschuss wird verworfen und
 // gezählt (verworfen darf nullptr sein).
 constexpr size_t KANTEN_DATEI_MAX = 64 * 1024;

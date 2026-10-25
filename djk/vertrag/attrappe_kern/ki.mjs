@@ -1,7 +1,7 @@
 // KI-Stopp und -Freigabe, KI-Spur, Stufe, Vorschlagskanal, LEDs, Kiste, Mapping, Latenz (SCHNITTSTELLEN §4.7) und der
 // Prüfklick /test/klick (ROADMAP Z1). Die Attrappe hat weder Controller noch Ton: LEDs, Kiste, Mapping und Latenz
 // werden angenommen und gespeichert, sonst ohne Wirkung. Entscheidung E-a (2026-10-20): der KI-Stopp hält nur Cyphers Hand an (Teile ab,
-// ihr wartender Start und ihr Freeze enden, weitere Befehle abgelehnt; ein laufender Transport läuft weiter) und senkt keinen Fader; die KI-Spur-Listen werden geführt und senken nichts.
+// ihr wartender Start und ihr Freeze enden, weitere Befehle abgelehnt; ein laufender Transport läuft weiter) und senkt keinen Fader; die KI-Kanal-Liste wird geführt (Spuren nur als spur/0, E3 P1) und senkt nichts.
 
 import { SPIELKANAELE, KANALZUG_KANAELE, LEDS } from './vertrag.mjs';
 
@@ -22,7 +22,7 @@ function kiFrei(K, s, grund) {
 export default {
   name: 'ki',
   init(K) {
-    K.ki = { gestoppt: false, kanaele: [], spuren: [], stufe: 1, vorschlag: '' };   // D1 Spec 6.15: zwei Listen
+    K.ki = { gestoppt: false, kanaele: [], stufe: 1, vorschlag: '' };   // E3 P1: nur Kanäle
     K.leds = K.leds ?? {};
     K.latenz = {};
     K.kiStopp = (s, quelle, grund) => kiStopp(K, s, quelle, grund);
@@ -36,18 +36,14 @@ export default {
     },
     '/k/ki/spur': (K, a, b) => {
       const liste = a.kanaele === '' ? [] : a.kanaele.split(',').map((x) => x.trim()).filter((x) => x !== '');
-      // D1 K1, Spec 6.15: auch spur/<ziffern> (spur/2, spur/135; spur/0 = keine); seit E-a nur geführt, der Stopp senkt nichts.
-      // Spur-Einträge ersetzen nur die Spur-Liste (S2 sendet nur spur/0), Kanal-Einträge nur die Kanal-Liste (Leitstand); leer: Kanäle.
-      const spurEintrag = (k) => k.startsWith('spur/');
-      if (liste.some((k) => (spurEintrag(k) ? !/^spur\/(0|[1-8]+)$/.test(k) : !SPIELKANAELE.includes(k)))) {
-        return K.q(b, 6, 'unbekannter_regler');
-      }
-      const spuren = [...new Set(liste.filter(spurEintrag).flatMap((k) => (k === 'spur/0' ? [] : [...k.slice(5)].map((z) => `spur/${z}`))))];
-      const kanaele = liste.filter((k) => !spurEintrag(k));
-      const mitSpuren = liste.some(spurEintrag);
+      // E3 P1: für Spuren gilt nur spur/0 (keine Spur, S2 sendet nur das); jede andere Spur-Angabe wird wie ein unbekannter Kanal abgelehnt.
+      // spur/0 allein lässt die Kanäle stehen, die leere Liste leert sie (Leitstand).
+      const spurNull = (k) => k === 'spur/0';
+      if (liste.some((k) => !spurNull(k) && !SPIELKANAELE.includes(k))) return K.q(b, 6, 'unbekannter_regler');
+      const kanaele = liste.filter((k) => !spurNull(k));
+      const mitSpuren = liste.some(spurNull);
       K.sofort(b, () => {
         if (kanaele.length > 0 || !mitSpuren) K.ki.kanaele = kanaele;
-        if (mitSpuren) K.ki.spuren = spuren;
         return null;
       });
     },

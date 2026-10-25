@@ -18,6 +18,7 @@ from pathlib import Path
 import numpy as np
 
 from . import vertrag
+from .vertrag import sauber
 from .audio import lade_mono
 from .parallel import Kind, gleichzeitig
 from .bestand import (aufraeumen, fassung_name, fassungen_von, fsync_baum, korrekturen_lesen, lies_json,
@@ -189,10 +190,46 @@ def _stimmung_und_lautheit(x, x44):
     return lq, c1, rr, c2, ta
 
 
-def einlesen(quelle, bestand, basis_bpm=128.0, karte=None, geraet="cpu", auftrag_id=None, titel=None, melde=None):
+def _messen(quelle, x, x44, x22, karte, geraet, melde, gemeldet, kinder, warnungen):
+    """Karte, Raster, Lautheit, Stimmung und Tonart einer Quelle (Stufen beats und key von einlesen)."""
+    # Unabhaengige Arbeit startet jetzt in Kindprozessen und laeuft neben beat_this: Lautheit der Quelle plus Stimmung
+    # und Tonart (haengen nur am Audio) sowie Essentia samt seiner Karte (haengt nicht von beat_this ab).
+    kinder.append(Kind(_stimmung_und_lautheit, (x, x44)))
+    kind_schluessel = kinder[-1]
+    if karte is None:
+        from .lauf_raster import essentia_karte
+        kinder.append(Kind(essentia_karte, (x44,)))
+        _VORAB.set({"x22": x22, "x44": x44, "essentia": kinder[-1]})
+        liste, raster, rinfo, w = raster_messen(quelle, geraet, melde) if gemeldet else raster_messen(quelle, geraet)
+        _VORAB.set(None)
+        warnungen += w
+        eins_bt = rinfo["eins_beat_this"]
+    else:
+        liste, raster, rinfo = karte.als_liste(), raster_aus_wahrheit(karte, pulsklarheit_aus_c_drift(quelle)), {}
+        eins_bt = None
+    liste, raster, w = klemme_ersten_schlag(liste, raster)
+    warnungen += w
+    return liste, raster, rinfo, eins_bt, kind_schluessel.ergebnis(), warnungen   # Kind lief seit dem Start von beats
+
+
+def lies_vorab(ablage, mid, sha):
+    """Analyse aus der Ablage (nur_analyse), wenn sie zu genau dieser Quelle gehoert; sonst None."""
+    p = Path(ablage) / mid / "vorab.json"
+    if not p.exists():
+        return None
+    g = lies_json(p)
+    return g if g.get("schema") == 1 and g.get("sha256") == sha else None
+
+
+def einlesen(quelle, bestand, basis_bpm=128.0, karte=None, geraet="cpu", auftrag_id=None, titel=None, melde=None,
+             vorab=None, nur_analyse=False):
     """Neues Material mit Fassung r1. Liegt das Material schon im Bestand: nichts schreiben, Status 'vorhanden'.
     karte: nur fuer Kontrollen mit bekannter Wahrheit; sonst misst Scheibe 05 die Karte.
-    melde(name, prozent=None, teil=None): Fortschritt (fortschritt.py), Stufen decode, beats, key, render, save."""
+    melde(name, prozent=None, teil=None): Fortschritt (fortschritt.py), Stufen decode, beats, key, render, save.
+    nur_analyse (2026-10-20, Nachtlauf ueber Andreas' Tracks): `bestand` ist dann die Analyse-Ablage; geschrieben
+    werden nur material.json, tags.json und vorab.json (keine Kopie der Quelle, keine Fassung), Status 'analysiert'.
+    vorab: Analyse-Ablage; liegt dort die Analyse dieser Quelle (gleiche sha256), uebernimmt einlesen Karte, Raster,
+    Lautheit, Stimmung und Tonart von dort und rechnet nur noch die Fassung, bitgleich zum Weg ohne Ablage."""
     quelle, bestand = Path(quelle), Path(bestand)
     gemeldet = melde is not None
     if melde is None:
@@ -204,22 +241,28 @@ def einlesen(quelle, bestand, basis_bpm=128.0, karte=None, geraet="cpu", auftrag
     if (bestand / mid).exists():
         return {"material_id": mid, "status": "vorhanden"}
     auftrag_id = auftrag_id or f"e-{mid}"
+    g = None if nur_analyse or vorab is None else lies_vorab(vorab, mid, sha)
     kinder = []
     arbeit = bestand / ".arbeit" / auftrag_id
     aufraeumen(arbeit)                              # Rest eines abgebrochenen Laufs derselben Werkstatt
     try:
         mo = arbeit / mid
-        (mo / "fassungen").mkdir(parents=True)
         endung = quelle.suffix.lower()
-        shutil.copyfile(quelle, mo / f"original{endung}")
-        if endung in VERLUSTBEHAFTET:
-            subprocess.run(["ffmpeg", "-nostdin", "-loglevel", "error", "-i", str(quelle), "-c:a", "flac",
-                            str(mo / "original.flac")], check=True)
-        (mo / "korrekturen.jsonl").touch()
+        if nur_analyse:
+            mo.mkdir(parents=True)
+        else:
+            (mo / "fassungen").mkdir(parents=True)
+            shutil.copyfile(quelle, mo / f"original{endung}")
+            if endung in VERLUSTBEHAFTET:
+                subprocess.run(["ffmpeg", "-nostdin", "-loglevel", "error", "-i", str(quelle), "-c:a", "flac",
+                                str(mo / "original.flac")], check=True)
+            (mo / "korrekturen.jsonl").touch()
         zeiten = {}
         melde("decode")
         # Dekodieren gleichzeitig (ffmpeg-Kindprozesse, dieselben Befehle wie zuvor, also dieselben Samples).
-        if karte is None:
+        if g is not None:
+            x = lade_stereo48(quelle)
+        elif karte is None:
             x, x44, x22 = gleichzeitig((lade_stereo48, (quelle,)), (lade_mono, (quelle, 44100)),
                                        (lade_mono, (quelle, 22050)))
         else:
@@ -227,35 +270,27 @@ def einlesen(quelle, bestand, basis_bpm=128.0, karte=None, geraet="cpu", auftrag
         t = time.perf_counter()
         warnungen = []
         melde("beats")
-        # Unabhaengige Arbeit startet jetzt in Kindprozessen und laeuft neben beat_this: Lautheit der Quelle plus Stimmung
-        # und Tonart (haengen nur am Audio) sowie Essentia samt seiner Karte (haengt nicht von beat_this ab).
-        kinder.append(Kind(_stimmung_und_lautheit, (x, x44)))
-        kind_schluessel = kinder[-1]
-        if karte is None:
-            from .lauf_raster import essentia_karte
-            kinder.append(Kind(essentia_karte, (x44,)))
-            _VORAB.set({"x22": x22, "x44": x44, "essentia": kinder[-1]})
-            liste, raster, rinfo, w = raster_messen(quelle, geraet, melde) if gemeldet else raster_messen(quelle, geraet)
-            _VORAB.set(None)
-            warnungen += w
-            eins_bt = rinfo["eins_beat_this"]
+        if g is not None:
+            liste, raster, rinfo, eins_bt = g["liste"], g["raster"], g["rinfo"], g["eins_bt"]
+            lq, c1, rr, c2, ta = g["lq"], g["c1"], g["rr"], g["c2"], g["ta"]
+            warnungen = list(g["warnungen"])
         else:
-            liste, raster, rinfo = karte.als_liste(), raster_aus_wahrheit(karte, pulsklarheit_aus_c_drift(quelle)), {}
-            eins_bt = None
-        liste, raster, w = klemme_ersten_schlag(liste, raster)
-        warnungen += w
+            liste, raster, rinfo, eins_bt, (lq, c1, rr, c2, ta), warnungen = _messen(
+                quelle, x, x44, x22 if karte is None else None, karte, geraet, melde, gemeldet, kinder, warnungen)
         zeiten["raster"] = round(time.perf_counter() - t, 2)
         karte_r = karte_aus_liste(liste, raster["tempo_vielfaches"])   # Fassung genau aus material.json
         t = time.perf_counter()
         melde("key")
-        lq, c1, rr, c2, ta = kind_schluessel.ergebnis()      # lief seit dem Start der Stufe beats
         stimmung = entscheide(c1, rr, c2)
         zeiten["stimmung"] = round(time.perf_counter() - t, 2)
-        if stimmung["warnung"]:
-            warnungen.append(stimmung["warnung"])
         info = quelle_info(quelle)
         fremd = lese_tags(quelle)
-        warnungen += fremd.pop("warnungen")
+        if g is None:                               # aus der Ablage kommen die Warnungen schon vollstaendig
+            if stimmung["warnung"]:
+                warnungen.append(stimmung["warnung"])
+            warnungen += fremd.pop("warnungen")
+        else:
+            fremd.pop("warnungen")
         eigen_bpm = None
         try:
             steig = float(np.polyfit(karte_r.sekunden, karte_r.beats, 1)[0])
@@ -280,6 +315,18 @@ def einlesen(quelle, bestand, basis_bpm=128.0, karte=None, geraet="cpu", auftrag
         hat_fremdtags = any(fremd[k] for k in ("tkey", "energie", "tag_bpm", "artist", "titel", "album"))
         if hat_fremdtags:
             schreibe_json(mo / "tags.json", fremd)
+        if nur_analyse:
+            schreibe_json(mo / "vorab.json", sauber({"schema": 1, "sha256": sha, "liste": liste, "raster": raster,
+                                                     "rinfo": rinfo, "eins_bt": eins_bt, "lq": lq, "c1": c1, "rr": rr,
+                                                     "c2": c2, "ta": ta, "warnungen": warnungen}))
+            fsync_baum(mo)
+            rename_ohne_ueberschreiben(mo, bestand / mid)
+            aufraeumen(arbeit)
+            for k in kinder:
+                k.abbrechen()
+            zeiten["gesamt"] = round(time.perf_counter() - t0, 2)
+            return {"material_id": mid, "status": "analysiert", "titel": material["titel"], "zeiten": zeiten,
+                    "lufs": (lq or {}).get("lufs_integriert"), "warnungen": warnungen}
         name = fassung_name(basis_bpm, 1)
         t = time.perf_counter()
         melde("render")

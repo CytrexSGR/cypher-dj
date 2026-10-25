@@ -1,4 +1,6 @@
-// Übersetzer Projekt → Wiedergabe cypherdj-arr/1 (Spec 3.2) und Ablage der Wiedergabe-Dateien im Arbeitsordner (Spec 2.9).
+// Übersetzer Projekt → Wiedergabe cypherdj-arr/1 oder /2 (Spec 3.2; /2 bei Routing, 1.10 P2, oder bei gewarptem Clip, 1.13) und Ablage (Spec 2.9).
+// Paket 1.13: ein Audio-Clip mit Warp an trägt `warp: { modus: 0, w: [[beat, frame], …] }` (je Clip und je Loop-Kopie); ohne Routing und
+// ohne Warp bleibt die Datei Zeichen für Zeichen die von /1.
 // Die Datei heißt wiedergabe-<nr>.json; <nr> ist die Wiedergabe-Nummer der Instanz (Spec 6.1), nicht die Projekt-Revision: der
 // WiedergabeZaehler vergibt sie fortlaufend über Projekte hinweg und findet beim Start im Arbeitsordner wieder, wo er stand.
 // Die Wiedergabe trägt nur, was der Kern abspielt: absolute Beats, Audio-Clips mit Datei/Frames/Offset, Noten flach je Spur an den
@@ -8,6 +10,10 @@ import path from 'node:path';
 import { MAX_CLIPS, MAX_NOTEN, MAX_SPUREN, SAMPLERATE, type AudioClip, type MidiClip, type Note, type Projekt, type Spur } from './modell.ts';
 
 export const WIEDERGABE_FORMAT = 'cypherdj-arr/1';
+// /2, wenn das Projekt Gruppen hat oder eine Spur nicht auf master zeigt (1.10, P2) oder ein Audio-Clip Warp an trägt (1.13); sonst /1 byteweise wie bisher
+export const WIEDERGABE_FORMAT_2 = 'cypherdj-arr/2';
+export const MAX_WARP_PUNKTE = 262_144;                       // Marker aller Clips (und Loop-Kopien) einer Wiedergabe; gleich ARR_WARP_PUNKTE_MAX im Kern
+export const WARP_MODUS_NR: Readonly<Record<string, number>> = { repitch: 0 };
 export const BEHALTE = 5;                                    // so viele wiedergabe-<nr>.json bleiben, die zuletzt geschriebenen (Spec 6.1)
 
 export class WiedergabeFehler extends Error {
@@ -18,13 +24,16 @@ export class WiedergabeFehler extends Error {
 export interface WAudioClip {
   id: string; start_beat: number; laenge_beats: number; sha256: string; datei: string; frames: number; offset_frames: number;
   gain_db: number; ein_beats: number; aus_beats: number;
+  warp?: { modus: number; w: [number, number][] };            // Paket 1.13 (nur /2): Marker [Clip-Beat der Kopie, Quell-Frame], nur bei Warp an
 }
 export interface WNote { id: string; beat: number; laenge: number; ton: number; vel: number }
+export type WZiel = { art: 'gruppe'; nr: number };   // fehlt `ausgang`, zeigt die Spur auf den Produktions-Master
 export type WSpur =
-  | { nr: number; art: 'audio'; clips: WAudioClip[] }
-  | { nr: number; art: 'intern'; geraet: 'rb338'; parameter: Record<string, number>; noten: WNote[] }
-  | { nr: number; art: 'wirt'; slot: number; noten: WNote[] };
-export interface Wiedergabe { format: typeof WIEDERGABE_FORMAT; nr: number; spuren: WSpur[] }
+  | { nr: number; art: 'audio'; clips: WAudioClip[]; ausgang?: WZiel }
+  | { nr: number; art: 'intern'; geraet: 'rb338'; parameter: Record<string, number>; noten: WNote[]; ausgang?: WZiel }
+  | { nr: number; art: 'wirt'; slot: number; noten: WNote[]; ausgang?: WZiel };
+export interface WGruppe { nr: number; ausgang: { art: 'master' } }   // Tiefe 1 (P2): eine Gruppe führt immer in den Master
+export interface Wiedergabe { format: typeof WIEDERGABE_FORMAT | typeof WIEDERGABE_FORMAT_2; nr: number; spuren: WSpur[]; gruppen?: WGruppe[] }
 
 export interface UebersetzOptionen {
   nr: number;                                                // Wiedergabe-Nummer (WiedergabeZaehler.naechste())
@@ -91,15 +100,30 @@ export function zaehleAusgerollt(p: Projekt): { clips: number; noten: number } {
   return { clips, noten };
 }
 
+// Marker der Wiedergabe: Clip-Beat der Kopie (der Marker-Beat minus versatz_beats, jede Kopie beginnt wieder bei versatz_beats) und Quell-Frame
+function warpMarker(c: AudioClip): [number, number][] | null {
+  if (!c.warp?.an) return null;
+  return c.warp.marker.map(([quellS, beat]) => [beat - c.warp!.versatz_beats, quellS * SAMPLERATE]);
+}
+
 function audioClips(c: AudioClip, o: Required<Pick<UebersetzOptionen, 'frames'>> & UebersetzOptionen): WAudioClip[] {
   if (c.dekodiert !== 'fertig') return [];                   // Spec 3.2: nur fertig dekodierte Clips
   const frames = o.frames!(c.quelle.sha256);
   if (frames === null) return [];                            // Datei fehlt oder leer: noch nicht spielbar
-  const offset = Math.round(c.offset_s * SAMPLERATE);
+  const marker = warpMarker(c);
+  const offset = marker ? 0 : Math.round(c.offset_s * SAMPLERATE);   // gewarpt liest der Kern nicht über offset_frames
   if (offset >= frames) return [];                           // hinter dem Dateiende: nichts zu spielen
   const datei = path.join(o.audioOrdner, `${c.quelle.sha256}.f32`);
   return audioKopien(c).map((k) => ({ id: k.id, start_beat: k.start_beat, laenge_beats: k.laenge_beats, sha256: c.quelle.sha256,
-    datei, frames, offset_frames: offset, gain_db: c.gain_db, ein_beats: k.ein_beats, aus_beats: k.aus_beats }));
+    datei, frames, offset_frames: offset, gain_db: c.gain_db, ein_beats: k.ein_beats, aus_beats: k.aus_beats,
+    ...(marker ? { warp: { modus: WARP_MODUS_NR[c.warp!.modus], w: marker.map((m): [number, number] => [m[0], m[1]]) } } : {}) }));
+}
+
+// Zahl der Warp-Marker aller Audio-Clips nach dem Ausrollen der Loops (jede Kopie trägt ihre Liste); der Kern lehnt über MAX_WARP_PUNKTE ab
+export function zaehleWarpMarker(p: Projekt): number {
+  let n = 0;
+  for (const s of p.spuren) for (const c of s.clips) if (c.art === 'audio' && c.warp?.an) n += c.warp.marker.length * audioKopien(c).length;
+  return n;
 }
 
 function noten(s: Spur): WNote[] {
@@ -116,7 +140,7 @@ export function uebersetze(p: Projekt, opt: UebersetzOptionen): Wiedergabe {
   if (p.spuren.length > MAX_SPUREN) throw new WiedergabeFehler('zu_gross', `spuren: ${p.spuren.length} > ${MAX_SPUREN}`);
   const o = { ...opt, frames: opt.frames ?? dateiFrames(opt.audioOrdner) };
   let clips = 0, nZahl = 0;
-  const spuren: WSpur[] = [...p.spuren].sort((a, b) => a.nr - b.nr).map((s): WSpur => {
+  const ohneZiel = (s: Spur): WSpur => {
     if (s.art === 'audio') {
       const cs = s.clips.flatMap((c) => (c.art === 'audio' ? audioClips(c, o) : []))
         .sort((a, b) => a.start_beat - b.start_beat || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
@@ -137,10 +161,25 @@ export function uebersetze(p: Projekt, opt: UebersetzOptionen): Wiedergabe {
     return g.art === 'intern'
       ? { nr: s.nr, art: 'intern', geraet: 'rb338', parameter: { ...g.parameter }, noten: n }
       : { nr: s.nr, art: 'wirt', slot: g.slot, noten: n };
+  };
+  // 1.10 (P2): Ziel je Spur; die Gruppen-Nummer, nicht die ID, steht in der Wiedergabe (der Kern kennt nur Nummern)
+  const nrVon = new Map((p.gruppen ?? []).map((g) => [g.id, g.nr] as const));
+  const spuren: WSpur[] = [...p.spuren].sort((a, b) => a.nr - b.nr).map((s): WSpur => {
+    const w = ohneZiel(s);
+    if (!s.ausgang) return w;
+    const nr = nrVon.get(s.ausgang.id);
+    if (nr === undefined) throw new WiedergabeFehler('ziel_unbekannt', `Spur ${s.id} zeigt auf ${s.ausgang.id}`);
+    return { ...w, ausgang: { art: 'gruppe' as const, nr } };
   });
   if (clips > MAX_CLIPS) throw new WiedergabeFehler('zu_gross', `clips: ${clips} > ${MAX_CLIPS}`);
   if (nZahl > MAX_NOTEN) throw new WiedergabeFehler('zu_gross', `noten: ${nZahl} > ${MAX_NOTEN}`);
-  return { format: WIEDERGABE_FORMAT, nr: opt.nr, spuren };
+  const routing = spuren.some((s) => s.ausgang) || (p.gruppen ?? []).length > 0;
+  // Paket 1.13: ein gewarpter Clip braucht /2 (der Kern lehnt warp in /1 ab); gruppen steht dann immer da, auch leer
+  const gewarpt = spuren.some((sp) => sp.art === 'audio' && sp.clips.some((c) => c.warp !== undefined));
+  if (gewarpt && zaehleWarpMarker(p) > MAX_WARP_PUNKTE) throw new WiedergabeFehler('zu_gross', `warp-marker: > ${MAX_WARP_PUNKTE}`);
+  if (!routing && !gewarpt) return { format: WIEDERGABE_FORMAT, nr: opt.nr, spuren };   // ohne Routing und Warp byteweise die alte Datei (AK3)
+  return { format: WIEDERGABE_FORMAT_2, nr: opt.nr, spuren,
+    gruppen: [...(p.gruppen ?? [])].sort((a, b) => a.nr - b.nr).map((g) => ({ nr: g.nr, ausgang: { art: 'master' as const } })) };
 }
 
 export const wiedergabeDatei = (arbeitsordner: string, nr: number): string => path.join(arbeitsordner, `wiedergabe-${nr}.json`);

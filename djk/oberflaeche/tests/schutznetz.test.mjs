@@ -12,7 +12,7 @@ import { Oberflaeche } from '../server.ts';
 import { schreibeLeerenRing } from './hilfen/ring.mjs';
 import { innen } from './hilfen/innen.mjs';
 import { baueBestand } from './hilfen/bestand.mjs';
-import { K, TEST_INSTANZ, belegeTestInstanz } from './hilfen/instanz.mjs';
+import { K, TEST_INSTANZ, belegeTestInstanz, serverInstanzSetzen } from './hilfen/instanz.mjs';
 belegeTestInstanz();
 
 const HIER = path.dirname(fileURLToPath(import.meta.url));
@@ -43,6 +43,7 @@ async function stapel(t, { loops, musterOrdner, wirtOrdner, klangBefehl, hotcueO
   });
   const log = [];
   const huellen = path.join(tmp('djk-huellen-'), 'huellen'); schreibeLeerenRing(huellen);
+  serverInstanzSetzen(t);   // I08 Nachzug R2 (m4)
   const o = new Oberflaeche({ port: 47300 + K, kernPort: 47100 + K, aboPort: 47150 + K, leitstandWs: 47200 + K, bestand: BESTAND, arbeitsbestand: ab,
     mutationen: [], loops: loops ?? tmp('djk-loops-'), kits: tmp('djk-kits-'), welleCache: tmp('djk-welle-'), musterOrdner: musterOrdner ?? tmp('djk-muster-'),
     hotcueOrdner: hotcueOrdner ?? tmp('djk-hc-'), rasterOrdner: tmp('djk-raster-'), huellen, wirtOrdner: wirtOrdner ?? tmp('djk-wirt-'), klangBefehl, log: (z) => log.push(z) });

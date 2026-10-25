@@ -28,8 +28,10 @@ export interface ProjZugang {
   naechsteNummer(): number;                                                              // Spec 6.25: Freeze-Kennung aus dem einen Wiedergabe-Zähler
   tempoAnMaster(): Promise<void>;                                                        // wirft deck_laeuft, wenn Master-Tempo abweicht und ein Deck läuft
   // Spec 6.23: gibt die Freigabe zurück; 6.32: wirft 409 beschaeftigt, solange ein Öffnen läuft
-  sperreLaden(): () => void;
+  sperreLaden(fuer?: 'aufnahme'): () => void;   // 1.8: 'aufnahme' darf den eigenen Transport starten (Nachbesserung 1, B1)
   ausgabeLauf(l: AusgabeLauf | null): void;                                              // Spec 6.34 (Paket S3): laufender Freeze/Export für GET /proj/aktuell
+  transport(d: Record<string, unknown>, quelle: 'andreas' | 'cypher'): Promise<Antwort>;                  // 1.8: der gewöhnliche Transport (Start/Stopp)
+  aufnahmeLauf(l: unknown): void;                                                                        // 1.8: laufende Aufnahme (sperrt Tempo-Änderungen)
 }
 export const KOERPER_MAX = 1024 * 1024;   // Spec 3.4: 1 MiB
 
@@ -75,8 +77,8 @@ const notenZahl = (p: Projekt): Record<string, number> => {
 };
 export function kurzeAntwort(r: Antwort): Antwort {
   if (r.code !== 200) return r;
-  const j = r.j as { rev: number; projekt: Projekt; kern?: Record<string, unknown> };
-  return { code: 200, j: { rev: j.rev, kern: j.kern ?? {}, noten_zahl: notenZahl(j.projekt) } };
+  const j = r.j as { rev: number; projekt: Projekt; kern?: Record<string, unknown>; hinweise?: unknown[] };
+  return { code: 200, j: { rev: j.rev, kern: j.kern ?? {}, noten_zahl: notenZahl(j.projekt), ...(j.hinweise ? { hinweise: j.hinweise } : {}) } };
 }
 // Spec 6.32: schmale Antwort für proj_oeffnen und proj_neu (Abfrage ?antwort=kurz): slug, rev, die Spuren (Clips ohne Noten, MIDI-Clips mit
 // noten_zahl), noten_zahl je Clip und die Kern-Meldungen. Bei 10.000 Noten statt rund 0,6 MB wenige hundert Bytes; die Seite fragt ohne Abfrage.
@@ -96,7 +98,8 @@ export function projBereich(ctx: BereichKontext, opt: ProjOptionen = {}): Bereic
   const zugang: ProjZugang = {
     offen: () => s.zugangOffen(), arbeitsordner: () => s.arbeitsordner, haken: () => s.zugangHaken(), uebernimm: (w, meta) => s.uebernimm(w, meta),
     schreibeWiedergabe: (p) => s.schreibeWiedergabeFuer(p), naechsteNummer: () => s.naechsteNummer(), tempoAnMaster: () => s.tempoAnMaster(),
-    sperreLaden: () => s.sperreLaden(), ausgabeLauf: (l) => s.setzeAusgabeLauf(l),
+    sperreLaden: (fuer) => s.sperreLaden(fuer), ausgabeLauf: (l) => s.setzeAusgabeLauf(l),
+    transport: (d, quelle) => s.transport(d, quelle), aufnahmeLauf: (l) => s.setzeAufnahmeLauf(l),
   };
   const antworte = async (a: http.ServerResponse, f: () => Antwort | Promise<Antwort>): Promise<void> => {
     let r: Antwort;
@@ -124,6 +127,17 @@ export function projBereich(ctx: BereichKontext, opt: ProjOptionen = {}): Bereic
       lies('/proj/aktuell', (url) => s.aktuell(url.searchParams.get('nur') === 'rev' ? 'rev'
         : url.searchParams.get('noten') === 'zahl' ? 'noten_zahl' : 'voll')),
       lies('/proj/verlauf', () => s.verlaufListe()),
+      // Paket 1.13: proj_warp (clip_id, von_beat, bis_beat, bei_beat als Projekt-Beats)
+      lies('/proj/warp', (url) => {
+        const zahlArg = (k: string): number | null => {
+          const t = url.searchParams.get(k);
+          if (t === null || t === '') return null;
+          const n = Number(t);
+          if (!Number.isFinite(n)) throw new ProjFehler(400, 'argument_ungueltig', { text: `${k}: a number is required` });
+          return n;
+        };
+        return s.warpLage(url.searchParams.get('clip_id'), zahlArg('von_beat'), zahlArg('bis_beat'), zahlArg('bei_beat'));
+      }),
       // Spec 6.32: ?antwort=kurz (Werkzeuge proj_neu, proj_oeffnen) liefert slug, rev, Spuren ohne Noten, noten_zahl und kern statt des Projekts
       schreib('/proj/neu', (d, quelle) => s.neu(d.name, quelle), kurzeOeffnenAntwort),
       schreib('/proj/oeffnen', (d, quelle) => s.oeffnen(d.slug, quelle), kurzeOeffnenAntwort),

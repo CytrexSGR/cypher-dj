@@ -1,6 +1,7 @@
 // D1 S2-Integration, Slice 6: KI-Stopp, KI-Maske, Kern-Neustart (Spec 2.12, 6.15, 6.22).
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { MAX_SPUREN } from '../projekt/modell.ts';
 import { sitzung, warteBis } from './hilfen/proj_kontext.mjs';
 
 test('KI-Maske beim Öffnen (Spec 6.15): auch ohne Cyphers Spuren geht die Liste hinaus (spur/0 leert die Spur-Maske)', async (t) => {
@@ -27,7 +28,7 @@ test('KI-Stopp: der Server stoppt keinen Transport (E-a), weder einen von Cypher
   assert.equal(k.an('/k/arr/stopp').length, 0, 'Negativ-Kontrolle: Andreas\' Transport ebenso');
 });
 
-test('Neustart des Kerns (Spec 2.12): letzte Wiedergabe neu laden, 32 Spur-Regler, Loop, Metronom, KI-Maske', async (t) => {
+test('Neustart des Kerns (Spec 2.12): letzte Wiedergabe neu laden, alle Spur-Regler (4 · MAX_SPUREN), Loop, Metronom, KI-Maske', async (t) => {
   const { s, k } = sitzung(t);
   s.ereignis('/k/willkommen', { generation: 1 });
   await s.neu('N', 'andreas');
@@ -39,7 +40,7 @@ test('Neustart des Kerns (Spec 2.12): letzte Wiedergabe neu laden, 32 Spur-Regle
   s.ereignis('/e/neustart', { generation: 2, sample: 0n });
   assert.ok(await warteBis(() => k.an('/k/ki/spur').length === 1));
   assert.deepEqual(k.an('/k/arr/laden').map((x) => x.felder.nr), [nr]);
-  assert.equal(k.teile(/^spur\//).length, 32);
+  assert.equal(k.teile(/^spur\//).length, 4 * MAX_SPUREN);
   assert.deepEqual(k.an('/k/arr/loop')[0].felder, { quelle: 'andreas', an: 1, von_beat: 0, bis_beat: 16 });
   assert.equal(k.an('/k/arr/metronom').length, 1);
 });

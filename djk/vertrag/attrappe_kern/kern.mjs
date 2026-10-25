@@ -109,8 +109,8 @@ export class Kern {
     if (def.felder[0] === 'id' && def.felder[1] === 'quelle') {
       b = { key: `${a.quelle}:${a.id}`, id: a.id, quelle: a.quelle, adresse: m.adresse, status: 0 };
       if (!QUELLEN.includes(a.quelle)) return this.q(b, 6, 'ausserhalb_bereich');
-      // §4.7: weitere cypher-Befehle abgelehnt; D1 Spec 6.27: /k/arr/stopp bleibt erlaubt (Anhalten ist die sichere Richtung)
-      if (a.quelle === 'cypher' && this.ki?.gestoppt && (m.adresse !== '/k/arr/stopp' || this.mutation.has('arr_ki_stopp_ab')))
+      // §4.7: weitere cypher-Befehle abgelehnt; D1 Spec 6.27: /k/arr/stopp bleibt erlaubt, ebenso /k/rec/stopp (1.8) (Anhalten ist die sichere Richtung)
+      if (a.quelle === 'cypher' && this.ki?.gestoppt && ((m.adresse !== '/k/arr/stopp' && m.adresse !== '/k/rec/stopp') || this.mutation.has('arr_ki_stopp_ab')))
         return this.q(b, 6, 'ki_gestoppt');
     }
     this.stempel = this.jetzt;

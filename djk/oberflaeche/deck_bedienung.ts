@@ -24,6 +24,17 @@ export function sprungDelta(o: { laeuft: boolean; quell: number; beat: number; a
   return o.raster > 0 ? o.raster * Math.round(roh / o.raster) : roh;
 }
 
+// Loop-Start auf dem Track-Raster (Plan 2026-10-21 L1–L3). Steht das Deck, rastet der Start wie ein Sprungziel auf das gewählte
+// Raster ab der Takt-Eins. Läuft es, zählt der Kopf bei ab_beat (Faktor 1 im Direktweg) und wird nur auf den Beat gerundet
+// (bei Raster ¼ aufs Viertel): ein Takt-Raster könnte den Start bis zu 2 Beats vom Kopf wegsetzen. Raster 0 = Kopf.
+export function loopStart(o: { laeuft: boolean; quell: number; beat: number; ab: number; raster: number; eins: number }): number {
+  const kopf = o.laeuft ? o.quell + (o.ab - o.beat) : o.quell;
+  if (!(o.raster > 0)) return kopf;
+  // vor der Takt-Eins kann die nächste Rasterstelle negativ sein (Eins bei Quell-Beat 3, Kopf 0): dann die erste Stelle ≥ 0
+  const r = o.laeuft ? Math.min(o.raster, 1) : o.raster, s = rasterStelle(kopf, r, o.eins);
+  return s < 0 ? s + r * Math.ceil(-s / r) : s;
+}
+
 // Nächste Rasterstelle, gezählt ab der Takt-Eins (erste_eins_quell_beat): bei 24 von 42 Fassungen ist sie ≠ 0 mod 4.
 export function rasterStelle(q: number, r: number, eins: number): number {
   return eins + r * Math.round((q - eins) / r);

@@ -86,6 +86,14 @@ OF2=$(grep '^ExecStart=' "$O/v/cypherdj-oberflaeche.service" 2>/dev/null)
 CYPHERDJ_MEDIATHEK="/tmp/mit leer/m.sqlite" lauf "$O/a3d.txt" "$START/djk-start" "${VN[@]}" "$O/v2"; R3=$?
 [ "$R" = 0 ] && [[ "$OF" == *"--mediathek /tmp/mt-pruef/mediathek.sqlite"* ]] && [ "$R2" = 0 ] && [ -n "$OF2" ] && [[ "$OF2" != *"--mediathek"* ]] && [ "$R3" = 2 ]
 pruef $? "A3b Mediathek-Pfad: mit Variable ($R) durchgereicht, ohne ($R2) keine Option, mit Leerzeichen ($R3, erwartet 2)"
+# A3e Katalog-Pfad (Paket 1.13): CYPHERDJ_KATALOG wird als --katalog durchgereicht, ohne Variable fehlt die Option, Leerzeichen -> 2
+rm -rf "$O/v"; CYPHERDJ_KATALOG=/tmp/w1-ziel/katalog.sqlite lauf "$O/a3e.txt" "$START/djk-start" "${VN[@]}" "$O/v"; R=$?
+OF=$(grep '^ExecStart=' "$O/v/cypherdj-oberflaeche.service" 2>/dev/null)
+rm -rf "$O/v"; lauf "$O/a3f.txt" env -u CYPHERDJ_KATALOG CYPHERDJ_UMGEBUNG=/nicht/da "$START/djk-start" "${VN[@]}" "$O/v"; R2=$?
+OF2=$(grep '^ExecStart=' "$O/v/cypherdj-oberflaeche.service" 2>/dev/null)
+CYPHERDJ_KATALOG="/tmp/mit leer/k.sqlite" lauf "$O/a3g.txt" "$START/djk-start" "${VN[@]}" "$O/v2"; R3=$?
+[ "$R" = 0 ] && [[ "$OF" == *"--katalog /tmp/w1-ziel/katalog.sqlite"* ]] && [ "$R2" = 0 ] && [ -n "$OF2" ] && [[ "$OF2" != *"--katalog"* ]] && [ "$R3" = 2 ]
+pruef $? "A3e Katalog-Pfad: mit Variable ($R) durchgereicht, ohne ($R2) keine Option, mit Leerzeichen ($R3, erwartet 2)"
 
 # A5 Riegel
 for z in "alsa_output.stummschalter_echt:playback_F" "echt_stumm:playback_F" "cypher_stumm_echt:playback_F"; do

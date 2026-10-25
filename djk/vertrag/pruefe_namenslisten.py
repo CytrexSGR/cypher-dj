@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Vertragstest L3: Namenslisten für Tasten, Deck-Aktionen und Regler-Pfade gegeneinander.
+1.10 Slice 1: dazu grp/<n>/* und pm/fader in denselben Fundorten.
 D1 K1 (Spec A11): dazu die Spur-Regler spur/<n>/* in allen sieben Fundorten (Kern-Tabelle regler.cpp, §1.5,
 Attrappe REGLER, kurven.js ZIELE, regler_info.ts, hand_bedienung.PFAD, defs.schema.json regler_pfad) und die Gründe
 (§16.2 mit Kern als Vergeber gegen Attrappe GRUENDE, Attrappe GRUENDE gegen osc.json, Grund-Literale im Kern-Quelltext
@@ -539,6 +540,81 @@ def _pruefe_spur_regler(q: Quelle, befunde: list[str]) -> None:
             befunde.append(f"Spur-Regler: R07 defs.schema.json regler_pfad nimmt {falsch} an")
 
 
+# ---------------------------------------------------------------- 1.10 Slice 1: Gruppen-Regler und PM in allen Fundorten (A11)
+def routing_regler_listen(q: Quelle) -> tuple[int, dict[str, list[str]]]:
+    """grp/<n>/* und pm/fader je Fundort; n = GRP_REGLER_GRUPPEN aus regler.h. Nur im Arbeitsbaum (node)."""
+    regler_h = q.lies("djk/kern/stellwerk/include/cypherdj/stellwerk/regler.h")
+    n = int(_such(r"constexpr int GRP_REGLER_GRUPPEN = (\d+);", regler_h, "regler.h").group(1))
+    cpp = q.lies("djk/kern/stellwerk/src/regler.cpp")
+    felder = re.findall(r'"grp/%d/([a-z_]+)"', cpp)
+    if not felder:
+        raise ParserFehler("regler.cpp: kein Pfad grp/%d/…, Parser blind oder Quelle umgebaut")
+    if '"pm/fader"' not in cpp:
+        raise ParserFehler("regler.cpp: kein Pfad pm/fader, Parser blind oder Quelle umgebaut")
+    spec = q.lies("docs/architektur/SCHNITTSTELLEN.md")
+    teil = spec[_index(spec, "### 1.5 Kanäle und Regler-Pfade", "§1.5"):_index(spec, "### 1.6", "§1.5")]
+    zeilen = re.findall(r"^\| `grp/<n>/([a-z_]+)` \|", teil, re.M)
+    if not zeilen or not re.search(r"^\| `pm/fader` \|", teil, re.M):
+        raise ParserFehler("SCHNITTSTELLEN §1.5: keine Zeile grp/<n>/… oder pm/fader, Parser blind oder Quelle umgebaut")
+    alle = lambda fs: sorted([f"grp/{i}/{f}" for i in range(1, n + 1) for f in fs] + ["pm/fader"])   # noqa: E731
+    aus = q.node_json(
+        "const v=await import('file://@@/djk/vertrag/attrappe_kern/vertrag.mjs');"
+        "const k=await import('file://@@/djk/oberflaeche/oeffentlich/kurven.js');"
+        "const l=await import('file://@@/djk/leitstand/src/regler_info.ts');"
+        "const s=(m)=>[...m].filter((p)=>p.startsWith('grp/')||p==='pm/fader');"
+        "console.log(JSON.stringify({a:s(v.REGLER.keys()),z:s(k.ZIELE),l:s(l.REGLER.keys())}))")
+    return n, {"R01 Kern regler.cpp": alle(felder), "R02 SCHNITTSTELLEN §1.5": alle(zeilen),
+               "R03 Attrappe REGLER": sorted(aus["a"]), "R04 kurven.js ZIELE": sorted(aus["z"]),
+               "R05 regler_info.ts": sorted(aus["l"])}
+
+
+def routing_fader_bereiche(q: Quelle) -> dict[str, tuple[float, float, float]]:
+    """(min, max, vorgabe) von pm/fader je Fundort mit Wertebereich (−200..+6, Vorgabe 0). Nur im Arbeitsbaum."""
+    cpp = q.lies("djk/kern/stellwerk/src/regler.cpp")
+    m = _such(r'neu\("pm/fader", -1, Rolle::pm_fader, (-?[\d.]+)f?, (-?[\d.]+)f?, (-?[\d.]+)f?,', cpp, "regler.cpp pm_fader")
+    spec = q.lies("docs/architektur/SCHNITTSTELLEN.md")
+    teil = spec[_index(spec, "### 1.5 Kanäle und Regler-Pfade", "§1.5"):_index(spec, "### 1.6", "§1.5")]
+    z = _such(r"^\| `pm/fader` \| dB \| (\S+) bis (\S+) \| (\S+) \|", teil, "SCHNITTSTELLEN §1.5 pm/fader", re.M)
+    aus = q.node_json(
+        "const v=await import('file://@@/djk/vertrag/attrappe_kern/vertrag.mjs');"
+        "const k=await import('file://@@/djk/oberflaeche/oeffentlich/kurven.js');"
+        "const l=await import('file://@@/djk/leitstand/src/regler_info.ts');"
+        "const p='pm/fader',a=v.REGLER.get(p),r=l.REGLER.get(p);"
+        "console.log(JSON.stringify({a:[a.min,a.max,a.vorgabe],l:[r.min,r.max,r.vorgabe],"
+        "k:[k.wertAusMidi(p,0),k.wertAusMidi(p,1),k.vorgabe(p)]}))")
+    return {"R01 Kern regler.cpp": (_db(m.group(1)), _db(m.group(2)), _db(m.group(3))),
+            "R02 SCHNITTSTELLEN §1.5": (_db(z.group(1)), _db(z.group(2)), _db(z.group(3))),
+            "R03 Attrappe REGLER": tuple(aus["a"]), "R04 kurven.js (Griff 0 und 1, Vorgabe)": tuple(aus["k"]),
+            "R05 regler_info.ts": tuple(aus["l"])}
+
+
+def _pruefe_routing_regler(q: Quelle, befunde: list[str]) -> None:
+    for name, ist in (bereiche := routing_fader_bereiche(q)).items():
+        if any(abs(a - b) > 1e-3 for a, b in zip(ist, bereiche["R01 Kern regler.cpp"])):
+            befunde.append(f"Routing-Fader-Bereich=Kern: {name} (min, max, vorgabe) {ist} statt {bereiche['R01 Kern regler.cpp']}")
+    n, listen = routing_regler_listen(q)
+    soll = listen["R01 Kern regler.cpp"]
+    for name, ist in listen.items():
+        if name != "R01 Kern regler.cpp":
+            _diff(befunde, "Routing-Regler=Kern", soll, ist, name)
+    pfad = re.compile(_such(r"export const PFAD = /(.*)/;", q.lies("djk/oberflaeche/hand_bedienung.ts"),
+                            "hand_bedienung.ts").group(1).replace("\\/", "/"))
+    try:
+        schema = json.loads(q.lies("djk/vertrag/schemas/defs.schema.json"))["$defs"]["regler_pfad"]["pattern"]
+    except (ValueError, KeyError) as fehler:
+        raise ParserFehler(f"defs.schema.json: kein $defs.regler_pfad.pattern ({fehler})") from fehler
+    for name in soll:
+        if not pfad.search(name):
+            befunde.append(f"Routing-Regler: R06 hand_bedienung.PFAD lehnt {name} ab")
+        if not re.fullmatch(schema, name):
+            befunde.append(f"Routing-Regler: R07 defs.schema.json regler_pfad lehnt {name} ab")
+    for falsch in (f"grp/{n + 1}/fader", "grp/0/fader", "grp/1/trim", "pm/pan", "pm/fader/x"):   # Gegenprobe: kein Muster zu weit
+        if pfad.search(falsch):
+            befunde.append(f"Routing-Regler: R06 hand_bedienung.PFAD nimmt {falsch} an")
+        if re.fullmatch(schema, falsch):
+            befunde.append(f"Routing-Regler: R07 defs.schema.json regler_pfad nimmt {falsch} an")
+
+
 # ---------------------------------------------------------------- D1 K1: Gründe (A11)
 _GRUND_LITERALE = [r'quittung\([^;]*?"([a-z_]+)"\s*\)', r'\bab\("([a-z_]+)"\)', r'Abbruch\("([a-z_]+)"',
                    r'\bgrund = "([a-z_]+)"']
@@ -636,6 +712,7 @@ def pruefe(q: Quelle) -> list[str]:
     else:
         _pruefe_regler(q, befunde)
         _pruefe_spur_regler(q, befunde)   # D1 K1
+        _pruefe_routing_regler(q, befunde)   # 1.10 Slice 1
         _pruefe_gruende(q, befunde)       # D1 K1
         _pruefe_zielarten(q, befunde)     # D1 K1 Slice 10
     for schluessel in AUSNAHMEN:

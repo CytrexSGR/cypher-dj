@@ -62,12 +62,19 @@ for (const [p, e] of Object.entries({
   'color/art': r('stufe', 0, 5, 0), 'color/param': r('linear', 0, 1, 0.5),   // SOUND COLOR FX, alle dürfen
   keylock: r('schalter', 0, 1, 1),   // Keylock 3 (Fassung 4): EIN Knopf für alle Quellen, alle dürfen
 })) tabelle.set(p, { pfad: p, kanal: null, ...e });
-for (let n = 1; n <= 8; n++) {   // D1 K1 (§1.5): Spur-Regler des Arrangements, global, alle dürfen; Fader bis +6 dB (Spec 6.16)
+for (let n = 1; n <= 32; n++) {   // D1 K1 (§1.5), E3: 32 Slots: Spur-Regler des Arrangements, global, alle dürfen; Fader bis +6 dB (Spec 6.16)
   tabelle.set(`spur/${n}/fader`, { pfad: `spur/${n}/fader`, kanal: null, ...r('db', -200, 6, 0) });
   tabelle.set(`spur/${n}/pan`, { pfad: `spur/${n}/pan`, kanal: null, ...r('linear', -1, 1, 0) });
   tabelle.set(`spur/${n}/mute`, { pfad: `spur/${n}/mute`, kanal: null, ...r('schalter', 0, 1, 0) });
   tabelle.set(`spur/${n}/solo`, { pfad: `spur/${n}/solo`, kanal: null, ...r('schalter', 0, 1, 0) });
 }
+for (let n = 1; n <= 8; n++) {   // 1.10 Slice 1 (§1.5): Gruppen-Regler des Arrangements, global, alle dürfen; Fader bis +6 dB
+  tabelle.set(`grp/${n}/fader`, { pfad: `grp/${n}/fader`, kanal: null, ...r('db', -200, 6, 0) });
+  tabelle.set(`grp/${n}/pan`, { pfad: `grp/${n}/pan`, kanal: null, ...r('linear', -1, 1, 0) });
+  tabelle.set(`grp/${n}/mute`, { pfad: `grp/${n}/mute`, kanal: null, ...r('schalter', 0, 1, 0) });
+  tabelle.set(`grp/${n}/solo`, { pfad: `grp/${n}/solo`, kanal: null, ...r('schalter', 0, 1, 0) });
+}
+tabelle.set('pm/fader', { pfad: 'pm/fader', kanal: null, ...r('db', -200, 6, 0) });
 
 export const REGLER: ReadonlyMap<string, ReglerInfo> = tabelle;
 

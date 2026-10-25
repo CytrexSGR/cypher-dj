@@ -21,8 +21,9 @@ export const LOOPBOXEN = ['pad/1', 'pad/2'];  // Loop-Boxen L1, L2 (MVP 2, ADR 0
 const KANALZUG = ['fader', 'trim', 'eq/hoch', 'eq/mitte', 'eq/tief', 'kill/hoch', 'kill/mitte', 'kill/tief', 'filter', 'pfl'];
 const DECK_TASTEN = ['play', 'cue'];
 const DECK_ZUWEISUNG = ['xseite'];  // Crossfader-Seite A/THRU/B, §1.5 „nur Hand“ (2026-09-27)
-export const SPUREN = [1, 2, 3, 4, 5, 6, 7, 8];   // D1 K1: Spur-Regler des Arrangements (§1.5 spur/<n>/*)
+export const SPUREN = Array.from({ length: 32 }, (_, i) => i + 1);   // D1 K1: Spur-Regler des Arrangements (§1.5 spur/<n>/*)
 const SPUR_REGLER = ['fader', 'pan', 'mute', 'solo'];
+export const GRUPPEN = Array.from({ length: 8 }, (_, i) => i + 1);   // 1.10 Slice 1: Gruppen-Regler des Arrangements (§1.5 grp/<n>/*)
 
 // Jeder Pfad, den die Seite greifen darf; alles andere lehnt der Server ab (unbekanntes_ziel), ohne zu senden.
 // 60m-Nachtrag: PFL je Deck, Master-Pegel, Kopfhörer (cue/mix, cue/pegel), alle §1.5 „nur Hand“.
@@ -33,6 +34,8 @@ export const ZIELE = new Set([
   'xfader', 'master/pegel', 'master/kleber', 'cue/mix', 'cue/pegel',   // kleber (K2): Schwelle des Summen-Kompressors, nur Hand
   'master/pfl',   // MASTER CUE (2026-10-10): Master auf die PFL-Seite des Kopfhörers, nur Hand
   ...SPUREN.flatMap((n) => SPUR_REGLER.map((p) => `spur/${n}/${p}`)),   // D1 K1: Spur-Mixer der Produktion
+  ...GRUPPEN.flatMap((n) => SPUR_REGLER.map((p) => `grp/${n}/${p}`)),   // 1.10: Gruppen-Mixer der Produktion
+  'pm/fader',                                                          // 1.10: Fader des Produktions-Masters
 ]);
 
 // §1.5-Bereich je Regler-Art (Einheit wie im Vertrag)
@@ -48,8 +51,11 @@ export function art(pfad) {
   if (pfad === 'cue/mix') return 'mix';
   if (pfad === 'master/kleber') return 'kleber';
   if (pfad === 'master/pfl') return 'pfl';
-  const sp = /^spur\/[1-8]\/(fader|pan|mute|solo)$/.exec(pfad);   // D1 K1
+  const sp = /^spur\/(?:[1-9]|[12][0-9]|3[0-2])\/(fader|pan|mute|solo)$/.exec(pfad);   // D1 K1
   if (sp) return sp[1] === 'fader' ? 'spur_fader' : sp[1] === 'pan' ? 'pan' : 'schalter';
+  const gp = /^grp\/[1-8]\/(fader|pan|mute|solo)$/.exec(pfad);   // 1.10: wie die Spur-Regler
+  if (gp) return gp[1] === 'fader' ? 'spur_fader' : gp[1] === 'pan' ? 'pan' : 'schalter';
+  if (pfad === 'pm/fader') return 'spur_fader';
   const m = /^(?:deck\/[12]|erz\/[1-3]|pad\/[12])\/(fader|trim|eq|kill|filter|pfl|xseite|play|cue)(\/|$)/.exec(pfad);
   if (!m) return null;
   return m[1] === 'play' || m[1] === 'cue' ? 'taste' : m[1];

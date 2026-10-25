@@ -28,6 +28,11 @@ def standard_bestand():
     return Path(os.environ.get("CYPHERDJ_BESTAND", Path.home() / "cypher-dj" / "bestand"))
 
 
+def standard_ablage():
+    """Analyse-Ablage des Nachtlaufs (einlesen nur_analyse); Daten gehoeren nach ~/werkstatt (Platte disk2)."""
+    return Path(os.environ.get("CYPHERDJ_ANALYSE", Path.home() / "werkstatt" / "cypher-dj-analyse"))
+
+
 def sha256_datei(pfad):
     h = hashlib.sha256()
     with open(pfad, "rb") as f:

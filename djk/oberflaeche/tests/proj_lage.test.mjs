@@ -6,6 +6,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { KernLage } from '../bereiche/proj/lage.ts';
 import * as AB from '../bereiche/proj/abbildung.ts';
+import { reglerEinzeln } from '../bereiche/proj/ausgabe.ts';
+import { MAX_SPUREN } from '../projekt/modell.ts';
 import { arrOrdner } from '../bereiche/proj/konfig.ts';
 import { tempoRampe, abBeatVon } from '../tempo_rampe.ts';
 import { specProjekt, tmpOrdner } from './hilfen/projekt.mjs';
@@ -46,13 +48,16 @@ test('abbildung: Gründe → HTTP (400, 404, 409, 413, 503)', () => {
   assert.equal(AB.grundCode('koerper_zu_gross'), 413); assert.equal(AB.grundCode('katalog_fehlt'), 503);
 });
 
-test('abbildung: alle 32 Spur-Regler, belegte Slots mit Werten (mute/solo 0/1), freie mit der Vorgabe; erz/4 neutral ohne nur-Hand-Pfade', () => {
+test('abbildung: alle 4 · MAX_SPUREN Spur-Regler, belegte Slots mit Werten (mute/solo 0/1), freie mit der Vorgabe; erz/4 neutral ohne nur-Hand-Pfade', () => {
   const p = specProjekt(); p.spuren[1].fader_db = -6; p.spuren[1].pan = 0.25; p.spuren[1].mute = true;
   const r = AB.alleSpurRegler(p);
-  assert.equal(r.length, 32);
+  assert.equal(r.length, 4 * MAX_SPUREN);
+  assert.equal(r.length, 128, 'MAX_SPUREN = 32');
   const w = Object.fromEntries(r.map((x) => [x.pfad, x.wert]));
   assert.deepEqual([w['spur/2/fader'], w['spur/2/pan'], w['spur/2/mute'], w['spur/2/solo']], [-6, 0.25, 1, 0]);
   assert.deepEqual([w['spur/8/fader'], w['spur/8/pan'], w['spur/8/mute'], w['spur/8/solo']], [0, 0, 0, 0]);
+  assert.deepEqual([w[`spur/${MAX_SPUREN}/fader`], w[`spur/${MAX_SPUREN}/pan`], w[`spur/${MAX_SPUREN}/mute`], w[`spur/${MAX_SPUREN}/solo`]], [0, 0, 0, 0], 'T08: die letzte Spur ist dabei');
+  assert.ok(`spur/${MAX_SPUREN}/solo` in w); assert.ok(!(`spur/${MAX_SPUREN + 1}/solo` in w));
   assert.ok(!AB.ERZ4_NEUTRAL.some((x) => x.pfad === 'erz/4/ziel' || x.pfad === 'erz/4/xseite'), 'nur Hand: bei Quelle cypher lehnt der Kern nur_hand ab');
   assert.deepEqual(AB.ERZ4_NUR_HAND.map((x) => x.pfad), ['erz/4/ziel', 'erz/4/xseite']);
   // P6: bei Quelle andreas gehören ziel=0 und xseite=1 in die Sollliste (der Kern lehnt nur_hand nur bei cypher ab, einsortieren.cpp:38)
@@ -71,6 +76,13 @@ test('abbildung: Rückweg /e/regler → spur_aendern (Nummer → ID, 0/1 → boo
   assert.equal(AB.reglerZuBefehl(p, 'spur/5/fader', -3), null, 'keine Spur auf Slot 5');
   assert.equal(AB.reglerZuBefehl(p, 'erz/4/fader', -3), null);
   assert.equal(AB.reglerZuBefehl(p, 'spur/1/fader', NaN), null);
+  // E3 Task 10: der Rückweg kennt zweistellige Spuren bis MAX_SPUREN. Vorher (Muster [1-8]) kam der Wert von Spur 10 still nicht an.
+  const q = specProjekt(); q.spuren.push({ id: `s${MAX_SPUREN}`, nr: MAX_SPUREN, name: 'Zehn', farbe: '#000000', art: 'audio', fader_db: 0, pan: 0, mute: false, solo: false, clips: [] });
+  assert.deepEqual(AB.reglerZuBefehl(q, `spur/${MAX_SPUREN}/fader`, -20), { befehl: { befehl: 'spur_aendern', spur_id: `s${MAX_SPUREN}`, fader_db: -20 }, label: 'Mixer: Zehn fader' });
+  assert.deepEqual(AB.reglerZuBefehl(q, 'spur/9/fader', -20), null, 'Negativ-Kontrolle: Slot 9 ist leer');
+  assert.equal(AB.reglerZuBefehl(q, `spur/${MAX_SPUREN + 1}/fader`, -20), null, 'über MAX_SPUREN: kein Befehl');
+  assert.equal(AB.reglerZuBefehl(q, `spur/${MAX_SPUREN + 23}/fader`, -20), null);
+  assert.equal(AB.reglerZuBefehl(q, 'spur/010/fader', -20), null, 'führende Null ist kein Pfad');
 });
 
 test('konfig: arr_ordner aus kern.toml (mit Instanz umgeschrieben), leer oder fehlend: Vorgabe ~/.cache/cypherdj[-<i>]/arr', (t) => {
@@ -91,4 +103,16 @@ test('tempo_rampe: nächster Takt, 4 Beats, auf 0,01 gerundet, 60..200; außerha
   assert.equal(tempoRampe(5.2, 120, 59.99), null); assert.equal(tempoRampe(5.2, 120, 200.01), null); assert.equal(tempoRampe(5.2, 120, NaN), null);
   assert.equal(tempoRampe(5.2, 120, '120'), null);
   assert.ok(abBeatVon(5.2, 120, 'jetzt') > 5.2 && abBeatVon(5.2, 120, 'jetzt') < 5.4, 'jetzt = Beat plus Vorlauf');
+});
+
+test('ausgabe: Regler für den Einzel-Render stummen alle Slots bis MAX_SPUREN außer der Spur (Spur 10 wird nicht vergessen)', () => {
+  const p = specProjekt(); const s = p.spuren[0]; s.fader_db = -3; s.pan = 0.5;
+  const r = reglerEinzeln(s);
+  for (let n = 2; n <= MAX_SPUREN; n++) assert.equal(r[`spur/${n}/mute`], 1, `spur/${n} stumm`);
+  assert.equal(r[`spur/${MAX_SPUREN}/mute`], 1);
+  assert.equal(r['spur/1/mute'], 0); assert.equal(r['spur/1/fader'], -3); assert.equal(r['spur/1/pan'], 0.5);
+  assert.ok(!(`spur/${MAX_SPUREN + 1}/mute` in r), 'nicht über MAX_SPUREN hinaus');
+  assert.equal(Object.keys(r).filter((k) => k.endsWith('/solo')).length, MAX_SPUREN);
+  const z = reglerEinzeln({ ...s, nr: MAX_SPUREN, mute: true });
+  assert.equal(z[`spur/${MAX_SPUREN}/mute`], 1); assert.equal(z['spur/1/mute'], 1, 'Spur 10 allein: Spur 1 stumm');
 });

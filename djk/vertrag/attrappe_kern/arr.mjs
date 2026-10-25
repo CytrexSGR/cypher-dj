@@ -27,9 +27,9 @@ const VORHALT = 2 * N + 25;
 function melde(K, s) {
   const a = K.arr;
   const p = a.status === 2 ? K.uhr.beat(s) - a.ursprung + a.start_beat : a.start_beat;
-  const w = [a.nr, a.status, a.loop.an ? 1 : 0, p, BigInt(a.start_s), a.start_beat, a.metro.an ? 1 : 0];
+  const w = [a.nr, a.status, a.loop.an ? 1 : 0, p, BigInt(a.start_s), a.start_beat, a.metro.an ? 1 : 0, 0.0];   // 1.10 Slice 2: limiter_db (die Attrappe hat keinen Limiter: immer 0)
   if (a.freeze && a.status !== 0) w[1] = 3;   // Paket K3: Status freeze, solange er wartet oder läuft (wie der Kern)
-  if (K.mutation.has('arr_zustand_alt')) w.pop();   // Fehlerfall: Form ohne metronom_an (der Vertragstest muss es sehen)
+  if (K.mutation.has('arr_zustand_alt')) w.pop();   // Fehlerfall: Form ohne das letzte Feld (limiter_db), der Vertragstest muss es sehen
   K.aus('/zustand/arr', w);
 }
 
@@ -149,7 +149,7 @@ export default {
       beidesQ(K, b, () => { K.arr.metro = { an: a.an === 1, pegel_db: a.pegel_db, ziel: a.ziel }; });
     },
     '/k/arr/freeze': (K, a, b) => {   // Paket K3 (KI-Stopp für cypher prüft kern.mjs vor allem anderen)
-      if (!(a.spur >= 1 && a.spur <= 8) || !(a.von_beat >= 0) || !(a.bis_beat - a.von_beat >= 1) ||
+      if (!(a.spur >= 1 && a.spur <= 32) || !(a.von_beat >= 0) || !(a.bis_beat - a.von_beat >= 1) ||
           !(a.bis_beat - a.von_beat <= 256) || !(a.kennung >= 0))
         return K.q(b, 6, 'ausserhalb_bereich');
       const A = K.arr;

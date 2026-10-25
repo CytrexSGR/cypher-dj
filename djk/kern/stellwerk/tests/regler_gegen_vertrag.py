@@ -14,6 +14,8 @@ import re
 import subprocess
 import sys
 
+SPUREN = [0]   # E3: Zahl der Spur-Slots, aus dem Vertragstext gelesen (`spur/<n>/*` ... n = 1 bis N), nicht fest verdrahtet
+GRUPPEN = [0]   # 1.10: Zahl der Gruppen-Slots, aus dem Vertragstext gelesen (`grp/<n>/*` ... n = 1 bis N)
 KANAELE = [f'deck/{i}' for i in range(1, 5)] + [f'erz/{i}' for i in range(1, 9)] + [f'pad/{i}' for i in (1, 2)] + \
           [f'bus/{i}' for i in range(1, 5)]
 FX_N = {'rueckkopplung': (1, 2), 'rueckweg': (1, 2, 3, 4), 'notenwert': (1, 2)}
@@ -68,8 +70,10 @@ def expandiere(p):
         return [f'{k}/{rest}' for k in KANAELE if not (k.startswith('bus/') and (rest == 'ziel' or rest.startswith('komp/')))]
     if p.startswith('deck/<n>/'):
         return [f'deck/{i}/{p[9:]}' for i in range(1, 5)]
-    if p.startswith('spur/<n>/'):                       # D1 K1: Spur-Regler des Arrangements, n = 1..8
-        return [f'spur/{i}/{p[9:]}' for i in range(1, 9)]
+    if p.startswith('spur/<n>/'):                       # D1 K1: Spur-Regler des Arrangements, n = 1..32
+        return [f'spur/{i}/{p[9:]}' for i in range(1, SPUREN[0] + 1)]
+    if p.startswith('grp/<n>/'):                        # 1.10 Slice 1: Gruppen-Regler des Arrangements, n = 1..8
+        return [f'grp/{i}/{p[8:]}' for i in range(1, GRUPPEN[0] + 1)]
     if p.startswith('fx/<n>/'):
         rest = p[7:]
         return [f'fx/{i}/{rest}' for i in FX_N[rest]]
@@ -79,6 +83,12 @@ def expandiere(p):
 def vertrag(text):
     ab = text.index('### 1.5 Kanäle und Regler-Pfade')
     bis = text.index('### 1.6', ab)
+    m = re.search(r'`spur/<n>/\*`[^\n]*?n = 1 bis (\d+)', text[ab:bis])
+    assert m, 'Vertrag §1.5: der Satz "`spur/<n>/*` (...n = 1 bis N)" fehlt'
+    SPUREN[0] = int(m.group(1))   # Text sagt 8, Kern hat 32 Pfade: "im Stellwerk, nicht im Vertrag"; umgekehrt "fehlt im Stellwerk"
+    mg = re.search(r'`grp/<n>/\*`[^\n]*?n = 1 bis (\d+)', text[ab:bis])
+    assert mg, 'Vertrag §1.5: der Satz "`grp/<n>/*` (...n = 1 bis N)" fehlt'
+    GRUPPEN[0] = int(mg.group(1))
     erg = {}
     for zeile in text[ab:bis].splitlines():
         if not zeile.startswith('| `'):
@@ -131,11 +141,27 @@ def main():
         '| 10 ms | alle; `bus/<n>/fader` nur Hand |', '| 10 ms | nur Hand |')
     assert falsch != text, 'Selbsttest: Zeilen im Vertrag nicht gefunden'
     f_falsch = abgleich(bib, vertrag(falsch))
-    soll = {p for p in bib if '/kill/' in p} | {p for p in bib if p.endswith('/fader') and not p.startswith(('bus/', 'spur/'))}
+    soll = {p for p in bib if '/kill/' in p} | {p for p in bib if p.endswith('/fader') and not p.startswith(('bus/', 'spur/', 'grp/', 'pm/'))}
     ist = {f.split(':')[0] for f in f_falsch}
     print(f'Selbsttest verfälschter Vertrag: {len(f_falsch)} Abweichungen, erwartet {len(soll)} (alle Kills, Fader außer Bus)')
     if ist != soll or len(f_falsch) != len(soll):
         print('FEHLER: der Abgleich sieht den verfälschten Vertrag nicht wie erwartet', sorted(ist ^ soll)[:5])
+        return 1
+    # Selbsttest 2 (E3 Review-Nachzug): sagt der Vertragstext „n = 1 bis 8“, muss der Abgleich die 96 Pfade der Slots 9 bis 32 melden
+    acht = text.replace('n = 1 bis 32', 'n = 1 bis 8')
+    assert acht != text, 'Selbsttest: Satz "n = 1 bis 32" im Vertrag nicht gefunden'
+    f_acht = abgleich(bib, vertrag(acht))
+    print(f'Selbsttest Vertragstext n = 1 bis 8: {len(f_acht)} Abweichungen, erwartet 96 (Slots 9 bis 32 mal 4 Regler)')
+    if len(f_acht) != 96:
+        print('FEHLER: der Abgleich liest den Bereich nicht aus dem Vertragstext')
+        return 1
+    # Selbsttest 3 (1.10): sagt der Vertragstext „n = 1 bis 4“ für die Gruppen, muss der Abgleich die 16 Pfade der Gruppen 5 bis 8 melden
+    satz = '`grp/<n>/*` (1.10, ADR 033, n = 1 bis 8)'
+    assert satz in text, 'Selbsttest: Satz der Gruppen-Regler im Vertrag nicht gefunden'
+    f_vier = abgleich(bib, vertrag(text.replace(satz, satz.replace('n = 1 bis 8', 'n = 1 bis 4'))))
+    print(f'Selbsttest Vertragstext Gruppen n = 1 bis 4: {len(f_vier)} Abweichungen, erwartet 16 (Gruppen 5 bis 8 mal 4 Regler)')
+    if len(f_vier) != 16:
+        print('FEHLER: der Abgleich liest die Gruppenzahl nicht aus dem Vertragstext')
         return 1
     ver = vertrag(text)
     fehler = abgleich(bib, ver)

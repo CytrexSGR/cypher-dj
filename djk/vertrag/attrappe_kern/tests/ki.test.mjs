@@ -62,14 +62,23 @@ test('LED, Kiste, Mapping, Latenz, Stufe, Vorschlagskanal: angenommen; falsche N
   gruen(r);
 });
 
-test('D1 Spec 6.15 (E-a): KI-Spur-Listen mit Cyphers Spuren (S2) und Kanälen (Leitstand) getrennt geführt; der Stopp senkt keine', () => {
+test('E3 P1: /k/ki/spur nimmt für Spuren nur spur/0; spur/1, spur/135, spur/10 gehen den Weg eines unbekannten Kanals; der Stopp senkt keine', () => {
   const r = fahre([
     sende(1000, ['/k/ki/spur', 'hss', 1, 'leitstand', 'erz/1']),
     sende(1000, ['/k/ki/spur', 'hss', 2, 'andreas', 'spur/1,spur/2']),
-    sende(1000, ['/k/ki/spur', 'hss', 3, 'andreas', 'spur/13']),       // S2 erneuert seine Spuren, erz/1 bleibt
+    sende(1000, ['/k/ki/spur', 'hss', 3, 'andreas', 'spur/0']),         // S2 erneuert, erz/1 bleibt
     sende(1000, ['/k/ki/spur', 'hss', 4, 'andreas', 'spur/1x']),
     sende(1000, ['/k/ki/spur', 'hss', 5, 'andreas', 'spur/']),
+    sende(1000, ['/k/ki/spur', 'hss', 8, 'andreas', 'spur/1']),
+    sende(1000, ['/k/ki/spur', 'hss', 9, 'andreas', 'spur/135']),
+    sende(1000, ['/k/ki/spur', 'hss', 10, 'andreas', 'spur/10']),
+    sende(1000, ['/k/ki/spur', 'hss', 11, 'andreas', 'erz/9']),          // Referenz: unbekannter Kanal
+    erwarte(1600, q(2, 'andreas', 6, null, 'unbekannter_regler')),
     erwarte(1600, q(3, 'andreas', 3)),
+    erwarte(1600, q(8, 'andreas', 6, null, 'unbekannter_regler')),
+    erwarte(1600, q(9, 'andreas', 6, null, 'unbekannter_regler')),
+    erwarte(1600, q(10, 'andreas', 6, null, 'unbekannter_regler')),
+    erwarte(1600, q(11, 'andreas', 6, null, 'unbekannter_regler')),
     erwarte(1600, q(4, 'andreas', 6, null, 'unbekannter_regler')),
     erwarte(1600, q(5, 'andreas', 6, null, 'unbekannter_regler')),
     sende(S(2), teil(6, 'andreas', 'p', 0, 'erz/1/fader', 4, 0, -6)),
@@ -82,12 +91,33 @@ test('D1 Spec 6.15 (E-a): KI-Spur-Listen mit Cyphers Spuren (S2) und Kanälen (L
   gruen(r);
 });
 
-test('D1 Spec 6.15 (E-a): spur/0 leert nur die Spuren, die leere Liste nur die Kanäle; keine Liste senkt etwas', () => {
+test('E3 P1 Zustand: spur/0 lässt die Kanal-Liste stehen, eine abgelehnte Liste ändert sie nicht, die leere Liste leert sie', () => {
+  const kanaele = (schritte) => { const r = fahre([...schritte, wert(12000, 'spur/1/fader', 0)], { cfg });   // der letzte Schritt lässt den Kern die Befehle abarbeiten
+    gruen(r); return r.kern.ki.kanaele; };
+  assert.deepEqual(kanaele([sende(1000, ['/k/ki/spur', 'hss', 1, 'leitstand', 'erz/1,spur/0'])]), ['erz/1'], 'Kanal neben spur/0 übernommen');
+  assert.deepEqual(kanaele([
+    sende(1000, ['/k/ki/spur', 'hss', 1, 'leitstand', 'erz/1']),
+    sende(4000, ['/k/ki/spur', 'hss', 2, 'andreas', 'spur/0']),         // S2 erneuert: erz/1 bleibt
+  ]), ['erz/1'], 'spur/0 allein lässt die Kanäle stehen');
+  assert.deepEqual(kanaele([
+    sende(1000, ['/k/ki/spur', 'hss', 1, 'leitstand', 'erz/1']),
+    sende(4000, ['/k/ki/spur', 'hss', 2, 'andreas', 'erz/2,spur/4']),   // abgelehnt: auch erz/2 wird nicht übernommen
+    sende(8000, ['/k/ki/spur', 'hss', 3, 'andreas', 'spur/0,spur/1']),
+  ]), ['erz/1'], 'abgelehnte Liste ändert nichts');
+  assert.deepEqual(kanaele([
+    sende(1000, ['/k/ki/spur', 'hss', 1, 'leitstand', 'erz/1']),
+    sende(4000, ['/k/ki/spur', 'hss', 2, 'leitstand', '']),
+  ]), [], 'die leere Liste leert die Kanäle');
+});
+
+test('E3 P1: spur/0 neben Kanälen wird angenommen, spur/4 abgelehnt, die leere Liste leert die Kanäle; keine Liste senkt etwas', () => {
   const r = fahre([
-    sende(1000, ['/k/ki/spur', 'hss', 1, 'leitstand', 'erz/1,spur/2']),
+    sende(1000, ['/k/ki/spur', 'hss', 1, 'leitstand', 'erz/1,spur/0']),
     sende(1000, ['/k/ki/spur', 'hss', 2, 'andreas', 'spur/0']),
     sende(1000, ['/k/ki/spur', 'hss', 3, 'andreas', 'spur/4']),
     sende(1000, ['/k/ki/spur', 'hss', 4, 'leitstand', '']),
+    erwarte(1600, q(1, 'leitstand', 3)), erwarte(1600, q(2, 'andreas', 3)), erwarte(1600, q(4, 'leitstand', 3)),
+    erwarte(1600, q(3, 'andreas', 6, null, 'unbekannter_regler')),
     sende(S(2), teil(5, 'andreas', 'p', 0, 'erz/1/fader', 4, 0, -6)),
     sende(S(10), ['/k/ki/stopp', 'hs', 6, 'andreas']),
     wert(S(16), 'erz/1/fader', -6),
@@ -130,7 +160,7 @@ test('D1 Spec 6.27: KI-Stopp am Arrangement wie im Kern (djk/vertrag/faelle/arr_
 // ki_fader_ab nach: Ausblende über 4 Beats, Fader in Andreas' Hand und schon stumme Fader ausgenommen.
 test('E-a KI-Stopp: kein Fader wird gesenkt, Cyphers laufende Rampe hält am Ist-Wert, fremde Teile laufen weiter, auch an Fadern der KI-Spur', () => {
   const r = fahre([
-    sende(1000, ['/k/ki/spur', 'hss', 1, 'andreas', 'spur/124']),
+    sende(1000, ['/k/ki/spur', 'hss', 1, 'andreas', 'spur/0']),
     sende(S(1), teil(2, 'andreas', 'p', 0, 'spur/1/fader', 2, 0, -6)),          // gesetzt auf −6, in der KI-Spur
     sende(S(1), teil(3, 'cypher', 'c', 0, 'deck/1/eq/mitte', 4, 16, -16)),      // Cyphers Rampe Beat 4 bis 20: bei Beat 12 halb unterwegs
     sende(S(1), teil(4, 'andreas', 'l', 0, 'deck/1/eq/hoch', 4, 16, -16)),      // Negativ-Kontrolle: Andreas' gleiche Rampe läuft weiter

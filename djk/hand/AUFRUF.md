@@ -4,13 +4,13 @@ Plan `docs/superpowers/plans/2026-09-28-djk-hand-mcp.md` (Rev. 2 nach Review), S
 
     claude mcp add --scope user djk-hand -- node /path/to/cypher-dj/djk/hand/hand.ts --seite http://127.0.0.1:47300
 
-Prüfinstanz i: `--seite http://127.0.0.1:56300`. Die 51 sind gezählt am Code (`grep -c "^  { name: '" djk/hand/hand.ts` = 51; 50 am 2026-10-20, dazu `proj_lautheit` aus Paket 1.18) und gegen die MCP-Antwort `tools/list` von `node hand.ts` (ebenfalls 51); davon 12 `proj_*`. Jeder Aufruf geht als HTTP an den Seiten-Server mit dem Kopf
+Prüfinstanz i: `--seite http://127.0.0.1:56300`. Die 54 sind gezählt am Code (`grep -c "^  { name: '" djk/hand/hand.ts` = 54; 51 vor I08 Task 10, dazu `geraete_lage`, mit 1.8 Task 28 `proj_aufnahme` und mit Paket 1.13 `proj_warp`) und gegen die MCP-Antwort `tools/list` von `node hand.ts` (ebenfalls 54); davon 14 `proj_*`. Jeder Aufruf geht als HTTP an den Seiten-Server mit dem Kopf
 `x-djk-quelle: cypher`; der Server setzt die Quelle `cypher` in jeden Kern-Befehl, Cyphers Befehle tragen `plan: cypher`.
 
-## Werkzeuge (51)
+## Werkzeuge (54)
 
 DJ: `lage` · `bestand` · `laden` · `deck_start` · `deck_stopp` · `sprung` · `loop` · `pad` · `loop_nach_box` · `box` ·
-`regler` (Rampe über Takte) · `fx` · `fx_zuweisung` · `abbrechen` · `tempo` (Decks folgen seit 2026-10-06: Varispeed, dann Tausch auf eine Fassung im neuen Tempo, ADR 028) · `warte` · `hoeren`. Dazu die Studio-Werkzeuge
+`regler` (Rampe über Takte; Projekt-Mixerpfade `spur/1..32/*`, `grp/1..8/*`, `pm/fader` lehnt der Server mit `ueber_projekt` ab) · `fx` · `fx_zuweisung` · `abbrechen` · `tempo` (Decks folgen seit 2026-10-06: Varispeed, dann Tausch auf eine Fassung im neuen Tempo, ADR 028) · `warte` · `hoeren`. Dazu die Studio-Werkzeuge
 unten und die Mediathek (`bibliothek` · `vorbereiten` · `sets` · `set_zeige` · `set_lege` · `set_vorbereiten`) sowie `instrumente`. `instrumente {melodie: "fluegel"}` legt einen gesampelten Flügel (Ableton Core Library,
 4 Anschlagstufen, Carla-SFZ) auf MELODY statt Surge, `"surge"` zurück (2026-10-06).
 
@@ -32,12 +32,12 @@ Studio (Plan `docs/superpowers/plans/2026-09-29-djk-hand-mcp-studio.md`, 2026-09
 | `strudel` | `POST /strudel` | AUTO des Stroms, Stop Cypher |
 | `studio` | `GET /strudel?strom=1..3` | lesend; `status.taub` = Strudel-Felder, die hier nicht klingen (siehe „Taube Felder“) |
 | `stille` | 3× `POST /strudel` `silence` | wie `strudel`, meldet Teilfehler je Strom |
-| `pegel` | `GET /pegel?sek=1..10` (ungedrosselter Puffer vor der SSE-Drossel; Kanäle auch `spur/1..8`: Spitze und Median nach dem Spur-Fader, keine Lautheit) | lesend |
+| `pegel` | `GET /pegel?sek=1..10` (ungedrosselter Puffer vor der SSE-Drossel; Kanäle auch `spur/1..32`: Spitze und Median nach dem Spur-Fader, keine Lautheit; `grp/1..8` je Gruppe mit Mitgliedern, `pm` = Produktions-Master nach seinem Fader, vor dem Set-Limiter) | lesend |
 | `klang` | `POST /klang` (spawnt `djk/wirte/carla/djk-klang`; `fahre` direkt an den Wirt mit Spur `klang-<gruppe>`) | AUTO Strom 2 (bass) / 3 (melodie), Stop Cypher, `fremdePost`; `zeige`/`liste` frei; Werte mit `-` vorne 400 |
 | `loops` | `GET /loops` | lesend |
 | `rec` | `POST /loop {aktion:rec}`, wartet auf die Kern-Quittung | Kern: laufende Tempo-Rampe (`ausserhalb_bereich`), Stop Cypher, Überlappung; jedes feste Tempo geht (Plan Tempo-Folge) |
 | `loop_klang` | `POST /loop {aktion:kit}` | AUTO Strom 1, Stop Cypher |
-| `spur` · `spur_stopp` · `spuren` | `POST /spur {spur:{name,fahrten},ab}` · `POST /spur/stopp` · `GET /spur` | wie Automationsspuren unten |
+| `spur` · `spur_stopp` · `spuren` | `POST /spur {spur:{name,fahrten},ab}` · `POST /spur/stopp` · `GET /spur` | wie Automationsspuren unten; Ziele `spur/1..32/*`, `grp/1..8/*` und `pm/fader` lehnt der Server mit 409 `ueber_projekt` ab (nur über `proj_aendern`) |
 
 `/lage` trägt zusätzlich `studio: {stroeme:[{strom, autonom, von, text_kurz}], klang:{bass, melodie}}`
 (`klang` = Name aus `wirt-<g>.json`; nach `setze` „edited"). `abbrechen` und Stop Cypher halten auch `klang fahre`.
@@ -50,13 +50,16 @@ daraus. Ich ändere es nur mit Befehlslisten, nie mit Dateien.
 | Werkzeug | Route | Riegel für cypher |
 |---|---|---|
 | `proj_liste` · `proj_lage` · `proj_verlauf` | `GET /proj/liste` · `GET /proj/aktuell?noten=zahl` (Noten nur als `noten_zahl` je Clip, Spec 6.30) · `GET /proj/verlauf` | lesend |
+| `geraete_lage` | `GET /geraete` | lesend; Zuordnen und Freigeben nur Andreas (F3) |
 | `proj_neu` · `proj_oeffnen` | `POST /proj/neu {name}` · `POST /proj/oeffnen {slug}` | Stop Cypher (409 `ki_gestoppt`); läuft ein Transport, den Andreas gestartet oder nach Stop Cypher übernommen hat (Seite, Hand-Taste oder unbekannt), 409 `transport_laeuft`, nichts gestoppt (Spec 6.37); ein von mir gestarteter, nicht übernommener Transport des alten Projekts stoppt |
-| `proj_aendern` | `POST /proj/aendern {rev, label, befehle}`; ohne `rev` holt das Werkzeug sie aus `GET /proj/aktuell?nur=rev` (auch undo/redo) | Stop Cypher; `rev_veraltet` (neu lesen); `regler_abgelehnt` (Andreas hält den Regler, nichts geändert); `deck_laeuft` bei `tempo_setzen`, solange ein Deck spielt; Audio nur mit `sha256` aus der Bibliothek (`sha_unbekannt`, `nur_live`, `quelle_fehlt`) |
+| `proj_aendern` | `POST /proj/aendern {rev, label, befehle}`; ohne `rev` holt das Werkzeug sie aus `GET /proj/aktuell?nur=rev` (auch undo/redo) | Stop Cypher; `rev_veraltet` (neu lesen); `regler_abgelehnt` (Andreas hält den Regler, nichts geändert); `deck_laeuft` bei `tempo_setzen`, solange ein Deck spielt; Audio nur mit `sha256` aus der Bibliothek (`sha_unbekannt`, `nur_live`, `quelle_fehlt`); Routing seit 1.10: `gruppenspur_neu` · `gruppenspur_aendern` · `gruppenspur_loeschen` · `ziel_setzen` · `master_aendern` (Gründe `routing_zyklus`, `routing_grenze`, `ziel_unbekannt`, `gruppe_unbekannt`; Art der Gruppe im Ziel heißt `"gruppe"`); Solo auf einer Spur lässt ihre Gruppe klingen, Solo auf einer Gruppe alle Mitglieder, Mute auf einer Gruppe stummt ihre Mitglieder |
 | `proj_undo` · `proj_redo` | `POST /proj/undo` · `POST /proj/redo {rev}` | Stop Cypher; `nichts_zu_tun` |
 | `proj_transport` | `POST /proj/transport {aktion, beat?}` | Stop Cypher (409 `ki_gestoppt`); Stop Cypher stoppt keinen laufenden Transport, auch meinen nicht: er läuft weiter und gehört ab dann Andreas (E-a); ein noch wartender Start von mir fällt (Kern: Quittung 7 `ki_stopp`); `start` und `stopp` über einen Transport, den Andreas gestartet hat oder der ihm durch Stop Cypher übergeben wurde (Seite, Hand-Taste, Stop Cypher oder unbekannt), 409 `transport_laeuft`, nichts gesendet: ich stoppe nur, was ich gestartet habe und er nicht übernommen hat, und ein Start beendete seinen Lauf (Spec 6.37) |
 | `proj_freeze` | `POST /proj/freeze?antwort=kurz {spur_id, an}` (Seiten-Server `djk/oberflaeche/bereiche/proj/ausgabe.ts`) | Stop Cypher; nur Surge-Spuren; wartet bis zu 6 min (Werkzeug-Frist, danach 504 `hand_frist`, der Lauf kann auf dem Server weiterlaufen) |
-| `proj_export` | `POST /proj/export {von_beat?, bis_beat?}` (`ausgabe.ts`) | Stop Cypher; Transport muss stehen; wartet bis zu 80 min (Werkzeug-Frist) |
+| `proj_export` | `POST /proj/export {von_beat?, bis_beat?, abgriff?}` (`ausgabe.ts`) | Stop Cypher; Transport muss stehen; wartet bis zu 80 min (Werkzeug-Frist) |
 | `proj_lautheit` | `POST /proj/lautheit {von_beat?, bis_beat?}` (`ausgabe.ts`) | Stop Cypher; Transport muss stehen; friert Surge-Spuren vorher ein (braucht den Wirt arr1, sonst 409 `wirt_fehlt`); wartet bis zu 80 min (Werkzeug-Frist) |
+| `proj_aufnahme` | `POST /proj/aufnahme {aktion: start oder stopp, von_beat?}` (Quelle cypher; `djk/oberflaeche/bereiche/proj/aufnahme.ts`) | schreibend; nimmt nur interne Eingänge (`erz/1..3`) auf armierten Audio-Spuren auf; Stop Cypher (409 `ki_gestoppt`); `nichts_scharf`, `ueberlappung`, `transport_laeuft`, `aufnahme_laeuft`, `keine_aufnahme`, `aufnahme_abgebrochen` (mit `grund`), `beschaeftigt`; externe Eingänge nur mit Andreas' Freigabe je Eingang (`geraete_lage`) |
+| `proj_warp` | `GET /proj/warp?clip_id=…&von_beat=…&bis_beat=…&bei_beat=…` (`bereich.ts`, `sitzung.ts warpLage`) | liest nur; `kein_projekt`, `clip_unbekannt`, `feld_nur_audio` |
 
 **`proj_freeze {spur_id, an}`** spielt die Noten einer Surge-Spur (Wirt) einmal in Echtzeit im Kern durch (vom ersten bis zum letzten
 MIDI-Clip mit klingenden Noten plus 2 Beats, höchstens 256 Beats; bei 124 BPM dauern 8 Takte rund 16 s, der Aufruf wartet), danach spielt die Spur als
@@ -77,16 +80,17 @@ Antwort (`?antwort=kurz`): `{rev, spur_id, freeze: {datei, frames, kennung, sha2
 | 502 | `freeze_fehler` | der Kern brach ab oder startete neu, nichts gespeichert |
 | 504 | `hand_frist` | kommt vom Werkzeug, nicht vom Server: nach 6 min keine Antwort, der Lauf kann weiterlaufen |
 
-**`proj_export {von_beat?, bis_beat?}`** rendert das offene Projekt offline im Kern (niedrige Priorität, für 8 Takte wenige Sekunden) als WAV, 48 kHz,
+**`proj_export {von_beat?, bis_beat?, abgriff?}`** rendert das offene Projekt offline im Kern (niedrige Priorität, für 8 Takte wenige Sekunden) als WAV, 48 kHz,
 32 bit float, in den Ordner `export/` des Projekts, überschreibt nie. Ohne Angabe gilt die Loop-Klammer, sonst `von_beat` bis `bis_beat` (1 bis 1024 Beats,
 Start ab Beat 0). Surge-Spuren mit Noten, die noch nicht eingefroren sind, werden vorher in Echtzeit eingefroren (je Spur ein Undo-Schritt), der Aufruf wartet auf beides.
-Antwort: `{datei, frames, spitze_db, regler_quelle, lufs_i, lra, true_peak_dbtp}`. `regler_quelle` ist `kern` (Mixer so, wie der laufende Kern ihn hat) oder `projekt`
-(aus der Projektdatei, weil seit dem Start kein Kern lief). Die Lautheit ist hinter dem Master-Limiter gemessen; scheitert ffmpeg, sind die drei Lautheitsfelder
+`abgriff` wählt, wo der Export abgegriffen wird: `produktion` (Vorgabe) ist der Produktions-Master, hinter seinem Fader (`pm/fader`), aber vor dem DJ-Kleber, dem DJ-Master-Fader und dem Set-Limiter, eine Mastering-Kette außerhalb bekommt also das unbegrenzte Signal; `set` ist das Signal, wie der Saal es hört (hinter dem Set-Limiter). Ohne Angabe wählt der Server `produktion`.
+Antwort: `{datei, frames, spitze_db, regler_quelle, abgriff, ueber_decke, limiter_db_max, lufs_i, lra, true_peak_dbtp}`. `regler_quelle` ist `kern` (Mixer so, wie der laufende Kern ihn hat) oder `projekt`
+(aus der Projektdatei, weil seit dem Start kein Kern lief). `ueber_decke: true` heißt: die Sample-Spitze der Datei liegt über der Decke des Limiters (`kern.toml` `limiter_dbtp`); mit `abgriff: produktion` hätte der Set-Limiter sie abgesenkt, `limiter_db_max` ist seine größte Absenkung in dB während des Renders (0 = griff nie ein). Die Seite zeigt SET LIMITER, wenn der Limiter beim Hören eingreift. Die Lautheit wird an der geschriebenen Datei gemessen; scheitert ffmpeg, sind die drei Lautheitsfelder
 `null` und `loudness_fehler` nennt den Grund (die WAV ist trotzdem geschrieben). Ablehnung:
 
 | Code | Grund | Wann |
 |---|---|---|
-| 400 | `argument_ungueltig`, `export_bereich` | unbekanntes Feld oder keine Zahl; Bereich kürzer als 1 Beat, länger als 1024 Beats oder vor Beat 0 |
+| 400 | `argument_ungueltig`, `export_bereich` | unbekanntes Feld, keine Zahl oder `abgriff` weder `produktion` noch `set`; Bereich kürzer als 1 Beat, länger als 1024 Beats oder vor Beat 0 |
 | 409 | `ki_gestoppt`, `kein_projekt`, `transport_laeuft`, `beschaeftigt` | wie oben; `transport_laeuft` heißt: der Transport muss stehen (auch Andreas' Lauf bleibt unberührt) |
 | 400 | `zu_gross` | aus dem vorgeschalteten Freeze: eine Surge-Spur reicht über mehr als 256 Beats (erst einzeln einfrieren oder kürzen) |
 | 409 | `audio_fehlt`, `kein_kernstand`, `veraltet` | ein Audio-Clip wird noch dekodiert (gleich nochmal); eine Spur braucht einen Freeze, aber der Kern hat nichts gemeldet; während des Exports kamen neue Noten, nichts geschrieben |
@@ -100,14 +104,16 @@ Stop Cypher hält nur meine Hand an (Entscheidung E-a, Paket 1.18): kein Fader w
 Laufende Rampen und Pläne von mir enden am Ist-Wert (wie `abbrechen`). Auch einen laufenden Transport, den ich gestartet habe, hält Stop Cypher nicht an: er läuft weiter und gehört ab dann Andreas (E-a, 20.10.; Spec 6.37 ist insoweit überholt). Ein Start von mir, der noch auf den Takt oder auf die Tempo-Rampe davor wartet, fällt dagegen (`ok: false`, Quittung 7 `ki_stopp`, nichts wird gestartet); nach der Freigabe starte ich neu. Andreas' Bewegungen an
 `spur/<n>/*` landen mit Quelle `andreas` im Projekt und im Verlauf. Projekt löschen gibt es über MCP nicht.
 
+**`proj_warp {clip_id, von_beat?, bis_beat?, bei_beat?}`** (Paket 1.13) liest den Warp eines Audio-Clips: `warp` ist `null` ohne Warp, sonst `{an, modus, quelle, eins_unsicher, transpose_st, detune_ct, versatz_beats, marker_zahl, marker: [{quell_s, beat, projekt_beat, segment_bpm}]}`. `quell_s` ist die Quellsekunde, `beat` der Clip-Beat (0 = 1.1.1 der Quelle), `projekt_beat` die Lage im ersten Durchlauf, `segment_bpm` das Quelltempo des Segments, das am Marker beginnt (am letzten Marker `null`). `bei_beat` (Projekt-Beat) liefert zusätzlich `bei {projekt_beat, quell_s}`: die Quellsekunde, die dort spielt, als Gegenprobe. Ändern geht über `proj_aendern`: `clip_neu` mit `warp: "auto"`, `warp_auto {clip_id}`, `warp_setzen {clip_id, an?, warp?}`, `clip_aendern {versatz_beats}`; gibt es kein Tempo, meldet `proj_aendern` `hinweise: [{index, hinweis: "kein_tempo"}]` (`warp_auto` lehnt mit `kein_tempo` ab). In Slice 1 gibt es nur RE-PITCH: die Tonhöhe geht mit dem Tempo.
+
 **`proj_lautheit {von_beat?, bis_beat?}`** misst die Lautheit je Spur und als Summe, offline und nur auf Anfrage (im Kern läuft keine Messung mit). Der Server rendert jede Spur, die im Bereich etwas spielt,
-einzeln (Fader und Pan der Spur aus dem Projekt, alle anderen Spuren stumm, ohne den Mixer-Zustand des Kerns; der Master-Limiter bleibt) und einmal alle zusammen, dann misst ffmpeg jede WAV. Bereich wie bei `proj_export`
+einzeln (Fader und Pan der Spur aus dem Projekt, dann durch ihre Gruppe und den Produktions-Master, alle anderen Spuren stumm, ohne den Mixer-Zustand des Kerns; Abgriff ist der Produktions-Master, vor dem Set-Limiter) und einmal alle zusammen, dann misst ffmpeg jede WAV. Bereich wie bei `proj_export`
 (Vorgabe Loop-Klammer, 1 bis 1024 Beats). Surge-Spuren mit Noten werden vorher eingefroren (Wirt arr1 nötig). Es wird nichts ins Projekt oder in den Export-Ordner geschrieben.
 Antwort: `{von_beat, bis_beat, spuren: [{spur_id, nr, name, lufs_i, lra, true_peak_dbtp, spitze_db, stumm, unter_messgrenze}], summe: {lufs_i, lra, true_peak_dbtp, spitze_db, unter_messgrenze, regler_quelle}}`. `lufs_i` ist die integrierte Lautheit,
 mit ihr gleicht man eine 808-Kick an einen Bass an (die Spitze täuscht dort). Eine gemutete Spur, eine mit Fader aus oder eine still im Bereich meldet `stumm: true` und `lufs_i: null` (nicht −70); steht irgendeine Spur des Projekts auf Solo, gilt eine Spur ohne Solo wie im Mix als stumm. Eine leise, aber nicht stille Spur unter der Messgrenze
 von −70 LUFS (Spitze zwischen −90 und etwa −68 dBFS) meldet `unter_messgrenze: true`, `stumm: false`, `lufs_i: null` (nicht −70,0) und `lra: null`, der True Peak bleibt gemessen. Spuren ohne Inhalt im
-Bereich fehlen. Die Summe weicht von `proj_export` desselben Bereichs höchstens um 0,1 LU ab, solange der Master des Kerns auf den Vorgaben steht (`regler_quelle: projekt` bei der Summe, `kern` beim Export).
-Ablehnung wie bei `proj_export`, dazu `wirt_fehlt`. Die Frist von 80 min deckt normale Bereiche; im Grenzfall (neun Renders zu 1024 Beats bei 60 BPM, jeder am Zeitlimit) erlaubt der Server rund 10,8 h, dann kommt `hand_frist`.
+Bereich fehlen. Die Summe gleicht `proj_export` desselben Bereichs (Vorgabe `abgriff: produktion`) auf 0,1 LU (`regler_quelle: projekt` bei der Summe, `kern` beim Export). `spitze_db` ist die Sample-Spitze am Produktions-Master, vor dem Set-Limiter.
+Ablehnung wie bei `proj_export`, dazu `wirt_fehlt`. Die Frist von 80 min deckt normale Bereiche; im Grenzfall (bis zu 33 Renders (32 Spuren und Summe) zu 1024 Beats bei 60 BPM, jeder am Zeitlimit) erlaubt der Server rund 39,3 h, dann kommt `hand_frist`.
 
 ## Track bauen
 
@@ -150,6 +156,14 @@ unwirksam (alles oder nichts, ein Undo-Schritt). Voraussetzungen: kein Deck spie
    ungefrorene Surge-Spuren mit Noten selbst ein.
 7. `proj_export {}` schreibt den Loop-Bereich (hier Beat 0 bis 8) als WAV nach `~/cypherdj-projekte/mini/export/` und meldet `datei`, `frames`, `spitze_db`,
    `lufs_i`, `lra`, `true_peak_dbtp`.
+
+**Aufnahme in vier Zeilen** (1.8 Slice 1, interner Strom auf eine Audio-Spur):
+
+1. `proj_aendern` mit `spur_aendern {spur_id, arm: true, eingang: {art: "intern", name: "erz/1"}}` (erz/1 ist der Strudel-Kanal).
+2. `proj_aufnahme {"aktion":"start","von_beat":0}` armiert den Kern, startet den Transport und nimmt ab dessen Start auf.
+3. `warte` oder Musik über `strudel`; der Take ist der interne Strom, bitgleich.
+4. `proj_aufnahme {"aktion":"stopp"}` hält den Transport an, schreibt `aufnahmen/take-<kennung>-<spur>.wav` und legt je Spur einen Clip (ein Undo-Schritt); `proj_lage` zeigt den Clip.
+   Endet der Transport anders (`proj_transport`, Handtaste, Ende des Arrangements), speichert der Server den Take selbst; `stopp` liefert das Ergebnis dann einmal, danach steht es unter `letzte` in `proj_aufnahme`.
 
 Gemessen 2026-10-20: die Befehlslisten aus 2. und 4. laufen durch `fuehreListeAus` (`djk/oberflaeche/projekt/befehle.ts`) auf einem neuen Projekt ohne Fehler und
 ergeben `s1` Kick, `s2` Bass, `s3` Lead, Loop 0..8, Tempo 128; dieselbe Liste mit `spur_id: "s9"` wird mit `spur_unbekannt` abgelehnt (Negativ-Kontrolle).

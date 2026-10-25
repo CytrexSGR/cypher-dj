@@ -186,3 +186,47 @@ def test_ohne_fremdtags_kein_tags_json(quelle, tmp_path):
     assert not (mo / "tags.json").exists()
     f = lies_json(mo / "fassungen" / "128000_r1" / "fassung.json")
     assert any("keine Fremdtags gefunden" in w for w in f["warnungen"]), f["warnungen"]
+
+
+def test_nur_analyse_schreibt_keine_kopie_und_keine_fassung(quelle, tmp_path):
+    """Nachtlauf (2026-10-20): nur_analyse legt in der Ablage material.json und vorab.json an, sonst nichts."""
+    p, karte = quelle
+    a = tmp_path / "ablage"
+    e = kette.einlesen(p, a, karte=karte, nur_analyse=True)
+    assert e["status"] == "analysiert"
+    assert sorted(x.name for x in (a / e["material_id"]).iterdir()) == ["material.json", "vorab.json"]
+    assert fehler("material.schema.json", lies_json(a / e["material_id"] / "material.json")) == []
+    assert not any((a / ".arbeit").iterdir())
+    assert kette.einlesen(p, a, karte=karte, nur_analyse=True) == {"material_id": e["material_id"], "status": "vorhanden"}
+
+
+def test_einlesen_mit_vorab_ist_bitgleich(quelle, tmp_path):
+    """Die Fassung aus der Ablage (ohne karte: gemessen wird nichts) gleicht der direkt eingelesenen bitgenau."""
+    p, karte = quelle
+    e1 = kette.einlesen(p, tmp_path / "b1", karte=karte)
+    kette.einlesen(p, tmp_path / "ablage", karte=karte, nur_analyse=True)
+    e2 = kette.einlesen(p, tmp_path / "b2", vorab=tmp_path / "ablage")
+    m1, m2 = tmp_path / "b1" / e1["material_id"], tmp_path / "b2" / e2["material_id"]
+    assert e2["status"] == "neu"
+    assert sha_baum(m1 / "fassungen" / "128000_r1") == sha_baum(m2 / "fassungen" / "128000_r1")
+    assert sha_baum(m1) == sha_baum(m2)
+
+
+def test_vorab_wird_wirklich_benutzt(quelle, tmp_path):
+    """NEGATIV-KONTROLLE: eine verschobene Karte in vorab.json aendert die Fassung (die Ablage wird gelesen);
+    eine Ablage mit fremder sha256 wird nicht benutzt."""
+    import json
+    p, karte = quelle
+    e1 = kette.einlesen(p, tmp_path / "b1", karte=karte)
+    a = tmp_path / "ablage"
+    kette.einlesen(p, a, karte=karte, nur_analyse=True)
+    v = a / e1["material_id"] / "vorab.json"
+    g = json.loads(v.read_text())
+    g["liste"] = [[s + 0.01, b] for s, b in g["liste"]]
+    v.write_text(json.dumps(g))
+    e2 = kette.einlesen(p, tmp_path / "b2", vorab=a)
+    f1 = sha_baum(tmp_path / "b1" / e1["material_id"] / "fassungen" / "128000_r1")
+    assert f1 != sha_baum(tmp_path / "b2" / e2["material_id"] / "fassungen" / "128000_r1")
+    g["sha256"] = "0" * 64
+    v.write_text(json.dumps(g))
+    assert kette.lies_vorab(a, e1["material_id"], kette.sha256_datei(p)) is None

@@ -194,8 +194,7 @@ void Kern::einsortieren25(const Befehl& c) {
     case Befehl::KI_STOPP: sw_->ki_stopp(c.id, q); break;  // §4.7 (F13: wartende cypher-Loops verwirft Kern::audio)
     case Befehl::KI_FREI: sw_->ki_frei(c.id, q); break;
     case Befehl::KI_SPUR:
-      ki_spur_id_ = c.id;
-      sw_->ki_spur(c.id, q, c.liste);
+      if (sw_->ki_spur(c.id, q, c.liste)) ki_spur_id_ = c.id;   // eine abgelehnte Liste nimmt der gültigen im selben Zyklus die Kennung nicht
       break;
     case Befehl::KI_STUFE:  // §4.7: nur für LEDs (Scheibe 35); die Stufe durchsetzen tut der Leitstand
       ki_stufe_ = c.an;
@@ -282,6 +281,16 @@ void Kern::set_neu_teile_ab() {
   hand_.leeren();
 }
 
+void spur_pegel_name(int i, char* aus) {
+  std::memcpy(aus, "spur/", 5);
+  int n = i + 1, k = 5;
+  char z[4];
+  int m = 0;
+  do { z[m++] = static_cast<char>('0' + n % 10); n /= 10; } while (n > 0 && m < 3);
+  while (m > 0) aus[k++] = z[--m];
+  aus[k] = '\0';
+}
+
 // §5.6 /pegel, 20 Hz (im Zyklus, der ein Vielfaches von 2 400 Samples enthält): je geladenem Deck, master und cue die
 // Abtast-Spitze seit der letzten Meldung in dB (−200 unter −200). Echtspitze, LUFS und Bänder misst erst 43: −200.
 void Kern::pegel_melden(int64_t n0, int n) {
@@ -312,14 +321,58 @@ void Kern::pegel_melden(int64_t n0, int n) {
     Ereignis e{};
     e.art = Ereignis::PEGEL;
     e.sample = n0;
-    const char name[7] = {'s', 'p', 'u', 'r', '/', static_cast<char>('1' + i), '\0'};
-    std::memcpy(e.pfad, name, sizeof name);
+    spur_pegel_name(i, e.pfad);
     e.pegel[0] = sp > 1e-10f ? 20.0f * std::log10(sp) : -200.0f;
     for (int j = 1; j < 7; ++j) e.pegel[j] = -200.0f;
     melde(e);
   }
+  for (int g = 0; g < ARR_GRUPPEN; ++g) {  // 1.10: grp/<n> je Gruppe mit Mitgliedern, Spitze nach dem Gruppen-Fader
+    const float sp = arr_->spitze_gruppe_lesen(g);
+    if (!arr_->gruppe_belegt(g)) continue;
+    Ereignis e{};
+    e.art = Ereignis::PEGEL;
+    e.sample = n0;
+    std::memcpy(e.pfad, "grp/", 4);
+    e.pfad[4] = static_cast<char>('1' + g);
+    e.pfad[5] = '\0';
+    e.pegel[0] = sp > 1e-10f ? 20.0f * std::log10(sp) : -200.0f;
+    for (int j = 1; j < 7; ++j) e.pegel[j] = -200.0f;
+    melde(e);
+  }
+  {  // 1.10: pm, die Spitze des Produktions-Masters nach dem PM-Fader (ohne Metronom), sobald eine Wiedergabe geladen ist
+    const float sp = arr_->spitze_pm_lesen();
+    if (arr_->snapshot()) {
+      Ereignis e{};
+      e.art = Ereignis::PEGEL;
+      e.sample = n0;
+      std::memcpy(e.pfad, "pm", 3);
+      e.pegel[0] = sp > 1e-10f ? 20.0f * std::log10(sp) : -200.0f;
+      for (int j = 1; j < 7; ++j) e.pegel[j] = -200.0f;
+      melde(e);
+    }
+  }
   melden("master", Mixer::PEGEL_MASTER);
   melden("cue", Mixer::PEGEL_CUE);
+  for (int k = 1; k <= EIN_PAARE; ++k) {  // I08: ein/<k>, immer (ohne Verbindung −200)
+    const float sp = ein_bank_.spitze_lesen(k);
+    Ereignis e{};
+    e.art = Ereignis::PEGEL;
+    e.sample = n0;
+    e.pfad[0] = 'e'; e.pfad[1] = 'i'; e.pfad[2] = 'n'; e.pfad[3] = '/'; e.pfad[4] = static_cast<char>('0' + k); e.pfad[5] = '\0';
+    e.pegel[0] = sp > 1e-10f ? 20.0f * std::log10(sp) : -200.0f;
+    for (int i = 1; i < 7; ++i) e.pegel[i] = -200.0f;
+    melde(e);
+  }
+  Ereignis z{};  // I08: /zustand/ein (§5.14), im Takt der Pegel
+  z.art = Ereignis::EIN_ZUSTAND;
+  z.sample = n0;
+  z.status = static_cast<int32_t>(ein_verbunden_.load(std::memory_order_relaxed));
+  z.ein_gesehen = static_cast<int64_t>(midi_ein_.gesehen());
+  z.ein_verloren = static_cast<int64_t>(midi_ein_.verloren());
+  z.ein_midi_sample = midi_ein_.letztes_sample();
+  z.ein_flanke = ein_bank_.flanke(1);
+  melde(z);
+  rec_zustand_melden(n0, n);
 }
 
 void Kern::audio(int64_t n0, int n) {
@@ -327,6 +380,7 @@ void Kern::audio(int64_t n0, int n) {
   for (int off = 0; off < n;) {
     const int m = std::min(n - off, MIX_BLOCK);
     const int64_t s0 = n0 + off;
+    ein_bank_.messe(s0, off, m);  // I08: Spitzen und Flanke der Eingänge ein_1..4
     // Hand am Versatz (§7.3 Punkt 1, ADR 023 Punkt 2): jeder Griff wirkt an seinem Sample, nicht am Blockanfang
     HandGriff g;
     while (hand_.raus_vor(s0 + m, g)) {
@@ -353,6 +407,8 @@ void Kern::audio(int64_t n0, int n) {
     if (sw_->ki_gestoppt()) arr_->ki_stopp(s0, karte);
     arr_->block(karte, s0, m, erz_l_[arr_kanal_], erz_r_[arr_kanal_], mixer_->summe_eingang_l(),
                 mixer_->summe_eingang_r(), mixer_->pfl_eingang_l(), mixer_->pfl_eingang_r());
+    std::memcpy(pm_abgriff_l_ + off, arr_->pm_l(), sizeof(float) * static_cast<size_t>(m));   // 1.10: Export-Abgriff (Spec 5.4)
+    std::memcpy(pm_abgriff_r_ + off, arr_->pm_r(), sizeof(float) * static_cast<size_t>(m));
     arr_quittungen(karte);
     arr_freeze_quittungen(karte);  // Paket K3: Freeze 2, 3, 7 und Rückgabe des Auftrags
     // K2: der Duck setzt AM Kick-Ereignis ein, nicht um den Wirt-Rundweg verzögert. Seit Glanz 2.7 (F19) gehen MIDI-Noten um den
@@ -408,8 +464,29 @@ void Kern::audio(int64_t n0, int n) {
     loops_frei(s0);  // Keylock: Varianten, die eine Blende zu Ende gebracht hat, zurück an den Netz-Faden
     for (int i = 0; i < nb; ++i) loop_melden(bm[i].box, bm[i].sample, karte.beat_at((double)bm[i].sample));
     if (mt_fertig) mitschnitt_melden(mt_fertig, mt_fertig->abgebrochen ? 1 : 0);  // voll: das Netz schreibt und gibt frei; abgebrochen (Scheibe 3 E4): nur frei
+    // 1.8: Abgriff erz/1..3 (rec_tap) nach den Loop-Boxen, vor dem Mixer; Einsatz und Ende kommen aus dem Arrangement
+    auto rec_abgriff = [&](const float* const* tl, const float* const* tr) {
+      if (sw_->ki_gestoppt()) aufnahme_.ki_stopp(s0);
+      aufnahme_.block(s0, m, rec_arr_lage(), tl, tr);
+      rec_meldungen(karte);
+    };
+#ifndef CYPHERDJ_MUTATION_REC_TAP_NACH_MIXER
+    {
+      const float* tl[3] = {erz_l_[4], erz_l_[5], erz_l_[6]};   // Mixer-Indizes von erz/1..3 (pegel_melden: melden("erz/1", 4) …)
+      const float* tr[3] = {erz_r_[4], erz_r_[5], erz_r_[6]};
+      rec_abgriff(tl, tr);
+    }
+#endif
     mixer_->fx_takt(karte.beat_at((double)s0), karte.bpm_at((double)s0) / 60.0 / 48000.0);  // Plan 3: LFO aus dem Beat
     mixer_->verarbeite(m, links_ + off, rechts_ + off, cue_l_ + off, cue_r_ + off);
+    limiter_beobachten(s0, m);
+#ifdef CYPHERDJ_MUTATION_REC_TAP_NACH_MIXER
+    {  // Fehlerfall (AK4): der Abgriff hinter dem Mixer, mit Fader und Limiter
+      const float* tl[3] = {links_ + off, links_ + off, links_ + off};
+      const float* tr[3] = {rechts_ + off, rechts_ + off, rechts_ + off};
+      rec_abgriff(tl, tr);
+    }
+#endif
     huellen_block(s0, m, cue_l_ + off, cue_r_ + off);  // Ohr (§6.2): Mess-Abgriff vor dem Fader
     decks_verlauf_ende(m);  // Scheibe 31
     ereignisse_uebernehmen();
@@ -497,7 +574,7 @@ void Kern::ereignisse_uebernehmen() {
       const char* qn = sw::name(s.quelle);
       const int st = static_cast<int>(s.status);
       if (schatten_.quittung(s.id, qn, st, s.sample, beat)) continue;  // Neustart: schon gemeldet
-      if (s.id == ki_spur_id_ && st == 3) {   // D1 Spec 6.15: beide Listen (Kanäle, Spuren) in Normalform, nicht der letzte Text
+      if (s.id == ki_spur_id_ && st == 3) {   // E3 P1: die Kanal-Liste in Normalform, nicht der letzte Text
         sw_->ki_spur_text(ki_spur_, sizeof ki_spur_);
         ki_spur_id_ = 0;
       }

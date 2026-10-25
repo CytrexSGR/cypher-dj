@@ -2,6 +2,7 @@
 // in Array-Reihenfolge des Projekts (Spec 3.3: Anzeigereihenfolge = Array-Reihenfolge). Das Lineal hat oben die
 // Loop-Zone (Klammer ziehen) und unten die Positions-Zone (Startposition setzen).
 import { beatZuX, rasten } from './zeitachse.js';
+import { quellSekunde, warpAn } from './warp.js';
 
 export const SPUR_HOEHE = 64;
 export const LINEAL_HOEHE = 28;
@@ -23,9 +24,24 @@ export const sichtbar = (k, breite) => k.x + k.w >= 0 && k.x <= breite;
 
 // Audio-Clip: Quell-Spalten [a, b) der Welle (DJKW, hop Frames je Spalte) für die Pixelspalte rx..rx+1 im Clip.
 // Länge in Sekunden unverändert (kein Warp in D1, Spec 5): Sekunde im Clip = Beat im Clip · 60 / Projekttempo.
+// Paket 1.13: ist der Clip gewarpt, liegt die Welle über W(b) (Marker, versatz_beats; mit Loop wiederholt sich jede Kopie), nicht über Sekunden.
 export function quellSpalten(clip, bpm, hop, pxProBeat, rx, sr = 48000) {
+  if (warpAn(clip)) {
+    const lb = clip.loop_beats ?? null, b0 = clip.warp.versatz_beats + (lb ? (rx / pxProBeat) % lb : rx / pxProBeat);
+    return [(quellSekunde(clip.warp.marker, b0) * sr) / hop, (quellSekunde(clip.warp.marker, b0 + 1 / pxProBeat) * sr) / hop];
+  }
   const sek = (px) => (clip.offset_s ?? 0) + (px / pxProBeat) * 60 / bpm;
   return [(sek(rx) * sr) / hop, (sek(rx + 1) * sr) / hop];
+}
+
+// Paket 1.13 (Prüfung 2, MINOR 7): was die Zeichenschleife mit der Pixelspalte rx tut: [a, b) zeichnen, 'leer' (Stille: überspringen) oder 'ende' (Schleife beenden).
+// Hinter dem Ende der Quelle (mit negativem Versatz auch vor ihrem Anfang) liegt Stille. Ein gewarpter Loop-Clip fängt in der nächsten Kopie wieder vorn an,
+// dort darf die Schleife nicht enden; ungewarpt gilt wie bisher: hinter dem Ende der Quelle ist Schluss.
+export function welleSpalteFuer(clip, bpm, hop, pxProBeat, rx, spaltenZahl) {
+  const [a, b] = quellSpalten(clip, bpm, hop, pxProBeat, rx), gewarpt = warpAn(clip);
+  if (gewarpt && b <= 0) return 'leer';
+  if (a >= spaltenZahl) return gewarpt ? 'leer' : 'ende';
+  return [a, b];
 }
 
 // MIDI-Clip: Notenvorschau als Rechtecke unter der Namenszeile; höchster Ton oben, Tonumfang mindestens eine Oktave

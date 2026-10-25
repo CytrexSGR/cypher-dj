@@ -17,10 +17,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define CDJ_ZUSTAND_VERSION 1u
+#define CDJ_ZUSTAND_VERSION 2u
 #define CDJ_Z_SEGMENTE 64    /* §1.3 */
 #define CDJ_Z_BEFEHLE 256    /* §6.3: ausstehende Befehle bis 256 */
-#define CDJ_Z_REGLER 512     /* §1.5 */
+#define CDJ_Z_REGLER 1024    /* §1.5; >= MAX_REGLER (stellwerk/regler.h), sonst schneidet kern_zustand.cpp still ab (E1) */
 #define CDJ_Z_HOERSCHEINE 32 /* §4.5 */
 #define CDJ_Z_DECKS 4        /* §1.5 */
 #define CDJ_Z_HOTCUES 8      /* §4.4 */
@@ -196,7 +196,7 @@ CDJ_Z_PRUEFE(sizeof(cdj_z_hoerschein) == 144, "Hörschein 144 Bytes");
 CDJ_Z_PRUEFE(sizeof(cdj_z_deck) == 168, "Deck 168 Bytes");
 CDJ_Z_PRUEFE(sizeof(cdj_z_abonnent) == 64, "Abonnent 64 Bytes");
 CDJ_Z_PRUEFE(offsetof(cdj_z_echtzeit, segmente) == 208, "Segmente ab Byte 208");
-CDJ_Z_PRUEFE(sizeof(cdj_z_echtzeit) == 208 + 2 * 64 * 48 + 256 * 256 + 512 * 96 + 32 * 144 + 4 * 168, "Echtzeit-Fach");
+CDJ_Z_PRUEFE(sizeof(cdj_z_echtzeit) == 208 + 2 * 64 * 48 + 256 * 256 + CDJ_Z_REGLER * 96 + 32 * 144 + 4 * 168, "Echtzeit-Fach");
 CDJ_Z_PRUEFE(sizeof(cdj_z_abos) == 32 + 8 * 64, "Abonnenten-Fach");
 CDJ_Z_PRUEFE(offsetof(cdj_z_datei, echtzeit) == 64, "Kopf 64 Bytes");
 #undef CDJ_Z_PRUEFE

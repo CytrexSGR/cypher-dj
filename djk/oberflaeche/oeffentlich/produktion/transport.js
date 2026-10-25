@@ -22,6 +22,9 @@ export function kopfStand({ arr, arrZeit, t, hochrechne, loop }) {
 }
 export const kernText = (f) => `core rev ${f.nr} · ${STATUS_TEXT[f.status] ?? f.status}`;
 export const KERN_UNBEKANNT = 'core state unknown';
+// 1.10 Slice 2 (AK19): Lampe SET LIMITER. limiter_db ist die größte Absenkung des Set-Limiters (≤ 0, hält 0,5 s im Kern); unter −0,1 dB leuchtet sie.
+// Kein Feld (älterer Kern), 0, Rauschen, Text und NaN ergeben false: nie eine Lampe aus einem Wert, den es nicht gibt.
+export const limiterAn = (arr) => Number(arr?.limiter_db) < -0.1;
 
 export function bindeTransport(ctx) {
   const { st, $ } = ctx;
@@ -84,6 +87,7 @@ export function bindeTransport(ctx) {
     st.arr = f; arrZeit = performance.now();
     kopf.melde(Number(f.projekt_beat), ctx.bpm(), arrZeit, f.status === 2);
     setzeText($('kern'), kernText(f));
+    $('limiter').hidden = !limiterAn(f);
     $('play').classList.toggle('an', f.status === 1 || f.status === 2);
   });
   ctx.vorBild.push((t0) => {
@@ -91,7 +95,7 @@ export function bindeTransport(ctx) {
     st.kopfBeat = s.kopfBeat; st.arrUnbekannt = s.unbekannt;
     if (s.unbekannt !== unbekannt) {          // beim Wechsel: Anzeige „unbekannt“ setzen, bei der nächsten Meldung schreibt der Ereignis-Haken wieder
       unbekannt = s.unbekannt;
-      if (unbekannt) { setzeText($('kern'), KERN_UNBEKANNT); $('play').classList.remove('an'); }
+      if (unbekannt) { setzeText($('kern'), KERN_UNBEKANNT); $('play').classList.remove('an'); $('limiter').hidden = true; }
       else if (st.arr) setzeText($('kern'), kernText(st.arr));
     }
     if (st.kopfBeat !== null && st.follow) { const b0 = folgeSeite(st.ansicht, st.kopfBeat, ctx.breite()); if (b0 !== null) st.ansicht = { ...st.ansicht, beat0: b0 }; }

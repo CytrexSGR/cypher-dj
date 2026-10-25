@@ -30,7 +30,9 @@ import { KernAnbindung } from '../leitstand/src/kern.ts';
 import { json as sendeJson, koerper as leseKoerper, postAbgewiesen, quelleAusKopf } from './http/transport.ts';
 import { Router, type Route, type Bereich, type BereichKontext } from './http/router.ts';
 import { projBereich, type ProjOptionen } from './bereiche/proj/bereich.ts';
+import { geraeteBereich, type GeraeteOptionen } from './bereiche/geraete/bereich.ts';
 import { ausgabeBereich } from './bereiche/proj/ausgabe.ts';   // Paket S3
+import { aufnahmeBereich } from './bereiche/proj/aufnahme.ts';   // 1.8 Slice 1
 import type { Dekodiert, Felder } from '../leitstand/src/adressen.ts';
 import { ZIELE, ZIEL_KURVE, ZIEL_KURVEN } from './oeffentlich/kurven.js';
 
@@ -44,7 +46,7 @@ import { WelleCache, WelleFehler, loopQuelle, fassungQuelle, dateiQuelle } from 
 import { OEFFENTLICH, REPO, REPO_PFADE, instanz, ports, shmOrdner, rasterOrdnerVorgabe, hotcueOrdnerVorgabe, huellenVorgabe, musterOrdnerVorgabe,
   wirtOrdnerVorgabe, kitsOrdnerVorgabe, zusatzKit, strudelPakete, loopOrdnerVorgabe, welleCacheVorgabe, arbeitsbestandVorgabe } from './pfade.ts';
 import { tempoRampe, vorlaufBeats } from './tempo_rampe.ts';
-import { RASTER_WAHL, abBeat, sprungDelta, rasterRunden, hotcueDatei, leseHotcues, schreibeHotcues, type Hotcue, type Fassung, rasterSchritt, RASTER_MAX, rasterDatei, leseRaster, schreibeRaster, einsSetzen, rasterErbe, einsNachFix, einsZeile, haengeKorrekturAn, letzteEinsZeile, hatHandEins, hotcuesErbe } from './deck_bedienung.ts';
+import { RASTER_WAHL, abBeat, sprungDelta, loopStart, rasterRunden, hotcueDatei, leseHotcues, schreibeHotcues, type Hotcue, type Fassung, rasterSchritt, RASTER_MAX, rasterDatei, leseRaster, schreibeRaster, einsSetzen, rasterErbe, einsNachFix, einsZeile, haengeKorrekturAn, letzteEinsZeile, hatHandEins, hotcuesErbe } from './deck_bedienung.ts';
 // @ts-expect-error reines .mjs ohne Typen (djk/loops)
 import { loopZuKlang } from '../loops/kit_schreiben.mjs';
 import { AB, PFAD, oeffnet, kanalOffen, FEHL_STATUS, ersterFreierBeat } from './hand_bedienung.ts';
@@ -67,6 +69,8 @@ export function pythonVorgabe(): string {
   const kandidaten = [process.env.CYPHERDJ_PYTHON, path.join(REPO, 'djk', 'werkstatt', '.venv', 'bin', 'python'), path.join(REPO, '.venv', 'bin', 'python')];
   return kandidaten.find((p) => p !== undefined && p !== '' && fs.existsSync(p)) ?? 'python3';
 }
+// Mixer-Regler des Projekts (spur/*, grp/*, pm/fader) ändern sich nur über das Projekt (Spec 6.22), auf keinem Weg am Projekt vorbei
+const ueberProjekt = (pfad: string): boolean => pfad.startsWith('spur/') || pfad.startsWith('grp/') || pfad === 'pm/fader';
 const STRUDEL_ZEITLIMIT_MS = 2000;   // Plan-Review M3
 
 export interface ServerOptionen {
@@ -95,6 +99,7 @@ export interface ServerOptionen {
   musterSets?: string;         // S2b: Muster-Quellen track.mjs und Dirigent-Blöcke, Vorgabe <REPO>/sets
   loopWerkzeug?: ImportOptionen['werkzeug'];   // Tests: Attrappen vor ffmpeg/rubberband des Loop-Imports (S6)
   katalog?: string;      // Browser (Plan 2026-10-10): katalog.sqlite, Vorgabe $CYPHERDJ_KATALOG bzw. neben der Mediathek
+  geraete?: GeraeteOptionen;   // I08: Pfade und Erkennung (Tests geben eigene)
   proj?: ProjOptionen;   // D1 S2: Projektwurzel, Arbeitsordner (Vorgaben je Instanz, bereiche/proj/sitzung.ts)
   mediathek?: string;    // Mediathek T2: Vorgabe $CYPHERDJ_MEDIATHEK (nur lesen; fehlt sie: 503 mediathek_fehlt)
   einleserModul?: string;  // Mediathek T2: Python-Modul für POST /mediathek/vorbereiten (Vorgabe werkstatt.einzeln); Python selbst: `python`
@@ -108,11 +113,11 @@ const KLANG_AUS_MAX = 32768, KLANG_ERR_MAX = 8192;
 export type Pruefmodus = 'an' | 'aus' | 'unbekannt';
 
 // Drosselung je Schlüssel: höchstens eine Meldung je Intervall, die letzte gewinnt (nachgereicht)
-const DROSSEL_MS: Record<string, number> = { '/uhr': 50, '/zustand/deck': 100, '/pegel': 100, '/zustand/komp': 100, '/zustand/arr': 50 };   // D1 S2: /zustand/arr 50 Hz beim Spielen, Drossel 50 ms (Spec 3.1)
+const DROSSEL_MS: Record<string, number> = { '/uhr': 50, '/zustand/deck': 100, '/pegel': 100, '/zustand/komp': 100, '/zustand/arr': 50, '/zustand/ein': 250, '/zustand/rec': 100 };   // D1 S2: /zustand/arr 50 Hz beim Spielen, Drossel 50 ms (Spec 3.1)
 const DURCHREICHEN = new Set(['/uhr', '/zustand/deck', '/pegel', '/e/regler', '/e/hand', '/e/geladen', '/e/hotcue', '/e/fx',
   '/e/fx/zuweisung', '/e/fx/routing', '/q', '/e/protokollfehler', '/e/halter', '/e/neustart', '/k/willkommen', '/e/ki', '/e/loop', '/e/mitschnitt', '/e/raster',
   '/zustand/komp',   // Effekt-Sektion 2026-10-11: Absenkung je aktivem Kompressor (10 Hz)
-  '/zustand/arr', '/e/freeze']);   // D1 S2 (Spec 3.4)
+  '/zustand/arr', '/e/freeze', '/zustand/ein', '/zustand/rec', '/e/aufnahme']);   // D1 S2 (Spec 3.4); I08 (§5.14)
 
 interface Eintrag {
   material_id: string; titel: string; camelot: string | null; quelle_bpm: number; dauer_s: number; lufs: number;
@@ -421,6 +426,9 @@ export class Oberflaeche {
     this.router.melde(this.proj);
     this.ausgabe = ausgabeBereich(this.bereichKontext(), this.proj.zugang, { wirtOrdner: () => this.wirtBasis() });   // Paket S3: /proj/freeze, /proj/export (Spec 3.4)
     this.router.melde(this.ausgabe);
+    this.aufnahme = aufnahmeBereich(this.bereichKontext(), this.proj.zugang);   // 1.8: /proj/aufnahme
+    this.router.melde(this.aufnahme);
+    this.router.melde(geraeteBereich(this.bereichKontext(), opt.geraete ?? {}));   // I08: /geraete
   }
 
   async starte(): Promise<void> {
@@ -443,6 +451,7 @@ export class Oberflaeche {
   async stoppe(): Promise<void> {
     if (this.gestoppt) return;   // zweimal (Test-Neustart und Aufräumen) darf nichts werfen
     this.gestoppt = true;
+    this.aufnahme.aufnahme.schliesse();
     this.ausgabe.ausgabe.schliesse();   // Fix-Runde S3 R7: ein wartender Freeze endet jetzt mit freeze_fehler, nicht erst nach Stille oder Frist
     this.proj.sitzung.schliesse();   // D1 S2: ausstehenden Mixer-Eintrag schreiben, Projekt-Sperre frei
     for (const l of this.spuren.values()) for (const t of l.timer) clearTimeout(t);
@@ -738,7 +747,24 @@ export class Oberflaeche {
     } else {
       return this.json(a, 400, { fehler: 'ziel_oder_delta' });
     }
-    this.json(a, 200, { ok: true, felder: this.deckTeil('/k/deck/sprung', st, ab, raster, { delta_beats: delta }) });
+    // Der Kern verschiebt einen scharfen Loop beim Sprung mit (kern_deck.cpp art 6: loop_a += llround(delta · fpb), deck.cpp springe);
+    // das Loop-Gedächtnis zieht um dasselbe Delta nach (llround(delta · fpb) / fpb, wie der Kern in Frames rechnet). Lehnt der Kern ab
+    // (ausserhalb_bereich: der Loop ginge aus dem Material), bleibt sein Loop stehen: dann Rücknahme.
+    const l = this.loopVon(st) ? this.aktiverLoop[String(st.deck)] : undefined;
+    let schritt = 0;
+    if (l) {
+      const fpb = 48000 * 60 / st.f.basis_bpm;
+      schritt = Math.round(delta * fpb) / fpb;
+      this.setzeAktivenLoop(st.deck, { ...l, start: l.start + schritt });
+    }
+    const felder = this.deckTeil('/k/deck/sprung', st, ab, raster, { delta_beats: delta });
+    if (l) {
+      void this.warteQuittung(Number(felder.id), ab).then((q) => {
+        const jetzt = this.aktiverLoop[String(st.deck)];
+        if (q && q.status === 6 && jetzt) this.setzeAktivenLoop(st.deck, { ...jetzt, start: jetzt.start - schritt });
+      });
+    }
+    this.json(a, 200, { ok: true, felder });
   }
 
   // Hörbares Ziehen (2026-10-17): {deck, phase 0 los | 1 Griff | 2 Zug, delta (Quell-Beats seit dem Griff)}. Der Kern liest das Material
@@ -795,7 +821,37 @@ export class Oberflaeche {
     const st = this.deckStand(d.deck);
     if (!st) return this.json(a, 409, { fehler: 'kein_kernstand' });
     const ab = this.deckAb(st, raster);
-    this.merkeLoop(st, ab, d.laenge);
+    // behalte_start (Längenknöpfe, Traktor): bei scharfem Loop nur die Länge ändern, der Start bleibt (/k/deck/loop_laenge, Kern setzt
+    // den Loop bei start_beat statt am Kopf). Ohne gemerkten scharfen Loop (oder Länge 0) der gewöhnliche Weg.
+    const alt = d.behalte_start === true && d.laenge > 0 && this.loopVon(st) ? this.aktiverLoop[String(st.deck)] : undefined;
+    if (alt) {
+      this.setzeAktivenLoop(st.deck, { ...alt, laenge: d.laenge });
+      const felder = this.deckTeil('/k/deck/loop_laenge', st, ab, raster, { start_beat: alt.start, laenge_beats: d.laenge });
+      void this.warteQuittung(Number(felder.id), ab).then((q) => {   // abgelehnt (Loop ginge aus dem Material): der alte Loop läuft weiter
+        if (q && q.status === 6) this.setzeAktivenLoop(st.deck, alt);
+      });
+      return this.json(a, 200, { ok: true, felder });
+    }
+    // Loop-Raster (Plan 2026-10-21): mit Raster setzt der Server den Start selbst auf das Track-Raster (L1/L2) und schickt ihn als
+    // festen Start (/k/deck/loop_laenge, Kern art 5 mit quell_beat); lehnt der Kern ab, gilt wieder der vorige Loop (L4).
+    const imLauf = Number(st.z.status) === 3 || Number(st.z.status) === 4;   // im Loop/Roll: den gewickelten Kopf kennt nur der Kern (L2b)
+    if (d.laenge > 0 && raster > 0 && !imLauf) {
+      // Sofort (nur Vorlauf), nicht auf die Rasterstelle des Masters: der Start liegt schon auf dem Track-Raster, das Warten kostete bei
+      // Takt-Raster bis zu 4 Beats (Andreas 21.10.: „der loop knopf reagiert nur verzögert“). Liegt der Start bis zu ½ Beat vor dem Kopf,
+      // läuft der Kopf in den Loop hinein.
+      const jetzt = this.deckAb(st, 0);
+      const start = loopStart({ laeuft: Number(st.z.status) >= 2, quell: Number(st.z.quell_beat), beat: st.beat, ab: jetzt, raster, eins: st.eins });
+      const vorher = this.aktiverLoop[String(st.deck)];
+      this.setzeAktivenLoop(st.deck, { schluessel: Oberflaeche.fassungSchluessel(st.f), start, laenge: d.laenge });
+      const felder = this.deckTeil('/k/deck/loop_laenge', st, jetzt, 0, { start_beat: start, laenge_beats: d.laenge });
+      void this.warteQuittung(Number(felder.id), jetzt).then((q) => {
+        if (!q || q.status !== 6) return;
+        if (vorher) this.setzeAktivenLoop(st.deck, vorher);
+        else { delete this.aktiverLoop[String(st.deck)]; this.sichereAktiveLoops(); }
+      });
+      return this.json(a, 200, { ok: true, felder });
+    }
+    this.merkeLoop(st, ab, d.laenge);   // Raster 0 oder aus: der Kern setzt ab dem Kopf (L3)
     this.json(a, 200, { ok: true, felder: this.deckTeil('/k/deck/loop', st, ab, raster, { laenge_beats: d.laenge }) });
   }
 
@@ -1055,7 +1111,9 @@ export class Oberflaeche {
     if (typeof pfad !== 'string' || !PFAD.test(pfad)) return this.json(a, 400, { fehler: 'pfad' });
     // D1 S2-Integration (Spec 6.22): Spur-Regler ändern sich nur über das Projekt (/proj/aendern, spur_aendern) und über den Rückweg /e/regler
     // mit Halter mensch; PFAD bleibt Vokabular (Vertragstest), aber hier kommt nichts durch, sonst fuhre Cypher am Projekt vorbei.
-    if (pfad.startsWith('spur/')) return this.json(a, 409, { fehler: 'ueber_projekt', text: 'track faders are changed through the project (/proj/aendern, spur_aendern)' });
+    if (ueberProjekt(pfad)) return this.json(a, 409, { fehler: 'ueber_projekt', text: pfad.startsWith('spur/')
+      ? 'track faders are changed through the project (/proj/aendern, spur_aendern)'
+      : 'group and master faders are changed through the project (/proj/aendern: gruppenspur_aendern, master_aendern)' });
     if (typeof nach !== 'number' || !Number.isFinite(nach)) return this.json(a, 400, { fehler: 'nach' });
     if (typeof takte !== 'number' || !(takte >= 0 && takte <= 64)) return this.json(a, 400, { fehler: 'takte' });
     if (typeof ab !== 'string' || !(ab in AB)) return this.json(a, 400, { fehler: 'ab' });
@@ -1150,10 +1208,12 @@ export class Oberflaeche {
     const r = pruefeSpur(d.spur, this.fahrbar);
     if ('fehler' in r) return this.json(a, 400, { fehler: 'spur', text: r.fehler });
     // D1 S2-Integration (Spec 6.22, 6.30): Spur-Regler ändern sich nur über das Projekt, auch eine Automationsspur fährt sie nicht
-    const ueber = r.spur.fahrten.findIndex((f) => f.ziel.startsWith('spur/'));
+    const ueber = r.spur.fahrten.findIndex((f) => ueberProjekt(f.ziel));
     if (ueber >= 0) {
       return this.json(a, 409, { fehler: 'ueber_projekt', ziel: r.spur.fahrten[ueber].ziel, index: ueber,
-        text: 'track faders are changed through the project (/proj/aendern, spur_aendern), not by an automation track' });
+        text: r.spur.fahrten[ueber].ziel.startsWith('spur/')
+          ? 'track faders are changed through the project (/proj/aendern, spur_aendern), not by an automation track'
+          : 'group and master faders are changed through the project (/proj/aendern: gruppenspur_aendern, master_aendern), not by an automation track' });
     }
     this.spurenAufraeumen();
     const quelle = this.quelle(), name = r.spur.name;
@@ -1478,6 +1538,7 @@ export class Oberflaeche {
   // trägt cypher; sonst andreas. Befehle aus Kern-Ereignissen (Wiederherstellen) laufen außerhalb und bleiben andreas.
   private readonly qs = new AsyncLocalStorage<string>();
   private readonly proj: ReturnType<typeof projBereich>;   // D1 S2: Bereich proj (Sitzung schliesst beim Stoppen)
+  private readonly aufnahme: ReturnType<typeof aufnahmeBereich>;   // 1.8: Bereich proj-aufnahme
   readonly ausgabe: ReturnType<typeof ausgabeBereich>;   // Paket S3: Bereich proj-ausgabe (schliesst beim Stoppen, Fix-Runde R7)
   private readonly router = new Router();   // Plan d1-s1 Task 9: Bereiche melden hier ihre Routen (oberflaeche zuerst, dann proj)
   meldeBereich(b: Bereich): void { this.router.melde(b); }

@@ -36,3 +36,12 @@ export function belegeTestInstanz() {
   }
   process.once('exit', () => { freigabe?.(); freigabe = null; });
 }
+
+// Nachzug R2 (m4): ein Server im Testprozess liest seine Instanz zur Laufzeit aus CYPHERDJ_INSTANZ (pfade.ts instanz()). Leer wäre der Betrieb:
+// Vorhoeren.ende() schriebe bei jedem Stopp /dev/shm/cypherdj/kanten des Betriebs per grep -v und mv neu. Wer einen Oberflaeche im Testprozess
+// baut, ruft dies vor `new Oberflaeche`; t.after stellt die Umgebung wieder her (nach den früher registrierten Stopp-Hooks).
+export function serverInstanzSetzen(t) {
+  const alt = process.env.CYPHERDJ_INSTANZ;
+  process.env.CYPHERDJ_INSTANZ = TEST_INSTANZ;
+  t.after(() => { if (alt === undefined) delete process.env.CYPHERDJ_INSTANZ; else process.env.CYPHERDJ_INSTANZ = alt; });
+}

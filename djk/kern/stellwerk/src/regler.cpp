@@ -11,6 +11,21 @@
 namespace cypherdj::stellwerk {
 
 namespace {
+int nr_hinter(const char* pfad, const char* praefix) {
+  const size_t n = std::strlen(praefix);
+  if (std::strncmp(pfad, praefix, n) != 0) return 0;
+  const char* p = pfad + n;
+  if (*p < '1' || *p > '9') return 0;
+  int zahl = 0, ziffern = 0;
+  while (*p >= '0' && *p <= '9') { zahl = zahl * 10 + (*p - '0'); ++p; if (++ziffern > 3) return 0; }
+  return *p == '/' && p[1] != '\0' ? zahl : 0;
+}
+}  // namespace
+
+int spur_nr(const char* pfad) { return nr_hinter(pfad, "spur/"); }
+int grp_nr(const char* pfad) { return nr_hinter(pfad, "grp/"); }
+
+namespace {
 
 constexpr int MS(double ms) { return static_cast<int>(ms * SR / 1000.0 + 0.5); }
 constexpr Kurve K_FADER{KurvenTyp::fader_db, -200.0f, 0.0f, false};
@@ -142,6 +157,19 @@ ReglerTabelle::ReglerTabelle() {
     std::snprintf(p, sizeof p, "spur/%d/solo", n);
     neu(p, -1, Rolle::spur_solo, 0, 1, 0, 0, false, false, true, true, K_SCHALTER);
   }
+  // 1.10 Slice 1 (Spec 5.3): Gruppen-Regler und Fader des Produktions-Masters, global (Kanal −1), alle dürfen. Werte und Rampen wie
+  // spur/<n>/*; die Blende von Mute und Solo macht das Modul Arrangement (arr_ausgang.cpp). Am Ende der Tabelle: kein Index wandert.
+  for (int n = 1; n <= GRP_REGLER_GRUPPEN; n++) {
+    std::snprintf(p, sizeof p, "grp/%d/fader", n);
+    neu(p, -1, Rolle::grp_fader, -200, 6, 0, MS(10), false, true, false, false, K_SPUR_FADER);
+    std::snprintf(p, sizeof p, "grp/%d/pan", n);
+    neu(p, -1, Rolle::grp_pan, -1, 1, 0, MS(10), false, false, false, false, linear(-1, 1));
+    std::snprintf(p, sizeof p, "grp/%d/mute", n);
+    neu(p, -1, Rolle::grp_mute, 0, 1, 0, 0, false, false, true, true, K_SCHALTER);
+    std::snprintf(p, sizeof p, "grp/%d/solo", n);
+    neu(p, -1, Rolle::grp_solo, 0, 1, 0, 0, false, false, true, true, K_SCHALTER);
+  }
+  neu("pm/fader", -1, Rolle::pm_fader, -200, 6, 0, MS(10), false, true, false, false, K_SPUR_FADER);
   for (int i = 0; i < n_; i++) sortiert_[i] = static_cast<int16_t>(i);
   std::sort(sortiert_, sortiert_ + n_, [&](int16_t a, int16_t b) { return std::strcmp(def_[a].pfad, def_[b].pfad) < 0; });
 }

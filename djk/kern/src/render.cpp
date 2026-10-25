@@ -30,6 +30,9 @@ RenderErgebnis abbruch(const char* fehler, std::string meldung) {
 
 }  // namespace
 
+// Mixer-Regler des Projekts: spur/<n>/…, grp/<n>/… und pm/fader (die Tabelle prüft Name, Bereich und Ganzzahligkeit)
+static bool mixer_pfad(const std::string& p) { return p.compare(0, 5, "spur/") == 0 || p.compare(0, 4, "grp/") == 0 || p == "pm/fader"; }
+
 RenderErgebnis rendere(const RenderAuftrag& a) {
 #ifdef CYPHERDJ_MUTATION_RENDER_OHNE_OBERGRENZE
   const bool zu_lang = false;   // Fehlerfall L3: keine Obergrenze, 1e9 Beats laufen bis zum bad_alloc
@@ -51,11 +54,19 @@ RenderErgebnis rendere(const RenderAuftrag& a) {
     if (sp.art == ArrArt::wirt)
       return weg("wirt_nicht_eingefroren", "Spur " + std::to_string(sp.nr) + " ist eine Wirt-Spur (erst einfrieren)");
   if (a.gegenprobe_spur != 0) {
-    if (a.gegenprobe_spur < 1 || a.gegenprobe_spur > ARR_SPUREN) return weg("gegenprobe", "Spur 1..8");
+    if (a.gegenprobe_spur < 1 || a.gegenprobe_spur > ARR_SPUREN)
+      return weg("gegenprobe", "Spur 1.." + std::to_string(ARR_SPUREN));
     const ArrSpur& sp = w.snap->spur[a.gegenprobe_spur - 1];
     if (sp.art != ArrArt::audio || sp.n_clips == 0) return weg("gegenprobe", "Spur ohne Audio-Clips");
     for (int i = 0; i < sp.n_clips; ++i) {
       auto* c = const_cast<ArrClip*>(&sp.clips[i]);   // zeigt in w.snap->clips (veränderlich, noch nicht im Kern)
+      if (c->warp) {   // Paket 1.13: ein gewarpter Clip liest nicht über offset_frames; alle Marker ein Frame weiter in der Quelle
+#ifndef CYPHERDJ_MUTATION_RENDER_GEGENPROBE_WARP_BLIND   // Fehlerfall: die Gegenprobe fasst einen Warp nicht an, bleibt also gleich (blind)
+        auto* wf = const_cast<double*>(c->warp->frame);   // zeigt in w.snap->warp_frame (ein Bereich je Clip)
+        for (int j = 0; j < c->warp->n; ++j) wf[j] += 1.0;
+#endif
+        continue;
+      }
       if (c->offset_frames + 1 >= c->audio->frames) return weg("gegenprobe", "Clip ohne Platz für 1 Frame");
       c->offset_frames += 1;
     }
@@ -87,10 +98,10 @@ RenderErgebnis rendere(const RenderAuftrag& a) {
     kern->regler_setzen("erz/4/fader", 0.0f);   // 2.3: Fader 0 dB; Trim, EQ, Kill, Filter, Komp, Ziel, xseite und Sends
 #endif                                          // (−200) stehen schon auf der Vorgabe
     for (const SpurRegler& sr : a.spur_regler) {
-      if (sr.pfad.compare(0, 5, "spur/") != 0 || !kern->regler_setzen(sr.pfad.c_str(), sr.wert)) {
+      if (!mixer_pfad(sr.pfad) || !kern->regler_setzen(sr.pfad.c_str(), sr.wert)) {
         if (const ArrSnapshot* rest = kern->arrangement().snapshot()) gib_wiedergabe(const_cast<ArrSnapshot*>(rest), cache);
         gib_wiedergabe(w.snap.release(), cache);
-        return abbruch("regler", sr.pfad + " = " + std::to_string(sr.wert) + " ist kein Spur-Regler in seinen Grenzen");
+        return abbruch("regler", sr.pfad + " = " + std::to_string(sr.wert) + " ist kein Mixer-Regler (spur, grp, pm/fader) in seinen Grenzen");
       }
       ++e.regler;
     }
@@ -113,7 +124,9 @@ RenderErgebnis rendere(const RenderAuftrag& a) {
   bef->schiebe(s);
   const int n = a.quantum;
   const int64_t grenze = 4LL * n + 25;   // der Einsatz liegt bei 3n + 25 (Quittung 2 im vierten Zyklus)
-  int64_t ab = -1;                       // Kern-Sample des ersten Master-Werts
+  const bool pm = a.abgriff == RenderAbgriff::produktion;   // 1.10 Slice 2 (E2)
+  e.abgriff = pm ? "produktion" : "set";
+  int64_t ab = -1;                       // Kern-Sample des ersten Export-Werts (Master: plus Vorhalt; Abgriff: der Einsatz selbst)
   while (true) {
     const int64_t n0 = kern->sample();
     const uint64_t w0 = cdj_lade(&ring->w);
@@ -146,23 +159,35 @@ RenderErgebnis rendere(const RenderAuftrag& a) {
 #ifdef CYPHERDJ_MUTATION_RENDER_OHNE_VORHALT
       ab = e.start_sample;   // Fehlerfall: Master ohne den Vorhalt des Limiters ausgerichtet
 #else
-      ab = e.start_sample + e.vorhalt;
+      ab = pm ? e.start_sample : e.start_sample + e.vorhalt;   // der PM-Abgriff liegt um den Vorhalt vor dem Ring-Master
 #endif
       e.l.assign(static_cast<size_t>(e.frames), 0.0f);
       e.r.assign(static_cast<size_t>(e.frames), 0.0f);
     }
     const float* d = cdj_ring_daten_c(ring);
+    const float* pl = kern->pm_abgriff_l();
+    const float* pr = kern->pm_abgriff_r();
     for (int i = 0; i < n; ++i) {
       const int64_t j = n0 + i - ab;
       if (j < 0 || j >= e.frames) continue;
-      const uint64_t f = (w0 + static_cast<uint64_t>(i)) % CDJ_RING_CAP;
-      e.l[static_cast<size_t>(j)] = d[f * 4 + 0];
-      e.r[static_cast<size_t>(j)] = d[f * 4 + 1];
-      e.spitze = std::max(e.spitze, std::max(std::fabs(d[f * 4 + 0]), std::fabs(d[f * 4 + 1])));
+      float l, r;
+      if (pm) {
+        l = pl[i];
+        r = pr[i];
+      } else {
+        const uint64_t f = (w0 + static_cast<uint64_t>(i)) % CDJ_RING_CAP;
+        l = d[f * 4 + 0];
+        r = d[f * 4 + 1];
+      }
+      e.l[static_cast<size_t>(j)] = l;
+      e.r[static_cast<size_t>(j)] = r;
+      e.spitze = std::max(e.spitze, std::max(std::fabs(l), std::fabs(r)));
     }
     if (n0 + n >= ab + e.frames) break;
   }
   if (const ArrSnapshot* rest = kern->arrangement().snapshot()) gib_wiedergabe(const_cast<ArrSnapshot*>(rest), cache);
+  e.limiter_db_max = std::max(0.0f, -kern->limiter_db_min());   // positive Zahl; max statt Vorzeichenwechsel, damit „griff nie ein“ +0 ist, nicht −0
+  e.ueber_decke = e.spitze > static_cast<float>(std::pow(10.0, a.limiter_dbtp / 20.0));
   return e;
 }
 
@@ -191,9 +216,10 @@ bool lies_spur_regler(const std::string& pfad, std::vector<SpurRegler>& aus, std
   const cypherdj::stellwerk::ReglerTabelle tab;
   for (auto it = j.begin(); it != j.end(); ++it) {
     const std::string& p = it.key();
-    const int r = p.compare(0, 5, "spur/") == 0 ? tab.suche(p.c_str()) : -1;
+    const int r = mixer_pfad(p) ? tab.suche(p.c_str()) : -1;
     if (r < 0) {
-      fehler = pfad + ": " + p + " ist kein Spur-Regler (spur/<1..8>/{fader,pan,mute,solo})";
+      fehler = pfad + ": " + p + " ist kein Mixer-Regler (spur/<1.." + std::to_string(ARR_SPUREN) + ">, grp/<1.." + std::to_string(ARR_GRUPPEN) +
+               ">/{fader,pan,mute,solo}, pm/fader)";
       return false;
     }
     if (!it.value().is_number()) {

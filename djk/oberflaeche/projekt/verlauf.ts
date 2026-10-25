@@ -260,13 +260,16 @@ export class Verlauf {
 // `dekodiert`: Patches tragen den abgeleiteten Zustand der Audio-Clips nicht (Spec 6.6); nach Undo/Redo setzt dieser Haken ihn neu.
 export interface Haken { speichere?: (neu: Projekt) => void; dekodiert?: (sha256: string) => DekodiertZustand }
 
-// Nur eine einzelne Reglerbewegung (ein Befehl spur_aendern mit genau einem Mixer-Feld) ist zusammenfassbar.
+// Nur eine einzelne Reglerbewegung (ein Befehl mit genau einem Mixer-Feld) ist zusammenfassbar: spur_aendern (spur_id), seit 1.10 auch
+// gruppenspur_aendern (gruppe_id) und master_aendern (der Produktions-Master hat nur fader_db). Name, Farbe und gefaltet sind keine Mixer-Felder.
 function mixerSchluessel(befehle: unknown[]): string | null {
   if (befehle.length !== 1) return null;
   const b = befehle[0] as Record<string, unknown>;
-  if (!b || b.befehl !== 'spur_aendern' || typeof b.spur_id !== 'string') return null;
-  const rest = Object.keys(b).filter((k) => k !== 'befehl' && k !== 'spur_id');
-  return rest.length === 1 && MIXER_FELDER.includes(rest[0]) ? `${b.spur_id}:${rest[0]}` : null;
+  if (!b) return null;
+  const idFeld = b.befehl === 'spur_aendern' ? 'spur_id' : b.befehl === 'gruppenspur_aendern' ? 'gruppe_id' : b.befehl === 'master_aendern' ? '' : null;
+  if (idFeld === null || (idFeld !== '' && typeof b[idFeld] !== 'string')) return null;
+  const rest = Object.keys(b).filter((k) => k !== 'befehl' && k !== idFeld);
+  return rest.length === 1 && MIXER_FELDER.includes(rest[0]) ? `${idFeld === '' ? 'master' : String(b[idFeld])}:${rest[0]}` : null;
 }
 
 // speichern, dann ins Log; scheitert das Log, steht project.json wieder auf `alt`. Vertrag (sitzung.ts vollziehe hängt daran, Spec 6.31): speichere

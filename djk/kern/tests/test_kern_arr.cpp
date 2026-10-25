@@ -28,6 +28,15 @@ static float spitze(const std::vector<float>& x, int64_t von, int64_t bis) {
 }
 
 int main() {
+  {  // E3 S1: Pegelname spur/<n> mehrstellig (heute "spur/:" bei Index 9)
+    char n[48];
+    cdj::spur_pegel_name(0, n);  PRUEF(std::strcmp(n, "spur/1") == 0);
+    cdj::spur_pegel_name(7, n);  PRUEF(std::strcmp(n, "spur/8") == 0);
+    cdj::spur_pegel_name(9, n);  PRUEF(std::strcmp(n, "spur/10") == 0);
+    cdj::spur_pegel_name(31, n); PRUEF(std::strcmp(n, "spur/32") == 0);
+    cdj::spur_pegel_name(99, n); PRUEF(std::strcmp(n, "spur/100") == 0);
+    cdj::spur_pegel_name(998, n); PRUEF(std::strcmp(n, "spur/999") == 0);
+  }
   k35::Arbeitsbestand ab("test_kern_arr");
   {  // 1-6: Laden, Start sofort, Einsatz am Ring, Zustand, Pegel, Spur-Fader, Stopp, zweites Laden
     arr35::Lauf x(ab.pfad, "test_kern_arr");
@@ -271,6 +280,30 @@ int main() {
     kern->zyklus(N, 0);
     PRUEF(static_cast<int64_t>(cdj_lade(&ring->sample_minus_w)) == -7000);
     PRUEF(cdj_lade(&ring->w) == 7000 + 2 * N);
+  }
+  {  // 1.10 Slice 1: /pegel grp/<n> je Gruppe mit Mitgliedern und pm (Spitze nach Gruppen- bzw. PM-Fader)
+    arr35::Lauf x(ab.pfad, "test_kern_arr_grp");
+    const std::string a = x.ordner.audio('a', 200000, 0.25f);
+    const std::string clip = x.ordner.clip("c1", 0.0, 4.0, a, 200000);
+    x.lauf(10 * N);
+    PRUEF(!x.alle(cdj::Ereignis::PEGEL, "master").empty());   // Positiv-Kontrolle: die Pegel laufen schon, nur ohne Wiedergabe kommt kein pm
+    PRUEF(x.alle(cdj::Ereignis::PEGEL, "pm").empty());        // 1.10: ohne geladene Wiedergabe schweigt pm
+    const int64_t l1 = x.laden2(7,
+        "{\"nr\":1,\"art\":\"audio\",\"ausgang\":{\"art\":\"gruppe\",\"nr\":1},\"clips\":[" + clip + "]},"
+        "{\"nr\":2,\"art\":\"audio\",\"clips\":[" + clip + "]}",
+        "{\"nr\":1,\"ausgang\":{\"art\":\"master\"}}");
+    x.lauf(12 * N);
+    x.start(0.0, 0);
+    x.lauf(80 * N);
+    PRUEF(x.quittung(l1, 3));
+    const auto g1 = x.alle(cdj::Ereignis::PEGEL, "grp/1"), pm = x.alle(cdj::Ereignis::PEGEL, "pm");
+    PRUEF(!g1.empty() && !pm.empty());
+    PRUEF(x.alle(cdj::Ereignis::PEGEL, "grp/2").empty());   // Negativ-Kontrolle: Gruppe 2 hat kein Mitglied
+    if (!g1.empty() && !pm.empty()) {
+      // Spur 0,25 in der Mitte: 0,25 · 0,7071 = 0,1768 (−15,05 dB); die Gruppe trägt eine Spur, der PM Gruppe plus Spur 2 = 0,3536 (−9,03 dB)
+      PRUEF_NAH(g1.back().pegel[0], -15.05, 0.2);
+      PRUEF_NAH(pm.back().pegel[0], -9.03, 0.2);
+    }
   }
   PRUEF_ENDE();
 }

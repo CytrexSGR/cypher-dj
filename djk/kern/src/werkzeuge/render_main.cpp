@@ -8,12 +8,15 @@
 // Datei (kein Kern seit dem Boot) oder steht --ohne-zustand, gelten die Vorgaben eines frisch gestarteten Kerns, erz/4
 // neutral und darüber --spur-regler („projekt“); ohne --spur-regler dann Rückgabe 3. Ein vorhandener, aber unlesbarer
 // Zustand ist Rückgabe 3, kein stiller Rückfall. Das Programm parst kein Projekt.
-// --spur-regler <datei.json>: EIN JSON-Objekt Pfad -> Wert, Pfade spur/<n>/{fader,pan,mute,solo} in Kern-Einheiten
+// --spur-regler <datei.json>: EIN JSON-Objekt Pfad -> Wert, Pfade spur/<n>/{fader,pan,mute,solo}, grp/<n>/{fader,pan,mute,solo} und pm/fader in Kern-Einheiten
 // (fader dB −200..+6, pan −1..+1, mute und solo 0/1).
 // Aufruf: cypherdj-render --nr N --von-beat V --bis-beat B --bpm T --aus <datei.wav> [--quantum Q] [--konfig kern.toml]
 //         [--zustand pfad | --ohne-zustand] [--spur-regler datei.json] [--arr-ordner pfad] [--gegenprobe-spur S]
+//         [--abgriff produktion|set]
+// --abgriff (1.10 Slice 2, E2): produktion = der PM-Ausgang des Kerns vor erz/4, Kleber, master/pegel und Set-Limiter; set (Vorgabe, wie bisher) = der
+// Master hinter dem Set-Limiter. Der PM-Abgriff ist der PM ohne DJ-Kanalzug, der Ring-Master derselbe PM durch den Isolator von erz/4 (Betrag gleich).
 // Ausgabe (stdout, eine Zeile): {"datei","frames","spitze_db","start_sample","phase","quantum","vorhalt","regler",
-// "regler_quelle"}
+// "regler_quelle","abgriff","ueber_decke","limiter_db_max"}
 // Zahlen werden streng gelesen (Fix L8: „abc“ oder „128x“ sind Rückgabe 2 mit dem Schalter im Text, nicht 0 oder 128);
 // eine ungültige CYPHERDJ_INSTANZ ist Rückgabe 2 mit Hinweis.
 // Rückgabe: 0 geschrieben, 2 Aufruf (auch: Spur-Regler-Datei unlesbar oder ungültig; bis − von über 2048 Beats,
@@ -47,7 +50,7 @@
 static int hilfe() {
   std::fprintf(stderr, "Aufruf: cypherdj-render --nr N --von-beat V --bis-beat B --bpm T --aus <datei.wav> [--quantum Q]"
                        " [--konfig kern.toml] [--zustand pfad | --ohne-zustand] [--spur-regler datei.json]"
-                       " [--arr-ordner pfad] [--gegenprobe-spur S]\n");
+                       " [--arr-ordner pfad] [--gegenprobe-spur S] [--abgriff produktion|set]\n");
   return 2;
 }
 
@@ -57,7 +60,7 @@ int main(int argc, char** argv) {
   if (!cdj::instanz_gueltig("cypherdj-render")) return 2;   // Fix L8: mit Hinweis
   cdj::RenderAuftrag a;
   a.nr = -1;
-  std::string aus, konfig, zustand, arr_ordner, spur_regler;
+  std::string aus, konfig, zustand, arr_ordner, spur_regler, abgriff = "set";
   bool ohne_zustand = false;
   int quantum = 0;
   // Fix L8: jede Zahl streng (ganz verbraucht, endlich, im Bereich), sonst Rückgabe 2 mit dem Schalter
@@ -89,13 +92,17 @@ int main(int argc, char** argv) {
     } else if (!std::strcmp(argv[i], "--arr-ordner") && wert) {
       arr_ordner = argv[++i];
     } else if (!std::strcmp(argv[i], "--gegenprobe-spur") && wert) {
-      if (!cdj::lies_ganz(argv[++i], 0, 8, g)) return falsch(i, "ganze Zahl 0..8");
+      if (!cdj::lies_ganz(argv[++i], 0, cdj::ARR_SPUREN, g)) return falsch(i, "ganze Zahl 0..32");
       a.gegenprobe_spur = static_cast<int>(g);
+    } else if (!std::strcmp(argv[i], "--abgriff") && wert) {
+      abgriff = argv[++i];
+      if (abgriff != "set" && abgriff != "produktion") return cdj::wert_falsch("cypherdj-render", "--abgriff", abgriff.c_str(), "produktion oder set");
     } else {
       return hilfe();
     }
   }
   if (a.nr < 0 || aus.empty() || (ohne_zustand && !zustand.empty())) return hilfe();
+  a.abgriff = abgriff == "produktion" ? cdj::RenderAbgriff::produktion : cdj::RenderAbgriff::set;
   std::vector<cdj::SpurRegler> projekt;
   if (!spur_regler.empty()) {   // immer prüfen, auch wenn der Zustand gilt: ein kaputter Aufruf fällt sofort auf
     std::string fehler;
@@ -166,8 +173,9 @@ int main(int argc, char** argv) {
   }
   const double spitze_db = e.spitze > 0.0f ? 20.0 * std::log10(static_cast<double>(e.spitze)) : -200.0;
   std::printf("{\"datei\":%s,\"frames\":%lld,\"spitze_db\":%.3f,\"start_sample\":%lld,\"phase\":%d,\"quantum\":%d,"
-              "\"vorhalt\":%d,\"regler\":%d,\"regler_quelle\":%s}\n",
+              "\"vorhalt\":%d,\"regler\":%d,\"regler_quelle\":%s,\"abgriff\":%s,\"ueber_decke\":%s,\"limiter_db_max\":%.3f}\n",
               cdj::json_text(aus).c_str(), (long long)e.frames, spitze_db, (long long)e.start_sample, e.phase, a.quantum,
-              e.vorhalt, e.regler, cdj::json_text(e.regler_quelle).c_str());   // Fix L7: maskiert
+              e.vorhalt, e.regler, cdj::json_text(e.regler_quelle).c_str(), cdj::json_text(e.abgriff).c_str(),   // Fix L7: maskiert
+              e.ueber_decke ? "true" : "false", static_cast<double>(e.limiter_db_max));
   return 0;
 }

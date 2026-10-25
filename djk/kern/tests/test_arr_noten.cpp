@@ -118,21 +118,29 @@ int main() {
     PRUEF(w.offs().size() == 1 && w.offs()[0].ziel == 90000);
     PRUEF(t.arr.status() == ArrStatus::steht);
   }
-  {  // 6: Liste voll: 300 gleichzeitige Noten -> 256 offen, 44 gezählt verloren, keine hängende Note
-    Treiber t;
-    PruefSenke rb(0);
-    t.senken.push_back(&rb);
-    t.arr.setze_senke_intern(&rb);
-    Bau b;
-    b.spur(3, ArrArt::intern);
-    for (int i = 0; i < 300; ++i) b.note(3, ("b/n" + std::to_string(i)).c_str(), 0.0, 1.0, i % 128);
-    t.laden(b.fertig());
-    t.arr.start(0.0, 2, false, 0, V, 256, t.k);
-    t.lauf(90112);
-    PRUEF(t.arr.offene_noten() == 256);
-    PRUEF(t.arr.noten_verloren() == 44);
-    t.lauf(113000);
-    PRUEF(rb.ons().size() == 256 && rb.offs().size() == 256);
+  {  // 6: Liste voll (E3: 32 RB-Spuren mit je 32 gleichzeitig gehaltenen Noten = ARR_OFFEN = 1024, nichts geht verloren).
+     // Gegenprobe: mehr Noten als Plätze -> 1024 offen, genau so viele gezählt verloren wie überzählig (1 und 3: ein
+     // Zähler, der nur „irgendwas verloren“ merkt, fiele bei 3 auf), keine hängende Note.
+    for (const int mehr : {0, 1, 3}) {
+      Treiber t;
+      PruefSenke rb(0);
+      t.senken.push_back(&rb);
+      t.arr.setze_senke_intern(&rb);
+      Bau b;
+      for (int n = 1; n <= cdj::ARR_SPUREN; ++n) {
+        b.spur(n, ArrArt::intern);
+        for (int i = 0; i < 32; ++i) b.note(n, ("b/n" + std::to_string(n) + "_" + std::to_string(i)).c_str(), 0.0, 1.0, i);
+      }
+      for (int k = 0; k < mehr; ++k) b.note(1, ("b/zuviel" + std::to_string(k)).c_str(), 0.0, 1.0, 40 + k);
+      t.laden(b.fertig());
+      t.arr.start(0.0, 2, false, 0, V, 256, t.k);
+      t.lauf(90112);
+      PRUEF(cdj::ARR_OFFEN == 32 * cdj::ARR_SPUREN);
+      PRUEF(t.arr.offene_noten() == 1024);
+      PRUEF(t.arr.noten_verloren() == static_cast<uint64_t>(mehr));
+      t.lauf(113000);
+      PRUEF(rb.ons().size() == 1024 && rb.offs().size() == 1024);
+    }
   }
   {  // 7: K1-Fix 2 (Spec 2.2, §4.11): Vorausblick über die Naht. Loop 0..4 ab Takt (Einsatz 90 000, Nähte 180 000 und
      // 270 000), Wirt-Vorhalt 537. Die Fenster der Blöcke kurz vor der Naht liegen schon hinter bis; sie bilden über die

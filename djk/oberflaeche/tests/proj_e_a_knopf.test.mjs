@@ -4,6 +4,7 @@
 // Kern diese Fader über 4 Beats auf −200 aus, der Server fuhr sie bei der Freigabe zurück.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { MAX_SPUREN } from '../projekt/modell.ts';
 import { sitzung, neustart, arrNr, warteBis } from './hilfen/proj_kontext.mjs';
 import { stapel } from './hilfen/mediathek.mjs';
 import { innen } from './hilfen/innen.mjs';
@@ -35,7 +36,7 @@ test('E-a Einheit: Öffnen im KI-Stopp setzt den Fader von Cyphers Spur auf den 
   assert.deepEqual(nach(1), [0], 'Negativ-Kontrolle: Andreas\' Spur wie bisher');
 });
 
-test('E-a Einheit: Kern-Neustart im KI-Stopp setzt alle 32 Spur-Regler aus dem Projekt, auch Cyphers Fader', async (t) => {
+test('E-a Einheit: Kern-Neustart im KI-Stopp setzt alle Spur-Regler (4 · MAX_SPUREN) aus dem Projekt, auch Cyphers Fader', async (t) => {
   const { z } = neustart(t);
   await z.s.oeffnen('wa', 'andreas');
   z.k.ki = true;
@@ -44,7 +45,7 @@ test('E-a Einheit: Kern-Neustart im KI-Stopp setzt alle 32 Spur-Regler aus dem P
   assert.ok(await warteBis(() => z.k.an('/k/arr/loop').length > 0), 'nachNeustart ist durch');
   await warte(20);
   const pfade = z.k.teile(/^spur\//).map((x) => x.felder.pfad);
-  assert.equal(pfade.length, 32);
+  assert.equal(pfade.length, 4 * MAX_SPUREN);
   assert.deepEqual(z.k.teile(/^spur\/2\/fader$/).map((x) => x.felder.nach), [0], 'Cyphers Fader wird auf den Projektwert 0 dB gesetzt, nicht auf stumm');
 });
 

@@ -127,10 +127,11 @@ int main() {
       z.arr_ursprung = 90000;
       z.arr_start_beat = 0.0;
       z.arr_metronom_an = 0;
+      z.arr_limiter_db = -2.5f;
       PRUEF(ere->schiebe(z));
       netz.ereignisse_senden();
       PRUEF(g.warte("/zustand/arr", 200) && g.m.werte[0].i == 17 && g.m.werte[1].i == 2 && g.m.werte[2].i == 1 &&
-            g.m.werte[3].d == 3.5 && g.m.werte[4].h == 90000 && g.m.werte[6].i == 0);
+            g.m.werte[3].d == 3.5 && g.m.werte[4].h == 90000 && g.m.werte[6].i == 0 && g.m.werte[7].f == -2.5f);
     }
     // 7: /erz/strom auf erz/4: reserviert; erz/5 mit unbekanntem Kit: pruefung (Negativ-Kontrolle)
     {

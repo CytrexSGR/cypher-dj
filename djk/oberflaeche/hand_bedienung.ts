@@ -4,7 +4,7 @@
 export const AB: Record<string, number> = { jetzt: 0, schlag: 1, takt: 4, phrase: 32 };   // Phrase 8 Takte (SCHNITTSTELLEN.md:30)
 
 // Regler-Pfade nach SCHNITTSTELLEN §1.5. Die „nur Hand“-Pfade stehen mit drin: sie lehnt der Kern ab (nur_hand).
-export const PFAD = /^(deck\/[1-4]|erz\/[1-8]|pad\/[12]|bus\/[1-4])\/(fader|trim|eq\/(tief|mitte|hoch)|kill\/(tief|mitte|hoch)|filter|send\/[1-4]|stem\/(drums|bass|vocals|other)|xseite|pfl|ziel)$|^(deck\/[1-4]|erz\/[1-8]|pad\/[12])\/komp\/(an|schwelle|ratio|attack|release|makeup|mix|sc)$|^(xfader|master\/(pegel|kleber|pfl)|cue\/(mix|pegel|split)|fx\/[1-4]\/(notenwert|rueckkopplung|rueckweg)|duck\/(tiefe|release)|color\/(art|param)|keylock)$|^spur\/[1-8]\/(fader|pan|mute|solo)$/;   // keylock: Keylock 3, EIN Knopf für alle Quellen
+export const PFAD = /^(deck\/[1-4]|erz\/[1-8]|pad\/[12]|bus\/[1-4])\/(fader|trim|eq\/(tief|mitte|hoch)|kill\/(tief|mitte|hoch)|filter|send\/[1-4]|stem\/(drums|bass|vocals|other)|xseite|pfl|ziel)$|^(deck\/[1-4]|erz\/[1-8]|pad\/[12])\/komp\/(an|schwelle|ratio|attack|release|makeup|mix|sc)$|^(xfader|master\/(pegel|kleber|pfl)|cue\/(mix|pegel|split)|fx\/[1-4]\/(notenwert|rueckkopplung|rueckweg)|duck\/(tiefe|release)|color\/(art|param)|keylock)$|^spur\/([1-9]|[12][0-9]|3[0-2])\/(fader|pan|mute|solo)$|^grp\/[1-8]\/(fader|pan|mute|solo)$|^pm\/fader$/;   // keylock: Keylock 3, EIN Knopf für alle Quellen
 
 // Plan Hand D8 (Rev. 2 nach Review B1): Der Kern prüft I3a seit Ohr T13/T14 selbst; der Server-Riegel ist die frühe
 // Absage vor dem Senden. Er sperrt Cyphers Öffnen nach §1.6: offen(k) ⇔ trim + fader > −26 dB (kern_deck.cpp:106

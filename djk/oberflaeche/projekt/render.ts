@@ -13,8 +13,14 @@ export interface RenderAufruf {
   aus: string; arbeitsordner: string; spurRegler: string; instanz: string; zeitlimitMs: number;
   ohneZustand?: boolean;     // Paket 1.18 E-b: --ohne-zustand, die Regler kommen allein aus spurRegler (Quelle projekt), nie aus dem Neustart-Zustand des Kerns
   abbruch?: AbortSignal;     // Fix-Runde 2 S3, F4: der Server endet; tötet die Gruppe wie das Zeitlimit
+  // 1.10 (E2, P11): optional. Fehlt es, steht kein --abgriff in der Kommandozeile (das Programm nimmt dann den Ring) und die Antwort wird nicht auf den
+  // Abgriff geprüft; die bestehenden rendere()-Tests übergeben keins. Der Server (ausgabe.ts) übergibt immer eins.
+  abgriff?: Abgriff;
 }
-export interface RenderAntwort { datei: string; frames: number; spitze_db: number; regler_quelle: 'kern' | 'projekt' }
+export type Abgriff = 'produktion' | 'set';
+export interface RenderAntwort {
+  datei: string; frames: number; spitze_db: number; regler_quelle: 'kern' | 'projekt'; abgriff?: Abgriff; ueber_decke?: boolean; limiter_db_max?: number;
+}
 
 const RC_TEXT: Record<number, [string, string]> = {
   2: ['Aufruf', 'the render refused its arguments'],
@@ -50,18 +56,24 @@ export function reglerAusProjekt(p: Projekt): Record<string, number> {
     r[`spur/${s.nr}/mute`] = s.mute ? 1 : 0;
     r[`spur/${s.nr}/solo`] = s.solo ? 1 : 0;
   }
+  for (const g of [...(p.gruppen ?? [])].sort((a, b) => a.nr - b.nr)) {   // 1.10: Gruppen-Regler, nur für vorhandene Gruppen
+    r[`grp/${g.nr}/fader`] = g.fader_db; r[`grp/${g.nr}/pan`] = g.pan; r[`grp/${g.nr}/mute`] = g.mute ? 1 : 0; r[`grp/${g.nr}/solo`] = g.solo ? 1 : 0;
+  }
+  if ((p.master?.fader_db ?? 0) !== 0) r['pm/fader'] = p.master.fader_db;   // nur wenn nicht 0 dB (ein älteres Render-Programm kennt den Pfad nicht)
   return r;
 }
 
 export function renderArgumente(a: RenderAufruf): string[] {
   return ['--nr', String(a.nr), '--von-beat', String(a.von_beat), '--bis-beat', String(a.bis_beat), '--bpm', String(a.bpm),
-    '--aus', a.aus, '--arr-ordner', a.arbeitsordner, '--spur-regler', a.spurRegler, ...(a.ohneZustand ? ['--ohne-zustand'] : [])];
+    '--aus', a.aus, '--arr-ordner', a.arbeitsordner, '--spur-regler', a.spurRegler, ...(a.ohneZustand ? ['--ohne-zustand'] : []),
+    ...(a.abgriff !== undefined ? ['--abgriff', a.abgriff] : [])];
 }
 
 const AUS_MAX = 65536, ERR_MAX = 8192;
 
-// Liest die letzte nicht leere stdout-Zeile als JSON und prüft die Felder, die S3 weiterreicht.
-export function leseRenderAntwort(stdout: string): RenderAntwort {
+// Liest die letzte nicht leere stdout-Zeile als JSON und prüft die Felder, die S3 weiterreicht. erwartet (1.10, P11): der verlangte Abgriff; der Render
+// muss ihn genannt haben, sonst hätte ein älteres Programm still den Ring gelesen, während der Server „produktion“ behauptet.
+export function leseRenderAntwort(stdout: string, erwartet?: Abgriff): RenderAntwort {
   const zeile = stdout.split('\n').map((z) => z.trim()).filter(Boolean).at(-1) ?? '';
   let j: Record<string, unknown>;
   try { j = JSON.parse(zeile) as Record<string, unknown>; } catch {
@@ -74,7 +86,19 @@ export function leseRenderAntwort(stdout: string): RenderAntwort {
     throw new RenderFehler(`Ausgabe ohne regler_quelle (K3-Nachtrag Spec 6.20 fehlt?): ${zeile.slice(0, 200)}`, 0,
       'the render did not say whose mixer it used');
   }
-  return { datei: j.datei, frames: j.frames as number, spitze_db: j.spitze_db, regler_quelle: j.regler_quelle };
+  if (erwartet !== undefined) {
+    if (j.abgriff !== erwartet) {
+      throw new RenderFehler(`Abgriff ${String(j.abgriff)} statt ${erwartet}: ${zeile.slice(0, 200)}`, 0,
+        'the render did not use the requested tap (is the render program up to date?)');
+    }
+    if (typeof j.ueber_decke !== 'boolean' || typeof j.limiter_db_max !== 'number') {
+      throw new RenderFehler(`Ausgabe ohne ueber_decke/limiter_db_max: ${zeile.slice(0, 200)}`, 0, 'the render gave no readable answer');
+    }
+  }
+  return { datei: j.datei, frames: j.frames as number, spitze_db: j.spitze_db, regler_quelle: j.regler_quelle,
+    ...(j.abgriff === 'produktion' || j.abgriff === 'set' ? { abgriff: j.abgriff as Abgriff } : {}),
+    ...(typeof j.ueber_decke === 'boolean' ? { ueber_decke: j.ueber_decke } : {}),
+    ...(typeof j.limiter_db_max === 'number' ? { limiter_db_max: j.limiter_db_max } : {}) };
 }
 
 // Fix-Runde S3 R3: der Render läuft als eigene Prozessgruppe (detached). Das Zeitlimit tötet die ganze Gruppe (kill(-pid)), auch einen Enkel, der
@@ -109,7 +133,7 @@ export function rendere(a: RenderAufruf): Promise<RenderAntwort> {
     k.once('close', (rc) => ende(() => {
       const letzte = err.split('\n').map((z) => z.trim()).filter(Boolean).at(-1) ?? '';
       if (rc !== 0) return fehl(new RenderFehler(`Rückgabe ${rc} (${RC_TEXT[rc ?? -1]?.[0] ?? 'unbekannt'}): ${letzte}`, rc));
-      try { ok(leseRenderAntwort(aus)); } catch (e) { fehl(e); }
+      try { ok(leseRenderAntwort(aus, a.abgriff)); } catch (e) { fehl(e); }
     }));
   });
 }

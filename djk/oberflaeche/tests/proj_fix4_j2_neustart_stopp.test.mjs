@@ -2,6 +2,7 @@
 // setzt alle Spur-Regler aus dem Projekt, auch den Fader von Cyphers Spuren. Vorher blieb dieser Fader bei der Absenkung des Kerns.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { MAX_SPUREN } from '../projekt/modell.ts';
 import { neustart, warteBis } from './hilfen/proj_kontext.mjs';
 import { stapel } from './hilfen/mediathek.mjs';
 import { innen } from './hilfen/innen.mjs';
@@ -19,17 +20,17 @@ async function offenUndNeustart(t, gestoppt) {
   return z;
 }
 
-test('J2 Kern-Neustart im KI-Stopp (E-a): alle 32 Spur-Regler werden gesetzt, auch der Fader von Cyphers Spur', async (t) => {
+test('J2 Kern-Neustart im KI-Stopp (E-a): alle Spur-Regler (4 · MAX_SPUREN) werden gesetzt, auch der Fader von Cyphers Spur', async (t) => {
   const z = await offenUndNeustart(t, true);
   const teile = z.k.teile(/^spur\//).map((x) => x.felder.pfad);
-  assert.equal(teile.length, 32);
+  assert.equal(teile.length, 4 * MAX_SPUREN);
   for (const p of ['spur/1/fader', 'spur/2/fader', 'spur/2/pan', 'spur/2/mute', 'spur/2/solo', 'spur/3/fader']) assert.ok(teile.includes(p), p);
 });
 
-test('J2 Negativ-Kontrolle ohne Stopp: alle 32 Spur-Regler werden gesetzt', async (t) => {
+test('J2 Negativ-Kontrolle ohne Stopp: alle Spur-Regler (4 · MAX_SPUREN) werden gesetzt', async (t) => {
   const z = await offenUndNeustart(t, false);
   const teile = z.k.teile(/^spur\//).map((x) => x.felder.pfad);
-  assert.equal(teile.length, 32);
+  assert.equal(teile.length, 4 * MAX_SPUREN);
   assert.ok(teile.includes('spur/2/fader'));
 });
 

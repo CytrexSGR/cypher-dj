@@ -17,13 +17,15 @@
 #include <vector>
 
 #include "cypherdj/speicher_konto.h"
+#include "cypherdj/warp_abbildung.h"
 
 namespace cdj {
 
-constexpr int ARR_SPUREN = 8;           // Spur-Slots spur/1..8 (Spec 2.3)
+constexpr int ARR_SPUREN = 32;           // Spur-Slots spur/1..32 (Spec 2.3, E3); = SPUR_REGLER_SPUREN (static_assert)
 constexpr int ARR_CLIPS_MAX = 4096;     // je Wiedergabe (Spec 3.2)
 constexpr int ARR_NOTEN_MAX = 65536;    // je Wiedergabe (Spec 3.2)
 constexpr int ARR_WIRT_SLOTS = 2;       // arr_midi_<s>, s = 1..2 (Spec 2.4)
+constexpr int ARR_GRUPPEN = 8;          // Gruppen-Spuren grp/1..8 (1.10, F1: eigene Plätze neben den 32 Spuren); = GRP_REGLER_GRUPPEN (static_assert in arr_ausgang.cpp)
 constexpr int ARR_PARAMETER = 8;        // RB-338-Parameter je interner Spur (K2 liest sie)
 constexpr double ARR_GAIN_DB_MIN = -96.0;    // Clip-Gain, ein Bereich mit S2 (Spec 6.27)
 constexpr double ARR_GAIN_DB_MAX = 24.0;
@@ -50,6 +52,7 @@ struct ArrClip {
   int64_t offset_frames;
   float gain;                        // linear, aus gain_db
   double ein_beats, aus_beats;
+  const ArrWarp* warp = nullptr;     // Paket 1.13: gewarpter Clip (Marker in ArrSnapshot::warps); nullptr: Quellposition = offset_frames + pos
 };
 
 struct ArrNote {
@@ -66,8 +69,9 @@ struct ArrParameter {
 };
 
 struct ArrSpur {
-  int nr = 0;                        // 1..8; 0 = leer
+  int nr = 0;                        // 1..ARR_SPUREN (32); 0 = leer
   ArrArt art = ArrArt::leer;
+  int8_t ausgang = 0;                // 1.10: 0 master, 1..ARR_GRUPPEN Gruppe (Wiedergabe /2); Tiefe 1
   int slot = 0;                      // wirt: 1..2
   char geraet[16] = {};              // intern: "rb338"
   int n_param = 0;
@@ -134,6 +138,9 @@ struct ArrSnapshot {
   std::vector<ArrNote, ArrSeiten<ArrNote>> noten;
   std::vector<uint64_t, ArrSeiten<uint64_t>> noten_id;
   std::vector<int32_t, ArrSeiten<int32_t>> noten_id_index;
+  // Paket 1.13: Warp-Marker aller Clips, hintereinander (je Clip ein ArrWarp, dessen Zeiger in warp_beat und warp_frame zeigen)
+  std::vector<ArrWarp, ArrSeiten<ArrWarp>> warps;
+  std::vector<double, ArrSeiten<double>> warp_beat, warp_frame;
   std::vector<ArrAudio*> audios;     // jedes genutzte Audio genau einmal (Referenz im Cache); der Callback liest es nie
   int64_t gesperrt_bytes = 0;        // Kopf und Felder: auf dem Konto gebucht (und gesperrt, wenn der Cache sperrt)
   static void* operator new(size_t n) { return arr_seiten_neu(n); }

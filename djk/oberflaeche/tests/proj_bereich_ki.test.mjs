@@ -2,6 +2,7 @@
 // die letzte Wiedergabe und setzt die Spur-Regler (Spec 2.12, 6.15).
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { MAX_SPUREN } from '../projekt/modell.ts';
 import { stapel } from './hilfen/mediathek.mjs';
 import { innen } from './hilfen/innen.mjs';
 import { bis, ruf, anKern, CYPHER, warte } from './hilfen/proj_stapel.mjs';
@@ -32,5 +33,5 @@ test('Kern-Neustart (Spec 2.12): nach /e/neustart mit neuer Generation lädt der
   innen(o).vomKern('/e/neustart', { generation: 999, sample: 0 });
   assert.ok(await bis(() => anKern(log.slice(vor), '/k/ki/spur').length === 1, 5000));
   assert.deepEqual(anKern(log.slice(vor), '/k/arr/laden').map((z) => z.felder.nr), [nr]);
-  assert.equal(anKern(log.slice(vor), '/k/teil').filter((z) => /^spur\//.test(z.felder.pfad)).length, 32);
+  assert.equal(anKern(log.slice(vor), '/k/teil').filter((z) => /^spur\//.test(z.felder.pfad)).length, 4 * MAX_SPUREN);
 });

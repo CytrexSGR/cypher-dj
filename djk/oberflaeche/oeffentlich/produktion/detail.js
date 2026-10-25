@@ -7,6 +7,7 @@ import { findeClip } from './entwurf.js';
 import { feldBefehl, zahlText, FELDER } from './clips.js';
 import { positionText } from './zeitachse.js';
 import { bindeRolle } from './pianoroll_bedienung.js';
+import { warpAnzeige } from './warp.js';
 
 // Gain-Regler: Bereich aus FELDER.gain_db (Spec 6.27, −96..+24 dB), sonst schnitte er Werte ab (V2 Fix F8: vorher −36..+12, +20 dB zeigte 12)
 const GERUEST = `<div class="p-detail-kopf"><span data-d="titel">CLIP</span><span class="p-detail-info" data-d="info"></span>
@@ -19,10 +20,15 @@ const GERUEST = `<div class="p-detail-kopf"><span data-d="titel">CLIP</span><spa
   <label>GAIN <input data-d="gainregler" type="range" min="${FELDER.gain_db.min}" max="${FELDER.gain_db.max}" step="0.1" title="Clip gain (double click: 0 dB)"> <input data-f="gain_db" inputmode="decimal" autocomplete="off"> dB</label>
   <label>FADE IN <input data-f="fade_ein_beats" inputmode="decimal" autocomplete="off"> beats</label>
   <label>FADE OUT <input data-f="fade_aus_beats" inputmode="decimal" autocomplete="off"> beats</label>
-  <label>OFFSET <input data-f="offset_s" inputmode="decimal" autocomplete="off"> s</label>
+  <label data-d="offsetl">OFFSET <input data-f="offset_s" inputmode="decimal" autocomplete="off"> s</label>
+  <label data-d="versatzl" hidden>OFFSET <input data-f="versatz_beats" inputmode="decimal" autocomplete="off" title="Which beat of the warp plays at the clip start"> beats</label>
+  <div class="p-warp" data-d="warp">
+    <button data-d="warpknopf" aria-pressed="false" title="Warp: play the clip in the project tempo. RE-PITCH: the pitch follows the tempo, like a record">WARP</button>
+    <span class="p-warp-modus" data-d="warpmodus"></span><span class="p-warp-info" data-d="warpinfo"></span>
+  </div>
 </div>
 <div class="p-clip-midi" data-d="midi" hidden></div>`;
-const LABEL = { name: 'Rename clip', start_beat: 'Move clip', laenge_beats: 'Clip length', gain_db: 'Clip gain', fade_ein_beats: 'Fade in', fade_aus_beats: 'Fade out', offset_s: 'Clip offset' };
+const LABEL = { name: 'Rename clip', start_beat: 'Move clip', laenge_beats: 'Clip length', gain_db: 'Clip gain', fade_ein_beats: 'Fade in', fade_aus_beats: 'Fade out', offset_s: 'Clip offset', versatz_beats: 'Clip offset' };
 
 export function bindeDetail(ctx) {
   const { st, $ } = ctx;
@@ -50,6 +56,14 @@ export function bindeDetail(ctx) {
       if (r.befehl) ctx.aendere(LABEL[feld], [r.befehl]);
     });
   }
+  // Paket 1.13: WARP schaltet den Warp des gewählten Audio-Clips; ohne Warp-Daten holt warp_auto sie aus der Library (der Server meldet kein_tempo, wenn dort nichts steht)
+  d('warpknopf').addEventListener('click', () => {
+    const t = gezeigt();
+    if (!t || t.clip.art !== 'audio') return;
+    const w = t.clip.warp;
+    if (!w) ctx.aendere('Warp clip', [{ befehl: 'warp_auto', clip_id: t.clip.id }]);
+    else ctx.aendere(w.an ? 'Warp off' : 'Warp on', [{ befehl: 'warp_setzen', clip_id: t.clip.id, an: !w.an }]);
+  });
   const regler = d('gainregler');
   // V2 Fix-Runde 2 H6: ein neuer Serverstand überschreibt den Regler nur nicht, solange er bedient wird (Zeiger gedrückt oder Eingabe läuft);
   // bloßer Fokus schützt nicht mehr (vorher zeigte ein Regler mit Fokus weiter den alten Wert, −6-dB-Clip mit 12). Danach zeigt er den Serverwert.
@@ -88,8 +102,13 @@ export function bindeDetail(ctx) {
     rolle.zeige(null);
     for (const f of felder) {
       if (!erzwungen && document.activeElement === f) continue;
-      f.value = f.dataset.f === 'name' ? c.name : zahlText(c[f.dataset.f]);
+      f.value = f.dataset.f === 'name' ? c.name : zahlText(f.dataset.f === 'versatz_beats' ? (c.warp?.versatz_beats ?? 0) : c[f.dataset.f]);
     }
+    const wa = warpAnzeige(c);
+    d('warpknopf').classList.toggle('an', wa.an); d('warpknopf').setAttribute('aria-pressed', String(wa.an));
+    d('warpmodus').textContent = wa.vorhanden ? wa.modus : '';
+    d('warpinfo').textContent = !wa.vorhanden ? 'no tempo set: WARP asks the library' : [wa.herkunft, wa.bpm ? `${wa.bpm} BPM` : '', wa.downbeatFrage ? 'downbeat?' : ''].filter(Boolean).join(' · ');
+    d('offsetl').hidden = wa.an; d('versatzl').hidden = !wa.an;                 // gewarpt zählt der Versatz in Beats, nicht offset_s
     if (!bedient) regler.value = String(c.gain_db);                 // H6: nur während der Bedienung nicht
     d('startpos').textContent = `bar ${positionText(c.start_beat)}`;
   }

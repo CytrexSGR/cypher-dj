@@ -20,6 +20,7 @@ struct Lauf : k35::Lauf {
   cdj::SpeicherKonto konto{3800LL << 20};
   cdj::ArrAudioCache cache{&konto, 1024LL << 20, false};
   std::vector<float> cue_l;
+  std::vector<float> pm_l, pm_r;   // PM-Abgriff des Kerns je Zyklus (Index = Kern-Sample, 1.10)
   size_t frei_bis = 0;
 
   Lauf(const std::string& ab, const char* name, const char* mapping = nullptr) : k35::Lauf(ab, mapping), ordner(name) {
@@ -31,8 +32,19 @@ struct Lauf : k35::Lauf {
     if (const cdj::ArrSnapshot* s = kern->arrangement().snapshot())
       cdj::gib_wiedergabe(const_cast<cdj::ArrSnapshot*>(s), cache);
   }
-  int64_t laden(int64_t nr, const std::string& spuren, const char* quelle = "andreas") {
-    ordner.wiedergabe(nr, spuren);
+  int64_t laden(int64_t nr, const std::string& spuren, const char* quelle = "andreas", bool v2 = false) {   // v2: Format /2 (Paket 1.13, Warp)
+    if (v2) ordner.wiedergabe2_warp(nr, spuren); else ordner.wiedergabe(nr, spuren);
+    cdj::ArrLadeErgebnis e = cdj::lade_wiedergabe(ordner.pfad, nr, cache);
+    PRUEF(e.snap != nullptr);
+    if (!e.snap) return -1;
+    cdj::Befehl b = neu(cdj::Befehl::ARR_LADEN, quelle);
+    b.zeiger = e.snap.release();
+    b.arr_nr = nr;
+    return sende(b);
+  }
+  // 1.10: Wiedergabe /2 mit Gruppen-Liste (JSON-Elemente ohne eckige Klammern)
+  int64_t laden2(int64_t nr, const std::string& spuren, const std::string& gruppen, const char* quelle = "andreas") {
+    ordner.wiedergabe2(nr, spuren, gruppen);
     cdj::ArrLadeErgebnis e = cdj::lade_wiedergabe(ordner.pfad, nr, cache);
     PRUEF(e.snap != nullptr);
     if (!e.snap) return -1;
@@ -66,6 +78,17 @@ struct Lauf : k35::Lauf {
     b.nr = ziel;
     return sende(b);
   }
+  int64_t rec_spur(int spur, int scharf, int eingang, cdj::RecSpur* p, const char* quelle = "andreas") {
+    cdj::Befehl b = neu(cdj::Befehl::REC_SPUR, quelle);
+    b.nr = spur; b.an = scharf; b.deck = eingang; b.zeiger = p;
+    return sende(b);
+  }
+  int64_t rec_start(int kennung, int nachlauf, int64_t frist = 0, const char* quelle = "andreas") {   // frist 0: Vorgabe 96000
+    cdj::Befehl b = neu(cdj::Befehl::REC_START, quelle);
+    b.nr = kennung; b.fassung = nachlauf; b.versatz_f = frist;
+    return sende(b);
+  }
+  int64_t rec_stopp(const char* quelle = "andreas") { return sende(neu(cdj::Befehl::REC_STOPP, quelle)); }
   void lauf(int64_t bis) {
     while (kern->sample() < bis) {
       const int64_t n0 = kern->sample();
@@ -74,6 +97,14 @@ struct Lauf : k35::Lauf {
       const float* d = cdj_ring_daten_c(ring);
       if (static_cast<int64_t>(cue_l.size()) < n0 + k35::N) cue_l.resize(static_cast<size_t>(n0 + k35::N));
       for (int i = 0; i < k35::N; ++i) cue_l[n0 + i] = d[((w0 + static_cast<uint64_t>(i)) % CDJ_RING_CAP) * 4 + 2];
+      if (static_cast<int64_t>(pm_l.size()) < n0 + k35::N) {
+        pm_l.resize(static_cast<size_t>(n0 + k35::N));
+        pm_r.resize(static_cast<size_t>(n0 + k35::N));
+      }
+      for (int i = 0; i < k35::N; ++i) {
+        pm_l[n0 + i] = kern->pm_abgriff_l()[i];
+        pm_r[n0 + i] = kern->pm_abgriff_r()[i];
+      }
     }
     frei();
   }

@@ -5,6 +5,7 @@
 // - Ist der Ist-Wert eines Spur-Reglers unbekannt, gewinnt für genau diesen Regler das Projekt (er wird gesendet, nicht übernommen).
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { MAX_SPUREN } from '../projekt/modell.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pruefKontext, sitzung, neustart, arrNr, ist } from './hilfen/proj_kontext.mjs';
@@ -76,12 +77,12 @@ test('A4 Wiederanlauf: weder erz/4 noch Loop noch Metronom neu gesetzt; die KI-M
   assert.deepEqual(z.k.an('/k/ki/spur').map((x) => x.felder.kanaele), ['spur/0']);
 });
 
-test('A4 Negativ-Kontrolle: verschiedene Nummer → erz/4, Loop, Metronom und alle 32 Spur-Regler werden gesetzt', async (t) => {
+test('A4 Negativ-Kontrolle: verschiedene Nummer → erz/4, Loop, Metronom und alle Spur-Regler (4 · MAX_SPUREN) werden gesetzt', async (t) => {
   const { z, nr } = neustart(t);
   z.s.ereignis('/zustand/arr', arrNr(nr + 1));
   await z.s.oeffnen('wa', 'andreas');
   assert.equal(z.k.teile(/^erz\/4\//).length, 16); assert.equal(z.k.an('/k/arr/loop').length, 1); assert.equal(z.k.an('/k/arr/metronom').length, 1);
-  assert.equal(z.k.teile(/^spur\//).length, 32);
+  assert.equal(z.k.teile(/^spur\//).length, 4 * MAX_SPUREN);
 });
 
 test('A4 unbekannter Ist-Wert: Kern liefert nur spur/1, Projekt hat spur/1 und spur/2 → spur/2 aus dem Projekt gesendet, spur/1 übernommen', async (t) => {
@@ -93,7 +94,7 @@ test('A4 unbekannter Ist-Wert: Kern liefert nur spur/1, Projekt hat spur/1 und s
   assert.equal(z.k.teile(/^spur\/1\//).length, 0, 'spur/1 bekannt: nichts gesendet');
   assert.deepEqual(z.k.teile(/^spur\/2\//).map((x) => [x.felder.pfad, x.felder.nach]),
     [['spur/2/fader', 0], ['spur/2/pan', 0], ['spur/2/mute', 0], ['spur/2/solo', 0]], 'spur/2 unbekannt: Projektwerte gesendet');
-  assert.equal(z.k.teile(/^spur\/[3-8]\//).length, 24, 'freie Slots unbekannt: Vorgabe gesendet');
+  assert.equal(z.k.teile(/^spur\/([3-9]|[1-9][0-9])\//).length, 4 * (MAX_SPUREN - 2), 'freie Slots unbekannt: Vorgabe gesendet');
   const sp = r.j.projekt.spuren;
   assert.deepEqual([sp[0].fader_db, sp[0].pan, sp[0].mute, sp[1].fader_db], [-12, 0.5, true, 0], 'spur/1 übernommen, spur/2 bleibt');
 });

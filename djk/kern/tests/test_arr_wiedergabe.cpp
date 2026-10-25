@@ -89,7 +89,7 @@ int main() {
     };
     const std::string gut = "{\"nr\":1,\"art\":\"audio\",\"clips\":[" + o.clip("c1", 0.0, 1.0, a, F) + "]}";
     PRUEF(grund(99) == "datei_fehlt");
-    o.roh(20, "{\"format\":\"cypherdj-arr/2\",\"nr\":20,\"spuren\":[]}");
+    o.roh(20, "{\"format\":\"cypherdj-arr/3\",\"nr\":20,\"spuren\":[]}");   // 1.10: /2 ist seit Task 5 gültig, unbekannt ist jetzt /3
     PRUEF(grund(20) == "format");
     o.roh(21, "{\"format\":\"cypherdj-arr/1\",\"nr\":7,\"spuren\":[]}");
     PRUEF(grund(21) == "format");   // nr der Datei weicht ab
@@ -110,8 +110,23 @@ int main() {
     PRUEF(grund(27) == "audio_fehlt");
     o.wiedergabe(28, "{\"nr\":1,\"art\":\"audio\",\"clips\":[" + o.clip("c1", 0.0, 1.0, a, F + 1) + "]}");
     PRUEF(grund(28) == "format");   // Größe passt nicht zu frames
-    o.wiedergabe(29, "{\"nr\":9,\"art\":\"audio\",\"clips\":[]}");
+    o.wiedergabe(29, "{\"nr\":" + std::to_string(cdj::ARR_SPUREN + 1) + ",\"art\":\"audio\",\"clips\":[]}");   // n+1: abgelehnt (T02)
     PRUEF(grund(29) == "spur_bereich");
+    {  // Fehlertexte nennen die Konstante, nicht eine feste Zahl (E3: Texte aus ARR_SPUREN)
+      const std::string bis = "1 bis " + std::to_string(cdj::ARR_SPUREN);
+      o.wiedergabe(35, "{\"nr\":" + std::to_string(cdj::ARR_SPUREN + 1) + ",\"art\":\"audio\",\"clips\":[]}");
+      cdj::ArrLadeErgebnis e = cdj::lade_wiedergabe(o.pfad, 35, cache);
+      PRUEF(!e.snap && e.grund == "spur_bereich");
+      PRUEF(e.meldung.find(bis) != std::string::npos);
+      std::string viele;   // ARR_SPUREN + 1 Spuren, jede gültig nummeriert 1..N+1 (die Zahl der Spuren schlägt zuerst an)
+      for (int i = 1; i <= cdj::ARR_SPUREN + 1; ++i)
+        viele += (i > 1 ? "," : "") + std::string("{\"nr\":") + std::to_string(i) + ",\"art\":\"audio\",\"clips\":[]}";
+      o.wiedergabe(36, viele);
+      e = cdj::lade_wiedergabe(o.pfad, 36, cache);
+      PRUEF(!e.snap && e.grund == "spur_bereich");
+      // Meldung trägt den Dateipfad davor, darum find statt ==
+      PRUEF(e.meldung.find("mehr als " + std::to_string(cdj::ARR_SPUREN) + " Spuren") != std::string::npos);
+    }
     o.wiedergabe(30, gut + "," + gut);
     PRUEF(grund(30) == "spur_bereich");   // nr doppelt
     o.wiedergabe(31, "{\"nr\":3,\"art\":\"wirt\",\"slot\":3,\"noten\":[]}");
@@ -326,6 +341,85 @@ int main() {
     }
     cdj::gib_wiedergabe(e.snap.release(), cache);
     PRUEF(konto.gesperrt() == 0 && vm_lck() == basis);
+  }
+  {  // 1.10 Slice 1: Wiedergabe /2 mit Gruppen (AK7 Kern-Teil, AK1: /1 ohne Routing lädt wie bisher)
+    cdj::SpeicherKonto konto(100LL << 20);
+    cdj::ArrAudioCache cache(&konto, 50LL << 20, false);   // wie Fall 1 der Datei; F ist die Frame-Zahl des Test-Audios
+    const std::string a = o.audio('e', F, 0.25f);   // sha ist Hex: 'g' wäre nicht 64 Hex-Zeichen (Plan-Tippfehler)
+    const std::string clip = o.clip("c1", 0.0, 1.0, a, F);
+    const std::string s1 = "{\"nr\":1,\"art\":\"audio\",\"ausgang\":{\"art\":\"gruppe\",\"nr\":2},\"clips\":[" + clip + "]}";
+    const std::string s2 = "{\"nr\":2,\"art\":\"audio\",\"clips\":[" + clip + "]}";
+    const std::string g = "{\"nr\":2,\"ausgang\":{\"art\":\"master\"}}";
+    auto lade = [&](int64_t nr) { return cdj::lade_wiedergabe(o.pfad, nr, cache); };
+    // gültig: Spur 1 in Gruppe 2, Spur 2 ohne ausgang = master
+    o.wiedergabe2(40, s1 + "," + s2, g);
+    cdj::ArrLadeErgebnis e = lade(40);
+    PRUEF(e.snap != nullptr);
+    if (e.snap) {
+      PRUEF(e.snap->spur[0].ausgang == 2 && e.snap->spur[1].ausgang == 0);
+      cdj::gib_wiedergabe(e.snap.release(), cache);
+    }
+    // /1 ohne Routing: wie bisher, ausgang 0
+    o.wiedergabe(41, s2);
+    e = lade(41);
+    PRUEF(e.snap != nullptr && e.snap->spur[1].ausgang == 0);
+    if (e.snap) cdj::gib_wiedergabe(e.snap.release(), cache);
+    // abgelehnt mit Grund format: ausgang in /1; Spur zeigt auf Gruppe ohne Eintrag; Gruppe in sich selbst; Gruppe in anderer Gruppe;
+    // Gruppen-Nummer 9; doppelte Gruppen-Nummer; ausgang.art unbekannt; ausgang.nr 0
+    o.wiedergabe2(42, s1, g, "cypherdj-arr/1");
+    PRUEF(lade(42).grund == "format");
+    o.wiedergabe2(43, s1, "");                                                     // Gruppe 2 fehlt in der Liste
+    PRUEF(lade(43).grund == "format");
+    o.wiedergabe2(44, s2, "{\"nr\":1,\"ausgang\":{\"art\":\"gruppe\",\"nr\":1}}");   // Zyklus: Gruppe 1 in Gruppe 1
+    PRUEF(lade(44).grund == "format");
+    o.wiedergabe2(45, s2, "{\"nr\":1,\"ausgang\":{\"art\":\"gruppe\",\"nr\":2}}," + g);   // Gruppen verschachteln nicht
+    PRUEF(lade(45).grund == "format");
+    o.wiedergabe2(46, s2, "{\"nr\":9,\"ausgang\":{\"art\":\"master\"}}");
+    PRUEF(lade(46).grund == "format");
+    o.wiedergabe2(47, s2, g + "," + g);
+    PRUEF(lade(47).grund == "format");
+    o.wiedergabe2(48, "{\"nr\":1,\"art\":\"audio\",\"ausgang\":{\"art\":\"return\",\"nr\":1},\"clips\":[]}", g);
+    PRUEF(lade(48).grund == "format");
+    o.wiedergabe2(49, "{\"nr\":1,\"art\":\"audio\",\"ausgang\":{\"art\":\"gruppe\",\"nr\":0},\"clips\":[]}", g);
+    PRUEF(lade(49).grund == "format");
+    // Negativ-Kontrolle: ein azyklisches Projekt gleicher Größe (acht Gruppen, 32 Spuren auf sie verteilt) wird angenommen
+    std::string viele, gr;
+    for (int n = 1; n <= 8; ++n) gr += std::string(n > 1 ? "," : "") + "{\"nr\":" + std::to_string(n) + ",\"ausgang\":{\"art\":\"master\"}}";
+    for (int n = 1; n <= 32; ++n)
+      viele += std::string(n > 1 ? "," : "") + "{\"nr\":" + std::to_string(n) + ",\"art\":\"audio\",\"ausgang\":{\"art\":\"gruppe\",\"nr\":" +
+               std::to_string((n - 1) % 8 + 1) + "},\"clips\":[]}";
+    o.wiedergabe2(50, viele, gr);
+    e = lade(50);
+    PRUEF(e.snap != nullptr);
+    if (e.snap) {
+      PRUEF(e.snap->spur[0].ausgang == 1 && e.snap->spur[31].ausgang == 8);
+      cdj::gib_wiedergabe(e.snap.release(), cache);
+    }
+    // Paket 1.13: Routing und Warp in derselben /2-Datei (ein Format für beide Nachbarn); der Warp ändert den Ausgang nicht
+    const std::string cw = o.clip_warp("c1", 0.0, 1.0, a, F, {{0.0, 0.0}, {1.0, 24000.0}});
+    const std::string sw = "{\"nr\":1,\"art\":\"audio\",\"ausgang\":{\"art\":\"gruppe\",\"nr\":2},\"clips\":[" + cw + "]}";
+    o.wiedergabe2(51, sw + "," + s2, g);
+    e = lade(51);
+    PRUEF(e.snap != nullptr);
+    if (e.snap) {
+      PRUEF(e.snap->spur[0].ausgang == 2 && e.snap->spur[1].ausgang == 0);
+      PRUEF(e.snap->spur[0].clips[0].warp != nullptr && e.snap->spur[0].clips[0].warp->n == 2);
+      PRUEF(e.snap->spur[1].clips[0].warp == nullptr);
+      cdj::gib_wiedergabe(e.snap.release(), cache);
+    }
+    // Nr. 52 (Nachbesserung 4, N4-2): NUR der Warp, ohne Gruppen-Liste und ohne ausgang, als /1. Mit Gruppe bräche der Lader schon an
+    // "gruppen gibt es erst in cypherdj-arr/2" ab, bevor er das Clip-Feld liest; so trägt allein der Warp den Grund format.
+    // Nr. 53 ist die Positivkontrolle: dieselbe Spur als /2 lädt.
+    const std::string sn = "{\"nr\":1,\"art\":\"audio\",\"clips\":[" + cw + "]}";
+    o.wiedergabe(52, sn);
+    e = lade(52);
+    PRUEF(e.snap == nullptr && e.grund == "format");
+    PRUEF(e.meldung.find("warp gibt es erst in cypherdj-arr/2") != std::string::npos);
+    if (e.snap) cdj::gib_wiedergabe(e.snap.release(), cache);
+    o.wiedergabe2(53, sn, "");
+    e = lade(53);
+    PRUEF(e.snap != nullptr && e.snap->spur[0].clips[0].warp != nullptr);
+    if (e.snap) cdj::gib_wiedergabe(e.snap.release(), cache);
   }
   PRUEF_ENDE();
 }

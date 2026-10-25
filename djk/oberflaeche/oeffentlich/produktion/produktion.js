@@ -9,6 +9,8 @@ import { neuerLader, serverWeg, offlineNach } from './laden.js';
 import { bindeZeitachse } from './zeitachse_bedienung.js';
 import { bindeProjektwahl } from './projektwahl.js';
 import { bindeSpuren } from './spurkoepfe.js';
+import { bindeGruppen } from './gruppen.js';
+import { MAX_SPUREN } from './grenzen.js';
 import { bindeAblage } from './ablage.js';
 import { bindeTransport } from './transport.js';
 import { bindeVerlauf } from './verlauf_anzeige.js';
@@ -16,9 +18,11 @@ import { bindeClips } from './clip_bedienung.js';
 import { bindeDetail } from './detail.js';
 import { bindeAusgabe } from './freeze_export.js';
 import { bindeVariantenReihen } from './varianten.js';
+import { bindeGeraete } from './geraete.js';
+import { bindeAufnahme } from './aufnahme.js';
 import { AUSGABE_FEHLER, mehrdeutigText } from './ausgabe.js';
 
-const BINDER = [bindeZeitachse, bindeProjektwahl, bindeSpuren, bindeAblage, bindeTransport, bindeVerlauf, bindeClips, bindeDetail, bindeAusgabe, bindeVariantenReihen];
+const BINDER = [bindeZeitachse, bindeProjektwahl, bindeSpuren, bindeGruppen, bindeAblage, bindeTransport, bindeVerlauf, bindeClips, bindeDetail, bindeAusgabe, bindeVariantenReihen, bindeGeraete, bindeAufnahme];
 
 const GERUEST = `
 <div class="p-transport" role="toolbar" aria-label="Transport">
@@ -31,6 +35,7 @@ const GERUEST = `
   <div class="p-gruppe">
     <button data-p="play" class="p-play" title="Play from the start marker" disabled>▶ PLAY</button>
     <button data-p="stopp" title="Stop" disabled>■ STOP</button>
+    <button data-p="rec" class="p-rec" aria-pressed="false" title="Open a project first" disabled>● REC</button><span data-p="rec-status" class="p-recstatus" role="status"></span>
     <output data-p="position" class="p-position" title="Position: bar.beat.sixteenth">1.1.1</output>
   </div>
   <div class="p-gruppe">
@@ -51,6 +56,7 @@ const GERUEST = `
   <span class="p-offline" data-p="offline" role="status" title="The project server does not answer: this is the last state it sent" hidden>OFFLINE</span>
   <span class="p-meldung" data-p="meldung" role="status"></span>
   <span class="p-kern" data-p="kern" title="Arrangement in the core: loaded revision and transport state"></span>
+  <span class="p-limiter" data-p="limiter" role="status" title="The set limiter is reducing the master: the room hears less than the production master and the export carry" hidden>SET LIMITER</span>
 </div>
 <ol class="p-verlauf" data-p="verlauf-liste" aria-label="History" hidden></ol>
 <div class="p-arr">
@@ -64,6 +70,17 @@ const GERUEST = `
   </div>
   <div class="p-leer" data-p="leer">No project open. NEW starts one, OPEN loads one.</div>
 </div>
+<section class="p-mixer" data-p="mixer" aria-label="Groups and master" hidden>
+  <div class="p-mixer-kopf"><span class="p-mixer-titel">GROUPS</span><button data-p="neu-gruppe" title="Add a group track (up to 8); put tracks into it with the output menu of each track" disabled>+ GROUP</button></div>
+  <div class="p-gruppenreihe" data-p="mixer-gruppen"></div>
+  <div class="p-pm" aria-label="Production master">
+    <span class="p-mixer-titel">MASTER</span>
+    <input class="p-pm-fader" data-p="pm-fader" type="range" min="-60" max="6" step="0.5" title="Production master volume (double click: 0 dB). The export is taken here, before the set limiter." aria-label="Volume production master">
+    <output class="p-pm-wert" data-p="pm-wert"></output>
+    <div class="meter waagrecht p-pm-pegel" data-kanal="pm"><i></i></div>
+  </div>
+</section>
+<details class="p-geraete" data-p="geraete"><summary>INPUTS</summary><div data-p="geraete-liste" role="group" aria-label="Audio and MIDI inputs"></div></details>
 <section class="p-detail" data-p="detail" aria-label="Detail"><div class="p-detail-kopf">CLIP</div><div class="p-detail-leer">No clip selected.</div></section>`;
 
 // Texte zu den Gründen der Projekt-API: die Gründe aus S2-Kern (projekt/befehle.ts, verlauf.ts) und Spec 3.4. Fehlt einer,
@@ -74,10 +91,16 @@ export const FEHLER_TEXT = {
   nichts_zu_tun: 'Nothing to undo or redo', kein_projekt: 'No project open', unbekannt: 'No such project', name_ungueltig: 'A project name needs 1 to 80 characters',
   ki_gestoppt: 'Stop Cypher is set', ki_stopp: 'Stop Cypher was pressed: the start was dropped', deck_laeuft: 'A deck is playing: the tempo stays until it stops', nicht_geladen: 'The core has no arrangement loaded yet',
   zu_gross: AUSGABE_FEHLER.zu_gross, server_fehler: 'The project server did not answer: showing the last state', netz: 'Page server unreachable', keine_antwort: 'No answer from the core',
-  spur_bereich: 'At most 8 tracks', slot_belegt: 'D1 has one Surge slot', spur_unbekannt: 'That track no longer exists', clip_unbekannt: 'That clip no longer exists',
+  routing_zyklus: 'A group cannot feed itself', routing_grenze: 'Groups do not nest, and there are at most 8',
+  ziel_unbekannt: 'That output no longer exists', gruppe_unbekannt: 'That group no longer exists',
+  spur_bereich: `At most ${MAX_SPUREN} tracks`, slot_belegt: 'D1 has one Surge slot', spur_unbekannt: 'That track no longer exists', clip_unbekannt: 'That clip no longer exists',
+  kein_eingang: 'A track can only be armed with a recording input', eingang_fehlt: 'That recording input does not exist', zu_viele_scharf: 'At most 8 audio tracks can be armed at once', aufnahme_laeuft: 'A recording is running', nichts_scharf: 'No track is armed', keine_aufnahme: 'No recording is running', kein_platz: 'Not enough free disk space to record', ersetzen_loop: 'The take could not replace a looped clip; it is saved as a file', veraltet_spur: 'The armed track no longer exists', ueberlappung: 'A transport is already running; stop it before recording', transport_abgelehnt: 'The transport did not start; nothing was recorded', aufnahme_abgelehnt: 'The core refused the recording', aufnahme_abgebrochen: 'The core dropped the recording before it began; nothing was recorded', leer: 'The take contains no audio', take_zu_lang: 'The take is longer than a WAV file can hold (about 3 hours); the raw file is kept', uebernahme_fehler: 'The take could not be placed on the track; the raw file is kept',
   index_bereich: 'No such track position', tempo_bereich: 'Tempo: 60 to 200 BPM', loop_bereich: 'The loop needs at least 1 beat',
   argument_ungueltig: 'That value is not allowed', argument_unbekannt: 'The core does not know that setting', befehl_unbekannt: 'The server does not know that command',
   art_passt_nicht: 'That clip does not fit this track', sha_ungueltig: 'That sample is not in the catalogue', clip_nicht_midi: 'That is not a MIDI clip',
+  warp_marker: 'The warp markers are not valid', warp_faktor: 'A warp segment has a tempo outside 15 to 800 BPM', warp_modus: 'That warp mode does not exist yet',
+  transpose_repitch: 'RE-PITCH follows the tempo: no transpose here', kein_warp: 'That clip has no warp yet', offset_bei_warp: 'The clip is warped: use its offset in beats',
+  kein_tempo: 'The library has no tempo for this sample: it stays unwarped', warp_auto_neuer_clip: 'Auto-warp a new clip with its own clip_neu',
   fade_zu_lang: 'The fades are longer than the clip', feld_nur_audio: 'That setting only exists on audio clips', beat_ausserhalb: 'That position is outside the clip',
   noten_unbekannt: 'That note no longer exists', id_belegt: 'That id is taken', projekt_ungueltig: 'The change would make the project invalid',
   // verlauf.ts und ablage.ts (S2): Verlauf und Ablage des Projekts

@@ -67,10 +67,11 @@ export function lautheitText(j) {
   return zahl(j.lufs_i) && zahl(j.true_peak_dbtp) ? ` · ${dbText(j.lufs_i)} LUFS, true peak ${dbText(j.true_peak_dbtp)} dBTP` : '';
 }
 export function ergebnisText(j) {
-  const ueber = j.spitze_db > 0;
+  const ueber = j.spitze_db > 0, decke = j.ueber_decke === true;   // 1.10 Slice 2: ueber_decke nur vom Produktions-Abgriff (Server, P10); ältere Antworten haben das Feld nicht
+  const limiter = decke && zahl(j.limiter_db_max) && j.limiter_db_max > 0 ? ` (set limiter would take ${j.limiter_db_max.toFixed(1)} dB)` : '';
   return {
-    text: `Exported ${dateiName(j.datei)} · ${dauerText(j.frames)} · peak ${dbText(j.spitze_db)} dBFS${lautheitText(j)}${ueber ? ' · CLIPPING' : ''}`,
+    text: `Exported ${dateiName(j.datei)} · ${dauerText(j.frames)} · peak ${dbText(j.spitze_db)} dBFS${lautheitText(j)}${ueber ? ' · CLIPPING' : ''}${decke ? ` · ABOVE SET LIMITER CEILING${limiter}` : ''}`,
     titel: j.datei,
-    warnung: ueber,
+    warnung: ueber || decke,
   };
 }

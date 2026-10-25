@@ -10,9 +10,13 @@
 //   8 (Fix 2/P4): schreibe_wav_f32 verschränkt in festen Stücken: beim Schreiben von 8 Mio. Frames (L und R 64 MB) wächst
 //     die Spitze des Arbeitsspeichers (VmHWM nach clear_refs 5) um weniger als 8 MB, vorher um die ganze Kopie (64 MB);
 //     die Datei bleibt bitgleich.
+//   9 (1.10 Slice 1): Render mit Gruppen und PM-Fader aus der Regler-Datei;
+//   10 (1.10 Slice 2, AK18): --abgriff produktion trägt die ungebremste Spitze (ueber_decke), set hält die Decke; limiter_db_max meldet den Eingriff;
+//     leise: set ist der Abgriff durch den erz/4-Isolator (Nachzug N7), um den Vorhalt ausgerichtet, unter −90 dBFS.
 // Mutationen: RENDER_ERZ4_NICHT_NEUTRAL (Fall 6 rot: der Render bleibt still), ARR_OHNE_RB_SENKE (Fall 5 rot),
 // RENDER_OHNE_OBERGRENZE (Fall 1 rot, Fix L3), RING_OHNE_MARGE (Fall 4 rot, Fix L6), WAV_ERSETZT (Fall 3 rot, Fix L9:
 // ein vorhandenes Ziel wird nie ersetzt), WAV_GANZE_KOPIE (Fall 8 rot, Fix 2/P4: verschränkte Kopie des ganzen Exports).
+// Von Hand geprüft (Task 19, nicht in CMake): `if (pm)` → `if (false)` in der Kopierschleife macht Fall 10 rot; CYPHERDJ_MUTATION_RENDER_OHNE_VORHALT ebenso (Isolator-Vergleich).
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -21,6 +25,8 @@
 #include <fstream>
 #include <memory>
 #include <vector>
+
+#include <cypherdj/dsp/isolator.h>
 
 #include "arr_datei.h"
 #include "cypherdj/render.h"
@@ -274,13 +280,19 @@ int main() {
     PRUEF(regler_datei(p, "{}", v, fehler) && v.empty());
     PRUEF(!regler_datei(p, "{\"spur/1/fader\":", v, fehler));             // kein JSON
     PRUEF(!regler_datei(p, "[1,2]", v, fehler));                          // kein Objekt
-    PRUEF(!regler_datei(p, "{\"spur/9/fader\":0}", v, fehler));           // Spur 1..8
+    PRUEF(!regler_datei(p, ("{\"spur/" + std::to_string(cdj::ARR_SPUREN + 1) + "/fader\":0}").c_str(), v, fehler));   // n+1 (T09)
     PRUEF(!regler_datei(p, "{\"erz/4/fader\":0}", v, fehler));            // nur Spur-Regler
     PRUEF(!regler_datei(p, "{\"spur/1/fader\":6.5}", v, fehler));         // −200..+6
     PRUEF(!regler_datei(p, "{\"spur/1/pan\":-1.5}", v, fehler));          // −1..+1
     PRUEF(!regler_datei(p, "{\"spur/1/mute\":0.5}", v, fehler));          // 0 oder 1
     PRUEF(!regler_datei(p, "{\"spur/1/fader\":\"0\"}", v, fehler));       // Zahl
     PRUEF(!cdj::lies_spur_regler(o.pfad + "/gibtsnicht.json", v, fehler) && !fehler.empty());
+    // 1.10: Gruppen-Regler und PM-Fader sind Mixer-Regler des Projekts; Grenzen der Tabelle gelten
+    PRUEF(regler_datei(p, "{\"grp/1/fader\":-6,\"grp/8/pan\":0.5,\"grp/2/mute\":1,\"grp/3/solo\":0,\"pm/fader\":-1.5}", v, fehler) && v.size() == 5);
+    PRUEF(!regler_datei(p, "{\"grp/9/fader\":0}", v, fehler));        // n+1
+    PRUEF(!regler_datei(p, "{\"grp/1/send/1\":0}", v, fehler));       // gibt es noch nicht (Slice 3)
+    PRUEF(!regler_datei(p, "{\"pm/fader\":6.5}", v, fehler));          // −200..+6
+    PRUEF(!regler_datei(p, "{\"pm/pan\":0}", v, fehler));
   }
   // 8 (Fix 2/P4): Schreiben ohne Kopie des ganzen Exports. Vorher legte schreibe_wav_f32 L und R verschränkt in einen
   // zweiten Vektor (beim größten Export 786 MB zusätzlich; cypherdj-render 2048 Beats bei 60 BPM: 1,58 GB Spitze).
@@ -315,6 +327,98 @@ int main() {
     const long hwm3 = status_kb("VmHWM");
     std::printf("Fall 8 Gegenprobe: Kopie von L (%zu kB) im Fenster: Zuwachs %ld kB\n", frames * 4 / 1024, hwm3 - hwm2);
     PRUEF(kopie.size() == frames && hwm3 - hwm2 > static_cast<long>(frames * 4 / 1024) * 9 / 10);
+  }
+  // 9 (1.10 Slice 1): Render mit Wiedergabe /2, zwei Spuren in Gruppe 1: Gruppen-Fader −6,02 dB halbiert den Export, PM-Fader ebenso
+  {
+    const std::string h = o.audio('a', 300000, 0.25f);
+    const std::string clip = o.clip("c1", 0.0, 4.0, h, 300000);
+    o.wiedergabe2(9, "{\"nr\":1,\"art\":\"audio\",\"ausgang\":{\"art\":\"gruppe\",\"nr\":1},\"clips\":[" + clip + "]},"
+                     "{\"nr\":2,\"art\":\"audio\",\"ausgang\":{\"art\":\"gruppe\",\"nr\":1},\"clips\":[" + clip + "]}",
+                  "{\"nr\":1,\"ausgang\":{\"art\":\"master\"}}");
+    cdj::RenderAuftrag r;
+    r.arr_ordner = o.pfad;
+    r.nr = 9;
+    r.von_beat = 0.0;
+    r.bis_beat = 4.0;
+    r.bpm = 128.0;
+    r.regler_projekt = true;
+    const cdj::RenderErgebnis roh = cdj::rendere(r);
+    PRUEF(roh.fehler.empty() && roh.l.size() == 4 * 22500 && db(roh.spitze) > -30.0);
+    r.spur_regler = {{"grp/1/fader", -6.0206f}};
+    const cdj::RenderErgebnis halb = cdj::rendere(r);
+    PRUEF(halb.fehler.empty() && halb.regler == 1);
+    PRUEF(std::fabs(halb.l[22500] / roh.l[22500] - 0.5f) < 1e-3f);
+    r.spur_regler = {{"pm/fader", -6.0206f}};
+    const cdj::RenderErgebnis pm = cdj::rendere(r);
+    PRUEF(std::fabs(pm.l[22500] / roh.l[22500] - 0.5f) < 1e-3f);
+    r.spur_regler = {{"grp/1/mute", 1.0f}};
+    PRUEF(cdj::rendere(r).spitze == 0.0f);   // Gruppen-Mute: der Export schweigt
+    r.spur_regler = {{"grp/9/fader", 0.0f}};
+    PRUEF(cdj::rendere(r).fehler == "regler");   // Negativ-Kontrolle: keine Gruppe 9
+  }
+  // 10 (1.10 Slice 2, AK18): heißes Material (Spur 1,5 · 0,7071 = 1,06 am PM): abgriff produktion enthält die ungebremste Spitze, abgriff set hält die Decke;
+  // ueber_decke und limiter_db_max sagen es; leises Material: set ist der Abgriff durch den erz/4-Isolator (Gains 1,0), um den Limiter-Vorhalt ausgerichtet,
+  // unter −90 dBFS (Nachzug N7: erz/4 ist nur im Betrag neutral, die Phase dreht der LR8-Isolator; ein Sample-Vergleich produktion gegen set ist nie null),
+  // ueber_decke aus (Negativ-Kontrolle)
+  {
+    const std::string heiss = o.audio('b', 300000, 1.5f), leise = o.audio('c', 300000, 0.2f);   // sha nur aus Hex-Zeichen (arr_wiedergabe.cpp)
+    o.wiedergabe(10, "{\"nr\":1,\"art\":\"audio\",\"clips\":[" + o.clip("c1", 0.0, 4.0, heiss, 300000) + "]}");
+    o.wiedergabe(11, "{\"nr\":1,\"art\":\"audio\",\"clips\":[" + o.clip("c1", 0.0, 4.0, leise, 300000) + "]}");
+    auto lauf = [&](int64_t nr, cdj::RenderAbgriff ab) {
+      cdj::RenderAuftrag r;
+      r.arr_ordner = o.pfad;
+      r.nr = nr;
+      r.von_beat = 0.0;
+      r.bis_beat = 4.0;
+      r.bpm = 128.0;
+      r.regler_projekt = true;
+      r.abgriff = ab;
+      return cdj::rendere(r);
+    };
+    const cdj::RenderErgebnis prod = lauf(10, cdj::RenderAbgriff::produktion), set = lauf(10, cdj::RenderAbgriff::set);
+    std::printf("Fall 10: heiß, produktion Spitze %.3f (%.1f dBFS), set Spitze %.3f, Limiter bis %.1f dB\n", prod.spitze, db(prod.spitze), set.spitze, prod.limiter_db_max);
+    PRUEF(prod.fehler.empty() && set.fehler.empty() && prod.frames == set.frames && prod.frames == 4 * 22500);
+    PRUEF(prod.abgriff == "produktion" && set.abgriff == "set");
+    PRUEF(prod.spitze > 1.0f && prod.ueber_decke);                 // ungebremst, über 0 dBFS, über der Decke (−1 dBTP)
+    PRUEF(set.spitze <= 0.92f && !set.ueber_decke);               // die Decke hält
+    PRUEF(prod.limiter_db_max > 1.0f && set.limiter_db_max > 1.0f);   // der Set-Limiter hat in beiden Läufen eingegriffen (beide rendern denselben Kern)
+    PRUEF(std::fabs(prod.l[40000] - 1.5f * 0.70710677f) < 1e-3f);    // Mitte des Clips: Wert · 0,7071 unverändert
+    const cdj::RenderErgebnis pl = lauf(11, cdj::RenderAbgriff::produktion), sl = lauf(11, cdj::RenderAbgriff::set);
+    PRUEF(pl.fehler.empty() && sl.fehler.empty() && !pl.ueber_decke && !sl.ueber_decke && pl.limiter_db_max < 0.05f);
+    PRUEF(pl.frames == sl.frames && pl.l.size() == sl.l.size() && pl.l.size() == static_cast<size_t>(pl.frames));
+    PRUEF(!std::signbit(pl.limiter_db_max) && !std::signbit(sl.limiter_db_max));   // „0 = griff nie ein“ ist +0, nicht −0 (die Zeile des Programms schriebe sonst "-0.000")
+    // N7: Referenz = cypherdj::dsp::Isolator (Gains 1,0), frisch ab Renderbeginn, über den Abgriff gerechnet. Der Abgriff beginnt am Kern-Sample start_sample,
+    // der Master hinter dem Limiter um den Vorhalt später: l[j] von set klingt, wo der Isolator den Abgriff-Wert j ausgibt (Task 17 Fall 1: Ring[t + vh] = Iso(PM[t])).
+    std::vector<float> ref_l(pl.l.size()), ref_r(pl.r.size());
+    {
+      cypherdj::dsp::Isolator iso;
+      const std::vector<float> eins(256, 1.0f);
+      for (size_t i = 0; i < pl.l.size(); i += 256) {
+        const int m = static_cast<int>(std::min<size_t>(256, pl.l.size() - i));
+        iso.verarbeite(&pl.l[i], &pl.r[i], &ref_l[i], &ref_r[i], m, eins.data(), eins.data(), eins.data());
+      }
+    }
+    double rest = 0.0, verschoben = 0.0, signal = 0.0;
+    for (size_t j = 0; j + 1 < sl.l.size(); ++j) {
+      rest = std::max(rest, static_cast<double>(std::fabs(sl.l[j] - ref_l[j])));
+      rest = std::max(rest, static_cast<double>(std::fabs(sl.r[j] - ref_r[j])));
+      verschoben = std::max(verschoben, static_cast<double>(std::fabs(sl.l[j + 1] - ref_l[j])));
+      signal = std::max(signal, static_cast<double>(std::fabs(pl.l[j])));
+    }
+    std::printf("Fall 10: leise, set gegen Isolator(produktion): Rest %.1f dBFS, um 1 Sample verschoben %.1f dBFS, Signal %.1f dBFS, Vorhalt %d\n",
+                20.0 * std::log10(rest + 1e-12), 20.0 * std::log10(verschoben + 1e-12), 20.0 * std::log10(signal + 1e-12), sl.vorhalt);
+    PRUEF(signal > 0.1);                         // hörbar: Stille in beiden Läufen gilt als ungültig, nicht als bestanden
+    PRUEF(rest < std::pow(10.0, -90.0 / 20.0));
+    PRUEF(verschoben > 1e-3);                    // Gegenprobe: um 1 Sample verschoben ist der Rest nicht null
+    // Ausrichtung: der Abgriff beginnt mit dem Einsatz, der Ring-Master (set) liegt um den Limiter-Vorhalt dahinter; die strenge Ausrichtung
+    // prüft der Vergleich oben (Index j) und Task 17 Fall 1 (Index t + vh)
+    int64_t ip = -1, is = -1;
+    for (size_t i = 0; i < pl.l.size() && (ip < 0 || is < 0); ++i) {
+      if (ip < 0 && pl.l[i] != 0.0f) ip = static_cast<int64_t>(i);
+      if (is < 0 && sl.l[i] != 0.0f) is = static_cast<int64_t>(i);
+    }
+    std::printf("Fall 10: erster Wert produktion %lld, set %lld, Vorhalt %d\n", (long long)ip, (long long)is, sl.vorhalt);
+    PRUEF(ip >= 0 && is >= 0 && ip <= is);
   }
   PRUEF_ENDE();
 }

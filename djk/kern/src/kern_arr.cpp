@@ -2,6 +2,7 @@
 // 2 und 3 an Einsatz und Ende (am Sample), /zustand/arr (§5.13) mit 50 Hz beim Spielen und 2 Hz sonst, abgelöste und
 // abgelehnte Schnappschüsse als ARR_ALT zurück an den Netz-Faden (Freigabe im Lade-Faden). Keine Allokation, keine
 // Sperre, kein I/O.
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 
@@ -308,12 +309,30 @@ void Kern::arr_quittungen(const Karte& k) {
   }
 }
 
+// 1.10 Slice 2 (E2, P12): Absenkung des Set-Limiters nach jedem Mischer-Block lesen. Das Lesen setzt zurück (mixer.h).
+void Kern::limiter_beobachten(int64_t s0, int m) {
+  const float a = mixer_->limiter_absenkung_db();   // seit dem letzten Aufruf, <= 0
+  if (a < limiter_db_min_) limiter_db_min_ = a;
+  if (a < LIMITER_LAMPE_DB) {
+    limiter_halte_db_ = s0 <= limiter_halte_bis_ ? std::min(limiter_halte_db_, a) : a;
+    limiter_halte_bis_ = s0 + m + LIMITER_HALTE;
+  } else if (s0 >= limiter_halte_bis_) {
+    limiter_halte_db_ = 0.0f;
+  }
+  const bool an = limiter_halte_db_ < LIMITER_LAMPE_DB;
+  if (an != limiter_lampe_) {
+    limiter_lampe_ = an;
+    limiter_wechsel_ = true;   // die Lampe wechselt sofort hinaus, nicht erst im 2-Hz-Takt
+  }
+}
+
 // §5.13 /zustand/arr: 50 Hz (je 960 Samples), solange er wartet oder spielt, sonst 2 Hz (24 000), dazu bei jeder Änderung
 void Kern::arr_zustand(int64_t n0, int n) {
   const ArrStatus st = arr_->status();
   const int64_t abstand = (st == ArrStatus::wartet || st == ArrStatus::spielt) ? 960 : 24000;
   const bool takt = (n0 + abstand - 1) / abstand * abstand < n0 + n;
-  if (!arr_->hole_geaendert() && !takt) return;
+  if (!arr_->hole_geaendert() && !takt && !limiter_wechsel_) return;
+  limiter_wechsel_ = false;
   const ArrZustand z = arr_->zustand(plan_.karte(), n0);
   Ereignis e{};
   e.art = Ereignis::ARR_ZUSTAND;
@@ -325,7 +344,81 @@ void Kern::arr_zustand(int64_t n0, int n) {
   e.arr_ursprung = z.ursprung_sample;
   e.arr_start_beat = z.start_beat;
   e.arr_metronom_an = z.metronom_an ? 1 : 0;
+  e.arr_limiter_db = limiter_halte_db_;
   melde(e);
+}
+
+// ---- 1.8 Aufnahme -------------------------------------------------------------------------------------------------------
+ArrLage Kern::rec_arr_lage() const {
+  return ArrLage{static_cast<int>(arr_->status()), arr_->einsatz_sample(), arr_->beendet_sample(), arr_->stopp_sample(), arr_->letzte_naht()};
+}
+
+void Kern::rec_alt_melden(RecSpur* p) {   // der abgelöste oder abgelehnte RecSpur geht zur Freigabe an den Netz-Faden (nie im Callback freigeben)
+  if (!p) return;
+  Ereignis x{};
+  x.art = Ereignis::REC_ALT;
+  x.sample = sample_;
+  x.zeiger = p;
+  if (!ereignisse_->schiebe(x)) ++verloren_;   // gezählt (/zustand/kern ereignisse_verloren): ein Leck von 1 MB statt eines Absturzes
+}
+
+void Kern::einsortieren_rec(const Befehl& c, double beat0) {
+  auto ab = [&](const char* grund) { quittung(c.id, c.quelle, 6, sample_, beat0, grund); };
+  switch (c.art) {
+    case Befehl::REC_SPUR: {
+      RecSpur* neu = static_cast<RecSpur*>(const_cast<void*>(c.zeiger));
+      if (ist_cypher(c.quelle) && sw_->ki_gestoppt()) { rec_alt_melden(neu); return ab("ki_gestoppt"); }
+      if (c.nr < 1 || c.nr > ARR_SPUREN) { rec_alt_melden(neu); return ab("spur_bereich"); }
+      if (!aufnahme_.aendern_erlaubt()) { rec_alt_melden(neu); return ab("aufnahme_laeuft"); }   // auch solange der Faden die Datei des letzten Takes noch schließt (m1)
+      if (neu && aufnahme_.scharf_ohne(c.nr) >= REC_MAX_ARM) { rec_alt_melden(neu); return ab("zu_viele_scharf"); }
+      rec_alt_melden(aufnahme_.setze(c.nr, neu));
+      quittung(c.id, c.quelle, 1, sample_, beat0);
+      quittung(c.id, c.quelle, 3, sample_, beat0);
+      return;
+    }
+    case Befehl::REC_START: {
+      if (ist_cypher(c.quelle) && sw_->ki_gestoppt()) return ab("ki_gestoppt");
+      if (c.nr < 0 || c.fassung < 0 || c.fassung > 480000) return ab("ausserhalb_bereich");
+      if (!(c.versatz_f == 0 || (c.versatz_f >= REC_FRIST_MIN && c.versatz_f <= REC_FRIST_MAX))) return ab("ausserhalb_bereich");   // frist_samples (M1)
+      if (const char* g = aufnahme_.starte(c.id, c.nr, c.fassung, ist_cypher(c.quelle), sample_, rec_arr_lage(), c.versatz_f)) return ab(g);
+      rec_id_ = c.id;
+      std::strncpy(rec_quelle_, c.quelle, sizeof rec_quelle_ - 1);
+      quittung(c.id, c.quelle, 1, sample_, beat0);
+      return;
+    }
+    case Befehl::REC_STOPP:
+      quittung(c.id, c.quelle, 1, sample_, beat0);
+      aufnahme_.stopp(sample_);
+      quittung(c.id, c.quelle, 3, sample_, beat0);
+      return;
+    default: return;
+  }
+}
+
+void Kern::rec_meldungen(const Karte& k) {   // Quittungen des Start-Befehls: 2 am Einsatz, 3 am Ende, 7 Abbruch
+  AufnahmeMeldung m;
+  while (aufnahme_.hole_meldung(m)) {
+    const double beat = k.beat_at(static_cast<double>(m.sample));
+    quittung(rec_id_, rec_quelle_, m.art, m.sample, beat, m.grund);
+  }
+}
+
+void Kern::rec_zustand_melden(int64_t n0, int n) {   // /zustand/rec: 10 Hz beim Aufnehmen, 2 Hz sonst
+  const int64_t abstand = aufnahme_.status() == 0 ? 24000 : 4800;
+  if ((n0 + abstand - 1) / abstand * abstand >= n0 + n) return;
+  Ereignis z{};
+  z.art = Ereignis::REC_ZUSTAND;
+  z.sample = n0;
+  z.status = aufnahme_.status();
+  z.id = aufnahme_.kennung();
+  z.rec_scharf = aufnahme_.scharf();
+  z.rec_luecken = static_cast<int64_t>(aufnahme_.luecken());
+#ifdef CYPHERDJ_MUTATION_REC_ARR_BEAT_KERN
+  z.arr_beat = arr_->status() == ArrStatus::spielt ? plan_.karte().beat_at(static_cast<double>(n0)) : 0.0;   // Fehlerfall (m2): der Kern-Beat statt des Projekt-Beats
+#else
+  z.arr_beat = arr_->status() == ArrStatus::spielt ? arr_->zustand(plan_.karte(), n0).projekt_beat : 0.0;     // Projekt-Beat wie /zustand/arr (m2)
+#endif
+  melde(z);
 }
 
 }  // namespace cdj

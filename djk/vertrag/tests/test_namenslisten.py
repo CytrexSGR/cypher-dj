@@ -146,17 +146,17 @@ MUTATIONEN += [
      "Spur-Regler=Kern: R02 SCHNITTSTELLEN §1.5 fehlt: spur/1/solo"),
     ("djk/kern/stellwerk/src/regler.cpp", '"spur/%d/pan"', '"spur/%d/balance"',
      "Spur-Regler=Kern: R03 Attrappe REGLER steht ohne Vertrag: spur/1/pan"),
-    ("djk/oberflaeche/hand_bedienung.ts", "|^spur\\/[1-8]\\/(fader|pan|mute|solo)$", "|^spur\\/[1-8]\\/(fader|mute|solo)$",
+    ("djk/oberflaeche/hand_bedienung.ts", "|^spur\\/([1-9]|[12][0-9]|3[0-2])\\/(fader|pan|mute|solo)$", "|^spur\\/([1-9]|[12][0-9]|3[0-2])\\/(fader|mute|solo)$",
      "Spur-Regler: R06 hand_bedienung.PFAD lehnt spur/1/pan ab"),
-    ("djk/vertrag/schemas/defs.schema.json", "|spur/[1-8]/(fader|pan|mute|solo)", "|spur/[1-9]/(fader|pan|mute|solo)",
-     "Spur-Regler: R07 defs.schema.json regler_pfad nimmt spur/9/fader an"),
-    (VERTRAG_MJS, "'spur_bereich', 'reserviert']", "'spur_bereich']",
+    ("djk/vertrag/schemas/defs.schema.json", "|spur/([1-9]|[12][0-9]|3[0-2])/(fader|pan|mute|solo)", "|spur/([1-9]|[12][0-9]|3[0-3])/(fader|pan|mute|solo)",
+     "Spur-Regler: R07 defs.schema.json regler_pfad nimmt spur/33/fader an"),
+    (VERTRAG_MJS, "'spur_bereich', 'reserviert',", "'spur_bereich',",
      "Gründe: Attrappe GRUENDE fehlt: reserviert"),
     ("djk/kern/src/kern_arr.cpp", 'return ab("nicht_geladen");', 'return ab("nicht_geladenx");',
      "Gründe: Kern-Quelltext vergibt nicht_geladenx, osc.json kennt es nicht"),
-    ("djk/vertrag/osc.json", '"spur_bereich", "reserviert"]', '"spur_bereich"]',
+    ("djk/vertrag/osc.json", '"spur_bereich", "reserviert",', '"spur_bereich",',
      "Gründe: Attrappe GRUENDE kennt reserviert, osc.json nicht"),
-    ("djk/vertrag/schemas/defs.schema.json", '"spur_bereich", "reserviert"]', '"spur_bereich"]',
+    ("djk/vertrag/schemas/defs.schema.json", '"spur_bereich", "reserviert",', '"spur_bereich",',
      "Gründe=osc.json: G05 defs.schema.json grund fehlt: reserviert"),
 ]
 
@@ -177,10 +177,31 @@ MUTATIONEN += [
      "spur_fader: { typ: 'fader_db', min: -200, max: 0,", "Spur-Fader-Bereich=Kern: R04 kurven.js"),
     (VERTRAG_MJS, "REGLER.set(`spur/${n}/fader`, { ...R(DB, -200, 6, 0)",
      "REGLER.set(`spur/${n}/fader`, { ...R(DB, -200, 0, 0)", "Spur-Fader-Bereich=Kern: R03 Attrappe REGLER"),
-    ("djk/leitstand/src/regler_info.ts", "...r('db', -200, 6, 0) });", "...r('db', -200, 0, 0) });",
+    ("djk/leitstand/src/regler_info.ts",
+     "tabelle.set(`spur/${n}/fader`, { pfad: `spur/${n}/fader`, kanal: null, ...r('db', -200, 6, 0) });",
+     "tabelle.set(`spur/${n}/fader`, { pfad: `spur/${n}/fader`, kanal: null, ...r('db', -200, 0, 0) });",
      "Spur-Fader-Bereich=Kern: R05 regler_info.ts"),
     ("docs/architektur/SCHNITTSTELLEN.md", "| `spur/<n>/fader` | dB | −200 bis +6 |", "| `spur/<n>/fader` | dB | −200 bis 0 |",
      "Spur-Fader-Bereich=Kern: R02 SCHNITTSTELLEN §1.5"),
+]
+
+
+# ---- 1.10 Slice 1: Gruppen-Regler und PM in allen Fundorten
+MUTATIONEN += [
+    (KURVEN_JS, "...GRUPPEN.flatMap((n) => SPUR_REGLER.map((p) => `grp/${n}/${p}`)),",
+     "...GRUPPEN.flatMap((n) => SPUR_REGLER.filter((p) => n !== 1 || p !== 'pan').map((p) => `grp/${n}/${p}`)),",
+     "Routing-Regler=Kern: R04 kurven.js ZIELE fehlt: grp/1/pan"),
+    (VERTRAG_MJS, "REGLER.set(`grp/${n}/solo`", "REGLER.set(`grp/${n}/soli`", "Routing-Regler=Kern: R03 Attrappe REGLER fehlt: grp/1/solo"),
+    ("djk/leitstand/src/regler_info.ts", "tabelle.set(`grp/${n}/mute`, { pfad: `grp/${n}/mute`",
+     "tabelle.set(`grp/${n}/mutx`, { pfad: `grp/${n}/mutx`", "Routing-Regler=Kern: R05 regler_info.ts fehlt: grp/1/mute"),
+    ("docs/architektur/SCHNITTSTELLEN.md", "| `grp/<n>/solo` | Schalter |", "| `grp/<n>/solx` | Schalter |",
+     "Routing-Regler=Kern: R02 SCHNITTSTELLEN §1.5 fehlt: grp/1/solo"),
+    ("djk/kern/stellwerk/src/regler.cpp", '"grp/%d/pan"', '"grp/%d/balance"',
+     "Routing-Regler=Kern: R03 Attrappe REGLER steht ohne Vertrag: grp/1/pan"),
+    ("djk/oberflaeche/hand_bedienung.ts", "|^pm\\/fader$/;", "/;", "Routing-Regler: R06 hand_bedienung.PFAD lehnt pm/fader ab"),
+    ("djk/vertrag/schemas/defs.schema.json", "|pm/fader)$\"", "|pm/fadex)$\"", "Routing-Regler: R07 defs.schema.json regler_pfad lehnt pm/fader ab"),
+    (VERTRAG_MJS, "REGLER.set('pm/fader', { ...R(DB, -200, 6, 0), kanal: null });", "REGLER.set('pm/fader', { ...R(DB, -200, 0, 0), kanal: null });",
+     "Routing-Fader-Bereich=Kern: R03 Attrappe REGLER"),
 ]
 
 

@@ -11,15 +11,16 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { BereichKontext } from '../../http/router.ts';
-import { Katalog } from '../../katalog.ts';
+import { Katalog, type Zeile } from '../../katalog.ts';
 import { Projekte, projektWurzelVorgabe } from '../../projekt/ablage.ts';
 import { fuehreListeAus, setzeDekodiert, vergleiche } from '../../projekt/befehle.ts';
 import { DekodierCache, type DekodierEreignis } from '../../projekt/dekodier.ts';
-import { MAX_BEAT, kanonisch, type DekodiertZustand, type Projekt } from '../../projekt/modell.ts';
+import { MAX_BEAT, kanonisch, sucheClip, type AudioClip, type DekodiertZustand, type Projekt, type Warp } from '../../projekt/modell.ts';
 import { PatchFehler, wende } from '../../projekt/patch.ts';
+import { autoWarp, quellSekunde, segmentBpm, type TempoQuelle } from '../../projekt/warp.ts';
 import { aendere, rueckgaengig, wiederholen, type Haken, type Meta, type Verlauf, type Wirkung } from '../../projekt/verlauf.ts';
 import { WiedergabeFehler, WiedergabeZaehler, schreibeWiedergabe, uebersetze, wiedergabeDatei } from '../../projekt/wiedergabe.ts';
-import { ERZ4_NUR_HAND, alleSpurRegler, erz4Soll, istSpurRegler, reglerZuBefehl, type Soll } from './abbildung.ts';
+import { ERZ4_NUR_HAND, alleRegler, erz4Soll, istMixerRegler, reglerZuBefehl, type Soll } from './abbildung.ts';
 import { arrOrdner, zaehlerDateiVorgabe } from './konfig.ts';
 import { grundText } from '../../http/gruende.ts';
 import { KernLage } from './lage.ts';
@@ -53,11 +54,17 @@ interface Merk { laden: boolean; loop: boolean; tempo: boolean }
 export type AusgabeLauf = { art: 'freeze'; spur_id: string } | { art: 'export' } | { art: 'lautheit' };
 interface Offen { slug: string; projekt: Projekt; verlauf: Verlauf; merk: Merk }
 type Koerper = Record<string, unknown>;
+interface Hinweis { index: number; hinweis: string }                // Paket 1.13: z. B. kein_tempo (Auto-Warp fand kein Tempo)
 
 const schlaf = (ms: number): Promise<void> => new Promise((ok) => setTimeout(ok, ms));
 // Flache Kopie für proj_lage: MIDI-Clips tragen noten_zahl statt noten, alles andere wird geteilt (nur lesen, nicht verändern)
+// Paket 1.13: ein Audio-Clip zeigt seinen Warp ohne Marker-Liste (marker_zahl; die Marker liest proj_warp)
+const warpKurz = (w: Warp): unknown => {
+  const { marker, ...rest } = w;
+  return { ...rest, marker_zahl: marker.length };
+};
 const ohneNoten = (p: Projekt): unknown => ({ ...p, spuren: p.spuren.map((s) => ({ ...s, clips: s.clips.map((c) => {
-  if (c.art !== 'midi') return c;
+  if (c.art === 'audio') return c.warp ? { ...c, warp: warpKurz(c.warp) } : c;
   const { noten, ...rest } = c;
   return { ...rest, noten_zahl: noten.length };
 }) })) });
@@ -67,6 +74,19 @@ const reglerBefund = (e: ReglerErgebnis[]): { regler_fehler: ReglerErgebnis[]; r
   ({ regler_fehler: e.filter((r) => quittungAbgelehnt(r.quittung)), regler_ohne_kern: e.filter((r) => r.quittung === null).length });
 export const RUECKWEG_MS = 250;     // Spec 6.30: höchstens eine Speicherung des Rückwegs je 250 ms
 export const GESTE_RUHE_MS = 500;   // Spec 6.30: so lange Ruhe schließt eine Geste (ein Verlaufseintrag je Geste)
+
+// Gegenprobe W(bei_beat) des Werkzeugs proj_warp: die Quellsekunde, die bei diesem Projekt-Beat wirklich klingt. Maßgeblich ist, was der Übersetzer
+// spielt (wiedergabe.ts audioKopien/warpMarker): jede Loop-Kopie beginnt bei versatz_beats von vorn (Clip-Beat c, Kopie k = ⌊c/loop⌋, Beat in der
+// Kopie c − k·loop). Klingt dort nichts aus dem Warp, ist quell_s null und warum sagt es: ausserhalb (vor dem Clip oder ab seinem Ende,
+// halboffen) oder warp_aus (an false: der Clip spielt ungewarpt über offset_s).
+function gegenprobe(c: AudioClip, bei: number): { projekt_beat: number; quell_s: number | null; warum?: 'ausserhalb' | 'warp_aus' } {
+  const w = c.warp!, rel = bei - c.start_beat;
+  if (rel < 0 || rel >= c.laenge_beats - 1e-9) return { projekt_beat: bei, quell_s: null, warum: 'ausserhalb' };
+  if (!w.an) return { projekt_beat: bei, quell_s: null, warum: 'warp_aus' };
+  const loop = c.loop_beats ?? null;
+  const lokal = loop === null ? rel : Math.max(0, rel - Math.floor(rel / loop + 1e-9) * loop);
+  return { projekt_beat: bei, quell_s: quellSekunde(w.marker, w.versatz_beats + lokal) };
+}
 
 export class ProjSitzung {
   readonly lage = new KernLage();
@@ -88,6 +108,8 @@ export class ProjSitzung {
   private rueckwegGespeichertMs = -Infinity;                         // Zeit der letzten Speicherung des Rückwegs
   private geste: { nr: number; letzteMs: number; labels: string[]; offen: Offen | null } = { nr: 0, letzteMs: -Infinity, labels: [], offen: null };
   private sperren = 0;          // P4 (Spec 6.23): offene sperreLaden()-Freigaben
+  private sperrenAufnahme = 0;   // 1.8: davon die Sperre der Aufnahme (höchstens eine; sie darf den eigenen Transport-Start)
+  private aufnahmeLauf: unknown = null;   // 1.8: laufende Aufnahme (sperrt Tempo-Änderungen)
   private oeffnet = 0;          // Spec 6.32: laufende /proj/oeffnen und /proj/neu (in der Kette); solange > 0 lehnt sperreLaden() ab
   private ausgabeLauf: AusgabeLauf | null = null;   // Spec 6.34: laufender Freeze oder Export (Paket S3), GET /proj/aktuell ausgabe_lauf
 
@@ -149,6 +171,26 @@ export class ProjSitzung {
   verlaufListe(): Antwort {
     const o = this.brauchOffen();
     return { code: 200, j: o.verlauf.liste().map((e) => ({ ...e, zeit: Date.parse(e.zeit) })) };
+  }
+
+  // Paket 1.13 (proj_warp): der Warp eines Audio-Clips mit Marker-Liste, Segment-Tempo und der Gegenprobe W(bei_beat). Beats in der Antwort:
+  // beat = Clip-Beat des Markers, projekt_beat = wo er im ersten Durchlauf des Clips liegt; von_beat, bis_beat und bei_beat sind Projekt-Beats.
+  warpLage(clipId: string | null, von: number | null, bis: number | null, bei: number | null): Antwort {
+    const o = this.brauchOffen();
+    if (!clipId) throw new ProjFehler(400, 'argument_ungueltig', { text: 'clip_id: an audio clip id is required' });
+    const g = sucheClip(o.projekt, clipId);
+    if (!g) throw new ProjFehler(404, 'clip_unbekannt');
+    if (g.clip.art !== 'audio') throw new ProjFehler(409, 'feld_nur_audio');
+    const c = g.clip, w = c.warp;
+    if (!w) return { code: 200, j: { clip_id: c.id, start_beat: c.start_beat, laenge_beats: c.laenge_beats, warp: null } };
+    const m = w.marker;
+    const marker = m.map(([quellS, beat], i) => ({ quell_s: quellS, beat, projekt_beat: c.start_beat + beat - w.versatz_beats,
+      segment_bpm: i + 1 < m.length ? segmentBpm(m, i) : null }))
+      .filter((x) => (von === null || x.projekt_beat >= von) && (bis === null || x.projekt_beat <= bis));
+    const { marker: _alle, ...kopf } = w;
+    return { code: 200, j: { clip_id: c.id, start_beat: c.start_beat, laenge_beats: c.laenge_beats,
+      warp: { ...kopf, eins_unsicher: w.eins_unsicher === true, marker_zahl: m.length, marker },
+      ...(bei === null ? {} : { bei: gegenprobe(c, bei) }) } };
   }
 
   // --- öffnen ---------------------------------------------------------------------------------------------------------
@@ -239,13 +281,13 @@ export class ProjSitzung {
     if (o) try { o.verlauf.schliesse(); } catch { /* der Server endet ohnehin */ }
   }
 
-  // Wiedergabe laden, Spur-Regler (alle 32), auf Wunsch erz/4 neutral, Loop, Metronom, Leeren der KI-Maske; alles parallel, Quittungen abgewartet
+  // Wiedergabe laden, Mixer-Regler (alle), auf Wunsch erz/4 neutral, Loop, Metronom, Leeren der KI-Maske; alles parallel, Quittungen abgewartet
   // wiederanlauf (Spec 6.21, 6.30): der Kern gewinnt ganz. Keine neue Wiedergabe, kein erz/4, kein Loop, kein Metronom; von den Spur-Reglern
   // nur die mit unbekanntem Ist-Wert (für genau diese gewinnt das Projekt).
   private async synchronisiere(quelle: Quelle, erz4: boolean, wiederanlauf = false): Promise<Record<string, unknown>> {
     const o = this.brauchOffen();
     const soll: Soll[] = wiederanlauf ? this.unbekannteSpurRegler(o.projekt)
-      : [...(erz4 ? erz4Soll(quelle) : []), ...alleSpurRegler(o.projekt)];
+      : [...(erz4 ? erz4Soll(quelle) : []), ...alleRegler(o.projekt)];
     // Spec 6.32: die Sperre zusätzlich unmittelbar vor Laden und Loop (gesperrt: am Offen merken, nicht senden; die Freigabe holt es nach).
     // Die erste Linie ist sperreLaden(), das während eines Öffnens ablehnt; dies ist die zweite.
     const [wiedergabe, regler, loop, metronom, ki] = await Promise.all([
@@ -270,18 +312,20 @@ export class ProjSitzung {
   // Spec 6.30: Spur-Regler, deren Ist-Wert der Server nicht kennt (der Kern schickt den Regler-Stand nur beim ersten Hallo einer Generation;
   // ein Server, der binnen 5 s neu startet, bekommt ihn nicht). Für genau diese gewinnt beim Wiederanlauf das Projekt.
   private unbekannteSpurRegler(p: Projekt): Soll[] {
-    return alleSpurRegler(p).filter((r) => this.lage.reglerWert(r.pfad) === null);
+    return alleRegler(p).filter((r) => this.lage.reglerWert(r.pfad) === null);
   }
   // Ist-Werte der Spur-Regler, die der Kern gemeldet hat, als EINE Änderung ins Projekt (Quelle andreas, undo-fähig). Unbekannte Werte
   // bleiben. Entscheidung E-a: der KI-Stopp senkt keinen Fader, jeder Ist-Wert ist eine Handbewegung oder der Projektstand.
   private uebernimmMixer(o: Offen): number {
     const befehle: Record<string, unknown>[] = [];
-    for (const s of o.projekt.spuren) {
-      for (const k of ['fader', 'pan', 'mute', 'solo'] as const) {
-        const pfad = `spur/${s.nr}/${k}`, wert = this.lage.reglerWert(pfad);
-        const b = wert === null ? null : reglerZuBefehl(o.projekt, pfad, wert);
-        if (b) befehle.push(b.befehl);
-      }
+    const pfade = [
+      ...o.projekt.spuren.flatMap((s) => (['fader', 'pan', 'mute', 'solo'] as const).map((k) => `spur/${s.nr}/${k}`)),
+      ...(o.projekt.gruppen ?? []).flatMap((g) => (['fader', 'pan', 'mute', 'solo'] as const).map((k) => `grp/${g.nr}/${k}`)),
+      'pm/fader'];
+    for (const pfad of pfade) {
+      const wert = this.lage.reglerWert(pfad);
+      const b = wert === null ? null : reglerZuBefehl(o.projekt, pfad, wert);
+      if (b) befehle.push(b.befehl);
     }
     if (!befehle.length) return 0;
     const meta = { quelle: 'andreas' as const, label: 'Mixer nach Wiederanlauf' };
@@ -385,10 +429,27 @@ export class ProjSitzung {
 
   // --- ändern -----------------------------------------------------------------------------------------------------------
   // Audio-Clips nur aus dem Katalog (Spec 2.11): sha256 → Pfad; Ableton-geschützt, Datei fehlt, unbekannt werden abgelehnt.
-  private loeseQuellenAuf(befehle: unknown[]): { befehle: unknown[]; quellen: Map<string, string> } {
+  // Paket 1.13: dasselbe Wissen löst den Auto-Warp auf. clip_neu mit warp 'auto' bekommt aus dem Katalogeintrag (Typ, BPM, Takte, Dauer) den
+  // Warp und die Länge in Beats (laenge_beats des Aufrufers ist dann nur der Rückfall für Typen und Einträge ohne Tempo, ein Hinweis
+  // kein_tempo meldet den Fall); warp_auto auf einem vorhandenen Clip wird zu warp_setzen mit dem Warp aus dem Katalog (Länge bleibt).
+  private loeseQuellenAuf(befehle: unknown[], projekt: Projekt): { befehle: unknown[]; quellen: Map<string, string>; hinweise: Hinweis[] } {
     const quellen = new Map<string, string>();
+    const hinweise: Hinweis[] = [];
+    const tempoVon = (z: Zeile): TempoQuelle => ({ typ: z.typ, bpm: z.bpm, takte: z.takte, dauer_s: z.dauer_s });
     const aus = befehle.map((b, index) => {
       const x = b as Koerper;
+      if (x && typeof x === 'object' && x.befehl === 'warp_auto' && typeof x.clip_id === 'string') {
+        const g = sucheClip(projekt, x.clip_id);
+        if (!g && befehle.slice(0, index).some((v) => (v as Koerper)?.befehl === 'clip_neu')) throw new ProjFehler(409, 'warp_auto_neuer_clip', { index });
+        if (g?.clip.art !== 'audio') return b;                                   // der Baustein meldet clip_unbekannt bzw. feld_nur_audio
+        if (!this.katalog) throw new ProjFehler(503, 'katalog_fehlt', { index });
+        const z = this.katalog.eintrag(g.clip.quelle.sha256);
+        if (!z) throw new ProjFehler(404, 'sha_unbekannt', { index });
+        const r = autoWarp(tempoVon(z));
+        if (r === null || 'hinweis' in r) throw new ProjFehler(409, 'kein_tempo', { index });
+        const { clip_id, ...rest } = x;
+        return { ...rest, befehl: 'warp_setzen', clip_id, warp: r.warp };
+      }
       if (!x || typeof x !== 'object' || x.befehl !== 'clip_neu' || x.art !== 'audio' || typeof x.sha256 !== 'string') return b;
       if (!this.katalog) throw new ProjFehler(503, 'katalog_fehlt', { index });
       const z = this.katalog.eintrag(x.sha256);
@@ -396,9 +457,18 @@ export class ProjSitzung {
       if (z.schutz === 'ableton') throw new ProjFehler(409, 'nur_live', { index });
       if (!z.pfad || !fs.existsSync(z.pfad)) throw new ProjFehler(409, 'quelle_fehlt', { index });
       quellen.set(z.sha, z.pfad);
-      return { ...x, sha256: z.sha, pfad_hinweis: z.pfad };
+      let warpTeil: Koerper = {};
+      if (x.warp === 'auto') {
+        const r = autoWarp(tempoVon(z));
+        if (r !== null && 'warp' in r) warpTeil = { warp: r.warp, laenge_beats: r.laenge_beats };
+        else {
+          warpTeil = { warp: 'aus' };
+          if (r !== null) hinweise.push({ index, hinweis: r.hinweis });
+        }
+      }
+      return { ...x, sha256: z.sha, pfad_hinweis: z.pfad, ...warpTeil };
     });
-    return { befehle: aus, quellen };
+    return { befehle: aus, quellen, hinweise };
   }
   private pruefeRev(o: Offen, rev: unknown): void {
     if (rev !== o.projekt.rev) throw new ProjFehler(409, 'rev_veraltet', { rev: o.projekt.rev });
@@ -414,16 +484,19 @@ export class ProjSitzung {
       }
       const meta = { quelle, label: d.label as string };
       o.verlauf.pruefeMeta(meta);
-      const { befehle, quellen } = this.loeseQuellenAuf(d.befehle);
+      const { befehle, quellen, hinweise } = this.loeseQuellenAuf(d.befehle, o.projekt);
       if (befehle.some((b) => (b as Koerper)?.befehl === 'tempo_setzen') && this.lage.deckLaeuft()) throw new ProjFehler(409, 'deck_laeuft');
+      if (this.aufnahmeLauf && befehle.some((b) => (b as Koerper)?.befehl === 'tempo_setzen'))
+        throw new ProjFehler(409, 'beschaeftigt', { text: 'a recording is running; the tempo cannot change now' });
       const probe = fuehreListeAus(o.projekt, befehle, { quelle });   // quelle: Herkunft für spur_neu (Spec 6.22)
       if (probe.vor.length === 0) return { code: 200, j: { rev: o.projekt.rev, projekt: o.projekt } };
       this.pruefeSperre(o.projekt, probe.projekt, probe.betrifft_wiedergabe);
       // Spec 6.31 (Leistung): die Probe IST die Ausführung; aendere rechnet sie nicht noch einmal. Gültig, weil vollziehe nach dem Warten auf die
       // Quittungen prüft, dass o.projekt noch genau der Stand ist, gegen den sie gerechnet wurde (sonst 409 rev_veraltet).
       const projekt = o.projekt;
-      return this.vollziehe(o, quelle, probe.regler_aenderungen, (h) => aendere(o.verlauf, projekt, befehle as never, meta, h, { ergebnis: probe }),
-        quellen, probe.betrifft_wiedergabe);
+      const antwort = await this.vollziehe(o, quelle, probe.regler_aenderungen,
+        (h) => aendere(o.verlauf, projekt, befehle as never, meta, h, { ergebnis: probe }), quellen, probe.betrifft_wiedergabe);
+      return hinweise.length && antwort.code === 200 ? { code: 200, j: { ...(antwort.j as object), hinweise } } : antwort;
     });
   }
 
@@ -515,7 +588,7 @@ export class ProjSitzung {
   }
   // Angenommene Regler einer abgelehnten Änderung auf den alten Stand zurück.
   private async reglerZurueck(alt: Projekt, ergebnis: ReglerErgebnis[], quelle: Quelle): Promise<void> {
-    const vorher = new Map(alleSpurRegler(alt).map((r) => [r.pfad, r.wert] as const));
+    const vorher = new Map(alleRegler(alt).map((r) => [r.pfad, r.wert] as const));
     const zurueck = ergebnis.filter((r) => r.ok && vorher.has(r.pfad)).map((r) => ({ pfad: r.pfad, wert: vorher.get(r.pfad) as number }));
     if (zurueck.length) await this.kern.setzeRegler(zurueck, quelle);
   }
@@ -578,7 +651,7 @@ export class ProjSitzung {
   }
   // Spec 6.32: ein Freeze ist ein Transport-Lauf; Start und Tempo-Rampe brechen ihn ab oder verändern die Datei. Stopp bleibt erlaubt.
   private sperreTransport(): void {
-    if (this.sperren > 0) throw new ProjFehler(409, 'beschaeftigt', { text: 'a freeze is running; transport start waits until it is done' });
+    if (this.sperren > this.sperrenAufnahme) throw new ProjFehler(409, 'beschaeftigt', { text: 'a freeze is running; transport start waits until it is done' });
   }
   // Spec 6.32: für POST /tempo des Seiten-Servers (Studio-Route und Werkzeug tempo): läuft gerade eine Freeze-Sperre?
   ladenGesperrt(): boolean { return this.sperren > 0; }
@@ -608,14 +681,25 @@ export class ProjSitzung {
   // Während eines Freeze lädt der Server nicht neu: jedes Laden bricht den Echtzeit-Durchlauf im Kern ab. Gesperrt sind Änderungen, die die
   // Wiedergabe berühren (Noten, Clips, Spuren anlegen, löschen, verschieben, Gerät, Tempo, Loop); Mixer (Regler) bleibt frei.
   // Spec 6.32: solange ein Öffnen oder Anlegen läuft, 409 beschaeftigt (wer zuerst kommt, gewinnt; S3 startet den Freeze dann nicht).
-  sperreLaden(): () => void {
+  sperreLaden(fuer?: 'aufnahme'): () => void {
     if (this.oeffnet > 0) throw new ProjFehler(409, 'beschaeftigt', { text: 'a project is being opened; a freeze waits until it is open' });
+    // Aufnahme und Freeze fahren beide den Transport: wer zuerst kommt, gewinnt (Nachbesserung 1, B1)
+    // zwei getrennte Abfragen mit je einem Text-Literal: ein Ternär mit 'aufnahme' in der Bedingung hält tests/proj_gruende_text.test.mjs für
+    // einen Text aus einer Variablen (Probelauf, N9)
+    if (fuer === 'aufnahme' && this.sperren > 0) {
+      throw new ProjFehler(409, 'beschaeftigt', { text: 'a freeze, an export or another recording holds the lock; a recording waits until it is done' });
+    }
+    if (fuer !== 'aufnahme' && this.sperrenAufnahme > 0) {
+      throw new ProjFehler(409, 'beschaeftigt', { text: 'a recording is running; a freeze waits until it is done' });
+    }
     this.sperren += 1;
+    if (fuer === 'aufnahme') this.sperrenAufnahme += 1;
     let frei = false;
     return () => {
       if (frei) return;
       frei = true;
       this.sperren -= 1;
+      if (fuer === 'aufnahme') this.sperrenAufnahme -= 1;
       const o = this.offen;
       if (this.sperren > 0 || !o || !(o.merk.laden || o.merk.loop || o.merk.tempo)) return;
       // Spec 6.31: das Nachholen läuft in der Kette, also später. Ist das Projekt bis dahin geschlossen, verfällt es; setzt S3 inzwischen eine
@@ -666,6 +750,7 @@ export class ProjSitzung {
   }
   zugangHaken(): Haken { return this.haken(this.brauchOffen()); }
   // Spec 6.34: S3 meldet Beginn (art, beim Freeze spur_id) und Ende (null) jedes Laufs; nur diese Form geht an die Seite
+  setzeAufnahmeLauf(l: unknown): void { this.aufnahmeLauf = l; }
   setzeAusgabeLauf(l: AusgabeLauf | null): void {
     this.ausgabeLauf = l === null ? null : l.art === 'freeze' ? { art: 'freeze', spur_id: l.spur_id } : { art: l.art };
   }
@@ -714,7 +799,7 @@ export class ProjSitzung {
   // --- Kern-Ereignisse (Haken ereignis, Spec 2.10) ---------------------------------------------------------------------
   ereignis(adresse: string, f: Record<string, unknown>): void {
     const { neustart } = this.lage.nimm(adresse, f);
-    if (adresse === '/e/regler' && f.halter === 'mensch' && istSpurRegler(String(f.pfad))) this.rueckweg(String(f.pfad), Number(f.wert));
+    if (adresse === '/e/regler' && f.halter === 'mensch' && istMixerRegler(String(f.pfad))) this.rueckweg(String(f.pfad), Number(f.wert));
     // /zustand/arr status 0 setzt transportQuelle bewusst nicht zurück; ein neuer Start überschreibt die Quelle.
     // Spec 6.37 (REVIEW-5-opus M2): die Hand-Taste am Gerät führt der Kern selbst aus (kern_arr.cpp arr_hand_start_stopp) und meldet danach
     // /e/hand arr/start_stopp mit wert 1 (nur beim Druck; die Attrappe meldet auch das Loslassen mit 0). Ein Start oder Stopp dort gehört
@@ -793,7 +878,7 @@ export class ProjSitzung {
       // Spec 6.31, 6.32: wartende Handwerte ins Projekt, unmittelbar vor dem Senden der Regler (nach der Lade-Quittung, kein await dazwischen),
       // damit auch, was während des Ladens kam, an den neuen Kern geht und Kern und Projekt denselben Wert haben
       this.rueckwegSpeichern();
-      const [regler, loop, metronom, ki] = await Promise.all([this.kern.setzeRegler(alleSpurRegler(o.projekt), 'andreas'),
+      const [regler, loop, metronom, ki] = await Promise.all([this.kern.setzeRegler(alleRegler(o.projekt), 'andreas'),
         this.kern.loop(o.projekt, 'andreas'), this.kern.metronom(o.projekt, 'andreas'), this.leereKiMaske()]);
       this.ctx.log({ typ: 'proj_neustart', slug: o.slug, wiedergabe, ...reglerBefund(regler), loop, metronom, ki });
     }).catch((e) => this.ctx.log({ typ: 'proj_neustart_fehler', fehler: (e as Error).message }));

@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cstring>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -22,6 +23,7 @@
 #include "cypherdj/deck_werk.h"
 #include "cypherdj/dsp/analyse_baender.h"
 #include "cypherdj/arrangement.h"
+#include "cypherdj/aufnahme.h"
 #include "cypherdj/arr_rb_senke.h"
 #include "cypherdj/arr_wirt_senke.h"
 #include "cypherdj/erzeuger.h"
@@ -36,6 +38,8 @@
 #include "cypherdj/stellwerk/i3.h"
 #include "cypherdj/stellwerk/stellwerk.h"
 #include "cypherdj/teile.h"
+#include "cypherdj/eingang.h"
+#include "cypherdj/midi_ein.h"
 #include "cypherdj/tempoplan.h"
 #include "cypherdj/uhr.h"
 
@@ -44,6 +48,10 @@ struct cdj_z_echtzeit;  // Scheibe 18: Neustart-Zustand, cypherdj/zustand.h
 namespace cdj {
 
 constexpr int MAX_BLOCK = 8192;
+
+// Schreibt "spur/<i+1>" nach aus (mindestens 9 Byte), ohne snprintf (Echtzeit-Faden).
+// Vorbedingung: 0 <= i < 999 (höchstens drei Ziffern); im Kern ist assert unüblich, daher nicht geprüft.
+void spur_pegel_name(int i, char* aus);
 constexpr int KLICK_MASTER = MIX_KANAELE;  // Scheibe 25: Prüfklick-Ziele 0..17 = Mixer-Kanäle, 18 = master
 
 struct Befehl {
@@ -70,7 +78,9 @@ struct Befehl {
     // ARR_STOPP politik = quant; ARR_LOOP an, arr_von, arr_bis; ARR_METRONOM an, wert = pegel_db, nr = ziel
     ARR_LADEN = 37, ARR_START = 38, ARR_STOPP = 39, ARR_LOOP = 40, ARR_METRONOM = 41,
     ARR_FREEZE = 42,  // Paket K3 (§4.11 /k/arr/freeze): zeiger = ArrFreeze* (Auftrag samt Puffer, im Lade-Faden angelegt, 6.29)
-    DECK_SCRUB = 43   // Hörbares Ziehen (§4.4 /k/deck/scrub): deck, nr = phase (0 los, 1 Griff, 2 Zug), wert_beats = delta_beats
+    DECK_SCRUB = 43,  // Hörbares Ziehen (§4.4 /k/deck/scrub): deck, nr = phase (0 los, 1 Griff, 2 Zug), wert_beats = delta_beats
+    DECK_LOOP_LAENGE = 44,  // §4.4 /k/deck/loop_laenge: Loop mit festem Start: quell_beat = start_beat, wert_beats = laenge_beats
+    REC_SPUR = 45, REC_START = 46, REC_STOPP = 47  // 1.8 (§4.12): REC_SPUR nr = spur, an = scharf, deck = eingang, zeiger = RecSpur*; REC_START nr = kennung, fassung = nachlauf_samples, versatz_f = frist_samples (0: Vorgabe)
   };
   int32_t art;
   int32_t an;          // KLICK: 0 oder 1; KI_STUFE: Stufe 0 bis 3
@@ -143,9 +153,11 @@ struct Ereignis {
     KOMP = 30,          // Effekt-Sektion 2026-10-11, §5.5c /zustand/komp: pfad = Kanal, wert = Absenkung in dB (10 Hz, nur aktive)
     ARR_ALT = 31,       // D1 K1: abgelöster oder abgelehnter ArrSnapshot zur Freigabe im Lade-Faden (zeiger)
     ARR_ZUSTAND = 32,   // D1 K1, §5.13 /zustand/arr: arr_*
-    ARR_FREEZE = 33     // Paket K3: beendeter oder abgelehnter Freeze-Auftrag (zeiger = ArrFreeze*), status 0 fertig,
+    ARR_FREEZE = 33,    // Paket K3: beendeter oder abgelehnter Freeze-Auftrag (zeiger = ArrFreeze*), status 0 fertig,
                         // 1 abgebrochen, ARR_FREEZE_ABGELEHNT nur freigeben; der Lade-Faden schreibt die Datei (6.29),
                         // das Netz meldet /e/freeze
+    EIN_ZUSTAND = 34,   // I08, §5.14 /zustand/ein: status = verbunden (Bit k-1: ein_k, Bit 8: midi_ein_1), ein_* (Zähler, Samples)
+    REC_ZUSTAND = 35, REC_ALT = 36  // 1.8 §5.14 /zustand/rec: status, id = kennung, rec_scharf, rec_luecken, arr_beat; REC_ALT: zeiger = abgelöster RecSpur* zur Freigabe im Netz-Faden
   };
   int32_t art;
   int32_t status;   // QUITTUNG: §5.1; KI: gestoppt 0/1
@@ -194,6 +206,11 @@ struct Ereignis {
   int64_t arr_nr, arr_ursprung;
   double arr_beat, arr_start_beat;
   int32_t arr_status, arr_loop_an, arr_metronom_an;
+  float arr_limiter_db;   // ARR_ZUSTAND: Absenkung des Set-Limiters, <= 0 (1.10 Slice 2)
+  // I08, EIN_ZUSTAND: MIDI-Zähler seit Kernstart, Kern-Sample des letzten MIDI-Ereignisses bzw. der letzten Flanke auf ein_1 (−1 ohne)
+  int64_t ein_gesehen, ein_verloren, ein_midi_sample, ein_flanke;
+  int32_t rec_scharf;   // 1.8, REC_ZUSTAND: Zahl der scharfen Spuren
+  int64_t rec_luecken;  // 1.8, REC_ZUSTAND: Lücken des laufenden Takes
 };
 
 constexpr int32_t ARR_FREEZE_ABGELEHNT = 3;  // Paket K3: Ereignis ARR_FREEZE eines abgelehnten Auftrags (Quittung 6 kam schon)
@@ -255,6 +272,12 @@ class Kern {
   void setze_arr_senke_intern(ArrSenke* s) { arr_->setze_senke_intern(s); }
   void setze_arr_senke_wirt(int slot, ArrSenke* s) { arr_->setze_senke_wirt(slot, s); }
   const Arrangement& arrangement() const { return *arr_; }   // Tests, Diagnose (nur aus dem Callback-Faden lesen)
+  // 1.10 Slice 2 (E2): Produktions-Master des zuletzt gelaufenen Zyklus, Index 0..n−1 (n = Größe des Zyklus). Nach dem PM-Fader, vor erz/4,
+  // ohne Metronom, Kleber, master/pegel und Set-Limiter: der Export-Abgriff. Nur aus dem Callback-Faden (und Tests, Render) lesen.
+  const float* pm_abgriff_l() const { return pm_abgriff_l_; }
+  const float* pm_abgriff_r() const { return pm_abgriff_r_; }
+  // 1.10 Slice 2 (E2, P12): Set-Limiter beobachten. limiter_db_min: größte Absenkung seit dem Start (<= 0, für den Render); die Lampe hält 0,5 s.
+  float limiter_db_min() const { return limiter_db_min_; }
   // Paket K3 (cypherdj-render, Spec 2.5): nur die Regler-Werte eines Neustart-Fachs übernehmen, ohne Karte, Befehle,
   // Decks, Halter und KI-Stopp; Regler mit Transport-Rolle bleiben. Rückgabe: übernommene Regler, −1 bei ungültigem
   // Fach. Nicht im Callback, vor dem ersten Zyklus.
@@ -362,6 +385,34 @@ class Kern {
   void rueck(int erz, const float* l, const float* r) noexcept {
     if (erz >= 1 && erz <= 8) { rueck_l_[erz - 1] = l; rueck_r_[erz - 1] = r; }
   }
+  // I08: Audio-Eingänge ein_1..4_L/R für den NÄCHSTEN zyklus(); nullptr = Port fehlt. Wie rueck(): main.cpp setzt vor jedem zyklus() die
+  // JACK-Puffer dieses Zyklus.
+  void ein(int paar, const float* l, const float* r) noexcept { ein_bank_.zeiger(paar, l, r); }
+  // I08: roher MIDI-Eingang midi_ein_1, je Ereignis mit JACK-Versatz; aufzurufen im Callback vor dem zyklus(). Das Ereignis wird erst in
+  // zyklus() gestempelt, NACH dem Einsortieren der Befehle: so trägt es die Zeitachse, auf der dieser Zyklus läuft (nach /k/set/neu die
+  // neue), wie die Hand-MIDI (Review-Nachzug MINOR 4). Höchstens MAX_MIDI je Zyklus, mehr zählt midi_ein_ring().verloren().
+  void midi_ein(const uint8_t* daten, size_t groesse, uint32_t versatz) noexcept {
+#ifdef CYPHERDJ_MUTATION_EIN_MIDI_BLOCKANFANG
+    versatz = 0;  // Fehlerfall: Versatz im Zyklus fällt weg
+#endif
+#ifdef CYPHERDJ_MUTATION_EIN_MIDI_ALTE_ACHSE
+    midi_ein_.schiebe(sample_, versatz, daten, groesse);  // Fehlerfall: gestempelt vor dem Einsortieren, also mit der alten Achse
+    return;
+#endif
+    if (groesse == 0) return;
+    if (n_midi_ein_ >= MAX_MIDI) { midi_ein_.ueberlauf(); return; }
+    MidiRoh& m = midi_ein_roh_[n_midi_ein_++];
+    std::memcpy(m.d, daten, std::min<size_t>(groesse, 3));
+    m.groesse = static_cast<uint8_t>(std::min<size_t>(groesse, 255));  // über 3 Byte zählt schiebe() als zu_lang, die Länge genügt
+    m.versatz = versatz;
+  }
+  // Der Ring hat einen einzigen Leser. Standard: der Kern räumt ihn in jedem Zyklus selbst (Zähler und letztes Sample bleiben, die Ereignisse
+  // nicht), sonst füllte er sich im Betrieb nach 4096 Ereignissen und zählte jedes weitere als verloren (Review-Nachzug MAJOR 1). Wer ihn selbst
+  // liest (Aufnahme, 1.8 Slice 5; Tests), setzt dies VOR dem ersten Zyklus auf true und ist dann der einzige Leser.
+  void midi_ein_extern(bool leser) noexcept { midi_ein_extern_.store(leser, std::memory_order_relaxed); }
+  // I08: der Verbinder-Faden meldet, welche Eingänge verbunden sind (Bit k-1: ein_k, beide Kanäle; Bit 8: midi_ein_1)
+  void ein_verbunden(uint32_t maske) noexcept { ein_verbunden_.store(maske, std::memory_order_relaxed); }
+  MidiEin& midi_ein_ring() noexcept { return midi_ein_; }
   void setze_mapping(const hand::Mapping* m) noexcept;
   const hand::Mapping* mapping() const noexcept { return mapping_; }
   void hand_neu_verbunden() noexcept { neu_verbunden_.store(true, std::memory_order_release); }
@@ -408,6 +459,22 @@ class Kern {
   // D1 K1 (kern_arr.cpp): Modul Arrangement
   void einsortieren_arr(const Befehl& c, double beat0);
   void arr_zustand(int64_t n0, int n);
+  void limiter_beobachten(int64_t s0, int m);   // 1.10 Slice 2: liest die Absenkung des Set-Limiters nach jedem Mischer-Block
+  static constexpr float LIMITER_LAMPE_DB = -0.1f;
+  static constexpr int64_t LIMITER_HALTE = 24000;
+  float limiter_db_min_ = 0.0f, limiter_halte_db_ = 0.0f;
+  int64_t limiter_halte_bis_ = -1;
+  bool limiter_lampe_ = false, limiter_wechsel_ = false;
+  // 1.8: Aufnahme (kern_arr.cpp). Abgriff und Quittungen je Teilblock in audio(); Befehle am Blockanfang in einsortieren_rec().
+  void einsortieren_rec(const Befehl& c, double beat0);
+  void rec_alt_melden(RecSpur* p);
+  void rec_meldungen(const Karte& k);
+  void rec_zustand_melden(int64_t n0, int n);
+  ArrLage rec_arr_lage() const;   // Lage des Arrangements für das Modul Aufnahme (Einsatz, Ende, geplanter Stopp)
+  Aufnahme aufnahme_;
+  int64_t rec_id_ = 0;
+  char rec_quelle_[48] = {};
+  int64_t rec_zustand_bei_ = 0;
   void arr_quittungen(const Karte& k);
   // Review MINOR 8.2/10.2: ein wartender Start, der ohne Einsatz endet, bekommt 7 mit Grund; jede id endet genau einmal
   void arr_start_abbrechen(int64_t s, double b, const char* grund);
@@ -531,6 +598,9 @@ class Kern {
   int64_t rueck_unendlich_ = 0;  // Audit F01: nicht endliche Samples am Wirt-Rückweg (verworfen)
   const float* rueck_l_[8] = {};
   const float* rueck_r_[8] = {};
+  EingangsBank ein_bank_;
+  MidiEin midi_ein_;
+  std::atomic<uint32_t> ein_verbunden_{0};
   float* erz_r_[MIX_KANAELE] = {};
   // MVP 2 (ADR 025): Loop-Boxen in pad/1, pad/2; Eingänge wie erz_l_/erz_r_
   std::unique_ptr<LoopBoxen> loops_;
@@ -542,12 +612,14 @@ class Kern {
   TeilSchatten schatten_;
   HandSchlange hand_;
   int ki_stufe_ = 0;
-  char ki_spur_[128] = {0};        // KI-Spur nach der letzten Quittung fertig, beide Listen in Normalform (ki_spur_text)
+  char ki_spur_[128] = {0};        // KI-Spur nach der letzten Quittung fertig, Kanal-Liste in Normalform (ki_spur_text)
   int64_t ki_spur_id_ = 0;
   bool ki_stopp_wieder_ = false;   // Neustart: KI-Stopp nachreichen
   int16_t mensch_wieder_[64] = {};  // Neustart: Regler mit Halter mensch
   int n_mensch_wieder_ = 0;
   int nachreichen_in_ = 0;         // Neustart: im zweiten Zyklus der Generation Teile ins Stellwerk nachreichen
+  float pm_abgriff_l_[MAX_BLOCK] = {};   // 1.10 Slice 2: Kopie des PM-Ausgangs je Zyklus (Export-Abgriff)
+  float pm_abgriff_r_[MAX_BLOCK] = {};
   float links_[MAX_BLOCK];
   float rechts_[MAX_BLOCK];
   float cue_l_[MAX_BLOCK];
@@ -569,6 +641,10 @@ class Kern {
   };
   MidiRoh midi_[MAX_MIDI];
   int n_midi_ = 0;
+  MidiRoh midi_ein_roh_[MAX_MIDI];  // I08: Ereignisse dieses Zyklus, gestempelt in midi_ein_stempeln()
+  int n_midi_ein_ = 0;
+  std::atomic<bool> midi_ein_extern_{false};
+  void midi_ein_stempeln() noexcept;
   HandEin hand_ein_;
   const hand::Mapping* mapping_ = nullptr;
   uint64_t hand_ohne_wirkung_ = 0;

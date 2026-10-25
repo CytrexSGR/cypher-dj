@@ -3,6 +3,9 @@
 // spur_aendern), damit sie im Projekt und im Undo-Verlauf landet. Der Pegel kommt ohne eigenen Code: app.js zeigePegel
 // füllt jedes .meter[data-kanal="spur/<nr>"] aus /pegel (Spec 3.4: /pegel geht schon heute für jeden Kanal durch).
 import { FARBEN } from './layout.js';
+import { MAX_SPUREN } from './grenzen.js';
+import { armZustand } from './aufnahme.js';
+import { ausgangOptionen, ausgangWert, ausgangBefehl } from './routing.js';
 
 // Fader −60..+6 dB; ganz unten heißt aus (−200), wie die Spurbänder es halten (spurband.js baender: min −60, aus −200)
 export const FADER_MIN = -60, FADER_MAX = 6, FADER_AUS = -200;
@@ -36,8 +39,9 @@ const KOPF = `<button class="p-farbe" title="Track colour: click for the next on
 <span class="p-spurname" role="button" tabindex="0" title="Double click, Enter or F2 to rename"></span><span class="p-geraet"></span>
 <button class="p-hoch" title="Move track up">↑</button><button class="p-runter" title="Move track down">↓</button>
 <button class="p-mute" aria-pressed="false" title="Mute">M</button><button class="p-solo" aria-pressed="false" title="Solo">S</button>
+<button class="p-arm" aria-pressed="false" title="Arm for recording (needs an input)" disabled>●</button><select class="p-eingang" title="Recording input" disabled><option value="">input</option><option value="erz/1">erz/1</option><option value="erz/2">erz/2</option><option value="erz/3">erz/3</option></select>
 <button class="p-loeschen" title="Delete track (Undo brings it back)">✕</button>
-<input class="p-fader" type="range" min="${FADER_MIN}" max="${FADER_MAX}" step="0.5" title="Volume (double click: 0 dB)">
+<input class="p-fader" type="range" min="${FADER_MIN}" max="${FADER_MAX}" step="0.5" title="Volume (double click: 0 dB)"><select class="p-ausgang" title="Output: Master or a group track"></select>
 <output class="p-faderwert"></output>
 <input class="p-pan" type="range" min="-1" max="1" step="0.01" title="Pan (double click: centre)">
 <output class="p-panwert"></output>
@@ -50,6 +54,7 @@ export function bindeKoepfe(behaelter, { aendere, aendereAus }) {
   const greift = new Set();    // `${id}:fader|pan`, solange die Hand am Regler ist: der Server überschreibt dann nicht
   const els = new Map();       // spur_id → Element
   let reihenfolge = [];        // spur_ids in Anzeigereihenfolge (Array-Reihenfolge des Projekts)
+  let gruppenStand = [];       // Gruppen laut letztem Projekt (Auswahl der Ausgang-Wahl)
 
   function baue(id) {
     const el = document.createElement('div');
@@ -66,6 +71,8 @@ export function bindeKoepfe(behaelter, { aendere, aendereAus }) {
     });
     q('.p-mute').addEventListener('click', () => spurAus((s) => ({ label: `${s.mute ? 'Unmute' : 'Mute'} ${s.name}`, felder: { mute: !s.mute } })));
     q('.p-solo').addEventListener('click', () => spurAus((s) => ({ label: `${s.solo ? 'Unsolo' : 'Solo'} ${s.name}`, felder: { solo: !s.solo } })));
+    q('.p-arm').addEventListener('click', () => spurAus((s) => ({ label: `${s.aufnahme?.scharf ? 'Disarm' : 'Arm'} ${s.name}`, felder: { arm: !s.aufnahme?.scharf } })));
+    q('.p-eingang').addEventListener('change', () => { const w = q('.p-eingang').value; aendernSpur(`Input ${spur().name}`, { eingang: w ? { art: 'intern', name: w } : null, ...(w ? {} : { arm: false }) }); });
     q('.p-farbe').addEventListener('click', () => spurAus((s) => ({ label: `Colour ${s.name}`, felder: { farbe: naechsteFarbe(s.farbe) } })));
     // ↑/↓ und ✕ sind eigene Befehle (spur_verschieben, spur_loeschen), nicht spur_aendern; Löschen nimmt Undo zurück
     for (const [klasse, richtung] of [['.p-hoch', 'hoch'], ['.p-runter', 'runter']]) {
@@ -75,6 +82,7 @@ export function bindeKoepfe(behaelter, { aendere, aendereAus }) {
       }));
     }
     q('.p-loeschen').addEventListener('click', () => aendere(`Delete track ${spur().name}`, [{ befehl: 'spur_loeschen', spur_id: id }]));
+    q('.p-ausgang').addEventListener('change', (e) => aendere(`Output ${spur().name}`, [ausgangBefehl(id, e.target.value)]));
     for (const [klasse, feld, vorgabe] of [['.p-fader', 'fader_db', 0], ['.p-pan', 'pan', 0]]) {
       const r = q(klasse), k = `${id}:${feld}`;
       const sende = () => {
@@ -117,9 +125,21 @@ export function bindeKoepfe(behaelter, { aendere, aendereAus }) {
     for (const [k, an] of [['.p-mute', s.mute], ['.p-solo', s.solo]]) { q(k).classList.toggle('an', an); q(k).setAttribute('aria-pressed', String(an)); }
     if (!greift.has(`${s.id}:fader_db`)) q('.p-fader').value = String(Math.max(FADER_MIN, s.fader_db));
     if (!greift.has(`${s.id}:pan`)) q('.p-pan').value = String(s.pan);
+    const sel = q('.p-ausgang'), opts = ausgangOptionen({ gruppen: gruppenStand }), schluessel = JSON.stringify(opts);
+    if (sel.dataset.optionen !== schluessel) {   // die Auswahl wird nur neu gebaut, wenn sich die Gruppen ändern
+      sel.dataset.optionen = schluessel;
+      sel.replaceChildren(...opts.map((o) => { const e = document.createElement('option'); e.value = o.wert; e.textContent = o.text; return e; }));
+    }
+    sel.value = ausgangWert(s);
+    sel.setAttribute('aria-label', `Output ${s.name}`);
     const L = spurLabels(s.name);
     for (const [k, v] of [['.p-mute', L.mute], ['.p-solo', L.solo], ['.p-hoch', L.hoch], ['.p-runter', L.runter], ['.p-farbe', L.farbe],
       ['.p-loeschen', L.loeschen], ['.p-spurname', L.umbenennen], ['.p-fader', L.fader], ['.p-pan', L.pan]]) q(k).setAttribute('aria-label', v);
+    const z = armZustand(s);
+    for (const k of ['.p-arm', '.p-eingang']) q(k).hidden = !z.sichtbar;
+    q('.p-arm').classList.toggle('an', z.scharf); q('.p-arm').setAttribute('aria-pressed', String(z.scharf)); q('.p-arm').disabled = z.armSperre && !z.scharf;
+    q('.p-arm').setAttribute('aria-label', `Arm ${s.name} for recording`);
+    q('.p-eingang').value = z.eingang; q('.p-eingang').disabled = !z.sichtbar; q('.p-eingang').setAttribute('aria-label', `Recording input of ${s.name}`);
     q('.p-faderwert').textContent = faderText(s.fader_db);
     q('.p-panwert').textContent = panText(s.pan);
     q('.p-pegel').dataset.kanal = `spur/${s.nr}`;
@@ -131,6 +151,7 @@ export function bindeKoepfe(behaelter, { aendere, aendereAus }) {
   return {
     zeige(projekt) {
       const spuren = projekt?.spuren ?? [];
+      gruppenStand = projekt?.gruppen ?? [];
       stand.clear();
       reihenfolge = spuren.map((s) => s.id);
       for (const s of spuren) stand.set(s.id, s);
@@ -157,8 +178,8 @@ export function bindeSpuren(ctx) {
   for (const [knopf, [label, befehl]] of Object.entries(NEU)) $(knopf).addEventListener('click', () => ctx.aendere(label, [befehl]));
   ctx.beimProjekt.push((p) => {
     const n = p?.spuren.length ?? 0;
-    $('neu-audio').disabled = $('neu-rb').disabled = !p || n >= 8;
-    $('neu-surge').disabled = !p || n >= 8 || p.spuren.some((s) => s.geraet?.art === 'wirt' && s.geraet.slot === 1);
+    $('neu-audio').disabled = $('neu-rb').disabled = !p || n >= MAX_SPUREN;
+    $('neu-surge').disabled = !p || n >= MAX_SPUREN || p.spuren.some((s) => s.geraet?.art === 'wirt' && s.geraet.slot === 1);
     koepfe.zeige(p);
   });
 }

@@ -43,6 +43,9 @@ export function musterOrdnerVorgabe(i: string = instanz()): string { return `${s
 export function wirtOrdnerVorgabe(i: string = instanz()): string { return shmOrdner(i); }
 export function kitsOrdnerVorgabe(): string { return konfig('kits'); }
 export function zusatzKit(i: string = instanz()): string { return i ? `rec-${i}` : 'rec'; }
+// I08: Geräte-Konfiguration je Instanz (~/.config/cypherdj[-<i>]/geraete.json) und die Kanten-Datei, die der Kern aus dem Shm-Ordner liest.
+export function geraeteDatei(i: string = instanz()): string { return path.join(os.homedir(), '.config', i ? `cypherdj-${i}` : 'cypherdj', 'geraete.json'); }
+export function eingangsKantenDatei(i: string = instanz()): string { return path.join(shmOrdner(i), 'eingaenge-kanten'); }
 export function strudelPakete(): string { return process.env.STRUDEL_PAKETE ?? path.join(os.homedir(), 'strudel', 'packages'); }
 // Bisher in loops.ts, welle_cache.ts, arbeitsbestand.ts; dort bleiben sie als Re-Export (gleiche Signatur, gleiche Tests).
 export function loopOrdnerVorgabe(i: string): string { return i ? `/dev/shm/cypherdj-${i}/loops` : konfig('loops'); }

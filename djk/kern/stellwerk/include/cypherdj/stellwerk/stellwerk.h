@@ -53,7 +53,7 @@ struct Zaehler {
   int64_t ereignisse_verloren = 0;  // Ausgabepuffer voll
   int64_t hand_verloren = 0;        // Griff-Warteschlange voll
   int64_t teile_voll = 0;           // Teil abgelehnt, weil MAX_TEILE offen sind
-  int64_t bewegt_voll = 0;          // mehr als MAX_BEWEGT Regler in einem Zyklus bewegt
+  int64_t bewegt_voll = 0;          // abgelehnte Verlaufs-Slot-Anfragen (slot_fuer) bei MAX_BEWEGT belegten Slots; ein Regler kann mehrfach zählen
   int64_t zyklen_ruhig = 0;         // Zyklen ohne Bewegung (schneller Pfad)
   int64_t zyklen_voll = 0;          // Zyklen mit Rechnung je Sample
   int64_t spruenge = 0;             // prozess() mit s0 != jetzt()
@@ -70,9 +70,9 @@ class Stellwerk {
   void abbruch(int64_t id, Quelle quelle, const char* plan, const int32_t* nrs, int anzahl);   // anzahl < 0: "*"
   void ki_stopp(int64_t id, Quelle quelle);          // id 0: Stopp-Taste, ohne Quittung (§7.3 Punkt 8)
   void ki_frei(int64_t id, Quelle quelle);           // id 0: Freigabe plus Stopp, ohne Quittung
-  void ki_spur(int64_t id, Quelle quelle, const char* kanaele);   // "deck/3,deck/4,erz/1", "spur/1,spur/3", "spur/135"
-  // D1 Spec 6.15: die KI-Spur als Text in Normalform, Kanäle dann spur/<ziffern> ("deck/3,deck/4,spur/135"); "" ohne.
-  // Für den Neustart-Zustand (kern_zustand.cpp): ki_spur() mit diesem Text stellt beide Listen wieder her.
+  bool ki_spur(int64_t id, Quelle quelle, const char* kanaele);   // "deck/3,deck/4,erz/1"; Spuren nur als "spur/0" (E3 P1), sonst abgelehnt
+  // Die KI-Spur als Text in Normalform: nur Kanäle ("deck/3,deck/4"); "" ohne. Seit E3 P1 kein Spur-Teil.
+  // Für den Neustart-Zustand (kern_zustand.cpp): ki_spur() mit diesem Text stellt die Kanal-Liste wieder her.
   void ki_spur_text(char* aus, size_t n) const;
   void hand(const Griff& g);
   void deck_taste(int deck, int64_t sample);         // Transport-Taste: Deck-Halter mensch für 32 Beats (§7.3 Punkt 5)
@@ -215,8 +215,6 @@ class Stellwerk {
   int n_hand_rampen_ = 0;   // F18: Regler mit laufender Hand-Schaltrampe
   bool ki_gestoppt_ = false;
   uint32_t ki_spur_ = 0;      // Bit k = Kanal k gehört zur KI-Spur
-  uint8_t ki_spur_arr_ = 0;   // D1 K1: Bit n − 1 = spur/<n> gehört zur KI-Spur (eigene Liste, die Spur-Regler sind global)
-  int16_t spur_fader_[SPUR_REGLER_SPUREN] = {};   // D1 K1: Regler-Index von spur/<n>/fader
   bool stems_[5] = {};
   int64_t jetzt_ = 0;
   int64_t zyklus_s0_ = 0;

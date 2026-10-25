@@ -40,6 +40,19 @@ void Kern::hand_midi(const uint8_t* daten, size_t groesse, uint32_t versatz) noe
   m.versatz = versatz;
 }
 
+// I08: die in midi_ein() gesammelten Ereignisse dieses Zyklus mit dem Kern-Sample der Achse stempeln (nach dem Einsortieren, also nach einem
+// /k/set/neu auf der neuen Achse) und, wenn kein anderer Leser eingetragen ist, den Ring räumen (nur der Kern ist dann Leser).
+void Kern::midi_ein_stempeln() noexcept {
+  for (int i = 0; i < n_midi_ein_; ++i) midi_ein_.schiebe(sample_, midi_ein_roh_[i].versatz, midi_ein_roh_[i].d, midi_ein_roh_[i].groesse);
+  n_midi_ein_ = 0;
+#ifndef CYPHERDJ_MUTATION_EIN_MIDI_OHNE_ABFLUSS  // Fehlerfall: niemand leert den Ring, nach 4096 Ereignissen zählt jedes weitere als verloren
+  if (!midi_ein_extern_.load(std::memory_order_relaxed)) {
+    MidiEinEreignis e;
+    while (midi_ein_.hole(e)) {}
+  }
+#endif
+}
+
 void Kern::hand_zyklus(int64_t n0, int n) {
   if (neu_verbunden_.exchange(false, std::memory_order_acq_rel)) sw_->stellung_vergessen();  // §7.3 Punkt 2
   HandAktion a;

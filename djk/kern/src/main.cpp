@@ -75,6 +75,8 @@ static std::atomic<int> g_cb_prio{-1};     // Keylock Task 2.5 (Vertrag 12): Ech
 static std::atomic<uint64_t> g_graph_ereignisse{0};  // Fixup M1: Zähler für die Diagnosezeile im Verbinder
 static cdj::WaechterSeite* g_ws = nullptr;  // Scheibe 18: Selbst-Wächter, nullptr wenn aus
 static jack_port_t* g_hand_in = nullptr;    // Scheibe 35: JACK-MIDI vom Controller (§7.1)
+static jack_port_t* g_ein[cdj::EIN_PAARE][2] = {};  // I08: ein_<k>_L/R
+static jack_port_t* g_midi_ein = nullptr;           // I08: midi_ein_1
 static jack_port_t* g_midi_aus[cdj::ERZ_MIDI_PORTS] = {};  // Studio S5: §7.1 midi_aus_1 bis _4
 // Slice 3 (F06/B10/B17): All-Off nach Neuverbindung eines MIDI-Ausgangs. Der Verbinder setzt je Port zwei Fälligkeiten
 // (mono_ns; 0 = keine), process() sendet und löscht sie. g_allaus_pos/_maske nur im Callback.
@@ -146,6 +148,17 @@ static int process(jack_nframes_t n, void*) {
       if (jack_midi_event_get(&ev, mb, i) == 0) g_kern->hand_midi(ev.buffer, ev.size, ev.time);
     }
   }
+  if (g_midi_ein) {  // I08: roher MIDI-Eingang, jedes Ereignis mit Versatz
+    void* mb = jack_port_get_buffer(g_midi_ein, n);
+    const uint32_t ne = jack_midi_get_event_count(mb);
+    for (uint32_t i = 0; i < ne; ++i) {
+      jack_midi_event_t ev;
+      if (jack_midi_event_get(&ev, mb, i) == 0) g_kern->midi_ein(ev.buffer, ev.size, ev.time);
+    }
+  }
+  for (int k = 0; k < cdj::EIN_PAARE; ++k)  // I08: Audio-Eingänge dieses Zyklus
+    g_kern->ein(k + 1, g_ein[k][0] ? (const float*)jack_port_get_buffer(g_ein[k][0], n) : nullptr,
+                g_ein[k][1] ? (const float*)jack_port_get_buffer(g_ein[k][1], n) : nullptr);
   for (int e = 0; e < 8; ++e)  // Studio S5: Rückwege dieses Zyklus; unverbunden liefert JACK Nullen
     g_kern->rueck(e + 1, g_rueck[e][0] ? (const float*)jack_port_get_buffer(g_rueck[e][0], n) : nullptr,
                   g_rueck[e][1] ? (const float*)jack_port_get_buffer(g_rueck[e][1], n) : nullptr);
@@ -453,6 +466,9 @@ int main(int argc, char** argv) {
   cdj::ArrLader arr_lader(arr_ordner, konto, (int64_t)konf.arr_budget_mib << 20, !ohne_sperre);
   netz.verbinde_arr(aringe);
   netz.setze_arr_ordner(arr_ordner);  // Paket K3: Freeze im Arbeitsordner (Spec 6.14), geschrieben vom arr_faden (6.29)
+  static cdj::AufnahmeFaden rec_faden(arr_ordner);   // 1.8: Aufnahme-Faden, Take-Dateien im Arbeitsordner (statisch: überlebt den Netz-Faden; sein Destruktor fasst keine RecSpur an)
+  rec_faden.starte();
+  netz.verbinde_rec(&rec_faden);
   g_kern->verbinde_huellen(huellen);  // Ohr (§6.2), vor mlockall
   g_kern->setze_deck_konfig((float)konf.ziel_lufs, (float)konf.hoerbar_db);
   g_kern->setze_pruefmodus(pruefmodus);  // Scheibe 25, B7: vor dem Lesen des Neustart-Zustands
@@ -470,6 +486,14 @@ int main(int argc, char** argv) {
   // Scheibe 35: Eingang der Hand (§7.1); hand_led bleibt in Teil A unregistriert (LEDs kommen mit Teil B)
   g_hand_in = jack_port_register(g_client, "hand_in", JACK_DEFAULT_MIDI_TYPE, JackPortIsInput, 0);
   if (!g_hand_in) std::fprintf(stderr, "Port hand_in nicht angelegt: Kern ohne Controller\n");
+  for (int k = 0; k < cdj::EIN_PAARE; ++k)  // I08: Audio-Eingänge; unverbunden liefert JACK Nullen
+    for (int s = 0; s < 2; ++s) {
+      char name[32];
+      std::snprintf(name, sizeof name, "ein_%d_%c", k + 1, s ? 'R' : 'L');
+      g_ein[k][s] = jack_port_register(g_client, name, JACK_DEFAULT_AUDIO_TYPE, JackPortIsInput, 0);
+    }
+  g_midi_ein = jack_port_register(g_client, "midi_ein_1", JACK_DEFAULT_MIDI_TYPE, JackPortIsInput, 0);
+  if (!g_midi_ein) std::fprintf(stderr, "Port midi_ein_1 nicht angelegt: Kern ohne rohen MIDI-Eingang\n");
   for (int p = 0; p < cdj::ERZ_MIDI_PORTS; ++p) {
     char name[32];
     std::snprintf(name, sizeof name, "midi_aus_%d", p + 1);
@@ -617,6 +641,12 @@ int main(int argc, char** argv) {
   std::vector<cdj::Kante> soll_aus;
   for (int k = 0; k < n_ziele; ++k) soll_aus.push_back({jack_port_name(g_aus[k]), ziel[k]});
   std::vector<cdj::Kante> soll_alle = soll_aus;  // Slice 2: dazu die gefilterten Wirt-Kanten aus der Kanten-Datei
+  std::vector<cdj::Kante> soll_datei, soll_ein;  // I08: Quelle 1 = Kanten-Datei, Quelle 2 = eingaenge-kanten; soll_alle = soll_aus + beide
+  auto soll_neu = [&]() {
+    soll_alle = soll_aus;
+    soll_alle.insert(soll_alle.end(), soll_datei.begin(), soll_datei.end());
+    soll_alle.insert(soll_alle.end(), soll_ein.begin(), soll_ein.end());
+  };
   char kdir[128];
   cdj_shm_ordner(kdir, sizeof kdir, inst);
   const std::string kanten_pfad = std::string(kdir) + "/kanten";
@@ -627,7 +657,7 @@ int main(int argc, char** argv) {
   auto lade_kanten_datei = [&]() {  // bei Änderung (mtime, Größe) neu lesen; B9: nur Kern-MIDI-Ausgänge und Rückwege
     struct stat st {};
     if (stat(kanten_pfad.c_str(), &st) != 0) {
-      if (kanten_da) { kanten_da = false; soll_alle = soll_aus; }
+      if (kanten_da) { kanten_da = false; soll_datei.clear(); soll_neu(); }
       return;
     }
     if (kanten_da && st.st_mtim.tv_sec == kst_alt.st_mtim.tv_sec && st.st_mtim.tv_nsec == kst_alt.st_mtim.tv_nsec &&
@@ -659,11 +689,54 @@ int main(int argc, char** argv) {
                                                                  cdj::KANTEN_MAX, &doppelt_oder_ueber);
     if (reserviert)  // D1 K1 (Spec 2.3): Grund reserviert, erz/4 gehört der Produktion
       std::fprintf(stderr, "Kanten-Datei %s: %zu Kanten auf rueck_erz_4 abgelehnt (reserviert)\n", kanten_pfad.c_str(), reserviert);
-    soll_alle = soll_aus;
-    soll_alle.insert(soll_alle.end(), ok.begin(), ok.end());
+    soll_datei = ok;
+    soll_neu();
     std::fprintf(stderr, "Kanten-Datei %s: %zu Kanten gelesen, %zu angenommen, %zu verworfen (davon %zu Duplikate oder über %zu)%s (mono_ns %lld)\n",
                  kanten_pfad.c_str(), alle.size(), ok.size(), alle.size() - ok.size(), doppelt_oder_ueber,
                  cdj::KANTEN_MAX, zu_gross ? ", Datei über 64 KiB abgeschnitten" : "", (long long)mono_ns());
+  };
+  // Review-Nachzug (MAJOR 2): ändert sich die Zuordnung oder fällt die Datei weg, werden die Eingangs-Kanten getrennt, die vorher aus dieser Datei
+  // kamen und im Soll nicht mehr stehen (sonst liefen alte und neue Quelle summiert in ein_k). Fremde Kanten bleiben unberührt.
+  auto ein_setzen = [&](std::vector<cdj::Kante> neu) {
+    const std::vector<cdj::Kante> alt = std::move(soll_ein);
+    soll_ein = std::move(neu);
+    soll_neu();
+    for (const cdj::Kante& k : cdj::wegfallende_kanten(alt, soll_alle)) {
+      jack_port_t* pa = jack_port_by_name(g_client, k.quelle.c_str());
+      if (!pa || !jack_port_connected_to(pa, k.ziel.c_str())) continue;
+      const cdj::KarenzMarke km = karenz();
+      if (jack_disconnect(g_client, k.quelle.c_str(), k.ziel.c_str()) != 0) { karenz_zurueck(km); continue; }
+      std::fprintf(stderr, "Eingangs-Kante getrennt: %s -> %s (mono_ns %lld)\n", k.quelle.c_str(), k.ziel.c_str(), (long long)mono_ns());
+    }
+  };
+  const std::string ein_pfad = std::string(kdir) + "/eingaenge-kanten";  // I08: vom Seiten-Server atomar geschrieben (Temp + rename)
+  struct stat ein_st_alt {};
+  bool ein_da = false;
+  auto lade_ein_kanten = [&]() {
+    struct stat st {};
+    if (stat(ein_pfad.c_str(), &st) != 0) {
+      if (ein_da) { ein_da = false; ein_setzen({}); }
+      return;
+    }
+    if (ein_da && st.st_mtim.tv_sec == ein_st_alt.st_mtim.tv_sec && st.st_mtim.tv_nsec == ein_st_alt.st_mtim.tv_nsec &&
+        st.st_size == ein_st_alt.st_size)
+      return;
+    FILE* f = std::fopen(ein_pfad.c_str(), "r");
+    if (!f) return;  // nächster Takt versucht es neu
+    ein_st_alt = st;
+    ein_da = true;
+    std::string text;
+    char b[4096];
+    size_t n;
+    while ((n = std::fread(b, 1, sizeof b, f)) > 0) {
+      if (text.size() + n > cdj::KANTEN_DATEI_MAX) { text.append(b, cdj::KANTEN_DATEI_MAX - text.size()); break; }
+      text.append(b, n);
+    }
+    std::fclose(f);
+    const std::vector<cdj::Kante> alle = cdj::lies_eingangs_kanten(text, kern_praefix);
+    size_t doppelt = 0;
+    ein_setzen(cdj::entdoppeln_begrenzen(alle, cdj::KANTEN_MAX, &doppelt));
+    std::fprintf(stderr, "Eingangs-Kanten %s: %zu angenommen (mono_ns %lld)\n", ein_pfad.c_str(), soll_ein.size(), (long long)mono_ns());
   };
   cdj::KantenIst ist_jack{[](void*, const char* p) { return jack_port_by_name(g_client, p) != nullptr; },
                           [](void*, const char* a, const char* b) {
@@ -678,6 +751,7 @@ int main(int argc, char** argv) {
   cdj::VerlustBuch buch;  // MINOR-2/6: Verlust einmal je Verlust, Scheitern höchstens alle 10 s, fremde Heilung löscht beides
   auto verbinde_ausgaenge = [&]() {
     lade_kanten_datei();
+    lade_ein_kanten();
     buch.geheilte_abgleichen(soll_alle, ist_jack);
     for (const cdj::ZielEreignis& e : ziel_uebergaenge.pruefe(soll_alle, ist_jack))  // Fixup m2: einmalig je Richtung
       std::fprintf(stderr, e.wieder ? "Kante: Ziel wieder da: %s (mono_ns %lld)\n" : "Kante ohne Ziel: %s fehlt (mono_ns %lld)\n",
@@ -710,6 +784,11 @@ int main(int argc, char** argv) {
   };
   auto verbinde = [&]() {
     verbinde_ausgaenge();
+    uint32_t maske = 0;  // I08: was ist verbunden (Bit k-1: ein_k beide Kanäle, Bit 8: midi_ein_1)
+    for (int k = 0; k < cdj::EIN_PAARE; ++k)
+      if (g_ein[k][0] && g_ein[k][1] && jack_port_connected(g_ein[k][0]) > 0 && jack_port_connected(g_ein[k][1]) > 0) maske |= 1u << k;
+    if (g_midi_ein && jack_port_connected(g_midi_ein) > 0) maske |= 1u << 8;
+    g_kern->ein_verbunden(maske);
     if (!g_hand_in || !hand_quelle[0]) return;
     if (!jack_port_by_name(g_client, hand_quelle)) return;
     if (jack_port_connected_to(g_hand_in, hand_quelle)) return;

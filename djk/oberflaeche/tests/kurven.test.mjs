@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { ZIELE, art, GRIFF, griffZuMidi, midiRoh, wertAusMidi, formatiere, vorgabe } from '../oeffentlich/kurven.js';
 
 test('Ziel-Liste: 41 Pfade, je Deck 13 (mit PFL und Crossfader-Zuweisung), erz/1 11, pad/1 und pad/2 je 11 (ohne Tasten) plus xfader, master/pegel, cue/mix, cue/pegel', () => {
-  assert.equal(ZIELE.size, 87 + 32);   // K2: plus master/kleber; D1 K1: spur/1..8 je fader, pan, mute, solo
+  assert.equal(ZIELE.size, 87 + 128 + 33);   // K2: plus master/kleber; D1 K1/E3: spur/1..32 je fader, pan, mute, solo; 1.10: grp/1..8 je 4 plus pm/fader
   for (const p of ['deck/1/fader', 'deck/2/eq/tief', 'deck/1/kill/hoch', 'deck/2/play', 'deck/1/cue', 'xfader',
     'deck/1/pfl', 'deck/2/pfl', 'master/pegel', 'master/kleber', 'cue/mix', 'cue/pegel', 'erz/1/fader']) assert.ok(ZIELE.has(p), p);
 });
@@ -131,9 +131,12 @@ test('K2 Kleber: linear 0..1 (u = Wert), Vorgabe 0 = aus, Anzeige OFF / Prozent'
   assert.equal(formatiere('master/kleber', 0.55), '55%');
 });
 
-test('D1 K1: Spur-Regler spur/1..8 in der Ziel-Liste, Kurven wie der Kern (fader K_FADER, pan linear −1..1, Schalter)', () => {
-  for (const n of [1, 8]) for (const p of ['fader', 'pan', 'mute', 'solo']) assert.ok(ZIELE.has(`spur/${n}/${p}`), `spur/${n}/${p}`);
-  assert.ok(!ZIELE.has('spur/9/fader') && !ZIELE.has('spur/1/trim'));
+test('D1 K1: Spur-Regler spur/1..32 in der Ziel-Liste, Kurven wie der Kern (fader K_FADER, pan linear −1..1, Schalter)', () => {
+  for (const n of [1, 8, 9, 20, 32]) for (const p of ['fader', 'pan', 'mute', 'solo']) assert.ok(ZIELE.has(`spur/${n}/${p}`), `spur/${n}/${p}`);
+  assert.ok(!ZIELE.has('spur/33/fader') && !ZIELE.has('spur/0/fader') && !ZIELE.has('spur/1/trim'));   // n+1 und 0 fehlen
+  assert.equal(art('spur/32/fader'), 'spur_fader');   // zweistellig: die Zahl ist keine Fangruppe, die Art liest das Feld
+  assert.equal(art('spur/20/mute'), 'schalter');
+  assert.equal(art('spur/33/fader'), null);
   assert.equal(art('spur/3/fader'), 'spur_fader');   // eigene Art: Bereich −200..+6 (Spec 6.16)
   assert.equal(art('spur/3/pan'), 'pan');
   assert.equal(art('spur/3/mute'), 'schalter');

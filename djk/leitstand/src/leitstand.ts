@@ -13,7 +13,7 @@ import { parseArgs } from 'node:util';
 import type { Dekodiert, Felder } from './adressen.ts';
 import { ansageFuer, ART_JE_ADRESSE, NICHT_INS_JOURNAL } from './ereignisse.ts';
 import { Hub, RpcFehler, type Client, type Rolle } from './hub.ts';
-import { Journal, setIdAus, type JournalZeile, type Von } from './journal.ts';
+import { Journal, journalZeilen, setIdAus, type JournalZeile, type Von } from './journal.ts';
 import { KernAnbindung, type KernZustand } from './kern.ts';
 import { ladeKonfig, type Laufzeit } from './konfig.ts';
 import { Annahme } from './annahme.ts';
@@ -144,11 +144,13 @@ export class Leitstand {
   // Vorschläge, Stufe, Hörscheine und Spiegel daraus und gleicht nach der Neuanmeldung über /q/stand ab.
   private wiederaufnehmen(): void {
     if (!fs.existsSync(this.journal.pfad)) return;
-    const zeilen = fs.readFileSync(this.journal.pfad, 'utf8').split('\n').filter((z) => z.trim())
-      .flatMap((z) => { try { return [JSON.parse(z) as JournalZeile]; } catch { return []; } });
-    for (const z of zeilen) {
-      if (z.typ === '/k/willkommen' || z.typ === '/e/neustart') this.bekannteGeneration = z.daten.generation as number;
-    }
+    const leitstand = this;
+    const zeilen = (function* () {
+      for (const z of journalZeilen(leitstand.journal.pfad)) {
+        if (z.typ === '/k/willkommen' || z.typ === '/e/neustart') leitstand.bekannteGeneration = z.daten.generation as number;
+        yield z;
+      }
+    })();
     const n = this.annahme.wiederaufnehmen(zeilen);
     if (n > 0 || this.annahme.offeneTeile().length > 0) this.annahme.abgleichBeginnen('leitstand_neustart');
   }

@@ -13,6 +13,8 @@
 // einen Zähler (nie geladen, danach gelöscht), cypherdj-render mit nice 19 und den Spur-Reglern aus project.json als Datei, WAV unter
 // <projektordner>/export/ (nie ersetzt), Lautheit per ffmpeg. Die Antwort ist schmal (kein Projekt, Spec 6.31): datei, frames, spitze_db,
 // regler_quelle, lufs_i, lra, true_peak_dbtp, bei Fehlschlag der Messung loudness_fehler.
+// 1.10 Slice 2 (E2): POST /proj/export nimmt abgriff (produktion | set, Vorgabe produktion) und schickt immer ausdrücklich --abgriff an den Render; die Antwort
+// nennt abgriff, ueber_decke und limiter_db_max. Sagt der Render einen anderen Abgriff, ist es ein render_fehler (render.ts leseRenderAntwort, P11).
 // Lautheit je Spur (Paket 1.18, E-b, POST /proj/lautheit): derselbe Anfang (Bereich, Wirt-Freeze, Export-Wiedergabe), dann ein Render je belegter Spur
 // ohne Neustart-Zustand des Kerns (--ohne-zustand): die Regler kommen allein aus einer Datei, in der alle anderen Spuren stumm stehen, dazu ein Render
 // aller Spuren für die Summe. Die WAVs liegen in einem temporären Ordner und gehen im finally weg.
@@ -24,14 +26,14 @@ import type { Bereich, BereichKontext } from '../../http/router.ts';
 import { json, koerper } from '../../http/transport.ts';
 import { grundText } from '../../http/gruende.ts';
 import { instanz, renderProgramm, wirtOrdnerVorgabe } from '../../pfade.ts';
-import { KENNUNG_MAX, SAMPLERATE, kanonisch, spurSicht, sucheSpur, type Freeze, type Projekt, type Spur } from '../../projekt/modell.ts';
+import { KENNUNG_MAX, MAX_SPUREN, SAMPLERATE, kanonisch, spurSicht, sucheSpur, type Freeze, type Projekt, type Spur } from '../../projekt/modell.ts';
 import type { Meta } from '../../projekt/verlauf.ts';
 import { aendereStand, StandFehler } from '../../projekt/stand.ts';
 import {
   brauchtFreeze, freezeBereich, freezeDateiName, FreezeFehler, FREEZE_MAX_BEATS, FREEZE_NACHLAUF_BEATS, istWirt, klingendeNoten,
   pruefeFreezeDatei, setzeFreeze,
 } from '../../projekt/freeze.ts';
-import { reglerAusProjekt, rendere, RenderFehler, type RenderAntwort } from '../../projekt/render.ts';
+import { reglerAusProjekt, rendere, RenderFehler, type Abgriff, type RenderAntwort } from '../../projekt/render.ts';
 import { messeLautheit, type Lautheit } from '../../projekt/lautheit.ts';
 import type { AusgabeLauf, ProjZugang } from './bereich.ts';
 import { grundCode } from './abbildung.ts';
@@ -172,7 +174,11 @@ export function kurzeFreezeAntwort(r: { rev: number; projekt: Projekt }, spurId:
   return { rev: r.rev, spur_id: spurId, freeze: sucheSpur(r.projekt, spurId)?.freeze ?? null };
 }
 
-export type ExportAntwort = Pick<RenderAntwort, 'frames' | 'spitze_db' | 'regler_quelle'> & { datei: string } & Lautheit;
+// 1.10 Slice 2 (E2): abgriff = wo der Render den Ton abgriff (produktion: PM-Ausgang vor dem Set-Limiter, set: Ring hinter dem Limiter), ueber_decke =
+// die Sample-Spitze des Exports liegt über der Limiter-Decke (P10), limiter_db_max = größte Absenkung des Set-Limiters während des Renders
+// (positive dB, 0 = griff nie ein).
+export type ExportAntwort = Pick<RenderAntwort, 'frames' | 'spitze_db' | 'regler_quelle'>
+  & { datei: string; abgriff: Abgriff; ueber_decke: boolean; limiter_db_max: number } & Lautheit;
 
 // Paket 1.18, E-b. Unter dieser Spitze (dBFS) gilt ein Render als Stille: die Lautheit ist null, nicht der Gate-Boden −70 von ffmpeg.
 export const STILLE_DB = -90;
@@ -207,14 +213,19 @@ export function belegteSpuren(p: Projekt, von: number, bis: number): Spur[] {
 
 // Spur-Regler für den Render EINER Spur (Datei --spur-regler): alle anderen Slots stumm, Solo überall aus, Fader und Pan der Spur aus dem Projekt,
 // ihr Mute auch (eine stumme Spur rendert Stille). Pfade und Wertebereiche wie lies_spur_regler (render.cpp).
-export function reglerEinzeln(s: Spur): Record<string, number> {
+export function reglerEinzeln(s: Spur, p?: Projekt): Record<string, number> {
   const r: Record<string, number> = {};
-  for (let n = 1; n <= 8; n++) {
+  for (let n = 1; n <= MAX_SPUREN; n++) {
     r[`spur/${n}/mute`] = n === s.nr ? (s.mute ? 1 : 0) : 1;
     r[`spur/${n}/solo`] = 0;
   }
   r[`spur/${s.nr}/fader`] = s.fader_db;
   r[`spur/${s.nr}/pan`] = s.pan;
+  if (p) {   // 1.10: Ziel-Kette der Spur (Gruppe, PM); andere Gruppen tragen keine klingende Spur und bleiben auf der Vorgabe
+    const g = s.ausgang ? (p.gruppen ?? []).find((x) => x.id === s.ausgang!.id) : undefined;
+    if (g) { r[`grp/${g.nr}/fader`] = g.fader_db; r[`grp/${g.nr}/pan`] = g.pan; r[`grp/${g.nr}/mute`] = g.mute ? 1 : 0; }
+    if ((p.master?.fader_db ?? 0) !== 0) r['pm/fader'] = p.master.fader_db;
+  }
   return r;
 }
 
@@ -442,8 +453,8 @@ export class Ausgabe {
 
   // Prüfungen von Export und Lautheit: nur von_beat und bis_beat, Bereich 1 bis EXPORT_MAX_BEATS Beats ab Beat 0 (Vorgabe: Loop-Klammer), kein anderer
   // Lauf, kein Transport, kein Audio in Vorbereitung.
-  private pruefeBereich(d: Record<string, unknown>): { von: number; bis: number } {
-    for (const k of Object.keys(d)) if (k !== 'von_beat' && k !== 'bis_beat') fehl('argument_ungueltig', `unknown field ${k}`);
+  private pruefeBereich(d: Record<string, unknown>, erlaubt: readonly string[] = ['von_beat', 'bis_beat']): { von: number; bis: number } {
+    for (const k of Object.keys(d)) if (!erlaubt.includes(k)) fehl('argument_ungueltig', `unknown field ${k}`);
     for (const k of ['von_beat', 'bis_beat']) {
       if (d[k] !== undefined && (typeof d[k] !== 'number' || !Number.isFinite(d[k]))) fehl('argument_ungueltig', `${k}: a number is required`);
     }
@@ -476,7 +487,10 @@ export class Ausgabe {
   }
 
   async exportiere(d: Record<string, unknown>): Promise<ExportAntwort> {
-    const { von, bis } = this.pruefeBereich(d);
+    const { von, bis } = this.pruefeBereich(d, ['von_beat', 'bis_beat', 'abgriff']);
+    if (d.abgriff !== undefined && d.abgriff !== 'produktion' && d.abgriff !== 'set') fehl('argument_ungueltig', 'abgriff: production or set expected');
+    // 1.10: Vorgabe des Servers ist der Produktions-Abgriff (der Render selbst nimmt ohne Angabe den Ring, P11)
+    const abgriff: Abgriff = d.abgriff === 'set' ? 'set' : 'produktion';
     this.belege({ art: 'export' });
     try {
       const { jetzt, p, w } = await this.friereEinUndSchreibe('export');
@@ -493,7 +507,7 @@ export class Ausgabe {
           if (this.geschlossen) this.renderAbbruch.abort();               // RR3: schliesse() kam während des Freeze, kein Render mehr
           r = await rendere({ programm: (this.opt.render ?? (() => [renderProgramm()]))(), nr: w.nr, von_beat: von, bis_beat: bis, bpm: p.tempo_bpm,
             aus: teil, arbeitsordner: this.zugang.arbeitsordner(), spurRegler: regler, instanz: (this.opt.instanz ?? instanz)(),
-            zeitlimitMs: Math.ceil(4 * dauerMs) + 60_000, abbruch: this.renderAbbruch.signal });
+            zeitlimitMs: Math.ceil(4 * dauerMs) + 60_000, abbruch: this.renderAbbruch.signal, abgriff });
           fs.linkSync(teil, ziel);                                        // nie ersetzen (wie der Render, Spec 6.25): link schlägt fehl, wenn es ziel gibt
           this.datei = ziel;
         } finally {
@@ -505,7 +519,8 @@ export class Ausgabe {
         fs.rmSync(w.datei, { force: true });                             // die Export-Wiedergabe verdrängt sonst die geladene (BEHALTE 5)
       }
       const lautheit = await messeLautheit(ziel, this.opt.ffmpeg);
-      const antwort: ExportAntwort = { datei: ziel, frames: r.frames, spitze_db: r.spitze_db, regler_quelle: r.regler_quelle, ...lautheit };
+      const antwort: ExportAntwort = { datei: ziel, frames: r.frames, spitze_db: r.spitze_db, regler_quelle: r.regler_quelle, abgriff,
+        ueber_decke: r.ueber_decke ?? false, limiter_db_max: r.limiter_db_max ?? 0, ...lautheit };
       this.ctx.log({ typ: 'proj_export', slug: jetzt.slug, nr: w.nr, von_beat: von, bis_beat: bis, ...antwort });
       return antwort;
     } catch (e) { throw this.nachFehler(e); } finally { this.gib(); }
@@ -532,18 +547,23 @@ export class Ausgabe {
           fs.writeFileSync(datei, JSON.stringify(regler));
           const r = await rendere({ programm: (this.opt.render ?? (() => [renderProgramm()]))(), nr: w.nr, von_beat: von, bis_beat: bis, bpm: p.tempo_bpm,
             aus, arbeitsordner: this.zugang.arbeitsordner(), spurRegler: datei, ohneZustand: true, instanz: (this.opt.instanz ?? instanz)(),
-            zeitlimitMs: Math.ceil(4 * dauerMs) + 60_000, abbruch: this.renderAbbruch!.signal });
+            // 1.10: alle am PM, damit die Summe dem Standard-Export gleicht (AK24)
+            zeitlimitMs: Math.ceil(4 * dauerMs) + 60_000, abbruch: this.renderAbbruch!.signal, abgriff: 'produktion' });
           return { r, ...(r.spitze_db <= STILLE_DB ? { l: OHNE_LAUTHEIT, unter: false } : untermessgrenze(await messeLautheit(aus, this.opt.ffmpeg))) };
         };
         const spuren: SpurLautheit[] = [];
-        const solo = p.spuren.some((x) => x.solo);                        // S3-Fix G3: mit irgendeinem Solo im Projekt klingt im Mix nur, was Solo trägt
+        // S3-Fix G3: mit irgendeinem Solo im Projekt klingt im Mix nur, was Solo trägt; 1.10 wie der Mischer (arr_ausgang.cpp Schritt 1):
+        // auch ein Gruppen-Solo zählt, und ein Mitglied einer Solo-Gruppe klingt
+        const gruppen = p.gruppen ?? [];
+        const solo = p.spuren.some((x) => x.solo) || gruppen.some((g) => g.solo);
+        const gruppenSolo = (s: Spur) => !!s.ausgang && gruppen.some((g) => g.id === s.ausgang!.id && g.solo);
         for (const s of belegteSpuren(p, von, bis)) {
           const kopf = { spur_id: s.id, nr: s.nr, name: s.name };
-          if (s.mute || s.fader_db <= STUMM_GRENZE || (solo && !s.solo)) {
+          if (s.mute || s.fader_db <= STUMM_GRENZE || (solo && !s.solo && !gruppenSolo(s))) {
             spuren.push({ ...kopf, ...OHNE_LAUTHEIT, spitze_db: -200, stumm: true, unter_messgrenze: false });
             continue;
           }
-          const { r, l, unter } = await render(`spur-${s.nr}`, reglerEinzeln(s));
+          const { r, l, unter } = await render(`spur-${s.nr}`, reglerEinzeln(s, p));
           spuren.push({ ...kopf, ...l, spitze_db: r.spitze_db, stumm: r.spitze_db <= STILLE_DB, unter_messgrenze: unter });
         }
         const sum = await render('summe', reglerAusProjekt(p));

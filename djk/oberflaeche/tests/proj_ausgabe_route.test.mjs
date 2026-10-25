@@ -160,7 +160,8 @@ test('Export über die Route: Surge-Spur vorher eingefroren, WAV im Projektordne
   assert.deepEqual(waehrend.ausgabe_lauf, { art: 'export' }, 'Spec 6.34: auch während des Freeze im Export heißt der Lauf export');
   const r = await lauf;
   assert.equal(r.code, 200, JSON.stringify(r.j));
-  assert.deepEqual(Object.keys(r.j).sort(), ['datei', 'frames', 'lra', 'lufs_i', 'regler_quelle', 'spitze_db', 'true_peak_dbtp'], 'schmale Antwort');
+  // 1.10 Slice 2: drei Felder neu (abgriff, limiter_db_max, ueber_decke), sonst schmal
+  assert.deepEqual(Object.keys(r.j).sort(), ['abgriff', 'datei', 'frames', 'limiter_db_max', 'lra', 'lufs_i', 'regler_quelle', 'spitze_db', 'true_peak_dbtp', 'ueber_decke'], 'schmale Antwort');
   assert.equal(r.j.frames, Math.round(8 * 60 / 128 * 48000));
   assert.match(r.j.datei, new RegExp(`/${vorher.slug}/export/${vorher.slug}-\\d{8}-\\d{6}\\.wav$`));
   assert.ok(r.j.datei.startsWith(path.resolve(optionen.proj.wurzel)), `Export im Projektordner des Stapels (tmp): ${r.j.datei}`);

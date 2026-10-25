@@ -3,7 +3,7 @@
 // Größe oder einer angekommenen Welle) und Überlagerung (jedes Bild: Abspielkopf, Startmarke, Ablage-Geist).
 // Zeichenvokabular und Wellendaten aus welle.js (spalten, zeichneSpalte), kein WebGL.
 import { linien, beatZuX } from './zeitachse.js';
-import { SPUR_HOEHE, LOOP_ZONE, CLIP_KOPF, clipKasten, sichtbar, quellSpalten, notenKaesten } from './layout.js';
+import { SPUR_HOEHE, LOOP_ZONE, CLIP_KOPF, clipKasten, sichtbar, welleSpalteFuer, notenKaesten } from './layout.js';
 import { spalten, zeichneSpalte } from '../welle.js';
 
 const HEX = /^#[0-9a-f]{6}$/i;
@@ -87,9 +87,11 @@ export class Arrangement {
         const mitte = (k.h - CLIP_KOPF) / 2, x0 = Math.max(0, Math.floor(k.x)), x1 = Math.min(w, Math.ceil(k.x + k.w));
         g.translate(0, k.y + CLIP_KOPF);
         for (let x = x0; x < x1; x++) {
-          const [sa, sb] = quellSpalten(c, p.tempo_bpm, e.welle.hop, a.pxProBeat, x - k.x);
-          if (sa >= e.welle.spalten) break;
-          zeichneSpalte(g, x, mitte, spalten(e.welle, sa, sb), e.welle.gain);
+          // Paket 1.13: hinter dem Ende der Quelle bricht nur der ungewarpte Clip ab; ein gewarpter Loop-Clip überspringt die Stille und zeichnet die nächste Kopie
+          const r = welleSpalteFuer(c, p.tempo_bpm, e.welle.hop, a.pxProBeat, x - k.x, e.welle.spalten);
+          if (r === 'ende') break;
+          if (r === 'leer') continue;
+          zeichneSpalte(g, x, mitte, spalten(e.welle, r[0], r[1]), e.welle.gain);
         }
       } else if (e.fehler) unten('no waveform');
     }

@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { fuehreAus, fuehreListeAus, BefehlFehler, vergleiche, gleicheDekodiertAb } from '../projekt/befehle.ts';
-import { neuesProjekt, pruefeProjekt, kanonisch } from '../projekt/modell.ts';
+import { neuesProjekt, pruefeProjekt, kanonisch, MAX_SPUREN } from '../projekt/modell.ts';
 import { wende } from '../projekt/patch.ts';
 import { specProjekt, kopie, ohneAbgeleitetes, SHA_A, SHA_B } from './hilfen/projekt.mjs';
 
@@ -42,16 +42,20 @@ test('spur_neu: Instrument vorgabe RB-338 intern; Wirt Surge mit Slot 1 (Spec 6.
   lehntAb(p, { befehl: 'spur_neu', art: 'instrument', geraet: { art: 'intern', name: 'unbekannt' } }, 'argument_ungueltig');
 });
 
-test('spur_neu: neunte Spur → spur_bereich (8 belegt); nach Löschen wird die freie nr wiederverwendet', () => {
+test('spur_neu: elfte Spur → spur_bereich (10 belegt); nach Löschen wird die freie nr wiederverwendet', () => {
   let p = leer();
-  for (let i = 1; i <= 8; i++) p = ok(p, { befehl: 'spur_neu', art: 'audio' }).projekt;
-  assert.deepEqual(p.spuren.map((s) => s.nr), [1, 2, 3, 4, 5, 6, 7, 8]);
+  for (let i = 1; i <= MAX_SPUREN; i++) p = ok(p, { befehl: 'spur_neu', art: 'audio' }).projekt;
+  assert.deepEqual(p.spuren.map((s) => s.nr), Array.from({ length: MAX_SPUREN }, (_, i) => i + 1));
   lehntAb(p, { befehl: 'spur_neu', art: 'audio' }, 'spur_bereich');
-  const q = ok(p, { befehl: 'spur_loeschen', spur_id: 's3' });
+  assert.throws(() => fuehreAus(p, { befehl: 'spur_neu', art: 'audio' }), (e) => e.detail === `alle ${MAX_SPUREN} Spuren belegt`, 'Fehlertext aus der Konstanten (T06)');
+  const q = ok(p, { befehl: 'spur_loeschen', spur_id: 's4' });
   pruefeErgebnis(p, q);
-  assert.deepEqual(q.regler_aenderungen, [{ pfad: 'spur/3/fader', wert: 0 }, { pfad: 'spur/3/pan', wert: 0 }, { pfad: 'spur/3/mute', wert: 0 }, { pfad: 'spur/3/solo', wert: 0 }]);
+  assert.deepEqual(q.regler_aenderungen, [{ pfad: 'spur/4/fader', wert: 0 }, { pfad: 'spur/4/pan', wert: 0 }, { pfad: 'spur/4/mute', wert: 0 }, { pfad: 'spur/4/solo', wert: 0 }]);
   const n = ok(q.projekt, { befehl: 'spur_neu', art: 'audio' });
-  assert.equal(n.projekt.spuren.at(-1).nr, 3); assert.equal(n.projekt.spuren.at(-1).id, 's9', 'ID wird nicht wiederverwendet, solange ein höheres lebt');
+  assert.equal(n.projekt.spuren.at(-1).nr, 4, 'nach dem Löschen von Spur 4 bekommt die nächste Spur nr 4');
+  assert.equal(n.projekt.spuren.at(-1).id, `s${MAX_SPUREN + 1}`, 'ID wird nicht wiederverwendet, solange ein höheres lebt');
+  const z = ok(p, { befehl: 'spur_loeschen', spur_id: `s${MAX_SPUREN}` });
+  assert.equal(ok(z.projekt, { befehl: 'spur_neu', art: 'audio' }).projekt.spuren.at(-1).nr, MAX_SPUREN, 'auch die höchste Nummer wird vergeben');
 });
 
 test('spur_neu: ungültige Argumente → argument_ungueltig; unbekannter Befehl → befehl_unbekannt; unbekanntes Feld wird nicht still geschluckt', () => {
@@ -376,4 +380,30 @@ test('gleicheDekodiertAb: gleicht Audio-Clips mit dem Zustand des Caches ab; erh
   assert.equal(q.spuren[0].clips[0].dekodiert, 'fertig'); assert.equal(q.rev, p.rev + 1);
   const r = gleicheDekodiertAb(q, (sha) => 'fertig'); assert.equal(r, q, 'nichts zu tun: dasselbe Objekt, rev gleich');
   assert.equal(p.spuren[0].clips[0].dekodiert, 'laeuft');
+});
+
+// Plan E3 Task 10, feindliche Parameter (Vorbild SoundCraft hostile_params.rs): jede Zeile wirft BefehlFehler mit Grund,
+// nie etwas anderes, und das Projekt bleibt tief gleich. Negativ-Kontrolle: eine gültige Zeile ändert es.
+test('feindliche Parameter: spur_neu/spur_aendern/spur_loeschen werfen nur BefehlFehler und lassen das Projekt unberührt', () => {
+  let p = leer();
+  for (let i = 1; i <= MAX_SPUREN; i++) p = ok(p, { befehl: 'spur_neu', art: 'audio' }).projekt;
+  const voll = p;
+  let eine = leer(); eine = ok(eine, { befehl: 'spur_neu', art: 'audio' }).projekt;
+  const boese = [0, 11, 33, -1, 1.5, NaN, '10', `s${MAX_SPUREN + 1}`, null, {}, [], 's0'];
+  const zeilen = [
+    ...boese.map((v) => [eine, { befehl: 'spur_aendern', spur_id: v, fader_db: -6 }]),
+    ...boese.map((v) => [eine, { befehl: 'spur_loeschen', spur_id: v }]),
+    ...boese.map((v) => [eine, { befehl: 'spur_neu', art: 'audio', nr: v }]),
+    ...[NaN, Infinity, -Infinity, 1e9, -1e9, '−6', null].map((v) => [eine, { befehl: 'spur_aendern', spur_id: 's1', fader_db: v }]),
+    [voll, { befehl: 'spur_neu', art: 'audio' }],
+  ];
+  for (const [q, b] of zeilen) {
+    const vorher = structuredClone(q);
+    let e;
+    try { fuehreAus(q, b); } catch (x) { e = x; }
+    assert.ok(e instanceof BefehlFehler && typeof e.grund === 'string' && e.grund.length > 0, `BefehlFehler mit Grund erwartet für ${JSON.stringify(b)}, war ${e}`);
+    assert.deepEqual(q, vorher, `Projekt verändert durch ${JSON.stringify(b)}`);
+  }
+  const g = fuehreAus(eine, { befehl: 'spur_aendern', spur_id: 's1', fader_db: -6 });
+  assert.equal(g.projekt.spuren[0].fader_db, -6, 'Negativ-Kontrolle: gültige Zeile ändert das Projekt');
 });

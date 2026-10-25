@@ -75,6 +75,29 @@ test('loop: ab Quellposition bei ab_beat, Wiederholung, Status 3, Sprung im Loop
   assert.ok(z.every((m) => m.werte.length === 14 && m.werte[12] === 0 && m.werte[13] === 0));
 });
 
+test('loop_laenge: Länge ändern, der Start bleibt; Verkürzen wickelt den Kopf in den Loop; Start außerhalb des Materials wird abgelehnt', () => {
+  const ll = (id, ab, start, laenge) => ['/k/deck/loop_laenge', 'hssssidddid', id, 'cypher', '', '', '', 1, ab, start, laenge, 1, 0];
+  const r = fahre([
+    sende(1000, laden(1, 1)),
+    sende(2000, start(2, 'leitstand', 1, 16, 0)),
+    sende(3000, deckTeil('/k/deck/loop', 'hssssiddid', 3, 1, 32, 4, 0, 0)),
+    wert(S(37), 'deck/1/quell_beat', 17),                 // Loop [16, 20)
+    sende(S(38), ll(4, 40, 16, 8)),                       // Länge 8, Start bleibt 16 (der alte Weg setzte ihn an den Kopf)
+    wert(S(44), 'deck/1/quell_beat', 20),                 // läuft über das alte Ende 20 hinaus
+    wert(S(47), 'deck/1/quell_beat', 23),
+    wert(S(48.5), 'deck/1/quell_beat', 16.5),             // Naht bei 24 zurück auf 16
+    sende(S(50), ll(5, 52, 16, 2)),                       // Verkürzen: Kopf (Quell 20) hinter dem neuen Ende 18
+    wert(S(53), 'deck/1/quell_beat', 17),                 // wickelt in [16, 18)
+    wert(S(54), 'deck/1/quell_beat', 16),
+    sende(S(55), ll(6, 58, 1e6, 4)),                      // Negativ: Start hinter dem Material
+    erwarte(S(60), q(4, 'cypher', 2)),
+    erwarte(S(60), q(5, 'cypher', 2)),
+    erwarte(S(60), q(6, 'cypher', 6, null, 'ausserhalb_bereich')),
+    wert(S(61), 'deck/1/quell_beat', 17),                 // der Loop [16, 18) läuft unverändert weiter
+  ], { cfg });
+  gruen(r);
+});
+
 test('roll: Band mit Schatten, beim Aus zurück zur Schattenposition', () => {
   const r = fahre([
     sende(1000, laden(1, 1)),

@@ -1,6 +1,7 @@
 // D1 S2-Integration, Slice 3: Projekt anlegen, öffnen, lesen samt Kern-Abgleich (Spec 3.4, 2.3, 6.1), gegen einen Prüf-Kontext.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { MAX_SPUREN } from '../projekt/modell.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pruefKontext, sitzung, wav, warteBis, neustart, arrNr, ist } from './hilfen/proj_kontext.mjs';
@@ -10,14 +11,15 @@ import { tmpOrdner } from './hilfen/projekt.mjs';
 const fehlerVon = async (p) => { try { await p; } catch (e) { return e; } return null; };
 const lies = (datei) => JSON.parse(fs.readFileSync(datei, 'utf8'));
 
-test('neu: Projekt angelegt, Wiedergabe 1 geschrieben und geladen, erz/4 neutral (14 Regler), alle 32 Spur-Regler, Loop, Metronom; SSE proj', async (t) => {
+test('neu: Projekt angelegt, Wiedergabe 1 geschrieben und geladen, erz/4 neutral (14 Regler), alle Spur-Regler (4 · MAX_SPUREN), Loop, Metronom; SSE proj', async (t) => {
   const { s, k, arr } = sitzung(t);
   const r = await s.neu('First Track', 'andreas');
   assert.equal(r.code, 200);
   assert.equal(r.j.slug, 'first-track'); assert.equal(r.j.projekt.rev, 0); assert.equal(r.j.projekt.wiedergabe_rev, 1);
   assert.deepEqual(k.an('/k/arr/laden').map((x) => x.felder), [{ quelle: 'andreas', nr: 1 }]);
   assert.deepEqual(lies(path.join(arr, 'wiedergabe-1.json')), { format: 'cypherdj-arr/1', nr: 1, spuren: [] });
-  assert.equal(k.teile(/^erz\/4\//).length, 16); assert.equal(k.teile(/^spur\//).length, 32);
+  assert.equal(k.teile(/^erz\/4\//).length, 16); assert.equal(k.teile(/^spur\//).length, 4 * MAX_SPUREN);
+  assert.equal(k.teile(/^grp\//).length, 4 * 8); assert.equal(k.teile(/^pm\/fader$/).length, 1);   // 1.10: das Öffnen setzt alle Gruppen-Slots und den PM
   assert.deepEqual(k.teile(/^erz\/4\/(ziel|xseite)$/).map((x) => [x.felder.pfad, x.felder.nach]), [['erz/4/ziel', 0], ['erz/4/xseite', 1]], 'P6: bei Quelle andreas gesendet');
   assert.deepEqual(k.teile(/^erz\/4\/send\/1$/)[0].felder, { quelle: 'andreas', plan: '', teil: 0, pfad: 'erz/4/send/1', ab_beat: k.teile(/^erz\/4\/send\/1$/)[0].felder.ab_beat,
     dauer_beats: 0, nach: -200, form: 0, politik: 1, gruppe: '', hoerschein: '' });
@@ -26,6 +28,26 @@ test('neu: Projekt angelegt, Wiedergabe 1 geschrieben und geladen, erz/4 neutral
   assert.deepEqual(r.j.kern.regler_fehler, []);
   assert.deepEqual(k.verteilt.at(-1), { a: 'proj', f: { slug: 'first-track', rev: 0, label: 'Open', quelle: 'andreas' } });
   assert.equal(s.aktuell().j.slug, 'first-track');
+});
+
+test('1.10: Gruppe anlegen schreibt Wiedergabe /2 und sendet nur die neuen Regler; ein Gruppen-Fader-Zug lädt keine neue Wiedergabe (schneller Weg)', async (t) => {
+  const { s, k, arr } = sitzung(t);
+  const r = await s.neu('Rt', 'andreas');
+  k.leere();
+  const a = await s.aendern({ rev: r.j.projekt.rev, label: 'Add group', befehle: [{ befehl: 'spur_neu', art: 'audio' }, { befehl: 'gruppenspur_neu', name: 'Music', mitglieder: ['s1'] }] }, 'andreas');
+  assert.equal(a.code, 200);
+  const proj = s.aktuell().j.projekt;
+  const w = lies(path.join(arr, `wiedergabe-${proj.wiedergabe_rev}.json`));
+  assert.equal(w.format, 'cypherdj-arr/2'); assert.deepEqual(w.gruppen, [{ nr: 1, ausgang: { art: 'master' } }]); assert.deepEqual(w.spuren[0].ausgang, { art: 'gruppe', nr: 1 });
+  assert.deepEqual(k.teile(/^grp\//).map((x) => x.felder.pfad).sort(), ['grp/1/fader', 'grp/1/mute', 'grp/1/pan', 'grp/1/solo']);
+  k.leere();
+  const f = await s.aendern({ rev: proj.rev, label: 'Group volume', befehle: [{ befehl: 'gruppenspur_aendern', gruppe_id: 'g1', fader_db: -6 }] }, 'andreas');
+  assert.equal(f.code, 200);
+  assert.equal(k.an('/k/arr/laden').length, 0, 'Pegel sind keine Wiedergabe');
+  assert.deepEqual(k.teile().map((x) => [x.felder.pfad, x.felder.nach]), [['grp/1/fader', -6]]);
+  k.leere();
+  const m = await s.aendern({ rev: f.j.rev, label: 'Master volume', befehle: [{ befehl: 'master_aendern', fader_db: -2 }] }, 'andreas');
+  assert.equal(m.code, 200); assert.deepEqual(k.teile().map((x) => [x.felder.pfad, x.felder.nach]), [['pm/fader', -2]]);
 });
 
 test('Öffnen: ein zweites Projekt schliesst das erste (Sperre frei, Transport gestoppt); Wiederöffnen behält wiedergabe_rev, lädt eine neue', async (t) => {
@@ -79,8 +101,8 @@ test('P2 Wiederanlauf (gleiche Nummer): keine neue Wiedergabe, bekannte Spur-Reg
   ist(z.s, 'spur/1/fader', -12); ist(z.s, 'spur/1/mute', 1); ist(z.s, 'spur/2/pan', 0.25);   // Handgriffe während des Server-Ausfalls
   const r = await z.s.oeffnen('wa', 'andreas');
   assert.equal(z.k.an('/k/arr/laden').length, 0, 'keine neue Wiedergabe');
-  // Spec 6.30: für Regler mit unbekanntem Ist-Wert gewinnt das Projekt (29 von 32), die drei bekannten setzt der Server nicht
-  assert.equal(z.k.teile(/^spur\//).length, 29); assert.equal(z.k.teile(/^spur\/(1\/fader|1\/mute|2\/pan)$/).length, 0, 'bekannte Spur-Regler nicht gesetzt');
+  // Spec 6.30: für Regler mit unbekanntem Ist-Wert gewinnt das Projekt (4 · MAX_SPUREN - 3), die drei bekannten setzt der Server nicht
+  assert.equal(z.k.teile(/^spur\//).length, 4 * MAX_SPUREN - 3); assert.equal(z.k.teile(/^spur\/(1\/fader|1\/mute|2\/pan)$/).length, 0, 'bekannte Spur-Regler nicht gesetzt');
   assert.equal(r.j.projekt.wiedergabe_rev, nr);
   const sp = r.j.projekt.spuren;
   assert.deepEqual([sp[0].fader_db, sp[0].mute, sp[0].solo, sp[1].pan, sp[1].fader_db], [-12, true, false, 0.25, 0], 'unbekannte Ist-Werte (solo) bleiben, wie sie sind');
@@ -94,12 +116,12 @@ test('P2 Wiederanlauf (gleiche Nummer): keine neue Wiedergabe, bekannte Spur-Reg
   assert.deepEqual(z2.s.verlaufListe().j, []); assert.equal(r2.j.projekt.rev, 0);
 });
 
-test('P2 verschieden (anderes Projekt, Kern ohne Wiedergabe, Nummer unbekannt): das Projekt gewinnt, 32 Spur-Regler, neue Wiedergabe; Fader des alten Projekts werden nicht geerbt', async (t) => {
+test('P2 verschieden (anderes Projekt, Kern ohne Wiedergabe, Nummer unbekannt): das Projekt gewinnt, alle Spur-Regler (4 · MAX_SPUREN), neue Wiedergabe; Fader des alten Projekts werden nicht geerbt', async (t) => {
   for (const kern of [(s, nr) => s.ereignis('/zustand/arr', arrNr(nr + 5)), (s) => s.ereignis('/zustand/arr', arrNr(0)), () => {}]) {
     const { z, nr } = neustart(t);
     kern(z.s, nr); ist(z.s, 'spur/1/fader', -12);                 // der Kern hält Fader eines anderen Projekts
     const r = await z.s.oeffnen('wa', 'andreas');
-    assert.equal(z.k.an('/k/arr/laden').length, 1); assert.equal(z.k.teile(/^spur\//).length, 32);
+    assert.equal(z.k.an('/k/arr/laden').length, 1); assert.equal(z.k.teile(/^spur\//).length, 4 * MAX_SPUREN);
     assert.equal(r.j.projekt.spuren[0].fader_db, 0, 'Projekt gewinnt'); assert.equal(r.j.projekt.rev, 0);
     assert.deepEqual(z.k.teile(/^spur\/1\/fader$/).map((x) => x.felder.nach), [0]);
     assert.ok(r.j.projekt.wiedergabe_rev > nr);

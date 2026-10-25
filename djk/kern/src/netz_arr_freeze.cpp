@@ -20,6 +20,10 @@ namespace cdj {
 
 namespace v = cypherdj::osc;
 
+// E3: der Vertragsbereich der Spur (osc.json, /k/arr/freeze und /e/freeze) und die Slot-Zahl des Arrangements laufen nicht auseinander
+static_assert(v::bereich::k_arr_freeze::spur_max == ARR_SPUREN && v::bereich::e_freeze::spur_max == ARR_SPUREN,
+              "Vertrag (osc.json freeze spur) und ARR_SPUREN (arr_wiedergabe.h) laufen auseinander");
+
 namespace {
 
 void kopiere(char* ziel, const char* quelle, size_t n) {

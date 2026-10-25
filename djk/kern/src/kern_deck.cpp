@@ -854,7 +854,7 @@ void Kern::einsortieren31(const Befehl& c) {
   if (!a) return ab("ausserhalb_bereich");  // mehr als 64 wartende Deck-Befehle
   *a = DeckAktion{};
   a->belegt = true;
-  a->art = c.art == Befehl::DECK_START ? 1 : c.art == Befehl::DECK_STOPP ? 2 : c.art == Befehl::DECK_LOOP ? 5
+  a->art = c.art == Befehl::DECK_START ? 1 : c.art == Befehl::DECK_STOPP ? 2 : (c.art == Befehl::DECK_LOOP || c.art == Befehl::DECK_LOOP_LAENGE) ? 5
          : c.art == Befehl::DECK_SPRUNG ? 6 : 7;
   a->verschoben = ab_beat != c.ab_beat;
   a->wert_beats = c.wert_beats;
@@ -866,7 +866,7 @@ void Kern::einsortieren31(const Befehl& c) {
   a->seq = ++w.seq;
   a->id = c.id;
   a->ab_beat = ab_beat;
-  a->quell_beat = c.quell_beat;
+  a->quell_beat = c.art == Befehl::DECK_LOOP ? NAN : c.quell_beat;  // art 5: endlich = fester Loop-Start (DECK_LOOP_LAENGE), NaN = ab dem Kopf
   kopiere(a->quelle, c.quelle, sizeof a->quelle);
   kopiere(a->plan, c.plan, sizeof a->plan);
   kopiere(a->gruppe, c.gruppe, sizeof a->gruppe);
@@ -1248,7 +1248,10 @@ void Kern::deck_ausfuehren(DeckAktion& a, int64_t s) {
       // Loop-Drift: die exakte Länge L_beats · fpb geht mit, die Nähte liegen bei round(j · l_x) statt j · round(l_x) (bei
       // krummem fpb lief der Loop sonst gegen das Beat-Raster weg); im Material muss der längste Durchlauf ceil(l_x) liegen
       const double l_x = a.wert_beats * fpb;
-      const int64_t a_f = dk.frame_bei(s), l_f = std::llround(l_x);
+      // /k/deck/loop_laenge: der Start bleibt (Quell-Beat → Frame wie beim Hotcue), der Kopf läuft weiter; liegt er hinter dem neuen
+      // Ende, wickelt ihn die Naht um k · Länge zurück (deck.cpp Naht), davor läuft er bis zum Ende
+      const bool fest = std::isfinite(a.quell_beat);
+      const int64_t a_f = fest ? std::llround(frame_von(a.quell_beat, dk.schlag0(), m->basis_bpm)) : dk.frame_bei(s), l_f = std::llround(l_x);
 #ifdef CYPHERDJ_MUTATION_KERN_LOOP_GRENZE_LF
       if (a_f < 0 || a_f + l_f > m->frames)  // Fehlerfall der Prüfung (F5): gerundete statt längste Länge
 #else

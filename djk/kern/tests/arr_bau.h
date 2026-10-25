@@ -35,6 +35,14 @@ struct Audio {
     x->fuellen(frames);
     return x;
   }
+  static std::unique_ptr<Audio> sinus(int64_t frames, double hz, float amp) {   // Sinus hz mit Spitze amp, L und R gleich (1.10 AK6)
+    auto x = std::make_unique<Audio>();
+    x->d.resize(static_cast<size_t>(frames) * 2);
+    for (int64_t f = 0; f < frames; ++f)
+      x->d[2 * f] = x->d[2 * f + 1] = amp * static_cast<float>(std::sin(2.0 * 3.14159265358979323846 * hz * static_cast<double>(f) / 48000.0));
+    x->fuellen(frames);
+    return x;
+  }
   static std::unique_ptr<Audio> rampe(int64_t frames) {   // Frame f trägt f (L) und −f (R): misst die Quellposition
     auto x = std::make_unique<Audio>();
     x->d.resize(static_cast<size_t>(frames) * 2);
@@ -42,6 +50,13 @@ struct Audio {
       x->d[2 * f] = static_cast<float>(f);
       x->d[2 * f + 1] = -static_cast<float>(f);
     }
+    x->fuellen(frames);
+    return x;
+  }
+  static std::unique_ptr<Audio> klicks(int64_t frames, int64_t abstand) {   // 1.0 auf Frame k · abstand, sonst 0 (Paket 1.13)
+    auto x = std::make_unique<Audio>();
+    x->d.assign(static_cast<size_t>(frames) * 2, 0.0f);
+    for (int64_t f = 0; f < frames; f += abstand) x->d[2 * f] = x->d[2 * f + 1] = 1.0f;
     x->fuellen(frames);
     return x;
   }
@@ -55,7 +70,7 @@ struct Audio {
 // Baut einen Schnappschuss; spur()/clip()/note() vor fertig(), danach zeigen die Zeiger in die Vektoren.
 struct Bau {
   std::unique_ptr<cdj::ArrSnapshot> s{new cdj::ArrSnapshot()};
-  struct C { int spur; cdj::ArrClip c; };
+  struct C { int spur; cdj::ArrClip c; std::vector<double> wb, wf; };   // wb, wf: Warp-Marker des Clips (Paket 1.13), leer = ungewarpt
   struct N { int spur; cdj::ArrNote n; };
   std::vector<C> cs;
   std::vector<N> ns;
@@ -66,9 +81,16 @@ struct Bau {
     s->spur[nr - 1].slot = slot;
     return *this;
   }
+  Bau& ausgang(int nr, int gruppe) { s->spur[nr - 1].ausgang = static_cast<int8_t>(gruppe); return *this; }   // 1.10: 0 master, 1..8 Gruppe
   Bau& clip(int nr, const char* id, double start, double laenge, const cdj::ArrAudio* a, int64_t offset = 0,
             float gain = 1.0f, double ein = 0.0, double aus = 0.0) {
     cs.push_back({nr, cdj::ArrClip{cdj::arr_id(id), start, laenge, a, offset, gain, ein, aus}});
+    return *this;
+  }
+  // Paket 1.13: hängt dem zuletzt hinzugefügten Clip einen Warp an (RE-PITCH): Marker als Clip-Beat und Quell-Frame, beide streng steigend
+  Bau& warp(std::vector<double> beat, std::vector<double> frame) {
+    cs.back().wb = std::move(beat);
+    cs.back().wf = std::move(frame);
     return *this;
   }
   Bau& note(int nr, const char* id, double beat, double laenge, int ton, int vel = 100) {
@@ -80,11 +102,34 @@ struct Bau {
     s->noten.reserve(ns.size());
     s->noten_id.reserve(ns.size());
     s->noten_id_index.reserve(ns.size());
+    size_t n_warps = 0, n_punkte = 0;
+    for (const C& c : cs)
+      if (!c.wb.empty()) {
+        ++n_warps;
+        n_punkte += c.wb.size();
+      }
+    s->warps.reserve(n_warps);        // die Zeiger der Clips zeigen in diese Vektoren, sie wachsen danach nie
+    s->warp_beat.reserve(n_punkte);
+    s->warp_frame.reserve(n_punkte);
     for (int nr = 1; nr <= cdj::ARR_SPUREN; ++nr) {
       cdj::ArrSpur& sp = s->spur[nr - 1];
       const size_t c0 = s->clips.size();
       for (const C& c : cs)
-        if (c.spur == nr) s->clips.push_back(c.c);
+        if (c.spur == nr) {
+          cdj::ArrClip x = c.c;
+          if (!c.wb.empty()) {
+            const size_t p0 = s->warp_beat.size();
+            s->warp_beat.insert(s->warp_beat.end(), c.wb.begin(), c.wb.end());
+            s->warp_frame.insert(s->warp_frame.end(), c.wf.begin(), c.wf.end());
+            cdj::ArrWarp w;
+            w.n = static_cast<int32_t>(c.wb.size());
+            w.beat = s->warp_beat.data() + p0;
+            w.frame = s->warp_frame.data() + p0;
+            s->warps.push_back(w);
+            x.warp = &s->warps.back();
+          }
+          s->clips.push_back(x);
+        }
       std::sort(s->clips.begin() + static_cast<long>(c0), s->clips.end(),
                 [](const cdj::ArrClip& a, const cdj::ArrClip& b) { return a.start_beat < b.start_beat; });
       sp.n_clips = static_cast<int>(s->clips.size() - c0);
@@ -161,6 +206,7 @@ struct Treiber {
   int n = 256;
   int64_t s = 0;
   std::vector<float> l, r, ml, mr, cl, cr;
+  std::vector<float> pml, pmr;                // PM-Abgriff je Block (1.10)
   std::vector<const cdj::ArrSnapshot*> alt;   // abgelöste Schnappschüsse (am Ende freigegeben)
   std::vector<PruefSenke*> senken;            // bekommen vor jedem Block dessen Anfang
   ~Treiber() {
@@ -182,6 +228,8 @@ struct Treiber {
       mr.insert(mr.end(), b[3], b[3] + n);
       cl.insert(cl.end(), b[4], b[4] + n);
       cr.insert(cr.end(), b[5], b[5] + n);
+      pml.insert(pml.end(), arr.pm_l(), arr.pm_l() + n);
+      pmr.insert(pmr.end(), arr.pm_r(), arr.pm_r() + n);
       s += n;
     }
   }

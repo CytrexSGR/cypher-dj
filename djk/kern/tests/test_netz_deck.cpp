@@ -81,6 +81,13 @@ int main() {
   { cdj::osc::Schreiber s(v::k_deck_loop); s.h(20).s("andreas").s("").s("").s("").i(1).d(32.0).d(4.0).i(2).d(16.0); g.sende(s); }
   PRUEF(hole(bef, b) && b.art == cdj::Befehl::DECK_LOOP && b.deck == 1 && b.ab_beat == 32.0 && b.wert_beats == 4.0 &&
         b.politik == 2 && b.raster_beats == 16.0);
+  { cdj::osc::Schreiber s(v::k_deck_loop_laenge); s.h(25).s("andreas").s("").s("").s("").i(1).d(32.0).d(20.0).d(8.0).i(1).d(0.0); g.sende(s); }
+  PRUEF(hole(bef, b) && b.art == cdj::Befehl::DECK_LOOP_LAENGE && b.deck == 1 && b.ab_beat == 32.0 && b.quell_beat == 20.0 &&
+        b.wert_beats == 8.0 && b.politik == 1);
+  { cdj::osc::Schreiber s(v::k_deck_loop_laenge); s.h(26).s("andreas").s("").s("").s("").i(1).d(32.0).d(NAN).d(8.0).i(1).d(0.0); g.sende(s); }
+  abgelehnt(26, "ausserhalb_bereich");  // Start nicht endlich
+  { cdj::osc::Schreiber s(v::k_deck_loop_laenge); s.h(27).s("andreas").s("").s("").s("").i(1).d(32.0).d(20.0).d(0.0).i(1).d(0.0); g.sende(s); }
+  abgelehnt(27, "ausserhalb_bereich");  // Länge 0 ist /k/deck/loop
   { cdj::osc::Schreiber s(v::k_deck_sprung); s.h(21).s("cypher").s("p1").s("").s("").i(2).d(40.0).d(-8.5).i(1).d(0.0); g.sende(s); }
   PRUEF(hole(bef, b) && b.art == cdj::Befehl::DECK_SPRUNG && b.deck == 2 && b.wert_beats == -8.5 && b.politik == 1 &&
         !std::strcmp(b.plan, "p1"));

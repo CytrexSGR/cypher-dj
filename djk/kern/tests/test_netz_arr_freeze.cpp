@@ -83,10 +83,10 @@ int main() {
     cdj::ArrFreeze* f = static_cast<cdj::ArrFreeze*>(const_cast<void*>(b.zeiger));
     PRUEF(f->spur == 2 && f->kennung == 17 && f->von_beat == 4.0 && f->bis_beat == 8.0);
     PRUEF(f->kap == 6 * 48000 + 2 && f->daten.size() == static_cast<size_t>(f->kap) * 2);
-    // 3: Bereichsfehler: Spur 0 und 9, bis − von < 1 und > 256, kennung < 0, von < 0, NaN
+    // 3: Bereichsfehler: Spur 0 und ARR_SPUREN + 1, bis − von < 1 und > 256, kennung < 0, von < 0, NaN
     anfrage(92, "andreas", 0, 0.0, 4.0, 1);
     PRUEF(q6(92, "ausserhalb_bereich"));
-    anfrage(93, "andreas", 9, 0.0, 4.0, 1);
+    anfrage(93, "andreas", cdj::ARR_SPUREN + 1, 0.0, 4.0, 1);
     PRUEF(q6(93, "ausserhalb_bereich"));
     anfrage(94, "andreas", 1, 0.0, 0.5, 1);
     PRUEF(q6(94, "ausserhalb_bereich"));

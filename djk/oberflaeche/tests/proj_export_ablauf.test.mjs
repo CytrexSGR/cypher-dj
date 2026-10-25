@@ -37,7 +37,8 @@ test('Export: friert die Surge-Spur vorher ein (mit Sperre), rendert die Loop-Kl
   assert.equal(r.body.lra, 0);
   assert.ok(r.body.true_peak_dbtp > -6.5 && r.body.true_peak_dbtp < -5.5);
   assert.equal(r.body.loudness_fehler, undefined);
-  assert.deepEqual(Object.keys(r.body).sort(), ['datei', 'frames', 'lra', 'lufs_i', 'regler_quelle', 'spitze_db', 'true_peak_dbtp'], 'schmale Antwort, kein Projekt');
+  // 1.10 Slice 2: drei Felder neu (abgriff, limiter_db_max, ueber_decke), sonst schmal
+  assert.deepEqual(Object.keys(r.body).sort(), ['abgriff', 'datei', 'frames', 'limiter_db_max', 'lra', 'lufs_i', 'regler_quelle', 'spitze_db', 'true_peak_dbtp', 'ueber_decke'], 'schmale Antwort, kein Projekt');
   assert.ok(fs.statSync(ziel).size > 44);
   assert.deepEqual(fs.readdirSync(path.join(o.ordner, 'export')), [path.basename(ziel)], 'keine .teil- oder Regler-Datei bleibt liegen');
   // vorher eingefroren: ein /k/arr/freeze unter der Sperre (vor tempoAnMaster), ein Verlaufseintrag, danach eine Export-Wiedergabe mit der Spur als Audio

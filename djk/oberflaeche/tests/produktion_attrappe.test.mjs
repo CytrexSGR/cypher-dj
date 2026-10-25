@@ -4,6 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { starteProjAttrappe } from '../pruef/proj_attrappe.mjs';
+import { MAX_SPUREN } from '../projekt/modell.ts';
 
 const SHA = 'b'.repeat(64);
 const warte = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -76,14 +77,15 @@ test('V1 Attrappe: Projekt neu, ändern mit rev-Prüfung, ganze Änderung oder n
   } finally { await at.stoppe(); await o.stoppe(); }
 });
 
-test('V1 Attrappe: höchstens 8 Spuren (409 spur_bereich)', async () => {
+test('V1 Attrappe: höchstens 10 Spuren (409 spur_bereich)', async () => {
   const o = await oben();
   const at = await starteProjAttrappe({ oben: o.url });
   try {
     await post(at.url, '/proj/neu', { name: 'Voll' });
-    const acht = Array.from({ length: 8 }, () => ({ befehl: 'spur_neu', art: 'audio' }));
-    assert.equal((await post(at.url, '/proj/aendern', { rev: 1, label: '8', befehle: acht })).status, 200);
-    assert.deepEqual((await post(at.url, '/proj/aendern', { rev: 2, label: '9', befehle: [{ befehl: 'spur_neu', art: 'audio' }] })).j.fehler, 'spur_bereich');
+    const zehn = Array.from({ length: MAX_SPUREN }, () => ({ befehl: 'spur_neu', art: 'audio' }));
+    assert.equal((await post(at.url, '/proj/aendern', { rev: 1, label: '10', befehle: zehn })).status, 200);
+    assert.deepEqual((await get(at.url, '/proj/aktuell')).j.projekt.spuren.map((s) => s.nr), Array.from({ length: MAX_SPUREN }, (_, i) => i + 1), 'die Attrappe vergibt die Nummern 1 bis MAX_SPUREN');
+    assert.deepEqual((await post(at.url, '/proj/aendern', { rev: 2, label: '11', befehle: [{ befehl: 'spur_neu', art: 'audio' }] })).j.fehler, 'spur_bereich');
   } finally { await at.stoppe(); await o.stoppe(); }
 });
 
