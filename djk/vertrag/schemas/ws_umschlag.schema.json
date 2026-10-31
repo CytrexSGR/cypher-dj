@@ -1,7 +1,7 @@
 {
  "$schema": "https://json-schema.org/draft/2020-12/schema",
  "$id": "https://cypherdj.invalid/vertrag/1/ws_umschlag.schema.json",
- "title": "Umschlag jeder Leitstand-WebSocket-Nachricht (SCHNITTSTELLEN.md §9.1); daten nur als Objekt geprüft, die Form je typ prüft ws_nachricht.schema.json",
+ "title": "Umschlag jeder Leitstand-WebSocket-Nachricht (INTERFACES.md §9.1); daten nur als Objekt geprüft, die Form je typ prüft ws_nachricht.schema.json",
  "type": "object",
  "required": ["v", "seq", "von", "typ", "zeit", "daten"],
  "properties": {

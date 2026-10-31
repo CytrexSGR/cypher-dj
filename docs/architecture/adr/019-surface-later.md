@@ -31,7 +31,7 @@ implemented), and A4 is helped by level displays ("so the level meters do help a
 
 ## Consequences
 
-- Everything a later surface needs already exists in the control desk stream (`SCHNITTSTELLEN.md` §9).
+- Everything a later surface needs already exists in the control desk stream (`INTERFACES.md` §9).
 - For Cypher the listening check replaces the level display; Andreas gets the traffic light per deck via LEDs and the announcement line.
 
 ## Evidence

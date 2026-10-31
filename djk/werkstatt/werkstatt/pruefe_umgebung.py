@@ -29,7 +29,7 @@ def pruefe_laufzeit():
     print("TORCH", torch.__version__, "CUDA", torch.version.cuda, torch.__file__)
     print("TORCHAUDIO", torchaudio.__version__)
     if torch.version.cuda is None:
-        befunde.append("torch ohne CUDA (Proben-venv-Fehler aus ARCHITEKTUR §8.2)")
+        befunde.append("torch ohne CUDA (Proben-venv-Fehler aus ARCHITECTURE §8.2)")
     if basis(torchaudio.__version__) != basis(torch.__version__):
         befunde.append(f"torchaudio {torchaudio.__version__} passt nicht zu torch {torch.__version__}")
     if torch.__file__.startswith(sys.prefix):

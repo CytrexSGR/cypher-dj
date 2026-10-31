@@ -1,4 +1,4 @@
-// Cue-Daten je Track als JSON (Schema djk.cues/1, siehe docs/architektur/stand/cues-werkzeug.md).
+// Cue-Daten je Track als JSON (Schema djk.cues/1, siehe docs/architecture/stand/cues-werkzeug.md).
 // Dateiname: sha1(pfad_rel).json unter <daten>/; im Inhalt der volle Schlüssel (pfad_rel, groesse, sha1_erste_mib).
 // Takt, Schlag und quell_beat rechnet der Server beim Speichern aus dem Raster neu (raster.js), die Seite liefert
 // nur Sekunde, Slot, Name, Farbe. Die MP3 wird nur gelesen (sha1 der ersten MiB).

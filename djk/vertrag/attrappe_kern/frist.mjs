@@ -1,4 +1,4 @@
-// Frist-Wächter und /e/frist (SCHNITTSTELLEN §5.9, §17, ADR 023 Entscheidung 4).
+// Frist-Wächter und /e/frist (INTERFACES §5.9, §17, ADR 023 Entscheidung 4).
 // Ist ein laufendes Deck der einzige hörbare Kanal, ohne Loop, mit beats_bis_ende < 32, und macht kein angenommener Teil
 // einen anderen Kanal vor dem Ende hörbar, legt der Kern einen Loop über [q0, q0 + 16) mit
 // q0 = e + floor((Q_ende − e − 16)/16)·16 (e = erste_eins_quell_beat) und meldet /e/rueckfall an = 1.

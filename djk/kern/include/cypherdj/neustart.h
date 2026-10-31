@@ -1,4 +1,4 @@
-// Kern-Neustart und Betrieb (Scheibe 18, ADR 016 Entscheidung 4, SCHNITTSTELLEN §4.1, §6.3): was das Hauptprogramm
+// Kern-Neustart und Betrieb (Scheibe 18, ADR 016 Entscheidung 4, INTERFACES §4.1, §6.3): was das Hauptprogramm
 // an fünf Stellen aufruft.
 //   1. starte()             nach dem Anlegen des Kerns, vor jack_activate: Zustand öffnen, neuestes Fach lesen, Karte,
 //                           Befehle, Klick und Generation in den Kern übernehmen, Anker merken. Ohne gültiges Fach:

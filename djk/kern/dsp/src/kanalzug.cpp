@@ -97,7 +97,7 @@ void Kanalzug::verarbeite_vor(const float* in_l, const float* in_r, int n) {
     // SOUND COLOR FX: Art FILTER ist der DjFilter selbst (bitgleich zu vorher), jede andere Art ersetzt ihn
     if (color_.art() == ColorArt::filter) filter_.verarbeite(a_l, a_r, n, k_filter_);
     else color_.verarbeite(a_l, a_r, n, k_filter_);
-    // ab hier: a_l/a_r ist der Abgriff nach Filter, vor dem Fader (ADR 008 Punkt 4, SCHNITTSTELLEN §6.2)
+    // ab hier: a_l/a_r ist der Abgriff nach Filter, vor dem Fader (ADR 008 Punkt 4, INTERFACES §6.2)
 }
 
 void Kanalzug::verarbeite_nach(int n, const KanalzugAusgang& aus) {

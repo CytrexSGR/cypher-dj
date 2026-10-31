@@ -1,7 +1,7 @@
 {
  "$schema": "https://json-schema.org/draft/2020-12/schema",
  "$id": "https://cypherdj.invalid/vertrag/1/korrektur.schema.json",
- "title": "Eine Zeile von korrekturen.jsonl (SCHNITTSTELLEN.md §13.3)",
+ "title": "Eine Zeile von korrekturen.jsonl (INTERFACES.md §13.3)",
  "type": "object",
  "required": ["zeit", "von", "art", "fassung", "ab_quell_beat", "bis_quell_beat", "versatz_ms", "nr", "text"],
  "properties": {

@@ -23,7 +23,7 @@ The **browser leaves the audio path.** No sound, no clock, no scheduling any mor
 
 ## Consequences
 
-- The switch is a rebuild of the audio path, not a rework; the slices in ARCHITEKTUR §9.2 build it.
+- The switch is a rebuild of the audio path, not a rework; the slices in ARCHITECTURE §9.2 build it.
 - All Web Audio-specific knowledge (worklet patches) is no longer maintained.
 - node-web-audio-api remains useful for offline rendering in the workbench, but only on a quiet machine: the "235-fold real time" (01 §3.4) ran at about 3 under load; at load 27 it came back again at 2.5-fold, WASM at 1.8 to 2.2-fold (01 NP K7).
 

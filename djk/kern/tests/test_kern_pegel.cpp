@@ -1,4 +1,4 @@
-// Scheibe 35 (Vorgriff aus 43, Auftrag der Hauptinstanz): /pegel am Kern (SCHNITTSTELLEN §5.6), ohne JACK. Sinus 1 kHz mit
+// Scheibe 35 (Vorgriff aus 43, Auftrag der Hauptinstanz): /pegel am Kern (INTERFACES §5.6), ohne JACK. Sinus 1 kHz mit
 // Amplitude 0,25 auf Deck 1, Fader −6 dB: erwartet deck/1 und master −18,06 dB (20 log10 0,25 − 6,02) ±0,1 dB, cue −200
 // (keine PFL), kein Ereignis für nicht geladene Decks (kein Übersprechen); Rate 20 Hz (alle 2 400 Samples); Fader ganz
 // unten: deck/1 −200. Fehlerfall: die Mutation „kein /pegel“ (test_kern_pegel_mutation, WILL_FAIL) meldet nichts.

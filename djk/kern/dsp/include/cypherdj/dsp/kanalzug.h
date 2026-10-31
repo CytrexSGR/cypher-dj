@@ -1,4 +1,4 @@
-// Kanalzug eines Kanals (SCHNITTSTELLEN §1.5, §1.6; ADR 008 Entscheidung 1):
+// Kanalzug eines Kanals (INTERFACES §1.5, §1.6; ADR 008 Entscheidung 1):
 //   Trim → LR8-Isolator mit Kill → DJ-Filter oder Color-FX → [Abgriff: PFL und Mess-Abgriff] → Fader → Haupt
 //                                                                             └→ Sends 1..4 (nach dem Fader)
 // DIE NAHT zu Scheibe 25 (Kern-Kanalzug). Spätere Scheiben (14, 22) ergänzen nur additiv:
@@ -84,7 +84,7 @@ public:
     float* abgriff_schreibbar(int kanal) { return abgriff_[kanal]; }
     void verarbeite_nach(int n, const KanalzugAusgang& aus);
 
-    // Abgriff nach Filter, vor dem Fader (PFL und Mess-Abgriff; ADR 008 Punkt 4, SCHNITTSTELLEN §6.2),
+    // Abgriff nach Filter, vor dem Fader (PFL und Mess-Abgriff; ADR 008 Punkt 4, INTERFACES §6.2),
     // aus dem letzten verarbeite().
     const float* abgriff(int kanal) const { return abgriff_[kanal]; }
     // Band vor dem Band-Gain des Isolators (§5.6), aus dem letzten verarbeite().

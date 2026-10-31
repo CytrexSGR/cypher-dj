@@ -1,4 +1,4 @@
-// Hörschein-Register und I3 "neuer Inhalt nur mit Hörschein" (SCHNITTSTELLEN §4.5, §17 I3a und I3d; I3b und I3c
+// Hörschein-Register und I3 "neuer Inhalt nur mit Hörschein" (INTERFACES §4.5, §17 I3a und I3d; I3b und I3c
 // prüft erzeuger.mjs mit gueltig()). Gültig: Kanal und Inhalt passen, beat ≤ gueltig_bis_beat,
 // |bpm_jetzt/bpm_messung − 1| ≤ 0,005; bei Decks liegt die Quellposition in [quell_von, quell_bis + 64].
 // Abgelaufene Hörscheine bleiben im Register, bis ihr Platz gebraucht wird: nur so kann der Kern

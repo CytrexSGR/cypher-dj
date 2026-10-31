@@ -1,4 +1,4 @@
-// Ohr T14: Prüfer im Kern, am echten Kern belegt (SCHNITTSTELLEN §17 I3a, §4.5). Aufbau aus test_kern_deck.cpp (Lauf
+// Ohr T14: Prüfer im Kern, am echten Kern belegt (INTERFACES §17 I3a, §4.5). Aufbau aus test_kern_deck.cpp (Lauf
 // mit Lader im selben Faden). Deck 2 geladen (nicht gestartet: Öffnen prüft I3a am Regler deck/2/fader, unabhängig
 // davon, ob das Deck läuft, wie test_kern_teil.cpp). Quelle cypher öffnet ohne Hörschein -> Quittung 6
 // kein_hoerschein; mit passendem /k/hoerschein vorher -> Quittung 2; Quelle andreas ohne Schein -> Quittung 2 (§17

@@ -1,4 +1,4 @@
-"""Baukasten für Golden-Folgen (SCHNITTSTELLEN.md §19.0, Format folgen/FORMAT.md samt den Zusätzen ab Punkt 13).
+"""Baukasten für Golden-Folgen (INTERFACES.md §19.0, Format folgen/FORMAT.md samt den Zusätzen ab Punkt 13).
 
 Jede Methode schreibt Zeilen in eine Folge; Samples kommen aus karte.py (Scheibe 02), alle anderen Zahlen aus
 herleitung.py, nie von Hand. Typ-Zeichenketten kommen aus osc.json (Scheibe 02), der einen Quelle.
@@ -15,7 +15,7 @@ TYPEN = {a["adresse"]: a["typen"] for a in json.loads((HIER / "osc.json").read_t
 MARGE = 2400          # 50 ms: bis dahin muss eine Quittung nach ihrem Ereignis-Sample da sein
 ZYKLEN2 = 512         # zwei Zyklen bei Quantum 256: Fenster für zyklusweise geprüfte Ereignisse
 LADEN_FRIST = 48000   # 1 s für Laden bis fertig (Kopie liegt schon im Arbeitsbestand)
-STARTFRIST = 12000    # 250 ms: Zusage "Kern wieder hörbar" (ARCHITEKTUR §7)
+STARTFRIST = 12000    # 250 ms: Zusage "Kern wieder hörbar" (ARCHITECTURE §7)
 TOL = 1e-6            # Toleranz für Beats und andere Gleitkommawerte in Quittungen (FORMAT.md Punkt 6: Vorgabe 0)
 ANGENOMMEN, GESTARTET, FERTIG, VERWORFEN, VERSP_AUSGEFUEHRT, ABGELEHNT, ABGEBROCHEN = 1, 2, 3, 4, 5, 6, 7
 

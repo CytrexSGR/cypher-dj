@@ -1,4 +1,4 @@
-// Plan E9 (Deck-Bedienung): Sprung, Hotcue, Loop im Kern ohne JACK (SCHNITTSTELLEN §4.4, §5.5, §5.9 /e/hotcue, §16.1
+// Plan E9 (Deck-Bedienung): Sprung, Hotcue, Loop im Kern ohne JACK (INTERFACES §4.4, §5.5, §5.9 /e/hotcue, §16.1
 // Politik 2). Rahmen wie test_kern_deck.cpp (Lader im selben Faden, Klick-Material, Master links am Kern-Sample). Das
 // Material betont die Takt-Eins (0,5, sonst 0,25): ein Sprung um 2 Beats verschiebt die Betonung messbar.
 #include <unistd.h>

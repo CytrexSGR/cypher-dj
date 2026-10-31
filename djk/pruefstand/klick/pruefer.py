@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prüfer der Scheibe 01: spricht mit cypherdj-kern über OSC/UDP (SCHNITTSTELLEN.md §4.1, §4.2, §5, ROADMAP Z1) und
+"""Prüfer der Scheibe 01: spricht mit cypherdj-kern über OSC/UDP (INTERFACES.md §4.1, §4.2, §5, ROADMAP Z1) und
 schreibt jede empfangene Nachricht als JSON-Zeile ins Protokoll (auch jedes /uhr, das braucht die Auswertung).
 
 Arten:
@@ -8,7 +8,7 @@ Arten:
   ohne-klick      /k/hallo, /k/set/neu 128, --bereit anlegen, --sekunden lang nur zuhören (Negativ-Kontrolle)
   klick-verboten  /k/hallo, /test/klick an; erfüllt, wenn /e/protokollfehler mit Adresse /test/klick kommt und
                   keine Quittung (Kern ohne --pruefmodus)
-Nach der Anmeldung schickt der Prüfer jede Sekunde /k/hallo (Herzschlag, SCHNITTSTELLEN.md §4.1: spätestens alle 2 s).
+Nach der Anmeldung schickt der Prüfer jede Sekunde /k/hallo (Herzschlag, INTERFACES.md §4.1: spätestens alle 2 s).
 Umgebung: CYPHERDJ_INSTANZ verschiebt die Ports um 1000*k (ROADMAP Z2).
 Rückgabe: 0 erfüllt, 1 nicht erfüllt, 2 Aufruf falsch.
 """

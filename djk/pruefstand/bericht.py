@@ -1,5 +1,5 @@
 """Bericht eines Prüflaufs (Scheibe 16): bericht.md aus lauf.json und auswertung.json, mit Urteil je Erwartung und je
-Zusage aus ARCHITEKTUR §7, soweit dieser Lauf sie misst. Was er nicht misst, steht als „nicht in diesem Lauf“ da."""
+Zusage aus ARCHITECTURE §7, soweit dieser Lauf sie misst. Was er nicht misst, steht als „nicht in diesem Lauf“ da."""
 import json
 from pathlib import Path
 
@@ -17,7 +17,7 @@ def _schleife(sl):
 
 
 def zusagen(L, A):
-    """Zeilen (Zusage, Grenze, gemessen, Urteil) für ARCHITEKTUR §7."""
+    """Zeilen (Zusage, Grenze, gemessen, Urteil) für ARCHITECTURE §7."""
     p = L["profil"]
     f = A.get("eingriffe", [])
     q = p["quelle"]["art"]
@@ -79,7 +79,7 @@ def zusagen(L, A):
                        f"{fk} fehlende Klicks in 8 Takten nach dem Eingriff{aufl}", "erfüllt" if fk == 0 else "verfehlt"))
     for name in ("Leitstand, Spieler, MCP, Rechner, Analyse, Werkstatt sterben", "Wirt hängt oder stirbt",
                  "Deck-Vorlauf", "Dauerlauf 2 h"):
-        zeilen.append((name, "ARCHITEKTUR §7", "–", "nicht in diesem Lauf (Scheiben 48, 54, 57, 31)"))
+        zeilen.append((name, "ARCHITECTURE §7", "–", "nicht in diesem Lauf (Scheiben 48, 54, 57, 31)"))
     return zeilen
 
 
@@ -124,7 +124,7 @@ def schreibe(ordner):
           f"Notbahn-Übernahmen {r.get('notbahn_uebernahmen')}, fehlende Klicks {_z(r.get('fehlende_klicks'))}.", ""]
     k, qj = A.get("kern") or {}, A.get("quelle") or {}
     z += ["## Frame-Lücken", "",
-          f"- Kern (`/zustand/kern`, SCHNITTSTELLEN §5.4): {k.get('frame_luecken', '–')} Lücken, "
+          f"- Kern (`/zustand/kern`, INTERFACES §5.4): {k.get('frame_luecken', '–')} Lücken, "
           f"{k.get('ausgelassene_perioden', '–')} ausgelassene Perioden, {k.get('meldungen', 0)} Meldungen, "
           f"cb_max {k.get('cb_max_us', '–')} µs, Aufwachen max {k.get('aufwach_max_us', '–')} µs",
           f"- Prüfquelle (Journal): {qj.get('luecken', '–')} Lücken, {qj.get('spins', '–')} Spins, {qj.get('starts', '–')} Starts",
@@ -139,7 +139,7 @@ def schreibe(ordner):
     z += ["## Erwartung dieses Profils", "", "| Schlüssel | Grenze | gemessen | Urteil |", "|---|---|---|---|"]
     z += [f"| {u['schluessel']} | {_z(u['grenze'])} | {_z(u['wert'], 2)} | {'erfüllt' if u['ok'] else 'VERFEHLT'} |"
           for u in A.get("urteile", [])] + [""]
-    z += ["## Zusagen aus ARCHITEKTUR §7", "", "| Zusage | Grenze | gemessen | Urteil |", "|---|---|---|---|"]
+    z += ["## Zusagen aus ARCHITECTURE §7", "", "| Zusage | Grenze | gemessen | Urteil |", "|---|---|---|---|"]
     z += [f"| {a} | {b} | {c} | {d} |" for a, b, c, d in zusagen(L, A)] + [""]
     (o / "bericht.md").write_text("\n".join(z))
     return o / "bericht.md"

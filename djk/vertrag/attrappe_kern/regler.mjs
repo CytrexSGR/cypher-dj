@@ -1,4 +1,4 @@
-// Regler-Tabelle und Planteile an Reglern (SCHNITTSTELLEN §1.2, §1.5, §4.3, §17 I4).
+// Regler-Tabelle und Planteile an Reglern (INTERFACES §1.2, §1.5, §4.3, §17 I4).
 // Rampen in Beats: wert(beat) = w0 + (nach − w0)·f((beat − ab)/dauer), f linear oder S-Kurve 3u² − 2u³.
 // dB-Rampen von oder nach "stumm" laufen bis bzw. ab −60 dB und setzen am Ende −200 (§1.2).
 

@@ -1,4 +1,4 @@
-// Schlanke, eigenständige WebSocket-Anbindung an den Leitstand-Hub (SCHNITTSTELLEN §9), fürs Kommandozeilen-
+// Schlanke, eigenständige WebSocket-Anbindung an den Leitstand-Hub (INTERFACES §9), fürs Kommandozeilen-
 // Werkzeug djk-spiel. Angelehnt an das Muster von djk/leitstand/src/ws_client.ts (WsClient), aber eigenständiger
 // Code: djk/leitstand/ wird nur gelesen, nie importiert oder verändert (Auftrag spieler-cli). Nutzt Node 22s
 // eingebautes globales WebSocket (kein npm-Paket nötig, geprüft gegen den echten Hub).
@@ -56,7 +56,7 @@ export class Spielerverbindung {
 
   // Meldet sich mit Rolle an (§9.2: hallo -> willkommen). Rolle laut Auftrag "mcp": der gebaute Leitstand lässt nur
   // mcp und pruefstand rpc senden (djk/leitstand/src/hub.ts DARF_SENDEN, Zeile ~14-21); Rolle "spieler" darf laut
-  // dieser Tabelle nur zug_status senden, kein rpc. Siehe docs/architektur/stand/spieler-cli.md Abschnitt "Rollen-Befund".
+  // dieser Tabelle nur zug_status senden, kein rpc. Siehe docs/architecture/stand/spieler-cli.md Abschnitt "Rollen-Befund".
   static async angemeldet(port: number, rolle: string, name: string): Promise<Spielerverbindung> {
     const c = await Spielerverbindung.verbinde(port);
     c.rolle = rolle;

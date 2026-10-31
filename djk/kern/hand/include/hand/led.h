@@ -1,4 +1,4 @@
-// Hand-Weg: LED-Namen (SCHNITTSTELLEN §7.4) und Nachrichtenbau für den Ausgang cypherdj-kern:hand_led (§7.1).
+// Hand-Weg: LED-Namen (INTERFACES §7.4) und Nachrichtenbau für den Ausgang cypherdj-kern:hand_led (§7.1).
 // Zustände wie /k/led (§4.7): 0 aus, 1 an, 2 blinkt, 3 blinkt schnell. §7.2 kennt nur die Werte aus/an/blinkt;
 // "blinkt schnell" sendet darum den Wert von blinkt (Festlegung F6 dieser Scheibe).
 #pragma once

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Auswertung des Prüfklicks in einer Tempo-Rampe am Ziel (Scheibe 08): jeder Klick-Einsatz der Aufnahme wird einem
-Kern-Sample zugeordnet und gegen llround(sample(b)) der Tempo-Karte mit derselben Rampe gehalten (SCHNITTSTELLEN.md
+Kern-Sample zugeordnet und gegen llround(sample(b)) der Tempo-Karte mit derselben Rampe gehalten (INTERFACES.md
 §1.1, §1.3; Referenz djk/vertrag/karte.py aus Scheibe 02, nicht der Kern selbst).
 
 Zuordnung wie in Scheibe 01 (djk/pruefstand/klick/auswertung.py): der Aufnehmer schreibt den Blockanfang seines ersten

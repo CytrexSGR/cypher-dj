@@ -16,7 +16,7 @@ run (09 NP K3, K4).
 
 1. **Path:** USB-MIDI class device → ALSA → PipeWire MIDI bridge → `cypherdj-kern:hand_in` (JACK MIDI with
    sample offset). No detour via Node. LED return path via `cypherdj-kern:hand_led`.
-2. **Mapping as a file** (`~/.config/cypherdj/controller/<geraet>.json`, format `SCHNITTSTELLEN.md` §7), no
+2. **Mapping as a file** (`~/.config/cypherdj/controller/<geraet>.json`, format `INTERFACES.md` §7), no
    mapping scripts with logic; the logic sits in the core's hand arbiter.
 3. **Takeover:** the first value per control after start or reconnection counts only as position; **scaled** for pots
    and faders, **relative** for endless encoders; **dead zone 3/128** (Mixxx threshold), before a grab takes a control

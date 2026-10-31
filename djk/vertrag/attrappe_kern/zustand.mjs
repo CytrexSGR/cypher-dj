@@ -1,4 +1,4 @@
-// Neustart-Zustand der Attrappe (Gegenstück zu SCHNITTSTELLEN §6.3, als JSON-Datei statt Seqlock): Anker, Karte,
+// Neustart-Zustand der Attrappe (Gegenstück zu INTERFACES §6.3, als JSON-Datei statt Seqlock): Anker, Karte,
 // offene Befehle und Teile, Regler, Decks, Hörscheine, KI, Erzeuger, Abonnenten. Nach einem Neustart setzt die Attrappe
 // auf dem Anker fort (ADR 004 Regel 2): Sample = anker_sample + (jetzt_ns − anker_mono_ns)·48000/10⁹, auf den nächsten
 // Blockanfang gerundet; generation + 1; /e/neustart an alle gespeicherten Abonnenten; /q/stand nach /k/hallo.

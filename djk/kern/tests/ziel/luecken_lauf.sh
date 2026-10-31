@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Scheibe 08: Lückenzähler des Kerns am Ziel gegen den JACK-Aufnehmer derselben Null-Senke (SCHNITTSTELLEN.md §5.4,
-# §5.9; ARCHITEKTUR §7; ROADMAP §8.4, §8.5). Aufruf: luecken_lauf.sh <kern-programm> <ausgabe-ordner> <lauf-name>
+# Scheibe 08: Lückenzähler des Kerns am Ziel gegen den JACK-Aufnehmer derselben Null-Senke (INTERFACES.md §5.4,
+# §5.9; ARCHITECTURE §7; ROADMAP §8.4, §8.5). Aufruf: luecken_lauf.sh <kern-programm> <ausgabe-ordner> <lauf-name>
 #   <schlaege> <keine|einige> [--test-last-alle N --test-last-perioden F]
 # Laufzeit = schlaege·60/128 + 6 s (Review 08 Punkt 7: der vierte Parameter ist die Zahl der Schläge, nicht Sekunden).
 # Der Kern läuft mit --pruefmodus (künstliche Callback-Last, 10 K1b, nur im Prüfmodus). Der Lauscher ist der Prüfer

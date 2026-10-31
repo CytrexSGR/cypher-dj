@@ -1,4 +1,4 @@
-"""Index `<bestand>/index.sqlite` (SCHNITTSTELLEN §13.4): Tabellen `material` und `fassung`, WAL-Modus,
+"""Index `<bestand>/index.sqlite` (INTERFACES §13.4): Tabellen `material` und `fassung`, WAL-Modus,
 geschrieben nur von der Werkstatt. Die Ordner sind die Wahrheit; der Index wird nach jedem Veroeffentlichen
 nachgetragen und laesst sich jederzeit aus den Ordnern neu aufbauen (`neu_aufbauen`).
 Material-Zeile: `tore_ok` und `nur_fuer_andreas` der Fassung mit dem hoechsten r auf der Set-Basis."""

@@ -76,7 +76,7 @@ struct ArrFreeze {
   int32_t rueck_status = 0;        // Status des wartenden Ereignisses ARR_FREEZE (0, 1 oder ARR_FREEZE_ABGELEHNT)
 };
 
-struct ArrZustand {                     // /zustand/arr (SCHNITTSTELLEN §5.13)
+struct ArrZustand {                     // /zustand/arr (INTERFACES §5.13)
   int64_t nr;                          // −1 ohne Schnappschuss
   ArrStatus status;
   bool loop_an;

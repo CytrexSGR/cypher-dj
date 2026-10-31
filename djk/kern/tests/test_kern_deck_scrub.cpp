@@ -1,4 +1,4 @@
-// Hörbares Ziehen (Scrub) im Kern ohne JACK (SCHNITTSTELLEN §4.4 /k/deck/scrub). Rahmen wie test_kern_deck_e9.cpp. Material:
+// Hörbares Ziehen (Scrub) im Kern ohne JACK (INTERFACES §4.4 /k/deck/scrub). Rahmen wie test_kern_deck_e9.cpp. Material:
 // linker Kanal ein Dauer-Sinus 440 Hz, rechts die Klicks. Geprüft am Master: ein gezogenes stehendes Deck klingt (vorwärts wie
 // rückwärts), ein gehaltenes ist still (Negativ-Kontrolle), beim Loslassen bleibt der Kopf (quell_beat in /zustand/deck), ein
 // laufendes Deck läuft um die Strecke versetzt weiter, nichts im Zyklus allokiert, ein nicht geladenes Deck ignoriert den Befehl.

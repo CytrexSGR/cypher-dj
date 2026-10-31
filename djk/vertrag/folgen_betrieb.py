@@ -43,10 +43,10 @@ def notbahn(rampe=False):
     f.erwarte(ks + 4800, osc("/nb", 1, None, None, None), "pruefstand", ab=ks, herleitung="§5.10 Zustand 1 Schleife")
     f.messung(ks, "schleife_frames", tf, 0,
               f"§6.1: Schleife um takt_frames = llround(sample({takt_ende:g})) − llround(sample({takt_ende - 4:g})) = {tf}")
-    f.messung(ks + 12000, "stille_ms", 0, 0, "ARCHITEKTUR §7: 0 ms Stille")
+    f.messung(ks + 12000, "stille_ms", 0, 0, "ARCHITECTURE §7: 0 ms Stille")
     f.erwarte(ks + 96000, osc("/nb", 0, None, None, None), "pruefstand", ab=ks, herleitung="§5.10 zurück zu durchreichen")
     f.messung(ks + 96000, "rueckgabe_raster_abw_samples", 0, 1,
-              "ARCHITEKTUR §7: Klicks nach der Rückgabe auf llround(sample_at(b)) ± 1 Sample")
+              "ARCHITECTURE §7: Klicks nach der Rückgabe auf llround(sample_at(b)) ± 1 Sample")
     return f
 
 

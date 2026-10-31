@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Druckt den JSON-Block aus SCHNITTSTELLEN.md §7.2 (das Mapping-Beispiel des Vertrags) wörtlich aus.
+"""Druckt den JSON-Block aus INTERFACES.md §7.2 (das Mapping-Beispiel des Vertrags) wörtlich aus.
 
-Aufruf: python3 beispiel_aus_vertrag.py <pfad zu SCHNITTSTELLEN.md>
+Aufruf: python3 beispiel_aus_vertrag.py <pfad zu INTERFACES.md>
 Rückgabe 0 mit dem Block auf stdout, 1 wenn §7.2 oder der ```json-Block fehlt. Die Tests vergleichen die Ausgabe
 bytegleich mit tests/mappings/beispiel_7_2.json: ändert sich der Vertrag, wird der Test rot."""
 import sys

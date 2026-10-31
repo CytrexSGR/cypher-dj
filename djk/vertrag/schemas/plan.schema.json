@@ -1,7 +1,7 @@
 {
  "$schema": "https://json-schema.org/draft/2020-12/schema",
  "$id": "https://cypherdj.invalid/vertrag/1/plan.schema.json",
- "title": "Plan, kanonisch in Beats (SCHNITTSTELLEN.md §14.1)",
+ "title": "Plan, kanonisch in Beats (INTERFACES.md §14.1)",
  "type": "object",
  "required": ["id", "quelle", "spielart", "wahl_id", "einstieg_quell_beat", "hoerscheine", "grund", "teile"],
  "properties": {

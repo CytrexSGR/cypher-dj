@@ -1,4 +1,4 @@
-// Paket K3 (Spec D1 A7, Schritt 2): Master-Mitschnitt aus dem Audio-Ring (SCHNITTSTELLEN §6.1), sample-genau über das
+// Paket K3 (Spec D1 A7, Schritt 2): Master-Mitschnitt aus dem Audio-Ring (INTERFACES §6.1), sample-genau über das
 // Ring-Kopf-Feld sample_minus_w (Frame f klingt am Kern-Sample f + sample_minus_w). Nur lesend: der Ring gehört dem Kern.
 // lies() holt alle Frames seit dem letzten Aufruf; der erste Aufruf setzt den Anfang auf das aktuelle w (eine Blockgrenze:
 // w steht nach jedem Zyklus am Ende des geschriebenen Blocks). Der Leser muss schneller sein als der Ring abzüglich eines

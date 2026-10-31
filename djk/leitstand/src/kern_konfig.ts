@@ -1,4 +1,4 @@
-// Die Schlüssel aus kern.toml, die der Leitstand für seine Vorprüfung braucht (SCHNITTSTELLEN §2.1): hoerbar_db,
+// Die Schlüssel aus kern.toml, die der Leitstand für seine Vorprüfung braucht (INTERFACES §2.1): hoerbar_db,
 // tief_offen_db (§1.6), max_stretcher (§4.4, Grund budget_stretcher) und arbeitsbestand (§6.4: Ziel der Kopie, die
 // laden vor /k/deck/laden anlegt). Nur lesen; fehlt die Datei, gelten die Vorgaben aus djk/vertrag/konfig.schema.json.
 // Pfad wie der Kern, mit Prüfinstanz nach ROADMAP Z2.
@@ -28,7 +28,7 @@ export function ladeKernWerte(pfad: string | undefined, instanz: string): KernWe
   }
   const k = structuredClone(roh);
   const e = pruefe(k);
-  if (!e.ok) throw new Error(`${quelle}: ${e.fehler} (SCHNITTSTELLEN §2.1)`);
+  if (!e.ok) throw new Error(`${quelle}: ${e.fehler} (INTERFACES §2.1)`);
   return {
     hoerbar_db: k.hoerbar_db as number, tief_offen_db: k.tief_offen_db as number, max_stretcher: k.max_stretcher as number,
     arbeitsbestand_pfad: mitInstanz(k.arbeitsbestand as string, instanz), quelle,

@@ -1,4 +1,4 @@
-// Planform (SCHNITTSTELLEN §14.1, kanonisch in Beats), Umrechnung der Menschenform aus plan_einreichen (§10), und die
+// Planform (INTERFACES §14.1, kanonisch in Beats), Umrechnung der Menschenform aus plan_einreichen (§10), und die
 // OSC-Nachricht je Teil (§4.2 Tempo, §4.3 Regler, §4.4 Deck). Die Kopplung (Gruppe) und die Politik setzt kopplung.ts.
 import type { Felder } from './adressen.ts';
 

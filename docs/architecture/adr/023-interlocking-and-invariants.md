@@ -1,7 +1,7 @@
 # ADR 023: Stellwerk (interlocking), runtime invariants and deadline watchdog
 
 - **Status:** accepted (fallback loop and audible threshold provisional until slice 2 and M18); I2, I3 and "audible"
-  corrected after the critique round of 2026-09-23 (ARCHITEKTUR "Critique and corrections")
+  corrected after the critique round of 2026-09-23 (ARCHITECTURE "Critique and corrections")
 - **Date:** 2026-09-23
 - **Requirements carried:** A1, A4, A6, A7, A14, A20
 - **Related to:** ADR 005, 008, 012, 013
@@ -27,7 +27,7 @@ level (K10), and when a deadline is missed a fallback is missing ("What is missi
    (running and waiting parts, from any plan). Takeover scaled or relative, first value only a position, dead zone
    3/128 (ADR 014). The invariants never bind the hand.
 3. **Runtime invariants in the core**, checked before each part start, in every cycle in which a plan part moves an
-   affected control, and after each hand grab (definitions: `SCHNITTSTELLEN.md` §17):
+   affected control, and after each hand grab (definitions: `INTERFACES.md` §17):
    - **I1 Sub never doubled:** a plan part that would make a second channel "low open" is aborted with its group
      (`invariante sub_doppelt`).
    - **I2 Master never empty:** a plan part or a deck stop from a plan that would make the last audible channel
@@ -41,7 +41,7 @@ level (K10), and when a deadline is missed a fallback is missing ("What is missi
      crossfader, bus or master; (b) a hit on an open pad needs a listening pass for that hit; (c) a new
      pattern on an open generator channel plays only with a listening pass for that pattern; (d) Cypher's
      jump or hot cue on an open deck needs a measured target or Andreas' acceptance. Otherwise it is interlocked
-     (forms: `SCHNITTSTELLEN.md` §17).
+     (forms: `INTERFACES.md` §17).
    - **I4 No overlap** on the same control (also within a plan).
 4. **Deadline watchdog in the core:** if a running deck is the **only audible channel**, fewer than 32 beats
    (8 bars) remain until the end of its material, and no accepted part makes another channel audible in time, the

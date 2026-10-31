@@ -1,4 +1,4 @@
-// Scheibe 35, Kern-Hand: übersetzt ein JACK-MIDI-Ereignis vom Eingang cypherdj-kern:hand_in (SCHNITTSTELLEN §7.1)
+// Scheibe 35, Kern-Hand: übersetzt ein JACK-MIDI-Ereignis vom Eingang cypherdj-kern:hand_in (INTERFACES §7.1)
 // mit der Hand-Bibliothek (djk/kern/hand, Scheibe 19) über das Mapping (§7.2) in eine Aktion des Kerns: einen Griff
 // fürs Stellwerk (§7.3 Punkte 1 bis 3), eine Deck-Taste (play, cue), eine Taste (§5.8) oder eine Raste des
 // Tempo-Encoders. Jede Aktion trägt das Sample ihres Versatzes: Zyklusanfang plus Versatz (§7.3 Punkt 1).

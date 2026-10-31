@@ -1,4 +1,4 @@
-// Scheibe 31: Decks im Kern ohne JACK (SCHNITTSTELLEN §4.4, §5.5, §5.9, §13.1, §16.1, §16.2). Der Lader läuft im
+// Scheibe 31: Decks im Kern ohne JACK (INTERFACES §4.4, §5.5, §5.9, §13.1, §16.1, §16.2). Der Lader läuft im
 // selben Faden nach jedem Zyklus (lader.einmal), Material aus tests/deck/klick_fassung.py in einem eigenen
 // Arbeitsbestand. Gemessen wird am Audio-Ring (Master links): jeder Klick der Fassung liegt auf dem Sample, das §13.1
 // und §4.4 vorgeben, ohne Drift; dazu Quittungen, Gründe, /zustand/deck, /e/geladen, /e/frist, Stems gegen die

@@ -1,4 +1,4 @@
-// Plan 2026-09-27 Task 5: Erzeuger-OSC im Netz (SCHNITTSTELLEN §4.8, ADR 024). /erz/strom kit:<name> lädt das Kit und
+// Plan 2026-09-27 Task 5: Erzeuger-OSC im Netz (INTERFACES §4.8, ADR 024). /erz/strom kit:<name> lädt das Kit und
 // reicht es als Zeiger weiter; Fehler als /q Status 6. Bundles /erz/fenster + /erz/ev werden als ein ErzFenster
 // weitergereicht; Formfehler als /e/protokollfehler, nichts im Ring. ERZ_QUITTUNG wird /erz/quittung, ERZ_ALT frei.
 #include <arpa/inet.h>
@@ -17,6 +17,7 @@
 #include "cypherdj/cypher_bk_ffi.h"
 #include "cypherdj/erzeuger.h"
 #include "cypherdj/netz.h"
+#include "cypherdj/stellwerk/regler.h"
 #include "gegenstelle.h"
 #include "pruef.h"
 
@@ -168,6 +169,48 @@ int main() {
       graph(87, "andreas", "deck/1", "../juno-pad");      // Name mit Pfad: ausserhalb_bereich
       PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 87 && g.m.werte[2].i == 6 && !std::strcmp(g.s(5), "ausserhalb_bereich"));
       PRUEF(!bef->hole(kb));   // keiner der Fehlerfälle reiht einen Befehl ein
+    }
+
+    // S5r K2: die Regler <kanal>/bk/<1..8> der Stellwerk-Tabelle gibt es genau auf den Kanälen, auf denen der Kern einen
+    // Baukasten-Graphen annimmt. Gemessen am echten Verhalten: für jeden Kanal der Tabelle ein Instrument-Graph über
+    // /erz/strom (bk:) und ein Effekt-Graph über /k/kanal/graph; "angenommen" heißt, ein Befehl liegt im Ring.
+    {
+      cypherdj::stellwerk::ReglerTabelle tab;
+      int angenommen = 0, mit_pfad = 0;
+      int64_t id = 900;
+      for (int k = 0; k < tab.kanaele(); k++) {
+        const char* kanal = tab.kanal_name(k);
+        bool nimmt = false;
+        cdj::Befehl pb{};
+        strom(netz, id++, "bk:saege", kanal);
+        if (bef->hole(pb)) {
+          nimmt = true;
+          PRUEF(pb.art == cdj::Befehl::ERZ_STROM && pb.zeiger);
+          if (pb.zeiger) cypher_bk_frei(static_cast<CypherBk*>(const_cast<void*>(pb.zeiger)));
+        } else {
+          PRUEF(g.warte("/q", 200) && g.m.werte[2].i == 6);
+        }
+        cdj::osc::Schreiber s(v::k_kanal_graph);
+        s.h(id++).s("andreas").s(kanal).s("fx-echo-achtel");
+        netz.paket(s.daten(), s.groesse());
+        pb = cdj::Befehl{};
+        if (bef->hole(pb)) {
+          nimmt = true;
+          PRUEF(pb.art == cdj::Befehl::KANAL_GRAPH && pb.zeiger);
+          if (pb.zeiger) cypher_bk_frei(static_cast<CypherBk*>(const_cast<void*>(pb.zeiger)));
+        } else {
+          PRUEF(g.warte("/q", 200) && g.m.werte[2].i == 6);
+        }
+        char p[40];
+        std::snprintf(p, sizeof p, "%s/bk/1", kanal);
+        const bool hat_pfad = tab.suche(p) >= 0;
+        if (hat_pfad != nimmt) std::fprintf(stderr, "bk-Pfade und Graph-Annahme weichen bei %s ab (Pfad %d, Annahme %d)\n", kanal, hat_pfad, nimmt);
+        PRUEF(hat_pfad == nimmt);
+        angenommen += nimmt;
+        mit_pfad += hat_pfad;
+      }
+      PRUEF(angenommen == 12 && mit_pfad == 12);   // Positivkontrolle: es gibt Kanäle, die treffen (deck/1..4, 6 x erz, pad/1..2)
+      PRUEF(angenommen < tab.kanaele());           // und Kanäle, die nicht treffen (erz/4, erz/8, bus, master, cue)
     }
 
     // MVP 2 Scheibe 3 (E2): kit:<a>+<b> verschmilzt; b fehlt → nur a; zwei '+' oder leerer Teil → ausserhalb_bereich

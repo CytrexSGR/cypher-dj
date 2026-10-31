@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prüft djk/vertrag/osc.json gegen den Vertragstext SCHNITTSTELLEN.md (§4, §5, §19.0) und die erzeugten Dateien.
+"""Prüft djk/vertrag/osc.json gegen den Vertragstext INTERFACES.md (§4, §5, §19.0) und die erzeugten Dateien.
 
 Grün (Rückgabewert 0) nur, wenn
   1. die Zahl der OSC-Definitionen im Text (am Text gezählt) gleich der Zahl der Einträge in osc.json ist,

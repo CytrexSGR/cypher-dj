@@ -1,5 +1,5 @@
 // Kern-Zyklus ohne JACK: /uhr je Zyklus, /takt am Taktanfang, /k/set/neu setzt Beat 0 an den nächsten Zyklus,
-// Prüfklick landet im Ring am Soll-Sample, Taktfelder und w im Ring-Kopf (SCHNITTSTELLEN §5.2, §5.3, §6.1).
+// Prüfklick landet im Ring am Soll-Sample, Taktfelder und w im Ring-Kopf (INTERFACES §5.2, §5.3, §6.1).
 #include <cstdlib>
 #include <new>
 #include <cstring>

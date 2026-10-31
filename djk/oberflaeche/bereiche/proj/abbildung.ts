@@ -22,7 +22,7 @@ export const BEREICH_GRUENDE: readonly string[] = ['kein_projekt', 'rev_veraltet
 
 // --- Regler -----------------------------------------------------------------------------------------------------------
 export interface Soll { pfad: string; wert: number }
-// Spec 2.3: erz/4 neutral beim Öffnen. ziel und xseite sind „nur Hand“ (SCHNITTSTELLEN §1.5), doch der Kern lehnt nur_hand nur bei Quelle
+// Spec 2.3: erz/4 neutral beim Öffnen. ziel und xseite sind „nur Hand“ (INTERFACES §1.5), doch der Kern lehnt nur_hand nur bei Quelle
 // cypher ab (einsortieren.cpp:38): bei Quelle andreas gehören sie in die Sollliste (P6, erz4Soll), bei Quelle cypher meldet der Server
 // nur, wenn sie bekannt anders stehen (ERZ4_NUR_HAND).
 export const ERZ4_NEUTRAL: readonly Soll[] = [

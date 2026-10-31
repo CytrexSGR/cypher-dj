@@ -1,5 +1,5 @@
 // stellwerk_folgen: fährt Golden-Folgen gegen die Stellwerk-Bibliothek an einer simulierten Uhr.
-// Format: SCHNITTSTELLEN §19.0 mit den Regeln aus djk/vertrag/folgen/FORMAT.md (Scheibe 09), Punkte 1 bis 22.
+// Format: INTERFACES §19.0 mit den Regeln aus djk/vertrag/folgen/FORMAT.md (Scheibe 09), Punkte 1 bis 22.
 // Gebaut sind die Bereiche zeitachse, regler und ki (FORMAT.md Punkt 14); Zeilen anderer Bereiche werden übersprungen
 // und gezählt, eine unbekannte Schritt-Art in einem gebauten Bereich ist ein Formfehler (Punkt 16).
 // Zustellung: `sende` wirkt am ersten Zyklusanfang >= seinem sample (Befehlsring, §16.1 „nächster Blockanfang“);

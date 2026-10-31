@@ -13,7 +13,7 @@
 // <controller_geraet>.json (fehlt oder bricht es: Kern ohne Controller, kein Startfehler); Verbinder im Hauptfaden beim
 // Start und alle 500 ms (quelle_port des Mappings -> hand_in, jede neue Verbindung: erster Wert nur Stellung).
 //         [--waechter-ms N]                               (Scheibe 18: Selbst-Wächter, tötet bei N ms Stillstand)
-// Konfiguration: kern.toml nach SCHNITTSTELLEN.md §2.1 (Vorgabe ~/.config/cypherdj[-<i>]/kern.toml; fehlt sie, gelten
+// Konfiguration: kern.toml nach INTERFACES.md §2.1 (Vorgabe ~/.config/cypherdj[-<i>]/kern.toml; fehlt sie, gelten
 // die Vorgaben aus §2.1), Aufrufparameter gehen vor. Rückgabe 2: Aufruf- oder Konfigurationsfehler (Startfehler).
 // Ausgänge (Scheibe 10k, ADR 016 Nachtrag 2026-09-25): master_L/R, cue_L/R mit Riegel und Einblende; mit --master
 // <präfix> [--cue <präfix>] verbindet der Kern sie selbst (nur stumm/cypherdj-pruef-*, sonst --ton-frei), ohne bleiben
@@ -395,7 +395,7 @@ int main(int argc, char** argv) {
   const std::string pfad = konfig_pfad ? konfig_pfad : cdj::standard_konfig_pfad(inst);
   try {
     if (konfig_pfad || access(pfad.c_str(), F_OK) == 0) konf = cdj::lies_kern_toml(pfad);
-    else std::fprintf(stderr, "%s fehlt: Vorgaben aus SCHNITTSTELLEN.md §2.1\n", pfad.c_str());
+    else std::fprintf(stderr, "%s fehlt: Vorgaben aus INTERFACES.md §2.1\n", pfad.c_str());
   } catch (const cdj::KonfigFehler& e) {
     std::fprintf(stderr, "Startfehler: %s\n", e.what());
     return 2;
@@ -418,7 +418,7 @@ int main(int argc, char** argv) {
     return 2;
   }
 
-  // Riegel vor allem anderen (SCHNITTSTELLEN §8): ohne Freigabe weder Ring noch JACK-Client
+  // Riegel vor allem anderen (INTERFACES §8): ohne Freigabe weder Ring noch JACK-Client
   char ziel[4][256];
   const int n_ziele = master ? (cue ? 4 : 2) : 0;
   for (int k = 0; k < n_ziele; ++k) {
@@ -444,7 +444,7 @@ int main(int argc, char** argv) {
   char gruppe[64], props[160], name[64];
   cdj_name(gruppe, sizeof gruppe, "cypherdj", inst);
   std::snprintf(props, sizeof props, "{ node.group = \"%s\" node.lock-quantum = true }", gruppe);
-  setenv("PIPEWIRE_PROPS", props, 1);  // SCHNITTSTELLEN §8: selbe Gruppe wie die Notbahn, Quantum fest
+  setenv("PIPEWIRE_PROPS", props, 1);  // INTERFACES §8: selbe Gruppe wie die Notbahn, Quantum fest
   cdj_name(name, sizeof name, "cypherdj-kern", inst);
 
   auto* befehle = new cdj::Befehlsring();      // vor dem Callback angelegt, mlockall unten sperrt sie
@@ -592,7 +592,7 @@ int main(int argc, char** argv) {
       std::fprintf(stderr, "Wirt-Slot %d des Arrangements: Ports nicht vollständig angelegt\n", a + 1);
   }
   g_ring = ring;
-  // Scheibe 18: Neustart-Zustand lesen und übernehmen (SCHNITTSTELLEN §6.3), gespeicherte Abonnenten ans Netz
+  // Scheibe 18: Neustart-Zustand lesen und übernehmen (INTERFACES §6.3), gespeicherte Abonnenten ans Netz
   // Keylock Task 2.5b (Vertrag 17, Prüfung F2): Vorgabe 1 im Betrieb, hier nur angekündigt (kostet nichts); Dehner und
   // Fäden baut keylock_bauen nach READY in einem eigenen Faden, die Decks spielen bis dahin Varispeed
   const bool keylock = g_kern->keylock_nach_konfig(konf.keylock);  // Task 3: kern.toml keylock (§2.1)

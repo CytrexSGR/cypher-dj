@@ -1,4 +1,4 @@
-// Hand-Weg: Mapping-Datei lesen und prüfen (SCHNITTSTELLEN §7.2). Nicht-Echtzeit.
+// Hand-Weg: Mapping-Datei lesen und prüfen (INTERFACES §7.2). Nicht-Echtzeit.
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>

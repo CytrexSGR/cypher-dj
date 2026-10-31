@@ -1,4 +1,4 @@
-// Tests des Pegelmessers (Scheibe 14, SCHNITTSTELLEN 5.6).
+// Tests des Pegelmessers (Scheibe 14, INTERFACES 5.6).
 #include <cmath>
 #include <cstdio>
 #include <vector>

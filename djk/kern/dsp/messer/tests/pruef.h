@@ -1,4 +1,4 @@
-// Kleiner Prüf-Kopf für die Tests von Scheibe 14 (gtest/catch2 fehlen auf DJ-Maschine, SCHNITTSTELLEN 19.4).
+// Kleiner Prüf-Kopf für die Tests von Scheibe 14 (gtest/catch2 fehlen auf DJ-Maschine, INTERFACES 19.4).
 #pragma once
 #include <cmath>
 #include <cstdio>

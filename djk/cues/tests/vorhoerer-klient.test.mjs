@@ -1,4 +1,4 @@
-// VorhoererKlient: der Rand-Fall aus docs/architektur/stand/vorhoerer.md B3 — "Loop greift nur, wenn die
+// VorhoererKlient: der Rand-Fall aus docs/architecture/stand/vorhoerer.md B3 — "Loop greift nur, wenn die
 // Wiedergabe B von innen erreicht" — muss der Klient selbst abfangen: liegt die geschätzte Position schon auf
 // oder hinter B, erst springen, dann Loop setzen. Geprüft ohne echten Vorhörer-Prozess: eigener UDP-Empfänger
 // als Attrappe, k.sock wird direkt gebunden (starte() würde die Binärdatei spawnen).

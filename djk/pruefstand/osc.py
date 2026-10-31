@@ -1,4 +1,4 @@
-"""OSC 1.0 kodieren und lesen (Typen i, h, f, d, s) und der Hörer des Prüfstands (SCHNITTSTELLEN §2, §4.1, §5, §5.10).
+"""OSC 1.0 kodieren und lesen (Typen i, h, f, d, s) und der Hörer des Prüfstands (INTERFACES §2, §4.1, §5, §5.10).
 
 Der Hörer bindet den Prüfstand-Port 47140 + 1000·k (ROADMAP Z2), schreibt jede Nachricht als JSON-Zeile mit
 CLOCK_MONOTONIC-Zeit und hält sich mit /k/hallo alle `herzschlag_s` beim Kern angemeldet (§4.1: Abonnenten fallen nach

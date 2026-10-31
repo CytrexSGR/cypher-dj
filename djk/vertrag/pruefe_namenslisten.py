@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """Vertragstest L3: Namenslisten für Tasten, Deck-Aktionen und Regler-Pfade gegeneinander.
 1.10 Slice 1: dazu grp/<n>/* und pm/fader in denselben Fundorten.
+S5r: dazu die Graph-Regler <kanal>/bk/<1..8> (Kanalmenge aus regler.cpp, in alle Fundorte getragen).
 D1 K1 (Spec A11): dazu die Spur-Regler spur/<n>/* in allen sieben Fundorten (Kern-Tabelle regler.cpp, §1.5,
 Attrappe REGLER, kurven.js ZIELE, regler_info.ts, hand_bedienung.PFAD, defs.schema.json regler_pfad) und die Gründe
 (§16.2 mit Kern als Vergeber gegen Attrappe GRUENDE, Attrappe GRUENDE gegen osc.json, Grund-Literale im Kern-Quelltext
 djk/kern/src gegen osc.json). D1 K1 Slice 10: die Hand-Zielarten arr/<aktion> aus §7.2 gegen mapping.cpp, mapping.h
 (ZielArt::arr), hand_ein.h (/test/hand) und Attrappe hand.mjs ARR_ZIELE.
 
-Quellen der Wahrheit: osc.json (Tasten), SCHNITTSTELLEN.md §7.2 (Deck-Aktionen; keine Maschinenquelle) und die
+Quellen der Wahrheit: osc.json (Tasten), INTERFACES.md §7.2 (Deck-Aktionen; keine Maschinenquelle) und die
 Regler-Tabelle der Attrappe (vertrag.mjs REGLER) gegen kurven.js ZIELE, hand_bedienung.PFAD und die Mappings.
 Jede Liste wird mit eigenem Parser aus der Quelldatei gelesen; ein Parser, der nichts, eine leere Liste, die falsche
 Zahl oder ein Token nicht versteht, wirft ParserFehler (nie ein leeres Grün). Fehlende Schlüssel und unlesbare Dateien
@@ -15,7 +16,7 @@ sind ebenfalls ParserFehler, nie ein Traceback. Die Encoder-Tasten (test_taste_p
 (deck_taste_pfad) kommen aus den Rümpfen dieser Funktionen in hand_ein.h (Kommentare entfernt). Gelesen werden genau
 die Ablehnungsbedingung vor `*t = k` und die ist_-Deklarationen samt r-Zugriffen; dort ist jede fremde Form
 (strcmp statt Vergleich, Taste:: ohne hand::, r außerhalb der Deklarationen) ParserFehler. Beide Richtungen werden
-verglichen: Encoder gegen SCHNITTSTELLEN (Encoder-Werte), Deck-Tasten gegen kurven.js DECK_TASTEN. Der Annahme-Weg
+verglichen: Encoder gegen INTERFACES (Encoder-Werte), Deck-Tasten gegen kurven.js DECK_TASTEN. Der Annahme-Weg
 (T09/T10) hat ein festes Soll (ANNAHME_SOLL), keine Wildcard.
 NICHT geprüft (offen): Ablehnungen oder Tasten in anderer Form außerhalb der gelesenen Stellen von hand_ein.h
 (eigene if-Zweige oder strcmp in test_taste_pfad vor oder nach der Bedingung, Zugriffe über p statt r in
@@ -206,14 +207,14 @@ def _deck_tasten_aus_hand_ein(hand_ein: str) -> list[str]:
 
 
 def _encoder_aus_spec(spec: str) -> list[str]:
-    """SCHNITTSTELLEN: `taste/<name>` mit den Namen aus §5.8 ohne die Encoder-Werte (`a`, `b`, ...)."""
+    """INTERFACES: `taste/<name>` mit den Namen aus §5.8 ohne die Encoder-Werte (`a`, `b`, ...)."""
     treffer = re.search(r"ohne die\s+Encoder-Werte \(([^)]*)\)", spec)
     if not treffer:
-        raise ParserFehler("SCHNITTSTELLEN: 'ohne die Encoder-Werte (...)' nicht gefunden, "
+        raise ParserFehler("INTERFACES: 'ohne die Encoder-Werte (...)' nicht gefunden, "
                            "Parser blind oder Text umgebaut")
     namen = re.findall(r"`([^`]+)`", treffer.group(1))
     if not namen:
-        raise ParserFehler("SCHNITTSTELLEN: Encoder-Werte ohne Namen in Backticks")
+        raise ParserFehler("INTERFACES: Encoder-Werte ohne Namen in Backticks")
     return sorted(namen)
 
 
@@ -235,7 +236,7 @@ def tasten_listen(q: Quelle) -> dict[str, list[str]]:
         listen["T02 osc.json"] = json.loads(q.lies("djk/vertrag/osc.json"))["werte"]["taste"]["liste"]
     except (ValueError, KeyError, TypeError) as fehler:
         raise ParserFehler(f"osc.json: werte.taste.liste fehlt oder ist unlesbar ({fehler!r})") from fehler
-    listen["T01 SCHNITTSTELLEN §5.8"] = vertragstext.tasten(q.lies("docs/architektur/SCHNITTSTELLEN.md"))
+    listen["T01 INTERFACES §5.8"] = vertragstext.tasten(q.lies("docs/architecture/INTERFACES.md"))
     adressen_h = q.lies("djk/vertrag/osc_adressen.h")
     listen["T03 osc_adressen.h"] = _namen(
         _such(r"array<std::string_view, \d+> taste\{([^}]*)\}", adressen_h, "osc_adressen.h").group(1))
@@ -265,7 +266,7 @@ def tasten_listen(q: Quelle) -> dict[str, list[str]]:
     listen["T12 softcontroller.json"] = sorted({e["ziel"][6:] for e in soft if e["ziel"].startswith("taste/")})
     hand_ein_h = q.lies("djk/kern/include/cypherdj/hand_ein.h")
     listen["T13 hand_ein.h Encoder"] = _encoder_aus_hand_ein(hand_ein_h)
-    listen["T14 SCHNITTSTELLEN Encoder-Werte"] = _encoder_aus_spec(q.lies("docs/architektur/SCHNITTSTELLEN.md"))
+    listen["T14 INTERFACES Encoder-Werte"] = _encoder_aus_spec(q.lies("docs/architecture/INTERFACES.md"))
     leer = [name for name, liste in listen.items() if not liste]
     if leer:
         raise ParserFehler(f"leere Liste(n) {leer}: Quelle leergeräumt oder Parser blind")
@@ -282,7 +283,7 @@ _AKTION_TOKEN = r"[a-z_]+(/<[a-z+\-]+>)?"
 
 def _spec_aktionen(spec: str) -> list[str]:
     """§7.2: die Aktionsliste hinter `deck/<n>/<aktion>`. Ein Token außerhalb des Namensmusters ist ein Fehler."""
-    wo = "SCHNITTSTELLEN §7.2"
+    wo = "INTERFACES §7.2"
     start = _index(spec, "- `ziel`: ein Regler-Pfad (§1.5)", wo)
     stueck = spec[start:_index(spec, "- `quant`", wo, start)]
     teil = stueck[_index(stueck, "`deck/<n>/<aktion>`", wo):_index(stueck, "`tempo`", wo)]
@@ -295,7 +296,7 @@ def _spec_aktionen(spec: str) -> list[str]:
 
 def aktionen_listen(q: Quelle) -> dict[str, list[str]]:
     listen: dict[str, list[str]] = {}
-    listen["A01 SCHNITTSTELLEN §7.2"] = _spec_aktionen(q.lies("docs/architektur/SCHNITTSTELLEN.md"))
+    listen["A01 INTERFACES §7.2"] = _spec_aktionen(q.lies("docs/architecture/INTERFACES.md"))
     mapping_h = _strip_cpp(q.lies("djk/kern/hand/include/hand/mapping.h"))
     enum_aktion = _such(r"enum class DeckAktion : uint8_t \{([^}]*)\}", mapping_h, "mapping.h").group(1)
     listen["A02 mapping.h enum"] = sorted({MAPN.get(x.strip(), x.strip()) for x in enum_aktion.split(",") if x.strip()})
@@ -353,13 +354,13 @@ def _pruefe_tasten(q: Quelle, befunde: list[str], genutzt: set) -> list[str]:
     encoder = tasten["T13 hand_ein.h Encoder"]
     if len(vertrag) != len(set(vertrag)) or not vertrag:
         befunde.append("Tasten: osc.json leer oder doppelt")
-    for liste in ("T01 SCHNITTSTELLEN §5.8", "T03 osc_adressen.h", "T04 osc_adressen.ts", "T05 namen.cpp",
+    for liste in ("T01 INTERFACES §5.8", "T03 osc_adressen.h", "T04 osc_adressen.ts", "T05 namen.cpp",
                   "T06 mapping.h enum", "T07 test_namen.cpp", "T08 hand.mjs TASTEN"):
         _diff(befunde, "Tasten=osc.json", vertrag, tasten[liste], liste, liste, genutzt)
     for liste in ("T05 namen.cpp", "T06 mapping.h enum"):   # Index = Enum-Wert (static_cast<Taste>(i) in namen.cpp)
         if tasten[liste] != vertrag:
             befunde.append(f"Tasten-Reihenfolge: {liste} weicht von osc.json ab (Index ist Enum-Wert)")
-    _diff(befunde, "Encoder=§19.0", tasten["T14 SCHNITTSTELLEN Encoder-Werte"], encoder, "T13 hand_ein.h Encoder")
+    _diff(befunde, "Encoder=§19.0", tasten["T14 INTERFACES Encoder-Werte"], encoder, "T13 hand_ein.h Encoder")
     for name in encoder:
         if name not in vertrag:
             befunde.append(f"Encoder: hand_ein.h lehnt {name} ab, osc.json kennt es nicht")
@@ -389,7 +390,7 @@ def _pruefe_tasten(q: Quelle, befunde: list[str], genutzt: set) -> list[str]:
 
 def _pruefe_aktionen(q: Quelle, befunde: list[str], genutzt: set) -> None:
     listen = aktionen_listen(q)
-    spec = listen["A01 SCHNITTSTELLEN §7.2"]
+    spec = listen["A01 INTERFACES §7.2"]
     hand_mjs = listen["A05 hand.mjs DECK_AKTION"]
     praefixe = listen["A04 mapping.cpp Präfixe"]
     if not spec:
@@ -470,11 +471,11 @@ def spur_regler_listen(q: Quelle) -> tuple[int, dict[str, list[str]]]:
     felder = re.findall(r'"spur/%d/([a-z_]+)"', q.lies("djk/kern/stellwerk/src/regler.cpp"))
     if not felder:
         raise ParserFehler("regler.cpp: kein Pfad spur/%d/…, Parser blind oder Quelle umgebaut")
-    spec = q.lies("docs/architektur/SCHNITTSTELLEN.md")
+    spec = q.lies("docs/architecture/INTERFACES.md")
     teil = spec[_index(spec, "### 1.5 Kanäle und Regler-Pfade", "§1.5"):_index(spec, "### 1.6", "§1.5")]
     zeilen = re.findall(r"^\| `spur/<n>/([a-z_]+)` \|", teil, re.M)
     if not zeilen:
-        raise ParserFehler("SCHNITTSTELLEN §1.5: keine Zeile spur/<n>/…, Parser blind oder Quelle umgebaut")
+        raise ParserFehler("INTERFACES §1.5: keine Zeile spur/<n>/…, Parser blind oder Quelle umgebaut")
     alle = lambda fs: sorted(f"spur/{i}/{f}" for i in range(1, n + 1) for f in fs)   # noqa: E731
     aus = q.node_json(
         "const v=await import('file://@@/djk/vertrag/attrappe_kern/vertrag.mjs');"
@@ -482,7 +483,7 @@ def spur_regler_listen(q: Quelle) -> tuple[int, dict[str, list[str]]]:
         "const l=await import('file://@@/djk/leitstand/src/regler_info.ts');"
         "const s=(m)=>[...m].filter((p)=>p.startsWith('spur/'));"
         "console.log(JSON.stringify({a:s(v.REGLER.keys()),z:s(k.ZIELE),l:s(l.REGLER.keys())}))")
-    return n, {"R01 Kern regler.cpp": alle(felder), "R02 SCHNITTSTELLEN §1.5": alle(zeilen),
+    return n, {"R01 Kern regler.cpp": alle(felder), "R02 INTERFACES §1.5": alle(zeilen),
                "R03 Attrappe REGLER": sorted(aus["a"]), "R04 kurven.js ZIELE": sorted(aus["z"]),
                "R05 regler_info.ts": sorted(aus["l"])}
 
@@ -496,9 +497,9 @@ def spur_fader_bereiche(q: Quelle) -> dict[str, tuple[float, float, float]]:
     hand_bedienung.PFAD und defs.schema.json regler_pfad tragen nur den Pfad, keinen Bereich. Nur im Arbeitsbaum."""
     cpp = q.lies("djk/kern/stellwerk/src/regler.cpp")
     m = _such(r"Rolle::spur_fader, (-?[\d.]+)f?, (-?[\d.]+)f?, (-?[\d.]+)f?,", cpp, "regler.cpp spur_fader")
-    spec = q.lies("docs/architektur/SCHNITTSTELLEN.md")
+    spec = q.lies("docs/architecture/INTERFACES.md")
     teil = spec[_index(spec, "### 1.5 Kanäle und Regler-Pfade", "§1.5"):_index(spec, "### 1.6", "§1.5")]
-    z = _such(r"^\| `spur/<n>/fader` \| dB \| (\S+) bis (\S+) \| (\S+) \|", teil, "SCHNITTSTELLEN §1.5 spur/<n>/fader",
+    z = _such(r"^\| `spur/<n>/fader` \| dB \| (\S+) bis (\S+) \| (\S+) \|", teil, "INTERFACES §1.5 spur/<n>/fader",
               re.M)
     aus = q.node_json(
         "const v=await import('file://@@/djk/vertrag/attrappe_kern/vertrag.mjs');"
@@ -508,7 +509,7 @@ def spur_fader_bereiche(q: Quelle) -> dict[str, tuple[float, float, float]]:
         "console.log(JSON.stringify({a:[a.min,a.max,a.vorgabe],l:[r.min,r.max,r.vorgabe],"
         "k:[k.wertAusMidi(p,0),k.wertAusMidi(p,1),k.vorgabe(p)]}))")
     return {"R01 Kern regler.cpp": (_db(m.group(1)), _db(m.group(2)), _db(m.group(3))),
-            "R02 SCHNITTSTELLEN §1.5": (_db(z.group(1)), _db(z.group(2)), _db(z.group(3))),
+            "R02 INTERFACES §1.5": (_db(z.group(1)), _db(z.group(2)), _db(z.group(3))),
             "R03 Attrappe REGLER": tuple(aus["a"]), "R04 kurven.js (Griff 0 und 1, Vorgabe)": tuple(aus["k"]),
             "R05 regler_info.ts": tuple(aus["l"])}
 
@@ -551,11 +552,11 @@ def routing_regler_listen(q: Quelle) -> tuple[int, dict[str, list[str]]]:
         raise ParserFehler("regler.cpp: kein Pfad grp/%d/…, Parser blind oder Quelle umgebaut")
     if '"pm/fader"' not in cpp:
         raise ParserFehler("regler.cpp: kein Pfad pm/fader, Parser blind oder Quelle umgebaut")
-    spec = q.lies("docs/architektur/SCHNITTSTELLEN.md")
+    spec = q.lies("docs/architecture/INTERFACES.md")
     teil = spec[_index(spec, "### 1.5 Kanäle und Regler-Pfade", "§1.5"):_index(spec, "### 1.6", "§1.5")]
     zeilen = re.findall(r"^\| `grp/<n>/([a-z_]+)` \|", teil, re.M)
     if not zeilen or not re.search(r"^\| `pm/fader` \|", teil, re.M):
-        raise ParserFehler("SCHNITTSTELLEN §1.5: keine Zeile grp/<n>/… oder pm/fader, Parser blind oder Quelle umgebaut")
+        raise ParserFehler("INTERFACES §1.5: keine Zeile grp/<n>/… oder pm/fader, Parser blind oder Quelle umgebaut")
     alle = lambda fs: sorted([f"grp/{i}/{f}" for i in range(1, n + 1) for f in fs] + ["pm/fader"])   # noqa: E731
     aus = q.node_json(
         "const v=await import('file://@@/djk/vertrag/attrappe_kern/vertrag.mjs');"
@@ -563,7 +564,7 @@ def routing_regler_listen(q: Quelle) -> tuple[int, dict[str, list[str]]]:
         "const l=await import('file://@@/djk/leitstand/src/regler_info.ts');"
         "const s=(m)=>[...m].filter((p)=>p.startsWith('grp/')||p==='pm/fader');"
         "console.log(JSON.stringify({a:s(v.REGLER.keys()),z:s(k.ZIELE),l:s(l.REGLER.keys())}))")
-    return n, {"R01 Kern regler.cpp": alle(felder), "R02 SCHNITTSTELLEN §1.5": alle(zeilen),
+    return n, {"R01 Kern regler.cpp": alle(felder), "R02 INTERFACES §1.5": alle(zeilen),
                "R03 Attrappe REGLER": sorted(aus["a"]), "R04 kurven.js ZIELE": sorted(aus["z"]),
                "R05 regler_info.ts": sorted(aus["l"])}
 
@@ -572,9 +573,9 @@ def routing_fader_bereiche(q: Quelle) -> dict[str, tuple[float, float, float]]:
     """(min, max, vorgabe) von pm/fader je Fundort mit Wertebereich (−200..+6, Vorgabe 0). Nur im Arbeitsbaum."""
     cpp = q.lies("djk/kern/stellwerk/src/regler.cpp")
     m = _such(r'neu\("pm/fader", -1, Rolle::pm_fader, (-?[\d.]+)f?, (-?[\d.]+)f?, (-?[\d.]+)f?,', cpp, "regler.cpp pm_fader")
-    spec = q.lies("docs/architektur/SCHNITTSTELLEN.md")
+    spec = q.lies("docs/architecture/INTERFACES.md")
     teil = spec[_index(spec, "### 1.5 Kanäle und Regler-Pfade", "§1.5"):_index(spec, "### 1.6", "§1.5")]
-    z = _such(r"^\| `pm/fader` \| dB \| (\S+) bis (\S+) \| (\S+) \|", teil, "SCHNITTSTELLEN §1.5 pm/fader", re.M)
+    z = _such(r"^\| `pm/fader` \| dB \| (\S+) bis (\S+) \| (\S+) \|", teil, "INTERFACES §1.5 pm/fader", re.M)
     aus = q.node_json(
         "const v=await import('file://@@/djk/vertrag/attrappe_kern/vertrag.mjs');"
         "const k=await import('file://@@/djk/oberflaeche/oeffentlich/kurven.js');"
@@ -583,7 +584,7 @@ def routing_fader_bereiche(q: Quelle) -> dict[str, tuple[float, float, float]]:
         "console.log(JSON.stringify({a:[a.min,a.max,a.vorgabe],l:[r.min,r.max,r.vorgabe],"
         "k:[k.wertAusMidi(p,0),k.wertAusMidi(p,1),k.vorgabe(p)]}))")
     return {"R01 Kern regler.cpp": (_db(m.group(1)), _db(m.group(2)), _db(m.group(3))),
-            "R02 SCHNITTSTELLEN §1.5": (_db(z.group(1)), _db(z.group(2)), _db(z.group(3))),
+            "R02 INTERFACES §1.5": (_db(z.group(1)), _db(z.group(2)), _db(z.group(3))),
             "R03 Attrappe REGLER": tuple(aus["a"]), "R04 kurven.js (Griff 0 und 1, Vorgabe)": tuple(aus["k"]),
             "R05 regler_info.ts": tuple(aus["l"])}
 
@@ -615,6 +616,73 @@ def _pruefe_routing_regler(q: Quelle, befunde: list[str]) -> None:
             befunde.append(f"Routing-Regler: R07 defs.schema.json regler_pfad nimmt {falsch} an")
 
 
+# ---------------------------------------------------------------- S5r: Graph-Regler <kanal>/bk/<1..8> (A11)
+def _bk_kanaele_aus_spec(zelle: str) -> list[str]:
+    """'deck/1..4, erz/1, 2, 3, 5, 6, 7 und pad/1, 2' -> ['deck/1', ..., 'pad/2']"""
+    ergebnis: list[str] = []
+    for gruppe in ("deck", "erz", "pad"):
+        m = re.search(gruppe + r"/(\d+(?:\.\.\d+|(?:, \d+)*))", zelle)
+        if not m:
+            raise ParserFehler(f"INTERFACES §1.5 bk-Zeile: keine Kanäle für {gruppe}, Parser blind oder Quelle umgebaut")
+        t = m.group(1)
+        nummern = list(range(int(t.split("..")[0]), int(t.split("..")[1]) + 1)) if ".." in t else [int(x) for x in t.split(", ")]
+        ergebnis += [f"{gruppe}/{n}" for n in nummern]
+    return ergebnis
+
+
+def bk_regler_listen(q: Quelle) -> dict[str, list[str]]:
+    """<kanal>/bk/<1..8> je Fundort. Die Kanalmenge steht im Kern (regler.cpp, Schleife über kn_bk) und ist dort gegen
+    das echte Annahmeverhalten von netz_erz.cpp gepinnt (test_netz_erz.cpp); hier wird sie in alle anderen Fundorte
+    getragen. Nur im Arbeitsbaum (node)."""
+    cpp = q.lies("djk/kern/stellwerk/src/regler.cpp")
+    m = _such(r"for \(const char\* kn_bk : \{([^}]*)\}\)", cpp, "regler.cpp bk-Kanalschleife")
+    kanaele = re.findall(r'"([a-z]+/\d+)"', m.group(1))
+    if not kanaele or "%s/bk/%d" not in cpp:
+        raise ParserFehler("regler.cpp: keine bk-Kanäle oder kein Muster %s/bk/%d, Parser blind oder Quelle umgebaut")
+    spec = q.lies("docs/architecture/INTERFACES.md")
+    teil = spec[_index(spec, "### 1.5 Kanäle und Regler-Pfade", "§1.5"):_index(spec, "### 1.6", "§1.5")]
+    z = _such(r"^\| `<k>/bk/<n>` \(n = 1 bis 8\) \|.*\| alle; nur `<k>` = ([^|]*) \|$", teil,
+              "INTERFACES §1.5 bk-Zeile", re.M)
+    alle = lambda ks: sorted(f"{k}/bk/{n}" for k in ks for n in range(1, 9))   # noqa: E731
+    aus = q.node_json(
+        "const v=await import('file://@@/djk/vertrag/attrappe_kern/vertrag.mjs');"
+        "const k=await import('file://@@/djk/oberflaeche/oeffentlich/kurven.js');"
+        "const l=await import('file://@@/djk/leitstand/src/regler_info.ts');"
+        "const s=(m)=>[...m].filter((p)=>/\\/bk\\/[0-9]+$/.test(p));"
+        "console.log(JSON.stringify({a:s(v.REGLER.keys()),z:s(k.ZIELE),l:s(l.REGLER.keys())}))")
+    return {"R01 Kern regler.cpp": alle(kanaele), "R02 INTERFACES §1.5": alle(_bk_kanaele_aus_spec(z.group(1))),
+            "R03 Attrappe REGLER": sorted(aus["a"]), "R04 kurven.js ZIELE": sorted(aus["z"]),
+            "R05 regler_info.ts": sorted(aus["l"])}
+
+
+def _pruefe_bk_regler(q: Quelle, befunde: list[str]) -> None:
+    listen = bk_regler_listen(q)
+    soll = listen["R01 Kern regler.cpp"]
+    for name, ist in listen.items():
+        if name != "R01 Kern regler.cpp":
+            _diff(befunde, "bk-Regler=Kern", soll, ist, name)
+    pfad = re.compile(_such(r"export const PFAD = /(.*)/;", q.lies("djk/oberflaeche/hand_bedienung.ts"),
+                            "hand_bedienung.ts").group(1).replace("\\/", "/"))
+    try:
+        schema = json.loads(q.lies("djk/vertrag/schemas/defs.schema.json"))["$defs"]["regler_pfad"]["pattern"]
+    except (ValueError, KeyError) as fehler:
+        raise ParserFehler(f"defs.schema.json: kein $defs.regler_pfad.pattern ({fehler})") from fehler
+    for name in soll:
+        if not pfad.search(name):
+            befunde.append(f"bk-Regler: R06 hand_bedienung.PFAD lehnt {name} ab")
+        if not re.fullmatch(schema, name):
+            befunde.append(f"bk-Regler: R07 defs.schema.json regler_pfad lehnt {name} ab")
+    # Gegenprobe: kein Muster zu weit. Jeder Kanal der Spielkanäle und Busse, der nicht in der Menge steht, muss abgelehnt werden
+    kanaele = {n.rsplit("/bk/", 1)[0] for n in soll}
+    unbekannt = [f"{g}/{i}/bk/1" for g, n in (("deck", 4), ("erz", 8), ("pad", 2), ("bus", 4)) for i in range(1, n + 1)
+                 if f"{g}/{i}" not in kanaele]
+    for falsch in unbekannt + ["master/bk/1", "cue/bk/1", "deck/1/bk/9", "deck/1/bk/0", "pad/3/bk/1", "deck/1/bk/10"]:
+        if pfad.search(falsch):
+            befunde.append(f"bk-Regler: R06 hand_bedienung.PFAD nimmt {falsch} an")
+        if re.fullmatch(schema, falsch):
+            befunde.append(f"bk-Regler: R07 defs.schema.json regler_pfad nimmt {falsch} an")
+
+
 # ---------------------------------------------------------------- D1 K1: Gründe (A11)
 _GRUND_LITERALE = [r'quittung\([^;]*?"([a-z_]+)"\s*\)', r'\bab\("([a-z_]+)"\)', r'Abbruch\("([a-z_]+)"',
                    r'\bgrund = "([a-z_]+)"']
@@ -626,7 +694,7 @@ def gruende_listen(q: Quelle) -> dict[str, list[str]]:
         listen["G01 osc.json"] = json.loads(q.lies("djk/vertrag/osc.json"))["werte"]["gruende"]["liste"]
     except (ValueError, KeyError) as fehler:
         raise ParserFehler(f"osc.json: keine Liste werte.gruende ({fehler})") from fehler
-    spec = q.lies("docs/architektur/SCHNITTSTELLEN.md")
+    spec = q.lies("docs/architecture/INTERFACES.md")
     unter = spec[_index(spec, "### 16.2", "§16.2"):_index(spec, "### 16.3", "§16.2")]
     kern: set[str] = set()
     for zeile in unter.split("\n"):
@@ -635,7 +703,7 @@ def gruende_listen(q: Quelle) -> dict[str, list[str]]:
             if "Kern" in spalten[1]:
                 kern |= set(vertragstext._namen(spalten[0]))
     if not kern:
-        raise ParserFehler("SCHNITTSTELLEN §16.2: keine Zeile mit Vergeber Kern")
+        raise ParserFehler("INTERFACES §16.2: keine Zeile mit Vergeber Kern")
     listen["G02 §16.2 vom Kern"] = sorted(kern)
     literale: set[str] = set()
     for rel in q.dateien("djk/kern/src", ".cpp"):
@@ -673,12 +741,12 @@ def _pruefe_gruende(q: Quelle, befunde: list[str]) -> None:
 
 # ---------------------------------------------------------------- D1 K1: Hand-Zielart arr/<aktion> (A11)
 def zielart_listen(q: Quelle) -> dict[str, list[str]]:
-    wo = "SCHNITTSTELLEN §7.2"
-    spec = q.lies("docs/architektur/SCHNITTSTELLEN.md")
+    wo = "INTERFACES §7.2"
+    spec = q.lies("docs/architecture/INTERFACES.md")
     start = _index(spec, "- `ziel`: ein Regler-Pfad (§1.5)", wo)
     stueck = spec[start:_index(spec, "- `quant`", wo, start)]
-    listen = {"Z01 SCHNITTSTELLEN §7.2": sorted(set(re.findall(r"`(arr/[a-z_]+)`", stueck)))}
-    if not listen["Z01 SCHNITTSTELLEN §7.2"]:
+    listen = {"Z01 INTERFACES §7.2": sorted(set(re.findall(r"`(arr/[a-z_]+)`", stueck)))}
+    if not listen["Z01 INTERFACES §7.2"]:
         raise ParserFehler(f"{wo}: keine Zielart arr/<aktion> in der ziel-Zeile, Parser blind oder Quelle umgebaut")
     listen["Z02 mapping.cpp"] = sorted(set(re.findall(r'strcmp\(z, "(arr/[a-z_]+)"\)', q.lies("djk/kern/hand/src/mapping.cpp"))))
     listen["Z03 hand_ein.h /test/hand"] = sorted(set(re.findall(r'strcmp\(p, "(arr/[a-z_]+)"\)',
@@ -693,7 +761,7 @@ def zielart_listen(q: Quelle) -> dict[str, list[str]]:
 
 def _pruefe_zielarten(q: Quelle, befunde: list[str]) -> None:
     listen = zielart_listen(q)
-    soll = listen["Z01 SCHNITTSTELLEN §7.2"]
+    soll = listen["Z01 INTERFACES §7.2"]
     for name in ("Z02 mapping.cpp", "Z03 hand_ein.h /test/hand", "Z04 hand.mjs ARR_ZIELE"):
         _diff(befunde, "Zielarten=§7.2", soll, listen[name], name)
     if "arr" not in listen["Z05 mapping.h ZielArt"]:
@@ -713,6 +781,7 @@ def pruefe(q: Quelle) -> list[str]:
         _pruefe_regler(q, befunde)
         _pruefe_spur_regler(q, befunde)   # D1 K1
         _pruefe_routing_regler(q, befunde)   # 1.10 Slice 1
+        _pruefe_bk_regler(q, befunde)     # S5r
         _pruefe_gruende(q, befunde)       # D1 K1
         _pruefe_zielarten(q, befunde)     # D1 K1 Slice 10
     for schluessel in AUSNAHMEN:

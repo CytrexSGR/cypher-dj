@@ -1,5 +1,5 @@
 // ERZEUGT von djk/vertrag/erzeuge_osc.py aus djk/vertrag/osc.json. Nicht von Hand ändern.
-// Vertrag: docs/architektur/SCHNITTSTELLEN.md, Version 1. Prüfung: python3 djk/vertrag/pruefe_osc.py
+// Vertrag: docs/architecture/INTERFACES.md, Version 1. Prüfung: python3 djk/vertrag/pruefe_osc.py
 // Nur löschbare Syntax (Konstanten und Typen), damit Node sie mit Type-Stripping laden kann.
 
 export const VERTRAG = 1 as const;

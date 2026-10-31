@@ -1,4 +1,4 @@
-// Stellwerk-RT: Regler-Tabelle nach SCHNITTSTELLEN §1.5, Standard-Kurven nach §7.2, Deck-Halter nach §7.3 Punkt 5.
+// Stellwerk-RT: Regler-Tabelle nach INTERFACES §1.5, Standard-Kurven nach §7.2, Deck-Halter nach §7.3 Punkt 5.
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -170,6 +170,17 @@ ReglerTabelle::ReglerTabelle() {
     neu(p, -1, Rolle::grp_solo, 0, 1, 0, 0, false, false, true, true, K_SCHALTER);
   }
   neu("pm/fader", -1, Rolle::pm_fader, -200, 6, 0, MS(10), false, true, false, false, K_SPUR_FADER);
+  // S5r: acht Graph-Regler je Kanal, auf dem der Kern einen Baukasten-Graphen annimmt: deck/1..4 (Effekt über
+  // /k/kanal/graph) und die Instrument-Kanäle von /erz/strom bk:<name> (netz_erz.cpp: erz/1..8 und pad/1..2 ohne erz/4,
+  // reserviert für die Produktion, und ohne erz/8, Nur-Cue-Vorhöreingang). Am Tabellenende, damit kein Index wandert.
+  // Schaltrampe 0: die FFI glättet selbst 20 ms (K15). Gegen das echte Verhalten gepinnt in test_netz_erz.cpp.
+  for (const char* kn_bk : {"deck/1", "deck/2", "deck/3", "deck/4", "erz/1", "erz/2", "erz/3", "erz/5", "erz/6", "erz/7", "pad/1", "pad/2"}) {
+    const int k = kanal_suche(kn_bk);
+    for (int nr = 1; nr <= 8; nr++) {
+      std::snprintf(p, sizeof p, "%s/bk/%d", kn_bk, nr);
+      neu(p, k, Rolle::bk_regler, 0, 1, 0.5f, 0, false, false, false, false, linear(0, 1));
+    }
+  }
   for (int i = 0; i < n_; i++) sortiert_[i] = static_cast<int16_t>(i);
   std::sort(sortiert_, sortiert_ + n_, [&](int16_t a, int16_t b) { return std::strcmp(def_[a].pfad, def_[b].pfad) < 0; });
 }

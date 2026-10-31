@@ -1,4 +1,4 @@
-// Offen, hörbar und "Tief offen" nach SCHNITTSTELLEN §1.6, als reine Funktionen über eine Sicht auf den Zustand.
+// Offen, hörbar und "Tief offen" nach INTERFACES §1.6, als reine Funktionen über eine Sicht auf den Zustand.
 // Eine Sicht liefert Reglerwerte und Deck-Laufzustand; die Frist-Vorhersage benutzt dieselben Funktionen mit einer
 // Sicht auf den geplanten Zustand.
 

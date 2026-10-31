@@ -1,4 +1,4 @@
-// Eigener Assert-Kopf für CTest (SCHNITTSTELLEN §19 Punkt 4: gtest und catch2 fehlen auf DJ-Maschine), gleiche Form wie
+// Eigener Assert-Kopf für CTest (INTERFACES §19 Punkt 4: gtest und catch2 fehlen auf DJ-Maschine), gleiche Form wie
 // djk/kern/stellwerk/tests/pruef.h: jeder Fall druckt "OK   <name>" oder "ROT  <name>"; die Mutationsmatrix liest das.
 #pragma once
 #include <cmath>

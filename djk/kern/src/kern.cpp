@@ -9,7 +9,7 @@ namespace cdj {
 
 Kern::Kern(double start_bpm, cdj_ring_kopf* ring, Befehlsring* befehle, Ereignisring* ereignisse)
     : plan_(start_bpm), ring_(ring), befehle_(befehle), ereignisse_(ereignisse) {
-  w_ = cdj_lade(&ring_->w);  // SCHNITTSTELLEN §6.1: beim Start liest der Kern w und setzt fort
+  w_ = cdj_lade(&ring_->w);  // INTERFACES §6.1: beim Start liest der Kern w und setzt fort
   // Ohr T14 (§17 I3a): Deck-Modell und Prüfer vor dem Stellwerk, das ihn als Pointer bekommt (Vorgabe: aus).
   deck_modell_ = std::make_unique<DeckModellImpl>(decks_);
   pruefer_i3_ = std::make_unique<cypherdj::stellwerk::PrueferI3>(hoerschein_reg_, *deck_modell_);
@@ -23,6 +23,22 @@ Kern::Kern(double start_bpm, cdj_ring_kopf* ring, Befehlsring* befehle, Ereignis
   for (int k = 0; k < MIX_KANAELE; ++k) {
     erz_l_[k] = mixer_->eingang_l(k);
     erz_r_[k] = mixer_->eingang_r(k);
+  }
+  {  // Baukasten S5r: Graph-Regler <kanal>/bk/<1..8> -> (Mixer-Kanal, nr); Start aus den Reglerwerten (Vorgabe 0,5)
+    const auto& tab = sw_->tabelle();
+    for (int r = 0; r < cypherdj::stellwerk::MAX_REGLER; ++r) bk_ort_[r] = -1;
+    for (int r = 0; r < tab.anzahl(); ++r) {
+      const auto& d = tab.def(r);
+      if (d.rolle != cypherdj::stellwerk::Rolle::bk_regler || d.kanal < 0) continue;
+      const int k = Mixer::kanal_index(tab.kanal_name(d.kanal));
+      const size_t len = std::strlen(d.pfad);
+      const int nr = d.pfad[len - 1] - '0';
+      if (k < 0 || nr < 1 || nr > 8) continue;
+      bk_ort_[r] = static_cast<int16_t>(k * 8 + nr - 1);
+      bk_wert_[k][nr - 1] = sw_->wert(r);
+    }
+    mixer_->setze_bk_wert(bk_wert_);
+    erz_->setze_bk_wert(bk_wert_);
   }
   loops_ = std::make_unique<LoopBoxen>();  // MVP 2: feste Puffer, darum hier und nicht im Callback
   arr_ = std::make_unique<Arrangement>(sw_->tabelle());  // D1 K1: feste Puffer (rund 340 KB bei 32 Spuren), nicht im Callback

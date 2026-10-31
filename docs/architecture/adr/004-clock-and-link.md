@@ -16,7 +16,7 @@ graph's frame time; the draft "Spielbarkeit" (playability) wanted to close gaps 
 
 1. **The one clock** is its own `int64` sample counter in the core's real-time callback (sum of the `nframes`) plus a
    **tempo card** of segments (constant or linear in time; S-shaped corners only after V1). Beat, bar, phrase and
-   deadline are functions of it (formulas: `SCHNITTSTELLEN.md` §1.3).
+   deadline are functions of it (formulas: `INTERFACES.md` §1.3).
 2. **Steady inside, re-anchored outside.** A dropped cycle is not caught up: the music shifts against the wall clock by
    one block, inside nobody notices. Outward (Link, MIDI clock), every detected gap and every driver change
    re-anchors, resets the HostTimeFilter, and reports `/e/luecke`.
@@ -25,7 +25,7 @@ graph's frame time; the draft "Spielbarkeit" (playability) wanted to close gaps 
 4. **Tempo card limited** (64 segments), past segments are discarded, a rejected change is acknowledged as `abgelehnt`
    with reason `karte_voll`. Andreas' tempo control is **one** hand segment that is overwritten each cycle.
 5. **No tempo jumps**, only ramps with a minimum duration of 1 beat, **also for Andreas' hand:** every encoder detent
-   (0.01 BPM) drives the hand segment as a ramp over 1 beat (`SCHNITTSTELLEN.md` §1.3, §7.3 point 7). Reason: the only
+   (0.01 BPM) drives the hand segment as a ramp over 1 beat (`INTERFACES.md` §1.3, §7.3 point 7). Reason: the only
    native factor jump measured on pitch lay 95 ms over 10 ct and had 128 null samples (ERGEBNIS §2.6). M4 (2026-09-25):
    small changes produce no null samples in the time-based design (E7, E9), but cost phase, each one on its own; hence
    a factor cadence of 43 blocks (rule 6). Ramp over 1 beat with 50 ms lead confirmed (E1, E2, E6). S-shaped corners

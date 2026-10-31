@@ -1,4 +1,4 @@
-// Plan 2026-09-27 (Strudel im Kern, Stufe 1; SCHNITTSTELLEN §4.8, ADR 024): Erzeuger-Schlange je Strom und Stimmen
+// Plan 2026-09-27 (Strudel im Kern, Stufe 1; INTERFACES §4.8, ADR 024): Erzeuger-Schlange je Strom und Stimmen
 // eines Kits. Ereignisse tragen den Beat der Kern-Karte; block() setzt jedes am Sample llround(sample_at(beat)) ein und
 // addiert die Stimmen in den Eingang ihres Mixer-Kanals (vor Trim). Außer dem Konstruktor läuft alles im Callback:
 // keine Allokation, feste Größen.
@@ -108,6 +108,10 @@ class Erzeuger {
   // Mit Werk wartet ein neuer Graph (setze_bk) in Strom::bk_neu, bis die Plätze des Stroms frei sind; der alte spielt im
   // Wechselblock seinen vorgerechneten Block mit der Ausklang-Rampe ab 0, der neue klingt ab dem Folgeblock.
   void setze_graph_werk(GraphWerk* w) { werk_ = w; }
+  // S5r: die Werte der Graph-Regler <kanal>/bk/1..8 (Zeile = Mixer-Kanal), vom Kern geführt. nullptr (Tests ohne Kern): keine
+  // Meldung, der Graph bleibt auf seinen Werten (K10). Der Erzeuger meldet sie je Block an den Graphen des Stroms, nie an einen
+  // Platz, an dem ein Faden rechnet.
+  void setze_bk_wert(const float (*w)[8]) { bk_wert_ = w; }
   // Abgelöste und ausgeklungene Graphen zur Freigabe außerhalb des Callbacks (höchstens max), nach block() aufrufen.
   int bk_frei(CypherBk** aus, int max);
   // voll: Freigabeliste voll, Graph nicht freigegeben. verspaetet (S3b): Blöcke, in denen ein Faden den Graphen noch rechnete (Stille)
@@ -186,6 +190,8 @@ class Erzeuger {
                   int ausblende_n);
   // Baukasten S3b
   GraphWerk* werk_ = nullptr;
+  const float (*bk_wert_)[8] = nullptr;
+  void bk_regler_melden(CypherBk* bk, int kanal);
   void bk_wechsel(Strom& s, CypherBk* bk, int kanal);
   // Graph-Ereignisse mit Sample < bis an den Graphen (Versatz relativ zu von, frühere am Fensteranfang), dann die Offs bis bis.
   void bk_noten(Strom& s, const Karte& k, int64_t von, int64_t bis);

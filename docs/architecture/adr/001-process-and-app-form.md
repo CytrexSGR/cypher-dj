@@ -22,7 +22,7 @@ sound and plugin hosts (Klang- und Plugin-Wirte), Link bridge, front end (Oberfl
 `systemctl --user start cypherdj.target`, without a window.
 
 Satellites talk to the core only through commands with a target beat (OSC/UDP), finished files and decoupled
-audio return paths (`SCHNITTSTELLEN.md` §2). If a satellite dies, at most its share is missing.
+audio return paths (`INTERFACES.md` §2). If a satellite dies, at most its share is missing.
 
 ## Alternatives and why not
 
@@ -36,7 +36,7 @@ audio return paths (`SCHNITTSTELLEN.md` §2). If a satellite dies, at most its s
 
 ## Consequences
 
-- Every boundary between processes is a contract: `SCHNITTSTELLEN.md` is mandatory for all sessions.
+- Every boundary between processes is a contract: `INTERFACES.md` is mandatory for all sessions.
 - Satellites can be built in parallel, the control station first against a core dummy (ADR 021).
 - Operation needs units, limits (`LimitRTPRIO`, `LimitMEMLOCK`), watchdog rules (ADR 016).
 - Today's `nohup` services are being replaced, not continued.

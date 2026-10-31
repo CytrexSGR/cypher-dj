@@ -1,4 +1,4 @@
-// Regler des Kanalzugs nach SCHNITTSTELLEN.md §1.5 (Pfad, Einheit, Bereich, Vorgabe, Schaltrampe).
+// Regler des Kanalzugs nach INTERFACES.md §1.5 (Pfad, Einheit, Bereich, Vorgabe, Schaltrampe).
 // Teil der öffentlichen Naht von cypherdj_dsp (Scheibe 04). Neue Regler nur hinten anfügen (vor `anzahl`).
 #pragma once
 

@@ -5,7 +5,7 @@ Je Regel genau ein Textersatz (muss genau einmal passen), der diese Regel abscha
 Erwartung: je Mutation mindestens ein Fall rot, das Original ganz grün. Nach M01 (Blockgrenze statt Versatz) wird der
 mutierte JACK-Prüfclient als build-mut/hand_pruef_blockgrenze aufbewahrt: mit ihm misst Task 11 den Fehlerfall am Ziel.
 Arbeitskopie unter build-mut/arbeit (hand, stellwerk, konfig/controller), ein Bauordner, je Mutation zurückgesetzt.
-Aufruf (aus djk/kern/hand/): python3 mutation/mutationen.py [<SCHNITTSTELLEN.md>]
+Aufruf (aus djk/kern/hand/): python3 mutation/mutationen.py [<INTERFACES.md>]
   -> mutation/matrix.json, mutation/matrix.md. Bau mit nice -n 19 und ninja -j4 (ROADMAP §8.5). Kein Ton."""
 import json
 import pathlib
@@ -73,7 +73,7 @@ def pruefen():
 
 
 def main():
-    vertrag = sys.argv[1] if len(sys.argv) > 1 else str(DJK.parent / "docs/architektur/SCHNITTSTELLEN.md")
+    vertrag = sys.argv[1] if len(sys.argv) > 1 else str(DJK.parent / "docs/architecture/INTERFACES.md")
     if MUT.exists():
         shutil.rmtree(MUT)
     for teil in ["kern/hand", "kern/stellwerk", "konfig/controller"]:

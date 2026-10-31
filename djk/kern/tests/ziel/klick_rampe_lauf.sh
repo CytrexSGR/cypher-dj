@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Scheibe 08, Abnahme „Am Ziel“: Prüfklick in einer Rampe 128 -> 132 über 32 Beats an eigener Null-Senke
-# (SCHNITTSTELLEN.md §19.5, ROADMAP §8.4, §8.5). Senke, Notbahn, Kern mit Prüfmodus, Prüfer, JACK-Aufnehmer am Monitor
+# (INTERFACES.md §19.5, ROADMAP §8.4, §8.5). Senke, Notbahn, Kern mit Prüfmodus, Prüfer, JACK-Aufnehmer am Monitor
 # der Senke, Auswertung gegen karte.py. Aufruf: klick_rampe_lauf.sh <kern-programm> <ausgabe-ordner> <lauf-name>
 # Braucht CYPHERDJ_INSTANZ (Strang A: a). Hält das Echtzeit-Schloss für den ganzen Lauf (SCHLOSS=0 nur für Proben ohne
 # Zeitmessung, steht dann im Bericht).

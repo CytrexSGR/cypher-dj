@@ -1,5 +1,5 @@
 // node --test tests/teil_rampe.test.mjs: Planteil als Rampe in Beats an einem mit Hörschein geöffneten Deck-Kanal
-// (SCHNITTSTELLEN §4.3, §19.3 teil_rampe): Start 1 440 000, Ende 2 160 000, Wert bei Beat 80 = −7,5 dB.
+// (INTERFACES §4.3, §19.3 teil_rampe): Start 1 440 000, Ende 2 160 000, Wert bei Beat 80 = −7,5 dB.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fahre } from '../folgen_schnell.mjs';

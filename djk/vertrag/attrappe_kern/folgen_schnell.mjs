@@ -1,4 +1,4 @@
-// Schneller Test-Läufer der Unit-Tests: fährt Schritte im Grundformat SCHNITTSTELLEN §19.0 der Reihe nach im selben
+// Schneller Test-Läufer der Unit-Tests: fährt Schritte im Grundformat INTERFACES §19.0 der Reihe nach im selben
 // Prozess gegen die Attrappe, ohne UDP und ohne Echtzeit (die simulierte Uhr läuft so schnell wie gerechnet). Eine
 // erwartete Meldung wird verbraucht. Die Golden-Folgen aus 09 (mit FORMAT.md-Zusätzen) fährt golden.mjs.
 //

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Golden-Folgen notbahn_124 und notbahn_rampe gegen den echten Kern (SCHNITTSTELLEN §19.3, Format
+"""Golden-Folgen notbahn_124 und notbahn_rampe gegen den echten Kern (INTERFACES §19.3, Format
 djk/vertrag/folgen/FORMAT.md mit der Zeilenart "aktion"). Übersetzt die Folge in einen Lauf von serie.sh (Tempo aus
 /k/set/neu, Rampe aus /k/tempo/rampe, Abschuss-Sample aus "aktion kern_kill9") und prüft ihre Zeilen am Ziel:
 

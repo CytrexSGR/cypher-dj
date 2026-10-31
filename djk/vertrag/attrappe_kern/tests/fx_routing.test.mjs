@@ -1,4 +1,4 @@
-// node --test tests/fx_routing.test.mjs: /k/fx/routing und /e/fx/routing (SCHNITTSTELLEN §4.10, §5.12, Ohr Task 15)
+// node --test tests/fx_routing.test.mjs: /k/fx/routing und /e/fx/routing (INTERFACES §4.10, §5.12, Ohr Task 15)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fahre } from '../folgen_schnell.mjs';

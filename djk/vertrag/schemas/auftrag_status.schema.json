@@ -1,7 +1,7 @@
 {
  "$schema": "https://json-schema.org/draft/2020-12/schema",
  "$id": "https://cypherdj.invalid/vertrag/1/auftrag_status.schema.json",
- "title": "auftrag_status, Werkstatt → Leitstand (SCHNITTSTELLEN.md §12.2)",
+ "title": "auftrag_status, Werkstatt → Leitstand (INTERFACES.md §12.2)",
  "type": "object",
  "required": ["auftrag_id", "stand", "schritt", "fortschritt", "erwartet_fertig_s", "grund"],
  "properties": {

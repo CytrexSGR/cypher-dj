@@ -167,7 +167,7 @@ int main() {
     y.kern->abbild(*fach3);
     PRUEF(std::strcmp(fach3->ki_spur, "deck/3") == 0);   // die Liste kommt aus dem Stellwerk
   }
-  {  // 7: Spec 6.27, SCHNITTSTELLEN §4.7/§4.11: gemeinsamer Fall mit der Attrappe (djk/vertrag/faelle/arr_ki_stopp.json)
+  {  // 7: Spec 6.27, INTERFACES §4.7/§4.11: gemeinsamer Fall mit der Attrappe (djk/vertrag/faelle/arr_ki_stopp.json)
     const nlohmann::json f = nlohmann::json::parse(std::ifstream(CYPHERDJ_DJK "/vertrag/faelle/arr_ki_stopp.json"));
     arr35::Lauf x(ab.pfad, "test_kern_arr_ki");
     std::vector<std::unique_ptr<cdj::ArrFreeze>> auftraege;   // Paket K3: der Kern gibt sie als ARR_FREEZE zurück

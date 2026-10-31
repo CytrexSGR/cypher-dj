@@ -1,4 +1,4 @@
-// Mixer des Kerns als Zuweisungstabelle (SCHNITTSTELLEN.md §1.5, §1.6; ADR 008 Entscheidung 1 bis 3; A17; ARCHITEKTUR
+// Mixer des Kerns als Zuweisungstabelle (INTERFACES.md §1.5, §1.6; ADR 008 Entscheidung 1 bis 3; A17; ARCHITECTURE
 // §13 Frage 5, Antwort „5 ok“: jeder Kanal auf den Master oder einen von vier Gruppenbussen, vier Sends je Kanal).
 // Scheibe 25.
 //
@@ -86,6 +86,8 @@ class Mixer {
   static constexpr int MIX_GRAPH_KANAELE = 4, MIX_GRAPH_BLENDE = 480, MIX_BK_FREI = 8;
   void setze_kanal_graph(int k, CypherBk* g) noexcept;
   int bk_frei(CypherBk** aus, int max) noexcept;
+  // S5r: Werte der Graph-Regler <kanal>/bk/1..8 (Zeile = Mixer-Kanal), vom Kern geführt; nullptr: keine Meldung (K10).
+  void setze_bk_wert(const float (*w)[8]) noexcept { bk_wert_ = w; }
   uint32_t bk_verloren() const noexcept { return bk_verloren_; }
   ~Mixer();
 
@@ -247,6 +249,8 @@ class Mixer {
   CypherBk* bk_alt_[MIX_GRAPH_KANAELE] = {};
   int bk_blende_[MIX_GRAPH_KANAELE] = {};        // verbleibende Samples der Blende, 0 = keine
   CypherBk* bk_frei_[MIX_BK_FREI] = {};
+  const float (*bk_wert_)[8] = nullptr;
+  void bk_regler_melden(CypherBk* g, int k) noexcept;
   int n_bk_frei_ = 0;
   uint32_t bk_verloren_ = 0;                     // Ablage voll: Graph verloren (Leck), darf nicht vorkommen
   float bk_ein_l_[MIX_BLOCK], bk_ein_r_[MIX_BLOCK], bk_alt_l_[MIX_BLOCK], bk_alt_r_[MIX_BLOCK];

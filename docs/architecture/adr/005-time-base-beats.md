@@ -17,7 +17,7 @@ push them to the next grid step, 02 NP K11 warns that a discarded fader-close is
    beats). All processes except the hand send commands with target beat on the core clock. Never milliseconds, never
    OSC timestamps, never "now" from the AI.
 2. **The hand** comes as JACK-MIDI with sample offset and takes effect one period after the grab, at the right sample.
-3. **Lateness per command type** (field `politik` in every command, `SCHNITTSTELLEN.md` §16):
+3. **Lateness per command type** (field `politik` in every command, `INTERFACES.md` §16):
    - `musik` (generator events, AI plan parts, deck starts from plans): too late = **discarded and reported**;
    - `zustand` (fader close, kill, stop, fade out, stop button): too late = **executed in the next cycle with a
      10-ms ramp and reported**;
@@ -37,7 +37,7 @@ push them to the next grid step, 02 NP K11 warns that a discarded fader-close is
 
 ## Consequences
 
-- Planners must keep lead time (`SCHNITTSTELLEN.md` §3): control parts at least 2 cycles, deck grabs on the stretcher
+- Planners must keep lead time (`INTERFACES.md` §3): control parts at least 2 cycles, deck grabs on the stretcher
   path at least work lead-in plus buffer lead.
 - "Exact or reported" is the core's promise; a command never sounds silently at the wrong place.
 

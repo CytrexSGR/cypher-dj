@@ -1,4 +1,4 @@
-// Plan 2026-09-27 (Strudel im Kern, Stufe 1; SCHNITTSTELLEN §4.8, ADR 024): Erzeuger-OSC im Netz-Faden. /erz/strom mit
+// Plan 2026-09-27 (Strudel im Kern, Stufe 1; INTERFACES §4.8, ADR 024): Erzeuger-OSC im Netz-Faden. /erz/strom mit
 // Ziel kit:<name> lädt das Kit aus <kit_ordner>/<name>/ und reicht es als Zeiger an den Kern; Fenster-Bundles
 // (/erz/fenster + n × /erz/ev) werden hier vollständig geprüft und als ein ErzFenster übergeben. Freigaben (abgelöstes
 // Kit, verbrauchtes Fenster) kommen als Ereignis zurück und passieren nur hier, nie im Callback.

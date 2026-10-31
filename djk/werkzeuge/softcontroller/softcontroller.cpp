@@ -1,6 +1,6 @@
 // Softcontroller (Scheibe 19): ein virtueller MIDI-Controller im Terminal. Er meldet sich wie ein USB-Controller als
 // ALSA-Sequencer-Client an (Port "hand" zum Lesen, Port "led" zum Beschreiben); PipeWires Midi-Bridge macht daraus
-// JACK-Ports (SCHNITTSTELLEN §7.1). Jede Taste sendet eine Nachricht aus tastatur.h, die im Mapping
+// JACK-Ports (INTERFACES §7.1). Jede Taste sendet eine Nachricht aus tastatur.h, die im Mapping
 // djk/konfig/controller/softcontroller.json steht; LED-Nachrichten am Port "led" zeigt er mit ihrem Namen (§7.4).
 // Er verbindet selbst nichts (kein Ton, kein Riegel nötig) und sendet nichts, solange keine Taste kommt.
 //

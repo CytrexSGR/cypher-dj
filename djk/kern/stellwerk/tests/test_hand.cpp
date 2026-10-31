@@ -1,4 +1,4 @@
-// Scheibe 11, Task 8: Hand-Schiedsrichter nach SCHNITTSTELLEN §7.3 Punkte 1 bis 4 und ADR 023 Punkt 2.
+// Scheibe 11, Task 8: Hand-Schiedsrichter nach INTERFACES §7.3 Punkte 1 bis 4 und ADR 023 Punkt 2.
 #include "pruef.h"
 #include "szenario.h"
 
@@ -91,7 +91,7 @@ FALL(hand_am_selben_sample_wie_teilstart_gewinnt) {
 }
 
 // F18 (Audit 2026-10-01, Welle 2 Slice 2.3): ein Kill-Griff der Hand ist keine Stufe, sondern die Schaltrampe des Reglers
-// (kill/*: 240 Samples = 5 ms, SCHNITTSTELLEN §1.5) als S-Kurve vom Ist-Wert. Vorher schrieb hand.cpp:139 den Zielwert
+// (kill/*: 240 Samples = 5 ms, INTERFACES §1.5) als S-Kurve vom Ist-Wert. Vorher schrieb hand.cpp:139 den Zielwert
 // am Griff-Sample (größter Schritt 1,0).
 FALL(kill_hand_mit_schaltrampe) {
   Lauf l;

@@ -1,4 +1,4 @@
-"""Takt-Eins der Quelle (SCHNITTSTELLEN §1.1 `erste_eins_quell_beat`, §12.3 Tor `eins`).
+"""Takt-Eins der Quelle (INTERFACES §1.1 `erste_eins_quell_beat`, §12.3 Tor `eins`).
 
 Verfahren 1 (beat_this): jede erkannte Downbeat-Zeit im Bereich der Karte wird auf den naechsten
 ganzen quell_beat gelegt; die Lage mod 4, die am haeufigsten vorkommt, ist die Eins.

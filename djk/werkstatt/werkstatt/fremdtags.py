@@ -9,7 +9,7 @@ eigene Chroma-Analyse (stimmung.py/fa.py: eigenes Spektralverfahren + Essentia, 
 hat darum kein freies Feld fuer Tag-Werte: `tonart.camelot` ist an r/vorsprung/aus_stems gebunden (eine
 Audio-Messung, kein Tag), fuer EnergyLevel, Album, ein separates Artist-Feld und einen Tag-BPM-Vergleich gibt es
 gar kein Schema-Feld. Die hier gelesenen Werte landen deshalb in einer eigenen Datei tags.json neben
-material.json (siehe Nachtrag zu Scheibe 15 in docs/architektur/stand/15-werkstatt-fassung.md); TBPM nur als
+material.json (siehe Nachtrag zu Scheibe 15 in docs/architecture/stand/15-werkstatt-fassung.md); TBPM nur als
 Abweichung in Prozent zur eigenen Tempo-Karte (tag_bpm_abweichung_prozent), nie als Ersatz."""
 import json
 import re

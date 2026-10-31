@@ -1,7 +1,7 @@
 {
  "$schema": "https://json-schema.org/draft/2020-12/schema",
  "$id": "https://cypherdj.invalid/vertrag/1/wahl.schema.json",
- "title": "Wahl (SCHNITTSTELLEN.md §14.2); laenge_takte und absicht sind optional wie in §10 waehle",
+ "title": "Wahl (INTERFACES.md §14.2); laenge_takte und absicht sind optional wie in §10 waehle",
  "type": "object",
  "required": ["id", "von", "material_id", "spielart", "start_takt", "hoerschein", "einstieg_quell_beat", "deck"],
  "properties": {

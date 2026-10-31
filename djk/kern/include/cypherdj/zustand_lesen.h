@@ -1,4 +1,4 @@
-// Paket K3: den Neustart-Zustand eines laufenden Kerns nur lesend holen (SCHNITTSTELLEN §6.3, wie cypherdj-zustand):
+// Paket K3: den Neustart-Zustand eines laufenden Kerns nur lesend holen (INTERFACES §6.3, wie cypherdj-zustand):
 // öffnen O_RDONLY, mmap PROT_READ, neuestes fertiges Echtzeit-Fach kopieren. Für cypherdj-render und cypherdj-nulltest.
 #pragma once
 

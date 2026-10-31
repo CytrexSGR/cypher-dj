@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// djk-loop (Plan MVP 2, ADR 025, SCHNITTSTELLEN §4.9, Scheibe 2 §4.9 /k/loop/rec): Loop-Boxen aus der CLI, für Cypher
+// djk-loop (Plan MVP 2, ADR 025, INTERFACES §4.9, Scheibe 2 §4.9 /k/loop/rec): Loop-Boxen aus der CLI, für Cypher
 // und Andreas. Meldet sich beim Kern an (/k/hallo), schickt /k/loop/* mit Quelle cypher (Stop Cypher greift) oder
 // andreas und wartet auf Quittung und /e/loop bzw. (rec) /e/mitschnitt. Rückgabe 0 angenommen, 1 abgelehnt oder keine
 // Antwort, 2 falscher Aufruf.

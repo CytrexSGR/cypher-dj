@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Auswertung eines Prüflaufs der Scheibe 01 am Ziel: jeder Klick-Einsatz in der Aufnahme wird einem Kern-Sample
-zugeordnet und gegen llround(sample_at(b)) gehalten (SCHNITTSTELLEN.md §1.1, §1.3 konstantes Segment).
+zugeordnet und gegen llround(sample_at(b)) gehalten (INTERFACES.md §1.1, §1.3 konstantes Segment).
 
 Zuordnung ohne Kern-Protokoll: der Aufnehmer schreibt den Blockanfang seines ersten Frames (mono_ns, aus
 jack_get_cycle_times) in <wav>.json; der Prüfer hat jedes /uhr des Kerns protokolliert (sample, mono_ns je Zyklus).

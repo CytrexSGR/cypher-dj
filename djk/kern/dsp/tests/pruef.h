@@ -1,4 +1,4 @@
-// Kleiner Prüf-Kopf für CTest (SCHNITTSTELLEN.md §19.4: CTest mit eigenem Assert-Header, kein gtest).
+// Kleiner Prüf-Kopf für CTest (INTERFACES.md §19.4: CTest mit eigenem Assert-Header, kein gtest).
 // Jede Prüfung druckt Datei, Zeile und die Werte; das Programm endet mit 1, wenn eine fehlschlug.
 #pragma once
 

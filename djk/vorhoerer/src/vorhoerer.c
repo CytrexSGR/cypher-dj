@@ -1,6 +1,6 @@
 /* cypherdj-vorhoerer: nativer Vorhörer für Werkzeuge, deren Oberfläche nur noch anzeigt (Andreas 2026-09-26: „wir sollten
  * uns langsam davon lösen das der browser die audioausgabe mache. das muss seperat eben wegen echtzeit erfolgen. browser
- * dann nur anzeige dann“). Erster Nutzer: djk/cues. Stand und Messungen: docs/architektur/stand/vorhoerer.md.
+ * dann nur anzeige dann“). Erster Nutzer: djk/cues. Stand und Messungen: docs/architecture/stand/vorhoerer.md.
  *
  * JACK-Client „cypherdj-vorhoerer“ mit aus_L/aus_R. Eine Datei wird im Lade-Faden per ffmpeg in den Speicher dekodiert
  * (float32 stereo, Rate des JACK-Graphen, ffmpeg-Vorgabe: MP3-Encoder-Vorlauf abgeschnitten wie in djk/cues/welle.ts)

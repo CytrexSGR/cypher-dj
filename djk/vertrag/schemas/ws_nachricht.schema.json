@@ -1,7 +1,7 @@
 {
  "$schema": "https://json-schema.org/draft/2020-12/schema",
  "$id": "https://cypherdj.invalid/vertrag/1/ws_nachricht.schema.json",
- "title": "WebSocket-Nachricht mit Form der daten je typ (SCHNITTSTELLEN.md §9.2 bis §9.4)",
+ "title": "WebSocket-Nachricht mit Form der daten je typ (INTERFACES.md §9.2 bis §9.4)",
  "allOf": [
   {"$ref": "ws_umschlag.schema.json"},
   {"if": {"properties": {"typ": {"const": "hallo"}}}, "then": {"properties": {"daten": {"$ref": "ws_daten.schema.json#/$defs/hallo"}}}},

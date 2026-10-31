@@ -31,7 +31,7 @@ Two Mixxx gaps: the shadow head counts with the rate from switch-on, jumps happe
    behind the keylock** in the channel strip (repetition from the already computed output, deck keeps running inaudibly),
    the same code as beat repeat for generator and pad channels; only after M6.
 5. **For Cypher** deck grabs are discrete plan parts in the Stellwerk (interlocking) (with `plan`, `gruppe`, `hoerschein`,
-   `SCHNITTSTELLEN.md` §4.4); a deck that Andreas touched in the last 8 bars (holder "discrete") is not jumped
+   `INTERFACES.md` §4.4); a deck that Andreas touched in the last 8 bars (holder "discrete") is not jumped
    or looped by Cypher, it only proposes (reason `deck_beruehrt`). A jump or hot cue by Cypher on an
    **open** deck brings new content to the master and needs a target within the measured range of a valid
    listening check or Andreas' acceptance (I3d, ADR 023); otherwise it becomes a proposal. Loop and roll are free.

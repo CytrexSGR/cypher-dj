@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Eigene Null-Senke je Prüflauf (ROADMAP §8.4, SCHNITTSTELLEN §19.5). Aufruf: senke_an.sh <name>
+# Eigene Null-Senke je Prüflauf (ROADMAP §8.4, INTERFACES §19.5). Aufruf: senke_an.sh <name>
 # Der Name muss mit cypherdj-pruef- beginnen (Riegel §8). Gibt die Modul-ID aus und legt sie ab unter
 # ${TMPDIR:-/tmp}/cypherdj-senken/<name>.modid. Wartet, bis der JACK-Port <name>:playback_FL sichtbar ist.
 # Andreas' Standardausgang darf sich dabei nicht ändern; tut er es doch, wird die Senke sofort wieder entladen (Rückgabe 6).

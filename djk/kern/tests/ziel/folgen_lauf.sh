@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Scheibe 08: Golden-Folgen über djk/vertrag/attrappe_leitstand.py gegen einen laufenden Kern an eigener Null-Senke
-# (SCHNITTSTELLEN.md §19.2, §19.5; ROADMAP §8.4, §8.5). Kern und Notbahn in einer node.group, damit der Kern dem
+# (INTERFACES.md §19.2, §19.5; ROADMAP §8.4, §8.5). Kern und Notbahn in einer node.group, damit der Kern dem
 # Treiber der eigenen Senke folgt; kein Ton an echte Ausgänge (Riegel der Notbahn).
 # Aufruf: folgen_lauf.sh <kern-programm> <ausgabe-ordner> <lauf-name> [folge.jsonl ...]
 #   ohne Folgen: uhr_golden, storno, protokollfehler aus djk/vertrag/folgen/

@@ -1,4 +1,4 @@
-// lastgen: Speicher-Streaming für Lastprofil P1 (ARCHITEKTUR §9.2). N Fäden (SCHED_OTHER) streamen je M MiB lesend und
+// lastgen: Speicher-Streaming für Lastprofil P1 (ARCHITECTURE §9.2). N Fäden (SCHED_OTHER) streamen je M MiB lesend und
 // schreibend (Vorlage proben/10-robustheit-betrieb/nachpruefung/src/lastgen2.c; 16 x 64 MiB verdrängt den 96-MB-L3).
 // Neu: zählt den Durchsatz und endet sauber auf SIGTERM, damit der Bericht die erzeugte Last belegt.
 // Aufruf: lastgen <fäden> <sekunden> <mib>

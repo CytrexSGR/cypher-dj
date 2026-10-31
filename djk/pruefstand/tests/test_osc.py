@@ -10,7 +10,7 @@ import osc
 
 
 def test_nb_bytes_wie_notbahn():
-    # /nb ,iiih: zustand 1, takte 3, generation 0, w 2^32 + 5 (SCHNITTSTELLEN §5.10)
+    # /nb ,iiih: zustand 1, takte 3, generation 0, w 2^32 + 5 (INTERFACES §5.10)
     p = osc.kodiere("/nb", "iiih", 1, 3, 0, (1 << 32) + 5)
     assert p[:12] == b"/nb\0,iiih\0\0\0"
     assert p[12:] == struct.pack(">iiiq", 1, 3, 0, (1 << 32) + 5)

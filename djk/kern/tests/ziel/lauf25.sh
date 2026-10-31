@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Scheibe 25: eine Golden-Folge gegen den echten Kern an einer eigenen Null-Senke mit vier Kanälen (SCHNITTSTELLEN
+# Scheibe 25: eine Golden-Folge gegen den echten Kern an einer eigenen Null-Senke mit vier Kanälen (INTERFACES
 # §19.5, ROADMAP §8.4; Vorlage djk/kern/tests/neustart/serie.sh aus Scheibe 18): Notbahn (Scheibe 10) an der Senke,
 # Kern als transiente Unit mit den Eigenschaften aus djk/units/cypherdj-kern.service (nach kill -9 startet systemd ihn
 # neu; verbindet seine Ports selbst mit der Senke, Selbst-Wächter 100 ms wie die Unit), Notbahn daneben (ADR 016

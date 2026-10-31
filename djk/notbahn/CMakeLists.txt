@@ -25,6 +25,6 @@ if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/src/notbahn.c)
   target_include_directories(cypherdj-notbahn PRIVATE src ${CMAKE_CURRENT_SOURCE_DIR}/../kern/include)
   target_link_libraries(cypherdj-notbahn PRIVATE PkgConfig::JACK m)
   target_compile_options(cypherdj-notbahn PRIVATE -Wall -Wextra)
-  # ARCHITEKTUR §2.1: die Notbahn bleibt unter 200 Zeilen C
+  # ARCHITECTURE §2.1: die Notbahn bleibt unter 200 Zeilen C
   add_test(NAME unter_200_zeilen COMMAND sh -c "test $(wc -l < ${CMAKE_CURRENT_SOURCE_DIR}/src/notbahn.c) -lt 200")
 endif()

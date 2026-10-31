@@ -1,7 +1,7 @@
 # ADR 015: Inventory (Bestand), working inventory, crate (Kiste) and journal
 
 - **Status:** accepted (SQLite index: assumption, to be checked in the first workshop plan); versions after the
-  critique round of 2026-09-23 (ARCHITEKTUR "Kritik und Korrekturen"), binding before W1, because W1 writes the inventory first
+  critique round of 2026-09-23 (ARCHITECTURE "Kritik und Korrekturen"), binding before W1, because W1 writes the inventory first
 - **Date:** 2026-09-23
 - **Requirements carried:** A12, A13, A16, A1
 - **Related to:** ADR 011, 020, 016
@@ -36,7 +36,7 @@ several base tempos per material. Andreas' nudge and tap corrections must reach 
    unloading by rule (oldest unloaded first).
 6. **Set journal** under `~/cypher-dj/sets/djk/<JJJJ-MM-TT_hhmm>/journal.jsonl` (control station) and recording
    `aufnahme.f32` plus `aufnahme.json` (first core sample) next to it.
-7. Formats in detail: `SCHNITTSTELLEN.md` §13, §15.
+7. Formats in detail: `INTERFACES.md` §13, §15.
 
 ## Alternatives and why not
 

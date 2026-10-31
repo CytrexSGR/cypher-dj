@@ -1,4 +1,4 @@
-// Hand-Weg: MIDI -> Ausgabe (SCHNITTSTELLEN §7.2, §7.3 Punkt 1). Echtzeitfest.
+// Hand-Weg: MIDI -> Ausgabe (INTERFACES §7.2, §7.3 Punkt 1). Echtzeitfest.
 #include <cmath>
 
 #include "hand/uebersetzer.h"

@@ -1,5 +1,5 @@
 // Selbst-Wächter des Kerns (Scheibe 18, Plan-Befund B5): ein eigener kleiner Prozess neben dem Kern, der ihn mit SIGKILL
-// tötet, wenn der Echtzeit-Zähler (w im Ring, SCHNITTSTELLEN §6.1) `ms` Millisekunden lang steht. Warum ein Prozess:
+// tötet, wenn der Echtzeit-Zähler (w im Ring, INTERFACES §6.1) `ms` Millisekunden lang steht. Warum ein Prozess:
 // ein angehaltener Kern (SIGSTOP) hält alle seine Fäden an, ein Wächter-Faden stünde mit. Warum überhaupt: systemd
 // prüft WatchdogSec mit 250 ms Genauigkeit (sd-event), der Tod kam gemessen bis 450 ms nach dem Hänger, und so lange
 // wartet die Notbahn daneben über die Kante mit (Stand 16, sigstop-kern). Der systemd-Watchdog bleibt als zweite Linie.

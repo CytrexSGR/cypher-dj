@@ -1,4 +1,4 @@
-// pq_ring.h: Sicht der Prüfquelle auf den Audio-Ring nach SCHNITTSTELLEN §6.1, Version 1 (Kopf 64 Bytes, dann
+// pq_ring.h: Sicht der Prüfquelle auf den Audio-Ring nach INTERFACES §6.1, Version 1 (Kopf 64 Bytes, dann
 // float32[cap][4]). Eigene Kopie mit Lage-Prüfung, damit der Prüfstand nicht an einer Kopfdatei aus Kern oder Notbahn
 // hängt: stimmen beide mit dem Vertrag, stimmen sie mit dieser Datei.
 #pragma once

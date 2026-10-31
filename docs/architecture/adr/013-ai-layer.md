@@ -37,7 +37,7 @@ An LLM move takes seconds (09 check a, a2); the LLM wrote a coupling in 0 of 105
    audible deck; alone only loading, pre-listening, generating, aborting own plans, and a plan that exclusively
    makes channels of the own track quieter) · 2 own track (Cypher plays released channels behind a fader that only
    Andreas holds; everything else still as proposal) · 3 transitions alone. Enforced in the control desk; wording and
-   golden sequence `autonomie_1_eq`: `SCHNITTSTELLEN.md` §10. Reason for the positive list: A4 "Nothing reaches the master
+   golden sequence `autonomie_1_eq`: `INTERFACES.md` §10. Reason for the positive list: A4 "Nothing reaches the master
    unchecked"; an EQ at +6 dB on Andreas' running deck opens no channel and is still playing in without him.
 5. **Cypher stop** (key on the controller, acts in the core even without the control desk): all parts with source `cypher` off, channels
    of the AI track to −200 dB within one bar, other controls stay where they are, further Cypher commands rejected until "release".
@@ -47,7 +47,7 @@ An LLM move takes seconds (09 check a, a2); the LLM wrote a coupling in 0 of 105
    **announcement line** in the terminal (one sentence with bar: what Cypher intends next), the key "Hear Cypher",
    the play sheet as text. No speech output (No sound without a question).
 7. **MCP tools:** `lage`, `warte`, `waehle`, `plan_einreichen`, `plan_abbrechen`, `laden`, `vorhoeren`, `bestand`,
-   `passung`, `erzeuge`, `spielzettel` (from slice 7), `markieren` (forms: `SCHNITTSTELLEN.md` §10). Tools instead of
+   `passung`, `erzeuge`, `spielzettel` (from slice 7), `markieren` (forms: `INTERFACES.md` §10). Tools instead of
    resource subscriptions.
 
 ## Alternatives and why not
@@ -65,7 +65,7 @@ An LLM move takes seconds (09 check a, a2); the LLM wrote a coupling in 0 of 105
 ## Consequences
 
 - Form errors cost a move, never a sound: the control desk checks every answer.
-- The choice as a tool call is unmeasured; calculated 2.5 to 3.5 s (text 1.3 to 1.4 s plus 1 to 2 s for the second model call after the tool result, 09 NP K6). **Decisive is the response deadline of the contract: 4 bars (7.5 s at 128)** from the move to `antwort_bis_beat`; the remaining 4 bars of the 8-bar lead belong to Andreas' acceptance and the lead time of the parts (`SCHNITTSTELLEN.md` §3). Measured are: free plan via the tool 4.5 to 8.7 s, warm text moves with schema up to 14.5 s, the choice only as text 1.3 to 1.4 s (n = 5, context at most 7 410 tokens, `llm_x_wahl_sonnet_low_ergebnis.json` field `cache_gelesen`). Move plus repair move fit only if the tool choice holds the calculated 2.5 to 3.5 s; that is open.
+- The choice as a tool call is unmeasured; calculated 2.5 to 3.5 s (text 1.3 to 1.4 s plus 1 to 2 s for the second model call after the tool result, 09 NP K6). **Decisive is the response deadline of the contract: 4 bars (7.5 s at 128)** from the move to `antwort_bis_beat`; the remaining 4 bars of the 8-bar lead belong to Andreas' acceptance and the lead time of the parts (`INTERFACES.md` §3). Measured are: free plan via the tool 4.5 to 8.7 s, warm text moves with schema up to 14.5 s, the choice only as text 1.3 to 1.4 s (n = 5, context at most 7 410 tokens, `llm_x_wahl_sonnet_low_ergebnis.json` field `cache_gelesen`). Move plus repair move fit only if the tool choice holds the calculated 2.5 to 3.5 s; that is open.
 - If the deadline is tight, the move request for "safe" moves up to F−28 (12 bars before S), the response deadline stays S − 4 bars.
 - Costs over a set are unmeasured: at 260 000 tokens of context every move reads this amount from the cache (09 NP "What is missing"). M15 first measures 30 minutes.
 - Form reliability at large context is measured only for text (0 of 5 valid at 259 266 tokens); the 10 valid tool calls ran at 7 to 23 thousand tokens (`llm_x_mcp_*_ergebnis.json`, `cache_gelesen`).

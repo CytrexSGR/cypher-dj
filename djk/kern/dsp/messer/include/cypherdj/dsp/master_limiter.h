@@ -1,5 +1,5 @@
-// Master-Limiter mit Vorhalt und Echtspitzen-Erkennung (ARCHITEKTUR 3.1, ADR 008 Punkt 2,
-// SCHNITTSTELLEN 2.1 limiter_dbtp). Scheibe 14. Stereo gekoppelt.
+// Master-Limiter mit Vorhalt und Echtspitzen-Erkennung (ARCHITECTURE 3.1, ADR 008 Punkt 2,
+// INTERFACES 2.1 limiter_dbtp). Scheibe 14. Stereo gekoppelt.
 //
 // Verfahren: je Eingangssample die Echtspitze mit zwei Interpolatoren, genommen wird die größere:
 //   (a) derselbe 4-fach-Interpolator wie libebur128 (49 Abgriffe, Hann-Sinc; 6 Samples Laufzeit), damit der

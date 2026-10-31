@@ -1,4 +1,4 @@
-/* Hüllkurven-Ring Kern -> Analyse nach SCHNITTSTELLEN.md §6.2, Version 1 (cap 16384, Änderung 2026-09-28).
+/* Hüllkurven-Ring Kern -> Analyse nach INTERFACES.md §6.2, Version 1 (cap 16384, Änderung 2026-09-28).
  * Little Endian, Kopf 64 Bytes, dann cap·16 Datensätze zu 64 Bytes; Datensatz r von Kanal c bei 64 + ((r % cap)·16 + c)·64.
  * Der Kern schreibt alle 16 Kanäle eines Datensatzes, dann w = r + 1 (Release). Anlegen: nur der Kern. */
 #ifndef CYPHERDJ_HUELLEN_H

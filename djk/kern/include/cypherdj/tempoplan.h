@@ -1,4 +1,4 @@
-// Tempo-Rampen im Callback (SCHNITTSTELLEN.md §1.3, §4.2, §16.1): angenommene Rampen warten sortiert nach Start-Beat;
+// Tempo-Rampen im Callback (INTERFACES.md §1.3, §4.2, §16.1): angenommene Rampen warten sortiert nach Start-Beat;
 // die Karte ist die Grundkarte (alles Gestartete) plus alle wartenden Rampen, in Startreihenfolge neu aufgebaut, sobald
 // sich die Liste ändert. So gilt jede Rampe "vom dann gültigen Tempo", auch nach einem Storno davor.
 // Keine Allokation, keine Sperre: alle Methoden sind im Callback erlaubt. Scheibe 08.

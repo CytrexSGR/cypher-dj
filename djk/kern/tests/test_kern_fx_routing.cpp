@@ -1,4 +1,4 @@
-// Ohr Task 17 (Slice 5, SCHNITTSTELLEN §4.10 /k/fx/routing, §5.12 /e/fx/routing): Beat-FX als Insert (vor dem Fader) oder
+// Ohr Task 17 (Slice 5, INTERFACES §4.10 /k/fx/routing, §5.12 /e/fx/routing): Beat-FX als Insert (vor dem Fader) oder
 // Post Fader (nach dem Fader, Vorgabe), ohne JACK. Rahmen wie test_kern_fx.cpp (Klick-Material, Master und Cue am
 // Kern-Sample).
 //   Fall 1 (a bis c): Deck 2 mit Klick-Material, Fader zu, PFL an, FX1 Echo ½ Beat Wet 0,5 an deck/2.

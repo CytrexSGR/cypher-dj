@@ -1,7 +1,7 @@
 {
  "$schema": "https://json-schema.org/draft/2020-12/schema",
  "$id": "https://cypherdj.invalid/vertrag/1/auftrag.schema.json",
- "title": "Werkstatt-Auftrag, Leitstand → Werkstatt, WS-Typ auftrag (SCHNITTSTELLEN.md §12.1)",
+ "title": "Werkstatt-Auftrag, Leitstand → Werkstatt, WS-Typ auftrag (INTERFACES.md §12.1)",
  "type": "object",
  "required": ["auftrag_id", "art", "vorrang", "set_basis_bpm", "parameter"],
  "properties": {

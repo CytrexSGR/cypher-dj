@@ -1,4 +1,4 @@
-// Scheibe 18: der Kern und sein Neustart-Zustand (SCHNITTSTELLEN.md §6.3, ADR 016 Entscheidung 4). Was der Callback
+// Scheibe 18: der Kern und sein Neustart-Zustand (INTERFACES.md §6.3, ADR 016 Entscheidung 4). Was der Callback
 // je Zyklus ins Echtzeit-Fach schreibt und was ein neuer Kern daraus übernimmt: Generation, wirksame Karte, Grundkarte
 // (Tempoplan), offene Befehle mit Stand (Tempo-Rampen, Prüfklick). Keine Allokation, keine Sperre, kein I/O.
 // Scheibe 25: dazu alle Regler mit Wert oder Halter außerhalb der Vorgabe, Planteile mit Stand (Art 5), KI-Stopp,

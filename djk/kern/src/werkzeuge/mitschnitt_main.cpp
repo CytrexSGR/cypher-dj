@@ -1,5 +1,5 @@
 // cypherdj-mitschnitt (Paket K3, Spec D1 A7 Schritt 2): Master-Mitschnitt aus dem Audio-Ring eines laufenden Kerns, nur
-// lesend (/dev/shm/cypherdj[-$CYPHERDJ_INSTANZ]/bus, SCHNITTSTELLEN §6.1). Liest ab jetzt alle 20 ms, was der Kern neu
+// lesend (/dev/shm/cypherdj[-$CYPHERDJ_INSTANZ]/bus, INTERFACES §6.1). Liest ab jetzt alle 20 ms, was der Kern neu
 // geschrieben hat, sekunden lang, und schreibt Master L/R als rohes f32 Stereo. s0 ist das Kern-Sample des ersten
 // Frames (über sample_minus_w), grenze eine Blockgrenze (für die Blockphase).
 // Aufruf: cypherdj-mitschnitt --sekunden S --aus <datei.f32> [--ring pfad]

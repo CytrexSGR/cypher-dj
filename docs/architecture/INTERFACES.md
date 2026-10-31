@@ -1,7 +1,7 @@
 # Cypher-DJ: Interfaces (contract between the building blocks)
 
-*Status 2026-09-23, after the review round ("Kritik und Korrekturen" in ARCHITEKTUR), contract version **1** (`protokoll = 1`; the
-corrections of this round stay in version 1, because nothing has been built yet). Basis: `ARCHITEKTUR.md` and `adr/`.
+*Status 2026-09-23, after the review round ("Kritik und Korrekturen" in ARCHITECTURE), contract version **1** (`protokoll = 1`; the
+corrections of this round stay in version 1, because nothing has been built yet). Basis: `ARCHITECTURE.md` and `adr/`.
 This contract is binding for all sessions: names, addresses, types, fields, units and policies apply literally.
 Where a number is set and not measured, that is stated here; it is binding nonetheless until a measurement
 changes it.*
@@ -146,15 +146,16 @@ Channels: `deck/1` to `deck/4` (Andreas says A = 1, B = 2), `erz/1` to `erz/8` (
 | `grp/<n>/mute` | switch | 0/1 | 0 | immediate (10 ms fade in the Arrangement module) | all |
 | `grp/<n>/solo` | switch | 0/1 | 0 | immediate (10 ms fade in the Arrangement module) | all |
 | `pm/fader` | dB | −200 to +6 | 0 | 10 ms | all |
+| `<k>/bk/<n>` (n = 1 to 8) | 0 to 1 (graph knob `regler nr n` of the Baukasten (modular) graph on the channel) | | 0.5 | immediately; the Baukasten library smooths over 20 ms | all; only `<k>` = deck/1..4 (effect graph, §4.10), erz/1, 2, 3, 5, 6, 7 and pad/1, 2 (instrument `bk:<name>`, §4.8); not erz/4 (production) and erz/8 (pre-listen) |
 
 `keylock` (Keylock Task 3; ADR 029 comes with Task 4): ONE switch for all sources, no deck argument. On (default): decks and loop boxes play via the time stretcher (Dehner; Rubber Band R3 in the work thread, one per source) at their pitch, each event with a varispeed bridge up to `s_h`; a waiting box starts with a lead-in and fades out to the one from the ring (ADR 029 section loop boxes, since Task 7; pre-rendered variants per ADR 027 no longer exist). Off: decks and loop boxes play varispeed (pitch follows tempo). The REC conversion of a recording stays offline (ADR 027 decision 6) and does not depend on the knob. A new subscriber receives the state at the first `/k/hallo` as `/e/regler keylock` (§5.7). Takes effect at the sample, also while a deck is running. Without the stretcher (kern.toml `keylock = false`, §2.1) the knob has no effect on the decks.
 
 `<k>/komp/*` (effect section, 2026-10-11): Cypher Komp (compressor; Rust `komp_dsp` via `hall_ffi`, Giannoulis, Massberg, Reiss 2012) per
 source channel after EQ and filter, before the fader (PFL hears it), knee fixed at 6 dB; with `komp/sc` the detector listens to the input
 of another source channel (before its trim and EQ), e.g. the kick on erz/1 (value 5); off = bit-identical to the
-channel strip without compressor. Status: `docs/architektur/stand/kompressor.md`.
+channel strip without compressor. Status: `docs/architecture/stand/kompressor.md`.
 
-`color/*` (SOUND COLOR FX modeled on the XDJ-XZ, 2026-10-11): `<k>/filter` is the COLOR control of each channel, `color/art` and `color/param` apply to all channels as on the desk. Type 0 is the DJ filter as before (bit-identical); every other type replaces it at the same point in the channel strip (before the tap, i.e. before PFL and fader). In the dead zone |k| < 0.05 the output is dry; SPACE and DUB ECHO (3/4 beat from the master tempo) fade out after turning back, and a type change empties them. Curves: `djk/kern/dsp/include/cypherdj/dsp/colorfx.h`, status: `docs/architektur/stand/color-fx.md`.
+`color/*` (SOUND COLOR FX modeled on the XDJ-XZ, 2026-10-11): `<k>/filter` is the COLOR control of each channel, `color/art` and `color/param` apply to all channels as on the desk. Type 0 is the DJ filter as before (bit-identical); every other type replaces it at the same point in the channel strip (before the tap, i.e. before PFL and fader). In the dead zone |k| < 0.05 the output is dry; SPACE and DUB ECHO (3/4 beat from the master tempo) fade out after turning back, and a type change empties them. Curves: `djk/kern/dsp/include/cypherdj/dsp/colorfx.h`, status: `docs/architecture/stand/color-fx.md`.
 
 `spur/<n>/*` (D1, ADR 030, n = 1 to 32): track controls of the arrangement, global (no channel; channel −1 of the control table). In the Arrangement module they act on the track before the sum into the input of `erz/4` (§4.11): fader,
 pan (left cos, right sin via (pan + 1)·π/4, at center −3 dB per side), mute and solo fade over 10 ms (if any track is solo, all others are silent).
@@ -180,7 +181,7 @@ The check I3 (listening check) exempts them. The controls sit at the end of the 
 group buses; a bus has the full channel strip and goes to master; four sends per channel after the fader to `fx/1`
 to `fx/4`. The mixer in the core is an **assignment table**, not a chain of fixed paths: K1 may still leave buses and
 `fx/3`/`fx/4` empty in slice 1, but not the table. Freely wirable inserts come with the hosts
-(slice 8, ADR 009); whether Andreas wants more routing (matrix, subgroups within subgroups) is question 5 in ARCHITEKTUR §13.
+(slice 8, ADR 009); whether Andreas wants more routing (matrix, subgroups within subgroups) is question 5 in ARCHITECTURE §13.
 
 ### 1.6 Open, audible and "deep open" (set, calibrated in M18)
 
@@ -215,7 +216,7 @@ to `fx/4`. The mixer in the core is an **assignment table**, not a chain of fixe
 | Control station hub | WebSocket, JSON text frames | `ws://127.0.0.1:47200/` | Control station ↔ player driver, MCP, analysis, workshop, announcement, display, test bench | §9 |
 | Rechner (planner) | Unix socket, JSON lines | `$XDG_RUNTIME_DIR/cypherdj/rechner.sock` | Control station → Rechner | §11 |
 | Cypher | MCP over stdio | `cypherdj-mcp` as child of the player session | Player ↔ MCP (then WS to the control station) | §10 |
-| djk cues: preview (commands + reports) | OSC 1.0 over UDP, loopback only | `127.0.0.1:47740` (+1000·k per instance, `CYPHERDJ_INSTANZ`) | Cue server (djk/cues) ↔ preview (djk/vorhoerer) | docs/architektur/stand/vorhoerer.md |
+| djk cues: preview (commands + reports) | OSC 1.0 over UDP, loopback only | `127.0.0.1:47740` (+1000·k per instance, `CYPHERDJ_INSTANZ`) | Cue server (djk/cues) ↔ preview (djk/vorhoerer) | docs/architecture/stand/vorhoerer.md |
 | Generation | HTTP | ComfyUI of the GPU machine, port 8288 (address from `~/.config/cypherdj/werkstatt.toml`, key `comfy_musik_url`) | Workshop → GPU machine | §12.3 |
 | Inventory | files | `~/cypher-dj/bestand/` | Workshop writes, all read | §13 |
 | Set journal, recording | files | `~/cypher-dj/sets/djk/<JJJJ-MM-TT_hhmm>/` | Control station, recording | §15 |
@@ -261,7 +262,7 @@ Unknown keys are a startup error (typos show up at once). Every file begins with
 | `werkstatt.toml` | `comfy_musik_url` | str | (from skill `cypher-musik`) | §12.3 |
 | | `bestand` | path | `~/cypher-dj/bestand` | §13 |
 | | `threads` | int | 4 | per job; unit with `Nice=19`, `CPUSchedulingPolicy=batch` |
-| | `stems_gpu` | bool | false | only after Andreas' answer to question 4 (ARCHITEKTUR §13) |
+| | `stems_gpu` | bool | false | only after Andreas' answer to question 4 (ARCHITECTURE §13) |
 | | `stems_cpu_im_set` | str | `"nur_256"` | `nie` or `nur_256` (§12.3) |
 | | `luft_db` | float | −12.0 | headroom before R3 (08 NP K5) |
 | | `tor_raster_ms`, `tor_klarheit`, `tor_streckfaktor`, `tor_headroom_dbtp` | float | 8.0, 0.1, 0.20, −1.0 | §12.3; `tor_streckfaktor` 0.20 from M19 (2026-09-25, 5-ms convention, at 30 ms 0.30), provisional until M18 |
@@ -959,7 +960,7 @@ is in the mapping.
    base (also a ramp over 1 beat). Without effect until slice 5 while a deck runs (no stretcher path). On the
    stretcher path, after M4 (2026-09-25, slice 33, `messungen/M04-tempo-rampen/BERICHT.md`) the following applies: the
    factor is set **at most every 43 blocks** (229 ms at quantum 256), also by the phase control, because every change
-   costs phase, regardless of its size (E3); the phase control (ARCHITEKTUR §4 rule 5) works on the delay model
+   costs phase, regardless of its size (E3); the phase control (ARCHITECTURE §4 rule 5) works on the delay model
    (D = 50 ms) with |c| ≤ 100 ppm (E5; "10 ppm per block" runs away); the stretcher **never gets a factor closer than
    10⁻⁶ to 1.0**, on the base the direct path plays (E4: return to exactly 1.0 jumps up to 87 ct). Null samples do not
    produce small changes in the time-stretch design (E7, E9).
@@ -1160,7 +1161,7 @@ for "hard", 08 NP K1); until M20 (recalculation) they only report `warnungen` (`
   A new material is published as a whole folder via `rename` to `~/cypher-dj/bestand/<material_id>/`; each further version (re-rendering, correction) as its own folder via `rename` to `<material_id>/fassungen/<bpm·1000>_r<n>/` (§13.1). Nothing existing is overwritten.
 - **Tempo choice:** the chain chooses, among source BPM × {½, 1, 2}, the multiple whose stretch factor to the set base (`basis_bpm / (Quell-BPM × v)`) lies closest to 1. Half and double tempo change only the beat count of the tempo map. `material.json` records `tempo_vielfaches`.
 - **Tuning:** if both tools (own method from `fa.py`, Essentia) agree to within at most 10 cents, and the deviation from A = 440 Hz lies below `stimmung_max_cent` (35), the chain removes it in the same R3 run as the warp (`stimmung_korrektur_cent` in `fassung.json`); otherwise there is no correction and a warning. Live there is no pitch control, the direct path stays bit-exact (ADR 012). Pitch of the correction unmeasured: M19.
-- **Stems in the set:** on the GPU only with `stems_gpu = true` (only after Andreas' answer, ARCHITEKTUR §13 question 4); on the CPU during a set only at quantum 256 (`stems_cpu_im_set = "nur_256"`: 10 NP N6, 15 % of the period at 256, 55 % at 128), as a workshop job with `Nice=19`, `CPUSchedulingPolicy=batch`, at most `threads` threads; never at 128.
+- **Stems in the set:** on the GPU only with `stems_gpu = true` (only after Andreas' answer, ARCHITECTURE §13 question 4); on the CPU during a set only at quantum 256 (`stems_cpu_im_set = "nur_256"`: 10 NP N6, 15 % of the period at 256, 55 % at 128), as a workshop job with `Nice=19`, `CPUSchedulingPolicy=batch`, at most `threads` threads; never at 128.
 - **Gates** (`fassung.json` field `tore`, thresholds provisional until M13 and M19; a gate **never measures with the tool that set the map**, 08 NP K3):
   - `raster` ok if the **independently** measured low-band onsets on the warped result (method `proben/08-analyse-passung/fa.py` onsets: Hilbert envelope 30 to 250 Hz, 50% point; control click grid 32 of 32, 0.38 ms, 08 §4.0) against the rigid grid have a residual of ≤ 8 ms p90 (flam lower bound), with at least 64 onsets; fewer onsets count as undetermined and thus as broken. beat_this and Essentia do not check here, they set the map. Built as `werkstatt/tor_raster.py` (slice 3a), not yet hooked into `kette.py`; on real tracks the assumption "kick on every beat" does not hold throughout (target acceptance S3a 2026-10-29, new version in S3b).
   - `klarheit` ok if the pulse clarity (method `c_drift.py`) ≥ 0.1. The earlier exception "both raster tools agree" is dropped: both set the map, and below 0.1 the metric does not separate noise from drift (c_drift: 8 of 10 MiniMax songs lie below 0.1).
@@ -1554,7 +1555,7 @@ Checked before every part start and every deck part, in every cycle in which a p
    - `einstieg`: pre-listening from the entry, plan with deck part `start` at S → I3a checks the source position, the listening pass covers it.
    - `autonomie_1_eq` (control station against mock): level 1, plan with one EQ part on an audible deck → `vorgeschlagen` (suggested), no `/k/teil` to the core.
    - `expandiere_sicher` (planner): choice in, exactly the parts from §14.1 out.
-   - `notbahn_124`, `notbahn_rampe` (test bench, silent): core crash at fixed base 124 and during a ramp → the loop is one master bar long, the return to the core lies on the grid (limit as ARCHITEKTUR §7).
+   - `notbahn_124`, `notbahn_rampe` (test bench, silent): core crash at fixed base 124 and during a ramp → the loop is one master bar long, the return to the core lies on the grid (limit as ARCHITECTURE §7).
 4. **Build dependencies on the DJ machine** (checked 2026-09-23, `pkg-config`): rubberband 3.3.0, jack 1.9.21, sndfile 1.2.2, samplerate 0.2.2, fftw3/fftw3f 3.3.10, lilv-0 0.24.22, alsa 1.2.11, aubio 0.4.9; g++ 13.3, CMake 3.28.3, Ninja 1.11.1, Faust 2.70.3, Node 22.23.2, Python 3.12.3. **Missing** (measured 2026-09-23: `pkg-config` does not find liblo, libsystemd, nlohmann_json, tomlplusplus, gtest, catch2; `/usr/include/{nlohmann,toml++,gtest,catch2,lo,systemd}` missing; counter-check rubberband, jack, sndfile found). Decision for V0 and K1:
    - **libebur128** (MIT, `ebur128.c` plus `queue/`, commit 67b33ab): copy the source to `djk/third_party/libebur128/` and compile it in (today only under `proben/04-mixer-effekte/vendor/`, there excluded from git via `.gitignore`).
    - **JSON** (`kiste.json`, mapping, `fassung.json`): nlohmann/json as a pinned single header (MIT) under `djk/third_party/`; **TOML** (`kern.toml`): toml++ as a pinned single header (MIT) likewise. The Notbahn (fallback path, C) reads no file (§8).
@@ -1610,14 +1611,14 @@ deletes the field; `null` rejects `clip_aendern` (`argument_ungueltig`).
 | Date | Version | Change |
 |---|---|---|
 | 2026-09-23 | 1 | first version from the synthesis of the architecture night |
-| 2026-09-23 | 1 | critique round (ARCHITEKTUR "Kritik und Korrekturen"), version stays 1 because nothing is built yet: autonomy allowlist (§10); I3 as "new content only with listening pass" with `offen`, content and section (§1.6, §4.5, §17); `hörbar` requires a running deck, deck parts with `plan`/`gruppe`/`hoerschein` (§4.4); listening pass renewal per bar (§14.5); entry (§10, §14.2); stems or base (§4.4); versions instead of overwritten files (§13); bar one and text (§13.2); six bands in the envelope ring and `huelle_1khz` defined (§6.2, §13.1); Notbahn bar fields in the ring, ports from the unit, interlock (§6.1, §8); subscribers in the state, `/q/stand` (§4.1, §5.1); playing style as full rule (§14.4), low limits only warning (§11); target LUFS and trim up to +24 dB (§1.5, §2.1); routing with buses (§1.5); gates with independent instrument, stretch factor, bar one, tuning (§12.3); hand tempo as ramp (§1.3); configuration schema (§2.1); V0, golden sequences, build dependencies (§19) |
+| 2026-09-23 | 1 | critique round (ARCHITECTURE "Kritik und Korrekturen"), version stays 1 because nothing is built yet: autonomy allowlist (§10); I3 as "new content only with listening pass" with `offen`, content and section (§1.6, §4.5, §17); `hörbar` requires a running deck, deck parts with `plan`/`gruppe`/`hoerschein` (§4.4); listening pass renewal per bar (§14.5); entry (§10, §14.2); stems or base (§4.4); versions instead of overwritten files (§13); bar one and text (§13.2); six bands in the envelope ring and `huelle_1khz` defined (§6.2, §13.1); Notbahn bar fields in the ring, ports from the unit, interlock (§6.1, §8); subscribers in the state, `/q/stand` (§4.1, §5.1); playing style as full rule (§14.4), low limits only warning (§11); target LUFS and trim up to +24 dB (§1.5, §2.1); routing with buses (§1.5); gates with independent instrument, stretch factor, bar one, tuning (§12.3); hand tempo as ramp (§1.3); configuration schema (§2.1); V0, golden sequences, build dependencies (§19) |
 | 2026-09-24 | 1 | slice 02: roadmap additions Z1 (test click `/test/klick`, only with `pruefmodus`) and Z2 (test instances via `CYPHERDJ_INSTANZ`) carried over per §19.0; test operation only, no set semantics, version stays 1 |
 | 2026-09-24 | 1 | §1.3 made precise: rounded `s0` requires `b0` on the continuous curve at this sample. Finding slice 02 (rounded `s0` with ordered beat misses `sample(192,0)` and the `/uhr` step at 4 286 976 in `uhr_golden` by 3.53·10⁻⁶ beats); the core already computes this from slice 01 (`djk/kern/src/uhr.cpp`, `rampe`), `karte.py` keeps `s0` unrounded, both hit the table. No number changed, version stays 1. |
 | 2026-09-25 | 1 | §12.3 and §20 aligned with §2.1: gate `streckfaktor` 0.20 (M19) instead of 0.15; the value had stood only in §2.1 since ff24935. Finding of test slice 09 (`~/messungen/2026-09-25-djk09-vertragsdrift/`); no new decision, version stays 1 |
 | 2026-09-25 | 1 | §16.2 extended by `grenze_sub` (dossier 09 V4) and `neustart` (§16.3 already named it); finding slice 09, plan finding 3 and 5. Version stays 1 |
 | 2026-09-25 | 1 | §14.1: deck parts carry the hotcue number as `hotcue_nr` and the roll type as `roll_art` (name clash with `nr`/`art` of the part; finding slice 09, plan 21 already uses the names). New optional fields, version stays 1 |
 | 2026-09-25 | 1 | §7.3 point 7 after M4 (slice 33, E3 to E7): factor bar 43 blocks, phase control \|c\| ≤ 100 ppm on the delay model, never factor closer than 10⁻⁶ to 1.0; replaces "10 ppm per block" (set, refuted). Version stays 1 |
-| 2026-09-25 | 1 | readings from slice 09 decided (Andreas): b rejection at the start takes the group with it (§4.3 field 11); e grab breaks off immediately (§4.3, ADR 023); n I1 checks via the switching ramp, §14.1 example part 1 on beat 447, rule §14.4 likewise. Remaining eleven to `docs/architektur/entwuerfe/2026-09-25-lesarten-09.md`. Version stays 1 |
+| 2026-09-25 | 1 | readings from slice 09 decided (Andreas): b rejection at the start takes the group with it (§4.3 field 11); e grab breaks off immediately (§4.3, ADR 023); n I1 checks via the switching ramp, §14.1 example part 1 on beat 447, rule §14.4 likewise. Remaining eleven to `docs/architecture/entwuerfe/2026-09-25-lesarten-09.md`. Version stays 1 |
 | 2026-09-26 | 1 | slice 35, finding B-O (decision of the main instance, path 1): §2.1 `hand_osc` (bool, false) allows `/test/hand` even without `pruefmodus`; §19.0: `deck/<n>/play`, `deck/<n>/cue` and `taste/<name>` (§5.8 without encoder values) are valid `pfad` of `/test/hand`. New optional key, version stays 1 |
 | 2026-09-27 | 1 | §4.4 `/k/deck/laden` and `entladen`: blocked only if the deck runs AND is open (before: open). Finding at the Digital-Out (Andreas: "loading a new track does not work via load a"). Version stays 1 |
 | 2026-09-27 | 1 | Strudel in the core, stage 1 (ADR 024): §4.8 `ziel` `kit:<name>`, kit form, I3c suspended, 20 `/erz/ev` per bundle; §5.6 `/pegel` also `erz/1`. New target form, version stays 1 |
@@ -1657,3 +1658,4 @@ deletes the field; `null` rejects `clip_aendern` (`argument_ungueltig`).
 | 2026-10-29 | 1 | Baukasten S3c: §4.10 `/k/kanal/graph` (effect graph as insert in deck/1..4); §16.2 `kein_eingang` here too. New address, version stays 1 |
 | 2026-10-30 | 1 | package 1.13 slice 3b (warp, markers by hand): no new OSC and no new playback field. Page API: new commands in `POST /proj/aendern`: `warp_tempo {clip_id, faktor 2|0.5}`, `warp_marker {clip_id, setze?, loesche?, verschiebe? (neu_beat | neu_quell_s)}`, `warp_ab_hier {clip_id, beat, art gerade|start}`, `eins_hier {clip_id, quell_s}`, `tempo_vom_clip {clip_id}` (the server converts it into `tempo_setzen`); new reason `marker_unbekannt`; new `hinweise` in the answer of `aendern`: `eins_gemeldet`, `eins_nur_hier`, `eins_rueckweg_fehler`; server option `--korrekturen` (environment `CYPHERDJ_KORREKTUREN`). The server writes `bestand/<sha[:16]>/korrekturen.jsonl` (line `art eins`, `von andreas`, §13.3). Additive, version stays 1 |
 | 2026-10-30 | 1 | package 1.13 slice 6 (stems): page API §20.1, `stumm` on the clip, no OSC change. Additive, version stays 1 |
+| 2026-10-31 | 1 | Baukasten S5r: §1.5 `<k>/bk/<1..8>` (graph knobs, 96 new controls, 693 instead of 597) on deck/1..4, erz/1, 2, 3, 5, 6, 7, pad/1, 2. New control paths, no new address, version stays 1 |

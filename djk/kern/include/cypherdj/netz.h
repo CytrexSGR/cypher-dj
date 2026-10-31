@@ -1,4 +1,4 @@
-// Nicht-Echtzeit-Faden des Kerns: nimmt OSC-Befehle über UDP an (SCHNITTSTELLEN.md §4.1, §4.2, ROADMAP Z1), prüft
+// Nicht-Echtzeit-Faden des Kerns: nimmt OSC-Befehle über UDP an (INTERFACES.md §4.1, §4.2, ROADMAP Z1), prüft
 // Form (Adresse und Typen gegen die erzeugte osc_adressen.h) und Bereiche, reicht sie über den Befehlsring in den
 // Callback und schickt die Ereignisse des Callbacks als /uhr, /takt, /q, /e/luecke, /e/quantum und 20-mal je Sekunde
 // /zustand/kern an alle Abonnenten (§5). Abonnenten: höchstens 8, gestrichen nach 5 s ohne /k/hallo (§4.1).
@@ -76,7 +76,7 @@ class Netz {
   // Keylock Slice 3b (F6): Shutdown. Bricht einen laufenden Render ab und startet keinen weiteren (auch nicht aus
   // ereignisse_senden() nach dem Stopp des Netz-Fadens). laufen() ruft es am Ende selbst; Tests rufen es direkt.
   void keylock_beenden();
-  // Scheibe 18, Abonnenten über einen Neustart (SCHNITTSTELLEN §4.1, §5.1, §5.9, §6.3). Beide vor dem Netz-Faden.
+  // Scheibe 18, Abonnenten über einen Neustart (INTERFACES §4.1, §5.1, §5.9, §6.3). Beide vor dem Netz-Faden.
   // verbinde_zustand: Abonnenten bei jeder Änderung und jedem /k/hallo ins Abonnenten-Fach schreiben, /q/stand aus
   // dem neuesten Echtzeit-Fach lesen. nullptr: wie Scheibe 08 (kein Fach, kein /q/stand).
   void verbinde_zustand(cdj_z_datei* d, uint64_t letzter_abo_stand);

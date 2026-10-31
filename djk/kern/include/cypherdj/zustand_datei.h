@@ -1,4 +1,4 @@
-// Zugriff auf den Neustart-Zustand (zustand.h, SCHNITTSTELLEN.md §6.3): Datei öffnen oder anlegen, Fächer schreiben
+// Zugriff auf den Neustart-Zustand (zustand.h, INTERFACES.md §6.3): Datei öffnen oder anlegen, Fächer schreiben
 // (Seqlock) und lesen. Je Fachart genau ein Schreiber (Echtzeit-Fächer: der Callback; Abonnenten-Fächer: der
 // Netz-Faden). FachSchreiber::beginne() und beende() sind echtzeitfest: keine Allokation, keine Sperre, kein
 // Systemaufruf. Scheibe 18.

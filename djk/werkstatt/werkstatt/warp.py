@@ -1,4 +1,4 @@
-"""Warp per Timemap auf das starre Raster der Set-Basis (SCHNITTSTELLEN §12.3, §13.1; ADR 011 Entscheidung 2.3).
+"""Warp per Timemap auf das starre Raster der Set-Basis (INTERFACES §12.3, §13.1; ADR 011 Entscheidung 2.3).
 
 Die Karte der Quelle (§13.2 `tempo_karte_quelle`: quell_sekunde -> quell_beat) wird zur Timemap fuer
 `rubberband -3 --timemap`: jeder Eintrag (s, q) geht von Quell-Frame round(s * 48000) auf Ziel-Frame

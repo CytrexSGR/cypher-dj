@@ -1,4 +1,4 @@
-// Aufnahme (SCHNITTSTELLEN §4.12, §5.14; 1.8 Slice 1) in der Attrappe: Zustand, Quittungen und Dateien wie der Kern, ohne Ton. Der Take beginnt am Einsatz-Sample
+// Aufnahme (INTERFACES §4.12, §5.14; 1.8 Slice 1) in der Attrappe: Zustand, Quittungen und Dateien wie der Kern, ohne Ton. Der Take beginnt am Einsatz-Sample
 // des Arrangements (K.arr.start_s) und endet, wenn das Arrangement nicht mehr spielt (Vereinfachung: am Blockanfang, der Kern am Ende-Sample)
 // oder, bei eingeschalteter Loop-Klammer, am ersten Wrap (wie der Kern, aufnahme.h).
 // Inhalt der Rohdatei ist das Prüfmuster L = ((Kern-Sample) mod 1000) / 1000, R = −L, damit der Server seine WAV-Umwandlung bitgenau prüfen kann.

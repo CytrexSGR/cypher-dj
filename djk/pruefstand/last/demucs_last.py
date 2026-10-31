@@ -1,4 +1,4 @@
-# Werkstatt-Last für Lastprofil P1 (ARCHITEKTUR §9.2): HTDemucs aus demucs 4.0.1 mit zufälligen Gewichten (nichts wird
+# Werkstatt-Last für Lastprofil P1 (ARCHITECTURE §9.2): HTDemucs aus demucs 4.0.1 mit zufälligen Gewichten (nichts wird
 # heruntergeladen) trennt Rauschen auf der CPU in Schleife; Rechen- und Speicherprofil wie eine echte Stem-Trennung.
 # Kopie von proben/10-robustheit-betrieb/nachpruefung/demucs_last.py (dort gemessen: 10 NP N6), neu: endet sauber auf
 # SIGTERM und meldet die Rundenzahl. Aufruf: python demucs_last.py <sekunden_laufzeit> <threads> <segment_s>

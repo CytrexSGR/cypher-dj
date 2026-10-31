@@ -1,6 +1,6 @@
 // Gesundheit an systemd (ADR 016 Entscheidung 2): READY=1 nach dem ersten Zyklus, WATCHDOG=1 nur bei
 // Echtzeit-Fortschritt. sd_notify ohne libsystemd wie proben/10-robustheit-betrieb/src/minikern.c Z. 56 bis 60
-// (SCHNITTSTELLEN §19.4). Läuft im Hauptfaden, nie im Callback. Scheibe 18.
+// (INTERFACES §19.4). Läuft im Hauptfaden, nie im Callback. Scheibe 18.
 #pragma once
 
 #include <cstdint>

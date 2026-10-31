@@ -91,7 +91,7 @@ endfunction()
 messer_test(test_baender_koeff)
 
 
-# Task 2: sechs Analyse-Bänder (SCHNITTSTELLEN 6.2)
+# Task 2: sechs Analyse-Bänder (INTERFACES 6.2)
 messer_test(test_analyse_baender)
 target_sources(cypherdj_dsp_messer PRIVATE src/analyse_baender.cpp)
 
@@ -100,12 +100,12 @@ target_sources(cypherdj_dsp_messer PRIVATE src/analyse_baender.cpp)
 messer_werkzeug(messer_baender_datei)
 
 
-# Task 4: Pegelmesser für /pegel (SCHNITTSTELLEN 5.6)
+# Task 4: Pegelmesser für /pegel (INTERFACES 5.6)
 messer_test(test_pegel_messer)
 target_sources(cypherdj_dsp_messer PRIVATE src/pegel_messer.cpp)
 
 
-# Task 5: Master-Limiter (SCHNITTSTELLEN 2.1 limiter_dbtp)
+# Task 5: Master-Limiter (INTERFACES 2.1 limiter_dbtp)
 messer_test(test_master_limiter)
 target_sources(cypherdj_dsp_messer PRIVATE src/master_limiter.cpp)
 

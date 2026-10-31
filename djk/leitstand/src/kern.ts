@@ -1,4 +1,4 @@
-// Kern-Anbindung (SCHNITTSTELLEN §4.1, §16.3): Abo per /k/hallo, Herzschlag, Kern-weg-Wächter.
+// Kern-Anbindung (INTERFACES §4.1, §16.3): Abo per /k/hallo, Herzschlag, Kern-weg-Wächter.
 // Regel §4.1: 100 ms ohne /uhr → /k/hallo sofort, dann alle 50 ms bis /k/willkommen.
 // Herzschlag 1 500 ms (Festlegung dieser Scheibe; Vertrag: spätestens alle 2 s, Kern streicht nach 5 s).
 import dgram from 'node:dgram';

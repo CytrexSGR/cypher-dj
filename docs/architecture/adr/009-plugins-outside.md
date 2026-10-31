@@ -33,7 +33,7 @@ A18 wants plugins as an interface to instruments and effects. 05 §1 recommends 
 ## Consequences
 
 - Every host return path costs one block of latency (async), compensated by holding back events.
-- Send effects from hosts come back via `fx/3` and `fx/4` (sends 3 and 4 per channel, `SCHNITTSTELLEN.md` §1.5); the mixer is an assignment table, so that host return paths can be added without rework (A17).
+- Send effects from hosts come back via `fx/3` and `fx/4` (sends 3 and 4 per channel, `INTERFACES.md` §1.5); the mixer is an assignment table, so that host return paths can be added without rework (A17).
 - Open and decisive: what a dead or hanging async predecessor delivers (old block or silence), and the contradiction between 05 §4.5 (a hang in the process freezes the driver cycle) and 10 NP N3 (a parallel hang does not hold it up). If M7 turns out badly, plugins stay out of the mix until Carla is built with a short bridge wait time.
 - Plugins write into foreign folders (Dexed 34 files, Surge folders, 05 §4.3): own `HOME` is mandatory.
 

@@ -1,5 +1,5 @@
 // node --test tests/hand.test.mjs: /test/hand an der teil_rampe: erster Wert nur Stellung, Totzone 3/128, Gruppe,
-// Rückgabe nach 32 Beats (SCHNITTSTELLEN §7.3, §19.3 hand_gewinnt). Die Rampe selbst prüft tests/teil_rampe.test.mjs.
+// Rückgabe nach 32 Beats (INTERFACES §7.3, §19.3 hand_gewinnt). Die Rampe selbst prüft tests/teil_rampe.test.mjs.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fahre } from '../folgen_schnell.mjs';
@@ -66,7 +66,7 @@ test('Rückgabe: 32 Beats ohne Handbewegung -> Halter frei; danach nimmt der Reg
   gruen(r);
 });
 
-// Lesart e (Andreas 2026-09-25, SCHNITTSTELLEN §4.3): ein Griff bricht auch WARTENDE Teile des Reglers sofort ab (7 hand)
+// Lesart e (Andreas 2026-09-25, INTERFACES §4.3): ein Griff bricht auch WARTENDE Teile des Reglers sofort ab (7 hand)
 test('Lesart e: wartender Teil fällt beim Griff mit 7 hand, nicht erst am Start; Negativ-Kontrolle: anderer Regler wartet weiter', () => {
   const r = fahre([
     ...vorbereitung,

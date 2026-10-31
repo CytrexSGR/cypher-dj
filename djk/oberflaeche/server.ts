@@ -179,7 +179,7 @@ const TYPEN: Record<string, string> = {
 
 interface SpurLauf { quelle: string; anker: number; ende: number; fahrten: Fahrt[]; timer: NodeJS.Timeout[]; offen: MusterPlan[]; gruppen: Set<string>; ids: number[]; teile: { id: number; teil: number; pfad: string }[] }
 
-// K2: Regler, die /lage erst zeigt, wenn sie von der Vorgabe (SCHNITTSTELLEN §1.5) abweichen
+// K2: Regler, die /lage erst zeigt, wenn sie von der Vorgabe (INTERFACES §1.5) abweichen
 // Kompressor je Quellkanal (2026-10-11): in der Lage, sobald ein Feld von seiner Vorgabe abweicht
 const KOMP_VORGABE: Record<string, number> = { an: 0, schwelle: -18, ratio: 4, attack: 10, release: 120, makeup: 0, mix: 1, sc: 0 };
 const kompAbweichend = (p: string, w: number): boolean => { const m = /^(?:deck\/[1-4]|erz\/[1-8]|pad\/[12])\/komp\/(\w+)$/.exec(p); return !!m && m[1] in KOMP_VORGABE && w !== KOMP_VORGABE[m[1]]; };

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Ring-Attrappe: schreibt den Hüllkurven-Ring §6.2 aus WAV-Dateien je Kanal, mit den Filtern aus baender.json,
-im Echtzeit-Takt (1 000 Datensätze je Sekunde), solange der Kern fehlt (SCHNITTSTELLEN.md §19.0).
+im Echtzeit-Takt (1 000 Datensätze je Sekunde), solange der Kern fehlt (INTERFACES.md §19.0).
 
   python3 djk/vertrag/attrappe_huellen.py --kanal 0=deck_a.wav --kanal 1=deck_b.wav --sekunden 60
       [--pfad RING] [--bpm 128] [--quell-bpm 128] [--baender baender.json] [--schnell] [--schleife]

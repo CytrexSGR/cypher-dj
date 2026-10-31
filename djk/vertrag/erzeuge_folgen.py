@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Erzeugt die ersten Golden-Folgen aus SCHNITTSTELLEN.md §19.3: uhr_golden, storno, protokollfehler.
+"""Erzeugt die ersten Golden-Folgen aus INTERFACES.md §19.3: uhr_golden, storno, protokollfehler.
 
 Kein Erwartungswert ist abgeschrieben: jede Sample-, Beat- und BPM-Zahl rechnet karte.py mit den Formeln aus §1.3.
 Format und Läufer-Regeln: folgen/FORMAT.md. `storno` ist mit /k/tempo/rampe gebaut, damit Scheibe 08 sie ohne

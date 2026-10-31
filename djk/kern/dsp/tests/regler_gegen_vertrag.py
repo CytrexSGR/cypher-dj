@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Task 2: Reglertabelle der Bibliothek gegen SCHNITTSTELLEN.md §1.5 (Vertragstext).
+"""Task 2: Reglertabelle der Bibliothek gegen INTERFACES.md §1.5 (Vertragstext).
 
-Aufruf: regler_gegen_vertrag.py <regler_liste-Programm> <SCHNITTSTELLEN.md>
+Aufruf: regler_gegen_vertrag.py <regler_liste-Programm> <INTERFACES.md>
 Prüft je Kanalzug-Regler Bereich, Vorgabe, Dauer und Art der Schaltrampe. Vorher ein Selbsttest:
 derselbe Abgleich gegen einen im Speicher verfälschten Vertragstext muss rot werden (Fehlerfall),
 sonst taugt die Prüfung nicht. Rückgabe 0 nur, wenn der Selbsttest rot und der echte Abgleich grün ist.

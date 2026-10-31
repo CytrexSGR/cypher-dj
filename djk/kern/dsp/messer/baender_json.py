@@ -8,10 +8,10 @@ dieselben Zahlen sehen. Form laut Probe von Scheibe 09 (proben/plan-09, 2026-09-
                 "sos": [[b0, b1, b2, a0, a1, a2], ...]}, ... sechs Bänder ...],
    "k_filter": {"sos": [[...], [...]]}}
 Geduldet werden auch "rate", "von_hz"/"bis_hz" und statt "sos" zwei SOS-Listen "hochpass" und
-"tiefpass" (verkettet, Hochpass zuerst, SCHNITTSTELLEN 6.2). Fehlt "k_filter", gilt der Normfilter."""
+"tiefpass" (verkettet, Hochpass zuerst, INTERFACES 6.2). Fehlt "k_filter", gilt der Normfilter."""
 import json
 
-NAMEN = ["sub", "tief", "tiefmitte", "mitte", "praesenz", "hoch"]   # SCHNITTSTELLEN 6.2, 14.8
+NAMEN = ["sub", "tief", "tiefmitte", "mitte", "praesenz", "hoch"]   # INTERFACES 6.2, 14.8
 GRENZEN = [(30, 90), (90, 250), (250, 800), (800, 2000), (2000, 6000), (6000, 16000)]
 MAX_SEKTIONEN = 8
 K_NORM = [[1.53512485958697, -2.69169618940638, 1.19839281085285, 1.0, -1.69065929318241, 0.73248077421585],

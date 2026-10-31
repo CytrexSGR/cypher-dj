@@ -1,4 +1,4 @@
-// Plan 2026-09-27 Task 3: Erzeuger-Schlange (SCHNITTSTELLEN §4.8, ADR 024) ohne Kern. Einsatz genau am Sample des
+// Plan 2026-09-27 Task 3: Erzeuger-Schlange (INTERFACES §4.8, ADR 024) ohne Kern. Einsatz genau am Sample des
 // Beats, auch an Blockgrenzen; Fenster ersetzen mit Zählern; zu spät; Strom ohne Kit still; velocity; Stimmen enden
 // mit dem Kit. Fehlerfall: test_erzeuger_mutation (Einsatz am Blockanfang) muss scheitern.
 #include <algorithm>

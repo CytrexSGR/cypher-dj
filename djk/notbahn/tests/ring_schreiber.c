@@ -1,5 +1,5 @@
 /* ring_schreiber: Prüf-Kern für Scheibe 10 (Notbahn daneben, ADR 016 Nachtrag 2026-09-25). Schreibt je Schlag einen
- * Klick (ein Sample 0,5 auf master_L/R, cue still) in den Audio-Ring nach SCHNITTSTELLEN.md §6.1, hält takt_frames und
+ * Klick (ein Sample 0,5 auf master_L/R, cue still) in den Audio-Ring nach INTERFACES.md §6.1, hält takt_frames und
  * takt_anfang_w, und gibt dasselbe Signal wie der Kern daneben direkt an die Prüf-Senke aus. Tempo fest (--bpm) oder als
  * Rampe (--bpm-bis, --rampe-takte, linear in der Zeit). w setzt über Neustarts fort (Ring besteht schon).
  * --nan-takt K: im Takt K steht im Ring statt des Klicks NaN und ein Sample 4,0 (Clip), am eigenen Ausgang nicht.

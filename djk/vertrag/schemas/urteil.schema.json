@@ -1,7 +1,7 @@
 {
  "$schema": "https://json-schema.org/draft/2020-12/schema",
  "$id": "https://cypherdj.invalid/vertrag/1/urteil.schema.json",
- "title": "Urteil (SCHNITTSTELLEN.md §14.9)",
+ "title": "Urteil (INTERFACES.md §14.9)",
  "type": "object",
  "required": ["id", "art", "bezug", "gewinner", "sample", "von"],
  "properties": {

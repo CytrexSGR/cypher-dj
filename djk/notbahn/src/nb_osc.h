@@ -1,4 +1,4 @@
-/* /nb ,iiih nach SCHNITTSTELLEN.md §5.10 an Leitstand (47110) und Prüfstand (47140), je Instanz + 1000·k (§2).
+/* /nb ,iiih nach INTERFACES.md §5.10 an Leitstand (47110) und Prüfstand (47140), je Instanz + 1000·k (§2).
  * Aus dem Hauptfaden, nie aus dem Callback. generation_gesehen: bis der Zustand-Seqlock (§6.x) die Kern-Generation
  * trägt, zählt die Notbahn die Rückkehren des Kerns seit ihrem Start (jede Rückkehr ist eine neue Generation). */
 #ifndef CYPHERDJ_NB_OSC_H

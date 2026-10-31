@@ -1,6 +1,6 @@
 # ADR 012: Fingerprint, fit, style, live analysis, learning
 
-- **Status:** accepted; listening-permit thresholds and the rule of thumb against the optimizer provisional until M18, low-band limits until M20; corrected after the critique round of 2026-09-23 (ARCHITEKTUR "Kritik und Korrekturen", i.e. "critique and corrections")
+- **Status:** accepted; listening-permit thresholds and the rule of thumb against the optimizer provisional until M18, low-band limits until M20; corrected after the critique round of 2026-09-23 (ARCHITECTURE "Kritik und Korrekturen", i.e. "critique and corrections")
 - **Date:** 2026-09-23
 - **Requirements carried:** A4, A6, A7, A8, A15, A16, A20
 - **Related to:** ADR 008, 011, 013, 023
@@ -29,7 +29,7 @@ less (08 NP K1) and that live analysis does not see a wrong grid (K4).
    tuning, stretch cost, vocals doubled.
 4. **Style = parameter set, executed as a rule** (rule of thumb with parameters: length, course, entry, ramp, bass-swap
    bar, A-out bar, sub/low limits, pumping), and indeed **exactly the measured rule** `saat()` from
-   `probe_b_uebergang.py` with all controls, anchor values and shapes (`SCHNITTSTELLEN.md` §14.4). The **prediction**
+   `probe_b_uebergang.py` with all controls, anchor values and shapes (`INTERFACES.md` §14.4). The **prediction**
    over cross energies checks each rule before use: **locking only against the sub limit**; the low-band limits only
    report warnings until M20, because the measured rule of thumb itself lies above them (all bands, 08 NP K1: "safe"
    sub 0.082 at limit 0,10, **low 0.402 at 0.20**, low-mid 0.951; "hard" sub 0.015 at 0,25, **low 0.355 at 0.35**,
@@ -40,7 +40,7 @@ less (08 NP K1) and that live analysis does not see a wrong grid (K4).
 5. **"Pumping"** is 0 dB until Andreas' answer (A8 open); the three readings (gain, bass emphasized, sidechain from the
    clock) are provided as parameters.
 6. **Live analysis:** block-rate DSP in the core (six analysis bands as envelopes at 1 kHz, LUFS;
-   `SCHNITTSTELLEN.md` §6.2, same filters as the reference `huelle_1khz.npy`); end-of-bar evaluation in
+   `INTERFACES.md` §6.2, same filters as the reference `huelle_1khz.npy`); end-of-bar evaluation in
    `cypherdj-analyse`: bands and overlap per band, **offset per deck against its reference** (checks the execution,
    search window ±200 ms, band with highest correlation) **and onsets deck against deck in the low band** (checks the
    grid). Collisions are predicted and measured live (the decision "predict only" from 08 §3.3.6 is open again through

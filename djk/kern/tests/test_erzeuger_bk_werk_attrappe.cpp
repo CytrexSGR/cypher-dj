@@ -22,6 +22,8 @@
 struct CypherBk {
   std::atomic<int> drin{0};
   std::atomic<int> aufrufe{0};
+  std::atomic<int> regler_aufrufe{0};  // S5r: Aufrufe von cypher_bk_regler (Task 3 prüft sie auf besetztem Platz)
+  float regler_wert[8] = {0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f};
   std::atomic<bool> halt{false};   // nächster block() wartet auf los
   struct Ev { uint32_t versatz; uint8_t ton; bool an; };
   Ev offen_ev[256];                // vorgemerkt für den nächsten block()
@@ -55,6 +57,13 @@ void cypher_bk_frei(CypherBk* h) { delete h; }
 int32_t cypher_bk_note_an(CypherBk* h, uint32_t v, uint8_t ton, float) { Eintritt e(h); merke(h, v, ton, true); return 0; }
 int32_t cypher_bk_note_aus(CypherBk* h, uint32_t v, uint8_t ton) { Eintritt e(h); merke(h, v, ton, false); return 0; }
 int32_t cypher_bk_alle_aus(CypherBk* h, uint32_t) { Eintritt e(h); return 0; }
+int32_t cypher_bk_regler(CypherBk* h, uint32_t nr, float wert) {
+  if (!h || nr < 1 || nr > 8) return -1;
+  Eintritt e(h);
+  h->regler_aufrufe.fetch_add(1);
+  h->regler_wert[nr - 1] = wert;
+  return 0;
+}
 int32_t cypher_bk_block(CypherBk* h, float* l, float* r, size_t n) {
   if (!h) { std::fill(l, l + n, 0.0f); std::fill(r, r + n, 0.0f); return 0; }
   Eintritt e(h);
@@ -83,6 +92,7 @@ namespace {
 constexpr int N = 256;
 constexpr int64_t SPB = 22500;  // 128 BPM bei 48 kHz
 constexpr int ERZ2 = 5, ERZ3 = 6;
+constexpr int ERZ_5 = 8, ERZ_6 = 9;   // S5r: Mixer-Kanäle von erz/5 und erz/6 (erz/4 nimmt der Kern nicht an)
 
 void schlafe_ms(int ms) { std::this_thread::sleep_for(std::chrono::milliseconds(ms)); }
 void warte_im_rechnen() {
@@ -138,7 +148,95 @@ void neu_lauf() { g_los.store(false); g_im_rechnen.store(false); }
 
 }  // namespace
 
+// S5r: Reglerwerte je Mixer-Kanal, je Zeile und Regler verschieden, keiner gleich 0,5 (dem Vorgabewert der Attrappe)
+void regler_werte(float (*w)[8]) {
+  for (int k = 0; k < cdj::MIX_KANAELE; ++k)
+    for (int nr = 1; nr <= 8; ++nr) w[k][nr - 1] = 0.05f + 0.09f * (float)nr + 0.01f * (float)(k - 8) + 0.001f;
+}
+bool regler_gleich(const CypherBk* h, const float* soll) {
+  for (int i = 0; i < 8; ++i) if (h->regler_wert[i] != soll[i]) return false;
+  return true;
+}
+
 int main() {
+  for (int faeden : {0, 1}) {  // S5r 8) regler_werk: Werte kommen am Handle des Stroms an, Gegenprobe erz/6, Änderung, Tausch (D5)
+    neu_lauf();
+    const int ue0 = g_ueberlappt.load();
+    static float wert[cdj::MIX_KANAELE][8];
+    regler_werte(wert);
+    Welt w(faeden);
+    w.erz.setze_bk_wert(wert);
+    CypherBk* a = cypher_bk_neu(nullptr, 48000.0, nullptr, 0);   // Strom 2 auf erz/5
+    CypherBk* b = cypher_bk_neu(nullptr, 48000.0, nullptr, 0);   // Strom 3 auf erz/6
+    w.erz.setze_bk(2, a, ERZ_5);
+    w.erz.setze_bk(3, b, ERZ_6);
+    w.bis(6 * N);
+    const bool a1 = regler_gleich(a, wert[ERZ_5]), b1 = regler_gleich(b, wert[ERZ_6]);
+    wert[ERZ_5][0] = 1.0f;   // nur erz/5/bk/1 ändert sich
+    w.bis(w.s + 6 * N);
+    const bool a2 = a->regler_wert[0] == 1.0f && a->regler_wert[1] == wert[ERZ_5][1], b2 = regler_gleich(b, wert[ERZ_6]);
+    wert[ERZ_5][0] = 0.9f;   // Tausch: der neue Graph bekommt den aktuellen Wert, nicht seinen Vorgabewert 0,5
+    CypherBk* c = cypher_bk_neu(nullptr, 48000.0, nullptr, 0);
+    w.erz.setze_bk(2, c, ERZ_5);
+    w.bis(w.s + 30 * N);
+    const bool c1 = regler_gleich(c, wert[ERZ_5]);
+    std::printf("MESS regler_werk faeden=%d: a=%d b=%d nach_aenderung a=%d b=%d nach_tausch c=%d (c[0]=%.3f soll %.3f) aufrufe a=%d b=%d "
+                "c=%d\n", faeden, a1, b1, a2, b2, c1, c->regler_wert[0], wert[ERZ_5][0], a->regler_aufrufe.load(),
+                b->regler_aufrufe.load(), c->regler_aufrufe.load());
+    PRUEF(a1);
+    PRUEF(b1);   // Gegenprobe: erz/6 hat seine eigene Zeile, nicht die von erz/5
+    PRUEF(a2);
+    PRUEF(b2);   // erz/6 blieb unberührt
+    PRUEF(c1);
+    PRUEF(g_ueberlappt.load() - ue0 == 0);
+    w.erz.setze_bk(2, nullptr, ERZ_5);
+    w.erz.setze_bk(3, nullptr, ERZ_6);
+    w.bis(w.s + 6 * N);
+    CypherBk* f[8];
+    int nf = 0;
+    for (int k; (k = w.erz.bk_frei(f + nf, 8 - nf)) > 0;) nf += k;
+    w.werk->stoppe();
+    for (int i = 0; i < nf; ++i) cypher_bk_frei(f[i]);
+    PRUEF(nf == 3);
+  }
+  {  // S5r 9) regler_nie_besetzt: solange der Platz nicht FREI ist (VERSPAETET), ruft der Erzeuger cypher_bk_regler nicht
+    neu_lauf();
+    const int ue0 = g_ueberlappt.load();
+    static float wert[cdj::MIX_KANAELE][8];
+    regler_werte(wert);
+    Welt w(1);
+    w.erz.setze_bk_wert(wert);
+    CypherBk* h = cypher_bk_neu(nullptr, 48000.0, nullptr, 0);
+    w.erz.setze_bk(2, h, ERZ_5);
+    w.erz.fenster(fenster(2, {ev(0.0, 48, 16.0)}), 0.0);
+    w.bis(6 * N);
+    const int vor = h->regler_aufrufe.load();
+    PRUEF(vor > 0);               // Positivprobe: auf freiem Platz wird gemeldet
+    h->halt.store(true);          // der Auftrag aus diesem Zyklus bleibt im Faden hängen
+    w.ein();
+    warte_im_rechnen();
+    PRUEF(g_im_rechnen.load());
+    const int beim_halt = h->regler_aufrufe.load();
+    for (int i = 0; i < 3; ++i) w.ein();   // verspätet: Platz beim Faden
+    const int waehrend = h->regler_aufrufe.load() - beim_halt;
+    g_los.store(true);
+    schlafe_ms(5);
+    w.bis(w.s + 4 * N);
+    const int danach = h->regler_aufrufe.load() - beim_halt;
+    std::printf("MESS regler_besetzt: vor=%d waehrend_verspaetet=%d nach_los=%d verspaetet=%u ueberlappt=%d\n", vor, waehrend, danach,
+                w.erz.bk_stand().verspaetet, g_ueberlappt.load() - ue0);
+    PRUEF(w.erz.bk_stand().verspaetet >= 1);
+    PRUEF(waehrend == 0);
+    PRUEF(danach > 0);            // und danach wieder
+    PRUEF(g_ueberlappt.load() - ue0 == 0);
+    w.erz.setze_bk(2, nullptr, ERZ_5);
+    w.bis(w.s + 3 * N);
+    CypherBk* f[4];
+    const int nf = w.erz.bk_frei(f, 4);
+    w.werk->stoppe();
+    for (int i = 0; i < nf; ++i) cypher_bk_frei(f[i]);
+    PRUEF(nf == 1);
+  }
   {  // 4) verspaetet_kein_notenverlust
     neu_lauf();
     const int ue0 = g_ueberlappt.load();

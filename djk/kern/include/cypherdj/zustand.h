@@ -1,4 +1,4 @@
-/* Neustart-Zustand /dev/shm/cypherdj/zustand (SCHNITTSTELLEN.md §6.3), Layout Version 1. Kern-intern: außer dem Kern
+/* Neustart-Zustand /dev/shm/cypherdj/zustand (INTERFACES.md §6.3), Layout Version 1. Kern-intern: außer dem Kern
  * liest ihn nur der Prüfstand, und nur lesend (Werkzeug cypherdj-zustand). Gemeinsam für C und C++; die Prüfungen am
  * Ende binden die Lage. Little Endian, Kopf 64 Bytes (§6).
  *

@@ -1,4 +1,4 @@
-// Arrangement (SCHNITTSTELLEN §4.11, §5.13; D1 K1) in der Attrappe: Zustand, Quittungen und /zustand/arr wie der Kern,
+// Arrangement (INTERFACES §4.11, §5.13; D1 K1) in der Attrappe: Zustand, Quittungen und /zustand/arr wie der Kern,
 // ohne Ton. Die Attrappe liest keine Wiedergabe-Datei: /k/arr/laden merkt sich nur nr (Quittung 1 und 3). Der Einsatz
 // folgt der Start-Regel des Kerns bei Quantum 256 (jetzt + Vorhalt 537 + 256, dann Quant: 0 sofort, 1 Beat, 2 Takt mit
 // (Kern-Beat − start_beat) ≡ 0 mod 4), Quittung 2 am Einsatz-Sample. Stopp gilt sofort (Quittung 1 und 3), ohne Quant.

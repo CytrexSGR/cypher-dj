@@ -76,7 +76,7 @@ def test_naht_schleife_rueckgabe(tmp_path):
     assert A["ruhe"]["spruenge"] == 0 and A["ruhe"]["stille_ereignisse"] == 0 and A["ruhe"]["raster_streuung"] == 0.0
     assert A["ergebnis"] == "erfuellt", A["urteile"]
     b = bericht.schreibe(tmp_path).read_text()
-    assert "Zusagen aus ARCHITEKTUR §7" in b and "Kern stirbt: Stille" in b
+    assert "Zusagen aus ARCHITECTURE §7" in b and "Kern stirbt: Stille" in b
 
 
 def test_fehlerfall_stille_und_rastersprung(tmp_path):

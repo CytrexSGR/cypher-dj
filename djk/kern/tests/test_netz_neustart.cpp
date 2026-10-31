@@ -1,4 +1,4 @@
-// Scheibe 18: Abonnenten über einen Neustart (SCHNITTSTELLEN §4.1, §5.1, §5.9, §6.3), Netz-Faden über echtes UDP auf
+// Scheibe 18: Abonnenten über einen Neustart (INTERFACES §4.1, §5.1, §5.9, §6.3), Netz-Faden über echtes UDP auf
 // Loopback, Zeit eingespeist. Ein Kern der Generation 0 schreibt seine Abonnenten ins Abonnenten-Fach; ein neuer Kern
 // übernimmt sie, schickt /e/neustart als erste Nachricht an den gespeicherten Abonnenten, und wer sich in der neuen
 // Generation zum ersten Mal meldet, bekommt /k/willkommen, /e/neustart und je offenem Befehl /q/stand. Negativ-

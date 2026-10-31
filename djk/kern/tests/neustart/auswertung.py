@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Auswertung einer Abschuss-Serie der Scheibe 18 (serie.sh) am Ziel, gegen ARCHITEKTUR §7:
+"""Auswertung einer Abschuss-Serie der Scheibe 18 (serie.sh) am Ziel, gegen ARCHITECTURE §7:
 
   stille_ms            Läufe von mindestens 48 Samples mit |Cue| < 1e-3 im Prüfsignal, je Eingriff aufsummiert;
                        stille_samples dasselbe in Samples. Grenzen seit der Notbahn daneben (ADR 016 Nachtrag
-                       2026-09-25, ARCHITEKTUR §7): kill -9 höchstens 1 Block (256 Samples), SIGSTOP höchstens 450 ms
+                       2026-09-25, ARCHITECTURE §7): kill -9 höchstens 1 Block (256 Samples), SIGSTOP höchstens 450 ms
                        (WatchdogSec 200 ms plus 250 ms Genauigkeit von systemd, Plan-Befund B5); Ruhe 0
   raster_abw_samples   Klick-Einsatz nach der Rückkehr gegen llround(sample_at(b)) plus festen Versatz (Grenze 1);
                        raster_abw_gesamt_samples dasselbe gegen den Versatz vor dem ersten Eingriff (Grenze 1, nur
@@ -12,7 +12,7 @@
   hoerbar_ms           Tod des alten Kerns (kill -9 bzw. SIGKILL des Watchdogs) bis zum ersten Ziel-Sample, ab dem
                        das Prüfsignal wieder bitgleich mit der Rechnung läuft (100 ms lang) (Grenze 250 ms)
   watchdog_ms          SIGSTOP bis „Watchdog timeout“ oder „Selbst-Waechter: SIGKILL“ im Journal (getoetet_von) (Grenze 450 ms; watchdog_ueber_250 zählt die
-                       Eingriffe über der Zusage 250 ms aus ARCHITEKTUR §7, als Befund, nicht als Grenze)
+                       Eingriffe über der Zusage 250 ms aus ARCHITECTURE §7, als Befund, nicht als Grenze)
   neustart_ms          Eingriff bis Empfang von /e/neustart beim gespeicherten Abonnenten. neustart_vor_herzschlag:
                        es kam, bevor der neue Kern einen Herzschlag des Abonnenten mit /k/willkommen der neuen
                        Generation beantwortete (ein Herzschlag, der in die Pause fiel, geht verloren und zählt nicht);
@@ -41,7 +41,7 @@ BLOCK = 256    # Quantum der Serien (serie.sh: pw-jack -p 256)
 GLEICH = 1e-4  # Rest des Prüfsignals, unter dem ein Sample als gleich gilt (ein Versatz um 1 Sample gibt ~0,1)
 
 
-# --- Uhr nach SCHNITTSTELLEN §1.3 --------------------------------------------------------------------------------
+# --- Uhr nach INTERFACES §1.3 --------------------------------------------------------------------------------
 class Karte:
     """Konstant `bpm` ab Beat 0 bei Sample 0, optional eine Rampe (ab_beat, ziel_bpm, dauer_beats) danach konstant."""
 

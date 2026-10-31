@@ -21,6 +21,7 @@ int32_t cypher_bk_alle_aus(CypherBk* h, uint32_t versatz);
 int32_t cypher_bk_block(CypherBk* h, float* aus_l, float* aus_r, size_t n);   // überschreibt; h null: Stille
 // Effekt (S3c): ein_* Host-Audio, aus_* überschrieben, Ein- und Ausgang getrennt; h null: Stille
 int32_t cypher_bk_effekt(CypherBk* h, const float* ein_l, const float* ein_r, float* aus_l, float* aus_r, size_t n);
+int32_t cypher_bk_regler(CypherBk* h, uint32_t nr, float wert);   // nr 1..8, 0..1 (geklemmt, NaN ignoriert), 20 ms geglättet; -1 h null oder nr falsch; nicht nebenläufig mit block
 void cypher_bk_takt(CypherBk* h, double beat0, double bps);   // beat0 = erstes Sample des nächsten Blocks
 uint32_t cypher_bk_hat_eingang(const CypherBk* h);            // 1 Effekt-Graph, 0 Instrument oder null
 uint32_t cypher_bk_latenz(const CypherBk* h);

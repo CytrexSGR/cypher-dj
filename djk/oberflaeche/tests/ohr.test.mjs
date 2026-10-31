@@ -1,4 +1,4 @@
-// Ohr T4: Messung aus dem Hüllkurven-Ring (reine Funktionen). Ring-Datei im Layout aus Task 1 (SCHNITTSTELLEN §6.2).
+// Ohr T4: Messung aus dem Hüllkurven-Ring (reine Funktionen). Ring-Datei im Layout aus Task 1 (INTERFACES §6.2).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

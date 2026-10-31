@@ -17,7 +17,7 @@ import rec from './rec.mjs';
 
 export const MODULE = [verbindung, regler, decks, hand, hoerschein, erzeuger, ki, invarianten, frist, fxRouting, arr, rec];
 
-// Mutationen für den Fehlerfall der Abnahme: je eine Regel aus (SCHNITTSTELLEN §17, ROADMAP Scheibe 13)
+// Mutationen für den Fehlerfall der Abnahme: je eine Regel aus (INTERFACES §17, ROADMAP Scheibe 13)
 // arr_ki_stopp_ab (D1 Spec 6.27): /k/arr/stopp von cypher während des KI-Stopps abgelehnt wie vor 6.27; arr_zustand_alt
 // (K1-Fix 12): /zustand/arr ohne metronom_an
 export const MUTATIONEN = ['i1_aus', 'i2_aus', 'i3a_aus', 'i3b_aus', 'i3c_aus', 'i3d_aus', 'i4_aus', 'frist_aus', 'arr_ki_stopp_ab', 'arr_zustand_alt',

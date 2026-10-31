@@ -1,4 +1,4 @@
-"""Tests für karte.py gegen die Golden-Tabelle in SCHNITTSTELLEN.md §1.3."""
+"""Tests für karte.py gegen die Golden-Tabelle in INTERFACES.md §1.3."""
 import math
 import sys
 from pathlib import Path

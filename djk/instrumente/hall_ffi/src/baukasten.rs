@@ -6,7 +6,7 @@
 //! Sample-Versatz relativ zum Anfang des nächsten `cypher_bk_block` in eine Warteschlange fester Größe; ein Versatz hinter
 //! dem Block wandert in den Folgeblock. Am selben Sample: alle_aus vor aus vor an, sonst in Meldereihenfolge. Ein Panic
 //! im Block kommt nicht über die Grenze: Stille, Zurücksetzen, Warteschlange leer, `panik` zählt.
-use baukasten_dsp::{uebersetze, Programm};
+use baukasten_dsp::{uebersetze, Programm, REGLER};
 use std::ffi::{c_char, CStr};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
@@ -47,9 +47,38 @@ pub struct CypherBk {
     n_warte: usize,
     verloren: u32,
     panik: u32,
+    /// Reglerziele 0..1 (S5r), gesetzt von `cypher_bk_regler`
+    ziel: [f32; REGLER],
+    /// geglätteter Reglerstand, der am Programm liegt
+    ist: [f32; REGLER],
+    /// Einpol-Koeffizient für 20 ms: 1 - exp(-1 / (0,020 · fs))
+    a: f32,
 }
 
+/// Reglerzeit wie im Plugin (`baukasten/src/lib.rs`: „20 ms geglättet“)
+const REGLER_GLATT_S: f64 = 0.020;
+/// Näher als das am Ziel rastet `ist` auf `ziel` ein (S5r K4), ebenso wenn ein Schritt `ist` nicht mehr bewegt. Das
+/// Einpol-Filter erreicht in float32 sein Ziel nie (a·d unterschreitet das halbe ulp schon bei d ≈ 3e-5 > 1e-5,
+/// gemessen: stand bei 0,89997137 für Ziel 0,9), ohne Einrasten bliebe `ist` knapp daneben und `setze_regler`
+/// liefe in jedem Sample weiter.
+const REGLER_EINRASTEN: f32 = 1e-5;
+
 impl CypherBk {
+    /// Je Sample: `ist` zieht einpolig auf `ziel`, rastet unter `REGLER_EINRASTEN` ein (ein letztes `setze_regler`);
+    /// steht `ist` bitgleich auf `ziel`, kostet der Regler nur den Vergleich.
+    #[inline]
+    fn regler_schritt(&mut self) {
+        for i in 0..REGLER {
+            if self.ist[i] == self.ziel[i] {
+                continue;
+            }
+            let d = self.ziel[i] - self.ist[i];
+            let schritt = self.ist[i] + self.a * d;
+            self.ist[i] = if d.abs() < REGLER_EINRASTEN || schritt == self.ist[i] { self.ziel[i] } else { schritt };
+            self.p.setze_regler(i + 1, self.ist[i]);
+        }
+    }
+
     fn melde(&mut self, e: Ev) -> i32 {
         if self.n_warte >= BK_MAX_EREIGNISSE {
             self.verloren += 1;
@@ -80,6 +109,7 @@ impl CypherBk {
                 }
                 k += 1;
             }
+            self.regler_schritt();
             if let Some((el, er)) = ein {
                 self.p.setze_eingang(el[i], er[i]);
             }
@@ -134,6 +164,9 @@ pub extern "C" fn cypher_bk_neu(json: *const c_char, fs: f64, fehler: *mut c_cha
             n_warte: 0,
             verloren: 0,
             panik: 0,
+            ziel: [0.5; REGLER],
+            ist: [0.5; REGLER],
+            a: (1.0 - (-1.0 / (REGLER_GLATT_S * fs)).exp()) as f32,
         })),
         Ok(Err(e)) => {
             schreibe_fehler(fehler, fehler_laenge, &e);
@@ -181,6 +214,21 @@ pub extern "C" fn cypher_bk_alle_aus(h: *mut CypherBk, versatz: u32) -> i32 {
     // SAFETY: wie cypher_bk_note_an
     let Some(bk) = (unsafe { h.as_mut() }) else { return -1 };
     bk.melde(Ev::AlleAus { t: versatz })
+}
+
+/// Reglerziel `nr` (1..8) auf `wert` (0..1, geklemmt; NaN wird ignoriert). Der Graph folgt in 20 ms einpolig (Zeit aus
+/// `fs`). Rückgabe 0, -1 bei h null oder nr außerhalb. Allokiert nicht; nicht nebenläufig mit block.
+#[no_mangle]
+pub extern "C" fn cypher_bk_regler(h: *mut CypherBk, nr: u32, wert: f32) -> i32 {
+    // SAFETY: wie cypher_bk_note_an
+    let Some(bk) = (unsafe { h.as_mut() }) else { return -1 };
+    if !(1..=REGLER as u32).contains(&nr) {
+        return -1;
+    }
+    if !wert.is_nan() {
+        bk.ziel[nr as usize - 1] = wert.clamp(0.0, 1.0);
+    }
+    0
 }
 
 /// Rechnet `n` Samples Stereo in `aus_l`/`aus_r` (überschreibt). h null: Stille, Rückgabe 0. Panic: Stille,

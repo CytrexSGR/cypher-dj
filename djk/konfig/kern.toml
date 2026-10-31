@@ -1,5 +1,5 @@
 version = 1
-# Standard-Konfiguration des Kerns nach SCHNITTSTELLEN.md §2.1 (Vertragsversion 1), Scheibe 08.
+# Standard-Konfiguration des Kerns nach INTERFACES.md §2.1 (Vertragsversion 1), Scheibe 08.
 # Vorgaben gesetzt, nicht gemessen, wo nicht anders vermerkt. Unbekannte Schlüssel sind ein Startfehler.
 # Ort im Betrieb: ~/.config/cypherdj/kern.toml (Prüfinstanz <i>: ~/.config/cypherdj-<i>/kern.toml, ROADMAP Z2).
 # Prüfinstanzen: der Kern verschiebt udp_port um 1000·k und schreibt /cypherdj/ in Pfaden zu /cypherdj-<i>/ um;

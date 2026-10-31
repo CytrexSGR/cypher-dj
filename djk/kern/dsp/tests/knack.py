@@ -5,7 +5,7 @@ Metrik wie proben/04-mixer-effekte/messung.py (bereich_spitze_db, von der Keyloc
 tests/stretch-bench/analyse.py umschalt_spitze_db): Hochpass > 5 kHz, Butterworth 4. Ordnung,
 nullphasig; Spitze im Fenster ±50 ms um das Ereignis gegen den Median der 100-ms-Blockspitzen im
 ruhigen Bereich 1,0 bis 2,9 s. Schwelle: 16-bit-Stufe −96,33 dBFS absolut (04 §4.3 „unter der
-16-bit-Stufe“, SCHNITTSTELLEN §1.3, ARCHITEKTUR §4 Regel 4). Reiz wie 04 §4.2: 780 Hz, −6 dBFS.
+16-bit-Stufe“, INTERFACES §1.3, ARCHITECTURE §4 Regel 4). Reiz wie 04 §4.2: 780 Hz, −6 dBFS.
 
 Aufruf: knack.py <render> <render_mutation_kill_hart> <ausgabeordner>
 Rückgabe 0 nur, wenn: die Metrik eine bekannte Störung sieht (Positiv-Kontrolle), ohne Ereignis

@@ -2,7 +2,7 @@
 """Prüft die Golden-Folgen unter djk/vertrag/folgen/ und die Herkunft ihrer Zahlen.
 
 Grün (Rückgabewert 0) nur, wenn
-  1. karte.py die Golden-Tabelle aus SCHNITTSTELLEN.md §1.3 trifft (auf die im Text angegebenen Stellen genau),
+  1. karte.py die Golden-Tabelle aus INTERFACES.md §1.3 trifft (auf die im Text angegebenen Stellen genau),
   2. jede Zeile jeder Folge dem Schema folge.schema.json entspricht,
   3. jede OSC-Nachricht zu osc.json passt (Adresse, Typ-Zeichenkette, Richtung, Wertetypen), außer sie ist mit
      "absicht" als absichtlich falsch gekennzeichnet und ist es auch,

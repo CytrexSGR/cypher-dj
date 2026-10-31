@@ -1,4 +1,4 @@
-// Stellwerk-RT: Regler-Tabelle nach SCHNITTSTELLEN §1.5 (Pfade, Einheiten, Bereiche, Vorgaben, Schaltrampen, Wer darf)
+// Stellwerk-RT: Regler-Tabelle nach INTERFACES §1.5 (Pfade, Einheiten, Bereiche, Vorgaben, Schaltrampen, Wer darf)
 // und Standard-Kurven der Hand nach §7.2. Dazu je Deck der Halter-Eintrag `deck/<n>/transport` (§7.3 Punkt 5, §5.9
 // /e/halter); er hat keinen Wert und ist kein Regler für /k/teil. Wird einmal außerhalb des Callbacks gebaut, danach
 // nur gelesen.
@@ -24,7 +24,8 @@ enum class Rolle : uint8_t {
   komp_sc,                                  // Schlüssel des Kompressors: 0 eigenes Signal, 1..14 Quellkanal + 1
   spur_fader, spur_pan, spur_mute, spur_solo,  // D1 K1: Spur-Regler des Arrangements, global (Kanal −1), spur/1..32
   grp_fader, grp_pan, grp_mute, grp_solo,      // 1.10 Slice 1: Gruppen-Regler des Arrangements, global (Kanal −1), grp/1..8
-  pm_fader                                     // 1.10 Slice 1: Fader des Produktions-Masters, pm/fader
+  pm_fader,                                    // 1.10 Slice 1: Fader des Produktions-Masters, pm/fader
+  bk_regler                                    // S5r: Graph-Regler je Kanal, <kanal>/bk/<1..8>, am Ende angehängt
 };
 constexpr int SPUR_REGLER_SPUREN = 32;   // D1 K1 (Spec 2.3): spur/<n>/{fader,pan,mute,solo}, n = 1..32 (E3)
 constexpr int GRP_REGLER_GRUPPEN = 8;    // 1.10 (F1: eigene Plätze neben den 32 Spuren): grp/<n>/{fader,pan,mute,solo}, n = 1..8

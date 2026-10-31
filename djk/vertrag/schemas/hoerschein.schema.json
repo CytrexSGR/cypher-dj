@@ -1,7 +1,7 @@
 {
  "$schema": "https://json-schema.org/draft/2020-12/schema",
  "$id": "https://cypherdj.invalid/vertrag/1/hoerschein.schema.json",
- "title": "Hörschein (SCHNITTSTELLEN.md §14.5); deck, quell_von, quell_bis null bei Pad und Erzeuger (§4.5: NaN), deck_gegen_deck_ms und flam_anteil null ohne Partner",
+ "title": "Hörschein (INTERFACES.md §14.5); deck, quell_von, quell_bis null bei Pad und Erzeuger (§4.5: NaN), deck_gegen_deck_ms und flam_anteil null ohne Partner",
  "type": "object",
  "required": ["id", "kanal", "inhalt", "deck", "bpm", "gemessen_von_beat", "gemessen_bis_beat", "gueltig_bis_beat",
   "quell_von", "quell_bis", "erneuerung", "sync_ms", "deck_gegen_deck_ms", "flam_anteil", "lufs_kurz", "pegel_diff_db",

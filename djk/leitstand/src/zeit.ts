@@ -1,4 +1,4 @@
-// Zeit auf der Kern-Uhr (SCHNITTSTELLEN §1.1, §1.3, §5.2): Beat, Takt, Phrase und CLOCK_MONOTONIC
+// Zeit auf der Kern-Uhr (INTERFACES §1.1, §1.3, §5.2): Beat, Takt, Phrase und CLOCK_MONOTONIC
 // aus dem letzten /uhr. Der Leitstand rechnet nur innerhalb des Segments des letzten /uhr hoch; die
 // Uhr bleibt allein im Kern.
 export interface Uhrstand {

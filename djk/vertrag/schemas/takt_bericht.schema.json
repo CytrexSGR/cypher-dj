@@ -1,7 +1,7 @@
 {
  "$schema": "https://json-schema.org/draft/2020-12/schema",
  "$id": "https://cypherdj.invalid/vertrag/1/takt_bericht.schema.json",
- "title": "Takt-Bericht, Analyse → Leitstand (SCHNITTSTELLEN.md §14.8)",
+ "title": "Takt-Bericht, Analyse → Leitstand (INTERFACES.md §14.8)",
  "type": "object",
  "required": ["takt", "phrase", "frist_takte", "decks", "deck_gegen_deck", "ueberdeckung", "summe", "plan_abweichung"],
  "properties": {

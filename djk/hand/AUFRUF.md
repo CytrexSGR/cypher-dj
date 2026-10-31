@@ -1,6 +1,6 @@
 # djk-hand: Cypher's hand for djk (MCP, stdio)
 
-Plan `docs/superpowers/plans/2026-09-28-djk-hand-mcp.md` (Rev. 2 after review), status `docs/architektur/stand/hand-mcp.md`.
+Plan `docs/superpowers/plans/2026-09-28-djk-hand-mcp.md` (Rev. 2 after review), status `docs/architecture/stand/hand-mcp.md`.
 
     claude mcp add --scope user djk-hand -- node /path/to/cypher-dj/djk/hand/hand.ts --seite http://127.0.0.1:47300
 
@@ -226,7 +226,7 @@ A ride without `form`: at the core `s`, at the host `linear` (the page always wr
 
 | Target | Effect | Route |
 |---|---|---|
-| Control path from SCHNITTSTELLEN §1.5 (`erz/2/filter`, `erz/3/fader`, `deck/1/eq/tief` …): `nach` in its unit, `takte` (0 = set), `form` `s` (default) or `linear` | beat-exact in the core, a tempo change stretches along; a grip on the control breaks off | `/k/teil`, plan `spur:<name>` |
+| Control path from INTERFACES §1.5 (`erz/2/filter`, `erz/3/fader`, `deck/1/eq/tief` …): `nach` in its unit, `takte` (0 = set), `form` `s` (default) or `linear` | beat-exact in the core, a tempo change stretches along; a grip on the control breaks off | `/k/teil`, plan `spur:<name>` |
 | `wirt:bass/<parameter>`, `wirt:melodie/<parameter>` (continuous Surge parameters, `surge_bereiche.json`), optionally `von` | start on bar one (measured 4 ms), duration converted to seconds at the start: a tempo change afterwards does NOT stretch it | host `fahre` with `ab`, `spur` |
 | `strom:1..3` with `muster` | takes effect from bar one of the ride (the server writes 2 beats earlier; with `ab_takt 1` and a close anchor it can take effect one bar late) | like the Strudel field, the AUTO lock applies |
 

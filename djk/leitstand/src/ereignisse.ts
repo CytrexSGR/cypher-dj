@@ -1,4 +1,4 @@
-// Kern- und Notbahn-Meldungen → WS-Ereignis-Art (SCHNITTSTELLEN §9.3) und Ansage-Satz (ADR 019).
+// Kern- und Notbahn-Meldungen → WS-Ereignis-Art (INTERFACES §9.3) und Ansage-Satz (ADR 019).
 // Was hier keine Art hat (/e/regler, /e/taste, /e/frist, /e/raster, /e/hotcue, /e/rueckweg, /e/protokollfehler,
 // /q, /q/stand), geht nur ins Journal: §9.3 kennt dafür keine Art; Pläne und Teile kommen mit Scheibe 21.
 import type { Felder } from './adressen.ts';

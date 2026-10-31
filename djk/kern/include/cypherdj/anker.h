@@ -1,4 +1,4 @@
-// Fortsetzen auf dem Anker (ADR 004 Regel 3, ARCHITEKTUR §4 Regel 2, SCHNITTSTELLEN §1.1): der neue Kern rechnet, wo
+// Fortsetzen auf dem Anker (ADR 004 Regel 3, ARCHITECTURE §4 Regel 2, INTERFACES §1.1): der neue Kern rechnet, wo
 // er ohne Absturz stünde. Der alte Kern schrieb in jedem Zyklus (Kern-Sample, Frame-Zähler des Treibers,
 // CLOCK_MONOTONIC) desselben Blockanfangs in den Zustand. Der neue Kern nimmt im ersten Zyklus dieselben zwei Uhren und
 // zählt die dazwischen vergangenen Frames auf das Kern-Sample. Vorrang hat der Frame-Zähler des Treibers (samplegenau

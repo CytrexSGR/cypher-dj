@@ -62,7 +62,7 @@ add_executable(regler_liste werkzeuge/regler_liste.cpp)
 target_link_libraries(regler_liste PRIVATE cypherdj_dsp)
 add_test(NAME regler_gegen_vertrag
          COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/regler_gegen_vertrag.py
-                 $<TARGET_FILE:regler_liste> ${CMAKE_CURRENT_SOURCE_DIR}/../../../docs/architektur/SCHNITTSTELLEN.md)
+                 $<TARGET_FILE:regler_liste> ${CMAKE_CURRENT_SOURCE_DIR}/../../../docs/architecture/INTERFACES.md)
 
 # --- Task 3: Bahnen ---
 dsp_test(test_bahn)

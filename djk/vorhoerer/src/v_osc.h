@@ -1,5 +1,5 @@
 /* OSC 1.0 für den Vorhörer, ohne liblo und ohne Allokation (Typen s, i, h, f, d; Big Endian, 4-Byte-Raster).
- * Nur im Hauptfaden benutzt, nie im Callback. Pakete höchstens 1 400 Bytes (SCHNITTSTELLEN.md §2). */
+ * Nur im Hauptfaden benutzt, nie im Callback. Pakete höchstens 1 400 Bytes (INTERFACES.md §2). */
 #ifndef CYPHERDJ_V_OSC_H
 #define CYPHERDJ_V_OSC_H
 

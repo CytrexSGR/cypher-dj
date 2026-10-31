@@ -1,10 +1,10 @@
-# cypherdj-kern: der Echtzeit-Kern (ARCHITEKTUR §2, §7; ADR 001, ADR 016 mit Nachtrag 2026-09-25). Scheibe 18.
+# cypherdj-kern: der Echtzeit-Kern (ARCHITECTURE §2, §7; ADR 001, ADR 016 mit Nachtrag 2026-09-25). Scheibe 18.
 # Nie "systemctl --user enable" oder "link": das Einschalten des Verbunds entscheidet Andreas (ROADMAP §8.4, §8.11).
 # Prüfläufe starten ihn transient mit genau diesen Eigenschaften (djk/kern/tests/neustart/unit_eigenschaften.py liest
 # diese Datei; nur ExecStart und Environment setzt der Prüflauf selbst).
 # Ausgang daneben (10k): der Kern spielt mit --master direkt an die Senke, die Notbahn sitzt daneben mit
 # --vor cypherdj-kern:notbahn_vor (cypherdj-notbahn.service). Vorgabe stumm: die geteilte Null-Senke cypher_stumm; das
-# echte Interface erst mit --ton-frei nach Andreas' Freigabe (SCHNITTSTELLEN §8).
+# echte Interface erst mit --ton-frei nach Andreas' Freigabe (INTERFACES §8).
 # RestartSec=0: kürzester Neustart (10 Probe c: erster Block nach 19 bis 48 ms). RestartSteps und RestartMaxDelaySec
 # stehen nach ADR 016 da, wirken bei RestartSec=0 in systemd 255 aber nicht (10 F2 Probe f, service.c Z. 309 bis 314:
 # 1659 Neustarts in 5 s); die Politik gegen Absturz-Schleifen entscheidet M11 (Scheibe 48).

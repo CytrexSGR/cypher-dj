@@ -22,10 +22,10 @@ external load of 19 to 70. The drafts contradict each other: "playability" wants
   unit sets the quantum; telemetry reports every buffer change (`/e/quantum`).
 - If the interface has only two outputs: **split headphones** (left cue mono, right master mono, Mixxx pattern) as
   the emergency route until a device with four outputs is there.
-- **Stem separation during a set** (one rule for all documents, ADR 011, `SCHNITTSTELLEN.md` §12.3): on the CPU only
+- **Stem separation during a set** (one rule for all documents, ADR 011, `INTERFACES.md` §12.3): on the CPU only
   at quantum 256, as a workshop job with `Nice=19`, `CPUSchedulingPolicy=batch` and limited threads (10 NP N6: 15%
   of the 256 period, 0 gaps; at 128: 55%), never at 128; on the GPU only once Andreas has answered the question
-  "GPU free during a set?" (ARCHITEKTUR §13 question 4) and M9 has measured job start and end.
+  "GPU free during a set?" (ARCHITECTURE §13 question 4) and M9 has measured job start and end.
 
 ## Alternatives and why not
 
@@ -39,7 +39,7 @@ external load of 19 to 70. The drafts contradict each other: "playability" wants
 ## Consequences
 
 - Latency heard by ear at 256 with soft Notbahn calculated at least 22.3 ms from grab to converter, at 128 at least
-  11.7 ms (ARCHITEKTUR §6). Whether that matters, Andreas decides in the listening session (M18).
+  11.7 ms (ARCHITECTURE §6). Whether that matters, Andreas decides in the listening session (M18).
 - A foreign client with `node.force-quantum` on the same driver can overturn the quantum ("The last node to be
   activated with this property wins", `man pipewire-props`); hence an own interface for the DJ nodes.
 - Kernel and boot stay as they are; the reserve option is Ubuntu's `lowlatency-kernel` plus `threadirqs`, only after

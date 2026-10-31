@@ -1,4 +1,4 @@
-// leitstand.toml lesen (SCHNITTSTELLEN §2.1) und gegen das Schema aus Scheibe 02 prüfen; Vorgaben kommen aus
+// leitstand.toml lesen (INTERFACES §2.1) und gegen das Schema aus Scheibe 02 prüfen; Vorgaben kommen aus
 // dessen "default"-Werten. Unbekannte Schlüssel sind ein Startfehler, jede Datei beginnt mit version = 1.
 // Prüfinstanzen nach ROADMAP Z2: CYPHERDJ_INSTANZ=a..i verschiebt Ports um 1000·k, cypherdj/ wird cypherdj-<i>/.
 import fs from 'node:fs';
@@ -41,7 +41,7 @@ const pruefe = pruefer(SCHEMA_KONFIG, '#/$defs/leitstand.toml', true);
 export function pruefeKonfig(roh: Record<string, unknown>, quelle: string): Konfig {
   const k = structuredClone(roh);
   const p = pruefe(k);
-  if (!p.ok) throw new Error(`${quelle}: ${p.fehler} (SCHNITTSTELLEN §2.1)`);
+  if (!p.ok) throw new Error(`${quelle}: ${p.fehler} (INTERFACES §2.1)`);
   return k as unknown as Konfig;
 }
 

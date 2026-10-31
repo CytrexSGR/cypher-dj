@@ -1,7 +1,7 @@
 {
  "$schema": "https://json-schema.org/draft/2020-12/schema",
  "$id": "https://cypherdj.invalid/vertrag/1/fassung.schema.json",
- "title": "fassung.json, Schema-Version 1 (SCHNITTSTELLEN.md §13.2); analyse_quelle = stems genau dann, wenn stems nicht leer ist (§13.1)",
+ "title": "fassung.json, Schema-Version 1 (INTERFACES.md §13.2); analyse_quelle = stems genau dann, wenn stems nicht leer ist (§13.1)",
  "type": "object",
  "required": ["schema", "material_id", "basis_bpm", "fassung", "korrekturen_bis_zeile", "datei", "frames", "sha256", "erster_schlag_frame",
   "beats", "erste_eins_quell_beat", "analyse_quelle", "stems", "schuesse", "headroom_db", "stimmung_korrektur_cent", "lautheit", "struktur",

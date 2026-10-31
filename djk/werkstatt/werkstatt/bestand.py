@@ -1,4 +1,4 @@
-"""Bestand (SCHNITTSTELLEN §13.1, §13.3; ADR 015): Pfade, material_id, atomares Veroeffentlichen ohne
+"""Bestand (INTERFACES §13.1, §13.3; ADR 015): Pfade, material_id, atomares Veroeffentlichen ohne
 Ueberschreiben, Versiegeln veroeffentlichter Fassungen, korrekturen.jsonl als einzige anhaengbare Datei.
 
 Atomar: alles entsteht unter <bestand>/.arbeit/<auftrag_id>/ (gleiches Dateisystem) und kommt per

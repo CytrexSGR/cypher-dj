@@ -1,4 +1,4 @@
-// OSC 1.0 kodieren und lesen (SCHNITTSTELLEN §2, §4, §5). Typen: i h d f s.
+// OSC 1.0 kodieren und lesen (INTERFACES §2, §4, §5). Typen: i h d f s.
 // Vorlage: proben/02-uhr-sync-planer/kern/absender.mjs (osc, parse); hier mit f, s, Längenprüfung.
 export type OscWert = number | bigint | string;
 

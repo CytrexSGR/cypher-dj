@@ -1,4 +1,4 @@
-// Lader des Kerns (ARCHITEKTUR §3.1, SCHNITTSTELLEN.md §4.4, §6.4, §13.2; ADR 015): blendet eine Fassung aus dem
+// Lader des Kerns (ARCHITECTURE §3.1, INTERFACES.md §4.4, §6.4, §13.2; ADR 015): blendet eine Fassung aus dem
 // Arbeitsbestand per mmap ein, sperrt sie mit mlock (je Material, nie MCL_FUTURE: 10 NP K7), prüft sie gegen
 // fassung.json und reicht sie über einen Ring in den Callback. Freigegeben (munlock, munmap) wird erst, wenn der
 // Callback das Material zurückgegeben hat. Budget: speicher_budget_mib (§2.1, 3 800 MiB unter der 4-GiB-Grenze).

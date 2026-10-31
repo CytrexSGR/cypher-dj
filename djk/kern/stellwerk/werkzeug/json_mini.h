@@ -1,4 +1,4 @@
-// Kleinster JSON-Leser für die Golden-Folgen (eine Zeile je Schritt, SCHNITTSTELLEN §19.0). Nicht im Echtzeit-Pfad.
+// Kleinster JSON-Leser für die Golden-Folgen (eine Zeile je Schritt, INTERFACES §19.0). Nicht im Echtzeit-Pfad.
 // Eigenbau statt nlohmann/json, damit das Stellwerk ohne djk/third_party baut; Zahlen ohne Punkt und Exponent
 // bleiben als int64 erhalten (Befehls-IDs).
 #pragma once

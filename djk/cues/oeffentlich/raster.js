@@ -1,5 +1,5 @@
 // Taktraster aus TBPM und einer Takt-Eins (eins_s). Geteilt von Seite und Server (dieselbe Rechnung beim Setzen und
-// beim Speichern). Zählweise wie SCHNITTSTELLEN §1.1: quell_beat 0 = erster Schlag des Rasters in der Datei (>= 0 s),
+// beim Speichern). Zählweise wie INTERFACES §1.1: quell_beat 0 = erster Schlag des Rasters in der Datei (>= 0 s),
 // erste_eins_quell_beat 0..3 = Lage der ersten Takt-Eins. Takt 1 beginnt an der ersten Takt-Eins in der Datei.
 export const SCHLAEGE_JE_TAKT = 4;
 export const TAKTE_JE_PHRASE = 16;

@@ -87,7 +87,7 @@ if(EXISTS ${D}/werkzeug/regler_liste.cpp)
   target_link_libraries(stellwerk_regler_liste cypherdj_stellwerk)
   stellwerk_ziel(stellwerk_regler_liste)
   # Regler-Tabelle gegen den Vertragstext §1.5 (mit Selbsttest gegen einen verfälschten Text)
-  set(VERTRAG_TEXT ${D}/../../../docs/architektur/SCHNITTSTELLEN.md CACHE FILEPATH "SCHNITTSTELLEN.md")
+  set(VERTRAG_TEXT ${D}/../../../docs/architecture/INTERFACES.md CACHE FILEPATH "INTERFACES.md")
   if(EXISTS ${VERTRAG_TEXT})
     add_test(NAME regler_gegen_vertrag
              COMMAND python3 ${D}/tests/regler_gegen_vertrag.py $<TARGET_FILE:stellwerk_regler_liste> ${VERTRAG_TEXT})

@@ -6,7 +6,7 @@
 using namespace probe;
 
 FALL(teil_rampe_golden) {
-  // SCHNITTSTELLEN §19.3 teil_rampe: -15 dB nach 0 dB ab Beat 64 über 32 Beats bei 128 BPM
+  // INTERFACES §19.3 teil_rampe: -15 dB nach 0 dB ab Beat 64 über 32 Beats bei 128 BPM
   Lauf l;
   l.sw->setze_direkt(l.r("deck/2/fader"), -15.0f);
   l.beobachte("deck/2/fader");
@@ -135,7 +135,7 @@ FALL(rampe_aus_stumm_und_s_kurve) {
 }
 
 FALL(setzen_und_rampe_am_selben_sample) {
-  // SCHNITTSTELLEN §14.1 Teile 2 und 3: eine Rampe beginnt beim Zielwert eines Setzens am selben Sample
+  // INTERFACES §14.1 Teile 2 und 3: eine Rampe beginnt beim Zielwert eines Setzens am selben Sample
   Lauf l;
   l.beobachte("deck/2/fader");
   const int64_t a = l.teil("deck/2/fader", 64, 0, -15, "p17", 2, "b_rein");

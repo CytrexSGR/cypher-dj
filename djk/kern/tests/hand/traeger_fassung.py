@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Klick-Träger-Fassung für die Kern-Hand (Scheibe 35): ein Material nach SCHNITTSTELLEN §6.4, §13.1, §13.2 wie die
+"""Klick-Träger-Fassung für die Kern-Hand (Scheibe 35): ein Material nach INTERFACES §6.4, §13.1, §13.2 wie die
 Klick-Fassung der Scheibe 31 (tests/deck/klick_fassung.py: dasselbe Raster, dieselbe Klickform, derselbe Schreibweg),
 aber links je Beat ein Klick mit Pegel 0,5 und rechts ein Träger von 12 kHz, 4 Samples je Periode:
 

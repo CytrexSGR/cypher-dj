@@ -1,5 +1,5 @@
 // Scheibe 25, Naht: die Kanalzug-Bibliothek (Scheibe 04) und die Stellwerk-Bibliothek (Scheibe 11) bauen im Kern und
-// arbeiten zusammen. Das Stellwerk fährt die Rampe aus teil_rampe (SCHNITTSTELLEN §19.3: deck/2/fader −15 → 0 dB ab
+// arbeiten zusammen. Das Stellwerk fährt die Rampe aus teil_rampe (INTERFACES §19.3: deck/2/fader −15 → 0 dB ab
 // Beat 64 über 32 Beats bei 128 BPM), sein Verlauf je Sample geht in einen Kanalzug. Erwartet: Wert bei Beat 80
 // (Sample 1 800 000) −7,5 dB, der Kanalzug ruht danach auf dem letzten Verlauf-Wert, und ein Eingang 1,0 kommt bei
 // Fader −200 als exakt 0 heraus (Negativ-Kontrolle), bei −7,5 dB mit 10^(−7,5/20) (nach dem Einschwingen des LR8).

@@ -1,4 +1,4 @@
-// Die eine Uhr: Tempo-Karte nach SCHNITTSTELLEN.md §1.3 (normativ) und Takt-Zählung nach §1.1.
+// Die eine Uhr: Tempo-Karte nach INTERFACES.md §1.3 (normativ) und Takt-Zählung nach §1.1.
 // Vorlage: proben/02-uhr-sync-planer/kern/uhrkern.cpp (Formeln Z. 72 bis 88), hier mit int64-Start-Sample
 // je Segment und höchstens 64 Segmenten. Keine Allokation: alle Funktionen sind im Callback erlaubt.
 #pragma once

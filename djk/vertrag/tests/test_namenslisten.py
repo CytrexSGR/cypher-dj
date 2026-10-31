@@ -76,8 +76,8 @@ MUTATIONEN = [
     ("djk/kern/hand/tests/test_namen.cpp", '"kiste_laden", ', "", "T07 test_namen.cpp fehlt: kiste_laden"),
     ("djk/vertrag/osc_adressen.ts", "'kiste_laden', ", "", "T04 osc_adressen.ts fehlt: kiste_laden"),
     ("djk/vertrag/osc_adressen.h", '"kiste_laden", ', "", "T03 osc_adressen.h fehlt: kiste_laden"),
-    ("docs/architektur/SCHNITTSTELLEN.md", "`tempo_basis`, `zuruf` (Wert", "`zuruf` (Wert",
-     "T01 SCHNITTSTELLEN §5.8 fehlt: tempo_basis"),
+    ("docs/architecture/INTERFACES.md", "`tempo_basis`, `zuruf` (Wert", "`zuruf` (Wert",
+     "T01 INTERFACES §5.8 fehlt: tempo_basis"),
     ("djk/vertrag/osc.json", '"zuruf"]', '"zuruf", "achtzehnte"]', "T05 namen.cpp fehlt: achtzehnte"),   # die 18. Taste
     (NAMEN_CPP, '"annehmen", "verwerfen",', '"verwerfen", "annehmen",',
      "Tasten-Reihenfolge: T05 namen.cpp weicht von osc.json ab"),
@@ -113,7 +113,7 @@ MUTATIONEN = [
     (SOFTCONTROLLER, '"ziel":"deck/1/play"', '"ziel":"deck/1x/play"',
      "Mapping softcontroller.json: Ziel deck/1x/play: Deck-Nummer außerhalb 1 bis 4"),
     # ---- veraltete Ausnahmen: die pfl-Ausnahmen (A03, A05) dürfen nicht blind als genutzt gelten
-    ("docs/architektur/SCHNITTSTELLEN.md", "`pfl`, ", "",
+    ("docs/architecture/INTERFACES.md", "`pfl`, ", "",
      "Ausnahme veraltet (tritt nicht mehr auf, streichen): ('A02 mapping.h enum', 'pfl')"),
     (HAND_MJS, "|slip|", "|slip|pfl|", "Ausnahme veraltet (tritt nicht mehr auf, streichen): "
      "('A05 hand.mjs DECK_AKTION', 'pfl')"),
@@ -142,8 +142,8 @@ MUTATIONEN += [
      "Spur-Regler=Kern: R03 Attrappe REGLER fehlt: spur/1/solo"),
     ("djk/leitstand/src/regler_info.ts", "tabelle.set(`spur/${n}/mute`, { pfad: `spur/${n}/mute`",
      "tabelle.set(`spur/${n}/mutx`, { pfad: `spur/${n}/mutx`", "Spur-Regler=Kern: R05 regler_info.ts fehlt: spur/1/mute"),
-    ("docs/architektur/SCHNITTSTELLEN.md", "| `spur/<n>/solo` | Schalter |", "| `spur/<n>/solx` | Schalter |",
-     "Spur-Regler=Kern: R02 SCHNITTSTELLEN §1.5 fehlt: spur/1/solo"),
+    ("docs/architecture/INTERFACES.md", "| `spur/<n>/solo` | Schalter |", "| `spur/<n>/solx` | Schalter |",
+     "Spur-Regler=Kern: R02 INTERFACES §1.5 fehlt: spur/1/solo"),
     ("djk/kern/stellwerk/src/regler.cpp", '"spur/%d/pan"', '"spur/%d/balance"',
      "Spur-Regler=Kern: R03 Attrappe REGLER steht ohne Vertrag: spur/1/pan"),
     ("djk/oberflaeche/hand_bedienung.ts", "|^spur\\/([1-9]|[12][0-9]|3[0-2])\\/(fader|pan|mute|solo)$", "|^spur\\/([1-9]|[12][0-9]|3[0-2])\\/(fader|mute|solo)$",
@@ -181,8 +181,8 @@ MUTATIONEN += [
      "tabelle.set(`spur/${n}/fader`, { pfad: `spur/${n}/fader`, kanal: null, ...r('db', -200, 6, 0) });",
      "tabelle.set(`spur/${n}/fader`, { pfad: `spur/${n}/fader`, kanal: null, ...r('db', -200, 0, 0) });",
      "Spur-Fader-Bereich=Kern: R05 regler_info.ts"),
-    ("docs/architektur/SCHNITTSTELLEN.md", "| `spur/<n>/fader` | dB | −200 bis +6 |", "| `spur/<n>/fader` | dB | −200 bis 0 |",
-     "Spur-Fader-Bereich=Kern: R02 SCHNITTSTELLEN §1.5"),
+    ("docs/architecture/INTERFACES.md", "| `spur/<n>/fader` | dB | −200 bis +6 |", "| `spur/<n>/fader` | dB | −200 bis 0 |",
+     "Spur-Fader-Bereich=Kern: R02 INTERFACES §1.5"),
 ]
 
 
@@ -194,15 +194,47 @@ MUTATIONEN += [
     (VERTRAG_MJS, "REGLER.set(`grp/${n}/solo`", "REGLER.set(`grp/${n}/soli`", "Routing-Regler=Kern: R03 Attrappe REGLER fehlt: grp/1/solo"),
     ("djk/leitstand/src/regler_info.ts", "tabelle.set(`grp/${n}/mute`, { pfad: `grp/${n}/mute`",
      "tabelle.set(`grp/${n}/mutx`, { pfad: `grp/${n}/mutx`", "Routing-Regler=Kern: R05 regler_info.ts fehlt: grp/1/mute"),
-    ("docs/architektur/SCHNITTSTELLEN.md", "| `grp/<n>/solo` | Schalter |", "| `grp/<n>/solx` | Schalter |",
-     "Routing-Regler=Kern: R02 SCHNITTSTELLEN §1.5 fehlt: grp/1/solo"),
+    ("docs/architecture/INTERFACES.md", "| `grp/<n>/solo` | Schalter |", "| `grp/<n>/solx` | Schalter |",
+     "Routing-Regler=Kern: R02 INTERFACES §1.5 fehlt: grp/1/solo"),
     ("djk/kern/stellwerk/src/regler.cpp", '"grp/%d/pan"', '"grp/%d/balance"',
      "Routing-Regler=Kern: R03 Attrappe REGLER steht ohne Vertrag: grp/1/pan"),
-    ("djk/oberflaeche/hand_bedienung.ts", "|^pm\\/fader$/;", "/;", "Routing-Regler: R06 hand_bedienung.PFAD lehnt pm/fader ab"),
-    ("djk/vertrag/schemas/defs.schema.json", "|pm/fader)$\"", "|pm/fadex)$\"", "Routing-Regler: R07 defs.schema.json regler_pfad lehnt pm/fader ab"),
+    ("djk/oberflaeche/hand_bedienung.ts", "|^pm\\/fader$|^(deck", "|^(deck", "Routing-Regler: R06 hand_bedienung.PFAD lehnt pm/fader ab"),
+    ("djk/vertrag/schemas/defs.schema.json", "|pm/fader|(deck", "|pm/fadex|(deck", "Routing-Regler: R07 defs.schema.json regler_pfad lehnt pm/fader ab"),
     (VERTRAG_MJS, "REGLER.set('pm/fader', { ...R(DB, -200, 6, 0), kanal: null });", "REGLER.set('pm/fader', { ...R(DB, -200, 0, 0), kanal: null });",
      "Routing-Fader-Bereich=Kern: R03 Attrappe REGLER"),
 ]
+
+
+# ---- S5r: Graph-Regler <kanal>/bk/<1..8>, nur auf Kanälen mit Graph (deck/1..4, erz/1,2,3,5,6,7, pad/1,2)
+MUTATIONEN += [
+    (KURVEN_JS, "...BK_KANAELE.flatMap((k) => Array.from({ length: 8 }, (_, i) => `${k}/bk/${i + 1}`)),",
+     "...BK_KANAELE.filter((k) => !k.startsWith('pad/')).flatMap((k) => Array.from({ length: 8 }, (_, i) => `${k}/bk/${i + 1}`)),",
+     "bk-Regler=Kern: R04 kurven.js ZIELE fehlt: pad/1/bk/1"),
+    (VERTRAG_MJS, "for (const k of BK_KANAELE) for (let n = 1; n <= 8; n++) REGLER.set(",
+     "for (const k of BK_KANAELE) for (let n = 1; n <= 7; n++) REGLER.set(", "bk-Regler=Kern: R03 Attrappe REGLER fehlt: deck/1/bk/8"),
+    ("djk/leitstand/src/regler_info.ts", "for (let n = 1; n <= 8; n++) tabelle.set(`${k}/bk/${n}`",
+     "for (let n = 2; n <= 8; n++) tabelle.set(`${k}/bk/${n}`", "bk-Regler=Kern: R05 regler_info.ts fehlt: deck/1/bk/1"),
+    ("djk/leitstand/src/regler_info.ts", "'erz/3', 'erz/5', 'erz/6', 'erz/7', 'pad/1', 'pad/2'];\nfor (const k of BK_KANAELE)",
+     "'erz/3', 'erz/4', 'erz/5', 'erz/6', 'erz/7', 'pad/1', 'pad/2'];\nfor (const k of BK_KANAELE)", "bk-Regler=Kern: R05 regler_info.ts steht ohne Vertrag: erz/4/bk/1"),
+    ("docs/architecture/INTERFACES.md", "erz/1, 2, 3, 5, 6, 7 und pad/1, 2 (Instrument", "erz/1, 2, 3, 4, 5, 6, 7 und pad/1, 2 (Instrument",
+     "bk-Regler=Kern: R02 INTERFACES §1.5 steht ohne Vertrag: erz/4/bk/1"),
+    ("djk/kern/stellwerk/src/regler.cpp", '"erz/3", "erz/5", "erz/6"', '"erz/3", "erz/4", "erz/5", "erz/6"',
+     "bk-Regler=Kern: R03 Attrappe REGLER fehlt: erz/4/bk/1"),
+    ("djk/oberflaeche/hand_bedienung.ts", "|^(deck\\/[1-4]|erz\\/[1-35-7]|pad\\/[12])\\/bk\\/[1-8]$/;", "|^(deck\\/[1-4]|erz\\/[1-8]|pad\\/[12])\\/bk\\/[1-8]$/;",
+     "bk-Regler: R06 hand_bedienung.PFAD nimmt erz/4/bk/1 an"),
+    ("djk/oberflaeche/hand_bedienung.ts", "|^(deck\\/[1-4]|erz\\/[1-35-7]|pad\\/[12])\\/bk\\/[1-8]$/;", "/;",
+     "bk-Regler: R06 hand_bedienung.PFAD lehnt deck/1/bk/1 ab"),
+    ("djk/vertrag/schemas/defs.schema.json", "|(deck/[1-4]|erz/[1-35-7]|pad/[12])/bk/[1-8])$\"", "|(deck/[1-4]|erz/[1-35-7]|pad/[12])/bk/[1-9])$\"",
+     "bk-Regler: R07 defs.schema.json regler_pfad nimmt deck/1/bk/9 an"),
+    ("djk/vertrag/schemas/defs.schema.json", "|(deck/[1-4]|erz/[1-35-7]|pad/[12])/bk/[1-8])$\"", "|(deck/[1-4]|erz/[1-8]|pad/[12])/bk/[1-8])$\"",
+     "bk-Regler: R07 defs.schema.json regler_pfad nimmt erz/4/bk/1 an"),
+]
+
+
+def test_bk_zeile_in_schnittstellen_weg_wirft_parserfehler(kopie):
+    mutiere(kopie, "docs/architecture/INTERFACES.md", "| `<k>/bk/<n>` (n = 1 bis 8)", "| `<k>/bx/<n>` (n = 1 bis 8)")
+    with pytest.raises(pn.ParserFehler, match="bk"):
+        pn.pruefe(pn.Quelle(kopie))
 
 
 def test_spur_fader_bereich_wie_spec_6_16():
@@ -233,9 +265,9 @@ def test_blinder_parser_wirft_statt_gruen(kopie):
 
 
 @pytest.mark.parametrize("datei,alt,neu,wort", [
-    ("docs/architektur/SCHNITTSTELLEN.md", "`tap`, `slip`,", "`tap`, `sync2`, `slip`,", "sync2"),
-    ("docs/architektur/SCHNITTSTELLEN.md", "`tap`, `slip`,", "`tap`, `beatjump/<n2>`, `slip`,", "beatjump"),
-    ("docs/architektur/SCHNITTSTELLEN.md", "- `ziel`: ein Regler-Pfad (§1.5)", "- `zielx`: ein Regler-Pfad (§1.5)",
+    ("docs/architecture/INTERFACES.md", "`tap`, `slip`,", "`tap`, `sync2`, `slip`,", "sync2"),
+    ("docs/architecture/INTERFACES.md", "`tap`, `slip`,", "`tap`, `beatjump/<n2>`, `slip`,", "beatjump"),
+    ("docs/architecture/INTERFACES.md", "- `ziel`: ein Regler-Pfad (§1.5)", "- `zielx`: ein Regler-Pfad (§1.5)",
      "§7.2"),
     ("djk/kern/include/cypherdj/hand_ein.h", "test_taste_pfad", "test_taste_pfadx", "hand_ein.h"),
 ], ids=["sync2", "beatjump", "marke_weg", "encoder_blind"])

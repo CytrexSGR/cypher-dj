@@ -1,4 +1,4 @@
-// Stellwerk-RT: Prüfer-Schnittstelle, die Naht zu Scheibe 20 (Invarianten I1 bis I3, Frist-Wächter, SCHNITTSTELLEN §17).
+// Stellwerk-RT: Prüfer-Schnittstelle, die Naht zu Scheibe 20 (Invarianten I1 bis I3, Frist-Wächter, INTERFACES §17).
 // Scheibe 11 ruft die Haken an den Stellen auf, die §17 nennt, und liefert eine leere Standard-Implementierung.
 // Scheibe 20 leitet von Pruefer ab und füllt die Haken, ohne diese Datei zu ändern; was 20 darüber hinaus braucht
 // (Hörschein-Register, Deck-Modell, Deck-Teile), hängt an ihrer abgeleiteten Klasse, nicht an dieser Datei.

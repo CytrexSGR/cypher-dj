@@ -1,4 +1,4 @@
-// Der Vertrag (SCHNITTSTELLEN.md, Version 1) als Tabellen für die Kern-Attrappe.
+// Der Vertrag (INTERFACES.md, Version 1) als Tabellen für die Kern-Attrappe.
 // Adressen und Typ-Zeichenketten wörtlich aus §4, §5, §19.0 und ROADMAP Z1. Ein Test gleicht sie
 // gegen den Vertragstext und gegen djk/vertrag/osc.json ab (tests/vertrag.test.mjs).
 
@@ -182,6 +182,10 @@ for (let n = 1; n <= 8; n++) {   // 1.10 Slice 1 (§1.5): Gruppen-Regler, global
   REGLER.set(`grp/${n}/solo`, { ...R(SCHALTER, 0, 1, 0), kanal: null });
 }
 REGLER.set('pm/fader', { ...R(DB, -200, 6, 0), kanal: null });
+// S5r (§1.5): acht Graph-Regler <kanal>/bk/<1..8> auf den Kanälen, auf denen der Kern einen Baukasten-Graphen annimmt
+// (deck/1..4 als Effekt, erz/1,2,3,5,6,7 und pad/1,2 als Instrument; nicht erz/4 und erz/8), alle dürfen, 0..1, Vorgabe 0,5
+export const BK_KANAELE = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'erz/1', 'erz/2', 'erz/3', 'erz/5', 'erz/6', 'erz/7', 'pad/1', 'pad/2'];
+for (const k of BK_KANAELE) for (let n = 1; n <= 8; n++) REGLER.set(`${k}/bk/${n}`, { ...R(LIN, 0, 1, 0.5), kanal: k });
 
 export const kanalVon = (pfad) => REGLER.get(pfad)?.kanal ?? null;
 export const istDeck = (k) => typeof k === 'string' && /^deck\/[1-4]$/.test(k);

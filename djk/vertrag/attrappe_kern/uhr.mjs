@@ -1,4 +1,4 @@
-// Tempo-Karte nach SCHNITTSTELLEN §1.3 (normativ): Segmente linear in der Zeit, höchstens 64.
+// Tempo-Karte nach INTERFACES §1.3 (normativ): Segmente linear in der Zeit, höchstens 64.
 // Formeln wie proben/02-uhr-sync-planer/kern/uhrkern.cpp Z. 60-100. Der Segmentanfang s0 wird als
 // float64 gehalten (wie uhrkern.cpp); für die Golden-Werte ist das gleichwertig mit einem int64-s0 und
 // dem exakten Beat an diesem Sample als b0 (nachgerechnet in tests/uhr.test.mjs).

@@ -1,4 +1,4 @@
-"""Herleitung der Golden-Erwartungswerte aus dem Vertragstext (SCHNITTSTELLEN.md §1.2, §1.5, §1.6, §4, §7.3, §14.4,
+"""Herleitung der Golden-Erwartungswerte aus dem Vertragstext (INTERFACES.md §1.2, §1.5, §1.6, §4, §7.3, §14.4,
 §16, §17). Die Tempo-Karte §1.3 kommt aus karte.py (Scheibe 02), nicht aus einer zweiten Umsetzung.
 
 Jede Funktion trägt den Abschnitt, aus dem sie stammt. Keine Funktion kennt Kern, Attrappe oder Leitstand: das hier

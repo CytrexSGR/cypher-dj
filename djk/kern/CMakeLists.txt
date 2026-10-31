@@ -294,6 +294,16 @@ test_bk_attrappe(test_erzeuger_bk_werk_attrappe "")
 test_bk_attrappe(test_erzeuger_bk_werk_spaet_verbraucht_mutation CYPHERDJ_MUTATION_BK_WERK_SPAET_VERBRAUCHT)
 test_bk_attrappe(test_erzeuger_bk_werk_noten_trotz_besetzt_mutation CYPHERDJ_MUTATION_BK_WERK_NOTEN_TROTZ_BESETZT)
 test_bk_attrappe(test_erzeuger_bk_werk_wechsel_sofort_mutation CYPHERDJ_MUTATION_BK_WERK_WECHSEL_SOFORT)
+# Baukasten S5r Task 3: Graph-Regler. Die Attrappe sieht alle vier Fehlerfälle (nicht gemeldet, an besetztem Platz, falscher Kanal,
+# getauschter Graph ohne Wert); test_erzeuger_bk (ohne Werk) und test_kern_kanal_graph (Kern bis Mixer) die drei übrigen.
+foreach(mut NICHT_GEMELDET TROTZ_BESETZT FALSCHER_KANAL TAUSCH_05)
+  string(TOLOWER ${mut} mut_klein)
+  test_bk_attrappe(test_erzeuger_bk_werk_regler_${mut_klein}_mutation CYPHERDJ_MUTATION_BK_REGLER_${mut})
+endforeach()
+foreach(mut NICHT_GEMELDET FALSCHER_KANAL TAUSCH_05)
+  string(TOLOWER ${mut} mut_klein)
+  test_mutation(test_erzeuger_bk_regler_${mut_klein}_mutation test_erzeuger_bk CYPHERDJ_MUTATION_BK_REGLER_${mut} src/erzeuger.cpp src/kit.cpp src/uhr.cpp)
+endforeach()
 # Plan MVP 2 (ADR 025), Fehlerfall: Loop-Position ab dem Einsatz statt aus dem Beat (Box läuft neben dem Raster).
 test_mutation(test_loopbox_mutation test_loopbox CYPHERDJ_MUTATION_LOOP_AB_START src/loopbox.cpp src/loop.cpp src/uhr.cpp)
 # Plan MVP 2 Scheibe 2 (ADR 025 Folgeplan), Fehlerfall: Mitschnitt-Einsatz am Blockanfang statt ab ab_sample.
@@ -325,7 +335,7 @@ add_executable(cypherdj-aufnehmer4 tests/neustart/aufnehmer4.cpp)
 target_link_libraries(cypherdj-aufnehmer4 PRIVATE PkgConfig::JACK)
 target_compile_options(cypherdj-aufnehmer4 PRIVATE -Wall -Wextra)
 
-# Scheibe 18: Diagnose des Neustart-Zustands (nur lesend, SCHNITTSTELLEN §6.3) und die Vergleichsmessung der Kosten des
+# Scheibe 18: Diagnose des Neustart-Zustands (nur lesend, INTERFACES §6.3) und die Vergleichsmessung der Kosten des
 # Echtzeit-Fachs (kein Test). Beide in Unterordnern, die das Einsammeln oben nicht erfasst.
 add_executable(cypherdj-zustand src/werkzeuge/zustand.cpp)
 target_link_libraries(cypherdj-zustand PRIVATE cypherdj_kernbib)
@@ -580,6 +590,11 @@ test_mutation(test_kern_fx_routing_hart_mutation test_kern_fx_routing CYPHERDJ_M
 foreach(mut NICHT_SETZEN KI_LECK KI_OFFEN BEREICH_LECK NICHT_ABHOLEN DOPPELT BURST_LECK)
   string(TOLOWER ${mut} mut_klein)
   test_mutation(test_kern_kanal_graph_${mut_klein}_mutation test_kern_kanal_graph CYPHERDJ_MUTATION_KANAL_GRAPH_${mut} ${KERN_QUELLEN35})
+endforeach()
+# Baukasten S5r Task 3: die Graph-Regler bis in den Effekt-Graphen (Fall 9); nicht gemeldet, falscher Kanal, Tausch ohne Wert.
+foreach(mut NICHT_GEMELDET FALSCHER_KANAL TAUSCH_05)
+  string(TOLOWER ${mut} mut_klein)
+  test_mutation(test_kern_kanal_graph_regler_${mut_klein}_mutation test_kern_kanal_graph CYPHERDJ_MUTATION_BK_REGLER_${mut} ${KERN_QUELLEN35})
 endforeach()
 # Dasselbe im Netz: netz_erz.cpp mutiert als eigenes Objekt vor der Bibliothek (Muster test_netz_arr_erz4_mutation);
 # test_netz_erz muss scheitern, wenn kein_eingang, die Latenz oder der Kanalbereich nicht mehr geprüft werden.

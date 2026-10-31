@@ -1,4 +1,4 @@
-// OSC-Kodierung/Dekodierung für den Vorhörer-Vertrag (docs/architektur/stand/vorhoerer.md, §OSC-Vertrag).
+// OSC-Kodierung/Dekodierung für den Vorhörer-Vertrag (docs/architecture/stand/vorhoerer.md, §OSC-Vertrag).
 // Portierung von djk/vorhoerer/vfern.py (kodiere/dekodiere), Typen nach OSC 1.0, Big Endian. Nur die Typen, die
 // der Vorhörer benutzt: i (int32), h (int64, für jack_frame_time), f (float32), d (float64), s (string).
 export type OscWert = number | string;

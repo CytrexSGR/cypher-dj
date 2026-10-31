@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Leitstand-Attrappe (SCHNITTSTELLEN.md §19.2, Werkstück K1, Scheibe 08): fährt Golden-Folgen aus
+"""Leitstand-Attrappe (INTERFACES.md §19.2, Werkstück K1, Scheibe 08): fährt Golden-Folgen aus
 djk/vertrag/folgen/*.jsonl gegen einen laufenden Kern (oder die Kern-Attrappe, Scheibe 13) und prüft Quittungen,
 Ereignisse und Werte. Format und Läufer-Regeln: djk/vertrag/folgen/FORMAT.md (Punkte 1 bis 22, Scheiben 02 und 09).
 Geurteilt wird am Ende über die ganze Beobachtung mit djk/vertrag/folgen_vergleich.py (Scheibe 09), wie in golden.mjs

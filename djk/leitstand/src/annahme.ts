@@ -1,4 +1,4 @@
-// Annahme im Leitstand (ADR 023 Entscheidung 1, SCHNITTSTELLEN §10, §14.1, §14.3, §16.3): Pläne annehmen, verriegeln
+// Annahme im Leitstand (ADR 023 Entscheidung 1, INTERFACES §10, §14.1, §14.3, §16.3): Pläne annehmen, verriegeln
 // oder zum Vorschlag machen, koppeln, einreichen („A raus“ erst, wenn „B rein“ gestartet ist), Quittungen verfolgen,
 // Vorschläge per Taste annehmen, verwerfen, verfallen lassen, nach einem Neustart über /q/stand abgleichen.
 import type { Felder } from './adressen.ts';

@@ -4,7 +4,7 @@
 # Satellit nach ADR 016: Restart=always; ein Konfigurationsfehler (Rückgabe 2) startet nicht in Schleife neu.
 [Unit]
 Description=cypherdj-leitstand (Hub, Kern-Anbindung, Takt-Strom, Journal)
-Documentation=file:%h/cypher-dj/docs/architektur/SCHNITTSTELLEN.md
+Documentation=file:%h/cypher-dj/docs/architecture/INTERFACES.md
 PartOf=cypherdj.target
 After=cypherdj-kern.service
 

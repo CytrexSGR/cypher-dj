@@ -1,4 +1,4 @@
-// fassung.json lesen (SCHNITTSTELLEN §13.2), Pfade (§6.4, §13.1) und Raster der Fassung (§13.1). Scheibe 31.
+// fassung.json lesen (INTERFACES §13.2), Pfade (§6.4, §13.1) und Raster der Fassung (§13.1). Scheibe 31.
 // Positiv: die Fixtures der Golden-Folgen (djk/vertrag/folgen/material/). Fehlerfall: kaputte Kopien davon.
 #include <unistd.h>
 

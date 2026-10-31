@@ -1,4 +1,4 @@
-// Set-Journal nach SCHNITTSTELLEN §15: eine JSON-Zeile je Ereignis, synchron geschrieben (ein kill -9
+// Set-Journal nach INTERFACES §15: eine JSON-Zeile je Ereignis, synchron geschrieben (ein kill -9
 // verliert höchstens die Zeile, die gerade entsteht). sample, beat, takt sind null, solange der Leitstand
 // noch keine Kern-Zeit kennt. Erste Zeile einer neuen Datei ist set_start; hängt ein neuer Lauf an eine
 // vorhandene Datei an (gleiche set_id), beginnt sein Teil mit "fortsetzung" (gleiche Felder).

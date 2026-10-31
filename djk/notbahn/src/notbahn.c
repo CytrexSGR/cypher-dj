@@ -1,4 +1,4 @@
-/* cypherdj-notbahn (Scheiben 01 und 10): letzte Meile nach SCHNITTSTELLEN.md §6.1, §8, ADR 016 (Nachtrag 2026-09-25).
+/* cypherdj-notbahn (Scheiben 01 und 10): letzte Meile nach INTERFACES.md §6.1, §8, ADR 016 (Nachtrag 2026-09-25).
  * --daneben: sitzt neben dem Kern am Ausgang und schweigt, solange er schreibt. Ohne: reicht den Ring einen Block
  * versetzt durch wie Scheibe 01, ohne Schleife (bis der Kern eigene Ausgänge hat, 10k). Daneben: steht w einen
  * Zyklus still (ohne verbundenes vor zwei), spielt sie den letzten vollendeten Takt aus ihrem Verlauf; Durchgänge beginnen am fortgesetzten Raster

@@ -1,4 +1,4 @@
-/* Riegel gegen ungefragten Ton (SCHNITTSTELLEN.md §8, 00-anforderungen §9 „Kein Ton ohne Frage“): ein Zielport ist
+/* Riegel gegen ungefragten Ton (INTERFACES.md §8, 00-anforderungen §9 „Kein Ton ohne Frage“): ein Zielport ist
  * erlaubt, wenn sein Name „stumm“ enthält oder mit „cypherdj-pruef-“ beginnt; jedes andere Ziel nur mit --ton-frei,
  * das erst nach Andreas' Freigabe für sein Interface gesetzt wird. */
 #ifndef CYPHERDJ_RIEGEL_H

@@ -1,4 +1,4 @@
-// Scheibe 31: die Decks im Kern (SCHNITTSTELLEN.md §4.4, §5.5, §5.9, §6.3, §6.4, §13.1, §13.2, §16.1, §16.2).
+// Scheibe 31: die Decks im Kern (INTERFACES.md §4.4, §5.5, §5.9, §6.3, §6.4, §13.1, §13.2, §16.1, §16.2).
 // Befehle /k/deck/laden, entladen, start, stopp werden am Blockanfang einsortiert; Laden geht über einen Ring an den
 // Lade-Faden (lader.h) und kommt als eingeblendetes, geprüftes Material zurück; start und stopp wirken am Sample ihres
 // Ziel-Beats, auch mitten im Block (der Kern teilt den Block dort). Das Deck liest im Direktweg ohne Stretcher (ADR 020);

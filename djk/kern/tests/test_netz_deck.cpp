@@ -1,4 +1,4 @@
-// Scheibe 31: Deck-Adressen im Netz-Faden über echtes UDP (SCHNITTSTELLEN §4.4, §5.5, §5.9, §16.2): /k/deck/laden,
+// Scheibe 31: Deck-Adressen im Netz-Faden über echtes UDP (INTERFACES §4.4, §5.5, §5.9, §16.2): /k/deck/laden,
 // entladen, start, stopp kommen mit allen Feldern in den Befehlsring; Bereichsfehler werden quittiert, ohne den Ring zu
 // füllen; /zustand/deck, /e/geladen und /e/frist gehen mit den Typen aus osc_adressen.h hinaus; die Deck-Adressen
 // späterer Scheiben bleiben unbekannt.

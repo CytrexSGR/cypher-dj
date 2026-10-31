@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prüfläufe der Scheibe 35 am Ziel, stumm (SCHNITTSTELLEN §19.5, ROADMAP §8.4, §8.5): eigene Null-Senke mit vier
+"""Prüfläufe der Scheibe 35 am Ziel, stumm (INTERFACES §19.5, ROADMAP §8.4, §8.5): eigene Null-Senke mit vier
 Kanälen je Lauf, der Kern an seinen eigenen Ausgängen (10k: --master <senke>:playback_F --cue <senke>:playback_R,
 Selbst-Wächter 100 ms wie die Unit), JACK-Aufnehmer mit vier Kanälen am Monitor der Senke (cypherdj-aufnehmer4, 18),
 ein OSC-Abonnent (djk/vertrag/attrappe_leitstand.py als Bibliothek), der Befehle schickt und alles protokolliert, und der

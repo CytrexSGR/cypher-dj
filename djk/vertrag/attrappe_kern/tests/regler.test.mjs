@@ -85,7 +85,7 @@ test('/k/abbruch: laufender Teil hält am Ist-Wert, wartender entfällt, Quittun
   gruen(r);
 });
 
-// Lesart i (docs/architektur/entwuerfe/2026-09-25-lesarten-09.md): Grund bei Status 5 ist "", wie Kern 08
+// Lesart i (docs/architecture/entwuerfe/2026-09-25-lesarten-09.md): Grund bei Status 5 ist "", wie Kern 08
 test('Lesart i: Quittung 5 trägt Grund ""; Negativ-Kontrolle: Quittung 4 behält zu_spaet', () => {
   const r = fahre([
     sende(500000, teil(1, 'cypher', 'p1', 0, 'deck/1/eq/mitte', 10, 0, -6, { politik: 0 })),

@@ -1,4 +1,4 @@
-// OSC 1.0 kodieren und lesen, ohne Fremdbibliothek (SCHNITTSTELLEN §19.4: kein liblo).
+// OSC 1.0 kodieren und lesen, ohne Fremdbibliothek (INTERFACES §19.4: kein liblo).
 // Typen: i (int32), h (int64, gelesen als BigInt), f (float32), d (float64), s (Zeichenkette).
 // Bundles nur lesend (Erzeuger-Fenster §4.8). Vorlage: proben/02-uhr-sync-planer/kern/absender.mjs.
 

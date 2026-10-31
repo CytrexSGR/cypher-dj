@@ -1,4 +1,4 @@
-// Paket 1.13 Warp, Slice 3a: Testhelfer für die Quellen des Auto-Warps. Karte im Format der Nachtanalyse (material.json, SCHNITTSTELLEN.md:1202), Marken-Tabelle
+// Paket 1.13 Warp, Slice 3a: Testhelfer für die Quellen des Auto-Warps. Karte im Format der Nachtanalyse (material.json, INTERFACES.md:1202), Marken-Tabelle
 // wie cypher-mediathek/mediathek/leser2.py (marke(inhalt_sha256, quelle, art, nummer, start_s, laenge_s, bpm, name)).
 import fs from 'node:fs';
 import path from 'node:path';
@@ -32,7 +32,7 @@ export function baueMarken(datei, zeilen) {
 }
 
 // Slice 3b: ein Material im Bestand des Decks (bestand/<sha[:16]>/): material.json wie die Ablage (schreibeKarte), dazu die Fassungen
-// (fassungen/<bpm·1000>_r<n>/fassung.json) und optional Zeilen für korrekturen.jsonl (Objekte, Felder wie SCHNITTSTELLEN.md §13.3)
+// (fassungen/<bpm·1000>_r<n>/fassung.json) und optional Zeilen für korrekturen.jsonl (Objekte, Felder wie INTERFACES.md §13.3)
 export function schreibeBestand(bestand, sha, { fassungen = ['128000_r1'], korrekturen = [], ...karteOpt } = {}) {
   const dir = schreibeKarte(bestand, sha, karteOpt);
   for (const f of fassungen) {

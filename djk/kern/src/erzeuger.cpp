@@ -41,6 +41,28 @@ void Erzeuger::bk_zur_freigabe(CypherBk* bk) {
   else ++bk_stand_.voll;  // darf nicht vorkommen (je Block geleert); lieber verlieren als im Callback freigeben
 }
 
+// S5r: die Regler <kanal>/bk/1..8 an den Graphen melden (die FFI glättet über 20 ms). Nur aufrufen, wo der Platz des Handles
+// nachweislich FREI ist (bk_vorlauf: nach dem Abholen, nicht bei VERSPAETET), oder ohne Werk im Callback. Ohne Werte-Zeiger
+// (Tests ohne Kern) keine Meldung: der Graph bleibt auf seinen Werten (K10).
+void Erzeuger::bk_regler_melden(CypherBk* bk, int kanal) {
+#ifdef CYPHERDJ_MUTATION_BK_REGLER_NICHT_GEMELDET  // Fehlerfall S5r: der Kern meldet die Regler nie an den Graphen
+  (void)bk; (void)kanal;
+  return;
+#endif
+  if (!bk_wert_ || !bk || kanal < 0 || kanal >= MIX_KANAELE) return;
+#ifdef CYPHERDJ_MUTATION_BK_REGLER_FALSCHER_KANAL  // Fehlerfall S5r: die Zeile des Nachbarkanals
+  kanal = (kanal + 1) % MIX_KANAELE;
+#endif
+  for (int nr = 1; nr <= 8; ++nr) {
+#ifdef CYPHERDJ_MUTATION_BK_REGLER_TAUSCH_05  // Fehlerfall S5r (D5): nur gemeldet, wenn sich der Wert ändert; ein getauschter Graph bleibt auf 0,5
+    static float zuletzt[MIX_KANAELE][8];
+    if (bk_wert_[kanal][nr - 1] == zuletzt[kanal][nr - 1]) continue;
+    zuletzt[kanal][nr - 1] = bk_wert_[kanal][nr - 1];
+#endif
+    cypher_bk_regler(bk, static_cast<uint32_t>(nr), bk_wert_[kanal][nr - 1]);
+  }
+}
+
 void Erzeuger::setze_bk(int strom, CypherBk* bk, int kanal) {
   if (strom < 1 || strom > ERZ_STROEME) { bk_zur_freigabe(bk); return; }
   Strom& s = st_[strom - 1];
@@ -400,6 +422,7 @@ void Erzeuger::block(const Karte& k, int64_t n0, int n, float* const* ein_l, flo
     if (midi || s.bk) noten_aus(s, n0 + n, midi, n0, zyklus_n0, OffsWahl::ALLE);  // Studio S5: Offs, die in diesem Block fällig sind
     if (s.bk && s.kanal >= 0) {  // Baukasten S3a: Graph rechnen, Noten dieses Blocks sind gemeldet
       cypherdj::dsp::DenormalSchutz schutz;
+      bk_regler_melden(s.bk, s.kanal);  // S5r K5: ohne Werk gilt s.kanal (bk_kanal ist dort -1)
       if (cypher_bk_block(s.bk, bk_l_, bk_r_, (size_t)n) != 0) ++bk_stand_.panik;
       bk_addiere(bk_l_, bk_r_, s.kanal, n, ein_l, ein_r, 0, 0);
     }
@@ -461,6 +484,9 @@ void Erzeuger::bk_vorlauf(Strom& s, int a, const Karte& k, int64_t n0, int n, fl
   const Abholung h = werk_->abholen(a, n0, n);
   if (h == Abholung::VERSPAETET) {  // D4: Stille, Platz bleibt beim Faden, Noten bleiben liegen, kein Auftrag
     ++bk_stand_.verspaetet;
+#ifdef CYPHERDJ_MUTATION_BK_REGLER_TROTZ_BESETZT  // Fehlerfall S5r: Regler an ein Handle, an dem ein Faden rechnet
+    bk_regler_melden(s.bk, s.bk_kanal);
+#endif
 #ifdef CYPHERDJ_MUTATION_BK_WERK_SPAET_VERBRAUCHT  // Fehlerfall: die Ereignisse des übersprungenen Fensters gehen verloren
     int g = 0;
     while (g < s.n && std::llround(k.sample_at(s.ev[g].beat)) < n0 + 2 * n) ++g;
@@ -475,6 +501,8 @@ void Erzeuger::bk_vorlauf(Strom& s, int a, const Karte& k, int64_t n0, int n, fl
 #endif
     return;
   }
+  // S5r K12: ab hier ist der Platz a frei (VERSPAETET kehrte oben zurück), vor anlauf, bk_noten und auftrag
+  bk_regler_melden(s.bk, s.bk_kanal);
   // D6: wechseln, wenn ein neuer wartet und der Ausklang-Platz frei ist (der aktive ist es nach dem Abholen)
   const bool wechsle = s.bk_neu_gesetzt && !bk_aus_[a].bk && werk_->frei(ERZ_STROEME + a);
   if (h != Abholung::GUELTIG) {  // D5 Anlauf: dieses Fenster selbst; wartet ein Wechsel, bekommt der alte keine Noten (m11)
@@ -499,6 +527,7 @@ void Erzeuger::bk_vorlauf(Strom& s, int a, const Karte& k, int64_t n0, int n, fl
     }
     bk_wechsel(s, s.bk_neu, s.bk_neu_kanal);
     if (!s.bk) return;  // Graph ab: der Strom spielt ab dem nächsten Block Kit oder MIDI
+    bk_regler_melden(s.bk, s.bk_kanal);  // S5r D5: der neue Graph bekommt die Werte, bevor er Noten und Auftrag bekommt
   }
   if (s.bk_neu_gesetzt) return;  // ein Wechsel wartet (Ausklang-Platz besetzt): keine Noten an den alten (m11)
   bk_noten(s, k, n0 + n, n0 + 2 * n);

@@ -1,5 +1,5 @@
 // Hand-Weg: übersetzt ein JACK-MIDI-Ereignis über das Mapping in eine Ausgabe für Stellwerk und Kern
-// (SCHNITTSTELLEN §7.2, §7.3). Echtzeitfest: keine Allokation, keine Sperre, kein I/O; Nachschlagen über die feste
+// (INTERFACES §7.2, §7.3). Echtzeitfest: keine Allokation, keine Sperre, kein I/O; Nachschlagen über die feste
 // Index-Tabelle des Mappings.
 //
 // §7.3 Punkt 1: jedes Ereignis wirkt am Sample seines Versatzes im Zyklus der Ankunft: sample = zyklus_s0 + versatz.

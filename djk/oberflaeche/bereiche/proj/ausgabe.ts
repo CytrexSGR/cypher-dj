@@ -183,7 +183,7 @@ export type ExportAntwort = Pick<RenderAntwort, 'frames' | 'spitze_db' | 'regler
 
 // Paket 1.18, E-b. Unter dieser Spitze (dBFS) gilt ein Render als Stille: die Lautheit ist null, nicht der Gate-Boden −70 von ffmpeg.
 export const STILLE_DB = -90;
-const STUMM_GRENZE = -120;          // SCHNITTSTELLEN §1.2: jeder Fader-Wert ≤ −120 dB ist stumm
+const STUMM_GRENZE = -120;          // INTERFACES §1.2: jeder Fader-Wert ≤ −120 dB ist stumm
 const OHNE_LAUTHEIT: Lautheit = { lufs_i: null, lra: null, true_peak_dbtp: null };
 // S3-Fix G2: ffmpeg (ebur128) meldet −70.0 LUFS, wenn kein Block das absolute Gate −70 passiert: das ist der Boden, keine Messung. Eine solche leise,
 // aber nicht stille Spur (Spitze über STILLE_DB) bekommt lufs_i null und lra null (LRA 0 wäre erfunden), den gemessenen True Peak und unter_messgrenze true.

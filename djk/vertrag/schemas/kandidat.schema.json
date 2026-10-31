@@ -1,7 +1,7 @@
 {
  "$schema": "https://json-schema.org/draft/2020-12/schema",
  "$id": "https://cypherdj.invalid/vertrag/1/kandidat.schema.json",
- "title": "Kandidat (SCHNITTSTELLEN.md §14.6)",
+ "title": "Kandidat (INTERFACES.md §14.6)",
  "type": "object",
  "required": ["material_id", "titel", "fassung", "einstieg_quell_beat", "passung", "spielarten", "empfehlung", "nur_fuer_andreas"],
  "properties": {

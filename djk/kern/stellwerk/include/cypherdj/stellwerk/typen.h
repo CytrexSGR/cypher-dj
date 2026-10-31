@@ -1,5 +1,5 @@
 // Stellwerk-RT (Scheibe 11): Grundtypen, Konstanten und Ausgaben.
-// Vertrag: SCHNITTSTELLEN.md Vertragsversion 1, §1.2, §1.4, §4.3, §5.1, §5.7 bis §5.9, §7.3, §16.2.
+// Vertrag: INTERFACES.md Vertragsversion 1, §1.2, §1.4, §4.3, §5.1, §5.7 bis §5.9, §7.3, §16.2.
 #pragma once
 #include <cstdint>
 

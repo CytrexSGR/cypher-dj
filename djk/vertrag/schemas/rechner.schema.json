@@ -1,7 +1,7 @@
 {
  "$schema": "https://json-schema.org/draft/2020-12/schema",
  "$id": "https://cypherdj.invalid/vertrag/1/rechner.schema.json",
- "title": "Rechner, Unix-Socket, JSON-Zeilen (SCHNITTSTELLEN.md §11)",
+ "title": "Rechner, Unix-Socket, JSON-Zeilen (INTERFACES.md §11)",
  "$defs": {
   "anfrage": {"type": "object", "required": ["id", "methode", "parameter"],
    "properties": {"id": {"type": "integer", "minimum": 0}, "methode": {"enum": ["spielarten", "passung", "kandidaten", "expandiere", "vorhersage"]},

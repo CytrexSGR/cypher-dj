@@ -1,5 +1,5 @@
 // Paket 1.18 (E-b, Erhebung 2026-10-20): was Server, Werkzeug und Projekt-Attrappe aus /pegel lesen und senden, steht im Vertrag (vertrag/osc_adressen.ts,
-// SCHNITTSTELLEN §5.6). Der Kern meldet spur/<n> mit denselben acht Feldern wie jeden Kanal; Server und Seite lesen davon kanal und spitze_db.
+// INTERFACES §5.6). Der Kern meldet spur/<n> mit denselben acht Feldern wie jeden Kanal; Server und Seite lesen davon kanal und spitze_db.
 // Die Projekt-Attrappe (pruef/proj_attrappe.mjs) sendet nur Felder, die der Vertrag kennt, und mit dem Kanalnamen spur/<n>.
 import test from 'node:test';
 import assert from 'node:assert/strict';

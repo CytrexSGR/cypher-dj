@@ -1,4 +1,4 @@
-// Stellwerk-RT (Scheibe 20, Task 13): Hörschein-Register und Prüfer I3a (SCHNITTSTELLEN §17, §4.5).
+// Stellwerk-RT (Scheibe 20, Task 13): Hörschein-Register und Prüfer I3a (INTERFACES §17, §4.5).
 // Echtzeit: HoerscheinRegister hat feste 32 Plätze, keine Allokation; PrueferI3::vor_teilstart ohne Allokation,
 // I/O, Sperre, std::map, std::string.
 //

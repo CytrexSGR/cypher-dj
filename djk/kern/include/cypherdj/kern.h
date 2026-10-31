@@ -1,5 +1,5 @@
 // Der Echtzeit-Teil des Kerns ohne JACK: ein Zyklus nimmt Befehle aus dem Befehlsring und sortiert sie ein, führt
-// fällige Befehle am Ziel-Sample aus, führt die Uhr, klickt, schreibt den Audio-Ring (SCHNITTSTELLEN.md §6.1) und
+// fällige Befehle am Ziel-Sample aus, führt die Uhr, klickt, schreibt den Audio-Ring (INTERFACES.md §6.1) und
 // meldet /uhr, /takt und Quittungen als Ereignisse. Keine Allokation, keine Sperre, kein I/O in zyklus(): Befehle
 // kommen und Ereignisse gehen über zwei lock-freie SPSC-Ringe (Scheibe 01, Befehle und Ringe erweitert in Scheibe 08).
 // Scheibe 25: Planteile, Abbruch, KI-Stopp und der Prüf-Handeingang laufen über die Stellwerk-Bibliothek
@@ -237,7 +237,7 @@ class Kern {
   int tempoplan_eintraege() const { return plan_.eintraege(); }   // Paket K3: offene Rampen (Spec 6.33, Tests)
   uint64_t ereignisse_verloren() const { return verloren_; }
 
-  // Scheibe 18, Neustart-Zustand (SCHNITTSTELLEN §6.3, kern_zustand.cpp). abbild() schreibt Generation, wirksame Karte,
+  // Scheibe 18, Neustart-Zustand (INTERFACES §6.3, kern_zustand.cpp). abbild() schreibt Generation, wirksame Karte,
   // Grundkarte und die offenen Befehle (Rampen, Prüfklick) in ein Echtzeit-Fach; den Anker schreibt der Aufrufer.
   // wiederherstellen() übernimmt ein Fach in einen frisch angelegten Kern, Generation + 1. Beide echtzeitfest.
   // Scheibe 25: dazu Regler mit Wert und Halter, Planteile mit Stand, KI-Stopp, KI-Spur und Prüfklicks je Kanal.
@@ -517,6 +517,10 @@ class Kern {
   bool dj_laeuft() const noexcept;   // Deck, Loop-Box oder Erzeuger-Strom läuft (Spec 2.2: dann Quant 2)
   std::unique_ptr<Arrangement> arr_;
   int arr_kanal_ = -1;              // Mixer-Index von erz/4 (ARR_KANAL)
+  // Baukasten S5r: die Werte der Graph-Regler <kanal>/bk/1..8, Zeile = Mixer-Kanal. bk_ort_[regler] = kanal * 8 + nr - 1
+  // oder -1; einmal im Ctor gebaut, im Callback nur Indexzugriff. Mixer und Erzeuger lesen bk_wert_ über einen Zeiger.
+  float bk_wert_[MIX_KANAELE][8] = {};
+  int16_t bk_ort_[cypherdj::stellwerk::MAX_REGLER];
   int zyklus_n_ = 256;              // Größe des laufenden Zyklus (Start-Regel: Vorhalt 2n + 25 und + 1 Zyklus)
   int64_t arr_start_id_ = 0, arr_stopp_id_ = 0;
   const ArrSnapshot* arr_alt_offen_ = nullptr;   // abgelöster Schnappschuss, den der volle Ring nicht nahm

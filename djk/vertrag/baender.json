@@ -1,7 +1,7 @@
 {
  "version": 1,
  "rate_hz": 48000,
- "quelle": "SCHNITTSTELLEN.md §6.2; erzeugt von djk/vertrag/erzeuge_baender.py mit scipy 1.17.1 (signal.butter, output='sos', fs=48000)",
+ "quelle": "INTERFACES.md §6.2; erzeugt von djk/vertrag/erzeuge_baender.py mit scipy 1.17.1 (signal.butter, output='sos', fs=48000)",
  "form": "sos: je Zeile b0 b1 b2 a0 a1 a2 (a0 = 1), Zeilen nacheinander angewandt (Kaskade), Direktform II transponiert wie scipy.signal.sosfilt",
  "fenster_samples": 48,
  "rms": "band[i] = sqrt(Summe über 48 Samples und alle Kanäle von y_i^2 / (48 * Kanalzahl)), y_i = Bandfilter i angewandt auf jeden Kanal getrennt, Filterzustand läuft über die Fenster weiter",

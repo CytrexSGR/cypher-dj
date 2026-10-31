@@ -5,7 +5,7 @@ Decided: E2 (own production master with export tap before the set limiter) by An
 and returns on their own slots next to the 32 tracks, mute zeroes the track including sends, solo lets group and returns
 sound, new project without returns) by Andreas on 2026-10-22; the form (decisions 1 to 7) by Cypher in the plan
 `docs/superpowers/plans/2026-10-23-1.10-routing-slice1-2.md` (P1 to P14) and by the main instance on 2026-10-24 (N7, N8).
-Spec: `docs/superpowers/specs/2026-10-22-1.10-routing-busse.md`. Status and measurement figures: `docs/architektur/stand/routing-1-10.md`.
+Spec: `docs/superpowers/specs/2026-10-22-1.10-routing-busse.md`. Status and measurement figures: `docs/architecture/stand/routing-1-10.md`.
 Predecessor: ADR 030 ("Production channel strips (inserts, sends, groups) grow in the module, not in the DJ mixer.")
 
 ## Context

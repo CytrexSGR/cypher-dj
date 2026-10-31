@@ -1,5 +1,5 @@
 // Scheibe 25: die Hand gewinnt am selben Sample, offline über Kern::zyklus. Die Golden-Folge hand_gewinnt
-// (SCHNITTSTELLEN §19.3) ohne Deck- und Hörschein-Zeilen, der Prüf-Handeingang als Befehl HAND (§19.0, wie /test/hand):
+// (INTERFACES §19.3) ohne Deck- und Hörschein-Zeilen, der Prüf-Handeingang als Befehl HAND (§19.0, wie /test/hand):
 //   0,5 bei Sample 1 500 000 setzt nur die Stellung (§7.3 Punkt 2), 0,5 + 4/128 bei 1 620 000 liegt über der Totzone:
 //   Abbruch der Rampe (Teil 7) und des wartenden Teils 8 derselben Gruppe b_rein mit Quittung 7 `hand` bei genau
 //   1 620 000, Halter mensch am selben Sample, Teil 9 (Gruppe echo) läuft weiter. Am Master steht der Pegel des

@@ -1,5 +1,5 @@
 """Schritt 1 der Kette (ADR 011 Entscheidung 2.1): dekodieren (ffmpeg, Float32, 48 kHz, Stereo) und
--12 dB Luft vor R3 (SCHNITTSTELLEN §2.1 `luft_db`; 08 NP K5: die Kommandozeile klemmt bei +-1,0 auch
+-12 dB Luft vor R3 (INTERFACES §2.1 `luft_db`; 08 NP K5: die Kommandozeile klemmt bei +-1,0 auch
 mit --ignore-clipping, MFB bis +5,09 dBFS). Dazu der Klemm-Zaehler fuer das Ergebnis."""
 import json
 import subprocess

@@ -21,12 +21,21 @@ namespace {
 constexpr int N = 256;
 constexpr int64_t SPB = 22500;  // 128 BPM bei 48 kHz
 constexpr int ERZ2 = 5, ERZ3 = 6;
+constexpr int ERZ_5 = 8, ERZ_6 = 9;   // S5r: Mixer-Kanäle von erz/5 und erz/6 (erz/4 nimmt der Kern nicht an)
 const char* G = R"({"format":"baukasten/2","name":"t","stimmen":2,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"saege"},{"id":"v","art":"mul"},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"s.hz"},{"von":"s.aus","nach":"v.a"},{"von":"n.gate","nach":"v.b"},{"von":"v.aus","nach":"o.x"}]})";
 
 const char* GA = R"({"format":"baukasten/2","name":"t","stimmen":2,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"saege"},{"id":"e","art":"adsr","a":0.001,"d":0.1,"s":1,"r":1.0},{"id":"v","art":"mul"},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"s.hz"},{"von":"n.gate","nach":"e.gate"},{"von":"s.aus","nach":"v.a"},{"von":"e.aus","nach":"v.b"},{"von":"v.aus","nach":"o.x"}]})";
 CypherBk* graphA() {
   char f[256] = {};
   CypherBk* h = cypher_bk_neu(GA, 48000.0, f, sizeof f);
+  PRUEF(h != nullptr);
+  return h;
+}
+// S5r: Säge x gate x Regler 1 (0..1) -> Pegel; der Regler skaliert die Ausgabe linear
+const char* GR = R"({"format":"baukasten/2","name":"r","stimmen":1,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"saege"},{"id":"v","art":"mul"},{"id":"r","art":"regler","nr":1,"min":0,"max":1},{"id":"w","art":"mul"},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"s.hz"},{"von":"s.aus","nach":"v.a"},{"von":"n.gate","nach":"v.b"},{"von":"v.aus","nach":"w.a"},{"von":"r.aus","nach":"w.b"},{"von":"w.aus","nach":"o.x"}]})";
+CypherBk* graphR() {
+  char f[256] = {};
+  CypherBk* h = cypher_bk_neu(GR, 48000.0, f, sizeof f);
   PRUEF(h != nullptr);
   return h;
 }
@@ -278,6 +287,102 @@ int main() {
     const int nf = w.erz.bk_frei(frei, 4);
     PRUEF(nf == 1);
     for (int i = 0; i < nf; ++i) cypher_bk_frei(frei[i]);
+  }
+  {  // S5r 7) Regler <kanal>/bk/1: erz/5 folgt dem Wert, erz/6 bleibt bitgleich; ein getauschter Graph bekommt den aktuellen Wert (D5)
+    constexpr int64_t N2 = 11250;   // Note des zweiten Graphen (Beat 0,5), hinter dem Tausch bei 40 N
+    struct Aus { std::vector<float> k8, k9; };
+    // wb: Wert von erz/5/bk/1 ab 20 N, wc: ab 40 N (dort Tausch auf einen neuen Graphen, wenn tausch)
+    const auto lauf = [&](float wb, float wc, bool tausch) {
+      static float wert[cdj::MIX_KANAELE][8];
+      for (auto& z : wert) for (float& v : z) v = 0.5f;
+      Welt w;
+      w.erz.setze_bk_wert(wert);
+      w.erz.setze_bk(2, graphR(), ERZ_5);
+      w.erz.setze_bk(3, graphR(), ERZ_6);
+      w.erz.fenster(fenster(2, {ev(0.0, 57, 1.0f, 8.0), ev(0.5, 57, 1.0f, 4.0)}), 0.0);
+      w.erz.fenster(fenster(3, {ev(0.0, 57, 1.0f, 8.0)}), 0.0);
+      Aus a;
+      const auto bis = [&](int64_t ende) {
+        while (w.s < ende) {
+          std::fill(w.pl.begin(), w.pl.end(), 0.0f);
+          std::fill(w.pr.begin(), w.pr.end(), 0.0f);
+          w.erz.block(w.karte, w.s, N, w.l, w.r, nullptr, w.s);
+          a.k8.insert(a.k8.end(), w.l[ERZ_5], w.l[ERZ_5] + N);
+          a.k9.insert(a.k9.end(), w.l[ERZ_6], w.l[ERZ_6] + N);
+          w.s += N;
+        }
+      };
+      bis(20 * N);
+      wert[ERZ_5][0] = wb;
+      bis(40 * N);
+      wert[ERZ_5][0] = wc;
+      if (tausch) w.erz.setze_bk(2, graphR(), ERZ_5);
+      bis(N2 + 40 * N);
+      w.erz.setze_bk(2, nullptr, ERZ_5);
+      w.erz.setze_bk(3, nullptr, ERZ_6);
+      bis(w.s + 3 * N);
+      CypherBk* f[8];
+      for (int nf; (nf = w.erz.bk_frei(f, 8)) > 0;) for (int i = 0; i < nf; ++i) cypher_bk_frei(f[i]);
+      return a;
+    };
+    const auto spitze = [](const std::vector<float>& x, int64_t von, int64_t bis) {
+      float m = 0.0f;
+      for (int64_t i = von; i < bis; ++i) m = std::max(m, std::abs(x[(size_t)i]));
+      return m;
+    };
+    const Aus e = lauf(1.0f, 0.9f, true);     // erz/5/bk/1: 0,5 -> 1,0 bei 20 N, -> 0,9 und neuer Graph bei 40 N
+    const Aus ref = lauf(1.0f, 1.0f, true);   // Referenz Tausch: derselbe Lauf mit 1,0 statt 0,9
+    const Aus ruhe = lauf(0.5f, 0.5f, false); // nichts ändert sich
+    const float a05 = spitze(e.k8, 10 * N, 20 * N), a10 = spitze(e.k8, 30 * N, 40 * N);
+    const float c09 = spitze(e.k8, N2 + 20 * N, N2 + 40 * N), c10 = spitze(ref.k8, N2 + 20 * N, N2 + 40 * N);
+    std::printf("bk regler: 0,5 -> %.4f, 1,0 -> %.4f (Faktor %.3f), nach Tausch 0,9 -> %.4f gegen 1,0 -> %.4f (Faktor %.3f), "
+                "erz/6 gegen ruhigen Lauf %s\n", a05, a10, a10 / a05, c09, c10, c09 / c10, e.k9 == ruhe.k9 ? "bitgleich" : "ANDERS");
+    PRUEF(a05 > 0.05f);                          // Positivprobe: der Graph klingt
+    PRUEF(a10 / a05 > 1.95f && a10 / a05 < 2.05f);
+    PRUEF(c10 > 0.05f);
+    PRUEF(c09 / c10 > 0.88f && c09 / c10 < 0.92f);   // der getauschte Graph steht auf 0,9, nicht auf seinem Vorgabewert
+    PRUEF(e.k9 == ruhe.k9);                      // Gegenprobe: erz/6 hört nichts von erz/5
+    PRUEF(spitze(e.k9, 10 * N, 20 * N) > 0.05f); // und klingt
+    {  // 7b) Allokationswächter über die Reglerfahrt
+      static float wert[cdj::MIX_KANAELE][8];
+      for (auto& z : wert) for (float& v : z) v = 0.5f;
+      Welt w;
+      w.erz.setze_bk_wert(wert);
+      w.erz.setze_bk(2, graphR(), ERZ_5);
+      w.erz.fenster(fenster(2, {ev(0.0, 57, 1.0f, 8.0)}), 0.0);
+      w.bis(N);
+      w.erz2.reserve(1 << 20);
+      w.erz2r.reserve(1 << 20);
+      w.erz3.reserve(1 << 20);
+      abfang_an();
+      for (int i = 0; i < 40; ++i) {
+        wert[ERZ_5][0] = (float)(i % 7) / 6.0f;
+        w.bis(w.s + N);
+      }
+      const AbfangZahlen az = abfang_zahlen();
+      abfang_aus();
+      std::printf("bk regler: Allokationen/Freigaben über die Reglerfahrt %ld\n", az.summe());
+      PRUEF(!ALLOC_ABFANG_VERFUEGBAR || az.summe() == 0);
+      w.erz.setze_bk(2, nullptr, ERZ_5);
+      w.bis(w.s + 2 * N);
+      CypherBk* f[4];
+      const int nf = w.erz.bk_frei(f, 4);
+      PRUEF(nf == 1);
+      for (int i = 0; i < nf; ++i) cypher_bk_frei(f[i]);
+    }
+    {  // 7c) K10: ohne Werte-Zeiger keine Meldung, der Graph bleibt auf seinen Werten (kein Absturz)
+      Welt w;
+      w.erz.setze_bk(2, graphR(), ERZ_5);
+      w.erz.fenster(fenster(2, {ev(0.0, 57, 1.0f, 8.0)}), 0.0);
+      w.bis(20 * N);
+      PRUEF(w.erz2.size() == 20 * (size_t)N);
+      w.erz.setze_bk(2, nullptr, ERZ_5);
+      w.bis(w.s + 2 * N);
+      CypherBk* f[4];
+      const int nf = w.erz.bk_frei(f, 4);
+      PRUEF(nf == 1);
+      for (int i = 0; i < nf; ++i) cypher_bk_frei(f[i]);
+    }
   }
   PRUEF_ENDE();
 }

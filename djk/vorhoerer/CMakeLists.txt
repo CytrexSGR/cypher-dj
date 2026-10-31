@@ -1,4 +1,4 @@
-# djk/vorhoerer: nativer Vorhörer (Stand: docs/architektur/stand/vorhoerer.md). Oberflächen zeigen nur an, der Ton kommt
+# djk/vorhoerer: nativer Vorhörer (Stand: docs/architecture/stand/vorhoerer.md). Oberflächen zeigen nur an, der Ton kommt
 # von hier. Die Messmutante (Rücksprung am Blockanfang) wird mitgebaut und nur von tests/messung.py benutzt.
 cmake_minimum_required(VERSION 3.28)
 project(cypherdj_vorhoerer LANGUAGES C)

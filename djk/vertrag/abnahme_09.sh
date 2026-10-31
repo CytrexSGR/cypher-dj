@@ -6,7 +6,7 @@
 set -u
 WURZEL=${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}
 V=$WURZEL/djk/vertrag
-TEXT=$WURZEL/docs/architektur/SCHNITTSTELLEN.md
+TEXT=$WURZEL/docs/architecture/INTERFACES.md
 mkdir -p "${TMPDIR:-/tmp}"
 T=$(mktemp -d "${TMPDIR:-/tmp}/djk09-abnahme.XXXXXX")
 fehler=0

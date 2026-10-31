@@ -1,4 +1,4 @@
-// Scheibe 11, Task 4: Regler-Tabelle gegen SCHNITTSTELLEN §1.5 und Standard-Kurven gegen §7.2.
+// Scheibe 11, Task 4: Regler-Tabelle gegen INTERFACES §1.5 und Standard-Kurven gegen §7.2.
 #include <cstdio>
 #include <cstring>
 
@@ -25,8 +25,10 @@ FALL(zahl_der_regler_und_kanaele) {
   // 4 Decks x 21 (mit transport), 8 Erzeuger x 16, 2 Pads x 16, 4 Busse x 15 (ohne ziel), 18 globale (seit Keylock 3
   // mit `keylock`, seit 2026-10-10 mit `master/pfl`, seit 2026-10-11 mit `color/art` und `color/param`), dazu 14 Quellkanäle
   // x 8 `komp/*` (2026-10-11, mit komp/sc): 436; D1 K1/E3: dazu 32 Spuren x 4 Spur-Regler (spur/<n>/*, global): 564;
-  // 1.10 Slice 1: dazu 8 Gruppen x 4 Gruppen-Regler (grp/<n>/*) und pm/fader: 597
-  PRUEFE_GLEICH(tab().anzahl(), 597);
+  // 1.10 Slice 1: dazu 8 Gruppen x 4 Gruppen-Regler (grp/<n>/*) und pm/fader: 597; S5r: dazu 12 Graph-Kanäle x 8
+  // Graph-Regler (<kanal>/bk/<1..8>): 693
+  PRUEFE_GLEICH(tab().anzahl(), 597 + 12 * 8);
+  PRUEFE(tab().anzahl() < cypherdj::stellwerk::MAX_REGLER);
   PRUEFE_GLEICH(tab().kanaele(), 20);
   PRUEFE_GLEICH(tab().kanal_suche("deck/1"), 0);
   PRUEFE_GLEICH(tab().kanal_suche("bus/4"), 17);
@@ -237,3 +239,39 @@ FALL(grp_nr_liest_nummern) {
 }
 
 PRUEF_MAIN
+
+FALL(bk_regler_nur_fuer_kanaele_mit_graph) {
+  // S5r K2: <kanal>/bk/<1..8> gibt es genau für Kanäle, auf denen der Kern einen Baukasten-Graphen annimmt: deck/1..4
+  // (Effekt, /k/kanal/graph) und die Instrument-Kanäle erz/1,2,3,5,6,7 und pad/1,2. Nicht erz/4 (reserviert für die
+  // Produktion), nicht erz/8 (Nur-Cue-Vorhöreingang), nicht bus/*, master, cue. Gegen das echte Verhalten des Kerns
+  // pinnt das test_netz_erz ("bk-Pfade genau auf den Kanälen, die einen Graphen annehmen").
+  const char* mit[] = {"deck/1", "deck/2", "deck/3", "deck/4", "erz/1", "erz/2", "erz/3", "erz/5", "erz/6", "erz/7", "pad/1", "pad/2"};
+  for (int k = 0; k < tab().kanaele(); k++) {
+    bool soll = false;
+    for (const char* m : mit) soll = soll || !std::strcmp(m, tab().kanal_name(k));
+    for (int nr = 1; nr <= 8; nr++) {
+      char p[40];
+      std::snprintf(p, sizeof p, "%s/bk/%d", tab().kanal_name(k), nr);
+      PRUEFE_GLEICH(tab().suche(p) >= 0, soll);
+    }
+  }
+  PRUEFE_GLEICH(tab().suche("erz/4/bk/1"), -1);
+  PRUEFE_GLEICH(tab().suche("erz/8/bk/1"), -1);
+  PRUEFE_GLEICH(tab().suche("bus/1/bk/1"), -1);
+  PRUEFE_GLEICH(tab().suche("deck/1/bk/9"), -1);
+  PRUEFE_GLEICH(tab().suche("deck/1/bk/0"), -1);
+  // Definition: Rolle bk_regler, 0..1, Vorgabe 0,5, Schaltrampe 0 (K15: die FFI glättet), darf jeder, Kurve linear 0..1
+  for (const char* p : {"deck/1/bk/1", "erz/3/bk/4", "erz/5/bk/8", "pad/2/bk/8"}) {
+    const ReglerDef& x = d(p);
+    PRUEFE(x.rolle == Rolle::bk_regler && x.min == 0.0f && x.max == 1.0f && x.vorgabe == 0.5f);
+    PRUEFE(x.schalt_samples == 0 && !x.nur_hand && !x.db && !x.keine_rampe && !x.ganzzahlig && !x.transport);
+    PRUEFE(x.kurve.typ == KurvenTyp::linear && x.kurve.min == 0.0f && x.kurve.max == 1.0f);
+  }
+  PRUEFE_GLEICH(d("erz/3/bk/4").kanal, tab().kanal_suche("erz/3"));
+  PRUEFE_GLEICH(d("deck/2/bk/1").kanal, tab().kanal_suche("deck/2"));
+  // D3: alle hinter pm/fader, kein bestehender Index wandert
+  for (int r = 0; r < tab().anzahl(); r++)
+    if (tab().def(r).rolle == Rolle::bk_regler) PRUEFE(r > tab().suche("pm/fader"));
+  PRUEFE_GLEICH(tab().suche("pm/fader"), 596);
+  PRUEFE_GLEICH(tab().suche("deck/1/fader"), 0);
+}

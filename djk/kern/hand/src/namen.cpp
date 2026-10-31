@@ -1,4 +1,4 @@
-// Hand-Weg: Namen aus dem Vertrag. Tasten (SCHNITTSTELLEN §5.8), Deck-Aktionen (§7.2), LED-Namen (§7.4), dazu die
+// Hand-Weg: Namen aus dem Vertrag. Tasten (INTERFACES §5.8), Deck-Aktionen (§7.2), LED-Namen (§7.4), dazu die
 // Namen der Fehlerarten und Arten für Meldungen. Nur Tabellen und Vergleiche, echtzeitfest.
 #include <cstring>
 

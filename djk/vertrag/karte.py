@@ -1,4 +1,4 @@
-"""Tempo-Karte nach SCHNITTSTELLEN.md §1.3 (normativ), als Python-Referenz für Golden-Folgen und Prüfungen.
+"""Tempo-Karte nach INTERFACES.md §1.3 (normativ), als Python-Referenz für Golden-Folgen und Prüfungen.
 
 Segmente {s0, b0, bpm0, k, dauer_s}, linear in der Zeit. s0 wird ungerundet geführt: nur so trifft die Karte
 den Golden-Wert sample(192) = 4 287 104,895 aus §1.3 (mit gerundetem s0 wären es 4 287 104,818).

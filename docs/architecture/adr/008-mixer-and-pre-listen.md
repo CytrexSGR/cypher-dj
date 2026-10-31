@@ -19,7 +19,7 @@ records at the Notbahn outputs, "AI" and "Spiel (play)" in the core.
    → **LR8 isolator 246/2484 Hz** with kill (second-order ramps 5 ms) → TPT filter on one control (20 ms smoothed)
    → **PFL tap (pre-fader listen) and measuring tap** → channel fader → crossfader assignment (Mixxx curves) → four
    sends after the fader → **destination** master or one of four group buses (A17; assignment table instead of
-   fixed paths, `SCHNITTSTELLEN.md` §1.5).
+   fixed paths, `INTERFACES.md` §1.5).
 2. **Master:** sum → FX returns (beat-synchronous echo as a hybrid with two read heads from the clock, reverb as a
    Faust block) → limiter with look-ahead (Faust `co.limiter_lad_stereo`, unmeasured) → guards (NaN, DC, clip).
 3. **Cue** on outputs 3/4 of the same interface: PFL after EQ and filter, before the fader; delayed by the limiter
@@ -27,7 +27,7 @@ records at the Notbahn outputs, "AI" and "Spiel (play)" in the core.
    same Notbahn as the master.
 4. **Measuring tap separate from the cue:** at the same point (after EQ, before the fader) **every** channel always
    runs a meter (peak, true peak, LUFS M/S via libebur128, band level, envelopes of the **six analysis bands** Sub
-   to Hoch with 1 kHz into the ring for analysis, `SCHNITTSTELLEN.md` §6.2; the workshop computes the same filters
+   to Hoch with 1 kHz into the ring for analysis, `INTERFACES.md` §6.2; the workshop computes the same filters
    for the reference). Cypher's listening passs arise only there; Andreas' headphones stay his. The key
    **"Listen to Cypher"** deliberately puts Cypher's suggested channel on Andreas' PFL.
 5. **New sources start silent:** every channel (deck, generator, pad, host return) is at −200 dB after loading or

@@ -1,5 +1,5 @@
 // Vorprüfung beim Annehmen (ADR 023 Entscheidung 1: Form, zu spät, Regler beim Menschen, Überlappung, Hörschein,
-// Budget; Autonomie entscheidet autonomie.ts). Codes wörtlich aus SCHNITTSTELLEN §16.2. Der Kern prüft am Start
+// Budget; Autonomie entscheidet autonomie.ts). Codes wörtlich aus INTERFACES §16.2. Der Kern prüft am Start
 // noch einmal (§17); diese Prüfung gibt Cypher den Grund sofort und erspart Andreas Vorschläge, die nie laufen.
 // Je Teil wird der erste zutreffende Grund gemeldet, in der Reihenfolge der Prüfungen unten.
 import type { HoerscheinRegister } from './hoerscheine.ts';

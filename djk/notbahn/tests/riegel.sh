@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Riegel gegen ungefragten Ton am lebenden Graphen (SCHNITTSTELLEN.md §8). Beide Ziele sind eigene Null-Senken, also
+# Riegel gegen ungefragten Ton am lebenden Graphen (INTERFACES.md §8). Beide Ziele sind eigene Null-Senken, also
 # stumm, auch wenn der Riegel versagt:
 #   verboten  riegelprobe-<i>            (weder „stumm“ noch cypherdj-pruef-): Rückgabe 3, keine Verbindung
 #   erlaubt   cypherdj-pruef-<i>-riegel  Positiv-Gegenprobe: dieselbe Messung sieht die Verbindung

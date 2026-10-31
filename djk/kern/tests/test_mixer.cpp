@@ -56,7 +56,8 @@ int main() {
     PRUEF(n[static_cast<int>(cdj::MixRolle::master_kleber)] == 1);
     // stem/* (31), fx/notenwert, fx/rueckkopplung (47); keylock (Kern, Keylock 3); D1 K1: spur/<n>/* (4 je Spur-Slot, Modul Arrangement);
     // 1.10 Slice 1: grp/<n>/* (4 je Gruppen-Slot) und pm/fader, ebenfalls Modul Arrangement (der Mischer kennt die Rollen nicht, I8)
-    PRUEF(n[static_cast<int>(cdj::MixRolle::spaeter)] == 16 + 4 + 1 + 4 * cdj::ARR_SPUREN + 4 * sw::GRP_REGLER_GRUPPEN + 1);
+    // S5r: dazu 12 Graph-Kanäle x 8 `bk/<n>` (der Mischer ignoriert sie, die Werte trägt der Kern an die Graph-Handles)
+    PRUEF(n[static_cast<int>(cdj::MixRolle::spaeter)] == 16 + 4 + 1 + 4 * cdj::ARR_SPUREN + 4 * sw::GRP_REGLER_GRUPPEN + 1 + 12 * 8);
     PRUEF(n[static_cast<int>(cdj::MixRolle::fx_rueckweg)] == 4);                     // fx/1..4/rueckweg (K2 Slice 2)
     int abweichend = 0;
     for (int r = 0; r < p.tab.anzahl(); ++r) {

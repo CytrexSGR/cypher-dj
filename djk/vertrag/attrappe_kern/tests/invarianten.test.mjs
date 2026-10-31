@@ -131,7 +131,7 @@ test('hand_stoppt_a_raus: Griff an A-Fader während A raus -> Gruppe a_raus samt
   gruen(r);
 });
 
-// Lesart b (Andreas 2026-09-25, SCHNITTSTELLEN §4.3 Feld 11): eine Ablehnung am Start reißt die wartenden Teile der
+// Lesart b (Andreas 2026-09-25, INTERFACES §4.3 Feld 11): eine Ablehnung am Start reißt die wartenden Teile der
 // Gruppe mit, Quittung 7 mit dem Grund des abgelehnten Teils. Negativ-Kontrolle: ein Teil ohne Gruppe läuft weiter.
 test('Lesart b: Ablehnung am Start (regler_beim_menschen) bricht die wartenden Gruppenteile ab', async () => {
   const { fahre } = await import('../folgen_schnell.mjs');

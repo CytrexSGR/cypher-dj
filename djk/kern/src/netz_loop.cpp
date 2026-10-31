@@ -1,4 +1,4 @@
-// MVP 2 (Spec docs/specs/2026-09-27-djk-mvp2-loops-design.md, ADR 025, SCHNITTSTELLEN §4.9, §5.11): Loop-Boxen im
+// MVP 2 (Spec docs/specs/2026-09-27-djk-mvp2-loops-design.md, ADR 025, INTERFACES §4.9, §5.11): Loop-Boxen im
 // Netz-Faden. /k/loop/laden liest den Loop aus <loop_ordner>/<name>/ und reicht ihn als Zeiger an den Kern; start und
 // stopp gehen als Befehl durch. Freigaben (abgelöster Loop) kommen als Ereignis zurück und passieren nur hier.
 // Scheibe 2 (ADR 025 Folgeplan): /k/loop/rec legt einen Mitschnitt-Puffer an (das Netz prüft nur Form, nicht Tempo

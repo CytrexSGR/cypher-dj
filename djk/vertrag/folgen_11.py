@@ -28,7 +28,7 @@ def teil_rampe(neustart=False):
         f.aktion(ks, "kern_kill9", "§19.3 neustart: kill -9 zwischen Teilstart und Teilende")
         f.erwarte(ks + STARTFRIST, osc("/e/neustart", 1, None), "zeitachse", ab=ks,
                   herleitung="§4.1: erste Nachricht der neuen Generation an die gespeicherten Abonnenten; "
-                             "ARCHITEKTUR §7: wieder da nach höchstens 250 ms")
+                             "ARCHITECTURE §7: wieder da nach höchstens 250 ms")
         bis = ks + STARTFRIST + 48000
         f.erwarte(bis, osc("/k/willkommen", 1, 1, None, None, None, None), "zeitachse", ab=ks,
                   herleitung="§4.1: der Herzschlag des Läufers (FORMAT.md Punkt 13) meldet ihn in Generation 1 an")

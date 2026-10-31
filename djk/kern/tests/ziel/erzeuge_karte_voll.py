@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Erzeugt djk/kern/tests/ziel/karte_voll.jsonl: eine Kern-Folge im Format von djk/vertrag/folgen/FORMAT.md
-(Scheibe 02), die „Karte voll“ am laufenden Kern prüft (SCHNITTSTELLEN.md §1.3: höchstens 64 Segmente; §4.2: Karte
+(Scheibe 02), die „Karte voll“ am laufenden Kern prüft (INTERFACES.md §1.3: höchstens 64 Segmente; §4.2: Karte
 voll -> abgelehnt, Grund karte_voll; 02 NP N4: die Probe meldete Erfolg, obwohl die Karte voll war).
 
 Herleitung der Erwartung aus §1.3, nicht aus dem Kern: eine Rampe belegt ein Segment für sich und eines für das

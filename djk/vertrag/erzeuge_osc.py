@@ -14,7 +14,7 @@ from pathlib import Path
 
 HIER = Path(__file__).resolve().parent
 KOPF = ("ERZEUGT von djk/vertrag/erzeuge_osc.py aus djk/vertrag/osc.json. Nicht von Hand ändern.\n"
-        "Vertrag: docs/architektur/SCHNITTSTELLEN.md, Version {v}. Prüfung: python3 djk/vertrag/pruefe_osc.py")
+        "Vertrag: docs/architecture/INTERFACES.md, Version {v}. Prüfung: python3 djk/vertrag/pruefe_osc.py")
 CPP_SCHLUESSELWOERTER = {
     "alignas", "alignof", "and", "asm", "auto", "bool", "break", "case", "catch", "char", "class", "const", "continue",
     "default", "delete", "do", "double", "else", "enum", "explicit", "export", "extern", "false", "float", "for",

@@ -1,4 +1,4 @@
-// Tests des Master-Limiters (Scheibe 14; ADR 008 Punkt 2; SCHNITTSTELLEN 2.1 limiter_dbtp = -1,0).
+// Tests des Master-Limiters (Scheibe 14; ADR 008 Punkt 2; INTERFACES 2.1 limiter_dbtp = -1,0).
 #include <cmath>
 #include <cstdint>
 #include <cstdio>

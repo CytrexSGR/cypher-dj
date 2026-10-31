@@ -1,4 +1,4 @@
-// Scheibe 25: Verteilung der Callback-Dauer (telemetrie.h) für die Zusage ARCHITEKTUR §7 (p99,9 unter 1,07 ms bei 256).
+// Scheibe 25: Verteilung der Callback-Dauer (telemetrie.h) für die Zusage ARCHITECTURE §7 (p99,9 unter 1,07 ms bei 256).
 // Positiv-Kontrolle: zwei Ausreißer unter 1 002 Zyklen heben p99,9, nicht p99. Negativ-Kontrolle: ohne Werte −1.
 // Über 20 ms landet ein Wert in der letzten Klasse, das Maximum bleibt genau.
 #include "cypherdj/telemetrie.h"

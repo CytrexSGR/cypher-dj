@@ -1,13 +1,13 @@
 // hand_pruef (Scheibe 19): JACK-MIDI-Prüfclient für den Hand-Weg. Er tut im Kleinen, was der Kern (Scheibe 35) am
 // Eingang cypherdj-kern:hand_in tut: jedes MIDI-Ereignis im Prozess-Callback durch die Hand-Bibliothek übersetzen,
-// mit Kern-Sample = Frame-Zeit des Zyklus plus Versatz (SCHNITTSTELLEN §7.3 Punkt 1). Je Ereignis protokolliert er
+// mit Kern-Sample = Frame-Zeit des Zyklus plus Versatz (INTERFACES §7.3 Punkt 1). Je Ereignis protokolliert er
 // Frame-Zeit und Mikrosekunden des Zyklusanfangs, Versatz, Blocklänge, Bytes und das Sample, das die Bibliothek
 // liefert; auswertung.py stellt das gegen die Sendezeiten des Softcontrollers. Kein Audio-Port.
 //
 // Aufruf (unter pw-jack; Quantum 256 mit pw-jack -p 256):
 //   hand_pruef --mapping <json> --quelle <muster> --sekunden S [--anzahl N] [--log datei]
 //              [--led name:zustand --led-ziel <muster>]
-// --quelle/--led-ziel: Teilzeichenkette des JACK-Portnamens (jack_get_ports-Muster). Riegel wie SCHNITTSTELLEN §8:
+// --quelle/--led-ziel: Teilzeichenkette des JACK-Portnamens (jack_get_ports-Muster). Riegel wie INTERFACES §8:
 // verbunden wird nur mit Ports, deren Name "cypherdj-softcontroller" enthält, sonst Abbruch mit Rückgabe 3.
 // CYPHERDJ_INSTANZ=b -> Client "cypherdj-hand-pruef-b" (ROADMAP Z2).
 #include <jack/jack.h>

@@ -1,5 +1,5 @@
 """Werkstatt-Kette, Teil 2 (Scheibe 15): aus einer Quelldatei ein Material im Bestand mit Fassung r1 auf der
-Set-Basis; `korrigieren` legt r+1 daneben (SCHNITTSTELLEN §12.1, §12.3, §13; ADR 011 Entscheidung 2, ADR 015).
+Set-Basis; `korrigieren` legt r+1 daneben (INTERFACES §12.1, §12.3, §13; ADR 011 Entscheidung 2, ADR 015).
 
 Reihenfolge je Song: Original sichern, dekodieren (48 kHz Stereo Float), Lautheit der Quelle, Raster (Scheibe 05:
 beat_this, Essentia, Tempo-Wahl, Takt-Eins; Pulsklarheit aus proben/07 c_drift.json, sonst null), Stimmung und

@@ -1,4 +1,4 @@
-// Legt eine Hüllkurven-Ring-Datei im Layout aus Task 1 an (SCHNITTSTELLEN §6.2): Kopf CDJH/1/1000/16/cap,
+// Legt eine Hüllkurven-Ring-Datei im Layout aus Task 1 an (INTERFACES §6.2): Kopf CDJH/1/1000/16/cap,
 // Datensätze per DataView/Buffer, little-endian. Von tests/ohr.test.mjs und tests/server.test.mjs benutzt (T5).
 import fs from 'node:fs';
 

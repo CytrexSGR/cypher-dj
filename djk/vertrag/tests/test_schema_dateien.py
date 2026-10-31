@@ -1,4 +1,4 @@
-"""Die Schema-Dateien (SCHNITTSTELLEN §19.0: §6.2, §6.5, §9 bis §15): vollständig, gültiges Draft 2020-12, jede $ref
+"""Die Schema-Dateien (INTERFACES §19.0: §6.2, §6.5, §9 bis §15): vollständig, gültiges Draft 2020-12, jede $ref
 auflösbar. Die Prüfung gegen die Beispiele im Vertragstext macht pruefe_schemas.py (tests/test_schemas.py)."""
 import pathlib
 import sys

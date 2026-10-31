@@ -1,7 +1,7 @@
 {
  "$schema": "https://json-schema.org/draft/2020-12/schema",
  "$id": "https://cypherdj.invalid/vertrag/1/aufnahme.schema.json",
- "title": "aufnahme.json (SCHNITTSTELLEN.md §15)",
+ "title": "aufnahme.json (INTERFACES.md §15)",
  "type": "object",
  "required": ["erstes_kern_sample", "notbahn_versatz_samples", "frames", "luecken"],
  "properties": {

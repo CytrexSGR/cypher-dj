@@ -1,4 +1,4 @@
-/* Audio-Ring Kern -> Notbahn nach SCHNITTSTELLEN.md §6.1, Version 1. Gemeinsam für C (Notbahn) und C++ (Kern).
+/* Audio-Ring Kern -> Notbahn nach INTERFACES.md §6.1, Version 1. Gemeinsam für C (Notbahn) und C++ (Kern).
  * Little Endian, Kopf 64 Bytes, Daten float32[cap][4] verschränkt (0 master_L, 1 master_R, 2 cue_L, 3 cue_R).
  * Die drei Zähler sind 64-Bit-Worte, geschrieben mit Release und gelesen mit Acquire (GCC-__atomic-Eingebaute,
  * gleiche Darstellung wie _Atomic uint64 auf x86-64). Anlegen: nur der Kern (O_CREAT, 0600). */

@@ -1,4 +1,4 @@
-// D1 K1 Slice 10: Hand-Zielart arr/start_stopp (SCHNITTSTELLEN §7.2, Spec D1 3.1, L4). Aus dem Mapping (MIDI am
+// D1 K1 Slice 10: Hand-Zielart arr/start_stopp (INTERFACES §7.2, Spec D1 3.1, L4). Aus dem Mapping (MIDI am
 // Versatz) und über /test/hand: erster Druck startet an der letzten Startposition nach der Start-Regel (ohne laufendes
 // Deck sofort: Druck-Sample + Vorhalt 537 + 256), zweiter Druck stoppt am Sample des Drucks; /e/hand meldet jeden Druck;
 // läuft ein Deck, setzt der Start auf den Takt (Quant 2); ohne Wiedergabe ohne Wirkung.

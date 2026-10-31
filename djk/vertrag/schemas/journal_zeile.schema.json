@@ -1,7 +1,7 @@
 {
  "$schema": "https://json-schema.org/draft/2020-12/schema",
  "$id": "https://cypherdj.invalid/vertrag/1/journal_zeile.schema.json",
- "title": "Eine Zeile von journal.jsonl (SCHNITTSTELLEN.md §15); sample, beat, takt null, solange der Leitstand noch keine Kern-Zeit kennt",
+ "title": "Eine Zeile von journal.jsonl (INTERFACES.md §15); sample, beat, takt null, solange der Leitstand noch keine Kern-Zeit kennt",
  "type": "object",
  "required": ["sample", "beat", "takt", "mono_ns", "von", "typ", "daten"],
  "properties": {

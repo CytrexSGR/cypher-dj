@@ -1,4 +1,4 @@
-// Baukasten S3c Task 5 (Plan 2026-10-29-baukasten-s3c-effekt.md, D10, D11; SCHNITTSTELLEN §4.10 /k/kanal/graph): der Befehl
+// Baukasten S3c Task 5 (Plan 2026-10-29-baukasten-s3c-effekt.md, D10, D11; INTERFACES §4.10 /k/kanal/graph): der Befehl
 // KANAL_GRAPH bis in den Mixer, ohne JACK und ohne Netz (das Netz prüft test_netz_erz). Rahmen wie test_kern_fx_routing.cpp.
 //  1. Setzen von andreas: Quittungen 1, 2, 3; nach der Blende hat deck/2 (Träger 200 Hz) im Master die halbe Spitze (−6,02 dB ±0,05).
 //  2. Entfernen (zeiger null): Quittungen 1, 2, 3, danach wieder volle Spitze; genau ein ERZ_BK_ALT mit dem gesetzten Zeiger.
@@ -6,6 +6,8 @@
 //  4. Kanal außerhalb (erz/1): Quittung 6 ausserhalb_bereich, der Zeiger kommt als ERZ_BK_ALT zurück.
 //  5. KI-Stopp, Quelle cypher: Quittung 6 ki_gestoppt, der Zeiger kommt als ERZ_BK_ALT zurück; andreas darf weiter.
 //  6. Allokationsfrei: Blöcke mit gesetztem Graphen, Wechsel und Blende allokieren nicht.
+//  9. (S5r) Graph-Regler <kanal>/bk/1: deck/2/bk/1 setzt den Pegel des Graphen auf deck/2 (Eingang x Regler -> Ausgang), deck/3/bk/1
+//     ändert deck/2 nicht, ein getauschter Graph steht auf dem aktuellen Wert, keine Allokation über die Reglerfahrt.
 //  7. Wechsel A -> B -> A vor demselben Block: jeder Zeiger kommt genau einmal zurück (kein Doppel-Free), A bleibt gesetzt.
 // Der Kern gibt einen übergebenen Graphen nie selbst frei, nur über ERZ_BK_ALT (der Test sammelt und gibt frei).
 #include <unistd.h>
@@ -54,6 +56,10 @@ static const char* HALB =
     R"({"format":"baukasten/2","name":"halb","stimmen":1,"knoten":[{"id":"e","art":"eingang"},{"id":"a","art":"mul","b":0.5},{"id":"b","art":"mul","b":0.5},{"id":"o","art":"ausgang"}],"kanten":[{"von":"e.l","nach":"a.a"},{"von":"e.r","nach":"b.a"},{"von":"a.aus","nach":"o.l"},{"von":"b.aus","nach":"o.r"}]})";
 static const char* DURCH =
     R"({"format":"baukasten/2","name":"durch","stimmen":1,"knoten":[{"id":"e","art":"eingang"},{"id":"o","art":"ausgang"}],"kanten":[{"von":"e.l","nach":"o.l"},{"von":"e.r","nach":"o.r"}]})";
+
+// S5r: Eingang x Regler 1 (0..1) -> Ausgang, beide Seiten; der Regler skaliert den Pegel linear
+static const char* REGLER_PEGEL =
+    R"({"format":"baukasten/2","name":"rp","stimmen":1,"knoten":[{"id":"e","art":"eingang"},{"id":"r","art":"regler","nr":1,"min":0,"max":1},{"id":"a","art":"mul"},{"id":"b","art":"mul"},{"id":"o","art":"ausgang"}],"kanten":[{"von":"e.l","nach":"a.a"},{"von":"r.aus","nach":"a.b"},{"von":"e.r","nach":"b.a"},{"von":"r.aus","nach":"b.b"},{"von":"a.aus","nach":"o.l"},{"von":"b.aus","nach":"o.r"}]})";
 
 static void material(const std::string& skript, const std::string& args) {
   const std::string c = "python3 " + DJK + "/kern/tests/" + skript + " --ziel " + AB + " " + args + " > /dev/null";
@@ -278,6 +284,84 @@ int main() {
     PRUEF(a.zurueck(b8[11]) == 0);                    // der letzte bleibt gesetzt
     PRUEF(a.kern->mixer().bk_verloren() == 0);
     for (int i = 0; i < 11; ++i) a.spaeter.push_back(b8[i]);
+  }
+
+  // ---------------------------------------------------------------- Fall 9 (S5r): Graph-Regler deck/<n>/bk/1 bis in den Graphen
+  {
+    Lauf a;
+    a.zyklen(10 * N);
+    cdj::Befehl ld = a.neu(cdj::Befehl::DECK_LADEN, "leitstand");
+    ld.deck = 2;
+    std::snprintf(ld.material_id, sizeof ld.material_id, "%s", "f0f0000000000003");
+    ld.bpm = 128.0;
+    ld.fassung = 1;
+    a.sende(ld);
+    a.zyklen(20 * N);
+    cdj::Befehl fd = a.neu(cdj::Befehl::TEIL, "pruefstand");
+    std::snprintf(fd.pfad, sizeof fd.pfad, "%s", "deck/2/fader");
+    fd.ab_beat = 2.0;
+    fd.wert = 0.0f;
+    fd.politik = 1;
+    a.sende(fd);
+    cdj::Befehl st = a.neu(cdj::Befehl::DECK_START, "andreas");
+    st.deck = 2;
+    st.ab_beat = 8.0;
+    st.quell_beat = 0.0;
+    a.sende(st);
+    a.zyklen(10 * SPB);
+    const float voll = a.spitze(10 * SPB - 6000, 10 * SPB - 500);
+    PRUEF(voll > 0.05f);   // Positiv-Kontrolle: das Deck klingt im Master
+    const auto regler = [&](const char* pfad, double beat, float wert) {
+      cdj::Befehl t = a.neu(cdj::Befehl::TEIL, "pruefstand");
+      std::snprintf(t.pfad, sizeof t.pfad, "%s", pfad);
+      t.ab_beat = beat;
+      t.wert = wert;
+      t.politik = 1;
+      a.sende(t);
+    };
+    // Fenster ab 9000 Samples nach dem Setzen: die FFI glättet über 20 ms, bei fallendem Wert läge die Spitze sonst im Einschwingen
+    const auto pegel = [&](int64_t von) { return db(a.spitze(von, von + 6000), voll); };
+    CypherBk* g1 = graph(REGLER_PEGEL);
+    const int64_t i1 = a.graph_setzen("deck/2", g1);
+    regler("deck/2/bk/1", 11.0, 1.0f);
+    regler("deck/3/bk/1", 12.0, 0.0f);   // Gegenprobe: ein anderer Kanal
+    regler("deck/2/bk/1", 13.0, 0.25f);
+    g_allokationen = 0;
+    a.bewachen = true;
+    a.zyklen(11 * SPB + 15000);
+    a.bewachen = false;
+    const double p05 = db(a.spitze(10 * SPB + 8 * N, 10 * SPB + 20 * N), voll);   // Vorgabe 0,5
+    const double p10 = pegel(11 * SPB + 9000);
+    std::printf("Fall 9: Vorgabe 0,5 -> %.3f dB, 1,0 -> %.3f dB\n", p05, p10);
+    PRUEF(a.angenommen(i1));
+    PRUEF(std::fabs(p05 + 6.0206) < 0.05);
+    PRUEF(std::fabs(p10) < 0.05);                      // deck/2/bk/1 = 1,0
+    a.bewachen = true;
+    a.zyklen(12 * SPB + 15000);
+    a.bewachen = false;
+    const double p_fremd = pegel(12 * SPB + 9000);
+    std::printf("Fall 9: deck/3/bk/1 = 0 -> deck/2 %.3f dB\n", p_fremd);
+    PRUEF(std::fabs(p_fremd) < 0.05);                  // deck/2 hört nichts von deck/3
+    a.bewachen = true;
+    a.zyklen(13 * SPB + 15000);
+    a.bewachen = false;
+    const double p025 = pegel(13 * SPB + 9000);
+    std::printf("Fall 9: 0,25 -> %.3f dB (soll -12,041)\n", p025);
+    PRUEF(std::fabs(p025 + 12.0412) < 0.05);
+    std::printf("Fall 9: Allokationen über die Reglerfahrt %ld\n", g_allokationen);
+    PRUEF(g_allokationen == 0);
+
+    // Tausch (D5): Regler auf 0,9, danach neuer Graph; der steht auf 0,9, nicht auf seinem Vorgabewert
+    regler("deck/2/bk/1", 14.0, 0.9f);
+    a.zyklen(14 * SPB + 2000);
+    CypherBk* g2 = graph(REGLER_PEGEL);
+    a.graph_setzen("deck/2", g2);
+    a.zyklen(14 * SPB + 21500);
+    const double p09 = pegel(14 * SPB + 15000);
+    std::printf("Fall 9: nach Tausch 0,9 -> %.3f dB (soll -0,915)\n", p09);
+    PRUEF(std::fabs(p09 + 0.9151) < 0.05);
+    PRUEF(a.zurueck(g1) == 1);                         // der abgelöste Graph kam zurück
+    a.spaeter.push_back(g1);
   }
   fs::remove_all(AB);
   PRUEF_ENDE();

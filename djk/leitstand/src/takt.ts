@@ -1,4 +1,4 @@
-// Zustandsstrom je Takt (SCHNITTSTELLEN §18, §14.7): auf /takt folgt die WS-Nachricht takt an alle, spätestens
+// Zustandsstrom je Takt (INTERFACES §18, §14.7): auf /takt folgt die WS-Nachricht takt an alle, spätestens
 // 150 ms nach dem Taktanfang. Ist eine Analyse angemeldet, wartet der Leitstand auf ihren Bericht des vorigen
 // Takts bis Taktanfang + 120 ms (Festlegung dieser Scheibe: 30 ms Reserve vor der Grenze von 150 ms); kommt er
 // nicht, geht takt mit bericht_vorher: null. Ohne Analyse geht takt sofort.

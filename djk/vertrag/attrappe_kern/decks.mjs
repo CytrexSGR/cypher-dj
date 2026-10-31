@@ -1,4 +1,4 @@
-// Decks 1 bis 4 der Attrappe (SCHNITTSTELLEN §4.4, §5.5, §13): Material aus dem Arbeitsbestand (nur Metadaten, Größe
+// Decks 1 bis 4 der Attrappe (INTERFACES §4.4, §5.5, §13): Material aus dem Arbeitsbestand (nur Metadaten, Größe
 // und NaN-Stichprobe, kein Ton), Quellposition in Quell-Beats über einen Anker (Master-Beat ↔ Quell-Beat), Loop, Roll mit
 // Schatten, Sprung, Hotcue phasentreu, Slip, Fassungstausch. Direktweg: Quell-Beats laufen 1:1 mit Master-Beats.
 

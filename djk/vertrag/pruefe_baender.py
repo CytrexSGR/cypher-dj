@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Prüft djk/vertrag/baender.json gegen den Vertragstext §6.2, unabhängig vom Erzeuger:
 
-1. Bandgrenzen: aus SCHNITTSTELLEN.md §6.2 gelesen ("Sub 30 bis 90, Tief 90 bis 250, ..."), nicht aus baender.json
+1. Bandgrenzen: aus INTERFACES.md §6.2 gelesen ("Sub 30 bis 90, Tief 90 bis 250, ..."), nicht aus baender.json
    und nicht aus erzeuge_baender.py.
 2. Form: sechs Bänder in dieser Reihenfolge (sub, tief, tiefmitte, mitte, praesenz, hoch), je vier Biquads, a0 = 1.
 3. Frequenzgang je Band mit scipy.signal.sosfreqz nachgerechnet: die zwei -3-dB-Punkte (bezogen auf 0 dB) liegen je

@@ -3,7 +3,7 @@
 Status: **superseded by ADR 029 (keylock in real time) for decisions 1 to 3 and 5**; 4 (direct path at 128) and 6 (REC conversion offline) remain in force (2026-10-08, task 7 of the plan `2026-10-06-keylock-echtzeit.md`: the loop box now stretches live with the Dehner, the variant render removed). Before that: implemented in branch `keylock` (slices 0 to 5), not merged; listening test was pending (2026-09-30, Cypher).
 Trigger: ADR 026 let loops run along in varispeed, and the pitch drifts as a result (requirement A10, "Keylock is mandatory for everything", remained open). Andreas: "we need a master tempo that everything subordinates itself to".
 
-Plan: `~/messungen/2026-09-30-keylock-plan/plan.md`. Reports per slice: `~/messungen/2026-09-30-keylock-umsetzung/` (`slice-01.md` to `slice-05.md`, review `slice-3b4-review.md`, closing `slice-3c.md`). Status and measured values: `docs/architektur/stand/tempo-folgen.md`, section "Keylock".
+Plan: `~/messungen/2026-09-30-keylock-plan/plan.md`. Reports per slice: `~/messungen/2026-09-30-keylock-umsetzung/` (`slice-01.md` to `slice-05.md`, review `slice-3b4-review.md`, closing `slice-3c.md`). Status and measured values: `docs/architecture/stand/tempo-folgen.md`, section "Keylock".
 
 ## Context
 

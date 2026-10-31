@@ -48,4 +48,4 @@ clock was already the master tempo (the Strudel streams followed it), only not e
 | pin operation to 128 | contradicts Andreas' sentence; the Strudel streams already ran at 130 | spec 2026-09-27 lines 162 to 168 |
 | wait for the stretcher | large (slices 34, 50 to 52), until then no loop outside 128 | ROADMAP |
 
-Measured values: `docs/architektur/stand/tempo-folgen.md`, raw data `~/messungen/2026-09-30-tempo-folgen/`.
+Measured values: `docs/architecture/stand/tempo-folgen.md`, raw data `~/messungen/2026-09-30-tempo-folgen/`.

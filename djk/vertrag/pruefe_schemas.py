@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prüft die JSON-Schemas in djk/vertrag/schemas/ gegen die Beispiele in SCHNITTSTELLEN.md.
+"""Prüft die JSON-Schemas in djk/vertrag/schemas/ gegen die Beispiele in INTERFACES.md.
 
 1. Metaschema: jedes Schema ist gültiges Draft 2020-12.
 2. Zählung am Text: alle JSON-Kandidaten (vertrag_beispiele.kandidaten) der Abschnitte aus zuordnung.json "geltung"

@@ -1,7 +1,7 @@
 {
  "$schema": "https://json-schema.org/draft/2020-12/schema",
  "$id": "https://cypherdj.invalid/vertrag/1/baender.schema.json",
- "title": "djk/vertrag/baender.json (SCHNITTSTELLEN.md §6.2)",
+ "title": "djk/vertrag/baender.json (INTERFACES.md §6.2)",
  "type": "object",
  "required": ["version", "rate_hz", "fenster_samples", "baender", "k_filter"],
  "properties": {

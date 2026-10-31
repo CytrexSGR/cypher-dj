@@ -103,7 +103,7 @@ export class SpielerVorhoerer {
   }
   // Zwischen zwei 30-Hz-Meldungen über die verstrichene Wanduhrzeit fortschätzen, wenn gespielt wird (sonst steht
   // die zuletzt gemeldete Sekunde). Der Graph-Versatz (1 Zyklus, ~5,33 ms bei 256/48000) ist in der Meldung selbst
-  // schon Sekunden-genau enthalten (docs/architektur/stand/vorhoerer.md, B1) und wird hier nicht extra addiert.
+  // schon Sekunden-genau enthalten (docs/architecture/stand/vorhoerer.md, B1) und wird hier nicht extra addiert.
   position() { return this._paused ? this._pos : this._pos + (performance.now() - this._empfangen_ms) / 1000; }
   get paused() { return this._paused; }
 

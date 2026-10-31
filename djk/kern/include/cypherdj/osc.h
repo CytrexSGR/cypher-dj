@@ -1,4 +1,4 @@
-// OSC 1.0 kodieren und lesen, ohne liblo (SCHNITTSTELLEN.md §19.4). Vorlage: proben/02-uhr-sync-planer/kern/uhrkern.cpp
+// OSC 1.0 kodieren und lesen, ohne liblo (INTERFACES.md §19.4). Vorlage: proben/02-uhr-sync-planer/kern/uhrkern.cpp
 // Z. 322 ff. Typen: s (Zeichenkette), i (int32), h (int64), f (float32), d (float64), alle Big Endian, 4-Byte-Raster.
 // Keine Allokation: Schreiber und Leser arbeiten auf festen Puffern.
 #pragma once
@@ -10,7 +10,7 @@
 
 namespace cdj::osc {
 
-constexpr size_t MAX_PAKET = 1400;  // SCHNITTSTELLEN.md §2: UDP-Pakete höchstens 1 400 Bytes
+constexpr size_t MAX_PAKET = 1400;  // INTERFACES.md §2: UDP-Pakete höchstens 1 400 Bytes
 constexpr int MAX_WERTE = 32;  // Scheibe 3: /erz/ev mit Parameter-Schwanz (7 + 2 · n)
 
 class Schreiber {

@@ -1,4 +1,4 @@
-"""Messer des Chaos-Prüfstands (Scheibe 16), offline auf der Aufnahme am Ziel (SCHNITTSTELLEN §19.5).
+"""Messer des Chaos-Prüfstands (Scheibe 16), offline auf der Aufnahme am Ziel (INTERFACES §19.5).
 
 Alle Funktionen arbeiten auf float-Arrays mit 48 kHz, Indizes sind Frames der Aufnahme.
 - stille:        Dauer-Signal (Prüfton): Läufe, in denen alle Kanäle mindestens `mindest` Samples unter `schwelle` liegen
@@ -10,7 +10,7 @@ Alle Funktionen arbeiten auf float-Arrays mit 48 kHz, Indizes sind Frames der Au
 - raster_luecken: Lücken am Ziel beim Kern mit Prüfklick: lässt der Kern einen Zyklus aus, läuft seine Uhr innen stetig
                  weiter und jeder spätere Klick kommt um eine Periode später an (Scheibe 08, auswertung_luecken.py).
 - schleife_treue: Stille in voller Auflösung auch beim Prüfklick: in der Schleife gleicht jedes Frame dem Frame einen Takt
-                 früher (die Notbahn spielt den letzten Takt aus ihrem Verlauf, SCHNITTSTELLEN §6.1, ADR 016).
+                 früher (die Notbahn spielt den letzten Takt aus ihrem Verlauf, INTERFACES §6.1, ADR 016).
 """
 import numpy as np
 

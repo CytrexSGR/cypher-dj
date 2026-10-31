@@ -1,4 +1,4 @@
-// Hörschein-Register des Leitstands (ARCHITEKTUR §3.3, SCHNITTSTELLEN §4.5, §14.5): nimmt Hörscheine der Analyse an (WS
+// Hörschein-Register des Leitstands (ARCHITECTURE §3.3, INTERFACES §4.5, §14.5): nimmt Hörscheine der Analyse an (WS
 // typ hoerschein, §9.4), registriert nur Urteil ok beim Kern (/k/hoerschein, gleiche hs_id ersetzt), zieht einen
 // registrierten zurück (/k/hoerschein/weg), sobald eine Erneuerung nicht mehr ok ist.
 import type { Felder } from './adressen.ts';

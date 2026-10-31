@@ -30,7 +30,7 @@ only with block division); "robustness" and judges 1 and 2 want no foreign code 
 5. **Every generator is a full channel in the core** (channel strip like a deck); its fader starts at −200 dB and only
    opens with a listening pass (A4 for generators, 09 NP K10). **A pattern change is new content too:** on an open
    channel the core plays events of a pattern only with a valid listening pass `muster/<m>` of this channel;
-   otherwise it counts them as `ungehoert` (I3c, `SCHNITTSTELLEN.md` §4.8). A new pattern therefore sounds first on a
+   otherwise it counts them as `ungehoert` (I3c, `INTERFACES.md` §4.8). A new pattern therefore sounds first on a
    closed generator channel and then comes in by plan, like a new track; `/erz/strom` names for this the core channel
    on which the sound returns.
 6. **MIDI to devices** only as an output of the core (JACK MIDI with sample offset), never directly from Node.

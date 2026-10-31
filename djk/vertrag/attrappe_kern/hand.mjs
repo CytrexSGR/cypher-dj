@@ -1,4 +1,4 @@
-// Test-Handeingang /test/hand (SCHNITTSTELLEN §19.0) mit der Semantik der Hand (§7.3): erster Wert nur Stellung,
+// Test-Handeingang /test/hand (INTERFACES §19.0) mit der Semantik der Hand (§7.3): erster Wert nur Stellung,
 // Totzone 3/128 gegenüber dem Übernahmepunkt, solange ein Plan den Regler hält, Übernahme skaliert, Abbruch nur dieses
 // Reglers und seiner Gruppe am selben Sample, Rückgabe nach 32 Beats Ruhe oder per Freigabe-Geste, Tasten, Deck-Halter.
 // Skalierte Übernahme aus proben/09-ki-steuerung/stellwerk.mjs (handAnwenden). Ohne Mapping-Datei gilt je Regler die

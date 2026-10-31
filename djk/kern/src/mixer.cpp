@@ -286,12 +286,34 @@ int Mixer::bk_frei(CypherBk** aus, int max) noexcept {
   return n;
 }
 
+// S5r: die Regler <kanal>/bk/1..8 an den Graphen des Kanals k melden (die FFI glättet). Nur der gehörte Graph bk_[k], nie bk_alt_.
+// Ohne Werte-Zeiger (Tests ohne Kern) keine Meldung (K10).
+void Mixer::bk_regler_melden(CypherBk* g, int k) noexcept {
+#ifdef CYPHERDJ_MUTATION_BK_REGLER_NICHT_GEMELDET  // Fehlerfall S5r: der Kern meldet die Regler nie an den Graphen
+  (void)g; (void)k;
+  return;
+#endif
+  if (!bk_wert_ || !g || k < 0 || k >= MIX_KANAELE) return;
+#ifdef CYPHERDJ_MUTATION_BK_REGLER_FALSCHER_KANAL  // Fehlerfall S5r: die Zeile des Nachbarkanals
+  k = (k + 1) % MIX_KANAELE;
+#endif
+  for (int nr = 1; nr <= 8; ++nr) {
+#ifdef CYPHERDJ_MUTATION_BK_REGLER_TAUSCH_05  // Fehlerfall S5r (D5): nur gemeldet, wenn sich der Wert ändert; ein getauschter Graph bleibt auf 0,5
+    static float zuletzt[MIX_KANAELE][8];
+    if (bk_wert_[k][nr - 1] == zuletzt[k][nr - 1]) continue;
+    zuletzt[k][nr - 1] = bk_wert_[k][nr - 1];
+#endif
+    cypher_bk_regler(g, static_cast<uint32_t>(nr), bk_wert_[k][nr - 1]);
+  }
+}
+
 // Insert auf dem Abgriff l/r (in place): neuer Weg, während der Blende gemischt mit dem alten. Ausgang geklemmt (±8, NaN 0).
 void Mixer::kanal_graph(int k, float* l, float* r, int n) noexcept {
   std::memcpy(bk_ein_l_, l, sizeof(float) * n);
   std::memcpy(bk_ein_r_, r, sizeof(float) * n);
   cypherdj::dsp::DenormalSchutz ds;
   if (bk_[k]) {
+    bk_regler_melden(bk_[k], k);
 #ifndef CYPHERDJ_MUTATION_BK_KANAL_TAKT_AUS
     cypher_bk_takt(bk_[k], fx_beat0_, fx_bps_);
 #endif

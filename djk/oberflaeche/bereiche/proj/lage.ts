@@ -5,7 +5,7 @@ export interface ArrZustand {
   nr: number; status: number; loop_an: number; projekt_beat: number; ursprung_sample: number; start_beat: number; metronom_an: number;
 }
 
-const BOX_LAEUFT = new Set([2, 3, 4]);          // /e/loop, /zustand/box: 2 wartet, 3 läuft, 4 endet (SCHNITTSTELLEN §5.11)
+const BOX_LAEUFT = new Set([2, 3, 4]);          // /e/loop, /zustand/box: 2 wartet, 3 läuft, 4 endet (INTERFACES §5.11)
 const ERZ_STROEME = ['erz/1', 'erz/2', 'erz/3'];  // Studio-Ströme 1 bis 3 (Strudel), Spec 2.2 „Studio-Strom“
 
 export class KernLage {

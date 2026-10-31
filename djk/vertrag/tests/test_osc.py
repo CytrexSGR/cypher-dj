@@ -23,14 +23,14 @@ def test_verfaelschte_typen_in_json_ist_rot(tmp_path):
 
 
 def test_verfaelschte_typen_im_text_ist_rot(tmp_path):
-    falsch = tmp_path / "SCHNITTSTELLEN.md"
+    falsch = tmp_path / "INTERFACES.md"
     falsch.write_text(vertragstext.lies().replace("`/k/teil ,hssisddfiiss`", "`/k/teil ,hssisddfiis`"), encoding="utf-8")
     fehler = pruefe_osc.pruefe(falsch, OSC, False)
     assert any(f.startswith("/k/teil: Typ-Zeichenkette Text ,hssisddfiis ") for f in fehler)
 
 
 def test_text_ohne_z1_ist_rot(tmp_path):
-    falsch = tmp_path / "SCHNITTSTELLEN.md"
+    falsch = tmp_path / "INTERFACES.md"
     falsch.write_text("\n".join(z for z in vertragstext.lies().split("\n") if "`/test/klick ,hssi`" not in z),
                       encoding="utf-8")
     fehler = pruefe_osc.pruefe(falsch, OSC, False)

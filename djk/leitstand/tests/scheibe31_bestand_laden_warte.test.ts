@@ -1,4 +1,4 @@
-// Scheibe 31: bestand, laden, warte als Hub-Methoden (SCHNITTSTELLEN §10, §4.4, §6.4, §6.5, §13.4). Vorher standen
+// Scheibe 31: bestand, laden, warte als Hub-Methoden (INTERFACES §10, §4.4, §6.4, §6.5, §13.4). Vorher standen
 // nur lage, plan_einreichen, plan_abbrechen in leitstand.ts; die drei anderen METHODEN_10-Einträge antworteten mit
 // rpc_fehler "form" ("gibt es in diesem Leitstand noch nicht", djk/spieler_cli/tests/spieler.test.ts GAP-Belege).
 // Gegen die echte Kern-Attrappe (djk/vertrag/attrappe_kern.mjs), wie djk/spieler_cli/tests/spieler.test.ts.

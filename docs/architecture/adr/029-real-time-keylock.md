@@ -21,7 +21,7 @@ ppm, factor never 1.0) and the factor rule (map tempo in the middle of the next 
 
 ## Decision
 
-1. **One button, global.** Control `keylock` (switch, default 1, no deck argument, SCHNITTSTELLEN §1.5) for decks,
+1. **One button, global.** Control `keylock` (switch, default 1, no deck argument, INTERFACES §1.5) for decks,
    loop on the deck and, from task 7, loop boxes. Off means varispeed (ADR 028 decision 1). `kern.toml keylock = false`
    builds no stretcher (§2.1). Page and control station show the button, the display follows the listening path (task 3, 3b).
 2. **Stretcher (Dehner): R3 in work threads with a lead-in ring** (`dehner.h/.cpp`). Source-agnostic: band and base come through
@@ -181,7 +181,7 @@ Limits of the boxes:
    −5.09 → −2.18 dB; deck jump sine 1000 −7.99 → −5.19 dB, 213 Hz −9.69 dB; test 32 and T19, `task-07c/p4_*`). The fade tests
    against the ideal linear transition (≤ 0.02) do not concern (b): they all lie outside the base.
 4. **Box counters** (underrun, given up, ring_voll, kein_platz per box): since 7b.3 and 7c.3 respectively in `/zustand/box ,iiiiii`
-   (SCHNITTSTELLEN §5.5b, additive, 50 Hz per box with a loop; test K4 in `test_kern_box_keylock` over the network, kein_platz with
+   (INTERFACES §5.5b, additive, 50 Hz per box with a loop; test K4 in `test_kern_box_keylock` over the network, kein_platz with
    value 2, mutation `BOX_ZAEHLER_VERTAUSCHT` red; ring_voll only as a guard, always 0 in the test; `ziel_lauf_boxen.py` evaluates them in the
    gate). `frei_verloren` remains only as an access function.
 5. **Not heard:** sound live against the offline render; material `task-07/hoerprobe/` (1 to 5).

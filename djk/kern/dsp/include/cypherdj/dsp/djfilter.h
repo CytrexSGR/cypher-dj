@@ -1,4 +1,4 @@
-// DJ-Filter an einem Regler k in [−1, +1] (SCHNITTSTELLEN §1.2, Dossier 04 §4.6 und NP K6):
+// DJ-Filter an einem Regler k in [−1, +1] (INTERFACES §1.2, Dossier 04 §4.6 und NP K6):
 // links Tiefpass 20 kHz → 60 Hz, rechts Hochpass 20 Hz → 8 kHz, je ein TPT-Zustandsvariablenfilter
 // (Zavalishin, wie Faust fi.svf), Güte einstellbar (Vorgabe 0,707, A27 Weg a: Konfig-Wert `filter_guete`). Beide laufen immer mit, es wirkt nur die Seite, die sich
 // bewegt (k < 0 Tiefpass, k > 0 Hochpass); die ruhende ist umgangen (04 NP K6: sonst kostet der

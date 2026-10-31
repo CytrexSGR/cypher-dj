@@ -1,7 +1,7 @@
 {
  "$schema": "https://json-schema.org/draft/2020-12/schema",
  "$id": "https://cypherdj.invalid/vertrag/1/ws_daten.schema.json",
- "title": "daten je WebSocket-typ (SCHNITTSTELLEN.md §9.2 bis §9.4)",
+ "title": "daten je WebSocket-typ (INTERFACES.md §9.2 bis §9.4)",
  "$defs": {
   "rolle": {"enum": ["spieler", "mcp", "analyse", "werkstatt", "ansage", "anzeige", "pruefstand"]},
   "hallo": {"description": "§9.2 Client → Leitstand", "type": "object", "required": ["rolle", "name", "protokoll"],

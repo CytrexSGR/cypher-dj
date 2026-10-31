@@ -1,4 +1,4 @@
-// Scheibe 18: Neustart-Zustand (SCHNITTSTELLEN §6.3). Datei anlegen und wieder öffnen, falsche Version legt neu an,
+// Scheibe 18: Neustart-Zustand (INTERFACES §6.3). Datei anlegen und wieder öffnen, falsche Version legt neu an,
 // Seqlock mit zwei Fächern: ein Schreiber, der mitten im Schreiben stirbt, hinterlässt das ältere Fach lesbar
 // (Fehlerfall: mit nur einem Fach wäre der Zustand weg), z_lies_befehle liest das neueste fertige Fach.
 #include <fcntl.h>

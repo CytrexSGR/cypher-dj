@@ -50,5 +50,16 @@ int main() {
     for (int i = 0; i < 64; ++i) PRUEF(l[i] == 0.0f && r[i] == 0.0f);
     cypher_bk_frei(nullptr);
   }
+  {  // 3 Regler (S5r): nr 1..8 ok, 0 und 9 und Zeiger null -1; Wirkung (Glättung, Klemmen) prüft hall_ffi/tests/bk_ffi.rs
+    char fehler[256] = {};
+    CypherBk* h = cypher_bk_neu(G, 48000.0, fehler, sizeof fehler);
+    PRUEF(h != nullptr);
+    PRUEF(cypher_bk_regler(h, 1, 0.9f) == 0);
+    PRUEF(cypher_bk_regler(h, 8, 0.1f) == 0);
+    PRUEF(cypher_bk_regler(h, 9, 0.5f) == -1);
+    PRUEF(cypher_bk_regler(h, 0, 0.5f) == -1);
+    PRUEF(cypher_bk_regler(nullptr, 1, 0.5f) == -1);
+    cypher_bk_frei(h);
+  }
   PRUEF_ENDE();
 }

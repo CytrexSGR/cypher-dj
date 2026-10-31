@@ -441,6 +441,7 @@ void Kern::audio(int64_t n0, int n) {
       decks_verlauf(a[i].regler, a[i].verlauf);  // Scheibe 31: stem/* ins Deck
       keylock_verlauf(a[i].regler, a[i].verlauf, s0, m);  // Keylock Task 3: Regler keylock an Decks und Boxen
       arr_->verlauf(a[i].regler, a[i].verlauf);  // D1 K1: spur/<n>/* ins Modul Arrangement (Verlauf je Sample)
+      if (const int o = bk_ort_[a[i].regler]; o >= 0) bk_wert_[o >> 3][o & 7] = a[i].verlauf[m - 1];  // S5r K6: Endwert des Blocks (m wie keylock_verlauf), die FFI glättet
     }
     decks_block(s0, m);  // Scheibe 31: Decks in die Eingänge deck/1..4, Starts und Stopps am Sample
     ErzAusloeser ausl;

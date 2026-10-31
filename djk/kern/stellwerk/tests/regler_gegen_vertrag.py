@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Regler-Tabelle des Stellwerks gegen SCHNITTSTELLEN.md §1.5 (Vertragstext): Pfade, Bereich, Vorgabe, Schaltrampe,
+"""Regler-Tabelle des Stellwerks gegen INTERFACES.md §1.5 (Vertragstext): Pfade, Bereich, Vorgabe, Schaltrampe,
 Wer darf. Vorher ein Selbsttest (Fehlerfall): derselbe Abgleich gegen einen im Speicher verfälschten Vertragstext
 (Kill-Schaltrampe 5 -> 8 ms, Fader nur Hand) muss Abweichungen finden. Rückgabe 0 nur, wenn der Selbsttest rot und der
 echte Abgleich grün ist und die Zahl der Pfade gleich ist.
-Aufruf: regler_gegen_vertrag.py <stellwerk_regler_liste> <SCHNITTSTELLEN.md>
+Aufruf: regler_gegen_vertrag.py <stellwerk_regler_liste> <INTERFACES.md>
 
 Festlegungen dieser Scheibe, die der Abgleich kennt: `10-ms-Blende` (ziel) und `sofort mit Überblendung`
 (fx/<n>/notenwert) setzt das Stellwerk sofort (0 ms), die Blende macht der Mischer bzw. das Echo; `<k>` sind

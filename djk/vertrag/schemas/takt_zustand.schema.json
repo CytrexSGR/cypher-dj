@@ -1,7 +1,7 @@
 {
  "$schema": "https://json-schema.org/draft/2020-12/schema",
  "$id": "https://cypherdj.invalid/vertrag/1/takt_zustand.schema.json",
- "title": "Takt-Zustand, Lage (SCHNITTSTELLEN.md §14.7); bericht_vorher null, wenn der Bericht fehlt (§18 Punkt 3)",
+ "title": "Takt-Zustand, Lage (INTERFACES.md §14.7); bericht_vorher null, wenn der Bericht fehlt (§18 Punkt 3)",
  "type": "object",
  "required": ["takt", "phrase", "beat", "bpm", "set_basis_bpm", "autonomie", "ki_gestoppt", "decks", "erzeuger", "plaene",
   "vorschlaege", "hoerscheine", "fristen", "bericht_vorher", "auftraege", "neu_in_kiste", "ereignisse_seit"],

@@ -1,4 +1,4 @@
-"""Tempo-Karte der Quelle (SCHNITTSTELLEN §1.1, §13.2 `tempo_karte_quelle`).
+"""Tempo-Karte der Quelle (INTERFACES §1.1, §13.2 `tempo_karte_quelle`).
 
 Aus erkannten Schlagzeiten (Sekunden) wird eine glatte Karte Schlag-Nummer -> Quell-Sekunde:
   1. nummerieren: doppelte Treffer (Abstand unter einer halben Grundperiode) fallen weg; jeder

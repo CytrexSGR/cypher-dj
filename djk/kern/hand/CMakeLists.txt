@@ -43,7 +43,7 @@ endif()
 
 enable_testing()
 set(KONFIG ${D}/../../konfig/controller CACHE PATH "Ordner der Controller-Mappings (djk/konfig/controller)")
-set(VERTRAG_TEXT ${D}/../../../docs/architektur/SCHNITTSTELLEN.md CACHE FILEPATH "SCHNITTSTELLEN.md")
+set(VERTRAG_TEXT ${D}/../../../docs/architecture/INTERFACES.md CACHE FILEPATH "INTERFACES.md")
 
 file(GLOB TESTDATEIEN CONFIGURE_DEPENDS ${D}/tests/test_*.cpp)
 foreach(f ${TESTDATEIEN})

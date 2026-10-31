@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Erzeugt djk/vertrag/baender.json: Koeffizienten der sechs Analyse-Bänder (SCHNITTSTELLEN §6.2) und des
+"""Erzeugt djk/vertrag/baender.json: Koeffizienten der sechs Analyse-Bänder (INTERFACES §6.2) und des
 K-Filters (BS.1770-4, 48 kHz) als Biquad-Kaskaden (scipy-SOS-Zeilen b0 b1 b2 a0 a1 a2, a0 = 1).
 
 Vertrag §6.2: je Band ein Bandpass aus zwei Butterworth-Filtern vierter Ordnung (Hochpass an der unteren,
@@ -36,7 +36,7 @@ def baue():
     return {
         "version": 1,
         "rate_hz": SR,
-        "quelle": "SCHNITTSTELLEN.md §6.2; erzeugt von djk/vertrag/erzeuge_baender.py mit scipy "
+        "quelle": "INTERFACES.md §6.2; erzeugt von djk/vertrag/erzeuge_baender.py mit scipy "
                   + __import__("scipy").__version__ + " (signal.butter, output='sos', fs=48000)",
         "form": "sos: je Zeile b0 b1 b2 a0 a1 a2 (a0 = 1), Zeilen nacheinander angewandt (Kaskade), "
                 "Direktform II transponiert wie scipy.signal.sosfilt",

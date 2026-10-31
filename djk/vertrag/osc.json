@@ -1,6 +1,6 @@
 {
   "vertrag": 1,
-  "quelle": "docs/architektur/SCHNITTSTELLEN.md §4, §5, §19.0 (mit Roadmap-Zusatz Z1)",
+  "quelle": "docs/architecture/INTERFACES.md §4, §5, §19.0 (mit Roadmap-Zusatz Z1)",
   "hinweis": "Von Hand gepflegt, einzige Quelle. osc_adressen.h und osc_adressen.ts erzeugt erzeuge_osc.py; pruefe_osc.py vergleicht diese Datei mit dem Vertragstext.",
   "osc_typen": {
     "i": "int32, big endian",

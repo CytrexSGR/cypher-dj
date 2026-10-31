@@ -4,7 +4,7 @@
 // 3. Cues per Tastatur auf einem echten Track setzen, Screenshot, gespeicherte Datei prüfen, Cues wieder löschen.
 // 4. Andreas' MP3 unverändert (sha1 und mtime vorher/nachher).
 // Daten und Cache in einem Temp-Ordner: Andreas' ~/cypher-dj/cues/daten bleibt unberührt und leer.
-// Aufruf: node djk/cues/pruef/bild.mjs [--n 10] [--bild docs/architektur/stand/cues-screenshot.png]
+// Aufruf: node djk/cues/pruef/bild.mjs [--n 10] [--bild docs/architecture/stand/cues-screenshot.png]
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -17,7 +17,7 @@ import { dateiName } from '../speicher.ts';
 
 const HIER = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HIER, '..', '..', '..');
-const { values } = parseArgs({ options: { n: { type: 'string', default: '10' }, bild: { type: 'string', default: path.join(REPO, 'docs/architektur/stand/cues-screenshot.png') }, zeige: { type: 'string', default: '1113242_Siiet_Original Mix.mp3' } } });
+const { values } = parseArgs({ options: { n: { type: 'string', default: '10' }, bild: { type: 'string', default: path.join(REPO, 'docs/architecture/stand/cues-screenshot.png') }, zeige: { type: 'string', default: '1113242_Siiet_Original Mix.mp3' } } });
 const warte = (ms) => new Promise((r) => setTimeout(r, ms));
 
 if (!VORGABE.wurzel) { console.error('CYPHERDJ_MUSIK nicht gesetzt (Wurzel der Musiksammlung): nicht gestartet'); process.exit(2); }

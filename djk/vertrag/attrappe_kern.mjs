@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Kern-Attrappe (SCHNITTSTELLEN §19.1): spricht §4 und §5 über UDP wie der Kern, mit simulierter Uhr in Echtzeit
+// Kern-Attrappe (INTERFACES §19.1): spricht §4 und §5 über UDP wie der Kern, mit simulierter Uhr in Echtzeit
 // (ein Block zu 256 Samples, sobald seine Anfangszeit auf CLOCK_MONOTONIC erreicht ist), ohne JACK und ohne Ton.
 // Prüfinstanzen (ROADMAP Z2): CYPHERDJ_INSTANZ=<a..i> verschiebt den UDP-Port um 1000·k und setzt cypherdj-<instanz>/
 // in alle festen Pfade. Neustart-Zustand in /dev/shm/cypherdj[-<instanz>]/zustand_attrappe.json; liegt er beim Start

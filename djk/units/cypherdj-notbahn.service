@@ -1,5 +1,5 @@
 # cypherdj-notbahn: Notbahn daneben am Ausgang (ADR 016, Nachtrag 2026-09-25; Scheibe 10).
-# Ports als Aufrufparameter (SCHNITTSTELLEN.md §7, kein TOML in C). Vorgabe stumm: die geteilte Null-Senke
+# Ports als Aufrufparameter (INTERFACES.md §7, kein TOML in C). Vorgabe stumm: die geteilte Null-Senke
 # cypher_stumm. Das echte Interface erst mit --ton-frei nach Andreas' Freigabe (§8, „Kein Ton ohne Frage“).
 # --vor: der stumme Ausgang vor auf den Kern-Eingang notbahn_vor, die Notbahn rechnet vor dem Kern und hängt nicht an ihm (29.10.; vorher --kante, Probe 2026-09-25).
 # Installation und Start gehören Scheibe 18 (cypherdj.target); diese Datei wird hier nur geliefert, nicht aktiviert.

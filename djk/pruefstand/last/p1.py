@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Lastprofil P1 (ARCHITEKTUR §9.2): Speicher-Streaming `cypherdj-lastgen` 16 x 64 MiB plus `demucs_last.py` mit
+"""Lastprofil P1 (ARCHITECTURE §9.2): Speicher-Streaming `cypherdj-lastgen` 16 x 64 MiB plus `demucs_last.py` mit
 8 Fäden (Werkstatt-Stellvertreter, 10 NP N6), beide unter Nice 19 (Entscheidung E6 im Plan: bei Nice 0 für lastgen
 bekäme demucs neben 16 streamenden Fäden kaum Rechenzeit, und P1 wäre nur noch Speicherlast). Misst je Sekunde, was P1
 wirklich erzeugt: CPU-Belegung der Maschine, CPU-Kerne je Lastprozess, RSS, verfügbaren Speicher, 1-Minuten-Last; dazu

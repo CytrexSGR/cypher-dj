@@ -1,4 +1,4 @@
-"""Liest die JSON-Beispiele aus SCHNITTSTELLEN.md, am Text gezählt (nicht aus einer Liste abgeschrieben).
+"""Liest die JSON-Beispiele aus INTERFACES.md, am Text gezählt (nicht aus einer Liste abgeschrieben).
 
 Den Text liefert vertragstext.lies() aus Scheibe 02. Ein Kandidat ist jeder ```json-Block und jeder Inline-Code, der
 mit '{' beginnt (auch über Zeilenumbrüche). Kennung: '<Abschnitt>#<laufende Nummer im Abschnitt>' (Blöcke zuerst,

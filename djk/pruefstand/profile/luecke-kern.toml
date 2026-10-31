@@ -1,5 +1,5 @@
 name = "luecke-kern"
-zweck = "Fehlerfall für den Lückenzähler des Kerns (SCHNITTSTELLEN §5.4): der Kern aus Scheibe 08 verbrennt im Prüfmodus jeden 500. Zyklus 1,5 Perioden; /zustand/kern zählt die ausgelassenen Perioden, am Ziel verschiebt jede das Klick-Raster um eine Periode; beide Zahlen gleich ±1."
+zweck = "Fehlerfall für den Lückenzähler des Kerns (INTERFACES §5.4): der Kern aus Scheibe 08 verbrennt im Prüfmodus jeden 500. Zyklus 1,5 Perioden; /zustand/kern zählt die ausgelassenen Perioden, am Ziel verschiebt jede das Klick-Raster um eine Periode; beide Zahlen gleich ±1."
 dauer_s = 60.0
 
 [quelle]

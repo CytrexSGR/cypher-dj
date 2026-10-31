@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Leitstand: WebSocket-Hub, Kern-Anbindung, Takt-Strom, Journal (SCHNITTSTELLEN §9, §15, §16.3, §18)",
+  "description": "Leitstand: WebSocket-Hub, Kern-Anbindung, Takt-Strom, Journal (INTERFACES §9, §15, §16.3, §18)",
   "engines": { "node": ">=22.18" },
   "scripts": {
     "start": "node src/leitstand.ts",

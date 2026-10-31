@@ -1,4 +1,4 @@
-// Scheibe 25: die Kern-Uhr als Uhr des Stellwerks (kern_uhr.h). Sie muss die Golden-Werte aus SCHNITTSTELLEN §1.3 der
+// Scheibe 25: die Kern-Uhr als Uhr des Stellwerks (kern_uhr.h). Sie muss die Golden-Werte aus INTERFACES §1.3 der
 // Karte liefern, die im Kern gerade gilt, auch mit einer wartenden Tempo-Rampe (Scheibe 08: die Karte ist Grundkarte
 // plus wartende Rampen). Negativ-Kontrolle: ohne Rampe liegt Beat 144 auf 144 · 22 500 = 3 240 000.
 #include <cmath>

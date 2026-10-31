@@ -1,7 +1,7 @@
 {
  "$schema": "https://json-schema.org/draft/2020-12/schema",
  "$id": "https://cypherdj.invalid/vertrag/1/material_fertig.schema.json",
- "title": "material_fertig, Werkstatt → Leitstand (SCHNITTSTELLEN.md §12.2)",
+ "title": "material_fertig, Werkstatt → Leitstand (INTERFACES.md §12.2)",
  "type": "object",
  "required": ["auftrag_id", "material_id", "basis_bpm", "fassung", "pfad", "tore", "nur_fuer_andreas", "warnungen", "dauer_s"],
  "properties": {

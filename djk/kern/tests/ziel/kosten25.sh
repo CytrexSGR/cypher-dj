@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Scheibe 25: Callback-Kosten im echten JACK-Callback (ARCHITEKTUR §7: p99,9 unter 20 % der Periode, 1,07 ms bei 256;
+# Scheibe 25: Callback-Kosten im echten JACK-Callback (ARCHITECTURE §7: p99,9 unter 20 % der Periode, 1,07 ms bei 256;
 # Maximum unter 50 %, 2,67 ms). Eigene Null-Senke, Notbahn, Kern mit Prüfmodus bei Quantum 256; kosten25_sender.py belegt
 # 16 Kanäle (oder keinen: --leer) und hält den Kern --sekunden lang; dann SIGTERM, und die Schlusszeile des Kerns nennt
 # cb_p50_us, cb_p99_us, cb_p999_us, cb_max_us über alle Zyklen (Verteilung im Netz-Faden, telemetrie.h) sowie die

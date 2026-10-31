@@ -1,4 +1,4 @@
-// Zählt am Ziel, in wie vielen Takten zwei Decks zugleich „tief offen“ waren (SCHNITTSTELLEN §1.6, Invariante I1), aus dem,
+// Zählt am Ziel, in wie vielen Takten zwei Decks zugleich „tief offen“ waren (INTERFACES §1.6, Invariante I1), aus dem,
 // was die Attrappe gemeldet hat: /e/regler (Fader, Trim, EQ tief, Kill tief, xfader, master/pegel), /zustand/deck (läuft).
 // Raster: alle 480 Samples (10 ms); ein Takt zählt, wenn an mindestens einem Rasterpunkt beide Decks tief offen sind.
 import { REGLER } from '../src/regler_info.ts';

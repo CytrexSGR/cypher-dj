@@ -1,4 +1,4 @@
-// Simulierte Uhr nach SCHNITTSTELLEN §1.3 (Tempo-Karte, linear in der Zeit), für Tests und den Folgenleser.
+// Simulierte Uhr nach INTERFACES §1.3 (Tempo-Karte, linear in der Zeit), für Tests und den Folgenleser.
 // Die echte Kern-Uhr baut Strang A (Scheiben 01, 08); beide müssen die Golden-Werte aus §1.3 treffen.
 #pragma once
 #include <cmath>

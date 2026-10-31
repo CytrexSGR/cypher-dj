@@ -1,4 +1,4 @@
-// Autonomie-Positivliste SCHNITTSTELLEN §10 (ADR 013 Entscheidung 4 und 5), wörtlich und lückenlos: je Regel ein Test,
+// Autonomie-Positivliste INTERFACES §10 (ADR 013 Entscheidung 4 und 5), wörtlich und lückenlos: je Regel ein Test,
 // der eine Verletzung abweist (oder bei einer Erlaubnis die Erlaubnis zeigt), und je Regel eine Mutante in
 // pruef/mutation_positivliste.ts, die genau diesen Test rot macht. Die Kennung P<nn> im Testnamen ist der Schlüssel,
 // über den die Mutationsprobe ihren Test findet; eine neue Regel braucht Test und Mutante.

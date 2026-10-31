@@ -1,4 +1,4 @@
-// Simulierte Uhr nach SCHNITTSTELLEN §1.3.
+// Simulierte Uhr nach INTERFACES §1.3.
 #include "sim_uhr.h"
 
 #include "cypherdj/stellwerk/typen.h"

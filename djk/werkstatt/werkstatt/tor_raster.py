@@ -1,4 +1,4 @@
-"""Paket 1.13 Warp, Slice 3a (AK18): das Tor „raster“ am gerenderten Ergebnis (SCHNITTSTELLEN.md:1128-1132, Form :1224).
+"""Paket 1.13 Warp, Slice 3a (AK18): das Tor „raster“ am gerenderten Ergebnis (INTERFACES.md:1128-1132, Form :1224).
 
 Verfahren: unabhängig vom Raster-Werkzeug der Werkstatt (nicht beat_this) werden im Tief-Band (30 bis 250 Hz) die Anschläge des Renders gesucht
 (fa.onsets_band: Hilbert-Hüllkurve, 50-%-Punkt, Zeitauflösung 1 ms), gemessen wird ihr Rest gegen ein STARRES Raster der Projekt-BPM; die Phase kommt per Kreismittel

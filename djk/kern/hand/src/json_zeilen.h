@@ -1,4 +1,4 @@
-// JSON-Leser mit Zeilennummern für die Mapping-Datei (SCHNITTSTELLEN §7.2). Nicht im Echtzeit-Pfad: der Kern liest
+// JSON-Leser mit Zeilennummern für die Mapping-Datei (INTERFACES §7.2). Nicht im Echtzeit-Pfad: der Kern liest
 // das Mapping im Nicht-Echtzeit-Faden (§4.7 /k/mapping). Eigenbau, weil nlohmann/json keine Zeile je Wert liefert und
 // die Abnahme von Scheibe 19 fehlerhafte Mappings "mit Zeilenangabe" ablehnt. Doppelte Schlüssel sind ein Fehler.
 #pragma once

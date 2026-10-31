@@ -127,7 +127,7 @@ test('E3 P1: spur/0 neben Kanälen wird angenommen, spur/4 abgelehnt, die leere 
   gruen(r);
 });
 
-// D1 Spec 6.27, SCHNITTSTELLEN §4.7/§4.11: gemeinsamer Fall mit dem Kern (test_kern_arr_ki Fall 7). laden, start, loop und
+// D1 Spec 6.27, INTERFACES §4.7/§4.11: gemeinsamer Fall mit dem Kern (test_kern_arr_ki Fall 7). laden, start, loop und
 // metronom von cypher während des KI-Stopps abgelehnt (ki_gestoppt), stopp von cypher erlaubt (Anhalten ist die sichere
 // Richtung). Die OSC-Form jedes Befehls kommt aus BEFEHLE (Feldnamen wie osc.json), die Erwartung aus der Datei.
 test('D1 Spec 6.27: KI-Stopp am Arrangement wie im Kern (djk/vertrag/faelle/arr_ki_stopp.json)', () => {

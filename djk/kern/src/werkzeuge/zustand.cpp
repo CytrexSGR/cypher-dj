@@ -1,4 +1,4 @@
-// cypherdj-zustand: liest den Neustart-Zustand (nur lesend, SCHNITTSTELLEN §6.3 „Ausnahme: Prüfstand“) und gibt das
+// cypherdj-zustand: liest den Neustart-Zustand (nur lesend, INTERFACES §6.3 „Ausnahme: Prüfstand“) und gibt das
 // neueste fertige Echtzeit- und Abonnenten-Fach als eine JSON-Zeile aus. Scheibe 18.
 // Aufruf: cypherdj-zustand [<pfad>]   Ohne Pfad: /dev/shm/cypherdj[-$CYPHERDJ_INSTANZ]/zustand.
 // Rückgabe 0 gelesen, 1 kein gültiges Echtzeit-Fach, 2 Datei fehlt oder hat die falsche Größe.

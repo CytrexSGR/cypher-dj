@@ -18,7 +18,7 @@ from .tempo_wahl import tor_streckfaktor, waehle_vielfaches
 
 HIER = Path(__file__).resolve().parent.parent
 BASIS = 128.0
-FAEDEN = 4           # werkstatt.toml `threads`, Vorgabe 4 (SCHNITTSTELLEN §2.1)
+FAEDEN = 4           # werkstatt.toml `threads`, Vorgabe 4 (INTERFACES §2.1)
 TOR_RASTER_MS = 8.0  # werkstatt.toml `tor_raster_ms` (§2.1): hier Grenze fuer „Werkzeuge einig“ (ADR 011 E2.2)
 KONTROLL_NAMEN = ("konst134", "drift_synth", "mfbass", "eins_synth")
 

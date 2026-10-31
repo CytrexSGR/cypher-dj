@@ -1,4 +1,4 @@
-"""Halb- oder Doppeltempo-Wahl (SCHNITTSTELLEN §12.3 „Tempo-Wahl“).
+"""Halb- oder Doppeltempo-Wahl (INTERFACES §12.3 „Tempo-Wahl“).
 
 Unter Quell-BPM x {1/2, 1, 2} gilt das Vielfache, dessen Streckfaktor basis_bpm / (Quell-BPM * v)
 am naechsten bei 1 liegt. Gleichstand: 1 vor 2 vor 1/2 (keine Umdeutung ohne Gewinn)."""

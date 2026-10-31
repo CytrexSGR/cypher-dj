@@ -4,7 +4,7 @@
 Aufruf: referenz_baender.py <baender.json> <eingang.f32> <kern_datensaetze.f32> [--verschiebe BAND:SEITE:FAKTOR]
 
 Rechnet mit scipy.signal.sosfilt und den Koeffizienten aus baender.json dieselben Größen wie
-AnalyseBaender (SCHNITTSTELLEN 6.2, Definition in baender.json "rms"): je 48 Samples
+AnalyseBaender (INTERFACES 6.2, Definition in baender.json "rms"): je 48 Samples
 band[b] = sqrt(Summe(yL^2 + yR^2) / (48 * 2)), k_leistung = Summe(kL^2 + kR^2) / 48 (K-Filter aus
 baender.json, BS.1770), spitze = max |x|; Fenster ab Frame 0, Filterzustand läuft durch.
 Vergleicht mit den Datensätzen des C++-Werkzeugs messer_baender_datei (8 float32 je Datensatz).

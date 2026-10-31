@@ -1,4 +1,4 @@
-"""OSC 1.0 kodieren und lesen für die Prüfskripte der Scheibe 18 (Typen s, i, h, f, d; SCHNITTSTELLEN §4, §5)."""
+"""OSC 1.0 kodieren und lesen für die Prüfskripte der Scheibe 18 (Typen s, i, h, f, d; INTERFACES §4, §5)."""
 import struct
 
 

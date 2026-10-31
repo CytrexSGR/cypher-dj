@@ -1,4 +1,4 @@
-// Scheibe 31: OSC der Decks im Netz-Faden (SCHNITTSTELLEN.md §4.4, §5.5, §5.9). Nimmt /k/deck/laden, entladen, start
+// Scheibe 31: OSC der Decks im Netz-Faden (INTERFACES.md §4.4, §5.5, §5.9). Nimmt /k/deck/laden, entladen, start
 // und stopp an (Form und Bereiche; die Zustandsprüfungen macht der Callback), reicht sie über den Befehlsring weiter und
 // schickt /zustand/deck, /e/geladen und /e/frist an alle Abonnenten. Plan E9 (Deck-Bedienung): loop, sprung, hotcue,
 // hotcue_setzen und /e/hotcue. Welle 3: basis_tausch. Roll und slip bleiben bis zu ihren Scheiben (38, 52) wie unbekannt.

@@ -1,4 +1,4 @@
-// Deck im Direktweg (deck.h, SCHNITTSTELLEN §4.4, §5.5, §13.1): liest bitgenau am Soll-Lesekopf, Start mitten im Block,
+// Deck im Direktweg (deck.h, INTERFACES §4.4, §5.5, §13.1): liest bitgenau am Soll-Lesekopf, Start mitten im Block,
 // 128-Frame-Blende auf laufendem Deck, Stopp mit 10-ms-Rampe, Ende des Materials, Stems mit Pegeln, Rückgabe erst nach
 // der Blende. Material im Speicher: Frame f trägt links f und rechts −f (float exakt bis 2^24). Scheibe 31.
 #include <algorithm>

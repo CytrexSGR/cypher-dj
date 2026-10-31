@@ -1,5 +1,5 @@
 // node --test tests/erzeuger.test.mjs: I3b (Schuss auf offenes Pad) und I3c (Muster auf offenem Erzeuger-Kanal),
-// Fenster ersetzen mit Zählern in /erz/quittung (SCHNITTSTELLEN §4.6, §4.8, §17)
+// Fenster ersetzen mit Zählern in /erz/quittung (INTERFACES §4.6, §4.8, §17)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fahre } from '../folgen_schnell.mjs';

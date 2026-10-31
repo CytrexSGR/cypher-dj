@@ -1,5 +1,5 @@
 name = "kill-notbahn"
-zweck = "Die Notbahn stirbt (kill -9), der Kern aus 08 spielt selbst an die Senke weiter: daneben schwieg die Notbahn ohnehin, am Ziel fehlt kein Klick und keine Periode. Misst die Zeile „Notbahn stirbt“ aus ARCHITEKTUR §7 für die Notbahn daneben."
+zweck = "Die Notbahn stirbt (kill -9), der Kern aus 08 spielt selbst an die Senke weiter: daneben schwieg die Notbahn ohnehin, am Ziel fehlt kein Klick und keine Periode. Misst die Zeile „Notbahn stirbt“ aus ARCHITECTURE §7 für die Notbahn daneben."
 dauer_s = 32.0
 
 [quelle]

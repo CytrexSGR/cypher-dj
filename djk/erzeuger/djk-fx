@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// djk-fx (Beat-FX, SCHNITTSTELLEN §4.10, zwei Einheiten seit 2026-09-28): die Beat-FX aus der CLI, für die Welle. Meldet
+// djk-fx (Beat-FX, INTERFACES §4.10, zwei Einheiten seit 2026-09-28): die Beat-FX aus der CLI, für die Welle. Meldet
 // sich beim Kern an (/k/hallo), schickt /k/fx bzw. /k/fx/zuweisung mit Quelle cypher und wartet auf Quittung und /e/fx
 // bzw. /e/fx/zuweisung. Ist der AUTO-Schalter der Seite aus (autonom.json im Erzeuger-Ordner), schickt es nichts (wie
 // djk-muster). `aus` liest den Stand der Einheit von der Seite (GET /fx) und schickt ihn mit an 0. Nach dem Übernehmen

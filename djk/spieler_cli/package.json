@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Cyphers Leitstand-Werkzeug fuer die CLI-Hauptinstanz: eine Zeile rein, JSON raus (siehe docs/architektur/stand/spieler-cli.md).",
+  "description": "Cyphers Leitstand-Werkzeug fuer die CLI-Hauptinstanz: eine Zeile rein, JSON raus (siehe docs/architecture/stand/spieler-cli.md).",
   "engines": { "node": ">=22.18" },
   "bin": { "djk-spiel": "./spieler.ts" },
   "scripts": {

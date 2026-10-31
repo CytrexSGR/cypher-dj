@@ -32,7 +32,7 @@ export const K1_PLAN: MenschenPlan = {
 
 // Das Beispiel §14.1 steht als einziger json-Block zwischen "### 14.1" und "### 14.2" im Vertragstext
 export function beispiel141(): Plan {
-  const text = fs.readFileSync(path.join(VERTRAG_ORDNER, '..', '..', 'docs', 'architektur', 'SCHNITTSTELLEN.md'), 'utf8');
+  const text = fs.readFileSync(path.join(VERTRAG_ORDNER, '..', '..', 'docs', 'architecture', 'INTERFACES.md'), 'utf8');
   const abschnitt = text.slice(text.indexOf('### 14.1'), text.indexOf('### 14.2'));
   const json = /```json\n([\s\S]*?)```/.exec(abschnitt);
   assert.ok(json, 'kein json-Block in §14.1');

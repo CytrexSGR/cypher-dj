@@ -1,4 +1,4 @@
-// /k/deck/loop_laenge (SCHNITTSTELLEN §4.4, 2026-10-21): Loop-Länge ändern, der Start BLEIBT (Traktor). Rahmen wie test_kern_deck_e9
+// /k/deck/loop_laenge (INTERFACES §4.4, 2026-10-21): Loop-Länge ändern, der Start BLEIBT (Traktor). Rahmen wie test_kern_deck_e9
 // (Klick-Material 64 Beats, Master links am Kern-Sample). Gemessen wird die Quellposition aus /zustand/deck während des Laufs.
 //   1) Loop 4 ab Quell 8 (läuft ab Master-Beat 16), Länge 8 bei festem Start 8: der Loop läuft [8, 16). Der Fehlerfall davor:
 //      /k/deck/loop mit 8 setzt den Start an den Kopf (hier 10 + ...) und liefe [x, x + 8) mit x > 8.

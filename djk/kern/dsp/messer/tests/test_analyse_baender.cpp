@@ -1,4 +1,4 @@
-// Tests der sechs Analyse-Bänder (Scheibe 14, SCHNITTSTELLEN 6.2).
+// Tests der sechs Analyse-Bänder (Scheibe 14, INTERFACES 6.2).
 #include <algorithm>
 #include <cmath>
 #include <cstdint>

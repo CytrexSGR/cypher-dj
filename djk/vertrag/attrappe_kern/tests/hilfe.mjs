@@ -63,7 +63,7 @@ export function deckRein(n, { id0, ab, qb = 0, mid = ID, hs_id = `h${n}`, quelle
     sende(S(ab) - 50000, hoerschein(id0 + 1, hs_id, k, inhalt(mid))),
     sende(S(ab) - 40000, start(id0 + 2, quelle, n, ab, qb, { plan })),
   ];
-  // Bass einen Beat vor dem Fader setzen (Lesart n: I1 über die Schaltrampe; SCHNITTSTELLEN §14.1 Teil 1 bei Beat 447)
+  // Bass einen Beat vor dem Fader setzen (Lesart n: I1 über die Schaltrampe; INTERFACES §14.1 Teil 1 bei Beat 447)
   if (eqTief !== null) s.push(sende(S(ab) - 30000, teil(id0 + 3, quelle, plan, 0, `${k}/eq/tief`, ab - 1, 0, eqTief)));
   s.push(sende(S(ab) - 20000, teil(id0 + 4, quelle, plan, 1, `${k}/fader`, ab, 0, 0, { hs: hs_id })));
   return s;

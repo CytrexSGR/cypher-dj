@@ -1,5 +1,5 @@
 """Lautheit der Quelle (`material.json` `lautheit_quelle`) und der Fassung (`fassung.json` `lautheit`, daraus
-setzt der Kern beim Laden den Trim, SCHNITTSTELLEN §1.5, §13.2). Verfahren aus fa.py (`lautheit`: BS.1770-4
+setzt der Kern beim Laden den Trim, INTERFACES §1.5, §13.2). Verfahren aus fa.py (`lautheit`: BS.1770-4
 mit Gates, Echtspitze per 4-fach-Ueberabtastung, Crest = Spitze gegen RMS); `lufs_je_takt` ungegatet je Takt
 ab der Takt-Eins der Fassung (fa.py rechnet ab Sample 0, die Fassung zaehlt Takte ab `erste_eins_quell_beat`)."""
 import numpy as np

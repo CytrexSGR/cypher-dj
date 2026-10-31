@@ -1,4 +1,4 @@
-// MVP 2 (Spec docs/specs/2026-09-27-djk-mvp2-loops-design.md, ADR 025, SCHNITTSTELLEN §4.9): zwei Loop-Boxen im Kern.
+// MVP 2 (Spec docs/specs/2026-09-27-djk-mvp2-loops-design.md, ADR 025, INTERFACES §4.9): zwei Loop-Boxen im Kern.
 // Box b spielt ihren Loop phasenstarr zur Kern-Uhr in den Eingang von pad/b (vor Trim): Position = (Beat mod beats)
 // · LOOP_SPB, je Block aus dem Beat neu gerechnet. Start und Stopp wirken auf der nächsten Takt-Eins. Loops liegen bei
 // 128 BPM: dort liest die Box ganzzahlig (Direktweg, bitgenau); weicht die Karte ab, liest sie mit gebrochenem Schritt

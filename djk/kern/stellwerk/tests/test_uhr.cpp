@@ -1,4 +1,4 @@
-// Scheibe 11, Task 2: SimUhr trifft die Golden-Werte aus SCHNITTSTELLEN §1.3 (Abweichung <= 1e-6 Samples vor dem Runden).
+// Scheibe 11, Task 2: SimUhr trifft die Golden-Werte aus INTERFACES §1.3 (Abweichung <= 1e-6 Samples vor dem Runden).
 #include "pruef.h"
 #include "sim_uhr.h"
 

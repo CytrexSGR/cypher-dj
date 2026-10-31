@@ -1,4 +1,4 @@
-// Scheibe 20, Task 13: Hörschein-Register und Prüfer I3a (SCHNITTSTELLEN §17 I3a, §4.5). Aufbau nach test_pruefer.cpp:
+// Scheibe 20, Task 13: Hörschein-Register und Prüfer I3a (INTERFACES §17 I3a, §4.5). Aufbau nach test_pruefer.cpp:
 // ein Teil öffnet deck/2/fader (Fader von −200 auf 0 dB), PrueferI3 prüft ihn gegen Register und Deck-Modell.
 #include <cmath>
 #include <cstdio>

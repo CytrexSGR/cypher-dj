@@ -1,4 +1,4 @@
-// Golden-Werte SCHNITTSTELLEN.md §1.3: Abweichung <= 1e-6 Samples vor dem Runden.
+// Golden-Werte INTERFACES.md §1.3: Abweichung <= 1e-6 Samples vor dem Runden.
 // Referenzen mit 50 Stellen (Python decimal) aus den Formeln in §1.3 nachgerechnet am 2026-09-23.
 #include <cmath>
 

@@ -1,5 +1,5 @@
 // Scheibe 25: KI-Stopp, KI-Spur, KI-Stufe, Abbruch und /k/set/neu im Kern, offline über Kern::zyklus.
-//  1. Die Golden-Folge ki_stopp (SCHNITTSTELLEN §19.3, §4.7) ohne Läufer: alle cypher-Teile ab (Grund ki_stopp), die
+//  1. Die Golden-Folge ki_stopp (INTERFACES §19.3, §4.7) ohne Läufer: alle cypher-Teile ab (Grund ki_stopp), die
 //     KI-Spur (deck/3) wird nicht gesenkt (Entscheidung E-a, 2026-10-20; vorher über 4 Beats auf −200), weitere cypher-Teile abgelehnt
 //     (ki_gestoppt), leitstand geht weiter
 //     (Negativ-Kontrolle), /k/ki/frei nur von andreas.

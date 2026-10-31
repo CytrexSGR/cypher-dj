@@ -1,5 +1,5 @@
 // OSC-Nachrichten nach Adresse bauen und lesen. Typ-Zeichenketten und Feldnamen kommen allein aus
-// djk/vertrag/osc_adressen.ts (erzeugt von Scheibe 02 aus osc.json, SCHNITTSTELLEN §19.0); dieser Leitstand
+// djk/vertrag/osc_adressen.ts (erzeugt von Scheibe 02 aus osc.json, INTERFACES §19.0); dieser Leitstand
 // hält keine eigene Adresstabelle.
 import { ADRESSEN as VERTRAG } from '../../vertrag/osc_adressen.ts';
 import { kodiere, lies, type OscNachricht } from './osc.ts';

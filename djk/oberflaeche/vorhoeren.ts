@@ -1,6 +1,6 @@
 // Vorhören im Browser als Kern-Eingang (Plan 2026-10-10-mediathek-browser, S7). Der Vorhörer (djk/vorhoerer) spielt die
 // Datei und speist rueck_erz_8 des Kerns; erz/8 ist im Mixer Nur-Cue (Task 7.1): PFL fest an, nie Master. Damit wirken
-// cue/mix und cue/pegel am Kopfhörer (FiiO KA11, docs/architektur/stand/kopfhoerer-cue.md). Ohne Kopfhörer-Kante am
+// cue/mix und cue/pegel am Kopfhörer (FiiO KA11, docs/architecture/stand/kopfhoerer-cue.md). Ohne Kopfhörer-Kante am
 // Cue des Kerns: 409, nichts wird gestartet.
 import { execFile } from 'node:child_process';
 import fs from 'node:fs';

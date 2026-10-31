@@ -1,4 +1,4 @@
-// Kopplung vergibt der Leitstand, nicht das LLM (SCHNITTSTELLEN §14.1, ADR 023): Basstausch-Paare bekommen die Gruppe
+// Kopplung vergibt der Leitstand, nicht das LLM (INTERFACES §14.1, ADR 023): Basstausch-Paare bekommen die Gruppe
 // basstausch, die übrigen Teile des einblendenden Kanals b_rein, die des ausblendenden Kanals a_raus. Politik nach §16.1:
 // Ausblenden, Fader zu, Kill an und Stopp-Folgen 1 (zustand), alles andere 0 (musik).
 // Beleg für die Regel: das Beispiel §14.1 kommt ohne Gruppen hinein und mit genau seinen Gruppen und Politiken heraus

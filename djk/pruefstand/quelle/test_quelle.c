@@ -1,4 +1,4 @@
-// test_quelle.c: Signal und Ring-Block der Prüfquelle offline gegen die Rechnung (SCHNITTSTELLEN §1.1, §6.1, Z1).
+// test_quelle.c: Signal und Ring-Block der Prüfquelle offline gegen die Rechnung (INTERFACES §1.1, §6.1, Z1).
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

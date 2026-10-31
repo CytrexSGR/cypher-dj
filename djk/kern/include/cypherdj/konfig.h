@@ -1,4 +1,4 @@
-// kern.toml nach SCHNITTSTELLEN.md §2.1 (Scheibe 08). Unbekannter Schlüssel, falscher Typ, fehlende oder falsche
+// kern.toml nach INTERFACES.md §2.1 (Scheibe 08). Unbekannter Schlüssel, falscher Typ, fehlende oder falsche
 // `version` und Werte außerhalb ihres Bereichs sind ein Startfehler, der den Schlüssel nennt. Die Schlüsselliste ist
 // dieselbe wie djk/vertrag/konfig.schema.json $defs["kern.toml"] (Test test_konfig_schema).
 // Prüfinstanzen (ROADMAP Z2): Pfad ~/.config/cypherdj-<i>/kern.toml, udp_port + 1000·k, "/cypherdj/" -> "/cypherdj-<i>/".

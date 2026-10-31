@@ -1,5 +1,5 @@
 // pruefquelle: bekanntes Signal für den Chaos-Prüfstand (Scheibe 16). L Dauerton 220 Hz, R Klick je Schlag.
-//   --ring <pfad>       schreibt den Audio-Ring nach SCHNITTSTELLEN §6.1 wie der Kern (Stellvertreter des Kerns für die
+//   --ring <pfad>       schreibt den Audio-Ring nach INTERFACES §6.1 wie der Kern (Stellvertreter des Kerns für die
 //                       Notbahn: abschießbar, anhaltbar, ohne Kern-Code). w läuft über Neustarts weiter.
 //   --master <präfix>   spielt zugleich selbst über master_L/R an <präfix>L/R wie der Kern aus 10k (Notbahn daneben,
 //                       ADR 016 Nachtrag 2026-09-25); nur mit --ring.

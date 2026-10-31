@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // djk-spiel: Cyphers Leitstand-Werkzeug für die CLI-Hauptinstanz (Auftrag "spieler-cli", MVP.md Korrektur 2026-09-26).
-// Eine Zeile rein, JSON raus: verbindet sich mit dem Leitstand-Hub (SCHNITTSTELLEN §9), meldet sich an, schickt EIN
+// Eine Zeile rein, JSON raus: verbindet sich mit dem Leitstand-Hub (INTERFACES §9), meldet sich an, schickt EIN
 // Kommando als rpc (oder wartet auf eine gepushte takt-Nachricht), gibt den vollen daten-Teil der Antwort auf stdout
-// aus und beendet sich. Details, Rollen-Befund und fünf geprüfte Beispiel-Pläne: docs/architektur/stand/spieler-cli.md
+// aus und beendet sich. Details, Rollen-Befund und fünf geprüfte Beispiel-Pläne: docs/architecture/stand/spieler-cli.md
 //
 // Aufruf: node djk/spieler_cli/spieler.ts <kommando> [...args] [--ws-port <n>] [--timeout-ms <n>] [--max-s <n>]
 // Port: --ws-port ODER Umgebungsvariable DJK_WS_PORT (kein Hardcoding); genau einer von beiden muss den fertigen,

@@ -1,4 +1,4 @@
-// Laufzeit-Invarianten I1 und I2 (SCHNITTSTELLEN §17, ADR 023). Geprüft nach allen Teilen eines Samples (diskrete
+// Laufzeit-Invarianten I1 und I2 (INTERFACES §17, ADR 023). Geprüft nach allen Teilen eines Samples (diskrete
 // Änderungen: Setzen, Deck-Teile, Hand) und am Ende jedes Zyklus (Rampen). Die Hand wird nie blockiert.
 // I1: würde ein Planteil einen zweiten Kanal "Tief offen" machen, fällt er samt Gruppe; der Wert bleibt am Ist-Wert.
 //     Am Start-Sample heißt das: der Teil wird zurückgerollt und nie wirksam (nur Quittung 7).

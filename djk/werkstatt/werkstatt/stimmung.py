@@ -1,4 +1,4 @@
-"""Stimmung und Tonart der Quelle (SCHNITTSTELLEN §12.3 „Stimmung“, §13.2 `tonart`; ADR 012 Entscheidung 2).
+"""Stimmung und Tonart der Quelle (INTERFACES §12.3 „Stimmung“, §13.2 `tonart`; ADR 012 Entscheidung 2).
 
 Werkzeug 1 (eigen): Spektralspitzen und gewichtetes Kreismittel aus fa.py (`spitzen`, wie `stimmung_cent`),
 dazu die Richtungsschaerfe R = |Summe| / Summe der Betraege. Werkzeug 2: Essentia TuningFrequencyExtractor,

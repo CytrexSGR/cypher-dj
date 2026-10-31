@@ -3,7 +3,7 @@
 // Browser-Fallback <audio> aktiv, siehe server.ts), leitet Seiten-Befehle per UDP weiter und meldet Positionen,
 // Ladezustand und Fehler über Events (server.ts reicht sie per SSE an die Seite weiter).
 //
-// Befund Vorhörer (docs/architektur/stand/vorhoerer.md, B3): ein Loop greift nur, wenn die Wiedergabe B von innen
+// Befund Vorhörer (docs/architecture/stand/vorhoerer.md, B3): ein Loop greift nur, wenn die Wiedergabe B von innen
 // erreicht. Liegt die (geschätzte) aktuelle Position schon auf oder hinter B, springt loop() hier zuerst nach A,
 // bevor der Loop gesetzt wird — sonst bliebe die Loop bis zum Dateiende wirkungslos.
 import { type ChildProcess, spawn } from 'node:child_process';
@@ -19,7 +19,7 @@ export interface VorhoererOpt {
   name?: string; // --name: JACK-Namensbasis (Vorgabe cypherdj-vorhoerer; der Browser-Vorhörer heißt cypherdj-vorhoerer-mt)
   instanz?: string; // CYPHERDJ_INSTANZ für Kind + eigenen OSC-Port; Vorgabe process.env.CYPHERDJ_INSTANZ
   port?: number; // OSC-Port-Override, sonst aus instanz (47740 + 1000·k)
-  quantum?: number; // pw-jack -p, Vorgabe 256 wie docs/architektur/stand/vorhoerer.md „Starten“
+  quantum?: number; // pw-jack -p, Vorgabe 256 wie docs/architecture/stand/vorhoerer.md „Starten“
   log?: (z: Record<string, unknown>) => void;
 }
 
@@ -57,7 +57,7 @@ export class VorhoererKlient extends EventEmitter {
     const env: NodeJS.ProcessEnv = { ...process.env };
     if (this.opt.instanz !== undefined) env.CYPHERDJ_INSTANZ = this.opt.instanz;
     // pw-jack: der Vorhörer ist ein JACK-Client, läuft hier über PipeWires JACK-Kompatibilität (wie
-    // docs/architektur/stand/vorhoerer.md „Starten“: `pw-jack -p 256 …`).
+    // docs/architecture/stand/vorhoerer.md „Starten“: `pw-jack -p 256 …`).
     this.proc = spawn('pw-jack', ['-p', String(this.opt.quantum ?? 256), ...args], { env, stdio: ['ignore', 'pipe', 'pipe'] });
     this.proc.stdout?.on('data', (b: Buffer) => this.opt.log?.({ typ: 'vorhoerer_stdout', z: b.toString() }));
     this.proc.stderr?.on('data', (b: Buffer) => this.opt.log?.({ typ: 'vorhoerer_stderr', z: b.toString() }));

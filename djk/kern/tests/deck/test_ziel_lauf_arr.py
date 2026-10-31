@@ -1,5 +1,5 @@
 """Paket 1.13 Slice 2: der Arrangement-Teil von ziel_lauf_boxen.py (--arr ohne|warp). Geprüft wird, was ohne Prüfinstanz prüfbar ist: die Wiedergabe-Datei, die der
-Kern laden soll (Form wie D1 3.2/ SCHNITTSTELLEN §4.11), die Argumente und die Kontrollen der Auswertung. Der Lauf selbst (JACK, Kern, Abonnent) ist Sache der Zielabnahme."""
+Kern laden soll (Form wie D1 3.2/ INTERFACES §4.11), die Argumente und die Kontrollen der Auswertung. Der Lauf selbst (JACK, Kern, Abonnent) ist Sache der Zielabnahme."""
 import json
 import sys
 from pathlib import Path

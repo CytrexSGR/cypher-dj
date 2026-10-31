@@ -1,5 +1,5 @@
 // Paket 1.13 Warp, Slice 3a: die Quellen des Auto-Warps außerhalb des Katalogs. Nur lesen, nichts entscheiden.
-//  - leseKarte: die Werkstatt-Karte aus der Analyse-Ablage (<ablage>/<sha[:16]>/material.json, Format SCHNITTSTELLEN.md:1202). Schlüssel ist
+//  - leseKarte: die Werkstatt-Karte aus der Analyse-Ablage (<ablage>/<sha[:16]>/material.json, Format INTERFACES.md:1202). Schlüssel ist
 //    die volle sha256 des Clips; das Dokument trägt quelle.sha256 zur Gegenprobe (eine andere Kodierung desselben Stücks hat eine andere sha
 //    und damit keine Karte).
 //  - leseTraktor: das Raster aus Tabelle marke der Mediathek.
@@ -30,7 +30,7 @@ export function leseKarte(ablage: string | null | undefined, sha: string, bestan
     if (!Array.isArray(p) || p.length !== 2 || !endlich(p[0]) || !endlich(p[1])) return null;
     marker.push([p[0], p[1] - eins]);
   }
-  // Karten vor dem 2026-10-11 haben das Feld nicht (SCHNITTSTELLEN.md:1723): unbekannt zählt als unsicher
+  // Karten vor dem 2026-10-11 haben das Feld nicht (INTERFACES.md:1723): unbekannt zählt als unsicher
   return { karte: { marker, eins_unsicher: unsicher }, dauer_s: endlich(m.quelle.dauer_s) ? m.quelle.dauer_s : null };
 }
 
@@ -49,7 +49,7 @@ export function leseTraktor(mediathek: string | null | undefined, sha: string): 
     return z && endlich(z.start_s) && endlich(z.bpm) ? { anker_s: z.start_s, bpm: z.bpm } : null;
   } catch { return null; } finally { try { db?.close(); } catch { /* schon zu */ } }
 }
-// --- Slice 3b (D3): die Takt-Eins von Hand, aus und in den Bestand des DJ-Decks (bestand/<sha[:16]>/korrekturen.jsonl, SCHNITTSTELLEN.md §13.3) -----
+// --- Slice 3b (D3): die Takt-Eins von Hand, aus und in den Bestand des DJ-Decks (bestand/<sha[:16]>/korrekturen.jsonl, INTERFACES.md §13.3) -----
 type Karte = [number, number][];
 // Python round(): Halbe gehen zur geraden Zahl (2,5 → 2, 3,5 → 4, −2,5 → −2); die Kette liest ab_quell_beat so (kette.py)
 export const rundeGerade = (x: number): number => Math.abs(x % 1) === 0.5 ? 2 * Math.round(x / 2) : Math.round(x);

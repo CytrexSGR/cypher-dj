@@ -1,4 +1,4 @@
-// node --test tests/uhr.test.mjs: Tempo-Karte gegen die Golden-Werte aus SCHNITTSTELLEN §1.3
+// node --test tests/uhr.test.mjs: Tempo-Karte gegen die Golden-Werte aus INTERFACES §1.3
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Karte, llround, taktVon, schlagVon, phraseVon, MAX_SEGMENTE } from '../uhr.mjs';

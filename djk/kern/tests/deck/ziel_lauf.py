@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Abnahme der Scheibe 31 am Ziel, stumm (SCHNITTSTELLEN §19.5, ROADMAP §8.4): eigene Null-Senke mit vier Kanälen je
+"""Abnahme der Scheibe 31 am Ziel, stumm (INTERFACES §19.5, ROADMAP §8.4): eigene Null-Senke mit vier Kanälen je
 Lauf, Kern mit Prüfmodus an eigenen Ausgängen (10k: --master <senke>:playback_F --cue <senke>:playback_R, Selbst-Wächter
 100 ms wie die Unit), Notbahn daneben (ADR 016 Nachtrag, --daneben --vor cypherdj-kern-<i>:notbahn_vor, Vorlage
 djk/kern/tests/neustart/serie.sh und tests/ziel/lauf25.sh), JACK-Aufnehmer mit vier Kanälen am Monitor der Senke (cypherdj-aufnehmer4, Scheibe 18), dazu ein
@@ -29,7 +29,7 @@ Arten (--art):
            der neue Kern mit einblenden muss); die Dauer bis zum ersten Zyklus meldet der Kern selbst (Treiber-Frames).
   kosten   Callback-Kosten mit vier spielenden Decks (Deck 1 mit vier Stems, Decks 2 bis 4 Basis), alle Fader offen,
            --sekunden lang; Verteilung aus der Schlusszeile des Kerns (cb_p50/p99/p999/max, wie kosten25.sh aus 25);
-           Zusage ARCHITEKTUR §7: p99,9 unter 1 067 µs, Maximum unter 2 667 µs bei Quantum 256.
+           Zusage ARCHITECTURE §7: p99,9 unter 1 067 µs, Maximum unter 2 667 µs bei Quantum 256.
   keylock  Keylock Task 4.2: --material klick (Klick-Fassung), sinus (Sinus links, Klick rechts) oder sinusrein (Sinus
            1000 Hz auf beiden Kanälen); Start Beat 32 bei 128, Rampe 128 -> 132 ab Beat 48 über 32 Beats, bis Beat 112.
            Lage je Klick (Korrelation, Teil-Sample) gegen das Ideal ±12, auf der Basis 0 (Direktweg), Mittel ausgewiesen;
@@ -645,7 +645,7 @@ def art_neustart(a: Aufbau, arg) -> dict:
 
 def werte_neustart(o: Path, lauf: dict) -> tuple[dict, int]:
     """Fenster 5 s vor bis 10 s nach dem Abschuss: jeder Klick des Decks da und auf dem Versatz des Prüfklicks
-    (±1 Sample, ARCHITEKTUR §7 Raster ≤ 1 Sample); Lücken des Kerns im Fenster (/e/luecke) machen den Lauf ungültig.
+    (±1 Sample, ARCHITECTURE §7 Raster ≤ 1 Sample); Lücken des Kerns im Fenster (/e/luecke) machen den Lauf ungültig.
     Stille misst der Klick selbst: ein fehlender Klick im Fenster ist die Stille (das Material ist zwischen den
     Schlägen still, ein Stille-Messer auf Dauersignal passt hier nicht)."""
     x, meta = aufnahme(o)
@@ -669,7 +669,7 @@ def werte_neustart(o: Path, lauf: dict) -> tuple[dict, int]:
            "neustart_ms": round((lauf["neu_mono_ns"] - lauf["kill_mono_ns"]) / 1e6, 1),
            "kern_luecken_im_lauf": len(luecken), "aufnahme_luecken": meta["luecken"]}
     erg["start_versatz"], erg["start_versatz_beat_danach"] = startsample_treue(x, s_a)
-    # ARCHITEKTUR §7 „Kern wieder hörbar ≤ 250 ms samt Material“: Ausfall vom letzten Anker bis zum ersten Zyklus des
+    # ARCHITECTURE §7 „Kern wieder hörbar ≤ 250 ms samt Material“: Ausfall vom letzten Anker bis zum ersten Zyklus des
     # neuen Kerns in Treiber-Frames, wie der Kern selbst ihn meldet (main.cpp „fortgesetzt auf dem Anker“)
     fort = [z for z in (o / "kern.err").read_text(errors="replace").splitlines() if "fortgesetzt auf dem Anker" in z]
     d = int(fort[-1].split(" Frames laut Treiber")[0].rsplit(" ", 1)[1]) if fort else None
@@ -1228,7 +1228,7 @@ def sinus_rein(beats: int) -> np.ndarray:
 
 
 def fassung_schreiben(ab: Path, mid: str, y: np.ndarray, titel: str, warnung: str) -> dict:
-    """Schreibt ein Material als Fassung 128000_r1 (Basis 128, erster Schlag Frame 0) nach SCHNITTSTELLEN §6.4, mit
+    """Schreibt ein Material als Fassung 128000_r1 (Basis 128, erster Schlag Frame 0) nach INTERFACES §6.4, mit
     den JSON-Bausteinen von klick_fassung.py; atomar über .<mid>.tmp und rename."""
     import hashlib
     sys.path.insert(0, str(HIER))

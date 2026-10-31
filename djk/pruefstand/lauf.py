@@ -158,7 +158,7 @@ def notbahn_aufruf(programm_pfad, senke, art, inst, kante=True):
 
 
 def aufnehmer_aufruf(senke, ordner, sekunden, quantum, inst, bereit):
-    """Befehl und Umgebung des Aufnehmers aus Scheibe 01 am Monitor der eigenen Senke (SCHNITTSTELLEN §19.5).
+    """Befehl und Umgebung des Aufnehmers aus Scheibe 01 am Monitor der eigenen Senke (INTERFACES §19.5).
     CYPHERDJ_INSTANZ setzt seine Gruppe (node.group cypherdj-<i>, Scheibe 01 Entscheidung 11): ohne sie hinge er in
     der Gruppe der Vorgabe-Instanz, an einem anderen Treiber als Quelle und Notbahn."""
     argv = ["/usr/bin/pw-jack", "-p", str(quantum), str(AUFNEHMER), "--quelle", f"{senke}:monitor_F", "--datei",

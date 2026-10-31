@@ -1,4 +1,4 @@
-// Hand-Weg (Scheibe 19): Mapping-Datei nach SCHNITTSTELLEN §7.2, geprüft gegen die Regler-Tabelle des Stellwerks
+// Hand-Weg (Scheibe 19): Mapping-Datei nach INTERFACES §7.2, geprüft gegen die Regler-Tabelle des Stellwerks
 // (§1.5, Scheibe 11), die Tasten-Namen (§5.8) und die LED-Namen (§7.4). Laden ist Nicht-Echtzeit (§4.7 /k/mapping);
 // das fertige Mapping ist ein Block fester Größe ohne Zeiger ins Freie und wird im Callback nur gelesen.
 //

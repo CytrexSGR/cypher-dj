@@ -1,4 +1,4 @@
-// Regler-Pfade mit Einheit, Bereich, Vorgabe und „nur Hand“ nach SCHNITTSTELLEN §1.5, dazu Kanal eines Pfads und
+// Regler-Pfade mit Einheit, Bereich, Vorgabe und „nur Hand“ nach INTERFACES §1.5, dazu Kanal eines Pfads und
 // „leiser machen“ im Sinn der Autonomie-Positivliste (§10 Stufe 1: Fader oder Send nach unten, Kill an).
 // Die Pfadmenge gleicht tests/regler_info.test.ts mit dem Muster regler_pfad aus djk/vertrag/schemas/defs.schema.json ab.
 
@@ -75,6 +75,12 @@ for (let n = 1; n <= 8; n++) {   // 1.10 Slice 1 (§1.5): Gruppen-Regler des Arr
   tabelle.set(`grp/${n}/solo`, { pfad: `grp/${n}/solo`, kanal: null, ...r('schalter', 0, 1, 0) });
 }
 tabelle.set('pm/fader', { pfad: 'pm/fader', kanal: null, ...r('db', -200, 6, 0) });
+// S5r (§1.5): acht Graph-Regler <kanal>/bk/<1..8> auf Kanälen, die einen Baukasten-Graphen annehmen (deck/1..4 Effekt,
+// erz/1,2,3,5,6,7 und pad/1,2 Instrument; nicht erz/4, erz/8), alle dürfen, 0..1, Vorgabe 0,5
+export const BK_KANAELE: readonly string[] = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'erz/1', 'erz/2', 'erz/3', 'erz/5', 'erz/6', 'erz/7', 'pad/1', 'pad/2'];
+for (const k of BK_KANAELE) {
+  for (let n = 1; n <= 8; n++) tabelle.set(`${k}/bk/${n}`, { pfad: `${k}/bk/${n}`, kanal: k, ...r('linear', 0, 1, 0.5) });
+}
 
 export const REGLER: ReadonlyMap<string, ReglerInfo> = tabelle;
 

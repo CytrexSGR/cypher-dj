@@ -1,4 +1,4 @@
-# cypherdj-leitstand, Vorgaben nach SCHNITTSTELLEN §2.1 (gesetzt, nicht gemessen, wo nicht anders vermerkt).
+# cypherdj-leitstand, Vorgaben nach INTERFACES §2.1 (gesetzt, nicht gemessen, wo nicht anders vermerkt).
 # Unbekannte Schlüssel sind ein Startfehler. Ports ohne Prüfinstanz; mit CYPHERDJ_INSTANZ=<a..i>
 # verschiebt der Leitstand sie um 1000·k (ROADMAP Z2).
 version = 1

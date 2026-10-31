@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Klick-Fassung für die Decks (Scheibe 31): schreibt ein Material mit einer Fassung in einen Arbeitsbestand nach
-SCHNITTSTELLEN.md §6.4, §13.1 und §13.2, mit Klicks genau auf dem Raster der Fassung:
+INTERFACES.md §6.4, §13.1 und §13.2, mit Klicks genau auf dem Raster der Fassung:
 
     Klick des Quell-Beats q beginnt bei Frame llround(erster_schlag_frame + q · 60 / basis_bpm · 48000)   (§13.1)
 

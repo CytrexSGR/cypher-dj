@@ -1,4 +1,4 @@
-// Pegelmesser je Kanal für /pegel (SCHNITTSTELLEN 5.6): Spitze, Echtspitze, LUFS M und S
+// Pegelmesser je Kanal für /pegel (INTERFACES 5.6): Spitze, Echtspitze, LUFS M und S
 // über libebur128, drei Bandpegel aus den Bandsignalen des Isolators. Scheibe 14.
 // Anlegen und Zerstören allokieren (ebur128_init): nie im Callback. verarbeite() ist echtzeitfest,
 // schnappschuss() allokiert nicht, kostet aber eine Summe über 3 s Audio (Kosten im Bericht).
@@ -8,7 +8,7 @@
 
 namespace cypherdj::dsp {
 
-inline constexpr float kStummDb = -200.0f;   // SCHNITTSTELLEN 1.2: stumm = -200,0
+inline constexpr float kStummDb = -200.0f;   // INTERFACES 1.2: stumm = -200,0
 inline constexpr int kMesserMaxBlock = 1024; // größere Blöcke werden intern geteilt
 
 // Felder von /pegel ,sfffffff ohne kanal, in Vertragsreihenfolge (5.6).

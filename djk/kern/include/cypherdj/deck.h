@@ -1,4 +1,4 @@
-// Ein Deck im Direktweg (SCHNITTSTELLEN.md §4.4, §5.5, §13.1; ADR 007, ADR 020 Entscheidung 1): liest das
+// Ein Deck im Direktweg (INTERFACES.md §4.4, §5.5, §13.1; ADR 007, ADR 020 Entscheidung 1): liest das
 // eingeblendete Material am Soll-Lesekopf ohne Stretcher. Mit Stems klingt deren Summe (Reihenfolge STEM_NAMEN, je
 // Stem mit seinem Pegel stem/*), sonst die Basis-Datei. Scheibe 31; Loop, Roll, Sprung, Hotcue kommen mit 38.
 // Echtzeitfest: keine Allokation, keine Sperre, kein Systemaufruf.

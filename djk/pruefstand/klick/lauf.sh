@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Ein stummer Prüflauf der Scheibe 01 an eigener Null-Senke (SCHNITTSTELLEN §19.5, ROADMAP §8.4, §8.5):
+# Ein stummer Prüflauf der Scheibe 01 an eigener Null-Senke (INTERFACES §19.5, ROADMAP §8.4, §8.5):
 # Senke anlegen, Notbahn, Kern, Aufnehmer am Monitor der Senke, Prüfer über OSC, Auswertung, Senke entladen.
 # Aufruf: lauf.sh <art> <lauf-nr> <ausgabe-ordner>
 #   klick            Kern mit --pruefmodus, /test/klick, 101 Schläge, Auswertung gegen llround(sample_at(b))

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Erzeugt die Golden-Folgen der Scheibe 09 (SCHNITTSTELLEN.md §19.3 ohne uhr_golden, storno, protokollfehler, die
+"""Erzeugt die Golden-Folgen der Scheibe 09 (INTERFACES.md §19.3 ohne uhr_golden, storno, protokollfehler, die
 Scheibe 02 mit erzeuge_folgen.py liefert) nach folgen/<name>.jsonl und das Verzeichnis folgen/INDEX.json über alle
 Folgen (auch die drei von 02).
 

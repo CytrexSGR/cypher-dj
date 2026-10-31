@@ -1,4 +1,4 @@
-// Prüft die zur Bauzeit aus baender.json eingebauten Koeffizienten (Scheibe 14, SCHNITTSTELLEN 6.2).
+// Prüft die zur Bauzeit aus baender.json eingebauten Koeffizienten (Scheibe 14, INTERFACES 6.2).
 #include <cmath>
 #include <cstdio>
 

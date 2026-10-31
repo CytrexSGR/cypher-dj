@@ -1,6 +1,6 @@
 # Golden sequences: format and runner rules (Contract 1)
 
-Based on: `docs/architektur/SCHNITTSTELLEN.md` §19.0 (format) and §19.3 (mandatory sequences). Structure per line:
+Based on: `docs/architecture/INTERFACES.md` §19.0 (format) and §19.3 (mandatory sequences). Structure per line:
 `djk/vertrag/folge.schema.json`. Checking all files: `python3 djk/vertrag/pruefe_folgen.py`. Every sequence runs against the core mock (slice 13) and against the core (runner `attrappe_leitstand.py`, slice 08).
 
 1. **File.** `djk/vertrag/folgen/<name>.jsonl`, UTF-8, one JSON line per step. The runner works through the steps in file order.
@@ -58,5 +58,5 @@ Additive to points 1 to 12: no existing line changes its meaning. Structure per 
     m. Whether the fallback ends already when a command arrives at the deck or only when it is executed: open, the window begins at sending (`rueckfall`).
     n. Whether I1 checks a setting with its target value (dossier 09 §5.3 V1) or with the value of its switch ramp (dossier 09, re-check NK3: plan §14.1 would then have 192 samples of sub twice at S): open. No sequence closes a bass by setting it at the same sample at which a channel becomes audible while another is fully open. The setting lies one beat earlier, as long as the channel still lies behind the closed fader (`b_rein` in `folgen_bau.py`, `hand_stoppt_a_raus`).
 
-    **Decided 2026-09-25 (Andreas; sheet `docs/architektur/entwuerfe/2026-09-25-lesarten-09.md`):**
-    b: yes, the rejection at the start drags the group along (SCHNITTSTELLEN §4.3 field 11). e: the waiting part falls at the grab, status 7 `hand` (§4.3, ADR 023). n: I1 checks via the switch ramp (§17); the rule §14.4 sets B's bass one beat before S (`herleitung.expandiere`, `expandiere_sicher.jsonl`). a, f: each reported once. i: `""`. j: source `leitstand`. l: no `/e/frist`. m: end at execution. c, d, g, h, k: as above. **Still open:** the sequences that keep b, e, n, a, f, i, l, m open with `erlaube` or status `null` are to be sharpened to `erwarte`/`erwarte_nicht` (belongs to slice 20, or before 13; until then they let both readings through).
+    **Decided 2026-09-25 (Andreas; sheet `docs/architecture/entwuerfe/2026-09-25-lesarten-09.md`):**
+    b: yes, the rejection at the start drags the group along (INTERFACES §4.3 field 11). e: the waiting part falls at the grab, status 7 `hand` (§4.3, ADR 023). n: I1 checks via the switch ramp (§17); the rule §14.4 sets B's bass one beat before S (`herleitung.expandiere`, `expandiere_sicher.jsonl`). a, f: each reported once. i: `""`. j: source `leitstand`. l: no `/e/frist`. m: end at execution. c, d, g, h, k: as above. **Still open:** the sequences that keep b, e, n, a, f, i, l, m open with `erlaube` or status `null` are to be sharpened to `erwarte`/`erwarte_nicht` (belongs to slice 20, or before 13; until then they let both readings through).

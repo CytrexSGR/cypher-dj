@@ -1,4 +1,4 @@
-// Die Kern-Uhr als Uhr des Stellwerks (SCHNITTSTELLEN.md §1.1, §1.3; djk/kern/stellwerk/include/cypherdj/stellwerk/uhr.h,
+// Die Kern-Uhr als Uhr des Stellwerks (INTERFACES.md §1.1, §1.3; djk/kern/stellwerk/include/cypherdj/stellwerk/uhr.h,
 // Scheibe 11). Das Stellwerk hält keine eigene Tempo-Karte: es fragt je Zyklus die Karte, die im Kern gerade gilt
 // (Grundkarte plus wartende Tempo-Rampen, Scheibe 08). Keine Allokation, keine Sperre: im Callback erlaubt. Scheibe 25.
 #pragma once

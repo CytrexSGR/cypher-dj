@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Auswertung des Lückenzählers am Ziel (Scheibe 08, SCHNITTSTELLEN.md §5.4, §5.9, ARCHITEKTUR §7).
+"""Auswertung des Lückenzählers am Ziel (Scheibe 08, INTERFACES.md §5.4, §5.9, ARCHITECTURE §7).
 
 Der Kern zählt Frame-Lücken selbst (der JACK-Xrun-Rückruf ist unter pipewire-jack blind, 10 Probe b). Das unabhängige
 Instrument ist das Ziel: ein Zyklus, den der Kern auslässt, fehlt ihm (seine Uhr ist innen stetig, ADR 004), der

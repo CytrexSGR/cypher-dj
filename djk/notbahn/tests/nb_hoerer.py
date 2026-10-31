@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Scheibe 10: empfängt /nb ,iiih (SCHNITTSTELLEN §5.10) auf einem UDP-Port und schreibt je Nachricht eine Zeile
+"""Scheibe 10: empfängt /nb ,iiih (INTERFACES §5.10) auf einem UDP-Port und schreibt je Nachricht eine Zeile
 '<mono_s> <zustand> <takte> <generation> <w>' nach <datei>, bis SIGTERM. Aufruf: nb_hoerer.py <port> <datei>"""
 import signal, socket, struct, sys, time
 port, datei = int(sys.argv[1]), sys.argv[2]

@@ -1,4 +1,4 @@
-// WebSocket-Hub (SCHNITTSTELLEN §9): Umschlag mit seq je Verbindung und Richtung, Anmeldung per hallo, Rollen,
+// WebSocket-Hub (INTERFACES §9): Umschlag mit seq je Verbindung und Richtung, Anmeldung per hallo, Rollen,
 // rpc mit rpc_antwort/rpc_fehler. Jede eingehende Nachricht wird gegen das WS-Schema aus Scheibe 09 geprüft
 // (Verstoß: rpc_fehler mit code "form", §16.2). ansage und anzeige sind nur lesend (§9.2); zuruf von ansage ist
 // die eine Ausnahme, die §9.4 ausdrücklich nennt.

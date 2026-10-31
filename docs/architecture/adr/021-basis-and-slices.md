@@ -3,7 +3,7 @@
 - **Status:** accepted
 - **Date:** 2026-09-23
 - **Requirements carried:** A1, A2, A3, A13, A26
-- **Related to:** all; ARCHITEKTUR §1, §9
+- **Related to:** all; ARCHITECTURE §1, §9
 
 ## Context
 
@@ -23,14 +23,14 @@ estimates are uncalibrated.
    core goal A1/A2/A13 and the doubly weighted A4 most precisely. The adoption lists of the three judges coincide:
    **core and operation from "Robust", deck and hand from "Play", AI layer from "AI"**. Thus the result does not depend
    on the choice of the basis, only the order of the slices.
-2. **Order of the slices** (ARCHITEKTUR §9.2):
+2. **Order of the slices** (ARCHITECTURE §9.2):
    - **Slice 0, preconditions (silent, in parallel):** M3 (R3 in working threads as a JACK client), M13 (grid of the
      MiniMax songs, also `sofa-abend`), M15 (choice as a tool call, 30 min simulation), M2 (seam), M10 if quiet, M14 when
      the GPU machine is free, M1 as soon as device and yes are there. Reason: judge 3 ("nobody makes the deck real-time
      test a precondition"), judges 1 and 2 (grid, choice, generation unmeasured).
    - **Slice 1, three work items in parallel after a short shared lead-in:** first **V0** (one owner, roughly half a
      session day): test reference prototypes into the repo, `djk/third_party/`, machine-readable contract `djk/vertrag/`
-     with golden sequences, test hand input and ring mock (`SCHNITTSTELLEN.md` §19.0). Then core (with Notbahn (the
+     with golden sequences, test hand input and ring mock (`INTERFACES.md` §19.0). Then core (with Notbahn (the
      fallback path), direct-path decks, chaos test rig v1), Leitstand with MCP and player against a **core mock**, and
      the workshop chain v1. Reason: parallelism is Andreas' engine; the contract makes it possible, but only if there is
      exactly one machine-readable truth (two sessions that each generate `djk/vertrag/` themselves deliver two).
@@ -44,10 +44,10 @@ estimates are uncalibrated.
      late in all drafts).
    - **Slice 5:** tempo and keylock live. Then workshop in the set (6), own track (7), plugins (8), outside world and
      surface (9).
-3. **Cut list** per slice (ARCHITEKTUR §9.3); never cut: invariants I1 to I3, deadline guard, listening-certificate
+3. **Cut list** per slice (ARCHITECTURE §9.3); never cut: invariants I1 to I3, deadline guard, listening-certificate
    requirement, stop key, Notbahn.
 4. **Effort** in session days (one session, one working day), estimate, uncalibrated; critical path up to slice 4
-   roughly 16.5 session days with three parallel sessions, V0 included (calculated from ARCHITEKTUR §8.1).
+   roughly 16.5 session days with three parallel sessions, V0 included (calculated from ARCHITECTURE §8.1).
 
 ## Alternatives and why not
 
@@ -63,14 +63,14 @@ estimates are uncalibrated.
 - Up to slice 5 the set runs at a fixed tempo (base 128 or another fixed base); A9 is until then carried only as "one
   fixed set tempo" and noted that way in the journal.
 - The core mock is a work item of its own: it speaks the contract, simulates clock and receipts, without sound.
-- The listening session needs Andreas' time and yes (question 3 in ARCHITEKTUR §13).
+- The listening session needs Andreas' time and yes (question 3 in ARCHITECTURE §13).
 - **Secure the reference prototypes before the start:** no file under `proben/` is in git (measured 2026-09-23: `git ls-files proben`
   → 0, `du -sh proben` 18 GB); `vendor/` in 03 and 04 is excluded via `.gitignore`, `*.log` via the root `.gitignore`
   (the evidence logs such as `c_drift.log` need an exception). A session in a worktree or a fresh clone would see
   neither prototypes nor evidence. V0 commits code and result files of the tests (without WAV, venv, vendor, raw
   recordings); the plans name prototypes only with a repo path.
 - **Acceptances measurable:** every acceptance names load profile, duration, quantum, external-load log and repetition
-  rule (ARCHITEKTUR §9.2); runs under external load count as provisional and are repeated in M10.
+  rule (ARCHITECTURE §9.2); runs under external load count as provisional and are repeated in M10.
 
 ## Evidence
 

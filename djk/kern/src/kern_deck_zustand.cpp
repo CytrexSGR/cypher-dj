@@ -1,5 +1,5 @@
-// Scheibe 31: die Decks im Neustart-Zustand (SCHNITTSTELLEN.md §6.3 „je Deck Material, Basis, läuft, Anker Master-Beat
-// ↔ Quell-Beat“; ARCHITEKTUR §7 „blendet Material ein und setzt auf dem Raster fort“). decks_abbild() und
+// Scheibe 31: die Decks im Neustart-Zustand (INTERFACES.md §6.3 „je Deck Material, Basis, läuft, Anker Master-Beat
+// ↔ Quell-Beat“; ARCHITECTURE §7 „blendet Material ein und setzt auf dem Raster fort“). decks_abbild() und
 // decks_wiederherstellen() laufen im Echtzeit-Fach des Zustands (kern_zustand.cpp, Scheibe 18 und 25): keine Allokation,
 // keine Sperre. decks_nachladen() läuft einmal vor jack_activate und blendet das Material über den Lader ein.
 #include <cmath>
@@ -120,7 +120,7 @@ void Kern::decks_wiederherstellen(const cdj_z_echtzeit& f) noexcept {
 }
 
 // Nicht-Echtzeit, vor jack_activate: Material der Decks aus dem Zustand einblenden (ohne sha256: es lag schon geprüft
-// im Arbeitsbestand; ARCHITEKTUR §7 „Kern wieder hörbar ≤ 250 ms samt Material“), Lesekopf auf den Anker.
+// im Arbeitsbestand; ARCHITECTURE §7 „Kern wieder hörbar ≤ 250 ms samt Material“), Lesekopf auf den Anker.
 int Kern::decks_nachladen(Lader& lader) {
   DeckWerk& w = *decks_;
   const Karte& k = plan_.karte();

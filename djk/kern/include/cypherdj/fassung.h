@@ -1,4 +1,4 @@
-// Fassungen im Arbeitsbestand (SCHNITTSTELLEN.md §6.4, §13.1, §13.2): Pfade, fassung.json lesen, Raster der Fassung.
+// Fassungen im Arbeitsbestand (INTERFACES.md §6.4, §13.1, §13.2): Pfade, fassung.json lesen, Raster der Fassung.
 // Scheibe 31. lies_fassung() liest eine Datei und allokiert: nur im Lade-Faden oder vor dem Start. frame_von() und
 // quell_beat_von() sind echtzeitfest.
 #pragma once

@@ -1,4 +1,4 @@
-/* Z2 Prüfinstanzen (docs/architektur/ROADMAP.md Abschnitt 3): CYPHERDJ_INSTANZ leer oder ein Buchstabe a bis i.
+/* Z2 Prüfinstanzen (docs/architecture/ROADMAP.md Abschnitt 3): CYPHERDJ_INSTANZ leer oder ein Buchstabe a bis i.
  * Gesetzt: "cypherdj/" in festen Pfaden wird "cypherdj-<i>/", JACK-Namen bekommen "-<i>", Ports + 1000*k (a=1 ... i=9).
  * Gemeinsam für C (Notbahn) und C++ (Kern). */
 #ifndef CYPHERDJ_INSTANZ_H
@@ -33,7 +33,7 @@ static inline void cdj_shm_ordner(char* aus, size_t n, const char* i) {
   else snprintf(aus, n, "/dev/shm/cypherdj");
 }
 
-/* UDP-Port aus SCHNITTSTELLEN.md §2 für diese Instanz */
+/* UDP-Port aus INTERFACES.md §2 für diese Instanz */
 static inline int cdj_port(int basis, const char* i) { return basis + 1000 * cdj_instanz_k(i); }
 
 #endif

@@ -1,5 +1,5 @@
 // Scheibe 25: Planteile im Callback, offline über Kern::zyklus (ohne JACK). Die Golden-Folge teil_rampe
-// (SCHNITTSTELLEN §19.3) ohne ihre Deck- und Hörschein-Zeilen, dazu der Prüfklick (Z1) im Kanal deck/2:
+// (INTERFACES §19.3) ohne ihre Deck- und Hörschein-Zeilen, dazu der Prüfklick (Z1) im Kanal deck/2:
 //   Teil 5 setzt deck/2/fader bei Beat 64 auf −15 dB, Teil 6 fährt ihn bis Beat 96 linear auf 0 dB (Gruppe b_rein).
 // Erwartet: Quittungen 1, 2 (Sample 1 440 000), 3 (Teil 5 nach der 10-ms-Schaltrampe, Teil 6 bei 2 160 000); /e/regler
 // bei Teilstart mit Halter plan:p1 und am Ende frei; am Master ist der Klick bei Beat 80 um 7,5 dB leiser als bei Beat 96

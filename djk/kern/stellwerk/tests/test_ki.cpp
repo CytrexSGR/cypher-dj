@@ -1,4 +1,4 @@
-// Scheibe 11, Task 9: KI-Stopp, KI-Frei und KI-Spur nach SCHNITTSTELLEN §4.7 und §7.3 Punkt 8.
+// Scheibe 11, Task 9: KI-Stopp, KI-Frei und KI-Spur nach INTERFACES §4.7 und §7.3 Punkt 8.
 #include <cstring>
 
 #include "pruef.h"

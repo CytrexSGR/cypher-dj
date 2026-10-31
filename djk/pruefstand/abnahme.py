@@ -5,7 +5,7 @@ Bericht, dazu der P1-Vergleich der zwei jüngsten p1-kern-Läufe. Reihenfolge wi
 
   abnahme.py [laeufe-ordner]   schreibt die Tabelle auf stdout; Rückgabewert 0 erfüllt, 1 nicht erfüllt
 
-„Vorläufig“ (ARCHITEKTUR §9.2, ROADMAP §8.5): ein Lauf mit Fremdlast über 4 zählt, wird aber markiert und kommt in M10
+„Vorläufig“ (ARCHITECTURE §9.2, ROADMAP §8.5): ein Lauf mit Fremdlast über 4 zählt, wird aber markiert und kommt in M10
 wieder. Ein P1-Vergleich außerhalb der Spanne gilt als „vorläufig“, wenn einer der beiden Läufe vorläufig war (unter
 Fremdlast ist Reproduzierbarkeit nicht zu zeigen), sonst als nicht erfüllt.
 """

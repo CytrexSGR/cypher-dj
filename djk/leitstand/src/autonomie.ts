@@ -1,4 +1,4 @@
-// Autonomie-Stufen als Positivliste (SCHNITTSTELLEN §10, ADR 013 Entscheidung 4). Befangen: diese Datei regelt meinen
+// Autonomie-Stufen als Positivliste (INTERFACES §10, ADR 013 Entscheidung 4). Befangen: diese Datei regelt meinen
 // eigenen Spielraum. Darum steht hier nur, was ich darf; alles andere wird Vorschlag oder abgelehnt.
 // Stufe 2 füllt Scheibe 56 (eigene Spur); bis dahin gilt auf Stufe 2 dasselbe wie auf Stufe 1 (strenger, nie lockerer).
 import { autonomieText } from './hinweise.ts';

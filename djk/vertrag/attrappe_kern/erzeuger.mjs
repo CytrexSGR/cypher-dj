@@ -1,4 +1,4 @@
-// Erzeuger-Ströme und -Fenster (SCHNITTSTELLEN §4.8, I3c) und Einzelschüsse (§4.6, I3b). Die Attrappe spielt nichts
+// Erzeuger-Ströme und -Fenster (INTERFACES §4.8, I3c) und Einzelschüsse (§4.6, I3b). Die Attrappe spielt nichts
 // ab und schickt kein MIDI; sie führt Buch, ersetzt Fenster, zählt und prüft die Hörschein-Pflicht.
 
 import fs from 'node:fs';

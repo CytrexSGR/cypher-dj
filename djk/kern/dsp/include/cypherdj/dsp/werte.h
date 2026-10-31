@@ -1,4 +1,4 @@
-// Werte und Einheiten des Kanalzugs (SCHNITTSTELLEN.md §1.1, §1.2, §1.5, §1.6).
+// Werte und Einheiten des Kanalzugs (INTERFACES.md §1.1, §1.2, §1.5, §1.6).
 // Diese Datei ist Teil der öffentlichen Naht der Bibliothek cypherdj_dsp (Scheibe 04).
 // Spätere Scheiben (14, 22) ergänzen nur, sie ändern keine Signatur.
 #pragma once

@@ -1,4 +1,4 @@
-// Plan MVP 2 Task 5: Loop-OSC im Netz (SCHNITTSTELLEN §4.9, §5.11, ADR 025). /k/loop/laden liest den Loop aus dem
+// Plan MVP 2 Task 5: Loop-OSC im Netz (INTERFACES §4.9, §5.11, ADR 025). /k/loop/laden liest den Loop aus dem
 // Loop-Ordner und reicht ihn als Zeiger weiter; Fehler als /q Status 6. start/stopp gehen als Befehl durch. LOOP wird
 // /e/loop, LOOP_ALT wird freigegeben (ASan-Bau: kein Leck).
 #include <filesystem>

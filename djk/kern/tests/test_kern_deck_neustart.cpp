@@ -1,5 +1,5 @@
-// Scheibe 31: Decks über einen Kern-Neustart (SCHNITTSTELLEN §6.3 „je Deck Material, Basis, läuft, Anker Master-Beat ↔
-// Quell-Beat“, ARCHITEKTUR §7 „blendet Material ein und setzt auf dem Raster fort“). Aufbau wie test_kern_neustart
+// Scheibe 31: Decks über einen Kern-Neustart (INTERFACES §6.3 „je Deck Material, Basis, läuft, Anker Master-Beat ↔
+// Quell-Beat“, ARCHITECTURE §7 „blendet Material ein und setzt auf dem Raster fort“). Aufbau wie test_kern_neustart
 // (Scheibe 18): Bezug k0 ohne Absturz; k1 mit Zustandsdatei bis zum „kill -9“; k2 setzt nach 40 ms Pause aus dem
 // Zustand fort und blendet das Material der Decks vorher wieder ein (decks_nachladen). Deck 1 läuft beim Absturz,
 // Deck 2 hat einen wartenden Start (Beat 50,5). Verglichen werden Klick-Einsätze in Treiber-Frames: jeder Einsatz von

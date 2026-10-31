@@ -1,4 +1,4 @@
-// cypherdj-aufnehmer: JACK-Aufnehmer am Ziel (SCHNITTSTELLEN.md §19.5, nie pw-record: 01 §4.4). Nimmt zwei Ports auf,
+// cypherdj-aufnehmer: JACK-Aufnehmer am Ziel (INTERFACES.md §19.5, nie pw-record: 01 §4.4). Nimmt zwei Ports auf,
 // schreibt WAV (float32) und daneben <datei>.json mit dem Blockanfang des ersten aufgenommenen Frames (mono_ns wie /uhr),
 // damit die Auswertung jedes Aufnahme-Frame einem Kern-Sample zuordnen kann. Zählt eigene Lücken und Ring-Überläufe.
 // Vorlage: proben/01-audio-kern/a-cpp-jack/aufnehmer.cpp.

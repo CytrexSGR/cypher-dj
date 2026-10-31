@@ -1,4 +1,4 @@
-// Vorschläge an Andreas (SCHNITTSTELLEN §14.3, §3: verfällt 1 Takt vor seinem Start). Tasten „annehmen“ und
+// Vorschläge an Andreas (INTERFACES §14.3, §3: verfällt 1 Takt vor seinem Start). Tasten „annehmen“ und
 // „verwerfen“ (§5.8) wirken auf den offenen Vorschlag mit dem frühesten Start (Festlegung dieser Scheibe: der Vertrag
 // sagt nicht, welcher bei mehreren gilt; LED und „Cypher hören“ zeigen genau diesen).
 export interface Vorschlag {

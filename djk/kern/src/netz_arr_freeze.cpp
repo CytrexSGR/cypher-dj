@@ -1,4 +1,4 @@
-// Paket K3 (Spec D1 2.5, 3.1, 6.14, 6.25, 6.27, 6.29; SCHNITTSTELLEN §4.11, §5.13): Freeze im Netz-Faden. /k/arr/freeze
+// Paket K3 (Spec D1 2.5, 3.1, 6.14, 6.25, 6.27, 6.29; INTERFACES §4.11, §5.13): Freeze im Netz-Faden. /k/arr/freeze
 // prüft die Felder (im KI-Stopp lehnt cypher zuerst ab, vor jeder Bereichsprüfung, §4.7) und reiht einen Auftrag zum
 // Arrangement-Lade-Faden; der legt ihn samt Puffer an (arr_lader.h), sein Ergebnis geht als Befehl ARR_FREEZE in den
 // Kern. Ob und wann er läuft, entscheidet der Kern am Sample. Zurück kommt er als Ereignis ARR_FREEZE und geht an den

@@ -1,5 +1,5 @@
 // cypherdj-aufnehmer4: JACK-Aufnehmer am Ziel mit vier Kanälen (Master L/R, Cue L/R) für die Abschuss-Serien der
-// Scheibe 18 (SCHNITTSTELLEN §19.5: JACK-Aufnehmer, nie pw-record). Vorlage: djk/pruefstand/aufnehmer/aufnehmer.cpp
+// Scheibe 18 (INTERFACES §19.5: JACK-Aufnehmer, nie pw-record). Vorlage: djk/pruefstand/aufnehmer/aufnehmer.cpp
 // (Scheibe 01), hier mit vier Ports und roher float32-Datei. Neben die Datei schreibt er <datei>.json mit Treiber-Frame
 // und CLOCK_MONOTONIC des ersten Frames, damit die Auswertung Kern-Zeit und Aufnahme verbindet, dazu je Lücke des Graphen
 // (Treiber-Frame springt) die Stelle in der Datei und die Zahl der fehlenden Frames (höchstens 16).

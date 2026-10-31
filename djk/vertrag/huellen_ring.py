@@ -1,4 +1,4 @@
-"""Hüllkurven-Ring /dev/shm/cypherdj/huellen, Version 1 (SCHNITTSTELLEN.md §6.2): Layout, Pfad, Leser.
+"""Hüllkurven-Ring /dev/shm/cypherdj/huellen, Version 1 (INTERFACES.md §6.2): Layout, Pfad, Leser.
 
 Kopf 64 Bytes: char[4] magic "CDJH"; uint32 version 1; uint32 rate_hz 1000; uint32 n_kanaele 16; uint32 cap 16384;
 uint32 reserve[3]; _Atomic uint64 w (Datensätze je Kanal); uint8 reserve[24]. Datensatz 64 Bytes: int64 sample;

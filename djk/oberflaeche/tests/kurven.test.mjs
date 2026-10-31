@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { ZIELE, art, GRIFF, griffZuMidi, midiRoh, wertAusMidi, formatiere, vorgabe } from '../oeffentlich/kurven.js';
 
 test('Ziel-Liste: 41 Pfade, je Deck 13 (mit PFL und Crossfader-Zuweisung), erz/1 11, pad/1 und pad/2 je 11 (ohne Tasten) plus xfader, master/pegel, cue/mix, cue/pegel', () => {
-  assert.equal(ZIELE.size, 87 + 128 + 33);   // K2: plus master/kleber; D1 K1/E3: spur/1..32 je fader, pan, mute, solo; 1.10: grp/1..8 je 4 plus pm/fader
+  assert.equal(ZIELE.size, 87 + 128 + 33 + 12 * 8);   // S5r: + <kanal>/bk/1..8 auf 12 Kanälen; K2: plus master/kleber; D1 K1/E3: spur/1..32 je fader, pan, mute, solo; 1.10: grp/1..8 je 4 plus pm/fader
   for (const p of ['deck/1/fader', 'deck/2/eq/tief', 'deck/1/kill/hoch', 'deck/2/play', 'deck/1/cue', 'xfader',
     'deck/1/pfl', 'deck/2/pfl', 'master/pegel', 'master/kleber', 'cue/mix', 'cue/pegel', 'erz/1/fader']) assert.ok(ZIELE.has(p), p);
 });

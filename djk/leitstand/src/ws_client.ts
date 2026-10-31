@@ -1,4 +1,4 @@
-// WebSocket-Client für den Leitstand-Hub (SCHNITTSTELLEN §9): meldet sich mit einer Rolle an, schickt Umschläge
+// WebSocket-Client für den Leitstand-Hub (INTERFACES §9): meldet sich mit einer Rolle an, schickt Umschläge
 // mit eigenem seq und sammelt jede Nachricht mit Empfangszeit (CLOCK_MONOTONIC). Genutzt von der Ansage-Zeile,
 // vom Prüf-Client und von den Tests.
 import WebSocket from 'ws';

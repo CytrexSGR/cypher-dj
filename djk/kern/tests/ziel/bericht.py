@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Fasst einen Abnahme-Ordner der Scheibe 08 zusammen (von abnahme.sh erzeugt) und urteilt nach dem Steckbrief 08.
-Schreibt <ordner>/bericht.json und gibt die ABNAHME-Zeilen für docs/architektur/stand/08-kern-befehle.md aus
+Schreibt <ordner>/bericht.json und gibt die ABNAHME-Zeilen für docs/architecture/stand/08-kern-befehle.md aus
 (ROADMAP §8.8: je Abnahmepunkt eine Zeile mit Zahl und Beleg-Pfad).
 Aufruf: bericht.py <abnahme-ordner>   Rückgabe 0 bestanden (vorläufig zählt als bestanden, steht aber dabei), 1 sonst.
 """

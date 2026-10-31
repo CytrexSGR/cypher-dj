@@ -1,4 +1,4 @@
-// Lader (lader.h, SCHNITTSTELLEN §4.4, §6.4, §13.2; ADR 015): einblenden, sperren, prüfen, Budget, Rückgabe.
+// Lader (lader.h, INTERFACES §4.4, §6.4, §13.2; ADR 015): einblenden, sperren, prüfen, Budget, Rückgabe.
 // Material aus tests/deck/klick_fassung.py in einem eigenen Arbeitsbestand unter /dev/shm (tmpfs wie im Betrieb).
 // Scheibe 31.
 #include <sys/resource.h>

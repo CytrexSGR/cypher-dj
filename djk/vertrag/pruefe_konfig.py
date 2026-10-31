@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prüft djk/vertrag/konfig.schema.json gegen die Tabelle in SCHNITTSTELLEN.md §2.1.
+"""Prüft djk/vertrag/konfig.schema.json gegen die Tabelle in INTERFACES.md §2.1.
 
 Grün (Rückgabewert 0) nur, wenn je Datei (kern.toml, leitstand.toml, werkstatt.toml) die Schlüssel in Text und
 Schema gleich sind (am Text gezählt), Typ und Vorgabe übereinstimmen, und eine TOML-Datei aus allen Vorgaben gegen das

@@ -1,4 +1,4 @@
-// Flaches TOML für kern.toml (SCHNITTSTELLEN §2.1): key = wert, Kommentare mit #, Zeichenketten, Zahlen, Wahrheitswerte.
+// Flaches TOML für kern.toml (INTERFACES §2.1): key = wert, Kommentare mit #, Zeichenketten, Zahlen, Wahrheitswerte.
 // Unbekannte Schlüssel sind ein Startfehler.
 
 export function leseToml(text, erlaubt, datei = 'kern.toml') {

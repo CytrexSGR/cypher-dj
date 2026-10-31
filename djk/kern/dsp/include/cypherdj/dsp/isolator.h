@@ -1,7 +1,7 @@
 // LR8-Isolator 246/2484 Hz, drei Bänder, Stereo (ADR 008, Dossier 04 §4.1).
 // Aufbau wie Mixxx linkwitzriley8eqeffect.cpp: zuerst bei 2484 Hz teilen, dann bei 246 Hz;
 // das Hoch-Band läuft zum Phasenabgleich durch den Hochpass bei 246 Hz. Die drei Bänder werden
-// getrennt gerechnet, damit sie vor dem Band-Gain abgreifbar sind (SCHNITTSTELLEN §5.6).
+// getrennt gerechnet, damit sie vor dem Band-Gain abgreifbar sind (INTERFACES §5.6).
 // Teil der öffentlichen Naht von cypherdj_dsp.
 #pragma once
 

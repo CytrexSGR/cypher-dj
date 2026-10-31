@@ -1,4 +1,4 @@
-// Scheibe 35 (Teil A, MVP): Kern-Hand (SCHNITTSTELLEN §2 Hand, §5.8, §7.1 bis §7.3, §17 „Die Hand (MIDI) wird nie
+// Scheibe 35 (Teil A, MVP): Kern-Hand (INTERFACES §2 Hand, §5.8, §7.1 bis §7.3, §17 „Die Hand (MIDI) wird nie
 // blockiert“; ADR 014, ADR 023 Punkt 2). Die MIDI-Ereignisse eines Zyklus kommen roh über hand_midi() herein und werden
 // in zyklus() nach dem Einsortieren der Befehle mit dem Blockanfang übersetzt (hand_ein.h, Plan 35 E1): Griffe gehen mit
 // ihrem Sample in die Hand-Schlange (Scheibe 25) und von dort ins Stellwerk, das erster Wert, Totzone, Übernahme und

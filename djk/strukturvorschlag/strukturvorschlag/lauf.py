@@ -1,4 +1,4 @@
-"""Ein Track -> Vorschlags-JSON (Schema docs/architektur/stand/strukturvorschlag.md).
+"""Ein Track -> Vorschlags-JSON (Schema docs/architecture/stand/strukturvorschlag.md).
 
 Aufruf:  python3 -m strukturvorschlag.lauf <mp3> [--nml collection.nml] [--aus datei.json] [--eigen]
 Raster: Traktor-Grid aus der NML, falls Eintrag und Grid vorhanden; sonst eigene Schaetzung aus TBPM.

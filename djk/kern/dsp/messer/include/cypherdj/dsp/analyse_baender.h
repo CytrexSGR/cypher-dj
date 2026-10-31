@@ -1,4 +1,4 @@
-// Sechs Analyse-Bänder, K-gewichtete Leistung und Spitze je 48-Sample-Fenster (SCHNITTSTELLEN 6.2).
+// Sechs Analyse-Bänder, K-gewichtete Leistung und Spitze je 48-Sample-Fenster (INTERFACES 6.2).
 // Scheibe 14. Echtzeitfest: verarbeite() allokiert nicht, sperrt nicht, macht kein I/O.
 #pragma once
 #include <cstdint>

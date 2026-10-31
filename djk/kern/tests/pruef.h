@@ -1,4 +1,4 @@
-// Eigener Assert-Header für CTest (SCHNITTSTELLEN.md §19.4: gtest und catch2 fehlen auf DJ-Maschine).
+// Eigener Assert-Header für CTest (INTERFACES.md §19.4: gtest und catch2 fehlen auf DJ-Maschine).
 #pragma once
 #include <cmath>
 #include <cstdio>

@@ -1,4 +1,4 @@
-// KI-Stopp und -Freigabe, KI-Spur, Stufe, Vorschlagskanal, LEDs, Kiste, Mapping, Latenz (SCHNITTSTELLEN §4.7) und der
+// KI-Stopp und -Freigabe, KI-Spur, Stufe, Vorschlagskanal, LEDs, Kiste, Mapping, Latenz (INTERFACES §4.7) und der
 // Prüfklick /test/klick (ROADMAP Z1). Die Attrappe hat weder Controller noch Ton: LEDs, Kiste, Mapping und Latenz
 // werden angenommen und gespeichert, sonst ohne Wirkung. Entscheidung E-a (2026-10-20): der KI-Stopp hält nur Cyphers Hand an (Teile ab,
 // ihr wartender Start und ihr Freeze enden, weitere Befehle abgelehnt; ein laufender Transport läuft weiter) und senkt keinen Fader; die KI-Kanal-Liste wird geführt (Spuren nur als spur/0, E3 P1) und senkt nichts.

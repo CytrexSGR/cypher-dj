@@ -22,6 +22,8 @@ function universum(): string[] {
   u.push('duck/tiefe', 'duck/release', 'master/kleber', 'master/pfl');
   u.push('color/art', 'color/param');
   u.push('keylock', 'deck/1/keylock', 'pad/1/keylock');   // Keylock 3: nur der globale Knopf
+  // S5r: Graph-Regler <kanal>/bk/<n> auf jedem Kanal, dazu die Ränder 0 und 9 und Nicht-Kanäle (nur Kanäle mit Graph gelten)
+  u.push(...kanaele.flatMap((k) => [0, 1, 8, 9].map((n) => `${k}/bk/${n}`)), 'master/bk/1', 'cue/bk/1', 'pad/3/bk/1');
   return u;
 }
 
@@ -29,6 +31,19 @@ test('Pfadmenge gleich dem Vertragsmuster regler_pfad', () => {
   const abweichend = universum().filter((p) => muster.test(p) !== REGLER.has(p));
   assert.deepEqual(abweichend, []);
   assert.ok(REGLER.size > 300, `nur ${REGLER.size} Pfade`); // Gegenprobe: die Tabelle ist nicht leer
+});
+
+test('S5r: <kanal>/bk/<1..8> nur auf Kanälen mit Graph, 0..1, Vorgabe 0,5, alle dürfen', () => {
+  const mit = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'erz/1', 'erz/2', 'erz/3', 'erz/5', 'erz/6', 'erz/7', 'pad/1', 'pad/2'];
+  const bk = [...REGLER.keys()].filter((p) => /\/bk\/\d$/.test(p));
+  assert.equal(bk.length, mit.length * 8);
+  for (const k of ['erz/4', 'erz/8', 'bus/1', 'master']) assert.equal(REGLER.has(`${k}/bk/1`), false, k);
+  for (const k of mit) assert.equal(kanalVon(`${k}/bk/3`), k);
+  const i = reglerInfo('erz/5/bk/8')!;
+  assert.deepEqual([i.einheit, i.min, i.max, i.vorgabe, i.nurHand], ['linear', 0, 1, 0.5, false]);
+  assert.equal(imBereich(i, 0.25, 0), true);
+  assert.equal(imBereich(i, 1.01, 0), false);
+  assert.equal(machtLeiser('deck/1/bk/1', 0.9, 0.1), false);   // ein Graph-Regler ist kein Fader: nie "leiser machen"
 });
 
 test('§1.5: Bereiche, Vorgaben, nur Hand', () => {

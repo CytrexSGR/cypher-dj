@@ -22,7 +22,7 @@ stretcher path and without a jump engine, until M2b requires it.
    effect one period after the grip). **What sounds:** if the loaded version has stems, the stem sum sounds and the base file
    is not loaded; without stems the base file sounds and `stem/*` is rejected (`keine_stems`). Switching happens
    only at loading, because Demucs stems summed do not give the mix bit-identically; reference envelope and cross energies
-   come from exactly what sounds (`SCHNITTSTELLEN.md` §4.4, §13.1).
+   come from exactly what sounds (`INTERFACES.md` §4.4, §13.1).
 2. **Shadow stretcher:** for **every audibly or pre-listened deck** an R3 stretcher runs warm (factor 1, input from
    the same band, in a work thread with lead-in). If the tempo deviates (ramp, hand segment), it takes over before the first deviating sample with a **20 ms cosine fade**; if the tempo returns to the base, the
    deck fades back to the direct path (on a beat boundary). The audible stretcher never gets a factor closer than

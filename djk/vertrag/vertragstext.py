@@ -1,4 +1,4 @@
-"""Liest die maschinenprüfbaren Teile aus docs/architektur/SCHNITTSTELLEN.md (Vertragsversion 1).
+"""Liest die maschinenprüfbaren Teile aus docs/architecture/INTERFACES.md (Vertragsversion 1).
 
 Nur Standardbibliothek. Wird von pruefe_osc.py, pruefe_konfig.py und pruefe_folgen.py benutzt.
 Grundsatz: gezählt wird am Text. Eine OSC-Definition ist eine Adresse mit Typ-Zeichenkette, entweder als
@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 WURZEL = Path(__file__).resolve().parents[2]
-VERTRAG = WURZEL / "docs" / "architektur" / "SCHNITTSTELLEN.md"
+VERTRAG = WURZEL / "docs" / "architecture" / "INTERFACES.md"
 
 _TABELLE = re.compile(r"^\|\s*`(/[a-z0-9_/]+)`\s*\|\s*`(,[a-z]*)`\s*\|")
 _INLINE = re.compile(r"`(/[a-z0-9_/]+) (,[a-z]+)`")

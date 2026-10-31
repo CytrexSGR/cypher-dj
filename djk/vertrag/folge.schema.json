@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://cypherdj.invalid/vertrag/folge.schema.json",
-  "title": "Eine Zeile einer Golden-Folge (SCHNITTSTELLEN.md §19.0, Vertrag 1)",
+  "title": "Eine Zeile einer Golden-Folge (INTERFACES.md §19.0, Vertrag 1)",
   "description": "Aufbau je Zeile. Die Semantik (Zeitachse, Kennungen, Vergleich, Ende) steht in folgen/FORMAT.md; pruefe_folgen.py prüft beides. Weitere Felder sind erlaubt und werden vom Läufer ignoriert (Vertragsregel für JSON-Nachrichten: neue optionale Felder). Die Schritt-Arten nach wert und die Felder bereich, herleitung, ab_sample kamen mit Scheibe 09 dazu (FORMAT.md Punkt 13 ff.).",
   "oneOf": [
     {"$ref": "#/$defs/sende"},

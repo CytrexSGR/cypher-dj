@@ -1,4 +1,4 @@
-// D1 K1 (Spec D1 2.1, 3.1; SCHNITTSTELLEN §4.11, §5.13): Arrangement im Netz-Faden. /k/arr/laden prüft nur die Anfrage
+// D1 K1 (Spec D1 2.1, 3.1; INTERFACES §4.11, §5.13): Arrangement im Netz-Faden. /k/arr/laden prüft nur die Anfrage
 // und reiht einen Auftrag zum Arrangement-Lade-Faden (arr_lader.h); dessen Ergebnis geht als Befehl ARR_LADEN mit dem
 // Schnappschuss in den Callback oder als /q Status 6 mit Grund zurück. start, stopp, loop und metronom gehen nach der
 // Bereichsprüfung als Befehl durch. Im KI-Stopp lehnt cypher (außer stopp) vor der Bereichsprüfung ab (§4.7). Abgelöste Schnappschüsse (ARR_ALT) gehen an den Lade-Faden zur Freigabe zurück.

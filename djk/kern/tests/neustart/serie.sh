@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Abschuss-Serie der Scheibe 18, stumm an einer eigenen Null-Senke mit vier Kanälen (SCHNITTSTELLEN §19.5, ROADMAP
+# Abschuss-Serie der Scheibe 18, stumm an einer eigenen Null-Senke mit vier Kanälen (INTERFACES §19.5, ROADMAP
 # §8.4): Kern mit eigenen Ausgängen direkt an der Senke (10k, --master/--cue) und die Notbahn (Scheibe 10) daneben mit
 # --daneben --vor <kern>:notbahn_vor (ADR 016 Nachtrag 2026-09-25, Richtung seit 29.10.), beide als transiente Units mit den Eigenschaften aus
 # djk/units/cypherdj-notbahn.service und djk/units/cypherdj-kern.service (die Notbahn-Unit aus 10 hat keinen Watchdog:

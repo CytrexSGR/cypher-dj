@@ -1,4 +1,4 @@
-// node --test tests/arr.test.mjs: Arrangement in der Attrappe (SCHNITTSTELLEN §4.11, §5.13; D1 K1). Laden merkt nr
+// node --test tests/arr.test.mjs: Arrangement in der Attrappe (INTERFACES §4.11, §5.13; D1 K1). Laden merkt nr
 // (Quittung 1 und 3, /zustand/arr), Start ohne Laden nicht_geladen, Start mit Quant 2 setzt auf dem Takt ein
 // (Quittung 2 auf dem Einsatz-Sample), Stopp, Bereichsfehler, KI-Stopp für cypher. Paket K3: /k/arr/freeze mit Status 3,
 // Quittungen 1, 2, 3, /e/freeze und Datei im Arbeitsordner; Abbruch durch Stopp; ohne Arbeitsordner /e/freeze Status 2.

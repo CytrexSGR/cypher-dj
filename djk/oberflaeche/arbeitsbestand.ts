@@ -1,4 +1,4 @@
-// Arbeitsbestand <arbeitsbestand>/<material_id>/fassungen/<bpm·1000>_r<n>/ (SCHNITTSTELLEN §6.4, ADR 015), 60m-Nachtrag.
+// Arbeitsbestand <arbeitsbestand>/<material_id>/fassungen/<bpm·1000>_r<n>/ (INTERFACES §6.4, ADR 015), 60m-Nachtrag.
 // Form von Plan 36 F2 / Task 5 (docs/superpowers/plans/2026-09-23-djk-36-kiste-laden-vorhoeren.md:164, :1336 ff.) und
 // Plan 31 N4, damit 36 den Schritt unverändert in den Leitstand übernehmen kann: kopiert fassung.json und die
 // Audiodateien, die der Kern lädt (basis.f32, oder die vier Stems, wenn analyse_quelle = stems, §4.4), in

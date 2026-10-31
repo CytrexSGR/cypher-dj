@@ -1,4 +1,4 @@
-// D1 K1 Slice 9: Arrangement im Netz-Faden (SCHNITTSTELLEN §4.11, §5.13). /k/arr/laden reiht einen Auftrag zum
+// D1 K1 Slice 9: Arrangement im Netz-Faden (INTERFACES §4.11, §5.13). /k/arr/laden reiht einen Auftrag zum
 // Lade-Faden, dessen Ergebnis wird Befehl ARR_LADEN (mit Zeiger) oder /q 6 mit Grund; Bereichsfehler und KI-Stopp
 // (Quelle cypher) lehnt schon das Netz ab; start, stopp, loop, metronom gehen als Befehl durch; /k/arr/freeze ohne
 // Arbeitsordner ist datei_fehlt (Paket K3, test_netz_arr_freeze); ARR_ALT geht an den Lade-Faden zurück; ARR_ZUSTAND

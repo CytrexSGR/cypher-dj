@@ -1,4 +1,4 @@
-// Scheibe 25: Neustart-Zustand mit Reglern, Planteilen, KI und Prüfklicks je Kanal (SCHNITTSTELLEN §6.3, §19.3
+// Scheibe 25: Neustart-Zustand mit Reglern, Planteilen, KI und Prüfklicks je Kanal (INTERFACES §6.3, §19.3
 // neustart), offline: Kern A fährt teil_rampe bis Beat 72 und schreibt sein Echtzeit-Fach; Kern B übernimmt es und setzt
 // 4 096 Samples später fort (simulierter Ausfall).
 // Erwartet: im Fach Teil 6 (läuft, Start 1 440 000), Teil 7 (wartet, Ziel 1 980 000), Prüfklick deck/2, Regler mit Wert

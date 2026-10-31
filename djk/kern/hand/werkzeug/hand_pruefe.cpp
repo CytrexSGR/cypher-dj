@@ -1,4 +1,4 @@
-// hand_pruefe: lädt Mapping-Dateien nach SCHNITTSTELLEN §7.2 und meldet je Datei "OK ..." oder
+// hand_pruefe: lädt Mapping-Dateien nach INTERFACES §7.2 und meldet je Datei "OK ..." oder
 // "<datei>:<zeile>: <fehlerart>: <text>". Rückgabe 0, wenn alle laden, sonst 1. Für Scheibe 19 (Abnahme) und 40.
 #include <cstdio>
 #include <memory>

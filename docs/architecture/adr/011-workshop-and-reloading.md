@@ -2,7 +2,7 @@
 
 - **Status:** provisional; measurements M13 (grid and bar one of the MiniMax songs after warp), M14 (end to end, BPM fidelity),
   M19 (large stretch factors, tuning correction) and M9 (GPU in the set) are outstanding; dossier 07 is missing; corrected after the
-  critique round of 2026-09-23 (ARCHITEKTUR "Kritik und Korrekturen")
+  critique round of 2026-09-23 (ARCHITECTURE "Kritik und Korrekturen")
 - **Date:** 2026-09-23
 - **Requirements carried:** A2, A10, A12, A13, A16, A19
 - **Related to:** ADR 015 (inventory), 022 (generation), 020 (re-rendering), 006
@@ -32,12 +32,12 @@ guess about the size). Independently of this, the best fixed BPM of all MiniMax 
       the tuning correction to A = 440 Hz (only under 35 cents and when two tools agree, ADR 012); the trim
       comes on loading from `ziel_lufs` and the LUFS of the version;
    4. stems with the same map: in the set on the CPU only at quantum 256 (Nice 19, batch, 10 NP N6: 15 % of the
-      period), never at 128; on the DJ machine GPU only after Andreas' answer to question 4 (ARCHITEKTUR §13) and M9. **W1
+      period), never at 128; on the DJ machine GPU only after Andreas' answer to question 4 (ARCHITECTURE §13) and M9. **W1
       starts without stems** (cut list);
    5. fingerprint v1 in beat time, cross-energies with the mixer filters, reference envelopes (six bands like the
       ring), all from what sounds (stem sum or base file); structure, hotcue suggestions at phrases from bar one,
       loops, single hits on the set base;
-   6. **gates** (`SCHNITTSTELLEN.md` §12.3): grid residue of the **independently** measured low-band hits on the warped
+   6. **gates** (`INTERFACES.md` §12.3): grid residue of the **independently** measured low-band hits on the warped
       result (`fa.py`, not beat_this or Essentia, which set the map), pulse clarity ≥ 0.1 without exception,
       stretch factor ±15 %, bar-one agreement, headroom. Material that tears a gate is offered **only to Andreas**
       (`nur_fuer_andreas`), never to Cypher, with a warning;

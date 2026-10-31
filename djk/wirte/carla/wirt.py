@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""cypherdj-wirt (Studio S5.1/S5.3, ADR 009, SCHNITTSTELLEN §8): Carla 2.5.8 im Rack-Modus ohne Fenster als JACK-Client,
+"""cypherdj-wirt (Studio S5.1/S5.3, ADR 009, INTERFACES §8): Carla 2.5.8 im Rack-Modus ohne Fenster als JACK-Client,
 ein LV2-Instrument je Prozess (genau EINE Engine je Prozess: mehrere nacheinander stürzten in der Vorprobe ab). Läuft
 unter pw-jack; node.async/node.group setzt die Unit über PIPEWIRE_PROPS. --sock: Steuer-Socket (wirtsteuerung.py).
 --aktiv: Klang-Datei (.fxp), mit der der Wirt startet und die er bei jedem `lade` überschreibt. Rückgabe 2 bei

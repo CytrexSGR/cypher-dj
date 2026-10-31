@@ -17,7 +17,7 @@ HIER = pathlib.Path(__file__).resolve().parent.parent          # djk/kern/stellw
 ARBEIT = HIER / "build-mut" / "arbeit"
 BAU = HIER / "build-mut" / "bau"
 FOLGEN = ["teil_rampe", "hand_gewinnt", "zu_spaet", "i4_ueberlappung", "ki_stopp"]
-VERTRAG_TEXT = (HIER / ".." / ".." / ".." / "docs" / "architektur" / "SCHNITTSTELLEN.md").resolve()
+VERTRAG_TEXT = (HIER / ".." / ".." / ".." / "docs" / "architecture" / "INTERFACES.md").resolve()
 
 # Name: (Regel, [(Datei, alt, neu), ...])
 MUT = {

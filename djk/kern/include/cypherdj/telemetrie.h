@@ -1,4 +1,4 @@
-// Telemetrie des Kerns (SCHNITTSTELLEN.md §5.4, §5.9, ARCHITEKTUR §7): der Kern zählt Frame-Lücken und ausgelassene
+// Telemetrie des Kerns (INTERFACES.md §5.4, §5.9, ARCHITECTURE §7): der Kern zählt Frame-Lücken und ausgelassene
 // Perioden selbst, weil der JACK-Xrun-Rückruf unter pipewire-jack für Überläufe des eigenen Clients blind ist
 // (10 Probe b, K1b: 44 Lücken, 0 Rückrufe). Der Zyklusmesser läuft im Callback und schreibt je Zyklus ein Ereignis
 // ZYKLUS sowie LUECKE und QUANTUM in den Ereignisring; das Zustandsfenster im Netz-Faden rechnet daraus die Werte der
@@ -71,7 +71,7 @@ struct KernZustand {
   int32_t ki_gestoppt = 0;
 };
 
-// Scheibe 25: Verteilung der Callback-Dauer über den ganzen Lauf (ARCHITEKTUR §7: p99,9 unter 20 % der Periode, 1,07 ms
+// Scheibe 25: Verteilung der Callback-Dauer über den ganzen Lauf (ARCHITECTURE §7: p99,9 unter 20 % der Periode, 1,07 ms
 // bei 256). Klassen zu 1 µs von 0 bis 20 000 µs, alles darüber in der letzten Klasse. Nur im Netz-Faden (ZYKLUS-Ereignis);
 // der Konstruktor legt die Klassen an (nicht im Callback).
 class Verteilung {

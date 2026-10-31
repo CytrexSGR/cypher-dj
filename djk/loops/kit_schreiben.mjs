@@ -1,4 +1,4 @@
-// MVP 2 Scheibe 3 (E2, SCHNITTSTELLEN §4.8 kit:<a>+<b>): ein gespeicherter Loop wird zum Klang im Zusatz-Kit, das der
+// MVP 2 Scheibe 3 (E2, INTERFACES §4.8 kit:<a>+<b>): ein gespeicherter Loop wird zum Klang im Zusatz-Kit, das der
 // Erzeuger zusammen mit dem Basis-Kit spielt (s("bd rec0")). Geschrieben wird nur ins Zusatz-Kit; der Erzeuger sieht
 // die geänderte kit.json und meldet den Strom neu an, der Kern lädt dann beide Kits (ohne Neustart).
 // Genutzt von djk-loop kit und vom Seiten-Server (→ STRUDEL).

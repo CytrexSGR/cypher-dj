@@ -1,5 +1,5 @@
 """Raster-Werkzeuge: beat_this setzt die Karte, Essentia ist Zweitwerkzeug (AGPL-3.0, nur
-Pruefmittel, ARCHITEKTUR §8.2). Beide bekommen fertig dekodierte Mono-Signale."""
+Pruefmittel, ARCHITECTURE §8.2). Beide bekommen fertig dekodierte Mono-Signale."""
 from pathlib import Path
 import numpy as np
 

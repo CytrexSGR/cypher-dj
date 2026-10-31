@@ -1,4 +1,4 @@
-// Layout des Hüllkurven-Rings (SCHNITTSTELLEN §6.2): Kopf 64 Bytes, w bei 32, Datensatz 64 Bytes, Lage r·16+c.
+// Layout des Hüllkurven-Rings (INTERFACES §6.2): Kopf 64 Bytes, w bei 32, Datensatz 64 Bytes, Lage r·16+c.
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>

@@ -1,4 +1,4 @@
-// MVP 2 (ADR 025, SCHNITTSTELLEN §4.9): Loop-Bibliothek für die Seite. Ordner je Instanz wie im Kern (main.cpp):
+// MVP 2 (ADR 025, INTERFACES §4.9): Loop-Bibliothek für die Seite. Ordner je Instanz wie im Kern (main.cpp):
 // Vorgabe ~/.config/cypherdj/loops, Prüfinstanz <i> /dev/shm/cypherdj-<i>/loops. Gelistet wird, was der Kern laden
 // würde: Name [a-z0-9_-]{1,32} (halbe .<name>.neu-Ordner nicht), schema 1, beats 1/2/4/8/16/32 (alte Dateien: takte 1/2/4/8 als beats = 4 · takte, wie der Kern).
 import fs from 'node:fs';
