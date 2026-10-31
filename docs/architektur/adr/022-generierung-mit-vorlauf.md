@@ -1,62 +1,57 @@
-# ADR 022: Generierung frischer Songs mit Vorlauf
+# ADR 022: Generating fresh songs with lead time
 
-- **Status:** vorläufig, Messung M14 (Ende zu Ende) steht aus
-- **Datum:** 2026-09-23
-- **Getragene Anforderungen:** A2, A13, A19
-- **Hängt zusammen mit:** ADR 011, 013, 015
+- **Status:** provisional, measurement M14 (end to end) pending
+- **Date:** 2026-09-23
+- **Requirements carried:** A2, A13, A19
+- **Related to:** ADR 011, 013, 015
 
-## Kontext
+## Context
 
-A2: „wenn wir parallel songs generieren möchte ich die im laufenden betrieb mit dir zerlegen und flüssig in ein
-laufendes set einbinden können.“ Alle drei Entwürfe führten die Generierzeit als ungemessen und sorgten sich um den
-Grafikspeicher der DJ-Maschine (12 282 MiB, bis 11 218 fremd belegt). Nicht gelesen hatten sie: MiniMax Music 3 läuft auf der
-GPU-Maschine (ComfyUI-Instanz `:8288`, GB10 mit gemeinsamem Speicher). Dort kostet ein Lauf heute 4,7 bis 7,2 s Rechenzeit je
-Sekunde Musik (Streuung durch 28 parallel laufende Dienste), Modell laden 65 bis 80 s warm und 284 s kalt; eine
-gemietete L40S schafft 1,35-fache Echtzeit. Das sind Betriebs-Befunde aus dem Skill `cypher-musik` bzw.
-`cypher-musik-mietgpu`, dort ausdrücklich nicht als Hardware-Befund ausgewiesen und heute nicht nachgemessen.
+A2: "if we generate songs in parallel, I want to be able to split them during operation with you and fold them smoothly
+into a running set." All three drafts left the generation time unmeasured and worried about the graphics memory of the
+DJ machine (12 282 MiB, up to 11 218 occupied by others). What they had not read: MiniMax Music 3 runs on the GPU machine
+(ComfyUI instance `:8288`, GB10 with shared memory). There a run now costs 4.7 to 7.2 s of compute time per second of
+music (spread due to 28 services running in parallel), model loading 65 to 80 s warm and 284 s cold; a rented L40S
+manages 1.35-fold real time. These are operating findings from the skill `cypher-musik` respectively
+`cypher-musik-mietgpu`, there explicitly not stated as hardware findings and not measured again today.
 
-## Entscheidung
+## Decision
 
-1. **Generierung auf der GPU-Maschine** über ComfyUI (MiniMax Music 3), angestoßen von der Werkstatt (`auftrag` Art
-   `generieren`); Ergebnis per HTTP nach DJ-Maschine, dann Werkstatt-Kette (ADR 011). Die GPU der DJ-Maschine bleibt für Stems.
-   Adresse und Workflow in der Werkstatt-Konfiguration; Prompt-Form nach Skill `cypher-musik` (Dauer 40 bis 50 %
-   über der Ziellänge, Text für die volle Länge, Ziel-BPM nahe der Set-Basis). **Ob MiniMax ein Ziel-BPM trifft, ist
-   ungemessen** (M14 misst BPM-Treue gegen den Prompt); der Skill rät von exakten BPM ab (Z. 59), und die zehn
-   vorhandenen Songs liegen bei 89,9 bis 180,7 BPM (c_drift.log), also Streckfaktoren 0,71 bis 1,42 zur Basis 128.
-2. **Die Kiste ist eine Warteschlange mit Vorlauf.** „Während des Sets generieren“ heißt: bestellen, wenn ein Song in
-   rund 15 bis 30 Minuten gebraucht wird (Generierung 14 bis 22 min Rechnen plus Laden für 3 Minuten Musik,
-   Werkstatt gerechnet 1 bis 5 min). Der Leitstand zeigt je Auftrag die erwartete Fertigzeit in Takten; Cypher
-   (Werkzeug `erzeuge`, Autonomie ab Stufe 1 erlaubt, weil nichts hörbar wird) oder Andreas bestellen.
-3. **Mehrere Seeds in einem Prozess** (Modell nur einmal laden), wenn mehr als ein Song bestellt ist.
-4. **Gemietete GPU** als Option, wenn Andreas im Set schnellere Songs will (1,35-fache Echtzeit: ein 3-Minuten-Song
-   rund 4 min); Kosten und Einrichtung sind seine Entscheidung (Skill `cypher-musik-mietgpu`).
-5. Die GPU-Maschine ist geteilt; parallele Nutzung durch andere Wellen wird über die Wellen-Koordination abgestimmt, nicht im
-   Set.
+1. **Generation on the GPU machine** via ComfyUI (MiniMax Music 3), triggered by the workshop (`auftrag` type
+   `generieren`); result via HTTP to the DJ machine, then the workshop chain (ADR 011). The DJ machine's GPU remains for
+   stems. Address and workflow in the workshop configuration; prompt form per skill `cypher-musik` (duration 40 to 50 %
+   above the target length, text for the full length, target BPM close to the set base). **Whether MiniMax hits a
+   target BPM is unmeasured** (M14 measures BPM fidelity against the prompt); the skill advises against exact BPMs
+   (line 59), and the ten existing songs lie at 89.9 to 180.7 BPM (c_drift.log), i.e. stretch factors 0.71 to 1.42
+   relative to the base 128.
+2. **The crate is a queue with lead time.** "Generating during the set" means: order when a song is needed in about 15
+   to 30 minutes (generation 14 to 22 min of computing plus loading for 3 minutes of music, workshop computed 1 to 5
+   min). The control station shows the expected completion time in bars for each order; Cypher (tool `erzeuge`,
+   autonomy from level 1 allowed because nothing becomes audible) or Andreas order.
+3. **Several seeds in one process** (load the model only once) when more than one song is ordered.
+4. **Rented GPU** as an option if Andreas wants faster songs in the set (1.35-fold real time: a 3-minute song about
+   4 min); cost and setup are his decision (skill `cypher-musik-mietgpu`).
+5. The GPU machine is shared; parallel use by other waves is coordinated via the wave coordination (Wellen-Koordination),
+   not in the set.
 
-## Alternativen und warum nicht
+## Alternatives and why not
 
-| Alternative | Grund der Ablehnung | Beleg |
+| Alternative | Reason for rejection | Evidence |
 |---|---|---|
-| Generierung auf der DJ-Maschine-GPU | 12 GB Grafikspeicher, bei laufendem Training rund 1 GB frei; nicht der heutige MiniMax-Weg | Recherche §3c; 10 §3a |
-| „live“ als Sekunden-Takt planen | Generierung dauert Minuten; das Set würde warten | Skill `cypher-musik` |
-| ACE-Step Turbo statt MiniMax | unter 10 s je Song (Herstellerangabe), aber anderes Modell, Klang ungeprüft | Recherche §3c |
+| Generation on the DJ machine's GPU | 12 GB graphics memory, with training running about 1 GB free; not today's MiniMax path | research §3c; 10 §3a |
+| planning "live" as a second-level cadence | generation takes minutes; the set would wait | Skill `cypher-musik` |
+| ACE-Step Turbo instead of MiniMax | under 10 s per song (vendor figure), but a different model, sound unchecked | research §3c |
 
-## Folgen
+## Consequences
 
-- A2 ist mit Vorlauf getragen, nicht mit Sekunden; das steht so in der Kurzfassung.
-- M14 misst die ganze Kette mit freier und belegter GPU-Maschine und schreibt die Zahl in die Kiste-Planung.
-- Songs, die ein Werkstatt-Tor reißen (schwacher Puls, Raster, Streckfaktor über ±15 %), gehen nur an Andreas (ADR 011);
-  von den zehn vorhandenen MiniMax-Songs träfe das nach c_drift acht über die Pulsklarheit und sieben über den
-  Streckfaktor (gerechnet). Trifft MiniMax das Ziel-BPM nicht, bleibt A2 für Cypher dünn, bis M14 und M19 es klären.
+- A2 is carried with lead time, not with seconds; that is how it stands in the summary.
+- M14 measures the whole chain with a free and a busy GPU machine and writes the figure into the crate planning.
+- Songs that trip a workshop gate (weak pulse, grid, stretch factor over ±15 %) go only to Andreas (ADR 011); of the ten existing MiniMax songs, according to c_drift, eight would hit the pulse clarity and seven the stretch factor (calculated). If MiniMax does not hit the target BPM, A2 stays thin for Cypher until M14 and M19 clarify it.
 
-## Beleg
+## Evidence
 
-Skill `cypher-musik` (intern) Abschnitt „Die Zahlen, mit denen du planst“ (sechsfache Echtzeit, 4,7 bis
-7,2 s je Sekunde Musik, Modell laden 65 bis 80 s warm, 284 s kalt, 28 Dienste auf einer GPU) und Abschnitt zur
-ComfyUI-Instanz `GPU-Maschine:8288`; Skill `cypher-musik-mietgpu` (intern) Zeile 8 (GPU-Maschine 7,0-fache, L40S
-1,35-fache Echtzeit); Recherche §3c; 07 `c_drift.log` (Pulsklarheit).
+Skill `cypher-musik` (internal), section "The numbers you plan with" (sixfold real time, 4.7 to 7.2 s per second of music, model loading 65 to 80 s warm, 284 s cold, 28 services on one GPU) and section on the ComfyUI instance `GPU-Maschine:8288`; skill `cypher-musik-mietgpu` (internal), line 8 (GPU machine 7.0-fold, L40S 1.35-fold real time); research §3c; 07 `c_drift.log` (pulse clarity).
 
-## Kippt, wenn
+## Overturned if
 
-M14 zeigt deutlich kürzere oder längere Zeiten (dann Vorlauf anpassen) oder Andreas will Generierung im Sekundentakt
-(dann anderes Modell, eigene Prüfung).
+M14 shows clearly shorter or longer times (then adjust the lead time), or Andreas wants generation at a per-second cadence (then a different model, own check).

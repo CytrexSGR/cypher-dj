@@ -4,6 +4,9 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { cpuTicksBaum, liesFortschrittsZeichen } from '../../mediathek.ts';
 
 export const STEMS_THREADS = 4;                                                 // D18
+// AK26-Nachzug (2026-10-31, Andreas „ja getrennte kerne“): demucs nur auf den Kernen 2 bis 7 (CPU 2-7, 10-15); die Kerne 0 und 1 hält der
+// Echtzeit-Kern (djk-start KERN_CPUS). Gemessen: p99,9-Zuwachs +894 → +572 µs, längster Takt unter 2500 µs (~/messungen/2026-10-31-w6-last-pin/).
+export const STEMS_CPUS = process.env.CYPHERDJ_STEMS_CPUS || '2-7,10-15';
 export interface StemsLaufOptionen { python: string; cwd: string; modul?: string; gewichte?: string; zusatzArgs?: string[]; killMs?: number }
 export interface StemsAuftrag { quelle: string; f0: number; f1: number; aus: string }
 export interface StemsErgebnis { rc: number | null; signal: string | null; zeile: Record<string, unknown> | null; fehl: string }
@@ -13,9 +16,9 @@ export class StemsLauf {
   private killUhr: NodeJS.Timeout | null = null;
   readonly fertig: Promise<StemsErgebnis>;
   constructor(o: StemsLaufOptionen, a: StemsAuftrag, melde: (stufe: string, prozent: number | null) => void) {
-    const args = ['-n', '19', 'ionice', '-c3', o.python, '-m', o.modul ?? 'werkstatt.stems', '--quelle', a.quelle, '--f0', String(a.f0), '--f1', String(a.f1),
+    const args = ['-c', STEMS_CPUS, 'nice', '-n', '19', 'ionice', '-c3', o.python, '-m', o.modul ?? 'werkstatt.stems', '--quelle', a.quelle, '--f0', String(a.f0), '--f1', String(a.f1),
       '--aus', a.aus, '--threads', String(STEMS_THREADS), ...(o.gewichte ? ['--gewichte', o.gewichte] : []), ...(o.zusatzArgs ?? [])];
-    this.kind = spawn('nice', args, { cwd: o.cwd, stdio: ['ignore', 'pipe', 'pipe'], detached: true,
+    this.kind = spawn('taskset', args, { cwd: o.cwd, stdio: ['ignore', 'pipe', 'pipe'], detached: true,
       env: { ...process.env, CUDA_VISIBLE_DEVICES: '', OMP_NUM_THREADS: String(STEMS_THREADS) } });   // P4: keine GPU sichtbar (detached: eigene Gruppe)
     let aus = '', fehl = '', rest = '';
     this.kind.stdout!.on('data', (d: Buffer) => { aus += d; if (aus.length > 65536) aus = aus.slice(-32768); });

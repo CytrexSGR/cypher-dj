@@ -1,50 +1,31 @@
-# ADR 028: Decks folgen dem Live-Tempo (Varispeed sofort, Fassungstausch für die Tonhöhe)
+# ADR 028: Decks follow the live tempo (varispeed immediately, version swap for the pitch)
 
-Status: **teilweise abgelöst (2026-10-08):** der Fassungstausch (Slice 2, `deck_keylock.ts`, Render und `/k/deck/basis_tausch` aus der Seite) ist mit Keylock Task 3 ausgebaut; die Tonhöhe hält jetzt der Dehner im Kern (Plan `docs/superpowers/plans/2026-10-06-keylock-echtzeit.md`, Fassung 4; ADR 029 kommt mit Task 4). Varispeed (Slice 1) gilt weiter, bei Keylock aus. `/k/deck/basis_tausch` und `werkstatt.fassung` bleiben als Werkzeuge.
-Früherer Status: Slice 1 (Varispeed) und Slice 2 (Fassungstausch) umgesetzt 2026-10-06; am Ziel abgenommen; Hörtermin 06.10.: Andreas „ja das passt“ (Varispeed hoch, beim Tausch zurück auf die Ausgangstonhöhe) (Cypher).
-Anlass: Andreas 05.10.: „wir haben auch live tempo änderungen gemacht“ (Park-Item `e65c5c17`), 06.10.: „Flügel fertig, dann
-Welle 3 mit writing-plans bitte“. Plan: `docs/superpowers/plans/2026-10-06-welle3-beatmatch.md`.
+Status: **partly superseded (2026-10-08):** the version swap (slice 2, `deck_keylock.ts`, render and `/k/deck/basis_tausch` from the page) was dismantled with keylock task 3; the pitch is now held by the Dehner in the core (plan `docs/superpowers/plans/2026-10-06-keylock-echtzeit.md`, version 4; ADR 029 comes with task 4). Varispeed (slice 1) still applies, with keylock off. `/k/deck/basis_tausch` and `werkstatt.fassung` remain as tools.
+Earlier status: slice 1 (varispeed) and slice 2 (version swap) implemented 2026-10-06; accepted at the target; listening session 06.10.: Andreas "yes, that fits" (varispeed up, on the swap back to the original pitch) (Cypher).
+Trigger: Andreas 05.10.: "we also made live tempo changes" (park item `e65c5c17`), 06.10.: "grand piano done, then wave 3 with writing-plans please". Plan: `docs/superpowers/plans/2026-10-06-welle3-beatmatch.md`.
 
-## Kontext
+## Context
 
-Bis Welle 2 lehnte der Kern einen Tempowechsel ab, solange ein Deck lief (`kern.cpp`, Quittung 6 `kein_stretcher`), und ein
-Deck startete nur bei seiner Basis (`kern_deck.cpp`). Gemessen 06.10. an Prüfinstanz i: `POST /tempo 132` bei laufendem Deck →
-`{"status":6,"grund":"kein_stretcher"}` (`~/messungen/2026-10-06-welle3-beatmatch/`). Loop-Boxen, REC und Strudel folgten dem
-Tempo seit ADR 026/027, die Decks nicht. Die ROADMAP sah dafür Rubber Band R3 im Echtzeitweg je Deck vor (Scheiben 34, 50
-bis 52); davor liegen vier offene Scheiben, und die Echtzeit-Messreihe M3 (Scheibe 30) wurde am 25.09. auf Andreas' Einspruch
-angehalten („du blockiert meinen rechner“).
+Up to wave 2 the core rejected a tempo change as long as a deck was running (`kern.cpp`, acknowledgement 6 `kein_stretcher`), and a deck started only at its base (`kern_deck.cpp`). Measured 06.10. on check instance i: `POST /tempo 132` with a running deck → `{"status":6,"grund":"kein_stretcher"}` (`~/messungen/2026-10-06-welle3-beatmatch/`). Loop boxes, REC and Strudel have followed the tempo since ADR 026/027, the decks have not. The ROADMAP foresaw Rubber Band R3 in the real-time path per deck for this (slices 34, 50 to 52); before that lie four open slices, and the real-time measurement series M3 (slice 30) was paused on 25.09. at Andreas' objection ("you're blocking my computer").
 
-## Entscheidung
+## Decision
 
-1. **Varispeed im Deck.** Das Deck kennt die Karte der Kern-Uhr und hält den Master-Beat seines Ankers. Lesekopf
-   `kopf(s) = anker_f + (beat_at(s) − anker_b) · fpb`: ein Quell-Beat bleibt ein Master-Beat (phasenstarr, auch in Rampen),
-   gelesen mit Catmull-Rom wie die Loop-Box (ADR 026). Steht das Tempo über den ganzen Block auf der Basis, liest das Deck
-   ganzzahlig wie bisher (bitgleich). Wechsel direkt → Varispeed an derselben Stelle ohne Blende; Varispeed → direkt auf das
-   nächste ganze Frame mit der 128er Blende (Rücken höchstens 0,5 Frame). `deck.cpp`, `deck.h`.
-2. **Start und Rampe bei jedem Tempo.** Beide `kein_stretcher`-Ablehnungen entfallen (Kern und Attrappe). `/k/set/neu` bleibt
-   bei laufendem Deck abgelehnt (`deck_laeuft`): eine neue Zeitachse bräche den Beat-Anker.
-3. **Frist und Neustart über Beats.** `/e/frist` rechnet im Varispeed über den Beat-Anker; der Neustart-Zustand trug den Anker
-   schon in Beats (`anker_master_beat`) und setzt ihn jetzt direkt (`setze_lauf_beat`).
-4. **Tonhöhe über Fassungstausch:** die Werkstatt rendert aus dem Original eine Fassung im Zieltempo (`werkstatt.fassung`,
-   höchstens zwei Zusatztempi je Track, nichts wird gelöscht), die Seite kopiert sie in den Arbeitsbestand und schickt
-   `/k/deck/basis_tausch` (Quelle `werkstatt`) auf eine Takt-Eins frühestens einen Beat voraus und nie vor dem Ende einer
-   laufenden Rampe (`deck_keylock.ts`). Der Kern lädt die Fassung über den Lader, tauscht am Ziel-Beat mit 960-Frame-Blende
-   (der alte Kopf läuft darin mit seinem Varispeed-Schritt weiter) am selben Quell-Beat; ein Loop wird umgerechnet, das
-   Raster der alten Fassung gilt nicht weiter. Danach liest das Deck direkt.
+1. **Varispeed in the deck.** The deck knows the map of the core clock and holds the master beat of its anchor. Read head `kopf(s) = anker_f + (beat_at(s) − anker_b) · fpb`: a source beat remains a master beat (phase-locked, also in ramps), read with Catmull-Rom like the loop box (ADR 026). If the tempo stands at the base over the whole block, the deck reads integer as before (bit-identical). Switch direct → varispeed at the same position without blend; varispeed → direct on the next whole frame with the 128 blend (step back at most 0.5 frame). `deck.cpp`, `deck.h`.
+2. **Start and ramp at any tempo.** Both `kein_stretcher` rejections fall away (core and mock). `/k/set/neu` remains rejected while a deck runs (`deck_laeuft`): a new time axis would break the beat anchor.
+3. **Deadline and restart via beats.** `/e/frist` computes in varispeed via the beat anchor; the restart state already carried the anchor in beats (`anker_master_beat`) and now sets it directly (`setze_lauf_beat`).
+4. **Pitch via version swap:** the workshop renders from the original a version at the target tempo (`werkstatt.fassung`, at most two extra tempi per track, nothing is deleted); the page copies it into the working set and sends `/k/deck/basis_tausch` (source `werkstatt`) to a bar one at the earliest one beat ahead, and never before the end of a running ramp (`deck_keylock.ts`). The core loads the version via the loader and swaps at the target beat with a 960-frame blend (the old head runs on in it with its varispeed step) at the same source beat; a loop is recalculated, the grid of the old version no longer applies. Afterwards the deck reads directly.
 
-## Verworfen
+## Discarded
 
-| Weg | Warum nicht | Quelle |
+| Route | Why not | Source |
 |---|---|---|
-| R3 live im Deck jetzt (Scheiben 50 bis 52) | vier offene Vorstufen; M3 pausiert auf Andreas' Einspruch; R3-fein im 256er Block bis 4458 µs bei 5333 µs Budget mit zwei Instanzen | Stand 30, ADR 027 „Verworfen“ |
-| Decks weiter nur bei ihrer Basis | beantwortet die erste DJ-Frage nicht | Glanz-Programm Welle 3 |
+| R3 live in the deck now (slices 50 to 52) | four open preliminary stages; M3 paused at Andreas' objection; R3-fine in the 256-frame block up to 4458 µs against a 5333 µs budget with two instances | status 30, ADR 027 "Discarded" |
+| Decks still only at their base | does not answer the first DJ question | Glanz programme wave 3 |
 
-## Folgen
+## Consequences
 
-- Bis zum Tausch wandert die Tonhöhe eines Decks: 128 → 132 +0,53 Halbtöne, 128 → 140 +1,55. Die Seite zeigt am Deck
-  `VARI +0,5 st`.
-- Klangtreue des Catmull-Rom-Wegs wie ADR 026 gerechnet, nicht gehört. Die alte Blende (128 Frames) liest im Varispeed weiter
-  ganzzahlig: bei Faktor 1,03 weicht sie über ihre Länge um rund 4 Frames ab (gerechnet, in der Blende).
-- Kosten: im Varispeed je Sample zwei `beat_at` und vier Frame-Lesungen je Deck; Echtzeit-Messung in Task 3 des Plans.
+- Until the swap, a deck's pitch drifts: 128 → 132 +0.53 semitones, 128 → 140 +1.55. The page shows `VARI +0,5 st` on the deck.
+- Sound fidelity of the Catmull-Rom path calculated as in ADR 026, not heard. The old blend (128 frames) keeps reading integer in varispeed: at factor 1.03 it deviates over its length by about 4 frames (calculated, within the blend).
+- Cost: in varispeed, per sample two `beat_at` calls and four frame reads per deck; real-time measurement in task 3 of the plan.
 
-Messwerte: Plan-Abschnitt „Ergebnisse“, Rohdaten `~/messungen/2026-10-06-welle3-beatmatch/`.
+Measured values: plan section "Ergebnisse" (Results), raw data `~/messungen/2026-10-06-welle3-beatmatch/`.

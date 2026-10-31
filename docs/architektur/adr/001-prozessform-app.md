@@ -1,55 +1,55 @@
-# ADR 001: Prozessform und App-Form
+# ADR 001: Process form and app form
 
-- **Status:** angenommen
-- **Datum:** 2026-09-23
-- **Getragene Anforderungen:** A1, A3, A17, A23, A24, A25
-- **Hängt zusammen mit:** ADR 002, 016, 018, 019
+- **Status:** accepted
+- **Date:** 2026-09-23
+- **Requirements carried:** A1, A3, A17, A23, A24, A25
+- **Related to:** ADR 002, 016, 018, 019
 
-## Kontext
+## Context
 
-Heute läuft der DJ-Teil im Browser (Dirigent-Seite, superdough) und als lose Python- und Node-Dienste mit
-`nohup` und PID-Dateien (`dirigent.pid`, `battery_server.pid`, `pegel.pid`, `vox_server.pid`, 10 §3a). Die
-Dirigent-Seite starb am 2026-09-22 dreimal, ein Worklet-Modul lud einmal nicht (01 §3.8). A25 erlaubt eine
-eigene App, A24 stellt die Oberfläche zurück, A17 verlangt einen modularen Kern mit Routing.
+Today the DJ part runs in the browser (Dirigent page, superdough) and as loose Python and Node services with
+`nohup` and PID files (`dirigent.pid`, `battery_server.pid`, `pegel.pid`, `vox_server.pid`, 10 §3a). The
+Dirigent page died three times on 2026-09-22, and one worklet module once failed to load (01 §3.8). A25 allows
+its own app, A24 puts the interface back, A17 demands a modular core with routing.
 
-## Entscheidung
+## Decision
 
-Ein **Echtzeit-Kern** (`cypherdj-kern`, C++) ist der einzige Prozess, der im Takt rechnet. Dahinter sitzt eine
-winzige **Notbahn** (`cypherdj-notbahn`, C). Alles andere ist ein **Satellit** in einem eigenen Prozess:
-Leitstand, Spieler (Cypher), MCP-Adapter, Rechner, Analyse, Werkstatt, Aufnahme, später Zerleger, Erzeuger,
-Klang- und Plugin-Wirte, Link-Brücke, Oberfläche. Jeder Prozess ist eine **systemd-User-Unit** unter
-`cypherdj.target`. „Die App“ im Sinn von A25 ist dieser Verbund, gestartet mit
-`systemctl --user start cypherdj.target`, ohne Fenster.
+A **real-time core** (`cypherdj-kern`, C++) is the only process that computes in time. Behind it sits a
+tiny **Notbahn (the fallback path)** (`cypherdj-notbahn`, C). Everything else is a **satellite** in its own process:
+control station (Leitstand), player (Cypher), MCP adapter, Rechner (planner), analysis, Werkstatt (workshop), recording, later splitter (Zerleger), generator (Erzeuger),
+sound and plugin hosts (Klang- und Plugin-Wirte), Link bridge, front end (Oberfläche). Each process is a **systemd user unit** under
+`cypherdj.target`. "The app" in the sense of A25 is this network, started with
+`systemctl --user start cypherdj.target`, without a window.
 
-Satelliten sprechen mit dem Kern nur über Befehle mit Ziel-Beat (OSC/UDP), fertige Dateien und entkoppelte
-Audio-Rückwege (`SCHNITTSTELLEN.md` §2). Stirbt ein Satellit, fehlt höchstens sein Anteil.
+Satellites talk to the core only through commands with a target beat (OSC/UDP), finished files and decoupled
+audio return paths (`SCHNITTSTELLEN.md` §2). If a satellite dies, at most its share is missing.
 
-## Alternativen und warum nicht
+## Alternatives and why not
 
-| Alternative | Grund der Ablehnung | Beleg |
+| Alternative | Reason for rejection | Evidence |
 |---|---|---|
-| Ein großes Programm (JUCE-App mit GUI, Plugin-Host, Engine) | ein Adressraum: ein Plugin- oder GUI-Absturz nimmt die Musik mit; JUCE bringt AGPL und GUI-Kette ohne Nutzen für einen Dienst ohne Fenster | 01 §3.7, §6.1; 05 §4.5 |
-| Mixxx als Deck-Motor, KI daneben | Uhr gehört dann Mixxx, alles andere läuft hinterher; Mixxx-Skript-Timer frühestens alle 20 ms; Quantize wartet nicht auf den Takt | A14 (Andreas zu Mixxx), 09 §3.3, Recherche Loopen-Springen |
-| Ardour als Herz | Andreas: „fühlt sich das nicht wirklich gut an“ | A14 |
-| Browser bleibt Audiopfad | Tode der Seite, Worklet-Ladefehler, Chromium als Pulse-Client mit eigenem Puffer | 01 §3.8; ADR 018 |
-| Eigener Supervisor statt systemd | noch ein Baustein, der sterben kann | 10 §3c |
+| One large program (JUCE app with GUI, plugin host, engine) | one address space: a crash of a plugin or the GUI takes the music with it; JUCE brings AGPL and a GUI chain with no benefit for a service without a window | 01 §3.7, §6.1; 05 §4.5 |
+| Mixxx as deck engine, AI alongside | the clock then belongs to Mixxx, everything else runs behind it; Mixxx script timer at best every 20 ms; quantize does not wait for the bar | A14 (Andreas on Mixxx), 09 §3.3, research on loop jumping |
+| Ardour as the heart | Andreas: "doesn't really feel good" | A14 |
+| Browser stays as audio path | the page's death, worklet load failures, Chromium as Pulse client with its own buffer | 01 §3.8; ADR 018 |
+| Own supervisor instead of systemd | one more component that can die | 10 §3c |
 
-## Folgen
+## Consequences
 
-- Jede Grenze zwischen Prozessen ist ein Vertrag: `SCHNITTSTELLEN.md` ist Pflicht für alle Sessions.
-- Satelliten können parallel gebaut werden, der Leitstand zunächst gegen eine Kern-Attrappe (ADR 021).
-- Der Betrieb braucht Units, Limits (`LimitRTPRIO`, `LimitMEMLOCK`), Watchdog-Regeln (ADR 016).
-- Die heutigen `nohup`-Dienste werden abgelöst, nicht fortgeführt.
+- Every boundary between processes is a contract: `SCHNITTSTELLEN.md` is mandatory for all sessions.
+- Satellites can be built in parallel, the control station first against a core dummy (ADR 021).
+- Operation needs units, limits (`LimitRTPRIO`, `LimitMEMLOCK`), watchdog rules (ADR 016).
+- Today's `nohup` services are being replaced, not continued.
 
-## Beleg
+## Evidence
 
-- 01 Probe e2: Sender per SIGKILL, der Kern spielte 51 von 51 Schlagabständen exakt weiter.
-- 01 Probe e1: zweiter Kern per SIGKILL, der erste lief 63 von 63 Schläge exakt weiter.
-- 01 Probe b3: node-web-audio-api mit leerem Worklet 669 Aussetzer in 60 s, ohne Worklet 0 (Nachprüfung: 1 539, die
-  Zahl hängt an der Fremdlast, der Befund steht; 01 NP).
-- 10 §5: Unit-Schnitt; 10 Probe c: systemd startet einen Kern mit `RestartSec=0` in 38,7 ms bis zum ersten Block.
+- 01 test e2: sender via SIGKILL, the core continued playing 51 of 51 beat intervals exactly.
+- 01 test e1: second core via SIGKILL, the first one continued 63 of 63 beats exactly.
+- 01 test b3: node-web-audio-api with an empty worklet 669 dropouts in 60 s, without worklet 0 (re-check: 1,539, the
+  number depends on foreign load, the finding stands; 01 NP).
+- 10 §5: unit cut; 10 test c: systemd starts a core with `RestartSec=0` in 38.7 ms until the first block.
 
-## Kippt, wenn
+## Breaks if
 
-Die Prozessgrenzen selbst Aussetzer erzeugen (etwa ein hängender Satellit den Treiber anhält): M7 prüft das
-für Rückwege, M11 für den Watchdog.
+The process boundaries themselves produce dropouts (for example a hanging satellite stalls the driver): M7 checks this
+for return paths, M11 for the watchdog.

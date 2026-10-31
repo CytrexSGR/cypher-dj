@@ -1,62 +1,62 @@
-# ADR 014: Controller für Andreas
+# ADR 014: Controller for Andreas
 
-- **Status:** vorläufig, Messung M17 (Andreas' Gerät) steht aus
-- **Datum:** 2026-09-23
-- **Getragene Anforderungen:** A1, A5, A7, A14, A26
-- **Hängt zusammen mit:** ADR 007, 013, 023
+- **Status:** provisional, measurement M17 (Andreas' device) is outstanding
+- **Date:** 2026-09-23
+- **Requirements carried:** A1, A5, A7, A14, A26
+- **Related to:** ADR 007, 013, 023
 
-## Kontext
+## Context
 
-Andreas' Controller ist unbekannt (A26); `hidapi` fehlt auf DJ-Maschine (09 §3.7). Gemessen ist der Weg mit einem
-Software-Sender: USB-MIDI → ALSA → Midi-Bridge → JACK-MIDI, eine Periode später am richtigen Sample (09 Probe c,
-NP). Die Nachprüfung fand zwei Fallen: unbekannte Knopfstellung springt (0,3675), ein Rauschschritt bricht Cyphers
-Fahrt ab (09 NP K3, K4).
+Andreas' controller is unknown (A26); `hidapi` is missing on the DJ machine (09 §3.7). Measured is the path with a
+software sender: USB MIDI → ALSA → MIDI bridge → JACK MIDI, one period later at the correct sample (09 probe c,
+NP). The re-check found two traps: an unknown knob position jumps (0.3675), and a noise step breaks off Cyphers
+run (09 NP K3, K4).
 
-## Entscheidung
+## Decision
 
-1. **Weg:** USB-MIDI-Klassengerät → ALSA → PipeWire-Midi-Bridge → `cypherdj-kern:hand_in` (JACK-MIDI mit
-   Sample-Versatz). Kein Umweg über Node. LED-Rückweg über `cypherdj-kern:hand_led`.
-2. **Mapping als Datei** (`~/.config/cypherdj/controller/<geraet>.json`, Format `SCHNITTSTELLEN.md` §7), keine
-   Mapping-Skripte mit Logik; die Logik sitzt im Hand-Schiedsrichter des Kerns.
-3. **Übernahme:** erster Wert je Regler nach Start oder Neuverbindung zählt nur als Stellung; **skaliert** für Potis
-   und Fader, **relativ** für Endlos-Encoder; **Totzone 3/128** (Mixxx-Schwelle), bevor ein Griff einen Regler von
-   einem Plan übernimmt; Berührungssensor als Auslöser, wo vorhanden.
-4. **Rückgabe** eines Reglers an `frei`: Freigabe-Geste (Umschalt plus Berühren) oder 32 Beats (8 Takte) ohne
-   Handbewegung, was zuerst kommt (Vorgabe zu 09 Frage 2).
-5. **Belegung (Vorschlag bis zum Gerät):** je Deck Play, CDJ-Cue, 4 Pads Hotcue (Umschalt: 5 bis 8, setzen), Pads im
-   Roll-Modus (1/4 bis 1/32), Loop-Encoder (Länge, drücken an/aus), Beatjump ±, Nudge-Encoder, Tap, EQ Hoch/Mitte/Tief
-   als Encoder mit LED-Kranz, 3 Kill-Tasten, Filter, Send, Trim, Kanalfader, PFL. Global: Crossfader, Cue-Mix,
-   Kopfhörerpegel, Split, Tempo-Encoder (Hand-Segment), **Spielart-Encoder, Längen-Encoder (Zeitdruck), Start**,
-   **Bass-Tausch-Taste** (zwei gekoppelte Kills als Gruppe auf dem nächsten Takt), „Cypher, Vorschlag“,
-   „Cypher hören“, Annehmen, Verwerfen, **Stopp**, Freigabe, Urteil gut/daneben, Autonomie-Schalter 0 bis 3,
-   Kiste-Browser (Encoder plus Laden auf Deck n).
-6. **LEDs:** eine Farbe für Andreas' Halter, eine für Cypher; Hörschein grün/rot; Vorschlag wartet; Rückfall aktiv;
-   Notbahn aktiv; die letzten 4 Takte vor einer Frist blinkt das Deck.
-7. **Laden aus der Kiste** geht auch bei totem Leitstand (der Kern liest `/dev/shm/cypherdj/kiste.json`).
-8. **Empfehlung Hardware:** Endlos-Encoder mit LED-Kranz für alles, was Cypher auch fährt (dann gibt es keine
-   Übernahmefrage); ein echter Fader für die KI-Spur; Motorfader optional. HID erst, wenn Andreas' Gerät es verlangt.
+1. **Path:** USB-MIDI class device → ALSA → PipeWire MIDI bridge → `cypherdj-kern:hand_in` (JACK MIDI with
+   sample offset). No detour via Node. LED return path via `cypherdj-kern:hand_led`.
+2. **Mapping as a file** (`~/.config/cypherdj/controller/<geraet>.json`, format `SCHNITTSTELLEN.md` §7), no
+   mapping scripts with logic; the logic sits in the core's hand arbiter.
+3. **Takeover:** the first value per control after start or reconnection counts only as position; **scaled** for pots
+   and faders, **relative** for endless encoders; **dead zone 3/128** (Mixxx threshold), before a grab takes a control
+   over from a plan; touch sensor as trigger where present.
+4. **Return** of a control to `frei` (free): release gesture (shift plus touch) or 32 beats (8 bars) without
+   hand movement, whichever comes first (default per 09 question 2).
+5. **Assignment (proposal until the device is known):** per deck play, CDJ cue, 4 pads hotcue (shift: 5 to 8, set), pads in
+   roll mode (1/4 to 1/32), loop encoder (length, press on/off), beat jump ±, nudge encoder, tap, EQ high/mid/low
+   as encoders with LED ring, 3 kill buttons, filter, send, trim, channel fader, PFL. Global: crossfader, cue mix,
+   headphone level, split, tempo encoder (hand segment), **playing style encoder, length encoder (time pressure), start**,
+   **bass swap button** (two coupled kills as a group on the next bar), "Cypher, proposal",
+   "Cypher listen", accept, discard, **stop**, release, verdict good/off, autonomy switch 0 to 3,
+   crate browser (encoder plus load to deck n).
+6. **LEDs:** one colour for Andreas' holder, one for Cypher; listening pass green/red; proposal waiting; fallback active;
+   Notbahn (fallback path) active; the last 4 bars before a deadline the deck blinks.
+7. **Loading from the crate** also works with a dead control room (the core reads `/dev/shm/cypherdj/kiste.json`).
+8. **Hardware recommendation:** endless encoders with LED ring for everything Cypher also drives (then there is no
+   takeover question); one real fader for the AI track; motorized fader optional. HID only when Andreas' device requires it.
 
-## Alternativen und warum nicht
+## Alternatives and why not
 
-| Alternative | Grund der Ablehnung | Beleg |
+| Alternative | Reason for rejection | Evidence |
 |---|---|---|
-| Pickup-Übernahme (Ableton „Pick-Up“, Mixxx Soft Takeover) als Vorgabe | Wert bleibt hängen, wenn Andreas vom Wert weg dreht | 09 §3.6, Probe b |
-| Sprung-Übernahme | Sprung 0,21 am Griff-Sample | 09 §3.6 |
-| Controller über Node (`@julusian/midi`) | ohne Sample-Stempel; Weck-Streuung | 06 §3.1, Probe a Strom 4 |
-| HID sofort | `hidapi` fehlt, Gerät unbekannt | 09 §3.7 |
+| pickup takeover (Ableton "Pick-Up", Mixxx soft takeover) as default | value stays stuck if Andreas turns away from the value | 09 §3.6, probe b |
+| jump takeover | jump of 0.21 at the grab sample | 09 §3.6 |
+| controller via Node (`@julusian/midi`) | without sample stamp; wakeup scatter | 06 §3.1, probe a current 4 |
+| HID immediately | `hidapi` missing, device unknown | 09 §3.7 |
 
-## Folgen
+## Consequences
 
-- USB-Abfrage und Zittern echter Potis sind ungemessen (M17).
-- Die Belegung ist ein Vorschlag, bis das Gerät bekannt ist; die Mechanik hängt nicht daran.
+- USB polling and jitter of real pots are unmeasured (M17).
+- The assignment is a proposal until the device is known; the mechanics do not depend on it.
 
-## Beleg
+## Evidence
 
-09 §3.6, §3.7, Probe b (Übernahme-Modi), Probe c (1024: 21,318 ms, Spanne 0,035 ms; 256: 5,32 ms, Spanne 0,041 ms;
-300 von 300), NP c (5,326 ms, Spanne 0,060 ms), K3, K4; Mixxx `softtakeover.h:20` (Schwelle 3/128),
-`softtakeover.cpp:70`; entwurf-spiel §3.1 (Belegung).
+09 §3.6, §3.7, probe b (takeover modes), probe c (1024: 21.318 ms, spread 0.035 ms; 256: 5.32 ms, spread 0.041 ms;
+300 of 300), NP c (5.326 ms, spread 0.060 ms), K3, K4; Mixxx `softtakeover.h:20` (threshold 3/128),
+`softtakeover.cpp:70`; entwurf-spiel §3.1 (assignment).
 
-## Kippt, wenn
+## Reverses if
 
-Andreas' Gerät ist HID-only (dann `hidapi` installieren, mit seinem Ja, und eine HID-Brücke als eigener Prozess mit
-Zeitstempel) oder zittert stärker als 3/128.
+Andreas' device is HID-only (then install `hidapi`, with his yes, and a HID bridge as its own process with a
+timestamp) or jitters more than 3/128.

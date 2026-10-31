@@ -1,28 +1,28 @@
-# ADR 024: Kit im Kern (Strudel, Stufe 1)
+# ADR 024: Kit in the core (Strudel, stage 1)
 
-Status: angenommen 2026-09-27 (Cypher; Andreas: Vorziehen von 54/56 auf seinen Aufruf von /write-plan).
+Status: accepted 2026-09-27 (Cypher; Andreas: pulling 54/56 forward on his call of /write-plan).
 
-## Kontext
+## Context
 
-ADR 010 legt fest, dass Erzeuger nur Ereignisse liefern und der Klang aus einem Wirt kommt (SunVox, Scheibe 57),
-per JACK-MIDI mit Rückweg, Puls und Latenzvorhalt (Scheibe 54). Das sind drei L-Scheiben, bevor ein Muster klingt.
-Andreas' gemeinsames Spiel lebt in Strudel (Live-Act 26./27.09.); Wortbefehle wie „hihats“ brauchen einen kurzen Weg.
+ADR 010 fixes that generators deliver only events and that the sound comes from a host (SunVox, slice 57),
+via JACK MIDI with return path, pulse and latency lead time (slice 54). That makes three L-slices before a pattern sounds.
+Andreas' shared play lives in Strudel (live act 26./27.09.); word commands like "hihats" need a short path.
 
-## Entscheidung
+## Decision
 
-`/erz/strom` bekommt die Zielform `kit:<name>`. Der Kern spielt `klang[note]` eines Kits (Einzelschüsse,
-Stereo float32, 48 kHz) am Sample des Beats in den Eingang eines Erzeuger-Kanals. Das Netz lädt das Kit; der Kern
-tauscht den Zeiger im Zyklus und gibt das alte als Ereignis zur Freigabe zurück (Muster `/k/mapping`, Scheibe 35).
+`/erz/strom` gets the target form `kit:<name>`. The core plays `klang[note]` of a kit (single shots,
+stereo float32, 48 kHz) at the sample of the beat into the input of a generator channel. The network loads the kit; the
+core swaps the pointer in the cycle and returns the old one as an event for release (same pattern as `/k/mapping`, slice 35).
 
-## Folgen
+## Consequences
 
-- Sample-genau ohne Rückweg; keine Synthese, keine Tonhöhe: Melodisches bleibt bei 57.
-- I3c ist in Stufe 1 ausgesetzt (SCHNITTSTELLEN §4.8), weil es für Erzeuger noch keinen Hörschein gibt.
-- Kits liegen gemeinsam unter `~/.config/cypherdj/kits/`; `djk/erzeuger/kit_bauen.py` baut sie aus Strudel-Listen.
+- Sample-exact without return path; no synthesis, no pitch: melodic material stays with slice 57.
+- I3c is suspended in stage 1 (SCHNITTSTELLEN §4.8), because there is no listening pass for generators yet.
+- Kits are kept together under `~/.config/cypherdj/kits/`; `djk/erzeuger/kit_bauen.py` builds them from Strudel lists.
 
-## Verworfen
+## Discarded
 
-| Weg | Warum nicht | Beleg |
+| Route | Why not | Evidence |
 |---|---|---|
-| Strudel im Browser als dritter Audio-Eingang | Browser-Uhr treibt, `setPattern` ohne Raster, Tod der Seite nimmt den Klang mit | ADR 017 |
-| MIDI an SunVox zuerst | drei L-Scheiben vor dem ersten Ton | ROADMAP 54, 57 |
+| Strudel in the browser as a third audio input | browser clock drives, `setPattern` without grid, the death of the page takes the sound with it | ADR 017 |
+| MIDI to SunVox first | three L-slices before the first sound | ROADMAP 54, 57 |

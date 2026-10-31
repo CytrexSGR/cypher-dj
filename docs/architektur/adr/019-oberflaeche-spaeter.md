@@ -1,43 +1,43 @@
-# ADR 019: Oberfläche später
+# ADR 019: Surface later
 
-- **Status:** angenommen
-- **Datum:** 2026-09-23
-- **Getragene Anforderungen:** A24, A25, A1, A4
-- **Hängt zusammen mit:** ADR 001, 013, 014, 018
+- **Status:** accepted
+- **Date:** 2026-09-23
+- **Requirements carried:** A24, A25, A1, A4
+- **Related to:** ADR 001, 013, 014, 018
 
-## Kontext
+## Context
 
-A24: „mir sind aktuell oberfläche egal. das können wir nachziehen, oder integrieren was es gibt jeweils.“ Trotzdem
-braucht A1 einen Sichtkanal für Cyphers Vorschläge (09 NP „Was fehlt“: ohne Sichtbarkeit ist „Vorschlagen“ nicht
-umsetzbar) und A4 hilft mit Pegelanzeigen („also helfen die pegelanzeigen schon mal bisschen“).
+A24: "Right now I don't care about the surface. We can catch up later, or integrate whatever exists at the time." Still,
+A1 needs a view channel for Cypher's proposals (09 NP "What is missing": without visibility "proposing" cannot be
+implemented), and A4 is helped by level displays ("so the level meters do help a little").
 
-## Entscheidung
+## Decision
 
-1. **Vor jeder Oberfläche** tragen drei Minimalkanäle: **LEDs am Controller** (ADR 014), eine **Ansage-Zeile** im
-   Terminal (liest den Leitstand-WebSocket, zeigt je Ereignis einen Satz mit Takt: Cyphers nächster Plan, offene
-   Vorschläge, Rückfall, Notbahn, Pegel-Ampel je Deck) und den **Spielzettel** als Text.
-2. **Die Oberfläche kommt später** als eigener Prozess, der nur den Leitstand-WebSocket liest und Befehle an den
-   Leitstand schickt, nie an den Kern und nie im Audiopfad. Ob Browser-Seite oder eigene App, entscheidet sich dann;
-   Inhalt wie im Entwurf „Spielbarkeit“ (Phrasen, Restzeit, Bandpegel, Ampel, Halter, laufender Plan, Tracker-Ansicht).
-3. Eine abgestürzte Oberfläche nimmt nichts Hörbares mit.
+1. **Before any surface** three minimal channels carry: **LEDs on the controller** (ADR 014), an **announcement line** in the
+   terminal (reads the control desk WebSocket, shows one sentence per event with bar: Cypher's next plan, open
+   proposals, fallback, fallback path (Notbahn), level traffic light per deck) and the **play sheet** as text.
+2. **The surface comes later** as its own process that only reads the control desk WebSocket and sends commands to the
+   control desk, never to the core and never in the audio path. Whether it is a browser page or its own app is decided then;
+   content as in the draft "Playability" (phrases, remaining time, band level, traffic light, holder, running plan, tracker view).
+3. A crashed surface takes nothing audible with it.
 
-## Alternativen und warum nicht
+## Alternatives and why not
 
-| Alternative | Grund der Ablehnung | Beleg |
+| Alternative | Reason for rejection | Evidence |
 |---|---|---|
-| Oberfläche zuerst | A24 stellt sie zurück; die Architektur-Risiken liegen im Audiopfad | A24 |
-| JUCE-GUI im Kernprozess | ein Adressraum: GUI-Absturz nimmt den Ton mit; AGPL | 01 §3.7 |
-| gar kein Sichtkanal bis zur Oberfläche | Vorschlagen wäre nicht umsetzbar | 09 NP „Was fehlt“ |
+| Surface first | A24 defers it; the architecture risks lie in the audio path | A24 |
+| JUCE GUI in the core process | one address space: GUI crash takes the sound with it; AGPL | 01 §3.7 |
+| no view channel at all until the surface | proposing would not be implementable | 09 NP "What is missing" |
 
-## Folgen
+## Consequences
 
-- Alles, was eine spätere Oberfläche braucht, steht schon im Leitstand-Strom (`SCHNITTSTELLEN.md` §9).
-- Der Hörschein ersetzt für Cypher die Pegelanzeige; Andreas bekommt die Ampel je Deck über LEDs und Ansage-Zeile.
+- Everything a later surface needs already exists in the control desk stream (`SCHNITTSTELLEN.md` §9).
+- For Cypher the listening check replaces the level display; Andreas gets the traffic light per deck via LEDs and the announcement line.
 
-## Beleg
+## Evidence
 
-01 §3.7, §3.9; 09 NP „Was fehlt“; Recherche §5 („Sichtbarer Plan“, ReaLJam).
+01 §3.7, §3.9; 09 NP "What is missing"; research §5 ("Visible plan", ReaLJam).
 
-## Kippt, wenn
+## Overturned if
 
-Andreas im Set eine Anzeige vermisst: dann zieht die Oberfläche nach vorn, ohne Architekturänderung.
+Andreas misses a display during a set: then the surface moves forward, without an architecture change.

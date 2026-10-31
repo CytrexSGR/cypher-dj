@@ -1,30 +1,24 @@
-# ADR 025: Loop-Boxen im Kern (MVP 2)
+# ADR 025: Loop boxes in the core (MVP 2)
 
-Status: angenommen 2026-09-27 (Cypher; Andreas: „mein nächstes mvp ist damit … 2 loop decks … wav extrakt aus einer
-laufenden strudel loop … jede loop box braucht beatsynchrone filter“, FX-Vorschlag „ja“).
+Status: accepted 2026-09-27 (Cypher; Andreas: "my next mvp is with it … 2 loop decks … wav extract from a running strudel loop … each loop box needs beat-synchronous filters", FX proposal "yes").
 
-## Kontext
+## Context
 
-Das gemeinsame Spiel lebt in Strudel (ADR 024). Andreas will davon Loops abgreifen, in zwei Boxen legen, einblenden,
-vorhören und mit Beat-FX bearbeiten. Scheibe 38 (Deck-Grammatik mit Loop) braucht Stretcher und Lader und ist groß.
+The shared play lives in Strudel (ADR 024). Andreas wants to tap loops from it, put them in two boxes, fade them in, pre-listen and process them with beat FX. Slice 38 (deck grammar with loop) needs stretchers and a loader and is large.
 
-## Entscheidung
+## Decision
 
-Zwei Loop-Boxen im Kern auf `pad/1` und `pad/2`. Ein Loop ist genau N Takte bei 128 BPM (N = 1, 2, 4, 8); die Box
-spielt ihn phasenstarr zur Kern-Uhr (Position = Beat mod 4·N), Start und Stopp auf der nächsten Takt-Eins. Das Netz
-lädt Loops und legt Mitschnitt-Puffer an; der Kern tauscht Zeiger und gibt sie als Ereignis zur Freigabe zurück
-(Muster `/k/mapping`, ADR 024). Beat-FX sitzen in der Box vor dem Kanalzug und haben eigene Befehle.
+Two loop boxes in the core on `pad/1` and `pad/2`. A loop is exactly N bars at 128 BPM (N = 1, 2, 4, 8); the box plays it phase-locked to the core clock (position = beat mod 4·N), start and stop on the next bar one. The network process loads loops and sets up capture buffers; the core swaps pointers and returns them as an event for release (pattern `/k/mapping`, ADR 024). Beat FX sit in the box before the channel strip and have their own commands.
 
-## Folgen
+## Consequences
 
-- Kein Stretcher, kein Keylock: Loops schweigen bei Tempo ≠ 128.
-- Der Mitschnitt greift `erz/1` vor Trim ab und beginnt auf einem Vielfachen seiner Länge.
-- Der DSP-Kanalzug (Naht, Scheibe 04) bleibt unberührt; `pad/*` sind keine Einzelschuss-Kanäle mehr, solange der
-  Erzeuger sie nicht als Ziel wählt.
+- No stretcher, no keylock: loops fall silent at tempo ≠ 128.
+- The capture taps `erz/1` before trim and starts on a multiple of its length.
+- The DSP channel strip (seam, slice 04) remains untouched; `pad/*` are no longer single-shot channels, as long as the generator does not choose them as target.
 
-## Verworfen
+## Discarded
 
-| Weg | Warum nicht | Beleg |
+| Route | Why not | Evidence |
 |---|---|---|
-| Loops auf Deck 3 und 4 (Deck-Engine, Scheibe 38) | Stretcher, Lader, Grammatik: groß; für Loops auf Set-Tempo unnötig | ROADMAP 38 |
-| Beat-FX als §1.5-Regler im Kanalzug | Naht des Kanalzugs festgeschrieben; Regler zögen durch Tabelle, Attrappe, Leitstand, Seiten-Kurven | `kanalzug.h` Kopf, Spec Entscheidung 8 |
+| Loops on deck 3 and 4 (deck engine, slice 38) | stretcher, loader, grammar: large; unnecessary for loops at set tempo | ROADMAP 38 |
+| Beat FX as §1.5 control in the channel strip | seam of the channel strip is fixed; controls would have to pass through the table, the core mock, the Leitstand, page curves | `kanalzug.h` header, spec decision 8 |

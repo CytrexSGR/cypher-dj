@@ -1,51 +1,51 @@
-# ADR 005: Zeitbasis der Befehle und Verspätung
+# ADR 005: Time base of commands and lateness
 
-- **Status:** angenommen
-- **Datum:** 2026-09-23
-- **Getragene Anforderungen:** A1, A14, A20, A21
-- **Hängt zusammen mit:** ADR 004, 007, 023
+- **Status:** accepted
+- **Date:** 2026-09-23
+- **Requirements carried:** A1, A14, A20, A21
+- **Related to:** ADR 004, 007, 023
 
-## Kontext
+## Context
 
-Befehle kommen von Andreas' Hand, vom Leitstand (für Cypher und Andreas' Makros), von Erzeugern. Offen war, in
-welcher Zeit sie reden und was mit Verspätetem passiert: 02 und 09 (Leitsatz 5) wollen verwerfen, 03 §3.4 auf den
-nächsten Rasterschritt schieben, 02 NP K11 warnt, dass ein verworfener Fader gefährlich ist.
+Commands come from Andreas' hand, from the control station (for Cypher and Andreas' macros), from generators. Open
+was in which time they talk and what happens to late ones: 02 and 09 (principle 5) want to discard, 03 §3.4 wants to
+push them to the next grid step, 02 NP K11 warns that a discarded fader-close is dangerous.
 
-## Entscheidung
+## Decision
 
-1. **Musikzeit ist der Beat** (`f64`, Viertel, Beat 0 = Set-Start, 1 Takt = 4 Beats, 1 Phrase = 8 Takte = 32
-   Beats). Alle Prozesse außer der Hand schicken Befehle mit Ziel-Beat auf der Kern-Uhr. Nie Millisekunden, nie
-   OSC-Zeitmarken, nie „jetzt“ aus der KI.
-2. **Die Hand** kommt als JACK-MIDI mit Sample-Versatz und wirkt eine Periode nach dem Griff am richtigen Sample.
-3. **Verspätung je Befehlsart** (Feld `politik` in jedem Befehl, `SCHNITTSTELLEN.md` §16):
-   - `musik` (Erzeuger-Ereignisse, KI-Planteile, Deck-Starts aus Plänen): zu spät = **verworfen und gemeldet**;
-   - `zustand` (Fader zu, Kill, Stopp, Ausblenden, Stopp-Taste): zu spät = **am nächsten Zyklus mit 10-ms-Rampe
-     ausgeführt und gemeldet**;
-   - `raster` (Deck-Griffe: Loop, Sprung, Hotcue aus einem Makro): zu spät = **auf den nächsten erreichbaren
-     Rasterpunkt** der angegebenen Rastergröße gelegt und gemeldet.
-4. **Quittung** für jeden Befehl: `angenommen`, `gestartet`, `fertig`, `verspaetet_verworfen`,
-   `verspaetet_ausgefuehrt`, `abgelehnt` (mit Grund), `abgebrochen` (mit Grund), `storniert`.
+1. **Musical time is the beat** (`f64`, quarter note, beat 0 = set start, 1 bar = 4 beats, 1 phrase = 8 bars = 32
+   beats). All processes except the hand send commands with target beat on the core clock. Never milliseconds, never
+   OSC timestamps, never "now" from the AI.
+2. **The hand** comes as JACK-MIDI with sample offset and takes effect one period after the grab, at the right sample.
+3. **Lateness per command type** (field `politik` in every command, `SCHNITTSTELLEN.md` §16):
+   - `musik` (generator events, AI plan parts, deck starts from plans): too late = **discarded and reported**;
+   - `zustand` (fader close, kill, stop, fade out, stop button): too late = **executed in the next cycle with a
+     10-ms ramp and reported**;
+   - `raster` (deck grabs: loop, jump, hotcue from a macro): too late = **placed on the next reachable grid point** of
+     the given grid size and reported.
+4. **Receipt** for every command: `angenommen`, `gestartet`, `fertig`, `verspaetet_verworfen`,
+   `verspaetet_ausgefuehrt`, `abgelehnt` (with reason), `abgebrochen` (with reason), `storniert`.
 
-## Alternativen und warum nicht
+## Alternatives and why not
 
-| Alternative | Grund der Ablehnung | Beleg |
+| Alternative | Reason for rejection | Evidence |
 |---|---|---|
-| Millisekunden oder Wanduhr | Tempoänderung nach dem Senden: bis 554 Samples (11,5 ms) daneben; ohne Stempel median 12 ms, bis 29 ms | 02 NP N1; 06 §4.1 Strom 4; 01 §4.3 („jetzt“ −2,42 bis +5,25 ms) |
-| OSC-Bundle mit Zeitmarke | Verspätetes wird „immediately“ gespielt (OSC 1.0) | 02 §3.2 |
-| immer verwerfen | ein 3 ms zu später Fader-zu würde verworfen | 02 NP K11, N2 |
-| immer verspätet ausführen | Musik-Ereignisse kämen als Schwall | 06 §4.1 Lauf 4 (ohne Stempel 48 Ereignisse bis 5,78 s zu spät) |
+| milliseconds or wall clock | tempo change after sending: up to 554 samples (11.5 ms) off; without stamp median 12 ms, up to 29 ms | 02 NP N1; 06 §4.1 run 4; 01 §4.3 ("now" −2.42 to +5.25 ms) |
+| OSC bundle with timestamp | late ones are played "immediately" (OSC 1.0) | 02 §3.2 |
+| always discard | a fader-close 3 ms too late would be discarded | 02 NP K11, N2 |
+| always execute late | music events would come as a burst | 06 §4.1 run 4 (without stamp 48 events up to 5.78 s late) |
 
-## Folgen
+## Consequences
 
-- Planer müssen Vorlauf einhalten (`SCHNITTSTELLEN.md` §3): Regler-Teile mindestens 2 Zyklen, Deck-Griffe auf dem
-  Stretcher-Weg mindestens Arbeitsvorlauf plus Bandvorlauf.
-- „Genau oder gemeldet“ ist die Zusage des Kerns; ein Befehl klingt nie still an falscher Stelle.
+- Planners must keep lead time (`SCHNITTSTELLEN.md` §3): control parts at least 2 cycles, deck grabs on the stretcher
+  path at least work lead-in plus buffer lead.
+- "Exact or reported" is the core's promise; a command never sounds silently at the wrong place.
 
-## Beleg
+## Evidence
 
-02 Probe b, NP N1, N2 (Marge ab 4,58 ms 12 von 12 genau, darunter gemeldet, keiner an falscher Stelle), K10, K11;
-06 Probe a (295 von 295 frame-genau mit Beat-Stempel); 01 Probe a3; 09 §3.3 Leitsätze.
+02 check b, NP N1, N2 (margin from 4.58 ms: 12 of 12 exact, below that reported, none at the wrong place), K10, K11;
+06 check a (295 of 295 frame-exact with beat stamp); 01 check a3; 09 §3.3 principles.
 
-## Kippt, wenn
+## Revisit if
 
-Nie grundsätzlich; einzelne Politiken können sich nach Hörerfahrung ändern (Journal zeigt jede Verspätung).
+Never fundamentally; individual policies may change after listening experience (the journal shows every lateness).

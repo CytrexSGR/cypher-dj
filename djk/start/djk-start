@@ -258,7 +258,11 @@ if [ -n "${CYPHERDJ_PYTHON:-}" ]; then
   [[ "$CYPHERDJ_PYTHON" =~ ^/[A-Za-z0-9._/+=,:-]+$ && "$CYPHERDJ_PYTHON" != *..* ]] || { echo "djk-start: CYPHERDJ_PYTHON must be an absolute path without spaces, quotes or '..', is '$CYPHERDJ_PYTHON'. Nothing started." >&2; exit 2; }
   OF_ARGS="$OF_ARGS --python $CYPHERDJ_PYTHON"
 fi
-VARS=(--var "MASTER=$KMASTER" --var "CUE_ARG=$CUE_ARG" --var "TON_FREI=$TF_ARG" --var "KERN_ARGS=$KERN_ARGS"
+# AK26-Nachzug (2026-10-31): der Kern bekommt einen eigenen physischen Kern, demucs (stems_lauf.ts) liegt auf 2 bis 7.
+# Zwei physische Kerne (CPU 0,1 und ihre SMT-Geschwister 8,9), damit die Kern-Arbeiter (Keylock, Warp, Graph) Platz haben.
+KERN_CPUS=${CYPHERDJ_KERN_CPUS:-0 1 8 9}
+[[ "$KERN_CPUS" =~ ^[0-9][0-9\ ,-]*$ ]] || { echo "djk-start: CYPHERDJ_KERN_CPUS must be a CPU list like '0 8', is '$KERN_CPUS'. Nothing started." >&2; exit 2; }
+VARS=(--var "MASTER=$KMASTER" --var "CUE_ARG=$CUE_ARG" --var "TON_FREI=$TF_ARG" --var "KERN_ARGS=$KERN_ARGS" --var "KERN_CPUS=$KERN_CPUS"
       --var "KERN_CLIENT=$KERN_CLIENT" --var "LEITSTAND_ARGS=$LS_ARGS" --var "OBERFLAECHE_ARGS=$OF_ARGS")
 
 if [ "$MODUS" = vorlagen ]; then

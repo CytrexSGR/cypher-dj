@@ -1,148 +1,124 @@
-# ADR 013: KI-Schicht (Rollen, Wahl statt Plan, Zug-Takt, Autonomie)
+# ADR 013: AI layer (roles, choice instead of plan, move cadence, autonomy)
 
-- **Status:** vorläufig, Messung M15 steht aus; Spieler geändert auf Sonnet-Welle (Nachtrag 2026-09-25)
-- **Datum:** 2026-09-23
-- **Getragene Anforderungen:** A1, A3, A4, A7, A13, A15, A16, A24
-- **Hängt zusammen mit:** ADR 012, 014, 023
+- **Status:** provisional, measurement M15 outstanding; player changed to Sonnet wave (addendum 2026-09-25)
+- **Date:** 2026-09-23
+- **Requirements carried:** A1, A3, A4, A7, A13, A15, A16, A24
+- **Related to:** ADR 012, 014, 023
 
-*Befangenheit, offen gelegt: diese Entscheidung regelt meinen eigenen Spielraum. Darum liegt jede Stufe meiner
-Freiheit auf einem Schalter in Andreas' Hand, und die Vorgabe ist klein.*
+*Conflict of interest, disclosed: this decision regulates my own room for maneuver. That is why every level of my freedom lies on a switch in Andreas' hand, and the default is small.*
 
-## Kontext
+## Context
 
-Ein LLM-Zug dauert Sekunden (09 Probe a, a2); das LLM schrieb in 0 von 105 Plänen eine Kopplung, woraus zur
-Laufzeit 15 Takte doppelter Sub entstanden (09 NP K1); eine Wahl statt eines Plans kostete als Text-Antwort
-1,307 bis 1,437 s (NP K7). A16 sagt wörtlich: „Was Kunst bleibt: welcher Track, welche Spielart, welcher Moment.“
-09 Frage 1 fragt, wie viel Cypher allein darf; ohne Sichtkanal ist „Vorschlagen“ nicht umsetzbar (09 NP „Was fehlt“).
+An LLM move takes seconds (09 check a, a2); the LLM wrote a coupling in 0 of 105 plans, which at runtime produced 15 bars of doubled sub (09 NP K1); a choice instead of a plan cost 1.307 to 1.437 s as a text answer (NP K7). A16 says literally: "What stays art: which track, which play style, which moment."
+09 question 1 asks how much Cypher may do on its own; without a view channel "proposing" cannot be implemented (09 NP "What is missing").
 
-## Entscheidung
+## Decision
 
-1. **Rollen:**
-   - **Spieler:** Claude Sonnet in einer warmen Sitzung je Set (`claude -p --input-format stream-json
-     --output-format stream-json`), schlanker Rollenprompt nur mit Musik- und Set-Kontext, `MAX_THINKING_TOKENS=0`,
-     ohne Hooks und fremde MCP-Server, ein Aufwärmzug vor dem Set. Getrieben von `cypherdj-spieler` (Node), Werkzeuge
-     über `cypherdj-mcp`.
-   - **Zerleger** (ab Scheibe 6): zweite, getrennte Sonnet-Sitzung in der Werkstatt (A13).
-   - **Hauptinstanz** (Opus mit Gedächtnis) nur vor und nach dem Set: Rollenprompt, Lernmodell, Zusammenfassung,
-     A/B-Paare in Auftrag geben. Opus nicht für Züge; Haiku nicht für freie Pläne.
-2. **Wahl statt Plan:** Cypher antwortet mit `waehle{material_id, spielart, start_takt, hoerschein, absicht}` aus
-   Kandidaten, die der Rechner vorbereitet hat. Der Leitstand lässt die Spielart vom Rechner zu Planteilen expandieren,
-   vergibt Kopplungen, prüft die Vorhersage gegen die Sub-Grenze (Tief-Grenzen bis M20 nur Warnung, ADR 012) und reicht
-   erst dann ein. `plan_einreichen` (freier
-   Plan in der einen Planform) bleibt die Ausnahme für Ungewöhnliches.
-3. **Zug-Takt:** der Leitstand ruft, nicht Cypher. Anlässe: spätestens 8 Takte vor dem frühesten Start eines Einsatzes;
-   `material_fertig`; Hörschein; Handgriff in einem Cypher-Plan; Verriegelung; abgelehnter oder verfallener Vorschlag;
-   Frist unter 32 Takten; Andreas' Taste „Cypher, Vorschlag“; sein Zuruf (eine getippte Zeile). Nur ein Zug
-   gleichzeitig; jede Anfrage trägt eine Antwortfrist in Beats; zu spät heißt verworfen. In ruhigen Phrasen fragt
-   niemand. Lage je Takt verdichtet, kein Strom unterhalb des Takts an das LLM.
-4. **Autonomie-Stufen** auf einem Schalter am Controller, **Vorgabe Stufe 1**:
-   0 Zuhören (Cypher analysiert und protokolliert nur) · 1 Vorschlagen (**Positivliste:** jede Wahl und jeder Plan wird
-   ein Vorschlag, gleich ob er einen Kanal öffnet oder nur EQ, Stem, Send, Hotcue, Sprung oder Loop an einem schon
-   hörbaren Deck ändert; allein nur Laden, Vorhören, Erzeugen, eigene Pläne abbrechen und ein Plan, der ausschließlich
-   Kanäle der eigenen Spur leiser macht) · 2 Eigene Spur (Cypher spielt freigegebene Kanäle hinter einem Fader, den nur
-   Andreas hält; alles andere weiter als Vorschlag) · 3 Übergänge allein. Durchgesetzt im Leitstand; Wortlaut und
-   Golden-Folge `autonomie_1_eq`: `SCHNITTSTELLEN.md` §10. Grund der Positivliste: A4 „Nichts erreicht den Master
-   ungeprüft“; ein EQ auf +6 dB an Andreas' laufendem Deck öffnet keinen Kanal und ist trotzdem Einspielen ohne ihn.
-5. **Cypher-Stopp** (Taste am Controller, wirkt im Kern auch ohne Leitstand): alle Teile mit Quelle `cypher` ab, Kanäle
-   der KI-Spur in einem Takt auf −200 dB, übrige Regler bleiben stehen, weitere Cypher-Befehle abgelehnt bis „Freigabe“.
-   *Überholt durch Paket 1.18, Entscheidung E-a (Andreas, 2026-10-20):* der Stopp senkt keinen Kanal mehr; laufende Teile von Cypher halten
-   am Ist-Wert, ein laufender Transport läuft weiter und gehört Andreas (D1-SPEC Nachträge 39 und 40).
-6. **Sichtbarkeit vor jeder Oberfläche:** LEDs am Controller (Vorschlag offen, Plan läuft, Rückfall aktiv), eine
-   **Ansage-Zeile** im Terminal (ein Satz mit Takt: was Cypher als Nächstes vorhat), die Taste „Cypher hören“, der
-   Spielzettel als Text. Kein Sprachausgang (Kein Ton ohne Frage).
-7. **MCP-Werkzeuge:** `lage`, `warte`, `waehle`, `plan_einreichen`, `plan_abbrechen`, `laden`, `vorhoeren`, `bestand`,
-   `passung`, `erzeuge`, `spielzettel` (ab Scheibe 7), `markieren` (Formen: `SCHNITTSTELLEN.md` §10). Werkzeuge statt
-   Ressourcen-Abos.
+1. **Roles:**
+   - **Player:** Claude Sonnet in a warm session per set (`claude -p --input-format stream-json
+     --output-format stream-json`), lean role prompt only with music and set context, `MAX_THINKING_TOKENS=0`,
+     without hooks and foreign MCP servers, one warm-up move before the set. Driven by `cypherdj-spieler` (Node), tools
+     via `cypherdj-mcp`.
+   - **Splitter** (from slice 6): second, separate Sonnet session in the workshop (A13).
+   - **Main instance** (Opus with memory) only before and after the set: role prompt, learning model, summary,
+     commission A/B pairs. Opus not for moves; Haiku not for free plans.
+2. **Choice instead of plan:** Cypher answers with `waehle{material_id, spielart, start_takt, hoerschein, absicht}` from
+   candidates that the planner has prepared. The control desk lets the planner expand the play style into plan parts,
+   assigns couplings, checks the prediction against the sub limit (low-band limits until M20 only warning, ADR 012) and only then
+   submits. `plan_einreichen` (free plan in the one plan form) remains the exception for unusual cases.
+3. **Move bar:** the control desk calls, not Cypher. Occasions: at the latest 8 bars before the earliest start of a deployment;
+   `material_fertig`; listening check; hand grab in a Cypher plan; lock; rejected or expired proposal;
+   deadline under 32 bars; Andreas' key "Cypher, proposal"; his call (one typed line). Only one move
+   at a time; every request carries a response deadline in beats; too late means discarded. In quiet phrases
+   nobody asks. State condensed per bar, no stream below the bar to the LLM.
+4. **Autonomy levels** on a switch on the controller, **default level 1**:
+   0 listen (Cypher only analyzes and logs) · 1 propose (**positive list:** every choice and every plan becomes a
+   proposal, whether it opens a channel or only changes EQ, stem, send, hot cue, jump or loop on an already
+   audible deck; alone only loading, pre-listening, generating, aborting own plans, and a plan that exclusively
+   makes channels of the own track quieter) · 2 own track (Cypher plays released channels behind a fader that only
+   Andreas holds; everything else still as proposal) · 3 transitions alone. Enforced in the control desk; wording and
+   golden sequence `autonomie_1_eq`: `SCHNITTSTELLEN.md` §10. Reason for the positive list: A4 "Nothing reaches the master
+   unchecked"; an EQ at +6 dB on Andreas' running deck opens no channel and is still playing in without him.
+5. **Cypher stop** (key on the controller, acts in the core even without the control desk): all parts with source `cypher` off, channels
+   of the AI track to −200 dB within one bar, other controls stay where they are, further Cypher commands rejected until "release".
+   *Overtaken by package 1.18, decision E-a (Andreas, 2026-10-20):* the stop no longer lowers any channel; running parts of Cypher hold
+   at the current value, a running transport keeps running and belongs to Andreas (D1 SPEC addenda 39 and 40).
+6. **Visibility before any surface:** LEDs on the controller (proposal open, plan running, fallback active), an
+   **announcement line** in the terminal (one sentence with bar: what Cypher intends next), the key "Hear Cypher",
+   the play sheet as text. No speech output (No sound without a question).
+7. **MCP tools:** `lage`, `warte`, `waehle`, `plan_einreichen`, `plan_abbrechen`, `laden`, `vorhoeren`, `bestand`,
+   `passung`, `erzeuge`, `spielzettel` (from slice 7), `markieren` (forms: `SCHNITTSTELLEN.md` §10). Tools instead of
+   resource subscriptions.
 
-## Alternativen und warum nicht
+## Alternatives and why not
 
-| Alternative | Grund der Ablehnung | Beleg |
+| Alternative | Reason for rejection | Evidence |
 |---|---|---|
-| LLM schreibt Planteile (09) | 0 von 105 Plänen koppeln; Spielart-Regeln aus dem Prompt verletzt, Prüfer blind; Werkzeugweg 4,5 bis 8,7 s bis zum Plan | 09 NP K1, K6, K9 |
-| kalter `claude -p` je Zug | p50 22,9 s, p95 33,7 s (12 bis 18 Takte) | 09 Probe a |
-| `--effort low` statt `MAX_THINKING_TOKENS=0` | schaltet Denken nicht sicher ab (52 bis 693 Denk-Token in Folgezügen) | 09 NP K6 |
-| Haiku als Spieler | ohne Denken schnell (2,2 bis 2,5 s), bricht aber Bass-Regeln | 09 NP K8 |
-| Opus 5.5 für Züge | Denken nicht abschaltbar („except on Opus 5.5 and the Fable models“) | 09 NP K6 |
-| Ressourcen-Abos statt `warte` | in MCP optional, Weg ins Modell ungeprüft | 09 §3.5 |
-| volle Autonomie ab Start | Vertrauen muss eingelöst werden; Andreas behält die Hand | 09 §6 Frage 1, R10 im Entwurf „KI“ |
+| LLM writes plan parts (09) | 0 of 105 plans couple; play style rules violated from the prompt, checker blind; tool route 4.5 to 8.7 s to the plan | 09 NP K1, K6, K9 |
+| cold `claude -p` per move | p50 22.9 s, p95 33.7 s (12 to 18 bars) | 09 check a |
+| `--effort low` instead of `MAX_THINKING_TOKENS=0` | does not reliably switch off thinking (52 to 693 thinking tokens in follow-up moves) | 09 NP K6 |
+| Haiku as player | fast without thinking (2.2 to 2.5 s), but breaks bass rules | 09 NP K8 |
+| Opus 5.5 for moves | thinking not switchable ("except on Opus 5.5 and the Fable models") | 09 NP K6 |
+| resource subscriptions instead of `warte` | optional in MCP, route into the model unchecked | 09 §3.5 |
+| full autonomy from the start | trust must be earned; Andreas keeps the hand | 09 §6 question 1, R10 in the draft "KI" |
 
-## Folgen
+## Consequences
 
-- Formfehler kosten einen Zug, nie einen Klang: der Leitstand prüft jede Antwort.
-- Die Wahl als Werkzeugaufruf ist ungemessen; gerechnet 2,5 bis 3,5 s (Text 1,3 bis 1,4 s plus 1 bis 2 s für den
-  zweiten Modellaufruf nach dem Werkzeugergebnis, 09 NP K6). **Maßgeblich ist die Antwortfrist des Vertrags: 4 Takte
-  (7,5 s bei 128)** vom Zug bis `antwort_bis_beat`; die übrigen 4 Takte der 8 Takte Vorlauf gehören Andreas' Annahme
-  und dem Vorlauf der Teile (`SCHNITTSTELLEN.md` §3). Gemessen sind: freier Plan über das Werkzeug 4,5 bis 8,7 s,
-  warme Text-Züge mit Schema bis 14,5 s, die Wahl nur als Text 1,3 bis 1,4 s (n = 5, Kontext höchstens 7 410 Token,
-  `llm_x_wahl_sonnet_low_ergebnis.json` Feld `cache_gelesen`). Zug plus Reparaturzug passen nur, wenn die Werkzeug-Wahl
-  die gerechneten 2,5 bis 3,5 s hält; das ist offen.
-- Ist die Frist knapp, rückt die Zug-Anfrage bei „sicher“ auf F−28 (12 Takte vor S), die Antwortfrist bleibt S − 4 Takte.
-- Kosten über ein Set sind ungemessen: bei 260 000 Token Kontext liest jeder Zug diese Menge aus dem Cache (09 NP
-  „Was fehlt“). M15 misst zuerst 30 Minuten.
-- Formsicherheit bei großem Kontext ist nur für Text gemessen (0 von 5 gültig bei 259 266 Token); die 10 gültigen
-  Werkzeugaufrufe liefen bei 7 bis 23 Tausend Token (`llm_x_mcp_*_ergebnis.json`, `cache_gelesen`).
+- Form errors cost a move, never a sound: the control desk checks every answer.
+- The choice as a tool call is unmeasured; calculated 2.5 to 3.5 s (text 1.3 to 1.4 s plus 1 to 2 s for the second model call after the tool result, 09 NP K6). **Decisive is the response deadline of the contract: 4 bars (7.5 s at 128)** from the move to `antwort_bis_beat`; the remaining 4 bars of the 8-bar lead belong to Andreas' acceptance and the lead time of the parts (`SCHNITTSTELLEN.md` §3). Measured are: free plan via the tool 4.5 to 8.7 s, warm text moves with schema up to 14.5 s, the choice only as text 1.3 to 1.4 s (n = 5, context at most 7 410 tokens, `llm_x_wahl_sonnet_low_ergebnis.json` field `cache_gelesen`). Move plus repair move fit only if the tool choice holds the calculated 2.5 to 3.5 s; that is open.
+- If the deadline is tight, the move request for "safe" moves up to F−28 (12 bars before S), the response deadline stays S − 4 bars.
+- Costs over a set are unmeasured: at 260 000 tokens of context every move reads this amount from the cache (09 NP "What is missing"). M15 first measures 30 minutes.
+- Form reliability at large context is measured only for text (0 of 5 valid at 259 266 tokens); the 10 valid tool calls ran at 7 to 23 thousand tokens (`llm_x_mcp_*_ergebnis.json`, `cache_gelesen`).
 
-## Beleg
+## Evidence
 
-09 §3.2, §3.4, §3.5, Probe a, a2, b, c; NP K1, K6 (Werkzeugweg; `MAX_THINKING_TOKENS=0`: warme Text-Folgezüge 3,564
-bis 4,455 s), K7 (Wahl 1,307 bis 1,437 s, 33 bis 42 Token, 5 von 5 gültig), K8, K9, K11, „Was fehlt“; Rohdaten
-`proben/09-ki-steuerung/nachpruefung/llm_x_wahl_sonnet_low_ergebnis.json` (`init_tools` leer),
-`llm_x_mcp_sonnet_low_ergebnis.json`; 08 NP K1; Recherche §5 (Übernahme durch Spielen, Vorschlag und Annahme,
-sichtbarer Plan, eigene KI-Spur).
+09 §3.2, §3.4, §3.5, check a, a2, b, c; NP K1, K6 (tool route; `MAX_THINKING_TOKENS=0`: warm text follow-up moves 3.564
+to 4.455 s), K7 (choice 1.307 to 1.437 s, 33 to 42 tokens, 5 of 5 valid), K8, K9, K11, "What is missing"; raw data
+`proben/09-ki-steuerung/nachpruefung/llm_x_wahl_sonnet_low_ergebnis.json` (`init_tools` empty),
+`llm_x_mcp_sonnet_low_ergebnis.json`; 08 NP K1; research §5 (takeover by playing, proposal and acceptance,
+visible plan, own AI track).
 
-## Kippt, wenn
+## Overturned if
 
-M15 (Wahl als Werkzeugaufruf, Kontext ≥ 100 000 Token wie spät im Set) zeigt, dass **p95(Zug) + p95(Reparaturzug)
-über der Vertragsfrist von 4 Takten** liegt, oder Formfehler bei der Wahl über das Werkzeug (dann Wahl als Text mit
-`--json-schema`, Zug-Anfrage früher, oder ohne Reparaturzug); die Kosten eines Sets sind nicht tragbar (Entscheidung
+M15 (choice as a tool call, context ≥ 100 000 tokens as late as in the set) shows that **p95(move) + p95(repair move)
+exceeds the contract deadline of 4 bars**, or form errors in the choice via the tool (then choice as text with
+`--json-schema`, move request earlier, or without a repair move); the costs of a set are not sustainable (decision
 Andreas).
 
-## Nachtrag 2026-09-25: der Spieler ist eine Sonnet-Welle
+## Addendum 2026-09-25: the player is a Sonnet wave
 
-`(A, 2026-09-25: „ich gehe davon aus das wir mit sonet welle auflegen. das klapt ohnehin besser als mit opus. du denkst viel länger rum")`
+`(A, 2026-09-25: "I assume we spin with a Sonnet wave. That works better than Opus anyway. You think much longer.")`
 
-Entscheidung 1 wird geändert: Der Spieler ist nicht mehr eine schlanke, gedächtnislose Sonnet-Sitzung, sondern eine
-**Cypher-Welle auf Sonnet** mit Boot, Gedächtnis und Andreas' Geschmack. **Opus bleibt als Spieler möglich** `(A, 2026-09-25: „schließ opus nicht ganz aus gleich. vielleicht
-auch mal mit opus. dann entscheide ich sowieso über das budget")`: Vorgabe ist Sonnet, Opus eine Wahl je Set, über
-die Andreas samt Budget entscheidet. Bekannter Preis dafür: Denken ist auf Opus 5.5 nicht abschaltbar (09 NP K6), ein
-Zug dauert also länger; ob er in die Frist passt, ist ungemessen.
-Erfahrungsgrundlage: das Set hall140 am 2026-09-21 wurde auf Sonnet gespielt.
+Decision 1 is changed: the player is no longer a lean, memoryless Sonnet session, but a **Cypher wave on Sonnet** with boot, memory and Andreas' taste. **Opus remains possible as player** `(A, 2026-09-25: "don't rule Opus out completely. maybe sometimes with Opus too. then I decide about the budget anyway")`: the default is Sonnet, Opus is a choice per set, which Andreas decides together with the budget. Known price for this: thinking cannot be switched off on Opus 5.5 (09 NP K6), so a move takes longer; whether it fits the deadline is unmeasured.
+Experience base: the set hall140 on 2026-09-21 was played on Sonnet.
 
-Was dadurch neu offen ist und M15 messen muss, statt der bisherigen schlanken Sitzung:
+What is newly open as a result, and what M15 must measure, instead of the previous lean session:
 
-- **Kontext:** Boot und Boden bringen den Kontext schon vor dem ersten Zug nach oben. Die Zeit bis zur Wahl muss an
-  genau dieser Größe gemessen werden.
-- **Hooks:** Eine Welle trägt die PreToolUse- und PostToolUse-Hooks (DJ-Maschine: 50). Jeder `waehle`-Aufruf läuft durch sie
-  hindurch. Ihre Laufzeit zählt in die Frist von 4 Takten. Zu klären: für die Dauer des Sets ein Hook-Profil ohne die
-  Hooks, die nichts mit dem Set zu tun haben.
-- **Denken:** `MAX_THINKING_TOKENS=0` gilt auch für die Welle (Sonnet erlaubt es, Opus 5.5 nicht, 09 NP K6).
+- **Context:** boot and Boden (the shared base text) already push the context up before the first move. The time to the choice must be measured at exactly this size.
+- **Hooks:** a wave carries the PreToolUse and PostToolUse hooks (DJ machine: 50). Every `waehle` call runs through them. Their run time counts toward the 4-bar deadline. To be clarified: for the duration of the set, a hook profile without the hooks that have nothing to do with the set.
+- **Thinking:** `MAX_THINKING_TOKENS=0` also applies to the wave (Sonnet permits it, Opus 5.5 does not, 09 NP K6).
 
-M15 wird dafür verkleinert: ein Kurzlauf mit rund 20 Zügen in der Wellen-Konfiguration (etwa 3 USD statt 20). Ein
-zweiter Kurzlauf mit Opus in derselben Konfiguration misst, ob Opus die Frist hält; Kosten vorher gerechnet, Lauf auf
-Andreas' Wort. Die
-30-Minuten-Messung folgt, wenn der Spieler gebaut ist (Scheibe 61).
+M15 is shrunk for this: a short run with about 20 moves in the wave configuration (about 3 USD instead of 20). A second short run with Opus in the same configuration measures whether Opus holds the deadline; costs calculated in advance, run on Andreas' word. The 30-minute measurement follows once the player is built (slice 61).
 
-## Nachtrag 2026-09-26: Rückfall F−28 scharf (M15 gemessen)
+## Addendum 2026-09-26: fallback F−28 armed (M15 measured)
 
-Kurzlauf M15 (`messungen/M15-wahl-werkzeug/laeufe/kurz-welle-20260926-1005`, Stand 03): Wahl als Werkzeugaufruf 20 von 20
-gültig, 0 Formfehler, Reparatur mit handlungsfähiger Ansage 0 verfehlt, 0,09 USD je Zug. Die Zeit hängt an der API: am
-25.09. abends Zug p95 3,4 s, am 26.09. vormittags 9,9 s (erste Antwort der API 3,0 bis 8,7 s statt 1,1 bis 1,9 s). Die
-4-Takte-Frist (7,5 s) hält damit nicht verlässlich. Der oben vorgesehene Rückfall gilt ab jetzt immer: `zug_vorlauf_takte`
-= 12, Antwortfrist bleibt S − 4 Takte, das Antwortfenster ist 8 Takte (15 s bei 128). Ein Zug passt im p95 mit Luft; eine
-Reparatur im selben Zug passt im Median (5,5 + 4,4 s), im schlechtesten gemessenen Fall (9,9 + 9,0 s) nicht, dann greift
-der Frist-Wächter wie für jede fehlende Antwort.
+Short run M15 (`messungen/M15-wahl-werkzeug/laeufe/kurz-welle-20260926-1005`, status 03): choice as tool call 20 of 20
+valid, 0 form errors, repair with a capable announcement 0 missed, 0.09 USD per move. The time depends on the API: on
+25.09. in the evening move p95 3.4 s, on 26.09. in the morning 9.9 s (first API response 3.0 to 8.7 s instead of 1.1 to 1.9 s). The
+4-bar deadline (7.5 s) therefore does not hold reliably. The fallback planned above now applies always: `zug_vorlauf_takte`
+= 12, response deadline stays S − 4 bars, the response window is 8 bars (15 s at 128). One move fits at p95 with room to spare; a
+repair in the same move fits at the median (5.5 + 4.4 s), but not in the worst measured case (9.9 + 9.0 s), then the
+deadline watchdog takes over as for any missing answer.
 
-## Nachtrag 2026-09-26 abends: Planung der Echtzeit voraus (A29)
+## Addendum 2026-09-26 evening: planning ahead of real time (A29)
 
-`(A, 2026-09-26)` „wir müssen planerisch immer der echtzeit voraussein … wenn wir 2 minuten brauchen die präzise folge
-aufzusetzen müssen wir mindestens 3 minuten vorher reden, fallback ist loop des aktuellen sounds sowieso immer … wir
-entwickeln musikalische reisen eigentlich“.
+`(A, 2026-09-26)` "we always have to be ahead of real time in our planning … if we need 2 minutes to set up the precise sequence, we have to talk at least 3 minutes before. Fallback is looping the current sound anyway, always … we are actually developing musical journeys".
 
-Richtung geändert: Die KI-Schicht arbeitet in zwei Horizonten.
-1. **Reise** (strategisch, Minuten voraus): Dramaturgie, nächste Tracks, Art der Übergänge, Ansagen (A28). Horizont
-   mindestens 1,5 × Aufbauzeit der nächsten Folge. Die Werkstatt rendert, was die Reise braucht, bevor es gebraucht wird.
-2. **Zug** (taktisch, wie bisher, `zug_vorlauf_takte` = 12): setzt eine längst geplante Folge ins Raster, repariert
-   Verriegelungen.
-Rückfall ist Normalbetrieb, kein Fehler: aktuellen Takt oder Phrase loopen (Frist-Wächter, Scheibe 13/20) oder eine
-Sequenz wiederholen, bis die nächste Folge steht. Die API-Antwortzeit (M15: p95 9,9 s) trifft damit nur noch den Zug,
-nie die Reise. Unmittelbares Live-Reagieren ist ausdrücklich nachrangig.
+Direction changed: the AI layer works in two horizons.
+1. **Journey** (strategic, minutes ahead): dramaturgy, next tracks, kind of transitions, announcements (A28). Horizon
+   at least 1.5 × build time of the next sequence. The workshop renders what the journey needs before it is needed.
+2. **Move** (tactical, as before, `zug_vorlauf_takte` = 12): places a long-planned sequence on the grid, repairs
+   locks.
+Fallback is normal operation, not an error: loop the current bar or phrase (deadline watchdog, slices 13/20) or
+repeat a sequence until the next sequence is ready. The API response time (M15: p95 9.9 s) therefore only affects the move,
+never the journey. Immediate live reaction is explicitly secondary.

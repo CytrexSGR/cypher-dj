@@ -1,45 +1,41 @@
-# ADR 017: Rolle von Strudel
+# ADR 017: Role of Strudel
 
-- **Status:** angenommen
-- **Datum:** 2026-09-23
-- **Getragene Anforderungen:** A22, A21, A25
-- **Hängt zusammen mit:** ADR 010, 018
+- **Status:** accepted
+- **Date:** 2026-09-23
+- **Requirements carried:** A22, A21, A25
+- **Related to:** ADR 010, 018
 
-## Kontext
+## Context
 
-Bisher war Strudel im Browser das Herz: Muster, Zeitplanung (Cyclist, `cps` als Uhr) und Klang (superdough).
-Andreas fragte: „eigentlich ist doch der kern die schnelle musik, bzw midi noten generierung, oder?“ (A22). Gemessen
-2026-09-22: der Strudel-Kern läuft in Node ohne Browser, 1 000 Takte, 7 000 Ereignisse, 44 ms.
+So far Strudel was the heart in the browser: patterns, scheduling (Cyclist, `cps` as clock) and sound (superdough).
+Andreas asked: "isn't the core really the fast music, or MIDI note generation, right?" (A22). Measured 2026-09-22: the
+Strudel core runs in Node without a browser, 1 000 bars, 7 000 events, 44 ms.
 
-## Entscheidung
+## Decision
 
-Strudel bleibt **die Funktion „Muster zu Ereignissen“**: `@strudel/core` und `@strudel/mini` 1.2.6, nur
-`pattern.queryArc(a, b)`, in der Erzeuger-Unit (ADR 010). Nicht mehr: Strudels Scheduler (Cyclist), Strudels Uhr
-(`cps`), superdough als Klang, der Browser als Laufzeit. Ein Zyklus ist ein Takt; Beat = 4 · Zyklus. Die Mini-Notation
-ist die Inhaltssprache im Spielzettel. Strudel wird unverändert als eigener Prozess benutzt (AGPL, kein Fork
-weitergeben).
+Strudel remains **the function "pattern to events"**: `@strudel/core` and `@strudel/mini` 1.2.6, only
+`pattern.queryArc(a, b)`, in the generator unit (ADR 010). No more: Strudel's scheduler (Cyclist), Strudel's clock
+(`cps`), superdough as sound, the browser as runtime. One cycle is one bar; beat = 4 · cycle. The mini notation is the
+content language in the play sheet (Spielzettel). Strudel is used unchanged as its own process (AGPL, no fork to pass on).
 
-## Alternativen und warum nicht
+## Alternatives and why not
 
-| Alternative | Grund der Ablehnung | Beleg |
+| Alternative | Reason for rejection | Evidence |
 |---|---|---|
-| Strudel als Scheduler (Cyclist) | 0,1 s Latenz, Vorschau rund 0,2 s, `setPattern` ersetzt sofort ohne Raster | 06 §3.1 (`cyclist.mjs:17`, `:123-124`) |
-| `cps` als Uhr | fällt mit dem Browser; kennt keine Rampe im Kern | 02 §3.1 E |
-| Strudels `stretch` als Keylock | 110-Hz-Sonde bleibt bei 105,5 Hz | 00-anforderungen §10 |
-| pattrns (Renoise) als zweite Mustersprache | zweite Sprache ohne Gewinn, „experimental“ | 06 §3.1 |
+| Strudel as scheduler (Cyclist) | 0.1 s latency, preview about 0.2 s, `setPattern` replaces immediately without grid | 06 §3.1 (`cyclist.mjs:17`, `:123-124`) |
+| `cps` as clock | falls away with the browser; knows no ramp in the core | 02 §3.1 E |
+| Strudel's `stretch` as keylock | 110 Hz probe stays at 105.5 Hz | 00-anforderungen §10 |
+| pattrns (Renoise) as a second pattern language | second language without gain, "experimental" | 06 §3.1 |
 
-## Folgen
+## Consequences
 
-- Muster, die Andreas oder Cypher im Spielzettel schreiben, klingen über Kern-Kanäle (SunVox-Wirt, Pads, später
-  Plugins), mit Kanalzug und Hörschein.
-- Strudels OSC-Weg (WebSocket an einen Hilfsserver mit Wanduhr-Zeitmarke) wird nicht benutzt.
+- Patterns that Andreas or Cypher write in the play sheet sound through core channels (SunVox host, pads, later plugins), with channel strip and listening pass.
+- Strudel's OSC path (WebSocket to a helper server with wall-clock timestamp) is not used.
 
-## Beleg
+## Evidence
 
-06 §3.1, Probe a (Abfrage je Zwei-Takt-Fenster median 146 µs), §4.3; 02 §3.1; A22 mit Messung vom 2026-09-22
-(00-anforderungen §7).
+06 §3.1, check a (query per two-bar window median 146 µs), §4.3; 02 §3.1; A22 with measurement of 2026-09-22 (00-anforderungen §7).
 
-## Kippt, wenn
+## Overturned if
 
-Nie grundsätzlich; nur die Mini-Notation als Inhaltssprache könnte wechseln, wenn Cypher sie im Spielzettel schlecht
-schreibt (Messung im Plan von Scheibe 7).
+Never in principle; only the mini notation as content language could change, if Cypher writes it poorly in the play sheet (measurement in the plan of slice 7).

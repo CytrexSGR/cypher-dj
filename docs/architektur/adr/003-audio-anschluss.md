@@ -1,56 +1,56 @@
-# ADR 003: Audio-Anschluss und Blockgröße
+# ADR 003: Audio connection and block size
 
-- **Status:** vorläufig, Messung M1 (Interface) steht aus
-- **Datum:** 2026-09-23
-- **Getragene Anforderungen:** A4, A20, A26
-- **Hängt zusammen mit:** ADR 004, 008, 016
+- **Status:** provisional, measurement M1 (interface) outstanding
+- **Date:** 2026-09-23
+- **Requirements carried:** A4, A20, A26
+- **Related to:** ADR 004, 008, 016
 
-## Kontext
+## Context
 
-PipeWire 1.6.8 läuft auf DJ-Maschine mit Standard-Quantum 1024 (10 §3a). Andreas' Interface ist unbekannt (A26); alle
-Echtzeit-Zahlen stammen von einer Null-Senke, die selbst nach `CLOCK_MONOTONIC` taktet (02 NP K6, 10 NP K8), unter
-Fremdlast 19 bis 70. Die Entwürfe widersprechen sich: „Spielbarkeit“ will 128 als Spielziel, „Robustheit“ und
-„KI“ 256 als Standard.
+PipeWire 1.6.8 runs on the DJ machine with the standard quantum 1024 (10 §3a). Andreas' interface is unknown (A26);
+all real-time figures come from a null sink that itself clocks per `CLOCK_MONOTONIC` (02 NP K6, 10 NP K8), under
+external load of 19 to 70. The drafts contradict each other: "playability" wants 128 as the playing target,
+"robustness" and "AI" want 256 as the standard.
 
-## Entscheidung
+## Decision
 
-- **JACK-API unter `pw-jack`**, 48 kHz. Der Kern verbindet seine Ports selbst mit JACK-Namen, nie automatisch.
-- **Quantum 256 (5,33 ms) ist der Set-Standard.** 128 wird Standard erst, wenn M1 am echten Interface bei 128
-  60 min mit laufender Werkstatt ohne Frame-Lücke zeigt.
-- **Ein Interface ist der einzige Treiber der DJ-Knoten** (eine Quarzuhr); Master (1/2) und Cue (3/4) auf
-  demselben Gerät. Desktop-Ton bleibt am Onboard-Ausgang. Kern und Notbahn setzen `node.lock-quantum = true`,
-  nur die Kern-Unit setzt das Quantum, die Telemetrie meldet jeden Pufferwechsel (`/e/quantum`).
-- Hat das Interface nur zwei Ausgänge: **Split-Kopfhörer** (links Cue mono, rechts Master mono, Mixxx-Muster) als
-  Notweg, bis ein Gerät mit vier Ausgängen da ist.
-- **Stem-Trennung während eines Sets** (eine Regel für alle Dokumente, ADR 011, `SCHNITTSTELLEN.md` §12.3): auf der
-  CPU nur bei Quantum 256, als Werkstatt-Job mit `Nice=19`, `CPUSchedulingPolicy=batch` und begrenzten Fäden (10 NP
-  N6: 15 % der 256er-Periode, 0 Lücken; bei 128: 55 %), bei 128 nie; auf der GPU erst, wenn Andreas die Frage „GPU im
-  Set frei?“ beantwortet hat (ARCHITEKTUR §13 Frage 4) und M9 Job-Start und -Ende gemessen hat.
+- **JACK API under `pw-jack`**, 48 kHz. The core connects its ports itself using JACK names, never automatically.
+- **Quantum 256 (5.33 ms) is the set standard.** 128 becomes the standard only once M1 on the real interface shows
+  no frame gap at 128 for 60 min with the workshop running.
+- **One interface is the only driver of the DJ nodes** (one crystal clock); master (1/2) and cue (3/4) on the same
+  device. Desktop sound stays on the onboard output. Core and Notbahn set `node.lock-quantum = true`; only the core
+  unit sets the quantum; telemetry reports every buffer change (`/e/quantum`).
+- If the interface has only two outputs: **split headphones** (left cue mono, right master mono, Mixxx pattern) as
+  the emergency route until a device with four outputs is there.
+- **Stem separation during a set** (one rule for all documents, ADR 011, `SCHNITTSTELLEN.md` §12.3): on the CPU only
+  at quantum 256, as a workshop job with `Nice=19`, `CPUSchedulingPolicy=batch` and limited threads (10 NP N6: 15%
+  of the 256 period, 0 gaps; at 128: 55%), never at 128; on the GPU only once Andreas has answered the question
+  "GPU free during a set?" (ARCHITEKTUR §13 question 4) and M9 has measured job start and end.
 
-## Alternativen und warum nicht
+## Alternatives and why not
 
-| Alternative | Grund der Ablehnung | Beleg |
+| Alternative | Reason for rejection | Evidence |
 |---|---|---|
-| 128 als Standard | echte Stem-Trennung auf der CPU trieb das Aufwachen bei 128 auf 55 % der Periode (bei 256: 15 %); unter Speicher-Sättigung bei 128 bis 85 % und 1 bis 2 Ausfälle in 337 605 Zyklen; die „0 Ausfälle bei 256“ sind statistisch leer, getragen wird 256 vom Abstand zur Periode | 10 NP N6, K2, Probe b L1/L7 |
-| native PipeWire-API (`pw_filter`) | spätere Option, wenn Knoten-Eigenschaften direkt gesetzt werden sollen; ungeprüft | 01 §3.2 |
-| Cue auf einem zweiten Gerät | zweite Uhr, adaptives Resampling | 02 NP K8 |
-| JACK2-Server statt PipeWire | würde Andreas' Desktop-Audio umbauen; nicht geprüft | Vermutung |
+| 128 as standard | real stem separation on the CPU drove the wake-up at 128 to 55% of the period (at 256: 15%); under memory saturation at 128 up to 85% and 1 to 2 dropouts in 337 605 cycles; the "0 dropouts at 256" are statistically empty, 256 rests on its margin to the period | 10 NP N6, K2, test b L1/L7 |
+| native PipeWire API (`pw_filter`) | later option, if node properties should be set directly; unverified | 01 §3.2 |
+| cue on a second device | second clock, adaptive resampling | 02 NP K8 |
+| JACK2 server instead of PipeWire | would rebuild Andreas' desktop audio; not checked | assumption |
 
-## Folgen
+## Consequences
 
-- Ohr-Latenz bei 256 mit weicher Notbahn gerechnet mindestens 22,3 ms vom Griff bis zum Wandler, bei 128
-  mindestens 11,7 ms (ARCHITEKTUR §6). Ob das stört, entscheidet Andreas im Hörtermin (M18).
-- Ein fremder Client mit `node.force-quantum` am selben Treiber kann das Quantum umwerfen („The last node to be
-  activated with this property wins“, `man pipewire-props`); darum eigenes Interface für die DJ-Knoten.
-- Kernel und Boot bleiben, wie sie sind; Reserve ist Ubuntus `lowlatency-kernel` plus `threadirqs`, nur nach M1
-  und mit Andreas' Ja (10 §3c, Frage 2).
+- Latency heard by ear at 256 with soft Notbahn calculated at least 22.3 ms from grab to converter, at 128 at least
+  11.7 ms (ARCHITEKTUR §6). Whether that matters, Andreas decides in the listening session (M18).
+- A foreign client with `node.force-quantum` on the same driver can overturn the quantum ("The last node to be
+  activated with this property wins", `man pipewire-props`); hence an own interface for the DJ nodes.
+- Kernel and boot stay as they are; the reserve option is Ubuntu's `lowlatency-kernel` plus `threadirqs`, only after
+  M1 and with Andreas' yes (10 §3c, question 2).
 
-## Beleg
+## Evidence
 
-10 Probe b (R1: 128 unter GPU-Training 600 s, 0 Lücken, Aufwachen max 304 µs; L3: 256 unter Speicher-Sättigung
-max 1 609 µs = 30 %), NP N6, K2, Risiko 2; 01 §3.2 (Falle Portname `cypher-stumm-probe`); 04 §3.1 (Split).
+10 test b (R1: 128 under GPU training 600 s, 0 gaps, wake-up max 304 µs; L3: 256 under memory saturation max
+1 609 µs = 30%), NP N6, K2, risk 2; 01 §3.2 (pitfall: port name `cypher-stumm-probe`); 04 §3.1 (split).
 
-## Kippt, wenn
+## Reversed if
 
-M1 zeigt Lücken bei 256 am Interface (dann Kernel-Reserve mit Andreas' Ja, weniger Keylock-Decks, Werkstatt im Set
-drosseln) oder hält 128 stabil (dann 128 als Standard, Latenz halbiert).
+M1 shows gaps at 256 on the interface (then kernel reserve with Andreas' yes, fewer keylock decks, workshop
+throttled during the set) or holds 128 stable (then 128 as standard, latency halved).

@@ -1,80 +1,80 @@
-# ADR 006: Keylock-Engine je Einsatz
+# ADR 006: Keylock engine per use
 
-- **Status:** vorläufig; Messungen M3 (Echtzeit in Arbeits-Threads, Pull-Modus), M4 (Rampen, kleine Faktorwechsel,
-  Bungee-Tonscan), M19 (große Streckfaktoren beim Einlesen) und der Hörtermin M18 (R3 gegen Bungee) stehen aus;
-  nach der Nachprüfung von Dossier 01 (K1 bis K4) am 2026-09-23 korrigiert
-- **Datum:** 2026-09-23
-- **Getragene Anforderungen:** A9, A10, A12
-- **Hängt zusammen mit:** ADR 020 (Hörwege), 011 (Werkstatt)
+- **Status:** provisional; measurements M3 (real time in work threads, pull mode), M4 (ramps, small factor changes,
+  Bungee pitch scan), M19 (large stretch factors when reading in) and the listening session M18 (R3 against Bungee) are outstanding;
+  corrected after the re-check of dossier 01 (K1 to K4) on 2026-09-23
+- **Date:** 2026-09-23
+- **Requirements carried:** A9, A10, A12
+- **Related to:** ADR 020 (listening paths), 011 (workshop)
 
-## Kontext
+## Context
 
-A10: Tonhöhenerhaltung „ist pflicht für alles“. A12: jeder Loop wird einmal offline auf die Set-Basis gestreckt,
-live macht der Keylock nur die Abweichung. Die Werkbank (`tests/stretch-bench/ERGEBNIS.md`) prüfte 59
-Konfigurationen im Browser, Dossier 03 sieben Maschinen nativ (offline, ungeprüft).
+A10: pitch preservation "is mandatory for everything". A12: every loop is stretched once offline to the set base,
+live the keylock only does the deviation. The bench (`tests/stretch-bench/ERGEBNIS.md`, workbench (Werkbank)) tested 59
+configurations in the browser, dossier 03 seven machines natively (offline, unchecked).
 
-## Entscheidung
+## Decision
 
-| Einsatz | Engine | Einstellung |
+| Use | Engine | Setting |
 |---|---|---|
-| Einlesen (Basis-Datei, Stems) | **Rubber Band R3 offline** (Bibliothek oder `rubberband -3 --timemap`) | Float rein und raus, **−12 dB Luft vor dem Strecken**, Trim beim Laden aus `ziel_lufs`; Timemap aus der Tempo-Karte auf das starre Raster der Set-Basis; Stimmungskorrektur im selben Lauf (`SCHNITTSTELLEN.md` §12.3). Tonhöhe gemessen nur für Faktoren bis rund 5 % neben 1 (0,95522 und 1,04121); MiniMax-Songs brauchen 0,71 bis 1,42 (c_drift: 89,9 bis 180,7 BPM): darum Halb-/Doppeltempo-Wahl und Tor `streckfaktor` ±15 % bis M19 |
-| Einzelschüsse, Pads | **R3 offline** auf die Set-Basis vorgerendert, ohne Stretcher gespielt | bei neuer Set-Basis neu rendern |
-| Live bei Tempoabweichung | **Rubber Band R3 nativ** (3.3.0), `OptionProcessRealTime \| OptionEngineFiner \| OptionChannelsTogether`, in Arbeits-Threads mit Vorlauf (Vorgabe 4 Blöcke, M3); **höchstens 2 R3 je Arbeits-Thread** (01 NP K1), 4 Stretcher also mindestens 2 Threads | **Start:** im Lade-Faden anlegen, `getPreferredStartPad()` füttern, `getStartDelay()` verwerfen **und einen Pull-Zyklus samt `retrieve` durchziehen**, erst dann über die Warteschlange an den Arbeits-Thread (01 NP K3: sonst kostet der erste Block 4,6 bis 6,4 ms); gilt auch für den Neustartpfad und das Anwärmen des Schatten-Stretchers. Faktorwechsel 50 ms vor dem Ratenwechsel (Timing, 03 §4b2); Phasenregler; höchstens 4 Echtzeit-Stretcher gleichzeitig |
-| Zweite Wahl live | **Bungee 2.4.30** hinter derselben Maschinen-Schnittstelle | M4 (2026-09-25, E8): trägt technisch (Basstöne 0,04 ct gegen R3 0,75 ct, Echtzeit 0 Null-Samples); offen nur der Hörtermin |
-| nie | R2, SoundTouch, Signalsmith | siehe unten |
+| Reading in (base file, stems) | **Rubber Band R3 offline** (library or `rubberband -3 --timemap`) | float in and out, **−12 dB headroom before stretching**, trim on loading from `ziel_lufs`; timemap from the tempo map onto the rigid grid of the set base; tuning correction in the same run (`SCHNITTSTELLEN.md` §12.3). Pitch measured only for factors up to about 5 % away from 1 (0.95522 and 1.04121); MiniMax songs need 0.71 to 1.42 (c_drift: 89.9 to 180.7 BPM): therefore half/double tempo choice and gate `streckfaktor` ±15 % until M19 |
+| Single hits, pads | **R3 offline** pre-rendered to the set base, played without stretcher | re-render when the set base changes |
+| Live on tempo deviation | **Rubber Band R3 native** (3.3.0), `OptionProcessRealTime \| OptionEngineFiner \| OptionChannelsTogether`, in work threads with lead-in (default 4 blocks, M3); **at most 2 R3 per work thread** (01 NP K1), so 4 stretchers means at least 2 threads | **Start:** create in the loading thread, feed `getPreferredStartPad()`, discard `getStartDelay()` **and run one pull cycle including `retrieve`**, only then hand over via the queue to the work thread (01 NP K3: otherwise the first block costs 4.6 to 6.4 ms); also applies to the restart path and the warm-up of the shadow stretcher. Factor change 50 ms before the rate change (timing, 03 §4b2); phase control; at most 4 real-time stretchers at the same time |
+| Second choice live | **Bungee 2.4.30** behind the same machine interface | M4 (2026-09-25, E8): technically viable (bass tones 0.04 ct against R3 0.75 ct, real time 0 zero samples); only the listening session is open |
+| never | R2, SoundTouch, Signalsmith | see below |
 
-Bei Faktor 1 liegt **kein** Stretcher im Hörweg (ADR 020).
+At factor 1 there is **no** stretcher in the listening path (ADR 020).
 
-## Alternativen und warum nicht
+## Alternatives and why not
 
-| Alternative | Grund der Ablehnung | Beleg |
+| Alternative | Reason for rejection | Evidence |
 |---|---|---|
-| Rubber Band R2 | tiefe reine Töne behalten die Umspiel-Tonhöhe (110 Hz → 105,074 Hz, auch im offiziellen Programm) | 03 §4c |
-| SoundTouch | driftet bei Tempowechseln (−3,867 ms in 30 min), Latenz streut mit Musik 5 bis 7,5 ms je Schlag; zerlegt 30,87 Hz (−79,7 ct) | 03 §4a; ERGEBNIS §2.2, §2.1 |
-| Signalsmith | Tonhöhe in keiner Konfiguration (+13,4 bis +34,1 ct am Sinus, Obertöne tiefer Basstöne bis 67,2 ct verschoben) | ERGEBNIS §2.1 |
-| R3 im Callback direkt | stoßweise Rechenlast: p99,9 3,8 ms, Maximum 14,7 ms je 256er-Block; Stem-Deck 16 Blöcke über Budget | 03 §4e |
-| Doppelknoten aus der Werkbank | **zurückgestellt, nicht widerlegt.** Gebaut ist er nur für WASM (Hülle um `reset()` bei jedem Faktorwechsel). Die 50 ms Vorhalt (+0,01/−0,11 ms, 03 §4b2) belegen nur das Timing eines nativen Einzelknotens. Die einzige native **Tonhöhen**messung eines Faktorwechsels (ein Knoten, ohne `reset`, ohne Vorhalt) lag 95 ms über 10 ct und hatte 128 Null-Samples, schlechter als der Doppelknoten mit 27,5 ms. Mit Vorhalt ist der Einzelknoten auf Tonhöhe ungemessen: M4 entscheidet; bis dahin gibt es live keine Faktorsprünge (ADR 004) | ERGEBNIS §2.3, §2.6 (Z. 180, 185 bis 187), 03 §4b2 |
-| R3 immer im Hörweg (auch bei Faktor 1) | bei 1,0 nicht transparent (Artefakte −63,7 dB statt −102,8), weichere Transienten | 03 §4c; ERGEBNIS §2.5; ADR 020 |
+| Rubber Band R2 | deep pure tones keep the shifted pitch (110 Hz → 105.074 Hz, also in the official program) | 03 §4c |
+| SoundTouch | drifts on tempo changes (−3.867 ms in 30 min), latency varies with music 5 to 7.5 ms per beat; breaks up 30.87 Hz (−79.7 ct) | 03 §4a; ERGEBNIS §2.2, §2.1 |
+| Signalsmith | pitch in no configuration (+13.4 to +34.1 ct on the sine, overtones of deep bass tones shifted up to 67.2 ct) | ERGEBNIS §2.1 |
+| R3 directly in the callback | bursty computing load: p99.9 3.8 ms, maximum 14.7 ms per 256 block; stem deck 16 blocks over budget | 03 §4e |
+| Double node from the bench | **deferred, not refuted.** It was built only for WASM (wrapper around `reset()` on every factor change). The 50 ms lead (+0.01/−0.11 ms, 03 §4b2) proves only the timing of a native single node. The only native **pitch** measurement of a factor change (one node, without `reset`, without lead) was 95 ms over 10 ct and had 128 zero samples, worse than the double node with 27.5 ms. With lead the single node is unmeasured for pitch: M4 decides; until then there are no factor jumps live (ADR 004) | ERGEBNIS §2.3, §2.6 (lines 180, 185 to 187), 03 §4b2 |
+| R3 always in the listening path (also at factor 1) | at 1.0 not transparent (artifacts −63.7 dB instead of −102.8), softer transients | 03 §4c; ERGEBNIS §2.5; ADR 020 |
 
-## Folgen
+## Consequences
 
-- Klang ungehört: R3 macht Snare und Hats messbar weicher (Vorecho +4,5 / +7,5 dB, Kick-Anstieg 9,07 statt 3,09 ms;
-  gemessen offline im OfflineAudioContext am WASM-Weg, nativ ungemessen). Hörprobe R3 gegen Bungee im Hörtermin.
-- Tempo-Rampen sind nativ nur als Timing gemessen (02 NP N5), die Tonhöhe in Rampen nicht (ERGEBNIS §8: nur
-  Sprünge): M4.
-- Kapazität für den schlimmsten Fall: weicht das Set von der Basis ab, rechnen **alle** hörbaren und vorgehörten Decks
-  gleichzeitig (01 NP K4); Faktor 1 senkt nur den Mittelwert. Günstigere Option `OptionWindowShort` (R3 kurz): 2,5 %
-  statt 7,4 % eines Threads je Stretcher, aber Artefakte −29,2 statt −42,3 dB (01 NP K2, 03 §4c); Klangpreis
-  entscheidet Andreas an der Werkbank, nicht dieses ADR.
-- Die Kommandozeile klemmt bei ±1,0 auch mit `--ignore-clipping` (08 NP K5): darum die −12 dB Luft.
-- Lizenz GPL (intern folgenlos); Bungee MPL wäre frei weitergebbar.
+- Sound not heard yet: R3 makes snare and hats measurably softer (pre-echo +4.5 / +7.5 dB, kick rise 9.07 instead of 3.09 ms;
+  measured offline in the OfflineAudioContext on the WASM path, native unmeasured). Listening sample R3 against Bungee at the listening session.
+- Tempo ramps are measured natively only for timing (02 NP N5), pitch in ramps not (ERGEBNIS §8: jumps only):
+  M4.
+- Capacity for the worst case: if the set deviates from the base, **all** audible and pre-listened decks compute
+  at the same time (01 NP K4); factor 1 lowers only the average. Cheaper option `OptionWindowShort` (R3 short): 2.5 %
+  instead of 7.4 % of a thread per stretcher, but artifacts −29.2 instead of −42.3 dB (01 NP K2, 03 §4c); the sound
+  price is decided by Andreas at the bench, not by this ADR.
+- The command line clamps at ±1.0 even with `--ignore-clipping` (08 NP K5): hence the −12 dB headroom.
+- License GPL (internally without consequence); Bungee MPL would be freely redistributable.
 
-## Beleg
+## Evidence
 
-ERGEBNIS §1 (R3 einzige von 59 Konfigurationen über alle vier Tore: G1 ±0,2 ct, G2 0,18 ms, G3 2,05 dB, G4 rtf_4
-2,73), §2.1 (Tonscan 30,87 bis 261,63 Hz, Grundtöne 0,00 ct), §2.6; 03 §4a (30 min, 100 Tempowechsel: R3 −0,105 ms,
-Bungee −0,026 ms), §4b, §4b2, §4c (R3 110,000 Hz), §4d (nach Roll zeitgleich, −0,00 Samples), §4e (Bungee p99,9
-161,6 µs), §4f (Schüsse 0,13 bis 0,31 s, Länge ±0,4 Frames); **01 NP K1** (Pull-Modus, wie ein Deck rechnet: 8 R3 mit zwei
-Phasen im echten Callback 377 Überläufe in 60 s, 0 von 111 Schlagabständen exakt; ein Thread trägt 2 R3 sicher, 4
-knapp; die frühere Angabe „8 versetzt mit 120 µs Reserve“ aus 01 §4.5 galt nur im Druck-Modus ohne Deck-Semantik),
-**01 NP K3** (erster Block eines frischen R3 4,6 bis 6,4 ms; nach einem Pull-Zyklus mit `retrieve` 0,25 bis 0,32 ms,
-nur offline gemessen); 02 Probe c (Polster und Verzögerung je 2 048 Samples); 07 `b_timemap.log` (Timemap R3: Rest
-0,19 ms RMS, max 0,58 ms; R2 1,94 ms; ohne 45,26 ms; **eingestuft: belegt die Timemap-Mechanik an einem synthetischen
-Klick mit bekannter Wahrheit, die Timemap stammt aus den wahren Schlagzeiten; über die Tempo-Karte aus beat_this an
-MiniMax-Songs sagt es nichts, das misst M13**), `b_strecken.log` (R3 110,000 Hz, Bass −0,11 ct, nur Faktor 134/128).
+ERGEBNIS §1 (R3 the only one of 59 configurations across all four gates: G1 ±0.2 ct, G2 0.18 ms, G3 2.05 dB, G4 rtf_4
+2.73), §2.1 (pitch scan 30.87 to 261.63 Hz, fundamentals 0.00 ct), §2.6; 03 §4a (30 min, 100 tempo changes: R3 −0.105 ms,
+Bungee −0.026 ms), §4b, §4b2, §4c (R3 110.000 Hz), §4d (after roll simultaneously, −0.00 samples), §4e (Bungee p99.9
+161.6 µs), §4f (shots 0.13 to 0.31 s, length ±0.4 frames); **01 NP K1** (pull mode, how a deck computes: 8 R3 with two
+phases in the real callback 377 overruns in 60 s, 0 of 111 beat intervals exact; one thread carries 2 R3 safely, 4
+barely; the earlier statement "8 staggered with 120 µs reserve" from 01 §4.5 applied only in print mode without deck semantics),
+**01 NP K3** (first block of a fresh R3 4.6 to 6.4 ms; after a pull cycle with `retrieve` 0.25 to 0.32 ms,
+measured offline only); 02 check c (cushion and delay 2 048 samples each); 07 `b_timemap.log` (timemap R3: residual
+0.19 ms RMS, max 0.58 ms; R2 1.94 ms; without 45.26 ms; **rated: proves the timemap mechanism on a synthetic
+click with known truth, the timemap comes from the true beat times; via the tempo map from beat_this on
+MiniMax songs it says nothing, M13 measures that**), `b_strecken.log` (R3 110.000 Hz, bass −0.11 ct, only factor 134/128).
 
-## Kippt, wenn
+## Overturned if
 
-M3 zeigt Unterläufe mit R3 in Arbeits-Threads bei 4 Decks und 2 R3 je Thread (dann mehr Threads, R3 kurz, Bungee
-oder weniger Keylock-Decks); M4 zeigt Tonhöhenfehler oder Null-Samples in Rampen oder bei kleinen Faktorwechseln
-(dann Doppelknoten nativ); M19 zeigt, dass R3 bei Faktoren um 0,7 oder 1,4 hörbar leidet (dann engeres Tor
-`streckfaktor`, Generierung näher an der Set-Basis); Andreas bevorzugt im Hörtermin Bungee (dann Bungee live, R3
+M3 shows underruns with R3 in work threads at 4 decks and 2 R3 per thread (then more threads, R3 short, Bungee
+or fewer keylock decks); M4 shows pitch errors or zero samples in ramps or at small factor changes
+(then double node native); M19 shows that R3 suffers audibly at factors around 0.7 or 1.4 (then tighter gate
+`streckfaktor`, generation closer to the set base); Andreas prefers Bungee at the listening session (then Bungee live, R3
 offline).
 
 
-## Nachtrag 2026-09-23 13:3x
-VORLÄUFIG, 2026-09-23 13:3x: die Nachprüfung zu Dossier 01 misst R3 in FIFO-Arbeits-Threads mit Vorlauf mit 8 je Thread ohne Unterlauf (16 auf 2 und 32 auf 4 Threads, Grenze erst bei 16 je Thread; SCHED_OTHER statt FIFO: 23 Unterläufe). Die Grenze entscheidet M3 (Scheibe 30). Die Obergrenzen „2 R3 je Arbeits-Thread“ und „4 Echtzeit-Stretcher“ in diesem ADR und in ADR 020 gelten bis dahin als vorläufig; Stems mit Keylock sind nach dieser Messung machbar.
+## Addendum 2026-09-23 13:3x
+PRELIMINARY, 2026-09-23 13:3x: the re-check of dossier 01 measures R3 in FIFO work threads with lead-in, with 8 per thread without underrun (16 on 2 and 32 on 4 threads, limit only at 16 per thread; SCHED_OTHER instead of FIFO: 23 underruns). M3 (slice 30) decides the limit. The upper limits "2 R3 per work thread" and "4 real-time stretchers" in this ADR and in ADR 020 count as provisional until then; stems with keylock are feasible after this measurement.
 
-## Nachtrag 2026-09-25: M19 gemessen
+## Addendum 2026-09-25: M19 measured
 
-`tor_streckfaktor` 0,20 (vorher 0,15; mit der groben 30-ms-Kontrolle wären 0,30 gegangen, es gilt der strengere Wert), `stimmung_max_cent` 35 hält auf 167 Tönen. Befund Linienzerfall: R3 verfehlt einzelne stationäre Töne zwischen 120 und 138 Hz um bis zu 28 ct, schon bei 128/134, offline wie im Echtzeit-Modus, nicht aus der Timemap; `--window-short` ist in 24 von 24 sauber. Zu prüfen in M4/M18: R3 kurz für tonale Decks. Beleg `messungen/M19-keylock-gross/BERICHT.md`.
+`tor_streckfaktor` 0.20 (previously 0.15; with the coarse 30 ms control 0.30 would have passed, the stricter value applies), `stimmung_max_cent` 35 holds on 167 tones. Finding on line decay: R3 misses individual stationary tones between 120 and 138 Hz by up to 28 ct, already at 128/134, offline as well as in real-time mode, not from the timemap; `--window-short` is clean in 24 of 24. To check in M4/M18: R3 short for tonal decks. Evidence `messungen/M19-keylock-gross/BERICHT.md`.

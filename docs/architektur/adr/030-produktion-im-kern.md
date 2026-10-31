@@ -1,28 +1,27 @@
-# ADR 030: Produktion im Kern (Arrangement, Spur-Mixer, Instrumente, Offline-Export)
+# ADR 030: Production in the core (arrangement, track mixer, instruments, offline export)
 
-Status: angenommen 2026-10-15 (Cypher, Architektur-Auftrag von Andreas). Umsetzung: Durchstich D1, Pakete S1 bis S3, K1 bis K3, V1, V2.
-Volltext der Entscheidungen und Schnittstellen: `docs/masterplan/D1-SPEC.md`, Abschnitt 2 und 3.
+Status: accepted 2026-10-15 (Cypher, architecture assignment from Andreas). Implementation: vertical slice D1 (Durchstich), packages S1 to S3, K1 to K3, V1, V2.
+Full text of the decisions and interfaces: `docs/masterplan/D1-SPEC.md`, sections 2 and 3.
 
-## Kontext
+## Context
 
-cypher-dj soll Produktionsumgebung werden (Masterplan Welle 1). Der Kern kennt Decks, Loop-Boxen, Erzeuger und einen
-DJ-Mixer mit 18 festen Kanälen, aber keinen Transport, keine Spuren, kein Pan/Mute/Solo und keinen Export. Die
-Erhebung vom 15.10. (u1 bis u6) und die adversariale Prüfung der Spec (2 BLOCKER, 20 MAJOR) sind die Grundlage.
+cypher-dj is meant to become a production environment (masterplan wave 1). The core knows decks, loop boxes, generators and a
+DJ mixer with 18 fixed channels, but no transport, no tracks, no pan/mute/solo and no export. The survey of 15.10. (u1 to u6) and the adversarial review of the spec (2 BLOCKER, 20 MAJOR) are the basis.
 
-## Entscheidung
+## Decision
 
-1. Der Seiten-Server besitzt das Projekt (Ordner mit `project.json`, `undo.jsonl`); der Kern spielt eine Wiedergabe,
-   die er über einen eigenen Lade-Faden lädt und per Zeigerübergabe tauscht.
-2. Neues Kern-Modul `Arrangement` mit eigenem Transport auf der einen Uhr, ohne `/k/set/neu`, ohne JACK-Transport.
-3. Eigener Spur-Mixer im Modul (8 Spuren, Regler-Rollen an Kanal −1); die Summe geht auf den für die Produktion
-   reservierten Kanal `erz/4`. Der DJ-Mixer bleibt unverändert.
-4. RB-338 läuft als FFI im Kern; fremde Instrumente im Carla-Wirt an eigenen Slots mit Vorhalt.
-5. Export als Offline-Render desselben Kerns (`cypherdj-render`) mit dem Regler-Stand des laufenden Kerns;
-   Wirt-Spuren werden vorher in Echtzeit eingefroren. JACK-Freewheel verworfen für D1.
-6. Kein OSC-Feld trägt einen Pfad; Dateien liegen im Arbeitsordner je Instanz.
+1. The page server owns the project (folder with `project.json`, `undo.jsonl`); the core plays a playback,
+   which it loads via its own load thread and swaps via pointer handover.
+2. New core module `Arrangement` with its own transport on the one clock, without `/k/set/neu`, without JACK transport.
+3. Own track mixer in the module (8 tracks, control roles on channel −1); the sum goes to the channel `erz/4`
+   reserved for production. The DJ mixer stays unchanged.
+4. RB-338 runs as FFI in the core; foreign instruments in the Carla host, in their own slots with a lead-in (Vorhalt).
+5. Export as offline render of the same core (`cypherdj-render`) with the control state of the running core;
+   host tracks are frozen in real time beforehand. JACK freewheel rejected for D1.
+6. No OSC field carries a path; files lie in the working folder per instance.
 
-## Folgen
+## Consequences
 
-Die Produktion greift nicht in den DJ-Pfad ein, solange erz/4 neutral ist. Produktions-Kanalzüge (Inserts, Sends,
-Gruppen) wachsen im Modul, nicht im DJ-Mixer. Mehr als 8 Spuren, Automation und Warp brauchen spätere Pakete.
-Projekt-Takt gleich DJ-Takt nur bei Takt-Quantisierung.
+Production does not touch the DJ path as long as `erz/4` is neutral. Production channel strips (inserts, sends,
+groups) grow in the module, not in the DJ mixer. More than 8 tracks, automation and warp need later packages.
+Project bar equal to DJ bar only with bar quantization.

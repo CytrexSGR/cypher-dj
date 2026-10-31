@@ -1,63 +1,63 @@
-# Notfall-Karte djk
+# Emergency card djk
 
-Start `~/cypher-dj/djk/start/djk-start` · Zustand `djk-start --zustand` · Stopp `djk-stop`. Der Ton gehört dem Kern;
-Seite und Leitstand dürfen hängen, ohne dass es still wird. **Faustregel: erst hören, dann `--zustand`, dann handeln.**
+Start `~/cypher-dj/djk/start/djk-start` · state `djk-start --zustand` · stop `djk-stop`. The sound belongs to the core;
+the page and the control room may hang without the sound stopping. **Rule of thumb: listen first, then `--zustand`, then act.**
 
-**Prüfmodus ist bis Scheibe 35 die Vorgabe.** `djk-start` startet den Kern mit `--pruefmodus`, weil die Hand der Seite
-(Fader, Tasten) bis `hand_osc` nur als `/test/hand` ankommt; der Start sagt das an (`test mode ON`), `--zustand` zeigt
-es in der Zeile `kern`. Mit `--ohne-pruefmodus` startet er ohne, dann greifen die Regler der Seite **nicht**. MVP.md
-sagt für den Betrieb: nicht der Prüfmodus; mit `hand_osc` wird die Vorgabe umgedreht und dieser Absatz fällt.
+**Test mode is the default until slice 35.** `djk-start` starts the core with `--pruefmodus`, because the page's hand
+(faders, buttons) only reaches `hand_osc` as `/test/hand` until then. The start announces this (`test mode ON`), and `--zustand` shows
+it in the `kern` line. With `--ohne-pruefmodus` it starts without test mode, and then the page's controls do **not** take effect. MVP.md
+says for operation: not test mode; once `hand_osc` is in place the default is reversed and this paragraph drops out.
 
-## 1. Stille
+## 1. Silence
 
-1. `djk-start --zustand` lesen. Zeile `output`: steht dort `cypher_stumm`, ist das die Vorgabe: **es war nie laut.**
-   Neu starten mit dem echten Ausgang: erst `djk-ausgang` (liest nur; hängen **fremde** Clients an der Senke, Rückgabe 4,
-   kein `--ton-frei`), dann `djk-stop`, dann `djk-start --master <senke>:playback_F --ohne-cue --ton-frei`.
-   `<senke>` ist der `node.name` aus `pw-link -i` (ohne `:playback_FL`) **oder** die Beschreibung des Geräts; `djk-start`
-   löst beides auf. **Portnamen-Falle:** `pw-link` kennt nur den `node.name`, der Kern läuft unter `pw-jack` und braucht
-   die Beschreibung. `djk-start` gibt dem Kern deshalb selbst die Beschreibung (`--zustand`, Zeile `names under pw-jack`);
-   den Kern nie von Hand mit dem `node.name` starten (gemessen an einer Test-Senke: „Verbinden … gescheitert“, Start
-   abgebrochen). Cue bei echtem Master: `--ohne-cue`; ein Cue an der stummen Senke wird abgewiesen, Pro-Audio-Ports
-   (`playback_AUX0…`) kann der Kern nicht anschließen. `djk-stop --alles` beendet zusätzlich Cue-Server und Vorhörer
-   der Instanz (`--trocken` listet nur).
-2. Alle vier `active`, `restarts` beim Kern steigt nicht? Dann liegt es am Mix: Kanalfader, Crossfader-Seite, Gain,
-   EQ-Kill, Filter ganz links/rechts, Master. Auf der Seite prüfen, ob das Deck läuft (Takt bewegt sich).
-3. `pw-link -l | grep -A2 cypherdj-kern:master_L` muss auf den Ausgang zeigen. Fehlt die Verbindung: `djk-stop`,
-   `djk-start` neu (verbindet selbst, nie von Hand verkabeln).
-4. Dauert es länger als ein Stück: **Rückweg auf den XZ (4.)**, danach suchen.
+1. Read `djk-start --zustand`. The `output` line: if it shows `cypher_stumm`, that is the default: **it was never loud.**
+   Restart with the real output: first `djk-ausgang` (read-only; if **foreign** clients hang on the sink, return code 4,
+   no `--ton-frei`), then `djk-stop`, then `djk-start --master <senke>:playback_F --ohne-cue --ton-frei`.
+   `<senke>` is the `node.name` from `pw-link -i` (without `:playback_FL`) **or** the description of the device; `djk-start`
+   resolves either. **Port name trap:** `pw-link` only knows the `node.name`, while the core runs under `pw-jack` and needs
+   the description. `djk-start` therefore gives the core the description itself (`--zustand`, line `names under pw-jack`);
+   never start the core by hand with the `node.name` (measured on a test sink: "Verbinden … gescheitert", start
+   aborted). Cue with a real master: `--ohne-cue`; a cue on the silent sink is rejected, and the core cannot connect pro-audio ports
+   (`playback_AUX0…`). `djk-stop --alles` additionally ends the cue server and the cue listener
+   of the instance (`--trocken` only lists).
+2. All four `active`, and `restarts` on the core does not rise? Then it is the mix: channel fader, crossfader side, gain,
+   EQ kill, filter fully left/right, master. Check on the page whether the deck is running (the bar moves).
+3. `pw-link -l | grep -A2 cypherdj-kern:master_L` must point to the output. If the connection is missing: `djk-stop`,
+   then `djk-start` again (it connects by itself, never wire by hand).
+4. If it takes longer than one track: **fallback to the XZ (4.)**, and look for the cause afterwards.
 
-## 2. Neustart-Schleife
+## 2. Restart loop
 
-Kennzeichen: `restarts` beim Kern zählt hoch, Ton stottert oder fehlt. Der Kern startet ohne Pause neu (RestartSec=0,
-kein Startlimit, gemessen bis 1659 Neustarts in 5 s), eine Schleife hört nicht von allein auf.
+Sign: `restarts` on the core keeps counting up, the sound stutters or is missing. The core restarts without a pause (RestartSec=0,
+no start limit, measured up to 1659 restarts in 5 s), and a loop does not stop by itself.
 
-1. **Sofort `djk-stop`.** Das beendet die Schleife und räumt alles ab.
-2. Ursache lesen: `journalctl --user -u cypherdj-kern -n 40 -o cat`. Häufig: PipeWire weg (`pw-link -o` schlägt fehl),
-   Startfehler Rückgabe 2 (Konfiguration, `~/.config/cypherdj/kern.toml`), Ausgang verschwunden (Interface abgezogen).
-3. Ist die Ursache behoben, einmal `djk-start`. Schleift es wieder: nicht ein drittes Mal, **Rückweg auf den XZ.**
+1. **Immediately `djk-stop`.** That ends the loop and clears everything.
+2. Read the cause: `journalctl --user -u cypherdj-kern -n 40 -o cat`. Common: PipeWire gone (`pw-link -o` fails),
+   start error with return code 2 (configuration, `~/.config/cypherdj/kern.toml`), output gone (interface unplugged).
+3. Once the cause is fixed, run `djk-start` once. If it loops again: not a third time, **fallback to the XZ.**
 
-## 3. Seite hängt
+## 3. Page hangs
 
-Der Ton läuft weiter, die Seite ist nur Anzeige und Hand. Nicht den Kern neu starten.
+The sound keeps running, the page is only display and hand. Do not restart the core.
 
-1. Im Browser neu laden (F5), Adresse aus `--zustand` (`open`, Vorgabe `http://127.0.0.1:47300/`).
-2. Hilft das nicht: `systemctl --user restart cypherdj-oberflaeche`, danach neu laden.
-3. Takt oder Ansagen fehlen, Regler gehen aber: `systemctl --user restart cypherdj-leitstand`.
-4. Regler greifen von Anfang an nicht: `--zustand`, Zeile `kern`. Steht dort `without test mode`, lief der Start mit
-   `--ohne-pruefmodus`; Stück auslaufen lassen, `djk-stop`, `djk-start` ohne diesen Schalter.
-5. Regler greifen gar nicht mehr und der Kern ist `active`: Crossfader und Fader bleiben, wo sie sind. Stück
-   auslaufen lassen, dann `djk-stop` und `djk-start`, oder Rückweg auf den XZ.
+1. Reload in the browser (F5), with the address from `--zustand` (`open`, default `http://127.0.0.1:47300/`).
+2. If that does not help: `systemctl --user restart cypherdj-oberflaeche`, then reload.
+3. Bar or announcements missing, but controls work: `systemctl --user restart cypherdj-leitstand`.
+4. Controls do not work from the start: `--zustand`, `kern` line. If it says `without test mode`, the start ran with
+   `--ohne-pruefmodus`; let the track run out, `djk-stop`, `djk-start` without this switch.
+5. Controls no longer work at all and the core is `active`: crossfader and faders stay where they are. Let the track
+   run out, then `djk-stop` and `djk-start`, or fallback to the XZ.
 
-## 4. Rückweg auf den XDJ-XZ mit USB-Stick
+## 4. Fallback to the XDJ-XZ with a USB stick
 
-Vorher bereit legen: ein Stick mit den Stücken als Dateien in Ordnern, Dateisystem **FAT32 oder HFS+** (exFAT und
-NTFS liest der XZ nicht; Handbuch S. 6). Annahme, noch nicht mit Andreas geklärt: der XZ hängt mit MASTER OUT an
-den Lautsprechern und läuft schon, während djk spielt.
+Prepare beforehand: a stick with the tracks as files in folders, file system **FAT32 or HFS+** (the XZ does not read exFAT and
+NTFS; manual p. 6). Assumption, not yet confirmed with Andreas: the XZ is connected with MASTER OUT
+to the speakers and is already running while djk is playing.
 
-1. Am Rechner leise machen: Master oder Crossfader auf der Seite runter, dann `djk-stop`.
-2. Am XZ: Abdeckung von **[USB 1]** oder **[USB 2]** öffnen, Stick einstecken (Handbuch S. 111).
-3. Taste **[USB 1]**/**[USB 2]** drücken, mit dem Drehregler den Ordner öffnen (drücken), **[BACK]** eine Ebene hoch.
-4. Stück wählen, **[LOAD 1]** oder **[LOAD 2]**, dann **PLAY/PAUSE** (Handbuch S. 112 f.).
-5. Stick erst abziehen, nachdem **[USB STOP]** 2 s gedrückt war und die USB-Anzeige aus ist (S. 112).
+1. On the computer, go quiet: master or crossfader down on the page, then `djk-stop`.
+2. On the XZ: open the cover of **[USB 1]** or **[USB 2]**, insert the stick (manual p. 111).
+3. Press **[USB 1]**/**[USB 2]**, open the folder with the jog knob (press), **[BACK]** one level up.
+4. Select the track, **[LOAD 1]** or **[LOAD 2]**, then **PLAY/PAUSE** (manual p. 112 f.).
+5. Pull the stick only after **[USB STOP]** has been held for 2 s and the USB indicator is off (p. 112).
 
-Zurück auf djk später: XZ-Kanal runter, `djk-start` mit denselben Parametern wie vorher, `--zustand` prüfen.
+Back to djk later: XZ channel down, `djk-start` with the same parameters as before, check `--zustand`.

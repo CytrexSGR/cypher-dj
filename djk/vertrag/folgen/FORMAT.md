@@ -1,126 +1,62 @@
-# Golden-Folgen: Format und Läufer-Regeln (Vertrag 1)
+# Golden sequences: format and runner rules (Contract 1)
 
-Grundlage: `docs/architektur/SCHNITTSTELLEN.md` §19.0 (Format) und §19.3 (Pflichtfolgen). Aufbau je Zeile:
-`djk/vertrag/folge.schema.json`. Prüfung aller Dateien: `python3 djk/vertrag/pruefe_folgen.py`. Jede Folge läuft
-gegen die Kern-Attrappe (Scheibe 13) und gegen den Kern (Läufer `attrappe_leitstand.py`, Scheibe 08).
+Based on: `docs/architektur/SCHNITTSTELLEN.md` §19.0 (format) and §19.3 (mandatory sequences). Structure per line:
+`djk/vertrag/folge.schema.json`. Checking all files: `python3 djk/vertrag/pruefe_folgen.py`. Every sequence runs against the core mock (slice 13) and against the core (runner `attrappe_leitstand.py`, slice 08).
 
-1. **Datei.** `djk/vertrag/folgen/<name>.jsonl`, UTF-8, eine JSON-Zeile je Schritt. Der Läufer arbeitet die Schritte
-   in Dateireihenfolge ab.
-2. **Zeitachse.** Der erste Schritt jeder Folge ist `sende` mit `/k/set/neu` und `sample` 0 („sofort“). Die Folge
-   rechnet ab der Quittung `gestartet` dieses Befehls in Samples der neuen Zeitachse (§1.1: Sample 0 ist der erste
-   Zyklus danach). Bis diese Quittung da ist, wartet der Läufer höchstens 2 s Wanduhr, sonst ist die Folge rot.
-3. **`sende`** `{"t":"sende","sample":S,"osc":[adresse, typen, w1, …]}`: der Läufer schickt die Nachricht, sobald
-   die Kern-Uhr S erreicht hat (aus `/uhr` hochgerechnet, §5.2). Den Vorlauf nach §3 plant die Folge selbst ein
-   (S liegt früh genug vor dem Ziel-Beat des Befehls).
-4. **Kennungen.** Felder mit Namen `id` oder `ziel_id` (Typ `h`, Namen aus `osc.json`) tragen in der Folge kleine
-   Zahlen ab 1. Der Läufer addiert beim Senden und beim Vergleichen eine Basis B (sein `mono_ns` beim Start der
-   Folge, §1.4), damit Kennungen über Läufe hinweg streng steigend bleiben.
-5. **`hand`** `{"t":"hand","sample":S,"pfad":P,"midi_roh":x}`: der Läufer schickt `/test/hand ,sfh` mit
-   `[P, x, S]` mindestens 2 Zyklen plus Transport vor S (§3); wirksam am Sample S (nur mit `pruefmodus = true`).
-6. **`erwarte`** `{"t":"erwarte","bis_sample":S,"osc":[adresse, typen, w1, …],"toleranz":x}`: eine Nachricht mit
-   gleicher Adresse und Typ-Zeichenkette, deren Werte passen, muss eintreffen, bevor die Kern-Uhr S überschreitet.
-   Vergleich je Wert: `null` passt auf alles; `i`, `h`, `s` genau; `f`, `d` mit |ist − soll| ≤ `toleranz`
-   (Vorgabe 0); `"NaN"` passt nur auf NaN, `"inf"`/`"-inf"` nur auf die Unendlichkeit mit diesem Vorzeichen.
-   Gesucht wird in allen seit dem Start der Folge eingetroffenen, noch nicht verbrauchten Nachrichten; eine Nachricht
-   erfüllt höchstens einen Schritt. Die Reihenfolge der `erwarte`-Zeilen legt keine Reihenfolge der Nachrichten fest.
-7. **`wert`** `{"t":"wert","sample":S,"pfad":P,"wert":v,"toleranz":x}`: der Regler P hat am Sample S den Wert
-   v ± x (Kern: aus `/e/regler`; Attrappe und Bibliotheken: direkt aus ihrer Regler-Tabelle).
-8. **Ende.** Grün, wenn alle `erwarte`- und `wert`-Schritte erfüllt sind und keine unverbrauchte Nachricht
-   `/e/protokollfehler`, `/e/invariante` oder `/q` mit Status 4 bis 8 übrig ist (eine unerwartete Ablehnung oder
-   Verspätung macht die Folge rot).
-9. **`absicht`** (nur bei `sende`): `unbekannte_adresse` oder `falsche_typen` kennzeichnet eine absichtlich
-   vertragswidrige Nachricht; `pruefe_folgen.py` prüft, dass sie es wirklich ist.
-10. **`notiz`**: freier Text für Menschen, ohne Wirkung. Weitere Felder in einer Zeile ignoriert der Läufer
-    (Vertragsregel für JSON: neue optionale Felder sind erlaubt); spätere Scheiben dürfen so etwa `herleitung`
-    ergänzen, ohne dieses Format zu brechen. Neue Schritt-Arten (`t`) kommen nur mit einer Zeile in dieser Datei dazu.
-11. **Quantum.** Folgen, die `/uhr` erwarten, wählen Blockanfänge, die bei Quantum 128 und 256 gelten (Vielfache
-    von 256 Samples).
-12. **Herkunft der Zahlen.** Erwartungswerte schreibt nie jemand ab: `erzeuge_folgen.py` rechnet sie mit `karte.py`
-    (Formeln aus §1.3) aus, und `pruefe_folgen.py` vergleicht `karte.py` mit der Golden-Tabelle in §1.3.
+1. **File.** `djk/vertrag/folgen/<name>.jsonl`, UTF-8, one JSON line per step. The runner works through the steps in file order.
+2. **Time axis.** The first step of every sequence is `sende` with `/k/set/neu` and `sample` 0 ("immediately"). The sequence counts from the acknowledgement `gestartet` of this command in samples of the new time axis (§1.1: sample 0 is the first cycle after that). Until this acknowledgement arrives, the runner waits at most 2 s of wall-clock time, otherwise the sequence is red.
+3. **`sende`** `{"t":"sende","sample":S,"osc":[adresse, typen, w1, …]}`: the runner sends the message as soon as the core clock has reached S (extrapolated from `/uhr`, §5.2). The sequence plans the lead time itself according to §3 (S lies early enough before the target beat of the command).
+4. **Identifiers.** Fields named `id` or `ziel_id` (type `h`, names from `osc.json`) carry small numbers from 1 in the sequence. The runner adds a base B (its `mono_ns` at the start of the sequence, §1.4) when sending and when comparing, so that identifiers stay strictly increasing across runs.
+5. **`hand`** `{"t":"hand","sample":S,"pfad":P,"midi_roh":x}`: the runner sends `/test/hand ,sfh` with `[P, x, S]` at least 2 cycles plus transport before S (§3); effective at sample S (only with `pruefmodus = true`).
+6. **`erwarte`** `{"t":"erwarte","bis_sample":S,"osc":[adresse, typen, w1, …],"toleranz":x}`: a message with the same address and the same type string, whose values match, must arrive before the core clock exceeds S. Comparison per value: `null` matches everything; `i`, `h`, `s` exactly; `f`, `d` with |actual − target| ≤ `toleranz` (default 0); `"NaN"` matches only NaN, `"inf"`/`"-inf"` only infinity with this sign. Searched among all messages received since the start of the sequence that have not yet been consumed; a message fulfills at most one step. The order of the `erwarte` lines does not fix an order of the messages.
+7. **`wert`** `{"t":"wert","sample":S,"pfad":P,"wert":v,"toleranz":x}`: the control P has the value v ± x at sample S (core: from `/e/regler`; mock and libraries: directly from their control table).
+8. **End.** Green if all `erwarte` and `wert` steps are fulfilled and no unconsumed message `/e/protokollfehler`, `/e/invariante` or `/q` with status 4 to 8 remains (an unexpected rejection or delay makes the sequence red).
+9. **`absicht`** (only for `sende`): `unbekannte_adresse` or `falsche_typen` marks a deliberately contract-violating message; `pruefe_folgen.py` checks that it really is one.
+10. **`notiz`**: free text for humans, no effect. The runner ignores further fields in a line (contract rule for JSON: new optional fields are allowed); later slices may thus add e.g. `herleitung` without breaking this format. New step types (`t`) are only added with a line in this file.
+11. **Quantum.** Sequences that expect `/uhr` choose block starts that apply at quantum 128 and 256 (multiples of 256 samples).
+12. **Origin of the numbers.** Nobody copies expected values: `erzeuge_folgen.py` computes them with `karte.py` (formulas from §1.3), and `pruefe_folgen.py` compares `karte.py` with the golden table in §1.3.
 
-## Zusätze von Scheibe 09
+## Additions from slice 09
 
-Additiv zu den Punkten 1 bis 12: keine bestehende Zeile ändert ihre Bedeutung. Aufbau je Zeile:
-`folge.schema.json`; Herleitung und Prüfung der Folgen von 09: `erzeuge_golden.py`, `pruefe_golden.py`; Vergleich
-einer Beobachtung mit einer Folge in Code: `folgen_vergleich.py`.
+Additive to points 1 to 12: no existing line changes its meaning. Structure per line: `folge.schema.json`; derivation and checking of the sequences from 09: `erzeuge_golden.py`, `pruefe_golden.py`; comparison of an observation with a sequence in code: `folgen_vergleich.py`.
 
-13. **Läufer als Abonnent.** Der Läufer meldet sich vor der ersten Zeile mit `/k/hallo` an (Name und Port seiner
-    Prüfinstanz, Z2) und wiederholt es jede Sekunde (Herzschlag, §4.1); kommt 100 ms lang kein `/uhr`, sofort und dann
-    alle 50 ms (§16.3). Eine Folge sendet `/k/hallo` nie selbst; `neustart` verlässt sich auf diesen Herzschlag.
-14. **Zusatzfelder.** Jede Zeile darf `herleitung` (Abschnitt und Formel, nur zum Lesen) und `bereich` tragen
-    (`zeitachse`, `regler`, `ki`, `deck`, `hoerschein`, `schuss`, `erzeuger`, `invariante`, `pruefstand`, `leitstand`,
-    `rechner`). Ein Läufer fährt die Folgen, die `INDEX.json` unter `fuer` für seine Scheibe nennt. Baut er einen
-    Bereich nicht (die Stellwerk-Bibliothek von Scheibe 11 ohne Decks, Hörscheine und Invarianten), überspringt er
-    dessen Zeilen; die für ihn genannten Folgen sind so gebaut, dass die übrigen Zeilen für ihn dasselbe ergeben wie
-    für den vollen Kern. `erwarte` darf `ab_sample` tragen: das Fenster ist dann `[ab_sample, bis_sample]`, sonst
-    `[0, bis_sample]`; wer `ab_sample` nicht liest, prüft schwächer, nie falsch.
-15. **Reihenfolge der Handlungen.** `sende`, `buendel`, `hand`, `aktion` und `ws_sende` stehen in nicht fallender
-    Sample-Folge; der Läufer arbeitet sie in Dateireihenfolge ab.
-16. **Neue Schritt-Arten.** Ein Läufer, der eine Schritt-Art nicht kennt, bricht rot ab; still überspringen darf er nur
-    nach Punkt 14.
+13. **Runner as subscriber.** Before the first line, the runner registers with `/k/hallo` (name and port of its check instance, Z2) and repeats it every second (heartbeat, §4.1). If no `/uhr` arrives for 100 ms, it sends immediately and then every 50 ms (§16.3). A sequence never sends `/k/hallo` itself; `neustart` relies on this heartbeat.
+14. **Additional fields.** Each line may carry `herleitung` (section and formula, for reading only) and `bereich` (`zeitachse`, `regler`, `ki`, `deck`, `hoerschein`, `schuss`, `erzeuger`, `invariante`, `pruefstand`, `leitstand`, `rechner`). A runner runs the sequences that `INDEX.json` names under `fuer` for its slice. If it does not build an area (the Stellwerk (interlocking) library of slice 11 without decks, listening passs and invariants), it skips the lines of that area; the sequences named for it are built so that the remaining lines give the same result for it as for the full core. `erwarte` may carry `ab_sample`: the window is then `[ab_sample, bis_sample]`, otherwise `[0, bis_sample]`. Whoever does not read `ab_sample` checks more weakly, never wrongly.
+15. **Order of actions.** `sende`, `buendel`, `hand`, `aktion` and `ws_sende` are in non-decreasing sample order; the runner works them through in file order.
+16. **New step types.** A runner that does not know a step type aborts red; it may skip silently only under point 14.
 
-    | `t` | Felder | Bedeutung |
+    | `t` | Fields | Meaning |
     |---|---|---|
-    | `erwarte_nicht` | `ab_sample`, `bis_sample`, `osc`, `toleranz`? | im Fenster trifft keine passende Nachricht ein (verbraucht oder nicht); Negativ-Kontrolle |
-    | `erlaube` | `ab_sample`, `bis_sample`, `osc`, `herleitung` | passende Nachrichten im Fenster sind erlaubt (null bis viele) und zählen nicht nach Punkt 8; nur wo der Vertrag offen lässt, ob eine Meldung kommt (Punkt 22) |
-    | `buendel` | `sample`, `nachrichten` | OSC-Bündel mit Zeitmarke 1 („sofort“), §4.8; `t_send_us` ist 0 (nur Diagnose) |
-    | `deck_wert` | `sample`, `deck`, `feld`, `wert`, `toleranz` | `feld` aus `/zustand/deck` §5.5 (`status`, `quell_beat`, `beats_bis_ende`, `faktor`); Kern: aus `/zustand/deck` (50 Hz; zwischen zwei Meldungen linear, `status` die letzte davor); Attrappe und Bibliothek: aus ihrem Deck-Modell |
-    | `messung` | `sample`, `name`, `wert`, `toleranz` | misst der Prüfstand am Ziel (JACK-Aufnehmer an eigener Null-Senke): `schleife_frames`, `stille_ms`, `rueckgabe_raster_abw_samples` |
-    | `aktion` | `sample`, `was` | Eingriff des Prüfstands, heute nur `kern_kill9` |
-    | `ws_sende`, `ws_erwarte` | `sample` bzw. `ab_sample`, `bis_sample`; `typ`, `daten` | WebSocket an bzw. vom Leitstand (§9); den Umschlag §9.1 setzt der Läufer; Vergleich als Teilmenge (erwartete Schlüssel müssen da sein und passen, weitere sind erlaubt, Listen gleich lang) |
-    | `rechner_frage`, `rechner_antwort` | `zeile` | eine JSON-Zeile an den Rechner (§11) bzw. seine Antwort, Vergleich als Teilmenge |
+    | `erwarte_nicht` | `ab_sample`, `bis_sample`, `osc`, `toleranz`? | in the window no matching message arrives (consumed or not); negative control |
+    | `erlaube` | `ab_sample`, `bis_sample`, `osc`, `herleitung` | matching messages in the window are allowed (none to many) and do not count under point 8; only where the contract leaves open whether a message comes (point 22) |
+    | `buendel` | `sample`, `nachrichten` | OSC bundle with time tag 1 ("immediately"), §4.8; `t_send_us` is 0 (diagnostics only) |
+    | `deck_wert` | `sample`, `deck`, `feld`, `wert`, `toleranz` | `feld` from `/zustand/deck` §5.5 (`status`, `quell_beat`, `beats_bis_ende`, `faktor`); core: from `/zustand/deck` (50 Hz; linear between two reports, `status` the last report before); mock and library: from their deck model |
+    | `messung` | `sample`, `name`, `wert`, `toleranz` | the test bench measures at the target (JACK recorder on its own null sink): `schleife_frames`, `stille_ms`, `rueckgabe_raster_abw_samples` |
+    | `aktion` | `sample`, `was` | intervention by the test bench, today only `kern_kill9` |
+    | `ws_sende`, `ws_erwarte` | `sample` or `ab_sample`, `bis_sample`; `typ`, `daten` | WebSocket to or from the Leitstand (control station) (§9); the envelope §9.1 is set by the runner; comparison as subset (expected keys must be present and match, further keys are allowed, lists have equal length) |
+    | `rechner_frage`, `rechner_antwort` | `zeile` | one JSON line to the computer (§11) or its answer, comparison as subset |
 
-17. **Rechner-Folgen** bestehen nur aus `rechner_frage` und `rechner_antwort` und haben keine Zeitachse (Ausnahme zu
-    Punkt 2; `pruefe_folgen.py` lässt sie ohne `/k/set/neu` zu).
-18. **Leitstand-Folgen.** Die OSC-Zeilen schickt der Läufer weiter direkt an den Kern (oder die Kern-Attrappe); der
-    Leitstand läuft daneben als Abonnent; die `ws_*`-Zeilen gehen an den Leitstand.
-19. **Kennungen in WebSocket und Rechner.** `id` in `rpc` und in Rechner-Zeilen gelten, wie sie stehen; die Basis B
-    aus Punkt 4 gilt nur für OSC.
-20. **Toleranz.** Wie Punkt 6 (Vorgabe 0). Die Folgen von 09 tragen `toleranz` in jeder Zeile mit Gleitkommawerten:
-    1e-6 für Beats und BPM in Quittungen, sonst den Wert, den ihre `herleitung` begründet.
-21. **Fixtures und Verzeichnis.** Jede `material_id` aus `/k/deck/laden` oder `/k/schuss` liegt unter
-    `folgen/material/<material_id>/` (nur JSON; die Audiodaten sind deterministisch und werden erzeugt). Der Läufer
-    schreibt das Material vor der Folge mit `python3 djk/vertrag/erzeuge_material.py --ziel <arbeitsbestand>` in den
-    Arbeitsbestand (§6.4); `f0000000000000ff` fehlt mit Absicht (`material_fehlt`). `folgen/INDEX.json` nennt je Folge
-    `von` (02 oder 09), `fuer` (Scheiben, die sie fahren), `bereiche`, `schritt_arten` und `material`.
-    Die Folgen setzen die Vorgaben aus §2.1 voraus (`ziel_lufs` −16, `hoerbar_db` −26, `tief_offen_db` −12) und
-    `pruefmodus = true`. Jede Fixture außer `f0000000000000c3` (−9,4 LUFS) und `f0000000000000d4` (−45 LUFS), die nur
-    `laden` benutzt, hat `lufs_integriert` −16, also Trim 0 dB (§1.5): so liegen die Schwellen aus §1.6 direkt auf den
-    Fader-Werten der Folgen.
-22. **Offene Lesarten des Vertrags** (Befund an die Hauptinstanz). Wo der Text zwei Lesarten zulässt, legt keine Folge
-    eine fest, außer hier genannt; bis die Hauptinstanz entscheidet, gilt:
-    a. Ob eine I3-Ablehnung zusätzlich `/e/invariante hoerschein` meldet (§5.9 kennt die Art, §17 nennt nur die
-       Quittung): offen, `erlaube`.
-    b. Ob eine Ablehnung am Start die Kopplungsgruppe mitreißt (§4.3 „fallen gemeinsam“): offen; Folgen, die eine
-       Ablehnung prüfen, geben den abgelehnten Teilen keine Gruppe. (`kern_sim.mjs` der Nacht reißt sie mit.)
-    c. Ein ausgeführter Deck-Start ist abgeschlossen und fällt bei einem späteren Gruppenabbruch nicht mehr
-       (`hand_gewinnt`).
-    d. Die Übernahme-Kurve „skaliert“ (§7.2) ist nicht festgelegt: die Folgen nutzen Anschläge (0,0 und 1,0) und
-       Richtungen, nie einen Zwischenwert.
-    e. Ein wartender Teil am gegriffenen Regler fällt beim Griff (Status 7 `hand`, ADR 023) oder an seinem Start
-       (Status 6 `regler_beim_menschen`, §4.3): offen, Status frei (`sub_doppelt`).
-    f. Ob ein wegen I2 wartender Plan-Stopp eine eigene `/e/invariante master_leer` meldet: offen, `erlaube`. Der
-       wartende Stopp bleibt `angenommen` (§17 I2), eine Quittung `gestartet` ist rot.
-    g. `/test/hand` auf `<k>/xseite` (drei Stellungen): Wert = `round(2·midi_roh)`; `crossfader_luecke` prüft das mit
-       einer `wert`-Zeile, bevor sie sich darauf stützt.
-    h. `/erz/quittung` zählt `ungehoert` beim Einsetzen des Fensters (Antwort auf das Bündel), nicht erst beim Spielen.
-    i. Grund bei Status 5 (`verspaetet_ausgefuehrt`): `""` oder `zu_spaet`, beides zulässig; bei Status 4 `zu_spaet`.
-    j. `/k/hoerschein` trägt in den Folgen die Quelle `pruefstand` (§1.4 kennt keine Quelle `analyse`).
-    k. Ein am Start abgelehnter Teil meldet `ist_sample` = sein Ziel-Sample (§17 „am Start abgelehnt“).
-    l. Ob `/e/frist` zwischen dem Setzen des Rückfall-Loops und dem Erreichen des Loops noch kommt (§5.5 „∞ im
-       Loop“): offen, keine Zeile.
-    m. Ob der Rückfall schon beim Eintreffen eines Befehls an das Deck endet oder erst beim Ausführen: offen, das
-       Fenster beginnt beim Senden (`rueckfall`).
-    n. Ob I1 ein Setzen mit seinem Zielwert prüft (Dossier 09 §5.3 V1) oder mit dem Wert seiner Schaltrampe (Dossier 09
-       Nachprüfung NK3: der Plan §14.1 hätte dann 192 Samples Sub doppelt an S): offen. Keine Folge schließt einen Bass
-       per Setzen am selben Sample, an dem ein Kanal hörbar wird, während ein anderer tief offen ist; das Setzen liegt
-       einen Beat vorher, solange der Kanal noch hinter dem geschlossenen Fader liegt (`b_rein` in `folgen_bau.py`,
-       `hand_stoppt_a_raus`).
+17. **Computer sequences** consist only of `rechner_frage` and `rechner_antwort` and have no time axis (exception to point 2; `pruefe_folgen.py` allows them without `/k/set/neu`).
+18. **Leitstand sequences.** The runner forwards the OSC lines directly to the core (or to the core mock). The Leitstand runs alongside as a subscriber; the `ws_*` lines go to the Leitstand.
+19. **Identifiers in WebSocket and computer.** `id` in `rpc` and in computer lines applies as written; the base B from point 4 applies only to OSC.
+20. **Tolerance.** As point 6 (default 0). The sequences from 09 carry `toleranz` in every line with floating-point values: 1e-6 for beats and BPM in acknowledgements, otherwise the value that their `herleitung` justifies.
+21. **Fixtures and directory.** Every `material_id` from `/k/deck/laden` or `/k/schuss` lies under `folgen/material/<material_id>/` (JSON only; the audio data are deterministic and are generated). The runner writes the material before the sequence with `python3 djk/vertrag/erzeuge_material.py --ziel <arbeitsbestand>` into the working set (§6.4). `f0000000000000ff` is missing on purpose (`material_fehlt`). `folgen/INDEX.json` names for each sequence `von` (02 or 09), `fuer` (the slices that run it), `bereiche`, `schritt_arten` and `material`.
+    The sequences presuppose the defaults from §2.1 (`ziel_lufs` −16, `hoerbar_db` −26, `tief_offen_db` −12) and `pruefmodus = true`. Every fixture except `f0000000000000c3` (−9.4 LUFS) and `f0000000000000d4` (−45 LUFS), which only uses `laden`, has `lufs_integriert` −16, thus trim 0 dB (§1.5): so the thresholds from §1.6 lie directly on the fader values of the sequences.
+22. **Open readings of the contract** (finding for the main instance). Where the text allows two readings, no sequence fixes one, except as named here. Until the main instance decides, the following applies:
+    a. Whether an I3 rejection additionally reports `/e/invariante hoerschein` (§5.9 knows the kind, §17 names only the acknowledgement): open, `erlaube`.
+    b. Whether a rejection at the start drags the coupling group along (§4.3 "fall together"): open. Sequences that check a rejection give the rejected parts no group. (`kern_sim.mjs` from the overnight run drags them along.)
+    c. An executed deck start is complete and no longer falls with a later group abort (`hand_gewinnt`).
+    d. The transfer curve "skaliert" (§7.2) is not fixed: the sequences use extremes (0.0 and 1.0) and directions, never an intermediate value.
+    e. A waiting part on the grabbed control falls at the grab (status 7 `hand`, ADR 023) or at its own start (status 6 `regler_beim_menschen`, §4.3): open, status free (`sub_doppelt`).
+    f. Whether a plan stop waiting because of I2 reports its own `/e/invariante master_leer`: open, `erlaube`. The waiting stop remains `angenommen` (§17 I2); an acknowledgement `gestartet` is red.
+    g. `/test/hand` on `<k>/xseite` (three positions): value = `round(2·midi_roh)`; `crossfader_luecke` checks that with a `wert` line before it relies on it.
+    h. `/erz/quittung` counts `ungehoert` when the window is inserted (reply to the bundle), not only when it is played.
+    i. Reason at status 5 (`verspaetet_ausgefuehrt`): `""` or `zu_spaet`, both permissible; at status 4 `zu_spaet`.
+    j. `/k/hoerschein` carries the source `pruefstand` in the sequences (§1.4 knows no source `analyse`).
+    k. A part rejected at the start reports `ist_sample` = its target sample (§17 "am Start abgelehnt").
+    l. Whether `/e/frist` still comes between setting the fallback loop and reaching the loop (§5.5 "∞ im Loop"): open, no line.
+    m. Whether the fallback ends already when a command arrives at the deck or only when it is executed: open, the window begins at sending (`rueckfall`).
+    n. Whether I1 checks a setting with its target value (dossier 09 §5.3 V1) or with the value of its switch ramp (dossier 09, re-check NK3: plan §14.1 would then have 192 samples of sub twice at S): open. No sequence closes a bass by setting it at the same sample at which a channel becomes audible while another is fully open. The setting lies one beat earlier, as long as the channel still lies behind the closed fader (`b_rein` in `folgen_bau.py`, `hand_stoppt_a_raus`).
 
-    **Entschieden 2026-09-25 (Andreas; Blatt `docs/architektur/entwuerfe/2026-09-25-lesarten-09.md`):**
-    b: ja, die Ablehnung am Start reißt die Gruppe mit (SCHNITTSTELLEN §4.3 Feld 11). e: der wartende Teil fällt beim
-    Griff, Status 7 `hand` (§4.3, ADR 023). n: I1 prüft über die Schaltrampe (§17); die Regel §14.4 setzt B's Bass einen
-    Beat vor S (`herleitung.expandiere`, `expandiere_sicher.jsonl`). a, f: je einmal melden. i: `""`. j: Quelle
-    `leitstand`. l: keine `/e/frist`. m: Ende beim Ausführen. c, d, g, h, k: wie oben. **Noch offen:** die Folgen, die
-    b, e, n, a, f, i, l, m mit `erlaube` oder Status `null` offenhalten, auf `erwarte`/`erwarte_nicht` schärfen
-    (gehört Scheibe 20 bzw. vor 13; bis dahin lassen sie beide Lesarten durch).
+    **Decided 2026-09-25 (Andreas; sheet `docs/architektur/entwuerfe/2026-09-25-lesarten-09.md`):**
+    b: yes, the rejection at the start drags the group along (SCHNITTSTELLEN §4.3 field 11). e: the waiting part falls at the grab, status 7 `hand` (§4.3, ADR 023). n: I1 checks via the switch ramp (§17); the rule §14.4 sets B's bass one beat before S (`herleitung.expandiere`, `expandiere_sicher.jsonl`). a, f: each reported once. i: `""`. j: source `leitstand`. l: no `/e/frist`. m: end at execution. c, d, g, h, k: as above. **Still open:** the sequences that keep b, e, n, a, f, i, l, m open with `erlaube` or status `null` are to be sharpened to `erwarte`/`erwarte_nicht` (belongs to slice 20, or before 13; until then they let both readings through).

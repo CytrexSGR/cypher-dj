@@ -1,68 +1,68 @@
-# ADR 008: Mixer, Vorhören, Mess-Abgriff und Aufnahme
+# ADR 008: Mixer, pre-listen, measuring tap and recording
 
-- **Status:** angenommen; Cue am echten Interface vorläufig (M1); Hörschein-Schwellen vorläufig (M18)
-- **Datum:** 2026-09-23
-- **Getragene Anforderungen:** A4, A5, A6, A11, A15, A17, A21
-- **Hängt zusammen mit:** ADR 003, 012, 016, 023
+- **Status:** accepted; cue on the real interface provisional (M1); listening-certificate thresholds provisional (M18)
+- **Date:** 2026-09-23
+- **Requirements carried:** A4, A5, A6, A11, A15, A17, A21
+- **Related to:** ADR 003, 012, 016, 023
 
-## Kontext
+## Context
 
-A4: „für die KI gemessen, für Andreas Vorhören auf einem zweiten Ausgang“. A5: EQ zum Tauschen, nicht nur Filter.
-Latenzausgleich zwischen parallelen Wegen gibt es nur innerhalb eines Programms (Carla gleicht nicht aus, 04 §3.1).
-Der Entwurf „Robustheit“ ließ KI-Messung und Andreas' Cue denselben Abgriff teilen; „KI“ trennt sie. „Robustheit“
-nimmt an den Notbahn-Ausgängen auf, „KI“ und „Spiel“ im Kern.
+A4: "measured for the AI, pre-listen on a second output for Andreas". A5: EQ to swap, not only filter.
+Latency compensation between parallel paths exists only within one program (Carla does not compensate, 04 §3.1).
+The draft "robustness" let the AI measurement and Andreas' cue share the same tap; "AI" separates them. "Robustness"
+records at the Notbahn outputs, "AI" and "Spiel (play)" in the core.
 
-## Entscheidung
+## Decision
 
-1. **Mixer im Kern, eigener Code** (Faust für feste DSP-Blöcke, C++ für alles, was die Uhr kennt):
-   Kanalzug je Deck, Erzeuger-Kanal, Pad und Gruppenbus: Trim (beim Laden `ziel_lufs` − LUFS der Fassung, −24 bis
-   +24 dB) → **LR8-Isolator 246/2484 Hz** mit Kill (Rampen zweiter Ordnung 5 ms) → TPT-Filter an einem Regler (20 ms
-   geglättet) → **PFL-Abgriff und Mess-Abgriff** → Kanalfader → Crossfader-Zuweisung (Mixxx-Kurven) → vier Sends nach
-   dem Fader → **Ziel** Master oder einer von vier Gruppenbussen (A17; Zuweisungstabelle statt fester Pfade,
-   `SCHNITTSTELLEN.md` §1.5).
-2. **Master:** Summe → FX-Rückwege (beatsynchrones Echo als Mischform mit zwei Leseköpfen aus der Uhr, Hall als
-   Faust-Block) → Limiter mit Vorhalt (Faust `co.limiter_lad_stereo`, ungemessen) → Riegel (NaN, DC, Clip).
-3. **Cue** auf Ausgang 3/4 desselben Interfaces: PFL nach EQ und Filter, vor dem Fader; um den Limiter-Vorhalt
-   verzögert (laufzeitgleich zum Master); Kopfhörer-Mix Cue gegen Master und Split wie Mixxx. Durch dieselbe
-   Notbahn wie der Master.
-4. **Mess-Abgriff getrennt vom Cue:** an derselben Stelle (nach EQ, vor Fader) läuft für **jeden** Kanal immer ein
-   Messer (Spitze, Echtspitze, LUFS M/S über libebur128, Bandpegel, Hüllkurven der **sechs Analyse-Bänder** Sub bis
-   Hoch mit 1 kHz in den Ring für die Analyse, `SCHNITTSTELLEN.md` §6.2; dieselben Filter rechnet die Werkstatt für die
-   Referenz). Cyphers Hörscheine entstehen nur dort; Andreas' Kopfhörer bleibt seiner. Die Taste **„Cypher hören“**
-   legt Cyphers vorgeschlagenen Kanal bewusst auf Andreas' PFL.
-5. **Neue Quellen starten stumm:** jeder Kanal (Deck, Erzeuger, Pad, Wirt-Rückweg) steht nach Laden oder Anlegen
-   auf −200 dB; ein Plan darf ihn nur mit gültigem Hörschein hörbar machen (Invariante I3, ADR 023).
-6. **Aufnahme** in eigener Unit an den **Notbahn-Ausgängen** (was wirklich klingt, auch Notbahn-Schleifen), mit dem
-   Kern-Sample des ersten Frames.
+1. **Mixer in the core, own code** (Faust for fixed DSP blocks, C++ for everything the clock knows): channel strip
+   per deck, generator channel, pad and group bus: trim (on load `ziel_lufs` minus LUFS of the version, −24 to +24 dB)
+   → **LR8 isolator 246/2484 Hz** with kill (second-order ramps 5 ms) → TPT filter on one control (20 ms smoothed)
+   → **PFL tap (pre-fader listen) and measuring tap** → channel fader → crossfader assignment (Mixxx curves) → four
+   sends after the fader → **destination** master or one of four group buses (A17; assignment table instead of
+   fixed paths, `SCHNITTSTELLEN.md` §1.5).
+2. **Master:** sum → FX returns (beat-synchronous echo as a hybrid with two read heads from the clock, reverb as a
+   Faust block) → limiter with look-ahead (Faust `co.limiter_lad_stereo`, unmeasured) → guards (NaN, DC, clip).
+3. **Cue** on outputs 3/4 of the same interface: PFL after EQ and filter, before the fader; delayed by the limiter
+   look-ahead (latency-equal to master); headphone mix of cue against master and split, as in Mixxx. Through the
+   same Notbahn as the master.
+4. **Measuring tap separate from the cue:** at the same point (after EQ, before the fader) **every** channel always
+   runs a meter (peak, true peak, LUFS M/S via libebur128, band level, envelopes of the **six analysis bands** Sub
+   to Hoch with 1 kHz into the ring for analysis, `SCHNITTSTELLEN.md` §6.2; the workshop computes the same filters
+   for the reference). Cypher's listening passs arise only there; Andreas' headphones stay his. The key
+   **"Listen to Cypher"** deliberately puts Cypher's suggested channel on Andreas' PFL.
+5. **New sources start silent:** every channel (deck, generator, pad, host return) is at −200 dB after loading or
+   creating; a plan may make it audible only with a valid listening pass (invariant I3, ADR 023).
+6. **Recording** in its own unit at the **Notbahn outputs** (what really sounds, including Notbahn loops), with the
+   core sample of the first frame.
 
-## Alternativen und warum nicht
+## Alternatives and why not
 
-| Alternative | Grund der Ablehnung | Beleg |
+| Alternative | Reason for rejection | Evidence |
 |---|---|---|
-| Faust-Standard LR4 als Isolator | Mitten-Kill nur 34,4 dB, verfehlt „Kill > 40 dB“ | 04 §4.1 |
-| Butterworth-Weiche | Summe +2,94 dB an den Grenzen | 04 §4.1 |
-| EQ als Plugin (a-EQ) | kehrt nach „0“ nicht bitgenau zurück (−0,04 dB, Glättung stoppt 0,05 dB vor dem Ziel) | 05 §4.1 |
-| hart umgeschaltetes Delay | knackt in 160 von 160 Blöcken der Rampe (−39,9 dBFS) | 04 §4.3 |
-| KI misst am Cue-Abgriff | Cypher würde Andreas' Kopfhörer belegen oder warten müssen; A4 trennt „gemessen“ und „Vorhören“ | A4 wörtlich; Richter 3 |
-| Aufnahme im Kern-Ring | nimmt vor der Notbahn auf: Notbahn-Schleifen und Nahtfehler fehlen in der Aufnahme | Richter 3 zu „KI“ |
-| `pw-record` als Aufnahme | verlor unter Last ganze Blöcke | 01 §4.4, 02 Risiko 5 |
+| Faust standard LR4 as isolator | middle kill only 34.4 dB, misses "kill > 40 dB" | 04 §4.1 |
+| Butterworth crossover | sum +2.94 dB at the crossover points | 04 §4.1 |
+| EQ as plugin (a-EQ) | does not return bit-exactly to "0" (−0.04 dB, smoothing stops 0.05 dB short of the target) | 05 §4.1 |
+| hard-switched delay | clicks in 160 of 160 blocks of the ramp (−39.9 dBFS) | 04 §4.3 |
+| AI measures at the cue tap | Cypher would occupy Andreas' headphones or have to wait; A4 separates "measured" and "pre-listen" | A4 verbatim; judge 3 |
+| recording in the core ring | records before the Notbahn: Notbahn loops and seam errors missing from the recording | judge 3 on "AI" |
+| `pw-record` as recorder | lost whole blocks under load | 01 §4.4, 02 risk 5 |
 
-## Folgen
+## Consequences
 
-- Isolator-Grenzen 246/2484 Hz sind Mixxx-Vorgabe, ein Parameter; ob sie zu Andreas' Gewohnheit passen, stellt er
-  live ein.
-- Kreuzenergien der Vorhersage müssen mit genau diesen Filtern gerechnet werden (ADR 012).
-- Split halbiert das Vorhören auf Mono je Ohr; nur Notweg.
-- Mess-Abgriff kostet Rechenzeit je Kanal; gerechnet unter 2 % des 256er-Budgets für vier Decks plus vier Effekte.
+- The isolator boundaries 246/2484 Hz are the Mixxx default, one parameter; whether they suit Andreas' habits, he
+  sets live.
+- Cross energies of the prediction must be calculated with exactly these filters (ADR 012).
+- Split halves the pre-listen to mono per ear; emergency route only.
+- The measuring tap costs compute per channel; calculated below 2 % of the 256 budget for four decks plus four effects.
 
-## Beleg
+## Evidence
 
-04 §3.1 (Graph, Mixxx `enginemixer.cpp` 394 bis 405, 830 bis 840), §4.1 (LR8 Mitten-Kill 74,6 dB, −12 dB eingestellt
-= −11,995 dB, neutral 0,0000 dB), §4.2 (Kill-Rampe zweiter Ordnung 5 ms: −97,68 statt −60,38 dBFS), §4.3 bis 4.5
-(Mischform mit S-Ecken −144,51 dBFS), §4.6 (TPT-Filter geglättet −102,26 dBFS), §4.7 (libebur128 −22,993 LUFS bei Soll
-−23,0), §4.8 (LR8 5,4 bis 10,9 µs je Kanal und Block); 01 §4.4. Alle 04-Zahlen offline, Dossier 04 ungeprüft.
+04 §3.1 (graph, Mixxx `enginemixer.cpp` 394 to 405, 830 to 840), §4.1 (LR8 middle kill 74.6 dB, set to −12 dB =
+−11.995 dB, neutral 0.0000 dB), §4.2 (second-order kill ramp 5 ms: −97.68 instead of −60.38 dBFS), §4.3 to 4.5
+(hybrid with S-corners −144.51 dBFS), §4.6 (TPT filter smoothed −102.26 dBFS), §4.7 (libebur128 −22.993 LUFS at
+target −23.0), §4.8 (LR8 5.4 to 10.9 µs per channel and block); 01 §4.4. All 04 figures offline, dossier 04 unchecked.
 
-## Kippt, wenn
+## Reversed if
 
-Andreas im Hörtermin andere EQ-Kennlinien oder Grenzen will (Parameter, keine Architektur); M1 zeigt, dass das
-Interface nur zwei Ausgänge hat (dann Split bis zum neuen Gerät).
+Andreas wants other EQ curves or boundaries in the listening session (parameters, not architecture); M1 shows that
+the interface has only two outputs (then split until the new device).

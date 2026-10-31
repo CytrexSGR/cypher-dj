@@ -202,7 +202,7 @@ mostly against a silent test sink. Not benchmarks.
 - Many moving parts: Rubber Band, JACK/PipeWire, ffmpeg, Node.js 22.18+, Python, and optionally
   Strudel, Carla and Surge XT. See [INSTALL.md](INSTALL.md).
 - The library search expects a catalog database that is not part of this repository.
-- Code comments and internal docs are in German. The interface is in English.
+- Code comments are in German. The architecture docs and ADRs are written in German and published here as English translations; the export refuses to publish a translation whose German source has changed since. Field names and code words in the docs stay German (`regler`, `warp_setzen`). The interface is in English.
 
 ## Getting started
 

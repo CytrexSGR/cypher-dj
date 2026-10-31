@@ -1,44 +1,36 @@
-# ADR 018: Abschied vom Browser im Audiopfad
+# ADR 018: Farewell to the browser in the audio path
 
-- **Status:** angenommen
-- **Datum:** 2026-09-23
-- **Getragene Anforderungen:** A25, A24, A3, A10
-- **Hängt zusammen mit:** ADR 001, 017, 019
+- **Status:** accepted
+- **Date:** 2026-09-23
+- **Requirements carried:** A25, A24, A3, A10
+- **Related to:** ADR 001, 017, 019
 
-## Kontext
+## Context
 
-Der heutige Stand spielt über die Dirigent-Seite in Chromium mit superdough und Worklets; der laufende Plan
-„Tonhöhe halten“ (`docs/superpowers/plans/2026-09-23-tonhoehe-halten.md`) baut Rubber Band als WASM-Worklet je Orbit
-ein. A25 erlaubt ausdrücklich den Weg vom Browser in eine eigene App.
+Today's state plays through the conductor page in Chromium with superdough and worklets; the ongoing plan "hold pitch" (`docs/superpowers/plans/2026-09-23-tonhoehe-halten.md`) builds Rubber Band as a WASM worklet per orbit into it. A25 explicitly allows the route from the browser into an own app.
 
-## Entscheidung
+## Decision
 
-Der **Browser verlässt den Audiopfad.** Kein Klang, keine Uhr, keine Zeitplanung mehr im Browser. Eine Browser-Seite
-darf später **reine Anzeige** sein, die nur den Leitstand-WebSocket liest (ADR 019). Der Plan „Tonhöhe halten“ ist ein
-Übergang zum Hören und Vergleichen, kein Ziel; seine Befunde (Keylock-Klang, Doppelknoten) fließen als Messwerte ein.
-Die heutigen Dienste mit `nohup` und PID-Dateien werden durch Units ersetzt, sobald der neue Kern ihre Rolle trägt;
-bis dahin bleiben sie unberührt.
+The **browser leaves the audio path.** No sound, no clock, no scheduling any more in the browser. A browser page may later be **pure display**, reading only the Leitstand WebSocket (ADR 019). The plan "hold pitch" is a transition to listening and comparing, not a goal; its findings (keylock sound, double nodes) flow in as measurements. Today's services with `nohup` and PID files are replaced by units as soon as the new core takes over their role; until then they remain untouched.
 
-## Alternativen und warum nicht
+## Alternatives and why not
 
-| Alternative | Grund der Ablehnung | Beleg |
+| Alternative | Reason for rejection | Evidence |
 |---|---|---|
-| Browser mit eigener Web-Audio-Engine | Tode der Dirigent-Seite (dreimal am 2026-09-22), Renderer-Absturz lässt die Seite als offen gelten, Worklet lud einmal nicht, Faktor wechselte vor dem Ratenwechsel, Latenz hängt am Faktor, Chromium ist ein Pulse-Client mit eigenem Puffer | 01 §3.8 |
-| node-web-audio-api als Kern ohne Browser | jeder Worklet hängt an einem JS-Thread: 669 Aussetzer in 60 s mit leerem Worklet, in der Nachprüfung 1 539 (die Zahl hängt an der Fremdlast, qualitativ bestätigt; der Render-Faden lief ohne Echtzeit-Priorität), 0 ohne Worklet | 01 §3.4, Probe b3, 01 NP (b Echtzeit, Punkt 5) |
-| Rubber Band als WASM im Worklet dauerhaft | braucht vier Zusätze (M/S, HeapArray-Flicken gegen Ausfall nach rund 271 Faktorwechseln, ruhender Knoten, Kosinus-Blende); nativ entfallen sie | ERGEBNIS §1, §8 |
+| browser with its own Web Audio engine | deaths of the conductor page (three times on 2026-09-22), a renderer crash leaves the page considered open, a worklet once failed to load, the factor changed before the rate change, latency depends on the factor, Chromium is a Pulse client with its own buffer | 01 §3.8 |
+| node-web-audio-api as core without browser | every worklet hangs on a JS thread: 669 dropouts in 60 s with an empty worklet, in the re-check 1 539 (the number depends on external load, confirmed qualitatively; the render thread ran without real-time priority), 0 without worklet | 01 §3.4, test b3, 01 NP (b real-time, point 5) |
+| Rubber Band as WASM in the worklet permanently | needs four add-ons (M/S, HeapArray patch against failure after about 271 factor changes, idle node, cosine blend); natively these fall away | RESULT §1, §8 |
 
-## Folgen
+## Consequences
 
-- Der Umstieg ist ein Neubau des Audiopfads, kein Umbau; die Scheiben in ARCHITEKTUR §9.2 bauen ihn.
-- Alles Web-Audio-spezifische Wissen (Worklet-Flicken) wird nicht weiter gepflegt.
-- node-web-audio-api bleibt nützlich für Offline-Rendern in der Werkbank, aber nur auf ruhiger Maschine: die
-  „235-fache Echtzeit“ (01 §3.4) lief bei Last rund 3; bei Last 27 kam sie als 2,5-fach, WASM 1,8- bis 2,2-fach wieder
-  (01 NP K7).
+- The switch is a rebuild of the audio path, not a rework; the slices in ARCHITEKTUR §9.2 build it.
+- All Web Audio-specific knowledge (worklet patches) is no longer maintained.
+- node-web-audio-api remains useful for offline rendering in the workbench, but only on a quiet machine: the "235-fold real time" (01 §3.4) ran at about 3 under load; at load 27 it came back again at 2.5-fold, WASM at 1.8 to 2.2-fold (01 NP K7).
 
-## Beleg
+## Evidence
 
-01 §3.4, §3.8, Probe b; ERGEBNIS §1, §4, §8; `docs/zwei-decks.md` (Dirigent überlebt den Tod seiner Seite).
+01 §3.4, §3.8, test b; RESULT §1, §4, §8; `docs/zwei-decks.md` (the conductor survives the death of its page).
 
-## Kippt, wenn
+## Overturned if
 
-Nie für den Audiopfad; für die Anzeige entscheidet ADR 019.
+Never for the audio path; for the display, ADR 019 decides.
