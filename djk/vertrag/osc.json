@@ -49,6 +49,7 @@
     "raster_beats": {"abschnitt": "4.4", "zahlen": [0.25, 1, 4, 16, 32]},
     "fx_beats": {"abschnitt": "4.10", "zahlen": [0.25, 0.5, 1, 2, 4, 8, 16]},
     "fx_kanal": {"abschnitt": "4.10", "liste": ["deck/1", "deck/2", "erz/1", "erz/2", "erz/3", "pad/1", "pad/2", "master"]},
+    "graph_kanal": {"abschnitt": "4.10", "liste": ["deck/1", "deck/2", "deck/3", "deck/4"]},
     "roll_art": {"abschnitt": "4.4", "codes": {"0": "band_schatten", "1": "puffer_keylock"}},
     "urteil": {"abschnitt": "4.5", "liste": ["ok"]},
     "led_zustand": {"abschnitt": "4.7", "codes": {"0": "aus", "1": "an", "2": "blinkt", "3": "blinkt_schnell"}},
@@ -62,7 +63,7 @@
     "invariante_art": {"abschnitt": "5.9", "liste": ["sub_doppelt", "master_leer", "hoerschein"]},
     "protokollfehler_grund": {"abschnitt": "16.2", "liste": ["unbekannte_adresse", "falsche_typen", "protokoll"]},
     "nb_zustand": {"abschnitt": "5.10", "codes": {"0": "durchreichen", "1": "schleife", "2": "ausgeblendet", "3": "rueckgabe"}},
-    "gruende": {"abschnitt": "16.2", "liste": ["zu_spaet", "regler_beim_menschen", "regler_verplant", "ueberlappung", "nur_hand", "unbekannter_regler", "unbekanntes_deck", "ausserhalb_bereich", "kein_hoerschein", "hoerschein_anderer_kanal", "hoerschein_anderer_inhalt", "hoerschein_anderes_tempo", "hoerschein_abgelaufen", "hoerschein_anderer_abschnitt", "ziel_ungehoert", "keine_stems", "hoerschein_nicht_sync", "hoerschein_pegel", "invariante_sub_doppelt", "invariante_master_leer", "deck_beruehrt", "deck_hoerbar", "deck_laeuft", "nicht_geladen", "material_fehlt", "pruefung", "budget_speicher", "budget_stretcher", "karte_voll", "tempo_rampe", "ki_gestoppt", "rechner_fehlt", "kein_stretcher", "autonomie", "form", "hand", "abbruch", "ki_stopp", "unbekannte_adresse", "falsche_typen", "protokoll", "grenze_sub", "neustart", "datei_fehlt", "format", "audio_fehlt", "zu_gross", "spur_bereich", "reserviert", "kein_eingang", "aufnahme_laeuft", "zu_viele_scharf", "eingang_fehlt", "kein_platz"]}
+    "gruende": {"abschnitt": "16.2", "liste": ["zu_spaet", "regler_beim_menschen", "regler_verplant", "ueberlappung", "nur_hand", "unbekannter_regler", "unbekanntes_deck", "ausserhalb_bereich", "kein_hoerschein", "hoerschein_anderer_kanal", "hoerschein_anderer_inhalt", "hoerschein_anderes_tempo", "hoerschein_abgelaufen", "hoerschein_anderer_abschnitt", "ziel_ungehoert", "keine_stems", "hoerschein_nicht_sync", "hoerschein_pegel", "invariante_sub_doppelt", "invariante_master_leer", "deck_beruehrt", "deck_hoerbar", "deck_laeuft", "nicht_geladen", "material_fehlt", "pruefung", "budget_speicher", "budget_stretcher", "karte_voll", "tempo_rampe", "ki_gestoppt", "rechner_fehlt", "kein_stretcher", "autonomie", "form", "hand", "abbruch", "ki_stopp", "unbekannte_adresse", "falsche_typen", "protokoll", "grenze_sub", "neustart", "datei_fehlt", "format", "audio_fehlt", "zu_gross", "spur_bereich", "reserviert", "kein_eingang", "aufnahme_laeuft", "zu_viele_scharf", "eingang_fehlt", "kein_platz", "warp_maschine_fehlt"]}
   },
   "adressen": [
     {"adresse": "/k/hallo", "typen": ",sii", "abschnitt": "4.1", "richtung": "an_kern", "felder": [
@@ -365,6 +366,11 @@
       {"name": "id", "typ": "h", "einheit": "kennung"},
       {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle"},
       {"name": "routing", "typ": "i", "einheit": "code", "bereich": [0, 1]}]},
+    {"adresse": "/k/kanal/graph", "typen": ",hsss", "abschnitt": "4.10", "richtung": "an_kern", "felder": [
+      {"name": "id", "typ": "h", "einheit": "kennung"},
+      {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle"},
+      {"name": "kanal", "typ": "s", "einheit": "pfad", "werte": "graph_kanal"},
+      {"name": "name", "typ": "s", "einheit": "text"}]},
     {"adresse": "/k/arr/laden", "typen": ",hsi", "abschnitt": "4.11", "richtung": "an_kern", "felder": [
       {"name": "id", "typ": "h", "einheit": "kennung"},
       {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle"},
@@ -615,6 +621,12 @@
       {"name": "start_beat", "typ": "d", "einheit": "beat"},
       {"name": "metronom_an", "typ": "i", "einheit": "schalter", "bereich": [0, 1]},
       {"name": "limiter_db", "typ": "f", "einheit": "db", "bereich": [-200, 0], "notiz": "Absenkung des Set-Limiters, ≤ 0; hält 0,5 s nach dem letzten Eingriff über 0,1 dB (1.10, E2)"}]},
+    {"adresse": "/zustand/warp", "typen": ",iiiii", "abschnitt": "5.13", "richtung": "vom_kern", "felder": [
+      {"name": "stimmen", "typ": "i", "einheit": "anzahl", "notiz": "Stimmen im Warp-Werk (COMPLEX, TONES), eine auslaufende mitgezählt"},
+      {"name": "unterlauf", "typ": "i", "einheit": "anzahl", "notiz": "Ausfälle des Rings während einer Stimme (Stille mit 2-ms-Blende), seit Kern-Start; soll 0 bleiben"},
+      {"name": "kein_platz", "typ": "i", "einheit": "anzahl", "notiz": "Stimmen ohne Platz im Werk (Pool voll oder Werk fehlt): der Clip spielt als RE-PITCH, seit Kern-Start"},
+      {"name": "spaet", "typ": "i", "einheit": "anzahl", "notiz": "Stimmen, deren Ring zum Einsatz noch leer war (Ansatz nicht rechtzeitig fertig), seit Kern-Start"},
+      {"name": "faeden", "typ": "i", "einheit": "anzahl", "notiz": "Arbeitsfäden des Werks (kern.toml warp_faeden), 0 synchron"}]},
     {"adresse": "/zustand/ein", "typen": ",ihhhh", "abschnitt": "5.14", "richtung": "vom_kern", "felder": [
       {"name": "verbunden", "typ": "i", "einheit": "code", "notiz": "Bitmaske: Bit k-1 = ein_k_L und ein_k_R verbunden (k 1..4), Bit 8 = midi_ein_1 (I08)"},
       {"name": "midi_gesehen", "typ": "h", "einheit": "anzahl"},

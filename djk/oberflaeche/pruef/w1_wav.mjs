@@ -10,7 +10,8 @@ export function schreibeWav(pfad, daten, kanaele = 2, rate = 48000) {
   kopf.writeUInt16LE(kanaele * 4, 32); kopf.writeUInt16LE(32, 34); kopf.write('data', 36); kopf.writeUInt32LE(bytes, 40);
   fs.writeFileSync(pfad, Buffer.concat([kopf, Buffer.from(daten.buffer, daten.byteOffset, bytes)]));
 }
-// Liest eine WAV (Format 1 mit 16 Bit oder Format 3 mit 32 Bit) und gibt den linken Kanal als Float32Array zurück (Chunks werden gesucht, nicht angenommen)
+// Liest eine WAV (Format 1 mit 16 Bit oder Format 3 mit 32 Bit): l = linker, r = zweiter Kanal (bei Mono derselbe Puffer), je Float32Array.
+// Chunks werden gesucht, nicht angenommen.
 export function leseWav(pfad) {
   const b = fs.readFileSync(pfad);
   if (b.toString('latin1', 0, 4) !== 'RIFF' || b.toString('latin1', 8, 12) !== 'WAVE') throw new Error(`${pfad}: kein RIFF/WAVE`);
@@ -23,12 +24,15 @@ export function leseWav(pfad) {
   }
   if (!fmt || !daten) throw new Error(`${pfad}: fmt oder data fehlt`);
   const bytesProFrame = fmt.kanaele * fmt.bits / 8, frames = Math.floor(daten.length / bytesProFrame), l = new Float32Array(frames);
+  const r = fmt.kanaele >= 2 ? new Float32Array(frames) : l, byteProKanal = fmt.bits / 8;   // r: zweiter Kanal (Slice 6), bei Mono derselbe Puffer wie l
+  const lies = (o) => (fmt.format === 3 && fmt.bits === 32 ? daten.readFloatLE(o) : fmt.format === 1 && fmt.bits === 16 ? daten.readInt16LE(o) / 32768 : NaN);
   for (let i = 0; i < frames; i++) {
     const o = i * bytesProFrame;
-    l[i] = fmt.format === 3 && fmt.bits === 32 ? daten.readFloatLE(o) : fmt.format === 1 && fmt.bits === 16 ? daten.readInt16LE(o) / 32768 : NaN;
+    l[i] = lies(o);
+    if (r !== l) r[i] = lies(o + byteProKanal);
   }
   if (Number.isNaN(l[0])) throw new Error(`${pfad}: Format ${fmt.format}/${fmt.bits} Bit nicht unterstützt`);
-  return { l, rate: fmt.rate, frames };
+  return { l, r, rate: fmt.rate, frames };
 }
 // Sample-Stellen der Klicks: lokale Spitzen über der Schwelle, mindestens `abstand` Samples auseinander (die stärkere gewinnt).
 // Die Ränder zählen mit (jenseits des Rands ist Stille): der Export beginnt auf dem Einsatz-Sample, ein Klick auf Index 0 oder auf dem letzten Index ist ein Klick.

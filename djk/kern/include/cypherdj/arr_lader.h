@@ -17,6 +17,7 @@
 
 #include "cypherdj/arr_wiedergabe.h"
 #include "cypherdj/spsc_ring.h"
+#include "cypherdj/warp_werk.h"
 
 namespace cdj {
 
@@ -81,12 +82,21 @@ class ArrLader {
   void laufen(ArrLaderRinge& r, const std::atomic<bool>& stop);
   const ArrAudioCache& cache() const { return cache_; }
   const std::string& ordner() const { return ordner_; }
+  // Paket 1.13 Slice 2 (Lebensdauer): ein abgelöster Schnappschuss wird erst freigegeben, wenn das Warp-Werk ihn nicht mehr liest (WarpWerk::liest);
+  // bis dahin wartet er hier (höchstens WARTE_MAX, in jedem Durchgang erneut gefragt). Vor dem Start des Fadens setzen; nullptr: ohne Werk.
+  void setze_warp_werk(const WarpWerk* w) { werk_ = w; }
+  int aufgeschoben() const { return n_aufgeschoben_; }
+  static constexpr int WARTE_MAX = 16;
 
  private:
   std::string ordner_;
   ArrAudioCache cache_;
   ArrErgebnis wartend_{};   // K1-Fix 9: Ergebnis, das nach 1 s vollem Ring als zu_spaet auf Platz wartet
   bool wartet_ = false;
+  const WarpWerk* werk_ = nullptr;
+  ArrSnapshot* aufgeschoben_[WARTE_MAX] = {};   // abgelöst, aber das Warp-Werk liest noch (Slice 2)
+  int n_aufgeschoben_ = 0;
+  void rueckgabe_frei(ArrSnapshot* s, bool& arbeit);
   void freeze_fertig(ArrLaderRinge& r, ArrFreeze* f);   // Paket K3: Datei, Meldung, freigeben
 };
 

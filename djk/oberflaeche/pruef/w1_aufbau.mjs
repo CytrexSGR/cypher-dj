@@ -21,7 +21,7 @@ for (let i = 0; i < FRAMES; i++) sinus[2 * i] = sinus[2 * i + 1] = 0.4 * Math.si
 const pfadKlick = path.join(opt.ziel, 'klick125.wav'), pfadSinus = path.join(opt.ziel, 'sinus125.wav');
 schreibeWav(pfadKlick, klick); schreibeWav(pfadSinus, sinus);
 const katalog = baueKatalog(opt.ziel, [
-  { n: 1, typ: 'loop', bpm: 125, takte: 2, pack: 'W1', dauer_s: FRAMES / 48000, pfad: pfadKlick },
+  { n: 1, typ: 'loop', bpm: 125, takte: 2, pack: 'W1', instrument: 'perc', dauer_s: FRAMES / 48000, pfad: pfadKlick },   // D10: Klick = Drum-Loop, Auto-Warp RE-PITCH
   { n: 2, typ: 'loop', bpm: 125, takte: 2, pack: 'W1', dauer_s: FRAMES / 48000, pfad: pfadSinus },
 ]);
 process.stdout.write(`${JSON.stringify({ katalog, sha_klick: ksha(1), sha_sinus: ksha(2), dauer_s: FRAMES / 48000, klick_vor_frames: VOR })}\n`);

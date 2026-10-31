@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Abschuss-Serie der Scheibe 18, stumm an einer eigenen Null-Senke mit vier Kanälen (SCHNITTSTELLEN §19.5, ROADMAP
 # §8.4): Kern mit eigenen Ausgängen direkt an der Senke (10k, --master/--cue) und die Notbahn (Scheibe 10) daneben mit
-# --daneben --kante <kern>:master_L (ADR 016 Nachtrag 2026-09-25), beide als transiente Units mit den Eigenschaften aus
+# --daneben --vor <kern>:notbahn_vor (ADR 016 Nachtrag 2026-09-25, Richtung seit 29.10.), beide als transiente Units mit den Eigenschaften aus
 # djk/units/cypherdj-notbahn.service und djk/units/cypherdj-kern.service (die Notbahn-Unit aus 10 hat keinen Watchdog:
 # systemd prüft den des Kerns mit 250 ms Genauigkeit, Plan-Befund B5), JACK-Aufnehmer am Monitor der Senke, Prüf-Abonnent mit festem Herzschlag (2 s), N Eingriffe (kill -9 oder SIGSTOP) auf
 # den Hauptprozess der Unit, danach Auswertung (auswertung.py). Hält das Echtzeit-Schloss für den ganzen Lauf.
@@ -51,7 +51,7 @@ AUFNEHMER=$DJK/kern/build/cypherdj-aufnehmer4
 ZUSTAND=$DJK/kern/build/cypherdj-zustand
 for p in "$KERN" "$NOTBAHN" "$AUFNEHMER"; do [ -x "$p" ] || { echo "fehlt: $p" >&2; exit 4; }; done
 UNIT=cypherdj-kern-$I
-NB_ARGS="--daneben --kante cypherdj-kern-$I:master_L"   # wie djk/units/cypherdj-notbahn.service, Kern dieser Instanz
+NB_ARGS="--daneben --vor cypherdj-kern-$I:notbahn_vor"   # wie djk/units/cypherdj-notbahn.service, Kern dieser Instanz
 NB_UNIT=cypherdj-notbahn-$I
 SENKE=cypherdj-pruef-$I-$LAUF
 KERN_PORT=$((47100 + 1000 * K)); ABO_PORT=$((47140 + 1000 * K))

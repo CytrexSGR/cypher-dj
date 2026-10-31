@@ -34,6 +34,7 @@ ECHTZEIT = [
     "src/kern_arr.cpp",
     "src/arrangement.cpp",
     "src/arr_stimmen.cpp",
+    "src/arr_warp.cpp",   # 1.13 Slice 2: Seite des Arrangements am Warp-Werk (nicht warp_werk.cpp: das ist der Arbeitsfaden)
     "src/arr_ausgang.cpp",
     "src/arr_noten.cpp",
     "src/arr_metronom.cpp",
@@ -41,8 +42,11 @@ ECHTZEIT = [
     "src/arr_rb_senke.cpp",
     "src/arr_wirt_senke.cpp",
     "include/cypherdj/arrangement.h",
+    "include/cypherdj/warp_werk.h",
     "include/cypherdj/arr_rb_senke.h",
     "include/cypherdj/arr_wirt_senke.h",
+    "src/erzeuger.cpp",             # Baukasten S3a: Erzeuger-Ströme mit Graph laufen im Callback
+    "include/cypherdj/erzeuger.h",
 ]
 
 KOEPFE = ("mutex", "shared_mutex", "condition_variable", "semaphore", "latch", "barrier")

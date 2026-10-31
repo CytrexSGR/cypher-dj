@@ -52,7 +52,8 @@
     "karte_voll", "tempo_rampe", "ki_gestoppt", "rechner_fehlt", "kein_stretcher", "autonomie", "form", "hand", "abbruch", "ki_stopp",
     "unbekannte_adresse", "falsche_typen", "protokoll", "neustart", "grenze_sub",
     "datei_fehlt", "format", "audio_fehlt", "zu_gross", "spur_bereich", "reserviert",
-    "kein_eingang", "aufnahme_laeuft", "zu_viele_scharf", "eingang_fehlt", "kein_platz"]
+    "kein_eingang", "aufnahme_laeuft", "zu_viele_scharf", "eingang_fehlt", "kein_platz",
+    "warp_maschine_fehlt"]
   },
   "zeit": {"description": "§9.1 zeit: Kern-Zeitpunkt", "type": "object", "required": ["sample", "beat", "takt", "phrase"],
    "properties": {"sample": {"$ref": "#/$defs/sample"}, "beat": {"$ref": "#/$defs/beat"},

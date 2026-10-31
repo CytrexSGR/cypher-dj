@@ -59,13 +59,15 @@ body.produktion.lib-zu #bestand > :not(.kopfzeile), body.produktion.lib-zu #best
 .p-verlauf .p-verlauf-undo, .p-verlauf .p-verlauf-redo { color: var(--dim); }
 
 /* Arrangement: Ecke | Lineal, darunter Köpfe | Spurfläche in EINEM senkrecht scrollenden Körper */
-.p-arr { display: grid; grid-template-columns: 264px minmax(0, 1fr); grid-template-rows: 28px minmax(0, 1fr); min-height: 0;
+.p-arr { display: grid; grid-template-columns: 264px minmax(0, 1fr); grid-template-rows: 28px minmax(0, 1fr) 14px; min-height: 0;
   background: var(--panel); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; position: relative; }
 .p-ecke { display: flex; gap: 2px; align-items: center; padding: 0 4px; border-right: 1px solid var(--line); }
 .p-ecke button { font-size: 9px; font-weight: 700; padding: 2px 4px; border-radius: 4px; white-space: nowrap; }
 .p-lineal { display: block; width: 100%; height: 28px; cursor: pointer; touch-action: none; }
 .p-koerper { grid-column: 1 / -1; display: grid; grid-template-columns: 264px minmax(0, 1fr); overflow-y: auto; overflow-x: hidden; min-height: 0; }
 .p-koepfe { border-right: 1px solid var(--line); }
+.p-hleiste { grid-column: 2; overflow-x: auto; overflow-y: hidden; height: 14px; }   /* sichtbare Scrollleiste (Andreas 2026-10-30) */
+.p-hleiste > div { height: 1px; }
 .p-flaeche { position: relative; min-height: 100%; }
 .p-flaeche canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block; }
 .p-ueber { touch-action: none; }
@@ -116,8 +118,11 @@ body.produktion.lib-zu #bestand > :not(.kopfzeile), body.produktion.lib-zu #best
 .p-clip-audio label[hidden] { display: none; }
 .p-warp { display: flex; gap: 8px; align-items: center; }
 .p-warp button.an { background: #e0a83b; color: #0e0f12; border-color: #e0a83b; }
-.p-warp-modus { letter-spacing: 0.06em; color: var(--fg, inherit); }
-.p-warp-info { color: var(--dim); }
+.p-warp-modus { letter-spacing: 0.06em; color: var(--fg, inherit); background: transparent; border: 1px solid var(--dim); border-radius: 4px; font: inherit; padding: 1px 4px; }
+.p-warp-modus:disabled { opacity: 0.4; }
+.p-warp-info { color: var(--dim); cursor: help; }
+.p-warp-ton { color: var(--dim); display: inline-flex; gap: 4px; align-items: center; }
+.p-warp-ton input { width: 4.2em; text-align: right; }
 .p-clip-audio input[data-f="name"] { width: 18ch; }
 .p-clip-midi { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 4px; }
 .p-roll-leiste { display: flex; gap: 12px; align-items: center; font-size: 11px; color: var(--dim); }
@@ -179,3 +184,19 @@ body.produktion.lib-zu #bestand > :not(.kopfzeile), body.produktion.lib-zu #best
 .p-pm-fader { min-width: 0; height: 14px; }
 .p-pm-wert { font-size: 10px; text-align: right; }
 .p-pm-pegel { grid-column: 1 / -1; height: 6px; }
+
+/* Paket 1.13 Warp, Slice 3b: ×2, :2 (Task 4), SET PROJECT TEMPO (Task 10), Sample-Editor und Kontextmenü (Task 17) */
+.p-warp-tempo { display: inline-flex; gap: 4px; }
+.p-warp-editor { flex-basis: 100%; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.p-warp-editor[hidden] { display: none; }
+.p-warp-editor-leiste { display: flex; gap: 12px; align-items: center; font-size: 11px; color: var(--dim); }
+.p-warp-canvas { width: 100%; height: 10vh; min-height: 72px; display: block; border-radius: 4px; touch-action: none; }
+.p-warp-canvas:focus { outline: 1px solid rgba(224, 168, 59, .5); outline-offset: -1px; }
+.p-menue { position: fixed; z-index: 1000; margin: 0; padding: 4px; list-style: none; min-width: 220px; background: var(--panel2); color: var(--text);
+  border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 6px 18px rgba(0, 0, 0, .5); font-size: 12px; }
+.p-menue button { display: block; width: 100%; text-align: left; padding: 5px 8px; border: 0; border-radius: 4px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.p-menue button:hover:not(:disabled), .p-menue button:focus-visible { background: #e0a83b; color: #0e0f12; outline: 0; }
+.p-menue button:disabled { opacity: .35; cursor: default; }
+
+/* Slice 4 (T10): Transienten der Quelle im Sample-Editor, grau mit 45 % Deckkraft (warp_editor_bedienung.js liest die Variable; sie gilt für das Canvas) */
+.p-warp-canvas { --p-transient: rgba(160, 165, 175, 0.45); }

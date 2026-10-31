@@ -16,6 +16,8 @@ from fractions import Fraction
 from pathlib import Path
 
 ZIEL = Path(__file__).with_name("warp_referenz.json")
+ZIEL_VIELE = Path(__file__).with_name("warp_referenz_viele.json")
+GROESSEN = (100, 865, 2321, 4096)   # 865 = Median der Nachtanalyse, 2321 = größte Karte (Plan Slice 3a), 4096 = MAX_MARKER
 
 
 def wert(marker, b):
@@ -56,9 +58,38 @@ def bauen():
             "toleranz_relativ": 1e-12, "faelle": faelle}
 
 
+def bauen_viele():
+    """Slice 3a (AK28 mit großen Markerzahlen): vier Marker-Sätze, je 40 Stellen; die Suche in W(b) geht bei 4096 Markern 12 Schritte tief."""
+    r = random.Random(2321)
+    saetze = []
+    for n in GROESSEN:
+        beat, sek = r.uniform(-3.0, 0.0), r.uniform(0.0, 2.0)
+        marker = []
+        for _ in range(n):
+            marker.append([sek, beat])
+            beat += r.uniform(0.5, 1.5)
+            sek += r.uniform(0.2, 0.8)
+        faelle = []
+        for i in range(40):
+            art = i % 4
+            if art == 0:
+                b = r.choice(marker)[1]                                   # genau auf einem Marker
+            elif art == 1:
+                k = r.randrange(n - 1)
+                b = (marker[k][1] + marker[k + 1][1]) / 2.0               # Mitte eines Segments
+            else:
+                b = r.uniform(marker[0][1] - 5.0, marker[-1][1] + 5.0)    # überall, auch im Randsegment
+            faelle.append({"beat": b, "quell_s": wert(marker, b)})
+        saetze.append({"marker": marker, "faelle": faelle})
+    return {"hinweis": "erzeugt von erzeuge_warp_referenz.py (Seed 2321); quell_s exakt gerechnet, auf double gerundet",
+            "toleranz_relativ": 1e-12, "saetze": saetze}
+
+
 if __name__ == "__main__":
     neu = json.dumps(bauen(), indent=None, separators=(",", ":"), ensure_ascii=False) + "\n"
+    neu_viele = json.dumps(bauen_viele(), indent=None, separators=(",", ":"), ensure_ascii=False) + "\n"
     if "--pruefe" in sys.argv:
-        sys.exit(0 if ZIEL.read_text() == neu else 1)
+        sys.exit(0 if ZIEL.read_text() == neu and ZIEL_VIELE.read_text() == neu_viele else 1)
     ZIEL.write_text(neu)
-    print(f"geschrieben: {ZIEL} ({len(neu)} Bytes, 1000 Fälle)")
+    ZIEL_VIELE.write_text(neu_viele)
+    print(f"geschrieben: {ZIEL} ({len(neu)} Bytes, 1000 Fälle), {ZIEL_VIELE} ({len(neu_viele)} Bytes, 160 Fälle)")

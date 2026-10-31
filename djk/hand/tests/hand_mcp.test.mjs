@@ -12,7 +12,7 @@ const NAMEN = ['lage', 'bestand', 'laden', 'deck_start', 'deck_stopp', 'sprung',
   'regler', 'fx', 'fx_zuweisung', 'strudel', 'abbrechen', 'warte', 'hoeren',
   'studio', 'loops', 'rec', 'loop_klang', 'spur', 'spur_stopp', 'spuren', 'stille', 'pegel', 'klang', 'instrumente', 'bibliothek', 'anschluss', 'stoebern', 'klaenge', 'bestand_karte', 'vorbereiten',
   'sets', 'set_zeige', 'set_lege', 'set_vorbereiten', 'tempo',
-  'proj_liste', 'proj_neu', 'proj_oeffnen', 'proj_lage', 'proj_aendern', 'proj_undo', 'proj_redo', 'proj_verlauf', 'proj_transport', 'proj_freeze', 'proj_export', 'proj_lautheit', 'geraete_lage', 'proj_aufnahme', 'proj_warp'];   // D1 S2 (Spec 3.5), Paket 1.18 E-b, Paket 1.13 Warp
+  'proj_liste', 'proj_neu', 'proj_oeffnen', 'proj_lage', 'proj_aendern', 'proj_undo', 'proj_redo', 'proj_verlauf', 'proj_transport', 'proj_freeze', 'proj_export', 'proj_lautheit', 'geraete_lage', 'proj_aufnahme', 'proj_warp', 'proj_stems', 'proj_stems_abbrechen'];   // D1 S2 (Spec 3.5), Paket 1.18 E-b, Paket 1.13 Warp, Slice 6 Stems
 
 async function aufbau(t, antworten, env) {
   const gesehen = [];
@@ -199,6 +199,18 @@ test('djk-hand klang: Körper unverändert an POST /klang, Fehler 409 auto_aus w
   const { c: c2 } = await aufbau(t, () => [409, { fehler: 'auto_aus', text: 'AUTO is off for this instance: Andreas holds it' }]);
   const e = await c2.callTool({ name: 'klang', arguments: { gruppe: 'bass', aktion: 'lade', name: 'x' } });
   assert.equal(e.isError, true); assert.match(e.content[0].text, /auto_aus/);
+});
+
+test('Baukasten S2 djk-hand klang: param und params gehen unverändert an POST /klang', async (t) => {
+  const { c, gesehen } = await aufbau(t, (m, u) => (u === '/klang' ? [200, { ok: true, params: { 'Knob 1': 0.5 }, namen: { 'Knob 1': 'Cutoff' } }] : null));
+  for (const k of [{ gruppe: 'melodie', aktion: 'param', name: 'Knob 1', wert: 0.3 }, { gruppe: 'melodie', aktion: 'params' }]) {
+    const r = await c.callTool({ name: 'klang', arguments: k });
+    assert.ok(!r.isError, r.content[0].text);
+    assert.deepEqual(gesehen.filter((x) => x.pfad === '/klang').at(-1).koerper, k);
+  }
+  const w = (await c.listTools()).tools.find((x) => x.name === 'klang');
+  assert.ok(w.inputSchema.properties.aktion.enum.includes('param') && w.inputSchema.properties.aktion.enum.includes('params'));
+  assert.match(w.description, /Cypher Modular/);
 });
 
 test('djk-hand instrumente: AUTO aus auf Strom 2 → auto_aus, Skript nicht gerufen; AUTO an → Skript gerufen, Ausgabe zurück', async (t) => {
@@ -738,14 +750,156 @@ test('djk-hand proj_warp (Paket 1.13): GET mit Query, Quelle cypher, Ergebnis un
   assert.equal(b.isError, true); assert.match(b.content[0].text, /clip_unbekannt/);
   const e = await c.callTool({ name: 'proj_warp', arguments: { clip_id: 'c1', von_beat: 4, bis_beat: 12 } });
   assert.ok(!e.isError, e.content[0].text);
+  const f = await c.callTool({ name: 'proj_warp', arguments: { clip_id: 'c1', von_beat: 4, marker_max: 7 } });
+  assert.ok(!f.isError, f.content[0].text);
   assert.deepEqual(gesehen.map((x) => [x.methode, x.pfad, x.quelle]), [
-    ['GET', '/proj/warp?clip_id=c1&bei_beat=6', 'cypher'], ['GET', '/proj/warp?clip_id=c9', 'cypher'], ['GET', '/proj/warp?clip_id=c1&von_beat=4&bis_beat=12', 'cypher']]);
+    ['GET', '/proj/warp?clip_id=c1&bei_beat=6', 'cypher'], ['GET', '/proj/warp?clip_id=c9', 'cypher'], ['GET', '/proj/warp?clip_id=c1&von_beat=4&bis_beat=12', 'cypher'],
+    ['GET', '/proj/warp?clip_id=c1&von_beat=4&marker_max=7', 'cypher']]);
   const werkzeuge = (await c.listTools()).tools;
   const pw = werkzeuge.find((x) => x.name === 'proj_warp');
   assert.deepEqual(pw.inputSchema.required, ['clip_id']);
-  assert.deepEqual(Object.keys(pw.inputSchema.properties).sort(), ['bei_beat', 'bis_beat', 'clip_id', 'von_beat']);
-  for (const g of ['segment_bpm', 'quell_s', 'eins_unsicher', 'projekt_beat', 'warp_setzen', 'clip_unbekannt']) assert.ok(pw.description.includes(g), `proj_warp nennt ${g}`);
+  assert.deepEqual(Object.keys(pw.inputSchema.properties).sort(), ['bei_beat', 'bis_beat', 'clip_id', 'marker_max', 'transienten_max', 'von_beat']);
+  for (const g of ['segment_bpm', 'quell_s', 'eins_unsicher', 'projekt_beat', 'warp_setzen', 'clip_unbekannt',
+    'marker_max', 'marker_gezeigt', 'weiter_ab_projekt_beat', 'erster_marker', 'mittel_bpm', 'transienten_zahl', 'transienten_gezeigt', 'transienten_max', 'audio not decoded yet']) assert.ok(pw.description.includes(g), `proj_warp nennt ${g}`);
   const pa = werkzeuge.find((x) => x.name === 'proj_aendern').description;
-  for (const g of ['warp_setzen', 'warp_auto', 'versatz_beats', 'kein_tempo', 'transpose_repitch', 'offset_bei_warp', 'warp_marker', 'hinweise']) assert.ok(pa.includes(g), `proj_aendern nennt ${g}`);
+  for (const g of ['warp_setzen', 'warp_auto', 'versatz_beats', 'kein_tempo', 'transpose_repitch', 'offset_bei_warp', 'warp_marker', 'hinweise',
+    'analyse_angefordert', 'analyse_laeuft', 'karte_unbrauchbar', 'best source']) assert.ok(pa.includes(g), `proj_aendern nennt ${g}`);
+  for (const g of ['audio_quantisieren', 'transienten_fehlen', 'keine_transienten', 'quantisieren_konflikt', 'warp_tempo', 'warp_marker', 'warp_ab_hier', 'eins_hier', 'tempo_vom_clip', 'marker_unbekannt', 'eins_gemeldet', 'eins_nur_hier', 'eins_rueckweg_fehler',
+    'neu_quell_s', 'neu_beat', 'CLIP beats']) assert.ok(pa.includes(g), `proj_aendern nennt ${g} (Slice 3b)`);
+  for (const g of ['transpose_st', 'detune_ct', 'whole semitones', 'cents', 'transpose_repitch', 'repitch']) assert.ok(pa.includes(g), `proj_aendern nennt ${g}`);
+  for (const g of ['repitch | beats | complex | tones', 'beats {raster: transienten | 1/4 | 1/8 | 1/16 | 1/32, loop: aus | vor | vor_zurueck, huelle: 0..100}', 'default transienten/vor/100']) assert.ok(pa.includes(g), `proj_aendern nennt ${g} (Slice 4)`);
+  assert.ok(pw.description.includes('beats {raster, loop, huelle} in the answer when it is set (absent = default transienten/vor/100)'), 'proj_warp: beats nur wenn gesetzt, sonst Vorgabe');
+  assert.ok(pw.description.includes('beats: drum slices on their beat'), 'proj_warp erklärt den Modus beats');
+  const pl = werkzeuge.find((x) => x.name === 'proj_lage').description;
+  assert.ok(pl.includes('modus (repitch | beats | complex | tones)') && pl.includes('beats? (only when set: {raster, loop, huelle}; absent = default transienten/vor/100)'), 'proj_lage meldet modus beats und das optionale beats');
+  assert.equal(pa.includes('transpose_spaeter'), false, 'transpose_spaeter gibt es nicht mehr');
+  assert.equal(pa.includes('must stay 0'), false);
+  assert.ok(pa.includes('-12 to 24'), 'der Bereich steht im Werkzeugtext');
+  assert.ok(pw.description.includes('2^(transpose_st/12 + detune_ct/1200)'), 'proj_warp nennt den Faktor');
   assert.ok(werkzeuge.find((x) => x.name === 'proj_lage').description.includes('marker_zahl'), 'proj_lage nennt marker_zahl');
+  assert.ok(werkzeuge.find((x) => x.name === 'proj_lage').description.includes('analyse'), 'proj_lage nennt analyse');
+});
+
+test('djk-hand: ein Fehler trägt detail durch (der Feldhinweis von audio_quantisieren, Review T6 m2); ohne detail fehlt das Feld', async (t) => {
+  const { c } = await aufbau(t, (m, u) => {
+    if (u === '/deck/start') return [400, { fehler: 'argument_ungueltig', text: 'a value in the request is not allowed', detail: 'raster: 1/4 | 1/8 | 1/16 | 1/32' }];
+    if (u === '/deck/loop') return [409, { fehler: 'ziel_ungehoert', text: 'deck is open' }];
+  });
+  const a = await c.callTool({ name: 'deck_start', arguments: { deck: 2 } });
+  assert.equal(a.isError, true);
+  assert.equal(JSON.parse(a.content[0].text).detail, 'raster: 1/4 | 1/8 | 1/16 | 1/32');
+  const b = await c.callTool({ name: 'loop', arguments: { deck: 1, beats: 4 } });
+  assert.equal(b.isError, true);
+  assert.equal('detail' in JSON.parse(b.content[0].text), false, 'Negativ-Kontrolle: ohne detail kein Feld');
+});
+
+test('S6: proj_stems startet, fragt /proj/aktuell?noten=zahl ab bis zum Ende; Frist → laeuft mit auftrag_id, ohne Abbruch', async (t) => {
+  let abfragen = 0, ende = 3;
+  const { c, gesehen } = await aufbau(t, (m, u) => {
+    if (m === 'POST' && u === '/proj/stems') return [200, { auftrag_id: 7, frames: 48000 }];
+    if (m === 'POST' && u === '/proj/stems/abbrechen') return [200, { auftrag_id: 7, zustand: 'abbrechen' }];
+    if (m === 'GET' && u === '/proj/aktuell?noten=zahl') {
+      abfragen++;
+      const zustand = abfragen >= ende ? 'fertig' : 'laeuft';
+      return [200, { slug: 'x', projekt: { rev: 3 }, stems: { auftrag_id: 7, zustand, stufe: 'trennen', prozent: 50, spuren: ['s5', 's6', 's7', 's8'] } }];
+    }
+  }, { DJK_HAND_FRIST_PROJ_STEMS_MS: '400' });
+  const r = await c.callTool({ name: 'proj_stems', arguments: { clip_id: 'c1', von_beat: 0, bis_beat: 8 } });
+  assert.ok(!r.isError, r.content[0].text);
+  const j = JSON.parse(r.content[0].text);
+  assert.deepEqual([j.auftrag_id, j.zustand], [7, 'fertig']);
+  assert.deepEqual(gesehen.find((g) => g.pfad === '/proj/stems').koerper, { clip_id: 'c1', von_beat: 0, bis_beat: 8 });
+  ende = 1e9;                                                                 // läuft nie zu Ende: nach der Frist laeuft
+  const l = JSON.parse((await c.callTool({ name: 'proj_stems', arguments: { clip_id: 'c1' } })).content[0].text);
+  assert.deepEqual([l.zustand, l.auftrag_id], ['laeuft', 7]);
+  assert.match(l.text, /still running/);
+  assert.equal(gesehen.filter((g) => g.pfad === '/proj/stems/abbrechen').length, 0, 'kein Abbruch bei Frist');
+  const a = await c.callTool({ name: 'proj_stems_abbrechen', arguments: { auftrag_id: 7 } });
+  assert.equal(JSON.parse(a.content[0].text).zustand, 'abbrechen');
+  assert.deepEqual(gesehen.find((g) => g.pfad === '/proj/stems/abbrechen').koerper, { auftrag_id: 7 });
+});
+
+test('S6: proj_stems reicht Ablehnungen als Werkzeugfehler durch (stems_quantum)', async (t) => {
+  const ablehnung = [409, { fehler: 'stems_quantum', text: 'stems run only at the core quantum 256' }];
+  const { c } = await aufbau(t, (m, u) => (u === '/proj/stems' ? ablehnung : undefined));
+  const r = await c.callTool({ name: 'proj_stems', arguments: { clip_id: 'c1' } });
+  assert.equal(r.isError, true);
+  assert.equal(JSON.parse(r.content[0].text).fehler, 'stems_quantum');
+});
+
+test('S6: Beschreibungen nennen die Gründe und das Feld stumm (Pin)', async (t) => {
+  const { c } = await aufbau(t, () => undefined);
+  const T = Object.fromEntries((await c.listTools()).tools.map((x) => [x.name, x.description]));
+  for (const g of ['stems_quantum', 'nur_andreas_spur', 'stems_gpu_aus', 'ki_gestoppt', 'stems_loop']) assert.match(T.proj_stems, new RegExp(g), g);
+  assert.match(T.proj_aendern, /clip_aendern \{[^}]*stumm\?/, 'clip_aendern nennt stumm');
+  assert.match(T.proj_lage, /stems/, 'proj_lage nennt das Feld stems');
+});
+
+// Nachbesserung T9: Enden, fremde Läufe, fehlendes stems, Abfragefehler; Attrappe mit frei wählbarem Stand.
+const stemsAufbau = (t, stand, env = {}) => aufbau(t, (m, u) => {
+  if (m === 'POST' && u === '/proj/stems') return [200, { auftrag_id: 7, frames: 48000 }];
+  if (m === 'GET' && u === '/proj/aktuell?noten=zahl') return stand();
+}, { DJK_HAND_FRIST_PROJ_STEMS_MS: '5000', DJK_HAND_STEMS_FEHLT_MS: '150', ...env });
+const stemsRuf = async (c, args = { clip_id: 'c1' }) => { const t0 = Date.now(); const r = await c.callTool({ name: 'proj_stems', arguments: args }); return { ms: Date.now() - t0, r, j: JSON.parse(r.content[0].text) }; };
+
+for (const [zustand, grund, text] of [['abgebrochen', 'abbruch', 'the stem separation was cancelled'], ['fehler', 'stems_fehler', 'the stem separation failed'],
+  ['veraltet', 'veraltet', 'the clip changed while separating']]) {
+  test(`S6 T9: Ende ${zustand} beendet sofort, mit grund und text`, async (t) => {
+    const { c } = await stemsAufbau(t, () => [200, { slug: 'x', stems: { auftrag_id: 7, zustand, grund, text, detail: 'd' } }]);
+    const x = await stemsRuf(c);
+    assert.ok(!x.r.isError); assert.deepEqual([x.j.zustand, x.j.grund, x.j.text], [zustand, grund, text]);
+    assert.ok(x.ms < 3000, `wartete ${x.ms} ms`);
+  });
+}
+
+test('S6 T9: Stand eines fremden Laufs (andere auftrag_id) ist nicht das Ende des eigenen; nach der Frist ohne fremde Felder', async (t) => {
+  const { c } = await stemsAufbau(t, () => [200, { slug: 'x', stems: { auftrag_id: 8, zustand: 'fertig', clip_id: 'cFremd', spuren: ['s9'], prozent: 100 } }],
+    { DJK_HAND_FRIST_PROJ_STEMS_MS: '400', DJK_HAND_STEMS_FEHLT_MS: '100000' });
+  const x = await stemsRuf(c);
+  assert.deepEqual([x.j.zustand, x.j.auftrag_id], ['laeuft', 7]);
+  assert.equal(x.j.clip_id, undefined); assert.equal(x.j.spuren, undefined); assert.equal(x.j.prozent, undefined);
+});
+
+test('S6 T9: Eigener Stand laeuft: Frist-Antwort behält die eigenen Felder', async (t) => {
+  const { c } = await stemsAufbau(t, () => [200, { stems: { auftrag_id: 7, zustand: 'laeuft', stufe: 'trennen', prozent: 40 } }], { DJK_HAND_FRIST_PROJ_STEMS_MS: '300' });
+  const x = await stemsRuf(c);
+  assert.deepEqual([x.j.zustand, x.j.prozent, x.j.stufe], ['laeuft', 40, 'trennen']);
+});
+
+test('S6 T9: fehlt stems (Projektwechsel), endet das Werkzeug vor der Frist mit unbekannt', async (t) => {
+  let n = 0;
+  const { c } = await stemsAufbau(t, () => (++n === 1 ? [200, { stems: { auftrag_id: 7, zustand: 'laeuft' } }] : [200, { slug: null }]),
+    { DJK_HAND_FRIST_PROJ_STEMS_MS: '20000' });
+  const x = await stemsRuf(c);
+  assert.deepEqual([x.j.zustand, x.j.auftrag_id], ['unbekannt', 7]);
+  assert.match(x.j.text, /project changed or closed, the run was cancelled or its result is not visible here; check proj_lage/);
+  assert.ok(x.ms < 8000, `wartete ${x.ms} ms`); assert.ok(n >= 3, `Abfragen ${n}`);
+});
+
+test('S6 T9: flüchtiges Fehlen (eine Abfrage) wird toleriert', async (t) => {
+  let n = 0;
+  const { c } = await stemsAufbau(t, () => { n++; return [200, n === 2 ? { slug: 'x' } : { stems: { auftrag_id: 7, zustand: n < 4 ? 'laeuft' : 'fertig', spuren: ['s2'] } }]; },
+    { DJK_HAND_STEMS_FEHLT_MS: '2000' });
+  const x = await stemsRuf(c);
+  assert.equal(x.j.zustand, 'fertig');
+});
+
+test('S6 T9: Abfrage 409 beendet sofort mit unbekannt und detail', async (t) => {
+  const { c } = await stemsAufbau(t, () => [409, { fehler: 'kein_projekt', text: 'open or create a project first' }], { DJK_HAND_FRIST_PROJ_STEMS_MS: '20000' });
+  const x = await stemsRuf(c);
+  assert.ok(!x.r.isError); assert.deepEqual([x.j.zustand, x.j.auftrag_id], ['unbekannt', 7]);
+  assert.match(x.j.detail, /409.*kein_projekt.*open or create a project first/);
+  assert.ok(x.ms < 3000, `wartete ${x.ms} ms`);
+});
+
+test('S6 T9: Start: spur_id und geraet gehen an den Server; detail der Ablehnung kommt mit; Frist 20 min und geraet stehen in der Beschreibung', async (t) => {
+  const { c, gesehen } = await aufbau(t, (m, u) => (u === '/proj/stems' ? [400, { fehler: 'argument_ungueltig', text: 'bad', detail: "geraet: 'cpu' or 'gpu'" }] : undefined));
+  const r = await c.callTool({ name: 'proj_stems', arguments: { spur_id: 's2', geraet: 'gpu', von_beat: 1 } });
+  assert.equal(r.isError, true);
+  assert.equal(JSON.parse(r.content[0].text).detail, "geraet: 'cpu' or 'gpu'");
+  assert.deepEqual(gesehen.find((g) => g.pfad === '/proj/stems').koerper, { spur_id: 's2', von_beat: 1, geraet: 'gpu' });
+  const T = (await c.listTools()).tools.find((x) => x.name === 'proj_stems');
+  assert.match(T.description, /up to 20 min \(DJK_HAND_FRIST_PROJ_STEMS_MS\)/);
+  assert.match(T.description, /unbekannt/);
+  assert.deepEqual(T.inputSchema.properties.geraet.enum, ['cpu', 'gpu']);
 });

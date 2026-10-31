@@ -50,7 +50,7 @@ const BESTAND = process.env.CYPHERDJ_BESTAND ? LEBEND : baueSynthetisch();
 const warte = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Arbeitsbestand je Lauf in tmpfs wie im Betrieb (/dev/shm), die Attrappe liest nur dort (wie der echte Kern)
-async function stapel(t, mutationen = [], { bestand = BESTAND, vorher, kernPruefmodus, zielKurve, loops, kits, welleCache, musterOrdner, hotcueOrdner, rasterOrdner, huellen, wirtOrdner, klangBefehl, echteBegruessung, digitalout } = {}) {
+async function stapel(t, mutationen = [], { bestand = BESTAND, vorher, kernPruefmodus, zielKurve, loops, kits, welleCache, musterOrdner, hotcueOrdner, rasterOrdner, huellen, wirtOrdner, klangBefehl, echteBegruessung, digitalout, baukastenOrdner } = {}) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'djk60m-'));
   // V2 Fix-Runde 2 H2 (Spec 6.33, Muster tests/hilfen/mediathek.mjs): Hüllen und alle Vorgabe-Ordner (loops, kits, welle, muster, hc, raster, wirt) im
   // eigenen tmp-Ordner des Stapels, den t.after wegräumt; vorher lagen sie direkt unter TMPDIR und blieben je Stapel liegen. Übergebene Ordner bleiben.
@@ -75,7 +75,7 @@ async function stapel(t, mutationen = [], { bestand = BESTAND, vorher, kernPruef
   const log = [];
   const huellenPfad = huellen ?? (() => { const p = path.join(tmpd('huellen'), 'huellen'); schreibeLeerenRing(p); return p; })();
   serverInstanzSetzen(t);   // I08 Nachzug R2 (m4)
-  const o = new Oberflaeche({ port: 47300 + K, kernPort: 47100 + K, aboPort: 47150 + K, leitstandWs: 47200 + K, bestand, arbeitsbestand: ab, mutationen, kernPruefmodus, zielKurve, loops: loops ?? tmpd('loops'), kits: kits ?? tmpd('kits'), welleCache: welleCache ?? tmpd('welle'), musterOrdner: musterOrdner ?? tmpd('muster'), hotcueOrdner: hotcueOrdner ?? tmpd('hc'), rasterOrdner: rasterOrdner ?? tmpd('raster'), huellen: huellenPfad, wirtOrdner: wirt, klangBefehl, digitalout, log: (z) => log.push(z) });
+  const o = new Oberflaeche({ port: 47300 + K, kernPort: 47100 + K, aboPort: 47150 + K, leitstandWs: 47200 + K, bestand, arbeitsbestand: ab, mutationen, kernPruefmodus, zielKurve, loops: loops ?? tmpd('loops'), kits: kits ?? tmpd('kits'), welleCache: welleCache ?? tmpd('welle'), musterOrdner: musterOrdner ?? tmpd('muster'), hotcueOrdner: hotcueOrdner ?? tmpd('hc'), rasterOrdner: rasterOrdner ?? tmpd('raster'), huellen: huellenPfad, wirtOrdner: wirt, klangBefehl, digitalout, baukastenOrdner: baukastenOrdner ?? tmpd('baukasten'), log: (z) => log.push(z) });
   await o.starte();
   laufend = o;
   for (let i = 0; i < 100 && o.kern.zustand !== 'verbunden'; i++) await warte(20);
@@ -2508,6 +2508,57 @@ test('T3 /klang fahre: geht als Wirt-Befehl an den Socket (spur klang-<gruppe>, 
   await postJson(url, '/strudel/autonom', { an: false, strom: 2 });
   assert.equal((await p({ gruppe: 'bass', aktion: 'fahre', parameter: 'volume', ziel: 0, sekunden: 2 })).j.fehler, 'auto_aus');
   assert.equal((await postJson(url, '/klang', { gruppe: 'bass', aktion: 'fahre', parameter: 'volume', ziel: 0, sekunden: 2 })).code, 200);
+});
+
+test('Baukasten S2 /klang param: geht als Wirt-Befehl an den Socket, wert 0..1, AUTO-Riegel nur für Cypher, Wirt-Fehler → 409', async (t) => {
+  const { url, wo } = await klangStapel(t);
+  const mel = await fakeWirt(t, wo, 'melodie');
+  const p = (d) => postJson(url, '/klang', d, CYPHER);
+  const r = await p({ gruppe: 'melodie', aktion: 'param', name: 'Knob 1', wert: 0.25 });
+  assert.equal(r.code, 200, JSON.stringify(r.j));
+  assert.deepEqual(mel.at(-1), { befehl: 'param', name: 'Knob 1', wert: 0.25 });
+  const n = mel.length;
+  for (const falsch of [{ wert: 1.5 }, { wert: -0.1 }, { wert: '0.5' }, { name: '-x' }, { name: '' }, { name: 'Volume' }, { name: 'Knob 9' }, { name: 'Knob 0' }]) {
+    const f = await p({ gruppe: 'melodie', aktion: 'param', name: 'Knob 1', wert: 0.5, ...falsch });
+    assert.equal(f.code, 400, JSON.stringify(falsch));
+  }
+  assert.equal(mel.length, n, 'abgewiesenes erreicht den Wirt nicht');
+  // bass hat keinen Socket: 409 wirt
+  const b = await p({ gruppe: 'bass', aktion: 'param', name: 'Knob 1', wert: 0.5 });
+  assert.equal(b.code, 409); assert.equal(b.j.fehler, 'wirt');
+  // AUTO aus (melodie = Strom 3) → Cypher 409, Andreas frei
+  await postJson(url, '/strudel/autonom', { an: false, strom: 3 });
+  assert.equal((await p({ gruppe: 'melodie', aktion: 'param', name: 'Knob 1', wert: 0.5 })).j.fehler, 'auto_aus');
+  assert.equal((await postJson(url, '/klang', { gruppe: 'melodie', aktion: 'param', name: 'Knob 2', wert: 1 })).code, 200);
+  assert.deepEqual(mel.at(-1), { befehl: 'param', name: 'Knob 2', wert: 1 });
+});
+
+test('Baukasten S2 /klang param: lehnt der Wirt ab (Surge kennt param nicht), kommt sein Text als 409 zurück', async (t) => {
+  const { url, wo } = await klangStapel(t);
+  await fakeWirt(t, wo, 'bass', { ok: false, fehler: "unbekannter Befehl 'param'" });
+  const r = await postJson(url, '/klang', { gruppe: 'bass', aktion: 'param', name: 'Knob 1', wert: 0.5 }, CYPHER);
+  assert.equal(r.code, 409); assert.equal(r.j.fehler, 'wirt'); assert.match(r.j.text, /param/);
+});
+
+test('Baukasten S2 /klang params: Ist-Werte vom Wirt, Namen aus baukasten-<gruppe>.json, lesend auch bei AUTO aus', async (t) => {
+  const bk = fs.mkdtempSync(path.join(TMP, 'djk-baukasten-'));
+  const { url, wo } = await klangStapel(t, { baukastenOrdner: bk });
+  const mel = await fakeWirt(t, wo, 'melodie', { ok: true, params: { Volume: 0.75, 'Knob 1': 0.5 } });
+  const p = () => postJson(url, '/klang', { gruppe: 'melodie', aktion: 'params' }, CYPHER);
+  // ohne Graphdatei: keine Namen
+  let r = await p();
+  assert.equal(r.code, 200, JSON.stringify(r.j));
+  assert.deepEqual(r.j, { ok: true, params: { Volume: 0.75, 'Knob 1': 0.5 }, namen: {} });
+  assert.deepEqual(mel.at(-1), { befehl: 'params' });
+  fs.writeFileSync(path.join(bk, 'baukasten-melodie.json'), JSON.stringify({ regler_namen: { 1: 'Cutoff', 8: 'Noise', 9: 'zu viel', 2: 'x'.repeat(41) } }));
+  r = await p();
+  assert.deepEqual(r.j.namen, { 'Knob 1': 'Cutoff', 'Knob 8': 'Noise' });
+  fs.writeFileSync(path.join(bk, 'baukasten-melodie.json'), '{kaputt');
+  assert.deepEqual((await p()).j.namen, {});
+  await postJson(url, '/strudel/autonom', { an: false, strom: 3 });
+  assert.equal((await p()).code, 200, 'params ist lesend');
+  // ohne Wirt: 409
+  assert.equal((await postJson(url, '/klang', { gruppe: 'bass', aktion: 'params' }, CYPHER)).code, 409);
 });
 
 test('T3 /abbruch als cypher und Stop Cypher schicken halte klang-bass / klang-melodie an die Wirte', async (t) => {

@@ -83,3 +83,18 @@ def test_korrigieren_ohne_neue_zeilen_legt_nichts_an(quelle, tmp_path):
     with pytest.raises(kette.KeineNeuenKorrekturen):
         kette.korrigieren(mid, b)
     assert [x.name for x in (b / mid / "fassungen").iterdir()] == ["128000_r1"]
+
+
+def test_neu_rendern_ohne_neue_zeilen_legt_r2_an(quelle, tmp_path):
+    """neu=True (Render-Fix 2026-10-29, Timemap ohne (0, 0)): eine Fassung, die ein fehlerhaftes Rendern trägt, wird ohne
+    Korrekturzeile neu gerechnet; r1 bleibt unverändert liegen."""
+    p, karte = quelle
+    b = tmp_path / "bestand"
+    mid = kette.einlesen(p, b, karte=karte)["material_id"]
+    r1 = b / mid / "fassungen" / "128000_r1"
+    vorher = sha_baum(r1)
+    k = kette.korrigieren(mid, b, neu=True)
+    assert k["fassung"] == "128000_r2" and k["korrekturen_bis_zeile"] == 0
+    assert sha_baum(r1) == vorher
+    assert fehler("fassung.schema.json", lies_json(b / mid / "fassungen" / "128000_r2" / "fassung.json")) == []
+    assert zaehle(b) == (1, 2)

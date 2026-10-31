@@ -143,16 +143,18 @@ def kern_toml(ordner, bpm, pruefmodus, vorlage=DJK / "konfig" / "kern.toml"):
 
 
 def quelle_client(art, inst):
-    """JACK-Name der Quelle (§8, ROADMAP Z2): der Kern aus 08/10k oder die Prüfquelle, beide mit Ports master_L/R."""
+    """JACK-Name der Quelle (§8, ROADMAP Z2): der Kern aus 08/10k oder die Prüfquelle, beide mit Ports master_L/R und
+    dem nie gelesenen Eingang notbahn_vor."""
     return f"cypherdj-{'kern' if art == 'kern' else 'pruefquelle'}-{inst}"
 
 
 def notbahn_aufruf(programm_pfad, senke, art, inst, kante=True):
-    """Notbahn daneben (ADR 016 Nachtrag 2026-09-25, Scheibe 10): eigene Ausgänge an die Senke, Kante vom master_L der
-    Quelle auf den eigenen Eingang, damit der Graph die Quelle zuerst rechnet. Kein --vorhalt, kein --blende mehr.
-    `kante=False` nur als Vergleich (Befund sigstop-kern 2026-09-26: mit Kante wartet die Notbahn auf den hängenden Kern)."""
+    """Notbahn daneben (ADR 016 Nachtrag 2026-09-25, Scheibe 10): eigene Ausgänge an die Senke, Kante von ihrem Ausgang
+    vor auf notbahn_vor der Quelle, damit der Graph die Notbahn zuerst rechnet. Bis 29.10. umgekehrt (--kante, Quelle
+    zuerst): dort wartete die Notbahn auf einen hängenden oder sterbenden Kern (sigstop-kern 26.09., Neustart-Stille
+    29.10.). Kein --vorhalt, kein --blende mehr. `kante=False` nur als Vergleich."""
     a = [programm_pfad, "--master", f"{senke}:playback_F", "--daneben"]
-    return a + ["--kante", f"{quelle_client(art, inst)}:master_L"] if kante else a
+    return a + ["--vor", f"{quelle_client(art, inst)}:notbahn_vor"] if kante else a
 
 
 def aufnehmer_aufruf(senke, ordner, sekunden, quantum, inst, bereit):
@@ -178,7 +180,7 @@ def verbindungen(text):
 
 def graph_fehlt(text, senke, inst, art, notbahn_an, kante=True):
     """Welche Kante am Ziel fehlt (leere Liste: der Graph steht). Verlangt: die Quelle (Kern oder Prüfquelle) selbst an
-    playback_FL/FR der eigenen Senke, die Notbahn daneben ebenso und mit der Kante master_L der Quelle -> kante, der
+    playback_FL/FR der eigenen Senke, die Notbahn daneben ebenso und mit der Kante vor -> notbahn_vor der Quelle, der
     Aufnehmer an monitor_FL/FR, alle mit dem JACK-Namen der Instanz (Z2). Fehlt eine Kante, hat der Lauf nicht am
     eigenen Ziel gemessen, und er ist unbrauchbar."""
     q = quelle_client(art, inst)
@@ -187,7 +189,7 @@ def graph_fehlt(text, senke, inst, art, notbahn_an, kante=True):
         nb = f"cypherdj-notbahn-{inst}"
         soll += [(f"{nb}:master_L", f"{senke}:playback_FL"), (f"{nb}:master_R", f"{senke}:playback_FR")]
         if kante:
-            soll.append((f"{q}:master_L", f"{nb}:kante"))
+            soll.append((f"{nb}:vor", f"{q}:notbahn_vor"))
     soll += [(f"{senke}:monitor_FL", f"cypherdj-aufnehmer-{inst}:in_L"),
              (f"{senke}:monitor_FR", f"cypherdj-aufnehmer-{inst}:in_R")]
     k = verbindungen(text)

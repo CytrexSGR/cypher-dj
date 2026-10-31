@@ -26,7 +26,7 @@ trap abbau EXIT
 LAST_VOR=$(cut -d' ' -f1 /proc/loadavg)
 rm -f /dev/shm/cypherdj-f/bus
 ID=$("$DJK/pruefstand/senke/senke_an.sh" $SENKE) || exit 5
-pw-jack -p 256 "$HIER/build/cypherdj-notbahn" --master $SENKE:playback_F --daneben --kante cypherdj-kern-f:master_L \
+pw-jack -p 256 "$HIER/build/cypherdj-notbahn" --master $SENKE:playback_F --daneben --vor cypherdj-kern-f:notbahn_vor \
   > "$O/notbahn.log" 2>&1 & PIDS+=($!)
 sleep 0.5
 pw-jack -p 256 "$KERN" --pruefmodus --master $SENKE:playback_F 2> "$O/kern1.err" & KP=$!; PIDS+=($KP)

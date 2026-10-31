@@ -14,7 +14,7 @@ import type { Projekt } from '../../projekt/modell.ts';
 import { VerlaufFehler } from '../../projekt/verlauf.ts';
 import { grundCode } from './abbildung.ts';
 import { grundText } from '../../http/gruende.ts';
-import { ProjFehler, ProjSitzung, type Antwort, type AusgabeLauf, type ProjOptionen } from './sitzung.ts';
+import { ProjFehler, ProjSitzung, TRANSIENTEN_MAX, type Antwort, type AusgabeLauf, type ProjOptionen } from './sitzung.ts';
 
 export type { AusgabeLauf, ProjOptionen };
 
@@ -31,6 +31,8 @@ export interface ProjZugang {
   sperreLaden(fuer?: 'aufnahme'): () => void;   // 1.8: 'aufnahme' darf den eigenen Transport starten (Nachbesserung 1, B1)
   ausgabeLauf(l: AusgabeLauf | null): void;                                              // Spec 6.34 (Paket S3): laufender Freeze/Export für GET /proj/aktuell
   transport(d: Record<string, unknown>, quelle: 'andreas' | 'cypher'): Promise<Antwort>;                  // 1.8: der gewöhnliche Transport (Start/Stopp)
+  stemsStand(s: Record<string, unknown> | null): void;   // Slice 6 (P6): letzter Stems-Stand
+  beiSchliessen(f: (slug: string) => void): void;        // Slice 6 (T7): ruft f, sobald das offene Projekt geschlossen wird (Wechsel, Neuöffnen)
   aufnahmeLauf(l: unknown): void;                                                                        // 1.8: laufende Aufnahme (sperrt Tempo-Änderungen)
 }
 export const KOERPER_MAX = 1024 * 1024;   // Spec 3.4: 1 MiB
@@ -100,6 +102,7 @@ export function projBereich(ctx: BereichKontext, opt: ProjOptionen = {}): Bereic
     schreibeWiedergabe: (p) => s.schreibeWiedergabeFuer(p), naechsteNummer: () => s.naechsteNummer(), tempoAnMaster: () => s.tempoAnMaster(),
     sperreLaden: (fuer) => s.sperreLaden(fuer), ausgabeLauf: (l) => s.setzeAusgabeLauf(l),
     transport: (d, quelle) => s.transport(d, quelle), aufnahmeLauf: (l) => s.setzeAufnahmeLauf(l),
+    stemsStand: (x) => s.setzeStemsStand(x), beiSchliessen: (f) => s.beiSchliessen(f),
   };
   const antworte = async (a: http.ServerResponse, f: () => Antwort | Promise<Antwort>): Promise<void> => {
     let r: Antwort;
@@ -127,7 +130,7 @@ export function projBereich(ctx: BereichKontext, opt: ProjOptionen = {}): Bereic
       lies('/proj/aktuell', (url) => s.aktuell(url.searchParams.get('nur') === 'rev' ? 'rev'
         : url.searchParams.get('noten') === 'zahl' ? 'noten_zahl' : 'voll')),
       lies('/proj/verlauf', () => s.verlaufListe()),
-      // Paket 1.13: proj_warp (clip_id, von_beat, bis_beat, bei_beat als Projekt-Beats)
+      // Paket 1.13: proj_warp (clip_id, von_beat, bis_beat, bei_beat als Projekt-Beats, Slice 3a: marker_max)
       lies('/proj/warp', (url) => {
         const zahlArg = (k: string): number | null => {
           const t = url.searchParams.get(k);
@@ -136,7 +139,16 @@ export function projBereich(ctx: BereichKontext, opt: ProjOptionen = {}): Bereic
           if (!Number.isFinite(n)) throw new ProjFehler(400, 'argument_ungueltig', { text: `${k}: a number is required` });
           return n;
         };
-        return s.warpLage(url.searchParams.get('clip_id'), zahlArg('von_beat'), zahlArg('bis_beat'), zahlArg('bei_beat'));
+        const mx = zahlArg('marker_max');
+        if (mx !== null && (!Number.isInteger(mx) || mx < 1 || mx > 4096)) {
+          throw new ProjFehler(400, 'argument_ungueltig', { text: 'marker_max: an integer from 1 to 4096 is required' });
+        }
+        const tm = zahlArg('transienten_max');
+        if (tm !== null && (!Number.isInteger(tm) || tm < 1 || tm > TRANSIENTEN_MAX)) {
+          throw new ProjFehler(400, 'argument_ungueltig', { text: `transienten_max: an integer from 1 to ${TRANSIENTEN_MAX} is required` });
+        }
+        return s.warpLage(url.searchParams.get('clip_id'), zahlArg('von_beat'), zahlArg('bis_beat'), zahlArg('bei_beat'), mx, tm,
+          url.searchParams.get('transienten_quelle') === '1');   // Editor: alle Transienten der Quelle, ohne Marker und Fenster
       }),
       // Spec 6.32: ?antwort=kurz (Werkzeuge proj_neu, proj_oeffnen) liefert slug, rev, Spuren ohne Noten, noten_zahl und kern statt des Projekts
       schreib('/proj/neu', (d, quelle) => s.neu(d.name, quelle), kurzeOeffnenAntwort),

@@ -16,6 +16,7 @@
 #include "cypherdj/lader.h"
 #include "cypherdj/ring.h"
 #include "cypherdj/stellwerk/regler.h"
+#include "cypherdj/warp_werk.h"
 
 namespace cdj {
 
@@ -60,15 +61,33 @@ RenderErgebnis rendere(const RenderAuftrag& a) {
     if (sp.art != ArrArt::audio || sp.n_clips == 0) return weg("gegenprobe", "Spur ohne Audio-Clips");
     for (int i = 0; i < sp.n_clips; ++i) {
       auto* c = const_cast<ArrClip*>(&sp.clips[i]);   // zeigt in w.snap->clips (veränderlich, noch nicht im Kern)
-      if (c->warp) {   // Paket 1.13: ein gewarpter Clip liest nicht über offset_frames; alle Marker ein Frame weiter in der Quelle
+      if (c->warp) {   // Paket 1.13: ein gewarpter Clip liest nicht über offset_frames; alle Marker ein Frame weiter in der Quelle (BEATS: auch die Einheiten)
 #ifndef CYPHERDJ_MUTATION_RENDER_GEGENPROBE_WARP_BLIND   // Fehlerfall: die Gegenprobe fasst einen Warp nicht an, bleibt also gleich (blind)
         auto* wf = const_cast<double*>(c->warp->frame);   // zeigt in w.snap->warp_frame (ein Bereich je Clip)
         for (int j = 0; j < c->warp->n; ++j) wf[j] += 1.0;
+#endif
+#ifndef CYPHERDJ_MUTATION_RENDER_GEGENPROBE_BEATS_BLIND   // Fehlerfall (Slice 4): die Gegenprobe fasst die Einheiten eines BEATS-Clips nicht an (BEATS liest sie, nicht die Marker): blind
+        if (c->warp->modus == ARR_WARP_BEATS) {
+          auto* ef = const_cast<double*>(c->warp->e_frame);   // zeigt in w.snap->warp_frame hinter den Markern des Clips
+          for (int j = 0; j < c->warp->e_n; ++j) ef[j] += 1.0;
+        }
 #endif
         continue;
       }
       if (c->offset_frames + 1 >= c->audio->frames) return weg("gegenprobe", "Clip ohne Platz für 1 Frame");
       c->offset_frames += 1;
+    }
+  }
+  // 1.13 Slice 2: gewarpte Clips in COMPLEX oder TONES rechnet das Warp-Werk, im Render synchron (kein Faden): takt() füllt die Ringe im Zyklus, derselbe Strom wie
+  // live (Spec 5.3 „Render“). Es entsteht vor dem Kern und stirbt nach ihm.
+  std::unique_ptr<WarpWerk> werk;
+  {
+    bool braucht = false;
+    for (const ArrSpur& sp : w.snap->spur)
+      for (int i = 0; sp.art == ArrArt::audio && i < sp.n_clips; ++i) braucht = braucht || (sp.clips[i].warp && arr_warp_werk_modus(sp.clips[i].warp->modus));
+    if (braucht) {
+      werk = warp_werk_neu({});
+      if (!werk) return weg("warp_maschine_fehlt", "die Wiedergabe enthält COMPLEX oder TONES, dieser Bau hat kein Bungee");
     }
   }
   auto ring_mem = std::make_unique<unsigned char[]>(CDJ_RING_BYTES);
@@ -89,6 +108,7 @@ RenderErgebnis rendere(const RenderAuftrag& a) {
   kern->setze_filter_guete(a.filter_guete);
   kern->setze_limiter_dbtp(a.limiter_dbtp);
   if (a.senke_intern) kern->setze_arr_senke_intern(a.senke_intern);
+  if (werk) kern->setze_arr_warp_werk(werk.get());
   RenderErgebnis e;
   if (a.regler) {
     e.regler = kern->regler_uebernehmen(*a.regler);
@@ -123,7 +143,7 @@ RenderErgebnis rendere(const RenderAuftrag& a) {
   s.politik = 0;
   bef->schiebe(s);
   const int n = a.quantum;
-  const int64_t grenze = 4LL * n + 25;   // der Einsatz liegt bei 3n + 25 (Quittung 2 im vierten Zyklus)
+  const int64_t grenze = 4LL * n + 25 + (werk ? ARR_WARP_FRIST : 0);   // der Einsatz liegt bei 3n + 25 (Quittung 2 im vierten Zyklus), mit Warp-Werk um ARR_WARP_FRIST später (Start-Regel)
   const bool pm = a.abgriff == RenderAbgriff::produktion;   // 1.10 Slice 2 (E2)
   e.abgriff = pm ? "produktion" : "set";
   int64_t ab = -1;                       // Kern-Sample des ersten Export-Werts (Master: plus Vorhalt; Abgriff: der Einsatz selbst)

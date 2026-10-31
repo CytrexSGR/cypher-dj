@@ -11,6 +11,7 @@
 // nicht im Baum ist, findet die Extraktion sie nicht; die Positiv-Kontrolle prüft die Muster an wörtlichen Zeilen aus dem S3-Plan.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { FEHLER_TEXT, fehlerText } from '../oeffentlich/produktion/produktion.js';
 import { AUSGABE_FEHLER, ausgabeFehler } from '../oeffentlich/produktion/ausgabe.js';
 
@@ -23,8 +24,8 @@ test('V2 Gründe: die Extraktion findet bekannte Gründe aus jeder Quelle (Posit
   for (const [x, quelle] of [['clip_unbekannt', 'ab projekt/befehle.ts'], ['slot_belegt', 'ab projekt/befehle.ts'], ['projekt_busy', 'AblageFehler'],
     ['nichts_zu_tun', 'VerlaufFehler'], ['quelle_ungueltig', 'DekodierFehler'], ['op_unbekannt', 'PatchFehler'], ['beschaeftigt', 'ProjFehler'],
     ['koerper_zu_gross', 'ProjFehler'], ['katalog_kaputt', 'KatalogFehler'], ['datei_fehlt', 'WiedergabeFehler'], ['tempo_abgelehnt', 'literal bereiche/proj/sitzung.ts'],
-    ['rampe_haengt', 'literal'], ['intern', 'literal bereiche/proj/bereich.ts'], ['kein_kern', 'BEREICH_GRUENDE'], ['ueber_projekt', 'genannt server.ts'],
-    ['nur_json', 'literal http/transport.ts'], ['fremde_herkunft', 'literal http/transport.ts']]) {
+    ['rampe_haengt', 'literal'], ['marker_unbekannt', 'WarpFehler'], ['intern', 'literal bereiche/proj/bereich.ts'], ['kein_kern', 'BEREICH_GRUENDE'], ['ueber_projekt', 'genannt server.ts'],
+    ['nur_json', 'literal http/transport.ts'], ['fremde_herkunft', 'literal http/transport.ts'], ['stems_loop', 'ab projekt/stems.ts']]) {
     assert.ok(wo(x).includes(quelle), `${x} aus ${quelle} gefunden (gefunden: ${wo(x) || 'nichts'})`);
   }
   assert.ok(g.size >= 60, `mindestens 60 Gründe (gefunden ${g.size})`);
@@ -90,4 +91,20 @@ test('V2 Gründe: S3 im Baum, die Extraktion findet die Gründe von Freeze und E
   for (const x of S3) assert.ok(s3(x).length > 0, `${x}: aus bereiche/proj/ausgabe.ts, projekt/freeze.ts, stand.ts oder render.ts gezogen`);
   assert.ok(s3('render_fehler').some((w) => w.includes('projekt/render.ts')), 'render_fehler aus dem grund-Feld von RenderFehler');
   for (const x of [...S3, 'deck_laeuft']) assert.equal(typeof (AUSGABE_FEHLER[x] ?? FEHLER_TEXT[x]), 'string', `${x}: Text auf der Seite`);
+});
+
+// Fix-Runde Slice 4, Punkt 6: ein Schlüssel zweimal im Objektliteral gilt still der letzte und fällt in keinem Test auf (produktion.js hatte transienten_fehlen und
+// keine_transienten doppelt). Die Schlüssel stehen am Zeilenanfang oder nach einem Komma, vor einem Zeichenkettenliteral.
+const doppelte = (quelltext, objekt) => {
+  const a = quelltext.indexOf(`${objekt} = {`), b = quelltext.indexOf('\n};', a);
+  const zaehl = new Map();
+  for (const m of quelltext.slice(a, b).matchAll(/(?:^|,)\s*([A-Za-z_][A-Za-z0-9_]*):\s*['"`]/gm)) zaehl.set(m[1], (zaehl.get(m[1]) ?? 0) + 1);
+  return [...zaehl].filter(([, n]) => n > 1).map(([k]) => k);
+};
+test('FEHLER_TEXT in produktion.js: kein Schlüssel doppelt (Positiv-Kontrolle am Muster, dann am Quelltext)', () => {
+  const probe = "const X = {\n  a: 'eins', b: 'zwei',\n  c: 'drei', a: 'vier: noch einmal',\n  d: 'Tempo: 60'\n};";
+  assert.deepEqual(doppelte(probe, 'const X'), ['a'], 'das Muster findet einen doppelten Schlüssel und lässt "Tempo: 60" im Text in Ruhe');
+  const q = readFileSync(new URL('../oeffentlich/produktion/produktion.js', import.meta.url), 'utf8');
+  assert.ok(q.includes('export const FEHLER_TEXT = {'));
+  assert.deepEqual(doppelte(q, 'export const FEHLER_TEXT'), []);
 });

@@ -42,3 +42,13 @@ test('1.10 Slice 2: die Lampe SET LIMITER ist an, sobald limiter_db unter −0,1
   assert.equal(limiterAn({ limiter_db: -0.11 }), true);
   for (const f of [{ limiter_db: 0 }, { limiter_db: -0.05 }, {}, null, undefined, { limiter_db: 'x' }, { limiter_db: Number.NaN }]) assert.equal(limiterAn(f), false, JSON.stringify(f));
 });
+
+// Andreas 2026-10-30: „kann ich mit dem curser nicht auf einen punkt vor oder zurückclicken“. Ein Klick springt, wenn der Transport läuft.
+test('Klick im Lauf: springt nur bei laufendem oder startendem Transport und bekanntem Zustand', async () => {
+  const { springtImLauf } = await import('../oeffentlich/produktion/transport.js');
+  assert.equal(springtImLauf({ status: 2 }, false), true);
+  assert.equal(springtImLauf({ status: 1 }, false), true);
+  assert.equal(springtImLauf({ status: 0 }, false), false, 'gestoppt: nur Startmarker setzen');
+  assert.equal(springtImLauf({ status: 2 }, true), false, 'Zustand unbekannt: nie blind starten');
+  assert.equal(springtImLauf(null, false), false);
+});

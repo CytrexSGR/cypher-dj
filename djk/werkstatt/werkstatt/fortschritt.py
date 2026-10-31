@@ -12,12 +12,15 @@ PRAEFIX = "@@fortschritt "
 STUFEN = ("decode", "beats", "key", "render", "save")
 
 
-def melder(ziel=None):
-    """Rueckgabe: melde(name, prozent=None, teil=None). `ziel` (Vorgabe sys.stderr zum Zeitpunkt des Aufrufs)."""
+def melder(ziel=None, stufen=STUFEN):
+    """Rueckgabe: melde(name, prozent=None, teil=None). `ziel` (Vorgabe sys.stderr zum Zeitpunkt des Aufrufs); `stufen` (Vorgabe die Kette
+    von einzeln.py; Slice 6: werkstatt.stems meldet laden, trennen, schreiben)."""
+    stufen = tuple(stufen)
+
     def melde(name, prozent=None, teil=None):
-        if name not in STUFEN:
+        if name not in stufen:
             raise ValueError(f"unbekannte Stufe {name!r}")
-        z = {"stufe": STUFEN.index(name) + 1, "von": len(STUFEN), "name": name,
+        z = {"stufe": stufen.index(name) + 1, "von": len(stufen), "name": name,
              "prozent": None if prozent is None else round(float(prozent), 1), "teil": teil}
         out = ziel if ziel is not None else sys.stderr
         out.write(PRAEFIX + json.dumps(z, ensure_ascii=False) + "\n")

@@ -16,10 +16,32 @@
 #include "arr_datei.h"
 #include "cypherdj/arr_lader.h"
 #include "cypherdj/lader.h"
+#include "cypherdj/warp_werk.h"
 #include "kern35.h"
 #include "pruef.h"
 
 bool g_waechter = false;
+
+// Paket 1.13 Slice 2: ein Werk, das nur die Frage liest() beantwortet (Fall 6)
+struct FragWerk final : cdj::WarpWerk {
+  std::atomic<bool> liest_noch{false};
+  cdj::StreckRing r;
+  int belege() noexcept override { return -1; }
+  void ansetzen(int, cdj::WarpAnsatz&) noexcept override {}
+  void gib(int) noexcept override {}
+  cdj::StreckRing& ring(int) noexcept override { return r; }
+  int64_t ende_s(int) const noexcept override { return INT64_MAX; }
+  void takt(int64_t) noexcept override {}
+  int belegt() const noexcept override { return 0; }
+  bool liest(const cdj::ArrSnapshot*) const noexcept override { return liest_noch.load(); }
+  int faeden() const noexcept override { return 0; }
+  int prioritaet(int) override { return 0; }
+  void stoppe() override {}
+  cdj::WarpZaehler zaehler() const noexcept override { return {}; }
+  std::string schluss_json() const override { return "{}"; }
+  void test_halte(bool) noexcept override {}
+  void test_halte_block(bool) noexcept override {}
+};
 
 static cdj::ArrAuftrag auftrag(int64_t id, int64_t nr) {
   cdj::ArrAuftrag a{};
@@ -220,6 +242,26 @@ int main() {
       lader.einmal(*r);
     }
     PRUEF(konto.gesperrt() == 0 && !r->auftraege.hole(x));
+  }
+  {  // 6 (Slice 2): ein abgelöster Schnappschuss, den das Warp-Werk noch liest, wartet; erst danach gibt der Lader ihn frei
+    cdj::SpeicherKonto konto(100LL << 20);
+    cdj::ArrLader lader(o.pfad, &konto, 50LL << 20, false);
+    FragWerk werk;
+    lader.setze_warp_werk(&werk);
+    auto r = std::make_unique<cdj::ArrLaderRinge>();
+    PRUEF(r->auftraege.schiebe(auftrag(61, 1)));
+    lader.einmal(*r);
+    cdj::ArrErgebnis e{};
+    PRUEF(r->ergebnisse.hole(e) && e.snap);
+    werk.liest_noch = true;
+    PRUEF(r->rueckgabe.schiebe(e.snap));
+    lader.einmal(*r);
+    PRUEF(lader.cache().eintraege() == 1 && konto.gesperrt() > 0 && lader.aufgeschoben() == 1);   // das Werk liest noch: nicht freigegeben
+    lader.einmal(*r);
+    PRUEF(lader.cache().eintraege() == 1 && lader.aufgeschoben() == 1);                          // auch im nächsten Durchgang nicht
+    werk.liest_noch = false;
+    PRUEF(lader.einmal(*r));
+    PRUEF(lader.cache().eintraege() == 0 && konto.gesperrt() == 0 && lader.aufgeschoben() == 0);   // jetzt ja
   }
   PRUEF_ENDE();
 }

@@ -9,6 +9,8 @@
 import { xZuBeat, rasterBeats } from './zeitachse.js';
 import { CLIP_KOPF, clipKasten, sichtbar, spurIndexBei } from './layout.js';
 import { neueClipIds, neuerZugLauf, findeClip } from './entwurf.js';
+import { oeffneMenue } from './kontextmenue.js';
+import { stemsPunkte, stemsAktion } from './stems.js';
 import { trefferClip, fadePunkte, istZug, zugBefehle, zugLabel, teile, dupliziere, loesche, neuerMidiClip, CLIP_TEXT, istLoop, schalteLoop, loopImWeg, kacheln } from './clips.js';
 
 export function bindeClips(ctx) {
@@ -40,6 +42,17 @@ export function bindeClips(ctx) {
     const ok = await ctx.aendereAus((p) => { const b = befehleAus(p); alt = p; return b.length ? { label: label(b), befehle: b } : null; });
     if (ok && alt) ctx.setzeAuswahl(neueClipIds(alt, st.projekt));
   }
+
+  // Slice 6 (D13): Rechtsklick auf einen Audio-Clip: Separate Stems / Cancel Stems. Fehler mit dem Text des Grunds (fehlerText), nie „Rejected“.
+  ueber.addEventListener('contextmenu', (e) => {
+    if (!st.projekt) return;
+    const t = trefferClip(st.projekt, st.ansicht, e.offsetX, e.offsetY);
+    if (!t) return;
+    const punkte = stemsPunkte(st.projekt, t.clip, st.stems);
+    if (!punkte.length) return;
+    e.preventDefault();
+    oeffneMenue(punkte.map((p) => ({ text: p.text, aus: p.aus, aktion: () => stemsAktion(p, ctx) })), e.clientX, e.clientY);
+  });
 
   // Zeiger: im Einfangen auf der Fläche, damit die Griffe vor transport.js entscheiden (preventDefault: Startmarke bleibt)
   flaeche.addEventListener('pointerdown', (e) => {

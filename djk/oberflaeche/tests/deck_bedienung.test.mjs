@@ -195,7 +195,7 @@ test('einsZeile + haengeKorrekturAn: gültige Zeile (Schema korrektur), append-o
   assert.equal(letzteEinsZeile(mo), null);                                                  // keine Datei
   fs.writeFileSync(path.join(mo, 'korrekturen.jsonl'), '{"zeit":"2026-10-09T21:49:38","von":"werkstatt","art":"raster","fassung":"128000_r1","ab_quell_beat":-1000000.0,"bis_quell_beat":1000571.0,"versatz_ms":-6.75,"nr":null,"text":"x"}\n');
   assert.equal(letzteEinsZeile(mo), null);                                                  // nur eine Raster-Zeile
-  const z = einsZeile(fass(1), 1, -2, 'FIX', new Date('2026-10-11T03:04:05Z'));
+  const z = einsZeile(fass(1), 1, -2, 'FIX', new Date(2026, 9, 11, 3, 4, 5));   // Lokalzeit, ohne Suffix (wie datetime.now() in Python)
   assert.deepEqual(z, { zeit: '2026-10-11T03:04:05', von: 'andreas', art: 'eins', fassung: '128000_r1', ab_quell_beat: 1,
     bis_quell_beat: null, versatz_ms: null, nr: null, text: 'FIX: Eins um −2 Beats gesetzt, Lage 1' });
   haengeKorrekturAn(mo, z);
@@ -336,4 +336,10 @@ test('loopStart: steht → Rasterstelle ab der Eins; läuft → Kopf bei ab, auf
   assert.ok(Math.abs(loopStart({ laeuft: true, quell: 62.3, beat: 63.5, ab: 64, raster: 0, eins: 0 }) - 62.8) < 1e-9);
   // nie vor dem Material: Eins bei 3, Kopf 0 → nicht −1, sondern 3 (5 von 80 Fassungen im Bestand haben Eins 3)
   assert.equal(loopStart({ laeuft: false, quell: 0, beat: 0, ab: 0.1, raster: 4, eins: 3 }), 3);
+});
+
+test('einsZeile: zeit ist naive Lokalzeit ohne Suffix (wie datetime.now().isoformat in Python), nicht UTC', () => {
+  const z = einsZeile(fass(1), 1, 0, 'SET', new Date(2026, 0, 2, 3, 4, 5));
+  assert.equal(z.zeit, '2026-01-02T03:04:05');
+  assert.match(z.zeit, /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d$/);
 });

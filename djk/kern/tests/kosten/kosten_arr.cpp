@@ -19,6 +19,16 @@
 //          laufen in 8 Gruppen zu je 4 Spuren (Spur sp in Gruppe (sp-1)%8+1), alle Gruppen in den PM. Dazu Rampen an den 8
 //          Gruppen-Fadern (Ziel −1 − g%3 dB) und am PM-Fader (−2 dB), Beat 24 über 240 Beats. Selbstprüfung wie arr32, dazu
 //          muss der Fader von Gruppe 1 und der PM-Fader am Ende unter 0 dB stehen (sonst Ende 2).
+//   arr32au  Paket 1.13 Slice 2 (AK31): Grundlinie für arr32warp: 32 Audio-Spuren (4 Spuren je Quelle, 8 Töne), Loop-Klammer 16 Beats, ungewarpt, dazu die Keylock-Last
+//   KOSTEN_WARP_PITCH=<Faktor>: arr32warp mit transponierten Clips (Slice 5); ohne: pitch 1
+//   arr32warp wie arr32au, aber jede Spur ein COMPLEX-Clip auf 125-BPM-Quellen im 128er Kern, das Warp-Werk mit 4 Arbeitsfäden hängt am Kern. Keylock-Last (beide Lagen):
+//          sechs Bungee-Dehner (4 Decks + 2 Boxen nachgebildet) rechnen im selben Faden nach jedem Zyklus und werden aus ihren Ringen gelesen, so teilen sie sich Kerne,
+//          Caches und Speicherbandbreite mit dem Kern und dem Werk (die echten Decks und Boxen sind Sache der Zielabnahme). Gemeldet: Kern-Zyklus, Last und Summe
+//          getrennt (p50/p99/p99,9/max), der Zuwachs der Summe gegen arr32au (Grenze 150 µs bei p99,9), Unterlauf, spät, kein Platz, CPU je Werk-Faden. Die Selbstprüfung
+//          endet mit 2, wenn nicht 32 Stimmen im Werk klingen, die Last nicht läuft, der Zuwachs bei mindestens 20 000 Zyklen über 150 µs liegt (das Tor von AK31; darunter
+//          ist p99,9 zu grob und der Zuwachs nur gemeldet; KOSTEN_TOR_ZYKLEN und KOSTEN_GRENZE_US stellen es für den Kontrolllauf um) oder KOSTEN_PRIO unter 7 liegt (dann liefen
+//          die Fäden des Werks nicht unter dem Hauptfaden) oder in einem Tor-Lauf (mindestens 20 000 Zyklen) die Priorität nicht wirkt (KOSTEN_PRIO fehlt, SCHED_FIFO nicht gesetzt oder ein
+//          Werk-Faden ohne Priorität: die Zahlen stammen dann aus SCHED_OTHER). KOSTEN_WARP_HALT=1: Kontrolllauf, das Werk steht nach 2 000 Zyklen; Unterlauf MUSS dann zählen (sonst misst die Lage nichts).
 // Ausgabe je Lage: Median, p99, p99,9, Maximum in µs, dazu eine JSON-Zeile {"lage":…} für die Ablage. Kein Test: die
 // Zahlen gehören in den Bericht (Grenze A10, Teil ohne JACK: arr3 p99,9 höchstens ohne p99,9 + 200 µs).
 // Aufruf: kern_kosten_arr [zyklen [lagen]]   lagen: Komma-Liste, Vorgabe alle (ohne,arr3,arr3rb,hand); eine unbekannte
@@ -30,8 +40,11 @@
 // Lage hand prüft sich selbst: sieht sie kein Halter-Ereignis „mensch“, endet das Programm mit 2 (sonst misst sie nichts).
 // KOSTEN_HAND_RUECK=1: Kontrolllauf der Lage hand ohne neue Griffe, die Rückgabe nach 32 Beats muss als Halter „frei“
 // kommen (zeigt, dass die Rückgabe-Schleife eine Rückgabe findet).
+#include <sched.h>
 #include <time.h>
 #include <unistd.h>
+
+#include <cerrno>
 
 #include <algorithm>
 #include <cmath>
@@ -45,7 +58,9 @@
 #include <vector>
 
 #include "cypherdj/arr_wiedergabe.h"
+#include "cypherdj/dehner.h"
 #include "cypherdj/kern.h"
+#include "cypherdj/warp_werk.h"
 
 namespace {
 constexpr double KLANG_ANTEIL_MIN = 0.9;   // arr32: kleinster Anteil klingender Pegel-Meldungen je Spur
@@ -99,13 +114,236 @@ static void bericht(const char* name, std::vector<double>& us) {
               us.size(), q(0.5), q(0.99), q(0.999), us.back());
 }
 
+
+// ---- 1.13 Slice 2 (AK31): arr32au und arr32warp --------------------------------------------------------------------------
+namespace {
+
+constexpr int64_t WARP_FPB125 = 23040;   // Frames je Beat einer 125-BPM-Quelle
+
+// Das Band einer nachgebildeten Keylock-Quelle: ein Ton, Basis 128
+struct LastQuelle : cdj::DehnerQuelle {
+  float hz;
+  explicit LastQuelle(float h) : hz(h) {}
+  void band(int64_t ab, int n, float* l, float* r) const noexcept override {
+    for (int i = 0; i < n; ++i) l[i] = r[i] = 0.2f * std::sin(6.2831853f * hz * static_cast<float>((ab + i) % 480000) / 48000.0f);
+  }
+  double basis_bpm() const noexcept override { return 128.0; }
+};
+
+struct Last {   // sechs Bungee-Dehner wie 4 Decks und 2 Boxen
+  std::vector<std::unique_ptr<cdj::DehnerBasis>> d;
+  std::vector<LastQuelle> q;
+  std::vector<float> l, r;
+  int64_t s = 0;
+  Last() : l(256), r(256) {
+    for (int i = 0; i < 6; ++i) q.emplace_back(180.0f + 40.0f * static_cast<float>(i));
+  }
+  bool baue(const cdj::Karte& k, int64_t s_h) {
+    cdj::DehnerOptionen o;
+    o.maschine = cdj::DehnerMaschine::Bungee;
+    o.bungee_fein = false;
+    for (int i = 0; i < 6; ++i) {
+      d.push_back(cdj::dehner_neu(i + 1, o));
+      if (!d.back()) return false;
+    }
+    s = s_h;
+    for (int i = 0; i < 6; ++i) {
+      cdj::AnsatzAuftrag a;
+      a.quelle = &q[static_cast<size_t>(i)];
+      a.s_h = s_h;
+      a.anker = {k.beat_at(static_cast<double>(s_h)), 0.0};
+      a.karte = k;
+      a.generation = 1;
+      d[static_cast<size_t>(i)]->ansetzen(a);
+      cdj::KartenStand ks;
+      ks.karte = k;
+      ks.anker = a.anker;
+      ks.generation = 1;
+      d[static_cast<size_t>(i)]->karte_veroeffentlichen(ks);
+      d[static_cast<size_t>(i)]->ring().setze_epoche(d[static_cast<size_t>(i)]->epoche());
+    }
+    return true;
+  }
+  // ein Zyklus: füllen und 256 Frames aus jedem Ring nehmen (wie der Callback einer Quelle); false: ein Ring war leer
+  bool zyklus() {
+    bool ok = true;
+    for (auto& x : d) {
+      x->fuelle_synchron();
+      if (s >= 0 && x->ring().lies_bis(s, 256, l.data(), r.data()) != 256) ok = false;
+    }
+    s += 256;
+    return ok;
+  }
+};
+
+void bericht_zeile(const char* lage, const char* was, std::vector<double>& us) {
+  std::sort(us.begin(), us.end());
+  const auto q = [&](double p) { return us[std::min(us.size() - 1, static_cast<size_t>(p * static_cast<double>(us.size())))]; };
+  std::printf("%-9s %-6s Zyklen %zu: Median %.1f µs, p99 %.1f µs, p99,9 %.1f µs, Maximum %.1f µs\n", lage, was, us.size(), q(0.5), q(0.99), q(0.999), us.back());
+  std::printf("{\"lage\":\"%s\",\"was\":\"%s\",\"zyklen\":%zu,\"median_us\":%.1f,\"p99_us\":%.1f,\"p999_us\":%.1f,\"max_us\":%.1f}\n", lage, was, us.size(), q(0.5), q(0.99),
+              q(0.999), us.back());
+}
+
+double p999(std::vector<double> us) {
+  std::sort(us.begin(), us.end());
+  return us[std::min(us.size() - 1, static_cast<size_t>(0.999 * static_cast<double>(us.size())))];
+}
+
+// Rückgabe: 0 gut, 2 Selbstprüfung gescheitert; summe_p999 und cpu_je_faden werden gefüllt. tor: der Lauf ist ein Tor von AK31 (genug Zyklen); dann muss die Priorität wirken
+int warp_lage(const char* lage, int n, bool tor, const std::string& ordner, cdj::SpeicherKonto& konto, cdj::ArrAudioCache& cache, double& summe_p999) {
+  const bool warp = std::string(lage) == "arr32warp";
+  const bool halt = std::getenv("KOSTEN_WARP_HALT") != nullptr;
+  const char* pe = std::getenv("KOSTEN_WARP_PITCH");
+  const std::string pitchfeld = (warp && pe) ? std::string(",\"pitch\":") + pe : std::string();
+  const int nr = warp ? 4 : 5;
+  {  // Wiedergabe /2: 32 Audio-Spuren, 4 Spuren je Quelle, ein Clip über die Klammer (16 Beats)
+    std::string j = "{\"format\":\"cypherdj-arr/2\",\"nr\":" + std::to_string(nr) + ",\"spuren\":[";
+    for (int sp = 1; sp <= 32; ++sp) {
+      const std::string sha = std::string(63, 'e') + "0123456789abcdef"[(sp - 1) % 8];
+      char c[700];
+      std::snprintf(c, sizeof c,
+                    "%s{\"nr\":%d,\"art\":\"audio\",\"clips\":[{\"id\":\"w%d\",\"start_beat\":0.0,\"laenge_beats\":16.0,\"sha256\":\"%s\",\"datei\":\"%s/audio/%s.f32\","
+                    "\"frames\":%lld,\"offset_frames\":0,\"gain_db\":-12.0,\"ein_beats\":0.0,\"aus_beats\":0.0%s}]}",
+                    sp > 1 ? "," : "", sp, sp, sha.c_str(), ordner.c_str(), sha.c_str(), static_cast<long long>(17 * WARP_FPB125),
+                    warp ? (std::string(",\"warp\":{\"modus\":2") + pitchfeld + ",\"w\":[[0,0],[16," + std::to_string(16 * WARP_FPB125) + "]]}").c_str() : "");
+      j += c;
+    }
+    j += "]}";
+    std::ofstream(ordner + "/wiedergabe-" + std::to_string(nr) + ".json") << j;
+  }
+  Lauf l;
+  std::unique_ptr<cdj::WarpWerk> werk;
+  if (warp) {
+    werk = cdj::warp_werk_neu({4});
+    if (!werk) {
+      std::fprintf(stderr, "kosten_arr: %s: kein Warp-Werk (ohne Bungee gebaut)\n", lage);
+      return 2;
+    }
+    l.kern->setze_arr_warp_werk(werk.get());
+  }
+  cdj::ArrLadeErgebnis e = cdj::lade_wiedergabe(ordner, nr, cache);
+  if (!e.snap) {
+    std::fprintf(stderr, "kosten_arr: %s: %s\n", lage, e.meldung.c_str());
+    return 2;
+  }
+  cdj::Befehl f = l.neu(cdj::Befehl::TEIL);   // erz/4 offen wie im Betrieb
+  std::snprintf(f.pfad, sizeof f.pfad, "erz/4/fader");
+  f.politik = 1;
+  l.bef->schiebe(f);
+  cdj::Befehl b = l.neu(cdj::Befehl::ARR_LADEN);
+  b.zeiger = e.snap.release();
+  b.arr_nr = nr;
+  l.bef->schiebe(b);
+  cdj::Befehl lp = l.neu(cdj::Befehl::ARR_LOOP);
+  lp.an = 1;
+  lp.arr_von = 0.0;
+  lp.arr_bis = 16.0;
+  l.bef->schiebe(lp);
+  cdj::Befehl st = l.neu(cdj::Befehl::ARR_START);
+  l.bef->schiebe(st);
+  // KOSTEN_PRIO=P: der Hauptfaden (Kern und Last) läuft mit SCHED_FIFO P, die Fäden des Werks mit P − 6 (wie im Betrieb: JACK-Priorität und JACK − 6); ohne die Variable
+  // SCHED_OTHER. Auf einer Maschine mit Fremdlast (loadavg) streuen die Zahlen ohne Priorität um ein Vielfaches (gemessen im Plan, Task 9). Mit P unter 7 hebt das Werk
+  // seine Fäden auf 1 an (max(1, P − 6)): sie liefen dann auf der Priorität des Hauptfadens und nicht darunter, die Lage misst nicht die Ordnung des Betriebs (rc 2).
+  // Ein Tor (tor) braucht die Ordnung des Betriebs: ohne KOSTEN_PRIO, bei einem gescheiterten sched_setscheduler oder wenn ein Faden des Werks seine Priorität nicht bekam,
+  // läuft die Lage unter SCHED_OTHER oder mit Fäden auf der Priorität des Hauptfadens, und ein bestandenes Tor wäre eine Messung aus einer anderen Lage (rc 2). Unter dem Tor
+  // (wenige Zyklen) bleibt es bei einem Hinweis: dort misst ohnehin niemand eine Grenze.
+  bool prio_falsch = false, prio_wirkt = false;
+  if (const char* pr = std::getenv("KOSTEN_PRIO")) {
+    sched_param sp{};
+    sp.sched_priority = std::atoi(pr);
+    const bool gesetzt = sched_setscheduler(0, SCHED_FIFO, &sp) == 0 && sched_getscheduler(0) == SCHED_FIFO;
+    if (!gesetzt) std::fprintf(stderr, "kosten_arr: SCHED_FIFO %d nicht gesetzt: %s\n", sp.sched_priority, std::strerror(errno));
+    const int fehl = werk ? werk->prioritaet(sp.sched_priority) : 0;
+    prio_wirkt = gesetzt && fehl == 0;
+    if (werk && sp.sched_priority < 7) {
+      std::fprintf(stderr, "kosten_arr: %s: KOSTEN_PRIO %d unter 7: die Fäden des Werks laufen nicht unter dem Hauptfaden, die Lage misst nicht die Ordnung des Betriebs\n", lage,
+                   sp.sched_priority);
+      prio_falsch = true;
+    }
+  }
+  if (!prio_wirkt) {
+    std::fprintf(stderr, "kosten_arr: %s: keine Echtzeit-Priorität (KOSTEN_PRIO fehlt, SCHED_FIFO nicht gesetzt oder ein Werk-Faden ohne Priorität): die Zahlen stammen aus SCHED_OTHER%s\n", lage,
+                 tor ? ", das Tor von AK31 gilt so nicht (rc 2)" : "");
+    if (tor) prio_falsch = true;
+  }
+  Last last;
+  int rc = prio_falsch ? 2 : 0;
+  for (int i = 0; i < 6; ++i) l.zyklus();   // Laden, Einsatz (mit Werk 2 048 Samples später) und erste Stimmen
+  if (!last.baue(l.kern->karte(), l.kern->sample() + 8192)) {
+    std::fprintf(stderr, "kosten_arr: %s: keine Bungee-Dehner für die Last (ohne Bungee gebaut)\n", lage);
+    return 2;
+  }
+  std::vector<double> us_kern, us_last, us_summe;
+  us_kern.reserve(static_cast<size_t>(n));
+  us_last.reserve(static_cast<size_t>(n));
+  us_summe.reserve(static_cast<size_t>(n));
+  uint64_t last_leer = 0;
+  // Echtzeit-Takt: die Fäden des Werks rechnen in Wanduhrzeit, also läuft auch dieser Zyklus im Takt von 256 Samples (5,333 ms), nicht so schnell wie möglich;
+  // sonst bekäme das Werk ein Sechstel der Zeit und meldete Ausfälle, die es im Betrieb nicht gibt (gemessen: 4 000 Zyklen ungetaktet, 16 Unterläufe)
+  timespec naechster;
+  clock_gettime(CLOCK_MONOTONIC, &naechster);
+  for (int i = 0; i < 2000 + n; ++i) {
+    naechster.tv_nsec += 5'333'333;
+    if (naechster.tv_nsec >= 1'000'000'000) {
+      naechster.tv_nsec -= 1'000'000'000;
+      ++naechster.tv_sec;
+    }
+    clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &naechster, nullptr);
+    if (halt && i == 2000 && werk) werk->test_halte(true);
+    const int64_t t0 = jetzt_ns();
+    l.kern->zyklus(256, t0);
+    const int64_t t1 = jetzt_ns();
+    const bool ok = last.zyklus();
+    const int64_t t2 = jetzt_ns();
+    cdj::Ereignis ev;
+    while (l.ere->hole(ev)) {
+      if (ev.art == cdj::Ereignis::ARR_ALT) cdj::gib_wiedergabe(static_cast<cdj::ArrSnapshot*>(const_cast<void*>(ev.zeiger)), cache);
+    }
+    if (i < 2000) continue;   // Einschwingen
+    last_leer += ok ? 0 : 1;
+    us_kern.push_back(static_cast<double>(t1 - t0) / 1000.0);
+    us_last.push_back(static_cast<double>(t2 - t1) / 1000.0);
+    us_summe.push_back(static_cast<double>(t2 - t0) / 1000.0);
+  }
+  const cdj::Arrangement& a = l.kern->arrangement();
+  std::printf("%s: Stimmen im Werk %d, Unterlauf %llu, spät %llu, kein Platz %llu, Last-Ringe leer in %llu Zyklen\n", lage, a.werk_stimmen(),
+              static_cast<unsigned long long>(a.warp_unterlauf()), static_cast<unsigned long long>(a.warp_spaet()), static_cast<unsigned long long>(a.warp_kein_platz()),
+              static_cast<unsigned long long>(last_leer));
+  bericht_zeile(lage, "kern", us_kern);
+  bericht_zeile(lage, "last", us_last);
+  summe_p999 = p999(us_summe);
+  bericht_zeile(lage, "summe", us_summe);
+  if (werk) {
+    werk->stoppe();
+    std::printf("%s\n", werk->schluss_json().c_str());
+  }
+  if (warp && !halt && a.werk_stimmen() != 32) {
+    std::fprintf(stderr, "kosten_arr: %s: %d statt 32 Stimmen im Werk, die Lage misst nicht, was sie soll\n", lage, a.werk_stimmen());
+    rc = 2;
+  }
+  if (last_leer > static_cast<uint64_t>(n) / 100) {
+    std::fprintf(stderr, "kosten_arr: %s: die nachgebildeten Decks und Boxen blieben in %llu Zyklen ohne Ring-Inhalt, die Last ist keine\n", lage, static_cast<unsigned long long>(last_leer));
+    rc = 2;
+  }
+  if (warp && halt && a.warp_unterlauf() == 0) {
+    std::fprintf(stderr, "kosten_arr: %s: Kontrolllauf KOSTEN_WARP_HALT ohne Unterlauf, das Instrument sieht den Ausfall nicht\n", lage);
+    rc = 2;
+  }
+  if (warp && !halt && (a.warp_unterlauf() != 0 || a.warp_kein_platz() != 0))
+    std::fprintf(stderr, "kosten_arr: %s: Unterlauf %llu, kein Platz %llu (Ziel: 0)\n", lage, static_cast<unsigned long long>(a.warp_unterlauf()),
+                 static_cast<unsigned long long>(a.warp_kein_platz()));
+  return rc;
+}
+
+}  // namespace
+
 int main(int argc, char** argv) {
   const int n = argc > 1 ? std::atoi(argv[1]) : 20'000;
   const std::string lagen = argc > 2 ? std::string(",") + argv[2] + "," : "";
   for (size_t a = 0; !lagen.empty() && a + 1 < lagen.size();) {   // jede genannte Lage muss es geben
     const size_t b = lagen.find(',', a + 1);
     const std::string eine = lagen.substr(a + 1, b - a - 1);
-    if (!eine.empty() && eine != "ohne" && eine != "arr3" && eine != "arr3rb" && eine != "hand" && eine != "arr32" && eine != "arr32g") {
+    if (!eine.empty() && eine != "ohne" && eine != "arr3" && eine != "arr3rb" && eine != "hand" && eine != "arr32" && eine != "arr32g" && eine != "arr32au" && eine != "arr32warp") {
       std::fprintf(stderr, "kosten_arr: unbekannte Lage \"%s\"\n", eine.c_str());
       return 3;
     }
@@ -193,6 +431,35 @@ int main(int argc, char** argv) {
   }
   cdj::SpeicherKonto konto(3800LL << 20);
   cdj::ArrAudioCache cache(&konto, 1024LL << 20, true);
+  const bool will_au = lagen.find(",arr32au,") != std::string::npos, will_warp = lagen.find(",arr32warp,") != std::string::npos;
+  if (will_au || will_warp) {   // Slice 2: acht Töne zu je 17 Quell-Beats (125 BPM), geteilt von vier Spuren
+    for (int q = 0; q < 8; ++q) {
+      std::vector<float> ton(2 * static_cast<size_t>(17 * WARP_FPB125));
+      const float hz = 220.0f * (1.0f + 0.07f * static_cast<float>(q));
+      for (size_t i = 0; i < ton.size() / 2; ++i) ton[2 * i] = ton[2 * i + 1] = 0.3f * std::sin(6.2831853f * hz * static_cast<float>(i) / 48000.0f);
+      std::ofstream(ordner + "/audio/" + std::string(63, 'e') + "0123456789abcdef"[q] + ".f32", std::ios::binary)
+          .write(reinterpret_cast<const char*>(ton.data()), static_cast<std::streamsize>(ton.size() * sizeof(float)));
+    }
+    double p_au = -1.0, p_warp = -1.0;
+    int rc = 0;
+    // Das Tor gilt ab KOSTEN_TOR_ZYKLEN (Vorgabe 20 000) Zyklen: darunter liegen nur wenige Zyklen jenseits von p99,9, der Zuwachs streut von −12 bis +382 µs (Plan, Task 8).
+    // KOSTEN_GRENZE_US (Vorgabe 150, die Grenze von AK31) und KOSTEN_TOR_ZYKLEN gibt es für den Kontrolllauf des Tors.
+    const char* e_tor = std::getenv("KOSTEN_TOR_ZYKLEN");
+    const char* e_grenze = std::getenv("KOSTEN_GRENZE_US");
+    const bool tor = n >= (e_tor ? std::atoi(e_tor) : 20'000);
+    const double grenze = e_grenze ? std::atof(e_grenze) : 150.0;
+    if (will_au) rc = std::max(rc, warp_lage("arr32au", n, tor, ordner, konto, cache, p_au));
+    if (will_warp) rc = std::max(rc, warp_lage("arr32warp", n, tor, ordner, konto, cache, p_warp));
+    if (p_au >= 0 && p_warp >= 0) {
+      const double zuwachs = p_warp - p_au;
+      std::printf("Zuwachs p99,9 (Kern + Last) arr32warp gegen arr32au: %.1f µs (Grenze %.0f µs%s)\n", zuwachs, grenze, tor ? "" : "; unter 20 000 Zyklen nur gemeldet, kein Tor");
+      if (tor && zuwachs > grenze) {
+        std::fprintf(stderr, "kosten_arr: AK31: der Zuwachs %.1f µs liegt über %.0f µs (p99,9, %d Zyklen)\n", zuwachs, grenze, n);
+        rc = std::max(rc, 2);
+      }
+    }
+    if (rc) return rc;
+  }
   for (const char* lage : {"ohne", "arr3", "arr3rb", "hand", "arr32", "arr32g"}) {
     if (!lagen.empty() && lagen.find(std::string(",") + lage + ",") == std::string::npos) continue;
     Lauf l;

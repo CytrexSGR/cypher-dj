@@ -1,12 +1,12 @@
 /* cypherdj-notbahn (Scheiben 01 und 10): letzte Meile nach SCHNITTSTELLEN.md §6.1, §8, ADR 016 (Nachtrag 2026-09-25).
  * --daneben: sitzt neben dem Kern am Ausgang und schweigt, solange er schreibt. Ohne: reicht den Ring einen Block
  * versetzt durch wie Scheibe 01, ohne Schleife (bis der Kern eigene Ausgänge hat, 10k). Daneben: steht w einen
- * Zyklus still (ohne verbundene Kante zwei), spielt sie den letzten vollendeten Takt aus ihrem Verlauf; Durchgänge beginnen am fortgesetzten Raster
+ * Zyklus still (ohne verbundenes vor zwei), spielt sie den letzten vollendeten Takt aus ihrem Verlauf; Durchgänge beginnen am fortgesetzten Raster
  * (mittlere Taktlänge aus takt_anfang_w, nicht die ganzzahlige takt_frames: bei 124 BPM liefe die sonst 1,8 Samples in
  * 8 Takten weg). Nach 8 Takten ab einer Takt-Eins 2 Takte Ausblende, bei Rückkehr des Kerns 256 Samples Ausblende.
- * NaN/Inf -> 0 und Clip auf ±1 schon beim Schreiben in den Verlauf. --kante <port>: verbindet den Kern-Port auf den
- * eigenen Eingang, damit der Graph den Kern zuerst rechnet (Probe 2026-09-25: sonst 25 % der Zyklen ein Block früher).
- * Aufruf: pw-jack -p 256 cypherdj-notbahn --master <präfix> [--cue <präfix>] [--daneben] [--kante <port>] [--ton-frei]
+ * NaN/Inf -> 0 und Clip auf ±1 schon beim Schreiben in den Verlauf. --vor <port>: stummer Ausgang auf einen Kern-Eingang, damit
+ * die Notbahn vor dem Kern rechnet; bis 29.10. umgekehrt (--kante), da hielt ein toter Kern sie bis zum Abräumen auf (3 Blöcke).
+ * Aufruf: pw-jack -p 256 cypherdj-notbahn --master <präfix> [--cue <präfix>] [--daneben] [--vor <port>] [--ton-frei]
  * Rückgabe: 0 regulär, 1 JACK, 2 Aufruf, 3 Riegel (kein JACK-Client). Log auf stderr, JSON-Zähler am Ende. */
 #define _GNU_SOURCE
 #include <fcntl.h>
@@ -103,7 +103,7 @@ static int process(jack_nframes_t nf, void* arg) {
     w_alt = w;
   } else {
     bewegt = 0;
-    stand++; /* ohne Kante kann ein Reihenfolge-Wechsel w einen Zyklus lang stehen lassen: dann 2 Zyklen verlangen */
+    stand++; /* ohne vor kann ein Reihenfolge-Wechsel w einen Zyklus lang stehen lassen: dann 2 Zyklen verlangen */
     const int kok = __atomic_load_n(&kante_ok, __ATOMIC_RELAXED);
     if (daneben && zustand == 0 && stand >= (kok ? 1 : 2) && n_anf >= 2 && cdj_lade(&r->takt_frames) > 0) uebernahme(w);
   }
@@ -134,18 +134,18 @@ static int ring_einbinden(const char* pfad) {
 int main(int argc, char** argv) {
   const char* inst = cdj_instanz();
   if (cdj_instanz_k(inst) < 0) { fprintf(stderr, "CYPHERDJ_INSTANZ='%s' ungültig\n", inst); return 2; }
-  const char *master = NULL, *cue = NULL, *kante_von = NULL;
+  const char *master = NULL, *cue = NULL, *vor_nach = NULL;
   int ton_frei = 0, falsch = 0;
   for (int i = 1; i < argc && !falsch; i++) {
     if (!strcmp(argv[i], "--master") && i + 1 < argc) master = argv[++i];
     else if (!strcmp(argv[i], "--cue") && i + 1 < argc) cue = argv[++i];
-    else if (!strcmp(argv[i], "--kante") && i + 1 < argc) kante_von = argv[++i];
+    else if (!strcmp(argv[i], "--vor") && i + 1 < argc) vor_nach = argv[++i];
     else if (!strcmp(argv[i], "--daneben")) daneben = 1;
     else if (!strcmp(argv[i], "--ton-frei")) ton_frei = 1;
     else falsch = 1;
   }
   if (!master || falsch) {
-    fprintf(stderr, "Aufruf: cypherdj-notbahn --master <präfix> [--cue <präfix>] [--daneben] [--kante <port>] [--ton-frei]\n");
+    fprintf(stderr, "Aufruf: cypherdj-notbahn --master <präfix> [--cue <präfix>] [--daneben] [--vor <port>] [--ton-frei]\n");
     return 2;
   }
   char ziel[4][256];
@@ -165,14 +165,14 @@ int main(int argc, char** argv) {
   jack_status_t st;
   if (!(cl = jack_client_open(name, JackNoStartServer, &st))) { fprintf(stderr, "kein JACK-Server\n"); return 1; }
   for (int k = 0; k < 4; k++) aus[k] = jack_port_register(cl, NAMEN[k], JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput, 0);
-  kante = jack_port_register(cl, "kante", JACK_DEFAULT_AUDIO_TYPE, JackPortIsInput, 0);
+  kante = jack_port_register(cl, "vor", JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput, 0);
   jack_set_process_callback(cl, process, NULL);
   if (jack_activate(cl)) return 1;
   mlockall(MCL_CURRENT | MCL_FUTURE);
   for (int k = 0; k < n_ziele; k++)
     if (jack_connect(cl, jack_port_name(aus[k]), ziel[k])) { fprintf(stderr, "Verbinden %s gescheitert\n", ziel[k]); return 1; }
-  fprintf(stderr, "%s läuft: master %s, %s, Kante %s\n", jack_get_client_name(cl), master, daneben ? "daneben" : "in Reihe",
-          kante_von ? kante_von : "-");
+  fprintf(stderr, "%s läuft: master %s, %s, vor %s\n", jack_get_client_name(cl), master, daneben ? "daneben" : "in Reihe",
+          vor_nach ? vor_nach : "-");
   unsigned ge = 0;
   int fd = socket(AF_INET, SOCK_DGRAM, 0), z_alt = -1, ports[2] = {cdj_port(47110, inst), cdj_port(47140, inst)};
   long tick = 0;
@@ -183,8 +183,8 @@ int main(int argc, char** argv) {
       nb_osc_senden(fd, ports, 2, z, z == 1 || z == 3 ? pass : 0, (int32_t)n_rueck, rg ? cdj_lade(&rg->w) : 0);
     z_alt = z;
     if (!__atomic_load_n(&ring, __ATOMIC_ACQUIRE)) ring_einbinden(pfad);
-    const int k_ok = kante_von && jack_port_connected(kante);
-    if (kante_von && !k_ok) jack_connect(cl, kante_von, jack_port_name(kante));
+    const int k_ok = vor_nach && jack_port_connected(kante);
+    if (vor_nach && !k_ok) jack_connect(cl, jack_port_name(kante), vor_nach);
     __atomic_store_n(&kante_ok, k_ok, __ATOMIC_RELAXED);
     nb_nachverbinden(cl, aus, ziel, n_ziele); /* F05 */
     for (; ge < n_ev; ge++) fprintf(stderr, "zustand %llu w %llu\n", (unsigned long long)ev_z[ge], (unsigned long long)ev_w[ge]);

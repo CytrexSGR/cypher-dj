@@ -65,6 +65,23 @@ export function fxInhaltText(k, lage) {
   return `${klang ? `${String(klang).replace(/^vst3:/, '')} · ` : ''}${muster}${st && !st.autonom ? ' · AUTO off' : ''}`;
 }
 
+// Baukasten S2: die acht Knobs eines Cypher-Modular-Wirts aus POST /klang params ({params: {"Knob 1": 0.5, …}, namen:
+// {"Knob 1": "Cutoff"}}). Nur die Knobs, die der Wirt meldet (ein Surge-Wirt meldet keine → leere Liste); ohne Namen steht „Knob n“.
+export const KNOB_GRUPPE = { 'erz/2': 'bass', 'erz/3': 'melodie' };
+/** Text für innerHTML und Attribute: Knob-Namen stammen aus einer Graphdatei, nicht aus der Seite (Review F2). */
+export function htmlText(s) {
+  return String(s).replace(/[&<>"']/g, (z) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[z]);
+}
+
+export function knobListe(params, namen = {}) {
+  const aus = [];
+  for (let nr = 1; nr <= 8; nr++) {
+    const p = `Knob ${nr}`, w = params?.[p];
+    if (typeof w === 'number' && Number.isFinite(w)) aus.push({ nr, param: p, name: namen?.[p] ?? p, wert: Math.min(1, Math.max(0, w)) });
+  }
+  return aus;
+}
+
 // Vorlagen für Automationsspuren je Ziel (Andreas 2026-10-11: „komp schwelle, komp ratio, komp mix usw“). Punkte relativ zur
 // Spurlänge (0 ≤ t < 1) mit Werten in der Einheit des Reglers; vorlagePunkte streckt sie auf die eingestellte Länge.
 export const AUTO_VORLAGEN = {

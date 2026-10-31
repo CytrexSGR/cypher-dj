@@ -19,3 +19,5 @@ limiter_dbtp = -1.0                           # Master-Limiter
 pruefmodus = false                            # erlaubt /test/* (§19.0)
 hand_osc = false                              # erlaubt /test/hand auch ohne pruefmodus (Oberfläche, Scheibe 35, §19.0)
 filter_guete = 0.707                          # Güte des DJ-Filters, 0.5 bis 4 (A27, Nachtrag 04; über 4 gesperrt bis zum Hörvergleich)
+warp_faeden = 4                               # Arbeitsfäden des Warp-Werks für COMPLEX und TONES, 1 bis 8 (Paket 1.13 Slice 2, ADR 031 Teil 2)
+graph_faeden = 2                              # Arbeitsfäden der Baukasten-Graphen (ein Block Vorlauf), 0 bis 8; 0 rechnet im Callback (Baukasten S3b)

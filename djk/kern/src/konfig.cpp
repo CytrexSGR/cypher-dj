@@ -11,7 +11,7 @@
 
 namespace cdj {
 
-const KonfigSchluessel KERN_SCHLUESSEL[21] = {
+const KonfigSchluessel KERN_SCHLUESSEL[23] = {
     {"version", "version"},          {"start_bpm", "float"},       {"udp_port", "int"},
     {"arbeitsbestand", "Pfad"},      {"speicher_budget_mib", "int"}, {"controller_geraet", "str"},
     {"ziel_lufs", "float"},          {"hoerbar_db", "float"},      {"tief_offen_db", "float"},
@@ -20,6 +20,8 @@ const KonfigSchluessel KERN_SCHLUESSEL[21] = {
     {"hoerschein_pflicht", "bool"},  {"keylock", "bool"},
     {"keylock_maschine", "str"},
     {"arr_ordner", "Pfad"},          {"arr_budget_mib", "int"},     // D1 K1
+    {"warp_faeden", "int"},                                         // 1.13 Slice 2
+    {"graph_faeden", "int"},                                        // Baukasten S3b
     {nullptr, nullptr},
 };
 
@@ -108,6 +110,10 @@ KernKonfig lies_kern_toml_text(std::string_view text, const std::string& quelle)
       k.arr_ordner = als_text(wert, s, quelle);
     } else if (s == "arr_budget_mib") {  // D1 K1 (Spec 2.1)
       k.arr_budget_mib = als_ganzzahl(wert, s, quelle);
+    } else if (s == "warp_faeden") {  // 1.13 Slice 2 (ADR 031 Teil 2)
+      k.warp_faeden = als_ganzzahl(wert, s, quelle);
+    } else if (s == "graph_faeden") {  // Baukasten S3b
+      k.graph_faeden = als_ganzzahl(wert, s, quelle);
     } else {
       fehler(quelle, "unbekannter Schlüssel '" + std::string(s) + "'");  // §2.1: Tippfehler fallen sofort auf
     }
@@ -122,6 +128,8 @@ KernKonfig lies_kern_toml_text(std::string_view text, const std::string& quelle)
   if (k.arr_budget_mib < 1 || k.arr_budget_mib > k.speicher_budget_mib)
     fehler(quelle, "Schlüssel 'arr_budget_mib' muss zwischen 1 und speicher_budget_mib liegen (D1 2.1)");
   if (!k.arr_ordner.empty() && k.arr_ordner[0] != '/') fehler(quelle, "Schlüssel 'arr_ordner' muss ein absoluter Pfad sein");
+  if (k.warp_faeden < 1 || k.warp_faeden > 8) fehler(quelle, "Schlüssel 'warp_faeden' muss zwischen 1 und 8 liegen (1.13 Slice 2)");
+  if (k.graph_faeden < 0 || k.graph_faeden > 8) fehler(quelle, "Schlüssel 'graph_faeden' muss zwischen 0 und 8 liegen (Baukasten S3b)");
   if (k.stretcher_threads < 1) fehler(quelle, "Schlüssel 'stretcher_threads' muss mindestens 1 sein");
   if (k.max_stretcher < 0) fehler(quelle, "Schlüssel 'max_stretcher' darf nicht negativ sein");
   return k;

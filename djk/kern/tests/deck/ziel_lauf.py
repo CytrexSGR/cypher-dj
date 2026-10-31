@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Abnahme der Scheibe 31 am Ziel, stumm (SCHNITTSTELLEN §19.5, ROADMAP §8.4): eigene Null-Senke mit vier Kanälen je
 Lauf, Kern mit Prüfmodus an eigenen Ausgängen (10k: --master <senke>:playback_F --cue <senke>:playback_R, Selbst-Wächter
-100 ms wie die Unit), Notbahn daneben (ADR 016 Nachtrag, --daneben --kante cypherdj-kern-<i>:master_L, Vorlage
+100 ms wie die Unit), Notbahn daneben (ADR 016 Nachtrag, --daneben --vor cypherdj-kern-<i>:notbahn_vor, Vorlage
 djk/kern/tests/neustart/serie.sh und tests/ziel/lauf25.sh), JACK-Aufnehmer mit vier Kanälen am Monitor der Senke (cypherdj-aufnehmer4, Scheibe 18), dazu ein
 OSC-Abonnent (djk/vertrag/attrappe_leitstand.py als Bibliothek), der Befehle schickt und alles protokolliert.
 
@@ -61,6 +61,7 @@ import signal
 import subprocess
 import sys
 import time
+import zlib
 from pathlib import Path
 
 import numpy as np
@@ -80,6 +81,12 @@ STUMM = 1e-6         # §1.2: ≤ −120 dB
 # Umbauplan Bungee S2: Maschine des Keylocks (kern.toml keylock_maschine) und die Hilfsprogramme der Prüfinstanz, wenn sie nicht
 # unter DJK/kern/build bzw. DJK/notbahn/build liegen (Arbeitsbaum mit eigenem Bau-Ordner). Gesetzt in main() aus den Argumenten.
 OPT = {"maschine": "", "aufnehmer": "", "notbahn": ""}
+
+
+def hs_id(lauf: str, deck: int) -> str:
+    """Hörschein-ID der Prüfinstanz. Der Kern hält hs_id in char[48] (stellwerk i3.h) und schneidet längere still ab; der Laufname
+    geht darum als crc32 ein (S6 Task 14: lange Laufnamen gaben allen vier Decks dieselbe ID, Fader mit hoerschein_anderer_kanal)."""
+    return f"pruefstand-{zlib.crc32(lauf.encode()):08x}-deck{deck}"
 
 
 def instanz():
@@ -160,10 +167,10 @@ class Aufbau:
             if f"{self.senke}:playback_FL" in subprocess.run(["pw-link", "-i"], capture_output=True, text=True).stdout:
                 break
             time.sleep(0.1)
-        # Notbahn daneben am Treiber (ADR 016 Nachtrag, 10k), Kante am Kern-Port; ohne --cue führte sie nur 2 Ziele
+        # Notbahn daneben am Treiber (ADR 016 Nachtrag, 10k), Kante auf notbahn_vor des Kerns; ohne --cue führte sie nur 2 Ziele
         self.starte("notbahn", [OPT["notbahn"] or str(DJK / "notbahn" / "build" / "cypherdj-notbahn"), "--master",
-                                f"{self.senke}:playback_F", "--cue", f"{self.senke}:playback_R", "--daneben", "--kante",
-                                f"cypherdj-kern-{self.i}:master_L"])
+                                f"{self.senke}:playback_F", "--cue", f"{self.senke}:playback_R", "--daneben", "--vor",
+                                f"cypherdj-kern-{self.i}:notbahn_vor"])
         self.kern_starten()
         self.starte("aufnehmer", [OPT["aufnehmer"] or str(DJK / "kern" / "build" / "cypherdj-aufnehmer4"), "--quelle", self.senke, "--datei",
                                   str(self.o / "ziel.f32"), "--sekunden", str(self.sek), "--bereit",
@@ -275,7 +282,7 @@ class Aufbau:
         inhalt = self.__dict__.get("inhalt", {}).get(deck)
         if inhalt is None:
             raise RuntimeError(f"Hörschein für deck/{deck}: kein geladener Inhalt")
-        i, hs = self.nid(), f"pruefstand-{self.lauf}-deck{deck}"
+        i, hs = self.nid(), hs_id(self.lauf, deck)
         nan = float("nan")
         self.sende("/k/hoerschein", ",hsssssddddfff", i, "pruefstand", hs, f"deck/{deck}", inhalt, "ok", 128.0,
                    float(ab) + 64.0, 0.0, 1e9, nan, nan, nan)

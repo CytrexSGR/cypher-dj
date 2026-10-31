@@ -55,6 +55,7 @@ export const BEFEHLE = {
   '/k/fx': f('hsiidddddi', 'id quelle einheit art beats wet param1 param2 param3 an'),   // AUFTRAG 2026-09-28 (§4.10)
   '/k/fx/zuweisung': f('hsisi', 'id quelle einheit kanal an'),                          // AUFTRAG 2026-09-28 (§4.10)
   '/k/fx/routing': f('hsi', 'id quelle routing'),                                        // Ohr Task 15 (§4.10)
+  '/k/kanal/graph': f('hsss', 'id quelle kanal name'),   // Baukasten S3c (§4.10)
   '/k/loop/stopp': f('hsi', 'id quelle box'),
   '/k/loop/raster': f('hsii', 'id quelle box versatz_frames'),
   '/k/loop/rec': f('hsis', 'id quelle beats name'),
@@ -106,6 +107,7 @@ export const AUSGABEN = {
   '/zustand/arr': f('iiidhdif', 'nr status loop_an projekt_beat ursprung_sample start_beat metronom_an limiter_db'),   // D1 K1 (§5.13)
   '/zustand/ein': f('ihhhh', 'verbunden midi_gesehen midi_verloren midi_sample flanke_sample'),   // I08 (§5.14)
   '/zustand/rec': f('iiihd', 'status kennung scharf luecken projekt_beat'),   // 1.8 (§5.14)
+  '/zustand/warp': f('iiiii', 'stimmen unterlauf kein_platz spaet faeden'),   // 1.13 Slice 2 (§5.13): Zähler des Warp-Werks
   '/e/aufnahme': f('iiihhi', 'spur kennung status frames start_sample luecken'),
   '/e/freeze': f('iiih', 'spur kennung status frames'),                                                    // Paket K3
 };
@@ -122,7 +124,8 @@ export const GRUENDE = new Set(['zu_spaet', 'regler_beim_menschen', 'regler_verp
   'kein_stretcher', 'hand', 'abbruch', 'ki_stopp', 'unbekannte_adresse', 'falsche_typen', 'protokoll',
   'form',                                                                                   // §16.2 Kern (netz.cpp /k/hoerschein)
   'datei_fehlt', 'format', 'audio_fehlt', 'zu_gross', 'spur_bereich', 'reserviert',       // D1 K1 (§4.11)
-  'kein_eingang', 'aufnahme_laeuft', 'zu_viele_scharf', 'eingang_fehlt', 'kein_platz']);   // 1.8 (§4.12)
+  'kein_eingang', 'aufnahme_laeuft', 'zu_viele_scharf', 'eingang_fehlt', 'kein_platz',   // 1.8 (§4.12)
+  'warp_maschine_fehlt']);                                                                  // 1.13 Slice 2 (§4.11, §16.2)
 
 // §1.5 Kanäle
 export const DECKS = [1, 2, 3, 4].map((n) => `deck/${n}`);

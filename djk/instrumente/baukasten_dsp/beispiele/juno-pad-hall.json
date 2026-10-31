@@ -1,0 +1,334 @@
+{
+  "format": "baukasten/2",
+  "name": "juno-pad-hall",
+  "stimmen": 8,
+  "regler_namen": {
+    "1": "Cutoff",
+    "2": "Resonance",
+    "3": "Env amount",
+    "4": "Attack",
+    "5": "Release",
+    "6": "PWM depth",
+    "7": "Sub",
+    "8": "Chorus"
+  },
+  "knoten": [
+    {
+      "id": "note",
+      "art": "note"
+    },
+    {
+      "id": "k_cutoff",
+      "art": "regler",
+      "nr": 1,
+      "min": 250,
+      "max": 6000,
+      "log": 1
+    },
+    {
+      "id": "k_reso",
+      "art": "regler",
+      "nr": 2,
+      "min": 0,
+      "max": 0.6
+    },
+    {
+      "id": "k_env",
+      "art": "regler",
+      "nr": 3,
+      "min": 0,
+      "max": 3000
+    },
+    {
+      "id": "k_attack",
+      "art": "regler",
+      "nr": 4,
+      "min": 0.05,
+      "max": 5,
+      "log": 1
+    },
+    {
+      "id": "k_release",
+      "art": "regler",
+      "nr": 5,
+      "min": 0.3,
+      "max": 8,
+      "log": 1
+    },
+    {
+      "id": "k_pwm",
+      "art": "regler",
+      "nr": 6,
+      "min": 0,
+      "max": 0.8
+    },
+    {
+      "id": "k_sub",
+      "art": "regler",
+      "nr": 7,
+      "min": 0,
+      "max": 0.5
+    },
+    {
+      "id": "k_chorus",
+      "art": "regler",
+      "nr": 8,
+      "min": 0,
+      "max": 1.5
+    },
+    {
+      "id": "lfo",
+      "art": "lfo",
+      "form": 1,
+      "rate": 0.5
+    },
+    {
+      "id": "pwm",
+      "art": "mul"
+    },
+    {
+      "id": "saege",
+      "art": "saege"
+    },
+    {
+      "id": "puls",
+      "art": "puls"
+    },
+    {
+      "id": "sub_ton",
+      "art": "transponiere",
+      "st": -12
+    },
+    {
+      "id": "sub",
+      "art": "puls"
+    },
+    {
+      "id": "p_saege",
+      "art": "mul",
+      "b": 0.5
+    },
+    {
+      "id": "p_puls",
+      "art": "mul",
+      "b": 0.35
+    },
+    {
+      "id": "p_sub",
+      "art": "mul"
+    },
+    {
+      "id": "mix",
+      "art": "add"
+    },
+    {
+      "id": "hochpass",
+      "art": "svf",
+      "cutoff": 40
+    },
+    {
+      "id": "env",
+      "art": "adsr",
+      "a": 0.5,
+      "d": 2.0,
+      "s": 0.8,
+      "r": 1.5
+    },
+    {
+      "id": "env_hz",
+      "art": "mul"
+    },
+    {
+      "id": "cutoff",
+      "art": "add"
+    },
+    {
+      "id": "filter",
+      "art": "ladder"
+    },
+    {
+      "id": "vca",
+      "art": "mul"
+    },
+    {
+      "id": "pegel",
+      "art": "mul",
+      "b": 0.4
+    },
+    {
+      "id": "chorus",
+      "art": "chorus",
+      "modus": 2
+    },
+    {
+      "id": "hall",
+      "art": "hall",
+      "mix": 0.25,
+      "decay": 2.5,
+      "groesse": 80,
+      "pre": 15
+    },
+    {
+      "id": "grenze_l",
+      "art": "saett"
+    },
+    {
+      "id": "grenze_r",
+      "art": "saett"
+    },
+    {
+      "id": "aus",
+      "art": "ausgang"
+    }
+  ],
+  "kanten": [
+    {
+      "von": "note.hz",
+      "nach": "saege.hz"
+    },
+    {
+      "von": "note.hz",
+      "nach": "puls.hz"
+    },
+    {
+      "von": "note.hz",
+      "nach": "sub_ton.hz"
+    },
+    {
+      "von": "sub_ton.aus",
+      "nach": "sub.hz"
+    },
+    {
+      "von": "lfo.aus",
+      "nach": "pwm.a"
+    },
+    {
+      "von": "k_pwm.aus",
+      "nach": "pwm.b"
+    },
+    {
+      "von": "pwm.aus",
+      "nach": "puls.pwm"
+    },
+    {
+      "von": "saege.aus",
+      "nach": "p_saege.a"
+    },
+    {
+      "von": "puls.aus",
+      "nach": "p_puls.a"
+    },
+    {
+      "von": "sub.aus",
+      "nach": "p_sub.a"
+    },
+    {
+      "von": "k_sub.aus",
+      "nach": "p_sub.b"
+    },
+    {
+      "von": "p_saege.aus",
+      "nach": "mix.a"
+    },
+    {
+      "von": "p_puls.aus",
+      "nach": "mix.b"
+    },
+    {
+      "von": "p_sub.aus",
+      "nach": "mix.c"
+    },
+    {
+      "von": "mix.aus",
+      "nach": "hochpass.x"
+    },
+    {
+      "von": "note.gate",
+      "nach": "env.gate"
+    },
+    {
+      "von": "note.trig",
+      "nach": "env.trig"
+    },
+    {
+      "von": "k_attack.aus",
+      "nach": "env.a"
+    },
+    {
+      "von": "k_release.aus",
+      "nach": "env.r"
+    },
+    {
+      "von": "env.aus",
+      "nach": "env_hz.a"
+    },
+    {
+      "von": "k_env.aus",
+      "nach": "env_hz.b"
+    },
+    {
+      "von": "k_cutoff.aus",
+      "nach": "cutoff.a"
+    },
+    {
+      "von": "env_hz.aus",
+      "nach": "cutoff.b"
+    },
+    {
+      "von": "hochpass.hp",
+      "nach": "filter.x"
+    },
+    {
+      "von": "cutoff.aus",
+      "nach": "filter.cutoff"
+    },
+    {
+      "von": "k_reso.aus",
+      "nach": "filter.reso"
+    },
+    {
+      "von": "filter.aus",
+      "nach": "vca.a"
+    },
+    {
+      "von": "env.aus",
+      "nach": "vca.b"
+    },
+    {
+      "von": "vca.aus",
+      "nach": "pegel.a"
+    },
+    {
+      "von": "pegel.aus",
+      "nach": "chorus.x"
+    },
+    {
+      "von": "k_chorus.aus",
+      "nach": "chorus.mix"
+    },
+    {
+      "von": "chorus.l",
+      "nach": "hall.l"
+    },
+    {
+      "von": "chorus.r",
+      "nach": "hall.r"
+    },
+    {
+      "von": "hall.l",
+      "nach": "grenze_l.x"
+    },
+    {
+      "von": "hall.r",
+      "nach": "grenze_r.x"
+    },
+    {
+      "von": "grenze_l.aus",
+      "nach": "aus.l"
+    },
+    {
+      "von": "grenze_r.aus",
+      "nach": "aus.r"
+    }
+  ]
+}

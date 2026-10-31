@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { fuehreAus, fuehreListeAus, BefehlFehler } from '../projekt/befehle.ts';
-import { neuesProjekt, pruefeProjekt, MAX_MARKER } from '../projekt/modell.ts';
+import { neuesProjekt, pruefeProjekt, MAX_MARKER, TRANSPOSE_MAX, DETUNE_MAX } from '../projekt/modell.ts';
 import { wende } from '../projekt/patch.ts';
 import { SHA_A, ohneAbgeleitetes } from './hilfen/projekt.mjs';
 
@@ -61,7 +61,16 @@ test('warp_setzen: Schalter, ganzes Objekt, Entfernen; Ablehnungen mit Grund', (
   lehntAb(p, { befehl: 'warp_setzen', clip_id: 'c1' }, 'argument_ungueltig');
   lehntAb(p, { befehl: 'warp_setzen', clip_id: 'c1', warp: warp(), an: false }, 'argument_ungueltig');
   lehntAb(p, { befehl: 'warp_setzen', clip_id: 'c1', transpose_st: 2 }, 'transpose_repitch');
-  lehntAb(p, { befehl: 'warp_setzen', clip_id: 'c1', modus: 'complex' }, 'warp_modus');
+  lehntAb(p, { befehl: 'warp_setzen', clip_id: 'c1', modus: 'texture' }, 'warp_modus');
+  // Slice 2: complex und tones gehen, einzeln und im ganzen Objekt; Transpose und Detune gelten ab Slice 5 (Grenzen TRANSPOSE_MAX, DETUNE_MAX; bei RE-PITCH transpose_repitch)
+  for (const modus of ['complex', 'tones']) {
+    const r = fuehreAus(p, { befehl: 'warp_setzen', clip_id: 'c1', modus });
+    pruefe(p, r); assert.equal(clip(r.projekt).warp.modus, modus); assert.equal(r.betrifft_wiedergabe, true, 'der Modus ändert den Klang');
+    const ganz = fuehreAus(p, { befehl: 'warp_setzen', clip_id: 'c1', warp: warp({ modus }) });
+    pruefe(p, ganz); assert.equal(clip(ganz.projekt).warp.modus, modus);
+    lehntAb(r.projekt, { befehl: 'warp_setzen', clip_id: 'c1', transpose_st: TRANSPOSE_MAX + 1 }, 'argument_ungueltig');
+    lehntAb(r.projekt, { befehl: 'warp_setzen', clip_id: 'c1', detune_ct: DETUNE_MAX + 1 }, 'argument_ungueltig');
+  }
   lehntAb(p, { befehl: 'warp_setzen', clip_id: 'c1', an: 'ja' }, 'argument_ungueltig');
   lehntAb(p, { befehl: 'warp_setzen', clip_id: 'c1', warp: warp({ marker: [[0, 0], [6, 1]] }) }, 'warp_faktor');
   lehntAb(p, { befehl: 'warp_setzen', clip_id: 'c9', an: false }, 'clip_unbekannt');
@@ -133,4 +142,27 @@ test('clip_duplizieren und Loop behalten den Warp; Marker-Gesamtgrenze nach dem 
   assert.ok(l.projekt);
   assert.throws(() => fuehreAus(l.projekt, { befehl: 'clip_aendern', clip_id: 'c1', laenge_beats: 70, loop_beats: 1 }),
     (e) => e instanceof BefehlFehler && e.grund === 'zu_gross', '70 Kopien · 4096 Marker > 262 144');
+});
+
+test('Slice 4: warp_setzen schaltet auf beats und setzt beats-Parameter, ein Undo-Schritt', () => {
+  const p = aufbau();
+  const r1 = fuehreAus(p, { befehl: 'warp_setzen', clip_id: 'c1', modus: 'beats' });
+  pruefe(p, r1);
+  assert.equal(clip(r1.projekt).warp.modus, 'beats');
+  assert.equal(clip(r1.projekt).warp.beats, undefined);                       // ohne Angabe gilt die Vorgabe, im Modell steht nichts
+  const r = fuehreAus(r1.projekt, { befehl: 'warp_setzen', clip_id: 'c1', beats: { raster: '1/8', loop: 'vor_zurueck', huelle: 70 } });
+  pruefe(r1.projekt, r);
+  assert.deepEqual(clip(r.projekt).warp.beats, { raster: '1/8', loop: 'vor_zurueck', huelle: 70 });
+  lehntAb(r1.projekt, { befehl: 'warp_setzen', clip_id: 'c1', beats: { raster: '1/8', loop: 'x', huelle: 70 } }, 'argument_ungueltig');
+  // D6b: BEATS nimmt wie RE-PITCH keine Transposition
+  const t = aufbau(warp({ modus: 'complex', transpose_st: 3 }));
+  lehntAb(t, { befehl: 'warp_setzen', clip_id: 'c1', modus: 'beats' }, 'transpose_repitch');
+  lehntAb(r1.projekt, { befehl: 'warp_setzen', clip_id: 'c1', transpose_st: 2 }, 'transpose_repitch');
+});
+
+test('Slice 4 D9: ein BEATS-Clip über der Einheiten-Grenze lässt Folgebefehle durch (zaehleWarpMarker wirft nie)', () => {
+  const p = aufbau(warp({ modus: 'beats', beats: { raster: '1/32', loop: 'aus', huelle: 100 } }));
+  const l = fuehreAus(p, { befehl: 'clip_aendern', clip_id: 'c1', laenge_beats: 4200 });
+  const r = fuehreAus(l.projekt, { befehl: 'clip_aendern', clip_id: 'c1', name: 'x' });
+  assert.equal(clip(r.projekt).name, 'x');
 });

@@ -24,7 +24,7 @@ const { values: opt } = parseArgs({ options: {
   muster: { type: 'string', default: `/dev/shm/cypherdj${I ? `-${I}` : ''}/erzeuger/strom1.js` },
   strom: { type: 'string', default: '1' },
   kanal: { type: 'string', default: 'erz/1' },
-  ziel: { type: 'string', default: '' },   // Studio S5: midi:<port>:<kanal> statt Kit
+  ziel: { type: 'string', default: '' },   // Studio S5: midi:<port>:<kanal> statt Kit; Baukasten S3a: bk:<graph>
   name: { type: 'string', default: 'erzeuger' },   // Studio S1: Hallo-Name je Prozess (Kern führt Abonnenten nach Name)
 } });
 const KERN = Number(opt['kern-port']);
@@ -35,7 +35,7 @@ const ZUSATZ = opt['kit-zusatz'];
 const zusatzJson = ZUSATZ ? `${opt['kit-ordner']}/${ZUSATZ}/kit.json` : '';
 const zusatzStand = () => { try { return fs.statSync(zusatzJson).mtimeMs; } catch { return 0; } };
 let zusatzGesehen = 0;
-const MIDI = opt.ziel.startsWith('midi:');
+const MIDI = opt.ziel.startsWith('midi:') || opt.ziel.startsWith('bk:');  // Baukasten S3a: Noten ohne Kit
 const KIT_ZIEL = MIDI ? opt.ziel : ZUSATZ ? `kit:${opt.kit}+${ZUSATZ}` : `kit:${opt.kit}`;
 const kitLaden = () => MIDI ? { midi: true } : ladeKits(`${opt['kit-ordner']}/${opt.kit}`, ZUSATZ ? `${opt['kit-ordner']}/${ZUSATZ}` : '');
 let kit;

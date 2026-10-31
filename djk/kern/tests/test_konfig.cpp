@@ -29,6 +29,8 @@ int main() {
   PRUEF(k.limiter_dbtp == -1.0);
   PRUEF(k.pruefmodus == false);
   PRUEF(k.arr_ordner.empty() && k.arr_budget_mib == 1024);   // D1 K1: Vorgaben wie §2.1
+  PRUEF(k.warp_faeden == 4);                                 // 1.13 Slice 2: Vorgabe 4 Arbeitsfäden
+  PRUEF(k.graph_faeden == 2);                                // Baukasten S3b: Vorgabe 2 Fäden des Graph-Werks
 
   // Fehlerfall: Tippfehler im Schlüssel, Meldung nennt Schlüssel und Datei
   const std::string f1 = fehlertext("version = 1\nudp_prot = 47100\n");
@@ -82,5 +84,16 @@ int main() {
   cdj::wende_instanz_an(kn, "b");
   PRUEF(cdj::arr_ordner_von(kn, "b") == "/srv/cypherdj-b/arr");
   PRUEF(cdj::arr_ordner_von(cdj::lies_kern_toml_text("version = 1\narr_ordner = \"/srv/arr/\"\n", "t"), "") == "/srv/arr");
+  // 1.13 Slice 2: Arbeitsfäden des Warp-Werks, 1 bis 8; Negativ-Kontrolle: 0 und 9 sind ein Startfehler, der den Schlüssel nennt
+  PRUEF(cdj::lies_kern_toml_text("version = 1\nwarp_faeden = 8\n", "t").warp_faeden == 8);
+  PRUEF(cdj::lies_kern_toml_text("version = 1\nwarp_faeden = 1\n", "t").warp_faeden == 1);
+  PRUEF(fehlertext("version = 1\nwarp_faeden = 0\n").find("warp_faeden") != std::string::npos);
+  PRUEF(fehlertext("version = 1\nwarp_faeden = 9\n").find("warp_faeden") != std::string::npos);
+  PRUEF(fehlertext("version = 1\nwarp_faeden = \"vier\"\n").find("warp_faeden") != std::string::npos);
+  // Baukasten S3b: graph_faeden 0 (synchron im Callback) bis 8
+  PRUEF(cdj::lies_kern_toml_text("version = 1\ngraph_faeden = 0\n", "t").graph_faeden == 0);
+  PRUEF(cdj::lies_kern_toml_text("version = 1\ngraph_faeden = 8\n", "t").graph_faeden == 8);
+  PRUEF(fehlertext("version = 1\ngraph_faeden = -1\n").find("graph_faeden") != std::string::npos);
+  PRUEF(fehlertext("version = 1\ngraph_faeden = 9\n").find("graph_faeden") != std::string::npos);
   PRUEF_ENDE();
 }

@@ -419,6 +419,9 @@ body.lib-gross .fxdetail { display: grid; flex: 1; grid-template-columns: minmax
 .fxdetail .regler-liste label { display: grid; grid-template-columns: 84px 1fr 64px; gap: 6px; align-items: center; color: var(--dim); }
 .fxdetail .regler-liste output { text-align: right; font-variant-numeric: tabular-nums; color: var(--text, #e6e6e6); }
 .fxdetail .bilder { display: flex; flex-direction: column; gap: 8px; }
+.fxdetail .knobbereich { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); }
+.fxdetail .knobliste { display: flex; flex-direction: column; gap: 6px; }
+.fxdetail .knobliste label { text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fxdetail svg, .fxdetail canvas { width: 100%; max-width: 520px; background: rgba(255,255,255,0.03); border: 1px solid var(--line); border-radius: 6px; }
 .fxdetail .kurve { fill: none; stroke: var(--warn); stroke-width: 2; }
 .fxdetail .achse { stroke: var(--line); stroke-width: 1; }

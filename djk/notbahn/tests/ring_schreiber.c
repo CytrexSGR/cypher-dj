@@ -119,6 +119,7 @@ int main(int argc, char** argv) {
   if (!cl) return 1;
   aus[0] = jack_port_register(cl, "master_L", JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput, 0);
   aus[1] = jack_port_register(cl, "master_R", JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput, 0);
+  jack_port_register(cl, "notbahn_vor", JACK_DEFAULT_AUDIO_TYPE, JackPortIsInput, 0);  /* wie der Kern: Ziel von --vor */
   jack_set_process_callback(cl, process, NULL);
   mlockall(MCL_CURRENT | MCL_FUTURE);
   if (jack_activate(cl)) return 1;

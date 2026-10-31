@@ -1,11 +1,14 @@
 // PRODUCTION (D1 V1): Zeitachse bedienen und zeichnen. Ansicht (Zoom, Scroll), Raster-Wahl GRID, FOLLOW-Schalter,
 // Rad (Rad: waagrecht · Strg+Rad: Zoom um den Zeiger · Umschalt+Rad: Spuren) und das Arrangement-Canvas. Zoom, Raster
 // und FOLLOW sind Bequemlichkeit je Browser (localStorage), nie Projektdaten (L7).
-import { neueAnsicht, zoomUm, scrolle, RASTER, RASTER_VORGABE, PX_PRO_BEAT_VORGABE } from './zeitachse.js';
+import { neueAnsicht, zoomUm, scrolle, RASTER, RASTER_VORGABE, PX_PRO_BEAT_VORGABE, projektEnde, leiste, ausLeiste } from './zeitachse.js';
 import { SPUR_HOEHE } from './layout.js';
 import { neueWellen } from './wellen.js';
 import { Arrangement } from './arrangement.js';
 
+// Argumente für das Bild des Arrangements aus dem Seitenstand (rein, getestet: stems geht mit)
+export const arrBild = (st) => ({ ansicht: st.ansicht, projekt: st.projektEntwurf ?? st.projekt, loop: st.loopEntwurf ?? st.projekt?.loop ?? null,
+  kopfBeat: st.kopfBeat, startBeat: st.start, geist: st.geist, stems: st.stems });
 export function bindeZeitachse(ctx) {
   const { st, $ } = ctx;
   st.ansicht = { ...neueAnsicht(), pxProBeat: Number(ctx.lies('djk-prod-zoom', PX_PRO_BEAT_VORGABE)) || PX_PRO_BEAT_VORGABE };
@@ -36,6 +39,20 @@ export function bindeZeitachse(ctx) {
   $('ueber').addEventListener('wheel', rad, { passive: false });
   $('lineal').addEventListener('wheel', rad, { passive: false });
   ctx.beimProjekt.push((p) => { $('flaeche').style.height = `${(p?.spuren.length ?? 0) * SPUR_HOEHE}px`; });
-  ctx.beimBild.push(() => arr.bild({ ansicht: st.ansicht, projekt: st.projektEntwurf ?? st.projekt, loop: st.loopEntwurf ?? st.projekt?.loop ?? null,
-    kopfBeat: st.kopfBeat, startBeat: st.start, geist: st.geist }));
+  // Sichtbare Scrollleiste: folgt der Ansicht in jedem Bild; ein Zug an ihr setzt beat0 (und schaltet FOLLOW aus wie das Rad).
+  // gesetzt merkt die Lage, die das Bild selbst geschrieben hat: deren scroll-Ereignis ist kein Zug von Hand.
+  const hl = $('hleiste'), hi = $('hleiste-inhalt');
+  let gesetzt = -1;
+  hl.addEventListener('scroll', () => {
+    if (Math.abs(hl.scrollLeft - gesetzt) < 1) return;
+    st.ansicht = ausLeiste(st.ansicht, hl.scrollLeft);
+    if (st.follow) ctx.setzeFollow(false);
+  });
+  ctx.beimBild.push(() => {
+    const l = leiste(st.ansicht, projektEnde(st.projektEntwurf ?? st.projekt), ctx.breite());
+    const w = `${l.inhaltPx}px`;
+    if (hi.style.width !== w) hi.style.width = w;
+    if (Math.abs(hl.scrollLeft - l.links) >= 1) { gesetzt = l.links; hl.scrollLeft = l.links; }
+  });
+  ctx.beimBild.push(() => arr.bild(arrBild(st)));
 }

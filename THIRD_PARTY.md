@@ -13,7 +13,7 @@ These files are copied verbatim into `djk/third_party/`. Each one is pinned by s
 | libebur128 | 1.2.6 | MIT | `djk/third_party/libebur128/` |
 | nlohmann/json | 3.12.0 | MIT | `djk/third_party/nlohmann/` |
 | toml++ | 3.4.0 | MIT | `djk/third_party/toml++/` |
-| Bungee | git 8cb6977 | MPL-2.0 | `djk/third_party/bungee/` (optional keylock engine, built only with `-DCYPHERDJ_BUNGEE=ON`) |
+| Bungee | git 8cb6977 | MPL-2.0 | `djk/third_party/bungee/` (keylock and warp engine, built by default; `-DCYPHERDJ_BUNGEE=OFF` builds without it) |
 | Eigen (Core only, via Bungee) | git c29c800 | MPL-2.0 | `djk/third_party/bungee/submodules/eigen/` |
 | PFFFT (via Bungee) | git 02fe771 | BSD-style (FFTPACK) | `djk/third_party/bungee/submodules/pffft/` |
 
@@ -43,11 +43,17 @@ Sources in `djk/kern/gen/*.dsp`, rebuild with `djk/kern/gen/erzeuge.sh`.
 | Surge XT (LV2) | GPL-3.0-or-later | synthesizer |
 | PipeWire | MIT | audio server |
 
+## Stem separation (PRODUCTION, optional)
+
+| Component | Code license | Note |
+|---|---|---|
+| Demucs 4.0.1 (htdemucs) | MIT | splits an audio clip into drums, bass, other and vocals, on the CPU only. The pretrained weights (84 MB) are not in this repository: `python -m werkstatt.gewichte_stems` fetches them from the Demucs release and checks their sha256. Check their terms before commercial use |
+| PyTorch | BSD-3-Clause | runtime for Demucs |
+
 ## Optional analysis tools (not required to play)
 
 | Component | Code license | Note |
 |---|---|---|
-| Demucs | MIT | stem separation. The pretrained weights are downloaded by Demucs itself; check their terms before commercial use |
 | all-in-one (allin1) | MIT | structure analysis experiment. Pulls in madmom, whose bundled model files are licensed CC BY-NC-SA 4.0 (non-commercial) |
 
 ## Not included, on purpose

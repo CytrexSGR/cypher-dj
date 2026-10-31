@@ -476,7 +476,7 @@ export class Mediathek {
 // Fortschritt (Zeilen `@@fortschritt {json}` auf stderr des Einlesers, djk/werkstatt/werkstatt/fortschritt.py): nur was die Werkstatt
 // wirklich meldet. prozent ist null, wo kein Werkzeug Prozente liefert. haengt = länger als haengtNachMs weder Meldung noch wachsende CPU-Zeit des Prozessbaums.
 export interface VorbereitStand {
-  status: 'laeuft' | 'neu' | 'vorhanden' | 'fehler'; grund?: string;
+  status: 'laeuft' | 'neu' | 'vorhanden' | 'analysiert' | 'fehler'; grund?: string;
   stufe?: number; von?: number; name?: string; prozent?: number | null; teil?: string | null;   // letzte gemeldete Stufe (auch bei fehler: wo es riss)
   vergangen_s?: number; ohne_fortschritt_s?: number; haengt?: boolean;                          // nur während 'laeuft'
 }
@@ -546,6 +546,8 @@ export function cpuTicksBaum(pid: number, lies: (pfad: string) => string = (p) =
 export interface VorbereiterOptionen {
   python: string; cwd: string; bestand: string; modul?: string; maxGleichzeitig?: number; zeitlimitMs?: number;
   haengtNachMs?: number; jetzt?: () => number;   // Uhr (ms) für vergangene Zeit und „hängt“; Tests setzen sie
+  zusatzArgs?: string[];   // Slice 3a: hinter --bestand (der Analyse-Modus: ['--nur-analyse'])
+  bei?: (mid: string, stand: VorbereitStand) => void;   // einmal am Ende eines Laufs
   log?: (zeile: Record<string, unknown>) => void;
 }
 
@@ -587,7 +589,7 @@ export class Vorbereiter {
     if (this.laeufe.has(mid)) return 'laeuft';
     if (this.laeufe.size >= this.max) return 'ausgelastet';
     const args = ['-n', '19', ...(this.ionice ? ['ionice', '-c3'] : []), this.o.python, '-m', this.o.modul ?? 'werkstatt.einzeln',
-      '--quelle', quelle, '--titel', titel, '--bestand', this.o.bestand];
+      '--quelle', quelle, '--titel', titel, '--bestand', this.o.bestand, ...(this.o.zusatzArgs ?? [])];
     const kind = spawn('nice', args, { cwd: this.o.cwd, stdio: ['ignore', 'pipe', 'pipe'] });   // keine Shell: Titel und Pfad bleiben Argumente
     this.laeufe.set(mid, kind);
     this.staende.set(mid, { status: 'laeuft' });
@@ -611,16 +613,19 @@ export class Vorbereiter {
       this.laeufe.delete(mid); this.fortschritte.delete(mid);
       this.staende.set(mid, stand.status === 'fehler' && fort.f ? { ...stand, stufe: fort.f.stufe, von: fort.f.von, name: fort.f.name } : stand);
       this.o.log?.({ typ: 'vorbereitet', material_id: mid, status: stand.status, grund: stand.grund });
+      try { this.o.bei?.(mid, this.staende.get(mid) as VorbereitStand); } catch (e) {   // Slice 3a: ein Fehler des Hörers stört den Vorbereiter nicht
+        this.o.log?.({ typ: 'vorbereiter_bei_fehler', material_id: mid, fehler: (e as Error).message });
+      }
     };
     const zeit = setTimeout(() => { kind.kill('SIGKILL'); ende({ status: 'fehler', grund: 'zeitlimit' }); }, this.o.zeitlimitMs ?? 20 * 60_000);
     zeit.unref();
     kind.once('error', () => ende({ status: 'fehler', grund: 'start' }));
     kind.once('close', (rc) => {
-      // Vertrag des Einlesers: die letzte JSON-Zeile auf stdout {"status": neu|vorhanden|fehler, "material_id", "grund"?}
+      // Vertrag des Einlesers: die letzte JSON-Zeile auf stdout {"status": neu|vorhanden|analysiert|fehler, "material_id", "grund"?}
       const zeilen = aus.split('\n').map((z) => z.trim()).filter(Boolean);
       let j: { status?: unknown; grund?: unknown } | null = null;
       try { j = JSON.parse(zeilen[zeilen.length - 1] ?? '') as typeof j; } catch { j = null; }
-      if (j && (j.status === 'neu' || j.status === 'vorhanden')) return ende({ status: j.status });
+      if (j && (j.status === 'neu' || j.status === 'vorhanden' || j.status === 'analysiert')) return ende({ status: j.status });
       const grund = j && j.status === 'fehler' && typeof j.grund === 'string' ? j.grund
         : rc === 0 ? 'keine_antwort' : `exit_${rc}`;
       if (!j) this.o.log?.({ typ: 'vorbereiten_stderr', material_id: mid, rc, stderr: fehl.slice(-500) });

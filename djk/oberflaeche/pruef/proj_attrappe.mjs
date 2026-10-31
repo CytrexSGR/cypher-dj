@@ -5,7 +5,7 @@
 // /pegel spur/<n> (Spec 3.1). Der Transport ist simuliert: Projekt-Beat läuft mit dem Master-Tempo aus /uhr.
 // Nicht in server.ts (Auftrag V1). Kein Kern, kein Ton.
 // Befehle flach {befehl: 'spur_neu', …} wie S2 (befehle.ts); Ablehnungsgründe und Wertebereiche wie S2 und Spec §4 (siehe wende()).
-// Steuerung für Proben: POST /attrappe/weg {an} (Ausfall: /proj/* 503 ohne Grund, Strom gekappt) · POST /attrappe/lauf {art} (Freeze-Durchlauf: art 'freeze', null beendet) · POST /attrappe/ausgabe {…} (Freeze/Export, siehe unten) · POST /attrappe/kernantwort {kern} (einmalig: die nächste angenommene Änderung antwortet mit diesem kern) · POST /attrappe/saat {projekt} · POST /attrappe/sse {a, f} · POST /attrappe/stumm {ms} · POST /attrappe/transportantwort {quittung} (einmalig: null = der Kern antwortet nicht) · POST /attrappe/rohantwort {weg, code, koerper} (einmalig, roh) · POST /attrappe/katalog {eintraege: [{sha, typ, bpm, takte, dauer_s}]} (Tempo-Angaben der Library für warp 'auto', Paket 1.13) · GET /attrappe/log.
+// Steuerung für Proben: POST /attrappe/weg {an} (Ausfall: /proj/* 503 ohne Grund, Strom gekappt) · POST /attrappe/lauf {art} (Freeze-Durchlauf: art 'freeze', null beendet) · POST /attrappe/ausgabe {…} (Freeze/Export, siehe unten) · POST /attrappe/kernantwort {kern} (einmalig: die nächste angenommene Änderung antwortet mit diesem kern) · POST /attrappe/saat {projekt} · POST /attrappe/sse {a, f} · POST /attrappe/stumm {ms} · POST /attrappe/transportantwort {quittung} (einmalig: null = der Kern antwortet nicht) · POST /attrappe/rohantwort {weg, code, koerper} (einmalig, roh) · POST /attrappe/katalog {eintraege: [{sha, typ, bpm, takte, dauer_s, instrument?, kategorie?, karte?, traktor?}]} (Tempo-Angaben der Library für warp 'auto', Paket 1.13) · GET /attrappe/log.
 // Direkt: node pruef/proj_attrappe.mjs <oben-url> [port]
 import http from 'node:http';
 import path from 'node:path';
@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 // nachzubauen: so prüft die Browserprobe die Seite gegen dieselben Regeln, Gründe, HTTP-Codes und IDs wie der Server.
 import { fuehreAus, BefehlFehler } from '../projekt/befehle.ts';
 import { neueId, LOOP_MIN, MAX_SPUREN, warpPruefung } from '../projekt/modell.ts';
-import { autoWarp } from '../projekt/warp.ts';
+import { abHierStart, autoWarp, fensterTempo, handWarp } from '../projekt/warp.ts';
 import { grundCode } from '../bereiche/proj/abbildung.ts';
 import { grundText } from '../http/gruende.ts';
 
@@ -35,7 +35,7 @@ export async function starteProjAttrappe({ oben, port = 0, dekodierMs = 300, fre
     transport: null, stoppBeat: 0, masterBpm: null,
     lauf: null, kennungen: new Map(), exporte: new Set(),   // D1 V2 Slice 3: Freeze/Export nach dem S3-Plan
     ausgabe: { freezeMs, renderMs, spitze_db: -6.02, lufs_i: -14.2, lra: 5.1, true_peak_dbtp: -1.0, regler_quelle: 'kern', ueber_decke: false, limiter_db_max: 0, loudness_fehler: null, fehler: null },
-    katalog: new Map(),   // Paket 1.13: sha → {typ, bpm, takte, dauer_s}, die Tempo-Angaben, aus denen der Server warp 'auto' auflöst (POST /attrappe/katalog)
+    katalog: new Map(),   // Paket 1.13: sha → {typ, bpm, takte, dauer_s, instrument, kategorie} (Slice 2 D10: Drum-Loops RE-PITCH, sonst COMPLEX), die Tempo-Angaben, aus denen der Server warp 'auto' auflöst (POST /attrappe/katalog)
     dekodierUhren: new Set() };   // V2 Fix-Runde 2 H9: laufende Dekodier-Timer; stoppe() beendet sie (dekodierMs 60000 hielt den Testprozess ~62 s am Leben)
   // D1 V2 Nachzug (7f, Spec 6.23, 6.31, 6.32): läuft ein Freeze-Durchlauf (z.lauf.durchlauf, ab V2 Slice 3 vom simulierten Freeze gesetzt;
   // für Proben auch über POST /attrappe/lauf {art}), antworten Transport-Start, Öffnen, Anlegen, jede Änderung an Wiedergabe, Tempo oder Loop
@@ -64,7 +64,7 @@ export async function starteProjAttrappe({ oben, port = 0, dekodierMs = 300, fre
   // D1 V2: diese Befehle (und clip_neu für MIDI) laufen über S2 fuehreAus; dessen Ablehnung kommt mit S2-Grund und Server-Code zurück
   // V2 Fix F13: tempo_setzen auch über S2, damit ein anderes Tempo Freezes verwirft wie dort (befehle.ts verwerfeFreezes)
   const S2_BEFEHLE = new Set(['clip_aendern', 'clip_teilen', 'clip_duplizieren', 'clip_loeschen', 'noten_neu', 'noten_aendern', 'noten_loeschen', 'tempo_setzen', 'variante_waehlen',
-  'gruppenspur_neu', 'gruppenspur_aendern', 'gruppenspur_loeschen', 'ziel_setzen', 'master_aendern', 'warp_setzen', 'warp_auto']);   // Paket 1.18 E-c: variante_waehlen rechnet S2; 1.10: Gruppen, Ziel und Master rechnet S2; 1.13: Warp rechnet S2
+  'gruppenspur_neu', 'gruppenspur_aendern', 'gruppenspur_loeschen', 'ziel_setzen', 'master_aendern', 'warp_setzen', 'warp_auto', 'warp_tempo', 'warp_marker', 'warp_ab_hier', 'eins_hier', 'tempo_vom_clip', 'audio_quantisieren']);   // Paket 1.18 E-c: variante_waehlen rechnet S2; 1.10: Gruppen, Ziel und Master rechnet S2; 1.13: Warp rechnet S2
   const ueberS2 = (b) => S2_BEFEHLE.has(b?.befehl) || (b?.befehl === 'clip_neu' && b.art === 'midi');
   function mitS2(p, b) {
     try { return fuehreAus(p, b).projekt; } catch (e) { if (e instanceof BefehlFehler) throw new Fehl(grundCode(e.grund), e.grund); throw e; }
@@ -86,6 +86,30 @@ export async function starteProjAttrappe({ oben, port = 0, dekodierMs = 300, fre
         if (r === null || 'hinweis' in r) throw new Fehl(409, 'kein_tempo');
         const { clip_id, ...rest } = b;
         return { ...rest, befehl: 'warp_setzen', clip_id, warp: r.warp };
+      }
+      // Slice 3b: wie sitzung.ts loeseQuellenAuf, gegen den Stand VOR der Liste (die Attrappe kennt keinen Zwischenstand)
+      if (b?.befehl === 'eins_hier') hinweise.push({ index, hinweis: 'eins_nur_hier' });   // die Attrappe hat keinen Bestand: kein Rückweg
+      if (b?.befehl === 'tempo_vom_clip' && typeof b.clip_id === 'string') {
+        const g = clips.find((c) => c.id === b.clip_id);
+        return g?.art === 'audio' && g.warp ? { befehl: 'tempo_setzen', bpm: fensterTempo(g.warp, g.loop_beats ?? g.laenge_beats) } : b;
+      }
+      if (b?.befehl === 'warp_ab_hier' && b.art === 'start' && typeof b.clip_id === 'string' && typeof b.beat === 'number') {
+        const g = clips.find((c) => c.id === b.clip_id);
+        if (g?.art !== 'audio' || !g.warp) return b;
+        const r = autoWarp(tempoVon(g.quelle.sha256));
+        const marker = r !== null && 'warp' in r ? abHierStart(g.warp.marker, b.beat, r.warp.marker) : null;
+        if (marker === null) throw new Fehl(409, 'kein_tempo');
+        return { befehl: 'warp_setzen', clip_id: b.clip_id, warp: handWarp(g.warp, marker) };
+      }
+      // Slice 4 (D8), wie sitzung.ts loeseQuellenAuf: Quantize Audio braucht die Transienten der dekodierten Quelle. Die Attrappe dekodiert nichts, also lehnt sie ab,
+      // sobald Felder, Clip und Werte stimmen (409 transienten_fehlen); alles davor meldet S2 (argument_unbekannt, clip_unbekannt, kein_warp).
+      if (b?.befehl === 'audio_quantisieren' && typeof b.clip_id === 'string') {
+        const g = Object.keys(b).every((k) => ['befehl', 'clip_id', 'raster', 'staerke', 'von_beat', 'bis_beat'].includes(k)) ? clips.find((c) => c.id === b.clip_id) : undefined;
+        if (g?.art !== 'audio' || !g.warp) return b;
+        if (!['1/4', '1/8', '1/16', '1/32'].includes(b.raster)) throw new Fehl(400, 'argument_ungueltig');
+        if (b.staerke !== undefined && !(typeof b.staerke === 'number' && b.staerke >= 0 && b.staerke <= 1)) throw new Fehl(400, 'argument_ungueltig');
+        for (const k of ['von_beat', 'bis_beat']) if (b[k] !== undefined && !(typeof b[k] === 'number' && Number.isFinite(b[k]))) throw new Fehl(400, 'argument_ungueltig');
+        throw new Fehl(409, 'transienten_fehlen');
       }
       if (b?.befehl !== 'clip_neu' || b.art !== 'audio' || b.warp !== 'auto') return b;
       const r = autoWarp(tempoVon(b.sha256));
@@ -271,7 +295,7 @@ export async function starteProjAttrappe({ oben, port = 0, dekodierMs = 300, fre
     if (q.method === 'POST' && weg === '/attrappe/kernantwort') { z.kernAntwort = d.kern ?? null; return json(a, 200, { ok: true }); }   // D1 V2 Nachzug (7c): nächste angenommene Änderung trägt dieses kern
     if (q.method === 'POST' && weg === '/attrappe/transportantwort') { z.transportAntwort = { quittung: d.quittung ?? null }; return json(a, 200, { ok: true }); }   // nächste /proj/transport-Anfrage: diese Quittung, nichts gestartet
     if (q.method === 'POST' && weg === '/attrappe/katalog') {   // Paket 1.13: Tempo-Angaben der Library (ersetzt die bisherigen), Grundlage von warp 'auto' und warp_auto
-      z.katalog = new Map((Array.isArray(d.eintraege) ? d.eintraege : []).map((e) => [e.sha, { typ: e.typ ?? null, bpm: e.bpm ?? null, takte: e.takte ?? null, dauer_s: e.dauer_s ?? null }]));
+      z.katalog = new Map((Array.isArray(d.eintraege) ? d.eintraege : []).map((e) => [e.sha, { typ: e.typ ?? null, bpm: e.bpm ?? null, takte: e.takte ?? null, dauer_s: e.dauer_s ?? null, instrument: e.instrument ?? null, kategorie: e.kategorie ?? null, karte: e.karte ?? null, traktor: e.traktor ?? null }]));
       return json(a, 200, { ok: true, n: z.katalog.size });
     }
     if (q.method === 'POST' && weg === '/attrappe/saat') {

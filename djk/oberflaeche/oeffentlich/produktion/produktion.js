@@ -21,6 +21,7 @@ import { bindeVariantenReihen } from './varianten.js';
 import { bindeGeraete } from './geraete.js';
 import { bindeAufnahme } from './aufnahme.js';
 import { AUSGABE_FEHLER, mehrdeutigText } from './ausgabe.js';
+import { nachladenNoetig, stemsEreignis, stemsFuerProjekt } from './stems.js';
 
 const BINDER = [bindeZeitachse, bindeProjektwahl, bindeSpuren, bindeGruppen, bindeAblage, bindeTransport, bindeVerlauf, bindeClips, bindeDetail, bindeAusgabe, bindeVariantenReihen, bindeGeraete, bindeAufnahme];
 
@@ -68,6 +69,7 @@ const GERUEST = `
     <div class="p-koepfe" data-p="koepfe"></div>
     <div class="p-flaeche" data-p="flaeche"><canvas class="p-spuren" data-p="spuren"></canvas><canvas class="p-ueber" data-p="ueber" title="Click: start marker · wheel: scroll · Ctrl+wheel: zoom · Shift+wheel: tracks"></canvas></div>
   </div>
+  <div class="p-hleiste" data-p="hleiste" title="Scroll the arrangement"><div data-p="hleiste-inhalt"></div></div>
   <div class="p-leer" data-p="leer">No project open. NEW starts one, OPEN loads one.</div>
 </div>
 <section class="p-mixer" data-p="mixer" aria-label="Groups and master" hidden>
@@ -86,6 +88,22 @@ const GERUEST = `
 // Texte zu den Gründen der Projekt-API: die Gründe aus S2-Kern (projekt/befehle.ts, verlauf.ts) und Spec 3.4. Fehlt einer,
 // zeigt die Seite „Rejected: <code>“ (tests/produktion_wurzel.test.mjs hält die Liste beisammen).
 export const FEHLER_TEXT = {
+  veraltet: 'The clip changed while separating: nothing was placed',
+  audio_fehlt: 'An audio clip is still being prepared: try again in a moment',
+  stems_laeuft: 'A stem separation is already running',
+  stems_gpu_aus: 'Stem separation on the GPU is not available yet; it runs on the CPU',
+  stems_fehler: 'The stem separation failed: nothing was changed',
+  stems_loop: 'Switch the clip loop off before separating stems',
+  stems_zu_gross: 'The range to separate is longer than 600 s: choose a shorter range',
+  stems_zeitlimit: 'The stem separation took too long and was stopped: nothing was changed',
+  abbruch: 'The stem separation was cancelled',
+  zu_spaet: 'The stems are already placed: use undo to remove them',
+  stems_quantum: 'Stems run only at the core quantum 256',
+  kein_kernstand: 'The core has not reported its state yet: try again in a moment',
+  nur_andreas_spur: 'This track belongs to Andreas: Cypher may not separate it',
+  kein_auftrag: 'No stem separation with this id is running',
+  mehrere_clips: 'Exactly one audio clip must lie in the range',
+  zu_viele_spuren: 'Separating stems needs four free tracks',
   rev_veraltet: 'The project changed elsewhere: reloaded, please repeat',
   regler_abgelehnt: 'The core refused a mixer change: nothing was changed',
   nichts_zu_tun: 'Nothing to undo or redo', kein_projekt: 'No project open', unbekannt: 'No such project', name_ungueltig: 'A project name needs 1 to 80 characters',
@@ -98,9 +116,12 @@ export const FEHLER_TEXT = {
   index_bereich: 'No such track position', tempo_bereich: 'Tempo: 60 to 200 BPM', loop_bereich: 'The loop needs at least 1 beat',
   argument_ungueltig: 'That value is not allowed', argument_unbekannt: 'The core does not know that setting', befehl_unbekannt: 'The server does not know that command',
   art_passt_nicht: 'That clip does not fit this track', sha_ungueltig: 'That sample is not in the catalogue', clip_nicht_midi: 'That is not a MIDI clip',
-  warp_marker: 'The warp markers are not valid', warp_faktor: 'A warp segment has a tempo outside 15 to 800 BPM', warp_modus: 'That warp mode does not exist yet',
+  warp_marker: 'The warp markers are not valid', warp_faktor: 'A warp segment has a tempo outside 15 to 800 BPM',
+  transienten_fehlen: 'The audio is not decoded yet, so its transients are unknown', keine_transienten: 'There is no transient in that range',
+ marker_unbekannt: 'There is no warp marker at that beat any more', warp_modus: 'That warp mode does not exist yet',
+  beats_einheiten: 'Too many BEATS units in this clip: choose a coarser grid', quantisieren_konflikt: 'Quantizing would put two markers in the wrong order: choose a smaller range or a finer grid',
   transpose_repitch: 'RE-PITCH follows the tempo: no transpose here', kein_warp: 'That clip has no warp yet', offset_bei_warp: 'The clip is warped: use its offset in beats',
-  kein_tempo: 'The library has no tempo for this sample: it stays unwarped', warp_auto_neuer_clip: 'Auto-warp a new clip with its own clip_neu',
+  kein_tempo: 'No tempo found for this sample (no analysis, no Traktor grid, no bars, no library BPM): it stays unwarped', warp_auto_neuer_clip: 'Auto-warp a new clip with its own clip_neu',
   fade_zu_lang: 'The fades are longer than the clip', feld_nur_audio: 'That setting only exists on audio clips', beat_ausserhalb: 'That position is outside the clip',
   noten_unbekannt: 'That note no longer exists', id_belegt: 'That id is taken', projekt_ungueltig: 'The change would make the project invalid',
   // verlauf.ts und ablage.ts (S2): Verlauf und Ablage des Projekts
@@ -155,6 +176,38 @@ export function kernHinweis(kern) {
   if (kern?.regler === 'kein_kern') return 'Saved; the core is not running';
   return null;
 }
+// Slice 3a (T7): die Hinweise des Schreibwegs (`hinweise: [{index, hinweis}]` in der Antwort von clip_neu mit warp "auto" und warp_auto) waren auf der Seite stumm
+export const HINWEIS_TEXT = {
+  kein_tempo: FEHLER_TEXT.kein_tempo,
+  analyse_angefordert: 'Analysing the track in the background: the analysed warp replaces the current one when it arrives and the clip is not playing',
+  analyse_laeuft: 'The analysis of this track is already running',
+  karte_zu_gross: 'The beat map has more than 4096 markers: warped from the next source instead',
+  karte_unbrauchbar: 'The beat map of this track is not usable (a beat is out of range): warped from the next source instead',
+  // Slice 3b: Set 1.1.1 Here und sein Rückweg an die Analyse (D3)
+  eins_gemeldet: 'Bar one set. The correction is saved with the track: the decks use it too, and the next warp of this track starts there',
+  eins_nur_hier: 'Bar one set in this clip only: no correction written (the track is not in the deck stock, or this instance writes none)',
+  eins_rueckweg_fehler: 'Bar one set in this clip, but the correction could not be saved with the track',
+};
+export function hinweisMeldung(hinweise) {
+  if (!Array.isArray(hinweise) || hinweise.length === 0) return null;
+  const texte = [...new Set(hinweise.map((h) => HINWEIS_TEXT[h.hinweis] ?? `Note: ${h.hinweis}`))];
+  return { text: texte.join(' · '), fehler: hinweise.some((h) => h.hinweis === 'kein_tempo' || h.hinweis === 'eins_rueckweg_fehler') };
+}
+// Slice 3a: SSE {a: 'proj', f: {clip_id, analyse: 'wartet'|'laeuft'|'karte_bereit'|'fertig'|'fehler'|'verworfen', grund?}}. Die Seite lädt bei clip_id ohnehin nach
+// (ereignis); eine Meldung gibt es nur, wo der Nutzer etwas wissen muss: die Analyse ist gescheitert, die Karte ist da, aber der Clip klingt (D1: sie wartet), oder
+// die Karte kam, aber der Clip war inzwischen angefasst oder Cypher gestoppt
+export function analyseMeldung(f) {
+  if (f?.analyse === 'fehler') return { text: `Analysis failed${f.grund ? `: ${f.grund}` : ''}. The clip keeps its current warp`, fehler: true };
+  if (f?.analyse === 'karte_bereit') return { text: 'The analysis arrived. The clip is playing: the analysed warp replaces the current one as soon as the clip is not playing', fehler: false };
+  if (f?.analyse === 'verworfen' && f.grund === 'angefasst') return { text: 'The analysis arrived, but the clip was changed meanwhile: it stays as it is. Press WARP to use the analysis', fehler: false };
+  if (f?.analyse === 'verworfen' && f.grund === 'ki_gestoppt') return { text: 'The analysis arrived, but Stop Cypher is set: the clip stays as it is. Press WARP to use the analysis', fehler: false };
+  return null;
+}
+// Nach einem angenommenen Schreibzug (beiProjekt des Schreibers in bindeProduktion): der Kern-Hinweis hat Vorrang, sonst die Hinweise des Schreibwegs, sonst nichts
+export function meldeNachSchreiben(j, melde) {
+  const h = kernHinweis(j?.kern), m = hinweisMeldung(j?.hinweise);
+  if (h) melde(h, true); else if (m) melde(m.text, m.fehler);
+}
 // Text zu einer Antwort ohne Erfolg: ein 5xx ohne Grund ist „der Server antwortet nicht“, nie „Rejected: HTTP 503“. Gilt für den Schreibweg
 // und (V2 Fix F3) für FREEZE und EXPORT (freeze_export.js über ctx.antwortText)
 export const antwortText = (r) => fehlerText(serverWeg(r) && r.status !== 0 ? { j: { fehler: 'server_fehler' } } : r);
@@ -164,7 +217,7 @@ const merke = (k, v) => { try { localStorage.setItem(k, v); } catch { /* ohne Sp
 export function bindeProduktion({ post, bpm, stoebern, bibliothek = null, wurzel = document.querySelector('#produktion') }) {
   wurzel.innerHTML = GERUEST;
   const $ = (n) => wurzel.querySelector(`[data-p="${n}"]`);
-  const st = { slug: null, projekt: null, sichtbar: false, laeuft: false, arr: null, kopfBeat: null, start: 0, getrennt: false };
+  const st = { slug: null, projekt: null, sichtbar: false, laeuft: false, arr: null, kopfBeat: null, start: 0, getrennt: false, analyse: [], stems: null };
   window.djkProd = st;            // für die Browserprobe (lesen)
   window.djkProdBild = [];        // Zeichendauer je Bild in ms, Ring 600
   let meldeUhr = 0;
@@ -194,6 +247,7 @@ export function bindeProduktion({ post, bpm, stoebern, bibliothek = null, wurzel
   function setzeProjekt(slug, p) {
     if (slug !== null && slug === st.slug && st.projekt && p.rev < st.projekt.rev) return;
     const wechsel = slug !== st.slug;
+    if (wechsel) st.stems = stemsFuerProjekt(st.stems, slug);   // Projektwechsel: ein fremder Stand fällt weg
     st.slug = slug; st.projekt = p;
     if (slug !== null) ctx.schreiber.setze(slug, p.rev);
     $('leer').hidden = !!p;
@@ -205,8 +259,9 @@ export function bindeProduktion({ post, bpm, stoebern, bibliothek = null, wurzel
   // verbindet neu), lädt ereignis() neu. Nur eine Antwort des Servers leert die Ansicht (laden.js).
   const ladeAktuell = neuerLader({
     hole: () => holeGet('/proj/aktuell'),
-    uebernimm: (slug, p, j) => { ctx.uebernimm(slug, p); ctx.ausgabeLauf(j?.ausgabe_lauf ?? null); },   // V2 Fix F14: Lauf aus /proj/aktuell
-    leere: (j) => { setzeProjekt(null, null); ctx.ausgabeLauf(j?.ausgabe_lauf ?? null); },
+    uebernimm: (slug, p, j) => { st.analyse = Array.isArray(j?.analyse) ? j.analyse : []; st.stems = stemsFuerProjekt(j?.stems, slug);
+      ctx.uebernimm(slug, p); ctx.ausgabeLauf(j?.ausgabe_lauf ?? null); },   // Slice 3a: Analysen, Slice 6: stems
+    leere: (j) => { st.analyse = []; st.stems = null; setzeProjekt(null, null); ctx.ausgabeLauf(j?.ausgabe_lauf ?? null); },
     // 7b: OFFLINE setzt holeGet (merkeAntwort); ein 5xx mit Grund behält den Stand und zeigt den Text des Grunds
     beiWeg: (r) => melde(antwortText(r), true),
     beiDa: () => setzeGetrennt(false),
@@ -218,7 +273,10 @@ export function bindeProduktion({ post, bpm, stoebern, bibliothek = null, wurzel
   // Schreibweg: nacheinander, mit rev (Spec 3.4); 409 rev_veraltet lädt neu
   ctx.schreiber = neuerSchreiber({
     holeJson,
-    beiProjekt: (slug, p, rev, j) => { ctx.uebernimm(slug, p); const h = kernHinweis(j?.kern); if (h) melde(h, true); },
+    beiProjekt: (slug, p, rev, j) => {
+      ctx.uebernimm(slug, p);
+      meldeNachSchreiben(j, melde);
+    },
     // rev_veraltet: neu laden und das Promise zurückgeben, der Schreiber hält die Schlange bis der neue Stand gesetzt ist
     beiFehler: (a, r) => {
       melde(antwortText(r), true);
@@ -263,10 +321,21 @@ export function bindeProduktion({ post, bpm, stoebern, bibliothek = null, wurzel
   function verberge() { st.sichtbar = false; for (const h of ctx.beimSichtwechsel) h(false); }
   let standN = 0;
   function ereignis(a, f) {
+    // Slice 6 (D13): Stems-Meldungen {stems:{slug,clip_id,zustand,prozent,…}} tragen kein rev und kein f.slug. Stand merken, Ende melden, neu zeichnen;
+    // nachladen nur bei fertig (nachladenNoetig), nie bei einem Fortschritts-Tick. Die Haken (beimEreignis) lesen f.stems nicht.
+    // Ein Stand eines anderen Projekts wird ignoriert (Clip-ids kollidieren zwischen Projekten).
+    const se = a === 'proj' ? stemsEreignis(f, { slug: st.slug, sichtbar: st.sichtbar }, FEHLER_TEXT) : { behandelt: false };
+    if (se.behandelt) {
+      if (se.uebernimm) st.stems = se.stand;
+      if (se.meldung) melde(se.meldung.text, se.meldung.fehler);
+      if (se.nachladen) planeLaden();
+      return;
+    }
+    if (a === 'proj') { const m = analyseMeldung(f); if (m) melde(m.text, m.fehler); }   // Slice 3a: Analyse-Ereignisse mit Meldung
     // Das Anfangsbild 'stand' kommt bei jedem (Wieder-)Verbinden des Stroms: nach einem Ausfall den Stand neu holen
     if (a === 'stand') { standN++; if (st.sichtbar && (st.getrennt || standN > 1)) planeLaden(); }
     // Die eigene Änderung kommt als SSE vor der HTTP-Antwort: dafür nicht nachladen (die Antwort bringt den Stand)
-    if (a === 'proj' && st.sichtbar && !ctx.schreiber.istEigeneRev(f?.slug, f?.rev) && (f?.clip_id || f?.slug !== st.slug || f?.rev > (st.projekt?.rev ?? -1))) planeLaden();
+    if (nachladenNoetig(a, f, { sichtbar: st.sichtbar, slug: st.slug, rev: st.projekt?.rev, eigene: ctx.schreiber.istEigeneRev })) planeLaden();
     for (const h of ctx.beimEreignis) h(a, f);
   }
   setzeProjekt(null, null);

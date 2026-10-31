@@ -37,6 +37,10 @@ struct KernKonfig {
   // des gesperrten Speichers für Arrangement-Audio (zählt zugleich gegen speicher_budget_mib)
   std::string arr_ordner = "";
   int arr_budget_mib = 1024;
+  // 1.13 Slice 2 (ADR 031 Teil 2): Arbeitsfäden des Warp-Werks (COMPLEX, TONES), 1 bis 8; sie laufen unter den Keylock-Fäden (JACK − 6)
+  int warp_faeden = 4;
+  // Baukasten S3b: Arbeitsfäden der Baukasten-Graphen (ein Block Vorlauf), 0 bis 8; 0 rechnet im Callback. SCHED_FIFO JACK − 7
+  int graph_faeden = 2;
 };
 
 // Schlüssel mit TOML-Typ, wie §2.1 sie schreibt: "version", dann je Schlüssel "float", "int", "str", "Pfad", "bool"
@@ -44,7 +48,7 @@ struct KonfigSchluessel {
   const char* name;
   const char* typ;
 };
-extern const KonfigSchluessel KERN_SCHLUESSEL[21];
+extern const KonfigSchluessel KERN_SCHLUESSEL[23];
 
 class KonfigFehler : public std::runtime_error {
  public:

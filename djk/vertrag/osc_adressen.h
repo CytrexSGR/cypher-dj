@@ -159,6 +159,9 @@ static_assert(k_fx_zuweisung.typen.size() - 1 == k_fx_zuweisung.felder);
 // §4.10 /k/fx/routing ,hsi
 inline constexpr Adresse k_fx_routing{"/k/fx/routing", ",hsi", Richtung::an_kern, false, 3};
 static_assert(k_fx_routing.typen.size() - 1 == k_fx_routing.felder);
+// §4.10 /k/kanal/graph ,hsss
+inline constexpr Adresse k_kanal_graph{"/k/kanal/graph", ",hsss", Richtung::an_kern, false, 4};
+static_assert(k_kanal_graph.typen.size() - 1 == k_kanal_graph.felder);
 // §4.11 /k/arr/laden ,hsi
 inline constexpr Adresse k_arr_laden{"/k/arr/laden", ",hsi", Richtung::an_kern, false, 3};
 static_assert(k_arr_laden.typen.size() - 1 == k_arr_laden.felder);
@@ -285,6 +288,9 @@ static_assert(e_fx_routing.typen.size() - 1 == e_fx_routing.felder);
 // §5.13 /zustand/arr ,iiidhdif
 inline constexpr Adresse zustand_arr{"/zustand/arr", ",iiidhdif", Richtung::vom_kern, false, 8};
 static_assert(zustand_arr.typen.size() - 1 == zustand_arr.felder);
+// §5.13 /zustand/warp ,iiiii
+inline constexpr Adresse zustand_warp{"/zustand/warp", ",iiiii", Richtung::vom_kern, false, 5};
+static_assert(zustand_warp.typen.size() - 1 == zustand_warp.felder);
 // §5.14 /zustand/ein ,ihhhh
 inline constexpr Adresse zustand_ein{"/zustand/ein", ",ihhhh", Richtung::vom_kern, false, 5};
 static_assert(zustand_ein.typen.size() - 1 == zustand_ein.felder);
@@ -307,7 +313,7 @@ static_assert(test_hand.typen.size() - 1 == test_hand.felder);
 inline constexpr Adresse test_klick{"/test/klick", ",hssi", Richtung::an_kern, true, 4};
 static_assert(test_klick.typen.size() - 1 == test_klick.felder);
 
-inline constexpr std::array<Adresse, 95> alle{
+inline constexpr std::array<Adresse, 97> alle{
     k_hallo,
     k_tschuess,
     k_willkommen,
@@ -354,6 +360,7 @@ inline constexpr std::array<Adresse, 95> alle{
     k_fx,
     k_fx_zuweisung,
     k_fx_routing,
+    k_kanal_graph,
     k_arr_laden,
     k_arr_start,
     k_arr_stopp,
@@ -396,6 +403,7 @@ inline constexpr std::array<Adresse, 95> alle{
     e_fx_zuweisung,
     e_fx_routing,
     zustand_arr,
+    zustand_warp,
     zustand_ein,
     zustand_rec,
     e_aufnahme,
@@ -460,6 +468,7 @@ namespace k_loop_rec { enum : std::size_t { id = 0, quelle = 1, beats = 2, name 
 namespace k_fx { enum : std::size_t { id = 0, quelle = 1, einheit = 2, art = 3, beats = 4, wet = 5, param1 = 6, param2 = 7, param3 = 8, an = 9 }; }
 namespace k_fx_zuweisung { enum : std::size_t { id = 0, quelle = 1, einheit = 2, kanal = 3, an = 4 }; }
 namespace k_fx_routing { enum : std::size_t { id = 0, quelle = 1, routing = 2 }; }
+namespace k_kanal_graph { enum : std::size_t { id = 0, quelle = 1, kanal = 2, name = 3 }; }
 namespace k_arr_laden { enum : std::size_t { id = 0, quelle = 1, nr = 2 }; }
 namespace k_arr_start { enum : std::size_t { id = 0, quelle = 1, start_beat = 2, quant = 3 }; }
 namespace k_arr_stopp { enum : std::size_t { id = 0, quelle = 1, quant = 2 }; }
@@ -502,6 +511,7 @@ namespace e_fx { enum : std::size_t { einheit = 0, art = 1, beats = 2, wet = 3, 
 namespace e_fx_zuweisung { enum : std::size_t { einheit = 0, kanal = 1, an = 2 }; }
 namespace e_fx_routing { enum : std::size_t { routing = 0 }; }
 namespace zustand_arr { enum : std::size_t { nr = 0, status = 1, loop_an = 2, projekt_beat = 3, ursprung_sample = 4, start_beat = 5, metronom_an = 6, limiter_db = 7 }; }
+namespace zustand_warp { enum : std::size_t { stimmen = 0, unterlauf = 1, kein_platz = 2, spaet = 3, faeden = 4 }; }
 namespace zustand_ein { enum : std::size_t { verbunden = 0, midi_gesehen = 1, midi_verloren = 2, midi_sample = 3, flanke_sample = 4 }; }
 namespace zustand_rec { enum : std::size_t { status = 0, kennung = 1, scharf = 2, luecken = 3, projekt_beat = 4 }; }
 namespace e_aufnahme { enum : std::size_t { spur = 0, kennung = 1, status = 2, frames = 3, start_sample = 4, luecken = 5 }; }
@@ -585,6 +595,7 @@ enum class Form : std::int32_t { linear = 0, s_kurve = 1 };
 inline constexpr std::array<double, 5> raster_beats{0.25, 1.0, 4.0, 16.0, 32.0};
 inline constexpr std::array<double, 7> fx_beats{0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0};
 inline constexpr std::array<std::string_view, 8> fx_kanal{"deck/1", "deck/2", "erz/1", "erz/2", "erz/3", "pad/1", "pad/2", "master"};
+inline constexpr std::array<std::string_view, 4> graph_kanal{"deck/1", "deck/2", "deck/3", "deck/4"};
 enum class RollArt : std::int32_t { band_schatten = 0, puffer_keylock = 1 };
 inline constexpr std::array<std::string_view, 1> urteil{"ok"};
 enum class LedZustand : std::int32_t { aus = 0, an = 1, blinkt = 2, blinkt_schnell = 3 };
@@ -598,7 +609,7 @@ inline constexpr std::array<std::string_view, 17> taste{"annehmen", "verwerfen",
 inline constexpr std::array<std::string_view, 3> invariante_art{"sub_doppelt", "master_leer", "hoerschein"};
 inline constexpr std::array<std::string_view, 3> protokollfehler_grund{"unbekannte_adresse", "falsche_typen", "protokoll"};
 enum class NbZustand : std::int32_t { durchreichen = 0, schleife = 1, ausgeblendet = 2, rueckgabe = 3 };
-inline constexpr std::array<std::string_view, 54> gruende{"zu_spaet", "regler_beim_menschen", "regler_verplant", "ueberlappung", "nur_hand", "unbekannter_regler", "unbekanntes_deck", "ausserhalb_bereich", "kein_hoerschein", "hoerschein_anderer_kanal", "hoerschein_anderer_inhalt", "hoerschein_anderes_tempo", "hoerschein_abgelaufen", "hoerschein_anderer_abschnitt", "ziel_ungehoert", "keine_stems", "hoerschein_nicht_sync", "hoerschein_pegel", "invariante_sub_doppelt", "invariante_master_leer", "deck_beruehrt", "deck_hoerbar", "deck_laeuft", "nicht_geladen", "material_fehlt", "pruefung", "budget_speicher", "budget_stretcher", "karte_voll", "tempo_rampe", "ki_gestoppt", "rechner_fehlt", "kein_stretcher", "autonomie", "form", "hand", "abbruch", "ki_stopp", "unbekannte_adresse", "falsche_typen", "protokoll", "grenze_sub", "neustart", "datei_fehlt", "format", "audio_fehlt", "zu_gross", "spur_bereich", "reserviert", "kein_eingang", "aufnahme_laeuft", "zu_viele_scharf", "eingang_fehlt", "kein_platz"};
+inline constexpr std::array<std::string_view, 55> gruende{"zu_spaet", "regler_beim_menschen", "regler_verplant", "ueberlappung", "nur_hand", "unbekannter_regler", "unbekanntes_deck", "ausserhalb_bereich", "kein_hoerschein", "hoerschein_anderer_kanal", "hoerschein_anderer_inhalt", "hoerschein_anderes_tempo", "hoerschein_abgelaufen", "hoerschein_anderer_abschnitt", "ziel_ungehoert", "keine_stems", "hoerschein_nicht_sync", "hoerschein_pegel", "invariante_sub_doppelt", "invariante_master_leer", "deck_beruehrt", "deck_hoerbar", "deck_laeuft", "nicht_geladen", "material_fehlt", "pruefung", "budget_speicher", "budget_stretcher", "karte_voll", "tempo_rampe", "ki_gestoppt", "rechner_fehlt", "kein_stretcher", "autonomie", "form", "hand", "abbruch", "ki_stopp", "unbekannte_adresse", "falsche_typen", "protokoll", "grenze_sub", "neustart", "datei_fehlt", "format", "audio_fehlt", "zu_gross", "spur_bereich", "reserviert", "kein_eingang", "aufnahme_laeuft", "zu_viele_scharf", "eingang_fehlt", "kein_platz", "warp_maschine_fehlt"};
 }  // namespace werte
 
 }  // namespace cypherdj::osc

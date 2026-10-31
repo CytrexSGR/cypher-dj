@@ -66,10 +66,16 @@ struct Ordner {
                   id, start, laenge, sha.c_str(), pfad.c_str(), sha.c_str(), (long long)frames, (long long)offset, gain_db);
     return b;
   }
-  // Paket 1.13: Clip mit Warp (RE-PITCH, Modus 0); marker = Paare (Clip-Beat, Quell-Frame)
+  // Paket 1.13: Clip mit Warp; marker = Paare (Clip-Beat, Quell-Frame); modus: 0 repitch, 2 complex, 3 tones; pitch (Slice 5): nur geschrieben, wenn != 1
   std::string clip_warp(const char* id, double start, double laenge, const std::string& sha, int64_t frames,
-                        const std::vector<std::pair<double, double>>& marker, double gain_db = 0.0) const {
-    std::string w = ",\"warp\":{\"modus\":0,\"w\":[";
+                        const std::vector<std::pair<double, double>>& marker, double gain_db = 0.0, int modus = 0, double pitch = 1.0) const {
+    std::string w = ",\"warp\":{\"modus\":" + std::to_string(modus);
+    if (pitch != 1.0) {
+      char pz[48];
+      std::snprintf(pz, sizeof pz, ",\"pitch\":%.17g", pitch);
+      w += pz;
+    }
+    w += ",\"w\":[";
     char z[96];
     for (size_t i = 0; i < marker.size(); ++i) {
       std::snprintf(z, sizeof z, "%s[%.17g,%.17g]", i ? "," : "", marker[i].first, marker[i].second);

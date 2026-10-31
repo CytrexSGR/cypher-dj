@@ -38,7 +38,7 @@ void bericht(const char* lage, std::vector<double>& us) {
 }
 
 // Median der Lage; -1 bei Fehler
-double lage(const char* name, bool warp, bool rampe, int zyklen) {
+double lage(const char* name, bool warp, bool rampe, int zyklen, bool beats = false) {
   Treiber t;
   if (rampe) t.k.rampe(8.0, 140.0, 16.0);
   std::vector<std::unique_ptr<Audio>> quellen;
@@ -46,7 +46,15 @@ double lage(const char* name, bool warp, bool rampe, int zyklen) {
   for (int sp = 1; sp <= 32; ++sp) {
     quellen.push_back(Audio::sinus(40 * FPB, 110.0 + 13.0 * sp, 0.03f));   // 32 verschiedene Töne, je eine eigene Datei im Speicher
     b.spur(sp, ArrArt::audio).clip(sp, ("k" + std::to_string(sp)).c_str(), 0.0, 1000.0, &quellen.back()->a);
-    if (warp) b.warp({0.0, 40.0}, {0.0, 40.0 * static_cast<double>(FPB)});
+    if (warp) b.warp({0.0, 40.0}, {0.0, 40.0 * static_cast<double>(FPB)}, beats ? 1 : 0);
+    if (beats) {   // Slice 4: Einheiten 1/16 (640 auf 40 Beats), Lücke vor, Hülle 100
+      std::vector<double> eb, ef;
+      for (int u = 0; u < 640; ++u) {
+        eb.push_back(u * 0.25);
+        ef.push_back(static_cast<double>(u * (FPB / 4)));
+      }
+      b.beats(eb, ef, 1, 100);
+    }
   }
   t.laden(b.fertig());
   t.arr.loop(true, 0.0, 32.0, t.s, t.k);   // 32 Beats = 15 s; die Quellen sind 40 Beats lang, die Stimmen starten an jeder Naht neu
@@ -86,7 +94,9 @@ int main(int argc, char** argv) {
   const double ohne = lage("ohne", false, false, n);
   const double rp = lage("rp", true, false, n);
   const double rampe = lage("rp_rampe", true, true, n);
-  if (ohne < 0 || rp < 0 || rampe < 0) return 2;
-  std::printf("Zuwachs gegen ohne: rp %.1f µs, rp_rampe %.1f µs (Median)\n", rp - ohne, rampe - ohne);
+  const double be = lage("beats", true, false, n, true);          // Slice 4
+  const double be_r = lage("beats_rampe", true, true, n, true);
+  if (ohne < 0 || rp < 0 || rampe < 0 || be < 0 || be_r < 0) return 2;
+  std::printf("Zuwachs gegen ohne: rp %.1f µs, rp_rampe %.1f µs, beats %.1f µs, beats_rampe %.1f µs (Median)\n", rp - ohne, rampe - ohne, be - ohne, be_r - ohne);
   return 0;
 }

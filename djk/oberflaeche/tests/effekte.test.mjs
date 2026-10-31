@@ -4,7 +4,20 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { kennlinie, kennlinienPfad, KOMP_PRESETS, AUTO_BEREICH, punktAusStelle, fxInhaltText } from '../oeffentlich/effekte.js';
 import { AUTO_BEREICH as SERVER_AUTO, pruefeAutomation } from '../loop_automation.ts';
-import { AUTO_VORLAGEN, vorlagePunkte } from '../oeffentlich/effekte.js';
+import { AUTO_VORLAGEN, vorlagePunkte, knobListe, KNOB_GRUPPE, htmlText } from '../oeffentlich/effekte.js';
+
+test('Baukasten S2 knobListe: nur gemeldete Knobs, Namen aus dem Graphen, sonst „Knob n“; Surge ohne Knobs → leer', () => {
+  const l = knobListe({ Volume: 0.75, 'Knob 1': 0.25, 'Knob 2': 1.5, 'Knob 8': 0 }, { 'Knob 1': 'Cutoff' });
+  assert.deepEqual(l, [
+    { nr: 1, param: 'Knob 1', name: 'Cutoff', wert: 0.25 },
+    { nr: 2, param: 'Knob 2', name: 'Knob 2', wert: 1 },
+    { nr: 8, param: 'Knob 8', name: 'Knob 8', wert: 0 },
+  ]);
+  assert.deepEqual(knobListe({ volume: -12, a_filter1_cutoff: 0.4 }), []);
+  assert.deepEqual(knobListe(undefined), []);
+  assert.deepEqual(knobListe({ 'Knob 3': 'x', 'Knob 4': NaN }), []);
+  assert.deepEqual(KNOB_GRUPPE, { 'erz/2': 'bass', 'erz/3': 'melodie' });
+});
 
 test('Kennlinie: unter dem Knie unverändert, darüber 1/R, Knie stetig (Werte wie komp_dsp/tests/komp.rs)', () => {
   assert.equal(kennlinie(-40, -20, 4, 10), -40);
@@ -65,4 +78,10 @@ test('Automations-Vorlagen: jede passt zu ihrem Ziel und besteht die Prüfung de
   assert.ok(n > 200);
   // Gegenprobe: ein Wert außerhalb des Bereichs fällt durch
   assert.ok('fehler' in pruefeAutomation([{ pfad: 'send/2', punkte: vorlagePunkte({ punkte: [[0, -70]] }, 8) }], 8));
+});
+
+test('Baukasten S2 htmlText: Knob-Namen aus der Graphdatei gehen als Text, nicht als HTML auf die Seite (Review F2)', () => {
+  assert.equal(htmlText('<img src=x onerror=alert(1)>'), '&lt;img src=x onerror=alert(1)&gt;');
+  assert.equal(htmlText(`a"b'c&d`), 'a&quot;b&#39;c&amp;d');
+  assert.equal(htmlText('Cutoff'), 'Cutoff');
 });

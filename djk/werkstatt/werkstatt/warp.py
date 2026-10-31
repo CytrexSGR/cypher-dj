@@ -9,7 +9,7 @@ Stimmungskorrektur laeuft im selben Aufruf (-p in Halbtoenen, §12.3)."""
 import os
 import re
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 import numpy as np
 import soundfile as sf
@@ -81,9 +81,31 @@ def timemap(karte, basis_bpm, quell_frames, abstand_beats=ANKER_ABSTAND_BEATS):
     return Timemap(quelle[i], ziel[i], erster, ende)
 
 
+def vorlauf_frames(karte):
+    """Frames Stille vor der Quelle, damit quell_beat 0 nicht vor dem Dateianfang liegt (Randtempo wie in timemap).
+    580de55457b9bbba (2026-10-30): erster Schlag 14 ms vor dem Anfang, auf 0 geklemmt; die Phasenkorrektur um −9,2 ms
+    legte ihn wieder davor, timemap lehnte ab. 0, wenn er im Signal liegt."""
+    s = np.asarray(karte.sekunden, dtype=float)
+    q = np.asarray(karte.beats, dtype=float)
+    null_s = s[0] - q[0] * (s[1] - s[0]) / (q[1] - q[0])
+    return 0 if null_s >= 0 else int(np.ceil(-null_s * SR))
+
+
+def karte_mit_vorlauf(karte, frames):
+    """Dieselbe Karte, um `frames` Stille vorn verschoben (die Quelle bekommt dieselben Frames vorangestellt)."""
+    if frames == 0:
+        return karte
+    return replace(karte, sekunden=np.asarray(karte.sekunden, dtype=float) + frames / SR)
+
+
 def schreibe_timemap(tm, pfad):
+    # Ohne den Anker (0, 0): rubberband -3 --timemap verschiebt damit die ganze Ausgabe (Klickspur 130 -> 128: -15,3 ms,
+    # 124 -> 128: +31,1 ms; Queen of Pain 4282cd99, erster Schlag auf 0 geklemmt: Kick im Deck 20 ms vor dem Raster,
+    # gemessen 2026-10-29). Der Anfang geht ohnehin 0 -> 0.
     with open(pfad, "w") as f:
         for a, b in zip(tm.quelle, tm.ziel):
+            if a == 0 and b == 0:
+                continue
             f.write(f"{int(a)} {int(b)}\n")
 
 

@@ -179,7 +179,7 @@ export class DekodierCache {
     const code = await new Promise<number | null>((ok) => { kind.once('error', () => ok(-1)); kind.once('exit', (c) => ok(c)); });
     clearTimeout(limit);
     if (abgelaufen) return 'zeitlimit';
-    const n = Number(aus.trim().split('\n')[0]);
+    const n = Number(/^\s*(\d+)/.exec(aus)?.[1]);   // führende Zahl: csv hängt bei Seitendaten (ReplayGain) ein Komma an ("2,")
     return code === 0 && Number.isInteger(n) && n >= 1 ? n : null;
   }
 }

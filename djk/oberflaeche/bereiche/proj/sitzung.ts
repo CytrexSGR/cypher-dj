@@ -14,16 +14,23 @@ import type { BereichKontext } from '../../http/router.ts';
 import { Katalog, type Zeile } from '../../katalog.ts';
 import { Projekte, projektWurzelVorgabe } from '../../projekt/ablage.ts';
 import { fuehreListeAus, setzeDekodiert, vergleiche } from '../../projekt/befehle.ts';
+import { TransientenLager } from '../../projekt/transienten.ts';
 import { DekodierCache, type DekodierEreignis } from '../../projekt/dekodier.ts';
 import { MAX_BEAT, kanonisch, sucheClip, type AudioClip, type DekodiertZustand, type Projekt, type Warp } from '../../projekt/modell.ts';
 import { PatchFehler, wende } from '../../projekt/patch.ts';
-import { autoWarp, quellSekunde, segmentBpm, type TempoQuelle } from '../../projekt/warp.ts';
+import {
+  WarpFehler, abHierStart, autoWarp, beatBeiQuelle, fensterTempo, handWarp, quantisiere, quellSekunde, segmentBpm, type TempoQuelle,
+} from '../../projekt/warp.ts';
 import { aendere, rueckgaengig, wiederholen, type Haken, type Meta, type Verlauf, type Wirkung } from '../../projekt/verlauf.ts';
 import { WiedergabeFehler, WiedergabeZaehler, schreibeWiedergabe, uebersetze, wiedergabeDatei } from '../../projekt/wiedergabe.ts';
 import { ERZ4_NUR_HAND, alleRegler, erz4Soll, istMixerRegler, reglerZuBefehl, type Soll } from './abbildung.ts';
 import { arrOrdner, zaehlerDateiVorgabe } from './konfig.ts';
 import { grundText } from '../../http/gruende.ts';
 import { KernLage } from './lage.ts';
+import { leseKarte, leseTraktor, schreibeEinsKorrektur } from './quellen.ts';
+import { AnalyseListe, type AnalyseEintrag, type AnalyseEnde, type AnalyseStarter, type Anforderung, type Wunsch } from './analyse.ts';
+import { ankunftBefehle, brauchtAnalyse, klingtGerade } from '../../projekt/warp_analyse.ts';
+import { analyseVorgabe } from '../../pfade.ts';
 import { KernWeg, quittungAbgelehnt, quittungOk, type Quelle, type Quittung, type ReglerErgebnis } from './kern_weg.ts';
 
 export class ProjFehler extends Error {
@@ -42,6 +49,11 @@ export interface ProjOptionen {
                                // arbeitsordner `<arbeitsordner>.zaehler` (je Ordner eine, Test-Server teilen nie eine Datei), sonst
                                // ~/.local/state/cypherdj[-<i>]/wiedergabe-zaehler
   katalog?: string;            // katalog.sqlite (Audio-Quellen nur über den Katalog, Spec 2.11)
+  analyse?: string | null;      // Slice 3a: Analyse-Ablage (Karten); null = aus; Vorgabe nur im Betrieb (pfade.ts analyseVorgabe)
+  mediathek?: string | null;    // Slice 3a: mediathek.sqlite, daraus die Traktor-Raster (Tabelle marke); null/fehlt = keine
+  bestand?: string | null;      // Slice 3b: Bestand des Decks (bestand/<sha[:16]>/): Eins-Korrekturen lesen, Set 1.1.1 Here zurückschreiben; null = aus
+  analysierer?: AnalyseStarter | null;   // Slice 3a: startet die Analyse auf Abruf (server.ts: WerkstattAnalyse); fehlt oder null = keine Aufträge
+  analyseWarteMs?: number;   // Slice 3a: Abstand der Wiederholung der Ankunft, solange ein Freeze die Wiedergabe sperrt oder der Clip klingt (Vorgabe 2000)
   ffmpeg?: string[]; ffprobe?: string[]; vorsatz?: string[];   // Dekodier-Cache (Tests)
   arrFristMs?: number;         // P2: so lange wartet oeffne auf /zustand/arr, wenn der Server den Kern-Stand noch nicht kennt (Vorgabe 600 ms)
   rampeWarteMs?: number;       // höchstens so lange wartet ein Transport-Start auf das Ende der Tempo-Rampe (Vorgabe 20 s)
@@ -57,11 +69,12 @@ type Koerper = Record<string, unknown>;
 interface Hinweis { index: number; hinweis: string }                // Paket 1.13: z. B. kein_tempo (Auto-Warp fand kein Tempo)
 
 const schlaf = (ms: number): Promise<void> => new Promise((ok) => setTimeout(ok, ms));
+const MARKER_TOLERANZ_S = 0.05;   // Rundung zwischen Katalog-Dauer und Dekodierung
 // Flache Kopie für proj_lage: MIDI-Clips tragen noten_zahl statt noten, alles andere wird geteilt (nur lesen, nicht verändern)
 // Paket 1.13: ein Audio-Clip zeigt seinen Warp ohne Marker-Liste (marker_zahl; die Marker liest proj_warp)
 const warpKurz = (w: Warp): unknown => {
   const { marker, ...rest } = w;
-  return { ...rest, marker_zahl: marker.length };
+  return { ...rest, eins_unsicher: w.eins_unsicher === true, marker_zahl: marker.length };   // Slice 3a: eins_unsicher ist ein festes Feld (auch false)
 };
 const ohneNoten = (p: Projekt): unknown => ({ ...p, spuren: p.spuren.map((s) => ({ ...s, clips: s.clips.map((c) => {
   if (c.art === 'audio') return c.warp ? { ...c, warp: warpKurz(c.warp) } : c;
@@ -88,15 +101,34 @@ function gegenprobe(c: AudioClip, bei: number): { projekt_beat: number; quell_s:
   return { projekt_beat: bei, quell_s: quellSekunde(w.marker, w.versatz_beats + lokal) };
 }
 
+// Slice 3a (T13): Vorgabe des Werkzeugs proj_warp. 200 Marker · 86 Byte = 17 KB; die ganze Liste einer Karte (bis 4096) wären 359 KB in Cyphers Kontext.
+export const MARKER_VORGABE = 200;
+export const TRANSIENTEN_VORGABE = 4096;   // Slice 4: transienten_max, höchstens TRANSIENTEN_MAX
+export const TRANSIENTEN_MAX = 32768;
+const rund2 = (x: number): number => Math.round(x * 100) / 100;
+function tempoUebersicht(m: readonly (readonly [number, number])[]): { mittel_bpm: number; min_bpm: number; max_bpm: number } {
+  let min = Infinity, max = -Infinity;
+  for (let i = 0; i + 1 < m.length; i++) { const b = segmentBpm(m, i); if (b < min) min = b; if (b > max) max = b; }
+  return { mittel_bpm: rund2(60 * (m[m.length - 1][1] - m[0][1]) / (m[m.length - 1][0] - m[0][0])), min_bpm: rund2(min), max_bpm: rund2(max) };
+}
+
 export class ProjSitzung {
   readonly lage = new KernLage();
   readonly arbeitsordner: string;
+  private readonly transientenLager: TransientenLager;     // Slice 4: Transienten je Quelle (Quellsekunden), für BEATS und proj_warp
+  private readonly transienten = (sha: string): number[] | null => this.transientenLager.fuer(sha);
   private readonly ctx: BereichKontext;
   private readonly kern: KernWeg;
   private readonly projekte: Projekte;
   private readonly cache: DekodierCache;
   private readonly zaehler: WiedergabeZaehler;
   private readonly katalog: Katalog | null;
+  private readonly analyse: string | null;
+  private readonly mediathekPfad: string | null;
+  private readonly bestand: string | null;
+  private readonly analysen: AnalyseListe | null;
+  private readonly analyseWarteMs: number;
+  private readonly analyseGescheitert = new Set<string>();   // D1: shas, deren Analyse scheiterte oder keine Karte brachte (bis zum Neustart)
   private readonly arrFristMs: number;
   private readonly rampeWarteMs: number;
   private readonly uhrStillMs: number;
@@ -111,6 +143,7 @@ export class ProjSitzung {
   private sperrenAufnahme = 0;   // 1.8: davon die Sperre der Aufnahme (höchstens eine; sie darf den eigenen Transport-Start)
   private aufnahmeLauf: unknown = null;   // 1.8: laufende Aufnahme (sperrt Tempo-Änderungen)
   private oeffnet = 0;          // Spec 6.32: laufende /proj/oeffnen und /proj/neu (in der Kette); solange > 0 lehnt sperreLaden() ab
+  private stemsStand: Record<string, unknown> | null = null;   // Slice 6 (P6): letzter Stems-Stand, GET /proj/aktuell stems
   private ausgabeLauf: AusgabeLauf | null = null;   // Spec 6.34: laufender Freeze oder Export (Paket S3), GET /proj/aktuell ausgabe_lauf
 
   constructor(ctx: BereichKontext, opt: ProjOptionen = {}) {
@@ -124,7 +157,17 @@ export class ProjSitzung {
     this.zaehler = new WiedergabeZaehler(this.arbeitsordner, zaehlerDatei);
     this.cache = new DekodierCache(this.arbeitsordner, { ffmpeg: opt.ffmpeg, ffprobe: opt.ffprobe, vorsatz: opt.vorsatz,
       bei: (e) => this.dekodiertEreignis(e) });
+    this.transientenLager = new TransientenLager(path.join(this.arbeitsordner, 'audio'));
     this.katalog = opt.katalog ? new Katalog(opt.katalog) : null;
+    this.analyse = opt.analyse !== undefined ? opt.analyse : analyseVorgabe(instanz);
+    this.mediathekPfad = opt.mediathek ?? null;
+    this.bestand = opt.bestand ?? null;
+    this.analyseWarteMs = opt.analyseWarteMs ?? 2000;
+    // Die Meldung läuft ohne neue rev: die Seite lädt bei clip_id nach (produktion.js)
+    this.analysen = this.analyse && opt.analysierer
+      ? new AnalyseListe(opt.analysierer, (sha, ei, ende) => this.analyseEnde(sha, ei, ende),
+        (w, status) => this.ctx.verteile({ a: 'proj', f: { clip_id: w.clip_id, analyse: status } }))
+      : null;
     this.arrFristMs = opt.arrFristMs ?? 600;
     this.rampeWarteMs = opt.rampeWarteMs ?? 20_000;
     this.uhrStillMs = opt.uhrStillMs ?? 1000;
@@ -165,7 +208,11 @@ export class ProjSitzung {
     if (!o) return { code: 200, j: { slug: null, projekt: null, kern: null, ...lauf } };
     const a = this.lage.arr;
     const projekt = ansicht === 'noten_zahl' ? ohneNoten(o.projekt) : o.projekt;
-    return { code: 200, j: { slug: o.slug, projekt, kern: { rev_geladen: a ? a.nr : null, status: a ? a.status : null }, ...lauf } };
+    // Slice 3a (T8): laufende Analysen dieses Projekts, flüchtig (nie im Projekt); nur wenn welche laufen, damit sich sonst nichts an der Antwort ändert
+    const an = this.analysen?.stand(o.slug) ?? [];
+    const kern = { rev_geladen: a ? a.nr : null, status: a ? a.status : null };
+    return { code: 200, j: { slug: o.slug, projekt, kern, ...lauf, ...(an.length ? { analyse: an } : {}),
+      ...(this.stemsStand && this.stemsStand.slug === o.slug ? { stems: this.stemsStand } : {}) } };
   }
   // zeit in Millisekunden seit 1970 (Festlegung V1, Seite rechnet damit), volle Liste
   verlaufListe(): Antwort {
@@ -175,7 +222,9 @@ export class ProjSitzung {
 
   // Paket 1.13 (proj_warp): der Warp eines Audio-Clips mit Marker-Liste, Segment-Tempo und der Gegenprobe W(bei_beat). Beats in der Antwort:
   // beat = Clip-Beat des Markers, projekt_beat = wo er im ersten Durchlauf des Clips liegt; von_beat, bis_beat und bei_beat sind Projekt-Beats.
-  warpLage(clipId: string | null, von: number | null, bis: number | null, bei: number | null): Antwort {
+  // Slice 3a: höchstens max (Vorgabe MARKER_VORGABE) Marker, die Antwort sagt marker_zahl (im Clip), marker_gezeigt und weiter_ab_projekt_beat.
+  warpLage(clipId: string | null, von: number | null, bis: number | null, bei: number | null, max: number | null = null,
+    transMax: number | null = null, quelleGanz = false): Antwort {
     const o = this.brauchOffen();
     if (!clipId) throw new ProjFehler(400, 'argument_ungueltig', { text: 'clip_id: an audio clip id is required' });
     const g = sucheClip(o.projekt, clipId);
@@ -183,13 +232,28 @@ export class ProjSitzung {
     if (g.clip.art !== 'audio') throw new ProjFehler(409, 'feld_nur_audio');
     const c = g.clip, w = c.warp;
     if (!w) return { code: 200, j: { clip_id: c.id, start_beat: c.start_beat, laenge_beats: c.laenge_beats, warp: null } };
-    const m = w.marker;
-    const marker = m.map(([quellS, beat], i) => ({ quell_s: quellS, beat, projekt_beat: c.start_beat + beat - w.versatz_beats,
+    const m = w.marker, grenze = max ?? MARKER_VORGABE;
+    const passend = m.map(([quellS, beat], i) => ({ quell_s: quellS, beat, projekt_beat: c.start_beat + beat - w.versatz_beats,
       segment_bpm: i + 1 < m.length ? segmentBpm(m, i) : null }))
       .filter((x) => (von === null || x.projekt_beat >= von) && (bis === null || x.projekt_beat <= bis));
+    const marker = passend.slice(0, grenze);
+    // Slice 4: Transienten der Quelle (Quellsekunden). transienten_zahl = im Bereich des Clips (die Länge einer Kopie), null = Quelle nicht
+    // dekodiert; transienten = die im Fenster von_beat..bis_beat (Projekt-Beats der ersten Kopie), gedeckelt durch transienten_max
+    const tAlle = this.transientenLager.fuer(c.quelle.sha256);
+    const bereichEnde = w.versatz_beats + (c.loop_beats ?? c.laenge_beats);
+    const tBereich = tAlle === null ? null : tAlle.filter((q) => { const b = beatBeiQuelle(m, q); return b >= w.versatz_beats && b < bereichEnde; });
+    const tFenster = (tBereich ?? []).filter((q) => {
+      const pb = c.start_beat + beatBeiQuelle(m, q) - w.versatz_beats;
+      return (von === null || pb >= von) && (bis === null || pb <= bis);
+    });
+    // quelleGanz (Schlussrunde): alle Transienten der Quelle, ohne Marker, Bereich und Fenster; der Editor bildet sie selbst über seine aktuellen Marker ab
+    const tGezeigt = (quelleGanz ? tAlle ?? [] : tFenster).slice(0, transMax ?? TRANSIENTEN_VORGABE);
     const { marker: _alle, ...kopf } = w;
     return { code: 200, j: { clip_id: c.id, start_beat: c.start_beat, laenge_beats: c.laenge_beats,
-      warp: { ...kopf, eins_unsicher: w.eins_unsicher === true, marker_zahl: m.length, marker },
+      warp: { ...kopf, eins_unsicher: w.eins_unsicher === true, marker_zahl: m.length, marker_gezeigt: marker.length,
+        transienten_zahl: tBereich === null ? null : tBereich.length, transienten: tGezeigt, transienten_gezeigt: tGezeigt.length,
+        ...(passend.length > grenze ? { weiter_ab_projekt_beat: passend[grenze].projekt_beat } : {}),
+        tempo: tempoUebersicht(m), erster_marker: { quell_s: m[0][0], beat: m[0][1] }, marker },
       ...(bei === null ? {} : { bei: gegenprobe(c, bei) }) } };
   }
 
@@ -265,6 +329,7 @@ export class ProjSitzung {
   private async schliesseOffen(quelle: Quelle): Promise<void> {
     const o = this.offen;
     if (!o) return;
+    for (const h of this.schliessHaken) try { h(o.slug); } catch (e) { this.ctx.log({ typ: 'proj_schliess_haken_fehler', fehler: (e as Error).message }); }
     this.rueckwegSpeichern();                                            // Spec 6.30: wartende Rückweg-Werte gehören diesem Projekt
     if (this.lage.arr && (this.lage.arr.status === 1 || this.lage.arr.status === 2)) await this.kern.stopp(quelle);
     this.rueckwegSpeichern();                                            // Spec 6.31: auch, was während des Stopps kam (nach dem letzten await)
@@ -274,6 +339,7 @@ export class ProjSitzung {
   }
   // Beim Beenden des Servers: ausstehenden Mixer-Eintrag schreiben, Sperre freigeben
   schliesse(): void {
+    this.analysen?.stoppe();
     if (this.rueckwegTimer) { clearTimeout(this.rueckwegTimer); this.rueckwegTimer = null; }
     this.rueckwegSpeichern();
     const o = this.offen;
@@ -330,7 +396,7 @@ export class ProjSitzung {
     if (!befehle.length) return 0;
     const meta = { quelle: 'andreas' as const, label: 'Mixer nach Wiederanlauf' };
     try {
-      const w = aendere(o.verlauf, o.projekt, befehle as never, meta, this.haken(o));
+      const w = aendere(o.verlauf, o.projekt, befehle as never, meta, this.haken(o), { transienten: this.transienten });
       if (!w.eintrag) return 0;
       w.projekt.wiedergabe_rev = o.projekt.wiedergabe_rev;
       o.projekt = w.projekt;
@@ -357,7 +423,7 @@ export class ProjSitzung {
     let w;
     try {
       // Spec 6.14, 6.29: freeze.datei ist relativ zum Arbeitsordner
-      w = uebersetze(p, { nr, audioOrdner: path.join(this.arbeitsordner, 'audio'), frames: (sha) => this.cache.frames(sha),
+      w = uebersetze(p, { nr, audioOrdner: path.join(this.arbeitsordner, 'audio'), frames: (sha) => this.cache.frames(sha), transienten: this.transienten,
         arbeitsordner: this.arbeitsordner });
     } catch (e) {
       if (e instanceof WiedergabeFehler) {
@@ -398,6 +464,16 @@ export class ProjSitzung {
     }
     return hinweis && fs.existsSync(hinweis) ? hinweis : null;
   }
+  // Welle der Seite (S6 Task 14): Pfad einer sha, die ein Audio-Clip des offenen Projekts trägt (Stems, Takes). Der Pfad kommt aus dem
+  // Projekt, nie aus der Anfrage; eine sha ohne Clip im offenen Projekt gibt null.
+  projektQuellPfad(sha: string): string | null {
+    const o = this.offen;
+    if (!o) return null;
+    for (const s of o.projekt.spuren) for (const c of s.clips) {
+      if (c.art === 'audio' && c.quelle.sha256 === sha) return this.quellPfad(sha, c.quelle.pfad_hinweis);
+    }
+    return null;
+  }
   // Setzt dekodiert aller Audio-Clips (ohne rev, Spec 6.6) und fordert fehlende Dekodierungen an. fehlerNeu: auch Fehlgeschlagene neu versuchen.
   private gleicheDekodiertAb(p: Projekt, fehlerNeu: boolean): boolean {
     let anders = false;
@@ -428,25 +504,100 @@ export class ProjSitzung {
   }
 
   // --- ändern -----------------------------------------------------------------------------------------------------------
+  // Slice 3a: die Tempo-Angaben des Katalogs plus die Werkstatt-Karte zur sha des Clips; die Dauer fällt auf die der Karte zurück, wenn der Katalog keine hat
+  private tempoQuelleFuer(z: Zeile, sha: string): TempoQuelle {
+    const k = leseKarte(this.analyse, sha, this.bestand);
+    // auch bei einer Karte: sie kann unbrauchbar sein (karten_hinweis)
+    const t = z.typ === 'track' || z.typ === 'loop' ? leseTraktor(this.mediathekPfad, sha) : null;
+    return { typ: z.typ, bpm: z.bpm, takte: z.takte, dauer_s: z.dauer_s ?? k?.dauer_s ?? null, instrument: z.instrument, kategorie: z.kategorie,
+      ...(k ? { karte: k.karte } : {}), ...(t ? { traktor: t } : {}) };
+  }
   // Audio-Clips nur aus dem Katalog (Spec 2.11): sha256 → Pfad; Ableton-geschützt, Datei fehlt, unbekannt werden abgelehnt.
-  // Paket 1.13: dasselbe Wissen löst den Auto-Warp auf. clip_neu mit warp 'auto' bekommt aus dem Katalogeintrag (Typ, BPM, Takte, Dauer) den
-  // Warp und die Länge in Beats (laenge_beats des Aufrufers ist dann nur der Rückfall für Typen und Einträge ohne Tempo, ein Hinweis
-  // kein_tempo meldet den Fall); warp_auto auf einem vorhandenen Clip wird zu warp_setzen mit dem Warp aus dem Katalog (Länge bleibt).
-  private loeseQuellenAuf(befehle: unknown[], projekt: Projekt): { befehle: unknown[]; quellen: Map<string, string>; hinweise: Hinweis[] } {
+  // Paket 1.13: dasselbe Wissen löst den Auto-Warp auf (Reihenfolge werkstatt > traktor > takte > mediathek, tempoQuelleFuer). clip_neu mit warp
+  // 'auto' bekommt Warp und Länge in Beats, laenge_beats des Aufrufers ist der Rückfall für Typen und Einträge ohne Tempo (Hinweis kein_tempo);
+  // warp_auto auf einem vorhandenen Clip wird zu warp_setzen (Länge bleibt). Slice 3a (D1, F2): braucht ein langer Track eine Analyse
+  // (brauchtAnalyse, nicht für eine sha, deren Analyse scheiterte), bekommt der Clip trotzdem sofort den Warp der besten Quelle (ohne jedes Tempo
+  // keinen); die Auflösung merkt sich einen Wunsch (die Aufträge starten erst nach dem erfolgreichen Schreiben, starteAnalysen) und sagt es in
+  // hinweise. Ein warp_auto ohne Tempo, das nur eine Analyse anstößt, fällt aus der Liste (T6).
+  private loeseQuellenAuf(befehle: unknown[], projekt: Projekt):
+    { befehle: unknown[]; quellen: Map<string, string>; hinweise: Hinweis[]; wuensche: Anforderung[] } {
     const quellen = new Map<string, string>();
     const hinweise: Hinweis[] = [];
-    const tempoVon = (z: Zeile): TempoQuelle => ({ typ: z.typ, bpm: z.bpm, takte: z.takte, dauer_s: z.dauer_s });
-    const aus = befehle.map((b, index) => {
+    const wuensche: Anforderung[] = [];
+    const analyseHinweis = (index: number, sha: string): void => {
+      hinweise.push({ index, hinweis: this.analysen?.laeuft(sha) ? 'analyse_laeuft' : 'analyse_angefordert' });
+    };
+    const brauchtSie = (q: Parameters<typeof brauchtAnalyse>[0], r: Parameters<typeof brauchtAnalyse>[1], sha: string): boolean =>
+      this.analysen !== null && !this.analyseGescheitert.has(sha) && brauchtAnalyse(q, r);
+    // Slice 3b: der Stand, den ein Befehl an dieser Stelle sieht (die Befehle davor sind schon aufgelöst). Scheitert einer davon, rechnet der Lauf
+    // ohnehin dieselbe Ablehnung.
+    const bisher: unknown[] = [];
+    const standVor = (): Projekt => {
+      const davor = bisher.filter((v) => v !== null);
+      if (davor.length === 0) return projekt;
+      try { return fuehreListeAus(projekt, davor, { transienten: this.transienten }).projekt; } catch { return projekt; }
+    };
+    const loese = (b: unknown, index: number): unknown => {
       const x = b as Koerper;
+      if (x && typeof x === 'object' && x.befehl === 'tempo_vom_clip') {
+        const nurId = Object.keys(x).every((k) => k === 'befehl' || k === 'clip_id');
+        const g = nurId && typeof x.clip_id === 'string' ? sucheClip(standVor(), x.clip_id) : undefined;
+        if (g?.clip.art !== 'audio' || !g.clip.warp) return b;      // der Baustein meldet clip_unbekannt, feld_nur_audio, kein_warp, argument_unbekannt
+        return { befehl: 'tempo_setzen', bpm: fensterTempo(g.clip.warp, g.clip.loop_beats ?? g.clip.laenge_beats) };
+      }
+      if (x && typeof x === 'object' && x.befehl === 'warp_ab_hier' && x.art === 'start' && typeof x.clip_id === 'string' && typeof x.beat === 'number') {
+        const g = Object.keys(x).every((k) => ['befehl', 'clip_id', 'beat', 'art'].includes(k)) ? sucheClip(standVor(), x.clip_id) : undefined;
+        if (g?.clip.art !== 'audio' || !g.clip.warp) return b;                   // der Baustein meldet die Ablehnung
+        if (!this.katalog) throw new ProjFehler(503, 'katalog_fehlt', { index });
+        const z = this.katalog.eintrag(g.clip.quelle.sha256);
+        if (!z) throw new ProjFehler(404, 'sha_unbekannt', { index });
+        const r = autoWarp(this.tempoQuelleFuer(z, g.clip.quelle.sha256));
+        if (r === null || 'hinweis' in r) throw new ProjFehler(409, 'kein_tempo', { index });
+        const marker = abHierStart(g.clip.warp.marker, x.beat, r.warp.marker);
+        if (marker === null) throw new ProjFehler(409, 'kein_tempo', { index, text: 'the auto warp has no marker behind that beat' });
+        return { befehl: 'warp_setzen', clip_id: x.clip_id, warp: handWarp(g.clip.warp, marker) };
+      }
+      // Slice 4 (D8): Quantize Audio. Je Transient im Bereich ein Hand-Marker auf dem Raster; die Grenzen (800 BPM, 4096 Marker) prüft warp_setzen und lehnt ab
+      if (x && typeof x === 'object' && x.befehl === 'audio_quantisieren' && typeof x.clip_id === 'string') {
+        const felder = ['befehl', 'clip_id', 'raster', 'staerke', 'von_beat', 'bis_beat'];
+        const g = Object.keys(x).every((k) => felder.includes(k)) ? sucheClip(standVor(), x.clip_id) : undefined;
+        if (g?.clip.art !== 'audio' || !g.clip.warp) return b;                   // der Baustein meldet die Ablehnung
+        const r = ({ '1/4': 1, '1/8': 0.5, '1/16': 0.25, '1/32': 0.125 } as Record<string, number | undefined>)[String(x.raster)];
+        const falsch = (detail: string): never => { throw new ProjFehler(400, 'argument_ungueltig', { index, detail }); };
+        if (r === undefined) falsch('raster: 1/4 | 1/8 | 1/16 | 1/32');
+        const staerke = x.staerke === undefined ? 1 : x.staerke;
+        if (typeof staerke !== 'number' || !(staerke >= 0 && staerke <= 1)) falsch('staerke: 0..1');
+        for (const k of ['von_beat', 'bis_beat']) {
+          const v = x[k];
+          if (v !== undefined && !(typeof v === 'number' && Number.isFinite(v) && Math.abs(v) <= MAX_BEAT)) falsch(`${k}: a clip beat (number)`);
+        }
+        const t = this.transienten(g.clip.quelle.sha256);
+        if (t === null) throw new ProjFehler(409, 'transienten_fehlen', { index });
+        let marker: [number, number][];
+        // D13/Fix 2: Standardbereich = der Bereich des Clips (Randtempo außerhalb der Marker), Raster im Projekt (erste Kopie)
+        const c = g.clip, versatz = c.warp!.versatz_beats;
+        const laenge = c.loop_beats ?? c.laenge_beats;
+        const bereich = { von_beat: (x.von_beat as number | undefined) ?? versatz, bis_beat: (x.bis_beat as number | undefined) ?? versatz + laenge,
+          off: c.start_beat - versatz };
+        try { marker = quantisiere(g.clip.warp.marker, t, r!, staerke as number, bereich); }
+        catch (e) { if (e instanceof WarpFehler) throw new ProjFehler(409, e.grund, { index }); throw e; }
+        return { befehl: 'warp_setzen', clip_id: x.clip_id, warp: handWarp(g.clip.warp, marker) };
+      }
       if (x && typeof x === 'object' && x.befehl === 'warp_auto' && typeof x.clip_id === 'string') {
         const g = sucheClip(projekt, x.clip_id);
         if (!g && befehle.slice(0, index).some((v) => (v as Koerper)?.befehl === 'clip_neu')) throw new ProjFehler(409, 'warp_auto_neuer_clip', { index });
         if (g?.clip.art !== 'audio') return b;                                   // der Baustein meldet clip_unbekannt bzw. feld_nur_audio
         if (!this.katalog) throw new ProjFehler(503, 'katalog_fehlt', { index });
-        const z = this.katalog.eintrag(g.clip.quelle.sha256);
+        const sha = g.clip.quelle.sha256;
+        const z = this.katalog.eintrag(sha);
         if (!z) throw new ProjFehler(404, 'sha_unbekannt', { index });
-        const r = autoWarp(tempoVon(z));
-        if (r === null || 'hinweis' in r) throw new ProjFehler(409, 'kein_tempo', { index });
+        const q = this.tempoQuelleFuer(z, sha), r = autoWarp(q);
+        const pfad = brauchtSie(q, r, sha) ? this.quellPfad(sha, g.clip.quelle.pfad_hinweis) : null;
+        if (pfad !== null) { wuensche.push({ sha, pfad, clip_id: x.clip_id }); analyseHinweis(index, sha); }
+        if (r === null || 'hinweis' in r) {
+          if (pfad !== null) return null;                          // kein Tempo, die Analyse ist unterwegs: der Befehl tut nichts und lehnt nicht ab
+          throw new ProjFehler(409, 'kein_tempo', { index });
+        }
         const { clip_id, ...rest } = x;
         return { ...rest, befehl: 'warp_setzen', clip_id, warp: r.warp };
       }
@@ -459,16 +610,21 @@ export class ProjSitzung {
       quellen.set(z.sha, z.pfad);
       let warpTeil: Koerper = {};
       if (x.warp === 'auto') {
-        const r = autoWarp(tempoVon(z));
-        if (r !== null && 'warp' in r) warpTeil = { warp: r.warp, laenge_beats: r.laenge_beats };
-        else {
+        const q = this.tempoQuelleFuer(z, z.sha), r = autoWarp(q);
+        const analyse = brauchtSie(q, r, z.sha);
+        if (analyse) { wuensche.push({ sha: z.sha, pfad: z.pfad }); analyseHinweis(index, z.sha); }   // D1: die Karte kommt nebenher
+        if (r !== null && 'warp' in r) {
+          warpTeil = { warp: r.warp, laenge_beats: r.laenge_beats };
+          if (r.karten_hinweis) hinweise.push({ index, hinweis: r.karten_hinweis });   // T3: eine bessere Quelle war da, taugte aber nicht
+        } else {
           warpTeil = { warp: 'aus' };
-          if (r !== null) hinweise.push({ index, hinweis: r.hinweis });
+          if (r !== null && !analyse) hinweise.push({ index, hinweis: r.hinweis });    // mit Analyse sagt analyse_angefordert mehr als kein_tempo
         }
       }
       return { ...x, sha256: z.sha, pfad_hinweis: z.pfad, ...warpTeil };
-    });
-    return { befehle: aus, quellen, hinweise };
+    };
+    const aus = befehle.map((b, index) => { const r = loese(b, index); bisher.push(r); return r; });
+    return { befehle: aus.filter((b) => b !== null), quellen, hinweise, wuensche };
   }
   private pruefeRev(o: Offen, rev: unknown): void {
     if (rev !== o.projekt.rev) throw new ProjFehler(409, 'rev_veraltet', { rev: o.projekt.rev });
@@ -484,20 +640,111 @@ export class ProjSitzung {
       }
       const meta = { quelle, label: d.label as string };
       o.verlauf.pruefeMeta(meta);
-      const { befehle, quellen, hinweise } = this.loeseQuellenAuf(d.befehle, o.projekt);
+      const { befehle, quellen, hinweise, wuensche } = this.loeseQuellenAuf(d.befehle, o.projekt);
+      const alt = o.projekt;
+      if (befehle.length === 0) {                                   // Slice 3a: alles war ein warp_auto, das nur eine Analyse anstieß
+        this.starteAnalysen(o, quelle, wuensche, alt);
+        return { code: 200, j: { rev: alt.rev, projekt: alt, hinweise } };
+      }
       if (befehle.some((b) => (b as Koerper)?.befehl === 'tempo_setzen') && this.lage.deckLaeuft()) throw new ProjFehler(409, 'deck_laeuft');
       if (this.aufnahmeLauf && befehle.some((b) => (b as Koerper)?.befehl === 'tempo_setzen'))
         throw new ProjFehler(409, 'beschaeftigt', { text: 'a recording is running; the tempo cannot change now' });
-      const probe = fuehreListeAus(o.projekt, befehle, { quelle });   // quelle: Herkunft für spur_neu (Spec 6.22)
-      if (probe.vor.length === 0) return { code: 200, j: { rev: o.projekt.rev, projekt: o.projekt } };
+      const probe = fuehreListeAus(o.projekt, befehle, { quelle, transienten: this.transienten });   // quelle: Herkunft für spur_neu (Spec 6.22)
+      if (probe.vor.length === 0) {
+        this.starteAnalysen(o, quelle, wuensche, alt);
+        return { code: 200, j: { rev: o.projekt.rev, projekt: o.projekt, ...(hinweise.length ? { hinweise } : {}) } };
+      }
+      this.pruefeMarkerInQuelle(o.projekt, probe.projekt);
       this.pruefeSperre(o.projekt, probe.projekt, probe.betrifft_wiedergabe);
       // Spec 6.31 (Leistung): die Probe IST die Ausführung; aendere rechnet sie nicht noch einmal. Gültig, weil vollziehe nach dem Warten auf die
       // Quittungen prüft, dass o.projekt noch genau der Stand ist, gegen den sie gerechnet wurde (sonst 409 rev_veraltet).
       const projekt = o.projekt;
       const antwort = await this.vollziehe(o, quelle, probe.regler_aenderungen,
         (h) => aendere(o.verlauf, projekt, befehle as never, meta, h, { ergebnis: probe }), quellen, probe.betrifft_wiedergabe);
-      return hinweise.length && antwort.code === 200 ? { code: 200, j: { ...(antwort.j as object), hinweise } } : antwort;
+      if (antwort.code === 200) this.starteAnalysen(o, quelle, wuensche, alt);
+      const alle = antwort.code === 200 ? [...hinweise, ...this.einsRueckweg(o, d.befehle, quelle)] : hinweise;
+      return alle.length && antwort.code === 200 ? { code: 200, j: { ...(antwort.j as object), hinweise: alle } } : antwort;
     });
+  }
+  // Slice 3b (D3, F6): Set 1.1.1 Here geht als Zeile art = eins in die Korrekturen des Decks, wenn der Bestand den Track kennt. Das Projekt ist da
+  // schon geändert; ein Schreibfehler kippt es nicht, er kommt als Hinweis eins_rueckweg_fehler. Ohne Rückweg sagt eins_nur_hier, dass nur der Clip
+  // sich änderte.
+  private einsRueckweg(o: Offen, roh: unknown[], quelle: Quelle): Hinweis[] {
+    const aus: Hinweis[] = [];
+    roh.forEach((b, index) => {
+      const x = b as Koerper;
+      if (x?.befehl !== 'eins_hier' || typeof x.clip_id !== 'string' || typeof x.quell_s !== 'number') return;
+      const g = sucheClip(o.projekt, x.clip_id);
+      if (g?.clip.art !== 'audio') return;
+      const sha = g.clip.quelle.sha256;
+      try {
+        const r = schreibeEinsKorrektur(this.bestand, sha, x.quell_s);
+        aus.push({ index, hinweis: r.status === 'geschrieben' ? 'eins_gemeldet' : 'eins_nur_hier' });
+        if (r.status === 'geschrieben') this.ctx.log({ typ: 'eins_korrektur', sha, ab_quell_beat: r.ab_quell_beat, quelle });
+      } catch (e) {
+        aus.push({ index, hinweis: 'eins_rueckweg_fehler' });
+        this.ctx.log({ typ: 'eins_korrektur_fehler', sha, fehler: (e as Error).message });
+      }
+    });
+    return aus;
+  }
+  // Slice 3a: nach dem Schreiben die Aufträge anfordern. clip_neu-Wünsche (ohne clip_id) gelten allen neuen Clips dieser sha; der Stand beim Auftrag
+  // (Warp, Länge) ist, was der Clip jetzt hat (T11).
+  private starteAnalysen(o: Offen, quelle: Quelle, wuensche: Anforderung[], alt: Projekt): void {
+    if (this.analysen === null || wuensche.length === 0) return;
+    const vorhanden = new Set(alt.spuren.flatMap((s) => s.clips.map((c) => c.id)));
+    for (const w of wuensche) {
+      for (const s of o.projekt.spuren) for (const c of s.clips) {
+        if (c.art !== 'audio' || c.quelle.sha256 !== w.sha) continue;
+        if (w.clip_id !== undefined ? c.id !== w.clip_id : vorhanden.has(c.id)) continue;
+        this.analysen.anfordern(w.sha, w.pfad, { slug: o.slug, clip_id: c.id, quelle, vorher: c.warp ?? null, laenge_beats: c.laenge_beats });
+      }
+    }
+  }
+  // Das Ende einer Analyse: bei Fehler die sha als gescheitert merken und melden, bei Erfolg jeden wartenden Clip umschalten (ankunft) und melden
+  private analyseEnde(sha: string, ei: AnalyseEintrag, ende: AnalyseEnde): void {
+    this.ctx.log({ typ: 'analyse_ende', sha, ok: ende.ok, grund: ende.grund ?? null, clips: ei.wuensche.length });
+    if (!ende.ok) this.analyseGescheitert.add(sha);   // D1: warp_auto und neues Ablegen warpen diese sha ab jetzt sofort aus Traktor, Takten oder BPM
+    for (const w of ei.wuensche) {
+      if (!ende.ok) { this.ctx.verteile({ a: 'proj', f: { clip_id: w.clip_id, analyse: 'fehler', grund: ende.grund ?? 'unbekannt' } }); continue; }
+      void this.ankunft(sha, w).then((e) => {
+        if (e === 'keine_karte') this.analyseGescheitert.add(sha);   // ok, aber keine brauchbare Karte in der Ablage: derselbe Fall
+        const f = e === 'ok' ? { analyse: 'fertig' } : { analyse: 'verworfen', grund: e };
+        this.ctx.verteile({ a: 'proj', f: { clip_id: w.clip_id, ...f } });
+      }).catch((x) => this.ctx.log({ typ: 'analyse_ankunft_fehler', sha, clip_id: w.clip_id, fehler: (x as Error).message }));
+    }
+  }
+  // Ankunft der Karte für einen Clip (T10, T11). Läuft ausserhalb der seriellen Kette und schreibt über aendern() (rev-Prüfung, Riegel,
+  // Freeze-Sperre, Verlauf, SSE); gelesen wird synchron vor dem Aufruf, rev_veraltet wiederholt. 'ok' oder der Grund, aus dem nichts geschrieben wurde.
+  // D1: klingt der Clip (klingtGerade), wartet sie, ohne Versuchsgrenze; jeder Durchgang liest Projekt, Clip und Warp neu, ein Wechsel oder ein
+  // Eingriff beendet das Warten (schliesse() setzt offen auf null: auch der Serverstop beendet es).
+  private async ankunft(sha: string, w: Wunsch): Promise<string> {
+    let veraltet = 0, beschaeftigt = 0, gemeldet = false;
+    for (;;) {
+      const o = this.offen;
+      if (!o || o.slug !== w.slug) return 'projekt_weg';
+      const g = sucheClip(o.projekt, w.clip_id);
+      if (!g || g.clip.art !== 'audio' || g.clip.quelle.sha256 !== sha) return 'clip_weg';
+      const z = this.katalog?.eintrag(sha) ?? null;
+      if (!z) return 'katalog_weg';
+      const a = ankunftBefehle(g.clip, { warp: w.vorher, laenge_beats: w.laenge_beats }, this.tempoQuelleFuer(z, sha));
+      if ('lassen' in a) return a.lassen;   // Auto-Warp bleibt aus (interner Grund, nie an die Seite)
+      if (klingtGerade(this.lage.arr, g.clip)) {                  // D1: ein klingender Clip wird nicht umgeschaltet
+        if (!gemeldet) { gemeldet = true; this.ctx.verteile({ a: 'proj', f: { clip_id: w.clip_id, analyse: 'karte_bereit' } }); }
+        await schlaf(this.analyseWarteMs);
+        continue;
+      }
+      try {
+        await this.aendern({ rev: o.projekt.rev, label: 'Auto-Warp', befehle: a.befehle }, w.quelle);
+        return 'ok';
+      } catch (e) {
+        const grund = (e as { grund?: string })?.grund ?? null;
+        if (grund === 'rev_veraltet' && ++veraltet < 5) continue;
+        if (grund === 'beschaeftigt' && ++beschaeftigt < 150) { await schlaf(this.analyseWarteMs); continue; }
+        if (grund !== 'ki_gestoppt') this.ctx.log({ typ: 'analyse_ankunft_abgelehnt', sha, clip_id: w.clip_id, grund, fehler: (e as Error)?.message });
+        return grund ?? 'fehler';
+      }
+    }
   }
 
   umkehr(art: 'undo' | 'redo', d: Koerper, quelle: Quelle): Promise<Antwort> {
@@ -727,6 +974,24 @@ export class ProjSitzung {
     }
     this.ctx.log({ typ: 'proj_nachgeholt', slug: o.slug, ...ergebnis });
   }
+  // Slice 3a (AK2): ein Marker hinter dem Ende der Quelle klingt nie (der Kern liest dort Stille, arr_stimmen.cpp:197) und ist ein Bedienfehler. Geprüft
+  // wird nur, wo sich der letzte Marker eines Warps geändert hat (die früheren sind kleiner); die Dauer ist die des Katalogs, die für denselben Clip
+  // schon Auto-Warp und Länge bestimmt.
+  private pruefeMarkerInQuelle(alt: Projekt, neu: Projekt): void {
+    if (!this.katalog) return;
+    const vorher = new Map<string, number | undefined>();
+    for (const s of alt.spuren) for (const c of s.clips) if (c.art === 'audio') vorher.set(c.id, c.warp?.marker[c.warp.marker.length - 1]?.[0]);
+    for (const s of neu.spuren) for (const c of s.clips) {
+      if (c.art !== 'audio' || !c.warp) continue;
+      const letzter = c.warp.marker[c.warp.marker.length - 1][0];
+      if (vorher.get(c.id) === letzter) continue;
+      let dauer: number | null = null;
+      try { dauer = this.katalog.eintrag(c.quelle.sha256)?.dauer_s ?? null; } catch { dauer = null; }
+      if (dauer !== null && letzter > dauer + MARKER_TOLERANZ_S) {
+        throw new ProjFehler(400, 'warp_marker', { text: `warp marker at ${letzter} s lies behind the end of the source (${dauer} s)`, clip_id: c.id });
+      }
+    }
+  }
   private pruefeSperre(alt: Projekt, neu: Projekt, betrifftWiedergabe: boolean): void {
     if (this.sperren === 0) return;
     if (betrifftWiedergabe || alt.tempo_bpm !== neu.tempo_bpm || kanonisch(alt.loop) !== kanonisch(neu.loop)) {
@@ -751,6 +1016,9 @@ export class ProjSitzung {
   zugangHaken(): Haken { return this.haken(this.brauchOffen()); }
   // Spec 6.34: S3 meldet Beginn (art, beim Freeze spur_id) und Ende (null) jedes Laufs; nur diese Form geht an die Seite
   setzeAufnahmeLauf(l: unknown): void { this.aufnahmeLauf = l; }
+  setzeStemsStand(x: Record<string, unknown> | null): void { this.stemsStand = x; }
+  private readonly schliessHaken: ((slug: string) => void)[] = [];   // Slice 6 (T7): Läufe, die zum offenen Projekt gehören
+  beiSchliessen(f: (slug: string) => void): void { this.schliessHaken.push(f); }
   setzeAusgabeLauf(l: AusgabeLauf | null): void {
     this.ausgabeLauf = l === null ? null : l.art === 'freeze' ? { art: 'freeze', spur_id: l.spur_id } : { art: l.art };
   }
@@ -760,7 +1028,7 @@ export class ProjSitzung {
   // Wiedergabe-Datei mit der nächsten Nummer des einen Zählers, ohne /k/arr/laden (Plan S3: Freeze, Export)
   schreibeWiedergabeFuer(p: Projekt): { nr: number; datei: string } {
     const nr = this.zaehler.naechste();
-    const w = uebersetze(p, { nr, audioOrdner: path.join(this.arbeitsordner, 'audio'), frames: (sha) => this.cache.frames(sha),
+    const w = uebersetze(p, { nr, audioOrdner: path.join(this.arbeitsordner, 'audio'), frames: (sha) => this.cache.frames(sha), transienten: this.transienten,
       arbeitsordner: this.arbeitsordner });
     return { nr, datei: schreibeWiedergabe(this.arbeitsordner, w) };
   }
@@ -850,7 +1118,8 @@ export class ProjSitzung {
     this.rueckwegGespeichertMs = Date.now();
     const label = (g.labels.length === 1 ? g.labels[0] : `Mixer: ${g.labels.map((l) => l.replace(/^Mixer: /, '')).join(', ')}`).slice(0, 200);
     try {
-      const r = aendere(o.verlauf, o.projekt, befehle as never, { quelle: 'andreas', label }, this.haken(o), { schluessel: `rueckweg:${g.nr}` });
+      const r = aendere(o.verlauf, o.projekt, befehle as never, { quelle: 'andreas', label }, this.haken(o), {
+        schluessel: `rueckweg:${g.nr}`, transienten: this.transienten });
       if (!r.eintrag) return;
       r.projekt.wiedergabe_rev = o.projekt.wiedergabe_rev;
       o.projekt = r.projekt;

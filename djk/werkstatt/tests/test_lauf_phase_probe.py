@@ -29,3 +29,11 @@ def test_probe_laesst_passende_karte_durch(tmp_path):
     """Negativkontrolle: Karte endet 0,25 s vor dem Dateiende: kein Grund."""
     mo = _mo(tmp_path, letzte_s=9.75)
     assert probe_vor_dem_schreiben(mo, 128.0, []) is None
+
+
+def test_probe_laesst_korrektur_vor_den_dateianfang_mit_vorlauf_durch(tmp_path):
+    """Fehlerfall 580de55457b9bbba (2026-10-30): eine Korrektur, die quell_beat 0 vor den Dateianfang legt, scheiterte an
+    der Probe („quell_beat 0 laege vor dem Dateianfang“). Gerendert wird mit Vorlauf, also lässt die Probe sie durch."""
+    mo = _mo(tmp_path, letzte_s=9.75)
+    zeile = {"art": "raster", "ab_quell_beat": -1e6, "bis_quell_beat": 1e6, "versatz_ms": -300.0}
+    assert probe_vor_dem_schreiben(mo, 128.0, [zeile]) is None

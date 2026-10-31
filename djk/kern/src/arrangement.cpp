@@ -43,6 +43,10 @@ const ArrSnapshot* Arrangement::tausche(const ArrSnapshot* neu, int64_t s, const
   noten_tauschen(neu, s);     // offene Noten ohne Gegenstück: Off sofort
   senken_wechsel(neu, s);     // Spuren, die ihre Senke verlassen: Ausblende (RB), All Notes Off an den Slot (Wirt)
   snap_ = neu;
+  snap_werk_ = false;   // Slice 2: hat der neue Schnappschuss Clips des Warp-Werks (COMPLEX, TONES)?
+  if (snap_)
+    for (const ArrSpur& sp : snap_->spur)
+      for (int j = 0; sp.art == ArrArt::audio && j < sp.n_clips; ++j) snap_werk_ = snap_werk_ || werk_clip(sp.clips[j]);
   for (bool& b : grp_belegt_) b = false;   // 1.10: Gruppen mit Mitgliedern (Pegel-Meldung)
   if (snap_)
     for (const ArrSpur& sp : snap_->spur)
@@ -91,7 +95,11 @@ bool Arrangement::start(double start_beat, int quant, bool von_cypher, int64_t s
     stopp(0, s, k);
     beende(s);
   }
-  const int64_t frueh = s + vorhalt + n;   // Spec 2.2: frühestens jetzt + Vorhalt (2n + 25) + 1 Zyklus
+  int64_t frueh = s + vorhalt + n;   // Spec 2.2: frühestens jetzt + Vorhalt (2n + 25) + 1 Zyklus
+#ifndef CYPHERDJ_MUTATION_ARR_WARP_WERK_START_OHNE_FRIST   // Fehlerfall: der Start gibt dem Werk keine Zeit, ein klingender Clip setzt spät und mit Einblende ein
+  if (werk_am_start(start_beat)) frueh += ARR_WARP_FRIST;
+#endif   // Slice 2: das Werk braucht die Zeit, um den klingenden Clip vor dem Einsatz zu rechnen
+  if (karte_gen_) karte_gen_gesehen_ = *karte_gen_;
   const double b_min = k.beat_at(static_cast<double>(frueh));
   double kb = b_min;
   if (quant == 1) kb = std::ceil(b_min - EPS);
@@ -122,6 +130,19 @@ void Arrangement::stopp(int quant, int64_t s, const Karte& k) {
   if (status_ == ArrStatus::steht) return;
   if (status_ == ArrStatus::wartet) {   // noch nicht eingesetzt: sofort aus
     if (freeze_) freeze_ende(s, 1);     // Paket K3: Freeze vor dem Einsatz abgebrochen
+    // Slice 2: vorab angesetzte Stimmen des Werks haben nie geklungen. Nachbesserung 5 (Prüfung 5, fable m6): eine Werk-Stimme, die schon in der Ausblende ist (ab_aus
+    // gesetzt und erreicht, Einsatz davor), stammt vom vorigen Lauf (start() bei laufendem Transport: stopp, beende, dann der Stopp im selben Block); sie blendet zu Ende,
+    // statt hart zu enden. Nur die Ausblende zählt, nicht werk_ab < s: der Stopp kann ein Ziel-Sample hinter einem noch ausstehenden Einsatz tragen (Zufallsfolgen, Seed 25).
+    // Nachbesserung 6 (Flanke 18 a, verdichtete Seeds 6829, 8786, 10156, 11193): die Ausnahme hing an s, und ein Ziel hinter dem Ende einer Brücke dieses Laufs (karte_spaeter,
+    // Tausch, Marker vor dem Einsatz: ab_aus = Ereignis + Frist) machte sie zur „Ausblendenden“, die nie geklungen hat und nach dem Stopp 400 bis 900 Samples voll klang.
+    // Eine Stimme des vorigen Laufs setzt vor dem Einsatz dieses Laufs ein (werk_ab < start_s_), jede dieses Laufs danach (der Vorausblick setzt bei s_h ≥ start_s_, Brücken erben
+    // werk_ab): daran, nicht am Ziel-Sample, hängt die Ausnahme
+    for (Stimme& v : st_)
+#ifdef CYPHERDJ_MUTATION_ARR_WARP_WERK_STOPP_WARTET_HART   // Fehlerfall (Prüfung 5, fable m6): der Stopp im Wartezustand schneidet auch die Ausblendenden hart ab (Knack)
+      if (v.aktiv && v.werk >= 0) werk_frei(v);
+#else
+      if (v.aktiv && v.werk >= 0 && !(v.ab_aus >= 0 && v.ab_aus <= s && v.werk_ab < v.ab_aus && v.werk_ab < start_s_)) werk_frei(v);
+#endif
     status_ = ArrStatus::steht;
     stopp_s_ = -1;
     for (int i = 0; i < n_offen_; ++i) offen_[i].aus = offen_[i].an;   // vorab gesendete Noten: Off auf ihr On
@@ -145,6 +166,7 @@ void Arrangement::stopp(int quant, int64_t s, const Karte& k) {
 }
 
 void Arrangement::loop(bool an, double von, double bis, int64_t s, const Karte& k) {
+  werk_naechste_verwerfen();   // Slice 2: vorab für den Durchlauf nach der alten Naht angesetzt; das Vorausblick setzt sie mit der neuen Klammer neu an
   (freeze_ ? loop_gemerkt_ : loop_an_) = an;   // Paket K3: während eines Freeze gilt sie erst danach
   von_ = von;
   bis_ = bis;
@@ -255,6 +277,22 @@ void Arrangement::block(const Karte& k, int64_t s0, int m, float* aus_l, float* 
   metro_l_ = metro_ziel_ == 1 ? metro_cue_l : metro_master_l;
   metro_r_ = metro_ziel_ == 1 ? metro_cue_r : metro_master_r;
   noten_block(k, s0, m);   // Vorausblick: Noten mit Ziel in [s0 + Vorhalt, s0 + m + Vorhalt)
+  const bool karte_neu = karte_gen_ && *karte_gen_ != karte_gen_gesehen_;   // Paket 1.13: eine neue Generation der Karte, seit dem letzten Block
+  if (karte_neu) {
+    karte_gen_gesehen_ = *karte_gen_;
+    stimmen_karte_neu(k);   // Nachbesserung 4 (N2): RE-PITCH-Stimmen enden am Clip-Ende der neuen Karte
+  }
+  if (werk_ && snap_ && snap_werk_) {   // Slice 2: Stimmen des Warp-Werks ARR_WARP_FRIST Samples vor ihrem Einsatz ansetzen; eine neue Karte setzt sie neu an
+#ifndef CYPHERDJ_MUTATION_ARR_WARP_WERK_KARTE_IGNORIERT   // Fehlerfall: die Stimmen behalten die alte Karte, nach einer Tempo-Rampe liegen sie neben dem Raster
+#ifdef CYPHERDJ_MUTATION_ARR_WARP_WERK_KARTE_WARTET   // Fehlerfall (Nachbesserung 3): im Wartezustand behalten die vorab angesetzten Stimmen die alte Karte, bis zum Ende ihres Clips
+    if (status_ == ArrStatus::spielt && karte_neu) warp_karte_neu(k, s0);
+#else
+    if ((status_ == ArrStatus::spielt || status_ == ArrStatus::wartet) && karte_neu) warp_karte_neu(k, s0);   // neue Generation: die gebundenen Stimmen werden Brücken
+#endif
+#endif
+    werk_decken(k, s0, m);   // Nachbesserung 4: jede Brücke hat ihre Nachfolgerin (Tausch, Karte, Nachholen bei vollem Pool)
+    warp_vorausblick(k, s0, m);
+  }
   int64_t a = s0;
   const int64_t e = s0 + m;
   while (a < e) {
@@ -291,6 +329,7 @@ void Arrangement::block(const Karte& k, int64_t s0, int m, float* aus_l, float* 
   freeze_abgriff(s0, m);   // Paket K3: Spur-Signal vor dem Fader
   mischen(m, aus_l, aus_r);
   verlaeufe_nachfuehren(m);
+  if (werk_) werk_->takt(s0 + m);   // Slice 2: Stand des Callbacks an das Warp-Werk (synchron: es füllt die Ringe jetzt)
 }
 
 }  // namespace cdj

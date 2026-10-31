@@ -317,3 +317,72 @@ def test_djk_start_sieht_einen_liegengebliebenen_arr1_wirt_als_belegt(tmp_path):
             assert not (log / "systemd-run").exists(), "nichts gestartet"
         finally:
             shutil.rmtree(shm, ignore_errors=True)
+
+
+# ---------------------------------------------------------------- Baukasten S1: --melodie baukasten
+
+def _melodie_zeile(log):
+    return next(z for z in (log / "systemd-run").read_text().splitlines() if f"--unit=cypherdj-wirt-melodie-{INST}" in z)
+
+
+def test_melodie_baukasten_startet_den_wirt_mit_bundle_und_graph(tmp_path):
+    env, log, home = _attrappen(tmp_path, aus_ports=[f"cypherdj-kern-{INST}:midi_aus_1"])
+    (home / ".local/lib/cypherdj/vst3/baukasten.vst3/Contents").mkdir(parents=True)
+    graph = home / f".config/cypherdj-{INST}/baukasten-melodie.json"
+    graph.parent.mkdir(parents=True)
+    graph.write_text("{}")
+    shm = _shm()
+    try:
+        r = _lauf(env, "--nur-wirte", "--melodie", "baukasten")
+        assert r.returncode == 0, (r.returncode, r.stdout, r.stderr)
+        z = _melodie_zeile(log)
+        assert f"--vst3 {home}/.local/lib/cypherdj/vst3/baukasten.vst3" in z, z
+        assert f"--setenv=CYPHERDJ_BAUKASTEN_GRAPH={graph}" in z, z
+        assert "CYPHERDJ_BAUKASTEN_GRAPH" not in next(x for x in (log / "systemd-run").read_text().splitlines()
+                                                   if f"--unit=cypherdj-wirt-bass-{INST}" in x), "nur die Baukasten-Gruppe"
+    finally:
+        shutil.rmtree(shm, ignore_errors=True)
+
+
+def test_melodie_baukasten_ohne_graphdatei_setzt_den_pfad_trotzdem(tmp_path):
+    # Plan-Review F5: die Umgebung der Unit steht beim Anlegen fest; kommt die Datei später, muss ein Neustart sie finden
+    env, log, home = _attrappen(tmp_path, aus_ports=[f"cypherdj-kern-{INST}:midi_aus_1"])
+    (home / ".local/lib/cypherdj/vst3/baukasten.vst3/Contents").mkdir(parents=True)
+    shm = _shm()
+    try:
+        r = _lauf(env, "--nur-wirte", "--melodie", "baukasten")
+        assert r.returncode == 0, (r.returncode, r.stdout, r.stderr)
+        z = _melodie_zeile(log)
+        assert f"--setenv=CYPHERDJ_BAUKASTEN_GRAPH={home}/.config/cypherdj-{INST}/baukasten-melodie.json" in z, z
+    finally:
+        shutil.rmtree(shm, ignore_errors=True)
+
+
+def test_status_sagt_baukasten_bundle_fehlt_ist_eine_klare_meldung(tmp_path):
+    # Plan-Review F11: ohne --melodie bleibt die Art aus der Status-Datei; fehlt dann das Bundle, Abbruch vor systemd-run
+    env, log, _ = _attrappen(tmp_path, aus_ports=[f"cypherdj-kern-{INST}:midi_aus_1"])  # Wirt tot, Status-Datei bleibt
+    shm = _shm()
+    try:
+        (shm / "wirt-melodie.json").write_text('{"art": "vst3:baukasten"}')
+        r = _lauf(env, "--nur-wirte")
+        assert r.returncode == 2 and "was baukasten (status file) but baukasten is missing" in r.stderr, (r.returncode, r.stderr)
+        assert not (log / "systemd-run").exists() or "wirt-melodie" not in (log / "systemd-run").read_text()
+    finally:
+        shutil.rmtree(shm, ignore_errors=True)
+
+
+def test_melodie_baukasten_ohne_bundle_ist_ein_aufruffehler(tmp_path):
+    env, log, _ = _attrappen(tmp_path, aus_ports=[f"cypherdj-kern-{INST}:midi_aus_1"])
+    shm = _shm()
+    try:
+        r = _lauf(env, "--nur-wirte", "--melodie", "baukasten")
+        assert r.returncode == 2 and "baukasten missing" in r.stderr, (r.returncode, r.stderr)
+        assert not (log / "systemd-run").exists(), "kein Wirt gestartet"
+    finally:
+        shutil.rmtree(shm, ignore_errors=True)
+
+
+def test_melodie_unbekannt_nennt_baukasten(tmp_path):
+    env, _, _ = _attrappen(tmp_path)
+    r = _lauf(env, "--melodie", "zauber")
+    assert r.returncode == 2 and "surge, fluegel or baukasten" in r.stderr, r.stderr

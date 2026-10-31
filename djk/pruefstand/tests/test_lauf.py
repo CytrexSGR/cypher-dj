@@ -50,13 +50,14 @@ def test_aufnehmer_in_der_gruppe_der_instanz(tmp_path, monkeypatch):
 
 GRAPH = """cypherdj-kern-f:master_L
   |-> cypherdj-pruef-f-x:playback_FL
-  |-> cypherdj-notbahn-f:kante
 cypherdj-kern-f:master_R
   |-> cypherdj-pruef-f-x:playback_FR
 cypherdj-notbahn-f:master_L
   |-> cypherdj-pruef-f-x:playback_FL
 cypherdj-notbahn-f:master_R
   |-> cypherdj-pruef-f-x:playback_FR
+cypherdj-notbahn-f:vor
+  |-> cypherdj-kern-f:notbahn_vor
 cypherdj-pruef-f-x:playback_FL
   |<- cypherdj-notbahn-f:master_L
 cypherdj-pruef-f-x:monitor_FL
@@ -71,9 +72,9 @@ def test_graph_steht_und_fehlende_kante():
     fremd = GRAPH.replace("cypherdj-aufnehmer-f:in_R", "cypherdj-aufnehmer-g:in_R")   # Aufnehmer einer anderen Instanz
     assert lauf.graph_fehlt(fremd, "cypherdj-pruef-f-x", "f", "kern", True) == [
         "cypherdj-pruef-f-x:monitor_FR -> cypherdj-aufnehmer-f:in_R"]
-    ohne_kante = GRAPH.replace("  |-> cypherdj-notbahn-f:kante\n", "")               # Notbahn ohne Kante: Reihenfolge offen
+    ohne_kante = GRAPH.replace("  |-> cypherdj-kern-f:notbahn_vor\n", "")             # Notbahn ohne Kante: Reihenfolge offen
     assert lauf.graph_fehlt(ohne_kante, "cypherdj-pruef-f-x", "f", "kern", True) == [
-        "cypherdj-kern-f:master_L -> cypherdj-notbahn-f:kante"]
+        "cypherdj-notbahn-f:vor -> cypherdj-kern-f:notbahn_vor"]
     assert lauf.graph_fehlt(ohne_kante, "cypherdj-pruef-f-x", "f", "kern", True, kante=False) == []
     assert lauf.graph_fehlt(GRAPH, "cypherdj-pruef-f-x", "f", "pruefquelle_direkt", False) == [
         "cypherdj-pruefquelle-f:master_L -> cypherdj-pruef-f-x:playback_FL",
@@ -88,13 +89,13 @@ def test_ziel_pid_direkt():
 
 
 def test_notbahn_daneben_mit_kante():
-    """Aufruf wie Scheibe 10 (djk/units/cypherdj-notbahn.service, ADR 016 Nachtrag): daneben, Kante vom master_L der
+    """Aufruf wie Scheibe 10 (djk/units/cypherdj-notbahn.service, ADR 016 Nachtrag): daneben, Kante auf notbahn_vor der
     Quelle, kein --vorhalt und kein --blende (die Notbahn aus 10 lehnt beide mit Rückgabe 2 ab)."""
     a = lauf.notbahn_aufruf("/x/cypherdj-notbahn", "cypherdj-pruef-f-x", "kern", "f")
-    assert a == ["/x/cypherdj-notbahn", "--master", "cypherdj-pruef-f-x:playback_F", "--daneben", "--kante",
-                 "cypherdj-kern-f:master_L"]
+    assert a == ["/x/cypherdj-notbahn", "--master", "cypherdj-pruef-f-x:playback_F", "--daneben", "--vor",
+                 "cypherdj-kern-f:notbahn_vor"]
     b = lauf.notbahn_aufruf("/x/nb", "cypherdj-pruef-f-y", "pruefquelle", "f")
-    assert b[-1] == "cypherdj-pruefquelle-f:master_L" and "--vorhalt" not in b and "--blende" not in b
+    assert b[-1] == "cypherdj-pruefquelle-f:notbahn_vor" and "--vorhalt" not in b and "--blende" not in b
     assert lauf.notbahn_aufruf("/x/nb", "s", "kern", "f", kante=False) == ["/x/nb", "--master", "s:playback_F", "--daneben"]
 
 

@@ -5,6 +5,8 @@
 #include <cmath>
 #include <cstring>
 
+#include <cypherdj/dsp/denormal.h>
+
 namespace cdj {
 
 const Kit* Erzeuger::setze_strom(int strom, const Kit* kit, int kanal) {
@@ -33,12 +35,105 @@ void Erzeuger::setze_midi(int strom, int port, int midi_kanal) {
   s.midi_kanal = std::clamp(midi_kanal, 1, 16);
 }
 
-void Erzeuger::noten_aus(Strom& s, int64_t bis, MidiAus* midi, int64_t n0, int64_t zyklus_n0) {
+void Erzeuger::bk_zur_freigabe(CypherBk* bk) {
+  if (!bk) return;
+  if (n_bk_frei_ < ERZ_BK_FREI) bk_frei_[n_bk_frei_++] = bk;
+  else ++bk_stand_.voll;  // darf nicht vorkommen (je Block geleert); lieber verlieren als im Callback freigeben
+}
+
+void Erzeuger::setze_bk(int strom, CypherBk* bk, int kanal) {
+  if (strom < 1 || strom > ERZ_STROEME) { bk_zur_freigabe(bk); return; }
+  Strom& s = st_[strom - 1];
+  if (werk_) {  // Baukasten S3b (D6): nur vormerken; der Wechsel geschieht in block(), wenn die Plätze frei sind
+    if (s.bk_neu_gesetzt && s.bk_neu != bk && s.bk_neu != s.bk) bk_zur_freigabe(s.bk_neu);  // gehörte nie einem Platz (m5)
+    if (bk == s.bk) { s.bk_neu = nullptr; s.bk_neu_gesetzt = false; return; }  // derselbe Graph: nichts wartet mehr
+    s.bk_neu = bk;
+    s.bk_neu_kanal = (kanal >= 0 && kanal < MIX_KANAELE) ? kanal : -1;
+    s.bk_neu_gesetzt = true;
+    return;
+  }
+  if (s.bk && s.bk != bk) {
+    BkAus& a = bk_aus_[strom - 1];
+#ifndef CYPHERDJ_MUTATION_BK_ZWEITER_WECHSEL_LECK
+    bk_zur_freigabe(a.bk);  // ein noch ausklingender geht sofort
+#endif
+#ifdef CYPHERDJ_MUTATION_BK_HART
+    bk_zur_freigabe(s.bk);  // Fehlerfall Baukasten S3a: der alte Graph endet hart statt auszuklingen
+#elif defined(CYPHERDJ_MUTATION_BK_ALLE_AUS)
+    cypher_bk_alle_aus(s.bk, 0);  // Fehlerfall Baukasten S3a: alle_aus setzt gate 0 am Sample 0 (Abbruch in einem Sample)
+    a = BkAus{s.bk, s.kanal, 0};
+#else
+    a = BkAus{s.bk, s.kanal, 0};
+#endif
+    int w = 0;  // offene Noten des alten Graphen verfallen (port 0 = Graph)
+    for (int i = 0; i < s.n_offen; ++i) if (s.offen[i].port != 0) s.offen[w++] = s.offen[i];
+    s.n_offen = w;
+  }
+  s.bk = bk;
+  if (bk) s.kanal = (kanal >= 0 && kanal < MIX_KANAELE) ? kanal : -1;
+}
+
+// Baukasten S3b: der neue Graph übernimmt den Strom; der alte ist schon im Ausklang-Platz oder war keiner.
+void Erzeuger::bk_wechsel(Strom& s, CypherBk* bk, int kanal) {
+  s.bk = bk;
+  s.bk_kanal = bk ? kanal : -1;
+  if (bk && kanal >= 0) s.kanal = kanal;  // wie S3a setze_bk
+  s.bk_neu = nullptr;
+  s.bk_neu_gesetzt = false;
+}
+
+int Erzeuger::bk_frei(CypherBk** aus, int max) {
+  const int n = std::min(n_bk_frei_, max);
+  for (int i = 0; i < n; ++i) aus[i] = bk_frei_[i];
+  for (int i = n; i < n_bk_frei_; ++i) bk_frei_[i - n] = bk_frei_[i];
+  n_bk_frei_ -= n;
+  return n;
+}
+
+// Addiert q_l/q_r (bk_l_/bk_r_ oder ein Platz des Graph-Werks) in den Eingang von kanal: NaN/Inf als 0, Klemme ±8 (wie die Rückwege). Ab Sample ausblende_ab
+// linear über ausblende_n Samples (Ausklang) und danach nichts; ausblende_n 0 = ohne Ausblende.
+void Erzeuger::bk_addiere(const float* q_l, const float* q_r, int kanal, int n, float* const* ein_l, float* const* ein_r,
+                          int ausblende_ab, int ausblende_n) {
+  float* l = ein_l[kanal];
+  float* r = ein_r[kanal];
+  for (int i = 0; i < n; ++i) {
+    float g = 1.0f;
+    if (ausblende_n > 0) {
+      const int p = ausblende_ab + i;
+      if (p >= ausblende_n) break;
+#ifdef CYPHERDJ_MUTATION_BK_FADE_KONSTANT
+      g = 1.0f;  // Fehlerfall Baukasten S3a: der Ausklang bricht am Ende ab statt linear zu fallen
+#else
+      g = 1.0f - (float)(p + 1) / (float)ausblende_n;
+#endif
+    }
+    const float a = q_l[i], c = q_r[i];
+#ifdef CYPHERDJ_MUTATION_BK_OHNE_KLEMME
+    l[i] += g * a;  // Fehlerfall Baukasten S3a: Zahlenvergiftung und Überpegel erreichen den Mixer
+    r[i] += g * c;
+#else
+    const bool ok = std::isfinite(a) && std::isfinite(c);
+    l[i] += ok ? g * std::clamp(a, -8.0f, 8.0f) : 0.0f;
+    r[i] += ok ? g * std::clamp(c, -8.0f, 8.0f) : 0.0f;
+#endif
+  }
+}
+
+void Erzeuger::noten_aus(Strom& s, int64_t bis, MidiAus* midi, int64_t n0, int64_t zyklus_n0, OffsWahl wahl) {
   int w = 0;
   for (int i = 0; i < s.n_offen; ++i) {
     const Strom::Offen& o = s.offen[i];
-    if (o.aus < bis) {
-      midi[o.port - 1].schreibe(std::max(o.aus, n0) - zyklus_n0, (uint8_t)(0x80 | o.kanal), o.note, 0);
+    // D8: nur die gewählte Art; MIDI-Offs gehen nur mit Puffer hinaus und bleiben sonst stehen (B1)
+    const bool faellig = o.aus < bis && (o.port == 0 ? wahl != OffsWahl::OHNE_GRAPH : (wahl != OffsWahl::NUR_GRAPH && midi));
+    if (faellig) {
+      if (o.port == 0) {
+#ifdef CYPHERDJ_MUTATION_BK_OFF_BLOCKANFANG
+        if (cypher_bk_note_aus(s.bk, 0, o.note) != 0) ++bk_stand_.verloren;  // Fehlerfall Baukasten S3a: Off am Blockanfang
+#else
+        if (cypher_bk_note_aus(s.bk, (uint32_t)(std::max(o.aus, n0) - n0), o.note) != 0) ++bk_stand_.verloren;
+#endif
+      }
+      else midi[o.port - 1].schreibe(std::max(o.aus, n0) - zyklus_n0, (uint8_t)(0x80 | o.kanal), o.note, 0);
     } else {
       s.offen[w++] = o;
     }
@@ -55,7 +150,8 @@ ErzZaehler Erzeuger::fenster(const ErzFenster& f, double jetzt_beat) {
 #ifdef CYPHERDJ_MUTATION_MIDI_FENSTER_OHNE_SCHUTZ
   const double jetzt_s = jetzt_beat;  // Fehlerfall Prüfung R2/R3: schon gesendete MIDI-Noten kommen doppelt
 #else
-  const double jetzt_s = s.midi_port > 0 ? std::max(jetzt_beat, s.gesendet_bis) : jetzt_beat;
+  // Baukasten S3b (D8b): ein Graph-Strom mit Werk hat das Fenster des nächsten Blocks schon vergeben
+  const double jetzt_s = (s.midi_port > 0 || (s.bk && werk_)) ? std::max(jetzt_beat, s.gesendet_bis) : jetzt_beat;
 #endif
   const double lo = std::max(f.ab_beat, jetzt_s);
   int w = 0;  // 1. noch nicht gespielte Ereignisse in [lo, bis) fallen weg
@@ -155,8 +251,29 @@ void Erzeuger::block(const Karte& k, int64_t n0, int n, float* const* ein_l, flo
       r[t] += a.d[2 * a.pos + 1];
     }
   }
+  for (int i = 0; i < ERZ_STROEME; ++i) {  // Baukasten S3a: abgelöste Graphen klingen ERZ_AUSKLANG Frames linear aus
+    BkAus& a = bk_aus_[i];
+    if (!a.bk) continue;
+    if (werk_) { bk_ausklang_werk(i, n0, n, ein_l, ein_r); continue; }  // S3b: aus dem Ausklang-Platz
+    if (a.kanal >= 0) {
+      cypherdj::dsp::DenormalSchutz schutz;
+      if (cypher_bk_block(a.bk, bk_l_, bk_r_, (size_t)n) != 0) ++bk_stand_.panik;
+      bk_addiere(bk_l_, bk_r_, a.kanal, n, ein_l, ein_r, a.pos, ERZ_AUSKLANG);
+    }
+    a.pos += n;
+    if (a.pos >= ERZ_AUSKLANG || a.kanal < 0) { bk_zur_freigabe(a.bk); a = BkAus{}; }
+  }
   for (Stimme& v : sti_) spiele(v, 0, n, ein_l, ein_r);  // was schon klingt: der ganze Block
-  for (Strom& s : st_) {
+  for (int si = 0; si < ERZ_STROEME; ++si) {
+    Strom& s = st_[si];
+    // Baukasten S3b: ein Strom ohne Graph übernimmt einen wartenden sofort, wenn seine Plätze frei sind (sonst nach dem Ausklang)
+    if (werk_ && s.bk_neu_gesetzt && !s.bk && !bk_aus_[si].bk && werk_->frei(si) && werk_->frei(ERZ_STROEME + si))
+      bk_wechsel(s, s.bk_neu, s.bk_neu_kanal);
+    if (werk_ && s.bk) {  // Baukasten S3b: Graph-Strom mit Werk, die Ereignisse entnimmt bk_noten fensterweise (Review F2 N6)
+      if (midi) noten_aus(s, n0 + n, midi, n0, zyklus_n0, OffsWahl::OHNE_GRAPH);  // offene MIDI-Noten eines früheren MIDI-Stroms
+      bk_vorlauf(s, si, k, n0, n, ein_l, ein_r);
+      continue;
+    }
 #ifdef CYPHERDJ_MUTATION_MIDI_OHNE_VORHALT
     const int64_t vor = 0;  // Fehlerfall F19: MIDI am Sample des Beats, kommt 545 Samples hinter dem Kit an
 #else
@@ -168,6 +285,30 @@ void Erzeuger::block(const Karte& k, int64_t n0, int n, float* const* ein_l, flo
       const int64_t smp = std::llround(k.sample_at(e.beat)) - vor;  // Kit-Ströme: vor = 0, Einsatz, von und Duck unverändert
       if (smp >= n0 + n) break;
       ++gespielt;
+#ifdef CYPHERDJ_MUTATION_BK_KIT_SPIELT
+      if (s.bk && false) {  // Fehlerfall Baukasten S3a: der Graph-Zweig greift nicht, das Kit spielt
+#else
+      if (s.bk) {  // Baukasten S3a: Note an den Graphen am Sample des Beats, ohne Vorhalt; Off nach dauer
+#endif
+        if (s.kanal < 0 || e.note < 0 || e.note > 127) continue;
+#ifdef CYPHERDJ_MUTATION_BK_VORHALT
+        const int64_t on = std::max(smp - 545, n0);  // Fehlerfall Baukasten S3a: Vorhalt wie beim MIDI-Strom
+#else
+        const int64_t on = std::max(smp, n0);
+#endif
+        const uint8_t note = (uint8_t)e.note;
+        for (int i = 0; i < s.n_offen; ++i)  // dieselbe Note klingt noch: erst aus (am selben Sample vor dem An)
+          if (s.offen[i].port == 0 && s.offen[i].note == note) {
+            if (cypher_bk_note_aus(s.bk, (uint32_t)(on - n0), note) != 0) ++bk_stand_.verloren;
+            s.offen[i] = s.offen[--s.n_offen];
+            break;
+          }
+        if (cypher_bk_note_an(s.bk, (uint32_t)(on - n0), note, e.velocity) != 0) ++bk_stand_.verloren;
+        const int64_t aus = std::max<int64_t>(std::llround(k.sample_at(e.beat + (e.dauer > 0.0 ? e.dauer : 0.25))), on + 1);
+        if (s.n_offen < ERZ_OFFEN) s.offen[s.n_offen++] = Strom::Offen{aus, note, 0, 0};
+        else if (cypher_bk_note_aus(s.bk, (uint32_t)(on - n0 + 1), note) != 0) ++bk_stand_.verloren;  // kein Platz: gleich wieder aus statt hängen
+        continue;
+      }
       if (s.midi_port > 0) {  // Studio S5: MIDI-Strom — Note-On am Sample (Glanz 2.7: minus Vorhalt), Off nach dauer
         if (!midi || s.kanal < 0 || e.note > 127) continue;  // F08: Noten ab 128 gibt es nur im Kit
         MidiAus& m = midi[s.midi_port - 1];
@@ -252,8 +393,116 @@ void Erzeuger::block(const Karte& k, int64_t n0, int n, float* const* ein_l, flo
       std::memmove(s.ev, s.ev + gespielt, sizeof(ErzEv) * (size_t)(s.n - gespielt));
       s.n -= gespielt;
     }
-    if (midi) noten_aus(s, n0 + n, midi, n0, zyklus_n0);  // Studio S5: Offs, die in diesem Block fällig sind
+    if (werk_) {  // Baukasten S3b: Kit/MIDI-Strom (ein Graph-Strom kam oben nicht hierher)
+      if (midi) noten_aus(s, n0 + n, midi, n0, zyklus_n0, OffsWahl::OHNE_GRAPH);
+      continue;
+    }
+    if (midi || s.bk) noten_aus(s, n0 + n, midi, n0, zyklus_n0, OffsWahl::ALLE);  // Studio S5: Offs, die in diesem Block fällig sind
+    if (s.bk && s.kanal >= 0) {  // Baukasten S3a: Graph rechnen, Noten dieses Blocks sind gemeldet
+      cypherdj::dsp::DenormalSchutz schutz;
+      if (cypher_bk_block(s.bk, bk_l_, bk_r_, (size_t)n) != 0) ++bk_stand_.panik;
+      bk_addiere(bk_l_, bk_r_, s.kanal, n, ein_l, ein_r, 0, 0);
+    }
   }
+}
+
+// Baukasten S3b: Graph-Ereignisse mit Sample < bis an den Graphen, am Sample des Beats ohne Vorhalt (wie S3a), Versatz relativ
+// zu von; was vor von liegt (verspätet eingetroffen oder nach einem verspäteten Block liegen geblieben), am Fensteranfang.
+// Nur auf freiem Platz: der Callback ist dann der einzige, der das Handle anfasst.
+void Erzeuger::bk_noten(Strom& s, const Karte& k, int64_t von, int64_t bis) {
+  int gespielt = 0;
+  while (gespielt < s.n) {
+    const ErzEv& e = s.ev[gespielt];
+    const int64_t smp = std::llround(k.sample_at(e.beat));
+    if (smp >= bis) break;
+    ++gespielt;
+    if (s.bk_kanal < 0 || e.note < 0 || e.note > 127) continue;
+    const int64_t on = std::max(smp, von);
+    const uint8_t note = (uint8_t)e.note;
+    for (int i = 0; i < s.n_offen; ++i)  // dieselbe Note klingt noch: erst aus (am selben Sample vor dem An)
+      if (s.offen[i].port == 0 && s.offen[i].note == note) {
+        if (cypher_bk_note_aus(s.bk, (uint32_t)(on - von), note) != 0) ++bk_stand_.verloren;
+        s.offen[i] = s.offen[--s.n_offen];
+        break;
+      }
+    if (cypher_bk_note_an(s.bk, (uint32_t)(on - von), note, e.velocity) != 0) ++bk_stand_.verloren;
+    const int64_t aus = std::max<int64_t>(std::llround(k.sample_at(e.beat + (e.dauer > 0.0 ? e.dauer : 0.25))), on + 1);
+    if (s.n_offen < ERZ_OFFEN) s.offen[s.n_offen++] = Strom::Offen{aus, note, 0, 0};
+    else if (cypher_bk_note_aus(s.bk, (uint32_t)(on - von + 1), note) != 0) ++bk_stand_.verloren;  // kein Platz: gleich wieder aus
+  }
+  if (gespielt > 0) {
+    std::memmove(s.ev, s.ev + gespielt, sizeof(ErzEv) * (size_t)(s.n - gespielt));
+    s.n -= gespielt;
+  }
+  noten_aus(s, bis, nullptr, von, 0, OffsWahl::NUR_GRAPH);
+  // D8b: bis hierher ist vergeben; fenster() ersetzt davor nichts mehr (sonst klänge eine Note doppelt)
+  s.gesendet_bis = std::max(s.gesendet_bis, k.beat_at((double)bis - 0.5));
+}
+
+// Baukasten S3b: abgelöster Graph des Stroms a im Ausklang-Platz ERZ_STROEME + a. Er bekommt keine Noten mehr, spielt seinen
+// vorgerechneten Block mit der Rampe ab pos und rechnet den nächsten voraus, solange die Rampe nicht zu Ende ist.
+void Erzeuger::bk_ausklang_werk(int a, int64_t n0, int n, float* const* ein_l, float* const* ein_r) {
+  BkAus& x = bk_aus_[a];
+  const int p = ERZ_STROEME + a;
+  const Abholung h = werk_->abholen(p, n0, n);
+  if (h == Abholung::VERSPAETET) { ++bk_stand_.verspaetet; return; }  // Stille, der Faden besitzt den Graphen noch
+  if (h != Abholung::GUELTIG) werk_->anlauf(p, x.bk, n);              // verworfen oder leer: selbst rechnen
+#ifndef CYPHERDJ_MUTATION_BK_WERK_AUSKLANG_STUMM  // Fehlerfall: der Ausklang-Platz rechnet, aber sein Block wird nie gemischt
+  if (x.kanal >= 0) bk_addiere(werk_->l(p), werk_->r(p), x.kanal, n, ein_l, ein_r, x.pos, ERZ_AUSKLANG);
+#endif
+  x.pos += n;
+  if (x.pos >= ERZ_AUSKLANG || x.kanal < 0) { bk_zur_freigabe(x.bk); x = BkAus{}; return; }
+  werk_->auftrag(p, x.bk, n0 + n, n);
+}
+
+// Baukasten S3b: Graph-Strom mit Werk, Platz a (D1, D4, D5). Abholen, was ein Faden für diesen Block gerechnet hat (sonst
+// selbst rechnen), dann ggf. wechseln, dann Noten für den nächsten Block und Auftrag.
+void Erzeuger::bk_vorlauf(Strom& s, int a, const Karte& k, int64_t n0, int n, float* const* ein_l, float* const* ein_r) {
+  const Abholung h = werk_->abholen(a, n0, n);
+  if (h == Abholung::VERSPAETET) {  // D4: Stille, Platz bleibt beim Faden, Noten bleiben liegen, kein Auftrag
+    ++bk_stand_.verspaetet;
+#ifdef CYPHERDJ_MUTATION_BK_WERK_SPAET_VERBRAUCHT  // Fehlerfall: die Ereignisse des übersprungenen Fensters gehen verloren
+    int g = 0;
+    while (g < s.n && std::llround(k.sample_at(s.ev[g].beat)) < n0 + 2 * n) ++g;
+    std::memmove(s.ev, s.ev + g, sizeof(ErzEv) * (size_t)(s.n - g));
+    s.n -= g;
+#endif
+#ifdef CYPHERDJ_MUTATION_BK_WERK_NOTEN_TROTZ_BESETZT  // Fehlerfall: Noten an ein Handle, an dem ein Faden rechnet
+    bk_noten(s, k, n0 + n, n0 + 2 * n);
+#endif
+#ifdef CYPHERDJ_MUTATION_BK_WERK_WECHSEL_SOFORT  // Fehlerfall: der Wechsel wartet nicht auf den Platz, der alte geht frei
+    if (s.bk_neu_gesetzt) { bk_zur_freigabe(s.bk); bk_wechsel(s, s.bk_neu, s.bk_neu_kanal); }
+#endif
+    return;
+  }
+  // D6: wechseln, wenn ein neuer wartet und der Ausklang-Platz frei ist (der aktive ist es nach dem Abholen)
+  const bool wechsle = s.bk_neu_gesetzt && !bk_aus_[a].bk && werk_->frei(ERZ_STROEME + a);
+  if (h != Abholung::GUELTIG) {  // D5 Anlauf: dieses Fenster selbst; wartet ein Wechsel, bekommt der alte keine Noten (m11)
+    if (!s.bk_neu_gesetzt) bk_noten(s, k, n0, n0 + n);
+    werk_->anlauf(a, s.bk, n);
+  }
+#ifdef CYPHERDJ_MUTATION_BK_WERK_RAMPE_SPAET  // Fehlerfall: der alte spielt den Wechselblock voll, die Rampe beginnt erst danach
+  const int rampe = 0;
+  if (s.bk_kanal >= 0) bk_addiere(werk_->l(a), werk_->r(a), s.bk_kanal, n, ein_l, ein_r, 0, 0);
+#else
+  const int rampe = n;
+  if (s.bk_kanal >= 0) bk_addiere(werk_->l(a), werk_->r(a), s.bk_kanal, n, ein_l, ein_r, 0, wechsle ? ERZ_AUSKLANG : 0);
+#endif
+  if (wechsle) {  // der alte klingt im Ausklang-Platz weiter, seine offenen Noten verfallen (wie S3a)
+    int w = 0;
+    for (int i = 0; i < s.n_offen; ++i) if (s.offen[i].port != 0) s.offen[w++] = s.offen[i];
+    s.n_offen = w;
+    if (rampe >= ERZ_AUSKLANG || s.bk_kanal < 0) bk_zur_freigabe(s.bk);
+    else {
+      bk_aus_[a] = BkAus{s.bk, s.bk_kanal, rampe};
+      werk_->auftrag(ERZ_STROEME + a, s.bk, n0 + n, n);
+    }
+    bk_wechsel(s, s.bk_neu, s.bk_neu_kanal);
+    if (!s.bk) return;  // Graph ab: der Strom spielt ab dem nächsten Block Kit oder MIDI
+  }
+  if (s.bk_neu_gesetzt) return;  // ein Wechsel wartet (Ausklang-Platz besetzt): keine Noten an den alten (m11)
+  bk_noten(s, k, n0 + n, n0 + 2 * n);
+  werk_->auftrag(a, s.bk, n0 + n, n);
 }
 
 void Erzeuger::leeren() {

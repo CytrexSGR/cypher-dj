@@ -38,6 +38,15 @@ export function zoomUm(a, faktor, x) {
 // Waagrecht scrollen um dx Pixel (Rad, Ziehen); nie vor Beat 0
 export const scrolle = (a, dx) => ({ ...a, beat0: Math.max(0, a.beat0 + dx / a.pxProBeat) });
 
+// Sichtbare Scrollleiste (Andreas 2026-10-30: „ich kann in der ansicht nicht vorscrollen“). Der Inhalt reicht vom Beat 0 bis hinter das Projektende
+// plus eine Bildbreite, damit das Ende an den linken Rand rollt; liegt die Ansicht schon weiter rechts, wächst er mit (die Leiste klemmt nie zurück).
+export const projektEnde = (p) => Math.max(0, ...(p?.spuren ?? []).flatMap((s) => s.clips.map((c) => c.start_beat + c.laenge_beats)));
+export function leiste(a, endeBeat, breitePx) {
+  const links = a.beat0 * a.pxProBeat;
+  return { inhaltPx: Math.ceil(Math.max(endeBeat * a.pxProBeat, links) + breitePx), links };
+}
+export const ausLeiste = (a, links) => ({ ...a, beat0: Math.max(0, links / a.pxProBeat) });
+
 // Lineal: Hauptlinien (beschriftet) mindestens 60 px auseinander, Nebenlinien mindestens 8 px
 const STUFEN = [0.25, 0.5, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512];
 export function linealStufen(pxProBeat) {

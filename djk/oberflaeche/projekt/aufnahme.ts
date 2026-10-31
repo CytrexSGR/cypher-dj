@@ -57,6 +57,35 @@ export function schreibeWavAusF32(quelle: string, ziel: string): { frames: numbe
   finally { fs.closeSync(ein); fs.closeSync(aus); }
 }
 
+// Review MINOR 5 (Slice 6): dasselbe in Stücken von 1 MiB über fs.promises, die Ereignisschleife bleibt frei (bei 600 s sind es 4 x 230 MB)
+export async function schreibeWavAusF32Stueckweise(quelle: string, ziel: string): Promise<{ frames: number; sha256: string }> {
+  const frames = Math.floor(fs.statSync(quelle).size / 8);
+  if (50 + frames * 8 > 0xFFFFFFFF) throw new TakeFehler('take_zu_lang', `${frames} Frames`);
+  fs.mkdirSync(path.dirname(ziel), { recursive: true });
+  const aus = await fs.promises.open(ziel, 'wx');
+  try {
+    const ein = await fs.promises.open(quelle, 'r');
+    try {
+      const h = crypto.createHash('sha256');
+      const kopf = wavKopf(frames);
+      h.update(kopf);
+      await aus.write(kopf);
+      const puf = Buffer.allocUnsafe(1 << 20);
+      let rest = frames * 8;
+      while (rest > 0) {
+        const { bytesRead: n } = await ein.read(puf, 0, Math.min(puf.length, rest), null);
+        if (n <= 0) break;
+        h.update(puf.subarray(0, n));
+        await aus.write(puf, 0, n);
+        rest -= n;
+      }
+      await aus.sync();
+      return { frames, sha256: h.digest('hex') };
+    } finally { await ein.close(); }
+  } catch (e) { await aus.close().catch(() => {}); fs.rmSync(ziel, { force: true }); throw e; }
+  finally { await aus.close().catch(() => {}); }
+}
+
 export interface TakeAngabe { spurId: string; startBeat: number; laengeBeats: number; sha256: string; pfadHinweis: string; name: string }
 const EPS = 1e-9;
 const lauf = (p: Projekt, b: unknown): Projekt => fuehreListeAus(p, [b]).projekt;

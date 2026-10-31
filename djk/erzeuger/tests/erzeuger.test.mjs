@@ -208,3 +208,33 @@ test('Feld eines späten Zweigs kommt nachträglich in status.json (room nach cu
   const s = lies();
   assert.deepEqual([...s.taub].sort(), ['cutoff', 'room'], log);
 });
+
+// Baukasten S3a Task 4: --ziel bk:<graph> meldet /erz/strom mit diesem Ziel und lädt kein Kit (der Kit-Ordner existiert
+// nicht: ein Kit-Ladeversuch bräche den Prozess ab); die Noten des Musters kommen als Ereignisse an.
+test('Ziel bk:<name>: Strom mit diesem Ziel, kein Kit geladen, Noten im Fenster', { timeout: 20000 }, async (t) => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'erz-bk-'));
+  const muster = path.join(tmp, 'strom1.js');
+  fs.writeFileSync(muster, 'note("a2 c3 e3 a3")');
+  const kern = dgram.createSocket('udp4');
+  await new Promise((r) => kern.bind(0, '127.0.0.1', r));
+  const eingang = [];
+  let abo = null;
+  kern.on('message', (b) => { const m = dekodiere(b); eingang.push(m); if (m.adresse === '/k/hallo') abo = m.werte[1]; });
+  const p = spawn(process.execPath, ['--permission', `--allow-fs-read=${path.resolve(HIER, '../..')}`,
+    `--allow-fs-read=${process.env.HOME}/strudel`, `--allow-fs-read=${tmp}`, `--allow-fs-write=${tmp}`,
+    path.join(HIER, '../erzeuger.mjs'), '--kern-port', String(kern.address().port), '--abo-port', '0',
+    '--kit-ordner', path.join(tmp, 'kein-kit-ordner'), '--ziel', 'bk:juno-pad', '--muster', muster], { stdio: ['ignore', 'ignore', 'pipe'] });
+  let log = '';
+  p.stderr.on('data', (d) => { log += d; });
+  t.after(() => { p.kill('SIGTERM'); kern.close(); fs.rmSync(tmp, { recursive: true, force: true }); });
+  for (let i = 0; i < 100 && !abo; i++) await warte(50);
+  assert.ok(abo, `kein /k/hallo: ${log}`);
+  kern.send(kodiere('/uhr', 'hhddd', [0n, process.hrtime.bigint(), 6.0, 128, 0]), abo, '127.0.0.1');
+  await warte(300);
+  const strom = eingang.find((m) => m.adresse === '/erz/strom');
+  assert.deepEqual(strom?.werte.slice(1), ['erzeuger', 1, 'bk:juno-pad', 'erz/1'], log);
+  const b = eingang.find((m) => m.bundle);
+  assert.ok(b, `kein Fenster: ${log}`);
+  assert.deepEqual(b.elemente.slice(1).map((e) => e.werte[3]), [45, 48, 52, 57, 45, 48, 52, 57]);   // a2 c3 e3 a3, zwei Takte
+  assert.doesNotMatch(log, /nicht lesbar/);   // kein Kit-Ladeversuch (der Kit-Ordner existiert nicht)
+});

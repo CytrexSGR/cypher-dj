@@ -14,7 +14,9 @@ endif()
 option(CYPHERDJ_SANITIZE "ASan und UBSan (ADR 002)" OFF)
 # Bungee (MPL-2.0) als zweite Keylock-Maschine neben R3 (Umbauplan 2026-10-09-bungee-umbau, S0). Aus: kein Bungee gebaut,
 # keylock_maschine = "bungee" liefert dann keinen Dehner (Keylock aus), R3 unverändert.
-option(CYPHERDJ_BUNGEE "Bungee als Keylock-Maschine (djk/third_party/bungee)" OFF)
+# Paket 1.13 Warp, Slice 2: Bungee ist Pflicht im Betriebs-Bau (Vorgabe ON): das Warp-Werk rechnet COMPLEX und TONES damit. Ein Bau mit OFF lädt
+# keine Wiedergabe mit diesen Modi (Grund warp_maschine_fehlt), statt sie still als RE-PITCH zu spielen.
+option(CYPHERDJ_BUNGEE "Bungee als Keylock-Maschine und Warp-Maschine (djk/third_party/bungee)" ON)
 option(CYPHERDJ_TSAN "ThreadSanitizer für den Befehlsring (Scheibe 08)" OFF)
 option(CYPHERDJ_MUTATION_RING_RELAXED "Fehlerfall: Ring ohne Release/Acquire (nur mit CYPHERDJ_TSAN)" OFF)
 if(CYPHERDJ_SANITIZE)
@@ -62,11 +64,15 @@ endif()
 find_program(CARGO cargo REQUIRED)
 set(HALL_FFI_DIR ${DJK}/instrumente)
 set(HALL_FFI_LIB ${HALL_FFI_DIR}/target/release/libhall_ffi.a)
-# Seit 2026-10-11 trägt dieselbe Bibliothek auch Cypher Komp (komp_dsp): zwei Rust-Staticlibs kollidieren im Binary.
+# Seit 2026-10-11 trägt dieselbe Bibliothek auch Cypher Komp (komp_dsp): zwei Rust-Staticlibs kollidieren im Binary
+# (und Baukasten-Graphen der Erzeuger-Ströme).
 # D1 K2a: dazu die RB-338 (rb_dsp, cypher_rb_* in hall_ffi/src/rb.rs); ohne rb_dsp hier baute eine Änderung dort nicht neu.
+# Baukasten S3a: dazu baukasten_dsp mit saett_dsp und eq_dsp (cypher_bk_* in hall_ffi/src/baukasten.rs).
 file(GLOB HALL_FFI_QUELLEN CONFIGURE_DEPENDS ${HALL_FFI_DIR}/hall_ffi/src/*.rs ${HALL_FFI_DIR}/hall_dsp/src/*.rs
      ${HALL_FFI_DIR}/komp_dsp/src/*.rs ${HALL_FFI_DIR}/rb_dsp/src/*.rs ${HALL_FFI_DIR}/hall_ffi/Cargo.toml
-     ${HALL_FFI_DIR}/hall_dsp/Cargo.toml ${HALL_FFI_DIR}/komp_dsp/Cargo.toml ${HALL_FFI_DIR}/rb_dsp/Cargo.toml)
+     ${HALL_FFI_DIR}/baukasten_dsp/src/*.rs ${HALL_FFI_DIR}/saett_dsp/src/*.rs ${HALL_FFI_DIR}/eq_dsp/src/*.rs
+     ${HALL_FFI_DIR}/hall_dsp/Cargo.toml ${HALL_FFI_DIR}/komp_dsp/Cargo.toml ${HALL_FFI_DIR}/rb_dsp/Cargo.toml
+     ${HALL_FFI_DIR}/baukasten_dsp/Cargo.toml ${HALL_FFI_DIR}/saett_dsp/Cargo.toml ${HALL_FFI_DIR}/eq_dsp/Cargo.toml)
 # touch danach: cargo schreibt die .a nicht neu, wenn sich nur die mtime einer Quelle ändert (gemessen 2026-10-15 an
 # rb_dsp/Cargo.toml); ohne touch liefe die Regel dann bei jedem Bau erneut.
 add_custom_command(OUTPUT ${HALL_FFI_LIB}
@@ -85,10 +91,12 @@ list(REMOVE_ITEM KERN_QUELLEN ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp)
 # src/dehner_bungee.cpp gehört nicht in KERN_QUELLEN (die Mutationsziele mit eigener Quellenliste kennen Bungee nicht): nur die
 # Bibliothek und die Ziele, die Bungee ausdrücklich brauchen, binden sie (mit CYPHERDJ_BUNGEE und cypherdj::bungee).
 list(REMOVE_ITEM KERN_QUELLEN ${CMAKE_CURRENT_SOURCE_DIR}/src/dehner_bungee.cpp)
+# Paket 1.13 Slice 2: ebenso die Bungee-Maschine des Warp-Werks; src/warp_werk.cpp (Pool, Ringe, Fäden) kennt Bungee nicht und bleibt in KERN_QUELLEN
+list(REMOVE_ITEM KERN_QUELLEN ${CMAKE_CURRENT_SOURCE_DIR}/src/warp_werk_bungee.cpp)
 set(KERN_BUNGEE_QUELLE)
 if(CYPHERDJ_BUNGEE)
   include(${DJK}/third_party/bungee.cmake)
-  set(KERN_BUNGEE_QUELLE ${CMAKE_CURRENT_SOURCE_DIR}/src/dehner_bungee.cpp)
+  set(KERN_BUNGEE_QUELLE ${CMAKE_CURRENT_SOURCE_DIR}/src/dehner_bungee.cpp ${CMAKE_CURRENT_SOURCE_DIR}/src/warp_werk_bungee.cpp)
 endif()
 add_library(cypherdj_kernbib STATIC ${KERN_QUELLEN} ${KERN_BUNGEE_QUELLE})
 if(CYPHERDJ_BUNGEE)
@@ -121,8 +129,10 @@ file(GLOB KERN_TESTS CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_*.
 # Scheibe 25: test_mixer prüft die Zuweisungstabelle (Wege bitgleich, Blende, Crossfader, PFL/Cue) am Mixer ohne den
 # Master-Limiter dahinter; den Limiter, seinen Vorhalt und den verzögerten Cue prüft test_limiter25 am Betriebs-Mixer.
 list(REMOVE_ITEM KERN_TESTS ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_mixer.cpp)
+# Baukasten S3b Task 2: die Attrappe definiert cypher_bk_* selbst und darf hall_ffi nicht linken (eigenes Ziel weiter unten).
+list(REMOVE_ITEM KERN_TESTS ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_erzeuger_bk_werk_attrappe.cpp)
 if(NOT CYPHERDJ_BUNGEE)
-  list(FILTER KERN_TESTS EXCLUDE REGEX "test_[a-z_]*bungee")  # Tests der Bungee-Maschine bauen nur mit CYPHERDJ_BUNGEE
+  list(FILTER KERN_TESTS EXCLUDE REGEX "test_([a-z_]*bungee|warp_werk)")  # Tests der Bungee-Maschine und des Warp-Werks bauen nur mit CYPHERDJ_BUNGEE
 endif()
 # Fix L5 (K3): unter Kernel 7.0 bricht die TSan-Laufzeit mit Adress-Zufälligkeit oft schon beim Start ab („FATAL:
 # ThreadSanitizer: unexpected memory mapping“). Die TSan-Läufe des Freeze starten darum über setarch -R.
@@ -186,8 +196,8 @@ function(test_mutation name test schalter)
   add_executable(${name} tests/${test}.cpp ${tm_quellen})
   target_include_directories(${name} PRIVATE include tests ${DJK}/vertrag)
   target_compile_definitions(${name} PRIVATE ${schalter}=1 CYPHERDJ_DJK="${DJK}")
-  if(CYPHERDJ_BUNGEE AND "src/dehner_bungee.cpp" IN_LIST tm_quellen)  # nur die Ziele, die Bungee ausdrücklich einbinden
-    target_compile_definitions(${name} PRIVATE CYPHERDJ_BUNGEE=1)
+  if(CYPHERDJ_BUNGEE AND ("src/dehner_bungee.cpp" IN_LIST tm_quellen OR "src/arr_wiedergabe.cpp" IN_LIST tm_quellen OR "src/warp_werk.cpp" IN_LIST tm_quellen))  # nur die Ziele, die Bungee ausdrücklich einbinden;
+    target_compile_definitions(${name} PRIVATE CYPHERDJ_BUNGEE=1)   # Paket 1.13 Slice 2: der Lader fragt es nur (Maschinen-Tor für complex und tones), er bindet Bungee nicht
   endif()
   target_link_libraries(${name} PRIVATE PkgConfig::JACK Threads::Threads cypherdj::dsp cypherdj::stellwerk
                         cypherdj_dsp_messer cypherdj::json PkgConfig::CRYPTO cypherdj::hand ${tm_libs})  # Scheibe 25, 31, 35
@@ -197,7 +207,8 @@ endfunction()
 # D1 K1: Quellen des Moduls Arrangement (arrangement.h); die Ziele mit eigener Quellenliste brauchen sie, sobald der Kern
 # das Modul hält (Slice 8). Wächst mit den Slices 4 bis 7.
 set(ARR_QUELLEN src/arrangement.cpp src/arr_stimmen.cpp src/arr_ausgang.cpp src/arr_noten.cpp src/arr_metronom.cpp
-    src/arr_freeze.cpp)  # Paket K3: Freeze
+    src/arr_freeze.cpp  # Paket K3: Freeze
+    src/arr_warp.cpp)   # Paket 1.13 Slice 2: Seite des Arrangements am Warp-Werk (nur die Schnittstelle warp_werk.h, kein Bungee)
 list(APPEND ARR_QUELLEN src/arr_rb_senke.cpp src/arr_wirt_senke.cpp)   # D1 K2b: Senken (RB-338 über cypherdj::dsp -> libhall_ffi.a, Wirt-Slots)
 test_mutation(test_klick_mutation test_klick CYPHERDJ_MUTATION_KLICK_BLOCKANFANG src/klick.cpp src/uhr.cpp)
 test_mutation(test_tempoplan_mutation test_tempoplan CYPHERDJ_MUTATION_RAMPE_IN_SAMPLES src/tempoplan.cpp src/uhr.cpp)
@@ -224,6 +235,65 @@ test_mutation(test_erzeuger_ausklangplaetze_mutation test_erzeuger CYPHERDJ_MUTA
 test_mutation(test_erzeuger_raubwahl_mutation test_erzeuger CYPHERDJ_MUTATION_ERZ_RAUB_JUENGSTE src/erzeuger.cpp src/kit.cpp src/uhr.cpp)
 # Prüfung Slice 2.5/2.4, Fix B: jeder Ausklang landet auf Platz 0 und überschreibt den vorigen.
 test_mutation(test_erzeuger_ausklangplatz_mutation test_erzeuger CYPHERDJ_MUTATION_ERZ_AUSKLANG_PLATZ0 src/erzeuger.cpp src/kit.cpp src/uhr.cpp)
+# Baukasten S3a Task 2: Fehlerfälle des Erzeuger-Stroms mit Graph (test_erzeuger_bk).
+test_mutation(test_erzeuger_bk_vorhalt_mutation test_erzeuger_bk CYPHERDJ_MUTATION_BK_VORHALT src/erzeuger.cpp src/kit.cpp src/uhr.cpp)
+test_mutation(test_erzeuger_bk_hart_mutation test_erzeuger_bk CYPHERDJ_MUTATION_BK_HART src/erzeuger.cpp src/kit.cpp src/uhr.cpp)
+test_mutation(test_erzeuger_bk_kit_spielt_mutation test_erzeuger_bk CYPHERDJ_MUTATION_BK_KIT_SPIELT src/erzeuger.cpp src/kit.cpp src/uhr.cpp)
+test_mutation(test_erzeuger_bk_off_blockanfang_mutation test_erzeuger_bk CYPHERDJ_MUTATION_BK_OFF_BLOCKANFANG src/erzeuger.cpp src/kit.cpp src/uhr.cpp)
+test_mutation(test_erzeuger_bk_ohne_klemme_mutation test_erzeuger_bk CYPHERDJ_MUTATION_BK_OHNE_KLEMME src/erzeuger.cpp src/kit.cpp src/uhr.cpp)
+test_mutation(test_erzeuger_bk_fade_konstant_mutation test_erzeuger_bk CYPHERDJ_MUTATION_BK_FADE_KONSTANT src/erzeuger.cpp src/kit.cpp src/uhr.cpp)
+test_mutation(test_erzeuger_bk_alle_aus_mutation test_erzeuger_bk CYPHERDJ_MUTATION_BK_ALLE_AUS src/erzeuger.cpp src/kit.cpp src/uhr.cpp)
+test_mutation(test_erzeuger_bk_zweiter_wechsel_leck_mutation test_erzeuger_bk CYPHERDJ_MUTATION_BK_ZWEITER_WECHSEL_LECK src/erzeuger.cpp src/kit.cpp src/uhr.cpp)
+# Baukasten S3c Task 4: Kanal-Graph im Mixer. test_mixer_bk gegen diese Mutationen muss scheitern.
+test_mutation(test_mixer_bk_blende_aus_mutation test_mixer_bk CYPHERDJ_MUTATION_BK_KANAL_BLENDE_AUS src/mixer.cpp src/beatfx.cpp)
+test_mutation(test_mixer_bk_klemme_aus_mutation test_mixer_bk CYPHERDJ_MUTATION_BK_KANAL_KLEMME_AUS src/mixer.cpp src/beatfx.cpp)
+test_mutation(test_mixer_bk_takt_aus_mutation test_mixer_bk CYPHERDJ_MUTATION_BK_KANAL_TAKT_AUS src/mixer.cpp src/beatfx.cpp)
+test_mutation(test_mixer_bk_doppel_alt_mutation test_mixer_bk CYPHERDJ_MUTATION_BK_KANAL_DOPPEL_ALT src/mixer.cpp src/beatfx.cpp)
+# Baukasten S3b Task 1: Fehlerfälle des Graph-Werks (test_graph_werk).
+test_mutation(test_graph_werk_ohne_stehlen_mutation test_graph_werk CYPHERDJ_MUTATION_GW_OHNE_STEHLEN src/graph_werk.cpp)
+test_mutation(test_graph_werk_spaet_gueltig_mutation test_graph_werk CYPHERDJ_MUTATION_GW_SPAET_GUELTIG src/graph_werk.cpp)
+test_mutation(test_graph_werk_auftrag_besetzt_mutation test_graph_werk CYPHERDJ_MUTATION_GW_AUFTRAG_BESETZT src/graph_werk.cpp)
+test_mutation(test_graph_werk_falsches_s_mutation test_graph_werk CYPHERDJ_MUTATION_GW_FALSCHES_S src/graph_werk.cpp)
+test_mutation(test_graph_werk_kein_rueckfall_mutation test_graph_werk CYPHERDJ_MUTATION_GW_KEIN_RUECKFALL src/graph_werk.cpp)
+test_mutation(test_graph_werk_verwerfen_rechnet_mutation test_graph_werk CYPHERDJ_MUTATION_GW_VERWERFEN_RECHNET src/graph_werk.cpp)
+# Fall 5 fährt in ctest 5000 statt 50 000 Zyklen (CYPHERDJ_GW_ZYKLEN); ein hängender Stub (halt ohne los) hängt ctest nicht bis zum Vorgabe-Timeout.
+foreach(t test_graph_werk test_graph_werk_ohne_stehlen_mutation test_graph_werk_spaet_gueltig_mutation test_graph_werk_auftrag_besetzt_mutation
+          test_graph_werk_falsches_s_mutation test_graph_werk_kein_rueckfall_mutation test_graph_werk_verwerfen_rechnet_mutation)
+  if(TEST ${t})
+    set_tests_properties(${t} PROPERTIES ENVIRONMENT "CYPHERDJ_GW_ZYKLEN=5000" TIMEOUT 120)
+  endif()
+endforeach()
+# Baukasten S3b Task 2: Erzeuger mit Graph-Werk. test_erzeuger_bk_werk mit echtem Graphen (hall_ffi); die Attrappe ohne
+# hall_ffi, nur mit den Quellen, die der Erzeuger braucht (Review F2 N3), und ihre Fehlerfälle.
+test_mutation(test_erzeuger_bk_werk_rampe_spaet_mutation test_erzeuger_bk_werk CYPHERDJ_MUTATION_BK_WERK_RAMPE_SPAET
+              src/erzeuger.cpp src/kit.cpp src/uhr.cpp src/graph_werk.cpp)
+test_mutation(test_erzeuger_bk_werk_ausklang_stumm_mutation test_erzeuger_bk_werk CYPHERDJ_MUTATION_BK_WERK_AUSKLANG_STUMM
+              src/erzeuger.cpp src/kit.cpp src/uhr.cpp src/graph_werk.cpp)
+function(test_bk_attrappe name schalter)
+  add_executable(${name} tests/test_erzeuger_bk_werk_attrappe.cpp src/erzeuger.cpp src/kit.cpp src/uhr.cpp src/graph_werk.cpp)
+  target_include_directories(${name} PRIVATE include tests ${DJK}/vertrag   # nur Köpfe (mixer.h), nichts gelinkt
+    $<TARGET_PROPERTY:cypherdj::dsp,INTERFACE_INCLUDE_DIRECTORIES> $<TARGET_PROPERTY:cypherdj_dsp_messer,INTERFACE_INCLUDE_DIRECTORIES>
+    $<TARGET_PROPERTY:cypherdj::stellwerk,INTERFACE_INCLUDE_DIRECTORIES>)
+  target_link_libraries(${name} PRIVATE Threads::Threads cypherdj::json)
+  if(schalter)
+    target_compile_definitions(${name} PRIVATE ${schalter}=1)
+  endif()
+  if(CYPHERDJ_TSAN)
+    add_test(NAME ${name} COMMAND ${TSAN_START} $<TARGET_FILE:${name}>)
+  else()
+    add_test(NAME ${name} COMMAND ${name})
+  endif()
+  set_tests_properties(${name} PROPERTIES TIMEOUT 60)
+  if(schalter)
+    set_tests_properties(${name} PROPERTIES WILL_FAIL TRUE)
+  elseif(CYPHERDJ_TSAN)
+    set_tests_properties(${name} PROPERTIES FAIL_REGULAR_EXPRESSION "ThreadSanitizer")
+  endif()
+endfunction()
+test_bk_attrappe(test_erzeuger_bk_werk_attrappe "")
+test_bk_attrappe(test_erzeuger_bk_werk_spaet_verbraucht_mutation CYPHERDJ_MUTATION_BK_WERK_SPAET_VERBRAUCHT)
+test_bk_attrappe(test_erzeuger_bk_werk_noten_trotz_besetzt_mutation CYPHERDJ_MUTATION_BK_WERK_NOTEN_TROTZ_BESETZT)
+test_bk_attrappe(test_erzeuger_bk_werk_wechsel_sofort_mutation CYPHERDJ_MUTATION_BK_WERK_WECHSEL_SOFORT)
 # Plan MVP 2 (ADR 025), Fehlerfall: Loop-Position ab dem Einsatz statt aus dem Beat (Box läuft neben dem Raster).
 test_mutation(test_loopbox_mutation test_loopbox CYPHERDJ_MUTATION_LOOP_AB_START src/loopbox.cpp src/loop.cpp src/uhr.cpp)
 # Plan MVP 2 Scheibe 2 (ADR 025 Folgeplan), Fehlerfall: Mitschnitt-Einsatz am Blockanfang statt ab ab_sample.
@@ -394,7 +464,7 @@ if(CYPHERDJ_BUNGEE)
   target_link_libraries(test_dehner_bungee PRIVATE PkgConfig::RUBBERBAND)  # keylock_mess.h bindet Rubber Band ein
   # S2: der Kern mit Bungee; Fehlerfall: niemand treibt die Dehner (alle Kern-Quellen samt dehner_bungee.cpp, wie kern_keylock_faeden_mutation)
   target_link_libraries(test_kern_keylock_bungee PRIVATE PkgConfig::RUBBERBAND)
-  add_executable(test_kern_keylock_bungee_kein_antrieb_mutation tests/test_kern_keylock_bungee.cpp ${KERN_QUELLEN} src/dehner_bungee.cpp)
+  add_executable(test_kern_keylock_bungee_kein_antrieb_mutation tests/test_kern_keylock_bungee.cpp ${KERN_QUELLEN} src/dehner_bungee.cpp src/warp_werk_bungee.cpp)   # Slice 2: warp_werk.cpp liegt in KERN_QUELLEN und braucht die Maschine
   target_include_directories(test_kern_keylock_bungee_kein_antrieb_mutation PRIVATE include tests ${DJK}/vertrag)
   target_compile_definitions(test_kern_keylock_bungee_kein_antrieb_mutation PRIVATE CYPHERDJ_MUTATION_KEIN_ANTRIEB=1 CYPHERDJ_BUNGEE=1
                              CYPHERDJ_DJK="${DJK}")
@@ -408,6 +478,23 @@ if(CYPHERDJ_BUNGEE)
     test_mutation(test_dehner_${mk}_mutation test_dehner_bungee CYPHERDJ_MUTATION_${m}
                   src/dehner.cpp src/dehner_bungee.cpp src/uhr.cpp PkgConfig::RUBBERBAND cypherdj::bungee)
   endforeach()
+  # Paket 1.13 Warp, Slice 2: Fehlerfälle des Warp-Werks (das Werk wird als eigenes Objekt mutiert), jede macht ihren Fall in test_warp_werk rot
+  foreach(m SOLL_NACH_SCHREIBE RING_VOLL_DREHT)
+    string(TOLOWER ${m} mk)
+    test_mutation(test_warp_werk_${mk}_mutation test_warp_werk CYPHERDJ_MUTATION_WARP_${m} src/warp_werk.cpp src/warp_werk_bungee.cpp src/uhr.cpp cypherdj::bungee)
+  endforeach()
+  # Paket 1.13 Warp, Slice 5: Fehlerfälle von Transpose/Detune im Werk (PITCH_VERGESSEN bricht Fall 1, HOP_FEST Fall 3)
+  foreach(m PITCH_VERGESSEN HOP_FEST)
+    string(TOLOWER ${m} mk)
+    test_mutation(test_warp_werk_pitch_${mk}_mutation test_warp_werk_pitch CYPHERDJ_MUTATION_WARP_${m} src/warp_werk.cpp src/warp_werk_bungee.cpp src/uhr.cpp cypherdj::bungee)
+  endforeach()
+  # Task 3 Step 6, ohne die Quelle anzufassen: die Reihenfolge der ersten Fassung (schreibe vor soll) mit dem engen Fenster. Kein Test, denn der Verlust tritt nur in einem Teil
+  # der Läufe auf (ein ctest-Ziel wäre unzuverlässig): der Plan fährt das Ziel fünfmal von Hand
+  add_executable(test_warp_werk_soll_nach_schreibe_eng tests/test_warp_werk.cpp src/warp_werk.cpp src/warp_werk_bungee.cpp src/uhr.cpp)
+  target_include_directories(test_warp_werk_soll_nach_schreibe_eng PRIVATE include tests ${DJK}/vertrag)
+  target_compile_definitions(test_warp_werk_soll_nach_schreibe_eng PRIVATE CYPHERDJ_MUTATION_WARP_SOLL_NACH_SCHREIBE_ENG=1 CYPHERDJ_BUNGEE=1 CYPHERDJ_DJK="${DJK}")
+  target_link_libraries(test_warp_werk_soll_nach_schreibe_eng PRIVATE PkgConfig::JACK Threads::Threads cypherdj::dsp cypherdj::stellwerk cypherdj_dsp_messer cypherdj::json
+                        PkgConfig::CRYPTO cypherdj::hand cypherdj::bungee)
 endif()
 kern_mutation(cypherdj-kern-mutation-drift CYPHERDJ_MUTATION_DECK_DRIFT)
 # Scheibe 31, Fehlerfall der Abnahme: Deck-Start am Blockanfang statt am Sample des Ziel-Beats. test_kern_deck gegen die
@@ -486,6 +573,25 @@ test_mutation(test_kern_fx_reihenfolge_mutation test_kern_fx CYPHERDJ_MUTATION_F
 # Ohr T17, Fehlerfall FX-Routing: der Weg wird ohne Gleiten getauscht und die Echo-Leitung sofort geleert. test_kern_fx_routing
 # (Fall 2, Sprung im Umschaltfenster) muss dagegen scheitern.
 test_mutation(test_kern_fx_routing_hart_mutation test_kern_fx_routing CYPHERDJ_MUTATION_FX_ROUTING_HART ${KERN_QUELLEN35})
+# Baukasten S3c Task 5: Befehl /k/kanal/graph. test_kern_kanal_graph (Kern bis Mixer) muss gegen jede dieser Mutationen sauber
+# scheitern (PRUEF, kein Absturz): Graph nicht gesetzt, Graph im KI-Stopp oder bei falschem Kanal nicht zurückgegeben (Leck),
+# KI-Stopp ohne Riegel, abgelöste Graphen nicht abgeholt, abgeholte doppelt gemeldet (Doppel-Free im Netz-Faden),
+# ein Burst über die Ablage nicht sofort abgeholt (Leck).
+foreach(mut NICHT_SETZEN KI_LECK KI_OFFEN BEREICH_LECK NICHT_ABHOLEN DOPPELT BURST_LECK)
+  string(TOLOWER ${mut} mut_klein)
+  test_mutation(test_kern_kanal_graph_${mut_klein}_mutation test_kern_kanal_graph CYPHERDJ_MUTATION_KANAL_GRAPH_${mut} ${KERN_QUELLEN35})
+endforeach()
+# Dasselbe im Netz: netz_erz.cpp mutiert als eigenes Objekt vor der Bibliothek (Muster test_netz_arr_erz4_mutation);
+# test_netz_erz muss scheitern, wenn kein_eingang, die Latenz oder der Kanalbereich nicht mehr geprüft werden.
+foreach(mut NETZ_EINGANG_OFFEN NETZ_LATENZ_OFFEN NETZ_BEREICH_OFFEN)
+  string(TOLOWER ${mut} mut_klein)
+  add_executable(test_netz_erz_kanal_graph_${mut_klein}_mutation tests/test_netz_erz.cpp src/netz_erz.cpp)
+  target_include_directories(test_netz_erz_kanal_graph_${mut_klein}_mutation PRIVATE include tests)
+  target_compile_definitions(test_netz_erz_kanal_graph_${mut_klein}_mutation PRIVATE CYPHERDJ_MUTATION_KANAL_GRAPH_${mut}=1 CYPHERDJ_DJK="${DJK}")
+  target_link_libraries(test_netz_erz_kanal_graph_${mut_klein}_mutation PRIVATE cypherdj_kernbib cypherdj::json cypherdj::toml)
+  add_test(NAME test_netz_erz_kanal_graph_${mut_klein}_mutation COMMAND test_netz_erz_kanal_graph_${mut_klein}_mutation)
+  set_tests_properties(test_netz_erz_kanal_graph_${mut_klein}_mutation PROPERTIES WILL_FAIL TRUE)
+endforeach()
 # Kern für den Fehlerfall am Ziel (Task 9 Step 3): Erzeuger-Einsatz am Blockanfang
 kern_mutation(cypherdj-kern-mutation-erz CYPHERDJ_MUTATION_ERZ_BLOCKANFANG)
 # Glanz 2.7 (F19), Fehlerfall: MIDI-Ströme ohne Vorhalt (Note am Sample des Beats, Surge 11,35 ms hinter dem Kit).
@@ -846,9 +952,110 @@ test_mutation(test_arr_warp_neustart_mutation test_arr_warp CYPHERDJ_MUTATION_AR
 test_mutation(test_arr_warp_ausklang_mutation test_arr_warp CYPHERDJ_MUTATION_ARR_WARP_AUSKLANG_URSPRUNG ${ARR_QUELLEN} src/uhr.cpp)
 test_mutation(test_arr_warp_unveraendert_naht_mutation test_arr_warp_unveraendert CYPHERDJ_MUTATION_ARR_NAHT_HART ${ARR_QUELLEN} src/uhr.cpp)
 test_mutation(test_arr_warp_unveraendert_einstieg_mutation test_arr_warp_unveraendert CYPHERDJ_MUTATION_ARR_EINSTIEG_OHNE_RAMPE ${ARR_QUELLEN} src/uhr.cpp)
+# Paket 1.13 Warp, Slice 4 (Task 5): BEATS im Callback; jeder Fehlerfall muss test_arr_warp_beats rot machen (WILL_FAIL)
+test_mutation(test_arr_warp_beats_kuerzen_mutation test_arr_warp_beats CYPHERDJ_MUTATION_ARR_BEATS_OHNE_KUERZBLENDE ${ARR_QUELLEN} src/uhr.cpp)
+test_mutation(test_arr_warp_beats_varispeed_mutation test_arr_warp_beats CYPHERDJ_MUTATION_ARR_BEATS_VARISPEED ${ARR_QUELLEN} src/uhr.cpp)
+test_mutation(test_arr_warp_beats_luecke_mutation test_arr_warp_beats CYPHERDJ_MUTATION_ARR_BEATS_LUECKE_SPIELT ${ARR_QUELLEN} src/uhr.cpp)
+test_mutation(test_arr_warp_beats_ausklang_mutation test_arr_warp_beats CYPHERDJ_MUTATION_ARR_BEATS_AUSKLANG_WARP ${ARR_QUELLEN} src/uhr.cpp)
+test_mutation(test_arr_warp_beats_gleich_loop_mutation test_arr_warp_beats CYPHERDJ_MUTATION_ARR_WARP_GLEICH_OHNE_LOOP ${ARR_QUELLEN} src/uhr.cpp)
+test_mutation(test_arr_warp_beats_gleich_huelle_mutation test_arr_warp_beats CYPHERDJ_MUTATION_ARR_WARP_GLEICH_OHNE_HUELLE ${ARR_QUELLEN} src/uhr.cpp)
+test_mutation(test_arr_warp_beats_gleich_einheiten_mutation test_arr_warp_beats CYPHERDJ_MUTATION_ARR_WARP_GLEICH_OHNE_EINHEITEN ${ARR_QUELLEN} src/uhr.cpp)
+test_mutation(test_arr_warp_beats_gleich_zahl_mutation test_arr_warp_beats CYPHERDJ_MUTATION_ARR_WARP_GLEICH_OHNE_ZAHL ${ARR_QUELLEN} src/uhr.cpp)
 test_mutation(test_arr_warp_lader_v1_mutation test_arr_warp_lader CYPHERDJ_MUTATION_ARR_WARP_IN_V1 src/arr_wiedergabe.cpp)
 test_mutation(test_arr_warp_lader_steigend_mutation test_arr_warp_lader CYPHERDJ_MUTATION_ARR_WARP_OHNE_STEIGEND src/arr_wiedergabe.cpp)
 test_mutation(test_arr_warp_lader_grenze_mutation test_arr_warp_lader CYPHERDJ_MUTATION_ARR_WARP_OHNE_GRENZE src/arr_wiedergabe.cpp)
+test_mutation(test_arr_warp_lader_pitch_grenze_mutation test_arr_warp_lader CYPHERDJ_MUTATION_ARR_WARP_PITCH_OHNE_GRENZE src/arr_wiedergabe.cpp)
+test_mutation(test_arr_warp_lader_gesamt_mutation test_arr_warp_lader CYPHERDJ_MUTATION_ARR_WARP_OHNE_GESAMT src/arr_wiedergabe.cpp)
+test_mutation(test_arr_warp_lader_beats_steigend_mutation test_arr_warp_lader CYPHERDJ_MUTATION_ARR_BEATS_OHNE_STEIGEND src/arr_wiedergabe.cpp)
+# Paket 1.13 Warp, Slice 3a (Task 4): viele Marker. ERSTES_SEGMENT macht jede Abbildung mit mehr als zwei Markern falsch (Referenzdatei und Abspielen).
+test_mutation(test_warp_abbildung_erstes_segment_mutation test_warp_abbildung CYPHERDJ_MUTATION_ARR_WARP_ERSTES_SEGMENT)
+# Paket 1.13 Warp, Slice 2: COMPLEX und TONES im Arrangement (test_warp_werk_arr, automatisch eingesammelt): jede Mutation macht ihren Fall rot (WILL_FAIL)
+if(CYPHERDJ_BUNGEE)
+  set(WARP_WERK_QUELLEN src/warp_werk.cpp src/warp_werk_bungee.cpp cypherdj::bungee)
+  # Nachbesserung 3 (Ereignisse im Frist-Fenster, Fälle 10 bis 13): OHNE_DECKUNG bis NAHT_VORFILTER. Nachbesserung 4 (eine Regel für Tausch und Karte, Fall 14):
+  # ZWEIMAL_ANSETZEN entfällt (die Regel ist weg), TAUSCH_FREI bis UNGEHOERT kommen dazu (Fall 15). OHNE_PLATZTAUSCH, KETTE_LANG, BRUECKE_BLEIBT und
+  # ENDE_ALTE_KARTE macht test_warp_werk_arr nicht rot (gemessen im dritten Beweislauf der Nachbesserung 4): sie haben nur Ziele gegen die Zufallsfolgen (unten)
+  # Nachbesserung 5 (Prüfung 5): PLATZ_OHNE_KLANG, SPAET_STILL, EINSATZ_OHNE_SPAET (Fall 16), OHNE_VORRANG (Fall 7 und 10 bei 2 361), STOPP_WARTET_HART (Fall 17);
+  # BRUECKE_MINUS_EINS (fable m2) fängt nur der verdichtete Generator der Zufallsfolgen (unten)
+  set(WARP_WERK_MUTATIONEN OHNE_VORAUSBLICK START_OHNE_FRIST NAHT_ALLE TAUSCH_HART OHNE_BLENDE KARTE_IGNORIERT OHNE_NACHHOLEN VORFILTER
+      OHNE_DECKUNG DECKUNG_ORTLOS KARTE_VOR_EINSATZ KARTE_WARTET STOPP_VOR_EINSATZ EINSTIEG_STUMM EINSTIEG_NAECHSTE EINSTIEG_DOPPELT NAHT_VORFILTER
+      TAUSCH_FREI REPITCH_DECKT EINSTIEG_LUECKE GAIN_SPRUNG UEBERGANG_LOCH UNGEHOERT
+      PLATZ_OHNE_KLANG SPAET_STILL EINSATZ_OHNE_SPAET OHNE_VORRANG STOPP_WARTET_HART PITCH_GLEICH)
+  foreach(m ${WARP_WERK_MUTATIONEN})
+    string(TOLOWER ${m} mk)
+    test_mutation(test_warp_werk_arr_${mk}_mutation test_warp_werk_arr CYPHERDJ_MUTATION_ARR_WARP_WERK_${m} ${ARR_QUELLEN} src/uhr.cpp ${WARP_WERK_QUELLEN})
+  endforeach()
+  # Slice 3a (Task 15, E-K B4.2): dieselbe Lage mit 4096 Markern je Clip, 0 Allokationen in Callback und Werk
+  if(TARGET test_kern_arr_warp_alloc)
+    add_test(NAME test_kern_arr_warp_alloc_4096 COMMAND test_kern_arr_warp_alloc)
+    set_tests_properties(test_kern_arr_warp_alloc_4096 PROPERTIES ENVIRONMENT "ALLOC_MARKER=4096")
+  endif()
+  test_mutation(test_warp_werk_viele_erstes_segment_mutation test_warp_werk_viele CYPHERDJ_MUTATION_ARR_WARP_ERSTES_SEGMENT ${ARR_QUELLEN} src/uhr.cpp ${WARP_WERK_QUELLEN})
+  # Nachbesserung 4: die Zufallsfolgen (test_warp_werk_folgen, synchrone Attrappe, ohne Bungee) gegen die Mutationen, die sie in 300 Folgen fangen (die übrigen
+  # fängt test_warp_werk_arr); CYPHERDJ_FOLGEN setzt die Zahl der Folgen. Langlauf: Ziel warp_werk_folgen_lang (50 000 Folgen, kein ctest). DECKT_VOR_EINSATZ und
+  # NACHHOLEN_UEBER_ENDE fand der erste Langlauf; die Seeds 22894 und 9601 laufen in jedem Aufruf mit
+  foreach(m TAUSCH_HART KARTE_IGNORIERT OHNE_NACHHOLEN OHNE_DECKUNG KARTE_VOR_EINSATZ TAUSCH_FREI REPITCH_DECKT BRUECKE_BLEIBT EINSTIEG_LUECKE OHNE_VORAUSBLICK
+            START_OHNE_FRIST VORFILTER KARTE_WARTET EINSTIEG_DOPPELT ENDE_ALTE_KARTE DECKT_VOR_EINSATZ NACHHOLEN_UEBER_ENDE
+            SPAET_STILL)   # Nachbesserung 5: ein später Einsatz schweigt; die Folgen mit spät (vorher ausgenommen, jetzt gedeckt) werden rot
+    string(TOLOWER ${m} mk)
+    test_mutation(test_warp_werk_folgen_${mk}_mutation test_warp_werk_folgen CYPHERDJ_MUTATION_ARR_WARP_WERK_${m} ${ARR_QUELLEN} src/uhr.cpp)
+    if(TEST test_warp_werk_folgen_${mk}_mutation)
+      set_tests_properties(test_warp_werk_folgen_${mk}_mutation PROPERTIES ENVIRONMENT CYPHERDJ_FOLGEN=300)
+    endif()
+  endforeach()
+  # Nachbesserung 5 (Prüfung 5): der verdichtete Generator (17 bis 32 Spuren, Ereignisse über alle Spuren, gemeinsame Grenzen, Klammern auf der Grenze, Karten 2 048 bis
+  # 2 700 Samples vor der Grenze) als eigener Test mit 1 000 Folgen; gegen den Stand vor der Nachbesserung 10 rote von 302 (Löcher bei Platzmangel). Die Mutationen der
+  # Klasse „Platz ohne Klang“ und fable m2 (BRUECKE_MINUS_EINS: der Wächter −1 gegen negative Clip-Starts) fängt er, der Plan-Generator nicht
+  # Seeds 2 001 bis 3 000: in 1 bis 2 000 liegen die bekannten roten Folgen 160 (Flanke 14) und 1260 (fable m3), siehe Kopf des Tests. Als Mutationsziel nur
+  # BRUECKE_MINUS_EINS (2 rote von 1 002; m2 hat keinen Fall in test_warp_werk_arr); PLATZ_OHNE_KLANG, EINSATZ_OHNE_SPAET und STOPP_WARTET_HART fängt der verdichtete
+  # Generator nur mit 1 von 1 002 (Seeds 1 bis 1 000) oder gar nicht (2 001 bis 3 000): ihre Ziele sind Fall 16 und 17
+  if(TARGET test_warp_werk_folgen)
+    add_test(NAME test_warp_werk_folgen_dicht COMMAND test_warp_werk_folgen 1000 2001 --dicht)
+  endif()
+  # Slice 5 (D7): Ereignis transpose (Tausch der Tonhöhe an Werk-Clips) mit dem Zeugen der Tonhöhe; der Standard-Generator bleibt derselbe (Gewicht 0 ohne --transpose)
+  if(TARGET test_warp_werk_folgen)
+    add_test(NAME test_warp_werk_folgen_transpose COMMAND test_warp_werk_folgen 600 3001 --transpose)
+  endif()
+  foreach(m PITCH_GLEICH)
+    string(TOLOWER ${m} mk)
+    test_mutation(test_warp_werk_folgen_${mk}_mutation test_warp_werk_folgen CYPHERDJ_MUTATION_ARR_WARP_WERK_${m} ${ARR_QUELLEN} src/uhr.cpp)
+    if(TEST test_warp_werk_folgen_${mk}_mutation)
+      set_tests_properties(test_warp_werk_folgen_${mk}_mutation PROPERTIES ENVIRONMENT "CYPHERDJ_FOLGEN=300;CYPHERDJ_FOLGEN_TRANSPOSE=1;CYPHERDJ_FOLGEN_SEED0=3001")
+    endif()
+  endforeach()
+  foreach(m BRUECKE_MINUS_EINS)
+    string(TOLOWER ${m} mk)
+    test_mutation(test_warp_werk_folgen_dicht_${mk}_mutation test_warp_werk_folgen CYPHERDJ_MUTATION_ARR_WARP_WERK_${m} ${ARR_QUELLEN} src/uhr.cpp)
+    if(TEST test_warp_werk_folgen_dicht_${mk}_mutation)
+      set_tests_properties(test_warp_werk_folgen_dicht_${mk}_mutation PROPERTIES ENVIRONMENT "CYPHERDJ_FOLGEN=1000;CYPHERDJ_FOLGEN_DICHT=1;CYPHERDJ_FOLGEN_SEED0=2001")
+    endif()
+  endforeach()
+  # OHNE_PLATZTAUSCH und KETTE_LANG fängt kein Fall von test_warp_werk_arr (gemessen im Beweislauf der Nachbesserung 4), die Zufallsfolgen erst in 2 000 Folgen
+  # (erste rote Seeds 898 und 414)
+  foreach(m OHNE_PLATZTAUSCH KETTE_LANG)
+    string(TOLOWER ${m} mk)
+    test_mutation(test_warp_werk_folgen_${mk}_mutation test_warp_werk_folgen CYPHERDJ_MUTATION_ARR_WARP_WERK_${m} ${ARR_QUELLEN} src/uhr.cpp)
+    if(TEST test_warp_werk_folgen_${mk}_mutation)
+      set_tests_properties(test_warp_werk_folgen_${mk}_mutation PROPERTIES ENVIRONMENT CYPHERDJ_FOLGEN=2000)
+    endif()
+  endforeach()
+  # AK15 durch das Arrangement (Tausch mit anderer Quelle): liest() ohne die Stimmen lässt den Faden ein freigegebenes Audio lesen (Absturz, rc 139)
+  test_mutation(test_warp_werk_tausch_quelle_liest_ohne_stimme_mutation test_warp_werk_tausch_quelle CYPHERDJ_MUTATION_WARP_LIEST_OHNE_STIMME
+                ${ARR_QUELLEN} src/uhr.cpp ${WARP_WERK_QUELLEN})
+  add_custom_target(warp_werk_folgen_lang COMMAND test_warp_werk_folgen 50000 1 DEPENDS test_warp_werk_folgen USES_TERMINAL)
+  # Kosten des Vorausblicks bei 4 096 Clips (kein Test; Task 5 Step 10)
+  add_executable(kern_kosten_vorausblick tests/kosten/kosten_vorausblick.cpp)
+  target_include_directories(kern_kosten_vorausblick PRIVATE tests)
+  target_link_libraries(kern_kosten_vorausblick PRIVATE cypherdj_kernbib)
+  # Nachbesserung 5: Kosten der Deckung später Einsätze (kein Test; Task 5 Step 10)
+  add_executable(kern_kosten_deckung tests/kosten/kosten_deckung.cpp)
+  target_include_directories(kern_kosten_deckung PRIVATE tests)
+  target_link_libraries(kern_kosten_deckung PRIVATE cypherdj_kernbib)
+endif()
+# Paket 1.13 Warp, Slice 2: ohne Maschine lehnt der Lader complex und tones mit warp_maschine_fehlt ab (grün, darum WILL_FAIL aus); die Mutation nimmt sie an (rot)
+test_mutation(test_arr_warp_lader_ohne_maschine test_arr_warp_lader CYPHERDJ_TEST_OHNE_MASCHINE src/arr_wiedergabe.cpp)
+set_tests_properties(test_arr_warp_lader_ohne_maschine PROPERTIES WILL_FAIL FALSE)
+test_mutation(test_arr_warp_lader_maschine_still_mutation test_arr_warp_lader CYPHERDJ_MUTATION_ARR_WARP_MASCHINE_STILL src/arr_wiedergabe.cpp)
 test_mutation(test_arr_wiedergabe_konto_mutation test_arr_wiedergabe CYPHERDJ_MUTATION_ARR_OHNE_KONTO src/arr_wiedergabe.cpp)
 test_mutation(test_arr_wiedergabe_ordner_mutation test_arr_wiedergabe CYPHERDJ_MUTATION_ARR_ORDNER_ROH src/arr_wiedergabe.cpp)
 test_mutation(test_arr_wiedergabe_bereich_mutation test_arr_wiedergabe CYPHERDJ_MUTATION_ARR_GAIN_ALT src/arr_wiedergabe.cpp)
@@ -878,6 +1085,14 @@ target_compile_definitions(test_arr_lader_konto_mutation PRIVATE CYPHERDJ_MUTATI
 target_link_libraries(test_arr_lader_konto_mutation PRIVATE cypherdj_kernbib cypherdj::json cypherdj::toml)
 add_test(NAME test_arr_lader_konto_mutation COMMAND test_arr_lader_konto_mutation)
 set_tests_properties(test_arr_lader_konto_mutation PROPERTIES WILL_FAIL TRUE)
+# Paket 1.13 Warp, Slice 2: der Lade-Faden gibt einen abgelösten Schnappschuss nicht frei, solange das Warp-Werk ihn liest (arr_lader.cpp mutiert als eigenes
+# Objekt vor der Bibliothek): ohne die Frage an das Werk wird Fall 6 rot
+add_executable(test_arr_lader_werk_mutation tests/test_arr_lader.cpp src/arr_lader.cpp)
+target_include_directories(test_arr_lader_werk_mutation PRIVATE include tests)
+target_compile_definitions(test_arr_lader_werk_mutation PRIVATE CYPHERDJ_MUTATION_ARR_LADER_OHNE_WERK=1 CYPHERDJ_DJK="${DJK}")
+target_link_libraries(test_arr_lader_werk_mutation PRIVATE cypherdj_kernbib cypherdj::json cypherdj::toml)
+add_test(NAME test_arr_lader_werk_mutation COMMAND test_arr_lader_werk_mutation)
+set_tests_properties(test_arr_lader_werk_mutation PROPERTIES WILL_FAIL TRUE)
 # D1 K1: /erz/strom auf erz/4 ohne Riegel; netz_erz.cpp mutiert als eigenes Objekt, test_netz_arr muss scheitern
 add_executable(test_netz_arr_erz4_mutation tests/test_netz_arr.cpp src/netz_erz.cpp)
 target_include_directories(test_netz_arr_erz4_mutation PRIVATE include tests)
@@ -1072,10 +1287,22 @@ target_compile_definitions(test_arr_warp_null_render_gegenprobe_warp_blind_mutat
 target_link_libraries(test_arr_warp_null_render_gegenprobe_warp_blind_mutation PRIVATE cypherdj_kernbib cypherdj::json cypherdj::toml)
 add_test(NAME test_arr_warp_null_render_gegenprobe_warp_blind_mutation COMMAND test_arr_warp_null_render_gegenprobe_warp_blind_mutation)
 set_tests_properties(test_arr_warp_null_render_gegenprobe_warp_blind_mutation PROPERTIES WILL_FAIL TRUE)
+# Paket 1.13 Warp, Slice 4 (Task 6): die Gegenprobe eines BEATS-Clips verschiebt auch die Einheiten (Fall 8); ohne das bleibt sie blind
+add_executable(test_arr_warp_null_render_gegenprobe_beats_blind_mutation tests/test_arr_warp_null.cpp src/render.cpp)
+target_include_directories(test_arr_warp_null_render_gegenprobe_beats_blind_mutation PRIVATE include tests)
+target_compile_definitions(test_arr_warp_null_render_gegenprobe_beats_blind_mutation PRIVATE CYPHERDJ_MUTATION_RENDER_GEGENPROBE_BEATS_BLIND=1
+                           CYPHERDJ_DJK="${DJK}")
+target_link_libraries(test_arr_warp_null_render_gegenprobe_beats_blind_mutation PRIVATE cypherdj_kernbib cypherdj::json cypherdj::toml)
+add_test(NAME test_arr_warp_null_render_gegenprobe_beats_blind_mutation COMMAND test_arr_warp_null_render_gegenprobe_beats_blind_mutation)
+set_tests_properties(test_arr_warp_null_render_gegenprobe_beats_blind_mutation PROPERTIES WILL_FAIL TRUE)
 # Paket 1.13 Warp, Slice 1: Kosten des Moduls mit 32 gewarpten Spuren (kein Test; Zahlen in den Bericht)
 add_executable(kern_kosten_arr_warp tests/kosten/kosten_arr_warp.cpp)
 target_include_directories(kern_kosten_arr_warp PRIVATE tests)
 target_link_libraries(kern_kosten_arr_warp PRIVATE cypherdj_kernbib)
+# Paket 1.13 Warp, Slice 3a (Task 16): Kosten bei 2, 100, 865 und 4096 Markern je Clip, Tausch eingeschlossen (kein Test; Zahlen in den Bericht)
+add_executable(kern_kosten_arr_warp_viele tests/kosten/kosten_arr_warp_viele.cpp)
+target_include_directories(kern_kosten_arr_warp_viele PRIVATE tests)
+target_link_libraries(kern_kosten_arr_warp_viele PRIVATE cypherdj_kernbib)
 # Paket 1.13 Warp, Messprobe Arbeitsfaden-Last (vor Slice 2): ein Werk aus Bungee-Stimmen und Arbeitsfäden ohne Kern (kein Test; Aufruf über
 # tests/deck/warp_last_lauf.sh neben ziel_lauf_boxen.py); braucht nur Bungee
 if(CYPHERDJ_BUNGEE)
@@ -1178,3 +1405,19 @@ test_mutation(test_kern_rec_frist_mutation test_kern_rec CYPHERDJ_MUTATION_REC_F
 test_mutation(test_kern_rec_aendern_mutation test_kern_rec CYPHERDJ_MUTATION_REC_AENDERN_NUR_STATUS ${KERN_QUELLEN35} src/aufnahme_faden.cpp src/take_schreiber.cpp src/arr_wiedergabe.cpp)
 test_mutation(test_kern_rec_beat_mutation test_kern_rec CYPHERDJ_MUTATION_REC_ARR_BEAT_KERN ${KERN_QUELLEN35} src/aufnahme_faden.cpp src/take_schreiber.cpp src/arr_wiedergabe.cpp)
 test_mutation(test_kern_rec_naht_mutation test_kern_rec CYPHERDJ_MUTATION_REC_NAHT_IGNORIERT ${KERN_QUELLEN35} src/aufnahme_faden.cpp src/take_schreiber.cpp src/arr_wiedergabe.cpp)   # Review-Nachzug Teil B: Ende am ersten Loop-Wrap
+
+# Paket 1.13 Warp, Slice 2 (AK15): die Freigabe eines abgelösten Schnappschusses ohne die Frage an das Werk (WarpWerk::liest) muss den Lebensdauer-Test
+# zum Absturz bringen (WILL_FAIL; das Audio liegt in Seiten, die nach der Freigabe PROT_NONE sind)
+if(CYPHERDJ_BUNGEE)
+  add_executable(test_warp_werk_lebensdauer_freigabe_mutation tests/test_warp_werk_lebensdauer.cpp)
+  target_include_directories(test_warp_werk_lebensdauer_freigabe_mutation PRIVATE tests)
+  target_compile_definitions(test_warp_werk_lebensdauer_freigabe_mutation PRIVATE CYPHERDJ_MUTATION_WARP_FREIGABE_OHNE_QUITTUNG=1)
+  target_link_libraries(test_warp_werk_lebensdauer_freigabe_mutation PRIVATE cypherdj_kernbib)
+  add_test(NAME test_warp_werk_lebensdauer_freigabe_mutation COMMAND test_warp_werk_lebensdauer_freigabe_mutation)
+  set_tests_properties(test_warp_werk_lebensdauer_freigabe_mutation PROPERTIES WILL_FAIL TRUE)
+  # die Regel selbst, im Werk mutiert: liest() fragt die Stimmen nicht (Fall 1b), das Audio wird erst nach dem Übernehmen angemeldet (Fall 1)
+  foreach(m LIEST_OHNE_STIMME HALTE_NACH_GELESEN)
+    string(TOLOWER ${m} mk)
+    test_mutation(test_warp_werk_lebensdauer_${mk}_mutation test_warp_werk_lebensdauer CYPHERDJ_MUTATION_WARP_${m} src/warp_werk.cpp src/warp_werk_bungee.cpp src/uhr.cpp cypherdj::bungee)
+  endforeach()
+endif()

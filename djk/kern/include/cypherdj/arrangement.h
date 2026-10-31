@@ -14,6 +14,7 @@
 #include "cypherdj/arr_wiedergabe.h"
 #include "cypherdj/stellwerk/regler.h"
 #include "cypherdj/uhr.h"
+#include "cypherdj/warp_werk.h"
 
 namespace cdj {
 
@@ -85,6 +86,8 @@ struct ArrZustand {                     // /zustand/arr (SCHNITTSTELLEN §5.13)
   bool metronom_an;
 };
 
+struct ArrPruefZugang;   // nur Tests (test_warp_werk_folgen): liest Spur-Busse und Stimmen, schreibt nichts
+
 class Arrangement {
  public:
   explicit Arrangement(const cypherdj::stellwerk::ReglerTabelle& tab);
@@ -135,6 +138,19 @@ class Arrangement {
   float wert(int spur, int feld) const { return w_[spur][feld].w; }   // feld 0 fader (dB), 1 pan, 2 mute, 3 solo
   int stimmen() const;
   int warp_stimmen() const;          // Paket 1.13: davon gewarpt (nur Prüfung und Kosten)
+  int werk_stimmen() const;          // Paket 1.13 Slice 2: davon im Warp-Werk (COMPLEX, TONES), eine auslaufende mitgezählt
+  // Paket 1.13 Slice 2: das Warp-Werk für COMPLEX und TONES. Nicht im Callback, vor dem ersten Block. Ohne Werk (nullptr) spielt ein COMPLEX- oder
+  // TONES-Clip als RE-PITCH (im Takt, falsche Tonhöhe) und zählt warp_kein_platz; der Lader lässt solche Clips ohnehin nur mit Bungee zu.
+  void setze_warp_werk(WarpWerk* w) { werk_ = w; }
+  WarpWerk* warp_werk() const { return werk_; }
+  // Karten-Generation des Kerns (Tempoplan::generation_zeiger): wächst sie, setzt das Arrangement die Stimmen des Werks mit der neuen Karte neu an
+  void setze_karten_generation(const uint32_t* g) {
+    karte_gen_ = g;
+    karte_gen_gesehen_ = g ? *g : 0;
+  }
+  uint64_t warp_unterlauf() const { return warp_unterlauf_; }     // Ausfälle des Rings während einer Stimme (Stille mit Blende)
+  uint64_t warp_kein_platz() const { return warp_kein_platz_; }   // Stimmen, die kein Werk-Platz bekam und als RE-PITCH spielen
+  uint64_t warp_spaet() const { return warp_spaet_; }             // Stimmen, deren Ring zum Einsatz noch leer war
   uint64_t stimmen_verloren() const { return stimmen_verloren_; }
   int offene_noten() const { return n_offen_; }
   uint64_t noten_verloren() const { return noten_verloren_; }
@@ -163,6 +179,7 @@ class Arrangement {
   ArrFreeze* hole_freeze_fertig() { ArrFreeze* f = freeze_fertig_; freeze_fertig_ = nullptr; return f; }
 
  private:
+  friend struct ArrPruefZugang;
   double projekt_beat(const Karte& k, double s) const { return k.beat_at(s) - ursprung_ + start_beat_; }
   int64_t sample_von_p(const Karte& k, double p, double urs) const {
     return std::llround(k.sample_at(p + urs - start_beat_));
@@ -196,18 +213,56 @@ class Arrangement {
     int64_t ramp_ein_ab = -1;        // Kurz-Einblende ab diesem Sample, −1: keine
     int64_t ab_aus = -1;             // Kurzblende (Stopp) beginnt hier, ARR_NAHT lang, −1: keine
     double p_off = 0.0;              // Paket 1.13: start_beat_ − ursprung_ beim Start dieser Stimme (ein Neustart ändert beides, die Ausblende behält ihre Abbildung)
+    // Paket 1.13 Slice 2 (Warp-Werk): die Stimme liest ihren Ring, nicht das Audio. Nach dem Start liest sie den Clip nie wieder (der Schnappschuss
+    // darf gehen): Gain und Abbildung stehen hier.
+    int werk = -1;                   // Platz im Warp-Werk, −1: keiner
+    int64_t werk_ab = 0;             // erstes Sample, das das Werk für diese Stimme liefert (s_h)
+    float gain = 1.0f;               // Clip-Gain
+    int ramp_n = ARR_EIN;            // Länge der Einblende ab ramp_ein_ab (Werk-Stimmen, und seit Nachbesserung 6 auch RE-PITCH-Stimmen: stimme_starten setzt sie)
+    double beat_versatz = 0.0;       // Clip-Beat b(m) = karte.beat_at(m) + beat_versatz (für ein Neuansetzen mit anderer Karte)
+    bool naechste = false;           // vorab für den Durchlauf nach der Naht angesetzt
+    bool tausch_bruecke = false;     // Nachbesserung 4: gelöst von einem Tausch (der alte Inhalt gilt nicht mehr), sonst von einer neuen Karte (nur das Raster ist alt)
+    float gain_alt = 1.0f;           // Nachbesserung 4 (R3): ein Tausch, der nur den Gain ändert, bindet neu; der Gain gleitet ab gain_ab über ARR_NAHT von gain_alt auf gain
+    int64_t gain_ab = -1;
+    bool luecke = false;             // der Ring war zuletzt zu leer (Stille mit Blende), die nächste Strecke blendet ein
+    bool gelesen = false;            // hat schon Audio aus dem Ring bekommen (warp_spaet gegen warp_unterlauf)
+    int fade_ein = 0;                // noch zu blendende Samples nach einer Lücke
+    bool nachfolgerin = false;       // Nachbesserung 5: von werk_decken als Nachfolgerin einer Brücke angesetzt; solange sie stumm ist, kann ein längerer Einsatz sie bei vollem Pool verdrängen (ihre Brücke holt nach)
+    bool spaet_deckung = false;      // Nachbesserung 5: der Ring war zum Einsatz leer (spät): der Clip klingt als RE-PITCH aus dem Clip, bis der Ring liefert, dann Überblendung über ARR_NAHT
     int ak_n = 0, ak_pos = 0;        // Ausklang
     float ak[2 * ARR_NAHT] = {};
   };
   void clips_starten(const Karte& k, int64_t a, int64_t b);
-  void stimme_starten(const Karte& k, const ArrClip& c, int spur, int64_t s_start, int64_t clip_s0, bool rampe);
+  Stimme* stimme_starten(const Karte& k, const ArrClip& c, int spur, int64_t s_start, int64_t clip_s0, bool rampe,
+                       int ramp_n = ARR_EIN);   // nullptr: Pool voll; ramp_n: Länge der Einblende (Nachbesserung 6: ARR_NAHT, wo sie eine Ausblende über ARR_NAHT ablöst)
   void stimmen_einstieg(const Karte& k, int64_t a);
   void stimme_ausklang(Stimme& v, int64_t s, const Karte& k);
   void stimmen_spielen(const Karte& k, int64_t a, int64_t b, int64_t s0, int64_t naht);
   void stimme_warp_spielen(Stimme& v, int64_t a, int64_t b, int64_t s0, int64_t naht);   // Paket 1.13: Quellposition aus W(b), RE-PITCH
+  void stimme_beats_spielen(const Karte& k, Stimme& v, int64_t a, int64_t b, int64_t s0, int64_t naht);   // Slice 4: BEATS, Einheiten mit Faktor 1
+  bool beats_lage(const Karte& k, const Stimme& v, int64_t t, int& i, int64_t& s0, int64_t& s1) const;   // Slice 4: Einheit und ihre Grenzen in ganzen Samples aus der Karte
+  static constexpr int64_t BEATS_ENDLOS = int64_t{1} << 60;                                              // Beginn der „nächsten“ Einheit hinter der letzten
   void stimmen_tauschen(const ArrSnapshot* neu, int64_t s, const Karte& k);
   void stimmen_stopp(int64_t s);
   void stimmen_naht();
+  void stimmen_karte_neu(const Karte& k);   // Nachbesserung 4 (N2): RE-PITCH-Stimmen rechnen ihr End-Sample mit der neuen Karte
+  // Warp-Werk (Slice 2, arr_warp.cpp)
+  bool werk_clip(const ArrClip& c) const { return c.warp && arr_warp_werk_modus(c.warp->modus); }
+  bool hat_stimme(int spur, uint64_t clip_id, int64_t clip_s0) const;
+  // ab: erstes Sample, das die Stimme klingen soll (Vorgabe s_h); liegt es vor s_h (clips_starten: der Einsatz ist jetzt, das Werk liefert erst ab a + Frist), klingt
+  // der Clip bis s_h als RE-PITCH (spät, gezählt), nicht still (Nachbesserung 5)
+  Stimme* werk_stimme_starten(const Karte& k, const ArrClip& c, int spur, int64_t s_h, int64_t clip_s0, bool rampe, int ramp_n, double urs, bool naechste,
+                              int64_t ab = INT64_MIN);
+  void werk_stimme_spielen(const Karte& k, Stimme& v, int64_t a, int64_t b, int64_t s0, int64_t naht);
+  Stimme* werk_verdraengen(int64_t s0, int64_t dauer);            // Nachbesserung 5 (Vorrang): die stumme Nachfolgerin mit dem kürzesten Rest unter dauer, sonst nullptr
+  void werk_abloesen(const Karte& k, Stimme& v, const ArrClip* c2, int64_t s, bool tausch);   // Tausch oder neue Karte: die gebundene Stimme v wird Brücke oder geht
+  void werk_frei(Stimme& v);                                       // Platz zurückgeben, Stimme beenden
+  void warp_vorausblick(const Karte& k, int64_t s0, int m);        // Stimmen für Einsätze der nächsten ARR_WARP_FRIST Samples ansetzen
+  void warp_karte_neu(const Karte& k, int64_t s);                  // die Karte hat eine neue Generation: Stimmen des Werks neu ansetzen
+  void werk_naechste_verwerfen();                                  // vorab angesetzte Stimmen des nächsten Durchlaufs aufgeben
+  int64_t werk_bruecke_bis(int spur, uint64_t clip_id, bool naechste, int64_t s) const;   // bis wohin eine Brücke dieses Clips (ab s noch nicht ausblendend) spielt, INT64_MIN: keine (Nachbesserung 5, m2: −1 kollidierte mit negativen Clip-Starts)
+  void werk_decken(const Karte& k, int64_t s0, int m);             // Nachbesserung 4: DIE Stelle der Invariante (je Block): jede Brücke hat ihre Nachfolgerin; Nachbesserung 5: kein Platz ohne Klang
+  bool werk_am_start(double start_beat) const;                     // klingt am Start ein Werk-Clip (oder setzt er binnen kurzem ein)?
 
   // Spur-Mixer (arr_ausgang.cpp)
   struct Wert {
@@ -263,6 +318,12 @@ class Arrangement {
   Stimme st_[ARR_STIMMEN];
   uint64_t stimmen_verloren_ = 0;
   double wp_[ARR_BLOCK] = {};        // Paket 1.13: Projekt-Beat je Sample des Teilblocks, einmal je Teilblock für alle gewarpten Stimmen
+  float wl_[ARR_BLOCK] = {}, wr_[ARR_BLOCK] = {};   // Slice 2: Lesepuffer für den Ring einer Werk-Stimme
+  WarpWerk* werk_ = nullptr;
+  bool snap_werk_ = false;           // der Schnappschuss hat Clips im Modus COMPLEX oder TONES (beim Tausch bestimmt)
+  uint64_t warp_unterlauf_ = 0, warp_kein_platz_ = 0, warp_spaet_ = 0;
+  const uint32_t* karte_gen_ = nullptr;
+  uint32_t karte_gen_gesehen_ = 0;
   Wert w_[ARR_STREIFEN][4];          // je Streifen (Spur, Gruppe, PM) 0 fader (dB), 1 pan, 2 mute, 3 solo; PM nur 0
   int16_t regler_spur_[cypherdj::stellwerk::MAX_REGLER];
   int8_t regler_feld_[cypherdj::stellwerk::MAX_REGLER];

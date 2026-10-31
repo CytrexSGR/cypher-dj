@@ -116,3 +116,18 @@ def test_einzeln_kaputte_datei_meldet_vorher_stufe_und_dann_fehler_mit_grund(tmp
     z = [x for x in map(fortschritt.lies_zeile, err.splitlines()) if x]
     assert z and z[0]["name"] == "decode" and z[-1]["name"] == "decode"
     assert not (tmp_path / "b" / ".arbeit").exists() or not any((tmp_path / "b" / ".arbeit").iterdir())
+
+
+def test_eigene_stufen_und_vorgabe_unveraendert():
+    import io
+    from werkstatt.fortschritt import melder, lies_zeile
+    puf = io.StringIO()
+    m = melder(puf, stufen=("laden", "trennen", "schreiben"))
+    m("trennen", 42.0)
+    z = lies_zeile(puf.getvalue().strip())
+    assert (z["stufe"], z["von"], z["name"], z["prozent"]) == (2, 3, "trennen", 42.0)
+    import pytest
+    with pytest.raises(ValueError):
+        m("beats")                                            # nicht in diesen Stufen
+    puf2 = io.StringIO(); melder(puf2)("render", 10)
+    assert lies_zeile(puf2.getvalue().strip())["von"] == 5     # Vorgabe wie bisher

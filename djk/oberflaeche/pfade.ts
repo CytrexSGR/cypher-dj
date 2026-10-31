@@ -36,6 +36,12 @@ export function ports(i: string = instanz()): { port: number; kernPort: number; 
   return { port: PORT_BASIS.http + k, kernPort: PORT_BASIS.kern + k, aboPort: PORT_BASIS.abo + k, leitstandWs: PORT_BASIS.leitstandWs + k };
 }
 export function shmOrdner(i: string = instanz()): string { return `/dev/shm/cypherdj${i ? `-${i}` : ''}`; }
+// Slice 3a: die Analyse-Ablage der Nachtanalyse (Karten je Track, djk/werkstatt/werkstatt/bestand.py:33 standard_ablage). Nur der Betrieb hat eine Vorgabe: eine
+// Prüfinstanz (a..i) liest sie nur mit ausdrücklichem --analyse, damit sie nie die echte Ablage berührt (Fixture-Katalog, Aufträge).
+export function analyseVorgabe(i: string = instanz()): string | null {
+  if (i !== '') return null;
+  return process.env.CYPHERDJ_ANALYSE || path.join(os.homedir(), 'werkstatt', 'cypher-dj-analyse');
+}
 export function rasterOrdnerVorgabe(i: string = instanz()): string { return i ? `/dev/shm/cypherdj-${i}/raster` : konfig('raster'); }
 export function hotcueOrdnerVorgabe(i: string = instanz()): string { return i ? `/dev/shm/cypherdj-${i}/hotcues` : konfig('hotcues'); }
 export function huellenVorgabe(i: string = instanz()): string { return `${shmOrdner(i)}/huellen`; }
@@ -44,6 +50,8 @@ export function wirtOrdnerVorgabe(i: string = instanz()): string { return shmOrd
 export function kitsOrdnerVorgabe(): string { return konfig('kits'); }
 export function zusatzKit(i: string = instanz()): string { return i ? `rec-${i}` : 'rec'; }
 // I08: Geräte-Konfiguration je Instanz (~/.config/cypherdj[-<i>]/geraete.json) und die Kanten-Datei, die der Kern aus dem Shm-Ordner liest.
+// Baukasten S2: Ordner der Baukasten-Graphen (baukasten-<gruppe>.json), wie djk-instrumente sie dem Wirt nennt
+export function baukastenOrdnerVorgabe(i: string = instanz()): string { return path.join(os.homedir(), '.config', i ? `cypherdj-${i}` : 'cypherdj'); }
 export function geraeteDatei(i: string = instanz()): string { return path.join(os.homedir(), '.config', i ? `cypherdj-${i}` : 'cypherdj', 'geraete.json'); }
 export function eingangsKantenDatei(i: string = instanz()): string { return path.join(shmOrdner(i), 'eingaenge-kanten'); }
 export function strudelPakete(): string { return process.env.STRUDEL_PAKETE ?? path.join(os.homedir(), 'strudel', 'packages'); }

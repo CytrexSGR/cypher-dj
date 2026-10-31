@@ -150,11 +150,12 @@ export function exportSicht(p: Projekt): Projekt {
   return q;
 }
 
-// Audio-Clips im Bereich [von, bis), die noch nicht dekodiert sind: der Übersetzer ließe sie weg (Spec 2.8), der Export klänge anders.
+// Audio-Clips im Bereich [von, bis), die noch nicht dekodiert sind: der Übersetzer ließe sie weg (Spec 2.8),
+// der Export klänge anders. Stumme Clips lässt der Übersetzer ohnehin weg (D12), sie fehlen nicht.
 export function fehlendesAudio(p: Projekt, von: number, bis: number): string[] {
   const aus: string[] = [];
   for (const s of p.spuren) for (const c of s.clips) {
-    if (c.art === 'audio' && c.dekodiert !== 'fertig' && c.start_beat < bis && c.start_beat + c.laenge_beats > von) aus.push(c.id);
+    if (c.art === 'audio' && !c.stumm && c.dekodiert !== 'fertig' && c.start_beat < bis && c.start_beat + c.laenge_beats > von) aus.push(c.id);
   }
   return aus;
 }

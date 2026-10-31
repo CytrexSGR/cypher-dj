@@ -14,6 +14,7 @@
 #include <string>
 #include <vector>
 
+#include "cypherdj/cypher_bk_ffi.h"
 #include "cypherdj/erzeuger.h"
 #include "cypherdj/netz.h"
 #include "gegenstelle.h"
@@ -105,6 +106,70 @@ int main() {
     strom(netz, 55, "kit:../gut", "erz/1");
     PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 55 && g.m.werte[2].i == 6);
     PRUEF(!bef->hole(b));
+    // Baukasten S3a: bk:<name> lädt <bk_ordner>/<name>.json, übersetzt im Netz-Faden; ERZ_STROM mit form = -1 und
+    // zeiger = CypherBk*. Fehlt die Datei oder ist der Graph falsch → pruefung; Name mit Pfad → ausserhalb_bereich.
+    {
+      fs::create_directories(dir / "bk");
+      std::ofstream(dir / "bk/saege.json") << R"({"format":"baukasten/2","name":"t","stimmen":1,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"saege"},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"s.hz"},{"von":"s.aus","nach":"o.x"}]})";
+      std::ofstream(dir / "bk/kaputt.json") << R"({"format":"baukasten/2","name":"t","stimmen":1,"knoten":[{"id":"x","art":"gibtsnicht"}],"kanten":[]})";
+      netz.setze_bk_ordner((dir / "bk").string());
+      strom(netz, 71, "bk:saege", "erz/2");
+      cdj::Befehl bb{};
+      PRUEF(bef->hole(bb) && bb.art == cdj::Befehl::ERZ_STROM && bb.id == 71 && bb.form == -1 && bb.zeiger != nullptr);
+      if (bb.zeiger) cypher_bk_frei(static_cast<CypherBk*>(const_cast<void*>(bb.zeiger)));
+      strom(netz, 72, "bk:fehlt", "erz/2");
+      PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 72 && g.m.werte[2].i == 6 && !std::strcmp(g.s(5), "pruefung"));
+      strom(netz, 73, "bk:kaputt", "erz/2");
+      PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 73 && g.m.werte[2].i == 6 && !std::strcmp(g.s(5), "pruefung"));
+      strom(netz, 74, "bk:../saege", "erz/2");
+      PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 74 && g.m.werte[2].i == 6 && !std::strcmp(g.s(5), "ausserhalb_bereich"));
+      PRUEF(!bef->hole(bb));   // keiner der Fehlerfälle reiht einen Befehl ein
+      // ERZ_BK_ALT: der Netz-Faden gibt den Graphen frei (Weg wie ERZ_ALT in Fall 10, über den Ring; im normalen Bau nur
+      // „kein Absturz“, das Leck sähe der Sanitizer-Bau)
+      char f[64] = {};
+      cdj::Ereignis x{};
+      x.art = cdj::Ereignis::ERZ_BK_ALT;
+      x.zeiger = cypher_bk_neu(R"({"format":"baukasten/2","name":"t","stimmen":1,"knoten":[{"id":"o","art":"ausgang"}],"kanten":[]})", 48000.0, f, sizeof f);
+      PRUEF(x.zeiger != nullptr);
+      PRUEF(ere->schiebe(x));
+      netz.ereignisse_senden();
+    }
+
+    // Baukasten S3c: /k/kanal/graph ,hsss lädt <bk_ordner>/<name>.json im Netz-Faden und prüft: ein Effekt-Graph (eingang,
+    // Latenz 0) wird als KANAL_GRAPH mit zeiger eingereiht; ein Instrument → kein_eingang, Limiter → pruefung (Latenz),
+    // leerer Name → eingereiht mit zeiger null (entfernen), Kanal außerhalb deck/1..4 → ausserhalb_bereich.
+    {
+      const fs::path beispiele = fs::path(CYPHERDJ_DJK) / "instrumente/baukasten_dsp/beispiele";
+      fs::copy_file(beispiele / "fx-echo-achtel.json", dir / "bk/fx-echo-achtel.json", fs::copy_options::overwrite_existing);
+      fs::copy_file(beispiele / "juno-pad.json", dir / "bk/juno-pad.json", fs::copy_options::overwrite_existing);
+      std::ofstream(dir / "bk/fx-limit.json") << R"({"format":"baukasten/2","name":"fx-limit","stimmen":1,"knoten":[{"id":"e","art":"eingang"},{"id":"lim","art":"limiter"},{"id":"o","art":"ausgang"}],"kanten":[{"von":"e.l","nach":"lim.l"},{"von":"e.r","nach":"lim.r"},{"von":"lim.l","nach":"o.l"},{"von":"lim.r","nach":"o.r"}]})";
+      const auto graph = [&](int64_t id, const char* quelle, const char* kanal, const char* name) {
+        cdj::osc::Schreiber s(v::k_kanal_graph);
+        s.h(id).s(quelle).s(kanal).s(name);
+        netz.paket(s.daten(), s.groesse());
+      };
+      cdj::Befehl kb{};
+      graph(81, "andreas", "deck/2", "fx-echo-achtel");   // (1) Effekt-Graph: eingereiht
+      PRUEF(bef->hole(kb) && kb.art == cdj::Befehl::KANAL_GRAPH && kb.id == 81 && kb.zeiger != nullptr &&
+            !std::strcmp(kb.pfad, "deck/2") && !std::strcmp(kb.quelle, "andreas"));
+      if (kb.zeiger) cypher_bk_frei(static_cast<CypherBk*>(const_cast<void*>(kb.zeiger)));
+      graph(82, "andreas", "deck/2", "juno-pad");         // (2) Instrument: kein_eingang
+      PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 82 && g.m.werte[2].i == 6 && !std::strcmp(g.s(5), "kein_eingang"));
+      graph(83, "andreas", "deck/2", "fx-limit");         // (3) Latenz > 0: pruefung
+      PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 83 && g.m.werte[2].i == 6 && !std::strcmp(g.s(5), "pruefung"));
+      kb = cdj::Befehl{};
+      graph(84, "cypher", "deck/3", "");                  // (4) leerer Name (und cypher darf): eingereiht, zeiger null
+      PRUEF(bef->hole(kb) && kb.art == cdj::Befehl::KANAL_GRAPH && kb.id == 84 && kb.zeiger == nullptr &&
+            !std::strcmp(kb.pfad, "deck/3") && !std::strcmp(kb.quelle, "cypher"));
+      graph(85, "andreas", "deck/5", "fx-echo-achtel");   // (5) Kanal außerhalb: ausserhalb_bereich
+      PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 85 && g.m.werte[2].i == 6 && !std::strcmp(g.s(5), "ausserhalb_bereich"));
+      graph(86, "andreas", "deck/1", "fehlt");            // Datei fehlt: pruefung
+      PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 86 && g.m.werte[2].i == 6 && !std::strcmp(g.s(5), "pruefung"));
+      graph(87, "andreas", "deck/1", "../juno-pad");      // Name mit Pfad: ausserhalb_bereich
+      PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 87 && g.m.werte[2].i == 6 && !std::strcmp(g.s(5), "ausserhalb_bereich"));
+      PRUEF(!bef->hole(kb));   // keiner der Fehlerfälle reiht einen Befehl ein
+    }
+
     // MVP 2 Scheibe 3 (E2): kit:<a>+<b> verschmilzt; b fehlt → nur a; zwei '+' oder leerer Teil → ausserhalb_bereich
     fs::create_directories(dir / "rec");
     {

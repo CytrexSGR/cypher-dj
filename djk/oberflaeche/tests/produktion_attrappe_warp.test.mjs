@@ -47,7 +47,8 @@ test('N4-1 clip_neu warp "auto" mit Katalogeintrag: Warp aus Takten, Länge in B
   const r = await post(at.url, '/proj/aendern', { rev, label: 'Add clip', befehle: [neu(SHA_LOOP, 0), neu(SHA_EINS, 16)] });
   assert.equal(r.status, 200);
   const [loop, eins] = r.j.projekt.spuren[0].clips;
-  assert.deepEqual(loop.warp, { an: true, modus: 'repitch', marker: [[0, 0], [3.84, 8]], versatz_beats: 0, quelle: 'takte', transpose_st: 0, detune_ct: 0 });
+  assert.deepEqual(loop.warp, { an: true, modus: 'complex', marker: [[0, 0], [3.84, 8]], versatz_beats: 0, quelle: 'takte', transpose_st: 0, detune_ct: 0 },
+    'Slice 2 D10: ein Loop ohne Drum-Angabe warpt mit COMPLEX');
   assert.equal(loop.laenge_beats, 8, 'zwei Takte = 8 Beats, unabhängig vom Projekttempo 128 und von laenge_beats des Aufrufers');
   assert.equal('warp' in eins, false, 'One-Shot nie');
   assert.equal(eins.laenge_beats, 1, 'dann gilt laenge_beats des Aufrufers');
@@ -93,4 +94,26 @@ test('N4-1 warp_setzen rechnet S2 (an, kein_warp), warp_auto löst aus dem Katal
   const mid = mc.j.projekt.spuren.at(-1).clips[0].id;
   const midi = await post(at.url, '/proj/aendern', { rev: mc.j.rev, label: 'x', befehle: [{ befehl: 'warp_auto', clip_id: mid }] });
   assert.deepEqual([midi.status, midi.j.fehler], [409, 'feld_nur_audio']);
+}));
+
+// Fix-Runde Slice 4, Punkt 7: audio_quantisieren in der Attrappe. Sie hat keine dekodierte Quelle und damit keine Transienten; wie der Server ohne Transienten
+// (sitzung.ts: 409 transienten_fehlen) lehnt sie ab. Vorher fiel der Befehl in wende() und endete mit einem Grund, den es für ihn nicht gibt.
+test('Fix-Runde Punkt 7: audio_quantisieren in der Attrappe: gültig 409 transienten_fehlen, falsche Felder und Werte wie der Server, unbekannter Clip wie S2', () => mitAttrappe(async (at) => {
+  const { spur, rev } = await mitSpur(at);
+  await katalog(at);
+  const a = await post(at.url, '/proj/aendern', { rev, label: 'Add clip', befehle: [{ befehl: 'clip_neu', spur_id: spur, art: 'audio', start_beat: 0, laenge_beats: 8, sha256: SHA_LOOP, warp: 'auto' }] });
+  const id = a.j.projekt.spuren[0].clips[0].id;
+  const q = (extra) => post(at.url, '/proj/aendern', { rev: a.j.rev, label: 'Quantize audio', befehle: [{ befehl: 'audio_quantisieren', clip_id: id, raster: '1/16', ...extra }] });
+  const fehler = (r) => [r.status, r.j.fehler];
+  assert.deepEqual(fehler(await q({})), [409, 'transienten_fehlen']);
+  assert.deepEqual(fehler(await q({ staerke: 0.5, von_beat: 0, bis_beat: 4 })), [409, 'transienten_fehlen']);
+  assert.deepEqual(fehler(await q({ raster: '1/3' })), [400, 'argument_ungueltig'], 'Raster wie der Server');
+  assert.deepEqual(fehler(await q({ staerke: 2 })), [400, 'argument_ungueltig']);
+  assert.deepEqual(fehler(await q({ unsinn: 1 })), [400, 'argument_unbekannt'], 'unbekanntes Feld (S2-Prüfung)');
+  const fremd = await post(at.url, '/proj/aendern', { rev: a.j.rev, label: 'x', befehle: [{ befehl: 'audio_quantisieren', clip_id: 'gibt-es-nicht', raster: '1/16' }] });
+  assert.deepEqual(fehler(fremd), [404, 'clip_unbekannt'], 'unbekannter Clip: der Grund von S2');
+  const w = await post(at.url, '/proj/aendern', { rev: a.j.rev, label: 'x', befehle: [{ befehl: 'clip_neu', spur_id: spur, art: 'audio', start_beat: 16, laenge_beats: 1, sha256: SHA, warp: 'aus' }] });
+  const ungewarpt = w.j.projekt.spuren[0].clips[1].id;
+  const r = await post(at.url, '/proj/aendern', { rev: w.j.rev, label: 'x', befehle: [{ befehl: 'audio_quantisieren', clip_id: ungewarpt, raster: '1/16' }] });
+  assert.deepEqual(fehler(r), [409, 'kein_warp'], 'ein Clip ohne Warp: der Grund von S2');
 }));

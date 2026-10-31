@@ -1,5 +1,5 @@
 // Übersetzer Projekt → Wiedergabe cypherdj-arr/1 oder /2 (Spec 3.2; /2 bei Routing, 1.10 P2, oder bei gewarptem Clip, 1.13) und Ablage (Spec 2.9).
-// Paket 1.13: ein Audio-Clip mit Warp an trägt `warp: { modus: 0, w: [[beat, frame], …] }` (je Clip und je Loop-Kopie); ohne Routing und
+// Paket 1.13: ein Audio-Clip mit Warp an trägt `warp: { modus: 0 | 1 | 2 | 3, w: [[beat, frame], …], pitch? }` (je Clip und je Loop-Kopie); ohne Routing und
 // ohne Warp bleibt die Datei Zeichen für Zeichen die von /1.
 // Die Datei heißt wiedergabe-<nr>.json; <nr> ist die Wiedergabe-Nummer der Instanz (Spec 6.1), nicht die Projekt-Revision: der
 // WiedergabeZaehler vergibt sie fortlaufend über Projekte hinweg und findet beim Start im Arbeitsordner wieder, wo er stand.
@@ -7,13 +7,17 @@
 // Clip-Grenzen geschnitten. Mixer-Werte stehen nicht darin (Regler, 2.3), Tempo auch nicht (Beats sind absolut).
 import fs from 'node:fs';
 import path from 'node:path';
-import { MAX_CLIPS, MAX_NOTEN, MAX_SPUREN, SAMPLERATE, type AudioClip, type MidiClip, type Note, type Projekt, type Spur } from './modell.ts';
+import { BEATS_VORGABE, MAX_CLIPS, MAX_NOTEN, MAX_SPUREN, SAMPLERATE, pitchFaktor } from './modell.ts';
+import { MAX_BEATS_EINHEITEN, beatsEinheiten, beatsEinheitenZahl } from './warp.ts';
+import type { AudioClip, MidiClip, Note, Projekt, Spur, Warp } from './modell.ts';
 
 export const WIEDERGABE_FORMAT = 'cypherdj-arr/1';
 // /2, wenn das Projekt Gruppen hat oder eine Spur nicht auf master zeigt (1.10, P2) oder ein Audio-Clip Warp an trägt (1.13); sonst /1 byteweise wie bisher
 export const WIEDERGABE_FORMAT_2 = 'cypherdj-arr/2';
 export const MAX_WARP_PUNKTE = 262_144;                       // Marker aller Clips (und Loop-Kopien) einer Wiedergabe; gleich ARR_WARP_PUNKTE_MAX im Kern
-export const WARP_MODUS_NR: Readonly<Record<string, number>> = { repitch: 0 };
+export const WARP_MODUS_NR: Readonly<Record<string, number>> = { repitch: 0, beats: 1, complex: 2, tones: 3 };
+// 1 spielt der Callback (Slice 4), 2 und 3 das Warp-Werk des Kerns
+const BEATS_LOOP_NR: Readonly<Record<string, number>> = { aus: 0, vor: 1, vor_zurueck: 2 };
 export const BEHALTE = 5;                                    // so viele wiedergabe-<nr>.json bleiben, die zuletzt geschriebenen (Spec 6.1)
 
 export class WiedergabeFehler extends Error {
@@ -24,7 +28,8 @@ export class WiedergabeFehler extends Error {
 export interface WAudioClip {
   id: string; start_beat: number; laenge_beats: number; sha256: string; datei: string; frames: number; offset_frames: number;
   gain_db: number; ein_beats: number; aus_beats: number;
-  warp?: { modus: number; w: [number, number][] };            // Paket 1.13 (nur /2): Marker [Clip-Beat der Kopie, Quell-Frame], nur bei Warp an
+  // Paket 1.13 (nur /2): Marker [Clip-Beat der Kopie, Quell-Frame], nur bei Warp an; pitch (Slice 5) nur bei != 1
+  warp?: { modus: number; w: [number, number][]; pitch?: number; e?: [number, number][]; loop?: number; huelle?: number };
 }
 export interface WNote { id: string; beat: number; laenge: number; ton: number; vel: number }
 export type WZiel = { art: 'gruppe'; nr: number };   // fehlt `ausgang`, zeigt die Spur auf den Produktions-Master
@@ -41,6 +46,7 @@ export interface UebersetzOptionen {
   frames?: (sha256: string) => number | null;                // Stereo-Frames der dekodierten Datei oder null (nicht bereit); Vorgabe: Dateigröße / 8
   arbeitsordner?: string;                                    // nötig, sobald eine Spur eingefroren ist: freeze.datei ist relativ dazu (Spec 6.14, 6.29)
   existiert?: (datei: string) => boolean;                    // Vorgabe fs.existsSync (Haken für Tests)
+  transienten?: (sha256: string) => number[] | null;         // Slice 4: Transienten einer Quelle in Sekunden, aufsteigend; fehlt sie, gilt null (Raster 1/16)
 }
 
 const sortiereNoten = (a: WNote, b: WNote): number => a.beat - b.beat || a.ton - b.ton || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
@@ -106,7 +112,29 @@ function warpMarker(c: AudioClip): [number, number][] | null {
   return c.warp.marker.map(([quellS, beat]) => [beat - c.warp!.versatz_beats, quellS * SAMPLERATE]);
 }
 
+// Slice 5: pitch nur bei Transpose oder Detune (ohne bleibt die Datei Zeichen für Zeichen wie vor Slice 5)
+const pitchFeld = (w: Warp): { pitch?: number } => { const p = pitchFaktor(w.transpose_st, w.detune_ct); return p === 1 ? {} : { pitch: p }; };
+
+// Transienten nur holen, wenn das Raster sie braucht (die erste Abfrage einer Quelle rechnet synchron)
+const transientenFuer = (c: AudioClip, quelle?: (sha256: string) => number[] | null): number[] | null =>
+  (c.warp?.beats ?? BEATS_VORGABE).raster === 'transienten' ? quelle?.(c.quelle.sha256) ?? null : null;
+
+// Slice 4: Einheiten, Lückenmodus und Hülle eines BEATS-Clips; einmal je Clip, nicht je Loop-Kopie (jede Kopie trägt dieselbe Liste)
+function beatsFeld(c: AudioClip, o: UebersetzOptionen, frames: number): { e?: [number, number][]; loop?: number; huelle?: number } {
+  if (c.warp!.modus !== 'beats') return {};
+  const b = c.warp!.beats ?? BEATS_VORGABE;
+  const roh = beatsEinheiten(c.warp!, c.loop_beats ?? c.laenge_beats, transientenFuer(c, o.transienten));
+  if (roh.length > MAX_BEATS_EINHEITEN) throw new WiedergabeFehler('beats_einheiten', `${c.id}: mehr als ${MAX_BEATS_EINHEITEN} Einheiten`);
+  // Frames nach dem Runden streng steigend (der Kern lehnt sonst die ganze Wiedergabe mit format ab) und innerhalb der Quelle; mindestens eine Einheit bleibt
+  const alle = roh.map(([beat, s]): [number, number] => [beat - c.warp!.versatz_beats, Math.round(s * SAMPLERATE)]);
+  const e: [number, number][] = [];
+  for (const u of alle) if (u[1] < frames && (e.length === 0 || u[1] > e[e.length - 1][1])) e.push(u);
+  if (e.length === 0) e.push([alle[0][0], Math.max(0, Math.min(alle[0][1], frames - 1))]);
+  return { e, loop: BEATS_LOOP_NR[b.loop], huelle: b.huelle };
+}
+
 function audioClips(c: AudioClip, o: Required<Pick<UebersetzOptionen, 'frames'>> & UebersetzOptionen): WAudioClip[] {
+  if (c.stumm) return [];   // Slice 6 (D12): stumm, Live und Export gleich
   if (c.dekodiert !== 'fertig') return [];                   // Spec 3.2: nur fertig dekodierte Clips
   const frames = o.frames!(c.quelle.sha256);
   if (frames === null) return [];                            // Datei fehlt oder leer: noch nicht spielbar
@@ -114,15 +142,25 @@ function audioClips(c: AudioClip, o: Required<Pick<UebersetzOptionen, 'frames'>>
   const offset = marker ? 0 : Math.round(c.offset_s * SAMPLERATE);   // gewarpt liest der Kern nicht über offset_frames
   if (offset >= frames) return [];                           // hinter dem Dateiende: nichts zu spielen
   const datei = path.join(o.audioOrdner, `${c.quelle.sha256}.f32`);
+  const bf = marker ? beatsFeld(c, o, frames) : {};
   return audioKopien(c).map((k) => ({ id: k.id, start_beat: k.start_beat, laenge_beats: k.laenge_beats, sha256: c.quelle.sha256,
     datei, frames, offset_frames: offset, gain_db: c.gain_db, ein_beats: k.ein_beats, aus_beats: k.aus_beats,
-    ...(marker ? { warp: { modus: WARP_MODUS_NR[c.warp!.modus], w: marker.map((m): [number, number] => [m[0], m[1]]) } } : {}) }));
+    ...(marker ? { warp: { modus: WARP_MODUS_NR[c.warp!.modus], w: marker.map((m): [number, number] => [m[0], m[1]]),
+      ...pitchFeld(c.warp!), ...bf } } : {}) }));
 }
 
 // Zahl der Warp-Marker aller Audio-Clips nach dem Ausrollen der Loops (jede Kopie trägt ihre Liste); der Kern lehnt über MAX_WARP_PUNKTE ab
-export function zaehleWarpMarker(p: Projekt): number {
+// Slice 4: ein BEATS-Clip zählt zusätzlich seine Einheiten (e) je Kopie; wirft nie (D9). `o` liefert die Transienten, ohne gilt das Raster.
+export function zaehleWarpMarker(p: Projekt, o?: Pick<UebersetzOptionen, 'transienten'>): number {
   let n = 0;
-  for (const s of p.spuren) for (const c of s.clips) if (c.art === 'audio' && c.warp?.an) n += c.warp.marker.length * audioKopien(c).length;
+  for (const s of p.spuren) {
+    for (const c of s.clips) {
+      if (c.art !== 'audio' || !c.warp?.an) continue;
+      const k = audioKopien(c).length;
+      n += c.warp.marker.length * k;
+      if (c.warp.modus === 'beats') n += beatsEinheitenZahl(c.warp, c.loop_beats ?? c.laenge_beats, transientenFuer(c, o?.transienten)) * k;
+    }
+  }
   return n;
 }
 
@@ -176,7 +214,7 @@ export function uebersetze(p: Projekt, opt: UebersetzOptionen): Wiedergabe {
   const routing = spuren.some((s) => s.ausgang) || (p.gruppen ?? []).length > 0;
   // Paket 1.13: ein gewarpter Clip braucht /2 (der Kern lehnt warp in /1 ab); gruppen steht dann immer da, auch leer
   const gewarpt = spuren.some((sp) => sp.art === 'audio' && sp.clips.some((c) => c.warp !== undefined));
-  if (gewarpt && zaehleWarpMarker(p) > MAX_WARP_PUNKTE) throw new WiedergabeFehler('zu_gross', `warp-marker: > ${MAX_WARP_PUNKTE}`);
+  if (gewarpt && zaehleWarpMarker(p, opt) > MAX_WARP_PUNKTE) throw new WiedergabeFehler('zu_gross', `warp-marker: > ${MAX_WARP_PUNKTE}`);
   if (!routing && !gewarpt) return { format: WIEDERGABE_FORMAT, nr: opt.nr, spuren };   // ohne Routing und Warp byteweise die alte Datei (AK3)
   return { format: WIEDERGABE_FORMAT_2, nr: opt.nr, spuren,
     gruppen: [...(p.gruppen ?? [])].sort((a, b) => a.nr - b.nr).map((g) => ({ nr: g.nr, ausgang: { art: 'master' as const } })) };

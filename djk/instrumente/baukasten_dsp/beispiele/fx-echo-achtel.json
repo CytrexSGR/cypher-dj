@@ -1,0 +1,16 @@
+{
+  "format": "baukasten/2",
+  "name": "fx-echo-achtel",
+  "stimmen": 1,
+  "knoten": [
+    {"id": "ein", "art": "eingang"},
+    {"id": "echo", "art": "delay", "takt": 0.5, "fb": 0.45, "mix": 0.35, "max": 2000, "pingpong": 1, "daempf": 5000},
+    {"id": "aus", "art": "ausgang"}
+  ],
+  "kanten": [
+    {"von": "ein.l", "nach": "echo.l"},
+    {"von": "ein.r", "nach": "echo.r"},
+    {"von": "echo.l", "nach": "aus.l"},
+    {"von": "echo.r", "nach": "aus.r"}
+  ]
+}

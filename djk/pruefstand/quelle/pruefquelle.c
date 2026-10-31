@@ -116,9 +116,10 @@ int main(int argc, char **argv) {
     snprintf(name, sizeof name, "cypherdj-pruefquelle%s%s", inst && *inst ? "-" : "", inst && *inst ? inst : "");
     jack_status_t js; cl = jack_client_open(name, JackNoStartServer, &js);
     if (!cl || jack_get_sample_rate(cl) != 48000) { fprintf(stderr, "pruefquelle: kein JACK mit 48 kHz (0x%x)\n", js); return 1; }
-    if (ziel) {                                         // Namen wie der Kern (§8, 10k): die Notbahn-Kante zeigt auf master_L
+    if (ziel) {                                         // Namen wie der Kern (§8, 10k): die Notbahn-Kante zeigt auf notbahn_vor
         port[0] = jack_port_register(cl, "master_L", JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput, 0);
         port[1] = jack_port_register(cl, "master_R", JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput, 0);
+        jack_port_register(cl, "notbahn_vor", JACK_DEFAULT_AUDIO_TYPE, JackPortIsInput, 0); /* nie gelesen, Ziel von --vor */
     }
     jack_set_process_callback(cl, process, NULL);
     if (jack_activate(cl)) { fprintf(stderr, "pruefquelle: jack_activate gescheitert\n"); return 1; }

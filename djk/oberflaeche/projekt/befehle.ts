@@ -19,6 +19,9 @@ import {
 } from './modell.ts';
 import { unterschied, type Patch } from './patch.ts';
 import { MAX_WARP_PUNKTE, zaehleAusgerollt, zaehleWarpMarker } from './wiedergabe.ts';
+import {
+  WarpFehler, abHierGerade, einsHier, handWarp, markerAendern, tempoSkalieren, type MarkerSetze, type MarkerVerschiebe,
+} from './warp.ts';
 
 export class BefehlFehler extends Error {
   readonly grund: string;
@@ -92,7 +95,30 @@ function warpArg(x: unknown): Warp | null {
   if (f) return ab(f.grund, f.text);
   return structuredClone(x) as Warp;
 }
-const WARP_FELDER = ['an', 'modus', 'transpose_st', 'detune_ct'] as const;
+const WARP_FELDER = ['an', 'modus', 'transpose_st', 'detune_ct', 'beats'] as const;
+// Slice 3b: die Befehle der Marker von Hand. Alle arbeiten auf einem Audio-Clip mit Warp (sonst kein_warp), rechnen mit den reinen Funktionen von
+// warp.ts, prüfen das Ergebnis mit warpPruefung und setzen quelle 'hand'. Clip-Beats sind die Beats der Marker (Beat 0 = die Eins der Quelle).
+function warpClip(p: Projekt, a: Args): AudioClip & { warp: Warp } {
+  const gefunden = clipVon(p, idArg(a, 'clip_id')).clip;
+  const clip = gefunden.art === 'audio' ? gefunden : ab('feld_nur_audio', 'warp');
+  if (!clip.warp) ab('kein_warp', clip.id);
+  return clip as AudioClip & { warp: Warp };
+}
+function mitWarp<T>(f: () => T): T {
+  try { return f(); } catch (e) { if (e instanceof WarpFehler) return ab(e.grund, e.message); throw e; }
+}
+function gueltig(w: Warp): Warp {
+  const f = warpPruefung(w);
+  if (f) ab(f.grund, f.text);
+  return w;
+}
+function objekte(a: Args, k: string, erlaubt: string[]): Args[] {
+  return listeArg(a, k).map((x, i) => {
+    if (!istObjekt(x)) return ab('argument_ungueltig', `${k}[${i}]: Objekt erwartet`);
+    erlaube(x as Args, ...erlaubt);
+    return x as Args;
+  });
+}
 
 // --- Geräte -----------------------------------------------------------------------------------------------------------
 // `eigene`: die Spur, deren Gerät geändert wird. Ohne `slot` behält sie ihren eigenen Wirt-Slot (Spec 6.8), sonst gilt der erste freie.
@@ -305,12 +331,12 @@ const PRO_BEFEHL: Record<string, (p: Projekt, a: Args, ctx: Kontext) => void> = 
 
   clip_aendern(p, a) {
     erlaube(a, 'clip_id', 'start_beat', 'laenge_beats', 'loop_beats', 'offset_s', 'gain_db', 'fade_ein_beats', 'fade_aus_beats', 'spur_id', 'name',
-      'versatz_beats');
+      'versatz_beats', 'stumm');
     const { spur, clip } = clipVon(p, idArg(a, 'clip_id'));
     const felder = ['start_beat', 'laenge_beats', 'loop_beats', 'offset_s', 'gain_db', 'fade_ein_beats', 'fade_aus_beats', 'spur_id', 'name',
-      'versatz_beats'];
+      'versatz_beats', 'stumm'];
     if (felder.every((k) => a[k] === undefined)) ab('argument_ungueltig', 'keine Änderung angegeben');
-    for (const k of ['offset_s', 'gain_db', 'fade_ein_beats', 'fade_aus_beats', 'versatz_beats']) {
+    for (const k of ['offset_s', 'gain_db', 'fade_ein_beats', 'fade_aus_beats', 'versatz_beats', 'stumm']) {
       if (a[k] !== undefined && clip.art !== 'audio') ab('feld_nur_audio', k);
     }
     const versatz = zahl(a, 'versatz_beats', -MAX_BEAT, MAX_BEAT, { opt: true });
@@ -341,6 +367,10 @@ const PRO_BEFEHL: Record<string, (p: Projekt, a: Args, ctx: Kontext) => void> = 
       if (offset !== undefined) clip.offset_s = offset;
       if (versatz !== undefined && clip.warp) clip.warp = { ...clip.warp, versatz_beats: versatz };
       if (gain !== undefined) clip.gain_db = gain;
+      if (a.stumm !== undefined) {
+        if (typeof a.stumm !== 'boolean') ab('argument_ungueltig', 'stumm: true oder false erwartet');
+        if (a.stumm) clip.stumm = true; else delete clip.stumm;
+      }
       if (ein !== undefined) clip.fade_ein_beats = ein;
       if (aus !== undefined) clip.fade_aus_beats = aus;
       if (clip.fade_ein_beats + clip.fade_aus_beats > clip.laenge_beats + 1e-9) {
@@ -400,6 +430,7 @@ const PRO_BEFEHL: Record<string, (p: Projekt, a: Args, ctx: Kontext) => void> = 
     if (a.modus !== undefined) neu.modus = a.modus;
     if (a.transpose_st !== undefined) neu.transpose_st = a.transpose_st;
     if (a.detune_ct !== undefined) neu.detune_ct = a.detune_ct;
+    if (a.beats !== undefined) neu.beats = structuredClone(a.beats) as Warp['beats'];
     const f = warpPruefung(neu);
     if (f) ab(f.grund, f.text);
     clip.warp = neu;
@@ -413,6 +444,73 @@ const PRO_BEFEHL: Record<string, (p: Projekt, a: Args, ctx: Kontext) => void> = 
     ab('argument_ungueltig', 'warp_auto braucht den Katalog des Servers (Tempo-Angaben der Library)');
   },
 
+  // Slice 3b (Spec 5.5): ×2 / :2. Die Beats aller Marker, der Versatz, die Länge und der Loop des Clips werden mit dem Faktor multipliziert: derselbe
+  // Ausschnitt der Quelle klingt, nur mit doppelt (halb) so vielen Beats. Die Fades bleiben in Beats; reichen sie danach über den Clip: fade_zu_lang.
+  warp_tempo(p, a) {
+    erlaube(a, 'clip_id', 'faktor');
+    const clip = warpClip(p, a);
+    const warp = gueltig(mitWarp(() => tempoSkalieren(clip.warp, a.faktor)));
+    const laenge = clip.laenge_beats * a.faktor;
+    if (laenge > MAX_BEAT) ab('argument_ungueltig', `laenge_beats: höchstens ${MAX_BEAT}`);
+    const loop = clip.loop_beats == null ? null : clip.loop_beats * a.faktor;
+    if (loop !== null && loop < LOOP_MIN) ab('argument_ungueltig', `loop_beats: mindestens ${LOOP_MIN}`);
+    if (clip.fade_ein_beats + clip.fade_aus_beats > laenge + 1e-9) ab('fade_zu_lang', `${clip.fade_ein_beats} + ${clip.fade_aus_beats} > ${laenge}`);
+    clip.warp = warp; clip.laenge_beats = laenge;
+    if (loop !== null) clip.loop_beats = loop;
+  },
+  // Slice 3b: Marker setzen, löschen, verschieben (Reihenfolge löschen → verschieben → setzen; Beats wie vor dem Befehl). Die Länge des Clips bleibt.
+  warp_marker(p, a) {
+    erlaube(a, 'clip_id', 'setze', 'loesche', 'verschiebe');
+    const clip = warpClip(p, a);
+    if (a.setze === undefined && a.loesche === undefined && a.verschiebe === undefined) ab('argument_ungueltig', 'keine Änderung angegeben');
+    const setze = a.setze === undefined ? undefined : objekte(a, 'setze', ['quell_s', 'beat']).map((s): MarkerSetze => ({
+      quell_s: zahl(s, 'quell_s', 0, 1e7)!, ...(s.beat === undefined ? {} : { beat: zahl(s, 'beat', -MAX_BEAT, MAX_BEAT)! }) }));
+    const loesche = a.loesche === undefined ? undefined
+      : listeArg(a, 'loesche').map((b) => (zahlOk(b) ? b : ab('argument_ungueltig', 'loesche: Beats (Zahlen) erwartet')));
+    const verschiebe = a.verschiebe === undefined ? undefined : objekte(a, 'verschiebe', ['beat', 'neu_beat', 'neu_quell_s']).map((v): MarkerVerschiebe => ({
+      beat: zahl(v, 'beat', -MAX_BEAT, MAX_BEAT)!, ...(v.neu_beat === undefined ? {} : { neu_beat: zahl(v, 'neu_beat', -MAX_BEAT, MAX_BEAT)! }),
+      ...(v.neu_quell_s === undefined ? {} : { neu_quell_s: zahl(v, 'neu_quell_s', 0, 1e7)! }) }));
+    const marker = mitWarp(() => markerAendern(clip.warp.marker, { setze, loesche: loesche as number[] | undefined, verschiebe }));
+    clip.warp = gueltig(handWarp(clip.warp, marker));
+  },
+  // Slice 3b: Warp From Here. gerade: ab `beat` (Clip-Beat) ein Segment mit dem Tempo dort. start: ab `beat` der Auto-Warp neu; den löst der Server
+  // aus dem Katalog (sitzung.ts loeseQuellenAuf schreibt den Befehl in warp_setzen um), ohne Katalog bleibt nur diese Ablehnung. Die Länge bleibt.
+  warp_ab_hier(p, a) {
+    erlaube(a, 'clip_id', 'beat', 'art');
+    const clip = warpClip(p, a);
+    const beat = zahl(a, 'beat', -MAX_BEAT, MAX_BEAT)!;
+    if (a.art !== 'gerade' && a.art !== 'start') ab('argument_ungueltig', 'art: gerade oder start erwartet');
+    if (a.art === 'start') ab('argument_ungueltig', 'warp_ab_hier start braucht den Katalog des Servers (Tempo-Angaben der Library)');
+    const marker = abHierGerade(clip.warp.marker, beat);
+    if (marker !== null) clip.warp = gueltig(handWarp(clip.warp, marker));
+  },
+  // Slice 4: Quantize Audio. Die Transienten kennt nur der Server (sitzung.ts loeseQuellenAuf schreibt den Befehl in warp_setzen mit Hand-Markern um);
+  // hier bleibt die Ablehnung der Fälle, die er nicht umschreibt.
+  audio_quantisieren(p, a) {
+    erlaube(a, 'clip_id', 'raster', 'staerke', 'von_beat', 'bis_beat');
+    warpClip(p, a);
+    ab('argument_ungueltig', 'audio_quantisieren braucht den Server (er kennt die Transienten)');
+  },
+  // Slice 3b: Set 1.1.1 Here. Die Stelle quell_s der Quelle wird Beat 0; der Klang bleibt, der Clip beginnt (versatz_beats gleich) an der neuen Eins.
+  // Seine Länge folgt, damit er dasselbe Ende der Quelle spielt: laenge − (alter Beat der Stelle).
+  eins_hier(p, a) {
+    erlaube(a, 'clip_id', 'quell_s');
+    const clip = warpClip(p, a);
+    const { warp, verschoben } = einsHier(clip.warp, zahl(a, 'quell_s', 0, 1e7)!);
+    const laenge = runde9(clip.laenge_beats - verschoben);
+    if (!(laenge > 0)) ab('beat_ausserhalb', `die neue Eins liegt ${verschoben} Beats hinter dem Anfang, der Clip hat ${clip.laenge_beats}`);
+    if (laenge > MAX_BEAT) ab('argument_ungueltig', `laenge_beats: höchstens ${MAX_BEAT}`);
+    if (clip.fade_ein_beats + clip.fade_aus_beats > laenge + 1e-9) ab('fade_zu_lang', `${clip.fade_ein_beats} + ${clip.fade_aus_beats} > ${laenge}`);
+    clip.warp = gueltig(warp); clip.laenge_beats = laenge;
+    if (clip.loop_beats != null && clip.loop_beats > laenge) clip.loop_beats = laenge;
+  },
+  // Slice 3b: tempo_vom_clip setzt das Projekttempo auf das Tempo des Clips (warp.ts fensterTempo). Den Befehl schreibt der Server in tempo_setzen um
+  // (sitzung.ts loeseQuellenAuf), damit die Sperren des Tempos (deck_laeuft, Aufnahme) greifen; hier bleibt die Ablehnung der Fälle, die er nicht umschreibt.
+  tempo_vom_clip(p, a) {
+    erlaube(a, 'clip_id');
+    warpClip(p, a);
+    ab('argument_ungueltig', 'tempo_vom_clip braucht den Server (er setzt das Projekttempo über tempo_setzen)');
+  },
   clip_duplizieren(p, a) {
     erlaube(a, 'clip_id', 'ziel_beat');
     const { spur, clip } = clipVon(p, idArg(a, 'clip_id'));
@@ -726,7 +824,11 @@ function notenEntwurf(projekt: Projekt, befehle: unknown[]): Projekt | null {
 
 // Mehrere Befehle nacheinander (spätere sehen frühere); ein Gesamt-Patch von `projekt` zum Ergebnis. Eine Ablehnung verwirft alle.
 // o.quelle: Herkunft für spur_neu (Spec 6.22), ohne Angabe andreas. o.voll: immer der allgemeine Weg (tiefe Kopie), für den Vergleich in Tests.
-export function fuehreListeAus(projekt: Projekt, befehle: unknown[], o: { voll?: boolean; quelle?: Herkunft } = {}): BefehlErgebnis {
+// o.transienten (Slice 4, D9): dieselbe Transienten-Quelle wie uebersetze, damit die Zählung der BEATS-Einheiten hier und dort gleich ist;
+// ohne gilt Raster 1/16.
+type TransientenQuelle = (sha256: string) => number[] | null;
+export function fuehreListeAus(projekt: Projekt, befehle: unknown[],
+  o: { voll?: boolean; quelle?: Herkunft; transienten?: TransientenQuelle } = {}): BefehlErgebnis {
   if (!Array.isArray(befehle) || befehle.length === 0) ab('argument_ungueltig', 'befehle: nicht leere Liste erwartet');
   if (!o.voll && befehle.every((b) => istLeicht(projekt, b))) return fuehreLeichtAus(projekt, befehle);
   const entwurf = (o.voll ? null : notenEntwurf(projekt, befehle)) ?? structuredClone(projekt);
@@ -740,7 +842,8 @@ export function fuehreListeAus(projekt: Projekt, befehle: unknown[], o: { voll?:
   if (g.clips > MAX_CLIPS || g.noten > MAX_NOTEN) {
     ab('zu_gross', `after unrolling loops ${g.clips} clips, ${g.noten} notes (at most ${MAX_CLIPS}, ${MAX_NOTEN})`);
   }
-  const marker = zaehleWarpMarker(entwurf);                                    // Paket 1.13: Warp-Marker aller Kopien, Grenze wie im Kern
+  // Paket 1.13: Warp-Marker aller Kopien, Grenze wie im Kern (Slice 4: BEATS-Einheiten nach denselben Transienten wie uebersetze)
+  const marker = zaehleWarpMarker(entwurf, o.transienten ? { transienten: o.transienten } : undefined);
   if (marker > MAX_WARP_PUNKTE) ab('zu_gross', `after unrolling loops ${marker} warp markers (at most ${MAX_WARP_PUNKTE})`);
   return { projekt: entwurf, vor: unterschied(projekt, entwurf), zurueck: unterschied(entwurf, projekt), ...vergleiche(projekt, entwurf) };
 }

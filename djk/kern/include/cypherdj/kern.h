@@ -60,7 +60,7 @@ struct Befehl {
     TEIL = 5, ABBRUCH = 6, KI_STOPP = 7, KI_FREI = 8, KI_SPUR = 9, KI_STUFE = 10, HAND = 11,  // Scheibe 25
     DECK_LADEN = 12, DECK_ENTLADEN = 13, DECK_START = 14, DECK_STOPP = 15,                   // Scheibe 31
     MAPPING = 16,                                                                             // Scheibe 35: /k/mapping
-    ERZ_STROM = 17, ERZ_FENSTER = 18,  // Plan 2026-09-27 (§4.8, ADR 024): nr = strom, pfad = kanal, zeiger = Kit*/ErzFenster*
+    ERZ_STROM = 17, ERZ_FENSTER = 18,  // Plan 2026-09-27 (§4.8, ADR 024): nr = strom, pfad = kanal, zeiger = Kit*/ErzFenster*; form = -1: Baukasten-Graph, zeiger = CypherBk*
     LOOP_LADEN = 19, LOOP_START = 20, LOOP_STOPP = 21,  // MVP 2 (§4.9, ADR 025): deck = box, pfad = name, zeiger = Loop*
     MITSCHNITT = 22,  // MVP 2 Scheibe 2 (§4.9 /k/loop/rec): nr = beats, pfad = name, zeiger = Mitschnitt*
     DECK_LOOP = 23, DECK_SPRUNG = 24, DECK_HOTCUE = 25, DECK_HOTCUE_SETZEN = 26,  // Plan E9 (§4.4): nr = Hotcue
@@ -80,7 +80,8 @@ struct Befehl {
     ARR_FREEZE = 42,  // Paket K3 (§4.11 /k/arr/freeze): zeiger = ArrFreeze* (Auftrag samt Puffer, im Lade-Faden angelegt, 6.29)
     DECK_SCRUB = 43,  // Hörbares Ziehen (§4.4 /k/deck/scrub): deck, nr = phase (0 los, 1 Griff, 2 Zug), wert_beats = delta_beats
     DECK_LOOP_LAENGE = 44,  // §4.4 /k/deck/loop_laenge: Loop mit festem Start: quell_beat = start_beat, wert_beats = laenge_beats
-    REC_SPUR = 45, REC_START = 46, REC_STOPP = 47  // 1.8 (§4.12): REC_SPUR nr = spur, an = scharf, deck = eingang, zeiger = RecSpur*; REC_START nr = kennung, fassung = nachlauf_samples, versatz_f = frist_samples (0: Vorgabe)
+    REC_SPUR = 45, REC_START = 46, REC_STOPP = 47,  // 1.8 (§4.12): REC_SPUR nr = spur, an = scharf, deck = eingang, zeiger = RecSpur*; REC_START nr = kennung, fassung = nachlauf_samples, versatz_f = frist_samples (0: Vorgabe)
+    KANAL_GRAPH = 48   // Baukasten S3c (§4.10 /k/kanal/graph): pfad = kanal (deck/1..4), zeiger = CypherBk* oder null (entfernen)
   };
   int32_t art;
   int32_t an;          // KLICK: 0 oder 1; KI_STUFE: Stufe 0 bis 3
@@ -157,7 +158,9 @@ struct Ereignis {
                         // 1 abgebrochen, ARR_FREEZE_ABGELEHNT nur freigeben; der Lade-Faden schreibt die Datei (6.29),
                         // das Netz meldet /e/freeze
     EIN_ZUSTAND = 34,   // I08, §5.14 /zustand/ein: status = verbunden (Bit k-1: ein_k, Bit 8: midi_ein_1), ein_* (Zähler, Samples)
-    REC_ZUSTAND = 35, REC_ALT = 36  // 1.8 §5.14 /zustand/rec: status, id = kennung, rec_scharf, rec_luecken, arr_beat; REC_ALT: zeiger = abgelöster RecSpur* zur Freigabe im Netz-Faden
+    REC_ZUSTAND = 35, REC_ALT = 36,  // 1.8 §5.14 /zustand/rec: status, id = kennung, rec_scharf, rec_luecken, arr_beat; REC_ALT: zeiger = abgelöster RecSpur* zur Freigabe im Netz-Faden
+    WARP_ZUSTAND = 37,               // 1.13 Slice 2, §5.13b /zustand/warp: warp_stimmen, warp_unterlauf, warp_kein_platz, warp_spaet, warp_faeden
+    ERZ_BK_ALT = 38,                 // Baukasten S3a: abgelöster Baukasten-Graph zur Freigabe im Netz-Faden (zeiger = CypherBk*)
   };
   int32_t art;
   int32_t status;   // QUITTUNG: §5.1; KI: gestoppt 0/1
@@ -209,6 +212,7 @@ struct Ereignis {
   float arr_limiter_db;   // ARR_ZUSTAND: Absenkung des Set-Limiters, <= 0 (1.10 Slice 2)
   // I08, EIN_ZUSTAND: MIDI-Zähler seit Kernstart, Kern-Sample des letzten MIDI-Ereignisses bzw. der letzten Flanke auf ein_1 (−1 ohne)
   int64_t ein_gesehen, ein_verloren, ein_midi_sample, ein_flanke;
+  int32_t warp_stimmen, warp_unterlauf, warp_kein_platz, warp_spaet, warp_faeden;   // 1.13 Slice 2, WARP_ZUSTAND (§5.13b)
   int32_t rec_scharf;   // 1.8, REC_ZUSTAND: Zahl der scharfen Spuren
   int64_t rec_luecken;  // 1.8, REC_ZUSTAND: Lücken des laufenden Takes
 };
@@ -270,7 +274,16 @@ class Kern {
   }
   // D1 K1: Senken der Arrangement-Noten (K2: RB-FFI für interne Spuren, je Wirt-Slot eine). Nicht im Callback.
   void setze_arr_senke_intern(ArrSenke* s) { arr_->setze_senke_intern(s); }
+  // 1.13 Slice 2: das Warp-Werk für COMPLEX und TONES (warp_werk.h); vor dem ersten Zyklus, Besitz beim Aufrufer (er stoppt es vor dem Abbau des Lade-Fadens).
+  // Das Arrangement setzt die Stimmen neu an, wenn die Karte eine neue Generation hat. nullptr: ohne Werk (die Clips spielen als RE-PITCH).
+  void setze_arr_warp_werk(WarpWerk* w) {
+    arr_->setze_warp_werk(w);
+    arr_->setze_karten_generation(plan_.generation_zeiger());
+  }
   void setze_arr_senke_wirt(int slot, ArrSenke* s) { arr_->setze_senke_wirt(slot, s); }
+  // Baukasten S3b: das Graph-Werk (graph_werk.h) für die Baukasten-Ströme des Erzeugers; vor dem ersten Zyklus, Besitz beim
+  // Aufrufer (er stoppt es nach jack_deactivate). nullptr: Graphen rechnen im Callback (S3a).
+  void setze_graph_werk(GraphWerk* w) { erz_->setze_graph_werk(w); }
   const Arrangement& arrangement() const { return *arr_; }   // Tests, Diagnose (nur aus dem Callback-Faden lesen)
   // 1.10 Slice 2 (E2): Produktions-Master des zuletzt gelaufenen Zyklus, Index 0..n−1 (n = Größe des Zyklus). Nach dem PM-Fader, vor erz/4,
   // ohne Metronom, Kleber, master/pegel und Set-Limiter: der Export-Abgriff. Nur aus dem Callback-Faden (und Tests, Render) lesen.
@@ -443,6 +456,7 @@ class Kern {
   };
   // Scheibe 25 (kern_stellwerk.cpp)
   void einsortieren25(const Befehl& c);
+  void bk_zurueck(CypherBk* g, int64_t s);  // Baukasten S3c: ein Graph geht als ERZ_BK_ALT zur Freigabe in den Netz-Faden (null: nichts)
   void set_neu_teile_ab();
   void klick_befehl(const Befehl& c, double beat0);
   void audio(int64_t n0, int n);
@@ -459,6 +473,8 @@ class Kern {
   // D1 K1 (kern_arr.cpp): Modul Arrangement
   void einsortieren_arr(const Befehl& c, double beat0);
   void arr_zustand(int64_t n0, int n);
+  void warp_zustand(int64_t n0, int n);   // 1.13 Slice 2: /zustand/warp (§5.13b), bei Änderung und mit 2 Hz, solange ein Warp-Werk hängt
+  int32_t warp_gemeldet_[4] = {-1, -1, -1, -1};
   void limiter_beobachten(int64_t s0, int m);   // 1.10 Slice 2: liest die Absenkung des Set-Limiters nach jedem Mischer-Block
   static constexpr float LIMITER_LAMPE_DB = -0.1f;
   static constexpr int64_t LIMITER_HALTE = 24000;

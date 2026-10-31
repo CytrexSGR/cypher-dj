@@ -1,0 +1,39 @@
+{
+  "format": "baukasten/2",
+  "name": "saite",
+  "stimmen": 4,
+  "regler_namen": {"1": "Helligkeit", "2": "Ausklang"},
+  "knoten": [
+    {"id": "note", "art": "note"},
+    {"id": "rausch", "art": "rauschen"},
+    {"id": "stoss", "art": "adsr", "a": 0.0005, "d": 0.004, "s": 0, "r": 0.002},
+    {"id": "anreg", "art": "mul"},
+    {"id": "gleichfrei", "art": "svf", "cutoff": 60, "reso": 0},
+    {"id": "summe", "art": "add"},
+    {"id": "saite", "art": "leitung", "max": 60},
+    {"id": "hell", "art": "regler", "nr": 1, "min": 6, "max": 60, "log": 1},
+    {"id": "hell_kehr", "art": "regler", "nr": 1, "min": 0.0375, "max": 0.00375, "log": 1},
+    {"id": "grenzhz", "art": "mul"},
+    {"id": "korr", "art": "mul"},
+    {"id": "stimmhz", "art": "add"},
+    {"id": "tp", "art": "svf", "pole": 2, "reso": 0},
+    {"id": "aus_kl", "art": "regler", "nr": 2, "min": 0.98, "max": 0.998},
+    {"id": "daempf", "art": "mul"},
+    {"id": "pegel", "art": "mul", "b": 2},
+    {"id": "begr", "art": "limiter", "decke": -2},
+    {"id": "aus", "art": "ausgang"}
+  ],
+  "kanten": [
+    {"von": "note.gate", "nach": "stoss.gate"}, {"von": "note.trig", "nach": "stoss.trig"},
+    {"von": "rausch.aus", "nach": "anreg.a"}, {"von": "stoss.aus", "nach": "anreg.b"},
+    {"von": "anreg.aus", "nach": "gleichfrei.x"}, {"von": "gleichfrei.hp", "nach": "summe.a"},
+    {"von": "summe.aus", "nach": "saite.x"}, {"von": "stimmhz.aus", "nach": "saite.hz"},
+    {"von": "note.hz", "nach": "grenzhz.a"}, {"von": "hell.aus", "nach": "grenzhz.b"},
+    {"von": "note.hz", "nach": "korr.a"}, {"von": "hell_kehr.aus", "nach": "korr.b"},
+    {"von": "note.hz", "nach": "stimmhz.a"}, {"von": "korr.aus", "nach": "stimmhz.b"},
+    {"von": "saite.aus", "nach": "tp.x"}, {"von": "grenzhz.aus", "nach": "tp.cutoff"},
+    {"von": "tp.tp", "nach": "daempf.a"}, {"von": "aus_kl.aus", "nach": "daempf.b"}, {"von": "daempf.aus", "nach": "summe.b"},
+    {"von": "summe.aus", "nach": "pegel.a"}, {"von": "pegel.aus", "nach": "begr.x"},
+    {"von": "begr.l", "nach": "aus.l"}, {"von": "begr.r", "nach": "aus.r"}
+  ]
+}

@@ -115,7 +115,7 @@ export function baueEinleser(dir, { schlaf = 0, ausgabe = '{"status":"neu","mate
   return { skript, log, laeufe: () => (fs.existsSync(log) ? fs.readFileSync(log, 'utf8').split('---\n').filter(Boolean) : []) };
 }
 
-export async function stapel(t, { mediathek, python, bestand, einleserModul, sammlungen, loops, katalog, vorhoeren, musterBibliothek, musterSets, musterOrdner, welleFfmpeg, welleZeitlimit, loopWerkzeug, proj, geraete } = {}) {
+export async function stapel(t, { mediathek, python, bestand, einleserModul, sammlungen, loops, katalog, vorhoeren, musterBibliothek, musterSets, musterOrdner, welleFfmpeg, welleZeitlimit, loopWerkzeug, proj, geraete, stems } = {}) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-mt-'));
   const ab = path.join(fs.mkdtempSync('/dev/shm/djk-mt-test-'), 'material');
   fs.mkdirSync(ab, { recursive: true });
@@ -146,6 +146,7 @@ export async function stapel(t, { mediathek, python, bestand, einleserModul, sam
     // D1 S2: nie ~/.cache oder /dev/shm der Instanz. Fix3 G8: Projektwurzel, Arbeitsordner und damit auch <arbeitsordner>.zaehler (Spec 6.31) liegen im
     // eigenen tmp-Ordner des Stapels, den t.after wegräumt (vorher tmpd(): je Lauf ein djk-proj-*, ein djk-arr-* und ein .zaehler unter TMPDIR, nie entfernt)
     proj: { wurzel: path.join(tmp, 'proj'), ...(proj ?? {}), arbeitsordner },
+    stems,
     geraete: { konfigPfad: path.join(tmp, 'geraete.json'), kantenPfad: path.join(tmp, 'eingaenge-kanten'), cacheMs: 0, erkenne: async () => ({ audio: [], midi: [] }), ...(geraete ?? {}) } };
   serverInstanzSetzen(t);   // Nachzug R2 (m4): die Testinstanz gilt auch im Server, nie der Betrieb
   const o = new Oberflaeche(optionen);

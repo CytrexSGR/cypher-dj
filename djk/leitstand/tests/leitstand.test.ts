@@ -47,7 +47,8 @@ test('je Takt eine takt-Nachricht, seq lückenlos, Kern-Ereignisse als ereignis 
   const s1 = baue('/e/luecke', { sample: 123456, frames: 256, zyklen: 1 });
   const s2 = baue('/e/invariante', { art: 'sub_doppelt', plan: 'p17', teil: 2, sample: 123456, beat: 10.5 });
   const s3 = baue('/e/neustart', { generation: 1, sample: 123456 });
-  for (const s of [s1, s2, s3]) await new Promise((ok) => u.send(s, aboL, '127.0.0.1', ok));
+  const s4 = baue('/zustand/ein', { verbunden: 0, midi_gesehen: 0, midi_verloren: 0, midi_sample: -1, flanke_sample: -1 });
+  for (const s of [s1, s2, s3, s4, s4, s4]) await new Promise((ok) => u.send(s, aboL, '127.0.0.1', ok));
   u.close();
   const e = await ps.warteAuf((n) => n.typ === 'ereignis' && n.daten.art === 'invariante', 3000, abPs);
   assert.equal(e.daten.invariante, 'sub_doppelt');
@@ -75,6 +76,7 @@ test('je Takt eine takt-Nachricht, seq lückenlos, Kern-Ereignisse als ereignis 
   const jt = new Set(j.filter((z) => z.typ === '/takt').map((z) => z.daten.takt));
   assert.deepEqual(takte.filter((t) => !jt.has(t)), []);
   assert.equal(j.filter((z) => z.typ === '/e/luecke').length, 1);
+  assert.equal(j.filter((z) => z.typ === '/zustand/ein').length, 0); // 20-Hz-Tick bleibt draußen (§5.14), /e/luecke daneben kam an
   const vj = pruefer(SCHEMA_JOURNAL);
   assert.deepEqual(j.map((z) => vj(z)).filter((p) => !p.ok), []);
   ps.schliesse(); an.schliesse();

@@ -83,6 +83,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "baukasten"
+version = "0.1.0"
+dependencies = [
+ "baukasten_dsp",
+ "nih_plug",
+]
+
+[[package]]
+name = "baukasten_dsp"
+version = "0.1.0"
+dependencies = [
+ "hall_dsp",
+ "komp_dsp",
+ "rb_dsp",
+ "saett_dsp",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "bitflags"
 version = "1.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -286,6 +306,7 @@ dependencies = [
 name = "hall_ffi"
 version = "0.1.0"
 dependencies = [
+ "baukasten_dsp",
  "hall_dsp",
  "komp_dsp",
  "nih_plug",

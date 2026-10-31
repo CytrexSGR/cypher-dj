@@ -7,9 +7,12 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <fstream>
 #include <memory>
+#include <sstream>
 #include <string>
 
+#include "cypherdj/cypher_bk_ffi.h"
 #include "cypherdj/erzeuger.h"
 #include "cypherdj/kit.h"
 #include "cypherdj/mixer.h"
@@ -44,6 +47,18 @@ bool kit_name_ok(const char* s) {  // [a-z0-9_-]{1,32}
   return true;
 }
 
+// Graph <ordner>/<name>.json lesen und übersetzen (Netz-Faden, allokiert). null mit Grund in fehler.
+CypherBk* lade_bk(const std::string& ordner, const char* name, char* fehler, size_t n) {
+  std::ifstream f(ordner + "/" + name + ".json");
+  if (!f) {
+    std::snprintf(fehler, n, "Datei fehlt");
+    return nullptr;
+  }
+  std::stringstream text;
+  text << f.rdbuf();
+  return cypher_bk_neu(text.str().c_str(), 48000.0, fehler, n);
+}
+
 int32_t be32(const char* p) {
   uint32_t x;
   std::memcpy(&x, p, 4);
@@ -55,6 +70,53 @@ int32_t be32(const char* p) {
 bool Netz::erz_paket(const v::Adresse* a, const osc::Nachricht& m) {
   if (a->pfad == v::erz_fenster.pfad || a->pfad == v::erz_ev.pfad) {  // §4.8: nur im Bundle
     protokollfehler(m.adresse, "protokoll", 0);
+    return true;
+  }
+  if (a->pfad == v::k_kanal_graph.pfad) {  // Baukasten S3c: /k/kanal/graph ,hsss
+    namespace f = v::feld::k_kanal_graph;
+    Befehl b{};
+    b.art = Befehl::KANAL_GRAPH;
+    b.id = m.werte[f::id].h;
+    kopiere(b.quelle, m.werte[f::quelle].s, sizeof b.quelle);
+    kopiere(b.pfad, m.werte[f::kanal].s, sizeof b.pfad);
+    const char* name = m.werte[f::name].s;
+    bool kanal_ok = false;
+    for (const auto& k : v::werte::graph_kanal) kanal_ok = kanal_ok || k == m.werte[f::kanal].s;
+#ifdef CYPHERDJ_MUTATION_KANAL_GRAPH_NETZ_BEREICH_OFFEN
+    kanal_ok = true;
+#endif
+    if (!quelle_ok(b.quelle) || !kanal_ok || (name[0] && !kit_name_ok(name))) {
+      quittung(b.id, b.quelle, 6, stand_sample_, stand_beat_, "ausserhalb_bereich");
+      return true;
+    }
+    CypherBk* g = nullptr;  // leerer Name: entfernen (D10)
+    if (name[0]) {
+      char fehler[256] = {};
+      g = lade_bk(bk_ordner_, name, fehler, sizeof fehler);
+      const char* grund = nullptr;
+      if (!g) {
+        grund = "pruefung";
+#ifndef CYPHERDJ_MUTATION_KANAL_GRAPH_NETZ_EINGANG_OFFEN
+      } else if (!cypher_bk_hat_eingang(g)) {  // D5: ein Instrument als Insert ersetzte das Deck durch einen Synth
+        grund = "kein_eingang";
+        std::snprintf(fehler, sizeof fehler, "kein eingang");
+#endif
+#ifndef CYPHERDJ_MUTATION_KANAL_GRAPH_NETZ_LATENZ_OFFEN
+      } else if (cypher_bk_latenz(g) > 0) {  // D6: der Kern hat kein Latenzkonto
+        grund = "pruefung";
+        std::snprintf(fehler, sizeof fehler, "Latenz %u Samples", cypher_bk_latenz(g));
+#endif
+      }
+      if (grund) {
+        std::fprintf(stderr, "/k/kanal/graph: %s: %s\n", name, fehler);
+        cypher_bk_frei(g);  // null erlaubt
+        quittung(b.id, b.quelle, 6, stand_sample_, stand_beat_, grund);
+        return true;
+      }
+      std::fprintf(stderr, "Kanal-Graph: %s <- %s\n", b.pfad, name);  // Positivprobe für den Kostenlauf (Task 6)
+    }
+    b.zeiger = g;
+    if (!einreihen(b)) cypher_bk_frei(g);  // nicht angenommen: wir besitzen ihn noch
     return true;
   }
   if (a->pfad != v::erz_strom.pfad) return false;
@@ -75,6 +137,25 @@ bool Netz::erz_paket(const v::Adresse* a, const osc::Nachricht& m) {
     return true;
   }
 #endif
+  if (std::strncmp(ziel, "bk:", 3) == 0) {  // Baukasten S3a: bk:<name>, Graph <bk_ordner>/<name>.json, hier übersetzt
+    const char* name = ziel + 3;
+    if (!quelle_ok(b.quelle) || b.nr < 1 || b.nr > ERZ_STROEME || !kanal_ok || !kit_name_ok(name)) {
+      quittung(b.id, b.quelle, 6, stand_sample_, stand_beat_, "ausserhalb_bereich");
+      return true;
+    }
+    char fehler[256] = {};
+    CypherBk* g = lade_bk(bk_ordner_, name, fehler, sizeof fehler);
+    if (!g) {
+      std::fprintf(stderr, "/erz/strom: bk:%s: %s\n", name, fehler);
+      quittung(b.id, b.quelle, 6, stand_sample_, stand_beat_, "pruefung");
+      return true;
+    }
+    b.form = -1;
+    b.politik = 1;
+    b.zeiger = g;
+    if (!einreihen(b)) cypher_bk_frei(g);  // nicht angenommen: wir besitzen ihn noch
+    return true;
+  }
   if (std::strncmp(ziel, "midi:", 5) == 0) {  // Studio S5: midi:<port 1..4>:<kanal 1..16>, kein Kit
     int port = 0, mk = 0;
     char rest = 0;
@@ -209,6 +290,10 @@ void Netz::erz_bundle(const char* p, size_t n) {
 }
 
 bool Netz::erz_ereignis(const Ereignis& e) {
+  if (e.art == Ereignis::ERZ_BK_ALT) {  // Baukasten S3a: der Erzeuger hat den Graphen ausklingen lassen
+    cypher_bk_frei(static_cast<CypherBk*>(const_cast<void*>(e.zeiger)));
+    return true;
+  }
   if (e.art == Ereignis::ERZ_ALT) {
     delete static_cast<const Kit*>(e.zeiger);
     return true;

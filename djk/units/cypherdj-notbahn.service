@@ -1,7 +1,7 @@
 # cypherdj-notbahn: Notbahn daneben am Ausgang (ADR 016, Nachtrag 2026-09-25; Scheibe 10).
 # Ports als Aufrufparameter (SCHNITTSTELLEN.md §7, kein TOML in C). Vorgabe stumm: die geteilte Null-Senke
 # cypher_stumm. Das echte Interface erst mit --ton-frei nach Andreas' Freigabe (§8, „Kein Ton ohne Frage“).
-# --kante: Kern-Ausgang auf den eigenen Eingang, damit der Graph den Kern zuerst rechnet (Probe 2026-09-25).
+# --vor: der stumme Ausgang vor auf den Kern-Eingang notbahn_vor, die Notbahn rechnet vor dem Kern und hängt nicht an ihm (29.10.; vorher --kante, Probe 2026-09-25).
 # Installation und Start gehören Scheibe 18 (cypherdj.target); diese Datei wird hier nur geliefert, nicht aktiviert.
 [Unit]
 Description=Cypher-DJ Notbahn (daneben)
@@ -10,7 +10,7 @@ StartLimitIntervalSec=0
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/pw-jack -p 256 %h/cypher-dj/djk/notbahn/build/cypherdj-notbahn --master cypher_stumm:playback_F --daneben --kante cypherdj-kern:master_L
+ExecStart=/usr/bin/pw-jack -p 256 %h/cypher-dj/djk/notbahn/build/cypherdj-notbahn --master cypher_stumm:playback_F --daneben --vor cypherdj-kern:notbahn_vor
 Restart=always
 RestartSec=0
 Nice=-5

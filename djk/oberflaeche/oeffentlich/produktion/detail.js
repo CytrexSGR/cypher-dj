@@ -7,7 +7,8 @@ import { findeClip } from './entwurf.js';
 import { feldBefehl, zahlText, FELDER } from './clips.js';
 import { positionText } from './zeitachse.js';
 import { bindeRolle } from './pianoroll_bedienung.js';
-import { warpAnzeige } from './warp.js';
+import { warpAnzeige, transposeBefehl, modusBefehl, BEATS_FELDER, beatsFeldAnsicht, beatsAenderung, tonErlaubt, tempoBefehl, projektTempoBefehl, EINS_HINWEIS } from './warp.js';
+import { bindeWarpEditor } from './warp_editor_bedienung.js';
 
 // Gain-Regler: Bereich aus FELDER.gain_db (Spec 6.27, −96..+24 dB), sonst schnitte er Werte ab (V2 Fix F8: vorher −36..+12, +20 dB zeigte 12)
 const GERUEST = `<div class="p-detail-kopf"><span data-d="titel">CLIP</span><span class="p-detail-info" data-d="info"></span>
@@ -24,7 +25,19 @@ const GERUEST = `<div class="p-detail-kopf"><span data-d="titel">CLIP</span><spa
   <label data-d="versatzl" hidden>OFFSET <input data-f="versatz_beats" inputmode="decimal" autocomplete="off" title="Which beat of the warp plays at the clip start"> beats</label>
   <div class="p-warp" data-d="warp">
     <button data-d="warpknopf" aria-pressed="false" title="Warp: play the clip in the project tempo. RE-PITCH: the pitch follows the tempo, like a record">WARP</button>
-    <span class="p-warp-modus" data-d="warpmodus"></span><span class="p-warp-info" data-d="warpinfo"></span>
+    <select class="p-warp-modus" data-d="warpmodus" title="Warp mode. RE-PITCH: the pitch follows the tempo, like a record. BEATS: drums, each hit starts on its beat and keeps its shape. COMPLEX: whole tracks, the pitch stays. TONES: tonal material, finer grains" disabled>
+      <option value="repitch">RE-PITCH</option><option value="beats">BEATS</option><option value="complex">COMPLEX</option><option value="tones">TONES</option></select>
+    <span class="p-warp-beats" data-d="beatsteil" hidden>
+      <label title="Preserve: where each slice starts, at the transients of the audio or on a fixed grid">PRESERVE <select data-d="beatsraster"><option value="transienten">Transients</option><option value="1/4">1/4</option><option value="1/8">1/8</option><option value="1/16">1/16</option><option value="1/32">1/32</option></select></label>
+      <label title="Transient Loop Mode: what fills the gap when the tempo is slower than the audio: nothing, the end of the slice looped forward, or back and forth">TRANSIENT LOOP <select data-d="beatsloop"><option value="aus">Off</option><option value="vor">Forward</option><option value="vor_zurueck">Back-and-Forth</option></select></label>
+      <label title="Transient Envelope: 100 keeps each slice whole, lower values fade it out sooner">TRANSIENT ENVELOPE <input data-d="beatshuelle" inputmode="numeric" autocomplete="off"></label>
+    </span>
+    <label class="p-warp-ton">TRANSPOSE <input data-d="transpose" inputmode="numeric" autocomplete="off" title="Semitones, whole numbers from -12 to 24. Takes effect after a moment (the clip is re-rendered ahead of time)" disabled> st</label><label class="p-warp-ton">DETUNE <input data-d="detune" inputmode="decimal" autocomplete="off" title="Cents" disabled> ct</label><span class="p-warp-info" data-d="warpinfo"></span>
+    <span class="p-warp-tempo"><button data-d="tempo2" title="Double the tempo of the whole warp: the same piece of the track takes twice as many beats, so the clip gets twice as long" disabled>×2</button><button data-d="tempohalb" title="Halve the tempo of the whole warp: the clip gets half as long" disabled>:2</button><button data-d="projekttempo" title="Set the project tempo to the tempo of this clip, so the clip plays at its own speed" disabled>SET PROJECT TEMPO</button></span>
+  </div>
+  <div class="p-warp-editor" data-d="editor" hidden>
+    <div class="p-warp-editor-leiste"><span class="p-warp-info" data-d="segment"></span><span class="p-roll-hilfe">Double click: add or delete a marker · drag: move it (Shift: move its beat) · right click: menu · wheel: scroll · Ctrl+wheel: zoom</span></div>
+    <canvas class="p-warp-canvas" data-d="editorcanvas" tabindex="0" aria-label="Warp editor"></canvas>
   </div>
 </div>
 <div class="p-clip-midi" data-d="midi" hidden></div>`;
@@ -37,6 +50,7 @@ export function bindeDetail(ctx) {
   const d = (n) => sek.querySelector(`[data-d="${n}"]`);
   const felder = [...sek.querySelectorAll('[data-f]')];
   const rolle = bindeRolle(ctx, d('midi'));
+  const editor = bindeWarpEditor(ctx, d('editorcanvas'), d('segment'));
   const gezeigt = () => (st.auswahl.length ? findeClip(st.projekt, st.auswahl.at(-1)) : null);
 
   for (const [knopf, aktion] of [['loop', 'loop'], ['teilen', 'teilen'], ['duplizieren', 'duplizieren'], ['loeschen', 'loeschen']]) d(knopf).addEventListener('click', () => ctx.clipAktion(aktion));
@@ -64,6 +78,46 @@ export function bindeDetail(ctx) {
     if (!w) ctx.aendere('Warp clip', [{ befehl: 'warp_auto', clip_id: t.clip.id }]);
     else ctx.aendere(w.an ? 'Warp off' : 'Warp on', [{ befehl: 'warp_setzen', clip_id: t.clip.id, an: !w.an }]);
   });
+  // Slice 2: der Modus des Warps (RE-PITCH, COMPLEX, TONES); COMPLEX und TONES rechnet das Warp-Werk des Kerns voraus
+  d('warpmodus').addEventListener('change', () => {
+    const t = gezeigt();
+    if (!t || t.clip.art !== 'audio' || !t.clip.warp) return;
+    const modus = d('warpmodus').value;
+    ctx.aendere('Warp mode', [modusBefehl(t.clip, modus)]);
+  });
+  // Slice 4: die drei Felder von BEATS; jede Änderung ist ein warp_setzen mit dem ganzen beats-Objekt
+  for (const [name, feld] of BEATS_FELDER) {
+    const f = d(name);
+    if (feld === 'huelle') f.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') f.blur(); if (e.key === 'Escape') { zeige(true); f.blur(); } });
+    f.addEventListener('change', () => {
+      const t = gezeigt();
+      if (!t || t.clip.art !== 'audio') return;
+      const r = beatsAenderung(t.clip, name, f.value);
+      if (r.fehler) { ctx.melde(r.fehler, true); zeige(true); return; }
+      if (r.befehl) ctx.aendere(r.label, [r.befehl]); else zeige(true);
+    });
+  }
+  // Slice 5: TRANSPOSE und DETUNE: Zahlenfelder, gesendet bei change/Enter (kein Schieberegler: jede Änderung ist eine neue Stimme im Warp-Werk und eine neue Wiedergabe)
+  for (const [name, feld, label] of [['transpose', 'transpose_st', 'Transpose'], ['detune', 'detune_ct', 'Detune']]) {
+    const f = d(name);
+    f.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') f.blur(); if (e.key === 'Escape') { zeige(true); f.blur(); } });
+    f.addEventListener('change', () => {
+      const t = gezeigt();
+      if (!t || t.clip.art !== 'audio') return;
+      const r = transposeBefehl(t.clip, feld, f.value);
+      if (r.fehler) { ctx.melde(r.fehler, true); zeige(true); return; }
+      if (r.befehl) ctx.aendere(label, [r.befehl]); else zeige(true);
+    });
+  }
+  // Slice 3b: ×2 und :2 wirken auf den ganzen Warp des gewählten Clips (ein Befehl, ein Undo-Schritt)
+  for (const [name, bauen] of [['tempo2', (c) => tempoBefehl(c, 2)], ['tempohalb', (c) => tempoBefehl(c, 0.5)], ['projekttempo', projektTempoBefehl]]) {
+    d(name).addEventListener('click', () => {
+      const t = gezeigt();
+      if (!t || t.clip.art !== 'audio') return;
+      const r = bauen(t.clip);
+      if (r.fehler) ctx.melde(r.fehler, true); else ctx.aendere(r.label, [r.befehl]);
+    });
+  }
   const regler = d('gainregler');
   // V2 Fix-Runde 2 H6: ein neuer Serverstand überschreibt den Regler nur nicht, solange er bedient wird (Zeiger gedrückt oder Eingabe läuft);
   // bloßer Fokus schützt nicht mehr (vorher zeigte ein Regler mit Fokus weiter den alten Wert, −6-dB-Clip mit 12). Danach zeigt er den Serverwert.
@@ -94,20 +148,41 @@ export function bindeDetail(ctx) {
     d('leer').hidden = !!t;
     d('audio').hidden = t?.clip.art !== 'audio';
     d('midi').hidden = t?.clip.art !== 'midi';
-    if (!t) { d('titel').textContent = 'CLIP'; d('info').textContent = ''; rolle.zeige(null); return; }
+    if (!t) { d('titel').textContent = 'CLIP'; d('info').textContent = ''; rolle.zeige(null); editor.zeige(null); return; }
     const c = t.clip, frozen = t.spur.freeze ? ' · FROZEN: changing notes unfreezes the track' : '';
     d('titel').textContent = c.art === 'audio' ? 'AUDIO CLIP' : 'MIDI CLIP';
     d('info').textContent = `${c.name} · ${t.spur.name} · bar ${positionText(c.start_beat)} · ${zahlText(c.laenge_beats)} beats${c.loop_beats != null ? ` · loop ${zahlText(c.loop_beats)} beats` : ''}${st.auswahl.length > 1 ? ` · ${st.auswahl.length} selected` : ''}${frozen}`;
-    if (c.art === 'midi') { rolle.zeige(c.id); return; }
+    if (c.art === 'midi') { rolle.zeige(c.id); editor.zeige(null); return; }
     rolle.zeige(null);
     for (const f of felder) {
       if (!erzwungen && document.activeElement === f) continue;
       f.value = f.dataset.f === 'name' ? c.name : zahlText(f.dataset.f === 'versatz_beats' ? (c.warp?.versatz_beats ?? 0) : c[f.dataset.f]);
     }
-    const wa = warpAnzeige(c);
+    const wa = warpAnzeige(c, (st.analyse ?? []).find((x) => x.clip_id === c.id)?.status ?? null);
     d('warpknopf').classList.toggle('an', wa.an); d('warpknopf').setAttribute('aria-pressed', String(wa.an));
-    d('warpmodus').textContent = wa.vorhanden ? wa.modus : '';
-    d('warpinfo').textContent = !wa.vorhanden ? 'no tempo set: WARP asks the library' : [wa.herkunft, wa.bpm ? `${wa.bpm} BPM` : '', wa.downbeatFrage ? 'downbeat?' : ''].filter(Boolean).join(' · ');
+    const ms = d('warpmodus');
+    ms.disabled = !wa.vorhanden;
+    if (erzwungen || document.activeElement !== ms) ms.value = wa.vorhanden ? c.warp.modus : 'repitch';
+    const kannTon = wa.vorhanden && tonErlaubt(c.warp);                  // D6b: nicht in RE-PITCH und BEATS
+    const ba = beatsFeldAnsicht(c);
+    d('beatsteil').hidden = ba.teilVersteckt;
+    for (const [name] of BEATS_FELDER) {
+      const f = d(name);
+      f.disabled = ba.gesperrt;
+      if (erzwungen || document.activeElement !== f) f.value = ba.werte[name];
+    }
+    for (const [name, feld] of [['transpose', 'transpose_st'], ['detune', 'detune_ct']]) {
+      const f = d(name);
+      f.disabled = !kannTon;
+      if (erzwungen || document.activeElement !== f) f.value = kannTon ? zahlText(c.warp[feld]) : '0';
+    }
+    d('warpinfo').textContent = !wa.vorhanden
+      ? (wa.analysiert ? 'no warp yet · analysing…' : 'no tempo set: WARP asks the library')
+      : [wa.herkunft, wa.bpm ? `${wa.bpm} BPM${wa.spanne ? ` (${wa.spanne})` : ''}` : '', wa.markerZahl > 2 ? `${wa.markerZahl} markers` : '',
+        wa.downbeatFrage ? 'downbeat?' : '', wa.analysiert ? 'analysing…' : ''].filter(Boolean).join(' · ');
+    d('warpinfo').title = wa.downbeatFrage ? EINS_HINWEIS : '';
+    for (const k of ['tempo2', 'tempohalb', 'projekttempo']) d(k).disabled = !wa.vorhanden;
+    d('editor').hidden = !wa.vorhanden; editor.zeige(c);
     d('offsetl').hidden = wa.an; d('versatzl').hidden = !wa.an;                 // gewarpt zählt der Versatz in Beats, nicht offset_s
     if (!bedient) regler.value = String(c.gain_db);                 // H6: nur während der Bedienung nicht
     d('startpos').textContent = `bar ${positionText(c.start_beat)}`;

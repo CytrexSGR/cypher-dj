@@ -4,6 +4,7 @@
 // Zeichenvokabular und Wellendaten aus welle.js (spalten, zeichneSpalte), kein WebGL.
 import { linien, beatZuX } from './zeitachse.js';
 import { SPUR_HOEHE, LOOP_ZONE, CLIP_KOPF, clipKasten, sichtbar, welleSpalteFuer, notenKaesten } from './layout.js';
+import { stemsBalkenListe, stummDecke } from './stems.js';
 import { spalten, zeichneSpalte } from '../welle.js';
 
 const HEX = /^#[0-9a-f]{6}$/i;
@@ -32,7 +33,7 @@ export class Arrangement {
     return true;
   }
   // loop: die gezeigte Klammer (beim Ziehen der Entwurf, sonst projekt.loop)
-  bild({ ansicht, projekt, loop, kopfBeat, startBeat, geist }) {
+  bild({ ansicht, projekt, loop, kopfBeat, startBeat, geist, stems = null }) {
     if (this.passe(this.s) | this.passe(this.u)) this.schmutzig = true;
     this.passe(this.l);
     if (this.schmutzig || this.letzte.ansicht !== ansicht || this.letzte.projekt !== projekt) {
@@ -40,7 +41,7 @@ export class Arrangement {
       this.zeichneSpuren(ansicht, projekt);
     }
     this.zeichneLineal(ansicht, loop, kopfBeat, startBeat);
-    this.zeichneUeber(ansicht, kopfBeat, startBeat, geist);
+    this.zeichneUeber(ansicht, kopfBeat, startBeat, geist, projekt, stems);
   }
   zeichneSpuren(a, p) {
     const g = this.gs, w = this.s.width, h = this.s.height;
@@ -70,7 +71,7 @@ export class Arrangement {
     g.fillStyle = f; g.fillRect(k.x, k.y, k.w, CLIP_KOPF);
     g.strokeStyle = c.dekodiert === 'fehler' ? '#ff5a1f' : f; g.lineWidth = 1; g.strokeRect(k.x + 0.5, k.y + 0.5, Math.max(0, k.w - 1), k.h - 1);
     g.save(); g.beginPath(); g.rect(k.x, k.y, k.w, k.h); g.clip();
-    g.font = '11px system-ui, sans-serif'; g.fillStyle = '#0e0f12'; g.fillText(c.name ?? '', k.x + 4, k.y + 11);
+    g.font = '11px system-ui, sans-serif'; g.fillStyle = '#0e0f12'; g.fillText(c.stumm ? `${c.name ?? ''} (muted)` : (c.name ?? ''), k.x + 4, k.y + 11);
     const unten = (text) => { g.fillStyle = 'rgba(232,232,236,0.7)'; g.fillText(text, k.x + 4, k.y + CLIP_KOPF + 14); };
     if (spur.freeze) {
       g.strokeStyle = alpha(f, '60');
@@ -96,6 +97,8 @@ export class Arrangement {
       } else if (e.fehler) unten('no waveform');
     }
     g.restore();
+    const decke = stummDecke(k, c);
+    if (decke) { g.fillStyle = decke.farbe; g.fillRect(decke.x, decke.y, decke.w, decke.h); }
   }
   zeichneLineal(a, loop, kopfBeat, startBeat) {
     const g = this.gl, w = this.l.width, h = this.l.height;
@@ -116,13 +119,15 @@ export class Arrangement {
     g.fillStyle = '#ffb020'; g.beginPath(); g.moveTo(xs - 5, LOOP_ZONE); g.lineTo(xs + 5, LOOP_ZONE); g.lineTo(xs, LOOP_ZONE + 7); g.closePath(); g.fill();
     if (kopfBeat !== null) { g.fillStyle = '#fff'; g.fillRect(Math.round(beatZuX(a, kopfBeat)) - 1, 0, 2, h); }
   }
-  zeichneUeber(a, kopfBeat, startBeat, geist) {
+  zeichneUeber(a, kopfBeat, startBeat, geist, p = null, stems = null) {
     const g = this.gu, w = this.u.width, h = this.u.height;
     g.clearRect(0, 0, w, h);
     if (geist && geist.spur >= 0) {
       g.fillStyle = 'rgba(255,255,255,0.08)'; g.fillRect(0, geist.spur * SPUR_HOEHE, w, SPUR_HOEHE);
       g.fillStyle = '#ffb020'; g.fillRect(Math.round(geist.x) - 1, geist.spur * SPUR_HOEHE, 2, SPUR_HOEHE);
     }
+    // Slice 6 (D13): Fortschrittsbalken am Clip, dessen Stems laufen (die Überlagerung zeichnet jedes Bild: kein Nachladen, kein schmutzig)
+    for (const b of stemsBalkenListe(p, stems, (i, c) => clipKasten(a, i, c))) { g.fillStyle = '#2fd6c3'; g.fillRect(b.x, b.y, b.w, b.h); }
     if (kopfBeat !== null) { g.fillStyle = '#fff'; g.fillRect(Math.round(beatZuX(a, kopfBeat)) - 1, 0, 2, h); return; }
     const xs = Math.round(beatZuX(a, startBeat)) + 0.5;
     g.strokeStyle = 'rgba(255,176,32,0.7)'; g.setLineDash([4, 4]); g.beginPath(); g.moveTo(xs, 0); g.lineTo(xs, h); g.stroke(); g.setLineDash([]);

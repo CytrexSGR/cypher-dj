@@ -30,16 +30,30 @@ export const SPUR_FARBEN = ['#e0563b', '#3b8de0', '#9b59d0', '#3bb07a', '#e0a83b
 // --- Warp (Paket 1.13, ADR 031): eine Eigenschaft des Audio-Clips ---------------------------------------------------------------
 // marker: [quell_s, beat], beide streng steigend; beat ist Clip-Beat (0 = die Stelle der Quelle, an der 1.1.1 liegt). versatz_beats:
 // welcher Clip-Beat am Clip-Anfang spielt (ersetzt offset_s, solange an). Ist `an` falsch, bleibt der Warp erhalten, gilt aber nicht.
-export const WARP_MODI = ['repitch'] as const;                 // complex und tones kommen mit Slice 2, beats mit Slice 4
+// Slice 2: complex und tones (Warp-Werk im Kern); Slice 4: beats (Einheiten im Callback des Kerns, warp.ts beatsEinheiten)
+export const WARP_MODI = ['repitch', 'beats', 'complex', 'tones'] as const;
 export type WarpModus = (typeof WARP_MODI)[number];
 export const WARP_QUELLEN = ['werkstatt', 'traktor', 'mediathek', 'takte', 'hand'] as const;
 export type WarpQuelle = (typeof WARP_QUELLEN)[number];
 export const MAX_MARKER = 4096;                                // je Clip; der Kern prüft zusätzlich 262 144 in der ganzen Wiedergabe
-export const TRANSPOSE_MAX = 48;
+// Halbtöne; Bungee rechnet 2 Oktaven (third_party/bungee/src/Timing.cpp:22, Plan Slice 5 D1); die Spec sagte 48. Nach unten nur −12 (D1, Andreas 2026-10-28):
+// ab −13 st liegt der Anschlag im Arrangement über dem Lage-Gate (gemessen −13 st 26,9 Samples, −24 st 50,9, Gate 25). Der Kern nimmt weiter 0,25 bis 4.
+export const TRANSPOSE_MIN = -12;
+export const TRANSPOSE_MAX = 24;
 export const DETUNE_MAX = 50;
+export const GESAMT_CT_MIN = TRANSPOSE_MIN * 100;       // transpose_st · 100 + detune_ct liegt in [MIN, MAX]: pitch 0,5 bis 4
+export const GESAMT_CT_MAX = TRANSPOSE_MAX * 100;
+// Frequenzfaktor des Warps (Bungee Request.pitch): die einzige Rechnung, der Kern bekommt den Faktor und rechnet nicht aus Halbtönen
+export const pitchFaktor = (st: number, ct: number): number => 2 ** (st / 12 + ct / 1200);
+export const BEATS_RASTER = ['1/4', '1/8', '1/16', '1/32', 'transienten'] as const;
+export const BEATS_LOOP = ['aus', 'vor', 'vor_zurueck'] as const;
+export interface BeatsParameter { raster: (typeof BEATS_RASTER)[number]; loop: (typeof BEATS_LOOP)[number]; huelle: number }
+// wie Live (Preserve Transients, Loop Forward, Envelope 100)
+export const BEATS_VORGABE: Readonly<BeatsParameter> = { raster: 'transienten', loop: 'vor', huelle: 100 };
 export interface Warp {
   an: boolean; modus: WarpModus; marker: [number, number][]; versatz_beats: number; quelle: WarpQuelle; eins_unsicher?: boolean;
   transpose_st: number; detune_ct: number;
+  beats?: BeatsParameter;   // nur gelesen im Modus beats; bleibt beim Moduswechsel stehen (wie Live)
 }
 
 export type DekodiertZustand = 'nein' | 'laeuft' | 'fertig' | 'fehler';
@@ -49,6 +63,7 @@ export interface Note { id: string; beat: number; laenge: number; ton: number; v
 // loop_beats (Spec 6.17): null oder fehlend = kein Loop; sonst wiederholt sich [0, loop_beats) bis laenge_beats (1/16 ≤ loop_beats ≤ laenge_beats)
 export interface AudioClip {
   id: string; art: 'audio'; name: string; start_beat: number; laenge_beats: number; loop_beats?: number | null;
+  stumm?: boolean;   // Slice 6 (D12): true = der Übersetzer lässt den Clip weg (Live und Export); fehlt = hörbar
   quelle: { sha256: string; pfad_hinweis: string }; dekodiert: DekodiertZustand;
   offset_s: number; gain_db: number; fade_ein_beats: number; fade_aus_beats: number;
   warp?: Warp | null;                                          // Paket 1.13 (nur /2): fehlt oder null = ohne Warp (das Verhalten von /1)
@@ -210,17 +225,28 @@ const boolean = (x: unknown, wo: string): boolean => (typeof x === 'boolean' ? x
 const text = (x: unknown, wo: string, max: number): string => (
   typeof x === 'string' && x.length >= 1 && x.length <= max ? x : werfe(wo, `Text 1..${max} Zeichen erwartet`));
 
+export function beatsPruefung(x: unknown): { grund: string; text: string } | null {
+  const ab = (grund: string, text: string) => ({ grund, text });
+  if (!istObjekt(x)) return ab('argument_ungueltig', 'warp.beats: Objekt erwartet');
+  for (const k of Object.keys(x)) if (!['raster', 'loop', 'huelle'].includes(k)) return ab('argument_unbekannt', `warp.beats.${k}`);
+  if (!(BEATS_RASTER as readonly unknown[]).includes(x.raster)) return ab('argument_ungueltig', `warp.beats.raster: ${BEATS_RASTER.join(' | ')} erwartet`);
+  if (!(BEATS_LOOP as readonly unknown[]).includes(x.loop)) return ab('argument_ungueltig', `warp.beats.loop: ${BEATS_LOOP.join(' | ')} erwartet`);
+  if (!ganz(x.huelle) || x.huelle < 0 || x.huelle > 100) return ab('argument_ungueltig', 'warp.beats.huelle: ganze Zahl 0..100 erwartet');
+  return null;
+}
+
 // Prüfung eines Warp-Objekts (Modell und Befehle teilen sie): null = gültig, sonst Grund (der Befehls-Grund) und Text.
 export function warpPruefung(w: unknown): { grund: string; text: string } | null {
   const ab = (grund: string, text: string) => ({ grund, text });
   if (!istObjekt(w)) return ab('argument_ungueltig', 'warp: Objekt erwartet');
   const pflicht = ['an', 'modus', 'marker', 'versatz_beats', 'quelle', 'transpose_st', 'detune_ct'];
-  for (const k of Object.keys(w)) if (!pflicht.includes(k) && k !== 'eins_unsicher') return ab('argument_unbekannt', `warp.${k}`);
+  for (const k of Object.keys(w)) if (!pflicht.includes(k) && k !== 'eins_unsicher' && k !== 'beats') return ab('argument_unbekannt', `warp.${k}`);
   for (const k of pflicht) if (!(k in w)) return ab('argument_ungueltig', `warp.${k}: fehlt`);
   if (typeof w.an !== 'boolean') return ab('argument_ungueltig', 'warp.an: true oder false erwartet');
   if ('eins_unsicher' in w && typeof w.eins_unsicher !== 'boolean') {
     return ab('argument_ungueltig', 'warp.eins_unsicher: true oder false erwartet');
   }
+  if ('beats' in w) { const f = beatsPruefung(w.beats); if (f) return f; }
   if (!(WARP_MODI as readonly unknown[]).includes(w.modus)) return ab('warp_modus', `warp.modus: ${WARP_MODI.join(' | ')} erwartet`);
   if (!(WARP_QUELLEN as readonly unknown[]).includes(w.quelle)) {
     return ab('argument_ungueltig', `warp.quelle: ${WARP_QUELLEN.join(' | ')} erwartet`);
@@ -228,14 +254,18 @@ export function warpPruefung(w: unknown): { grund: string; text: string } | null
   if (!zahl(w.versatz_beats) || Math.abs(w.versatz_beats) > MAX_BEAT) {
     return ab('argument_ungueltig', `warp.versatz_beats: Zahl von −${MAX_BEAT} bis ${MAX_BEAT} erwartet`);
   }
-  if (!ganz(w.transpose_st) || Math.abs(w.transpose_st) > TRANSPOSE_MAX) {
-    return ab('argument_ungueltig', `warp.transpose_st: ganze Zahl ${-TRANSPOSE_MAX}..${TRANSPOSE_MAX} erwartet`);
+  if (!ganz(w.transpose_st) || w.transpose_st < TRANSPOSE_MIN || w.transpose_st > TRANSPOSE_MAX) {
+    return ab('argument_ungueltig', `warp.transpose_st: ganze Zahl ${TRANSPOSE_MIN}..${TRANSPOSE_MAX} erwartet`);
   }
   if (!zahl(w.detune_ct) || Math.abs(w.detune_ct) > DETUNE_MAX) {
     return ab('argument_ungueltig', `warp.detune_ct: Zahl ${-DETUNE_MAX}..${DETUNE_MAX} erwartet`);
   }
-  if (w.modus === 'repitch' && (w.transpose_st !== 0 || w.detune_ct !== 0)) {
-    return ab('transpose_repitch', 'RE-PITCH folgt dem Tempo; Transpose und Detune gibt es dort nicht');
+  if ((w.modus === 'repitch' || w.modus === 'beats') && (w.transpose_st !== 0 || w.detune_ct !== 0)) {   // D6b: BEATS wie RE-PITCH
+    return ab('transpose_repitch', 'RE-PITCH und BEATS folgen dem Tempo; Transpose und Detune gibt es dort nicht');
+  }
+  const gesamt = w.transpose_st * 100 + w.detune_ct;
+  if (gesamt < GESAMT_CT_MIN || gesamt > GESAMT_CT_MAX) {
+    return ab('argument_ungueltig', `warp: transpose_st · 100 + detune_ct ${GESAMT_CT_MIN}..${GESAMT_CT_MAX} Cent`);
   }
   const m = w.marker;
   if (!Array.isArray(m) || m.length < 2 || m.length > MAX_MARKER) return ab('warp_marker', `warp.marker: 2 bis ${MAX_MARKER} Marker erwartet`);
@@ -314,7 +344,7 @@ function pruefeClip(c: unknown, wo: string, spurArt: string, warpErlaubt: boolea
   if (c.art !== (spurArt === 'audio' ? 'audio' : 'midi')) werfe(`${wo}.art`, `passt nicht zur ${spurArt}-Spur`);
   const basis = ['id', 'art', 'name', 'start_beat', 'laenge_beats'];
   if (c.art === 'audio') {
-    const o = felder(c, wo, [...basis, 'quelle', 'dekodiert', 'offset_s', 'gain_db', 'fade_ein_beats', 'fade_aus_beats'], ['loop_beats', 'warp']);
+    const o = felder(c, wo, [...basis, 'quelle', 'dekodiert', 'offset_s', 'gain_db', 'fade_ein_beats', 'fade_aus_beats'], ['loop_beats', 'warp', 'stumm']);
     if (typeof o.id !== 'string' || !ID.test(o.id)) werfe(`${wo}.id`, 'ID erwartet');
     text(o.name, `${wo}.name`, 80);
     zahlIn(o.start_beat, `${wo}.start_beat`, 0, MAX_BEAT);
@@ -327,6 +357,7 @@ function pruefeClip(c: unknown, wo: string, spurArt: string, warpErlaubt: boolea
     const ein = zahlIn(o.fade_ein_beats, `${wo}.fade_ein_beats`, 0, MAX_BEAT), aus = zahlIn(o.fade_aus_beats, `${wo}.fade_aus_beats`, 0, MAX_BEAT);
     if (ein + aus > (o.laenge_beats as number) + 1e-9) werfe(`${wo}.fade`, 'Ein- plus Ausblende länger als der Clip');
     pruefeLoop(o, wo);
+    if (o.stumm !== undefined && typeof o.stumm !== 'boolean') werfe(`${wo}.stumm`, 'true oder false erwartet');
     if ('warp' in o) {                                          // in /1 ist jedes warp-Feld unbekannt, auch null (N4-6)
       if (!warpErlaubt) werfe(`${wo}.warp`, `unbekanntes Feld (Warp gibt es erst ab ${FORMAT})`);
       const f = o.warp === null ? null : warpPruefung(o.warp);
@@ -499,7 +530,7 @@ export function spurSicht(s: Spur, mitFreeze = true): unknown {
     clips: s.clips.map((c) => (c.art === 'audio'
       ? { id: c.id, art: c.art, sha256: c.quelle.sha256, dekodiert: c.dekodiert, start_beat: c.start_beat, laenge_beats: c.laenge_beats,
         loop_beats: c.loop_beats ?? null, offset_s: c.offset_s, gain_db: c.gain_db, fade_ein_beats: c.fade_ein_beats, fade_aus_beats: c.fade_aus_beats,
-        warp: c.warp?.an ? c.warp : null }   // Paket 1.13: ein Warp an ändert den Klang, ein Warp aus nicht
+        warp: c.warp?.an ? c.warp : null, ...(c.stumm ? { stumm: true } : {}) }   // Paket 1.13: ein Warp an ändert den Klang, ein Warp aus nicht
       : { id: c.id, art: c.art, start_beat: c.start_beat, laenge_beats: c.laenge_beats, loop_beats: c.loop_beats ?? null, noten: c.noten })),
   };
 }

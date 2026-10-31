@@ -29,7 +29,8 @@ from .index import eintragen, oeffne
 from .karte import Karte
 from .lautheit import lautheit, lufs_je_takt
 from .stimmung import entscheide, essentia_cent, eigen, tonart, tonart_mik
-from .warp import frames_je_beat, lies_float_wav, schreibe_f32, timemap, warp
+from .warp import (frames_je_beat, karte_mit_vorlauf, lies_float_wav, schreibe_f32, timemap, vorlauf_frames,
+                   warp)
 
 VERLUSTBEHAFTET = {".mp3", ".ogg", ".m4a", ".aac", ".opus"}
 TOR_RASTER_MS = 8.0       # §2.1 tor_raster_ms
@@ -144,6 +145,9 @@ def rendere(x, karte, material, basis_bpm, r, fassung_ordner, arbeit, korrekture
     """Eine Fassung in `fassung_ordner` (noch nicht veroeffentlicht). Rueckgabe (fassung_json, messwerte)."""
     t0 = time.perf_counter()
     fassung_ordner.mkdir(parents=True)
+    v = vorlauf_frames(karte)
+    if v:
+        karte, x = karte_mit_vorlauf(karte, v), np.concatenate([np.zeros((v, x.shape[1]), dtype=x.dtype), x])
     tm = timemap(karte, basis_bpm, len(x))
     ein = arbeit / "luft.wav"
     schreibe_float_wav(luft(x), ein)
@@ -396,9 +400,11 @@ def eins_und_hotcues(material, zeilen):
     return eins, [hotcues[k] for k in sorted(hotcues)]
 
 
-def korrigieren(material_id, bestand, basis_bpm=128.0):
+def korrigieren(material_id, bestand, basis_bpm=128.0, neu=False):
     """§12.1 `korrigieren`: alle Zeilen von korrekturen.jsonl einrechnen, neue Fassung r+1 auf derselben Basis.
-    Die alte Fassung wird nur gelesen (fassung.json fuer r, Zeilenstand, Stimmung)."""
+    Die alte Fassung wird nur gelesen (fassung.json fuer r, Zeilenstand, Stimmung).
+    neu=True: auch ohne neue Zeile neu rechnen (eine Fassung traegt einen behobenen Render-Fehler, z. B. 2026-10-29
+    Timemap mit Anker (0, 0): Kick 20 ms vor dem Raster)."""
     bestand = Path(bestand)
     mo = bestand / material_id
     zeilen = korrekturen_lesen(mo)
@@ -411,7 +417,7 @@ def korrigieren(material_id, bestand, basis_bpm=128.0):
         raise FileNotFoundError(f"{material_id}: keine Fassung auf Basis {basis_bpm}")
     r_alt, p_alt = max(auf_basis)
     alt = lies_json(p_alt / "fassung.json")
-    if len(zeilen) <= alt["korrekturen_bis_zeile"]:
+    if not neu and len(zeilen) <= alt["korrekturen_bis_zeile"]:
         raise KeineNeuenKorrekturen(f"{material_id}: {len(zeilen)} Zeilen, {p_alt.name} rechnet schon "
                                     f"{alt['korrekturen_bis_zeile']} ein")
     material = lies_json(mo / "material.json")

@@ -348,6 +348,27 @@ void Kern::arr_zustand(int64_t n0, int n) {
   melde(e);
 }
 
+// 1.13 Slice 2 (§5.13b): Zähler des Warp-Werks im Arrangement. Gemeldet wird bei jeder Änderung und sonst mit 2 Hz, solange ein Werk hängt.
+void Kern::warp_zustand(int64_t n0, int n) {
+  const WarpWerk* w = arr_->warp_werk();
+  if (!w) return;
+  const auto sat = [](uint64_t x) { return static_cast<int32_t>(x > 0x7fffffffu ? 0x7fffffffu : x); };
+  const int32_t v[4] = {arr_->werk_stimmen(), sat(arr_->warp_unterlauf()), sat(arr_->warp_kein_platz()), sat(arr_->warp_spaet())};
+  const bool geaendert = std::memcmp(v, warp_gemeldet_, sizeof v) != 0;
+  const bool takt = (n0 + 24000 - 1) / 24000 * 24000 < n0 + n;
+  if (!geaendert && !takt) return;
+  std::memcpy(warp_gemeldet_, v, sizeof v);
+  Ereignis e{};
+  e.art = Ereignis::WARP_ZUSTAND;
+  e.sample = n0;
+  e.warp_stimmen = v[0];
+  e.warp_unterlauf = v[1];
+  e.warp_kein_platz = v[2];
+  e.warp_spaet = v[3];
+  e.warp_faeden = w->faeden();
+  melde(e);
+}
+
 // ---- 1.8 Aufnahme -------------------------------------------------------------------------------------------------------
 ArrLage Kern::rec_arr_lage() const {
   return ArrLage{static_cast<int>(arr_->status()), arr_->einsatz_sample(), arr_->beendet_sample(), arr_->stopp_sample(), arr_->letzte_naht()};

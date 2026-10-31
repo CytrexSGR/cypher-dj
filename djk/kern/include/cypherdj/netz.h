@@ -61,6 +61,7 @@ class Netz {
   void setze_controller_ordner(std::string ordner) { controller_ordner_ = std::move(ordner); }
   // Plan 2026-09-27 (ADR 024): Ordner der Kits (~/.config/cypherdj/kits), /erz/strom kit:<name> liest <ordner>/<name>/
   void setze_kit_ordner(std::string ordner) { kit_ordner_ = std::move(ordner); }
+  void setze_bk_ordner(std::string ordner) { bk_ordner_ = std::move(ordner); }  // Baukasten S3a
   // MVP 2 (ADR 025): Loop-Ordner (§4.9), /k/loop/laden liest <ordner>/<name>/
   void setze_loop_ordner(std::string ordner) { loop_ordner_ = std::move(ordner); }
   // D1 K1 (Spec 2.1): Ringe zum Arrangement-Lade-Faden; vor dem Netz-Faden. nullptr: /k/arr/laden mit datei_fehlt.
@@ -107,6 +108,7 @@ class Netz {
   void erz_bundle(const char* p, size_t n);
   bool erz_ereignis(const Ereignis& e);
   std::string kit_ordner_;
+  std::string bk_ordner_;  // Baukasten S3a
   // MVP 2 (netz_loop.cpp): /k/loop/* annehmen (false: keine Loop-Adresse), /e/loop senden, Freigaben
   bool loop_paket(const cypherdj::osc::Adresse* a, const osc::Nachricht& m);
   bool loop_ereignis(const Ereignis& e);

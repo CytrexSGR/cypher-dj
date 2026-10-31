@@ -345,14 +345,17 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
           if (c.is_object() && c.contains("warp") && c.at("warp").is_object() && c.at("warp").contains("w") && c.at("warp").at("w").is_array()) {
             ++n_warps;
             n_punkte += c.at("warp").at("w").size();
+            if (c.at("warp").contains("e") && c.at("warp").at("e").is_array()) n_punkte += c.at("warp").at("e").size();   // Slice 4: die Einheiten liegen hinter den Markern
           }
       }
       if (s.contains("noten") && s.at("noten").is_array()) n_noten += s.at("noten").size();
     }
     if (n_clips > static_cast<size_t>(ARR_CLIPS_MAX)) throw Abbruch("zu_gross", "mehr als 4096 Clips");
     if (n_noten > static_cast<size_t>(ARR_NOTEN_MAX)) throw Abbruch("zu_gross", "mehr als 65536 Noten");
+#ifndef CYPHERDJ_MUTATION_ARR_WARP_OHNE_GESAMT   // Fehlerfall: die Gesamtgrenze der Marker aller Clips fehlt (Slice 3a, Task 15)
     if (n_punkte > static_cast<size_t>(ARR_WARP_PUNKTE_MAX))
       throw Abbruch("zu_gross", "mehr als " + std::to_string(ARR_WARP_PUNKTE_MAX) + " Warp-Marker in allen Clips");
+#endif
     snap->clips.reserve(n_clips);
     snap->noten.reserve(n_noten);
     snap->noten_id.reserve(n_noten);
@@ -480,7 +483,30 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
             const json& wj = c.at("warp");
             if (!wj.is_object()) format(wc + "warp ist kein Objekt");
             const int64_t modus = ganz(wj, "modus", ww);
-            if (modus != ARR_WARP_REPITCH) format(ww + "modus " + std::to_string(modus) + " ist nicht gebaut (nur 0 = repitch)");
+            if (modus != ARR_WARP_REPITCH && modus != ARR_WARP_BEATS && !arr_warp_werk_modus(static_cast<int32_t>(modus)))
+              format(ww + "modus " + std::to_string(modus) + " ist nicht gebaut (0 repitch, 1 beats, 2 complex, 3 tones)");
+            if (modus != ARR_WARP_BEATS && (wj.contains("e") || wj.contains("loop") || wj.contains("huelle")))
+              format(ww + "e, loop und huelle gibt es nur bei modus 1 (beats)");
+            // Paket 1.13 Slice 2: complex und tones rechnet Bungee im Warp-Werk. Ein Kern ohne Bungee lehnt sie beim Laden ab, statt still
+            // RE-PITCH zu spielen (falsche Tonhöhe, im Takt): die vorige Wiedergabe spielt weiter, der Seiten-Server meldet den Grund.
+#if !defined(CYPHERDJ_BUNGEE) || defined(CYPHERDJ_TEST_OHNE_MASCHINE)
+#ifndef CYPHERDJ_MUTATION_ARR_WARP_MASCHINE_STILL   // Fehlerfall: der Lader nimmt den Modus ohne Maschine an und spielt ihn als RE-PITCH
+            if (arr_warp_werk_modus(static_cast<int32_t>(modus)))
+              throw Abbruch("warp_maschine_fehlt", ww + "modus " + std::to_string(modus) + " braucht einen Kern mit Bungee (CYPHERDJ_BUNGEE)");
+#endif
+#endif
+            double pitch = 1.0;   // Slice 5: fehlt = 1
+            if (wj.contains("pitch")) {
+              pitch = zahl(wj, "pitch", ww);   // Text, null, nicht endlich: format
+#ifndef CYPHERDJ_MUTATION_ARR_WARP_PITCH_OHNE_GRENZE   // Fehlerfall: jedes positive pitch gilt (Bungee bekäme ein Korn über seinem Puffer)
+              if (!(pitch >= ARR_WARP_PITCH_MIN * (1.0 - 1e-9) && pitch <= ARR_WARP_PITCH_MAX * (1.0 + 1e-9)))
+                format(ww + "pitch " + std::to_string(pitch) + " außerhalb " + std::to_string(ARR_WARP_PITCH_MIN) + " bis " + std::to_string(ARR_WARP_PITCH_MAX));
+#else
+              if (!(pitch > 0.0)) format(ww + "pitch nicht positiv");
+#endif
+              if (modus == ARR_WARP_REPITCH && pitch != 1.0) format(ww + "pitch bei repitch: RE-PITCH folgt dem Tempo");
+              if (modus == ARR_WARP_BEATS && pitch != 1.0) format(ww + "pitch bei beats: BEATS nimmt keine Tonhöhe (D6b)");
+            }
             const json& wl = feld(wj, "w", ww);
             if (!wl.is_array()) format(ww + "w ist keine Liste");
 #ifdef CYPHERDJ_MUTATION_ARR_WARP_OHNE_GRENZE   // Fehlerfall: ein Marker und mehr als 4096 gelten als gültig
@@ -507,9 +533,40 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
             }
             ArrWarp w;
             w.modus = static_cast<int32_t>(modus);
+            w.pitch = pitch;
             w.n = static_cast<int32_t>(wl.size());
             w.beat = snap->warp_beat.data() + p0;
             w.frame = snap->warp_frame.data() + p0;
+            if (modus == ARR_WARP_BEATS) {   // Slice 4: Einheiten [Clip-Beat, Quell-Frame] hinter den Markern, dazu loop und huelle
+              const int64_t lp = ganz(wj, "loop", ww), hu = ganz(wj, "huelle", ww);
+              if (lp < 0 || lp > 2) format(ww + "loop " + std::to_string(lp) + " außerhalb 0 bis 2");
+              if (hu < 0 || hu > 100) format(ww + "huelle " + std::to_string(hu) + " außerhalb 0 bis 100");
+              const json& el = feld(wj, "e", ww);
+              if (!el.is_array()) format(ww + "e ist keine Liste");
+              if (el.empty() || el.size() > static_cast<size_t>(ARR_BEATS_EINHEITEN_MAX))
+                format(ww + "e hat " + std::to_string(el.size()) + " Einheiten, erlaubt sind 1 bis " + std::to_string(ARR_BEATS_EINHEITEN_MAX));
+              const size_t e0 = snap->warp_beat.size();
+              for (size_t ei = 0; ei < el.size(); ++ei) {
+                const json& m = el[ei];
+                const std::string we = ww + "e[" + std::to_string(ei) + "]";
+                if (!m.is_array() || m.size() != 2 || !m[0].is_number() || !m[1].is_number()) format(we + " ist kein Paar [beat, frame]");
+                const double b = m[0].get<double>(), fr = m[1].get<double>();
+                if (!std::isfinite(b) || !std::isfinite(fr)) format(we + " nicht endlich");
+                if (std::fabs(b) > 1e6) format(we + " beat außerhalb ±1e6");
+                if (fr < 0.0 || fr > 1.1e12) format(we + " frame außerhalb 0 bis 1,1e12");
+#ifndef CYPHERDJ_MUTATION_ARR_BEATS_OHNE_STEIGEND   // Fehlerfall: fallende Einheiten laden (beats_einheit fände die falsche)
+                if (ei > 0 && !(b > snap->warp_beat.back())) format(we + " beat nicht streng steigend");
+                if (ei > 0 && !(fr > snap->warp_frame.back())) format(we + " frame nicht streng steigend");
+#endif
+                snap->warp_beat.push_back(b);
+                snap->warp_frame.push_back(fr);
+              }
+              w.e_n = static_cast<int32_t>(el.size());
+              w.e_beat = snap->warp_beat.data() + e0;
+              w.e_frame = snap->warp_frame.data() + e0;
+              w.loop = static_cast<int32_t>(lp);
+              w.huelle = static_cast<int32_t>(hu);
+            }
             snap->warps.push_back(w);
             x.warp = &snap->warps.back();
           }

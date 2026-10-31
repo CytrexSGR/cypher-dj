@@ -15,7 +15,7 @@ import numpy as np
 from .bestand import fassungen_von, korrektur_anhaengen, lies_json, standard_bestand
 from .eingang import lade_stereo48
 from .kette import karte_aus_liste, korrigieren, wende_raster_an
-from .warp import timemap
+from .warp import karte_mit_vorlauf, timemap, vorlauf_frames
 from .phase import MIN_BETRAG_MS, SR, abschnitte_messen, phase_messen, sollzeiten
 from .warp import lies_f32
 
@@ -45,7 +45,9 @@ def probe_vor_dem_schreiben(mo, basis_bpm, neue_zeilen):
         k = wende_raster_an(karte, korrekturen_lesen(mo) + neue_zeilen, basis_bpm)
         # echte Laenge wie beim Rendern (kette.korrigieren: lade_stereo48 der Originaldatei); material.json fuehrt kein
         # `frames`, der frueher eingesetzte Ersatz 10**12 schaltete den Dateiende-Waechter ab
-        timemap(k, basis_bpm, len(lade_stereo48(mo / material["quelle"]["datei"])))
+        # mit Vorlauf wie kette.rendere: quell_beat 0 vor dem Dateianfang ist kein Grund (580de, 2026-10-30)
+        v = vorlauf_frames(k)
+        timemap(karte_mit_vorlauf(k, v), basis_bpm, v + len(lade_stereo48(mo / material["quelle"]["datei"])))
     except ValueError as e:
         return str(e)
     return None

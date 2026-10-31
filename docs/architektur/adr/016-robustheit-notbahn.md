@@ -95,3 +95,14 @@ Entscheidung geändert: **die Notbahn sitzt daneben am Treiber**, nicht in Reihe
 „weiche Notbahn“ bis zum Hörtermin entfällt. Die Übernahme-Blende aus M2 (E2, 1 Block) gilt nur für den Weg in Reihe
 und ist damit nicht mehr Bauvorgabe. Hörprobe beim Hörtermin (Scheibe 46) bleibt: kippt der Knack für Andreas' Ohr,
 geht es zurück in Reihe mit 1 Block Blende (gemessen, trägt).
+
+## Nachtrag 2026-10-29: Kante umgedreht (--vor statt --kante)
+
+Die Kante vom Kern-Ausgang auf den Notbahn-Eingang (Nachtrag 2026-09-25, Reihenfolge Kern zuerst) machte die Notbahn
+zur Abhängigen des Kerns. Nach kill -9 wartete sie, bis der Kernel den Adressraum des toten Kerns abgeräumt hatte
+(exit_mm vor exit_files): 2,5 ms am 26.09., 20 ms am 29.10. bei 322 MB gesperrtem Speicher, also 3 Blöcke Stille statt
+1 (Gegenprobe +300 MB: 5 Blöcke). Seitdem verbindet die Notbahn ihren nie geschriebenen Ausgang `vor` auf den nie
+gelesenen Kern-Eingang `notbahn_vor`. Sie rechnet stets vor dem Kern, sieht w des Vorzyklus, und ein Zyklus Stillstand
+reicht weiter (ohne Kante wären zwei nötig). Gemessen kill x20: Stille 256 Samples in 20/20, alle Grenzen der Serie
+grün; mit +300 MB Ballast ebenfalls 256. Derselbe Weg löst den Befund sigstop-kern 2026-09-26 (Notbahn wartete auf
+den hängenden Kern). Belege ~/messungen/2026-10-29-neustart/STILLE.md.

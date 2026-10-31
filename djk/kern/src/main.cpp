@@ -21,8 +21,10 @@
 #include <fcntl.h>
 #include <jack/jack.h>
 #include <jack/midiport.h>
+#include <pthread.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <sys/resource.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -50,6 +52,8 @@
 #include "cypherdj/kern.h"
 #include "cypherdj/konfig.h"
 #include "cypherdj/arr_lader.h"
+#include "cypherdj/graph_werk.h"
+#include "cypherdj/warp_werk.h"
 #include "cypherdj/lader.h"
 #include "cypherdj/midi_ausgabe.h"
 #include "cypherdj/netz.h"
@@ -71,6 +75,7 @@ static jack_port_t* g_aus[4];
 static uint64_t g_eingeblendet = 0;  // nur im Callback
 static cdj::Betrieb* g_betrieb = nullptr;  // Scheibe 18
 static std::atomic<int> g_cb_tid{0};       // Scheibe 31: Faden des Callbacks, für die Seitenfehler-Zählung (M8)
+static jack_port_t* g_notbahn_vor = nullptr;  // nie gelesen, Ziel der Notbahn-Kante (--vor)
 static std::atomic<int> g_cb_prio{-1};     // Keylock Task 2.5 (Vertrag 12): Echtzeit-Priorität des JACK-Fadens, 0 ohne
 static std::atomic<uint64_t> g_graph_ereignisse{0};  // Fixup M1: Zähler für die Diagnosezeile im Verbinder
 static cdj::WaechterSeite* g_ws = nullptr;  // Scheibe 18: Selbst-Wächter, nullptr wenn aus
@@ -124,7 +129,27 @@ static void midi_ausgeben(jack_port_t* port, jack_nframes_t n, int64_t jetzt_ns,
   else if (r == cdj::AllAusPlan::PUFFER_VOLL) luecken.fetch_add(1, std::memory_order_relaxed);
 }
 
+// Diagnose Baukasten S3b (Spitzen im Maximum): mit CYPHERDJ_STOLPER=1 misst der Callback je Zyklus Faden-CPU-Zeit,
+// Seitenfehler und Kontextwechsel (4 Systemaufrufe) und legt Zyklen über 1500 µs in ein vorbelegtes Feld; Ausgabe am Ende.
+struct Stolper { int64_t zyklus, t_ns, wall_ns, vor_ns, cpu_ns, aufwach_ns; long minflt, majflt, nvcsw, nivcsw; };
+static bool g_stolper_an = false;
+static Stolper g_stolper[64];
+static std::atomic<int> g_stolper_n{0};
+static int64_t g_stolper_zyklus = 0;
+static int64_t faden_cpu_ns() {
+  timespec ts;
+  clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts);
+  return (int64_t)ts.tv_sec * 1000000000LL + ts.tv_nsec;
+}
+
 static int process(jack_nframes_t n, void*) {
+  int64_t st_t0 = 0, st_cpu0 = 0, st_vor = 0;
+  rusage st_r0{};
+  if (g_stolper_an) {
+    st_t0 = mono_ns();
+    st_cpu0 = faden_cpu_ns();
+    getrusage(RUSAGE_THREAD, &st_r0);
+  }
   if (g_cb_tid.load(std::memory_order_relaxed) == 0) {  // Scheibe 31: einmal im ersten Zyklus (ein Systemaufruf)
     g_cb_tid.store(gettid(), std::memory_order_relaxed);
     // Keylock Task 2.5 (Vertrag 12): Priorität aus dem JACK-Faden selbst, einmal; sched_getscheduler/sched_getparam mit
@@ -166,6 +191,7 @@ static int process(jack_nframes_t n, void*) {
     g_kern->arr_rueck(s + 1, g_arr_rueck[s][0] ? (const float*)jack_port_get_buffer(g_arr_rueck[s][0], n) : nullptr,
                       g_arr_rueck[s][1] ? (const float*)jack_port_get_buffer(g_arr_rueck[s][1], n) : nullptr);
   g_kern->zyklus((int)n, (int64_t)cu * 1000);                // cu: Blockanfang in µs (CLOCK_MONOTONIC)
+  if (g_stolper_an) st_vor = mono_ns();
   for (int p = 0; p < cdj::ERZ_MIDI_PORTS; ++p) {  // Studio S5: MIDI dieses Zyklus, nach Versatz sortiert
     if (!g_midi_aus[p]) continue;
     void* mb = jack_port_get_buffer(g_midi_aus[p], n);
@@ -199,6 +225,21 @@ static int process(jack_nframes_t n, void*) {
   g_betrieb->zyklus_ende(cf, (int64_t)cu * 1000, n, *g_kern);  // 18: Anker, Karte, Befehle ins Echtzeit-Fach
   if (g_ws) __atomic_store_n(&g_ws->zaehler, cdj_lade(&g_ring->w), __ATOMIC_RELEASE);  // 18: Lebenszeichen an den Wächter
   g_messer->ende(mono_ns(), g_kern->wartend(), g_kern->generation(), g_kern->sample() - (int64_t)n);
+  if (g_stolper_an) {
+    const int64_t t1 = mono_ns();
+    if (t1 - st_t0 > 1500000) {
+      const int i = g_stolper_n.load(std::memory_order_relaxed);
+      if (i < 64) {
+        rusage r1{};
+        getrusage(RUSAGE_THREAD, &r1);
+        g_stolper[i] = {g_stolper_zyklus, st_t0, t1 - st_t0, st_vor - st_t0, faden_cpu_ns() - st_cpu0, st_t0 - (int64_t)cu * 1000,
+                        r1.ru_minflt - st_r0.ru_minflt, r1.ru_majflt - st_r0.ru_majflt, r1.ru_nvcsw - st_r0.ru_nvcsw,
+                        r1.ru_nivcsw - st_r0.ru_nivcsw};
+        g_stolper_n.store(i + 1, std::memory_order_release);
+      }
+    }
+    ++g_stolper_zyklus;
+  }
   return 0;
 }
 
@@ -307,7 +348,20 @@ static void hilfe() {
 }
 
 int main(int argc, char** argv) {
+  // 1 MiB Stack je Faden statt 8 MiB: mlockall sperrt jeden Stack ganz, nach kill -9 hielt das Abräumen der 16 Stacks
+  // den Graphen mit auf (Höchststand je Faden 60 KiB; ~/messungen/2026-10-29-neustart/STILLE.md)
+  {
+    pthread_attr_t a;
+    if (pthread_attr_init(&a) == 0) {
+      if (pthread_attr_setstacksize(&a, 1u << 20) != 0 || pthread_setattr_default_np(&a) != 0)
+        std::fprintf(stderr, "Faden-Stack: Vorgabe 1 MiB nicht gesetzt\n");
+      pthread_attr_destroy(&a);
+    }
+  }
   const char* inst = cdj_instanz();
+  g_stolper_an = std::getenv("CYPHERDJ_STOLPER") != nullptr;  // Diagnose S3b, siehe Stolper
+  std::memset(g_stolper, 0, sizeof g_stolper);
+  if (g_stolper_an) std::fprintf(stderr, "Stolper: an, Schwelle 1500 us, höchstens 64 Zyklen\n");
   if (cdj_instanz_k(inst) < 0) {
     std::fprintf(stderr, "CYPHERDJ_INSTANZ='%s' ungültig: leer oder ein Buchstabe a bis i\n", inst);
     return 2;
@@ -401,6 +455,7 @@ int main(int argc, char** argv) {
   const std::string std_pfad_netz = cdj::standard_konfig_pfad(inst);
   netz.setze_controller_ordner(std_pfad_netz.substr(0, std_pfad_netz.rfind('/')) + "/controller");  // Scheibe 35: /k/mapping
   netz.setze_kit_ordner(std::string(std::getenv("HOME") ? std::getenv("HOME") : "") + "/.config/cypherdj/kits");  // ADR 024
+  netz.setze_bk_ordner(std::string(std::getenv("HOME") ? std::getenv("HOME") : "") + "/.config/cypherdj/baukasten");  // Baukasten S3a
   {  // MVP 2 (ADR 025, §4.9): Loops der Vorgabe-Instanz in ~/.config/cypherdj/loops, einer Prüfinstanz in /dev/shm
     char shm[64];
     cdj_shm_ordner(shm, sizeof shm, inst);
@@ -466,6 +521,22 @@ int main(int argc, char** argv) {
   cdj::ArrLader arr_lader(arr_ordner, konto, (int64_t)konf.arr_budget_mib << 20, !ohne_sperre);
   netz.verbinde_arr(aringe);
   netz.setze_arr_ordner(arr_ordner);  // Paket K3: Freeze im Arbeitsordner (Spec 6.14), geschrieben vom arr_faden (6.29)
+  // 1.13 Slice 2 (ADR 031 Teil 2): das Warp-Werk für COMPLEX und TONES. Pool, Ringe und Bungee-Instanzen entstehen hier, vor jack_activate und mlockall (der Speicher
+  // wird mitgesperrt); die Fäden warten auf den Callback, ihre Priorität setzt ein eigener Faden, sobald der JACK-Faden seine kennt. Ohne Bungee im Bau: kein
+  // Werk, der Lader lehnt COMPLEX und TONES mit warp_maschine_fehlt ab.
+  std::unique_ptr<cdj::WarpWerk> warp_werk = cdj::warp_werk_neu({konf.warp_faeden});
+  if (warp_werk) {
+    g_kern->setze_arr_warp_werk(warp_werk.get());
+    arr_lader.setze_warp_werk(warp_werk.get());
+    std::fprintf(stderr, "Warp-Werk: %d Fäden, %d Plätze, Vorlauf %d Frames, Frist %d Samples\n", warp_werk->faeden(), cdj::ARR_WARP_PLAETZE, cdj::ARR_WARP_VORLAUF, cdj::ARR_WARP_FRIST);
+  } else {
+    std::fprintf(stderr, "Warp-Werk: nicht angelegt (Kern ohne Bungee oder keine Fäden): COMPLEX und TONES werden mit warp_maschine_fehlt abgelehnt\n");
+  }
+  // Baukasten S3b: das Graph-Werk. Plätze und Fäden entstehen hier, vor jack_activate und mlockall; die Priorität setzt
+  // gr_prio, sobald der JACK-Faden seine kennt (ohne Echtzeit-Recht rechnet das Werk synchron im Callback, D10).
+  std::unique_ptr<cdj::GraphWerk> graph_werk = cdj::graph_werk_neu({konf.graph_faeden});
+  g_kern->setze_graph_werk(graph_werk.get());
+  std::fprintf(stderr, "Graph-Werk: %d Fäden, %d Plätze, ein Block Vorlauf\n", graph_werk->faeden(), cdj::GW_PLAETZE);
   static cdj::AufnahmeFaden rec_faden(arr_ordner);   // 1.8: Aufnahme-Faden, Take-Dateien im Arbeitsordner (statisch: überlebt den Netz-Faden; sein Destruktor fasst keine RecSpur an)
   rec_faden.starte();
   netz.verbinde_rec(&rec_faden);
@@ -483,6 +554,10 @@ int main(int argc, char** argv) {
   if (last_alle > 0) g_messer->setze_pruef_last(last_alle, last_perioden);
   static const char* NAMEN[4] = {"master_L", "master_R", "cue_L", "cue_R"};
   for (int k = 0; k < 4; ++k) g_aus[k] = jack_port_register(g_client, NAMEN[k], JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput, 0);
+  // Nie gelesen: die Notbahn verbindet ihren stummen Ausgang hierher (--vor) und rechnet so immer vor dem Kern
+  g_notbahn_vor = jack_port_register(g_client, "notbahn_vor", JACK_DEFAULT_AUDIO_TYPE, JackPortIsInput, 0);
+  if (!g_notbahn_vor)
+    std::fprintf(stderr, "Port notbahn_vor nicht angelegt: die Notbahn braucht zwei stehende Zyklen\n");
   // Scheibe 35: Eingang der Hand (§7.1); hand_led bleibt in Teil A unregistriert (LEDs kommen mit Teil B)
   g_hand_in = jack_port_register(g_client, "hand_in", JACK_DEFAULT_MIDI_TYPE, JackPortIsInput, 0);
   if (!g_hand_in) std::fprintf(stderr, "Port hand_in nicht angelegt: Kern ohne Controller\n");
@@ -565,12 +640,23 @@ int main(int argc, char** argv) {
       std::perror(tmp);
     }
   }
+  // vor jack_activate: lief die Sperre danach (rund 17 ms), wartete Zyklus 0 mit seinen ersten Seitenfehlern auf sie
+  // (Spitzen bis 17 ms, nur in Zyklus 0; ~/messungen/2026-10-29-mlock/)
+  if (mlockall(MCL_CURRENT) != 0) std::perror("mlockall");  // nicht MCL_FUTURE (10 NP K7)
   if (jack_activate(g_client) != 0) {
     std::fprintf(stderr, "jack_activate fehlgeschlagen\n");
     g_kern->keylock_faeden_stoppen();  // Prüfung F4 (seit 2.5b laufen hier noch keine; bleibt als Schutz)
     return 1;
   }
-  if (mlockall(MCL_CURRENT) != 0) std::perror("mlockall");  // nicht MCL_FUTURE (10 NP K7)
+  // Die Kante der Notbahn (vor -> notbahn_vor) vor den Ausgängen selbst verbinden: zog sie erst die Notbahn nach, ordnete
+  // PipeWire den Graphen um, während der Kern schon spielte, und der Kern verlor einen Zyklus (Raster 1 Block versetzt,
+  // 29.10.). Läuft keine Notbahn, scheitert es still; sie verbindet dann selbst.
+  {
+    char nb[64], vor[96];
+    cdj_name(nb, sizeof nb, "cypherdj-notbahn", inst);
+    std::snprintf(vor, sizeof vor, "%s:vor", nb);
+    jack_connect(g_client, vor, jack_port_name(g_notbahn_vor));
+  }
   // Review Slice 4 Q1: ein gescheitertes Verbinden beim Start ist nicht mehr tödlich. Vorher endete der Kern mit 1, die
   // Unit startete sofort neu, und die Bremse (F20) zählte das als Absturz ohne Fortschritt: fehlte das Ziel nur kurz, war
   // nach drei Runden der Zustand weg. Der 500-ms-Verbinder (Slice 1) holt die Kante nach; djk-start prüft die Ausgänge am
@@ -611,6 +697,20 @@ int main(int argc, char** argv) {
   // Priorität (Vertrag 12) = JACK-Priorität − 5 aus dem JACK-Faden; Task 2.5c: danach nur den Dehner-Speicher sperren
   // (keylock_bauen sperren = true, kein zweites mlockall); erst nach Netz- und Lade-Faden, damit ihre Stapel schon vorher
   // da sind und nicht als neu gelten.
+  std::thread wk_prio;   // 1.13 Slice 2: Priorität der Fäden des Warp-Werks (JACK − 6), sobald der JACK-Faden seine Priorität kennt
+  if (warp_werk)
+    wk_prio = std::thread([&warp_werk] {
+      for (int i = 0; i < 100 && g_cb_prio.load(std::memory_order_acquire) < 0; ++i) usleep(50'000);
+      const int jp = g_cb_prio.load(std::memory_order_acquire);
+      if (jp > 0) warp_werk->prioritaet(jp);
+      else std::fprintf(stderr, "Warp-Werk: JACK-Faden ohne Echtzeit-Priorität (%d), die Fäden bleiben SCHED_OTHER\n", jp);
+    });
+  std::thread gr_prio;   // Baukasten S3b: Priorität der Fäden des Graph-Werks (JACK − 7)
+  if (graph_werk->faeden() > 0)
+    gr_prio = std::thread([&graph_werk] {
+      for (int i = 0; i < 100 && g_cb_prio.load(std::memory_order_acquire) < 0; ++i) usleep(50'000);
+      graph_werk->prioritaet(g_cb_prio.load(std::memory_order_acquire));   // jp <= 0: Meldung, synchron
+    });
   std::thread kl_bau;
   if (keylock)
     kl_bau = std::thread([] {
@@ -897,8 +997,25 @@ int main(int argc, char** argv) {
   long long cb_minflt = -1, cb_majflt = -1;  // Scheibe 31: vor dem Abmelden, solange der Faden lebt
   seitenfehler(g_cb_tid.load(), cb_minflt, cb_majflt);
   if (kl_bau.joinable()) kl_bau.join();  // Task 2.5b: ein laufender Bau (rund 270 ms) endet vor dem Abbau
+  if (wk_prio.joinable()) wk_prio.join();
+  if (gr_prio.joinable()) gr_prio.join();
   jack_deactivate(g_client);
   g_kern->keylock_faeden_stoppen();  // Keylock Task 2.5: Join (Wecker plus höchstens 20 ms Warten je Faden)
+  graph_werk->stoppe();   // Baukasten S3b: nach jack_deactivate rechnet niemand mehr; danach die Schlusszeile
+  {
+    const cdj::GraphZaehler gz = graph_werk->zaehler();
+    std::fprintf(stderr, "Graph-Werk: %llu Aufträge, %llu gestohlen, %llu Anlauf, %llu verspätet, %llu verworfen, %llu hängt, %llu Panik\n",
+                 (unsigned long long)gz.auftraege, (unsigned long long)gz.gestohlen, (unsigned long long)gz.anlauf,
+                 (unsigned long long)gz.verspaetet, (unsigned long long)gz.verworfen, (unsigned long long)gz.haengt,
+                 (unsigned long long)gz.panik);
+  }
+  for (int i = 0, k = g_stolper_n.load(std::memory_order_acquire); i < k; ++i) {
+    const Stolper& x = g_stolper[i];
+    std::fprintf(stderr, "Stolper: zyklus %lld t_ns %lld wall_us %lld vor_ausgang_us %lld cpu_us %lld aufwach_us %lld minflt %ld majflt %ld nvcsw %ld nivcsw %ld\n",
+                 (long long)x.zyklus, (long long)x.t_ns, (long long)(x.wall_ns / 1000), (long long)(x.vor_ns / 1000),
+                 (long long)(x.cpu_ns / 1000), (long long)(x.aufwach_ns / 1000), x.minflt, x.majflt, x.nvcsw, x.nivcsw);
+  }
+  if (warp_werk) warp_werk->stoppe();   // 1.13 Slice 2: kein Faden liest mehr Audio; erst danach darf der Lade-Faden alles freigeben
   faden.join();
   lader_faden.join();
   arr_faden.join();
@@ -921,5 +1038,6 @@ int main(int argc, char** argv) {
                (unsigned long long)g_kern->hand_ueberlauf(), (unsigned long long)neuverbindungen);
   // Keylock Task 7 Step 1 (Gate G1): Kosten und Zähler je Quelle, nach dem Join der Keylock-Fäden (oben)
   std::fprintf(stderr, "%s\n", g_kern->keylock_schluss_json().c_str());
+  if (warp_werk) std::fprintf(stderr, "%s\n", warp_werk->schluss_json().c_str());   // 1.13 Slice 2: Kosten je Block und Auftrag, CPU je Faden
   return 0;
 }

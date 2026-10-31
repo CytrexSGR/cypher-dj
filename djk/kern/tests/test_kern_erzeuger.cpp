@@ -8,6 +8,7 @@
 #include <memory>
 #include <new>
 
+#include "cypherdj/cypher_bk_ffi.h"
 #include "cypherdj/erzeuger.h"
 #include "kern35.h"
 
@@ -102,6 +103,55 @@ static void tausch(const std::string& ab) {
   delete f;
 }
 
+// Baukasten S3a Task 3 am Kern-Weg: ERZ_STROM mit form = -1 und einem Graphen; eine gehaltene Note klingt auf erz/1.
+// Ein zweiter ERZ_STROM (Kit) löst den Graphen ab: im Zyklus keine Allokation, nach dem Ausklang genau ein
+// Ereignis::ERZ_BK_ALT mit dem Graphen (Negativ-Kontrolle: vor dem Tausch keines).
+static void bk_tausch(const std::string& ab) {
+  const char* G = R"({"format":"baukasten/2","name":"t","stimmen":2,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"saege"},{"id":"v","art":"mul"},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"s.hz"},{"von":"s.aus","nach":"v.a"},{"von":"n.gate","nach":"v.b"},{"von":"v.aus","nach":"o.x"}]})";
+  char fehler[256] = {};
+  CypherBk* g = cypher_bk_neu(G, 48000.0, fehler, sizeof fehler);
+  PRUEF(g != nullptr);
+  cdj::Kit kit = impuls();
+  Lauf x(ab, nullptr);
+  x.bewachen = true;
+  g_allokationen = 0;
+  auto s = x.neu(cdj::Befehl::ERZ_STROM, "erzeuger");
+  s.nr = 1;
+  std::snprintf(s.pfad, sizeof s.pfad, "erz/1");
+  s.form = -1;
+  s.politik = 1;
+  s.zeiger = g;
+  x.sende(s);
+  x.teil("erz/1/fader", 0.0f, 0.0, 0.0);  // wie lauf(): ohne Fader steht der Kanal auf -200 dB
+  auto* f = new cdj::ErzFenster{};
+  f->strom = 1; f->sendung = 1; f->ab_beat = 8.0; f->bis_beat = 12.0;
+  cdj::ErzEv e{8.0, 57, 1, 1.0f};
+  e.dauer = 4.0;
+  f->ev[f->n++] = e;
+  auto c = x.neu(cdj::Befehl::ERZ_FENSTER, "erzeuger");
+  c.zeiger = f;
+  x.sende(c);
+  x.zyklen(9 * SPB);
+  float pegel = -999.0f;
+  for (const auto& p : x.alle(cdj::Ereignis::PEGEL, "erz/1")) pegel = std::max(pegel, p.pegel[0]);
+  const size_t vorher = x.alle(cdj::Ereignis::ERZ_BK_ALT).size();
+  auto t = x.neu(cdj::Befehl::ERZ_STROM, "erzeuger");
+  t.nr = 1;
+  std::snprintf(t.pfad, sizeof t.pfad, "erz/1");
+  t.zeiger = &kit;
+  x.sende(t);
+  x.zyklen(10 * SPB);
+  const auto alt = x.alle(cdj::Ereignis::ERZ_BK_ALT);
+  std::printf("S3a Kern-Weg: Pegel erz/1 %.2f dB, ERZ_BK_ALT vor dem Tausch %zu, danach %zu, Allokationen im Zyklus %ld\n",
+              pegel, vorher, alt.size(), g_allokationen);
+  PRUEF(pegel > -40.0f);
+  PRUEF(vorher == 0);
+  PRUEF(alt.size() == 1 && alt[0].zeiger == g);
+  PRUEF(g_allokationen == 0);
+  delete f;
+  cypher_bk_frei(g);
+}
+
 int main() {
   Arbeitsbestand ab("test_kern_erzeuger");
   std::vector<int64_t> k;
@@ -123,5 +173,6 @@ int main() {
   lauf(ab.pfad, -200.0f, &k, &q, &p);
   PRUEF(k.empty() && q == 1);
   tausch(ab.pfad);
+  bk_tausch(ab.pfad);
   PRUEF_ENDE();
 }

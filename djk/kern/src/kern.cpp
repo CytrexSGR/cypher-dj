@@ -105,9 +105,13 @@ void Kern::einsortieren(const Befehl& c) {
       }
 #endif
       break;
-    case Befehl::ERZ_STROM: {  // §4.8 /erz/strom mit kit:<name> (ADR 024): das Netz hat geladen und geprüft
-      const Kit* alt = erz_->setze_strom(c.nr, static_cast<const Kit*>(c.zeiger), Mixer::kanal_index(c.pfad));
-      erz_->setze_midi(c.nr, c.form, c.politik);  // Studio S5: midi:<p>:<c> (form = Port, politik = Kanal); Kit: form 0
+    case Befehl::ERZ_STROM: {  // §4.8 /erz/strom mit kit:<name>, midi:<p>:<c> oder bk:<name> (Baukasten S3a, form = -1)
+      const bool bk = c.form < 0;
+      const int kanal = Mixer::kanal_index(c.pfad);
+      // setze_bk zuerst: es hält den ALTEN Kanal des abgelösten Graphen fest, setze_strom überschreibt s.kanal
+      erz_->setze_bk(c.nr, bk ? static_cast<CypherBk*>(const_cast<void*>(c.zeiger)) : nullptr, kanal);  // Kit/MIDI: Graph ab
+      const Kit* alt = erz_->setze_strom(c.nr, bk ? nullptr : static_cast<const Kit*>(c.zeiger), kanal);
+      erz_->setze_midi(c.nr, bk ? 0 : c.form, c.politik);  // Studio S5: midi:<p>:<c> (form = Port, politik = Kanal); Kit: form 0
       quittung(c.id, c.quelle, 1, sample_, beat0);
       quittung(c.id, c.quelle, 3, sample_, beat0);
       if (alt) {  // das Netz gibt es frei; der Callback liest es nach dem Tausch nicht mehr
@@ -344,6 +348,7 @@ void Kern::zyklus(int n, int64_t mono_ns) {
   boxen_zustand(n0, n);  // Keylock 7b.3: /zustand/box im selben Zyklus (§5.5b)
   komp_zustand(n0, n);   // Effekt-Sektion: Absenkung je aktivem Kompressor (§5.5c)
   arr_zustand(n0, n);    // D1 K1: /zustand/arr (§5.13)
+  warp_zustand(n0, n);   // 1.13 Slice 2: /zustand/warp (§5.13b)
 
   // 3) Takt-Anfänge in diesem Block (§5.3): Beats 4(t-1) mit llround(sample_at) in [n0, n0+n)
   const double b_lo = karte.beat_at((double)n0 - 0.5);

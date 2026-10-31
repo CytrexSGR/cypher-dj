@@ -148,3 +148,14 @@ test('Ereignis-Rückruf, der wirft, bricht die Schlange nicht ab', async (t) => 
   c.fordereAn(sha('1'), q); c.fordereAn(sha('2'), q);
   assert.deepEqual(await Promise.all([c.bereit(sha('1')), c.bereit(sha('2'))]), ['fertig', 'fertig']);
 });
+
+test('Kanalzahl mit Anhang: ffprobe csv druckt bei Seitendaten (ReplayGain) "2," statt "2" → trotzdem fertig; ohne Zahl bleibt es ffmpeg_fehler', async (t) => {
+  // Fund der S3a-Zielabnahme (2026-10-29): Queen of Pain (Beatport-MP3 mit side_data_list) kam als "2," und wurde zu NaN, der Clip blieb auf fehler
+  const dir = tmpOrdner(t); const q = wav(dir, 'st.wav');
+  const probe = (aus) => { const p = path.join(dir, `probe-${aus.replace(/\W/g, '_')}.sh`); fs.writeFileSync(p, `#!/bin/sh\nprintf '${aus}\\n'\n`, { mode: 0o755 }); return [p]; };
+  const c = new DekodierCache(path.join(dir, 'arr'), { ffprobe: probe('2,') });
+  c.fordereAn(sha('e'), q); assert.equal(await c.bereit(sha('e')), 'fertig');
+  const k = new DekodierCache(path.join(dir, 'arr2'), { ffprobe: probe(',2') });
+  k.fordereAn(sha('f'), q); assert.equal(await k.bereit(sha('f')), 'fehler', 'Negativ-Kontrolle: keine führende Zahl');
+  assert.equal(k.fehlerGrund(sha('f')), 'ffmpeg_fehler');
+});

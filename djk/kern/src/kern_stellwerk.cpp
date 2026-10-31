@@ -82,6 +82,15 @@ void Kern::klick_befehl(const Befehl& c, double beat0) {
   }
 }
 
+void Kern::bk_zurueck(CypherBk* g, int64_t s) {
+  if (!g) return;
+  Ereignis x{};
+  x.art = Ereignis::ERZ_BK_ALT;
+  x.sample = s;
+  x.zeiger = g;
+  melde(x);
+}
+
 void Kern::einsortieren25(const Befehl& c) {
   const double beat0 = plan_.karte().beat_at((double)sample_);
   const sw::Quelle q = quelle_von(c.quelle);
@@ -133,6 +142,40 @@ void Kern::einsortieren25(const Befehl& c) {
       kopiere(x.pfad, c.pfad, sizeof x.pfad);
       x.status = c.an != 0 ? 1 : 0;
       melde(x);
+      quittung(c.id, c.quelle, 2, sample_, beat0);
+      quittung(c.id, c.quelle, 3, sample_, beat0);
+      break;
+    }
+    case Befehl::KANAL_GRAPH: {  // Baukasten S3c (§4.10): am Blockanfang; das Netz hat geladen und geprüft
+      CypherBk* g = static_cast<CypherBk*>(const_cast<void*>(c.zeiger));
+#ifndef CYPHERDJ_MUTATION_KANAL_GRAPH_KI_OFFEN
+      if (q == sw::Quelle::cypher && sw_->ki_gestoppt()) {  // §4.7 Stopp-Taste, Muster LOOP_LADEN
+#ifndef CYPHERDJ_MUTATION_KANAL_GRAPH_KI_LECK
+        bk_zurueck(g, sample_);
+#endif
+        quittung(c.id, c.quelle, 6, sample_, beat0, "ki_gestoppt");
+        break;
+      }
+#endif
+      const int k = Mixer::kanal_index(c.pfad);
+      if (k < 0 || k >= Mixer::MIX_GRAPH_KANAELE) {  // am Netz vorbei: der Graph gehört uns noch, zurück in die Freigabe
+#ifndef CYPHERDJ_MUTATION_KANAL_GRAPH_BEREICH_LECK
+        bk_zurueck(g, sample_);
+#endif
+        quittung(c.id, c.quelle, 6, sample_, beat0, "ausserhalb_bereich");
+        break;
+      }
+#ifndef CYPHERDJ_MUTATION_KANAL_GRAPH_NICHT_SETZEN
+      mixer_->setze_kanal_graph(k, g);
+#endif
+#ifndef CYPHERDJ_MUTATION_KANAL_GRAPH_BURST_LECK
+      {  // sofort abholen: ein Burst vieler Wechsel vor demselben Block liefe sonst über die Ablage (MIX_BK_FREI) und leckte
+        CypherBk* frei[Mixer::MIX_BK_FREI];
+        for (int nf; (nf = mixer_->bk_frei(frei, Mixer::MIX_BK_FREI)) > 0;)
+          for (int i = 0; i < nf; ++i) bk_zurueck(frei[i], sample_);
+      }
+#endif
+      quittung(c.id, c.quelle, 1, sample_, beat0);
       quittung(c.id, c.quelle, 2, sample_, beat0);
       quittung(c.id, c.quelle, 3, sample_, beat0);
       break;
@@ -402,6 +445,17 @@ void Kern::audio(int64_t n0, int n) {
     decks_block(s0, m);  // Scheibe 31: Decks in die Eingänge deck/1..4, Starts und Stopps am Sample
     ErzAusloeser ausl;
     erz_->block(karte, s0, m, erz_l_, erz_r_, midi_aus_, zyklus_n0_, &ausl);  // Plan 2026-09-27 + Studio S5 (MIDI-Ströme)
+    {  // Baukasten S3a: ausgeklungene Graphen zur Freigabe in den Netz-Faden
+      CypherBk* frei[8];
+      for (int nf; (nf = erz_->bk_frei(frei, 8)) > 0;)
+        for (int i = 0; i < nf; ++i) {
+          Ereignis x{};
+          x.art = Ereignis::ERZ_BK_ALT;
+          x.sample = s0;
+          x.zeiger = frei[i];
+          melde(x);
+        }
+    }
     // D1 K1 (Spec 2.2): Arrangement nach dem Erzeuger, vor Rückwegen, Prüfklicks und Mixer. Summe in den Eingang von
     // erz/4, Metronom in die Master-Summe vor dem Limiter oder in die PFL-Summe. Ein KI-Stopp beendet Cyphers wartenden Start und ihren Freeze, einen laufenden Transport nicht (E-a).
     if (sw_->ki_gestoppt()) arr_->ki_stopp(s0, karte);
@@ -479,6 +533,18 @@ void Kern::audio(int64_t n0, int n) {
 #endif
     mixer_->fx_takt(karte.beat_at((double)s0), karte.bpm_at((double)s0) / 60.0 / 48000.0);  // Plan 3: LFO aus dem Beat
     mixer_->verarbeite(m, links_ + off, rechts_ + off, cue_l_ + off, cue_r_ + off);
+    {  // Baukasten S3c: abgelöste Kanal-Graphen zur Freigabe in den Netz-Faden (dasselbe Ereignis wie beim Erzeuger)
+#ifndef CYPHERDJ_MUTATION_KANAL_GRAPH_NICHT_ABHOLEN
+      CypherBk* frei[Mixer::MIX_BK_FREI];
+      for (int nf; (nf = mixer_->bk_frei(frei, Mixer::MIX_BK_FREI)) > 0;)
+        for (int i = 0; i < nf; ++i) {
+          bk_zurueck(frei[i], s0);
+#ifdef CYPHERDJ_MUTATION_KANAL_GRAPH_DOPPELT
+          bk_zurueck(frei[i], s0);  // Fehlerfall: derselbe Zeiger zweimal gemeldet, der Netz-Faden gäbe ihn zweimal frei
+#endif
+        }
+#endif
+    }
     limiter_beobachten(s0, m);
 #ifdef CYPHERDJ_MUTATION_REC_TAP_NACH_MIXER
     {  // Fehlerfall (AK4): der Abgriff hinter dem Mixer, mit Fader und Limiter

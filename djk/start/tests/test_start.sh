@@ -103,7 +103,7 @@ V=0
 for q in "cypherdj-kern-$I:master_L" "cypherdj-kern-$I:master_R" "cypherdj-kern-$I:cue_L" "cypherdj-notbahn-$I:master_L" "cypherdj-notbahn-$I:cue_R"; do
   grep -A4 -x "$q" "$O/links.txt" | grep -q "|->.*$SENKE:playback_" && V=$((V + 1))
 done
-grep -A4 -x "cypherdj-kern-$I:master_L" "$O/links.txt" | grep -q "|-> *cypherdj-notbahn-$I:kante" && V=$((V + 1))
+grep -A4 -x "cypherdj-notbahn-$I:vor" "$O/links.txt" | grep -q "|-> *cypherdj-kern-$I:notbahn_vor" && V=$((V + 1))
 pruef $([ "$V" = 6 ]; echo $?) "P5 Verbindungen an der Prüf-Senke und Kante: $V von 6"
 
 # P6 Leitstand und Oberfläche

@@ -24,6 +24,22 @@ test('Referenzdatei: 1000 Fälle, TS und JS rechnen W(b) auf 1e-12 gleich', () =
   assert.ok(aussen > 100 && auf > 100, `die Datei trägt Randsegment- (${aussen}) und Marker-Fälle (${auf})`);
 });
 
+test('Referenzdatei Slice 3a: Sätze mit 100, 865, 2321 und 4096 Markern (die Suche geht 12 Schritte tief), TS und JS auf 1e-12; die Gerade wäre fast überall daneben', () => {
+  const V = JSON.parse(fs.readFileSync(path.join(HIER, '..', '..', 'vertrag', 'warp_referenz_viele.json'), 'utf8'));
+  assert.deepEqual(V.saetze.map((s) => s.marker.length), [100, 865, 2321, 4096]);
+  let n = 0, grobDaneben = 0;
+  for (const s of V.saetze) {
+    const grob = (b) => s.marker[0][0] + (b - s.marker[0][1]) * (s.marker.at(-1)[0] - s.marker[0][0]) / (s.marker.at(-1)[1] - s.marker[0][1]);
+    for (const f of s.faelle) {
+      for (const impl of [ts, js]) assert.ok(nah(impl.quellSekunde(s.marker, f.beat), f.quell_s, V.toleranz_relativ), `${s.marker.length} Marker, Beat ${f.beat}`);
+      if (!nah(grob(f.beat), f.quell_s, V.toleranz_relativ)) grobDaneben++;
+      n++;
+    }
+  }
+  assert.equal(n, 160);
+  assert.ok(grobDaneben > 120, `Gegenprobe: ${grobDaneben} von 160 Fällen sind von der Geraden verschieden`);
+});
+
 test('Gegenprobe der Messung: eine falsche Abbildung fällt an der Datei durch (konstantes Tempo statt Marker)', () => {
   const grob = (marker, b) => marker[0][0] + (b - marker[0][1]) * (marker.at(-1)[0] - marker[0][0]) / (marker.at(-1)[1] - marker[0][1]);
   const daneben = REF.faelle.filter((f) => !nah(grob(f.marker, f.beat), f.quell_s, REF.toleranz_relativ)).length;
@@ -49,10 +65,23 @@ test('W: zwei Marker, Randsegmente, Umkehrung, Segment-Tempo', () => {
 });
 
 const loop = (extra = {}) => ({ typ: 'loop', bpm: null, takte: null, dauer_s: null, ...extra });
+test('Auto-Warp Slice 2 (D10): Tracks und melodische Loops COMPLEX, Drum-Loops RE-PITCH bis zur Hörprobe', () => {
+  const m = (x) => ts.autoWarp(loop({ takte: 2, dauer_s: 3.84, bpm: 125, ...x })).warp.modus;
+  assert.equal(m({}), 'complex', 'ohne Angabe: melodisch');
+  assert.equal(m({ instrument: 'synth' }), 'complex');
+  assert.equal(m({ instrument: 'bass', kategorie: 'Samples/Loops/Music Loops/Bass Loops' }), 'complex');
+  assert.equal(m({ instrument: 'Kick' }), 'repitch', 'Instrument, Groß/Klein egal');
+  assert.equal(m({ instrument: 'hihat' }), 'repitch');
+  assert.equal(m({ kategorie: 'Samples/Loops/Drum Loops/Full Loops' }), 'repitch');
+  assert.equal(m({ kategorie: 'Drums/Percussion' }), 'repitch');
+  assert.equal(m({ kategorie: 'Samples/Loops/Drum Loops/Top Loops' }), 'repitch');
+  assert.equal(ts.autoWarp({ typ: 'track', bpm: 128, takte: null, dauer_s: 300, kategorie: 'Drums/Full' }).warp.modus, 'complex', 'ein Track ist nie ein Drum-Loop');
+});
 test('Auto-Warp: Loop mit Takten, Track mit BPM, One-Shot nie, ohne Tempo ein Hinweis', () => {
   const l = ts.autoWarp(loop({ takte: 2, dauer_s: 3.84, bpm: 125 }));
-  assert.deepEqual(l, { warp: { an: true, modus: 'repitch', marker: [[0, 0], [3.84, 8]], versatz_beats: 0, quelle: 'takte', transpose_st: 0, detune_ct: 0 }, laenge_beats: 8 });
+  assert.deepEqual(l, { warp: { an: true, modus: 'complex', marker: [[0, 0], [3.84, 8]], versatz_beats: 0, quelle: 'takte', transpose_st: 0, detune_ct: 0 }, laenge_beats: 8 });
   const t = ts.autoWarp({ typ: 'track', bpm: 128, takte: null, dauer_s: 300 });
+  assert.equal(t.warp.modus, 'complex', 'Slice 2 D10: Tracks halten die Tonhöhe');
   assert.equal(t.warp.quelle, 'mediathek'); assert.equal(t.warp.eins_unsicher, true);
   assert.deepEqual(t.warp.marker, [[0, 0], [300, 640]]); assert.equal(t.laenge_beats, 640);
   const lb = ts.autoWarp(loop({ bpm: 120, dauer_s: 8 }));                          // Loop nur mit BPM: Anfang = Eins, nicht unsicher
@@ -73,9 +102,22 @@ test('Auto-Warp: Loop mit Takten, Track mit BPM, One-Shot nie, ohne Tempo ein Hi
   assert.equal(ts.autoWarp(loop({ takte: 4, dauer_s: 7.5 })).warp.quelle, 'takte');
 });
 
-test('warpAnzeige: Schalter, Herkunft, downbeat?, Tempo des ersten Segments', () => {
+test('warpAnzeige: Schalter, Herkunft, downbeat?, Tempo (Mittel), Spanne und Markerzahl erst ab drei Markern, analysing', () => {
   const clip = { art: 'audio', warp: { an: true, modus: 'repitch', quelle: 'mediathek', eins_unsicher: true, marker: [[0, 0], [3.84, 8]] } };
-  assert.deepEqual(js.warpAnzeige(clip), { vorhanden: true, an: true, modus: 'RE-PITCH', herkunft: 'from library BPM', downbeatFrage: true, bpm: 125 });
-  assert.deepEqual(js.warpAnzeige({ art: 'audio' }), { vorhanden: false, an: false, modus: '', herkunft: '', downbeatFrage: false, bpm: null });
+  assert.deepEqual(js.warpAnzeige(clip), { vorhanden: true, an: true, modus: 'RE-PITCH', herkunft: 'from library BPM', downbeatFrage: true, bpm: 125, spanne: null, markerZahl: 2, analysiert: false });
+  assert.deepEqual(js.warpAnzeige({ art: 'audio' }), { vorhanden: false, an: false, modus: '', herkunft: '', downbeatFrage: false, bpm: null, spanne: null, markerZahl: 0, analysiert: false });
   assert.equal(js.warpAn(clip), true); assert.equal(js.warpAn({ art: 'audio', warp: { ...clip.warp, an: false } }), false); assert.equal(js.warpAn({ art: 'midi' }), false);
+  // Karte: erstes Segment 120 BPM, dann 130, 126; Mittel = Beats durch Zeit vom ersten bis letzten Marker (nicht das erste Segment)
+  const karte = { art: 'audio', warp: { an: true, modus: 'complex', quelle: 'werkstatt', marker: [[0.5, -2], [1.0, -1], [1.4615384615384615, 0], [1.9375, 1]] } };
+  const a = js.warpAnzeige(karte);
+  assert.equal(a.herkunft, 'from analysis'); assert.equal(a.markerZahl, 4); assert.equal(a.downbeatFrage, false);
+  assert.equal(a.bpm, Math.round(60 * 3 / 1.4375 * 100) / 100); assert.equal(a.spanne, '120–130');
+  assert.equal(js.warpAnzeige(karte, 'laeuft').analysiert, true); assert.equal(js.warpAnzeige({ art: 'audio' }, 'wartet').analysiert, true);
+  assert.equal(js.warpAnzeige({ art: 'audio', warp: { ...karte.warp, quelle: 'traktor' } }).herkunft, 'from Traktor grid');
+});
+test('warpTempo: Mittel, kleinstes und größtes Segment; kein Tempo unter zwei Markern', () => {
+  assert.equal(js.warpTempo([[0, 0]]), null);
+  assert.deepEqual(js.warpTempo([[0, 0], [3.84, 8]]), { mittel: 125, min: 125, max: 125 });
+  const t = js.warpTempo([[0, 0], [0.5, 1], [0.9615384615384615, 2]]);
+  assert.deepEqual([t.min, t.max], [120, 130]);
 });

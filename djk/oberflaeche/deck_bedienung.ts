@@ -162,7 +162,11 @@ export function einsNachFix(o: { v: number; fpb: number; eins: number; letzte: n
   return ziel === gilt ? null : ziel;
 }
 
-const zeitIso = (d: Date): string => d.toISOString().slice(0, 19);
+// naive Lokalzeit ohne Suffix, wie die Python-Schreiber (datetime.now().isoformat(timespec="seconds"))
+const zeitIso = (d: Date): string => {
+  const z = (n: number, l = 2): string => String(n).padStart(l, '0');
+  return `${z(d.getFullYear(), 4)}-${z(d.getMonth() + 1)}-${z(d.getDate())}T${z(d.getHours())}:${z(d.getMinutes())}:${z(d.getSeconds())}`;
+};
 export function einsZeile(f: Fassung, eins: number, k: number, quelle: 'SET' | 'FIX', jetzt: Date = new Date()): Record<string, unknown> {
   return { zeit: zeitIso(jetzt), von: 'andreas', art: 'eins', fassung: `${Math.round(f.basis_bpm * 1000)}_r${f.fassung}`,
     ab_quell_beat: eins, bis_quell_beat: null, versatz_ms: null, nr: null, text: `${quelle}: Eins um ${k < 0 ? '−' : '+'}${Math.abs(k)} Beats gesetzt, Lage ${eins}` };

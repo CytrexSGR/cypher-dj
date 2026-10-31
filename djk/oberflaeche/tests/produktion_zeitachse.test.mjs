@@ -86,3 +86,19 @@ test('V1 Zeitachse: FOLLOW blättert erst ab 90 % oder außerhalb', () => {
   assert.equal(folgeSeite(a, 95, 1000), 85);
   assert.equal(folgeSeite({ beat0: 40, pxProBeat: 10 }, 10, 1000), 0);
 });
+
+// Andreas 2026-10-30: „ich kann in der ansicht nicht vorscrollen“ (nur Rad, keine sichtbare Leiste). Leiste unter dem Arrangement.
+test('Scrollleiste: Inhalt reicht über das Projektende hinaus, Lage folgt beat0, zurück ohne Verlust', async () => {
+  const { projektEnde, leiste, ausLeiste } = await import('../oeffentlich/produktion/zeitachse.js');
+  const p = { spuren: [{ clips: [{ start_beat: 0, laenge_beats: 32 }, { start_beat: 352, laenge_beats: 32 }] }, { clips: [] }] };
+  assert.equal(projektEnde(p), 384);
+  assert.equal(projektEnde(null), 0);
+  const a = { beat0: 100, pxProBeat: 4 };
+  const l = leiste(a, 384, 800);
+  assert.ok(l.inhaltPx >= 384 * 4 + 800, `Inhalt ${l.inhaltPx}: das Ende muss an den linken Rand scrollbar sein`);
+  assert.equal(l.links, 400);
+  assert.deepEqual(ausLeiste(a, 1000), { beat0: 250, pxProBeat: 4 });
+  assert.equal(ausLeiste(a, -5).beat0, 0, 'nie vor Beat 0');
+  // ein leeres Projekt und eine Ansicht hinter dem Ende: die Leiste klemmt die Ansicht nicht zurück
+  assert.ok(leiste({ beat0: 500, pxProBeat: 4 }, 0, 800).inhaltPx >= 500 * 4 + 800);
+});

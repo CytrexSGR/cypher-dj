@@ -10,7 +10,7 @@
 //   Z4  AK16 Projekttempo 120: Warp wieder an, Export: Abstand 24 000 ± 1, Länge in Beats gleich
 //   Z5  AK5 Tonhöhe: Sinus-Loop gewarpt klingt +41,06 ct ± 0,5 (1024 Hz), ungewarpt ± 0,5 ct um 1000 Hz
 //   Z6  Cypher (Quelle cypher): warp_setzen aus und an, proj_warp liest Marker, Segment-Tempo 125 und die Gegenprobe W(4) = 1,92 s; Verlauf trägt cypher; Undo
-//   NK  Ablehnungen: modus complex → warp_modus, transpose bei repitch → transpose_repitch
+//   NK  Ablehnungen: modus beats → warp_modus, transpose bei repitch → transpose_repitch
 // Rückgabe: 0 alle Punkte OK, 1 mindestens ein Punkt FEHL, 2 Aufruf. Aufräumen: nur die eigenen Projekte (Slug w1-...).
 import fs from 'node:fs';
 import os from 'node:os';
@@ -130,6 +130,7 @@ async function lauf() {
   await setzeTempo(bpmProjekt);
   await aendern('W1 Sinus', [{ befehl: 'spur_neu', art: 'audio', name: 'Sinus' },
     { befehl: 'clip_neu', spur_id: 's1', art: 'audio', start_beat: 0, laenge_beats: 1, sha256: AUFBAU.sha_sinus, warp: 'auto' }, { befehl: 'loop_setzen', an: true, von_beat: 0, bis_beat: 8 }], CYPHER);
+  await aendern('W1 Sinus RE-PITCH', [{ befehl: 'warp_setzen', clip_id: 'c1', modus: 'repitch' }], CYPHER);   // D10: ein Sinus-Loop bekommt beim Ablegen COMPLEX
   const w5 = await exportiere(0, 8, 'z5-sinus-warp');
   const f5 = frequenz(w5.l, 20000, 150000), soll = 1200 * Math.log2(128 / 125);
   await aendern('W1 Sinus Warp aus', [{ befehl: 'warp_setzen', clip_id: 'c1', an: false }]);
@@ -153,8 +154,8 @@ async function lauf() {
 
   // --- NK
   punkt = 'NK';
-  const r1 = await ruf('POST', '/proj/aendern', { rev: await holeRev(), label: 'NK', befehle: [{ befehl: 'warp_setzen', clip_id: 'c1', modus: 'complex' }] }, CYPHER);
-  notiere('NK1 modus complex → warp_modus', r1.code === 409 && r1.j?.fehler === 'warp_modus', grundVon(r1));
+  const r1 = await ruf('POST', '/proj/aendern', { rev: await holeRev(), label: 'NK', befehle: [{ befehl: 'warp_setzen', clip_id: 'c1', modus: 'beats' }] }, CYPHER);
+  notiere('NK1 modus beats → warp_modus', r1.code === 409 && r1.j?.fehler === 'warp_modus', grundVon(r1));
   const r2 = await ruf('POST', '/proj/aendern', { rev: await holeRev(), label: 'NK', befehle: [{ befehl: 'warp_setzen', clip_id: 'c1', transpose_st: 2 }] }, CYPHER);
   notiere('NK2 transpose bei repitch → transpose_repitch', r2.code === 409 && r2.j?.fehler === 'transpose_repitch', grundVon(r2));
 }

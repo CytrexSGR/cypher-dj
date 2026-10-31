@@ -73,14 +73,27 @@ Node read access to `~/strudel` only).
 
 Carla 2.5 and the Surge XT LV2 plugin. `djk/start/djk-instrumente` describes where it looks for them.
 
+The own instruments are Rust crates built as VST3 plugins (nih-plug). With a Rust toolchain (`cargo`):
+
+```sh
+djk/instrumente/installiere.sh rb338       # RB-338, the 303-style bass
+djk/instrumente/installiere.sh baukasten   # Cypher Modular, the modular synth
+djk/start/djk-instrumente --bass rb338 --melodie baukasten
+```
+
+Cypher Modular reads its patch, a JSON graph, from `~/.config/cypherdj/baukasten-melodie.json` each time its host
+starts; without that file it plays a built-in saw and ladder filter. Example graphs are in
+`djk/instrumente/baukasten_dsp/beispiele/`.
+
 ## 7. The workshop (optional, for preparing your own tracks)
 
 ```sh
 cd djk/werkstatt && ./einrichten.sh
 ```
 
-It needs PyTorch (with CUDA if you have it) and installs Essentia, beat_this and soundfile into a
-virtual environment.
+It needs PyTorch (with CUDA if you have it) and installs Essentia, beat_this, soundfile and Demucs 4.0.1 into a
+virtual environment, then fetches the Demucs weights (84 MB, checked by sha256) for stem separation in PRODUCTION.
+Stem separation runs on the CPU only.
 
 ## 8. Your paths
 

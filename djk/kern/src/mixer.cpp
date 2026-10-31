@@ -1,5 +1,7 @@
 // Mixer als Zuweisungstabelle (mixer.h). Scheibe 25.
 #include "cypherdj/mixer.h"
+#include "cypherdj/cypher_bk_ffi.h"
+#include <cypherdj/dsp/denormal.h>
 
 #include <cmath>
 #include <cstdio>
@@ -243,6 +245,92 @@ void Mixer::komp_block(int k, int n) {
   komp_gr_[k].store(komp_[k]->gr_db(), std::memory_order_relaxed);
 }
 
+Mixer::~Mixer() {
+  for (int k = 0; k < MIX_GRAPH_KANAELE; ++k) {
+    cypher_bk_frei(bk_[k]);
+    cypher_bk_frei(bk_alt_[k]);
+  }
+  for (int i = 0; i < n_bk_frei_; ++i) cypher_bk_frei(bk_frei_[i]);
+}
+
+void Mixer::bk_zur_freigabe(CypherBk* g) noexcept {
+  if (!g) return;
+  if (n_bk_frei_ < MIX_BK_FREI) bk_frei_[n_bk_frei_++] = g;
+  else ++bk_verloren_;   // je Block geleert; lieber verlieren als im Callback freigeben
+}
+
+void Mixer::setze_kanal_graph(int k, CypherBk* g) noexcept {
+  if (k < 0 || k >= MIX_GRAPH_KANAELE) { bk_zur_freigabe(g); return; }
+  if (g == bk_[k]) return;
+#ifndef CYPHERDJ_MUTATION_BK_KANAL_DOPPEL_ALT
+  if (bk_blende_[k] == MIX_GRAPH_BLENDE) {
+    // Der neue Weg hat noch kein Sample gerechnet (zweiter Wechsel vor demselben Block): er geht, der gehörte alte
+    // Weg blendet weiter aus. Sonst würde der ungehörte Graph zum alten Weg und der gehörte bräche ohne Blende ab.
+    bk_zur_freigabe(bk_[k]);
+    bk_[k] = g;
+    if (g == bk_alt_[k]) { bk_alt_[k] = nullptr; bk_blende_[k] = 0; }   // zurück auf den gehörten Weg
+    return;
+  }
+#endif
+  bk_zur_freigabe(bk_alt_[k]);   // D4: ein Wechsel in der Blende gibt den ältesten sofort frei
+  bk_alt_[k] = bk_[k];           // null heißt: der alte Weg war trocken
+  bk_[k] = g;
+  bk_blende_[k] = MIX_GRAPH_BLENDE;
+}
+
+int Mixer::bk_frei(CypherBk** aus, int max) noexcept {
+  const int n = std::min(n_bk_frei_, max);
+  for (int i = 0; i < n; ++i) aus[i] = bk_frei_[i];
+  for (int i = n; i < n_bk_frei_; ++i) bk_frei_[i - n] = bk_frei_[i];
+  n_bk_frei_ -= n;
+  return n;
+}
+
+// Insert auf dem Abgriff l/r (in place): neuer Weg, während der Blende gemischt mit dem alten. Ausgang geklemmt (±8, NaN 0).
+void Mixer::kanal_graph(int k, float* l, float* r, int n) noexcept {
+  std::memcpy(bk_ein_l_, l, sizeof(float) * n);
+  std::memcpy(bk_ein_r_, r, sizeof(float) * n);
+  cypherdj::dsp::DenormalSchutz ds;
+  if (bk_[k]) {
+#ifndef CYPHERDJ_MUTATION_BK_KANAL_TAKT_AUS
+    cypher_bk_takt(bk_[k], fx_beat0_, fx_bps_);
+#endif
+    cypher_bk_effekt(bk_[k], bk_ein_l_, bk_ein_r_, l, r, static_cast<size_t>(n));
+  }
+#ifdef CYPHERDJ_MUTATION_BK_KANAL_BLENDE_AUS
+  bk_blende_[k] = 0;
+#endif
+  if (bk_blende_[k] > 0) {
+    const float* al = bk_ein_l_;
+    const float* ar = bk_ein_r_;
+    if (bk_alt_[k]) {
+#ifndef CYPHERDJ_MUTATION_BK_KANAL_TAKT_AUS
+      cypher_bk_takt(bk_alt_[k], fx_beat0_, fx_bps_);
+#endif
+      cypher_bk_effekt(bk_alt_[k], bk_ein_l_, bk_ein_r_, bk_alt_l_, bk_alt_r_, static_cast<size_t>(n));
+      al = bk_alt_l_;
+      ar = bk_alt_r_;
+    }
+    for (int i = 0; i < n; ++i) {
+      const int rest = bk_blende_[k] - i;
+      const float w = rest > 0 ? static_cast<float>(rest) / MIX_GRAPH_BLENDE : 0.0f;   // Gewicht des alten Wegs
+      l[i] = l[i] * (1.0f - w) + al[i] * w;
+      r[i] = r[i] * (1.0f - w) + ar[i] * w;
+    }
+    bk_blende_[k] = std::max(0, bk_blende_[k] - n);
+    if (bk_blende_[k] == 0) {
+      bk_zur_freigabe(bk_alt_[k]);
+      bk_alt_[k] = nullptr;
+    }
+  }
+#ifndef CYPHERDJ_MUTATION_BK_KANAL_KLEMME_AUS
+  for (int i = 0; i < n; ++i) {
+    l[i] = std::isfinite(l[i]) ? std::clamp(l[i], -8.0f, 8.0f) : 0.0f;
+    r[i] = std::isfinite(r[i]) ? std::clamp(r[i], -8.0f, 8.0f) : 0.0f;
+  }
+#endif
+}
+
 void Mixer::kanal(int k, int n) {
   // SOUND COLOR FX: globale Art und PARAMETER (Werte am Blockende wie duck/*), Echozeit aus dem Tempo der Uhr
   kz_[k]->setze_color(ganz(color_art_.w), color_param_.w, fx_bps_ > 0.0 ? 1.0 / fx_bps_ : 0.0);
@@ -282,11 +370,13 @@ void Mixer::kanal(int k, int n) {
     komp_lief_[k] = false;
     komp_gr_[k].store(0.0f, std::memory_order_relaxed);
   }
-  if (komp_an || (fzi >= 0 && routing_ == ROUTING_INSERT)) {
-    // Kompressor (2026-10-11) und Insert-FX (Ohr T17) sitzen vor dem Fader auf dem Abgriff, der Kompressor zuerst;
-    // die Teilung vor/nach ist bitgleich zu verarbeite (test_kanalzug_teilung)
+  const bool bk_an = k < MIX_GRAPH_KANAELE && (bk_[k] || bk_blende_[k] > 0);
+  if (komp_an || bk_an || (fzi >= 0 && routing_ == ROUTING_INSERT)) {
+    // Kompressor (2026-10-11), Baukasten-Graph (S3c, D3) und Insert-FX (Ohr T17) sitzen vor dem Fader auf dem Abgriff,
+    // in dieser Reihenfolge; die Teilung vor/nach ist bitgleich zu verarbeite (test_kanalzug_teilung)
     kz_[k]->verarbeite_vor(ein_l_[k], ein_r_[k], n);
     if (komp_an) komp_block(k, n);
+    if (bk_an) kanal_graph(k, kz_[k]->abgriff_schreibbar(0), kz_[k]->abgriff_schreibbar(1), n);
     if (fzi >= 0 && routing_ == ROUTING_INSERT) fx_kette(fzi, kz_[k]->abgriff_schreibbar(0), kz_[k]->abgriff_schreibbar(1), n);
     kz_[k]->verarbeite_nach(n, aus);
     if (fzi >= 0 && routing_ != ROUTING_INSERT) fx_kette(fzi, aus_l_, aus_r_, n);   // Post Fader wie unten

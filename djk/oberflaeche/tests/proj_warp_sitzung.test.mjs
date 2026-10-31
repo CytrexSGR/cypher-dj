@@ -36,13 +36,14 @@ test('clip_neu warp auto: Loop mit Takten → Warp aus dem Katalog, Länge aus d
   const r = await aendern(s, [clipNeu(1)]);
   assert.equal(r.j.hinweise, undefined, 'kein Hinweis, das Tempo war bekannt');
   const c = clips(s)[0];
-  assert.deepEqual(c.warp, { an: true, modus: 'repitch', marker: [[0, 0], [3.84, 8]], versatz_beats: 0, quelle: 'takte', transpose_st: 0, detune_ct: 0 });
+  // D10 (Nachbesserung 4): ein Loop ohne Drum-Angabe im Katalog bekommt COMPLEX (Tonhöhe bleibt), die Wiedergabe trägt Modus 2
+  assert.deepEqual(c.warp, { an: true, modus: 'complex', marker: [[0, 0], [3.84, 8]], versatz_beats: 0, quelle: 'takte', transpose_st: 0, detune_ct: 0 });
   assert.equal(c.laenge_beats, 8, 'die Länge kommt aus dem Warp (2 Takte), nicht aus dem Rückfall 1');
   assert.ok(await warteBis(() => clips(s)[0].dekodiert === 'fertig', 15000), 'der Clip wird dekodiert');
   assert.ok(await warteBis(() => lies(path.join(arr, `wiedergabe-${s.aktuell().j.projekt.wiedergabe_rev}.json`)).spuren[0]?.clips.length === 1, 15000));
   const w = lies(path.join(arr, `wiedergabe-${s.aktuell().j.projekt.wiedergabe_rev}.json`));
   assert.equal(w.format, 'cypherdj-arr/2');
-  assert.deepEqual(w.spuren[0].clips[0].warp, { modus: 0, w: [[0, 0], [8, 184320]] });
+  assert.deepEqual(w.spuren[0].clips[0].warp, { modus: 2, w: [[0, 0], [8, 184320]] });
 });
 
 test('clip_neu warp auto: Track mit BPM (eins_unsicher), One-Shot nie, ohne Tempo Hinweis kein_tempo; Ableton-Schutz bleibt', async (t) => {
@@ -117,6 +118,31 @@ test('proj_lage zeigt den Warp ohne Marker-Liste; proj_warp liest Marker, Segmen
   assert.deepEqual([e.code, e.fehler], [404, 'clip_unbekannt']);
   await aendern(s, [{ befehl: 'clip_neu', spur_id: 's1', art: 'audio', start_beat: 30, laenge_beats: 1, sha256: ksha(2) }]);
   assert.equal(s.warpLage('c2', null, null, null).j.warp, null, 'Clip ohne Warp: warp null');
+});
+
+// Slice 5 (AK28): Cypher stellt Transpose und Detune über proj_aendern ein und liest sie mit proj_lage und proj_warp zurück; die Wiedergabe trägt pitch;
+// der KI-Stopp gilt unverändert (kein neuer Mechanismus); ein Warp-Wechsel auf RE-PITCH ohne Nullen bleibt abgelehnt.
+test('Transpose über die Sitzung (AK28): warp_setzen von cypher, proj_lage und proj_warp zeigen es, Verlauf cypher, Wiedergabe trägt pitch; KI-Stopp: ki_gestoppt', async (t) => {
+  const { s, k, arr } = aufbau(t);
+  await s.neu('Warp5', 'andreas');
+  await aendern(s, [{ befehl: 'spur_neu', art: 'audio' }, clipNeu(1)]);
+  assert.ok(await warteBis(() => clips(s)[0].dekodiert === 'fertig', 15000), 'der Clip wird dekodiert');
+  const r = await s.aendern({ rev: s.aktuell().j.projekt.rev, label: 'Up a fifth', befehle: [{ befehl: 'warp_setzen', clip_id: 'c1', transpose_st: 7 }] }, 'cypher');
+  assert.equal(r.code, 200);
+  assert.equal(s.aktuell('noten_zahl').j.projekt.spuren[0].clips[0].warp.transpose_st, 7, 'proj_lage');
+  assert.equal(s.warpLage('c1', null, null, null).j.warp.transpose_st, 7, 'proj_warp');
+  assert.equal(s.warpLage('c1', null, null, null).j.warp.detune_ct, 0);
+  assert.equal(s.verlaufListe().j.at(-1).quelle, 'cypher'); assert.equal(s.verlaufListe().j.at(-1).label, 'Up a fifth');
+  const nr = () => s.aktuell().j.projekt.wiedergabe_rev;
+  assert.ok(await warteBis(() => { try { return lies(path.join(arr, `wiedergabe-${nr()}.json`)).spuren[0]?.clips.length === 1; } catch { return false; } }, 15000));
+  assert.deepEqual(lies(path.join(arr, `wiedergabe-${nr()}.json`)).spuren[0].clips[0].warp, { modus: 2, w: [[0, 0], [8, 184320]], pitch: 1.4983070768766815 });
+  const e = await fehlerVon(aendern(s, [{ befehl: 'warp_setzen', clip_id: 'c1', modus: 'repitch' }]));
+  assert.deepEqual([e.code ?? 409, e.grund ?? e.fehler], [409, 'transpose_repitch'], 'RE-PITCH mit Transpose bleibt abgelehnt');
+  k.ki = true;
+  const g = await fehlerVon(s.aendern({ rev: s.aktuell().j.projekt.rev, label: 'stop', befehle: [{ befehl: 'warp_setzen', clip_id: 'c1', transpose_st: 5 }] }, 'cypher'));
+  assert.deepEqual([g.code, g.fehler], [409, 'ki_gestoppt']);
+  assert.equal(clips(s)[0].warp.transpose_st, 7, 'der Stopp hat nichts geändert');
+  assert.equal((await s.aendern({ rev: s.aktuell().j.projekt.rev, label: 'Andreas', befehle: [{ befehl: 'warp_setzen', clip_id: 'c1', transpose_st: 5 }] }, 'andreas')).code, 200);
 });
 
 // N4-7 (Nachbesserung 4): Rundreise über die Platte. Ein Projekt mit gewarpten Clips (Auto-Warp aus Takten, aus der Library-BPM, ein Warp von Hand mit
@@ -248,4 +274,45 @@ test('proj_warp Gegenprobe ohne Loop: Länge nicht ein Vielfaches, letzte Beat-G
   await aendern(s, [{ befehl: 'clip_aendern', clip_id: 'c1', loop_beats: 3 }]);
   assert.ok(Math.abs(bei(10.5).quell_s - 0.24) < 1e-9, 'Beat 6,5 des Clips = Beat 0,5 der dritten Kopie');
   assert.ok(Math.abs(bei(11.9).quell_s - 0.912) < 1e-9);
+});
+
+// Slice 3a (Task 6): proj_warp mit Zusammenfassung und Deckel; proj_lage mit festem Feld eins_unsicher
+import { schreibeKarte, karteLinear } from './hilfen/karte.mjs';
+async function mitKarte(t, n) {
+  const d = tmpOrdner(t, 'djk-warpdeckel-');
+  const w = wav(path.join(d, 'daten'), 'track.wav', 3.84);
+  const katalog = baueKatalog(path.join(d, 'kat'), [{ n: 6, typ: 'track', werk_id: 2, titel: 'Song', bpm: 120, dauer_s: 1200, pfad: w }]);
+  const analyse = path.join(d, 'analyse');
+  schreibeKarte(analyse, ksha(6), { karte: karteLinear(n, { t0: 0.5, bpm: 240 }), eins: 0, unsicher: false, dauer_s: 1200 });   // 240 BPM: 0,25 s je Beat
+  const { s } = sitzung(t, { katalog, analyse });
+  await s.neu('Deckel', 'andreas');
+  await s.aendern({ rev: s.aktuell().j.projekt.rev, label: 'x', befehle: [{ befehl: 'spur_neu', art: 'audio' }] }, 'andreas');
+  await s.aendern({ rev: s.aktuell().j.projekt.rev, label: 'y', befehle: [{ befehl: 'clip_neu', spur_id: 's1', art: 'audio', start_beat: 0, laenge_beats: 1, sha256: ksha(6), warp: 'auto' }] }, 'andreas');
+  return s;
+}
+test('proj_warp: ohne Wunsch höchstens 200 Marker, mit marker_zahl, marker_gezeigt, weiter_ab_projekt_beat, Tempo und erstem Marker; marker_max und von/bis begrenzen', async (t) => {
+  const s = await mitKarte(t, 865);
+  const j = s.warpLage('c1', null, null, null).j;
+  assert.equal(j.warp.marker_zahl, 865); assert.equal(j.warp.marker.length, 200); assert.equal(j.warp.marker_gezeigt, 200);
+  assert.equal(j.warp.weiter_ab_projekt_beat, 200, 'der 201. Marker liegt bei Projekt-Beat 200 (Clip-Start 0, Versatz 0)');
+  assert.deepEqual(j.warp.erster_marker, { quell_s: 0.5, beat: 0 });
+  assert.equal(j.warp.tempo.mittel_bpm, 240); assert.equal(j.warp.tempo.min_bpm, 240); assert.equal(j.warp.tempo.max_bpm, 240);
+  const alle = s.warpLage('c1', null, null, null, 4096).j;
+  assert.equal(alle.warp.marker.length, 865); assert.equal(alle.warp.weiter_ab_projekt_beat, undefined, 'alles gezeigt: kein Weiter');
+  assert.equal(s.warpLage('c1', null, null, null, 5).j.warp.marker.length, 5);
+  const fenster = s.warpLage('c1', 300, 310, null).j.warp;
+  assert.equal(fenster.marker.length, 11); assert.equal(fenster.marker_gezeigt, 11); assert.equal(fenster.weiter_ab_projekt_beat, undefined);
+  assert.equal(fenster.marker_zahl, 865, 'marker_zahl ist die Zahl im Clip, nicht die der Antwort');
+  const grosses = s.warpLage('c1', 100, null, null, 50).j.warp;
+  assert.equal(grosses.marker.length, 50); assert.equal(grosses.marker[0].projekt_beat, 100); assert.equal(grosses.weiter_ab_projekt_beat, 150);
+});
+test('proj_warp: bis zu 4096 Marker bleiben unter dem Deckel von 200 nicht kurz; die Antwort mit Vorgabe ist unter 20 KB, die ungefilterte Liste nicht (Negativ-Kontrolle)', async (t) => {
+  const s = await mitKarte(t, 2000);
+  assert.ok(JSON.stringify(s.warpLage('c1', null, null, null).j).length < 20000);
+  assert.ok(JSON.stringify(s.warpLage('c1', null, null, null, 4096).j).length > 100000, 'ohne Deckel kämen 2000 Marker (rund 130 KB bei diesen runden Zahlen, 170 KB bei echten)');
+});
+test('proj_lage: eins_unsicher ist ein festes Feld (auch false), marker_zahl wie bisher, keine Marker-Liste', async (t) => {
+  const s = await mitKarte(t, 40);
+  const lage = s.aktuell('noten_zahl').j.projekt.spuren[0].clips[0].warp;
+  assert.equal(lage.eins_unsicher, false); assert.equal(lage.marker_zahl, 40); assert.equal(lage.marker, undefined); assert.equal(lage.quelle, 'werkstatt');
 });

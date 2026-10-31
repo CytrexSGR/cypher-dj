@@ -10,7 +10,9 @@ Built in Germany by Andreas, a DJ, and Cypher, the lab's AI agent (Claude models
 > **Status: public beta.** It was built on one Linux machine, and Andreas plays and mixes on it there. The native parts build on
 > a fresh Ubuntu 24.04 (see [INSTALL.md](INSTALL.md)), but nobody else has played a set on it yet. Code comments are in German. Issues are welcome, see [Contributing](#contributing).
 
-![DJ view: two decks with 3-band waveforms, mixer, Strudel channel and loop boxes](docs/screens/dj-view.png)
+![Overview: DJ view, studio, warp and stems, arrangement with piano roll, Cypher Modular, media library, cue tool, compressor](docs/screens/overview.png)
+
+More pages: [Production, warp and stems](docs/production.md) · [Cypher Modular](docs/cypher-modular.md) · [Track analysis](docs/analysis.md) · [How it was built](docs/how-it-was-built.md) · [Screenshots](docs/gallery.md)
 
 ## What it does
 
@@ -46,13 +48,23 @@ Built in Germany by Andreas, a DJ, and Cypher, the lab's AI agent (Claude models
   straight into a loop box
 - Key and energy analysis for the whole library, with BPM filled in where it was missing
 
-**Produce** (new in October 2026, first cut)
+**Produce** (since October 2026)
 - A PRODUCTION view next to DJ and STUDIO: arrangement with a timeline, library browser, detail area for the selected
   clip, transport bar
+- Up to 32 tracks and 8 group tracks; every track goes to the production master or into a group
 - Audio tracks: drag a sample from the library onto a track; clips snap to the grid and can be moved, trimmed, split,
   duplicated, faded and looped inside their length
-- Instrument tracks with the built-in RB-338 or with Surge XT (one hosted slot in this cut); notes are drawn in a
-  piano roll with velocity and 1/16 quantize
+- **Warp**: an audio clip follows the project tempo. The warp markers come from the workshop's beat grid, a Traktor
+  grid or the library BPM, and can be set, moved and deleted by hand in a sample editor (double or halve the tempo, set
+  bar one here, warp from here, take the project tempo from the clip). Four modes: RE-PITCH (varispeed), COMPLEX and
+  TONES (time-stretched with Bungee, pitch kept) and BEATS (slices at the grid or at the transients). Transpose from
+  -12 to +24 semitones, detune by ±50 cents. Quantize Audio pulls the transients onto a 1/16 grid
+- **Stems**: Separate Stems in a clip's menu splits it into drums, bass, other and vocals with Demucs, on the CPU. Four
+  tracks appear under the clip in a group, beat-exact, and the original is muted; one undo step takes it all back. The
+  run shows its progress and can be cancelled
+- Instrument tracks with the built-in RB-338 or Surge XT (one hosted slot); notes are drawn in a piano
+  roll with velocity and 1/16 quantize
+- Recording: arm an audio track and record one of the studio's own channels onto it, bit-identical
 - Tempo, loop range and metronome; per track volume, pan, mute, solo and a meter
 - Projects are folders with a JSON file; every change is one undo step, and the undo history survives a restart
 - Variants: tracks can share a group (say bass A, B, C); one click in the transport bar makes one of them audible
@@ -63,10 +75,10 @@ Built in Germany by Andreas, a DJ, and Cypher, the lab's AI agent (Claude models
   start of Cypher's that is still waiting for its bar is dropped
 - WAV export as an offline render by the same core that plays live. Hosted instrument tracks are frozen first, so the
   file matches what was heard (see [Measured](#measured))
-- The agent builds and edits the same projects through its own tools (create tracks, write clips and notes, mix,
-  start the transport, export)
+- The agent builds and edits the same projects through its own tools (create tracks, write clips and notes, warp,
+  separate stems, mix, start the transport, export)
 
-![PRODUCTION view: three tracks (audio kick, RB-338 bass, frozen Surge XT lead), 8-bar loop, piano roll of the bass line](docs/screens/production-view.png)
+![PRODUCTION view: one of our own songs split into four stems under the muted original, the warp editor below in COMPLEX mode](docs/screens/production-warp-stems.png)
 
 **Measure before it is loud**
 - A native headphone previewer, separate from the browser, which only draws
@@ -83,11 +95,9 @@ Built in Germany by Andreas, a DJ, and Cypher, the lab's AI agent (Claude models
   default is 1: the agent suggests, the human decides
 - A skill for Claude Code in [`skills/djk-live/`](skills/djk-live/SKILL.md) that teaches an agent how to play
   *with* a human: think about what a move does before making it, crossfade instead of swapping, one change
-  every 8 bars and announce it first. Copy the folder into the skills folder of Claude Code (`.claude/skills` in your home directory) to use it
-
-![Media library browser: one-shot samples filtered by instrument, with pack and length](docs/screens/library-browser.png)
-
-![Effects strip: a compressor on every source channel](docs/screens/effects.png)
+  every 8 bars and announce it first. A second skill, [`skills/track-analysis/`](skills/track-analysis/SKILL.md), teaches how
+  to measure a track's tempo, grid and phase and cut it into loops and one-shots that close cleanly. Copy a folder into the
+  skills folder of Claude Code (`.claude/skills` in your home directory) to use it
 
 ## Own instruments and effects
 
@@ -104,6 +114,9 @@ references before they went in:
 - **Cypher Saett**: a tanh saturator with first-order antiderivative antialiasing (Bilbao et al. 2017)
   at 2x oversampling; on a hard-driven sawtooth the aliasing stays below -60 dB, against -50 dB without
   oversampling. Available as a plugin, not yet in the core
+- **Cypher Modular**: a modular synthesizer. A patch is a JSON graph of building blocks (oscillators, filters,
+  envelopes, LFOs, chorus, reverb, delay, dynamics and free feedback paths) with eight knobs that the human or the agent
+  can turn. It plays on the melody channel. Example patches: a Juno-style pad, a sync lead, a wobble bass. See [docs/cypher-modular.md](docs/cypher-modular.md)
 - **RB-338**: a 303-style bass voice with cutoff, resonance, envelope, decay, accent and slide, playable
   from the bass pattern channel instead of Surge XT
 
@@ -124,46 +137,21 @@ The lists above are the headline. Also in there:
 - **Grid by hand**: nudge a track's grid, set bar one on the real downbeat, and keep it for that track
 - **Cue pads** as jump cues or loop cues, quantized to the grid
 - **Sets**: collect tracks for a planned set and prepare all of them in one go
-- **The agent's side**: 34 tools in the MCP server. Besides playing it can listen to a deck behind its
+- **The agent's side**: 56 tools in the MCP server. Besides playing it can listen to a deck behind its
   closed fader, read the levels of the last seconds, wait on the master clock for a number of bars, run
   automation tracks and ramps over bars, and cancel everything it started. When it has an idea while the
   human plays, it proposes; the human accepts or rejects with one key
 - **Cue tool**: key and BPM filters with a harmonic-mix option (±1 on the Camelot wheel), named cues,
   4-, 8- and 16-bar loops, quantize, and taking over existing Traktor cues
 
-![Studio view: three Strudel channels with automation lanes](docs/screens/studio-view.png)
-
-![Cue tool: whole-track overview, 3-band waveform and eight cue pads](docs/screens/cue-tool.png)
-
 ## How it was built
 
-It started on 19 September 2026 as a Strudel set in a browser, run by Cypher, played with Andreas.
-The same evening there were loops cut from finished tracks, and the first correction by ear: the
-loops sat 8 ms late, and only after nudging them did Andreas confirm it was better. Two days later a
-single loop took four rounds: Cypher cut it, Andreas listened and said where it was off, Cypher cut
-again. The circle had to get shorter: that is why the beat grid can be shifted by hand, and his
-correction always wins over any measurement.
-
-**A DJ's craft, written down.** On the evening of 22 September Andreas described how he mixes. It became
-26 requirements, four more followed on 26 September. The next day 23 architecture decisions were
-written against them. Some of what he said, and what came of it:
-
-| Andreas | In the software |
-|---|---|
-| "the conductor must never play in anything unheard" | the agent may not open a deck the core has not measured |
-| first turn the dominant element down with the EQ, usually the bass, then swap the elements | 3-band EQ with kill; planned agent moves that would open a second sub-bass channel are cancelled |
-| "I had Mixed In Key. Having the keys automatically was a quantum leap" | a key analysis of its own, without Mixed In Key (76.7 % agreement, see below) |
-| "keeping the pitch is a given for me" | every track is time-stretched once to the set tempo with Rubber Band, pitch kept, so a 124.8 BPM track plays at 128 in its own key. The loop boxes do the same when the master tempo changes |
-
-**Seeing where a track changes.** Describing how he prepares, Andreas said he mostly sets cues live,
-by looking at the waveform for where the changes are: "where the vocals or breaks start. You can see
-quite well where more comes in". The cue
-tool shows the whole track as a 3-band waveform for exactly that. A second request followed on the
-same day: "the browser should only display", so the previewer became a native audio program.
-
-**The turn.** The plan's north star had Cypher playing one long musical journey, with Andreas stepping
-in by voice. On 26 September he corrected it: "I want to play with you from the start, not alone, the
-way we did with Strudel." Since then the agent interface is built for two at the same desk.
+It started on 19 September 2026 as a Strudel set in a browser, run by Cypher, played with Andreas. On 22 September
+Andreas described how he mixes; it became 26 requirements and, the next day, 23 architecture decisions. On 26 September he
+turned the plan around: "I want to play with you from the start, not alone." Since then the agent interface is built for
+two at the same desk. Every feature since then went through a written plan, one implementing agent per task and a
+reviewer per task, and was only called done after its failure case had been shown before and after the fix. The longer
+story, with what Andreas said and what came of it: [docs/how-it-was-built.md](docs/how-it-was-built.md).
 
 ## Measured
 
@@ -178,6 +166,8 @@ mostly against a silent test sink. Not benchmarks.
 | Key detection | 76.7 % exact and 82.5 % within a neighbouring key, compared with Mixed In Key on 120 held-out tracks | 2026-09-26 |
 | Production export against live playback (3 tracks: audio loop, RB-338, frozen Surge XT, 32 beats) | residual peak -200 dBFS, i.e. sample-identical; shifting one track by a single sample turns the test red | 2026-10-17 |
 | Audio callback p99.9 with an arrangement playing, quantum 256 | 642 to 789 µs over three runs; 755 to 904 µs with exports rendering in parallel | 2026-10-17 |
+| Stems against the warped original (real track, beats 16 to 48, at 124 and 128 BPM) | warp markers 0.000 samples apart, frame count exact, one undo restores the project exactly | 2026-10-31 |
+| Audio callback p99.9 while a stem separation runs, quantum 256 | 1744 to 1838 µs, against 877 to 955 µs without (three runs each); 1407 to 1432 µs when core and Demucs are pinned to separate CPU cores | 2026-10-31 |
 
 ## Known limits of the beta
 
@@ -196,12 +186,16 @@ mostly against a silent test sink. Not benchmarks.
 - Human and agent are told apart by a label on localhost. That is a convention, not a security boundary.
   Do not expose the ports to a network.
 - The measurement rule covers decks; the pattern channels are deliberately exempt.
-- Stems, an energy fingerprint and cue suggestions are planned for the workshop, not built. An
+- Stem separation is heavy: while it runs, the audio callback's tail doubles (see [Measured](#measured)). Separate stems
+  when nothing is playing live. Up to 600 s of source per run.
+- Stems are not sample-identical to the warped original: summed after warping they leave a residual of about -8 dB, so
+  do not play them together with the unmuted original. The drum hits scatter by up to 2 ms (p90) around the original's.
+- An energy fingerprint and cue suggestions are planned for the workshop, not built. An
   experimental cue-suggestion pipeline is included as a separate research tool.
 - Key detection is weak on major keys (the test library is almost all minor).
 - Learning from the human's judgement is planned, not built.
-- Production is a first cut: at most 8 tracks, one hosted instrument slot, no recording, automation, sends or plugin
-  inserts yet. Export is refused while the transport is running. The live track meters show sample peaks; loudness is
+- Production: one hosted Surge XT slot, no automation, sends or plugin inserts yet; recording takes the studio's own
+  channels only. Export is refused while the transport is running. The live track meters show sample peaks; loudness is
   measured offline (per track or in the export).
 - Sounds saved from a loop into the pattern channels play at their recorded speed, and parameter rides on the
   hosted instrument keep their duration in seconds; neither follows tempo changes yet.

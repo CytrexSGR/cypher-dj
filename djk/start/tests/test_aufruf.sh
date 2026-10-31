@@ -94,7 +94,29 @@ OF2=$(grep '^ExecStart=' "$O/v/cypherdj-oberflaeche.service" 2>/dev/null)
 CYPHERDJ_KATALOG="/tmp/mit leer/k.sqlite" lauf "$O/a3g.txt" "$START/djk-start" "${VN[@]}" "$O/v2"; R3=$?
 [ "$R" = 0 ] && [[ "$OF" == *"--katalog /tmp/w1-ziel/katalog.sqlite"* ]] && [ "$R2" = 0 ] && [ -n "$OF2" ] && [[ "$OF2" != *"--katalog"* ]] && [ "$R3" = 2 ]
 pruef $? "A3e Katalog-Pfad: mit Variable ($R) durchgereicht, ohne ($R2) keine Option, mit Leerzeichen ($R3, erwartet 2)"
+# A3h Ablage und Python (Paket 1.13 S3a): CYPHERDJ_ANALYSE wird als --analyse, CYPHERDJ_PYTHON als --python durchgereicht, ohne Variable fehlt die Option;
+#     Leerzeichen -> 2; eine Prüfinstanz nimmt nur eine Ablage unter /tmp oder /dev/shm (nie die echte unter ~/werkstatt) -> 2
+rm -rf "$O/v"; CYPHERDJ_ANALYSE=/tmp/w3a-ziel/analyse CYPHERDJ_PYTHON=/tmp/w3a-py/bin/python lauf "$O/a3h.txt" "$START/djk-start" "${VN[@]}" "$O/v"; R=$?
+OF=$(grep '^ExecStart=' "$O/v/cypherdj-oberflaeche.service" 2>/dev/null)
+rm -rf "$O/v"; lauf "$O/a3i.txt" env -u CYPHERDJ_ANALYSE -u CYPHERDJ_PYTHON CYPHERDJ_UMGEBUNG=/nicht/da "$START/djk-start" "${VN[@]}" "$O/v"; R2=$?
+OF2=$(grep '^ExecStart=' "$O/v/cypherdj-oberflaeche.service" 2>/dev/null)
+CYPHERDJ_ANALYSE="/tmp/mit leer/a" lauf "$O/a3j.txt" "$START/djk-start" "${VN[@]}" "$O/v2"; R3=$?
+CYPHERDJ_PYTHON="/tmp/mit leer/python" lauf "$O/a3k.txt" "$START/djk-start" "${VN[@]}" "$O/v3"; R4=$?
+CYPHERDJ_ANALYSE="$HOME/werkstatt/cypher-dj-analyse" lauf "$O/a3l.txt" "$START/djk-start" "${VN[@]}" "$O/v4"; R5=$?
+[ "$R" = 0 ] && [[ "$OF" == *"--analyse /tmp/w3a-ziel/analyse"* ]] && [[ "$OF" == *"--python /tmp/w3a-py/bin/python"* ]] && [ "$R2" = 0 ] && [ -n "$OF2" ] \
+  && [[ "$OF2" != *"--analyse"* ]] && [[ "$OF2" != *"--python"* ]] && [ "$R3" = 2 ] && [ "$R4" = 2 ] && [ "$R5" = 2 ]
+pruef $? "A3h Ablage/Python: mit Variablen ($R) durchgereicht, ohne ($R2) keine Option, mit Leerzeichen ($R3, $R4) und echte Ablage in der Prüfinstanz ($R5) erwartet 2"
 
+# A3m Bestand für Eins-Korrekturen (Paket 1.13 S3b): CYPHERDJ_KORREKTUREN wird als --korrekturen durchgereicht, ohne Variable fehlt die Option; Leerzeichen -> 2;
+#     eine Prüfinstanz nimmt nur einen Bestand unter /tmp oder /dev/shm (nie ~/cypher-dj/bestand) -> 2
+rm -rf "$O/v"; CYPHERDJ_KORREKTUREN=/tmp/w3b-ziel/bestand lauf "$O/a3m.txt" "$START/djk-start" "${VN[@]}" "$O/v"; R=$?
+OF=$(grep '^ExecStart=' "$O/v/cypherdj-oberflaeche.service" 2>/dev/null)
+rm -rf "$O/v"; lauf "$O/a3n.txt" env -u CYPHERDJ_KORREKTUREN CYPHERDJ_UMGEBUNG=/nicht/da "$START/djk-start" "${VN[@]}" "$O/v"; R2=$?
+OF2=$(grep '^ExecStart=' "$O/v/cypherdj-oberflaeche.service" 2>/dev/null)
+CYPHERDJ_KORREKTUREN="/tmp/mit leer/b" lauf "$O/a3o.txt" "$START/djk-start" "${VN[@]}" "$O/v2"; R3=$?
+CYPHERDJ_KORREKTUREN="$HOME/cypher-dj/bestand" lauf "$O/a3p.txt" "$START/djk-start" "${VN[@]}" "$O/v4"; R4=$?
+[ "$R" = 0 ] && [[ "$OF" == *"--korrekturen /tmp/w3b-ziel/bestand"* ]] && [ "$R2" = 0 ] && [ -n "$OF2" ] && [[ "$OF2" != *"--korrekturen"* ]] && [ "$R3" = 2 ] && [ "$R4" = 2 ]
+pruef $? "A3m Bestand für Korrekturen: mit Variable ($R) durchgereicht, ohne ($R2) keine Option, mit Leerzeichen ($R3) und echter Bestand in der Prüfinstanz ($R4) erwartet 2"
 # A5 Riegel
 for z in "alsa_output.stummschalter_echt:playback_F" "echt_stumm:playback_F" "cypher_stumm_echt:playback_F"; do
   rm -rf "$O/v"; lauf "$O/a5.txt" "$START/djk-start" "${VN[@]}" "$O/v" --master "$z" --ohne-cue; R=$?

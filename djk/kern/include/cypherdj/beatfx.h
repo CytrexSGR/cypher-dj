@@ -13,6 +13,7 @@
 #pragma once
 
 #include <cstdint>
+#include <cstdlib>
 #include <memory>
 
 #include "cypherdj/hall.h"
@@ -59,8 +60,11 @@ class BeatFx {
   double beats_ = 1.0, ziel_beats_ = 1.0;
   float wet_ = 0.0f, ziel_wet_ = 0.0f, param_ = 0.5f, ziel_param_ = 0.5f;
   float ein_ = 0.0f, ziel_ein_ = 0.0f;     // ECHO: Eingang der Leitung (OFF: 0, die Fahne bleibt hörbar)
-  std::unique_ptr<float[]> echo_[2];
-  std::unique_ptr<float[]> flanger_[2];
+  struct Frei { void operator()(float* p) const noexcept { std::free(p); } };
+  // calloc statt new float[]() (2026-10-29): 16 Einheiten x 2,9 MB Echo-Leitung wurden beim Start genullt und kosteten
+  // 41 ms in jedem Kern-Neustart; calloc liefert unberührte Nullseiten, mlockall legt sie danach in einem Zug fest.
+  std::unique_ptr<float[], Frei> echo_[2];
+  std::unique_ptr<float[], Frei> flanger_[2];
   int echo_pos_ = 0, flanger_pos_ = 0;
   float nachhall_l_ = 0.0f;               // letzter Effektwert links (still_ prüft beide Seiten)
   int echo_d_ = 1;                         // ECHO: aktuelle Verzögerung in Samples

@@ -125,6 +125,14 @@ with tempfile.TemporaryDirectory() as t:
     pruef(teil[1] == "pruefstand" and teil[-1] == hs[2] and teil[-1].startswith("pruefstand-"),
           f"/k/teil: Quelle pruefstand mit hs_id {hs[2]!r} (Quelle {teil[1]!r}, hoerschein {teil[-1]!r})")
     pruef(all(x[2][1] != "andreas" for x in g), "kein Befehl dieses Weges gibt sich als andreas aus")
+    # S6 Task 14 (2026-10-31): der Kern hält hs_id in char[48] (stellwerk i3.h); ein langer Laufname wie aus stems_last_lauf.sh
+    # schnitt die vier Deck-Scheine auf dieselben 47 Zeichen ab, der Fader auf Deck 1 fand den Schein von Deck 2: hoerschein_anderer_kanal
+    a = aufbau()
+    a.lauf = "stemslast-ohne-1-20261031T064906-1757601-20261031-064906"
+    a.inhalt = {d: f"c1c000000000003{d}/128000_r1" for d in (1, 2, 3, 4)}
+    ids = [a.hoerschein(d, 4.0) for d in (1, 2, 3, 4)]
+    pruef(all(len(i) <= 47 for i in ids) and len({i[:47] for i in ids}) == 4,
+          f"Hörschein-IDs bei langem Laufnamen höchstens 47 Zeichen und je Deck verschieden ({ids})")
     a = aufbau()
     a.inhalt = {1: "c1c0000000000051/128000_r1"}
     a.teil("deck/1/stem/vocals", 70.0, -200.0)

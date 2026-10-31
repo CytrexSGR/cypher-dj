@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "cypherdj/arrangement.h"
+#include "cypherdj/warp_werk.h"
 
 namespace arrtest {
 
@@ -70,7 +71,7 @@ struct Audio {
 // Baut einen Schnappschuss; spur()/clip()/note() vor fertig(), danach zeigen die Zeiger in die Vektoren.
 struct Bau {
   std::unique_ptr<cdj::ArrSnapshot> s{new cdj::ArrSnapshot()};
-  struct C { int spur; cdj::ArrClip c; std::vector<double> wb, wf; };   // wb, wf: Warp-Marker des Clips (Paket 1.13), leer = ungewarpt
+  struct C { int spur; cdj::ArrClip c; std::vector<double> wb, wf; int wm = 0; double wp = 1.0; std::vector<double> eb, ef; int lp = 0, hu = 100; };   // wb, wf: Warp-Marker des Clips (Paket 1.13), leer = ungewarpt; wm: Modus (0 repitch, 2 complex, 3 tones)
   struct N { int spur; cdj::ArrNote n; };
   std::vector<C> cs;
   std::vector<N> ns;
@@ -87,10 +88,21 @@ struct Bau {
     cs.push_back({nr, cdj::ArrClip{cdj::arr_id(id), start, laenge, a, offset, gain, ein, aus}});
     return *this;
   }
-  // Paket 1.13: hängt dem zuletzt hinzugefügten Clip einen Warp an (RE-PITCH): Marker als Clip-Beat und Quell-Frame, beide streng steigend
-  Bau& warp(std::vector<double> beat, std::vector<double> frame) {
+  // Paket 1.13: hängt dem zuletzt hinzugefügten Clip einen Warp an: Marker als Clip-Beat und Quell-Frame, beide streng steigend; modus 0 RE-PITCH,
+  // 2 COMPLEX, 3 TONES (Slice 2)
+  Bau& warp(std::vector<double> beat, std::vector<double> frame, int modus = 0, double pitch = 1.0) {
     cs.back().wb = std::move(beat);
     cs.back().wf = std::move(frame);
+    cs.back().wm = modus;
+    cs.back().wp = pitch;
+    return *this;
+  }
+  // Slice 4: hängt dem Warp des zuletzt hinzugefügten Clips (warp(..., 1)) die BEATS-Einheiten an: Clip-Beat und Quell-Frame, beide streng steigend; loop 0 aus, 1 vor, 2 vor_zurueck; huelle 0..100
+  Bau& beats(std::vector<double> beat, std::vector<double> frame, int loop = 0, int huelle = 100) {
+    cs.back().eb = std::move(beat);
+    cs.back().ef = std::move(frame);
+    cs.back().lp = loop;
+    cs.back().hu = huelle;
     return *this;
   }
   Bau& note(int nr, const char* id, double beat, double laenge, int ton, int vel = 100) {
@@ -106,7 +118,7 @@ struct Bau {
     for (const C& c : cs)
       if (!c.wb.empty()) {
         ++n_warps;
-        n_punkte += c.wb.size();
+        n_punkte += c.wb.size() + c.eb.size();
       }
     s->warps.reserve(n_warps);        // die Zeiger der Clips zeigen in diese Vektoren, sie wachsen danach nie
     s->warp_beat.reserve(n_punkte);
@@ -122,9 +134,21 @@ struct Bau {
             s->warp_beat.insert(s->warp_beat.end(), c.wb.begin(), c.wb.end());
             s->warp_frame.insert(s->warp_frame.end(), c.wf.begin(), c.wf.end());
             cdj::ArrWarp w;
+            w.modus = c.wm;
+            w.pitch = c.wp;
             w.n = static_cast<int32_t>(c.wb.size());
             w.beat = s->warp_beat.data() + p0;
             w.frame = s->warp_frame.data() + p0;
+            if (!c.eb.empty()) {   // Slice 4: die Einheiten stehen hinter den Markern, wie im Lader
+              const size_t e0 = s->warp_beat.size();
+              s->warp_beat.insert(s->warp_beat.end(), c.eb.begin(), c.eb.end());
+              s->warp_frame.insert(s->warp_frame.end(), c.ef.begin(), c.ef.end());
+              w.e_n = static_cast<int32_t>(c.eb.size());
+              w.e_beat = s->warp_beat.data() + e0;
+              w.e_frame = s->warp_frame.data() + e0;
+              w.loop = c.lp;
+              w.huelle = c.hu;
+            }
             s->warps.push_back(w);
             x.warp = &s->warps.back();
           }
@@ -152,6 +176,8 @@ struct Bau {
       sp.noten_id = sp.n_noten ? s->noten_id.data() + i0 : nullptr;
       sp.noten_id_index = sp.n_noten ? s->noten_id_index.data() + i0 : nullptr;
     }
+    for (const C& c : cs)   // Slice 2: jedes genutzte Audio genau einmal (wie der Lader; das Warp-Werk fragt danach in liest())
+      if (std::find(s->audios.begin(), s->audios.end(), c.c.audio) == s->audios.end()) s->audios.push_back(const_cast<cdj::ArrAudio*>(c.c.audio));
     return s.release();
   }
 };
@@ -209,9 +235,20 @@ struct Treiber {
   std::vector<float> pml, pmr;                // PM-Abgriff je Block (1.10)
   std::vector<const cdj::ArrSnapshot*> alt;   // abgelöste Schnappschüsse (am Ende freigegeben)
   std::vector<PruefSenke*> senken;            // bekommen vor jedem Block dessen Anfang
+  std::unique_ptr<cdj::WarpWerk> werk;        // Slice 2: das Warp-Werk (mit_werk), vor den Schnappschüssen abgebaut
+  uint32_t gen = 1;                           // Slice 2: Karten-Generation (mit_werk hängt sie ans Arrangement); wer die Karte ändert, erhöht sie
   ~Treiber() {
+    if (werk) werk->stoppe();
     for (const cdj::ArrSnapshot* x : alt) delete x;
     delete arr.snapshot();
+  }
+  // Slice 2: das Werk dazu; faeden 0 = synchron (deterministisch, wie der Render), sonst Arbeitsfäden. false: ohne Bungee gebaut.
+  bool mit_werk(int faeden = 0) {
+    werk = cdj::warp_werk_neu({faeden});
+    if (!werk) return false;
+    arr.setze_warp_werk(werk.get());
+    arr.setze_karten_generation(&gen);
+    return true;
   }
   void laden(cdj::ArrSnapshot* neu) {
     if (const cdj::ArrSnapshot* a = arr.tausche(neu, s, k)) alt.push_back(a);

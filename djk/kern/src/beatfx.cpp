@@ -1,4 +1,5 @@
 // Beat-FX-Einheit (beatfx.h). Plan 3.
+#include <new>
 #include "cypherdj/beatfx.h"
 
 #include <algorithm>
@@ -21,8 +22,9 @@ inline float naeher(float ist, float ziel, float schritt) {
 
 BeatFx::BeatFx() : hall_(std::make_unique<Hall>(48000)) {   // Hall: 2,6 MB, nie im Callback angelegt
   for (int k = 0; k < 2; ++k) {
-    echo_[k].reset(new float[ECHO_FRAMES]());
-    flanger_[k].reset(new float[FLANGER_FRAMES]());
+    echo_[k].reset(static_cast<float*>(std::calloc(ECHO_FRAMES, sizeof(float))));
+    flanger_[k].reset(static_cast<float*>(std::calloc(FLANGER_FRAMES, sizeof(float))));
+    if (!echo_[k] || !flanger_[k]) throw std::bad_alloc();
   }
 }
 

@@ -11,6 +11,9 @@
 // Aufruf: node djk/oberflaeche/server.ts [--port N] [--kern-port N] [--abo-port N] [--leitstand-ws N] [--bestand DIR]
 //   [--mediathek DATEI]  (Vorgabe $CYPHERDJ_MEDIATHEK, z. B. /path/to/mediathek.sqlite; nur lesen)
 //   [--katalog DATEI]    (Vorgabe $CYPHERDJ_KATALOG, sonst katalog.sqlite neben der Mediathek; nur lesen)
+//   [--analyse DIR]      (Slice 3a: Analyse-Ablage der Karten; Vorgabe nur im Betrieb: $CYPHERDJ_ANALYSE, sonst ~/werkstatt/cypher-dj-analyse; nur lesen)
+//   [--korrekturen DIR]  (Slice 3b: Bestand des Decks, in den Set 1.1.1 Here die Eins-Korrektur schreibt; Vorgabe nur im Betrieb: --bestand; Prüfinstanz nur ausdrücklich)
+//   [--python DATEI]     (Slice 3a: Python für Werkstatt-Aufträge und welle.py; Vorgabe $CYPHERDJ_PYTHON, sonst die venv der Werkstatt)
 //   [--welle-cache ORDNER]  (Vorgabe: Betrieb ~/.cache/cypherdj/welle, Prüfinstanz /dev/shm/cypherdj-<i>/welle)
 //   [--digitalout DATEI]  (Glanz 2.1, F22: Standdatei der Digital-Out-Wache; fehlt sie, gilt 'unbewacht')
 //   [--arbeitsbestand DIR]  (Vorgabe /dev/shm/cypherdj/material, mit Prüfinstanz /dev/shm/cypherdj-<i>/material)
@@ -33,6 +36,7 @@ import { projBereich, type ProjOptionen } from './bereiche/proj/bereich.ts';
 import { geraeteBereich, type GeraeteOptionen } from './bereiche/geraete/bereich.ts';
 import { ausgabeBereich } from './bereiche/proj/ausgabe.ts';   // Paket S3
 import { aufnahmeBereich } from './bereiche/proj/aufnahme.ts';   // 1.8 Slice 1
+import { stemsBereich, type StemsOptionen } from './bereiche/proj/stems.ts';   // 1.13 Slice 6
 import type { Dekodiert, Felder } from '../leitstand/src/adressen.ts';
 import { ZIELE, ZIEL_KURVE, ZIEL_KURVEN } from './oeffentlich/kurven.js';
 
@@ -44,7 +48,9 @@ import { pruefeAutomation, planeSpur, spurLaenge, naechsterDurchgang, leseLoopAu
 import { beatsVon, importiereLoop, loopNameVon, findeImport, raeumeImportReste, LoopImportFehler, type ImportOptionen } from './loop_import.ts';
 import { WelleCache, WelleFehler, loopQuelle, fassungQuelle, dateiQuelle } from './welle_cache.ts';
 import { OEFFENTLICH, REPO, REPO_PFADE, instanz, ports, shmOrdner, rasterOrdnerVorgabe, hotcueOrdnerVorgabe, huellenVorgabe, musterOrdnerVorgabe,
-  wirtOrdnerVorgabe, kitsOrdnerVorgabe, zusatzKit, strudelPakete, loopOrdnerVorgabe, welleCacheVorgabe, arbeitsbestandVorgabe } from './pfade.ts';
+  wirtOrdnerVorgabe, baukastenOrdnerVorgabe, kitsOrdnerVorgabe, zusatzKit, strudelPakete, loopOrdnerVorgabe, welleCacheVorgabe, arbeitsbestandVorgabe,
+  analyseVorgabe } from './pfade.ts';
+import { WerkstattAnalyse } from './bereiche/proj/analyse.ts';
 import { tempoRampe, vorlaufBeats } from './tempo_rampe.ts';
 import { RASTER_WAHL, abBeat, sprungDelta, loopStart, rasterRunden, hotcueDatei, leseHotcues, schreibeHotcues, type Hotcue, type Fassung, rasterSchritt, RASTER_MAX, rasterDatei, leseRaster, schreibeRaster, einsSetzen, rasterErbe, einsNachFix, einsZeile, haengeKorrekturAn, letzteEinsZeile, hatHandEins, hotcuesErbe } from './deck_bedienung.ts';
 // @ts-expect-error reines .mjs ohne Typen (djk/loops)
@@ -94,14 +100,18 @@ export interface ServerOptionen {
   rasterOrdner?: string;  // Plan Grid: Vorgabe ~/.config/cypherdj/raster
   huellen?: string;  // Ohr T5: Vorgabe /dev/shm/cypherdj[-i]/huellen
   wirtOrdner?: string;  // Studio S6: Ordner der Wirt-Sockets (Vorgabe /dev/shm/cypherdj[-i])
+  baukastenOrdner?: string;  // Baukasten S2: Ordner der Graphen baukasten-<gruppe>.json (Vorgabe ~/.config/cypherdj[-i])
   sammlungen?: string;   // Sets: Ordner, Vorgabe <REPO>/bibliothek/sets
   musterBibliothek?: string;   // S2b: eigene Strudel-Muster, Vorgabe <REPO>/bibliothek/muster
   musterSets?: string;         // S2b: Muster-Quellen track.mjs und Dirigent-Blöcke, Vorgabe <REPO>/sets
   loopWerkzeug?: ImportOptionen['werkzeug'];   // Tests: Attrappen vor ffmpeg/rubberband des Loop-Imports (S6)
   katalog?: string;      // Browser (Plan 2026-10-10): katalog.sqlite, Vorgabe $CYPHERDJ_KATALOG bzw. neben der Mediathek
+  stems?: Partial<StemsOptionen>;   // 1.13 Slice 6: Tests biegen zusatzArgs (Prüftrenner, P3) und killMs um
   geraete?: GeraeteOptionen;   // I08: Pfade und Erkennung (Tests geben eigene)
   proj?: ProjOptionen;   // D1 S2: Projektwurzel, Arbeitsordner (Vorgaben je Instanz, bereiche/proj/sitzung.ts)
   mediathek?: string;    // Mediathek T2: Vorgabe $CYPHERDJ_MEDIATHEK (nur lesen; fehlt sie: 503 mediathek_fehlt)
+  korrekturen?: string;  // Slice 3b: Bestand des Decks für die Eins-Korrekturen; Vorgabe nur im Betrieb: bestand; eine Prüfinstanz (a..i) schreibt nur ausdrücklich
+  analyse?: string;      // Slice 3a: Analyse-Ablage (Karten), Vorgabe nur im Betrieb: $CYPHERDJ_ANALYSE, sonst ~/werkstatt/cypher-dj-analyse
   einleserModul?: string;  // Mediathek T2: Python-Modul für POST /mediathek/vorbereiten (Vorgabe werkstatt.einzeln); Python selbst: `python`
   vorhoeren?: Vorhoeren;   // S7: Vorhören als Kern-Eingang (Tests: Attrappe statt Vorhörer-Prozess)
   klangBefehl?: string;  // Task 3: Programm für POST /klang (Vorgabe djk/wirte/carla/djk-klang); Tests biegen es auf ein Stub-Skript um
@@ -422,12 +432,19 @@ export class Oberflaeche {
     this.router.melde({ name: 'oberflaeche', routen: () => this.routenOberflaeche() });
     // D1 S2 (Spec 3.4): Audio-Quellen über denselben Katalog wie der Browser. Spec 6.30: die Meldung bleibt zweizeilig (erst this.proj, dann melden),
     // weil stoppe() den Bereich braucht; S3 zieht seinen Anker auf diese zwei Zeilen nach.
-    this.proj = projBereich(this.bereichKontext(), { katalog: opt.katalog ?? katalogVorgabe(opt.mediathek ?? MEDIATHEK_VORGABE), ...opt.proj });
+    // Slice 3a: die Analyse-Ablage (Karten) und der Auftragsgeber der Analyse auf Abruf. Betrieb: Vorgabe $CYPHERDJ_ANALYSE bzw. ~/werkstatt/cypher-dj-analyse; eine
+    // Prüfinstanz (a..i) hat keine Vorgabe und liest/schreibt die Ablage nur mit ausdrücklichem --analyse (sie berührt nie die echte).
+    const analyseOrdner = opt.analyse !== undefined ? opt.analyse : analyseVorgabe(inst);
+    const analysierer = analyseOrdner ? new WerkstattAnalyse({ python, cwd: REPO_PFADE.werkstatt, ablage: analyseOrdner, modul: opt.einleserModul, log: opt.log }) : null;
+    this.proj = projBereich(this.bereichKontext(), { katalog: opt.katalog ?? katalogVorgabe(opt.mediathek ?? MEDIATHEK_VORGABE), mediathek: opt.mediathek ?? MEDIATHEK_VORGABE,
+      analyse: analyseOrdner, analysierer, bestand: opt.korrekturen !== undefined ? opt.korrekturen : (inst === '' ? opt.bestand : null), ...opt.proj });
     this.router.melde(this.proj);
     this.ausgabe = ausgabeBereich(this.bereichKontext(), this.proj.zugang, { wirtOrdner: () => this.wirtBasis() });   // Paket S3: /proj/freeze, /proj/export (Spec 3.4)
     this.router.melde(this.ausgabe);
     this.aufnahme = aufnahmeBereich(this.bereichKontext(), this.proj.zugang);   // 1.8: /proj/aufnahme
     this.router.melde(this.aufnahme);
+    this.stems = stemsBereich(this.bereichKontext(), this.proj.zugang, { python, cwd: REPO_PFADE.werkstatt, ...opt.stems });   // 1.13 S6
+    this.router.melde(this.stems);
     this.router.melde(geraeteBereich(this.bereichKontext(), opt.geraete ?? {}));   // I08: /geraete
   }
 
@@ -452,6 +469,7 @@ export class Oberflaeche {
     if (this.gestoppt) return;   // zweimal (Test-Neustart und Aufräumen) darf nichts werfen
     this.gestoppt = true;
     this.aufnahme.aufnahme.schliesse();
+    this.stems.stems.schliesse();
     this.ausgabe.ausgabe.schliesse();   // Fix-Runde S3 R7: ein wartender Freeze endet jetzt mit freeze_fehler, nicht erst nach Stille oder Frist
     this.proj.sitzung.schliesse();   // D1 S2: ausstehenden Mixer-Eintrag schreiben, Projekt-Sperre frei
     for (const l of this.spuren.values()) for (const t of l.timer) clearTimeout(t);
@@ -1325,7 +1343,7 @@ export class Oberflaeche {
   private async klang(d: Record<string, unknown>, a: http.ServerResponse): Promise<void> {
     const aktion = d.aktion;
     const lesend = aktion === 'zeige' || aktion === 'liste';
-    if (typeof aktion !== 'string' || !['lade', 'setze', 'fahre', 'zeige', 'speichere', 'hoere', 'liste'].includes(aktion)) return this.json(a, 400, { fehler: 'aktion' });
+    if (typeof aktion !== 'string' || !['lade', 'setze', 'fahre', 'zeige', 'speichere', 'hoere', 'liste', 'param', 'params'].includes(aktion)) return this.json(a, 400, { fehler: 'aktion' });
     const gruppe = d.gruppe;
     if (aktion !== 'liste' && (typeof gruppe !== 'string' || !KLANG_GRUPPEN.includes(gruppe))) return this.json(a, 400, { fehler: 'gruppe', text: 'gruppe must be bass or melodie' });
     // Werte mit - vorne läsen djk-klang als Schalter (argparse): abweisen, bevor sie in argv landen
@@ -1355,6 +1373,18 @@ export class Oberflaeche {
         argv.push(String(n));
         if (d.dauer !== undefined) { const s = zahl(d.dauer); if (s === null || s <= 0 || s > 10) return this.json(a, 400, { fehler: 'dauer', text: 'dauer: seconds, 0..10' }); argv.push(String(s)); }
       } else if (d.dauer !== undefined) return this.json(a, 400, { fehler: 'dauer', text: 'dauer needs note' });
+    } else if (aktion === 'param') {   // Baukasten S2: ein Regler eines VST3-Wirts (ParamSteuerung), normiert 0..1, direkt an den Socket wie fahre
+      const n = text(d.name), w = zahl(d.wert);
+      // nur die acht Knobs von Cypher Modular, nicht Volume oder andere Plugin-Parameter (Review F3)
+      if (n === null || !/^Knob [1-8]$/.test(n)) return this.json(a, 400, { fehler: 'name', text: 'name: Knob 1..8' });
+      if (w === null || w < 0 || w > 1) return this.json(a, 400, { fehler: 'wert', text: 'wert: number 0..1 (normalized)' });
+      if (this.quelle() === 'cypher') { const sperre = this.klangSperre(gruppe as string); if (sperre) return this.json(a, 409, sperre); }
+      const r = await wirtRuf(this.wirtSock(gruppe as string), { befehl: 'param', name: n, wert: w });
+      return r.ok ? this.json(a, 200, { ok: true }) : this.json(a, 409, { fehler: 'wirt', gruppe, text: String(r.fehler ?? 'wirt refused') });
+    } else if (aktion === 'params') {   // Baukasten S2: alle Regler mit Ist-Wert, dazu die Knob-Namen aus dem Graphen (lesend, ohne Riegel)
+      const r = await wirtRuf(this.wirtSock(gruppe as string), { befehl: 'params' });
+      if (!r.ok) return this.json(a, 409, { fehler: 'wirt', gruppe, text: String(r.fehler ?? 'wirt refused') });
+      return this.json(a, 200, { ok: true, params: r.params ?? {}, namen: this.reglerNamen(gruppe as string) });
     } else {   // fahre
       const p = text(d.parameter), ziel = zahl(d.ziel), sek = zahl(d.sekunden), von = d.von === undefined ? undefined : zahl(d.von);
       if (p === null) return bad('parameter');
@@ -1382,6 +1412,19 @@ export class Oberflaeche {
     if (r.code === 0) return this.json(a, 200, { ok: true, text: r.out, ...(r.gekappt ? { abgeschnitten: true } : {}) });
     const zeilen = r.err.split('\n').map((z) => z.trim()).filter((z) => z !== '');
     return this.json(a, 400, { fehler: zeilen.at(-1) ?? (r.code === null ? 'timeout' : `exit ${r.code}`), text: r.err });
+  }
+
+  // Baukasten S2: regler_namen aus baukasten-<gruppe>.json → {"Knob 1": "Cutoff", …}; ohne Datei, bei kaputtem JSON oder
+  // fremden Schlüsseln bleibt der Eintrag weg (der Wirt spielt dann ohnehin den eingebauten Graphen ohne Namen)
+  private reglerNamen(gruppe: string): Record<string, string> {
+    const namen: Record<string, string> = {};
+    try {
+      const g = JSON.parse(fs.readFileSync(path.join(this.opt.baukastenOrdner ?? baukastenOrdnerVorgabe(), `baukasten-${gruppe}.json`), 'utf8'));
+      for (const [nr, name] of Object.entries(g?.regler_namen ?? {})) {
+        if (/^[1-8]$/.test(nr) && typeof name === 'string' && name.length > 0 && name.length <= 40) namen[`Knob ${nr}`] = name;
+      }
+    } catch { /* keine Datei oder kein JSON: keine Namen */ }
+    return namen;
   }
 
   // Cyphers Riegel für schreibende Klang-Aktionen: Stop Cypher, AUTO des Stroms (bass 2, melodie 3)
@@ -1538,6 +1581,7 @@ export class Oberflaeche {
   // trägt cypher; sonst andreas. Befehle aus Kern-Ereignissen (Wiederherstellen) laufen außerhalb und bleiben andreas.
   private readonly qs = new AsyncLocalStorage<string>();
   private readonly proj: ReturnType<typeof projBereich>;   // D1 S2: Bereich proj (Sitzung schliesst beim Stoppen)
+  readonly stems: ReturnType<typeof stemsBereich>;   // 1.13 Slice 6: Bereich proj-stems
   private readonly aufnahme: ReturnType<typeof aufnahmeBereich>;   // 1.8: Bereich proj-aufnahme
   readonly ausgabe: ReturnType<typeof ausgabeBereich>;   // Paket S3: Bereich proj-ausgabe (schliesst beim Stoppen, Fix-Runde R7)
   private readonly router = new Router();   // Plan d1-s1 Task 9: Bereiche melden hier ihre Routen (oberflaeche zuerst, dann proj)
@@ -2462,8 +2506,11 @@ export class Oberflaeche {
       const q = loop !== null ? loopQuelle(this.loopOrdner(), loop)
         // Browser (S5): der Pfad kommt aus dem Katalog, nie aus der Anfrage. Ableton-geschützte Dateien sind für ffmpeg nicht lesbar (422).
         : sha !== null ? (() => {
-          const z = this.katalog.eintrag(sha);
-          if (!z?.pfad) throw new WelleFehler(404, 'unbekannt');
+          // S6 Task 14: Stems und Takes liegen im Projektordner, nicht im Katalog; deren Pfad kommt aus dem offenen Projekt
+          const ausProjekt = () => { const p = this.proj.sitzung.projektQuellPfad(sha); return p ? dateiQuelle(p, sha) : null; };
+          let z;
+          try { z = this.katalog.eintrag(sha); } catch (e) { const q = ausProjekt(); if (q) return q; throw e; }
+          if (!z?.pfad) { const q = ausProjekt(); if (q) return q; throw new WelleFehler(404, 'unbekannt'); }
           if (z.schutz === 'ableton') throw new WelleFehler(422, 'nur_live');
           // sha eines unterlegenen Objekts: dessen eigene Datei (Fundort auf diesem Host), nie stillschweigend die des Gewinners
           const pfad = sha === z.sha ? z.pfad : (this.mediathek.vorhanden() ? this.mediathek.pfadVon(sha) : null);
@@ -2511,7 +2558,7 @@ async function main(): Promise<void> {
   const { values: v } = parseArgs({ options: {
     port: { type: 'string' }, 'kern-port': { type: 'string' }, 'abo-port': { type: 'string' },
     'leitstand-ws': { type: 'string' }, bestand: { type: 'string' }, arbeitsbestand: { type: 'string' }, log: { type: 'string' },
-    'kern-pruefmodus': { type: 'string' }, 'ziel-kurve': { type: 'string' }, loops: { type: 'string' }, mediathek: { type: 'string' }, katalog: { type: 'string' }, sammlungen: { type: 'string' }, 'welle-cache': { type: 'string' }, 'muster-ordner': { type: 'string' }, 'muster-bibliothek': { type: 'string' }, 'muster-sets': { type: 'string' }, kit: { type: 'string' }, digitalout: { type: 'string' },
+    'kern-pruefmodus': { type: 'string' }, 'ziel-kurve': { type: 'string' }, loops: { type: 'string' }, mediathek: { type: 'string' }, analyse: { type: 'string' }, korrekturen: { type: 'string' }, python: { type: 'string' }, katalog: { type: 'string' }, sammlungen: { type: 'string' }, 'welle-cache': { type: 'string' }, 'muster-ordner': { type: 'string' }, 'muster-bibliothek': { type: 'string' }, 'muster-sets': { type: 'string' }, kit: { type: 'string' }, digitalout: { type: 'string' },
     'proj-wurzel': { type: 'string' }, 'arr-ordner': { type: 'string' },   // D1 S3 (Auftrag 14 e): Proben gegen den echten Server mit eigenen Ordnern
   } });
   const zk = v['ziel-kurve'];
@@ -2533,6 +2580,9 @@ async function main(): Promise<void> {
     loops: v.loops,
     digitalout: v.digitalout,
     mediathek: v.mediathek,
+    analyse: v.analyse,
+    korrekturen: v.korrekturen,
+    python: v.python,
     katalog: v.katalog,
     sammlungen: v.sammlungen,
     welleCache: v['welle-cache'],

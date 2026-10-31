@@ -36,7 +36,7 @@ SARGS=(--ziel $SENKE:playback_F --bpm "$BPM"); [ -n "$BPM_BIS" ] && SARGS+=(--bp
 pw-jack -p 256 "$HIER/build/ring_schreiber" "${SARGS[@]}" > "$O/schreiber.log" 2>&1 & RS=$!; PIDS+=($RS)
 sleep 0.5
 python3 "$HIER/tests/nb_hoerer.py" $((47140 + 6000)) "$O/nb.txt" & PIDS+=($!)
-KANTE=(--kante cypherdj-ringschreiber-f:master_L); [ "$ART" = ohne_kante ] && KANTE=()
+KANTE=(--vor cypherdj-ringschreiber-f:notbahn_vor); [ "$ART" = ohne_kante ] && KANTE=()
 pw-jack -p 256 "$NB" --master $SENKE:playback_F --daneben "${KANTE[@]}" > "$O/notbahn.log" 2>&1 & PIDS+=($!)
 SEK=42; [ "$ART" = ruhe ] && SEK=$DAUER
 pw-jack -p 256 "$DJK/pruefstand/aufnehmer/build/cypherdj-aufnehmer" --quelle $SENKE:monitor_F --datei "$O/aufnahme.wav" \

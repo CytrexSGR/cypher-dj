@@ -9,6 +9,7 @@ mod komp;
 pub use komp::*;
 mod rb;
 pub use rb::*;
+pub mod baukasten;
 
 use hall_dsp::{Hall, HallEinstellung};
 use std::panic::{catch_unwind, AssertUnwindSafe};

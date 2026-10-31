@@ -34,3 +34,8 @@ test('Keylock 7b.3: /zustand/box (§5.5b) wird dekodiert und bleibt aus dem Jour
   assert.deepEqual(liesUndDekodiere(baue('/zustand/box', felder)), { adresse: '/zustand/box', felder });
   assert.ok(NICHT_INS_JOURNAL.has('/zustand/box'));
 });
+
+test('I08: /zustand/ein (§5.14, 20 Hz im Takt der Pegel, ohne Änderungs-Auslöser) bleibt aus dem Journal', () => {
+  // M, 2026-10-25: Betriebs-Journal 2,26 GB in 5,6 Tagen, 60 % der Zeilen waren dieser Tick
+  assert.ok(NICHT_INS_JOURNAL.has('/zustand/ein'));
+});

@@ -1,0 +1,35 @@
+{
+  "format": "baukasten/2",
+  "name": "rueckkopplung",
+  "stimmen": 1,
+  "regler_namen": {"1": "Zeit", "2": "Farbe", "3": "Biss", "4": "Rückkopplung"},
+  "knoten": [
+    {"id": "note", "art": "note"},
+    {"id": "rausch", "art": "rauschen"},
+    {"id": "stoss", "art": "adsr", "a": 0.001, "d": 0.02, "s": 0, "r": 0.01},
+    {"id": "anreg", "art": "mul"},
+    {"id": "summe", "art": "add"},
+    {"id": "zeit", "art": "regler", "nr": 1, "min": 2, "max": 40, "log": 1},
+    {"id": "schleife", "art": "leitung", "max": 50},
+    {"id": "farbe", "art": "regler", "nr": 2, "min": 200, "max": 1200, "log": 1},
+    {"id": "bp", "art": "svf", "pole": 2, "reso": 0.3},
+    {"id": "biss", "art": "regler", "nr": 3, "min": 0, "max": 18},
+    {"id": "saett", "art": "saett"},
+    {"id": "rk", "art": "regler", "nr": 4, "min": 0.25, "max": 0.45},
+    {"id": "halt", "art": "adsr", "a": 0.005, "d": 0.01, "s": 1, "r": 0.3},
+    {"id": "rk_halt", "art": "mul"},
+    {"id": "zurueck", "art": "mul"},
+    {"id": "pegel", "art": "mul", "b": 0.3},
+    {"id": "aus", "art": "ausgang"}
+  ],
+  "kanten": [
+    {"von": "note.gate", "nach": "stoss.gate"}, {"von": "note.trig", "nach": "stoss.trig"},
+    {"von": "rausch.aus", "nach": "anreg.a"}, {"von": "stoss.aus", "nach": "anreg.b"},
+    {"von": "anreg.aus", "nach": "summe.a"}, {"von": "summe.aus", "nach": "schleife.x"}, {"von": "zeit.aus", "nach": "schleife.zeit"},
+    {"von": "schleife.aus", "nach": "bp.x"}, {"von": "farbe.aus", "nach": "bp.cutoff"},
+    {"von": "bp.bp", "nach": "saett.x"}, {"von": "biss.aus", "nach": "saett.antrieb"},
+    {"von": "saett.aus", "nach": "zurueck.a"}, {"von": "note.gate", "nach": "halt.gate"}, {"von": "note.trig", "nach": "halt.trig"},
+    {"von": "rk.aus", "nach": "rk_halt.a"}, {"von": "halt.aus", "nach": "rk_halt.b"}, {"von": "rk_halt.aus", "nach": "zurueck.b"}, {"von": "zurueck.aus", "nach": "summe.b"},
+    {"von": "saett.aus", "nach": "pegel.a"}, {"von": "pegel.aus", "nach": "aus.x"}
+  ]
+}

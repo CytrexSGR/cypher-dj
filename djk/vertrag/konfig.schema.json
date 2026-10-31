@@ -28,7 +28,9 @@
         "keylock_maschine": {"type": "string", "x-typ": "str", "default": "r3", "enum": ["r3", "bungee", "bungee_fein"], "x-quelle": "Umbauplan 2026-10-09-bungee-umbau S2: r3 = Rubber Band in Fäden (Rückfall, Vorgabe bis S8); bungee = Bungee synchron im Callback, Korn 512; bungee_fein = Korn 256. Bungee nur in einem mit CYPHERDJ_BUNGEE gebauten Kern."},
         "keylock": {"type": "boolean", "x-typ": "bool", "default": true, "x-quelle": "Keylock Task 3 (Plan 2026-10-06-keylock-echtzeit.md): Dehner und Fäden im Kern; false: Kern ohne Dehner, die Decks spielen Varispeed, der Regler keylock (§1.5) wirkt nur auf die Loop-Boxen."},
         "arr_ordner": {"type": "string", "x-typ": "Pfad", "default": "", "x-quelle": "D1 K1 (Spec 2.9): Arbeitsordner der Wiedergaben; leer = ~/.cache/cypherdj[-<i>]/arr, der Seiten-Server liest denselben Wert."},
-        "arr_budget_mib": {"type": "integer", "x-typ": "int", "default": 1024, "minimum": 1, "maximum": 4095, "x-quelle": "D1 K1 (Spec 2.1): Teilbetrag des gesperrten Speichers für Arrangement-Audio, höchstens speicher_budget_mib; zählt zugleich gegen speicher_budget_mib (gemeinsames Konto mit dem Deck-Lader)."}
+        "arr_budget_mib": {"type": "integer", "x-typ": "int", "default": 1024, "minimum": 1, "maximum": 4095, "x-quelle": "D1 K1 (Spec 2.1): Teilbetrag des gesperrten Speichers für Arrangement-Audio, höchstens speicher_budget_mib; zählt zugleich gegen speicher_budget_mib (gemeinsames Konto mit dem Deck-Lader)."},
+        "warp_faeden": {"type": "integer", "x-typ": "int", "default": 4, "minimum": 1, "maximum": 8, "x-quelle": "Paket 1.13 Slice 2 (ADR 031 Teil 2): Arbeitsfäden des Warp-Werks für COMPLEX und TONES; sie laufen mit SCHED_FIFO JACK-Priorität − 6, unter den Keylock-Fäden."},
+        "graph_faeden": {"type": "integer", "x-typ": "int", "default": 2, "minimum": 0, "maximum": 8, "x-quelle": "Baukasten S3b: Arbeitsfäden der Baukasten-Graphen, die einen Block voraus rechnen (Graph-Werk); sie laufen mit SCHED_FIFO JACK-Priorität − 7, unter dem Warp-Werk. 0 rechnet die Graphen synchron im Callback."}
       }
     },
     "leitstand.toml": {

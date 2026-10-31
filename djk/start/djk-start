@@ -4,8 +4,11 @@
 # Reihenfolge mit Wartebedingungen und zeigt URL und Zustand. djk-stop räumt alles ab, auch den Produktions-Wirt arr1
 # (djk-instrumente --arr1); liegt der noch von einem früheren Lauf, meldet djk-start belegt (Rückgabe 4).
 #
-# Aufruf: djk-start [--master PRÄFIX] [--cue PRÄFIX | --ohne-cue] [--ton-frei] [--strudel [--strudel-kit NAME] [--strudel-kit2 NAME] [--strudel-kit3 NAME] [--instrumente [--melodie surge|fluegel] [--bass surge|rb338]]] [--arr1] [--instanz a..i]
+# Aufruf: djk-start [--master PRÄFIX] [--cue PRÄFIX | --ohne-cue] [--ton-frei] [--strudel [--strudel-kit NAME] [--strudel-kit2 NAME] [--strudel-kit3 NAME] [--instrumente [--melodie surge|fluegel|baukasten] [--bass surge|rb338]]] [--arr1] [--instanz a..i]
 #   CYPHERDJ_KATALOG=<absoluter Pfad>  (Umgebung, keine Option) andere katalog.sqlite für die Oberfläche der Prüfinstanz; ohne: neben der Mediathek.
+#   CYPHERDJ_ANALYSE=<absoluter Pfad>  (Umgebung, keine Option) Analyse-Ablage der Oberfläche (Karten der Nachtanalyse, Aufträge „nur Analyse“). Eine Prüfinstanz nimmt nur /tmp oder /dev/shm.
+#   CYPHERDJ_KORREKTUREN=<absoluter Pfad>  (Umgebung, keine Option) Bestand des Decks, in den Set 1.1.1 Here die Eins-Korrektur schreibt. Eine Prüfinstanz nimmt nur /tmp oder /dev/shm.
+#   CYPHERDJ_PYTHON=<absoluter Pfad>   (Umgebung, keine Option) Python der Oberfläche (Werkstatt-Aufträge, welle.py); ohne: die Vorgabe der Seite (pythonVorgabe).
 #                   [--kern-konfig DATEI] [--leitstand-konfig DATEI] [--ohne-pruefmodus]
 #         djk-start --zustand [--instanz a..i]
 #         djk-start --vorlagen-nach DIR [--master ...]   (füllt die Betriebs-Drop-ins, installiert nichts)
@@ -84,7 +87,7 @@ done
 [ "$MELODIE" != surge ] && [ "$INSTR" != 1 ] && { echo "djk-start: --melodie needs --instrumente" >&2; exit 2; }
 [ -n "$BASS" ] && [ "$INSTR" != 1 ] && { echo "djk-start: --bass needs --instrumente" >&2; exit 2; }
 case "$BASS" in ""|surge|rb338) ;; *) echo "djk-start: --bass '$BASS' invalid, use surge or rb338" >&2; exit 2;; esac
-case "$MELODIE" in surge|fluegel) ;; *) echo "djk-start: --melodie '$MELODIE' invalid, use surge or fluegel" >&2; exit 2;; esac
+case "$MELODIE" in surge|fluegel|baukasten) ;; *) echo "djk-start: --melodie '$MELODIE' invalid, use surge, fluegel or baukasten" >&2; exit 2;; esac
 case "$I" in
   "") SFX=""; V=0;;
   [a-i]) SFX="-$I"; V=$(( 1000 * ($(printf '%d' "'$I") - 96) ));;
@@ -233,6 +236,27 @@ fi
 if [ -n "${CYPHERDJ_KATALOG:-}" ]; then
   [[ "$CYPHERDJ_KATALOG" =~ ^/[A-Za-z0-9._/+=,:-]+$ && "$CYPHERDJ_KATALOG" != *..* ]] || { echo "djk-start: CYPHERDJ_KATALOG must be an absolute path without spaces, quotes or '..', is '$CYPHERDJ_KATALOG'. Nothing started." >&2; exit 2; }
   OF_ARGS="$OF_ARGS --katalog $CYPHERDJ_KATALOG"
+fi
+# Analyse-Ablage und Python (Paket 1.13, Slice 3a): wie Mediathek und Katalog als Option durchgereicht (die transiente Unit erbt die Umgebung nicht).
+# Eine Prüfinstanz schreibt nie in die echte Ablage der Nachtanalyse: nur Pfade unter /tmp oder /dev/shm.
+if [ -n "${CYPHERDJ_ANALYSE:-}" ]; then
+  [[ "$CYPHERDJ_ANALYSE" =~ ^/[A-Za-z0-9._/+=,:-]+$ && "$CYPHERDJ_ANALYSE" != *..* ]] || { echo "djk-start: CYPHERDJ_ANALYSE must be an absolute path without spaces, quotes or '..', is '$CYPHERDJ_ANALYSE'. Nothing started." >&2; exit 2; }
+  if [ -n "$I" ] && [[ "$CYPHERDJ_ANALYSE" != /tmp/* && "$CYPHERDJ_ANALYSE" != /dev/shm/* ]]; then
+    echo "djk-start: a test instance may only use an analysis store under /tmp or /dev/shm (never the real one), is '$CYPHERDJ_ANALYSE'. Nothing started." >&2; exit 2
+  fi
+  OF_ARGS="$OF_ARGS --analyse $CYPHERDJ_ANALYSE"
+fi
+# Bestand für die Eins-Korrekturen (Paket 1.13, Slice 3b): nur ausdrücklich; eine Prüfinstanz schreibt nie in den echten Bestand des Decks.
+if [ -n "${CYPHERDJ_KORREKTUREN:-}" ]; then
+  [[ "$CYPHERDJ_KORREKTUREN" =~ ^/[A-Za-z0-9._/+=,:-]+$ && "$CYPHERDJ_KORREKTUREN" != *..* ]] || { echo "djk-start: CYPHERDJ_KORREKTUREN must be an absolute path without spaces, quotes or '..', is '$CYPHERDJ_KORREKTUREN'. Nothing started." >&2; exit 2; }
+  if [ -n "$I" ] && [[ "$CYPHERDJ_KORREKTUREN" != /tmp/* && "$CYPHERDJ_KORREKTUREN" != /dev/shm/* ]]; then
+    echo "djk-start: a test instance may only write corrections under /tmp or /dev/shm (never the real deck stock), is '$CYPHERDJ_KORREKTUREN'. Nothing started." >&2; exit 2
+  fi
+  OF_ARGS="$OF_ARGS --korrekturen $CYPHERDJ_KORREKTUREN"
+fi
+if [ -n "${CYPHERDJ_PYTHON:-}" ]; then
+  [[ "$CYPHERDJ_PYTHON" =~ ^/[A-Za-z0-9._/+=,:-]+$ && "$CYPHERDJ_PYTHON" != *..* ]] || { echo "djk-start: CYPHERDJ_PYTHON must be an absolute path without spaces, quotes or '..', is '$CYPHERDJ_PYTHON'. Nothing started." >&2; exit 2; }
+  OF_ARGS="$OF_ARGS --python $CYPHERDJ_PYTHON"
 fi
 VARS=(--var "MASTER=$KMASTER" --var "CUE_ARG=$CUE_ARG" --var "TON_FREI=$TF_ARG" --var "KERN_ARGS=$KERN_ARGS"
       --var "KERN_CLIENT=$KERN_CLIENT" --var "LEITSTAND_ARGS=$LS_ARGS" --var "OBERFLAECHE_ARGS=$OF_ARGS")
@@ -401,16 +425,16 @@ for kz in "master_R ${MASTER}R" ${CUE:+"cue_L ${CUE}L" "cue_R ${CUE}R"}; do
   warte 5 "$U_KERN" verbunden "$KERN_CLIENT:${kz%% *}" "${kz#* }" || abbruch "$(w "kern ${kz%% *} not connected to ${kz#* }")" "$U_KERN"
 done
 echo "  kern       ready   (udp $P_KERN, master -> ${MASTER}L/R)"
-# Notbahn daneben: Ports da, Kante vom Kern verbunden, Ausgänge am Ziel.
+# Notbahn daneben: Ports da, Kante vor -> notbahn_vor des Kerns verbunden (sie rechnet zuerst), Ausgänge am Ziel.
 starte "$U_NB" "$DJK/units/cypherdj-notbahn.service" "$VORL/cypherdj-notbahn.service.d/betrieb.conf"
 warte 5 "$U_NB" jack_port "$NB_CLIENT:master_L" || abbruch "$(w "notbahn ports missing")" "$U_NB"
-warte 5 "$U_NB" verbunden "$KERN_CLIENT:master_L" "$NB_CLIENT:kante" || abbruch "$(w "notbahn edge from kern not connected")" "$U_NB"
+warte 5 "$U_NB" verbunden "$NB_CLIENT:vor" "$KERN_CLIENT:notbahn_vor" || abbruch "$(w "notbahn edge to kern not connected")" "$U_NB"
 warte 5 "$U_NB" verbunden "$NB_CLIENT:master_L" "${MASTER}L" || abbruch "$(w "notbahn master_L not connected to ${MASTER}L")" "$U_NB"
 for kz in "master_R ${MASTER}R" ${CUE:+"cue_L ${CUE}L" "cue_R ${CUE}R"}; do
   warte 5 "$U_NB" verbunden "$NB_CLIENT:${kz%% *}" "${kz#* }" || abbruch "$(w "notbahn ${kz%% *} not connected to ${kz#* }")" "$U_NB"
 done
 aktiv "$U_KERN" || abbruch "kern died while notbahn started" "$U_KERN"
-echo "  notbahn    ready   (beside, edge from $KERN_CLIENT:master_L)"
+echo "  notbahn    ready   (beside, edge vor -> $KERN_CLIENT:notbahn_vor)"
 starte "$U_LS" "$DJK/units/cypherdj-leitstand.service" "$VORL/cypherdj-leitstand.service.d/betrieb.conf"
 warte 10 "$U_LS" lauscht t "$P_WS" || abbruch "$(w "leitstand does not listen on tcp $P_WS")" "$U_LS"
 echo "  leitstand  ready   (ws $P_WS)"

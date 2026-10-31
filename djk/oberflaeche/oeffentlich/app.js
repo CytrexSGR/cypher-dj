@@ -2,7 +2,7 @@
 // Öffnen sendet nichts an den Kern: gesendet wird nur auf einen Griff (Zeiger, Rad, Klick) oder LOAD.
 // Lesen: /strom (Kern über den Seiten-Server), Leitstand-WS als Rolle "anzeige" (takt, ansage, ereignis).
 import { DECKS, ERZEUGER, LOOPBOXEN, GRIFF, art, griffZuMidi, formatiere, vorgabe, setzeZielKurve } from './kurven.js';
-import { KOMP_PRESETS, KOMP_SCHLUESSEL, kennlinienPfad, AUTO_BEREICH, DURCHGAENGE, AUTO_VORLAGEN, vorlagePunkte, punktAusStelle, fxInhaltText } from './effekte.js';
+import { KOMP_PRESETS, KOMP_SCHLUESSEL, kennlinienPfad, AUTO_BEREICH, DURCHGAENGE, AUTO_VORLAGEN, vorlagePunkte, punktAusStelle, fxInhaltText, knobListe, KNOB_GRUPPE, htmlText } from './effekte.js';
 import { KOPIE_TEXT, HAND_PRUEFMODUS_TEXT, cypherStand, ausgangAnzeige, keylockStand, keylockAnfrage, keylockMeldung, variText, einsHinweis, EINS_HINWEIS_TEXT } from './meldungen.js';
 import { leseWelle, Kopf, Laufansicht, Uebersicht, SR, laengeFrames, ersteVolleEins } from './welle.js';
 import { bindeSpurbaender } from './spurband_ansicht.js';
@@ -681,7 +681,8 @@ function baueFxDetail() {
   d.innerHTML = `<div class="fxkopf"><b>${name}</b><span class="klein">${k}</span><button class="komp-an" title="Compressor on/off">COMP</button>
       <select class="preset" aria-label="Preset"><option value="">Preset…</option>${Object.keys(KOMP_PRESETS).map((n) => `<option>${n}</option>`).join('')}</select>
       <label class="klein">KEY <select class="schluessel" title="Sidechain: the detector listens to this channel's input (Kick Sidechain: DRUMS)">${KOMP_SCHLUESSEL.filter(([w]) => w === 0 || w !== FX_INDEX[k] + 1).map(([w, n]) => `<option value="${w}">${n}</option>`).join('')}</select></label></div>
-    <div class="regler-liste">${KOMP_DETAIL.map((r) => `<label>${r.name}<input type="range" data-komp-feld="${r.feld}" min="${r.min}" max="${r.max}" step="${r.schritt}"><output></output></label>`).join('')}</div>
+    <div class="regler-liste">${KOMP_DETAIL.map((r) => `<label>${r.name}<input type="range" data-komp-feld="${r.feld}" min="${r.min}" max="${r.max}" step="${r.schritt}"><output></output></label>`).join('')}
+      ${KNOB_GRUPPE[k] ? '<div class="knobbereich"><span class="bildtitel">INSTRUMENT KNOBS <b class="knobstatus">…</b></span><div class="knobliste"></div></div>' : ''}</div>
     <div class="bilder"><span class="bildtitel">TRANSFER CURVE (knee 6 dB)</span>
       <svg viewBox="0 0 240 168" aria-label="Transfer curve"><line class="achse" x1="0" y1="168" x2="240" y2="48"/><line class="schwelle"/><path class="kurve"/></svg>
       <span class="bildtitel">GAIN REDUCTION, LAST 10 S</span><canvas width="480" height="100" aria-label="Gain reduction history"></canvas></div>
@@ -709,7 +710,35 @@ function baueFxDetail() {
     });
   }
   if (k.startsWith('pad/')) bindeAutomation(d, Number(k.slice(4)));
+  if (KNOB_GRUPPE[k]) bindeKnobs(d, KNOB_GRUPPE[k]);
   zeigeFxDetail();
+}
+// Baukasten S2: die acht Knobs von Cypher Modular (POST /klang params/param). Ein Surge-Wirt meldet keine Knobs; dann steht das da.
+async function bindeKnobs(d, gruppe) {
+  const status = d.querySelector('.knobstatus'), liste = d.querySelector('.knobliste');
+  let r;
+  try { r = await postJson('/klang', { gruppe, aktion: 'params' }); } catch (e) { status.textContent = `page server unreachable: ${e.message}`; return; }
+  if (!d.isConnected) return;   // inzwischen ein anderer Kanal gewählt
+  const knobs = r.ok ? knobListe(r.j.params, r.j.namen) : [];
+  // Surge und der SFZ-Wirt kennen params nicht („unbekannter Befehl“): ein Instrument ohne Knobs, kein Fehler
+  if (!r.ok && !/unbekannter Befehl/.test(r.j?.text ?? '')) { status.textContent = `no instrument host (${r.j?.text ?? r.code})`; return; }
+  if (!knobs.length) { status.textContent = 'this instrument has no knobs (Cypher Modular only)'; return; }
+  status.textContent = `Cypher Modular · ${gruppe}`;
+  liste.innerHTML = knobs.map((x) => `<label title="${x.param}">${htmlText(x.name)}<input type="range" min="0" max="1" step="0.001" value="${x.wert}" data-knob="${x.param}" aria-label="${gruppe} ${htmlText(x.name)}"><output>${x.wert.toFixed(2)}</output></label>`).join('');
+  for (const inp of liste.querySelectorAll('input[data-knob]')) {
+    let warte = null;
+    inp.addEventListener('input', () => {
+      inp.nextElementSibling.textContent = Number(inp.value).toFixed(2);
+      if (warte) return;
+      warte = setTimeout(async () => {
+        warte = null;
+        let a;
+        try { a = await postJson('/klang', { gruppe, aktion: 'param', name: inp.dataset.knob, wert: Number(inp.value) }); } catch (e) { melde(`Knob not sent: ${e.message}`, true); return; }
+        window.djkGesendet.push({ knob: inp.dataset.knob, wert: Number(inp.value), code: a.code, antwort: a.j });
+        if (!a.ok) melde(`Knob refused: ${a.j?.text ?? a.j?.fehler ?? a.code}`, true);
+      }, 40);
+    });
+  }
 }
 function zeigeFxDetail() {
   const d = $('#fxdetail');

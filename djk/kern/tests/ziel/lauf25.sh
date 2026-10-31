@@ -34,7 +34,7 @@ NOTBAHN=$DJK/notbahn/build/cypherdj-notbahn
 AUFNEHMER=$DJK/kern/build/cypherdj-aufnehmer4
 for p in "$KERN" "$NOTBAHN" "$AUFNEHMER"; do [ -x "$p" ] || { echo "fehlt: $p" >&2; exit 4; }; done
 [ -f "$FOLGE" ] || { echo "Folge fehlt: $FOLGE" >&2; exit 4; }
-NB_ARGS="--daneben --kante cypherdj-kern-$I:master_L"   # Notbahn daneben (ADR 016 Nachtrag), wie neustart/serie.sh aus 18
+NB_ARGS="--daneben --vor cypherdj-kern-$I:notbahn_vor"   # Notbahn daneben (ADR 016 Nachtrag), wie neustart/serie.sh aus 18
 UNIT=cypherdj-kern-$I
 SENKE=cypherdj-pruef-$I-$LAUF
 KERN_PORT=$((47100 + 1000 * K)); ABO_PORT=$((47140 + 1000 * K))

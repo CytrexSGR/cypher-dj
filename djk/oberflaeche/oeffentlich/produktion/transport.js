@@ -25,6 +25,9 @@ export const KERN_UNBEKANNT = 'core state unknown';
 // 1.10 Slice 2 (AK19): Lampe SET LIMITER. limiter_db ist die größte Absenkung des Set-Limiters (≤ 0, hält 0,5 s im Kern); unter −0,1 dB leuchtet sie.
 // Kein Feld (älterer Kern), 0, Rauschen, Text und NaN ergeben false: nie eine Lampe aus einem Wert, den es nicht gibt.
 export const limiterAn = (arr) => Number(arr?.limiter_db) < -0.1;
+// Andreas 2026-10-30: ein Klick auf Lineal oder leere Spurfläche springt, wenn der Transport läuft (status 1 wartet, 2 spielt); gestoppt setzt er
+// nur den Startmarker. Unbekannter Zustand: nie blind starten.
+export const springtImLauf = (arr, unbekannt) => !unbekannt && (arr?.status === 1 || arr?.status === 2);
 
 export function bindeTransport(ctx) {
   const { st, $ } = ctx;
@@ -54,11 +57,12 @@ export function bindeTransport(ctx) {
     return { label: l.an ? 'Loop off' : 'Loop on', befehle: [{ befehl: 'loop_setzen', an: !l.an, von_beat: l.von_beat, bis_beat: l.bis_beat }] };
   }));
   $('metronom').addEventListener('click', () => ctx.aendereAus((p) => ({ label: p.metronom.an ? 'Metronome off' : 'Metronome on', befehle: [{ befehl: 'metronom_setzen', an: !p.metronom.an }] })));
-  $('ueber').addEventListener('pointerdown', (e) => { if (e.button === 0 && st.projekt && !e.defaultPrevented) setzeStart(xZuBeat(st.ansicht, e.offsetX)); });
+  const klickStart = (x) => { setzeStart(xZuBeat(st.ansicht, x)); if (springtImLauf(st.arr, st.arrUnbekannt)) transport('start'); };
+  $('ueber').addEventListener('pointerdown', (e) => { if (e.button === 0 && st.projekt && !e.defaultPrevented) klickStart(e.offsetX); });
   const lineal = $('lineal');
   lineal.addEventListener('pointerdown', (e) => {
     if (e.button !== 0 || !st.projekt) return;
-    if (linealZone(e.offsetY) === 'position') { setzeStart(xZuBeat(st.ansicht, e.offsetX)); return; }
+    if (linealZone(e.offsetY) === 'position') { klickStart(e.offsetX); return; }
     const alt = st.projekt.loop, griff = klammerGriff(st.ansicht, alt, e.offsetX) ?? 'neu', b0 = xZuBeat(st.ansicht, e.offsetX);
     lineal.setPointerCapture(e.pointerId);
     let b1 = b0;

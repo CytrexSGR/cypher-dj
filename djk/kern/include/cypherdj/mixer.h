@@ -36,6 +36,8 @@
 #include "cypherdj/kleber.h"
 #include "cypherdj/stellwerk/regler.h"
 
+struct CypherBk;
+
 namespace cdj {
 
 constexpr int MIX_QUELLEN = 14;                    // deck/1..4 (0..3), erz/1..8 (4..11), pad/1..2 (12, 13)
@@ -77,6 +79,15 @@ struct MixZuweisung {
 class Mixer {
  public:
   explicit Mixer(const cypherdj::stellwerk::ReglerTabelle& tab);
+  // Baukasten S3c: Effekt-Graph als Insert im Kanalzug von deck/1..4 (Index 0..3), nach dem Kompressor, vor dem
+  // Beat-FX-Insert. Nur im Callback (Stellwerk) setzen. g null entfernt. Jeder Wechsel blendet MIX_GRAPH_BLENDE Samples
+  // linear vom alten Weg (alter Graph oder trocken) auf den neuen; ein Wechsel in der Blende gibt den ältesten sofort
+  // frei. Ein k außerhalb geht sofort in die Freigabe. Abgelöste Graphen holt der Kern mit bk_frei ab (Netz-Faden gibt frei).
+  static constexpr int MIX_GRAPH_KANAELE = 4, MIX_GRAPH_BLENDE = 480, MIX_BK_FREI = 8;
+  void setze_kanal_graph(int k, CypherBk* g) noexcept;
+  int bk_frei(CypherBk** aus, int max) noexcept;
+  uint32_t bk_verloren() const noexcept { return bk_verloren_; }
+  ~Mixer();
 
   static int kanal_index(const char* name);   // "deck/2" -> 1, "bus/1" -> 14, sonst -1
   static const char* kanal_name(int k);        // 0..17, sonst ""
@@ -232,6 +243,15 @@ class Mixer {
   double fx_param2_[FX_EINHEITEN] = {0.5, 0.5}, fx_param3_[FX_EINHEITEN] = {0.5, 0.5};   // reserviert, ungenutzt
   bool fx_an_[FX_EINHEITEN] = {};
   double fx_beat0_ = 0.0, fx_bps_ = 128.0 / 60.0 / 48000.0;
+  CypherBk* bk_[MIX_GRAPH_KANAELE] = {};
+  CypherBk* bk_alt_[MIX_GRAPH_KANAELE] = {};
+  int bk_blende_[MIX_GRAPH_KANAELE] = {};        // verbleibende Samples der Blende, 0 = keine
+  CypherBk* bk_frei_[MIX_BK_FREI] = {};
+  int n_bk_frei_ = 0;
+  uint32_t bk_verloren_ = 0;                     // Ablage voll: Graph verloren (Leck), darf nicht vorkommen
+  float bk_ein_l_[MIX_BLOCK], bk_ein_r_[MIX_BLOCK], bk_alt_l_[MIX_BLOCK], bk_alt_r_[MIX_BLOCK];
+  void bk_zur_freigabe(CypherBk* g) noexcept;
+  void kanal_graph(int k, float* l, float* r, int n) noexcept;
   int routing_ = ROUTING_POST_FADER, routing_ziel_ = ROUTING_POST_FADER;   // Ohr T17
   bool routing_wechsel_ = false;                                            // Blende läuft (Einheiten pausiert)
 };

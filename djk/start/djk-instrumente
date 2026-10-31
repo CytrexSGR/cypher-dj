@@ -3,13 +3,17 @@
 # Leitstand, Seite oder Drums (erzeuger1) anzuhalten. Andreas 2026-10-03: „in einer live session muss man auch andere
 # dinge laden können". djk-start --instrumente ruft denselben Weg mit --nur-wirte.
 #
-# Aufruf: djk-instrumente [--instanz a..i] [--nur-wirte] [--melodie surge|fluegel] [--bass surge|rb338]
+# Aufruf: djk-instrumente [--instanz a..i] [--nur-wirte] [--melodie surge|fluegel|baukasten] [--bass surge|rb338]
 #         djk-instrumente [--instanz a..i] --arr1
 #   --bass rb338 (RB-338 W1): der Bass-Wirt spielt die eigene 303 (VST3 aus djk/instrumente, installiere.sh) statt Surge.
 #   Ohne --bass bleibt der Bass-Wirt, wie er läuft (läuft er nicht: Surge). klang/fahre gibt es nur mit Surge; rb338 kennt param.
 #   --melodie fluegel (Glanz Welle 4): der Melodie-Wirt spielt den Flügel (Carla-SFZ, wirte/carla/instrument_bauen.py,
 #   baut ~/.config/cypherdj/instrumente/grand beim ersten Mal) statt Surge. Läuft der Wirt schon in der anderen Art, wird
 #   nur er neu gestartet; seine Kanten bleiben (gleicher Klientname). Ohne --melodie bleibt die Melodie, wie die Status-Datei sagt (keine Datei: Surge). klang/fahre gibt es nur mit Surge.
+#   --melodie baukasten (Baukasten S1): der Melodie-Wirt spielt Cypher Modular (VST3 aus djk/instrumente, installiere.sh
+#   baukasten). Den Graphen liest das Plugin bei jedem Start des Wirts aus ~/.config/cypherdj<-i>/baukasten-melodie.json
+#   (fehlt die Datei: eingebauter Graph; ist sie fehlerhaft: eingebauter Graph und eine Zeile "graph rejected" im Journal
+#   der Unit). Neuer Graph = Datei schreiben, dann systemctl --user restart cypherdj-wirt-melodie<-i>.
 #   Schritte, je Gruppe (bass: midi_aus_1 -> erz/2, melodie: midi_aus_2 -> erz/3), jeder idempotent:
 #   1 Wirt-Unit cypherdj-wirt-<g> starten (läuft sie schon: übersprungen), auf "bereit" warten.
 #   2 Kanten midi_aus -> Wirt, Wirt -> rueck_erz_<n>_L/R verbinden und in /dev/shm/cypherdj<i>/kanten anhängen; der Kern
@@ -39,19 +43,21 @@ while [ $# -gt 0 ]; do
     --instanz) [ $# -ge 2 ] || { echo "djk-instrumente: --instanz needs a value" >&2; exit 2; }; I=$2; shift 2;;
     --nur-wirte) NUR_WIRTE=1; shift;;
     --arr1) ARR1=1; shift;;
-    --melodie) [ $# -ge 2 ] || { echo "djk-instrumente: --melodie needs surge or fluegel" >&2; exit 2; }; MELODIE=$2; shift 2;;
+    --melodie) [ $# -ge 2 ] || { echo "djk-instrumente: --melodie needs surge, fluegel or baukasten" >&2; exit 2; }; MELODIE=$2; shift 2;;
     --bass) [ $# -ge 2 ] || { echo "djk-instrumente: --bass needs surge or rb338" >&2; exit 2; }; BASS=$2; shift 2;;
     -h|--help) sed -n '2,/^set -uo/p' "$0" | sed '$d; s/^# \{0,1\}//'; exit 0;;
     *) echo "djk-instrumente: unknown option $1 (see --help)" >&2; exit 2;;
   esac
 done
-case "$MELODIE" in ""|surge|fluegel) ;; *) echo "djk-instrumente: --melodie '$MELODIE' invalid, use surge or fluegel" >&2; exit 2;; esac
+case "$MELODIE" in ""|surge|fluegel|baukasten) ;; *) echo "djk-instrumente: --melodie '$MELODIE' invalid, use surge, fluegel or baukasten" >&2; exit 2;; esac
 case "$BASS" in ""|surge|rb338) ;; *) echo "djk-instrumente: --bass '$BASS' invalid, use surge or rb338" >&2; exit 2;; esac
 if [ "$ARR1" = 1 ] && [ -n "$MELODIE$BASS" ]; then
   echo "djk-instrumente: --arr1 is the production slot only; --bass and --melodie belong to the DJ instruments (separate call)" >&2; exit 2
 fi
 RB338_VST3="$HOME/.local/lib/cypherdj/vst3/rb338.vst3"
 if [ "$BASS" = rb338 ] && [ ! -d "$RB338_VST3" ]; then echo "djk-instrumente: rb338 missing (djk/instrumente/installiere.sh)" >&2; exit 2; fi
+BAUKASTEN_VST3="$HOME/.local/lib/cypherdj/vst3/baukasten.vst3"
+if [ "$MELODIE" = baukasten ] && [ ! -d "$BAUKASTEN_VST3" ]; then echo "djk-instrumente: baukasten missing (djk/instrumente/installiere.sh baukasten)" >&2; exit 2; fi
 FLUEGEL_SFZ="$HOME/.config/cypherdj/instrumente/grand/grand.sfz"
 case "$I" in "") SFX="";; [a-i]) SFX="-$I";; *) echo "djk-instrumente: instance '$I' invalid, use a..i or empty" >&2; exit 2;; esac
 KERN_CLIENT=cypherdj-kern$SFX
@@ -79,6 +85,7 @@ for g in $GRUPPEN; do
   G=${g%%:*}; R=${g#*:}; MIDI=${R%%:*}; RUECK=${R#*:}
   U="cypherdj-wirt-$G$SFX"; C="cypherdj-wirt-$G$SFX"; ST="/dev/shm/cypherdj$SFX/wirt-$G.json"
   ART=lv2; [ "$G" = melodie ] && [ "$MELODIE" = fluegel ] && ART=sfz:grand
+  [ "$G" = melodie ] && [ "$MELODIE" = baukasten ] && ART=vst3:baukasten
   [ "$G" = bass ] && [ "$BASS" = rb338 ] && ART=vst3:rb338
   # Art laut Status-Datei (fehlt sie oder hat sie kein "art" = vor Welle 4: lv2); gilt auch, wenn der Wirt tot ist
   IST=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("art","lv2"))' "$ST" 2>/dev/null || echo lv2)
@@ -100,6 +107,9 @@ for g in $GRUPPEN; do
     if [ "$ART" = vst3:rb338 ] && [ ! -d "$RB338_VST3" ]; then
       echo "djk-instrumente: wirt $G was rb338 (status file) but rb338 is missing (djk/instrumente/installiere.sh, or --bass surge)" >&2; exit 2
     fi
+    if [ "$ART" = vst3:baukasten ] && [ ! -d "$BAUKASTEN_VST3" ]; then
+      echo "djk-instrumente: wirt $G was baukasten (status file) but baukasten is missing (djk/instrumente/installiere.sh baukasten, or --melodie surge)" >&2; exit 2
+    fi
     # Surge XT ist nur nötig, wenn diese Gruppe wirklich Surge startet (rb338 und Flügel brauchen es nicht)
     if [ "$ART" = lv2 ] && [ ! -f "$HOME/.local/lib/cypherdj/lv2/Surge XT.lv2/manifest.ttl" ]; then
       echo "djk-instrumente: Surge XT missing (djk/wirte/carla/installiere_surge.sh)" >&2; exit 2
@@ -114,11 +124,17 @@ for g in $GRUPPEN; do
                   --aktiv "$HOME/.config/cypherdj$SFX/klang-$G.fxp")
     elif [ "$ART" = vst3:rb338 ]; then
       INSTR_ARGS=(--vst3 "$RB338_VST3")
+    elif [ "$ART" = vst3:baukasten ]; then
+      INSTR_ARGS=(--vst3 "$BAUKASTEN_VST3")
     else
       INSTR_ARGS=(--sfz "$FLUEGEL_SFZ")
     fi
+    # Der Graph des Baukastens liegt unter dem echten HOME (der Wirt läuft mit HOME=$WH): Pfad als Variable mitgeben, immer,
+    # auch wenn die Datei noch fehlt; die Umgebung einer transienten Unit steht beim Anlegen fest, ein Neustart liest sie neu
+    GRAPH_ENV=()
+    [ "$ART" = vst3:baukasten ] && GRAPH_ENV=(--setenv=CYPHERDJ_BAUKASTEN_GRAPH="$HOME/.config/cypherdj$SFX/baukasten-$G.json")
     systemd-run --user --quiet --collect --unit="$U" -p Restart=always -p RestartSec=2 -p RestartPreventExitStatus=2 \
-      -p PartOf=cypherdj.target --setenv=HOME="$WH" \
+      -p PartOf=cypherdj.target --setenv=HOME="$WH" "${GRAPH_ENV[@]}" \
       --setenv=PIPEWIRE_PROPS="{ node.async = true node.group = cypherdj$SFX node.lock-quantum = true }" \
       /usr/bin/pw-jack -p 256 /usr/bin/python3 "$DJK/wirte/carla/wirt.py" --name "$C" "${INSTR_ARGS[@]}" --status "$ST" \
       --sock "/dev/shm/cypherdj$SFX/wirt-$G.sock" \

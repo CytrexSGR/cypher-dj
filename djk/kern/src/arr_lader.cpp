@@ -44,13 +44,36 @@ void ArrLader::freeze_fertig(ArrLaderRinge& r, ArrFreeze* roh) {
   }
 }
 
+// Slice 2: ein abgelöster Schnappschuss geht erst, wenn das Warp-Werk ihn nicht mehr liest (ein Faden rechnet vielleicht noch aus seinem Audio)
+void ArrLader::rueckgabe_frei(ArrSnapshot* s, bool& arbeit) {
+#ifdef CYPHERDJ_MUTATION_ARR_LADER_OHNE_WERK
+  gib_wiedergabe(s, cache_);   // Fehlerfall: ohne die Frage an das Werk
+  arbeit = true;
+  return;
+#else
+  if (werk_ && werk_->liest(s)) {
+    aufgeschoben_[n_aufgeschoben_++] = s;
+    return;
+  }
+  gib_wiedergabe(s, cache_);
+  arbeit = true;
+#endif
+}
+
 bool ArrLader::einmal(ArrLaderRinge& r) {
   bool arbeit = false;
-  ArrSnapshot* alt = nullptr;
-  while (r.rueckgabe.hole(alt)) {
-    gib_wiedergabe(alt, cache_);
+  for (int i = 0; i < n_aufgeschoben_;) {   // zuerst, was auf das Werk wartet
+    ArrSnapshot* s = aufgeschoben_[i];
+    if (werk_ && werk_->liest(s)) {
+      ++i;
+      continue;
+    }
+    gib_wiedergabe(s, cache_);
+    aufgeschoben_[i] = aufgeschoben_[--n_aufgeschoben_];
     arbeit = true;
   }
+  ArrSnapshot* alt = nullptr;
+  while (n_aufgeschoben_ < WARTE_MAX && r.rueckgabe.hole(alt)) rueckgabe_frei(alt, arbeit);   // ist die Warteliste voll, bleibt der Rest im Ring
   ArrFreeze* fz = nullptr;
   while (r.freeze_zurueck.hole(fz)) {   // Paket K3
     freeze_fertig(r, fz);

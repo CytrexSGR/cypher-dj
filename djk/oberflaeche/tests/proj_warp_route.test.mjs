@@ -46,7 +46,7 @@ test('GET /proj/warp: von_beat, bis_beat und bei_beat kommen in der richtigen Re
 
 test('GET /proj/warp: Unzahl in einem Argument ist 400 argument_ungueltig mit dem Namen des Arguments; fehlende und unbekannte clip_id', async (t) => {
   const { url } = await aufbau(t);
-  for (const k of ['von_beat', 'bis_beat', 'bei_beat']) {
+  for (const k of ['von_beat', 'bis_beat', 'bei_beat', 'marker_max']) {
     for (const v of ['abc', 'NaN', 'Infinity']) {
       const r = await ruf(url, 'GET', `/proj/warp?clip_id=c1&${k}=${v}`);
       assert.deepEqual([r.code, r.j.fehler], [400, 'argument_ungueltig'], `${k}=${v}`);
@@ -71,4 +71,23 @@ test('?antwort=kurz von /proj/aendern trägt hinweise (kein_tempo), ohne Hinweis
     { befehl: 'clip_neu', spur_id: 's1', art: 'audio', start_beat: 60, laenge_beats: 1, sha256: ksha(1), warp: 'auto' }] }, CYPHER);
   assert.equal(ohne.code, 200, JSON.stringify(ohne.j));
   assert.equal('hinweise' in ohne.j, false);
+});
+
+test('GET /proj/warp: marker_max muss eine ganze Zahl 1..4096 sein', async (t) => {
+  const { url } = await aufbau(t);
+  for (const v of ['0', '4097', '1.5', '-3']) {
+    const r = await ruf(url, 'GET', `/proj/warp?clip_id=c1&marker_max=${v}`);
+    assert.deepEqual([r.code, r.j.fehler], [400, 'argument_ungueltig'], `marker_max=${v}`);
+  }
+  assert.equal((await ruf(url, 'GET', '/proj/warp?clip_id=c1&marker_max=1')).j.warp.marker.length, 1, 'Positivkontrolle');
+  assert.equal((await ruf(url, 'GET', '/proj/warp?clip_id=c1&marker_max=4096')).j.warp.marker.length, 2);
+});
+
+test('GET /proj/warp: transienten_max muss eine ganze Zahl 1..32768 sein (Slice 4)', async (t) => {
+  const { url } = await aufbau(t);
+  for (const v of ['0', '32769', '1.5', '-3']) {
+    const r = await ruf(url, 'GET', `/proj/warp?clip_id=c1&transienten_max=${v}`);
+    assert.deepEqual([r.code, r.j.fehler], [400, 'argument_ungueltig'], `transienten_max=${v}`);
+  }
+  for (const v of ['1', '32768']) assert.equal((await ruf(url, 'GET', `/proj/warp?clip_id=c1&transienten_max=${v}`)).code, 200, `Positivkontrolle ${v}`);
 });

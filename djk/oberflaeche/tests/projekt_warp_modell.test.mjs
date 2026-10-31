@@ -3,7 +3,7 @@
 // Positivkontrolle (der gültige Warp geht durch). Routing (1.10) und Warp stehen im selben /2 nebeneinander.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { FORMAT, FORMAT_ALT, MAX_MARKER, neuesProjekt, pruefeFehler, pruefeProjekt, warpPruefung } from '../projekt/modell.ts';
+import { FORMAT, FORMAT_ALT, MAX_MARKER, TRANSPOSE_MAX, neuesProjekt, pruefeFehler, pruefeProjekt, warpPruefung } from '../projekt/modell.ts';
 import { specProjekt, kopie } from './hilfen/projekt.mjs';
 
 const gut = () => ({ an: true, modus: 'repitch', marker: [[0, 0], [3.84, 8]], versatz_beats: 0, quelle: 'takte', transpose_st: 0, detune_ct: 0 });
@@ -69,11 +69,11 @@ const ABLEHNUNGEN = [
   ['Segment knapp über 800 BPM (800,02)', (w) => { w.marker = [[0, 0], [0.3, 4.0001]]; }, 'warp_faktor'],
   ['Segment knapp unter 15 BPM (14,9985)', (w) => { w.marker = [[0, 0], [4, 0.9999]]; }, 'warp_faktor'],
   ['Modus unbekannt', (w) => { w.modus = 'turbo'; }, 'warp_modus'],
-  ['Modus noch nicht gebaut (complex)', (w) => { w.modus = 'complex'; }, 'warp_modus'],
+  ['Modus nicht vorhanden (texture)', (w) => { w.modus = 'texture'; }, 'warp_modus'],
   ['Transpose bei RE-PITCH', (w) => { w.transpose_st = 2; }, 'transpose_repitch'],
   ['Detune bei RE-PITCH', (w) => { w.detune_ct = 10; }, 'transpose_repitch'],
   ['Transpose nicht ganz', (w) => { w.transpose_st = 0.5; }, 'argument_ungueltig'],
-  ['Transpose außerhalb ±48', (w) => { w.transpose_st = 49; }, 'argument_ungueltig'],
+  ['Transpose außerhalb der Grenze', (w) => { w.modus = 'complex'; w.transpose_st = TRANSPOSE_MAX + 1; }, 'argument_ungueltig'],
   ['Detune außerhalb ±50', (w) => { w.detune_ct = 51; }, 'argument_ungueltig'],
   ['Quelle unbekannt', (w) => { w.quelle = 'raten'; }, 'argument_ungueltig'],
   ['an kein Boolean', (w) => { w.an = 1; }, 'argument_ungueltig'],
@@ -97,4 +97,18 @@ test('Grenzen, die noch gelten: 4096 Marker, genau 15 und genau 800 BPM, Transpo
   const langsam = gut(); langsam.marker = [[0, 0], [4, 1]]; assert.equal(warpPruefung(langsam), null, '15 BPM');
   const schnell = gut(); schnell.marker = [[0, 0], [0.3, 4]]; assert.equal(Math.round(60 * 4 / 0.3), 800); assert.equal(warpPruefung(schnell), null, '800 BPM');
   const lang = gut(); lang.marker = [[0, 0], [1e7, 20_000_000 / 60 * 120]]; assert.equal(warpPruefung(lang)?.grund, 'warp_marker', 'beat über MAX_BEAT');
+});
+
+test('Slice 4: modus beats ist gültig, beats-Parameter werden geprüft', () => {
+  const w = { an: true, modus: 'beats', marker: [[0, 0], [1.875, 4]], versatz_beats: 0, quelle: 'takte', transpose_st: 0, detune_ct: 0 };
+  assert.equal(warpPruefung(w), null);
+  assert.equal(warpPruefung({ ...w, beats: { raster: '1/16', loop: 'aus', huelle: 40 } }), null);
+  assert.equal(warpPruefung({ ...w, beats: { raster: '1/3', loop: 'aus', huelle: 40 } }).grund, 'argument_ungueltig');
+  assert.equal(warpPruefung({ ...w, beats: { raster: '1/16', loop: 'rueck', huelle: 40 } }).grund, 'argument_ungueltig');
+  assert.equal(warpPruefung({ ...w, beats: { raster: '1/16', loop: 'aus', huelle: 101 } }).grund, 'argument_ungueltig');
+  assert.equal(warpPruefung({ ...w, beats: { raster: '1/16', loop: 'aus', huelle: 4.5 } }).grund, 'argument_ungueltig');
+  assert.equal(warpPruefung({ ...w, beats: { raster: '1/16', loop: 'aus' } }).grund, 'argument_ungueltig');        // alle drei Pflicht
+  assert.equal(warpPruefung({ ...w, beats: { raster: '1/16', loop: 'aus', huelle: 1, x: 1 } }).grund, 'argument_unbekannt');
+  assert.equal(warpPruefung({ ...w, modus: 'texture' }).grund, 'warp_modus');                                   // Negativ-Kontrolle
+  assert.equal(warpPruefung({ ...w, transpose_st: 3 }).grund, 'transpose_repitch');                             // D6b
 });

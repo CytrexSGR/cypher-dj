@@ -286,9 +286,9 @@ function speichereDannProtokolliere<T>(haken: Haken, alt: Projekt, neu: Projekt,
 // o.ergebnis (Spec 6.31, Leistung): fuehreListeAus(projekt, befehle, {quelle: meta.quelle}), schon gerechnet (die Probe des Servers).
 // Wird o.ergebnis übergeben, gilt es ungeprüft; ohne o.ergebnis rechnet aendere selbst. Die Gültigkeit sichert vollziehe (o.projekt !== alt).
 export function aendere(v: Verlauf, projekt: Projekt, befehle: Befehl[], meta: Meta, haken: Haken = {},
-  o: { schluessel?: string; ergebnis?: BefehlErgebnis } = {}): Wirkung {
+  o: { schluessel?: string; ergebnis?: BefehlErgebnis; transienten?: (sha256: string) => number[] | null } = {}): Wirkung {
   v.pruefeMeta(meta);
-  const r = o.ergebnis ?? fuehreListeAus(projekt, befehle, { quelle: meta.quelle });
+  const r = o.ergebnis ?? fuehreListeAus(projekt, befehle, { quelle: meta.quelle, transienten: o.transienten });
   if (r.vor.length === 0) return { projekt, eintrag: null, betrifft_wiedergabe: false, regler_aenderungen: [] };
   const neu = r.projekt; neu.rev = projekt.rev + 1;
   v.pruefeRev(neu.rev);                                                    // vor dem Speichern: ein veralteter Stand schreibt nichts

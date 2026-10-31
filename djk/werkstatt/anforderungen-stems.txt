@@ -1,0 +1,16 @@
+# Paket 1.13 Slice 6 (D3): demucs und genau die Menge, mit der die Probe am 30.10. lief. Installiert mit --no-deps (torch/torchaudio bleiben die des Systems).
+# tqdm und PyYAML braucht demucs (apply.py, states/omegaconf) und kommen aus ~/.local bzw. apt: hier gepinnt auf die gemessenen Stände (Nachzug T1-m2).
+# lameenc fehlt absichtlich: nur für mp3-Ausgabe, von states und apply nicht importiert.
+demucs==4.0.1
+dora-search==0.1.13
+einops==0.8.2
+julius==0.2.8
+openunmix==1.3.0
+omegaconf==2.4.0
+retrying==1.4.2
+submitit==1.5.4
+treetable==0.2.6
+cloudpickle==3.1.2
+antlr4-python3-runtime==4.13.2
+tqdm==4.67.3
+PyYAML==6.0.1

@@ -20,7 +20,8 @@ export const ART_JE_ADRESSE: Record<string, string> = {
 // Hochfrequente Ströme gehen nicht ins Journal (§18 Punkt 5, §15 Pflichtliste): /uhr je Zyklus wären
 // 187,5 Zeilen je Sekunde, /zustand/kern und /pegel je 20 Hz, /zustand/deck 50 Hz je Deck, /zustand/box 50 Hz je Box
 // (Keylock 7b.3, §5.5b).
-export const NICHT_INS_JOURNAL = new Set(['/uhr', '/zustand/kern', '/zustand/deck', '/zustand/box', '/zustand/komp', '/pegel']);   // /zustand/komp 10 Hz je aktivem Kompressor (2026-10-11)
+// /zustand/komp 10 Hz je aktivem Kompressor (2026-10-11); /zustand/ein 20 Hz ohne Änderungs-Auslöser (§5.14, 2026-10-26: 60 % der Zeilen)
+export const NICHT_INS_JOURNAL = new Set(['/uhr', '/zustand/kern', '/zustand/deck', '/zustand/box', '/zustand/komp', '/zustand/ein', '/pegel']);
 
 // Jede Adresse, die dieser Leitstand liest oder schreibt; tests/adressen.test.ts prüft, dass der Vertrag
 // (djk/vertrag/osc_adressen.ts) sie alle kennt.

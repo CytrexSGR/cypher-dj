@@ -1,0 +1,24 @@
+{
+  "format": "baukasten/2",
+  "name": "fx-filter-wobble",
+  "stimmen": 1,
+  "knoten": [
+    {"id": "ein", "art": "eingang"},
+    {"id": "lfo", "art": "lfo", "form": 0, "takt": 1},
+    {"id": "tiefe", "art": "mul", "b": 1500},
+    {"id": "mitte", "art": "add", "b": 1800},
+    {"id": "fl", "art": "svf", "reso": 0.3, "pole": 4},
+    {"id": "fr", "art": "svf", "reso": 0.3, "pole": 4},
+    {"id": "aus", "art": "ausgang"}
+  ],
+  "kanten": [
+    {"von": "lfo.aus", "nach": "tiefe.a"},
+    {"von": "tiefe.aus", "nach": "mitte.a"},
+    {"von": "mitte.aus", "nach": "fl.cutoff"},
+    {"von": "mitte.aus", "nach": "fr.cutoff"},
+    {"von": "ein.l", "nach": "fl.x"},
+    {"von": "ein.r", "nach": "fr.x"},
+    {"von": "fl.tp", "nach": "aus.l"},
+    {"von": "fr.tp", "nach": "aus.r"}
+  ]
+}

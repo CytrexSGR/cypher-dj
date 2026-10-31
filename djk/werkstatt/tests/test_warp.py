@@ -106,3 +106,83 @@ def test_timemap_karte_weit_ueber_dem_ende_bleibt_fehler():
         timemap(k, 128.0, letzter - 24000 - 1)                      # letzter Eintrag > 1 Schlag (24000 Frames) dahinter
     with pytest.raises(ValueError, match="Dateiende"):
         timemap(k, 128.0, letzter - 10 * 48000)                     # 10 s dahinter
+
+
+def _klickspur(s0, bpm, n, sr=48000):
+    t = np.arange(int(0.004 * sr)) / sr
+    k = np.sin(2 * np.pi * 3000 * t) * np.exp(-t / 0.001) * 0.5
+    x = np.zeros((int((s0 + n * 60.0 / bpm + 1) * sr), 2))
+    for b in range(n):
+        a = int(round((s0 + b * 60.0 / bpm) * sr))
+        x[a:a + len(k)] += k[:, None]
+    return x
+
+
+def test_schreibe_timemap_laesst_den_anker_null_null_weg(tmp_path):
+    """Ein Anker (0, 0) verschiebt rubberband -3 --timemap die ganze Ausgabe (2026-10-29, Queen of Pain: erster Schlag auf 0
+    geklemmt, Kick im Deck 20 ms vor dem Raster). Der Anfang ist ohnehin 0 -> 0; alle anderen Anker bleiben."""
+    from werkstatt.warp import Timemap, schreibe_timemap
+    p = tmp_path / "t.txt"
+    schreibe_timemap(Timemap(quelle=np.array([0, 44308, 88615]), ziel=np.array([0, 45000, 90000]), erster_schlag_frame=0, ziel_frames=90000), p)
+    assert p.read_text().split("\n")[:2] == ["44308 45000", "88615 90000"]
+    schreibe_timemap(Timemap(quelle=np.array([5, 44308]), ziel=np.array([0, 45000]), erster_schlag_frame=0, ziel_frames=45000), p)
+    assert p.read_text().startswith("5 0\n")   # nur genau (0, 0) fällt weg
+
+
+@pytest.mark.skipif(not __import__("shutil").which("rubberband"), reason="rubberband fehlt")
+@pytest.mark.parametrize("s0,bpm", [(0.0, 130.0), (0.0, 124.0), (0.227, 130.0)])
+def test_warp_klicks_auf_dem_raster_auch_mit_erstem_schlag_auf_null(tmp_path, s0, bpm):
+    """Wahrheit: Klick je Schlag. Nach dem Warp auf 128 liegt jeder Klick ±2 ms auf dem Raster, auch wenn der erste Schlag
+    auf Frame 0 liegt (vorher: Median −15,3 ms bei 130, +31,1 ms bei 124)."""
+    import soundfile as sf
+    from werkstatt.warp import warp
+    n, sr = 120, 48000
+    x = _klickspur(s0, bpm, n)
+    sf.write(tmp_path / "e.wav", x.astype(np.float32), sr, subtype="FLOAT")
+    tm = timemap(Karte(sekunden=s0 + np.arange(n) * 60.0 / bpm, beats=np.arange(float(n))), 128.0, len(x))
+    warp(tmp_path / "e.wav", tmp_path / "a.wav", tm)
+    y = np.abs(sf.read(tmp_path / "a.wav")[0].mean(axis=1))
+    r = []
+    for b in range(n - 2):
+        c = int(tm.erster_schlag_frame + b * frames_je_beat(128.0))
+        lo = max(0, c - 2400)
+        seg = y[lo:c + 2400]
+        r.append((lo + int(np.argmax(seg > 0.2 * seg.max())) - c) / sr * 1000)
+    assert abs(np.median(r)) <= 2.0 and np.max(np.abs(r)) <= 3.0, (np.median(r), min(r), max(r))
+
+
+@pytest.mark.skipif(not __import__("shutil").which("rubberband"), reason="rubberband fehlt")
+def test_vorlauf_traegt_ersten_schlag_vor_dem_dateianfang(tmp_path):
+    """580de55457b9bbba (2026-10-30): erster Schlag 14 ms vor dem Dateianfang, auf 0 geklemmt; die Phasenkorrektur um
+    −9,2 ms legt quell_beat 0 vor den Anfang, timemap lehnt ab. Mit Vorlauf (Stille davor) läuft es, und jeder Klick liegt
+    ±2 ms auf dem Raster."""
+    import soundfile as sf
+    from werkstatt.warp import karte_mit_vorlauf, vorlauf_frames, warp
+    n, sr, bpm, s0 = 120, 48000, 125.0, -0.009
+    x = _klickspur(0.2, bpm, n)[int(round((0.2 - s0) * sr)):]     # Klick b bei s0 + b * Periode, Schlag 0 abgeschnitten
+    k = Karte(sekunden=s0 + np.arange(n) * 60.0 / bpm, beats=np.arange(float(n)))
+    with pytest.raises(ValueError, match="Dateianfang"):
+        timemap(k, 128.0, len(x))
+    v = vorlauf_frames(k)
+    assert v == int(np.ceil(-s0 * sr))
+    k2 = karte_mit_vorlauf(k, v)
+    x2 = np.concatenate([np.zeros((v, 2)), x])
+    sf.write(tmp_path / "e.wav", x2.astype(np.float32), sr, subtype="FLOAT")
+    tm = timemap(k2, 128.0, len(x2))
+    warp(tmp_path / "e.wav", tmp_path / "a.wav", tm)
+    y = np.abs(sf.read(tmp_path / "a.wav")[0].mean(axis=1))
+    r = []
+    for b in range(1, n - 2):
+        c = int(tm.erster_schlag_frame + b * frames_je_beat(128.0))
+        lo = max(0, c - 2400)
+        seg = y[lo:c + 2400]
+        r.append((lo + int(np.argmax(seg > 0.2 * seg.max())) - c) / sr * 1000)
+    assert abs(np.median(r)) <= 2.0 and np.max(np.abs(r)) <= 3.0, (np.median(r), min(r), max(r))
+
+
+def test_vorlauf_null_wenn_schlag_null_im_signal():
+    """Negativkontrolle: quell_beat 0 bei 0 oder danach braucht keinen Vorlauf, die Karte bleibt dieselbe."""
+    from werkstatt.warp import karte_mit_vorlauf, vorlauf_frames
+    for s0 in (0.0, 0.227):
+        k = Karte(sekunden=s0 + np.arange(8) * 0.48, beats=np.arange(8.0))
+        assert vorlauf_frames(k) == 0 and karte_mit_vorlauf(k, 0) is k
