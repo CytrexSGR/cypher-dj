@@ -49,12 +49,12 @@ test('S6: Stems am Kick-Clip: vier Spuren unter s1, Original stumm, eine Gruppe,
   assert.equal(nach.gruppen?.length ?? 0, vorher.gruppen?.length ?? 0);
 });
 
-test('S6: das Kind läuft mit CUDA_VISIBLE_DEVICES leer (P4): fehlt es im Kind, endet der Lauf mit fehler gpu_sichtbar (Gegenprobe)', async (t) => {
+test('S6: ein CPU-Lauf (geraet cpu) sieht CUDA_VISIBLE_DEVICES leer (P4): fehlt es im Kind, endet der Lauf mit fehler gpu_sichtbar (Gegenprobe)', async (t) => {
   const z = await mitStems(t);
   const alt = process.env.CUDA_VISIBLE_DEVICES;
   process.env.CUDA_VISIBLE_DEVICES = '0';                                     // der Server überschreibt es für das Kind
   t.after(() => { if (alt === undefined) delete process.env.CUDA_VISIBLE_DEVICES; else process.env.CUDA_VISIBLE_DEVICES = alt; });
-  assert.equal(z.stems.starte({ clip_id: 'c1' }, 'andreas').code, 200);
+  assert.equal(z.stems.starte({ clip_id: 'c1', geraet: 'cpu' }, 'andreas').code, 200);
   assert.equal((await z.ende()).zustand, 'fertig');
 });
 
@@ -315,12 +315,14 @@ test('S6 D10: Quantum unbekannt → kein_kernstand, 128 → stems_quantum; Wechs
   assert.equal(fs.existsSync(path.join(z.offen().ordner, 'stems')), false);
 });
 
-test('S6 D11: geraet gpu → stems_gpu_aus (STEMS_GPU = false), cpu startet', async (t) => {
+test('S6 D11 (aufgehoben 2026-10-31): geraet gpu ist die Vorgabe und startet, cpu startet, anderes → argument_ungueltig', async (t) => {
   const { STEMS_GPU } = await import('../bereiche/proj/stems.ts');
-  assert.equal(STEMS_GPU, false);
+  assert.equal(STEMS_GPU, true);
   const z = await mitStems(t);
-  assert.throws(() => z.stems.starte({ clip_id: 'c1', geraet: 'gpu' }, 'andreas'), (e) => e.fehler === 'stems_gpu_aus');
+  assert.throws(() => z.stems.starte({ clip_id: 'c1', geraet: 'tpu' }, 'andreas'), (e) => e.fehler === 'argument_ungueltig');
   assert.equal(z.stand(), undefined, 'kein Lauf entstanden');
+  assert.equal(z.stems.starte({ clip_id: 'c1' }, 'andreas').code, 200);
+  assert.equal((await z.ende()).zustand, 'fertig');
   assert.equal(z.stems.starte({ clip_id: 'c1', geraet: 'cpu' }, 'andreas').code, 200);
   assert.equal((await z.ende()).zustand, 'fertig');
 });

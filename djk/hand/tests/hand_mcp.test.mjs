@@ -830,7 +830,7 @@ test('S6: proj_stems reicht Ablehnungen als Werkzeugfehler durch (stems_quantum)
 test('S6: Beschreibungen nennen die Gründe und das Feld stumm (Pin)', async (t) => {
   const { c } = await aufbau(t, () => undefined);
   const T = Object.fromEntries((await c.listTools()).tools.map((x) => [x.name, x.description]));
-  for (const g of ['stems_quantum', 'nur_andreas_spur', 'stems_gpu_aus', 'ki_gestoppt', 'stems_loop']) assert.match(T.proj_stems, new RegExp(g), g);
+  for (const g of ['stems_quantum', 'nur_andreas_spur', 'ki_gestoppt', 'stems_loop']) assert.match(T.proj_stems, new RegExp(g), g);
   assert.match(T.proj_aendern, /clip_aendern \{[^}]*stumm\?/, 'clip_aendern nennt stumm');
   assert.match(T.proj_lage, /stems/, 'proj_lage nennt das Feld stems');
 });

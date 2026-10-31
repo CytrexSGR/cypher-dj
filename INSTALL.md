@@ -93,7 +93,8 @@ cd djk/werkstatt && ./einrichten.sh
 
 It needs PyTorch (with CUDA if you have it) and installs Essentia, beat_this, soundfile and Demucs 4.0.1 into a
 virtual environment, then fetches the Demucs weights (84 MB, checked by sha256) for stem separation in PRODUCTION.
-Stem separation runs on the CPU only.
+Stem separation uses the GPU when 2.5 GB of video memory are free (about 1.2 GB used, torch capped at 1.5 GB) and
+falls back to the CPU otherwise.
 
 ## 8. Your paths
 

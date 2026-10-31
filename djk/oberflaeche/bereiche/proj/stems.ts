@@ -17,7 +17,7 @@ import { alsAntwort, leseKoerper, type ProjZugang } from './bereich.ts';
 import { ProjFehler, type Antwort } from './sitzung.ts';
 import { StemsLauf, type StemsLaufOptionen } from './stems_lauf.ts';
 
-export const STEMS_GPU = false;                                                  // D11: GPU erst nach M9 (F3)
+export const STEMS_GPU = true;                                                   // D11 aufgehoben 2026-10-31 (Andreas): GPU mit Frei-Prüfung und CPU-Rückfall in stems.py
 // Review MINOR 4: Zeitlimit je Lauf. RTF 0,27 (Probe) mit Faktor 3 Reserve plus Laden; mindestens 10 min (wie die Vorbereiter-Linie, analyse.ts:14)
 export const stemsZeitlimitMs = (n: number): number => Math.max(10 * 60_000, Math.round(n / 48000 * 3 * 1000) + 120_000);
 export interface StemsOptionen extends Partial<StemsLaufOptionen> { python: string; cwd: string; zeitlimitMs?: number;
@@ -46,7 +46,7 @@ export class Stems {
 
   starte(d: Record<string, unknown>, quelle: 'andreas' | 'cypher'): Antwort {
     for (const k of Object.keys(d)) if (!FELDER.includes(k)) throw new ProjFehler(400, 'argument_unbekannt', { detail: k });
-    const geraet = d.geraet ?? 'cpu';
+    const geraet = d.geraet ?? 'gpu';
     if (geraet !== 'cpu' && geraet !== 'gpu') throw new ProjFehler(400, 'argument_ungueltig', { detail: "geraet: 'cpu' or 'gpu'" });
     if (geraet === 'gpu' && !STEMS_GPU) throw new ProjFehler(409, 'stems_gpu_aus');
     if (this.lauf) throw new ProjFehler(409, 'stems_laeuft', { auftrag_id: this.lauf.id });
@@ -62,7 +62,7 @@ export class Stems {
     if (g.clip.art !== 'audio' || g.clip.dekodiert !== 'fertig' || !fs.existsSync(quellDatei)) throw new ProjFehler(409, 'audio_fehlt');
     const id = this.naechste++;
     const tmp = path.join(this.zugang.arbeitsordner(), `stems-${id}`);
-    const prozess = new StemsLauf({ ...this.o }, { quelle: quellDatei, f0: plan.f0, f1: plan.f1, aus: tmp }, (stufe, prozent) => this.melde(stufe, prozent));
+    const prozess = new StemsLauf({ ...this.o }, { quelle: quellDatei, f0: plan.f0, f1: plan.f1, aus: tmp, geraet }, (stufe, prozent) => this.melde(stufe, prozent));
     const l: Lauf = { id, slug: o.slug, quelle, plan, tmp, kennung: this.zugang.naechsteNummer(), prozess, abgebrochen: null, wavs: [],
       rechnet: true, gespeichert: false,
       uhr: setInterval(() => this.stand({ cpu_s: prozess.cpuSekunden() }, false), 1000),

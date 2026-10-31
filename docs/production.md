@@ -35,7 +35,8 @@ An audio clip with warp on follows the project tempo, also through tempo changes
 ## Stems
 
 Right click an audio clip, Separate Stems. Demucs (htdemucs) splits the clip's source range into drums, bass, other and
-vocals. It runs on the CPU at the lowest priority; the menu shows the progress (Cancel Stems, 26 %) and a cancelled run
+vocals. It runs on the GPU when at least 2.5 GB of video memory are free (about 4 s for a four-minute track, capped at 1.5 GB) and
+otherwise on the CPU at the lowest priority (3 to 4 minutes); the menu shows the progress (Cancel Stems, 26 %) and a cancelled run
 leaves the project untouched. When it is done, four audio tracks appear under the clip in a new group, each stem warped
 exactly like the original, and the original is muted. One undo step takes all of it back. Up to 600 s of source.
 
@@ -43,8 +44,9 @@ What was measured on 31 October 2026 on a real track, at 124 and 128 BPM: the wa
 samples from the original's, the frame count is exact, one undo restores the project exactly.
 
 Limits:
-- While Demucs runs, the core's audio callback tail doubles (p99.9 from about 0.9 to 1.8 ms at quantum 256). Pinning
-  core and Demucs to separate CPU cores brings it to about 1.4 ms. Do not separate stems while a set is playing.
+- On the CPU, while Demucs runs, the core's audio callback tail doubles (p99.9 from about 0.9 to 1.8 ms at quantum 256).
+  Pinning core and Demucs to separate CPU cores, which the start script does, brings it to about 1.4 ms. Without a free
+  GPU, do not separate stems while a set is playing.
 - The drum hits of the drums stem scatter by up to 2 ms (p90) around the original's; the median offset is 0.
 - Summed after warping, the four stems leave a residual of about -8 dB against the warped original (the warp starts each
   clip with its own phase). The stems are coherent with each other; together with the unmuted original they can comb.

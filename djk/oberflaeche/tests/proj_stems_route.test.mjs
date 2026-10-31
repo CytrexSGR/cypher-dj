@@ -52,8 +52,8 @@ test('S6 HTTP: POST /proj/stems → 200 {auftrag_id}, Ende fertig, vier Stem-Spu
 test('S6 HTTP: Gründe über die Route: geraet gpu, unbekanntes Feld, Clip unbekannt', async (t) => {
   const { url } = await stapel(t, { stems: { zusatzArgs: ['--trenner', 'identitaet'] } });
   await ruf(url, 'POST', '/proj/neu', { name: 'Leer' });
-  const g = await ruf(url, 'POST', '/proj/stems', { clip_id: 'c1', geraet: 'gpu' });
-  assert.deepEqual([g.code, g.j.fehler], [409, 'stems_gpu_aus']);                       // D11
+  const g = await ruf(url, 'POST', '/proj/stems', { clip_id: 'c1', geraet: 'tpu' });
+  assert.deepEqual([g.code, g.j.fehler], [400, 'argument_ungueltig']);                  // D11 aufgehoben: gpu ist erlaubt
   assert.ok(g.j.text.length > 3);
   assert.deepEqual([(await ruf(url, 'POST', '/proj/stems', { clip_id: 'c1', x: 1 })).j.fehler], ['argument_unbekannt']);
   // Review MINOR 11c: ab Task 8 antwortet die Route vor dem ersten /zustand/kern (alle 50 ms) mit kein_kernstand; darauf warten, nicht flackern

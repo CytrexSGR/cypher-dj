@@ -59,7 +59,7 @@ More pages: [Production, warp and stems](docs/production.md) · [Cypher Modular]
   bar one here, warp from here, take the project tempo from the clip). Four modes: RE-PITCH (varispeed), COMPLEX and
   TONES (time-stretched with Bungee, pitch kept) and BEATS (slices at the grid or at the transients). Transpose from
   -12 to +24 semitones, detune by ±50 cents. Quantize Audio pulls the transients onto a 1/16 grid
-- **Stems**: Separate Stems in a clip's menu splits it into drums, bass, other and vocals with Demucs, on the CPU. Four
+- **Stems**: Separate Stems in a clip's menu splits it into drums, bass, other and vocals with Demucs, on the GPU in seconds (CPU fallback). Four
   tracks appear under the clip in a group, beat-exact, and the original is muted; one undo step takes it all back. The
   run shows its progress and can be cancelled
 - Instrument tracks with the built-in RB-338 or Surge XT (one hosted slot); notes are drawn in a piano
@@ -166,8 +166,9 @@ mostly against a silent test sink. Not benchmarks.
 | Key detection | 76.7 % exact and 82.5 % within a neighbouring key, compared with Mixed In Key on 120 held-out tracks | 2026-09-26 |
 | Production export against live playback (3 tracks: audio loop, RB-338, frozen Surge XT, 32 beats) | residual peak -200 dBFS, i.e. sample-identical; shifting one track by a single sample turns the test red | 2026-10-17 |
 | Audio callback p99.9 with an arrangement playing, quantum 256 | 642 to 789 µs over three runs; 755 to 904 µs with exports rendering in parallel | 2026-10-17 |
+| Stem separation of a four-minute track, RTX 4070 Ti | 4.2 to 4.6 s, about 1.2 GB of video memory (CPU: 3 to 4 minutes) | 2026-10-31 |
 | Stems against the warped original (real track, beats 16 to 48, at 124 and 128 BPM) | warp markers 0.000 samples apart, frame count exact, one undo restores the project exactly | 2026-10-31 |
-| Audio callback p99.9 while a stem separation runs, quantum 256 | 1744 to 1838 µs, against 877 to 955 µs without (three runs each); 1407 to 1432 µs when core and Demucs are pinned to separate CPU cores | 2026-10-31 |
+| Audio callback p99.9 while a stem separation runs on the CPU, quantum 256 | 1744 to 1838 µs, against 877 to 955 µs without (three runs each); 1407 to 1432 µs when core and Demucs are pinned to separate CPU cores | 2026-10-31 |
 
 ## Known limits of the beta
 
@@ -186,8 +187,8 @@ mostly against a silent test sink. Not benchmarks.
 - Human and agent are told apart by a label on localhost. That is a convention, not a security boundary.
   Do not expose the ports to a network.
 - The measurement rule covers decks; the pattern channels are deliberately exempt.
-- Stem separation is heavy: while it runs, the audio callback's tail doubles (see [Measured](#measured)). Separate stems
-  when nothing is playing live. Up to 600 s of source per run.
+- Stem separation on the CPU is heavy: while it runs, the audio callback's tail doubles (see [Measured](#measured)). On a
+  free GPU it takes seconds instead. Without one, separate stems when nothing is playing live. Up to 600 s of source per run.
 - Stems are not sample-identical to the warped original: summed after warping they leave a residual of about -8 dB, so
   do not play them together with the unmuted original. The drum hits scatter by up to 2 ms (p90) around the original's.
 - An energy fingerprint and cue suggestions are planned for the workshop, not built. An

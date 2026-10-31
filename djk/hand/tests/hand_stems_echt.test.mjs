@@ -46,10 +46,8 @@ test('T9 echt: proj_stems → fertig mit vier Spuren', async (t) => {
   assert.deepEqual([x.j.zustand, typeof x.j.auftrag_id, x.j.spuren?.length], ['fertig', 'number', 4]);
 });
 
-test('T9 echt: Projektwechsel mitten im Lauf → unbekannt vor der Frist; geraet gpu → stems_gpu_aus', async (t) => {
+test('T9 echt: Projektwechsel mitten im Lauf → unbekannt vor der Frist', async (t) => {
   const { c, url } = await aufbau(t, 'langsam');
-  const gpu = await c.callTool({ name: 'proj_stems', arguments: { clip_id: 'c1', geraet: 'gpu' } });
-  assert.equal(gpu.isError, true); assert.equal(JSON.parse(gpu.content[0].text).fehler, 'stems_gpu_aus');
   const p = stems(c, { clip_id: 'c1' });
   await warte(1200);
   assert.equal((await ruf(url, 'POST', '/proj/neu', { name: 'Anderes' })).code, 200);

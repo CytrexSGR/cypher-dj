@@ -166,3 +166,46 @@ def test_ausschnitt_direkt(tmp_path):
     assert np.all(a[:, :i0] == 0.0) and np.all(a[:, i1:] == 0.0)
     assert i0 == 2 * SR + SR // 2 and a.shape[1] - i1 == 2 * SR + SR // 4             # beide Raender voll vorhanden
     assert np.array_equal(a[:, i0:i1], quelle.T)                                      # Mitte bitgleich
+
+
+class _FalschCuda:
+    """Attrappe fuer torch.cuda: frei/gesamt in MB, merkt sich den gesetzten Deckel."""
+    def __init__(self, da=True, frei=8000, gesamt=12000, wirft=False):
+        self.da, self.frei, self.gesamt, self.wirft, self.deckel = da, frei, gesamt, wirft, None
+
+    def is_available(self):
+        return self.da
+
+    def mem_get_info(self):
+        if self.wirft:
+            raise RuntimeError("treiber")
+        return self.frei * 2**20, self.gesamt * 2**20
+
+    def set_per_process_memory_fraction(self, f):
+        self.deckel = f
+
+
+class _FalschTorch:
+    def __init__(self, **k):
+        self.cuda = _FalschCuda(**k)
+
+
+def test_waehle_geraet_gpu_nur_mit_platz_und_gedeckelt():
+    t = _FalschTorch(frei=8000)
+    assert stems.waehle_geraet(t, frei_mb=2500) == ("cuda", None)
+    assert abs(t.cuda.deckel - stems.GPU_DECKEL_MB / 12000) < 1e-9          # torch darf nie mehr als den Deckel nehmen
+    t = _FalschTorch(frei=2000)                                              # zu voll: CPU, kein Deckel gesetzt
+    dev, grund = stems.waehle_geraet(t, frei_mb=2500)
+    assert dev == "cpu" and grund.startswith("gpu_voll") and t.cuda.deckel is None
+    assert stems.waehle_geraet(_FalschTorch(da=False), frei_mb=2500) == ("cpu", "keine_gpu")
+    assert stems.waehle_geraet(_FalschTorch(wirft=True), frei_mb=2500)[0] == "cpu"
+
+
+def test_geraet_gpu_darf_cuda_sehen_cpu_nicht(tmp_path):
+    q = tmp_path / "q.f32"
+    klick_f32(q)
+    args = ("--quelle", str(q), "--f0", "0", "--f1", "48000", "--trenner", "identitaet")
+    rc, out, _ = lauf(*args, "--aus", str(tmp_path / "g"), "--geraet", "gpu", env_cuda="0")
+    assert rc == 0 and json.loads(out.strip().splitlines()[-1])["status"] == "ok"
+    rc, out, _ = lauf(*args, "--aus", str(tmp_path / "c"), "--geraet", "cpu", env_cuda="0")   # Gegenprobe P4
+    assert rc == 4 and json.loads(out.strip().splitlines()[-1])["grund"] == "gpu_sichtbar"

@@ -396,12 +396,12 @@ const W: Werkzeug[] = [
     + 'a failed status query also answers unbekannt with detail. Only one run at a time (stems_laeuft). Refused while the core runs at quantum 128 '
     + '(stems_quantum), on a track of Andreas (nur_andreas_spur), with Stop Cypher (ki_gestoppt), with a looped clip (stems_loop), with more or less than '
     + 'one audio clip in the range (mehrere_clips), when four free tracks are missing (zu_viele_spuren), before the core has reported (kein_kernstand), '
-    + 'with a range over 600 s of source (stems_zu_gross) and with geraet gpu (stems_gpu_aus, it always runs on the CPU).',
+    + 'with a range over 600 s of source (stems_zu_gross). Runs on the GPU by default (about 4 s per 4-minute track) when enough video memory is free, otherwise on the CPU; the result names the device.',
     inputSchema: { type: 'object', properties: {
       clip_id: { type: 'string', description: 'audio clip id from proj_lage, e.g. c3 (or spur_id)' },
       spur_id: { type: 'string', description: 'track id; exactly one audio clip must lie in the range' },
       von_beat: zahl('first project beat (default: clip start)', { minimum: 0 }), bis_beat: zahl('end beat (default: clip end)', { minimum: 0 }),
-      geraet: { type: 'string', enum: ['cpu', 'gpu'], description: 'default cpu; gpu is refused (stems_gpu_aus)' } } },
+      geraet: { type: 'string', enum: ['cpu', 'gpu'], description: 'default gpu (falls back to the CPU when the GPU is busy); cpu forces the CPU' } } },
     lauf: (p) => projStems(p) },
   { name: 'proj_stems_abbrechen',
     description: 'Cancel the running stem separation (auftrag_id from proj_stems): the run ends with abgebrochen, nothing changes. Unknown id or a run that has already ended: kein_auftrag; zu_spaet only while the result is being saved.',

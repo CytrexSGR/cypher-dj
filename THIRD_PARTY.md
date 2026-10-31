@@ -47,7 +47,7 @@ Sources in `djk/kern/gen/*.dsp`, rebuild with `djk/kern/gen/erzeuge.sh`.
 
 | Component | Code license | Note |
 |---|---|---|
-| Demucs 4.0.1 (htdemucs) | MIT | splits an audio clip into drums, bass, other and vocals, on the CPU only. The pretrained weights (84 MB) are not in this repository: `python -m werkstatt.gewichte_stems` fetches them from the Demucs release and checks their sha256. Check their terms before commercial use |
+| Demucs 4.0.1 (htdemucs) | MIT | splits an audio clip into drums, bass, other and vocals, on the GPU when one is free, otherwise on the CPU. The pretrained weights (84 MB) are not in this repository: `python -m werkstatt.gewichte_stems` fetches them from the Demucs release and checks their sha256. Check their terms before commercial use |
 | PyTorch | BSD-3-Clause | runtime for Demucs |
 
 ## Optional analysis tools (not required to play)
