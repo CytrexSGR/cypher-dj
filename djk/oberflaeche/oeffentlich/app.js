@@ -2,7 +2,7 @@
 // Öffnen sendet nichts an den Kern: gesendet wird nur auf einen Griff (Zeiger, Rad, Klick) oder LOAD.
 // Lesen: /strom (Kern über den Seiten-Server), Leitstand-WS als Rolle "anzeige" (takt, ansage, ereignis).
 import { DECKS, ERZEUGER, LOOPBOXEN, GRIFF, art, griffZuMidi, formatiere, vorgabe, setzeZielKurve } from './kurven.js';
-import { KOMP_PRESETS, KOMP_SCHLUESSEL, kennlinienPfad, AUTO_BEREICH, DURCHGAENGE, AUTO_VORLAGEN, vorlagePunkte, punktAusStelle, fxInhaltText, knobListe, KNOB_GRUPPE, htmlText } from './effekte.js';
+import { KOMP_PRESETS, KOMP_SCHLUESSEL, kennlinienPfad, AUTO_BEREICH, DURCHGAENGE, AUTO_VORLAGEN, vorlagePunkte, punktAusStelle, fxInhaltText, knobListe, KNOB_GRUPPE, htmlText, bkKnobListe } from './effekte.js';
 import { KOPIE_TEXT, HAND_PRUEFMODUS_TEXT, cypherStand, ausgangAnzeige, keylockStand, keylockAnfrage, keylockMeldung, variText, einsHinweis, EINS_HINWEIS_TEXT } from './meldungen.js';
 import { leseWelle, Kopf, Laufansicht, Uebersicht, SR, laengeFrames, ersteVolleEins } from './welle.js';
 import { bindeSpurbaender } from './spurband_ansicht.js';
@@ -682,7 +682,8 @@ function baueFxDetail() {
       <select class="preset" aria-label="Preset"><option value="">Preset…</option>${Object.keys(KOMP_PRESETS).map((n) => `<option>${n}</option>`).join('')}</select>
       <label class="klein">KEY <select class="schluessel" title="Sidechain: the detector listens to this channel's input (Kick Sidechain: DRUMS)">${KOMP_SCHLUESSEL.filter(([w]) => w === 0 || w !== FX_INDEX[k] + 1).map(([w, n]) => `<option value="${w}">${n}</option>`).join('')}</select></label></div>
     <div class="regler-liste">${KOMP_DETAIL.map((r) => `<label>${r.name}<input type="range" data-komp-feld="${r.feld}" min="${r.min}" max="${r.max}" step="${r.schritt}"><output></output></label>`).join('')}
-      ${KNOB_GRUPPE[k] ? '<div class="knobbereich"><span class="bildtitel">INSTRUMENT KNOBS <b class="knobstatus">…</b></span><div class="knobliste"></div></div>' : ''}</div>
+      ${KNOB_GRUPPE[k] ? '<div class="knobbereich"><span class="bildtitel">INSTRUMENT KNOBS <b class="knobstatus">…</b></span><div class="knobliste"></div></div>' : ''}
+      ${bkKnobListe(k, {}).length ? '<div class="knobbereich"><span class="bildtitel">GRAPH KNOBS <b>Knob 1..8 of the loaded graph</b></span><div class="bkliste"></div></div>' : ''}</div>
     <div class="bilder"><span class="bildtitel">TRANSFER CURVE (knee 6 dB)</span>
       <svg viewBox="0 0 240 168" aria-label="Transfer curve"><line class="achse" x1="0" y1="168" x2="240" y2="48"/><line class="schwelle"/><path class="kurve"/></svg>
       <span class="bildtitel">GAIN REDUCTION, LAST 10 S</span><canvas width="480" height="100" aria-label="Gain reduction history"></canvas></div>
@@ -711,6 +712,7 @@ function baueFxDetail() {
   }
   if (k.startsWith('pad/')) bindeAutomation(d, Number(k.slice(4)));
   if (KNOB_GRUPPE[k]) bindeKnobs(d, KNOB_GRUPPE[k]);
+  bindeBkKnobs(d, k);
   zeigeFxDetail();
 }
 // Baukasten S2: die acht Knobs von Cypher Modular (POST /klang params/param). Ein Surge-Wirt meldet keine Knobs; dann steht das da.
@@ -740,6 +742,33 @@ async function bindeKnobs(d, gruppe) {
     });
   }
 }
+// S5r: graph knobs <channel>/bk/1..8 over POST /regler (set at once, the engine smooths 20 ms); actual value from the control state
+function bindeBkKnobs(d, k) {
+  const liste = d.querySelector('.bkliste');
+  if (!liste) return;
+  liste.innerHTML = bkKnobListe(k, zustand.regler).map((x) => `<label>${x.name}<input type="range" min="0" max="1" step="0.001" value="${x.wert}" data-bk="${x.pfad}" aria-label="${k} ${x.name}"><output>${x.wert.toFixed(2)}</output></label>`).join('');
+  for (const inp of liste.querySelectorAll('input[data-bk]')) {
+    let warte = null;
+    inp.addEventListener('input', () => {
+      inp.nextElementSibling.textContent = Number(inp.value).toFixed(2);
+      if (warte) return;
+      warte = setTimeout(async () => {
+        warte = null;
+        let a;
+        try { a = await postJson('/regler', { pfad: inp.dataset.bk, nach: Number(inp.value), ab: 'jetzt' }); } catch (e) { melde(`Knob not sent: ${e.message}`, true); return; }
+        if (!a.ok) melde(`Knob refused: ${a.j?.text ?? a.j?.fehler ?? a.code}`, true);
+      }, 40);
+    });
+  }
+}
+function zeigeBkKnobs(d, k) {
+  for (const x of bkKnobListe(k, zustand.regler)) {
+    const inp = d.querySelector(`input[data-bk="${x.pfad}"]`);
+    if (!inp || document.activeElement === inp) continue;
+    inp.value = String(x.wert);
+    inp.nextElementSibling.textContent = x.wert.toFixed(2);
+  }
+}
 function zeigeFxDetail() {
   const d = $('#fxdetail');
   if (!d || !d.firstChild) return;
@@ -756,6 +785,7 @@ function zeigeFxDetail() {
   }
   const sl = d.querySelector('.schluessel');
   if (sl && document.activeElement !== sl) sl.value = String(kompWert(k, 'sc', 0));
+  zeigeBkKnobs(d, k);
   const t = kompWert(k, 'schwelle', -18), ra = kompWert(k, 'ratio', 4), mu = kompWert(k, 'makeup', 0);
   d.querySelector('.kurve').setAttribute('d', kennlinienPfad(t, ra, mu, 240, 168));
   const sx = ((t + 60) / 60) * 240;

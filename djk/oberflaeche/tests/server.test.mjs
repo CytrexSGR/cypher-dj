@@ -459,6 +459,47 @@ test('Kompressor: erz/1/komp/* setzen, Lage nur abweichend, bus abgelehnt', asyn
   s.zu();
 });
 
+// S5r Task 4: graph knobs <channel>/bk/1..8 travel through /regler like every other control
+test('S5r /regler: deck/1/bk/3 reaches the kernel as /k/teil, lage shows it once it differs from 0.5, bk/9 and erz/4/bk/1 are 400', async (t) => {
+  const { url, log } = await stapel(t);
+  const s = sse(url);
+  await warte(100);
+  const l0 = await (await fetch(`${url}/lage`)).json();
+  assert.ok(!Object.keys(l0.regler).some((p) => p.includes('/bk/')), 'default 0.5: no bk in lage');
+  const n0 = log.filter((z) => z.typ === 'an_kern' && z.adresse === '/k/teil').length;
+  const r = await postJson(url, '/regler', { pfad: 'deck/1/bk/3', nach: 0.8, ab: 'jetzt' }, CYPHER);
+  assert.equal(r.code, 200, JSON.stringify(r.j));
+  assert.equal(r.j.felder.pfad, 'deck/1/bk/3');
+  assert.equal(log.filter((z) => z.typ === 'an_kern' && z.adresse === '/k/teil').length, n0 + 1, 'exactly one /k/teil to the kernel');
+  assert.equal((await postJson(url, '/regler', { pfad: 'erz/1/bk/8', nach: 0.25, ab: 'jetzt' }, CYPHER)).code, 200);
+  await warte(300);
+  const l = await (await fetch(`${url}/lage`)).json();
+  assert.equal(l.regler['deck/1/bk/3'], 0.8, JSON.stringify(l.regler));
+  assert.equal(l.regler['erz/1/bk/8'], 0.25);
+  assert.ok(!('deck/1/bk/1' in l.regler), 'untouched knob stays invisible');
+  for (const pfad of ['deck/1/bk/9', 'deck/1/bk/0', 'erz/4/bk/1', 'erz/8/bk/1', 'bus/1/bk/1']) {   // negative controls
+    assert.equal((await postJson(url, '/regler', { pfad, nach: 0.5 }, CYPHER)).code, 400, pfad);
+  }
+  s.zu();
+});
+
+// S5r Task 4 (D10, K13): the AUTO lock of a stream also covers its graph knobs
+test('S5r AUTO off on stream 2 refuses cypher on erz/2/bk/1 (409 auto_aus, nothing to the kernel); andreas, erz/5 and AUTO on pass', async (t) => {
+  const { url, log } = await stapel(t);
+  const teile = () => log.filter((z) => z.typ === 'an_kern' && z.adresse === '/k/teil').length;
+  assert.equal((await postJson(url, '/strudel/autonom', { an: false, strom: 2 })).code, 200);
+  const n0 = teile();
+  const x = await postJson(url, '/regler', { pfad: 'erz/2/bk/1', nach: 0.7, ab: 'jetzt' }, CYPHER);
+  assert.equal(x.code, 409, JSON.stringify(x.j)); assert.equal(x.j.fehler, 'auto_aus'); assert.equal(x.j.strom, 2);
+  assert.equal(teile(), n0, 'nothing reached the kernel');
+  // negative controls
+  assert.equal((await postJson(url, '/regler', { pfad: 'erz/2/bk/1', nach: 0.7, ab: 'jetzt' })).code, 200, 'andreas may');
+  assert.equal((await postJson(url, '/regler', { pfad: 'erz/5/bk/1', nach: 0.7, ab: 'jetzt' }, CYPHER)).code, 200, 'erz/5 has no stream lock');
+  assert.equal((await postJson(url, '/regler', { pfad: 'erz/3/bk/1', nach: 0.7, ab: 'jetzt' }, CYPHER)).code, 200, 'stream 3 AUTO on');
+  assert.equal((await postJson(url, '/strudel/autonom', { an: true, strom: 2 })).code, 200);
+  assert.equal((await postJson(url, '/regler', { pfad: 'erz/2/bk/1', nach: 0.7, ab: 'jetzt' }, CYPHER)).code, 200, 'AUTO back on');
+});
+
 // SOUND COLOR FX (2026-10-11): color/art und color/param über /regler, Art sofort (Politik 1 wie keylock), in /lage nur
 // abweichend von der Vorgabe (0 FILTER, 0,5)
 test('Color FX: color/art und color/param setzen, Art mit Politik 1, Lage nur abweichend', async (t) => {

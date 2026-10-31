@@ -183,6 +183,8 @@ interface SpurLauf { quelle: string; anker: number; ende: number; fahrten: Fahrt
 // Kompressor je Quellkanal (2026-10-11): in der Lage, sobald ein Feld von seiner Vorgabe abweicht
 const KOMP_VORGABE: Record<string, number> = { an: 0, schwelle: -18, ratio: 4, attack: 10, release: 120, makeup: 0, mix: 1, sc: 0 };
 const kompAbweichend = (p: string, w: number): boolean => { const m = /^(?:deck\/[1-4]|erz\/[1-8]|pad\/[12])\/komp\/(\w+)$/.exec(p); return !!m && m[1] in KOMP_VORGABE && w !== KOMP_VORGABE[m[1]]; };
+// S5r: graph knobs <channel>/bk/1..8 (default 0.5) show in lage only once they differ, like komp
+const bkAbweichend = (p: string, w: number): boolean => /^(?:deck\/[1-4]|erz\/[1-35-7]|pad\/[12])\/bk\/[1-8]$/.test(p) && w !== 0.5;
 const LAGE_ABWEICHEND: Record<string, number> = { 'master/kleber': 0, 'duck/tiefe': 0, 'duck/release': 200, 'fx/2/rueckweg': 0, 'color/art': 0, 'color/param': 0.5 };
 
 export class Oberflaeche {
@@ -1567,8 +1569,8 @@ export class Oberflaeche {
         hoerschein: hs ? { urteil: hs.urteil, gueltig_bis_takt: Math.floor(hs.gueltig_bis_beat / 4) + 1, gruende: hs.gruende } : null };
     });
     const regler: Record<string, number | null> = Object.fromEntries(Object.entries(this.stand.regler)
-      .filter(([p, w]) => /^(deck\/[12]|pad\/[12]|erz\/[1-3])\/(fader|trim|eq\/|kill\/|filter)|^(xfader|master\/pegel)$/.test(p) || (p in LAGE_ABWEICHEND && w !== LAGE_ABWEICHEND[p]) || (/^(deck\/[12]|pad\/[12]|erz\/[1-3])\/send\/2$/.test(p) && w !== -200) || kompAbweichend(p, w))   // erst abweichend von der Vorgabe sichtbar (K2: Kleber, Duck, Hall-Rückweg und -Send)ar
-      .map(([p, w]) => [p, p === 'master/kleber' || p === 'color/param' ? Math.round(w * 100) / 100 : Math.round(w * 10) / 10]));
+      .filter(([p, w]) => /^(deck\/[12]|pad\/[12]|erz\/[1-3])\/(fader|trim|eq\/|kill\/|filter)|^(xfader|master\/pegel)$/.test(p) || (p in LAGE_ABWEICHEND && w !== LAGE_ABWEICHEND[p]) || (/^(deck\/[12]|pad\/[12]|erz\/[1-3])\/send\/2$/.test(p) && w !== -200) || kompAbweichend(p, w) || bkAbweichend(p, w))   // erst abweichend von der Vorgabe sichtbar (K2: Kleber, Duck, Hall-Rückweg und -Send)ar
+      .map(([p, w]) => [p, p === 'master/kleber' || p === 'color/param' || p.includes('/bk/') ? Math.round(w * 100) / 100 : Math.round(w * 10) / 10]));
     // Keylock 3b (Prüfung MINOR 4): der Knopf steht immer da, 1 an, 0 aus, null unbekannt (noch keine Meldung vom Kern; der Kern
     // schickt sie jedem neuen Abonnenten beim ersten /k/hallo)
     regler.keylock = typeof this.stand.regler.keylock === 'number' ? this.stand.regler.keylock : null;

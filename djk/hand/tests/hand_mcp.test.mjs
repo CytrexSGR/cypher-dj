@@ -341,6 +341,15 @@ test('djk-hand Keylock 3: tempo nennt den globalen Knopf keylock, regler den Pfa
   assert.doesNotMatch(regler + tempo, /deck\/<n>\/keylock|deck\/[1-4]\/keylock/);
 });
 
+// S5r Task 4: the tool description names the graph knob paths and passes them through to POST /regler unchanged
+test('djk-hand S5r: regler names <kanal>/bk/1..8 and sends the path through to /regler', async (t) => {
+  const { c, gesehen } = await aufbau(t, (m, u) => (u === '/regler' ? [200, { ok: true, felder: { id: 1 }, quittung: { status: 5, grund: '' } }] : undefined));
+  const regler = (await c.listTools()).tools.find((x) => x.name === 'regler').description;
+  assert.match(regler, /<kanal>\/bk\/1\.\.8 \(deck\/1\.\.4, erz\/1\|2\|3\|5\|6\|7, pad\/1\|2; 0\.\.1, default 0\.5/);
+  await c.callTool({ name: 'regler', arguments: { pfad: 'deck/1/bk/3', nach: 0.8 } });
+  assert.deepEqual(gesehen.filter((g) => g.pfad === '/regler').map((g) => [g.koerper.pfad, g.koerper.nach]), [['deck/1/bk/3', 0.8]]);
+});
+
 test('djk-hand anschluss: deck oder material_id, energie, max als Query an GET /mediathek/anschluss', async (t) => {
   const antwort = { lauf: { material_id: 'aa', camelot: '8A' }, treffer: [{ titel: 'X', punkte: 0.9 }], bewertet: 1 };
   const { c, gesehen } = await aufbau(t, (m, u) => (u.startsWith('/mediathek/anschluss?deck=1') ? [200, antwort] : u.startsWith('/mediathek/anschluss?deck=2') ? [409, { fehler: 'deck_leer' }] : undefined));

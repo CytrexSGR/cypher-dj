@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { kennlinie, kennlinienPfad, KOMP_PRESETS, AUTO_BEREICH, punktAusStelle, fxInhaltText } from '../oeffentlich/effekte.js';
 import { AUTO_BEREICH as SERVER_AUTO, pruefeAutomation } from '../loop_automation.ts';
-import { AUTO_VORLAGEN, vorlagePunkte, knobListe, KNOB_GRUPPE, htmlText } from '../oeffentlich/effekte.js';
+import { AUTO_VORLAGEN, vorlagePunkte, knobListe, KNOB_GRUPPE, htmlText, bkKnobListe } from '../oeffentlich/effekte.js';
 
 test('Baukasten S2 knobListe: nur gemeldete Knobs, Namen aus dem Graphen, sonst „Knob n“; Surge ohne Knobs → leer', () => {
   const l = knobListe({ Volume: 0.75, 'Knob 1': 0.25, 'Knob 2': 1.5, 'Knob 8': 0 }, { 'Knob 1': 'Cutoff' });
@@ -84,4 +84,15 @@ test('Baukasten S2 htmlText: Knob-Namen aus der Graphdatei gehen als Text, nicht
   assert.equal(htmlText('<img src=x onerror=alert(1)>'), '&lt;img src=x onerror=alert(1)&gt;');
   assert.equal(htmlText(`a"b'c&d`), 'a&quot;b&#39;c&amp;d');
   assert.equal(htmlText('Cutoff'), 'Cutoff');
+});
+
+test('S5r bkKnobListe: eight graph knobs per channel with a graph, value from the control state (default 0.5), none for host channels', () => {
+  const l = bkKnobListe('deck/2', { 'deck/2/bk/3': 0.8, 'deck/2/bk/4': 7, 'deck/1/bk/1': 0.1, 'deck/2/bk/5': 'x' });
+  assert.deepEqual(l.map((k) => k.pfad), [1, 2, 3, 4, 5, 6, 7, 8].map((n) => `deck/2/bk/${n}`));
+  assert.deepEqual(l.map((k) => k.name), [1, 2, 3, 4, 5, 6, 7, 8].map((n) => `Knob ${n}`));
+  assert.deepEqual(l.map((k) => k.wert), [0.5, 0.5, 0.8, 1, 0.5, 0.5, 0.5, 0.5]);   // 7 is clamped, 'x' falls back to the default
+  assert.equal(bkKnobListe('pad/1', undefined).length, 8);
+  assert.equal(bkKnobListe('erz/1', {}).length, 8);
+  // channels with an instrument host block (Knob 1..8 through /klang) and channels without a graph get none
+  for (const k of ['erz/2', 'erz/3', 'erz/4', 'bus/1', 'master']) assert.deepEqual(bkKnobListe(k, {}), [], k);
 });

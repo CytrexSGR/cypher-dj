@@ -73,6 +73,17 @@ export function htmlText(s) {
   return String(s).replace(/[&<>"']/g, (z) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[z]);
 }
 
+/** S5r: the eight graph knobs <channel>/bk/1..8 of a channel that takes a graph (POST /regler). Channels with an instrument host
+ *  block (KNOB_GRUPPE) get none here, they use their own knobs; channels without a graph neither. Value from the control state, default 0.5. */
+export const BK_KNOB_KANAELE = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'erz/1', 'erz/5', 'erz/6', 'erz/7', 'pad/1', 'pad/2'];
+export function bkKnobListe(kanal, reglerStand) {
+  if (!BK_KNOB_KANAELE.includes(kanal)) return [];
+  return Array.from({ length: 8 }, (_, i) => {
+    const pfad = `${kanal}/bk/${i + 1}`, w = reglerStand?.[pfad];
+    return { nr: i + 1, pfad, name: `Knob ${i + 1}`, wert: typeof w === 'number' && Number.isFinite(w) ? Math.min(1, Math.max(0, w)) : 0.5 };
+  });
+}
+
 export function knobListe(params, namen = {}) {
   const aus = [];
   for (let nr = 1; nr <= 8; nr++) {
