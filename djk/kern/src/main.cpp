@@ -487,7 +487,9 @@ int main(int argc, char** argv) {
     const std::string mpfad = controller_ordner + "/" + konf.controller_geraet + ".json";
     auto m = std::make_unique<hand::Mapping>();
     hand::Fehler fe{};
-    if (konf.controller_geraet.find('/') != std::string::npos || konf.controller_geraet[0] == '.') {
+    if (konf.controller_geraet == "lernen") {  // S19: the name is reserved for the learn table (slot 1)
+      std::fprintf(stderr, "Mapping: controller_geraet 'lernen' is a reserved name (learn table), kern without controller\n");
+    } else if (konf.controller_geraet.find('/') != std::string::npos || konf.controller_geraet[0] == '.') {
       std::fprintf(stderr, "Mapping: controller_geraet '%s' ist kein Gerätename (Kern ohne Controller)\n",
                    konf.controller_geraet.c_str());
     } else if (!hand::lade_datei(mpfad.c_str(), g_kern->stellwerk().tabelle(), m.get(), &fe)) {
@@ -499,6 +501,24 @@ int main(int argc, char** argv) {
       std::fprintf(stderr, "Mapping %s: Gerät %s, %d Einträge, Quelle %s\n", mpfad.c_str(), mapping->geraet,
                    mapping->n_eintraege, hand_quelle);
       g_kern->setze_mapping(mapping.release());  // Besitz beim Kern: ein Tausch über /k/mapping gibt es dem Netz-Faden zurück
+    }
+  }
+  // S19 (MIDI learn): the learn table <controller folder>/lernen.json translates midi_ein_1 (slot 1). A missing file means no
+  // table, a broken one is logged with the loader's line text and the kern runs without table: music never depends on the hand.
+  {
+    const std::string lpfad = controller_ordner + "/lernen.json";
+    std::error_code lec;
+    if (!std::filesystem::exists(lpfad, lec)) {
+      std::fprintf(stderr, "learn mapping %s: no file, no learn table\n", lpfad.c_str());
+    } else {
+      auto lm = std::make_unique<hand::Mapping>();
+      hand::Fehler lfe{};
+      if (!hand::lade_datei(lpfad.c_str(), g_kern->stellwerk().tabelle(), lm.get(), &lfe)) {
+        std::fprintf(stderr, "learn mapping %s: %s (kern without learn table)\n", lpfad.c_str(), lfe.text);
+      } else {
+        std::fprintf(stderr, "learn mapping %s: %d entries\n", lpfad.c_str(), lm->n_eintraege);
+        g_kern->setze_lern_mapping(lm.release());  // owned by the kern; a swap over /k/mapping hands it back to the net thread
+      }
     }
   }
   // Scheibe 31: Lader mit Budget (§2.1 speicher_budget_mib) und Ringen zum Callback, vor mlockall angelegt
@@ -519,6 +539,8 @@ int main(int argc, char** argv) {
   }
   auto* aringe = new cdj::ArrLaderRinge();
   cdj::ArrLader arr_lader(arr_ordner, konto, (int64_t)konf.arr_budget_mib << 20, !ohne_sperre);
+  arr_lader.setze_bk_ordner(std::string(std::getenv("HOME") ? std::getenv("HOME") : "") + "/.config/cypherdj/baukasten");  // S20: graph folder of the kern, for bk project tracks
+  arr_lader.setze_bk_leser(g_kern->arr_bk_leser());  // S20: the loader frees a graph instance only when the sink no longer plays it (g_kern is never deleted)
   netz.verbinde_arr(aringe);
   netz.setze_arr_ordner(arr_ordner);  // Paket K3: Freeze im Arbeitsordner (Spec 6.14), geschrieben vom arr_faden (6.29)
   // 1.13 Slice 2 (ADR 031 Teil 2): das Warp-Werk für COMPLEX und TONES. Pool, Ringe und Bungee-Instanzen entstehen hier, vor jack_activate und mlockall (der Speicher

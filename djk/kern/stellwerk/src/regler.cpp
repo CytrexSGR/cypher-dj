@@ -24,6 +24,16 @@ int nr_hinter(const char* pfad, const char* praefix) {
 
 int spur_nr(const char* pfad) { return nr_hinter(pfad, "spur/"); }
 int grp_nr(const char* pfad) { return nr_hinter(pfad, "grp/"); }
+int ret_nr(const char* pfad) { return nr_hinter(pfad, "ret/"); }
+int send_nr(const char* pfad) {
+  const char* s = std::strstr(pfad, "/send/");
+  if (!s) return 0;
+  const char* p = s + 6;
+  if (*p < '1' || *p > '9') return 0;
+  int zahl = 0, ziffern = 0;
+  while (*p >= '0' && *p <= '9') { zahl = zahl * 10 + (*p - '0'); ++p; if (++ziffern > 3) return 0; }
+  return *p == '\0' ? zahl : 0;
+}
 
 namespace {
 
@@ -179,6 +189,49 @@ ReglerTabelle::ReglerTabelle() {
     for (int nr = 1; nr <= 8; nr++) {
       std::snprintf(p, sizeof p, "%s/bk/%d", kn_bk, nr);
       neu(p, k, Rolle::bk_regler, 0, 1, 0.5f, 0, false, false, false, false, linear(0, 1));
+    }
+  }
+  // 1.10 Slice 3 (Spec 5.3), 204 controls, global (channel -1), everybody may. Appended after the bk block: no index moves.
+  // Sends and the return fader: -200..+6 dB, curve K_SPUR_FADER, ramp 10 ms; a send defaults to -200 (off), the return fader to 0 dB.
+  // ret/<r>/pan is a balance like grp/<n>/pan. ret/<r>/hall/* are normalised 0..1 (mapping to units: arr_returns.cpp), defaults hit the
+  // Cypher Hall defaults (decay 2 s, size 60 ms, pre 10 ms, low decay 1.2, high cut 12 kHz, tail 0 dB). hall/an is a switch without ramp.
+  // NAME TRAP: ret/<r>/hall/pre is the pre-delay of the hall, NOT a pre/post fader switch (that comes as a structure in slice 4).
+  for (int r = 1; r <= RET_REGLER_RETURNS; r++) {
+    for (int n = 1; n <= SPUR_REGLER_SPUREN; n++) {
+      std::snprintf(p, sizeof p, "spur/%d/send/%d", n, r);
+      neu(p, -1, Rolle::snd_spur, -200, 6, -200, MS(10), false, true, false, false, K_SPUR_FADER);
+    }
+    for (int n = 1; n <= GRP_REGLER_GRUPPEN; n++) {
+      std::snprintf(p, sizeof p, "grp/%d/send/%d", n, r);
+      neu(p, -1, Rolle::snd_grp, -200, 6, -200, MS(10), false, true, false, false, K_SPUR_FADER);
+    }
+    std::snprintf(p, sizeof p, "ret/%d/fader", r);
+    neu(p, -1, Rolle::ret_fader, -200, 6, 0, MS(10), false, true, false, false, K_SPUR_FADER);
+    std::snprintf(p, sizeof p, "ret/%d/pan", r);
+    neu(p, -1, Rolle::ret_pan, -1, 1, 0, MS(10), false, false, false, false, linear(-1, 1));
+    std::snprintf(p, sizeof p, "ret/%d/mute", r);
+    neu(p, -1, Rolle::ret_mute, 0, 1, 0, 0, false, false, true, true, K_SCHALTER);
+    std::snprintf(p, sizeof p, "ret/%d/solo", r);
+    neu(p, -1, Rolle::ret_solo, 0, 1, 0, 0, false, false, true, true, K_SCHALTER);
+    std::snprintf(p, sizeof p, "ret/%d/hall/an", r);
+    neu(p, -1, Rolle::ret_hall_an, 0, 1, 1, 0, false, false, true, true, K_SCHALTER);
+    struct HallW { const char* feld; Rolle rolle; float vorgabe; };
+    const HallW hall[] = {{"pre", Rolle::ret_hall_pre, 0.04f},         {"decay", Rolle::ret_hall_decay, 0.5252f},
+                          {"groesse", Rolle::ret_hall_groesse, 0.282f}, {"tief", Rolle::ret_hall_tief, 0.5658f},
+                          {"highcut", Rolle::ret_hall_highcut, 0.8039f}, {"fahne", Rolle::ret_hall_fahne, 0.66667f}};
+    for (const HallW& h : hall) {
+      std::snprintf(p, sizeof p, "ret/%d/hall/%s", r, h.feld);
+      neu(p, -1, h.rolle, 0, 1, h.vorgabe, MS(10), false, false, false, false, linear(0, 1));
+    }
+  }
+  // S14: eight graph knobs per send return fx/3, fx/4 (effect graph of section 4.10 on send bus 3, 4). Global (channel -1) like
+  // fx/<n>/rueckweg: fx/3 is a send bus, not a mixer channel. The kern maps them to the rows MIX_BK_SEND_ZEILE + 0/1 of its
+  // knob matrix (kern.cpp). Appended after the ret block: no index moves (897..912). Same shape as the kn_bk loop above,
+  // so djk/vertrag/pruefe_namenslisten.py reads the list. Ramp 0: the FFI smooths 20 ms.
+  for (const char* kn_bk_send : {"fx/3", "fx/4"}) {
+    for (int nr = 1; nr <= 8; nr++) {
+      std::snprintf(p, sizeof p, "%s/bk/%d", kn_bk_send, nr);
+      neu(p, -1, Rolle::bk_regler, 0, 1, 0.5f, 0, false, false, false, false, linear(0, 1));
     }
   }
   for (int i = 0; i < n_; i++) sortiert_[i] = static_cast<int16_t>(i);

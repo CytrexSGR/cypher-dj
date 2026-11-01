@@ -14,9 +14,13 @@ import type { BereichKontext } from '../../http/router.ts';
 import { Katalog, type Zeile } from '../../katalog.ts';
 import { Projekte, projektWurzelVorgabe } from '../../projekt/ablage.ts';
 import { fuehreListeAus, setzeDekodiert, vergleiche } from '../../projekt/befehle.ts';
+import { findeGraph } from '../../graphen.ts';
 import { TransientenLager } from '../../projekt/transienten.ts';
 import { DekodierCache, type DekodierEreignis } from '../../projekt/dekodier.ts';
-import { MAX_BEAT, kanonisch, sucheClip, type AudioClip, type DekodiertZustand, type Projekt, type Warp } from '../../projekt/modell.ts';
+import {
+  HALL_FELDER, MAX_BEAT, kanonisch, sucheClip, sucheSpur, type AudioClip, type DekodiertZustand, type Lane, type Projekt, type Spur, type Warp,
+} from '../../projekt/modell.ts';
+import { laneWert } from '../../projekt/lane.ts';
 import { PatchFehler, wende } from '../../projekt/patch.ts';
 import {
   WarpFehler, abHierStart, autoWarp, beatBeiQuelle, fensterTempo, handWarp, quantisiere, quellSekunde, segmentBpm, type TempoQuelle,
@@ -32,6 +36,8 @@ import { AnalyseListe, type AnalyseEintrag, type AnalyseEnde, type AnalyseStarte
 import { ankunftBefehle, brauchtAnalyse, klingtGerade } from '../../projekt/warp_analyse.ts';
 import { analyseVorgabe } from '../../pfade.ts';
 import { KernWeg, quittungAbgelehnt, quittungOk, type Quelle, type Quittung, type ReglerErgebnis } from './kern_weg.ts';
+import { ProjBk } from './baukasten.ts';   // S17: sound snapshot
+import { bkDefVonId } from '../../projekt/baukasten.ts';
 
 export class ProjFehler extends Error {
   readonly code: number;
@@ -55,20 +61,24 @@ export interface ProjOptionen {
   analysierer?: AnalyseStarter | null;   // Slice 3a: startet die Analyse auf Abruf (server.ts: WerkstattAnalyse); fehlt oder null = keine Aufträge
   analyseWarteMs?: number;   // Slice 3a: Abstand der Wiederholung der Ankunft, solange ein Freeze die Wiedergabe sperrt oder der Clip klingt (Vorgabe 2000)
   ffmpeg?: string[]; ffprobe?: string[]; vorsatz?: string[];   // Dekodier-Cache (Tests)
+  kernWeg?: { paket?: number; bisEnde?: boolean };   // test seam (slice 3): packet size and end-status waiting of the controls on open
   arrFristMs?: number;         // P2: so lange wartet oeffne auf /zustand/arr, wenn der Server den Kern-Stand noch nicht kennt (Vorgabe 600 ms)
   rampeWarteMs?: number;       // höchstens so lange wartet ein Transport-Start auf das Ende der Tempo-Rampe (Vorgabe 20 s)
+  bkFristMs?: number;          // S17: cap of the sound snapshot restore on open and after a kern restart (default 5000 ms)
   uhrStillMs?: number;         // Spec 6.30: läuft /uhr so lange nicht weiter, bricht das Warten auf die Rampe ab (503 kein_kern, Vorgabe 1 s)
 }
 // merk (Spec 6.30, 6.31): was die Freeze-Sperre aufgeschoben hat und nach der letzten Freigabe nachgeholt wird. Es gehört zum offenen Projekt und
 // verfällt mit ihm: ein anderes Projekt lädt beim Öffnen ohnehin seine eigene Wiedergabe.
 interface Merk { laden: boolean; loop: boolean; tempo: boolean }
 // Spec 6.34: was GET /proj/aktuell als ausgabe_lauf zeigt, solange S3 einen Freeze oder Export fährt (Spur nur beim Freeze)
-export type AusgabeLauf = { art: 'freeze'; spur_id: string } | { art: 'export' } | { art: 'lautheit' };
+export type AusgabeLauf = { art: 'freeze'; spur_id: string } | { art: 'export' } | { art: 'lautheit' } | { art: 'merge' };
 interface Offen { slug: string; projekt: Projekt; verlauf: Verlauf; merk: Merk }
 type Koerper = Record<string, unknown>;
 interface Hinweis { index: number; hinweis: string }                // Paket 1.13: z. B. kein_tempo (Auto-Warp fand kein Tempo)
 
 const schlaf = (ms: number): Promise<void> => new Promise((ok) => setTimeout(ok, ms));
+// Baukasten S20: lookup of a graph in the graph folder for the commands that set a bk device (null = no such graph)
+const graphArt = (name: string): 'instrument' | 'effekt' | null => findeGraph(name)?.art ?? null;
 const MARKER_TOLERANZ_S = 0.05;   // Rundung zwischen Katalog-Dauer und Dekodierung
 // Flache Kopie für proj_lage: MIDI-Clips tragen noten_zahl statt noten, alles andere wird geteilt (nur lesen, nicht verändern)
 // Paket 1.13: ein Audio-Clip zeigt seinen Warp ohne Marker-Liste (marker_zahl; die Marker liest proj_warp)
@@ -76,11 +86,32 @@ const warpKurz = (w: Warp): unknown => {
   const { marker, ...rest } = w;
   return { ...rest, eins_unsicher: w.eins_unsicher === true, marker_zahl: marker.length };   // Slice 3a: eins_unsicher ist ein festes Feld (auch false)
 };
-const ohneNoten = (p: Projekt): unknown => ({ ...p, spuren: p.spuren.map((s) => ({ ...s, clips: s.clips.map((c) => {
+// Automation Slice 1: a track shows its lanes without points (lanes [{id, ziel, punkte_zahl, gesperrt?}], proj_auto reads the points);
+// without a lane the shape stays as before
+const ohneLanePunkte = (s: Spur): Omit<Spur, 'automation'> & { lanes?: unknown } => {
+  const { automation, ...rest } = s;
+  return automation?.length
+    ? { ...rest, lanes: automation.map((l) => ({ id: l.id, ziel: l.ziel, punkte_zahl: l.punkte.length, ...(l.gesperrt ? { gesperrt: true } : {}) })) }
+    : rest;
+};
+// S17: the sound snapshot shows only {kanal, graph} (the values come with proj_bk lage)
+const bkKurz = (p: Projekt): Record<string, unknown> => (p.baukasten
+  ? { baukasten: p.baukasten.map((e) => ({ kanal: bkDefVonId(e.id)?.kanal ?? e.id, graph: e.graph })) } : {});
+const ohneNoten = (p: Projekt): unknown => ({ ...p, ...bkKurz(p), spuren: p.spuren.map((s) => ({ ...ohneLanePunkte(s), clips: s.clips.map((c) => {
   if (c.art === 'audio') return c.warp ? { ...c, warp: warpKurz(c.warp) } : c;
   const { noten, ...rest } = c;
   return { ...rest, noten_zahl: noten.length };
 }) })) });
+// Slice 1 (proj_auto): default number of points per answer; 200 points are about 8 KB in Cypher's context
+export const AUTO_PUNKTE_VORGABE = 200;
+function laneAnsicht(spurId: string, l: Lane, von: number | null, bis: number | null, bei: number | null, max: number): Record<string, unknown> {
+  const passend = l.punkte.filter((q) => (von === null || q.beat >= von) && (bis === null || q.beat <= bis));
+  const gezeigt = passend.slice(0, max).map((q) => ({ beat: q.beat, wert: q.wert, form: q.form ?? 'linear' }));
+  return { lane_id: l.id, spur_id: spurId, ziel: l.ziel, punkte_zahl: l.punkte.length, ...(l.gesperrt ? { gesperrt: true } : {}),
+    punkte_gezeigt: gezeigt.length, punkte: gezeigt,
+    ...(passend.length > max ? { weiter_ab_beat: passend[max].beat } : {}),
+    ...(bei === null ? {} : { bei: { beat: bei, wert: laneWert(l.punkte, bei, l.ziel) } }) };
+}
 // Spec 6.30, 6.31: wie in vollziehe ist nur eine echte Ablehnung des Kerns ein Regler-Fehler; Quittung null heißt kein Kern (keine Antwort bis
 // zur Frist), das Projekt bleibt die Wahrheit. Für Antworten und Protokoll getrennt gezählt.
 const reglerBefund = (e: ReglerErgebnis[]): { regler_fehler: ReglerErgebnis[]; regler_ohne_kern: number } =>
@@ -119,6 +150,7 @@ export class ProjSitzung {
   private readonly transienten = (sha: string): number[] | null => this.transientenLager.fuer(sha);
   private readonly ctx: BereichKontext;
   private readonly kern: KernWeg;
+  private readonly bk: ProjBk;   // S17
   private readonly projekte: Projekte;
   private readonly cache: DekodierCache;
   private readonly zaehler: WiedergabeZaehler;
@@ -149,7 +181,8 @@ export class ProjSitzung {
   constructor(ctx: BereichKontext, opt: ProjOptionen = {}) {
     const instanz = opt.instanz ?? process.env.CYPHERDJ_INSTANZ ?? '';
     this.ctx = ctx;
-    this.kern = new KernWeg(ctx, this.lage);
+    this.kern = new KernWeg(ctx, this.lage, opt.kernWeg);
+    this.bk = new ProjBk(ctx, this.lage, this.kern, opt.bkFristMs ?? 5000);
     this.projekte = new Projekte(opt.wurzel ?? projektWurzelVorgabe(instanz));
     this.arbeitsordner = opt.arbeitsordner ?? arrOrdner(instanz);
     const zaehlerDatei = opt.zaehlerDatei
@@ -257,6 +290,50 @@ export class ProjSitzung {
       ...(bei === null ? {} : { bei: gegenprobe(c, bei) }) } };
   }
 
+  // Automation Slice 1 (proj_auto): the points of one lane (lane_id) or of all lanes of a track (spur_id), plus the lane value at bei_beat
+  // (dB for fader, the raw value for the other targets; the same laneWert the core computes).
+  // von_beat/bis_beat are project beats, inclusive; at most max points (default AUTO_PUNKTE_VORGABE).
+  autoLage(laneId: string | null, spurId: string | null, von: number | null, bis: number | null, bei: number | null, max: number | null): Antwort {
+    const o = this.brauchOffen();
+    if (!laneId && !spurId) throw new ProjFehler(400, 'argument_ungueltig', { text: 'lane_id or spur_id is required' });
+    const grenze = max ?? AUTO_PUNKTE_VORGABE;
+    if (laneId) {
+      for (const s of o.projekt.spuren) {
+        const l = (s.automation ?? []).find((x) => x.id === laneId);
+        if (l) return { code: 200, j: laneAnsicht(s.id, l, von, bis, bei, grenze) };
+      }
+      throw new ProjFehler(404, 'lane_unbekannt');
+    }
+    const s = sucheSpur(o.projekt, spurId!);
+    if (!s) throw new ProjFehler(404, 'spur_unbekannt');
+    return { code: 200, j: { spur_id: s.id, lanes: (s.automation ?? []).map((l) => laneAnsicht(s.id, l, von, bis, bei, grenze)) } };
+  }
+
+  // --- S17: sound snapshot ------------------------------------------------------------------------------------------------
+  // GET /proj/bk: saved against live for every channel of the table
+  bkLage(): Antwort {
+    const o = this.brauchOffen();
+    return { code: 200, j: this.bk.ansicht(o.projekt, o.slug) };
+  }
+  // POST /proj/bk/merken {kanaele?, rev?}: ONE aendern call (one undo step). Runs outside `seriell` because aendern is serialised itself.
+  async bkMerken(d: Koerper, quelle: Quelle): Promise<Antwort> {
+    const o = this.brauchOffen();
+    this.riegel(quelle);
+    const { befehle, unbekannt, gemerkt } = this.bk.befehleZumMerken(o.projekt, d.kanaele);
+    const r = await this.aendern({ rev: d.rev ?? o.projekt.rev, befehle, label: 'Baukasten: save sound' }, quelle);
+    return r.code === 200 ? { code: 200, j: { ...(r.j as object), bk: { gemerkt, unbekannt } } } : r;
+  }
+  // POST /proj/bk/laden {kanaele?}: apply the saved sound now; an explicit load always sends the graph again
+  bkLaden(d: Koerper, quelle: Quelle): Promise<Antwort> {
+    return this.seriell(async () => {
+      const o = this.brauchOffen();
+      this.riegel(quelle);
+      const nur = this.bk.kanaeleArg(d.kanaele);
+      const baukasten = await this.bk.wiederherstellen(o.projekt, quelle, { schonGeladenUeberspringen: false, nur });
+      return { code: 200, j: { slug: o.slug, baukasten } };
+    });
+  }
+
   // --- öffnen ---------------------------------------------------------------------------------------------------------
   neu(name: unknown, quelle: Quelle): Promise<Antwort> {
     return this.seriell(async () => {
@@ -316,7 +393,10 @@ export class ProjSitzung {
     this.offen = { slug, projekt, verlauf: o.verlauf, merk: { laden: false, loop: false, tempo: false } };
     // Spec 6.21: die Wiedergabe-Nummer entscheidet, wer beim Mixer gewinnt (gleiche Nummer: Wiederanlauf, die Spur-Regler des Kerns gewinnen)
     const wieder = await this.istWiederanlauf(projekt);
-    const kern = await this.synchronisiere(quelle, true, wieder);
+    // S17: the saved sound goes back while the controls are synchronised (not after a page server restart in front of a running kern: it kept everything)
+    const [kern, bk] = await Promise.all([this.synchronisiere(quelle, true, wieder),
+      wieder || !projekt.baukasten ? Promise.resolve(null) : this.bk.wiederherstellen(projekt, quelle, { schonGeladenUeberspringen: true })]);
+    if (wieder && projekt.baukasten) kern.baukasten = { uebersprungen: 'wiederanlauf' }; else if (bk) kern.baukasten = bk;
     if (wieder) {
       const n = this.uebernimmMixer(this.offen);
       kern.wiederanlauf = true; kern.mixer_uebernommen = n;
@@ -358,14 +438,15 @@ export class ProjSitzung {
     // Die erste Linie ist sperreLaden(), das während eines Öffnens ablehnt; dies ist die zweite.
     const [wiedergabe, regler, loop, metronom, ki] = await Promise.all([
       wiederanlauf ? Promise.resolve({ nr: o.projekt.wiedergabe_rev, quittung: null, wiederanlauf: true }) : this.ladeOderMerke(quelle),
-      this.kern.setzeRegler(soll, quelle),
+      this.kern.setzeReglerPakete(soll, quelle),
       wiederanlauf ? Promise.resolve(null) : this.loopOderMerke(o, quelle),
       wiederanlauf ? Promise.resolve(null) : this.kern.metronom(o.projekt, quelle), this.leereKiMaske()]);
     // P6: nur bei Quelle cypher werden ziel und xseite nicht gesendet (der Kern lehnt nur_hand ab) und als Meldung geführt
     const nurHand = erz4 && !wiederanlauf && quelle === 'cypher'
       ? ERZ4_NUR_HAND.filter((r) => { const ist = this.lage.reglerWert(r.pfad); return ist !== null && ist !== r.wert; })
       .map((r) => ({ pfad: r.pfad, soll: r.wert, ist: this.lage.reglerWert(r.pfad) })) : [];
-    return { wiedergabe, regler: regler.length, ...reglerBefund(regler), loop, metronom, ki, erz4_nur_hand: nurHand };
+    return { wiedergabe, regler: regler.ergebnis.length, regler_nicht_gesendet: regler.nicht_gesendet, ...reglerBefund(regler.ergebnis),
+      loop, metronom, ki, erz4_nur_hand: nurHand };
   }
 
   // Spec 6.21: gleicht /zustand/arr.nr der wiedergabe_rev des Projekts, spielt der Kern genau dessen letzte Wiedergabe. Kennt der Server den
@@ -387,7 +468,12 @@ export class ProjSitzung {
     const pfade = [
       ...o.projekt.spuren.flatMap((s) => (['fader', 'pan', 'mute', 'solo'] as const).map((k) => `spur/${s.nr}/${k}`)),
       ...(o.projekt.gruppen ?? []).flatMap((g) => (['fader', 'pan', 'mute', 'solo'] as const).map((k) => `grp/${g.nr}/${k}`)),
-      'pm/fader'];
+      'pm/fader',
+      // 1.10 slice 3: the sends of every existing track and group, and all controls of every existing return (Hall included)
+      ...[...o.projekt.spuren.map((s) => `spur/${s.nr}`), ...(o.projekt.gruppen ?? []).map((g) => `grp/${g.nr}`)]
+        .flatMap((st) => [1, 2, 3, 4].map((r) => `${st}/send/${r}`)),
+      ...(o.projekt.returns ?? []).flatMap((r) => [...(['fader', 'pan', 'mute', 'solo'] as const).map((k) => `ret/${r.nr}/${k}`),
+        ...['an', ...HALL_FELDER].map((k) => `ret/${r.nr}/hall/${k}`)])];
     for (const pfad of pfade) {
       const wert = this.lage.reglerWert(pfad);
       const b = wert === null ? null : reglerZuBefehl(o.projekt, pfad, wert);
@@ -535,7 +621,7 @@ export class ProjSitzung {
     const standVor = (): Projekt => {
       const davor = bisher.filter((v) => v !== null);
       if (davor.length === 0) return projekt;
-      try { return fuehreListeAus(projekt, davor, { transienten: this.transienten }).projekt; } catch { return projekt; }
+      try { return fuehreListeAus(projekt, davor, { transienten: this.transienten, graphArt }).projekt; } catch { return projekt; }
     };
     const loese = (b: unknown, index: number): unknown => {
       const x = b as Koerper;
@@ -649,7 +735,7 @@ export class ProjSitzung {
       if (befehle.some((b) => (b as Koerper)?.befehl === 'tempo_setzen') && this.lage.deckLaeuft()) throw new ProjFehler(409, 'deck_laeuft');
       if (this.aufnahmeLauf && befehle.some((b) => (b as Koerper)?.befehl === 'tempo_setzen'))
         throw new ProjFehler(409, 'beschaeftigt', { text: 'a recording is running; the tempo cannot change now' });
-      const probe = fuehreListeAus(o.projekt, befehle, { quelle, transienten: this.transienten });   // quelle: Herkunft für spur_neu (Spec 6.22)
+      const probe = fuehreListeAus(o.projekt, befehle, { quelle, transienten: this.transienten, graphArt });   // quelle: Herkunft für spur_neu (Spec 6.22)
       if (probe.vor.length === 0) {
         this.starteAnalysen(o, quelle, wuensche, alt);
         return { code: 200, j: { rev: o.projekt.rev, projekt: o.projekt, ...(hinweise.length ? { hinweise } : {}) } };
@@ -1149,7 +1235,9 @@ export class ProjSitzung {
       this.rueckwegSpeichern();
       const [regler, loop, metronom, ki] = await Promise.all([this.kern.setzeRegler(alleRegler(o.projekt), 'andreas'),
         this.kern.loop(o.projekt, 'andreas'), this.kern.metronom(o.projekt, 'andreas'), this.leereKiMaske()]);
-      this.ctx.log({ typ: 'proj_neustart', slug: o.slug, wiedergabe, ...reglerBefund(regler), loop, metronom, ki });
+      // S17: the sound snapshot again (a new kern knows no graph); source andreas like the controls above (Spec 6.35 E-a)
+      const baukasten = o.projekt.baukasten ? await this.bk.wiederherstellen(o.projekt, 'andreas', { schonGeladenUeberspringen: false }) : undefined;
+      this.ctx.log({ typ: 'proj_neustart', slug: o.slug, wiedergabe, ...reglerBefund(regler), loop, metronom, ki, ...(baukasten ? { baukasten } : {}) });
     }).catch((e) => this.ctx.log({ typ: 'proj_neustart_fehler', fehler: (e as Error).message }));
   }
 }

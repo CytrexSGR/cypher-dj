@@ -25,17 +25,17 @@ function sse(url) {
 }
 async function bis(s, pruef, ms = 1000) { for (let t = 0; t < ms && !pruef(); t += 20) await warte(20); return pruef(); }
 
-test('SSE Anfangsbild: erstes Ereignis stand mit genau den Schlüsseln decks, fx, fxRouting, fxZuweisung, geladen, kern, loops, pruefmodus, regler', async (t) => {
+test('SSE Anfangsbild: erstes Ereignis stand mit genau den Schlüsseln decks, fx, fxRouting, fxZuweisung, geladen, graphen_geladen, kern, loops, pruefmodus, regler', async (t) => {
   const { url } = await stapel(t);
   const s = sse(url); t.after(s.zu);
   assert.ok(await bis(s, () => s.ereignisse.length > 0), 'kein Ereignis auf /strom');
   const [e] = s.ereignisse;
   assert.equal(e.a, 'stand');
-  assert.deepEqual(Object.keys(e.f).sort(), ['decks', 'fx', 'fxRouting', 'fxZuweisung', 'geladen', 'kern', 'loops', 'pruefmodus', 'regler']);
+  assert.deepEqual(Object.keys(e.f).sort(), ['decks', 'fx', 'fxRouting', 'fxZuweisung', 'geladen', 'graphen_geladen', 'kern', 'loops', 'pruefmodus', 'regler']);
   assert.equal(e.f.kern, 'verbunden');
   assert.equal(e.f.pruefmodus, 'an', 'stapel startet mit kernPruefmodus true');
   assert.deepEqual([e.f.fx, e.f.fxZuweisung, e.f.fxRouting], [[null, null], [{}, {}], 'post_fader']);
-  for (const k of ['decks', 'geladen', 'loops', 'regler']) assert.equal(Object.prototype.toString.call(e.f[k]), '[object Object]', `${k} ist ein einfaches Objekt`);
+  for (const k of ['decks', 'geladen', 'graphen_geladen', 'loops', 'regler']) assert.equal(Object.prototype.toString.call(e.f[k]), '[object Object]', `${k} ist ein einfaches Objekt`);
 });
 
 test('SSE synthetisch und durchgereicht: pruefmodus, wiederherstellung, /e/regler und /e/ki kommen an; /zustand/box nicht (Negativ-Kontrolle)', async (t) => {

@@ -16,10 +16,12 @@ export class StemsLauf {
   private killUhr: NodeJS.Timeout | null = null;
   readonly fertig: Promise<StemsErgebnis>;
   constructor(o: StemsLaufOptionen, a: StemsAuftrag, melde: (stufe: string, prozent: number | null) => void) {
-    const args = ['-c', STEMS_CPUS, 'nice', '-n', '19', 'ionice', '-c3', o.python, '-m', o.modul ?? 'werkstatt.stems', '--quelle', a.quelle, '--f0', String(a.f0), '--f1', String(a.f1),
-      '--aus', a.aus, '--threads', String(STEMS_THREADS), '--geraet', a.geraet ?? 'cpu', ...(o.gewichte ? ['--gewichte', o.gewichte] : []), ...(o.zusatzArgs ?? [])];
+    const args = ['-c', STEMS_CPUS, 'nice', '-n', '19', 'ionice', '-c3', o.python, '-m', o.modul ?? 'werkstatt.stems',
+      '--quelle', a.quelle, '--f0', String(a.f0), '--f1', String(a.f1), '--aus', a.aus, '--threads', String(STEMS_THREADS),
+      '--geraet', a.geraet ?? 'cpu', ...(o.gewichte ? ['--gewichte', o.gewichte] : []), ...(o.zusatzArgs ?? [])];
+    // P4: a CPU run sees no GPU (detached: own process group)
     this.kind = spawn('taskset', args, { cwd: o.cwd, stdio: ['ignore', 'pipe', 'pipe'], detached: true,
-      env: { ...process.env, CUDA_VISIBLE_DEVICES: a.geraet === 'gpu' ? '0' : '', OMP_NUM_THREADS: String(STEMS_THREADS) } });   // P4: CPU-Lauf sieht keine GPU (detached: eigene Gruppe)
+      env: { ...process.env, CUDA_VISIBLE_DEVICES: a.geraet === 'gpu' ? '0' : '', OMP_NUM_THREADS: String(STEMS_THREADS) } });
     let aus = '', fehl = '', rest = '';
     this.kind.stdout!.on('data', (d: Buffer) => { aus += d; if (aus.length > 65536) aus = aus.slice(-32768); });
     this.kind.stderr!.on('data', (d: Buffer) => {

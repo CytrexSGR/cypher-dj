@@ -13,5 +13,8 @@ export const PROFILE: readonly Profil[] = [
     audio: { passt: (q) => q.usb?.vendor === '0x2b73',
       hinweis: 'Audio unmeasured: all captures so far held only zero bytes; it needs the quirk_alias module option, a linked deck and a playing track (task H4).' },
     midi: { passt: (m) => /XDJ-XZ/i.test(m.port) || /XDJ-XZ/i.test(m.alias) } },
+  // S19 (MIDI learn): any MIDI controller. No audio; every detected physical MIDI source fits, so setzeMidi takes the first detected one or the
+  // explicit port the caller gives. The controller is then wired to midi_ein_1 and drives graph knobs through the learn table.
+  { id: 'midi-controller', name: 'MIDI controller', audio: null, midi: { passt: () => true } },
 ];
 export const profil = (id: unknown): Profil | undefined => PROFILE.find((p) => p.id === id);

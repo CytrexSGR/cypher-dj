@@ -1,9 +1,30 @@
 //! Jede Art aus ARTEN hat hier einen Minimalgraphen (Slice 4a, D8). Für jede gilt: laufen lassen, `zuruecksetzen`, dieselbe
 //! Eingabe noch einmal = bitgleich mit einem frisch geladenen Programm. Eine neue Art ohne Eintrag macht
 //! `jede_art_hat_einen_minimalgraphen` rot; ein vergessener Reset-Arm macht `zuruecksetzen_gleich_frisch` rot.
-use baukasten_dsp::{uebersetze, Programm, ARTEN};
+use baukasten_dsp::{uebersetze_mit_wurzel, Programm, ARTEN};
+use std::path::PathBuf;
+use std::sync::OnceLock;
 
 const SR: f32 = 48_000.0;
+
+/// Sample root with the generated probe `probe.f32` (S10, C11): the sampler graph needs a file, the other graphs ignore it.
+fn wurzel() -> &'static PathBuf {
+    static W: OnceLock<PathBuf> = OnceLock::new();
+    W.get_or_init(|| {
+        let w = std::env::temp_dir().join(format!("bk-s10-arten-{}", std::process::id()));
+        std::fs::create_dir_all(&w).unwrap();
+        std::fs::write(w.join("probe.f32"), baukasten_dsp::proben::bytes(&baukasten_dsp::proben::orchester_schlag(48_000.0))).unwrap();
+        // S21: 700 frames of a decaying sine pair (head plus two tail partitions) for the `faltung` minimal graph
+        let ir: Vec<f32> = (0..700).flat_map(|i| {
+            let e = (-(i as f64) / 150.0).exp();
+            [(e * (i as f64 * 0.31).sin()) as f32, (e * (i as f64 * 0.23).sin()) as f32]
+        }).collect();
+        std::fs::write(w.join("ir.f32"), baukasten_dsp::proben::bytes(&ir)).unwrap();
+        w
+    })
+}
+
+fn uebersetze(g: &str, sr: f32) -> Result<Programm, baukasten_dsp::Fehler> { uebersetze_mit_wurzel(g, sr, Some(wurzel())) }
 
 /// Knoten und Kanten um den Prüfling `p`. Jeder Graph hat Note, Sägezahn (Quelle mit Zustand) und Ausgang.
 fn um(knoten: &str, kanten: &str) -> String {
@@ -47,6 +68,18 @@ fn minimalgraph(art: &str) -> Option<String> {
         "komp" => um(r#",{"id":"p","art":"komp","schwelle":-30,"ratio":6,"schp":100}"#, r#",{"von":"s.aus","nach":"p.x"},{"von":"p.l","nach":"o.l"},{"von":"p.r","nach":"o.r"}"#),
         "leitung" => um(r#",{"id":"p","art":"leitung","zeit":3},{"id":"a","art":"add"},{"id":"m","art":"mul","b":0.7}"#,
                         r#",{"von":"s.aus","nach":"a.a"},{"von":"a.aus","nach":"p.x"},{"von":"p.aus","nach":"m.a"},{"von":"m.aus","nach":"a.b"},{"von":"a.aus","nach":"o.x"}"#),
+        // rate 12345: the run is 24000 samples, so the hold phase ends at 0.5 (with 12000 or 13000 it ends aligned and a missing reset goes unseen)
+        "krume" => durch(r#""art":"krume","bits":6,"rate":12345"#, "x", "aus"),
+        "phaser" => um(r#",{"id":"p","art":"phaser","rate":2,"fb":0.6,"stufen":4}"#, r#",{"von":"s.aus","nach":"p.x"},{"von":"p.l","nach":"o.l"},{"von":"p.r","nach":"o.r"}"#),
+        // S11: an internal saw feeds carrier and modulator, so the output is not silent (the eingang is silent in this harness)
+        "vocoder" => um(r#",{"id":"p","art":"vocoder","zisch":0.5,"attack":2,"release":50}"#,
+                        r#",{"von":"s.aus","nach":"p.x"},{"von":"s.aus","nach":"p.l"},{"von":"s.aus","nach":"p.r"},{"von":"p.l","nach":"o.l"},{"von":"p.r","nach":"o.r"}"#),
+        "roehre" => durch(r#""art":"roehre","antrieb":18,"stufen":2"#, "x", "aus"),
+        // S10: the sampler plays the generated probe as a one-shot; at the low notes it is still running when the run ends, so a missing reset shows
+        "sampler" => um(r#",{"id":"p","art":"sampler","datei":"probe.f32"}"#,
+                        r#",{"von":"n.hz","nach":"p.hz"},{"von":"n.trig","nach":"p.trig"},{"von":"n.gate","nach":"p.gate"},{"von":"p.l","nach":"o.l"},{"von":"p.r","nach":"o.r"}"#),
+        // S21: the saw is convolved with a 700 frame IR; mix 0.7 keeps the dry share audible next to the tail
+        "faltung" => um(r#",{"id":"p","art":"faltung","datei":"ir.f32","mix":0.7}"#, r#",{"von":"s.aus","nach":"p.x"},{"von":"p.l","nach":"o.l"},{"von":"p.r","nach":"o.r"}"#),
         "eingang" => um(r#",{"id":"p","art":"eingang"}"#, r#",{"von":"p.l","nach":"o.l"},{"von":"p.r","nach":"o.r"},{"von":"s.aus","nach":"o.x"}"#),
         _ => return None,
     })
@@ -101,4 +134,18 @@ fn hall_still_nach_zuruecksetzen(g: &str) {
     println!("MESS arten hall: Schwanz {schwanz:.3e}, Rest nach zuruecksetzen {rest:.3e}, Verhältnis {:.2e}", rest / schwanz);
     assert!(schwanz > 1e-3, "Art hall: Schwanz zu leise, die Prüfung wäre blind ({schwanz})");
     assert!(rest < 1e-4 * schwanz, "Art hall: nach zuruecksetzen klingt der Hall weiter: {rest} gegen Schwanz {schwanz}");
+}
+
+/// S21: the type numbers are part of the stored projects, so ARTEN may only grow at the end. This list pins the order of
+/// the first 32 entries; a later slice appends its names to a new list of its own, never edits this one.
+#[test]
+fn arten_nur_angehaengt() {
+    const ERSTE: [&str; 32] = [
+        "note", "konst", "regler", "saege", "puls", "dreieck", "sinus", "rauschen", "lfo", "transponiere", "ladder", "svf", "saett",
+        "glatt", "adsr", "mul", "add", "leitung", "chorus", "hall", "delay", "limiter", "gate", "komp", "eingang", "ausgang", "krume",
+        "phaser", "roehre", "vocoder", "sampler", "faltung",
+    ];
+    assert!(ARTEN.len() >= ERSTE.len(), "ARTEN has {} entries, at least {} expected", ARTEN.len(), ERSTE.len());
+    let ist: Vec<&str> = ARTEN.iter().take(ERSTE.len()).map(|a| a.art).collect();
+    assert_eq!(ist, ERSTE, "the first entries of ARTEN moved");
 }

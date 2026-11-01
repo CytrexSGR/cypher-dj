@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { aufbau } from './hilfen/ausgabe_aufbau.mjs';
+import { warteBis } from './hilfen/proj_kontext.mjs';
 import { alsAntwort, belegteSpuren, reglerEinzeln } from '../bereiche/proj/ausgabe.ts';
 
 async function ruf(f) {
@@ -199,4 +200,84 @@ test('Lautheit 1.10: Solo auf einer Gruppe macht Spuren außerhalb stumm und lä
   await a.aendern([{ befehl: 'spur_aendern', spur_id: 's1', solo: true }], 'Solo Kick');
   const b = await mitUmgebung(MISCHUNG(a), () => ruf(() => a.ausgabe.lautheit({ von_beat: 0, bis_beat: 4 })));
   assert.deepEqual(b.body.spuren.map((s) => [s.nr, s.stumm]), [[1, false], [2, false]], 'Spur-Solo und Gruppen-Solo: beide klingen');
+});
+
+// --- Automation slice 2, task 5 (E10): isolation of the single-track renders -------------------------------------------------------------------
+const warteGeladen = (a) => warteBis(() => a.zustand.kernNr === a.projekt().wiedergabe_rev && !a.s.ladenGesperrt(), 5000);
+const dateien = (a) => fs.readdirSync(a.arbeitsordner).filter((n) => /^wiedergabe-\d+\.json$/.test(n)).sort();
+// adds a lane with the given points to a track (two commands: auto_neu, then auto_punkte on the new lane)
+async function lane(a, spur, ziel, punkte) {
+  await a.aendern([{ befehl: 'auto_neu', spur_id: spur, ziel }], `lane ${ziel}`);
+  const id = a.projekt().spuren.find((s) => s.id === spur).automation.find((l) => l.ziel === ziel).id;
+  await a.aendern([{ befehl: 'auto_punkte', lane_id: id, setze: punkte, loesche_von: 0, loesche_bis: 1e6 }], `points ${ziel}`);
+}
+const spurW = (aufruf, n) => aufruf.wiedergabe.spuren.find((s) => s.nr === n);
+const ziele = (aufruf, n) => (spurW(aufruf, n)?.auto ?? []).map((x) => x.ziel);
+
+test('S2 T5 AK9: the single render of track A carries no lanes of track B but its own; the sum keeps all; no extra playback file stays', async (t) => {
+  const a = await aufbau(t, { tempo: 120 });
+  await lane(a, 's2', 'mute', [{ beat: 0, wert: 0 }]);
+  await lane(a, 's2', 'fader', [{ beat: 0, wert: 6 }, { beat: 16, wert: 6 }]);
+  await lane(a, 's1', 'pan', [{ beat: 0, wert: -0.5 }, { beat: 16, wert: -0.5 }]);
+  assert.ok(await warteGeladen(a), 'the playback with the lanes is loaded');
+  const geladen = a.projekt().wiedergabe_rev, vorher = dateien(a);
+  assert.ok(vorher.includes(`wiedergabe-${geladen}.json`));
+  const r = await mitUmgebung(MISCHUNG(a), () => ruf(() => a.ausgabe.lautheit({ von_beat: 0, bis_beat: 16 })));
+  assert.equal(r.code, 200, JSON.stringify(r.body));
+  const aufrufe = renderAufrufe(a);
+  assert.equal(aufrufe.length, 4, 'tracks 1, 2, 3 and the sum');
+  // the single render of track n: the only call whose regler file has track n un-muted and every other slot muted (the sum has no muted slot)
+  const einzel = (n) => aufrufe.find((x) => Object.entries(x.regler).filter(([k]) => k.endsWith('/mute')).every(([k, v]) => v === (k === `spur/${n}/mute` ? 0 : 1)));
+  assert.deepEqual(ziele(einzel(1), 1), ['pan'], 'track A keeps its own lane');
+  assert.deepEqual(ziele(einzel(1), 2), [], 'no lane of track B in the render of track A');
+  assert.equal('auto' in spurW(einzel(1), 2), false);
+  assert.deepEqual(ziele(einzel(2), 2), ['mute', 'fader'], 'track B keeps its own lanes in its own render');
+  assert.deepEqual(ziele(einzel(2), 1), [], 'no lane of track A in the render of track B');
+  const summe = aufrufe.at(-1);
+  assert.deepEqual([ziele(summe, 1), ziele(summe, 2)], [['pan'], ['mute', 'fader']], 'positive control: the sum keeps all lanes');
+  // the run freezes the host track s3 first (a new loaded playback, number rev); the export, single and sum files are all deleted
+  await warteGeladen(a);
+  const jetzt = `wiedergabe-${a.projekt().wiedergabe_rev}.json`, nachher = dateien(a);
+  assert.ok(nachher.every((n) => vorher.includes(n) || n === jetzt), `no extra playback file stays: ${nachher.join(', ')} (loaded: ${jetzt})`);
+  assert.ok(nachher.includes(jetzt), 'the playback loaded now still exists');
+  assert.ok(nachher.includes(`wiedergabe-${geladen}.json`), 'the previously loaded playback is not pushed out');
+});
+
+test('S2 T5 E10 skip rule: base mute 1 with a mute lane is rendered; base mute 1 without lanes is still skipped', async (t) => {
+  const a = await aufbau(t, { tempo: 120 });
+  await a.aendern([{ befehl: 'spur_aendern', spur_id: 's2', mute: true }], 'Bass mute');
+  const ohne = await mitUmgebung(MISCHUNG(a), () => ruf(() => a.ausgabe.lautheit({ von_beat: 0, bis_beat: 4 })));
+  assert.equal(ohne.code, 200, JSON.stringify(ohne.body));
+  assert.equal(renderAufrufe(a).length, 2, 'negative control: track 1 and the sum; the muted track 2 is skipped');
+  assert.equal(nr(ohne, 2).stumm, true);
+  fs.rmSync(protokollDatei(a));
+  await lane(a, 's2', 'mute', [{ beat: 0, wert: 0 }]);
+  assert.ok(await warteGeladen(a));
+  const mit = await mitUmgebung(MISCHUNG(a), () => ruf(() => a.ausgabe.lautheit({ von_beat: 0, bis_beat: 4 })));
+  assert.equal(mit.code, 200, JSON.stringify(mit.body));
+  assert.equal(renderAufrufe(a).length, 3, 'tracks 1 and 2 and the sum: the mute lane keeps track 2 in');
+  assert.deepEqual(ziele(renderAufrufe(a)[1], 2), ['mute']);
+  // a lane on another target (pan) does not rescue a muted track
+  fs.rmSync(protokollDatei(a));
+  const b = await aufbau(t, { tempo: 120 });
+  await b.aendern([{ befehl: 'spur_aendern', spur_id: 's2', mute: true }], 'Bass mute');
+  await lane(b, 's2', 'pan', [{ beat: 0, wert: 0.5 }]);
+  assert.ok(await warteGeladen(b));
+  await mitUmgebung(MISCHUNG(b), () => ruf(() => b.ausgabe.lautheit({ von_beat: 0, bis_beat: 4 })));
+  assert.equal(renderAufrufe(b).length, 2, 'a pan lane does not un-mute');
+});
+
+test('S2 T5 error path: a failing render (rc 4) with foreign lanes leaves no single-track playback behind and the loaded one stays', async (t) => {
+  const a = await aufbau(t, { tempo: 120 });
+  await lane(a, 's2', 'mute', [{ beat: 0, wert: 0 }]);
+  await lane(a, 's1', 'pan', [{ beat: 0, wert: 0.5 }]);
+  assert.ok(await warteGeladen(a));
+  const geladen = `wiedergabe-${a.projekt().wiedergabe_rev}.json`, vorher = dateien(a);
+  const f = await mitUmgebung({ RENDER_ATTRAPPE_RC: '4' }, () => ruf(() => a.ausgabe.lautheit({ von_beat: 0, bis_beat: 4 })));
+  assert.deepEqual([f.code, f.body.fehler], [502, 'render_fehler']);
+  assert.ok(a.protokoll.wiedergaben.length >= 2, 'a single-track playback was written next to the export playback');
+  await warteGeladen(a);
+  const nachher = dateien(a), jetzt = `wiedergabe-${a.projekt().wiedergabe_rev}.json`;
+  assert.ok(nachher.every((n) => vorher.includes(n) || n === jetzt), `no leftover: ${nachher.join(', ')} (before: ${vorher.join(', ')})`);
+  assert.ok(nachher.includes(geladen) && nachher.includes(jetzt), 'the loaded playback is still there');
 });

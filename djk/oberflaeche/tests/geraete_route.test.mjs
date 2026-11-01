@@ -20,7 +20,7 @@ test('geraete: GET zeigt vier leere Eingänge, POST ordnet zu und schreibt Datei
   const g0 = await ruf(url, 'GET', '/geraete');
   assert.equal(g0.code, 200);
   assert.deepEqual([g0.j.erkennung, g0.j.eingaenge.length, g0.j.eingaenge.every((e) => e.profil === null && e.frei_fuer_cypher === false)], ['ok', 4, true]);
-  assert.deepEqual(g0.j.profile.map((p) => p.id), ['pc-eingang', 'xdj-xz']);
+  assert.deepEqual(g0.j.profile.map((p) => p.id), ['pc-eingang', 'xdj-xz', 'midi-controller']);
   assert.ok(!fs.existsSync(konfigPfad) && !fs.existsSync(kantenPfad), 'Lesen schreibt nichts');
   // Gerät nicht da: Zuordnung wird mit 409 abgelehnt, nichts geschrieben
   const nein = await ruf(url, 'POST', '/geraete/eingang', { k: 1, profil: 'pc-eingang' });

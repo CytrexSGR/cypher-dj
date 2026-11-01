@@ -39,6 +39,7 @@ impl Frueh {
 
     pub fn reset(&mut self) {
         self.puffer.iter_mut().for_each(|v| *v = 0.0);
+        self.pos = 0;
     }
 
     #[inline]
@@ -67,6 +68,7 @@ impl Verzoegerung {
     }
     pub fn reset(&mut self) {
         self.puffer.iter_mut().for_each(|v| *v = 0.0);
+        self.pos = 0;
     }
     #[inline]
     pub fn sample(&mut self, x: f32) -> f32 {

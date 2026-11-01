@@ -1,0 +1,36 @@
+{
+  "format": "baukasten/2",
+  "name": "fx-lofi-sp1200",
+  "stimmen": 1,
+  "regler_namen": {"1": "Bits", "2": "Rate"},
+  "knoten": [
+    {"id": "ein", "art": "eingang"},
+    {"id": "bits", "art": "regler", "nr": 1, "min": 8, "max": 16},
+    {"id": "rate", "art": "regler", "nr": 2, "min": 14130, "max": 48000, "log": 1},
+    {"id": "kl", "art": "krume", "bits": 12, "rate": 26040},
+    {"id": "kr", "art": "krume", "bits": 12, "rate": 26040},
+    {"id": "fl", "art": "svf", "pole": 4, "cutoff": 12000, "reso": 0},
+    {"id": "fr", "art": "svf", "pole": 4, "cutoff": 12000, "reso": 0},
+    {"id": "cut", "art": "mul", "b": 0.45},
+    {"id": "sl", "art": "saett", "antrieb": 3},
+    {"id": "sr", "art": "saett", "antrieb": 3},
+    {"id": "aus", "art": "ausgang"}
+  ],
+  "kanten": [
+    {"von": "ein.l", "nach": "kl.x"},
+    {"von": "ein.r", "nach": "kr.x"},
+    {"von": "bits.aus", "nach": "kl.bits"},
+    {"von": "bits.aus", "nach": "kr.bits"},
+    {"von": "rate.aus", "nach": "kl.rate"},
+    {"von": "rate.aus", "nach": "kr.rate"},
+    {"von": "rate.aus", "nach": "cut.a"},
+    {"von": "cut.aus", "nach": "fl.cutoff"},
+    {"von": "cut.aus", "nach": "fr.cutoff"},
+    {"von": "kl.aus", "nach": "fl.x"},
+    {"von": "kr.aus", "nach": "fr.x"},
+    {"von": "fl.tp", "nach": "sl.x"},
+    {"von": "fr.tp", "nach": "sr.x"},
+    {"von": "sl.aus", "nach": "aus.l"},
+    {"von": "sr.aus", "nach": "aus.r"}
+  ]
+}

@@ -5,11 +5,15 @@
 # cb_p50_us, cb_p99_us, cb_p999_us, cb_max_us über alle Zyklen (Verteilung im Netz-Faden, telemetrie.h) sowie die
 # selbst gezählten Frame-Lücken. Hält das Echtzeit-Schloss, Fremdlast vorher und nachher (ROADMAP §8.5).
 # Aufruf: kosten25.sh --lauf NAME [--kern PROGRAMM] [--leer] [--rampen] [--last] [--sekunden 60] [--konfig-sed AUSDRUCK]
-#                     [--graph NAME]
+#                     [--graph NAME [--send-graph NAME]] [--regler] [--decks-offen]
 #   --graph    Baukasten S3c (D13): der Sender setzt NAME als Effekt-Graph auf deck/1..4 (/k/kanal/graph); legt
 #              ~/.config/cypherdj/baukasten/NAME.json aus baukasten_dsp/beispiele/ nur an, wenn sie fehlt, und räumt nur
 #              das Eigene. ergebnis.json trägt graph_angenommen (Zeilen "graph .. angenommen" im Sender); ungleich 4:
 #              POSITIVPROBE GERISSEN und Rückgabe 1
+#   --send-graph  Baukasten S6 (R6, only with --graph): additionally NAME as effect graph on fx/3 and fx/4, send/3 and send/4
+#              of deck/1..4 at -6 dB (the buses carry signal); six graphs, graph_angenommen must be 6 (else 4)
+#   --decks-offen  open the deck faders as the hand (from "leitstand" they are rejected kein_hoerschein and stay closed); implied by
+#              --send-graph, give it to the reference run (--graph only) as well so both runs carry the same load
 #   --konfig-sed  sed-Ausdruck auf die kern.toml des Laufs, neben pruefmodus (Baukasten S3b: graph_faeden je Lauf)
 #   --last     Fehlerfall für das Instrument: jeder 100. Zyklus verbrennt eine halbe Periode (Kern --test-last-*)
 # Ergebnis: djk/kern/tests/ziel/laeufe/<NAME>-<datum>/ergebnis.json (Schlusszeile des Kerns plus Lauf-Angaben).
@@ -21,22 +25,32 @@ DJK=$(cd "$HIER/../../.." && pwd)
 : "${CYPHERDJ_INSTANZ:?CYPHERDJ_INSTANZ setzen (Strang A: export CYPHERDJ_INSTANZ=a)}"
 I=$CYPHERDJ_INSTANZ
 case "$I" in [a-i]) K=$(( $(printf '%d' "'$I") - 96 ));; *) echo "CYPHERDJ_INSTANZ=$I: a bis i" >&2; exit 4;; esac
-LAUF=kosten KERN=$DJK/kern/build/cypherdj-kern SENDER_ARG=() LAST=() SEK=60 KSED=() GRAPH_NAME=""
+LAUF=kosten KERN=$DJK/kern/build/cypherdj-kern SENDER_ARG=() LAST=() SEK=60 KSED=() GRAPH_NAME="" SEND_GRAPH_NAME=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --lauf) LAUF=$2; shift 2;; --kern) KERN=$2; shift 2;; --leer) SENDER_ARG+=(--leer); shift;;
     --rampen) SENDER_ARG+=(--rampen); shift;; --last) LAST=(--test-last-alle 100 --test-last-perioden 0.5); shift;;
-    --graph) GRAPH_NAME=$2; SENDER_ARG+=(--graph "$2"); shift 2;;
+    --graph) GRAPH_NAME=$2; SENDER_ARG+=(--graph "$2"); shift 2;; --regler) SENDER_ARG+=(--regler); shift;;
+    --decks-offen) SENDER_ARG+=(--decks-offen); shift;;
+    --send-graph) SEND_GRAPH_NAME=$2; SENDER_ARG+=(--send-graph "$2"); shift 2;;
     --sekunden) SEK=$2; shift 2;; --konfig-sed) KSED+=(-e "$2"); shift 2;; *) echo "kosten25.sh: unbekannt $1" >&2; exit 4;;
   esac
 done
 NOTBAHN=$DJK/notbahn/build/cypherdj-notbahn
 case "$GRAPH_NAME" in *[!A-Za-z0-9_-]*) echo "--graph $GRAPH_NAME: nur Buchstaben, Ziffern, - und _" >&2; exit 4;; esac
+case "$SEND_GRAPH_NAME" in *[!A-Za-z0-9_-]*) echo "--send-graph $SEND_GRAPH_NAME: nur Buchstaben, Ziffern, - und _" >&2; exit 4;; esac
+[ -z "$SEND_GRAPH_NAME" ] || [ -n "$GRAPH_NAME" ] || { echo "--send-graph braucht --graph" >&2; exit 4; }
 BK_ORDNER=$HOME/.config/cypherdj/baukasten BK_DATEI="" BK_ANGELEGT="" BK_ORDNER_ANGELEGT=""
+BK_DATEI2="" BK_ANGELEGT2="" QUELLE2=""
 if [ -n "$GRAPH_NAME" ]; then
   QUELLE=$DJK/instrumente/baukasten_dsp/beispiele/$GRAPH_NAME.json
   [ -f "$QUELLE" ] || { echo "fehlt: $QUELLE" >&2; exit 4; }
   BK_DATEI=$BK_ORDNER/$GRAPH_NAME.json
+fi
+if [ -n "$SEND_GRAPH_NAME" ]; then
+  QUELLE2=$DJK/instrumente/baukasten_dsp/beispiele/$SEND_GRAPH_NAME.json
+  [ -f "$QUELLE2" ] || { echo "fehlt: $QUELLE2" >&2; exit 4; }
+  BK_DATEI2=$BK_ORDNER/$SEND_GRAPH_NAME.json
 fi
 for p in "$KERN" "$NOTBAHN"; do [ -x "$p" ] || { echo "fehlt: $p" >&2; exit 4; }; done
 NB_ARGS="--daneben --vor cypherdj-kern-$I:notbahn_vor"   # Notbahn daneben (ADR 016 Nachtrag), wie neustart/serie.sh aus 18
@@ -64,6 +78,7 @@ aufraeumen() {
   [ -n "$NB" ] && kill -TERM "$NB" 2>/dev/null && wait "$NB" 2>/dev/null
   [ -n "$MOD" ] && pactl unload-module "$MOD"
   [ -n "$BK_ANGELEGT" ] && rm -f "$BK_DATEI"
+  [ -n "$BK_ANGELEGT2" ] && rm -f "$BK_DATEI2"
   [ -n "$BK_ORDNER_ANGELEGT" ] && rmdir "$BK_ORDNER" 2>/dev/null
   f=/dev/shm/cypherdj-$I/zustand; if [ -e "$f" ] && ! fuser -s "$f" 2>/dev/null; then rm -f "$f"; fi
 }
@@ -71,6 +86,9 @@ trap aufraeumen EXIT
 if [ -n "$GRAPH_NAME" ]; then   # erst nach dem Schloss und der Falle: was wir anlegen, räumen wir
   [ -d "$BK_ORDNER" ] || { mkdir -p "$BK_ORDNER" && BK_ORDNER_ANGELEGT=1; }
   [ -f "$BK_DATEI" ] || { cp "$QUELLE" "$BK_DATEI" && BK_ANGELEGT=1; }
+  if [ -n "$SEND_GRAPH_NAME" ]; then
+    [ -f "$BK_DATEI2" ] || { cp "$QUELLE2" "$BK_DATEI2" && BK_ANGELEGT2=1; }
+  fi
 fi
 MOD=$(pactl load-module module-null-sink sink_name="$SENKE" channels=4 \
   channel_map=front-left,front-right,rear-left,rear-right sink_properties=node.description="$SENKE")
@@ -84,9 +102,9 @@ python3 "$HIER/kosten25_sender.py" --kern-port $((47100 + 1000 * K)) --port $((4
   "${SENDER_ARG[@]}" --sekunden "$SEK" > "$O/sender.txt" 2>&1
 kill -TERM "$KP"; wait "$KP" 2>/dev/null; KP=""
 NACH=$(cut -d' ' -f1-3 /proc/loadavg)
-python3 - "$O" "$LAUF" "$VOR" "$NACH" "$SEK" "$GRAPH_NAME" <<'PY'
+python3 - "$O" "$LAUF" "$VOR" "$NACH" "$SEK" "$GRAPH_NAME" "$SEND_GRAPH_NAME" <<'PY'
 import json, sys
-o, lauf, vor, nach, sek, graph = sys.argv[1:7]
+o, lauf, vor, nach, sek, graph, send_graph = sys.argv[1:8]
 zeile = [z for z in open(f"{o}/kern.err", encoding="utf-8") if z.startswith('{"zyklen"')][-1]
 e = json.loads(zeile)
 e.update({"lauf": lauf, "last_vorher": vor, "last_nachher": nach, "sekunden": float(sek),
@@ -97,11 +115,14 @@ probe_gerissen = False
 if graph:   # Positivprobe (D13): alle vier Decks haben den Graphen angenommen, sonst ist die Messung wertlos
     e["graph"] = graph
     e["graph_angenommen"] = sum(1 for z in e["sender"].splitlines() if z.startswith("graph ") and z.endswith(" angenommen"))
-    probe_gerissen = e["graph_angenommen"] != 4
+    soll = 6 if send_graph else 4   # S6: four decks, plus fx/3 and fx/4 with --send-graph
+    e["graph_soll"] = soll
+    if send_graph: e["send_graph"] = send_graph
+    probe_gerissen = e["graph_angenommen"] != soll
 json.dump(e, open(f"{o}/ergebnis.json", "w"), ensure_ascii=False, indent=1)
 print(json.dumps(e, ensure_ascii=False))
 if probe_gerissen:
-    print(f"POSITIVPROBE GERISSEN: graph_angenommen {e['graph_angenommen']} statt 4 ({graph})")
+    print(f"POSITIVPROBE GERISSEN: graph_angenommen {e['graph_angenommen']} statt {soll} ({graph})")
     sys.exit(1)
 sys.exit(0 if e["gehalten"] else 1)
 PY

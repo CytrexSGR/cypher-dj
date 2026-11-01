@@ -113,3 +113,99 @@ test('1.10 Modell N2: ein /1-Projekt mit aufnahme wird geladen, gehoben, gespeic
   const fremd = kopie(geladen); fremd.spuren[0].aufnahmee = aufnahme;
   assert.match(pruefeFehler(fremd), /aufnahmee.*unbekanntes Feld/);
 });
+
+// ---- 1.10 slice 3: returns, sends, hall values ----------------------------------------------------------------------------------
+import { MAX_RETURNS, HALL_VORGABE, neueId } from '../projekt/modell.ts';
+
+const ret = (nr, extra = {}) => ({ id: `r${nr}`, nr, name: `Return ${nr}`, farbe: '#d08a2e', fader_db: 0, pan: 0, mute: false, solo: false, hall: { ...HALL_VORGABE }, ...extra });
+const mitReturn = () => {
+  const p = mitGruppe();
+  p.returns = [ret(1, { name: 'Hall' })];
+  p.spuren[0].sends = [{ id: 'r1', db: -6 }];
+  p.gruppen[0].sends = [{ id: 'r1', db: -199 }];
+  return p;
+};
+
+test('slice 3 model: a valid project with returns and sends passes; the Hall defaults are the stellwerk defaults', () => {
+  const p = mitReturn();
+  assert.equal(pruefeFehler(p), null);
+  assert.equal(MAX_RETURNS, 4);
+  assert.deepEqual(HALL_VORGABE, { an: true, pre: 0.04, decay: 0.5252, groesse: 0.282, tief: 0.5658, highcut: 0.8039, fahne: 0.66667 });
+  const g = pruefeProjekt(p);
+  assert.ok(g.projekt, JSON.stringify(g));
+  assert.equal(kanonisch(pruefeProjekt(g.projekt).projekt), kanonisch(g.projekt), 'idempotent (A8)');
+  const vier = mitGruppe();
+  vier.returns = Array.from({ length: MAX_RETURNS }, (_, i) => ret(i + 1));
+  vier.spuren[0].sends = vier.returns.map((r) => ({ id: r.id, db: 0 }));
+  assert.equal(pruefeFehler(vier), null, 'negative control: four returns and four sends are accepted');
+});
+
+test('slice 3 model: closed validation of returns and sends (error cases)', () => {
+  const schlecht = (aendere, muster) => { const p = mitReturn(); aendere(p); assert.match(pruefeFehler(p), muster); };
+  schlecht((p) => { p.returns = Array.from({ length: MAX_RETURNS + 1 }, (_, i) => ret(i + 1)); }, /returns|nr/);   // more than 4
+  schlecht((p) => { p.returns.push(ret(1, { id: 'r2' })); }, /nr/);                                              // nr twice
+  schlecht((p) => { p.returns.push(ret(2, { id: 'r1' })); }, /id/);                                              // id twice
+  schlecht((p) => { p.returns[0].nr = MAX_RETURNS + 1; }, /nr/);
+  schlecht((p) => { p.returns[0].nr = 0; }, /nr/);
+  schlecht((p) => { p.returns = []; }, /returns/);                                                                // absent instead of empty
+  schlecht((p) => { p.spuren[0].sends = [{ id: 'r9', db: -6 }]; }, /unbekannter Return/);                         // send without a return
+  schlecht((p) => { p.gruppen[0].sends = [{ id: 'r9', db: -6 }]; }, /unbekannter Return/);
+  schlecht((p) => { p.spuren[0].sends = [{ id: 'r1', db: -6 }, { id: 'r1', db: -3 }]; }, /doppelt/);              // one send per return
+  schlecht((p) => { p.spuren[0].sends = [{ id: 'r1', db: 6.5 }]; }, /db/);                                        // above +6
+  schlecht((p) => { p.spuren[0].sends = [{ id: 'r1', db: -200 }]; }, /db/);                                       // -200 is "absent", never stored
+  schlecht((p) => { p.spuren[0].sends = [{ id: 'r1', db: -201 }]; }, /db/);
+  schlecht((p) => { p.spuren[0].sends = []; }, /sends/);
+  schlecht((p) => { p.spuren[0].sends = [{ id: 'r1', db: -6, extra: 1 }]; }, /unbekanntes Feld/);
+  schlecht((p) => { p.returns[0].hall.decay = 1.5; }, /decay/);                                                   // hall value outside 0..1
+  schlecht((p) => { p.returns[0].hall.pre = -0.1; }, /pre/);
+  schlecht((p) => { p.returns[0].hall.an = 1; }, /an/);
+  schlecht((p) => { p.returns[0].hall.mix = 0.5; }, /unbekanntes Feld/);                                          // no such hall field
+  schlecht((p) => { delete p.returns[0].hall.fahne; }, /fahne.*fehlt/);
+  schlecht((p) => { p.returns[0].extra = 1; }, /unbekanntes Feld/);
+  schlecht((p) => { p.returns[0].fader_db = 7; }, /fader_db/);
+  schlecht((p) => { p.returns[0].farbe = 'red'; }, /farbe/);
+});
+
+test('slice 3 migration: an existing /2 file without returns opens, saves byte-identical and renders the same view; /1 stays; returns in /1 is an error', (t) => {
+  const zwei = mitGruppe();                                   // a /2 project as written since slice 1
+  const w = tmpOrdner(t); const pr = new Projekte(w); const { slug } = pr.lege('M3');
+  pr.speichere(slug, zwei);                                   // the file exactly as the writer produces it
+  const vorher = fs.readFileSync(path.join(w, slug, 'project.json'), 'utf8');
+  const geladen = pr.lies(slug);
+  assert.ok(!('returns' in geladen), 'no returns field is invented');
+  assert.ok(!('return' in (geladen.naechste_id ?? {})), 'no return counter is invented');
+  pr.speichere(slug, geladen);
+  assert.equal(fs.readFileSync(path.join(w, slug, 'project.json'), 'utf8'), vorher, 'byte-identical after open and save');
+  assert.equal(kanonisch(wiedergabeSicht(geladen)), kanonisch(wiedergabeSicht(zwei)));
+  assert.deepEqual(Object.keys(wiedergabeSicht(geladen)).sort(), ['gruppen', 'spuren']);
+  const alt = kopie(specProjekt()); alt.returns = [ret(1)];
+  assert.match(pruefeFehler(alt), /returns.*unbekanntes Feld/, 'returns in /1');
+  const alt2 = kopie(specProjekt()); alt2.spuren[0].sends = [{ id: 'r1', db: -6 }];
+  assert.match(pruefeFehler(alt2), /sends.*unbekanntes Feld/, 'sends in /1');
+  assert.ok(pruefeProjekt(specProjekt()).projekt, '/1 opens as before');
+});
+
+test('slice 3 ids: the prefixes of neueId are pairwise different; the return counter arises with the first return and only rises', () => {
+  const p = neuesProjekt('P');
+  const ids = ['spur', 'clip', 'gruppe', 'lane', 'return'].map((a) => neueId(p, a));
+  assert.deepEqual(ids, ['s1', 'c1', 'g1', 'a1', 'r1']);
+  assert.equal(new Set(ids.map((i) => i[0])).size, 5);
+  const q = neuesProjekt('Q');
+  assert.ok(!('return' in q.naechste_id), 'a new project has no return counter');
+  q.returns = [ret(1)];
+  assert.equal(neueId(q, 'return'), 'r2', 'the live id r1 is skipped');
+  q.returns = [];
+  assert.equal(neueId(q, 'return'), 'r3', 'the counter never reuses an id');
+  assert.match(pruefeFehler({ ...neuesProjekt('R'), naechste_id: { return: 0 } }), /naechste_id\.return/);
+});
+
+test('slice 3 view: returns:[{id,nr}] only when there are returns; sends and hall values are not part of the view', () => {
+  const m = mitReturn();
+  assert.deepEqual(wiedergabeSicht(m).returns, [{ id: 'r1', nr: 1 }]);
+  const anders = kopie(m);
+  anders.spuren[0].sends = [{ id: 'r1', db: -20 }]; anders.returns[0].hall.decay = 0.9; anders.returns[0].fader_db = -8; anders.returns[0].name = 'x'; anders.returns[0].hall.an = false;
+  assert.equal(kanonisch(wiedergabeSicht(anders)), kanonisch(wiedergabeSicht(m)), 'level and hall are controls, not playback');
+  const ohne = kopie(m); delete ohne.returns; delete ohne.spuren[0].sends; delete ohne.gruppen[0].sends;
+  assert.ok(!('returns' in wiedergabeSicht(ohne)), 'negative control: no returns, no key');
+  assert.notEqual(kanonisch(wiedergabeSicht(ohne)), kanonisch(wiedergabeSicht(m)));
+});

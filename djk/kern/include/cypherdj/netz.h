@@ -10,6 +10,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <deque>
 #include <memory>
 #include <string>
 #include <vector>
@@ -54,6 +55,7 @@ class Netz {
   void zustand_senden(int64_t jetzt_ns);              // /zustand/kern aus dem Fenster der letzten Sekunde
   void abonnenten_pruefen(int64_t jetzt_ns);          // streicht Abonnenten, deren letztes /k/hallo älter als frist_ns ist
   int abonnenten() const;
+  size_t graph_wartend() const { return graph_wartend_.size(); }  // S16 tests: pending graph entries
   // Scheibe 35, Befund B-O Weg 1 (kern.toml hand_osc): /test/hand auch ohne Prüfmodus annehmen (Hand-Weg der Oberfläche).
   // Alle anderen /test/*-Adressen bleiben an den Prüfmodus gebunden.
   void setze_hand_osc(bool an) { hand_osc_ = an; }
@@ -109,6 +111,23 @@ class Netz {
   bool erz_ereignis(const Ereignis& e);
   std::string kit_ordner_;
   std::string bk_ordner_;  // Baukasten S3a
+  // S12 task 1: per stream (1..16) the last ACCEPTED non-graph target (kit:/midi:) and its kanal, net thread only. `bk:`
+  // with an empty name replays it, so an instrument graph can be taken off again. Graph targets are never stored.
+  std::string erz_vorher_ziel_[16];
+  std::string erz_vorher_kanal_[16];
+  // S16 (netz_graph.cpp): which graph sits on each graph-capable slot (osc.json graph_platz), net thread only. Changed only when
+  // the callback's quittung for the command arrives (1, 2, 3, 5), published as /e/graph; /k/graph/frage answers every slot.
+  bool graph_paket(const cypherdj::osc::Adresse* a, const osc::Nachricht& m);  // /k/graph/frage (false: other address)
+  void graph_vormerken(int64_t id, const char* quelle, const char* kanal, const char* name, int strom);
+  void graph_quittung(const Ereignis& e);
+  std::string graph_platz_name(const std::string& kanal) const;
+  void sende_graph(const char* kanal, const std::string& name);
+  struct GraphWartend { int64_t id; std::string quelle, kanal, name; int strom; };
+  void graph_anwenden(const GraphWartend& w);  // apply one confirmed entry to the mirror, send every changed slot
+  std::deque<GraphWartend> graph_wartend_;
+  std::map<std::string, std::string> graph_insert_;     // deck/1..4, fx/3, fx/4 -> name
+  struct GraphStrom { std::string kanal, name; };
+  GraphStrom graph_strom_[16];                          // stream n-1 -> channel and graph it carries ("" none)
   // MVP 2 (netz_loop.cpp): /k/loop/* annehmen (false: keine Loop-Adresse), /e/loop senden, Freigaben
   bool loop_paket(const cypherdj::osc::Adresse* a, const osc::Nachricht& m);
   bool loop_ereignis(const Ereignis& e);

@@ -21,7 +21,7 @@ export function bindeAusgabe(ctx) {
   let frage = 0;
   ctx.ausgabeLauf = (x) => {
     clearTimeout(frage);
-    if (!x || (x.art !== 'freeze' && x.art !== 'export' && x.art !== 'lautheit') || st.lauf) { if (st.fremdLauf) { st.fremdLauf = null; knoepfe(); } return; }
+    if (!x || (x.art !== 'freeze' && x.art !== 'export' && x.art !== 'lautheit' && x.art !== 'merge') || st.lauf) { if (st.fremdLauf) { st.fremdLauf = null; knoepfe(); } return; }
     const s = x.art === 'freeze' ? st.projekt?.spuren.find((y) => y.id === x.spur_id) : null;
     const gleich = st.fremdLauf && st.fremdLauf.art === x.art && st.fremdLauf.spur_id === x.spur_id;
     st.fremdLauf = gleich ? st.fremdLauf : { art: x.art, ...(x.art === 'freeze' ? { spur_id: x.spur_id, name: s?.name ?? x.spur_id, an: !s?.freeze } : {}), seit: null };   // H3: kein Start bekannt
@@ -29,6 +29,7 @@ export function bindeAusgabe(ctx) {
     frage = setTimeout(() => ctx.ladeAktuell(), 500);
   };
   st.exportErgebnis = null;  // letzte Antwort von /proj/export
+  ctx.laufJetzt = laufJetzt;
 
   function knoepfe() {
     $('export').disabled = !st.projekt || !!laufJetzt();
@@ -67,6 +68,12 @@ export function bindeAusgabe(ctx) {
     const j = await lauf('freeze', '/proj/freeze', { spur_id: spurId, an }, { spur_id: spurId, name: s.name, an });
     if (j?.projekt) { ctx.uebernimm(st.slug, j.projekt); ctx.melde(`${s.name} ${an ? 'frozen' : 'unfrozen'}`); }
   }
+  // Slice 7 (D14): Merge Tracks from the clip menu; the frame lauf() locks freeze, export and merge against each other and shows the text of a reason
+  ctx.zusammenfuehren = async (koerper) => {
+    const j = await lauf('merge', '/proj/zusammenfuehren', koerper, {});
+    if (j?.projekt) ctx.uebernimm(st.slug, j.projekt);
+    return j;
+  };
   $('export').addEventListener('click', async () => {
     if (!st.projekt || laufJetzt()) return;
     const j = await lauf('export', '/proj/export', {}, {});

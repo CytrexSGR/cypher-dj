@@ -250,6 +250,10 @@ Mixer::~Mixer() {
     cypher_bk_frei(bk_[k]);
     cypher_bk_frei(bk_alt_[k]);
   }
+  for (int s = 0; s < MIX_SENDS_GRAPH; ++s) {
+    cypher_bk_frei(send_bk_[s]);
+    cypher_bk_frei(send_bk_alt_[s]);
+  }
   for (int i = 0; i < n_bk_frei_; ++i) cypher_bk_frei(bk_frei_[i]);
 }
 
@@ -261,21 +265,32 @@ void Mixer::bk_zur_freigabe(CypherBk* g) noexcept {
 
 void Mixer::setze_kanal_graph(int k, CypherBk* g) noexcept {
   if (k < 0 || k >= MIX_GRAPH_KANAELE) { bk_zur_freigabe(g); return; }
-  if (g == bk_[k]) return;
+  graph_platz_setze({bk_[k], bk_alt_[k], bk_blende_[k]}, g);
+}
+
+void Mixer::setze_send_graph(int s, CypherBk* g) noexcept {
+  if (s < 2 || s >= 2 + MIX_SENDS_GRAPH) { bk_zur_freigabe(g); return; }
+  const int i = s - 2;
+  graph_platz_setze({send_bk_[i], send_bk_alt_[i], send_blende_[i]}, g);
+}
+
+// Switch logic of one graph slot, shared by the deck insert and the send returns (D9).
+void Mixer::graph_platz_setze(GraphPlatz p, CypherBk* g) noexcept {
+  if (g == p.g) return;
 #ifndef CYPHERDJ_MUTATION_BK_KANAL_DOPPEL_ALT
-  if (bk_blende_[k] == MIX_GRAPH_BLENDE) {
+  if (p.blende == MIX_GRAPH_BLENDE) {
     // Der neue Weg hat noch kein Sample gerechnet (zweiter Wechsel vor demselben Block): er geht, der gehörte alte
     // Weg blendet weiter aus. Sonst würde der ungehörte Graph zum alten Weg und der gehörte bräche ohne Blende ab.
-    bk_zur_freigabe(bk_[k]);
-    bk_[k] = g;
-    if (g == bk_alt_[k]) { bk_alt_[k] = nullptr; bk_blende_[k] = 0; }   // zurück auf den gehörten Weg
+    bk_zur_freigabe(p.g);
+    p.g = g;
+    if (g == p.alt) { p.alt = nullptr; p.blende = 0; }   // zurück auf den gehörten Weg
     return;
   }
 #endif
-  bk_zur_freigabe(bk_alt_[k]);   // D4: ein Wechsel in der Blende gibt den ältesten sofort frei
-  bk_alt_[k] = bk_[k];           // null heißt: der alte Weg war trocken
-  bk_[k] = g;
-  bk_blende_[k] = MIX_GRAPH_BLENDE;
+  bk_zur_freigabe(p.alt);   // D4: ein Wechsel in der Blende gibt den ältesten sofort frei
+  p.alt = p.g;              // null heißt: der alte Weg war trocken
+  p.g = g;
+  p.blende = MIX_GRAPH_BLENDE;
 }
 
 int Mixer::bk_frei(CypherBk** aus, int max) noexcept {
@@ -293,13 +308,17 @@ void Mixer::bk_regler_melden(CypherBk* g, int k) noexcept {
   (void)g; (void)k;
   return;
 #endif
+#ifdef CYPHERDJ_MUTATION_BK_SEND_WAECHTER_ALT   // failure case S14: the guard of S5r, rows 18 and 19 (send returns) are dropped
   if (!bk_wert_ || !g || k < 0 || k >= MIX_KANAELE) return;
+#else
+  if (!bk_wert_ || !g || k < 0 || k >= MIX_BK_ZEILEN) return;   // S14: rows 18, 19 are the send returns
+#endif
 #ifdef CYPHERDJ_MUTATION_BK_REGLER_FALSCHER_KANAL  // Fehlerfall S5r: die Zeile des Nachbarkanals
-  k = (k + 1) % MIX_KANAELE;
+  k = (k + 1) % MIX_BK_ZEILEN;
 #endif
   for (int nr = 1; nr <= 8; ++nr) {
 #ifdef CYPHERDJ_MUTATION_BK_REGLER_TAUSCH_05  // Fehlerfall S5r (D5): nur gemeldet, wenn sich der Wert ändert; ein getauschter Graph bleibt auf 0,5
-    static float zuletzt[MIX_KANAELE][8];
+    static float zuletzt[MIX_BK_ZEILEN][8];
     if (bk_wert_[k][nr - 1] == zuletzt[k][nr - 1]) continue;
     zuletzt[k][nr - 1] = bk_wert_[k][nr - 1];
 #endif
@@ -312,43 +331,110 @@ void Mixer::kanal_graph(int k, float* l, float* r, int n) noexcept {
   std::memcpy(bk_ein_l_, l, sizeof(float) * n);
   std::memcpy(bk_ein_r_, r, sizeof(float) * n);
   cypherdj::dsp::DenormalSchutz ds;
-  if (bk_[k]) {
-    bk_regler_melden(bk_[k], k);
-#ifndef CYPHERDJ_MUTATION_BK_KANAL_TAKT_AUS
-    cypher_bk_takt(bk_[k], fx_beat0_, fx_bps_);
+  GraphOptionen opt;
+#ifdef CYPHERDJ_MUTATION_BK_KANAL_TAKT_AUS
+  opt.takt = false;
 #endif
-    cypher_bk_effekt(bk_[k], bk_ein_l_, bk_ein_r_, l, r, static_cast<size_t>(n));
-  }
 #ifdef CYPHERDJ_MUTATION_BK_KANAL_BLENDE_AUS
   bk_blende_[k] = 0;
 #endif
-  if (bk_blende_[k] > 0) {
-    const float* al = bk_ein_l_;
-    const float* ar = bk_ein_r_;
-    if (bk_alt_[k]) {
-#ifndef CYPHERDJ_MUTATION_BK_KANAL_TAKT_AUS
-      cypher_bk_takt(bk_alt_[k], fx_beat0_, fx_bps_);
+#ifdef CYPHERDJ_MUTATION_BK_KANAL_KLEMME_AUS
+  opt.klemme = false;
 #endif
-      cypher_bk_effekt(bk_alt_[k], bk_ein_l_, bk_ein_r_, bk_alt_l_, bk_alt_r_, static_cast<size_t>(n));
+  // in = copy of the tap, out = the tap itself; the copy is also the dry fallback (removed graph / blend from dry)
+  graph_platz_block({bk_[k], bk_alt_[k], bk_blende_[k]}, bk_ein_l_, bk_ein_r_, l, r, bk_ein_l_, bk_ein_r_, k, n, opt);
+}
+
+// Shared block logic of one graph slot (deck insert, send return). See mixer.h.
+void Mixer::graph_platz_block(GraphPlatz p, const float* in_l, const float* in_r, float* out_l, float* out_r,
+                              const float* fb_l, const float* fb_r, int regler_zeile, int n, GraphOptionen opt) noexcept {
+  const size_t nn = static_cast<size_t>(n);
+  if (p.g) {
+    if (regler_zeile >= 0) bk_regler_melden(p.g, regler_zeile);
+    if (opt.takt) cypher_bk_takt(p.g, fx_beat0_, fx_bps_);
+    cypher_bk_effekt(p.g, in_l, in_r, out_l, out_r, nn);
+  } else if (out_l != fb_l) {   // no graph (removed, blending out): the new path is the fallback
+    std::memcpy(out_l, fb_l, sizeof(float) * nn);
+    std::memcpy(out_r, fb_r, sizeof(float) * nn);
+  }
+  if (p.blende > 0) {
+    const float* al = fb_l;
+    const float* ar = fb_r;
+    if (p.alt) {
+      if (opt.takt) cypher_bk_takt(p.alt, fx_beat0_, fx_bps_);
+      cypher_bk_effekt(p.alt, in_l, in_r, bk_alt_l_, bk_alt_r_, nn);
       al = bk_alt_l_;
       ar = bk_alt_r_;
     }
     for (int i = 0; i < n; ++i) {
-      const int rest = bk_blende_[k] - i;
+      const int rest = p.blende - i;
       const float w = rest > 0 ? static_cast<float>(rest) / MIX_GRAPH_BLENDE : 0.0f;   // Gewicht des alten Wegs
-      l[i] = l[i] * (1.0f - w) + al[i] * w;
-      r[i] = r[i] * (1.0f - w) + ar[i] * w;
+      out_l[i] = out_l[i] * (1.0f - w) + al[i] * w;
+      out_r[i] = out_r[i] * (1.0f - w) + ar[i] * w;
     }
-    bk_blende_[k] = std::max(0, bk_blende_[k] - n);
-    if (bk_blende_[k] == 0) {
-      bk_zur_freigabe(bk_alt_[k]);
-      bk_alt_[k] = nullptr;
+    p.blende = std::max(0, p.blende - n);
+    if (p.blende == 0) {
+      bk_zur_freigabe(p.alt);
+      p.alt = nullptr;
     }
   }
-#ifndef CYPHERDJ_MUTATION_BK_KANAL_KLEMME_AUS
+  if (opt.klemme) {
+    for (int i = 0; i < n; ++i) {
+      out_l[i] = std::isfinite(out_l[i]) ? std::clamp(out_l[i], -8.0f, 8.0f) : 0.0f;
+      out_r[i] = std::isfinite(out_r[i]) ? std::clamp(out_r[i], -8.0f, 8.0f) : 0.0f;
+    }
+  }
+}
+
+// S6: return of the effect graph on send bus 2 + s (fx/3, fx/4). S14: it reports its own knob row (fx/<n>/bk/1..8). The graph processes the summed send bus, runs every
+// block while a graph is set or blending (no wake gate: an echo tail must survive a silent send, D5), and its output is
+// added to the master sum scaled by fx/<n>/rueckweg (same gain expression as the hall). The bus itself is never written.
+void Mixer::send_rueckweg(int s, int n) noexcept {
+  if (!send_bk_[s] && send_blende_[s] == 0) return;
+  int bus = s + 2;
+#ifdef CYPHERDJ_MUTATION_BK_SEND_BUS_VERTAUSCHT
+  const int in_bus = 5 - bus;   // fx/3 <-> fx/4
+#else
+  const int in_bus = bus;
+#endif
+#ifdef CYPHERDJ_MUTATION_BK_SEND_GATE_WIE_HALL
+  {
+    bool speist = false;
+    for (int i = 0; i < n && !speist; ++i) speist = fx_l_[in_bus][i] != 0.0f || fx_r_[in_bus][i] != 0.0f;
+    if (!speist) return;
+  }
+#endif
+  cypherdj::dsp::DenormalSchutz ds;
+  GraphOptionen opt;
+#ifdef CYPHERDJ_MUTATION_BK_SEND_BLENDE_AUS
+  send_blende_[s] = 0;
+#endif
+#ifdef CYPHERDJ_MUTATION_BK_SEND_KLEMME_AUS
+  opt.klemme = false;
+#endif
+#if defined(CYPHERDJ_MUTATION_BK_SEND_NUTZT_DECK_REGLER)
+  const int zeile = bus;                           // failure case: fx/3 would hear deck/3/bk/*, fx/4 deck/4/bk/*
+#elif defined(CYPHERDJ_MUTATION_BK_SEND_ZEILE_VERTAUSCHT)
+  const int zeile = MIX_BK_SEND_ZEILE + 1 - s;     // failure case: fx/3 <-> fx/4 knobs swapped
+#elif defined(CYPHERDJ_MUTATION_BK_SEND_OHNE_REGLER)
+  const int zeile = -1;                            // failure case: the S6 behaviour, knobs stuck at 0.5
+#else
+  const int zeile = MIX_BK_SEND_ZEILE + s;         // S14: fx/3 -> row 18 (fx/3/bk/*), fx/4 -> row 19 (fx/4/bk/*)
+#endif
+  graph_platz_block({send_bk_[s], send_bk_alt_[s], send_blende_[s]}, fx_l_[in_bus], fx_r_[in_bus], send_aus_l_[s],
+                    send_aus_r_[s], send_null_, send_null_, zeile, n, opt);
+#ifndef CYPHERDJ_MUTATION_BK_SEND_RUECKGABE_AUS
+  const Wert& rw = fx_rueck_[bus];
   for (int i = 0; i < n; ++i) {
-    l[i] = std::isfinite(l[i]) ? std::clamp(l[i], -8.0f, 8.0f) : 0.0f;
-    r[i] = std::isfinite(r[i]) ? std::clamp(r[i], -8.0f, 8.0f) : 0.0f;
+#if defined(CYPHERDJ_MUTATION_BK_SEND_RUECKWEG_IGNORIERT)
+    const float g = 1.0f;
+#elif defined(CYPHERDJ_MUTATION_BK_SEND_RUECKWEG_W)
+    const float g = lin(rw.w);
+#else
+    const float g = lin(rw.vl ? rw.vl[i] : rw.w);
+#endif
+    sum_l_[i] += send_aus_l_[s][i] * g;
+    sum_r_[i] += send_aus_r_[s][i] * g;
   }
 #endif
 }
@@ -418,7 +504,11 @@ void Mixer::kanal(int k, int n) {
     addiere(pfl_l_, al, n, 1.0f);
     addiere(pfl_r_, ar, n, 1.0f);
   }
-  if (k < 7 || k == 12 || k == 13) {  // /pegel: Spitze nach dem Fader, deck/1..4, erz/1..3 (Studio S1), pad/1..2 (MVP 2)
+#ifdef CYPHERDJ_MUTATION_PEGEL_OHNE_ERZ567
+  if (k < 7 || k == 12 || k == 13) {
+#else
+  if (k < 7 || (k >= 8 && k <= 10) || k == 12 || k == 13) {  // /pegel: Spitze nach dem Fader, deck/1..4, erz/1..3 (Studio S1), erz/5..7 (S18), pad/1..2 (MVP 2)
+#endif
     float sp = spitze_[k];
     for (int i = 0; i < n; ++i) sp = std::max(sp, std::max(std::fabs(aus_l_[i]), std::fabs(aus_r_[i])));
     spitze_[k] = sp;
@@ -566,6 +656,7 @@ void Mixer::verarbeite(int n, float* ml, float* mr, float* cl, float* cr) {
     }
 #endif
   }
+  for (int s = 0; s < MIX_SENDS_GRAPH; ++s) send_rueckweg(s, n);   // S6: fx/3, fx/4 returns, after the hall, before the master FX
 #ifdef CYPHERDJ_MUTATION_FX_EINHEITEN_VERTAUSCHT
   for (int u = FX_EINHEITEN - 1; u >= 0; --u)
 #else

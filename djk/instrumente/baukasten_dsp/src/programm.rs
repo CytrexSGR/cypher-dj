@@ -4,11 +4,17 @@
 use crate::adsr::{Adsr, AdsrZeiten};
 use crate::chorus::Chorus;
 use crate::echo::Echo;
+use crate::faltung::Faltung;
 use crate::gate::Gate;
+use crate::krume::Krume;
 use crate::leitung::Leitung;
 use crate::lfo::Lfo;
 use crate::limiter::Limiter;
 use crate::osz::{Osz, Rauschen, Sinus};
+use crate::phaser::Phaser;
+use crate::vocoder::Vocoder;
+use crate::sampler::{Eingabe, Einstellung, Sampler};
+use crate::roehre::{Roehre, RoehrenSatz};
 use crate::svf::Svf;
 use rb_dsp::Ladder;
 use saett_dsp::Adaa1;
@@ -37,7 +43,8 @@ pub enum Schritt {
     Dreieck { hz: Quelle, sync: Quelle, aus: usize, zyklus: usize, osz: [Osz; MAX_STIMMEN] },
     Sinus { hz: Quelle, fm: Quelle, sync: Quelle, aus: usize, zyklus: usize, osz: [Sinus; MAX_STIMMEN] },
     Rauschen { aus: usize, r: [Rauschen; MAX_STIMMEN] },
-    Lfo { rate: Quelle, trig: Quelle, aus: usize, form: u8, neustart: bool, takt: f32, l: [Lfo; MAX_STIMMEN] },
+    /// `versatz` (beats) and `einmal` (ramp once, then hold) apply to the beat-synced mode (`takt` > 0) only (S21)
+    Lfo { rate: Quelle, trig: Quelle, aus: usize, form: u8, neustart: bool, takt: f32, versatz: f64, einmal: bool, l: [Lfo; MAX_STIMMEN] },
     Transponiere { hz: Quelle, st: Quelle, cent: Quelle, aus: usize },
     Ladder { x: Quelle, cutoff: Quelle, reso: Quelle, aus: usize, f: [Ladder; MAX_STIMMEN], reso_glatt: Spur },
     Svf { x: Quelle, cutoff: Quelle, reso: Quelle, tp: usize, bp: usize, hp: usize, vier: bool, f: [Svf; MAX_STIMMEN] },
@@ -54,15 +61,31 @@ pub enum Schritt {
     Chorus { x: Quelle, mix: Quelle, l: usize, r: usize, c: Chorus },
     /// Summenpunkt (Slice 4a): Cypher Hall auf Σ(x + l) links und Σ(x + r) rechts, Ergebnis in Stimme 0. Nur `mix` ändert
     /// sich im Lauf (D4); `setze` läuft nur bei geändertem Wert.
-    Hall { x: Quelle, l: Quelle, r: Quelle, mix: Quelle, wl: usize, wr: usize, mix_alt: f32, h: Box<hall_dsp::Hall> },
+    Hall { x: Quelle, l: Quelle, r: Quelle, mix: Quelle, wl: usize, wr: usize, mix_alt: f32, mix_start: f32, h: Box<hall_dsp::Hall> },
     /// Summenpunkt (Slice 4b): Echo auf Σ(x + l) links und Σ(x + r) rechts, Ergebnis in Stimme 0. Zeit, fb und mix aus Stimme 0.
     Delay { x: Quelle, l: Quelle, r: Quelle, zeit: Quelle, fb: Quelle, mix: Quelle, takt: f32, wl: usize, wr: usize, d: Echo },
     /// Summenpunkt (Slice 4c): Limiter auf Σ(x + l) links und Σ(x + r) rechts, Ergebnis in Stimme 0, Latenz N − 1
     Limiter { x: Quelle, l: Quelle, r: Quelle, wl: usize, wr: usize, b: Limiter },
     /// Summenpunkt (Slice 4c): Gate auf Σ(x + l) links und Σ(x + r) rechts, Ergebnis in Stimme 0
-    Gate { x: Quelle, l: Quelle, r: Quelle, wl: usize, wr: usize, g: Gate },
+    Gate { x: Quelle, l: Quelle, r: Quelle, kl: Quelle, kr: Quelle, key: bool, wl: usize, wr: usize, g: Gate },
     /// Summenpunkt (Slice 4c): komp_dsp::Komp je Sample auf Σ(x + l) links und Σ(x + r) rechts, Ergebnis in Stimme 0
-    Komp { x: Quelle, l: Quelle, r: Quelle, wl: usize, wr: usize, k: komp_dsp::Komp },
+    Komp { x: Quelle, l: Quelle, r: Quelle, kl: Quelle, kr: Quelle, key: bool, wl: usize, wr: usize, k: komp_dsp::Komp },
+    /// Per voice (S7): bit-depth and sample-rate reduction; a non-finite `bits` or `rate` reads the node's own value (`bits0`, `rate0`)
+    Krume { x: Quelle, bits: Quelle, rate: Quelle, aus: usize, bits0: f32, rate0: f32, k: [Krume; MAX_STIMMEN] },
+    /// Sum point (S7): phaser on Σ(x + l) left and Σ(x + r) right, result in voice 0. `rate`, `tiefe`, `fb`, `mix` are read
+    /// from voice 0; a non-finite value reads the node's own value (`voreinstellung`, same order).
+    Phaser { x: Quelle, l: Quelle, r: Quelle, rate: Quelle, tiefe: Quelle, fb: Quelle, mix: Quelle, wl: usize, wr: usize, voreinstellung: [f32; 4], p: Phaser },
+    /// Per voice (S8): triode stage, one or two in series (`zwei`; the second at 0 dB drive and the same bias). A non-finite
+    /// `antrieb` or `bias` reads the node's own value (`antrieb0`, `bias0`). `satz` holds one table (bias not modulated) or eleven.
+    Roehre { x: Quelle, antrieb: Quelle, bias: Quelle, aus: usize, antrieb0: f32, bias0: f32, zwei: bool, satz: Box<RoehrenSatz>, r1: [Roehre; MAX_STIMMEN], r2: [Roehre; MAX_STIMMEN] },
+    /// Sum point (S11): vocoder with the carrier Σx and the modulator mean of Σl and Σr (each summed over the voices separately,
+    /// C7), result in voice 0 on both sides. `zisch` and `mix` are read from voice 0; a non-finite value reads the node's own
+    /// value (`voreinstellung`, same order).
+    /// per voice; `d` is the node's sample data, shared read-only by all voices (S10, D5)
+    Sampler { hz: Quelle, trig: Quelle, gate: Quelle, scheibe: Quelle, rueck: Quelle, wl: usize, wr: usize, e: Einstellung, d: Box<[f32]>, s: [Sampler; MAX_STIMMEN] },
+    Vocoder { x: Quelle, l: Quelle, r: Quelle, zisch: Quelle, mix: Quelle, wl: usize, wr: usize, voreinstellung: [f32; 2], v: Vocoder },
+    /// Sum point (S21): convolution on Σ(x + l) left and Σ(x + r) right, result in voice 0; mix from voice 0
+    Faltung { x: Quelle, l: Quelle, r: Quelle, mix: Quelle, wl: usize, wr: usize, f: Box<Faltung> },
     /// Host-Audio (S3c): nur Stimme 0, wie die Summenpunkte; der Ausgang summiert über alle Stimmen
     Eingang { wl: usize, wr: usize },
     /// links = x + l, rechts = x + r, je über alle Stimmen summiert
@@ -126,6 +149,17 @@ fn summe_lr(x: &Spur, l: &Spur, r: &Spur, n: usize) -> (f32, f32) {
     for v in 0..n {
         a += x[v] + l[v];
         b += x[v] + r[v];
+    }
+    (a, b)
+}
+
+/// Key level per side: Σ kl and Σ kr over n voices (S9, D3); the detector reads it, the audio never does
+#[inline]
+fn key_lr(kl: &Spur, kr: &Spur, n: usize) -> (f32, f32) {
+    let (mut a, mut b) = (0.0f32, 0.0f32);
+    for v in 0..n {
+        a += kl[v];
+        b += kr[v];
     }
     (a, b)
 }
@@ -295,11 +329,26 @@ impl Programm {
                 }
                 Schritt::Adsr { e, .. } => *e = [Adsr::default(); MAX_STIMMEN],
                 Schritt::Chorus { c, .. } => c.zuruecksetzen(),
-                Schritt::Hall { h, .. } => h.reset(),
+                Schritt::Hall { h, mix_alt, mix_start, .. } => {
+                    // the mix input moves the hall's setting while playing: back to the translated value, as after the load
+                    // (S20 review: otherwise the smoother of a played instance starts at the last modulated mix, a fresh one at the static one)
+                    *mix_alt = *mix_start;
+                    h.setze(hall_dsp::HallEinstellung { mix: *mix_start as f64, ..h.einstellung() });
+                    h.reset();
+                }
                 Schritt::Delay { d, .. } => d.zuruecksetzen(),
                 Schritt::Limiter { b, .. } => b.zuruecksetzen(),
                 Schritt::Gate { g, .. } => g.zuruecksetzen(),
                 Schritt::Komp { k, .. } => k.leeren(),
+                Schritt::Krume { k, .. } => *k = [Krume::default(); MAX_STIMMEN],
+                Schritt::Phaser { p, .. } => p.zuruecksetzen(),
+                Schritt::Vocoder { v, .. } => v.zuruecksetzen(),
+                Schritt::Faltung { f, .. } => f.zuruecksetzen(),
+                Schritt::Sampler { s, .. } => *s = [Sampler::default(); MAX_STIMMEN],
+                Schritt::Roehre { r1, r2, .. } => {
+                    *r1 = [Roehre::default(); MAX_STIMMEN];
+                    *r2 = [Roehre::default(); MAX_STIMMEN];
+                }
                 Schritt::Note { .. }
                 | Schritt::Konst { .. }
                 | Schritt::Regler { .. }
@@ -391,12 +440,16 @@ impl Programm {
                     }
                     slots[*aus] = o;
                 }
-                Schritt::Lfo { rate, trig: t, aus, form, neustart, takt, l } => {
+                Schritt::Lfo { rate, trig: t, aus, form, neustart, takt, versatz, einmal, l } => {
                     let (r, t) = (spur(*rate, slots, vorher), spur(*t, slots, vorher));
                     let mut o = [0.0; MAX_STIMMEN];
                     if *takt > 0.0 {
-                        // D8: Phase aus dem Host-Beat, alle Stimmen gleich; rate und neustart wirken nicht
-                        let ph = (beat / *takt as f64).rem_euclid(1.0) as f32;
+                        // D8: Phase aus dem Host-Beat, alle Stimmen gleich; rate und neustart wirken nicht.
+                        // S21: the phase origin sits at beat `versatz`; with `einmal` the phase is clamped to 0..1, so the
+                        // wave holds its start value before the origin and its end value after one period. With the
+                        // defaults (versatz 0, einmal off) this is the old arithmetic: beat - 0.0 == beat.
+                        let rel = (beat - *versatz) / *takt as f64;
+                        let ph = if *einmal { rel.clamp(0.0, 1.0) } else { rel.rem_euclid(1.0) } as f32;
                         for i in 0..n {
                             o[i] = l[i].bei_phase(ph, *form);
                         }
@@ -497,7 +550,7 @@ impl Programm {
                     slots[*l] = ol;
                     slots[*r] = or;
                 }
-                Schritt::Hall { x, l, r, mix, wl, wr, mix_alt, h } => {
+                Schritt::Hall { x, l, r, mix, wl, wr, mix_alt, mix_start: _, h } => {
                     let (x, l, r, m) = (spur(*x, slots, vorher), spur(*l, slots, vorher), spur(*r, slots, vorher), spur(*mix, slots, vorher)[0]);
                     let (mut sl, mut sr_) = ([0.0f32], [0.0f32]);
                     for v in 0..n {
@@ -539,15 +592,90 @@ impl Programm {
                     let s = summe_lr(&spur(*x, slots, vorher), &spur(*l, slots, vorher), &spur(*r, slots, vorher), n);
                     in_stimme0(slots, *wl, *wr, b.prozess(s.0, s.1));
                 }
-                Schritt::Gate { x, l, r, wl, wr, g } => {
+                Schritt::Gate { x, l, r, kl, kr, key, wl, wr, g } => {
                     let s = summe_lr(&spur(*x, slots, vorher), &spur(*l, slots, vorher), &spur(*r, slots, vorher), n);
-                    in_stimme0(slots, *wl, *wr, g.prozess(s.0, s.1));
+                    let o = if *key {
+                        let k = key_lr(&spur(*kl, slots, vorher), &spur(*kr, slots, vorher), n);
+                        g.prozess_key(s.0, s.1, k.0, k.1)
+                    } else {
+                        g.prozess(s.0, s.1)
+                    };
+                    in_stimme0(slots, *wl, *wr, o);
                 }
-                Schritt::Komp { x, l, r, wl, wr, k } => {
+                Schritt::Komp { x, l, r, kl, kr, key, wl, wr, k } => {
                     let (a, b) = summe_lr(&spur(*x, slots, vorher), &spur(*l, slots, vorher), &spur(*r, slots, vorher), n);
                     let (mut a, mut b) = ([a], [b]);
-                    k.block(&mut a, &mut b, None);
+                    if *key {
+                        let (ka, kb) = key_lr(&spur(*kl, slots, vorher), &spur(*kr, slots, vorher), n);
+                        k.block(&mut a, &mut b, Some((&[ka], &[kb])));
+                    } else {
+                        k.block(&mut a, &mut b, None);
+                    }
                     in_stimme0(slots, *wl, *wr, (a[0], b[0]));
+                }
+                Schritt::Krume { x, bits, rate, aus, bits0, rate0, k } => {
+                    let (x, b, r) = (spur(*x, slots, vorher), spur(*bits, slots, vorher), spur(*rate, slots, vorher));
+                    let mut o = [0.0; MAX_STIMMEN];
+                    for i in 0..n {
+                        let bi = if b[i].is_finite() { b[i] } else { *bits0 };
+                        let ri = if r[i].is_finite() { r[i] } else { *rate0 };
+                        o[i] = k[i].prozess(x[i], bi, ri, sr);
+                    }
+                    slots[*aus] = o;
+                }
+                Schritt::Phaser { x, l, r, rate, tiefe, fb, mix, wl, wr, voreinstellung, p } => {
+                    let s = summe_lr(&spur(*x, slots, vorher), &spur(*l, slots, vorher), &spur(*r, slots, vorher), n);
+                    let m = |q: &Quelle, i: usize| {
+                        let v = spur(*q, slots, vorher)[0];
+                        if v.is_finite() { v } else { voreinstellung[i] }
+                    };
+                    let (ra, ti, f, mi) = (m(rate, 0), m(tiefe, 1), m(fb, 2), m(mix, 3));
+                    in_stimme0(slots, *wl, *wr, p.prozess(s.0, s.1, ra, ti, f, mi));
+                }
+                Schritt::Sampler { hz, trig, gate, scheibe, rueck, wl, wr, e, d, s } => {
+                    let (h, t, g) = (spur(*hz, slots, vorher), spur(*trig, slots, vorher), spur(*gate, slots, vorher));
+                    let (sc, ru) = (spur(*scheibe, slots, vorher), spur(*rueck, slots, vorher));
+                    let (mut ol, mut or) = ([0.0; MAX_STIMMEN], [0.0; MAX_STIMMEN]);
+                    for i in 0..n {
+                        (ol[i], or[i]) = s[i].prozess(d, e, sr, Eingabe { hz: h[i], trig: t[i], gate: g[i], scheibe: sc[i], rueck: ru[i] });
+                    }
+                    slots[*wl] = ol;
+                    slots[*wr] = or;
+                }
+                Schritt::Vocoder { x, l, r, zisch, mix, wl, wr, voreinstellung, v } => {
+                    let (xs, ls, rs) = (spur(*x, slots, vorher), spur(*l, slots, vorher), spur(*r, slots, vorher));
+                    let (mut c, mut ml, mut mr) = (0.0f32, 0.0f32, 0.0f32);
+                    for i in 0..n {
+                        c += xs[i];
+                        ml += ls[i];
+                        mr += rs[i];
+                    }
+                    let m = |q: &Quelle, i: usize| {
+                        let w = spur(*q, slots, vorher)[0];
+                        if w.is_finite() { w } else { voreinstellung[i] }
+                    };
+                    let (z, mi) = (m(zisch, 0), m(mix, 1));
+                    let y = v.prozess(c, ml, mr, z, mi);
+                    in_stimme0(slots, *wl, *wr, (y, y));
+                }
+                Schritt::Faltung { x, l, r, mix, wl, wr, f } => {
+                    let s = summe_lr(&spur(*x, slots, vorher), &spur(*l, slots, vorher), &spur(*r, slots, vorher), n);
+                    let m = spur(*mix, slots, vorher)[0];
+                    in_stimme0(slots, *wl, *wr, f.prozess(s.0, s.1, m));
+                }
+                Schritt::Roehre { x, antrieb, bias, aus, antrieb0, bias0, zwei, satz, r1, r2 } => {
+                    let (x, a, b) = (spur(*x, slots, vorher), spur(*antrieb, slots, vorher), spur(*bias, slots, vorher));
+                    let mut o = [0.0; MAX_STIMMEN];
+                    for i in 0..n {
+                        let ai = if a[i].is_finite() { a[i] } else { *antrieb0 };
+                        let bi = (if b[i].is_finite() { b[i] } else { *bias0 }) as f64;
+                        let mut y = r1[i].prozess_satz(satz, bi, x[i], ai, sr);
+                        if *zwei {
+                            y = r2[i].prozess_satz(satz, bi, y, 0.0, sr);
+                        }
+                        o[i] = y;
+                    }
+                    slots[*aus] = o;
                 }
                 Schritt::Eingang { wl, wr } => in_stimme0(slots, *wl, *wr, *ein),
                 Schritt::Ausgang { x, l, r } => {

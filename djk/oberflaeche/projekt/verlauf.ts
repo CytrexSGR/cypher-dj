@@ -266,7 +266,10 @@ function mixerSchluessel(befehle: unknown[]): string | null {
   if (befehle.length !== 1) return null;
   const b = befehle[0] as Record<string, unknown>;
   if (!b) return null;
-  const idFeld = b.befehl === 'spur_aendern' ? 'spur_id' : b.befehl === 'gruppenspur_aendern' ? 'gruppe_id' : b.befehl === 'master_aendern' ? '' : null;
+  // 1.10 slice 3: a send drag (send_setzen) is one move per track/group and return; a single mixer field of a return coalesces like a track fader
+  if (b.befehl === 'send_setzen' && typeof b.strang_id === 'string' && typeof b.return_id === 'string') return `${b.strang_id}:send:${b.return_id}`;
+  const idFeld = b.befehl === 'return_aendern' ? 'return_id' : b.befehl === 'spur_aendern' ? 'spur_id'
+    : b.befehl === 'gruppenspur_aendern' ? 'gruppe_id' : b.befehl === 'master_aendern' ? '' : null;
   if (idFeld === null || (idFeld !== '' && typeof b[idFeld] !== 'string')) return null;
   const rest = Object.keys(b).filter((k) => k !== 'befehl' && k !== idFeld);
   return rest.length === 1 && MIXER_FELDER.includes(rest[0]) ? `${idFeld === '' ? 'master' : String(b[idFeld])}:${rest[0]}` : null;

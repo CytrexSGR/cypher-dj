@@ -290,7 +290,14 @@ int main() {
     // 1.10: Gruppen-Regler und PM-Fader sind Mixer-Regler des Projekts; Grenzen der Tabelle gelten
     PRUEF(regler_datei(p, "{\"grp/1/fader\":-6,\"grp/8/pan\":0.5,\"grp/2/mute\":1,\"grp/3/solo\":0,\"pm/fader\":-1.5}", v, fehler) && v.size() == 5);
     PRUEF(!regler_datei(p, "{\"grp/9/fader\":0}", v, fehler));        // n+1
-    PRUEF(!regler_datei(p, "{\"grp/1/send/1\":0}", v, fehler));       // gibt es noch nicht (Slice 3)
+    PRUEF(!regler_datei(p, "{\"grp/1/send/5\":0}", v, fehler));       // r+1 (the group sends exist since slice 3: grp/n/send/1..4)
+    // 1.10 slice 3: send, return and hall controls are project mixer controls; the table checks their ranges
+    PRUEF(regler_datei(p, "{\"spur/1/send/1\":-6,\"grp/2/send/4\":-200,\"ret/1/fader\":-3,\"ret/4/pan\":0.5,\"ret/2/mute\":1,\"ret/3/hall/an\":0,\"ret/1/hall/decay\":0.8}", v, fehler) && v.size() == 7);
+    PRUEF(!regler_datei(p, "{\"spur/1/send/5\":0}", v, fehler));     // r+1
+    PRUEF(!regler_datei(p, "{\"ret/5/fader\":0}", v, fehler));       // r+1
+    PRUEF(!regler_datei(p, "{\"ret/1/hall/mix\":0.5}", v, fehler));  // no such control
+    PRUEF(!regler_datei(p, "{\"ret/1/hall/decay\":1.5}", v, fehler));   // 0..1
+    PRUEF(!regler_datei(p, "{\"ret/1/hall/an\":0.5}", v, fehler));   // switch: 0 or 1
     PRUEF(!regler_datei(p, "{\"pm/fader\":6.5}", v, fehler));          // −200..+6
     PRUEF(!regler_datei(p, "{\"pm/pan\":0}", v, fehler));
   }
@@ -419,6 +426,38 @@ int main() {
     }
     std::printf("Fall 10: erster Wert produktion %lld, set %lld, Vorhalt %d\n", (long long)ip, (long long)is, sl.vorhalt);
     PRUEF(ip >= 0 && is >= 0 && ip <= is);
+  }
+  {  // 1.10 slice 3 (Task 6): returns in the export. Two returns wake in the same block with non-default Hall targets: hall_sofort() applies both before block 0
+     // (no Hall runs a block on its old setting); without the call the second return would (mutation ARR_RENDER_OHNE_HALL_SOFORT)
+    const std::string clip = "{\"id\":\"s4/freeze\",\"start_beat\":0.0,\"laenge_beats\":4.0,\"sha256\":\"" + std::string(64, 'c') +
+                             "\",\"datei\":\"" + o.pfad + "/freeze-3-9.f32\",\"frames\":90000,\"offset_frames\":0,\"gain_db\":0.0,\"ein_beats\":0.0,\"aus_beats\":0.0}";
+    o.wiedergabe2_ret(4, "{\"nr\":1,\"art\":\"audio\",\"clips\":[" + clip + "]}", "",
+                      "{\"nr\":1,\"ausgang\":{\"art\":\"master\"}},{\"nr\":2,\"ausgang\":{\"art\":\"master\"}}");
+    cdj::RenderAuftrag r;
+    r.arr_ordner = o.pfad;
+    r.nr = 4;
+    r.von_beat = 0.0;
+    r.bis_beat = 4.0;
+    r.bpm = 128.0;
+    r.regler_projekt = true;
+    r.spur_regler = {{"spur/1/send/1", 0.0f}, {"spur/1/send/2", 0.0f}, {"ret/1/hall/decay", 0.8f}, {"ret/2/hall/decay", 0.6f}};
+    const cdj::RenderErgebnis e = cdj::rendere(r);
+    std::printf("Fall 11: returns im Export, regler %d, hall_start_alt %llu, decay %.2f / %.2f\n", e.regler, (unsigned long long)e.hall_start_alt, e.hall_decay[0], e.hall_decay[1]);
+    PRUEF(e.fehler.empty() && e.regler == 4);
+    PRUEF(e.hall_start_alt == 0);
+    PRUEF(e.hall_decay[0] == 0.8f && e.hall_decay[1] == 0.6f);
+    // the returns are in the export: the same project without the sends is quieter than with them (the Hall adds its tail), negative control above
+    cdj::RenderAuftrag ohne = r;
+    ohne.spur_regler = {{"ret/1/hall/decay", 0.8f}, {"ret/2/hall/decay", 0.6f}};
+    const cdj::RenderErgebnis ohne_e = cdj::rendere(ohne);
+    PRUEF(ohne_e.fehler.empty() && ohne_e.l.size() == e.l.size());
+    double diff = 0.0;
+    for (size_t i = 0; i < e.l.size(); ++i) diff = std::max(diff, static_cast<double>(std::fabs(e.l[i] - ohne_e.l[i])));
+    PRUEF(diff > 1e-3);
+    // a control the table does not know is refused (no silent clamp)
+    cdj::RenderAuftrag schlecht = r;
+    schlecht.spur_regler = {{"ret/5/fader", 0.0f}};
+    PRUEF(cdj::rendere(schlecht).fehler == "regler");
   }
   PRUEF_ENDE();
 }

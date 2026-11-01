@@ -174,6 +174,15 @@ FALL(spur_regler_ohne_schein) {
   PRUEFE(lauf(reg, deck, true, "", Quelle::cypher, "deck/2/fader") == Grund::kein_hoerschein);   // Gegenprobe
 }
 
+FALL(send_und_return_regler_ohne_schein) {
+  // 1.10 Slice 3 (I7): sends, return faders and hall values are no channel faders; Cypher opens them without a Hoerschein
+  HoerscheinRegister reg;   // leer
+  TestDeck deck;
+  for (const char* f : {"spur/1/send/1", "spur/32/send/4", "grp/3/send/2", "ret/1/fader", "ret/4/pan", "ret/1/hall/decay", "ret/3/hall/fahne"})   // ramp controls only: switches take no ramp
+    PRUEFE(lauf(reg, deck, true, "", Quelle::cypher, f) == Grund::kein);
+  PRUEFE(lauf(reg, deck, true, "", Quelle::cypher, "deck/2/fader") == Grund::kein_hoerschein);   // control: a channel fader still needs one
+}
+
 FALL(erzeuger_kanal_oeffnet_ohne_schein) {
   // Andreas 2026-09-29: erz/* öffnen ohne Hörschein; Deck-Kanäle bleiben gesperrt (pad/* seit 2026-10-05 offen).
   HoerscheinRegister reg;   // leer

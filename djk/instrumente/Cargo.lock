@@ -97,6 +97,7 @@ dependencies = [
  "hall_dsp",
  "komp_dsp",
  "rb_dsp",
+ "realfft",
  "saett_dsp",
  "serde",
  "serde_json",

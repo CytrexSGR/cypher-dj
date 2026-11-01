@@ -41,8 +41,18 @@ class HandEin {
                const cypherdj::stellwerk::Stellwerk& sw, HandAktion* aus);
   const hand::UebersetzerZaehler& zaehler() const { return ueb_.zaehler(); }
 
+  // S19: the learn table (slot 1) for the raw input midi_ein_1. Same translation as ereignis(), own translator and mapping.
+  void mapping_ein(const hand::Mapping* m) { ueb_ein_.mapping(m); }
+  const hand::Mapping* mapping_ein() const { return ueb_ein_.mapping(); }
+  int ereignis_ein(const uint8_t* daten, size_t groesse, uint32_t versatz, int64_t s0, uint32_t n,
+                   const cypherdj::stellwerk::Stellwerk& sw, HandAktion* aus);
+
  private:
+  // The part after the translator is mapping-generic: it reads entry e of mapping m (shared by both slots).
+  int wandle(hand::Ausgabe a, const hand::Mapping& m, const uint8_t* daten, size_t groesse, int64_t s0, uint32_t n,
+             const cypherdj::stellwerk::Stellwerk& st, HandAktion* aus);
   hand::Uebersetzer ueb_;
+  hand::Uebersetzer ueb_ein_{nullptr};
 };
 
 // /test/hand deck/<n>/play und deck/<n>/cue (Plan 35 E5 a): dieselbe Deck-Taste wie aus MIDI. true mit deck 1 bis 4 und

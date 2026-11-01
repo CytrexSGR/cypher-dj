@@ -44,7 +44,7 @@ export async function starteProjAttrappe({ oben, port = 0, dekodierMs = 300, fre
   // Freeze oder Export ist während des ganzen Laufs (z.lauf) gesperrt.
   const freezeLaeuft = () => !!z.lauf?.durchlauf;
   const SPERRE_WIEDERGABE = 'a freeze is running; changes to the playback wait until it is done';   // Text wie bereiche/proj/sitzung.ts
-  const nurMixer = (b) => b?.befehl === 'metronom_setzen' || b?.befehl === 'gruppenspur_aendern' || b?.befehl === 'master_aendern' || (b?.befehl === 'spur_aendern' && b.geraet === undefined);
+  const nurMixer = (b) => b?.befehl === 'metronom_setzen' || b?.befehl === 'gruppenspur_aendern' || b?.befehl === 'master_aendern' || b?.befehl === 'return_aendern' || b?.befehl === 'send_setzen' || (b?.befehl === 'spur_aendern' && b.geraet === undefined);
   const json = (a, code, j) => { a.writeHead(code, { 'content-type': 'application/json', 'cache-control': 'no-store' }); a.end(JSON.stringify(j)); };
   const sende = (n) => { const t = `data: ${JSON.stringify(n)}\n\n`; for (const s of z.stroeme) s.a.write(t); };
   const aktuell = () => { if (!z.slug) throw new Fehl(409, 'kein_projekt'); return z.projekte.get(z.slug); };
@@ -63,8 +63,8 @@ export async function starteProjAttrappe({ oben, port = 0, dekodierMs = 300, fre
   // pan −1..+1, pegel_db −60..0). Clip- und Notenbefehle rechnet S2 selbst (mitS2, D1 V2).
   // D1 V2: diese Befehle (und clip_neu für MIDI) laufen über S2 fuehreAus; dessen Ablehnung kommt mit S2-Grund und Server-Code zurück
   // V2 Fix F13: tempo_setzen auch über S2, damit ein anderes Tempo Freezes verwirft wie dort (befehle.ts verwerfeFreezes)
-  const S2_BEFEHLE = new Set(['clip_aendern', 'clip_teilen', 'clip_duplizieren', 'clip_loeschen', 'noten_neu', 'noten_aendern', 'noten_loeschen', 'tempo_setzen', 'variante_waehlen',
-  'gruppenspur_neu', 'gruppenspur_aendern', 'gruppenspur_loeschen', 'ziel_setzen', 'master_aendern', 'warp_setzen', 'warp_auto', 'warp_tempo', 'warp_marker', 'warp_ab_hier', 'eins_hier', 'tempo_vom_clip', 'audio_quantisieren']);   // Paket 1.18 E-c: variante_waehlen rechnet S2; 1.10: Gruppen, Ziel und Master rechnet S2; 1.13: Warp rechnet S2
+  const S2_BEFEHLE = new Set(['auto_neu', 'auto_punkte', 'auto_loeschen', 'auto_aendern', 'clip_aendern', 'clip_teilen', 'clip_duplizieren', 'clip_loeschen', 'noten_neu', 'noten_aendern', 'noten_loeschen', 'tempo_setzen', 'variante_waehlen',
+  'gruppenspur_neu', 'gruppenspur_aendern', 'gruppenspur_loeschen', 'ziel_setzen', 'master_aendern', 'return_neu', 'return_aendern', 'return_loeschen', 'send_setzen', 'warp_setzen', 'warp_auto', 'warp_tempo', 'warp_marker', 'warp_ab_hier', 'eins_hier', 'tempo_vom_clip', 'audio_quantisieren', 'auto_neu', 'auto_punkte', 'auto_loeschen']);   // Paket 1.18 E-c: variante_waehlen rechnet S2; 1.10: Gruppen, Ziel und Master rechnet S2; 1.13: Warp rechnet S2
   const ueberS2 = (b) => S2_BEFEHLE.has(b?.befehl) || (b?.befehl === 'clip_neu' && b.art === 'midi');
   function mitS2(p, b) {
     try { return fuehreAus(p, b).projekt; } catch (e) { if (e instanceof BefehlFehler) throw new Fehl(grundCode(e.grund), e.grund); throw e; }

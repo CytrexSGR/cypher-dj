@@ -25,6 +25,7 @@
     {"id": "pegel1", "art": "mul", "b": 0.5},
     {"id": "pegel2", "art": "mul"},
     {"id": "mix", "art": "add"},
+    {"id": "dcblock", "art": "svf", "cutoff": 25, "reso": 0},
     {"id": "fenv", "art": "adsr", "a": 0.002, "d": 0.4, "s": 0.15, "r": 0.3},
     {"id": "fenv_hz", "art": "mul"},
     {"id": "cutoff", "art": "add"},
@@ -68,7 +69,8 @@
     {"von": "k_drive.aus", "nach": "drive.antrieb"},
     {"von": "note.gate", "nach": "env.gate"},
     {"von": "note.trig", "nach": "env.trig"},
-    {"von": "drive.aus", "nach": "vca.a"},
+    {"von": "drive.aus", "nach": "dcblock.x"},
+    {"von": "dcblock.hp", "nach": "vca.a"},
     {"von": "env.aus", "nach": "vca.b"},
     {"von": "vca.aus", "nach": "pegel.a"},
     {"von": "pegel.aus", "nach": "aus.x"}

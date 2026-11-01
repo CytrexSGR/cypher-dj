@@ -29,7 +29,7 @@ struct AufnahmeChunk {
 
 struct RecSpur {
   int spur = 0;       // 1..ARR_SPUREN
-  int eingang = 0;    // 11..13 = erz/1..3
+  int eingang = 0;    // see REC_CODES (aufnahme.h): 11..13 = erz/1..3, 15..17 = erz/5..7, 21, 22 = pad/1, pad/2
   SpscRing<AufnahmeChunk, REC_RING_CHUNKS> ring;
   // Take: der Callback setzt start_s/ende_s/kennung, dann phase mit release; der Faden liest nach acquire.
   // 0 bereit · 1 nimmt auf · 2 Callback fertig (Ende gesetzt) · 3 Faden fertig (Datei geschlossen, gemeldet)

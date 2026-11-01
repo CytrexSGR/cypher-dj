@@ -1,6 +1,8 @@
 // E3 Task 7: Verlaufs-Deckel MAX_BEWEGT. Projekt öffnen setzt bei 32 Spuren 4 * 32 Spur-Regler plus 16 erz/4-Regler
 // in einem Zyklus (dauer_beats = 0, Politik 1); jeder braucht einen Verlauf-Slot, sonst erfährt der Mixer nichts (still).
 // Vorlage: ~/messungen/2026-10-20-e3-karte/messung/bewegt.cpp.
+#include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <set>
@@ -157,6 +159,148 @@ FALL(projekt_oeffnen_mit_gruppen_177_regler_alle_mit_verlauf) {
   }
   PRUEFE_GLEICH(ohne, 0);
   PRUEFE_GLEICH(falsch, 0);
+}
+
+// ---- 1.10 Slice 3 (plan F5, I16, I21): opening the maximum project sets 381 controls; the Teile ceiling is 256 ----
+
+namespace {
+// the maximum project: erz/4 (16), 32 tracks x 4, 8 groups x 4, pm/fader, 128 + 32 sends, 16 return controls, 28 hall values
+std::vector<Soll> maximalprojekt_oeffnen() {
+  std::vector<Soll> soll = projekt_oeffnen();
+  for (int n = 1; n <= GRP_REGLER_GRUPPEN; ++n) {
+    char p[32];
+    std::snprintf(p, sizeof p, "grp/%d/fader", n); soll.push_back({p, -3.0f});
+    std::snprintf(p, sizeof p, "grp/%d/pan", n); soll.push_back({p, 0.5f});
+    std::snprintf(p, sizeof p, "grp/%d/mute", n); soll.push_back({p, 1.0f});
+    std::snprintf(p, sizeof p, "grp/%d/solo", n); soll.push_back({p, 0.0f});
+  }
+  soll.push_back({"pm/fader", -1.5f});
+  for (int r = 1; r <= RET_REGLER_RETURNS; ++r) {
+    char p[40];
+    for (int n = 1; n <= SPUR_REGLER_SPUREN; ++n) { std::snprintf(p, sizeof p, "spur/%d/send/%d", n, r); soll.push_back({p, -12.0f}); }
+    for (int n = 1; n <= GRP_REGLER_GRUPPEN; ++n) { std::snprintf(p, sizeof p, "grp/%d/send/%d", n, r); soll.push_back({p, -9.0f}); }
+    std::snprintf(p, sizeof p, "ret/%d/fader", r); soll.push_back({p, -2.0f});
+    std::snprintf(p, sizeof p, "ret/%d/pan", r); soll.push_back({p, 0.25f});
+    std::snprintf(p, sizeof p, "ret/%d/mute", r); soll.push_back({p, 1.0f});
+    std::snprintf(p, sizeof p, "ret/%d/solo", r); soll.push_back({p, 0.0f});
+    for (const char* f : {"an", "pre", "decay", "groesse", "tief", "highcut", "fahne"}) {
+      std::snprintf(p, sizeof p, "ret/%d/hall/%s", r, f);
+      soll.push_back({p, std::strcmp(f, "an") == 0 ? 1.0f : 0.3f});
+    }
+  }
+  return soll;
+}
+
+// sends one packet (a slice of soll) and runs cycles until every Teil of the packet has a final status (3, 5, or a rejection/abort);
+// returns the number of cycles used. With bis_ende false it returns after the first cycle that shows status 2 for all (the old "status != 1" wait).
+int paket_senden(Stellwerk& sw, SimUhr& uhr, const std::vector<Soll>& soll, size_t von, size_t bis, int64_t& id, bool bis_ende) {
+  const double ab = uhr.beat(sw.jetzt());
+  std::set<int64_t> offen;
+  for (size_t i = von; i < bis; ++i) {
+    offen.insert(id);
+    sw.teil(TeilBefehl{id++, Quelle::andreas, "", 0, soll[i].pfad.c_str(), ab, 0.0, soll[i].wert, 0, 1, "", ""});
+  }
+  int zyklen = 0;
+  while (!offen.empty() && zyklen < 40) {
+    sw.prozess(sw.jetzt(), 256);
+    ++zyklen;
+    const Ereignis* e;
+    const int ne = sw.ereignisse(&e);
+    for (int i = 0; i < ne; ++i) {
+      if (e[i].art != EreignisArt::quittung) continue;
+      const int s = static_cast<int>(e[i].status);
+      const bool ende = s == 3 || s == 4 || s == 5 || s == 6 || s == 7 || s == 8;
+      if ((bis_ende && ende) || (!bis_ende && s != 1)) offen.erase(e[i].id);
+    }
+    sw.ereignisse_leeren();
+  }
+  return zyklen;
+}
+}  // namespace
+
+FALL(maximalprojekt_hat_381_regler) {
+  PRUEFE_GLEICH(maximalprojekt_oeffnen().size(), 381);
+  PRUEFE(maximalprojekt_oeffnen().size() > static_cast<size_t>(MAX_TEILE));   // the whole point: it does not fit in one go
+}
+
+// error case first: all 381 in ONE move (what kern_weg.ts does today) overflows MAX_TEILE. Only teile_voll counts: a rejected Teil never
+// reaches slot_fuer, so bewegt_voll stays 0 (einsortieren.cpp:64-66 sits before kern.cpp:240-242).
+FALL(oeffnen_in_einem_zug_laeuft_ueber_max_teile) {
+  SimUhr uhr(128.0);
+  Stellwerk sw(uhr);
+  const std::vector<Soll> soll = maximalprojekt_oeffnen();
+  sw.prozess(0, 256);
+  int64_t id = 100;
+  paket_senden(sw, uhr, soll, 0, soll.size(), id, true);
+  std::printf("  in one move: teile_voll = %lld, bewegt_voll = %lld (of %zu controls)\n", static_cast<long long>(sw.zaehler().teile_voll),
+              static_cast<long long>(sw.zaehler().bewegt_voll), soll.size());
+  PRUEFE(sw.zaehler().teile_voll > 0);
+  PRUEFE_GLEICH(sw.zaehler().bewegt_voll, 0);
+}
+
+// the fix: packets of at most 100, waiting for the end status of each packet (plan P11)
+FALL(oeffnen_in_paketen_zu_100_mit_endstatus_laeuft_nicht_ueber) {
+  SimUhr uhr(128.0);
+  Stellwerk sw(uhr);
+  const std::vector<Soll> soll = maximalprojekt_oeffnen();
+  sw.prozess(0, 256);
+  int64_t id = 100;
+  for (size_t von = 0; von < soll.size(); von += 100) paket_senden(sw, uhr, soll, von, std::min(soll.size(), von + 100), id, true);
+  PRUEFE_GLEICH(sw.zaehler().teile_voll, 0);
+  PRUEFE_GLEICH(sw.zaehler().bewegt_voll, 0);
+  const ReglerTabelle& t = sw.tabelle();
+  int falsch = 0;
+  for (const Soll& s : soll) {
+    const int r = t.suche(s.pfad.c_str());
+    PRUEFE(r >= 0);
+    if (r >= 0 && std::fabs(sw.wert(r) - s.wert) > 1e-3) falsch++;
+  }
+  PRUEFE_GLEICH(falsch, 0);   // every control stands on its target
+}
+
+// negative control for "wait for the end status": a packet of 300 (over the ceiling) is rejected in part although the wait is for the end
+FALL(paket_zu_300_laeuft_ueber_auch_mit_endstatus) {
+  SimUhr uhr(128.0);
+  Stellwerk sw(uhr);
+  const std::vector<Soll> soll = maximalprojekt_oeffnen();
+  sw.prozess(0, 256);
+  int64_t id = 100;
+  paket_senden(sw, uhr, soll, 0, 300, id, true);
+  PRUEFE(sw.zaehler().teile_voll > 0);
+}
+
+// I21: a Teil with a ramp keeps its place past status 2 until status 3. 256 Teile fill the places; one more Teil sent while they run is
+// refused (teile_voll 1); after their end status the same Teil is accepted. This is why the wait must be for the end status.
+FALL(teil_haelt_seinen_platz_ueber_status_2_bis_3) {
+  SimUhr uhr(128.0);
+  Stellwerk sw(uhr);
+  const ReglerTabelle& t = sw.tabelle();
+  std::vector<Soll> soll;
+  std::string extra;
+  for (int r = 0; r < t.anzahl(); ++r) {
+    const ReglerDef& d = t.def(r);
+    if (d.transport || d.nur_hand || d.deck || d.keine_rampe) continue;   // only controls with a ramp
+    if (static_cast<int>(soll.size()) < MAX_TEILE) soll.push_back({d.pfad, d.max != d.vorgabe ? d.max : d.min});
+    else if (extra.empty()) extra = d.pfad;
+  }
+  PRUEFE_GLEICH(soll.size(), MAX_TEILE);
+  PRUEFE(!extra.empty());
+  sw.prozess(0, 256);
+  int64_t id = 100;
+  const std::vector<Soll> eins{{extra, 0.5f}};
+  // first the 256: stop at the first cycle that shows status 2 for all (the "status != 1" wait)
+  paket_senden(sw, uhr, soll, 0, soll.size(), id, false);
+  PRUEFE_GLEICH(sw.zaehler().teile_voll, 0);
+  // one more control right now: the 256 places are still held (ramp not at its end)
+  std::vector<Soll> mehr = eins;
+  mehr[0].wert = t.def(t.suche(extra.c_str())).max;
+  paket_senden(sw, uhr, mehr, 0, 1, id, false);
+  PRUEFE_GLEICH(sw.zaehler().teile_voll, 1);
+  // wait until the first 256 are at their end, then the same control is accepted
+  for (int z = 0; z < 10; ++z) sw.prozess(sw.jetzt(), 256);
+  const int64_t vorher = sw.zaehler().teile_voll;
+  paket_senden(sw, uhr, mehr, 0, 1, id, true);
+  PRUEFE_GLEICH(sw.zaehler().teile_voll, vorher);
 }
 
 PRUEF_MAIN

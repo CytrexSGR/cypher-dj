@@ -1,0 +1,31 @@
+{
+  "format": "baukasten/2",
+  "name": "fx-roehre",
+  "stimmen": 1,
+  "regler_namen": {"1": "Drive", "2": "Bias"},
+  "knoten": [
+    {"id": "ein", "art": "eingang"},
+    {"id": "k_drive", "art": "regler", "nr": 1, "min": 0, "max": 30},
+    {"id": "k_bias", "art": "regler", "nr": 2, "min": -3, "max": -0.5},
+    {"id": "k_pegel", "art": "regler", "nr": 1, "min": 1, "max": 0.056, "log": 1},
+    {"id": "tl", "art": "roehre", "antrieb": 12},
+    {"id": "tr", "art": "roehre", "antrieb": 12},
+    {"id": "pl", "art": "mul"},
+    {"id": "pr", "art": "mul"},
+    {"id": "aus", "art": "ausgang"}
+  ],
+  "kanten": [
+    {"von": "ein.l", "nach": "tl.x"},
+    {"von": "ein.r", "nach": "tr.x"},
+    {"von": "k_drive.aus", "nach": "tl.antrieb"},
+    {"von": "k_drive.aus", "nach": "tr.antrieb"},
+    {"von": "k_bias.aus", "nach": "tl.bias"},
+    {"von": "k_bias.aus", "nach": "tr.bias"},
+    {"von": "tl.aus", "nach": "pl.a"},
+    {"von": "tr.aus", "nach": "pr.a"},
+    {"von": "k_pegel.aus", "nach": "pl.b"},
+    {"von": "k_pegel.aus", "nach": "pr.b"},
+    {"von": "pl.aus", "nach": "aus.l"},
+    {"von": "pr.aus", "nach": "aus.r"}
+  ]
+}

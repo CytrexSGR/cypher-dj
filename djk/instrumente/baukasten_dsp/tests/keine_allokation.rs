@@ -1,7 +1,7 @@
 //! Echtzeit-Gegenprobe: sample, note_an, note_aus, alle_aus, setze_regler und zuruecksetzen fordern keinen Speicher an,
 //! für jeden Beispielgraphen;
 //! uebersetze schon (Positivkontrolle, sonst wäre der Zähler blind). Muster: hall_ffi/tests/rb_keine_allokation.rs.
-use baukasten_dsp::uebersetze;
+use baukasten_dsp::uebersetze_mit_wurzel;
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -37,7 +37,20 @@ const GATE_1: &str = r#"{"format":"baukasten/2","name":"gate-1","stimmen":4,"kno
 const KOMP_1: &str = r#"{"format":"baukasten/2","name":"komp-1","stimmen":4,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"saege"},{"id":"e","art":"adsr","a":0.01,"d":0.1,"s":1,"r":0.2},{"id":"vca","art":"mul"},{"id":"k","art":"komp","schwelle":-30,"ratio":8,"attack":0.5,"release":20,"mix":0.5,"schp":150},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"s.hz"},{"von":"n.gate","nach":"e.gate"},{"von":"n.trig","nach":"e.trig"},{"von":"s.aus","nach":"vca.a"},{"von":"e.aus","nach":"vca.b"},{"von":"vca.aus","nach":"k.x"},{"von":"k.l","nach":"o.l"},{"von":"k.r","nach":"o.r"}]}"#;
 /// Vier Stimmen Sägezahn in eine gestimmte Rückkopplungsschleife mit modulierter Zeit (Slice 4f)
 const LEITUNG_1: &str = r#"{"format":"baukasten/2","name":"leitung-1","stimmen":4,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"saege"},{"id":"e","art":"adsr","a":0.01,"d":0.1,"s":1,"r":0.2},{"id":"vca","art":"mul"},{"id":"a","art":"add"},{"id":"d","art":"leitung","max":50},{"id":"l","art":"lfo","rate":2},{"id":"t","art":"transponiere","cent":-30},{"id":"m","art":"mul","b":0.9},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"s.hz"},{"von":"n.gate","nach":"e.gate"},{"von":"n.trig","nach":"e.trig"},{"von":"s.aus","nach":"vca.a"},{"von":"e.aus","nach":"vca.b"},{"von":"vca.aus","nach":"a.a"},{"von":"a.aus","nach":"d.x"},{"von":"n.hz","nach":"t.hz"},{"von":"l.aus","nach":"t.st"},{"von":"t.aus","nach":"d.hz"},{"von":"d.aus","nach":"m.a"},{"von":"m.aus","nach":"a.b"},{"von":"a.aus","nach":"o.x"}]}"#;
-const GRAPHEN: [&str; 17] = [
+/// Four voices of saw through a krume with bits and rate on knobs (S7)
+const KRUME_1: &str = r#"{"format":"baukasten/2","name":"krume-1","stimmen":4,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"saege"},{"id":"e","art":"adsr","a":0.01,"d":0.1,"s":1,"r":0.2},{"id":"vca","art":"mul"},{"id":"k","art":"krume"},{"id":"kb","art":"regler","nr":1,"min":2,"max":16},{"id":"kr","art":"regler","nr":2,"min":2000,"max":48000,"log":1},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"s.hz"},{"von":"n.gate","nach":"e.gate"},{"von":"n.trig","nach":"e.trig"},{"von":"s.aus","nach":"vca.a"},{"von":"e.aus","nach":"vca.b"},{"von":"vca.aus","nach":"k.x"},{"von":"kb.aus","nach":"k.bits"},{"von":"kr.aus","nach":"k.rate"},{"von":"k.aus","nach":"o.x"}]}"#;
+/// Four voices of saw through a phaser with rate, feedback and mix on knobs (S7)
+const PHASER_1: &str = r#"{"format":"baukasten/2","name":"phaser-1","stimmen":4,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"saege"},{"id":"e","art":"adsr","a":0.01,"d":0.1,"s":1,"r":0.2},{"id":"vca","art":"mul"},{"id":"p","art":"phaser","stufen":8},{"id":"kr","art":"regler","nr":1,"min":0.05,"max":4,"log":1},{"id":"kf","art":"regler","nr":2,"min":-0.9,"max":0.9},{"id":"km","art":"regler","nr":3,"min":0,"max":1},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"s.hz"},{"von":"n.gate","nach":"e.gate"},{"von":"n.trig","nach":"e.trig"},{"von":"s.aus","nach":"vca.a"},{"von":"e.aus","nach":"vca.b"},{"von":"vca.aus","nach":"p.x"},{"von":"kr.aus","nach":"p.rate"},{"von":"kf.aus","nach":"p.fb"},{"von":"km.aus","nach":"p.mix"},{"von":"p.l","nach":"o.l"},{"von":"p.r","nach":"o.r"}]}"#;
+/// An effect graph with a modulated bias (eleven tables) and two stages, fed by a constant so the nonlinear path runs (S8)
+const ROEHRE_FX: &str = r#"{"format":"baukasten/2","name":"roehre-fx","stimmen":1,"knoten":[{"id":"e","art":"eingang"},{"id":"c","art":"konst","wert":0.6},{"id":"t","art":"roehre","antrieb":24,"stufen":2},{"id":"kd","art":"regler","nr":1,"min":0,"max":30},{"id":"kb","art":"regler","nr":2,"min":-3,"max":-0.5},{"id":"s","art":"add"},{"id":"o","art":"ausgang"}],"kanten":[{"von":"e.l","nach":"s.a"},{"von":"c.aus","nach":"s.b"},{"von":"s.aus","nach":"t.x"},{"von":"kd.aus","nach":"t.antrieb"},{"von":"kb.aus","nach":"t.bias"},{"von":"t.aus","nach":"o.x"}]}"#;
+
+/// S10: four voices of the generated probe, slice and direction from knobs, loop mode; the sample root is a temp dir
+const SAMPLER_1: &str = r#"{"format":"baukasten/2","name":"sampler-1","stimmen":4,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"sampler","datei":"probe.f32","scheiben":4,"schleife":1},{"id":"ks","art":"regler","nr":1,"min":0,"max":3},{"id":"kr","art":"regler","nr":2,"min":0,"max":1},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"s.hz"},{"von":"n.trig","nach":"s.trig"},{"von":"n.gate","nach":"s.gate"},{"von":"ks.aus","nach":"s.scheibe"},{"von":"kr.aus","nach":"s.rueck"},{"von":"s.l","nach":"o.l"},{"von":"s.r","nach":"o.r"}]}"#;
+
+/// S21: four voices of saw through a faltung (4097 frame IR: head, 15 tail partitions), mix on a knob, predelay 7 ms
+const FALTUNG_1: &str = r#"{"format":"baukasten/2","name":"faltung-1","stimmen":4,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"saege"},{"id":"e","art":"adsr","a":0.01,"d":0.1,"s":1,"r":0.2},{"id":"vca","art":"mul"},{"id":"f","art":"faltung","datei":"ir.f32","pre":7},{"id":"k","art":"regler","nr":1,"min":0,"max":1},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"s.hz"},{"von":"n.gate","nach":"e.gate"},{"von":"n.trig","nach":"e.trig"},{"von":"s.aus","nach":"vca.a"},{"von":"e.aus","nach":"vca.b"},{"von":"vca.aus","nach":"f.x"},{"von":"k.aus","nach":"f.mix"},{"von":"f.l","nach":"o.l"},{"von":"f.r","nach":"o.r"}]}"#;
+
+const GRAPHEN: [&str; 31] = [
     include_str!("../beispiele/saege-ladder.json"),
     include_str!("../beispiele/juno-pad.json"),
     include_str!("../beispiele/lead.json"),
@@ -55,13 +68,40 @@ const GRAPHEN: [&str; 17] = [
     include_str!("../beispiele/saite.json"),
     include_str!("../beispiele/rueckkopplung.json"),
     include_str!("../beispiele/bassmusik.json"),
+    KRUME_1,
+    PHASER_1,
+    include_str!("../beispiele/fx-phaser.json"),
+    include_str!("../beispiele/fx-flanger.json"),
+    include_str!("../beispiele/fx-lofi-sp1200.json"),
+    include_str!("../beispiele/roehre-lead.json"),
+    ROEHRE_FX,
+    include_str!("../beispiele/gated-hall-snare.json"),
+    include_str!("../beispiele/fx-takt-pump.json"),
+    include_str!("../beispiele/fx-vocoder-robot.json"),
+    SAMPLER_1,
+    FALTUNG_1,
+    include_str!("../beispiele/fx-federhall.json"),
+    include_str!("../beispiele/fx-filter-fahrt.json"),
 ];
 
 #[test]
 fn echtzeitpfad_allokiert_nicht() {
+    let wurzel = std::env::temp_dir().join(format!("bk-s10-alloc-{}", std::process::id()));
+    std::fs::create_dir_all(&wurzel).unwrap();
+    std::fs::write(wurzel.join("probe.f32"), baukasten_dsp::proben::bytes(&baukasten_dsp::proben::orchester_schlag(48_000.0))).unwrap();
+    // S21: a 4097 frame decaying-noise IR for FALTUNG_1 (deterministic xorshift, no random numbers)
+    let mut z = 0x2545_f491u32;
+    let ir: Vec<f32> = (0..2 * 4097).map(|i| {
+        z ^= z << 13;
+        z ^= z >> 17;
+        z ^= z << 5;
+        0.4 * ((z as f64 / u32::MAX as f64) * 2.0 - 1.0) as f32 * (-((i / 2) as f32) / 1000.0).exp()
+    }).collect();
+    std::fs::write(wurzel.join("ir.f32"), baukasten_dsp::proben::bytes(&ir)).unwrap();
+    std::fs::write(wurzel.join("feder-ir.f32"), baukasten_dsp::proben::bytes(&baukasten_dsp::proben::feder_ir(48_000.0))).unwrap();
     for g in GRAPHEN {
         let vor = ANFORDERUNGEN.load(Ordering::SeqCst);
-        let mut p = uebersetze(g, 48_000.0).unwrap();
+        let mut p = uebersetze_mit_wurzel(g, 48_000.0, Some(&wurzel)).unwrap();
         assert!(ANFORDERUNGEN.load(Ordering::SeqCst) > vor, "Positivkontrolle: uebersetze muss allokieren");
         let start = ANFORDERUNGEN.load(Ordering::SeqCst);
         let mut summe = 0.0f32;

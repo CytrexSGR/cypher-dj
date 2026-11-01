@@ -251,6 +251,11 @@ impl Hall {
         for v in self.verz_fahne.iter_mut() {
             v.reset();
         }
+        // the early-reflection tone filters carry state too (one-pole low and high pass)
+        for t in self.ton.iter_mut() {
+            t.z_tp = 0.0;
+            t.z_hp = 0.0;
+        }
         self.alt = None;
         self.blende = 1.0;
         // Glätter auf das Ziel setzen: nach einem Reset gilt die Einstellung sofort

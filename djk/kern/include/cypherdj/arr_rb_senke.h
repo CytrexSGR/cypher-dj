@@ -18,15 +18,23 @@
 // Spurwechsel (Fix F2): verlässt eine klingende Spur die Senke per Tausch (wird leer, Wirt-Spur), blendet der nächste
 // Block (das Modul ruft ihn einmal, spur_weg) linear auf 0 aus, ohne die Parameter der neuen Spur, danach setzt die Senke
 // die Spur zurück; die Stimme ruht, ein späteres Zurückladen spielt keinen alten Ausklang weiter.
+// Automation slice 2 (E9, `geraet` lanes): before block() of a track the core reports per lane and block one value (auto_parameter: the lane at the
+// last running sample of the block). block() hands it to cypher_rb_setze AFTER the defaults/base values and after zuruecksetzen, and only when it changed
+// (every parameter_setzen and every zuruecksetzen forgets the applied value). When the value stays away after a block that had one (lane deleted, swap
+// without it, stop) the sink sets the BASE value once: the playback's parameter value, else the RB default. The FFI glides 20 ms behind the lane and has
+// no getter; the lag is measured (test_arr_rb_senke_auto), not corrected.
 // Echtzeit: außer Konstruktor und Destruktor keine Allokation, keine Sperre, kein I/O.
 #pragma once
 
 #include <cstdint>
+#include <limits>
 
 #include "cypherdj/arrangement.h"
 #include "cypherdj/cypher_rb_ffi.h"
 
 namespace cdj {
+
+struct ArrRbPruefZugang;   // tests only: reads the set log of the sink
 
 constexpr int ARR_RB_WARTE = 256;   // Ereignisse je Spur bis zum nächsten Block (wie RB_MAX_EREIGNISSE der FFI)
 constexpr int64_t ARR_RB_RUHE = 48000;   // 1 s exakte Stille bei stehendem Transport, dann zurücksetzen (Stimme ruht)
@@ -39,6 +47,7 @@ class ArrRbSenke final : public ArrSenke {
   ArrRbSenke& operator=(const ArrRbSenke&) = delete;
 
   int64_t vorhalt() const noexcept override { return 0; }
+  void auto_parameter(int spur, int param, float wert) noexcept override;
   void note(int spur, int64_t ziel, uint8_t ton, uint8_t vel, bool an) noexcept override;
   void alle_aus(int spur, int64_t ziel) noexcept override;
   void transport_start(int spur, int64_t ziel) noexcept override;
@@ -47,10 +56,12 @@ class ArrRbSenke final : public ArrSenke {
 
   bool bereit() const { return bereit_; }                        // alle Instanzen angelegt
   uint64_t verloren() const { return verloren_; }                // Ereignisse über ARR_RB_WARTE oder von der FFI abgelehnt
+  uint64_t parameter_gemeldet() const { return gemeldet_; }      // values the core reported through auto_parameter (cost layouts: positive proof that the lanes arrive)
   uint64_t parameter_abgelehnt() const { return abgelehnt_; }    // unbekannte ID oder NaN (der Server prüft vorher)
   int ruhend() const;                                            // Spuren, deren Stimme ruht (seit Zurücksetzen ohne Note)
 
  private:
+  friend struct ArrRbPruefZugang;
   struct Ev {
     int64_t ziel;
     uint8_t art;   // 0 Note-Ein, 1 Note-Aus, 2 alle aus
@@ -67,8 +78,29 @@ class ArrRbSenke final : public ArrSenke {
     int64_t still = 0;                      // Samples exakter Stille am Ausgang in Folge
     bool stumm = false;                     // Kurzblende vorbei, stumm bis zum Block des Einsatzes
     bool weg = false;                       // Fix F2: die Spur hat die Senke verlassen, nächster Block blendet aus
+    // `geraet` lanes (E9) per parameter 0..3 (ARR_GERAET_PARAM_NAME); angewendet NaN: no lane value is in the FFI
+    float lane_wert[ARR_GERAET_PARAMS] = {};
+    bool lane_da[ARR_GERAET_PARAMS] = {};    // reported in this block
+    bool lane_war[ARR_GERAET_PARAMS] = {};   // reported in the block before
+    static_assert(ARR_GERAET_PARAMS == 4, "the initialiser below lists four values");
+    float angewendet[ARR_GERAET_PARAMS] = {NAN_WERT, NAN_WERT, NAN_WERT, NAN_WERT};
   };
+  // Test seam: the last PROTOKOLL_N calls to cypher_rb_setze (and cypher_rb_vorgaben as the name "<vorgaben>"), fixed ring, no allocation
+  struct Protokoll {
+    int spur;
+    char name[16];
+    float wert;
+  };
+  static constexpr int PROTOKOLL_N = 64;
+  static constexpr float NAN_WERT = std::numeric_limits<float>::quiet_NaN();
   void schiebe(Spur& p, const Ev& e) noexcept;
+  void protokoll(const Spur& p, const char* name, float wert) noexcept;
+  void vorgaben_(Spur& p) noexcept;        // cypher_rb_vorgaben, logged; forgets the applied lane values
+  void zuruecksetzen_(Spur& p) noexcept;   // cypher_rb_zuruecksetzen; forgets the applied lane values
+  void setze_(Spur& p, const char* name, float wert) noexcept;   // cypher_rb_setze, logged, rc != 0 counts abgelehnt_
+  void lanes_anwenden(Spur& p, const ArrSnapshot* snap, int spur) noexcept;   // E9, in block() after base values and zuruecksetzen
+  void lanes_vergessen(Spur& p, bool auch_gemeldet) noexcept;   // the track left the sink: forget the previous block and the applied values; auch_gemeldet also the value of this block
+  static float basiswert(const ArrSnapshot* snap, int spur, int param) noexcept;   // base value of a lane parameter: the playback's value, else the RB default
   void parameter_setzen(Spur& p, const ArrSpur& quelle) noexcept;
   bool parameter_gleich(const Spur& p, const ArrSpur& quelle) const noexcept;
 
@@ -77,6 +109,9 @@ class ArrRbSenke final : public ArrSenke {
   bool bereit_ = false;
   uint64_t verloren_ = 0;
   uint64_t abgelehnt_ = 0;
+  uint64_t gemeldet_ = 0;
+  Protokoll protokoll_[PROTOKOLL_N] = {};
+  uint64_t protokoll_n_ = 0;
   float puf_l_[ARR_BLOCK] = {};
   float puf_r_[ARR_BLOCK] = {};
 };

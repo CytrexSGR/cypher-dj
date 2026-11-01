@@ -24,6 +24,8 @@
 #include "cypherdj/dsp/analyse_baender.h"
 #include "cypherdj/arrangement.h"
 #include "cypherdj/aufnahme.h"
+#include "cypherdj/arr_bk_senke.h"
+#include "cypherdj/arr_intern_senke.h"
 #include "cypherdj/arr_rb_senke.h"
 #include "cypherdj/arr_wirt_senke.h"
 #include "cypherdj/erzeuger.h"
@@ -59,7 +61,7 @@ struct Befehl {
     SET_NEU = 1, KLICK = 2, TEMPO_RAMPE = 3, STORNO = 4,
     TEIL = 5, ABBRUCH = 6, KI_STOPP = 7, KI_FREI = 8, KI_SPUR = 9, KI_STUFE = 10, HAND = 11,  // Scheibe 25
     DECK_LADEN = 12, DECK_ENTLADEN = 13, DECK_START = 14, DECK_STOPP = 15,                   // Scheibe 31
-    MAPPING = 16,                                                                             // Scheibe 35: /k/mapping
+    MAPPING = 16,                                                                             // Scheibe 35: /k/mapping; S19: nr = slot (0 hand_in, 1 learn table on midi_ein_1)
     ERZ_STROM = 17, ERZ_FENSTER = 18,  // Plan 2026-09-27 (§4.8, ADR 024): nr = strom, pfad = kanal, zeiger = Kit*/ErzFenster*; form = -1: Baukasten-Graph, zeiger = CypherBk*
     LOOP_LADEN = 19, LOOP_START = 20, LOOP_STOPP = 21,  // MVP 2 (§4.9, ADR 025): deck = box, pfad = name, zeiger = Loop*
     MITSCHNITT = 22,  // MVP 2 Scheibe 2 (§4.9 /k/loop/rec): nr = beats, pfad = name, zeiger = Mitschnitt*
@@ -81,7 +83,8 @@ struct Befehl {
     DECK_SCRUB = 43,  // Hörbares Ziehen (§4.4 /k/deck/scrub): deck, nr = phase (0 los, 1 Griff, 2 Zug), wert_beats = delta_beats
     DECK_LOOP_LAENGE = 44,  // §4.4 /k/deck/loop_laenge: Loop mit festem Start: quell_beat = start_beat, wert_beats = laenge_beats
     REC_SPUR = 45, REC_START = 46, REC_STOPP = 47,  // 1.8 (§4.12): REC_SPUR nr = spur, an = scharf, deck = eingang, zeiger = RecSpur*; REC_START nr = kennung, fassung = nachlauf_samples, versatz_f = frist_samples (0: Vorgabe)
-    KANAL_GRAPH = 48   // Baukasten S3c (§4.10 /k/kanal/graph): pfad = kanal (deck/1..4), zeiger = CypherBk* oder null (entfernen)
+    KANAL_GRAPH = 48,  // Baukasten S3c (§4.10 /k/kanal/graph): pfad = kanal (deck/1..4), zeiger = CypherBk* oder null (entfernen)
+    LERNEN = 49        // S19 (§4.7 /k/lernen): an 1 arm / 0 disarm the MIDI learn capture, id is reported back in GELERNT
   };
   int32_t art;
   int32_t an;          // KLICK: 0 oder 1; KI_STUFE: Stufe 0 bis 3
@@ -161,6 +164,7 @@ struct Ereignis {
     REC_ZUSTAND = 35, REC_ALT = 36,  // 1.8 §5.14 /zustand/rec: status, id = kennung, rec_scharf, rec_luecken, arr_beat; REC_ALT: zeiger = abgelöster RecSpur* zur Freigabe im Netz-Faden
     WARP_ZUSTAND = 37,               // 1.13 Slice 2, §5.13b /zustand/warp: warp_stimmen, warp_unterlauf, warp_kein_platz, warp_spaet, warp_faeden
     ERZ_BK_ALT = 38,                 // Baukasten S3a: abgelöster Baukasten-Graph zur Freigabe im Netz-Faden (zeiger = CypherBk*)
+    GELERNT = 39,                    // S19 (§5.8 /e/gelernt): id, deck = quelle (0 hand_in, 1 midi_ein_1), fassung = kanal, teil = nr, neu = wert, status = belegt
   };
   int32_t art;
   int32_t status;   // QUITTUNG: §5.1; KI: gestoppt 0/1
@@ -261,6 +265,9 @@ class Kern {
   // D1 K2b (Spec 2.4, 6.24): die RB-338, die der Kern für alle internen Spuren anlegt (setze_arr_senke_intern ersetzt
   // sie); der Render (K3) treibt denselben Kern und bekommt sie damit ohne Zutun
   const ArrRbSenke& arr_rb() const { return *arr_rb_; }
+  // S20: the Baukasten sink of the internal tracks (project tracks with device bk) and its reader for the graph store of the loader
+  const ArrBkSenke& arr_bk() const { return *arr_bk_; }
+  const ArrBkLeser* arr_bk_leser() const { return arr_bk_.get(); }
   // D1 K2b: Wirt-Slots s = 1..2 (setze_arr_senke_wirt ersetzt sie). arr_rueck: Rückweg arr_rueck_<s>_L/R für den NÄCHSTEN
   // zyklus() (wie rueck(), n Samples ab Index 0); arr_midi_aus: MIDI an arr_midi_<s> dieses Zyklus, gültig bis zum
   // nächsten zyklus().
@@ -274,6 +281,9 @@ class Kern {
   }
   // D1 K1: Senken der Arrangement-Noten (K2: RB-FFI für interne Spuren, je Wirt-Slot eine). Nicht im Callback.
   void setze_arr_senke_intern(ArrSenke* s) { arr_->setze_senke_intern(s); }
+  // 1.10 slice 3 (P8 a): the Halls of the return strips take the base values of their controls now. Main thread, before the first cycle (the render
+  // calls it after setting the project controls), so export and playback start with the same Hall settings.
+  void hall_sofort() { arr_->hall_sofort(); }
   // 1.13 Slice 2: das Warp-Werk für COMPLEX und TONES (warp_werk.h); vor dem ersten Zyklus, Besitz beim Aufrufer (er stoppt es vor dem Abbau des Lade-Fadens).
   // Das Arrangement setzt die Stimmen neu an, wenn die Karte eine neue Generation hat. nullptr: ohne Werk (die Clips spielen als RE-PITCH).
   void setze_arr_warp_werk(WarpWerk* w) {
@@ -284,6 +294,7 @@ class Kern {
   // Baukasten S3b: das Graph-Werk (graph_werk.h) für die Baukasten-Ströme des Erzeugers; vor dem ersten Zyklus, Besitz beim
   // Aufrufer (er stoppt es nach jack_deactivate). nullptr: Graphen rechnen im Callback (S3a).
   void setze_graph_werk(GraphWerk* w) { erz_->setze_graph_werk(w); }
+  void setze_arr_auto_schritt(int n) { arr_->setze_auto_schritt(n); }   // Automation Slice 1: test seam, 1 = lane without the step hold (before the callback runs)
   const Arrangement& arrangement() const { return *arr_; }   // Tests, Diagnose (nur aus dem Callback-Faden lesen)
   // 1.10 Slice 2 (E2): Produktions-Master des zuletzt gelaufenen Zyklus, Index 0..n−1 (n = Größe des Zyklus). Nach dem PM-Fader, vor erz/4,
   // ohne Metronom, Kleber, master/pegel und Set-Limiter: der Export-Abgriff. Nur aus dem Callback-Faden (und Tests, Render) lesen.
@@ -428,6 +439,12 @@ class Kern {
   MidiEin& midi_ein_ring() noexcept { return midi_ein_; }
   void setze_mapping(const hand::Mapping* m) noexcept;
   const hand::Mapping* mapping() const noexcept { return mapping_; }
+  // S19 (MIDI learn): second mapping slot, the learn table. It translates only midi_ein_1 (hand_in keeps slot 0 alone).
+  // Set before jack_activate (start) or swapped by Befehl MAPPING with nr 1; nullptr = no table, midi_ein_1 stays raw.
+  void setze_lern_mapping(const hand::Mapping* m) noexcept;
+  const hand::Mapping* lern_mapping() const noexcept { return lern_mapping_; }
+  uint64_t lern_ereignisse() const noexcept { return lern_ereignisse_; }      // midi_ein_1 events translated with effect
+  uint64_t lern_ohne_wirkung() const noexcept { return lern_ohne_wirkung_; }  // midi_ein_1 events with a table but no effect
   void hand_neu_verbunden() noexcept { neu_verbunden_.store(true, std::memory_order_release); }
   uint64_t hand_ohne_wirkung() const noexcept { return hand_ohne_wirkung_; }  // Ereignisse ohne Wirkung im MVP
   uint64_t hand_ueberlauf() const noexcept { return hand_ueberlauf_; }        // über MAX_MIDI je Zyklus verworfen
@@ -519,7 +536,8 @@ class Kern {
   int arr_kanal_ = -1;              // Mixer-Index von erz/4 (ARR_KANAL)
   // Baukasten S5r: die Werte der Graph-Regler <kanal>/bk/1..8, Zeile = Mixer-Kanal. bk_ort_[regler] = kanal * 8 + nr - 1
   // oder -1; einmal im Ctor gebaut, im Callback nur Indexzugriff. Mixer und Erzeuger lesen bk_wert_ über einen Zeiger.
-  float bk_wert_[MIX_KANAELE][8] = {};
+  // S14: rows 0..17 are the mixer channels, row MIX_BK_SEND_ZEILE (18) is fx/3 and 19 is fx/4 (graph knobs of the send returns).
+  float bk_wert_[MIX_BK_ZEILEN][8] = {};
   int16_t bk_ort_[cypherdj::stellwerk::MAX_REGLER];
   int zyklus_n_ = 256;              // Größe des laufenden Zyklus (Start-Regel: Vorhalt 2n + 25 und + 1 Zyklus)
   int64_t arr_start_id_ = 0, arr_stopp_id_ = 0;
@@ -613,6 +631,8 @@ class Kern {
   float* erz_l_[MIX_KANAELE] = {};
   MidiAus midi_aus_[ERZ_MIDI_PORTS];
   std::unique_ptr<ArrRbSenke> arr_rb_;                      // D1 K2b: RB-338 des Arrangements, im Konstruktor angelegt
+  std::unique_ptr<ArrBkSenke> arr_bk_;                      // S20: Baukasten graphs of the internal tracks
+  std::unique_ptr<ArrInternSenke> arr_intern_;              // S20: the one internal sink of the arrangement, forwards by device
   std::unique_ptr<ArrWirtSenke> arr_wirt_[ARR_WIRT_SLOTS];  // D1 K2b: Wirt-Slots 1..2, im Konstruktor angelegt
   int64_t zyklus_n0_ = 0;
   int64_t rueck_unendlich_ = 0;  // Audit F01: nicht endliche Samples am Wirt-Rückweg (verworfen)
@@ -664,9 +684,20 @@ class Kern {
   MidiRoh midi_ein_roh_[MAX_MIDI];  // I08: Ereignisse dieses Zyklus, gestempelt in midi_ein_stempeln()
   int n_midi_ein_ = 0;
   std::atomic<bool> midi_ein_extern_{false};
-  void midi_ein_stempeln() noexcept;
+  void midi_ein_stempeln(int n) noexcept;
+  // S19: effect of one translated action, shared by hand_zyklus (slot 0) and midi_ein_stempeln (slot 1)
+  void hand_aktion(const HandAktion& a, uint64_t* mit, uint64_t* ohne);
   HandEin hand_ein_;
   const hand::Mapping* mapping_ = nullptr;
+  const hand::Mapping* lern_mapping_ = nullptr;
+  uint64_t lern_ereignisse_ = 0;
+  uint64_t lern_ohne_wirkung_ = 0;
+  // S19 capture: armed by Befehl LERNEN; the first CC on midi_ein_1 is consumed and reported as GELERNT. The deadline is a
+  // countdown in samples (not a sample stamp): /k/set/neu resets sample_ but must not restart or stop it.
+  static constexpr int64_t LERN_FRIST = 20 * 48000;
+  bool lern_an_ = false;
+  int64_t lern_id_ = 0, lern_rest_ = 0;
+  void lern_melden(int quelle, const uint8_t* d, uint32_t versatz) noexcept;
   uint64_t hand_ohne_wirkung_ = 0;
   uint64_t hand_ueberlauf_ = 0;
   uint64_t hand_ereignisse_ = 0;

@@ -1,0 +1,40 @@
+{
+  "format": "baukasten/2",
+  "name": "fx-vocoder-robot",
+  "stimmen": 1,
+  "regler_namen": {"1": "Root", "2": "Zisch"},
+  "knoten": [
+    {"id": "ein", "art": "eingang"},
+    {"id": "root", "art": "regler", "nr": 1, "min": 55, "max": 220, "log": 1},
+    {"id": "quinte", "art": "mul", "b": 1.5},
+    {"id": "oktave", "art": "mul", "b": 2},
+    {"id": "s1", "art": "saege"},
+    {"id": "s2", "art": "saege"},
+    {"id": "s3", "art": "saege"},
+    {"id": "hauch", "art": "rauschen"},
+    {"id": "hauch_pegel", "art": "mul", "b": 0.05},
+    {"id": "traeger", "art": "add"},
+    {"id": "zisch", "art": "regler", "nr": 2, "min": 0, "max": 0.4},
+    {"id": "voc", "art": "vocoder"},
+    {"id": "pegel", "art": "mul", "b": 0.15},
+    {"id": "aus", "art": "ausgang"}
+  ],
+  "kanten": [
+    {"von": "root.aus", "nach": "s1.hz"},
+    {"von": "root.aus", "nach": "quinte.a"},
+    {"von": "root.aus", "nach": "oktave.a"},
+    {"von": "quinte.aus", "nach": "s2.hz"},
+    {"von": "oktave.aus", "nach": "s3.hz"},
+    {"von": "hauch.aus", "nach": "hauch_pegel.a"},
+    {"von": "s1.aus", "nach": "traeger.a"},
+    {"von": "s2.aus", "nach": "traeger.b"},
+    {"von": "s3.aus", "nach": "traeger.c"},
+    {"von": "hauch_pegel.aus", "nach": "traeger.d"},
+    {"von": "traeger.aus", "nach": "voc.x"},
+    {"von": "ein.l", "nach": "voc.l"},
+    {"von": "ein.r", "nach": "voc.r"},
+    {"von": "zisch.aus", "nach": "voc.zisch"},
+    {"von": "voc.l", "nach": "pegel.a"},
+    {"von": "pegel.aus", "nach": "aus.x"}
+  ]
+}

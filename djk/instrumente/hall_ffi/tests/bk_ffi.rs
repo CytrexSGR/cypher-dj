@@ -286,3 +286,223 @@ fn regler_rastet_am_ziel_ein() {
     assert!(y[0] > 0.8, "neues Ziel wirkt erst geglättet: {}", y[0]);
     assert_eq!(y[y.len() - 1].to_bits(), 0.2f32.to_bits());
 }
+
+// ---- S10 task 3: cypher_bk_neu_wurzel ----
+
+const SAMPLER_G: &str = r#"{"format":"baukasten/2","name":"s","stimmen":2,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"sampler","datei":"d.f32"},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"s.hz"},{"von":"n.trig","nach":"s.trig"},{"von":"n.gate","nach":"s.gate"},{"von":"s.l","nach":"o.l"},{"von":"s.r","nach":"o.r"}]}"#;
+
+fn wurzel_mit_probe(name: &str) -> std::path::PathBuf {
+    let w = std::env::temp_dir().join(format!("bk-s10-ffi-{}-{name}", std::process::id()));
+    std::fs::create_dir_all(&w).unwrap();
+    let d: Vec<f32> = (0..2 * 20_000).map(|i| ((i / 2) as f32 * 0.05).sin() * 0.5).collect();
+    std::fs::write(w.join("d.f32"), d.iter().flat_map(|v| v.to_le_bytes()).collect::<Vec<u8>>()).unwrap();
+    w
+}
+
+fn neu_wurzel(json: &str, wurzel: Option<&std::path::Path>) -> (*mut CypherBk, String) {
+    let c = CString::new(json).unwrap();
+    let w = wurzel.map(|p| CString::new(p.to_str().unwrap()).unwrap());
+    let mut fehler = [0 as std::ffi::c_char; 256];
+    let h = cypher_bk_neu_wurzel(c.as_ptr(), 48_000.0, w.as_ref().map_or(std::ptr::null(), |c| c.as_ptr()), fehler.as_mut_ptr(), fehler.len());
+    let text = unsafe { std::ffi::CStr::from_ptr(fehler.as_ptr()) }.to_string_lossy().into_owned();
+    (h, text)
+}
+
+#[test]
+fn wurzel_spielt_den_sampler_graphen_bitgleich_wie_programm() {
+    let w = wurzel_mit_probe("spielt");
+    let (h, fehler) = neu_wurzel(SAMPLER_G, Some(&w));
+    assert!(!h.is_null(), "{fehler}");
+    cypher_bk_note_an(h, 100, 60, 0.8);
+    let ist = bloecke(h, 512, 8);
+    cypher_bk_frei(h);
+    assert!(ist[2 * 100..].iter().any(|v| v.abs() > 0.1), "silent after a note");
+    assert!(ist[..2 * 100].iter().all(|v| *v == 0.0));
+    let mut p = baukasten_dsp::uebersetze_mit_wurzel(SAMPLER_G, 48_000.0, Some(&w)).unwrap();
+    p.zuruecksetzen();
+    let mut soll = Vec::new();
+    for i in 0..4096 {
+        if i == 100 { p.note_an(60, 0.8); }
+        let (a, b) = p.sample_stereo();
+        soll.extend([a, b]);
+    }
+    assert_eq!(ist, soll);
+}
+
+#[test]
+fn ohne_wurzel_ist_ein_sampler_graph_ein_fehler() {
+    let (h, fehler) = neu_wurzel(SAMPLER_G, None);
+    assert!(h.is_null());
+    assert!(fehler.contains("no sample root"), "{fehler}");
+    // the old entry point behaves the same
+    let c = CString::new(SAMPLER_G).unwrap();
+    let mut f = [0 as std::ffi::c_char; 256];
+    assert!(cypher_bk_neu(c.as_ptr(), 48_000.0, f.as_mut_ptr(), f.len()).is_null());
+    let text = unsafe { std::ffi::CStr::from_ptr(f.as_ptr()) }.to_string_lossy().into_owned();
+    assert!(text.contains("no sample root"), "{text}");
+}
+
+#[test]
+fn wurzel_pfad_und_dateifehler_kommen_als_text() {
+    let w = wurzel_mit_probe("fehler");
+    for (name, grund) in [("../d.f32", "must not contain .."), ("a/b.f32", "may only contain"), ("fehlt.f32", "not readable")] {
+        let (h, fehler) = neu_wurzel(&SAMPLER_G.replace("d.f32", name), Some(&w));
+        assert!(h.is_null(), "{name}");
+        assert!(fehler.contains(grund), "{name}: {fehler}");
+    }
+}
+
+#[test]
+fn neu_ist_fuer_alle_vorhandenen_beispiele_unveraendert() {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../baukasten_dsp/beispiele");
+    let mut n = 0;
+    for e in std::fs::read_dir(&dir).unwrap() {
+        let p = e.unwrap().path();
+        if p.extension().map_or(true, |x| x != "json") { continue; }
+        let text = std::fs::read_to_string(&p).unwrap();
+        let h = neu(&text);
+        // sampler (S10) and faltung (S21) read files from the graph folder, so they need a root
+        let datei = ["sampler", "faltung"].iter().any(|a| text.contains(&format!(r#""art": "{a}""#)) || text.contains(&format!(r#""art":"{a}""#)));
+        if datei {
+            assert!(h.is_null(), "{p:?}: a graph with a file node needs a root");
+            let w = wurzel_mit_probe("beispiel");
+            std::fs::write(w.join("orchester-schlag.f32"), std::fs::read(w.join("d.f32")).unwrap()).unwrap();
+            // S22: sampler-fairlight reads the hit as three detune slices
+            std::fs::write(w.join("orchester-schlag-schichten.f32"), std::fs::read(w.join("d.f32")).unwrap()).unwrap();
+            std::fs::write(w.join("feder-ir.f32"), baukasten_dsp::proben::bytes(&baukasten_dsp::proben::feder_ir(48_000.0))).unwrap();
+            let (h2, f) = neu_wurzel(&text, Some(&w));
+            assert!(!h2.is_null(), "{p:?}: {f}");
+            cypher_bk_frei(h2);
+        } else {
+            assert!(!h.is_null(), "{p:?}");
+            n += 1;
+        }
+        cypher_bk_frei(h);
+    }
+    assert!(n >= 20, "only {n} examples compared");
+}
+
+// ---- S20 task 1: cypher_bk_zuruecksetzen ----
+
+/// saw x gate x knob 1 (0..1) plus free-running noise: noise and the oscillator phase are state that only a reset clears
+const G_RAUSCH: &str = r#"{"format":"baukasten/2","name":"t","stimmen":2,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"saege"},{"id":"v","art":"mul"},{"id":"k","art":"regler","nr":1,"min":0,"max":1},{"id":"vk","art":"mul"},{"id":"r","art":"rauschen"},{"id":"rv","art":"mul","b":0.2},{"id":"m","art":"add"},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"s.hz"},{"von":"s.aus","nach":"v.a"},{"von":"n.gate","nach":"v.b"},{"von":"v.aus","nach":"vk.a"},{"von":"k.aus","nach":"vk.b"},{"von":"r.aus","nach":"rv.a"},{"von":"vk.aus","nach":"m.a"},{"von":"rv.aus","nach":"m.b"},{"von":"m.aus","nach":"o.x"}]}"#;
+
+/// one fixed run: note 57 for 4800 samples in blocks of 256 (the note ends at 3000)
+fn lauf_noten(h: *mut CypherBk) -> Vec<f32> {
+    assert_eq!(cypher_bk_note_an(h, 10, 57, 1.0), 0);
+    assert_eq!(cypher_bk_note_aus(h, 3000, 57), 0);
+    bloecke(h, 256, 19)
+}
+
+#[test]
+fn zuruecksetzen_wie_frisch() {
+    let frisch = {
+        let h = neu(G_RAUSCH);
+        assert!(!h.is_null());
+        let x = lauf_noten(h);
+        cypher_bk_frei(h);
+        x
+    };
+    assert!(frisch.iter().any(|v| v.abs() > 0.05), "positive control: the graph sounds");
+    let h = neu(G_RAUSCH);
+    let erster = lauf_noten(h);
+    assert_eq!(erster, frisch, "the same run on a fresh instance is deterministic");
+    // negative control: without the reset the second run differs (free-running noise and phase have moved on)
+    let ohne = lauf_noten(h);
+    assert_ne!(ohne, frisch, "without a reset the second run is not the first");
+    cypher_bk_zuruecksetzen(h);
+    let zweiter = lauf_noten(h);
+    assert_eq!(zweiter, frisch, "after the reset the run equals a fresh instance");
+    cypher_bk_frei(h);
+}
+
+/// saw x gate x knob 1, no free-running state: a settled knob is the only thing that differs from "fresh"
+const G_KNOPF: &str = r#"{"format":"baukasten/2","name":"t","stimmen":2,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"saege"},{"id":"v","art":"mul"},{"id":"k","art":"regler","nr":1,"min":0,"max":1},{"id":"vk","art":"mul"},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"s.hz"},{"von":"s.aus","nach":"v.a"},{"von":"n.gate","nach":"v.b"},{"von":"v.aus","nach":"vk.a"},{"von":"k.aus","nach":"vk.b"},{"von":"vk.aus","nach":"o.x"}]}"#;
+
+#[test]
+fn zuruecksetzen_behaelt_regler() {
+    let spitze = |x: &[f32]| x.iter().fold(0.0f32, |m, v| m.max(v.abs()));
+    // reference: fresh instance, knob 0.9 settled (40 blocks = 10240 samples >> 20 ms), no reset
+    let soll = {
+        let h = neu(G_KNOPF);
+        assert_eq!(cypher_bk_regler(h, 1, 0.9), 0);
+        bloecke(h, 256, 40);
+        let x = lauf_noten(h);
+        cypher_bk_frei(h);
+        x
+    };
+    // the reset after a note and the settled knob: the knob value still applies afterwards
+    let ist = {
+        let h = neu(G_KNOPF);
+        assert_eq!(cypher_bk_regler(h, 1, 0.9), 0);
+        cypher_bk_note_an(h, 0, 50, 1.0);
+        bloecke(h, 256, 40);
+        cypher_bk_zuruecksetzen(h);
+        let x = lauf_noten(h);
+        cypher_bk_frei(h);
+        x
+    };
+    assert_eq!(ist, soll, "the knob path survives the reset");
+    // negative control: the default knob 0.5 is clearly quieter than the kept 0.9
+    let h = neu(G_KNOPF);
+    let niedrig = lauf_noten(h);
+    cypher_bk_frei(h);
+    assert!(spitze(&ist) > spitze(&niedrig) * 1.3, "0.9 louder than 0.5: {} vs {}", spitze(&ist), spitze(&niedrig));
+}
+
+#[test]
+fn zuruecksetzen_leert_die_warteschlange() {
+    let h = neu(G_RAUSCH);
+    assert_eq!(cypher_bk_note_an(h, 0, 57, 1.0), 0);   // queued, not yet rendered
+    cypher_bk_zuruecksetzen(h);
+    let x = bloecke(h, 256, 4);
+    // only the free-running noise may be present; the queued note must not sound: compare against an instance that never got it
+    let g = neu(G_RAUSCH);
+    let y = bloecke(g, 256, 4);
+    assert_eq!(x, y, "a note queued before the reset does not survive it");
+    cypher_bk_frei(h);
+    cypher_bk_frei(g);
+}
+
+#[test]
+fn zuruecksetzen_null_handle_ist_harmlos() {
+    cypher_bk_zuruecksetzen(std::ptr::null_mut());
+}
+
+#[test]
+fn regler_sofort_springt_ohne_rampe() {
+    // reference: knob 0.9 settled over 40 blocks, then the fixed run
+    let soll = {
+        let h = neu(G_KNOPF);
+        assert_eq!(cypher_bk_regler(h, 1, 0.9), 0);
+        bloecke(h, 256, 40);
+        let x = lauf_noten(h);
+        cypher_bk_frei(h);
+        x
+    };
+    // sofort: the same values from the first block on, no settling blocks
+    let h = neu(G_KNOPF);
+    assert_eq!(cypher_bk_regler_sofort(h, 1, 0.9), 0);
+    let sofort = lauf_noten(h);
+    cypher_bk_frei(h);
+    assert_eq!(sofort, soll, "regler_sofort starts on the settled value");
+    // negative control: the smoothed call from the same start differs in the first blocks (the ramp is audible)
+    let h = neu(G_KNOPF);
+    assert_eq!(cypher_bk_regler(h, 1, 0.9), 0);
+    let geglaettet = lauf_noten(h);
+    cypher_bk_frei(h);
+    assert_ne!(geglaettet, soll, "the smoothed call ramps over 20 ms");
+    // bounds as regler: nr outside 1..8 and null are refused, NaN ignored, values clamped
+    let h = neu(G_KNOPF);
+    assert_eq!(cypher_bk_regler_sofort(h, 0, 0.5), -1);
+    assert_eq!(cypher_bk_regler_sofort(h, 9, 0.5), -1);
+    assert_eq!(cypher_bk_regler_sofort(std::ptr::null_mut(), 1, 0.5), -1);
+    assert_eq!(cypher_bk_regler_sofort(h, 1, f32::NAN), 0);
+    assert_eq!(cypher_bk_regler_sofort(h, 1, 7.0), 0);   // clamped to 1.0
+    let eins = lauf_noten(h);
+    cypher_bk_frei(h);
+    let h = neu(G_KNOPF);
+    assert_eq!(cypher_bk_regler_sofort(h, 1, 1.0), 0);
+    assert_eq!(lauf_noten(h), eins, "7.0 is clamped to 1.0");
+    cypher_bk_frei(h);
+}

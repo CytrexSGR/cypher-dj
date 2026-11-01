@@ -7,10 +7,11 @@
 // Clip-Loop (Spec 6.17): Strg+L schaltet den Loop der gewählten Clips (loop_beats = Länge bzw. null), danach zieht die rechte Kante die
 // Länge; die Überlagerung zeigt jede Wiederholung als Kachel mit Trennstrich. Teilen und links kürzen sind bei Loop-Clips gesperrt.
 import { xZuBeat, rasterBeats } from './zeitachse.js';
-import { CLIP_KOPF, clipKasten, sichtbar, spurIndexBei } from './layout.js';
+import { CLIP_KOPF, clipKasten, sichtbar, spurIndexBeiTabelle, spurZeile } from './layout.js';
 import { neueClipIds, neuerZugLauf, findeClip } from './entwurf.js';
 import { oeffneMenue } from './kontextmenue.js';
 import { stemsPunkte, stemsAktion } from './stems.js';
+import { mergePunkte, mergeAktion } from './merge.js';
 import { trefferClip, fadePunkte, istZug, zugBefehle, zugLabel, teile, dupliziere, loesche, neuerMidiClip, CLIP_TEXT, istLoop, schalteLoop, loopImWeg, kacheln } from './clips.js';
 
 export function bindeClips(ctx) {
@@ -43,22 +44,23 @@ export function bindeClips(ctx) {
     if (ok && alt) ctx.setzeAuswahl(neueClipIds(alt, st.projekt));
   }
 
-  // Slice 6 (D13): Rechtsklick auf einen Audio-Clip: Separate Stems / Cancel Stems. Fehler mit dem Text des Grunds (fehlerText), nie „Rejected“.
+  // Slice 6 (D13): right click on an audio clip: Separate Stems / Cancel Stems; Slice 7 (D14): Merge Tracks with at least two tracks. Fehler mit dem Text des Grunds (fehlerText), nie „Rejected“.
   ueber.addEventListener('contextmenu', (e) => {
     if (!st.projekt) return;
-    const t = trefferClip(st.projekt, st.ansicht, e.offsetX, e.offsetY);
+    const t = trefferClip(st.projekt, st.ansicht, e.offsetX, e.offsetY, ctx.zeilen());
     if (!t) return;
-    const punkte = stemsPunkte(st.projekt, t.clip, st.stems);
+    const punkte = [...stemsPunkte(st.projekt, t.clip, st.stems), ...mergePunkte(st.projekt, st.auswahl, t.clip, ctx.laufJetzt?.())];
     if (!punkte.length) return;
     e.preventDefault();
-    oeffneMenue(punkte.map((p) => ({ text: p.text, aus: p.aus, aktion: () => stemsAktion(p, ctx) })), e.clientX, e.clientY);
+    oeffneMenue(punkte.map((p) => ({ text: p.text, aus: p.aus, titel: p.grund, aktion: () => (p.id === 'merge' ? mergeAktion(p, ctx) : stemsAktion(p, ctx)) })),
+      e.clientX, e.clientY);
   });
 
   // Zeiger: im Einfangen auf der Fläche, damit die Griffe vor transport.js entscheiden (preventDefault: Startmarke bleibt)
   flaeche.addEventListener('pointerdown', (e) => {
     if (e.button !== 0 || e.target !== ueber || !st.projekt) return;
     ueber.focus({ preventScroll: true });
-    const t = trefferClip(st.projekt, st.ansicht, e.offsetX, e.offsetY);
+    const t = trefferClip(st.projekt, st.ansicht, e.offsetX, e.offsetY, ctx.zeilen());
     if (!t) { ctx.zug.beginne().verwirf(); if (!(e.shiftKey || e.ctrlKey || e.metaKey)) ctx.setzeAuswahl([]); return; }   // Klick ins Leere: auch ein Klick ohne Ziehen (6.34)
     if (t.zone !== 'mitte') e.preventDefault();
     const id = t.clip.id, gewaehlt = st.auswahl.includes(id);
@@ -78,7 +80,7 @@ export function bindeClips(ctx) {
     const bewege = (m) => {
       if (!gezogen && !istZug(m.offsetX - x0, m.offsetY - y0)) return;
       gezogen = true;
-      const zi = spurIndexBei(m.offsetY, p0.spuren.length), dBeat = xZuBeat(st.ansicht, m.offsetX) - b0, dSpur = zi < 0 ? 0 : zi - t.spurIndex, raster = rasterBeats(st.raster);
+      const zi = spurIndexBeiTabelle(ctx.zeilen(), m.offsetY), dBeat = xZuBeat(st.ansicht, m.offsetX) - b0, dSpur = zi < 0 ? 0 : zi - t.spurIndex, raster = rasterBeats(st.raster);
       // Spec 6.34: aus dem Stand p, der gezeigt bzw. gesendet wird (nicht aus p0): derselbe Clip dort, dieselbe Bewegung der Maus
       zug.bewege((p) => {
         const f = findeClip(p, t.clip.id);
@@ -108,8 +110,8 @@ export function bindeClips(ctx) {
   let abbrechen = null;                                   // Abbruch des laufenden Zugs (Esc), sonst null
 
   ueber.addEventListener('dblclick', async (e) => {
-    if (!st.projekt || trefferClip(st.projekt, st.ansicht, e.offsetX, e.offsetY)) return;
-    const r = neuerMidiClip(st.projekt, spurIndexBei(e.offsetY, st.projekt.spuren.length), xZuBeat(st.ansicht, e.offsetX), rasterBeats(st.raster));
+    if (!st.projekt || trefferClip(st.projekt, st.ansicht, e.offsetX, e.offsetY, ctx.zeilen())) return;
+    const r = neuerMidiClip(st.projekt, spurIndexBeiTabelle(ctx.zeilen(), e.offsetY), xZuBeat(st.ansicht, e.offsetX), rasterBeats(st.raster));
     if (r.fehler) { ctx.melde(CLIP_TEXT[r.fehler], true); return; }
     aendereUndWaehle(() => 'Add MIDI clip', () => [r.befehl]);   // Spur und Beat, auf die die Person gezeigt hat (fest)
   });
@@ -171,9 +173,10 @@ export function bindeClips(ctx) {
     if (!p) return;
     const a = st.ansicht, w = ueber.width;
     const auswahl = new Set(st.auswahl);   // V2 Fix-Runde 2 H8 (Klasse F4): einmal je Bild, nicht includes je Clip (2000 gewählt: 2003 Aufrufe je Bild)
+    const tab = ctx.zeilen();
     p.spuren.forEach((spur, i) => {
       for (const c of spur.clips) {
-        const k = clipKasten(a, i, c);
+        const k = clipKasten(a, i, c, spurZeile(tab, i).y);
         if (!sichtbar(k, w)) continue;
         const gewaehlt = auswahl.has(c.id);
         if (istLoop(c)) zeichneKacheln(g, k, c, a, w);

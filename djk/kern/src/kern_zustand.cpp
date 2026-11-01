@@ -150,6 +150,9 @@ int Kern::regler_uebernehmen(const cdj_z_echtzeit& f) noexcept {
     std::memcpy(pfad, z.pfad, sizeof z.pfad);
     const int r = tab.suche(pfad);
     if (r < 0 || tab.def(r).transport || !std::isfinite(z.wert)) continue;
+#ifdef CYPHERDJ_MUTATION_BK_ZUSTAND_OHNE_WERT   // failure case S14 (task 3 pin): restored graph knob values never reach the knob matrix
+    if (tab.def(r).rolle == sw::Rolle::bk_regler) continue;
+#endif
     sw_->setze_direkt(r, z.wert);
     mixer_->setze_sofort(r, z.wert);
     arr_->setze_sofort(r, z.wert);
@@ -165,6 +168,9 @@ bool Kern::regler_setzen(const char* pfad, float wert) noexcept {
   if (r < 0 || !std::isfinite(wert)) return false;
   const sw::ReglerDef& d = tab.def(r);
   if (d.transport || wert < d.min || wert > d.max || (d.ganzzahlig && wert != std::floor(wert))) return false;
+#ifdef CYPHERDJ_MUTATION_BK_ZUSTAND_OHNE_WERT   // failure case S14 (task 3 pin): see regler_uebernehmen
+  if (d.rolle == sw::Rolle::bk_regler) return true;
+#endif
   sw_->setze_direkt(r, wert);
   mixer_->setze_sofort(r, wert);
   arr_->setze_sofort(r, wert);

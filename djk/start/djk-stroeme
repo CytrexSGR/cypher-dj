@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# djk-stroeme: adds ONE erzeuger process for the Baukasten streams 5, 6, 7, 9, 10 (erz/5..7, pad/1, pad/2) to a running
+# studio, as a transient user unit (systemd-run, never enabled). One process = one kern subscriber slot (the kern keeps
+# at most 8); the process says one hello as "erzeuger-bk" and announces all five streams with MIDI targets, so a
+# `bk:<graph>` instrument can be put on these channels and removed again. A pattern goes to a stream with
+# djk/erzeuger/djk-muster --strom N, a graph with the page picker or the djk-hand tool `graph`.
+# Without this process the page refuses a graph on these channels with 409 kein_erzeuger.
+#
+# Usage: djk-stroeme [--instanz a..i] [--kern-port N] [--trocken]
+#   --instanz   instance (default CYPHERDJ_INSTANZ, empty = the studio); ports and folders follow the instance offset V
+#               like djk-start (abo port = P_ERZ + 5 = 47165 + V, kern port 47100 + V, folders /dev/shm/cypherdj[-i]/erzeugerN)
+#   --kern-port the kern udp port when the instance runs with a --kern-konfig (djk-start passes its own)
+#   --trocken   print the systemd-run command line instead of running it (test seam); starts and creates nothing
+# Idempotent: when the unit is already active it says so and exits 0.
+# Exit: 0 running (or dry run), 2 usage, 5 the unit did not come up (the unit is stopped again).
+set -uo pipefail
+I=${CYPHERDJ_INSTANZ:-}; TROCKEN=0; KERN_PORT=""
+HIER=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
+DJK=${DJK:-$(cd "$HIER/.." && pwd)}
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --instanz)
+      if [ $# -lt 2 ] || [[ "$2" == -* ]]; then echo "djk-stroeme: option --instanz needs a value (a..i, or '' for the studio)" >&2; exit 2; fi
+      I=$2; shift 2;;
+    --kern-port)
+      if [ $# -lt 2 ] || ! [[ "$2" =~ ^[0-9]+$ ]]; then echo "djk-stroeme: option --kern-port needs a port number" >&2; exit 2; fi
+      KERN_PORT=$2; shift 2;;
+    --trocken) TROCKEN=1; shift;;
+    -h|--help) sed -n '2,/^set -uo/p' "$0" | sed '$d; s/^# \{0,1\}//'; exit 0;;
+    *) echo "djk-stroeme: unknown option $1 (see --help)" >&2; exit 2;;
+  esac
+done
+case "$I" in
+  "") SFX=""; V=0;;
+  [a-i]) SFX="-$I"; V=$(( 1000 * ($(printf '%d' "'$I") - 96) ));;
+  *) echo "djk-stroeme: instance '$I' invalid, use a..i or empty" >&2; exit 2;;
+esac
+STROEME=(5 6 7 9 10)   # = BK_STROEME of djk/vertrag/stroeme.ts
+P_KERN=${KERN_PORT:-$(( 47100 + V ))}
+P=$(( 47160 + V + 5 ))   # P_ERZ + 5: the studio's erzeuger use P_ERZ .. P_ERZ + 2, 47170 is taken by tests/test_start.sh
+U=cypherdj-erzeuger-bk$SFX
+BASIS=/dev/shm/cypherdj$SFX/erzeuger
+FS=()
+for s in "${STROEME[@]}"; do FS+=("--allow-fs-read=$BASIS$s" "--allow-fs-write=$BASIS$s"); done
+CMD=(systemd-run --user --quiet --collect --unit="$U" ${I:+--setenv=CYPHERDJ_INSTANZ=$I}
+     -p Restart=always -p RestartSec=1 -p RestartPreventExitStatus=2 -p PartOf=cypherdj.target
+     /usr/bin/node --permission --allow-fs-read="$DJK" --allow-fs-read="$HOME/strudel" "${FS[@]}"
+     "$DJK/erzeuger/erzeuger_bk.mjs" --kern-port "$P_KERN" --abo-port "$P" --strom "$(IFS=,; echo "${STROEME[*]}")"
+     --muster-basis "$BASIS" --name erzeuger-bk)
+if [ "$TROCKEN" = 1 ]; then echo "${CMD[*]}"; exit 0; fi
+
+aktiv() { [ "$(systemctl --user is-active "$U.service" 2>/dev/null)" = active ]; }
+lauscht() { [ -n "$(ss -Hlnu "sport = :$P" 2>/dev/null)" ]; }
+if aktiv; then echo "  bk streams already running ($U, udp $P)"; exit 0; fi
+systemctl --user reset-failed "$U.service" 2>/dev/null   # rest of an earlier failed run
+for s in "${STROEME[@]}"; do mkdir -p "$BASIS$s"; done
+"${CMD[@]}" 2>&1 | sed 's/^/    /' >&2
+for _ in $(seq 1 100); do lauscht && break; sleep 0.1; done
+if ! lauscht || ! aktiv; then
+  echo "djk-stroeme: $U does not listen on udp $P" >&2
+  journalctl --user -u "$U.service" -n 12 --no-pager -o cat 2>/dev/null | sed 's/^/    | /' >&2
+  systemctl --user stop "$U.service" 2>/dev/null; systemctl --user reset-failed "$U.service" 2>/dev/null
+  exit 5
+fi
+echo "  bk streams ready (5,6,7 -> erz/5..7, 9,10 -> pad/1,2; udp $P; pattern: djk/erzeuger/djk-muster${I:+ --instanz $I} --strom N --text '<pattern>')"

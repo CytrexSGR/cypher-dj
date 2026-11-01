@@ -2,13 +2,17 @@
 // Rad (Rad: waagrecht · Strg+Rad: Zoom um den Zeiger · Umschalt+Rad: Spuren) und das Arrangement-Canvas. Zoom, Raster
 // und FOLLOW sind Bequemlichkeit je Browser (localStorage), nie Projektdaten (L7).
 import { neueAnsicht, zoomUm, scrolle, RASTER, RASTER_VORGABE, PX_PRO_BEAT_VORGABE, projektEnde, leiste, ausLeiste } from './zeitachse.js';
-import { SPUR_HOEHE } from './layout.js';
+import { zeilenTabelle, zeilenHoehe } from './layout.js';
+import { offeneIndizes } from './lanen.js';
 import { neueWellen } from './wellen.js';
 import { Arrangement } from './arrangement.js';
 
 // Argumente für das Bild des Arrangements aus dem Seitenstand (rein, getestet: stems geht mit)
-export const arrBild = (st) => ({ ansicht: st.ansicht, projekt: st.projektEntwurf ?? st.projekt, loop: st.loopEntwurf ?? st.projekt?.loop ?? null,
+export const arrBild = (st) => ({ lanen: offeneIndizes(st.projektEntwurf ?? st.projekt, st.laneOffen), ansicht: st.ansicht, laneZiel: st.laneZiel, projekt: st.projektEntwurf ?? st.projekt, loop: st.loopEntwurf ?? st.projekt?.loop ?? null,
   kopfBeat: st.kopfBeat, startBeat: st.start, geist: st.geist, stems: st.stems });
+// Another project: the chosen lane targets belong to the old one (track ids can repeat), so they are dropped. The open rows (laneOffen) stay: a known
+// leftover of slice 1, not changed here.
+export function laneZustandBeiProjekt(st, wechsel) { if (wechsel) st.laneZiel.clear(); }
 export function bindeZeitachse(ctx) {
   const { st, $ } = ctx;
   st.ansicht = { ...neueAnsicht(), pxProBeat: Number(ctx.lies('djk-prod-zoom', PX_PRO_BEAT_VORGABE)) || PX_PRO_BEAT_VORGABE };
@@ -38,7 +42,13 @@ export function bindeZeitachse(ctx) {
   };
   $('ueber').addEventListener('wheel', rad, { passive: false });
   $('lineal').addEventListener('wheel', rad, { passive: false });
-  ctx.beimProjekt.push((p) => { $('flaeche').style.height = `${(p?.spuren.length ?? 0) * SPUR_HOEHE}px`; });
+  // Automation S1: the open lane rows live in the page state (a Set of track ids), not in the project: they survive a reload from the server
+  st.laneOffen = new Set();
+  st.laneZiel = new Map();   // Automation S2: spur_id → the target the open row shows (page state like laneOffen)
+  ctx.offeneLanen = () => offeneIndizes(st.projekt, st.laneOffen);
+  ctx.zeilen = () => zeilenTabelle(st.projekt?.spuren.length ?? 0, ctx.offeneLanen());
+  ctx.layoutNeu = () => { $('flaeche').style.height = `${zeilenHoehe(ctx.zeilen())}px`; };
+  ctx.beimProjekt.push((p, wechsel) => { laneZustandBeiProjekt(st, wechsel); ctx.layoutNeu(); });
   // Sichtbare Scrollleiste: folgt der Ansicht in jedem Bild; ein Zug an ihr setzt beat0 (und schaltet FOLLOW aus wie das Rad).
   // gesetzt merkt die Lage, die das Bild selbst geschrieben hat: deren scroll-Ereignis ist kein Zug von Hand.
   const hl = $('hleiste'), hi = $('hleiste-inhalt');

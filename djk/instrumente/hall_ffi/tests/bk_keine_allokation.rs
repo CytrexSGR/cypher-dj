@@ -41,6 +41,8 @@ fn bk_block_allokiert_nicht() {
         // S5r: Regler laufend umstellen, die Glättung bewegt sich in fast jedem Block
         assert_eq!(cypher_bk_regler(h, 1 + b % 8, ((b * 37) % 100) as f32 / 100.0), 0);
         if b == 100 { for i in 0..300 { cypher_bk_note_an(h, i, 50, 0.9); } } // über die Warteschlange hinaus
+        if b % 60 == 59 { cypher_bk_zuruecksetzen(h); }   // S20: the reset allocates nothing either
+        if b % 45 == 44 { cypher_bk_regler_sofort(h, 1 + b % 8, 0.3); }   // S20: neither does the immediate knob
         assert!(cypher_bk_block(h, l.as_mut_ptr(), r.as_mut_ptr(), 256) == 0);
         klang |= l.iter().any(|v| *v != 0.0);
     }

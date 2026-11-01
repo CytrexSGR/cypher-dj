@@ -49,7 +49,8 @@
     "raster_beats": {"abschnitt": "4.4", "zahlen": [0.25, 1, 4, 16, 32]},
     "fx_beats": {"abschnitt": "4.10", "zahlen": [0.25, 0.5, 1, 2, 4, 8, 16]},
     "fx_kanal": {"abschnitt": "4.10", "liste": ["deck/1", "deck/2", "erz/1", "erz/2", "erz/3", "pad/1", "pad/2", "master"]},
-    "graph_kanal": {"abschnitt": "4.10", "liste": ["deck/1", "deck/2", "deck/3", "deck/4"]},
+    "graph_kanal": {"abschnitt": "4.10", "liste": ["deck/1", "deck/2", "deck/3", "deck/4", "fx/3", "fx/4"]},
+    "graph_platz": {"abschnitt": "5.12", "liste": ["deck/1", "deck/2", "deck/3", "deck/4", "fx/3", "fx/4", "erz/1", "erz/2", "erz/3", "erz/5", "erz/6", "erz/7", "pad/1", "pad/2"]},
     "roll_art": {"abschnitt": "4.4", "codes": {"0": "band_schatten", "1": "puffer_keylock"}},
     "urteil": {"abschnitt": "4.5", "liste": ["ok"]},
     "led_zustand": {"abschnitt": "4.7", "codes": {"0": "aus", "1": "an", "2": "blinkt", "3": "blinkt_schnell"}},
@@ -289,6 +290,10 @@
       {"name": "id", "typ": "h", "einheit": "kennung"},
       {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle"},
       {"name": "geraet", "typ": "s", "einheit": "text"}]},
+    {"adresse": "/k/lernen", "typen": ",hsi", "abschnitt": "4.7", "richtung": "an_kern", "felder": [
+      {"name": "id", "typ": "h", "einheit": "kennung"},
+      {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle"},
+      {"name": "an", "typ": "i", "einheit": "schalter", "bereich": [0, 1], "notiz": "1 arm, 0 disarm"}]},
     {"adresse": "/k/latenz", "typen": ",hssi", "abschnitt": "4.7", "richtung": "an_kern", "felder": [
       {"name": "id", "typ": "h", "einheit": "kennung"},
       {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle"},
@@ -371,6 +376,9 @@
       {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle"},
       {"name": "kanal", "typ": "s", "einheit": "pfad", "werte": "graph_kanal"},
       {"name": "name", "typ": "s", "einheit": "text"}]},
+    {"adresse": "/k/graph/frage", "typen": ",hs", "abschnitt": "4.10", "richtung": "an_kern", "felder": [
+      {"name": "id", "typ": "h", "einheit": "kennung"},
+      {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle"}]},
     {"adresse": "/k/arr/laden", "typen": ",hsi", "abschnitt": "4.11", "richtung": "an_kern", "felder": [
       {"name": "id", "typ": "h", "einheit": "kennung"},
       {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle"},
@@ -408,7 +416,7 @@
       {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle"},
       {"name": "spur", "typ": "i", "einheit": "nummer", "bereich": [1, 32]},
       {"name": "scharf", "typ": "i", "einheit": "schalter", "bereich": [0, 1]},
-      {"name": "eingang", "typ": "i", "einheit": "code", "bereich": [0, 20], "notiz": "0 keiner, 11..13 = erz/1..3 (intern); 20 = Master vor dem Fader (später); externe Eingänge 1..4 kommen mit 1.8 Slice 2"}]},
+      {"name": "eingang", "typ": "i", "einheit": "code", "bereich": [0, 22], "notiz": "0 none; 10+N = erz/N for N 1..3 and 5..7; 20+N = pad/N (21, 22); 20 = master before the fader (later); 14 (erz/4) and 18 (erz/8) are refused; external inputs 1..4 come with 1.8 slice 2"}]},
     {"adresse": "/k/rec/start", "typen": ",hsiii", "abschnitt": "4.12", "richtung": "an_kern", "felder": [
       {"name": "id", "typ": "h", "einheit": "kennung"},
       {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle"},
@@ -515,6 +523,13 @@
       {"name": "wert", "typ": "i", "einheit": "zahl"},
       {"name": "sample", "typ": "h", "einheit": "sample"},
       {"name": "beat", "typ": "d", "einheit": "beat"}]},
+    {"adresse": "/e/gelernt", "typen": ",hiiiii", "abschnitt": "5.8", "richtung": "vom_kern", "felder": [
+      {"name": "id", "typ": "h", "einheit": "kennung", "notiz": "id of the /k/lernen that armed the capture"},
+      {"name": "quelle", "typ": "i", "einheit": "code", "bereich": [0, 1], "notiz": "0 hand_in, 1 midi_ein_1"},
+      {"name": "kanal", "typ": "i", "einheit": "nummer", "bereich": [1, 16]},
+      {"name": "nr", "typ": "i", "einheit": "zahl", "bereich": [0, 127], "notiz": "controller number of the CC"},
+      {"name": "wert", "typ": "i", "einheit": "zahl", "bereich": [0, 127]},
+      {"name": "belegt", "typ": "i", "einheit": "schalter", "bereich": [0, 1], "notiz": "1: the base mapping (slot 0) already uses this CC"}]},
     {"adresse": "/e/geladen", "typen": ",isdiih", "abschnitt": "5.9", "richtung": "vom_kern", "felder": [
       {"name": "deck", "typ": "i", "einheit": "nummer", "bereich": [1, 4]},
       {"name": "material_id", "typ": "s", "einheit": "text"},
@@ -612,6 +627,9 @@
       {"name": "an", "typ": "i", "einheit": "code", "bereich": [0, 1]}]},
     {"adresse": "/e/fx/routing", "typen": ",i", "abschnitt": "5.12", "richtung": "vom_kern", "felder": [
       {"name": "routing", "typ": "i", "einheit": "code", "bereich": [0, 1]}]},
+    {"adresse": "/e/graph", "typen": ",ss", "abschnitt": "5.12", "richtung": "vom_kern", "felder": [
+      {"name": "kanal", "typ": "s", "einheit": "pfad", "werte": "graph_platz"},
+      {"name": "name", "typ": "s", "einheit": "text", "notiz": "graph file name without .json, empty = no graph on this slot"}]},
     {"adresse": "/zustand/arr", "typen": ",iiidhdif", "abschnitt": "5.13", "richtung": "vom_kern", "felder": [
       {"name": "nr", "typ": "i", "einheit": "nummer", "notiz": "Wiedergabe-Nummer (D1 6.1), −1 ohne Wiedergabe"},
       {"name": "status", "typ": "i", "einheit": "code", "bereich": [0, 3], "notiz": "0 steht, 1 wartet, 2 spielt, 3 freeze"},

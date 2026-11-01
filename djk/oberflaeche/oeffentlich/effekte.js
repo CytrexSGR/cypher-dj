@@ -75,13 +75,90 @@ export function htmlText(s) {
 
 /** S5r: the eight graph knobs <channel>/bk/1..8 of a channel that takes a graph (POST /regler). Channels with an instrument host
  *  block (KNOB_GRUPPE) get none here, they use their own knobs; channels without a graph neither. Value from the control state, default 0.5. */
-export const BK_KNOB_KANAELE = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'erz/1', 'erz/5', 'erz/6', 'erz/7', 'pad/1', 'pad/2'];
-export function bkKnobListe(kanal, reglerStand) {
-  if (!BK_KNOB_KANAELE.includes(kanal)) return [];
+export const BK_KNOB_KANAELE = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'erz/1', 'erz/5', 'erz/6', 'erz/7', 'pad/1', 'pad/2', 'fx/3', 'fx/4'];
+/** S12: erz/2 and erz/3 show the eight graph knobs only while a graph sits on them (opt.graph = {name, regler_namen}); otherwise
+ *  they keep the Surge/host knobs. S14: fx/3, fx/4 (send returns) have the knobs fx/<n>/bk/1..8 too. Knob names come from the graph's
+ *  regler_namen, else "Knob n". */
+export const BK_KNOB_MIT_GRAPH = ['erz/2', 'erz/3'];
+export function bkKnobListe(kanal, reglerStand, opt) {
+  const graph = opt?.graph ?? null;
+  if (!(BK_KNOB_KANAELE.includes(kanal) || (graph && BK_KNOB_MIT_GRAPH.includes(kanal)))) return [];
   return Array.from({ length: 8 }, (_, i) => {
-    const pfad = `${kanal}/bk/${i + 1}`, w = reglerStand?.[pfad];
-    return { nr: i + 1, pfad, name: `Knob ${i + 1}`, wert: typeof w === 'number' && Number.isFinite(w) ? Math.min(1, Math.max(0, w)) : 0.5 };
+    const pfad = `${kanal}/bk/${i + 1}`, w = reglerStand?.[pfad], n = graph?.regler_namen?.[i + 1];
+    return { nr: i + 1, pfad, name: typeof n === 'string' && n !== '' ? n : `Knob ${i + 1}`, wert: typeof w === 'number' && Number.isFinite(w) ? Math.min(1, Math.max(0, w)) : 0.5 };
   });
+}
+/** S12: one knob as a <label> string; the name comes from a graph file, so it goes through htmlText in text and aria-label. */
+export function bkKnobHtml(knob, kanal) {
+  const n = htmlText(knob.name);
+  return `<label>${n}<input type="range" min="0" max="1" step="0.001" value="${knob.wert}" data-bk="${htmlText(knob.pfad)}" aria-label="${htmlText(kanal)} ${n}"><output>${knob.wert.toFixed(2)}</output></label>`;
+}
+/** S19 (MIDI learn): the assignment of a knob path out of GET /lernen "zuordnungen" ({pfad, kanal, nr}), or null. */
+export function lernStand(zuordnungen, pfad) {
+  return (Array.isArray(zuordnungen) ? zuordnungen : []).find((z) => z?.pfad === pfad) ?? null;
+}
+/** S19: the learn control of one graph knob, as a string next to the knob's <label>. lage = {midi: a MIDI input is assigned, wartet: path that waits}.
+ *  Free knob: button "M". Waiting knob: blinking "move a knob…". Learned knob: badge "CC74 ch1" and a remove button. Every dynamic part goes
+ *  through htmlText (the path is data, not trusted). */
+export function lernKnopfHtml(pfad, zuordnung, lage) {
+  const p = htmlText(pfad), wartet = lage?.wartet === pfad, midi = lage?.midi === true;
+  let h;
+  if (wartet) h = `<button type="button" class="lern wartet" data-lern="${p}" aria-pressed="true" title="Waiting for your controller: move a knob, or click again to cancel">move a knob…</button>`;
+  else if (!midi) h = `<button type="button" class="lern" data-lern="${p}" disabled title="Assign a MIDI input under Devices first">M</button>`;
+  else h = `<button type="button" class="lern" data-lern="${p}" aria-pressed="false" title="Learn: click, then move a knob on your MIDI controller">M</button>`;
+  if (zuordnung) {
+    const cc = htmlText(`CC${zuordnung.nr} ch${zuordnung.kanal}`);
+    h += `<span class="lern-badge" title="${p} is driven by ${cc}">${cc}</span>`
+      + `<button type="button" class="lern-weg" data-lern-weg="${p}" title="Remove the assignment of ${p} (${cc})" aria-label="Remove the MIDI assignment of ${p}">×</button>`;
+  }
+  return `<span class="lern-zeile">${h}</span>`;
+}
+/** S14: markup of the SEND RETURNS block (the effect graph pickers and the eight graph knobs of fx/3, fx/4); app.js only inserts it.
+ *  Each row carries data-kanal for the knob binding, a picker place for graphWahlHtml and an empty .bkliste that bindeBkKnobs fills. */
+export function sendRueckHtml(kanaele = ['fx/3', 'fx/4']) {
+  return '<span class="bildtitel">SEND RETURNS <b>graph picker and eight knobs per return</b></span>'
+    + kanaele.map((k) => `<div class="sendzeile" data-kanal="${htmlText(k)}"><span>${k === 'fx/3' ? 'RETURN 3' : 'RETURN 4'}</span>`
+      + `<div class="graphplatz" data-graphplatz="${htmlText(k)}"></div><div class="bkliste"></div></div>`).join('');
+}
+/** S12/S18: graph picker. Instruments go on erz/2, erz/3, erz/5..7 and the pads (stream 1 is a drum kit, erz/4 the production, erz/8 unused),
+ *  effects on decks and the send returns. The instrument keys are bound to vertrag/stroeme.ts by tests/effekte.test.mjs. */
+export const GRAPH_KANAL_ART = { 'erz/2': 'instrument', 'erz/3': 'instrument', 'erz/5': 'instrument', 'erz/6': 'instrument', 'erz/7': 'instrument', 'pad/1': 'instrument', 'pad/2': 'instrument', 'deck/1': 'effekt', 'deck/2': 'effekt', 'deck/3': 'effekt', 'deck/4': 'effekt', 'fx/3': 'effekt', 'fx/4': 'effekt' };
+export function graphWahlOptionen(kanal, graphen, geladenName) {
+  const art = GRAPH_KANAL_ART[kanal];
+  if (!art) return [];
+  const gewaehlt = geladenName ?? '';
+  const namen = (graphen ?? []).filter((g) => g.art === art).map((g) => g.name);
+  const aus = [{ wert: '', text: '—', gewaehlt: gewaehlt === '' }, ...namen.map((n) => ({ wert: n, text: n, gewaehlt: n === gewaehlt }))];
+  if (gewaehlt !== '' && !namen.includes(gewaehlt)) aus.push({ wert: gewaehlt, text: gewaehlt, gewaehlt: true });   // loaded but not in the list: do not lie
+  return aus;
+}
+export function graphWahlHtml(kanal, graphen, geladenName) {
+  const o = graphWahlOptionen(kanal, graphen, geladenName);
+  if (!o.length) return '';
+  return `<select class="graphwahl" data-graphwahl="${htmlText(kanal)}" aria-label="Graph on ${htmlText(kanal)}" title="Baukasten graph on this channel">`
+    + o.map((x) => `<option value="${htmlText(x.wert)}"${x.gewaehlt ? ' selected' : ''}>${htmlText(x.text)}</option>`).join('') + '</select>';
+}
+
+/** S17: saved/differs marker of the sound snapshot for one channel. gespeichert = GET /proj/bk gespeichert ([{id, graph, regler}] or null without a
+ *  project), geladenName = what is loaded now, regler = live values by path. '' = nothing saved for this channel. A live knob value the page does not
+ *  know is no difference here (the hand tool proj_bk lage reports it as null). Pure, no polling. */
+export function bkMarke(kanal, gespeichert, geladenName, regler) {
+  const e = Array.isArray(gespeichert) ? gespeichert.find((x) => x.id === kanal.replace('/', '')) : undefined;
+  if (!e) return '';
+  if (!geladenName || geladenName !== e.graph) return 'abweichend';
+  for (let i = 0; i < 8; i++) {
+    const w = regler?.[`${kanal}/bk/${i + 1}`];
+    if (typeof w === 'number' && Math.abs(w - e.regler[i]) > 0.0005) return 'abweichend';
+  }
+  return 'gespeichert';
+}
+/** S17: SAVE SOUND button and marker beside the graph picker. Only with an open project and a graph loaded on the channel. */
+export function bkSpeichernHtml(kanal, marke, projektOffen, geladenName) {
+  if (!projektOffen || !geladenName) return '';
+  const k = htmlText(kanal);
+  const text = marke === 'gespeichert' ? 'saved' : marke === 'abweichend' ? 'differs from project' : '';
+  return `<button class="bkmerken" data-bkmerken="${k}" title="Save the graph on this channel and its eight knob values in the project">SAVE SOUND</button>`
+    + (text ? `<span class="bkmarke ${marke}">${text}</span>` : '');
 }
 
 export function knobListe(params, namen = {}) {

@@ -53,6 +53,8 @@ export function zusatzKit(i: string = instanz()): string { return i ? `rec-${i}`
 // Baukasten S2: Ordner der Baukasten-Graphen (baukasten-<gruppe>.json), wie djk-instrumente sie dem Wirt nennt
 export function baukastenOrdnerVorgabe(i: string = instanz()): string { return path.join(os.homedir(), '.config', i ? `cypherdj-${i}` : 'cypherdj'); }
 export function geraeteDatei(i: string = instanz()): string { return path.join(os.homedir(), '.config', i ? `cypherdj-${i}` : 'cypherdj', 'geraete.json'); }
+// S19 (MIDI learn): the controller folder of the kern (~/.config/cypherdj[-<i>]/controller, kern/src/konfig.cpp standard_konfig_pfad); lernen.json lives there.
+export function controllerOrdner(i: string = instanz()): string { return path.join(os.homedir(), '.config', i ? `cypherdj-${i}` : 'cypherdj', 'controller'); }
 export function eingangsKantenDatei(i: string = instanz()): string { return path.join(shmOrdner(i), 'eingaenge-kanten'); }
 export function strudelPakete(): string { return process.env.STRUDEL_PAKETE ?? path.join(os.homedir(), 'strudel', 'packages'); }
 // Bisher in loops.ts, welle_cache.ts, arbeitsbestand.ts; dort bleiben sie als Re-Export (gleiche Signatur, gleiche Tests).

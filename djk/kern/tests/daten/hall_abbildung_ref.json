@@ -1,0 +1,121 @@
+{
+ "_comment": "Routing 1.10 slice 3: normalised hall control (0..1) to unit. One mapping, two implementations (arr_hall_einstellung in C++, the page mapping): both read this file. Values computed independently in Python.",
+ "order": [
+  "pre",
+  "decay",
+  "size",
+  "low",
+  "highcut",
+  "tail"
+ ],
+ "parameters": {
+  "pre": {
+   "unit": "ms",
+   "curve": "linear",
+   "x": [
+    0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ],
+   "y": [
+    0.0,
+    62.5,
+    125.0,
+    187.5,
+    250.0
+   ]
+  },
+  "decay": {
+   "unit": "s",
+   "curve": "log",
+   "x": [
+    0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ],
+   "y": [
+    0.1,
+    0.416179145,
+    1.73205081,
+    7.20843424,
+    30.0
+   ]
+  },
+  "size": {
+   "unit": "ms",
+   "curve": "linear",
+   "x": [
+    0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ],
+   "y": [
+    5.0,
+    53.75,
+    102.5,
+    151.25,
+    200.0
+   ]
+  },
+  "low": {
+   "unit": "factor",
+   "curve": "log",
+   "x": [
+    0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ],
+   "y": [
+    0.25,
+    0.5,
+    1.0,
+    2.0,
+    4.0
+   ]
+  },
+  "highcut": {
+   "unit": "Hz",
+   "curve": "log",
+   "x": [
+    0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ],
+   "y": [
+    1000.0,
+    2165.73677,
+    4690.41576,
+    10158.2059,
+    22000.0
+   ]
+  },
+  "tail": {
+   "unit": "dB",
+   "curve": "linear",
+   "x": [
+    0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ],
+   "y": [
+    -24.0,
+    -15.0,
+    -6.0,
+    3.0,
+    12.0
+   ]
+  }
+ }
+}

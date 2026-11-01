@@ -44,3 +44,34 @@ test('1.10 Negativ-Kontrolle: erz/* geht weiter durch, grp/9 und pm/pan bleiben 
   assert.equal((await ruf(url, 'POST', '/regler', { pfad: 'pm/pan', nach: 0 })).j.fehler, 'pfad');
   assert.deepEqual((await ruf(url, 'POST', '/spur', spur('neun', 'grp/9/fader'))).j.fehler, 'spur');
 });
+
+// ---- 1.10 slice 3: sends and return strips (Hall values included) change only through the project -----------------------------------------------
+const UEBER3 = ['ret/1/fader', 'ret/4/pan', 'ret/2/mute', 'ret/3/solo', 'ret/1/hall/decay', 'ret/1/hall/an', 'spur/1/send/1', 'spur/32/send/4', 'grp/1/send/2', 'grp/8/send/4'];
+
+test('slice 3 POST /regler with ret/* or a send path → 409 ueber_projekt (every source), nothing to the core', async (t) => {
+  const { url, log } = await stapel(t);
+  for (const pfad of UEBER3) {
+    for (const kopf of [{}, CYPHER]) {
+      const r = await ruf(url, 'POST', '/regler', { pfad, nach: 0 }, kopf);
+      assert.deepEqual([r.code, r.j.fehler], [409, 'ueber_projekt'], `${pfad} ${JSON.stringify(kopf)}: ${JSON.stringify(r.j)}`);
+      assert.match(r.j.text, /project/);
+    }
+  }
+  assert.equal(anKern(log, '/k/teil').length, 0, 'nothing went to the core');
+  assert.match((await ruf(url, 'POST', '/regler', { pfad: 'ret/1/fader', nach: 0 })).j.text, /send_setzen, return_aendern/);
+});
+
+test('slice 3 POST /spur: an automation track cannot drive ret/1/hall/decay or a send (the detour is closed), the index names the target', async (t) => {
+  const { url, log } = await stapel(t);
+  for (const [i, ziel] of UEBER3.entries()) {
+    const r = await ruf(url, 'POST', '/spur', spur(`r${i}`, ziel), CYPHER);
+    assert.deepEqual([r.code, r.j.fehler, r.j.ziel, r.j.index], [409, 'ueber_projekt', ziel, 0], `${ziel}: ${JSON.stringify(r.j)}`);
+  }
+  const gemischt = await ruf(url, 'POST', '/spur', spur('gem', 'erz/2/filter', 'ret/1/hall/decay'), CYPHER);
+  assert.deepEqual([gemischt.code, gemischt.j.fehler, gemischt.j.ziel, gemischt.j.index], [409, 'ueber_projekt', 'ret/1/hall/decay', 1]);
+  assert.equal(anKern(log, '/k/teil').length, 0, 'nothing went to the core');
+  // negative control: ret/5 and spur/1/send/5 are not vocabulary (400), and erz/2/filter still passes
+  assert.equal((await ruf(url, 'POST', '/regler', { pfad: 'ret/5/fader', nach: 0 })).j.fehler, 'pfad');
+  assert.equal((await ruf(url, 'POST', '/regler', { pfad: 'spur/1/send/5', nach: 0 })).j.fehler, 'pfad');
+  assert.equal((await ruf(url, 'POST', '/spur', spur('ok', 'erz/2/filter'), CYPHER)).code, 200);
+});

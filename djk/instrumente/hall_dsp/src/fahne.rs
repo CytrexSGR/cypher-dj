@@ -38,6 +38,7 @@ pub struct Fahne {
     duck_abfall: f64,
     pub freeze: bool,
     skal: f32,
+    samen: u64,
     zufall: Zufall,
 }
 
@@ -83,6 +84,7 @@ impl Fahne {
             // (Σ Hann = 2 bei Hop N/4) und Analyse-Energie (ebenfalls 2): Amplitude 1/N. Im Test
             // `impuls_energie` gegengemessen.
             skal: 1.0 / n as f32,
+            samen,
             zufall: Zufall::neu(samen),
         }
     }
@@ -121,11 +123,22 @@ impl Fahne {
         self.aus.iter_mut().for_each(|v| *v = 0.0);
     }
 
+    /// Back to the state right after `neu` (settings stay): buffers, frame positions and counter, the per-bin state including
+    /// phase accumulators, and the random generator at its seed. Allocation-free. S20 review: a partial reset (seed, `phi`,
+    /// `alt_phase`, positions left over) made live after a stop differ from the offline render of the same graph.
     pub fn reset(&mut self) {
         self.kill();
-        self.ein.iter_mut().for_each(|v| *v = 0.0);
+        for v in [&mut self.ein, &mut self.trocken, &mut self.aus, &mut self.rahmen] {
+            v.iter_mut().for_each(|x| *x = 0.0);
+        }
+        self.spek.iter_mut().for_each(|x| *x = Complex::new(0.0, 0.0));
         self.duck_d.iter_mut().for_each(|v| *v = 0.0);
+        self.phi.iter_mut().for_each(|v| *v = 0.0);
+        self.alt_phase.iter_mut().for_each(|v| *v = 0.0);
+        self.ein_pos = 0;
+        self.aus_pos = 0;
         self.zaehler = 0;
+        self.zufall = Zufall::neu(self.samen);
     }
 
     /// Ein Sample rein (Eingang der Fahne `x`, unverzögerte Ducking-Quelle `d`), ein Sample raus.

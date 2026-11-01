@@ -61,7 +61,7 @@ void ArrLader::rueckgabe_frei(ArrSnapshot* s, bool& arbeit) {
 }
 
 bool ArrLader::einmal(ArrLaderRinge& r) {
-  bool arbeit = false;
+  bool arbeit = cache_.bk_nachholen();   // S20: graph instances whose free waited for the sink
   for (int i = 0; i < n_aufgeschoben_;) {   // zuerst, was auf das Werk wartet
     ArrSnapshot* s = aufgeschoben_[i];
     if (werk_ && werk_->liest(s)) {

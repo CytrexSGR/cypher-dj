@@ -9,6 +9,8 @@
     {"id": "stoss", "art": "adsr", "a": 0.0005, "d": 0.004, "s": 0, "r": 0.002},
     {"id": "anreg", "art": "mul"},
     {"id": "gleichfrei", "art": "svf", "cutoff": 60, "reso": 0},
+    {"id": "exc_hz", "art": "mul", "b": 10},
+    {"id": "exc_lp", "art": "svf", "pole": 2, "reso": 0},
     {"id": "summe", "art": "add"},
     {"id": "saite", "art": "leitung", "max": 60},
     {"id": "hell", "art": "regler", "nr": 1, "min": 6, "max": 60, "log": 1},
@@ -26,7 +28,8 @@
   "kanten": [
     {"von": "note.gate", "nach": "stoss.gate"}, {"von": "note.trig", "nach": "stoss.trig"},
     {"von": "rausch.aus", "nach": "anreg.a"}, {"von": "stoss.aus", "nach": "anreg.b"},
-    {"von": "anreg.aus", "nach": "gleichfrei.x"}, {"von": "gleichfrei.hp", "nach": "summe.a"},
+    {"von": "note.hz", "nach": "exc_hz.a"}, {"von": "exc_hz.aus", "nach": "exc_lp.cutoff"},
+    {"von": "anreg.aus", "nach": "exc_lp.x"}, {"von": "exc_lp.tp", "nach": "gleichfrei.x"}, {"von": "gleichfrei.hp", "nach": "summe.a"},
     {"von": "summe.aus", "nach": "saite.x"}, {"von": "stimmhz.aus", "nach": "saite.hz"},
     {"von": "note.hz", "nach": "grenzhz.a"}, {"von": "hell.aus", "nach": "grenzhz.b"},
     {"von": "note.hz", "nach": "korr.a"}, {"von": "hell_kehr.aus", "nach": "korr.b"},

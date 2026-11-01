@@ -25,7 +25,11 @@ enum class Rolle : uint8_t {
   spur_fader, spur_pan, spur_mute, spur_solo,  // D1 K1: Spur-Regler des Arrangements, global (Kanal −1), spur/1..32
   grp_fader, grp_pan, grp_mute, grp_solo,      // 1.10 Slice 1: Gruppen-Regler des Arrangements, global (Kanal −1), grp/1..8
   pm_fader,                                    // 1.10 Slice 1: Fader des Produktions-Masters, pm/fader
-  bk_regler                                    // S5r: Graph-Regler je Kanal, <kanal>/bk/<1..8>, am Ende angehängt
+  bk_regler,                                   // S5r: Graph-Regler je Kanal, <kanal>/bk/<1..8>, am Ende angehängt
+  // 1.10 Slice 3 (appended after bk_regler: the order of the roles stays). Sends are post fader, hall values are normalised 0..1.
+  snd_spur, snd_grp,                           // spur/<n>/send/<r>, grp/<n>/send/<r>: send level in dB to return r
+  ret_fader, ret_pan, ret_mute, ret_solo,      // ret/<r>/{fader,pan,mute,solo}
+  ret_hall_an, ret_hall_pre, ret_hall_decay, ret_hall_groesse, ret_hall_tief, ret_hall_highcut, ret_hall_fahne   // ret/<r>/hall/*
 };
 constexpr int SPUR_REGLER_SPUREN = 32;   // D1 K1 (Spec 2.3): spur/<n>/{fader,pan,mute,solo}, n = 1..32 (E3)
 constexpr int GRP_REGLER_GRUPPEN = 8;    // 1.10 (F1: eigene Plätze neben den 32 Spuren): grp/<n>/{fader,pan,mute,solo}, n = 1..8
@@ -33,6 +37,13 @@ constexpr int GRP_REGLER_GRUPPEN = 8;    // 1.10 (F1: eigene Plätze neben den 3
 int spur_nr(const char* pfad);
 // "grp/<n>/<feld>" -> n (1..999, ohne führende Null), sonst 0; wie spur_nr
 int grp_nr(const char* pfad);
+
+constexpr int RET_REGLER_RETURNS = 4;    // 1.10 Slice 3: ret/<r>/..., r = 1..4 (own places next to the 32 tracks, decision F1)
+constexpr int SND_REGLER = 4;            // spur|grp/<n>/send/<r>, r = 1..4 (one per return)
+// "ret/<r>/<feld>" -> r (1..999, no leading zero), else 0; like spur_nr
+int ret_nr(const char* pfad);
+// "spur|grp/<n>/send/<r>" -> r (1..999, no leading zero), else 0. The track or group number is read by spur_nr / grp_nr.
+int send_nr(const char* pfad);
 
 // §7.2 kurve.typ plus zwei Formen für Schalter und Stufenregler (Festlegung dieser Scheibe)
 enum class KurvenTyp : uint8_t { fader_db, linear, schalter, stufen };

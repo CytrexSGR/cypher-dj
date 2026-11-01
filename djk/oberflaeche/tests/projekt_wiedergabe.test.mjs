@@ -184,3 +184,19 @@ test('1.10 Wiedergabe: eine Spur, die auf eine unbekannte Gruppe zeigt, scheiter
   p.gruppen.push({ id: 'g9', nr: 8, name: 'G', farbe: '#3b8de0', fader_db: 0, pan: 0, mute: false, solo: false, gefaltet: false });
   assert.deepEqual(uebersetze(p, opt()).spuren[1].ausgang, { art: 'gruppe', nr: 8 });
 });
+
+test('1.10 slice 3 translator: returns make the file /2 with returns [{nr, ausgang master}]; sends and Hall values never enter the file; no returns stays byte-identical', () => {
+  const basis = uebersetze(specProjekt(), opt());
+  assert.equal(basis.format, 'cypherdj-arr/1'); assert.ok(!('returns' in basis));
+  let p = fuehreAus(pruefeProjekt(kopie(specProjekt())).projekt, { befehl: 'return_neu', name: 'Hall' }).projekt;
+  p = fuehreAus(p, { befehl: 'return_neu', name: 'Plate' }).projekt;
+  p = fuehreAus(p, { befehl: 'send_setzen', strang_id: 's1', return_id: 'r2', db: -6 }).projekt;
+  const w = uebersetze(p, opt());
+  assert.equal(w.format, 'cypherdj-arr/2');
+  assert.deepEqual(w.returns, [{ nr: 1, ausgang: { art: 'master' } }, { nr: 2, ausgang: { art: 'master' } }]);
+  assert.deepEqual(w.gruppen, [], 'groups stay present (possibly empty) in /2');
+  assert.ok(!JSON.stringify(w).includes('send') && !JSON.stringify(w).includes('decay'), 'sends and Hall values are controls, not file content');
+  assert.deepEqual(w.spuren, basis.spuren, 'the tracks are unchanged');
+  const leer = fuehreAus(fuehreAus(p, { befehl: 'return_loeschen', return_id: 'r1' }).projekt, { befehl: 'return_loeschen', return_id: 'r2' }).projekt;
+  assert.equal(uebersetze(leer, opt()).format, 'cypherdj-arr/1', 'negative control: no returns left, back to /1');
+});

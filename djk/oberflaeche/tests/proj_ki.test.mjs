@@ -40,7 +40,7 @@ test('Neustart des Kerns (Spec 2.12): letzte Wiedergabe neu laden, alle Spur-Reg
   s.ereignis('/e/neustart', { generation: 2, sample: 0n });
   assert.ok(await warteBis(() => k.an('/k/ki/spur').length === 1));
   assert.deepEqual(k.an('/k/arr/laden').map((x) => x.felder.nr), [nr]);
-  assert.equal(k.teile(/^spur\//).length, 4 * MAX_SPUREN);
+  assert.equal(k.teile(/^spur\/\d+\/(fader|pan|mute|solo)$/).length, 4 * MAX_SPUREN);
   assert.deepEqual(k.an('/k/arr/loop')[0].felder, { quelle: 'andreas', an: 1, von_beat: 0, bis_beat: 16 });
   assert.equal(k.an('/k/arr/metronom').length, 1);
 });

@@ -38,6 +38,10 @@ pub struct Knoten {
     /// `"port": w` gibt jedem Ziel des Makro-Eingangs `port` den Wert `w`, `"knoten.wert": w` setzt einen Wert innen.
     #[serde(flatten)]
     pub werte: BTreeMap<String, f32>,
+    /// Sample file name of a `sampler` node (S10): a string, so it cannot live in the f32 value map. `Knoten` must not get
+    /// `deny_unknown_fields` (serde does not combine it with `flatten`).
+    #[serde(default)]
+    pub datei: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

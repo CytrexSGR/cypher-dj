@@ -35,3 +35,16 @@ export function setzeAutonom(ordner, an, zeit = Date.now()) {
 export function autonomAn(ordner) {
   return liesJson(path.join(ordner, 'autonom.json'))?.an !== false;
 }
+
+// S18: heartbeat of an erzeuger process for one stream, written once per bar next to the pattern (lebt.json). The page
+// server reads it to tell "no erzeuger process serves this stream" from "serving, no pattern yet" (a graph on a stream nobody
+// plays would be silent without any sign). zeit is milliseconds since the epoch (Date.now()).
+export function schreibeLebt(ordner, { strom, ziel }, zeit = Date.now()) {
+  atomar(path.join(ordner, 'lebt.json'), JSON.stringify({ zeit, strom, ziel }));
+}
+
+/** The heartbeat {zeit, strom, ziel}, or null when the file is missing or not a valid heartbeat. */
+export function leseLebt(ordner) {
+  const j = liesJson(path.join(ordner, 'lebt.json'));
+  return j && Number.isFinite(j.zeit) && Number.isInteger(j.strom) ? j : null;
+}

@@ -47,7 +47,8 @@ bool kit_name_ok(const char* s) {  // [a-z0-9_-]{1,32}
   return true;
 }
 
-// Graph <ordner>/<name>.json lesen und übersetzen (Netz-Faden, allokiert). null mit Grund in fehler.
+// Graph <ordner>/<name>.json lesen und übersetzen (Netz-Faden, allokiert). null mit Grund in fehler. Sampler-Knoten lesen
+// ihre Dateien aus <ordner>/samples (S10, D13).
 CypherBk* lade_bk(const std::string& ordner, const char* name, char* fehler, size_t n) {
   std::ifstream f(ordner + "/" + name + ".json");
   if (!f) {
@@ -56,7 +57,16 @@ CypherBk* lade_bk(const std::string& ordner, const char* name, char* fehler, siz
   }
   std::stringstream text;
   text << f.rdbuf();
-  return cypher_bk_neu(text.str().c_str(), 48000.0, fehler, n);
+#if defined(CYPHERDJ_MUTATION_BK_SAMPLER_OHNE_WURZEL)
+  return cypher_bk_neu(text.str().c_str(), 48000.0, fehler, n);  // Fehlerfall: die Wurzel wird nicht übergeben
+#else
+#if defined(CYPHERDJ_MUTATION_BK_SAMPLER_WURZEL_OHNE_SAMPLES)
+  const std::string wurzel = ordner;  // Fehlerfall: Wurzel ohne /samples
+#else
+  const std::string wurzel = ordner + "/samples";
+#endif
+  return cypher_bk_neu_wurzel(text.str().c_str(), 48000.0, wurzel.c_str(), fehler, n);
+#endif
 }
 
 int32_t be32(const char* p) {
@@ -68,6 +78,7 @@ int32_t be32(const char* p) {
 }  // namespace
 
 bool Netz::erz_paket(const v::Adresse* a, const osc::Nachricht& m) {
+  if (graph_paket(a, m)) return true;  // S16: /k/graph/frage
   if (a->pfad == v::erz_fenster.pfad || a->pfad == v::erz_ev.pfad) {  // §4.8: nur im Bundle
     protokollfehler(m.adresse, "protokoll", 0);
     return true;
@@ -117,6 +128,7 @@ bool Netz::erz_paket(const v::Adresse* a, const osc::Nachricht& m) {
     }
     b.zeiger = g;
     if (!einreihen(b)) cypher_bk_frei(g);  // nicht angenommen: wir besitzen ihn noch
+    else graph_vormerken(b.id, b.quelle, b.pfad, name, 0);  // S16: the mirror follows the callback's quittung
     return true;
   }
   if (a->pfad != v::erz_strom.pfad) return false;
@@ -127,8 +139,35 @@ bool Netz::erz_paket(const v::Adresse* a, const osc::Nachricht& m) {
   kopiere(b.quelle, m.werte[f::quelle].s, sizeof b.quelle);
   b.nr = m.werte[f::strom].i;
   kopiere(b.pfad, m.werte[f::kanal].s, sizeof b.pfad);
-  const char* ziel = m.werte[f::ziel].s;
+  std::string ziel_eff(m.werte[f::ziel].s);  // S12: `bk:` (empty name) is rewritten to the stored target below
+  const bool bk_leer = ziel_eff == "bk:";
+  [[maybe_unused]] bool wiederholt = false;
+  if (bk_leer && quelle_ok(b.quelle) && b.nr >= 1 && b.nr <= ERZ_STROEME && !erz_vorher_ziel_[b.nr - 1].empty()) {
+    ziel_eff = erz_vorher_ziel_[b.nr - 1];  // replay through the normal kit/midi path with the incoming id and quelle
+#ifndef CYPHERDJ_MUTATION_BK_LEER_KANAL_EINGANG
+    kopiere(b.pfad, erz_vorher_kanal_[b.nr - 1].c_str(), sizeof b.pfad);  // the stored kanal wins
+#endif
+    wiederholt = true;
+  }
+#ifdef CYPHERDJ_MUTATION_BK_LEER_OHNE_VORHER_ERFOLG
+  else if (bk_leer && quelle_ok(b.quelle) && b.nr >= 1 && b.nr <= ERZ_STROEME) {
+    ziel_eff = "midi:1:1";  // fault case: nothing stored, still "success"
+    wiederholt = true;
+  }
+#endif
+#ifdef CYPHERDJ_MUTATION_BK_LEER_OHNE_REPLAY
+  if (wiederholt) {  // fault case: the replay is not done, `bk:` falls into the graph branch
+    ziel_eff = "bk:";
+    wiederholt = false;
+  }
+#endif
+  const char* ziel = ziel_eff.c_str();
   const int k = Mixer::kanal_index(b.pfad);
+  // remember an accepted kit/midi target (not a graph) for `bk:` (S12); called only after the command is in the ring
+  auto merke = [&]() {
+    erz_vorher_ziel_[b.nr - 1] = ziel_eff;
+    erz_vorher_kanal_[b.nr - 1] = b.pfad;
+  };
   // erz/1..8, pad/1..2 (§1.5); erz/8 nicht: Nur-Cue-Vorhöreingang (S7, Review-Kern m3), ein Strom bliebe im Saal still
   const bool kanal_ok = k >= 4 && k <= 13 && k != Mixer::kanal_index(VORHOER_KANAL);
 #ifndef CYPHERDJ_MUTATION_ARR_ERZ4_FREI
@@ -153,7 +192,14 @@ bool Netz::erz_paket(const v::Adresse* a, const osc::Nachricht& m) {
     b.form = -1;
     b.politik = 1;
     b.zeiger = g;
-    if (!einreihen(b)) cypher_bk_frei(g);  // nicht angenommen: wir besitzen ihn noch
+    if (!einreihen(b)) {
+      cypher_bk_frei(g);  // nicht angenommen: wir besitzen ihn noch
+    } else {
+      graph_vormerken(b.id, b.quelle, b.pfad, name, b.nr);  // S16
+#ifdef CYPHERDJ_MUTATION_BK_LEER_VORHER_UEBERSCHRIEBEN
+      merke();  // fault case: a graph target overwrites the stored one
+#endif
+    }
     return true;
   }
   if (std::strncmp(ziel, "midi:", 5) == 0) {  // Studio S5: midi:<port 1..4>:<kanal 1..16>, kein Kit
@@ -168,7 +214,10 @@ bool Netz::erz_paket(const v::Adresse* a, const osc::Nachricht& m) {
     b.form = port;
     b.politik = mk;
     b.zeiger = nullptr;
-    einreihen(b);
+    if (einreihen(b)) {
+      merke();
+      graph_vormerken(b.id, b.quelle, b.pfad, "", b.nr);  // S16: this stream carries no graph
+    }
     return true;
   }
   // kit:<a> oder kit:<a>+<b> (MVP 2 Scheibe 3, E2: ein Muster spielt battery und die Mitschnitte zusammen)
@@ -196,7 +245,11 @@ bool Netz::erz_paket(const v::Adresse* a, const osc::Nachricht& m) {
     return true;
   }
   b.zeiger = geladen.get();
-  if (einreihen(b)) geladen.release();  // der Kern besitzt es jetzt; zurück kommt es als ERZ_ALT
+  if (einreihen(b)) {
+    geladen.release();  // der Kern besitzt es jetzt; zurück kommt es als ERZ_ALT
+    merke();
+    graph_vormerken(b.id, b.quelle, b.pfad, "", b.nr);  // S16: this stream carries no graph
+  }
   return true;
 }
 

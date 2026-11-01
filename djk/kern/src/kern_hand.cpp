@@ -40,10 +40,39 @@ void Kern::hand_midi(const uint8_t* daten, size_t groesse, uint32_t versatz) noe
   m.versatz = versatz;
 }
 
+void Kern::setze_lern_mapping(const hand::Mapping* m) noexcept {
+  lern_mapping_ = m;
+  hand_ein_.mapping_ein(m);
+}
+
 // I08: die in midi_ein() gesammelten Ereignisse dieses Zyklus mit dem Kern-Sample der Achse stempeln (nach dem Einsortieren, also nach einem
 // /k/set/neu auf der neuen Achse) und, wenn kein anderer Leser eingetragen ist, den Ring räumen (nur der Kern ist dann Leser).
-void Kern::midi_ein_stempeln() noexcept {
-  for (int i = 0; i < n_midi_ein_; ++i) midi_ein_.schiebe(sample_, midi_ein_roh_[i].versatz, midi_ein_roh_[i].d, midi_ein_roh_[i].groesse);
+// S19: with a learn table (slot 1) the same events are translated as well; the raw ring keeps receiving every event.
+void Kern::midi_ein_stempeln(int n) noexcept {
+#ifndef CYPHERDJ_MUTATION_LERN_OHNE_FRIST  // failure case S19: the capture never times out
+  if (lern_an_ && (lern_rest_ -= n) <= 0) lern_an_ = false;
+#endif
+  for (int i = 0; i < n_midi_ein_; ++i) {
+    const MidiRoh& m = midi_ein_roh_[i];
+    midi_ein_.schiebe(sample_, m.versatz, m.d, m.groesse);
+    // S19 capture: the first 3-byte CC after arming is reported and consumed (also without a learn table)
+    if (lern_an_ && m.groesse == 3 && (m.d[0] & 0xF0) == 0xB0) {
+      lern_melden(1, m.d, m.versatz);
+#ifndef CYPHERDJ_MUTATION_LERN_WEITERGEREICHT  // failure case S19: reported but also translated
+      continue;
+#endif
+    }
+    if (!lern_mapping_) continue;
+#ifdef CYPHERDJ_MUTATION_LERN_ALLOKIERT  // failure case S19: one allocation per translated event in the realtime path
+    { int* p = new int(i); asm volatile("" : : "r"(p) : "memory"); delete p; }
+#endif
+    HandAktion a;
+    if (!hand_ein_.ereignis_ein(m.d, m.groesse, m.versatz, sample_, static_cast<uint32_t>(n), *sw_, &a)) {
+      ++lern_ohne_wirkung_;
+      continue;
+    }
+    hand_aktion(a, &lern_ereignisse_, &lern_ohne_wirkung_);
+  }
   n_midi_ein_ = 0;
 #ifndef CYPHERDJ_MUTATION_EIN_MIDI_OHNE_ABFLUSS  // Fehlerfall: niemand leert den Ring, nach 4096 Ereignissen zählt jedes weitere als verloren
   if (!midi_ein_extern_.load(std::memory_order_relaxed)) {
@@ -58,38 +87,71 @@ void Kern::hand_zyklus(int64_t n0, int n) {
   HandAktion a;
   for (int i = 0; i < n_midi_; ++i) {
     const MidiRoh& m = midi_[i];
+    // S19 capture: a CC on hand_in is reported (the user picked the wrong input) but not consumed
+    if (lern_an_ && m.groesse == 3 && (m.d[0] & 0xF0) == 0xB0) lern_melden(0, m.d, m.versatz);
     if (!hand_ein_.ereignis(m.d, m.groesse, m.versatz, n0, static_cast<uint32_t>(n), *sw_, &a)) {
+#ifdef CYPHERDJ_MUTATION_LERN_AUCH_HAND_IN  // failure case S19: hand_in events without an entry in slot 0 reach the learn table
+      if (lern_mapping_ && hand_ein_.ereignis_ein(m.d, m.groesse, m.versatz, n0, static_cast<uint32_t>(n), *sw_, &a)) {
+        hand_aktion(a, &lern_ereignisse_, &lern_ohne_wirkung_);
+        continue;
+      }
+#endif
       ++hand_ohne_wirkung_;
       continue;
     }
-    switch (a.art) {
-      case HandArt::griff:  // §7.3 Punkte 1 bis 3: das Stellwerk entscheidet am Sample des Griffs
-        if (hand_.rein(HandGriff{a.griff.sample, a.griff.regler, a.griff.x, static_cast<uint8_t>(a.griff.art),
-                                  a.griff.kurve}))
-          ++hand_ereignisse_;
-        else
-          ++hand_ohne_wirkung_;
-        break;
-      case HandArt::deck:  // Scheibe 35 Teil A: play und cue (Plan 35 E3, E4); der Rest der Deck-Tasten kommt mit Teil B
-        if ((a.aktion == hand::DeckAktion::play || a.aktion == hand::DeckAktion::cue) &&
-            hand_deck(a.deck, a.aktion, a.quant, a.wert, a.sample))
-          ++hand_ereignisse_;
-        else
-          ++hand_ohne_wirkung_;
-        break;
-      case HandArt::taste:  // §5.8 /e/taste für jede Taste; die Stopp-Taste wirkt wie /k/ki/stopp (§7.3 Punkt 8, E6)
-        hand_taste(a.taste, a.wert, a.sample);
-        break;
-      case HandArt::arr:  // D1 K1 (§7.2): Transport des Arrangements, vom Kern selbst ausgeführt
-        if (arr_hand_start_stopp(a.sample)) ++hand_ereignisse_;
-        else ++hand_ohne_wirkung_;
-        break;
-      case HandArt::tempo:  // §7.3 Punkt 7: Hand-Tempo kommt mit Scheibe 51
-        ++hand_ohne_wirkung_;
-        break;
-    }
+    hand_aktion(a, &hand_ereignisse_, &hand_ohne_wirkung_);
   }
   n_midi_ = 0;
+}
+
+// S19: report a captured CC as GELERNT and disarm. belegt: the base mapping (slot 0) already uses this CC.
+void Kern::lern_melden(int quelle, const uint8_t* d, uint32_t versatz) noexcept {
+  const int kanal = (d[0] & 0x0F) + 1, nr = d[1] & 0x7F;
+  Ereignis x{};
+  x.art = Ereignis::GELERNT;
+  x.sample = sample_ + versatz;
+  x.id = lern_id_;
+  x.deck = quelle;
+  x.fassung = kanal;
+  x.teil = nr;
+  x.neu = d[2] & 0x7F;
+#ifndef CYPHERDJ_MUTATION_LERN_OHNE_BELEGT  // failure case S19: a CC of the base mapping is not flagged
+  x.status = mapping_ && hand::suche(*mapping_, hand::NachrichtTyp::cc, kanal, nr) >= 0 ? 1 : 0;
+#endif
+  melde(x);
+#ifndef CYPHERDJ_MUTATION_LERN_DAUERHAFT  // failure case S19: stays armed after the report
+  lern_an_ = false;
+#endif
+}
+
+// The effect of one translated action (shared by slot 0 and slot 1); mit/ohne are the counters of the calling slot.
+void Kern::hand_aktion(const HandAktion& a, uint64_t* mit, uint64_t* ohne) {
+  switch (a.art) {
+    case HandArt::griff:  // §7.3 Punkte 1 bis 3: das Stellwerk entscheidet am Sample des Griffs
+      if (hand_.rein(HandGriff{a.griff.sample, a.griff.regler, a.griff.x, static_cast<uint8_t>(a.griff.art),
+                                a.griff.kurve}))
+        ++*mit;
+      else
+        ++*ohne;
+      break;
+    case HandArt::deck:  // Scheibe 35 Teil A: play und cue (Plan 35 E3, E4); der Rest der Deck-Tasten kommt mit Teil B
+      if ((a.aktion == hand::DeckAktion::play || a.aktion == hand::DeckAktion::cue) &&
+          hand_deck(a.deck, a.aktion, a.quant, a.wert, a.sample))
+        ++*mit;
+      else
+        ++*ohne;
+      break;
+    case HandArt::taste:  // §5.8 /e/taste für jede Taste; die Stopp-Taste wirkt wie /k/ki/stopp (§7.3 Punkt 8, E6)
+      hand_taste(a.taste, a.wert, a.sample);
+      break;
+    case HandArt::arr:  // D1 K1 (§7.2): Transport des Arrangements, vom Kern selbst ausgeführt
+      if (arr_hand_start_stopp(a.sample)) ++*mit;
+      else ++*ohne;
+      break;
+    case HandArt::tempo:  // §7.3 Punkt 7: Hand-Tempo kommt mit Scheibe 51
+      ++*ohne;
+      break;
+  }
 }
 
 namespace {

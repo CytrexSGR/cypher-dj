@@ -75,6 +75,8 @@ struct Bau {
   struct N { int spur; cdj::ArrNote n; };
   std::vector<C> cs;
   std::vector<N> ns;
+  struct L { int spur; std::vector<cdj::ArrAutoPunkt> p; uint8_t ziel = cdj::ARR_AUTO_FADER; uint8_t param = 0; };   // Automation: one lane of a track (default target fader)
+  std::vector<L> ls;
   explicit Bau(int64_t nr = 1) { s->nr = nr; }
   Bau& spur(int nr, cdj::ArrArt art, int slot = 0) {
     s->spur[nr - 1].nr = nr;
@@ -105,6 +107,12 @@ struct Bau {
     cs.back().hu = huelle;
     return *this;
   }
+  // Automation: a lane on track nr; points (beat, wert in the unit of the target, form 0 linear, 1 s, 2 jump), beats not falling. ziel is one of cdj::ARR_AUTO_*
+  // (default fader), param the device parameter index for ARR_AUTO_GERAET. Several lanes per track keep the call order.
+  Bau& lane(int nr, std::vector<cdj::ArrAutoPunkt> p, uint8_t ziel = cdj::ARR_AUTO_FADER, uint8_t param = 0) {
+    ls.push_back({nr, std::move(p), ziel, param});
+    return *this;
+  }
   Bau& note(int nr, const char* id, double beat, double laenge, int ton, int vel = 100) {
     ns.push_back({nr, cdj::ArrNote{cdj::arr_id(id), beat, laenge, static_cast<uint8_t>(ton), static_cast<uint8_t>(vel)}});
     return *this;
@@ -120,6 +128,10 @@ struct Bau {
         ++n_warps;
         n_punkte += c.wb.size() + c.eb.size();
       }
+    size_t n_ap = 0;
+    for (const L& l : ls) n_ap += l.p.size();
+    s->auto_lane_liste.reserve(ls.size());   // Automation Slice 1: pointers into these vectors, they never grow afterwards
+    s->auto_punkte.reserve(n_ap);
     s->warps.reserve(n_warps);        // die Zeiger der Clips zeigen in diese Vektoren, sie wachsen danach nie
     s->warp_beat.reserve(n_punkte);
     s->warp_frame.reserve(n_punkte);
@@ -175,6 +187,20 @@ struct Bau {
       }
       sp.noten_id = sp.n_noten ? s->noten_id.data() + i0 : nullptr;
       sp.noten_id_index = sp.n_noten ? s->noten_id_index.data() + i0 : nullptr;
+      for (const L& l : ls)
+        if (l.spur == nr) {
+          const size_t p0 = s->auto_punkte.size();
+          s->auto_punkte.insert(s->auto_punkte.end(), l.p.begin(), l.p.end());
+          cdj::ArrAutoLane al{};
+          al.ziel = l.ziel;
+          al.param = l.param;
+          al.n = static_cast<int>(l.p.size());
+          al.p = s->auto_punkte.data() + p0;
+          s->auto_lane_liste.push_back(al);
+          if (sp.n_auto == 0) sp.auto_lanes = s->auto_lane_liste.data() + (s->auto_lane_liste.size() - 1);
+          ++sp.n_auto;
+          ++s->n_auto_lanes;
+        }
     }
     for (const C& c : cs)   // Slice 2: jedes genutzte Audio genau einmal (wie der Lader; das Warp-Werk fragt danach in liest())
       if (std::find(s->audios.begin(), s->audios.end(), c.c.audio) == s->audios.end()) s->audios.push_back(const_cast<cdj::ArrAudio*>(c.c.audio));

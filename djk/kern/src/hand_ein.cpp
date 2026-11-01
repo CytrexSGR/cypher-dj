@@ -13,12 +13,26 @@ int HandEin::ereignis(const uint8_t* daten, size_t groesse, uint32_t versatz, in
                       const sw::Stellwerk& st, HandAktion* aus) {
   hand::Ausgabe a;
   if (!ueb_.ereignis(daten, groesse, s0, versatz, n, &a)) return 0;
+  return wandle(a, *ueb_.mapping(), daten, groesse, s0, n, st, aus);
+}
+
+// S19: slot 1, the learn table for midi_ein_1: own translator, the same conversion into an action.
+int HandEin::ereignis_ein(const uint8_t* daten, size_t groesse, uint32_t versatz, int64_t s0, uint32_t n,
+                          const sw::Stellwerk& st, HandAktion* aus) {
+  hand::Ausgabe a;
+  if (!ueb_ein_.ereignis(daten, groesse, s0, versatz, n, &a)) return 0;
+  return wandle(a, *ueb_ein_.mapping(), daten, groesse, s0, n, st, aus);
+}
+
+int HandEin::wandle(hand::Ausgabe a, const hand::Mapping& m, const uint8_t* daten, size_t groesse, int64_t s0,
+                    uint32_t n, const sw::Stellwerk& st, HandAktion* aus) {
+  (void)s0;
+  (void)n;
 #ifdef CYPHERDJ_MUTATION_HAND_FOLGEBLOCK
   // Fehlerfall der Abnahme (Plan 35 E2): das Ereignis wirkt am Anfang des Folgeblocks statt an seinem Versatz (wie 19
   // Mutation M01 blockgrenze, 09 Probe b naiv_block): sample = Zyklusanfang + n
   a.sample = s0 + static_cast<int64_t>(n);
 #endif
-  const hand::Mapping& m = *ueb_.mapping();
   const hand::Eintrag& e = m.eintrag[a.eintrag];
 #ifdef CYPHERDJ_MUTATION_HAND_KODIERUNG
   // Fehlerfall Plan 35 Task 3: Kodierung des Encoders vertauscht (zweierkomplement <-> versatz64), die Raste läuft in

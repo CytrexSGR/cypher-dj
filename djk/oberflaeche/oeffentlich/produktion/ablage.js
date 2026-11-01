@@ -3,7 +3,7 @@
 // DJ-Ansicht bleibt unverändert. Ablegen schickt clip_neu mit dem Katalog-sha (Pfad löst der Server).
 import { ZIEH_TYP, nutzlast, ablageBefehl, ABLAGE_TEXT } from './ziehen.js';
 import { xZuBeat, rasterBeats } from './zeitachse.js';
-import { spurIndexBei } from './layout.js';
+import { spurIndexBeiTabelle } from './layout.js';
 
 export function bindeAblage(ctx) {
   const { st, $ } = ctx;
@@ -29,7 +29,7 @@ export function bindeAblage(ctx) {
   ueber.addEventListener('dragover', (e) => {
     if (!st.projekt || !e.dataTransfer.types.includes(ZIEH_TYP)) return;
     e.preventDefault(); e.dataTransfer.dropEffect = 'copy';
-    st.geist = { x: e.offsetX, spur: spurIndexBei(e.offsetY, st.projekt.spuren.length) };
+    st.geist = { x: e.offsetX, spur: spurIndexBeiTabelle(ctx.zeilen(), e.offsetY) };
   });
   ueber.addEventListener('dragleave', () => { st.geist = null; });
   ueber.addEventListener('drop', (e) => {
@@ -37,7 +37,7 @@ export function bindeAblage(ctx) {
     if (!st.projekt || !e.dataTransfer.types.includes(ZIEH_TYP)) return;
     e.preventDefault();
     let n = null; try { n = JSON.parse(e.dataTransfer.getData(ZIEH_TYP)); } catch { return; }
-    const i = spurIndexBei(e.offsetY, st.projekt.spuren.length), beat = xZuBeat(st.ansicht, e.offsetX), raster = rasterBeats(st.raster);
+    const i = spurIndexBeiTabelle(ctx.zeilen(), e.offsetY), beat = xZuBeat(st.ansicht, e.offsetX), raster = rasterBeats(st.raster);
     const r = ablageBefehl(st.projekt, n, i, beat, raster);
     if (r.fehler) { ctx.melde(ABLAGE_TEXT[r.fehler], true); return; }
     // V2 Fix-Runde 2 H1 (Spec 6.34): die Spur, auf die die Person gezeigt hat, bleibt fest; die Länge in Beats folgt aus dem Tempo im Stand beim

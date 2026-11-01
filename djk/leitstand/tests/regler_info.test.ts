@@ -24,6 +24,8 @@ function universum(): string[] {
   u.push('keylock', 'deck/1/keylock', 'pad/1/keylock');   // Keylock 3: nur der globale Knopf
   // S5r: Graph-Regler <kanal>/bk/<n> auf jedem Kanal, dazu die Ränder 0 und 9 und Nicht-Kanäle (nur Kanäle mit Graph gelten)
   u.push(...kanaele.flatMap((k) => [0, 1, 8, 9].map((n) => `${k}/bk/${n}`)), 'master/bk/1', 'cue/bk/1', 'pad/3/bk/1');
+  // S14: the same for the send returns fx/1..5 (only fx/3 and fx/4 have graph knobs)
+  u.push(...[1, 2, 3, 4, 5].flatMap((n) => [0, 1, 8, 9].map((m) => `fx/${n}/bk/${m}`)));
   return u;
 }
 
@@ -36,7 +38,7 @@ test('Pfadmenge gleich dem Vertragsmuster regler_pfad', () => {
 test('S5r: <kanal>/bk/<1..8> nur auf Kanälen mit Graph, 0..1, Vorgabe 0,5, alle dürfen', () => {
   const mit = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'erz/1', 'erz/2', 'erz/3', 'erz/5', 'erz/6', 'erz/7', 'pad/1', 'pad/2'];
   const bk = [...REGLER.keys()].filter((p) => /\/bk\/\d$/.test(p));
-  assert.equal(bk.length, mit.length * 8);
+  assert.equal(bk.length, (mit.length + 2) * 8);   // S14: + fx/3, fx/4
   for (const k of ['erz/4', 'erz/8', 'bus/1', 'master']) assert.equal(REGLER.has(`${k}/bk/1`), false, k);
   for (const k of mit) assert.equal(kanalVon(`${k}/bk/3`), k);
   const i = reglerInfo('erz/5/bk/8')!;
@@ -44,6 +46,17 @@ test('S5r: <kanal>/bk/<1..8> nur auf Kanälen mit Graph, 0..1, Vorgabe 0,5, alle
   assert.equal(imBereich(i, 0.25, 0), true);
   assert.equal(imBereich(i, 1.01, 0), false);
   assert.equal(machtLeiser('deck/1/bk/1', 0.9, 0.1), false);   // ein Graph-Regler ist kein Fader: nie "leiser machen"
+});
+
+test('S14: fx/3/bk/<1..8> and fx/4/bk/<1..8> are global graph knobs of the send returns, 0..1, default 0.5, everybody may', () => {
+  for (const n of [3, 4]) for (let m = 1; m <= 8; m++) {
+    const i = reglerInfo(`fx/${n}/bk/${m}`)!;
+    assert.deepEqual([i.einheit, i.min, i.max, i.vorgabe, i.nurHand], ['linear', 0, 1, 0.5, false], `fx/${n}/bk/${m}`);
+    assert.equal(i.kanal, null);
+  }
+  assert.equal(kanalVon('fx/3/bk/1'), kanalVon('fx/3/rueckweg'));   // both global
+  for (const p of ['fx/1/bk/1', 'fx/2/bk/1', 'fx/5/bk/1', 'fx/3/bk/0', 'fx/3/bk/9']) assert.equal(REGLER.has(p), false, p);   // negative controls
+  assert.equal(machtLeiser('fx/3/bk/1', 0.9, 0.1), false);
 });
 
 test('§1.5: Bereiche, Vorgaben, nur Hand', () => {

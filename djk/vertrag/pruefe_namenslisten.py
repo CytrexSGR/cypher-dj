@@ -481,7 +481,7 @@ def spur_regler_listen(q: Quelle) -> tuple[int, dict[str, list[str]]]:
         "const v=await import('file://@@/djk/vertrag/attrappe_kern/vertrag.mjs');"
         "const k=await import('file://@@/djk/oberflaeche/oeffentlich/kurven.js');"
         "const l=await import('file://@@/djk/leitstand/src/regler_info.ts');"
-        "const s=(m)=>[...m].filter((p)=>p.startsWith('spur/'));"
+        "const s=(m)=>[...m].filter((p)=>p.startsWith('spur/')&&!p.includes('/send/'));"
         "console.log(JSON.stringify({a:s(v.REGLER.keys()),z:s(k.ZIELE),l:s(l.REGLER.keys())}))")
     return n, {"R01 Kern regler.cpp": alle(felder), "R02 INTERFACES §1.5": alle(zeilen),
                "R03 Attrappe REGLER": sorted(aus["a"]), "R04 kurven.js ZIELE": sorted(aus["z"]),
@@ -489,7 +489,7 @@ def spur_regler_listen(q: Quelle) -> tuple[int, dict[str, list[str]]]:
 
 
 def _db(t: str) -> float:
-    return float(t.strip().replace("−", "-").replace("+", "").replace("f", ""))
+    return float(t.strip().replace("−", "-").replace("+", "").replace("f", "").replace(",", "."))
 
 
 def spur_fader_bereiche(q: Quelle) -> dict[str, tuple[float, float, float]]:
@@ -562,7 +562,7 @@ def routing_regler_listen(q: Quelle) -> tuple[int, dict[str, list[str]]]:
         "const v=await import('file://@@/djk/vertrag/attrappe_kern/vertrag.mjs');"
         "const k=await import('file://@@/djk/oberflaeche/oeffentlich/kurven.js');"
         "const l=await import('file://@@/djk/leitstand/src/regler_info.ts');"
-        "const s=(m)=>[...m].filter((p)=>p.startsWith('grp/')||p==='pm/fader');"
+        "const s=(m)=>[...m].filter((p)=>(p.startsWith('grp/')&&!p.includes('/send/'))||p==='pm/fader');"
         "console.log(JSON.stringify({a:s(v.REGLER.keys()),z:s(k.ZIELE),l:s(l.REGLER.keys())}))")
     return n, {"R01 Kern regler.cpp": alle(felder), "R02 INTERFACES §1.5": alle(zeilen),
                "R03 Attrappe REGLER": sorted(aus["a"]), "R04 kurven.js ZIELE": sorted(aus["z"]),
@@ -616,6 +616,120 @@ def _pruefe_routing_regler(q: Quelle, befunde: list[str]) -> None:
             befunde.append(f"Routing-Regler: R07 defs.schema.json regler_pfad nimmt {falsch} an")
 
 
+# ---------------------------------------------------------------- 1.10 Slice 3: Sends, Returns und Hall-Regler in allen Fundorten (A11)
+RET_HALL_FELDER = ("an", "pre", "decay", "groesse", "tief", "highcut", "fahne")
+
+
+def _kern_return_regler(q: Quelle) -> tuple[list[str], dict[str, tuple[float, float, float]]]:
+    """Pfade und (min, max, vorgabe) der Send-, Return- und Hall-Regler aus regler.cpp (Quelle der Wahrheit). Nur im Arbeitsbaum."""
+    regler_h = q.lies("djk/kern/stellwerk/include/cypherdj/stellwerk/regler.h")
+    nr = int(_such(r"constexpr int RET_REGLER_RETURNS = (\d+);", regler_h, "regler.h").group(1))
+    ns = int(_such(r"constexpr int SPUR_REGLER_SPUREN = (\d+);", regler_h, "regler.h").group(1))
+    ng = int(_such(r"constexpr int GRP_REGLER_GRUPPEN = (\d+);", regler_h, "regler.h").group(1))
+    cpp = q.lies("djk/kern/stellwerk/src/regler.cpp")
+    for muster in ('"spur/%d/send/%d"', '"grp/%d/send/%d"'):
+        if muster not in cpp:
+            raise ParserFehler(f"regler.cpp: kein Pfad {muster}, Parser blind oder Quelle umgebaut")
+    felder = re.findall(r'"ret/%d/([a-z_]+)"', cpp)
+    if not felder or "ret/%d/hall/an" not in cpp or "ret/%d/hall/%s" not in cpp:
+        raise ParserFehler("regler.cpp: keine ret/%d/…-Pfade, Parser blind oder Quelle umgebaut")
+    hall = [("an", None)] + [(f, v) for f, v in re.findall(r'\{"([a-z]+)", Rolle::ret_hall_[a-z]+, (-?[\d.]+)f?\}', cpp)]
+    if len(hall) != 7:
+        raise ParserFehler(f"regler.cpp: {len(hall) - 1} Hall-Werte statt 6, Parser blind oder Quelle umgebaut")
+    pfade: list[str] = []
+    snd = _such(r"Rolle::snd_spur, (-?[\d.]+)f?, (-?[\d.]+)f?, (-?[\d.]+)f?,", cpp, "regler.cpp snd_spur")
+    retf = _such(r"Rolle::ret_fader, (-?[\d.]+)f?, (-?[\d.]+)f?, (-?[\d.]+)f?,", cpp, "regler.cpp ret_fader")
+    for r in range(1, nr + 1):
+        pfade += [f"spur/{n}/send/{r}" for n in range(1, ns + 1)] + [f"grp/{n}/send/{r}" for n in range(1, ng + 1)]
+        pfade += [f"ret/{r}/{f}" for f in felder] + [f"ret/{r}/hall/{f}" for f, _ in hall]
+    bereich: dict[str, tuple[float, float, float]] = {
+        "spur/1/send/1": tuple(_db(snd.group(i)) for i in (1, 2, 3)),
+        "ret/1/fader": tuple(_db(retf.group(i)) for i in (1, 2, 3)),
+        "ret/1/hall/an": (0.0, 1.0, 1.0),
+    }
+    for f, v in hall[1:]:
+        bereich[f"ret/1/hall/{f}"] = (0.0, 1.0, _db(v))
+    return sorted(pfade), bereich
+
+
+def return_regler_listen(q: Quelle) -> tuple[dict[str, list[str]], dict[str, dict[str, tuple[float, float, float]]]]:
+    """Pfade und Wertebereiche je Fundort. Nur im Arbeitsbaum (node)."""
+    kern, kbereich = _kern_return_regler(q)
+    spec = q.lies("docs/architecture/INTERFACES.md")
+    teil = spec[_index(spec, "### 1.5 Kanäle und Regler-Pfade", "§1.5"):_index(spec, "### 1.6", "§1.5")]
+    zeilen = re.findall(r"^\| `ret/<r>/([a-z_/]+)`", teil, re.M)
+    if not zeilen:
+        raise ParserFehler("INTERFACES §1.5: keine Zeile ret/<r>/…, Parser blind oder Quelle umgebaut")
+    hat_snd = {w: bool(re.search(rf"^\| `{w}/<n>/send/<r>`", teil, re.M)) for w in ("spur", "grp")}
+    if not any(hat_snd.values()):
+        raise ParserFehler("INTERFACES §1.5: keine Zeile spur|grp/<n>/send/<r>, Parser blind oder Quelle umgebaut")
+    regler_h = q.lies("djk/kern/stellwerk/include/cypherdj/stellwerk/regler.h")
+    nr = int(_such(r"constexpr int RET_REGLER_RETURNS = (\d+);", regler_h, "regler.h").group(1))
+    spec_pfade = [f"ret/{r}/{f}" for r in range(1, nr + 1) for f in zeilen]
+    spec_pfade += [p for p in kern if "/send/" in p and hat_snd[p.split("/")[0]]]
+    sbereich: dict[str, tuple[float, float, float]] = {}
+    for pfad_spec, key in (("spur/<n>/send/<r>", "spur/1/send/1"), ("ret/<r>/fader", "ret/1/fader")):
+        z = _such(rf"^\| `{re.escape(pfad_spec)}`[^|]*\| dB \| (\S+) (?:bis|to) (\S+) \| (\S+) \|", teil,
+                  f"INTERFACES §1.5 {pfad_spec}", re.M)
+        sbereich[key] = tuple(_db(z.group(i)) for i in (1, 2, 3))
+    z = _such(r"^\| `ret/<r>/hall/an`[^|]*\|[^|]*\| (\S+)/(\S+) \| (\S+) \|", teil, "INTERFACES §1.5 ret/<r>/hall/an", re.M)
+    sbereich["ret/1/hall/an"] = tuple(_db(z.group(i)) for i in (1, 2, 3))
+    for f in RET_HALL_FELDER[1:]:
+        z = re.search(rf"^\| `ret/<r>/hall/{f}`[^|]*\|[^|]*\| (\S+) (?:bis|to) (\S+) \| (\S+) \|", teil, re.M)
+        if z:   # a missing row is reported as a missing path by the list comparison, not as a blind parser
+            sbereich[f"ret/1/hall/{f}"] = tuple(_db(z.group(i)) for i in (1, 2, 3))
+    probe = list(kbereich)
+    aus = q.node_json(
+        "const v=await import('file://@@/djk/vertrag/attrappe_kern/vertrag.mjs');"
+        "const k=await import('file://@@/djk/oberflaeche/oeffentlich/kurven.js');"
+        "const l=await import('file://@@/djk/leitstand/src/regler_info.ts');"
+        "const s=(m)=>[...m].filter((p)=>/^(spur|grp)\\/[0-9]+\\/send\\/[0-9]+$/.test(p)||p.startsWith('ret/'));"
+        f"const ps={json.dumps(probe)};"
+        "const b=(m)=>Object.fromEntries(ps.map((p)=>[p,[m.get(p)?.min,m.get(p)?.max,m.get(p)?.vorgabe]]));"
+        "const kb=Object.fromEntries(ps.map((p)=>[p,[k.wertAusMidi(p,0),k.wertAusMidi(p,1),k.vorgabe(p)]]));"
+        "console.log(JSON.stringify({a:s(v.REGLER.keys()),z:s(k.ZIELE),l:s(l.REGLER.keys()),ab:b(v.REGLER),lb:b(l.REGLER),kb}))")
+    listen = {"R01 Kern regler.cpp": kern, "R02 INTERFACES §1.5": sorted(spec_pfade), "R03 Attrappe REGLER": sorted(aus["a"]),
+              "R04 kurven.js ZIELE": sorted(aus["z"]), "R05 regler_info.ts": sorted(aus["l"])}
+    bereiche = {"R01 Kern regler.cpp": kbereich, "R02 INTERFACES §1.5": sbereich,
+                "R03 Attrappe REGLER": {p: tuple(w) for p, w in aus["ab"].items()},
+                "R04 kurven.js (Griff 0 und 1, Vorgabe)": {p: tuple(w) for p, w in aus["kb"].items()},
+                "R05 regler_info.ts": {p: tuple(w) for p, w in aus["lb"].items()}}
+    return listen, bereiche
+
+
+def _pruefe_return_regler(q: Quelle, befunde: list[str]) -> None:
+    listen, bereiche = return_regler_listen(q)
+    soll = listen["R01 Kern regler.cpp"]
+    for name, ist in listen.items():
+        if name != "R01 Kern regler.cpp":
+            _diff(befunde, "Return-Regler=Kern", soll, ist, name)
+    kern_b = bereiche["R01 Kern regler.cpp"]
+    for name, bs in bereiche.items():
+        for pfad, wert in bs.items():
+            erwartet = kern_b[pfad]
+            if name.startswith("R04") and erwartet[0] == -200.0 and erwartet[1] == 6.0:
+                erwartet = (-200.0, 6.0, erwartet[2])   # the grip travel of a dB control starts silent
+            if any(w is None or abs(w - e) > 1e-3 for w, e in zip(wert, erwartet)):
+                befunde.append(f"Return-Bereich=Kern: {name} {pfad} (min, max, vorgabe) {wert} statt {erwartet}")
+    pfad_re = re.compile(_such(r"export const PFAD = /(.*)/;", q.lies("djk/oberflaeche/hand_bedienung.ts"),
+                               "hand_bedienung.ts").group(1).replace("\\/", "/"))
+    try:
+        schema = json.loads(q.lies("djk/vertrag/schemas/defs.schema.json"))["$defs"]["regler_pfad"]["pattern"]
+    except (ValueError, KeyError) as fehler:
+        raise ParserFehler(f"defs.schema.json: kein $defs.regler_pfad.pattern ({fehler})") from fehler
+    for name in soll:
+        if not pfad_re.search(name):
+            befunde.append(f"Return-Regler: R06 hand_bedienung.PFAD lehnt {name} ab")
+        if not re.fullmatch(schema, name):
+            befunde.append(f"Return-Regler: R07 defs.schema.json regler_pfad lehnt {name} ab")
+    for falsch in ("spur/33/send/1", "spur/1/send/5", "spur/1/send/0", "grp/9/send/1", "ret/5/fader", "ret/0/fader", "ret/1/hall/mix",
+                   "ret/1/send/1", "ret/1/trim"):   # Gegenprobe: kein Muster zu weit
+        if pfad_re.search(falsch):
+            befunde.append(f"Return-Regler: R06 hand_bedienung.PFAD nimmt {falsch} an")
+        if re.fullmatch(schema, falsch):
+            befunde.append(f"Return-Regler: R07 defs.schema.json regler_pfad nimmt {falsch} an")
+
+
 # ---------------------------------------------------------------- S5r: Graph-Regler <kanal>/bk/<1..8> (A11)
 def _bk_kanaele_aus_spec(zelle: str) -> list[str]:
     """'deck/1..4, erz/1, 2, 3, 5, 6, 7 und pad/1, 2' -> ['deck/1', ..., 'pad/2']"""
@@ -631,18 +745,24 @@ def _bk_kanaele_aus_spec(zelle: str) -> list[str]:
 
 
 def bk_regler_listen(q: Quelle) -> dict[str, list[str]]:
-    """<kanal>/bk/<1..8> je Fundort. Die Kanalmenge steht im Kern (regler.cpp, Schleife über kn_bk) und ist dort gegen
-    das echte Annahmeverhalten von netz_erz.cpp gepinnt (test_netz_erz.cpp); hier wird sie in alle anderen Fundorte
-    getragen. Nur im Arbeitsbaum (node)."""
+    """<kanal>/bk/<1..8> and fx/3|4/bk/<1..8> (S14) per location. The channel set sits in the kern (regler.cpp, loop over
+    kn_bk) and is pinned there against the real acceptance of netz_erz.cpp (test_netz_erz.cpp); the send-return set is the
+    second loop (kn_bk_send). Both are carried into all other locations here. Working tree only (node)."""
     cpp = q.lies("djk/kern/stellwerk/src/regler.cpp")
     m = _such(r"for \(const char\* kn_bk : \{([^}]*)\}\)", cpp, "regler.cpp bk-Kanalschleife")
     kanaele = re.findall(r'"([a-z]+/\d+)"', m.group(1))
     if not kanaele or "%s/bk/%d" not in cpp:
         raise ParserFehler("regler.cpp: keine bk-Kanäle oder kein Muster %s/bk/%d, Parser blind oder Quelle umgebaut")
+    ms = _such(r"for \(const char\* kn_bk_send : \{([^}]*)\}\)", cpp, "regler.cpp bk-Sendeschleife")   # S14
+    senden = re.findall(r'"(fx/\d+)"', ms.group(1))
+    if not senden:
+        raise ParserFehler("regler.cpp: keine Send-Returns in der bk-Sendeschleife, Parser blind oder Quelle umgebaut")
     spec = q.lies("docs/architecture/INTERFACES.md")
     teil = spec[_index(spec, "### 1.5 Kanäle und Regler-Pfade", "§1.5"):_index(spec, "### 1.6", "§1.5")]
     z = _such(r"^\| `<k>/bk/<n>` \(n = 1 bis 8\) \|.*\| alle; nur `<k>` = ([^|]*) \|$", teil,
               "INTERFACES §1.5 bk-Zeile", re.M)
+    zf = _such(r"^\| `fx/<n>/bk/<m>` \(n = (\d+(?: and \d+)*), m = 1 to 8\) \|", teil, "INTERFACES §1.5 bk-Sendezeile", re.M)   # S14
+    spec_senden = [f"fx/{n}" for n in zf.group(1).split(" and ")]
     alle = lambda ks: sorted(f"{k}/bk/{n}" for k in ks for n in range(1, 9))   # noqa: E731
     aus = q.node_json(
         "const v=await import('file://@@/djk/vertrag/attrappe_kern/vertrag.mjs');"
@@ -650,7 +770,8 @@ def bk_regler_listen(q: Quelle) -> dict[str, list[str]]:
         "const l=await import('file://@@/djk/leitstand/src/regler_info.ts');"
         "const s=(m)=>[...m].filter((p)=>/\\/bk\\/[0-9]+$/.test(p));"
         "console.log(JSON.stringify({a:s(v.REGLER.keys()),z:s(k.ZIELE),l:s(l.REGLER.keys())}))")
-    return {"R01 Kern regler.cpp": alle(kanaele), "R02 INTERFACES §1.5": alle(_bk_kanaele_aus_spec(z.group(1))),
+    return {"R01 Kern regler.cpp": alle(kanaele + senden),
+            "R02 INTERFACES §1.5": alle(_bk_kanaele_aus_spec(z.group(1)) + spec_senden),
             "R03 Attrappe REGLER": sorted(aus["a"]), "R04 kurven.js ZIELE": sorted(aus["z"]),
             "R05 regler_info.ts": sorted(aus["l"])}
 
@@ -676,7 +797,9 @@ def _pruefe_bk_regler(q: Quelle, befunde: list[str]) -> None:
     kanaele = {n.rsplit("/bk/", 1)[0] for n in soll}
     unbekannt = [f"{g}/{i}/bk/1" for g, n in (("deck", 4), ("erz", 8), ("pad", 2), ("bus", 4)) for i in range(1, n + 1)
                  if f"{g}/{i}" not in kanaele]
-    for falsch in unbekannt + ["master/bk/1", "cue/bk/1", "deck/1/bk/9", "deck/1/bk/0", "pad/3/bk/1", "deck/1/bk/10"]:
+    # S14: only the send returns fx/3 and fx/4 have graph knobs
+    fx_falsch = ["fx/1/bk/1", "fx/2/bk/1", "fx/5/bk/1", "fx/3/bk/0", "fx/3/bk/9", "fx/4/bk/10"]
+    for falsch in unbekannt + fx_falsch + ["master/bk/1", "cue/bk/1", "deck/1/bk/9", "deck/1/bk/0", "pad/3/bk/1", "deck/1/bk/10"]:
         if pfad.search(falsch):
             befunde.append(f"bk-Regler: R06 hand_bedienung.PFAD nimmt {falsch} an")
         if re.fullmatch(schema, falsch):
@@ -782,6 +905,7 @@ def pruefe(q: Quelle) -> list[str]:
         _pruefe_spur_regler(q, befunde)   # D1 K1
         _pruefe_routing_regler(q, befunde)   # 1.10 Slice 1
         _pruefe_bk_regler(q, befunde)     # S5r
+        _pruefe_return_regler(q, befunde)   # 1.10 Slice 3
         _pruefe_gruende(q, befunde)       # D1 K1
         _pruefe_zielarten(q, befunde)     # D1 K1 Slice 10
     for schluessel in AUSNAHMEN:

@@ -102,3 +102,13 @@ test('Scrollleiste: Inhalt reicht über das Projektende hinaus, Lage folgt beat0
   // ein leeres Projekt und eine Ansicht hinter dem Ende: die Leiste klemmt die Ansicht nicht zurück
   assert.ok(leiste({ beat0: 500, pxProBeat: 4 }, 0, 800).inhaltPx >= 500 * 4 + 800);
 });
+
+test('S2 T6 fix 5: another project drops the chosen lane targets, the same project keeps them', async () => {
+  const { laneZustandBeiProjekt } = await import('../oeffentlich/produktion/zeitachse_bedienung.js');
+  const st = { laneZiel: new Map([['s1', 'pan'], ['s2', 'mute']]), laneOffen: new Set(['s1']) };
+  laneZustandBeiProjekt(st, false);
+  assert.equal(st.laneZiel.size, 2, 'same project (a new revision): kept');
+  laneZustandBeiProjekt(st, true);
+  assert.equal(st.laneZiel.size, 0, 'another project: dropped');
+  assert.equal(st.laneOffen.size, 1, 'the open rows are a known leftover of slice 1 and stay');
+});

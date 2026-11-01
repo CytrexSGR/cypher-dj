@@ -53,5 +53,27 @@ int main() {
   const float m_unten = letzter("master", 11 * SPB);
   std::printf("pegel: Fader unten deck/1 %.1f dB, master %.1f dB\n", unten, m_unten);
   PRUEF(unten <= -199.0f && m_unten <= -199.0f);
+  // S18: erz/5..7 are reported always (-200 without a stream), like pad/1..2. Negative control first: no source, no fader move.
+  const int64_t ab_s18 = 12 * SPB;   // zyklen() runs to an absolute Kern sample
+  x.zyklen(14 * SPB);
+  for (const char* k : {"erz/5", "erz/6", "erz/7"}) {
+    const auto pe5 = x.alle(cdj::Ereignis::PEGEL, k);
+    int n5 = 0;
+    float hoechst = -999.0f;
+    for (const auto& e : pe5)
+      if (e.sample >= ab_s18) { ++n5; hoechst = std::max(hoechst, e.pegel[0]); }
+    std::printf("pegel S18: %s ohne Strom %d Meldungen, hoechstens %.1f dB\n", k, n5, hoechst);
+    PRUEF(n5 >= 2 * SPB / 2400 - 2);   // the event exists (the channel is reported without a stream) ...
+    PRUEF(hoechst <= -199.0f);          // ... and reads -200
+  }
+  // A 1 kHz source on erz/6 only (kern->rueck(6, ..)), fader -6 dB: erz/6 reads 20 log10(0.25) - 6.02, erz/5 and erz/7 stay -200
+  x.erz_quelle[5] = [](int64_t s) { return 0.25f * static_cast<float>(std::sin(2.0 * 3.14159265358979 * 1000.0 * static_cast<double>(s) / 48000.0)); };
+  x.teil("erz/6/fader", -6.0f, 14.0, 0.0);
+  const int64_t ab6 = 17 * SPB;
+  x.zyklen(22 * SPB);
+  const float e6 = letzter("erz/6", ab6), e5 = letzter("erz/5", ab6), e7 = letzter("erz/7", ab6);
+  std::printf("pegel S18: erz/6 %.3f dB (erwartet %.3f), erz/5 %.1f dB, erz/7 %.1f dB\n", e6, soll, e5, e7);
+  PRUEF(std::fabs(e6 - soll) <= 0.2);
+  PRUEF(e5 <= -199.0f && e7 <= -199.0f);   // isolation: the neighbours do not follow
   PRUEF_ENDE();
 }

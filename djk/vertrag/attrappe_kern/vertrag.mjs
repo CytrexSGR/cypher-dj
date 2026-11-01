@@ -45,6 +45,7 @@ export const BEFEHLE = {
   '/k/led': f('hssi', 'id quelle name zustand'),
   '/k/kiste': f('hs', 'id quelle'),
   '/k/mapping': f('hss', 'id quelle geraet'),
+  '/k/lernen': f('hsi', 'id quelle an'),
   '/k/latenz': f('hssi', 'id quelle ziel samples'),
   '/erz/strom': f('hsiss', 'id quelle strom ziel kanal'),
   '/erz/fenster': f('iiiiddh', 'strom sendung modus reserve ab_beat bis_beat t_send_us'),
@@ -56,6 +57,7 @@ export const BEFEHLE = {
   '/k/fx/zuweisung': f('hsisi', 'id quelle einheit kanal an'),                          // AUFTRAG 2026-09-28 (§4.10)
   '/k/fx/routing': f('hsi', 'id quelle routing'),                                        // Ohr Task 15 (§4.10)
   '/k/kanal/graph': f('hsss', 'id quelle kanal name'),   // Baukasten S3c (§4.10)
+  '/k/graph/frage': f('hs', 'id quelle'),   // Baukasten S16 (§4.10)
   '/k/loop/stopp': f('hsi', 'id quelle box'),
   '/k/loop/raster': f('hsii', 'id quelle box versatz_frames'),
   '/k/loop/rec': f('hsis', 'id quelle beats name'),
@@ -84,6 +86,7 @@ export const AUSGABEN = {
   '/e/regler': f('sfshd', 'pfad wert halter sample beat'),
   '/e/hand': f('sfhd', 'pfad wert sample beat'),
   '/e/taste': f('sihd', 'name wert sample beat'),
+  '/e/gelernt': f('hiiiii', 'id quelle kanal nr wert belegt'),
   '/e/geladen': f('isdiih', 'deck material_id basis_bpm fassung mit_stems sample'),
   '/e/halter': f('sshd', 'pfad halter sample beat'),
   '/e/invariante': f('ssihd', 'art plan teil sample beat'),
@@ -103,6 +106,7 @@ export const AUSGABEN = {
   '/e/fx': f('iidddddi', 'einheit art beats wet param1 param2 param3 an'),   // AUFTRAG 2026-09-28 (§5.12)
   '/e/fx/zuweisung': f('isi', 'einheit kanal an'),                          // AUFTRAG 2026-09-28 (§5.12)
   '/e/fx/routing': f('i', 'routing'),                                       // Ohr Task 15 (§5.12)
+  '/e/graph': f('ss', 'kanal name'),   // Baukasten S16 (§5.12)
   '/e/mitschnitt': f('siid', 'name beats status ab_beat'),
   '/zustand/arr': f('iiidhdif', 'nr status loop_an projekt_beat ursprung_sample start_beat metronom_an limiter_db'),   // D1 K1 (§5.13)
   '/zustand/ein': f('ihhhh', 'verbunden midi_gesehen midi_verloren midi_sample flanke_sample'),   // I08 (§5.14)
@@ -182,10 +186,26 @@ for (let n = 1; n <= 8; n++) {   // 1.10 Slice 1 (§1.5): Gruppen-Regler, global
   REGLER.set(`grp/${n}/solo`, { ...R(SCHALTER, 0, 1, 0), kanal: null });
 }
 REGLER.set('pm/fader', { ...R(DB, -200, 6, 0), kanal: null });
+// 1.10 Slice 3 (§1.5): sends (post fader) from tracks and groups to the 4 returns, return strips and Cypher Hall values; global, everybody may.
+// Sends default to -200 (off). Hall values are normalised 0..1 (the unit mapping lives in the kernel, arr_returns.cpp); hall/an is a switch.
+const HALL_VORGABE = { pre: 0.04, decay: 0.5252, groesse: 0.282, tief: 0.5658, highcut: 0.8039, fahne: 0.66667 };
+for (let r = 1; r <= 4; r++) {
+  for (let n = 1; n <= 32; n++) REGLER.set(`spur/${n}/send/${r}`, { ...R(DB, -200, 6, -200), kanal: null });
+  for (let n = 1; n <= 8; n++) REGLER.set(`grp/${n}/send/${r}`, { ...R(DB, -200, 6, -200), kanal: null });
+  REGLER.set(`ret/${r}/fader`, { ...R(DB, -200, 6, 0), kanal: null });
+  REGLER.set(`ret/${r}/pan`, { ...R(LIN, -1, 1, 0), kanal: null });
+  REGLER.set(`ret/${r}/mute`, { ...R(SCHALTER, 0, 1, 0), kanal: null });
+  REGLER.set(`ret/${r}/solo`, { ...R(SCHALTER, 0, 1, 0), kanal: null });
+  REGLER.set(`ret/${r}/hall/an`, { ...R(SCHALTER, 0, 1, 1), kanal: null });
+  for (const [f, v] of Object.entries(HALL_VORGABE)) REGLER.set(`ret/${r}/hall/${f}`, { ...R(LIN, 0, 1, v), kanal: null });
+}
 // S5r (§1.5): acht Graph-Regler <kanal>/bk/<1..8> auf den Kanälen, auf denen der Kern einen Baukasten-Graphen annimmt
 // (deck/1..4 als Effekt, erz/1,2,3,5,6,7 und pad/1,2 als Instrument; nicht erz/4 und erz/8), alle dürfen, 0..1, Vorgabe 0,5
 export const BK_KANAELE = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'erz/1', 'erz/2', 'erz/3', 'erz/5', 'erz/6', 'erz/7', 'pad/1', 'pad/2'];
 for (const k of BK_KANAELE) for (let n = 1; n <= 8; n++) REGLER.set(`${k}/bk/${n}`, { ...R(LIN, 0, 1, 0.5), kanal: k });
+// S14 (§1.5): eight graph knobs fx/<n>/bk/<m> per send return fx/3, fx/4; global (no channel), alle dürfen, 0..1, default 0.5
+export const BK_SEND_KANAELE = ['fx/3', 'fx/4'];
+for (const k of BK_SEND_KANAELE) for (let n = 1; n <= 8; n++) REGLER.set(`${k}/bk/${n}`, { ...R(LIN, 0, 1, 0.5), kanal: null });
 
 export const kanalVon = (pfad) => REGLER.get(pfad)?.kanal ?? null;
 export const istDeck = (k) => typeof k === 'string' && /^deck\/[1-4]$/.test(k);

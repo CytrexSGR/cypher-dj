@@ -33,7 +33,7 @@ test('neu und öffnen mit der Kern-Attrappe: Wiedergabe geladen (Quittung 3), er
   assert.equal(n.j.slug, 'first-track');
   assert.equal(n.j.kern.wiedergabe.quittung.status, 3, 'Attrappe lädt die Wiedergabe');
   assert.deepEqual(n.j.kern.regler_fehler, [], 'erz/4 und Spur-Regler angenommen');
-  assert.equal(anKern(log, '/k/teil').filter((z) => /^spur\//.test(z.felder.pfad)).length, 4 * MAX_SPUREN);
+  assert.equal(anKern(log, '/k/teil').filter((z) => /^spur\/\d+\/(fader|pan|mute|solo)$/.test(z.felder.pfad)).length, 4 * MAX_SPUREN);
   assert.equal(anKern(log, '/k/teil').filter((z) => /^erz\/4\//.test(z.felder.pfad)).length, 16);
   assert.deepEqual(anKern(log, '/k/arr/laden').map((z) => z.felder.nr), [n.j.projekt.wiedergabe_rev]);
   assert.deepEqual((await ruf(url, 'GET', '/proj/liste')).j.map((e) => [e.slug, e.name]), [['first-track', 'First Track']]);

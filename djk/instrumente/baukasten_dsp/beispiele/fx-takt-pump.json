@@ -1,0 +1,34 @@
+{
+  "format": "baukasten/2",
+  "name": "fx-takt-pump",
+  "stimmen": 1,
+  "regler_namen": {"1": "Pump depth"},
+  "knoten": [
+    {"id": "ein", "art": "eingang"},
+    {"id": "lfo", "art": "lfo", "form": 2, "takt": 1},
+    {"id": "k_depth", "art": "regler", "nr": 1, "min": 0, "max": 0.3},
+    {"id": "fall", "art": "mul", "b": -0.5},
+    {"id": "fall1", "art": "add", "b": 0.5},
+    {"id": "key", "art": "mul"},
+    {"id": "komp", "art": "komp", "schwelle": -30, "ratio": 8, "knie": 3, "attack": 1, "release": 150},
+    {"id": "k_aus", "art": "regler", "nr": 1, "min": 1, "max": 4},
+    {"id": "gl", "art": "mul"},
+    {"id": "gr", "art": "mul"},
+    {"id": "aus", "art": "ausgang"}
+  ],
+  "kanten": [
+    {"von": "ein.l", "nach": "komp.l"},
+    {"von": "ein.r", "nach": "komp.r"},
+    {"von": "lfo.aus", "nach": "fall.a"},
+    {"von": "fall.aus", "nach": "fall1.a"},
+    {"von": "fall1.aus", "nach": "key.a"},
+    {"von": "k_depth.aus", "nach": "key.b"},
+    {"von": "key.aus", "nach": "komp.kl"},
+    {"von": "komp.l", "nach": "gl.a"},
+    {"von": "komp.r", "nach": "gr.a"},
+    {"von": "k_aus.aus", "nach": "gl.b"},
+    {"von": "k_aus.aus", "nach": "gr.b"},
+    {"von": "gl.aus", "nach": "aus.l"},
+    {"von": "gr.aus", "nach": "aus.r"}
+  ]
+}

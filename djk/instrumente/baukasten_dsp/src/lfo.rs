@@ -2,6 +2,8 @@
 //! Periode). Nicht bandbegrenzt, gedacht für langsame Modulation. Ohne `neustart` laufen alle Stimmen phasengleich
 //! (gleicher Start, gleiche Rate); mit `neustart` = 1 beginnt die Periode bei jedem Anschlag der Stimme neu.
 //! Taktsynchron mit dem Wert `takt` (Beats je Periode, S3c): die Phase kommt dann aus dem Host-Beat (`Programm::setze_takt`).
+//! S21: `takt` reaches 256 beats; `versatz` shifts the phase origin to a beat, `einmal` = 1 runs the phase 0..1 once and then
+//! holds the end value (an arrangement-length ramp). Both need `takt` > 0 and make the output a pure function of the beat.
 use crate::osz::Rauschen;
 
 #[derive(Clone, Copy)]

@@ -238,3 +238,107 @@ test('Ziel bk:<name>: Strom mit diesem Ziel, kein Kit geladen, Noten im Fenster'
   assert.deepEqual(b.elemente.slice(1).map((e) => e.werte[3]), [45, 48, 52, 57, 45, 48, 52, 57]);   // a2 c3 e3 a3, zwei Takte
   assert.doesNotMatch(log, /nicht lesbar/);   // kein Kit-Ladeversuch (der Kit-Ordner existiert nicht)
 });
+
+// Baukasten S15 task 2 (break 7): the erzeuger reports its note mode in status.json, from the process start on (before any
+// /uhr, so a restarted process never leaves the previous process's file). The page server refuses an instrument graph on a
+// stream whose mode is "kit" (its notes are kit indices, a graph would get the wrong notes or none).
+async function starteErzeuger(t, { ziel = '', vorMuster = null } = {}) {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'erz-noten-'));
+  fs.mkdirSync(path.join(tmp, 'kits/t'), { recursive: true });
+  fs.writeFileSync(path.join(tmp, 'kits/t/kit.json'), JSON.stringify({ schema: 1, name: 't', klaenge: [
+    { note: 0, name: 'bd:0', datei: 'bd_0.f32', frames: 1 }, { note: 1, name: 'hh:0', datei: 'hh_0.f32', frames: 1 }] }));
+  const muster = path.join(tmp, 'strom1.js');
+  if (vorMuster !== null) fs.writeFileSync(muster, vorMuster);
+  const kern = dgram.createSocket('udp4');
+  await new Promise((r) => kern.bind(0, '127.0.0.1', r));
+  let abo = null;
+  const eingang = [];
+  kern.on('message', (b) => { const m = dekodiere(b); eingang.push(m); if (m.adresse === '/k/hallo') abo = m.werte[1]; });
+  const args = ['--permission', `--allow-fs-read=${path.resolve(HIER, '../..')}`,
+    `--allow-fs-read=${process.env.HOME}/strudel`, `--allow-fs-read=${tmp}`, `--allow-fs-write=${tmp}`,
+    path.join(HIER, '../erzeuger.mjs'), '--kern-port', String(kern.address().port), '--abo-port', '0',
+    '--kit-ordner', path.join(tmp, 'kits'), '--kit', 't', '--muster', muster];
+  if (ziel) args.push('--ziel', ziel);
+  const p = spawn(process.execPath, args, { stdio: ['ignore', 'ignore', 'pipe'] });
+  let log = '';
+  p.stderr.on('data', (d) => { log += d; });
+  t.after(() => { p.kill('SIGTERM'); kern.close(); fs.rmSync(tmp, { recursive: true, force: true }); });
+  for (let i = 0; i < 100 && !abo; i++) await warte(50);
+  assert.ok(abo, `kein /k/hallo: ${log}`);
+  const uhr = (beat) => kern.send(kodiere('/uhr', 'hhddd', [0n, process.hrtime.bigint(), beat, 128, 0]), abo, '127.0.0.1');
+  const status = () => { try { return JSON.parse(fs.readFileSync(path.join(tmp, 'status.json'), 'utf8')); } catch { return null; } };
+  const senden = (buf) => kern.send(buf, abo, '127.0.0.1');
+  return { tmp, muster, uhr, status, senden, eingang, log: () => log };
+}
+
+test('status.json carries noten from the start: kit without --ziel, midi with midi:2:1 and bk:x', { timeout: 30000 }, async (t) => {
+  const erwartet = [['', 'kit'], ['midi:2:1', 'midi'], ['bk:juno-pad', 'midi']];
+  for (const [ziel, noten] of erwartet) {
+    const e = await starteErzeuger(t, { ziel });   // no /uhr is ever sent
+    let st = null;
+    for (let i = 0; i < 20 && !st; i++) { st = e.status(); if (!st) await warte(50); }
+    assert.ok(st, `no status.json before /uhr for ziel "${ziel}": ${e.log()}`);
+    assert.equal(st.noten, noten, `ziel "${ziel}"`);
+    assert.deepEqual(st.taub, []);
+    assert.equal(st.taub_muster, null);
+  }
+});
+
+test('noten stays in status.json after a pattern and after a broken pattern', { timeout: 20000 }, async (t) => {
+  const e = await starteErzeuger(t);
+  e.uhr(6.0);
+  await warte(300);
+  fs.writeFileSync(`${e.muster}.neu`, 's("bd*4")');
+  fs.renameSync(`${e.muster}.neu`, e.muster);
+  let st = null;
+  for (let i = 0; i < 40 && !(st && st.nr >= 1); i++) { await warte(50); st = e.status(); }
+  assert.ok(st && st.nr >= 1, `no pattern status: ${e.log()}`);
+  assert.equal(st.noten, 'kit');
+  assert.equal(st.fehler, null);
+  fs.writeFileSync(`${e.muster}.neu`, 's("hh*2")');   // second valid pattern: it takes over at the next bar (the first one starts at once)
+  fs.renameSync(`${e.muster}.neu`, e.muster);
+  await warte(600);
+  const s2 = e.status();
+  assert.equal(s2.noten, 'kit');
+  assert.equal(s2.ab_beat, 8);
+  assert.equal(s2.fehler, null);
+  fs.writeFileSync(`${e.muster}.neu`, 's("hh*2"');
+  fs.renameSync(`${e.muster}.neu`, e.muster);
+  await warte(600);
+  const sf = e.status();
+  assert.equal(sf.noten, 'kit');
+  assert.match(sf.fehler ?? '', /^Zeile 1: /);
+  assert.equal(sf.ab_beat, null);
+  assert.deepEqual(sf.taub, []);
+});
+
+// S17 race: the kern sends /e/neustart twice per generation (once as a broadcast at its start, once on the subscriber's
+// next heartbeat, netz.cpp erstes_in_generation). Announcing on both let the second announcement replace a graph that the
+// page server had restored in between. The stream is announced once per generation.
+test('after a kern restart the stream is announced once per generation', { timeout: 30000 }, async (t) => {
+  const e = await starteErzeuger(t, { ziel: 'midi:1:1' });
+  const strom = () => e.eingang.filter((m) => m.adresse === '/erz/strom').length;
+  const neustart = (g) => e.senden(kodiere('/e/neustart', 'ih', [g, 0n]));
+  const willkommen = (g) => e.senden(kodiere('/k/willkommen', 'iihdds', [1, g, 0n, 0, 128, 'test']));
+  e.uhr(6.0);
+  await warte(300);
+  const start = strom();
+  assert.equal(start, 1, 'one announcement on the first /uhr');
+  neustart(1);                                // the broadcast at the kern start
+  await warte(300);
+  assert.equal(strom(), start + 1, 'the first /e/neustart of generation 1 announces');
+  willkommen(1);                              // the heartbeat repeat of netz.cpp: /k/willkommen then /e/neustart, same generation
+  neustart(1);
+  await warte(300);
+  assert.equal(strom(), start + 1, 'the repeat of generation 1 must not announce again');
+  // negative control: a real new generation announces again
+  neustart(2);
+  await warte(300);
+  assert.equal(strom(), start + 2, 'generation 2 announces');
+  // reset rule: a /k/willkommen with another generation (a braked kern start, generation 0) forgets the announced one,
+  // so a later /e/neustart that happens to carry generation 2 again is a new kern and announces
+  willkommen(0);
+  neustart(2);
+  await warte(300);
+  assert.equal(strom(), start + 3, 'after a /k/willkommen of another generation the same number announces again');
+});

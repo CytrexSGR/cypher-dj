@@ -1,0 +1,41 @@
+{
+  "format": "baukasten/2",
+  "name": "fx-bandecho",
+  "stimmen": 1,
+  "knoten": [
+    {"id": "ein", "art": "eingang"},
+    {"id": "rate", "art": "konst", "wert": 0.7},
+    {"id": "wow", "art": "lfo", "form": 0, "takt": 0},
+    {"id": "tiefe", "art": "mul", "b": 1.5},
+    {"id": "mitte", "art": "add", "b": 350},
+    {"id": "echo", "art": "delay", "zeit": 350, "fb": 0.55, "mix": 1, "daempf": 2500},
+    {"id": "minus_l", "art": "mul", "b": -1},
+    {"id": "minus_r", "art": "mul", "b": -1},
+    {"id": "nass_l", "art": "add"},
+    {"id": "nass_r", "art": "add"},
+    {"id": "antrieb", "art": "konst", "wert": 4},
+    {"id": "sl", "art": "saett"},
+    {"id": "sr", "art": "saett"},
+    {"id": "aus", "art": "ausgang"}
+  ],
+  "kanten": [
+    {"von": "rate.aus", "nach": "wow.rate"},
+    {"von": "wow.aus", "nach": "tiefe.a"},
+    {"von": "tiefe.aus", "nach": "mitte.a"},
+    {"von": "mitte.aus", "nach": "echo.zeit"},
+    {"von": "ein.l", "nach": "echo.l"},
+    {"von": "ein.r", "nach": "echo.r"},
+    {"von": "ein.l", "nach": "minus_l.a"},
+    {"von": "ein.r", "nach": "minus_r.a"},
+    {"von": "echo.l", "nach": "nass_l.a"},
+    {"von": "minus_l.aus", "nach": "nass_l.b"},
+    {"von": "echo.r", "nach": "nass_r.a"},
+    {"von": "minus_r.aus", "nach": "nass_r.b"},
+    {"von": "nass_l.aus", "nach": "sl.x"},
+    {"von": "nass_r.aus", "nach": "sr.x"},
+    {"von": "antrieb.aus", "nach": "sl.antrieb"},
+    {"von": "antrieb.aus", "nach": "sr.antrieb"},
+    {"von": "sl.aus", "nach": "aus.l"},
+    {"von": "sr.aus", "nach": "aus.r"}
+  ]
+}

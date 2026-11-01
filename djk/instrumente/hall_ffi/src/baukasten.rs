@@ -6,8 +6,9 @@
 //! Sample-Versatz relativ zum Anfang des nächsten `cypher_bk_block` in eine Warteschlange fester Größe; ein Versatz hinter
 //! dem Block wandert in den Folgeblock. Am selben Sample: alle_aus vor aus vor an, sonst in Meldereihenfolge. Ein Panic
 //! im Block kommt nicht über die Grenze: Stille, Zurücksetzen, Warteschlange leer, `panik` zählt.
-use baukasten_dsp::{uebersetze, Programm, REGLER};
+use baukasten_dsp::{uebersetze_mit_wurzel, Programm, REGLER};
 use std::ffi::{c_char, CStr};
+use std::os::unix::ffi::OsStrExt;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
 /// Ereignisse bis zum nächsten Block (wie RB_MAX_EREIGNISSE). Mehr meldet `-1` und zählt `verloren`.
@@ -143,17 +144,28 @@ fn schreibe_fehler(ziel: *mut c_char, laenge: usize, text: &str) {
 
 /// Übersetzt den Graphen `json` (UTF-8, nullterminiert) für die Rate `fs`. Fehler: nullptr und Text in `fehler`
 /// (höchstens `fehler_laenge` Bytes mit Null; `fehler` darf null sein). Allokiert: nur außerhalb des Callbacks.
+/// Ohne Sample-Wurzel: ein Graph mit `sampler`-Knoten ist ein Fehler ("no sample root").
 #[no_mangle]
 pub extern "C" fn cypher_bk_neu(json: *const c_char, fs: f64, fehler: *mut c_char, fehler_laenge: usize) -> *mut CypherBk {
+    cypher_bk_neu_wurzel(json, fs, std::ptr::null(), fehler, fehler_laenge)
+}
+
+/// Wie `cypher_bk_neu`, mit Sample-Wurzel für `sampler`-Knoten (S10): `wurzel` ist ein nullterminierter Ordnerpfad, die
+/// Dateien `wurzel/<datei>` werden hier gelesen (Netz-Faden), nie im Callback. `wurzel` null: wie `cypher_bk_neu`.
+#[no_mangle]
+pub extern "C" fn cypher_bk_neu_wurzel(json: *const c_char, fs: f64, wurzel: *const c_char, fehler: *mut c_char, fehler_laenge: usize) -> *mut CypherBk {
     if json.is_null() || !(fs.is_finite() && fs > 0.0) {
         schreibe_fehler(fehler, fehler_laenge, "json null oder fs ungültig");
         return std::ptr::null_mut();
     }
     // SAFETY: json ist nullterminiert (Vertrag des Kopfes)
     let text = unsafe { CStr::from_ptr(json) };
+    // SAFETY: wurzel ist null oder nullterminiert (Vertrag des Kopfes)
+    let wurzel = (!wurzel.is_null()).then(|| unsafe { CStr::from_ptr(wurzel) });
     let r = catch_unwind(|| -> Result<Programm, String> {
         let s = text.to_str().map_err(|e| format!("kein UTF-8: {e}"))?;
-        let mut p = uebersetze(s, fs as f32).map_err(|e| e.to_string())?;
+        let w = wurzel.map(|c| std::path::Path::new(std::ffi::OsStr::from_bytes(c.to_bytes())));
+        let mut p = uebersetze_mit_wurzel(s, fs as f32, w).map_err(|e| e.to_string())?;
         p.zuruecksetzen();
         Ok(p)
     });
@@ -229,6 +241,41 @@ pub extern "C" fn cypher_bk_regler(h: *mut CypherBk, nr: u32, wert: f32) -> i32 
         bk.ziel[nr as usize - 1] = wert.clamp(0.0, 1.0);
     }
     0
+}
+
+/// S20: like `cypher_bk_regler`, but the smoothed state jumps to the target at once (no 20 ms ramp). The arrangement sink uses it when it
+/// takes over a new instance and at transport start, so that live and the offline render begin from the same knob values whatever
+/// the pre-roll (the offline render has only three blocks before the first note). Returns 0, -1 for h null or nr outside 1..8; NaN is
+/// ignored. Does not allocate; not concurrent with block.
+#[no_mangle]
+pub extern "C" fn cypher_bk_regler_sofort(h: *mut CypherBk, nr: u32, wert: f32) -> i32 {
+    // SAFETY: wie cypher_bk_note_an
+    let Some(bk) = (unsafe { h.as_mut() }) else { return -1 };
+    if !(1..=REGLER as u32).contains(&nr) {
+        return -1;
+    }
+    if !wert.is_nan() {
+        let i = nr as usize - 1;
+        let w = wert.clamp(0.0, 1.0);
+        bk.ziel[i] = w;
+        bk.ist[i] = w;
+        bk.p.setze_regler(nr as usize, w);
+    }
+    0
+}
+
+/// S20: resets the program as after `cypher_bk_neu` (voices, oscillators, filters, envelopes, slots, noise, delay and reverb
+/// buffers) and empties the event queue. The knob targets and the smoothed knob state stay (as `Programm::zuruecksetzen`
+/// keeps the knob paths). The arrangement sink calls this at transport start so that live and the offline render start
+/// from the same state. h null: no effect. Does not allocate; not concurrent with block.
+#[no_mangle]
+pub extern "C" fn cypher_bk_zuruecksetzen(h: *mut CypherBk) {
+    // SAFETY: wie cypher_bk_note_an
+    let Some(bk) = (unsafe { h.as_mut() }) else { return };
+    if catch_unwind(AssertUnwindSafe(|| bk.p.zuruecksetzen())).is_err() {
+        bk.panik += 1;
+    }
+    bk.n_warte = 0;
 }
 
 /// Rechnet `n` Samples Stereo in `aus_l`/`aus_r` (überschreibt). h null: Stille, Rückgabe 0. Panic: Stille,

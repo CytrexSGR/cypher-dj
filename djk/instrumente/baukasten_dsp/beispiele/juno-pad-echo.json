@@ -8,9 +8,9 @@
     "3": "Env amount",
     "4": "Attack",
     "5": "Release",
-    "6": "PWM depth",
-    "7": "Sub",
-    "8": "Chorus"
+    "6": "Echo mix",
+    "7": "Echo time",
+    "8": "Hall mix"
   },
   "knoten": [
     {
@@ -43,38 +43,39 @@
       "id": "k_attack",
       "art": "regler",
       "nr": 4,
-      "min": 0.05,
-      "max": 5,
+      "min": 0.04,
+      "max": 1.6,
       "log": 1
     },
     {
       "id": "k_release",
       "art": "regler",
       "nr": 5,
-      "min": 0.3,
-      "max": 8,
+      "min": 0.08,
+      "max": 1.2,
       "log": 1
     },
     {
-      "id": "k_pwm",
+      "id": "k_echo_mix",
       "art": "regler",
       "nr": 6,
       "min": 0,
-      "max": 0.8
+      "max": 0.6
     },
     {
-      "id": "k_sub",
+      "id": "k_echo_zeit",
       "art": "regler",
       "nr": 7,
-      "min": 0,
-      "max": 0.5
+      "min": 93.75,
+      "max": 1500,
+      "log": 1
     },
     {
-      "id": "k_chorus",
+      "id": "k_hall_mix",
       "art": "regler",
       "nr": 8,
       "min": 0,
-      "max": 1.5
+      "max": 0.5
     },
     {
       "id": "lfo",
@@ -84,7 +85,8 @@
     },
     {
       "id": "pwm",
-      "art": "mul"
+      "art": "mul",
+      "b": 0.4
     },
     {
       "id": "saege",
@@ -115,7 +117,8 @@
     },
     {
       "id": "p_sub",
-      "art": "mul"
+      "art": "mul",
+      "b": 0.25
     },
     {
       "id": "mix",
@@ -158,16 +161,17 @@
     {
       "id": "chorus",
       "art": "chorus",
-      "modus": 2
+      "modus": 2,
+      "mix": 0.75
     },
     {
       "id": "echo",
       "art": "delay",
-      "zeit": 375,
       "fb": 0.35,
       "mix": 0.3,
       "daempf": 3000,
-      "pingpong": 1
+      "pingpong": 1,
+      "max": 1500
     },
     {
       "id": "hall",
@@ -212,8 +216,8 @@
       "nach": "pwm.a"
     },
     {
-      "von": "k_pwm.aus",
-      "nach": "pwm.b"
+      "von": "k_echo_mix.aus",
+      "nach": "echo.mix"
     },
     {
       "von": "pwm.aus",
@@ -232,8 +236,8 @@
       "nach": "p_sub.a"
     },
     {
-      "von": "k_sub.aus",
-      "nach": "p_sub.b"
+      "von": "k_echo_zeit.aus",
+      "nach": "echo.zeit"
     },
     {
       "von": "p_saege.aus",
@@ -312,8 +316,8 @@
       "nach": "chorus.x"
     },
     {
-      "von": "k_chorus.aus",
-      "nach": "chorus.mix"
+      "von": "k_hall_mix.aus",
+      "nach": "hall.mix"
     },
     {
       "von": "chorus.l",

@@ -2,7 +2,7 @@
 // Öffnen sendet nichts an den Kern: gesendet wird nur auf einen Griff (Zeiger, Rad, Klick) oder LOAD.
 // Lesen: /strom (Kern über den Seiten-Server), Leitstand-WS als Rolle "anzeige" (takt, ansage, ereignis).
 import { DECKS, ERZEUGER, LOOPBOXEN, GRIFF, art, griffZuMidi, formatiere, vorgabe, setzeZielKurve } from './kurven.js';
-import { KOMP_PRESETS, KOMP_SCHLUESSEL, kennlinienPfad, AUTO_BEREICH, DURCHGAENGE, AUTO_VORLAGEN, vorlagePunkte, punktAusStelle, fxInhaltText, knobListe, KNOB_GRUPPE, htmlText, bkKnobListe } from './effekte.js';
+import { KOMP_PRESETS, KOMP_SCHLUESSEL, kennlinienPfad, AUTO_BEREICH, DURCHGAENGE, AUTO_VORLAGEN, vorlagePunkte, punktAusStelle, fxInhaltText, knobListe, KNOB_GRUPPE, htmlText, bkKnobListe, bkKnobHtml, graphWahlHtml, GRAPH_KANAL_ART, sendRueckHtml, lernKnopfHtml, lernStand, bkMarke, bkSpeichernHtml } from './effekte.js';
 import { KOPIE_TEXT, HAND_PRUEFMODUS_TEXT, cypherStand, ausgangAnzeige, keylockStand, keylockAnfrage, keylockMeldung, variText, einsHinweis, EINS_HINWEIS_TEXT } from './meldungen.js';
 import { leseWelle, Kopf, Laufansicht, Uebersicht, SR, laengeFrames, ersteVolleEins } from './welle.js';
 import { bindeSpurbaender } from './spurband_ansicht.js';
@@ -586,8 +586,8 @@ async function schalteKeylock() {
 // Effekt-Sektion (Plan 2026-10-11-effekt-sektion.md, Andreas: „tauschoberfläche gegen die libary unten“): unten LIBRARY |
 // EFFECTS; EFFECTS zeigt je Quellkanal einen Streifen mit dem Kompressor (<k>/komp/*), Bedienung über /regler (sofort),
 // Absenkung aus /zustand/komp (10 Hz je aktivem Kompressor). Der gewählte Bereich gilt je Betrachter (localStorage).
-const FX_KANAELE = [['deck/1', 'A'], ['deck/2', 'B'], ['erz/1', 'DRUMS'], ['erz/2', 'BASS'], ['erz/3', 'MELODY'], ['pad/1', 'L1'], ['pad/2', 'L2']];
-const FX_INDEX = { 'deck/1': 0, 'deck/2': 1, 'erz/1': 4, 'erz/2': 5, 'erz/3': 6, 'pad/1': 12, 'pad/2': 13 };   // Mixer-Index (komp/sc = Index + 1)
+const FX_KANAELE = [['deck/1', 'A'], ['deck/2', 'B'], ['erz/1', 'DRUMS'], ['erz/2', 'BASS'], ['erz/3', 'MELODY'], ['erz/5', 'I5'], ['erz/6', 'I6'], ['erz/7', 'I7'], ['pad/1', 'L1'], ['pad/2', 'L2']];
+const FX_INDEX = { 'deck/1': 0, 'deck/2': 1, 'erz/1': 4, 'erz/2': 5, 'erz/3': 6, 'erz/5': 8, 'erz/6': 9, 'erz/7': 10, 'pad/1': 12, 'pad/2': 13 };   // Mixer-Index (komp/sc = Index + 1)
 const KOMP_REGLER = [
   { feld: 'schwelle', name: 'THR', min: -60, max: 0, schritt: 0.5, vorgabe: -18, text: (w) => `${w.toFixed(1)}` },
   { feld: 'ratio', name: 'RATIO', min: 1, max: 20, schritt: 0.1, vorgabe: 4, text: (w) => `${w.toFixed(1)}:1` },
@@ -611,6 +611,69 @@ async function setzeKomp(pfad, nach) {
     else if (j?.quittung?.status === 6) melde(`Compressor refused: ${j.quittung.grund}`, true);
   } catch (e) { melde(`Page server unreachable: ${e.message}`, true); }
 }
+// Baukasten S12: graph picker. graphenInfo = GET /graphen (the folder), graphenGeladen = what the page server sent per channel
+// (SSE: stand.graphen_geladen, then a:'graphen'). Pickers sit on the strips of deck/1, deck/2, erz/2, erz/3, erz/5..7 (I5..I7), pad/1, pad/2, in the detail view
+// and in the SEND RETURNS block (fx/3, fx/4); deck/3, deck/4 have no strip.
+let graphenInfo = { graphen: [], uebersprungen: [] };
+let graphenGeladen = {};
+function graphVon(k) {
+  const n = graphenGeladen[k];
+  return n ? (graphenInfo.graphen.find((g) => g.name === n) ?? { name: n, regler_namen: {} }) : null;
+}
+function zeigeGraphWahl() {
+  for (const platz of $$('[data-graphplatz]')) {
+    const k = platz.dataset.graphplatz;
+    if (platz.contains(document.activeElement)) continue;   // do not pull the list away while it is open
+    platz.innerHTML = graphWahlHtml(k, graphenInfo.graphen, graphenGeladen[k] ?? '')
+      + bkSpeichernHtml(k, bkMarke(k, bkGespeichert, graphenGeladen[k], zustand.regler), bkGespeichert !== null, graphenGeladen[k]);   // S17
+  }
+}
+// S17: sound snapshot of the open project. bkGespeichert = GET /proj/bk gespeichert, null without a project. Fetched on start, on SSE 'proj'
+// (debounced) and after SAVE SOUND; the marker follows the live knob values without polling (a knob event refreshes it at most every 250 ms).
+let bkGespeichert = null, bkTimer = null, bkMarkeTimer = null;
+async function holeBk() {
+  try {
+    const r = await fetch('/proj/bk');
+    bkGespeichert = r.ok ? ((await r.json()).gespeichert ?? []) : null;
+  } catch { /* the page server is gone: keep what the marker had */ }
+  zeigeGraphWahl();
+}
+function holeBkSpaeter() { clearTimeout(bkTimer); bkTimer = setTimeout(holeBk, 300); }
+function bkMarkeSpaeter() { if (!bkMarkeTimer) bkMarkeTimer = setTimeout(() => { bkMarkeTimer = null; zeigeGraphWahl(); }, 250); }
+async function speichereSound(kanal) {
+  let r;
+  try { r = await postJson('/proj/bk/merken', { kanaele: [kanal] }); } catch (e) { melde(`Page server unreachable: ${e.message}`, true); return; }
+  window.djkGesendet.push({ bk_merken: { kanal }, code: r.code, antwort: r.j });
+  if (!r.ok) melde(`Save sound refused: ${r.j?.text ?? r.j?.fehler ?? r.code}`, true);
+  else if (r.j?.bk?.unbekannt?.length) melde(`Sound saved; ${r.j.bk.unbekannt.length} knob value(s) were unknown and kept as stored`, false);
+  await holeBk();
+}
+async function holeGraphen() {
+  try {
+    const j = await (await fetch('/graphen')).json();
+    if (Array.isArray(j.graphen)) { graphenInfo = { graphen: j.graphen, uebersprungen: j.uebersprungen ?? [] }; graphenGeladen = j.geladen ?? graphenGeladen; }
+    zeigeGraphWahl();
+    baueSendKnobs();
+    if (GRAPH_KANAL_ART[fxGewaehlt] || $('#fxdetail')?.firstChild) baueFxDetail();
+  } catch { /* the page server is gone: the picker keeps what it had */ }
+}
+function setzeGraphenGeladen(neu) {
+  const vorher = graphenGeladen[fxGewaehlt];
+  graphenGeladen = neu ?? {};
+  zeigeGraphWahl();
+  baueSendKnobs();
+  if (graphenGeladen[fxGewaehlt] !== vorher) baueFxDetail();   // knob names (and the Surge knobs of erz/2, erz/3) follow the graph
+}
+async function waehleGraph(kanal, name) {
+  let r;
+  try { r = await postJson('/graph', { kanal, name }); } catch (e) { melde(`Page server unreachable: ${e.message}`, true); zeigeGraphWahl(); return; }
+  window.djkGesendet.push({ graph: { kanal, name }, code: r.code, antwort: r.j });
+  if (!r.ok) melde(`Graph refused: ${r.j?.text ?? r.j?.fehler ?? r.code}`, true);
+  else if (r.j?.quittung?.status === 6) melde(`Graph refused: ${r.j.quittung.grund}`, true);
+  else if (!r.j?.quittung) melde('Graph: no answer from the core yet (a large sampler loads slowly); check the picker', true);
+  else if (r.j?.warnung) melde(`Graph loaded, but: ${r.j.warnung}`, true);   // kit-mode stream: Andreas is warned, not locked
+  zeigeGraphWahl();   // back to what is really loaded when refused
+}
 function baueFxStreifen() {
   const reihe = $('#fxstreifen');
   reihe.replaceChildren();
@@ -620,6 +683,7 @@ function baueFxStreifen() {
     s.dataset.kanal = k;
     s.innerHTML = `<div class="fxname"><span>${name}</span><button class="komp-an" title="Compressor on/off (${k})">COMP</button></div>`
       + `<div class="fxinhalt" data-fxinhalt="${k}" title="What plays on this channel">–</div>`
+      + (GRAPH_KANAL_ART[k] ? `<div class="graphplatz" data-graphplatz="${k}"></div>` : '')
       + `<div class="fxpegel"><div class="meter waagrecht" data-kanal="${k}"><i></i></div><span data-fxpegel="${k}">−∞</span></div>`
       + KOMP_REGLER.map((r) => `<label>${r.name}<input type="range" data-komp-feld="${r.feld}" min="${r.min}" max="${r.max}" step="${r.schritt}" aria-label="${name} compressor ${r.name}"><output></output></label>`).join('')
       + '<div class="gr" title="Gain reduction"><i></i></div><div class="grzahl">GR –</div>';
@@ -634,6 +698,12 @@ function baueFxStreifen() {
     }
     reihe.append(s);
   }
+  const send = document.createElement('div');   // SEND RETURNS: graph picker and the eight knobs fx/<n>/bk/1..8 (S14)
+  send.className = 'sendrueck';
+  send.innerHTML = sendRueckHtml();
+  reihe.append(send);
+  zeigeGraphWahl();
+  baueSendKnobs();
   zeigeKomp();
 }
 function zeigeKomp(nur) {
@@ -681,9 +751,10 @@ function baueFxDetail() {
   d.innerHTML = `<div class="fxkopf"><b>${name}</b><span class="klein">${k}</span><button class="komp-an" title="Compressor on/off">COMP</button>
       <select class="preset" aria-label="Preset"><option value="">Preset…</option>${Object.keys(KOMP_PRESETS).map((n) => `<option>${n}</option>`).join('')}</select>
       <label class="klein">KEY <select class="schluessel" title="Sidechain: the detector listens to this channel's input (Kick Sidechain: DRUMS)">${KOMP_SCHLUESSEL.filter(([w]) => w === 0 || w !== FX_INDEX[k] + 1).map(([w, n]) => `<option value="${w}">${n}</option>`).join('')}</select></label></div>
+    ${GRAPH_KANAL_ART[k] ? `<div class="graphplatz graphdetail" data-graphplatz="${k}"></div>` : ''}
     <div class="regler-liste">${KOMP_DETAIL.map((r) => `<label>${r.name}<input type="range" data-komp-feld="${r.feld}" min="${r.min}" max="${r.max}" step="${r.schritt}"><output></output></label>`).join('')}
-      ${KNOB_GRUPPE[k] ? '<div class="knobbereich"><span class="bildtitel">INSTRUMENT KNOBS <b class="knobstatus">…</b></span><div class="knobliste"></div></div>' : ''}
-      ${bkKnobListe(k, {}).length ? '<div class="knobbereich"><span class="bildtitel">GRAPH KNOBS <b>Knob 1..8 of the loaded graph</b></span><div class="bkliste"></div></div>' : ''}</div>
+      ${KNOB_GRUPPE[k] && !graphVon(k) ? '<div class="knobbereich"><span class="bildtitel">INSTRUMENT KNOBS <b class="knobstatus">…</b></span><div class="knobliste"></div></div>' : ''}
+      ${bkKnobListe(k, {}, { graph: graphVon(k) }).length ? `<div class="knobbereich"><span class="bildtitel">GRAPH KNOBS <b>${graphVon(k) ? htmlText(graphVon(k).name) : 'Knob 1..8 of the loaded graph'}</b></span><div class="bkliste"></div></div>` : ''}</div>
     <div class="bilder"><span class="bildtitel">TRANSFER CURVE (knee 6 dB)</span>
       <svg viewBox="0 0 240 168" aria-label="Transfer curve"><line class="achse" x1="0" y1="168" x2="240" y2="48"/><line class="schwelle"/><path class="kurve"/></svg>
       <span class="bildtitel">GAIN REDUCTION, LAST 10 S</span><canvas width="480" height="100" aria-label="Gain reduction history"></canvas></div>
@@ -711,8 +782,9 @@ function baueFxDetail() {
     });
   }
   if (k.startsWith('pad/')) bindeAutomation(d, Number(k.slice(4)));
-  if (KNOB_GRUPPE[k]) bindeKnobs(d, KNOB_GRUPPE[k]);
+  if (KNOB_GRUPPE[k] && !graphVon(k)) bindeKnobs(d, KNOB_GRUPPE[k]);
   bindeBkKnobs(d, k);
+  zeigeGraphWahl();
   zeigeFxDetail();
 }
 // Baukasten S2: die acht Knobs von Cypher Modular (POST /klang params/param). Ein Surge-Wirt meldet keine Knobs; dann steht das da.
@@ -742,11 +814,51 @@ async function bindeKnobs(d, gruppe) {
     });
   }
 }
+// S19 (MIDI learn): the learn table as the page server reports it (GET /lernen); the buttons next to the graph knobs follow it
+let lernen = { zuordnungen: [], wartet: null, midi: { port: null }, datei: 'fehlt' };
+function setzeLernen(neu) {
+  if (!neu || !Array.isArray(neu.zuordnungen)) return;
+  lernen = neu;
+  zeigeLernen();
+}
+function zeigeLernen() {
+  for (const platz of $$('[data-lern-platz]')) {
+    const pfad = platz.dataset.lernPlatz;
+    platz.innerHTML = lernKnopfHtml(pfad, lernStand(lernen.zuordnungen, pfad), { midi: !!lernen.midi?.port, wartet: lernen.wartet?.pfad ?? null });
+  }
+}
+async function holeLernen() {
+  try { setzeLernen(await (await fetch('/lernen')).json()); } catch { /* the page server is gone: the buttons keep what they had */ }
+}
+async function lernSchicken(pfad, daten) {
+  let r;
+  try { r = await postJson(pfad, daten); } catch (e) { melde(`Learn not sent: ${e.message}`, true); return; }
+  window.djkGesendet.push({ lernen: { pfad, daten }, code: r.code, antwort: r.j });
+  if (!r.ok) { melde(`Learn refused: ${r.j?.text ?? r.j?.fehler ?? r.code}`, true); holeLernen(); return; }
+  setzeLernen(r.j);
+}
+const LERN_MELDUNG = {
+  fertig: (f) => [`Learned: ${f.pfad} follows CC${f.nr} ch${f.kanal}`, false],
+  geloescht: (f) => [`MIDI assignment of ${f.pfad} removed`, false],
+  belegt: (f) => [`CC${f.nr} ch${f.kanal} already drives a knob of the base mapping; nothing changed`, true],
+  hand_in: (f) => [f.text, true],
+  abgelaufen: (f) => [`Learn timed out for ${f.pfad}`, true],
+  abbrechen: () => ['', false],
+  abgelehnt: (f) => [`The core refused the learn table (${f.grund}); the previous table is kept`, true],
+  ohne_antwort: () => ['Learn table saved; the core did not answer yet, it loads it at its next start', true],
+};
+function lernEreignis(f) {
+  const m = LERN_MELDUNG[f?.stand];
+  if (m) { const [text, fehler] = m(f); if (text) melde(text, fehler); }
+  holeLernen();
+}
 // S5r: graph knobs <channel>/bk/1..8 over POST /regler (set at once, the engine smooths 20 ms); actual value from the control state
 function bindeBkKnobs(d, k) {
   const liste = d.querySelector('.bkliste');
   if (!liste) return;
-  liste.innerHTML = bkKnobListe(k, zustand.regler).map((x) => `<label>${x.name}<input type="range" min="0" max="1" step="0.001" value="${x.wert}" data-bk="${x.pfad}" aria-label="${k} ${x.name}"><output>${x.wert.toFixed(2)}</output></label>`).join('');
+  liste.innerHTML = bkKnobListe(k, zustand.regler, { graph: graphVon(k) })
+    .map((x) => `<div class="bkzeile">${bkKnobHtml(x, k)}<span data-lern-platz="${htmlText(x.pfad)}"></span></div>`).join('');   // names from a graph file: escaped in bkKnobHtml
+  zeigeLernen();
   for (const inp of liste.querySelectorAll('input[data-bk]')) {
     let warte = null;
     inp.addEventListener('input', () => {
@@ -761,8 +873,13 @@ function bindeBkKnobs(d, k) {
     });
   }
 }
+// S14: knobs of the send returns; rebuilt when the graph (and so the knob names) changes, values refreshed from /e/regler
+function baueSendKnobs() {
+  for (const z of $$('.sendzeile[data-kanal]')) if (!z.contains(document.activeElement)) bindeBkKnobs(z, z.dataset.kanal);
+}
+function zeigeSendKnobs() { for (const z of $$('.sendzeile[data-kanal]')) zeigeBkKnobs(z, z.dataset.kanal); }
 function zeigeBkKnobs(d, k) {
-  for (const x of bkKnobListe(k, zustand.regler)) {
+  for (const x of bkKnobListe(k, zustand.regler, { graph: graphVon(k) })) {
     const inp = d.querySelector(`input[data-bk="${x.pfad}"]`);
     if (!inp || document.activeElement === inp) continue;
     inp.value = String(x.wert);
@@ -916,8 +1033,25 @@ function bindeEffekte() {
   baueFxStreifen();
   $('#fxstreifen').addEventListener('click', (e) => {
     const s = e.target.closest('.fxstreifen');
-    if (s && !e.target.closest('button, input')) waehleFx(s.dataset.kanal);
+    if (s && !e.target.closest('button, input, select')) waehleFx(s.dataset.kanal);
   });
+  document.addEventListener('change', (e) => {   // S12: graph pickers (strips, detail, send returns)
+    const sel = e.target.closest?.('select.graphwahl');
+    if (sel) waehleGraph(sel.dataset.graphwahl, sel.value);
+  });
+  document.addEventListener('click', (e) => {   // S17: SAVE SOUND
+    const b = e.target.closest?.('button[data-bkmerken]');
+    if (b) { const k = b.dataset.bkmerken; b.blur(); speichereSound(k); }
+  });
+  holeBk();
+  holeGraphen();
+  holeLernen();   // S19
+  document.addEventListener('click', (e) => {   // S19: learn button (arm / cancel) and remove control of a learned knob
+    const lb = e.target.closest?.('button[data-lern]'), wb = e.target.closest?.('button[data-lern-weg]');
+    if (lb) lernSchicken('/lernen', { pfad: lernen.wartet?.pfad === lb.dataset.lern ? null : lb.dataset.lern });
+    else if (wb) lernSchicken('/lernen/loeschen', { pfad: wb.dataset.lernWeg });
+  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && lernen.wartet) lernSchicken('/lernen', { pfad: null }); });
   waehleFx(fxGewaehlt);
   setInterval(() => {   // 10 Hz: Verlauf der Absenkung aller Kanäle mitschreiben, das Detail zeichnen
     for (const [k] of FX_KANAELE) { const v = (kompVerlauf[k] ??= []); v.push(grJetzt(k)); if (v.length > 100) v.shift(); }
@@ -1955,10 +2089,14 @@ function strom() {
         if (Array.isArray(f.fx)) f.fx.forEach((x, u) => { if (x) fxVomKern(u, x); });
         if (f.fxZuweisung) f.fxZuweisung.forEach((m, u) => { for (const [kanal, an] of Object.entries(m)) fxZuweisungVomKern(u, kanal, an ? 1 : 0); });
         if (f.fxRouting) fxRoutingVomKern(f.fxRouting === 'insert' ? 1 : 0);
+        if (f.graphen_geladen) setzeGraphenGeladen(f.graphen_geladen);   // S12
         BOXEN.forEach(zeigeBox);
         $('#v-kern').classList.toggle('an', f.kern === 'verbunden');
         zeigePruefmodus(f.pruefmodus);
         break;
+      case 'graphen': setzeGraphenGeladen(f.geladen); break;   // S12
+      case 'lernen': lernEreignis(f); break;   // S19
+      case 'proj': holeBkSpaeter(); break;   // S17: the project changed or was opened
       case 'pruefmodus': zeigePruefmodus(f.stand); break;
       case 'kern': $('#v-kern').classList.toggle('an', f.zustand === 'verbunden'); break;
       case '/uhr':
@@ -1972,9 +2110,11 @@ function strom() {
         break;
       case '/e/regler':
         zustand.regler[f.pfad] = f.wert; zeigeWert(f.pfad);
+        if (/\/bk\/[1-8]$/.test(f.pfad)) bkMarkeSpaeter();   // S17: the saved/differs marker follows the graph knobs
         if (f.pfad === 'keylock') { zeigeKeylock(); zeigeDeck(1); zeigeDeck(2); }   // Keylock 3: Taste und VARI
         if (f.pfad === 'color/art' || f.pfad === 'color/param') zeigeColor();
         { const m = /^(.+)\/komp\/\w+$/.exec(f.pfad); if (m) { zeigeKomp(m[1]); if (m[1] === fxGewaehlt) zeigeFxDetail(); } }
+        if (/^fx\/[34]\/bk\//.test(f.pfad)) zeigeSendKnobs();   // S14: the send-return knobs follow the echo (also a move by Cypher)
         break;
       case '/zustand/komp':
         kompGr[f.kanal] = { db: Number(f.gr_db), t: performance.now() };

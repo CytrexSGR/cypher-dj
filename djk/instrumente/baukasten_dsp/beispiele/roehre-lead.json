@@ -1,0 +1,33 @@
+{
+  "format": "baukasten/2",
+  "name": "roehre-lead",
+  "stimmen": 4,
+  "regler_namen": {"1": "Drive", "2": "Cutoff"},
+  "knoten": [
+    {"id": "note", "art": "note"},
+    {"id": "k_drive", "art": "regler", "nr": 1, "min": 0, "max": 30},
+    {"id": "k_cutoff", "art": "regler", "nr": 2, "min": 300, "max": 8000, "log": 1},
+    {"id": "osz", "art": "saege"},
+    {"id": "hp", "art": "svf", "pole": 2, "cutoff": 300, "reso": 0},
+    {"id": "tube", "art": "roehre", "antrieb": 18, "stufen": 2},
+    {"id": "filter", "art": "ladder", "cutoff": 2500, "reso": 0.3},
+    {"id": "env", "art": "adsr", "a": 0.005, "d": 0.3, "s": 0.7, "r": 0.25},
+    {"id": "vca", "art": "mul"},
+    {"id": "pegel", "art": "mul", "b": 0.25},
+    {"id": "aus", "art": "ausgang"}
+  ],
+  "kanten": [
+    {"von": "note.hz", "nach": "osz.hz"},
+    {"von": "osz.aus", "nach": "hp.x"},
+    {"von": "hp.hp", "nach": "tube.x"},
+    {"von": "k_drive.aus", "nach": "tube.antrieb"},
+    {"von": "tube.aus", "nach": "filter.x"},
+    {"von": "k_cutoff.aus", "nach": "filter.cutoff"},
+    {"von": "note.gate", "nach": "env.gate"},
+    {"von": "note.trig", "nach": "env.trig"},
+    {"von": "filter.aus", "nach": "vca.a"},
+    {"von": "env.aus", "nach": "vca.b"},
+    {"von": "vca.aus", "nach": "pegel.a"},
+    {"von": "pegel.aus", "nach": "aus.x"}
+  ]
+}

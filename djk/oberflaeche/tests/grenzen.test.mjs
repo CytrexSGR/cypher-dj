@@ -29,7 +29,7 @@ test('Seite: die Neu-Knöpfe sperren erst bei MAX_SPUREN Spuren (nicht bei 8)', 
   try {
     const els = { koepfe: Object.assign(element(), { children: [], insertBefore(el) { this.children.push(el); } }) }; const $ = (k) => (els[k] ??= element());
     const beim = [];
-    bindeSpuren({ $, aendere() {}, aendereAus() {}, beimProjekt: beim });
+    bindeSpuren({ $, aendere() {}, aendereAus() {}, beimProjekt: beim, beimBild: [] });
     const spur = (i) => ({ id: `s${i}`, nr: i, name: 'x', farbe: '#000000', art: 'audio', fader_db: 0, pan: 0, mute: false, solo: false, clips: [] });
     const mit = (n) => ({ spuren: Array.from({ length: n }, (_, i) => spur(i + 1)) });
     for (const [n, gesperrt] of [[8, false], [9, false], [SEITE - 1, false], [SEITE, true]]) {
@@ -39,4 +39,11 @@ test('Seite: die Neu-Knöpfe sperren erst bei MAX_SPUREN Spuren (nicht bei 8)', 
       assert.equal(els['neu-surge'].disabled, gesperrt, `${n} Spuren: + Surge (ohne Wirt-Spur)`);
     }
   } finally { delete globalThis.document; }
+});
+
+test('slice 3: page and server have the same return limit', async () => {
+  const { MAX_RETURNS: SEITE_R } = await import('../oeffentlich/produktion/grenzen.js');
+  const { MAX_RETURNS: SERVER_R } = await import('../projekt/modell.ts');
+  assert.equal(SEITE_R, SERVER_R);
+  assert.equal(SERVER_R, 4);
 });

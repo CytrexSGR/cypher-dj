@@ -82,7 +82,7 @@ test('A4 Negativ-Kontrolle: verschiedene Nummer → erz/4, Loop, Metronom und al
   z.s.ereignis('/zustand/arr', arrNr(nr + 1));
   await z.s.oeffnen('wa', 'andreas');
   assert.equal(z.k.teile(/^erz\/4\//).length, 16); assert.equal(z.k.an('/k/arr/loop').length, 1); assert.equal(z.k.an('/k/arr/metronom').length, 1);
-  assert.equal(z.k.teile(/^spur\//).length, 4 * MAX_SPUREN);
+  assert.equal(z.k.teile(/^spur\/\d+\/(fader|pan|mute|solo)$/).length, 4 * MAX_SPUREN);
 });
 
 test('A4 unbekannter Ist-Wert: Kern liefert nur spur/1, Projekt hat spur/1 und spur/2 → spur/2 aus dem Projekt gesendet, spur/1 übernommen', async (t) => {
@@ -91,10 +91,10 @@ test('A4 unbekannter Ist-Wert: Kern liefert nur spur/1, Projekt hat spur/1 und s
   ist(z.s, 'spur/1/fader', -12); ist(z.s, 'spur/1/pan', 0.5); ist(z.s, 'spur/1/mute', 1); ist(z.s, 'spur/1/solo', 0);
   const r = await z.s.oeffnen('wa', 'andreas');
   assert.equal(r.j.kern.wiederanlauf, true);
-  assert.equal(z.k.teile(/^spur\/1\//).length, 0, 'spur/1 bekannt: nichts gesendet');
-  assert.deepEqual(z.k.teile(/^spur\/2\//).map((x) => [x.felder.pfad, x.felder.nach]),
+  assert.equal(z.k.teile(/^spur\/1\/(fader|pan|mute|solo)$/).length, 0, 'spur/1 bekannt: nichts gesendet');
+  assert.deepEqual(z.k.teile(/^spur\/2\/(fader|pan|mute|solo)$/).map((x) => [x.felder.pfad, x.felder.nach]),
     [['spur/2/fader', 0], ['spur/2/pan', 0], ['spur/2/mute', 0], ['spur/2/solo', 0]], 'spur/2 unbekannt: Projektwerte gesendet');
-  assert.equal(z.k.teile(/^spur\/([3-9]|[1-9][0-9])\//).length, 4 * (MAX_SPUREN - 2), 'freie Slots unbekannt: Vorgabe gesendet');
+  assert.equal(z.k.teile(/^spur\/([3-9]|[1-9][0-9])\/(fader|pan|mute|solo)$/).length, 4 * (MAX_SPUREN - 2), 'freie Slots unbekannt: Vorgabe gesendet');
   const sp = r.j.projekt.spuren;
   assert.deepEqual([sp[0].fader_db, sp[0].pan, sp[0].mute, sp[1].fader_db], [-12, 0.5, true, 0], 'spur/1 übernommen, spur/2 bleibt');
 });

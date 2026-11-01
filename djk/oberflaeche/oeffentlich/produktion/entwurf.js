@@ -4,6 +4,8 @@
 // gehen, auf eine flache Kopie an: was man sieht, ist genau das, was geschickt wird. Nur die Befehle, die ein Zug erzeugt
 // (clip_aendern, noten_neu, noten_aendern, noten_loeschen); alles andere bleibt unverändert. Prüfungen macht der Server.
 
+import { punkteNach } from './lanen.js';
+
 export function entwurf(projekt, befehle) {
   if (!projekt || !Array.isArray(befehle) || befehle.length === 0) return projekt;
   const p = { ...projekt, spuren: projekt.spuren.map((s) => ({ ...s, clips: [...s.clips] })) };
@@ -12,6 +14,16 @@ export function entwurf(projekt, befehle) {
     return null;
   };
   for (const b of befehle) {
+    if (b?.befehl === 'auto_punkte') {   // Automation Slice 1: the lane while a point is dragged (the same rule as the server, lanen.js punkteNach)
+      for (const s of p.spuren) {
+        const i = (s.automation ?? []).findIndex((l) => l.id === b.lane_id);
+        if (i < 0) continue;
+        const lanen = [...s.automation];
+        lanen[i] = { ...lanen[i], punkte: punkteNach(lanen[i].punkte, b) };
+        s.automation = lanen;
+      }
+      continue;
+    }
     const f = finde(b?.clip_id);
     if (!f) continue;
     const c = { ...f.s.clips[f.i] };

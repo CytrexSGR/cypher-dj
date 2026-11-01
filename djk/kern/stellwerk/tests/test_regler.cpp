@@ -26,8 +26,9 @@ FALL(zahl_der_regler_und_kanaele) {
   // mit `keylock`, seit 2026-10-10 mit `master/pfl`, seit 2026-10-11 mit `color/art` und `color/param`), dazu 14 Quellkanäle
   // x 8 `komp/*` (2026-10-11, mit komp/sc): 436; D1 K1/E3: dazu 32 Spuren x 4 Spur-Regler (spur/<n>/*, global): 564;
   // 1.10 Slice 1: dazu 8 Gruppen x 4 Gruppen-Regler (grp/<n>/*) und pm/fader: 597; S5r: dazu 12 Graph-Kanäle x 8
-  // Graph-Regler (<kanal>/bk/<1..8>): 693
-  PRUEFE_GLEICH(tab().anzahl(), 597 + 12 * 8);
+  // Graph-Regler (<kanal>/bk/<1..8>): 693; 1.10 Slice 3: dazu 128 + 32 Sends, 16 Return-Regler und 28 Hall-Regler: 897
+  // S14: plus 2 send returns x 8 graph knobs (fx/3, fx/4): 913
+  PRUEFE_GLEICH(tab().anzahl(), 597 + 12 * 8 + 204 + 2 * 8);
   PRUEFE(tab().anzahl() < cypherdj::stellwerk::MAX_REGLER);
   PRUEFE_GLEICH(tab().kanaele(), 20);
   PRUEFE_GLEICH(tab().kanal_suche("deck/1"), 0);
@@ -77,7 +78,9 @@ FALL(kapazitaet_hat_luft_fuer_k2) {
   PRUEFE(cypherdj::stellwerk::MAX_REGLER >= 384);
   // D1 K1 (Spec 2.3) verlangte 512 − 468 >= 44. E1 (2026-10-20): Reserve gegen 1024. 32 Spuren statt 8 brauchen
   // 24 · 4 = 96 Regler mehr (468 → 564, Paket E3), dazu dieselbe Luft von 44. Bei MAX_REGLER 512 sind es nur 44: rot.
-  PRUEFE(cypherdj::stellwerk::MAX_REGLER - tab().anzahl() >= 24 * 4 + 44);
+  // 1.10 Slice 3: the 96 of E3 are spent and 204 send/return/hall controls took more of the 1024; the reserve is 127 now (S14: 111 with the 16 send-return knobs), so the
+  // check keeps only the margin of 44 (the E3 surcharge of 96 is history). Slice 4 (+96) needs the ceiling raised first (plan P13).
+  PRUEFE(cypherdj::stellwerk::MAX_REGLER - tab().anzahl() >= 44);
   std::printf("Regler %d von %d, Reserve %d\n", tab().anzahl(), cypherdj::stellwerk::MAX_REGLER,
               cypherdj::stellwerk::MAX_REGLER - tab().anzahl());
 }
@@ -212,7 +215,7 @@ FALL(gruppen_regler_und_pm_global_mit_vorgaben) {
   PRUEFE(pm.kanal == -1 && pm.rolle == Rolle::pm_fader && pm.min == -200.0f && pm.max == 6.0f && pm.vorgabe == 0.0f && pm.db && !pm.nur_hand &&
          pm.schalt_samples == 480);
   // Negativ-Kontrollen: n+1, 0, fremde Felder, PM hat nur den Fader
-  for (const char* p : {"grp/9/fader", "grp/0/pan", "grp/1/trim", "grp/1/send/1", "pm/pan", "pm/mute", "pm/fader/x"}) PRUEFE_GLEICH(tab().suche(p), -1);
+  for (const char* p : {"grp/9/fader", "grp/0/pan", "grp/1/trim", "grp/1/send/0", "pm/pan", "pm/mute", "pm/fader/x"}) PRUEFE_GLEICH(tab().suche(p), -1);
 }
 
 FALL(neue_regler_stehen_hinter_spur_32_ohne_index_verschiebung) {
@@ -236,6 +239,98 @@ FALL(grp_nr_liest_nummern) {
   PRUEFE_GLEICH(grp_nr("spur/1/fader"), 0);      // Negativ-Kontrolle: anderer Namensraum
   PRUEFE_GLEICH(grp_nr("pm/fader"), 0);
   PRUEFE_GLEICH(cypherdj::stellwerk::spur_nr("grp/1/fader"), 0);   // und umgekehrt
+}
+
+FALL(send_und_return_regler_global_mit_vorgaben) {
+  // 1.10 Slice 3 (Spec 5.3): spur/<n>/send/<r> 32x4, grp/<n>/send/<r> 8x4, ret/<r>/{fader,pan,mute,solo} 4x4, ret/<r>/hall/* 4x7 = 204
+  PRUEFE_GLEICH(tab().kanaele(), 20);   // keine neuen Kanäle
+  int gezaehlt = 0;
+  for (int r = 1; r <= RET_REGLER_RETURNS; r++) {
+    char p[40];
+    for (int n = 1; n <= SPUR_REGLER_SPUREN; n++) {
+      std::snprintf(p, sizeof p, "spur/%d/send/%d", n, r);
+      PRUEFE(d(p).kanal == -1 && d(p).rolle == Rolle::snd_spur && d(p).vorgabe == -200.0f && d(p).min == -200.0f && d(p).max == 6.0f &&
+             d(p).db && !d(p).nur_hand && d(p).schalt_samples == 480 && d(p).kurve.typ == KurvenTyp::fader_db && d(p).kurve.max == 6.0f);
+      gezaehlt++;
+    }
+    for (int n = 1; n <= GRP_REGLER_GRUPPEN; n++) {
+      std::snprintf(p, sizeof p, "grp/%d/send/%d", n, r);
+      PRUEFE(d(p).kanal == -1 && d(p).rolle == Rolle::snd_grp && d(p).vorgabe == -200.0f && d(p).min == -200.0f && d(p).max == 6.0f &&
+             d(p).db && !d(p).nur_hand && d(p).schalt_samples == 480 && d(p).kurve.typ == KurvenTyp::fader_db);
+      gezaehlt++;
+    }
+    std::snprintf(p, sizeof p, "ret/%d/fader", r);
+    PRUEFE(d(p).kanal == -1 && d(p).rolle == Rolle::ret_fader && d(p).vorgabe == 0.0f && d(p).min == -200.0f && d(p).max == 6.0f && d(p).db &&
+           !d(p).nur_hand && d(p).schalt_samples == 480 && d(p).kurve.typ == KurvenTyp::fader_db);
+    std::snprintf(p, sizeof p, "ret/%d/pan", r);
+    PRUEFE(d(p).rolle == Rolle::ret_pan && d(p).min == -1.0f && d(p).max == 1.0f && d(p).vorgabe == 0.0f && !d(p).nur_hand && d(p).schalt_samples == 480);
+    std::snprintf(p, sizeof p, "ret/%d/mute", r);
+    PRUEFE(d(p).rolle == Rolle::ret_mute && d(p).ganzzahlig && d(p).keine_rampe && d(p).schalt_samples == 0 && d(p).vorgabe == 0.0f);
+    std::snprintf(p, sizeof p, "ret/%d/solo", r);
+    PRUEFE(d(p).rolle == Rolle::ret_solo && d(p).ganzzahlig && d(p).keine_rampe && d(p).schalt_samples == 0 && d(p).vorgabe == 0.0f);
+    gezaehlt += 4;
+    struct H { const char* feld; Rolle rolle; float vorgabe; bool schalter; };
+    const H hall[] = {{"an", Rolle::ret_hall_an, 1.0f, true},          {"pre", Rolle::ret_hall_pre, 0.04f, false},
+                      {"decay", Rolle::ret_hall_decay, 0.5252f, false}, {"groesse", Rolle::ret_hall_groesse, 0.282f, false},
+                      {"tief", Rolle::ret_hall_tief, 0.5658f, false},   {"highcut", Rolle::ret_hall_highcut, 0.8039f, false},
+                      {"fahne", Rolle::ret_hall_fahne, 0.66667f, false}};
+    for (const H& h : hall) {
+      std::snprintf(p, sizeof p, "ret/%d/hall/%s", r, h.feld);
+      PRUEFE(d(p).kanal == -1 && d(p).rolle == h.rolle && d(p).min == 0.0f && d(p).max == 1.0f && !d(p).nur_hand && !d(p).db && !d(p).transport);
+      PRUEFE_NAH(d(p).vorgabe, h.vorgabe, 1e-6);
+      if (h.schalter) PRUEFE(d(p).ganzzahlig && d(p).keine_rampe && d(p).schalt_samples == 0 && d(p).kurve.typ == KurvenTyp::schalter);
+      else PRUEFE(!d(p).ganzzahlig && !d(p).keine_rampe && d(p).schalt_samples == 480 && d(p).kurve.typ == KurvenTyp::linear);
+      gezaehlt++;
+    }
+  }
+  PRUEFE_GLEICH(gezaehlt, 204);
+  // Negativ-Kontrollen: n+1, 0, fremde Felder, Returns senden nicht an Returns
+  for (const char* p : {"spur/33/send/1", "spur/1/send/5", "spur/1/send/0", "grp/9/send/1", "grp/1/send/5", "ret/5/fader", "ret/0/fader", "ret/1/hall/mix",
+                        "ret/1/send/1", "ret/1/trim", "ret/1/hall", "ret/1/hall/an/x", "spur/1/send/01", "spur/1/send/10"})
+    PRUEFE_GLEICH(tab().suche(p), -1);
+}
+
+FALL(send_und_return_regler_stehen_hinter_dem_bk_block_ohne_index_verschiebung) {
+  // kein bestehender Index wandert: pm/fader 596, bk-Block 597..692, die 204 neuen Regler ab 693 (N0 = 693 vor Slice 3)
+  PRUEFE_GLEICH(tab().suche("pm/fader"), 596);
+  PRUEFE_GLEICH(tab().suche("deck/1/fader"), 0);
+  PRUEFE_GLEICH(tab().suche("pad/2/bk/8"), 692);
+  PRUEFE_GLEICH(tab().suche("spur/1/send/1"), 693);
+  int kleinster = tab().anzahl();
+  for (int r = 0; r < tab().anzahl(); r++) {
+    const Rolle x = tab().def(r).rolle;
+    if (x >= Rolle::snd_spur) kleinster = r < kleinster ? r : kleinster;
+  }
+  PRUEFE_GLEICH(kleinster, 693);
+  // S14: the 16 send-return knobs fx/3|4/bk/<n> are the tail (897..912) and have the role bk_regler (before snd_spur), so the
+  // 204 controls of slice 3 are still exactly the roles from snd_spur on
+  int ab_snd = 0;
+  for (int r = 0; r < tab().anzahl(); r++)
+    if (tab().def(r).rolle >= Rolle::snd_spur && tab().def(r).rolle <= Rolle::ret_hall_fahne) ab_snd++;
+  PRUEFE_GLEICH(ab_snd, 204);
+  PRUEFE_GLEICH(tab().anzahl() - 897, 16);
+}
+
+FALL(ret_nr_und_send_nr_lesen_nummern) {
+  using cypherdj::stellwerk::ret_nr;
+  using cypherdj::stellwerk::send_nr;
+  PRUEFE_GLEICH(ret_nr("ret/1/fader"), 1);
+  PRUEFE_GLEICH(ret_nr("ret/4/hall/decay"), 4);
+  PRUEFE_GLEICH(ret_nr("ret/12/pan"), 12);         // the parser checks the form, the binder checks the range
+  PRUEFE_GLEICH(ret_nr("ret/0/fader"), 0);
+  PRUEFE_GLEICH(ret_nr("ret/01/fader"), 0);
+  PRUEFE_GLEICH(ret_nr("ret/1"), 0);
+  PRUEFE_GLEICH(ret_nr("grp/1/fader"), 0);         // negative control: other namespace
+  PRUEFE_GLEICH(ret_nr("spur/1/send/1"), 0);
+  PRUEFE_GLEICH(send_nr("spur/3/send/2"), 2);
+  PRUEFE_GLEICH(send_nr("grp/8/send/4"), 4);
+  PRUEFE_GLEICH(send_nr("spur/3/send/0"), 0);
+  PRUEFE_GLEICH(send_nr("spur/3/send/"), 0);
+  PRUEFE_GLEICH(send_nr("spur/3/send/10"), 10);
+  PRUEFE_GLEICH(send_nr("spur/3/send/02"), 0);
+  PRUEFE_GLEICH(send_nr("spur/3/fader"), 0);       // negative control: other field
+  PRUEFE_GLEICH(send_nr("ret/1/fader"), 0);
+  PRUEFE_GLEICH(send_nr("spur/3/send/2/x"), 0);
 }
 
 PRUEF_MAIN
@@ -274,4 +369,28 @@ FALL(bk_regler_nur_fuer_kanaele_mit_graph) {
     if (tab().def(r).rolle == Rolle::bk_regler) PRUEFE(r > tab().suche("pm/fader"));
   PRUEFE_GLEICH(tab().suche("pm/fader"), 596);
   PRUEFE_GLEICH(tab().suche("deck/1/fader"), 0);
+}
+
+FALL(fx_send_bk_regler_global_hinter_dem_ret_block) {
+  // S14: eight graph knobs per send return fx/3, fx/4, global (channel -1) like fx/<n>/rueckweg, appended behind the ret block
+  const ReglerDef& ref = d("deck/1/bk/1");
+  int index = 897;
+  for (const char* fx : {"fx/3", "fx/4"}) {
+    for (int nr = 1; nr <= 8; nr++) {
+      char p[40];
+      std::snprintf(p, sizeof p, "%s/bk/%d", fx, nr);
+      PRUEFE_GLEICH(tab().suche(p), index);
+      index++;
+      const ReglerDef& x = d(p);
+      PRUEFE_GLEICH(x.kanal, -1);
+      PRUEFE(x.rolle == Rolle::bk_regler && x.min == 0.0f && x.max == 1.0f && x.vorgabe == 0.5f);
+      PRUEFE(x.schalt_samples == 0 && !x.nur_hand && !x.db && !x.keine_rampe && !x.ganzzahlig && !x.transport);
+      PRUEFE(x.kurve.typ == ref.kurve.typ && x.kurve.min == ref.kurve.min && x.kurve.max == ref.kurve.max);
+      PRUEFE(x.kurve.typ == KurvenTyp::linear);
+    }
+  }
+  PRUEFE_GLEICH(index, 913);
+  // negative controls: other send buses and the channel namespace stay free, the n form is checked
+  for (const char* p : {"fx/1/bk/1", "fx/2/bk/1", "fx/5/bk/1", "fx/3/bk/0", "fx/3/bk/9", "fx/3/bk/01", "fx/3/bk/10", "fx/3/bk", "fx/4/bk/9", "fx/0/bk/1"})
+    PRUEFE_GLEICH(tab().suche(p), -1);
 }

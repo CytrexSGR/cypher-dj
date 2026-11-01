@@ -1,4 +1,5 @@
 // djk-hand über stdio mit dem SDK-Client, gegen eine Seiten-Attrappe (HTTP): Werkzeugliste, Quellkopf, Fehlerabbildung.
+import { ALLE_STROEME, REC_EINGANG } from '../../vertrag/stroeme.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
@@ -10,9 +11,9 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 const HAND = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'hand.ts');
 const NAMEN = ['lage', 'bestand', 'laden', 'deck_start', 'deck_stopp', 'sprung', 'loop', 'pad', 'loop_nach_box', 'box',
   'regler', 'fx', 'fx_zuweisung', 'strudel', 'abbrechen', 'warte', 'hoeren',
-  'studio', 'loops', 'rec', 'loop_klang', 'spur', 'spur_stopp', 'spuren', 'stille', 'pegel', 'klang', 'instrumente', 'bibliothek', 'anschluss', 'stoebern', 'klaenge', 'bestand_karte', 'vorbereiten',
+  'studio', 'loops', 'rec', 'loop_klang', 'spur', 'spur_stopp', 'spuren', 'stille', 'pegel', 'graphen', 'graph', 'klang', 'instrumente', 'bibliothek', 'anschluss', 'stoebern', 'klaenge', 'bestand_karte', 'vorbereiten',
   'sets', 'set_zeige', 'set_lege', 'set_vorbereiten', 'tempo',
-  'proj_liste', 'proj_neu', 'proj_oeffnen', 'proj_lage', 'proj_aendern', 'proj_undo', 'proj_redo', 'proj_verlauf', 'proj_transport', 'proj_freeze', 'proj_export', 'proj_lautheit', 'geraete_lage', 'proj_aufnahme', 'proj_warp', 'proj_stems', 'proj_stems_abbrechen'];   // D1 S2 (Spec 3.5), Paket 1.18 E-b, Paket 1.13 Warp, Slice 6 Stems
+  'proj_liste', 'proj_neu', 'proj_oeffnen', 'proj_lage', 'proj_aendern', 'proj_undo', 'proj_redo', 'proj_verlauf', 'proj_transport', 'proj_freeze', 'proj_export', 'proj_lautheit', 'geraete_lage', 'proj_aufnahme', 'proj_warp', 'proj_auto', 'proj_bk', 'proj_stems', 'proj_stems_abbrechen', 'proj_zusammenfuehren', 'proj_strom_aufnehmen'];   // D1 S2 (Spec 3.5), Paket 1.18 E-b, Paket 1.13 Warp, Slice 6 Stems
 
 async function aufbau(t, antworten, env) {
   const gesehen = [];
@@ -66,7 +67,7 @@ test('djk-hand: Seite nicht erreichbar → Werkzeugfehler mit Grund, kein Abstur
   assert.equal(r.isError, true); assert.match(r.content[0].text, /seite_nicht_erreichbar/);
 });
 
-test('djk-hand: strudel sendet strom (Vorgabe 1), Strom 2 wird durchgereicht, Schema nennt nur 1 bis 3', async (t) => {
+test('djk-hand: strudel sendet strom (Vorgabe 1), Strom 2 wird durchgereicht, Schema nennt die Ströme der Tabelle (S18: 1 2 3 5 6 7 9 10)', async (t) => {
   const { c, gesehen } = await aufbau(t, (m, u) => (u === '/strudel' ? [200, { ok: true }] : null));
   const r1 = await c.callTool({ name: 'strudel', arguments: { code: 's("bd")' } });
   assert.ok(!r1.isError, r1.content[0].text);
@@ -75,7 +76,7 @@ test('djk-hand: strudel sendet strom (Vorgabe 1), Strom 2 wird durchgereicht, Sc
   const k = gesehen.filter((x) => x.pfad === '/strudel').map((x) => x.koerper);
   assert.deepEqual(k, [{ text: 's("bd")', strom: 1 }, { text: 's("bd")', strom: 2 }]);
   const schema = (await c.listTools()).tools.find((x) => x.name === 'strudel').inputSchema;
-  assert.deepEqual(schema.properties.strom.enum, [1, 2, 3]);
+  assert.deepEqual(schema.properties.strom.enum, [...ALLE_STROEME]);   // S18: was [1, 2, 3]; now the shared stream table
 });
 
 test('djk-hand rec: geht bei jedem Tempo an /loop (Plan Tempo-Folge: kein 128-Vorcheck mehr)', async (t) => {
@@ -117,7 +118,8 @@ test('djk-hand studio: drei Ströme, Strom 2 mit autonom false', async (t) => {
   assert.deepEqual(j.stroeme.map((x) => x.strom), [1, 2, 3]);
   assert.equal(j.stroeme[1].autonom, false);
   assert.equal(j.stroeme[0].autonom, true);
-  assert.deepEqual(gesehen.map((x) => x.pfad), ['/strudel?strom=1', '/strudel?strom=2', '/strudel?strom=3']);
+  // S18: studio first asks /lage which streams run (here 404: the three studio streams as before), then one GET per stream
+  assert.deepEqual(gesehen.map((x) => x.pfad), ['/lage', '/strudel?strom=1', '/strudel?strom=2', '/strudel?strom=3']);
 });
 
 test('djk-hand loops: GET /loops unverändert', async (t) => {
@@ -142,7 +144,7 @@ test('djk-hand stille: Negativ-Kontrolle, alle drei Ströme 200 → kein Fehler,
   const { c, gesehen } = await aufbau(t, (m, u) => (u === '/strudel' ? [200, { ok: true, code: 'silence', j: 1 }] : null));
   const ok = await c.callTool({ name: 'stille', arguments: {} });
   assert.ok(!ok.isError, ok.content[0].text);
-  assert.deepEqual(gesehen.map((x) => x.koerper), [1, 2, 3].map((strom) => ({ text: 'silence', strom })));
+  assert.deepEqual(gesehen.filter((x) => x.pfad === '/strudel').map((x) => x.koerper), [1, 2, 3].map((strom) => ({ text: 'silence', strom })));   // S18: plus one GET /lage for the stream list
 });
 
 test('djk-hand stille: Strom 2 auto_aus → Fehler nennt auto_aus und strom 2, 1 und 3 sind trotzdem gesendet', async (t) => {
@@ -348,6 +350,19 @@ test('djk-hand S5r: regler names <kanal>/bk/1..8 and sends the path through to /
   assert.match(regler, /<kanal>\/bk\/1\.\.8 \(deck\/1\.\.4, erz\/1\|2\|3\|5\|6\|7, pad\/1\|2; 0\.\.1, default 0\.5/);
   await c.callTool({ name: 'regler', arguments: { pfad: 'deck/1/bk/3', nach: 0.8 } });
   assert.deepEqual(gesehen.filter((g) => g.pfad === '/regler').map((g) => [g.koerper.pfad, g.koerper.nach]), [['deck/1/bk/3', 0.8]]);
+});
+
+// S14: the send-return knobs fx/3/bk/1..8, fx/4/bk/1..8 are named in the tool descriptions and pass through to /regler
+test('djk-hand S14: regler names fx/3/bk/1..8 and passes fx/4/bk/1 through; graph no longer says the knobs are fixed', async (t) => {
+  const { c, gesehen } = await aufbau(t, (m, u) => (u === '/regler' ? [200, { ok: true, felder: { id: 1 }, quittung: { status: 5, grund: '' } }] : undefined));
+  const tools = (await c.listTools()).tools;
+  const regler = tools.find((x) => x.name === 'regler').description;
+  const graph = tools.find((x) => x.name === 'graph').description;
+  assert.match(regler, /fx\/3\/bk\/1\.\.8, fx\/4\/bk\/1\.\.8/);
+  assert.doesNotMatch(graph, /fixed at 0\.5/);
+  assert.match(graph, /fx\/3\/bk\/1\.\.8/);
+  await c.callTool({ name: 'regler', arguments: { pfad: 'fx/4/bk/1', nach: 0.3 } });
+  assert.deepEqual(gesehen.filter((g) => g.pfad === '/regler').map((g) => [g.koerper.pfad, g.koerper.nach]), [['fx/4/bk/1', 0.3]]);
 });
 
 test('djk-hand anschluss: deck oder material_id, energie, max als Query an GET /mediathek/anschluss', async (t) => {
@@ -911,4 +926,261 @@ test('S6 T9: Start: spur_id und geraet gehen an den Server; detail der Ablehnung
   assert.match(T.description, /up to 20 min \(DJK_HAND_FRIST_PROJ_STEMS_MS\)/);
   assert.match(T.description, /unbekannt/);
   assert.deepEqual(T.inputSchema.properties.geraet.enum, ['cpu', 'gpu']);
+});
+
+// Slice 7: proj_zusammenfuehren posts the three fields with source cypher to /proj/zusammenfuehren?antwort=kurz,
+// passes the answer on unchanged and maps a refusal to a tool error.
+test('djk-hand proj_zusammenfuehren (slice 7): body, source, answer, refusal, required fields', async (t) => {
+  const ergebnis = { rev: 12, spur_id: 's7', datei: '/p/x/merge/merge-ab12.wav', frames: 96000, hinweis: null, quellen: ['s2', 's3'] };
+  const refusal = { fehler: 'merge_teil_solo', text: 'only some of the chosen tracks are on solo; nothing was changed' };
+  const { c, gesehen } = await aufbau(t, (m, u) => (u.startsWith('/proj/zusammenfuehren') ? (gesehen.length === 1 ? [200, ergebnis] : [409, refusal]) : null));
+  const e1 = await c.callTool({ name: 'proj_zusammenfuehren', arguments: { spur_ids: ['s2', 's3'], von_beat: 0, bis_beat: 8 } });
+  assert.ok(!e1.isError, e1.content[0].text);
+  assert.deepEqual(JSON.parse(e1.content[0].text), ergebnis);
+  const e2 = await c.callTool({ name: 'proj_zusammenfuehren', arguments: { spur_ids: ['s2', 's3'], von_beat: 0, bis_beat: 8 } });
+  assert.equal(e2.isError, true); assert.match(e2.content[0].text, /merge_teil_solo/);
+  assert.deepEqual(gesehen.map((x) => [x.methode, x.pfad, x.quelle, x.koerper]), [
+    ['POST', '/proj/zusammenfuehren?antwort=kurz', 'cypher', { spur_ids: ['s2', 's3'], von_beat: 0, bis_beat: 8 }],
+    ['POST', '/proj/zusammenfuehren?antwort=kurz', 'cypher', { spur_ids: ['s2', 's3'], von_beat: 0, bis_beat: 8 }]]);
+  const w = (await c.listTools()).tools.find((x) => x.name === 'proj_zusammenfuehren');
+  assert.deepEqual([...w.inputSchema.required].sort(), ['bis_beat', 'spur_ids', 'von_beat']);
+  const names = ['merge_leer', 'merge_gruppen', 'merge_teil_solo', 'merge_freeze_noetig', 'merge_andreas_spur', 'merge_keine_spur_frei'];
+  for (const g of [...names, 'ONE project change', 'One undo', '+3.01 dB', 'hand_frist']) {
+    assert.ok(w.description.includes(g), `proj_zusammenfuehren names ${g}`);
+  }
+});
+
+// Automation Slice 1: proj_auto goes out as GET /proj/auto, the query carries only the given fields, source cypher, result unchanged, errors with reason
+// as tool errors; the descriptions name units, ranges and the proj_aendern commands; the tool count rises by exactly one against the base.
+test('djk-hand proj_auto (Automation Slice 1): GET with query, source cypher, result unchanged, error mapping; proj_aendern names auto_*', async (t) => {
+  const lage = { lane_id: 'a1', spur_id: 's1', ziel: 'fader', punkte_zahl: 2, punkte_gezeigt: 2,
+    punkte: [{ beat: 4, wert: 0, form: 'linear' }, { beat: 20, wert: -30, form: 'linear' }], bei: { beat: 12, wert: -15 } };
+  const { c, gesehen } = await aufbau(t, (m, u) => {
+    if (u?.startsWith('/proj/auto?lane_id=a1')) return [200, lage];
+    if (u?.startsWith('/proj/auto')) return [404, { fehler: 'lane_unbekannt', text: 'that automation lane does not exist' }];
+  });
+  const a = await c.callTool({ name: 'proj_auto', arguments: { lane_id: 'a1', bei_beat: 12 } });
+  assert.ok(!a.isError, a.content[0].text);
+  assert.deepEqual(JSON.parse(a.content[0].text), lage);
+  const b = await c.callTool({ name: 'proj_auto', arguments: { lane_id: 'a9' } });
+  assert.equal(b.isError, true); assert.match(b.content[0].text, /lane_unbekannt/);
+  const e = await c.callTool({ name: 'proj_auto', arguments: { lane_id: 'a1', von_beat: 4, bis_beat: 12, punkte_max: 7 } });
+  assert.ok(!e.isError, e.content[0].text);
+  assert.deepEqual(gesehen.map((x) => [x.methode, x.pfad, x.quelle]), [
+    ['GET', '/proj/auto?lane_id=a1&bei_beat=12', 'cypher'], ['GET', '/proj/auto?lane_id=a9', 'cypher'],
+    ['GET', '/proj/auto?lane_id=a1&von_beat=4&bis_beat=12&punkte_max=7', 'cypher']]);
+  const werkzeuge = (await c.listTools()).tools;
+  const pa = werkzeuge.find((x) => x.name === 'proj_auto');
+  assert.deepEqual(pa.inputSchema.required ?? [], []);
+  for (const wort of ['dB', 'project beat', '-200 = off', 'punkte_max', 'lane_unbekannt', 'auto_punkte']) {
+    assert.ok(pa.description.includes(wort), `proj_auto nennt ${wort}`);
+  }
+  const pae = werkzeuge.find((x) => x.name === 'proj_aendern');
+  for (const wort of ['auto_neu {spur_id', 'auto_punkte {lane_id', 'auto_loeschen {lane_id', 'loesche_von', 'lane_doppelt', 'punkte_ungueltig']) {
+    assert.ok(pae.description.includes(wort), `proj_aendern nennt ${wort}`);
+  }
+  assert.ok(werkzeuge.find((x) => x.name === 'proj_lage').description.includes('lanes [{id, ziel, punkte_zahl, gesperrt?'));
+  assert.ok(werkzeuge.find((x) => x.name === 'spur').description.includes('is a lane, not a spur'));
+  // count: base (57 tools, 17 of them proj_*) plus one
+  assert.equal(werkzeuge.length, 57 + 1 + 2 /* S12: graphen, graph */ + 1 /* S17: proj_bk */ + 1 /* S15: proj_strom_aufnehmen */);
+  assert.equal(werkzeuge.filter((x) => x.name.startsWith('proj_')).length, 17 + 1 + 1 + 1);
+});
+
+// Automation Slice 2 (task 7): the hand MCP forwards the new targets and the lock unchanged, shows ziel/gesperrt/bei of a pan lane, and a locked lane is a tool error with its reason.
+test('djk-hand proj_aendern/proj_auto (Automation Slice 2): auto_neu pan and auto_aendern gesperrt go out as sent; proj_auto shows ziel, gesperrt, bei; lane_gesperrt is a tool error; descriptions name targets and ranges; 60 tools', async (t) => {
+  const panLage = { lane_id: 'a2', spur_id: 's1', ziel: 'pan', gesperrt: true, punkte_zahl: 2, punkte_gezeigt: 2,
+    punkte: [{ beat: 0, wert: -1, form: 'linear' }, { beat: 8, wert: 1, form: 'linear' }], bei: { beat: 4, wert: 0 } };
+  const faderLage = { lane_id: 'a1', spur_id: 's1', ziel: 'fader', punkte_zahl: 1, punkte_gezeigt: 1, punkte: [{ beat: 0, wert: -6, form: 'linear' }] };
+  const { c, gesehen } = await aufbau(t, (m, u) => {
+    if (u === '/proj/aktuell?nur=rev') return [200, { slug: 'p', rev: 7 }];
+    if (u?.startsWith('/proj/auto?lane_id=a2')) return [200, panLage];
+    if (u?.startsWith('/proj/auto?lane_id=a1')) return [200, faderLage];
+    if (u === '/proj/aendern?antwort=kurz') return [200, { rev: 8, kern: {}, noten_zahl: {} }];
+    return null;
+  });
+  // auto_neu pan and auto_aendern gesperrt: the body is exactly what was sent (plus the rev from the project)
+  const n = await c.callTool({ name: 'proj_aendern', arguments: { label: 'pan lane', befehle: [{ befehl: 'auto_neu', spur_id: 's1', ziel: 'pan' }] } });
+  assert.ok(!n.isError, n.content[0].text);
+  const g = await c.callTool({ name: 'proj_aendern', arguments: { label: 'lock', rev: 8, befehle: [{ befehl: 'auto_aendern', lane_id: 'a2', gesperrt: true }] } });
+  assert.ok(!g.isError, g.content[0].text);
+  assert.deepEqual(gesehen.filter((x) => x.pfad === '/proj/aendern?antwort=kurz').map((x) => x.koerper), [
+    { label: 'pan lane', befehle: [{ befehl: 'auto_neu', spur_id: 's1', ziel: 'pan' }], rev: 7 },
+    { label: 'lock', befehle: [{ befehl: 'auto_aendern', lane_id: 'a2', gesperrt: true }], rev: 8 }]);
+  // proj_auto shows ziel, gesperrt and bei of a pan lane unchanged
+  const p = JSON.parse((await c.callTool({ name: 'proj_auto', arguments: { lane_id: 'a2', bei_beat: 4 } })).content[0].text);
+  assert.deepEqual([p.ziel, p.gesperrt, p.bei], ['pan', true, { beat: 4, wert: 0 }]);
+  assert.equal('bei_beat' in p, false, 'the answer key is bei, not bei_beat');
+  // negative control: the fader lane behaves as before (no gesperrt key appears)
+  const f = JSON.parse((await c.callTool({ name: 'proj_auto', arguments: { lane_id: 'a1' } })).content[0].text);
+  assert.deepEqual(f, faderLage); assert.equal('gesperrt' in f, false);
+  assert.deepEqual(gesehen.filter((x) => x.pfad.startsWith('/proj/auto')).map((x) => x.pfad), ['/proj/auto?lane_id=a2&bei_beat=4', '/proj/auto?lane_id=a1']);
+  // descriptions: targets and ranges instead of "dB" for every lane
+  const werkzeuge = (await c.listTools()).tools;
+  const pa = werkzeuge.find((x) => x.name === 'proj_auto').description;
+  const pae = werkzeuge.find((x) => x.name === 'proj_aendern').description;
+  for (const wort of ['fader', 'pan', 'mute', 'solo', 'geraet.lautstaerke', 'geraet.cutoff', 'geraet.resonanz', 'geraet.env_mod', 'gesperrt', 'ziel']) {
+    assert.ok(pa.includes(wort), `proj_auto names ${wort}`);
+  }
+  for (const wort of ['auto_aendern {lane_id', 'gesperrt', 'lane_gesperrt', 'geraet_lanes', 'ziel_unbekannt', 'geraet.cutoff', '-1..1', 'mute and solo', 'sprung']) {
+    assert.ok(pae.includes(wort), `proj_aendern names ${wort}`);
+  }
+  assert.ok(!pa.includes('wert (dB, -200 = off, max 6)'), 'proj_auto no longer calls every value dB');
+  assert.ok(!pa.includes('ziel (fader)') && !pa.includes('(dB)'), 'proj_auto: no fader-only wording');
+  assert.ok(!pae.includes('auto_neu {spur_id, ziel: "fader"}'), 'proj_aendern: auto_neu is no longer fader-only');
+  assert.ok(werkzeuge.find((x) => x.name === 'proj_auto').inputSchema.properties.bei_beat.description.includes('lane value'));
+  assert.ok(!werkzeuge.find((x) => x.name === 'proj_auto').inputSchema.properties.bei_beat.description.includes('(dB)'));
+  assert.ok(werkzeuge.find((x) => x.name === 'proj_zusammenfuehren').description.includes('lanes_verworfen'));
+  assert.equal(werkzeuge.length, 62);   // rebase onto the Baukasten work: the 60 of this branch plus proj_bk and proj_strom_aufnehmen (same sum as above)
+});
+
+test('djk-hand proj_aendern (Automation Slice 2): a locked lane answers lane_gesperrt as a tool error with the reason; negative control: an unlocked change succeeds', async (t) => {
+  const { c } = await aufbau(t, (m, u) => {
+    if (u === '/proj/aktuell?nur=rev') return [200, { slug: 'p', rev: 3 }];
+    if (u === '/proj/aendern?antwort=kurz') return [409, { fehler: 'lane_gesperrt', text: 'that automation lane is locked: unlock it with auto_aendern first', detail: 'a2', index: 0 }];
+    return null;
+  });
+  const r = await c.callTool({ name: 'proj_aendern', arguments: { label: 'edit', befehle: [{ befehl: 'auto_punkte', lane_id: 'a2', setze: [{ beat: 0, wert: 0 }] }] } });
+  assert.equal(r.isError, true);
+  const j = JSON.parse(r.content[0].text);
+  assert.equal(j.fehler, 'lane_gesperrt'); assert.match(j.text, /auto_aendern/);
+  const ok = await aufbau(t, (m, u) => (u === '/proj/aktuell?nur=rev' ? [200, { slug: 'p', rev: 3 }] : u === '/proj/aendern?antwort=kurz' ? [200, { rev: 4, kern: {}, noten_zahl: {} }] : null));
+  const r2 = await ok.c.callTool({ name: 'proj_aendern', arguments: { label: 'edit', befehle: [{ befehl: 'auto_punkte', lane_id: 'a1', setze: [{ beat: 0, wert: 0 }] }] } });
+  assert.ok(!r2.isError, r2.content[0].text);
+});
+
+test('djk-hand proj_zusammenfuehren (Automation Slice 2): lanes_verworfen from the server reaches the caller unchanged', async (t) => {
+  const { c } = await aufbau(t, (m, u) => (u === '/proj/zusammenfuehren?antwort=kurz'
+    ? [200, { rev: 9, spur_id: 's9', datei: 'merge/merge-1.wav', frames: 1, hinweis: 'x', quellen: ['s2', 's3'], lanes_verworfen: 2 }] : null));
+  const r = await c.callTool({ name: 'proj_zusammenfuehren', arguments: { spur_ids: ['s2', 's3'], von_beat: 0, bis_beat: 8 } });
+  assert.ok(!r.isError, r.content[0].text);
+  assert.equal(JSON.parse(r.content[0].text).lanes_verworfen, 2);
+});
+
+test('djk-hand S12: graphen reads GET /graphen, graph posts {kanal, name}; a kern refusal and ki_gestoppt become tool errors', async (t) => {
+  const { c, gesehen } = await aufbau(t, (m, u) => {
+    if (u === '/graphen') return [200, { graphen: [{ name: 'inst', art: 'instrument', regler_namen: {} }], uebersprungen: [], geladen: {} }];
+    if (u === '/graph') return [200, { ok: true, kanal: 'erz/3', name: 'inst', quittung: { status: 3, grund: '' } }];
+    return null;
+  });
+  const g = await c.callTool({ name: 'graphen', arguments: {} });
+  assert.ok(!g.isError, g.content[0].text);
+  assert.equal(JSON.parse(g.content[0].text).graphen[0].name, 'inst');
+  const l = await c.callTool({ name: 'graph', arguments: { kanal: 'erz/3', name: 'inst' } });
+  assert.ok(!l.isError, l.content[0].text);
+  const e = await c.callTool({ name: 'graph', arguments: { kanal: 'erz/3', name: '' } });
+  assert.ok(!e.isError, e.content[0].text);
+  const posts = gesehen.filter((x) => x.methode === 'POST' && x.pfad === '/graph');
+  assert.deepEqual(posts.map((x) => x.koerper), [{ kanal: 'erz/3', name: 'inst' }, { kanal: 'erz/3', name: '' }]);
+  assert.ok(gesehen.every((x) => x.quelle === 'cypher'));
+});
+
+test('djk-hand S12: graph turns a kern refusal (status 6) and HTTP 409 into tool errors (negative control: status 3 is success above)', async (t) => {
+  let weiter = 0;
+  const { c } = await aufbau(t, (m, u) => (u === '/graph' ? (weiter++ === 0 ? [200, { ok: true, quittung: { status: 6, grund: 'pruefung' } }] : [409, { fehler: 'ki_gestoppt' }]) : null));
+  const a = await c.callTool({ name: 'graph', arguments: { kanal: 'erz/3', name: 'inst' } });
+  assert.equal(a.isError, true); assert.match(a.content[0].text, /pruefung/);
+  const b = await c.callTool({ name: 'graph', arguments: { kanal: 'erz/3', name: 'inst' } });
+  assert.equal(b.isError, true); assert.match(b.content[0].text, /ki_gestoppt/);
+});
+
+// 1.10 slice 3: Cypher builds returns and sends through proj_aendern; the tool text names the commands, ranges, reasons and the post fader rule
+test('1.10 slice 3: proj_aendern names return_neu, return_aendern, return_loeschen, send_setzen with ranges and reasons; pegel names ret/1..4; regler names the ret and send paths', async (t) => {
+  const { c } = await aufbau(t, () => null);
+  const werkzeuge = (await c.listTools()).tools;
+  const text = (n) => werkzeuge.find((x) => x.name === n).description;
+  for (const b of ['return_neu', 'return_aendern', 'return_loeschen', 'send_setzen']) assert.ok(text('proj_aendern').includes(b), b);
+  for (const g of ['routing_grenze', 'return_unbekannt']) assert.ok(text('proj_aendern').includes(g), g);
+  assert.ok(text('proj_aendern').includes('sends are post fader and post mute'), 'the post fader rule');
+  for (const u of ['0..250 ms', '0.1..30 s', '5..200 ms', '1000..22000 Hz', '-24..+12 dB']) assert.ok(text('proj_aendern').includes(u), `Hall unit ${u}`);
+  assert.ok(text('pegel').includes('ret/1..4'));
+  assert.ok(text('regler').includes('ret/1..4/*') && text('regler').includes('send/1..4'), 'regler: the new paths are ueber_projekt');
+  assert.ok(!/[—]/.test(text('proj_aendern').slice(text('proj_aendern').indexOf('return_neu'), text('proj_aendern').indexOf('spur_loeschen {spur_id}'))), 'no em dash in the new text');
+});
+
+test('1.10 slice 3: a return routing through the hand (return_neu, two send_setzen) goes as one list from source cypher; ki_gestoppt is refused with its reason', async (t) => {
+  let aufrufe = 0;
+  const { c, gesehen } = await aufbau(t, (m, u) => {
+    if (u === '/proj/aktuell?nur=rev') return [200, { slug: 'p', rev: 4 }];
+    if (/^\/proj\/aendern/.test(u)) return ++aufrufe === 1 ? [200, { rev: 5, kern: { regler: 48 } }] : [409, { fehler: 'ki_gestoppt', text: 'Cypher is stopped' }];
+  });
+  const befehle = [{ befehl: 'return_neu', name: 'Hall' }, { befehl: 'send_setzen', strang_id: 's1', return_id: 'r1', db: -6 },
+    { befehl: 'send_setzen', strang_id: 's2', return_id: 'r1', db: -6 }];
+  const r = await c.callTool({ name: 'proj_aendern', arguments: { label: 'Hall bus', befehle } });
+  assert.ok(!r.isError, r.content[0].text);
+  const post = gesehen.filter((x) => x.methode === 'POST').at(-1);
+  assert.equal(post.pfad, '/proj/aendern?antwort=kurz');
+  assert.deepEqual(post.koerper.befehle, befehle, 'the commands go through unchanged, in one list');
+  const nein = await c.callTool({ name: 'proj_aendern', arguments: { label: 'Hall bus again', befehle } });
+  assert.equal(nein.isError, true);
+  assert.match(nein.content[0].text, /ki_gestoppt/);
+});
+
+// S17: proj_bk goes out as GET /proj/bk (lage), POST /proj/bk/merken?antwort=kurz and POST /proj/bk/laden, source cypher; a 409 is a tool error.
+test('djk-hand proj_bk (S17): lage = GET, merken = POST merken with kanaele, laden = POST laden, source cypher; 409 is a tool error; a wrong aktion never reaches the page', async (t) => {
+  const lage = { slug: 'p', gespeichert: [], kanaele: [{ kanal: 'erz/2', gespeichert: null, live: null, gleich: false }] };
+  const { c, gesehen } = await aufbau(t, (m, u) => {
+    if (m === 'GET' && u === '/proj/bk') return [200, lage];
+    if (u === '/proj/bk/merken?antwort=kurz') return [200, { rev: 3, bk: { gemerkt: ['erz/2'], unbekannt: [] } }];
+    if (u === '/proj/bk/laden') return [409, { fehler: 'ki_gestoppt', text: 'Stop Cypher is set' }];
+  });
+  const a = await c.callTool({ name: 'proj_bk', arguments: { aktion: 'lage' } });
+  assert.deepEqual(JSON.parse(a.content[0].text), lage);
+  const m = await c.callTool({ name: 'proj_bk', arguments: { aktion: 'merken', kanaele: ['erz/2'] } });
+  assert.ok(!m.isError, m.content[0].text); assert.deepEqual(JSON.parse(m.content[0].text).bk.gemerkt, ['erz/2']);
+  const l = await c.callTool({ name: 'proj_bk', arguments: { aktion: 'laden' } });
+  assert.equal(l.isError, true); assert.match(l.content[0].text, /ki_gestoppt/);
+  assert.deepEqual(gesehen.map((x) => [x.methode, x.pfad, x.quelle, x.koerper]), [
+    ['GET', '/proj/bk', 'cypher', null], ['POST', '/proj/bk/merken?antwort=kurz', 'cypher', { kanaele: ['erz/2'] }],
+    ['POST', '/proj/bk/laden', 'cypher', {}]]);
+  const n = gesehen.length;
+  const q = await c.callTool({ name: 'proj_bk', arguments: { aktion: 'quatsch' } });
+  assert.equal(q.isError, true); assert.equal(gesehen.length, n, 'nothing reaches the page');
+  const w = (await c.listTools()).tools;
+  const d = w.find((x) => x.name === 'proj_bk').description;
+  for (const wort of ['Baukasten: save sound', 'bk_setzen', 'auto_aus', 'does not change the running sound']) assert.ok(d.includes(wort), `proj_bk names ${wort}`);
+  assert.ok(w.find((x) => x.name === 'proj_lage').description.includes('baukasten [{kanal, graph}]'));
+  assert.ok(w.find((x) => x.name === 'proj_aendern').description.includes('bk_setzen {kanal'));
+});
+
+// S18: the instrument slots erz/5..7 and pad/1..2 (streams 5, 6, 7, 9, 10) are reachable through the existing tools
+test('S18 djk-hand: strudel enum is the stream table, graph names erz/5..7 and pad/1, pad/2, tool count unchanged', async (t) => {
+  const { c } = await aufbau(t, () => null);
+  const tools = (await c.listTools()).tools;
+  const strudel = tools.find((x) => x.name === 'strudel');
+  assert.deepEqual(strudel.inputSchema.properties.strom.enum, [1, 2, 3, 5, 6, 7, 9, 10]);
+  assert.deepEqual(strudel.inputSchema.properties.strom.enum, [...ALLE_STROEME]);
+  assert.match(strudel.description, /5, 6, 7 \(erz\/5\.\.7\)/);
+  const graph = tools.find((x) => x.name === 'graph');
+  assert.deepEqual(graph.inputSchema.properties.kanal.enum.slice(0, 7), ['erz/2', 'erz/3', 'erz/5', 'erz/6', 'erz/7', 'pad/1', 'pad/2']);
+  for (const s of ['erz/5', 'erz/6', 'erz/7', 'pad/1', 'pad/2', 'djk-stroeme']) assert.match(graph.description, new RegExp(s.replace('/', '\\/')), s);
+  assert.match(graph.description, /summed with the loop/);
+  assert.match(tools.find((x) => x.name === 'pegel').description, /erz\/5\.\.7/, 'pegel lists the new channels');
+  assert.equal(tools.length, NAMEN.length)   // merge S17+S18: S18 adds no tool, the count follows the name list;
+});
+
+test('S18 djk-hand: proj_aendern and proj_aufnahme name every recordable input of the table (REC_EINGANG), not erz/4 or erz/8', async (t) => {
+  const { c } = await aufbau(t, () => null);
+  const tools = (await c.listTools()).tools;
+  const sp = Object.keys(REC_EINGANG).join('|');
+  assert.equal(sp, 'erz/1|erz/2|erz/3|erz/5|erz/6|erz/7|pad/1|pad/2');
+  for (const n of ['proj_aendern', 'proj_aufnahme']) {
+    assert.ok(tools.find((x) => x.name === n).description.includes(`name: ${sp}}`), `${n} lists the eight inputs`);
+  }
+  assert.doesNotMatch(tools.find((x) => x.name === 'proj_aufnahme').description, /name: erz\/1\|erz\/2\|erz\/3\}/, 'the old three-input text is gone');
+});
+
+test('S18 djk-hand studio and stille follow the streams that /lage lists (fresh Baukasten streams included)', async (t) => {
+  const lage = [200, { studio: { stroeme: [{ strom: 1 }, { strom: 2 }, { strom: 3 }, { strom: 6 }, { strom: 9 }] } }];
+  const { c, gesehen } = await aufbau(t, (m, u) => {
+    if (u === '/lage') return lage;
+    if (u === '/strudel') return [200, { ok: true }];
+    const n = /^\/strudel\?strom=(\d+)$/.exec(u ?? '');
+    return n ? [200, { autonom: true, text: 'silence', von: 'cypher' }] : null;
+  });
+  const s = JSON.parse((await c.callTool({ name: 'studio', arguments: {} })).content[0].text);
+  assert.deepEqual(s.stroeme.map((x) => x.strom), [1, 2, 3, 6, 9]);
+  const n0 = gesehen.length;
+  const st = await c.callTool({ name: 'stille', arguments: {} });
+  assert.ok(!st.isError, st.content[0].text);
+  assert.deepEqual(gesehen.slice(n0).filter((x) => x.pfad === '/strudel').map((x) => x.koerper.strom), [1, 2, 3, 6, 9]);
 });

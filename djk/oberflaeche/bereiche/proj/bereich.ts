@@ -82,6 +82,11 @@ export function kurzeAntwort(r: Antwort): Antwort {
   const j = r.j as { rev: number; projekt: Projekt; kern?: Record<string, unknown>; hinweise?: unknown[] };
   return { code: 200, j: { rev: j.rev, kern: j.kern ?? {}, noten_zahl: notenZahl(j.projekt), ...(j.hinweise ? { hinweise: j.hinweise } : {}) } };
 }
+// S17: like kurzeAntwort, plus what bkMerken captured
+export function kurzeBkAntwort(r: Antwort): Antwort {
+  const k = kurzeAntwort(r);
+  return r.code === 200 ? { code: 200, j: { ...(k.j as object), bk: (r.j as { bk?: unknown }).bk } } : k;
+}
 // Spec 6.32: schmale Antwort für proj_oeffnen und proj_neu (Abfrage ?antwort=kurz): slug, rev, die Spuren (Clips ohne Noten, MIDI-Clips mit
 // noten_zahl), noten_zahl je Clip und die Kern-Meldungen. Bei 10.000 Noten statt rund 0,6 MB wenige hundert Bytes; die Seite fragt ohne Abfrage.
 export function kurzeOeffnenAntwort(r: Antwort): Antwort {
@@ -150,6 +155,22 @@ export function projBereich(ctx: BereichKontext, opt: ProjOptionen = {}): Bereic
         return s.warpLage(url.searchParams.get('clip_id'), zahlArg('von_beat'), zahlArg('bis_beat'), zahlArg('bei_beat'), mx, tm,
           url.searchParams.get('transienten_quelle') === '1');   // Editor: alle Transienten der Quelle, ohne Marker und Fenster
       }),
+      // Automation Slice 1: proj_auto (lane_id or spur_id, von_beat, bis_beat, bei_beat as project beats, punkte_max)
+      lies('/proj/auto', (url) => {
+        const zahlArg = (k: string): number | null => {
+          const t = url.searchParams.get(k);
+          if (t === null || t === '') return null;
+          const n = Number(t);
+          if (!Number.isFinite(n)) throw new ProjFehler(400, 'argument_ungueltig', { text: `${k}: a number is required` });
+          return n;
+        };
+        const mx = zahlArg('punkte_max');
+        if (mx !== null && (!Number.isInteger(mx) || mx < 1 || mx > 8192)) {
+          throw new ProjFehler(400, 'argument_ungueltig', { text: 'punkte_max: an integer from 1 to 8192 is required' });
+        }
+        return s.autoLage(url.searchParams.get('lane_id') || null, url.searchParams.get('spur_id') || null, zahlArg('von_beat'), zahlArg('bis_beat'),
+          zahlArg('bei_beat'), mx);
+      }),
       // Spec 6.32: ?antwort=kurz (Werkzeuge proj_neu, proj_oeffnen) liefert slug, rev, Spuren ohne Noten, noten_zahl und kern statt des Projekts
       schreib('/proj/neu', (d, quelle) => s.neu(d.name, quelle), kurzeOeffnenAntwort),
       schreib('/proj/oeffnen', (d, quelle) => s.oeffnen(d.slug, quelle), kurzeOeffnenAntwort),
@@ -158,6 +179,10 @@ export function projBereich(ctx: BereichKontext, opt: ProjOptionen = {}): Bereic
       schreib('/proj/undo', (d, quelle) => s.umkehr('undo', d, quelle), kurzeAntwort),
       schreib('/proj/redo', (d, quelle) => s.umkehr('redo', d, quelle), kurzeAntwort),
       schreib('/proj/transport', (d, quelle) => s.transport(d, quelle)),
+      // S17: sound snapshot (graph + eight knobs per channel): compare, capture, apply
+      lies('/proj/bk', () => s.bkLage()),
+      schreib('/proj/bk/merken', (d, q) => s.bkMerken(d, q), kurzeBkAntwort),
+      schreib('/proj/bk/laden', (d, q) => s.bkLaden(d, q)),
     ],
     ereignis: (adresse: string, felder: Record<string, unknown>) => s.ereignis(adresse, felder),
   };

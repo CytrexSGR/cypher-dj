@@ -2,6 +2,7 @@
 // gibt abgelöste RecSpur wieder frei (Ereignis REC_ALT). Die Meldung eines Takes (/e/aufnahme) kommt vom Aufnahme-Faden über seinen Ring.
 #include <cstring>
 
+#include "cypherdj/aufnahme.h"
 #include "cypherdj/netz.h"
 
 namespace cdj {
@@ -25,7 +26,7 @@ bool Netz::rec_paket(const v::Adresse* a, const osc::Nachricht& m) {
   if (spur) {
     namespace f = v::feld::k_rec_spur;
     const int32_t nr = m.werte[f::spur].i, scharf = m.werte[f::scharf].i, eingang = m.werte[f::eingang].i;
-    if (nr < 1 || nr > ARR_SPUREN || (scharf != 0 && scharf != 1) || !(eingang == 0 || (eingang >= 11 && eingang <= 13) || eingang == 20))
+    if (nr < 1 || nr > ARR_SPUREN || (scharf != 0 && scharf != 1) || !(eingang == 0 || rec_mixer_index(eingang) >= 0 || eingang == 20))
       return ab("ausserhalb_bereich");
     if (scharf == 1 && eingang == 0) return ab("kein_eingang");
     if (scharf == 1 && eingang == 20) return ab("eingang_fehlt");   // Master vor dem Fader ist noch kein Abgriff

@@ -1,0 +1,23 @@
+{
+  "format": "baukasten/2",
+  "name": "fx-phaser",
+  "stimmen": 1,
+  "regler_namen": {"1": "Rate", "2": "Feedback", "3": "Mix"},
+  "knoten": [
+    {"id": "ein", "art": "eingang"},
+    {"id": "ph", "art": "phaser", "rate": 0.25, "fb": 0.6, "mix": 0.5, "stufen": 6},
+    {"id": "rate", "art": "regler", "nr": 1, "min": 0.05, "max": 4, "log": 1},
+    {"id": "fb", "art": "regler", "nr": 2, "min": -0.6, "max": 0.6},
+    {"id": "mix", "art": "regler", "nr": 3, "min": 0, "max": 1},
+    {"id": "aus", "art": "ausgang"}
+  ],
+  "kanten": [
+    {"von": "ein.l", "nach": "ph.l"},
+    {"von": "ein.r", "nach": "ph.r"},
+    {"von": "rate.aus", "nach": "ph.rate"},
+    {"von": "fb.aus", "nach": "ph.fb"},
+    {"von": "mix.aus", "nach": "ph.mix"},
+    {"von": "ph.l", "nach": "aus.l"},
+    {"von": "ph.r", "nach": "aus.r"}
+  ]
+}

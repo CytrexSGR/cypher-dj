@@ -66,7 +66,9 @@ struct HandGriff {
 
 class HandSchlange {
  public:
-  static constexpr int MAX = 256;
+  // S19: two translated sources (hand_in and the learn table on midi_ein_1) may each deliver MAX_MIDI = 256 griffs per cycle; the
+  // queue holds both so that a busy learn controller can never starve hand_in (measured: with 256 the guard test lost all hand_in griffs)
+  static constexpr int MAX = 512;
   bool rein(const HandGriff& g);                       // nach Sample sortiert; false: voll
   // Nimmt den frühesten Griff mit sample < bis heraus; false: keiner.
   bool raus_vor(int64_t bis, HandGriff& g);

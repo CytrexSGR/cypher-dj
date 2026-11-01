@@ -41,6 +41,7 @@ export const ADRESSEN = {
   '/k/led': { typen: ',hssi', abschnitt: '4.7', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'name', 'zustand'], bereiche: {} },
   '/k/kiste': { typen: ',hs', abschnitt: '4.7', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle'], bereiche: {} },
   '/k/mapping': { typen: ',hss', abschnitt: '4.7', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'geraet'], bereiche: {} },
+  '/k/lernen': { typen: ',hsi', abschnitt: '4.7', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'an'], bereiche: { an: [0, 1] } },
   '/k/latenz': { typen: ',hssi', abschnitt: '4.7', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'ziel', 'samples'], bereiche: {} },
   '/erz/strom': { typen: ',hsiss', abschnitt: '4.8', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'strom', 'ziel', 'kanal'], bereiche: { strom: [1, 16] } },
   '/erz/fenster': { typen: ',iiiiddh', abschnitt: '4.8', richtung: 'an_kern', nurPruefmodus: false, felder: ['strom', 'sendung', 'modus', 'reserve', 'ab_beat', 'bis_beat', 't_send_us'], bereiche: { strom: [1, 16] } },
@@ -55,13 +56,14 @@ export const ADRESSEN = {
   '/k/fx/zuweisung': { typen: ',hsisi', abschnitt: '4.10', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'einheit', 'kanal', 'an'], bereiche: { einheit: [1, 2], an: [0, 1] } },
   '/k/fx/routing': { typen: ',hsi', abschnitt: '4.10', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'routing'], bereiche: { routing: [0, 1] } },
   '/k/kanal/graph': { typen: ',hsss', abschnitt: '4.10', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'kanal', 'name'], bereiche: {} },
+  '/k/graph/frage': { typen: ',hs', abschnitt: '4.10', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle'], bereiche: {} },
   '/k/arr/laden': { typen: ',hsi', abschnitt: '4.11', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'nr'], bereiche: { nr: [0, null] } },
   '/k/arr/start': { typen: ',hsdi', abschnitt: '4.11', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'start_beat', 'quant'], bereiche: { start_beat: [0.0, null], quant: [0, 2] } },
   '/k/arr/stopp': { typen: ',hsi', abschnitt: '4.11', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'quant'], bereiche: { quant: [0, 2] } },
   '/k/arr/loop': { typen: ',hsidd', abschnitt: '4.11', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'an', 'von_beat', 'bis_beat'], bereiche: { an: [0, 1], von_beat: [0.0, null] } },
   '/k/arr/metronom': { typen: ',hsifi', abschnitt: '4.11', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'an', 'pegel_db', 'ziel'], bereiche: { an: [0, 1], pegel_db: [-60, 0], ziel: [0, 1] } },
   '/k/arr/freeze': { typen: ',hsiddi', abschnitt: '4.11', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'spur', 'von_beat', 'bis_beat', 'kennung'], bereiche: { spur: [1, 32], von_beat: [0.0, null], kennung: [0, null] } },
-  '/k/rec/spur': { typen: ',hsiii', abschnitt: '4.12', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'spur', 'scharf', 'eingang'], bereiche: { spur: [1, 32], scharf: [0, 1], eingang: [0, 20] } },
+  '/k/rec/spur': { typen: ',hsiii', abschnitt: '4.12', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'spur', 'scharf', 'eingang'], bereiche: { spur: [1, 32], scharf: [0, 1], eingang: [0, 22] } },
   '/k/rec/start': { typen: ',hsiii', abschnitt: '4.12', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'kennung', 'nachlauf_samples', 'frist_samples'], bereiche: { kennung: [0, null], nachlauf_samples: [0, 480000], frist_samples: [0, 1440000] } },
   '/k/rec/stopp': { typen: ',hs', abschnitt: '4.12', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle'], bereiche: {} },
   '/erz/quittung': { typen: ',iiiiiii', abschnitt: '4.8', richtung: 'vom_kern', nurPruefmodus: false, felder: ['strom', 'sendung', 'verworfen', 'verworfen_anderes_muster', 'eingefuegt', 'zu_spaet', 'ungehoert'], bereiche: { strom: [1, 16] } },
@@ -77,6 +79,7 @@ export const ADRESSEN = {
   '/e/regler': { typen: ',sfshd', abschnitt: '5.7', richtung: 'vom_kern', nurPruefmodus: false, felder: ['pfad', 'wert', 'halter', 'sample', 'beat'], bereiche: {} },
   '/e/hand': { typen: ',sfhd', abschnitt: '5.8', richtung: 'vom_kern', nurPruefmodus: false, felder: ['pfad', 'wert', 'sample', 'beat'], bereiche: {} },
   '/e/taste': { typen: ',sihd', abschnitt: '5.8', richtung: 'vom_kern', nurPruefmodus: false, felder: ['name', 'wert', 'sample', 'beat'], bereiche: {} },
+  '/e/gelernt': { typen: ',hiiiii', abschnitt: '5.8', richtung: 'vom_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'kanal', 'nr', 'wert', 'belegt'], bereiche: { quelle: [0, 1], kanal: [1, 16], nr: [0, 127], wert: [0, 127], belegt: [0, 1] } },
   '/e/geladen': { typen: ',isdiih', abschnitt: '5.9', richtung: 'vom_kern', nurPruefmodus: false, felder: ['deck', 'material_id', 'basis_bpm', 'fassung', 'mit_stems', 'sample'], bereiche: { deck: [1, 4] } },
   '/e/halter': { typen: ',sshd', abschnitt: '5.9', richtung: 'vom_kern', nurPruefmodus: false, felder: ['pfad', 'halter', 'sample', 'beat'], bereiche: {} },
   '/e/invariante': { typen: ',ssihd', abschnitt: '5.9', richtung: 'vom_kern', nurPruefmodus: false, felder: ['art', 'plan', 'teil', 'sample', 'beat'], bereiche: {} },
@@ -96,6 +99,7 @@ export const ADRESSEN = {
   '/e/fx': { typen: ',iidddddi', abschnitt: '5.12', richtung: 'vom_kern', nurPruefmodus: false, felder: ['einheit', 'art', 'beats', 'wet', 'param1', 'param2', 'param3', 'an'], bereiche: { einheit: [1, 2], art: [0, 12], an: [0, 1] } },
   '/e/fx/zuweisung': { typen: ',isi', abschnitt: '5.12', richtung: 'vom_kern', nurPruefmodus: false, felder: ['einheit', 'kanal', 'an'], bereiche: { einheit: [1, 2], an: [0, 1] } },
   '/e/fx/routing': { typen: ',i', abschnitt: '5.12', richtung: 'vom_kern', nurPruefmodus: false, felder: ['routing'], bereiche: { routing: [0, 1] } },
+  '/e/graph': { typen: ',ss', abschnitt: '5.12', richtung: 'vom_kern', nurPruefmodus: false, felder: ['kanal', 'name'], bereiche: {} },
   '/zustand/arr': { typen: ',iiidhdif', abschnitt: '5.13', richtung: 'vom_kern', nurPruefmodus: false, felder: ['nr', 'status', 'loop_an', 'projekt_beat', 'ursprung_sample', 'start_beat', 'metronom_an', 'limiter_db'], bereiche: { status: [0, 3], loop_an: [0, 1], metronom_an: [0, 1], limiter_db: [-200, 0] } },
   '/zustand/warp': { typen: ',iiiii', abschnitt: '5.13', richtung: 'vom_kern', nurPruefmodus: false, felder: ['stimmen', 'unterlauf', 'kein_platz', 'spaet', 'faeden'], bereiche: {} },
   '/zustand/ein': { typen: ',ihhhh', abschnitt: '5.14', richtung: 'vom_kern', nurPruefmodus: false, felder: ['verbunden', 'midi_gesehen', 'midi_verloren', 'midi_sample', 'flanke_sample'], bereiche: {} },
@@ -144,6 +148,7 @@ export interface Werte {
   '/k/led': [id: bigint, quelle: string, name: string, zustand: number];
   '/k/kiste': [id: bigint, quelle: string];
   '/k/mapping': [id: bigint, quelle: string, geraet: string];
+  '/k/lernen': [id: bigint, quelle: string, an: number];
   '/k/latenz': [id: bigint, quelle: string, ziel: string, samples: number];
   '/erz/strom': [id: bigint, quelle: string, strom: number, ziel: string, kanal: string];
   '/erz/fenster': [strom: number, sendung: number, modus: number, reserve: number, ab_beat: number, bis_beat: number, t_send_us: bigint];
@@ -158,6 +163,7 @@ export interface Werte {
   '/k/fx/zuweisung': [id: bigint, quelle: string, einheit: number, kanal: string, an: number];
   '/k/fx/routing': [id: bigint, quelle: string, routing: number];
   '/k/kanal/graph': [id: bigint, quelle: string, kanal: string, name: string];
+  '/k/graph/frage': [id: bigint, quelle: string];
   '/k/arr/laden': [id: bigint, quelle: string, nr: number];
   '/k/arr/start': [id: bigint, quelle: string, start_beat: number, quant: number];
   '/k/arr/stopp': [id: bigint, quelle: string, quant: number];
@@ -180,6 +186,7 @@ export interface Werte {
   '/e/regler': [pfad: string, wert: number, halter: string, sample: bigint, beat: number];
   '/e/hand': [pfad: string, wert: number, sample: bigint, beat: number];
   '/e/taste': [name: string, wert: number, sample: bigint, beat: number];
+  '/e/gelernt': [id: bigint, quelle: number, kanal: number, nr: number, wert: number, belegt: number];
   '/e/geladen': [deck: number, material_id: string, basis_bpm: number, fassung: number, mit_stems: number, sample: bigint];
   '/e/halter': [pfad: string, halter: string, sample: bigint, beat: number];
   '/e/invariante': [art: string, plan: string, teil: number, sample: bigint, beat: number];
@@ -199,6 +206,7 @@ export interface Werte {
   '/e/fx': [einheit: number, art: number, beats: number, wet: number, param1: number, param2: number, param3: number, an: number];
   '/e/fx/zuweisung': [einheit: number, kanal: string, an: number];
   '/e/fx/routing': [routing: number];
+  '/e/graph': [kanal: string, name: string];
   '/zustand/arr': [nr: number, status: number, loop_an: number, projekt_beat: number, ursprung_sample: bigint, start_beat: number, metronom_an: number, limiter_db: number];
   '/zustand/warp': [stimmen: number, unterlauf: number, kein_platz: number, spaet: number, faeden: number];
   '/zustand/ein': [verbunden: number, midi_gesehen: bigint, midi_verloren: bigint, midi_sample: bigint, flanke_sample: bigint];
@@ -217,7 +225,8 @@ export const FORM = { linear: 0, s_kurve: 1 } as const;
 export const RASTER_BEATS = [0.25, 1, 4, 16, 32] as const;
 export const FX_BEATS = [0.25, 0.5, 1, 2, 4, 8, 16] as const;
 export const FX_KANAL = ['deck/1', 'deck/2', 'erz/1', 'erz/2', 'erz/3', 'pad/1', 'pad/2', 'master'] as const;
-export const GRAPH_KANAL = ['deck/1', 'deck/2', 'deck/3', 'deck/4'] as const;
+export const GRAPH_KANAL = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'fx/3', 'fx/4'] as const;
+export const GRAPH_PLATZ = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'fx/3', 'fx/4', 'erz/1', 'erz/2', 'erz/3', 'erz/5', 'erz/6', 'erz/7', 'pad/1', 'pad/2'] as const;
 export const ROLL_ART = { band_schatten: 0, puffer_keylock: 1 } as const;
 export const URTEIL = ['ok'] as const;
 export const LED_ZUSTAND = { aus: 0, an: 1, blinkt: 2, blinkt_schnell: 3 } as const;

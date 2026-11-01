@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -91,6 +92,18 @@ struct Ordner {
     std::ofstream(pfad + "/wiedergabe-" + std::to_string(nr) + ".json")
         << "{\"format\":\"cypherdj-arr/2\",\"nr\":" << nr << ",\"spuren\":[" << spuren << "]}";
   }
+  // Automation Slice 1: format /2 with `auto` on the tracks (the caller writes them into the track text, see auto_lane); otherwise like wiedergabe2_warp
+  void wiedergabe2_auto(int64_t nr, const std::string& spuren) const { wiedergabe2_warp(nr, spuren); }
+  // One lane as JSON text: punkte = (beat, wert dB, formcode 0 linear, 1 s, 2 sprung); yields {"ziel":"fader","punkte":[[b,w,f],...]}
+  static std::string auto_lane(const std::vector<std::tuple<double, double, int>>& punkte, const char* ziel = "fader") {
+    std::string s = std::string("{\"ziel\":\"") + ziel + "\",\"punkte\":[";
+    char z[96];
+    for (size_t i = 0; i < punkte.size(); ++i) {
+      std::snprintf(z, sizeof z, "%s[%.17g,%.17g,%d]", i ? "," : "", std::get<0>(punkte[i]), std::get<1>(punkte[i]), std::get<2>(punkte[i]));
+      s += z;
+    }
+    return s + "]}";
+  }
   void wiedergabe(int64_t nr, const std::string& spuren) const {
     std::ofstream(pfad + "/wiedergabe-" + std::to_string(nr) + ".json")
         << "{\"format\":\"cypherdj-arr/1\",\"nr\":" << nr << ",\"spuren\":[" << spuren << "]}";
@@ -99,6 +112,13 @@ struct Ordner {
   void wiedergabe2(int64_t nr, const std::string& spuren, const std::string& gruppen, const char* format = "cypherdj-arr/2") const {
     std::ofstream(pfad + "/wiedergabe-" + std::to_string(nr) + ".json")
         << "{\"format\":\"" << format << "\",\"nr\":" << nr << ",\"spuren\":[" << spuren << "],\"gruppen\":[" << gruppen << "]}";
+  }
+  // 1.10 Slice 3: format /2 with a groups list and a returns list (JSON text of the elements, without brackets); format overridable
+  void wiedergabe2_ret(int64_t nr, const std::string& spuren, const std::string& gruppen, const std::string& returns,
+                       const char* format = "cypherdj-arr/2") const {
+    std::ofstream(pfad + "/wiedergabe-" + std::to_string(nr) + ".json")
+        << "{\"format\":\"" << format << "\",\"nr\":" << nr << ",\"spuren\":[" << spuren << "],\"gruppen\":[" << gruppen
+        << "],\"returns\":[" << returns << "]}";
   }
   void roh(int64_t nr, const std::string& text) const {
     std::ofstream(pfad + "/wiedergabe-" + std::to_string(nr) + ".json") << text;

@@ -120,6 +120,9 @@ static_assert(k_kiste.typen.size() - 1 == k_kiste.felder);
 // §4.7 /k/mapping ,hss
 inline constexpr Adresse k_mapping{"/k/mapping", ",hss", Richtung::an_kern, false, 3};
 static_assert(k_mapping.typen.size() - 1 == k_mapping.felder);
+// §4.7 /k/lernen ,hsi
+inline constexpr Adresse k_lernen{"/k/lernen", ",hsi", Richtung::an_kern, false, 3};
+static_assert(k_lernen.typen.size() - 1 == k_lernen.felder);
 // §4.7 /k/latenz ,hssi
 inline constexpr Adresse k_latenz{"/k/latenz", ",hssi", Richtung::an_kern, false, 4};
 static_assert(k_latenz.typen.size() - 1 == k_latenz.felder);
@@ -162,6 +165,9 @@ static_assert(k_fx_routing.typen.size() - 1 == k_fx_routing.felder);
 // §4.10 /k/kanal/graph ,hsss
 inline constexpr Adresse k_kanal_graph{"/k/kanal/graph", ",hsss", Richtung::an_kern, false, 4};
 static_assert(k_kanal_graph.typen.size() - 1 == k_kanal_graph.felder);
+// §4.10 /k/graph/frage ,hs
+inline constexpr Adresse k_graph_frage{"/k/graph/frage", ",hs", Richtung::an_kern, false, 2};
+static_assert(k_graph_frage.typen.size() - 1 == k_graph_frage.felder);
 // §4.11 /k/arr/laden ,hsi
 inline constexpr Adresse k_arr_laden{"/k/arr/laden", ",hsi", Richtung::an_kern, false, 3};
 static_assert(k_arr_laden.typen.size() - 1 == k_arr_laden.felder);
@@ -228,6 +234,9 @@ static_assert(e_hand.typen.size() - 1 == e_hand.felder);
 // §5.8 /e/taste ,sihd
 inline constexpr Adresse e_taste{"/e/taste", ",sihd", Richtung::vom_kern, false, 4};
 static_assert(e_taste.typen.size() - 1 == e_taste.felder);
+// §5.8 /e/gelernt ,hiiiii
+inline constexpr Adresse e_gelernt{"/e/gelernt", ",hiiiii", Richtung::vom_kern, false, 6};
+static_assert(e_gelernt.typen.size() - 1 == e_gelernt.felder);
 // §5.9 /e/geladen ,isdiih
 inline constexpr Adresse e_geladen{"/e/geladen", ",isdiih", Richtung::vom_kern, false, 6};
 static_assert(e_geladen.typen.size() - 1 == e_geladen.felder);
@@ -285,6 +294,9 @@ static_assert(e_fx_zuweisung.typen.size() - 1 == e_fx_zuweisung.felder);
 // §5.12 /e/fx/routing ,i
 inline constexpr Adresse e_fx_routing{"/e/fx/routing", ",i", Richtung::vom_kern, false, 1};
 static_assert(e_fx_routing.typen.size() - 1 == e_fx_routing.felder);
+// §5.12 /e/graph ,ss
+inline constexpr Adresse e_graph{"/e/graph", ",ss", Richtung::vom_kern, false, 2};
+static_assert(e_graph.typen.size() - 1 == e_graph.felder);
 // §5.13 /zustand/arr ,iiidhdif
 inline constexpr Adresse zustand_arr{"/zustand/arr", ",iiidhdif", Richtung::vom_kern, false, 8};
 static_assert(zustand_arr.typen.size() - 1 == zustand_arr.felder);
@@ -313,7 +325,7 @@ static_assert(test_hand.typen.size() - 1 == test_hand.felder);
 inline constexpr Adresse test_klick{"/test/klick", ",hssi", Richtung::an_kern, true, 4};
 static_assert(test_klick.typen.size() - 1 == test_klick.felder);
 
-inline constexpr std::array<Adresse, 97> alle{
+inline constexpr std::array<Adresse, 101> alle{
     k_hallo,
     k_tschuess,
     k_willkommen,
@@ -347,6 +359,7 @@ inline constexpr std::array<Adresse, 97> alle{
     k_led,
     k_kiste,
     k_mapping,
+    k_lernen,
     k_latenz,
     erz_strom,
     erz_fenster,
@@ -361,6 +374,7 @@ inline constexpr std::array<Adresse, 97> alle{
     k_fx_zuweisung,
     k_fx_routing,
     k_kanal_graph,
+    k_graph_frage,
     k_arr_laden,
     k_arr_start,
     k_arr_stopp,
@@ -383,6 +397,7 @@ inline constexpr std::array<Adresse, 97> alle{
     e_regler,
     e_hand,
     e_taste,
+    e_gelernt,
     e_geladen,
     e_halter,
     e_invariante,
@@ -402,6 +417,7 @@ inline constexpr std::array<Adresse, 97> alle{
     e_fx,
     e_fx_zuweisung,
     e_fx_routing,
+    e_graph,
     zustand_arr,
     zustand_warp,
     zustand_ein,
@@ -455,6 +471,7 @@ namespace k_vorschlag_kanal { enum : std::size_t { id = 0, quelle = 1, kanal = 2
 namespace k_led { enum : std::size_t { id = 0, quelle = 1, name = 2, zustand = 3 }; }
 namespace k_kiste { enum : std::size_t { id = 0, quelle = 1 }; }
 namespace k_mapping { enum : std::size_t { id = 0, quelle = 1, geraet = 2 }; }
+namespace k_lernen { enum : std::size_t { id = 0, quelle = 1, an = 2 }; }
 namespace k_latenz { enum : std::size_t { id = 0, quelle = 1, ziel = 2, samples = 3 }; }
 namespace erz_strom { enum : std::size_t { id = 0, quelle = 1, strom = 2, ziel = 3, kanal = 4 }; }
 namespace erz_fenster { enum : std::size_t { strom = 0, sendung = 1, modus = 2, reserve = 3, ab_beat = 4, bis_beat = 5, t_send_us = 6 }; }
@@ -469,6 +486,7 @@ namespace k_fx { enum : std::size_t { id = 0, quelle = 1, einheit = 2, art = 3, 
 namespace k_fx_zuweisung { enum : std::size_t { id = 0, quelle = 1, einheit = 2, kanal = 3, an = 4 }; }
 namespace k_fx_routing { enum : std::size_t { id = 0, quelle = 1, routing = 2 }; }
 namespace k_kanal_graph { enum : std::size_t { id = 0, quelle = 1, kanal = 2, name = 3 }; }
+namespace k_graph_frage { enum : std::size_t { id = 0, quelle = 1 }; }
 namespace k_arr_laden { enum : std::size_t { id = 0, quelle = 1, nr = 2 }; }
 namespace k_arr_start { enum : std::size_t { id = 0, quelle = 1, start_beat = 2, quant = 3 }; }
 namespace k_arr_stopp { enum : std::size_t { id = 0, quelle = 1, quant = 2 }; }
@@ -491,6 +509,7 @@ namespace pegel { enum : std::size_t { kanal = 0, spitze_db = 1, echtspitze_dbtp
 namespace e_regler { enum : std::size_t { pfad = 0, wert = 1, halter = 2, sample = 3, beat = 4 }; }
 namespace e_hand { enum : std::size_t { pfad = 0, wert = 1, sample = 2, beat = 3 }; }
 namespace e_taste { enum : std::size_t { name = 0, wert = 1, sample = 2, beat = 3 }; }
+namespace e_gelernt { enum : std::size_t { id = 0, quelle = 1, kanal = 2, nr = 3, wert = 4, belegt = 5 }; }
 namespace e_geladen { enum : std::size_t { deck = 0, material_id = 1, basis_bpm = 2, fassung = 3, mit_stems = 4, sample = 5 }; }
 namespace e_halter { enum : std::size_t { pfad = 0, halter = 1, sample = 2, beat = 3 }; }
 namespace e_invariante { enum : std::size_t { art = 0, plan = 1, teil = 2, sample = 3, beat = 4 }; }
@@ -510,6 +529,7 @@ namespace e_loop { enum : std::size_t { box = 0, status = 1, name = 2, beats = 3
 namespace e_fx { enum : std::size_t { einheit = 0, art = 1, beats = 2, wet = 3, param1 = 4, param2 = 5, param3 = 6, an = 7 }; }
 namespace e_fx_zuweisung { enum : std::size_t { einheit = 0, kanal = 1, an = 2 }; }
 namespace e_fx_routing { enum : std::size_t { routing = 0 }; }
+namespace e_graph { enum : std::size_t { kanal = 0, name = 1 }; }
 namespace zustand_arr { enum : std::size_t { nr = 0, status = 1, loop_an = 2, projekt_beat = 3, ursprung_sample = 4, start_beat = 5, metronom_an = 6, limiter_db = 7 }; }
 namespace zustand_warp { enum : std::size_t { stimmen = 0, unterlauf = 1, kein_platz = 2, spaet = 3, faeden = 4 }; }
 namespace zustand_ein { enum : std::size_t { verbunden = 0, midi_gesehen = 1, midi_verloren = 2, midi_sample = 3, flanke_sample = 4 }; }
@@ -547,6 +567,7 @@ namespace k_deck_slip { inline constexpr double deck_min = 1; inline constexpr d
 namespace k_deck_basis_tausch { inline constexpr double deck_min = 1; inline constexpr double deck_max = 4; inline constexpr double fassung_min = 1; }
 namespace k_schuss { inline constexpr double fassung_min = 1; inline constexpr double pad_min = 1; inline constexpr double pad_max = 2; }
 namespace k_ki_stufe { inline constexpr double stufe_min = 0; inline constexpr double stufe_max = 3; }
+namespace k_lernen { inline constexpr double an_min = 0; inline constexpr double an_max = 1; }
 namespace erz_strom { inline constexpr double strom_min = 1; inline constexpr double strom_max = 16; }
 namespace erz_fenster { inline constexpr double strom_min = 1; inline constexpr double strom_max = 16; }
 namespace erz_ev { inline constexpr double strom_min = 1; inline constexpr double strom_max = 16; inline constexpr double note_min = 0; inline constexpr double note_max = 255; inline constexpr double velocity_min = 0; inline constexpr double velocity_max = 1; }
@@ -564,12 +585,13 @@ namespace k_arr_stopp { inline constexpr double quant_min = 0; inline constexpr 
 namespace k_arr_loop { inline constexpr double an_min = 0; inline constexpr double an_max = 1; inline constexpr double von_beat_min = 0.0; }
 namespace k_arr_metronom { inline constexpr double an_min = 0; inline constexpr double an_max = 1; inline constexpr double pegel_db_min = -60; inline constexpr double pegel_db_max = 0; inline constexpr double ziel_min = 0; inline constexpr double ziel_max = 1; }
 namespace k_arr_freeze { inline constexpr double spur_min = 1; inline constexpr double spur_max = 32; inline constexpr double von_beat_min = 0.0; inline constexpr double kennung_min = 0; }
-namespace k_rec_spur { inline constexpr double spur_min = 1; inline constexpr double spur_max = 32; inline constexpr double scharf_min = 0; inline constexpr double scharf_max = 1; inline constexpr double eingang_min = 0; inline constexpr double eingang_max = 20; }
+namespace k_rec_spur { inline constexpr double spur_min = 1; inline constexpr double spur_max = 32; inline constexpr double scharf_min = 0; inline constexpr double scharf_max = 1; inline constexpr double eingang_min = 0; inline constexpr double eingang_max = 22; }
 namespace k_rec_start { inline constexpr double kennung_min = 0; inline constexpr double nachlauf_samples_min = 0; inline constexpr double nachlauf_samples_max = 480000; inline constexpr double frist_samples_min = 0; inline constexpr double frist_samples_max = 1440000; }
 namespace erz_quittung { inline constexpr double strom_min = 1; inline constexpr double strom_max = 16; }
 namespace takt { inline constexpr double takt_min = 1; inline constexpr double phrase_min = 1; }
 namespace zustand_deck { inline constexpr double deck_min = 1; inline constexpr double deck_max = 4; inline constexpr double stretcher_fuell_min = -1; }
 namespace zustand_box { inline constexpr double box_min = 1; inline constexpr double box_max = 2; }
+namespace e_gelernt { inline constexpr double quelle_min = 0; inline constexpr double quelle_max = 1; inline constexpr double kanal_min = 1; inline constexpr double kanal_max = 16; inline constexpr double nr_min = 0; inline constexpr double nr_max = 127; inline constexpr double wert_min = 0; inline constexpr double wert_max = 127; inline constexpr double belegt_min = 0; inline constexpr double belegt_max = 1; }
 namespace e_geladen { inline constexpr double deck_min = 1; inline constexpr double deck_max = 4; }
 namespace e_rueckfall { inline constexpr double deck_min = 1; inline constexpr double deck_max = 4; }
 namespace e_frist { inline constexpr double deck_min = 1; inline constexpr double deck_max = 4; }
@@ -595,7 +617,8 @@ enum class Form : std::int32_t { linear = 0, s_kurve = 1 };
 inline constexpr std::array<double, 5> raster_beats{0.25, 1.0, 4.0, 16.0, 32.0};
 inline constexpr std::array<double, 7> fx_beats{0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0};
 inline constexpr std::array<std::string_view, 8> fx_kanal{"deck/1", "deck/2", "erz/1", "erz/2", "erz/3", "pad/1", "pad/2", "master"};
-inline constexpr std::array<std::string_view, 4> graph_kanal{"deck/1", "deck/2", "deck/3", "deck/4"};
+inline constexpr std::array<std::string_view, 6> graph_kanal{"deck/1", "deck/2", "deck/3", "deck/4", "fx/3", "fx/4"};
+inline constexpr std::array<std::string_view, 14> graph_platz{"deck/1", "deck/2", "deck/3", "deck/4", "fx/3", "fx/4", "erz/1", "erz/2", "erz/3", "erz/5", "erz/6", "erz/7", "pad/1", "pad/2"};
 enum class RollArt : std::int32_t { band_schatten = 0, puffer_keylock = 1 };
 inline constexpr std::array<std::string_view, 1> urteil{"ok"};
 enum class LedZustand : std::int32_t { aus = 0, an = 1, blinkt = 2, blinkt_schnell = 3 };

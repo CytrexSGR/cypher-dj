@@ -75,11 +75,29 @@ for (let n = 1; n <= 8; n++) {   // 1.10 Slice 1 (§1.5): Gruppen-Regler des Arr
   tabelle.set(`grp/${n}/solo`, { pfad: `grp/${n}/solo`, kanal: null, ...r('schalter', 0, 1, 0) });
 }
 tabelle.set('pm/fader', { pfad: 'pm/fader', kanal: null, ...r('db', -200, 6, 0) });
+// 1.10 Slice 3 (§1.5): sends (post fader) from tracks and groups to the 4 returns, return strips and Cypher Hall values; global, everybody may.
+// Sends default to -200 (off). Hall values are normalised 0..1 (unit mapping in the kernel); hall/an is a switch.
+const HALL_VORGABE: Record<string, number> = { pre: 0.04, decay: 0.5252, groesse: 0.282, tief: 0.5658, highcut: 0.8039, fahne: 0.66667 };
+for (let ret = 1; ret <= 4; ret++) {
+  for (let n = 1; n <= 32; n++) tabelle.set(`spur/${n}/send/${ret}`, { pfad: `spur/${n}/send/${ret}`, kanal: null, ...r('db', -200, 6, -200) });
+  for (let n = 1; n <= 8; n++) tabelle.set(`grp/${n}/send/${ret}`, { pfad: `grp/${n}/send/${ret}`, kanal: null, ...r('db', -200, 6, -200) });
+  tabelle.set(`ret/${ret}/fader`, { pfad: `ret/${ret}/fader`, kanal: null, ...r('db', -200, 6, 0) });
+  tabelle.set(`ret/${ret}/pan`, { pfad: `ret/${ret}/pan`, kanal: null, ...r('linear', -1, 1, 0) });
+  tabelle.set(`ret/${ret}/mute`, { pfad: `ret/${ret}/mute`, kanal: null, ...r('schalter', 0, 1, 0) });
+  tabelle.set(`ret/${ret}/solo`, { pfad: `ret/${ret}/solo`, kanal: null, ...r('schalter', 0, 1, 0) });
+  tabelle.set(`ret/${ret}/hall/an`, { pfad: `ret/${ret}/hall/an`, kanal: null, ...r('schalter', 0, 1, 1) });
+  for (const [f, v] of Object.entries(HALL_VORGABE)) tabelle.set(`ret/${ret}/hall/${f}`, { pfad: `ret/${ret}/hall/${f}`, kanal: null, ...r('linear', 0, 1, v) });
+}
 // S5r (§1.5): acht Graph-Regler <kanal>/bk/<1..8> auf Kanälen, die einen Baukasten-Graphen annehmen (deck/1..4 Effekt,
 // erz/1,2,3,5,6,7 und pad/1,2 Instrument; nicht erz/4, erz/8), alle dürfen, 0..1, Vorgabe 0,5
 export const BK_KANAELE: readonly string[] = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'erz/1', 'erz/2', 'erz/3', 'erz/5', 'erz/6', 'erz/7', 'pad/1', 'pad/2'];
 for (const k of BK_KANAELE) {
   for (let n = 1; n <= 8; n++) tabelle.set(`${k}/bk/${n}`, { pfad: `${k}/bk/${n}`, kanal: k, ...r('linear', 0, 1, 0.5) });
+}
+// S14 (§1.5): eight graph knobs fx/<n>/bk/<m> per send return fx/3, fx/4; global (no channel), linear 0..1, default 0.5, everybody may
+export const BK_SEND_KANAELE: readonly string[] = ['fx/3', 'fx/4'];
+for (const k of BK_SEND_KANAELE) {
+  for (let m = 1; m <= 8; m++) tabelle.set(`${k}/bk/${m}`, { pfad: `${k}/bk/${m}`, kanal: null, ...r('linear', 0, 1, 0.5) });
 }
 
 export const REGLER: ReadonlyMap<string, ReglerInfo> = tabelle;

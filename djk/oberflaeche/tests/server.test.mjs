@@ -483,6 +483,26 @@ test('S5r /regler: deck/1/bk/3 reaches the kernel as /k/teil, lage shows it once
   s.zu();
 });
 
+// S14: graph knobs of the send returns fx/3, fx/4 travel through /regler as global controls
+test('S14 /regler: fx/3/bk/2 reaches the kernel as /k/teil, lage shows it once it differs from 0.5; fx/5, fx/2, bk/9 are 400', async (t) => {
+  const { url, log } = await stapel(t);
+  const s = sse(url);
+  await warte(100);
+  const n0 = log.filter((z) => z.typ === 'an_kern' && z.adresse === '/k/teil').length;
+  const r = await postJson(url, '/regler', { pfad: 'fx/3/bk/2', nach: 0.8, ab: 'jetzt' }, CYPHER);
+  assert.equal(r.code, 200, JSON.stringify(r.j));
+  assert.equal(r.j.felder.pfad, 'fx/3/bk/2');
+  assert.equal(log.filter((z) => z.typ === 'an_kern' && z.adresse === '/k/teil').length, n0 + 1, 'exactly one /k/teil to the kernel');
+  await warte(300);
+  const l = await (await fetch(`${url}/lage`)).json();
+  assert.equal(l.regler['fx/3/bk/2'], 0.8, JSON.stringify(l.regler));
+  assert.ok(!('fx/3/bk/1' in l.regler), 'untouched knob stays invisible');
+  for (const pfad of ['fx/5/bk/1', 'fx/2/bk/1', 'fx/1/bk/1', 'fx/3/bk/9', 'fx/3/bk/0']) {   // negative controls
+    assert.equal((await postJson(url, '/regler', { pfad, nach: 0.5 }, CYPHER)).code, 400, pfad);
+  }
+  s.zu();
+});
+
 // S5r Task 4 (D10, K13): the AUTO lock of a stream also covers its graph knobs
 test('S5r AUTO off on stream 2 refuses cypher on erz/2/bk/1 (409 auto_aus, nothing to the kernel); andreas, erz/5 and AUTO on pass', async (t) => {
   const { url, log } = await stapel(t);

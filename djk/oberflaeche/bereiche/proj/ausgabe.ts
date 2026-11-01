@@ -18,6 +18,7 @@
 // Lautheit je Spur (Paket 1.18, E-b, POST /proj/lautheit): derselbe Anfang (Bereich, Wirt-Freeze, Export-Wiedergabe), dann ein Render je belegter Spur
 // ohne Neustart-Zustand des Kerns (--ohne-zustand): die Regler kommen allein aus einer Datei, in der alle anderen Spuren stumm stehen, dazu ein Render
 // aller Spuren für die Summe. Die WAVs liegen in einem temporären Ordner und gehen im finally weg.
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -33,8 +34,11 @@ import {
   brauchtFreeze, freezeBereich, freezeDateiName, FreezeFehler, FREEZE_MAX_BEATS, FREEZE_NACHLAUF_BEATS, istWirt, klingendeNoten,
   pruefeFreezeDatei, setzeFreeze,
 } from '../../projekt/freeze.ts';
-import { reglerAusProjekt, rendere, RenderFehler, type Abgriff, type RenderAntwort } from '../../projekt/render.ts';
+import { reglerAusProjekt, routingRegler, rendere, RenderFehler, type Abgriff, type RenderAntwort } from '../../projekt/render.ts';
 import { messeLautheit, type Lautheit } from '../../projekt/lautheit.ts';
+import {
+  baueMergeProjekt, MergeFehler, mergePlan, mergeRegler, mergeWiedergabe, pruefeMergeNochGleich,
+} from '../../projekt/zusammenfuehren.ts';
 import type { AusgabeLauf, ProjZugang } from './bereich.ts';
 import { grundCode } from './abbildung.ts';
 import { ProjFehler } from './sitzung.ts';
@@ -53,12 +57,14 @@ export interface AusgabeOptionen {
   jetzt?: () => Date;             // Uhr für den Dateinamen (Vorgabe new Date())
   ffmpeg?: string[];              // ffmpeg für die Lautheit (Vorgabe ['ffmpeg'])
   wirtOrdner?: () => string;      // Ordner der Wirt-Status-Dateien (Vorgabe pfade.wirtOrdnerVorgabe(), der Server gibt seinen mit)
+  zeitlimitMs?: number;           // Test-Haken: Zeitlimit des Merge-Renders (Vorgabe 4 · Dauer + 60 s)
 }
 
 const STATUS: Record<string, number> = {
   argument_ungueltig: 400, export_bereich: 400, spur_unbekannt: 400, keine_wirtspur: 400, spur_leer: 400, zu_gross: 400,
   kein_projekt: 409, ki_gestoppt: 409, beschaeftigt: 409, transport_laeuft: 409, nicht_geladen: 409, kein_kernstand: 409, deck_laeuft: 409,
   audio_fehlt: 409, veraltet: 409, wirt_fehlt: 409,
+  merge_leer: 409, merge_gruppen: 409, merge_teil_solo: 409, merge_sends: 409, merge_freeze_noetig: 409, merge_andreas_spur: 409, merge_keine_spur_frei: 409,
   freeze_fehler: 502, render_fehler: 502,
 };
 
@@ -106,7 +112,7 @@ export function alsAntwort(e: unknown): { code: number; body: { fehler: string; 
     const text = x.body.fehler === 'intern' ? `internal server error; ${e.stand()}` : `${x.body.text}; ${e.stand()}`;
     return { code: x.code, body: { ...x.body, text, schritte: e.schritte } };
   }
-  if (e instanceof AusgabeFehler || e instanceof FreezeFehler) return { code: STATUS[e.grund] ?? 409, body: mit(e.grund, e.text) };
+  if (e instanceof AusgabeFehler || e instanceof FreezeFehler || e instanceof MergeFehler) return { code: STATUS[e.grund] ?? 409, body: mit(e.grund, e.text) };
   if (e instanceof StandFehler) return { code: STATUS[e.grund] ?? 409, body: mit(e.grund, e.text, e.detail) };
   if (e instanceof RenderFehler) return { code: STATUS[e.grund], body: mit(e.grund, e.text, e.message) };
   if (e instanceof ProjFehler) return { code: e.code, body: mit(e.fehler, typeof e.extra.text === 'string' ? e.extra.text : '') };
@@ -141,6 +147,13 @@ export function wirtLebt(datei: string): boolean {
 }
 
 export const EXPORT_MAX_BEATS = 1024;
+
+// sha256 über die ganze Datei, im Strom (Vorbild freeze.ts pruefeFreezeDatei)
+export async function sha256Datei(datei: string): Promise<string> {
+  const h = crypto.createHash('sha256');
+  for await (const teil of fs.createReadStream(datei)) h.update(teil as Buffer);
+  return h.digest('hex');
+}
 
 // Export-Wiedergabe: Wirt-Spuren ohne Freeze sind hier stumm (sonst wären sie vorher eingefroren worden) und fehlen, denn der Render lehnt jede
 // Wirt-Spur ab (K3, Rückgabe 5).
@@ -199,6 +212,12 @@ export interface LautheitAntwort {
   summe: Lautheit & { spitze_db: number; unter_messgrenze: boolean; regler_quelle: RenderAntwort['regler_quelle'] };
 }
 
+// Paket 1.13 Slice 7 (D1): Antwort von POST /proj/zusammenfuehren. hinweis quellen_laenger: Inhalt einer Quelle liegt außerhalb von von..bis (D8).
+export interface ZusammenfuehrAntwort {
+  rev: number; projekt: Projekt; spur_id: string; quellen: string[]; datei: string; frames: number;
+  lanes_verworfen: number; hinweis?: 'quellen_laenger';
+}
+
 // Spuren, die im Bereich [von, bis) etwas spielen: ein Clip, der ihn berührt (MIDI-Clips mit Noten), oder ein Freeze, der ihn berührt. Eine Wirt-Spur
 // ohne Freeze spielt nicht (exportSicht lässt sie weg).
 export function belegteSpuren(p: Projekt, von: number, bis: number): Spur[] {
@@ -226,11 +245,12 @@ export function reglerEinzeln(s: Spur, p?: Projekt): Record<string, number> {
     const g = s.ausgang ? (p.gruppen ?? []).find((x) => x.id === s.ausgang!.id) : undefined;
     if (g) { r[`grp/${g.nr}/fader`] = g.fader_db; r[`grp/${g.nr}/pan`] = g.pan; r[`grp/${g.nr}/mute`] = g.mute ? 1 : 0; }
     if ((p.master?.fader_db ?? 0) !== 0) r['pm/fader'] = p.master.fader_db;
+    Object.assign(r, routingRegler(p, { nur: s }));   // 1.10 slice 3: the track's sends and the returns it feeds (spec 5.10)
   }
   return r;
 }
 
-const LAUF_TEXT: Record<AusgabeLauf['art'], string> = { freeze: 'a freeze', export: 'an export', lautheit: 'a loudness measurement' };
+const LAUF_TEXT: Record<AusgabeLauf['art'], string> = { freeze: 'a freeze', export: 'an export', lautheit: 'a loudness measurement', merge: 'a merge' };
 
 // Ende eines Freeze aus Sicht des Wartenden: /e/freeze (status, frames), ein neuer Kern, Stille, Frist
 type FreezeEnde = { art: 'e_freeze'; status: number; frames: number } | { art: 'neustart' } | { art: 'stille' } | { art: 'frist' } | { art: 'geschlossen' };
@@ -454,7 +474,9 @@ export class Ausgabe {
 
   // Prüfungen von Export und Lautheit: nur von_beat und bis_beat, Bereich 1 bis EXPORT_MAX_BEATS Beats ab Beat 0 (Vorgabe: Loop-Klammer), kein anderer
   // Lauf, kein Transport, kein Audio in Vorbereitung.
-  private pruefeBereich(d: Record<string, unknown>, erlaubt: readonly string[] = ['von_beat', 'bis_beat']): { von: number; bis: number } {
+  // nurSpuren (Merge, P6): audio_fehlt zählt nur diese Spuren (Standard: alle)
+  private pruefeBereich(d: Record<string, unknown>, erlaubt: readonly string[] = ['von_beat', 'bis_beat'], nurSpuren?: string[]):
+    { von: number; bis: number } {
     for (const k of Object.keys(d)) if (!erlaubt.includes(k)) fehl('argument_ungueltig', `unknown field ${k}`);
     for (const k of ['von_beat', 'bis_beat']) {
       if (d[k] !== undefined && (typeof d[k] !== 'number' || !Number.isFinite(d[k]))) fehl('argument_ungueltig', `${k}: a number is required`);
@@ -467,7 +489,7 @@ export class Ausgabe {
     }
     this.pruefeFrei();                                                   // ein laufender Freeze meldet Status 3: beschaeftigt, nicht transport_laeuft
     if (this.arr && this.arr.status !== 0) fehl('transport_laeuft', 'stop the transport first');
-    const fehlt = fehlendesAudio(o.projekt, von, bis);
+    const fehlt = fehlendesAudio(nurSpuren ? { ...o.projekt, spuren: o.projekt.spuren.filter((s) => nurSpuren.includes(s.id)) } : o.projekt, von, bis);
     if (fehlt.length) fehl('audio_fehlt', `audio clip ${fehlt.join(', ')} is still being prepared; try again in a moment`);
     return { von, bis };
   }
@@ -527,6 +549,15 @@ export class Ausgabe {
     } catch (e) { throw this.nachFehler(e); } finally { this.gib(); }
   }
 
+  // Slice 2 (E10): the playback for the single render of `s`: the export view without the lanes of all other tracks, the own ones stay. null if no
+  // other track has a lane (the shared export playback is already right then). The caller deletes the file after the render.
+  private schreibeOhneFremdeLanes(p: Projekt, s: Spur): { nr: number; datei: string } | null {
+    if (!p.spuren.some((x) => x.id !== s.id && x.automation?.length)) return null;
+    const q = exportSicht(p);
+    for (const x of q.spuren) if (x.id !== s.id) delete x.automation;
+    return this.zugang.schreibeWiedergabe(q);
+  }
+
   // Paket 1.18, E-b (POST /proj/lautheit): Lautheit je belegter Spur und als Summe, offline, auf Anfrage. Gleicher Anfang wie der Export (Bereich, Wirt-
   // Spuren einfrieren, Export-Wiedergabe). Ein Render je Spur mit --ohne-zustand und einer Regler-Datei, in der alle anderen Spuren stumm stehen
   // (Fader und Pan der Spur aus dem Projekt, Master wie ein frisch gestarteter Kern, der Limiter bleibt), dazu ein Render aller Spuren für die Summe
@@ -543,10 +574,10 @@ export class Ausgabe {
         const dauerMs = (bis - von) * 60_000 / p.tempo_bpm;
         this.renderAbbruch = new AbortController();
         if (this.geschlossen) this.renderAbbruch.abort();
-        const render = async (name: string, regler: Record<string, number>): Promise<{ r: RenderAntwort; l: Lautheit; unter: boolean }> => {
+        const render = async (name: string, regler: Record<string, number>, nrW = w.nr): Promise<{ r: RenderAntwort; l: Lautheit; unter: boolean }> => {
           const datei = path.join(dir, `${name}.json`), aus = path.join(dir, `${name}.wav`);
           fs.writeFileSync(datei, JSON.stringify(regler));
-          const r = await rendere({ programm: (this.opt.render ?? (() => [renderProgramm()]))(), nr: w.nr, von_beat: von, bis_beat: bis, bpm: p.tempo_bpm,
+          const r = await rendere({ programm: (this.opt.render ?? (() => [renderProgramm()]))(), nr: nrW, von_beat: von, bis_beat: bis, bpm: p.tempo_bpm,
             aus, arbeitsordner: this.zugang.arbeitsordner(), spurRegler: datei, ohneZustand: true, instanz: (this.opt.instanz ?? instanz)(),
             // 1.10: alle am PM, damit die Summe dem Standard-Export gleicht (AK24)
             zeitlimitMs: Math.ceil(4 * dauerMs) + 60_000, abbruch: this.renderAbbruch!.signal, abgriff: 'produktion' });
@@ -560,11 +591,18 @@ export class Ausgabe {
         const gruppenSolo = (s: Spur) => !!s.ausgang && gruppen.some((g) => g.id === s.ausgang!.id && g.solo);
         for (const s of belegteSpuren(p, von, bis)) {
           const kopf = { spur_id: s.id, nr: s.nr, name: s.name };
-          if (s.mute || s.fader_db <= STUMM_GRENZE || (solo && !s.solo && !gruppenSolo(s))) {
+          // E10: the base values decide only for a track without a fader/mute/solo lane (a lane can un-mute it)
+          const grundStumm = s.mute || s.fader_db <= STUMM_GRENZE || (solo && !s.solo && !gruppenSolo(s));
+          if (grundStumm && !(s.automation ?? []).some((l) => l.ziel === 'fader' || l.ziel === 'mute' || l.ziel === 'solo')) {
             spuren.push({ ...kopf, ...OHNE_LAUTHEIT, spitze_db: -200, stumm: true, unter_messgrenze: false });
             continue;
           }
-          const { r, l, unter } = await render(`spur-${s.nr}`, reglerEinzeln(s, p));
+          // E10: isolation. A lane of another track would override its base mute = 1 in the single render, so this render gets a playback without
+          // the lanes of the other tracks (only written when there are some), deleted right after (BEHALTE 5 would push out the loaded playback).
+          const einzel = this.schreibeOhneFremdeLanes(p, s);
+          let res: { r: RenderAntwort; l: Lautheit; unter: boolean };
+          try { res = await render(`spur-${s.nr}`, reglerEinzeln(s, p), einzel?.nr); } finally { if (einzel) fs.rmSync(einzel.datei, { force: true }); }
+          const { r, l, unter } = res;
           spuren.push({ ...kopf, ...l, spitze_db: r.spitze_db, stumm: r.spitze_db <= STILLE_DB, unter_messgrenze: unter });
         }
         const sum = await render('summe', reglerAusProjekt(p));
@@ -578,6 +616,70 @@ export class Ausgabe {
         if (tmp) fs.rmSync(tmp, { recursive: true, force: true });
       }
     } catch (e) { throw this.nachFehler(e); } finally { this.gib(); }
+  }
+  // Paket 1.13 Slice 7 (POST /proj/zusammenfuehren, D1 bis D13): die gewählten Spuren in EINEM Render ohne Neustart-Zustand (Regler allein aus der Datei,
+  // Gruppen und PM neutral), die WAV als Quelle ohne Katalog auf eine neue Spur direkt unter der tiefsten Quelle, die Quellen stumm: EIN aendereStand,
+  // ein Undo. Keine Sperre über die Render-Dauer (wie Export und Lautheit), kein Einfrieren (D7), nach dem Render eine frische Prüfung (D12).
+  async zusammenfuehre(d: Record<string, unknown>): Promise<ZusammenfuehrAntwort> {
+    const quelle = this.ctx.quelle();                                          // vor dem ersten await (Muster stems.ts:224)
+    for (const k of ['von_beat', 'bis_beat']) if (typeof d[k] !== 'number') fehl('argument_ungueltig', `${k}: a number is required`);
+    const ids = Array.isArray(d.spur_ids) ? d.spur_ids.filter((x): x is string => typeof x === 'string') : [];
+    const { von, bis } = this.pruefeBereich(d, ['spur_ids', 'von_beat', 'bis_beat'], ids);
+    const o0 = this.offen();
+    const z = mergePlan(o0.projekt, d, quelle);                                // wirft MergeFehler
+    const belegt = new Set(belegteSpuren(o0.projekt, von, bis).map((s) => s.id));
+    if (!z.spurIds.some((id) => belegt.has(id))) fehl('merge_leer', 'none of the tracks plays in this range');
+    this.belege({ art: 'merge' });
+    let ziel: string | null = null, teil: string | null = null, regler: string | null = null;
+    let wiedergabe: { nr: number; datei: string } | null = null;
+    try {
+      const ordner = path.join(o0.ordner, 'merge');
+      fs.mkdirSync(ordner, { recursive: true });
+      const kennung = this.zugang.naechsteNummer();
+      ziel = path.join(ordner, `merge-${kennung}.wav`);
+      teil = `${ziel}.${process.pid}.teil`; regler = path.join(ordner, `.regler-${process.pid}.json`);
+      wiedergabe = this.zugang.schreibeWiedergabe(mergeWiedergabe(o0.projekt, z.spurIds));
+      fs.writeFileSync(regler, JSON.stringify(mergeRegler(o0.projekt, z.spurIds)));
+      this.renderAbbruch = new AbortController();
+      if (this.geschlossen) this.renderAbbruch.abort();
+      const dauerMs = (bis - von) * 60_000 / o0.projekt.tempo_bpm;
+      const r = await rendere({ programm: (this.opt.render ?? (() => [renderProgramm()]))(), nr: wiedergabe.nr, von_beat: von, bis_beat: bis,
+        bpm: o0.projekt.tempo_bpm, aus: teil, arbeitsordner: this.zugang.arbeitsordner(), spurRegler: regler, ohneZustand: true,
+        instanz: (this.opt.instanz ?? instanz)(), zeitlimitMs: this.opt.zeitlimitMs ?? Math.ceil(4 * dauerMs) + 60_000,
+        abbruch: this.renderAbbruch.signal, abgriff: 'produktion' });
+      if (r.spitze_db <= STILLE_DB) fehl('merge_leer', 'the tracks render to silence in this range');
+      fs.linkSync(teil, ziel);                                                 // nie ersetzen (P4)
+      const sha256 = await sha256Datei(ziel);                                  // im Strom, der Event-Loop bleibt frei
+      // frisch, danach kein await mehr bis aendereStand (Muster stems.ts:148)
+      const o = this.offen();
+      if (o.slug !== o0.slug) fehl('veraltet', 'the project was closed or replaced during the merge; nothing was saved');
+      const alt = pruefeMergeNochGleich(o.projekt, z);
+      if (alt === 'merge_keine_spur_frei') fehl('merge_keine_spur_frei', 'all 32 tracks are used');
+      if (alt !== null) fehl('veraltet', 'the tracks changed during the merge; nothing was saved');
+      if (quelle === 'cypher' && this.ctx.kiGestoppt()) fehl('ki_gestoppt', 'Stop Cypher is set; the result was discarded');
+      const neu = baueMergeProjekt(o.projekt, z, { sha256, pfad: ziel }, quelle);
+      const meta: Meta = { quelle, label: `Merge ${z.name.slice('Merge: '.length)}`.slice(0, 80) };
+      const w = aendereStand(o.verlauf, o.projekt, neu.projekt, meta, this.zugang.haken());
+      this.schritte.push({ rev: w.projekt.rev, label: meta.label });          // ab hier gehört die WAV dem Projekt (nie mehr löschen)
+      const behalte = ziel; ziel = null;
+      await this.zugang.uebernimm(w, meta);
+      const jetzt = this.offen();
+      this.ctx.log({ typ: 'proj_zusammenfuehren', slug: jetzt.slug, nr: wiedergabe.nr, von_beat: von, bis_beat: bis, spuren: z.spurIds.length,
+        datei: behalte, regler_quelle: r.regler_quelle });
+      return { rev: jetzt.projekt.rev, projekt: jetzt.projekt, spur_id: neu.spurId, quellen: z.spurIds, datei: behalte, frames: r.frames,
+        lanes_verworfen: neu.lanesVerworfen,
+        ...(z.ausserhalb ? { hinweis: 'quellen_laenger' as const } : {}) };
+    } catch (e) {
+      // the render text speaks of an export; for a merge nothing was saved yet, say so (Task 3)
+      if (e instanceof RenderFehler && !this.schritte.length) Object.assign(e, { text: `${e.text}; nothing was changed` });
+      throw this.nachFehler(e);
+    } finally {
+      this.renderAbbruch = null;
+      if (wiedergabe) fs.rmSync(wiedergabe.datei, { force: true });            // verdrängt sonst die geladene (BEHALTE 5)
+      for (const f of [teil, regler, ziel]) if (f) fs.rmSync(f, { force: true });   // ziel nur, wenn nie gespeichert (oben auf null gesetzt)
+      try { fs.rmdirSync(path.join(o0.ordner, 'merge')); } catch { /* nicht leer oder weg */ }
+      this.gib();
+    }
   }
 }
 
@@ -611,6 +713,12 @@ export function ausgabeBereich(ctx: BereichKontext, zugang: ProjZugang, opt: Aus
       }) },
       { methode: 'POST', pfad: '/proj/export', schutz: 'fremdePost', handler: antworte((d) => a.exportiere(d)) },
       { methode: 'POST', pfad: '/proj/lautheit', schutz: 'fremdePost', handler: antworte((d) => a.lautheit(d)) },
+      { methode: 'POST', pfad: '/proj/zusammenfuehren', schutz: 'fremdePost', handler: antworte(async (d, kurz) => {
+        const x = await a.zusammenfuehre(d);
+        if (!kurz) return x;
+        const { projekt: _projekt, ...schmal } = x;                              // Spec 6.31: schmal ohne projekt
+        return schmal;
+      }) },
     ],
     ereignis: (adresse, felder) => a.ereignis(adresse, felder),
   };

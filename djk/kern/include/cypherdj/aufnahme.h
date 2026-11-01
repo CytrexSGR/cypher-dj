@@ -1,5 +1,5 @@
 // 1.8 Slice 1: Modul Aufnahme im Kern-Callback. Besitzt den Transport nicht: Einsatz und Ende kommen aus der Lage des Arrangements (ArrLage).
-// Zustand: 0 steht · 2 wartet auf den Einsatz · 3 nimmt auf · 4 Nachlauf. Abgriff: erz/1..3 (Codes 11..13), bitgleich, in Chunks zu 256 Frames (Teilblöcke werden gesammelt).
+// Zustand: 0 steht · 2 wartet auf den Einsatz · 3 nimmt auf · 4 Nachlauf. Abgriff: erz/1..3, erz/5..7, pad/1..2 (Codes siehe REC_CODES), bitgleich, in Chunks zu 256 Frames (Teilblöcke werden gesammelt).
 // Echtzeit: keine Allokation, keine Sperre. Die Abgriffsliste (rec_tap) ist der EINE Ort der internen Quellen; 1.10 (Resampling) ergänzt sie hier.
 // Rein Header (CMakeLists.txt, explizite Quellenlisten mit src/kern.cpp).
 #pragma once
@@ -15,6 +15,23 @@ namespace cdj {
 
 constexpr int64_t REC_FRIST_SAMPLES = 96000;   // 2 s: Vorgabe der Frist für den Transportstart nach /k/rec/start (Feld frist_samples = 0); sie endet, sobald das Arrangement wartet
 constexpr int64_t REC_FRIST_MIN = 48000, REC_FRIST_MAX = 1440000;   // 1 s bis 30 s: was der Befehl tragen darf (osc.json frist_samples)
+
+// S18: the internal tap list. Recording input codes (contract osc.json /k/rec/spur eingang): 11..13 = erz/1..3,
+// 15..17 = erz/5..7, 21, 22 = pad/1, pad/2 (rule: erz/N -> 10 + N, pad/N -> 20 + N). 14 (erz/4, production) and 18
+// (erz/8, cue) are not taps. A tap slot is the index of the code in REC_CODES (0..7); the table also lives in
+// djk/vertrag/stroeme.ts (REC_EINGANG), pinned by djk/vertrag/tests/test_stroeme_tabelle.py.
+constexpr int REC_ABGRIFFE = 8;
+constexpr int REC_CODES[REC_ABGRIFFE] = {11, 12, 13, 15, 16, 17, 21, 22};
+constexpr int REC_MIXER[REC_ABGRIFFE] = {4, 5, 6, 8, 9, 10, 12, 13};   // Mixer index of each code (mixer.h: erz/1..8 = 4..11, pad/1..2 = 12, 13)
+constexpr int rec_abgriff_slot(int code) {
+  for (int i = 0; i < REC_ABGRIFFE; ++i)
+    if (REC_CODES[i] == code) return i;
+  return -1;
+}
+constexpr int rec_mixer_index(int code) {
+  const int s = rec_abgriff_slot(code);
+  return s < 0 ? -1 : REC_MIXER[s];
+}
 
 struct ArrLage {
   int status;       // ArrStatus: 0 steht, 1 wartet, 2 spielt, 3 freeze
@@ -136,8 +153,12 @@ class Aufnahme {
     const int64_t a = std::max(s0, start_s_), e = ende_ >= 0 ? std::min(s1, ende_) : s1;
     for (RecSpur* p : spur_) {
       if (!p || p->phase.load(std::memory_order_relaxed) != 1) continue;
-      const int k = p->eingang - 11;   // rec_tap: 11..13 -> erz/1..3
-      if (k < 0 || k > 2) continue;
+#ifdef CYPHERDJ_MUTATION_REC_ERZ6_ALS_5
+      const int k = rec_abgriff_slot(p->eingang == 16 ? 15 : p->eingang);   // mutation: erz/6 (16) reads the tap of erz/5 (15)
+#else
+      const int k = rec_abgriff_slot(p->eingang);   // rec_tap: slot of the code in REC_CODES (S18: erz/1..3, 5..7, pad/1..2)
+#endif
+      if (k < 0) continue;
       sammle(p, a, e, s0, tl[k], tr[k]);
     }
     if (ende_ >= 0 && s1 >= ende_) {

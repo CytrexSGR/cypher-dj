@@ -3,7 +3,7 @@
 // Projektstand: den rechnet der Server, die Seite zeigt ihn (während eines Zugs über entwurf.js). Lagen rasten auf das
 // GRID der Transportleiste (zeitachse.js rasten); Fades rasten nicht (frei wie in jeder DAW).
 import { rasten } from './zeitachse.js';
-import { CLIP_KOPF, clipKasten, spurIndexBei } from './layout.js';
+import { CLIP_KOPF, clipKasten, spurIndexBeiTabelle, zeilenTabelle, spurZeile } from './layout.js';
 import { beatBeiQuelle, warpAn } from './warp.js';
 
 export const GRIFF_PX = 6;          // Breite der Kürz-Griffe an den Clip-Rändern
@@ -20,12 +20,13 @@ const minLaenge = (clip, raster) => Math.min(clip.laenge_beats, raster > 0 ? ras
 
 // Welcher Clip liegt unter (x, y) der Spurfläche, und welche Zone: 'fade_ein' | 'fade_aus' (Namenszeile eines Audio-Clips,
 // nahe am Fade-Punkt) | 'links' | 'rechts' (Kürz-Griffe) | 'mitte' (verschieben). Der zuletzt gezeichnete Clip gewinnt.
-export function trefferClip(projekt, a, x, y) {
-  const i = spurIndexBei(y, projekt?.spuren?.length ?? 0);
+// tab: the row table (layout.js zeilenTabelle) when lane rows are open; a click in a lane row never hits a clip. Without it the old fixed grid.
+export function trefferClip(projekt, a, x, y, tab = zeilenTabelle(projekt?.spuren?.length ?? 0)) {
+  const i = spurIndexBeiTabelle(tab, y);
   if (i < 0) return null;
   const spur = projekt.spuren[i];
   for (let k = spur.clips.length - 1; k >= 0; k--) {
-    const clip = spur.clips[k], kb = clipKasten(a, i, clip);
+    const clip = spur.clips[k], kb = clipKasten(a, i, clip, spurZeile(tab, i).y);
     if (x < kb.x || x > kb.x + kb.w || y < kb.y || y > kb.y + kb.h) continue;
     return { spurIndex: i, spur, clip, zone: zone(clip, kb, a, x, y) };
   }

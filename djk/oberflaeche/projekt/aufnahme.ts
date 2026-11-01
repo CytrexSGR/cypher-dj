@@ -4,7 +4,8 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fuehreListeAus } from './befehle.ts';
-import { INTERNE_EINGAENGE, sucheSpur, type AudioClip, type Projekt } from './modell.ts';
+import { sucheSpur, type AudioClip, type Projekt } from './modell.ts';
+import { REC_EINGANG } from '../../vertrag/stroeme.ts';
 
 export class TakeFehler extends Error {
   readonly grund: string;
@@ -13,9 +14,9 @@ export class TakeFehler extends Error {
 const RATE = 48000;
 
 export function eingangsCode(name: string): number {
-  const i = (INTERNE_EINGAENGE as readonly string[]).indexOf(name);
-  if (i < 0) throw new TakeFehler('eingang_fehlt', name);
-  return 11 + i;
+  const code = (REC_EINGANG as Record<string, number>)[name];   // S18: explicit table, no longer 11 + index (erz/4 and erz/8 have no tap)
+  if (code === undefined) throw new TakeFehler('eingang_fehlt', name);
+  return code;
 }
 
 export function wavKopf(frames: number): Buffer {

@@ -23,11 +23,11 @@ const mit = async (t, opt, k) => { const x = bereich(t, opt, k); await x.s.neu('
 
 // --- P5: Fassade ------------------------------------------------------------------------------------------------------------------------
 
-test('P5 Fassade: projBereich liefert zugang mit allen dreizehn Funktionen (B3: naechsteNummer; S3: ausgabeLauf, Spec 6.34; 1.8: transport, aufnahmeLauf; Slice 6: stemsStand, beiSchliessen), die Routen bleiben neun plus GET /proj/warp (Paket 1.13); offen() ist null ohne Projekt', (t) => {
+test('P5 Fassade: projBereich liefert zugang mit allen dreizehn Funktionen (B3: naechsteNummer; S3: ausgabeLauf, Spec 6.34; 1.8: transport, aufnahmeLauf; Slice 6: stemsStand, beiSchliessen), the routes stay nine plus GET /proj/warp (Paket 1.13) and GET /proj/auto (Automation Slice 1); offen() ist null ohne Projekt', (t) => {
   const { b, z } = bereich(t);
   for (const f of ['offen', 'arbeitsordner', 'haken', 'uebernimm', 'schreibeWiedergabe', 'naechsteNummer', 'tempoAnMaster', 'sperreLaden', 'ausgabeLauf', 'transport', 'aufnahmeLauf', 'stemsStand', 'beiSchliessen']) assert.equal(typeof z[f], 'function', f);
   assert.equal(Object.keys(z).length, 13);
-  assert.equal(b.routen().length, 10); assert.equal(b.name, 'proj');
+  assert.equal(b.routen().length, 14); assert.equal(b.name, 'proj');
   assert.equal(z.offen(), null);
   assert.equal(z.arbeitsordner(), b.sitzung.arbeitsordner);
 });

@@ -2,6 +2,8 @@
 // Namen), lader.cpp (mmap + MAP_POPULATE + mlock, Budget vor dem Einblenden).
 #include "cypherdj/arr_wiedergabe.h"
 
+#include "cypherdj/cypher_bk_ffi.h"
+
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -15,6 +17,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <new>
 #include <set>
 #include <stdexcept>
@@ -34,6 +37,37 @@ struct Abbruch : std::runtime_error {
 };
 
 [[noreturn]] void format(const std::string& m) { throw Abbruch("format", m); }
+
+// The one table of lane targets (automation slice 2): project string -> core target, device parameter index, range and form rule. The ranges
+// repeat ZIEL_BEREICH in modell.ts. nur_sprung: only jump points (form 2) with the value 0 or 1 (mute, solo).
+struct AutoZiel {
+  const char* name;
+  uint8_t ziel, param;
+  double min, max;
+  bool nur_sprung;
+};
+constexpr AutoZiel AUTO_ZIELE[] = {
+    {"fader", ARR_AUTO_FADER, 0, -200.0, 6.0, false},
+    {"pan", ARR_AUTO_PAN, 0, -1.0, 1.0, false},
+    {"mute", ARR_AUTO_MUTE, 0, 0.0, 1.0, true},
+    {"solo", ARR_AUTO_SOLO, 0, 0.0, 1.0, true},
+    {"geraet.lautstaerke", ARR_AUTO_GERAET, 0, 0.0, 1.0, false},   // param = index into the device parameter names
+    {"geraet.cutoff", ARR_AUTO_GERAET, 1, 0.0, 1.0, false},
+    {"geraet.resonanz", ARR_AUTO_GERAET, 2, 0.0, 1.0, false},
+    {"geraet.env_mod", ARR_AUTO_GERAET, 3, 0.0, 1.0, false},
+};
+static_assert(sizeof(AUTO_ZIELE) / sizeof(AUTO_ZIELE[0]) == ARR_AUTO_LANES_JE_SPUR, "one lane per target and track: 8");
+
+constexpr bool gleich(const char* a, const char* b) {
+  while (*a && *a == *b) ++a, ++b;
+  return *a == *b;
+}
+constexpr bool geraet_namen_gebunden() {   // every geraet.* entry carries the name ARR_GERAET_PARAM_NAME[param] after the prefix
+  for (const AutoZiel& z : AUTO_ZIELE)
+    if (z.ziel == ARR_AUTO_GERAET && !gleich(z.name + 7, ARR_GERAET_PARAM_NAME[z.param])) return false;
+  return true;
+}
+static_assert(geraet_namen_gebunden(), "AUTO_ZIELE geraet.* entries must match ARR_GERAET_PARAM_NAME");
 
 const json& feld(const json& o, const char* name, const std::string& wo) {
   if (!o.is_object() || !o.contains(name)) format(wo + name + " fehlt");
@@ -82,6 +116,15 @@ int64_t erstes_unendliches(const float* x, int64_t n) {
   return -1;
 }
 
+// S20: the graph name rule = GRAPH_NAME in oberflaeche/graphen.ts = BK_GRAPH_NAME in modell.ts = kit_name_ok in netz_erz.cpp
+bool bk_name_ok(const std::string& n) {
+  if (n.empty() || n.size() > 32) return false;
+  for (char c : n)
+    if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '-')) return false;
+  return true;
+}
+bool bk_knopf_ok(const std::string& k) { return k.size() == 2 && k[0] == 'k' && k[1] >= '1' && k[1] <= '8'; }
+
 bool hex64(const std::string& s) {
   if (s.size() != 64) return false;
   for (char c : s)
@@ -105,6 +148,9 @@ void je_bereich(ArrSnapshot& s, F f) {
   if (s.warps.capacity()) f(static_cast<void*>(s.warps.data()), arr_seiten(s.warps.capacity() * sizeof(ArrWarp)));   // Paket 1.13
   if (s.warp_beat.capacity()) f(static_cast<void*>(s.warp_beat.data()), arr_seiten(s.warp_beat.capacity() * sizeof(double)));
   if (s.warp_frame.capacity()) f(static_cast<void*>(s.warp_frame.data()), arr_seiten(s.warp_frame.capacity() * sizeof(double)));
+  if (s.auto_lane_liste.capacity())   // Automation Slice 1
+    f(static_cast<void*>(s.auto_lane_liste.data()), arr_seiten(s.auto_lane_liste.capacity() * sizeof(ArrAutoLane)));
+  if (s.auto_punkte.capacity()) f(static_cast<void*>(s.auto_punkte.data()), arr_seiten(s.auto_punkte.capacity() * sizeof(ArrAutoPunkt)));
 }
 }  // namespace
 
@@ -153,6 +199,11 @@ std::string wiedergabe_pfad(const std::string& ordner, int64_t nr) {
 }
 
 ArrAudioCache::~ArrAudioCache() {
+  // S20: free every instance without asking the sink: the cache outlives the kern only in the render, where the kern is gone first, and
+  // in the kern the loader thread (and so this cache) ends after the callback has stopped
+  for (BkEintrag& e : bk_)
+    if (e.h) cypher_bk_frei(e.h);
+  for (CypherBk* h : bk_aufgeschoben_) cypher_bk_frei(h);
   for (auto& [sha, a] : audio_) {
     if (a->gesperrt) munlock(a->abbild, a->bytes);
     munmap(a->abbild, a->bytes);
@@ -283,10 +334,121 @@ void ArrAudioCache::gib(ArrAudio* a) {
   audio_.erase(it);   // gibt den Kopf frei (munmap seiner Seiten hebt die Sperre auf)
 }
 
+// ---- S20: graph store -------------------------------------------------------------------------------------------------
+namespace {
+constexpr size_t BK_DATEI_MAX = 4u << 20;   // a graph file larger than this is refused (a real graph is a few KiB)
+}
+
+int32_t ArrAudioCache::bk_hole(int nr, const std::string& graph, CypherBk** h, uint64_t* gen, std::string& grund,
+                               std::string& meldung) {
+  grund = "format";
+  if (bk_ordner_.empty()) {
+    meldung = "graph " + graph + ": no graph folder set";
+    return -1;
+  }
+  const std::string pfad = bk_ordner_ + "/" + graph + ".json";
+  std::ifstream f(pfad, std::ios::binary);
+  if (!f) {
+    meldung = "graph " + graph + ": " + pfad + " cannot be read";
+    return -1;
+  }
+  const std::string text((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+  if (text.size() > BK_DATEI_MAX) {
+    meldung = "graph " + graph + ": file larger than " + std::to_string(BK_DATEI_MAX >> 20) + " MiB";
+    return -1;
+  }
+#ifdef CYPHERDJ_MUTATION_ARR_BK_OHNE_TEILEN
+  const std::string schluessel = std::to_string(nr) + "|" + graph + "|" + std::to_string(arr_id(text)) + "|" + std::to_string(++bk_zaehler_);   // fault: never shared
+  --bk_zaehler_;
+#else
+  const std::string schluessel = std::to_string(nr) + "|" + graph + "|" + std::to_string(arr_id(text));
+#endif
+  for (size_t i = 0; i < bk_.size(); ++i) {
+    if (bk_[i].schluessel != schluessel) continue;
+    ++bk_[i].ref;
+    *h = bk_[i].h;
+    *gen = bk_[i].gen;
+    return static_cast<int32_t>(i);
+  }
+  char fehler[256] = {};
+  const std::string wurzel = bk_ordner_ + "/samples";
+  CypherBk* b = cypher_bk_neu_wurzel(text.c_str(), 48000.0, wurzel.c_str(), fehler, sizeof fehler);
+  if (!b) {
+    meldung = "graph " + graph + ": " + fehler;
+    return -1;
+  }
+#ifndef CYPHERDJ_MUTATION_ARR_BK_EFFEKT_OFFEN
+  if (cypher_bk_hat_eingang(b)) {
+    cypher_bk_frei(b);
+    meldung = "graph " + graph + " is an effect graph, an instrument is expected";
+    return -1;
+  }
+#endif
+  if (const uint32_t lat = cypher_bk_latenz(b); lat > 0) {
+    cypher_bk_frei(b);
+    meldung = "graph " + graph + " has a latency of " + std::to_string(lat) + " samples (not supported on a project track)";
+    return -1;
+  }
+  size_t slot = 0;
+  while (slot < bk_.size() && !bk_[slot].schluessel.empty()) ++slot;
+  if (slot == bk_.size()) bk_.emplace_back();
+  bk_[slot].schluessel = schluessel;
+  bk_[slot].h = b;
+  bk_[slot].gen = ++bk_zaehler_;
+  bk_[slot].ref = 1;
+  *h = b;
+  *gen = bk_[slot].gen;
+  return static_cast<int32_t>(slot);
+}
+
+void ArrAudioCache::bk_gib(int32_t slot) {
+  if (slot < 0 || static_cast<size_t>(slot) >= bk_.size() || bk_[slot].schluessel.empty()) return;
+  BkEintrag& e = bk_[slot];
+  if (--e.ref > 0) return;
+  CypherBk* h = e.h;
+  e.schluessel.clear();
+  e.h = nullptr;
+  e.ref = 0;
+#ifdef CYPHERDJ_MUTATION_ARR_BK_FREI_OHNE_LESER
+  cypher_bk_frei(h);   // fault: freed although the sink may still fade this instance
+  return;
+#else
+  if (bk_leser_ && bk_leser_->nutzt(h)) {
+    bk_aufgeschoben_.push_back(h);   // the sink fades it for one more block: freed in a later pass
+    return;
+  }
+  cypher_bk_frei(h);
+#endif
+}
+
+bool ArrAudioCache::bk_nachholen() {
+  bool arbeit = false;
+  for (size_t i = 0; i < bk_aufgeschoben_.size();) {
+    if (bk_leser_ && bk_leser_->nutzt(bk_aufgeschoben_[i])) {
+      ++i;
+      continue;
+    }
+    cypher_bk_frei(bk_aufgeschoben_[i]);
+    bk_aufgeschoben_[i] = bk_aufgeschoben_.back();
+    bk_aufgeschoben_.pop_back();
+    arbeit = true;
+  }
+  return arbeit;
+}
+
+int ArrAudioCache::bk_eintraege() const {
+  int n = 0;
+  for (const BkEintrag& e : bk_) n += e.h != nullptr;
+  return n;
+}
+
 void gib_wiedergabe(ArrSnapshot* s, ArrAudioCache& cache) {
   if (!s) return;
   cache.entsperre(*s);
   for (ArrAudio* a : s->audios) cache.gib(a);
+#ifndef CYPHERDJ_MUTATION_ARR_BK_OHNE_REF
+  for (int32_t sl : s->bk_refs) cache.bk_gib(sl);
+#endif
   delete s;
 }
 
@@ -336,8 +498,25 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
         if (text(ag, "art", wg + "ausgang.") != "master") format(wg + "ausgang: Gruppen verschachteln nicht (nur master)");
       }
     }
+    // 1.10 Slice 3: returns (only /2). The core needs only WHICH returns exist; the sends are controls, not data (spec 5.1).
+    // nr 1..ARR_RETURNS at most once, the output is master (returns do not feed returns or groups).
+    if (j.contains("returns")) {
+      if (!v2) format("returns gibt es erst in cypherdj-arr/2");
+      const json& rl = j.at("returns");
+      if (!rl.is_array()) format("returns ist keine Liste");
+      for (size_t ri = 0; ri < rl.size(); ++ri) {
+        const json& r = rl[ri];
+        const std::string wr = "returns[" + std::to_string(ri) + "].";
+        const int64_t rn = ganz(r, "nr", wr);
+        if (rn < 1 || rn > ARR_RETURNS) format(wr + "nr außerhalb 1 bis " + std::to_string(ARR_RETURNS));
+        if (snap->ret_da[rn - 1]) format(wr + "nr doppelt");
+        snap->ret_da[rn - 1] = true;
+        const json& ar = feld(r, "ausgang", wr);
+        if (text(ar, "art", wr + "ausgang.") != "master") format(wr + "ausgang: Returns senden nicht weiter (nur master)");
+      }
+    }
     // Zählen, dann reservieren: die Zeiger in ArrSpur zeigen in die Vektoren, die danach nie wachsen
-    size_t n_clips = 0, n_noten = 0, n_warps = 0, n_punkte = 0;
+    size_t n_clips = 0, n_noten = 0, n_warps = 0, n_punkte = 0, n_lanes = 0, n_auto_p = 0;
     for (const json& s : spuren) {
       if (s.contains("clips") && s.at("clips").is_array()) {
         n_clips += s.at("clips").size();
@@ -349,7 +528,18 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
           }
       }
       if (s.contains("noten") && s.at("noten").is_array()) n_noten += s.at("noten").size();
+      if (s.contains("auto") && s.at("auto").is_array()) {   // Automation Slice 1: count lanes and points (the checks follow in the track loop)
+        n_lanes += s.at("auto").size();
+        for (const json& l : s.at("auto")) {
+          if (!(l.is_object() && l.contains("punkte") && l.at("punkte").is_array())) continue;
+          if (l.at("punkte").size() > static_cast<size_t>(ARR_AUTO_LANE_PUNKTE_MAX))
+            throw Abbruch("zu_gross", "more than " + std::to_string(ARR_AUTO_LANE_PUNKTE_MAX) + " points in one automation lane");
+          n_auto_p += l.at("punkte").size();
+        }
+      }
     }
+    if (n_auto_p > static_cast<size_t>(ARR_AUTO_PUNKTE_MAX))
+      throw Abbruch("zu_gross", "more than " + std::to_string(ARR_AUTO_PUNKTE_MAX) + " automation points in all lanes");
     if (n_clips > static_cast<size_t>(ARR_CLIPS_MAX)) throw Abbruch("zu_gross", "mehr als 4096 Clips");
     if (n_noten > static_cast<size_t>(ARR_NOTEN_MAX)) throw Abbruch("zu_gross", "mehr als 65536 Noten");
 #ifndef CYPHERDJ_MUTATION_ARR_WARP_OHNE_GESAMT   // Fehlerfall: die Gesamtgrenze der Marker aller Clips fehlt (Slice 3a, Task 15)
@@ -363,7 +553,10 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
     snap->warps.reserve(n_warps);
     snap->warp_beat.reserve(n_punkte);
     snap->warp_frame.reserve(n_punkte);
+    snap->auto_lane_liste.reserve(n_lanes);
+    snap->auto_punkte.reserve(n_auto_p);
     std::map<std::string, ArrAudio*> je_sha;  // jedes Audio einmal je Schnappschuss
+    int n_bk = 0;                              // S20: bk tracks of this playback (at most ARR_BK_MAX)
     std::set<int> nr_gesehen;
     for (size_t si = 0; si < spuren.size(); ++si) {
       const json& s = spuren[si];
@@ -393,12 +586,22 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
       } else if (art == "intern") {
         sp.art = ArrArt::intern;
         const std::string g = text(s, "geraet", wo);
-        if (g != "rb338") format(wo + "geraet " + g + " unbekannt (D1: rb338)");
+        if (g != "rb338" && g != "bk") format(wo + "geraet " + g + " unbekannt (rb338 oder bk)");
         std::snprintf(sp.geraet, sizeof sp.geraet, "%s", g.c_str());
+        const bool ist_bk = g == "bk";
+        if (ist_bk) {   // S20: a Baukasten graph; built here (loader thread), handed to the callback inside the snapshot
+          if (++n_bk > ARR_BK_MAX) throw Abbruch("zu_gross", wo + "more than " + std::to_string(ARR_BK_MAX) + " bk tracks");
+          const std::string gr = text(s, "graph", wo);
+          if (!bk_name_ok(gr)) format(wo + "graph \"" + gr + "\": name must be 1 to 32 characters of [a-z0-9_-]");
+          std::snprintf(sp.graph, sizeof sp.graph, "%s", gr.c_str());
+        } else if (s.contains("graph")) {
+          format(wo + "graph gibt es nur bei geraet bk");
+        }
         if (s.contains("parameter")) {
           const json& p = s.at("parameter");
           if (!p.is_object()) format(wo + "parameter ist kein Objekt");
           for (auto it = p.begin(); it != p.end(); ++it) {
+            if (ist_bk && !bk_knopf_ok(it.key())) format(wo + "parameter." + it.key() + ": a bk track knows k1 to k8");
             if (sp.n_param >= ARR_PARAMETER) format(wo + "mehr als " + std::to_string(ARR_PARAMETER) + " parameter");
             if (it.key().empty() || it.key().size() >= sizeof sp.param[0].name) format(wo + "parameter-Name zu lang");
             if (!it.value().is_number()) format(wo + "parameter." + it.key() + " ist keine Zahl");
@@ -407,6 +610,12 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
             std::snprintf(sp.param[sp.n_param].name, sizeof sp.param[0].name, "%s", it.key().c_str());
             sp.param[sp.n_param++].wert = static_cast<float>(w);
           }
+        }
+        if (ist_bk) {   // all of the track's checks passed up to here: only now build or share the instance
+          std::string grund, meldung;
+          const int32_t slot = cache.bk_hole(static_cast<int>(nr), sp.graph, &sp.bk, &sp.bk_gen, grund, meldung);
+          if (slot < 0) throw Abbruch(grund, wo + meldung);
+          snap->bk_refs.push_back(slot);
         }
       } else if (art == "wirt") {
         sp.art = ArrArt::wirt;
@@ -616,19 +825,75 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
         sp.noten_id = sp.n_noten ? snap->noten_id.data() + i0 : nullptr;
         sp.noten_id_index = sp.n_noten ? snap->noten_id_index.data() + i0 : nullptr;
       }
+      if (s.contains("auto")) {   // Automation Slice 1: lanes of this track, only in /2; one lane per (target, parameter), see AUTO_ZIELE
+        if (!v2) format(wo + "auto exists only in cypherdj-arr/2");
+        const json& al = s.at("auto");
+        if (!al.is_array()) format(wo + "auto is not a list");
+        const size_t l0 = snap->auto_lane_liste.size();
+        for (size_t li = 0; li < al.size(); ++li) {
+          const json& l = al[li];
+          const std::string wl = wo + "auto[" + std::to_string(li) + "].";
+          const std::string zname = text(l, "ziel", wl);
+          const AutoZiel* az = nullptr;
+          for (const AutoZiel& z : AUTO_ZIELE)
+            if (zname == z.name) az = &z;
+          if (!az) format(wl + "ziel " + zname + " unknown");
+          if (az->ziel == ARR_AUTO_GERAET && !(sp.art == ArrArt::intern && std::strcmp(sp.geraet, "rb338") == 0))   // 1.12: the four parameters are the RB-338's; the bk sink has no auto_parameter
+            format(wl + "ziel " + zname + " only on an RB-338 track");
+          for (size_t k = l0; k < snap->auto_lane_liste.size(); ++k)
+            if (snap->auto_lane_liste[k].ziel == az->ziel && snap->auto_lane_liste[k].param == az->param)
+              format(wl + "ziel " + zname + " twice on one track");
+          const json& pl = feld(l, "punkte", wl);
+          if (!pl.is_array() || pl.empty()) format(wl + "punkte is not a non-empty list");
+          const size_t p0 = snap->auto_punkte.size();
+          for (size_t pi = 0; pi < pl.size(); ++pi) {
+            const json& q = pl[pi];
+            const std::string wq = wl + "punkte[" + std::to_string(pi) + "]";
+            if (!q.is_array() || q.size() != 3) format(wq + " is not [beat, wert, form]");
+            if (!q[0].is_number() || !q[1].is_number() || !q[2].is_number_integer()) format(wq + " has a non-number");
+            ArrAutoPunkt x{};
+            x.beat = q[0].get<double>();
+            const double w = q[1].get<double>();
+            const int64_t fm = q[2].get<int64_t>();
+            if (!std::isfinite(x.beat) || x.beat < 0.0) format(wq + " beat negative or not finite");
+            if (!(w >= az->min && w <= az->max)) format(wq + " wert outside the range of " + zname);
+            if (fm < 0 || fm > 2) format(wq + " form outside 0 to 2");
+            if (az->nur_sprung && (fm != 2 || (w != 0.0 && w != 1.0))) format(wq + " " + zname + " takes only 0 or 1 with form 2 (jump)");
+            x.wert = static_cast<float>(w);
+            x.form = static_cast<uint8_t>(fm);
+            if (pi > 0 && x.beat < snap->auto_punkte.back().beat) format(wq + " beats fall");
+            if (pi > 1 && x.beat == snap->auto_punkte[snap->auto_punkte.size() - 1].beat &&
+                x.beat == snap->auto_punkte[snap->auto_punkte.size() - 2].beat)
+              format(wq + " three points at one beat");
+            snap->auto_punkte.push_back(x);
+          }
+          ArrAutoLane lane{};
+          lane.ziel = az->ziel;
+          lane.param = az->param;
+          lane.n = static_cast<int>(pl.size());
+          lane.p = snap->auto_punkte.data() + p0;
+          snap->auto_lane_liste.push_back(lane);
+        }
+        sp.n_auto = static_cast<int>(snap->auto_lane_liste.size() - l0);
+        sp.auto_lanes = sp.n_auto ? snap->auto_lane_liste.data() + l0 : nullptr;
+        snap->n_auto_lanes += sp.n_auto;
+      }
     }
   } catch (const Abbruch& a) {
+    for (int32_t sl : snap->bk_refs) cache.bk_gib(sl);   // S20: graph references taken so far
     for (ArrAudio* x : geholt) cache.gib(x);
     erg.grund = a.grund;
     erg.meldung = pfad + ": " + a.what();
     return erg;
   } catch (const std::exception& e) {
+    for (int32_t sl : snap->bk_refs) cache.bk_gib(sl);   // S20: graph references taken so far
     for (ArrAudio* x : geholt) cache.gib(x);
     erg.grund = "format";
     erg.meldung = pfad + ": " + e.what();
     return erg;
   }
   if (std::string g, m; !cache.sperre(*snap, g, m)) {   // K1-Fix 8: Kopf und Felder gesperrt und gebucht
+    for (int32_t sl : snap->bk_refs) cache.bk_gib(sl);   // S20: graph references taken so far
     for (ArrAudio* x : geholt) cache.gib(x);
     erg.grund = g;
     erg.meldung = pfad + ": " + m;

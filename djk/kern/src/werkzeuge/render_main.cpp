@@ -12,7 +12,9 @@
 // (fader dB −200..+6, pan −1..+1, mute und solo 0/1).
 // Aufruf: cypherdj-render --nr N --von-beat V --bis-beat B --bpm T --aus <datei.wav> [--quantum Q] [--konfig kern.toml]
 //         [--zustand pfad | --ohne-zustand] [--spur-regler datei.json] [--arr-ordner pfad] [--gegenprobe-spur S]
-//         [--abgriff produktion|set]
+//         [--abgriff produktion|set] [--bk-ordner pfad]
+// --bk-ordner (S20): the folder of the Baukasten graphs of the project tracks with device bk; default $CYPHERDJ_BK_ORDNER, else
+// $HOME/.config/cypherdj/baukasten (the folder the live kern reads).
 // --abgriff (1.10 Slice 2, E2): produktion = der PM-Ausgang des Kerns vor erz/4, Kleber, master/pegel und Set-Limiter; set (Vorgabe, wie bisher) = der
 // Master hinter dem Set-Limiter. Der PM-Abgriff ist der PM ohne DJ-Kanalzug, der Ring-Master derselbe PM durch den Isolator von erz/4 (Betrag gleich).
 // Ausgabe (stdout, eine Zeile): {"datei","frames","spitze_db","start_sample","phase","quantum","vorhalt","regler",
@@ -50,7 +52,7 @@
 static int hilfe() {
   std::fprintf(stderr, "Aufruf: cypherdj-render --nr N --von-beat V --bis-beat B --bpm T --aus <datei.wav> [--quantum Q]"
                        " [--konfig kern.toml] [--zustand pfad | --ohne-zustand] [--spur-regler datei.json]"
-                       " [--arr-ordner pfad] [--gegenprobe-spur S] [--abgriff produktion|set]\n");
+                       " [--arr-ordner pfad] [--gegenprobe-spur S] [--abgriff produktion|set] [--bk-ordner pfad]\n");
   return 2;
 }
 
@@ -60,7 +62,7 @@ int main(int argc, char** argv) {
   if (!cdj::instanz_gueltig("cypherdj-render")) return 2;   // Fix L8: mit Hinweis
   cdj::RenderAuftrag a;
   a.nr = -1;
-  std::string aus, konfig, zustand, arr_ordner, spur_regler, abgriff = "set";
+  std::string aus, konfig, zustand, arr_ordner, spur_regler, abgriff = "set", bk_ordner;
   bool ohne_zustand = false;
   int quantum = 0;
   // Fix L8: jede Zahl streng (ganz verbraucht, endlich, im Bereich), sonst Rückgabe 2 mit dem Schalter
@@ -91,6 +93,8 @@ int main(int argc, char** argv) {
       spur_regler = argv[++i];
     } else if (!std::strcmp(argv[i], "--arr-ordner") && wert) {
       arr_ordner = argv[++i];
+    } else if (!std::strcmp(argv[i], "--bk-ordner") && wert) {
+      bk_ordner = argv[++i];
     } else if (!std::strcmp(argv[i], "--gegenprobe-spur") && wert) {
       if (!cdj::lies_ganz(argv[++i], 0, cdj::ARR_SPUREN, g)) return falsch(i, "ganze Zahl 0..32");
       a.gegenprobe_spur = static_cast<int>(g);
@@ -121,6 +125,12 @@ int main(int argc, char** argv) {
   }
   cdj::wende_instanz_an(konf, inst);
   a.arr_ordner = arr_ordner.empty() ? cdj::arr_ordner_von(konf, inst) : arr_ordner;
+  if (bk_ordner.empty()) {   // S20: like the live kern, whatever the instance
+    const char* env = std::getenv("CYPHERDJ_BK_ORDNER");
+    const char* home = std::getenv("HOME");
+    bk_ordner = env && *env ? env : (home && *home ? std::string(home) + "/.config/cypherdj/baukasten" : std::string());
+  }
+  a.bk_ordner = bk_ordner;
   a.limiter_dbtp = konf.limiter_dbtp;
   a.filter_guete = konf.filter_guete;
   a.speicher_budget_bytes = static_cast<int64_t>(konf.speicher_budget_mib) << 20;

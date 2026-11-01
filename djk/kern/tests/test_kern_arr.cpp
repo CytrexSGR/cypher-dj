@@ -305,5 +305,27 @@ int main() {
       PRUEF_NAH(pm.back().pegel[0], -9.03, 0.2);
     }
   }
+  {  // 1.10 slice 3 (Task 6): /pegel ret/<r> only for returns the playback knows, peak after the return fader; -200 without a signal
+    arr35::Lauf x(ab.pfad, "test_kern_arr_ret");
+    const std::string a = x.ordner.audio('a', 200000, 0.25f);
+    const std::string clip = x.ordner.clip("c1", 0.0, 4.0, a, 200000);
+    x.lauf(10 * N);
+    PRUEF(x.alle(cdj::Ereignis::PEGEL, "ret/1").empty());   // no playback: no return level
+    x.teil("spur/1/send/1", 0.0f, 0.0, 0.0);
+    x.teil("ret/1/hall/an", 0.0f, 0.0, 0.0);                // dry: the peak is the track level
+    const int64_t l1 = x.laden3(8, "{\"nr\":1,\"art\":\"audio\",\"clips\":[" + clip + "]}", "",
+                                "{\"nr\":1,\"ausgang\":{\"art\":\"master\"}},{\"nr\":3,\"ausgang\":{\"art\":\"master\"}}");
+    x.lauf(12 * N);
+    x.start(0.0, 0);
+    x.lauf(80 * N);
+    PRUEF(x.quittung(l1, 3));
+    const auto r1 = x.alle(cdj::Ereignis::PEGEL, "ret/1"), r3 = x.alle(cdj::Ereignis::PEGEL, "ret/3");
+    PRUEF(!r1.empty() && !r3.empty());
+    PRUEF(x.alle(cdj::Ereignis::PEGEL, "ret/2").empty() && x.alle(cdj::Ereignis::PEGEL, "ret/4").empty());   // negative control: not in the playback
+    if (!r1.empty() && !r3.empty()) {
+      PRUEF_NAH(r1.back().pegel[0], -15.05, 0.2);   // the track 0.25 in the centre = 0.1768 (-15.05 dB), send 0 dB, return fader 0 dB, dry
+      PRUEF(r3.back().pegel[0] <= -199.0);          // return 3 gets no send
+    }
+  }
   PRUEF_ENDE();
 }

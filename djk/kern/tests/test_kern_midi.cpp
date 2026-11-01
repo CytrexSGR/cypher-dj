@@ -94,16 +94,29 @@ static void fall_versatz(const std::string& ab) {
   // 3) Überlauf und keine Allokation: 300 Ereignisse in einem Zyklus
   const uint64_t ueber = x.kern->hand_ueberlauf();
   const uint64_t ereignisse = x.kern->hand_ereignisse();
+  // S19: with the learn table active, 300 CCs on midi_ein_1 arrive in the same cycle (256 are translated by slot 1, 44 are
+  // counted lost by the ring); the cycle must stay free of allocations with both slots busy
+  x.lern_laden("kern/tests/hand/mappings/lernen_bk.json");
+  const uint64_t lern0 = x.kern->lern_ereignisse();
+  {  // armed as well: the first of the 300 CCs is captured (GELERNT is queued without allocation), the other 255 are translated
+    cdj::Befehl scharf = x.neu(cdj::Befehl::LERNEN, "andreas");
+    scharf.an = 1;
+    x.sende(scharf);
+  }
+  for (int i = 0; i < 300; ++i) x.midi_ein_bei(13 * SPB - 13 * SPB % N + (i % N), 0xB0, 74, static_cast<uint8_t>(i % 128));
   for (int i = 0; i < 300; ++i) x.midi_bei(13 * SPB - 13 * SPB % N + (i % N), 0xB0, 7, static_cast<uint8_t>(i % 128));
   x.bewachen = true;
   x.zyklen(14 * SPB);
   x.bewachen = false;
   PRUEF(x.kern->hand_ueberlauf() == ueber + 44);
   PRUEF(x.kern->hand_ereignisse() == ereignisse + 256);
+  PRUEF(x.kern->lern_ereignisse() == lern0 + 255);
+  PRUEF(x.alle(cdj::Ereignis::GELERNT).size() == 1);
   PRUEF(g_allokationen == 0);
-  std::printf("ueberlauf: %llu verworfen, %llu uebersetzt, Allokationen im Zyklus %ld\n",
+  std::printf("ueberlauf: %llu verworfen, %llu uebersetzt, Allokationen im Zyklus %ld; learn table: %llu uebersetzt (+1 captured)\n",
               (unsigned long long)(x.kern->hand_ueberlauf() - ueber),
-              (unsigned long long)(x.kern->hand_ereignisse() - ereignisse), g_allokationen);
+              (unsigned long long)(x.kern->hand_ereignisse() - ereignisse), g_allokationen,
+              (unsigned long long)(x.kern->lern_ereignisse() - lern0));
 }
 
 // 4) /k/set/neu und MIDI im selben Zyklus: der Griff wirkt am Versatz der neuen Zeitachse

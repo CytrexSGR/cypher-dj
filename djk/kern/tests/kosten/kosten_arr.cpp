@@ -29,6 +29,22 @@
 //          ist p99,9 zu grob und der Zuwachs nur gemeldet; KOSTEN_TOR_ZYKLEN und KOSTEN_GRENZE_US stellen es für den Kontrolllauf um) oder KOSTEN_PRIO unter 7 liegt (dann liefen
 //          die Fäden des Werks nicht unter dem Hauptfaden) oder in einem Tor-Lauf (mindestens 20 000 Zyklen) die Priorität nicht wirkt (KOSTEN_PRIO fehlt, SCHED_FIFO nicht gesetzt oder ein
 //          Werk-Faden ohne Priorität: die Zahlen stammen dann aus SCHED_OTHER). KOSTEN_WARP_HALT=1: Kontrolllauf, das Werk steht nach 2 000 Zyklen; Unterlauf MUSS dann zählen (sonst misst die Lage nichts).
+//   arr32fest, arr32lane, arr32lanet  Automation Slice 1 (task 8): the arr32 tracks WITHOUT the 32 stellwerk ramps. fest: fader fixed (baseline); lane: one
+//          fader lane per track (triangle: 0 dB, 3..6 dB down at beat 16, 0 dB at beat 32, so every block lies in a ramp); lanet: lane plus a tempo map of
+//          31 one-beat ramps (up to 63 segments). Self-check: all 32 tracks sound, the base value of every fader is still 0 dB, the level is under 0 dB,
+//          lane: 32 lanes in the snapshot (otherwise exit 2).
+//   arr32pan, arr32cut, arr32rb  Automation Slice 2, cost decomposition: pan = arr32fest plus a pan lane on all 32 tracks only (32 lanes); cut = arr32fest plus a
+//          geraet.cutoff lane on the tracks 1..8 only (8 lanes); rb = the arr32fest file again under another number (no lanes). NOTE: arr32fest already has 24 internal
+//          RB-338 tracks (1..24) and 8 audio tracks (25..32), so the tracks 1..8 of arr32auto are RB in the baseline too; arr32rb is therefore identical to arr32fest
+//          and serves as the noise floor of a paired difference.
+//   arr32steil  Automation Slice 2, worst case of the step hold: the arr32fest tracks with a fader lane and a pan lane on all 32 tracks, each a zigzag of 20 dB (pan: 1.6 units)
+//          per 0.05 beat (641 points per lane, 64 lanes). The held value leaves its tolerance every 2 samples, so no hold window runs out; reported, no gate.
+//          KOSTEN_OHNE_VORAUSSCHAU=1 switches the look-ahead of auto_block off (control run, same bits).
+//   arr32auto, arr32solo  Automation Slice 2 (task 8, AK22): the arr32fest tracks (no stellwerk ramps) with 32 fader lanes (triangle as in arr32lane), 32 pan
+//          lanes (a triangle around a per-track centre) and, on the tracks 1 to 8 (internal RB-338), a geraet.cutoff lane (0.2, 0.8, 0.2): 72 lanes, quantum 256.
+//          arr32solo adds a solo lane (jump points, 1 for a sixteenth) on the tracks 1, 2, 4 and 5: 76 lanes; a solo lane keeps the per-sample solo loops on in
+//          every block (reported, no gate). Baseline of the gate is arr32fest (decision E11), not arr32. Self-check: 72 (76) lanes in the snapshot, all
+//          tracks sound, base values untouched (otherwise exit 2).
 // Ausgabe je Lage: Median, p99, p99,9, Maximum in µs, dazu eine JSON-Zeile {"lage":…} für die Ablage. Kein Test: die
 // Zahlen gehören in den Bericht (Grenze A10, Teil ohne JACK: arr3 p99,9 höchstens ohne p99,9 + 200 µs).
 // Aufruf: kern_kosten_arr [zyklen [lagen]]   lagen: Komma-Liste, Vorgabe alle (ohne,arr3,arr3rb,hand); eine unbekannte
@@ -343,7 +359,9 @@ int main(int argc, char** argv) {
   for (size_t a = 0; !lagen.empty() && a + 1 < lagen.size();) {   // jede genannte Lage muss es geben
     const size_t b = lagen.find(',', a + 1);
     const std::string eine = lagen.substr(a + 1, b - a - 1);
-    if (!eine.empty() && eine != "ohne" && eine != "arr3" && eine != "arr3rb" && eine != "hand" && eine != "arr32" && eine != "arr32g" && eine != "arr32au" && eine != "arr32warp") {
+    if (!eine.empty() && eine != "ohne" && eine != "arr3" && eine != "arr3rb" && eine != "hand" && eine != "arr32" && eine != "arr32g" && eine != "arr32au" && eine != "arr32warp" &&
+        eine != "arr32fest" && eine != "arr32lane" && eine != "arr32lanet" && eine != "arr32auto" && eine != "arr32solo" && eine != "arr32pan" && eine != "arr32cut" && eine != "arr32rb" && eine != "arr32steil" &&
+        eine != "arr32r" && eine != "arr32r_setze" && eine != "arr32r_oeffnen") {
       std::fprintf(stderr, "kosten_arr: unbekannte Lage \"%s\"\n", eine.c_str());
       return 3;
     }
@@ -353,7 +371,13 @@ int main(int argc, char** argv) {
   const std::string ordner = "/dev/shm/kern_kosten_arr_" + std::to_string(getpid());
   std::filesystem::create_directories(ordner + "/audio");
   const std::string sha(64, 'c');
-  const bool will32 = lagen.empty() || lagen.find(",arr32,") != std::string::npos || lagen.find(",arr32g,") != std::string::npos;
+  const bool will32 = lagen.empty() || lagen.find(",arr32,") != std::string::npos || lagen.find(",arr32g,") != std::string::npos ||
+                      lagen.find(",arr32fest,") != std::string::npos || lagen.find(",arr32lane,") != std::string::npos ||
+                      lagen.find(",arr32lanet,") != std::string::npos || lagen.find(",arr32auto,") != std::string::npos ||
+                      lagen.find(",arr32solo,") != std::string::npos || lagen.find(",arr32pan,") != std::string::npos ||
+                      lagen.find(",arr32cut,") != std::string::npos || lagen.find(",arr32rb,") != std::string::npos || lagen.find(",arr32steil,") != std::string::npos ||
+                      lagen.find(",arr32r,") != std::string::npos || lagen.find(",arr32r_setze,") != std::string::npos ||
+                      lagen.find(",arr32r_oeffnen,") != std::string::npos;
   struct Aufraeumen {   // Ende 1, 2 oder 3 und Normalende räumen gleich auf (arr32 legt 8 x 5,8 MB in /dev/shm ab)
     std::string d;
     ~Aufraeumen() { std::error_code ec; std::filesystem::remove_all(d, ec); }
@@ -392,8 +416,8 @@ int main(int argc, char** argv) {
       std::ofstream(ordner + "/audio/" + sha32_von(sp) + ".f32", std::ios::binary)
           .write(reinterpret_cast<const char*>(ton.data()), (std::streamsize)(ton.size() * sizeof(float)));
     }
-    const auto bau32 = [&](int nr, bool mit_gruppen) {   // 1.10: nr 2 ohne Gruppen (/1), nr 3 mit 8 Gruppen zu je 4 Spuren (/2)
-    std::string j = std::string("{\"format\":\"") + (mit_gruppen ? "cypherdj-arr/2" : "cypherdj-arr/1") + "\",\"nr\":" + std::to_string(nr) + ",\"spuren\":[";
+    const auto bau32 = [&](int nr, bool mit_gruppen, bool mit_lane = false, int mit_ret = 0, int mit_auto = 0) {   // mit_auto: 1 = slice 2 lanes (fader, pan, cutoff), 2 = plus solo lane, 3 = pan lane only, 4 = cutoff lane on tracks 1..8 only, 5 = steep fader and pan lanes on all tracks   // mit_ret: number of returns (1.10 slice 3, format /2)   // 1.10: nr 2 ohne Gruppen (/1), nr 3 mit 8 Gruppen zu je 4 Spuren (/2)
+    std::string j = std::string("{\"format\":\"") + (mit_gruppen || mit_lane || mit_ret || mit_auto ? "cypherdj-arr/2" : "cypherdj-arr/1") + "\",\"nr\":" + std::to_string(nr) + ",\"spuren\":[";
     for (int sp = 1; sp <= 32; ++sp) {
       j += (sp > 1 ? "," : "") + std::string("{\"nr\":") + std::to_string(sp);
       if (mit_gruppen) j += ",\"ausgang\":{\"art\":\"gruppe\",\"nr\":" + std::to_string((sp - 1) % 8 + 1) + "}";   // 8 Gruppen zu je 4 Spuren
@@ -413,6 +437,52 @@ int main(int argc, char** argv) {
         j += c;
         j += "]";
       }
+      if (mit_auto >= 3) {   // decomposition layouts: only the pan lane (3) or only the cutoff lane of the tracks 1..8 (4)
+        char c[300];
+        const double mitte = ((sp % 5) - 2) * 0.2;
+        if (mit_auto == 3) {
+          std::snprintf(c, sizeof c, ",\"auto\":[{\"ziel\":\"pan\",\"punkte\":[[0.0,%.2f,0],[16.0,%.2f,0],[32.0,%.2f,0]]}]", mitte - 0.3, mitte + 0.3, mitte - 0.3);
+          j += c;
+        } else if (sp <= 8) {
+          j += ",\"auto\":[{\"ziel\":\"geraet.cutoff\",\"punkte\":[[0.0,0.2,0],[16.0,0.8,0],[32.0,0.2,0]]}]";
+        }
+      }
+      if (mit_auto == 5) {   // arr32steil: a zigzag of 20 dB (fader) and 1.6 pan units (pan) per 0.05 beat on every track, 641 points per lane, 64 lanes: the hold of 16 samples is left every 2 samples
+        j += ",\"auto\":[{\"ziel\":\"fader\",\"punkte\":[";
+        for (int k = 0; k <= 640; ++k) {
+          char c[64];
+          std::snprintf(c, sizeof c, "%s[%.2f,%.1f,0]", k ? "," : "", k * 0.05, (k + sp) % 2 ? 0.0 : -20.0);
+          j += c;
+        }
+        j += "]},{\"ziel\":\"pan\",\"punkte\":[";
+        for (int k = 0; k <= 640; ++k) {
+          char c[64];
+          std::snprintf(c, sizeof c, "%s[%.2f,%.1f,0]", k ? "," : "", k * 0.05, (k + sp) % 2 ? 0.8 : -0.8);
+          j += c;
+        }
+        j += "]}]";
+      }
+      if (mit_auto == 1 || mit_auto == 2) {   // Automation Slice 2 (AK22): fader and pan lane on every track, geraet.cutoff on the internal tracks 1..8, a solo lane on 4 tracks for mit_auto == 2
+        char c[400];
+        const double mitte = ((sp % 5) - 2) * 0.2;   // pan centre -0.4 .. 0.4, the triangle moves 0.3 around it
+        std::snprintf(c, sizeof c,
+                      ",\"auto\":[{\"ziel\":\"fader\",\"punkte\":[[0.0,0.0,0],[16.0,%.1f,0],[32.0,0.0,0]]},"
+                      "{\"ziel\":\"pan\",\"punkte\":[[0.0,%.2f,0],[16.0,%.2f,0],[32.0,%.2f,0]]}",
+                      -3.0 - (sp % 4), mitte - 0.3, mitte + 0.3, mitte - 0.3);
+        j += c;
+        if (sp <= 8) j += ",{\"ziel\":\"geraet.cutoff\",\"punkte\":[[0.0,0.2,0],[16.0,0.8,0],[32.0,0.2,0]]}";
+        if (mit_auto == 2 && (sp == 1 || sp == 2 || sp == 4 || sp == 5)) {
+          const int b = sp == 1 ? 6 : sp == 2 ? 10 : sp == 4 ? 14 : 18;   // staggered, never on track 3 (its solo count belongs to the stellwerk parts)
+          std::snprintf(c, sizeof c, ",{\"ziel\":\"solo\",\"punkte\":[[0.0,0,2],[%d.0,1,2],[%d.25,0,2]]}", b, b);
+          j += c;
+        }
+        j += "]";
+      }
+      if (mit_lane) {   // Automation Slice 1: one fader lane per track, a triangle over the loop (0 dB, target, 0 dB): every block lies inside a ramp
+        char c[200];
+        std::snprintf(c, sizeof c, ",\"auto\":[{\"ziel\":\"fader\",\"punkte\":[[0.0,0.0,0],[16.0,%.1f,0],[32.0,0.0,0]]}]", -3.0 - (sp % 4));
+        j += c;
+      }
       j += "}";
     }
     j += "]";
@@ -421,12 +491,26 @@ int main(int argc, char** argv) {
       for (int g = 1; g <= 8; ++g) j += (g > 1 ? "," : "") + std::string("{\"nr\":") + std::to_string(g) + ",\"ausgang\":{\"art\":\"master\"}}";
       j += "]";
     }
+    if (mit_ret) {
+      j += ",\"returns\":[";
+      for (int r = 1; r <= 4 && r <= mit_ret; ++r) j += (r > 1 ? "," : "") + std::string("{\"nr\":") + std::to_string(r) + ",\"ausgang\":{\"art\":\"master\"}}";
+      j += "]";
+    }
     j += "}";
     return j;
     };
     if (will32) {
       std::ofstream(ordner + "/wiedergabe-2.json") << bau32(2, false);
       std::ofstream(ordner + "/wiedergabe-3.json") << bau32(3, true);
+      std::ofstream(ordner + "/wiedergabe-4.json") << bau32(4, false, true);
+      std::ofstream(ordner + "/wiedergabe-5.json") << bau32(5, false, false, 4);   // 1.10 slice 3: 32 tracks, 4 returns
+      std::ofstream(ordner + "/wiedergabe-7.json") << bau32(7, false, false, 0, 1);   // slice 2: arr32auto
+      std::ofstream(ordner + "/wiedergabe-8.json") << bau32(8, false, false, 0, 2);   // slice 2: arr32solo
+      std::ofstream(ordner + "/wiedergabe-9.json") << bau32(9, false, false, 0, 3);    // arr32pan
+      std::ofstream(ordner + "/wiedergabe-10.json") << bau32(10, false, false, 0, 4);  // arr32cut
+      std::ofstream(ordner + "/wiedergabe-12.json") << bau32(12, false, false, 0, 5);  // arr32steil
+      std::ofstream(ordner + "/wiedergabe-11.json") << bau32(11, false);               // arr32rb: the arr32fest file under another number
+      std::ofstream(ordner + "/wiedergabe-6.json") << bau32(6, false, false, 2);   // the swap partner of arr32r_oeffnen: returns 3 and 4 are dropped
     }
   }
   cdj::SpeicherKonto konto(3800LL << 20);
@@ -460,13 +544,23 @@ int main(int argc, char** argv) {
     }
     if (rc) return rc;
   }
-  for (const char* lage : {"ohne", "arr3", "arr3rb", "hand", "arr32", "arr32g"}) {
+  for (const char* lage : {"ohne", "arr3", "arr3rb", "hand", "arr32", "arr32g", "arr32fest", "arr32lane", "arr32lanet", "arr32auto", "arr32solo", "arr32pan", "arr32cut", "arr32rb", "arr32steil", "arr32r", "arr32r_setze", "arr32r_oeffnen"}) {
     if (!lagen.empty() && lagen.find(std::string(",") + lage + ",") == std::string::npos) continue;
     Lauf l;
+    if (std::getenv("KOSTEN_OHNE_VORAUSSCHAU"))   // control run: every lane sample evaluated, as before the look-ahead in auto_block (same bits, higher cost)
+      const_cast<cdj::Arrangement&>(l.kern->arrangement()).setze_auto_vorausschau(false);
     const bool hand = std::string(lage) == "hand";
     uint64_t halter_mensch = 0, halter_frei = 0, hand_ereignisse = 0;
     const bool g32 = std::string(lage) == "arr32g";   // 1.10: wie arr32, dazu 8 Gruppen und der PM
-    const bool a32 = std::string(lage) == "arr32" || g32;
+    const bool fest = std::string(lage) == "arr32fest", lane = std::string(lage) == "arr32lane", lanet = std::string(lage) == "arr32lanet";
+    const bool aut = std::string(lage) == "arr32auto", aut_solo = std::string(lage) == "arr32solo";   // slice 2
+    const bool aut_pan = std::string(lage) == "arr32pan", aut_cut = std::string(lage) == "arr32cut", aut_rb = std::string(lage) == "arr32rb", aut_steil = std::string(lage) == "arr32steil";   // decomposition, steep lanes
+    const bool r32o_ = std::string(lage) == "arr32r_oeffnen";   // the stellwerk holds at most MAX_TEILE = 256 open parts: 41 fader ramps + 114 solo parts + 128 send ramps would exceed it, so this situation runs without the fader ramps
+    const bool ohne_rampen = fest || lane || lanet || aut || aut_solo || aut_pan || aut_cut || aut_rb || aut_steil || r32o_;   // Automation Slice 1: no stellwerk fader ramps; fixed fader (fest) or one lane per track (lane, lanet)
+    const bool r32 = std::string(lage) == "arr32r", r32s = std::string(lage) == "arr32r_setze", r32o = std::string(lage) == "arr32r_oeffnen";
+    const bool ret_lage = r32 || r32s || r32o;   // 1.10 slice 3: 32 tracks, 4 returns with a Hall each, 128 sends; _setze moves a Hall control every block, _oeffnen swaps the playback every 500 blocks
+    const bool a32 = std::string(lage) == "arr32" || g32 || ohne_rampen || ret_lage;
+    const int arr_nr32 = ret_lage ? 5 : g32 ? 3 : (lane || lanet) ? 4 : aut ? 7 : aut_solo ? 8 : aut_pan ? 9 : aut_cut ? 10 : aut_rb ? 11 : aut_steil ? 12 : 2;
     const int stumm_nr = std::getenv("KOSTEN_ARR32_STUMM") ? std::atoi(std::getenv("KOSTEN_ARR32_STUMM")) : 0;
     float spitze_db[33], zuletzt_db[33];   // arr32: höchste Spur-Spitze seit Zyklus 100 je Spur (dB)
     for (float& x : spitze_db) x = -1000.0f;
@@ -475,6 +569,7 @@ int main(int argc, char** argv) {
     int zyk = 0;
     uint64_t solo_schaltungen = 0;       // arr32: Blöcke, in denen sich der Solo-Wert von Spur 3 änderte (= Blöcke mit solo_vl)
     float solo_vorher = 0.0f;
+    std::vector<double> us_rampe;        // arr32r_oeffnen: the two blocks that carry the send ramps
     std::vector<double> us_solo;         // arr32: Dauer genau dieser Blöcke
     uint64_t quittung_status[8] = {};   // arr32: Quittungen der Teile je Status (6 = abgelehnt)
     auto leeren = [&] {
@@ -485,6 +580,8 @@ int main(int argc, char** argv) {
           else if (!std::strcmp(e.text, "frei")) ++halter_frei;
         } else if (e.art == cdj::Ereignis::HAND) {
           ++hand_ereignisse;
+        } else if (e.art == cdj::Ereignis::ARR_ALT) {
+          cdj::gib_wiedergabe(static_cast<cdj::ArrSnapshot*>(const_cast<void*>(e.zeiger)), cache);
         } else if (a32 && e.art == cdj::Ereignis::QUITTUNG) {
           if (e.status >= 0 && e.status < 8) ++quittung_status[e.status];
           if (e.status == 6) std::fprintf(stderr, "arr32: abgelehntes Teil id %lld, Grund \"%s\" / \"%s\"\n", (long long)e.id, e.text, e.pfad);
@@ -518,14 +615,14 @@ int main(int argc, char** argv) {
     f.politik = 1;
     l.bef->schiebe(f);
     if (std::string(lage) != "ohne") {
-      cdj::ArrLadeErgebnis e = cdj::lade_wiedergabe(ordner, a32 ? (g32 ? 3 : 2) : 1, cache);
+      cdj::ArrLadeErgebnis e = cdj::lade_wiedergabe(ordner, a32 ? arr_nr32 : 1, cache);
       if (!e.snap) {
         std::fprintf(stderr, "kosten_arr: %s\n", e.meldung.c_str());
         return 1;
       }
       cdj::Befehl b = l.neu(cdj::Befehl::ARR_LADEN);
       b.zeiger = e.snap.release();
-      b.arr_nr = a32 ? (g32 ? 3 : 2) : 1;
+      b.arr_nr = a32 ? arr_nr32 : 1;
       l.bef->schiebe(b);
       cdj::Befehl lp = l.neu(cdj::Befehl::ARR_LOOP);
       lp.an = 1;
@@ -549,7 +646,7 @@ int main(int argc, char** argv) {
       } else {
         // Zyklus 2000 liegt bei Beat 22,8 (128 BPM, 256 Samples je Zyklus, 48 kHz): die Rampen starten bei Beat 24 und
         // laufen über 240 Beats, das Messfenster von 20 000 Zyklen endet bei Beat 250
-        for (int sp = 1; sp <= 32; ++sp) {
+        for (int sp = 1; sp <= 32 && !ohne_rampen; ++sp) {
           cdj::Befehl r = l.neu(cdj::Befehl::TEIL);
           std::snprintf(r.pfad, sizeof r.pfad, "spur/%d/fader", sp);
           r.wert = -3.0f - (float)(sp % 4);
@@ -576,6 +673,15 @@ int main(int argc, char** argv) {
           r.politik = 1;
           l.bef->schiebe(r);
         }
+        if (lanet) {   // a tempo map of up to 63 segments: 31 ramps of one beat (126 <-> 130 BPM), one every 7 beats from beat 24 (two segments each)
+          for (int k = 0; k < 31; ++k) {
+            cdj::Befehl tr = l.neu(cdj::Befehl::TEMPO_RAMPE);
+            tr.ab_beat = 24.0 + 7.0 * k;
+            tr.ziel_bpm = (k % 2) ? 126.0 : 130.0;
+            tr.dauer_beats = 1.0;
+            l.bef->schiebe(tr);
+          }
+        }
         // Solo-Verlauf auf Spur 3: ein Schalter nimmt keine Rampe (keine_rampe) und schaltet ohne Schaltrampe (regler.cpp:152,
         // schalt = 0: sofort, am Sample). Alle 4 Beats ein Solo für eine Sechzehntel (Beat 24 bis 24,25, 28 bis 28,25, …): ein
         // Verlauf besteht nur im Block der Schaltung, der Solo-Scan läuft also nur dort (114 Blöcke), die übrigen Spuren klingen
@@ -592,6 +698,17 @@ int main(int argc, char** argv) {
             so.politik = 1;
             l.bef->schiebe(so);
           }
+        }
+        if (ret_lage) {   // every track sends to every return (128 sends, -10 dB); the Halls get input from the first block of the loop
+          for (int sp = 1; sp <= 32; ++sp)
+            for (int r = 1; r <= 4; ++r) {
+              cdj::Befehl sd = l.neu(cdj::Befehl::TEIL);
+              std::snprintf(sd.pfad, sizeof sd.pfad, "spur/%d/send/%d", sp, r);
+              sd.wert = -10.0f;
+              sd.politik = 1;
+              l.bef->schiebe(sd);
+              l.zyklus();   // one command per cycle keeps the ring from overflowing
+            }
         }
         if (stumm_nr >= 1 && stumm_nr <= 32) {   // Kontrolllauf der Selbstprüfung
           cdj::Befehl mu = l.neu(cdj::Befehl::TEIL);
@@ -617,10 +734,31 @@ int main(int argc, char** argv) {
     us.reserve(n);
     for (int i = 0; i < n; ++i) {
       if (hand && !nur_rueck && i % 500 == 0) griff(0.50f + 0.05f * ((i / 500) % 2));
+      if (r32s && (i % 8 == 0 || std::getenv("KOSTEN_SETZE_JEDER"))) {   // plan F4: every 8th block (12.5 %) carries a changed Hall target, rotating over the returns; KOSTEN_SETZE_JEDER: every block (stress)
+        cdj::Befehl hs = l.neu(cdj::Befehl::TEIL);
+        std::snprintf(hs.pfad, sizeof hs.pfad, "ret/%d/hall/decay", i % 4 + 1);
+        hs.wert = (i / 8) % 2 ? 0.3f : 0.7f;
+        hs.politik = 1;
+        l.bef->schiebe(hs);
+      }
+      const bool rampe_an = r32o && (i % 100 == 0 || i % 100 == 1);   // plan F8: every 100th block 128 send controls ramp (10 ms = 480 samples, two blocks) between -200 and -10 dB
+      if (r32o && (i % 100 == 0 || i % 100 == 90)) {   // at 90 the sends jump back to -200 (a ramp cannot end there), at 0 they ramp up to -10 dB
+        for (int sp = 1; sp <= 32; ++sp)
+          for (int r = 1; r <= 4; ++r) {
+            cdj::Befehl sd = l.neu(cdj::Befehl::TEIL);
+            std::snprintf(sd.pfad, sizeof sd.pfad, "spur/%d/send/%d", sp, r);
+            sd.wert = i % 100 == 0 ? -10.0f : -200.0f;
+            sd.dauer_beats = i % 100 == 0 ? 480.0 / 48000.0 * 128.0 / 60.0 : 0.0;
+            sd.ab_beat = l.kern->karte().beat_at((double)l.kern->sample()) + 0.02;   // a start in the past is refused
+            sd.politik = 1;
+            l.bef->schiebe(sd);
+          }
+      }
       const int64_t t0 = jetzt_ns();
       l.kern->zyklus(256, t0);
       us.push_back((jetzt_ns() - t0) / 1000.0);
       ++zyk;
+      if (rampe_an) us_rampe.push_back(us.back());
       if (a32) {   // nach der Messung des Zyklus: hat er einen Solo-Verlauf getragen (Wert am Blockende ≠ Wert davor)?
         const float so = l.kern->arrangement().wert(2, 3);
         if ((so >= 0.5f) != (solo_vorher >= 0.5f)) {
@@ -635,6 +773,20 @@ int main(int argc, char** argv) {
       leeren();
     }
     bericht(lage, us);
+    if (r32o && !us_rampe.empty()) {
+      std::sort(us_rampe.begin(), us_rampe.end());
+      std::fprintf(stderr, "arr32r_oeffnen: ramp blocks %zu, median %.1f us, p99 %.1f us, max %.1f us\n", us_rampe.size(), us_rampe[us_rampe.size() / 2],
+                   us_rampe[std::min(us_rampe.size() - 1, (size_t)(0.99 * (double)us_rampe.size()))], us_rampe.back());
+    }
+    if (ret_lage) {
+      const auto& rt = l.kern->arrangement().returns();
+      std::fprintf(stderr, "%s: Hall awake %d %d %d %d, setze %llu, max per block %llu, NaN %llu\n", lage, (int)rt.wach(0), (int)rt.wach(1), (int)rt.wach(2), (int)rt.wach(3),
+                   (unsigned long long)rt.setze_gesamt(), (unsigned long long)rt.setze_max_je_block(), (unsigned long long)rt.nan_treffer());
+      if (!rt.wach(0) || rt.setze_max_je_block() > 1 || (r32s && rt.setze_gesamt() < (unsigned long long)n / 10)) {
+        std::fprintf(stderr, "kosten_arr: Lage %s: the Halls did not run or setze did not run often enough, it does not measure what it should\n", lage);
+        return 2;
+      }
+    }
     if (a32) {
       int klingen = 0;
       for (int sp = 1; sp <= 32; ++sp) {
@@ -653,7 +805,38 @@ int main(int argc, char** argv) {
       // Alle 32 Fader müssen am Ende MITTEN in der Rampe stehen: linear von 0 dB (Beat 24) zum Ziel (−3 − sp%4 dB) über 240
       // Beats. Wer nur "unter 0 dB" prüft, übersieht eine zu kurze Rampe (schon am Ziel) und eine fehlende (kostet ~46 µs).
       int fader_mit_verlauf = 0;
-      for (int sp = 1; sp <= 32; ++sp) {
+      for (int sp = 1; sp <= 32 && ohne_rampen; ++sp) {   // fest / lane / lanet: the base value of every fader is still 0 dB (a lane never writes into it)
+        const float ist = l.kern->arrangement().wert(sp - 1, 0);
+        if (std::fabs(ist) <= 1e-6f && zuletzt_db[sp] < 0.0f) ++fader_mit_verlauf;   // and the level of the track is under 0 dB
+        else std::fprintf(stderr, "kosten_arr: %s Spur %d: Grundwert %.4f dB, letzter Pegel %.1f dB\n", lage, sp, ist, zuletzt_db[sp]);
+      }
+      if (lane || lanet) {
+        const cdj::ArrSnapshot* sn = l.kern->arrangement().snapshot();
+        const int nl = sn ? sn->n_auto_lanes : -1;
+        std::fprintf(stderr, "%s: Lanes im Snapshot %d (erwartet 32), Segmente der Tempokarte am Ende %d\n", lage, nl, l.kern->karte().anzahl());
+        if (nl != 32) fader_mit_verlauf = -1;
+      }
+      if (aut || aut_solo) {   // 32 fader + 32 pan + 8 cutoff (+ 4 solo)
+        const cdj::ArrSnapshot* sn = l.kern->arrangement().snapshot();
+        const int nl = sn ? sn->n_auto_lanes : -1, soll_l = aut ? 72 : 76;
+        std::fprintf(stderr, "%s: Lanes im Snapshot %d (erwartet %d)\n", lage, nl, soll_l);
+        if (nl != soll_l) fader_mit_verlauf = -1;
+      }
+      if (aut_pan || aut_cut || aut_steil) {   // 32 pan lanes, 8 cutoff lanes, 64 steep lanes
+        const cdj::ArrSnapshot* sn = l.kern->arrangement().snapshot();
+        const int nl = sn ? sn->n_auto_lanes : -1, soll_l = aut_pan ? 32 : aut_steil ? 64 : 8;
+        std::fprintf(stderr, "%s: Lanes im Snapshot %d (erwartet %d)\n", lage, nl, soll_l);
+        if (nl != soll_l) fader_mit_verlauf = -1;
+      }
+      {   // positive proof that the device lanes really reached the sink: auto_parameter values reported, not only "rejected 0". Expected: the layouts with a cutoff lane
+          // report at least one value per running block and lane (8 lanes), the layouts without one report none (negative control in the same binary).
+        const uint64_t gemeldet = l.kern->arr_rb().parameter_gemeldet();
+        const bool soll_cutoff = aut || aut_solo || aut_cut;
+        const uint64_t mindest = soll_cutoff ? 8ull * static_cast<uint64_t>(n) / 2 : 0;
+        std::fprintf(stderr, "%s: auto_parameter gemeldet %llu (%s)\n", lage, (unsigned long long)gemeldet, soll_cutoff ? "erwartet mindestens ein Wert je Block und Lane" : "erwartet 0, keine Geraete-Lane");
+        if (soll_cutoff ? gemeldet < mindest : gemeldet != 0) fader_mit_verlauf = -1;
+      }
+      for (int sp = 1; sp <= 32 && !ohne_rampen; ++sp) {
         const float ist = l.kern->arrangement().wert(sp - 1, 0);
         const float ziel = -3.0f - (float)(sp % 4);
         const float soll = ziel * (float)std::min(1.0, std::max(0.0, (ende_beat - 24.0) / 240.0));

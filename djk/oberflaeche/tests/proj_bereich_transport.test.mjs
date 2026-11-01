@@ -7,10 +7,11 @@ import { innen } from './hilfen/innen.mjs';
 import { bis, sse, ruf } from './hilfen/proj_stapel.mjs';
 import { GRUND_TEXT } from '../http/gruende.ts';   // Spec 6.34: jede Antwort mit Grund trägt einen englischen text
 
-const ROUTEN = ['GET /proj/liste', 'GET /proj/aktuell', 'GET /proj/verlauf', 'GET /proj/warp', 'POST /proj/neu', 'POST /proj/oeffnen', 'POST /proj/aendern',
-  'POST /proj/undo', 'POST /proj/redo', 'POST /proj/transport'];
+const ROUTEN = ['GET /proj/liste', 'GET /proj/aktuell', 'GET /proj/verlauf', 'GET /proj/warp', 'GET /proj/auto', 'POST /proj/neu', 'POST /proj/oeffnen', 'POST /proj/aendern',
+  'POST /proj/undo', 'POST /proj/redo', 'POST /proj/transport',
+  'GET /proj/bk', 'POST /proj/bk/merken', 'POST /proj/bk/laden'];   // S17
 
-test('Routen: genau die neun aus Spec 3.4 plus GET /proj/warp (Paket 1.13; ohne freeze und export, die bringt S3), alle POST mit fremdePost', async (t) => {
+test('Routen: genau die neun aus Spec 3.4 plus GET /proj/warp (Paket 1.13) and GET /proj/auto (Automation Slice 1; ohne freeze und export, die bringt S3), alle POST mit fremdePost', async (t) => {
   const { o } = await stapel(t);
   const proj = o.routen().filter((e) => e.bereich === 'proj');
   assert.deepEqual(proj.map((e) => `${e.methode} ${e.pfad}`), ROUTEN);

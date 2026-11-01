@@ -34,6 +34,7 @@ import { json as sendeJson, koerper as leseKoerper, postAbgewiesen, quelleAusKop
 import { Router, type Route, type Bereich, type BereichKontext } from './http/router.ts';
 import { projBereich, type ProjOptionen } from './bereiche/proj/bereich.ts';
 import { geraeteBereich, type GeraeteOptionen } from './bereiche/geraete/bereich.ts';
+import { lernenBereich, type LernenOptionen } from './bereiche/lernen/bereich.ts';
 import { ausgabeBereich } from './bereiche/proj/ausgabe.ts';   // Paket S3
 import { aufnahmeBereich } from './bereiche/proj/aufnahme.ts';   // 1.8 Slice 1
 import { stemsBereich, type StemsOptionen } from './bereiche/proj/stems.ts';   // 1.13 Slice 6
@@ -67,7 +68,9 @@ import { leseAusgang } from './ausgang.ts';
 import { OhrLeser, hoerAntwort, sync as ohrSync, K as OHR_K, type DeckLage, Hoerscheinstelle, type Hoerschein, type DeckStand as OhrDeckStand } from './ohr.ts';
 // @ts-expect-error reines .mjs ohne Typen (djk/erzeuger); muster_stand lädt Strudel NICHT (Plan-Review M3)
 import { PegelPuffer } from './pegel_puffer.ts';
-import { leseMusterStand, setzeAutonom } from '../erzeuger/src/muster_stand.mjs';
+import { leseMusterStand, setzeAutonom, leseLebt } from '../erzeuger/src/muster_stand.mjs';
+import { ALLE_STROEME, istBkStrom, stromVonKanal } from '../vertrag/stroeme.ts';   // S18: stream <-> channel table
+import { listeGraphen, findeGraph, graphHash, GRAPH_NAME, GRAPH_KANAELE, INSTRUMENT_KANAELE } from './graphen.ts';   // Baukasten S12
 
 // Python für welle.py (braucht numpy): CYPHERDJ_PYTHON, sonst die venv der Werkstatt (Arbeitsrechner), sonst die venv
 // im Repo-Wurzelordner (INSTALL §3: `python3 -m venv .venv`), sonst python3 aus dem PATH.
@@ -76,7 +79,12 @@ export function pythonVorgabe(): string {
   return kandidaten.find((p) => p !== undefined && p !== '' && fs.existsSync(p)) ?? 'python3';
 }
 // Mixer-Regler des Projekts (spur/*, grp/*, pm/fader) ändern sich nur über das Projekt (Spec 6.22), auf keinem Weg am Projekt vorbei
-const ueberProjekt = (pfad: string): boolean => pfad.startsWith('spur/') || pfad.startsWith('grp/') || pfad === 'pm/fader';
+// 1.10 slice 3: also the sends (spur|grp/<n>/send/<r>) and the return strips (ret/*, Hall values included)
+const ueberProjekt = (pfad: string): boolean => pfad.startsWith('spur/') || pfad.startsWith('grp/') || pfad.startsWith('ret/') || pfad === 'pm/fader';
+const ueberProjektText = (pfad: string): string => (pfad.startsWith('ret/') || pfad.includes('/send/')
+  ? 'sends, return strips and Hall values are changed through the project (/proj/aendern: send_setzen, return_aendern)'
+  : pfad.startsWith('spur/') ? 'track faders are changed through the project (/proj/aendern, spur_aendern)'
+    : 'group and master faders are changed through the project (/proj/aendern: gruppenspur_aendern, master_aendern)');
 const STRUDEL_ZEITLIMIT_MS = 2000;   // Plan-Review M3
 
 export interface ServerOptionen {
@@ -108,6 +116,7 @@ export interface ServerOptionen {
   katalog?: string;      // Browser (Plan 2026-10-10): katalog.sqlite, Vorgabe $CYPHERDJ_KATALOG bzw. neben der Mediathek
   stems?: Partial<StemsOptionen>;   // 1.13 Slice 6: Tests biegen zusatzArgs (Prüftrenner, P3) und killMs um
   geraete?: GeraeteOptionen;   // I08: Pfade und Erkennung (Tests geben eigene)
+  lernen?: LernenOptionen;     // S19: controller folder (lernen.json) and the devices file (Tests give their own)
   proj?: ProjOptionen;   // D1 S2: Projektwurzel, Arbeitsordner (Vorgaben je Instanz, bereiche/proj/sitzung.ts)
   mediathek?: string;    // Mediathek T2: Vorgabe $CYPHERDJ_MEDIATHEK (nur lesen; fehlt sie: 503 mediathek_fehlt)
   korrekturen?: string;  // Slice 3b: Bestand des Decks für die Eins-Korrekturen; Vorgabe nur im Betrieb: bestand; eine Prüfinstanz (a..i) schreibt nur ausdrücklich
@@ -183,8 +192,8 @@ interface SpurLauf { quelle: string; anker: number; ende: number; fahrten: Fahrt
 // Kompressor je Quellkanal (2026-10-11): in der Lage, sobald ein Feld von seiner Vorgabe abweicht
 const KOMP_VORGABE: Record<string, number> = { an: 0, schwelle: -18, ratio: 4, attack: 10, release: 120, makeup: 0, mix: 1, sc: 0 };
 const kompAbweichend = (p: string, w: number): boolean => { const m = /^(?:deck\/[1-4]|erz\/[1-8]|pad\/[12])\/komp\/(\w+)$/.exec(p); return !!m && m[1] in KOMP_VORGABE && w !== KOMP_VORGABE[m[1]]; };
-// S5r: graph knobs <channel>/bk/1..8 (default 0.5) show in lage only once they differ, like komp
-const bkAbweichend = (p: string, w: number): boolean => /^(?:deck\/[1-4]|erz\/[1-35-7]|pad\/[12])\/bk\/[1-8]$/.test(p) && w !== 0.5;
+// S5r: graph knobs <channel>/bk/1..8 (default 0.5) show in lage only once they differ, like komp; S14: fx/3, fx/4 /bk/1..8 too
+const bkAbweichend = (p: string, w: number): boolean => /^(?:deck\/[1-4]|erz\/[1-35-7]|pad\/[12]|fx\/[34])\/bk\/[1-8]$/.test(p) && w !== 0.5;
 const LAGE_ABWEICHEND: Record<string, number> = { 'master/kleber': 0, 'duck/tiefe': 0, 'duck/release': 200, 'fx/2/rueckweg': 0, 'color/art': 0, 'color/param': 0.5 };
 
 export class Oberflaeche {
@@ -197,7 +206,8 @@ export class Oberflaeche {
   private readonly wartend = new Map<string, NodeJS.Timeout>();
   private readonly stand = { regler: {} as Record<string, number>, decks: {} as Record<string, Felder>, geladen: {} as Record<string, Felder>, loops: {} as Record<string, Felder>,
     fx: [null, null] as (Felder | null)[], fxZuweisung: [{}, {}] as Record<string, boolean>[],   // Index 0 = FX1, 1 = FX2
-    fxRouting: 'post_fader' as 'post_fader' | 'insert' };   // Ohr T18: wo der Beat-FX in den Kanalzügen sitzt (Stand des Kerns)
+    fxRouting: 'post_fader' as 'post_fader' | 'insert',   // Ohr T18: wo der Beat-FX in den Kanalzügen sitzt (Stand des Kerns)
+    graphen_geladen: {} as Record<string, string> };   // Baukasten S12/S16: channel -> graph as the kern reports it (/e/graph); optimistic after a POST
   // Ohr T18: Andreas' letzte Wahl. Der Kern behält das Routing über einen Neustart nicht (Rev. 5); der Server sendet sie
   // nach /e/neustart erneut, wenn sie nicht die Vorgabe ist. Nur im Speicher: ein Server-Neustart kehrt zur Vorgabe zurück.
   private fxRoutingWunsch: 'post_fader' | 'insert' = 'post_fader';
@@ -206,6 +216,9 @@ export class Oberflaeche {
   private readonly welle: WelleCache;
   private readonly ohr: OhrLeser;   // Ohr T5: Hüllkurven-Ring (§6.2), liest deck/1, deck/2, master
   private ohrTakt: NodeJS.Timeout | null = null;
+  private graphenVomKernMs: number | null = null;   // Baukasten S16: when the kern last reported a graph slot (null: not known yet)
+  private graphTakt: ReturnType<typeof setInterval> | null = null;   // Baukasten S16: asks the kern every 30 s
+  private static readonly GRAPH_FRAGE_MS = 30000;
   // Effekt-Sektion Schritt 4: je Box die geplante Loop-Automation (Name, bis wohin geplant, nächste Teilnummer)
   private loopAuto: Record<string, { name: string; auto: AutoSpur[]; beats: number; geplantBis: number[]; teil: number }> = {};   // geplantBis je Spur
   // Ohr T10: Hörscheinstelle hält je Kanal den letzten Schein; `hoerscheine` ist dieselbe Objekt-Referenz wie
@@ -448,6 +461,7 @@ export class Oberflaeche {
     this.stems = stemsBereich(this.bereichKontext(), this.proj.zugang, { python, cwd: REPO_PFADE.werkstatt, ...opt.stems });   // 1.13 S6
     this.router.melde(this.stems);
     this.router.melde(geraeteBereich(this.bereichKontext(), opt.geraete ?? {}));   // I08: /geraete
+    this.router.melde(lernenBereich(this.bereichKontext(), opt.lernen ?? {}));   // S19: /lernen
   }
 
   async starte(): Promise<void> {
@@ -459,6 +473,8 @@ export class Oberflaeche {
     if (importReste > 0) this.opt.log?.({ typ: 'loop_import_aufgeraeumt', anzahl: importReste });
     await this.kern.starte();
     this.ohrTakt = setInterval(() => { this.ohr.lies(); this.hoerscheinTakt(); this.loopAutoTakt(); }, 100);  // Ohr T5/T10: Ring 100 ms nachlesen, je neuem Takt Hörscheine
+    this.graphTakt = setInterval(() => { if (this.generation !== null) this.fragGraphen('takt'); }, Oberflaeche.GRAPH_FRAGE_MS);   // Baukasten S16
+    this.graphTakt.unref();
     this.http = http.createServer((q, a) => { this.anfrage(q, a).catch((e: Error) => this.json(a, 500, { fehler: e.message })); });
     await new Promise<void>((ok, fehler) => {
       this.http!.once('error', fehler);
@@ -478,6 +494,7 @@ export class Oberflaeche {
     for (const s of this.stroeme) s.end();
     for (const t of this.wartend.values()) clearTimeout(t);
     if (this.ohrTakt) { clearInterval(this.ohrTakt); this.ohrTakt = null; }
+    if (this.graphTakt) { clearInterval(this.graphTakt); this.graphTakt = null; }
     if (this.pumpeTimer) clearTimeout(this.pumpeTimer);
     this.vorbereiter.stoppe();
     await this.vorhoeren.ende();
@@ -511,6 +528,8 @@ export class Oberflaeche {
       if (this.generation !== null && g !== this.generation) this.setzePruefmodus(this.pruefmodusAusKonfig(), 'neue_generation');
       this.generation = g;
     }
+    if (d.adresse === '/k/willkommen' && alteGeneration === null) this.fragGraphen('start');   // Baukasten S16: first contact
+    if (d.adresse === '/e/graph') this.merkeGraph(String(f.kanal), String(f.name));   // Baukasten S16: the kern's word
     if (d.adresse === '/e/regler') this.stand.regler[f.pfad as string] = f.wert as number;
     if (d.adresse === '/q') this.merkeQuittung(f);
     if (d.adresse === '/e/ki') this.setzeKiGestoppt(Number(f.gestoppt) === 1);
@@ -559,6 +578,8 @@ export class Oberflaeche {
     }
     if (neuerKern || gebremst) this.fahrtEnde.clear();                 // Plan Glanz 1.2: ob ein gebremster Start den Beat auf 0 setzt, ist ungeprüft
     if (neuerKern || gebremst) this.loopRasterLive = {};              // Plan Grid, Review F5
+    if ((neuerKern || gebremst) && Object.keys(this.stand.graphen_geladen).length) this.setzeGraphenGeladen({});   // S12: the kern keeps no graph over a restart
+    if (neuerKern || gebremst) { this.graphenVomKernMs = null; this.fragGraphen('neustart'); }   // Baukasten S16: ask the new kern
     if (neuerKern || gebremst) this.stand.loops = {};                  // Boxen liegen nicht im Neustart-Zustand
     if (neuerKern || gebremst) for (const k of Object.keys(this.loopLadung)) delete this.loopLadung[k];   // Ladung ohne Echo gilt für den neuen Kern nicht (boxInhaltName zöge sie vor)
     if (d.adresse === '/pegel') this.pegelPuffer.nimm({ kanal: String(f.kanal), spitze_db: Number(f.spitze_db) });   // vor der Drossel: Spitzen gehen nicht verloren
@@ -596,9 +617,16 @@ export class Oberflaeche {
     const basis = this.opt.musterOrdner ?? musterOrdnerVorgabe();
     return strom === 1 ? basis : `${basis}${strom}`;
   }
+  // S18: is the multi-stream erzeuger of this Baukasten stream alive? Its heartbeat (lebt.json) is written once per bar, so 6 s
+  // (about 3 bars at 120 BPM, 2.5 at 60) separates "serving" from "stopped". Only after the first /uhr does the process write it.
+  static readonly LEBT_FRIST_MS = 6000;
+  private erzeugerLebt(strom: number): boolean {
+    const l = leseLebt(this.musterOrdner(strom));
+    return l !== null && Date.now() - l.zeit <= Oberflaeche.LEBT_FRIST_MS && l.zeit - Date.now() < 2000;
+  }
   private static strom(x: unknown): number | null {
     const n = x === undefined || x === null || x === '' ? 1 : Number(x);
-    return [1, 2, 3].includes(n) ? n : null;
+    return (ALLE_STROEME as readonly number[]).includes(n) ? n : null;   // S18: the stream table (1, 2, 3, 5, 6, 7, 9, 10)
   }
 
   // AUFTRAG 2026-09-28: zwei Beat-FX-Einheiten, drei Parameter; zuweisbar sind die fünf Kanäle und der Master.
@@ -617,6 +645,75 @@ export class Oberflaeche {
     this.fxVon(d.einheit as 1 | 2, this.quelle() as 'andreas' | 'cypher');
     this.gesendet++;
     this.json(a, 200, { ok: true, felder });
+  }
+  // Baukasten S16: the kern reports each graph slot (/e/graph); its word replaces what this server sent
+  private merkeGraph(kanal: string, name: string): void {
+    this.graphenVomKernMs = Date.now();
+    const vorher = this.stand.graphen_geladen[kanal] ?? '';
+    if (vorher === name) return;
+    const neu = { ...this.stand.graphen_geladen };
+    if (name === '') delete neu[kanal]; else neu[kanal] = name;
+    this.opt.log?.({ typ: 'graph_vom_kern', kanal, vorher, name });
+    this.setzeGraphenGeladen(neu);
+  }
+  private fragGraphen(grund: string): void {
+    this.kern.sende('/k/graph/frage', { id: Number(++this.id), quelle: 'andreas' });
+    this.opt.log?.({ typ: 'graphen_frage', grund });
+  }
+  // Baukasten S12: set the loaded-graph map and push it to the pages
+  private setzeGraphenGeladen(neu: Record<string, string>): void {
+    this.stand.graphen_geladen = neu;
+    this.verteile({ a: 'graphen', f: { geladen: neu } });
+  }
+  // POST /graph {kanal, name}: put a Baukasten graph on a channel or take it off (name ""). Instruments: erz/2, erz/3 through
+  // /erz/strom (bk:<name>, "bk:" removes: the kern replays the stream's last kit/midi target). Effects: deck/1..4, fx/3, fx/4
+  // through /k/kanal/graph. A kern refusal answers 200 with the quittung (like /regler); 409 only for the Cypher pre-checks.
+  private async graphLaden(d: Record<string, unknown>, a: http.ServerResponse): Promise<void> {
+    const r = await this.graphSetzen(d, this.quelle());
+    this.json(a, r.code, r.j);
+  }
+  // S17: the body of POST /graph as a function with an explicit source, shared with the Bereich bridge (bereichKontext().baukasten)
+  private async graphSetzen(d: Record<string, unknown>, quelle: string): Promise<{ code: number; j: Record<string, unknown> }> {
+    const kanal = d.kanal, name = d.name;
+    if (typeof kanal !== 'string' || !GRAPH_KANAELE.includes(kanal)) return { code: 400, j: { fehler: 'ausserhalb_bereich' } };
+    if (typeof name !== 'string' || (name !== '' && !GRAPH_NAME.test(name))) return { code: 400, j: { fehler: 'name' } };
+    // S18: the instrument channels come from the stream table (erz/2, erz/3, erz/5..7, pad/1, pad/2); erz/1 is the kit stream
+    const erz = INSTRUMENT_KANAELE.includes(kanal);
+    if (kanal === 'erz/1') return { code: 400, j: { fehler: 'kein_midi_strom', text: 'stream 1 runs a drum kit: its notes are kit indices, an instrument graph would get them as MIDI notes' } };
+    if (name !== '') {
+      const g = findeGraph(name);
+      if (!g) return { code: 404, j: { fehler: 'unbekannt' } };
+      if ((g.art === 'instrument') !== erz) return { code: 400, j: { fehler: 'falsche_art', art: g.art } };
+    }
+    const strom = erz ? (stromVonKanal(kanal) as number) : 0;
+    // S15 (break 7): a stream whose erzeuger runs in kit mode sends kit indices, a graph would get wrong or no notes. Unknown mode passes.
+    // Cypher is refused; Andreas's own page loads and gets a warning (no lock in his tools without his yes).
+    let warnung: string | undefined;
+    if (erz && name !== '' && leseMusterStand(this.musterOrdner(strom)).status?.noten === 'kit') {
+      const text = `stream ${strom} runs in kit mode (notes are kit indices): load the instruments first (tool instrumente, or djk-instrumente --instanz <i>), then load the graph`;
+      if (quelle === 'cypher') return { code: 400, j: { fehler: 'kein_midi_strom', strom, text } };
+      warnung = text;
+    }
+    if (quelle === 'cypher') {
+      if (this.kiGestoppt) return { code: 409, j: { fehler: 'ki_gestoppt' } };
+      if (erz && !leseMusterStand(this.musterOrdner(strom)).autonom) return { code: 409, j: { fehler: 'auto_aus', strom, text: 'AUTO is off: Andreas holds this stream' } };
+    }
+    // S18: streams 5..10 are played by the multi-stream erzeuger (djk/start/djk-stroeme). Without a fresh heartbeat nobody would
+    // play the graph: say so instead of loading a silent one. Taking a graph off never needs the process (the kern replays the stored target).
+    if (erz && name !== '' && istBkStrom(strom) && !this.erzeugerLebt(strom)) {
+      return { code: 409, j: { fehler: 'kein_erzeuger', strom, text: `no erzeuger process serves stream ${strom} (${kanal}); start it with djk/start/djk-stroeme${instanz() ? ` --instanz ${instanz()}` : ''}` } };
+    }
+    const id = Number(++this.id);
+    if (erz) this.kern.sende('/erz/strom', { id, quelle, strom, ziel: `bk:${name}`, kanal });
+    else this.kern.sende('/k/kanal/graph', { id, quelle, kanal, name });
+    this.gesendet++;
+    const quittung = await this.warteQuittung(id, undefined, false, 4000);   // a sampler graph loads up to 64 MiB in the net thread before it answers
+    if (quittung && [2, 3, 5].includes(quittung.status)) {   // /k/kanal/graph answers 1, 2, 3 at once and the wait can return on the 2 (measured on d)
+      const neu = { ...this.stand.graphen_geladen };
+      if (name === '') delete neu[kanal]; else neu[kanal] = name;
+      this.setzeGraphenGeladen(neu);
+    }
+    return { code: 200, j: { ok: true, kanal, name, quittung, ...(warnung ? { warnung } : {}) } };
   }
   // Plan Hand T7 (Review M3): Cyphers FX nur bei AUTO an und ohne Stop Cypher (der Kern nimmt /k/fx auch gestoppt an)
   private fxRiegel(a: http.ServerResponse): boolean {
@@ -1104,15 +1201,17 @@ export class Oberflaeche {
   }
   // Erste Quittung mit Status ≠ 1 (angenommen). Review Hand M2: Ablehnungen am Start (ki_stopp, regler_beim_menschen …)
   // kommen erst zum ab_beat; darum bis ab_beat + ¼ Beat warten (höchstens 4 s), dann die letzte; null, wenn keine kam.
-  private async warteQuittung(id: number, abBeat?: number): Promise<{ status: number; grund: string } | null> {
+  // bisEnde: nur der Endstatus zählt (nicht 1 angenommen, nicht 2 gestartet): ein Teil belegt seinen Stellwerk-Platz bis dahin (1.10 Slice 3, P11)
+  // maxMs: longer wait without abBeat for slow loads (S12: sampler graphs)
+  private async warteQuittung(id: number, abBeat?: number, bisEnde = false, maxMs?: number): Promise<{ status: number; grund: string } | null> {
     const t0 = Date.now();
     for (;;) {
       const l = this.quittungen.get(id);
-      const x = l?.find((q) => Number(q.status) !== 1);
+      const x = l?.find((q) => (bisEnde ? Number(q.status) > 2 : Number(q.status) !== 1));
       if (x) return { status: Number(x.status), grund: String(x.grund ?? '') };
       const beat = (this.kern.uhr as unknown as { beat: number } | null)?.beat ?? 0;
-      const faellig = abBeat === undefined ? Date.now() - t0 >= 400 : beat >= abBeat + 0.25;
-      if (faellig || Date.now() - t0 >= 4000) {
+      const faellig = abBeat === undefined ? Date.now() - t0 >= (maxMs ?? 400) : beat >= abBeat + 0.25;   // S12: maxMs for slow loads (sampler graphs)
+      if (faellig || Date.now() - t0 >= Math.max(4000, maxMs ?? 0)) {
         const y = l?.at(-1);
         return y ? { status: Number(y.status), grund: String(y.grund ?? '') } : null;
       }
@@ -1131,9 +1230,7 @@ export class Oberflaeche {
     if (typeof pfad !== 'string' || !PFAD.test(pfad)) return this.json(a, 400, { fehler: 'pfad' });
     // D1 S2-Integration (Spec 6.22): Spur-Regler ändern sich nur über das Projekt (/proj/aendern, spur_aendern) und über den Rückweg /e/regler
     // mit Halter mensch; PFAD bleibt Vokabular (Vertragstest), aber hier kommt nichts durch, sonst fuhre Cypher am Projekt vorbei.
-    if (ueberProjekt(pfad)) return this.json(a, 409, { fehler: 'ueber_projekt', text: pfad.startsWith('spur/')
-      ? 'track faders are changed through the project (/proj/aendern, spur_aendern)'
-      : 'group and master faders are changed through the project (/proj/aendern: gruppenspur_aendern, master_aendern)' });
+    if (ueberProjekt(pfad)) return this.json(a, 409, { fehler: 'ueber_projekt', text: ueberProjektText(pfad) });
     if (typeof nach !== 'number' || !Number.isFinite(nach)) return this.json(a, 400, { fehler: 'nach' });
     if (typeof takte !== 'number' || !(takte >= 0 && takte <= 64)) return this.json(a, 400, { fehler: 'takte' });
     if (typeof ab !== 'string' || !(ab in AB)) return this.json(a, 400, { fehler: 'ab' });
@@ -1144,7 +1241,8 @@ export class Oberflaeche {
     }
     let hoerscheinId = '';
     const padBox = /^pad\/([12])\//.exec(pfad)?.[1];
-    const eigenePad = padBox !== undefined && this.boxEigen(Number(padBox));   // wie /loop: eigener Mitschnitt (laufend UND wartend)
+    // S18: a Baukasten instrument graph on an otherwise EMPTY box is Cypher's own sound like erz/* (no loop, nothing waiting); a foreign loop keeps the check
+    const eigenePad = padBox !== undefined && (this.boxEigen(Number(padBox)) || this.boxNurGraph(Number(padBox)));   // wie /loop: eigener Mitschnitt (laufend UND wartend)
     if (this.quelle() === 'cypher' && !eigenePad && oeffnet(this.stand.regler, pfad, nach)) {
       // Ohr T10: nur deck/1|2 kennt Hörscheine (§4.5); erz/* frei seit 2026-09-29, pad/* frei für Cyphers eigenen Mitschnitt (eigenePad, Glanz 1.3).
       const m = /^(deck\/[12])\//.exec(pfad);
@@ -1210,7 +1308,7 @@ export class Oberflaeche {
     if (!Array.isArray(daten)) return;
     for (const x of daten as Record<string, unknown>[]) {
       if (typeof x?.name !== 'string' || !SPUR_NAME.test(x.name) || this.spuren.has(x.name) || !Number.isFinite(x.anker) || !Number.isFinite(x.ende)) continue;
-      const muster = (Array.isArray(x.muster) ? x.muster : []).filter((m: MusterPlan) => Number.isFinite(m?.ab_beat) && typeof m?.text === 'string' && [1, 2, 3].includes(m?.strom));
+      const muster = (Array.isArray(x.muster) ? x.muster : []).filter((m: MusterPlan) => Number.isFinite(m?.ab_beat) && typeof m?.text === 'string' && (ALLE_STROEME as readonly number[]).includes(m?.strom));
       const lauf: SpurLauf = { quelle: x.quelle === 'cypher' ? 'cypher' : 'andreas', anker: Number(x.anker), ende: Number(x.ende), fahrten: Array.isArray(x.fahrten) ? x.fahrten as Fahrt[] : [], timer: [], offen: muster,
         gruppen: new Set((Array.isArray(x.gruppen) ? x.gruppen : []).filter((g: unknown) => g === 'bass' || g === 'melodie') as string[]),
         ids: Array.isArray(x.ids) ? x.ids.filter(Number.isFinite) : [], teile: Array.isArray(x.teile) ? x.teile : [] };
@@ -1231,9 +1329,7 @@ export class Oberflaeche {
     const ueber = r.spur.fahrten.findIndex((f) => ueberProjekt(f.ziel));
     if (ueber >= 0) {
       return this.json(a, 409, { fehler: 'ueber_projekt', ziel: r.spur.fahrten[ueber].ziel, index: ueber,
-        text: r.spur.fahrten[ueber].ziel.startsWith('spur/')
-          ? 'track faders are changed through the project (/proj/aendern, spur_aendern), not by an automation track'
-          : 'group and master faders are changed through the project (/proj/aendern: gruppenspur_aendern, master_aendern), not by an automation track' });
+        text: `${ueberProjektText(r.spur.fahrten[ueber].ziel)}, not by an automation track` });
     }
     this.spurenAufraeumen();
     const quelle = this.quelle(), name = r.spur.name;
@@ -1542,7 +1638,8 @@ export class Oberflaeche {
 
   // Task 4: Studio-Zustand für /lage: AUTO und Muster je Strom (Kurzform), geladener Surge-Klang je Gruppe (Name aus wirt-<g>.json)
   private studioLage(): { stroeme: unknown[]; klang: Record<string, string | null> } {
-    const stroeme = [1, 2, 3].map((strom) => {
+    // S18: streams 1..3 always; a Baukasten stream (5, 6, 7, 9, 10) only while its erzeuger heartbeat is fresh
+    const stroeme = ALLE_STROEME.filter((s) => !istBkStrom(s) || this.erzeugerLebt(s)).map((strom) => {
       const m = leseMusterStand(this.musterOrdner(strom));
       return { strom, autonom: m.autonom, von: m.von, text_kurz: m.text.slice(0, 200) };
     });
@@ -1598,11 +1695,18 @@ export class Oberflaeche {
         const id = Number(++this.id);
         this.kern.sende(adresse, { id, quelle: this.quelle(), ...felder } as Felder); this.gesendet++; return id;
       },
-      warteQuittung: (id, abBeat) => this.warteQuittung(id, abBeat),
+      warteQuittung: (id, abBeat, bisEnde) => this.warteQuittung(id, abBeat, bisEnde),
       quelle: () => (this.quelle() === 'cypher' ? 'cypher' : 'andreas'),
       kiGestoppt: () => this.kiGestoppt,
       verteile: (ereignis) => this.verteile(ereignis),
       log: (zeile) => { this.opt.log?.(zeile); },
+      baukasten: {   // S17: the proj Bereich restores and captures graphs through the same checks as POST /graph
+        geladen: () => ({ ...this.stand.graphen_geladen }),
+        setzeGraph: (kanal, name, quelle) => this.graphSetzen({ kanal, name }, quelle),
+        autoAus: (kanal) => { const st = stromVonKanal(kanal); return INSTRUMENT_KANAELE.includes(kanal) && typeof st === 'number' && !leseMusterStand(this.musterOrdner(st)).autonom; },   // S17+S18: stream from the shared table (pad/N is stream 8+N)
+        graphHash: (name) => graphHash(name),
+        kernDa: () => this.kern.zustand === 'verbunden',   // S17: without a kern the restore sends nothing and answers kein_kern at once
+      },
     };
   }
   private quelle(): string { return this.qs.getStore() ?? 'andreas'; }
@@ -1710,6 +1814,8 @@ export class Oberflaeche {
       { methode: 'GET', pfad: '/hoeren', schutz: O, handler: (_q, a, url) => this.hoerenAus(url, a) },
       { methode: 'GET', pfad: '/fx', schutz: O, handler: (_q, a) => this.json(a, 200, this.stand.fx) },   // [FX1, FX2] oder null je Einheit
       { methode: 'GET', pfad: '/fx/zuweisung', schutz: O, handler: (_q, a) => this.json(a, 200, this.stand.fxZuweisung) },
+      { methode: 'GET', pfad: '/graphen', schutz: O, handler: (_q, a) => this.json(a, 200, { ...listeGraphen(), geladen: this.stand.graphen_geladen, geladen_geprueft_vor_ms: this.graphenVomKernMs === null ? null : Date.now() - this.graphenVomKernMs }) },   // Baukasten S12/S16
+      { methode: 'POST', pfad: '/graph', schutz: F, handler: async (q, a) => this.graphLaden(await this.koerper(q), a) },
       { methode: 'GET', pfad: '/fx/routing', schutz: O, handler: (_q, a) => this.json(a, 200, { routing: this.stand.fxRouting }) },
       { methode: 'POST', pfad: '/fx/routing', schutz: F, handler: async (q, a) => {   // Ohr T18: Andreas' Taste (Insert oder Post Fader), nie Cyphers
         if (this.quelle() === 'cypher') return this.json(a, 403, { fehler: 'nur_andreas' });   // wie /strudel/autonom (Review M5)
@@ -1985,7 +2091,7 @@ export class Oberflaeche {
     try {
       const d = await this.koerper(q);
       const strom = Oberflaeche.strom(d.strom);
-      if (strom === null) return this.json(a, 400, { fehler: 'strom' });
+      if (strom === null || strom > 3) return this.json(a, 400, { fehler: 'strom' });   // S18: the pattern library has roles for streams 1..3 only
       const laufend = leseMusterStand(this.musterOrdner(strom)).text;
       const r = this.muster.speichere({ name: String(d.name ?? ''), text: laufend, rolle: (['drums', 'bass', 'melodie'] as const)[strom - 1], strom,
         von: this.quelle(), ueberschreiben: d.ueberschreiben === true });
@@ -2466,6 +2572,10 @@ export class Oberflaeche {
     const wartend = this.loopLadung[String(box)]?.name;
     const laufend = this.boxLoopName(box);
     return (laufend === '' ? wartend !== undefined : this.eigenerMitschnitt(laufend)) && (wartend === undefined || this.eigenerMitschnitt(wartend));
+  }
+  // S18: a loaded Baukasten graph (instrument) and no loop at all in the box, running or waiting: the box can only play Cypher's own graph
+  private boxNurGraph(box: number): boolean {
+    return (this.stand.graphen_geladen[`pad/${box}`] ?? '') !== '' && this.boxLoopName(box) === '' && this.loopLadung[String(box)] === undefined;
   }
   // zählt nur fader und trim: eq/filter/send können eine Box nicht öffnen
   private boxFaehrt(box: number): boolean {

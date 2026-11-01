@@ -22,14 +22,14 @@ async function offenUndNeustart(t, gestoppt) {
 
 test('J2 Kern-Neustart im KI-Stopp (E-a): alle Spur-Regler (4 · MAX_SPUREN) werden gesetzt, auch der Fader von Cyphers Spur', async (t) => {
   const z = await offenUndNeustart(t, true);
-  const teile = z.k.teile(/^spur\//).map((x) => x.felder.pfad);
+  const teile = z.k.teile(/^spur\/\d+\/(fader|pan|mute|solo)$/).map((x) => x.felder.pfad);
   assert.equal(teile.length, 4 * MAX_SPUREN);
   for (const p of ['spur/1/fader', 'spur/2/fader', 'spur/2/pan', 'spur/2/mute', 'spur/2/solo', 'spur/3/fader']) assert.ok(teile.includes(p), p);
 });
 
 test('J2 Negativ-Kontrolle ohne Stopp: alle Spur-Regler (4 · MAX_SPUREN) werden gesetzt', async (t) => {
   const z = await offenUndNeustart(t, false);
-  const teile = z.k.teile(/^spur\//).map((x) => x.felder.pfad);
+  const teile = z.k.teile(/^spur\/\d+\/(fader|pan|mute|solo)$/).map((x) => x.felder.pfad);
   assert.equal(teile.length, 4 * MAX_SPUREN);
   assert.ok(teile.includes('spur/2/fader'));
 });

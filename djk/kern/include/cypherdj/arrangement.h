@@ -11,6 +11,8 @@
 #include <cstdint>
 #include <vector>
 
+#include "cypherdj/arr_auto.h"
+#include "cypherdj/arr_returns.h"
 #include "cypherdj/arr_wiedergabe.h"
 #include "cypherdj/stellwerk/regler.h"
 #include "cypherdj/uhr.h"
@@ -27,7 +29,12 @@ constexpr int ARR_OFFEN = 32 * ARR_SPUREN;     // offene Noten (Off ausstehend),
 constexpr int ARR_KLICK_LAENGE = 96;    // Metronom-Klick, Form wie der Prüfklick (klick.h)
 constexpr int ARR_ZIEL_BLENDE = 480;    // 1.10: Ziel-Wechsel einer Spur (master ↔ Gruppe) blendet über 10 ms
 constexpr int ARR_PM = ARR_SPUREN + ARR_GRUPPEN;   // Streifen-Index des Produktions-Masters: 0..31 Spuren, 32..39 Gruppen, 40 PM
-constexpr int ARR_STREIFEN = ARR_PM + 1;
+constexpr int ARR_RET0 = ARR_PM + 1;              // 1.10 Slice 3 (P2): the return strips follow the PM, no existing index moves
+constexpr int ARR_STREIFEN = ARR_PM + 1 + ARR_RETURNS;
+// Fields per strip: 0 fader (dB), 1 pan, 2 mute, 3 solo. Tracks and groups: 4..7 send to return 1..4 (dB). Returns: 4 hall on, 5..10 hall pre, decay, size, low, highcut, tail.
+constexpr int ARR_FELDER = 11;
+constexpr int ARR_F_SEND0 = 4;
+static_assert(ARR_BLOCK == ARR_RET_BLOCK, "the return buffers must match the block size");
 
 // Wohin Noten gehen (Spec 2.4). K2 hängt die RB-FFI (intern) und die Wirt-Slots an, Tests eine Prüfsenke. Alle
 // Methoden laufen im Callback: keine Allokation, keine Sperre, kein I/O.
@@ -48,6 +55,14 @@ class ArrSenke {
   virtual bool spur_weg(int spur, int64_t s, bool andere_spur) noexcept {
     if (!andere_spur) alle_aus(spur, s);
     return false;
+  }
+  // Automation slice 2 (E9): spur is the 0-based track index (as in block(i, ...)); the value of the `geraet` lane `param` (0..3 = ARR_GERAET_PARAM_NAME, normalised 0..1) of the track at the
+  // project beat of the last RUNNING sample of the block, once per block and lane, before block() of the same block. No call in a block
+  // without a running transport and for a track without that lane. Default: ignored (the host sink has no device parameters).
+  virtual void auto_parameter(int spur, int param, float wert) noexcept {
+    (void)spur;
+    (void)param;
+    (void)wert;
   }
 };
 
@@ -90,7 +105,9 @@ struct ArrPruefZugang;   // nur Tests (test_warp_werk_folgen): liest Spur-Busse 
 
 class Arrangement {
  public:
-  explicit Arrangement(const cypherdj::stellwerk::ReglerTabelle& tab);
+  // mit_hall false (test seam, tests without return strips only): the four return Halls are not built (each costs about 1.5 ms of FFT
+  // plans, measured 2026-11-01); a return then passes its dry signal only and never computes a wet one
+  explicit Arrangement(const cypherdj::stellwerk::ReglerTabelle& tab, bool mit_hall = true);
 
   // ---- Senken (K2: RB-FFI für alle internen Spuren, je Wirt-Slot eine); nicht im Callback, vor dem Start
   void setze_senke_intern(ArrSenke* s) { senke_intern_ = s; }
@@ -131,6 +148,12 @@ class Arrangement {
   float spitze_lesen(int i) { const float v = spitze_[i]; spitze_[i] = 0.0f; return v; }   // nach dem Fader, linear
   float spitze_gruppe_lesen(int g) { return spitze_lesen(ARR_SPUREN + g); }   // 1.10: nach dem Gruppen-Fader, linear
   float spitze_pm_lesen() { return spitze_lesen(ARR_PM); }                    // nach dem PM-Fader
+  float spitze_ret_lesen(int r) { return spitze_lesen(ARR_RET0 + r); }        // 1.10 Slice 3: after the return fader
+  bool ret_belegt(int r) const { return snap_ && snap_->ret_da[r]; }         // the playback knows return r (0-based)
+  bool ret_blendet() const { return ret_.blendet(); }                        // a return strip still fades (P15)
+  void hall_sofort();                                                        // main thread before block 0 (render) and in the constructor: Halls take the base values of their controls now
+  const ArrReturns& returns() const { return ret_; }                         // counters and test seams of the return Halls
+  uint64_t ruhe_zaehler() const { return ruhe_n_; }                              // blocks taken on the quiet path (test seam, P15)
   bool gruppe_belegt(int g) const { return grp_belegt_[g]; }                  // mindestens eine Spur im Schnappschuss schickt in die Gruppe
   // Produktions-Master des zuletzt gerechneten Teilblocks (m Werte, nach dem PM-Fader, ohne Metronom): Summe in erz/4 und Export-Abgriff
   const float* pm_l() const { return pm_l_; }
@@ -170,6 +193,8 @@ class Arrangement {
   bool freeze(ArrFreeze* f, int quant, bool von_cypher, int64_t s, int64_t vorhalt, int n, const Karte& k,
               const char*& grund);
   bool freeze_laeuft() const { return freeze_ != nullptr; }
+  void setze_auto_schritt(int n) { auto_schritt_ = n < 1 ? 1 : n; }      // test seam: 1 = no hold
+  void setze_auto_vorausschau(bool an) { auto_vorausschau_ = an; }       // test seam: false = every lane sample is evaluated (the reference of the look-ahead in auto_block)
   // Fix L1 (/k/set/neu, nach dem Sprung der Zeitachse): ein wartender oder laufender Freeze endet sofort bei s (Status 1,
   // abholen mit hole_freeze_fertig), der Transport steht. Offene Noten der alten Achse fallen weg (ihr Off-Sample läge auf
   // der neuen in der Zukunft), jede Senke bekommt alle_aus bei s.
@@ -268,11 +293,20 @@ class Arrangement {
   struct Wert {
     float w = 0.0f;
     const float* vl = nullptr;
+    const float* sw_vl = nullptr;    // Automation Slice 1: the stellwerk course of this block (vl may be replaced by a lane buffer); w stays the base value
   };
   void regler_binden(const cypherdj::stellwerk::ReglerTabelle& tab);
   void mischen(int m, float* aus_l, float* aus_r);
   void verlaeufe_nachfuehren(int m);
   void ruhe(int m);                  // Block ohne Wiedergabe und ohne Klang (Slice 11)
+
+  // Automation Slice 1 (arr_auto.cpp, ADR 032): the fader lane of a track, evaluated per sample in the core
+  void auto_segment(const Karte& k, int64_t a, int64_t b, int64_t s0);   // in segment(): project beat per sample of a playing sub-block
+  void auto_block(int64_t s0, int m);                                     // before mischen(): fills auto_buf_ and points the fader of the track at it
+  void auto_tausch(const ArrSnapshot* neu, int64_t s);                    // in tausche(): lanes appear, change or go; blend from the last played value
+  void auto_stopp(int64_t s);                                             // in beende(): the lane stops, the fader blends back to the base value
+  void auto_geraet();                                                     // before the sinks' block(): hands the `geraet` lane values to the sink (E9)
+  void auto_beginn();                                                     // in beginne(): the start takes the hard lane value, no blend
 
   // Noten (arr_noten.cpp)
   struct Offen {
@@ -317,6 +351,28 @@ class Arrangement {
   bool einstieg_ = false;            // am nächsten Teilblock Clips ansetzen, die am laufenden Ort schon klingen müssten
   Stimme st_[ARR_STIMMEN];
   uint64_t stimmen_verloren_ = 0;
+  // Automation: 8 KiB of project beats per block (ap_); the lane buffers auto_buf_ below are 32 tracks * 4 fields * 1024 * 4 B = 512 KiB (slice 1 had one field: 128 KiB)
+  double ap_[ARR_BLOCK] = {};                      // project beat per sample of the block (only filled while a lane plays)
+  // Automation slice 2: the fields 0..3 of a track (fader dB, pan, mute 0/1, solo 0/1) can each play a lane. One buffer per track and field (E7, 512 KiB, members: no allocation).
+  static constexpr int AUTO_FELDER = 4;
+  static constexpr int AUTO_BLENDE_FELDER = 2;   // the fields 0 (fader) and 1 (pan) have a source blend; mute and solo (2, 3) have none
+  float auto_buf_[ARR_SPUREN][AUTO_FELDER][ARR_BLOCK] = {};   // the lane value or the blend per sample; Wert::vl points here for a block
+  int auto_von_ = 0, auto_bis_ = 0;                // block-relative range [von, bis) in which the lane plays (transport running)
+  AutoLane auto_l_[ARR_SPUREN][AUTO_FELDER];       // cursor per track and field on the lane of the current snapshot
+  AutoLane auto_g_[ARR_SPUREN][ARR_GERAET_PARAMS]; // cursor per track and device parameter on the `geraet` lane of the current snapshot
+  float auto_zuletzt_[ARR_SPUREN][AUTO_FELDER] = {};   // last value written to auto_buf_ (dB for the fader, pan units for pan)
+  bool auto_war_[ARR_SPUREN][AUTO_FELDER] = {};        // the field wrote auto_buf_ in the last block
+  // Step hold (task 8 fallback): the lane value is taken over for up to auto_schritt_ samples, so the mixer computes the gain (std::pow, cos/sin) only when the
+  // value changes. A step larger than AUTO_HALT_DB (fader) or AUTO_HALT_PAN (pan) is taken at once. Mute and solo are not held (0/1 jumps). Live and render run the same function.
+  int auto_schritt_ = 16;                          // samples per hold (1: every sample); set_auto_schritt is a test seam
+  int auto_halt_n_[ARR_SPUREN][AUTO_FELDER] = {};      // samples the held value still stays
+  float auto_halt_v_[ARR_SPUREN][AUTO_FELDER] = {};    // the held value
+  bool auto_vorausschau_ = true;                       // look-ahead inside a hold (auto_block); false only in tests
+  bool auto_probe_aus_[ARR_SPUREN][AUTO_FELDER] = {};  // the look-ahead failed in the running hold window: no second try until the next latch
+  // Source blend (D6, E8): field 0 (fader) blends in the gain, field 1 (pan) linearly in the pan value; mute and solo have none (the mixer fade applies).
+  int32_t blende_n_[ARR_SPUREN][AUTO_FELDER] = {};     // samples of the source blend still to run (480)
+  float blende_g0_[ARR_SPUREN][AUTO_FELDER] = {};      // start value of the running blend: the gain (fader) or the pan value (pan) played just before the source change
+  int64_t blende_s_[ARR_SPUREN][AUTO_FELDER];          // absolute sample at which a blend starts, INT64_MIN: none (constructor)
   double wp_[ARR_BLOCK] = {};        // Paket 1.13: Projekt-Beat je Sample des Teilblocks, einmal je Teilblock für alle gewarpten Stimmen
   float wl_[ARR_BLOCK] = {}, wr_[ARR_BLOCK] = {};   // Slice 2: Lesepuffer für den Ring einer Werk-Stimme
   WarpWerk* werk_ = nullptr;
@@ -324,7 +380,7 @@ class Arrangement {
   uint64_t warp_unterlauf_ = 0, warp_kein_platz_ = 0, warp_spaet_ = 0;
   const uint32_t* karte_gen_ = nullptr;
   uint32_t karte_gen_gesehen_ = 0;
-  Wert w_[ARR_STREIFEN][4];          // je Streifen (Spur, Gruppe, PM) 0 fader (dB), 1 pan, 2 mute, 3 solo; PM nur 0
+  Wert w_[ARR_STREIFEN][ARR_FELDER];   // per strip (track, group, PM, return) see ARR_FELDER; the PM has field 0 only
   int16_t regler_spur_[cypherdj::stellwerk::MAX_REGLER];
   int8_t regler_feld_[cypherdj::stellwerk::MAX_REGLER];
   float ms_gain_[ARR_STREIFEN];      // Mute/Solo-Blende 0..1
@@ -335,6 +391,9 @@ class Arrangement {
   bool msolo_t_[ARR_GRUPPEN][ARR_BLOCK] = {};   // 1.10: je Sample, ob ein Mitglied der Gruppe Solo hat (nur bei Solo-Verlauf)
   float grp_l_[ARR_GRUPPEN][ARR_BLOCK] = {};    // 1.10: Eingang der Gruppen (Summe der Mitglieder nach deren Fader und Pan)
   float grp_r_[ARR_GRUPPEN][ARR_BLOCK] = {};
+  float gblende_[ARR_GRUPPEN][ARR_BLOCK] = {};  // 1.10 Slice 3 (P14): mute/solo fade of each used group per sample, computed before the tracks (the sends of the members use it)
+  uint64_t ruhe_n_ = 0;
+  ArrReturns ret_;                               // 1.10 Slice 3: return inputs and presence fades
   float pm_l_[ARR_BLOCK] = {};                  // 1.10: Produktions-Master
   float pm_r_[ARR_BLOCK] = {};
   int8_t ziel_[ARR_SPUREN] = {};                // gültiges Ziel der Spur: 0 master, 1..8 Gruppe

@@ -44,7 +44,7 @@ test('E-a Einheit: Kern-Neustart im KI-Stopp setzt alle Spur-Regler (4 · MAX_SP
   z.s.ereignis('/e/neustart', { generation: 2 });
   assert.ok(await warteBis(() => z.k.an('/k/arr/loop').length > 0), 'nachNeustart ist durch');
   await warte(20);
-  const pfade = z.k.teile(/^spur\//).map((x) => x.felder.pfad);
+  const pfade = z.k.teile(/^spur\/\d+\/(fader|pan|mute|solo)$/).map((x) => x.felder.pfad);
   assert.equal(pfade.length, 4 * MAX_SPUREN);
   assert.deepEqual(z.k.teile(/^spur\/2\/fader$/).map((x) => x.felder.nach), [0], 'Cyphers Fader wird auf den Projektwert 0 dB gesetzt, nicht auf stumm');
 });

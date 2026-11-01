@@ -421,5 +421,45 @@ int main() {
     PRUEF(e.snap != nullptr && e.snap->spur[0].clips[0].warp != nullptr);
     if (e.snap) cdj::gib_wiedergabe(e.snap.release(), cache);
   }
+  {  // 1.10 Slice 3 Task 4: Wiedergabe /2 mit returns (additiv; der Kern braucht nur, WELCHE Returns es gibt)
+    cdj::SpeicherKonto konto(100LL << 20);
+    cdj::ArrAudioCache cache(&konto, 50LL << 20, false);
+    const std::string a = o.audio('f', F, 0.25f);
+    const std::string s1 = "{\"nr\":1,\"art\":\"audio\",\"clips\":[" + o.clip("c1", 0.0, 1.0, a, F) + "]}";
+    const std::string ret1 = "{\"nr\":1,\"ausgang\":{\"art\":\"master\"}}", ret3 = "{\"nr\":3,\"ausgang\":{\"art\":\"master\"}}";
+    auto lade = [&](int64_t nr) { return cdj::lade_wiedergabe(o.pfad, nr, cache); };
+    // valid: returns 1 and 3
+    o.wiedergabe2_ret(60, s1, "", ret1 + "," + ret3);
+    cdj::ArrLadeErgebnis e = lade(60);
+    PRUEF(e.snap != nullptr);
+    if (e.snap) {
+      PRUEF(e.snap->ret_da[0] && !e.snap->ret_da[1] && e.snap->ret_da[2] && !e.snap->ret_da[3]);
+      cdj::gib_wiedergabe(e.snap.release(), cache);
+    }
+    // negative control: /2 without returns loads as before, no return exists
+    o.wiedergabe2(61, s1, "");
+    e = lade(61);
+    PRUEF(e.snap != nullptr);
+    if (e.snap) {
+      for (int r = 0; r < cdj::ARR_RETURNS; ++r) PRUEF(!e.snap->ret_da[r]);
+      cdj::gib_wiedergabe(e.snap.release(), cache);
+    }
+    // /1 with returns: format
+    o.roh(62, "{\"format\":\"cypherdj-arr/1\",\"nr\":62,\"spuren\":[],\"returns\":[" + ret1 + "]}");
+    e = lade(62);
+    PRUEF(e.snap == nullptr && e.grund == "format" && e.meldung.find("returns") != std::string::npos);
+    if (e.snap) cdj::gib_wiedergabe(e.snap.release(), cache);
+    // nr 0 and 5, doubled nr, output to a group: format
+    const std::string schlecht[] = {"{\"nr\":0,\"ausgang\":{\"art\":\"master\"}}", "{\"nr\":5,\"ausgang\":{\"art\":\"master\"}}",
+                                    ret1 + "," + ret1, "{\"nr\":2,\"ausgang\":{\"art\":\"gruppe\",\"nr\":1}}"};
+    int nr = 63;
+    for (const std::string& r : schlecht) {
+      o.wiedergabe2_ret(nr, s1, "{\"nr\":1,\"ausgang\":{\"art\":\"master\"}}", r);
+      e = lade(nr);
+      PRUEF(e.snap == nullptr && e.grund == "format");
+      if (e.snap) cdj::gib_wiedergabe(e.snap.release(), cache);
+      ++nr;
+    }
+  }
   PRUEF_ENDE();
 }

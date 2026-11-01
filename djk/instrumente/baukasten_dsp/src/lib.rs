@@ -5,19 +5,26 @@
 pub mod adsr;
 pub mod chorus;
 pub mod echo;
+pub mod faltung;
 pub mod format;
 pub mod gate;
 pub mod kosten;
+pub mod krume;
 pub mod leitung;
 pub mod limiter;
 pub mod lfo;
 pub mod makro;
 pub mod osz;
+pub mod phaser;
 pub mod programm;
+pub mod proben;
+pub mod roehre;
+pub mod sampler;
 pub mod svf;
 pub mod uebersetzen;
+pub mod vocoder;
 
 pub use format::{Graph, Kante, Knoten, FORMAT, FORMATE};
 pub use kosten::Kosten;
 pub use programm::{Programm, MAX_STIMMEN, REGLER};
-pub use uebersetzen::{hall_vorgabe, uebersetze, Fehler, ARTEN};
+pub use uebersetzen::{hall_vorgabe, uebersetze, uebersetze_mit_wurzel, Fehler, ARTEN};

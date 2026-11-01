@@ -20,8 +20,8 @@ const ERK = {
 };
 const grund = (f) => { try { f(); } catch (e) { return e instanceof GeraeteFehler ? `${e.grund}/${e.code}` : String(e); } return null; };
 
-test('Profile: genau zwei, PC-Eingang und XDJ-XZ; Zuordnung nach Knoten, USB-Hersteller und MIDI-Name', () => {
-  assert.deepEqual(PROFILE.map((p) => p.id), ['pc-eingang', 'xdj-xz']);
+test('Profile: PC-Eingang, XDJ-XZ und das generische MIDI-Profil (S19); Zuordnung nach Knoten, USB-Hersteller und MIDI-Name', () => {
+  assert.deepEqual(PROFILE.map((p) => p.id), ['pc-eingang', 'xdj-xz', 'midi-controller']);
   assert.ok(profil('pc-eingang').audio.passt(ERK.audio[0]) && !profil('pc-eingang').audio.passt(ERK.audio[1]));
   assert.ok(profil('xdj-xz').audio.passt(ERK.audio[1]) && !profil('xdj-xz').audio.passt(ERK.audio[2]), 'das Seiren (0x1532) ist kein XDJ-XZ');
   assert.ok(profil('xdj-xz').midi.passt(ERK.midi[1]) && !profil('xdj-xz').midi.passt(ERK.midi[0]));
@@ -204,4 +204,20 @@ test('Nachzug R2 (m2): eine Datei mit Latenz ohne Gerät ist defekt; mit Gerät 
   assert.equal(mit((x) => { x.eingaenge[0].latenz = L; }), 'konfig_defekt/500', 'P2: Latenz ohne Gerät');
   assert.equal(mit((x) => { Object.assign(x.eingaenge[0], { profil: 'pc-eingang', audio: { knoten: PC, ports: [`${PC}:capture_FL`] }, latenz: L }); }), null, 'Gegenprobe: Latenz mit Gerät ist heil');
   fs.rmSync(d, { recursive: true, force: true });
+});
+
+test('S19 generic MIDI profile: any MIDI source fits; without a detected source and without a port it is 409 geraet_nicht_da; setzeEingang refuses it (no audio)', () => {
+  const g = profil('midi-controller');
+  assert.ok(g.midi.passt(ERK.midi[1]) && g.midi.passt(ERK.midi[0]) && g.audio === null);
+  // a detected source: the first one is taken
+  const mk = setzeMidi(standard(), 'andreas', { profil: 'midi-controller' }, ERK);
+  assert.deepEqual([mk.midi.profil, mk.midi.port], ['midi-controller', ERK.midi[0].port]);
+  // an explicit port wins over detection
+  assert.equal(setzeMidi(standard(), 'andreas', { profil: 'midi-controller', port: 'X:Y' }, ERK).midi.port, 'X:Y');
+  // nothing detected and no port
+  assert.equal(grund(() => setzeMidi(standard(), 'andreas', { profil: 'midi-controller' }, { audio: [], midi: [] })), 'geraet_nicht_da/409');
+  // negative control: the profile has no audio input
+  assert.equal(grund(() => setzeEingang(standard(), 'andreas', { k: 1, profil: 'midi-controller' }, ERK)), 'profil_ohne_audio/400');
+  // Cypher may not assign it
+  assert.equal(grund(() => setzeMidi(standard(), 'cypher', { profil: 'midi-controller', port: 'X:Y' }, ERK)), 'nur_andreas/403');
 });

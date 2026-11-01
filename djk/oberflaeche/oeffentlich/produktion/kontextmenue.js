@@ -12,7 +12,7 @@ export function oeffneMenue(punkte, x, y, doc = document, fenster = window) {
   for (const p of punkte) {
     const li = doc.createElement('li'), b = doc.createElement('button');
     li.setAttribute('role', 'none');
-    b.type = 'button'; b.setAttribute('role', 'menuitem'); b.textContent = p.text; b.disabled = !!p.aus;
+    b.type = 'button'; b.setAttribute('role', 'menuitem'); b.textContent = p.text; b.disabled = !!p.aus; if (p.titel) b.title = p.titel;
     b.addEventListener('click', () => { schliesseMenue(); p.aktion(); });
     li.append(b); ul.append(li);
   }

@@ -1,6 +1,6 @@
 # ADR 033: Routing and production master in the arrangement module (group tracks, PM, export tap)
 
-Status: built on branch `r1-routing` (package 1.10, slices 1 and 2), 2026-10-24; acceptance by Andreas open, not merged.
+Status: built on branch `r1-routing` (package 1.10, slices 1 and 2), 2026-10-24; slice 3 (returns and sends) built on branch `r3-routing`, 2026-10-31; acceptance by Andreas open, not merged.
 Decided: E2 (own production master with export tap before the set limiter) by Andreas on 2026-10-20; F1 to F3 (groups
 and returns on their own slots next to the 32 tracks, mute zeroes the track including sends, solo lets group and returns
 sound, new project without returns) by Andreas on 2026-10-22; the form (decisions 1 to 7) by Cypher in the plan
@@ -94,6 +94,20 @@ export tap with display).
 - **Not in these slices:** returns and sends, pre/post and comp insert, sidechain, matrix, resampling (slices 3 to 8); groups
   in the timeline layout (indent, fold, slice 6): the heads of groups and PM sit in their own mixer block below the
   arrangement (P1).
+
+## Addendum Slice 3: returns and sends (2026-10-31, branch `r3-routing`)
+
+Plan `docs/superpowers/plans/2026-10-31-routing-slice3.md` (version 2). Decisions of the plan, numbered after the seven above:
+
+8. **Returns are slots beside the 32 tracks**, up to 4 (`ret/1..4`), each plays into the master only; they do not feed returns or groups (P1).
+9. **Sends are controls, not project data in the playback:** the playback `cypherdj-arr/2` carries only `returns: [{nr, ausgang}]`; the 4 sends per track or group are controls `spur|grp/<n>/send/<r>` (spec 5.1). A send is taken post fader, post pan and post mute/solo fade of its strand (P2).
+10. **The group fader and balance do not act on the sends of the members** (P14); a track in a muted group has a silent send.
+11. **Return solo (P7):** a return without solo is not silenced by a track or group solo; a solo on a return silences the others as for tracks.
+12. **Cypher Hall** is a return option with seven controls mapped from 0..1 (`djk/kern/tests/daten/hall_abbildung_ref.json`); frame 1024 because frame 2048 fails the real-time gate G1 (median 1609 us above 1500 us). No bit equality is claimed for the Hall (I12): export and ring agree within a tolerance, calibrated in regime B (not yet measured).
+13. **Control table 897 of 1024, reserve 127 (31 after Slice 4)** (P13): the reserve check `kapazitaet_hat_luft_fuer_k2` is lowered to `>= 44` as a deliberate change. `MAX_TEILE` stays 256: a project is opened in packets of at most 100 controls, each waiting for the end status; a packet with a rejection stops the open and the next open heals.
+14. **Merge:** tracks with identical sends merge and the new track carries the send; unequal sends are refused with `merge_sends` (task 10b).
+
+Open: Hall regime B, the acceptance listening (P7, P14, P15 are audible), Hall latency (P10). Numbers: `docs/architecture/stand/routing-1-10.md`.
 
 ## Rejected
 

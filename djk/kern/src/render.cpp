@@ -31,8 +31,11 @@ RenderErgebnis abbruch(const char* fehler, std::string meldung) {
 
 }  // namespace
 
-// Mixer-Regler des Projekts: spur/<n>/…, grp/<n>/… und pm/fader (die Tabelle prüft Name, Bereich und Ganzzahligkeit)
-static bool mixer_pfad(const std::string& p) { return p.compare(0, 5, "spur/") == 0 || p.compare(0, 4, "grp/") == 0 || p == "pm/fader"; }
+// Mixer controls of the project: spur/<n>/… (also the sends), grp/<n>/… (also the sends), ret/<r>/… (return fader, pan, mute, solo, hall) and pm/fader
+// (the table checks name, range and integer-ness)
+static bool mixer_pfad(const std::string& p) {
+  return p.compare(0, 5, "spur/") == 0 || p.compare(0, 4, "grp/") == 0 || p.compare(0, 4, "ret/") == 0 || p == "pm/fader";
+}
 
 RenderErgebnis rendere(const RenderAuftrag& a) {
 #ifdef CYPHERDJ_MUTATION_RENDER_OHNE_OBERGRENZE
@@ -45,6 +48,9 @@ RenderErgebnis rendere(const RenderAuftrag& a) {
     return abbruch("aufruf", "von >= 0, bis - von 1..2048 Beats, bpm 60..200, quantum 16..8192, nr >= 0");
   SpeicherKonto konto(a.speicher_budget_bytes);
   ArrAudioCache cache(&konto, a.arr_budget_bytes, false);
+#ifndef CYPHERDJ_MUTATION_RENDER_OHNE_BK_ORDNER
+  cache.setze_bk_ordner(a.bk_ordner);   // S20: graphs of the bk tracks, read by the loader (never in the callback)
+#endif
   ArrLadeErgebnis w = lade_wiedergabe(a.arr_ordner, a.nr, cache);
   if (!w.snap) return abbruch(w.grund.c_str(), w.meldung);
   auto weg = [&](const char* fehler, std::string meldung) {
@@ -78,6 +84,13 @@ RenderErgebnis rendere(const RenderAuftrag& a) {
       c->offset_frames += 1;
     }
   }
+  if (a.gegenprobe_auto) {
+    if (w.snap->n_auto_lanes == 0) return weg("gegenprobe", "keine Lane");
+#ifndef CYPHERDJ_MUTATION_RENDER_GEGENPROBE_AUTO_BLIND   // error case (Automation Slice 1): the counter-check does not touch a lane, so it stays equal (blind)
+    const double schritt = a.bpm / 60.0 / 48000.0;   // beats of one sample at the constant tempo of the render
+    for (ArrAutoPunkt& pt : w.snap->auto_punkte) pt.beat += schritt;   // the points are in w.snap (not yet in the core), changeable like warp_frame
+#endif
+  }
   // 1.13 Slice 2: gewarpte Clips in COMPLEX oder TONES rechnet das Warp-Werk, im Render synchron (kein Faden): takt() füllt die Ringe im Zyklus, derselbe Strom wie
   // live (Spec 5.3 „Render“). Es entsteht vor dem Kern und stirbt nach ihm.
   std::unique_ptr<WarpWerk> werk;
@@ -105,9 +118,13 @@ RenderErgebnis rendere(const RenderAuftrag& a) {
   kern->verbinde_lader(lr.get());
   kern->setze_pruefmodus(false);
   kern->sperre_metronom(true);   // Spec 2.6: im Render immer aus
+#ifdef CYPHERDJ_MUTATION_ARR_AUTO_SCHRITT_NUR_LIVE
+  kern->setze_arr_auto_schritt(1);   // error case (Automation Slice 1): the render evaluates every sample, the live run holds 16
+#endif
   kern->setze_filter_guete(a.filter_guete);
   kern->setze_limiter_dbtp(a.limiter_dbtp);
   if (a.senke_intern) kern->setze_arr_senke_intern(a.senke_intern);
+  cache.setze_bk_leser(kern->arr_bk_leser());   // S20: the store frees a graph instance only when the bk sink no longer plays it
   if (werk) kern->setze_arr_warp_werk(werk.get());
   RenderErgebnis e;
   if (a.regler) {
@@ -121,12 +138,15 @@ RenderErgebnis rendere(const RenderAuftrag& a) {
       if (!mixer_pfad(sr.pfad) || !kern->regler_setzen(sr.pfad.c_str(), sr.wert)) {
         if (const ArrSnapshot* rest = kern->arrangement().snapshot()) gib_wiedergabe(const_cast<ArrSnapshot*>(rest), cache);
         gib_wiedergabe(w.snap.release(), cache);
-        return abbruch("regler", sr.pfad + " = " + std::to_string(sr.wert) + " ist kein Mixer-Regler (spur, grp, pm/fader) in seinen Grenzen");
+        return abbruch("regler", sr.pfad + " = " + std::to_string(sr.wert) + " ist kein Mixer-Regler (spur, grp, ret, pm/fader) in seinen Grenzen");
       }
       ++e.regler;
     }
     e.regler_quelle = "projekt";
   }
+#ifndef CYPHERDJ_MUTATION_ARR_RENDER_OHNE_HALL_SOFORT
+  kern->hall_sofort();   // 1.10 slice 3 (P8 a): the return Halls start on the controls of the project, as playback does, before block 0
+#endif
   e.vorhalt = kern->mixer().limiter_vorhalt();
   Befehl b{};
   b.art = Befehl::ARR_LADEN;
@@ -153,8 +173,10 @@ RenderErgebnis rendere(const RenderAuftrag& a) {
     kern->zyklus(n, n0 * 20833);
     Ereignis x;
     while (ere->hole(x)) {
-      if (x.art == Ereignis::ARR_ALT)
+      if (x.art == Ereignis::ARR_ALT) {
         gib_wiedergabe(static_cast<ArrSnapshot*>(const_cast<void*>(x.zeiger)), cache);
+        cache.bk_nachholen();   // S20: free graph instances whose last snapshot just went and that the sink has let go of
+      }
       if (x.art != Ereignis::QUITTUNG) continue;
       if (x.status == 6) {
         e.fehler = "abgelehnt";
@@ -206,6 +228,8 @@ RenderErgebnis rendere(const RenderAuftrag& a) {
     if (n0 + n >= ab + e.frames) break;
   }
   if (const ArrSnapshot* rest = kern->arrangement().snapshot()) gib_wiedergabe(const_cast<ArrSnapshot*>(rest), cache);
+  e.hall_start_alt = kern->arrangement().returns().start_alt();
+  for (int r = 0; r < ARR_RETURNS; ++r) e.hall_decay[r] = kern->arrangement().returns().angewendet(r)[1];
   e.limiter_db_max = std::max(0.0f, -kern->limiter_db_min());   // positive Zahl; max statt Vorzeichenwechsel, damit „griff nie ein“ +0 ist, nicht −0
   e.ueber_decke = e.spitze > static_cast<float>(std::pow(10.0, a.limiter_dbtp / 20.0));
   return e;
@@ -239,7 +263,7 @@ bool lies_spur_regler(const std::string& pfad, std::vector<SpurRegler>& aus, std
     const int r = mixer_pfad(p) ? tab.suche(p.c_str()) : -1;
     if (r < 0) {
       fehler = pfad + ": " + p + " ist kein Mixer-Regler (spur/<1.." + std::to_string(ARR_SPUREN) + ">, grp/<1.." + std::to_string(ARR_GRUPPEN) +
-               ">/{fader,pan,mute,solo}, pm/fader)";
+               ">/{fader,pan,mute,solo,send/<r>}, ret/<r>/…, pm/fader)";
       return false;
     }
     if (!it.value().is_number()) {

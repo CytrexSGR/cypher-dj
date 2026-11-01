@@ -27,7 +27,7 @@ namespace cdj {
 constexpr double RENDER_MAX_BEATS = 2048.0;
 
 // Spec 6.20/6.25: ein Mixer-Regler des Projekts, Pfad spur/<1..ARR_SPUREN = 32>/{fader,pan,mute,solo}, grp/<1..ARR_GRUPPEN = 8>/{fader,pan,mute,solo}
-// oder pm/fader (1.10), Wert in Kern-Einheiten
+// oder pm/fader (1.10), spur|grp/<n>/send/<1..4> und ret/<1..4>/{fader,pan,mute,solo,hall/…} (1.10 slice 3), Wert in Kern-Einheiten
 struct SpurRegler {
   std::string pfad;
   float wert = 0.0f;
@@ -56,7 +56,14 @@ struct RenderAuftrag {
   bool regler_projekt = false;
   std::vector<SpurRegler> spur_regler;
   ArrSenke* senke_intern = nullptr;        // Ersatz für Tests; nullptr: die RB-338 des Kerns (K2b)
+  // S20: folder of the Baukasten graphs (<graph>.json, samples/ beside them) of the project tracks with device bk. Empty: a playback with
+  // a bk track is refused with fehler "format". cypherdj-render: --bk-ordner, else $CYPHERDJ_BK_ORDNER, else $HOME/.config/cypherdj/baukasten
+  // (the folder the live kern reads).
+  std::string bk_ordner;
   int gegenprobe_spur = 0;                 // > 0: jeder Audio-Clip dieser Spur 1 Frame weiter in der Quelle (A7, 5.)
+  // Automation Slice 1: true shifts every point of every lane by the beat distance of one sample (the lane runs one sample late). Counter-check of
+  // the null test: a lane that the render evaluates wrongly by one sample must turn it red. Refused with grund gegenprobe when there is no lane.
+  bool gegenprobe_auto = false;
   RenderAbgriff abgriff = RenderAbgriff::set;   // Vorgabe des Programms: wie bisher (P11)
 };
 
@@ -77,11 +84,15 @@ struct RenderErgebnis {
   std::string abgriff = "set";             // "produktion" oder "set": das tatsächlich gelesene Signal
   bool ueber_decke = false;                // Sample-Spitze des Exports größer als limiter_dbtp (kern.toml); die True-Peak-Lücke steht im Kommentar zu P10 des Plans
   float limiter_db_max = 0.0f;             // größte Absenkung des Set-Limiters während des Renders als positive dB-Zahl (0 = griff nie ein)
+  // 1.10 slice 3 (P8 a, test seam): a Hall that woke on a pending target and got no setze credit (render: 0, hall_sofort() applied before block 0), and the
+  // normalised decay each return Hall holds at the end
+  uint64_t hall_start_alt = 0;
+  float hall_decay[4] = {0, 0, 0, 0};
 };
 
 RenderErgebnis rendere(const RenderAuftrag& a);
 
-// Spec 6.20/6.25: --spur-regler <datei.json>, EIN JSON-Objekt Pfad -> Zahl. Nur spur/<1..ARR_SPUREN = 32>/{fader,pan,mute,solo}, grp/<1..8>/… und pm/fader, Werte
+// Spec 6.20/6.25: --spur-regler <datei.json>, EIN JSON-Objekt Pfad -> Zahl. Nur spur/<1..ARR_SPUREN = 32>/{fader,pan,mute,solo,send/<r>}, grp/<1..8>/… (also send), ret/<1..4>/… und pm/fader, Werte
 // in den Grenzen der Regler-Tabelle (fader −200..+6 dB, pan −1..+1, mute und solo 0 oder 1). false mit fehler bei fehlender
 // oder unlesbarer Datei, kein JSON, kein Objekt, fremdem Pfad, keiner Zahl, Wert außerhalb.
 bool lies_spur_regler(const std::string& pfad, std::vector<SpurRegler>& aus, std::string& fehler);

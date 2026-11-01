@@ -8,16 +8,20 @@
 // die Bewegung, die der Verlauf zusammenfasst (Spec 6.5); `{voll: true}` erzwingt den allgemeinen Weg (Test: beide ergeben dasselbe).
 // `rev` und `wiedergabe_rev` fasst kein Befehl an: sie zählt der Verlauf (verlauf.ts).
 import {
+  AUTO_ZIELE, MAX_LANES_PRO_SPUR, GERAET_PRAEFIX, RB_VORGABE_NORM, istGeraetZiel, istRbGeraet, normalisiereLane, punktePruefung,
+  type Lane, type Punkt, type Ziel,
   FADER_MAX, FADER_MIN, GAIN_MAX, GAIN_MIN, GRUPPE_MAX, INTERNE_EINGAENGE, LOOP_MIN, MAX_ARM_AUDIO, MAX_BEAT, MAX_CLIPS,
-  MAX_GRUPPEN, MAX_NOTEN, MAX_SPUREN,
-  RB_PARAMETER, SPUR_FARBEN,
+  MAX_GRUPPEN, MAX_NOTEN, MAX_RETURNS, MAX_SPUREN, HALL_FELDER, HALL_VORGABE,
+  BK_GRAPH_NAME, BK_PARAMETER, RB_PARAMETER, SPUR_FARBEN,
   TEMPO_MAX, TEMPO_MIN, WIRT_SLOTS,
   istObjekt, kanonisch, neueId, neueNotenId, notenNummer, notenZaehler,
-  pruefeFehler, spurSicht, sucheClip, sucheSpur, wiedergabeSicht, warpPruefung, type AudioClip, type Clip, type Gruppe, type Herkunft, type Geraet,
-  type MidiClip, type Note, type Projekt, type Spur, type Warp,
+  pruefeFehler, spurSicht, sucheClip, sucheSpur, wiedergabeSicht, warpPruefung, entstehungPruefung, type Entstehung,
+  type AudioClip, type Clip, type Gruppe, type Herkunft, type Geraet,
+  type MidiClip, type Note, type Projekt, type Return, type Send, type Spur, type Warp,
   type DekodiertZustand,
 } from './modell.ts';
 import { unterschied, type Patch } from './patch.ts';
+import { bkSetzen } from './baukasten.ts';
 import { MAX_WARP_PUNKTE, zaehleAusgerollt, zaehleWarpMarker } from './wiedergabe.ts';
 import {
   WarpFehler, abHierGerade, einsHier, handWarp, markerAendern, tempoSkalieren, type MarkerSetze, type MarkerVerschiebe,
@@ -64,14 +68,44 @@ function gruppeArg(a: Args, opt = true): string | undefined {
   const g = text(a, 'gruppe', GRUPPE_MAX, opt);
   return g !== undefined && g.trim() !== g ? ab('argument_ungueltig', 'gruppe: ohne Leerzeichen am Rand') : g;
 }
+// The hall object of return_neu / return_aendern: a partial object of the Hall fields (an: true/false, the rest 0..1); writes into `ziel`
+function hallArg(x: unknown, ziel: Return['hall']): void {
+  if (x === undefined) return;
+  if (!istObjekt(x)) ab('argument_ungueltig', 'hall: Objekt erwartet');
+  for (const k of Object.keys(x)) if (k !== 'an' && !(HALL_FELDER as readonly string[]).includes(k)) ab('argument_unbekannt', `hall.${k}`);
+  if (Object.keys(x).length === 0) ab('argument_ungueltig', 'hall: leeres Objekt');
+  if (x.an !== undefined) { if (typeof x.an !== 'boolean') ab('argument_ungueltig', 'hall.an: true oder false erwartet'); ziel.an = x.an; }
+  for (const k of HALL_FELDER) if (x[k] !== undefined) ziel[k] = zahl(x as Args, k, 0, 1)!;
+}
 function idArg(a: Args, k: string): string {
   const x = a[k];
   return typeof x === 'string' && x ? x : ab('argument_ungueltig', `${k}: ID erwartet`);
 }
 const spurVon = (p: Projekt, id: string): Spur => sucheSpur(p, id) ?? ab('spur_unbekannt', id);
 const gruppeVon = (p: Projekt, id: string): Gruppe => (p.gruppen ?? []).find((g) => g.id === id) ?? ab('gruppe_unbekannt', id);
+const returnVon = (p: Projekt, id: string): Return => (p.returns ?? []).find((r) => r.id === id) ?? ab('return_unbekannt', id);
 const FARBE_OK = /^#[0-9a-fA-F]{6}$/;
 const GRUPPE_LEICHT = ['name', 'farbe', 'fader_db', 'pan', 'mute', 'solo', 'gefaltet'];   // Felder von gruppenspur_aendern
+// Slice 2 (E4): the one place of the lock. Every lane command that writes goes through here and is rejected on a locked lane;
+// only auto_aendern asks with `auchGesperrt` (it is the way to unlock).
+const laneVon = (p: Projekt, id: string, auchGesperrt = false): { spur: Spur; lane: Lane } => {
+  for (const spur of p.spuren) {
+    const lane = (spur.automation ?? []).find((l) => l.id === id);
+    if (lane) { if (lane.gesperrt && !auchGesperrt) ab('lane_gesperrt', id); return { spur, lane }; }
+  }
+  return ab('lane_unbekannt', id);
+};
+const hatRbGeraet = (s: Spur): boolean => s.art === 'instrument' && istRbGeraet(s.geraet);
+// start value of a new lane: what the track has now, so the new line changes nothing audible until a point is moved
+function laneStart(s: Spur, ziel: Ziel): number {
+  if (ziel === 'fader') return s.fader_db;
+  if (ziel === 'pan') return s.pan;
+  if (ziel === 'mute') return s.mute ? 1 : 0;
+  if (ziel === 'solo') return s.solo ? 1 : 0;
+  const k = ziel.slice(GERAET_PRAEFIX.length) as keyof typeof RB_VORGABE_NORM;
+  const eigen = s.geraet?.art === 'intern' && s.geraet.name === 'rb338' ? s.geraet.parameter[k] : undefined;
+  return eigen ?? RB_VORGABE_NORM[k];
+}
 const clipVon = (p: Projekt, id: string): { spur: Spur; clip: Clip } => sucheClip(p, id) ?? ab('clip_unbekannt', id);
 const midiVon = (clip: Clip, id: string): MidiClip => (clip.art === 'midi' ? clip : ab('clip_nicht_midi', id));
 const runde9 = (x: number): number => Math.round(x * 1e9) / 1e9;
@@ -120,16 +154,37 @@ function objekte(a: Args, k: string, erlaubt: string[]): Args[] {
   });
 }
 
+// Baukasten S20: {art: intern, name: bk, graph, parameter?}. The name rule always applies; with ctx.graphArt (the server injects a lookup into the
+// graph folder) an unknown graph and an effect graph are refused here, so Cypher gets the refusal at the command and not at the next load.
+function baueBkGeraet(g: Args, ctx?: Kontext): Geraet {
+  erlaube(g, 'art', 'name', 'graph', 'parameter');
+  if (typeof g.graph !== 'string' || !BK_GRAPH_NAME.test(g.graph)) ab('argument_ungueltig', 'geraet.graph: graph name expected ([a-z0-9_-], 1..32 characters)');
+  const art = ctx?.graphArt?.(g.graph);
+  if (ctx?.graphArt && art === null) ab('argument_ungueltig', `geraet.graph: unknown graph ${g.graph}`);
+  if (art === 'effekt') ab('argument_ungueltig', `geraet.graph: ${g.graph} is an effect graph, an instrument is expected`);
+  const parameter: Record<string, number> = {};
+  if (g.parameter !== undefined) {
+    if (!istObjekt(g.parameter)) ab('argument_ungueltig', 'geraet.parameter: Objekt erwartet');
+    for (const [k, v] of Object.entries(g.parameter as Record<string, unknown>)) {
+      if (!BK_PARAMETER.includes(k)) ab('argument_unbekannt', `geraet.parameter.${k} (allowed: ${BK_PARAMETER.join(', ')})`);
+      if (!zahlOk(v) || v < 0 || v > 1) ab('argument_ungueltig', `geraet.parameter.${k}: Zahl 0..1 erwartet`);
+      parameter[k] = v as number;
+    }
+  }
+  return { art: 'intern', name: 'bk', graph: g.graph, parameter };
+}
+
 // --- Geräte -----------------------------------------------------------------------------------------------------------
 // `eigene`: die Spur, deren Gerät geändert wird. Ohne `slot` behält sie ihren eigenen Wirt-Slot (Spec 6.8), sonst gilt der erste freie.
 // Spec 6.28: in D1 läuft genau ein Wirt (arr1), es gibt nur Slot 1 (WIRT_SLOTS); eine zweite Surge-Spur ist slot_belegt, auch mit slot 2.
-function baueGeraet(p: Projekt, g: unknown, eigene?: string): Geraet {
+function baueGeraet(p: Projekt, g: unknown, eigene?: string, ctx?: Kontext): Geraet {
   if (!istObjekt(g)) return ab('argument_ungueltig', 'geraet: Objekt erwartet');
   const belegt = new Set(p.spuren.filter((s) => s.id !== eigene && s.geraet?.art === 'wirt').map((s) => (s.geraet as { slot: number }).slot));
   const eigenerGeraet = eigene === undefined ? undefined : sucheSpur(p, eigene)?.geraet;
+  if (g.art === 'intern' && g.name === 'bk') return baueBkGeraet(g, ctx);                 // Baukasten S20
   if (g.art === 'intern') {
     erlaube(g, 'art', 'name', 'parameter');
-    if (g.name !== undefined && g.name !== 'rb338') ab('argument_ungueltig', 'geraet.name: intern kennt nur rb338');
+    if (g.name !== undefined && g.name !== 'rb338') ab('argument_ungueltig', 'geraet.name: intern knows rb338 or bk');
     const parameter: Record<string, number> = {};
     if (g.parameter !== undefined) {
       if (!istObjekt(g.parameter)) ab('argument_ungueltig', 'geraet.parameter: Objekt erwartet');
@@ -208,7 +263,8 @@ function fuegeNotenEin(p: Projekt, clip: MidiClip, roh: unknown[]): void {
 // --- Einzelne Befehle (verändern den Entwurf `p`) ---------------------------------------------------------------------
 const MIXER = ['fader_db', 'pan', 'mute', 'solo'] as const;
 // ctx.quelle: wer den Befehl gibt (der Verlauf reicht meta.quelle durch); spur_neu schreibt sie als von in die Spur (Spec 6.22)
-interface Kontext { quelle: Herkunft }
+// ctx.graphArt (Baukasten S20): lookup of a graph name in the graph folder, 'instrument' | 'effekt' | null (unknown); absent = name rule only
+interface Kontext { quelle: Herkunft; graphArt?: (name: string) => 'instrument' | 'effekt' | null }
 const PRO_BEFEHL: Record<string, (p: Projekt, a: Args, ctx: Kontext) => void> = {
   spur_neu(p, a, ctx) {
     erlaube(a, 'art', 'name', 'geraet', 'gruppe');
@@ -217,8 +273,9 @@ const PRO_BEFEHL: Record<string, (p: Projekt, a: Args, ctx: Kontext) => void> = 
     if (art === 'audio' && a.geraet !== undefined) ab('argument_ungueltig', 'geraet: nur für Instrument-Spuren');
     if (p.spuren.length >= MAX_SPUREN) ab('spur_bereich', `alle ${MAX_SPUREN} Spuren belegt`);
     const nr = Array.from({ length: MAX_SPUREN }, (_, i) => i + 1).find((n) => !p.spuren.some((s) => s.nr === n)) ?? ab('spur_bereich', 'keine freie Nummer');
-    const geraet = art === 'instrument' ? baueGeraet(p, a.geraet ?? { art: 'intern' }) : undefined;
-    const name = text(a, 'name', 80) ?? (art === 'audio' ? `Audio ${nr}` : geraet!.art === 'intern' ? 'RB-338' : 'Surge');
+    const geraet = art === 'instrument' ? baueGeraet(p, a.geraet ?? { art: 'intern' }, undefined, ctx) : undefined;
+    const standard = geraet?.art === 'intern' ? (geraet.name === 'bk' ? geraet.graph : 'RB-338') : 'Surge';   // S20: a bk track is named after its graph
+    const name = text(a, 'name', 80) ?? (art === 'audio' ? `Audio ${nr}` : standard);
     const gruppe = gruppeArg(a);
     const spur: Spur = { id: neueId(p, 'spur'), von: ctx.quelle, ...(gruppe !== undefined ? { gruppe } : {}), nr, name,
       farbe: SPUR_FARBEN[(nr - 1) % SPUR_FARBEN.length], art,
@@ -227,7 +284,7 @@ const PRO_BEFEHL: Record<string, (p: Projekt, a: Args, ctx: Kontext) => void> = 
     p.spuren.push(spur);
   },
 
-  spur_aendern(p, a) {
+  spur_aendern(p, a, ctx) {
     if (a.von !== undefined) ab('argument_ungueltig', 'von: unveränderlich (Spec 6.22), die Herkunft einer Spur ändert kein Befehl');
     erlaube(a, 'spur_id', 'name', 'farbe', 'fader_db', 'pan', 'mute', 'solo', 'geraet', 'gruppe', 'arm', 'eingang');
     const s = spurVon(p, idArg(a, 'spur_id'));
@@ -240,7 +297,7 @@ const PRO_BEFEHL: Record<string, (p: Projekt, a: Args, ctx: Kontext) => void> = 
     const fader = zahl(a, 'fader_db', FADER_MIN, FADER_MAX, { opt: true }), pan = zahl(a, 'pan', -1, 1, { opt: true });
     const mute = flagge(a, 'mute', true), solo = flagge(a, 'solo', true);
     if (a.geraet !== undefined && s.art !== 'instrument') ab('argument_ungueltig', 'geraet: nur für Instrument-Spuren');
-    const geraet = a.geraet !== undefined ? baueGeraet(p, a.geraet, s.id) : undefined;
+    const geraet = a.geraet !== undefined ? baueGeraet(p, a.geraet, s.id, ctx) : undefined;
     if (a.arm !== undefined || a.eingang !== undefined) {   // 1.8: kein Regler, kein Neuladen (wiedergabeSicht kennt das Feld nicht)
       if (s.art !== 'audio') ab('argument_ungueltig', 'arm/eingang: nur für Audio-Spuren');
       if (a.arm !== undefined && typeof a.arm !== 'boolean') ab('argument_ungueltig', 'arm: true oder false erwartet');
@@ -250,7 +307,7 @@ const PRO_BEFEHL: Record<string, (p: Projekt, a: Args, ctx: Kontext) => void> = 
       else if (a.eingang !== undefined) {
         const e = a.eingang as { art?: unknown; name?: unknown };
         if (typeof e !== 'object' || e.art !== 'intern' || !(INTERNE_EINGAENGE as readonly unknown[]).includes(e.name)) {
-          ab('eingang_fehlt', 'eingang: {art: intern, name: erz/1|erz/2|erz/3} oder null');
+          ab('eingang_fehlt', 'eingang: {art: intern, name: erz/1|erz/2|erz/3|erz/5|erz/6|erz/7|pad/1|pad/2} or null');
         }
         eingang = { art: 'intern', name: e.name as (typeof INTERNE_EINGAENGE)[number] };
       }
@@ -268,6 +325,9 @@ const PRO_BEFEHL: Record<string, (p: Projekt, a: Args, ctx: Kontext) => void> = 
     if (pan !== undefined) s.pan = pan;
     if (mute !== undefined) s.mute = mute;
     if (solo !== undefined) s.solo = solo;
+    if (geraet && !istRbGeraet(geraet) && (s.automation ?? []).some((l) => istGeraetZiel(l.ziel))) {
+      ab('geraet_lanes', `${s.id}: delete its geraet.* lanes before switching to a host or bk device`);
+    }
     if (geraet && kanonisch(geraet) !== kanonisch(s.geraet)) {
       s.geraet = geraet;
       if (geraet.art === 'wirt') s.freeze = null; else delete s.freeze;
@@ -331,12 +391,12 @@ const PRO_BEFEHL: Record<string, (p: Projekt, a: Args, ctx: Kontext) => void> = 
 
   clip_aendern(p, a) {
     erlaube(a, 'clip_id', 'start_beat', 'laenge_beats', 'loop_beats', 'offset_s', 'gain_db', 'fade_ein_beats', 'fade_aus_beats', 'spur_id', 'name',
-      'versatz_beats', 'stumm');
+      'versatz_beats', 'stumm', 'entstehung');
     const { spur, clip } = clipVon(p, idArg(a, 'clip_id'));
     const felder = ['start_beat', 'laenge_beats', 'loop_beats', 'offset_s', 'gain_db', 'fade_ein_beats', 'fade_aus_beats', 'spur_id', 'name',
-      'versatz_beats', 'stumm'];
+      'versatz_beats', 'stumm', 'entstehung'];
     if (felder.every((k) => a[k] === undefined)) ab('argument_ungueltig', 'keine Änderung angegeben');
-    for (const k of ['offset_s', 'gain_db', 'fade_ein_beats', 'fade_aus_beats', 'versatz_beats', 'stumm']) {
+    for (const k of ['offset_s', 'gain_db', 'fade_ein_beats', 'fade_aus_beats', 'versatz_beats', 'stumm', 'entstehung']) {
       if (a[k] !== undefined && clip.art !== 'audio') ab('feld_nur_audio', k);
     }
     const versatz = zahl(a, 'versatz_beats', -MAX_BEAT, MAX_BEAT, { opt: true });
@@ -370,6 +430,14 @@ const PRO_BEFEHL: Record<string, (p: Projekt, a: Args, ctx: Kontext) => void> = 
       if (a.stumm !== undefined) {
         if (typeof a.stumm !== 'boolean') ab('argument_ungueltig', 'stumm: true oder false erwartet');
         if (a.stumm) clip.stumm = true; else delete clip.stumm;
+      }
+      if (a.entstehung !== undefined) {   // S15: provenance of a stream take; null deletes the field (absent, never null in the file)
+        if (a.entstehung === null) delete clip.entstehung;
+        else {
+          const fe = entstehungPruefung(a.entstehung);
+          if (fe) ab(fe.grund, fe.text);
+          clip.entstehung = structuredClone(a.entstehung) as Entstehung;
+        }
       }
       if (ein !== undefined) clip.fade_ein_beats = ein;
       if (aus !== undefined) clip.fade_aus_beats = aus;
@@ -641,6 +709,65 @@ const PRO_BEFEHL: Record<string, (p: Projekt, a: Args, ctx: Kontext) => void> = 
     (p.master ??= { fader_db: 0 }).fader_db = zahl(a, 'fader_db', FADER_MIN, FADER_MAX)!;
   },
 
+  // 1.10 slice 3: returns (the Hall is a part of the return) and sends. A send is an entry {id: <return id>, db} of a track or group; -200 removes it.
+  return_neu(p, a) {
+    erlaube(a, 'name', 'farbe', 'hall');
+    const rl = p.returns ?? [];
+    if (rl.length >= MAX_RETURNS) ab('routing_grenze', `all ${MAX_RETURNS} returns are used`);
+    const nr = Array.from({ length: MAX_RETURNS }, (_, i) => i + 1).find((n) => !rl.some((r) => r.nr === n)) ?? ab('routing_grenze', 'no free return number');
+    if (a.farbe !== undefined && (typeof a.farbe !== 'string' || !FARBE_OK.test(a.farbe))) ab('argument_ungueltig', 'farbe: #rrggbb erwartet');
+    const name = text(a, 'name', 80);
+    const hall = { ...HALL_VORGABE };
+    hallArg(a.hall, hall);
+    const r: Return = { id: neueId(p, 'return'), nr, name: name ?? `Return ${nr}`, farbe: a.farbe ?? SPUR_FARBEN[(nr + 3) % SPUR_FARBEN.length],
+      fader_db: 0, pan: 0, mute: false, solo: false, hall };
+    p.returns = [...rl, r].sort((x, y) => x.nr - y.nr);
+  },
+
+  return_aendern(p, a) {
+    erlaube(a, 'return_id', 'name', 'farbe', 'fader_db', 'pan', 'mute', 'solo', 'hall');
+    const r = returnVon(p, idArg(a, 'return_id'));
+    if (['name', 'farbe', 'fader_db', 'pan', 'mute', 'solo', 'hall'].every((k) => a[k] === undefined)) ab('argument_ungueltig', 'keine Änderung angegeben');
+    const name = text(a, 'name', 80);
+    if (a.farbe !== undefined && (typeof a.farbe !== 'string' || !FARBE_OK.test(a.farbe))) ab('argument_ungueltig', 'farbe: #rrggbb erwartet');
+    const fader = zahl(a, 'fader_db', FADER_MIN, FADER_MAX, { opt: true }), pan = zahl(a, 'pan', -1, 1, { opt: true });
+    const mute = flagge(a, 'mute', true), solo = flagge(a, 'solo', true);
+    const hall = { ...r.hall };
+    hallArg(a.hall, hall);                                           // validates the whole object before anything is written
+    if (name !== undefined) r.name = name;
+    if (a.farbe !== undefined) r.farbe = a.farbe;
+    if (fader !== undefined) r.fader_db = fader;
+    if (pan !== undefined) r.pan = pan;
+    if (mute !== undefined) r.mute = mute;
+    if (solo !== undefined) r.solo = solo;
+    r.hall = hall;
+  },
+
+  return_loeschen(p, a) {   // every send to it goes in the same step, never an orphan; the stellwerk slots go back to the defaults (reglerAenderungen)
+    erlaube(a, 'return_id');
+    const r = returnVon(p, idArg(a, 'return_id'));
+    for (const st of [...p.spuren, ...(p.gruppen ?? [])]) {
+      if (!st.sends) continue;
+      st.sends = st.sends.filter((x) => x.id !== r.id);
+      if (st.sends.length === 0) delete st.sends;
+    }
+    p.returns = (p.returns ?? []).filter((x) => x.id !== r.id);
+    if (p.returns.length === 0) delete p.returns;
+  },
+
+  send_setzen(p, a) {
+    erlaube(a, 'strang_id', 'return_id', 'db');
+    const id = idArg(a, 'strang_id');
+    const strang: Spur | Gruppe = sucheSpur(p, id) ?? (p.gruppen ?? []).find((g) => g.id === id) ?? ab('spur_unbekannt', id);
+    const r = returnVon(p, idArg(a, 'return_id'));
+    const db = zahl(a, 'db', FADER_MIN, FADER_MAX)!;
+    const rest = (strang.sends ?? []).filter((x) => x.id !== r.id);
+    if (db > FADER_MIN) rest.push({ id: r.id, db });
+    const nr = (x: Send): number => (p.returns ?? []).find((y) => y.id === x.id)?.nr ?? 0;
+    rest.sort((x, y) => nr(x) - nr(y));
+    if (rest.length) strang.sends = rest; else delete strang.sends;
+  },
+
   tempo_setzen(p, a) {
     erlaube(a, 'bpm');
     if (!zahlOk(a.bpm)) ab('argument_ungueltig', 'bpm: Zahl erwartet');
@@ -663,6 +790,72 @@ const PRO_BEFEHL: Record<string, (p: Projekt, a: Args, ctx: Kontext) => void> = 
     if (an !== undefined) p.metronom.an = an;
     if (pegel !== undefined) p.metronom.pegel_db = pegel;
     if (a.ziel !== undefined) p.metronom.ziel = a.ziel;
+  },
+
+  // --- Automation Slice 1 (ADR 032, D8): Lanes sind Projektdaten; jeder Befehl ist ein Undo-Schritt (Patch über `unterschied`) ---
+  auto_neu(p, a) {
+    erlaube(a, 'spur_id', 'ziel');
+    const s = spurVon(p, idArg(a, 'spur_id'));
+    if (a.ziel === undefined) ab('argument_ungueltig', 'ziel: fehlt');
+    if (!(AUTO_ZIELE as readonly unknown[]).includes(a.ziel)) ab('ziel_unbekannt', `${String(a.ziel)} (${AUTO_ZIELE.join(' | ')})`);
+    if (istGeraetZiel(a.ziel as string) && !hatRbGeraet(s)) ab('ziel_unbekannt', `${String(a.ziel)} (only on tracks with the internal RB-338 device)`);
+    if ((s.automation ?? []).some((l) => l.ziel === a.ziel)) ab('lane_doppelt', `${s.id} ${a.ziel}`);
+    if ((s.automation ?? []).length >= MAX_LANES_PRO_SPUR) ab('zu_gross', `at most ${MAX_LANES_PRO_SPUR} lanes per track`);
+    // eine Lane mit leerer Punktliste ist verboten: zwei Punkte an der Loop-Klammer mit dem Grundwert der Spur
+    const ziel = a.ziel as Ziel, wert = laneStart(s, ziel);
+    const lane: Lane = { id: neueId(p, 'lane'), ziel, punkte: [{ beat: p.loop.von_beat, wert }, { beat: p.loop.bis_beat, wert }] };
+    normalisiereLane(lane);
+    s.automation = [...(s.automation ?? []), lane];
+  },
+
+  auto_punkte(p, a) {
+    erlaube(a, 'lane_id', 'setze', 'loesche_von', 'loesche_bis');
+    const lane = laneVon(p, idArg(a, 'lane_id')).lane;
+    const von = zahl(a, 'loesche_von', -Infinity, Infinity, { opt: true }), bis = zahl(a, 'loesche_bis', -Infinity, Infinity, { opt: true });
+    if (a.setze !== undefined && !Array.isArray(a.setze)) ab('argument_ungueltig', 'setze: Liste erwartet');
+    const setze = (a.setze ?? []) as unknown[];
+    if (setze.length === 0 && von === undefined && bis === undefined) {
+      ab('argument_ungueltig', 'keine Änderung angegeben (setze, loesche_von oder loesche_bis)');
+    }
+    const neu: Punkt[] = setze.map((x, i) => {
+      if (!istObjekt(x)) return ab('argument_ungueltig', `setze[${i}]: Objekt erwartet`);
+      erlaube(x as Args, 'beat', 'wert', 'form');
+      return { ...(x as unknown as Punkt) };
+    });
+    for (const [i, q] of neu.entries()) {          // Wert und Beat des einzelnen Punkts: dieselbe Prüfung wie im Modell
+      const f = punktePruefung([q], lane.ziel);
+      if (f) ab(f.grund, f.text.replace(/^punkte\[0\]/, `setze[${i}]`));
+    }
+    // erst löschen (beide Enden inklusiv, fehlt eines, ist die Seite offen), dann setzen: ein gesetzter Punkt ersetzt alle Punkte an seinem Beat
+    const imBereich = (q: Punkt): boolean => (von !== undefined || bis !== undefined)
+      && (von === undefined || q.beat >= von) && (bis === undefined || q.beat <= bis);
+    const bleibt = lane.punkte.filter((q) => !imBereich(q) && !neu.some((n) => n.beat === q.beat));
+    const alle = [...bleibt, ...neu].map((q, i) => ({ q, i })).sort((x, y) => x.q.beat - y.q.beat || x.i - y.i).map((x) => x.q);
+    const f = punktePruefung(alle, lane.ziel);
+    if (f) ab(f.grund, f.text);
+    lane.punkte = alle;
+    normalisiereLane(lane);
+  },
+
+  // slice 2 (E4): the lock; `gesperrt: false` deletes the key (an unlocked lane never carries it), one undo step
+  auto_aendern(p, a) {
+    erlaube(a, 'lane_id', 'gesperrt');
+    const lane = laneVon(p, idArg(a, 'lane_id'), true).lane;
+    if (typeof a.gesperrt !== 'boolean') ab('argument_ungueltig', 'gesperrt: true or false expected');
+    if (a.gesperrt) lane.gesperrt = true; else delete lane.gesperrt;
+  },
+
+  auto_loeschen(p, a) {
+    erlaube(a, 'lane_id');
+    const { spur, lane } = laneVon(p, idArg(a, 'lane_id'));
+    const rest = (spur.automation ?? []).filter((l) => l !== lane);
+    if (rest.length > 0) spur.automation = rest; else delete spur.automation;     // eine leere Liste steht nie in der Datei
+  },
+
+  bk_setzen(p, a) {   // S17: sound snapshot entry (projekt/baukasten.ts); no playback, no controls
+    const r = bkSetzen(p.baukasten, a);
+    if ('grund' in r) ab(r.grund, r.text);
+    else if (r.liste.length) p.baukasten = r.liste; else delete p.baukasten;
   },
 };
 export const BEFEHL_NAMEN: readonly string[] = Object.keys(PRO_BEFEHL);
@@ -696,6 +889,51 @@ function wendeAn(entwurf: Projekt, b: unknown, ctx: Kontext): void {
 }
 
 const KURZ = { fader_db: 'fader', pan: 'pan', mute: 'mute', solo: 'solo' } as const;
+// 1.10 slice 3: send controls spur|grp/<nr>/send/<r> (dB, -200 = absent), ret/<r>/{fader,pan,mute,solo} and ret/<r>/hall/*.
+// A new or deleted return number sets the slot to the defaults; a deleted track or group sets its sends back to -200.
+const HALL_PFAD = ['an', ...HALL_FELDER] as const;
+const hallWert = (h: Return['hall'], k: (typeof HALL_PFAD)[number]): number => (k === 'an' ? (h.an ? 1 : 0) : h[k]);
+function returnReglerAenderungen(alt: Projekt, neu: Projekt, aus: ReglerAenderung[]): void {
+  const sendWerte = (st: Spur | Gruppe, p: Projekt): number[] => {
+    const w = new Array<number>(MAX_RETURNS).fill(FADER_MIN);
+    for (const sd of st.sends ?? []) { const r = (p.returns ?? []).find((x) => x.id === sd.id); if (r) w[r.nr - 1] = sd.db; }
+    return w;
+  };
+  const strang = (kurz: string, a: (Spur | Gruppe)[], n: (Spur | Gruppe)[], pa: Projekt, pn: Projekt): void => {
+    for (const st of n) {
+      const vorher = a.find((x) => x.id === st.id && x.nr === st.nr);
+      const w = sendWerte(st, pn), v = vorher ? sendWerte(vorher, pa) : new Array<number>(MAX_RETURNS).fill(FADER_MIN);
+      w.forEach((x, i) => { if (x !== v[i]) aus.push({ pfad: `${kurz}/${st.nr}/send/${i + 1}`, wert: x }); });
+    }
+    for (const st of a) {
+      if (n.some((x) => x.nr === st.nr)) continue;
+      sendWerte(st, pa).forEach((x, i) => { if (x !== FADER_MIN) aus.push({ pfad: `${kurz}/${st.nr}/send/${i + 1}`, wert: FADER_MIN }); });
+    }
+  };
+  strang('spur', alt.spuren, neu.spuren, alt, neu);
+  strang('grp', alt.gruppen ?? [], neu.gruppen ?? [], alt, neu);
+  const altR = alt.returns ?? [], neuR = neu.returns ?? [];
+  const rw = (r: Return): number[] => [r.fader_db, r.pan, r.mute ? 1 : 0, r.solo ? 1 : 0];
+  const RK = ['fader', 'pan', 'mute', 'solo'];
+  for (const r of neuR) {
+    const a = altR.find((x) => x.id === r.id && x.nr === r.nr);
+    const w = rw(r), v = a ? rw(a) : null;
+    w.forEach((x, i) => { if (!v || v[i] !== x) aus.push({ pfad: `ret/${r.nr}/${RK[i]}`, wert: x }); });
+    for (const k of HALL_PFAD) {
+      const x = hallWert(r.hall, k), y = a ? hallWert(a.hall, k) : hallWert(HALL_VORGABE, k);
+      if (x !== y) aus.push({ pfad: `ret/${r.nr}/hall/${k}`, wert: x });
+    }
+  }
+  for (const a of altR) {
+    if (neuR.some((r) => r.nr === a.nr)) continue;
+    rw(a).forEach((_, i) => aus.push({ pfad: `ret/${a.nr}/${RK[i]}`, wert: 0 }));
+    for (const k of HALL_PFAD) {
+      const vorgabe = hallWert(HALL_VORGABE, k);
+      if (hallWert(a.hall, k) !== vorgabe) aus.push({ pfad: `ret/${a.nr}/hall/${k}`, wert: vorgabe });
+    }
+  }
+}
+
 // Welche Regler (spur/<nr>/…) müssen auf welchen Wert? Mute und Solo als 0/1.
 function reglerAenderungen(alt: Projekt, neu: Projekt): ReglerAenderung[] {
   const werte = (s: Spur): Record<(typeof MIXER)[number], number> => ({ fader_db: s.fader_db, pan: s.pan, mute: s.mute ? 1 : 0, solo: s.solo ? 1 : 0 });
@@ -722,6 +960,7 @@ function reglerAenderungen(alt: Projekt, neu: Projekt): ReglerAenderung[] {
     for (const k of MIXER) aus.push({ pfad: `grp/${a.nr}/${KURZ[k]}`, wert: 0 });
   }
   if ((alt.master?.fader_db ?? 0) !== (neu.master?.fader_db ?? 0)) aus.push({ pfad: 'pm/fader', wert: neu.master?.fader_db ?? 0 });
+  returnReglerAenderungen(alt, neu, aus);
   return aus;
 }
 
@@ -828,12 +1067,13 @@ function notenEntwurf(projekt: Projekt, befehle: unknown[]): Projekt | null {
 // ohne gilt Raster 1/16.
 type TransientenQuelle = (sha256: string) => number[] | null;
 export function fuehreListeAus(projekt: Projekt, befehle: unknown[],
-  o: { voll?: boolean; quelle?: Herkunft; transienten?: TransientenQuelle } = {}): BefehlErgebnis {
+  o: { voll?: boolean; quelle?: Herkunft; transienten?: TransientenQuelle; graphArt?: Kontext['graphArt'] } = {}): BefehlErgebnis {
   if (!Array.isArray(befehle) || befehle.length === 0) ab('argument_ungueltig', 'befehle: nicht leere Liste erwartet');
   if (!o.voll && befehle.every((b) => istLeicht(projekt, b))) return fuehreLeichtAus(projekt, befehle);
   const entwurf = (o.voll ? null : notenEntwurf(projekt, befehle)) ?? structuredClone(projekt);
+  const ctx: Kontext = { quelle: o.quelle ?? 'andreas', ...(o.graphArt ? { graphArt: o.graphArt } : {}) };
   befehle.forEach((b, i) => {
-    try { wendeAn(entwurf, b, { quelle: o.quelle ?? 'andreas' }); } catch (e) { if (e instanceof BefehlFehler) e.index = i; throw e; }
+    try { wendeAn(entwurf, b, ctx); } catch (e) { if (e instanceof BefehlFehler) e.index = i; throw e; }
   });
   const fehler = pruefeFehler(entwurf);
   if (fehler !== null) ab('projekt_ungueltig', fehler);

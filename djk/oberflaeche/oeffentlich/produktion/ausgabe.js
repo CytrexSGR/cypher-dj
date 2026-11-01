@@ -53,6 +53,7 @@ export function laufText(lauf, arr, jetzt) {
   const wo = arr?.status === 3 && Number.isFinite(arr.projekt_beat) ? ` · bar ${positionText(arr.projekt_beat)}` : '';
   if (lauf.art === 'freeze') return lauf.an ? `Freezing ${lauf.name}${wo}${sek}` : `Unfreezing ${lauf.name}…`;
   if (lauf.art === 'lautheit') return `Measuring loudness${sek}`;   // Paket 1.18 E-b: ein Lauf von proj_lautheit (Cypher), ausgabe_lauf {art: 'lautheit'}
+  if (lauf.art === 'merge') return `Merging tracks${sek}`;   // Slice 7: a merge run (own page or Cypher), ausgabe_lauf {art: 'merge'}
   return `${arr?.status === 3 ? `Exporting: freezing${wo}` : 'Exporting: rendering'}${sek}`;
 }
 

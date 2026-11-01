@@ -24,13 +24,24 @@ Kern::Kern(double start_bpm, cdj_ring_kopf* ring, Befehlsring* befehle, Ereignis
     erz_l_[k] = mixer_->eingang_l(k);
     erz_r_[k] = mixer_->eingang_r(k);
   }
-  {  // Baukasten S5r: Graph-Regler <kanal>/bk/<1..8> -> (Mixer-Kanal, nr); Start aus den Reglerwerten (Vorgabe 0,5)
+  {  // Baukasten S5r + S14: Graph-Regler <kanal>/bk/<1..8> and fx/3|4/bk/<1..8> -> (row of bk_wert_, nr); start from the control values (default 0.5)
     const auto& tab = sw_->tabelle();
     for (int r = 0; r < cypherdj::stellwerk::MAX_REGLER; ++r) bk_ort_[r] = -1;
     for (int r = 0; r < tab.anzahl(); ++r) {
       const auto& d = tab.def(r);
-      if (d.rolle != cypherdj::stellwerk::Rolle::bk_regler || d.kanal < 0) continue;
-      const int k = Mixer::kanal_index(tab.kanal_name(d.kanal));
+      if (d.rolle != cypherdj::stellwerk::Rolle::bk_regler) continue;
+      int k = -1;
+      if (d.kanal >= 0) {
+        k = Mixer::kanal_index(tab.kanal_name(d.kanal));
+#ifndef CYPHERDJ_MUTATION_BK_SEND_KERN_OHNE_ZEILE   // failure case S14: global knobs skipped as before
+      } else if (!std::strncmp(d.pfad, "fx/", 3) && (d.pfad[3] == '3' || d.pfad[3] == '4') && d.pfad[4] == '/') {
+#ifdef CYPHERDJ_MUTATION_BK_SEND_KERN_ZEILE_FALSCH
+        k = MIX_BK_SEND_ZEILE + (d.pfad[3] - '4');   // failure case: off by one, fx/3 -> row 17 (bus/4), fx/4 -> row 18 (fx/3)
+#else
+        k = MIX_BK_SEND_ZEILE + (d.pfad[3] - '3');   // S14: fx/3/bk/<n> -> row 18, fx/4/bk/<n> -> row 19
+#endif
+#endif
+      }
       const size_t len = std::strlen(d.pfad);
       const int nr = d.pfad[len - 1] - '0';
       if (k < 0 || nr < 1 || nr > 8) continue;
@@ -41,12 +52,14 @@ Kern::Kern(double start_bpm, cdj_ring_kopf* ring, Befehlsring* befehle, Ereignis
     erz_->setze_bk_wert(bk_wert_);
   }
   loops_ = std::make_unique<LoopBoxen>();  // MVP 2: feste Puffer, darum hier und nicht im Callback
-  arr_ = std::make_unique<Arrangement>(sw_->tabelle());  // D1 K1: feste Puffer (rund 340 KB bei 32 Spuren), nicht im Callback
+  arr_ = std::make_unique<Arrangement>(sw_->tabelle());  // D1 K1: fixed buffers (sizeof(Arrangement) is 1,303,248 bytes with 32 tracks, of which 512 KiB lane buffers; measured 2026-11-01), not in the callback
   arr_kanal_ = Mixer::kanal_index(ARR_KANAL);
   // D1 K2b (Spec 2.4): die RB-338 spielt alle internen Spuren (je Spur-Slot eine Instanz)
   arr_rb_ = std::make_unique<ArrRbSenke>(*arr_);
+  arr_bk_ = std::make_unique<ArrBkSenke>(*arr_);   // S20: a Baukasten graph per internal track with device bk
+  arr_intern_ = std::make_unique<ArrInternSenke>(*arr_, arr_rb_.get(), arr_bk_.get());
 #ifndef CYPHERDJ_MUTATION_ARR_OHNE_RB_SENKE
-  arr_->setze_senke_intern(arr_rb_.get());
+  arr_->setze_senke_intern(arr_intern_.get());
 #endif
   for (int s = 0; s < ARR_WIRT_SLOTS; ++s) {   // D1 K2b: je Wirt-Slot eine Senke (MIDI und Rückweg über main.cpp)
     arr_wirt_[s] = std::make_unique<ArrWirtSenke>(s + 1, &zyklus_n_, &sample_);
@@ -339,7 +352,7 @@ void Kern::zyklus(int n, int64_t mono_ns) {
   for (auto& w : arr_wirt_) w->zyklus_anfang();  // Fehlerfall: was ein Neustart beim Einsortieren schreibt, geht verloren
 #endif
   decks_uebernehmen();  // Scheibe 31: Rückgaben an den Lader, Lade-Ergebnisse tauschen, KI-Stopp
-  midi_ein_stempeln();      // I08: roher MIDI-Eingang, jetzt auf der Achse dieses Zyklus
+  midi_ein_stempeln(n);     // I08: roher MIDI-Eingang, jetzt auf der Achse dieses Zyklus
   hand_zyklus(sample_, n);  // Scheibe 35: MIDI dieses Zyklus am Versatz (nach /k/set/neu: Blockanfang der neuen Achse)
   const int64_t n0 = sample_;
   for (MidiAus& m : midi_aus_) m.leer();  // Studio S5: MIDI dieses Zyklus

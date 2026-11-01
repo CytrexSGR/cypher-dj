@@ -12,6 +12,7 @@ import { kompiliere } from './src/kompiliere.mjs';
 import { ladeKits } from './src/kit.mjs';
 import { Planer, WECHSEL_ABSTAND } from './src/planer.mjs';
 import { schreibeStatus } from './src/muster_stand.mjs';
+import { NeustartRegel } from './src/generation.mjs';
 
 const I = process.env.CYPHERDJ_INSTANZ ?? '';
 const V = I ? 1000 * (I.charCodeAt(0) - 96) : 0;
@@ -53,6 +54,7 @@ let uhr = null;  // letzte /uhr: {mono_ns: BigInt, beat, bpm}
 const beatJetzt = () => uhr.beat + (Number(process.hrtime.bigint() - uhr.mono_ns) / 1e9) * uhr.bpm / 60;
 const msBisBeat = (b) => ((b - beatJetzt()) * 60000) / uhr.bpm;
 const planer = new Planer({ strom: STROM, kit, sende, jetztUs: () => Number(process.hrtime.bigint() / 1000n) });
+const neustartRegel = new NeustartRegel();   // S17: announce once per kern generation, not on the heartbeat repeat
 let id = BigInt(Date.now()) * 1000n;
 const stromMelden = () => sende(kodiere('/erz/strom', 'hsiss', [++id, 'erzeuger', STROM, KIT_ZIEL, opt.kanal]));
 
@@ -120,7 +122,9 @@ function musterLesen() {
 // Plan 2 T6: status.json neben dem Muster (ab welchem Beat es gilt), für das Feld der Seite. Ohne Schreibrecht läuft der
 // Erzeuger weiter, nur ohne Stand.
 function status(stand) {
-  try { schreibeStatus(path.dirname(opt.muster), stand); } catch (e) { log(`status.json: ${e.message}`); }
+  // S15: "noten" tells the page server how this process turns pattern values into notes (kit indices or MIDI notes), so it
+  // can refuse an instrument graph on a kit stream. It is fixed at process start and travels with every write.
+  try { schreibeStatus(path.dirname(opt.muster), { ...stand, noten: MIDI ? 'midi' : 'kit' }); } catch (e) { log(`status.json: ${e.message}`); }
 }
 
 sock.on('message', (buf) => {
@@ -138,7 +142,10 @@ sock.on('message', (buf) => {
       musterLesen();
       wecke();
     }
+  } else if (m.adresse === '/k/willkommen') {
+    neustartRegel.willkommen(m.werte[1]);
   } else if (m.adresse === '/e/neustart') {  // Kern neu: Strom und Schlange sind weg (Plan, Entscheidung 5)
+    if (!neustartRegel.neustart(m.werte[0])) return;   // S17: the heartbeat repeat of the same generation changes nothing
     stromMelden();
     planer.vergiss();
     wecke();
@@ -153,6 +160,7 @@ sock.bind(Number(opt['abo-port']), '127.0.0.1', () => {
   hallo();
   setInterval(hallo, 1000);
   fs.watchFile(opt.muster, { interval: 100 }, () => musterLesen());
+  status(letzterStand);   // S15: report the note mode at once, a restarted process must not leave the previous process's file
   log(`bereit: Kern udp ${KERN}, Abo udp ${abo}, Kit ${opt.kit} (${kit.note?.size ?? 'midi'} Klänge), Muster ${opt.muster}`);
 });
 process.on('SIGTERM', () => process.exit(0));

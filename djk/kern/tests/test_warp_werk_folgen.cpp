@@ -296,7 +296,7 @@ int zufalls_modus(Zufall& z) {
 // Einsatz-Sample eines Transport-Starts (wie Arrangement::start, mit dem Inhalt am Anfang)
 int64_t einsatz(const Inhalt& z, double beat, int quant) {
   cypherdj::stellwerk::ReglerTabelle tab;
-  cdj::Arrangement arr(tab);
+  cdj::Arrangement arr(tab, false);   // no return strips here: the Halls (about 1.5 ms each) would cost most of the run time (2026-11-01)
   Attrappe w(64);
   uint32_t gen = 1;
   arr.setze_warp_werk(&w);
@@ -526,7 +526,7 @@ Aufz fahre(const Folge& f, int zustand) {
   cypherdj::stellwerk::ReglerTabelle tab;
   std::vector<cdj::ArrSnapshot*> snaps;
   {
-    cdj::Arrangement arr(tab);
+    cdj::Arrangement arr(tab, false);   // no return strips here: the Halls (about 1.5 ms each) would cost most of the run time (2026-11-01)
     Attrappe w(f.plaetze);
     uint32_t gen = 1;
     arr.setze_warp_werk(&w);

@@ -37,9 +37,10 @@ test('WAV: Kopf 58 Byte wie wav.h, Daten sind die Rohdatei unverändert, sha256 
   fs.rmSync(d, { recursive: true, force: true });
 });
 
-test('eingangsCode: erz/1..3 = 11..13, sonst Fehler', () => {
-  assert.deepEqual(['erz/1', 'erz/2', 'erz/3'].map(eingangsCode), [11, 12, 13]);
+test('eingangsCode: erz/1..3 = 11..13, erz/5..7 = 15..17, pad/1..2 = 21, 22 (S18), sonst Fehler', () => {
+  assert.deepEqual(['erz/1', 'erz/2', 'erz/3', 'erz/5', 'erz/6', 'erz/7', 'pad/1', 'pad/2'].map(eingangsCode), [11, 12, 13, 15, 16, 17, 21, 22]);
   assert.throws(() => eingangsCode('erz/4'));
+  assert.throws(() => eingangsCode('erz/8'));
 });
 
 const projektMitClips = () => {

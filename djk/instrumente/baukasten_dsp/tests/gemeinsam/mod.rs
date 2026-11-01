@@ -88,3 +88,32 @@ pub fn spiele_graph(graph: &str, noten: &[u8], regler: &[(usize, f32)]) -> Vec<(
     assert_eq!(p.rettungen, 0);
     x[48_000..].to_vec()
 }
+
+const SR_PROBE: f32 = 48_000.0;
+
+/// (S13) The synthetic effect probe of the convention lint and the audit tests: 6 s, 120 BPM, kick + off-beat hats + saw bass + chord stab, scaled to a peak of 0.5.
+pub fn musik_probe() -> Vec<f32> {
+    let n = 6 * 48_000;
+    let mut x = vec![0.0f32; n];
+    let mut z = 1u32;
+    let mut rausch = || { z = z.wrapping_mul(1664525).wrapping_add(1013904223); (z >> 8) as f32 / 8_388_608.0 - 1.0 };
+    let saege = |f: f32, i: usize| -> f32 { 2.0 * ((f * i as f32 / SR_PROBE) % 1.0) - 1.0 };
+    for b in 0..12 {
+        let s = b * 24_000;
+        let mut ph = 0.0f32;
+        for i in 0..12_000 {
+            let t = i as f32 / SR_PROBE;
+            ph += 2.0 * std::f32::consts::PI * (50.0 + 120.0 * (-t * 30.0).exp()) / SR_PROBE;
+            x[s + i] += 0.7 * ph.sin() * (-t * 12.0).exp();
+        }
+        let s2 = s + 12_000;
+        for i in 0..2_880 { if s2 + i < n { x[s2 + i] += 0.15 * rausch() * (-(i as f32 / SR_PROBE) * 60.0).exp(); } }
+    }
+    for i in 0..n {
+        let gate = if (2.0 * std::f32::consts::PI * 2.0 * i as f32 / SR_PROBE).sin() >= 0.0 { 1.0 } else { 0.0 };
+        x[i] += 0.12 * saege(55.0, i) * gate + 0.05 * (saege(220.0, i) + saege(261.6, i) + saege(329.6, i));
+    }
+    let pk = x.iter().fold(0.0f32, |m, v| m.max(v.abs()));
+    x.iter().map(|v| v / pk * 0.5).collect()
+}
+

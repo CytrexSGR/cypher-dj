@@ -621,3 +621,31 @@ button.laden.in-box:disabled { opacity: .4; }
 #libliste button.laden { margin-left: 4px; }
 .vorbereit-zeile { display: block; white-space: normal; overflow-wrap: anywhere; max-width: 24ch; margin: 3px 0 0 auto; text-align: right; font-size: 11px; font-weight: 600; color: var(--dim); letter-spacing: 0; }
 .vorbereit-zeile.vorbereit-fehler { color: #ff6b6b; font-weight: 700; }
+
+/* Baukasten S12: graph pickers on the strips, in the detail view and in the SEND RETURNS block */
+.graphplatz select.graphwahl { width: 100%; min-width: 0; font-size: 11px; }
+.graphplatz .bkmerken { font-size: 10px; padding: 1px 6px; margin-top: 2px; }   /* S17 */
+.graphplatz .bkmarke { font-size: 10px; margin-left: 6px; }
+.graphplatz .bkmarke.gespeichert { color: #6fbf73; }
+.graphplatz .bkmarke.abweichend { color: #e0a43b; }
+.fxdetail .graphdetail { grid-column: 1 / -1; max-width: 340px; }
+.fxstreifen-reihe .sendrueck { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 4px; border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font-size: 11px; }
+.sendrueck .sendzeile { display: grid; grid-template-columns: 80px minmax(0, 220px); gap: 8px; align-items: center; color: var(--dim); }
+/* S14: the eight graph knobs of a return span the row under the picker (same look as the detail view's knob list) */
+.sendrueck .sendzeile .bkliste { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 4px 12px; }
+.sendrueck .bkliste label { display: grid; grid-template-columns: minmax(0, 1fr) 44px; gap: 2px 6px; align-items: center; text-transform: uppercase; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.sendrueck .bkliste input[type=range] { grid-column: 1 / -1; grid-row: 2; min-width: 0; width: 100%; }
+.sendrueck .bkliste output { grid-column: 2; grid-row: 1; text-align: right; font-variant-numeric: tabular-nums; color: var(--text, #e6e6e6); }
+
+/* S19 (MIDI learn): learn button, waiting state and badge next to a graph knob */
+.bkzeile { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.bkzeile > label { flex: 1 1 260px; min-width: 260px; }   /* the learn controls wrap below the knob when the column is narrow (phone) */
+.bkzeile > span[data-lern-platz] { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; }   /* one unit: button, badge, remove */
+.lern-zeile { display: contents; }
+.bkzeile .lern-badge, .bkzeile .lern-weg, .bkzeile .lern { white-space: nowrap; }
+.lern { font-size: 10px; line-height: 1; padding: 4px 7px; min-width: 24px; border-radius: 6px; cursor: pointer; }
+.lern:disabled { opacity: .4; cursor: not-allowed; }
+.lern.wartet { border-color: var(--warn, #e6a23c); color: var(--warn, #e6a23c); animation: blinken .8s steps(2) infinite; }
+.lern-badge { font-size: 10px; padding: 2px 6px; border: 1px solid var(--line); border-radius: 10px; color: var(--dim); font-variant-numeric: tabular-nums; }
+.lern-weg { font-size: 12px; line-height: 1; padding: 1px 6px; border-radius: 6px; cursor: pointer; }
+@media (prefers-reduced-motion: reduce) { .lern.wartet { animation: none; } }

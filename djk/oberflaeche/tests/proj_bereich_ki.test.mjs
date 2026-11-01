@@ -33,5 +33,7 @@ test('Kern-Neustart (Spec 2.12): nach /e/neustart mit neuer Generation lädt der
   innen(o).vomKern('/e/neustart', { generation: 999, sample: 0 });
   assert.ok(await bis(() => anKern(log.slice(vor), '/k/ki/spur').length === 1, 5000));
   assert.deepEqual(anKern(log.slice(vor), '/k/arr/laden').map((z) => z.felder.nr), [nr]);
-  assert.equal(anKern(log.slice(vor), '/k/teil').filter((z) => /^spur\//.test(z.felder.pfad)).length, 4 * MAX_SPUREN);
+  const spurTeile = () => anKern(log.slice(vor), '/k/teil').filter((z) => /^spur\/\d+\/(fader|pan|mute|solo)$/.test(z.felder.pfad)).length;
+  assert.ok(await bis(() => spurTeile() === 4 * MAX_SPUREN, 5000), 'the controls go out in packets, one after the other');   // slice 3
+  assert.equal(anKern(log.slice(vor), '/k/teil').filter((z) => /^spur\/\d+\/(fader|pan|mute|solo)$/.test(z.felder.pfad)).length, 4 * MAX_SPUREN);
 });

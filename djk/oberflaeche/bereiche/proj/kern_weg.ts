@@ -19,24 +19,47 @@ export interface ReglerErgebnis { pfad: string; wert: number; quittung: Quittung
 // quittieren erst am Ende des Ladens bzw. am Einsatz: mit einem weiten abBeat wartet der Bereich dann bis zu diesen 4 s.
 const WEIT_BEATS = 16;
 
+// 1.10 slice 3 (P11): the stellwerk holds at most MAX_TEILE = 256 open parts. Opening a maximum project sets 379 controls (41 fader ramps, 114 solo parts
+// and 128 send ramps may come on top), so the controls go out in packets of at most this many, and each packet is waited for until its END status.
+export const REGLER_PAKET = 100;
+
 export class KernWeg {
   private readonly ctx: BereichKontext;
   private readonly lage: KernLage;
-  constructor(ctx: BereichKontext, lage: KernLage) { this.ctx = ctx; this.lage = lage; }
+  private readonly paket: number;
+  private readonly bisEnde: boolean;
+  // paket / bisEnde: test seams for the negative controls (packet size unlimited, waiting only for the first status)
+  constructor(ctx: BereichKontext, lage: KernLage, o: { paket?: number; bisEnde?: boolean } = {}) {
+    this.ctx = ctx; this.lage = lage; this.paket = o.paket ?? REGLER_PAKET; this.bisEnde = o.bisEnde ?? true;
+  }
 
   private beat(): number { return this.lage.uhr?.beat ?? 0; }
   private bpm(): number { return this.lage.uhr?.bpm ?? 128; }
 
   // Regler setzen (/k/teil, Dauer 0, ab sofort, Politik 1: zu spät heißt sofort ausgeführt, Quittung 5). Alle parallel, Ergebnis je Pfad.
-  setzeRegler(liste: readonly Soll[], quelle: Quelle): Promise<ReglerErgebnis[]> {
-    return this.teile(liste, abBeatVon(this.beat(), this.bpm(), 'jetzt'), quelle);
+  async setzeRegler(liste: readonly Soll[], quelle: Quelle): Promise<ReglerErgebnis[]> {
+    return (await this.setzeReglerPakete(liste, quelle)).ergebnis;
   }
-  // Alle Regler als /k/teil, parallel; Quittung je Regler. Cyphers Teile tragen den Plan "cypher" (/k/abbruch trifft sie).
+  // In Paketen zu höchstens `paket` Reglern: jedes Paket geht parallel hinaus und wird bis zum Endstatus abgewartet, erst dann das nächste.
+  // Abbruch (die späteren Pakete werden NICHT gesendet): ein Paket mit einer Ablehnung (Status 4, 6, 7, 8: der Kern ist voll oder lehnt ab) oder ein
+  // Paket, in dem kein einziger Regler eine Quittung bekam (kein Kern). Heilung: das nächste Öffnen setzt alle Regler neu.
+  async setzeReglerPakete(liste: readonly Soll[], quelle: Quelle): Promise<{ ergebnis: ReglerErgebnis[]; nicht_gesendet: number }> {
+    const ergebnis: ReglerErgebnis[] = [];
+    for (let von = 0; von < liste.length; von += this.paket) {
+      const teil = await this.teile(liste.slice(von, von + this.paket), abBeatVon(this.beat(), this.bpm(), 'jetzt'), quelle);
+      ergebnis.push(...teil);
+      if (teil.some((r) => quittungAbgelehnt(r.quittung)) || teil.every((r) => r.quittung === null)) {
+        return { ergebnis, nicht_gesendet: liste.length - ergebnis.length };
+      }
+    }
+    return { ergebnis, nicht_gesendet: 0 };
+  }
+  // Ein Paket als /k/teil, parallel; Quittung je Regler. Cyphers Teile tragen den Plan "cypher" (/k/abbruch trifft sie).
   private async teile(liste: readonly Soll[], ab: number, quelle: Quelle): Promise<ReglerErgebnis[]> {
     const ids = liste.map((r) => this.ctx.sende('/k/teil', { quelle, plan: quelle === 'cypher' ? 'cypher' : '', teil: 0,
       pfad: r.pfad, ab_beat: ab, dauer_beats: 0, nach: r.wert, form: 0, politik: 1, gruppe: '', hoerschein: '' }));
     return Promise.all(liste.map(async (r, i) => {
-      const q = await this.ctx.warteQuittung(ids[i], ab);
+      const q = await this.ctx.warteQuittung(ids[i], ab, this.bisEnde);
       return { pfad: r.pfad, wert: r.wert, quittung: q, ok: quittungOk(q) };
     }));
   }

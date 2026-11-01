@@ -12,11 +12,18 @@ pub fn aufloesen(g: Graph) -> Result<Graph, Fehler> {
         if k.id.contains('.') || k.id.contains('/') || k.id.is_empty() {
             return Err(Fehler::Id(k.id.clone()));
         }
+        // S10, C10: a sample file name would be copied into every instance, no hidden file access through a makro
+        if k.art.starts_with(PRAEFIX) && k.datei.is_some() {
+            return Err(Fehler::Wert { knoten: k.id.clone(), wert: "datei".to_string(), grund: "datei not supported in makros" });
+        }
     }
     for (name, m) in &g.makros {
         for k in &m.knoten {
             if k.id.contains('.') || k.id.contains('/') || k.id.is_empty() {
                 return Err(Fehler::Id(format!("{name}: {}", k.id)));
+            }
+            if k.datei.is_some() {
+                return Err(Fehler::Wert { knoten: format!("{name}/{}", k.id), wert: "datei".to_string(), grund: "datei not supported in makros" });
             }
             if k.art.starts_with(PRAEFIX) || k.art == "note" || k.art == "ausgang" || k.art == "eingang" {
                 return Err(Fehler::MakroInhalt { makro: name.clone(), knoten: k.id.clone(), art: k.art.clone() });

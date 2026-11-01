@@ -1,0 +1,39 @@
+{
+  "format": "baukasten/2",
+  "name": "gated-hall-snare",
+  "stimmen": 1,
+  "regler_namen": {"1": "Key gain (tail length)", "2": "Hall mix"},
+  "knoten": [
+    {"id": "note", "art": "note"},
+    {"id": "noise", "art": "rauschen"},
+    {"id": "tone", "art": "sinus", "hz": 180},
+    {"id": "body", "art": "add"},
+    {"id": "env", "art": "adsr", "a": 0.001, "d": 0.25, "s": 0, "r": 0.05},
+    {"id": "vca", "art": "mul"},
+    {"id": "level", "art": "mul", "b": 0.6},
+    {"id": "hall", "art": "hall", "decay": 3, "mix": 1},
+    {"id": "k_key", "art": "regler", "nr": 1, "min": 0.25, "max": 4, "log": 1},
+    {"id": "k_mix", "art": "regler", "nr": 2, "min": 0, "max": 1},
+    {"id": "key", "art": "mul"},
+    {"id": "gate", "art": "gate", "schwelle": -30, "hyst": 6, "tiefe": 60, "attack": 0.5, "release": 30},
+    {"id": "aus", "art": "ausgang"}
+  ],
+  "kanten": [
+    {"von": "noise.aus", "nach": "body.a"},
+    {"von": "tone.aus", "nach": "body.b"},
+    {"von": "note.gate", "nach": "env.gate"},
+    {"von": "note.trig", "nach": "env.trig"},
+    {"von": "body.aus", "nach": "vca.a"},
+    {"von": "env.aus", "nach": "vca.b"},
+    {"von": "vca.aus", "nach": "level.a"},
+    {"von": "level.aus", "nach": "hall.x"},
+    {"von": "k_mix.aus", "nach": "hall.mix"},
+    {"von": "level.aus", "nach": "key.a"},
+    {"von": "k_key.aus", "nach": "key.b"},
+    {"von": "hall.l", "nach": "gate.l"},
+    {"von": "hall.r", "nach": "gate.r"},
+    {"von": "key.aus", "nach": "gate.kl"},
+    {"von": "gate.l", "nach": "aus.l"},
+    {"von": "gate.r", "nach": "aus.r"}
+  ]
+}

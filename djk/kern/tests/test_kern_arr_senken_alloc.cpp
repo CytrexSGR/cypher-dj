@@ -32,11 +32,14 @@ int main() {
     noten += (i ? "," : "") + std::string("{\"id\":\"n/") + std::to_string(i) + "\",\"beat\":" + std::to_string(i / 2) +
              (i % 2 ? ".5" : ".0") + ",\"laenge\":0.25,\"ton\":" + std::to_string(36 + i) + ",\"vel\":100}";
   noten += ",{\"id\":\"n/lang\",\"beat\":0.0,\"laenge\":8.0,\"ton\":30,\"vel\":120}";   // klingt beim Neustart
+  // Automation slice 2 (task 8): two geraet lanes on the internal track run through auto_parameter and the RB parameter path in every block of the guarded cycles
+  const std::string lanes_rb =
+      "{\"ziel\":\"geraet.cutoff\",\"punkte\":[[0.0,0.1,0],[4.0,0.9,0],[8.0,0.1,0]]},{\"ziel\":\"geraet.resonanz\",\"punkte\":[[0.0,0.0,0],[8.0,0.8,1]]}";
   auto spuren = [&](const char* cutoff) {
     return std::string("{\"nr\":2,\"art\":\"intern\",\"geraet\":\"rb338\",\"parameter\":{\"cutoff\":") + cutoff +
-           ",\"env_mod\":0.7},\"noten\":[" + noten + "]}," + "{\"nr\":3,\"art\":\"wirt\",\"slot\":1,\"noten\":[" + noten + "]}";
+           ",\"env_mod\":0.7},\"noten\":[" + noten + "],\"auto\":[" + lanes_rb + "]}," + "{\"nr\":3,\"art\":\"wirt\",\"slot\":1,\"noten\":[" + noten + "]}";
   };
-  x.laden(1, spuren("0.3"));
+  x.laden(1, spuren("0.3"), "andreas", true);
   x.loop(true, 0.0, 8.0);
   x.lauf(4 * N);   // Laden und Klammer außerhalb des Wächters (Befehle aus dem Netz, nicht der Pfad im Zyklus)
   std::vector<float> rl(N, 0.0f), rr(N, 0.0f);
@@ -76,8 +79,9 @@ int main() {
   const int64_t st1 = x.start(0.0, 0);   // Start-Pfad unter dem Wächter: Einsatz nach 537 + 256 Samples
   zyklen(10);
   const bool start_da = quittung(st1, 2);
+  PRUEF(x.kern->arrangement().snapshot() && x.kern->arrangement().snapshot()->n_auto_lanes == 2);   // positive control: the geraet lanes are in the playing snapshot
   zyklen(3000);              // > 2 Durchläufe der Klammer (8 Beats = 180 000 Samples)
-  x.laden(2, spuren("0.8"));   // Tausch: neue Parameter, Noten bleiben
+  x.laden(2, spuren("0.8"), "andreas", true);   // Tausch: neue Parameter, Noten bleiben
   zyklen(1000);
   const int64_t st2 = x.start(0.0, 0);   // Neustart im Lauf: Kurzblende im Block vor dem Einsatz, dann Start-Pfad
   zyklen(10);
@@ -94,7 +98,7 @@ int main() {
   x.laden(3, "");            // Spurwechsel (Fix F2): beide Spuren werden leer, RB blendet aus, Slot 1 bekommt CC 123
   zyklen(10);
   const int ruhend_wechsel = x.kern->arr_rb().ruhend();
-  x.laden(4, spuren("0.5"));   // K2b-Rest: wieder beide Spuren, Start
+  x.laden(4, spuren("0.5"), "andreas", true);   // K2b-Rest: wieder beide Spuren, Start
   x.lauf(x.kern->sample() + 4 * N);
   const int64_t st4 = x.start(0.0, 0);
   zyklen(400);
@@ -117,6 +121,7 @@ int main() {
   PRUEF(im_zyklus.alloc == 0 && im_zyklus.frei == 0 && im_zyklus.sperren == 0 && im_zyklus.schlafen == 0);
   PRUEF(midi > 100 && pegel > 100);   // es lief wirklich etwas
   PRUEF(x.kern->arr_rb().verloren() == 0);
+  PRUEF(x.kern->arr_rb().parameter_abgelehnt() == 0);   // the lane values were accepted by the FFI
   PRUEF(start_da && neustart_da);     // Start-Pfad und Neustart mit Kurzblende liefen im Zyklus unter dem Wächter
   PRUEF(quittung(st3, 2));
   PRUEF(ruhend_lauf == cdj::ARR_SPUREN - 1 && ruhend_stopp == cdj::ARR_SPUREN);   // Ruhe-Reset lief

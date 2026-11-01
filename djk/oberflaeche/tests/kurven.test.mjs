@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { ZIELE, art, GRIFF, griffZuMidi, midiRoh, wertAusMidi, formatiere, vorgabe } from '../oeffentlich/kurven.js';
 
 test('Ziel-Liste: 41 Pfade, je Deck 13 (mit PFL und Crossfader-Zuweisung), erz/1 11, pad/1 und pad/2 je 11 (ohne Tasten) plus xfader, master/pegel, cue/mix, cue/pegel', () => {
-  assert.equal(ZIELE.size, 87 + 128 + 33 + 12 * 8);   // S5r: + <kanal>/bk/1..8 auf 12 Kanälen; K2: plus master/kleber; D1 K1/E3: spur/1..32 je fader, pan, mute, solo; 1.10: grp/1..8 je 4 plus pm/fader
+  assert.equal(ZIELE.size, 87 + 128 + 33 + 12 * 8 + 204 + 2 * 8);   // S14: + fx/3, fx/4 x 8 graph knobs; 1.10 Slice 3: + 128 + 32 sends, 16 return and 28 hall controls; S5r: + <kanal>/bk/1..8 auf 12 Kanälen; K2: plus master/kleber; D1 K1/E3: spur/1..32 je fader, pan, mute, solo; 1.10: grp/1..8 je 4 plus pm/fader
   for (const p of ['deck/1/fader', 'deck/2/eq/tief', 'deck/1/kill/hoch', 'deck/2/play', 'deck/1/cue', 'xfader',
     'deck/1/pfl', 'deck/2/pfl', 'master/pegel', 'master/kleber', 'cue/mix', 'cue/pegel', 'erz/1/fader']) assert.ok(ZIELE.has(p), p);
 });
@@ -159,4 +159,11 @@ test('D1 Spec 6.16: Spur-Fader −200..+6 dB wie der Kern (K_SPUR_FADER), Kanal-
   assert.ok(Math.abs(midiRoh('spur/1/fader', 6) - 1) < 1e-6);
   assert.equal(formatiere('spur/1/fader', 6), '+6.0 dB');
   assert.ok(Math.abs(wertAusMidi('deck/1/fader', 1) - 0) < 1e-6);   // Negativ-Kontrolle
+});
+
+// S14: graph knobs of the send returns fx/3, fx/4 (global controls fx/<n>/bk/1..8)
+test('S14 ZIELE: fx/3/bk/1..8 and fx/4/bk/1..8 are targets, other fx numbers and knob numbers are not; art is bk', () => {
+  for (const p of ['fx/3/bk/1', 'fx/3/bk/8', 'fx/4/bk/1', 'fx/4/bk/8']) { assert.ok(ZIELE.has(p), p); assert.equal(art(p), 'bk', p); }
+  for (const p of ['fx/1/bk/1', 'fx/2/bk/1', 'fx/5/bk/1', 'fx/3/bk/0', 'fx/3/bk/9', 'fx/3/bk/10', 'fx/3/bk']) { assert.ok(!ZIELE.has(p), p); assert.notEqual(art(p), 'bk', p); }
+  assert.equal(art('fx/3/bk/4'), 'bk');
 });

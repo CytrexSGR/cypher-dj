@@ -2,12 +2,17 @@
   "format": "baukasten/2",
   "name": "fx-echo-achtel",
   "stimmen": 1,
+  "regler_namen": {"1": "Echo mix", "2": "Feedback"},
   "knoten": [
     {"id": "ein", "art": "eingang"},
+    {"id": "k_mix", "art": "regler", "nr": 1, "min": 0, "max": 0.7},
+    {"id": "k_fb", "art": "regler", "nr": 2, "min": 0, "max": 0.9},
     {"id": "echo", "art": "delay", "takt": 0.5, "fb": 0.45, "mix": 0.35, "max": 2000, "pingpong": 1, "daempf": 5000},
     {"id": "aus", "art": "ausgang"}
   ],
   "kanten": [
+    {"von": "k_mix.aus", "nach": "echo.mix"},
+    {"von": "k_fb.aus", "nach": "echo.fb"},
     {"von": "ein.l", "nach": "echo.l"},
     {"von": "ein.r", "nach": "echo.r"},
     {"von": "echo.l", "nach": "aus.l"},

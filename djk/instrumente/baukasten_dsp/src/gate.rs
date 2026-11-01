@@ -43,9 +43,17 @@ impl Gate {
         self.huelle
     }
 
+    /// Same as `prozess_key(l, r, l, r)`: the gate detects on its own input.
     #[inline]
     pub fn prozess(&mut self, l: f32, r: f32) -> (f32, f32) {
-        let p = l.abs().max(r.abs());
+        self.prozess_key(l, r, l, r)
+    }
+
+    /// Detects on the key (`kl`, `kr`) instead of on the audio; the key is never heard (S9, D4). A non-finite key level
+    /// counts as silence, otherwise +Inf would hold the envelope open forever.
+    #[inline]
+    pub fn prozess_key(&mut self, l: f32, r: f32, kl: f32, kr: f32) -> (f32, f32) {
+        let p = kl.abs().max(kr.abs());
         let p = if p.is_finite() { p } else { 0.0 };
         self.huelle = p.max(self.huelle * self.a_huelle);
         if self.huelle < NULL {

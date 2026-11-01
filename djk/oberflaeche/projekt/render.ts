@@ -5,7 +5,7 @@
 // Rückgaben wie render_main.cpp (K3 05a91adb, am Baum gelesen): 0 geschrieben, 2 Aufruf, 3 Konfiguration oder Zustand, 4 Wiedergabe oder Render,
 // 5 Wirt-Spur nicht eingefroren, 6 Schreiben, 7 Speicher, 8 Ziel besteht (der Render ersetzt nie; S3 vergibt eigene Namen).
 import { spawn } from 'node:child_process';
-import type { Projekt } from './modell.ts';
+import { HALL_FELDER, type Projekt, type Spur } from './modell.ts';
 
 export interface RenderAufruf {
   programm: string[];        // [Pfad zu cypherdj-render] oder im Test [node, render_attrappe.mjs]
@@ -60,6 +60,49 @@ export function reglerAusProjekt(p: Projekt): Record<string, number> {
     r[`grp/${g.nr}/fader`] = g.fader_db; r[`grp/${g.nr}/pan`] = g.pan; r[`grp/${g.nr}/mute`] = g.mute ? 1 : 0; r[`grp/${g.nr}/solo`] = g.solo ? 1 : 0;
   }
   if ((p.master?.fader_db ?? 0) !== 0) r['pm/fader'] = p.master.fader_db;   // nur wenn nicht 0 dB (ein älteres Render-Programm kennt den Pfad nicht)
+  Object.assign(r, routingRegler(p));
+  return r;
+}
+
+// 1.10 slice 3 (P12): the send and return controls of the project for the export render (the render sets them like the playback does). Sends only for
+// returns that exist; every existing return with all its controls (fader, pan, mute, solo, Hall on and the six Hall values). Without returns: nothing,
+// so the file of a project without returns stays as it was. `nur`: the render of ONE track alone (spec 5.10): the track, its group, their sends and only
+// the returns they feed (their solo off, so that a return solo of the project does not silence the isolated track).
+export function routingRegler(p: Projekt, opt: { nur?: Spur; trocken?: boolean } = {}): Record<string, number> {
+  const nur = opt.nur;
+  const r: Record<string, number> = {};
+  const returns = p.returns ?? [];
+  if (returns.length === 0) return r;
+  if (opt.trocken) {                                                       // the merge renders dry: every send explicitly off, every existing return muted
+    for (const s of p.spuren) for (const x of returns) r[`spur/${s.nr}/send/${x.nr}`] = -200;
+    for (const g of p.gruppen ?? []) for (const x of returns) r[`grp/${g.nr}/send/${x.nr}`] = -200;
+    for (const x of returns) r[`ret/${x.nr}/mute`] = 1;
+    return r;
+  }
+  const nrVon = new Map(returns.map((x) => [x.id, x.nr] as const));
+  const gespeist = new Set<string>();
+  const strang = (kurz: string, nr: number, sends: { id: string; db: number }[] | undefined): void => {
+    for (const sd of sends ?? []) {
+      const rn = nrVon.get(sd.id);
+      if (rn === undefined) continue;                                      // a send without its return is not translated
+      r[`${kurz}/${nr}/send/${rn}`] = sd.db; gespeist.add(sd.id);
+    }
+  };
+  if (nur) {
+    strang('spur', nur.nr, nur.sends);
+    const g = nur.ausgang ? (p.gruppen ?? []).find((x) => x.id === nur.ausgang!.id) : undefined;
+    if (g) strang('grp', g.nr, g.sends);
+  } else {
+    for (const s of p.spuren) strang('spur', s.nr, s.sends);
+    for (const g of p.gruppen ?? []) strang('grp', g.nr, g.sends);
+  }
+  for (const x of [...returns].sort((a, b) => a.nr - b.nr)) {
+    if (nur && !gespeist.has(x.id)) continue;
+    r[`ret/${x.nr}/fader`] = x.fader_db; r[`ret/${x.nr}/pan`] = x.pan; r[`ret/${x.nr}/mute`] = x.mute ? 1 : 0;
+    r[`ret/${x.nr}/solo`] = nur ? 0 : (x.solo ? 1 : 0);
+    r[`ret/${x.nr}/hall/an`] = x.hall.an ? 1 : 0;
+    for (const k of HALL_FELDER) r[`ret/${x.nr}/hall/${k}`] = x.hall[k];
+  }
   return r;
 }
 

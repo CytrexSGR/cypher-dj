@@ -60,8 +60,8 @@ fn unguenstigster_fall_bleibt_unter_vollaussteuerung() {
 
 #[test]
 fn hall_klingt_nach_dem_loslassen_nach() {
-    // Akkord 1 s, loslassen, Fenster 1,5–2,0 s nach dem Loslassen: mit Hall deutlich lauter als ohne (Release 1,5 s
-    // in Grundstellung; ohne Hall ist der Pad dort im Ausklang)
+    // Akkord 1 s, loslassen, Fenster 1,5–2,0 s nach dem Loslassen: mit Hall deutlich lauter als ohne (Release ca. 0,3 s
+    // at the default position since S13; without the hall the pad has died away by then)
     let nach = |g: &str| {
         let mut p = uebersetze(g, SR).unwrap();
         for nr in 1..=REGLER {
@@ -95,6 +95,9 @@ fn mit_mix_null_bitgleich_mit_pad_v2() {
             p.note_an(n, 0.8);
         }
     }
+    // S13: knob 6 of the hall variant is the Hall mix (it overrides the fixed node value), so it goes to 0 here; the pad
+    // has PWM depth on knob 6, whose 0.5 position equals the value baked into the variant (0.4)
+    b.setze_regler(6, 0.0);
     for i in 0..48_000 {
         assert_eq!(a.sample_stereo(), b.sample_stereo(), "Sample {i}");
     }

@@ -3,6 +3,7 @@
 // Startzeit ab) und das Muster eines Stroms. Reine Funktionen bis auf wirtRuf (Unix-Socket, eine JSON-Zeile hin und zurück).
 import net from 'node:net';
 import { PFAD, OFFEN_DB, oeffnet } from './hand_bedienung.ts';
+import { stromVonKanal } from '../vertrag/stroeme.ts';   // S18: the shared stream <-> channel table
 
 export const SPUR_NAME = /^[a-z0-9_-]{1,32}$/;
 export const WIRT_ZIEL = /^wirt:(bass|melodie)\/([a-z][a-z0-9_]*)$/;
@@ -18,10 +19,12 @@ export interface WirtPlan { gruppe: string; name: string; ab_beat: number; dauer
 export interface MusterPlan { strom: number; text: string; ab_beat: number }
 export interface Geplant { teile: TeilPlan[]; wirt: WirtPlan[]; muster: MusterPlan[]; ende_beat: number }
 
-// Strom (1..3), dessen Muster ein Ziel hält: erz/<n>/*, wirt:bass (Strom 2), wirt:melodie (Strom 3), strom:<n>; sonst null
+// Stream whose AUTO switch holds a target: the channel strips erz/<n>/* and pad/<n>/* through the shared table (erz/1..3, 5..7 =
+// streams 1..3, 5..7; pad/1, pad/2 = streams 9, 10; erz/4 and erz/8 are no stream), wirt:bass (stream 2), wirt:melodie (stream 3),
+// strom:<n> (1..3); otherwise null
 export function stromVonZiel(ziel: string): number | null {
-  const e = /^erz\/([1-3])\//.exec(ziel);
-  if (e) return Number(e[1]);
+  const e = /^((?:erz|pad)\/[0-9]+)\//.exec(ziel);
+  if (e) return stromVonKanal(e[1]);
   const w = WIRT_ZIEL.exec(ziel);
   if (w) return w[1] === 'bass' ? 2 : 3;
   const s = STROM_ZIEL.exec(ziel);

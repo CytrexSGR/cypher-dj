@@ -151,11 +151,12 @@ test('Raster: #produktion hat für jedes Kind im Fluss eine feste Zeile (ein ver
     if (d === 0 && !/class="p-verlauf"/.test(attr)) kinder.push(tag + (/class="([^"]*)"/.exec(attr)?.[1] ? '.' + /class="([^"]*)"/.exec(attr)[1].split(' ')[0] : ''));
     if (!leer.has(tag) && !selbst) d++;
   }
-  assert.deepEqual(kinder, ['div.p-transport', 'div.p-arr', 'section.p-mixer', 'details.p-geraete', 'section.p-detail'], 'Kinder im Fluss (der Verlauf ist absolut)');
+  assert.deepEqual(kinder, ['div.p-transport', 'div.p-arr', 'section.p-mixer', 'section.p-returns', 'details.p-geraete', 'section.p-detail'], 'Kinder im Fluss (der Verlauf ist absolut)');
   assert.equal(zeilen.length, kinder.length, `Raster: ${zeilen.join(' | ')}`);
   assert.equal(zeilen[2], 'auto', 'Mischer: nur so hoch wie sein Inhalt (versteckt: 0)');
-  assert.equal(zeilen[3], 'auto', 'INPUTS zugeklappt: nur so hoch wie die Summary');
-  assert.ok(zeilen[4].includes('var(--detail'), 'das CLIP-Detail behält seine Zeile');
+  assert.equal(zeilen[3], 'auto', 'Returns (slice 3): only as high as their content (hidden: 0)');
+  assert.equal(zeilen[4], 'auto', 'INPUTS zugeklappt: nur so hoch wie die Summary');
+  assert.ok(zeilen[5].includes('var(--detail'), 'das CLIP-Detail behält seine Zeile');
   // N4: jedes Kind steht in einer festen Zeile, sonst rückt ein verstecktes Kind (display: none) die übrigen eine Zeile nach oben
   kinder.forEach((k, i) => {
     const klasse = k.split('.')[1];

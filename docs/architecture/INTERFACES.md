@@ -147,6 +147,7 @@ Channels: `deck/1` to `deck/4` (Andreas says A = 1, B = 2), `erz/1` to `erz/8` (
 | `grp/<n>/solo` | switch | 0/1 | 0 | immediate (10 ms fade in the Arrangement module) | all |
 | `pm/fader` | dB | −200 to +6 | 0 | 10 ms | all |
 | `<k>/bk/<n>` (n = 1 to 8) | 0 to 1 (graph knob `regler nr n` of the Baukasten (modular) graph on the channel) | | 0.5 | immediately; the Baukasten library smooths over 20 ms | all; only `<k>` = deck/1..4 (effect graph, §4.10), erz/1, 2, 3, 5, 6, 7 and pad/1, 2 (instrument `bk:<name>`, §4.8); not erz/4 (production) and erz/8 (pre-listen) |
+| `fx/<n>/bk/<m>` (n = 3 and 4, m = 1 to 8) | 0 to 1 (graph knob `regler nr m` of the effect graph on send return fx/n, §4.10) | | 0.5 | immediately; the Baukasten library smooths over 20 ms | all; global (no channel) |
 
 `keylock` (Keylock Task 3; ADR 029 comes with Task 4): ONE switch for all sources, no deck argument. On (default): decks and loop boxes play via the time stretcher (Dehner; Rubber Band R3 in the work thread, one per source) at their pitch, each event with a varispeed bridge up to `s_h`; a waiting box starts with a lead-in and fades out to the one from the ring (ADR 029 section loop boxes, since Task 7; pre-rendered variants per ADR 027 no longer exist). Off: decks and loop boxes play varispeed (pitch follows tempo). The REC conversion of a recording stays offline (ADR 027 decision 6) and does not depend on the knob. A new subscriber receives the state at the first `/k/hallo` as `/e/regler keylock` (§5.7). Takes effect at the sample, also while a deck is running. Without the stretcher (kern.toml `keylock = false`, §2.1) the knob has no effect on the decks.
 
@@ -172,10 +173,13 @@ The check I3 (listening check) exempts them. The controls sit at the end of the 
 
 `master/kleber` (K2): threshold of the sum compressor 2:1 (attack 30 ms, release 200 ms): 0 = off, 1 = −30 dB on the detector |L|+|R|, linear in dB (threshold = +6 − 36·value dB; 1/3 = −6 dB); fully wet, no parallel mix. It acts after the tap of the master sum (channel 14), before `master/pegel`: the ear tap does not see it. Turning back to 0, it fades out without a step (the gain recovers over the release).
 
-`<k>/send/2` (after the fader) feeds the reverb, `fx/2/rueckweg` routes it into the master sum; `fx/<n>/notenwert`, `fx/<n>/rueckkopplung` and the return paths fx/1, fx/3, fx/4 have no effect.
+`<k>/send/2` (after the fader) feeds the reverb, `fx/2/rueckweg` routes it into the master sum. `<k>/send/3` and `<k>/send/4` feed the send buses `fx/3` and `fx/4`; an effect graph set with `/k/kanal/graph` on `fx/3` / `fx/4` (S6) processes the summed bus and its output is added to the master sum scaled by `fx/3/rueckweg` / `fx/4/rueckweg` (after the hall return, before the master beat FX). Without a graph the return is silent. `fx/<n>/notenwert`, `fx/<n>/rueckkopplung` and the returns fx/1 have no effect.
 
-`fx/1` is the beat-synced echo (mixed form), `fx/2` the reverb, `fx/3` and `fx/4` are return paths for send effects from plugin hosts
-(from slice 8, silent until then; only `fx/<n>/rueckweg` applies to them). A command with a source other than `andreas` to a path "hand only" is rejected with reason `nur_hand`.
+`fx/1` is the beat-synced echo (mixed form), `fx/2` the reverb. `fx/3` and `fx/4` are the returns of the send effect graphs
+(Baukasten S6): the graph outputs wet only, runs every block while set (an echo tail is not cut when the send goes silent), has
+no latency and eight knobs per return, `fx/3/bk/1..8` and `fx/4/bk/1..8` (§1.5, S14; the values belong to the slot and survive a graph switch). Switching blends the old output
+into the new one over 480 samples, removing blends to silence; the output is clamped to ±8. Not persisted over a restart. Plugin-host
+returns (slice 8) would need another slot. A command with a source other than `andreas` to a path "hand only" is rejected with reason `nur_hand`.
 
 **Routing V1 (A17, draft):** every channel goes via `<k>/ziel` directly to master or to one of the four
 group buses; a bus has the full channel strip and goes to master; four sends per channel after the fader to `fx/1`
@@ -433,7 +437,8 @@ otherwise `abgelehnt`, reason `kein_hoerschein` (I3b). Pre-listening a shot: pla
 | `/k/vorschlag_kanal` | `,hss` | `id`, `quelle`, `kanal` (`""` = none) | channel that the button "Listen to Cypher" puts on Andreas' PFL |
 | `/k/led` | `,hssi` | `id`, `quelle`, `name` (§7.4), `zustand` (0 off, 1 on, 2 blinks, 3 blinks fast) | LED on the controller |
 | `/k/kiste` | `,hs` | `id`, `quelle` | core rereads `/dev/shm/cypherdj/kiste.json` |
-| `/k/mapping` | `,hss` | `id`, `quelle`, `geraet` | core rereads the controller mapping (non-real-time thread) |
+| `/k/mapping` | `,hss` | `id`, `quelle`, `geraet` | core rereads the controller mapping (non-real-time thread); `geraet` `lernen` loads the learn table (slot 1, applies only to `midi_ein_1`, §7.2) |
+| `/k/lernen` | `,hsi` | `id`, `quelle`, `an` (1 arm, 0 disarm) | MIDI learn: the next CC on midi_ein_1 is reported as /e/gelernt and not applied; 20 s, then disarmed silently; only Andreas' hand (cypher: nur_hand) |
 | `/k/latenz` | `,hssi` | `id`, `quelle`, `ziel` (`erz/<m>` or `fx/<n>`), `samples` | measured return-path latency of a host; the core sends events to this target `samples` plus one cycle earlier |
 
 ### 4.8 Generators (Erzeuger)
@@ -487,6 +492,8 @@ frame (cut or end of file), the core fades in linearly (32 frames) or out (96 fr
 known parameter is a format error (`protokoll`). At most 12 pairs per `/erz/ev` (7 + 2 · 12 = 31 values, the core reads
 up to 32). Format error in the bundle: `/e/protokollfehler` with `protokoll`.
 
+**Baukasten graphs and sample files (S10).** A `bk:<name>` stream loads `<bk_ordner>/<name>.json` in the net thread. A graph may contain `sampler` nodes (`"datei": "<name>.f32"`); their files are read from the **sample root `<bk_ordner>/samples/`** at the same moment (`cypher_bk_neu_wurzel`), never in the audio callback. File format: raw 48 kHz stereo float32, interleaved; name `[A-Za-z0-9_.-]`, 5 to 64 characters, ends in `.f32`, no `..`; at most 1 440 000 frames per file and 64 MiB of sample data per graph; a missing or invalid sample refuses the stream with acknowledgement 6 `pruefung` (reason on stderr). A sampler graph has no `eingang`, so as `/k/kanal/graph` insert it is refused with `kein_eingang`: it plays as an instrument stream on an erz channel. Worst case sample memory: 16 streams x 2 handles (graph switch) x 64 MiB. Since S21 `faltung` nodes read their impulse response (`"datei"`) from the same root with the same rules; an IR longer than the node's `laenge_max` (1 to 2000 ms) refuses the stream or insert with `pruefung`. `faltung` adds no latency, so it is allowed as `/k/kanal/graph` insert.
+
 ### 4.9 Loop boxes (MVP 2, ADR 025)
 
 | Address | Types | Fields | Effect |
@@ -537,7 +544,8 @@ reports `/e/mitschnitt`; if the name is already taken, status 1 without a file.
 | `/k/fx` | `,hsiidddddi` | `id`, `quelle`, `einheit` (1 FX1, 2 FX2), `art` (1 echo, 2 flanger, 3 phaser, 4 filter LFO, 5 reverb (Cypher Hall, `beats` = decay time T60), 6 delay (one repeat), 7 ping pong (L/R), 8 trans (gate), 9 roll, 10 slip roll (re-records on a `beats` change), 11 vinyl brake (`beats` = braking time), 12 spiral (time glides, pitch wanders); 5 to 12 since 2026-10-11, range from `osc.json`), `beats` (0,25, 0,5, 1, 2, 4, 8 or 16), `wet` (0 to 1, S8 FX knob 1 dry/wet), `param1` (0 to 1, S8 FX knob 2, DSP-active per type: echo/flanger feedback, phaser resonance, filter quality, reverb SIZE, delay TONE, ping pong and spiral feedback, trans DUTY; roll, slip roll, vinyl have no effect), `param2` (0 to 1, S8 FX knob 3, reserved, no DSP effect), `param3` (0 to 1, S8 FX knob 4, reserved, no DSP effect), `an` (0/1, the unit ON, S8 FX button 1) | sets the parameters of the unit; acts on every instance assigned to it (`/k/fx/zuweisung`); wet glides over 480 samples; a change of type or beats while `an` glides to 0 first and clears the state (exception: beats with roll, slip roll, vinyl, spiral: no clearing); off closes only the input for every type, and the reverb tail rings out; LFO phase = frac(beat / `beats`) |
 | `/k/fx/zuweisung` | `,hsisi` | `id`, `quelle`, `einheit` (1, 2), `kanal` (`deck/1`, `deck/2`, `erz/1`, `erz/2`, `erz/3`, `pad/1`, `pad/2`, `master`), `an` (0/1, assigned) | attaches `kanal` to the instance of the unit or detaches it (after the channel strip; main path after the fader; PFL dry; for `master` before `master/pegel` on the sum); several channels may hang on the same unit; a channel with both assignments runs FX1 before FX2 (serial, as on the Traktor Kontrol S8, §4.3.1: "first run through FX1, then FX2"); assigning off lets the instance run out (input closed, reverb tail rings out); assigning on lets the input glide back in |
 | `/k/fx/routing` | `,hsi` | `id`, `quelle`, `routing` (0 post fader, 1 insert; otherwise receipt 6 `ausserhalb_bereich`) | switches both units and all channel strips where the beat FX sits: post fader (default, after the fader; PFL and Cypher's ear do not hear it) or insert (before the fader; PFL and the envelope ring hear it, as with Traktor FX unit routing); takes effect at the start of the next block; the switch glides wet to 0 over 480 samples, swaps the path, clears and glides back (the echo tail breaks off); source `cypher` gets receipt 6 `nur_hand` (the key belongs to Andreas' hand); master FX stays untouched; the core does not keep the request across a restart (the page server sends it again); receipts 1/2/3 |
-| `/k/kanal/graph` | `,hsss` | `id`, `quelle`, `kanal` (`deck/1`..`deck/4`), `name` (graph `<name>.json` in the graph folder, empty = remove) | sets a building-block effect graph (node `eingang`, latency 0) as an insert into the channel strip: before the fader, after the compressor, before the beat FX insert; PFL, envelope ring and sends hear it, pre-listening (`nur_cue`) does not. Each change fades linearly over 10 ms (480 samples) from the old path to the new one. The graph computes at the tempo of the core clock (`lfo`/`delay` with `takt`). Rejection: receipt 6 `ausserhalb_bereich` (channel, name), `pruefung` (file missing, format, latency > 0), `kein_eingang` (graph without `eingang`). Any valid source; in the AI stop `cypher` gets receipt 6 `ki_gestoppt`; takes effect at the start of the next block; the core does not keep the graph across a restart; receipts 1/2/3 |
+| `/k/kanal/graph` | `,hsss` | `id`, `quelle`, `kanal` (`deck/1`..`deck/4`, or `fx/3`, `fx/4` for the send returns, S6), `name` (graph `<name>.json` in the graph folder, empty = remove) | sets a building-block effect graph (node `eingang`, latency 0) as an insert into the channel strip: before the fader, after the compressor, before the beat FX insert; PFL, envelope ring and sends hear it, pre-listening (`nur_cue`) does not. Each change fades linearly over 10 ms (480 samples) from the old path to the new one. The graph computes at the tempo of the core clock (`lfo`/`delay` with `takt`). Rejection: receipt 6 `ausserhalb_bereich` (channel, name), `pruefung` (file missing, format, latency > 0), `kein_eingang` (graph without `eingang`). Any valid source; in the AI stop `cypher` gets receipt 6 `ki_gestoppt`; takes effect at the start of the next block; the core does not keep the graph across a restart; receipts 1/2/3. On `fx/3` / `fx/4` the graph is not an insert but the effect of the send bus (§1.5); other `fx/<n>` are rejected `ausserhalb_bereich` |
+| `/k/graph/frage` | `,hs` | `id`, `quelle` | asks which graph sits on each graph-capable slot (`graph_platz`, §5.12). Answered in the network thread, not through the ring: one `/e/graph` per slot in list order (empty slots with `""`), then quittung 1 and 3 for this id; all to all subscribers. Any valid source; an unknown source gets quittung 6 `ausserhalb_bereich` and no `/e/graph` |
 
 `param` acts per type: echo and flanger feedback 0 to 0,9, phaser resonance 0 to 0,9, filter LFO quality 0.7 to 8.
 Receipt 1, 2, 3 at the start of the block; error `/q` status 6 `ausserhalb_bereich`. Source `cypher` itself rejects
@@ -632,6 +640,9 @@ once; a duplicate number is `format`) and `ausgang`; the `ausgang` of a group ha
 do not nest, depth 1; a group inside a group is `format`).
 The `ausgang` of a track has the `art` `master` (also the default when the field is missing) or the `art` `gruppe` with
 `nr`; this `nr` must appear in `gruppen`; any other `art` is `format`.
+**Baukasten instrument tracks in the playback (S20).** An `intern` track may carry `"geraet": "bk"` (instead of `"rb338"`) with `"graph": "<name>"` (1 to 32 characters of `[a-z0-9_-]`) and `"parameter": {"k1": v, …, "k8": v}` (0 to 1; absent knob = 0.5; any other key is `format`). The graph is the Baukasten file `<name>.json` in the graph folder, `$HOME/.config/cypherdj/baukasten` for the live kern (the kern has no override) and `--bk-ordner <dir>` of `cypherdj-render` (default: `$CYPHERDJ_BK_ORDNER`, else the same home folder). The loader builds the graph in the loader thread, never in the callback; a missing or invalid graph refuses the whole playback with `format`, more than 8 bk tracks with `zu_gross`, `graph` on a `rb338` track is `format`. Tracks with the same graph name share nothing: one instance per track slot; an unchanged track (same slot, graph, file content hash) keeps its running instance across a playback swap. Playing: the notes of the track go to the instance as note-on/off with sample offsets; the knobs k1 to k8 are set every block (no 20 ms ramp at take-over and at the transport start, so live and render begin on the same values); the instance is reset at every transport start (same rule as the RB-338) and runs on the kern clock (`takt` with beat and beats per sample, so `lfo`/`delay` follow the tempo map). A device change on a slot (rb338, bk, another graph, empty) fades the old instance out over one block and resets it. The track rests after 1 s of exact silence while the transport stands. The offline render (`proj_export`, `proj_lautheit`, `proj_zusammenfuehren`) plays bk tracks through the same sink; live against render is `bestanden` in `cypherdj-nulltest` (stand `stand/baukasten-s20.md`). A bk track is not a Surge track: `/k/arr/freeze` on it is refused by the page (`keine_wirtspur`). No new OSC address and no new reason.
+
+**Returns in the playback (1.10 Slice 3).** An optional `returns` list in `cypherdj-arr/2`: entries `{nr, ausgang}`, `nr` 1 to 4 at most once, `ausgang` has the `art` `master` and no other (returns do not feed returns or groups); a list in a `/1` file, a duplicate `nr` or another `art` is `format`. The core needs only which returns exist; the sends and the return strips are controls (§1.5), not data. The page server writes `/2` also when the project has a return and then always writes `returns`. A project without a return gives the same file as before.
 The page server writes `/2` only if the project has groups, a track does not point to master, or an audio clip carries a
 warp that is on (package 1.13; then `gruppen` is always present, even if empty); otherwise `/1` byte-for-byte as before
 1.10. The mixer computes tracks, then groups, then the production master (PM: sum of all targets `master`, fader
@@ -642,11 +653,13 @@ block into a buffer of the core (export tap, `cypherdj-render --abgriff produkti
 With neutral setting, `erz/4` is neutral only in magnitude (the isolator acts as an allpass): the PM tap and the ring
 master differ in phase, so a null test computes the reference through the same isolator (ADR 033, decision 4).
 
+**Automation lanes in the playback (Automation Slice 1, ADR 032).** In `cypherdj-arr/2` a track may carry `auto`, a list of lanes `{ziel, punkte}`. `ziel` is one of eight project strings (automation slice 2): `fader` (dB, -200 to +6), `pan` (-1 to 1), `mute` and `solo` (only 0 or 1, and every point has `form` 2), `geraet.lautstaerke`, `geraet.cutoff`, `geraet.resonanz`, `geraet.env_mod` (0 to 1, only on a track of `art` `intern` with `geraet` `rb338`, a `bk` track refuses them; `geraet.wellenform`, `geraet.decay` and `geraet.accent` are not targets). One lane per `ziel` and track, a second one is `format`, so at most 8 per track. The core keeps the target as `ArrAutoLane::ziel` (`ARR_AUTO_FADER` 0, `_PAN` 1, `_MUTE` 2, `_SOLO` 3, `_GERAET` 4) and, for a device lane, the parameter index as `param` (`lautstaerke`, `cutoff`, `resonanz`, `env_mod` = 0..3); the reader derives both and the range from one table. The server writes formcode 2 for every mute and solo point. `punkte` is a non-empty list of triples `[beat, wert, form]`: `beat` is a project beat (finite, not negative, not falling along the list; at most two points at one beat, they make a jump), `wert` the value in the unit of the target, `form` the code of the segment INTO the point: 0 `linear`, 1 `s` (3u^2 - 2u^3), 2 `sprung` (the left value holds up to the beat of the point). Limits: 8192 points per lane and 65536 per playback, over that `zu_gross`. `auto` in a `/1` file, a wrong type, an unknown `ziel`, a value outside the range of its target, a mute or solo point that is not a jump of 0 or 1, a device lane on a track that is not an RB-338 track (audio, host or bk) or a broken triple is `format`, and a failed load keeps the previous snapshot. The server writes `auto` only for a track that has a lane and then writes `/2` (a project without a lane gives the same file byte for byte as before). The core evaluates the lane per sample in the arrangement module (`auto_block`): the project beat of every sample comes exactly from the tempo map; before the first point its value holds, after the last point the last one; the form of the right point decides; a ramp from or to a value of -120 dB or lower runs towards -60 dB (like the interlocking). While a lane exists and the transport runs the lane value is the fader of the track; at stop, without a lane and after the lane is deleted the base value of the track (`fader_db`) holds, and a change between the two blends 480 samples linearly in the gain (not at a start and not at the loop seam). To keep the cost inside the frame the gain is recomputed from the lane value every 16 samples (a drift above 0.03 dB, a jump or a start takes the exact value at once); live and render use the same function. A lane uses no controller of §1.5. The playback format stays `cypherdj-arr/2`. Version skew: a slice 1 core refuses a file with a target other than `fader` as `format` and keeps the previous snapshot. The core plays the `fader`, `pan`, `mute` and `solo` lanes (found by target, not by position), each into its own per-sample buffer. A `geraet` lane drives the internal RB-338 per block: the core hands the sink ONE value per lane and block, the lane at the project beat of the last RUNNING sample of the block (`ArrSenke::auto_parameter`, before the `block()` of that block; no call in a block without a running transport, and none for a track without that lane; the host sink ignores it). `ArrRbSenke` sets it with `cypher_rb_setze` under the parameter name (index 0..3 = `lautstaerke`, `cutoff`, `resonanz`, `env_mod`) after the defaults, the playback's base values and the reset of a start, and only when it differs from the value applied before. When the lane falls away (deleted, a swap without it, stop) the sink sets the base value once: the playback's value of that parameter, else the RB default (0.71034, 0.62565, 0.3, 0.4). The FFI glides 20 ms behind the lane, so on a ramp the sound lags it; measured on the audio, not corrected: a cutoff step 0.2 -> 0.8 is within 5 % of its final sound between 543 and 799 samples after the jump (block resolution), and the value can take effect up to one block (255 samples) before the jump sample, because it is taken at the block's last running sample. A `pan` lane is held like the fader (16 samples, a drift above 0.002 pan, a jump or a start takes the exact value at once) and blends back 480 samples linearly in the pan value; a `mute` or `solo` edge goes through the 480-sample mixer fade.
+
 ### 4.12 Recording (1.8 Slice 1)
 
 | Address | Types | Fields | Effect |
 |---|---|---|---|
-| `/k/rec/spur` | `,hsiii` | `id`, `quelle`, `spur` (1 to 32), `scharf` (0/1), `eingang` (0 none; 11 to 13 = `erz/1..3`, internal; 20 = master before the fader, no tap yet) | arms a track or disarms it again; the core creates a ring per armed track (control thread, not in the callback). Receipt 1 and 3; status 6: `kein_eingang` (armed without input), `eingang_fehlt` (input 20), `ausserhalb_bereich`, `zu_viele_scharf` (more than 8), `aufnahme_laeuft` (during a take) |
+| `/k/rec/spur` | `,hsiii` | `id`, `quelle`, `spur` (1 to 32), `scharf` (0/1), `eingang` (0 none; internal taps before the fader: `10+N` = `erz/N` for N 1..3 and 5..7, i.e. 11 to 13 and 15 to 17; `20+N` = `pad/N`, i.e. 21 and 22 (S18); 14 (`erz/4`, production) and 18 (`erz/8`, cue) are refused `ausserhalb_bereich`; 20 = master before the fader, no tap yet) | arms a track or disarms it again; the core creates a ring per armed track (control thread, not in the callback). Receipt 1 and 3; status 6: `kein_eingang` (armed without input), `eingang_fehlt` (input 20), `ausserhalb_bereich`, `zu_viele_scharf` (more than 8), `aufnahme_laeuft` (during a take) |
 | `/k/rec/start` | `,hsiii` | `id`, `quelle`, `kennung` (≥ 0), `nachlauf_samples` (0 to 480 000; slice 1: 0), `frist_samples` (0 = default 96 000, otherwise 48 000 to 1 440 000) | the core waits for the entry of the arrangement (the recording does not own the transport); receipt 1 immediately, receipt 2 at the entry sample, receipt 3 at the end of the take. Receipt 7: `zu_spaet` (no transport start within the deadline; the deadline ends as soon as the arrangement waits, after that its quantization applies), `abbruch` (the arrangement ended before the entry), `ki_stopp`. Status 6: `kein_eingang` (nothing armed), `ueberlappung` (transport already running), `aufnahme_laeuft` (take running or the thread is still closing), `ausserhalb_bereich` |
 | `/k/rec/stopp` | `,hs` | `id`, `quelle` | cancels a waiting start (receipt 7 `abbruch` for the start) or ends a running take (receipt 3); receipt 1 and 3 |
 
@@ -730,7 +743,7 @@ State at slice 35 (preview from 43): the core reports `spitze_db` (sample peak s
 −200) for every loaded deck (after the fader), `master` (as in the ring, after the limiter) and `cue`, at most every 2 400
 samples (20 Hz); `echtspitze_dbtp`, `lufs_m`, `lufs_s` and the three bands are measured only by slice 43 and are at
 −200 until then. Since 2026-09-27 (Strudel stage 1, ADR 024) the core also reports `erz/1`, since 2026-09-29 (Studio S1) `erz/2` and
-`erz/3` (after the fader, always, without signal −200) and since MVP 2 (ADR 025) `pad/1` and `pad/2` (without loop −200); the remaining generator and bus rails do not yet report.
+`erz/3` (after the fader, always, without signal −200) and since MVP 2 (ADR 025) `pad/1` and `pad/2` (without loop −200); since S18 also `erz/5`, `erz/6`, `erz/7` (Baukasten instruments, always, −200 without a stream); the remaining erz and bus rails (`erz/4`, `erz/8`, `bus/*`) still do not report.
 Since D1 (§4.11) the core reports `spur/<n>` (peak after the track fader) for every track with content in the
 loaded playback. Since 1.10 it also reports `grp/<n>` (peak after the group fader, only for groups that a track of the loaded playback feeds) and `pm` (peak after the PM fader, as soon as a playback is loaded).
 
@@ -747,6 +760,11 @@ at most 50 Hz per control, and always at partial start, partial end and holder c
   playing style at the encoder), `laenge` (value = bars at the encoder), `spielart_start` (value = target deck), `basstausch`,
   `kiste_laden` (value = deck), `kiste_wahl` (value = index in `kiste.json`), `tempo_basis`, `zuruf` (value = 0; text
   comes via the terminal, §9.4).
+- `/e/gelernt ,hiiiii`: `id` (the `/k/lernen` that armed the capture), `quelle` (0 `hand_in`, 1 `midi_ein_1`), `kanal` (1..16),
+  `nr` (0..127), `wert` (0..127), `belegt` (1 when the base mapping, slot 0, already uses this CC). MIDI learn (S19): sent once
+  per arming, for the first 3-byte CC after `/k/lernen` with `an` 1. A CC from `midi_ein_1` is consumed (it does not move
+  anything); a CC from `hand_in` is only reported and keeps working through the base mapping. Armed is cleared by the
+  event, by `an` 0 or after 20 s of audio time (no event then).
 
 ### 5.9 Events `/e/*`
 
@@ -786,6 +804,7 @@ at most 50 Hz per control, and always at partial start, partial end and holder c
 | `/e/fx` | `,iidddddi` | `einheit` (1, 2), `art` (0 off), `beats`, `wet`, `param1`, `param2`, `param3`, `an` (unit ON) | on every change of the unit parameters |
 | `/e/fx/zuweisung` | `,isi` | `einheit` (1, 2), `kanal`, `an` (assigned) | on every change of the assignment |
 | `/e/fx/routing` | `,i` | `routing` (0 post fader, 1 insert) | on every change and once after `/e/neustart` with the default 0 |
+| `/e/graph` | `,ss` | `kanal` (one of `graph_platz`: deck/1..4, fx/3, fx/4, erz/1, 2, 3, 5, 6, 7, pad/1, 2), `name` (graph name, `""` = no graph) | whenever the graph on a slot changes, sent when the kern's quittung (1, 2, 3 or 5) for the `/k/kanal/graph` or `/erz/strom` command arrives in the network thread (any sender, including an erzeuger re-announce that replaces a graph with kit:/midi:); and as the answer to `/k/graph/frage`. The kern keeps no graph over a restart: after `/e/neustart` every slot is `""`. Reports the last accepted command, not audio |
 
 ### 5.13 Arrangement (D1, ADR 030)
 
@@ -915,6 +934,9 @@ Loading from the crate takes the highest version as set base, with stems if pres
 reconnection), `cypherdj-kern:clock` (later, MIDI clock 24 ppq). Connections are made with the JACK names; which ones
 is in the mapping.
 
+S19: `cypherdj-kern:midi_ein_1` (raw generic MIDI input, wired by the device management) is translated by the learn table
+`lernen.json` when one exists (§7.2); without one it stays raw (§5.14 counters only).
+
 ### 7.2 Mapping file `~/.config/cypherdj/controller/<geraet>.json`
 
 ```json
@@ -941,6 +963,12 @@ is in the mapping.
   −60 dB silent).
 - Default for controller EQ (A27 path a): curve `linear` from −26 to +6 dB with `kill_unter_min` = true (kill below
   the minimum), as in the example above.
+
+**Learn table (S19).** `controller/lernen.json` is a normal Mapping-v1 file with the reserved device name `lernen` (slot 1). It
+translates only `midi_ein_1` (`hand_in` keeps the base mapping alone); its `quelle_port` is ignored. The page server writes
+entries without `kurve` (the default curve of the control, `art` `absolut`), one entry per line, and reloads the table with
+`/k/mapping` (`geraet` `lernen`). The kern loads the file at start if it exists; a broken file is logged with its line and the
+kern runs without a learn table. `lernen` is refused as `controller_geraet` in kern.toml.
 
 ### 7.3 Semantics of the hand
 
@@ -1608,6 +1636,37 @@ only while the result is being taken over (undo takes it back); after the end of
 **`stumm?: boolean` on the audio clip** (`clip_aendern {stumm}`): `true` makes the translator leave the clip out, in the arrangement and in the export; `false` makes it audible again and
 deletes the field; `null` rejects `clip_aendern` (`argument_ungueltig`).
 
+### 20.2 Page API slice 7: Merge (Paket 1.13)
+
+No OSC field and no playback field is new. Source: `djk/oberflaeche/bereiche/proj/ausgabe.ts` (`zusammenfuehre`), `projekt/zusammenfuehren.ts`, `http/gruende.ts`.
+
+**`POST /proj/zusammenfuehren {spur_ids, von_beat, bis_beat}`** renders the chosen tracks in isolation and replaces them by one new audio track in ONE project change (one undo step).
+- All three fields are mandatory: `spur_ids` is 2 to 32 distinct strings, `von_beat` and `bis_beat` are numbers (the range checker of the export applies: 1 to 1024 beats). An unknown or wrong field gives 400 `argument_ungueltig`.
+- Render: `--ohne-zustand`, tap `produktion`. The chosen tracks keep their own fader and pan; group fader, pan, mute and `pm/fader` stand neutral; everything else is silent.
+- Answer `200 {rev, projekt, spur_id, quellen, datei, frames, hinweis?}`; with `?antwort=kurz` without `projekt`. `quellen` are the ids of the merged tracks, `datei` the WAV
+  `<project folder>/merge/merge-<id>.wav` (never replaced, written as `.teil` and linked), `hinweis: "quellen_laenger"` when content of a source lies outside `von_beat..bis_beat`.
+- The new track is named `Merge: <names>` (at most 80 characters), lies below the lowest source, has the same target as the sources and one clip with `gain_db` +3.0103 dB
+  (compensation of the pan law of the mixer, -3 dB in the middle). Its source has no catalog entry: the sha256 over the stream and the file hint identify it.
+- The sources get `mute: true` for the whole track. If all chosen tracks were on solo the new track is on solo too.
+- Refusals (409 unless noted): `merge_leer` (nothing sounds in the range or the render is silent), `merge_gruppen` (the tracks feed different groups or targets), `merge_teil_solo`
+  (only some of the chosen tracks are on solo), `merge_freeze_noetig` (a Surge track with unfrozen notes), `merge_andreas_spur` (a track of Andreas, source Cypher), `merge_keine_spur_frei`
+  (no free track slot), `ki_gestoppt`, `transport_laeuft`, `beschaeftigt`, `veraltet` (the project changed during the render; nothing saved, WAV removed), `audio_fehlt`, `export_bereich`,
+  the render errors of the export; 404 `spur_unbekannt`.
+- While the merge runs, `GET /proj/aktuell` shows `ausgabe_lauf: {art: "merge"}`; there is no abort route.
+
+### 20.3 Page API Baukasten S15: stream bounce provenance and the kit-mode refusal
+
+No OSC field and no playback field is new. Source: `djk/oberflaeche/projekt/modell.ts` (`entstehungPruefung`), `projekt/befehle.ts` (`clip_aendern`), `server.ts` (`graphLaden`), `djk/erzeuger/erzeuger.mjs` (`status`).
+
+**`entstehung?` on an audio clip** (project format `cypherdj-projekt/2` only, like `warp`; in a `/1` file it is an unknown field): where a take of a Baukasten stream came from.
+- Shape `{art: "strom", strom: 2|3, graph, regler: [8 numbers 0..1], code, bpm}`, all keys mandatory, no others. `graph` matches `^[a-z0-9_-]{1,32}$`, `code` has 1 to 20000 characters, `bpm` is 60..200.
+- Set with `POST /proj/aendern` `clip_aendern {clip_id, entstehung}` (audio clips only, else `feld_nur_audio`); `entstehung: null` deletes the field (absent in the file, never `null`). A wrong shape gives `argument_ungueltig`, an extra key `argument_unbekannt`. One undo step.
+- Absent in every project written before S15, so those files stay byte-identical. The playback translation never reads it. `clip_teilen` and `clip_duplizieren` copy the clip object and so keep it on every resulting clip.
+
+**`noten` in the erzeuger `status.json`:** `"kit"` (a `note(...)` value is dropped, an `s(...)` value is a kit index) or `"midi"` (a `--ziel midi:...` or `bk:...` process). Written at process start and with every later write; fixed for the life of the process.
+- `POST /graph` with an instrument name on erz/2 or erz/3 whose `status.noten` is `"kit"` answers 400 `kein_midi_strom` with `strom` and a `text` that names the cure (load the instruments first: tool `instrumente`, or `djk-instrumente --instanz <i>`). This applies to the source `cypher` and comes before the Cypher pre-checks. Andreas's own page is not locked: the graph loads as before and the 200 answer carries `warnung` with the same text (the page shows it as a message).
+- A missing field (an erzeuger started before S15, no `status.json` yet) is unknown and passes as before. Removing a graph (`name ""`) is never refused. No new reason code.
+
 | Date | Version | Change |
 |---|---|---|
 | 2026-09-23 | 1 | first version from the synthesis of the architecture night |
@@ -1659,3 +1718,14 @@ deletes the field; `null` rejects `clip_aendern` (`argument_ungueltig`).
 | 2026-10-30 | 1 | package 1.13 slice 3b (warp, markers by hand): no new OSC and no new playback field. Page API: new commands in `POST /proj/aendern`: `warp_tempo {clip_id, faktor 2|0.5}`, `warp_marker {clip_id, setze?, loesche?, verschiebe? (neu_beat | neu_quell_s)}`, `warp_ab_hier {clip_id, beat, art gerade|start}`, `eins_hier {clip_id, quell_s}`, `tempo_vom_clip {clip_id}` (the server converts it into `tempo_setzen`); new reason `marker_unbekannt`; new `hinweise` in the answer of `aendern`: `eins_gemeldet`, `eins_nur_hier`, `eins_rueckweg_fehler`; server option `--korrekturen` (environment `CYPHERDJ_KORREKTUREN`). The server writes `bestand/<sha[:16]>/korrekturen.jsonl` (line `art eins`, `von andreas`, §13.3). Additive, version stays 1 |
 | 2026-10-30 | 1 | package 1.13 slice 6 (stems): page API §20.1, `stumm` on the clip, no OSC change. Additive, version stays 1 |
 | 2026-10-31 | 1 | Baukasten S5r: §1.5 `<k>/bk/<1..8>` (graph knobs, 96 new controls, 693 instead of 597) on deck/1..4, erz/1, 2, 3, 5, 6, 7, pad/1, 2. New control paths, no new address, version stays 1 |
+| 2026-10-31 | 1 | package 1.13 slice 7 (merge): page API §20.2, `ausgabe_lauf` knows `merge`, no OSC and no playback field. Additive, version stays 1 |
+| 2026-10-31 | 1 | Baukasten S6: §4.10 `/k/kanal/graph` takes `fx/3`, `fx/4` (effect graph on the send returns, `graph_kanal` gains two entries); §1.5 returns scale with `fx/3/rueckweg`, `fx/4/rueckweg`. No new address, version stays 1 |
+| 2026-10-31 | 1 | Automation Slice 1 (ADR 032): §4.11 optional `spuren[].auto` (lanes with `[beat, wert, form]` triples) in `cypherdj-arr/2`; the server writes `/2` also when only `auto` is the reason. No OSC address and no new reason (`format` and `zu_gross` apply). Additive, version stays 1 |
+| 2026-10-31 | 1 | 1.10 Slice 3: §1.5 `spur|grp/<n>/send/<r>`, `ret/<r>/*` (+204 controls, 897 of 1024), §4.11 playback `returns` (optional, only `/2`); no new OSC address; version stays 1 |
+| 2026-11-01 | 1 | Baukasten S21: §4.8 note on faltung IR files. No new address, version stays 1 |
+| 2026-11-01 | 1 | Baukasten S14: §1.5 `fx/<n>/bk/<m>` (graph knobs of the send returns fx/3, fx/4, 16 new global controls, 913 of 1024); §4.10 send graphs follow them. New control paths, no new address, version stays 1 |
+| 2026-11-01 | 1 | Baukasten S16: §4.10 `/k/graph/frage`, §5.12 `/e/graph` and value list `graph_platz` (the kern reports which graph sits on each channel). New addresses, no new reason, version stays 1 |
+| 2026-11-01 | 1 | Baukasten S19: §4.7 /k/lernen, §5.8 /e/gelernt, §7.2 learn table lernen.json (slot 1 on midi_ein_1). Additive, version stays 1 |
+| 2026-11-01 | 1 | Baukasten S18: §4.12 `/k/rec/spur` `eingang` range [0, 22]: `10+N` = `erz/N` (N 1..3, 5..7), `20+N` = `pad/N`; 14 and 18 refused; §5.6 `/pegel` also `erz/5..7`. No new address or reason, version stays 1 |
+| 2026-11-01 | 1 | Baukasten S15: optional `entstehung` on audio clips (page API §20.3), erzeuger `status.json` `noten`, `POST /graph` refuses an instrument on a kit-mode stream from the source `cypher` with `kein_midi_strom` (Andreas's page gets `warnung` on the 200 answer instead). No OSC change, version stays 1 |
+| 2026-11-01 | 1 | Baukasten S20: §4.11 playback `intern` tracks may carry `geraet: "bk"` with `graph` and `parameter` k1 to k8 (loader reasons `format`, `zu_gross`); `cypherdj-render` gains `--bk-ordner`. No new OSC address, version stays 1 |

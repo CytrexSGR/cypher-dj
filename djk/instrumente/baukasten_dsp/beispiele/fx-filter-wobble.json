@@ -2,8 +2,12 @@
   "format": "baukasten/2",
   "name": "fx-filter-wobble",
   "stimmen": 1,
+  "regler_namen": {"1": "Centre", "2": "Depth", "3": "Resonance"},
   "knoten": [
     {"id": "ein", "art": "eingang"},
+    {"id": "k_mitte", "art": "regler", "nr": 1, "min": 450, "max": 7200, "log": 1},
+    {"id": "k_tiefe", "art": "regler", "nr": 2, "min": 0, "max": 3000},
+    {"id": "k_reso", "art": "regler", "nr": 3, "min": 0, "max": 0.6},
     {"id": "lfo", "art": "lfo", "form": 0, "takt": 1},
     {"id": "tiefe", "art": "mul", "b": 1500},
     {"id": "mitte", "art": "add", "b": 1800},
@@ -12,6 +16,10 @@
     {"id": "aus", "art": "ausgang"}
   ],
   "kanten": [
+    {"von": "k_mitte.aus", "nach": "mitte.b"},
+    {"von": "k_tiefe.aus", "nach": "tiefe.b"},
+    {"von": "k_reso.aus", "nach": "fl.reso"},
+    {"von": "k_reso.aus", "nach": "fr.reso"},
     {"von": "lfo.aus", "nach": "tiefe.a"},
     {"von": "tiefe.aus", "nach": "mitte.a"},
     {"von": "mitte.aus", "nach": "fl.cutoff"},

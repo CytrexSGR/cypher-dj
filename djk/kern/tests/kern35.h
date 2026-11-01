@@ -59,6 +59,7 @@ struct Lauf {
   cdj::Lader lader;
   std::unique_ptr<cdj::Kern> kern;
   std::unique_ptr<hand::Mapping> mapping{new hand::Mapping()};
+  std::unique_ptr<hand::Mapping> lern{new hand::Mapping()};  // S19: learn table (slot 1, applies to midi_ein_1 only)
   std::vector<float> l, r;
   std::vector<Q> q;
   std::vector<cdj::Ereignis> ev;  // alle außer UHR und ZYKLUS
@@ -67,8 +68,9 @@ struct Lauf {
   std::function<float(int64_t)> ein_quelle[cdj::EIN_PAARE + 1];
   std::vector<float> ein_puf[cdj::EIN_PAARE + 1];
   // 1.8: Quellen für erz/1..3 über den vorhandenen Rückweg (Kern::rueck): Kern-Sample -> Wert links, rechts das Negative. Der Rückweg addiert bitgleich (|Wert| <= 8).
-  std::function<float(int64_t)> erz_quelle[3];
-  std::vector<float> erz_puf_l[3], erz_puf_r[3];
+  // S18: widened from 3 to 8 sources (index e feeds erz/<e+1> = mixer index 4 + e; index 3 = erz/4 belongs to the production and is skipped by the kern).
+  std::function<float(int64_t)> erz_quelle[8];
+  std::vector<float> erz_puf_l[8], erz_puf_r[8];
   std::vector<Midi> midi_ein;
   void midi_ein_bei(int64_t s, uint8_t a, uint8_t b, uint8_t c) {
     PRUEF(s / N * N >= kern->sample());
@@ -100,6 +102,16 @@ struct Lauf {
     }
     l.reserve(6'000'000);
     r.reserve(6'000'000);
+  }
+  // S19: load a Mapping-v1 file as the learn table (slot 1). Relative paths are below djk/.
+  bool lern_laden(const char* datei) {
+    hand::Fehler f{};
+    const std::string p = datei[0] == '/' ? std::string(datei) : djk() + "/" + datei;
+    const bool ok = hand::lade_datei(p.c_str(), kern->stellwerk().tabelle(), lern.get(), &f);
+    if (!ok) std::fprintf(stderr, "learn mapping %s: %s\n", p.c_str(), f.text);
+    PRUEF(ok);
+    if (ok) kern->setze_lern_mapping(lern.get());
+    return ok;
   }
   cdj::Befehl neu(int art, const char* quelle = "leitstand") {
     cdj::Befehl b{};
@@ -173,7 +185,7 @@ struct Lauf {
         for (int i = 0; i < N; ++i) ein_puf[p][i] = ein_quelle[p](n0 + i);
         kern->ein(p, ein_puf[p].data(), ein_puf[p].data());
       }
-      for (int k = 0; k < 3; ++k) {  // 1.8: erz/1..3
+      for (int k = 0; k < 8; ++k) {  // 1.8: erz/1..3, S18: up to erz/8
         if (!erz_quelle[k]) continue;   // ohne Quelle bleibt der Rückweg, den ein Test selbst gesetzt hat (kern->rueck), unberührt
         erz_puf_l[k].resize(N);
         erz_puf_r[k].resize(N);

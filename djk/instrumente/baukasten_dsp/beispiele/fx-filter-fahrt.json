@@ -1,0 +1,43 @@
+{
+  "format": "baukasten/2",
+  "name": "fx-filter-fahrt",
+  "stimmen": 1,
+  "regler_namen": {"1": "HP kill", "2": "Cutoff start", "3": "Ride depth", "4": "Resonance"},
+  "knoten": [
+    {"id": "ein", "art": "eingang"},
+    {"id": "k_hp", "art": "regler", "nr": 1, "min": 20, "max": 400, "log": 1},
+    {"id": "k_start", "art": "regler", "nr": 2, "min": 100, "max": 2000, "log": 1},
+    {"id": "k_depth", "art": "regler", "nr": 3, "min": 0, "max": 84},
+    {"id": "k_reso", "art": "regler", "nr": 4, "min": 0, "max": 0.6},
+    {"id": "hpl", "art": "svf", "pole": 2},
+    {"id": "hpr", "art": "svf", "pole": 2},
+    {"id": "fahrt", "art": "lfo", "form": 2, "takt": 128, "einmal": 1},
+    {"id": "halb", "art": "mul", "b": 0.5},
+    {"id": "r01", "art": "add", "b": 0.5},
+    {"id": "tiefe", "art": "mul"},
+    {"id": "schnitt", "art": "transponiere"},
+    {"id": "lpl", "art": "svf", "pole": 4},
+    {"id": "lpr", "art": "svf", "pole": 4},
+    {"id": "aus", "art": "ausgang"}
+  ],
+  "kanten": [
+    {"von": "ein.l", "nach": "hpl.x"},
+    {"von": "ein.r", "nach": "hpr.x"},
+    {"von": "k_hp.aus", "nach": "hpl.cutoff"},
+    {"von": "k_hp.aus", "nach": "hpr.cutoff"},
+    {"von": "fahrt.aus", "nach": "halb.a"},
+    {"von": "halb.aus", "nach": "r01.a"},
+    {"von": "r01.aus", "nach": "tiefe.a"},
+    {"von": "k_depth.aus", "nach": "tiefe.b"},
+    {"von": "k_start.aus", "nach": "schnitt.hz"},
+    {"von": "tiefe.aus", "nach": "schnitt.st"},
+    {"von": "hpl.hp", "nach": "lpl.x"},
+    {"von": "hpr.hp", "nach": "lpr.x"},
+    {"von": "schnitt.aus", "nach": "lpl.cutoff"},
+    {"von": "schnitt.aus", "nach": "lpr.cutoff"},
+    {"von": "k_reso.aus", "nach": "lpl.reso"},
+    {"von": "k_reso.aus", "nach": "lpr.reso"},
+    {"von": "lpl.tp", "nach": "aus.l"},
+    {"von": "lpr.tp", "nach": "aus.r"}
+  ]
+}

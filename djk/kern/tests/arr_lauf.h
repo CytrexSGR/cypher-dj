@@ -53,6 +53,17 @@ struct Lauf : k35::Lauf {
     b.arr_nr = nr;
     return sende(b);
   }
+  // 1.10 slice 3: format /2 with groups and returns
+  int64_t laden3(int64_t nr, const std::string& spuren, const std::string& gruppen, const std::string& returns, const char* quelle = "andreas") {
+    ordner.wiedergabe2_ret(nr, spuren, gruppen, returns);
+    cdj::ArrLadeErgebnis e = cdj::lade_wiedergabe(ordner.pfad, nr, cache);
+    PRUEF(e.snap != nullptr);
+    if (!e.snap) return -1;
+    cdj::Befehl b = neu(cdj::Befehl::ARR_LADEN, quelle);
+    b.zeiger = e.snap.release();
+    b.arr_nr = nr;
+    return sende(b);
+  }
   int64_t start(double beat, int quant, const char* quelle = "andreas") {
     cdj::Befehl b = neu(cdj::Befehl::ARR_START, quelle);
     b.ab_beat = beat;

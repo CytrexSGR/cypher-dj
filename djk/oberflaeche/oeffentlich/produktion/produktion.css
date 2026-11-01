@@ -13,8 +13,8 @@ body.produktion #kopf { grid-area: kopf; }
 body.produktion #pult { display: none; }
 body.produktion #bestand { grid-area: bestand; min-width: 0; }
 body.produktion #produktion { grid-area: prod; display: grid; min-width: 0; min-height: 0; gap: 6px;
-  grid-template-rows: auto minmax(0, 1fr) auto auto var(--detail, 26vh); position: relative; }   /* Zeilen in Flussreihenfolge: Transport, Arrangement, Mischer (Gruppen und Master; meist versteckt), INPUTS (zu: nur die Summary), Detail; jedes Kind hat unten eine feste grid-row (1.10 N4) */
-.p-transport { grid-row: 1; } .p-arr { grid-row: 2; } .p-mixer { grid-row: 3; } .p-geraete { grid-row: 4; } .p-detail { grid-row: 5; }
+  grid-template-rows: auto minmax(0, 1fr) auto auto auto var(--detail, 26vh); position: relative; }   /* Zeilen in Flussreihenfolge: Transport, Arrangement, Mischer (Gruppen und Master; meist versteckt), INPUTS (zu: nur die Summary), Detail; jedes Kind hat unten eine feste grid-row (1.10 N4) */
+.p-transport { grid-row: 1; } .p-arr { grid-row: 2; } .p-mixer { grid-row: 3; } .p-returns { grid-row: 4; } .p-geraete { grid-row: 5; } .p-detail { grid-row: 6; }
 
 /* Browser links, schmal: nur LIBRARY, Baum über der Liste, Detail aus, nur die Namensspalte */
 /* Welche Tabelle des Browsers zeigt: in PRODUCTION immer LIBRARY, unabhängig vom DJ-Zustand (Reiter, BOTTOM-PANEL EFFECTS). Vorher
@@ -180,6 +180,20 @@ body.produktion.lib-zu #bestand > :not(.kopfzeile), body.produktion.lib-zu #best
 .p-gruppenreihe { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; min-width: 0; }
 .p-gruppenkopf { width: 264px; border: 1px solid var(--line); border-radius: 4px; }
 .p-gruppenkopf .p-fader { grid-column: 2 / 6; }   /* keine Ausgang-Wahl, keine Pfeile: der Fader nimmt die Spalten bis 5 */
+/* 1.10 slice 3: returns (the head is the group head with Hall rows) and the send grid */
+.p-returnkopf { width: 300px; height: auto; grid-template-rows: 20px 18px 14px auto; max-height: 40vh; overflow-y: auto; }
+.p-hallblock { grid-column: 1 / -1; font-size: 10px; }
+.p-hallblock summary { cursor: pointer; letter-spacing: .12em; color: var(--dim); font-weight: 700; }
+.p-hallan { font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 4px; margin-left: 6px; }
+.p-hallzeile { display: grid; grid-template-columns: 76px 1fr 10ch; white-space: nowrap; gap: 6px; align-items: center; }
+.p-hall { min-width: 0; height: 12px; }
+.p-hallwert, .p-sendwert { text-align: right; font-variant-numeric: tabular-nums; }
+.p-sendblock { flex-basis: 100%; font-size: 10px; margin-top: 4px; }
+.p-sendraster { display: flex; flex-direction: column; gap: 2px; padding-top: 4px; max-height: 220px; overflow-y: auto; }
+.p-sendzeile { display: flex; align-items: center; gap: 10px; }
+.p-sendname { width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.p-send { display: grid; grid-template-columns: 56px 110px 6ch; gap: 4px; align-items: center; }
+.p-sendregler { min-width: 0; height: 12px; }
 .p-pm { display: grid; grid-template-columns: auto 160px 6ch; gap: 2px 8px; align-items: center; margin-left: auto; }
 .p-pm-fader { min-width: 0; height: 14px; }
 .p-pm-wert { font-size: 10px; text-align: right; }
@@ -200,3 +214,25 @@ body.produktion.lib-zu #bestand > :not(.kopfzeile), body.produktion.lib-zu #best
 
 /* Slice 4 (T10): Transienten der Quelle im Sample-Editor, grau mit 45 % Deckkraft (warp_editor_bedienung.js liest die Variable; sie gilt für das Canvas) */
 .p-warp-canvas { --p-transient: rgba(160, 165, 175, 0.45); }
+
+/* Automation Slice 1: the A button, AUTO in front of the fader value, and the head of an open lane row (48 px like the lane row, layout.js LANE_HOEHE).
+   The A button sits over the right end of row 3 (absolute) and the level meter ends before it, so the grid of the head and every row height stay as they were. */
+.p-kopf { position: relative; }
+.p-pegel { margin-right: 22px; }
+.p-lane { position: absolute; right: 6px; bottom: 3px; width: 18px; height: 14px; font-size: 9px; font-weight: 800; line-height: 1; padding: 0; border-radius: 4px; }
+.p-lane.hat { border-color: var(--a); color: var(--a); }
+.p-lane.an { background: var(--a); color: #0e0f12; border-color: var(--a); }
+.p-kopf.auto .p-faderwert::before { content: "AUTO "; color: var(--a); font-weight: 800; letter-spacing: .06em; }
+.p-lanenkopf { height: 48px; box-sizing: border-box; display: flex; align-items: center; gap: 6px; padding: 0 6px 0 10px; border-bottom: 1px solid var(--line);
+  border-left: 10px solid var(--farbe, #8a8d98); font-size: 11px; background: #0d1014; }
+.p-lanentitel { font-weight: 700; flex: 1; }
+.p-lanenkopf button { font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 4px; }
+.p-lanenkopf button[hidden] { display: none; }
+
+/* Automation Slice 2: the lane selector, "+ Lane", the lock, AUTO in front of the pan value */
+.p-kopf.auto-pan .p-panwert::before { content: "AUTO "; color: var(--a); font-weight: 800; letter-spacing: .06em; }
+.p-lanenwahl, .p-lane-neu { font-size: 10px; max-width: 96px; min-width: 0; }
+.p-lanenwahl { flex: 1; }
+.p-lanenwahl[hidden], .p-lane-neu[hidden] { display: none; }
+.p-lane-sperre.an { background: var(--a); color: #0e0f12; border-color: var(--a); }
+.p-lanenkopf button:disabled { opacity: .4; }

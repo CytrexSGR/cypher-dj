@@ -7,9 +7,9 @@
 // Clip-Grenzen geschnitten. Mixer-Werte stehen nicht darin (Regler, 2.3), Tempo auch nicht (Beats sind absolut).
 import fs from 'node:fs';
 import path from 'node:path';
-import { BEATS_VORGABE, MAX_CLIPS, MAX_NOTEN, MAX_SPUREN, SAMPLERATE, pitchFaktor } from './modell.ts';
+import { BEATS_VORGABE, MAX_AUTO_PUNKTE, ZIEL_BEREICH, MAX_CLIPS, MAX_NOTEN, MAX_SPUREN, SAMPLERATE, pitchFaktor } from './modell.ts';
 import { MAX_BEATS_EINHEITEN, beatsEinheiten, beatsEinheitenZahl } from './warp.ts';
-import type { AudioClip, MidiClip, Note, Projekt, Spur, Warp } from './modell.ts';
+import type { AudioClip, Lane, Ziel, MidiClip, Note, Projekt, Spur, Warp } from './modell.ts';
 
 export const WIEDERGABE_FORMAT = 'cypherdj-arr/1';
 // /2, wenn das Projekt Gruppen hat oder eine Spur nicht auf master zeigt (1.10, P2) oder ein Audio-Clip Warp an trägt (1.13); sonst /1 byteweise wie bisher
@@ -33,12 +33,17 @@ export interface WAudioClip {
 }
 export interface WNote { id: string; beat: number; laenge: number; ton: number; vel: number }
 export type WZiel = { art: 'gruppe'; nr: number };   // fehlt `ausgang`, zeigt die Spur auf den Produktions-Master
+// Automation Slice 1 (nur /2): je Lane Ziel und Punkte [beat, wert dB, formcode], Formcode 0 linear, 1 s, 2 sprung; die Spur trägt `auto` nur mit Lane
+// Slice 2: `ziel` is the project string (Ziel: fader, pan, mute, solo, geraet.cutoff ...); mute and solo points always carry formcode 2
+export interface WAuto { ziel: Ziel; punkte: [number, number, number][] }
+const FORM_NR: Readonly<Record<string, number>> = { linear: 0, s: 1, sprung: 2 };
 export type WSpur =
-  | { nr: number; art: 'audio'; clips: WAudioClip[]; ausgang?: WZiel }
-  | { nr: number; art: 'intern'; geraet: 'rb338'; parameter: Record<string, number>; noten: WNote[]; ausgang?: WZiel }
-  | { nr: number; art: 'wirt'; slot: number; noten: WNote[]; ausgang?: WZiel };
+  | { nr: number; art: 'audio'; clips: WAudioClip[]; ausgang?: WZiel; auto?: WAuto[] }
+  | { nr: number; art: 'intern'; geraet: 'rb338' | 'bk'; graph?: string; parameter: Record<string, number>; noten: WNote[]; ausgang?: WZiel; auto?: WAuto[] }
+  | { nr: number; art: 'wirt'; slot: number; noten: WNote[]; ausgang?: WZiel; auto?: WAuto[] };
 export interface WGruppe { nr: number; ausgang: { art: 'master' } }   // Tiefe 1 (P2): eine Gruppe führt immer in den Master
-export interface Wiedergabe { format: typeof WIEDERGABE_FORMAT | typeof WIEDERGABE_FORMAT_2; nr: number; spuren: WSpur[]; gruppen?: WGruppe[] }
+export interface Wiedergabe { format: typeof WIEDERGABE_FORMAT | typeof WIEDERGABE_FORMAT_2; nr: number; spuren: WSpur[]; gruppen?: WGruppe[];
+  returns?: WGruppe[] }   // returns (slice 3): {nr, ausgang master} like the groups
 
 export interface UebersetzOptionen {
   nr: number;                                                // Wiedergabe-Nummer (WiedergabeZaehler.naechste())
@@ -197,27 +202,45 @@ export function uebersetze(p: Projekt, opt: UebersetzOptionen): Wiedergabe {
     }
     const n = noten(s); nZahl += n.length;
     return g.art === 'intern'
-      ? { nr: s.nr, art: 'intern', geraet: 'rb338', parameter: { ...g.parameter }, noten: n }
+      ? (g.name === 'bk'                                        // Baukasten S20: the graph name goes to the kern, which builds the graph off the callback
+        ? { nr: s.nr, art: 'intern', geraet: 'bk', graph: g.graph, parameter: { ...g.parameter }, noten: n }
+        : { nr: s.nr, art: 'intern', geraet: 'rb338', parameter: { ...g.parameter }, noten: n })
       : { nr: s.nr, art: 'wirt', slot: g.slot, noten: n };
   };
   // 1.10 (P2): Ziel je Spur; die Gruppen-Nummer, nicht die ID, steht in der Wiedergabe (der Kern kennt nur Nummern)
   const nrVon = new Map((p.gruppen ?? []).map((g) => [g.id, g.nr] as const));
+  let autoPunkte = 0;
   const spuren: WSpur[] = [...p.spuren].sort((a, b) => a.nr - b.nr).map((s): WSpur => {
-    const w = ohneZiel(s);
-    if (!s.ausgang) return w;
-    const nr = nrVon.get(s.ausgang.id);
-    if (nr === undefined) throw new WiedergabeFehler('ziel_unbekannt', `Spur ${s.id} zeigt auf ${s.ausgang.id}`);
-    return { ...w, ausgang: { art: 'gruppe' as const, nr } };
+    const w0 = ohneZiel(s);
+    let w: WSpur = w0;
+    if (s.ausgang) {
+      const nr = nrVon.get(s.ausgang.id);
+      if (nr === undefined) throw new WiedergabeFehler('ziel_unbekannt', `Spur ${s.id} zeigt auf ${s.ausgang.id}`);
+      w = { ...w0, ausgang: { art: 'gruppe' as const, nr } };
+    }
+    const lanes = s.automation ?? [];
+    if (lanes.length) {                                      // Automation: `auto` only with a lane, else the file stays the previous one
+      autoPunkte += lanes.reduce((n, l) => n + l.punkte.length, 0);
+      const punkte = (l: Lane): [number, number, number][] =>
+        l.punkte.map((q) => [q.beat, q.wert, ZIEL_BEREICH[l.ziel].nurSprung ? FORM_NR.sprung : FORM_NR[q.form ?? 'linear']]);   // mute/solo: always a jump
+      w = { ...w, auto: lanes.map((l) => ({ ziel: l.ziel, punkte: punkte(l) })) };
+    }
+    return w;
   });
+  if (autoPunkte > MAX_AUTO_PUNKTE) throw new WiedergabeFehler('zu_gross', `auto-punkte: ${autoPunkte} > ${MAX_AUTO_PUNKTE}`);
   if (clips > MAX_CLIPS) throw new WiedergabeFehler('zu_gross', `clips: ${clips} > ${MAX_CLIPS}`);
   if (nZahl > MAX_NOTEN) throw new WiedergabeFehler('zu_gross', `noten: ${nZahl} > ${MAX_NOTEN}`);
   const routing = spuren.some((s) => s.ausgang) || (p.gruppen ?? []).length > 0;
+  const hatReturns = (p.returns ?? []).length > 0;                          // slice 3: returns need /2 (the kern refuses them in /1)
   // Paket 1.13: ein gewarpter Clip braucht /2 (der Kern lehnt warp in /1 ab); gruppen steht dann immer da, auch leer
   const gewarpt = spuren.some((sp) => sp.art === 'audio' && sp.clips.some((c) => c.warp !== undefined));
   if (gewarpt && zaehleWarpMarker(p, opt) > MAX_WARP_PUNKTE) throw new WiedergabeFehler('zu_gross', `warp-marker: > ${MAX_WARP_PUNKTE}`);
-  if (!routing && !gewarpt) return { format: WIEDERGABE_FORMAT, nr: opt.nr, spuren };   // ohne Routing und Warp byteweise die alte Datei (AK3)
+  const automatisiert = spuren.some((sp) => sp.auto !== undefined);       // Automation braucht /2 (der Kern lehnt auto in /1 ab)
+  // ohne Routing, Warp und Lane byteweise die alte Datei (AK3)
+  if (!routing && !gewarpt && !automatisiert && !hatReturns) return { format: WIEDERGABE_FORMAT, nr: opt.nr, spuren };
   return { format: WIEDERGABE_FORMAT_2, nr: opt.nr, spuren,
-    gruppen: [...(p.gruppen ?? [])].sort((a, b) => a.nr - b.nr).map((g) => ({ nr: g.nr, ausgang: { art: 'master' as const } })) };
+    gruppen: [...(p.gruppen ?? [])].sort((a, b) => a.nr - b.nr).map((g) => ({ nr: g.nr, ausgang: { art: 'master' as const } })),
+    ...(hatReturns ? { returns: [...(p.returns ?? [])].sort((a, b) => a.nr - b.nr).map((r) => ({ nr: r.nr, ausgang: { art: 'master' as const } })) } : {}) };
 }
 
 export const wiedergabeDatei = (arbeitsordner: string, nr: number): string => path.join(arbeitsordner, `wiedergabe-${nr}.json`);

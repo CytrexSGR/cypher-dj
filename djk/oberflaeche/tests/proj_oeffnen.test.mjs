@@ -18,8 +18,8 @@ test('neu: Projekt angelegt, Wiedergabe 1 geschrieben und geladen, erz/4 neutral
   assert.equal(r.j.slug, 'first-track'); assert.equal(r.j.projekt.rev, 0); assert.equal(r.j.projekt.wiedergabe_rev, 1);
   assert.deepEqual(k.an('/k/arr/laden').map((x) => x.felder), [{ quelle: 'andreas', nr: 1 }]);
   assert.deepEqual(lies(path.join(arr, 'wiedergabe-1.json')), { format: 'cypherdj-arr/1', nr: 1, spuren: [] });
-  assert.equal(k.teile(/^erz\/4\//).length, 16); assert.equal(k.teile(/^spur\//).length, 4 * MAX_SPUREN);
-  assert.equal(k.teile(/^grp\//).length, 4 * 8); assert.equal(k.teile(/^pm\/fader$/).length, 1);   // 1.10: das Öffnen setzt alle Gruppen-Slots und den PM
+  assert.equal(k.teile(/^erz\/4\//).length, 16); assert.equal(k.teile(/^spur\/\d+\/(fader|pan|mute|solo)$/).length, 4 * MAX_SPUREN);
+  assert.equal(k.teile(/^grp\/\d+\/(fader|pan|mute|solo)$/).length, 4 * 8); assert.equal(k.teile(/^pm\/fader$/).length, 1);   // 1.10: das Öffnen setzt alle Gruppen-Slots und den PM
   assert.deepEqual(k.teile(/^erz\/4\/(ziel|xseite)$/).map((x) => [x.felder.pfad, x.felder.nach]), [['erz/4/ziel', 0], ['erz/4/xseite', 1]], 'P6: bei Quelle andreas gesendet');
   assert.deepEqual(k.teile(/^erz\/4\/send\/1$/)[0].felder, { quelle: 'andreas', plan: '', teil: 0, pfad: 'erz/4/send/1', ab_beat: k.teile(/^erz\/4\/send\/1$/)[0].felder.ab_beat,
     dauer_beats: 0, nach: -200, form: 0, politik: 1, gruppe: '', hoerschein: '' });
@@ -102,7 +102,7 @@ test('P2 Wiederanlauf (gleiche Nummer): keine neue Wiedergabe, bekannte Spur-Reg
   const r = await z.s.oeffnen('wa', 'andreas');
   assert.equal(z.k.an('/k/arr/laden').length, 0, 'keine neue Wiedergabe');
   // Spec 6.30: für Regler mit unbekanntem Ist-Wert gewinnt das Projekt (4 · MAX_SPUREN - 3), die drei bekannten setzt der Server nicht
-  assert.equal(z.k.teile(/^spur\//).length, 4 * MAX_SPUREN - 3); assert.equal(z.k.teile(/^spur\/(1\/fader|1\/mute|2\/pan)$/).length, 0, 'bekannte Spur-Regler nicht gesetzt');
+  assert.equal(z.k.teile(/^spur\/\d+\/(fader|pan|mute|solo)$/).length, 4 * MAX_SPUREN - 3); assert.equal(z.k.teile(/^spur\/(1\/fader|1\/mute|2\/pan)$/).length, 0, 'bekannte Spur-Regler nicht gesetzt');
   assert.equal(r.j.projekt.wiedergabe_rev, nr);
   const sp = r.j.projekt.spuren;
   assert.deepEqual([sp[0].fader_db, sp[0].mute, sp[0].solo, sp[1].pan, sp[1].fader_db], [-12, true, false, 0.25, 0], 'unbekannte Ist-Werte (solo) bleiben, wie sie sind');
@@ -121,7 +121,7 @@ test('P2 verschieden (anderes Projekt, Kern ohne Wiedergabe, Nummer unbekannt): 
     const { z, nr } = neustart(t);
     kern(z.s, nr); ist(z.s, 'spur/1/fader', -12);                 // der Kern hält Fader eines anderen Projekts
     const r = await z.s.oeffnen('wa', 'andreas');
-    assert.equal(z.k.an('/k/arr/laden').length, 1); assert.equal(z.k.teile(/^spur\//).length, 4 * MAX_SPUREN);
+    assert.equal(z.k.an('/k/arr/laden').length, 1); assert.equal(z.k.teile(/^spur\/\d+\/(fader|pan|mute|solo)$/).length, 4 * MAX_SPUREN);
     assert.equal(r.j.projekt.spuren[0].fader_db, 0, 'Projekt gewinnt'); assert.equal(r.j.projekt.rev, 0);
     assert.deepEqual(z.k.teile(/^spur\/1\/fader$/).map((x) => x.felder.nach), [0]);
     assert.ok(r.j.projekt.wiedergabe_rev > nr);

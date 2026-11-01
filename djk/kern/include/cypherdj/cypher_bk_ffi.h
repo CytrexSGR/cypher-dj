@@ -14,6 +14,10 @@ extern "C" {
 struct CypherBk;
 // json nullterminiert (baukasten/2); fs > 0. Fehler: nullptr, Text nach fehler (höchstens fehler_laenge Bytes mit Null)
 CypherBk* cypher_bk_neu(const char* json, double fs, char* fehler, size_t fehler_laenge);
+// Wie cypher_bk_neu, mit Sample-Wurzel für sampler-Knoten (S10): wurzel = nullterminierter Ordnerpfad, die Dateien
+// <wurzel>/<datei> werden hier gelesen (Netz-Faden, nie im Callback). wurzel null: wie cypher_bk_neu, ein Graph mit
+// sampler-Knoten ist dann ein Fehler ("no sample root").
+CypherBk* cypher_bk_neu_wurzel(const char* json, double fs, const char* wurzel, char* fehler, size_t fehler_laenge);
 void cypher_bk_frei(CypherBk* h);
 int32_t cypher_bk_note_an(CypherBk* h, uint32_t versatz, uint8_t ton, float vel);
 int32_t cypher_bk_note_aus(CypherBk* h, uint32_t versatz, uint8_t ton);
@@ -23,6 +27,8 @@ int32_t cypher_bk_block(CypherBk* h, float* aus_l, float* aus_r, size_t n);   //
 int32_t cypher_bk_effekt(CypherBk* h, const float* ein_l, const float* ein_r, float* aus_l, float* aus_r, size_t n);
 int32_t cypher_bk_regler(CypherBk* h, uint32_t nr, float wert);   // nr 1..8, 0..1 (geklemmt, NaN ignoriert), 20 ms geglättet; -1 h null oder nr falsch; nicht nebenläufig mit block
 void cypher_bk_takt(CypherBk* h, double beat0, double bps);   // beat0 = erstes Sample des nächsten Blocks
+int32_t cypher_bk_regler_sofort(CypherBk* h, uint32_t nr, float wert);   // S20: like regler, the smoothed state jumps to the target at once; -1 h null or nr wrong; no allocation
+void cypher_bk_zuruecksetzen(CypherBk* h);   // S20: like after neu, knobs stay, queue emptied; h null: no effect; no allocation; not concurrent with block
 uint32_t cypher_bk_hat_eingang(const CypherBk* h);            // 1 Effekt-Graph, 0 Instrument oder null
 uint32_t cypher_bk_latenz(const CypherBk* h);
 uint32_t cypher_bk_rettungen(const CypherBk* h);

@@ -56,6 +56,86 @@ bool ArrRbSenke::spur_weg(int spur, int64_t, bool) noexcept {
   return true;
 }
 
+// Test seam: a fixed ring, no snprintf (real time); the name is cut at 15 characters
+void ArrRbSenke::protokoll(const Spur& p, const char* name, float wert) noexcept {
+  Protokoll& e = protokoll_[protokoll_n_ % PROTOKOLL_N];
+  e.spur = static_cast<int>(&p - sp_);
+  std::strncpy(e.name, name, sizeof e.name - 1);
+  e.name[sizeof e.name - 1] = '\0';
+  e.wert = wert;
+  ++protokoll_n_;
+}
+
+void ArrRbSenke::vorgaben_(Spur& p) noexcept {
+  cypher_rb_vorgaben(p.h);
+  protokoll(p, "<vorgaben>", 0.0f);
+  for (float& a : p.angewendet) a = NAN_WERT;   // every parameter is on its default, no lane value holds any more
+}
+
+void ArrRbSenke::zuruecksetzen_(Spur& p) noexcept {
+  cypher_rb_zuruecksetzen(p.h);
+  for (float& a : p.angewendet) a = NAN_WERT;
+}
+
+// auch_gemeldet false: the value auto_parameter reported for THIS block stays (it runs before block(), also in a block that ends a double swap)
+void ArrRbSenke::lanes_vergessen(Spur& p, bool auch_gemeldet) noexcept {
+  for (int g = 0; g < ARR_GERAET_PARAMS; ++g) {
+    p.lane_war[g] = false;
+    if (auch_gemeldet) p.lane_da[g] = false;
+    p.angewendet[g] = NAN_WERT;
+  }
+}
+
+void ArrRbSenke::setze_(Spur& p, const char* name, float wert) noexcept {
+  if (cypher_rb_setze(p.h, name, wert) != 0) ++abgelehnt_;
+  protokoll(p, name, wert);
+}
+
+void ArrRbSenke::auto_parameter(int spur, int param, float wert) noexcept {
+  if (spur < 0 || spur >= ARR_SPUREN || param < 0 || param >= ARR_GERAET_PARAMS) return;
+#ifdef CYPHERDJ_MUTATION_ARR_RB_SPUR_NULL
+  spur = 0;   // error case: every value is filed under track index 0
+#endif
+  Spur& p = sp_[spur];
+  p.lane_wert[param] = wert;
+  p.lane_da[param] = true;
+  ++gemeldet_;
+}
+
+namespace {
+// Normalised defaults of the RB-338 (= RB_VORGABE_NORM in modell.ts; test_arr_rb_senke_auto case 6 checks them against cypher_rb_vorgaben)
+constexpr float RB_VORGABE_NORM[ARR_GERAET_PARAMS] = {0.71034f, 0.62565f, 0.3f, 0.4f};
+}  // namespace
+
+float ArrRbSenke::basiswert(const ArrSnapshot* snap, int spur, int param) noexcept {
+  float basis = RB_VORGABE_NORM[param];
+  if (snap) {
+    const ArrSpur& q = snap->spur[spur];
+    for (int i = 0; i < q.n_param; ++i)
+      if (std::strncmp(q.param[i].name, ARR_GERAET_PARAM_NAME[param], sizeof q.param[i].name) == 0) basis = q.param[i].wert;
+  }
+  return basis;
+}
+
+// E9. Per parameter: a reported value that differs from the applied one is set; a lane that fell away (reported in the block before, not in this one)
+// puts the base value back once. Then the flags move on: war = da, da = false.
+void ArrRbSenke::lanes_anwenden(Spur& p, const ArrSnapshot* snap, int spur) noexcept {
+  for (int g = 0; g < ARR_GERAET_PARAMS; ++g) {
+    const char* name = ARR_GERAET_PARAM_NAME[g];
+    if (p.lane_da[g]) {
+      if (p.lane_wert[g] != p.angewendet[g]) {   // NaN (nothing applied) is unequal to every value
+        setze_(p, name, p.lane_wert[g]);
+        p.angewendet[g] = p.lane_wert[g];
+      }
+    } else if (p.lane_war[g]) {
+      setze_(p, name, basiswert(snap, spur, g));
+      p.angewendet[g] = NAN_WERT;
+    }
+    p.lane_war[g] = p.lane_da[g];
+    p.lane_da[g] = false;
+  }
+}
+
 bool ArrRbSenke::parameter_gleich(const Spur& p, const ArrSpur& q) const noexcept {
   if (p.n_param != q.n_param) return false;
   for (int i = 0; i < q.n_param; ++i)
@@ -67,14 +147,14 @@ bool ArrRbSenke::parameter_gleich(const Spur& p, const ArrSpur& q) const noexcep
 // Spec 2.4: vorgaben, dann setze je Parameter der Wiedergabe (wirksam ab dem nächsten cypher_rb_block)
 void ArrRbSenke::parameter_setzen(Spur& p, const ArrSpur& q) noexcept {
 #ifndef CYPHERDJ_MUTATION_ARR_RB_REIHENFOLGE
-  cypher_rb_vorgaben(p.h);
+  vorgaben_(p);
 #endif
   for (int i = 0; i < q.n_param; ++i) {
-    if (cypher_rb_setze(p.h, q.param[i].name, q.param[i].wert) != 0) ++abgelehnt_;
+    setze_(p, q.param[i].name, q.param[i].wert);
     p.param[i] = q.param[i];
   }
 #ifdef CYPHERDJ_MUTATION_ARR_RB_REIHENFOLGE
-  cypher_rb_vorgaben(p.h);   // Fehlerfall: die Vorgaben überschreiben die Parameter der Wiedergabe
+  vorgaben_(p);   // Fehlerfall: die Vorgaben überschreiben die Parameter der Wiedergabe
 #endif
   p.n_param = q.n_param;
 }
@@ -96,7 +176,12 @@ void ArrRbSenke::block(int spur, int64_t s0, int m, float* l, float* r) noexcept
   // blendet nur der alte Ausklang aus: er wird ohne die Ereignisse der zurückgekehrten Spur gerechnet und linear auf 0
   // geblendet, dann setzt die Senke zurück, und die Spur spielt in diesem Block normal (zweiter Rechenschritt nur hier).
   // Vorher lief die neue Spur durch den Zweig weg und ging mit ihrem ersten Block ganz verloren (Energie 0 statt 23,05).
-  if (p.weg && arr_.snapshot() && arr_.snapshot()->spur[spur].art == ArrArt::intern) {
+#ifdef CYPHERDJ_MUTATION_ARR_RB_BK_ALS_RUECKKEHR
+  const bool rueckkehr = true;   // error case (S20): a bk track after the swap counts as a return to the RB
+#else
+  const bool rueckkehr = arr_.snapshot() && std::strcmp(arr_.snapshot()->spur[spur].geraet, "bk") != 0;   // S20: a bk track is no return to the RB
+#endif
+  if (p.weg && arr_.snapshot() && arr_.snapshot()->spur[spur].art == ArrArt::intern && rueckkehr) {
     {
       cypherdj::dsp::DenormalSchutz schutz;
       cypher_rb_block(p.h, puf_l_, puf_r_, static_cast<size_t>(m));
@@ -106,16 +191,20 @@ void ArrRbSenke::block(int spur, int64_t s0, int m, float* l, float* r) noexcept
       l[i] += g * puf_l_[i];
       r[i] += g * puf_r_[i];
     }
-    cypher_rb_zuruecksetzen(p.h);
+    zuruecksetzen_(p);
     p.weg = false;
     p.wach = false;
     p.still = 0;
     p.stumm = false;
     p.n_param = -1;   // die Parameter der zurückgekehrten Spur setzt der Block gleich unten
+    lanes_vergessen(p, false);   // the lane value of this block (reported before block()) stays for the returned track
   }
 #endif
   const bool start_hier = p.start >= 0 && p.start < s0 + m;
   const ArrSnapshot* snap = p.weg ? nullptr : arr_.snapshot();   // Fix F2: die Spur ist nicht mehr intern, keine Parameter
+#ifdef CYPHERDJ_MUTATION_ARR_RB_LANE_VOR_VORGABE
+  if (!p.weg) lanes_anwenden(p, snap, spur);   // error case: the lane value goes in BEFORE the defaults and base values, which then overwrite it
+#endif
   if (const ArrSnapshot* s = snap) {
     const ArrSpur& q = s->spur[spur];
 #ifdef CYPHERDJ_MUTATION_ARR_RB_TAUSCH_OHNE_PARAMETER
@@ -126,13 +215,16 @@ void ArrRbSenke::block(int spur, int64_t s0, int m, float* l, float* r) noexcept
   }
   if (start_hier) {
 #ifndef CYPHERDJ_MUTATION_ARR_RB_OHNE_ZURUECKSETZEN
-    cypher_rb_zuruecksetzen(p.h);   // Phase, Filter, Hüllkurven, Glide; die Stimme ruht bis zur ersten Note
+    zuruecksetzen_(p);   // Phase, Filter, Hüllkurven, Glide; die Stimme ruht bis zur ersten Note
 #endif
     if (cypher_rb_alle_aus(p.h, versatz(p.start)) != 0) ++verloren_;   // Spec 6.13: alle_aus am Einsatz, vor der ersten Note
     p.start = -1;
     p.wach = false;
     p.stumm = false;
   }
+#ifndef CYPHERDJ_MUTATION_ARR_RB_LANE_VOR_VORGABE
+  if (!p.weg) lanes_anwenden(p, snap, spur);   // E9: after the defaults, the base values and zuruecksetzen, before the notes
+#endif
   for (int i = 0; i < p.n; ++i) {
     const Ev& e = p.ev[i];
     int32_t rc = 0;
@@ -179,13 +271,14 @@ void ArrRbSenke::block(int spur, int64_t s0, int m, float* l, float* r) noexcept
   }
   p.still = null ? p.still + m : 0;
   if (p.weg) {   // Fix F2: ausgeblendet; zurücksetzen, die Stimme ruht, die Parameter setzt der nächste interne Block neu
-    cypher_rb_zuruecksetzen(p.h);
+    zuruecksetzen_(p);
     p.weg = false;
     p.wach = false;
     p.still = 0;
     p.start = -1;
     p.stumm = false;
     p.n_param = -1;
+    lanes_vergessen(p, true);
     return;
   }
 #ifdef CYPHERDJ_MUTATION_ARR_RB_RUHE_SOFORT
@@ -194,7 +287,7 @@ void ArrRbSenke::block(int spur, int64_t s0, int m, float* l, float* r) noexcept
   const bool ruhe = p.wach && p.still >= ARR_RB_RUHE && arr_.status() == ArrStatus::steht && p.start < 0;
 #endif
   if (ruhe) {   // Ausklang vorbei, Transport steht: zurücksetzen, die Stimme ruht (Ausgabe bleibt 0)
-    cypher_rb_zuruecksetzen(p.h);
+    zuruecksetzen_(p);
     p.wach = false;
     p.still = 0;
   }

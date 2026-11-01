@@ -37,9 +37,9 @@ static std::vector<char> bundle(std::initializer_list<const cdj::osc::Schreiber*
   return b;
 }
 
-static void strom(cdj::Netz& n, int64_t id, const char* ziel, const char* kanal) {
+static void strom(cdj::Netz& n, int64_t id, const char* ziel, const char* kanal, int strom_nr = 1) {
   cdj::osc::Schreiber s(v::erz_strom);
-  s.h(id).s("erzeuger").i(1).s(ziel).s(kanal);
+  s.h(id).s("erzeuger").i(strom_nr).s(ziel).s(kanal);
   n.paket(s.daten(), s.groesse());
 }
 
@@ -138,7 +138,7 @@ int main() {
 
     // Baukasten S3c: /k/kanal/graph ,hsss lädt <bk_ordner>/<name>.json im Netz-Faden und prüft: ein Effekt-Graph (eingang,
     // Latenz 0) wird als KANAL_GRAPH mit zeiger eingereiht; ein Instrument → kein_eingang, Limiter → pruefung (Latenz),
-    // leerer Name → eingereiht mit zeiger null (entfernen), Kanal außerhalb deck/1..4 → ausserhalb_bereich.
+    // leerer Name → eingereiht mit zeiger null (entfernen), Kanal außerhalb deck/1..4, fx/3, fx/4 → ausserhalb_bereich.
     {
       const fs::path beispiele = fs::path(CYPHERDJ_DJK) / "instrumente/baukasten_dsp/beispiele";
       fs::copy_file(beispiele / "fx-echo-achtel.json", dir / "bk/fx-echo-achtel.json", fs::copy_options::overwrite_existing);
@@ -169,6 +169,53 @@ int main() {
       graph(87, "andreas", "deck/1", "../juno-pad");      // Name mit Pfad: ausserhalb_bereich
       PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 87 && g.m.werte[2].i == 6 && !std::strcmp(g.s(5), "ausserhalb_bereich"));
       PRUEF(!bef->hole(kb));   // keiner der Fehlerfälle reiht einen Befehl ein
+      // S6: send returns fx/3, fx/4 take effect graphs; fx/2 (hall) and fx/5 are outside the range
+      graph(88, "andreas", "fx/3", "fx-echo-achtel");     // accepted: queued with the channel name fx/3
+      PRUEF(bef->hole(kb) && kb.art == cdj::Befehl::KANAL_GRAPH && kb.id == 88 && kb.zeiger != nullptr &&
+            !std::strcmp(kb.pfad, "fx/3") && !std::strcmp(kb.quelle, "andreas"));
+      if (kb.zeiger) cypher_bk_frei(static_cast<CypherBk*>(const_cast<void*>(kb.zeiger)));
+      graph(89, "andreas", "fx/5", "fx-echo-achtel");     // outside
+      PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 89 && g.m.werte[2].i == 6 && !std::strcmp(g.s(5), "ausserhalb_bereich"));
+      graph(90, "andreas", "fx/2", "fx-echo-achtel");     // fx/2 is the hall, not a graph slot
+      PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 90 && g.m.werte[2].i == 6 && !std::strcmp(g.s(5), "ausserhalb_bereich"));
+      graph(91, "andreas", "fx/4", "juno-pad");           // an instrument on a send: kein_eingang
+      PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 91 && g.m.werte[2].i == 6 && !std::strcmp(g.s(5), "kein_eingang"));
+      PRUEF(!bef->hole(kb));
+    }
+
+    // S10 (C8, D13): a sampler graph plays as an instrument stream (bk:<name> on an erz channel). lade_bk passes the
+    // sample root <bk_ordner>/samples to the translation; a name with a path part or a missing sample is refused with
+    // "pruefung" (the reason goes to stderr only), and as a deck insert the graph is refused for lack of an eingang.
+    {
+      fs::create_directories(dir / "bk/samples");
+      float probe[64];
+      for (int i = 0; i < 64; ++i) probe[i] = 0.25f * std::sin(0.3f * static_cast<float>(i / 2));
+      // samples/y.f32 exists only inside the root; bk/x.f32 exists next to it so that ../x.f32 fails by rule, not by absence
+      for (const fs::path& p : {dir / "bk/samples/y.f32", dir / "bk/x.f32"}) {
+        std::ofstream o(p, std::ios::binary);
+        o.write(reinterpret_cast<const char*>(probe), sizeof probe);
+      }
+      const auto sampler_json = [](const char* datei) {
+        return std::string(R"({"format":"baukasten/2","name":"s","stimmen":2,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"sampler","datei":")") + datei +
+               R"("},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"s.hz"},{"von":"n.trig","nach":"s.trig"},{"von":"s.l","nach":"o.l"},{"von":"s.r","nach":"o.r"}]})";
+      };
+      std::ofstream(dir / "bk/sampler.json") << sampler_json("y.f32");
+      std::ofstream(dir / "bk/sampler-pfad.json") << sampler_json("../x.f32");
+      std::ofstream(dir / "bk/sampler-fehlt.json") << sampler_json("nope.f32");
+      cdj::Befehl sb{};
+      strom(netz, 75, "bk:sampler", "erz/2");
+      PRUEF(bef->hole(sb) && sb.art == cdj::Befehl::ERZ_STROM && sb.id == 75 && sb.form == -1 && sb.zeiger != nullptr);
+      if (sb.zeiger) cypher_bk_frei(static_cast<CypherBk*>(const_cast<void*>(sb.zeiger)));
+      strom(netz, 76, "bk:sampler-pfad", "erz/2");
+      PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 76 && g.m.werte[2].i == 6 && !std::strcmp(g.s(5), "pruefung"));
+      strom(netz, 77, "bk:sampler-fehlt", "erz/2");
+      PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 77 && g.m.werte[2].i == 6 && !std::strcmp(g.s(5), "pruefung"));
+      PRUEF(!bef->hole(sb));   // neither failure queues a command
+      cdj::osc::Schreiber ks(v::k_kanal_graph);
+      ks.h(78).s("andreas").s("deck/2").s("sampler");
+      netz.paket(ks.daten(), ks.groesse());
+      PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 78 && g.m.werte[2].i == 6 && !std::strcmp(g.s(5), "kein_eingang"));
+      PRUEF(!bef->hole(sb));
     }
 
     // S5r K2: die Regler <kanal>/bk/<1..8> der Stellwerk-Tabelle gibt es genau auf den Kanälen, auf denen der Kern einen
@@ -366,6 +413,105 @@ int main() {
     netz.ereignisse_senden();  // gibt beide frei (ASan-Bau: kein Leck)
     PRUEF(g.warte("/erz/quittung", 200) && g.m.werte[0].i == 1 && g.m.werte[1].i == 9 && g.m.werte[2].i == 2 &&
           g.m.werte[3].i == 1 && g.m.werte[4].i == 3 && g.m.werte[5].i == 4 && g.m.werte[6].i == 0);
+  }
+
+  // S12 task 1: `bk:` with an empty name takes an instrument graph off a stream again. The net thread remembers, per
+  // stream, the last ACCEPTED non-graph target (kit or midi) with its kanal and replays it through the normal path.
+  {
+    auto frei = [](cdj::Befehl& x) {  // graph (form < 0) or kit (form 0); midi has no pointer
+      if (!x.zeiger) return;
+      if (x.form < 0) cypher_bk_frei(static_cast<CypherBk*>(const_cast<void*>(x.zeiger)));
+      else delete static_cast<const cdj::Kit*>(x.zeiger);
+      x.zeiger = nullptr;
+    };
+    fs::copy_file(dir / "bk/saege.json", dir / "bk/welle.json", fs::copy_options::overwrite_existing);
+    // 5. fresh kern: nothing stored, `bk:` is refused as ever (ausserhalb_bereich, no new reason)
+    {
+      cdj::Netz netz(0, false, bef, ere);
+      netz.setze_kit_ordner(dir.string());
+      netz.setze_bk_ordner((dir / "bk").string());
+      Gegenstelle g;
+      cdj::osc::Schreiber h(v::k_hallo);
+      h.s("x").i(g.port).i(1);
+      netz.paket(h.daten(), h.groesse());
+      PRUEF(g.warte("/k/willkommen", 200));
+      cdj::Befehl x{};
+      strom(netz, 801, "bk:", "erz/3", 5);   // bk_leer_ohne_vorher
+      PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 801 && g.m.werte[2].i == 6 && !std::strcmp(g.s(5), "ausserhalb_bereich"));
+      PRUEF(!bef->hole(x));
+    }
+    cdj::Netz netz(0, false, bef, ere);
+    netz.setze_kit_ordner(dir.string());
+    netz.setze_bk_ordner((dir / "bk").string());
+    Gegenstelle g;
+    {
+      cdj::osc::Schreiber h(v::k_hallo);
+      h.s("x").i(g.port).i(1);
+      netz.paket(h.daten(), h.groesse());
+      PRUEF(g.warte("/k/willkommen", 200));
+    }
+    cdj::Befehl x{};
+    // 1. bk_leer_stellt_vorher_her: midi:2:1 -> graph -> `bk:` gives midi:2:1 back, no graph on the stream
+    strom(netz, 810, "midi:2:1", "erz/3", 3);
+    PRUEF(bef->hole(x) && x.id == 810 && x.form == 2 && x.politik == 1 && x.zeiger == nullptr);
+    strom(netz, 811, "bk:saege", "erz/3", 3);
+    PRUEF(bef->hole(x) && x.id == 811 && x.form == -1 && x.zeiger != nullptr);
+    frei(x);
+    strom(netz, 812, "bk:", "erz/3", 3);
+    PRUEF(bef->hole(x) && x.art == cdj::Befehl::ERZ_STROM && x.id == 812 && x.nr == 3 && x.form == 2 && x.politik == 1 &&
+          x.zeiger == nullptr && !std::strcmp(x.pfad, "erz/3") && !std::strcmp(x.quelle, "erzeuger"));
+    PRUEF(!bef->hole(x));
+    // per stream: stream 5 never had a target, so `bk:` there stays refused even though stream 3 has one
+    strom(netz, 813, "bk:", "erz/5", 5);
+    PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 813 && g.m.werte[2].i == 6 && !std::strcmp(g.s(5), "ausserhalb_bereich"));
+    PRUEF(!bef->hole(x));
+    // 2. bk_leer_kit: the first target is a kit; the kit comes back as a fresh object (pointer non-null, graph off)
+    strom(netz, 820, "kit:gut", "erz/2", 2);
+    PRUEF(bef->hole(x) && x.form == 0 && x.zeiger != nullptr);
+    frei(x);
+    strom(netz, 821, "bk:welle", "erz/2", 2);
+    PRUEF(bef->hole(x) && x.form == -1);
+    frei(x);
+    strom(netz, 822, "bk:", "erz/2", 2);
+    PRUEF(bef->hole(x) && x.id == 822 && x.form == 0 && x.zeiger != nullptr && !std::strcmp(x.pfad, "erz/2"));
+    if (x.zeiger) PRUEF(static_cast<const cdj::Kit*>(x.zeiger)->n == 1);
+    frei(x);
+    // 4. bk_ueber_bk: midi:1:1, bk:saege, bk:welle, bk: -> midi 1:1 (a graph never becomes the stored target)
+    strom(netz, 830, "midi:1:1", "erz/3", 3);
+    PRUEF(bef->hole(x) && x.form == 1);
+    strom(netz, 831, "bk:saege", "erz/3", 3);
+    PRUEF(bef->hole(x) && x.form == -1);
+    frei(x);
+    strom(netz, 832, "bk:welle", "erz/3", 3);
+    PRUEF(bef->hole(x) && x.form == -1);
+    frei(x);
+    strom(netz, 833, "bk:", "erz/3", 3);
+    PRUEF(bef->hole(x) && x.id == 833 && x.form == 1 && x.politik == 1 && x.zeiger == nullptr);
+    // a refused target (midi:5:1) and a failing graph are not stored: the stored one stays midi:1:1
+    strom(netz, 834, "midi:5:1", "erz/3", 3);
+    PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 834 && g.m.werte[2].i == 6);
+    strom(netz, 835, "bk:kaputt", "erz/3", 3);
+    PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 835 && g.m.werte[2].i == 6 && !std::strcmp(g.s(5), "pruefung"));
+    PRUEF(!bef->hole(x));
+    strom(netz, 836, "bk:", "erz/3", 3);
+    PRUEF(bef->hole(x) && x.id == 836 && x.form == 1 && x.politik == 1);
+    // the newest accepted non-graph target wins
+    strom(netz, 837, "midi:3:7", "erz/3", 3);
+    PRUEF(bef->hole(x) && x.form == 3 && x.politik == 7);
+    strom(netz, 838, "bk:saege", "erz/3", 3);
+    PRUEF(bef->hole(x) && x.form == -1);
+    frei(x);
+    strom(netz, 839, "bk:", "erz/3", 3);
+    PRUEF(bef->hole(x) && x.form == 3 && x.politik == 7);
+    // 3. bk_leer_kanal: the stored kanal wins. First target on erz/2, remove arrives on erz/1 -> replay goes to erz/2
+    strom(netz, 840, "midi:1:2", "erz/2", 6);
+    PRUEF(bef->hole(x) && x.form == 1 && x.politik == 2 && !std::strcmp(x.pfad, "erz/2"));
+    strom(netz, 841, "bk:saege", "erz/2", 6);
+    PRUEF(bef->hole(x) && x.form == -1 && !std::strcmp(x.pfad, "erz/2"));
+    frei(x);
+    strom(netz, 842, "bk:", "erz/1", 6);
+    PRUEF(bef->hole(x) && x.id == 842 && x.nr == 6 && x.form == 1 && x.politik == 2 && !std::strcmp(x.pfad, "erz/2"));
+    PRUEF(!bef->hole(x));
   }
   delete bef;
   delete ere;

@@ -472,8 +472,28 @@ void Netz::paket(const char* p, size_t n, int64_t jetzt_ns) {
       quittung(b.id, b.quelle, 6, stand_sample_, stand_beat_, "pruefung");
       return;
     }
+    b.nr = std::strcmp(geraet, "lernen") == 0 ? 1 : 0;  // S19: the reserved name "lernen" is slot 1, the learn table on midi_ein_1
+#ifdef CYPHERDJ_MUTATION_LERN_FALSCHER_SLOT
+    b.nr = 0;  // failure case S19: the learn table would replace the base mapping
+#endif
     b.zeiger = neu.get();
     if (einreihen(b)) neu.release();  // der Kern besitzt es jetzt; sonst hat einreihen() `zu_spaet` gemeldet
+  } else if (a->pfad == v::k_lernen.pfad) {  // S19, §4.7: arm or disarm the MIDI learn capture; learning is hand work
+    namespace f = v::feld::k_lernen;
+    Befehl b{};
+    b.art = Befehl::LERNEN;
+    b.id = m.werte[f::id].h;
+    kopiere(b.quelle, m.werte[f::quelle].s, sizeof b.quelle);
+    b.an = m.werte[f::an].i;
+    if (!quelle_bekannt(b.quelle) || b.an < v::bereich::k_lernen::an_min || b.an > v::bereich::k_lernen::an_max) {
+      quittung(b.id, b.quelle, 6, stand_sample_, stand_beat_, "ausserhalb_bereich");
+      return;
+    }
+    if (std::strcmp(b.quelle, "cypher") == 0) {
+      quittung(b.id, b.quelle, 6, stand_sample_, stand_beat_, "nur_hand");
+      return;
+    }
+    einreihen(b);
   } else if (a->pfad == v::test_hand.pfad) {  // §19.0 Prüf-Handeingang (nur im Prüfmodus, oben geprüft)
     namespace f = v::feld::test_hand;
     Befehl b{};
@@ -548,6 +568,7 @@ void Netz::ereignisse_senden() {
       s.i((int32_t)e.takt).i((int32_t)e.phrase).h(e.sample).d(e.beat).d(e.bpm);
       an_alle(s);
     } else if (e.art == Ereignis::QUITTUNG) {
+      graph_quittung(e);  // S16: the mirror and its /e/graph go out before the quittung, so whoever sees the quittung knows the state
       quittung(e.id, e.quelle, e.status, e.sample, e.beat, e.grund);
     } else if (e.art == Ereignis::ZYKLUS) {
       fenster_.zyklus(e);
@@ -578,6 +599,14 @@ void Netz::ereignisse_senden() {
       an_alle(s);
     } else if (e.art == Ereignis::MAPPING_ALT) {  // Scheibe 35: abgelöstes Mapping freigeben (nur hier, nie im Callback)
       delete static_cast<const hand::Mapping*>(e.zeiger);
+    } else if (e.art == Ereignis::GELERNT) {  // S19 §5.8 /e/gelernt: id, quelle, kanal, nr, wert, belegt
+      osc::Schreiber s(v::e_gelernt);
+#ifdef CYPHERDJ_MUTATION_LERN_GELERNT_VERTAUSCHT
+      s.h(e.id).i(e.deck).i(e.teil).i(e.fassung).i(e.neu).i(e.status);  // failure case S19: kanal and nr swapped
+#else
+      s.h(e.id).i(e.deck).i(e.fassung).i(e.teil).i(e.neu).i(e.status);
+#endif
+      an_alle(s);
     } else if (e.art == Ereignis::TASTE) {  // §5.8 /e/taste: name, wert, sample, beat (Scheibe 35)
       osc::Schreiber s(v::e_taste);
       s.s(e.pfad).i(e.status).h(e.sample).d(e.beat);

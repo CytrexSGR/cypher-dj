@@ -80,7 +80,7 @@ fn rueckkopplung_unten_klingt_aus_oben_singt_solange_gehalten() {
     assert!(g1 < -90.0, "Regler 4 unten muss im Halten ausklingen: {g1}");
     assert!(g2 > -40.0, "Regler 4 oben muss im Halten selbst weiterschwingen: {g2}");
     assert!(unten < -90.0 && oben < -90.0, "nach Note aus muss die Schleife verstummen: {unten} / {oben}");
-    assert!(s2 <= 0.3 * 1.0001, "hinter tanh und Pegel 0,3: {s2}");
+    assert!(s2 <= 0.75 * 1.0001, "behind tanh and the 0.75 level (S13: was 0.3, the loop was 9 dB quieter than its siblings): {s2}");
 }
 
 #[test]

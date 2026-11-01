@@ -92,3 +92,28 @@ test('Studio S1: --strom 2 schreibt nach <basis>/erzeuger2/strom1.js, --strom 1 
   assert.equal(lauf(4).status, 2, 'nur Ströme 1..3');
   fs.rmSync(basis, { recursive: true, force: true });
 });
+
+// S18: --strom takes the streams of the shared table (1, 2, 3 and the Baukasten streams 5, 6, 7, 9, 10)
+test('S18 --strom 9 --basis writes <basis>/erzeuger9/strom1.js; --strom 5, 6, 7, 10 likewise', () => {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'muster-s18-'));
+  for (const s of [5, 6, 7, 9, 10]) {
+    fs.mkdirSync(path.join(d, `erzeuger${s}`));
+    const r = lauf(['--strom', String(s), '--basis', d, '--text', 'note("c3 e3")']);
+    assert.equal(r.status, 0, `stream ${s}: ${r.stderr}`);
+    assert.equal(fs.readFileSync(path.join(d, `erzeuger${s}`, 'strom1.js'), 'utf8'), 'note("c3 e3")\n');
+  }
+  // negative control: stream 2 still lands in erzeuger2
+  fs.mkdirSync(path.join(d, 'erzeuger2'));
+  assert.equal(lauf(['--strom', '2', '--basis', d, '--text', 'note("c2")']).status, 0);
+  assert.ok(fs.existsSync(path.join(d, 'erzeuger2', 'strom1.js')));
+});
+
+test('S18 --strom 4, 8, 11 exit 2 and name the allowed streams; nothing is written', () => {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'muster-s18-'));
+  for (const s of ['4', '8', '11', '0']) {
+    const r = lauf(['--strom', s, '--basis', d, '--text', 'note("c3")']);
+    assert.equal(r.status, 2, `stream ${s}: ${r.stderr}`);
+    assert.match(r.stderr, /1, 2, 3, 5, 6, 7, 9, 10/);
+  }
+  assert.deepEqual(fs.readdirSync(d), []);
+});

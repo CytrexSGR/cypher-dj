@@ -142,7 +142,7 @@ fn delay_takt_folgt_dem_tempo() {
 
 #[test]
 fn takt_werte_ausserhalb_abgelehnt() {
-    assert!(uebersetze(&lfo_saege(65.0), SR).is_err());
+    assert!(uebersetze(&lfo_saege(257.0), SR).is_err());
     assert!(uebersetze(&echo(17.0), SR).is_err());
     assert!(uebersetze(&echo(-1.0), SR).is_err());
 }

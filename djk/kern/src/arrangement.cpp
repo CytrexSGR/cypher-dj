@@ -14,9 +14,11 @@ namespace {
 constexpr double EPS = 1e-9;
 }  // namespace
 
-Arrangement::Arrangement(const sw::ReglerTabelle& tab) {
+Arrangement::Arrangement(const sw::ReglerTabelle& tab, bool mit_hall) : ret_(mit_hall) {
   regler_binden(tab);
   klick_form_bauen();
+  for (auto& je_spur : blende_s_)
+    for (int64_t& b : je_spur) b = INT64_MIN;
 }
 
 int64_t Arrangement::naht_sample(const Karte& k) const {
@@ -39,6 +41,7 @@ ArrZustand Arrangement::zustand(const Karte& k, int64_t s) const {
 const ArrSnapshot* Arrangement::tausche(const ArrSnapshot* neu, int64_t s, const Karte& k) {
   if (freeze_) stopp(0, s, k);   // Paket K3: eine neue Wiedergabe bricht den Freeze ab
   const ArrSnapshot* alt = snap_;
+  auto_tausch(neu, s);   // Automation Slice 1: needs the old snapshot (snap_), so before it is replaced
   stimmen_tauschen(neu, s, k);   // unverändert: neu binden; geändert oder weg: Ausklang aus eigener Kopie
   noten_tauschen(neu, s);     // offene Noten ohne Gegenstück: Off sofort
   senken_wechsel(neu, s);     // Spuren, die ihre Senke verlassen: Ausblende (RB), All Notes Off an den Slot (Wirt)
@@ -47,6 +50,9 @@ const ArrSnapshot* Arrangement::tausche(const ArrSnapshot* neu, int64_t s, const
   if (snap_)
     for (const ArrSpur& sp : snap_->spur)
       for (int j = 0; sp.art == ArrArt::audio && j < sp.n_clips; ++j) snap_werk_ = snap_werk_ || werk_clip(sp.clips[j]);
+#ifdef CYPHERDJ_MUTATION_ARR_HALL_STATE_IM_SNAPSHOT
+  for (int r = 0; r < ARR_RETURNS; ++r) ret_.schlafen(r);   // error case: the Hall state is reset on every swap (it would live in the snapshot)
+#endif
   for (bool& b : grp_belegt_) b = false;   // 1.10: Gruppen mit Mitgliedern (Pegel-Meldung)
   if (snap_)
     for (const ArrSpur& sp : snap_->spur)
@@ -200,6 +206,7 @@ void Arrangement::ki_stopp(int64_t s, const Karte& k) {
 void Arrangement::beginne(const Karte& k, int64_t s) {
   (void)k;
   status_ = ArrStatus::spielt;
+  auto_beginn();
   einstieg_ = true;
   gestartet_bei_ = s;
   if (freeze_) freeze_gestartet_bei_ = s;   // Paket K3
@@ -208,6 +215,7 @@ void Arrangement::beginne(const Karte& k, int64_t s) {
 
 void Arrangement::beende(int64_t s) {
   if (freeze_ && s < freeze_->start_s + freeze_->frames) freeze_ende(s, 1);   // Paket K3: vor dem Ende abgebrochen
+  if (status_ == ArrStatus::spielt) auto_stopp(s);   // Automation Slice 1: the lane ends here, the fader blends to the base value
   status_ = ArrStatus::steht;
   stopp_s_ = -1;
   stimmen_stopp(s);   // Kurzblende ab s
@@ -235,6 +243,7 @@ void Arrangement::segment(const Karte& k, int64_t a, int64_t b, int64_t s0) {
     }
     clips_starten(k, a, b);
     naht = naht_sample(k);
+    auto_segment(k, a, b, s0);   // Automation Slice 1: only with a lane in the snapshot
   }
   stimmen_spielen(k, a, b, s0, naht);
   metronom_segment(k, a, b, s0);
@@ -243,11 +252,12 @@ void Arrangement::segment(const Karte& k, int64_t a, int64_t b, int64_t s0) {
 // Ruhe ohne Wiedergabe und ohne Klang: nur die Regler nachführen; die Mute/Solo-Blende steht sofort auf ihrem Ziel (es klingt nichts).
 // Der PM-Abgriff ist Stille (1.10). Ziele bleiben, wie sie sind: ohne Schnappschuss gibt es keine neuen.
 void Arrangement::ruhe(int m) {
+  ++ruhe_n_;
   std::memset(pm_l_, 0, sizeof(float) * static_cast<size_t>(m));
   std::memset(pm_r_, 0, sizeof(float) * static_cast<size_t>(m));
   auto ende = [&](int i, int f) { return w_[i][f].vl ? w_[i][f].vl[m - 1] : w_[i][f].w; };
   bool solo = false;
-  for (int i = 0; i < ARR_PM; ++i) solo = solo || ende(i, 3) >= 0.5f;
+  for (int i = 0; i < ARR_PM; ++i) solo = solo || ende(i, 3) >= 0.5f;   // returns never exist here (ruhe() runs without a playback), so they never count
   bool msolo[ARR_GRUPPEN] = {};
   for (int i = 0; i < ARR_SPUREN; ++i)
     if (ziel_[i] > 0 && ende(i, 3) >= 0.5f) msolo[ziel_[i] - 1] = true;
@@ -259,6 +269,14 @@ void Arrangement::ruhe(int m) {
     const int s = ARR_SPUREN + g;
     ms_gain_[s] = (ende(s, 2) >= 0.5f || (solo && ende(s, 3) < 0.5f && !msolo[g])) ? 0.0f : 1.0f;
   }
+  for (int r = 0; r < ARR_RETURNS; ++r) ms_gain_[ARR_RET0 + r] = ende(ARR_RET0 + r, 2) >= 0.5f ? 0.0f : 1.0f;
+  for (int i = 0; i < ARR_SPUREN; ++i) {   // Automation Slice 1: nothing is loaded, no lane and no blend
+    for (int f = 0; f < AUTO_FELDER; ++f) {
+      blende_n_[i][f] = 0;
+      blende_s_[i][f] = INT64_MIN;
+      auto_war_[i][f] = false;
+    }
+  }
   verlaeufe_nachfuehren(m);
 }
 
@@ -266,10 +284,16 @@ void Arrangement::block(const Karte& k, int64_t s0, int m, float* aus_l, float* 
                         float* metro_master_r, float* metro_cue_l, float* metro_cue_r) {
   if (m > ARR_BLOCK) m = ARR_BLOCK;
   const bool weg = n_weg_ > 0;   // Fix F2: eine Senke blendet eine Spur noch aus
-  if (!snap_ && n_offen_ == 0 && klick_rest_ == 0 && stimmen() == 0 && !weg) {   // nichts geladen, nichts klingt:
+#ifdef CYPHERDJ_MUTATION_ARR_RUHE_SCHNEIDET_AB
+  const bool ret_blendet = false;   // error case: an unloaded playback cuts a return strip off instead of fading it out
+#else
+  const bool ret_blendet = ret_.blendet();   // 1.10 slice 3 (P15): a return strip still fades, no quiet path yet
+#endif
+  if (!snap_ && n_offen_ == 0 && klick_rest_ == 0 && stimmen() == 0 && !weg && !ret_blendet) {   // nichts geladen, nichts klingt:
     ruhe(m);                                                                      // DJ-Betrieb ohne Kosten (Slice 11)
     return;
   }
+  auto_von_ = auto_bis_ = 0;   // Automation Slice 1: a new block, no lane sample yet
   for (int i = 0; i < ARR_SPUREN; ++i) {
     std::memset(bus_l_[i], 0, sizeof(float) * static_cast<size_t>(m));
     std::memset(bus_r_[i], 0, sizeof(float) * static_cast<size_t>(m));
@@ -318,6 +342,7 @@ void Arrangement::block(const Karte& k, int64_t s0, int m, float* aus_l, float* 
     segment(k, a, b, s0);
     a = b;
   }
+  auto_geraet();   // Automation slice 2 (E9): the `geraet` lane values go to the sinks before their block()
   for (int i = 0; i < ARR_SPUREN; ++i) {
     ArrSenke* se = senke_fuer(snap_, i);
     // Fix F2: jede verlassene Senke blendet die Spur in diesem Block aus; spielt die Spur wieder auf ihr, dort (K2b-Rest b)
@@ -327,6 +352,7 @@ void Arrangement::block(const Karte& k, int64_t s0, int m, float* aus_l, float* 
   }
   n_weg_ = 0;
   freeze_abgriff(s0, m);   // Paket K3: Spur-Signal vor dem Fader
+  auto_block(s0, m);       // Automation Slice 1: the lane (or its blend) replaces the fader course of a track for this block
   mischen(m, aus_l, aus_r);
   verlaeufe_nachfuehren(m);
   if (werk_) werk_->takt(s0 + m);   // Slice 2: Stand des Callbacks an das Warp-Werk (synchron: es füllt die Ringe jetzt)

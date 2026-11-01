@@ -148,25 +148,45 @@ void Kern::einsortieren25(const Befehl& c) {
     }
     case Befehl::KANAL_GRAPH: {  // Baukasten S3c (§4.10): am Blockanfang; das Netz hat geladen und geprüft
       CypherBk* g = static_cast<CypherBk*>(const_cast<void*>(c.zeiger));
+      // S6: the send returns fx/3, fx/4 take graphs too. The mapping to the mixer's bus index (2, 3) sits here, before
+      // Mixer::kanal_index (which returns -1 for fx/3).
+      int send = -1;
+      if (std::strcmp(c.pfad, "fx/3") == 0) send = 2;
+      else if (std::strcmp(c.pfad, "fx/4") == 0) send = 3;
+#ifdef CYPHERDJ_MUTATION_FX_GRAPH_FALSCHER_BUS
+      if (send >= 0) send = 5 - send;   // fx/3 <-> fx/4
+#endif
 #ifndef CYPHERDJ_MUTATION_KANAL_GRAPH_KI_OFFEN
       if (q == sw::Quelle::cypher && sw_->ki_gestoppt()) {  // §4.7 Stopp-Taste, Muster LOOP_LADEN
 #ifndef CYPHERDJ_MUTATION_KANAL_GRAPH_KI_LECK
+#ifdef CYPHERDJ_MUTATION_FX_GRAPH_KI_LECK
+        if (send < 0)   // mutation: only the send path leaks
+#endif
         bk_zurueck(g, sample_);
 #endif
         quittung(c.id, c.quelle, 6, sample_, beat0, "ki_gestoppt");
         break;
       }
 #endif
-      const int k = Mixer::kanal_index(c.pfad);
-      if (k < 0 || k >= Mixer::MIX_GRAPH_KANAELE) {  // am Netz vorbei: der Graph gehört uns noch, zurück in die Freigabe
+      const int k = send >= 0 ? -1 : Mixer::kanal_index(c.pfad);
+      if (send < 0 && (k < 0 || k >= Mixer::MIX_GRAPH_KANAELE)) {  // am Netz vorbei: der Graph gehört uns noch, zurück in die Freigabe
 #ifndef CYPHERDJ_MUTATION_KANAL_GRAPH_BEREICH_LECK
+#ifdef CYPHERDJ_MUTATION_FX_GRAPH_BEREICH_LECK
+        if (std::strncmp(c.pfad, "fx/", 3) != 0)   // mutation: only fx/<n> paths leak
+#endif
         bk_zurueck(g, sample_);
 #endif
         quittung(c.id, c.quelle, 6, sample_, beat0, "ausserhalb_bereich");
         break;
       }
 #ifndef CYPHERDJ_MUTATION_KANAL_GRAPH_NICHT_SETZEN
-      mixer_->setze_kanal_graph(k, g);
+#ifdef CYPHERDJ_MUTATION_FX_GRAPH_NICHT_GESETZT
+      if (send < 0)   // mutation: the send path never sets
+#endif
+      {
+        if (send >= 0) mixer_->setze_send_graph(send, g);
+        else mixer_->setze_kanal_graph(k, g);
+      }
 #endif
 #ifndef CYPHERDJ_MUTATION_KANAL_GRAPH_BURST_LECK
       {  // sofort abholen: ein Burst vieler Wechsel vor demselben Block liefe sonst über die Ablage (MIX_BK_FREI) und leckte
@@ -245,10 +265,17 @@ void Kern::einsortieren25(const Befehl& c) {
       quittung(c.id, c.quelle, 3, sample_, beat0);
       break;
     case Befehl::MAPPING: {  // Scheibe 35, §4.7 /k/mapping: das Netz hat geladen und geprüft, der Tausch gilt ab diesem Zyklus
-      const hand::Mapping* alt = mapping_;
-#ifndef CYPHERDJ_MUTATION_MAPPING_NICHT_TAUSCHEN  // Fehlerfall Plan 35 Task 8: quittiert, tauscht aber nicht
-      setze_mapping(static_cast<const hand::Mapping*>(c.zeiger));
+      const bool lern = c.nr == 1;  // S19: slot 1 is the learn table on midi_ein_1, slot 0 the base mapping on hand_in
+      const hand::Mapping* alt = lern ? lern_mapping_ : mapping_;
+      if (lern) {
+#ifndef CYPHERDJ_MUTATION_LERN_NICHT_TAUSCHEN  // failure case S19: acknowledged, but the learn table is not swapped
+        setze_lern_mapping(static_cast<const hand::Mapping*>(c.zeiger));
 #endif
+      } else {
+#ifndef CYPHERDJ_MUTATION_MAPPING_NICHT_TAUSCHEN  // Fehlerfall Plan 35 Task 8: quittiert, tauscht aber nicht
+        setze_mapping(static_cast<const hand::Mapping*>(c.zeiger));
+#endif
+      }
       quittung(c.id, c.quelle, 1, sample_, beat0);
       quittung(c.id, c.quelle, 2, sample_, beat0);
       quittung(c.id, c.quelle, 3, sample_, beat0);
@@ -261,6 +288,15 @@ void Kern::einsortieren25(const Befehl& c) {
       }
       break;
     }
+    case Befehl::LERNEN:  // S19 (§4.7 /k/lernen): arm (an 1, restarts the 20 s countdown, replaces the id) or disarm
+#ifndef CYPHERDJ_MUTATION_LERN_NIE_SCHARF  // failure case S19: acknowledged, never armed
+      lern_an_ = c.an == 1;
+#endif
+      lern_id_ = c.id;
+      lern_rest_ = LERN_FRIST;
+      quittung(c.id, c.quelle, 1, sample_, beat0);
+      quittung(c.id, c.quelle, 3, sample_, beat0);
+      break;
     case Befehl::HOERSCHEIN: {  // Ohr T14 (§4.5 /k/hoerschein): registriert im Register, sofort fertig
       sw::Schein s{};
       kopiere(s.hs_id, c.hoerschein, sizeof s.hs_id);
@@ -356,6 +392,11 @@ void Kern::pegel_melden(int64_t n0, int n) {
   melden("erz/1", 4);  // Plan 2026-09-27: Strudel-Kanal, immer (auch ohne Strom: −200)
   melden("erz/2", 5);  // Studio S1: Bass
   melden("erz/3", 6);  // Studio S1: Melodie
+#ifndef CYPHERDJ_MUTATION_PEGEL_OHNE_ERZ567
+  melden("erz/5", 8);  // S18: Baukasten instruments on erz/5..7, always (-200 without a stream), like pad
+  melden("erz/6", 9);
+  melden("erz/7", 10);
+#endif
   melden("pad/1", 12);  // MVP 2: Loop-Boxen, immer (ohne Loop −200)
   melden("pad/2", 13);
   for (int i = 0; i < ARR_SPUREN; ++i) {  // D1 K1 (§5.6): spur/<n> je Spur mit Inhalt, Spitze nach dem Spur-Fader
@@ -377,6 +418,19 @@ void Kern::pegel_melden(int64_t n0, int n) {
     e.sample = n0;
     std::memcpy(e.pfad, "grp/", 4);
     e.pfad[4] = static_cast<char>('1' + g);
+    e.pfad[5] = '\0';
+    e.pegel[0] = sp > 1e-10f ? 20.0f * std::log10(sp) : -200.0f;
+    for (int j = 1; j < 7; ++j) e.pegel[j] = -200.0f;
+    melde(e);
+  }
+  for (int r = 0; r < ARR_RETURNS; ++r) {  // 1.10 slice 3: ret/<r> per return the playback knows, peak after the return fader
+    const float sp = arr_->spitze_ret_lesen(r);
+    if (!arr_->ret_belegt(r)) continue;
+    Ereignis e{};
+    e.art = Ereignis::PEGEL;
+    e.sample = n0;
+    std::memcpy(e.pfad, "ret/", 4);
+    e.pfad[4] = static_cast<char>('1' + r);
     e.pfad[5] = '\0';
     e.pegel[0] = sp > 1e-10f ? 20.0f * std::log10(sp) : -200.0f;
     for (int j = 1; j < 7; ++j) e.pegel[j] = -200.0f;
@@ -460,6 +514,7 @@ void Kern::audio(int64_t n0, int n) {
     // D1 K1 (Spec 2.2): Arrangement nach dem Erzeuger, vor Rückwegen, Prüfklicks und Mixer. Summe in den Eingang von
     // erz/4, Metronom in die Master-Summe vor dem Limiter oder in die PFL-Summe. Ein KI-Stopp beendet Cyphers wartenden Start und ihren Freeze, einen laufenden Transport nicht (E-a).
     if (sw_->ki_gestoppt()) arr_->ki_stopp(s0, karte);
+    arr_bk_->takt(karte.beat_at((double)s0), karte.bpm_at((double)s0) / 60.0 / 48000.0);   // S20: beat and tempo for the graphs of the bk tracks
     arr_->block(karte, s0, m, erz_l_[arr_kanal_], erz_r_[arr_kanal_], mixer_->summe_eingang_l(),
                 mixer_->summe_eingang_r(), mixer_->pfl_eingang_l(), mixer_->pfl_eingang_r());
     std::memcpy(pm_abgriff_l_ + off, arr_->pm_l(), sizeof(float) * static_cast<size_t>(m));   // 1.10: Export-Abgriff (Spec 5.4)
@@ -527,8 +582,17 @@ void Kern::audio(int64_t n0, int n) {
     };
 #ifndef CYPHERDJ_MUTATION_REC_TAP_NACH_MIXER
     {
-      const float* tl[3] = {erz_l_[4], erz_l_[5], erz_l_[6]};   // Mixer-Indizes von erz/1..3 (pegel_melden: melden("erz/1", 4) …)
-      const float* tr[3] = {erz_r_[4], erz_r_[5], erz_r_[6]};
+      const float* tl[REC_ABGRIFFE];   // S18: one entry per code of REC_CODES (erz/1..3, erz/5..7, pad/1..2), before the fader
+      const float* tr[REC_ABGRIFFE];
+      for (int i = 0; i < REC_ABGRIFFE; ++i) {
+#ifdef CYPHERDJ_MUTATION_REC_PAD_VERTAUSCHT
+        const int mi = i == 6 ? 13 : i == 7 ? 12 : REC_MIXER[i];   // mutation: pad/1 and pad/2 swapped
+#else
+        const int mi = REC_MIXER[i];
+#endif
+        tl[i] = erz_l_[mi];
+        tr[i] = erz_r_[mi];
+      }
       rec_abgriff(tl, tr);
     }
 #endif
@@ -549,8 +613,9 @@ void Kern::audio(int64_t n0, int n) {
     limiter_beobachten(s0, m);
 #ifdef CYPHERDJ_MUTATION_REC_TAP_NACH_MIXER
     {  // Fehlerfall (AK4): der Abgriff hinter dem Mixer, mit Fader und Limiter
-      const float* tl[3] = {links_ + off, links_ + off, links_ + off};
-      const float* tr[3] = {rechts_ + off, rechts_ + off, rechts_ + off};
+      const float* tl[REC_ABGRIFFE];
+      const float* tr[REC_ABGRIFFE];
+      for (int i = 0; i < REC_ABGRIFFE; ++i) { tl[i] = links_ + off; tr[i] = rechts_ + off; }
       rec_abgriff(tl, tr);
     }
 #endif

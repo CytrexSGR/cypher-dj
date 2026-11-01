@@ -61,6 +61,11 @@ export default {
     },
     '/k/kiste': (K, a, b) => K.sofort(b, () => null),
     '/k/mapping': (K, a, b) => K.sofort(b, () => null),
+    '/k/lernen': (K, a, b) => {  // S19: arm/disarm MIDI learn; learning is hand work
+      if (a.quelle === 'cypher') return K.q(b, 6, 'nur_hand');
+      if (!(a.an === 0 || a.an === 1)) return K.q(b, 6, 'ausserhalb_bereich');
+      K.sofort(b, () => { K.lernen = a.an === 1 ? a.id : null; return null; });
+    },
     '/k/latenz': (K, a, b) => {
       if (!/^(erz\/[1-8]|fx\/[1-4])$/.test(a.ziel) || a.samples < 0) return K.q(b, 6, 'ausserhalb_bereich');
       K.sofort(b, () => { K.latenz[a.ziel] = a.samples; return null; });

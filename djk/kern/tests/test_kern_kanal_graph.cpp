@@ -9,6 +9,13 @@
 //  9. (S5r) Graph-Regler <kanal>/bk/1: deck/2/bk/1 setzt den Pegel des Graphen auf deck/2 (Eingang x Regler -> Ausgang), deck/3/bk/1
 //     ändert deck/2 nicht, ein getauschter Graph steht auf dem aktuellen Wert, keine Allokation über die Reglerfahrt.
 //  7. Wechsel A -> B -> A vor demselben Block: jeder Zeiger kommt genau einmal zurück (kein Doppel-Free), A bleibt gesetzt.
+// S6 Task 2 (Plan 2026-10-31-baukasten-s6-send-graphen.md, send returns fx/3 and fx/4, notation fx/3, fx/4 only):
+// 10. fx3_graph_set_and_audible: pass-through graph on fx/3 with deck/2/send/3 at 0 dB adds the send to the master (+6.02 dB),
+//     quittungen 1, 2, 3, no allocation in the cycle.
+// 11. fx4_ki_stopp: cypher may set fx/4; after the KI stop cypher gets ki_gestoppt and the graph comes back once, andreas may.
+// 12. fx_burst_no_leak: 20 switches on fx/3 in one cycle: 19 come back exactly once, none lost, the last one stays.
+// 13. fx2_rejected: fx/2 (the hall) and fx/5 reach the core only past the network: ausserhalb_bereich, graph comes back once.
+// 14. fx3_ignores_deck3_knobs: a regler node on fx/3 does not hear deck/3/bk/1 (S5r binds knobs to channel names).
 // Der Kern gibt einen übergebenen Graphen nie selbst frei, nur über ERZ_BK_ALT (der Test sammelt und gibt frei).
 #include <unistd.h>
 
@@ -26,6 +33,7 @@
 #include "cypherdj/cypher_bk_ffi.h"
 #include "cypherdj/huellen.h"
 #include "cypherdj/kern.h"
+#include "cypherdj/zustand.h"
 #include "pruef.h"
 
 static bool g_waechter = false;
@@ -362,6 +370,220 @@ int main() {
     PRUEF(std::fabs(p09 + 0.9151) < 0.05);
     PRUEF(a.zurueck(g1) == 1);                         // der abgelöste Graph kam zurück
     a.spaeter.push_back(g1);
+  }
+
+  // ---------------------------------------------------------------- S6 Fall 10, 14: deck/2 mit Träger auf send/3, Graph auf fx/3
+  {
+    Lauf a;
+    a.zyklen(10 * N);
+    cdj::Befehl ld = a.neu(cdj::Befehl::DECK_LADEN, "leitstand");
+    ld.deck = 2;
+    std::snprintf(ld.material_id, sizeof ld.material_id, "%s", "f0f0000000000003");
+    ld.bpm = 128.0;
+    ld.fassung = 1;
+    a.sende(ld);
+    a.zyklen(20 * N);
+    const auto regler = [&](const char* pfad, double beat, float wert) {
+      cdj::Befehl t = a.neu(cdj::Befehl::TEIL, "pruefstand");
+      std::snprintf(t.pfad, sizeof t.pfad, "%s", pfad);
+      t.ab_beat = beat;
+      t.wert = wert;
+      t.politik = 1;
+      a.sende(t);
+    };
+    regler("deck/2/fader", 2.0, 0.0f);
+    regler("deck/2/send/3", 2.0, 0.0f);   // the send carries the deck at 0 dB; fx/3/rueckweg stays at its default 0 dB
+    cdj::Befehl st = a.neu(cdj::Befehl::DECK_START, "andreas");
+    st.deck = 2;
+    st.ab_beat = 8.0;
+    st.quell_beat = 0.0;
+    a.sende(st);
+    a.zyklen(10 * SPB);
+    const float voll = a.spitze(10 * SPB - 6000, 10 * SPB - 500);
+    PRUEF(voll > 0.05f);   // positive control: the deck sounds, the open send without a graph adds nothing
+
+    // Fall 10: pass-through graph on fx/3
+    CypherBk* durch = graph(DURCH);
+    const int64_t i10 = a.graph_setzen("fx/3", durch);
+    a.zyklen(10 * SPB + 2 * N);
+    g_allokationen = 0;
+    a.bewachen = true;
+    a.zyklen(10 * SPB + 20 * N);
+    a.bewachen = false;
+    const float mit = a.spitze(10 * SPB + 8 * N, 10 * SPB + 20 * N);
+    std::printf("Fall 10: ohne %.5f, mit Send-Graph %.5f (%.3f dB), Allokationen %ld\n", voll, mit, db(mit, voll), g_allokationen);
+    PRUEF(a.angenommen(i10));
+    PRUEF(std::fabs(db(mit, voll) - 6.0206) < 0.1);
+    PRUEF(a.zurueck(durch) == 0);
+    PRUEF(g_allokationen == 0);
+
+    // Fall 14: replace by the knob graph (default 0.5 -> dry 1 + send 0.5 = +3.52 dB), then turn deck/3/bk/1 up
+    CypherBk* knopf = graph(REGLER_PEGEL);
+    a.graph_setzen("fx/3", knopf);
+    a.zyklen(10 * SPB + 40 * N);
+    const double p05 = db(a.spitze(10 * SPB + 30 * N, 10 * SPB + 40 * N), voll);
+    regler("deck/3/bk/1", 11.0, 1.0f);   // another channel's knob
+    regler("deck/4/bk/1", 11.0, 1.0f);
+    a.zyklen(11 * SPB + 15000);
+    const double p_fremd = db(a.spitze(11 * SPB + 9000, 11 * SPB + 15000), voll);
+    std::printf("Fall 14: fx/3 mit Vorgabe 0,5 -> %.3f dB, nach deck/3/bk/1 und deck/4/bk/1 = 1 -> %.3f dB (soll beide 3,522)\n", p05, p_fremd);
+    PRUEF(std::fabs(p05 - 3.5218) < 0.1);
+    PRUEF(std::fabs(p_fremd - 3.5218) < 0.1);
+    PRUEF(a.zurueck(durch) == 1);   // the replaced graph came back
+    a.spaeter.push_back(durch);
+
+    // Fall 15 (S14): the knobs fx/3/bk/1 and fx/4/bk/1 reach the graphs on the send returns. `knopf` is on fx/3, deck/2 on send/3.
+    const auto stufe = [&](int64_t beat) {   // level in dB of the window 9000..15000 samples after the beat, relative to the dry deck
+      a.zyklen(beat * SPB + 15000);
+      return db(a.spitze(beat * SPB + 9000, beat * SPB + 15000), voll);
+    };
+    regler("fx/3/bk/1", 13.0, 1.0f);
+    const double s_hoch = stufe(13);       // dry 1 + send 1: +6.02 dB
+    regler("fx/3/bk/1", 15.0, 0.0f);
+    const double s_null = stufe(15);       // dry only: 0.00 dB
+    regler("fx/4/bk/1", 17.0, 1.0f);       // the other return's knob: fx/3 must not hear it (catches a row swap)
+    const double s_fremd = stufe(17);
+    std::printf("Fall 15: fx/3/bk/1 = 1 -> %.3f dB (soll 6,021), = 0 -> %.3f dB (soll 0), fx/4/bk/1 = 1 with fx/3 at 0 -> %.3f dB (soll 0)\n",
+                s_hoch, s_null, s_fremd);
+    PRUEF(std::fabs(s_hoch - 6.0206) < 0.1);
+    PRUEF(std::fabs(s_null) < 0.1);
+    PRUEF(std::fabs(s_fremd) < 0.1);
+
+    // fx/4: a knob graph on the second return, the deck moves from send/3 to send/4. The slot value of fx/4/bk/1 is already 1 (A4:
+    // the value belongs to the slot, the new graph gets it on its first block); fx/3/bk/1 is 0, so only the own row can lift it.
+    CypherBk* knopf4 = graph(REGLER_PEGEL);
+    a.graph_setzen("fx/4", knopf4);
+    regler("deck/2/send/3", 18.0, -200.0f);
+    regler("deck/2/send/4", 18.0, 0.0f);
+    const double v_hoch = stufe(19);
+    regler("fx/4/bk/1", 21.0, 0.0f);
+    const double v_null = stufe(21);
+    regler("fx/3/bk/1", 23.0, 1.0f);       // the other return's knob: fx/4 must not hear it
+    const double v_fremd = stufe(23);
+    std::printf("Fall 15: fx/4 graph, slot value 1 -> %.3f dB (soll 6,021), fx/4/bk/1 = 0 -> %.3f dB (soll 0), then fx/3/bk/1 = 1 -> %.3f dB (soll 0)\n",
+                v_hoch, v_null, v_fremd);
+    PRUEF(std::fabs(v_hoch - 6.0206) < 0.1);
+    PRUEF(std::fabs(v_null) < 0.1);
+    PRUEF(std::fabs(v_fremd) < 0.1);
+
+    // swap (A4): fx/3/bk/1 is 1; a fresh knob graph on fx/3 gets the slot value, not its own 0.5
+    CypherBk* knopf3 = graph(REGLER_PEGEL);
+    a.graph_setzen("fx/3", knopf3);
+    a.zyklen(24 * SPB + 15000);
+    regler("deck/2/send/3", 25.0, 0.0f);
+    regler("deck/2/send/4", 25.0, -200.0f);
+    const double t_hoch = stufe(26);
+    std::printf("Fall 15: fresh graph on fx/3 with the slot value 1 -> %.3f dB (soll 6,021; 3,522 would be the graph's own default)\n", t_hoch);
+    PRUEF(std::fabs(t_hoch - 6.0206) < 0.1);
+    PRUEF(a.zurueck(knopf) == 1);
+    a.spaeter.push_back(knopf);
+  }
+
+  // ---------------------------------------------------------------- S14 Fall 16: knob values that arrive by restore or render
+  // regler_setzen (project values) and regler_uebernehmen (render) write the control without a command; the graph knob must
+  // still carry the value. Two own runs: deck/2 at 0 dB on send/3 resp. send/4 and a knob graph on that return.
+  {
+    for (const int teil : {0, 1}) {
+      Lauf b;
+      const bool fx4 = teil == 1;
+      if (!fx4) {
+        PRUEF(b.kern->regler_setzen("fx/3/bk/1", 1.0f));
+        PRUEF(!b.kern->regler_setzen("fx/3/bk/9", 1.0f));   // negative control: no such knob
+      } else {
+        std::unique_ptr<cdj_z_echtzeit> f{new cdj_z_echtzeit()};
+        f->n_regler = 1;
+        std::snprintf(f->regler[0].pfad, sizeof f->regler[0].pfad, "%s", "fx/4/bk/1");
+        f->regler[0].wert = 1.0f;
+        PRUEF(b.kern->regler_uebernehmen(*f) == 1);
+      }
+      b.zyklen(10 * N);
+      cdj::Befehl ld = b.neu(cdj::Befehl::DECK_LADEN, "leitstand");
+      ld.deck = 2;
+      std::snprintf(ld.material_id, sizeof ld.material_id, "%s", "f0f0000000000003");
+      ld.bpm = 128.0;
+      ld.fassung = 1;
+      b.sende(ld);
+      b.zyklen(20 * N);
+      const auto regler = [&](const char* pfad, double beat, float wert) {
+        cdj::Befehl t = b.neu(cdj::Befehl::TEIL, "pruefstand");
+        std::snprintf(t.pfad, sizeof t.pfad, "%s", pfad);
+        t.ab_beat = beat;
+        t.wert = wert;
+        t.politik = 1;
+        b.sende(t);
+      };
+      regler("deck/2/fader", 2.0, 0.0f);
+      regler(fx4 ? "deck/2/send/4" : "deck/2/send/3", 2.0, 0.0f);
+      cdj::Befehl st = b.neu(cdj::Befehl::DECK_START, "andreas");
+      st.deck = 2;
+      st.ab_beat = 8.0;
+      st.quell_beat = 0.0;
+      b.sende(st);
+      b.zyklen(10 * SPB);
+      const float voll = b.spitze(10 * SPB - 6000, 10 * SPB - 500);
+      PRUEF(voll > 0.05f);
+      CypherBk* knopf = graph(REGLER_PEGEL);
+      b.graph_setzen(fx4 ? "fx/4" : "fx/3", knopf);
+      b.zyklen(10 * SPB + 40 * N);
+      const double pegel = db(b.spitze(10 * SPB + 30 * N, 10 * SPB + 40 * N), voll);
+      std::printf("Fall 16: %s knob set by %s -> %.3f dB (soll 6,021; 3,522 would be the unseeded default)\n", fx4 ? "fx/4/bk/1" : "fx/3/bk/1",
+                  fx4 ? "regler_uebernehmen" : "regler_setzen", pegel);
+      PRUEF(std::fabs(pegel - 6.0206) < 0.1);
+    }
+  }
+
+  // ---------------------------------------------------------------- S6 Fall 11, 12, 13: Quittungen und Rückgabe auf fx/3, fx/4
+  {
+    Lauf a;
+    a.zyklen(10 * N);
+    CypherBk* g0 = graph(HALB);
+    const int64_t i0 = a.graph_setzen("fx/4", g0, "cypher");   // D11: cypher may set before the stop
+    a.zyklen(20 * N);
+    PRUEF(a.angenommen(i0));
+    PRUEF(a.zurueck(g0) == 0);
+
+    a.sende(a.neu(cdj::Befehl::KI_STOPP, "andreas"));
+    a.zyklen(30 * N);
+    CypherBk* g11 = graph(HALB);
+    const int64_t i11 = a.graph_setzen("fx/4", g11, "cypher");
+    CypherBk* g11b = graph(HALB);
+    const int64_t i11b = a.graph_setzen("fx/4", g11b, "andreas");   // the hand may during the stop
+    a.zyklen(40 * N);
+    PRUEF(a.abgelehnt(i11) == "ki_gestoppt");
+    PRUEF(a.zurueck(g11) == 1);                                      // Fall 11: back once, no leak
+    a.spaeter.push_back(g11);
+    PRUEF(a.angenommen(i11b));
+    PRUEF(a.zurueck(g11b) == 0);
+    PRUEF(a.zurueck(g0) == 1);                                       // replaced by the hand's graph
+    a.spaeter.push_back(g0);
+
+    // Fall 12: burst on fx/3, 20 switches in one cycle (more than the free list MIX_BK_FREI holds)
+    CypherBk* b12[20];
+    for (int i = 0; i < 20; ++i) {
+      b12[i] = graph(i % 2 ? DURCH : HALB);
+      a.graph_setzen("fx/3", b12[i]);
+    }
+    a.zyklen(50 * N);
+    int einmal = 0;
+    for (int i = 0; i < 19; ++i) einmal += a.zurueck(b12[i]) == 1;
+    std::printf("Fall 12: %d von 19 abgelösten zurück, verloren %u\n", einmal, a.kern->mixer().bk_verloren());
+    PRUEF(einmal == 19);
+    PRUEF(a.zurueck(b12[19]) == 0);
+    PRUEF(a.kern->mixer().bk_verloren() == 0);
+    for (int i = 0; i < 19; ++i) a.spaeter.push_back(b12[i]);
+
+    // Fall 13: fx/2 is the hall, fx/5 does not exist: past the network the core rejects them and returns the graph
+    CypherBk* g2 = graph(HALB);
+    const int64_t i13 = a.graph_setzen("fx/2", g2);
+    CypherBk* g5 = graph(HALB);
+    const int64_t i13b = a.graph_setzen("fx/5", g5);
+    a.zyklen(60 * N);
+    PRUEF(a.abgelehnt(i13) == "ausserhalb_bereich");
+    PRUEF(a.abgelehnt(i13b) == "ausserhalb_bereich");
+    PRUEF(a.zurueck(g2) == 1);
+    PRUEF(a.zurueck(g5) == 1);
+    a.spaeter.push_back(g2);
+    a.spaeter.push_back(g5);
   }
   fs::remove_all(AB);
   PRUEF_ENDE();

@@ -25,7 +25,11 @@ export const SPUREN = Array.from({ length: 32 }, (_, i) => i + 1);   // D1 K1: S
 const SPUR_REGLER = ['fader', 'pan', 'mute', 'solo'];
 // S5r (§1.5): acht Graph-Regler <kanal>/bk/<1..8> auf den Kanälen, die einen Baukasten-Graphen annehmen (nicht erz/4, erz/8)
 export const BK_KANAELE = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'erz/1', 'erz/2', 'erz/3', 'erz/5', 'erz/6', 'erz/7', 'pad/1', 'pad/2'];
+export const BK_SEND_KANAELE = ['fx/3', 'fx/4'];   // S14: graph knobs of the send returns (global controls fx/<n>/bk/1..8)
 export const GRUPPEN = Array.from({ length: 8 }, (_, i) => i + 1);   // 1.10 Slice 1: Gruppen-Regler des Arrangements (§1.5 grp/<n>/*)
+export const RETURNS = [1, 2, 3, 4];   // 1.10 Slice 3: return strips with Cypher Hall (§1.5 ret/<r>/*, spur|grp/<n>/send/<r>)
+const RET_REGLER = ['fader', 'pan', 'mute', 'solo'];
+export const RET_HALL = ['an', 'pre', 'decay', 'groesse', 'tief', 'highcut', 'fahne'];   // ret/<r>/hall/*: normalised 0..1, `an` is a switch
 
 // Jeder Pfad, den die Seite greifen darf; alles andere lehnt der Server ab (unbekanntes_ziel), ohne zu senden.
 // 60m-Nachtrag: PFL je Deck, Master-Pegel, Kopfhörer (cue/mix, cue/pegel), alle §1.5 „nur Hand“.
@@ -38,13 +42,19 @@ export const ZIELE = new Set([
   ...SPUREN.flatMap((n) => SPUR_REGLER.map((p) => `spur/${n}/${p}`)),   // D1 K1: Spur-Mixer der Produktion
   ...GRUPPEN.flatMap((n) => SPUR_REGLER.map((p) => `grp/${n}/${p}`)),   // 1.10: Gruppen-Mixer der Produktion
   'pm/fader',                                                          // 1.10: Fader des Produktions-Masters
+  ...SPUREN.flatMap((n) => RETURNS.map((r) => `spur/${n}/send/${r}`)),   // 1.10 Slice 3: post-fader sends of a track
+  ...GRUPPEN.flatMap((n) => RETURNS.map((r) => `grp/${n}/send/${r}`)),   // ... and of a group
+  ...RETURNS.flatMap((r) => RET_REGLER.map((p) => `ret/${r}/${p}`)),     // return strip: fader, balance, mute, solo
+  ...RETURNS.flatMap((r) => RET_HALL.map((p) => `ret/${r}/hall/${p}`)),  // return hall: on switch and six normalised values
   ...BK_KANAELE.flatMap((k) => Array.from({ length: 8 }, (_, i) => `${k}/bk/${i + 1}`)),   // S5r: Graph-Regler 1..8
+  ...BK_SEND_KANAELE.flatMap((k) => Array.from({ length: 8 }, (_, i) => `${k}/bk/${i + 1}`)),   // S14: graph knobs of fx/3, fx/4
 ]);
 
 // §1.5-Bereich je Regler-Art (Einheit wie im Vertrag)
 const BEREICH = {
   fader: [-200, 0], trim: [-24, 24], eq: [-200, 6], kill: [0, 1], filter: [-1, 1], xfader: [-1, 1],
   pfl: [0, 1], pegel: [-200, 0], mix: [-1, 1], xseite: [0, 2], kleber: [0, 1],
+  send: [-200, 6], hall: [0, 1],   // 1.10 Slice 3: send level (own kind: it defaults to off), hall values normalised
   bk: [0, 1], pan: [-1, 1], schalter: [0, 1], spur_fader: [-200, 6],   // D1 K1: spur/<n>/pan, spur/<n>/mute|solo, spur/<n>/fader (Spec 6.16)
 };
 
@@ -59,7 +69,10 @@ export function art(pfad) {
   const gp = /^grp\/[1-8]\/(fader|pan|mute|solo)$/.exec(pfad);   // 1.10: wie die Spur-Regler
   if (gp) return gp[1] === 'fader' ? 'spur_fader' : gp[1] === 'pan' ? 'pan' : 'schalter';
   if (pfad === 'pm/fader') return 'spur_fader';
-  if (/^(?:deck\/[1-4]|erz\/[1-35-7]|pad\/[12])\/bk\/[1-8]$/.test(pfad)) return 'bk';   // S5r: linear 0..1, Vorgabe 0,5
+  if (/^(?:spur\/(?:[1-9]|[12][0-9]|3[0-2])|grp\/[1-8])\/send\/[1-4]$/.test(pfad)) return 'send';   // 1.10 Slice 3
+  const rt = /^ret\/[1-4]\/(fader|pan|mute|solo|hall\/(an|pre|decay|groesse|tief|highcut|fahne))$/.exec(pfad);   // 1.10 Slice 3
+  if (rt) return rt[1] === 'fader' ? 'spur_fader' : rt[1] === 'pan' ? 'pan' : rt[1] === 'mute' || rt[1] === 'solo' || rt[2] === 'an' ? 'schalter' : 'hall';
+  if (/^(?:deck\/[1-4]|erz\/[1-35-7]|pad\/[12]|fx\/[34])\/bk\/[1-8]$/.test(pfad)) return 'bk';   // S5r: linear 0..1, Vorgabe 0,5
   const m = /^(?:deck\/[12]|erz\/[1-3]|pad\/[12])\/(fader|trim|eq|kill|filter|pfl|xseite|play|cue)(\/|$)/.exec(pfad);
   if (!m) return null;
   return m[1] === 'play' || m[1] === 'cue' ? 'taste' : m[1];
@@ -80,6 +93,8 @@ const KERN = {
   pan: { typ: 'linear', min: -1, max: 1, kill: false },            // D1 K1: spur/<n>/pan
   spur_fader: { typ: 'fader_db', min: -200, max: 6, kill: false }, // D1 Spec 6.16: K_SPUR_FADER, spur/<n>/fader bis +6 dB
   bk: { typ: 'linear', min: 0, max: 1, kill: false },              // S5r: <kanal>/bk/<n>, linear(0, 1)
+  send: { typ: 'fader_db', min: -200, max: 6, kill: false },       // 1.10 Slice 3: K_SPUR_FADER, default -200
+  hall: { typ: 'linear', min: 0, max: 1, kill: false },            // 1.10 Slice 3: ret/<r>/hall/*, linear(0, 1)
 };
 KERN.pegel = KERN.fader;
 const klemme = (x) => Math.min(1, Math.max(0, x));
@@ -102,7 +117,7 @@ export function kernAusX(k, x) {
 
 // Griff-Kurven: Stellung 0..1 in der Hand ↔ Wert, den der Kern daraus macht (Anzeige = Kern-Wert)
 export const GRIFF = {};
-for (const a of ['fader', 'pegel', 'eq', 'trim', 'filter', 'xfader', 'mix', 'kleber', 'pan', 'spur_fader', 'bk']) {
+for (const a of ['fader', 'pegel', 'eq', 'trim', 'filter', 'xfader', 'mix', 'kleber', 'pan', 'spur_fader', 'bk', 'send', 'hall']) {
   GRIFF[a] = { wert: (x) => kernAusX(KERN[a], x), stellung: (w) => kernZuX(KERN[a], w) };
 }
 // EQ-Griff geteilt wie am Pioneer (Andreas 2026-09-28: „die eq an den kanälen sollten grundsätzlich alle immer erstmal
@@ -148,9 +163,13 @@ export function griffZuMidi(pfad, x) {
 
 // Vorgaben aus §1.5 (Fader nach dem Laden −200; cue/mix −1, cue/pegel −12, master/pegel 0)
 export const VORGABE = { fader: -200, trim: 0, eq: 0, kill: 0, filter: 0, xfader: 0, pfl: 0, mix: -1, pegel: 0, xseite: 1, kleber: 0,
-  pan: 0, schalter: 0, spur_fader: 0, bk: 0.5 };   // spur_fader: 0 dB (die Gruppe regelt erz/4)
+  pan: 0, schalter: 0, spur_fader: 0, bk: 0.5, send: -200, hall: 0.5 };   // spur_fader: 0 dB (die Gruppe regelt erz/4); send: off
+// 1.10 Slice 3: the hall values default to different points (mapping to units: djk/kern/src/arr_returns.cpp), hall/an to on
+const VORGABE_HALL = { an: 1, pre: 0.04, decay: 0.5252, groesse: 0.282, tief: 0.5658, highcut: 0.8039, fahne: 0.66667 };
 export function vorgabe(pfad) {
   if (pfad === 'cue/pegel') return -12;
+  const h = /^ret\/[1-4]\/hall\/(\w+)$/.exec(pfad);
+  if (h && VORGABE_HALL[h[1]] !== undefined) return VORGABE_HALL[h[1]];
   return VORGABE[art(pfad)];
 }
 
@@ -158,7 +177,7 @@ export function formatiere(pfad, w) {
   const a = art(pfad);
   if (w === undefined || w === null || Number.isNaN(w)) return '–';
   if (a === 'kill') return w >= 0.5 ? 'KILL' : '';
-  if (a === 'schalter') return w >= 0.5 ? (pfad.endsWith('/mute') ? 'MUTE' : 'SOLO') : '';
+  if (a === 'schalter') return w >= 0.5 ? (pfad.endsWith('/mute') ? 'MUTE' : pfad.endsWith('/hall/an') ? 'ON' : 'SOLO') : '';
   if (a === 'pan') return Math.abs(w) < 0.005 ? 'C' : `${w < 0 ? 'L' : 'R'} ${Math.round(Math.abs(w) * 100)}`;
   if (a === 'pfl') return w >= 0.5 ? 'PFL' : '';
   if (a === 'xseite') return ['A', 'THRU', 'B'][Math.round(w)] ?? '–';
@@ -169,7 +188,7 @@ export function formatiere(pfad, w) {
     return w < 0 ? `CUE ${Math.round(((1 - w) / 2) * 100)}%` : `MST ${Math.round(((1 + w) / 2) * 100)}%`;
   }
   if (a === 'kleber') return w < 0.005 ? 'OFF' : `${Math.round(w * 100)}%`;
-  if (a === 'bk') return `${Math.round(w * 100)}%`;
+  if (a === 'bk' || a === 'hall') return `${Math.round(w * 100)}%`;   // hall: percent for now, units come from hallEinheit (1.10 Slice 3 Task 12)
   if (a === 'filter') return Math.abs(w) < 0.005 ? 'OFF' : `${w < 0 ? 'LP' : 'HP'} ${Math.round(Math.abs(w) * 100)}`;
   if (a === 'xfader') return Math.abs(w) < 0.005 ? 'CENTER' : `${w < 0 ? 'A' : 'B'} ${Math.round(Math.abs(w) * 100)}`;
   if (w <= -199.5) return '−∞ dB';

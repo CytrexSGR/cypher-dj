@@ -169,3 +169,157 @@ test('AK22 (Zug, B2): viele Anfragen an einem Gruppen- oder Master-Fader im Fens
   const um = rueckgaengig(w, q, { quelle: 'andreas' });
   assert.equal(um.projekt.master.fader_db, 0); assert.deepEqual(um.regler_aenderungen, [{ pfad: 'pm/fader', wert: 0 }]);
 });
+
+// ---- 1.10 slice 3: return_neu, return_aendern, return_loeschen, send_setzen (spec 5.2; AK12 server part, AK22 send/return) -------------------
+const mitRet = () => {
+  let p = mit3();
+  p = ok(p, { befehl: 'gruppenspur_neu', name: 'Music', mitglieder: ['s2'] }).projekt;
+  return p;
+};
+
+test('return_neu: smallest free nr, id r1, defaults, Hall defaults; controls; affects the playback', () => {
+  const p = mitRet(), b = { befehl: 'return_neu' };
+  const r = ok(p, b); pruefe(p, r);
+  assert.deepEqual(r.projekt.returns.map((x) => [x.id, x.nr, x.name, x.fader_db, x.pan, x.mute, x.solo]), [['r1', 1, 'Return 1', 0, 0, false, false]]);
+  assert.deepEqual(r.projekt.returns[0].hall, { an: true, pre: 0.04, decay: 0.5252, groesse: 0.282, tief: 0.5658, highcut: 0.8039, fahne: 0.66667 });
+  assert.equal(r.projekt.naechste_id.return, 2);
+  assert.equal(r.betrifft_wiedergabe, true);
+  assert.deepEqual(r.regler_aenderungen, [{ pfad: 'ret/1/fader', wert: 0 }, { pfad: 'ret/1/pan', wert: 0 }, { pfad: 'ret/1/mute', wert: 0 }, { pfad: 'ret/1/solo', wert: 0 }],
+    'the "+ Return: Hall" button is return_neu without arguments: four controls, the Hall stays at its defaults');
+  assert.ok(!('returns' in p), 'input untouched');
+  const h = ok(p, { befehl: 'return_neu', name: 'Plate', farbe: '#112233', hall: { decay: 0.8, an: false } }); pruefe(p, h);
+  assert.deepEqual([h.projekt.returns[0].name, h.projekt.returns[0].farbe, h.projekt.returns[0].hall.decay, h.projekt.returns[0].hall.an], ['Plate', '#112233', 0.8, false]);
+  assert.deepEqual(h.regler_aenderungen.filter((x) => x.pfad.includes('hall')), [{ pfad: 'ret/1/hall/an', wert: 0 }, { pfad: 'ret/1/hall/decay', wert: 0.8 }]);
+  const zwei = ok(r.projekt, b); pruefe(r.projekt, zwei);
+  assert.deepEqual(zwei.projekt.returns.map((x) => [x.id, x.nr]), [['r1', 1], ['r2', 2]]);
+});
+
+test('return_neu: limit of four (routing_grenze), arguments, an id is never reused and the freed number is', () => {
+  let p = mitRet();
+  for (let i = 0; i < 4; i++) p = ok(p, { befehl: 'return_neu' }).projekt;
+  lehntAb(p, { befehl: 'return_neu' }, 'routing_grenze');                                          // the fifth
+  const q = ok(p, { befehl: 'return_loeschen', return_id: 'r2' }).projekt;
+  const n = ok(q, { befehl: 'return_neu' }).projekt;
+  assert.equal(n.returns.find((x) => x.nr === 2).id, 'r5', 'id never reused, the freed number (slot) is reused'); assert.ok(!n.returns.some((x) => x.id === 'r2'));
+  const o = mitRet();
+  lehntAb(o, { befehl: 'return_neu', farbe: 'red' }, 'argument_ungueltig');
+  lehntAb(o, { befehl: 'return_neu', name: '' }, 'argument_ungueltig');
+  lehntAb(o, { befehl: 'return_neu', hall: { decay: 1.5 } }, 'argument_ungueltig');
+  lehntAb(o, { befehl: 'return_neu', hall: { mix: 0.5 } }, 'argument_unbekannt');
+  lehntAb(o, { befehl: 'return_neu', hall: {} }, 'argument_ungueltig');
+  lehntAb(o, { befehl: 'return_neu', extra: 1 }, 'argument_unbekannt');
+  assert.ok(ok(o, { befehl: 'return_neu', hall: { decay: 1 } }), 'negative control: the boundary 1 is valid');
+});
+
+test('return_aendern: fields, Hall partial, controls ret/<r>/*, quick path equals the general path, rejections', () => {
+  const p = ok(mitRet(), { befehl: 'return_neu' }).projekt;
+  const b = { befehl: 'return_aendern', return_id: 'r1', fader_db: -6, hall: { decay: 0.9, highcut: 0.5 } };
+  const r = ok(p, b); pruefe(p, r); gleichLeichtVoll(p, b);
+  assert.equal(r.projekt.returns[0].fader_db, -6); assert.equal(r.projekt.returns[0].hall.decay, 0.9); assert.equal(r.projekt.returns[0].hall.pre, 0.04, 'the rest of the Hall stays');
+  assert.deepEqual(r.regler_aenderungen, [{ pfad: 'ret/1/fader', wert: -6 }, { pfad: 'ret/1/hall/decay', wert: 0.9 }, { pfad: 'ret/1/hall/highcut', wert: 0.5 }]);
+  assert.equal(r.betrifft_wiedergabe, false, 'level and Hall are controls, not playback');
+  const m = ok(p, { befehl: 'return_aendern', return_id: 'r1', mute: true, solo: true, pan: -0.5, name: 'X', farbe: '#abcdef' }); pruefe(p, m);
+  assert.deepEqual(m.regler_aenderungen, [{ pfad: 'ret/1/pan', wert: -0.5 }, { pfad: 'ret/1/mute', wert: 1 }, { pfad: 'ret/1/solo', wert: 1 }]);
+  assert.deepEqual(ok(p, { befehl: 'return_aendern', return_id: 'r1', fader_db: 0 }).regler_aenderungen, [], 'same value: nothing to send');
+  lehntAb(p, { befehl: 'return_aendern', return_id: 'r9', fader_db: 0 }, 'return_unbekannt');
+  lehntAb(p, { befehl: 'return_aendern', return_id: 'r1' }, 'argument_ungueltig');
+  lehntAb(p, { befehl: 'return_aendern', return_id: 'r1', fader_db: 7 }, 'argument_ungueltig');
+  lehntAb(p, { befehl: 'return_aendern', return_id: 'r1', hall: { decay: -0.1 } }, 'argument_ungueltig');
+  lehntAb(p, { befehl: 'return_aendern', return_id: 'r1', hall: { an: 1 } }, 'argument_ungueltig');
+  lehntAb(p, { befehl: 'return_aendern', return_id: 'r1', send: 1 }, 'argument_unbekannt');
+  assert.equal(p.returns[0].hall.decay, 0.5252, 'a refused command wrote nothing');
+});
+
+test('send_setzen: sets, changes, removes with -200; controls spur|grp/<n>/send/<r>; order by return number; rejections', () => {
+  let p = ok(ok(mitRet(), { befehl: 'return_neu' }).projekt, { befehl: 'return_neu' }).projekt;
+  const b = { befehl: 'send_setzen', strang_id: 's1', return_id: 'r2', db: -9 };
+  const r = ok(p, b); pruefe(p, r); gleichLeichtVoll(p, b);
+  assert.deepEqual(r.projekt.spuren[0].sends, [{ id: 'r2', db: -9 }]);
+  assert.deepEqual(r.regler_aenderungen, [{ pfad: 'spur/1/send/2', wert: -9 }]);
+  assert.equal(r.betrifft_wiedergabe, false);
+  p = r.projekt;
+  const zwei = ok(p, { befehl: 'send_setzen', strang_id: 's1', return_id: 'r1', db: -3 }); pruefe(p, zwei);
+  assert.deepEqual(zwei.projekt.spuren[0].sends.map((x) => x.id), ['r1', 'r2'], 'ordered by return number');
+  const g = ok(p, { befehl: 'send_setzen', strang_id: 'g1', return_id: 'r1', db: 0 }); pruefe(p, g);
+  assert.deepEqual(g.projekt.gruppen[0].sends, [{ id: 'r1', db: 0 }]); assert.deepEqual(g.regler_aenderungen, [{ pfad: 'grp/1/send/1', wert: 0 }]);
+  const aus = ok(p, { befehl: 'send_setzen', strang_id: 's1', return_id: 'r2', db: -200 }); pruefe(p, aus);
+  assert.ok(!('sends' in aus.projekt.spuren[0]), '-200 removes the entry and the empty list');
+  assert.deepEqual(aus.regler_aenderungen, [{ pfad: 'spur/1/send/2', wert: -200 }]);
+  assert.deepEqual(ok(p, { befehl: 'send_setzen', strang_id: 's1', return_id: 'r1', db: -200 }).regler_aenderungen, [], 'removing what is not there: nothing to send');
+  lehntAb(p, { befehl: 'send_setzen', strang_id: 's9', return_id: 'r1', db: 0 }, 'spur_unbekannt');
+  lehntAb(p, { befehl: 'send_setzen', strang_id: 's1', return_id: 'r9', db: 0 }, 'return_unbekannt');
+  lehntAb(p, { befehl: 'send_setzen', strang_id: 's1', return_id: 'r1', db: 6.5 }, 'argument_ungueltig');
+  lehntAb(p, { befehl: 'send_setzen', strang_id: 's1', return_id: 'r1', db: -201 }, 'argument_ungueltig');
+  lehntAb(p, { befehl: 'send_setzen', strang_id: 's1', return_id: 'r1' }, 'argument_ungueltig');
+  lehntAb(p, { befehl: 'send_setzen', strang_id: 's1', return_id: 'r1', db: 0, extra: 1 }, 'argument_unbekannt');
+  assert.ok(ok(p, { befehl: 'send_setzen', strang_id: 's1', return_id: 'r1', db: 6 }), 'negative control: +6 is valid');
+});
+
+test('return_loeschen: every send to it goes in the SAME step (one undo), controls back to the defaults, no orphan', () => {
+  let p = ok(ok(mitRet(), { befehl: 'return_neu' }).projekt, { befehl: 'return_neu', hall: { decay: 0.9 } }).projekt;
+  for (const [s, r] of [['s1', 'r2'], ['s3', 'r2'], ['g1', 'r2'], ['s1', 'r1']]) p = ok(p, { befehl: 'send_setzen', strang_id: s, return_id: r, db: -6 }).projekt;
+  p = ok(p, { befehl: 'return_aendern', return_id: 'r2', fader_db: -4, mute: true }).projekt;
+  const r = ok(p, { befehl: 'return_loeschen', return_id: 'r2' }); pruefe(p, r);
+  assert.deepEqual(r.projekt.returns.map((x) => x.id), ['r1']);
+  assert.deepEqual(r.projekt.spuren.map((s) => (s.sends ?? []).map((x) => x.id)), [['r1'], [], []], 'no orphan send');
+  assert.ok(!('sends' in r.projekt.gruppen[0]) && !('sends' in r.projekt.spuren[2]));
+  assert.deepEqual(r.regler_aenderungen.map((x) => x.pfad).sort(),
+    ['grp/1/send/2', 'ret/2/fader', 'ret/2/hall/decay', 'ret/2/mute', 'ret/2/pan', 'ret/2/solo', 'spur/1/send/2', 'spur/3/send/2'].sort());
+  assert.deepEqual(r.regler_aenderungen.find((x) => x.pfad === 'ret/2/fader'), { pfad: 'ret/2/fader', wert: 0 });
+  assert.deepEqual(r.regler_aenderungen.find((x) => x.pfad === 'ret/2/hall/decay'), { pfad: 'ret/2/hall/decay', wert: 0.5252 });
+  assert.deepEqual(r.regler_aenderungen.find((x) => x.pfad === 'spur/1/send/2'), { pfad: 'spur/1/send/2', wert: -200 });
+  lehntAb(p, { befehl: 'return_loeschen', return_id: 'r9' }, 'return_unbekannt');
+  const leer = ok(r.projekt, { befehl: 'return_loeschen', return_id: 'r1' }).projekt;
+  assert.ok(!('returns' in leer) && pruefeProjekt(leer).fehler === undefined, 'the last return takes the key with it');
+  assert.equal(leer.naechste_id.return, 3, 'the counter stays');
+});
+
+test('undo and redo of the return commands restore state and controls (one step per command, also return_loeschen with two senders)', (t) => {
+  const uhr = { t: 1000 };
+  const w = new Verlauf(path.join(tmpOrdner(t), 'undo.jsonl'), { jetzt: () => uhr.t, zeitgeber: false });
+  const A = { quelle: 'andreas', label: 'x' };
+  let q = aendere(w, mitRet(), [{ befehl: 'return_neu' }], A).projekt;
+  uhr.t += 5000; q = aendere(w, q, [{ befehl: 'send_setzen', strang_id: 's1', return_id: 'r1', db: -6 }], A).projekt;
+  uhr.t += 5000; q = aendere(w, q, [{ befehl: 'send_setzen', strang_id: 's3', return_id: 'r1', db: -3 }], A).projekt;
+  uhr.t += 5000; q = aendere(w, q, [{ befehl: 'return_aendern', return_id: 'r1', hall: { decay: 0.9 }, fader_db: -2 }], A).projekt;
+  const voll = q;
+  uhr.t += 5000; q = aendere(w, q, [{ befehl: 'return_loeschen', return_id: 'r1' }], A).projekt;
+  assert.ok(!('returns' in q));
+  const u = rueckgaengig(w, q, { quelle: 'andreas' });
+  const ohneRev = (x) => ohneAbgeleitetes({ ...x, rev: 0, wiedergabe_rev: 0 });
+  assert.equal(ohneRev(u.projekt), ohneRev(voll), 'ONE undo step brings the return AND both sends back');
+  assert.deepEqual(u.projekt.spuren.map((s) => (s.sends ?? []).length), [1, 0, 1]);
+  assert.ok(u.regler_aenderungen.some((x) => x.pfad === 'spur/1/send/1' && x.wert === -6) && u.regler_aenderungen.some((x) => x.pfad === 'ret/1/hall/decay' && x.wert === 0.9));
+  const u2 = rueckgaengig(w, u.projekt, { quelle: 'andreas' });
+  assert.deepEqual(u2.projekt.returns[0].hall.decay, 0.5252, 'the Hall change is its own step');
+  assert.equal(u2.projekt.returns[0].fader_db, 0);
+});
+
+test('AK28 (returns): variante_waehlen and the variant groups never touch the return strips', () => {
+  let p = ok(mitRet(), { befehl: 'return_neu' }).projekt;
+  p = ok(p, { befehl: 'spur_aendern', spur_id: 's1', gruppe: 'bass' }).projekt;
+  p = ok(p, { befehl: 'spur_aendern', spur_id: 's3', gruppe: 'bass' }).projekt;
+  p = ok(p, { befehl: 'send_setzen', strang_id: 's1', return_id: 'r1', db: -6 }).projekt;
+  const v = ok(p, { befehl: 'variante_waehlen', gruppe: 'bass', spur_id: 's3' });
+  assert.deepEqual(v.projekt.spuren.map((s) => s.mute), [true, false, false]);
+  assert.equal(v.projekt.returns[0].mute, false, 'negative control: the return stays audible');
+  assert.deepEqual(v.projekt.spuren[0].sends, [{ id: 'r1', db: -6 }], 'the sends stay');
+  assert.ok(!v.regler_aenderungen.some((x) => x.pfad.startsWith('ret/')));
+});
+
+test('deleting a track or group takes its sends out of the controls (set back to -200), a new track leaves the sends alone', () => {
+  let p = ok(ok(mitRet(), { befehl: 'return_neu' }).projekt, { befehl: 'send_setzen', strang_id: 's1', return_id: 'r1', db: -6 }).projekt;
+  p = ok(p, { befehl: 'send_setzen', strang_id: 'g1', return_id: 'r1', db: -2 }).projekt;
+  const t = ok(p, { befehl: 'spur_loeschen', spur_id: 's1' });
+  assert.ok(t.regler_aenderungen.some((x) => x.pfad === 'spur/1/send/1' && x.wert === -200));
+  const g = ok(p, { befehl: 'gruppenspur_loeschen', gruppe_id: 'g1' });
+  assert.ok(g.regler_aenderungen.some((x) => x.pfad === 'grp/1/send/1' && x.wert === -200));
+  const n = ok(p, { befehl: 'spur_neu', art: 'audio' });
+  assert.ok(!n.regler_aenderungen.some((x) => x.pfad.includes('/send/')), 'negative control: a new track without sends sends nothing');
+});
+
+test('ki_gestoppt-style source: the commands carry the source into the history like the other commands (Cypher is not exempt)', (t) => {
+  const w = new Verlauf(path.join(tmpOrdner(t), 'undo.jsonl'), { jetzt: () => 1, zeitgeber: false });
+  const e = aendere(w, mitRet(), [{ befehl: 'return_neu' }], { quelle: 'cypher', label: 'Hall' });
+  assert.equal(e.eintrag.quelle, 'cypher');
+});

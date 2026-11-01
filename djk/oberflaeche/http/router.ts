@@ -23,13 +23,25 @@ export interface Bereich { name: string; routen(): Route[]; ereignis?(adresse: s
 // `gesendet` mit; quelle gilt für die laufende Anfrage (x-djk-quelle), außerhalb einer Anfrage andreas (gemessen: auch im Haken ereignis,
 // selbst wenn die auslösende Anfrage cypher war). sende wirft, wenn felder eine id tragen, und setzt quelle: quelle(), wenn felder keine
 // tragen; eine ausdrücklich mitgegebene quelle bleibt.
+// S17: what the proj Bereich may do with Baukasten graphs: the same checks as POST /graph, without the HTTP response
+export interface BkBruecke {
+  geladen(): Record<string, string>;
+  setzeGraph(kanal: string, name: string, quelle: 'andreas' | 'cypher'): Promise<{ code: number; j: Record<string, unknown> }>;
+  autoAus(kanal: string): boolean;
+  graphHash(name: string): string | null;
+  // S17: false while the page server has no kern (KernAnbindung.zustand 'suche'); absent counts as true
+  kernDa?(): boolean;
+}
 export interface BereichKontext {
   sende(adresse: string, felder: Record<string, unknown>): number;
-  warteQuittung(id: number, abBeat?: number): Promise<{ status: number; grund: string } | null>;
+  // bisEnde (slice 3, P11): wait for the END status (3 fertig, 5 verspaetet ausgefuehrt, 4/6/7/8 refused or ended), not only for the first status other than 1;
+  // a Teil occupies a stellwerk slot until then
+  warteQuittung(id: number, abBeat?: number, bisEnde?: boolean): Promise<{ status: number; grund: string } | null>;
   quelle(): 'andreas' | 'cypher';
   kiGestoppt(): boolean;
   verteile(ereignis: { a: string; f: unknown }): void;
   log(zeile: Record<string, unknown>): void;
+  baukasten?: BkBruecke;   // S17: optional, only the server and test contexts that need graphs provide it
 }
 
 const trifft = (r: Route, pfad: string): boolean =>

@@ -6,8 +6,9 @@
 //   Filter, Abgriff, Fader, Sends) → Ziel aus <k>/ziel: 0 = Master mit dem Crossfader-Gewicht der Seite <k>/xseite,
 //   1..4 = Eingang von bus/<n>. Ein Zielwechsel blendet über 10 ms (480 Samples, S-Kurve 3u² − 2u³).
 //   Bus b (bus/1..4): Eingang (Summe seiner Quellen) → voller Kanalzug → Master mit dem Crossfader-Gewicht seiner Seite.
-//   Sends 1..4 nach dem Fader in die Summen fx/1..4. Wirksam ist nur Send 2: fx/2 ist der Hall, fx/2/rueckweg führt ihn
-//   in die Master-Summe (K2 Slice 2); die Rückwege fx/1, fx/3, fx/4 sind ohne Wirkung (Plugin-Wirte: Scheibe 8).
+//   Sends 1..4 nach dem Fader in die Summen fx/1..4. Wirksam sind Send 2 and the sends with a graph: fx/2 ist der Hall,
+//   fx/2/rueckweg führt ihn in die Master-Summe (K2 Slice 2); an effect graph on fx/3 or fx/4 (S6, setze_send_graph) processes
+//   that bus and its output joins the master sum scaled by fx/3/rueckweg, fx/4/rueckweg; fx/1 hat keine Wirkung.
 //   PFL: Abgriff nach Filter, vor dem Fader (ADR 008 Punkt 3) jedes Kanals mit <k>/pfl = 1 in die PFL-Summe.
 //   Master: Summe + Master-Eingang (Prüfklick Z1, „in die Summe vor dem Limiter“) → master/pegel.
 //   Cue: (PFL + master/pfl · Master) · 0,5·(1 − cue/mix) + Master · 0,5·(1 + cue/mix); bei cue/split links (L+R)/2 davon, rechts (L+R)/2 des
@@ -43,6 +44,8 @@ namespace cdj {
 constexpr int MIX_QUELLEN = 14;                    // deck/1..4 (0..3), erz/1..8 (4..11), pad/1..2 (12, 13)
 constexpr int MIX_BUSSE = 4;                       // bus/1..4 (14..17)
 constexpr int MIX_KANAELE = MIX_QUELLEN + MIX_BUSSE;
+constexpr int MIX_BK_SEND_ZEILE = MIX_KANAELE;       // S14: knob matrix row of fx/3 (fx/4 = +1), after the 18 mixer channels
+constexpr int MIX_BK_ZEILEN = MIX_KANAELE + 2;       // S14: rows of the knob matrix bk_wert_ (kern.h): 18 channels + fx/3 + fx/4
 constexpr int MIX_BLOCK = cypherdj::dsp::kMaxFrames;  // größter Block je verarbeite() (1024)
 constexpr int HALL_RUHE_MAX = 1 << 20;             // Sättigung des Stillezählers im Hall (mixer.cpp)
 constexpr float KLEBER_AUS_DB = 60.0f;                   // master/kleber = 0: Schwelle des Summen-Kompressors unerreichbar hoch
@@ -85,8 +88,11 @@ class Mixer {
   // frei. Ein k außerhalb geht sofort in die Freigabe. Abgelöste Graphen holt der Kern mit bk_frei ab (Netz-Faden gibt frei).
   static constexpr int MIX_GRAPH_KANAELE = 4, MIX_GRAPH_BLENDE = 480, MIX_BK_FREI = 8;
   void setze_kanal_graph(int k, CypherBk* g) noexcept;
+  // S6: effect graph on a send return. s = bus index (2 = fx/3, 3 = fx/4); any other s goes straight to the free list.
+  void setze_send_graph(int s, CypherBk* g) noexcept;
   int bk_frei(CypherBk** aus, int max) noexcept;
   // S5r: Werte der Graph-Regler <kanal>/bk/1..8 (Zeile = Mixer-Kanal), vom Kern geführt; nullptr: keine Meldung (K10).
+  // S14: the matrix has MIX_BK_ZEILEN rows: 0..17 the mixer channels, MIX_BK_SEND_ZEILE + s the send returns (fx/3, fx/4).
   void setze_bk_wert(const float (*w)[8]) noexcept { bk_wert_ = w; }
   uint32_t bk_verloren() const noexcept { return bk_verloren_; }
   ~Mixer();
@@ -162,6 +168,7 @@ class Mixer {
   // Audit F01: Blöcke, in denen Summe oder PFL nicht endlich war (Zustände geleert, Block still)
   int64_t nan_treffer() const { return nan_treffer_; }           // Test: Stillezähler des Halls (nur wach gezählt, gesättigt)
   const float* fx_l(int s) const { return fx_l_[s]; }   // Send-Summe fx/1..4 des letzten Blocks (0..3)
+  const float* fx_r(int s) const { return fx_r_[s]; }   // right channel of the same send sums (S6 test)
   // Ohr (§6.2): Master-Summe des letzten Blocks vor master/pegel und Limiter (gleiche Stufe wie ein Kanal bei Fader 0).
   const float* master_summe_l() const { return sum_l_; }
   // K2 Slice 3: die Summe, die in master/pegel und Limiter geht: nach dem Kleber (Test). Der Ohr-Abgriff bleibt davor.
@@ -198,7 +205,7 @@ class Mixer {
   Wert xfader_, master_pegel_, cue_mix_, cue_pegel_, cue_split_, duck_tiefe_, duck_release_, master_kleber_, master_pfl_;
   Wert color_art_, color_param_;   // SOUND COLOR FX: je Block in jeden Kanalzug (Art je Kanal wäre ein Regler je Kanal)
   Duck duck_;
-  Wert fx_rueck_[4];                                     // fx/1..4/rueckweg (dB); wirksam ist nur Index 1
+  Wert fx_rueck_[4];                                     // fx/1..4/rueckweg (dB); effective: index 1 (hall), 2 and 3 (send graphs, S6)
   std::unique_ptr<Hall> hall_;                           // Cypher Hall: im Konstruktor angelegt, nie im Callback
   // Kompressor je Quellkanal (Plan 2026-10-11-effekt-sektion.md): zwischen verarbeite_vor und verarbeite_nach
   static constexpr int KOMP_FELDER = 8;                  // an, schwelle, ratio, attack, release, makeup, mix, sc
@@ -256,6 +263,32 @@ class Mixer {
   float bk_ein_l_[MIX_BLOCK], bk_ein_r_[MIX_BLOCK], bk_alt_l_[MIX_BLOCK], bk_alt_r_[MIX_BLOCK];
   void bk_zur_freigabe(CypherBk* g) noexcept;
   void kanal_graph(int k, float* l, float* r, int n) noexcept;
+  // One graph slot (deck insert or send return): current graph, the graph being blended out, blend samples left.
+  struct GraphPlatz {
+    CypherBk*& g;
+    CypherBk*& alt;
+    int& blende;
+  };
+  void graph_platz_setze(GraphPlatz p, CypherBk* neu) noexcept;   // switch + free logic shared by deck insert and send
+  // Shared block logic: runs p.g on in -> out, blends from p.alt (or fallback) while p.blende > 0, frees the old graph
+  // after the blend, clamps out to +-8 (NaN -> 0). in and out must not overlap (FFI). Decks pass a copy of the tap as
+  // in and fallback (the dry path) and the tap itself as out; sends pass the bus, their own out buffer and a zero
+  // fallback (a send return has no dry path). regler_zeile >= 0 reports the knob row of bk_wert_ (decks: their channel row,
+  // send returns S14: MIX_BK_SEND_ZEILE + s = fx/3, fx/4 /bk/1..8), -1 none.
+  struct GraphOptionen {
+    bool takt = true;      // forward the clock to the graphs
+    bool klemme = true;    // output clamp
+  };
+  void graph_platz_block(GraphPlatz p, const float* in_l, const float* in_r, float* out_l, float* out_r,
+                         const float* fb_l, const float* fb_r, int regler_zeile, int n, GraphOptionen opt) noexcept;
+  // S6 send slots: index s - 2 (bus 2 = fx/3, bus 3 = fx/4). Separate from the deck arrays on purpose (test_mixer_bk (f)).
+  static constexpr int MIX_SENDS_GRAPH = 2;
+  CypherBk* send_bk_[MIX_SENDS_GRAPH] = {};
+  CypherBk* send_bk_alt_[MIX_SENDS_GRAPH] = {};
+  int send_blende_[MIX_SENDS_GRAPH] = {};
+  float send_aus_l_[MIX_SENDS_GRAPH][MIX_BLOCK] = {}, send_aus_r_[MIX_SENDS_GRAPH][MIX_BLOCK] = {};
+  float send_null_[MIX_BLOCK] = {};   // zero fallback: the dry path of a send return is silence
+  void send_rueckweg(int s, int n) noexcept;
   int routing_ = ROUTING_POST_FADER, routing_ziel_ = ROUTING_POST_FADER;   // Ohr T17
   bool routing_wechsel_ = false;                                            // Blende läuft (Einheiten pausiert)
 };

@@ -16,7 +16,7 @@
     {"id": "k_release", "art": "regler", "nr": 8, "min": 0.05, "max": 1.5, "log": 1},
 
     {"id": "saege", "art": "saege"},
-    {"id": "puls", "art": "puls", "pwm": 0.3},
+    {"id": "puls", "art": "puls", "pwm": 0},
     {"id": "sub_hz", "art": "transponiere", "st": -12},
     {"id": "sub", "art": "sinus"},
     {"id": "saege_halb", "art": "mul", "b": 0.35},

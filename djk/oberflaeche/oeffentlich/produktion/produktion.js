@@ -10,11 +10,13 @@ import { bindeZeitachse } from './zeitachse_bedienung.js';
 import { bindeProjektwahl } from './projektwahl.js';
 import { bindeSpuren } from './spurkoepfe.js';
 import { bindeGruppen } from './gruppen.js';
+import { bindeReturns } from './returns.js';
 import { MAX_SPUREN } from './grenzen.js';
 import { bindeAblage } from './ablage.js';
 import { bindeTransport } from './transport.js';
 import { bindeVerlauf } from './verlauf_anzeige.js';
 import { bindeClips } from './clip_bedienung.js';
+import { bindeLanen } from './lanen_bedienung.js';
 import { bindeDetail } from './detail.js';
 import { bindeAusgabe } from './freeze_export.js';
 import { bindeVariantenReihen } from './varianten.js';
@@ -23,7 +25,7 @@ import { bindeAufnahme } from './aufnahme.js';
 import { AUSGABE_FEHLER, mehrdeutigText } from './ausgabe.js';
 import { nachladenNoetig, stemsEreignis, stemsFuerProjekt } from './stems.js';
 
-const BINDER = [bindeZeitachse, bindeProjektwahl, bindeSpuren, bindeGruppen, bindeAblage, bindeTransport, bindeVerlauf, bindeClips, bindeDetail, bindeAusgabe, bindeVariantenReihen, bindeGeraete, bindeAufnahme];
+const BINDER = [bindeZeitachse, bindeProjektwahl, bindeSpuren, bindeGruppen, bindeReturns, bindeAblage, bindeTransport, bindeVerlauf, bindeLanen, bindeClips, bindeDetail, bindeAusgabe, bindeVariantenReihen, bindeGeraete, bindeAufnahme];
 
 const GERUEST = `
 <div class="p-transport" role="toolbar" aria-label="Transport">
@@ -82,6 +84,11 @@ const GERUEST = `
     <div class="meter waagrecht p-pm-pegel" data-kanal="pm"><i></i></div>
   </div>
 </section>
+<section class="p-returns p-mixer" data-p="returns" aria-label="Returns and sends" hidden>
+  <div class="p-mixer-kopf"><span class="p-mixer-titel">RETURNS</span><button data-p="neu-return" title="Add a return strip with Cypher Hall (up to 4)" disabled>+ Return: Hall</button></div>
+  <div class="p-gruppenreihe" data-p="mixer-returns"></div>
+  <details class="p-sendblock" data-p="sends" hidden><summary class="p-mixer-titel">SENDS</summary><div class="p-sendraster" data-p="mixer-sends"></div></details>
+</section>
 <details class="p-geraete" data-p="geraete"><summary>INPUTS</summary><div data-p="geraete-liste" role="group" aria-label="Audio and MIDI inputs"></div></details>
 <section class="p-detail" data-p="detail" aria-label="Detail"><div class="p-detail-kopf">CLIP</div><div class="p-detail-leer">No clip selected.</div></section>`;
 
@@ -104,13 +111,21 @@ export const FEHLER_TEXT = {
   kein_auftrag: 'No stem separation with this id is running',
   mehrere_clips: 'Exactly one audio clip must lie in the range',
   zu_viele_spuren: 'Separating stems needs four free tracks',
+  merge_leer: 'The tracks play nothing in this range',
+  merge_gruppen: 'The tracks feed different groups: merge tracks of one group',
+  merge_teil_solo: 'Some of the tracks are solo: solo all of them or none',
+  merge_sends: 'The tracks have different sends: give them identical sends or none',
+  merge_freeze_noetig: 'A Surge track has unfrozen notes: freeze it first',
+  merge_andreas_spur: 'This track belongs to Andreas: Cypher may not merge it',
+  merge_keine_spur_frei: 'Merging needs one free track',
   rev_veraltet: 'The project changed elsewhere: reloaded, please repeat',
   regler_abgelehnt: 'The core refused a mixer change: nothing was changed',
   nichts_zu_tun: 'Nothing to undo or redo', kein_projekt: 'No project open', unbekannt: 'No such project', name_ungueltig: 'A project name needs 1 to 80 characters',
   ki_gestoppt: 'Stop Cypher is set', ki_stopp: 'Stop Cypher was pressed: the start was dropped', deck_laeuft: 'A deck is playing: the tempo stays until it stops', nicht_geladen: 'The core has no arrangement loaded yet',
   zu_gross: AUSGABE_FEHLER.zu_gross, server_fehler: 'The project server did not answer: showing the last state', netz: 'Page server unreachable', keine_antwort: 'No answer from the core',
-  routing_zyklus: 'A group cannot feed itself', routing_grenze: 'Groups do not nest, and there are at most 8',
-  ziel_unbekannt: 'That output no longer exists', gruppe_unbekannt: 'That group no longer exists',
+  routing_zyklus: 'A group cannot feed itself', routing_grenze: 'Groups do not nest, and there are at most 8 groups and 4 returns',
+  ziel_unbekannt: 'That output or target does not exist for this track', gruppe_unbekannt: 'That group no longer exists', return_unbekannt: 'That return no longer exists',
+  lane_unbekannt: 'That automation line no longer exists', lane_doppelt: 'This track already has a lane for that target', lane_gesperrt: 'That line is locked: unlock it first', geraet_lanes: 'Delete the device lines of this track before switching to a host instrument', punkte_ungueltig: 'The line points are not valid (mute and solo points must be jumps)',
   spur_bereich: `At most ${MAX_SPUREN} tracks`, slot_belegt: 'D1 has one Surge slot', spur_unbekannt: 'That track no longer exists', clip_unbekannt: 'That clip no longer exists',
   kein_eingang: 'A track can only be armed with a recording input', eingang_fehlt: 'That recording input does not exist', zu_viele_scharf: 'At most 8 audio tracks can be armed at once', aufnahme_laeuft: 'A recording is running', nichts_scharf: 'No track is armed', keine_aufnahme: 'No recording is running', kein_platz: 'Not enough free disk space to record', ersetzen_loop: 'The take could not replace a looped clip; it is saved as a file', veraltet_spur: 'The armed track no longer exists', ueberlappung: 'A transport is already running; stop it before recording', transport_abgelehnt: 'The transport did not start; nothing was recorded', aufnahme_abgelehnt: 'The core refused the recording', aufnahme_abgebrochen: 'The core dropped the recording before it began; nothing was recorded', leer: 'The take contains no audio', take_zu_lang: 'The take is longer than a WAV file can hold (about 3 hours); the raw file is kept', uebernahme_fehler: 'The take could not be placed on the track; the raw file is kept',
   index_bereich: 'No such track position', tempo_bereich: 'Tempo: 60 to 200 BPM', loop_bereich: 'The loop needs at least 1 beat',
@@ -153,6 +168,10 @@ export const FEHLER_TEXT = {
   ueber_projekt: 'Track mixer changes go through the project',
   // http/transport.ts postAbgewiesen (V2 Fix F9, Spec 6.34: auch die Router-Gründe brauchen einen Text): 415 und 403
   nur_json: 'The server only takes JSON requests', fremde_herkunft: 'The server refused a request from another page',
+  // Baukasten S17: sound snapshot of the project (bereiche/proj/baukasten.ts)
+  bk_nicht_geladen: 'No Baukasten graph is loaded on that channel: load one before saving the sound',
+  bk_nichts_geladen: 'No Baukasten graph is loaded on a default channel: load one or name the channels to save',
+  kein_baukasten: 'This server has no Baukasten graph bridge: the sound snapshot is not available',
 };
 // V2 Fix-Runde 2 H7 (Spec 6.34): beschaeftigt und zu_gross sind mehrdeutig (ein Freeze, ein Öffnen, eine Tempo-Rampe; Grenzen des Kerns). Wie in
 // ausgabe.js (F12) zeigt die Seite dann den text der Antwort, wenn er da ist, sonst einen neutralen Text, der keine Ursache behauptet (vorher fest

@@ -198,8 +198,8 @@ MUTATIONEN += [
      "Routing-Regler=Kern: R02 INTERFACES §1.5 fehlt: grp/1/solo"),
     ("djk/kern/stellwerk/src/regler.cpp", '"grp/%d/pan"', '"grp/%d/balance"',
      "Routing-Regler=Kern: R03 Attrappe REGLER steht ohne Vertrag: grp/1/pan"),
-    ("djk/oberflaeche/hand_bedienung.ts", "|^pm\\/fader$|^(deck", "|^(deck", "Routing-Regler: R06 hand_bedienung.PFAD lehnt pm/fader ab"),
-    ("djk/vertrag/schemas/defs.schema.json", "|pm/fader|(deck", "|pm/fadex|(deck", "Routing-Regler: R07 defs.schema.json regler_pfad lehnt pm/fader ab"),
+    ("djk/oberflaeche/hand_bedienung.ts", "|^pm\\/fader$|^(spur", "|^(spur", "Routing-Regler: R06 hand_bedienung.PFAD lehnt pm/fader ab"),
+    ("djk/vertrag/schemas/defs.schema.json", "|pm/fader|(spur/", "|pm/fadex|(spur/", "Routing-Regler: R07 defs.schema.json regler_pfad lehnt pm/fader ab"),
     (VERTRAG_MJS, "REGLER.set('pm/fader', { ...R(DB, -200, 6, 0), kanal: null });", "REGLER.set('pm/fader', { ...R(DB, -200, 0, 0), kanal: null });",
      "Routing-Fader-Bereich=Kern: R03 Attrappe REGLER"),
 ]
@@ -220,19 +220,82 @@ MUTATIONEN += [
      "bk-Regler=Kern: R02 INTERFACES §1.5 steht ohne Vertrag: erz/4/bk/1"),
     ("djk/kern/stellwerk/src/regler.cpp", '"erz/3", "erz/5", "erz/6"', '"erz/3", "erz/4", "erz/5", "erz/6"',
      "bk-Regler=Kern: R03 Attrappe REGLER fehlt: erz/4/bk/1"),
-    ("djk/oberflaeche/hand_bedienung.ts", "|^(deck\\/[1-4]|erz\\/[1-35-7]|pad\\/[12])\\/bk\\/[1-8]$/;", "|^(deck\\/[1-4]|erz\\/[1-8]|pad\\/[12])\\/bk\\/[1-8]$/;",
+    ("djk/oberflaeche/hand_bedienung.ts", "|^(deck\\/[1-4]|erz\\/[1-35-7]|pad\\/[12]|fx\\/[34])\\/bk\\/[1-8]$/;", "|^(deck\\/[1-4]|erz\\/[1-8]|pad\\/[12]|fx\\/[34])\\/bk\\/[1-8]$/;",
      "bk-Regler: R06 hand_bedienung.PFAD nimmt erz/4/bk/1 an"),
-    ("djk/oberflaeche/hand_bedienung.ts", "|^(deck\\/[1-4]|erz\\/[1-35-7]|pad\\/[12])\\/bk\\/[1-8]$/;", "/;",
+    ("djk/oberflaeche/hand_bedienung.ts", "|^(deck\\/[1-4]|erz\\/[1-35-7]|pad\\/[12]|fx\\/[34])\\/bk\\/[1-8]$/;", "/;",
      "bk-Regler: R06 hand_bedienung.PFAD lehnt deck/1/bk/1 ab"),
-    ("djk/vertrag/schemas/defs.schema.json", "|(deck/[1-4]|erz/[1-35-7]|pad/[12])/bk/[1-8])$\"", "|(deck/[1-4]|erz/[1-35-7]|pad/[12])/bk/[1-9])$\"",
+    ("djk/vertrag/schemas/defs.schema.json", "|(deck/[1-4]|erz/[1-35-7]|pad/[12]|fx/[34])/bk/[1-8])$\"", "|(deck/[1-4]|erz/[1-35-7]|pad/[12]|fx/[34])/bk/[1-9])$\"",
      "bk-Regler: R07 defs.schema.json regler_pfad nimmt deck/1/bk/9 an"),
-    ("djk/vertrag/schemas/defs.schema.json", "|(deck/[1-4]|erz/[1-35-7]|pad/[12])/bk/[1-8])$\"", "|(deck/[1-4]|erz/[1-8]|pad/[12])/bk/[1-8])$\"",
+    ("djk/vertrag/schemas/defs.schema.json", "|(deck/[1-4]|erz/[1-35-7]|pad/[12]|fx/[34])/bk/[1-8])$\"", "|(deck/[1-4]|erz/[1-8]|pad/[12]|fx/[34])/bk/[1-8])$\"",
      "bk-Regler: R07 defs.schema.json regler_pfad nimmt erz/4/bk/1 an"),
+]
+
+
+# ---- S14: graph knobs of the send returns fx/3/bk/1..8, fx/4/bk/1..8 (global controls) in all locations
+MUTATIONEN += [
+    ("djk/vertrag/schemas/defs.schema.json", "|(deck/[1-4]|erz/[1-35-7]|pad/[12]|fx/[34])/bk/[1-8])$\"", "|(deck/[1-4]|erz/[1-35-7]|pad/[12])/bk/[1-8])$\"",
+     "bk-Regler: R07 defs.schema.json regler_pfad lehnt fx/3/bk/1 ab"),
+    ("djk/vertrag/schemas/defs.schema.json", "|(deck/[1-4]|erz/[1-35-7]|pad/[12]|fx/[34])/bk/[1-8])$\"", "|(deck/[1-4]|erz/[1-35-7]|pad/[12]|fx/[1-4])/bk/[1-8])$\"",
+     "bk-Regler: R07 defs.schema.json regler_pfad nimmt fx/1/bk/1 an"),
+    ("djk/oberflaeche/hand_bedienung.ts", "|pad\\/[12]|fx\\/[34])\\/bk\\/[1-8]$/;", "|pad\\/[12])\\/bk\\/[1-8]$/;",
+     "bk-Regler: R06 hand_bedienung.PFAD lehnt fx/3/bk/1 ab"),
+    ("djk/oberflaeche/hand_bedienung.ts", "|pad\\/[12]|fx\\/[34])\\/bk\\/[1-8]$/;", "|pad\\/[12]|fx\\/[1-4])\\/bk\\/[1-8]$/;",
+     "bk-Regler: R06 hand_bedienung.PFAD nimmt fx/1/bk/1 an"),
+    (KURVEN_JS, "  ...BK_SEND_KANAELE.flatMap((k) => Array.from({ length: 8 }, (_, i) => `${k}/bk/${i + 1}`)),   // S14: graph knobs of fx/3, fx/4\n", "",
+     "bk-Regler=Kern: R04 kurven.js ZIELE fehlt: fx/3/bk/1"),
+    (VERTRAG_MJS, "for (const k of BK_SEND_KANAELE) for (let n = 1; n <= 8; n++) REGLER.set(",
+     "for (const k of BK_SEND_KANAELE) for (let n = 1; n <= 7; n++) REGLER.set(", "bk-Regler=Kern: R03 Attrappe REGLER fehlt: fx/3/bk/8"),
+    ("djk/leitstand/src/regler_info.ts", "for (let m = 1; m <= 8; m++) tabelle.set(`${k}/bk/${m}`",
+     "for (let m = 2; m <= 8; m++) tabelle.set(`${k}/bk/${m}`", "bk-Regler=Kern: R05 regler_info.ts fehlt: fx/3/bk/1"),
+    ("docs/architecture/INTERFACES.md", "`fx/<n>/bk/<m>` (n = 3 and 4, m = 1 to 8)", "`fx/<n>/bk/<m>` (n = 3, m = 1 to 8)",
+     "bk-Regler=Kern: R02 INTERFACES §1.5 fehlt: fx/4/bk/1"),
+    ("djk/kern/stellwerk/src/regler.cpp", 'for (const char* kn_bk_send : {"fx/3", "fx/4"})', 'for (const char* kn_bk_send : {"fx/3"})',
+     "bk-Regler=Kern: R02 INTERFACES §1.5 steht ohne Vertrag: fx/4/bk/1"),
+]
+
+
+# ---- 1.10 Slice 3: Sends, Returns und Hall-Regler (204) in allen Fundorten
+MUTATIONEN += [
+    (KURVEN_JS, "...SPUREN.flatMap((n) => RETURNS.map((r) => `spur/${n}/send/${r}`)),",
+     "...SPUREN.filter((n) => n !== 1).flatMap((n) => RETURNS.map((r) => `spur/${n}/send/${r}`)),",
+     "Return-Regler=Kern: R04 kurven.js ZIELE fehlt: spur/1/send/1"),
+    ("djk/vertrag/schemas/defs.schema.json", "|ret/[1-4]/(fader|pan|mute|solo|hall/", "|ret/[1-4]/(pan|mute|solo|hall/",
+     "Return-Regler: R07 defs.schema.json regler_pfad lehnt ret/1/fader ab"),
+    ("docs/architecture/INTERFACES.md", "| `ret/<r>/hall/decay` |", "| `ret/<r>/hall/decai` |",
+     "Return-Regler=Kern: R02 INTERFACES §1.5 fehlt: ret/1/hall/decay"),
+    (VERTRAG_MJS, "REGLER.set(`ret/${r}/mute`, { ...R(SCHALTER, 0, 1, 0), kanal: null });", "REGLER.set(`ret/${r}/mutx`, { ...R(SCHALTER, 0, 1, 0), kanal: null });",
+     "Return-Regler=Kern: R03 Attrappe REGLER fehlt: ret/1/mute"),
+    ("djk/leitstand/src/regler_info.ts", "for (let n = 1; n <= 8; n++) tabelle.set(`grp/${n}/send/${ret}`",
+     "for (let n = 2; n <= 8; n++) tabelle.set(`grp/${n}/send/${ret}`", "Return-Regler=Kern: R05 regler_info.ts fehlt: grp/1/send/1"),
+    ("djk/oberflaeche/hand_bedienung.ts", "|^ret\\/[1-4]\\/(fader|pan|mute|solo|hall", "|^ret\\/[1-5]\\/(fader|pan|mute|solo|hall",
+     "Return-Regler: R06 hand_bedienung.PFAD nimmt ret/5/fader an"),
+    ("djk/vertrag/schemas/defs.schema.json", "|(spur/([1-9]|[12][0-9]|3[0-2])|grp/[1-8])/send/[1-4]|", "|(spur/([1-9]|[12][0-9]|3[0-2])|grp/[1-8])/send/[1-5]|",
+     "Return-Regler: R07 defs.schema.json regler_pfad nimmt spur/1/send/5 an"),
+    ("djk/kern/stellwerk/src/regler.cpp", "Rolle::snd_spur, -200, 6, -200,", "Rolle::snd_spur, -200, 6, 0,",
+     "Return-Bereich=Kern: R03 Attrappe REGLER spur/1/send/1 (min, max, vorgabe)"),
+    ("djk/kern/stellwerk/src/regler.cpp", '{"decay", Rolle::ret_hall_decay, 0.5252f}', '{"decay", Rolle::ret_hall_decay, 0.6f}',
+     "Return-Bereich=Kern: R03 Attrappe REGLER ret/1/hall/decay (min, max, vorgabe)"),
+    (VERTRAG_MJS, "const HALL_VORGABE = { pre: 0.04,", "const HALL_VORGABE = { pre: 0.05,",
+     "Return-Bereich=Kern: R03 Attrappe REGLER ret/1/hall/pre (min, max, vorgabe)"),
+    (KURVEN_JS, "const VORGABE_HALL = { an: 1, pre: 0.04,", "const VORGABE_HALL = { an: 1, pre: 0.05,",
+     "Return-Bereich=Kern: R04 kurven.js (Griff 0 und 1, Vorgabe) ret/1/hall/pre (min, max, vorgabe)"),
 ]
 
 
 def test_bk_zeile_in_schnittstellen_weg_wirft_parserfehler(kopie):
     mutiere(kopie, "docs/architecture/INTERFACES.md", "| `<k>/bk/<n>` (n = 1 bis 8)", "| `<k>/bx/<n>` (n = 1 bis 8)")
+    with pytest.raises(pn.ParserFehler, match="bk"):
+        pn.pruefe(pn.Quelle(kopie))
+
+
+def test_bk_sendschleife_in_regler_cpp_weg_wirft_parserfehler(kopie):
+    mutiere(kopie, "djk/kern/stellwerk/src/regler.cpp", "for (const char* kn_bk_send : ", "for (const char* kn_bk_sendx : ")
+    with pytest.raises(pn.ParserFehler, match="bk"):
+        pn.pruefe(pn.Quelle(kopie))
+
+
+def test_bk_sendzeile_in_schnittstellen_weg_wirft_parserfehler(kopie):
+    mutiere(kopie, "docs/architecture/INTERFACES.md", "| `fx/<n>/bk/<m>` (n = 3 and 4", "| `fx/<n>/bx/<m>` (n = 3 and 4")
     with pytest.raises(pn.ParserFehler, match="bk"):
         pn.pruefe(pn.Quelle(kopie))
 
