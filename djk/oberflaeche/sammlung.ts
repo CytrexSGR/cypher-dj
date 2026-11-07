@@ -28,7 +28,8 @@ export class SammlungFehler extends Error {
 }
 
 export function slugVon(name: string): string {
-  const s = name.toLowerCase().replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
+  // NFC first: in NFD (macOS input) the umlaut is a + U+0308 and the ä → ae replacement below would miss it
+  const s = name.normalize('NFC').toLowerCase().replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
     .normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48);
   return s === 'import' ? 'import-set' : (s || 'set');   // „import" ist die Route POST /sammlungen/import
 }
@@ -91,7 +92,7 @@ export class Sammlungen {
     for (const d of fs.readdirSync(this.ordner, { withFileTypes: true }).filter((x) => x.isDirectory() && SLUG.test(x.name)).sort((a, b) => a.name.localeCompare(b.name))) {
       const p = path.join(this.ordner, d.name, 'set.json');
       if (!fs.existsSync(p)) continue;
-      try { const s = JSON.parse(fs.readFileSync(p, 'utf8')) as Sammlung; aus.push({ slug: d.name, name: String(s.name), art: s.art ?? 'set', posten: s.posten.length }); }
+      try { const s = this.lies(d.name); aus.push({ slug: d.name, name: String(s.name), art: s.art ?? 'set', posten: s.posten.length }); }
       catch { aus.push({ slug: d.name, name: d.name, art: 'set', posten: 0, fehler: 'json_kaputt' }); }
     }
     return art ? aus.filter((e) => e.art === art) : aus;
@@ -100,7 +101,13 @@ export class Sammlungen {
   lies(slug: string): Sammlung {
     const p = this.datei(slug);
     if (!fs.existsSync(p)) throw new SammlungFehler(404, 'unbekannt');
-    try { return JSON.parse(fs.readFileSync(p, 'utf8')) as Sammlung; } catch { throw new SammlungFehler(409, 'json_kaputt'); }
+    let s: Sammlung;
+    try { s = JSON.parse(fs.readFileSync(p, 'utf8')) as Sammlung; } catch { throw new SammlungFehler(409, 'json_kaputt'); }
+    // Valid JSON of the wrong shape (an unknown art from a newer version, posten not an array of posten) is refused like
+    // broken JSON; otherwise every change crashed with a raw TypeError (500)
+    if (!s || typeof s !== 'object' || !Object.hasOwn(ERLAUBT, s.art ?? 'set') || !Array.isArray(s.posten)
+      || !s.posten.every((x) => x !== null && typeof x === 'object' && typeof x.id === 'string')) throw new SammlungFehler(409, 'json_kaputt');
+    return s;
   }
 
   lege(name: string, posten: Posten[] = [], art: string = 'set'): string {
@@ -113,7 +120,7 @@ export class Sammlungen {
     fs.mkdirSync(this.ordner, { recursive: true });
     for (let i = 2; ; i++) {
       try { fs.mkdirSync(path.join(this.ordner, slug)); break; } catch (e) { if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e; }
-      slug = `${basis.slice(0, 44)}-${i}`;
+      slug = `${basis.slice(0, Math.min(44, 47 - String(i).length))}-${i}`;   // at most 48 characters (SLUG), also from -1000 on
     }
     this.schreibe(slug, { schema: 1, art: art as ListenArt, name: n, angelegt: new Date().toISOString(), notiz: '', posten, ablauf: null });
     return slug;
@@ -133,7 +140,7 @@ export class Sammlungen {
     if (da) return { id: da.id, schon_drin: true };
     const id = `p${Math.max(0, ...s.posten.map((p) => Number(p.id.slice(1)) || 0)) + 1}`;
     s.posten.push({ id, art: art as PostenArt, ...(art === 'muster' ? { ref } : { material_id: ref }),
-      ...(art === 'loop' || art === 'oneshot' ? { quelle: 'mediathek' as const } : {}), ...(notiz ? { notiz: String(notiz).slice(0, 200) } : {}) });
+      ...(art === 'loop' || art === 'oneshot' ? { quelle: 'mediathek' as const } : {}), ...(notiz ? { notiz: String(notiz).slice(0, 200).replace(/[\uD800-\uDBFF]$/, '') } : {}) });
     this.schreibe(slug, s);
     return { id, schon_drin: false };
   }
@@ -170,6 +177,12 @@ export class Sammlungen {
     if (!fs.existsSync(p)) throw new SammlungFehler(404, 'unbekannt');
     const korb = path.join(this.ordner, '.papierkorb');
     fs.mkdirSync(korb, { recursive: true });
-    fs.renameSync(p, path.join(korb, `${slug}-${Date.now()}`));
+    // Two deletes of the same slug within one millisecond: the trash name exists (rename fails with ENOTEMPTY or
+    // EEXIST), so the next free suffix is taken. Retrying the rename is atomic, also against other processes.
+    const t = Date.now();
+    for (let i = 1; ; i++) {
+      try { fs.renameSync(p, path.join(korb, i === 1 ? `${slug}-${t}` : `${slug}-${t}-${i}`)); return; }
+      catch (e) { const c = (e as NodeJS.ErrnoException).code; if (c !== 'ENOTEMPTY' && c !== 'EEXIST') throw e; }
+    }
   }
 }

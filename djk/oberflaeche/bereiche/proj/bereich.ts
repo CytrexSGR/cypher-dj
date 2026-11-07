@@ -13,8 +13,10 @@ import type { Haken, Meta, Verlauf, Wirkung } from '../../projekt/verlauf.ts';
 import type { Projekt } from '../../projekt/modell.ts';
 import { VerlaufFehler } from '../../projekt/verlauf.ts';
 import { grundCode } from './abbildung.ts';
+import { listeKits } from './kits.ts';
 import { grundText } from '../../http/gruende.ts';
-import { ProjFehler, ProjSitzung, TRANSIENTEN_MAX, type Antwort, type AusgabeLauf, type ProjOptionen } from './sitzung.ts';
+import { wirtLage } from './wirt.ts';
+import { ProjFehler, ProjSitzung, TRANSIENTEN_MAX, hkKurz, type Antwort, type AusgabeLauf, type ProjOptionen } from './sitzung.ts';
 
 export type { AusgabeLauf, ProjOptionen };
 
@@ -33,6 +35,9 @@ export interface ProjZugang {
   transport(d: Record<string, unknown>, quelle: 'andreas' | 'cypher'): Promise<Antwort>;                  // 1.8: der gewöhnliche Transport (Start/Stopp)
   stemsStand(s: Record<string, unknown> | null): void;   // Slice 6 (P6): letzter Stems-Stand
   beiSchliessen(f: (slug: string) => void): void;        // Slice 6 (T7): ruft f, sobald das offene Projekt geschlossen wird (Wechsel, Neuöffnen)
+  beendeVorhoeren(): Promise<void>;   // 1.14: ends the audition and loads the main playback; called by a lock holder (recording, freeze) before it starts
+  // 1.9 U5: brings the Surge hosts to the project's parameter map and resolves when they answered (never rejects); the freeze waits for it
+  wirtSpiegel?(): Promise<string[] | void>;
   aufnahmeLauf(l: unknown): void;                                                                        // 1.8: laufende Aufnahme (sperrt Tempo-Änderungen)
 }
 export const KOERPER_MAX = 1024 * 1024;   // Spec 3.4: 1 MiB
@@ -92,9 +97,11 @@ export function kurzeBkAntwort(r: Antwort): Antwort {
 export function kurzeOeffnenAntwort(r: Antwort): Antwort {
   if (r.code !== 200) return r;
   const j = r.j as { slug: string; projekt: Projekt; kern?: Record<string, unknown> };
-  const spuren = j.projekt.spuren.map((s) => ({ ...s, clips: s.clips.map((c) => {
-    if (c.art !== 'midi') return c;
-    const { noten, ...rest } = c;
+  // 1.14: take lanes are reported as a count per track (takes_zahl), not as whole lanes
+  const spuren = j.projekt.spuren.map(({ takes, ...s }) => ({ ...s, ...(takes ? { takes_zahl: takes.length } : {}), clips: s.clips.map((c) => {
+    // 1.12 slice 5 (U11): envelopes are listed without points here too (huellkurven [{ziel, punkte_zahl}])
+    if (c.art !== 'midi') return hkKurz(c);
+    const { noten, ...rest } = hkKurz(c);
     return { ...rest, noten_zahl: noten.length };
   }) }));
   return { code: 200, j: { slug: j.slug, rev: j.projekt.rev, spuren, noten_zahl: notenZahl(j.projekt), kern: j.kern ?? {} } };
@@ -107,7 +114,8 @@ export function projBereich(ctx: BereichKontext, opt: ProjOptionen = {}): Bereic
     schreibeWiedergabe: (p) => s.schreibeWiedergabeFuer(p), naechsteNummer: () => s.naechsteNummer(), tempoAnMaster: () => s.tempoAnMaster(),
     sperreLaden: (fuer) => s.sperreLaden(fuer), ausgabeLauf: (l) => s.setzeAusgabeLauf(l),
     transport: (d, quelle) => s.transport(d, quelle), aufnahmeLauf: (l) => s.setzeAufnahmeLauf(l),
-    stemsStand: (x) => s.setzeStemsStand(x), beiSchliessen: (f) => s.beiSchliessen(f),
+    stemsStand: (x) => s.setzeStemsStand(x), beiSchliessen: (f) => s.beiSchliessen(f), beendeVorhoeren: () => s.beendeVorhoeren(),
+    wirtSpiegel: () => s.wirtSpiegel(),
   };
   const antworte = async (a: http.ServerResponse, f: () => Antwort | Promise<Antwort>): Promise<void> => {
     let r: Antwort;
@@ -132,9 +140,18 @@ export function projBereich(ctx: BereichKontext, opt: ProjOptionen = {}): Bereic
     routen: () => [
       lies('/proj/liste', () => s.liste()),
       // Spec 6.30: ?noten=zahl (proj_lage: Noten nur als Zahl je Clip), ?nur=rev (schmale rev-Abfrage des Werkzeugs); ohne Abfrage alles (die Seite)
-      lies('/proj/aktuell', (url) => s.aktuell(url.searchParams.get('nur') === 'rev' ? 'rev'
-        : url.searchParams.get('noten') === 'zahl' ? 'noten_zahl' : 'voll')),
+      lies('/proj/aktuell', (url) => {
+        const zahl = url.searchParams.get('noten') === 'zahl';
+        const r = s.aktuell(url.searchParams.get('nur') === 'rev' ? 'rev' : zahl ? 'noten_zahl' : 'voll');
+        // 1.9 (L10): proj_lage also shows whether the Surge hosts of slot 1 and 2 run (and what their status file holds); never for the page's view
+        if (zahl && opt.wirtOrdner && r.j !== null && typeof r.j === 'object' && 'projekt' in r.j) {
+          return { ...r, j: { ...r.j, wirte: wirtLage(opt.wirtOrdner()) } };
+        }
+        return r;
+      }),
       lies('/proj/verlauf', () => s.verlaufListe()),
+      // 1.9 (L25): the kits the kit folder offers for a kit track (proj_kits and the picker of the page)
+      lies('/proj/kits', () => ({ code: 200, j: { kits: listeKits() } })),
       // Paket 1.13: proj_warp (clip_id, von_beat, bis_beat, bei_beat als Projekt-Beats, Slice 3a: marker_max)
       lies('/proj/warp', (url) => {
         const zahlArg = (k: string): number | null => {
@@ -155,7 +172,8 @@ export function projBereich(ctx: BereichKontext, opt: ProjOptionen = {}): Bereic
         return s.warpLage(url.searchParams.get('clip_id'), zahlArg('von_beat'), zahlArg('bis_beat'), zahlArg('bei_beat'), mx, tm,
           url.searchParams.get('transienten_quelle') === '1');   // Editor: alle Transienten der Quelle, ohne Marker und Fenster
       }),
-      // Automation Slice 1: proj_auto (lane_id or spur_id, von_beat, bis_beat, bei_beat as project beats, punkte_max)
+      // Automation Slice 1: proj_auto (lane_id or spur_id, von_beat, bis_beat, bei_beat as project beats, punkte_max); 1.12 slice 5: clip_id (+ ziel) reads
+      // a clip's envelopes, the beats are then CLIP beats
       lies('/proj/auto', (url) => {
         const zahlArg = (k: string): number | null => {
           const t = url.searchParams.get(k);
@@ -169,7 +187,7 @@ export function projBereich(ctx: BereichKontext, opt: ProjOptionen = {}): Bereic
           throw new ProjFehler(400, 'argument_ungueltig', { text: 'punkte_max: an integer from 1 to 8192 is required' });
         }
         return s.autoLage(url.searchParams.get('lane_id') || null, url.searchParams.get('spur_id') || null, zahlArg('von_beat'), zahlArg('bis_beat'),
-          zahlArg('bei_beat'), mx);
+          zahlArg('bei_beat'), mx, url.searchParams.get('clip_id') || null, url.searchParams.get('ziel') || null);
       }),
       // Spec 6.32: ?antwort=kurz (Werkzeuge proj_neu, proj_oeffnen) liefert slug, rev, Spuren ohne Noten, noten_zahl und kern statt des Projekts
       schreib('/proj/neu', (d, quelle) => s.neu(d.name, quelle), kurzeOeffnenAntwort),
@@ -179,6 +197,15 @@ export function projBereich(ctx: BereichKontext, opt: ProjOptionen = {}): Bereic
       schreib('/proj/undo', (d, quelle) => s.umkehr('undo', d, quelle), kurzeAntwort),
       schreib('/proj/redo', (d, quelle) => s.umkehr('redo', d, quelle), kurzeAntwort),
       schreib('/proj/transport', (d, quelle) => s.transport(d, quelle)),
+      // 1.14 comping (R8): audition of one take per track, session state; the answer is the full map
+      lies('/proj/take_vorhoeren', () => s.vorhoerenLage()),
+      schreib('/proj/take_vorhoeren', (d, quelle) => s.vorhoerenSetzen(d, quelle)),
+      // 1.12 slice 3 (task 4): lane override. uebersteuern {spur_id, ziel} (D4, page; Cypher gets nur_andreas, D9); re_enable {alle: true} | {spur_id, ziel}
+      schreib('/proj/auto/uebersteuern', (d, quelle) => s.autoUebersteuern(d, quelle)),
+      schreib('/proj/auto/re_enable', (d, quelle) => s.autoReEnable(d, quelle)),
+      // 1.12 slice 3 (task 8): arm for recording (D11) and the mouse or keyboard value of a gesture (D12/D13); only Andreas
+      schreib('/proj/auto/arm', (d, quelle) => s.autoArm(d, quelle)),
+      schreib('/proj/auto/geste', async (d, quelle) => s.autoGeste(d, quelle)),
       // S17: sound snapshot (graph + eight knobs per channel): compare, capture, apply
       lies('/proj/bk', () => s.bkLage()),
       schreib('/proj/bk/merken', (d, q) => s.bkMerken(d, q), kurzeBkAntwort),

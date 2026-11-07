@@ -1,0 +1,30 @@
+{
+ "schema": 1,
+ "name": "Acid Kopie",
+ "geraet_typ": "instrument",
+ "geraet": "rb338",
+ "werte": {
+  "cutoff": 600,
+  "resonanz": 0.8,
+  "env_mod": 0.7
+ },
+ "beschreibung": {
+  "art": "bass",
+  "unterart": "acid",
+  "charakter": [
+   "dirty"
+  ],
+  "genre": [
+   "acid"
+  ],
+  "einsatz": [
+   "drop"
+  ],
+  "energie": 4,
+  "text": "User copy of the factory acid bass with the same sound."
+ },
+ "tags": [],
+ "notiz": "",
+ "angelegt": "2026-11-02T00:00:00.000Z",
+ "geaendert": "2026-11-02T00:00:00.000Z"
+}

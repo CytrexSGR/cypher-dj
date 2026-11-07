@@ -73,7 +73,7 @@ test('S6 Seite: Endmeldung je Zustand mit Text, nie „Rejected“', () => {
   assert.equal(m('fertig', undefined, 'stems_ohne_gruppe').text, 'Stems ready: four tracks under the clip (no free group)');
   // F3: der gewollte Abbruch ist kein Fehler (neutral); ein Abbruch aus anderem Grund (Quantum, Zeitlimit) bleibt Fehler-Stil
   assert.deepEqual(m('abgebrochen', 'abbruch'), { text: 'Stems cancelled', fehler: false });
-  assert.equal(m('abgebrochen', 'stems_quantum').fehler, true);
+  assert.equal(m('abgebrochen', 'stems_zeitlimit').fehler, true);
   assert.equal(m('veraltet', 'veraltet').text, 'The clip changed while separating: nothing was placed');
   assert.equal(m('fehler', 'stems_fehler').text, 'The stem separation failed: nothing was changed');
   assert.equal(m('fehler', 'neuer_grund_xyz').text, 'server text');                    // unbekannter Grund: Text des Servers

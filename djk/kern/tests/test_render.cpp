@@ -10,6 +10,7 @@
 //   8 (Fix 2/P4): schreibe_wav_f32 verschränkt in festen Stücken: beim Schreiben von 8 Mio. Frames (L und R 64 MB) wächst
 //     die Spitze des Arbeitsspeichers (VmHWM nach clear_refs 5) um weniger als 8 MB, vorher um die ganze Kopie (64 MB);
 //     die Datei bleibt bitgleich.
+//   12 (1.10 slice 4a T6): ins/komp/<n>/* are accepted by the render (range of the table), instance 13, ins/eq, an unknown name or a value out of range give "regler";
 //   9 (1.10 Slice 1): Render mit Gruppen und PM-Fader aus der Regler-Datei;
 //   10 (1.10 Slice 2, AK18): --abgriff produktion trägt die ungebremste Spitze (ueber_decke), set hält die Decke; limiter_db_max meldet den Eingriff;
 //     leise: set ist der Abgriff durch den erz/4-Isolator (Nachzug N7), um den Vorhalt ausgerichtet, unter −90 dBFS.
@@ -86,6 +87,19 @@ int main() {
     r.bis_beat = 4.0;
     r.bpm = 128.0;
     PRUEF(cdj::rendere(r).fehler == "wirt_nicht_eingefroren");
+    {  // 1.9 U6 T6.4: a rack with a Surge member is refused like a Wirt track (the render has no host); a rack without one is not refused for that
+      o.wiedergabe2_warp(31, "{\"nr\":1,\"art\":\"intern\",\"geraet\":\"rack\",\"kette\":0,\"glieder\":["
+                       "{\"id\":\"a\",\"art\":\"intern\",\"geraet\":\"rb338\"},{\"id\":\"s\",\"art\":\"wirt\",\"slot\":1}],\"noten\":[]}");
+      o.wiedergabe2_warp(32, "{\"nr\":1,\"art\":\"intern\",\"geraet\":\"rack\",\"kette\":0,\"glieder\":["
+                       "{\"id\":\"a\",\"art\":\"intern\",\"geraet\":\"rb338\"}],\"noten\":[]}");
+      cdj::RenderAuftrag q = r;
+      q.nr = 31;
+      const cdj::RenderErgebnis surge = cdj::rendere(q);
+      std::printf("rack with a Surge member: error '%s' (%s)\n", surge.fehler.c_str(), surge.meldung.c_str());
+      PRUEF(surge.fehler == "wirt_nicht_eingefroren" && surge.meldung.find("Surge") != std::string::npos);
+      q.nr = 32;
+      PRUEF(cdj::rendere(q).fehler != "wirt_nicht_eingefroren");   // negative control: a rack of internal members passes the gate
+    }
     r.nr = 2;
     PRUEF(cdj::rendere(r).fehler == "datei_fehlt");
     r.bis_beat = 0.5;
@@ -134,6 +148,28 @@ int main() {
     PRUEF(e.l.size() == 4 * 22500 && e.spitze > 0.1f && e.l[22500] > 0.1f);
     PRUEF(e.regler_quelle == "kern");
     kern_l = e.l;
+    // 1.15 A5b (D8): with the bus limiters built the whole mix is L samples later; the export is aligned with vorhalt + L, so the clip lands on the same
+    // export sample as without them (and the reported vorhalt carries L). Mutation RENDER_OHNE_KANAL_LATENZ (aligned with the master limiter only) turns it red.
+    for (const auto& lim : {std::pair<double, bool>{0.5, false}, {0.5, true}, {1.5, false}}) {
+      cdj::RenderAuftrag r2 = r;
+      r2.kanal_limiter_vorhalt_ms = lim.first;
+      r2.kanal_limiter_echtspitze = lim.second;
+      const cdj::RenderErgebnis e2 = cdj::rendere(r2);
+      const int L = lim.first == 0.5 ? (lim.second ? 38 : 26) : 74;
+      PRUEF(e2.fehler.empty() && e2.vorhalt == e.vorhalt + L && e2.start_sample == e.start_sample);
+      PRUEF(e2.l.size() == e.l.size());
+      long erster0 = -1, erster1 = -1;
+      double d = 0.0;
+      for (size_t i = 0; i < e.l.size() && i < e2.l.size(); ++i) {
+        if (erster0 < 0 && std::fabs(e.l[i]) > 0.05f) erster0 = static_cast<long>(i);
+        if (erster1 < 0 && std::fabs(e2.l[i]) > 0.05f) erster1 = static_cast<long>(i);
+        d = std::fmax(d, std::fabs(static_cast<double>(e2.l[i]) - e.l[i]));
+      }
+      std::printf("render with bus limiters (%.1f ms, true peak %d): vorhalt %d (+%d), first sample above 0.05 at %ld (without: %ld), largest difference %.2e\n", lim.first,
+                  lim.second ? 1 : 0, e2.vorhalt, e2.vorhalt - e.vorhalt, erster1, erster0, d);
+      PRUEF(erster0 >= 0 && erster1 == erster0);
+      PRUEF(d < 1e-6);
+    }
     // 3: WAV schreiben und lesen, bitgleich; Kopf 58 Bytes; keine Temp-Datei
     const std::string w = o.pfad + "/export.wav";
     std::string fehler;
@@ -269,6 +305,47 @@ int main() {
     ohne.spur_regler.clear();
     const cdj::RenderErgebnis still = cdj::rendere(ohne);
     PRUEF(still.fehler.empty() && still.spitze == 0.0f && still.regler_quelle.empty());
+  }
+  // 12 (1.10 slice 4a T6, AK-S4-12): the insert rows ins/komp/<1..12>/* are project mixer controls of the render: accepted with their range from the table,
+  // refused with "regler" outside the table (instance 13, an instance beyond the eq or saett pool, a value out of range), and in the controls file
+  {
+    cdj::RenderAuftrag r;
+    r.arr_ordner = o.pfad;
+    r.nr = 3;
+    r.von_beat = 0.0;
+    r.bis_beat = 4.0;
+    r.bpm = 128.0;
+    r.regler_projekt = true;
+    r.spur_regler = {{"ins/komp/1/schwelle", -30.0f}, {"ins/komp/12/ratio", 8.0f}, {"ins/komp/1/an", 1.0f}};
+    const cdj::RenderErgebnis mit = cdj::rendere(r);
+    std::printf("Fall 12: ins/komp/1/schwelle, 12/ratio, 1/an: Fehler '%s', Regler %d\n", mit.fehler.c_str(), mit.regler);
+    PRUEF(mit.fehler.empty() && mit.regler == 3 && mit.regler_quelle == "projekt");
+    // slice 4b: eq and saett rows are table rows too (accepted with their ranges); the first instance beyond each pool and a band out of range are refused
+    r.spur_regler = {{"ins/eq/1/b8/gain", 6.0f}, {"ins/eq/1/an", 1.0f}, {"ins/saett/1/drive", 20.0f}, {"ins/saett/1/an", 1.0f}};
+    const cdj::RenderErgebnis eqs = cdj::rendere(r);
+    std::printf("Fall 12: eq and saett rows: Fehler '%s', Regler %d\n", eqs.fehler.c_str(), eqs.regler);
+    PRUEF(eqs.fehler.empty() && eqs.regler == 4);
+    for (const char* pfad : {"ins/komp/13/schwelle", "ins/komp/0/schwelle", "ins/eq/3/an", "ins/saett/2/an", "ins/eq/1/b9/gain", "ins/eq/1/b8/gain/x", "ins/komp/1/zz"}) {
+      r.spur_regler = {{pfad, 0.0f}};
+      const cdj::RenderErgebnis e = cdj::rendere(r);
+      std::printf("Fall 12: %s: Fehler '%s'\n", pfad, e.fehler.c_str());
+      PRUEF(e.fehler == "regler");
+    }
+    r.spur_regler = {{"ins/komp/1/schwelle", 5.0f}};   // -60..0
+    PRUEF(cdj::rendere(r).fehler == "regler");
+    r.spur_regler = {{"ins/komp/1/an", 0.5f}};         // switch: 0 or 1 (integer)
+    PRUEF(cdj::rendere(r).fehler == "regler");
+    const std::string p = o.pfad + "/spur_regler_ins.json";
+    std::vector<cdj::SpurRegler> v;
+    std::string fehler;
+    PRUEF(regler_datei(p, "{\"ins/komp/1/schwelle\":-30,\"ins/komp/12/sc\":2,\"ins/komp/3/an\":1}", v, fehler) && v.size() == 3);
+    PRUEF(!regler_datei(p, "{\"ins/komp/13/schwelle\":-30}", v, fehler));
+    PRUEF(!regler_datei(p, "{\"ins/komp/1/sc\":33}", v, fehler));
+    // negative control: the old families are untouched, an unknown family prefix is no mixer control
+    r.spur_regler = {{"spur/3/fader", -6.0206f}};
+    PRUEF(cdj::rendere(r).fehler.empty());
+    r.spur_regler = {{"erz/4/fader", 0.0f}};
+    PRUEF(cdj::rendere(r).fehler == "regler");
   }
   // 7 (Spec 6.25): Spur-Regler-Datei, ein Objekt Pfad -> Wert in Kern-Einheiten
   {

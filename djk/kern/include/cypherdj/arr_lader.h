@@ -88,6 +88,11 @@ class ArrLader {
   // S20: the graph folder and the sink that tells whether a graph instance is still in use (see ArrBkLeser); before the thread starts
   void setze_bk_ordner(std::string o) { cache_.setze_bk_ordner(std::move(o)); }
   void setze_bk_leser(const ArrBkLeser* l) { cache_.setze_bk_leser(l); }
+  // 1.9: the kit folder, the loader function (cdj::lade_kit; the cache links no kit.cpp itself) and the sink that tells whether a Kit is still
+  // played (see ArrKitLeser); before the thread starts
+  void setze_kit_ordner(std::string o) { cache_.setze_kit_ordner(std::move(o)); }
+  void setze_kit_leser(const ArrKitLeser* l) { cache_.setze_kit_leser(l); }
+  void setze_kit_lader(ArrKitLader l) { cache_.setze_kit_lader(l); }
   int aufgeschoben() const { return n_aufgeschoben_; }
   static constexpr int WARTE_MAX = 16;
 

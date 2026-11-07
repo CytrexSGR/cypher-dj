@@ -1,0 +1,42 @@
+{
+ "schema": 1,
+ "name": "Sub Bass",
+ "geraet_typ": "instrument",
+ "geraet": "rb338",
+ "werte": {
+  "lautstaerke": 0.2511886432,
+  "wellenform": false,
+  "cutoff": 120,
+  "resonanz": 0.25,
+  "env_mod": 0.1,
+  "decay": 1,
+  "accent": 0.2
+ },
+ "beschreibung": {
+  "art": "bass",
+  "unterart": "sub",
+  "charakter": [
+   "deep",
+   "smooth",
+   "warm"
+  ],
+  "genre": [
+   "deep_house",
+   "techno",
+   "downtempo"
+  ],
+  "einsatz": [
+   "intro",
+   "drop"
+  ],
+  "energie": 2,
+  "text": "Nearly closed filter with little resonance: weight and pitch, no movement."
+ },
+ "tags": [
+  "sub",
+  "bass"
+ ],
+ "notiz": "Values are practice; the direction follows the sub-bass rule that any movement destroys the function (REZEPTE.md bass.sub).",
+ "angelegt": "2026-11-02T00:00:00.000Z",
+ "geaendert": "2026-11-02T00:00:00.000Z"
+}

@@ -91,11 +91,28 @@ def _vorgaben() -> dict[str, float]:
         if k.startswith("deck/"):
             for stem in ("drums", "bass", "vocals", "other"):
                 v[f"{k}/stem/{stem}"] = 0.0
+        # 1.15 mix tools (defaults of stellwerk/werkzeug_regler.h; erz/8 is cue-only and has no tool rows)
+        if k != "erz/8":
+            v.update({f"{k}/util/{p}": w for p, w in (("balance", 0.0), ("breite", 100.0), ("bassmono", 0.0), ("phase_l", 0.0),
+                                                       ("phase_r", 0.0), ("tausch", 0.0), ("dc", 0.0))})
+            if not k.startswith("bus/"):
+                v.update({f"{k}/gate/{p}": w for p, w in (("an", 0.0), ("schwelle", -40.0), ("hysterese", 4.0), ("ratio", 100.0),
+                                                           ("bereich", -80.0), ("attack", 1.0), ("hold", 20.0), ("release", 100.0),
+                                                           ("sc", 0.0))})
+        if k.startswith("bus/"):
+            v[f"{k}/mb/an"] = 0.0
+            v[f"{k}/mb/grenze_tief"] = 200.0
+            v[f"{k}/mb/grenze_hoch"] = 2000.0
+            for b in ("tief", "mitte", "hoch"):
+                v.update({f"{k}/mb/{b}/{p}": w for p, w in (("schwelle", 0.0), ("ratio", 1.0), ("attack", 10.0), ("release", 100.0),
+                                                             ("knie", 0.0), ("makeup", 0.0), ("umgehen", 0.0))})
+            v.update({f"{k}/lim/an": 0.0, f"{k}/lim/decke": -0.3, f"{k}/lim/abklingen": 80.0})
     v.update({"xfader": 0.0, "master/pegel": 0.0, "master/kleber": 0.0, "cue/mix": -1.0, "cue/pegel": -12.0, "cue/split": 0.0,
               "fx/1/notenwert": 0.75, "fx/2/notenwert": 0.75, "fx/1/rueckkopplung": 0.5, "fx/2/rueckkopplung": 0.5})
     v.update({f"fx/{n}/rueckweg": 0.0 for n in range(1, 5)})
     v.update({"duck/tiefe": 0.0, "duck/release": 200.0})
     v.update({"color/art": 0.0, "color/param": 0.5})
+    v["spektrum/kanal"] = 0.0
     return v
 
 

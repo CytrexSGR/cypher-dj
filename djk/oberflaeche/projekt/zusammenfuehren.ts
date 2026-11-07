@@ -9,7 +9,7 @@ import { MAX_SPUREN, SAMPLERATE, herkunft, kanonisch, spurSicht, sucheSpur, type
 // Der Render enthält das Gesetz der Quellen schon; die neue Spur wendet es mit Pan 0 ein zweites Mal an.
 // Dieser Gain am Clip hebt das auf (P2).
 export const PAN_MITTE_DB = 20 * Math.log10(Math.SQRT2);
-const EPS = 1e-9;
+export const EPS = 1e-9;
 
 export class MergeFehler extends Error {
   readonly grund: string;
@@ -39,19 +39,21 @@ export function mergeSicht(p: Projekt, ids: string[]): string {
 }
 
 // slice 3: the sends of a track sorted by return id, so that two lists compare by content
-const sendsSortiert = (s: Spur): { id: string; db: number }[] => [...(s.sends ?? [])].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+export const sendsSortiert = (s: Spur): { id: string; db: number }[] => [...(s.sends ?? [])].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 
-function liegtAusserhalb(s: Spur, von: number, bis: number, tempo: number): boolean {
+export function liegtAusserhalb(s: Spur, von: number, bis: number, tempo: number): boolean {
   if (s.clips.some((c) => c.start_beat < von - EPS || c.start_beat + c.laenge_beats > bis + EPS)) return true;
   if (!s.freeze) return false;
   const f0 = s.freeze.von_beat ?? 0, f1 = f0 + (s.freeze.frames / SAMPLERATE) * (tempo / 60);
   return f0 < von - EPS || f1 > bis + EPS;
 }
 
-export function mergePlan(p: Projekt, a: { spur_ids?: unknown; von_beat?: unknown; bis_beat?: unknown }, quelle: Herkunft): MergePlan {
-  const roh = a.spur_ids;
-  if (!Array.isArray(roh) || roh.length < 2 || roh.length > MAX_SPUREN || roh.some((x) => typeof x !== 'string') || new Set(roh).size !== roh.length) {
-    ab('argument_ungueltig', 'spur_ids: 2 or more distinct track ids expected');
+// 1.14 slice 4 (bounce, spec D5): `opt.min` 1 lets one source through (bounce to new track), `opt.praefix` names the new track (default 'Merge: ')
+export function mergePlan(p: Projekt, a: { spur_ids?: unknown; von_beat?: unknown; bis_beat?: unknown }, quelle: Herkunft,
+  opt: { min?: number; praefix?: string } = {}): MergePlan {
+  const roh = a.spur_ids, min = opt.min ?? 2;
+  if (!Array.isArray(roh) || roh.length < min || roh.length > MAX_SPUREN || roh.some((x) => typeof x !== 'string') || new Set(roh).size !== roh.length) {
+    ab('argument_ungueltig', `spur_ids: ${min} or more distinct track ids expected`);
   }
   const ids = roh as string[];
   for (const k of ['von_beat', 'bis_beat'] as const) {
@@ -71,6 +73,10 @@ export function mergePlan(p: Projekt, a: { spur_ids?: unknown; von_beat?: unknow
   }
   if (spuren.some((s) => s.solo) && !spuren.every((s) => s.solo)) ab('merge_teil_solo', 'some of the tracks are solo; solo all of the tracks or none');
   if (p.spuren.length >= MAX_SPUREN) ab('merge_keine_spur_frei', `all ${MAX_SPUREN} tracks are used`);
+  // slice 4: a merge would silently drop the chain of a source (the new track carries none), so any chain on a source is refused
+  if (spuren.some((s) => (s.inserts ?? []).length > 0)) {
+    ab('merge_inserts', 'a track has an insert chain; remove the inserts of the tracks (or freeze the sound some other way) and merge again');
+  }
   // slice 3: the merge renders dry, the new track takes over the sends of the sources, but only if all sources have identical sends
   // (the send is post fader and linear, so (sum of source * fader) * send equals the sum of the single sends only for the same send)
   const erste = JSON.stringify(sendsSortiert(spuren[0]));
@@ -79,7 +85,7 @@ export function mergePlan(p: Projekt, a: { spur_ids?: unknown; von_beat?: unknow
   }
   return {
     spurIds: ids, von, bis, ausgang: [...ziele][0], index: Math.max(...spuren.map((s) => p.spuren.indexOf(s))) + 1,
-    name: ('Merge: ' + spuren.map((s) => s.name).join(' + ')).slice(0, 80), solo: spuren.every((s) => s.solo),
+    name: ((opt.praefix ?? 'Merge: ') + spuren.map((s) => s.name).join(' + ')).slice(0, 80), solo: spuren.every((s) => s.solo),
     ausserhalb: spuren.some((s) => liegtAusserhalb(s, von, bis, p.tempo_bpm)), tempo: p.tempo_bpm, sicht: mergeSicht(p, ids),
     sends: sendsSortiert(spuren[0]).map((x) => ({ ...x })),
   };

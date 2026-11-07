@@ -1,0 +1,38 @@
+{
+ "schema": 1,
+ "name": "Pad Warmth",
+ "geraet_typ": "effekt",
+ "geraet": "saett",
+ "werte": {
+  "drive": 6,
+  "out": -3,
+  "mix": 0.35
+ },
+ "beschreibung": {
+  "art": "saturation",
+  "unterart": "tube",
+  "charakter": [
+   "warm",
+   "smooth",
+   "thick"
+  ],
+  "genre": [
+   "ambient",
+   "deep_house",
+   "downtempo"
+  ],
+  "einsatz": [
+   "intro",
+   "breakdown"
+  ],
+  "energie": 1,
+  "text": "A light touch of drive under a pad adds body while the clean signal keeps the softness."
+ },
+ "tags": [
+  "pad",
+  "warmth"
+ ],
+ "notiz": "Direction from the vocabulary entry warm (low-mid fullness); the device only adds odd harmonics, so the effect is limited. Values practice.",
+ "angelegt": "2026-11-02T00:00:00.000Z",
+ "geaendert": "2026-11-02T00:00:00.000Z"
+}

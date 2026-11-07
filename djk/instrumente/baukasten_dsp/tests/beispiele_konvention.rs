@@ -11,7 +11,8 @@
 //! the chord for 1.5 s, then 1.5 s of tail; effect graphs get a synthetic 120 BPM loop (kick, hats, saw bass, chord
 //! stab, peak -6 dBFS) of 6 s plus 1.5 s of tail. All knobs sit at the kern default 0.5.
 //!
-//! `BEISPIELE_DIR=/path` points the lint at another directory (used to show the lint red on the old graphs).
+//! `BEISPIELE_DIR=/path` points the lint at another directory (used to show the lint red on the old graphs). Without it the
+//! lint also covers the recipe patches in `beispiele/rezepte/` (named `rezepte/<file>`).
 mod gemeinsam;
 use baukasten_dsp::{uebersetze_mit_wurzel, Programm, REGLER};
 use std::collections::BTreeSet;
@@ -33,15 +34,34 @@ fn beispiele_dir() -> PathBuf {
     }
 }
 
-fn alle_graphen() -> Vec<(String, String)> {
-    let mut v: Vec<(String, String)> = std::fs::read_dir(beispiele_dir()).expect("beispiele dir")
+fn graphen_in(dir: &Path, praefix: &str) -> Vec<(String, String)> {
+    std::fs::read_dir(dir).expect("beispiele dir")
         .filter_map(|e| e.ok().map(|e| e.path()))
-        .filter(|p| p.extension().map_or(false, |x| x == "json"))
-        .map(|p| (p.file_stem().unwrap().to_string_lossy().into_owned(), std::fs::read_to_string(&p).unwrap()))
-        .collect();
-    v.sort();
+        .filter(|p| p.extension().map_or(false, |x| x == "json") && p.file_name().map_or(false, |n| n != "MANIFEST.json"))
+        .map(|p| (format!("{praefix}{}", p.file_stem().unwrap().to_string_lossy()), std::fs::read_to_string(&p).unwrap()))
+        .collect()
+}
+
+fn alle_graphen() -> Vec<(String, String)> {
+    let mut v = graphen_in(&beispiele_dir(), "");
     assert!(v.len() >= 22, "found only {} example graphs", v.len());
+    if std::env::var_os("BEISPIELE_DIR").is_none() {
+        let r = graphen_in(&beispiele_dir().join("rezepte"), "rezepte/");
+        assert_eq!(r.len(), 46, "recipe patches");
+        v.extend(r);
+    }
+    v.sort();
     v
+}
+
+/// run `f` over `items` on all cores, results in order
+fn parallel<T: Sync, R: Send>(items: &[T], f: impl Fn(&T) -> R + Sync) -> Vec<R> {
+    let n = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4).min(items.len().max(1));
+    let teile: Vec<&[T]> = items.chunks(items.len().div_ceil(n).max(1)).collect();
+    std::thread::scope(|s| {
+        let h: Vec<_> = teile.iter().map(|t| s.spawn(|| t.iter().map(&f).collect::<Vec<R>>())).collect();
+        h.into_iter().flat_map(|h| h.join().unwrap()).collect()
+    })
 }
 
 /// A sample root holding the generated probe, for the sampler example (nothing is stored in the repo).
@@ -177,15 +197,16 @@ fn sondergrund_liste_ist_ehrlich() {
 #[test]
 fn kein_gleichanteil_und_keine_uebersteuerung_auf_der_probe() {
     let dc_grenze = 10f32.powf(DC_GRENZE_DBFS / 20.0);
-    let mut fehler = Vec::new();
-    for (name, json) in alle_graphen() {
-        let m = messe(&name, &json);
+    let fehler: Vec<String> = parallel(&alle_graphen(), |(name, json)| {
+        let mut fehler = Vec::new();
+        let m = messe(name, json);
         println!("MESS {name:20} peak {:.3} ({:5.1} dB)  rms {:6.1} dB  dc {:.5} ({:6.1} dBFS)", m.spitze, 20.0 * m.spitze.log10(), m.rms_db, m.dc, 20.0 * m.dc.max(1e-9).log10());
         if m.dc > dc_grenze { fehler.push(format!("{name}: DC {:.1} dBFS above {DC_GRENZE_DBFS}", 20.0 * m.dc.log10())); }
         if m.spitze >= SPITZE_GRENZE { fehler.push(format!("{name}: peak {:.3} not below {SPITZE_GRENZE}", m.spitze)); }
         // positive control: the probe really plays (a silent graph would pass both limits trivially)
         if m.rms_db < -60.0 { fehler.push(format!("{name}: silent on the probe ({:.1} dB)", m.rms_db)); }
-    }
+        fehler
+    }).into_iter().flatten().collect();
     assert!(fehler.is_empty(), "convention violations:\n  {}", fehler.join("\n  "));
 }
 
@@ -203,21 +224,23 @@ fn jeder_regler_aendert_den_klang_auf_der_probe() {
     // The "feeds something" check of the first test passes vacuously when the consumer ignores the input (S13:
     // rueckkopplung "Zeit" fed leitung.zeit, which is bypassed once leitung.hz is wired). Sweep every knob 0 against 1
     // (others at 0.5) and require a different output.
-    let mut gesehen = 0;
-    let mut tot = Vec::new();
+    let mut faelle = Vec::new();
     for (name, json) in alle_graphen() {
         let j: serde_json::Value = serde_json::from_str(&json).unwrap();
         let regler: BTreeSet<usize> = knoten(&j).iter().filter(|k| k["art"] == "regler").map(|k| k["nr"].as_u64().unwrap() as usize).collect();
-        for nr in regler {
-            gesehen += 1;
-            let (a, b) = (probe_mit_regler(&name, &json, nr, 0.0), probe_mit_regler(&name, &json, nr, 1.0));
-            let diff = a.iter().zip(&b).fold(0.0f32, |m, (x, y)| m.max((x.0 - y.0).abs()).max((x.1 - y.1).abs()));
-            println!("MESS sweep {name:20} knob {nr}: max |0 - 1| {diff:.5}");
-            let erlaubt = REGLER_OHNE_WIRKUNG_AUF_DER_PROBE.iter().any(|(n, k, grund)| { assert!(!grund.is_empty()); *n == name && *k == nr });
-            if diff == 0.0 && !erlaubt { tot.push(format!("{name}: knob {nr} is dead on the probe (output bit-identical at 0 and 1)")); }
-            if diff != 0.0 && erlaubt { tot.push(format!("{name}: knob {nr} is allow-listed as dead but changes the sound (stale entry)")); }
-        }
+        faelle.extend(regler.into_iter().map(|nr| (name.clone(), json.clone(), nr)));
     }
+    let gesehen = faelle.len();
+    let tot: Vec<String> = parallel(&faelle, |(name, json, nr)| {
+        let nr = *nr;
+        let (a, b) = (probe_mit_regler(name, json, nr, 0.0), probe_mit_regler(name, json, nr, 1.0));
+        let diff = a.iter().zip(&b).fold(0.0f32, |m, (x, y)| m.max((x.0 - y.0).abs()).max((x.1 - y.1).abs()));
+        println!("MESS sweep {name:20} knob {nr}: max |0 - 1| {diff:.5}");
+        let erlaubt = REGLER_OHNE_WIRKUNG_AUF_DER_PROBE.iter().any(|(n, k, grund)| { assert!(!grund.is_empty()); *n == name && *k == nr });
+        if diff == 0.0 && !erlaubt { Some(format!("{name}: knob {nr} is dead on the probe (output bit-identical at 0 and 1)")) }
+        else if diff != 0.0 && erlaubt { Some(format!("{name}: knob {nr} is allow-listed as dead but changes the sound (stale entry)")) }
+        else { None }
+    }).into_iter().flatten().collect();
     assert!(gesehen >= 70, "positive control: expected at least 70 knobs in the sweep, saw {gesehen}");
     assert!(tot.is_empty(), "dead knobs:\n  {}", tot.join("\n  "));
 }

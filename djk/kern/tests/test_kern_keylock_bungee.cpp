@@ -27,6 +27,13 @@
 #include "keylock_mess.h"
 #include "pruef.h"
 
+// Python for klick_fassung.py: ctest sets CYPHERDJ_PYTHON3 to the interpreter CMake found (a venv on a fresh machine);
+// a direct start without ctest falls back to the system python (numpy there, see requirements.txt).
+static std::string cdj_python3() {
+  const char* p = std::getenv("CYPHERDJ_PYTHON3");
+  return std::string(p && *p ? p : "/usr/bin/python3") + " ";
+}
+
 namespace {
 
 namespace fs = std::filesystem;
@@ -123,7 +130,7 @@ struct Lauf {
 };
 
 void klick(const std::string& args) {
-  const std::string c = "/usr/bin/python3 " + std::string(CYPHERDJ_DJK) + "/kern/tests/deck/klick_fassung.py --ziel " + AB + " " + args +
+  const std::string c = cdj_python3() + std::string(CYPHERDJ_DJK) + "/kern/tests/deck/klick_fassung.py --ziel " + AB + " " + args +
                         " > /dev/null";
   PRUEF(std::system(c.c_str()) == 0);
 }

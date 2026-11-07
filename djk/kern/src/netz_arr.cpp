@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <string>
 
 #include "cypherdj/netz.h"
 
@@ -22,6 +23,15 @@ void kopiere(char* ziel, const char* quelle, size_t n) {
   ziel[n - 1] = '\0';
 }
 
+// 1.12 S3: the field names are the generated list v::werte::auto_ziel, the index is the field (Arrangement::AUTO_FELDER)
+static_assert(v::werte::auto_ziel.size() == Arrangement::AUTO_FELDER, "one name per overridable field");
+
+int auto_feld(const char* n) {
+  for (size_t i = 0; i < v::werte::auto_ziel.size(); ++i)
+    if (v::werte::auto_ziel[i] == n) return static_cast<int>(i);
+  return -1;
+}
+
 bool quelle_ok(const char* q) {
   for (const auto& n : v::werte::quelle)
     if (n == q) return true;
@@ -33,9 +43,9 @@ bool quelle_ok(const char* q) {
 bool Netz::arr_paket(const v::Adresse* a, const osc::Nachricht& m) {
   const bool laden = a->pfad == v::k_arr_laden.pfad, start = a->pfad == v::k_arr_start.pfad;
   const bool stopp = a->pfad == v::k_arr_stopp.pfad, loop = a->pfad == v::k_arr_loop.pfad;
-  const bool metronom = a->pfad == v::k_arr_metronom.pfad;
+  const bool metronom = a->pfad == v::k_arr_metronom.pfad, auto_ = a->pfad == v::k_arr_auto.pfad, arm = a->pfad == v::k_arr_arm.pfad;
   if (a->pfad == v::k_arr_freeze.pfad) return arr_freeze_paket(m);    // Paket K3
-  if (!laden && !start && !stopp && !loop && !metronom) return false;
+  if (!laden && !start && !stopp && !loop && !metronom && !auto_ && !arm) return false;
   Befehl b{};
   b.id = m.werte[0].h;
   kopiere(b.quelle, m.werte[1].s, sizeof b.quelle);
@@ -90,6 +100,29 @@ bool Netz::arr_paket(const v::Adresse* a, const osc::Nachricht& m) {
     if ((b.an != 0 && b.an != 1) || !std::isfinite(b.arr_von) || !std::isfinite(b.arr_bis) || b.arr_von < 0.0 ||
         b.arr_bis - b.arr_von < 1.0)
       return ab("ausserhalb_bereich");
+  } else if (auto_) {   // 1.12 S3 (§4.11): the lane override. Order of the refusals: format, auto_ziel_unbekannt, format (spur 0 with an 0), nur_andreas
+    namespace f = v::feld::k_arr_auto;
+    b.art = Befehl::ARR_AUTO;
+    b.nr = m.werte[f::spur].i;
+    b.an = m.werte[f::an].i;
+    b.politik = auto_feld(m.werte[f::ziel].s);
+    if (b.nr < 0 || b.nr > ARR_SPUREN || (b.an != 0 && b.an != 1)) return ab("format");
+    if (b.politik < 0) return ab("auto_ziel_unbekannt");
+    if (b.nr == 0 && b.an == 0) return ab("format");
+#ifndef CYPHERDJ_MUTATION_ARR_AUTO_CYPHER_UEBERSTEUERT   // error case: the net thread lets cypher override
+    if (b.an == 0 && !std::strcmp(b.quelle, "cypher")) return ab("nur_andreas");   // D9
+#endif
+  } else if (arm) {   // 1.12 S3 (§4.11 /k/arr/arm). Order of the refusals: format, nur_andreas (cypher in the AI stop is refused above, before any range check)
+    namespace f = v::feld::k_arr_arm;
+    b.art = Befehl::ARR_ARM;
+    b.nr = m.werte[f::spur].i;
+    b.an = m.werte[f::an].i;
+    b.politik = m.werte[f::modus].i;
+    if (b.nr < 0 || b.nr > ARR_SPUREN || (b.an != 0 && b.an != 1) || b.politik < 0 || b.politik > 2) return ab("format");
+    if (b.nr == 0 && b.an == 1) return ab("format");   // spur 0 only disarms
+#ifndef CYPHERDJ_MUTATION_ARR_ARM_CYPHER   // error case: any source may arm
+    if (std::strcmp(b.quelle, "andreas")) return ab("nur_andreas");   // D11
+#endif
   } else {
     namespace f = v::feld::k_arr_metronom;
     b.art = Befehl::ARR_METRONOM;
@@ -145,9 +178,28 @@ bool Netz::arr_ereignis(const Ereignis& e) {
     arr_freeze_ereignis(e);
     return true;
   }
+  if (e.art == Ereignis::AUTO_ZUSTAND) {   // 1.12 S3, §5.13 /e/auto: spur, ziel, zustand
+    if (e.deck < 1 || e.deck > ARR_SPUREN || e.fassung < 0 || e.fassung >= Arrangement::AUTO_FELDER) return true;   // not a field of the contract: dropped, never mapped to another
+    osc::Schreiber s(v::e_auto);
+    s.i(e.deck).s(std::string(v::werte::auto_ziel[static_cast<size_t>(e.fassung)]).c_str()).i(e.status);   // deck is the OSC track already
+    an_alle(s);
+    return true;
+  }
+  if (e.art == Ereignis::AUTO_PUNKT) {   // 1.12 S3, §5.13 /e/auto_punkt: pfad, projekt_beat, wert
+    osc::Schreiber s(v::e_auto_punkt);
+    s.s(e.pfad).d(e.beat).f(e.wert);
+    an_alle(s);
+    return true;
+  }
   if (e.art == Ereignis::WARP_ZUSTAND) {   // 1.13 Slice 2, §5.13b
     osc::Schreiber s(v::zustand_warp);
     s.i(e.warp_stimmen).i(e.warp_unterlauf).i(e.warp_kein_platz).i(e.warp_spaet).i(e.warp_faeden);
+    an_alle(s);
+    return true;
+  }
+  if (e.art == Ereignis::HALL_ZUSTAND) {   // mehrkern Task 5, §5.13
+    osc::Schreiber s(v::zustand_hall_pool);
+    s.i(e.hall_an).i(e.hall_faeden).i(e.hall_spaet).i(e.hall_zurueck);
     an_alle(s);
     return true;
   }

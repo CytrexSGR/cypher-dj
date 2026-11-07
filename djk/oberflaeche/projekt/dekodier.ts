@@ -147,7 +147,7 @@ export class DekodierCache {
       let err = '', abgelaufen = false;
       kind.stderr.on('data', (d) => { err = (err + d).slice(-300); });
       const limit = setTimeout(() => { abgelaufen = true; kind.kill('SIGKILL'); }, this.zeitlimitMs);
-      const code = await new Promise<number | null>((ok) => { kind.once('error', () => ok(-1)); kind.once('exit', (c) => ok(c)); });
+      const code = await new Promise<number | null>((ok) => { kind.once('error', () => ok(-1)); kind.once('close', (c) => ok(c)); });
       clearTimeout(limit);
       if (abgelaufen) return scheitere('zeitlimit');
       if (code !== 0) return scheitere(`ffmpeg_fehler`);
@@ -169,6 +169,8 @@ export class DekodierCache {
   }
 
   // Kanalzahl des ersten Audio-Streams per ffprobe; null = nicht lesbar (kein Audio, Datei kaputt), 'zeitlimit' = ffprobe hängt.
+  // Waits for 'close', not 'exit': Node may emit 'exit' before stdout is drained, and the empty output made a valid file 'ffmpeg_fehler'
+  // (2 of 30 runs of warp_tempo x2, 2026-11-04). The same holds for the stderr tail in dekodiere().
   private async kanalzahl(quelle: string): Promise<number | 'zeitlimit' | null> {
     const [programm, ...vorArgs] = this.ffprobe;
     const kind = spawn(programm, [...vorArgs, '-v', 'error', '-select_streams', 'a:0', '-show_entries', 'stream=channels', '-of', 'csv=p=0', quelle],
@@ -176,7 +178,7 @@ export class DekodierCache {
     let aus = '', abgelaufen = false;
     kind.stdout.on('data', (d) => { aus = (aus + d).slice(0, 200); });
     const limit = setTimeout(() => { abgelaufen = true; kind.kill('SIGKILL'); }, this.zeitlimitMs);
-    const code = await new Promise<number | null>((ok) => { kind.once('error', () => ok(-1)); kind.once('exit', (c) => ok(c)); });
+    const code = await new Promise<number | null>((ok) => { kind.once('error', () => ok(-1)); kind.once('close', (c) => ok(c)); });
     clearTimeout(limit);
     if (abgelaufen) return 'zeitlimit';
     const n = Number(/^\s*(\d+)/.exec(aus)?.[1]);   // führende Zahl: csv hängt bei Seitendaten (ReplayGain) ein Komma an ("2,")

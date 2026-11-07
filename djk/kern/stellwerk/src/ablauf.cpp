@@ -82,6 +82,8 @@ void Stellwerk::prozess(int64_t s0, int n) {
   if (s0 != jetzt_) z_.spruenge++;
   zyklus_s0_ = s0;
   zyklus_n_ = n;
+  for (int k = 0; k < n_griff_; k++) reg_[griff_r_[k]].griff = false;   // D1: the grip signal lives one cycle
+  n_griff_ = 0;
   for (int k = 0; k < n_aend_; k++) reg_[aend_[k].regler].slot = -1;
   n_aend_ = 0;
   for (int i = 0; i <= n; i++) beats_[i] = uhr_.beat(s0 + i);

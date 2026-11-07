@@ -17,6 +17,13 @@ import { after, before, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { liesUndDekodiere } from '../../leitstand/src/adressen.ts';
 import { beende, freierTcpPort, freierUdpPort, ohneInstanz, starte, warte, type Kind } from '../../leitstand/tests/hilfen/prozess.ts';
+// own kern.toml per test: the process helper refuses the mock core without --konfig (it would read the user's real one)
+function kernToml(dir: string): string {
+  const f = path.join(dir, 'kern.toml');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(f, `version = 1\narbeitsbestand = "${path.join(dir, 'arbeitsbestand')}"\n`);
+  return f;
+}
 import { Spielerverbindung } from '../src/client.ts';
 
 const HIER = path.dirname(fileURLToPath(import.meta.url));
@@ -54,7 +61,7 @@ before(async () => {
   fs.writeFileSync(konfig, `version = 1\nws_port = ${wsPort}\nabo_port = ${abo}\nsets = "${tmp}/sets"\n`);
   kp = await starte(
     path.join(DJK, 'vertrag', 'attrappe_kern.mjs'),
-    ['--udp-port', String(kernPort), '--arbeitsbestand', path.join(tmp, 'arbeitsbestand')],
+    ['--udp-port', String(kernPort), '--arbeitsbestand', path.join(tmp, 'arbeitsbestand'), '--konfig', kernToml(tmp)],
     'attrappe_kern:',
   );
   lp = await starte(
@@ -205,7 +212,7 @@ test('Negativ-Kontrolle: zustand (RPC lage) sendet 0 Nachrichten an den Kern; Po
 
   const kp2 = await starte(
     path.join(DJK, 'vertrag', 'attrappe_kern.mjs'),
-    ['--udp-port', String(kernPort), '--arbeitsbestand', path.join(tmp2, 'arbeitsbestand')],
+    ['--udp-port', String(kernPort), '--arbeitsbestand', path.join(tmp2, 'arbeitsbestand'), '--konfig', kernToml(tmp2)],
     'attrappe_kern:',
   );
   // --ki-spur deck/1: macht einen Plan, der ausschliesslich deck/1 leiser stellt (Kill an), zur DIREKTEN Annahme

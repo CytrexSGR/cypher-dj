@@ -14,6 +14,13 @@ namespace {
 constexpr Regler kEq[3] = {Regler::eq_tief, Regler::eq_mitte, Regler::eq_hoch};
 constexpr Regler kKill[3] = {Regler::kill_tief, Regler::kill_mitte, Regler::kill_hoch};
 constexpr Regler kSend[kAnzahlSends] = {Regler::send_1, Regler::send_2, Regler::send_3, Regler::send_4};
+// Decay floor of the filter states. FTZ/DAZ does not make the double recursions of the biquads and SVFs decay to zero: they
+// stay on a floor near the smallest normal double (measured with an LR8 impulse response under FTZ/DAZ: the stage states stay at
+// 2e-308 to 7e-308 for good, also after 3 million samples). Exactly zero
+// states are what lets a silent strip sleep (Kanalzug::ruhig), so a state below this threshold is set to exactly zero at the end of
+// every block. 1e-300 lies about 255 decades below the smallest float denormal (1e-45), so it cannot show in a float output, and
+// it is applied on every path (also with the mixer's sleep switch off), so sleeping and running compare equal by construction.
+constexpr double kStilleSchwelle = 1e-300;
 #ifdef CYPHERDJ_DSP_MUTATION_ALLOKATION
 volatile float g_mutation_senke = 0.0f;
 #endif
@@ -50,6 +57,16 @@ bool Kanalzug::db_gains(Regler r, float* g, int n, double& konst) {
         return false;
     }
     for (int i = 0; i < n; ++i) g[i] = static_cast<float>(db_zu_linear(werte_[i]));
+    return true;
+}
+
+bool Kanalzug::ruhig() const {
+    for (int i = 0; i < kAnzahlRegler; ++i)
+        if (bahn_[i].faehrt()) return false;
+    const double k = static_cast<double>(bahn_[static_cast<int>(Regler::filter)].wert());
+    if (!color_.ruhig(k)) return false;
+    if (!iso_.leer()) return false;
+    if (color_.art() == ColorArt::filter && !filter_.leer()) return false;
     return true;
 }
 
@@ -98,6 +115,11 @@ void Kanalzug::verarbeite_vor(const float* in_l, const float* in_r, int n) {
     if (color_.art() == ColorArt::filter) filter_.verarbeite(a_l, a_r, n, k_filter_);
     else color_.verarbeite(a_l, a_r, n, k_filter_);
     // ab hier: a_l/a_r ist der Abgriff nach Filter, vor dem Fader (ADR 008 Punkt 4, INTERFACES §6.2)
+
+    // End of the block: filter states below kStilleSchwelle become exactly zero (see the constant). Part of the awake path in every
+    // case, so the sleep state of the mixer (ruhig()) is bit-equal to running by construction.
+    iso_.abschneiden(kStilleSchwelle);
+    if (color_.art() == ColorArt::filter) filter_.abschneiden(kStilleSchwelle);
 }
 
 void Kanalzug::verarbeite_nach(int n, const KanalzugAusgang& aus) {

@@ -21,7 +21,22 @@ const WEIT_BEATS = 16;
 
 // 1.10 slice 3 (P11): the stellwerk holds at most MAX_TEILE = 256 open parts. Opening a maximum project sets 379 controls (41 fader ramps, 114 solo parts
 // and 128 send ramps may come on top), so the controls go out in packets of at most this many, and each packet is waited for until its END status.
+// Since slice 4a up to 120 insert rows (ten per stage, twelve stages) join them.
 export const REGLER_PAKET = 100;
+
+// 1.12 slice 3 (§4.11): the fields /k/arr/auto knows, the one server list; tests/proj_auto_uebersteuert.test.mjs pins it against osc.json werte.auto_ziel.
+// (modell.ts AUTO_ZIELE is the longer list of lane targets, including geraet.*; the core override knows only these four)
+export const KERN_AUTO_ZIELE = ['fader', 'pan', 'mute', 'solo'] as const;
+export const istKernAutoZiel = (z: unknown): z is (typeof KERN_AUTO_ZIELE)[number] => (KERN_AUTO_ZIELE as readonly unknown[]).includes(z);
+// How a core refusal of /k/arr/auto reaches the caller: the distinct ones keep their identity, `format` is a server bug (500, the core reason goes along
+// as `kern`), every other refusal is a generic 409 auto_abgelehnt
+export function autoAblehnung(grund: string): [code: number, fehler: string] {
+  if (grund === 'auto_ziel_unbekannt') return [400, 'auto_ziel_unbekannt'];
+  if (grund === 'ki_gestoppt') return [409, 'ki_gestoppt'];
+  if (grund === 'nur_andreas') return [403, 'nur_andreas'];
+  if (grund === 'format') return [500, 'auto_abgelehnt'];
+  return [409, 'auto_abgelehnt'];
+}
 
 export class KernWeg {
   private readonly ctx: BereichKontext;
@@ -84,6 +99,27 @@ export class KernWeg {
     const id = this.ctx.sende('/k/arr/stopp', { quelle, quant: 0 });
     return this.ctx.warteQuittung(id);
   }
+  // 1.12 slice 3 (§4.11): the lane override. spur = track number 1..32, 0 = all (only with an 1; ziel is then validated but ignored). an 0 = the hand
+  // overrides (never from cypher), an 1 = the lane plays again. The state comes back as /e/auto, not in the acknowledgement.
+  async auto(spur: number, ziel: string, an: 0 | 1, quelle: Quelle): Promise<Quittung> {
+    const id = this.ctx.sende('/k/arr/auto', { quelle, spur, ziel, an });
+    return this.ctx.warteQuittung(id);
+  }
+  // A project switch is a fresh start (Andreas, 2026-11-02): release the human hand holder on the listed regulators (comma list, an entry ending in / is a
+  // prefix, INTERFACES 4.3 /k/hand/frei) so the writes of the new project are not refused with regler_beim_menschen. Only the source andreas may.
+  async handFrei(pfade: string, quelle: Quelle): Promise<Quittung> {
+    const id = this.ctx.sende('/k/hand/frei', { quelle, pfade });
+    return this.ctx.warteQuittung(id);
+  }
+  // AK34 (D6): end every override in the core, source andreas (server housekeeping, as nachNeustart)
+  autoFrei(): Promise<Quittung> { return this.auto(0, 'fader', 1, 'andreas'); }
+  // 1.12 slice 3 (D11): arm one track for automation recording; spur 0 only with an 0 (disarms all). Only the source andreas may do it (nur_andreas).
+  async arm(spur: number, an: 0 | 1, modus: 0 | 1 | 2, quelle: Quelle): Promise<Quittung> {
+    const id = this.ctx.sende('/k/arr/arm', { quelle, spur, an, modus });
+    return this.ctx.warteQuittung(id);
+  }
+  // AK34 (D6): no track stays armed over a project open or a new core; server housekeeping, source andreas
+  armFrei(): Promise<Quittung> { return this.arm(0, 0, 0, 'andreas'); }
   async kiSpur(kanaele: string, quelle: Quelle): Promise<Quittung> {
     const id = this.ctx.sende('/k/ki/spur', { quelle, kanaele });
     return this.ctx.warteQuittung(id);

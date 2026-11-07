@@ -67,8 +67,13 @@ int AnalyseBaender::verarbeite(const float* l, const float* r, int n, HuellenWer
     if (++im_fenster_ == kFenster) {
       if (geschrieben < max_aus) {
         HuellenWerte& h = aus[geschrieben++];
-        for (int b = 0; b < kBaender; ++b) h.band[b] = static_cast<float>(std::sqrt(summe_band_[b] / (2 * kFenster)));
-        h.k_leistung = static_cast<float>(summe_k_ / kFenster);
+        // values below 1e-30 (-600 dB amplitude, -300 dB power) are written as 0: no subnormal float leaves here (B4)
+        for (int b = 0; b < kBaender; ++b) {
+          const double v = std::sqrt(summe_band_[b] / (2 * kFenster));
+          h.band[b] = v < 1e-30 ? 0.0f : static_cast<float>(v);
+        }
+        const double kl = summe_k_ / kFenster;
+        h.k_leistung = kl < 1e-30 ? 0.0f : static_cast<float>(kl);
         h.spitze = spitze_;
         h.ende_offset = i;
       } else {

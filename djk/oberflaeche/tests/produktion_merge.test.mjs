@@ -31,9 +31,7 @@ test('S7 page: mergePunkte text with numbers, aus in each of the six cases, the 
   assert.equal(ok.aus, false, 'negative control: the normal case is not aus');
   assert.deepEqual(ok.koerper, { spur_ids: ['s1', 's2'], von_beat: 4, bis_beat: 24 });
   assert.equal(mergePunkte(p, ['c1', 'c3'], c, { art: 'export' })[0].aus, true, 'run');
-  const einzeln = mergePunkte(p, ['c1'], c, null)[0];
-  assert.equal(einzeln.aus, true, 'fewer than two tracks (audio clip alone)');
-  assert.match(einzeln.text, /^Merge Tracks \(1 track, beats /, 'singular for one track');
+  assert.deepEqual(mergePunkte(p, ['c1'], c, null), [], '1.14 slice 4 (plan 3.1): one track gives no merge item, Bounce to New Track takes its place');
   const kurz = projekt({ loop: { an: true, von_beat: 0, bis_beat: 0.5 } });
   assert.equal(mergePunkte(kurz, ['c1', 'c3'], c, null)[0].aus, false, 'short loop falls back to the hull');
   const lang = projekt(); lang.spuren[1].clips[0] = au('c3', 8, 5000);

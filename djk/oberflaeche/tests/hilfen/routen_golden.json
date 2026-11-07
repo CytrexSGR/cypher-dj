@@ -19,6 +19,8 @@
      ],
      "geladen": {},
      "graphen_geladen": {},
+     "hallPool": "null",
+     "kanalLimiter": "null",
      "kern": "string",
      "loops": {},
      "pruefmodus": "string",

@@ -30,11 +30,14 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { DatabaseSync } from 'node:sqlite';
 import { KernAnbindung } from '../leitstand/src/kern.ts';
+import { reglerInfo } from '../leitstand/src/regler_info.ts';
 import { json as sendeJson, koerper as leseKoerper, postAbgewiesen, quelleAusKopf } from './http/transport.ts';
 import { Router, type Route, type Bereich, type BereichKontext } from './http/router.ts';
 import { projBereich, type ProjOptionen } from './bereiche/proj/bereich.ts';
 import { geraeteBereich, type GeraeteOptionen } from './bereiche/geraete/bereich.ts';
 import { lernenBereich, type LernenOptionen } from './bereiche/lernen/bereich.ts';
+import { presetInhaltVon, presetsBereich, type PresetOptionen } from './presets/bereich.ts';
+import { kollektionenBereich, type KollektionBereichOptionen } from './kollektionen/bereich.ts';
 import { ausgabeBereich } from './bereiche/proj/ausgabe.ts';   // Paket S3
 import { aufnahmeBereich } from './bereiche/proj/aufnahme.ts';   // 1.8 Slice 1
 import { stemsBereich, type StemsOptionen } from './bereiche/proj/stems.ts';   // 1.13 Slice 6
@@ -64,6 +67,7 @@ import { Katalog, KatalogFehler, KATALOG_TYPEN, SORT_VORGABE, SEITE_VORGABE, SEI
 import { Vorhoeren, VorhoerFehler, kernNurCueVorgabe, vorhoeerKlientVorgabe } from './vorhoeren.ts';
 import { Mediathek, Vorbereiter, MediathekFehler, KLANG_TYPEN, type KlangTreffer, MEDIATHEK_VORGABE, bestandIds, parseBpm, parseLimit } from './mediathek.ts';
 import { pruefeSpur, plane, oeffnetKanal, beatZuMono, wirtRuf, stromVonZiel, faelligeMuster, SPUR_NAME, type MusterPlan, type Fahrt } from './spur.ts';
+import { planeDurchlauf, MAX_SCHLEIFE_TAKTE, type Spur } from './spur.ts';   // 1.12 S7 (M13): track band loop
 import { leseAusgang } from './ausgang.ts';
 import { OhrLeser, hoerAntwort, sync as ohrSync, K as OHR_K, type DeckLage, Hoerscheinstelle, type Hoerschein, type DeckStand as OhrDeckStand } from './ohr.ts';
 // @ts-expect-error reines .mjs ohne Typen (djk/erzeuger); muster_stand lädt Strudel NICHT (Plan-Review M3)
@@ -72,16 +76,38 @@ import { leseMusterStand, setzeAutonom, leseLebt } from '../erzeuger/src/muster_
 import { ALLE_STROEME, istBkStrom, stromVonKanal } from '../vertrag/stroeme.ts';   // S18: stream <-> channel table
 import { listeGraphen, findeGraph, graphHash, GRAPH_NAME, GRAPH_KANAELE, INSTRUMENT_KANAELE } from './graphen.ts';   // Baukasten S12
 
-// Python für welle.py (braucht numpy): CYPHERDJ_PYTHON, sonst die venv der Werkstatt (Arbeitsrechner), sonst die venv
-// im Repo-Wurzelordner (INSTALL §3: `python3 -m venv .venv`), sonst python3 aus dem PATH.
-export function pythonVorgabe(): string {
-  const kandidaten = [process.env.CYPHERDJ_PYTHON, path.join(REPO, 'djk', 'werkstatt', '.venv', 'bin', 'python'), path.join(REPO, '.venv', 'bin', 'python')];
+// The main checkout behind a git worktree (its `.git` is a file pointing at .git/worktrees/<n>, whose `commondir` leads
+// back to the shared .git). The main checkout itself resolves to itself; a folder without git to null.
+export function hauptCheckout(repo: string): string | null {
+  const g = path.join(repo, '.git');
+  try {
+    if (fs.statSync(g).isDirectory()) return repo;
+    const m = /^gitdir:\s*(.+)$/m.exec(fs.readFileSync(g, 'utf8'));
+    if (!m) return null;
+    const gitdir = path.resolve(repo, m[1].trim());
+    const common = path.resolve(gitdir, fs.readFileSync(path.join(gitdir, 'commondir'), 'utf8').trim());
+    return path.dirname(common);
+  } catch { return null; }
+}
+// Python for welle.py and the werkstatt jobs (needs numpy, torchaudio for stems): CYPHERDJ_PYTHON, else the werkstatt venv,
+// else the venv in the repo root (INSTALL §3: `python3 -m venv .venv`), else the same two venvs of the main checkout (a git
+// worktree has no untracked venv; without this step every worktree ran the stems tests on the system python3, 2026-11-04),
+// else python3 from the PATH.
+export function pythonVorgabe(repo: string = REPO, env: NodeJS.ProcessEnv = process.env): string {
+  const venvs = (r: string) => [path.join(r, 'djk', 'werkstatt', '.venv', 'bin', 'python'), path.join(r, '.venv', 'bin', 'python')];
+  const haupt = hauptCheckout(repo);
+  const kandidaten = [env.CYPHERDJ_PYTHON, ...venvs(repo), ...(haupt !== null && haupt !== repo ? venvs(haupt) : [])];
   return kandidaten.find((p) => p !== undefined && p !== '' && fs.existsSync(p)) ?? 'python3';
 }
 // Mixer-Regler des Projekts (spur/*, grp/*, pm/fader) ändern sich nur über das Projekt (Spec 6.22), auf keinem Weg am Projekt vorbei
 // 1.10 slice 3: also the sends (spur|grp/<n>/send/<r>) and the return strips (ret/*, Hall values included)
-const ueberProjekt = (pfad: string): boolean => pfad.startsWith('spur/') || pfad.startsWith('grp/') || pfad.startsWith('ret/') || pfad === 'pm/fader';
-const ueberProjektText = (pfad: string): string => (pfad.startsWith('ret/') || pfad.includes('/send/')
+// 1.10 slice 4a/4b/4c: also the insert stages (ins/komp|eq|saett|lim/<n>/*) and the rack macros (rack/<k>/m1..m4)
+const ueberProjekt = (pfad: string): boolean => pfad.startsWith('spur/') || pfad.startsWith('grp/') || pfad.startsWith('ret/') || pfad.startsWith('ins/') || pfad.startsWith('rack/') || pfad === 'pm/fader';
+const ueberProjektText = (pfad: string): string => (pfad.startsWith('rack/')
+  ? 'rack macros are changed through the project (/proj/aendern: rack_makro for the value, rack_setzen for the mapping)'
+  : pfad.startsWith('ins/')
+  ? 'insert stages are changed through the project (/proj/aendern: insert_setzen, insert_param_setzen, insert_an, insert_entfernen, insert_ordnung)'
+  : pfad.startsWith('ret/') || pfad.includes('/send/')
   ? 'sends, return strips and Hall values are changed through the project (/proj/aendern: send_setzen, return_aendern)'
   : pfad.startsWith('spur/') ? 'track faders are changed through the project (/proj/aendern, spur_aendern)'
     : 'group and master faders are changed through the project (/proj/aendern: gruppenspur_aendern, master_aendern)');
@@ -117,6 +143,8 @@ export interface ServerOptionen {
   stems?: Partial<StemsOptionen>;   // 1.13 Slice 6: Tests biegen zusatzArgs (Prüftrenner, P3) und killMs um
   geraete?: GeraeteOptionen;   // I08: Pfade und Erkennung (Tests geben eigene)
   lernen?: LernenOptionen;     // S19: controller folder (lernen.json) and the devices file (Tests give their own)
+  kollektionen?: KollektionBereichOptionen;   // 1.16 rest: collections folder (default ~/.config/cypherdj[-<i>]/kollektionen); tests give their own
+  presets?: PresetOptionen;    // 1.16: preset folders (werk = factory presets/werk, nutzer = user ~/.config/cypherdj[-<i>]/presets), vocabulary and factory register; tests give their own
   proj?: ProjOptionen;   // D1 S2: Projektwurzel, Arbeitsordner (Vorgaben je Instanz, bereiche/proj/sitzung.ts)
   mediathek?: string;    // Mediathek T2: Vorgabe $CYPHERDJ_MEDIATHEK (nur lesen; fehlt sie: 503 mediathek_fehlt)
   korrekturen?: string;  // Slice 3b: Bestand des Decks für die Eins-Korrekturen; Vorgabe nur im Betrieb: bestand; eine Prüfinstanz (a..i) schreibt nur ausdrücklich
@@ -126,17 +154,26 @@ export interface ServerOptionen {
   klangBefehl?: string;  // Task 3: Programm für POST /klang (Vorgabe djk/wirte/carla/djk-klang); Tests biegen es auf ein Stub-Skript um
 }
 
+// 1.15 A7b: the names of the selector values of spektrum/kanal (index = value; the kern sends the same names as the kanal of /zustand/spektrum)
+const SPEKTRUM_QUELLEN: string[] = ['', 'deck/1', 'deck/2', 'deck/3', 'deck/4', 'erz/1', 'erz/2', 'erz/3', 'erz/4', 'erz/5', 'erz/6', 'erz/7', 'erz/8',
+  'pad/1', 'pad/2', 'bus/1', 'bus/2', 'bus/3', 'bus/4', 'master'];
 const KLANG_GRUPPEN = ['bass', 'melodie'];
 const KLANG_AUS_MAX = 32768, KLANG_ERR_MAX = 8192;
 
 export type Pruefmodus = 'an' | 'aus' | 'unbekannt';
 
 // Drosselung je Schlüssel: höchstens eine Meldung je Intervall, die letzte gewinnt (nachgereicht)
-const DROSSEL_MS: Record<string, number> = { '/uhr': 50, '/zustand/deck': 100, '/pegel': 100, '/zustand/komp': 100, '/zustand/arr': 50, '/zustand/ein': 250, '/zustand/rec': 100 };   // D1 S2: /zustand/arr 50 Hz beim Spielen, Drossel 50 ms (Spec 3.1)
+// D1 S2: /zustand/arr 50 Hz beim Spielen, Drossel 50 ms (Spec 3.1)
+const DROSSEL_MS: Record<string, number> = { '/uhr': 50, '/zustand/deck': 100, '/pegel': 100, '/zustand/komp': 100, '/zustand/arr': 50, '/zustand/ein': 250, '/zustand/rec': 100, '/zustand/mix': 100, '/e/ins_gr': 100,
+  '/zustand/spektrum': 40 };   // 1.15 A7b: 25 Hz, keyed per source (kanal)
+export const INS_GR_FRIST_MS = 500;   // 1.10 slice 4a: as the page's meters (MIX_FRIST_MS); the kern sends 20 Hz while a stage runs
 const DURCHREICHEN = new Set(['/uhr', '/zustand/deck', '/pegel', '/e/regler', '/e/hand', '/e/geladen', '/e/hotcue', '/e/fx',
   '/e/fx/zuweisung', '/e/fx/routing', '/q', '/e/protokollfehler', '/e/halter', '/e/neustart', '/k/willkommen', '/e/ki', '/e/loop', '/e/mitschnitt', '/e/raster',
   '/zustand/komp',   // Effekt-Sektion 2026-10-11: Absenkung je aktivem Kompressor (10 Hz)
-  '/zustand/arr', '/e/freeze', '/zustand/ein', '/zustand/rec', '/e/aufnahme']);   // D1 S2 (Spec 3.4); I08 (§5.14)
+  '/zustand/arr', '/e/freeze', '/zustand/ein', '/zustand/rec', '/e/aufnahme',   // D1 S2 (Spec 3.4); I08 (§5.14)
+  '/e/ins_gr',   // 1.10 slice 4a (§5.5f): gain reduction per running insert stage, 20 Hz from the kern, throttled per kanal
+  '/zustand/mix', '/zustand/spektrum',   // 1.15 A6: gain-reduction meters (10 Hz per channel, throttled per kanal); A7b: the spectrum (25 Hz, 40 ms throttle per kanal)
+  '/e/auto']);   // 1.12 S3 (D8, §5.13): the override state of a lane field, every change at once
 
 interface Eintrag {
   material_id: string; titel: string; camelot: string | null; quelle_bpm: number; dauer_s: number; lufs: number;
@@ -186,12 +223,41 @@ const TYPEN: Record<string, string> = {
   '.svg': 'image/svg+xml', '.png': 'image/png',
 };
 
-interface SpurLauf { quelle: string; anker: number; ende: number; fahrten: Fahrt[]; timer: NodeJS.Timeout[]; offen: MusterPlan[]; gruppen: Set<string>; ids: number[]; teile: { id: number; teil: number; pfad: string }[] }
+interface SpurLauf { quelle: string; anker: number; ende: number; fahrten: Fahrt[]; timer: NodeJS.Timeout[]; offen: MusterPlan[]; gruppen: Set<string>; ids: number[]; teile: { id: number; teil: number; pfad: string }[];
+  schleife?: SchleifenStand; planend?: number }   // 1.12 S7: only for a loop track; planend = end beat of the pass the watcher is sending (MAJOR 1)
+// 1.12 S7 (M13): state of a loop track. anker_naechster = start beat of the next pass not yet sent (MINOR 5: the one name for it),
+// durchlauf = its number k, teilNr = its first part number, n = its length in bars; durchlaeufe = the last two sent passes (MINOR 6).
+interface SchleifenStand { n: number; anker_naechster: number; durchlauf: number; teilNr: number; naechste: Spur | null;
+  durchlaeufe: { k: number; anfang: number; ende: number; teile: number }[] }
+const VORLAUF_SCHLEIFE_BEATS = 2;   // a pass goes to core and wirt this many beats before its start (S8 plan: 0.94 s at 128 BPM, n = 1)
+// Loop state from spuren.json (a file can hold anything): null unless every field is sound
+function schleifeAusDatei(x: unknown): SchleifenStand | null {
+  const s = x as Record<string, unknown> | null;
+  if (!s || typeof s !== 'object') return null;
+  const ganz = (v: unknown, lo: number, hi = Number.MAX_SAFE_INTEGER) => Number.isInteger(v) && (v as number) >= lo && (v as number) <= hi;
+  if (!ganz(s.n, 1, MAX_SCHLEIFE_TAKTE) || !Number.isFinite(s.anker_naechster) || !ganz(s.durchlauf, 0) || !ganz(s.teilNr, 0)) return null;
+  const d = Array.isArray(s.durchlaeufe) ? s.durchlaeufe.filter((x: Record<string, unknown>) => ganz(x?.k, 0) && Number.isFinite(x?.anfang)
+    && Number.isFinite(x?.ende) && ganz(x?.teile, 0)) : [];
+  if (!d.length) return null;
+  const n = s.naechste as Spur | null;
+  const naechste = n && typeof n === 'object' && Array.isArray(n.fahrten) && ganz(n.schleife_takte, 1, MAX_SCHLEIFE_TAKTE) ? n : null;
+  return { n: s.n as number, anker_naechster: s.anker_naechster as number, durchlauf: s.durchlauf as number, teilNr: s.teilNr as number,
+    naechste, durchlaeufe: d.slice(-2) as SchleifenStand['durchlaeufe'] };
+}
 
 // K2: Regler, die /lage erst zeigt, wenn sie von der Vorgabe (INTERFACES §1.5) abweichen
 // Kompressor je Quellkanal (2026-10-11): in der Lage, sobald ein Feld von seiner Vorgabe abweicht
 const KOMP_VORGABE: Record<string, number> = { an: 0, schwelle: -18, ratio: 4, attack: 10, release: 120, makeup: 0, mix: 1, sc: 0 };
 const kompAbweichend = (p: string, w: number): boolean => { const m = /^(?:deck\/[1-4]|erz\/[1-8]|pad\/[12])\/komp\/(\w+)$/.exec(p); return !!m && m[1] in KOMP_VORGABE && w !== KOMP_VORGABE[m[1]]; };
+// 1.15 A2: the 345 mix-tool controls (gate, util, mb, lim, spektrum/kanal) show in lage only once they differ from their default, like komp.
+// The default comes from the contract table (regler_info.ts, compared with the C++ table by its test); the comparison runs in float32, because
+// the core reports floats and lim/decke -0.3 is not exact there. The path set itself is PFAD (hand_bedienung.ts), checked before the kern is called.
+const WERKZEUG_PFAD = /^(?:(?:deck\/[1-4]|erz\/[1-7]|pad\/[12]|bus\/[1-4])\/(?:gate|util|mb|lim)\/|spektrum\/kanal$)/;
+const werkzeugAbweichend = (p: string, w: number): boolean => {
+  if (!WERKZEUG_PFAD.test(p)) return false;
+  const vorgabe = reglerInfo(p)?.vorgabe;
+  return vorgabe !== undefined && Math.fround(w) !== Math.fround(vorgabe);
+};
 // S5r: graph knobs <channel>/bk/1..8 (default 0.5) show in lage only once they differ, like komp; S14: fx/3, fx/4 /bk/1..8 too
 const bkAbweichend = (p: string, w: number): boolean => /^(?:deck\/[1-4]|erz\/[1-35-7]|pad\/[12]|fx\/[34])\/bk\/[1-8]$/.test(p) && w !== 0.5;
 const LAGE_ABWEICHEND: Record<string, number> = { 'master/kleber': 0, 'duck/tiefe': 0, 'duck/release': 200, 'fx/2/rueckweg': 0, 'color/art': 0, 'color/param': 0.5 };
@@ -204,8 +270,12 @@ export class Oberflaeche {
   private readonly letzte = new Map<string, number>();
   private readonly pegelPuffer = new PegelPuffer();   // ungedrosselt, vor der SSE-Drossel gefüttert (GET /pegel)
   private readonly wartend = new Map<string, NodeJS.Timeout>();
+  private spektrumLetzt: { kanal: string; rahmen: number; pegel: string; zeit: number } | null = null;   // 1.15 A7b: last /zustand/spektrum frame
+  private insGr: Record<string, { db: number; t: number }> = {};   // 1.10 slice 4a: last /e/ins_gr reading per stage (ins/komp/<n>) for /lage, not part of the SSE start picture
   private readonly stand = { regler: {} as Record<string, number>, decks: {} as Record<string, Felder>, geladen: {} as Record<string, Felder>, loops: {} as Record<string, Felder>,
     fx: [null, null] as (Felder | null)[], fxZuweisung: [{}, {}] as Record<string, boolean>[],   // Index 0 = FX1, 1 = FX2
+    hallPool: null as { an: boolean; faeden: number; spaet: number; zurueck: number } | null,   // mehrkern Task 5: the kern's /zustand/hall_pool (2 Hz and on change); null until it came, i.e. no pool or an old kern
+    kanalLimiter: null as { gebaut: boolean; latenz_samples: number } | null,   // 1.15 A5c: the kern's own word (/e/kanal_limiter); null until it came, a new kern says it again on its first hallo
     fxRouting: 'post_fader' as 'post_fader' | 'insert',   // Ohr T18: wo der Beat-FX in den Kanalzügen sitzt (Stand des Kerns)
     graphen_geladen: {} as Record<string, string> };   // Baukasten S12/S16: channel -> graph as the kern reports it (/e/graph); optimistic after a POST
   // Ohr T18: Andreas' letzte Wahl. Der Kern behält das Routing über einen Neustart nicht (Rev. 5); der Server sendet sie
@@ -451,8 +521,9 @@ export class Oberflaeche {
     // Prüfinstanz (a..i) hat keine Vorgabe und liest/schreibt die Ablage nur mit ausdrücklichem --analyse (sie berührt nie die echte).
     const analyseOrdner = opt.analyse !== undefined ? opt.analyse : analyseVorgabe(inst);
     const analysierer = analyseOrdner ? new WerkstattAnalyse({ python, cwd: REPO_PFADE.werkstatt, ablage: analyseOrdner, modul: opt.einleserModul, log: opt.log }) : null;
-    this.proj = projBereich(this.bereichKontext(), { katalog: opt.katalog ?? katalogVorgabe(opt.mediathek ?? MEDIATHEK_VORGABE), mediathek: opt.mediathek ?? MEDIATHEK_VORGABE,
-      analyse: analyseOrdner, analysierer, bestand: opt.korrekturen !== undefined ? opt.korrekturen : (inst === '' ? opt.bestand : null), ...opt.proj });
+    const presets = presetsBereich(this.bereichKontext(), { ...(opt.presets ?? {}), projekt: () => this.proj.zugang.offen()?.projekt ?? null });   // 1.9 (O28): built first, the project command preset_anwenden reads its store
+    this.proj = projBereich(this.bereichKontext(), { presetLies: (id) => presetInhaltVon(presets.speicher, id), katalog: opt.katalog ?? katalogVorgabe(opt.mediathek ?? MEDIATHEK_VORGABE), mediathek: opt.mediathek ?? MEDIATHEK_VORGABE,
+      wirtOrdner: () => this.wirtBasis(), analyse: analyseOrdner, analysierer, bestand: opt.korrekturen !== undefined ? opt.korrekturen : (inst === '' ? opt.bestand : null), ...opt.proj });
     this.router.melde(this.proj);
     this.ausgabe = ausgabeBereich(this.bereichKontext(), this.proj.zugang, { wirtOrdner: () => this.wirtBasis() });   // Paket S3: /proj/freeze, /proj/export (Spec 3.4)
     this.router.melde(this.ausgabe);
@@ -462,6 +533,8 @@ export class Oberflaeche {
     this.router.melde(this.stems);
     this.router.melde(geraeteBereich(this.bereichKontext(), opt.geraete ?? {}));   // I08: /geraete
     this.router.melde(lernenBereich(this.bereichKontext(), opt.lernen ?? {}));   // S19: /lernen
+    this.router.melde(presets);   // 1.16: /presets (presets/bereich.ts), built above so that the project command preset_anwenden reads its store
+    this.router.melde(kollektionenBereich(this.bereichKontext(), opt.kollektionen ?? {}));   // 1.16 rest: /kollektionen (kollektionen/bereich.ts)
   }
 
   async starte(): Promise<void> {
@@ -531,6 +604,9 @@ export class Oberflaeche {
     if (d.adresse === '/k/willkommen' && alteGeneration === null) this.fragGraphen('start');   // Baukasten S16: first contact
     if (d.adresse === '/e/graph') this.merkeGraph(String(f.kanal), String(f.name));   // Baukasten S16: the kern's word
     if (d.adresse === '/e/regler') this.stand.regler[f.pfad as string] = f.wert as number;
+    if (d.adresse === '/e/halter' && f.halter === 'mensch') this.schleifenHandgriff(String(f.pfad));   // 1.12 S7 MAJOR 3
+    if (d.adresse === '/e/regler' && f.pfad === 'spektrum/kanal') this.spektrumLetzt = null;   // 1.15 A7b: a frame of the old source must not be served for the new one
+    if (d.adresse === '/zustand/spektrum') this.spektrumLetzt = { kanal: String(f.kanal), rahmen: Number(f.rahmen), pegel: String(f.pegel), zeit: Date.now() };   // before the throttle
     if (d.adresse === '/q') this.merkeQuittung(f);
     if (d.adresse === '/e/ki') this.setzeKiGestoppt(Number(f.gestoppt) === 1);
     // Riegel 2026-09-30: /e/ki kommt nur beim Wechsel; ein neu gestarteter Server holt den Stand aus dem periodischen
@@ -570,7 +646,11 @@ export class Oberflaeche {
       this.verteile({ a: 'wiederherstellung', f: { uebersprungen: true, grund: 'gebremster_start' } });
     }
     if (neuerKern) this.boxFxPlanen();   // Paket 2 Slice 5 (F07): Schnappschuss VOR dem Leeren (B15)
+    if (neuerKern || gebremst) this.spektrumLetzt = null;   // 1.15 A7b: the new kern starts with the selector at 0
     if (neuerKern || gebremst) { this.stand.fx = [null, null]; this.stand.fxZuweisung = [{}, {}]; }  // nach einem Neustart sind beide Einheiten aus
+    if (neuerKern || gebremst) this.stand.hallPool = null;   // mehrkern Task 5: a new kern says it again within 0.5 s, or has no pool
+    if (d.adresse === '/zustand/hall_pool') this.stand.hallPool = { an: Number(f.an) === 1, faeden: Number(f.faeden), spaet: Number(f.spaet), zurueck: Number(f.zurueck) };   // mehrkern Task 5: real boolean for /lage
+    if (d.adresse === '/e/kanal_limiter') this.stand.kanalLimiter = { gebaut: Number(f.gebaut) === 1, latenz_samples: Number(f.latenz_samples) };   // A5c: real boolean for the page (=== true)
     if (d.adresse === '/e/fx/routing') this.stand.fxRouting = Number(f.routing) === 1 ? 'insert' : 'post_fader';
     if (neuerKern || gebremst) {   // Ohr T18: der neue Kern steht auf Post Fader; Andreas' Wahl geht erneut hin
       this.stand.fxRouting = 'post_fader';
@@ -582,6 +662,8 @@ export class Oberflaeche {
     if (neuerKern || gebremst) { this.graphenVomKernMs = null; this.fragGraphen('neustart'); }   // Baukasten S16: ask the new kern
     if (neuerKern || gebremst) this.stand.loops = {};                  // Boxen liegen nicht im Neustart-Zustand
     if (neuerKern || gebremst) for (const k of Object.keys(this.loopLadung)) delete this.loopLadung[k];   // Ladung ohne Echo gilt für den neuen Kern nicht (boxInhaltName zöge sie vor)
+    if (neuerKern || gebremst) this.insGr = {};   // 1.10 slice 4a: a new kern starts without a stage running
+    if (d.adresse === '/e/ins_gr' && typeof f.kanal === 'string' && Number.isFinite(Number(f.gr_db))) this.insGr[f.kanal] = { db: Math.max(0, Number(f.gr_db)), t: Date.now() };
     if (d.adresse === '/pegel') this.pegelPuffer.nimm({ kanal: String(f.kanal), spitze_db: Number(f.spitze_db) });   // vor der Drossel: Spitzen gehen nicht verloren
     // Spec D1 2.10: Haken ereignis? der Bereiche, für jedes Kern-Ereignis, nach der Zustandsführung und vor dem Durchreichen (Plan d1-s1 Task 9)
     this.router.ereignis(d.adresse, f, (bereich, e) => this.opt.log?.({ typ: 'bereich_ereignis_fehler', bereich, adresse: d.adresse, fehler: e.message }));
@@ -605,6 +687,8 @@ export class Oberflaeche {
       this.verteile(n);
     }, ms - (jetzt - zuletzt)));
   }
+
+  private ansageZeile: { text: string; art: string; von: string; zeit: number } | null = null;   // demo overlay (POST /ansage)
 
   private verteile(n: Record<string, unknown>): void {
     const text = `data: ${JSON.stringify(n)}\n\n`;
@@ -1285,6 +1369,22 @@ export class Oberflaeche {
     catch { return new Set<string>(); }
   })();
 
+  // In-flight wirt calls of a loop's pass per track name (see sendeDurchlauf); settled entries remove themselves
+  private readonly wirtImFlug = new Map<string, Promise<unknown>>();
+  private wirtFlug<T>(name: string, fn: () => Promise<T>): Promise<T> {
+    const p = fn();
+    const eintrag = p.then(() => undefined, () => undefined);
+    this.wirtImFlug.set(name, eintrag);
+    void eintrag.then(() => { if (this.wirtImFlug.get(name) === eintrag) this.wirtImFlug.delete(name); });
+    return p;
+  }
+  // A new run of a name waits until the previous run's in-flight wirt call (fahre answer and halte) has settled; bounded by the wirtRuf timeout
+  private async wirtFlugAbwarten(name: string): Promise<void> {
+    const f = this.wirtImFlug.get(name);
+    if (!f) return;
+    await Promise.race([f, new Promise((r) => setTimeout(r, 3000))]);
+  }
+
   private wirtBasis(): string { return this.opt.wirtOrdner ?? wirtOrdnerVorgabe(); }
   private wirtSock(gruppe: string): string { return path.join(this.wirtBasis(), `wirt-${gruppe}.sock`); }
 
@@ -1293,7 +1393,7 @@ export class Oberflaeche {
   private spurenSichern(): void {
     const datei = path.join(this.wirtBasis(), 'spuren.json');
     const daten = [...this.spuren].map(([name, l]) => ({ name, quelle: l.quelle, anker: l.anker, ende: l.ende, fahrten: l.fahrten, gruppen: [...l.gruppen],
-      ids: l.ids, teile: l.teile, muster: l.offen }));
+      ids: l.ids, teile: l.teile, muster: l.offen, ...(l.schleife ? { schleife: l.schleife } : {}) }));
     try {
       fs.mkdirSync(this.wirtBasis(), { recursive: true });
       const tmp = `${datei}.${process.pid}.neu`;
@@ -1312,8 +1412,11 @@ export class Oberflaeche {
       const lauf: SpurLauf = { quelle: x.quelle === 'cypher' ? 'cypher' : 'andreas', anker: Number(x.anker), ende: Number(x.ende), fahrten: Array.isArray(x.fahrten) ? x.fahrten as Fahrt[] : [], timer: [], offen: muster,
         gruppen: new Set((Array.isArray(x.gruppen) ? x.gruppen : []).filter((g: unknown) => g === 'bass' || g === 'melodie') as string[]),
         ids: Array.isArray(x.ids) ? x.ids.filter(Number.isFinite) : [], teile: Array.isArray(x.teile) ? x.teile : [] };
+      const schleife = schleifeAusDatei(x.schleife);   // 1.12 S7: a loop resumes its watcher from the next unsent pass
+      if (schleife) lauf.schleife = schleife;
       this.spuren.set(x.name, lauf);
       if (lauf.offen.length) this.musterTimer(x.name, lauf);
+      if (lauf.schleife) this.schleifenWaechter(x.name, lauf);
     }
     if (this.spuren.size) this.opt.log?.({ typ: 'spuren_geladen', anzahl: this.spuren.size });
   }
@@ -1335,27 +1438,45 @@ export class Oberflaeche {
     const quelle = this.quelle(), name = r.spur.name;
     if (quelle === 'cypher' && this.kiGestoppt) return this.json(a, 409, { fehler: 'ki_gestoppt' });
     if (this.spuren.has(name)) return this.json(a, 409, { fehler: 'laeuft', text: `track ${name} is running; stop it first` });
+    await this.wirtFlugAbwarten(name);   // the previous run's late fahre/halte first, then this run's fahre
+    if (this.spuren.has(name)) return this.json(a, 409, { fehler: 'laeuft', text: `track ${name} is running; stop it first` });
     const u = this.kern.uhr as unknown as { beat: number; bpm: number; mono_ns: number } | null;
     if (!u) return this.json(a, 409, { fehler: 'keine_uhr' });
     const anker = this.abVon(ab);
-    const g = plane(r.spur, anker);
+    const schleife = r.spur.schleife_takte !== undefined;   // 1.12 S7: pass 0 of a loop; its end is the start of pass 1
+    const g = schleife ? planeDurchlauf(r.spur, anker, 0, 0) : plane(r.spur, anker);
     if (quelle === 'cypher') {
       // F4: AUTO aus auf einem Strom heißt, Andreas hält ihn; Cyphers Spur darf ihn nicht berühren (Kern, Wirt, Muster)
       for (const f of r.spur.fahrten) {
         const st = stromVonZiel(f.ziel);
         if (st !== null && !leseMusterStand(this.musterOrdner(st)).autonom) return this.json(a, 409, { fehler: 'auto_aus', strom: st, ziel: f.ziel, text: 'AUTO is off: Andreas holds this stream' });
       }
-      const p = oeffnetKanal(this.stand.regler, g.teile);
+      // 1.12 S7: for a loop over two passes, so that the seam (end of pass k → start of pass k+1) is checked from the start
+      const p = oeffnetKanal(this.stand.regler, schleife ? [...g.teile, ...planeDurchlauf(r.spur, g.ende_beat, 0, 0).teile] : g.teile);
       if (p) return this.json(a, 409, { fehler: 'kein_hoerschein', pfad: p, text: 'this track opens a closed channel; Cypher may not (Plan Hand D8)' });
     }
     const lauf: SpurLauf = { quelle, anker, ende: g.ende_beat, fahrten: r.spur.fahrten, timer: [], offen: [...g.muster], gruppen: new Set(), ids: [], teile: [] };
+    if (schleife) {   // 1.12 S7: set before the track enters the table, so it never looks like a one-shot track (cleanup, GET /spur)
+      lauf.schleife = { n: r.spur.schleife_takte as number, anker_naechster: g.ende_beat, durchlauf: 1, teilNr: g.teile.length, naechste: null,
+        durchlaeufe: [{ k: 0, anfang: anker, ende: g.ende_beat, teile: g.teile.length }] };
+    }
     this.spuren.set(name, lauf);
     this.spurenSichern();
     // Surge-Fahrten zuerst: scheitert ein Wirt, ist noch nichts beim Kern und die schon belegten Wirte halten an
     for (const w of g.wirt) {
       const befehl: Record<string, unknown> = { befehl: 'fahre', name: w.name, bis: w.bis, dauer: w.dauer_beats * 60 / u.bpm,
         ab: beatZuMono(u, w.ab_beat), spur: name, form: w.form, ...(w.von !== undefined ? { von: w.von } : {}) };
-      const antwort = await wirtRuf(this.wirtSock(w.gruppe), befehl);
+      // In-flight unit like sendeDurchlauf: a STOP during this await deleted the run before the group was recorded, so its halte missed
+      // this wirt; the late fahre is held here, and a new run of the name waits for it (wirtFlugAbwarten)
+      const antwort = await this.wirtFlug(name, async () => {
+        const r = await wirtRuf(this.wirtSock(w.gruppe), befehl);
+        if (this.spuren.get(name) !== lauf && r.ok) await wirtRuf(this.wirtSock(w.gruppe), { befehl: 'halte', spur: name });
+        return r;
+      });
+      if (this.spuren.get(name) !== lauf) {   // stopped while waiting: no core part may follow the STOP's /k/abbruch
+        for (const gr of lauf.gruppen) await wirtRuf(this.wirtSock(gr), { befehl: 'halte', spur: name });
+        return this.json(a, 409, { fehler: 'gestoppt', name, text: `track ${name} was stopped while it started` });
+      }
       if (!antwort.ok) {
         for (const gr of lauf.gruppen) await wirtRuf(this.wirtSock(gr), { befehl: 'halte', spur: name });
         this.spuren.delete(name);
@@ -1375,6 +1496,7 @@ export class Oberflaeche {
       lauf.teile.push({ id: felder.id, teil: i, pfad: t.pfad });
     }
     if (lauf.offen.length) this.musterTimer(name, lauf);
+    if (lauf.schleife) this.schleifenWaechter(name, lauf);
     this.spurenSichern();
     this.opt.log?.({ typ: 'spur', name, quelle, anker, teile: g.teile.length, wirt: g.wirt.length, muster: g.muster.length });
     const quittung = lauf.ids.length ? await this.warteQuittung(lauf.ids[0], g.teile[0].ab_beat) : null;
@@ -1392,6 +1514,49 @@ export class Oberflaeche {
     if (this.quelle() === 'cypher' && lauf.quelle !== 'cypher') return this.json(a, 403, { fehler: 'nur_andreas', text: 'this track is Andreas\'s' });
     const { felder, wirt } = await this.spurAbbrechen(name, lauf, this.quelle());
     this.json(a, 200, { ok: true, name, felder, wirt });
+  }
+
+  // POST /spur/aendern {name, spur} (1.12 S7, S8 plan "Festlegungen"): the new line of a running loop, checked like POST /spur (schleife_takte
+  // required, it may change), waits as naechste and applies from the next pass not yet sent; a later change replaces a waiting one. Only the
+  // owner changes a loop (MAJOR 3: nur_andreas / nur_cypher); for Cypher Stop Cypher, AUTO and D8 hold as at the start. Answer
+  // {ok, name, ab_beat, ab_takt, uebernaechster}: the start of the pass it applies from; uebernaechster = the next pass was already being
+  // sent, so it applies from the one after.
+  private async spurAendern(d: Record<string, unknown>, a: http.ServerResponse): Promise<void> {
+    const name = d.name, quelle = this.quelle();
+    if (typeof name !== 'string' || !SPUR_NAME.test(name)) return this.json(a, 400, { fehler: 'name' });
+    if (quelle === 'cypher' && this.kiGestoppt) return this.json(a, 409, { fehler: 'ki_gestoppt' });
+    this.spurenAufraeumen();
+    const lauf = this.spuren.get(name);
+    if (!lauf) return this.json(a, 404, { fehler: 'keine_spur', name });
+    if (!lauf.schleife) return this.json(a, 409, { fehler: 'keine_schleife', name, text: 'only a running loop can be changed; stop and start it' });
+    if (lauf.quelle !== quelle) {
+      return lauf.quelle === 'cypher' ? this.json(a, 403, { fehler: 'nur_cypher', text: 'this loop is Cypher\'s' })
+        : this.json(a, 403, { fehler: 'nur_andreas', text: 'this loop is Andreas\'s' });
+    }
+    const r = pruefeSpur(d.spur, this.fahrbar);
+    if ('fehler' in r) return this.json(a, 400, { fehler: 'spur', text: r.fehler });
+    if (r.spur.name !== name) return this.json(a, 400, { fehler: 'spur', text: `spur.name must be ${name}` });
+    if (r.spur.schleife_takte === undefined) return this.json(a, 400, { fehler: 'spur', text: 'schleife_takte: a loop stays a loop (1..64)' });
+    const ueber = r.spur.fahrten.findIndex((f) => ueberProjekt(f.ziel));
+    if (ueber >= 0) {
+      return this.json(a, 409, { fehler: 'ueber_projekt', ziel: r.spur.fahrten[ueber].ziel, index: ueber,
+        text: `${ueberProjektText(r.spur.fahrten[ueber].ziel)}, not by an automation track` });
+    }
+    const s = lauf.schleife, uebernaechster = lauf.planend !== undefined;
+    const ab = uebernaechster ? lauf.planend as number : s.anker_naechster;
+    if (quelle === 'cypher') {
+      for (const f of r.spur.fahrten) {
+        const st = stromVonZiel(f.ziel);
+        if (st !== null && !leseMusterStand(this.musterOrdner(st)).autonom) return this.json(a, 409, { fehler: 'auto_aus', strom: st, ziel: f.ziel, text: 'AUTO is off: Andreas holds this stream' });
+      }
+      const g = planeDurchlauf(r.spur, ab, 0, 0);
+      const p = oeffnetKanal(this.stand.regler, [...g.teile, ...planeDurchlauf(r.spur, g.ende_beat, 0, 0).teile]);
+      if (p) return this.json(a, 409, { fehler: 'kein_hoerschein', pfad: p, text: 'this change opens a closed channel; Cypher may not (Plan Hand D8)' });
+    }
+    s.naechste = r.spur;
+    this.spurenSichern();
+    this.opt.log?.({ typ: 'spur_aendern', name, quelle, ab_beat: ab, uebernaechster });
+    this.json(a, 200, { ok: true, name, ab_beat: ab, ab_takt: Math.floor(ab / 4) + 1, uebernaechster });
   }
 
   // F5: ein Timer je Spur mit Muster-Fahrten; er schreibt, sobald der Kern-Beat ab_beat − Vorlauf erreicht hat
@@ -1547,14 +1712,14 @@ export class Oberflaeche {
     const beat = (this.kern.uhr as unknown as { beat: number } | null)?.beat;
     if (beat === undefined) return;
     let weg = false;
-    for (const [name, l] of this.spuren) if (l.ende + 1 < beat) { for (const t of l.timer) clearTimeout(t); this.spuren.delete(name); weg = true; }
+    for (const [name, l] of this.spuren) if (!l.schleife && l.ende + 1 < beat) { for (const t of l.timer) clearTimeout(t); this.spuren.delete(name); weg = true; }
     if (weg) this.spurenSichern();
   }
 
   private spurListe(): Record<string, unknown>[] {
     this.spurenAufraeumen();
     return [...this.spuren].map(([name, l]) => ({ name, quelle: l.quelle, anker_beat: l.anker, ende_beat: l.ende, fahrten: l.fahrten,
-      abgelehnt: this.spurAbgelehnt(l) }));
+      abgelehnt: this.spurAbgelehnt(l), ...(l.schleife ? this.schleifenInfo(l.schleife) : {}) }));
   }
 
   // Teile der Spur, deren letzte Kern-Quittung ein Fehlstatus ist (GET /spur und Antwort von POST /spur)
@@ -1563,6 +1728,141 @@ export class Oberflaeche {
       const y = this.quittungen.get(t.id)?.at(-1);
       return y && FEHL_STATUS.has(Number(y.status)) ? [{ teil: t.teil, pfad: t.pfad, status: Number(y.status), grund: String(y.grund ?? '') }] : [];
     });
+  }
+
+  // 1.12 S7 (M13): GET /spur fields of a loop. anker_beat/ende_beat name the RUNNING pass (the last sent one whose start the core beat
+  // has reached; before that the first one), durchlauf its number k, schleife_takte its length, naechste whether a change waits.
+  private schleifenInfo(s: SchleifenStand): Record<string, unknown> {
+    const beat = (this.kern.uhr as unknown as { beat: number } | null)?.beat ?? -Infinity;
+    const d = s.durchlaeufe.filter((x) => x.anfang <= beat).at(-1) ?? s.durchlaeufe[0];
+    return { schleife_takte: (d.ende - d.anfang) / 4, durchlauf: d.k, anker_beat: d.anfang, ende_beat: d.ende, naechste: s.naechste !== null };
+  }
+
+  // 1.12 S7: one watcher per loop track (like musterTimer, 50 ms, core beat instead of wall clock). MAJOR 1: it is serial; while a pass is
+  // being planned (lauf.planend, set before the first await) further ticks do nothing, so two ticks during one await never plan a pass twice.
+  private schleifenWaechter(name: string, lauf: SpurLauf): void {
+    const zeit = setInterval(() => {
+      if (this.spuren.get(name) !== lauf) { clearInterval(zeit); return; }
+      if (lauf.planend !== undefined) return;
+      void this.schleifenTakt(name, lauf);
+    }, 50);
+    zeit.unref();
+    lauf.timer.push(zeit);
+  }
+
+  // One tick. MAJOR 2: the pass to send is the one starting at anker_naechster; once the core beat is within VORLAUF_SCHLEIFE_BEATS of it,
+  // it goes out. If its start is not in the future any more (the clock was away, the server was down), the missed passes are skipped:
+  // with k = floor((beat − anker_naechster) / 4n) + 1 passes dropped, the next start lies after the beat. A pass whose start lies in the
+  // past is never sent.
+  private async schleifenTakt(name: string, lauf: SpurLauf): Promise<void> {
+    const s = lauf.schleife as SchleifenStand, u = this.kern.uhr as unknown as { beat: number; bpm: number; mono_ns: number } | null;
+    if (!u || u.beat < s.anker_naechster - VORLAUF_SCHLEIFE_BEATS) return;
+    if (s.anker_naechster <= u.beat) {
+      this.schleifeUeberspringen(name, s, Math.floor((u.beat - s.anker_naechster) / (4 * s.n)) + 1, u.beat);
+      if (u.beat < s.anker_naechster - VORLAUF_SCHLEIFE_BEATS) { this.spurenSichern(); return; }
+    }
+    lauf.planend = s.anker_naechster + 4 * s.n;   // sendeDurchlauf sets the exact end before its first await
+    try { await this.sendeDurchlauf(name, lauf, u); } finally { lauf.planend = undefined; }
+  }
+
+  private schleifeUeberspringen(name: string, s: SchleifenStand, weg: number, beat: number): void {
+    this.opt.log?.({ typ: 'spur_schleife_uebersprungen', name, durchlauf: s.durchlauf, durchlaeufe: weg, ab_beat: s.anker_naechster, beat });
+    s.anker_naechster += weg * 4 * s.n;
+    s.durchlauf += weg;
+  }
+
+  // Send the pass at anker_naechster: wirt first (fahre with a start in the future), then the core parts (/k/teil, plan spur:<name>, part
+  // numbers continuing). After every await the loop must still be this one (MAJOR 1: a STOP during the await lets no part follow); a wirt
+  // error ends the loop with a log entry (there is no HTTP answer inside the watcher). spuren.json is written once per pass (MINOR 6).
+  private async sendeDurchlauf(name: string, lauf: SpurLauf, u: { beat: number; bpm: number; mono_ns: number }): Promise<void> {
+    const s = lauf.schleife as SchleifenStand;
+    const spur: Spur = s.naechste ?? { name, fahrten: lauf.fahrten, schleife_takte: s.n };
+    const g = planeDurchlauf(spur, s.anker_naechster, 0, s.teilNr);
+    lauf.planend = g.ende_beat;
+    if (lauf.quelle === 'cypher') {   // MAJOR 3: Stop Cypher, AUTO and D8 hold for every pass of Cypher's loop, not only at the start
+      const sperre = this.schleifenSperre(spur, g.teile);
+      if (sperre) return this.schleifeBeenden(name, lauf, sperre);
+    }
+    for (const w of g.wirt) {
+      const uhr = (this.kern.uhr as unknown as typeof u | null) ?? u;
+      // The fahre and, if the run ended meanwhile, its compensating halte form one in-flight unit per track name: a new run of that name
+      // waits for it (wirtFlugAbwarten), so the wirt sees old fahre, halte, new fahre in this order. A halte after the new fahre would drop the
+      // new ramps; no halte would leave the old ramp where it is older than the new one (wirtsteuerung.py: a fahre replaces only t0 >= its ab).
+      const antwort = await this.wirtFlug(name, async () => {
+        const r = await wirtRuf(this.wirtSock(w.gruppe), { befehl: 'fahre', name: w.name, bis: w.bis, dauer: w.dauer_beats * 60 / uhr.bpm,
+          ab: beatZuMono(uhr, w.ab_beat), spur: name, form: w.form, ...(w.von !== undefined ? { von: w.von } : {}) });
+        if (this.spuren.get(name) !== lauf && r.ok) await wirtRuf(this.wirtSock(w.gruppe), { befehl: 'halte', spur: name });   // stopped while waiting: the STOP's halte may have come first
+        return r;
+      });
+      if (this.spuren.get(name) !== lauf) return;
+      if (!antwort.ok) return this.schleifeBeenden(name, lauf, { grund: 'wirt', gruppe: w.gruppe, text: String(antwort.fehler ?? '') });
+      lauf.gruppen.add(w.gruppe);
+      this.opt.log?.({ typ: 'spur_wirt', name, gruppe: w.gruppe, parameter: w.name, ab_beat: w.ab_beat, durchlauf: s.durchlauf });
+      if (Number(antwort.ersetzt) > 0) this.opt.log?.({ typ: 'spur_wirt_ersetzt', name, gruppe: w.gruppe, parameter: w.name, ersetzt: Number(antwort.ersetzt) });
+    }
+    const jetzt = (this.kern.uhr as unknown as { beat: number } | null)?.beat ?? u.beat;
+    if (g.anfang_beat <= jetzt) {   // the wirt took so long that the start has passed: the core parts of this pass are not sent (MAJOR 2)
+      this.opt.log?.({ typ: 'spur_schleife_uebersprungen', name, durchlauf: s.durchlauf, durchlaeufe: 1, ab_beat: g.anfang_beat, beat: jetzt });
+      this.schleifeUebernimm(lauf, spur);
+      s.durchlauf++;
+      s.anker_naechster = g.ende_beat;   // the length of this pass, which may already be the new n
+      this.spurenSichern();
+      return;
+    }
+    for (const t of g.teile) {
+      const felder = { id: Number(++this.id), quelle: lauf.quelle, plan: `spur:${name}`, teil: t.nr, pfad: t.pfad, ab_beat: t.ab_beat,
+        dauer_beats: t.dauer_beats, nach: t.nach, form: t.form, politik: t.politik, gruppe: '', hoerschein: '' };
+      this.kern.sende('/k/teil', felder);
+      this.gesendet++;
+      lauf.ids.push(felder.id);
+      lauf.teile.push({ id: felder.id, teil: t.nr, pfad: t.pfad });
+    }
+    this.schleifeUebernimm(lauf, spur);
+    s.durchlaeufe = [...s.durchlaeufe, { k: s.durchlauf, anfang: g.anfang_beat, ende: g.ende_beat, teile: g.teile.length }].slice(-2);
+    const behalten = s.durchlaeufe.reduce((n, d) => n + d.teile, 0);   // MINOR 6: ids and teile of the last two passes only
+    lauf.ids = behalten ? lauf.ids.slice(-behalten) : [];
+    lauf.teile = behalten ? lauf.teile.slice(-behalten) : [];
+    this.opt.log?.({ typ: 'spur_durchlauf', name, durchlauf: s.durchlauf, anfang_beat: g.anfang_beat, teile: g.teile.length, wirt: g.wirt.length });
+    s.durchlauf++;
+    s.teilNr += g.teile.length;
+    s.anker_naechster = g.ende_beat;
+    lauf.ende = g.ende_beat;
+    this.spurenSichern();
+  }
+
+  // The line a pass used is now the loop's; a change that came in during the awaits stays waiting for the next pass
+  private schleifeUebernimm(lauf: SpurLauf, spur: Spur): void {
+    const s = lauf.schleife as SchleifenStand;
+    lauf.fahrten = spur.fahrten;
+    s.n = spur.schleife_takte as number;
+    if (s.naechste === spur) s.naechste = null;
+  }
+
+  // Why Cypher's loop may not play its next pass (null: it may): Stop Cypher, AUTO off on a stream it moves (F4), a part that opens a
+  // closed channel against the current values (Plan Hand D8)
+  private schleifenSperre(spur: Spur, teile: { pfad: string; nach: number }[]): Record<string, unknown> | null {
+    if (this.kiGestoppt) return { grund: 'ki_gestoppt' };
+    for (const f of spur.fahrten) {
+      const st = stromVonZiel(f.ziel);
+      if (st !== null && !leseMusterStand(this.musterOrdner(st)).autonom) return { grund: 'auto_aus', strom: st, ziel: f.ziel };
+    }
+    const p = oeffnetKanal(this.stand.regler, teile as Parameters<typeof oeffnetKanal>[1]);
+    return p ? { grund: 'kein_hoerschein', pfad: p } : null;
+  }
+
+  // MAJOR 3: a hand on a target of Cypher's loop (the core reports holder mensch) ends that loop; Andreas' own loops keep running
+  private schleifenHandgriff(pfad: string): void {
+    for (const [name, l] of this.spuren) {
+      if (!l.schleife || l.quelle !== 'cypher') continue;
+      const ziele = [...l.fahrten, ...(l.schleife.naechste?.fahrten ?? [])].map((f) => f.ziel);
+      if (ziele.includes(pfad)) void this.schleifeBeenden(name, l, { grund: 'hand', pfad });
+    }
+  }
+
+  private async schleifeBeenden(name: string, lauf: SpurLauf, grund: Record<string, unknown>): Promise<void> {
+    if (this.spuren.get(name) !== lauf) return;
+    this.opt.log?.({ typ: 'spur_schleife_ende', name, quelle: lauf.quelle, ...grund });
+    await this.spurAbbrechen(name, lauf, lauf.quelle);
   }
 
   // Review Hand M7: Cyphers Befehle tragen plan 'cypher', damit /k/abbruch sie (auch wartende Deck-Teile) trifft
@@ -1649,6 +1949,15 @@ export class Oberflaeche {
   }
 
   // GET /lage (Plan Hand D5): verdichteter Stand für einen Zug
+  // 1.15 A7b (D11): the last spectrum frame, or {leer:true} while the selector is 0 (known from the /e/regler echo: no source has the name '') or no frame came yet.
+  private spektrum(): Record<string, unknown> {
+    const l = this.spektrumLetzt;
+    const sel = this.stand.regler['spektrum/kanal'];
+    if (!l) return { leer: true };
+    if (sel !== undefined && l.kanal !== SPEKTRUM_QUELLEN[sel]) return { leer: true };   // a late frame of the previous source
+    return { leer: false, kanal: l.kanal, rahmen: l.rahmen, pegel: l.pegel, alter_ms: Date.now() - l.zeit };
+  }
+
   private lage(): Record<string, unknown> {
     const u = this.kern.uhr as unknown as { beat: number; bpm: number } | null;
     const beat = u?.beat ?? 0, bestand = leseBestand(this.opt.bestand);
@@ -1666,14 +1975,17 @@ export class Oberflaeche {
         hoerschein: hs ? { urteil: hs.urteil, gueltig_bis_takt: Math.floor(hs.gueltig_bis_beat / 4) + 1, gruende: hs.gruende } : null };
     });
     const regler: Record<string, number | null> = Object.fromEntries(Object.entries(this.stand.regler)
-      .filter(([p, w]) => /^(deck\/[12]|pad\/[12]|erz\/[1-3])\/(fader|trim|eq\/|kill\/|filter)|^(xfader|master\/pegel)$/.test(p) || (p in LAGE_ABWEICHEND && w !== LAGE_ABWEICHEND[p]) || (/^(deck\/[12]|pad\/[12]|erz\/[1-3])\/send\/2$/.test(p) && w !== -200) || kompAbweichend(p, w) || bkAbweichend(p, w))   // erst abweichend von der Vorgabe sichtbar (K2: Kleber, Duck, Hall-Rückweg und -Send)ar
-      .map(([p, w]) => [p, p === 'master/kleber' || p === 'color/param' || p.includes('/bk/') ? Math.round(w * 100) / 100 : Math.round(w * 10) / 10]));
+      .filter(([p, w]) => /^(deck\/[12]|pad\/[12]|erz\/[1-3])\/(fader|trim|eq\/|kill\/|filter)|^(xfader|master\/pegel)$/.test(p) || (p in LAGE_ABWEICHEND && w !== LAGE_ABWEICHEND[p]) || (/^(deck\/[12]|pad\/[12]|erz\/[1-3])\/send\/2$/.test(p) && w !== -200) || kompAbweichend(p, w) || bkAbweichend(p, w) || werkzeugAbweichend(p, w))   // erst abweichend von der Vorgabe sichtbar (K2: Kleber, Duck, Hall-Rückweg und -Send)ar
+      .map(([p, w]) => [p, p === 'master/kleber' || p === 'color/param' || p.includes('/bk/') || WERKZEUG_PFAD.test(p) ? Math.round(w * 100) / 100 : Math.round(w * 10) / 10]));
     // Keylock 3b (Prüfung MINOR 4): der Knopf steht immer da, 1 an, 0 aus, null unbekannt (noch keine Meldung vom Kern; der Kern
     // schickt sie jedem neuen Abonnenten beim ersten /k/hallo)
     regler.keylock = typeof this.stand.regler.keylock === 'number' ? this.stand.regler.keylock : null;
+    const jetztMs = Date.now();   // 1.10 slice 4a: the stages that sent in the last 500 ms; a stage that stops sending (bypass, removed) simply falls out
+    const insGr = Object.fromEntries(Object.entries(this.insGr).filter(([, g]) => jetztMs - g.t < INS_GR_FRIST_MS).sort(([a], [b]) => a.localeCompare(b, 'en', { numeric: true }))
+      .map(([k, g]) => [k, Math.round(g.db * 10) / 10]));
     return { uhr: { beat: Math.round(beat * 100) / 100, takt: Math.floor(beat / 4) + 1, schlag: Math.floor(((beat % 4) + 4) % 4) + 1,
       bpm: u?.bpm ?? null }, ki: { gestoppt: this.kiGestoppt }, decks, regler, boxen: this.stand.loops, fx: this.stand.fx,
-      fx_routing: this.stand.fxRouting, quittungen: this.cypherQuittungen.slice(-10), studio: this.studioLage(), ausgang: leseAusgang(this.opt.digitalout) };
+      fx_routing: this.stand.fxRouting, ...(Object.keys(insGr).length ? { ins_gr: insGr } : {}), ...(this.stand.kanalLimiter ? { kanal_limiter: { ...this.stand.kanalLimiter } } : {}), ...(this.stand.hallPool ? { hall_pool: { ...this.stand.hallPool } } : {}), quittungen: this.cypherQuittungen.slice(-10), studio: this.studioLage(), ausgang: leseAusgang(this.opt.digitalout) };
   }
 
   // Plan Hand D1: Quelle je Anfrage. Kopf x-djk-quelle: cypher → jeder Kern-Befehl dieser Anfrage (auch über await)
@@ -1750,6 +2062,7 @@ export class Oberflaeche {
         kern_pruefmodus: this.pruefmodus }) },
       { methode: 'POST', pfad: '/griff', schutz: F, handler: async (q, a) => this.griff(await this.koerper(q), a) },   // Riegel 2026-09-30
       { methode: 'GET', pfad: '/lage', schutz: O, handler: (_q, a) => this.json(a, 200, this.lage()) },
+      { methode: 'GET', pfad: '/spektrum', schutz: O, handler: (_q, a) => this.json(a, 200, this.spektrum()) },   // 1.15 A7b
       { methode: 'GET', pfad: '/ausgang', schutz: O, handler: (_q, a) => this.json(a, 200, leseAusgang(this.opt.digitalout)) },   // Glanz 2.1 (F22)
       { methode: 'POST', pfad: ['/deck/start', '/deck/stopp'], schutz: F, handler: async (q, a, url) => await this.deckStartStopp(url.pathname === '/deck/start', await this.koerper(q), a) },   // Plan Hand T5
       { methode: 'POST', pfad: '/abbruch', schutz: F, handler: async (_q, a) => {   // Plan Hand T8: Cypher bricht die eigenen Teile ab
@@ -1772,6 +2085,7 @@ export class Oberflaeche {
         const d = await this.koerper(q);
         return url.pathname === '/spur' ? await this.spurStart(d, a) : await this.spurStopp(d, a);
       } },
+      { methode: 'POST', pfad: '/spur/aendern', schutz: F, handler: async (q, a) => await this.spurAendern(await this.koerper(q), a) },   // 1.12 S7
       { methode: 'POST', pfad: '/regler', schutz: F, handler: async (q, a) => await this.regler(await this.koerper(q), a) },   // Plan Hand
       { methode: 'POST', pfad: '/taste', schutz: F, handler: async (q, a) => this.taste(await this.koerper(q), a) },   // Riegel 2026-09-30
       { methode: 'POST', pfad: '/laden', schutz: F, handler: async (q, a) => await this.laden(await this.koerper(q), a) },   // Riegel 2026-09-30
@@ -1868,6 +2182,19 @@ export class Oberflaeche {
         }
         return await this.strudel(await this.koerper(q), a);
       } },
+      // Demo overlay (2026-11-07): one line of text that the page shows over every view, "what Cypher is doing now". Both
+      // sources may set it; an empty text clears it. GET answers the current line (null without one).
+      { methode: 'GET', pfad: '/ansage', schutz: O, handler: (_q, a) => this.json(a, 200, { ansage: this.ansageZeile }) },
+      { methode: 'POST', pfad: '/ansage', schutz: F, handler: async (q, a) => {
+        const d = await this.koerper(q);
+        if (typeof d.text !== 'string') return this.json(a, 400, { fehler: 'text_muss_text' });
+        const text = d.text.replace(/\s+/g, ' ').trim();
+        if (text.length > 300) return this.json(a, 400, { fehler: 'text_zu_lang', max: 300 });
+        const art = d.quelle === 'stimme' ? 'stimme' : 'tat';
+        this.ansageZeile = text ? { text, art, von: this.quelle(), zeit: Date.now() } : null;
+        this.verteile({ a: 'ansage', f: this.ansageZeile });
+        return this.json(a, 200, { ok: true, ansage: this.ansageZeile });
+      } },
       { methode: 'GET', pfad: '/klang', schutz: O, handler: (_q, a) => this.json(a, 200, this.leseWirtMeldungen()) },   // Task 3: was die Wirte gerade melden (wirt-<gruppe>.json), null ohne Datei
       { methode: 'POST', pfad: '/klang', schutz: F, handler: async (q, a) => await this.klang(await this.koerper(q), a) },
       { methode: 'GET', pfad: '/welle', schutz: O, handler: async (_q, a, url) => await this.welleAus(url, a) },
@@ -1878,6 +2205,7 @@ export class Oberflaeche {
   private strom(q: http.IncomingMessage, a: http.ServerResponse): void {
     a.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' });
     a.write(`data: ${JSON.stringify({ a: 'stand', f: { ...this.stand, kern: this.kern.zustand, pruefmodus: this.pruefmodus } })}\n\n`);
+    if (this.ansageZeile) a.write(`data: ${JSON.stringify({ a: 'ansage', f: this.ansageZeile })}\n\n`);   // demo overlay
     this.stroeme.add(a);
     q.on('close', () => this.stroeme.delete(a));
   }

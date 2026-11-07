@@ -7,9 +7,10 @@
 
 namespace cypherdj::stellwerk {
 
-constexpr int MAX_REGLER = 1024;   // 2026-10-11: 384 → 512 für komp/* je Quellkanal (98 Regler); 2026-10-20 (E1): 512 → 1024, Deckel
+constexpr int MAX_REGLER = 2048;   // 2026-10-11: 384 → 512 für komp/* je Quellkanal (98 Regler); 2026-10-20 (E1): 512 → 1024, Deckel
                                    // für 32 Spuren (564 Regler), gemessen: Median und p99,9 des Zyklus unverändert
                                    // (~/messungen/2026-10-20-e1-deckel/BERICHT.md). CDJ_Z_REGLER (zustand.h) muss mit.
+                                   // 2026-11-03 (1.15 A1a): 1024 -> 2048, room for the 96 insert controls of slice 4 plus margin; cost measured (A0).
 constexpr int MAX_KANAELE = 20;     // deck/1..4, erz/1..8, pad/1..2, bus/1..4, master, cue
 
 enum class Rolle : uint8_t {
@@ -29,10 +30,31 @@ enum class Rolle : uint8_t {
   // 1.10 Slice 3 (appended after bk_regler: the order of the roles stays). Sends are post fader, hall values are normalised 0..1.
   snd_spur, snd_grp,                           // spur/<n>/send/<r>, grp/<n>/send/<r>: send level in dB to return r
   ret_fader, ret_pan, ret_mute, ret_solo,      // ret/<r>/{fader,pan,mute,solo}
-  ret_hall_an, ret_hall_pre, ret_hall_decay, ret_hall_groesse, ret_hall_tief, ret_hall_highcut, ret_hall_fahne   // ret/<r>/hall/*
+  ret_hall_an, ret_hall_pre, ret_hall_decay, ret_hall_groesse, ret_hall_tief, ret_hall_highcut, ret_hall_fahne,  // ret/<r>/hall/*
+  // 1.15 A1b (mix tools, appended after ret_hall_fahne: the order of the roles stays). One role for all per-channel tool rows
+  // (the suffix table in werkzeug_regler.h tells which tool and field), one for the global spectrum source.
+  werkzeug,          // <k>/gate/*, <k>/util/*, bus/<n>/mb/*, bus/<n>/lim/*
+  spektrum_kanal,    // spektrum/kanal: source channel of the one spectrum analyser (global, steps)
+  // 1.10 slice 4a T1 (appended after spektrum_kanal: the order of the roles stays). The compressor insert ins/komp/<n>/<parameter>, global rows;
+  // the vocabulary is docs/schnittstellen/insert_module.json (generated rows: src/insert_zeilen.inc).
+  ins_komp_an, ins_komp_schwelle, ins_komp_ratio, ins_komp_knie, ins_komp_attack,
+  ins_komp_release, ins_komp_makeup, ins_komp_mix, ins_komp_schp, ins_komp_sc,
+  // 1.10 slice 4b T12 (appended after ins_komp_sc: the order of the roles stays). The EQ insert ins/eq/<n>/{an,out,propq} and ins/eq/<n>/b<1..8>/<parameter>
+  // (one role per parameter NAME; the band number is read from the path), and the saturator insert ins/saett/<n>/{an,drive,out,mix}.
+  ins_eq_an, ins_eq_out, ins_eq_propq,
+  ins_eq_b_an, ins_eq_b_typ, ins_eq_b_freq, ins_eq_b_gain, ins_eq_b_q, ins_eq_b_steil, ins_eq_b_platz,
+  ins_saett_an, ins_saett_drive, ins_saett_out, ins_saett_mix,
+  // 1.10 slice 4c T15 (appended after ins_saett_mix: the order of the roles stays). The rack macros rack/<k>/m1..m4, k = 1..12 (0..1): one role per macro number.
+  rack_m1, rack_m2, rack_m3, rack_m4,
+  // Master limiter (appended after rack_m4: the order of the roles stays). The limiter insert ins/lim/<n>/{an,decke,abklingen}.
+  ins_lim_an, ins_lim_decke, ins_lim_abklingen
 };
 constexpr int SPUR_REGLER_SPUREN = 32;   // D1 K1 (Spec 2.3): spur/<n>/{fader,pan,mute,solo}, n = 1..32 (E3)
 constexpr int GRP_REGLER_GRUPPEN = 8;    // 1.10 (F1: eigene Plätze neben den 32 Spuren): grp/<n>/{fader,pan,mute,solo}, n = 1..8
+// 1.10 slice 4a: the insert vocabulary of docs/schnittstellen/insert_module.json (all kinds, also those without table rows yet):
+// number of paths and the i-th path (0 <= i < insert_vertrag_anzahl()). Each is at most 31 characters (ReglerDef::pfad).
+int insert_vertrag_anzahl();
+const char* insert_vertrag_pfad(int i);
 // "spur/<n>/<feld>" -> n (1..999, ohne führende Null), sonst 0. Ersetzt die Ziffernarithmetik pfad[5] - '1' (E3).
 int spur_nr(const char* pfad);
 // "grp/<n>/<feld>" -> n (1..999, ohne führende Null), sonst 0; wie spur_nr

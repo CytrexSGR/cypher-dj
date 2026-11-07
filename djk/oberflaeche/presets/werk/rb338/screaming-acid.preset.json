@@ -1,0 +1,42 @@
+{
+ "schema": 1,
+ "name": "Screaming Acid",
+ "geraet_typ": "instrument",
+ "geraet": "rb338",
+ "werte": {
+  "lautstaerke": 0.2511886432,
+  "wellenform": false,
+  "cutoff": 300,
+  "resonanz": 0.9,
+  "env_mod": 0.9,
+  "decay": 0.3,
+  "accent": 0.9
+ },
+ "beschreibung": {
+  "art": "bass",
+  "unterart": "acid",
+  "charakter": [
+   "aggressive",
+   "dirty",
+   "bright"
+  ],
+  "genre": [
+   "acid",
+   "hardstyle",
+   "electro"
+  ],
+  "einsatz": [
+   "build",
+   "drop"
+  ],
+  "energie": 5,
+  "text": "Almost full resonance and a deep sweep: the line screams and the accents cut like a whip."
+ },
+ "tags": [
+  "303",
+  "screaming"
+ ],
+ "notiz": "Values are practice; the accent behaviour is read from the code (depth x (1+accent), decay fixed at 0.2 s).",
+ "angelegt": "2026-11-02T00:00:00.000Z",
+ "geaendert": "2026-11-02T00:00:00.000Z"
+}

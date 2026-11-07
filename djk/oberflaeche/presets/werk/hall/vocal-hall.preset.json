@@ -1,0 +1,51 @@
+{
+ "schema": 1,
+ "name": "Vocal Hall",
+ "geraet_typ": "effekt",
+ "geraet": "hall",
+ "werte": {
+  "mix": 0.28,
+  "early": 0.5,
+  "tail": 0,
+  "pre": 35,
+  "size": 70,
+  "decay": 2.2,
+  "lowx": 1.2,
+  "highx": 0.6,
+  "lowcut": 150,
+  "highcut": 8000,
+  "diff": 1,
+  "width": 0.9,
+  "duck": 0.2,
+  "freeze": false,
+  "kill": false,
+  "fft": "4096"
+ },
+ "beschreibung": {
+  "art": "reverb",
+  "unterart": "hall",
+  "charakter": [
+   "smooth",
+   "airy",
+   "wide"
+  ],
+  "genre": [
+   "house",
+   "garage",
+   "trance"
+  ],
+  "einsatz": [
+   "breakdown",
+   "mixdown"
+  ],
+  "energie": 2,
+  "text": "A long pre-delay lets the word through first, then a warm hall fills the space behind it."
+ },
+ "tags": [
+  "vocal",
+  "hall"
+ ],
+ "notiz": "Pre-delay purpose from Snoman p.232; a gentle duck follows the sidechained-compressor idea at Snoman p.233. Values are practice.",
+ "angelegt": "2026-11-02T00:00:00.000Z",
+ "geaendert": "2026-11-02T00:00:00.000Z"
+}

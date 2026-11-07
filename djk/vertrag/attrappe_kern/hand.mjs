@@ -70,6 +70,9 @@ function handAmRegler(K, e, s) {
   r.letzteHand = s;
   melde();
   meldeRegler(K, pfad, s);
+  // 1.12 Slice 3 task 8 (D12): a grip on spur/<n>/<field> is a point of a take. The project beat at the grip sample, as the core computes it (wrapped at the loop end); K.arrPunkt applies the arm, the playing state and the 50 Hz window
+  const sp = /^spur\/([1-9][0-9]?)\/(fader|pan|mute|solo)$/.exec(pfad);
+  if (sp && K.arrPunkt && K.arr.status === 2) K.arrPunkt(Number(sp[1]), sp[2], K.arrProjektBeat(s), w);
 }
 
 function taste(K, name, u, s) {
@@ -103,6 +106,16 @@ export default {
     K.hand = { q: [], freigabe: false, seq: 0 };
   },
   befehle: {
+    // §4.3 /k/hand/frei: the holder `mensch` of the listed regulators goes back to `frei` at once (comma list; an entry ending in / is a prefix; *)
+    '/k/hand/frei': (K, a, b) => {
+      if (a.quelle !== 'andreas') return K.q(b, 6, 'nur_andreas');
+      const liste = a.pfade.split(',').map((x) => x.trim()).filter((x) => x !== '');
+      const passt = (pfad) => liste.some((x) => x === '*' || (x.endsWith('/') ? pfad.startsWith(x) : x === pfad));
+      K.sofort(b, (s) => {
+        for (const [pfad, r] of K.r) if (r.halter === 'mensch' && passt(pfad)) { r.letzteHand = null; setzeHalter(K, pfad, 'frei', s); }
+        return null;
+      });
+    },
     '/test/hand': (K, a, b, von) => {
       const pfad = a.pfad;
       if (!REGLER.has(pfad) && !pfad.startsWith('taste/') && !DECK_AKTION.test(pfad) && !ARR_ZIELE.has(pfad))

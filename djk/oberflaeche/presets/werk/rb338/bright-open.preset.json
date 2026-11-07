@@ -1,0 +1,42 @@
+{
+ "schema": 1,
+ "name": "Bright Open",
+ "geraet_typ": "instrument",
+ "geraet": "rb338",
+ "werte": {
+  "lautstaerke": 0.2511886432,
+  "wellenform": false,
+  "cutoff": 3000,
+  "resonanz": 0.3,
+  "env_mod": 0.2,
+  "decay": 0.5,
+  "accent": 0.3
+ },
+ "beschreibung": {
+  "art": "lead",
+  "unterart": "mono",
+  "charakter": [
+   "bright",
+   "clean",
+   "thin"
+  ],
+  "genre": [
+   "electro",
+   "acid",
+   "breaks"
+  ],
+  "einsatz": [
+   "intro",
+   "build"
+  ],
+  "energie": 3,
+  "text": "An almost open filter turns the 303 voice into a thin, bright lead rather than a bass."
+ },
+ "tags": [
+  "bright",
+  "open"
+ ],
+ "notiz": "Values are practice; 3 kHz is inside geraete.ts cutoff range 40-5000 Hz.",
+ "angelegt": "2026-11-02T00:00:00.000Z",
+ "geaendert": "2026-11-02T00:00:00.000Z"
+}

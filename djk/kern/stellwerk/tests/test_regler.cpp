@@ -5,6 +5,7 @@
 #include "pruef.h"
 #include "cypherdj/stellwerk/regler.h"
 #include "cypherdj/stellwerk/typen.h"
+#include "cypherdj/stellwerk/werkzeug_regler.h"
 
 using namespace cypherdj::stellwerk;
 
@@ -28,7 +29,34 @@ FALL(zahl_der_regler_und_kanaele) {
   // 1.10 Slice 1: dazu 8 Gruppen x 4 Gruppen-Regler (grp/<n>/*) und pm/fader: 597; S5r: dazu 12 Graph-Kanäle x 8
   // Graph-Regler (<kanal>/bk/<1..8>): 693; 1.10 Slice 3: dazu 128 + 32 Sends, 16 Return-Regler und 28 Hall-Regler: 897
   // S14: plus 2 send returns x 8 graph knobs (fx/3, fx/4): 913
-  PRUEFE_GLEICH(tab().anzahl(), 597 + 12 * 8 + 204 + 2 * 8);
+  // 1.15 A1b: plus the mix tools, 345 rows (gate 9 x 13, utility 7 x 17, multiband 24 x 4, limiter 3 x 4, spektrum/kanal): 1258
+  // 1.10 slice 4a T1: plus the 120 insert rows ins/komp/<1..12>/<10 parameters>: 1378
+  // 1.10 slice 4b T12: plus the eq rows (59 per instance, 1 instance) and the saett rows (4 per instance, 1 instance): 1378 + 63 = 1441.
+  // The pool sizes are the measured ones (T11): a change of either is a decision with a new measurement, and this pin goes red first.
+  // 2026-11-06: the eq pool has 2 instances (Andreas' decision of 2026-11-05, lane measured quiet): 59 more rows.
+  PRUEFE_GLEICH(tab().anzahl(), 597 + 12 * 8 + 204 + 2 * 8 + WERKZEUG_REGLER + 120 + 2 * 59 + 4 + 48 + 3);   // + the 48 rack rows (slice 4c), + the 3 ins/lim rows (master limiter)
+  // 1.10 slice 4c T15: plus the 48 rack macro rows rack/<1..12>/m1..m4: 1500 + 48 = 1548.
+  // Master limiter: plus the 3 rows ins/lim/1/{an,decke,abklingen}: 1548 + 3 = 1551.
+  PRUEFE_GLEICH(tab().anzahl(), 913 + 345 + 120 + 122 + 48 + 3);
+  PRUEFE_GLEICH(tab().anzahl(), 1551);
+  // the contract (INTERFACES 1.5) says indices 1258 to 1377: the table counts the 4 deck/<n>/transport rows, the dump of stellwerk_regler_liste does not (1374 lines)
+  PRUEFE_GLEICH(tab().suche("ins/komp/1/an"), 1258);
+  PRUEFE_GLEICH(tab().suche("ins/komp/12/sc"), 1377);
+  // slice 4b: the eq block follows the komp block (indices 1378 to 1495, two instances of 59), then the saett block (1496 to 1499)
+  PRUEFE_GLEICH(tab().suche("ins/eq/1/an"), 1378);
+  PRUEFE_GLEICH(tab().suche("ins/eq/1/b8/platz"), 1436);
+  PRUEFE_GLEICH(tab().suche("ins/eq/2/an"), 1437);
+  PRUEFE_GLEICH(tab().suche("ins/eq/2/b8/platz"), 1495);
+  PRUEFE_GLEICH(tab().suche("ins/saett/1/an"), 1496);
+  PRUEFE_GLEICH(tab().suche("ins/saett/1/mix"), 1499);
+  // slice 4c: the rack block follows the saett block (1500 to 1547)
+  PRUEFE_GLEICH(tab().suche("rack/1/m1"), 1500);
+  PRUEFE_GLEICH(tab().suche("rack/12/m4"), 1547);
+  // master limiter: the lim block is appended after the rack block (1548 to 1550), so every earlier index stays
+  PRUEFE_GLEICH(tab().suche("ins/lim/1/an"), 1548);
+  PRUEFE_GLEICH(tab().suche("ins/lim/1/decke"), 1549);
+  PRUEFE_GLEICH(tab().suche("ins/lim/1/abklingen"), 1550);
+  PRUEFE(tab().suche("ins/lim/2/an") < 0);   // pool 1
   PRUEFE(tab().anzahl() < cypherdj::stellwerk::MAX_REGLER);
   PRUEFE_GLEICH(tab().kanaele(), 20);
   PRUEFE_GLEICH(tab().kanal_suche("deck/1"), 0);
@@ -76,10 +104,15 @@ FALL(spur_fader_bis_plus_6_db) {
 FALL(kapazitaet_hat_luft_fuer_k2) {
   // K2 Task 0.2: Luft für neue Pfade, und ein voller Speicher darf nicht überlaufen
   PRUEFE(cypherdj::stellwerk::MAX_REGLER >= 384);
+  // Package 1.10 slice 4 T0: the capacity of package 1.15 A1a (2048) is the start state of the insert rows
+  PRUEFE(cypherdj::stellwerk::MAX_REGLER == 2048);
   // D1 K1 (Spec 2.3) verlangte 512 − 468 >= 44. E1 (2026-10-20): Reserve gegen 1024. 32 Spuren statt 8 brauchen
   // 24 · 4 = 96 Regler mehr (468 → 564, Paket E3), dazu dieselbe Luft von 44. Bei MAX_REGLER 512 sind es nur 44: rot.
   // 1.10 Slice 3: the 96 of E3 are spent and 204 send/return/hall controls took more of the 1024; the reserve is 127 now (S14: 111 with the 16 send-return knobs), so the
   // check keeps only the margin of 44 (the E3 surcharge of 96 is history). Slice 4 (+96) needs the ceiling raised first (plan P13).
+  PRUEFE(cypherdj::stellwerk::MAX_REGLER - tab().anzahl() >= 44);
+  // 1.10 slice 4a T1: the reservation RESERVIERT_SLICE4 (96 rows, package 1.15 A1a) is replaced by the real rows: the 120 `komp` rows
+  // are in the table, the margin of 44 stays on top of them (the eq, saett and rack rows of 4b and 4c are not counted here).
   PRUEFE(cypherdj::stellwerk::MAX_REGLER - tab().anzahl() >= 44);
   std::printf("Regler %d von %d, Reserve %d\n", tab().anzahl(), cypherdj::stellwerk::MAX_REGLER,
               cypherdj::stellwerk::MAX_REGLER - tab().anzahl());
@@ -308,7 +341,7 @@ FALL(send_und_return_regler_stehen_hinter_dem_bk_block_ohne_index_verschiebung) 
   for (int r = 0; r < tab().anzahl(); r++)
     if (tab().def(r).rolle >= Rolle::snd_spur && tab().def(r).rolle <= Rolle::ret_hall_fahne) ab_snd++;
   PRUEFE_GLEICH(ab_snd, 204);
-  PRUEFE_GLEICH(tab().anzahl() - 897, 16);
+  PRUEFE_GLEICH(tab().suche("fx/4/bk/8") - 897 + 1, 16);   // A1b: the tail of the old table is fx/4/bk/8 (912), the mix-tool block follows
 }
 
 FALL(ret_nr_und_send_nr_lesen_nummern) {
@@ -333,7 +366,172 @@ FALL(ret_nr_und_send_nr_lesen_nummern) {
   PRUEFE_GLEICH(send_nr("spur/3/send/2/x"), 0);
 }
 
-PRUEF_MAIN
+// 1.15 A1b: the 345 mix-tool rows. The expectation below is written out here, NOT read from werkzeug_regler.h (a test that
+// derives its expectation from the table under test cannot see a wrong table). Source: docs/architecture/INTERFACES.md section 1.5.
+namespace {
+const char* const Q13[] = {"deck/1", "deck/2", "deck/3", "deck/4", "erz/1", "erz/2", "erz/3",
+                           "erz/4",  "erz/5",  "erz/6",  "erz/7",  "pad/1", "pad/2"};
+const char* const B4[] = {"bus/1", "bus/2", "bus/3", "bus/4"};
+enum Art { NUR_QUELLEN, QUELLEN_UND_BUSSE, NUR_BUSSE, GLOBAL };
+struct Z {
+  const char* suffix;
+  float min, max, vorgabe;
+  bool ganz;   // switch or steps: no ramp, integer; otherwise a 10 ms ramp, linear curve
+  bool schalter;
+  Art art;
+};
+const Z ZEILEN[] = {
+    {"gate/an", 0, 1, 0, true, true, NUR_QUELLEN},
+    {"gate/schwelle", -90, 0, -40, false, false, NUR_QUELLEN},
+    {"gate/hysterese", 0, 24, 4, false, false, NUR_QUELLEN},
+    {"gate/ratio", 1, 100, 100, false, false, NUR_QUELLEN},
+    {"gate/bereich", -120, 0, -80, false, false, NUR_QUELLEN},
+    {"gate/attack", 0.1f, 500, 1, false, false, NUR_QUELLEN},
+    {"gate/hold", 0, 2000, 20, false, false, NUR_QUELLEN},
+    {"gate/release", 1, 5000, 100, false, false, NUR_QUELLEN},
+    {"gate/sc", 0, 14, 0, true, false, NUR_QUELLEN},
+    {"util/balance", -1, 1, 0, false, false, QUELLEN_UND_BUSSE},
+    {"util/breite", 0, 200, 100, false, false, QUELLEN_UND_BUSSE},
+    {"util/bassmono", 0, 500, 0, false, false, QUELLEN_UND_BUSSE},
+    {"util/phase_l", 0, 1, 0, true, true, QUELLEN_UND_BUSSE},
+    {"util/phase_r", 0, 1, 0, true, true, QUELLEN_UND_BUSSE},
+    {"util/tausch", 0, 1, 0, true, true, QUELLEN_UND_BUSSE},
+    {"util/dc", 0, 1, 0, true, true, QUELLEN_UND_BUSSE},
+    {"mb/an", 0, 1, 0, true, true, NUR_BUSSE},
+    {"mb/grenze_tief", 20, 20000, 200, false, false, NUR_BUSSE},
+    {"mb/grenze_hoch", 20, 20000, 2000, false, false, NUR_BUSSE},
+    {"mb/tief/schwelle", -60, 0, 0, false, false, NUR_BUSSE},
+    {"mb/tief/ratio", 1, 20, 1, false, false, NUR_BUSSE},
+    {"mb/tief/attack", 0.1f, 500, 10, false, false, NUR_BUSSE},
+    {"mb/tief/release", 1, 5000, 100, false, false, NUR_BUSSE},
+    {"mb/tief/knie", 0, 24, 0, false, false, NUR_BUSSE},
+    {"mb/tief/makeup", -24, 24, 0, false, false, NUR_BUSSE},
+    {"mb/tief/umgehen", 0, 1, 0, true, true, NUR_BUSSE},
+    {"mb/mitte/schwelle", -60, 0, 0, false, false, NUR_BUSSE},
+    {"mb/mitte/ratio", 1, 20, 1, false, false, NUR_BUSSE},
+    {"mb/mitte/attack", 0.1f, 500, 10, false, false, NUR_BUSSE},
+    {"mb/mitte/release", 1, 5000, 100, false, false, NUR_BUSSE},
+    {"mb/mitte/knie", 0, 24, 0, false, false, NUR_BUSSE},
+    {"mb/mitte/makeup", -24, 24, 0, false, false, NUR_BUSSE},
+    {"mb/mitte/umgehen", 0, 1, 0, true, true, NUR_BUSSE},
+    {"mb/hoch/schwelle", -60, 0, 0, false, false, NUR_BUSSE},
+    {"mb/hoch/ratio", 1, 20, 1, false, false, NUR_BUSSE},
+    {"mb/hoch/attack", 0.1f, 500, 10, false, false, NUR_BUSSE},
+    {"mb/hoch/release", 1, 5000, 100, false, false, NUR_BUSSE},
+    {"mb/hoch/knie", 0, 24, 0, false, false, NUR_BUSSE},
+    {"mb/hoch/makeup", -24, 24, 0, false, false, NUR_BUSSE},
+    {"mb/hoch/umgehen", 0, 1, 0, true, true, NUR_BUSSE},
+    {"lim/an", 0, 1, 0, true, true, NUR_BUSSE},
+    {"lim/decke", -60, 0, -0.3f, false, false, NUR_BUSSE},
+    {"lim/abklingen", 1, 2000, 80, false, false, NUR_BUSSE},
+    {"spektrum/kanal", 0, 19, 0, true, false, GLOBAL},
+};
+
+// calls f(path, row) for every one of the 345 expected paths
+template <class F>
+void je_erwarteter_pfad(F f) {
+  char p[48];
+  for (const Z& z : ZEILEN) {
+    if (z.art == GLOBAL) {
+      f(z.suffix, z);
+      continue;
+    }
+    if (z.art != NUR_BUSSE)
+      for (const char* k : Q13) { std::snprintf(p, sizeof p, "%s/%s", k, z.suffix); f(p, z); }
+    if (z.art != NUR_QUELLEN)
+      for (const char* k : B4) { std::snprintf(p, sizeof p, "%s/%s", k, z.suffix); f(p, z); }
+  }
+}
+}  // namespace
+
+FALL(werkzeug_zeilen_345_und_ihre_zaehlung) {
+  int gate = 0, util = 0, mb = 0, lim = 0, spektrum = 0, gesamt = 0;
+  je_erwarteter_pfad([&](const char* p, const Z& z) {
+    PRUEFE(tab().suche(p) >= 0);   // each one is found
+    gesamt++;
+    if (!std::strncmp(z.suffix, "gate/", 5)) gate++;
+    else if (!std::strncmp(z.suffix, "util/", 5)) util++;
+    else if (!std::strncmp(z.suffix, "mb/", 3)) mb++;
+    else if (!std::strncmp(z.suffix, "lim/", 4)) lim++;
+    else spektrum++;
+  });
+  PRUEFE_GLEICH(gate, 117);
+  PRUEFE_GLEICH(util, 119);
+  PRUEFE_GLEICH(mb, 96);
+  PRUEFE_GLEICH(lim, 12);
+  PRUEFE_GLEICH(spektrum, 1);
+  PRUEFE_GLEICH(gesamt, 345);
+  PRUEFE_GLEICH(WERKZEUG_REGLER, 345);
+  PRUEFE_GLEICH(tab().anzahl(), 1258 + 120 + 122 + 48 + 3);   // 1.10 slice 4a/4b/4c + limiter: the 293 insert rows (120 komp, 2 x 59 eq, 4 saett, 48 rack, 3 lim) follow the tool block
+  // and the table holds no other row of this kind: the count by role is 345 as well
+  int rollen = 0;
+  for (int r = 0; r < tab().anzahl(); r++)
+    rollen += tab().def(r).rolle == Rolle::werkzeug || tab().def(r).rolle == Rolle::spektrum_kanal;
+  PRUEFE_GLEICH(rollen, 345);
+}
+
+FALL(werkzeug_zeilen_hinter_dem_bk_block_zusammenhaengend) {
+  const int ende_alt = tab().suche("fx/4/bk/8");
+  PRUEFE_GLEICH(ende_alt, 912);
+  PRUEFE(tab().suche("deck/1/gate/an") > ende_alt);
+  int kleinster = tab().anzahl(), groesster = -1, n = 0;
+  for (int r = 0; r < tab().anzahl(); r++) {
+    const Rolle x = tab().def(r).rolle;
+    if (x != Rolle::werkzeug && x != Rolle::spektrum_kanal) continue;
+    kleinster = r < kleinster ? r : kleinster;
+    groesster = r > groesster ? r : groesster;
+    n++;
+  }
+  PRUEFE_GLEICH(kleinster, ende_alt + 1);   // no row of the block has an index below 913
+  PRUEFE_GLEICH(kleinster, 913);
+  PRUEFE_GLEICH(groesster - kleinster + 1, n);   // contiguous
+  PRUEFE_GLEICH(groesster, 1257);
+  // every old pin survives
+  PRUEFE_GLEICH(tab().suche("pm/fader"), 596);
+  PRUEFE_GLEICH(tab().suche("pad/2/bk/8"), 692);
+  PRUEFE_GLEICH(tab().suche("spur/1/send/1"), 693);
+  PRUEFE_GLEICH(tab().suche("deck/1/fader"), 0);
+  // the new roles are appended after the last old one: no role number moves
+  PRUEFE(Rolle::werkzeug > Rolle::ret_hall_fahne && Rolle::spektrum_kanal > Rolle::werkzeug);
+}
+
+FALL(werkzeug_zeilen_bereich_vorgabe_rampe_ganz) {
+  je_erwarteter_pfad([&](const char* p, const Z& z) {
+    const int r = tab().suche(p);
+    PRUEFE(r >= 0);
+    if (r < 0) return;
+    const ReglerDef& x = tab().def(r);
+    PRUEFE_NAH(x.min, z.min, 0);
+    PRUEFE_NAH(x.max, z.max, 0);
+    PRUEFE_NAH(x.vorgabe, z.vorgabe, 1e-6);
+    PRUEFE(!x.nur_hand && !x.db && !x.transport);
+    PRUEFE_GLEICH(x.ganzzahlig, z.ganz);
+    PRUEFE_GLEICH(x.keine_rampe, z.ganz);
+    PRUEFE_GLEICH(x.schalt_samples, z.ganz ? 0 : 480);   // 10 ms for continuous rows, none for switches and steps (like komp/*)
+    PRUEFE(x.rolle == (z.art == GLOBAL ? Rolle::spektrum_kanal : Rolle::werkzeug));
+    PRUEFE(x.kurve.typ == (z.schalter ? KurvenTyp::schalter : z.ganz ? KurvenTyp::stufen : KurvenTyp::linear));
+    PRUEFE(x.kurve.min == z.min && x.kurve.max == z.max);
+    if (z.art == GLOBAL) {
+      PRUEFE_GLEICH(x.kanal, -1);
+    } else {
+      PRUEFE(x.kanal >= 0);
+      PRUEFE(x.kanal >= 0 && !std::strncmp(p, tab().kanal_name(x.kanal), std::strlen(tab().kanal_name(x.kanal))));
+    }
+  });
+}
+
+FALL(werkzeug_negativkontrollen) {
+  // erz/8 is cue only (returns before every insert): no tool row. Buses get no gate, sources no multiband or limiter.
+  for (const char* p : {"erz/8/gate/an", "erz/8/util/dc", "bus/1/gate/an", "deck/1/mb/an", "deck/1/lim/an", "bus/5/util/dc", "spektrum/kanal/1",
+                        "bus/1/mb/tief/solo", "bus/1/util/gain_db", "erz/8/gate/schwelle", "master/gate/an", "bus/0/mb/an", "bus/1/mb/mitte",
+                        "bus/1/lim/vorhalt_ms", "bus/1/lim/echtspitze", "deck/1/gate/sc/1", "spektrum", "deck/5/gate/an"})
+    PRUEFE_GLEICH(tab().suche(p), -1);
+  // harmless control: a path that must exist is found
+  PRUEFE(tab().suche("bus/4/mb/hoch/umgehen") >= 0);
+  PRUEFE(tab().suche("erz/4/gate/an") >= 0);   // erz/4 is a live channel (the production feeds it)
+  PRUEFE(tab().suche("spektrum/kanal") >= 0);
+}
+
 
 FALL(bk_regler_nur_fuer_kanaele_mit_graph) {
   // S5r K2: <kanal>/bk/<1..8> gibt es genau für Kanäle, auf denen der Kern einen Baukasten-Graphen annimmt: deck/1..4
@@ -394,3 +592,23 @@ FALL(fx_send_bk_regler_global_hinter_dem_ret_block) {
   for (const char* p : {"fx/1/bk/1", "fx/2/bk/1", "fx/5/bk/1", "fx/3/bk/0", "fx/3/bk/9", "fx/3/bk/01", "fx/3/bk/10", "fx/3/bk", "fx/4/bk/9", "fx/0/bk/1"})
     PRUEFE_GLEICH(tab().suche(p), -1);
 }
+
+// 1.10 slice 4a T1, negative control: the first 1258 rows (package 1.15 state) are unchanged by the insert rows. The hash is FNV-1a 64 of
+// the text dump `pfad|rolle|min|max|vorgabe` per row (`%s|%d|%.9g|%.9g|%.9g`), taken at the parent commit before T1
+// (docs/architecture/stand/routing-1-10.md, "Slice 4 start state"; sha256 of the same dump 16d6e933...0da9).
+FALL(die_ersten_1258_zeilen_sind_unveraendert) {
+  uint64_t h = 0xcbf29ce484222325ull;
+  for (int r = 0; r < 1258; r++) {
+    const ReglerDef& z = tab().def(r);
+    char zeile[160];
+    const int n = std::snprintf(zeile, sizeof zeile, "%s|%d|%.9g|%.9g|%.9g\n", z.pfad, static_cast<int>(z.rolle), static_cast<double>(z.min),
+                                static_cast<double>(z.max), static_cast<double>(z.vorgabe));
+    for (int i = 0; i < n; i++) h = (h ^ static_cast<unsigned char>(zeile[i])) * 0x100000001b3ull;
+  }
+  PRUEFE_GLEICH(static_cast<long long>(h), static_cast<long long>(0xc01227d2bfc9b294ull));
+  PRUEFE_GLEICH(std::strcmp(tab().def(1257).pfad, "spektrum/kanal"), 0);
+  PRUEFE_GLEICH(std::strcmp(tab().def(1258).pfad, "ins/komp/1/an"), 0);   // the insert block starts right behind the tool block
+  PRUEFE_GLEICH(std::strcmp(tab().def(1377).pfad, "ins/komp/12/sc"), 0);
+}
+
+PRUEF_MAIN

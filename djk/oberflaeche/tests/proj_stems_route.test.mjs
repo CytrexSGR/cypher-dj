@@ -12,7 +12,7 @@ import { ruf, warte } from './hilfen/proj_stapel.mjs';
 
 const SHA = 'e'.repeat(64);
 
-test('S6 HTTP: POST /proj/stems → 200 {auftrag_id}, Ende fertig, vier Stem-Spuren, ein Undo', async (t) => {
+test('S6 HTTP: POST /proj/stems → 200 {auftrag_id}, Ende fertig, sechs Stem-Spuren, ein Undo', async (t) => {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-stems-')); t.after(() => fs.rmSync(d, { recursive: true, force: true }));
   const katalog = baueKatalog(path.join(d, 'kat'), [{ n: 1, typ: 'oneshot', pfad: wav(path.join(d, 'daten'), 'ton.wav', 2.0), dauer_s: 2.0, sha: SHA }]);
   const { url } = await stapel(t, { katalog, stems: { zusatzArgs: ['--trenner', 'identitaet'] } });
@@ -34,7 +34,7 @@ test('S6 HTTP: POST /proj/stems → 200 {auftrag_id}, Ende fertig, vier Stem-Spu
   for (let i = 0; i < 600; i++) { a = await akt(); if (a.stems && a.stems.zustand !== 'laeuft') break; await new Promise((x) => setTimeout(x, 100)); }
   assert.equal(a.stems.zustand, 'fertig', JSON.stringify(a.stems));
   assert.equal(a.stems.auftrag_id, s.j.auftrag_id);
-  assert.equal(a.projekt.spuren.length, 5);
+  assert.equal(a.projekt.spuren.length, 7); // source + six stems (identitaet copies the input into all six, none folds)
   assert.equal(a.projekt.spuren[0].clips[0].stumm, true);
   // S6 Task 14 (2026-10-31): die Stem-WAVs liegen im Projektordner, nicht im Katalog; /welle kannte sie nicht (404, „no waveform“ an jedem Stem-Clip)
   const stemSha = a.projekt.spuren[1].clips[0].quelle.sha256;

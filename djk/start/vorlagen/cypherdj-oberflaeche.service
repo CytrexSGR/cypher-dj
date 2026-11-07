@@ -13,6 +13,8 @@ Type=simple
 WorkingDirectory=%h/cypher-dj/djk/oberflaeche
 ExecStart=/usr/bin/node %h/cypher-dj/djk/oberflaeche/server.ts @OBERFLAECHE_ARGS@
 Environment=NODE_NO_WARNINGS=1
+# Kerne der Stems (demucs): djk-start rechnet sie aus der Topologie (kerne.py); eine Zeile in umgebung.env gewinnt.
+Environment=CYPHERDJ_STEMS_CPUS=@STEMS_CPUS@
 # Persönliche Pfade (CYPHERDJ_MEDIATHEK ...): Datei außerhalb des Repos, fehlt sie, läuft die Unit ohne (Vorlage djk/konfig/umgebung.env.beispiel).
 EnvironmentFile=-%h/.config/cypherdj/umgebung.env
 Restart=always

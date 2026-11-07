@@ -218,6 +218,24 @@ bool Netz::loop_ereignis(const Ereignis& e) {
     an_alle(s);
     return true;
   }
+  if (e.art == Ereignis::MIX_ZUSTAND) {  // 1.15 A6, §5.5d /zustand/mix ,sfffff: gate, multiband low/mid/high, limiter reduction (>= 0)
+    osc::Schreiber s(v::zustand_mix);
+#ifndef CYPHERDJ_MUTATION_MIX_FELDER_VERTAUSCHT
+    s.s(e.pfad).f(e.pegel[0]).f(e.pegel[1]).f(e.pegel[2]).f(e.pegel[3]).f(e.pegel[4]);
+#else   // error case: low and high band swapped
+    s.s(e.pfad).f(e.pegel[0]).f(e.pegel[3]).f(e.pegel[2]).f(e.pegel[1]).f(e.pegel[4]);
+#endif
+    an_alle(s);
+    return true;
+  }
+  if (e.art == Ereignis::INS_GR) {  // 1.10 slice 4a, §5.5f /e/ins_gr ,sf: pfad = ins/komp/<n>, gain reduction of the pooled compressor stage (>= 0)
+    osc::Schreiber s(v::e_ins_gr);
+#ifndef CYPHERDJ_MUTATION_INS_GR_NICHT_GEROUTET
+    s.s(e.pfad).f(e.wert);
+    an_alle(s);
+#endif  // error case: the event is dropped as before the route existed
+    return true;
+  }
   if (e.art == Ereignis::BOX) {  // Keylock 7b.3, §5.5b /zustand/box ,iiiiii (7c.3: kein_platz)
     osc::Schreiber s(v::zustand_box);
     s.i(e.deck).i(e.status).i(e.keylock_unterlauf).i(e.keylock_aufgegeben).i(e.keylock_ring_voll).i(e.keylock_kein_platz);

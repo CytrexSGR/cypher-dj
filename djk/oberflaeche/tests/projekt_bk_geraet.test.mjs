@@ -172,3 +172,15 @@ test('S20 session: the graph folder decides: an instrument graph is accepted, an
   assert.match(JSON.stringify(nix), /argument_ungueltig/);
   assert.equal(s.aktuell().j.projekt.spuren.length, 1, 'only the accepted track was added');
 });
+
+// Package 1.16 rest U2 T2.1b: a bk device carries the preset origin through the command path
+test('1.16 bk device: spur_neu and spur_aendern carry geraet.preset; malformed refused; absent stores no key', () => {
+  const p = specProjekt();
+  const r = neu(p, { ...bk('juno-pad', { k1: 0.4 }), preset: 'nutzer:baukasten/my-pad' });
+  assert.equal(r.projekt.spuren.at(-1).geraet.preset, 'nutzer:baukasten/my-pad');
+  const id = r.projekt.spuren.at(-1).id;
+  const a = fuehreListeAus(r.projekt, [{ befehl: 'spur_aendern', spur_id: id, geraet: { ...bk('juno-pad', { k1: 0.5 }), preset: 'werk:baukasten/warm' } }]);
+  assert.equal(a.projekt.spuren.at(-1).geraet.preset, 'werk:baukasten/warm');
+  lehntAb(() => neu(p, { ...bk(), preset: 'werk:baukasten' }), 'argument_ungueltig');
+  assert.equal('preset' in neu(p, bk()).projekt.spuren.at(-1).geraet, false);
+});

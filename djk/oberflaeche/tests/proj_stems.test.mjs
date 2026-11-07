@@ -1,5 +1,5 @@
 // Paket 1.13 Slice 6: Bereich proj-stems mit dem echten werkstatt.stems (Prüftrenner identitaet, P3) am Kick-Clip des S3-Aufbaus. Eine Projektänderung,
-// ein Undo; die WAVs liegen im Projektordner, Temp im Arbeitsordner ist weg; das Kind sieht CUDA_VISIBLE_DEVICES leer.
+// ein Undo; die WAVs liegen im Projektordner, Temp im Arbeitsordner ist weg. Since 2026-11-06 six stems (four to six placed), GPU only.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -10,6 +10,9 @@ import { warteBis } from './hilfen/proj_kontext.mjs';
 import { Stems } from '../bereiche/proj/stems.ts';
 import { pythonVorgabe } from '../server.ts';
 import { REPO_PFADE } from '../pfade.ts';
+
+// These two load torch in the child and need CUDA; without an NVIDIA GPU they are skipped (stems run on the GPU only).
+const OHNE_GPU = !fs.existsSync('/dev/nvidia0') && 'no NVIDIA GPU: stems run on the GPU only';
 
 export async function mitStems(t, { trenner = 'identitaet', killMs = 2000, aufbauOpt = {}, extra = {}, mantel = (zg) => zg } = {}) {
   const r = await aufbau(t, aufbauOpt);
@@ -22,7 +25,7 @@ export async function mitStems(t, { trenner = 'identitaet', killMs = 2000, aufba
   return { ...r, stems, stand, ende };
 }
 
-test('S6: Stems am Kick-Clip: vier Spuren unter s1, Original stumm, eine Gruppe, WAVs mit n Frames, ein Undo stellt alles her', async (t) => {
+test('S6: Stems am Kick-Clip: six tracks under s1, Original stumm, eine Gruppe, WAVs mit n Frames, ein Undo stellt alles her', { skip: OHNE_GPU }, async (t) => {
   const z = await mitStems(t);
   const vorher = structuredClone(z.projekt());
   const a = z.stems.starte({ clip_id: 'c1' }, 'andreas');
@@ -32,15 +35,15 @@ test('S6: Stems am Kick-Clip: vier Spuren unter s1, Original stumm, eine Gruppe,
   assert.equal(e.zustand, 'fertig', JSON.stringify(e));
   const p = z.projekt();
   const name = p.spuren[0].clips[0].name;
-  assert.deepEqual(p.spuren.slice(1, 5).map((s) => s.name), ['Drums', 'Bass', 'Other', 'Vocals'].map((n) => `${name} ${n}`));
+  assert.deepEqual(p.spuren.slice(1, 7).map((s) => s.name), ['Drums', 'Bass', 'Other', 'Vocals', 'Guitar', 'Piano'].map((n) => `${name} ${n}`));
   assert.equal(p.spuren[0].clips[0].stumm, true);
   assert.equal(p.gruppen.at(-1).name, `Stems: ${vorher.spuren[0].clips[0].name}`);
   const ordner = z.offen().ordner;
   const wavs = fs.readdirSync(path.join(ordner, 'stems')).sort();
-  assert.equal(wavs.length, 4);
+  assert.equal(wavs.length, 6);
   for (const w of wavs) assert.equal(fs.statSync(path.join(ordner, 'stems', w)).size, 58 + 24000 * 8, w);   // Kopf 58 Bytes (wavKopf), n Frames
   assert.equal(fs.readdirSync(z.arbeitsordner).filter((f) => f.startsWith('stems-')).length, 0, 'Temp weg');
-  assert.ok(await warteBis(() => z.projekt().spuren.slice(1, 5).every((s) => s.clips[0].dekodiert === 'fertig'), 10000), 'Stems dekodiert');
+  assert.ok(await warteBis(() => z.projekt().spuren.slice(1, 7).every((s) => s.clips[0].dekodiert === 'fertig'), 10000), 'Stems dekodiert');
   assert.equal(z.protokoll.uebernommen.filter((u) => u.label.startsWith('Stems ')).length, 1, 'genau eine Übernahme');
   await z.s.umkehr('undo', { rev: z.projekt().rev }, 'andreas');
   const nach = z.projekt();
@@ -49,13 +52,29 @@ test('S6: Stems am Kick-Clip: vier Spuren unter s1, Original stumm, eine Gruppe,
   assert.equal(nach.gruppen?.length ?? 0, vorher.gruppen?.length ?? 0);
 });
 
-test('S6: ein CPU-Lauf (geraet cpu) sieht CUDA_VISIBLE_DEVICES leer (P4): fehlt es im Kind, endet der Lauf mit fehler gpu_sichtbar (Gegenprobe)', async (t) => {
-  const z = await mitStems(t);
+test('Stems GPU only: the child always sees CUDA_VISIBLE_DEVICES=0; empty guitar and piano are not placed (four tracks, D4)', { skip: OHNE_GPU }, async (t) => {
+  const z = await mitStems(t, { trenner: 'identitaet_vier' });
   const alt = process.env.CUDA_VISIBLE_DEVICES;
-  process.env.CUDA_VISIBLE_DEVICES = '0';                                     // der Server überschreibt es für das Kind
+  process.env.CUDA_VISIBLE_DEVICES = '';                                      // the server sets it for the child
   t.after(() => { if (alt === undefined) delete process.env.CUDA_VISIBLE_DEVICES; else process.env.CUDA_VISIBLE_DEVICES = alt; });
-  assert.equal(z.stems.starte({ clip_id: 'c1', geraet: 'cpu' }, 'andreas').code, 200);
+  const n0 = z.projekt().spuren.length;
+  assert.equal(z.stems.starte({ clip_id: 'c1' }, 'andreas').code, 200);
   assert.equal((await z.ende()).zustand, 'fertig');
+  const p = z.projekt();
+  assert.equal(p.spuren.length, n0 + 4);
+  assert.deepEqual(p.spuren.slice(1, 5).map((s) => s.name.split(' ').at(-1)), ['Drums', 'Bass', 'Other', 'Vocals']);
+  assert.equal(fs.readdirSync(path.join(z.offen().ordner, 'stems')).length, 4);
+});
+
+test('Stems GPU only: gpu_belegt from the child ends the run with that reason and leaves the project unchanged', async (t) => {
+  const z = await mitStems(t, { trenner: 'gpu_belegt' });
+  const rev = z.projekt().rev;
+  assert.equal(z.stems.starte({ clip_id: 'c1' }, 'andreas').code, 200);
+  const e = await z.ende();
+  assert.deepEqual([e.zustand, e.grund], ['fehler', 'gpu_belegt']);
+  assert.ok(typeof e.text === 'string' && e.text.includes('GPU'), JSON.stringify(e));
+  assert.equal(z.projekt().rev, rev);
+  assert.equal(fs.existsSync(path.join(z.offen().ordner, 'stems')), false);
 });
 
 test('S6 (Review MINOR 5): schreibeWavAusF32Stueckweise = schreibeWavAusF32 Byte für Byte; die Ereignisschleife läuft dabei weiter', async (t) => {
@@ -291,39 +310,33 @@ test('S6 (Review T7 m3): Abbrechen nach erfolgreichem aendereStand → 409 zu_sp
   assert.equal(antwort?.code, 409, JSON.stringify(antwort?.j ?? antwort?.message));
   assert.equal(antwort.fehler, 'zu_spaet');
   assert.equal(e.zustand, 'fertig', JSON.stringify(e));
-  assert.equal(z.projekt().spuren.length, 7, 'drei Aufbau-Spuren plus vier Stems');
-  assert.equal(stemsWavs(z.offen().ordner).length, 4);
+  assert.equal(z.projekt().spuren.length, 9, 'three set-up tracks plus six stems');
+  assert.equal(stemsWavs(z.offen().ordner).length, 6);
 });
 
 // ---- Task 8: Riegel, Quantum, KI-Stopp, GPU, Veraltet (D10, D11, D15, D16) ----
-test('S6 D10: Quantum unbekannt → kein_kernstand, 128 → stems_quantum; Wechsel auf 128 im Lauf → abgebrochen stems_quantum, Teil-f32 geräumt', async (t) => {
+test('S6 D10 (since M9, 2026-11-07): quantum unknown → kein_kernstand; at 128 a run starts, and a change to 128 mid-run does not abort', async (t) => {
   const z = await mitStems(t, { trenner: 'langsam' });
   const roh = new Stems(z.ctx, z.zugang, { python: pythonVorgabe(), cwd: REPO_PFADE.werkstatt });
   assert.throws(() => roh.starte({ clip_id: 'c1' }, 'andreas'), (e) => e.fehler === 'kein_kernstand');
   z.stems.ereignis('/e/quantum', { alt: 256, neu: 128, sample: 0n });
-  assert.throws(() => z.stems.starte({ clip_id: 'c1' }, 'andreas'), (e) => e.fehler === 'stems_quantum');
+  assert.equal(z.stems.starte({ clip_id: 'c1' }, 'andreas').code, 200, 'quantum 128 no longer refuses');
+  assert.equal((await z.ende(10000)).zustand, 'fertig');
   z.stems.ereignis('/zustand/kern', { generation: 1, quantum: 256, ki_gestoppt: 0 });
   assert.equal(z.stems.starte({ clip_id: 'c1' }, 'andreas').code, 200);
   assert.ok(await warteBis(() => z.stand()?.stufe === 'trennen', 10000));
-  const rev = z.projekt().rev;
-  legeTeil(z);
   z.stems.ereignis('/e/quantum', { alt: 256, neu: 128, sample: 0n });
-  const e = await z.ende(5000);
-  assert.deepEqual([e.zustand, e.grund], ['abgebrochen', 'stems_quantum']);
-  assert.equal(z.projekt().rev, rev);
-  assert.equal(fs.readdirSync(z.arbeitsordner).filter((f) => f.startsWith('stems-')).length, 0);
-  assert.equal(fs.existsSync(path.join(z.offen().ordner, 'stems')), false);
+  assert.equal((await z.ende(10000)).zustand, 'fertig', 'a quantum change mid-run does not abort');
 });
 
-test('S6 D11 (aufgehoben 2026-10-31): geraet gpu ist die Vorgabe und startet, cpu startet, anderes → argument_ungueltig', async (t) => {
-  const { STEMS_GPU } = await import('../bereiche/proj/stems.ts');
-  assert.equal(STEMS_GPU, true);
+test('Stems D7 (2026-11-06): geraet gpu is the default and starts, cpu → stems_nur_gpu, anything else → argument_ungueltig', async (t) => {
+  const { STEMS_NUR_GPU } = await import('../bereiche/proj/stems.ts');
+  assert.equal(STEMS_NUR_GPU, true);
   const z = await mitStems(t);
   assert.throws(() => z.stems.starte({ clip_id: 'c1', geraet: 'tpu' }, 'andreas'), (e) => e.fehler === 'argument_ungueltig');
+  assert.throws(() => z.stems.starte({ clip_id: 'c1', geraet: 'cpu' }, 'andreas'), (e) => e.fehler === 'stems_nur_gpu' && e.code === 400);
   assert.equal(z.stand(), undefined, 'kein Lauf entstanden');
-  assert.equal(z.stems.starte({ clip_id: 'c1' }, 'andreas').code, 200);
-  assert.equal((await z.ende()).zustand, 'fertig');
-  assert.equal(z.stems.starte({ clip_id: 'c1', geraet: 'cpu' }, 'andreas').code, 200);
+  assert.equal(z.stems.starte({ clip_id: 'c1', geraet: 'gpu' }, 'andreas').code, 200);
   assert.equal((await z.ende()).zustand, 'fertig');
 });
 
@@ -393,33 +406,21 @@ test('S6 T8-NB MAJOR: Stop Cypher im WAV-Fenster → veraltet ki_gestoppt, nicht
   assert.equal((await z.ende()).zustand, 'fertig');
 });
 
-test('S6 T8-NB MINOR 1: Quantum 128 im WAV-Fenster → abgebrochen stems_quantum, nichts gesetzt; nach dem Setzen ignoriert', async (t) => {
+test('S6 T8-NB MINOR 1 (since M9): quantum 128 in the WAV window does not abort, the run is placed', async (t) => {
   let z = null;
   z = await mitStems(t, { extra: { schreibeWav: imFenster(async () => { z.stems.ereignis('/e/quantum', { alt: 256, neu: 128, sample: 0n }); }) } });
   const rev = z.projekt().rev;
   assert.equal(z.stems.starte({ clip_id: 'c1' }, 'andreas').code, 200);
   const e = await z.ende();
-  assert.deepEqual([e.zustand, e.grund], ['abgebrochen', 'stems_quantum'], JSON.stringify(e));
-  assert.equal(z.projekt().rev, rev);
-  assert.deepEqual(stemsWavs(z.offen().ordner), []);
-  // nach dem Setzen (uebernimm läuft, gespeichert) kommt 128: ignoriert
-  let z2 = null;
-  const mantel = (zg) => ({ ...zg, uebernimm: async (w, meta) => {
-    z2.stems.ereignis('/e/quantum', { alt: 256, neu: 128, sample: 0n }); return zg.uebernimm(w, meta);
-  } });
-  z2 = await mitStems(t, { mantel });
-  z2.stems.ereignis('/zustand/kern', { generation: 1, quantum: 256, ki_gestoppt: 0 });
-  assert.equal(z2.stems.starte({ clip_id: 'c1' }, 'andreas').code, 200);
-  assert.equal((await z2.ende()).zustand, 'fertig');
+  assert.equal(e.zustand, 'fertig', JSON.stringify(e));
+  assert.ok(z.projekt().rev > rev);
 });
 
-test('S6 T8-NB MINOR 2: Quantum 0 = unbekannt: Start kein_kernstand, im Lauf kein Abbruch, danach 128 bricht ab; 512 → stems_quantum', async (t) => {
+test('S6 T8-NB MINOR 2: Quantum 0 = unbekannt: Start kein_kernstand, im Lauf kein Abbruch; 512 and 128 start (since M9)', async (t) => {
   const z = await mitStems(t, { trenner: 'langsam' });
   z.stems.ereignis('/zustand/kern', { generation: 2, quantum: 0, ki_gestoppt: 0 });
   assert.throws(() => z.stems.starte({ clip_id: 'c1' }, 'andreas'), (e) => e.fehler === 'kein_kernstand');
   z.stems.ereignis('/zustand/kern', { generation: 2, quantum: 512, ki_gestoppt: 0 });
-  assert.throws(() => z.stems.starte({ clip_id: 'c1' }, 'andreas'), (e) => e.fehler === 'stems_quantum');
-  z.stems.ereignis('/zustand/kern', { generation: 2, quantum: 256, ki_gestoppt: 0 });
   assert.equal(z.stems.starte({ clip_id: 'c1' }, 'andreas').code, 200);
   assert.ok(await warteBis(() => z.stand()?.stufe === 'trennen', 10000));
   z.stems.ereignis('/zustand/kern', { generation: 3, quantum: 0, ki_gestoppt: 0 });   // Kernneustart: unbekannt
@@ -428,20 +429,19 @@ test('S6 T8-NB MINOR 2: Quantum 0 = unbekannt: Start kein_kernstand, im Lauf kei
   assert.equal(z.stems.starte({ clip_id: 'c1' }, 'andreas').code, 200);
   assert.ok(await warteBis(() => z.stand()?.stufe === 'trennen', 10000));
   z.stems.ereignis('/zustand/kern', { generation: 4, quantum: 0, ki_gestoppt: 0 });
-  z.stems.ereignis('/e/quantum', { alt: 0, neu: 128, sample: 0n });                    // danach bekannt und falsch: normale Regel
-  const e = await z.ende(5000);
-  assert.deepEqual([e.zustand, e.grund], ['abgebrochen', 'stems_quantum']);
+  z.stems.ereignis('/e/quantum', { alt: 0, neu: 128, sample: 0n });                    // known again, 128: no abort since M9
+  assert.equal((await z.ende(10000)).zustand, 'fertig');
 });
 
-test('S6 T8-NB MINOR 3: nur_andreas_spur auch über spur_id; Quantumabbruch tötet das Kind; zu_viele_spuren am Ende → veraltet', async (t) => {
+test('S6 T8-NB MINOR 3: nur_andreas_spur auch über spur_id; Abbruch tötet das Kind; zu_viele_spuren am Ende → veraltet', async (t) => {
   const z = await mitStems(t, { trenner: 'taub', killMs: 300 });
   assert.throws(() => z.stems.starte({ spur_id: 's1' }, 'cypher'), (e) => e.fehler === 'nur_andreas_spur');
   assert.equal(z.stems.starte({ spur_id: 's1' }, 'andreas').code, 200, 'Negativ-Kontrolle: Andreas darf');
   assert.ok(await warteBis(() => z.stand()?.stufe === 'trennen', 10000));
   const pid = z.stems.lauf.prozess.pid;
-  z.stems.ereignis('/e/quantum', { alt: 256, neu: 128, sample: 0n });
+  z.stems.abbrechen({ auftrag_id: z.stems.lauf.id });
   assert.ok(await warteBis(() => { try { process.kill(pid, 0); return false; } catch { return true; } }, 3000), 'das (taube) Kind ist nach killMs tot');
-  assert.equal((await z.ende(5000)).grund, 'stems_quantum');
+  assert.equal((await z.ende(5000)).grund, 'abbruch');
   const y = await mitStems(t, { trenner: 'langsam' });
   assert.equal(y.stems.starte({ clip_id: 'c1' }, 'andreas').code, 200);
   await y.aendern(Array.from({ length: 26 }, () => ({ befehl: 'spur_neu', art: 'audio' })), 'Voll');

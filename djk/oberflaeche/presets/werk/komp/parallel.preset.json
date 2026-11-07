@@ -1,0 +1,43 @@
+{
+ "schema": 1,
+ "name": "Parallel",
+ "geraet_typ": "effekt",
+ "geraet": "komp",
+ "werte": {
+  "thresh": -30,
+  "ratio": 10,
+  "knee": 0,
+  "attack": 3,
+  "release": 80,
+  "makeup": 10,
+  "mix": 0.4,
+  "extsc": false,
+  "schp": 0
+ },
+ "beschreibung": {
+  "art": "compressor",
+  "unterart": "parallel",
+  "charakter": [
+   "punchy",
+   "thick"
+  ],
+  "genre": [
+   "techno",
+   "electro",
+   "breaks"
+  ],
+  "einsatz": [
+   "drop",
+   "build"
+  ],
+  "energie": 5,
+  "text": "Hard 10:1 squash blended at 40 percent under the dry signal for density without losing transients."
+ },
+ "tags": [
+  "drums",
+  "parallel"
+ ],
+ "notiz": "Starting point from practice (Senior, Mixing Secrets; Pirkle ch. 18), not measured. Same values as djk/instrumente/komp/presets/presets.json.",
+ "angelegt": "2026-11-02T00:00:00.000Z",
+ "geaendert": "2026-11-02T00:00:00.000Z"
+}

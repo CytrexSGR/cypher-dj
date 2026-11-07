@@ -1,0 +1,12 @@
+{
+ "schema": 1,
+ "name": "Old Plugin",
+ "geraet_typ": "effekt",
+ "geraet": "komp",
+ "werte": { "thresh": -20, "lookahead": 5 },
+ "beschreibung": { "art": "compressor", "unterart": "glue", "charakter": ["smooth", "subtle"], "genre": [], "einsatz": ["mixdown"], "energie": 2, "text": "Synthetic glue compressor for the tests." },
+ "tags": ["alt"],
+ "notiz": "synthetic: lookahead is a parameter the plugin no longer has",
+ "angelegt": "2026-01-01T00:00:00.000Z",
+ "geaendert": "2026-01-01T00:00:00.000Z"
+}

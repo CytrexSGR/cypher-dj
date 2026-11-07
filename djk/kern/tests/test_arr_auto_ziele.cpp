@@ -19,6 +19,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <utility>
 #include <vector>
 
 #include "arr_bau.h"
@@ -43,8 +44,10 @@ static void pan_soll(double pan, double& gl, double& gr) {
 struct AutoSpy : PruefSenke {
   struct R { int spur, param; float wert; int64_t block_s0; };
   std::vector<R> r;
-  AutoSpy() { r.reserve(4096); }
+  AutoSpy() { r.reserve(4096); su.reserve(4096); }
+  std::vector<R> su;   // 1.12 slice 5: auto_parameter_summand calls (a relative lane without an absolute one), wert = the summand
   void auto_parameter(int spur, int param, float wert) noexcept override { r.push_back({spur, param, wert, block_s0}); }
+  void auto_parameter_summand(int spur, int param, float delta) noexcept override { su.push_back({spur, param, delta, block_s0}); }
 };
 
 struct Ablauf {
@@ -283,6 +286,62 @@ int main() {
     t.lauf(256 * 12);
     PRUEF(spy.r.size() == nach_stopp);   // the block after the stop and every later one: no call
     PRUEF(t.arr.status() == cdj::ArrStatus::steht);
+  }
+  {  // 8. 1.12 slice 5 U9 (D9, spec 5.11 a): the device lane stack. Absolute + relative reach the sink stacked and clamped through auto_parameter; a relative lane alone
+     // reaches it as a summand (the sink owns the base value). Mutation ARR_AUTO_REL_OHNE_KLEMME (no clamp): red.
+    const auto sp_lauf = [&](const std::vector<std::pair<std::vector<ArrAutoPunkt>, bool>>& lanes, uint8_t param, AutoSpy& spy, Treiber& t) {
+      t.arr.setze_senke_intern(&spy);
+      t.senken.push_back(&spy);
+      Bau b;
+      b.spur(1, ArrArt::intern).spur(2, ArrArt::intern);   // track 2 carries no lane
+      for (const auto& l : lanes) b.lane(1, l.first, cdj::ARR_AUTO_GERAET, param, l.second);
+      t.laden(b.fertig());
+      t.arr.start(0.0, 0, false, 0, V, 256, t.k);
+      t.lauf(256 * 6);
+    };
+    {  // a. absolute 0.5 + relative 0.7 = 1.2, clamped to 1; the absolute lane alone is 0.5 (control)
+      Treiber t;
+      AutoSpy spy;
+      sp_lauf({{{P(0, 0.5f), P(40, 0.5f)}, false}, {{P(0, 0.7f), P(40, 0.7f)}, true}}, 1, spy, t);
+      PRUEF(spy.r.size() == 3 && spy.su.empty());
+      for (const auto& x : spy.r) PRUEF(x.spur == 0 && x.param == 1);
+      for (const auto& x : spy.r) PRUEF_NAH(x.wert, 1.0, 1e-7);
+      Treiber t2;
+      AutoSpy spy2;
+      sp_lauf({{{P(0, 0.5f), P(40, 0.5f)}, false}}, 1, spy2, t2);
+      PRUEF(spy2.r.size() == 3 && spy2.su.empty());
+      for (const auto& x : spy2.r) PRUEF_NAH(x.wert, 0.5, 1e-7);
+    }
+    {  // b. inside the range: absolute ramp 0 -> 1 over 8 beats + relative -0.25 = ramp - 0.25, clamped below at 0 (the first blocks), exact above
+      Treiber t;
+      AutoSpy spy;
+      sp_lauf({{{P(0, 0.f), P(8, 1.f)}, false}, {{P(0, -0.25f), P(40, -0.25f)}, true}}, 1, spy, t);
+      PRUEF(spy.r.size() == 3);
+      const int64_t einsatz = V + 256;
+      for (size_t j = 0; j < spy.r.size() && j < 3; ++j) {
+        const double beat = static_cast<double>(256 * (3 + static_cast<int64_t>(j)) + 255 - einsatz) / static_cast<double>(SPB);
+        PRUEF_NAH(spy.r[j].wert, std::clamp(beat / 8.0 - 0.25, 0.0, 1.0), 1e-6);
+      }
+      Treiber t3;
+      AutoSpy spy3;   // the same with a base well inside: absolute 0.6 + relative -0.25 = 0.35 (plain sum, no clamp involved)
+      sp_lauf({{{P(0, 0.6f), P(40, 0.6f)}, false}, {{P(0, -0.25f), P(40, -0.25f)}, true}}, 2, spy3, t3);
+      PRUEF(spy3.r.size() == 3);
+      for (const auto& x : spy3.r) PRUEF(x.param == 2);
+      for (const auto& x : spy3.r) PRUEF_NAH(x.wert, 0.35, 1e-6);
+    }
+    {  // c. relative only: no auto_parameter, one summand per block (the value at the last running sample), never on track 2
+      Treiber t;
+      AutoSpy spy;
+      sp_lauf({{{P(0, -1.f), P(8, 1.f)}, true}}, 1, spy, t);
+      PRUEF(spy.r.empty());
+      PRUEF(spy.su.size() == 3);
+      const int64_t einsatz = V + 256;
+      for (size_t j = 0; j < spy.su.size() && j < 3; ++j) {
+        PRUEF(spy.su[j].spur == 0 && spy.su[j].param == 1 && spy.su[j].block_s0 == 256 * (3 + static_cast<int64_t>(j)));
+        const double beat = static_cast<double>(256 * (3 + static_cast<int64_t>(j)) + 255 - einsatz) / static_cast<double>(SPB);
+        PRUEF_NAH(spy.su[j].wert, -1.0 + 2.0 * beat / 8.0, 1e-6);
+      }
+    }
   }
   PRUEF_ENDE();
 }

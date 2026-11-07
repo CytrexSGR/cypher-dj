@@ -34,6 +34,7 @@
 #include <set>
 #include <string>
 #include <cerrno>
+#include <cmath>
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
@@ -43,6 +44,7 @@
 #include <string>
 #include <thread>
 #include <utility>
+#include <vector>
 
 #include "cypherdj/ausgang.h"
 #include "cypherdj/erzeuger.h"
@@ -53,6 +55,7 @@
 #include "cypherdj/konfig.h"
 #include "cypherdj/arr_lader.h"
 #include "cypherdj/graph_werk.h"
+#include "cypherdj/hall_pool.h"
 #include "cypherdj/warp_werk.h"
 #include "cypherdj/lader.h"
 #include "cypherdj/midi_ausgabe.h"
@@ -77,6 +80,14 @@ static cdj::Betrieb* g_betrieb = nullptr;  // Scheibe 18
 static std::atomic<int> g_cb_tid{0};       // Scheibe 31: Faden des Callbacks, für die Seitenfehler-Zählung (M8)
 static jack_port_t* g_notbahn_vor = nullptr;  // nie gelesen, Ziel der Notbahn-Kante (--vor)
 static std::atomic<int> g_cb_prio{-1};     // Keylock Task 2.5 (Vertrag 12): Echtzeit-Priorität des JACK-Fadens, 0 ohne
+// mehrkern fix round: the JACK thread stays on the reserved physical core (CPUs of the first allowed core), set once in the thread-init callback, never in process().
+// The callback is registered only when the pool really has workers. It prints nothing (it runs in the JACK thread): the result goes to g_jack_pin
+// (-1 not called yet, 0 pinned, else the error number) and hall_prio reports it once the JACK thread is known to be running.
+static cpu_set_t g_jack_cpus;
+static std::atomic<int> g_jack_pin{-1};
+static void jack_faden_init(void*) {
+  g_jack_pin.store(pthread_setaffinity_np(pthread_self(), sizeof g_jack_cpus, &g_jack_cpus), std::memory_order_release);
+}
 static std::atomic<uint64_t> g_graph_ereignisse{0};  // Fixup M1: Zähler für die Diagnosezeile im Verbinder
 static cdj::WaechterSeite* g_ws = nullptr;  // Scheibe 18: Selbst-Wächter, nullptr wenn aus
 static jack_port_t* g_hand_in = nullptr;    // Scheibe 35: JACK-MIDI vom Controller (§7.1)
@@ -454,7 +465,14 @@ int main(int argc, char** argv) {
   netz.setze_hand_osc(konf.hand_osc);  // Scheibe 35, B-O Weg 1
   const std::string std_pfad_netz = cdj::standard_konfig_pfad(inst);
   netz.setze_controller_ordner(std_pfad_netz.substr(0, std_pfad_netz.rfind('/')) + "/controller");  // Scheibe 35: /k/mapping
-  netz.setze_kit_ordner(std::string(std::getenv("HOME") ? std::getenv("HOME") : "") + "/.config/cypherdj/kits");  // ADR 024
+  // 1.9 (E5, E17): the kit folder. $CYPHERDJ_KIT_ORDNER when set and non-empty (a test instance with its own copy), else exactly the folder the
+  // live studio reads today. The Strudel kits (netz) and the kit tracks of the arrangement (arr_lader below) read the same one.
+  const std::string kit_ordner = [] {
+    const char* env = std::getenv("CYPHERDJ_KIT_ORDNER");
+    if (env && *env) return std::string(env);
+    return std::string(std::getenv("HOME") ? std::getenv("HOME") : "") + "/.config/cypherdj/kits";
+  }();
+  netz.setze_kit_ordner(kit_ordner);  // ADR 024
   netz.setze_bk_ordner(std::string(std::getenv("HOME") ? std::getenv("HOME") : "") + "/.config/cypherdj/baukasten");  // Baukasten S3a
   {  // MVP 2 (ADR 025, §4.9): Loops der Vorgabe-Instanz in ~/.config/cypherdj/loops, einer Prüfinstanz in /dev/shm
     char shm[64];
@@ -541,6 +559,9 @@ int main(int argc, char** argv) {
   cdj::ArrLader arr_lader(arr_ordner, konto, (int64_t)konf.arr_budget_mib << 20, !ohne_sperre);
   arr_lader.setze_bk_ordner(std::string(std::getenv("HOME") ? std::getenv("HOME") : "") + "/.config/cypherdj/baukasten");  // S20: graph folder of the kern, for bk project tracks
   arr_lader.setze_bk_leser(g_kern->arr_bk_leser());  // S20: the loader frees a graph instance only when the sink no longer plays it (g_kern is never deleted)
+  arr_lader.setze_kit_ordner(kit_ordner);  // 1.9: kit folder of the kern, for kit project tracks
+  arr_lader.setze_kit_leser(g_kern->arr_kit_leser());  // 1.9: the loader frees a Kit only when the kit sink no longer plays it
+  arr_lader.setze_kit_lader(&cdj::lade_kit);  // 1.9: the cache loads through a function pointer (arr_wiedergabe.cpp does not link kit.cpp)
   netz.verbinde_arr(aringe);
   netz.setze_arr_ordner(arr_ordner);  // Paket K3: Freeze im Arbeitsordner (Spec 6.14), geschrieben vom arr_faden (6.29)
   // 1.13 Slice 2 (ADR 031 Teil 2): das Warp-Werk für COMPLEX und TONES. Pool, Ringe und Bungee-Instanzen entstehen hier, vor jack_activate und mlockall (der Speicher
@@ -559,17 +580,115 @@ int main(int argc, char** argv) {
   std::unique_ptr<cdj::GraphWerk> graph_werk = cdj::graph_werk_neu({konf.graph_faeden});
   g_kern->setze_graph_werk(graph_werk.get());
   std::fprintf(stderr, "Graph-Werk: %d Fäden, %d Plätze, ein Block Vorlauf\n", graph_werk->faeden(), cdj::GW_PLAETZE);
+  // mehrkern Task 4/5: the Halls of the arrangement's return strips on a HallPool (hall_pool.h). Threads are created here, before jack_activate and mlockall; the
+  // priority is set by hall_prio once the JACK thread knows its own. kern.toml hall_faeden (0 = no pool) and hall_cpus (empty: distinct physical cores, the first
+  // core stays free, see waehle_hall_cpus). The deadline is 25 % of the real sub-block of mischen(): min(JACK buffer, MIX_BLOCK) samples at 48 kHz. The pool is
+  // destroyed after jack_deactivate (the callback no longer runs), see the end of main.
+  const int hall_block_samples = std::min<int>(static_cast<int>(jack_get_buffer_size(g_client)), cdj::MIX_BLOCK);
+  const int hall_bloecke_us = static_cast<int>(std::lround(hall_block_samples * 1e6 / 48000.0));   // the rate is 48000 (checked after jack_client_open)
+  cdj::HallPoolEinstellung hall_e;
+  hall_e.faeden = konf.hall_faeden;
+  hall_e.bloecke_us = hall_bloecke_us;
+  std::string hall_cpu_text;   // for the start line
+  const char* const HALL_FAEDEN_NULL = "hall_faeden = 0";
+  std::string hall_aus_grund = HALL_FAEDEN_NULL;   // why there is no pool, for the start line
+  std::vector<int> hall_reserviert;                 // CPUs of the core kept for the JACK thread (automatic choice only)
+  std::string hall_pin_text;                        // the same as text for the report after jack_activate
+  if (hall_e.faeden > 0) {
+    // The CPUs this process may use (the unit's CPUAffinity, djk-start KERN_CPUS): the automatic choice stays inside, a pin must not leave it.
+    std::vector<int> erlaubt;
+    {
+      cpu_set_t cs;
+      CPU_ZERO(&cs);
+      if (sched_getaffinity(0, sizeof cs, &cs) == 0)
+        for (int c = 0; c < CPU_SETSIZE; ++c)
+          if (CPU_ISSET(c, &cs)) erlaubt.push_back(c);
+    }
+    const std::vector<int>* maske = erlaubt.empty() ? nullptr : &erlaubt;
+    const std::vector<cdj::CpuKern> topo = cdj::lies_cpu_topologie();
+    // validated while loading kern.toml; trimmed empty (only blanks) is automatic, like "" (hall_cpus_liste)
+    std::vector<int> cpus = cdj::hall_cpus_liste(konf.hall_cpus);
+    if (!cpus.empty()) {
+      if (static_cast<int>(cpus.size()) < hall_e.faeden) {
+        std::fprintf(stderr, "Hall pool: hall_cpus names %zu CPUs for hall_faeden = %d, starting %zu workers\n", cpus.size(), hall_e.faeden, cpus.size());
+        hall_e.faeden = static_cast<int>(cpus.size());
+      }
+      cpus.resize(static_cast<size_t>(hall_e.faeden));   // only the CPUs that are used: in the start line and in the warnings
+      for (const std::string& z : cdj::hall_cpus_warnungen(cpus, topo, maske)) std::fprintf(stderr, "Hall pool: warning, %s\n", z.c_str());
+      hall_cpu_text = "CPUs ";
+      for (size_t c = 0; c < cpus.size(); ++c) hall_cpu_text += (c ? "," : "") + std::to_string(cpus[c]);
+      hall_cpu_text += " (hall_cpus)";
+      hall_aus_grund = "hall_cpus without a CPU";
+    } else {
+      const cdj::HallCpuWahl w = cdj::waehle_hall_cpus(topo, hall_e.faeden, maske);
+      cpus = w.cpus;
+      if (w.unbekannt) hall_cpu_text = "without a fixed CPU";
+      else {
+        hall_cpu_text = "CPUs ";
+        for (size_t c = 0; c < cpus.size(); ++c) hall_cpu_text += (c ? "," : "") + std::to_string(cpus[c]);
+        hall_cpu_text += " (own physical cores inside the allowed CPUs, the first core stays free)";
+        hall_e.faeden = static_cast<int>(cpus.size());
+        hall_aus_grund = "no free physical cores";
+        hall_reserviert = w.reserviert;   // the JACK thread goes there, once the pool really has workers (below)
+      }
+      if (!w.meldung.empty()) std::fprintf(stderr, "Hall pool: %s\n", w.meldung.c_str());
+    }
+    for (size_t c = 0; c < cpus.size() && c < 3; ++c) hall_e.cpus[c] = cpus[c];
+  }
+  std::unique_ptr<cdj::HallPool> hall_pool = std::make_unique<cdj::HallPool>(hall_e);
+  g_kern->setze_hall_pool(hall_pool->faeden() > 0 ? hall_pool.get() : nullptr);
+  if (hall_pool->faeden() > 0) {
+    // Block and deadline are not printed here: jack_get_buffer_size() before jack_activate may differ from the real period (PipeWire reports 1024 here, then the
+    // buffer-size callback delivers the quantum). The callback below prints the effective values.
+    std::fprintf(stderr, "Hall pool: %d workers (return Halls: return 1 in the callback, returns 2 to %d on the workers), %s, block and deadline follow the JACK buffer size (reported by the buffer-size callback)\n",
+                 hall_pool->faeden(), hall_pool->faeden() + 1, hall_cpu_text.c_str());
+    if (!hall_reserviert.empty()) {   // pin the JACK thread to the reserved core (thread-init callback, registered before jack_activate, only with workers)
+      CPU_ZERO(&g_jack_cpus);
+      for (int c : hall_reserviert) { CPU_SET(c, &g_jack_cpus); hall_pin_text += (hall_pin_text.empty() ? "" : ",") + std::to_string(c); }
+      jack_set_thread_init_callback(g_client, jack_faden_init, nullptr);
+    }
+    // the JACK buffer size can change while we run (not with node.lock-quantum, but a plain JACK server): the deadline follows. Registered before jack_activate; runs outside the callback.
+    // jack.h (jack_set_buffer_size_callback): "All notification events are received in a separated non RT thread, the code in the supplied function does not need to be
+    // suitable for real-time execution." So fprintf is allowed here.
+    jack_set_buffer_size_callback(g_client, [](jack_nframes_t n, void* arg) -> int {
+      cdj::HallPool* pool = static_cast<cdj::HallPool*>(arg);
+      const int block = static_cast<int>(std::min<jack_nframes_t>(n, cdj::MIX_BLOCK));
+      const int us = static_cast<int>(std::lround(block * 1e6 / 48000.0));
+      pool->setze_bloecke_us(us);
+      std::fprintf(stderr, "Hall pool: block %d samples = %d us, deadline %lld us (25%% of the block)\n", block, us, static_cast<long long>(pool->frist_us()));
+      return 0;
+    }, hall_pool.get());
+  } else {
+    // the cause, not a guess: asked for 0, no free core in the allowed CPUs, or the threads could not be created
+    const char* grund = konf.hall_faeden == 0 ? HALL_FAEDEN_NULL : (hall_e.faeden == 0 ? hall_aus_grund.c_str() : "workers not created");
+    std::fprintf(stderr, "Hall pool off (%s)\n", grund);
+  }
   static cdj::AufnahmeFaden rec_faden(arr_ordner);   // 1.8: Aufnahme-Faden, Take-Dateien im Arbeitsordner (statisch: überlebt den Netz-Faden; sein Destruktor fasst keine RecSpur an)
   rec_faden.starte();
   netz.verbinde_rec(&rec_faden);
+  static cdj::SpektrumSender spektrum_sender(g_kern->mixer());   // 1.15 A7b: analysis side of the spectrum path, ticked by the 2 ms loop of the net thread (static: outlives the net thread)
+  netz.verbinde_spektrum(&spektrum_sender);
   g_kern->verbinde_huellen(huellen);  // Ohr (§6.2), vor mlockall
   g_kern->setze_deck_konfig((float)konf.ziel_lufs, (float)konf.hoerbar_db);
   g_kern->setze_pruefmodus(pruefmodus);  // Scheibe 25, B7: vor dem Lesen des Neustart-Zustands
   g_kern->setze_filter_guete(konf.filter_guete);  // Scheibe 25: kern.toml filter_guete (A27 Weg a)
-  g_kern->setze_limiter_dbtp(konf.limiter_dbtp);  // Scheibe 25: Master-Limiter aus 14, Decke aus kern.toml
+  g_kern->setze_limiter_dbtp(konf.limiter_dbtp);
+  {   // voice channel (stimme.h): before jack_activate
+    cdj::StimmEinstellung st;
+    st.eingang = konf.stimme_eingang;
+    st.duck_db = static_cast<float>(konf.stimme_duck_db);
+    st.pegel_db = static_cast<float>(konf.stimme_pegel_db);
+    g_kern->stimme_einstellen(st);
+    if (st.eingang > 0)
+      std::fprintf(stderr, "Voice channel: ein_%d into the master in front of the limiter, music ducked by %.1f dB, voice %+.1f dB\n",
+                   st.eingang, st.duck_db, st.pegel_db);
+  }  // Scheibe 25: Master-Limiter aus 14, Decke aus kern.toml
+  g_kern->setze_kanal_limiter(konf.kanal_limiter_vorhalt_ms, konf.kanal_limiter_echtspitze);  // 1.15 A5b (D8): before the audio starts; 0 (default) builds nothing, L = 0
+  netz.setze_kanal_limiter(g_kern->mixer().kanal_limiter_gebaut(), g_kern->mixer().kanal_latenz());  // 1.15 A5c: the real state for /e/kanal_limiter, before the net thread starts (it runs at the end of main)
   g_kern->hoerschein_pflicht(konf.hoerschein_pflicht);  // Ohr T14: kern.toml hoerschein_pflicht (Vorgabe true, §17 I3a)
   std::fprintf(stderr, "Master-Limiter: Decke %.2f dBTP, Vorhalt %d Samples (Cue gleich verzögert)\n", konf.limiter_dbtp,
                g_kern->mixer().limiter_vorhalt());
+  std::fprintf(stderr, "Channel limiter (bus/1..4): %s, latency account L = %d samples\n", g_kern->mixer().kanal_limiter_gebaut() ? "built" : "not built", g_kern->mixer().kanal_latenz());
   std::fprintf(stderr, "Filter-Güte %.3f in %d Kanalzügen\n", g_kern->mixer().kanalzug(0).filter_guete(),
                cdj::MIX_KANAELE);
   g_messer = new cdj::Zyklusmesser(ereignisse);
@@ -732,6 +851,18 @@ int main(int argc, char** argv) {
     gr_prio = std::thread([&graph_werk] {
       for (int i = 0; i < 100 && g_cb_prio.load(std::memory_order_acquire) < 0; ++i) usleep(50'000);
       graph_werk->prioritaet(g_cb_prio.load(std::memory_order_acquire));   // jp <= 0: Meldung, synchron
+    });
+  std::thread hall_prio;   // mehrkern Task 4: priority of the Hall pool threads (JACK - 1, HallPool::prioritaet), as soon as the JACK thread knows its own
+  if (hall_pool->faeden() > 0)
+    hall_prio = std::thread([&hall_pool, hall_pin_text] {
+      for (int i = 0; i < 100 && g_cb_prio.load(std::memory_order_acquire) < 0; ++i) usleep(50'000);
+      hall_pool->prioritaet(g_cb_prio.load(std::memory_order_acquire));   // jp <= 1: message on stderr, the workers stay SCHED_OTHER
+      if (!hall_pin_text.empty()) {   // the effect, not the registration: the thread-init callback has run before the first process() call
+        const int r = g_jack_pin.load(std::memory_order_acquire);
+        if (r == 0) std::fprintf(stderr, "Hall pool: JACK thread pinned to CPUs %s\n", hall_pin_text.c_str());
+        else if (r < 0) std::fprintf(stderr, "Hall pool: JACK thread not pinned (callback not called)\n");
+        else std::fprintf(stderr, "Hall pool: JACK thread not pinned (error %d)\n", r);
+      }
     });
   std::thread kl_bau;
   if (keylock)
@@ -1021,8 +1152,14 @@ int main(int argc, char** argv) {
   if (kl_bau.joinable()) kl_bau.join();  // Task 2.5b: ein laufender Bau (rund 270 ms) endet vor dem Abbau
   if (wk_prio.joinable()) wk_prio.join();
   if (gr_prio.joinable()) gr_prio.join();
+  if (hall_prio.joinable()) hall_prio.join();
   jack_deactivate(g_client);
+  g_kern->setze_hall_pool(nullptr);   // mehrkern Task 4: the callback is stopped; the pool goes with the end of main
   g_kern->keylock_faeden_stoppen();  // Keylock Task 2.5: Join (Wecker plus höchstens 20 ms Warten je Faden)
+  {   // mehrkern Task 5: the pool's end state, like the Graph-Werk line below: an 0 with counters means it switched itself off (more than 4 late events in 64 blocks)
+    std::fprintf(stderr, "Hall pool: on %d, %d workers, %llu late, %llu taken back%s\n", hall_pool->an() ? 1 : 0, hall_pool->faeden(), (unsigned long long)hall_pool->spaet(),
+                 (unsigned long long)hall_pool->zurueck(), (!hall_pool->an() && hall_pool->faeden() > 0) ? " (the pool switched itself off)" : "");
+  }
   graph_werk->stoppe();   // Baukasten S3b: nach jack_deactivate rechnet niemand mehr; danach die Schlusszeile
   {
     const cdj::GraphZaehler gz = graph_werk->zaehler();

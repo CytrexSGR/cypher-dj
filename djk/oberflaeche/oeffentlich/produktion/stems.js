@@ -57,6 +57,7 @@ export function stemsEndeMeldung(s, texte = {}) {
 export function nachladenNoetig(a, f, { sichtbar, slug, rev, eigene }) {
   if (a !== 'proj' || !sichtbar) return false;
   if (f?.stems) return f.stems.slug === slug && f.stems.zustand === 'fertig';
+  if (f?.auto_arm || f?.auto_aufnahme) return false;   // 1.12 S3 task 9: the event carries its state; a recording change arrives as its own revision event
   return !eigene(f?.slug, f?.rev) && !!(f?.clip_id || f?.slug !== slug || f?.rev > (rev ?? -1));
 }
 // Eine SSE-Meldung {stems}: was die Seite tut. behandelt=false → keine Stems-Meldung, der allgemeine Weg gilt. Fremdes Projekt → nichts.

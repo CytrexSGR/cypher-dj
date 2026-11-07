@@ -1,5 +1,5 @@
 // PRODUCTION (D1 V2): FREEZE im Spurkopf jeder Wirt-Spur und EXPORT in der Transportleiste (Spec 2.5, 3.4: POST /proj/freeze
-// {spur_id, an} → {rev, projekt}; POST /proj/export {} → {datei, frames, spitze_db, …}, Vorgabe Loop-Klammer; Paket S3).
+// {spur_id, an} → {rev, projekt}; POST /proj/export {} → {datei, frames, spitze_db, …}, default: loop bracket when on, else the whole song; Paket S3).
 // Beides sind lange Anfragen (ein Freeze ist ein Echtzeit-Durchlauf): währenddessen ist jeder weitere Lauf gesperrt, die
 // Transportleiste zeigt Phase, Takt (aus /zustand/arr status 3) und Sekunden, danach das Ergebnis oder den Grund.
 // Der Schalter wird in den vorhandenen Spurkopf (spurkoepfe.js) eingesetzt, nicht in dessen Vorlage: V1 bleibt unverändert.
@@ -9,7 +9,7 @@ export function bindeAusgabe(ctx) {
   const { st, $ } = ctx;
   const gruppe = document.createElement('div');
   gruppe.className = 'p-gruppe p-ausgabe';
-  gruppe.innerHTML = '<button data-p="export" title="Export the loop bracket as a WAV file (48 kHz, 32 bit float); Surge tracks are frozen first" disabled>EXPORT</button>'
+  gruppe.innerHTML = '<button data-p="export" title="Export the loop bracket when it is on, otherwise the whole song, as a WAV file (48 kHz, 32 bit float); Surge tracks are frozen first" disabled>EXPORT</button>'
     + '<output data-p="ausgabe" class="p-ausgabe-text" aria-live="polite"></output>';
   $('meldung').before(gruppe);
   st.lauf = null;            // { art: 'freeze'|'export', spur_id?, name?, an?, seit } während einer Anfrage (seit: Start dieser Seite, performance.now())
@@ -21,7 +21,7 @@ export function bindeAusgabe(ctx) {
   let frage = 0;
   ctx.ausgabeLauf = (x) => {
     clearTimeout(frage);
-    if (!x || (x.art !== 'freeze' && x.art !== 'export' && x.art !== 'lautheit' && x.art !== 'merge') || st.lauf) { if (st.fremdLauf) { st.fremdLauf = null; knoepfe(); } return; }
+    if (!x || (x.art !== 'freeze' && x.art !== 'export' && x.art !== 'lautheit' && x.art !== 'merge' && x.art !== 'bounce') || st.lauf) { if (st.fremdLauf) { st.fremdLauf = null; knoepfe(); } return; }
     const s = x.art === 'freeze' ? st.projekt?.spuren.find((y) => y.id === x.spur_id) : null;
     const gleich = st.fremdLauf && st.fremdLauf.art === x.art && st.fremdLauf.spur_id === x.spur_id;
     st.fremdLauf = gleich ? st.fremdLauf : { art: x.art, ...(x.art === 'freeze' ? { spur_id: x.spur_id, name: s?.name ?? x.spur_id, an: !s?.freeze } : {}), seit: null };   // H3: kein Start bekannt
@@ -71,6 +71,12 @@ export function bindeAusgabe(ctx) {
   // Slice 7 (D14): Merge Tracks from the clip menu; the frame lauf() locks freeze, export and merge against each other and shows the text of a reason
   ctx.zusammenfuehren = async (koerper) => {
     const j = await lauf('merge', '/proj/zusammenfuehren', koerper, {});
+    if (j?.projekt) ctx.uebernimm(st.slug, j.projekt);
+    return j;
+  };
+  // 1.14 slice 4 (spec R12): the bounce items of the clip menu; the same frame locks it against freeze, export and merge
+  ctx.bounce = async (koerper) => {
+    const j = await lauf('bounce', '/proj/bounce', koerper, {});
     if (j?.projekt) ctx.uebernimm(st.slug, j.projekt);
     return j;
   };

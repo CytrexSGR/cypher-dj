@@ -48,6 +48,7 @@ class ArrRbSenke final : public ArrSenke {
 
   int64_t vorhalt() const noexcept override { return 0; }
   void auto_parameter(int spur, int param, float wert) noexcept override;
+  void auto_parameter_summand(int spur, int param, float delta) noexcept override;   // 1.12 slice 5: base value (playback value, else RB default) + delta, clamped to 0..1
   void note(int spur, int64_t ziel, uint8_t ton, uint8_t vel, bool an) noexcept override;
   void alle_aus(int spur, int64_t ziel) noexcept override;
   void transport_start(int spur, int64_t ziel) noexcept override;
@@ -105,7 +106,7 @@ class ArrRbSenke final : public ArrSenke {
   bool parameter_gleich(const Spur& p, const ArrSpur& quelle) const noexcept;
 
   const Arrangement& arr_;
-  Spur sp_[ARR_SPUREN];
+  Spur sp_[ARR_SENKEN_PLAETZE];
   bool bereit_ = false;
   uint64_t verloren_ = 0;
   uint64_t abgelehnt_ = 0;

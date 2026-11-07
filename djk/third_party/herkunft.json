@@ -1,6 +1,16 @@
 {
   "hinweis": "Gepinnte Fremdquellen (SCHNITTSTELLEN.md §19.4). Jede Datei unter djk/third_party/ außer den hier unter eigene_dateien genannten steht mit sha256 in dieser Liste; pruefe_herkunft.py rechnet nach. Nie von Hand in diesen Dateien ändern: neue Fassung = neuer Eintrag mit neuer Herkunft.",
-  "eigene_dateien": ["herkunft.json", "pruefe_herkunft.py", "CMakeLists.txt", ".gitignore", "tests/ebu_r128.c", "tests/kopf_test.cpp", "tests/test_herkunft.py", "bungee.cmake"],
+  "eigene_dateien": [
+    "herkunft.json",
+    "pruefe_herkunft.py",
+    "CMakeLists.txt",
+    ".gitignore",
+    "tests/ebu_r128.c",
+    "tests/kopf_test.cpp",
+    "tests/test_herkunft.py",
+    "bungee.cmake",
+    "bs_roformer/__init__.py"
+  ],
   "quellen": [
     {
       "name": "libebur128",
@@ -311,6 +321,19 @@
         "bungee/submodules/pffft/fftpack.h": "e06b12c73aeef28d714519071a45175fe1df5899d12ff26df4f30c99a35f032d",
         "bungee/submodules/pffft/pffft.c": "7c7bfc62d5d4e2354220d963c1d95e02643041692ddbe2bc3f821e54d17c1bc7",
         "bungee/submodules/pffft/pffft.h": "f07a580d03403ead8c4fbd10eb56ce1125b2a4bbd5a5eb628a58290f2f4881df"
+      }
+    },
+    {
+      "name": "bs-roformer-infer (model code only)",
+      "lizenz": "MIT",
+      "url": "https://pypi.org/project/bs-roformer-infer/0.1.5/",
+      "commit": "wheel bs_roformer_infer-0.1.5-py3-none-any.whl",
+      "version": "0.1.5",
+      "bezogen": "2026-11-06: pip download --no-deps from PyPI, files copied unchanged from the wheel. Weights (BS-Rofo-SW-Fixed.ckpt, huggingface.co/enerjazzer/BS-ROFO-SW-Fixed) are fetched by werkstatt.gewichte_stems, not stored here; their license is not stated in that repository.",
+      "dateien": {
+        "bs_roformer/bs_roformer.py": "ace68fedb60b0587d03081d25fcec773062bcf56ee674a63102c662d47a7e7ef",
+        "bs_roformer/attend.py": "5df48d2b233ae8f779981b747a8ecb58d407418f195a7eaa3724b13c178181d3",
+        "bs_roformer/LICENSE": "d5ca885481147d15e92e5e525ba1a024ad1e92df743a10874bcdf7494f7e26eb"
       }
     }
   ]

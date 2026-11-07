@@ -1,0 +1,38 @@
+{
+ "schema": 1,
+ "name": "Tame Lead",
+ "geraet_typ": "effekt",
+ "geraet": "saett",
+ "werte": {
+  "drive": 6,
+  "out": -3,
+  "mix": 0.5
+ },
+ "beschreibung": {
+  "art": "saturation",
+  "unterart": "tape",
+  "charakter": [
+   "warm",
+   "thick",
+   "smooth"
+  ],
+  "genre": [
+   "progressive",
+   "trance",
+   "electro"
+  ],
+  "einsatz": [
+   "drop",
+   "breakdown"
+  ],
+  "energie": 3,
+  "text": "Half wet drive rounds off a too-clean lead and gives it weight in the midrange."
+ },
+ "tags": [
+  "lead",
+  "rounding"
+ ],
+ "notiz": "Purpose is practice; the curve is symmetric, so the effect is odd-harmonic and cannot add tube body (GERAET-saett.md 5).",
+ "angelegt": "2026-11-02T00:00:00.000Z",
+ "geaendert": "2026-11-02T00:00:00.000Z"
+}

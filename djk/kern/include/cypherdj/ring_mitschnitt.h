@@ -3,7 +3,8 @@
 // lies() holt alle Frames seit dem letzten Aufruf; der erste Aufruf setzt den Anfang auf das aktuelle w (eine Blockgrenze:
 // w steht nach jedem Zyklus am Ende des geschriebenen Blocks). Der Leser muss schneller sein als der Ring abzüglich eines
 // Blocks im Flug (Fix L6: 65 536 − 8192 = 57 344 Frames, 1,19 s); sonst ueberlauf. Ändert sich sample_minus_w
-// (Kern-Neustart, neue Zeitachse), sprung.
+// (Kern-Neustart, neue Zeitachse), sprung: the frames written up to now are still appended to m (w is continuous over a
+// jump), so a recorder that starts a new reader at once loses nothing (review 2026-11-07: 16 to 21 ms were lost).
 #pragma once
 
 #include <cstdint>

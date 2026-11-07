@@ -23,6 +23,11 @@ class DjFilter {
 public:
     explicit DjFilter(double fs = kAbtastrate);
     void leeren();
+    // Both SVF states exactly zero: zero input then gives exactly zero output and leaves the states as they are
+    // (the coefficient cache is a pure function of k, so skipping calls changes nothing observable).
+    bool leer() const;
+    // SVF states below `schwelle` in magnitude become exactly zero (see Kanalzug).
+    void abschneiden(double schwelle);
     // In place auf L und R, k je Sample (aus der Bahn des Reglers `filter`), 1 ≤ n ≤ kMaxFrames.
     void verarbeite(float* l, float* r, int n, const double* k);
     // Güte setzen: NaN wird verworfen (die alte bleibt), sonst auf [kGueteMin, kGueteMax] geklemmt. Allokiert nicht,

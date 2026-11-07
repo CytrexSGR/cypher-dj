@@ -1,0 +1,38 @@
+{
+ "schema": 1,
+ "name": "Bus Sheen",
+ "geraet_typ": "effekt",
+ "geraet": "saett",
+ "werte": {
+  "drive": 3,
+  "out": -2,
+  "mix": 0.25
+ },
+ "beschreibung": {
+  "art": "saturation",
+  "unterart": "tape",
+  "charakter": [
+   "subtle",
+   "transparent",
+   "warm"
+  ],
+  "genre": [
+   "house",
+   "disco",
+   "deep_house"
+  ],
+  "einsatz": [
+   "mixdown",
+   "mastering"
+  ],
+  "energie": 2,
+  "text": "Three dB into the curve at a quarter wet: a hint of density on a whole bus."
+ },
+ "tags": [
+  "bus",
+  "sheen"
+ ],
+ "notiz": "Small amounts of harmonic distortion per Snoman p.195; the drive number is practice.",
+ "angelegt": "2026-11-02T00:00:00.000Z",
+ "geaendert": "2026-11-02T00:00:00.000Z"
+}

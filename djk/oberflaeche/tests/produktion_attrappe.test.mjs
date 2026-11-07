@@ -196,14 +196,15 @@ test('V1 Attrappe: Gründe und Wertebereiche wie S2 (befehle.ts) und Spec §4', 
     assert.equal(await grund({ befehl: 'clip_neu', spur_id: id, art: 'audio', start_beat: 0, laenge_beats: 1, sha256: 'xyz' }), 'sha_ungueltig');
     assert.equal(await grund({ befehl: 'clip_neu', spur_id: id, art: 'midi', start_beat: 0, laenge_beats: 1 }), 'art_passt_nicht');
     assert.equal(await grund({ befehl: 'spur_neu', art: 'audio', geraet: { art: 'intern' } }), 'argument_ungueltig', 'Gerät nur für Instrument-Spuren');
-    // Surge: D1 hat einen Wirt-Slot (Spec 6.28, D1 V2 Nachzug 7d): Slot 1, danach ist jede weitere Surge-Spur slot_belegt (auch mit slot 2)
+    // Surge: two host slots (1.9 U3, AK-W3): slot 3 is invalid, the first free slot is taken, the third Surge track is slot_belegt
     const surge = (slot) => ({ befehl: 'spur_neu', art: 'instrument', name: 'Surge', geraet: { art: 'wirt', name: 'surge', ...(slot ? { slot } : {}) } });
-    assert.equal(await grund(surge(2)), 'slot_belegt', 'Slot 2 gibt es in D1 nicht');
-    assert.equal(await grund(surge()), 'ok', 'ohne slot: der freie');
+    assert.equal(await grund(surge(3)), 'argument_ungueltig', 'slot 3 does not exist');
+    assert.equal(await grund(surge(2)), 'ok', 'slot 2 is free');
+    assert.equal(await grund(surge()), 'ok', 'without slot: the free one (1)');
     assert.equal(await grund(surge(1)), 'slot_belegt');
     assert.equal(await grund(surge()), 'slot_belegt');
     const p = (await get(at.url, '/proj/aktuell')).j.projekt;
-    assert.deepEqual(p.spuren.filter((x) => x.geraet?.art === 'wirt').map((x) => x.geraet.slot), [1]);
+    assert.deepEqual(p.spuren.filter((x) => x.geraet?.art === 'wirt').map((x) => x.geraet.slot), [2, 1]);
     // Negativ-Kontrolle: nach all den Ablehnungen hat keine einen Teilstand hinterlassen (rev zählt nur die angenommenen)
     assert.equal(p.tempo_bpm, 120);
     assert.equal(p.loop.an, false);

@@ -1,0 +1,38 @@
+{
+ "schema": 1,
+ "name": "Bass Audibility",
+ "geraet_typ": "effekt",
+ "geraet": "saett",
+ "werte": {
+  "drive": 15,
+  "out": -8,
+  "mix": 1
+ },
+ "beschreibung": {
+  "art": "saturation",
+  "unterart": "tape",
+  "charakter": [
+   "thick",
+   "dirty",
+   "aggressive"
+  ],
+  "genre": [
+   "dnb",
+   "dubstep",
+   "techno"
+  ],
+  "einsatz": [
+   "drop",
+   "mixdown"
+  ],
+  "energie": 5,
+  "text": "Fifteen dB of drive fills the midrange with harmonics so the bass reads on a phone speaker."
+ },
+ "tags": [
+  "bass",
+  "harmonics"
+ ],
+ "notiz": "Purpose from Snoman p.30 (distortion adds frequencies and thickness); drive is practice.",
+ "angelegt": "2026-11-02T00:00:00.000Z",
+ "geaendert": "2026-11-02T00:00:00.000Z"
+}

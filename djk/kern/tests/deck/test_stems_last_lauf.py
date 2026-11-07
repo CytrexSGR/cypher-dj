@@ -167,11 +167,11 @@ def test_stirbt_der_kern_lauf_ohne_ordner_wird_kein_alter_ordner_gebunden(baum):
     assert not (neu / "ergebnis.json").exists() and "kern_lauf=" not in (neu / "meta.txt").read_text()
 
 
-def test_kind_bekommt_wie_beim_server_omp_4_und_keine_gpu(baum):
-    """Nachzug F7: stems_lauf.ts setzt OMP_NUM_THREADS=4 und CUDA_VISIBLE_DEVICES leer; die Last muss das Kind genauso starten (auch gegen eine
-    fremde Umgebung: OMP_NUM_THREADS=16 und CUDA_VISIBLE_DEVICES=0 im Aufrufer)."""
+def test_kind_bekommt_wie_beim_server_omp_2_und_die_gpu(baum):
+    """Nachzug F7: the load starts the child like stems_lauf.ts (since 2026-11-06 CUDA_VISIBLE_DEVICES=0, GPU only), also against a foreign
+    environment in the caller (OMP_NUM_THREADS=16, CUDA_VISIBLE_DEVICES empty)."""
     env = baum["tmp"] / "env.txt"
-    r = starte(baum, STUB_ENV=env, OMP_NUM_THREADS=16, CUDA_VISIBLE_DEVICES=0)
+    r = starte(baum, STUB_ENV=env, OMP_NUM_THREADS=16, CUDA_VISIBLE_DEVICES="")
     assert r.returncode == 0, r.stderr
     zeilen = set(env.read_text().splitlines())
-    assert zeilen == {"omp=4 cuda=[]"}, zeilen
+    assert zeilen == {"omp=2 cuda=[0]"}, zeilen

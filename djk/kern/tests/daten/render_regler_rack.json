@@ -1,0 +1,20 @@
+{
+ "spur/1/fader": 0,
+ "spur/1/pan": 0,
+ "spur/1/mute": 0,
+ "spur/1/solo": 0,
+ "ins/komp/1/schwelle": -18,
+ "ins/komp/1/ratio": 20,
+ "ins/komp/1/knie": 0,
+ "ins/komp/1/attack": 1,
+ "ins/komp/1/release": 50,
+ "ins/komp/1/makeup": 0,
+ "ins/komp/1/mix": 1,
+ "ins/komp/1/schp": 0,
+ "ins/komp/1/sc": 0,
+ "ins/komp/1/an": 1,
+ "rack/1/m1": 0,
+ "rack/1/m2": 0,
+ "rack/1/m3": 0,
+ "rack/1/m4": 0
+}

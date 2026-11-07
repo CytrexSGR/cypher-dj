@@ -1,9 +1,11 @@
 # Installing cypher-dj (beta)
 
-Tested on Ubuntu 24.04 (x86_64). Steps marked **checked** were run on a fresh Ubuntu 24.04 container;
-the others were only run on the development machine. Please report what breaks.
+Tested on Ubuntu 24.04 (x86_64). Steps marked **checked** were run on a fresh Ubuntu 24.04 container on
+5 October 2026. Since then the core build has gained a Rust dependency (section 1) and the workshop has changed
+(section 7), so a fresh run of the current version is still to do. The other steps were only run on the development
+machine. Please report what breaks.
 
-## 1. System packages (checked)
+## 1. System packages (checked, except the Rust paragraph)
 
 ```sh
 sudo apt install build-essential cmake ninja-build pkg-config \
@@ -21,6 +23,11 @@ ulimit -l    # should now print 4194304
 ```
 
 Without it, decks refuse to load with `budget_speicher: mlock Cannot allocate memory`.
+
+**Rust.** The core links a Rust library (Cypher Hall, Cypher Komp, the RB-338 voice, the EQ and saturation inserts and the
+Cypher Modular graph engine, all under `djk/instrumente/`), so the build needs `cargo` and `rustc`: `djk/kern/CMakeLists.txt`
+stops without `cargo`. The development machine uses Rust 1.93.1; Ubuntu's own cargo package has not been tried. The first
+build downloads the crates pinned in `djk/instrumente/Cargo.lock`, so it needs network access.
 
 `/dev/shm` must have room: the core keeps its working material there (several hundred MB per set).
 On a normal desktop it is half the RAM; in Docker pass `--shm-size=4g`.
@@ -47,6 +54,14 @@ going if the core dies) and `cypherdj-vorhoerer` (the headphone previewer).
 `ctest --test-dir djk/kern/build` runs the core's tests. Run them in a normal desktop session:
 several tests (and `djk-start`) need `XDG_RUNTIME_DIR` and a running PipeWire with `pactl`
 (package `pulseaudio-utils`).
+A few of them call `node`, so install Node.js (section 4) before you run them.
+
+`(cd djk/oberflaeche && npm test)` runs the web interface's tests (Node.js, section 4). Some of them
+start Python helpers and the conductor: they take Python from `CYPHERDJ_PYTHON`, else from
+`djk/werkstatt/.venv` or `.venv`, and they need `djk/leitstand/node_modules` (section 4). Neither
+is in git, so a second checkout made with `git worktree add` has neither. Run the tests there with
+`CYPHERDJ_PYTHON` set to an existing venv's `bin/python` and with `npm ci` in `djk/leitstand`,
+otherwise about twenty tests fail for that reason alone (stems, warp corrections, process stack).
 
 ## 4. Node.js 22.18 or newer (checked)
 
@@ -73,7 +88,7 @@ Node read access to `~/strudel` only).
 
 Carla 2.5 and the Surge XT LV2 plugin. `djk/start/djk-instrumente` describes where it looks for them.
 
-The own instruments are Rust crates built as VST3 plugins (nih-plug). With a Rust toolchain (`cargo`):
+The own instruments are Rust crates built as VST3 plugins (nih-plug). With the Rust toolchain from section 1:
 
 ```sh
 djk/instrumente/installiere.sh rb338       # RB-338, the 303-style bass
@@ -91,10 +106,14 @@ starts; without that file it plays a built-in saw and ladder filter. Example gra
 cd djk/werkstatt && ./einrichten.sh
 ```
 
-It needs PyTorch (with CUDA if you have it) and installs Essentia, beat_this, soundfile and Demucs 4.0.1 into a
-virtual environment, then fetches the Demucs weights (84 MB, checked by sha256) for stem separation in PRODUCTION.
-Stem separation uses the GPU when 2.5 GB of video memory are free (about 1.2 GB used, torch capped at 1.5 GB) and
-falls back to the CPU otherwise.
+It needs a system PyTorch 2.10 with CUDA: the script keeps your torch, and torchaudio is pinned to 2.10.0 from the
+PyTorch cu128 index. It installs Essentia, beat_this, soundfile, soxr and the runtime packages of the stem model
+(rotary-embedding-torch, einops, beartype) into a virtual environment, then fetches the BS-RoFormer-SW weights (about
+700 MB, checked by sha256; `python -m werkstatt.gewichte_stems --von <file>` takes a local copy instead of the network)
+for stem separation in PRODUCTION. The model code itself is in `djk/third_party/bs_roformer/`.
+
+Stem separation runs on the GPU only. It needs a CUDA GPU with about 4.5 GB of free video memory (the threshold is
+`CYPHERDJ_STEMS_GPU_FREI_MB`, default 4500); without one, Separate Stems is refused and there is no CPU fallback.
 
 ## 8. Your paths
 
@@ -115,6 +134,17 @@ djk/start/djk-start --strudel    # with the three pattern channels
 `djk-start` starts everything as transient systemd user units and prints the address of the web
 interface. To hear it, pass your output with `--master <sink>:<port>` and `--ton-frei`; see the
 comments at the top of `djk/start/djk-start`. `djk/start/djk-stop` stops everything.
+
+`djk/start/djk-start --strudel --bk-stroeme` adds five more pattern streams for Cypher Modular graphs (erz/5 to erz/7 and
+the two loop box pads).
+
+**Cores.** `djk-start` gives the core four physical cores (with their SMT siblings) by default and every other CPU to
+stem separation; `CYPHERDJ_KERN_KERNE=<n>` changes the number (a value outside 1 to cores minus 1 is clamped, with a
+note), and `CYPHERDJ_KERN_CPUS` and `CYPHERDJ_STEMS_CPUS` set the CPU lists directly. In an arrangement the return Halls
+are computed on up to three worker threads, each on its own physical core inside the core's allowed CPUs: `hall_faeden`
+(0 to 3, default 3) and `hall_cpus` in `djk/konfig/kern.toml` control them. With `hall_faeden = 0` everything is computed in the
+audio callback, with the same output. With fewer free physical cores than workers the core starts fewer workers and
+prints a start line.
 
 To let an AI agent play along, register the MCP server from `djk/hand/` with your agent, see
 `djk/hand/AUFRUF.md`.

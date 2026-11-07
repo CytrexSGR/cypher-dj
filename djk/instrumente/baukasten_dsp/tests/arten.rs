@@ -80,7 +80,31 @@ fn minimalgraph(art: &str) -> Option<String> {
                         r#",{"von":"n.hz","nach":"p.hz"},{"von":"n.trig","nach":"p.trig"},{"von":"n.gate","nach":"p.gate"},{"von":"p.l","nach":"o.l"},{"von":"p.r","nach":"o.r"}"#),
         // S21: the saw is convolved with a 700 frame IR; mix 0.7 keeps the dry share audible next to the tail
         "faltung" => um(r#",{"id":"p","art":"faltung","datei":"ir.f32","mix":0.7}"#, r#",{"von":"s.aus","nach":"p.x"},{"von":"p.l","nach":"o.l"},{"von":"p.r","nach":"o.r"}"#),
+        // type 32: three detuned copies on the morph table, start phases from a trig; a forgotten reset of the random
+        // generator or of the phases shows as a different second run
+        "wavetable" => um(r#",{"id":"p","art":"wavetable","tabelle":4,"pos":0.4,"kopien":3,"verstimmung":12,"breite":0.8}"#,
+                          r#",{"von":"n.hz","nach":"p.hz"},{"von":"n.trig","nach":"p.trig"},{"von":"p.l","nach":"o.l"},{"von":"p.r","nach":"o.r"}"#),
+        // type 34: a membrane struck by a noise burst (random generator state) with the saw on the audio input; a forgotten
+        // reset of the mode states, the burst or the trig edge shows as a different second run
+        "resonator" => um(r#",{"id":"p","art":"resonator","satz":5,"anregung":1,"material":0.7}"#,
+                          r#",{"von":"n.hz","nach":"p.hz"},{"von":"n.trig","nach":"p.trig"},{"von":"s.aus","nach":"p.x"},{"von":"p.aus","nach":"o.x"}"#),
+        // type 33: two hits in one sample (group choke idle), decay 0.4 s so both still ring at the release; a forgotten
+        // reset of phases, noise generator, filters or envelope shows as a different second run
+        "metall" => um(r#",{"id":"p","art":"metall","decay":0.4,"rauschen":0.4}"#,
+                       r#",{"von":"n.trig","nach":"p.trig"},{"von":"n.vel","nach":"p.vel"},{"von":"p.aus","nach":"o.l"},{"von":"p.huelle","nach":"o.r"}"#),
+        // type 35: a 2>1 pair plus a fed-back 4>3 pair with decaying modulators, free-running phases (sync 0); a forgotten
+        // reset of phases, feedback memory, envelopes or the guard's cache shows as a different second run
+        "fm" => um(r#",{"id":"p","art":"fm","algo":3,"sync":0,"rueck":0.6,"o2_pegel":0.2,"o2_d":0.2,"o2_s":0,"o3_pegel":0.7,"o3_verh":2,"o4_pegel":0.1,"o4_verh":3}"#,
+                   r#",{"von":"n.hz","nach":"p.hz"},{"von":"n.gate","nach":"p.gate"},{"von":"n.trig","nach":"p.trig"},{"von":"p.aus","nach":"o.x"}"#),
+        // type 36: the recording source on the saw, jittered grains; a forgotten reset of the ring buffer, the write head,
+        // the start clock or the grain pool shows as a different second run (tests/granular.rs covers the other sources)
+        "granular" => um(r#",{"id":"p","art":"granular","quelle":1,"puffer":0.2,"groesse":30,"dichte":120,"pos":0.5,"pos_zufall":1,"ton_zufall":100,"breite":1,"streuung":1}"#,
+                         r#",{"von":"s.aus","nach":"p.x"},{"von":"n.hz","nach":"p.hz"},{"von":"n.trig","nach":"p.trig"},{"von":"n.gate","nach":"p.gate"},{"von":"p.l","nach":"o.l"},{"von":"p.r","nach":"o.r"}"#),
         "eingang" => um(r#",{"id":"p","art":"eingang"}"#, r#",{"von":"p.l","nach":"o.l"},{"von":"p.r","nach":"o.r"},{"von":"s.aus","nach":"o.x"}"#),
+        // type 37: noise burst (random generator), guitar body, and the saw on x through the comb; a forgotten reset of the
+        // delay lines, the comb, the filters or the generator shows as a different second run
+        "saite" => um(r#",{"id":"p","art":"saite","anreger":0,"koerper":1,"ausklang":3}"#,
+                      r#",{"von":"n.hz","nach":"p.hz"},{"von":"n.trig","nach":"p.trig"},{"von":"s.aus","nach":"p.x"},{"von":"p.aus","nach":"o.x"}"#),
         _ => return None,
     })
 }
@@ -148,4 +172,56 @@ fn arten_nur_angehaengt() {
     assert!(ARTEN.len() >= ERSTE.len(), "ARTEN has {} entries, at least {} expected", ARTEN.len(), ERSTE.len());
     let ist: Vec<&str> = ARTEN.iter().take(ERSTE.len()).map(|a| a.art).collect();
     assert_eq!(ist, ERSTE, "the first entries of ARTEN moved");
+}
+
+/// Wavetable slice: type 32 is appended after the first 32 (their order is pinned above).
+#[test]
+fn arten_nur_angehaengt_wavetable() {
+    assert_eq!(ARTEN.get(32).map(|a| a.art), Some("wavetable"), "the wavetable block must be type 32");
+}
+
+/// Resonator slice: type 34, appended after metall; types are numbered in merge order and never move.
+#[test]
+fn arten_nur_angehaengt_resonator() {
+    let i = ARTEN.iter().position(|a| a.art == "resonator");
+    assert_eq!(i, Some(34), "the resonator block is type 34 (merge order) and must not move");
+}
+
+/// Metall slice: type 33, appended after wavetable; types are numbered in merge order and never move.
+#[test]
+fn arten_nur_angehaengt_metall() {
+    let nr = ARTEN.iter().position(|a| a.art == "metall");
+    assert_eq!(nr, Some(33), "metall is type 33 (merge order) and must not move");
+}
+/// FM slice: type 35, appended after resonator; types are numbered in merge order and never move.
+#[test]
+fn arten_nur_angehaengt_fm() {
+    assert_eq!(ARTEN.get(35).map(|a| a.art), Some("fm"), "the fm block is type 35 (merge order) and must not move");
+}
+/// Granular slice: type 36, appended after fm; types are numbered in merge order and never move.
+#[test]
+fn arten_nur_angehaengt_granular() {
+    let i = ARTEN.iter().position(|a| a.art == "granular");
+    assert_eq!(i, Some(36), "the granular block is type 36 (merge order) and must not move");
+}
+/// String slice: type 37, appended after granular; types are numbered in merge order and never move.
+#[test]
+fn arten_nur_angehaengt_saite() {
+    let p = ARTEN.iter().position(|a| a.art == "saite");
+    assert_eq!(p, Some(37), "the string block is type 37 (merge order) and must not move");
+}
+/// Hard sync slice: the slaves keep state across samples (the post-halves of the reset). Saw, pulse and triangle slaves
+/// on a saw master, run, `zuruecksetzen`, run again = bit for bit a fresh program.
+#[test]
+fn zuruecksetzen_gleich_frisch_hartsync() {
+    let g = um(r#",{"id":"t","art":"transponiere","st":7.3},{"id":"f1","art":"saege"},{"id":"f2","art":"puls","pwm":-0.5},{"id":"f3","art":"dreieck"},{"id":"a","art":"add"}"#,
+               r#",{"von":"n.hz","nach":"t.hz"},{"von":"t.aus","nach":"f1.hz"},{"von":"t.aus","nach":"f2.hz"},{"von":"t.aus","nach":"f3.hz"},{"von":"s.hart","nach":"f1.hart"},{"von":"s.hart","nach":"f2.hart"},{"von":"s.hart","nach":"f3.hart"},{"von":"f1.aus","nach":"a.a"},{"von":"f2.aus","nach":"a.b"},{"von":"f3.aus","nach":"a.c"},{"von":"a.aus","nach":"o.x"}"#);
+    let mut frisch = uebersetze(&g, SR).unwrap();
+    let mut benutzt = uebersetze(&g, SR).unwrap();
+    lauf(&mut benutzt);
+    benutzt.zuruecksetzen();
+    let (soll, ist) = (lauf(&mut frisch), lauf(&mut benutzt));
+    let abweichend = soll.iter().zip(&ist).filter(|(s, i)| s.0.to_bits() != i.0.to_bits() || s.1.to_bits() != i.1.to_bits()).count();
+    assert_eq!(abweichend, 0, "hard sync: {abweichend} samples differ after zuruecksetzen");
+    assert!(soll.iter().any(|v| v.0 != 0.0), "the graph is silent, the comparison would be blind");
 }

@@ -10,6 +10,12 @@
 
 namespace cypherdj::dsp {
 
+// A filter state of magnitude below `schwelle` becomes exactly zero (NaN stays NaN: both comparisons are false). Used by the filters'
+// abschneiden() (see kStilleSchwelle in kanalzug.cpp for why).
+inline void auf_null_unter(double& v, double schwelle) {
+    if (v < schwelle && v > -schwelle) v = 0.0;
+}
+
 class DenormalSchutz {
 public:
 #if (defined(__x86_64__) || defined(__i386__)) && !defined(CYPHERDJ_DSP_MUTATION_OHNE_FTZ)

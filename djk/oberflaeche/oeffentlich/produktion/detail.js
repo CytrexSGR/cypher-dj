@@ -9,10 +9,13 @@ import { positionText } from './zeitachse.js';
 import { bindeRolle } from './pianoroll_bedienung.js';
 import { warpAnzeige, transposeBefehl, modusBefehl, BEATS_FELDER, beatsFeldAnsicht, beatsAenderung, tonErlaubt, tempoBefehl, projektTempoBefehl, EINS_HINWEIS } from './warp.js';
 import { bindeWarpEditor } from './warp_editor_bedienung.js';
+import { bindeHuellkurven } from './huellkurven_bedienung.js';
+import { HkWahl, HK_TEXT } from './huellkurven.js';
 
 // Gain-Regler: Bereich aus FELDER.gain_db (Spec 6.27, −96..+24 dB), sonst schnitte er Werte ab (V2 Fix F8: vorher −36..+12, +20 dB zeigte 12)
 const GERUEST = `<div class="p-detail-kopf"><span data-d="titel">CLIP</span><span class="p-detail-info" data-d="info"></span>
   <span class="p-detail-knoepfe"><button data-d="loop" aria-pressed="false" title="Loop the clip: repeat it up to its length, then drag the right edge (Ctrl+L)" disabled>LOOP</button><button data-d="teilen" title="Split the selected clips at the start marker (Ctrl+E)" disabled>SPLIT</button><button data-d="duplizieren" title="Duplicate the selected clips behind themselves (Ctrl+D)" disabled>DUPLICATE</button><button data-d="loeschen" title="Delete the selected clips (Del)" disabled>DELETE</button></span></div>
+<div class="p-detail-reiter" role="tablist" data-d="reiter" hidden><button role="tab" data-d="reiterclip" aria-selected="true">${HK_TEXT.reiter_clip}</button><button role="tab" data-d="reiterhk" aria-selected="false">${HK_TEXT.reiter_hk}</button></div>
 <div class="p-detail-leer" data-d="leer">No clip selected. Click a clip; double click on an instrument track makes a MIDI clip.</div>
 <div class="p-clip-audio" data-d="audio" hidden>
   <label>NAME <input data-f="name" maxlength="80" autocomplete="off"></label>
@@ -40,7 +43,8 @@ const GERUEST = `<div class="p-detail-kopf"><span data-d="titel">CLIP</span><spa
     <canvas class="p-warp-canvas" data-d="editorcanvas" tabindex="0" aria-label="Warp editor"></canvas>
   </div>
 </div>
-<div class="p-clip-midi" data-d="midi" hidden></div>`;
+<div class="p-clip-midi" data-d="midi" hidden></div>
+<div class="p-clip-hk" data-d="hk" hidden></div>`;
 const LABEL = { name: 'Rename clip', start_beat: 'Move clip', laenge_beats: 'Clip length', gain_db: 'Clip gain', fade_ein_beats: 'Fade in', fade_aus_beats: 'Fade out', offset_s: 'Clip offset', versatz_beats: 'Clip offset' };
 
 export function bindeDetail(ctx) {
@@ -51,6 +55,9 @@ export function bindeDetail(ctx) {
   const felder = [...sek.querySelectorAll('[data-f]')];
   const rolle = bindeRolle(ctx, d('midi'));
   const editor = bindeWarpEditor(ctx, d('editorcanvas'), d('segment'));
+  // 1.12 slice 5 (U10): the tab row CLIP (NOTES on a MIDI clip) / ENVELOPES; the open tab and the target per clip are page state (HkWahl)
+  const hkWahl = new HkWahl(), hkTeil = bindeHuellkurven(ctx, d('hk'), hkWahl);
+  for (const [knopf, reiter] of [['reiterclip', 'clip'], ['reiterhk', 'huellkurven']]) d(knopf).addEventListener('click', () => { hkWahl.setzeReiter(reiter); zeige(); });
   const gezeigt = () => (st.auswahl.length ? findeClip(st.projekt, st.auswahl.at(-1)) : null);
 
   for (const [knopf, aktion] of [['loop', 'loop'], ['teilen', 'teilen'], ['duplizieren', 'duplizieren'], ['loeschen', 'loeschen']]) d(knopf).addEventListener('click', () => ctx.clipAktion(aktion));
@@ -148,10 +155,17 @@ export function bindeDetail(ctx) {
     d('leer').hidden = !!t;
     d('audio').hidden = t?.clip.art !== 'audio';
     d('midi').hidden = t?.clip.art !== 'midi';
-    if (!t) { d('titel').textContent = 'CLIP'; d('info').textContent = ''; rolle.zeige(null); editor.zeige(null); return; }
+    d('reiter').hidden = !t; d('hk').hidden = true;
+    if (!t) { d('titel').textContent = 'CLIP'; d('info').textContent = ''; rolle.zeige(null); editor.zeige(null); hkTeil.zeige(null); return; }
     const c = t.clip, frozen = t.spur.freeze ? ' · FROZEN: changing notes unfreezes the track' : '';
     d('titel').textContent = c.art === 'audio' ? 'AUDIO CLIP' : 'MIDI CLIP';
     d('info').textContent = `${c.name} · ${t.spur.name} · bar ${positionText(c.start_beat)} · ${zahlText(c.laenge_beats)} beats${c.loop_beats != null ? ` · loop ${zahlText(c.loop_beats)} beats` : ''}${st.auswahl.length > 1 ? ` · ${st.auswahl.length} selected` : ''}${frozen}`;
+    const hkAn = hkWahl.reiter === 'huellkurven';
+    d('reiterclip').textContent = c.art === 'midi' ? HK_TEXT.reiter_noten : HK_TEXT.reiter_clip;
+    d('reiterclip').setAttribute('aria-selected', String(!hkAn)); d('reiterhk').setAttribute('aria-selected', String(hkAn));
+    d('reiterclip').classList.toggle('an', !hkAn); d('reiterhk').classList.toggle('an', hkAn);
+    if (hkAn) { d('audio').hidden = true; d('midi').hidden = true; d('hk').hidden = false; rolle.zeige(null); editor.zeige(null); hkTeil.zeige(t); return; }
+    hkTeil.zeige(null);
     if (c.art === 'midi') { rolle.zeige(c.id); editor.zeige(null); return; }
     rolle.zeige(null);
     for (const f of felder) {

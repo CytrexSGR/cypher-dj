@@ -4,12 +4,13 @@
 import { neueAnsicht, zoomUm, scrolle, RASTER, RASTER_VORGABE, PX_PRO_BEAT_VORGABE, projektEnde, leiste, ausLeiste } from './zeitachse.js';
 import { zeilenTabelle, zeilenHoehe } from './layout.js';
 import { offeneIndizes } from './lanen.js';
+import { takeZeilenVon } from './takes.js';
 import { neueWellen } from './wellen.js';
 import { Arrangement } from './arrangement.js';
 
 // Argumente für das Bild des Arrangements aus dem Seitenstand (rein, getestet: stems geht mit)
-export const arrBild = (st) => ({ lanen: offeneIndizes(st.projektEntwurf ?? st.projekt, st.laneOffen), ansicht: st.ansicht, laneZiel: st.laneZiel, projekt: st.projektEntwurf ?? st.projekt, loop: st.loopEntwurf ?? st.projekt?.loop ?? null,
-  kopfBeat: st.kopfBeat, startBeat: st.start, geist: st.geist, stems: st.stems });
+export const arrBild = (st) => ({ takeZeilen: takeZeilenVon(st, st.projektEntwurf ?? st.projekt), lanen: offeneIndizes(st.projektEntwurf ?? st.projekt, st.laneOffen), ansicht: st.ansicht, laneZiel: st.laneZiel, projekt: st.projektEntwurf ?? st.projekt, loop: st.loopEntwurf ?? st.projekt?.loop ?? null,
+  kopfBeat: st.kopfBeat, startBeat: st.start, geist: st.geist, stems: st.stems, ueber: st.autoUeber ?? [] });
 // Another project: the chosen lane targets belong to the old one (track ids can repeat), so they are dropped. The open rows (laneOffen) stay: a known
 // leftover of slice 1, not changed here.
 export function laneZustandBeiProjekt(st, wechsel) { if (wechsel) st.laneZiel.clear(); }
@@ -46,9 +47,11 @@ export function bindeZeitachse(ctx) {
   st.laneOffen = new Set();
   st.laneZiel = new Map();   // Automation S2: spur_id → the target the open row shows (page state like laneOffen)
   ctx.offeneLanen = () => offeneIndizes(st.projekt, st.laneOffen);
-  ctx.zeilen = () => zeilenTabelle(st.projekt?.spuren.length ?? 0, ctx.offeneLanen());
+  st.takeOffen = new Set();  // 1.14: the T buttons, spur ids whose take rows are shown (page state like laneOffen)
+  st.vorhoeren = {};         // 1.14: {spur_id: take_id} audition map of the last /proj/aktuell (server state, shown by the speaker buttons)
+  ctx.zeilen = () => zeilenTabelle(st.projekt?.spuren.length ?? 0, ctx.offeneLanen(), takeZeilenVon(st));
   ctx.layoutNeu = () => { $('flaeche').style.height = `${zeilenHoehe(ctx.zeilen())}px`; };
-  ctx.beimProjekt.push((p, wechsel) => { laneZustandBeiProjekt(st, wechsel); ctx.layoutNeu(); });
+  ctx.beimProjekt.push((p, wechsel) => { laneZustandBeiProjekt(st, wechsel); if (wechsel) st.takeOffen.clear(); ctx.layoutNeu(); });   // spur ids repeat between projects
   // Sichtbare Scrollleiste: folgt der Ansicht in jedem Bild; ein Zug an ihr setzt beat0 (und schaltet FOLLOW aus wie das Rad).
   // gesetzt merkt die Lage, die das Bild selbst geschrieben hat: deren scroll-Ereignis ist kein Zug von Hand.
   const hl = $('hleiste'), hi = $('hleiste-inhalt');

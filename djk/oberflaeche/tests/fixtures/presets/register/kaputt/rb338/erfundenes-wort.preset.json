@@ -1,0 +1,29 @@
+{
+ "schema": 1,
+ "name": "Fat Bass",
+ "geraet_typ": "instrument",
+ "geraet": "rb338",
+ "werte": {
+  "cutoff": 200
+ },
+ "beschreibung": {
+  "art": "bass",
+  "unterart": "sub",
+  "charakter": [
+   "fat",
+   "warm"
+  ],
+  "genre": [
+   "techno"
+  ],
+  "einsatz": [
+   "drop"
+  ],
+  "energie": 3,
+  "text": "A sub bass tagged with a word that is not in the vocabulary."
+ },
+ "tags": [],
+ "notiz": "",
+ "angelegt": "2026-11-02T00:00:00.000Z",
+ "geaendert": "2026-11-02T00:00:00.000Z"
+}

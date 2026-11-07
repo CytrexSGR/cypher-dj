@@ -27,7 +27,8 @@ inline constexpr float kColorParamVorgabe = 0.5f;
 class ColorFx {
 public:
     explicit ColorFx(double fs = kAbtastrate);
-    // Alle Zustände leer (Fahnen weg). Echtzeitfest.
+    // Alle Zustände leer (Fahnen weg), like a fresh object: also the last side and the NOISE generator. Real-time
+    // safe.
     void leeren();
     // Art (ganz, außerhalb 0..5 → filter), PARAMETER p in [0, 1] (NaN → Vorgabe), Samples je Beat für DUB ECHO
     // (≤ 0 → 0,5 s). Ein Artwechsel leert die Zustände. Echtzeitfest.
@@ -35,6 +36,11 @@ public:
     ColorArt art() const { return art_; }
     // Läuft noch eine Fahne (SPACE, DUB ECHO), obwohl der Regler in der Mitte steht?
     bool faehrt() const { return fahne_ > 0; }
+    // True if verarbeite() on an all-zero input with the constant knob value k would write exactly zeros and change
+    // no state: art FILTER (does nothing), or the knob in the dead zone (NaN counts as dead zone, like verarbeite),
+    // no tail running and the states already cleared. Conservative: outside the dead zone it is false for every art
+    // (NOISE would add noise, CRUSH and SWEEP advance their hold/gate state).
+    bool ruhig(double k) const;
     // In place auf L und R, k je Sample, 1 ≤ n ≤ kMaxFrames. Bei art() == filter: nichts.
     void verarbeite(float* l, float* r, int n, const double* k);
 
@@ -43,11 +49,16 @@ public:
     };
 
 private:
-    void space(float* l, float* r, int n, const double* k);
-    void dub_echo(float* l, float* r, int n, const double* k);
-    void sweep(float* l, float* r, int n, const double* k);
-    void noise(float* l, float* r, int n, const double* k);
-    void crush(float* l, float* r, int n, const double* k);
+    // Clears the effect states when the knob returns to the dead zone or the art changes; keeps the NOISE generator
+    // running (so NOISE does not repeat the same sequence on every entry) and the last side.
+    void leeren_intern();
+    // Each art processes an active run from the first sample and returns the number of samples processed: it stops
+    // at the first dry sample (knob in the dead zone and no tail running), see verarbeite().
+    int space(float* l, float* r, int n, const double* k);
+    int dub_echo(float* l, float* r, int n, const double* k);
+    int sweep(float* l, float* r, int n, const double* k);
+    int noise(float* l, float* r, int n, const double* k);
+    int crush(float* l, float* r, int n, const double* k);
 
     double fs_;
     ColorArt art_ = ColorArt::filter;
@@ -80,6 +91,8 @@ private:
     std::vector<float> ap_[2][2];
     int ap_pos_[2][2] = {};
     int space_gefuellt_ = 0;
+    double fdn_g_[kLeitungen] = {};  // feedback gains, gliding towards the PARAMETER target (B3: no click)
+    bool fdn_g_gesetzt_ = false;     // false after a clear: the next SPACE sample starts on the target
 };
 
 }  // namespace cypherdj::dsp

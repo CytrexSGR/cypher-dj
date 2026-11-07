@@ -24,9 +24,9 @@ export async function starteWirtProzess(t, { programm = 'wirt.py' } = {}) {
   }) };
 }
 
-// Die Status-Datei, wie wirt.py sie schreibt (Felder: name, pid, bereit, fehler, sock, klang, art, fahrbar)
-export function schreibeWirtStatus(ordner, { pid, bereit = true } = {}) {
-  fs.writeFileSync(path.join(ordner, 'wirt-arr1.json'), JSON.stringify({ name: 'cypherdj-wirt-arr1', pid, bereit, fehler: [], sock: '', klang: null, art: 'lv2', fahrbar: 1 }));
+// Die Status-Datei, wie wirt.py sie schreibt (Felder: name, pid, bereit, fehler, sock, klang, art, fahrbar). 1.9: slot 1 or 2 (wirt-arr<slot>.json), fehler = the entries
+export function schreibeWirtStatus(ordner, { pid, bereit = true, slot = 1, fehler = [] } = {}) {
+  fs.writeFileSync(path.join(ordner, `wirt-arr${slot}.json`), JSON.stringify({ name: `cypherdj-wirt-arr${slot}`, pid, bereit, fehler, sock: '', klang: null, art: 'lv2', fahrbar: 1 }));
 }
 
 // Eine pid, die es nicht gibt: ein eben beendeter Kindprozess (die Nummer ist frei, solange kein anderer Prozess sie bekommt)

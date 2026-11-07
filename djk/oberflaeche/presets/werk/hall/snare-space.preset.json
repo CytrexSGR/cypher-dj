@@ -1,0 +1,50 @@
+{
+ "schema": 1,
+ "name": "Snare Space",
+ "geraet_typ": "effekt",
+ "geraet": "hall",
+ "werte": {
+  "mix": 0.22,
+  "early": 0.8,
+  "tail": 0,
+  "pre": 15,
+  "size": 35,
+  "decay": 0.9,
+  "lowx": 1,
+  "highx": 0.8,
+  "lowcut": 300,
+  "highcut": 11000,
+  "diff": 1,
+  "width": 0.8,
+  "duck": 0.4,
+  "freeze": false,
+  "kill": false,
+  "fft": "2048"
+ },
+ "beschreibung": {
+  "art": "reverb",
+  "unterart": "room",
+  "charakter": [
+   "punchy",
+   "tight",
+   "dry"
+  ],
+  "genre": [
+   "tech_house",
+   "breaks",
+   "garage"
+  ],
+  "einsatz": [
+   "mixdown"
+  ],
+  "energie": 3,
+  "text": "Early reflections carry the space, the tail is ducked: a snare hears a room without any wash."
+ },
+ "tags": [
+  "snare",
+  "space"
+ ],
+ "notiz": "Early-reflection role from Snoman p.232; ducking as at GERAET-hall.md (practice).",
+ "angelegt": "2026-11-02T00:00:00.000Z",
+ "geaendert": "2026-11-02T00:00:00.000Z"
+}

@@ -1,0 +1,42 @@
+{
+ "schema": 1,
+ "name": "Square Lead",
+ "geraet_typ": "instrument",
+ "geraet": "rb338",
+ "werte": {
+  "lautstaerke": 0.2511886432,
+  "wellenform": true,
+  "cutoff": 1600,
+  "resonanz": 0.5,
+  "env_mod": 0.3,
+  "decay": 0.6,
+  "accent": 0.4
+ },
+ "beschreibung": {
+  "art": "lead",
+  "unterart": "mono",
+  "charakter": [
+   "thin",
+   "bright",
+   "metallic"
+  ],
+  "genre": [
+   "electro",
+   "acid",
+   "idm"
+  ],
+  "einsatz": [
+   "drop",
+   "build"
+  ],
+  "energie": 3,
+  "text": "A resonant square lead with a short filter sweep: nasal, cutting, monophonic."
+ },
+ "tags": [
+  "lead",
+  "square"
+ ],
+ "notiz": "Values are practice; the mono character is fixed by the device (one voice).",
+ "angelegt": "2026-11-02T00:00:00.000Z",
+ "geaendert": "2026-11-02T00:00:00.000Z"
+}

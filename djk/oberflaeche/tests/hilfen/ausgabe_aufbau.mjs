@@ -30,6 +30,7 @@ const warte = (ms) => new Promise((r) => setTimeout(r, ms));
 //   { art: 'weg' }                       Quittung 1, danach keine Meldung mehr (Kern verloren: Stille)
 //   { art: 'haengt' }                    Quittung 1, Status 3 im Takt bis zum Testende (für Neustart, ausgabe_lauf)
 //   { art: 'ohne_quittung' }             warteQuittung null
+//   { art: 'ok', spaetMs }               (1.9 U3) the report 'stopped' (status 0) comes spaetMs after /e/freeze; until then the last report says status 3
 // mitWirt (Paket 1.18): false = die Status-Datei wirt-arr1.json fehlt im Wirt-Ordner (wirtDir), der Produktions-Wirt läuft nicht; true = Datei mit
 // bereit:true und der pid eines lebenden Stellvertreters (wirt_prozess.mjs, endet bei t.after)
 export async function aufbau(t, { tempo = 120, kern = { art: 'ok' }, opt = {}, mitKick = true, mitWirt = true } = {}) {
@@ -87,7 +88,8 @@ export async function aufbau(t, { tempo = 120, kern = { art: 'ok' }, opt = {}, m
     const frames = k.frames ?? 4800;
     setTimeout(() => {
       if (k.art === 'stumm') return;
-      stopp(); zustand.kernStatus = 0;
+      stopp(); zustand.kernStatus = k.spaetMs ? 3 : 0;
+      if (k.spaetMs) setTimeout(() => { zustand.kernStatus = 0; arrMeldung(); }, k.spaetMs);
       if (k.art === 'abbruch') {
         vomKern('/q', { id, status: 7, grund: k.grund });
         vomKern('/e/freeze', { spur: f.spur, kennung: f.kennung, status: 1, frames: 0n });
@@ -100,7 +102,7 @@ export async function aufbau(t, { tempo = 120, kern = { art: 'ok' }, opt = {}, m
         fs.writeFileSync(path.join(arbeitsordner, `freeze-${f.spur}-${f.kennung}.f32`), inhalt, { flag: 'wx' });
         vomKern('/e/freeze', { spur: f.spur, kennung: f.kennung, status: 0, frames: BigInt(frames) });
       }
-      arrMeldung();
+      if (!k.spaetMs) arrMeldung();
     }, k.ms ?? 20);
   }
 

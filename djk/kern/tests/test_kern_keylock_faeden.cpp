@@ -62,6 +62,13 @@
 #include "cypherdj/zustand.h"
 #include "pruef.h"
 
+// Python for klick_fassung.py: ctest sets CYPHERDJ_PYTHON3 to the interpreter CMake found (a venv on a fresh machine);
+// a direct start without ctest falls back to the system python (numpy there, see requirements.txt).
+static std::string cdj_python3() {
+  const char* p = std::getenv("CYPHERDJ_PYTHON3");
+  return std::string(p && *p ? p : "/usr/bin/python3") + " ";
+}
+
 namespace {
 
 namespace fs = std::filesystem;
@@ -291,7 +298,7 @@ struct Lauf {
 };
 
 void klick(const std::string& args) {
-  const std::string c = "/usr/bin/python3 " + std::string(CYPHERDJ_DJK) + "/kern/tests/deck/klick_fassung.py --ziel " + AB +
+  const std::string c = cdj_python3() + std::string(CYPHERDJ_DJK) + "/kern/tests/deck/klick_fassung.py --ziel " + AB +
                         " " + args + " > /dev/null";
   PRUEF(std::system(c.c_str()) == 0);
 }
@@ -993,6 +1000,12 @@ void test_prio() {
 // den Decks, keine Fäden; das Deck spielt Varispeed (1031,25 Hz bei 132), Laden, Stopp und Entladen quittieren, alles
 // Material kommt zurück. Stand 2.5 (Mutation VORGABE_VOR_FAEDEN): Dehner hingen trotzdem an, Entladen ohne Quittung 3.
 void test_startfehler() {
+  // root ignores RLIMIT_NPROC (CAP_SYS_RESOURCE), so the thread start cannot be made to fail, e.g. in a container.
+  if (geteuid() == 0) {
+    std::printf("TEST faeden_startfehler: SKIP (running as root, RLIMIT_NPROC does not apply)\n");
+    std::fflush(stdout);
+    return;
+  }
   Lauf k(Weg::ANGEKUENDIGT, true);
   rlimit rl{};
   PRUEF(getrlimit(RLIMIT_NPROC, &rl) == 0);
@@ -1420,7 +1433,7 @@ int main(int argc, char** argv) {
   klick(std::string("--material-id ") + MAT_B + " --beats 40");
   {  // 132er Fassung von MAT für den Tausch (wie test_kern_deck 11)
     const std::string ab2 = AB + "_132";
-    const std::string c = "/usr/bin/python3 " + std::string(CYPHERDJ_DJK) + "/kern/tests/deck/klick_fassung.py --ziel " + ab2 +
+    const std::string c = cdj_python3() + std::string(CYPHERDJ_DJK) + "/kern/tests/deck/klick_fassung.py --ziel " + ab2 +
                           " --material-id " + MAT + " --beats 40 --bpm 132 --sinus-links 1000 > /dev/null && mv " + ab2 + "/" +
                           MAT + "/fassungen/132000_r1 " + AB + "/" + MAT + "/fassungen/ && rm -rf " + ab2;
     PRUEF(std::system(c.c_str()) == 0);

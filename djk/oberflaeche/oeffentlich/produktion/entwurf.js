@@ -5,6 +5,7 @@
 // (clip_aendern, noten_neu, noten_aendern, noten_loeschen); alles andere bleibt unverändert. Prüfungen macht der Server.
 
 import { punkteNach } from './lanen.js';
+import { werkzeugNach } from './lanen_werkzeuge.js';
 
 export function entwurf(projekt, befehle) {
   if (!projekt || !Array.isArray(befehle) || befehle.length === 0) return projekt;
@@ -20,6 +21,16 @@ export function entwurf(projekt, befehle) {
         if (i < 0) continue;
         const lanen = [...s.automation];
         lanen[i] = { ...lanen[i], punkte: punkteNach(lanen[i].punkte, b) };
+        s.automation = lanen;
+      }
+      continue;
+    }
+    if (b?.befehl === 'auto_dehnen' || b?.befehl === 'auto_neigen' || b?.befehl === 'auto_form') {   // 1.12 slice 4: stretch, skew, shape (the server rule)
+      for (const s of p.spuren) {
+        const i = (s.automation ?? []).findIndex((l) => l.id === b.lane_id);
+        if (i < 0) continue;
+        const lanen = [...s.automation];
+        lanen[i] = { ...lanen[i], punkte: werkzeugNach(lanen[i], b) };
         s.automation = lanen;
       }
       continue;

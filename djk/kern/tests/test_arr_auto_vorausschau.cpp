@@ -33,6 +33,10 @@ struct ArrPruefZugang {
         feed(&a.blende_s_[i][f], sizeof(int64_t));
         const int cur = a.auto_l_[i][f].cursor();
         feed(&cur, sizeof(int));
+        if (f < 2) {   // 1.12 slice 5: the cursor of the relative lane (value stack)
+          const int rcur = a.auto_r_[i][f].cursor();
+          feed(&rcur, sizeof(int));
+        }
       }
     feed(a.ap_, sizeof(double) * static_cast<size_t>(m));
   }
@@ -111,7 +115,14 @@ struct Szene {
   bool blockwechsel = false;
   double start_beat = 0.0;
   int schritt = 16;
+  int stapel = 0;   // 1.12 slice 5: 0 only absolute lanes, 1 absolute and relative lanes (value stack), 2 relative lanes only (base value + relative)
 };
+
+// A relative lane from an absolute shape: the same points, values scaled into the (narrower) relative range
+std::vector<ArrAutoPunkt> skaliert(std::vector<ArrAutoPunkt> p, float faktor) {
+  for (ArrAutoPunkt& x : p) x.wert *= faktor;
+  return p;
+}
 
 std::unique_ptr<Audio> g_audio;
 
@@ -128,8 +139,14 @@ uint64_t lauf(const Szene& sz, bool vorausschau) {
   Bau b;
   for (int sp = 1; sp <= 8; ++sp) {
     b.spur(sp, ArrArt::audio).clip(sp, ("c" + std::to_string(sp)).c_str(), 0.0, 60.0, &g_audio->a, (sp * 977) % 20000);
-    b.lane(sp, fader(sz.lage, sp));
-    b.lane(sp, pan(sz.lage, sp), cdj::ARR_AUTO_PAN);
+    if (sz.stapel != 2) {
+      b.lane(sp, fader(sz.lage, sp));
+      b.lane(sp, pan(sz.lage, sp), cdj::ARR_AUTO_PAN);
+    }
+    if (sz.stapel != 0) {
+      b.lane(sp, skaliert(fader(sz.lage, sp + 3), 0.3f), cdj::ARR_AUTO_FADER, 0, true);
+      b.lane(sp, skaliert(pan(sz.lage, sp + 1), 0.5f), cdj::ARR_AUTO_PAN, 0, true);
+    }
   }
   t.laden(b.fertig());
   if (sz.schleife) t.arr.loop(true, sz.loop_von, sz.loop_bis, 0, t.k);
@@ -167,6 +184,15 @@ int main() {
   { Szene s{"mischung_loop"}; s.schleife = true; s.bloecke = 2000; szenen.push_back(s); }
   { Szene s{"mischung_start_mitte"}; s.start_beat = 5.3; s.bloecke = 1200; szenen.push_back(s); }
   { Szene s{"halten_7"}; s.schritt = 7; s.blockwechsel = true; s.bloecke = 1200; szenen.push_back(s); }
+  // 1.12 slice 5 U9: the same equality with a value stack (absolute + relative lanes) and with relative lanes only
+  { Szene s{"stapel_mischung_loop"}; s.stapel = 1; s.schleife = true; s.bloecke = 2000; szenen.push_back(s); }
+  { Szene s{"stapel_blockgroessen"}; s.stapel = 1; s.blockwechsel = true; s.bloecke = 1500; szenen.push_back(s); }
+  { Szene s{"stapel_tempo_rampe_loop"}; s.stapel = 1; s.rampe = true; s.schleife = true; s.loop_von = 0.5; s.loop_bis = 7.0; s.blockwechsel = true; s.bloecke = 1600; szenen.push_back(s); }
+  { Szene s{"stapel_zickzack"}; s.stapel = 1; s.lage = ZICKZACK; s.bloecke = 800; szenen.push_back(s); }
+  { Szene s{"stapel_dichte_punkte_loop"}; s.stapel = 1; s.lage = DICHT; s.schleife = true; s.loop_von = 0.0, s.loop_bis = 0.31; s.blockwechsel = true; s.bloecke = 900; szenen.push_back(s); }
+  { Szene s{"stapel_start_mitte"}; s.stapel = 1; s.start_beat = 5.3; s.bloecke = 1200; szenen.push_back(s); }
+  { Szene s{"nur_relativ_loop"}; s.stapel = 2; s.schleife = true; s.bloecke = 2000; szenen.push_back(s); }
+  { Szene s{"nur_relativ_blockgroessen"}; s.stapel = 2; s.blockwechsel = true; s.bloecke = 1500; szenen.push_back(s); }
   for (const Szene& s : szenen) {
     const uint64_t mit = lauf(s, true), ohne = lauf(s, false);
     std::printf("%-28s mit %016llx ohne %016llx %s\n", s.name, static_cast<unsigned long long>(mit), static_cast<unsigned long long>(ohne), mit == ohne ? "gleich" : "VERSCHIEDEN");
@@ -180,6 +206,11 @@ int main() {
     s.schritt = 1;
     const uint64_t h1 = lauf(s, false);
     PRUEF(h16 != h1);
+    Szene t{"kontrolle_stapel"};   // the stack changes the hash: the relative lanes are not ignored
+    t.bloecke = 300;
+    const uint64_t ohne_rel = lauf(t, false);
+    t.stapel = 1;
+    PRUEF(lauf(t, false) != ohne_rel);
   }
   PRUEF_ENDE();
 }

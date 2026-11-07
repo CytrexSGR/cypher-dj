@@ -14,6 +14,6 @@ nice -n 19 ionice -c3 $PIP install --quiet -r anforderungen.txt
 nice -n 19 $PIP install --dry-run --quiet --no-deps --report pip_plan_stems.json -r anforderungen-stems.txt
 .venv/bin/python -m werkstatt.pruefe_umgebung --pip-plan pip_plan_stems.json
 nice -n 19 ionice -c3 $PIP install --quiet --no-deps -r anforderungen-stems.txt
-.venv/bin/python -m werkstatt.gewichte_stems   # 80 MB, unter der G3-Grenze; mit --von <datei> ohne Netz
+.venv/bin/python -m werkstatt.gewichte_stems   # 700 MB, under the G3 limit; with --von <file> no network
 .venv/bin/python -c 'import torch; print("NACHHER", torch.__version__, torch.version.cuda, torch.__file__)'
 .venv/bin/python -m werkstatt.pruefe_umgebung

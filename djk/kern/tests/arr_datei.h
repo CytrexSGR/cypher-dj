@@ -104,6 +104,12 @@ struct Ordner {
     }
     return s + "]}";
   }
+  // 1.12 slice 5: the same lane as a summand lane ("relativ":true)
+  static std::string auto_lane_rel(const std::vector<std::tuple<double, double, int>>& punkte, const char* ziel = "fader") {
+    std::string s = auto_lane(punkte, ziel);
+    s.pop_back();
+    return s + ",\"relativ\":true}";
+  }
   void wiedergabe(int64_t nr, const std::string& spuren) const {
     std::ofstream(pfad + "/wiedergabe-" + std::to_string(nr) + ".json")
         << "{\"format\":\"cypherdj-arr/1\",\"nr\":" << nr << ",\"spuren\":[" << spuren << "]}";

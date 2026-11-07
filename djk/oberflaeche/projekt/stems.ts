@@ -5,9 +5,12 @@ import { fuehreListeAus } from './befehle.ts';
 import { MAX_GRUPPEN, MAX_SPUREN, SAMPLERATE, sucheClip, sucheSpur, type AudioClip, type Herkunft, type Projekt, type Warp } from './modell.ts';
 import { beatBeiQuelle, quellSekunde } from './warp.ts';
 
-export const STEMS = ['drums', 'bass', 'other', 'vocals'] as const;
+// Six stems since 2026-11-06 (BS-RoFormer-SW, plan 2026-11-06-stems-roformer-gpu); werkstatt.stems drops empty guitar and piano (D4), the result
+// line names the placed ones, in this order.
+export const STEMS = ['drums', 'bass', 'other', 'vocals', 'guitar', 'piano'] as const;
+export const STEMS_PFLICHT: readonly Stem[] = ['drums', 'bass', 'other', 'vocals'];
 export type Stem = (typeof STEMS)[number];
-const STEM_NAME: Record<Stem, string> = { drums: 'Drums', bass: 'Bass', other: 'Other', vocals: 'Vocals' };
+const STEM_NAME: Record<Stem, string> = { drums: 'Drums', bass: 'Bass', other: 'Other', vocals: 'Vocals', guitar: 'Guitar', piano: 'Piano' };
 export const STEMS_MAX_S = 600;                                                 // D9
 const EPS = 1e-9;
 
@@ -71,9 +74,10 @@ export function stemWarp(w: Warp, bClip0: number, f0: number, f1: number): Warp 
     ...(w.beats ? { beats: structuredClone(w.beats) } : {}) };
 }
 
-// F4 und D8: teilt das Original an den Bereichsgrenzen, setzt das Mittelstück stumm, legt vier Spuren direkt unter die Quellspur, je einen Clip
+// F4 and D8: splits the original at the range bounds, mutes the middle piece, places one track per stem in `dateien`
+// (four to six) right under the source track, je einen Clip
 // über den Bereich (Warp nach stemWarp, sonst offset 0), Gain und Fades des Mittelstücks, und eine Gruppe „Stems: <Name>“, solange eine frei ist.
-export function baueStemsProjekt(p0: Projekt, z: StemsPlan, dateien: Record<Stem, { sha256: string; pfad: string }>, quelle: Herkunft):
+export function baueStemsProjekt(p0: Projekt, z: StemsPlan, dateien: Partial<Record<Stem, { sha256: string; pfad: string }>>, quelle: Herkunft):
   { projekt: Projekt; spuren: string[]; hinweis?: string } {
   const lauf = (p: Projekt, b: unknown): Projekt => fuehreListeAus(p, [b], { quelle }).projekt;
   let p = p0;
@@ -92,15 +96,15 @@ export function baueStemsProjekt(p0: Projekt, z: StemsPlan, dateien: Record<Stem
   p = lauf(p, { befehl: 'clip_aendern', clip_id: m.id, stumm: true });
   const index = p.spuren.findIndex((s) => s.id === z.spurId);
   const spuren: string[] = [];
-  STEMS.forEach((stem, i) => {
+  STEMS.filter((s) => dateien[s] !== undefined).forEach((stem, i) => {
     p = lauf(p, { befehl: 'spur_neu', art: 'audio', name: `${z.clipName.slice(0, 70)} ${STEM_NAME[stem]}` });
     const id = p.spuren[p.spuren.length - 1].id;                                 // spur_neu hängt hinten an (befehle.ts:213-230)
     p = lauf(p, { befehl: 'spur_verschieben', spur_id: id, index: index + 1 + i });
     const q = sucheSpur(p, z.spurId)!;                                          // Review MINOR 6: Fader und Pan der Quellspur erben, Ausgang nach D8
     // mute erben (stumme Quelle, stumme Stems); solo nicht (Abhörzustand); Gruppen verschachteln nicht (Gruppe hat keinen Ausgang), also bleibt D8
     if (q.fader_db !== 0 || q.pan !== 0 || q.mute) p = lauf(p, { befehl: 'spur_aendern', spur_id: id, fader_db: q.fader_db, pan: q.pan, mute: q.mute });
-    p = lauf(p, { befehl: 'clip_neu', spur_id: id, art: 'audio', start_beat: z.von, laenge_beats: z.bis - z.von, sha256: dateien[stem].sha256,
-      pfad_hinweis: dateien[stem].pfad, name: `${z.clipName.slice(0, 70)} ${STEM_NAME[stem]}`,
+    p = lauf(p, { befehl: 'clip_neu', spur_id: id, art: 'audio', start_beat: z.von, laenge_beats: z.bis - z.von, sha256: dateien[stem]!.sha256,
+      pfad_hinweis: dateien[stem]!.pfad, name: `${z.clipName.slice(0, 70)} ${STEM_NAME[stem]}`,
       ...(gewarpt(m) ? { warp: stemWarp(m.warp, z.bClip0, z.f0, z.f1) } : {}) });
     const c = sucheSpur(p, id)!.clips[0];
     const extra = { ...(m.gain_db !== 0 ? { gain_db: m.gain_db } : {}), ...(m.fade_ein_beats !== 0 ? { fade_ein_beats: m.fade_ein_beats } : {}),
@@ -114,7 +118,8 @@ export function baueStemsProjekt(p0: Projekt, z: StemsPlan, dateien: Record<Stem
 }
 
 // D16: null = der Clip ist noch der vom Start; sonst der Grund
-export function pruefeNochGleich(p: Projekt, z: StemsPlan): 'veraltet' | 'zu_viele_spuren' | null {
+// anzahl: the stems actually placed (after the run); before the run the plan counts all six (D5 of plan 2026-11-06)
+export function pruefeNochGleich(p: Projekt, z: StemsPlan, anzahl: number = STEMS.length): 'veraltet' | 'zu_viele_spuren' | null {
   const g = sucheClip(p, z.clipId);
   if (!g || g.clip.art !== 'audio' || g.spur.id !== z.spurId) return 'veraltet';
   const c = g.clip;
@@ -122,6 +127,6 @@ export function pruefeNochGleich(p: Projekt, z: StemsPlan): 'veraltet' | 'zu_vie
   if (JSON.stringify(c.warp ?? null) !== z.warpText) return 'veraltet';
   if (!gewarpt(c) && (c.offset_s !== z.offset || p.tempo_bpm !== z.tempo)) return 'veraltet';   // ungewarpt hängt F0 am Tempo (wie setze)
   if (z.von < c.start_beat - EPS || z.bis > c.start_beat + c.laenge_beats + EPS) return 'veraltet';
-  if (p.spuren.length + STEMS.length > MAX_SPUREN) return 'zu_viele_spuren';
+  if (p.spuren.length + anzahl > MAX_SPUREN) return 'zu_viele_spuren';
   return null;
 }

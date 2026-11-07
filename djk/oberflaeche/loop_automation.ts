@@ -11,6 +11,9 @@ export const AUTO_BEREICH: Record<string, [number, number]> = {
   'komp/schwelle': [-60, 0], 'komp/ratio': [1, 20], 'komp/attack': [0.1, 100], 'komp/release': [10, 1000],
   'komp/makeup': [0, 24], 'komp/mix': [0, 1], filter: [-1, 1], 'eq/tief': [-26, 6], 'eq/mitte': [-26, 6], 'eq/hoch': [-26, 6],
   'send/2': [-60, 0],   // Hall-Send (Throws); −60 dB ist praktisch aus
+  // 1.15 A2: the continuous mix-tool rows a source channel has (a box is pad/1, pad/2); no switches or steps, no bus-only multiband / limiter
+  'gate/schwelle': [-90, 0], 'gate/hysterese': [0, 24], 'gate/ratio': [1, 100], 'gate/bereich': [-120, 0], 'gate/attack': [0.1, 500],
+  'gate/hold': [0, 2000], 'gate/release': [1, 5000], 'util/balance': [-1, 1], 'util/breite': [0, 200], 'util/bassmono': [0, 500],
 };
 // Länge einer Spur in Durchgängen des Loops (ein Build über 16 Takte auf einem 2-Takt-Loop: 8)
 export const DURCHGAENGE = [1, 2, 4, 8, 16, 32];

@@ -28,13 +28,20 @@
 #include <memory>
 #include <atomic>
 
+#include <cypherdj/dsp/gate.h>
+#include <cypherdj/dsp/kanal_limiter.h>
+#include <cypherdj/dsp/multiband.h>
+#include <cypherdj/dsp/spektrum.h>
 #include <cypherdj/dsp/kanalzug.h>
 #include <cypherdj/dsp/master_limiter.h>
+#include <cypherdj/dsp/utility.h>
 
 #include "cypherdj/beatfx.h"
 #include "cypherdj/duck.h"
 #include "cypherdj/hall.h"
 #include "cypherdj/kleber.h"
+#include "cypherdj/mixer_werkzeug.h"
+#include "cypherdj/stimme.h"
 #include "cypherdj/stellwerk/regler.h"
 
 struct CypherBk;
@@ -68,7 +75,8 @@ enum class MixRolle : uint8_t {
   master_kleber,                                         // K2 Slice 3: Schwelle des Summen-Klebers
   master_pfl,                                            // MASTER CUE: Master auf die PFL-Seite des Cue
   color_art, color_param,                                // SOUND COLOR FX (2026-10-11): Art und PARAMETER, global wie am XZ
-  komp                                                   // Kompressor je Quellkanal (2026-10-11): <k>/komp/<feld>
+  komp,                                                  // Kompressor je Quellkanal (2026-10-11): <k>/komp/<feld>
+  werkzeug                                               // 1.15 A1b: mix-tool rows (gate, utility, multiband, limiter, spectrum source), slots only
 };
 
 struct MixZuweisung {
@@ -76,7 +84,8 @@ struct MixZuweisung {
   int8_t kanal = -1;                                     // Kanal-Index 0..17 oder -1 (global)
   cypherdj::dsp::Regler regler = cypherdj::dsp::Regler::anzahl;  // nur bei MixRolle::kanalzug
   int8_t fx = -1;                                        // nur bei MixRolle::fx_rueckweg: 0..3 für fx/1..4
-  int8_t feld = -1;                                      // nur bei MixRolle::komp: 0 an, 1 schwelle … 6 mix, 7 sc
+  int8_t feld = -1;                                      // MixRolle::komp: 0 an, 1 schwelle … 6 mix, 7 sc; MixRolle::werkzeug: field inside the tool
+  MixWerkzeug werkzeug = MixWerkzeug::gate;               // only for MixRolle::werkzeug: the tool, feld is the field inside the tool
 };
 
 class Mixer {
@@ -108,10 +117,48 @@ class Mixer {
   // Scheibe 25: Güte des DJ-Filters in allen 18 Kanalzügen (kern.toml filter_guete, A27 Weg a); NaN verworfen, sonst
   // auf 0,5 bis 8 geklemmt (DjFilter::setze_guete). Nicht im Callback.
   void setze_filter_guete(double q);
+  // Sleep state of silent strips (all 18, kanal()): a strip whose input block is exact zeros and whose every state holder is idle
+  // skips its DSP and its route, bit-equal to running it (see Mixer::schlaf_schritt). setze_schlaf(false) is the reference switch
+  // (default on; a plain flag the callback thread reads, set between blocks, not during one). schlaeft(k): strip k slept in its last
+  // block. schlaf_bloecke(): strip-blocks skipped so far. schlaeft_[] is written and read by the callback thread only (like komp_aktiv);
+  // schlaeft() is for that thread and for tests that drive verarbeite() themselves.
+  void setze_schlaf(bool an) { schlaf_an_ = an; }
+  bool schlaeft(int k) const { return k >= 0 && k < MIX_KANAELE && schlaeft_[k]; }
+  uint64_t schlaf_bloecke() const { return schlaf_bloecke_.load(std::memory_order_relaxed); }
   // Absenkung des Kompressors von Quellkanal k (0..13) in dB, 0 wenn aus. Aus jedem Faden lesbar.
   // Läuft der Kompressor von Quellkanal k (komp/an 1 im letzten Block)? Nur im Callback-Faden lesen.
   bool komp_aktiv(int k) const { return k >= 0 && k < MIX_QUELLEN && komp_lief_[k]; }
   float komp_gr_db(int k) const { return (k >= 0 && k < MIX_QUELLEN) ? komp_gr_[k].load(std::memory_order_relaxed) : 0.0f; }
+  // 1.15 A3: is the gate / utility object of channel k in use (called in the last block)? Callback thread only. False means the
+  // channel runs the old path and the object is reset.
+  bool gate_aktiv(int k) const { return k >= 0 && k < MIX_QUELLEN && gate_lief_[k]; }
+  bool util_aktiv(int k) const { return k >= 0 && k < MIX_KANAELE && util_lief_[k]; }
+  // 1.15 A4: multiband compressor of bus k (14..17). mb_objekt: the object exists (created in the constructor, buses only); mb_objekte: how
+  // many exist; mb_aktiv: it ran in the last block; mb_blende: position of the 480-sample switching crossfade, 0 = dry, 480 = fully in.
+  bool mb_objekt(int k) const { return k >= MIX_QUELLEN && k < MIX_KANAELE && mb_[k - MIX_QUELLEN]; }
+  int mb_objekte() const {
+    int n = 0;
+    for (const auto& m : mb_) n += m != nullptr;
+    for (const auto& m : mb2_) n += m != nullptr;
+    return n;
+  }
+  bool mb_aktiv(int k) const { return k >= MIX_QUELLEN && k < MIX_KANAELE && mb_lief_[k - MIX_QUELLEN]; }
+  // Crossover change by crossfade: a second object per bus (made in the constructor) takes the new crossovers and the dynamics of the active
+  // one, both run on the same tap, and the output moves over 480 samples (S-curve). mb_grenze_*: the crossovers of the active object;
+  // mb_blenden: crossfades started since the object was made; mb_grenzblende: one is running.
+  double mb_grenze_tief_hz(int k) const { return mb_objekt(k) ? mb_akt(k - MIX_QUELLEN)->grenze_tief_hz() : 0.0; }
+  double mb_grenze_hoch_hz(int k) const { return mb_objekt(k) ? mb_akt(k - MIX_QUELLEN)->grenze_hoch_hz() : 0.0; }
+  unsigned mb_blenden(int k) const { return (k >= MIX_QUELLEN && k < MIX_KANAELE) ? mb_blenden_[k - MIX_QUELLEN] : 0u; }
+  bool mb_grenzblende(int k) const { return k >= MIX_QUELLEN && k < MIX_KANAELE && mb_gb_an_[k - MIX_QUELLEN]; }
+  // Automatic make-up of the multiband bands (dsp::MbBandEinstellung::aufholen_auto). On by default and not a controller row: a compressed band
+  // keeps its level. Tests switch it off to read the reduction from the output level (the make-up would cancel it); call before the blocks run.
+  void mb_ausgleich_automatisch(bool an) { mb_auto_ = an; }
+  int mb_blende(int k) const { return (k >= MIX_QUELLEN && k < MIX_KANAELE) ? mb_pos_[k - MIX_QUELLEN] : 0; }
+  // Test: does the slot of this controller still hold a per-sample course (set by verlauf(), cleared at the end of verarbeite())?
+  bool verlauf_offen(int regler) const {
+    const Wert* w = const_cast<Mixer*>(this)->wert_von(regler);
+    return w && w->vl;
+  }
   // Verlauf je Sample für den nächsten verarbeite()-Aufruf (Stellwerk-Aenderung, gültig bis dahin).
   void verlauf(int regler, const float* werte);
 
@@ -129,6 +176,13 @@ class Mixer {
   float* summe_eingang_r() { return summe_ein_r_; }
   float* pfl_eingang_l() { return pfl_ein_l_; }
   float* pfl_eingang_r() { return pfl_ein_r_; }
+  // Voice channel (stimme.h): set before the first block (not in the callback). With eingang 0 (the default) the master
+  // is bit-identical to a kern without it. stimme_eingang_*: the voice of the next verarbeite(), the kern copies the
+  // input pair ein_<eingang> into it; verarbeite() clears it.
+  void stimme_einstellen(const StimmEinstellung& e) { stimme_.einstellen(e); }
+  const StimmDucker& stimme() const { return stimme_; }
+  float* stimme_eingang_l() { return stimme_ein_l_; }
+  float* stimme_eingang_r() { return stimme_ein_r_; }
 
   // Ein Block, 1 <= n <= MIX_BLOCK. Schreibt Master und Cue (überschreibt die Ziele).
   void verarbeite(int n, float* master_l, float* master_r, float* cue_l, float* cue_r);
@@ -143,6 +197,18 @@ class Mixer {
   // Cue den Master so hört wie der Saal (ADR 008 Punkt 3). Der Prüfklick master (Z1) geht am Limiter vorbei (F19).
   void setze_limiter_dbtp(double decke);   // nicht im Callback (legt den Limiter neu an)
   int limiter_vorhalt() const { return limiter_->vorhalt_samples(); }
+  // 1.15 A5a (D8): the latency account. L = look-ahead of the four bus limiters in samples (0 = no limiter built, the old paths and
+  // bit-identical output). With L > 0 every master-bound path is delayed by exactly L once: each bus by a stereo delay after its strip, the
+  // sum of the direct sources, the hall return and the send-graph returns by one delay before the master FX (the buses are added behind it),
+  // the metronome by its own delay, and the PFL by vh + L. ONLY WHILE THE CALLBACK IS STOPPED / BEFORE THE FIRST BLOCK (it is not real-time safe: a
+  // change clears all delay lines and the PFL ring, which is an audible gap of up to vh + L). Clamped to 0..kMaxLatenz. The same value again is a no-op
+  // (nothing is cleared, the audio goes on bit for bit).
+  // Documented residuals: a bus's own sends are taken before its delay (they still arrive aligned with its dry part, the hall return is in
+  // the delayed sum) and the test click master_eingang_* (behind the limiter by design) is now L samples earlier than any other path.
+  static constexpr int KANAL_LATENZ_MAX = cypherdj::dsp::KanalLimiter::kMaxLatenz;
+  void setze_kanal_latenz(int samples);
+  int kanal_latenz() const { return kanal_latenz_; }
+  static constexpr int pfl_ring_groesse() { return PFL_RING; }   // test: the ring is sized for the worst case kMaxVorhalt + 1 + kMaxLatenz
   float limiter_absenkung_db() { return limiter_->groesste_absenkung_db(); }  // seit dem letzten Aufruf, <= 0
   // Scheibe 35 (Vorgriff aus 43, §5.6 /pegel): Abtast-Spitze in linear seit dem letzten Aufruf, je Deck nach dem Fader
   // (Kanal 0..3), master (PEGEL_MASTER, nach Limiter und Prüfklick, wie im Ring) und cue (PEGEL_CUE); setzt auf 0 zurück.
@@ -185,6 +251,56 @@ class Mixer {
   int fx_routing() const noexcept { return routing_; }              // der Weg, der gerade klingt
   int fx_routing_ziel() const noexcept { return routing_ziel_; }    // der gewünschte
   bool fx_routing_wechselt() const noexcept { return routing_wechsel_; }
+  // 1.15 A5b: the channel limiter on bus/1..4. vorhalt_ms 0 (the default, kern.toml kanal_limiter_vorhalt_ms) builds nothing: L = 0, the
+  // bit-identical old paths, the lim/* rows do nothing. 0.1 .. 20 builds the four KanalLimiter objects here (never in the callback) and sets the
+  // latency account to their latency_samples() (+ 12 with echtspitze): the buses then run through the limiter (lim/an 1) or an equal-latency
+  // delay (lim/an 0), crossfading between the two over 480 samples (D7). ONLY WHILE THE CALLBACK IS STOPPED / BEFORE THE FIRST BLOCK, like
+  // setze_kanal_latenz (a changed latency clears the lines and the PFL ring).
+  void setze_kanal_limiter(double vorhalt_ms, bool echtspitze);
+  bool kanal_limiter_gebaut() const { return lim_[0] != nullptr; }
+  // Gain reduction of the limiter of bus 0..3 (= bus/1..4) over the last block, positive dB. 0 when no limiter is built, lim/an is 0, or the bus
+  // is out of range (no indexing). Callable from another thread (a relaxed atomic).
+  float kanal_limiter_reduktion_db(int bus) const;
+  // 1.15 A5c: is the limiter of channel k (a bus, 14..17) in use, i.e. built and it ran in the last block (lim/an on, or its crossfade out still open)?
+  // Callback thread only, like gate_aktiv / mb_aktiv. Range rule: k outside the buses gives false before the bus index is computed (no indexing).
+  bool kanal_limiter_aktiv(int k) const { return k >= MIX_QUELLEN && k < MIX_KANAELE && lim_[k - MIX_QUELLEN] != nullptr && lim_lief_[k - MIX_QUELLEN]; }
+
+  // 1.15 A6: gain-reduction meters for /zustand/mix (D10). Positive dB (>= 0), 0 when the tool is off or not running. Callback thread only
+  // (they read the DSP objects the same thread just ran, like komp_aktiv). Range contract: an index outside the tool's own range gives 0
+  // and reads nothing.
+  float gate_reduktion_db(int k) const {   // source channels 0..13 with a gate object (erz/8 has none); the gate must have run in the last block
+#if defined(CYPHERDJ_MUTATION_MIX_GATE_OHNE_GUARD)   // error case: no range check (an out-of-bounds read for k >= 14; shown under CYPHERDJ_SANITIZE)
+    if (!gate_lief_[k] || !gate_[k]) return 0.0f;
+#elif defined(CYPHERDJ_MUTATION_MIX_GATE_OBERKANTE)   // error case: off by one at the upper edge (pad/2 reads 0)
+    if (k < 0 || k >= MIX_QUELLEN - 1 || !gate_lief_[k] || !gate_[k]) return 0.0f;
+#elif defined(CYPHERDJ_MUTATION_MIX_GATE_OHNE_LIEF)   // error case: the gate counts as reading although it does not run
+    if (k < 0 || k >= MIX_QUELLEN || !gate_[k]) return 0.0f;
+#else
+    if (k < 0 || k >= MIX_QUELLEN || !gate_lief_[k] || !gate_[k]) return 0.0f;
+#endif
+    const float g = gate_[k]->gain_db();   // <= 0, kStummDb (-200) when closed completely
+#ifdef CYPHERDJ_MUTATION_MIX_GATE_VORZEICHEN   // error case: negative reduction
+    return g;
+#else
+    return g < 0.0f ? -g : 0.0f;   // NaN fails the comparison: 0
+#endif
+  }
+  float mb_reduktion_db(int bus, int band) const {   // bus 0..3 (= channel 14..17), band 0..2 = low / mid / high
+#ifdef CYPHERDJ_MUTATION_MIX_MB_OHNE_GUARD   // error case: no range check on bus and band (out-of-bounds reads; shown under CYPHERDJ_SANITIZE)
+    if (!mb_lief_[bus] || !mb_akt(bus)) return 0.0f;
+#elif defined(CYPHERDJ_MUTATION_MIX_MB_OBERKANTE)   // error case: off by one at the upper edge (bus/4 reads 0)
+    if (bus < 0 || bus >= MIX_BUSSE - 1 || band < 0 || band > 2 || !mb_lief_[bus] || !mb_akt(bus)) return 0.0f;
+#else
+    if (bus < 0 || bus >= MIX_BUSSE || band < 0 || band > 2 || !mb_lief_[bus] || !mb_akt(bus)) return 0.0f;
+#endif
+#ifdef CYPHERDJ_MUTATION_MIX_MB_BAND_VERSCHOBEN   // error case: the band index is one too high (mid reads high)
+    const int bb = band == 2 ? 2 : band + 1;
+#else
+    const int bb = band;
+#endif
+    const float g = mb_akt(bus)->aktuelle_absenkung_db(static_cast<cypherdj::dsp::Band>(bb));   // <= 0, a bypassed band shows 0
+    return g < 0.0f ? -g : 0.0f;   // NaN fails the comparison: 0
+  }
 
  private:
   struct Wert {
@@ -211,7 +327,72 @@ class Mixer {
   static constexpr int KOMP_FELDER = 8;                  // an, schwelle, ratio, attack, release, makeup, mix, sc
   std::unique_ptr<Komp> komp_[MIX_QUELLEN];              // im Konstruktor angelegt, nie im Callback
   Wert komp_w_[MIX_QUELLEN][KOMP_FELDER];
+  // 1.15 A1b: slots of the mix-tool controllers (value and per-sample course like the compressor's); A3 reads the gate and utility
+  // fields, the multiband and limiter fields follow with their tasks. [channel][wz_versatz(tool) + field], and the one global spectrum source.
+  Wert wz_w_[MIX_KANAELE][WZ_FELDER_JE_KANAL];
+  Wert wz_spektrum_kanal_;
+  // 1.15 A3: gate (13 live source channels) and utility (those plus the 4 buses); an object exists only where the table has rows
+  // for it, created in the constructor, never in the callback. *_lief_: the object ran in the last block and has not
+  // been reset since (the bypass is "not called", with leeren() on the way back, D6).
+  std::unique_ptr<cypherdj::dsp::Gate> gate_[MIX_QUELLEN];
+  std::unique_ptr<cypherdj::dsp::Utility> util_[MIX_KANAELE];
+  bool gate_lief_[MIX_QUELLEN] = {}, util_lief_[MIX_KANAELE] = {};
+  float wz_wert(int k, int pos, int n) const;   // slot [k][pos] as the compressor reads it: w, or vl[n - 1] with a course
+  bool util_gefordert(int k, int n, cypherdj::dsp::UtilityParameter& p) const;   // parameters from the slots; true if not all neutral
+  void gate_block(int k, int n);
+  // 1.15 A4: multiband compressor on the four buses; objects created in the constructor, never in the callback. mb_lief_: it ran in the last
+  // block and has not been reset since; mb_pos_: position of the switching crossfade (0 = dry, MB_BLENDE = fully in). mb_gt_/mb_gh_: the
+  // crossovers last handed to the object (coefficients are recomputed only on a change).
+  static constexpr int MB_BLENDE_SAMPLES = 480;
+  std::unique_ptr<cypherdj::dsp::MultibandKompressor> mb_[MIX_BUSSE], mb2_[MIX_BUSSE];   // mb2_: the second object for the crossover crossfade
+  bool mb_wahl_[MIX_BUSSE] = {};         // which of the two is the active one: false mb_, true mb2_
+  bool mb_gb_an_[MIX_BUSSE] = {};        // a crossover crossfade is running
+  int mb_gpos_[MIX_BUSSE] = {};          // its position, 0..MB_BLENDE_SAMPLES
+  int mb_gwarm_[MIX_BUSSE] = {};         // samples left of the warm-up: the new object runs on the live input with empty filters, unheard
+  bool mb_gdyn_[MIX_BUSSE] = {};         // the dynamics of the active object were handed over (once, when the warm-up is over)
+  static constexpr int MB_WARM_SAMPLES = 960;   // 20 ms: an empty Linkwitz-Riley 8 at 100 Hz has settled to about 1 percent
+  static constexpr int MB_WARM_REST = 240;      // 5 ms: the least warm-up left after a small new target during the warm-up (turning a knob)
+  static constexpr int MB_WARM_VERLAENGERUNG = 240;   // 5 ms above 100 Hz (25 ms = 1200 samples at 20 Hz, scaled like the warm-up): how far a warm-up may be extended beyond its base length by small targets
+  static constexpr int MB_WARM_MAX = 4800;      // 100 ms: cap of the base warm-up for deep crossovers
+  static constexpr float MB_WARM_SPRUNG = 0.10f; // a new target within this relative step of the lower crossover goes into the warming-up object in place
+  static constexpr float MB_WARM_HZ = 100.0f;   // below this the warm-up grows as 1 / f
+  static int mb_warm(float gt, float gh, int basis);
+  int mb_gwarm_ges_[MIX_BUSSE] = {};             // samples the current warm-up has run since the last leeren()
+  int mb_gbasis_[MIX_BUSSE] = {};                // the base length of this warm-up
+  float mb_gat_[MIX_BUSSE] = {}, mb_gah_[MIX_BUSSE] = {};   // the anchor: the crossovers at the last leeren() of the second object
+  unsigned mb_blenden_[MIX_BUSSE] = {};
+  cypherdj::dsp::MultibandKompressor* mb_akt(int b) const { return mb_wahl_[b] ? mb2_[b].get() : mb_[b].get(); }
+  cypherdj::dsp::MultibandKompressor* mb_ruhend(int b) const { return mb_wahl_[b] ? mb_[b].get() : mb2_[b].get(); }
+  float mb_b_l_[MIX_BLOCK], mb_b_r_[MIX_BLOCK];   // output of the second object during a crossover crossfade
+  bool mb_lief_[MIX_BUSSE] = {};
+  int mb_pos_[MIX_BUSSE] = {};
+  bool mb_auto_ = true;   // see mb_ausgleich_automatisch
+  float mb_gt_[MIX_BUSSE] = {-1.0f, -1.0f, -1.0f, -1.0f}, mb_gh_[MIX_BUSSE] = {-1.0f, -1.0f, -1.0f, -1.0f};
+  float mb_tr_l_[MIX_BLOCK], mb_tr_r_[MIX_BLOCK];   // the dry copy during a crossfade
+  void mb_block(int k, int n, bool an, float* l, float* r);
+  void util_block(int k, int n, const cypherdj::dsp::UtilityParameter& p, bool neutral);
+  // 1.15 A5b: channel limiter on the buses (index k - MIX_QUELLEN, only behind k >= MIX_QUELLEN), created by setze_kanal_limiter, never in the
+  // callback. The bus runs through bus_verz_ (delay L) always; with lim/an the limiter output crosses over from that delayed dry signal
+  // (both have latency L, so the crossfade is time-aligned). lim_warm_: samples left of the warm-up (the limiter runs on the live input
+  // unheard until its own delay is full), lim_pos_: crossfade position 0..LIM_BLENDE_SAMPLES (0 = dry, full = limiter), lim_lief_: it ran and
+  // has not been reset since (the bypass is "not called", with leeren() on the way back, D6).
+  static constexpr int LIM_BLENDE_SAMPLES = 480;
+  std::unique_ptr<cypherdj::dsp::KanalLimiter> lim_[MIX_BUSSE];
+  bool lim_lief_[MIX_BUSSE] = {};
+  int lim_pos_[MIX_BUSSE] = {}, lim_warm_[MIX_BUSSE] = {};
+  float lim_decke_[MIX_BUSSE] = {NAN, NAN, NAN, NAN}, lim_abkl_[MIX_BUSSE] = {NAN, NAN, NAN, NAN};   // last values handed to the object
+  std::atomic<float> lim_red_[MIX_BUSSE] = {};
+  float lim_ein_l_[MIX_BLOCK] = {}, lim_ein_r_[MIX_BLOCK] = {};   // the undelayed bus signal (limiter input)
+  float lim_aus_l_[MIX_BLOCK] = {}, lim_aus_r_[MIX_BLOCK] = {};   // limiter output during a crossfade
+  void lim_block(int k, int n, bool an, const float* ein_l, const float* ein_r, float* l, float* r);
+  void lim_zuruecksetzen(int b) noexcept;
   bool komp_lief_[MIX_QUELLEN] = {};
+  // Sleep state (see schlaf_schritt in mixer.cpp). stumm_[k]: the strip's tap and final output were exact zeros in its last awake block.
+  bool schlaf_schritt(int k, int n, bool komp_an, bool gate_an, bool util_an, bool mb_laeuft, bool bk_an, int fzi);
+  bool schlaf_an_ = true;
+  bool schlaeft_[MIX_KANAELE] = {};   // callback thread only (written in kanal(), read by schlaeft())
+  bool stumm_[MIX_KANAELE] = {};
+  std::atomic<uint64_t> schlaf_bloecke_{0};
   std::atomic<float> komp_gr_[MIX_QUELLEN] = {};        // Absenkung in dB nach dem letzten Block (Anzeige)
   void komp_block(int k, int n);
   float hall_l_[MIX_BLOCK] = {}, hall_r_[MIX_BLOCK] = {};
@@ -233,13 +414,39 @@ class Mixer {
   float master_ein_l_[MIX_BLOCK] = {}, master_ein_r_[MIX_BLOCK] = {};
   float summe_ein_l_[MIX_BLOCK] = {}, summe_ein_r_[MIX_BLOCK] = {};   // D1 K1: Metronom master
   float pfl_ein_l_[MIX_BLOCK] = {}, pfl_ein_r_[MIX_BLOCK] = {};       // D1 K1: Metronom cue
+  float stimme_ein_l_[MIX_BLOCK] = {}, stimme_ein_r_[MIX_BLOCK] = {}; // voice channel (stimme.h)
+  float stimme_mg_[MIX_BLOCK] = {};                                   // master/pegel per sample for the voice
+  StimmDucker stimme_;
   float fx_l_[cypherdj::dsp::kAnzahlSends][MIX_BLOCK] = {}, fx_r_[cypherdj::dsp::kAnzahlSends][MIX_BLOCK] = {};
   float sum_l_[MIX_BLOCK] = {}, sum_r_[MIX_BLOCK] = {};
   float pfl_l_[MIX_BLOCK] = {}, pfl_r_[MIX_BLOCK] = {};
   std::unique_ptr<cypherdj::dsp::MasterLimiter> limiter_;
-  float pfl_verz_[2][cypherdj::dsp::MasterLimiter::kMaxVorhalt + 1] = {};  // PFL um den Vorhalt verzögert (Ring)
+  // PFL delayed by the limiter look-ahead vh plus the latency account L (ring; vh + L <= kMaxVorhalt + kMaxLatenz)
+#ifdef CYPHERDJ_MUTATION_LATENZ_PFL_RING_KLEIN   // error case: the ring keeps its old size, vh + L runs past its end
+  static constexpr int PFL_RING = cypherdj::dsp::MasterLimiter::kMaxVorhalt + 1;
+#else
+#ifdef CYPHERDJ_MUTATION_LATENZ_PFL_RING_VH84   // error case: sized for the vh of the default limiter (84) instead of the worst case
+  static constexpr int PFL_RING = 84 + 1 + KANAL_LATENZ_MAX;
+#else
+  static constexpr int PFL_RING = cypherdj::dsp::MasterLimiter::kMaxVorhalt + 1 + KANAL_LATENZ_MAX;
+#endif
+#endif
+  float pfl_verz_[2][PFL_RING] = {};
   int pfl_verz_pos_ = 0;
   float aus_l_[MIX_BLOCK] = {}, aus_r_[MIX_BLOCK] = {};
+  // 1.15 A5a: the latency account. A stereo delay line of up to KANAL_LATENZ_MAX samples (in place, one block at a time).
+  struct Leitung {
+    float l[KANAL_LATENZ_MAX + 1] = {}, r[KANAL_LATENZ_MAX + 1] = {};
+    int pos = 0;
+    void leeren() noexcept;
+    void block(float* xl, float* xr, int n, int latenz) noexcept;   // 1 <= latenz <= KANAL_LATENZ_MAX
+  };
+  int kanal_latenz_ = 0;
+  Leitung bus_verz_[MIX_BUSSE];            // after the strip of bus/1..4 (index k - MIX_QUELLEN, only for k >= MIX_QUELLEN)
+  Leitung summe_verz_, metro_verz_;        // the non-bus part of the master sum; the metronome
+  float bus_sum_l_[MIX_BLOCK] = {}, bus_sum_r_[MIX_BLOCK] = {};   // buses route here (not into sum_) while kanal_latenz_ > 0
+  bool latenz_nan_ = false;                // a block in front of a delay line was not finite (cleared there): the F01 guard of verarbeite() acts on it
+  static bool vor_leitung_endlich(float* l, float* r, int n) noexcept;
   float spitze_[MIX_KANAELE + 2] = {};
   BeatFx fx_kanal_[FX_EINHEITEN][FX_ZIELE];       // Leitungen im BeatFx-Konstruktor, nie im Callback angelegt
   BeatFx fx_master_[FX_EINHEITEN];                // die Summe vor master/pegel
@@ -291,6 +498,40 @@ class Mixer {
   void send_rueckweg(int s, int n) noexcept;
   int routing_ = ROUTING_POST_FADER, routing_ziel_ = ROUTING_POST_FADER;   // Ohr T17
   bool routing_wechsel_ = false;                                            // Blende läuft (Einheiten pausiert)
+
+  // ---- 1.15 A7b: spectrum path (D11, D12). One analyser with a selectable source. Audio thread: the selector row spektrum/kanal is read at
+  // the start of every block, the selected tap is written with schreibe() (channel 1..18 right after kanal(k), 19 the master sum); a change
+  // of the selector stores the source and the cut and bumps the generation. Network thread (SpektrumSender in netz.h): analysiere() and the
+  // other analysis-side methods of spektrum(), after reading the generation. Across threads only the three atomics below and the two atomic
+  // getters of the analyser (schreib_position(), verlorene_samples()) may be read; spektrum() itself belongs to the network thread.
+ public:
+  // const on purpose: the Kern hands out a const Mixer, and the network thread (the analysis side) needs the analyser itself. The thread rules
+  // in dsp/spektrum.h apply: the audio thread only writes through the tap inside the Mixer, everything else is the network thread's.
+  cypherdj::dsp::SpektrumAnalysator& spektrum() const { return *spek_; }
+  // Seqlock (D12). spek_generation() is ODD while the audio thread writes source and cut, EVEN otherwise; a change of the selector steps it by 2.
+  // A reader takes an even value, loads source and cut, and takes the generation again: only an unchanged even value proves the pair is whole.
+  uint32_t spek_generation() const { return spek_gen_.load(std::memory_order_acquire); }
+  int spek_quelle() const { return spek_quelle_.load(std::memory_order_acquire); }          // 0 off, 1..18 channel + 1, 19 master; read between two generation reads
+  std::size_t spek_schnitt() const { return spek_schnitt_.load(std::memory_order_acquire); } // write position at that change; read between two generation reads
+  // Test seam (null in operation), called by the audio thread inside a change while the generation is odd: stage 0 after the odd bump,
+  // stage 1 between the stores of source and cut, stage 2 after both stores, before the even bump. Set it only while no block runs.
+  using SpekFensterHaken = void (*)(void* ctx, int stufe);
+  void setze_spek_fenster_haken(SpekFensterHaken h, void* ctx) { spek_fenster_haken_ = h; spek_fenster_ctx_ = ctx; }
+  static constexpr int SPEK_MASTER = MIX_KANAELE + 1;   // selector value 19 = master sum
+
+ private:
+  std::unique_ptr<cypherdj::dsp::SpektrumAnalysator> spek_ = std::make_unique<cypherdj::dsp::SpektrumAnalysator>(
+      cypherdj::dsp::kAbtastrate, SpektrumVorgabe());   // constructed with the mixer, never in the callback
+  static cypherdj::dsp::SpektrumEinstellung SpektrumVorgabe();   // 3 bands per octave, centres 1000 Hz x 2^(i/3), i = -16 .. 12 (29 bands)
+  std::atomic<uint32_t> spek_gen_{0};
+  std::atomic<int> spek_quelle_{0};
+  std::atomic<std::size_t> spek_schnitt_{0};
+  SpekFensterHaken spek_fenster_haken_ = nullptr;
+  void* spek_fenster_ctx_ = nullptr;
+  int spek_ist_ = 0;                     // audio thread: the selector value of the last block
+  void spek_blockanfang(int n) noexcept;                       // detects a change of spektrum/kanal (call first in verarbeite)
+  void spek_abgriff(int k, int n) noexcept;                    // channel tap: right after kanal(k, n)
+  void spek_master(int n) noexcept;                            // master tap: master_summe_l()/r() level (after master FX and metronome, before the Kleber), see mixer.cpp
 };
 
 // Crossfader-Gewicht einer Seite (xseite 0 = A, 1 = durch, 2 = B) bei Stellung x in −1..+1 (Mixxx additiv, Exponent 1).

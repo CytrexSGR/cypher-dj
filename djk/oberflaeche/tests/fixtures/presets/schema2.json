@@ -1,0 +1,12 @@
+{
+ "schema": 2,
+ "name": "From The Future",
+ "geraet_typ": "effekt",
+ "geraet": "komp",
+ "werte": { "thresh": -10 },
+ "beschreibung": { "art": "compressor", "unterart": "glue", "charakter": ["smooth", "subtle"], "genre": [], "einsatz": ["mixdown"], "energie": 2, "text": "Synthetic glue compressor for the tests." },
+ "tags": [],
+ "notiz": "",
+ "angelegt": "2026-01-01T00:00:00.000Z",
+ "geaendert": "2026-01-01T00:00:00.000Z"
+}

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Lastlauf AK26 (Paket 1.13 Warp, Slice 6 Stems, D20): EIN Lauf von ziel_lauf_boxen.py (vier Decks im Keylock und zwei Loop-Boxen an einer Prüfinstanz,
-# Null-Senke, Quantum 256 per pw-jack) ohne oder mit einem echten werkstatt.stems-Lauf daneben (demucs htdemucs, 4 Fäden, nice 19, ionice -c3, nie die
-# GPU). Die Last ist der Python-Prozess der Werkstatt, wie ihn der Server startet; er teilt Kerne, Caches und Speicherbandbreite mit dem Kern.
+# Null-Senke, Quantum 256 per pw-jack) ohne oder mit einem echten werkstatt.stems-Lauf daneben (since 2026-11-06 BS-RoFormer on the GPU, 2 threads, nice 19,
+# ionice -c3; this is also the core-timing half of M9). Die Last ist der Python-Prozess der Werkstatt, wie ihn der Server startet; er teilt Kerne, Caches und Speicherbandbreite mit dem Kern.
 # Aufruf: stems_last_lauf.sh <name> <modus> [minuten] [ausgabe-ordner]
 #   modus: ohne   Grundlinie, keine Last
-#          mit    echter werkstatt.stems-Lauf (demucs, 4 Fäden, nice 19, ionice -c3, CUDA_VISIBLE_DEVICES leer) auf QUELLE, in Schleife über das Messfenster
+#          mit    echter werkstatt.stems-Lauf (RoFormer on the GPU, 2 threads, nice 19, ionice -c3, CUDA_VISIBLE_DEVICES=0) auf QUELLE, in Schleife über das Messfenster
 # Umgebung: CYPHERDJ_INSTANZ (Prüfinstanz, nie g, h, i, nie der Betrieb), QUELLE (.f32 des Dekodier-Caches, Vorgabe der Probe-Track b3f393fc...),
 #           PY (Werkstatt-venv-Python, Vorgabe $DJK/werkstatt/.venv/bin/python), KERN (Pfad zu cypherdj-kern, Vorgabe $DJK/kern/build/cypherdj-kern),
 #           SCHLOSS_WARTE_S (Wartezeit auf das Echtzeit-Schloss, Vorgabe 7200; für Prüfungen). Das Echtzeit-Schloss nimmt das Skript selbst.
@@ -29,7 +29,7 @@ QUELLE="${QUELLE:-$(ls ~/.cache/cypherdj*/arr/audio/b3f393fcf7b9dcf7a1532c0bb77d
 [ -x "$KERN" ] || { echo "KERN nicht ausführbar: $KERN" >&2; exit 4; }
 if [ "$MODUS" = mit ]; then
   [ -x "$PY" ] || { echo "PY nicht ausführbar: $PY" >&2; exit 4; }
-  (cd "$DJK/werkstatt" && CUDA_VISIBLE_DEVICES= nice -n 19 "$PY" -c "import werkstatt.stems") >/dev/null 2>&1 \
+  (cd "$DJK/werkstatt" && CUDA_VISIBLE_DEVICES=0 nice -n 19 "$PY" -c "import werkstatt.stems") >/dev/null 2>&1 \
     || { echo "import werkstatt.stems scheitert mit PY=$PY" >&2; exit 4; }
   [ -f "$QUELLE" ] || { echo "QUELLE fehlt" >&2; exit 4; }
   # 120 s Stereo float32 bei 48 kHz = 120*48000*8 Bytes (die Schleife trennt --f1 120*48000)
@@ -64,8 +64,8 @@ if [ "$MODUS" = mit ]; then
     ENDE=$(( $(date +%s) + MIN * 60 + 150 )); i=0; FEHLER=0
     while [ "$(date +%s)" -lt "$ENDE" ] && kill -0 "$ELTERN" 2>/dev/null; do
       i=$((i + 1))
-      # OMP_NUM_THREADS=4 und keine GPU: wie stems_lauf.ts das Kind startet (Nachzug F7)
-      if CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=4 nice -n 19 ionice -c3 "$PY" -m werkstatt.stems --quelle "$QUELLE" --f0 0 \
+      # threads and the GPU as stems_lauf.ts starts the child (Nachzug F7, GPU since 2026-11-06); STEMS_THREADS overrides (default 2 since 2026-11-04)
+      if CUDA_VISIBLE_DEVICES=0 OMP_NUM_THREADS=${STEMS_THREADS:-2} nice -n 19 ionice -c3 "$PY" -m werkstatt.stems --threads ${STEMS_THREADS:-2} --quelle "$QUELLE" --f0 0 \
         --f1 $((120 * 48000)) --aus "$O/s-$i" \
         >> "$O/stems.jsonl" 2>> "$O/stems.stderr"; then FEHLER=0; else
         FEHLER=$((FEHLER + 1))

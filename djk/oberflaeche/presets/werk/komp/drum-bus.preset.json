@@ -1,0 +1,43 @@
+{
+ "schema": 1,
+ "name": "Drum Bus",
+ "geraet_typ": "effekt",
+ "geraet": "komp",
+ "werte": {
+  "thresh": -18,
+  "ratio": 4,
+  "knee": 6,
+  "attack": 30,
+  "release": 100,
+  "makeup": 3,
+  "mix": 1,
+  "extsc": false,
+  "schp": 90
+ },
+ "beschreibung": {
+  "art": "compressor",
+  "unterart": "bus",
+  "charakter": [
+   "punchy",
+   "tight"
+  ],
+  "genre": [
+   "techno",
+   "house",
+   "tech_house"
+  ],
+  "einsatz": [
+   "drop",
+   "mixdown"
+  ],
+  "energie": 4,
+  "text": "Medium ratio with a slow attack that lets transients through and holds the drum group together."
+ },
+ "tags": [
+  "drums",
+  "bus"
+ ],
+ "notiz": "Starting point from practice (Senior, Mixing Secrets; Pirkle ch. 18), not measured. Same values as djk/instrumente/komp/presets/presets.json.",
+ "angelegt": "2026-11-02T00:00:00.000Z",
+ "geaendert": "2026-11-02T00:00:00.000Z"
+}

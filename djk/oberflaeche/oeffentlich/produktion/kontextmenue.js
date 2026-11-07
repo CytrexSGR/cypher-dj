@@ -12,6 +12,8 @@ export function oeffneMenue(punkte, x, y, doc = document, fenster = window) {
   for (const p of punkte) {
     const li = doc.createElement('li'), b = doc.createElement('button');
     li.setAttribute('role', 'none');
+    // 1.12 slice 4: { gruppe: true } is a group label of the flat list (no button, not focusable)
+    if (p.gruppe) { li.className = 'p-menue-gruppe'; li.setAttribute('role', 'presentation'); li.textContent = p.text; ul.append(li); continue; }
     b.type = 'button'; b.setAttribute('role', 'menuitem'); b.textContent = p.text; b.disabled = !!p.aus; if (p.titel) b.title = p.titel;
     b.addEventListener('click', () => { schliesseMenue(); p.aktion(); });
     li.append(b); ul.append(li);

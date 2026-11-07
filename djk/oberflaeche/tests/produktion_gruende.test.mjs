@@ -67,8 +67,8 @@ test('V2 Gründe: jeder Grund des Servers hat einen englischen Text, nie „Reje
   assert.deepEqual(ohne, [], 'Gründe ohne Text');
 });
 
-test('V2 Gründe: die Wortlaute aus Spec 6.28 und 6.34 (ein Surge-Slot; beschaeftigt ohne text neutral, Fix-Runde 2 H7)', () => {
-  assert.equal(FEHLER_TEXT.slot_belegt, 'D1 has one Surge slot');
+test('V2 Gründe: die Wortlaute aus Spec 6.28 und 6.34, 1.9 U3 (two Surge slots; beschaeftigt ohne text neutral, Fix-Runde 2 H7)', () => {
+  assert.equal(FEHLER_TEXT.slot_belegt, 'Both Surge slots are in use (1, 2)');
   assert.equal(fehlerText({ status: 409, j: { fehler: 'beschaeftigt' } }), 'The server is busy: try again in a moment');
 });
 

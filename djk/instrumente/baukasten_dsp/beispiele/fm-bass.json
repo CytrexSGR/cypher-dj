@@ -1,0 +1,36 @@
+{
+  "format": "baukasten/2",
+  "name": "fm-bass",
+  "stimmen": 2,
+  "regler_namen": {"1": "Brightness", "2": "Feedback", "3": "Decay", "4": "Drive"},
+  "knoten": [
+    {"id": "note", "art": "note"},
+    {"id": "k_hell", "art": "regler", "nr": 1, "min": 0, "max": 2},
+    {"id": "k_rueck", "art": "regler", "nr": 2, "min": 0, "max": 1},
+    {"id": "k_zeit", "art": "regler", "nr": 3, "min": 0.2, "max": 5, "log": 1},
+    {"id": "k_drive", "art": "regler", "nr": 4, "min": 0, "max": 12},
+    {"id": "fm", "art": "fm", "algo": 2, "anschlag": 0.6,
+     "o1_verh": 1, "o1_pegel": 1, "o1_a": 0.001, "o1_d": 3, "o1_s": 0.5, "o1_r": 0.08,
+     "o2_verh": 1, "o2_pegel": 0.22, "o2_a": 0.001, "o2_d": 0.35, "o2_s": 0.15, "o2_r": 0.08,
+     "o3_verh": 2, "o3_pegel": 0.08, "o3_a": 0.001, "o3_d": 0.2, "o3_s": 0, "o3_r": 0.08,
+     "o4_verh": 1, "o4_fein": 3, "o4_pegel": 0.12, "o4_a": 0.001, "o4_d": 0.5, "o4_s": 0.3, "o4_r": 0.08},
+    {"id": "drive", "art": "saett"},
+    {"id": "dcblock", "art": "svf", "cutoff": 25, "reso": 0},
+    {"id": "pegel", "art": "mul", "b": 0.36},
+    {"id": "aus", "art": "ausgang"}
+  ],
+  "kanten": [
+    {"von": "note.hz", "nach": "fm.hz"},
+    {"von": "note.gate", "nach": "fm.gate"},
+    {"von": "note.trig", "nach": "fm.trig"},
+    {"von": "note.vel", "nach": "fm.vel"},
+    {"von": "k_hell.aus", "nach": "fm.index"},
+    {"von": "k_rueck.aus", "nach": "fm.rueck"},
+    {"von": "k_zeit.aus", "nach": "fm.zeit"},
+    {"von": "fm.aus", "nach": "drive.x"},
+    {"von": "k_drive.aus", "nach": "drive.antrieb"},
+    {"von": "drive.aus", "nach": "dcblock.x"},
+    {"von": "dcblock.hp", "nach": "pegel.a"},
+    {"von": "pegel.aus", "nach": "aus.x"}
+  ]
+}

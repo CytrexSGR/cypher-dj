@@ -40,3 +40,13 @@ test('pfade: Repo-Pfade zeigen in dieses Repo (server.ts liegt in HIER)', () => 
     djkMuster: path.join(P.REPO, 'djk', 'erzeuger', 'djk-muster'), djkKlang: path.join(P.REPO, 'djk', 'wirte', 'carla', 'djk-klang'),
     surgeBereiche: path.join(P.REPO, 'djk', 'wirte', 'carla', 'surge_bereiche.json'), welleSkript: path.join(P.HIER, 'welle.py') });
 });
+
+test('pfade: CYPHERDJ_KIT_ORDNER ersetzt den Kit-Ordner der Konfiguration, leer zählt als nicht gesetzt (Paket 1.9 T2.0)', () => {
+  const alt = process.env.CYPHERDJ_KIT_ORDNER;
+  const mit = (w, f) => { if (w === undefined) delete process.env.CYPHERDJ_KIT_ORDNER; else process.env.CYPHERDJ_KIT_ORDNER = w; try { return f(); } finally { if (alt === undefined) delete process.env.CYPHERDJ_KIT_ORDNER; else process.env.CYPHERDJ_KIT_ORDNER = alt; } };
+  assert.equal(mit('/tmp/kits-d', () => P.kitsOrdnerVorgabe()), '/tmp/kits-d');
+  assert.equal(mit('/tmp/kits-d', () => mitInstanz('d', () => P.kitsOrdnerVorgabe())), '/tmp/kits-d');
+  // negative control: without the variable (or empty) the configured folder, unchanged
+  assert.equal(mit(undefined, () => P.kitsOrdnerVorgabe()), path.join(H, '.config/cypherdj/kits'));
+  assert.equal(mit('', () => P.kitsOrdnerVorgabe()), path.join(H, '.config/cypherdj/kits'));
+});

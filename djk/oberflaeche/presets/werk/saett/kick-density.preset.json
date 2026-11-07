@@ -1,0 +1,38 @@
+{
+ "schema": 1,
+ "name": "Kick Density",
+ "geraet_typ": "effekt",
+ "geraet": "saett",
+ "werte": {
+  "drive": 9,
+  "out": -5,
+  "mix": 0.6
+ },
+ "beschreibung": {
+  "art": "saturation",
+  "unterart": "tube",
+  "charakter": [
+   "punchy",
+   "tight",
+   "dirty"
+  ],
+  "genre": [
+   "techno",
+   "tech_house",
+   "electro"
+  ],
+  "einsatz": [
+   "drop",
+   "mixdown"
+  ],
+  "energie": 4,
+  "text": "Audible edge on the kick that survives small speakers, blended so the sub stays clean."
+ },
+ "tags": [
+  "kick",
+  "density"
+ ],
+ "notiz": "Drive amount is practice; the blend keeps the clean low end, following the parallel argument at Snoman p.197.",
+ "angelegt": "2026-11-02T00:00:00.000Z",
+ "geaendert": "2026-11-02T00:00:00.000Z"
+}

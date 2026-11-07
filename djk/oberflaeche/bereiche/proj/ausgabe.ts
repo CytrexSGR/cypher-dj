@@ -27,7 +27,11 @@ import type { Bereich, BereichKontext } from '../../http/router.ts';
 import { json, koerper } from '../../http/transport.ts';
 import { grundText } from '../../http/gruende.ts';
 import { instanz, renderProgramm, wirtOrdnerVorgabe } from '../../pfade.ts';
-import { KENNUNG_MAX, MAX_SPUREN, SAMPLERATE, kanonisch, spurSicht, sucheSpur, type Freeze, type Projekt, type Spur } from '../../projekt/modell.ts';
+import { wirtStand } from './wirt.ts';
+import {
+  KENNUNG_MAX, alleInserts, MAX_SPUREN, SAMPLERATE, kanonisch, spurSicht, sucheSpur,
+  type Clip, type Freeze, type Projekt, type Spur } from '../../projekt/modell.ts';
+import { istModulation } from '../../projekt/huellkurve.ts';
 import type { Meta } from '../../projekt/verlauf.ts';
 import { aendereStand, StandFehler } from '../../projekt/stand.ts';
 import {
@@ -39,6 +43,7 @@ import { messeLautheit, type Lautheit } from '../../projekt/lautheit.ts';
 import {
   baueMergeProjekt, MergeFehler, mergePlan, mergeRegler, mergeWiedergabe, pruefeMergeNochGleich,
 } from '../../projekt/zusammenfuehren.ts';
+import { baueBounceProjekt, bouncePlan, bounceRegler, bounceWiedergabe, pruefeBounceNochGleich, type BounceArt } from '../../projekt/bounce.ts';
 import type { AusgabeLauf, ProjZugang } from './bereich.ts';
 import { grundCode } from './abbildung.ts';
 import { ProjFehler } from './sitzung.ts';
@@ -47,7 +52,7 @@ export type { ProjZugang };
 type ProjOffen = NonNullable<ReturnType<ProjZugang['offen']>>;
 // Was S3 vom ProjZugang der S2-Integration braucht (bereich.ts; Plan S3 „vorausgesetzte Schnittstellen“, nach S2int berichtigt)
 export const ZUGANG_METHODEN = ['offen', 'arbeitsordner', 'haken', 'uebernimm', 'schreibeWiedergabe', 'naechsteNummer', 'tempoAnMaster',
-  'sperreLaden', 'ausgabeLauf'] as const;
+  'sperreLaden', 'ausgabeLauf', 'beendeVorhoeren'] as const;
 
 export interface AusgabeOptionen {
   zugabeMs?: number;              // Frist eines Freeze über seine Dauer hinaus (Vorgabe 5000, K3-Plan: Länge plus 5 s)
@@ -63,9 +68,11 @@ export interface AusgabeOptionen {
 const STATUS: Record<string, number> = {
   argument_ungueltig: 400, export_bereich: 400, spur_unbekannt: 400, keine_wirtspur: 400, spur_leer: 400, zu_gross: 400,
   kein_projekt: 409, ki_gestoppt: 409, beschaeftigt: 409, transport_laeuft: 409, nicht_geladen: 409, kein_kernstand: 409, deck_laeuft: 409,
-  audio_fehlt: 409, veraltet: 409, wirt_fehlt: 409,
-  merge_leer: 409, merge_gruppen: 409, merge_teil_solo: 409, merge_sends: 409, merge_freeze_noetig: 409, merge_andreas_spur: 409, merge_keine_spur_frei: 409,
+  audio_fehlt: 409, veraltet: 409, wirt_fehlt: 409, wirt_fehler: 409, wirt_spiegel_fehler: 409,
+  merge_leer: 409, merge_gruppen: 409, merge_teil_solo: 409, merge_sends: 409, merge_inserts: 409, merge_freeze_noetig: 409, merge_andreas_spur: 409,
+  merge_keine_spur_frei: 409,
   freeze_fehler: 502, render_fehler: 502,
+  bounce_nur_audio: 409, bounce_ziel_art: 409, takes_voll: 409, ersetzen_loop: 409, gruppe_unbekannt: 400,   // 1.14 slice 4 (spec D12)
 };
 
 // text: englisch (Spec 6.34)
@@ -135,16 +142,9 @@ function freezeAbgelehnt(grund: string): never {
   return fehl('freeze_fehler', `the core refused the freeze (${grund || 'no reason given'})`);
 }
 
-// S3-Fix W2: gilt die Status-Datei eines Wirts (wirt.py schreibt {name, pid, bereit, fehler, sock, klang, art, fahrbar}) noch? Ja nur, wenn bereit
-// true ist, pid eine ganze Zahl > 0 ist, /proc/<pid> lebt und der Prozess wirt.py ausführt (ein Argument der Befehlszeile heißt wirt.py: so fängt es eine
-// wiederverwendete pid ab). Jeder Lese- oder Formatfehler heißt: nein.
-export function wirtLebt(datei: string): boolean {
-  try {
-    const st = JSON.parse(fs.readFileSync(datei, 'utf8')) as { bereit?: unknown; pid?: unknown } | null;
-    if (st?.bereit !== true || typeof st.pid !== 'number' || !Number.isInteger(st.pid) || st.pid <= 0) return false;
-    return fs.readFileSync(`/proc/${st.pid}/cmdline`, 'utf8').split('\0').some((a) => path.basename(a) === 'wirt.py');
-  } catch { return false; }
-}
+export { wirtLebt } from './wirt.ts';
+// the host slot of a Surge track (a track without the wirt device cannot get here: istWirt is checked before)
+const slotVon = (s: Spur): number => (s.geraet?.art === 'wirt' ? s.geraet.slot : 1);
 
 export const EXPORT_MAX_BEATS = 1024;
 
@@ -157,6 +157,26 @@ export async function sha256Datei(datei: string): Promise<string> {
 
 // Export-Wiedergabe: Wirt-Spuren ohne Freeze sind hier stumm (sonst wären sie vorher eingefroren worden) und fehlen, denn der Render lehnt jede
 // Wirt-Spur ab (K3, Rückgabe 5).
+// Slice 2 (E10), as a pure function: the export view of `p` without the lanes of every track but `s` (its own stay), or null when no other track has a
+// lane (the shared export playback is already right then). 1.12 slice 5 (D9): the modulation envelopes of other tracks' clips become relative lanes, so
+// they count as lanes here and are stripped too (gain and transpose envelopes are the clip's own sound and stay).
+const modulierend = (c: Clip): boolean => (c.huellkurven ?? []).some((h) => istModulation(h.ziel));
+export function ohneFremdeLanen(p: Projekt, s: Spur): Projekt | null {
+  if (!p.spuren.some((x) => x.id !== s.id && (x.automation?.length || x.clips.some(modulierend)))) return null;
+  const q = exportSicht(p);
+  for (const x of q.spuren) {
+    if (x.id === s.id) continue;
+    delete x.automation;
+    x.clips = x.clips.map((c) => {
+      if (!modulierend(c)) return c;
+      const rest = (c.huellkurven ?? []).filter((h) => !istModulation(h.ziel));
+      const ohne = { ...c };
+      delete ohne.huellkurven;
+      return rest.length ? { ...ohne, huellkurven: rest } : ohne;
+    });
+  }
+  return q;
+}
 export function exportSicht(p: Projekt): Projekt {
   const q = structuredClone(p);
   q.spuren = q.spuren.filter((s) => !(istWirt(s) && !s.freeze));
@@ -192,11 +212,15 @@ export function kurzeFreezeAntwort(r: { rev: number; projekt: Projekt }, spurId:
 // die Sample-Spitze des Exports liegt über der Limiter-Decke (P10), limiter_db_max = größte Absenkung des Set-Limiters während des Renders
 // (positive dB, 0 = griff nie ein).
 export type ExportAntwort = Pick<RenderAntwort, 'frames' | 'spitze_db' | 'regler_quelle'>
-  & { datei: string; abgriff: Abgriff; ueber_decke: boolean; limiter_db_max: number } & Lautheit;
+  & { datei: string; abgriff: Abgriff; ueber_decke: boolean; limiter_db_max: number; dj_schluessel?: true } & Lautheit;
+// 1.10 slice 5 (plan E7): a stage keyed by a DJ input (deck/1..4, erz/1) hears nothing in an export (no deck plays in the render): the answer says so,
+// only when it is true
+export const hatDjSchluessel = (p: Projekt): boolean => alleInserts(p).some((x) => x.insert.key?.quelle === 'deck' || x.insert.key?.quelle === 'erz');
 
 // Paket 1.18, E-b. Unter dieser Spitze (dBFS) gilt ein Render als Stille: die Lautheit ist null, nicht der Gate-Boden −70 von ffmpeg.
 export const STILLE_DB = -90;
 const STUMM_GRENZE = -120;          // INTERFACES §1.2: jeder Fader-Wert ≤ −120 dB ist stumm
+const RUHE_WARTE_MS = 3000;   // longest wait for the core's report "stopped" between two freezes of one export (1.9 U3)
 const OHNE_LAUTHEIT: Lautheit = { lufs_i: null, lra: null, true_peak_dbtp: null };
 // S3-Fix G2: ffmpeg (ebur128) meldet −70.0 LUFS, wenn kein Block das absolute Gate −70 passiert: das ist der Boden, keine Messung. Eine solche leise,
 // aber nicht stille Spur (Spitze über STILLE_DB) bekommt lufs_i null und lra null (LRA 0 wäre erfunden), den gemessenen True Peak und unter_messgrenze true.
@@ -216,6 +240,13 @@ export interface LautheitAntwort {
 export interface ZusammenfuehrAntwort {
   rev: number; projekt: Projekt; spur_id: string; quellen: string[]; datei: string; frames: number;
   lanes_verworfen: number; hinweis?: 'quellen_laenger';
+}
+
+// Package 1.14 slice 4 (spec R10): answer of POST /proj/bounce. spur_id = the track that received the clip; take_id = the lane "Before bounce" (an_ort);
+// lanes_verworfen and hinweis as the merge (neue_spur only).
+export interface BounceAntwort {
+  art: BounceArt; rev: number; projekt: Projekt; spur_id: string; clip_id: string; datei: string; frames: number; quellen: string[];
+  take_id?: string; lanes_verworfen?: number; hinweis?: 'quellen_laenger';
 }
 
 // Spuren, die im Bereich [von, bis) etwas spielen: ein Clip, der ihn berührt (MIDI-Clips mit Noten), oder ein Freeze, der ihn berührt. Eine Wirt-Spur
@@ -250,7 +281,8 @@ export function reglerEinzeln(s: Spur, p?: Projekt): Record<string, number> {
   return r;
 }
 
-const LAUF_TEXT: Record<AusgabeLauf['art'], string> = { freeze: 'a freeze', export: 'an export', lautheit: 'a loudness measurement', merge: 'a merge' };
+const LAUF_TEXT: Record<AusgabeLauf['art'], string> = { freeze: 'a freeze', export: 'an export', lautheit: 'a loudness measurement', merge: 'a merge',
+  bounce: 'a bounce' };
 
 // Ende eines Freeze aus Sicht des Wartenden: /e/freeze (status, frames), ein neuer Kern, Stille, Frist
 type FreezeEnde = { art: 'e_freeze'; status: number; frames: number } | { art: 'neustart' } | { art: 'stille' } | { art: 'frist' } | { art: 'geschlossen' };
@@ -354,13 +386,32 @@ export class Ausgabe {
     } catch (e) { throw this.nachFehler(e); } finally { this.gib(); }
   }
 
-  // Der Produktions-Wirt arr1 (djk-instrumente --arr1) schreibt /dev/shm/cypherdj[-i]/wirt-arr1.json (wirt.py: name, pid, bereit, …). Fehlt der Wirt, spielt
-  // im Kern keine Surge für Slot 1, und der Freeze wäre eine leere Datei ohne Fehlermeldung (Erhebung 2026-10-20). Darum lehnt der Freeze vorher ab.
-  // Die Datei allein genügt nicht (S3-Fix W2): wirt.py und djk-stop löschen sie nie, sie bleibt mit bereit:true und toter pid liegen (wirtLebt()).
-  private pruefeWirt(): void {
+  // Die Produktions-Wirte (djk-instrumente --arr1, --arr2) schreiben /dev/shm/cypherdj[-i]/wirt-arr<s>.json (wirt.py: name, pid, bereit, fehler, …). Fehlt der
+  // Wirt eines Slots, spielt im Kern keine Surge für diesen Slot, und der Freeze wäre eine leere Datei ohne Fehlermeldung (Erhebung 2026-10-20). Darum lehnt
+  // der Freeze vorher ab. Die Datei allein genügt nicht (S3-Fix W2): wirt.py und djk-stop löschen sie nie, sie bleibt mit bereit:true und toter pid
+  // liegen (wirtLebt()). 1.9 (E3): je Slot; lebt der Wirt, zählt kein fehler-Eintrag; ist er tot, nennt ein fataler Eintrag den Grund (wirt_fehler).
+  private pruefeWirt(slots: number[]): void {
     const ordner = (this.opt.wirtOrdner ?? (() => wirtOrdnerVorgabe()))();
-    if (!wirtLebt(path.join(ordner, 'wirt-arr1.json'))) {
-      fehl('wirt_fehlt', 'the Surge host for the production slot (arr1) is not running; start it with djk-instrumente --arr1 and repeat');
+    for (const slot of slots) {
+      const u = wirtStand(ordner, slot);
+      if (u.lebt) continue;
+      if (u.fatal !== null) {
+        fehl('wirt_fehler', `the Surge host for slot ${slot} stopped with an error (${u.fatal}); fix it and start it with djk-instrumente --arr${slot}`);
+      }
+      fehl('wirt_fehlt', `the Surge host for production slot ${slot} is not running; start it with djk-instrumente --arr${slot}`);
+    }
+  }
+
+  // 1.9 U3 (acceptance run u3-abnahme-2, W2c): after a freeze of our own, the report "stopped" (status 0, new arrangement number) follows the
+  // /e/freeze event by a moment. With two Surge tracks the export started the second freeze on the stale report "freeze running" and refused
+  // transport_laeuft after the first track was already frozen. Bounded wait for the report; a transport that really runs is still refused by
+  // the checks of the freeze itself, after at most this wait.
+  private async warteRuhe(): Promise<void> {
+    const bis = Date.now() + RUHE_WARTE_MS;
+    while (Date.now() < bis) {
+      const nr = this.zugang.offen()?.projekt.wiedergabe_rev;
+      if (this.arr !== null && this.arr.status === 0 && this.arr.nr === nr) return;
+      await new Promise((r) => setTimeout(r, 10));
     }
   }
 
@@ -374,9 +425,15 @@ export class Ausgabe {
     }
     if (this.arr === null) fehl('kein_kernstand', 'the core has not reported its arrangement state yet');
     if (this.arr.status !== 0) fehl('transport_laeuft', 'stop the transport first');
-    this.pruefeWirt();
+    this.pruefeWirt([slotVon(vorher)]);
+    // 1.9 U5 (O28): the host plays the project's Surge parameter map before the core freezes
+    const spiegel = await this.zugang.wirtSpiegel?.();
+    if (spiegel && spiegel.length > 0) {
+      fehl('wirt_spiegel_fehler', `the Surge host did not take the parameter map (${spiegel.join('; ')}); the frozen sound would differ from the project`);
+    }
     const frei = this.zugang.sperreLaden();                             // wirft 409 beschaeftigt, solange ein Öffnen oder Anlegen läuft (6.32)
     try {
+      await this.zugang.beendeVorhoeren();                             // 1.14 (R8): the freeze needs the main playback loaded (nicht_geladen)
       await this.zugang.tempoAnMaster();                                 // das eingefrorene Audio ist in Sekunden fest: Master = Projekttempo
       const r = await this.friereEin(spurId, b);
       return await this.setze(spurId, r.freeze, `Freeze ${name}`, r.sicht);
@@ -472,7 +529,17 @@ export class Ausgabe {
     return { rev: jetzt.projekt.rev, projekt: jetzt.projekt };
   }
 
-  // Prüfungen von Export und Lautheit: nur von_beat und bis_beat, Bereich 1 bis EXPORT_MAX_BEATS Beats ab Beat 0 (Vorgabe: Loop-Klammer), kein anderer
+  // Default range of export and loudness without von_beat/bis_beat: the loop bracket when it is on, otherwise the whole song from beat 0 to the end
+  // of the last clip on any track (2026-11-06; before, the bracket was used even when off, so a fresh project always exported beats 0..32).
+  songBereich(): { von: number; bis: number } {
+    const p = this.offen().projekt;
+    if (p.loop.an) return { von: p.loop.von_beat, bis: p.loop.bis_beat };
+    let bis = 0;
+    for (const s of p.spuren) for (const c of s.clips) bis = Math.max(bis, c.start_beat + c.laenge_beats);
+    return { von: 0, bis };
+  }
+
+  // Prüfungen von Export und Lautheit: nur von_beat und bis_beat, Bereich 1 bis EXPORT_MAX_BEATS Beats ab Beat 0 (default: songBereich), kein anderer
   // Lauf, kein Transport, kein Audio in Vorbereitung.
   // nurSpuren (Merge, P6): audio_fehlt zählt nur diese Spuren (Standard: alle)
   private pruefeBereich(d: Record<string, unknown>, erlaubt: readonly string[] = ['von_beat', 'bis_beat'], nurSpuren?: string[]):
@@ -483,7 +550,8 @@ export class Ausgabe {
     }
     this.pruefeSchreiben();
     const o = this.offen();
-    const von = (d.von_beat as number | undefined) ?? o.projekt.loop.von_beat, bis = (d.bis_beat as number | undefined) ?? o.projekt.loop.bis_beat;
+    const vorgabe = this.songBereich();
+    const von = (d.von_beat as number | undefined) ?? vorgabe.von, bis = (d.bis_beat as number | undefined) ?? vorgabe.bis;
     if (!(von >= 0) || !(bis - von >= 1) || bis - von > EXPORT_MAX_BEATS) {
       fehl('export_bereich', `beat ${von} to ${bis}: the export starts at beat 0 or later and is 1 to ${EXPORT_MAX_BEATS} beats long`);
     }
@@ -497,9 +565,14 @@ export class Ausgabe {
   // Spec 2.5: Wirt-Spuren vorher einfrieren, eine nach der anderen (mit Sperre wie /proj/freeze, Spec 6.23, 6.33), dann die Export-Wiedergabe schreiben
   // (nie geladen; der Aufrufer löscht die Datei). was: für die Meldung „new notes … during the <was>“.
   private async friereEinUndSchreibe(was: string): Promise<{ jetzt: ProjOffen; p: Projekt; w: { nr: number; datei: string } }> {
+    // 1.9 (E3): the hosts of every slot that must be frozen are checked before the first freeze, so a dead second host does not leave the first track frozen
+    this.pruefeWirt([...new Set(this.offen().projekt.spuren.filter(brauchtFreeze).map(slotVon))].sort());
+    let erster = true;
     for (const id of this.offen().projekt.spuren.map((s) => s.id)) {
       const s = sucheSpur(this.offen().projekt, id);
       if (!s || !brauchtFreeze(s)) continue;
+      if (!erster) await this.warteRuhe();                              // 1.9 U3: the second freeze must not start on the stale report of the first one
+      erster = false;
       await this.friereEinUndSetze(id, s.name);
     }
     const jetzt = this.offen();
@@ -543,7 +616,8 @@ export class Ausgabe {
       }
       const lautheit = await messeLautheit(ziel, this.opt.ffmpeg);
       const antwort: ExportAntwort = { datei: ziel, frames: r.frames, spitze_db: r.spitze_db, regler_quelle: r.regler_quelle, abgriff,
-        ueber_decke: r.ueber_decke ?? false, limiter_db_max: r.limiter_db_max ?? 0, ...lautheit };
+        ueber_decke: r.ueber_decke ?? false, limiter_db_max: r.limiter_db_max ?? 0,
+        ...(hatDjSchluessel(p) ? { dj_schluessel: true as const } : {}), ...lautheit };
       this.ctx.log({ typ: 'proj_export', slug: jetzt.slug, nr: w.nr, von_beat: von, bis_beat: bis, ...antwort });
       return antwort;
     } catch (e) { throw this.nachFehler(e); } finally { this.gib(); }
@@ -552,10 +626,8 @@ export class Ausgabe {
   // Slice 2 (E10): the playback for the single render of `s`: the export view without the lanes of all other tracks, the own ones stay. null if no
   // other track has a lane (the shared export playback is already right then). The caller deletes the file after the render.
   private schreibeOhneFremdeLanes(p: Projekt, s: Spur): { nr: number; datei: string } | null {
-    if (!p.spuren.some((x) => x.id !== s.id && x.automation?.length)) return null;
-    const q = exportSicht(p);
-    for (const x of q.spuren) if (x.id !== s.id) delete x.automation;
-    return this.zugang.schreibeWiedergabe(q);
+    const q = ohneFremdeLanen(p, s);
+    return q ? this.zugang.schreibeWiedergabe(q) : null;
   }
 
   // Paket 1.18, E-b (POST /proj/lautheit): Lautheit je belegter Spur und als Summe, offline, auf Anfrage. Gleicher Anfang wie der Export (Bereich, Wirt-
@@ -681,6 +753,74 @@ export class Ausgabe {
       this.gib();
     }
   }
+
+  // Package 1.14 slice 4 (POST /proj/bounce, spec R1 to R11, D13 to D15): the structure of zusammenfuehre(). Guards in the order of R4, one render
+  // without the core's restart state and without the load lock, a fresh check after it, then ONE aendereStand. an_ort ends an audition before the
+  // render and again after uebernimm (one may have started during the render), without holding sperreLaden (D15).
+  async bounce(d: Record<string, unknown>): Promise<BounceAntwort> {
+    const quelle = this.ctx.quelle();                                          // before the first await
+    this.pruefeSchreiben();                                                    // ki_gestoppt
+    const o0 = this.offen();                                                   // kein_projekt
+    this.pruefeFrei();                                                         // beschaeftigt
+    if (this.arr && this.arr.status !== 0) fehl('transport_laeuft', 'stop the transport first');
+    const z = bouncePlan(o0.projekt, d, quelle);                               // argument_ungueltig, export_bereich and the plan refusals (MergeFehler)
+    this.pruefeBereich({ von_beat: z.von, bis_beat: z.bis }, ['von_beat', 'bis_beat'], z.spurIds);   // audio_fehlt of the sources only
+    const belegt = new Set(belegteSpuren(o0.projekt, z.von, z.bis).map((s) => s.id));
+    if (!z.spurIds.some((id) => belegt.has(id))) fehl('merge_leer', 'none of the tracks plays in this range');
+    this.belege({ art: 'bounce' });
+    let ziel: string | null = null, teil: string | null = null, regler: string | null = null;
+    let wiedergabe: { nr: number; datei: string } | null = null;
+    const ordner = path.join(o0.ordner, 'bounce');
+    try {
+      if (z.art === 'an_ort') await this.zugang.beendeVorhoeren();            // D15: the main lane is what plays afterwards
+      fs.mkdirSync(ordner, { recursive: true });
+      const kennung = this.zugang.naechsteNummer();
+      ziel = path.join(ordner, `bounce-${kennung}.wav`);
+      teil = `${ziel}.${process.pid}.teil`; regler = path.join(ordner, `.regler-${process.pid}.json`);
+      wiedergabe = this.zugang.schreibeWiedergabe(bounceWiedergabe(o0.projekt, z));
+      fs.writeFileSync(regler, JSON.stringify(bounceRegler(o0.projekt, z)));
+      this.renderAbbruch = new AbortController();
+      if (this.geschlossen) this.renderAbbruch.abort();
+      const dauerMs = (z.bis - z.von) * 60_000 / o0.projekt.tempo_bpm;
+      const r = await rendere({ programm: (this.opt.render ?? (() => [renderProgramm()]))(), nr: wiedergabe.nr, von_beat: z.von, bis_beat: z.bis,
+        bpm: o0.projekt.tempo_bpm, aus: teil, arbeitsordner: this.zugang.arbeitsordner(), spurRegler: regler, ohneZustand: true,
+        instanz: (this.opt.instanz ?? instanz)(), zeitlimitMs: this.opt.zeitlimitMs ?? Math.ceil(4 * dauerMs) + 60_000,
+        abbruch: this.renderAbbruch.signal, abgriff: 'produktion' });
+      if (r.spitze_db <= STILLE_DB) fehl('merge_leer', 'the tracks render to silence in this range');
+      fs.linkSync(teil, ziel);                                                 // never replace (D14)
+      const sha256 = await sha256Datei(ziel);
+      // fresh, no await from here until aendereStand (R6)
+      const o = this.offen();
+      if (o.slug !== o0.slug) fehl('veraltet', 'the project was closed or replaced during the bounce; nothing was saved');
+      const alt = pruefeBounceNochGleich(o.projekt, z);
+      if (alt === 'veraltet') fehl('veraltet', 'the tracks changed during the bounce; nothing was saved');
+      if (alt !== null) fehl(alt, 'the project changed during the bounce; nothing was saved');
+      if (quelle === 'cypher' && this.ctx.kiGestoppt()) fehl('ki_gestoppt', 'Stop Cypher is set; the result was discarded');
+      const neu = baueBounceProjekt(o.projekt, z, { sha256, pfad: ziel });
+      const meta: Meta = { quelle, label: neu.label };
+      const w = aendereStand(o.verlauf, o.projekt, neu.projekt, meta, this.zugang.haken());
+      this.schritte.push({ rev: w.projekt.rev, label: meta.label });          // from here the WAV belongs to the project (never removed again)
+      const behalte = ziel; ziel = null;
+      await this.zugang.uebernimm(w, meta);
+      if (z.art === 'an_ort') await this.zugang.beendeVorhoeren();            // D15: an audition started during the render
+      const jetzt = this.offen();
+      this.ctx.log({ typ: 'proj_bounce', art: z.art, slug: jetzt.slug, nr: wiedergabe.nr, von_beat: z.von, bis_beat: z.bis, spuren: z.spurIds.length,
+        datei: behalte, regler_quelle: r.regler_quelle });
+      return { art: z.art, rev: jetzt.projekt.rev, projekt: jetzt.projekt, spur_id: neu.spurId, clip_id: neu.clipId, datei: behalte, frames: r.frames,
+        quellen: z.spurIds, ...(neu.takeId ? { take_id: neu.takeId } : {}),
+        ...(z.art === 'neue_spur' ? { lanes_verworfen: neu.lanesVerworfen ?? 0 } : {}),
+        ...(z.merge?.ausserhalb ? { hinweis: 'quellen_laenger' as const } : {}) };
+    } catch (e) {
+      if (e instanceof RenderFehler && !this.schritte.length) Object.assign(e, { text: `${e.text}; nothing was changed` });
+      throw this.nachFehler(e);
+    } finally {
+      this.renderAbbruch = null;
+      if (wiedergabe) fs.rmSync(wiedergabe.datei, { force: true });            // would push out the loaded playback (BEHALTE 5)
+      for (const f of [teil, regler, ziel]) if (f) fs.rmSync(f, { force: true });   // ziel only when never saved (set to null above)
+      try { fs.rmdirSync(ordner); } catch { /* not empty or gone */ }
+      this.gib();
+    }
+  }
 }
 
 async function leseKoerper(q: http.IncomingMessage): Promise<Record<string, unknown>> {
@@ -717,6 +857,12 @@ export function ausgabeBereich(ctx: BereichKontext, zugang: ProjZugang, opt: Aus
         const x = await a.zusammenfuehre(d);
         if (!kurz) return x;
         const { projekt: _projekt, ...schmal } = x;                              // Spec 6.31: schmal ohne projekt
+        return schmal;
+      }) },
+      { methode: 'POST', pfad: '/proj/bounce', schutz: 'fremdePost', handler: antworte(async (d, kurz) => {
+        const x = await a.bounce(d);
+        if (!kurz) return x;
+        const { projekt: _projekt, ...schmal } = x;                              // R1: short answer without projekt
         return schmal;
       }) },
     ],

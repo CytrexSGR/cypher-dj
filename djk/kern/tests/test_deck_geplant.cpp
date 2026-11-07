@@ -40,6 +40,13 @@
 // zuletzt: Rubber Band bindet mm_malloc.h (posix_memalign ohne noexcept), der Abfang definiert es danach
 #include "alloc_abfang.h"
 
+// Python for klick_fassung.py: ctest sets CYPHERDJ_PYTHON3 to the interpreter CMake found (a venv on a fresh machine);
+// a direct start without ctest falls back to the system python (numpy there, see requirements.txt).
+static std::string cdj_python3() {
+  const char* p = std::getenv("CYPHERDJ_PYTHON3");
+  return std::string(p && *p ? p : "/usr/bin/python3") + " ";
+}
+
 namespace {
 
 using cdj::DehnerAnker;
@@ -1223,7 +1230,7 @@ void test_kern_start_geplant() {
   namespace fs = std::filesystem;
   const std::string ab = "/dev/shm/test_deck_geplant_" + std::to_string(getpid());
   fs::create_directories(ab);
-  const std::string c = "/usr/bin/python3 " + std::string(CYPHERDJ_DJK) + "/kern/tests/deck/klick_fassung.py --ziel " + ab +
+  const std::string c = cdj_python3() + std::string(CYPHERDJ_DJK) + "/kern/tests/deck/klick_fassung.py --ziel " + ab +
                         " --material-id c1c0000000000646 --beats 96 --sinus-links 1000 > /dev/null";
   PRUEF(std::system(c.c_str()) == 0);
   {
@@ -1319,7 +1326,7 @@ void test_kern_abbruch() {
   namespace fs = std::filesystem;
   const std::string ab = "/dev/shm/test_deck_geplant_ab_" + std::to_string(getpid());
   fs::create_directories(ab);
-  const std::string c = "/usr/bin/python3 " + std::string(CYPHERDJ_DJK) + "/kern/tests/deck/klick_fassung.py --ziel " + ab +
+  const std::string c = cdj_python3() + std::string(CYPHERDJ_DJK) + "/kern/tests/deck/klick_fassung.py --ziel " + ab +
                         " --material-id c1c0000000000647 --beats 96 --sinus-links 1000 > /dev/null";
   PRUEF(std::system(c.c_str()) == 0);
   for (const double bpm : {60.0, 132.0})
@@ -1422,7 +1429,7 @@ void test_kern_hand_stopp() {
   namespace fs = std::filesystem;
   const std::string ab = "/dev/shm/test_deck_geplant_hs_" + std::to_string(getpid());
   fs::create_directories(ab);
-  const std::string c = "/usr/bin/python3 " + std::string(CYPHERDJ_DJK) + "/kern/tests/deck/klick_fassung.py --ziel " + ab +
+  const std::string c = cdj_python3() + std::string(CYPHERDJ_DJK) + "/kern/tests/deck/klick_fassung.py --ziel " + ab +
                         " --material-id c1c0000000000662 --beats 96 --sinus-links 1000 > /dev/null";
   PRUEF(std::system(c.c_str()) == 0);
   for (const double bpm : {100.0, 132.0})

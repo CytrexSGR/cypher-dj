@@ -12,6 +12,7 @@ import { neueClipIds, neuerZugLauf, findeClip } from './entwurf.js';
 import { oeffneMenue } from './kontextmenue.js';
 import { stemsPunkte, stemsAktion } from './stems.js';
 import { mergePunkte, mergeAktion } from './merge.js';
+import { bouncePunkte, bounceAktion, einfuegenBeiMaus } from './bounce.js';
 import { trefferClip, fadePunkte, istZug, zugBefehle, zugLabel, teile, dupliziere, loesche, neuerMidiClip, CLIP_TEXT, istLoop, schalteLoop, loopImWeg, kacheln } from './clips.js';
 
 export function bindeClips(ctx) {
@@ -45,15 +46,23 @@ export function bindeClips(ctx) {
   }
 
   // Slice 6 (D13): right click on an audio clip: Separate Stems / Cancel Stems; Slice 7 (D14): Merge Tracks with at least two tracks. Fehler mit dem Text des Grunds (fehlerText), nie „Rejected“.
+  // 1.14 slice 4 (spec R12): the bounce items join them; after Copy for Bounced Paste a right click into an empty spot offers Paste Bounced Audio.
+  st.bounceAblage = null;     // {spur_ids, von_beat, bis_beat} of the last copy (page state only)
+  ctx.setzeBounceAblage = (a) => { st.bounceAblage = a; };
+  // a copy belongs to its project: track ids such as s1 repeat in every project, so after a switch the old copy would paste other tracks
+  ctx.beimProjekt.push((_p, wechsel) => { if (wechsel) st.bounceAblage = null; });
+  const BOUNCE_IDS = new Set(['an_ort', 'neue_spur', 'kopieren', 'einfuegen']);
+  const aktionVon = (p) => (p.id === 'merge' ? mergeAktion(p, ctx) : BOUNCE_IDS.has(p.id) ? bounceAktion(p, ctx) : stemsAktion(p, ctx));
   ueber.addEventListener('contextmenu', (e) => {
     if (!st.projekt) return;
     const t = trefferClip(st.projekt, st.ansicht, e.offsetX, e.offsetY, ctx.zeilen());
-    if (!t) return;
-    const punkte = [...stemsPunkte(st.projekt, t.clip, st.stems), ...mergePunkte(st.projekt, st.auswahl, t.clip, ctx.laufJetzt?.())];
+    const lauf = ctx.laufJetzt?.();
+    const punkte = t ? [...stemsPunkte(st.projekt, t.clip, st.stems), ...mergePunkte(st.projekt, st.auswahl, t.clip, lauf),
+      ...bouncePunkte(st.projekt, st.auswahl, t.clip, lauf)]
+      : [einfuegenBeiMaus(st.projekt, st.bounceAblage, ctx.zeilen(), st.ansicht, e.offsetX, e.offsetY, st.raster, lauf)].filter(Boolean);
     if (!punkte.length) return;
     e.preventDefault();
-    oeffneMenue(punkte.map((p) => ({ text: p.text, aus: p.aus, titel: p.grund, aktion: () => (p.id === 'merge' ? mergeAktion(p, ctx) : stemsAktion(p, ctx)) })),
-      e.clientX, e.clientY);
+    oeffneMenue(punkte.map((p) => ({ text: p.text, aus: p.aus, titel: p.grund, aktion: () => aktionVon(p) })), e.clientX, e.clientY);
   });
 
   // Zeiger: im Einfangen auf der Fläche, damit die Griffe vor transport.js entscheiden (preventDefault: Startmarke bleibt)

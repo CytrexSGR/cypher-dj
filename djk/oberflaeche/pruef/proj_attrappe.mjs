@@ -12,11 +12,13 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 // D1 V2: Clip- und Notenbefehle rechnet die Attrappe mit dem echten S2-Kern (projekt/befehle.ts, reine Funktionen), statt sie
 // nachzubauen: so prüft die Browserprobe die Seite gegen dieselben Regeln, Gründe, HTTP-Codes und IDs wie der Server.
-import { fuehreAus, BefehlFehler } from '../projekt/befehle.ts';
+import { fuehreAus, BefehlFehler, vergleiche } from '../projekt/befehle.ts';
 import { neueId, LOOP_MIN, MAX_SPUREN, warpPruefung } from '../projekt/modell.ts';
 import { abHierStart, autoWarp, fensterTempo, handWarp } from '../projekt/warp.ts';
 import { grundCode } from '../bereiche/proj/abbildung.ts';
 import { grundText } from '../http/gruende.ts';
+import { planeAnwendung, werteVonZiel } from '../presets/anwenden.ts';   // 1.16 rest U7: the preset plan routes (see presetPlan below)
+import { PresetFehler } from '../presets/modell.ts';
 
 const FARBEN = ['#e0563b', '#e0a33e', '#d6c94a', '#58d66b', '#2fd6c3', '#3b8de0', '#8c9bff', '#9b59d0'];
 const KOERPER_MAX = 1024 * 1024;   // Spec 3.4: Körperlimit /proj/aendern 1 MiB
@@ -31,10 +33,11 @@ export function neuesProjekt(name) {
 }
 
 export async function starteProjAttrappe({ oben, port = 0, dekodierMs = 300, freezeMs = 1200, renderMs = 600 }) {
-  const z = { projekte: new Map(), stapel: new Map(), slug: null, id: 0, log: [], stroeme: new Set(), fertig: new Set(),
+  const z = { aenderungen: [], projekte: new Map(), stapel: new Map(), slug: null, id: 0, log: [], stroeme: new Set(), fertig: new Set(),
     transport: null, stoppBeat: 0, masterBpm: null,
     lauf: null, kennungen: new Map(), exporte: new Set(),   // D1 V2 Slice 3: Freeze/Export nach dem S3-Plan
     ausgabe: { freezeMs, renderMs, spitze_db: -6.02, lufs_i: -14.2, lra: 5.1, true_peak_dbtp: -1.0, regler_quelle: 'kern', ueber_decke: false, limiter_db_max: 0, loudness_fehler: null, fehler: null },
+    gespeichertePresets: [],   // 1.16 rest U7: what POST /presets/von_ziel would have saved (see presetPlan)
     katalog: new Map(),   // Paket 1.13: sha → {typ, bpm, takte, dauer_s, instrument, kategorie} (Slice 2 D10: Drum-Loops RE-PITCH, sonst COMPLEX), die Tempo-Angaben, aus denen der Server warp 'auto' auflöst (POST /attrappe/katalog)
     dekodierUhren: new Set() };   // V2 Fix-Runde 2 H9: laufende Dekodier-Timer; stoppe() beendet sie (dekodierMs 60000 hielt den Testprozess ~62 s am Leben)
   // D1 V2 Nachzug (7f, Spec 6.23, 6.31, 6.32): läuft ein Freeze-Durchlauf (z.lauf.durchlauf, ab V2 Slice 3 vom simulierten Freeze gesetzt;
@@ -44,7 +47,7 @@ export async function starteProjAttrappe({ oben, port = 0, dekodierMs = 300, fre
   // Freeze oder Export ist während des ganzen Laufs (z.lauf) gesperrt.
   const freezeLaeuft = () => !!z.lauf?.durchlauf;
   const SPERRE_WIEDERGABE = 'a freeze is running; changes to the playback wait until it is done';   // Text wie bereiche/proj/sitzung.ts
-  const nurMixer = (b) => b?.befehl === 'metronom_setzen' || b?.befehl === 'gruppenspur_aendern' || b?.befehl === 'master_aendern' || b?.befehl === 'return_aendern' || b?.befehl === 'send_setzen' || (b?.befehl === 'spur_aendern' && b.geraet === undefined);
+  const nurMixer = (b) => b?.befehl === 'metronom_setzen' || b?.befehl === 'gruppenspur_aendern' || b?.befehl === 'master_aendern' || b?.befehl === 'return_aendern' || b?.befehl === 'send_setzen' || b?.befehl === 'insert_an' || (b?.befehl === 'insert_param_setzen' && b.param !== 'sc') || (b?.befehl === 'spur_aendern' && b.geraet === undefined);   // slice 4a: knob and bypass of an insert stage are live only (befehle.ts istLeicht)
   const json = (a, code, j) => { a.writeHead(code, { 'content-type': 'application/json', 'cache-control': 'no-store' }); a.end(JSON.stringify(j)); };
   const sende = (n) => { const t = `data: ${JSON.stringify(n)}\n\n`; for (const s of z.stroeme) s.a.write(t); };
   const aktuell = () => { if (!z.slug) throw new Fehl(409, 'kein_projekt'); return z.projekte.get(z.slug); };
@@ -64,8 +67,9 @@ export async function starteProjAttrappe({ oben, port = 0, dekodierMs = 300, fre
   // D1 V2: diese Befehle (und clip_neu für MIDI) laufen über S2 fuehreAus; dessen Ablehnung kommt mit S2-Grund und Server-Code zurück
   // V2 Fix F13: tempo_setzen auch über S2, damit ein anderes Tempo Freezes verwirft wie dort (befehle.ts verwerfeFreezes)
   const S2_BEFEHLE = new Set(['auto_neu', 'auto_punkte', 'auto_loeschen', 'auto_aendern', 'clip_aendern', 'clip_teilen', 'clip_duplizieren', 'clip_loeschen', 'noten_neu', 'noten_aendern', 'noten_loeschen', 'tempo_setzen', 'variante_waehlen',
-  'gruppenspur_neu', 'gruppenspur_aendern', 'gruppenspur_loeschen', 'ziel_setzen', 'master_aendern', 'return_neu', 'return_aendern', 'return_loeschen', 'send_setzen', 'warp_setzen', 'warp_auto', 'warp_tempo', 'warp_marker', 'warp_ab_hier', 'eins_hier', 'tempo_vom_clip', 'audio_quantisieren', 'auto_neu', 'auto_punkte', 'auto_loeschen']);   // Paket 1.18 E-c: variante_waehlen rechnet S2; 1.10: Gruppen, Ziel und Master rechnet S2; 1.13: Warp rechnet S2
-  const ueberS2 = (b) => S2_BEFEHLE.has(b?.befehl) || (b?.befehl === 'clip_neu' && b.art === 'midi');
+  'gruppenspur_neu', 'gruppenspur_aendern', 'gruppenspur_loeschen', 'ziel_setzen', 'master_aendern', 'return_neu', 'return_aendern', 'return_loeschen', 'send_setzen', 'insert_setzen', 'insert_param_setzen', 'insert_an', 'insert_entfernen', 'insert_ordnung', 'rack_setzen', 'rack_makro', 'warp_setzen', 'warp_auto', 'warp_tempo', 'warp_marker', 'warp_ab_hier', 'eins_hier', 'tempo_vom_clip', 'audio_quantisieren', 'auto_neu', 'auto_punkte', 'auto_loeschen', 'take_neu', 'take_umbenennen', 'take_loeschen', 'comp_waehlen',   // 1.14: take lanes (S2 computes them); Paket 1.18 E-c: variante_waehlen rechnet S2; 1.10: Gruppen, Ziel und Master rechnet S2; 1.13: Warp rechnet S2
+  'auto_vereinfachen', 'auto_dehnen', 'auto_neigen', 'auto_form', 'huellkurve_setzen', 'huellkurve_loeschen', 'insert_werte_setzen']);   // 1.12 slices 4 and 5 (S2 computes them)
+  const ueberS2 = (b) => S2_BEFEHLE.has(b?.befehl) || (b?.befehl === 'clip_neu' && b.art === 'midi') || (b?.befehl === 'spur_aendern' && b.geraet !== undefined);   // 1.16 rest U7: a device change (preset apply) is S2's
   function mitS2(p, b) {
     try { return fuehreAus(p, b).projekt; } catch (e) { if (e instanceof BefehlFehler) throw new Fehl(grundCode(e.grund), e.grund); throw e; }
   }
@@ -138,10 +142,10 @@ export async function starteProjAttrappe({ oben, port = 0, dekodierMs = 300, fre
       if (g.name !== undefined && g.name !== 'surge') ab('argument_ungueltig');
       const belegt = new Set(p.spuren.filter((s) => s.geraet?.art === 'wirt').map((s) => s.geraet.slot));
       let slot = g.slot;
-      // D1 V2 Nachzug (7d, Spec 6.28): in D1 läuft genau ein Wirt, nur Slot 1; eine zweite Surge-Spur (auch mit slot 2) ist slot_belegt wie S2
-      if (slot === undefined) { slot = [1].find((n) => !belegt.has(n)); if (slot === undefined) ab('slot_belegt', 409); }
-      else if (!Number.isInteger(slot) || slot < 1) ab('argument_ungueltig');
-      else if (slot > 1 || belegt.has(slot)) ab('slot_belegt', 409);
+      // 1.9 U3 (L10): two hosts, slots 1 and 2; the first free slot, a taken slot or a third Surge track is slot_belegt like the real server
+      if (slot === undefined) { slot = [1, 2].find((n) => !belegt.has(n)); if (slot === undefined) ab('slot_belegt', 409); }
+      else if (!Number.isInteger(slot) || slot < 1 || slot > 2) ab('argument_ungueltig');
+      else if (belegt.has(slot)) ab('slot_belegt', 409);
       return { art: 'wirt', name: 'surge', slot };
     }
     return ab('argument_ungueltig');
@@ -275,6 +279,7 @@ export async function starteProjAttrappe({ oben, port = 0, dekodierMs = 300, fre
     }
     z.log.push({ t: Date.now(), methode: q.method, weg, koerper: d, quelle });
     if (q.method === 'GET' && weg === '/attrappe/log') return json(a, 200, z.log);
+    if (q.method === 'GET' && weg === '/attrappe/aenderungen') return json(a, 200, z.aenderungen);
     // V2 Fix F3: POST /attrappe/rohantwort {weg, code, koerper} (einmalig): die nächste Anfrage auf weg antwortet roh mit code, Körper koerper als JSON
     // oder leer (null), etwa 503 ohne Körper oder 502 nur mit text, wie ein Vermittler oder ein abgestürzter Server; {weg: null} nimmt es zurück
     if (q.method === 'POST' && weg === '/attrappe/rohantwort') { z.roh = d.weg ? { weg: d.weg, code: d.code, koerper: d.koerper ?? null } : null; return json(a, 200, { ok: true }); }
@@ -337,6 +342,7 @@ export async function starteProjAttrappe({ oben, port = 0, dekodierMs = 300, fre
       const st = stapelVon(z.slug);
       const e = bucheEin(z.slug, 'aendern', d.label, quelle, p, neu);
       e.nurMixer = mixer;   // Undo/Redo davon bleibt während eines Freeze erlaubt (Spec 6.23)
+      z.aenderungen.push({ rev: neu.rev, befehle: befehle.map((b) => b.befehl), wiedergabe: vergleiche(p, neu).betrifft_wiedergabe });   // slice 4a: would the server start a new playback? (GET /attrappe/aenderungen)
       st.getan.push(e); st.rueck.length = 0;
       const kern = z.kernAntwort; z.kernAntwort = null;
       return json(a, 200, { rev: neu.rev, projekt: neu, ...(kern ? { kern } : {}), ...(hinweise.length ? { hinweise } : {}) });
@@ -364,6 +370,12 @@ export async function starteProjAttrappe({ oben, port = 0, dekodierMs = 300, fre
     if (q.method === 'POST' && weg === '/attrappe/ausgabe') { Object.assign(z.ausgabe, d); return json(a, 200, { ok: true, ausgabe: z.ausgabe }); }
     if (q.method === 'POST' && weg === '/proj/freeze') return json(a, 200, await freeze(d, quelle));
     if (q.method === 'POST' && weg === '/proj/export') return json(a, 200, await exportiere(d, quelle));
+    // 1.14 slice 4 (probe_bounce.mjs): POST /proj/bounce is recorded (z.log above) and answered without a change, in the answer shape of spec R10
+    if (q.method === 'POST' && weg === '/proj/bounce') {
+      const p = aktuell();
+      return json(a, 200, { art: d.art, rev: p.rev, projekt: p, spur_id: d.spur_id ?? d.ziel_spur_id ?? null, clip_id: null, datei: '', frames: 0,
+        quellen: d.spur_ids ?? (d.spur_id ? [d.spur_id] : []) });
+    }
     throw new Fehl(404, 'nicht_gefunden');
   }
 
@@ -510,6 +522,34 @@ export async function starteProjAttrappe({ oben, port = 0, dekodierMs = 300, fre
 
   }, 50);
 
+  // 1.16 rest U7: POST /presets/anwenden and /presets/von_ziel read the OPEN PROJECT, and the page server behind this stand-in has none (the project lives here).
+  // So the stand-in answers these two itself with the REAL plan code (presets/anwenden.ts) on its own project; the preset files and the save come from the
+  // page server above (GET /presets/<origin>/<device>/<slug>, POST /presets), so name, rights and values are the real ones.
+  async function presetPlan(q, a, u) {
+    const d = await koerper(q);
+    z.log.push({ t: Date.now(), methode: q.method, weg: u.pathname, koerper: d, quelle: q.headers['x-djk-quelle'] === 'cypher' ? 'cypher' : 'andreas' });   // the probe counts the plan requests
+    const aktuellOderNull = z.slug ? z.projekte.get(z.slug) : null;
+    const oben_ = (pfad, opt) => fetch(new URL(pfad, oben), opt);
+    try {
+      if (u.pathname === '/presets/anwenden') {
+        const m = typeof d.id === 'string' ? /^(werk|nutzer):([a-z0-9-]+)\/([a-z0-9][a-z0-9-]{0,47})$/.exec(d.id) : null;
+        if (!m) throw new PresetFehler(400, 'preset_id_ungueltig');
+        const r = await oben_(`/presets/${m[1]}/${m[2]}/${m[3]}`);
+        const preset = await r.json();
+        if (r.status !== 200) return json(a, r.status, preset);
+        return json(a, 200, planeAnwendung({ ...preset, id: d.id }, d.ziel, aktuellOderNull));
+      }
+      // von_ziel: the REAL values-from-target code on this project; the save itself is NOT forwarded (the page server's user preset folder is the
+      // test instance's real folder: a probe must not leave files there). The answer has the shape of the real 201; z.gespeichertePresets holds what would be saved.
+      const v = werteVonZiel(d.ziel, aktuellOderNull);
+      z.gespeichertePresets.push({ name: d.name, geraet: v.geraet, graph: v.graph, werte: v.werte, beschreibung: d.beschreibung, tags: d.tags, ziel: d.ziel });
+      return json(a, 201, { herkunft: 'nutzer', geraet: v.geraet, slug: String(d.name ?? 'x').toLowerCase().replace(/[^a-z0-9]+/g, '-'), geaendert: new Date().toISOString() });
+    } catch (e) {
+      if (e instanceof PresetFehler) return json(a, e.code, { fehler: e.fehler, text: e.text });
+      throw e;
+    }
+  }
+
   function durchreichen(q, a, u) {
     if (z.weg && u.pathname === '/strom') { q.socket.destroy(); return; }
     const kopf = { ...q.headers };
@@ -550,6 +590,9 @@ export async function starteProjAttrappe({ oben, port = 0, dekodierMs = 300, fre
 
   const srv = http.createServer((q, a) => {
     const u = new URL(q.url, 'http://attrappe');
+    if (q.method === 'POST' && (u.pathname === '/presets/anwenden' || u.pathname === '/presets/von_ziel')) {
+      return presetPlan(q, a, u).catch((e) => json(a, e instanceof Fehl ? e.code : 500, { fehler: e instanceof Fehl ? e.fehler : 'intern', text: e.message }));
+    }
     if (!u.pathname.startsWith('/proj/') && !u.pathname.startsWith('/attrappe/')) return durchreichen(q, a, u);
     proj(q, a, u).catch((e) => json(a, e instanceof Fehl ? e.code : 500, { fehler: e instanceof Fehl ? e.fehler : 'intern', text: e.message }));
   });

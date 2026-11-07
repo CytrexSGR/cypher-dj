@@ -6,6 +6,10 @@
 import { SEGMENT_BPM_MAX, SEGMENT_BPM_MIN } from './warp.ts';
 import type { Punkt } from './lane.ts';
 import { pruefeBkListe, type BkKanal } from './baukasten.ts';
+import { INSERT_ARTEN } from './insert_schluessel.ts';
+import { SCHLUESSEL_DJ, SCHLUESSEL_NUR_ZEILE } from './schluessel_tabelle.ts';
+import { huellkurvenPruefung, type Huellkurve } from './huellkurve.ts';
+import { PRESET_ID } from '../presets/preset_id.ts';   // 1.16 rest: zero-import file, keeps this module free of file access
 export type { Punkt, LaneForm } from './lane.ts';
 
 export const FORMAT = 'cypherdj-projekt/2';
@@ -14,7 +18,21 @@ export const MAX_SPUREN = 32;          // gleich oeffentlich/produktion/grenzen.
 export const MAX_GRUPPEN = 8;          // 1.10 (F1: eigene Plätze neben den 32 Spuren); gleich grenzen.js
 // 1.10 slice 3: returns (own strips next to the 8 groups); equal to oeffentlich/produktion/grenzen.js, checked by tests/grenzen.test.mjs
 export const MAX_RETURNS = 4;
-export const WIRT_SLOTS = 1;            // Spec 6.28: in D1 läuft genau ein Wirt (arr1); der Kern behält die Ports für Slot 2
+// 1.10 slice 4: insert chain per strip (track, group, return, master). The pool sizes equal the generated contract (insert_schluessel.ts),
+// pinned by tests/projekt_inserts.test.mjs. `komp` (4a), `eq`, `saett` and `lim` (4b) are accepted (INSERT_ARTEN_AKTIV); the sizes of eq and
+// saett were decided by the cost measurement (T11, docs/architecture/stand/routing-1-10.md) and live in the contract only: these constants are read from it.
+export const MAX_INSERTS_PRO_STRANG = 4;
+export const MAX_INS_KOMP = INSERT_ARTEN.komp.instanzen;
+export const MAX_INS_EQ = INSERT_ARTEN.eq.instanzen;
+export const MAX_INS_SAETT = INSERT_ARTEN.saett.instanzen;
+export const MAX_INS_LIM = INSERT_ARTEN.lim.instanzen;
+export const MAX_RACK = INSERT_ARTEN.rack.instanzen;
+// 1.10 slice 4c: rack macros. Four macros per rack, at most MAX_MAKRO_ZIELE mappings per strip (= ARR_MAKRO_ZIELE of the core, checked by
+// tests/projekt_rack.test.mjs).
+export const MAX_MAKROS = 4;
+export const MAX_MAKRO_ZIELE = 16;
+export const MAKRO_NAME_MAX = 24;
+export const WIRT_SLOTS = 2;            // 1.9 (L10): two production hosts (arr1, arr2); the core has the ports for both
 export const MAX_CLIPS = 4096;          // Grenzen des Kerns (Spec 3.2)
 export const MAX_NOTEN = 65536;
 export const TEMPO_MIN = 60;
@@ -55,6 +73,8 @@ export const istRbGeraet = (g: unknown): boolean => {
 };
 export const AUTO_FORMEN = ['linear', 's', 'sprung'] as const;
 export const MAX_LANES_PRO_SPUR = 12;
+export const MAX_TAKES_PRO_SPUR = 32;      // 1.14 comping: take lanes per audio track
+export const TAKE_NAME_MAX = 64;
 export const MAX_LANE_PUNKTE = 8192;
 export const MAX_AUTO_PUNKTE = 65536;
 // gesperrt (slice 2, E4): only `true` is ever written; an unlocked lane has no key, so slice 1 projects stay byte for byte the same
@@ -112,17 +132,29 @@ export interface AudioClip {
   offset_s: number; gain_db: number; fade_ein_beats: number; fade_aus_beats: number;
   warp?: Warp | null;                                          // Paket 1.13 (nur /2): fehlt oder null = ohne Warp (das Verhalten von /1)
   entstehung?: Entstehung;                                     // S15 (nur /2): where a stream take came from; absent in every older file, never null
+  huellkurven?: Huellkurve[];                                  // 1.12 slice 5 (/2 only, D7): clip envelopes, absent when none (projekt/huellkurve.ts)
 }
 // naechste_noten_id am Clip: nur noch in Dateien des ersten S2int-Baus (Spec 6.28 Nachsatz zu 6.26); pruefeProjekt übernimmt ihn ins Projekt
 export interface MidiClip {
   id: string; art: 'midi'; name: string; start_beat: number; laenge_beats: number; loop_beats?: number | null; naechste_noten_id?: number; noten: Note[];
+  huellkurven?: Huellkurve[];                                  // 1.12 slice 5 (/2 only, D7): clip envelopes, absent when none
 }
 export type Clip = AudioClip | MidiClip;
-export interface InternGeraet { art: 'intern'; name: 'rb338'; parameter: Record<string, number> }
+// 1.14 comping: a take is a named lane of audio clips below its track; it is never played itself (the comp copies clips into the track).
+// art 'original' marks the lane that holds the clips the track had before the first take (the only value). Id t<n>, project wide.
+export interface Take { id: string; name: string; art?: 'original'; clips: AudioClip[] }
+// preset (1.16 rest, F8): the register id of the preset last applied (presets/preset_id.ts); not playback (spurSicht strips it), absent in older files
+export interface InternGeraet { art: 'intern'; name: 'rb338'; parameter: Record<string, number>; preset?: string }
 // Baukasten S20: an instrument graph of the kern's graph folder as the device; parameter holds the knobs k1..k8 that were set (absent = 0.5)
-export interface BkGeraet { art: 'intern'; name: 'bk'; graph: string; parameter: Record<string, number> }
-export interface WirtGeraet { art: 'wirt'; name: 'surge'; slot: number }
-export type Geraet = InternGeraet | BkGeraet | WirtGeraet;
+export interface BkGeraet { art: 'intern'; name: 'bk'; graph: string; parameter: Record<string, number>; preset?: string }
+// 1.9 (L25): a core kit (ADR 024) as the device of an instrument track. One-shot, no device parameter: the kit is the whole device.
+export interface KitGeraet { art: 'intern'; name: 'kit'; kit: string }
+// 1.9 U5 (O28 on Surge, spec E7): `parameter` is a SPARSE map of Surge display values (names and ranges of wirte/carla/surge_bereiche.json); the server
+// mirrors it into the host of the slot. Absent = the host keeps the sound it was loaded with; the key is never written when there is no entry.
+export interface WirtGeraet { art: 'wirt'; name: 'surge'; slot: number; parameter?: Record<string, number> }
+export const SURGE_NAME = /^[a-z][a-z0-9_]{0,47}$/;
+export const SURGE_PARAMETER_MAX = 32;
+export type Geraet = InternGeraet | BkGeraet | KitGeraet | WirtGeraet;
 // kennung: ganze Zahl (Spec 3.1 und 6.2, wie /k/arr/freeze). sha256: Inhalts-Hash der Datei, beim Einfrieren berechnet (6.2); der Übersetzer liest
 // die Datei dafür nicht neu. von_beat: Ankerpunkt der Freeze-Datei im Projekt (Ergänzung zur Spec); fehlt das Feld, gilt 0.
 export interface Freeze { datei: string; frames: number; kennung: number; sha256: string; von_beat?: number }
@@ -135,24 +167,74 @@ export interface AusgangGruppe { art: 'gruppe'; id: string }
 // 1.10 slice 3: a send is an entry of a track or group, id = the return it feeds. Absent = off; db > -200 (-200 removes the entry), -200..+6 dB like a fader.
 export interface Send { id: string; db: number }
 export interface Gruppe {
-  id: string; nr: number; name: string; farbe: string; fader_db: number; pan: number; mute: boolean; solo: boolean; gefaltet: boolean; sends?: Send[];
+  id: string; nr: number; name: string; farbe: string; fader_db: number; pan: number; mute: boolean; solo: boolean; gefaltet: boolean;
+  sends?: Send[]; inserts?: Insert[]; rack?: Rack;
 }
 // Hall of a return: all values normalised 0..1 (the mapping to units lives in the core and in the page); defaults = the stellwerk defaults
 export interface ReturnHall { an: boolean; pre: number; decay: number; groesse: number; tief: number; highcut: number; fahne: number }
 export const HALL_VORGABE: Readonly<ReturnHall> = { an: true, pre: 0.04, decay: 0.5252, groesse: 0.282, tief: 0.5658, highcut: 0.8039, fahne: 0.66667 };
 export const HALL_FELDER = ['pre', 'decay', 'groesse', 'tief', 'highcut', 'fahne'] as const;
-export interface Return { id: string; nr: number; name: string; farbe: string; fader_db: number; pan: number; mute: boolean; solo: boolean; hall: ReturnHall }
-export interface Master { fader_db: number }
+// 1.10 slice 4: one stage of the insert chain. `slot` = the pooled instance (ins/<art>/<slot>/*), unique per kind in the whole project and chosen by the
+// project (lowest free). `werte` holds every parameter of the kind except the stage switch `an` and `sc` (real units, plugin ranges; the EQ band parameters are
+// 'b1/freq' ... 'b8/platz', the band switch is 'b<m>/an'); `sc` (komp only): 0 or absent = own signal, n = input of track number n.
+// `bk` (4d) is not accepted yet.
+export type InsertSorte = 'komp' | 'eq' | 'saett' | 'lim' | 'bk';
+// 1.10 slice 5 (plan E8): the sidechain key of a `komp` stage has two writers. A track `pre` key stays the field `sc` (4a, row `ins/komp/<slot>/sc`, a
+// control).
+// Every other source is structure: `key` {quelle, nr, punkt} (playback `chain[j].key`). A stage carries at most one of the two; `key` is never {spur, pre}.
+// deck/erz keys have the point 'post' (a DJ input has no pre and post; the point is stored for one shape).
+export type SchluesselQuelle = 'spur' | 'grp' | 'ret' | 'deck' | 'erz';
+export interface InsertSchluessel { quelle: SchluesselQuelle; nr: number; punkt: 'pre' | 'post' }
+export const SCHLUESSEL_QUELLEN: readonly SchluesselQuelle[] = ['spur', 'grp', 'ret', 'deck', 'erz'];
+export interface Insert {
+  id: string; art: InsertSorte; slot: number; an: boolean; werte: Record<string, number>; sc?: number; key?: InsertSchluessel; graph?: string; preset?: string;
+}
+export const INSERT_ARTEN_AKTIV: readonly InsertSorte[] = ['komp', 'eq', 'saett', 'lim'];
+export const MAX_INS: Readonly<Record<string, number>> = { komp: MAX_INS_KOMP, eq: MAX_INS_EQ, saett: MAX_INS_SAETT, lim: MAX_INS_LIM };
+export type InsertPoolArt = 'komp' | 'eq' | 'saett' | 'lim';
+const insertParameter = (art: InsertPoolArt) => INSERT_ARTEN[art].parameter;
+/** the contract parameters of a kind that `Insert.werte` holds: all except the stage switch `an` (and the key `sc`, which has its own field) */
+export const insertWertParameter = (art: InsertPoolArt) => insertParameter(art).filter((q) => q.name !== 'an' && q.name !== 'sc');
+/** the names of `Insert.werte` of a kind */
+export const insertWertNamen = (art: InsertPoolArt): readonly string[] => insertWertParameter(art).map((q) => q.name);
+/** the names of `Insert.werte` of the compressor (4a name, kept) */
+export const INSERT_WERT_NAMEN: readonly string[] = insertWertNamen('komp');
+/** the defaults of `Insert.werte` of a kind (a fresh object each call) */
+export const insertVorgabe = (art: InsertPoolArt = 'komp'): Record<string, number> =>
+  Object.fromEntries(insertWertParameter(art).map((q) => [q.name, q.vorgabe]));
+// 1.10 slice 4c (spec D13): the rack of a strip = four macro knobs and their mapping table. `slot` = the pooled rack (rack/<slot>/m1..m4), unique in the whole
+// project and chosen by the project (lowest free). `makros[i].ziel` lists the parameters macro i+1 drives: the stage `insert` (an ID of the
+// SAME strip's chain),
+// the parameter name `param` as in `Insert.werte` (a continuous one), and the values `von` (macro at 0) and `bis` (macro at 1) in the real
+// unit of the parameter
+// (`von` may be above `bis`: an inverted knob). While a parameter is mapped its own row is ignored; the project refuses to set it (`param_gemappt`).
+// `werte` are the live macro values 0..1 (a control: it travels as rack/<slot>/m<n>, not as playback structure); `namen` are the page's labels ('' = default).
+export interface RackZiel { insert: string; param: string; von: number; bis: number }
+export interface Rack {
+  slot: number; namen: string[]; makros: { ziel: RackZiel[] }[]; werte: number[];
+}
+/** a parameter a macro can drive: continuous (not a switch or a step list) and not the stage switch */
+export const makroFaehig = (art: InsertPoolArt, name: string): boolean => {
+  const q = INSERT_ARTEN[art].parameter.find((x) => x.name === name);
+  return !!q && q.name !== 'an' && q.kurve === 'linear';
+};
+/** the index of a parameter in the parameter list of its kind (= the parameter index the core uses; the stage switch is 0) */
+export const insertParamIndex = (art: InsertPoolArt, name: string): number => INSERT_ARTEN[art].parameter.findIndex((x) => x.name === name);
+export interface Return {
+  id: string; nr: number; name: string; farbe: string; fader_db: number; pan: number; mute: boolean; solo: boolean; hall: ReturnHall;
+  pre?: true; inserts?: Insert[]; rack?: Rack;
+}
+export interface Master { fader_db: number; inserts?: Insert[]; rack?: Rack }
 export interface Spur {
   id: string; von?: Herkunft; gruppe?: string; nr: number; name: string; farbe: string; art: 'audio' | 'instrument';
-  geraet?: Geraet; freeze?: Freeze | null; aufnahme?: SpurAufnahme; ausgang?: AusgangGruppe; automation?: Lane[];
-  fader_db: number; pan: number; mute: boolean; solo: boolean; clips: Clip[]; sends?: Send[];
+  geraet?: Geraet; freeze?: Freeze | null; aufnahme?: SpurAufnahme; ausgang?: AusgangGruppe; automation?: Lane[]; takes?: Take[];
+  fader_db: number; pan: number; mute: boolean; solo: boolean; clips: Clip[]; sends?: Send[]; inserts?: Insert[]; rack?: Rack;
 }
 // naechste_id (Spec 6.26): Zähler je Art (spur, clip, gruppe); naechste_noten_id (Spec 6.28 Nachsatz zu 6.26): EIN Noten-Zähler für alle Clips.
 // Alle steigen nur und stehen in keinem Patch, Undo und Redo setzen sie nicht zurück.
 export interface Projekt {
   format: typeof FORMAT; name: string; rev: number; wiedergabe_rev: number; tempo_bpm: number; taktart: [number, number];
-  naechste_id?: { spur?: number; clip?: number; gruppe?: number; lane?: number; return?: number }; naechste_noten_id?: number;
+  naechste_id?: { spur?: number; clip?: number; gruppe?: number; lane?: number; return?: number; insert?: number; take?: number }; naechste_noten_id?: number;
   loop: { an: boolean; von_beat: number; bis_beat: number };
   metronom: { an: boolean; pegel_db: number; ziel: 'master' | 'cue' };
   spuren: Spur[];
@@ -162,6 +244,7 @@ export interface Projekt {
   baukasten?: BkKanal[];   // S17: sound snapshot (projekt/baukasten.ts), only in /2, absent when empty
 }
 
+const TAKE_ID = /^t[0-9]{1,15}$/;
 const ID = /^[A-Za-z][A-Za-z0-9_-]{0,31}$/;          // kein „/": Wiedergabe-Noten heißen <clip>/<note>
 const FARBE = /^#[0-9a-fA-F]{6}$/;
 const SHA = /^[0-9a-f]{64}$/;
@@ -173,6 +256,9 @@ export const RB_PARAMETER: readonly string[] = ['lautstaerke', 'wellenform', 'cu
 export const BK_PARAMETER: readonly string[] = ['k1', 'k2', 'k3', 'k4', 'k5', 'k6', 'k7', 'k8'];
 export const BK_GRAPH_NAME = /^[a-z0-9_-]{1,32}$/;
 export const MAX_BK_SPUREN = 8;
+// 1.9 (L25): the kit folder name rule = BK_GRAPH_NAME = kit_name_ok in the kern; at most 8 kit devices (spec E15, the kern's ARR_KIT_MAX)
+export const KIT_NAME = /^[a-z0-9_-]{1,32}$/;
+export const MAX_KIT_GERAETE = 8;
 // Normalised (0..1) defaults of the four lane parameters, the start values of auto_neu when the track has no value of its own. Inverse of
 // rb_dsp/src/parameter.rs Def::wert (:47-52, Schief: norm^(1/faktor)·(max−min)+min) for the defaults of defs() (:72, entries :74-87):
 // cutoff 800 Hz on Schief 40..5000 with faktor 2^-2, lautstaerke −12 dB on Schief 10^(−48/20)..1 with faktor schief_pegel(−48, 0)
@@ -216,6 +302,8 @@ export function neuesProjekt(name: string): Projekt {
 
 // --- IDs ------------------------------------------------------------------------------------------------------------
 const ZIFFERN = /^\d+$/;
+// ids of all clips of the project, main clips and take clips
+const alleClipIds = (p: Projekt): string[] => p.spuren.flatMap((s) => [...s.clips, ...(s.takes ?? []).flatMap((t) => t.clips)].map((c) => c.id));
 export function hoechste(ids: Iterable<string>, praefix: string): number {
   let m = 0;
   for (const id of ids) if (id.length > 1 && id[0] === praefix && ZIFFERN.test(id.slice(1))) m = Math.max(m, Number(id.slice(1)));
@@ -229,13 +317,17 @@ export function hoechste(ids: Iterable<string>, praefix: string): number {
 // Noten-Zähler auch ein alter Clip-Zähler. Die Funktionen ändern den Zähler an `p` selbst: sie gehören auf den Entwurf eines Befehls.
 // Lane-IDs a<n> (Automation Slice 1): der Zähler naechste_id.lane entsteht erst mit der ersten Lane (wie naechste_noten_id), damit Projekte ohne Lane
 // Byte für Byte gleich bleiben und ein älterer Stand sie weiter liest; setzeFehlendeZaehler fasst ihn nicht an.
-// Return-IDs r<n> (slice 3): like the lane counter, naechste_id.return arises with the first return.
-export function neueId(p: Projekt, art: 'spur' | 'clip' | 'gruppe' | 'lane' | 'return'): string {
-  const praefix = art === 'spur' ? 's' : art === 'clip' ? 'c' : art === 'lane' ? 'a' : art === 'return' ? 'r' : 'g';
+// Return-IDs r<n> (slice 3): like the lane counter, naechste_id.return arises with the first return. Insert IDs i<n> (slice 4): the same, with the first stage.
+// Take ids t<n> (1.14): like the lane counter, naechste_id.take arises with the first use. Clip ids are project wide over main AND take clips.
+export function neueId(p: Projekt, art: 'spur' | 'clip' | 'gruppe' | 'lane' | 'return' | 'insert' | 'take'): string {
+  const praefix = art === 'spur' ? 's' : art === 'clip' ? 'c' : art === 'lane' ? 'a' : art === 'return' ? 'r'
+    : art === 'insert' ? 'i' : art === 'take' ? 't' : 'g';
   const ids = art === 'spur' ? p.spuren.map((s) => s.id)
-    : art === 'clip' ? p.spuren.flatMap((s) => s.clips.map((c) => c.id))
-      : art === 'lane' ? p.spuren.flatMap((s) => (s.automation ?? []).map((l) => l.id))
-        : art === 'return' ? (p.returns ?? []).map((r) => r.id) : (p.gruppen ?? []).map((g) => g.id);
+    : art === 'clip' ? alleClipIds(p)
+      : art === 'take' ? p.spuren.flatMap((s) => (s.takes ?? []).map((t) => t.id))
+        : art === 'lane' ? p.spuren.flatMap((s) => (s.automation ?? []).map((l) => l.id))
+          : art === 'return' ? (p.returns ?? []).map((r) => r.id)
+            : art === 'insert' ? alleInserts(p).map((x) => x.insert.id) : (p.gruppen ?? []).map((g) => g.id);
   const lebend = hoechste(ids, praefix);
   const n = Math.max(p.naechste_id?.[art] ?? 1, lebend + 1);
   p.naechste_id = { ...p.naechste_id, [art]: n + 1 };
@@ -275,19 +367,100 @@ export function setzeFehlendeZaehler(p: Projekt): void {
   const z = p.naechste_id;
   p.naechste_id = {
     spur: z?.spur ?? hoechste(p.spuren.map((s) => s.id), 's') + 1,
-    clip: z?.clip ?? hoechste(p.spuren.flatMap((s) => s.clips.map((c) => c.id)), 'c') + 1,
+    clip: z?.clip ?? hoechste(alleClipIds(p), 'c') + 1,
     gruppe: z?.gruppe ?? hoechste((p.gruppen ?? []).map((g) => g.id), 'g') + 1,
     ...(z?.lane !== undefined ? { lane: z.lane } : {}),     // nur ein vorhandener Lane-Zähler bleibt, angelegt wird er hier nie
     ...(z?.return !== undefined ? { return: z.return } : {}),   // slice 3: same for the return counter
+    ...(z?.insert !== undefined ? { insert: z.insert } : {}),   // slice 4: and for the insert counter
+    ...(z?.take !== undefined ? { take: z.take } : {}),         // 1.14: same for the take counter
   };
   if (p.naechste_noten_id === undefined) p.naechste_noten_id = notenZaehler(p);
 }
 
 export function sucheSpur(p: Projekt, id: string): Spur | undefined { return p.spuren.find((s) => s.id === id); }
 export function sucheGruppe(p: Projekt, id: string): Gruppe | undefined { return (p.gruppen ?? []).find((g) => g.id === id); }
+// slice 4: every stage of the project with the strip that carries it. `strang` is the owner object, `id` its ID ('master' for the master).
+export type InsertTraeger = Spur | Gruppe | Return | Master;
+export function alleInserts(p: Projekt): { strang: InsertTraeger; strangId: string; insert: Insert }[] {
+  const aus: { strang: InsertTraeger; strangId: string; insert: Insert }[] = [];
+  const von = (st: InsertTraeger, id: string): void => { for (const insert of st.inserts ?? []) aus.push({ strang: st, strangId: id, insert }); };
+  for (const s of p.spuren) von(s, s.id);
+  for (const g of p.gruppen ?? []) von(g, g.id);
+  for (const r of p.returns ?? []) von(r, r.id);
+  if (p.master) von(p.master, 'master');
+  return aus;
+}
+/** the pooled rows ins/<art>/<slot>/* of a stage with its values (komp 10, eq 59, saett 4, lim 3): values first, the key (komp), the switch `an` LAST
+ *  (a stage never sounds half set) */
+export function insertZeilen(i: Insert): Record<string, number> {
+  const r: Record<string, number> = {};
+  const art = i.art as InsertPoolArt;
+  for (const k of insertWertNamen(art)) r[`ins/${i.art}/${i.slot}/${k}`] = i.werte[k];
+  if (art === 'komp') r[`ins/${i.art}/${i.slot}/sc`] = i.sc ?? 0;
+  r[`ins/${i.art}/${i.slot}/an`] = i.an ? 1 : 0;
+  return r;
+}
+/** every rack of the project with the strip that carries it */
+export function alleRacks(p: Projekt): { strang: InsertTraeger; strangId: string; rack: Rack }[] {
+  return alleStraenge(p).filter((x) => x.strang.rack).map((x) => ({ strang: x.strang, strangId: x.strangId, rack: x.strang.rack! }));
+}
+export function alleStraenge(p: Projekt): { strang: InsertTraeger; strangId: string }[] {
+  return [
+    ...p.spuren.map((s) => ({ strang: s as InsertTraeger, strangId: s.id })),
+    ...(p.gruppen ?? []).map((g) => ({ strang: g as InsertTraeger, strangId: g.id })),
+    ...(p.returns ?? []).map((r) => ({ strang: r as InsertTraeger, strangId: r.id })),
+    ...(p.master ? [{ strang: p.master as InsertTraeger, strangId: 'master' }] : []),
+  ];
+}
+/** the pooled rows rack/<slot>/m1..m4 of a rack with its live macro values */
+export function rackZeilen(r: Rack): Record<string, number> {
+  const z: Record<string, number> = {};
+  for (let i = 0; i < MAX_MAKROS; i++) z[`rack/${r.slot}/m${i + 1}`] = r.werte[i];
+  return z;
+}
+/** the macro (1-based) and rack that drive a parameter of a stage, or undefined */
+export function makroVon(strang: InsertTraeger, insertId: string, param: string): { nr: number; ziel: RackZiel } | undefined {
+  const rack = strang.rack;
+  if (!rack) return undefined;
+  for (let i = 0; i < rack.makros.length; i++) {
+    const ziel = rack.makros[i].ziel.find((z) => z.insert === insertId && z.param === param);
+    if (ziel) return { nr: i + 1, ziel };
+  }
+  return undefined;
+}
+/** the mapping table of a rack as the playback sees it: the stage by its position in the chain, the parameter by its index */
+export type RackSicht = { slot: number; ziele: { makro: number; stufe: number; param: number; von: number; bis: number }[] };
+export function rackSicht(strang: InsertTraeger): RackSicht | undefined {
+  const rack = strang.rack, kette = strang.inserts ?? [];
+  if (!rack) return undefined;
+  const ziele: { makro: number; stufe: number; param: number; von: number; bis: number }[] = [];
+  rack.makros.forEach((m, i) => {
+    for (const z of m.ziel) {
+      const stufe = kette.findIndex((x) => x.id === z.insert);
+      if (stufe >= 0) ziele.push({ makro: i, stufe, param: insertParamIndex(kette[stufe].art as InsertPoolArt, z.param), von: z.von, bis: z.bis });
+    }
+  });
+  return { slot: rack.slot, ziele };
+}
+/** the strip with this ID: a track, a group, a return or 'master' */
+export function sucheStrang(p: Projekt, id: string): InsertTraeger | undefined {
+  return id === 'master' ? p.master : sucheSpur(p, id) ?? sucheGruppe(p, id) ?? (p.returns ?? []).find((r) => r.id === id);
+}
 export function sucheClip(p: Projekt, id: string): { spur: Spur; clip: Clip } | undefined {
   for (const spur of p.spuren) { const clip = spur.clips.find((c) => c.id === id); if (clip) return { spur, clip }; }
   return undefined;
+}
+
+export function sucheTakeClip(p: Projekt, clipId: string): { spur: Spur; take: Take; clip: AudioClip } | null {
+  for (const spur of p.spuren) {
+    for (const take of spur.takes ?? []) { const clip = take.clips.find((c) => c.id === clipId); if (clip) return { spur, take, clip }; }
+  }
+  return null;
+}
+// 1.14: an empty takes list is never written (old files stay byte for byte). The load drops it;
+// every command that can leave an empty list must call this on its draft. Changes `p` itself.
+export function entferneLeereTakes(p: Projekt): void {
+  for (const s of p.spuren) if (s.takes !== undefined && s.takes.length === 0) delete s.takes;
 }
 
 // --- Prüfung --------------------------------------------------------------------------------------------------------
@@ -412,6 +585,11 @@ export function lanePruefung(l: unknown): { grund: string; text: string } | null
 export function normalisiereLane(l: Lane): void {
   if (ZIEL_BEREICH[l.ziel].nurSprung) for (const q of l.punkte) q.form ??= 'sprung';
 }
+// the one range rule of a lane value (used by the lane check below and by the take entry of the session): switches take 0 or 1 only
+export const wertImBereich = (ziel: Ziel, wert: unknown): boolean => {
+  const { min, max, nurSprung } = ZIEL_BEREICH[ziel];
+  return typeof wert === 'number' && Number.isFinite(wert) && wert >= min && wert <= max && (!nurSprung || wert === 0 || wert === 1);
+};
 export function punktePruefung(pk: unknown, ziel: Ziel): { grund: string; text: string } | null {
   const ab = (grund: string, text: string) => ({ grund, text });
   if (!Array.isArray(pk) || pk.length < 1) return ab('punkte_ungueltig', 'punkte: mindestens ein Punkt erwartet (use auto_loeschen)');
@@ -423,7 +601,7 @@ export function punktePruefung(pk: unknown, ziel: Ziel): { grund: string; text: 
     if (!istObjekt(x)) return ab('argument_ungueltig', `punkte[${i}]: Objekt erwartet`);
     for (const k of Object.keys(x)) if (k !== 'beat' && k !== 'wert' && k !== 'form') return ab('argument_unbekannt', `punkte[${i}].${k}`);
     if (!zahl(x.beat) || x.beat < 0 || x.beat > MAX_BEAT) return ab('argument_ungueltig', `punkte[${i}].beat: Zahl 0..${MAX_BEAT} erwartet`);
-    if (!zahl(x.wert) || x.wert < min || x.wert > max || (nurSprung && x.wert !== 0 && x.wert !== 1)) {
+    if (!zahl(x.wert) || !wertImBereich(ziel, x.wert)) {
       return ab('argument_ungueltig', `punkte[${i}].wert: ${nurSprung ? '0 or 1' : `number ${min}..${max}`} expected`);
     }
     if ('form' in x && !(AUTO_FORMEN as readonly unknown[]).includes(x.form)) {
@@ -449,11 +627,22 @@ function pruefeNote(n: unknown, wo: string): Note {
   return o as unknown as Note;
 }
 
-function pruefeGeraet(g: unknown, wo: string): Geraet {
+// 1.16 rest (F8): a preset origin is a register id
+const presetIdIn = (x: unknown, wo: string): void => {
+  if (typeof x !== 'string' || !PRESET_ID.test(x)) werfe(wo, 'preset id <werk|nutzer>:<geraet>/<slug> expected');
+};
+function pruefeGeraet(g: unknown, wo: string, neu2: boolean): Geraet {
   if (!istObjekt(g)) return werfe(wo, 'Objekt erwartet');
   if (g.art === 'intern') {
+    if (g.name === 'kit') {                                                    // 1.9 (L25): /2 only, like takes and warp
+      const k = felder(g, wo, ['art', 'name', 'kit']);
+      if (!neu2) werfe(`${wo}.name`, `kit devices exist only from ${FORMAT} on`);
+      if (typeof k.kit !== 'string' || !KIT_NAME.test(k.kit)) werfe(`${wo}.kit`, 'kit name expected ([a-z0-9_-], 1..32 characters)');
+      return k as unknown as Geraet;
+    }
     if (g.name === 'bk') {                                                     // Baukasten S20
-      const b = felder(g, wo, ['art', 'name', 'graph', 'parameter']);
+      const b = felder(g, wo, ['art', 'name', 'graph', 'parameter'], ['preset']);
+      if ('preset' in b) presetIdIn(b.preset, `${wo}.preset`);
       if (typeof b.graph !== 'string' || !BK_GRAPH_NAME.test(b.graph)) werfe(`${wo}.graph`, 'graph name expected ([a-z0-9_-], 1..32 characters)');
       if (!istObjekt(b.parameter)) werfe(`${wo}.parameter`, 'Objekt erwartet');
       for (const [k, v] of Object.entries(b.parameter as Record<string, unknown>)) {
@@ -462,8 +651,9 @@ function pruefeGeraet(g: unknown, wo: string): Geraet {
       }
       return b as unknown as Geraet;
     }
-    const o = felder(g, wo, ['art', 'name', 'parameter']);
-    if (o.name !== 'rb338') werfe(`${wo}.name`, 'rb338 or bk expected');
+    const o = felder(g, wo, ['art', 'name', 'parameter'], ['preset']);
+    if (o.name !== 'rb338') werfe(`${wo}.name`, 'rb338, bk or kit expected');
+    if ('preset' in o) presetIdIn(o.preset, `${wo}.preset`);
     if (!istObjekt(o.parameter)) werfe(`${wo}.parameter`, 'Objekt erwartet');
     for (const [k, v] of Object.entries(o.parameter as Record<string, unknown>)) {
       if (!RB_PARAMETER.includes(k)) werfe(`${wo}.parameter.${k}`, `unbekannter Parameter (erlaubt: ${RB_PARAMETER.join(', ')})`);
@@ -472,9 +662,19 @@ function pruefeGeraet(g: unknown, wo: string): Geraet {
     return o as unknown as Geraet;
   }
   if (g.art === 'wirt') {
-    const o = felder(g, wo, ['art', 'name', 'slot']);
+    const o = felder(g, wo, ['art', 'name', 'slot'], ['parameter']);
     if (o.name !== 'surge') werfe(`${wo}.name`, 'surge erwartet');
     zahlIn(o.slot, `${wo}.slot`, 1, WIRT_SLOTS, true);
+    if ('parameter' in o) {                                                    // 1.9 U5: /2 only, like takes, warp and kit devices
+      if (!neu2) werfe(`${wo}.parameter`, `unbekanntes Feld (Surge-Parameter gibt es erst ab ${FORMAT})`);
+      if (!istObjekt(o.parameter) || Array.isArray(o.parameter)) werfe(`${wo}.parameter`, 'Objekt erwartet');
+      const eintraege = Object.entries(o.parameter as Record<string, unknown>);
+      if (eintraege.length > SURGE_PARAMETER_MAX) werfe(`${wo}.parameter`, `at most ${SURGE_PARAMETER_MAX} entries`);
+      for (const [k, v] of eintraege) {
+        if (!SURGE_NAME.test(k)) werfe(`${wo}.parameter.${k}`, 'Surge parameter name expected ([a-z][a-z0-9_], 1..48 characters)');
+        if (!zahl(v)) werfe(`${wo}.parameter.${k}`, 'endliche Zahl erwartet');
+      }
+    }
     return o as unknown as Geraet;
   }
   return werfe(`${wo}.art`, 'intern oder wirt erwartet');
@@ -498,13 +698,20 @@ function pruefeLoop(o: Record<string, unknown>, wo: string): void {
   }
 }
 
-function pruefeClip(c: unknown, wo: string, spurArt: string, warpErlaubt: boolean): Clip {
+// 1.12 slice 5 (D7): clip envelopes, /2 only; spur (when known) for the RB-338 rule of geraet.* envelopes
+function pruefeHuellkurven(o: Record<string, unknown>, wo: string, warpErlaubt: boolean, spur: { art: string; geraet?: unknown } | null): void {
+  if (!('huellkurven' in o)) return;
+  if (!warpErlaubt) werfe(`${wo}.huellkurven`, `unknown field (huellkurven exist only from ${FORMAT} on)`);
+  const f = huellkurvenPruefung(o.huellkurven, o as { art: string; laenge_beats: number }, spur);
+  if (f) werfe(`${wo}.huellkurven`, f.text);
+}
+function pruefeClip(c: unknown, wo: string, spurArt: string, warpErlaubt: boolean, spur: { art: string; geraet?: unknown } | null = null): Clip {
   if (!istObjekt(c)) return werfe(wo, 'Objekt erwartet');
   if (c.art !== (spurArt === 'audio' ? 'audio' : 'midi')) werfe(`${wo}.art`, `passt nicht zur ${spurArt}-Spur`);
   const basis = ['id', 'art', 'name', 'start_beat', 'laenge_beats'];
   if (c.art === 'audio') {
     const o = felder(c, wo, [...basis, 'quelle', 'dekodiert', 'offset_s', 'gain_db', 'fade_ein_beats', 'fade_aus_beats'],
-      ['loop_beats', 'warp', 'stumm', 'entstehung']);
+      ['loop_beats', 'warp', 'stumm', 'entstehung', 'huellkurven']);
     if (typeof o.id !== 'string' || !ID.test(o.id)) werfe(`${wo}.id`, 'ID erwartet');
     text(o.name, `${wo}.name`, 80);
     zahlIn(o.start_beat, `${wo}.start_beat`, 0, MAX_BEAT);
@@ -528,9 +735,10 @@ function pruefeClip(c: unknown, wo: string, spurArt: string, warpErlaubt: boolea
       const f = entstehungPruefung(o.entstehung);
       if (f) werfe(`${wo}.entstehung`, f.text);
     }
+    pruefeHuellkurven(o, wo, warpErlaubt, spur);
     return o as unknown as Clip;
   }
-  const o = felder(c, wo, [...basis, 'noten'], ['loop_beats', 'naechste_noten_id']);
+  const o = felder(c, wo, [...basis, 'noten'], ['loop_beats', 'naechste_noten_id', 'huellkurven']);
   if ('naechste_noten_id' in o) zahlIn(o.naechste_noten_id, `${wo}.naechste_noten_id`, 1, Number.MAX_SAFE_INTEGER, true);
   if (typeof o.id !== 'string' || !ID.test(o.id)) werfe(`${wo}.id`, 'ID erwartet');
   text(o.name, `${wo}.name`, 80);
@@ -544,6 +752,7 @@ function pruefeClip(c: unknown, wo: string, spurArt: string, warpErlaubt: boolea
     if (ids.has(note.id)) werfe(`${wo}.noten[${i}].id`, `doppelt (${note.id})`);
     ids.add(note.id);
   });
+  pruefeHuellkurven(o, wo, warpErlaubt, spur);
   return o as unknown as MidiClip;
 }
 
@@ -566,8 +775,85 @@ function pruefeSends(x: unknown, wo: string, erlaubt: boolean): Send[] {
   return x as Send[];
 }
 
+// 1.10 slice 5: the structural key of a stage, closed fields. Form only: the number ranges and the DJ list; the references are checked in pruefeAlles,
+// the rules (zyklus, spaet, quelle)
+// by the commands (projekt/routing_regeln.ts).
+function pruefeSchluessel(x: unknown, wo: string, art: InsertPoolArt, hatSc: boolean): void {
+  if (art !== 'komp') werfe(wo, 'unknown field (only the compressor has a key)');
+  if (hatSc) werfe(wo, 'sc and key exclude each other (a stage has one key at most)');
+  const k = felder(x, wo, ['quelle', 'nr', 'punkt']);
+  if (!(SCHLUESSEL_QUELLEN as readonly unknown[]).includes(k.quelle)) werfe(`${wo}.quelle`, `${SCHLUESSEL_QUELLEN.join(' | ')} expected`);
+  if (k.punkt !== 'pre' && k.punkt !== 'post') werfe(`${wo}.punkt`, 'pre | post expected');
+  const quelle = k.quelle as SchluesselQuelle;
+  const max = quelle === 'spur' ? MAX_SPUREN : quelle === 'grp' ? MAX_GRUPPEN : quelle === 'ret' ? MAX_RETURNS : 0;
+  if (max > 0) zahlIn(k.nr, `${wo}.nr`, 1, max, true);
+  else {                                                  // DJ input: only what the generated rules list as 'ja', and its point is 'post'
+    zahlIn(k.nr, `${wo}.nr`, 1, 99, true);
+    const nr = k.nr as number;
+    if (!SCHLUESSEL_DJ.some((e) => e.quelle === quelle && nr >= e.von && nr <= e.bis && e.antwort === 'ja')) werfe(wo, `${quelle}/${nr} cannot be a key`);
+    if (k.punkt !== 'post') werfe(`${wo}.punkt`, 'a DJ input has the point post only');
+  }
+  if (SCHLUESSEL_NUR_ZEILE.some((z) => z.quelle === quelle && z.punkt === k.punkt)) {
+    werfe(wo, `${quelle} ${k.punkt} is the row sc, not a key (one writer per pair)`);
+  }
+}
+
+// 1.10 slice 4: the chain of a strip (only /2): a non-empty list of at most MAX_INSERTS_PRO_STRANG stages with closed fields. Uniqueness of IDs and
+// slots over the whole project is checked in pruefeAlles.
+function pruefeInserts(x: unknown, wo: string, erlaubt: boolean): Insert[] {
+  if (!erlaubt) return werfe(wo, `unbekanntes Feld (Inserts gibt es erst ab ${FORMAT})`);
+  if (!Array.isArray(x) || x.length < 1) return werfe(wo, 'nicht leere Liste erwartet (fehlt bei keiner Stufe)');
+  if (x.length > MAX_INSERTS_PRO_STRANG) werfe(wo, `höchstens ${MAX_INSERTS_PRO_STRANG} Stufen`);
+  x.forEach((ix, i) => {
+    const w = `${wo}[${i}]`;
+    const o = felder(ix, w, ['id', 'art', 'slot', 'an', 'werte'], ['sc', 'key', 'preset']);
+    if ('preset' in o) presetIdIn(o.preset, `${w}.preset`);
+    if (typeof o.id !== 'string' || !ID.test(o.id)) werfe(`${w}.id`, 'ID erwartet');
+    if (!(INSERT_ARTEN_AKTIV as readonly unknown[]).includes(o.art)) werfe(`${w}.art`, `${INSERT_ARTEN_AKTIV.join(' | ')} erwartet`);
+    zahlIn(o.slot, `${w}.slot`, 1, MAX_INS[o.art as string], true);
+    boolean(o.an, `${w}.an`);
+    const art = o.art as InsertPoolArt;
+    const ws = felder(o.werte, `${w}.werte`, [...insertWertNamen(art)]);
+    for (const q of insertWertParameter(art)) zahlIn(ws[q.name], `${w}.werte.${q.name}`, q.min, q.max, q.ganz);
+    if ('sc' in o) {
+      if (art !== 'komp') werfe(`${w}.sc`, 'unbekanntes Feld (nur der Kompressor hat einen Schlüssel)');
+      zahlIn(o.sc, `${w}.sc`, 1, MAX_SPUREN, true);   // 0 is stored as an absent key
+    }
+    if ('key' in o) pruefeSchluessel(o.key, `${w}.key`, art, 'sc' in o);
+  });
+  return x as Insert[];
+}
+
+// 1.10 slice 4c: the rack of a strip, closed fields. The references into the chain, the uniqueness of the slot and the limits are checked in pruefeAlles.
+function pruefeRack(x: unknown, wo: string): Rack {
+  const o = felder(x, wo, ['slot', 'namen', 'makros', 'werte']);
+  zahlIn(o.slot, `${wo}.slot`, 1, MAX_RACK, true);
+  if (!Array.isArray(o.namen) || o.namen.length !== MAX_MAKROS) werfe(`${wo}.namen`, `${MAX_MAKROS} Texte erwartet`);
+  o.namen.forEach((n, i) => {
+    if (typeof n !== 'string' || n.length > MAKRO_NAME_MAX) werfe(`${wo}.namen[${i}]`, `Text 0..${MAKRO_NAME_MAX} Zeichen erwartet`);
+  });
+  if (!Array.isArray(o.werte) || o.werte.length !== MAX_MAKROS) werfe(`${wo}.werte`, `${MAX_MAKROS} Zahlen erwartet`);
+  o.werte.forEach((v, i) => zahlIn(v, `${wo}.werte[${i}]`, 0, 1));
+  if (!Array.isArray(o.makros) || o.makros.length !== MAX_MAKROS) werfe(`${wo}.makros`, `${MAX_MAKROS} Makros erwartet`);
+  o.makros.forEach((m, i) => {
+    const mo = felder(m, `${wo}.makros[${i}]`, ['ziel']);
+    if (!Array.isArray(mo.ziel)) werfe(`${wo}.makros[${i}].ziel`, 'Liste erwartet');
+    mo.ziel.forEach((z, k) => {
+      const zo = felder(z, `${wo}.makros[${i}].ziel[${k}]`, ['insert', 'param', 'von', 'bis']);
+      if (typeof zo.insert !== 'string' || !ID.test(zo.insert)) werfe(`${wo}.makros[${i}].ziel[${k}].insert`, 'ID erwartet');
+      if (typeof zo.param !== 'string') werfe(`${wo}.makros[${i}].ziel[${k}].param`, 'Text erwartet');
+      if (!zahl(zo.von)) werfe(`${wo}.makros[${i}].ziel[${k}].von`, 'Zahl erwartet');
+      if (!zahl(zo.bis)) werfe(`${wo}.makros[${i}].ziel[${k}].bis`, 'Zahl erwartet');
+    });
+  });
+  return x as Rack;
+}
+
 function pruefeReturn(g: unknown, wo: string): Return {
-  const o = felder(g, wo, ['id', 'nr', 'name', 'farbe', 'fader_db', 'pan', 'mute', 'solo', 'hall']);
+  const o = felder(g, wo, ['id', 'nr', 'name', 'farbe', 'fader_db', 'pan', 'mute', 'solo', 'hall'], ['pre', 'inserts', 'rack']);
+  if ('pre' in o && o.pre !== true) werfe(`${wo}.pre`, 'true erwartet (fehlt bei post)');
+  if ('inserts' in o) pruefeInserts(o.inserts, `${wo}.inserts`, true);   // returns exist only in /2
+  if ('rack' in o) pruefeRack(o.rack, `${wo}.rack`);
   if (typeof o.id !== 'string' || !ID.test(o.id)) werfe(`${wo}.id`, 'ID erwartet');
   zahlIn(o.nr, `${wo}.nr`, 1, MAX_RETURNS, true);
   text(o.name, `${wo}.name`, 80);
@@ -580,13 +866,25 @@ function pruefeReturn(g: unknown, wo: string): Return {
   return o as unknown as Return;
 }
 
+function pruefeTake(t: unknown, wo: string, warpErlaubt: boolean): Take {
+  const o = felder(t, wo, ['id', 'name', 'clips'], ['art']);
+  if (typeof o.id !== 'string' || !TAKE_ID.test(o.id)) werfe(`${wo}.id`, 't<n> expected');
+  text(o.name, `${wo}.name`, TAKE_NAME_MAX);
+  if ('art' in o && o.art !== 'original') werfe(`${wo}.art`, "'original' expected");
+  if (!Array.isArray(o.clips)) werfe(`${wo}.clips`, 'list expected');
+  (o.clips as unknown[]).forEach((c, i) => pruefeClip(c, `${wo}.clips[${i}]`, 'audio', warpErlaubt));
+  return o as unknown as Take;
+}
+
 function pruefeSpur(s: unknown, wo: string, warpErlaubt: boolean): Spur {
   if (!istObjekt(s)) return werfe(wo, 'Objekt erwartet');
   const basis = ['id', 'nr', 'name', 'farbe', 'art', 'fader_db', 'pan', 'mute', 'solo', 'clips'];
   if (s.art !== 'audio' && s.art !== 'instrument') werfe(`${wo}.art`, 'audio oder instrument erwartet');
-  const o = s.art === 'audio' ? felder(s, wo, basis, ['von', 'gruppe', 'aufnahme', 'ausgang', 'automation', 'sends'])
-    : felder(s, wo, [...basis, 'geraet'], ['freeze', 'von', 'gruppe', 'ausgang', 'automation', 'sends']);
+  const o = s.art === 'audio' ? felder(s, wo, basis, ['von', 'gruppe', 'aufnahme', 'ausgang', 'automation', 'sends', 'inserts', 'rack', 'takes'])
+    : felder(s, wo, [...basis, 'geraet'], ['freeze', 'von', 'gruppe', 'ausgang', 'automation', 'sends', 'inserts', 'rack']);
   if ('sends' in o) pruefeSends(o.sends, `${wo}.sends`, warpErlaubt);
+  if ('inserts' in o) pruefeInserts(o.inserts, `${wo}.inserts`, warpErlaubt);
+  if ('rack' in o) { if (!warpErlaubt) werfe(`${wo}.rack`, `unbekanntes Feld (Racks gibt es erst ab ${FORMAT})`); pruefeRack(o.rack, `${wo}.rack`); }
   if ('von' in o && o.von !== 'andreas' && o.von !== 'cypher') werfe(`${wo}.von`, 'andreas oder cypher erwartet');
   // ohne Leerzeichen am Rand, wie die Befehle (Review S2)
   if ('gruppe' in o && text(o.gruppe, `${wo}.gruppe`, GRUPPE_MAX).trim() !== o.gruppe) werfe(`${wo}.gruppe`, 'ohne Leerzeichen am Rand erwartet');
@@ -631,20 +929,28 @@ function pruefeSpur(s: unknown, wo: string, warpErlaubt: boolean): Spur {
   zahlIn(o.fader_db, `${wo}.fader_db`, FADER_MIN, FADER_MAX); zahlIn(o.pan, `${wo}.pan`, -1, 1);
   boolean(o.mute, `${wo}.mute`); boolean(o.solo, `${wo}.solo`);
   if (o.art === 'instrument') {
-    const g = pruefeGeraet(o.geraet, `${wo}.geraet`);
+    const g = pruefeGeraet(o.geraet, `${wo}.geraet`, warpErlaubt);
     if (g.art === 'wirt') {
       if (!('freeze' in o)) werfe(`${wo}.freeze`, 'fehlt (null oder Objekt)');
       if (o.freeze !== null) pruefeFreeze(o.freeze, `${wo}.freeze`);
     } else if ('freeze' in o) werfe(`${wo}.freeze`, 'nur bei Wirt-Geräten');
   }
   if (!Array.isArray(o.clips)) werfe(`${wo}.clips`, 'Liste erwartet');
-  (o.clips as unknown[]).forEach((c, i) => pruefeClip(c, `${wo}.clips[${i}]`, o.art as string, warpErlaubt));
+  (o.clips as unknown[]).forEach((c, i) => pruefeClip(c, `${wo}.clips[${i}]`, o.art as string, warpErlaubt, o as { art: string; geraet?: unknown }));
+  if ('takes' in o) {               // 1.14: like warp, /2 only; an empty list is valid on load (the load drops it)
+    if (!warpErlaubt) werfe(`${wo}.takes`, `unknown field (takes exist only from ${FORMAT} on)`);
+    if (!Array.isArray(o.takes)) werfe(`${wo}.takes`, 'list expected');
+    if ((o.takes as unknown[]).length > MAX_TAKES_PRO_SPUR) werfe(`${wo}.takes`, `at most ${MAX_TAKES_PRO_SPUR} takes per track`);
+    (o.takes as unknown[]).forEach((t, i) => pruefeTake(t, `${wo}.takes[${i}]`, warpErlaubt));
+  }
   return o as unknown as Spur;
 }
 
 function pruefeGruppe(g: unknown, wo: string): Gruppe {
-  const o = felder(g, wo, ['id', 'nr', 'name', 'farbe', 'fader_db', 'pan', 'mute', 'solo', 'gefaltet'], ['sends']);
+  const o = felder(g, wo, ['id', 'nr', 'name', 'farbe', 'fader_db', 'pan', 'mute', 'solo', 'gefaltet'], ['sends', 'inserts', 'rack']);
   if ('sends' in o) pruefeSends(o.sends, `${wo}.sends`, true);
+  if ('inserts' in o) pruefeInserts(o.inserts, `${wo}.inserts`, true);
+  if ('rack' in o) pruefeRack(o.rack, `${wo}.rack`);
   if (typeof o.id !== 'string' || !ID.test(o.id)) werfe(`${wo}.id`, 'ID erwartet');
   zahlIn(o.nr, `${wo}.nr`, 1, MAX_GRUPPEN, true);
   text(o.name, `${wo}.name`, 80);
@@ -674,6 +980,7 @@ export function pruefeProjekt(x: unknown): { projekt: Projekt } | { fehler: stri
   for (const s of p.spuren) for (const l of s.automation ?? []) normalisiereLane(l);   // slice 2 (E2): mute/solo points without form are sprung
   for (const s of p.spuren) s.von = herkunft(s);                                     // Spec 6.22: fehlt von (älteres Projekt), gilt andreas
   uebernimmNotenZaehler(p);                                                          // Spec 6.28: alte Clip-Zähler ins Projekt
+  entferneLeereTakes(p);                                                             // 1.14: an empty takes list is not written
   setzeFehlendeZaehler(p);                                                           // Spec 6.35: fehlende Zähler schon beim Öffnen
   return { projekt: p };
 }
@@ -689,8 +996,10 @@ function pruefeAlles(x: unknown): void {
   const o = felder(x, 'projekt', pflicht, ['naechste_id', 'naechste_noten_id', ...(neu2 ? ['returns', 'baukasten'] : [])]);
   if ('naechste_noten_id' in o) zahlIn(o.naechste_noten_id, 'naechste_noten_id', 1, Number.MAX_SAFE_INTEGER, true);
   if ('naechste_id' in o) {
-    const z = felder(o.naechste_id, 'naechste_id', [], ['spur', 'clip', 'gruppe', 'lane', 'return']);
-    for (const k of ['spur', 'clip', 'gruppe', 'lane', 'return']) if (k in z) zahlIn(z[k], `naechste_id.${k}`, 1, Number.MAX_SAFE_INTEGER, true);
+    const z = felder(o.naechste_id, 'naechste_id', [], ['spur', 'clip', 'gruppe', 'lane', 'return', 'insert', 'take']);
+    for (const k of ['spur', 'clip', 'gruppe', 'lane', 'return', 'insert', 'take']) {
+      if (k in z) zahlIn(z[k], `naechste_id.${k}`, 1, Number.MAX_SAFE_INTEGER, true);
+    }
   }
   text(o.name, 'name', 80);
   zahlIn(o.rev, 'rev', 0, Number.MAX_SAFE_INTEGER, true); zahlIn(o.wiedergabe_rev, 'wiedergabe_rev', 0, Number.MAX_SAFE_INTEGER, true);
@@ -705,8 +1014,9 @@ function pruefeAlles(x: unknown): void {
   if (!Array.isArray(o.spuren)) werfe('spuren', 'Liste erwartet');
   if ((o.spuren as unknown[]).length > MAX_SPUREN) werfe('spuren', `höchstens ${MAX_SPUREN}`);
   const refs: [number, string][] = [];
+  const takeIds = new Set<string>();
   const spurIds = new Set<string>(), nrs = new Set<number>(), clipIds = new Set<string>(), slots = new Set<number>();
-  let clips = 0, noten = 0, autoPunkte = 0, bkSpuren = 0;
+  let clips = 0, noten = 0, autoPunkte = 0, bkSpuren = 0, kitGeraete = 0;
   const laneIds = new Set<string>();
   (o.spuren as unknown[]).forEach((sx, i) => {
     const s = pruefeSpur(sx, `spuren[${i}]`, neu2);   // Paket 1.13: warp nur in /2
@@ -720,10 +1030,19 @@ function pruefeAlles(x: unknown): void {
       laneIds.add(l.id); autoPunkte += l.punkte.length;
     });
     if (s.geraet?.art === 'intern' && s.geraet.name === 'bk' && ++bkSpuren > MAX_BK_SPUREN) werfe('spuren', `at most ${MAX_BK_SPUREN} Baukasten tracks (bk)`);
+    if (s.geraet?.art === 'intern' && s.geraet.name === 'kit' && ++kitGeraete > MAX_KIT_GERAETE) werfe('spuren', `at most ${MAX_KIT_GERAETE} kit devices`);
     if (s.geraet?.art === 'wirt') { if (slots.has(s.geraet.slot)) werfe(`spuren[${i}].geraet.slot`, `doppelt (${s.geraet.slot})`); slots.add(s.geraet.slot); }
     s.clips.forEach((c, k) => {
       if (clipIds.has(c.id)) werfe(`spuren[${i}].clips[${k}].id`, `doppelt (${c.id})`);
       clipIds.add(c.id); clips++; if (c.art === 'midi') noten += c.noten.length;
+    });
+    (s.takes ?? []).forEach((t, k) => {                      // 1.14: take ids and take clip ids are project wide, take clips count against MAX_CLIPS
+      if (takeIds.has(t.id)) werfe(`spuren[${i}].takes[${k}].id`, `duplicate (${t.id})`);
+      takeIds.add(t.id);
+      t.clips.forEach((c, m) => {
+        if (clipIds.has(c.id)) werfe(`spuren[${i}].takes[${k}].clips[${m}].id`, `duplicate (${c.id})`);
+        clipIds.add(c.id); clips++;
+      });
     });
   });
   const gruppenIds = new Set<string>(), gruppenNrs = new Set<number>();
@@ -736,8 +1055,10 @@ function pruefeAlles(x: unknown): void {
       if (gruppenNrs.has(g.nr)) werfe(`gruppen[${i}].nr`, `doppelt (${g.nr})`);
       gruppenIds.add(g.id); gruppenNrs.add(g.nr);
     });
-    const ms = felder(o.master, 'master', ['fader_db']);
+    const ms = felder(o.master, 'master', ['fader_db'], ['inserts', 'rack']);
     zahlIn(ms.fader_db, 'master.fader_db', FADER_MIN, FADER_MAX);
+    if ('inserts' in ms) pruefeInserts(ms.inserts, 'master.inserts', true);
+    if ('rack' in ms) pruefeRack(ms.rack, 'master.rack');
   }
   for (const [i, id] of refs) if (!gruppenIds.has(id)) werfe(`spuren[${i}].ausgang.id`, `unbekannte Gruppe ${id}`);
   // 1.10 slice 3: returns and the references of the sends
@@ -758,6 +1079,48 @@ function pruefeAlles(x: unknown): void {
   }));
   sendRefs(o.spuren as { sends?: Send[] }[], 'spuren');
   if (neu2) sendRefs(o.gruppen as { sends?: Send[] }[], 'gruppen');
+  // slice 4: stage IDs and pooled slots are unique over the whole project
+  const insertIds = new Set<string>(), insertSlots = new Set<string>();
+  for (const { strangId, insert } of alleInserts(o as unknown as Projekt)) {
+    if (insertIds.has(insert.id)) werfe(`${strangId}.inserts`, `ID doppelt (${insert.id})`);
+    const slot = `${insert.art}/${insert.slot}`;
+    if (insertSlots.has(slot)) werfe(`${strangId}.inserts`, `Slot doppelt (${slot})`);
+    insertIds.add(insert.id); insertSlots.add(slot);
+    // the key names an existing track, like the command insert_setzen demands (a dangling key would bind silently to a later spur_neu)
+    if (insert.sc !== undefined && insert.sc > 0 && !nrs.has(insert.sc)) werfe(`${strangId}.inserts`, `sc: Spur ${insert.sc} existiert nicht`);
+    // slice 5: a structural key names an existing strip, like sc (a dangling key would bind silently to a later spur_neu)
+    const kq = insert.key;
+    if (kq && ((kq.quelle === 'spur' && !nrs.has(kq.nr)) || (kq.quelle === 'grp' && !gruppenNrs.has(kq.nr))
+      || (kq.quelle === 'ret' && !returnNrs.has(kq.nr)))) {
+      werfe(`${strangId}.inserts`, `key: ${kq.quelle} ${kq.nr} does not exist`);
+    }
+  }
+  // slice 4c: racks. The slot is unique over the project; a rack sits on a strip with a chain; every target is a stage of that chain and a
+  // continuous parameter in
+  // its range; a parameter has one macro at most; at most MAX_MAKRO_ZIELE targets per rack
+  const rackSlots = new Set<number>();
+  for (const { strang, strangId, rack } of alleRacks(o as unknown as Projekt)) {
+    if (rackSlots.has(rack.slot)) werfe(`${strangId}.rack`, `Slot doppelt (${rack.slot})`);
+    rackSlots.add(rack.slot);
+    if (!strang.inserts?.length) werfe(`${strangId}.rack`, 'ein Rack braucht eine Kette (rack_ohne_kette)');
+    const ziele = rack.makros.flatMap((m) => m.ziel);
+    if (ziele.length === 0) werfe(`${strangId}.rack`, 'kein Ziel: ein Rack ohne Zuordnung gibt es nicht (rack_leer)');
+    if (ziele.length > MAX_MAKRO_ZIELE) werfe(`${strangId}.rack`, `höchstens ${MAX_MAKRO_ZIELE} Ziele (makro_voll)`);
+    const gesehen = new Set<string>();
+    for (const z of ziele) {
+      const st = strang.inserts.find((x) => x.id === z.insert);
+      if (!st) werfe(`${strangId}.rack`, `Ziel ${z.insert}: keine Stufe dieser Kette`);
+      const art = st!.art as InsertPoolArt;
+      const q = INSERT_ARTEN[art].parameter.find((x) => x.name === z.param);
+      if (!q || !makroFaehig(art, z.param)) werfe(`${strangId}.rack`, `Ziel ${z.insert}.${z.param}: kein stetiger Parameter`);
+      if (z.von < q!.min || z.von > q!.max || z.bis < q!.min || z.bis > q!.max) {
+        werfe(`${strangId}.rack`, `Ziel ${z.insert}.${z.param}: von/bis ausserhalb ${q!.min}..${q!.max}`);
+      }
+      const key = `${z.insert}/${z.param}`;
+      if (gesehen.has(key)) werfe(`${strangId}.rack`, `Ziel ${key} doppelt (ziel_doppelt)`);
+      gesehen.add(key);
+    }
+  }
   if (clips > MAX_CLIPS) werfe('spuren', `höchstens ${MAX_CLIPS} Clips`);
   if (noten > MAX_NOTEN) werfe('noten', `höchstens ${MAX_NOTEN} Noten`);
   if (autoPunkte > MAX_AUTO_PUNKTE) werfe('automation', `höchstens ${MAX_AUTO_PUNKTE} Punkte im Projekt`);
@@ -767,25 +1130,48 @@ function pruefeAlles(x: unknown): void {
 // Alles, was den Klang des Kerns bestimmt, und nichts sonst. Zwei Stände mit gleicher Sicht brauchen keine neue Wiedergabe
 // (Mixer, Namen, Farben, Tempo, Loop und Metronom laufen über eigene Wege); `betrifft_wiedergabe` der Befehle und das Verwerfen
 // eines Freeze beruhen darauf.
+export const kettenSicht = (liste: readonly Insert[]): { art: InsertSorte; slot: number; key?: InsertSchluessel }[] =>
+  // slice 5: a structural key is playback structure
+  liste.map((i) => ({ art: i.art, slot: i.slot, ...(i.key ? { key: { quelle: i.key.quelle, nr: i.key.nr, punkt: i.key.punkt } } : {}) }));
+// 1.16 rest T2.5: the preset origin of a device is not playback (no new playback, no dropped freeze when only it changes)
+const ohnePreset = (g: Geraet | undefined): Geraet | undefined => {
+  if (!g || !('preset' in g)) return g;
+  const { preset: _p, ...rest } = g;
+  return rest as Geraet;
+};
 export function spurSicht(s: Spur, mitFreeze = true): unknown {
   return {
-    nr: s.nr, art: s.art, geraet: s.geraet ?? null, ...(mitFreeze ? { freeze: s.freeze ?? null } : {}),
+    nr: s.nr, art: s.art, geraet: ohnePreset(s.geraet) ?? null, ...(mitFreeze ? { freeze: s.freeze ?? null } : {}),
     // 1.10: das Ziel gehört zur Wiedergabe, nicht zum Freeze (ein Ziel-Wechsel verwirft keinen Freeze)
     ...(mitFreeze && s.ausgang ? { ausgang: s.ausgang.id } : {}),
+    // slice 4: the chain is playback structure (art and slot: `an`, the values and the row key `sc` are controls; slice 5: a structural `key` is part of it),
+    // not part of a freeze
+    // (D12: the freeze tap is before the chain)
+    ...(mitFreeze && s.inserts?.length ? { inserts: kettenSicht(s.inserts) } : {}),
+    ...(mitFreeze && s.rack ? { rack: rackSicht(s) } : {}),   // slice 4c: the mapping table is playback structure (the macro values are controls)
     // Automation Slice 1: die Lane ändert die Wiedergabe, aber keinen Freeze (Spec 1.12); fehlt sie, bleibt die Sicht bit-gleich
     ...(mitFreeze && s.automation?.length
       ? { automation: s.automation.map((l) => ({ ziel: l.ziel, punkte: l.punkte.map((q) => [q.beat, q.wert, q.form ?? 'linear']) })) } : {}),
+    // 1.12 slice 5 (D14): gain and modulation envelopes change the playback, not a freeze; transpose envelopes sit in the MIDI clip entry below (they
+    // change the host notes, so they also drop a freeze). Absent envelopes add no key: the view stays byte for byte the same
+    ...(mitFreeze && s.clips.some((c) => (c.huellkurven ?? []).some((h) => h.ziel !== 'transpose'))
+      ? { huellkurven: s.clips.flatMap((c) => (c.huellkurven ?? []).filter((h) => h.ziel !== 'transpose').map((h) => ({ clip: c.id, ...h }))) } : {}),
     clips: s.clips.map((c) => (c.art === 'audio'
       ? { id: c.id, art: c.art, sha256: c.quelle.sha256, dekodiert: c.dekodiert, start_beat: c.start_beat, laenge_beats: c.laenge_beats,
         loop_beats: c.loop_beats ?? null, offset_s: c.offset_s, gain_db: c.gain_db, fade_ein_beats: c.fade_ein_beats, fade_aus_beats: c.fade_aus_beats,
         warp: c.warp?.an ? c.warp : null, ...(c.stumm ? { stumm: true } : {}) }   // Paket 1.13: ein Warp an ändert den Klang, ein Warp aus nicht
-      : { id: c.id, art: c.art, start_beat: c.start_beat, laenge_beats: c.laenge_beats, loop_beats: c.loop_beats ?? null, noten: c.noten })),
+      : { id: c.id, art: c.art, start_beat: c.start_beat, laenge_beats: c.laenge_beats, loop_beats: c.loop_beats ?? null, noten: c.noten,
+        ...(c.huellkurven?.some((h) => h.ziel === 'transpose') ? { transpose: c.huellkurven.find((h) => h.ziel === 'transpose') } : {}) })),
   };
 }
 export const wiedergabeSicht = (p: Projekt): unknown => ({
   spuren: [...p.spuren].sort((a, b) => a.nr - b.nr).map((s) => spurSicht(s)),
   // 1.10: die Topologie nur, wenn es welche gibt (neutral: wie vorher)
-  ...((p.gruppen ?? []).length ? { gruppen: [...p.gruppen].sort((a, b) => a.nr - b.nr).map((g) => ({ id: g.id, nr: g.nr })) } : {}),
+  ...((p.gruppen ?? []).length ? { gruppen: [...p.gruppen].sort((a, b) => a.nr - b.nr)
+    .map((g) => ({ id: g.id, nr: g.nr, ...(g.inserts?.length ? { inserts: kettenSicht(g.inserts) } : {}), ...(g.rack ? { rack: rackSicht(g) } : {}) })) } : {}),
   // 1.10 slice 3: the return topology (id, nr) only when there are returns; sends and hall values are controls, not part of the view
-  ...((p.returns ?? []).length ? { returns: [...(p.returns ?? [])].sort((a, b) => a.nr - b.nr).map((r) => ({ id: r.id, nr: r.nr })) } : {}),
+  ...((p.returns ?? []).length ? { returns: [...(p.returns ?? [])].sort((a, b) => a.nr - b.nr).map((r) => ({ id: r.id, nr: r.nr,
+    ...(r.pre ? { pre: true } : {}), ...(r.inserts?.length ? { inserts: kettenSicht(r.inserts) } : {}), ...(r.rack ? { rack: rackSicht(r) } : {}) })) } : {}),
+  // slice 4: only with a chain on the master
+  ...(p.master?.inserts?.length ? { master: { inserts: kettenSicht(p.master.inserts), ...(p.master.rack ? { rack: rackSicht(p.master) } : {}) } } : {}),
 });

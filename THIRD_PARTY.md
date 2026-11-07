@@ -16,6 +16,7 @@ These files are copied verbatim into `djk/third_party/`. Each one is pinned by s
 | Bungee | git 8cb6977 | MPL-2.0 | `djk/third_party/bungee/` (keylock and warp engine, built by default; `-DCYPHERDJ_BUNGEE=OFF` builds without it) |
 | Eigen (Core only, via Bungee) | git c29c800 | MPL-2.0 | `djk/third_party/bungee/submodules/eigen/` |
 | PFFFT (via Bungee) | git 02fe771 | BSD-style (FFTPACK) | `djk/third_party/bungee/submodules/pffft/` |
+| bs-roformer-infer (model code only) | 0.1.5 | MIT | `djk/third_party/bs_roformer/` (the BS-RoFormer network for stem separation, copied unchanged from the wheel) |
 
 Generated with Faust 2.70.3 and included as C++ in `djk/kern/include/cypherdj/gen/`: the reverb
 (`zita_rev1_stereo` from Faust's `reverbs.lib`, Julius O. Smith III, STK-4.3 license, MIT-style).
@@ -43,18 +44,20 @@ Sources in `djk/kern/gen/*.dsp`, rebuild with `djk/kern/gen/erzeuge.sh`.
 | Surge XT (LV2) | GPL-3.0-or-later | synthesizer |
 | PipeWire | MIT | audio server |
 
-## Stem separation (PRODUCTION, optional)
+## Stem separation (PRODUCTION, optional, GPU only)
 
-| Component | Code license | Note |
+| Component | License | Note |
 |---|---|---|
-| Demucs 4.0.1 (htdemucs) | MIT | splits an audio clip into drums, bass, other and vocals, on the GPU when one is free, otherwise on the CPU. The pretrained weights (84 MB) are not in this repository: `python -m werkstatt.gewichte_stems` fetches them from the Demucs release and checks their sha256. Check their terms before commercial use |
-| PyTorch | BSD-3-Clause | runtime for Demucs |
+| BS-RoFormer-SW weights (`BS-Rofo-SW-Fixed.ckpt`) | **not stated** | splits an audio clip into drums, bass, other, vocals, guitar and piano. The weights (about 700 MB) are not in this repository: `python -m werkstatt.gewichte_stems` fetches them from the Hugging Face repository `enerjazzer/BS-ROFO-SW-Fixed` and checks their sha256. That repository does not state a license for them. Check their terms before any commercial use |
+| rotary-embedding-torch 0.9.1, einops 0.8.2, beartype 0.23.1 | MIT | runtime packages of the model, installed into the workshop's virtual environment |
+| PyTorch, torchaudio | BSD-3-Clause | runtime for the model |
 
 ## Optional analysis tools (not required to play)
 
 | Component | Code license | Note |
 |---|---|---|
 | all-in-one (allin1) | MIT | structure analysis experiment. Pulls in madmom, whose bundled model files are licensed CC BY-NC-SA 4.0 (non-commercial) |
+| Demucs 4.0.1 | MIT | no longer used for stems; only a test load profile (`djk/pruefstand/last/demucs_last.py`) uses it as a generic CPU load |
 
 ## Not included, on purpose
 

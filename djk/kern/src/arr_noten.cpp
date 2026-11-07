@@ -42,6 +42,7 @@ ArrSenke* Arrangement::senke_fuer(const ArrSnapshot* s, int spur) const {
   if (!s) return nullptr;
   const ArrSpur& sp = s->spur[spur];
   if (sp.art == ArrArt::intern) return senke_intern_;
+  if (sp.art == ArrArt::rack) return senke_rack_;   // 1.9 U6
   if (sp.art == ArrArt::wirt && sp.slot >= 1 && sp.slot <= ARR_WIRT_SLOTS) return senke_wirt_[sp.slot - 1];
   return nullptr;
 }

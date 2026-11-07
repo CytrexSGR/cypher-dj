@@ -3,6 +3,7 @@
 // kopfloser Chrome über cdp.mjs mit echten Maus-, Rad- und Zieh-Ereignissen. Kein Ton, kein Fenster, kein Betrieb.
 // Aufruf: node pruef/probe_produktion.mjs [--instanz i] [--teil 6]   (Teil n prüft die Slices 1..n; Browser-Probe ist Instanz i, Spec §4)
 // Ergebnis: pruef/ergebnisse/<zeit>-produktion/bericht.md und ergebnis.json; Exit 1, wenn ein Punkt FEHL ist.
+import { reglerVonDb, REGLER_MAX } from '../oeffentlich/produktion/fader_kennlinie.js';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -247,9 +248,9 @@ try {
     for (const k of ['neu-audio', 'neu-rb', 'neu-surge']) { await b.klick(`[data-p="${k}"]`); await warte(400); }
     const p = await projekt();
     const koepfe = await w(`[...document.querySelectorAll('.p-kopf')].map((k) => k.querySelector('.p-spurname').textContent + '|' + k.querySelector('.p-geraet').textContent)`);
-    const surgeAus = await w(`document.querySelector('[data-p="neu-surge"]').disabled`);
-    notiere('3.1 Spuren anlegen', p.spuren.length === 3 && JSON.stringify(koepfe) === '["Audio|AUDIO","RB-338|RB-338","Surge|SURGE · 1"]' && surgeAus,
-      `Spuren ${p.spuren.map((x) => `${x.nr}:${x.art}`).join(' ')}; Köpfe ${JSON.stringify(koepfe)}; + SURGE danach aus ${surgeAus}`);
+    const surgeAus = await w(`document.querySelector('[data-p="neu-surge"]').disabled`);   // 1.9 U3: two host slots, so one Surge track leaves the button enabled
+    notiere('3.1 Spuren anlegen', p.spuren.length === 3 && JSON.stringify(koepfe) === '["Audio|AUDIO","RB-338|RB-338","Surge|SURGE · 1"]' && !surgeAus,
+      `Spuren ${p.spuren.map((x) => `${x.nr}:${x.art}`).join(' ')}; Köpfe ${JSON.stringify(koepfe)}; + SURGE danach aus ${surgeAus} (expected false: one of two slots taken)`);
     const id = p.spuren[0].id;
     const n0 = log().length;
     await b.ziehe(`.p-kopf[data-spur="${id}"] .p-fader`, -40, 0, 12); await warte(600);
@@ -270,7 +271,7 @@ try {
     const p2a = await projekt();
     const faderMax = await w(`document.querySelector('.p-kopf[data-spur="${id}"] .p-fader').max`);
     const faderAnz = await w(`document.querySelector('.p-kopf[data-spur="${id}"] .p-faderwert').textContent`);
-    notiere('3.2c Fader-Anschlag +6 dB', p2a.spuren[0].fader_db === 6 && anschlag.length >= 1 && Math.max(...anschlag) === 6 && faderMax === '6' && faderAnz === '+6.0',
+    notiere('3.2c Fader-Anschlag +6 dB', p2a.spuren[0].fader_db === 6 && anschlag.length >= 1 && Math.max(...anschlag) === 6 && faderMax === String(REGLER_MAX) && faderAnz === '+6.0',
       `Regler max ${faderMax}, gesendet ${JSON.stringify(anschlag)}, Projekt ${p2a.spuren[0].fader_db}, Anzeige ${faderAnz}`);
     await b.ziehe(`.p-kopf[data-spur="${id}"] .p-fader`, -400, 0, 8); await warte(600);   // zurück nach unten, damit 3.3 und später vom Anfangszustand ausgehen
     await b.klick(`.p-kopf[data-spur="${id}"] .p-mute`); await warte(400);
@@ -354,8 +355,8 @@ try {
     await warte(700);
     const pUndo = await projekt();
     notiere('3.6b Spur löschen', pDel.spuren.length === 2 && del.length === 1 && del[0].koerper.label === 'Delete track Surge' && del[0].koerper.befehle[0].befehl === 'spur_loeschen' && surgeFrei && kopfAnzahl === 2
-      && pUndo.spuren.length === 3 && pUndo.spuren[2].id === idS && (await w(`document.querySelector('[data-p="neu-surge"]').disabled`)) && (await w(`document.querySelectorAll('.p-kopf').length`)) === 3,
-      `✕ Surge: Spuren ${p4.spuren.length} → ${pDel.spuren.length}, Anfrage „${del[0]?.koerper.label}“ ${JSON.stringify(del[0]?.koerper.befehle[0])}, + SURGE frei ${surgeFrei}, Köpfe ${kopfAnzahl}; Undo (POST /proj/undo): Spuren ${pUndo.spuren.length}, Surge wieder da (id ${pUndo.spuren[2]?.id}), + SURGE wieder aus`);
+      && pUndo.spuren.length === 3 && pUndo.spuren[2].id === idS && !(await w(`document.querySelector('[data-p="neu-surge"]').disabled`)) && (await w(`document.querySelectorAll('.p-kopf').length`)) === 3,
+      `✕ Surge: Spuren ${p4.spuren.length} → ${pDel.spuren.length}, Anfrage „${del[0]?.koerper.label}“ ${JSON.stringify(del[0]?.koerper.befehle[0])}, + SURGE frei ${surgeFrei}, Köpfe ${kopfAnzahl}; Undo (POST /proj/undo): Spuren ${pUndo.spuren.length}, Surge wieder da (id ${pUndo.spuren[2]?.id}), + SURGE weiter frei (one of two slots)`);
     // 3.7 eingefrorene Spur: der Kopf nennt es (Gerät · FROZEN); danach zurück zu First Track
     await oeffneProjekt('seed');
     const fkopf = await w(`document.querySelector('.p-kopf[data-spur="s94"] .p-geraet')?.textContent`);
@@ -437,7 +438,7 @@ try {
       }
       // 3.10 (D1 V2 Nachzug 7c, 7d): angenommen, aber der Kern zieht nicht nach. Der Server antwortet 200 mit kern.wiedergabe {nr: null, fehler}
       // (Übersetzer lehnte ab) bzw. kern.regler 'kein_kern' (Mixer ohne Kern, Spec 6.30): die Seite warnt, statt still Erfolg zu zeigen.
-      // Dazu Spec 6.28: eine zweite Surge-Spur lehnt der Server mit slot_belegt ab, Text „D1 has one Surge slot“.
+      // Dazu Spec 6.28: a third Surge track is refused by the server with slot_belegt, text „Both Surge slots are in use (1, 2)“ (1.9 U3: two host slots).
       {
         const steuer = (d) => fetch(URL + 'attrappe/kernantwort', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(d) });
         const leereMeldung = () => w(`document.querySelector('[data-p="meldung"]').textContent = ''`);
@@ -452,14 +453,19 @@ try {
         await b.klick('[data-p="metronom"]'); await warte(500);                                 // Negativ-Kontrolle: ohne kern-Angabe keine Warnung
         const w3 = await zeigt();
         await b.klick(`.p-kopf[data-spur="${sid}"] .p-mute`); await warte(500);                 // zurück
+        await b.klick('[data-p="neu-surge"]'); await warte(500);                                 // the second Surge track takes slot 2; the button is then disabled
+        const zwei = (await projekt()).spuren.filter((x) => x.geraet?.art === 'wirt').map((x) => x.geraet.slot);
         const gesperrt = await w(`document.querySelector('[data-p="neu-surge"]').disabled`);
         await w(`document.querySelector('[data-p="neu-surge"]').disabled = false`);             // erzwungen, wie ein Stand hinter dem Server
         const nS = log().length;
         await b.klick('[data-p="neu-surge"]'); await warte(500);
         const w4 = await zeigt(), surgeAnfragen = log().slice(nS).filter((e) => e.weg === '/proj/aendern').length;
         notiere('3.10 Kern zieht nicht nach: Warnung statt stillem Erfolg', w1.meldung === 'Saved, but the core did not load the arrangement: a frozen track file is missing' && w1.fehler && met1 === !met0
-          && w2.meldung === 'Saved; the core is not running' && mute2 === true && w3.meldung === '' && gesperrt && surgeAnfragen === 1 && w4.meldung === 'D1 has one Surge slot',
+          && w2.meldung === 'Saved; the core is not running' && mute2 === true && w3.meldung === '' && JSON.stringify(zwei) === '[1,2]' && gesperrt && surgeAnfragen === 1 && w4.meldung === 'Both Surge slots are in use (1, 2)',
           `Wiedergabe nicht geladen: „${w1.meldung}“ (Fehlerklasse ${w1.fehler}), Metronom trotzdem ${met1}; Mixer ohne Kern: „${w2.meldung}“, mute ${mute2}; Negativ-Kontrolle ohne kern-Angabe: „${w3.meldung}“; zweite Surge-Spur (Knopf war gesperrt ${gesperrt}, erzwungen, ${surgeAnfragen} Anfrage): „${w4.meldung}“`);
+        // put the project back as the later steps expect it: take the second Surge track away again (the refused third one stored nothing)
+        await fetch(URL + 'proj/undo', { method: 'POST', headers: { 'content-type': 'application/json', 'x-djk-quelle': 'cypher' }, body: JSON.stringify({ rev: (await projekt()).rev }) });
+        await warte(500);
       }
       // 3.11 (D1 V2 Nachzug 7f, Spec 6.32): während eines Freeze antworten Transport-Start und Tempo mit 409 beschaeftigt; die Seite sagt
       // „A freeze is running“ statt OFFLINE oder „Rejected: …“. Negativ-Kontrolle: ein Mixer-Griff geht durch; nach dem Freeze startet PLAY.

@@ -5,13 +5,14 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-export async function starteBrowser({ breite = 1920, hoehe = 1080 } = {}) {
+// sichtbar: { x, y, w, h } starts a VISIBLE window at exactly that place (no --headless, DISPLAY kept); default unchanged (headless).
+export async function starteBrowser({ breite = 1920, hoehe = 1080, sichtbar = null } = {}) {
   const profil = fs.mkdtempSync(path.join(os.tmpdir(), 'djk60m-chrome-'));
   const env = { ...process.env };
-  delete env.DISPLAY;
-  delete env.WAYLAND_DISPLAY;
-  const p = spawn('google-chrome', ['--headless=new', '--mute-audio', '--no-first-run', '--no-default-browser-check',
-    '--disable-gpu', `--user-data-dir=${profil}`, '--remote-debugging-port=0', `--window-size=${breite},${hoehe}`,
+  if (!sichtbar) { delete env.DISPLAY; delete env.WAYLAND_DISPLAY; }
+  const fenster = sichtbar ? [`--window-position=${sichtbar.x},${sichtbar.y}`, `--window-size=${sichtbar.w},${sichtbar.h}`] : [`--window-size=${breite},${hoehe}`];
+  const p = spawn('google-chrome', [...(sichtbar ? [] : ['--headless=new']), '--mute-audio', '--no-first-run', '--no-default-browser-check',
+    '--disable-gpu', `--user-data-dir=${profil}`, '--remote-debugging-port=0', ...fenster,
     '--force-device-scale-factor=1', 'about:blank'], { env, stdio: ['ignore', 'ignore', 'pipe'] });
   const port = await new Promise((ok, fehler) => {
     let aus = '';
@@ -37,7 +38,7 @@ export async function starteBrowser({ breite = 1920, hoehe = 1080 } = {}) {
   await sende('Runtime.enable');
   await sende('Log.enable');
   await sende('Page.enable');
-  await sende('Emulation.setDeviceMetricsOverride', { width: breite, height: hoehe, deviceScaleFactor: 1, mobile: false });
+  if (!sichtbar) await sende('Emulation.setDeviceMetricsOverride', { width: breite, height: hoehe, deviceScaleFactor: 1, mobile: false });
   const b = {
     konsole,
     ereignisse,   // D1 V1: rohe CDP-Ereignisse (Input.dragIntercepted für zieheDnD)

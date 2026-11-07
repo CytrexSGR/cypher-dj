@@ -10,13 +10,20 @@
 // aendereMit(rechne) (V2 Fix F2, Spec 6.34): die Änderung wird erst gerechnet, wenn sie an der Reihe ist; rechne() → {label, befehle, rev} aus
 // genau dem Stand, dessen rev mitgeht. Leere befehle: nichts senden (false).
 
-export function neuerSchreiber({ holeJson, beiProjekt, beiFehler, beiVerworfen = () => {} }) {
+// 1.12 S3 task 9: sent + 1 is only a guess at the moment of the event (a server take, e.g. the recorder, can take that revision while our request is in flight).
+// The event counts as ours only when the RESPONSE of the request carries that revision; otherwise beiFremdeRev(slug, rev) is called and the page reloads.
+export const WIEDERHOLUNGEN = 3, WIEDERHOLE_PAUSE_MS = 80;
+export function neuerSchreiber({ holeJson, beiProjekt, beiFehler, beiVerworfen = () => {}, beiFremdeRev = () => {}, beiWiederhole = async () => {} }) {
   let slug = null, rev = null, unterwegs = false, gesendet = null;
+  let vorlaeufig = [];       // events taken for ours while the request is in flight: [slug, rev]
+  let leerWartende = [];     // resolvers of leerWarten()
+  let eingereiht = 0, erledigt = 0, bisWartende = [];   // counters for bisHier(): requests queued so far / finished so far
   const schlange = [];
   function stelle(auftrag) {
+    eingereiht++;
     let fertig;
     auftrag.fertig = new Promise((ok) => { fertig = ok; });
-    auftrag.ende = fertig;
+    auftrag.ende = (v) => { erledigt++; fertig(v); const w = bisWartende; bisWartende = w.filter(([n, f]) => { if (erledigt >= n) { f(); return false; } return true; }); };
     schlange.push(auftrag);
     pumpe();
     return auftrag.fertig;
@@ -39,12 +46,24 @@ export function neuerSchreiber({ holeJson, beiProjekt, beiFehler, beiVerworfen =
       gesendet = koerper.rev;
       try { r = await holeJson(a.weg, koerper); } catch (e) { r = { status: 0, j: { fehler: 'netz', text: e.message } }; }
       gesendet = null;
+      const offen = vorlaeufig; vorlaeufig = [];
+      const bestaetigt = r.status === 200 && r.j && typeof r.j.rev === 'number' ? r.j.rev : null;
+      for (const [vs, vr] of offen) if (vr !== bestaetigt) beiFremdeRev(vs, vr);
       if (r.status === 200 && r.j && typeof r.j.rev === 'number' && r.j.projekt) {
         rev = r.j.rev;
         beiProjekt(slug, r.j.projekt, rev, r.j);   // D1 V2 Nachzug (7c): die ganze Antwort (kern) für den Hinweis
         a.ende(true);
       } else {
         const veraltet = r.status === 409 && r.j?.fehler === 'rev_veraltet';
+        // task 9: a hand value (absolute, idempotent) that met a revision taken by a server take a moment ago is written once more after the reload;
+        // no notice for the first answer, after WIEDERHOLUNGEN repeats rev_veraltet is final (the usual path below)
+        if (veraltet && a.wiederhole && (a.wiederholt ?? 0) < WIEDERHOLUNGEN) {
+          a.wiederholt = (a.wiederholt ?? 0) + 1;
+          if (a.wiederholt > 1) await new Promise((ok) => setTimeout(ok, WIEDERHOLE_PAUSE_MS));   // the take is still being written: the reload may not have it yet
+          try { await beiWiederhole(); } catch { /* the reload failure belongs to its owner */ }
+          schlange.unshift(a);
+          continue;
+        }
         const neu = beiFehler(a, r);
         if (veraltet) {
           try { await neu; } catch { /* der Neuladen-Fehler gehört dem Aufrufer; die Wartenden sind trotzdem veraltet */ }
@@ -56,20 +75,31 @@ export function neuerSchreiber({ holeJson, beiProjekt, beiFehler, beiVerworfen =
       }
     }
     unterwegs = false;
+    const w = leerWartende; leerWartende = [];
+    for (const f of w) f();
   }
   return {
     get rev() { return rev; },
     get slug() { return slug; },
-    istEigeneRev: (fremdSlug, neueRev) => gesendet !== null && fremdSlug === slug && slug !== null && neueRev === gesendet + 1,
+    istEigeneRev: (fremdSlug, neueRev) => {
+      const moeglich = gesendet !== null && fremdSlug === slug && slug !== null && neueRev === gesendet + 1;
+      if (moeglich) vorlaeufig.push([fremdSlug, neueRev]);
+      return moeglich;
+    },
+    // resolves when no request is in flight and nothing waits (a recorder end must not overtake the page's own writes)
+    // resolves when every request queued SO FAR is finished (later ones do not count: a gesture end must not wait for the next gesture's writes)
+    bisHier: () => { const n = eingereiht; return erledigt >= n ? Promise.resolve() : new Promise((ok) => { bisWartende.push([n, ok]); }); },
+    leerWarten: () => (!unterwegs && schlange.length === 0 ? Promise.resolve() : new Promise((ok) => { leerWartende.push(ok); })),
     // Neuer Stand von außen (Öffnen, SSE, Neuladen): gilt, wenn das Projekt wechselt oder die rev nicht älter ist
     setze(neuSlug, neuRev) {
       if (neuSlug !== slug || rev === null || neuRev >= rev) { slug = neuSlug; rev = neuRev; return true; }
       return false;
     },
-    aendere(label, befehle, schluessel = null) {
+    // optionen.wiederhole: see pumpe (a hand value is written again once after rev_veraltet)
+    aendere(label, befehle, schluessel = null, optionen = {}) {
       const letzte = schlange.at(-1);
       if (schluessel !== null && letzte && letzte.schluessel === schluessel) { letzte.befehle = befehle; letzte.label = label; return letzte.fertig; }
-      return stelle({ weg: '/proj/aendern', label, befehle, schluessel });
+      return stelle({ weg: '/proj/aendern', label, befehle, schluessel, wiederhole: optionen.wiederhole === true });
     },
     aendereMit: (rechne) => stelle({ weg: '/proj/aendern', rechne, schluessel: null }),
     undo: () => stelle({ weg: '/proj/undo', schluessel: null }),

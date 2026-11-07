@@ -5,7 +5,7 @@
 // Rückgaben wie render_main.cpp (K3 05a91adb, am Baum gelesen): 0 geschrieben, 2 Aufruf, 3 Konfiguration oder Zustand, 4 Wiedergabe oder Render,
 // 5 Wirt-Spur nicht eingefroren, 6 Schreiben, 7 Speicher, 8 Ziel besteht (der Render ersetzt nie; S3 vergibt eigene Namen).
 import { spawn } from 'node:child_process';
-import { HALL_FELDER, type Projekt, type Spur } from './modell.ts';
+import { HALL_FELDER, insertZeilen, rackZeilen, type InsertTraeger, type Projekt, type Spur } from './modell.ts';
 
 export interface RenderAufruf {
   programm: string[];        // [Pfad zu cypherdj-render] oder im Test [node, render_attrappe.mjs]
@@ -68,10 +68,29 @@ export function reglerAusProjekt(p: Projekt): Record<string, number> {
 // returns that exist; every existing return with all its controls (fader, pan, mute, solo, Hall on and the six Hall values). Without returns: nothing,
 // so the file of a project without returns stays as it was. `nur`: the render of ONE track alone (spec 5.10): the track, its group, their sends and only
 // the returns they feed (their solo off, so that a return solo of the project does not silence the isolated track).
+// 1.10 slice 4a: the insert rows ins/<art>/<slot>/* of the stages that sound in this render. Whole project: every strip. `nur` (one track alone): the
+// track, its group, the master and the returns the track or its group feeds (like routingRegler returns). The dry merge render has none (a source with a
+// chain is refused by merge_inserts, the groups are neutral, there is no master). The live path sets the values first and the switch `an` last; the export file
+// is parsed into a sorted map by the render, so there the order is not kept (harmless: all rows are set before the first block).
+export function insertRegler(p: Projekt, nur?: Spur): Record<string, number> {
+  const straenge: InsertTraeger[] = [];
+  if (nur) {
+    const g = nur.ausgang ? (p.gruppen ?? []).find((x) => x.id === nur.ausgang!.id) : undefined;
+    const gespeist = new Set([...(nur.sends ?? []), ...(g?.sends ?? [])].map((sd) => sd.id));
+    straenge.push(nur, ...(g ? [g] : []), ...(p.master ? [p.master] : []), ...(p.returns ?? []).filter((x) => gespeist.has(x.id)));
+  } else {
+    straenge.push(...p.spuren, ...(p.gruppen ?? []), ...(p.returns ?? []), ...(p.master ? [p.master] : []));
+  }
+  // slice 4c: the macro rows of the racks of those strips (the mapping table travels in the playback file)
+  return Object.assign({}, ...straenge.flatMap((st) => (st.inserts ?? []).map((i) => insertZeilen(i))),
+    ...straenge.filter((st) => st.rack).map((st) => rackZeilen(st.rack!)));
+}
+
 export function routingRegler(p: Projekt, opt: { nur?: Spur; trocken?: boolean } = {}): Record<string, number> {
   const nur = opt.nur;
   const r: Record<string, number> = {};
   const returns = p.returns ?? [];
+  if (!opt.trocken) Object.assign(r, insertRegler(p, nur));   // 1.10 slice 4a: before the early return, a project may have inserts and no return
   if (returns.length === 0) return r;
   if (opt.trocken) {                                                       // the merge renders dry: every send explicitly off, every existing return muted
     for (const s of p.spuren) for (const x of returns) r[`spur/${s.nr}/send/${x.nr}`] = -200;

@@ -12,6 +12,7 @@ import { tmpOrdner } from './hilfen/projekt.mjs';
 import { karteLinear, schreibeKarte, schreibeBestand } from './hilfen/karte.mjs';
 import { quellSekunde, beatBeiQuelle } from '../projekt/warp.ts';
 import { REPO_PFADE } from '../pfade.ts';
+import { pythonVorgabe } from '../server.ts';   // finds the main checkout's venv from a worktree (7e4f153b)
 
 const lies = (datei) => JSON.parse(fs.readFileSync(datei, 'utf8'));
 const fehlerVon = async (p) => { try { await p; } catch (e) { return e; } return null; };
@@ -150,7 +151,7 @@ test('Warp From Here (Start): rechts vom Beat gilt der Auto-Warp der Karte, am A
 
 // Die Python-Seite liest, was TypeScript schrieb: Schema korrektur.schema.json und die Regel der Kette (kette.eins_und_hotcues)
 function pythonLiest(materialOrdner) {
-  const py = process.env.CYPHERDJ_PYTHON ?? path.join(REPO_PFADE.werkstatt, '.venv', 'bin', 'python');
+  const py = pythonVorgabe();
   const code = ['import json,sys', 'from pathlib import Path', 'from werkstatt import bestand, kette', 'o = Path(sys.argv[1])',
     'z = bestand.korrekturen_lesen(o)', '[bestand.pruefe("korrektur.schema.json", x) for x in z]',
     'm = bestand.lies_json(o / "material.json")', 'print(json.dumps({"zeilen": len(z), "eins": kette.eins_und_hotcues(m, z)[0]}))'].join('\n');

@@ -71,8 +71,9 @@ export tap with display).
    server throttles `/zustand/arr` to 50 ms and a short intervention would otherwise be lost. The page shows "SET LIMITER" when
    the value is below −0.1 (`djk/oberflaeche/oeffentlich/produktion/transport.js:27`); the export line warns on `ueber_decke`.
 7. **Control budget: 597 of 1024, reserve 427; the total need of slices 1 to 8 is 897, reserve 127.** Measured on a copy of
-   the table (spec 5.3: groups, PM, 32 times 4 sends, 4 returns at 11, 12 inserts at 8). The reserve is above 100, therefore
-   raising to 2048 together with state version 3 was dropped. Failure case of the measurement: the same counter with
+   the table (spec 5.3: groups, PM, 32 times 4 sends, 4 returns at 11, 12 inserts at 8). The reserve was above 100, therefore
+   raising to 2048 together with state version 3 was dropped at the time. Superseded: package 1.15 (plan A v2, task A1a, 2026-11-03)
+   did it after all, `MAX_REGLER` and `CDJ_Z_REGLER` to 2048 and `CDJ_ZUSTAND_VERSION` to 3, because the mix tools need 345 rows. Failure case of the measurement: the same counter with
    `MAX_REGLER 800` aborts (`ReglerTabelle: mehr als 800 Regler`). 1.11 and 1.12 decide with their own measurement.
 
 ## Consequences
@@ -108,6 +109,21 @@ Plan `docs/superpowers/plans/2026-10-31-routing-slice3.md` (version 2). Decision
 14. **Merge:** tracks with identical sends merge and the new track carries the send; unequal sends are refused with `merge_sends` (task 10b).
 
 Open: Hall regime B, the acceptance listening (P7, P14, P15 are audible), Hall latency (P10). Numbers: `docs/architecture/stand/routing-1-10.md`.
+
+## Addendum 2026-11-04: Slice 4a, compressor inserts and pre/post sends (branch `s4-rack-4a`)
+
+15. **Insert chains are strips of the same mixer.** Up to 4 stages per track, group, return (after the Hall, before the return fader) and the PM (before the PM fader, so the export tap carries it). The chain index is the strip index (`ARR_KETTEN` = 45, pinned against `ARR_PM`, `ARR_RET0`, `ARR_STREIFEN`). Tracks and groups get a block-wise pass in place over the strip input before the per-sample fader loop; no per-sample FFI call.
+16. **The pool is 12 native compressors (`ins/komp/1..12`), shared by the whole project.** Built in the constructor of `Arrangement` (allocation outside the callback), state kept by slot identity across a snapshot swap; an entering stage starts cleared and fades in, a leaving stage keeps a tail, a stage switched off fades out over 10 ms and is cleared at weight 0. `eq` and `saett` follow in 4b with their own pool sizes after a measurement; `rack/` paths answer 400 in 4a.
+17. **The chain flag is structural, the bypass is only in the row.** The playback carries `chain: [{art, slot, an}]`; the page always writes `an: true` and the bypass is the row `ins/komp/<n>/an`, so a knob or a bypass never swaps the snapshot (seam fix `5fe42e31`). A stage runs when flag and row are on.
+18. **Sidechain key as a row:** `ins/komp/<n>/sc = k` (1..32) detects on the input of track k, copied before any chain of the block runs; 0 is the own signal.
+19. **Pre/post is playback structure, not a row:** `returns[].pre` in the snapshot; a pre send is taken after the chain of its source and before fader and pan, mute and solo still silence it. The name `ret/<r>/hall/pre` is the Hall pre-delay and unrelated.
+
+Changes to points 7 and 13 above:
+
+* **Point 7 (control budget).** The table is 1378 of 2048 rows (913 before package 1.15, 345 of the mix tools of package 1.15, 120 `ins/komp`), reserve 670. The 96 rows of the Slice 4 reservation (`RESERVIERT_SLICE4`) are gone from `test_regler.cpp`; the real rows replace them. The 8 rows per insert of the first estimate became 10 parameters per stage (`an`, `schwelle`, `ratio`, `knie`, `attack`, `release`, `makeup`, `mix`, `schp`, `sc`). The first 1258 rows are pinned by hash (FNV-1a 64 `0xc01227d2bfc9b294`), so no index moved.
+* **Point 13 (reserve 127, 31 after Slice 4).** Superseded: with 2048 rows the reserve after the `komp` rows is 670; the pin `MAX_REGLER - anzahl() >= 44` of `kapazitaet_hat_luft_fuer_k2` holds. `MAX_TEILE` stays 256; opening a project sets the ten rows of every stage in use inside the existing packets of at most 100 controls (a project without inserts sets the same 365 / 389 controls as before).
+
+Open: the real-time gate of the lane `arr32ins` (median <= 1500 us, p99.9 <= 2667 us) and the acceptance by ear and hand; both in `docs/architecture/stand/routing-1-10.md`, section "Slice 4a".
 
 ## Rejected
 

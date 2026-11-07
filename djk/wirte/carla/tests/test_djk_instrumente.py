@@ -94,6 +94,21 @@ WIRT_AUS = [f"cypherdj-wirt-arr1-{INST}:audio-out1", f"cypherdj-wirt-arr1-{INST}
 WIRT_EIN = [f"cypherdj-wirt-arr1-{INST}:events-in"]
 
 
+# 1.9 (L10): the same for any production slot n (arr1, arr2)
+def _kanten(n):
+    return [f"cypherdj-kern-{INST}:arr_midi_{n}\tcypherdj-wirt-arr{n}-{INST}:events-in",
+            f"cypherdj-wirt-arr{n}-{INST}:audio-out1\tcypherdj-kern-{INST}:arr_rueck_{n}_L",
+            f"cypherdj-wirt-arr{n}-{INST}:audio-out2\tcypherdj-kern-{INST}:arr_rueck_{n}_R"]
+
+
+def _wirt_aus(n):
+    return [f"cypherdj-wirt-arr{n}-{INST}:audio-out1", f"cypherdj-wirt-arr{n}-{INST}:audio-out2"]
+
+
+def _wirt_ein(n):
+    return [f"cypherdj-wirt-arr{n}-{INST}:events-in"]
+
+
 def test_arr1_startet_eigene_unit_und_traegt_kanten_ein_auch_ohne_kern_ports(tmp_path):
     # Kern ohne arr-Ports (älter als K2b) und ohne midi_aus_1: arr1 braucht die DJ-Ströme nicht. Die eigenen Ports des Wirts sind da.
     env, log, home = _attrappen(tmp_path, aus_ports=WIRT_AUS, ein_ports=WIRT_EIN)
@@ -168,7 +183,7 @@ def test_arr1_mit_bass_oder_melodie_ist_ein_aufruffehler(tmp_path):
     env, log, _ = _attrappen(tmp_path)
     for extra in (["--bass", "surge"], ["--melodie", "fluegel"]):
         r = _lauf(env, "--arr1", *extra)
-        assert r.returncode == 2 and "--arr1 is the production slot" in r.stderr, (extra, r.returncode, r.stderr)
+        assert r.returncode == 2 and "--arr1/--arr2 are production slots only" in r.stderr, (extra, r.returncode, r.stderr)
     assert not (log / "systemd-run").exists()
 
 
@@ -196,6 +211,132 @@ def test_ohne_arr1_bleiben_die_dj_gruppen_wie_sie_waren(tmp_path):
         assert (log / "pw-link").read_text().splitlines() == erwartet, "DJ-Kanten werden wie bisher immer verbunden"
     finally:
         shutil.rmtree(shm, ignore_errors=True)
+
+
+# ---------------------------------------------------------------- 1.9 T3.3: Produktions-Slot arr2 (und beide zusammen)
+
+def test_arr2_startet_eigene_unit_und_traegt_kanten_ein_auch_ohne_kern_ports(tmp_path):
+    env, log, home = _attrappen(tmp_path, aus_ports=_wirt_aus(2), ein_ports=_wirt_ein(2))
+    shm = _shm()
+    try:
+        r = _lauf(env, "--arr2")
+        assert r.returncode == 0, (r.returncode, r.stdout, r.stderr)
+        aufrufe = (log / "systemd-run").read_text().splitlines()
+        assert len(aufrufe) == 1, aufrufe  # nur arr2: arr1, bass und melodie bleiben unberührt
+        a = aufrufe[0]
+        for teil in (f"--unit=cypherdj-wirt-arr2-{INST}", f"--name cypherdj-wirt-arr2-{INST}", "--lv2 https://surge-synthesizer.github.io/lv2/surge-xt",
+                     f"--status {shm}/wirt-arr2.json", f"--sock {shm}/wirt-arr2.sock",
+                     f"--aktiv {home}/.config/cypherdj-{INST}/klang-arr2.fxp", "PartOf=cypherdj.target"):
+            assert teil in a, (teil, a)
+        assert "arr1" not in a, a
+        assert (shm / "kanten").read_text().splitlines() == _kanten(2)
+        assert not (log / "pw-link").exists(), "fehlende Kern-Ports: nichts verbinden, nur eintragen"
+        assert "production slot 2: wirt ready" in r.stdout and "older than D1 K2b" in r.stdout and "restart the studio" in r.stdout, r.stdout
+        assert "production slot 1" not in r.stdout and "live" not in r.stdout, r.stdout
+    finally:
+        shutil.rmtree(shm, ignore_errors=True)
+
+
+def test_arr2_eigene_wirt_ports_fehlen_nach_bereit_ist_ein_fehler(tmp_path):
+    for aus, ein, fehlt in ((_wirt_aus(2), [], f"cypherdj-wirt-arr2-{INST}:events-in"), ([], _wirt_ein(2), f"cypherdj-wirt-arr2-{INST}:audio-out1")):
+        t = tmp_path / fehlt.split(":")[1]
+        t.mkdir()
+        env, log, _ = _attrappen(t, aus_ports=aus, ein_ports=ein)
+        shm = _shm()
+        try:
+            r = _lauf(env, "--arr2")
+            assert r.returncode == 5, (fehlt, r.returncode, r.stdout, r.stderr)
+            assert fehlt in r.stderr and "wirt" in r.stderr, r.stderr
+            assert "live" not in r.stdout, r.stdout
+        finally:
+            shutil.rmtree(shm, ignore_errors=True)
+
+
+def test_arr2_ist_idempotent(tmp_path):
+    env, log, _ = _attrappen(tmp_path, aktiv=[f"cypherdj-wirt-arr2-{INST}"], aus_ports=_wirt_aus(2), ein_ports=_wirt_ein(2))
+    shm = _shm()
+    try:
+        (shm / "wirt-arr2.json").write_text('{"bereit": true, "art": "lv2"}')
+        (shm / "kanten").write_text("andere\tzeile\n" + _kanten(2)[0] + "\n")
+        for _ in range(2):
+            r = _lauf(env, "--arr2")
+            assert r.returncode == 0, (r.returncode, r.stdout, r.stderr)
+            assert "already running" in r.stdout, r.stdout
+        assert not (log / "systemd-run").exists(), "laufender Wirt wird nicht neu gestartet"
+        assert (shm / "kanten").read_text().splitlines() == ["andere\tzeile"] + _kanten(2), "keine Doppelten, Fremdes bleibt"
+    finally:
+        shutil.rmtree(shm, ignore_errors=True)
+
+
+def test_arr2_verbindet_sobald_die_kern_ports_da_sind(tmp_path):
+    # the edge test of the mutation "arr2 edges to arr_rueck_1": the kern ports of slot 2 are linked, those of slot 1 are not touched
+    env, log, _ = _attrappen(
+        tmp_path, aus_ports=[f"cypherdj-kern-{INST}:arr_midi_2", *_wirt_aus(2)],
+        ein_ports=[*_wirt_ein(2), f"cypherdj-kern-{INST}:arr_rueck_2_L", f"cypherdj-kern-{INST}:arr_rueck_2_R"])
+    shm = _shm()
+    try:
+        r = _lauf(env, "--arr2")
+        assert r.returncode == 0, (r.returncode, r.stdout, r.stderr)
+        assert (log / "pw-link").read_text().splitlines() == _kanten(2)
+        assert (shm / "kanten").read_text().splitlines() == _kanten(2)
+        assert "production slot 2 live" in r.stdout and "arr_midi_2 -> Surge -> arr_rueck_2_L/R" in r.stdout, r.stdout
+        assert "arr_rueck_1" not in r.stdout and "arr_rueck_1" not in (shm / "kanten").read_text()
+    finally:
+        shutil.rmtree(shm, ignore_errors=True)
+
+
+def test_arr1_und_arr2_zusammen_starten_beide_slots_mit_je_eigenen_kanten(tmp_path):
+    env, log, _ = _attrappen(
+        tmp_path, aus_ports=[f"cypherdj-kern-{INST}:arr_midi_1", f"cypherdj-kern-{INST}:arr_midi_2", *_wirt_aus(1), *_wirt_aus(2)],
+        ein_ports=[*_wirt_ein(1), *_wirt_ein(2), *(f"cypherdj-kern-{INST}:arr_rueck_{n}_{k}" for n in (1, 2) for k in "LR")])
+    shm = _shm()
+    try:
+        r = _lauf(env, "--arr1", "--arr2")
+        assert r.returncode == 0, (r.returncode, r.stdout, r.stderr)
+        units = [z.split("--unit=")[1].split()[0] for z in (log / "systemd-run").read_text().splitlines()]
+        assert units == [f"cypherdj-wirt-arr1-{INST}", f"cypherdj-wirt-arr2-{INST}"], units
+        assert (shm / "kanten").read_text().splitlines() == _kanten(1) + _kanten(2)
+        assert (log / "pw-link").read_text().splitlines() == _kanten(1) + _kanten(2)
+        assert "production slot 1 live" in r.stdout and "production slot 2 live" in r.stdout, r.stdout
+    finally:
+        shutil.rmtree(shm, ignore_errors=True)
+
+
+def test_arr1_und_arr2_melden_je_slot_ob_die_kern_ports_fehlen(tmp_path):
+    # the kern has the ports of slot 1 only: slot 1 is live, slot 2 is recorded but not linked, and the message says which
+    env, log, _ = _attrappen(
+        tmp_path, aus_ports=[f"cypherdj-kern-{INST}:arr_midi_1", *_wirt_aus(1), *_wirt_aus(2)],
+        ein_ports=[*_wirt_ein(1), *_wirt_ein(2), f"cypherdj-kern-{INST}:arr_rueck_1_L", f"cypherdj-kern-{INST}:arr_rueck_1_R"])
+    shm = _shm()
+    try:
+        r = _lauf(env, "--arr1", "--arr2")
+        assert r.returncode == 0, (r.returncode, r.stdout, r.stderr)
+        assert "production slot 1 live" in r.stdout and "production slot 2: wirt ready" in r.stdout, r.stdout
+        assert (log / "pw-link").read_text().splitlines() == _kanten(1), "only slot 1 is linked"
+        assert (shm / "kanten").read_text().splitlines() == _kanten(1) + _kanten(2), "both are recorded"
+    finally:
+        shutil.rmtree(shm, ignore_errors=True)
+
+
+def test_arr2_mit_bass_oder_melodie_ist_ein_aufruffehler(tmp_path):
+    env, log, _ = _attrappen(tmp_path)
+    for flags in (["--arr2"], ["--arr1", "--arr2"]):
+        for extra in (["--bass", "surge"], ["--melodie", "fluegel"]):
+            r = _lauf(env, *flags, *extra)
+            assert r.returncode == 2 and "--arr1/--arr2 are production slots only" in r.stderr, (flags, extra, r.returncode, r.stderr)
+    assert not (log / "systemd-run").exists()
+
+
+def test_arr2_steht_in_der_hilfe():
+    r = subprocess.run(["bash", str(SKRIPT), "--help"], capture_output=True, text=True, timeout=10)
+    assert r.returncode == 0 and "--arr2" in r.stdout and "cypherdj-wirt-arr2" in r.stdout, r.stdout
+
+
+def test_arr3_ist_unbekannt(tmp_path):
+    env, log, _ = _attrappen(tmp_path)
+    r = _lauf(env, "--arr3")
+    assert r.returncode == 2 and "unknown option --arr3" in r.stderr, (r.returncode, r.stderr)
+    assert not (log / "systemd-run").exists()
 
 
 # ---------------------------------------------------------------- Spec 6.9: djk-stop und djk-start kennen wirt-arr1
@@ -231,9 +372,10 @@ while [ $# -gt 0 ]; do [ "$1" = --status ] && ST=$2; shift; done
 [ -n "$ST" ] && printf '{{"bereit": true, "art": "lv2"}}' > "$ST"
 exit 0
 """)
-    ports_aus = "\n".join(WIRT_AUS)
+    ports_aus = "\n".join(WIRT_AUS + _wirt_aus(2))   # 1.9: the ports of both production hosts
+    ports_ein = "\n".join(WIRT_EIN + _wirt_ein(2))
     (bin_ / "pw-link").write_text(f"""#!/bin/sh
-case "$1" in -o) printf '{ports_aus}\n';; -i) printf '{WIRT_EIN[0]}\n';; -l) ;; *) printf '%s\t%s\n' "$1" "$2" >> {log}/pw-link;; esac
+case "$1" in -o) printf '{ports_aus}\n';; -i) printf '{ports_ein}\n';; -l) ;; *) printf '%s\t%s\n' "$1" "$2" >> {log}/pw-link;; esac
 exit 0
 """)
     (bin_ / "pactl").write_text(f"#!/bin/sh\nprintf '%s\\n' \"$*\" >> {log}/pactl\nexit 1\n")
@@ -319,6 +461,71 @@ def test_djk_start_sieht_einen_liegengebliebenen_arr1_wirt_als_belegt(tmp_path):
             shutil.rmtree(shm, ignore_errors=True)
 
 
+def test_djk_stop_raeumt_beide_produktions_wirte_ab(tmp_path):
+    env, log, units = _units_attrappen(tmp_path)
+    shm = _shm()
+    try:
+        r = _lauf(env, "--arr1", "--arr2")
+        assert r.returncode == 0, (r.returncode, r.stdout, r.stderr)
+        for n in (1, 2):
+            assert (units / f"cypherdj-wirt-arr{n}-{INST}.service").exists(), f"Vorbedingung: arr{n} läuft (simuliert)"
+        t = subprocess.run(["bash", str(START / "djk-stop"), "--instanz", INST, "--alles", "--trocken"], env=env,
+                           capture_output=True, text=True, timeout=30)
+        for n in (1, 2):
+            assert f"would stop cypherdj-wirt-arr{n}-{INST}.service" in t.stdout, t.stdout
+        s = subprocess.run(["bash", str(START / "djk-stop"), "--instanz", INST], env=env, capture_output=True, text=True, timeout=30)
+        assert s.returncode == 0, (s.returncode, s.stdout, s.stderr)
+        for n in (1, 2):
+            assert f"stopped cypherdj-wirt-arr{n}-{INST}.service" in s.stdout, s.stdout
+        assert not list(units.iterdir()), list(units.iterdir())
+    finally:
+        shutil.rmtree(shm, ignore_errors=True)
+
+
+def test_djk_stop_raeumt_den_arr2_wirt_allein_ab(tmp_path):
+    env, log, units = _units_attrappen(tmp_path)
+    shm = _shm()
+    try:
+        assert _lauf(env, "--arr2").returncode == 0
+        assert (units / f"cypherdj-wirt-arr2-{INST}.service").exists() and not (units / f"cypherdj-wirt-arr1-{INST}.service").exists()
+        s = subprocess.run(["bash", str(START / "djk-stop"), "--instanz", INST], env=env, capture_output=True, text=True, timeout=30)
+        assert s.returncode == 0 and f"stopped cypherdj-wirt-arr2-{INST}.service" in s.stdout, (s.returncode, s.stdout, s.stderr)
+        assert not list(units.iterdir()), list(units.iterdir())
+    finally:
+        shutil.rmtree(shm, ignore_errors=True)
+
+
+def test_djk_stop_meldet_einen_uebrig_gebliebenen_arr2_wirt(tmp_path):
+    env, log, units = _units_attrappen(tmp_path, geladen=[f"cypherdj-wirt-arr2-{INST}"])
+    zaeh = tmp_path / "bin" / "systemctl"
+    zaeh.write_text(zaeh.read_text().replace('stop) for u in "$@"; do rm -f "$U/$u"; done;;',
+                                             'stop) for u in "$@"; do case "$u" in *arr2*) ;; *) rm -f "$U/$u";; esac; done;;'))
+    s = subprocess.run(["bash", str(START / "djk-stop"), "--instanz", INST], env=env, capture_output=True, text=True, timeout=30)
+    assert s.returncode == 1 and f"cypherdj-wirt-arr2-{INST}.service" in s.stderr, (s.returncode, s.stdout, s.stderr)
+    assert "is down" not in s.stdout
+
+
+def test_djk_start_sieht_einen_liegengebliebenen_arr2_wirt_als_belegt(tmp_path):
+    for geladen in ([f"cypherdj-wirt-arr2-{INST}"], []):
+        t = tmp_path / ("mit" if geladen else "ohne")
+        t.mkdir()
+        env, log, units = _units_attrappen(t, geladen=geladen)
+        (units / f"cypherdj-kern-{INST}.service").unlink()  # kein Kern der Instanz geladen
+        djk, dump = _fake_djk(t)
+        env = dict(env, DJK=str(djk), DJK_PW_DUMP=str(dump))
+        shm = _shm()
+        try:
+            r = subprocess.run(["bash", str(START / "djk-start"), "--instanz", INST], env=env, capture_output=True, text=True, timeout=60)
+            if geladen:
+                assert r.returncode == 4, (r.returncode, r.stdout, r.stderr)
+                assert f"cypherdj-wirt-arr2-{INST}.service" in r.stderr and "--arr2" in r.stderr and "djk-stop" in r.stderr, r.stderr
+            else:
+                assert r.returncode == 2 and "silent sink" in r.stderr, (r.returncode, r.stdout, r.stderr)
+            assert not (log / "systemd-run").exists(), "nichts gestartet"
+        finally:
+            shutil.rmtree(shm, ignore_errors=True)
+
+
 # ---------------------------------------------------------------- Baukasten S1: --melodie baukasten
 
 def _melodie_zeile(log):
@@ -386,3 +593,52 @@ def test_melodie_unbekannt_nennt_baukasten(tmp_path):
     env, _, _ = _attrappen(tmp_path)
     r = _lauf(env, "--melodie", "zauber")
     assert r.returncode == 2 and "surge, fluegel or baukasten" in r.stderr, r.stderr
+
+
+# 1.9 U3 (acceptance run u3-abnahme-1): the first start of instance d with --arr1 --arr2 stopped with "wirt arr2: own port ...:audio-out1 missing
+# after ready" and the same start passed minutes later. Two causes can produce that and both are closed here: (1) `pw-link -o | grep -qxF` under
+# pipefail dies of SIGPIPE when grep exits first (ledger D33 saw it in djk-start), (2) the port is registered a moment after "bereit".
+def _alle_ports(n):
+    return [*_wirt_aus(n), f"cypherdj-kern-{INST}:arr_midi_{n}"], [*_wirt_ein(n), f"cypherdj-kern-{INST}:arr_rueck_{n}_L", f"cypherdj-kern-{INST}:arr_rueck_{n}_R"]
+
+
+def test_arr2_grosse_portliste_ist_kein_fehler_sigpipe(tmp_path):
+    aus, ein = _alle_ports(2)
+    env, log, _ = _attrappen(tmp_path, aus_ports=aus, ein_ports=ein)
+    bin_ = tmp_path / "bin"
+    # the wanted ports come first, then 400000 lines: grep -q leaves at the first match while pw-link is still writing (exec: the process dies of
+    # SIGPIPE like the real pw-link, a shell that goes on to `exit 0` would hide it)
+    (bin_ / "pw-link").write_text(
+        f'#!/bin/sh\ncase "$1" in\n  -o) cat {tmp_path}/aus_ports; exec seq 1 400000;;\n  -i) cat {tmp_path}/ein_ports; exec seq 1 400000;;\n  -l) ;;\n'
+        f'  *) printf "%s\\t%s\\n" "$1" "$2" >> {log}/pw-link;;\nesac\nexit 0\n')
+    shm = _shm()
+    try:
+        for _ in range(5):
+            shutil.rmtree(shm / "kanten", ignore_errors=True)
+            (shm / "kanten").unlink(missing_ok=True)
+            r = _lauf(env, "--arr2")
+            assert r.returncode in (0,), (r.returncode, r.stdout[-300:], r.stderr[-300:])
+            assert "production slot 2 live" in r.stdout, r.stdout[-300:]
+            shutil.rmtree(shm / "wirt-arr2.json", ignore_errors=True)
+            (shm / "wirt-arr2.json").unlink(missing_ok=True)
+    finally:
+        shutil.rmtree(shm, ignore_errors=True)
+
+
+def test_arr2_eigene_ports_kommen_einen_moment_nach_bereit(tmp_path):
+    aus, ein = _alle_ports(2)
+    env, log, _ = _attrappen(tmp_path, aus_ports=aus, ein_ports=ein)
+    bin_ = tmp_path / "bin"
+    zaehler = tmp_path / "zaehler"
+    # the own ports show only from the 4th listing on (about a second after "bereit" in the real run)
+    (bin_ / "pw-link").write_text(
+        f'#!/bin/sh\ncase "$1" in\n  -o|-i) n=$(cat {zaehler} 2>/dev/null || echo 0); n=$((n+1)); echo $n > {zaehler}\n'
+        f'    if [ "$n" -ge 4 ]; then if [ "$1" = -o ]; then cat {tmp_path}/aus_ports; else cat {tmp_path}/ein_ports; fi; fi;;\n  -l) ;;\n'
+        f'  *) printf "%s\\t%s\\n" "$1" "$2" >> {log}/pw-link;;\nesac\nexit 0\n')
+    shm = _shm()
+    try:
+        r = _lauf(env, "--arr2")
+        assert r.returncode == 0, (r.returncode, r.stdout[-300:], r.stderr[-300:])
+        assert "production slot 2 live" in r.stdout, r.stdout[-300:]
+    finally:
+        shutil.rmtree(shm, ignore_errors=True)

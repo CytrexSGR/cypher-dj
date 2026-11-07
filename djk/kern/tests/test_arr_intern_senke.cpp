@@ -8,15 +8,21 @@
 //     RB sink must not take a bk track for a return).
 //   5 a geraet.cutoff lane on an rb338 track reaches the RB sink through the dispatcher (auto_parameter forwarded: values reported > 0, none rejected);
 //     found by the cost layout arr32cut after the rebase: the dispatcher dropped every device lane value.
-// Mutations: ARR_INTERN_OHNE_WECHSEL (2, 3: the old sink gets no fade block, its tail ends with a step), ARR_RB_BK_ALS_RUECKKEHR (4), ARR_INTERN_OHNE_AUTO (5).
+//   6 (1.9 U1b T1.6) the third sink, device kit: rb338 -> kit -> bk on one track, and kit -> rb338, bk -> kit: each change fades the old sink
+//     for one block (a kit voice: the old output times (m-1-i)/m exactly), the notes reach the right sink, nothing before the swap changes.
+// Mutations: ARR_INTERN_OHNE_WECHSEL (2, 3, 6: the old sink gets no fade block, its tail ends with a step), ARR_RB_BK_ALS_RUECKKEHR (4),
+// ARR_INTERN_OHNE_AUTO (5).
 #include <cmath>
 #include <cstdio>
+#include <memory>
+#include <string>
 #include <vector>
 
 #include "arr_bau.h"
 #include "bk_hilfe.h"
 #include "cypherdj/arr_bk_senke.h"
 #include "cypherdj/arr_intern_senke.h"
+#include "cypherdj/arr_kit_senke.h"
 #include "cypherdj/arr_rb_senke.h"
 #include "pruef.h"
 
@@ -46,8 +52,9 @@ void geraet_rb(cdj::ArrSnapshot* s, int nr) {
 struct Sinken {
   cdj::ArrRbSenke rb;
   cdj::ArrBkSenke bk;
+  cdj::ArrKitSenke kit;
   cdj::ArrInternSenke intern;
-  explicit Sinken(cdj::Arrangement& a) : rb(a), bk(a), intern(a, &rb, &bk) { a.setze_senke_intern(&intern); }
+  explicit Sinken(cdj::Arrangement& a) : rb(a), bk(a), kit(a), intern(a, &rb, &bk, &kit) { a.setze_senke_intern(&intern); }
 };
 
 // Case 1: the two tracks together through the dispatcher, each alone on its own sink
@@ -110,6 +117,73 @@ Fall2 fall2(int von, int art) {
   return f;
 }
 
+// Case 6: a held note on track 1 over a chain of devices dev[0], dev[1], ... (0 rb338, 1 bk, 2 kit). Swap k (k >= 1) happens at the block T[k]
+// (a quarter of a beat plus 13 blocks after the previous one); in its block a note of the new device starts 64 samples in.
+struct Fall6 {
+  std::vector<float> l;
+  std::vector<int64_t> T;
+  uint64_t verloren = 0;
+  int kit_stimmen = -1;
+  int kit_spielend = -1;
+};
+std::unique_ptr<cdj::Kit> sinus_kit() {   // notes 45 and 50: sines of 200 and 330 Hz, amplitude 0.4, 48000 frames
+  auto k = std::make_unique<cdj::Kit>();
+  k->name = "sin";
+  const int noten[2] = {45, 50};
+  const double hz[2] = {200.0, 330.0};
+  for (int j = 0; j < 2; ++j) {
+    cdj::KitKlang& kl = k->klang[noten[j]];
+    kl.name = "sin:" + std::to_string(noten[j]);
+    kl.frames = 48000;
+    kl.daten.resize(2 * 48000);
+    for (int f = 0; f < 48000; ++f)
+      kl.daten[2 * f] = kl.daten[2 * f + 1] = 0.4f * static_cast<float>(std::sin(6.283185307179586 * hz[j] * f / 48000.0));
+  }
+  k->n = 2;
+  return k;
+}
+Fall6 fall6(const std::vector<int>& dev) {
+  Fall6 f;
+  CypherBk* h = bkt::neu(bkt::G_T);
+  std::unique_ptr<cdj::Kit> kit = sinus_kit();
+  Treiber t;
+  Sinken sk(t.arr);
+  auto projekt = [&](int64_t nr, int d, double beat2) {
+    Bau b(nr);
+    b.spur(1, ArrArt::intern).note(1, "v/n1", 0.0, 16.0, 45, 127);
+    if (beat2 > 0.0) b.note(1, "v/n2", beat2, 1.0, 50, 127);
+    cdj::ArrSnapshot* s = b.fertig();
+    if (d == 1) {
+      bkt::spur(s, 1, h, 1, {{"k1", 0.8f}});
+    } else if (d == 2) {
+      std::snprintf(s->spur[0].geraet, sizeof s->spur[0].geraet, "kit");
+      std::snprintf(s->spur[0].kit, sizeof s->spur[0].kit, "sin");
+      s->spur[0].kit_ptr = kit.get();
+      s->spur[0].kit_gen = 1;
+    } else {
+      geraet_rb(s, 1);
+    }
+    return s;
+  };
+  t.laden(projekt(1, dev[0], 0.0));
+  t.arr.start(0.0, 0, false, t.s, 537, 256, t.k);
+  t.lauf(SPB + 13 * 256);
+  for (size_t k = 1; k < dev.size(); ++k) {
+    f.T.push_back(t.s);
+    const double beat2 = static_cast<double>(t.s + 64 - (537 + 256)) / SPB;
+    t.laden(projekt(static_cast<int64_t>(k) + 1, dev[k], beat2));
+    t.lauf(t.s + SPB / 4 + 13 * 256);
+  }
+  t.lauf(t.s + SPB);
+  f.l = t.l;
+  f.verloren = sk.rb.verloren() + sk.bk.verloren() + sk.kit.verloren();
+  f.kit_stimmen = sk.kit.stimmen(0);
+  f.kit_spielend = sk.kit.spielend();
+  t.arr.setze_senke_intern(nullptr);
+  cypher_bk_frei(h);
+  return f;
+}
+
 }  // namespace
 
 int main() {
@@ -148,7 +222,7 @@ int main() {
     for (int art = 1; art <= 2; ++art) {   // 2, 3: one swap; 4: empty and the other device in the same cycle
       const Fall2 f = fall2(von, art);
       PRUEF(f.tausch == T);
-      PRUEF(von == 1 || ohne.rb_ruhend == cdj::ARR_SPUREN - 1);
+      PRUEF(von == 1 || ohne.rb_ruhend == cdj::ARR_SENKEN_PLAETZE - 1);
       float dmax = 0.0f, abw = 0.0f, ref_spitze = 0.0f;
       for (int64_t i = T - 1; i < T + 64; ++i) dmax = std::fmax(dmax, std::fabs(f.l[i] - f.l[i - 1]));
       bool davor_gleich = true;
@@ -169,7 +243,40 @@ int main() {
       PRUEF(energie(f.l, T + 256, T + 2 * SPB) > 1e-3);   // the new device plays
       PRUEF(f.verloren == 0);
       PRUEF(f.rb_abgelehnt == 0);   // the RB sink does not take a bk track for a return to the RB (its knobs k1.. are no RB parameters)
-      if (von == 0) PRUEF(f.rb_ruhend == cdj::ARR_SPUREN);   // the RB sink let the track go: its instance rests again
+      if (von == 0) PRUEF(f.rb_ruhend == cdj::ARR_SENKEN_PLAETZE);   // the RB sink let the track go: its instance rests again
+    }
+  }
+  {  // 6: chains through the kit sink
+    static const char* dn[3] = {"rb338", "bk", "kit"};
+    const std::vector<std::vector<int>> ketten = {{0, 2}, {2, 1}, {1, 2}, {2, 0}, {0, 2, 1}};
+    for (const std::vector<int>& kette : ketten) {
+      std::string name;
+      for (int d : kette) name += std::string(name.empty() ? "" : " -> ") + dn[d];
+      const Fall6 f = fall6(kette);
+      for (size_t k = 1; k < kette.size(); ++k) {
+        const int64_t T = f.T[k - 1];
+        const std::vector<int> bis_davor(kette.begin(), kette.begin() + static_cast<long>(k));   // the chain without swap k
+        const Fall6 ohne = fall6(bis_davor);
+        float dmax_spiel = 0.0f, dmax = 0.0f, abw = 0.0f, ref_spitze = 0.0f;
+        for (int64_t i = T - 4000; i < T; ++i) dmax_spiel = std::fmax(dmax_spiel, std::fabs(ohne.l[i] - ohne.l[i - 1]));
+        for (int64_t i = T - 1; i < T + 64; ++i) dmax = std::fmax(dmax, std::fabs(f.l[i] - f.l[i - 1]));
+        bool davor_gleich = true;
+        for (int64_t i = 0; i < T; ++i) davor_gleich = davor_gleich && f.l[i] == ohne.l[i];
+        for (int i = 0; i < 256; ++i) {
+          ref_spitze = std::fmax(ref_spitze, std::fabs(ohne.l[T + i]));
+          if (i < 64) abw = std::fmax(abw, std::fabs(f.l[T + i] - ohne.l[T + i] * (static_cast<float>(256 - 1 - i) / 256.0f)));
+        }
+        std::printf("%s, swap %zu: before bit-identical %d, largest difference to the fade of the old output %.3g (old peak %.5f), largest step %.6f (inside the note %.6f)\n",
+                    name.c_str(), k, davor_gleich, abw, ref_spitze, dmax, dmax_spiel);
+        std::fflush(stdout);
+        PRUEF(davor_gleich);
+        PRUEF(dmax_spiel > 1e-4f && ref_spitze > 1e-3f);
+        PRUEF(abw <= 1e-6f * ref_spitze + 1e-9f);   // the old sink fades its output over one block, whatever it is
+        PRUEF(dmax <= dmax_spiel * 1.5f);
+        PRUEF(energie(f.l, T + 256, T + SPB / 4) > 1e-3);   // the new device plays its note
+        PRUEF(f.verloren == 0);
+      }
+      if (kette.back() != 2) PRUEF(f.kit_stimmen == 0 && f.kit_spielend == 0);   // the kit sink let go of the track
     }
   }
   PRUEF_ENDE();

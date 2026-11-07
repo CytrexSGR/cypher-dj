@@ -7,6 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
+import { reglerVonDb, REGLER_MAX } from '../oeffentlich/produktion/fader_kennlinie.js';
 import { starteStapel } from './stapel.mjs';
 import { starteBrowser } from './cdp.mjs';
 import { starteProjAttrappe, neuesProjekt } from './proj_attrappe.mjs';
@@ -70,9 +71,9 @@ try {
   notiere('R1.3 Ausgang-Wahl steckt Bass und Pad in die Gruppe (ziel_setzen), Kick bleibt auf Master', p1.spuren[1].ausgang?.id === 'g1' && p1.spuren[2].ausgang?.id === 'g1' && p1.spuren[0].ausgang === undefined
     && (await w(`document.querySelector('.p-kopf[data-spur="s2"] .p-ausgang').value`)) === 'g1',
     `Ziele ${JSON.stringify(p1.spuren.map((s) => s.ausgang?.id ?? 'master'))}`);
-  await setzeRegler('.p-gruppenkopf[data-gruppe="g1"] .p-fader', -6); await warte(700);
+  await setzeRegler('.p-gruppenkopf[data-gruppe="g1"] .p-fader', reglerVonDb(-6)); await warte(700);
   notiere('R1.4 Gruppen-Fader landet im Projekt (gruppenspur_aendern)', (await projekt()).gruppen[0].fader_db === -6, `fader_db ${(await projekt()).gruppen[0].fader_db}`);
-  await setzeRegler('[data-p="pm-fader"]', -3); await warte(700);
+  await setzeRegler('[data-p="pm-fader"]', reglerVonDb(-3)); await warte(700);
   notiere('R1.5 Master-Fader landet im Projekt (master_aendern)', (await projekt()).master.fader_db === -3, `master.fader_db ${(await projekt()).master.fader_db}`);
   await b.klick('.p-gruppenkopf[data-gruppe="g1"] .p-mute'); await warte(600);
   const m1 = (await projekt()).gruppen[0].mute;

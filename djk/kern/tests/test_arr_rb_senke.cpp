@@ -239,10 +239,10 @@ int main() {
     cdj::ArrRbSenke rb(t.arr);
     t.arr.setze_senke_intern(&rb);
     t.laden(Bau().spur(1, ArrArt::intern).note(1, "v/n1", 0.0, 4.0, 36, 127).note(1, "v/n2", 5.0, 0.25, 40, 100).fertig());
-    PRUEF(rb.ruhend() == cdj::ARR_SPUREN);
+    PRUEF(rb.ruhend() == cdj::ARR_SENKEN_PLAETZE);
     t.arr.start(0.0, 0, false, t.s, 537, 256, t.k);
     t.lauf(SPB / 2);
-    PRUEF(rb.ruhend() == cdj::ARR_SPUREN - 1);   // die Spur klingt
+    PRUEF(rb.ruhend() == cdj::ARR_SENKEN_PLAETZE - 1);   // die Spur klingt
     t.lauf(2 * SPB);
     t.arr.stopp(0, t.s, t.k);                     // mitten in der Note: All-Off, der Ausklang folgt
     const int64_t stopp = t.s;
@@ -250,16 +250,16 @@ int main() {
     double e = 0.0;
     for (int64_t i = stopp + 512; i < stopp + 4800; ++i) e += static_cast<double>(t.l[i]) * t.l[i];
     PRUEF(e > 1e-4);                              // der Ausklang nach dem Stopp bleibt
-    PRUEF(rb.ruhend() == cdj::ARR_SPUREN - 1);   // noch nicht 1 s still
+    PRUEF(rb.ruhend() == cdj::ARR_SENKEN_PLAETZE - 1);   // noch nicht 1 s still
     t.lauf(stopp + 2 * 48000);
-    PRUEF(rb.ruhend() == cdj::ARR_SPUREN);
+    PRUEF(rb.ruhend() == cdj::ARR_SENKEN_PLAETZE);
     bool still = true;
     for (int64_t i = stopp + 48000; i < static_cast<int64_t>(t.l.size()); ++i) still = still && t.l[i] == 0.0f;
     PRUEF(still);
     // Negativ-Kontrolle: läuft der Transport, ruht die Stimme in einer langen Pause nie (Note 1, 3 s Pause, Note 2)
     t.arr.start(0.0, 0, false, t.s, 537, 256, t.k);
     t.lauf(t.s + 4 * SPB + SPB / 2);
-    PRUEF(rb.ruhend() == cdj::ARR_SPUREN - 1);
+    PRUEF(rb.ruhend() == cdj::ARR_SENKEN_PLAETZE - 1);
   }
   for (double laenge : {4.0, 0.5}) {   // 5: Kurzblende vor dem Zurücksetzen (Spec 6.28); 0,5: Negativ-Kontrolle
     // neustart false: Referenz für die Rampe (F3), Stopp statt Neustart am selben Sample, keine Blende
@@ -354,11 +354,11 @@ int main() {
         PRUEF(rampe);
         PRUEF(dmax_tausch < dmax_spiel);
         PRUEF(still);
-        PRUEF(f.ruhend == cdj::ARR_SPUREN);
+        PRUEF(f.ruhend == cdj::ARR_SENKEN_PLAETZE);
         PRUEF(f.e_zurueck == 0.0);
       } else {   // Negativ-Kontrolle: bitgleich mit demselben Lauf ohne Tausch
         PRUEF(gleich);
-        PRUEF(f.ruhend == cdj::ARR_SPUREN - 1);
+        PRUEF(f.ruhend == cdj::ARR_SENKEN_PLAETZE - 1);
       }
     }
   }

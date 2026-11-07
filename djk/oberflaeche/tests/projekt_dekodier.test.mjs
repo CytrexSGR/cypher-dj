@@ -159,3 +159,15 @@ test('Kanalzahl mit Anhang: ffprobe csv druckt bei Seitendaten (ReplayGain) "2,"
   k.fordereAn(sha('f'), q); assert.equal(await k.bereit(sha('f')), 'fehler', 'Negativ-Kontrolle: keine führende Zahl');
   assert.equal(k.fehlerGrund(sha('f')), 'ffmpeg_fehler');
 });
+
+test('Kanalzahl: ffprobe exits before its output is read → the cache waits for the pipe to close and still finishes (race fix 2026-11-04)', async (t) => {
+  // Found 2026-11-04 (warp_tempo x2 flake, 2 of 30 runs): ffprobe gave code 0 and an empty output for a complete WAV, because the cache
+  // read the output on 'exit', which Node may emit before stdout was drained. This probe makes the race certain: the shell exits 0 at
+  // once and a background child prints the channel count 200 ms later on the same pipe.
+  const dir = tmpOrdner(t); const q = wav(dir, 'st.wav');
+  const p = path.join(dir, 'probe-spaet.sh');
+  fs.writeFileSync(p, `#!/bin/sh\n( sleep 0.2; printf '2\\n' ) &\nexit 0\n`, { mode: 0o755 });
+  const c = new DekodierCache(path.join(dir, 'arr'), { ffprobe: [p] });
+  c.fordereAn(sha('9'), q);
+  assert.equal(await c.bereit(sha('9')), 'fertig', `grund: ${c.fehlerGrund(sha('9'))}`);
+});

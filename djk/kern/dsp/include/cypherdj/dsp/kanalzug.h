@@ -87,7 +87,15 @@ public:
     // Abgriff nach Filter, vor dem Fader (PFL und Mess-Abgriff; ADR 008 Punkt 4, INTERFACES §6.2),
     // aus dem letzten verarbeite().
     const float* abgriff(int kanal) const { return abgriff_[kanal]; }
-    // Band vor dem Band-Gain des Isolators (§5.6), aus dem letzten verarbeite().
+    // Sleep query (mixer): true if verarbeite() on an all-zero input block would write exactly zeros on the tap and
+    // every output and leave the whole object as it is. That holds when no Bahn runs (a knob move by setze, rampe or verlauf starts a
+    // Bahn or flips a switch, so a moved strip is never quiet in that block; setze_sofort starts NO Bahn, it sets the value at once and
+    // is harmless on a sleeping strip: zero input and zero filter states give exact zeros for any gain, and the colour knob is read from
+    // the value itself by ColorFx::ruhig), the colour fx would produce nothing at zero input (ColorFx::ruhig), and the isolator and
+    // (in art FILTER) the DJ filter states are exactly zero.
+    bool ruhig() const;
+    // Band vor dem Band-Gain des Isolators (§5.6), aus dem letzten verarbeite(). Note: while the mixer lets the strip sleep it does
+    // not call verarbeite(), so the value is the one of the last awake block (the mixer reads the tap, never the bands).
     const float* band(Band b, int kanal) const { return iso_.band(b, kanal); }
 
 private:

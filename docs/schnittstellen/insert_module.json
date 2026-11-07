@@ -1,0 +1,458 @@
+{
+ "vertrag": "insert_module/1",
+ "hinweis": "Single source of the insert vocabulary (package 1.10 slice 4). Generated from this file by djk/vertrag/erzeuge_insert.py: djk/kern/stellwerk/src/insert_zeilen.inc and djk/oberflaeche/projekt/insert_schluessel.ts. Never edit those by hand. Paths are '<praefix>/<n>/<gruppe><m>/<name>' or '<praefix>/<n>/<name>', at most 31 characters. 'tabelle' says whether the kind has rows in the controller table yet (komp from 4a, eq/saett from 4b, rack from 4c, lim from the master limiter). 'latenz' is the latency in samples a stage of the kind adds at 48 kHz (the delay compensation of the arrangement, slice 4b T13; pinned to cypher_*_latenz() by test_arr_pdc; lim: 74 samples, pinned to KanalLimiter(48000, {vorhalt 1.5 ms, sample peak}).latenz_samples()); 'instanzen' is the pool size; for eq and saett it was decided by the cost measurement (slice 4b T11, docs/architecture/stand/routing-1-10.md), not guessed; the other kinds only contribute their paths to the vocabulary. 'geraet' is the plugin parameter id in djk/oberflaeche/presets/geraete.ts ('<n>' is the band number); null where the plugin has no such parameter. Units and ranges are the plugin's. Curve 'schalter' = switch, 'stufen' = integer steps, 'linear' = continuous (kurven as in regler.h KurvenTyp).",
+ "arten": [
+  {
+   "art": "komp",
+   "praefix": "ins/komp",
+   "instanzen": 12,
+   "latenz": 0,
+   "tabelle": true,
+   "geraet": "komp",
+   "parameter": [
+    {
+     "name": "an",
+     "einheit": "",
+     "min": 0,
+     "max": 1,
+     "vorgabe": 0,
+     "kurve": "schalter",
+     "ganz": true,
+     "rampe_ms": 0,
+     "geraet": null,
+     "rolle": "ins_komp_an"
+    },
+    {
+     "name": "schwelle",
+     "einheit": "dB",
+     "min": -60,
+     "max": 0,
+     "vorgabe": -18,
+     "kurve": "linear",
+     "ganz": false,
+     "rampe_ms": 10,
+     "geraet": "thresh",
+     "rolle": "ins_komp_schwelle"
+    },
+    {
+     "name": "ratio",
+     "einheit": "",
+     "min": 1,
+     "max": 20,
+     "vorgabe": 4,
+     "kurve": "linear",
+     "ganz": false,
+     "rampe_ms": 10,
+     "geraet": "ratio",
+     "rolle": "ins_komp_ratio"
+    },
+    {
+     "name": "knie",
+     "einheit": "dB",
+     "min": 0,
+     "max": 24,
+     "vorgabe": 6,
+     "kurve": "linear",
+     "ganz": false,
+     "rampe_ms": 10,
+     "geraet": "knee",
+     "rolle": "ins_komp_knie"
+    },
+    {
+     "name": "attack",
+     "einheit": "ms",
+     "min": 0.1,
+     "max": 100,
+     "vorgabe": 10,
+     "kurve": "linear",
+     "ganz": false,
+     "rampe_ms": 10,
+     "geraet": "attack",
+     "rolle": "ins_komp_attack"
+    },
+    {
+     "name": "release",
+     "einheit": "ms",
+     "min": 10,
+     "max": 1000,
+     "vorgabe": 120,
+     "kurve": "linear",
+     "ganz": false,
+     "rampe_ms": 10,
+     "geraet": "release",
+     "rolle": "ins_komp_release"
+    },
+    {
+     "name": "makeup",
+     "einheit": "dB",
+     "min": 0,
+     "max": 24,
+     "vorgabe": 0,
+     "kurve": "linear",
+     "ganz": false,
+     "rampe_ms": 10,
+     "geraet": "makeup",
+     "rolle": "ins_komp_makeup"
+    },
+    {
+     "name": "mix",
+     "einheit": "",
+     "min": 0,
+     "max": 1,
+     "vorgabe": 1,
+     "kurve": "linear",
+     "ganz": false,
+     "rampe_ms": 10,
+     "geraet": "mix",
+     "rolle": "ins_komp_mix"
+    },
+    {
+     "name": "schp",
+     "einheit": "Hz",
+     "min": 0,
+     "max": 300,
+     "vorgabe": 0,
+     "kurve": "linear",
+     "ganz": false,
+     "rampe_ms": 10,
+     "geraet": "schp",
+     "rolle": "ins_komp_schp"
+    },
+    {
+     "name": "sc",
+     "einheit": "",
+     "min": 0,
+     "max": 32,
+     "vorgabe": 0,
+     "kurve": "stufen",
+     "ganz": true,
+     "rampe_ms": 0,
+     "geraet": null,
+     "rolle": "ins_komp_sc"
+    }
+   ]
+  },
+  {
+   "art": "eq",
+   "praefix": "ins/eq",
+   "instanzen": 2,
+   "latenz": 69,
+   "tabelle": true,
+   "geraet": "eq",
+   "parameter": [
+    {
+     "name": "an",
+     "einheit": "",
+     "min": 0,
+     "max": 1,
+     "vorgabe": 0,
+     "kurve": "schalter",
+     "ganz": true,
+     "rampe_ms": 0,
+     "geraet": null,
+     "rolle": "ins_eq_an"
+    },
+    {
+     "name": "out",
+     "einheit": "dB",
+     "min": -24,
+     "max": 24,
+     "vorgabe": 0,
+     "kurve": "linear",
+     "ganz": false,
+     "rampe_ms": 10,
+     "geraet": "out",
+     "rolle": "ins_eq_out"
+    },
+    {
+     "name": "propq",
+     "einheit": "",
+     "min": 0,
+     "max": 1,
+     "vorgabe": 0,
+     "kurve": "schalter",
+     "ganz": true,
+     "rampe_ms": 0,
+     "geraet": "propq",
+     "rolle": "ins_eq_propq"
+    }
+   ],
+   "gruppen": [
+    {
+     "name": "b",
+     "anzahl": 8,
+     "parameter": [
+      {
+       "name": "an",
+       "einheit": "",
+       "min": 0,
+       "max": 1,
+       "vorgabe": 0,
+       "kurve": "schalter",
+       "ganz": true,
+       "rampe_ms": 0,
+       "geraet": "on_<n>",
+       "rolle": "ins_eq_b_an"
+      },
+      {
+       "name": "typ",
+       "einheit": "",
+       "min": 0,
+       "max": 6,
+       "vorgabe": 0,
+       "kurve": "stufen",
+       "ganz": true,
+       "rampe_ms": 0,
+       "geraet": "type_<n>",
+       "rolle": "ins_eq_b_typ"
+      },
+      {
+       "name": "freq",
+       "einheit": "Hz",
+       "min": 10,
+       "max": 22000,
+       "vorgabe": 1000,
+       "kurve": "linear",
+       "ganz": false,
+       "rampe_ms": 10,
+       "geraet": "freq_<n>",
+       "rolle": "ins_eq_b_freq"
+      },
+      {
+       "name": "gain",
+       "einheit": "dB",
+       "min": -24,
+       "max": 24,
+       "vorgabe": 0,
+       "kurve": "linear",
+       "ganz": false,
+       "rampe_ms": 10,
+       "geraet": "gain_<n>",
+       "rolle": "ins_eq_b_gain"
+      },
+      {
+       "name": "q",
+       "einheit": "",
+       "min": 0.1,
+       "max": 18,
+       "vorgabe": 0.707,
+       "kurve": "linear",
+       "ganz": false,
+       "rampe_ms": 10,
+       "geraet": "q_<n>",
+       "rolle": "ins_eq_b_q"
+      },
+      {
+       "name": "steil",
+       "einheit": "",
+       "min": 0,
+       "max": 3,
+       "vorgabe": 0,
+       "kurve": "stufen",
+       "ganz": true,
+       "rampe_ms": 0,
+       "geraet": "slope_<n>",
+       "rolle": "ins_eq_b_steil"
+      },
+      {
+       "name": "platz",
+       "einheit": "",
+       "min": 0,
+       "max": 2,
+       "vorgabe": 0,
+       "kurve": "stufen",
+       "ganz": true,
+       "rampe_ms": 0,
+       "geraet": "place_<n>",
+       "rolle": "ins_eq_b_platz"
+      }
+     ],
+     "vorgabe_je_band": {
+      "typ": [
+       3,
+       1,
+       0,
+       0,
+       0,
+       0,
+       2,
+       4
+      ],
+      "freq": [
+       30,
+       100,
+       250,
+       800,
+       2500,
+       6000,
+       10000,
+       18000
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "art": "saett",
+   "praefix": "ins/saett",
+   "instanzen": 1,
+   "latenz": 69,
+   "tabelle": true,
+   "geraet": "saett",
+   "parameter": [
+    {
+     "name": "an",
+     "einheit": "",
+     "min": 0,
+     "max": 1,
+     "vorgabe": 0,
+     "kurve": "schalter",
+     "ganz": true,
+     "rampe_ms": 0,
+     "geraet": null,
+     "rolle": "ins_saett_an"
+    },
+    {
+     "name": "drive",
+     "einheit": "dB",
+     "min": 0,
+     "max": 36,
+     "vorgabe": 12,
+     "kurve": "linear",
+     "ganz": false,
+     "rampe_ms": 10,
+     "geraet": "drive",
+     "rolle": "ins_saett_drive"
+    },
+    {
+     "name": "out",
+     "einheit": "dB",
+     "min": -24,
+     "max": 12,
+     "vorgabe": -6,
+     "kurve": "linear",
+     "ganz": false,
+     "rampe_ms": 10,
+     "geraet": "out",
+     "rolle": "ins_saett_out"
+    },
+    {
+     "name": "mix",
+     "einheit": "",
+     "min": 0,
+     "max": 1,
+     "vorgabe": 1,
+     "kurve": "linear",
+     "ganz": false,
+     "rampe_ms": 10,
+     "geraet": "mix",
+     "rolle": "ins_saett_mix"
+    }
+   ]
+  },
+  {
+   "art": "rack",
+   "praefix": "rack",
+   "instanzen": 12,
+   "latenz": 0,
+   "tabelle": true,
+   "geraet": null,
+   "parameter": [
+    {
+     "name": "m1",
+     "einheit": "",
+     "min": 0,
+     "max": 1,
+     "vorgabe": 0,
+     "kurve": "linear",
+     "ganz": false,
+     "rampe_ms": 10,
+     "geraet": null,
+     "rolle": "rack_m1"
+    },
+    {
+     "name": "m2",
+     "einheit": "",
+     "min": 0,
+     "max": 1,
+     "vorgabe": 0,
+     "kurve": "linear",
+     "ganz": false,
+     "rampe_ms": 10,
+     "geraet": null,
+     "rolle": "rack_m2"
+    },
+    {
+     "name": "m3",
+     "einheit": "",
+     "min": 0,
+     "max": 1,
+     "vorgabe": 0,
+     "kurve": "linear",
+     "ganz": false,
+     "rampe_ms": 10,
+     "geraet": null,
+     "rolle": "rack_m3"
+    },
+    {
+     "name": "m4",
+     "einheit": "",
+     "min": 0,
+     "max": 1,
+     "vorgabe": 0,
+     "kurve": "linear",
+     "ganz": false,
+     "rampe_ms": 10,
+     "geraet": null,
+     "rolle": "rack_m4"
+    }
+   ]
+  },
+  {
+   "art": "lim",
+   "praefix": "ins/lim",
+   "instanzen": 1,
+   "latenz": 74,
+   "tabelle": true,
+   "geraet": null,
+   "parameter": [
+    {
+     "name": "an",
+     "einheit": "",
+     "min": 0,
+     "max": 1,
+     "vorgabe": 0,
+     "kurve": "schalter",
+     "ganz": true,
+     "rampe_ms": 0,
+     "geraet": null,
+     "rolle": "ins_lim_an"
+    },
+    {
+     "name": "decke",
+     "einheit": "dB",
+     "min": -60,
+     "max": 0,
+     "vorgabe": -1,
+     "kurve": "linear",
+     "ganz": false,
+     "rampe_ms": 10,
+     "geraet": null,
+     "rolle": "ins_lim_decke"
+    },
+    {
+     "name": "abklingen",
+     "einheit": "ms",
+     "min": 1,
+     "max": 2000,
+     "vorgabe": 80,
+     "kurve": "linear",
+     "ganz": false,
+     "rampe_ms": 0,
+     "geraet": null,
+     "rolle": "ins_lim_abklingen"
+    }
+   ]
+  }
+ ]
+}

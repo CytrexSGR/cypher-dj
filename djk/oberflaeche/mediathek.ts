@@ -51,7 +51,18 @@ interface Obj { sha: string; dauer_s: number | null; erst: string }
 interface Wertzeile { inhalt_sha256: string; feld: string; wert: string; quelle: string; erhoben_am: string }
 
 const maskiere = (s: string): string => `%${s.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
-const wenig = (s: string): string => s.toLowerCase();
+const wenig = (s: string): string => s.normalize('NFC').toLowerCase();
+// Substring condition, case-insensitive also for umlauts (bug 1 of the UI hardening): SQLite LIKE and lower() fold ASCII
+// only, so "über" never found "Über". A query of ASCII only keeps the native LIKE (same result, same speed as before). Any
+// other query compares the Unicode-folded value (klein(), a JS function per row, about 1 µs); a native LIKE on the ASCII
+// parts of the query runs first and leaves only a superset for klein() (measured on 201 000 rows: klein() alone +150 to
+// +200 ms per query, with the prefilter about half of that).
+const enthaelt = (spalte: string, text: string): { sql: string; par: string[] } => {
+  const q = wenig(text);
+  if (/^[\x00-\x7f]*$/.test(q)) return { sql: `${spalte} LIKE ? ESCAPE '\\'`, par: [maskiere(q)] };
+  const grob = `%${q.split(/[^\x00-\x7f]+/).map((t) => maskiere(t).slice(1, -1)).join('%')}%`;
+  return { sql: `(${spalte} LIKE ? ESCAPE '\\' AND klein(${spalte}) LIKE ? ESCAPE '\\')`, par: [grob, maskiere(q)] };
+};
 const zahl = (s: string | undefined): number | null => { const n = Number(s); return s !== undefined && s !== '' && Number.isFinite(n) ? n : null; };
 
 export function parseBpm(roh: string): [number, number] {
@@ -62,7 +73,7 @@ export function parseBpm(roh: string): [number, number] {
 }
 
 export function parseLimit(roh: string | null): number {
-  const n = roh === null || roh === '' ? NaN : Math.floor(Number(roh));
+  const n = roh === null || roh.trim() === '' ? NaN : Math.floor(Number(roh));   // ' ' is empty like '' (Number(' ') is 0)
   if (!Number.isFinite(n)) return LIMIT_VORGABE;
   return Math.min(LIMIT_MAX, Math.max(1, n));
 }
@@ -131,7 +142,9 @@ export class Mediathek {
 
   private oeffne(): DatabaseSync {
     if (!this.vorhanden()) throw new MediathekFehler(503, 'mediathek_fehlt');
-    return new DatabaseSync(this.pfad, { readOnly: true });
+    const db = new DatabaseSync(this.pfad, { readOnly: true });
+    db.function('klein', { deterministic: true }, (x) => (x == null ? null : wenig(String(x))));   // see enthaelt()
+    return db;
   }
 
   private rang(db: DatabaseSync): Map<string, number> {
@@ -241,10 +254,10 @@ export class Mediathek {
       return m;
     };
     const sets = [hole(`a.feld = 'typ' AND a.wert = 'track'`)];
-    if (a.text) sets.push(hole(`a.feld IN ('titel','kuenstler','mix') AND a.wert LIKE ? ESCAPE '\\'`, maskiere(a.text)));
+    if (a.text) { const e = enthaelt('a.wert', a.text); sets.push(hole(`a.feld IN ('titel','kuenstler','mix') AND ${e.sql}`, ...e.par)); }
     if (a.camelot) sets.push(hole(`a.feld = 'camelot' AND a.wert = ? COLLATE NOCASE`, a.camelot));
     if (a.bpm) sets.push(hole(`a.feld = 'bpm' AND CAST(a.wert AS REAL) BETWEEN ? AND ?`, a.bpm[0], a.bpm[1]));
-    if (a.genre) sets.push(hole(`a.feld = 'genre' AND a.wert LIKE ? ESCAPE '\\'`, maskiere(a.genre)));
+    if (a.genre) { const e = enthaelt('a.wert', a.genre); sets.push(hole(`a.feld = 'genre' AND ${e.sql}`, ...e.par)); }
     sets.sort((x, y) => x.size - y.size);
     return new Map([...sets[0]].filter(([s]) => sets.every((m) => m.has(s))));
   }
@@ -377,11 +390,11 @@ export class Mediathek {
       const w: string[] = [`f.host = ?`, `k.typ IN (${typen.map(() => '?').join(',')})`];
       const par: (string | number)[] = [this.host, ...typen];
       if (a.text) {
-        const m = maskiere(a.text.toLowerCase());
-        w.push(`(lower(substr(f.pfad, coalesce(length(f.wurzel), 0) + 1)) LIKE ? ESCAPE '\\' OR lower(k.pack) LIKE ? ESCAPE '\\' OR lower(k.kategorie) LIKE ? ESCAPE '\\' OR lower(k.instrument) LIKE ? ESCAPE '\\' OR lower(k.titel) LIKE ? ESCAPE '\\')`);
-        par.push(m, m, m, m, m);
+        const e = ['substr(f.pfad, coalesce(length(f.wurzel), 0) + 1)', 'k.pack', 'k.kategorie', 'k.instrument', 'k.titel'].map((x) => enthaelt(x, a.text!));
+        w.push(`(${e.map((x) => x.sql).join(' OR ')})`);
+        for (const x of e) par.push(...x.par);
       }
-      if (a.pack) { w.push(`lower(k.pack) LIKE ? ESCAPE '\\'`); par.push(maskiere(a.pack.toLowerCase())); }
+      if (a.pack) { const e = enthaelt('k.pack', a.pack); w.push(e.sql); par.push(...e.par); }
       if (a.camelot) { w.push(`lower(k.camelot) = ?`); par.push(a.camelot.toLowerCase()); }
       if (a.bpm) { w.push(`CAST(k.bpm AS REAL) BETWEEN ? AND ?`); par.push(a.bpm[0], a.bpm[1]); }
       if (a.einsatz === 'nur_live') w.push(`k.schutz = 'ableton'`);
@@ -391,10 +404,10 @@ export class Mediathek {
       const cparam: (string | number)[] = [...typen];
       let cand = `SELECT inhalt_sha256 FROM angabe WHERE feld = 'typ' AND ersetzt_durch IS NULL AND wert IN (${typen.map(() => '?').join(',')})`;
       if (a.text) {
-        const m = maskiere(a.text.toLowerCase());
-        cand += ` INTERSECT SELECT inhalt_sha256 FROM (SELECT inhalt_sha256 FROM fundort WHERE host = ? AND lower(substr(pfad, coalesce(length(wurzel), 0) + 1)) LIKE ? ESCAPE '\\'
-          UNION SELECT inhalt_sha256 FROM angabe WHERE ersetzt_durch IS NULL AND feld IN ('pack','kategorie','instrument','titel') AND lower(wert) LIKE ? ESCAPE '\\')`;
-        cparam.push(this.host, m, m);
+        const p = enthaelt('substr(pfad, coalesce(length(wurzel), 0) + 1)', a.text), v = enthaelt('wert', a.text);
+        cand += ` INTERSECT SELECT inhalt_sha256 FROM (SELECT inhalt_sha256 FROM fundort WHERE host = ? AND ${p.sql}
+          UNION SELECT inhalt_sha256 FROM angabe WHERE ersetzt_durch IS NULL AND feld IN ('pack','kategorie','instrument','titel') AND ${v.sql})`;
+        cparam.push(this.host, ...p.par, ...v.par);
       }
       const von = `WITH cand AS (${cand}), k AS (SELECT inhalt_sha256 AS s, max(CASE WHEN feld='typ' THEN wert END) AS typ, max(CASE WHEN feld='pack' THEN wert END) AS pack,
           max(CASE WHEN feld='kategorie' THEN wert END) AS kategorie, max(CASE WHEN feld='instrument' THEN wert END) AS instrument,

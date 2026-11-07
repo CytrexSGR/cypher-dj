@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cmath>
 
+#include <cypherdj/dsp/denormal.h>
+
 namespace cypherdj::dsp {
 
 namespace {
@@ -22,6 +24,21 @@ DjFilter::DjFilter(double fs) : fs_(fs) { koeffizienten(0.0); }
 
 void DjFilter::leeren() {
     for (int c = 0; c < 2; ++c) tp_[c] = hp_[c] = Svf{};
+}
+
+void DjFilter::abschneiden(double schwelle) {
+    for (int c = 0; c < 2; ++c) {
+        auf_null_unter(tp_[c].ic1, schwelle);
+        auf_null_unter(tp_[c].ic2, schwelle);
+        auf_null_unter(hp_[c].ic1, schwelle);
+        auf_null_unter(hp_[c].ic2, schwelle);
+    }
+}
+
+bool DjFilter::leer() const {
+    for (int c = 0; c < 2; ++c)
+        if (!(tp_[c].ic1 == 0.0 && tp_[c].ic2 == 0.0 && hp_[c].ic1 == 0.0 && hp_[c].ic2 == 0.0)) return false;
+    return true;
 }
 
 void DjFilter::setze_guete(double q) {

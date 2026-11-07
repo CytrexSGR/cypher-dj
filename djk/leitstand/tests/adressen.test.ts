@@ -39,3 +39,21 @@ test('I08: /zustand/ein (§5.14, 20 Hz im Takt der Pegel, ohne Änderungs-Auslö
   // M, 2026-10-25: Betriebs-Journal 2,26 GB in 5,6 Tagen, 60 % der Zeilen waren dieser Tick
   assert.ok(NICHT_INS_JOURNAL.has('/zustand/ein'));
 });
+
+test('A6: /zustand/mix (10 Hz x channels) and /zustand/spektrum (25 Hz) are in the table and stay out of the journal; /e/regler and /zustand/arr are not touched', () => {
+  assert.deepEqual(ADRESSEN['/zustand/mix'], { typen: 'sfffff', felder: ['kanal', 'gate_db', 'mb_tief_db', 'mb_mitte_db', 'mb_hoch_db', 'lim_db'] });
+  assert.deepEqual(ADRESSEN['/zustand/spektrum'], { typen: 'sis', felder: ['kanal', 'rahmen', 'pegel'] });
+  assert.ok(NICHT_INS_JOURNAL.has('/zustand/mix'));
+  assert.ok(NICHT_INS_JOURNAL.has('/zustand/spektrum'));
+  // negative controls: this task adds exactly these two (a regler event is a journal fact, /zustand/arr is another task's decision)
+  assert.equal(NICHT_INS_JOURNAL.has('/e/regler'), false);
+  assert.equal(NICHT_INS_JOURNAL.has('/zustand/arr'), false);
+  assert.ok(GENUTZT.includes('/zustand/mix') && GENUTZT.includes('/zustand/spektrum'));
+});
+
+test('4a: /e/ins_gr (up to 12 stages x 20 Hz) is in the table and stays out of the journal; a decision event next to it does not', () => {
+  assert.deepEqual(ADRESSEN['/e/ins_gr'], { typen: 'sf', felder: ['kanal', 'gr_db'] });
+  assert.ok(NICHT_INS_JOURNAL.has('/e/ins_gr'));
+  assert.equal(NICHT_INS_JOURNAL.has('/e/luecke'), false);   // negative control: a journal fact is not excluded
+  assert.ok(GENUTZT.includes('/e/ins_gr'));
+});

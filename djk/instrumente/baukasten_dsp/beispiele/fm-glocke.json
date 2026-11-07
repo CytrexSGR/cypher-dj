@@ -1,0 +1,37 @@
+{
+  "format": "baukasten/2",
+  "name": "fm-glocke",
+  "stimmen": 8,
+  "regler_namen": {"1": "Brightness", "2": "Decay", "3": "Feedback", "4": "Hall"},
+  "knoten": [
+    {"id": "note", "art": "note"},
+    {"id": "k_hell", "art": "regler", "nr": 1, "min": 0, "max": 2},
+    {"id": "k_zeit", "art": "regler", "nr": 2, "min": 0.25, "max": 4, "log": 1},
+    {"id": "k_rueck", "art": "regler", "nr": 3, "min": 0, "max": 1},
+    {"id": "k_hall", "art": "regler", "nr": 4, "min": 0, "max": 0.6},
+    {"id": "fm", "art": "fm", "algo": 10, "anschlag": 0.5,
+     "o1_verh": 1, "o1_pegel": 1, "o1_a": 0.001, "o1_d": 6, "o1_s": 0, "o1_r": 1.5,
+     "o2_verh": 3.5, "o2_pegel": 0.16, "o2_a": 0.001, "o2_d": 4, "o2_s": 0, "o2_r": 1.5,
+     "o3_verh": 2, "o3_fein": 6, "o3_pegel": 0.5, "o3_a": 0.001, "o3_d": 3, "o3_s": 0, "o3_r": 1.2,
+     "o4_verh": 5.19, "o4_pegel": 0.08, "o4_a": 0.001, "o4_d": 1.5, "o4_s": 0, "o4_r": 1.2,
+     "o5_verh": 0.5, "o5_fein": -5, "o5_pegel": 0.35, "o5_a": 0.002, "o5_d": 7, "o5_s": 0, "o5_r": 2,
+     "o6_verh": 1.41, "o6_pegel": 0.06, "o6_a": 0.001, "o6_d": 5, "o6_s": 0, "o6_r": 2},
+    {"id": "pegel", "art": "mul", "b": 0.55},
+    {"id": "hall", "art": "hall", "decay": 3.5, "groesse": 90, "pre": 20},
+    {"id": "aus", "art": "ausgang"}
+  ],
+  "kanten": [
+    {"von": "note.hz", "nach": "fm.hz"},
+    {"von": "note.gate", "nach": "fm.gate"},
+    {"von": "note.trig", "nach": "fm.trig"},
+    {"von": "note.vel", "nach": "fm.vel"},
+    {"von": "k_hell.aus", "nach": "fm.index"},
+    {"von": "k_zeit.aus", "nach": "fm.zeit"},
+    {"von": "k_rueck.aus", "nach": "fm.rueck"},
+    {"von": "fm.aus", "nach": "pegel.a"},
+    {"von": "pegel.aus", "nach": "hall.x"},
+    {"von": "k_hall.aus", "nach": "hall.mix"},
+    {"von": "hall.l", "nach": "aus.l"},
+    {"von": "hall.r", "nach": "aus.r"}
+  ]
+}

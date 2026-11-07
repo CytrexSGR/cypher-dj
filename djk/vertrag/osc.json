@@ -52,6 +52,7 @@
     "graph_kanal": {"abschnitt": "4.10", "liste": ["deck/1", "deck/2", "deck/3", "deck/4", "fx/3", "fx/4"]},
     "graph_platz": {"abschnitt": "5.12", "liste": ["deck/1", "deck/2", "deck/3", "deck/4", "fx/3", "fx/4", "erz/1", "erz/2", "erz/3", "erz/5", "erz/6", "erz/7", "pad/1", "pad/2"]},
     "roll_art": {"abschnitt": "4.4", "codes": {"0": "band_schatten", "1": "puffer_keylock"}},
+    "auto_ziel": {"abschnitt": "4.11", "liste": ["fader", "pan", "mute", "solo"]},
     "urteil": {"abschnitt": "4.5", "liste": ["ok"]},
     "led_zustand": {"abschnitt": "4.7", "codes": {"0": "aus", "1": "an", "2": "blinkt", "3": "blinkt_schnell"}},
     "erz_parameter": {"abschnitt": "4.8", "codes": {"0": "begin", "1": "end"}},
@@ -64,7 +65,7 @@
     "invariante_art": {"abschnitt": "5.9", "liste": ["sub_doppelt", "master_leer", "hoerschein"]},
     "protokollfehler_grund": {"abschnitt": "16.2", "liste": ["unbekannte_adresse", "falsche_typen", "protokoll"]},
     "nb_zustand": {"abschnitt": "5.10", "codes": {"0": "durchreichen", "1": "schleife", "2": "ausgeblendet", "3": "rueckgabe"}},
-    "gruende": {"abschnitt": "16.2", "liste": ["zu_spaet", "regler_beim_menschen", "regler_verplant", "ueberlappung", "nur_hand", "unbekannter_regler", "unbekanntes_deck", "ausserhalb_bereich", "kein_hoerschein", "hoerschein_anderer_kanal", "hoerschein_anderer_inhalt", "hoerschein_anderes_tempo", "hoerschein_abgelaufen", "hoerschein_anderer_abschnitt", "ziel_ungehoert", "keine_stems", "hoerschein_nicht_sync", "hoerschein_pegel", "invariante_sub_doppelt", "invariante_master_leer", "deck_beruehrt", "deck_hoerbar", "deck_laeuft", "nicht_geladen", "material_fehlt", "pruefung", "budget_speicher", "budget_stretcher", "karte_voll", "tempo_rampe", "ki_gestoppt", "rechner_fehlt", "kein_stretcher", "autonomie", "form", "hand", "abbruch", "ki_stopp", "unbekannte_adresse", "falsche_typen", "protokoll", "grenze_sub", "neustart", "datei_fehlt", "format", "audio_fehlt", "zu_gross", "spur_bereich", "reserviert", "kein_eingang", "aufnahme_laeuft", "zu_viele_scharf", "eingang_fehlt", "kein_platz", "warp_maschine_fehlt"]}
+    "gruende": {"abschnitt": "16.2", "liste": ["zu_spaet", "regler_beim_menschen", "regler_verplant", "ueberlappung", "nur_hand", "unbekannter_regler", "unbekanntes_deck", "ausserhalb_bereich", "kein_hoerschein", "hoerschein_anderer_kanal", "hoerschein_anderer_inhalt", "hoerschein_anderes_tempo", "hoerschein_abgelaufen", "hoerschein_anderer_abschnitt", "ziel_ungehoert", "keine_stems", "hoerschein_nicht_sync", "hoerschein_pegel", "invariante_sub_doppelt", "invariante_master_leer", "deck_beruehrt", "deck_hoerbar", "deck_laeuft", "nicht_geladen", "material_fehlt", "pruefung", "budget_speicher", "budget_stretcher", "karte_voll", "tempo_rampe", "ki_gestoppt", "rechner_fehlt", "kein_stretcher", "autonomie", "form", "hand", "abbruch", "ki_stopp", "unbekannte_adresse", "falsche_typen", "protokoll", "grenze_sub", "neustart", "datei_fehlt", "format", "audio_fehlt", "zu_gross", "spur_bereich", "reserviert", "kein_eingang", "aufnahme_laeuft", "zu_viele_scharf", "eingang_fehlt", "kein_platz", "warp_maschine_fehlt", "nur_andreas", "auto_ziel_unbekannt"]}
   },
   "adressen": [
     {"adresse": "/k/hallo", "typen": ",sii", "abschnitt": "4.1", "richtung": "an_kern", "felder": [
@@ -260,6 +261,10 @@
       {"name": "pad", "typ": "i", "einheit": "nummer", "bereich": [1, 2]},
       {"name": "pegel_db", "typ": "f", "einheit": "db"},
       {"name": "politik", "typ": "i", "einheit": "code", "werte": "politik"}]},
+    {"adresse": "/k/hand/frei", "typen": ",hss", "abschnitt": "4.3", "richtung": "an_kern", "felder": [
+      {"name": "id", "typ": "h", "einheit": "kennung"},
+      {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle", "notiz": "only andreas (nur_andreas otherwise)"},
+      {"name": "pfade", "typ": "s", "einheit": "text", "notiz": "comma list of regulator paths; an entry ending in / is a prefix (spur/ = every regulator below it); * = every regulator"}]},
     {"adresse": "/k/ki/stopp", "typen": ",hs", "abschnitt": "4.7", "richtung": "an_kern", "felder": [
       {"name": "id", "typ": "h", "einheit": "kennung"},
       {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle"}]},
@@ -411,6 +416,18 @@
       {"name": "von_beat", "typ": "d", "einheit": "beat", "bereich": [0.0, null]},
       {"name": "bis_beat", "typ": "d", "einheit": "beat"},
       {"name": "kennung", "typ": "i", "einheit": "nummer", "bereich": [0, null], "notiz": "Datei <arr_ordner>/freeze-<spur>-<kennung>.f32 (Paket K3)"}]},
+    {"adresse": "/k/arr/auto", "typen": ",hsisi", "abschnitt": "4.11", "richtung": "an_kern", "felder": [
+      {"name": "id", "typ": "h", "einheit": "kennung"},
+      {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle"},
+      {"name": "spur", "typ": "i", "einheit": "nummer", "bereich": [0, 32], "notiz": "1 to 32 one track, 0 = all tracks (only with an 1, ziel is then still checked but ignored)"},
+      {"name": "ziel", "typ": "s", "einheit": "text", "werte": "auto_ziel"},
+      {"name": "an", "typ": "i", "einheit": "schalter", "bereich": [0, 1], "notiz": "1 = the lane plays (re-enable), 0 = the hand overrides the lane; an 0 never from cypher (nur_andreas), never with spur 0 (format)"}]},
+    {"adresse": "/k/arr/arm", "typen": ",hsiii", "abschnitt": "4.11", "richtung": "an_kern", "felder": [
+      {"name": "id", "typ": "h", "einheit": "kennung"},
+      {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle"},
+      {"name": "spur", "typ": "i", "einheit": "nummer", "bereich": [0, 32], "notiz": "1 to 32 one track, 0 = all tracks (only with an 0: disarms everything)"},
+      {"name": "an", "typ": "i", "einheit": "schalter", "bereich": [0, 1], "notiz": "1 = the track is armed for automation recording, 0 = disarmed. Separate from the audio arm (/k/rec/spur). Only from andreas, any other source gets nur_andreas"},
+      {"name": "modus", "typ": "i", "einheit": "code", "bereich": [0, 2], "notiz": "0 touch, 1 latch, 2 write. Kept with the arm; the core reports points the same way in every mode, the server writes the take"}]},
     {"adresse": "/k/rec/spur", "typen": ",hsiii", "abschnitt": "4.12", "richtung": "an_kern", "felder": [
       {"name": "id", "typ": "h", "einheit": "kennung"},
       {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle"},
@@ -498,6 +515,20 @@
     {"adresse": "/zustand/komp", "typen": ",sf", "abschnitt": "5.5c", "richtung": "vom_kern", "felder": [
       {"name": "kanal", "typ": "s", "einheit": "pfad", "notiz": "Quellkanal (deck/<n>, erz/<n>, pad/<n>) mit laufendem Kompressor"},
       {"name": "gr_db", "typ": "f", "einheit": "db", "notiz": "Absenkung (≥ 0) am Ende des letzten Blocks; 10 Hz, nur solange <k>/komp/an 1 ist"}]},
+    {"adresse": "/zustand/mix", "typen": ",sfffff", "abschnitt": "5.5d", "richtung": "vom_kern", "felder": [
+      {"name": "kanal", "typ": "s", "einheit": "pfad", "notiz": "Kanal (deck/<n>, erz/<n>, pad/<n>, bus/<n>), auf dem ein Mix-Werkzeug läuft"},
+      {"name": "gate_db", "typ": "f", "einheit": "db", "notiz": "Absenkung des Gates (≥ 0); 0 auf Kanälen ohne Gate"},
+      {"name": "mb_tief_db", "typ": "f", "einheit": "db", "notiz": "Absenkung des Multiband-Kompressors, Band tief (≥ 0); 0 ohne Multiband"},
+      {"name": "mb_mitte_db", "typ": "f", "einheit": "db", "notiz": "Absenkung des Multiband-Kompressors, Band mitte (≥ 0)"},
+      {"name": "mb_hoch_db", "typ": "f", "einheit": "db", "notiz": "Absenkung des Multiband-Kompressors, Band hoch (≥ 0)"},
+      {"name": "lim_db", "typ": "f", "einheit": "db", "notiz": "Absenkung des Kanal-Limiters (≥ 0); 0, solange kanal_limiter_vorhalt_ms 0 ist (kein Limiter gebaut)"}]},
+    {"adresse": "/e/ins_gr", "typen": ",sf", "abschnitt": "5.5f", "richtung": "vom_kern", "felder": [
+      {"name": "kanal", "typ": "s", "einheit": "pfad", "notiz": "pooled compressor insert stage, ins/komp/<n> with n = 1 to 12 (the project's insert slot)"},
+      {"name": "gr_db", "typ": "f", "einheit": "db", "notiz": "gain reduction (>= 0) at the end of the last block; 20 Hz with the levels, only for stages that ran in the last block"}]},
+    {"adresse": "/zustand/spektrum", "typen": ",sis", "abschnitt": "5.5e", "richtung": "vom_kern", "felder": [
+      {"name": "kanal", "typ": "s", "einheit": "pfad", "notiz": "selected source of the spectrum (mixer channel or master); sent by the net thread at 25 Hz, only while spektrum/kanal > 0"},
+      {"name": "rahmen", "typ": "i", "einheit": "nummer", "notiz": "laufende Nummer des Rahmens seit der letzten Quellenwahl"},
+      {"name": "pegel", "typ": "s", "einheit": "text", "notiz": "29 ganze Zahlen in 0,1 dB, durch Komma getrennt, 3 Bänder je Oktave von 24,8 Hz bis 16 kHz"}]},
     {"adresse": "/pegel", "typen": ",sfffffff", "abschnitt": "5.6", "richtung": "vom_kern", "felder": [
       {"name": "kanal", "typ": "s", "einheit": "pfad"},
       {"name": "spitze_db", "typ": "f", "einheit": "db"},
@@ -625,6 +656,9 @@
       {"name": "einheit", "typ": "i", "einheit": "nummer", "bereich": [1, 2]},
       {"name": "kanal", "typ": "s", "einheit": "pfad", "werte": "fx_kanal"},
       {"name": "an", "typ": "i", "einheit": "code", "bereich": [0, 1]}]},
+    {"adresse": "/e/kanal_limiter", "typen": ",ii", "abschnitt": "5.12", "richtung": "vom_kern", "felder": [
+      {"name": "gebaut", "typ": "i", "einheit": "schalter"},
+      {"name": "latenz_samples", "typ": "i", "einheit": "samples"}]},
     {"adresse": "/e/fx/routing", "typen": ",i", "abschnitt": "5.12", "richtung": "vom_kern", "felder": [
       {"name": "routing", "typ": "i", "einheit": "code", "bereich": [0, 1]}]},
     {"adresse": "/e/graph", "typen": ",ss", "abschnitt": "5.12", "richtung": "vom_kern", "felder": [
@@ -645,6 +679,11 @@
       {"name": "kein_platz", "typ": "i", "einheit": "anzahl", "notiz": "Stimmen ohne Platz im Werk (Pool voll oder Werk fehlt): der Clip spielt als RE-PITCH, seit Kern-Start"},
       {"name": "spaet", "typ": "i", "einheit": "anzahl", "notiz": "Stimmen, deren Ring zum Einsatz noch leer war (Ansatz nicht rechtzeitig fertig), seit Kern-Start"},
       {"name": "faeden", "typ": "i", "einheit": "anzahl", "notiz": "Arbeitsfäden des Werks (kern.toml warp_faeden), 0 synchron"}]},
+    {"adresse": "/zustand/hall_pool", "typen": ",iiii", "abschnitt": "5.13", "richtung": "vom_kern", "felder": [
+      {"name": "an", "typ": "i", "einheit": "schalter", "bereich": [0, 1], "notiz": "1 the pool accepts work, 0 off (hall_faeden 0 or switched off for good after more than 4 late events in 64 blocks)"},
+      {"name": "faeden", "typ": "i", "einheit": "anzahl", "notiz": "worker threads running (kern.toml hall_faeden, fewer when threads or physical cores were missing)"},
+      {"name": "spaet", "typ": "i", "einheit": "anzahl", "notiz": "late events since kern start (a job taken back, or a join after the deadline)"},
+      {"name": "zurueck", "typ": "i", "einheit": "anzahl", "notiz": "jobs taken back by the callback since kern start"}]},
     {"adresse": "/zustand/ein", "typen": ",ihhhh", "abschnitt": "5.14", "richtung": "vom_kern", "felder": [
       {"name": "verbunden", "typ": "i", "einheit": "code", "notiz": "Bitmaske: Bit k-1 = ein_k_L und ein_k_R verbunden (k 1..4), Bit 8 = midi_ein_1 (I08)"},
       {"name": "midi_gesehen", "typ": "h", "einheit": "anzahl"},
@@ -669,6 +708,14 @@
       {"name": "kennung", "typ": "i", "einheit": "nummer"},
       {"name": "status", "typ": "i", "einheit": "code", "bereich": [0, 2], "notiz": "0 fertig, 1 abgebrochen, 2 Datei nicht geschrieben oder schon vorhanden (Paket K3)"},
       {"name": "frames", "typ": "h", "einheit": "frames"}]},
+    {"adresse": "/e/auto", "typen": ",isi", "abschnitt": "5.13", "richtung": "vom_kern", "felder": [
+      {"name": "spur", "typ": "i", "einheit": "nummer", "bereich": [1, 32]},
+      {"name": "ziel", "typ": "s", "einheit": "text", "werte": "auto_ziel"},
+      {"name": "zustand", "typ": "i", "einheit": "schalter", "bereich": [0, 1], "notiz": "1 = overridden (the hand plays), 0 = the lane plays (re-enabled, or the lane is gone). Polarity differs from /k/arr/auto an. Sent on every change; after the core lost events it re-reports every field of a lane and every field reported as 1"}]},
+    {"adresse": "/e/auto_punkt", "typen": ",sdf", "abschnitt": "5.13", "richtung": "vom_kern", "felder": [
+      {"name": "pfad", "typ": "s", "einheit": "pfad", "notiz": "spur/<n>/<fader|pan|mute|solo>"},
+      {"name": "projekt_beat", "typ": "d", "einheit": "beat", "notiz": "project beat at the sample of the LAST grip of the block, stored with the value and never recomputed when the point is sent"},
+      {"name": "wert", "typ": "f", "einheit": "regler", "notiz": "the hand value (fader dB, pan -1..1, mute and solo 0/1) at that same sample, so beat and value belong together. Order at a transport stop: a point still held is sent in the block AFTER the one that acknowledged the stop, so it arrives after the stopped /zustand/arr and the server must accept it (measured: stopped state first, point second). A disarm drops the held point"}]},
     {"adresse": "/e/mitschnitt", "typen": ",siid", "abschnitt": "5.11", "richtung": "vom_kern", "felder": [
       {"name": "name", "typ": "s", "einheit": "text"},
       {"name": "beats", "typ": "i", "einheit": "beats", "notiz": "MVP 2 Scheibe 3: 1, 2, 4, 8, 16 oder 32 (vorher takte)"},

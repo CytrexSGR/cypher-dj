@@ -23,6 +23,12 @@ pub mod sampler;
 pub mod svf;
 pub mod uebersetzen;
 pub mod vocoder;
+pub mod wavetable;
+pub mod resonator;
+pub mod metall;
+pub mod fm;
+pub mod granular;
+pub mod saite;
 
 pub use format::{Graph, Kante, Knoten, FORMAT, FORMATE};
 pub use kosten::Kosten;

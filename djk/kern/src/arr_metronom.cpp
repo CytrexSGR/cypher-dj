@@ -2,6 +2,9 @@
 // Kern-Beats wie der Prüfklick), Betonung bei p mod 4 == 0 mit dem vollen Pegel, sonst halber Pegel; Pegel aus pegel_db.
 // Klickform wie der Prüfklick (klick.h: 2 kHz, abklingend, 96 Samples). Ziel 0 master: in die Master-Summe VOR dem
 // Limiter; Ziel 1 cue: in die PFL-Summe. Gesperrt (Prüfmodus, Render): klingt nicht.
+// 1.10 slice 4b T13 (closes risk R3): the click is summed outside the PM tap (the master or the cue sum of the caller), so the latency compensation of the mixer does not
+// reach it. The audio of the production sounds the largest path latency later than the transport; the click is placed that much later too, so that it stays on the
+// beat that is heard. The export has no click (locked in the render).
 #include <cmath>
 
 #include "cypherdj/arrangement.h"
@@ -29,13 +32,18 @@ void Arrangement::metronom_segment(const Karte& k, int64_t a, int64_t b, int64_t
   float pegel[8];
   int n = 0;
   if (status_ == ArrStatus::spielt && metro_an_ && !metronom_gesperrt_) {
-    const double p_lo = projekt_beat(k, static_cast<double>(a) - 0.5);
-    const double p_hi = projekt_beat(k, static_cast<double>(b) - 0.5);
+#ifdef CYPHERDJ_MUTATION_METRONOM_PDC_FEHLT
+    const int64_t v = 0;   // error case: the click ignores the latency of the production
+#else
+    const int64_t v = pdc_latenz();
+#endif
+    const double p_lo = projekt_beat(k, static_cast<double>(a - v) - 0.5);
+    const double p_hi = projekt_beat(k, static_cast<double>(b - v) - 0.5);
     for (double p = std::ceil(p_lo - EPS); p < p_hi && n < 8; p += 1.0) {
       if (klammer() && p >= bis_) break;
       const int64_t s = sample_von_p(k, p, ursprung_);
-      if (s < a || s >= b) continue;
-      einsatz[n] = s;
+      if (s < a - v || s >= b - v) continue;
+      einsatz[n] = s + v;
 #ifdef CYPHERDJ_MUTATION_ARR_METRONOM_KERN_TAKT
       const double kt = k.beat_at(static_cast<double>(s));   // Fehlerfall: Betonung nach dem Kern-Takt wie der Prüfklick
       pegel[n++] = std::fabs(kt - 4.0 * std::round(kt / 4.0)) < 1e-6 ? metro_g_ : 0.5f * metro_g_;

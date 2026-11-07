@@ -1,0 +1,37 @@
+{
+ "schema": 1,
+ "name": "Light Glue",
+ "geraet_typ": "effekt",
+ "geraet": "saett",
+ "werte": {
+  "drive": 4,
+  "out": -2,
+  "mix": 0.3
+ },
+ "beschreibung": {
+  "art": "saturation",
+  "unterart": "tube",
+  "charakter": [
+   "subtle",
+   "tight",
+   "warm"
+  ],
+  "genre": [
+   "house",
+   "minimal",
+   "dubstep"
+  ],
+  "einsatz": [
+   "mixdown"
+  ],
+  "energie": 2,
+  "text": "Four dB into the curve at 30 percent: enough shared harmonics for a bus to cohere."
+ },
+ "tags": [
+  "glue",
+  "subtle"
+ ],
+ "notiz": "Small amounts per Snoman p.195; values practice.",
+ "angelegt": "2026-11-02T00:00:00.000Z",
+ "geaendert": "2026-11-02T00:00:00.000Z"
+}

@@ -1,0 +1,38 @@
+{
+ "schema": 1,
+ "name": "Parallel Drums",
+ "geraet_typ": "effekt",
+ "geraet": "saett",
+ "werte": {
+  "drive": 18,
+  "out": -10,
+  "mix": 0.4
+ },
+ "beschreibung": {
+  "art": "saturation",
+  "unterart": "clipper",
+  "charakter": [
+   "punchy",
+   "thick",
+   "aggressive"
+  ],
+  "genre": [
+   "techno",
+   "breaks",
+   "electro"
+  ],
+  "einsatz": [
+   "drop",
+   "mixdown"
+  ],
+  "energie": 4,
+  "text": "Parallel distortion at 40 percent thickens a drum bus while the transients stay untouched."
+ },
+ "tags": [
+  "drums",
+  "parallel"
+ ],
+ "notiz": "Parallel technique as at Snoman p.197 and 284; values are practice.",
+ "angelegt": "2026-11-02T00:00:00.000Z",
+ "geaendert": "2026-11-02T00:00:00.000Z"
+}

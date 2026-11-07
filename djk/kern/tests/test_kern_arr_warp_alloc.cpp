@@ -21,7 +21,29 @@ bool g_waechter = false;
 
 using k35::N;
 
+// 1.12 slice 5 U8b: the same runs once more with a gain envelope on every clip (g_hk), and of the voices that play one, the ones whose held factor has left 1.0
+// (the envelope really runs: 0 allocations is not an empty run)
+namespace cdj {
+struct ArrPruefZugang {
+  static int hk_laufen(const Arrangement& a) {
+    int n = 0;
+    for (const Arrangement::Stimme& v : a.st_) n += v.aktiv && (v.clip || v.werk >= 0) && v.hk.punkte() > 0 && v.hk_lin != 1.0f;
+    return n;
+  }
+};
+}  // namespace cdj
+
 namespace {
+
+bool g_hk = false;
+// the clip text c with a gain envelope [0, -18] .. [p, -4] .. [8, -30 (s-curve)] .. [8, -6 (jump)] when g_hk is set (the swap moves p)
+std::string mit_hk(std::string c, double p) {
+  if (!g_hk) return c;
+  char hk[160];
+  std::snprintf(hk, sizeof hk, ",\"gain_hk\":[[0,-18,0],[%.17g,-4,0],[8,-30,1],[8,-6,2]]", p);
+  c.insert(c.size() - 1, hk);
+  return c;
+}
 
 constexpr int64_t FPB125 = 23040;
 
@@ -53,8 +75,8 @@ AbfangZahlen lauf(int faeden, const char* name) {
         m.push_back({b, b * static_cast<double>(FPB125)});
       }
       s += (sp > 1 ? "," : "") + std::string("{\"nr\":") + std::to_string(sp) + ",\"art\":\"audio\",\"clips\":[" +
-           x.ordner.clip_warp(("w" + std::to_string(sp)).c_str(), 0.0, 8.0, sp % 2 ? a : b, F, m, 0.0, sp <= 4 ? 2 : 3,
-                                  sp % 3 == 0 ? 1.4983070768766815 : sp % 3 == 1 ? 0.7071067811865476 : 1.0) + "]}";   // Slice 5: +7 st, -6 st, 1 (der Neuabtast-Weg im Fenster)
+           mit_hk(x.ordner.clip_warp(("w" + std::to_string(sp)).c_str(), 0.0, 8.0, sp % 2 ? a : b, F, m, 0.0, sp <= 4 ? 2 : 3,
+                                  sp % 3 == 0 ? 1.4983070768766815 : sp % 3 == 1 ? 0.7071067811865476 : 1.0), ende2 > 8.1 ? 5.0 : 4.0) + "]}";   // Slice 5: +7 st, -6 st, 1 (der Neuabtast-Weg im Fenster)
     }
     return s;
   };
@@ -80,6 +102,7 @@ AbfangZahlen lauf(int faeden, const char* name) {
     }
   };
   zyklen(1500);                          // > 1 Durchlauf der Klammer (8 Beats = 180 000 Samples = 703 Zyklen): zwei Nähte
+  const int hk_lauf = cdj::ArrPruefZugang::hk_laufen(x.kern->arrangement());
   x.laden(2, spuren(8.2), "andreas", true);   // Tausch: andere Marker, die Stimmen lösen sich ab
   zyklen(500);
   x.teil("spur/1/fader", -3.0f, 0.0, 0.0);
@@ -100,6 +123,7 @@ AbfangZahlen lauf(int faeden, const char* name) {
   std::printf("arr_warp_alloc (%s): %ld Zyklen im Fenster: Allokationen %ld, free %ld, Sperren %ld, Schlafen %ld; Werk-Stimmen %d, Unterlauf %llu, spät %llu\n",
               faeden ? "Fäden" : "synchron", zyklen_gezaehlt, summe.alloc, summe.frei, summe.sperren, summe.schlafen, x.kern->arrangement().werk_stimmen(),
               static_cast<unsigned long long>(x.kern->arrangement().warp_unterlauf()), static_cast<unsigned long long>(x.kern->arrangement().warp_spaet()));
+  if (g_hk) PRUEF(hk_lauf >= 4);   // the werk voices play an envelope that moves
   PRUEF(x.kern->arrangement().warp_unterlauf() > 0);   // der Ausfall wurde bemerkt: der Lauf hat die Fehlerwege wirklich durchlaufen
   werk->stoppe();
   return summe;
@@ -115,7 +139,7 @@ AbfangZahlen lauf_beats(const char* name) {
   const auto spuren = [&](int huelle) {
     std::string s;
     for (int sp = 1; sp <= 4; ++sp) {
-      std::string c = x.ordner.clip_warp(("b" + std::to_string(sp)).c_str(), 0.0, 8.0, a, F, {{0.0, 0.0}, {8.0, 8.0 * static_cast<double>(FPB125)}});
+      std::string c = mit_hk(x.ordner.clip_warp(("b" + std::to_string(sp)).c_str(), 0.0, 8.0, a, F, {{0.0, 0.0}, {8.0, 8.0 * static_cast<double>(FPB125)}}), huelle == 60 ? 5.0 : 4.0);
       std::string e = ",\"e\":[";
       for (int k = 0; k < 32; ++k) e += (k ? "," : "") + std::string("[") + std::to_string(k * 0.25) + "," + std::to_string(k * (FPB125 / 4)) + "]";
       e += "],\"loop\":" + std::to_string(sp % 3) + ",\"huelle\":" + std::to_string(sp == 4 ? huelle : 100);
@@ -147,6 +171,7 @@ AbfangZahlen lauf_beats(const char* name) {
   };
   zyklen(1500);                        // > 1 Durchlauf der Klammer: zwei Nähte
   PRUEF(x.kern->arrangement().stimmen() >= 4 && x.kern->arrangement().warp_stimmen() >= 4);   // die vier BEATS-Stimmen klingen wirklich (sonst misst das Fenster Stille)
+  if (g_hk) PRUEF(cdj::ArrPruefZugang::hk_laufen(x.kern->arrangement()) >= 4);   // and their envelope moves
   x.laden(2, spuren(60), "andreas", true);   // Tausch: Hülle der Spur 4 ändert sich, die Stimme blendet aus einer Kopie aus
   zyklen(500);
   {
@@ -175,6 +200,11 @@ int main() {
   const AbfangZahlen s0 = lauf(0, "test_kern_arr_warp_alloc_s");
   const AbfangZahlen s2 = lauf(2, "test_kern_arr_warp_alloc_f");
   const AbfangZahlen sb = lauf_beats("test_kern_arr_warp_alloc_b");
+  g_hk = true;   // U8b: the same three runs with a gain envelope on every clip, a table-only swap in the middle (p 4 -> 5), the tempo ramp and the stop
+  const AbfangZahlen h0 = lauf(0, "test_kern_arr_warp_alloc_hs");
+  const AbfangZahlen h2 = lauf(2, "test_kern_arr_warp_alloc_hf");
+  const AbfangZahlen hb = lauf_beats("test_kern_arr_warp_alloc_hb");
+  g_hk = false;
   abfang_an();
   void* p = std::malloc(16);
   const long positiv = abfang_aus();
@@ -184,5 +214,8 @@ int main() {
   PRUEF(s0.alloc == 0 && s0.sperren == 0 && s0.schlafen == 0);   // synchron: Callback und Werk
   PRUEF(s2.alloc == 0 && s2.sperren == 0 && s2.schlafen == 0);   // Fäden: der Callback
   PRUEF(sb.alloc == 0 && sb.frei == 0 && sb.sperren == 0 && sb.schlafen == 0);   // Slice 4: BEATS
+  PRUEF(h0.alloc == 0 && h0.sperren == 0 && h0.schlafen == 0);   // U8b: synchronous, werk voices with an envelope
+  PRUEF(h2.alloc == 0 && h2.sperren == 0 && h2.schlafen == 0);   // U8b: threads
+  PRUEF(hb.alloc == 0 && hb.frei == 0 && hb.sperren == 0 && hb.schlafen == 0);   // U8b: BEATS voices with an envelope
   PRUEF_ENDE();
 }

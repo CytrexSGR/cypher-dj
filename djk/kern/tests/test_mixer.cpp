@@ -42,7 +42,7 @@ int main() {
   // 1. Tabelle
   {
     Pruefling p;
-    int n[16] = {};
+    int n[32] = {};   // MixRolle has 19 values; [16] was read out of bounds (found by UBSan with -fno-sanitize-recover)
     for (int r = 0; r < p.tab.anzahl(); ++r) ++n[static_cast<int>(p.m->zuweisung(r).rolle)];
     std::printf("Regler %d: ohne %d, spaeter %d, kanalzug %d, ziel %d, xseite %d, pfl %d, global %d\n", p.tab.anzahl(),
                 n[0], n[1], n[2], n[3], n[4], n[5], n[6] + n[7] + n[8] + n[9] + n[10]);
@@ -59,7 +59,8 @@ int main() {
     // S5r: dazu 12 Graph-Kanäle x 8 `bk/<n>` (der Mischer ignoriert sie, die Werte trägt der Kern an die Graph-Handles)
     // 1.10 Slice 3: dazu 204 Send-, Return- und Hall-Regler (spur|grp/<n>/send/<r>, ret/<r>/*), ebenfalls Modul Arrangement
     // S14: fx/3, fx/4 x 8 bk/<n>, global, the Mixer ignores them (the kern ctor carries the values to the send graphs)
-    PRUEF(n[static_cast<int>(cdj::MixRolle::spaeter)] == 16 + 4 + 1 + 4 * cdj::ARR_SPUREN + 4 * sw::GRP_REGLER_GRUPPEN + 1 + 12 * 8 + 204 + 2 * 8);
+    // 1.10 slice 4a T1: plus the 120 ins/komp/<n>/* rows, global, owned by the Arrangement module (the Mixer ignores them)
+    PRUEF(n[static_cast<int>(cdj::MixRolle::spaeter)] == 16 + 4 + 1 + 4 * cdj::ARR_SPUREN + 4 * sw::GRP_REGLER_GRUPPEN + 1 + 12 * 8 + 204 + 2 * 8 + 120 + 2 * 59 + 4 + 48 + 3);   // master limiter: + 3 ins/lim rows (role class spaeter); 1.10 slice 4b: + 59 eq and 4 saett insert rows (eq pool 2 since 2026-11-06: 2 x 59); slice 4c T15: + 48 rack macro rows rack/<k>/m<n>
     PRUEF(n[static_cast<int>(cdj::MixRolle::fx_rueckweg)] == 4);                     // fx/1..4/rueckweg (K2 Slice 2)
     int abweichend = 0;
     for (int r = 0; r < p.tab.anzahl(); ++r) {

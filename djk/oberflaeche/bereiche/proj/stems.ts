@@ -10,22 +10,23 @@ import { json } from '../../http/transport.ts';
 import { grundText } from '../../http/gruende.ts';
 import { aendereStand } from '../../projekt/stand.ts';
 import { schreibeWavAusF32Stueckweise } from '../../projekt/aufnahme.ts';
-import { STEMS, StemsFehler, baueStemsProjekt, pruefeNochGleich, stemsPlan, type Stem, type StemsPlan } from '../../projekt/stems.ts';
+import { STEMS, STEMS_PFLICHT, StemsFehler, baueStemsProjekt, pruefeNochGleich, stemsPlan, type Stem, type StemsPlan } from '../../projekt/stems.ts';
 import { herkunft, sucheClip } from '../../projekt/modell.ts';
 import { grundCode } from './abbildung.ts';
 import { alsAntwort, leseKoerper, type ProjZugang } from './bereich.ts';
 import { ProjFehler, type Antwort } from './sitzung.ts';
 import { StemsLauf, type StemsLaufOptionen } from './stems_lauf.ts';
 
-// D11 lifted 2026-10-31 (Andreas): GPU with a free check and CPU fallback in stems.py
-export const STEMS_GPU = true;
+// Plan 2026-11-06-stems-roformer-gpu, D2/D7: GPU only, no CPU fallback; the field geraet stays for compatibility and accepts only 'gpu'
+export const STEMS_NUR_GPU = true;
+const GPU_GRUENDE = new Set(['gpu_belegt', 'keine_gpu']);                       // grund of the result line, passed through unchanged
 // Review MINOR 4: Zeitlimit je Lauf. RTF 0,27 (Probe) mit Faktor 3 Reserve plus Laden; mindestens 10 min (wie die Vorbereiter-Linie, analyse.ts:14)
 export const stemsZeitlimitMs = (n: number): number => Math.max(10 * 60_000, Math.round(n / 48000 * 3 * 1000) + 120_000);
 export interface StemsOptionen extends Partial<StemsLaufOptionen> { python: string; cwd: string; zeitlimitMs?: number;
   schreibeWav?: (quelle: string, ziel: string) => Promise<{ frames: number; sha256: string }> }   // Test: den Schreiber verlangsamen
 type Zustand = 'laeuft' | 'fertig' | 'abgebrochen' | 'veraltet' | 'fehler';
 interface Lauf { id: number; slug: string; quelle: 'andreas' | 'cypher'; plan: StemsPlan; tmp: string; kennung: number; prozess: StemsLauf;
-  abgebrochen: 'abbruch' | 'stems_quantum' | 'stems_zeitlimit' | null; wavs: string[];
+  abgebrochen: 'abbruch' | 'stems_zeitlimit' | null; wavs: string[];
   rechnet: boolean; gespeichert: boolean; uhr: NodeJS.Timeout; frist: NodeJS.Timeout }
 const FELDER = ['clip_id', 'spur_id', 'von_beat', 'bis_beat', 'geraet'];
 const dateiName = (name: string): string => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'clip';
@@ -48,12 +49,12 @@ export class Stems {
   starte(d: Record<string, unknown>, quelle: 'andreas' | 'cypher'): Antwort {
     for (const k of Object.keys(d)) if (!FELDER.includes(k)) throw new ProjFehler(400, 'argument_unbekannt', { detail: k });
     const geraet = d.geraet ?? 'gpu';
-    if (geraet !== 'cpu' && geraet !== 'gpu') throw new ProjFehler(400, 'argument_ungueltig', { detail: "geraet: 'cpu' or 'gpu'" });
-    if (geraet === 'gpu' && !STEMS_GPU) throw new ProjFehler(409, 'stems_gpu_aus');
+    if (geraet === 'cpu') throw new ProjFehler(400, 'stems_nur_gpu');
+    if (geraet !== 'gpu') throw new ProjFehler(400, 'argument_ungueltig', { detail: "geraet: only 'gpu'" });
     if (this.lauf) throw new ProjFehler(409, 'stems_laeuft', { auftrag_id: this.lauf.id });
     if (quelle === 'cypher' && this.ctx.kiGestoppt()) throw new ProjFehler(409, 'ki_gestoppt');   // P5: nur Cyphers Läufe
     if (this.quantum === null) throw new ProjFehler(409, 'kein_kernstand');
-    if (this.quantum !== 256) throw new ProjFehler(409, 'stems_quantum', { quantum: this.quantum });   // D10
+    // D10 retired 2026-11-07: the quantum-256 rule came from CPU stems; M9 measured GPU jobs next to the kern at 256 and 128 with 0 gaps
     const o = this.zugang.offen();
     if (!o) throw new ProjFehler(409, 'kein_projekt');
     const plan = stemsPlan(o.projekt, d);
@@ -63,7 +64,7 @@ export class Stems {
     if (g.clip.art !== 'audio' || g.clip.dekodiert !== 'fertig' || !fs.existsSync(quellDatei)) throw new ProjFehler(409, 'audio_fehlt');
     const id = this.naechste++;
     const tmp = path.join(this.zugang.arbeitsordner(), `stems-${id}`);
-    const auftrag = { quelle: quellDatei, f0: plan.f0, f1: plan.f1, aus: tmp, geraet };
+    const auftrag = { quelle: quellDatei, f0: plan.f0, f1: plan.f1, aus: tmp };
     const prozess = new StemsLauf({ ...this.o }, auftrag, (stufe, prozent) => this.melde(stufe, prozent));
     const l: Lauf = { id, slug: o.slug, quelle, plan, tmp, kennung: this.zugang.naechsteNummer(), prozess, abgebrochen: null, wavs: [],
       rechnet: true, gespeichert: false,
@@ -76,7 +77,7 @@ export class Stems {
     return { code: 200, j: { auftrag_id: id, frames: plan.n } };
   }
 
-  private bricheAb(l: Lauf, grund: 'abbruch' | 'stems_quantum' | 'stems_zeitlimit'): void {
+  private bricheAb(l: Lauf, grund: 'abbruch' | 'stems_zeitlimit'): void {
     l.abgebrochen ??= grund;                                                    // der erste Grund zählt
     l.prozess.abbrechen(this.o.killMs ?? 2000);                                 // D2: SIGTERM, nach killMs SIGKILL
   }
@@ -88,8 +89,7 @@ export class Stems {
     return { code: 200, j: { auftrag_id: l.id, zustand: 'abbrechen' } };
   }
   private abbruchStand(l: Lauf): void {
-    if (l.abgebrochen === 'stems_quantum') this.endStand(l, { zustand: 'abgebrochen', grund: 'stems_quantum', text: 'stems run only at the core quantum 256' });
-    else if (l.abgebrochen === 'stems_zeitlimit') {
+    if (l.abgebrochen === 'stems_zeitlimit') {
       this.endStand(l, { zustand: 'abgebrochen', grund: 'stems_zeitlimit', text: 'the stem separation took too long and was cancelled' });
     } else this.endStand(l, { zustand: 'abgebrochen', grund: 'abbruch', text: 'the stem separation was cancelled' });
   }
@@ -121,7 +121,15 @@ export class Stems {
       if (l.quelle === 'cypher' && this.ctx.kiGestoppt()) {                     // D15: Stop Cypher am Ende → verwerfen, räumt das finally
         this.endStand(l, { zustand: 'veraltet', grund: 'ki_gestoppt', text: 'Stop Cypher is set; the result was discarded' }); return;
       }
-      if (e.rc !== 0 || e.zeile?.status !== 'ok') {
+      if (e.zeile?.status === 'fehler' && GPU_GRUENDE.has(String(e.zeile.grund))) {   // D2: no GPU or not enough free memory
+        const grund = String(e.zeile.grund);
+        this.endStand(l, { zustand: 'fehler', grund, text: grundText(grund), detail: String(e.zeile.text ?? '') });
+        return;
+      }
+      // the placed stems: the four required ones always, guitar and piano when werkstatt.stems kept them (D4)
+      const gesetzt = Array.isArray(e.zeile?.stems) ? (e.zeile!.stems as unknown[]).map(String) : [];
+      const stimmig = STEMS_PFLICHT.every((s) => gesetzt.includes(s)) && gesetzt.every((s) => (STEMS as readonly string[]).includes(s));
+      if (e.rc !== 0 || e.zeile?.status !== 'ok' || !stimmig) {
         this.endStand(l, { zustand: 'fehler', grund: 'stems_fehler', text: 'the stem separation failed; nothing was changed',
           detail: String(e.zeile?.grund ?? e.signal ?? `rc ${e.rc}`) });
         return;
@@ -131,15 +139,15 @@ export class Stems {
       const o0 = this.zugang.offen();
       const hinfaellig = (o: ReturnType<ProjZugang['offen']>): Record<string, unknown> | null => {
         if (!o || o.slug !== l.slug) return { zustand: 'veraltet', grund: 'veraltet', text: 'the clip changed while separating; nothing was placed' };
-        const alt = pruefeNochGleich(o.projekt, l.plan);
-        if (alt === 'zu_viele_spuren') return { zustand: 'veraltet', grund: 'zu_viele_spuren', text: 'separating stems needs four free tracks' };
+        const alt = pruefeNochGleich(o.projekt, l.plan, gesetzt.length);
+        if (alt === 'zu_viele_spuren') return { zustand: 'veraltet', grund: 'zu_viele_spuren', text: `separating stems needs ${gesetzt.length} free tracks` };
         if (alt !== null) return { zustand: 'veraltet', grund: 'veraltet', text: 'the clip changed while separating; nothing was placed' };
         return null;
       };
       const vor = hinfaellig(o0);
       if (vor) { this.endStand(l, vor as { zustand: Zustand }); return; }
-      const dateien = {} as Record<Stem, { sha256: string; pfad: string }>;
-      for (const s of STEMS) {
+      const dateien: Partial<Record<Stem, { sha256: string; pfad: string }>> = {};
+      for (const s of STEMS.filter((x) => gesetzt.includes(x))) {
         const ziel = path.join(o0!.ordner, 'stems', `${l.kennung}-${dateiName(l.plan.clipName)}-${s}.wav`);
         const w = await (this.o.schreibeWav ?? schreibeWavAusF32Stueckweise)(path.join(l.tmp, `${s}.f32`), ziel);   // Review MINOR 5: Event-Loop frei
         l.wavs.push(ziel);
@@ -178,9 +186,6 @@ export class Stems {
     if (q === undefined) return;
     // MINOR 2 T8: 0 = der Kern hat noch keinen Zyklus gerechnet (telemetrie.h:62) → unbekannt, nicht falsch: Start kein_kernstand, im Lauf kein Abbruch
     this.quantum = Number(q) > 0 ? Number(q) : null;
-    const l = this.lauf;
-    // MINOR 1 T8: bis zum Setzen gilt der Wechsel (auch im WAV-Fenster, Plan-Semantik); nach gespeichert wird er ignoriert
-    if (l && !l.gespeichert && this.quantum !== null && this.quantum !== 256) this.bricheAb(l, 'stems_quantum');
   }
   schliesse(): void {
     const l = this.lauf;

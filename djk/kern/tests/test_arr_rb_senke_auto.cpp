@@ -20,6 +20,7 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
+#include <tuple>
 #include <vector>
 
 #include "arr_bau.h"
@@ -373,6 +374,73 @@ int main() {
     PRUEF(m.back() > 0.95 && m.back() < 1.05);   // the cutoff opened: A ends where B is
     PRUEF(m[kb + 2] > 0.3);               // direction: within three blocks after the jump the sound has moved most of the way toward B (not monotone before: the projection of a mid cutoff is not linear)
     PRUEF(ersten != 0);
+  }
+  {  // 10: 1.12 slice 5 U9 (D9): a RELATIVE device lane without an absolute one reaches the sink as a summand; the sink adds it to its base value (the playback value, else
+     // the RB default) and clamps to 0..1. With an absolute lane the core stacks and clamps itself (control e).
+    const auto rel_snapshot = [](int64_t nr, const std::vector<std::tuple<int, std::vector<ArrAutoPunkt>, bool>>& lanes, bool mit_grundwerten = true) {
+      Bau b(nr);
+      b.spur(1, ArrArt::intern);
+      for (const auto& l : lanes) b.lane(1, std::get<1>(l), cdj::ARR_AUTO_GERAET, static_cast<uint8_t>(std::get<0>(l)), std::get<2>(l));
+      cdj::ArrSnapshot* sn = b.fertig();
+      if (mit_grundwerten) {
+        param(sn, 1, "cutoff", 0.4f);
+        param(sn, 1, "resonanz", 0.5f);
+      }
+      return sn;
+    };
+    {  // a. base 0.4 + relative 0.3 = 0.7, set once, not again
+      Lauf l;
+      l.t.laden(rel_snapshot(1, {{1, {P(0, 0.3f), P(100, 0.3f)}, true}}));
+      const auto e = bis_start(l);
+      PRUEF_NAH(letzter(e, "cutoff"), 0.7, 1e-6);
+      PRUEF(zaehle(e, "cutoff") == 2);   // the base value 0.4, then the stacked value
+      for (int i = 0; i < 6; ++i) PRUEF(l.block().empty());
+      PRUEF(l.rb.parameter_abgelehnt() == 0 && l.rb.verloren() == 0);
+    }
+    {  // b. clamp at both ends
+      Lauf l;
+      l.t.laden(rel_snapshot(1, {{1, {P(0, 0.9f), P(100, 0.9f)}, true}}));
+      PRUEF_NAH(letzter(bis_start(l), "cutoff"), 1.0, 1e-6);
+      Lauf m;
+      m.t.laden(rel_snapshot(1, {{1, {P(0, -0.9f), P(100, -0.9f)}, true}}));
+      PRUEF_NAH(letzter(bis_start(m), "cutoff"), 0.0, 1e-6);
+    }
+    {  // c. a relative-only lane deleted by a swap while playing: the base value once
+      Lauf l;
+      l.t.laden(rel_snapshot(1, {{1, {P(0, 0.3f), P(100, 0.3f)}, true}}));
+      bis_start(l);
+      l.blocks(2);
+      l.t.laden(rel_snapshot(2, {}));
+      const auto e = l.block();
+      PRUEF(e.size() == 1 && zaehle(e, "cutoff") == 1);
+      if (!e.empty()) PRUEF_NAH(e[0].wert, 0.4, 1e-6);
+      for (int i = 0; i < 4; ++i) PRUEF(l.block().empty());
+    }
+    {  // d. no playback value: the RB default 0.62565 is the base
+      Lauf l;
+      l.t.laden(rel_snapshot(1, {{1, {P(0, 0.1f), P(100, 0.1f)}, true}}, false));
+      PRUEF_NAH(letzter(bis_start(l), "cutoff"), 0.62565 + 0.1, 1e-5);
+    }
+    {  // e. control: absolute 0.2 + relative 0.3 arrives stacked as 0.5, the playback value 0.4 plays no part
+      Lauf l;
+      l.t.laden(rel_snapshot(1, {{1, {P(0, 0.2f), P(100, 0.2f)}, false}, {1, {P(0, 0.3f), P(100, 0.3f)}, true}}));
+      PRUEF_NAH(letzter(bis_start(l), "cutoff"), 0.5, 1e-6);
+    }
+    {  // f. a moving summand is set once per block, rising (like a ramp lane)
+      Lauf l;
+      l.t.laden(rel_snapshot(1, {{1, {P(0, -0.3f), P(8, 0.5f)}, true}}));
+      bis_start(l);
+      float vorher = -1.0f;
+      for (int i = 0; i < 6; ++i) {
+        const auto e = l.block();
+        PRUEF(zaehle(e, "cutoff") == 1 && e.size() == 1);
+        if (!e.empty()) {
+          PRUEF(e[0].wert > vorher);
+          vorher = e[0].wert;
+        }
+      }
+      PRUEF(vorher > 0.1f);
+    }
   }
   PRUEF_ENDE();
 }

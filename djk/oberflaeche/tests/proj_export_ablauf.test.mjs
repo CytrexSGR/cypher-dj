@@ -69,6 +69,28 @@ test('Export: friert die Surge-Spur vorher ein (mit Sperre), rendert die Loop-Kl
   assert.equal(a.freezes().length, 1);
 });
 
+test('Export default range: loop bracket only when it is on, otherwise the whole song from beat 0 to the end of the last clip', async (t) => {
+  const a = await aufbau(t, { tempo: 120 });
+  // the song ends at beat 32 (bass clip 16..32); the loop bracket is switched off but still holds 0..16
+  await a.aendern([{ befehl: 'clip_neu', spur_id: 's2', art: 'midi', start_beat: 16, laenge_beats: 16, noten: [{ beat: 0, laenge: 0.5, ton: 36, vel: 100 }] },
+    { befehl: 'loop_setzen', an: false, von_beat: 0, bis_beat: 16 }], 'Song');
+  await geladen(a);
+  const r = await mitUmgebung({ RENDER_ATTRAPPE_PROTOKOLL: protokollDatei(a) }, () => ruf(() => a.ausgabe.exportiere({})));
+  assert.equal(r.code, 200, JSON.stringify(r.body));
+  assert.equal(r.body.frames, 32 * 0.5 * 48000, 'whole song 0..32 at 120 BPM, not the switched-off loop bracket 0..16');
+  const aufruf = renderAufrufe(a).at(-1);
+  assert.deepEqual(aufruf.argv.slice(aufruf.argv.indexOf('--von-beat'), aufruf.argv.indexOf('--bis-beat') + 2), ['--von-beat', '0', '--bis-beat', '32']);
+  // negative control: with the bracket on, the bracket still wins
+  await a.aendern([{ befehl: 'loop_setzen', an: true, von_beat: 4, bis_beat: 12 }], 'Loop');
+  await geladen(a);
+  const r2 = await ruf(() => a.ausgabe.exportiere({}));
+  assert.equal(r2.body.frames, 8 * 0.5 * 48000, 'loop on: bracket 4..12');
+  // the song length also drives the loudness measurement, which shares the range check
+  await a.aendern([{ befehl: 'loop_setzen', an: false, von_beat: 4, bis_beat: 12 }], 'Loop aus');
+  await geladen(a);
+  assert.deepEqual(a.ausgabe.songBereich(), { von: 0, bis: 32 });
+});
+
 test('Export ohne Neustart-Zustand (Spec 6.20): regler_quelle projekt, der Render bekommt die Spur-Regler aus project.json', async (t) => {
   const a = await aufbau(t);
   await a.aendern([{ befehl: 'spur_aendern', spur_id: 's2', fader_db: -7.5, pan: 0.25, mute: true }]);

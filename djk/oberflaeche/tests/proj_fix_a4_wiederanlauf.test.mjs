@@ -81,7 +81,7 @@ test('A4 Negativ-Kontrolle: verschiedene Nummer → erz/4, Loop, Metronom und al
   const { z, nr } = neustart(t);
   z.s.ereignis('/zustand/arr', arrNr(nr + 1));
   await z.s.oeffnen('wa', 'andreas');
-  assert.equal(z.k.teile(/^erz\/4\//).length, 16); assert.equal(z.k.an('/k/arr/loop').length, 1); assert.equal(z.k.an('/k/arr/metronom').length, 1);
+  assert.equal(z.k.teile(/^erz\/4\//).length, 24); assert.equal(z.k.an('/k/arr/loop').length, 1); assert.equal(z.k.an('/k/arr/metronom').length, 1);
   assert.equal(z.k.teile(/^spur\/\d+\/(fader|pan|mute|solo)$/).length, 4 * MAX_SPUREN);
 });
 

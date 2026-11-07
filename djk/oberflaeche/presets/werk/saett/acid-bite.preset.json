@@ -1,0 +1,38 @@
+{
+ "schema": 1,
+ "name": "Acid Bite",
+ "geraet_typ": "effekt",
+ "geraet": "saett",
+ "werte": {
+  "drive": 24,
+  "out": -12,
+  "mix": 1
+ },
+ "beschreibung": {
+  "art": "saturation",
+  "unterart": "distortion",
+  "charakter": [
+   "dirty",
+   "aggressive",
+   "metallic"
+  ],
+  "genre": [
+   "acid",
+   "techno",
+   "electro"
+  ],
+  "einsatz": [
+   "drop",
+   "build"
+  ],
+  "energie": 5,
+  "text": "Heavy drive turns a 303 line into a biting, metallic lead without a second device."
+ },
+ "tags": [
+  "acid",
+  "bite"
+ ],
+ "notiz": "Heavy drive follows the driven-hard description at Snoman p.197; values are practice.",
+ "angelegt": "2026-11-02T00:00:00.000Z",
+ "geaendert": "2026-11-02T00:00:00.000Z"
+}

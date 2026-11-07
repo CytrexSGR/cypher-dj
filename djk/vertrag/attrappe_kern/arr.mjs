@@ -20,13 +20,22 @@ import path from 'node:path';
 // (7 ki_stopp) und ihren Freeze. Während des KI-Stopps lehnt kern.mjs alle cypher-Befehle
 // ab außer /k/arr/stopp (Spec 6.27, gemeinsamer Fall djk/vertrag/faelle/arr_ki_stopp.json).
 import { llround } from './uhr.mjs';
+import { AUTO_ZIELE } from './vertrag.mjs';   // field 0..3 of the lane override (§4.11 /k/arr/auto)
 
 const N = 256;
 const VORHALT = 2 * N + 25;
 
+// Project beat at sample s while playing. With the loop on (bis > von) the beat wraps like the core's: after the loop end it continues at the loop start.
+export function projektBeat(K, s) {
+  const a = K.arr;
+  const p = K.uhr.beat(s) - a.ursprung + a.start_beat;
+  const l = a.loop;
+  return l.an && l.bis > l.von && p >= l.bis ? l.von + ((p - l.von) % (l.bis - l.von)) : p;
+}
+
 function melde(K, s) {
   const a = K.arr;
-  const p = a.status === 2 ? K.uhr.beat(s) - a.ursprung + a.start_beat : a.start_beat;
+  const p = a.status === 2 ? projektBeat(K, s) : a.start_beat;
   const w = [a.nr, a.status, a.loop.an ? 1 : 0, p, BigInt(a.start_s), a.start_beat, a.metro.an ? 1 : 0, 0.0];   // 1.10 Slice 2: limiter_db (die Attrappe hat keinen Limiter: immer 0)
   if (a.freeze && a.status !== 0) w[1] = 3;   // Paket K3: Status freeze, solange er wartet oder läuft (wie der Kern)
   if (K.mutation.has('arr_zustand_alt')) w.pop();   // Fehlerfall: Form ohne das letzte Feld (limiter_db), der Vertragstest muss es sehen
@@ -58,6 +67,29 @@ function freezeEnde(K, s, ok, grund = 'abbruch') {
 // Spec 6.33: offen ist eine angenommene Rampe, die auf ihren Einsatz wartet oder läuft
 const rampeOffen = (K) => K.teile.some((u) => u.art === 'tempo' && (u.status === 'wartet' || u.status === 'laeuft'));
 
+// 1.12 Slice 3 (D6): the lanes change (a load, the test hook). Every overridden field that has no lane any more is cleared and reported as 0 at once.
+const schluessel = (k) => k.split('/').map(Number);
+function auto_aus(K, key, zustand) { const [sp, fe] = schluessel(key); K.aus('/e/auto', [sp, AUTO_ZIELE[fe], zustand]); }
+function lanenTauschen(K, neu) {
+  K.arr.lanen = neu;
+  const weg = [...K.arr.auto].filter((k) => !neu.has(k)).sort((x, y) => { const [a, b] = schluessel(x), [c, d] = schluessel(y); return a - c || b - d; });
+  for (const k of weg) { K.arr.auto.delete(k); auto_aus(K, k, 0); }
+}
+// the lanes of <arr_ordner>/wiedergabe-<nr>.json (spuren[].nr with spuren[].auto[].ziel); null if the file is not there or unreadable (the lanes stay as they are)
+function lanenAusDatei(K, nr) {
+  if (!K.cfg.arr_ordner) return null;
+  try {
+    const j = JSON.parse(fs.readFileSync(path.join(K.cfg.arr_ordner, `wiedergabe-${nr}.json`), 'utf8'));
+    const lanen = new Set();
+    // 1.12 slice 5 (D9): a lane with `relativ: true` is a summand of the value stack; the core overrides only absolute lanes, so a relative lane makes no field overridable here.
+    // `gain_hk` (clip gain envelopes in spuren[].clips[]) is ignored: this stand-in models no clip gain.
+    for (const sp of j.spuren ?? []) for (const l of sp.auto ?? []) if (AUTO_ZIELE.includes(l.ziel) && l.relativ !== true) lanen.add(`${sp.nr}/${AUTO_ZIELE.indexOf(l.ziel)}`);
+    return lanen;
+  } catch {
+    return null;
+  }
+}
+
 function startAbbrechen(K, s, grund) {   // wartender Start ohne Einsatz: Endquittung 7
   const a = K.arr;
   if (a.b_start && a.status === 1) K.q(a.b_start, 7, grund, s);
@@ -73,11 +105,36 @@ function beidesQ(K, b, tu) {   // Quittung 1 jetzt, 3 am nächsten Blockanfang (
   });
 }
 
+const PUNKT_ABSTAND = 960;   // 50 Hz per regulator (REGLER_MELDUNG_ABSTAND)
+function punktStand(K, spur, ziel) {
+  const key = `${spur}/${ziel}`;
+  if (!K.arr.punkte.has(key)) K.arr.punkte.set(key, { spur, ziel, gemeldet: -Infinity, halt: null });
+  return K.arr.punkte.get(key);
+}
+
 export default {
   name: 'arr',
   init(K) {
     K.arr = { nr: -1, status: 0, start_beat: 0, ursprung: 0, start_s: -1, b_start: null, cypher: false,
-      loop: { an: false, von: 0, bis: 0 }, metro: { an: false, pegel_db: -12, ziel: 0 } };
+      loop: { an: false, von: 0, bis: 0 }, metro: { an: false, pegel_db: -12, ziel: 0 },
+      auto: new Set(),     // 1.12 Slice 3: overridden fields "spur/feld" (spur 1..32, feld 0..3)
+      arm: new Map(),      // 1.12 Slice 3 (D11): armed tracks, spur 1..32 -> mode (0 touch, 1 latch, 2 write); a new core generation (a new stand-in) starts empty
+      punkte: new Map(),   // 1.12 Slice 3 (D12): "spur/ziel" -> { gemeldet: sample of the block end that sent the last point, halt: the held point or null }
+      lanen: new Set() };  // the fields that have a lane in the loaded playback, same keys
+    // 1.12 Slice 3 test hook: declares the lanes (pairs [spur, ziel]) as a load would; overridden fields without a lane go (D6) with /e/auto 0
+    K.arrLanen = (paare) => { lanenTauschen(K, new Set(paare.map(([sp, z]) => `${sp}/${AUTO_ZIELE.indexOf(z)}`))); };
+    // 1.12 Slice 3 test hook (D12, INTERFACES 5.13 /e/auto_punkt): a grip of the hand with its project beat and value, as the core sees it inside the current block.
+    // Modelled like the core: only an armed track, only while the transport plays (status 2, else false), only the fields of the contract. The point is not sent here but at
+    // the end of the block (nachBlock): at once when the 50 Hz window of that regulator (960 samples from the last sent point) is free, else it is HELD and a newer grip replaces
+    // it (trailing value, the last value of a gesture arrives). When the transport does not play any more a held point is sent in that block, after the stopped /zustand/arr.
+    // A disarm drops the held points of the track but keeps the windows. Returns true if the grip was accepted.
+    K.arrProjektBeat = (s) => projektBeat(K, s);
+    K.arrPunkt = (spur, ziel, beat, wert) => {
+      if (!K.arr.arm.has(spur) || K.arr.status !== 2 || !AUTO_ZIELE.includes(ziel)) return false;
+      const p = punktStand(K, spur, ziel);
+      p.halt = { beat, wert };
+      return true;
+    };
     K.arrStartStopp = (s) => {   // Hand-Zielart arr/start_stopp (§7.2): Stopp, oder Start sofort (die Attrappe spielt nie)
       const a = K.arr;
       if (a.status !== 0) {
@@ -111,6 +168,7 @@ export default {
   // Freeze ab; mit der Mutation arr_freeze_set_neu_bleibt liefe er auf der neuen Achse weiter
   setNeu(K) {
     const a = K.arr;
+    a.punkte.clear();   // the rate windows count in samples of the old axis
     if (!a.freeze || K.mutation.has('arr_freeze_set_neu_bleibt')) return;
     a.status = 0;
     freezeEnde(K, 0, false);
@@ -119,7 +177,16 @@ export default {
   befehle: {
     '/k/arr/laden': (K, a, b) => {
       if (!(a.nr >= 0)) return K.q(b, 6, 'ausserhalb_bereich');
-      beidesQ(K, b, (s) => { K.arr.nr = a.nr; if (K.arr.freeze) { K.arr.status = 0; freezeEnde(K, s, false); } });
+      K.q(b, 1);   // like beidesQ, but the lane events of a load follow the receipt 3 (as in the core: events leave at the end of the cycle)
+      K.sofortQ.push(() => {
+        const s = K.stempel;
+        K.arr.nr = a.nr;
+        if (K.arr.freeze) { K.arr.status = 0; freezeEnde(K, s, false); }
+        K.q(b, 3);
+        melde(K, s);
+        const lanen = lanenAusDatei(K, a.nr);
+        if (lanen) lanenTauschen(K, lanen);
+      });
     },
     '/k/arr/start': (K, a, b) => {
       if (!(a.start_beat >= 0) || !(a.quant >= 0 && a.quant <= 2)) return K.q(b, 6, 'ausserhalb_bereich');
@@ -148,6 +215,48 @@ export default {
         return K.q(b, 6, 'ausserhalb_bereich');
       beidesQ(K, b, () => { K.arr.metro = { an: a.an === 1, pegel_db: a.pegel_db, ziel: a.ziel }; });
     },
+    // 1.12 Slice 3 (§4.11): the lane override. Like the core: the filter is the transport (D5: an 0 while stopped is acknowledged, nothing changes, no /e/auto);
+    // an 1 clears also while stopped (D6); cypher may not override (D9); the state survives stop and start; without a lane for the field nothing happens (acknowledged).
+    '/k/arr/auto': (K, a, b) => {
+      const feld = AUTO_ZIELE.indexOf(a.ziel);
+      if (!(a.spur >= 0 && a.spur <= 32) || (a.an !== 0 && a.an !== 1)) return K.q(b, 6, 'format');
+      if (feld < 0) return K.q(b, 6, 'auto_ziel_unbekannt');
+      if (a.spur === 0 && a.an === 0) return K.q(b, 6, 'format');
+      if (a.an === 0 && a.quelle === 'cypher' && !K.mutation.has('arr_auto_cypher_uebersteuert')) return K.q(b, 6, 'nur_andreas');
+      K.q(b, 1);
+      K.sofortQ.push(() => {
+        const set = K.arr.auto;
+        const aus = (key, zustand) => auto_aus(K, key, zustand);
+        const wechsel = [];
+        if (a.an === 0) {
+          const key = `${a.spur}/${feld}`;
+          if (K.arr.status === 2 && K.arr.lanen.has(key) && !set.has(key)) { set.add(key); wechsel.push([key, 1]); }
+        } else {
+          const keys = a.spur === 0 ? [...set] : [`${a.spur}/${feld}`].filter((k) => set.has(k));
+          keys.sort((x, y) => { const [s1, f1] = schluessel(x), [s2, f2] = schluessel(y); return s1 - s2 || f1 - f2; });
+          for (const key of keys) { set.delete(key); wechsel.push([key, 0]); }
+        }
+        K.q(b, 3);
+        for (const [key, z] of wechsel) aus(key, z);
+      });
+    },
+    // 1.12 Slice 3 (§4.11, D11): arm a track for automation recording. Only andreas; spur 0 only disarms; the state lives in the stand-in like in the core.
+    '/k/arr/arm': (K, a, b) => {
+      if (!(a.spur >= 0 && a.spur <= 32) || (a.an !== 0 && a.an !== 1) || !(a.modus >= 0 && a.modus <= 2) || (a.spur === 0 && a.an === 1)) return K.q(b, 6, 'format');
+      if (a.quelle !== 'andreas' && !K.mutation.has('arr_arm_cypher')) return K.q(b, 6, 'nur_andreas');
+      K.q(b, 1);
+      K.sofortQ.push(() => {
+        const spuren = a.spur === 0 ? [...K.arr.arm.keys()] : [a.spur];
+        for (const sp of spuren) {
+          if (a.an === 1) K.arr.arm.set(sp, a.modus);
+          else {
+            K.arr.arm.delete(sp);
+            for (const p of K.arr.punkte.values()) if (p.spur === sp) p.halt = null;   // the held point goes, the rate window stays
+          }
+        }
+        K.q(b, 3);
+      });
+    },
     '/k/arr/freeze': (K, a, b) => {   // Paket K3 (KI-Stopp für cypher prüft kern.mjs vor allem anderen)
       if (!(a.spur >= 1 && a.spur <= 32) || !(a.von_beat >= 0) || !(a.bis_beat - a.von_beat >= 1) ||
           !(a.bis_beat - a.von_beat <= 256) || !(a.kennung >= 0))
@@ -164,6 +273,18 @@ export default {
         freeze: { b, spur: a.spur, kennung: a.kennung, ende, frames: ende - start_s } });
       melde(K, K.jetzt);
     },
+  },
+  // 1.12 Slice 3: the points of the block, in the order of the core (spur, then field)
+  nachBlock(K, s0, s1) {
+    const spielt = K.arr.status === 2;
+    const offen = [...K.arr.punkte.values()].filter((p) => p.halt && K.arr.arm.has(p.spur));
+    offen.sort((x, y) => x.spur - y.spur || AUTO_ZIELE.indexOf(x.ziel) - AUTO_ZIELE.indexOf(y.ziel));
+    for (const p of offen) {
+      if (spielt && !K.mutation.has('arr_punkt_ohne_drossel') && s1 - p.gemeldet < PUNKT_ABSTAND) continue;   // held until the window ends
+      K.aus('/e/auto_punkt', [`spur/${p.spur}/${p.ziel}`, p.halt.beat, p.halt.wert]);
+      p.halt = null;
+      p.gemeldet = s1;
+    }
   },
   ausgaben(K, s0, s1) {
     const abstand = K.arr.status === 1 || K.arr.status === 2 ? 960 : 24000;

@@ -1,0 +1,50 @@
+{
+ "schema": 1,
+ "name": "Subtle Glue",
+ "geraet_typ": "effekt",
+ "geraet": "hall",
+ "werte": {
+  "mix": 0.12,
+  "early": 0.5,
+  "tail": -3,
+  "pre": 12,
+  "size": 50,
+  "decay": 1.2,
+  "lowx": 1.1,
+  "highx": 0.7,
+  "lowcut": 200,
+  "highcut": 10000,
+  "diff": 1,
+  "width": 0.9,
+  "duck": 0.3,
+  "freeze": false,
+  "kill": false,
+  "fft": "2048"
+ },
+ "beschreibung": {
+  "art": "reverb",
+  "unterart": "chamber",
+  "charakter": [
+   "subtle",
+   "transparent",
+   "smooth"
+  ],
+  "genre": [
+   "house",
+   "disco",
+   "minimal"
+  ],
+  "einsatz": [
+   "mixdown"
+  ],
+  "energie": 1,
+  "text": "A quiet, transparent send that glues a bus together without being heard as reverb."
+ },
+ "tags": [
+  "glue",
+  "send"
+ ],
+ "notiz": "Chamber as a dense, uncoloured category from Snoman p.231 and Valhalla (Chamber mode); values are practice.",
+ "angelegt": "2026-11-02T00:00:00.000Z",
+ "geaendert": "2026-11-02T00:00:00.000Z"
+}

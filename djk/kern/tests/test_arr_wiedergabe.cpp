@@ -461,5 +461,45 @@ int main() {
       ++nr;
     }
   }
+  {  // 1.9 U1a T1.2: kit tracks (geraet "kit"). Built standalone (no kit.cpp), so no loader is set here: the four malformed shapes are
+     // refused by the parser with their own text, a well-formed track reaches the store and is refused "no kit loader".
+    cdj::SpeicherKonto konto(100LL << 20);
+    cdj::ArrAudioCache cache(&konto, 50LL << 20, false);
+    cache.setze_kit_ordner(o.pfad + "/kits");
+    struct Fall {
+      const char* was;
+      std::string spur;
+      const char* im_text;
+    };
+    const std::string kopf = "{\"nr\":1,\"art\":\"intern\",";
+    const Fall faelle[] = {
+        {"no kit", kopf + "\"geraet\":\"kit\",\"noten\":[]}", "kit fehlt"},
+        {"bad name", kopf + "\"geraet\":\"kit\",\"kit\":\"Kit X\",\"noten\":[]}", "name must be"},
+        {"path in the name", kopf + "\"geraet\":\"kit\",\"kit\":\"../x\",\"noten\":[]}", "name must be"},
+        {"graph on kit", kopf + "\"geraet\":\"kit\",\"kit\":\"k\",\"graph\":\"g\",\"noten\":[]}", "graph"},
+        {"parameter on kit", kopf + "\"geraet\":\"kit\",\"kit\":\"k\",\"parameter\":{\"k1\":0.5},\"noten\":[]}", "parameter"},
+        {"kit on rb338", kopf + "\"geraet\":\"rb338\",\"kit\":\"k\",\"noten\":[]}", "kit gibt es nur bei geraet kit"},
+        {"kit on bk", kopf + "\"geraet\":\"bk\",\"graph\":\"g\",\"kit\":\"k\",\"noten\":[]}", "kit gibt es nur bei geraet kit"},
+        {"no loader", kopf + "\"geraet\":\"kit\",\"kit\":\"kit_impuls\",\"noten\":[]}", "no kit loader"},
+    };
+    int nr = 70;
+    for (const Fall& f : faelle) {
+      o.wiedergabe(nr, f.spur);
+      cdj::ArrLadeErgebnis e = cdj::lade_wiedergabe(o.pfad, nr, cache);
+      if (e.snap || e.grund != "format" || e.meldung.find(f.im_text) == std::string::npos || e.meldung.find("spuren[0]") == std::string::npos)
+        std::fprintf(stderr, "case %s: grund=%s meldung=%s\n", f.was, e.grund.c_str(), e.meldung.c_str());
+      PRUEF(e.snap == nullptr && e.grund == "format");
+      PRUEF(e.meldung.find(f.im_text) != std::string::npos);
+      PRUEF(e.meldung.find("spuren[0]") != std::string::npos);   // names the track
+      if (e.snap) cdj::gib_wiedergabe(e.snap.release(), cache);
+      PRUEF(cache.kit_eintraege() == 0);
+      ++nr;
+    }
+    // negative control: the RB-338 track and the existing shapes load as before
+    o.wiedergabe(nr, "{\"nr\":1,\"art\":\"intern\",\"geraet\":\"rb338\",\"parameter\":{\"cutoff\":0.5},\"noten\":[]}");
+    cdj::ArrLadeErgebnis e = cdj::lade_wiedergabe(o.pfad, nr, cache);
+    PRUEF(e.snap != nullptr && e.snap->spur[0].kit[0] == '\0' && e.snap->spur[0].kit_ptr == nullptr && e.snap->kit_refs.empty());
+    if (e.snap) cdj::gib_wiedergabe(e.snap.release(), cache);
+  }
   PRUEF_ENDE();
 }

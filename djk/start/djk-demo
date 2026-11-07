@@ -1,0 +1,134 @@
+#!/usr/bin/env bash
+# djk-demo: the technical frame of a recorded demo set (2026-11-07). Cypher plays and speaks; this script only handles
+# voice player, set recording, OBS and the final file. It never touches the music.
+#
+#   djk-demo stimme [--eingang K]   start the voice player cypherdj-stimme on the kern's input pair ein_K (default 4).
+#                                   The kern must run with kern.toml stimme_eingang = K (djk-start --kern-konfig, see
+#                                   konfig/kern-demo.toml.beispiel). One graph edge, made once here, never per sentence.
+#   djk-demo stimme-stopp
+#   djk-demo start [--name N] [--ohne-obs]
+#                                   start the set recording (cypherdj-setmitschnitt, read only from the kern's audio ring,
+#                                   no graph change) and, unless --ohne-obs, the OBS recording over obs-websocket.
+#                                   Folder: ~/werkstatt/cypher-dj-demo/aufnahmen/<date>-<N>/ (master.wav, demo.json)
+#   djk-demo stopp                  stop both, then zusammen
+#   djk-demo zusammen [ORDNER]      video from OBS + master.wav aligned by cross-correlation -> demo.mp4
+#   djk-demo lage                   what runs (player, recording, OBS), as JSON lines
+#
+# Instance: CYPHERDJ_INSTANZ or --instanz <a..i> before the command (page port 47300 + 1000 k, ring /dev/shm/cypherdj-<i>/bus).
+# OBS: start it with the demo profile first (obs --profile CypherDemo --collection CypherDemo); obs-websocket on 4455 without
+# password. Its JACK capture "Studio-Master" is linked to the kern's master ports by `start` (one edge, at the start).
+set -euo pipefail
+
+DJK=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
+I=${CYPHERDJ_INSTANZ:-}
+if [ "${1:-}" = "--instanz" ]; then I=$2; shift 2; fi
+case "$I" in ""|[a-i]) ;; *) echo "djk-demo: instance must be empty or a..i" >&2; exit 2;; esac
+SFX=${I:+-$I}
+SHM=/dev/shm/cypherdj$SFX
+KERN=cypherdj-kern$SFX
+BAU=$DJK/kern/build
+WURZEL=${DJK_DEMO_ORDNER:-$HOME/werkstatt/cypher-dj-demo/aufnahmen}
+AKTUELL=$WURZEL/.aktuell$SFX
+OBS_WS="python3 $DJK/start/obs_ws.py"
+export CYPHERDJ_INSTANZ=$I
+
+jetzt_ns() { date +%s%N; }
+aktiv() { systemctl --user is-active --quiet "$1"; }
+
+stimme() {
+  local k=4
+  [ "${1:-}" = "--eingang" ] && k=$2
+  [ -x "$BAU/cypherdj-stimme" ] || { echo "djk-demo: $BAU/cypherdj-stimme missing (build the target cypherdj-stimme)" >&2; exit 1; }
+  if aktiv "cypherdj-stimme$SFX"; then echo "voice player already runs (cypherdj-stimme$SFX)"; return; fi
+  aktiv "$KERN" || { echo "djk-demo: kern $KERN does not run" >&2; exit 1; }
+  systemd-run --user --quiet --unit="cypherdj-stimme$SFX" --setenv=CYPHERDJ_INSTANZ="$I" -p Nice=-5 \
+    pw-jack "$BAU/cypherdj-stimme" --eingang "$k"
+  for _ in $(seq 50); do
+    if journalctl --user -u "cypherdj-stimme$SFX" --since "-10s" -o cat 2>/dev/null | grep -q "cypherdj-stimme: ready"; then
+      echo "voice player ready: cypherdj-stimme$SFX -> $KERN:ein_$k (queue $SHM/stimme)"; return; fi
+    aktiv "cypherdj-stimme$SFX" || break
+    sleep 0.1
+  done
+  journalctl --user -u "cypherdj-stimme$SFX" --since "-10s" -o cat 2>/dev/null | tail -3 >&2
+  echo "djk-demo: voice player did not come up" >&2; exit 1
+}
+
+obs_anschluss() {   # link the kern master to the OBS JACK capture, once (nothing happens if already linked)
+  local ports; ports=$(pw-link -i 2>/dev/null | grep -i "Studio-Master" | sort || true)
+  [ -n "$ports" ] || { echo "djk-demo: no OBS JACK input 'Studio-Master' (OBS not running with the demo collection?)" >&2; return 1; }
+  local l r; l=$(printf '%s\n' "$ports" | sed -n 1p); r=$(printf '%s\n' "$ports" | sed -n 2p)
+  pw-link "$KERN:master_L" "$l" 2>/dev/null || true
+  pw-link "$KERN:master_R" "${r:-$l}" 2>/dev/null || true
+  pw-link -l 2>/dev/null | grep -A3 "$KERN:master_L" | grep -q "Studio-Master" || { echo "djk-demo: link to OBS failed" >&2; return 1; }
+}
+
+start() {
+  local name=set obs=1
+  while [ $# -gt 0 ]; do case "$1" in --name) name=$2; shift 2;; --ohne-obs) obs=0; shift;; *) echo "djk-demo: unknown $1" >&2; exit 2;; esac; done
+  [ -e "$AKTUELL" ] && { echo "djk-demo: a recording runs ($(cat "$AKTUELL")); djk-demo stopp first" >&2; exit 1; }
+  aktiv "$KERN" || { echo "djk-demo: kern $KERN does not run" >&2; exit 1; }
+  local d; d="$WURZEL/$(date +%Y-%m-%d-%H%M)-$name"
+  mkdir -p "$d"
+  systemd-run --user --quiet --unit="cypherdj-setmitschnitt$SFX" --setenv=CYPHERDJ_INSTANZ="$I" -p Nice=5 \
+    "$BAU/cypherdj-setmitschnitt" --aus "$d/master.wav" --stopp "$d/stopp"
+  local wav_ns; wav_ns=$(jetzt_ns)
+  sleep 0.5
+  aktiv "cypherdj-setmitschnitt$SFX" || { journalctl --user -u "cypherdj-setmitschnitt$SFX" --since "-10s" -o cat | tail -3 >&2
+    echo "djk-demo: the set recording did not start" >&2; exit 1; }
+  local obs_ns=null obs_ok=false
+  if [ "$obs" = 1 ]; then
+    obs_anschluss
+    if $OBS_WS StartRecord >/dev/null; then obs_ns=$(jetzt_ns); obs_ok=true; else echo "djk-demo: OBS did not start recording" >&2; fi
+  fi
+  printf '{"ordner":"%s","instanz":"%s","wav_start_unix_ns":%s,"obs_start_unix_ns":%s,"obs":%s}\n' "$d" "$I" "$wav_ns" "$obs_ns" "$obs_ok" > "$d/demo.json"
+  echo "$d" > "$AKTUELL"
+  echo "recording: $d (master.wav$([ "$obs_ok" = true ] && echo ', OBS'))"
+}
+
+stopp() {
+  [ -e "$AKTUELL" ] || { echo "djk-demo: no recording runs" >&2; exit 1; }
+  local d; d=$(cat "$AKTUELL")
+  local pfad=""
+  if grep -q '"obs":true' "$d/demo.json"; then
+    pfad=$($OBS_WS StopRecord | python3 -c 'import json,sys; print(json.load(sys.stdin).get("outputPath",""))' || true)
+  fi
+  touch "$d/stopp"
+  for _ in $(seq 100); do aktiv "cypherdj-setmitschnitt$SFX" || break; sleep 0.1; done
+  rm -f "$AKTUELL" "$d/stopp"
+  python3 - "$d/demo.json" "$pfad" <<'PY'
+import json, sys
+p, v = sys.argv[1], sys.argv[2]
+d = json.load(open(p)); d["obs_datei"] = v or None
+json.dump(d, open(p, "w"), ensure_ascii=False); print(json.dumps(d, ensure_ascii=False))
+PY
+  cat "$d/master.wav.json" 2>/dev/null || echo "djk-demo: master.wav.json missing" >&2
+  [ -n "$pfad" ] && zusammen "$d"
+}
+
+zusammen() {
+  local d=${1:-}
+  [ -n "$d" ] || d=$(ls -1d "$WURZEL"/*/ 2>/dev/null | tail -1)
+  d=${d%/}
+  local v; v=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("obs_datei") or "")' "$d/demo.json")
+  [ -n "$v" ] && [ -e "$v" ] || { echo "djk-demo: no OBS file in $d/demo.json" >&2; exit 1; }
+  for _ in $(seq 100); do ffprobe -v error "$v" >/dev/null 2>&1 && break; sleep 0.2; done   # OBS closes the file after StopRecord returns
+  python3 "$DJK/start/demo_zusammen.py" "$v" "$d/master.wav" "$d/demo.mp4"
+}
+
+lage() {
+  for u in "cypherdj-stimme$SFX" "cypherdj-setmitschnitt$SFX" "$KERN"; do
+    printf '{"unit":"%s","aktiv":%s}\n' "$u" "$(aktiv "$u" && echo true || echo false)"
+  done
+  [ -e "$AKTUELL" ] && printf '{"aufnahme":"%s"}\n' "$(cat "$AKTUELL")"
+  $OBS_WS GetRecordStatus 2>/dev/null || echo '{"obs":"not reachable"}'
+}
+
+case "${1:-}" in
+  stimme) shift; stimme "$@";;
+  stimme-stopp) systemctl --user stop "cypherdj-stimme$SFX" 2>/dev/null || true; echo "voice player stopped";;
+  start) shift; start "$@";;
+  stopp) stopp;;
+  zusammen) shift; zusammen "$@";;
+  lage) lage;;
+  *) sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 2;;
+esac

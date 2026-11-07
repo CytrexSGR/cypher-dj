@@ -19,15 +19,15 @@ Six steps. Each one ends with a measurement.
 
 | # | Step | done when |
 |---|---|---|
-| 1 | **Separate stems** (Demucs) | four files exist, each exactly as long as the original |
+| 1 | **Separate stems** (BS-RoFormer) | four to six files exist, each exactly as long as the original |
 | 2 | **Find the beats** | the residual against the fitted line is known, not guessed |
 | 3 | **Measure the structure** | energy per bar and stem, block boundaries visible |
 | 4 | **Cut loops** | each one sample-exact at its target length |
 | 5 | **Wire them in** | the target file is provably fetched by the player |
 | 6 | **Listen** | level measured against a real zero point, or the human |
 
-In cypher-dj: `djk/werkstatt/werkstatt/stems.py` separates a range on the GPU or the CPU (or Separate Stems in the PRODUCTION
-view), `kick_messer.py` finds where the kick of each expected beat starts, `phase.py` measures the grid's phase against
+In cypher-dj: `djk/werkstatt/werkstatt/stems.py` separates a range on the GPU (or Separate Stems in the PRODUCTION
+view; there is no CPU path), `kick_messer.py` finds where the kick of each expected beat starts, `phase.py` measures the grid's phase against
 the hits.
 
 ## Is the grid constant? Measure, then decide

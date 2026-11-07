@@ -1,0 +1,28 @@
+{
+  "format": "baukasten/2",
+  "name": "metall-ride",
+  "stimmen": 4,
+  "regler_namen": {"1": "Decay", "2": "Tune", "3": "Color", "4": "Noise", "5": "Low cut"},
+  "knoten": [
+    {"id": "note", "art": "note"},
+    {"id": "k_decay", "art": "regler", "nr": 1, "min": 1, "max": 6, "log": 1},
+    {"id": "k_tune", "art": "regler", "nr": 2, "min": 0.6, "max": 1.2, "log": 1},
+    {"id": "k_farbe", "art": "regler", "nr": 3, "min": 0, "max": 0.6},
+    {"id": "k_rauschen", "art": "regler", "nr": 4, "min": 0, "max": 0.3},
+    {"id": "k_hp", "art": "regler", "nr": 5, "min": 800, "max": 5000, "log": 1},
+    {"id": "ride", "art": "metall", "gruppe": 0},
+    {"id": "pegel", "art": "mul", "b": 1.2},
+    {"id": "aus", "art": "ausgang"}
+  ],
+  "kanten": [
+    {"von": "note.trig", "nach": "ride.trig"},
+    {"von": "note.vel", "nach": "ride.vel"},
+    {"von": "k_decay.aus", "nach": "ride.decay"},
+    {"von": "k_tune.aus", "nach": "ride.tune"},
+    {"von": "k_farbe.aus", "nach": "ride.farbe"},
+    {"von": "k_rauschen.aus", "nach": "ride.rauschen"},
+    {"von": "k_hp.aus", "nach": "ride.hp"},
+    {"von": "ride.aus", "nach": "pegel.a"},
+    {"von": "pegel.aus", "nach": "aus.x"}
+  ]
+}

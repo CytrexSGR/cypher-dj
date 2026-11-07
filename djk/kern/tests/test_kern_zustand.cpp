@@ -88,5 +88,35 @@ int main() {
   c.kern->abbild(*h);
   PRUEF(h->n_befehle == 0);
   PRUEF(c.kern->karte().sample_at(96.0) != a.kern->karte().sample_at(96.0));
+
+  // 1.15 A1b (g): mix-tool controls survive the restart state. The state stores by path, so the new rows need no extra code;
+  // this pins it: two values off their defaults are written, restored into a fresh core, and sit in the Stellwerk AND in the
+  // Mixer slots there.
+  {
+    Aufbau w;
+    const auto& tw = w.kern->stellwerk().tabelle();
+    const int r_gate = tw.suche("deck/1/gate/schwelle"), r_mb = tw.suche("bus/2/mb/mitte/makeup"), r_rest = tw.suche("deck/2/gate/schwelle");
+    PRUEF(r_gate >= 0 && r_mb >= 0 && r_rest >= 0);
+    PRUEF(w.kern->regler_setzen("deck/1/gate/schwelle", -30.0f) && w.kern->regler_setzen("bus/2/mb/mitte/makeup", 3.0f));
+    PRUEF(w.kern->mixer().wert(r_gate) == -30.0f && w.kern->mixer().wert(r_mb) == 3.0f);   // set in the writing core
+    auto fw = std::make_unique<cdj_z_echtzeit>();
+    std::memset(fw.get(), 0, sizeof *fw);
+    w.kern->abbild(*fw);
+    bool im_fach_gate = false, im_fach_mb = false, im_fach_rest = false;
+    for (int i = 0; i < fw->n_regler; ++i) {
+      im_fach_gate = im_fach_gate || !std::strcmp(fw->regler[i].pfad, "deck/1/gate/schwelle");
+      im_fach_mb = im_fach_mb || !std::strcmp(fw->regler[i].pfad, "bus/2/mb/mitte/makeup");
+      im_fach_rest = im_fach_rest || !std::strcmp(fw->regler[i].pfad, "deck/2/gate/schwelle");
+    }
+    PRUEF(im_fach_gate && im_fach_mb);
+    PRUEF(!im_fach_rest);   // negative control: a mix-tool control at its default is not stored
+    Aufbau v;               // fresh core: the defaults (error case for comparison)
+    PRUEF(v.kern->stellwerk().wert(r_gate) == -40.0f && v.kern->mixer().wert(r_gate) == -40.0f);
+    PRUEF(v.kern->stellwerk().wert(r_mb) == 0.0f && v.kern->mixer().wert(r_mb) == 0.0f);
+    PRUEF(v.kern->wiederherstellen(*fw));
+    PRUEF(v.kern->stellwerk().wert(r_gate) == -30.0f && v.kern->stellwerk().wert(r_mb) == 3.0f);   // in the Stellwerk
+    PRUEF(v.kern->mixer().wert(r_gate) == -30.0f && v.kern->mixer().wert(r_mb) == 3.0f);           // in the Mixer slots
+    PRUEF(v.kern->stellwerk().wert(r_rest) == -40.0f && v.kern->mixer().wert(r_rest) == -40.0f);   // untouched neighbour stays default
+  }
   PRUEF_ENDE();
 }

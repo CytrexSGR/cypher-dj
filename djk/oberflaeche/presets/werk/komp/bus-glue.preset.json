@@ -1,0 +1,40 @@
+{
+ "schema": 1,
+ "name": "Bus Glue",
+ "geraet_typ": "effekt",
+ "geraet": "komp",
+ "werte": {
+  "thresh": -12,
+  "ratio": 2,
+  "knee": 12,
+  "attack": 30,
+  "release": 300,
+  "makeup": 1.5,
+  "mix": 1,
+  "extsc": false,
+  "schp": 60
+ },
+ "beschreibung": {
+  "art": "compressor",
+  "unterart": "glue",
+  "charakter": [
+   "smooth",
+   "subtle",
+   "transparent"
+  ],
+  "genre": [],
+  "einsatz": [
+   "mixdown",
+   "mastering"
+  ],
+  "energie": 2,
+  "text": "Gentle 2:1 compression with a long release that glues a bus without audible pumping."
+ },
+ "tags": [
+  "bus",
+  "glue"
+ ],
+ "notiz": "Starting point from practice (Senior, Mixing Secrets; Pirkle ch. 18), not measured. Same values as djk/instrumente/komp/presets/presets.json.",
+ "angelegt": "2026-11-02T00:00:00.000Z",
+ "geaendert": "2026-11-02T00:00:00.000Z"
+}

@@ -47,7 +47,8 @@ export function hotcueOrdnerVorgabe(i: string = instanz()): string { return i ? 
 export function huellenVorgabe(i: string = instanz()): string { return `${shmOrdner(i)}/huellen`; }
 export function musterOrdnerVorgabe(i: string = instanz()): string { return `${shmOrdner(i)}/erzeuger`; }
 export function wirtOrdnerVorgabe(i: string = instanz()): string { return shmOrdner(i); }
-export function kitsOrdnerVorgabe(): string { return konfig('kits'); }
+// Kit folder: CYPHERDJ_KIT_ORDNER (test instances, djk-start --kit-ordner) wins over the configured folder; empty counts as unset.
+export function kitsOrdnerVorgabe(): string { const e = process.env.CYPHERDJ_KIT_ORDNER; return e !== undefined && e !== '' ? e : konfig('kits'); }
 export function zusatzKit(i: string = instanz()): string { return i ? `rec-${i}` : 'rec'; }
 // I08: Geräte-Konfiguration je Instanz (~/.config/cypherdj[-<i>]/geraete.json) und die Kanten-Datei, die der Kern aus dem Shm-Ordner liest.
 // Baukasten S2: Ordner der Baukasten-Graphen (baukasten-<gruppe>.json), wie djk-instrumente sie dem Wirt nennt

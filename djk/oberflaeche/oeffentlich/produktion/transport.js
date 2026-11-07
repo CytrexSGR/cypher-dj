@@ -20,6 +20,9 @@ export function kopfStand({ arr, arrZeit, t, hochrechne, loop }) {
   if (arrZeit === null || t - arrZeit > ARR_ALTER_MS) return { kopfBeat: null, unbekannt: true };
   return { kopfBeat: arr.status === 2 ? kopfImLoop(hochrechne(t), loop, Number(arr.projekt_beat)) : null, unbekannt: false };
 }
+// 1.12 S3 task 5 (AK11): the button RE-ENABLE AUTOMATION gives every overridden lane back; it is active only while the server lists an override
+export const RE_ENABLE_TEXT = 'RE-ENABLE AUTOMATION';
+export const reEnableAn = (liste) => Array.isArray(liste) && liste.length > 0;
 export const kernText = (f) => `core rev ${f.nr} · ${STATUS_TEXT[f.status] ?? f.status}`;
 export const KERN_UNBEKANNT = 'core state unknown';
 // 1.10 Slice 2 (AK19): Lampe SET LIMITER. limiter_db ist die größte Absenkung des Set-Limiters (≤ 0, hält 0,5 s im Kern); unter −0,1 dB leuchtet sie.
@@ -42,6 +45,10 @@ export function bindeTransport(ctx) {
   }
   $('play').addEventListener('click', () => transport('start'));
   $('stopp').addEventListener('click', () => transport('stopp'));
+  $('re-enable').addEventListener('click', async () => {
+    const r = await ctx.holeJson('/proj/auto/re_enable', { alle: true });
+    if (r.status !== 200) ctx.melde(ctx.antwortText(r), true);   // the state comes back through /e/auto: the page does not clear anything itself
+  });
   $('tempo').addEventListener('keydown', (e) => {
     e.stopPropagation();
     if (e.key !== 'Enter') return;
@@ -84,6 +91,8 @@ export function bindeTransport(ctx) {
     if (document.activeElement !== $('tempo')) $('tempo').value = p ? String(p.tempo_bpm) : '';
     for (const [n, an] of [['loop', !!p?.loop?.an], ['metronom', !!p?.metronom?.an]]) { $(n).classList.toggle('an', an); $(n).setAttribute('aria-pressed', String(an)); }
     for (const n of ['play', 'stopp', 'loop', 'metronom', 'tempo']) $(n).disabled = !p;
+    const ueber = reEnableAn(st.autoUeber);   // orange and active only from the server list (D5, D8)
+    $('re-enable').disabled = !ueber; $('re-enable').classList.toggle('ueber', ueber);
   });
   let arrZeit = null, unbekannt = false;
   ctx.beimEreignis.push((a, f) => {

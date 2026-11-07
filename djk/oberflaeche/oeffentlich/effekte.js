@@ -18,6 +18,8 @@ export const AUTO_BEREICH = {
   'komp/schwelle': [-60, 0], 'komp/ratio': [1, 20], 'komp/attack': [0.1, 100], 'komp/release': [10, 1000],
   'komp/makeup': [0, 24], 'komp/mix': [0, 1], filter: [-1, 1], 'eq/tief': [-26, 6], 'eq/mitte': [-26, 6], 'eq/hoch': [-26, 6],
   'send/2': [-60, 0],
+  'gate/schwelle': [-90, 0], 'gate/hysterese': [0, 24], 'gate/ratio': [1, 100], 'gate/bereich': [-120, 0], 'gate/attack': [0.1, 500],
+  'gate/hold': [0, 2000], 'gate/release': [1, 5000], 'util/balance': [-1, 1], 'util/breite': [0, 200], 'util/bassmono': [0, 500],
 };
 export const DURCHGAENGE = [1, 2, 4, 8, 16, 32];
 // Punkt der Automationsspur aus einer Stelle im Feld (breite × hoehe): Beat auf 1/4 gerastet, Wert im Bereich
@@ -215,4 +217,208 @@ export function vorlagePunkte(vorlage, laenge) {
     if (!aus.length || beat > aus[aus.length - 1][0]) aus.push([beat, w]);
   }
   return aus;
+}
+
+// ---- A8: Gate and Utility strips (kern controller rows <kanal>/gate/*, <kanal>/util/*, INTERFACES 1.5) ----------------------------
+// Ranges, defaults, curve and integer flag are those of the header djk/kern/stellwerk/include/cypherdj/stellwerk/werkzeug_regler.h; tests/effekte.test.mjs
+// parses the header and holds both equal. The strips are built for the FX_KANAELE of app.js (10 channels); the other live channels
+// (deck/3, deck/4, erz/4) are reachable by hand and by preset only.
+export const WERK_FELDER = {
+  'gate/an': { min: 0, max: 1, vorgabe: 0, kurve: 'schalter', ganz: true },
+  'gate/schwelle': { min: -90, max: 0, vorgabe: -40, schritt: 0.5, einheit: 'dB', kurve: 'linear', ganz: false },
+  'gate/hysterese': { min: 0, max: 24, vorgabe: 4, schritt: 0.5, einheit: 'dB', kurve: 'linear', ganz: false },
+  'gate/ratio': { min: 1, max: 100, vorgabe: 100, schritt: 1, einheit: ':1', kurve: 'linear', ganz: false },
+  'gate/bereich': { min: -120, max: 0, vorgabe: -80, schritt: 1, einheit: 'dB', kurve: 'linear', ganz: false },
+  'gate/attack': { min: 0.1, max: 500, vorgabe: 1, schritt: 0.1, einheit: 'ms', kurve: 'linear', ganz: false },
+  'gate/hold': { min: 0, max: 2000, vorgabe: 20, schritt: 1, einheit: 'ms', kurve: 'linear', ganz: false },
+  'gate/release': { min: 1, max: 5000, vorgabe: 100, schritt: 1, einheit: 'ms', kurve: 'linear', ganz: false },
+  'gate/sc': { min: 0, max: 14, vorgabe: 0, schritt: 1, einheit: '', kurve: 'stufen', ganz: true },
+  'util/balance': { min: -1, max: 1, vorgabe: 0, schritt: 0.01, einheit: 'bal', kurve: 'linear', ganz: false },
+  'util/breite': { min: 0, max: 200, vorgabe: 100, schritt: 1, einheit: '%', kurve: 'linear', ganz: false },
+  'util/bassmono': { min: 0, max: 500, vorgabe: 0, schritt: 1, einheit: 'Hz', kurve: 'linear', ganz: false },
+  'util/phase_l': { min: 0, max: 1, vorgabe: 0, kurve: 'schalter', ganz: true },
+  'util/phase_r': { min: 0, max: 1, vorgabe: 0, kurve: 'schalter', ganz: true },
+  'util/tausch': { min: 0, max: 1, vorgabe: 0, kurve: 'schalter', ganz: true },
+  'util/dc': { min: 0, max: 1, vorgabe: 0, kurve: 'schalter', ganz: true },
+};
+/** One strip per tool: `an` = the on switch (or null), `regler` = sliders, `schalter` = further switches. The strip shows the main controls;
+ *  the rest of the rows (hysteresis, ratio, attack, hold, sidechain) are reachable by hand and by preset. */
+export const WERK_STREIFEN = [
+  { css: 'gate', titel: 'GATE', an: 'gate/an', schalter: [],
+    regler: [{ feld: 'gate/schwelle', name: 'THR' }, { feld: 'gate/bereich', name: 'RANGE' }, { feld: 'gate/release', name: 'REL' }] },
+  { css: 'util', titel: 'UTIL', an: null,
+    regler: [{ feld: 'util/balance', name: 'BAL' }, { feld: 'util/breite', name: 'WIDTH' }, { feld: 'util/bassmono', name: 'BASS' }],
+    schalter: [{ feld: 'util/phase_l', name: 'Ø L' }, { feld: 'util/phase_r', name: 'Ø R' }, { feld: 'util/tausch', name: 'SWAP' }, { feld: 'util/dc', name: 'DC' }] },
+];
+/** The text next to a slider: what the knob means in its unit. Bass mono 0 is "off", 1..19 act as 20 Hz (library clamp). */
+export function werkText(feld, w) {
+  const f = werkFeld(feld);
+  if (feld === 'util/bassmono') return w <= 0 ? 'off' : `${Math.max(20, Math.round(w))} Hz`;
+  if (feld === 'util/balance') return w === 0 ? 'C' : `${w < 0 ? 'L' : 'R'}${Math.round(Math.abs(w) * 100)}`;
+  if (feld === 'gate/ratio') return w >= 100 ? 'hard' : `${w.toFixed(0)}:1`;
+  if (feld.startsWith('mb/') || feld.startsWith('lim/')) {   // A8b: bus multiband and limiter
+    if (feld.endsWith('/ratio')) return `${w.toFixed(1)}:1`;
+    if (feld.endsWith('/makeup')) return `${w > 0 ? '+' : ''}${w.toFixed(1)} dB`;
+    if (f.einheit === 'Hz') return `${Math.round(w)} Hz`;
+    if (f.einheit === 'dB') return `${w.toFixed(Number.isInteger(w) ? 0 : 1)} dB`;
+  }
+  if (f.einheit === 'ms') return `${w < 10 ? w.toFixed(1) : Math.round(w)} ms`;
+  if (f.einheit === 'dB') return `${w.toFixed(0)} dB`;
+  return `${Math.round(w)}${f.einheit}`;
+}
+/** Markup of the Gate and the Utility strip of one channel (inside the channel's .fxstreifen). Nothing is sent while building;
+ *  the values are filled from the live control state by app.js (zeigeWerkzeug). */
+export function werkzeugStreifenHtml(k, name, nur = null) {   // `nur`: the css keys to build (the bus panel builds only 'util': no gate on buses, D2)
+  const kk = htmlText(k), nn = htmlText(name);
+  return WERK_STREIFEN.filter((s) => !nur || nur.includes(s.css)).map((s) => {
+    const pfad = (feld) => htmlText(`${k}/${feld}`);
+    const an = s.an ? `<button class="werk-an" data-werk-pfad="${pfad(s.an)}" title="${s.titel} on/off (${kk})" aria-pressed="false">${s.titel}</button>` : `<span class="werk-titel">${s.titel}</span>`;
+    const regler = s.regler.map((r) => {
+      const f = WERK_FELDER[r.feld];
+      return `<label>${r.name}<input type="range" data-werk-pfad="${pfad(r.feld)}" min="${f.min}" max="${f.max}" step="${f.schritt}" value="${f.vorgabe}" aria-label="${nn} ${s.titel.toLowerCase()} ${r.name}"><output>${werkText(r.feld, f.vorgabe)}</output></label>`;
+    }).join('');
+    const schalter = s.schalter.length
+      ? `<div class="werk-schalter">${s.schalter.map((x) => `<button data-werk-pfad="${pfad(x.feld)}" aria-pressed="false" title="${x.name} (${kk})">${x.name}</button>`).join('')}</div>` : '';
+    const messer = s.css === 'gate' ? busMesser(kk, 'gate_db', 'GR', 'Gate gain reduction (/zustand/mix gate_db)') : '';   // A6: the source channel's meter
+    return `<div class="fxwerk fxwerk-${s.css}">${an}${regler}${schalter}${messer}</div>`;
+  }).join('');
+}
+/** A click on a switch: the other state of the live value (a value not yet known counts as the default, off). */
+export function werkzeugKlickNach(stand, pfad) {
+  const w = stand?.[pfad];
+  return typeof w === 'number' && w >= 0.5 ? 0 : 1;
+}
+/** The body of POST /regler for one tool control; "jetzt" like the compressor strip (hand and automation take effect at once). */
+export const werkzeugAnfrage = (pfad, nach) => ({ pfad, nach, ab: 'jetzt' });
+/** Send one tool control. `senden` is fetch (a stub in tests). Returns {ok: true} or {ok: false, text} for the page's message line. */
+export async function setzeWerkzeug(senden, pfad, nach) {
+  try {
+    const r = await senden('/regler', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(werkzeugAnfrage(pfad, nach)) });
+    const j = await r.json().catch(() => null);   // review 1.15: a non-JSON refusal body is still a refusal with its status
+    globalThis.window?.djkGesendet?.push({ [pfad]: nach, code: r.status, antwort: j });
+    if (r.status !== 200) return { ok: false, text: `Tool control refused: ${j?.fehler ?? r.status}` };
+    if (j?.quittung?.status === 6) return { ok: false, text: `Tool control refused: ${j.quittung.grund}` };
+    return { ok: true };
+  } catch (e) { return { ok: false, text: `Page server unreachable: ${e.message}` }; }
+}
+
+// ---- A8b: bus panel (rows bus/<n>/mb/*, bus/<n>/lim/*, bus/<n>/util/*) and its meters --------------------------------------------------
+// Ranges and defaults are those of the header (werkzeug_regler.h, rows for buses only); tests/effekte.test.mjs holds both equal in both
+// directions. The Utility block of a bus is the Utility strip of A8 (WERK_FELDER / werkzeugStreifenHtml), not a second mechanism.
+export const BUS_KANAELE = ['bus/1', 'bus/2', 'bus/3', 'bus/4'];
+const BUS_BAENDER = [['tief', 'LOW'], ['mitte', 'MID'], ['hoch', 'HIGH']];
+const BAND_FELDER = {
+  schwelle: { min: -60, max: 0, vorgabe: 0, schritt: 0.5, einheit: 'dB', kurve: 'linear', ganz: false },
+  ratio: { min: 1, max: 20, vorgabe: 1, schritt: 0.1, einheit: ':1', kurve: 'linear', ganz: false },
+  attack: { min: 0.1, max: 500, vorgabe: 10, schritt: 0.1, einheit: 'ms', kurve: 'linear', ganz: false },
+  release: { min: 1, max: 5000, vorgabe: 100, schritt: 1, einheit: 'ms', kurve: 'linear', ganz: false },
+  knie: { min: 0, max: 24, vorgabe: 0, schritt: 0.5, einheit: 'dB', kurve: 'linear', ganz: false },
+  makeup: { min: -24, max: 24, vorgabe: 0, schritt: 0.5, einheit: 'dB', kurve: 'linear', ganz: false },
+  umgehen: { min: 0, max: 1, vorgabe: 0, kurve: 'schalter', ganz: true },
+};
+export const BUS_FELDER = {
+  'mb/an': { min: 0, max: 1, vorgabe: 0, kurve: 'schalter', ganz: true },
+  'mb/grenze_tief': { min: 20, max: 20000, vorgabe: 200, schritt: 1, einheit: 'Hz', kurve: 'linear', ganz: false },
+  'mb/grenze_hoch': { min: 20, max: 20000, vorgabe: 2000, schritt: 1, einheit: 'Hz', kurve: 'linear', ganz: false },
+  ...Object.fromEntries(BUS_BAENDER.flatMap(([b]) => Object.entries(BAND_FELDER).map(([f, d]) => [`mb/${b}/${f}`, d]))),
+  'lim/an': { min: 0, max: 1, vorgabe: 0, kurve: 'schalter', ganz: true },
+  'lim/decke': { min: -60, max: 0, vorgabe: -0.3, schritt: 0.1, einheit: 'dB', kurve: 'linear', ganz: false },
+  'lim/abklingen': { min: 1, max: 2000, vorgabe: 80, schritt: 1, einheit: 'ms', kurve: 'linear', ganz: false },
+};
+/** The field description of a controller suffix: the A8 fields (gate, util) or the bus fields (mb, lim). */
+export const werkFeld = (feld) => WERK_FELDER[feld] ?? BUS_FELDER[feld];
+
+export const LIMITER_GRUND = 'limiter not built (kanal_limiter_vorhalt_ms = 0)';
+/** What /lage says about the channel limiter: only `kanal_limiter.gebaut === true` enables the limiter controls. Absent (the kern has
+ *  not reported yet, A5c: /e/kanal_limiter on the first hallo) or false: disabled, with the reason. `latenz_samples` is shown when it is a sane number. */
+export function limiterZustand(lage) {
+  const kl = lage?.kanal_limiter;
+  if (kl && typeof kl === 'object' && kl.gebaut === true) {
+    const n = kl.latenz_samples;
+    return { gebaut: true, latenzSamples: typeof n === 'number' && Number.isFinite(n) && n >= 0 ? n : null, grund: '' };
+  }
+  return { gebaut: false, latenzSamples: null, grund: LIMITER_GRUND };
+}
+
+function busRegler(k, nn, feld, kurz, titel, aus = false) {
+  const f = werkFeld(feld);
+  return `<label>${kurz}<input type="range" data-werk-pfad="${htmlText(`${k}/${feld}`)}" min="${f.min}" max="${f.max}" step="${f.schritt}" value="${f.vorgabe}"${aus ? ' disabled' : ''} aria-label="${nn} ${titel}"><output>${werkText(feld, f.vorgabe)}</output></label>`;
+}
+function busSchalter(k, kk, feld, kurz, titel, klasse = '', aus = false) {
+  return `<button${klasse ? ` class="${klasse}"` : ''} data-werk-pfad="${htmlText(`${k}/${feld}`)}" aria-pressed="false" title="${titel} (${kk})"${aus ? ' disabled' : ''}>${kurz}</button>`;
+}
+function busMesser(kk, feld, kurz, titel) {
+  return `<div class="busgr" title="${titel}"><span>${kurz}</span><div class="gr"><i data-messer="${kk}|${feld}"></i></div><span class="grzahl" data-messer-zahl="${kk}|${feld}">–</span></div>`;
+}
+/** Markup of one bus strip: MULTIBAND (switch, crossovers, three gain-reduction meters, collapsed per-band block), LIMITER (switch, ceiling,
+ *  release, gain-reduction meter; built disabled with the reason until /lage says the limiter is built) and the Utility block of A8.
+ *  Nothing is sent while building; the values are filled from the live control state by app.js (zeigeWerkzeug). */
+export function busStreifenHtml(k, name) {
+  const kk = htmlText(k), nn = htmlText(name);
+  const baender = BUS_BAENDER.map(([b, kurz]) => `<div class="mb-band"><span class="werk-titel">${kurz}</span>`
+    + ['schwelle', 'ratio', 'attack', 'release', 'knie', 'makeup'].map((f) => busRegler(k, nn, `mb/${b}/${f}`, f === 'schwelle' ? 'THR' : f === 'ratio' ? 'RATIO' : f === 'attack' ? 'ATT'
+      : f === 'release' ? 'REL' : f === 'knie' ? 'KNEE' : 'TRIM', f === 'makeup' ? `multiband ${kurz.toLowerCase()} make-up trim (on top of the automatic make-up)` : `multiband ${kurz.toLowerCase()} ${f}`)).join('')
+    + busSchalter(k, kk, `mb/${b}/umgehen`, 'BYPASS', `${kurz} band bypass`) + '</div>').join('');
+  return `<div class="busstreifen" data-kanal="${kk}"><div class="fxname"><span>${nn}</span></div>`
+    + `<div class="fxwerk fxwerk-mb">${busSchalter(k, kk, 'mb/an', 'MULTIBAND', 'Multiband on/off', 'werk-an')}`
+    + busRegler(k, nn, 'mb/grenze_tief', 'X LOW', 'multiband crossover low/mid') + busRegler(k, nn, 'mb/grenze_hoch', 'X HIGH', 'multiband crossover mid/high')
+    + busMesser(kk, 'mb_tief_db', 'LOW', 'Gain reduction, low band') + busMesser(kk, 'mb_mitte_db', 'MID', 'Gain reduction, mid band') + busMesser(kk, 'mb_hoch_db', 'HIGH', 'Gain reduction, high band')
+    + `<button class="bus-baender-knopf" data-baender-knopf="${kk}" aria-expanded="false" title="Show or hide the per-band controls">BANDS ▸</button>`
+    + `<div class="mb-baender" data-baender="${kk}" hidden>${baender}</div></div>`
+    + `<div class="fxwerk fxwerk-lim">${busSchalter(k, kk, 'lim/an', 'LIMITER', 'Channel limiter on/off', 'werk-an', true)}`
+    + busRegler(k, nn, 'lim/decke', 'CEIL', 'limiter ceiling', true) + busRegler(k, nn, 'lim/abklingen', 'REL', 'limiter release', true)
+    + busMesser(kk, 'lim_db', 'LIM', 'Gain reduction, limiter')
+    + `<span class="lim-grund" data-lim-grund>${LIMITER_GRUND}</span></div>`
+    + werkzeugStreifenHtml(k, name, ['util']) + '</div>';
+}
+/** The whole BUS panel: a header that folds it, and four strips. */
+export function busPanelHtml() {
+  return '<div class="buskopf"><button class="bus-panel-knopf" aria-expanded="true" title="Show or hide the bus tools">BUS ▾</button>'
+    + '<span class="klein">multiband · limiter · utility per bus</span></div>'
+    + `<div class="busreihe">${BUS_KANAELE.map((k, i) => busStreifenHtml(k, `BUS ${i + 1}`)).join('')}</div>`;
+}
+
+// Meters: /zustand/mix ,sfffff (kanal, gate_db, mb_tief_db, mb_mitte_db, mb_hoch_db, lim_db; reductions >= 0, 10 Hz, only for channels where a
+// tool runs, D10). A reading counts for 500 ms; when the events stop the meter goes back to "no reading". The clock is injected (tests).
+export const MIX_FRIST_MS = 500;
+export const MIX_FELDER = ['mb_tief_db', 'mb_mitte_db', 'mb_hoch_db', 'lim_db'];
+/** Take one event into `stand` ({bus: {feld: {db, t}}}). A non-finite value is ignored (the old reading stays), a negative one is clamped
+ *  to 0, a channel that is not a bus is ignored (gate_db belongs to the source channels, not to this panel). Returns whether the bus was taken. */
+export function mixAufnehmen(stand, f, jetzt) {
+  const k = f?.kanal;
+  if (typeof k !== 'string' || !BUS_KANAELE.includes(k)) return false;
+  for (const feld of MIX_FELDER) {
+    const w = f[feld];
+    if (typeof w === 'number' && Number.isFinite(w)) (stand[k] ??= {})[feld] = { db: Math.max(0, w), t: jetzt };
+  }
+  return true;
+}
+/** The reading of one meter now, or null (never reported, or older than 500 ms). */
+export function mixLesung(stand, kanal, feld, jetzt) {
+  const g = stand?.[kanal]?.[feld];
+  return g && jetzt - g.t < MIX_FRIST_MS ? g.db : null;
+}
+/** Milliseconds until the next reading expires, or null when none is fresh (the page schedules its reset with it). */
+export function mixAblaufIn(stand, jetzt, kanaele = BUS_KANAELE, felder = MIX_FELDER) {
+  let m = null;
+  for (const k of kanaele) for (const feld of felder) {
+    const g = stand?.[k]?.[feld];
+    if (g && jetzt - g.t < MIX_FRIST_MS) m = m === null ? g.t + MIX_FRIST_MS - jetzt : Math.min(m, g.t + MIX_FRIST_MS - jetzt);
+  }
+  return m;
+}
+
+// A6: the gate meters of the source channels (gate_db of /zustand/mix; the 13 live channels, erz/8 has no gate, D2). Same 500 ms rule as the bus
+// meters; a gate can close by 80 dB and more, so the bar is scaled to 60 dB (the number shows the real value).
+export const GATE_KANAELE = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'erz/1', 'erz/2', 'erz/3', 'erz/4', 'erz/5', 'erz/6', 'erz/7', 'pad/1', 'pad/2'];
+export const GATE_FELDER = ['gate_db'];
+export const GATE_SKALA_DB = 60;
+/** Take the gate reading of one event into `stand` (same shape as mixAufnehmen). A non-finite value is ignored, a negative one clamped to 0, a
+ *  channel without a gate (a bus, erz/8, anything else) is ignored. Returns whether the channel was taken. */
+export function gateAufnehmen(stand, f, jetzt) {
+  const k = f?.kanal;
+  if (typeof k !== 'string' || !GATE_KANAELE.includes(k)) return false;
+  const w = f.gate_db;
+  if (typeof w === 'number' && Number.isFinite(w)) (stand[k] ??= {}).gate_db = { db: Math.max(0, w), t: jetzt };
+  return true;
 }

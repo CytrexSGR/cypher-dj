@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include "arr_gain_intern.h"
 #include "cypherdj/arrangement.h"
 
 namespace cdj {
@@ -46,11 +47,22 @@ bool warp_gleich(const ArrWarp* a, const ArrWarp* b) {
 #endif
 }
 
-bool gleich(const ArrClip& a, const ArrClip& b) {
+// 1.12 slice 5: two gain envelopes are equal when their points are (the pointers lie in different snapshots)
+bool hk_gleich(const ArrClip& a, const ArrClip& b) {
+  if (a.hk_n != b.hk_n) return false;
+  for (int i = 0; i < a.hk_n; ++i)
+    if (a.hk[i].beat != b.hk[i].beat || a.hk[i].wert != b.hk[i].wert || a.hk[i].form != b.hk[i].form) return false;
+  return true;
+}
+
+// everything but the envelope: a table-only change at a swap is a gain change (the voice stays, the factor glides), not a new voice
+bool gleich_ausser_hk(const ArrClip& a, const ArrClip& b) {
   return a.start_beat == b.start_beat && a.laenge_beats == b.laenge_beats && a.audio == b.audio &&
          a.offset_frames == b.offset_frames && a.gain == b.gain && a.ein_beats == b.ein_beats &&
          a.aus_beats == b.aus_beats && warp_gleich(a.warp, b.warp);
 }
+
+bool gleich(const ArrClip& a, const ArrClip& b) { return gleich_ausser_hk(a, b) && hk_gleich(a, b); }
 
 // Nachbesserung 4 (Prüfung 4, R3): der Gain ist kein Warp-Datum. Ein Werk-Clip, der sich nur im Gain ändert, braucht keine neue Stimme im Werk (der Callback liest den
 // Ring und multipliziert den Gain selbst, Spec Z. 219 „Kopie plus Gain“): er bindet neu, der Gain gleitet über ARR_NAHT.
@@ -106,6 +118,13 @@ bool beats_quelle(const ArrWarp& w, int i, int64_t seit_i, int64_t platz_i, doub
   return f >= 0 && f < n && ge != 0.0f;
 }
 
+// AK33 F4: the clip gain of a voice at sample t. A gain-only edit rebinds the voice in place and the gain glides from gain_alt to the new value over ARR_NAHT
+// samples from gain_ab (the same law as the warp engine voices use in arr_warp.cpp). No state beyond three fields of the voice: safe in the callback.
+inline float gain_lauf(float ziel, float alt, int64_t ab, int64_t t) noexcept {
+  if (ab < 0 || t - ab >= ARR_NAHT) return ziel;
+  return alt + (ziel - alt) * static_cast<float>(std::max<int64_t>(t - ab, 0)) / ARR_NAHT;
+}
+
 const ArrClip* finde_clip(const ArrSpur& sp, uint64_t id) {
   for (int i = 0; i < sp.n_clips; ++i)
     if (sp.clips[i].id == id) return &sp.clips[i];
@@ -124,6 +143,44 @@ int Arrangement::warp_stimmen() const {
   int n = 0;
   for (const Stimme& v : st_) n += (v.aktiv && ((v.clip && v.clip->warp) || v.werk >= 0)) ? 1 : 0;
   return n;
+}
+
+// 1.12 slice 5 (D8): a fresh cursor on the gain envelope of c, searched at the clip beat of the first sample. A pool slot never keeps a pointer into an older
+// snapshot or the cursor of its former voice (error case ARR_HK_CURSOR_ALT: it keeps the cursor, and the loop wrap then reads the end of the table).
+void Arrangement::hk_binden(Stimme& v, const ArrClip& c, double clip_beat) {
+  v.hk_db = 1e9f;
+  v.hk_lin = 1.0f;
+  v.hk_alt = 1.0f;
+  v.hk_ab = -1;
+  v.hk_fest = false;
+#ifdef CYPHERDJ_MUTATION_ARR_HK_CURSOR_ALT
+  v.hk.binde(c.hk, c.hk_n);
+  (void)clip_beat;
+#else
+  v.hk = AutoLane(c.hk, c.hk_n);
+  if (c.hk_n > 0) v.hk.neu_suchen(clip_beat);
+#endif
+}
+
+// The envelope gain of the voice at the clip beat of sample t: held (db_lin only on a move), with the glide of a table-only swap. Past the glide the state is cleared.
+float Arrangement::hk_faktor(Stimme& v, double clip_beat, int64_t t) {
+  const float lin = hk_halten(v.hk, clip_beat, v.hk_db, v.hk_lin);
+  const float g = hk_gleiten(lin, v.hk_alt, v.hk_ab, t);
+  if (v.hk_ab >= 0 && t - v.hk_ab >= ARR_NAHT) v.hk_ab = -1;
+  return g;
+}
+
+// A swap that changed the table of the clip a voice plays: the voice keeps playing (no new voice), its cursor moves to the table of c2 (never left on the old snapshot) and
+// the factor glides over ARR_NAHT from the one in force at the swap sample s. A voice that has not sounded yet has none to glide from (it starts on the new table).
+void Arrangement::hk_umbinden(Stimme& v, const ArrClip& c2, int64_t s, const Karte& k) {
+  // the factor in force at the swap is held in hk_lin (1.0 for a voice without a table), and the glide still running, if any
+  const int64_t anfang = v.werk >= 0 ? std::max(v.clip_s0, v.werk_ab) : v.clip_s0;
+  const bool lief = v.hk_db < 1e8f || (v.hk.punkte() == 0 && s > anfang);
+  v.hk_alt = lief ? hk_gleiten(v.hk_lin, v.hk_alt, v.hk_ab, s) : 1.0f;
+  v.hk_ab = lief ? s : -1;
+  v.clip = &c2;
+  v.hk = AutoLane(c2.hk, c2.hk_n);
+  if (c2.hk_n > 0) v.hk.neu_suchen(projekt_beat(k, static_cast<double>(s)) + (v.p_off - (start_beat_ - ursprung_)) - c2.start_beat);
 }
 
 Arrangement::Stimme* Arrangement::stimme_starten(const Karte& k, const ArrClip& c, int spur, int64_t s_start, int64_t clip_s0,
@@ -153,6 +210,10 @@ Arrangement::Stimme* Arrangement::stimme_starten(const Karte& k, const ArrClip& 
   v->ak_n = v->ak_pos = 0;
   v->werk = -1;   // Slice 2: ein Clip des Werks ohne Platz spielt als RE-PITCH (stimme_warp_spielen)
   v->naechste = false;
+  hk_binden(*v, c, c.hk_n > 0 ? projekt_beat(k, static_cast<double>(s_start)) - c.start_beat : 0.0);
+  v->gain = c.gain;   // AK33 F4: no gain glide yet; a gain-only edit sets gain_alt and gain_ab (stimmen_tauschen)
+  v->gain_alt = c.gain;
+  v->gain_ab = -1;
   return v;
 }
 
@@ -277,13 +338,21 @@ void Arrangement::stimme_ausklang(Stimme& v, int64_t s, const Karte& k) {
 #endif
   int bi = -1;   // Slice 4: Merker der BEATS-Einheit und ihre Grenzen
   int64_t u0 = 0, u1 = 0;
+  // 1.12 slice 5: the tail of a voice carries its envelope (a copy of the voice's state, the voice is reused right after); plain, warp, beats and werk voices alike
+#ifdef CYPHERDJ_MUTATION_ARR_HK_AUSKLANG_OHNE
+  const bool hk_an = false;   // error case: the tail fades out at the clip gain alone, the envelope level jumps to 0 dB at the swap
+#else
+  const bool hk_an = v.hk.punkte() > 0 || v.hk_ab >= 0;
+#endif
+  AutoLane hk_l = v.hk;
+  float hk_db = v.hk_db, hk_lin = v.hk_lin;
   for (int q = 0; q < ARR_NAHT; ++q) {
     const int64_t t = s + q;
     const int64_t pos = t - v.clip_s0;
     const int64_t f = c.offset_frames + pos;
     // Paket 1.13: gewarpt kommt die Quellposition aus W(b) zum Projekt-Beat des Samples t (die Karte ist die von jetzt)
     const bool beats = c.warp && c.warp->modus == ARR_WARP_BEATS;   // Slice 4: BEATS liest Einheiten, nicht W(b)
-    const double cbt = c.warp ? projekt_beat(k, static_cast<double>(t)) + d_proj - c.start_beat : 0.0;
+    const double cbt = c.warp || hk_an ? projekt_beat(k, static_cast<double>(t)) + d_proj - c.start_beat : 0.0;
     const double fr = c.warp && !beats ? warp_frame(*c.warp, cbt) : 0.0;
     int64_t bf = 0;
     float bge = 1.0f;
@@ -300,7 +369,8 @@ void Arrangement::stimme_ausklang(Stimme& v, int64_t s, const Karte& k) {
     }
     float l = 0.0f, r = 0.0f;
     if (t < v.ende && pos >= 0 && lesbar && (v.ab_aus < 0 || t < v.ab_aus + ARR_NAHT)) {
-      float g = c.gain * static_cast<float>(ARR_NAHT - q) / ARR_NAHT * (beats ? bge : 1.0f);
+      float g = gain_lauf(c.gain, v.gain_alt, v.gain_ab, t) * static_cast<float>(ARR_NAHT - q) / ARR_NAHT * (beats ? bge : 1.0f);
+      if (hk_an) g *= hk_gleiten(hk_halten(hk_l, cbt, hk_db, hk_lin), v.hk_alt, v.hk_ab, t);
       if (pos < v.ein_n) g *= static_cast<float>(pos) / static_cast<float>(v.ein_n);
       if (v.ende - t < v.aus_n) g *= static_cast<float>(v.ende - t) / static_cast<float>(v.aus_n);
       if (v.ramp_ein_ab >= 0 && t - v.ramp_ein_ab < v.ramp_n) g *= static_cast<float>(t - v.ramp_ein_ab) / static_cast<float>(v.ramp_n);
@@ -322,6 +392,8 @@ void Arrangement::stimme_ausklang(Stimme& v, int64_t s, const Karte& k) {
     v.ak[2 * q + 1] = r;
   }
   v.clip = nullptr;
+  v.hk = AutoLane();   // never leave the cursor on the table of a snapshot that may go
+  v.hk_ab = -1;
   v.ak_n = ARR_NAHT;
   v.ak_pos = 0;
 }
@@ -340,9 +412,15 @@ void Arrangement::stimme_warp_spielen(Stimme& v, int64_t a, int64_t b, int64_t s
 #else
   const double d_proj = v.p_off - (start_beat_ - ursprung_);   // 0.0, solange sich Ursprung und Start seit dem Stimmenstart nicht verschoben haben
 #endif
+#ifdef CYPHERDJ_MUTATION_ARR_HK_WARP_OHNE
+  const bool hk = false;   // error case: a warped voice ignores the gain envelope
+#else
+  const bool hk = v.hk.punkte() > 0 || v.hk_ab >= 0;   // 1.12 slice 5 (U8b): the gain envelope at the clip beat the warp map reads
+#endif
   for (int64_t t = a; t < b; ++t) {
     const int64_t pos = t - v.clip_s0;
-    const double fr = warp_frame(w, wp_[t - a] + d_proj - c.start_beat);
+    const double cb = wp_[t - a] + d_proj - c.start_beat;
+    const double fr = warp_frame(w, cb);
 #ifdef CYPHERDJ_MUTATION_ARR_WARP_OHNE_DATEIENDE
     if (t >= v.ende) {   // Fehlerfall: die Stimme lebt über das Dateiende hinaus bis zum Clip-Ende
 #else
@@ -352,7 +430,8 @@ void Arrangement::stimme_warp_spielen(Stimme& v, int64_t a, int64_t b, int64_t s
       break;
     }
     if (pos < 0) continue;
-    float g = c.gain;
+    float g = gain_lauf(c.gain, v.gain_alt, v.gain_ab, t);
+    if (hk) g *= hk_faktor(v, cb, t);
     if (pos < v.ein_n) g *= static_cast<float>(pos) / static_cast<float>(v.ein_n);
     if (v.ende - t < v.aus_n) g *= static_cast<float>(v.ende - t) / static_cast<float>(v.aus_n);
     if (v.ramp_ein_ab >= 0 && t - v.ramp_ein_ab < v.ramp_n) g *= static_cast<float>(t - v.ramp_ein_ab) / static_cast<float>(v.ramp_n);
@@ -386,6 +465,11 @@ void Arrangement::stimme_beats_spielen(const Karte& k, Stimme& v, int64_t a, int
   float* br = bus_r_[v.spur];
   int bi = -1;
   int64_t u0 = 0, u1 = 0;
+#ifdef CYPHERDJ_MUTATION_ARR_HK_WARP_OHNE
+  const bool hk = false;   // error case: a warped voice ignores the gain envelope
+#else
+  const bool hk = v.hk.punkte() > 0 || v.hk_ab >= 0;   // 1.12 slice 5 (U8b): the gain envelope at the clip beat of the unit map
+#endif
   for (int64_t t = a; t < b; ++t) {
     if (t >= v.ende) {
       v.aktiv = false;
@@ -395,9 +479,10 @@ void Arrangement::stimme_beats_spielen(const Karte& k, Stimme& v, int64_t a, int
     if (pos < 0) continue;
     int64_t f = 0;
     float ge = 1.0f;
-    const bool da = beats_lage(k, v, t, bi, u0, u1) &&
-                    beats_quelle(w, bi, t - u0, u1 - u0, k.beat_at(static_cast<double>(t)) + v.p_off - c.start_beat, n, f, ge);
-    float g = c.gain * ge;
+    const double cb = k.beat_at(static_cast<double>(t)) + v.p_off - c.start_beat;
+    const bool da = beats_lage(k, v, t, bi, u0, u1) && beats_quelle(w, bi, t - u0, u1 - u0, cb, n, f, ge);
+    float g = gain_lauf(c.gain, v.gain_alt, v.gain_ab, t) * ge;
+    if (hk) g *= hk_faktor(v, cb, t);
     if (pos < v.ein_n) g *= static_cast<float>(pos) / static_cast<float>(v.ein_n);
     if (v.ende - t < v.aus_n) g *= static_cast<float>(v.ende - t) / static_cast<float>(v.aus_n);
     if (v.ramp_ein_ab >= 0 && t - v.ramp_ein_ab < v.ramp_n) g *= static_cast<float>(t - v.ramp_ein_ab) / static_cast<float>(v.ramp_n);
@@ -417,7 +502,17 @@ void Arrangement::stimme_beats_spielen(const Karte& k, Stimme& v, int64_t a, int
 }
 
 void Arrangement::stimmen_spielen(const Karte& k, int64_t a, int64_t b, int64_t s0, int64_t naht) {
-  bool wp_da = false;   // wp_ ist für diesen Teilblock gefüllt (erst, wenn eine gewarpte Stimme klingt)
+  bool wp_da = false;   // wp_ ist für diesen Teilblock gefüllt (erst, wenn eine gewarpte Stimme oder eine mit Gain-Hüllkurve klingt)
+  const auto wp_fuellen = [&] {
+    if (wp_da) return;
+    for (int64_t t = a; t < b; ++t)
+#ifdef CYPHERDJ_MUTATION_ARR_WARP_BLOCKANFANG
+      wp_[t - a] = projekt_beat(k, static_cast<double>(a));   // Fehlerfall: der Beat steht für den ganzen Teilblock auf seinem Anfang
+#else
+      wp_[t - a] = projekt_beat(k, static_cast<double>(t));
+#endif
+    wp_da = true;
+  };
   for (Stimme& v : st_) {
     if (!v.aktiv) continue;
     if (v.werk >= 0) {   // Slice 2: aus dem Ring des Warp-Werks
@@ -439,15 +534,7 @@ void Arrangement::stimmen_spielen(const Karte& k, int64_t a, int64_t b, int64_t 
       continue;
     }
     if (v.clip->warp) {
-      if (!wp_da) {
-        for (int64_t t = a; t < b; ++t)
-#ifdef CYPHERDJ_MUTATION_ARR_WARP_BLOCKANFANG
-          wp_[t - a] = projekt_beat(k, static_cast<double>(a));   // Fehlerfall: der Beat steht für den ganzen Teilblock auf seinem Anfang
-#else
-          wp_[t - a] = projekt_beat(k, static_cast<double>(t));
-#endif
-        wp_da = true;
-      }
+      wp_fuellen();
       if (v.clip->warp->modus == ARR_WARP_BEATS) {
         stimme_beats_spielen(k, v, a, b, s0, naht);
       } else {
@@ -457,6 +544,10 @@ void Arrangement::stimmen_spielen(const Karte& k, int64_t a, int64_t b, int64_t 
     }
     const ArrClip& c = *v.clip;
     const float* d = c.audio->daten;
+    // 1.12 slice 5 (D8): a gain envelope (or the glide after a table-only swap) needs the clip beat of every sample, taken from the per-sample project beat wp_
+    const bool hk = v.hk.punkte() > 0 || v.hk_ab >= 0;
+    if (hk) wp_fuellen();
+    const double d_proj = hk ? v.p_off - (start_beat_ - ursprung_) - c.start_beat : 0.0;   // as the warp path: 0 while origin and start have not moved since the voice began
     for (int64_t t = a; t < b; ++t) {
       const int64_t pos = t - v.clip_s0;
       const int64_t f = c.offset_frames + pos;
@@ -465,7 +556,8 @@ void Arrangement::stimmen_spielen(const Karte& k, int64_t a, int64_t b, int64_t 
         break;
       }
       if (pos < 0) continue;
-      float g = c.gain;
+      float g = gain_lauf(c.gain, v.gain_alt, v.gain_ab, t);
+      if (hk) g *= hk_faktor(v, wp_[t - a] + d_proj, t);
       if (pos < v.ein_n) g *= static_cast<float>(pos) / static_cast<float>(v.ein_n);
       if (v.ende - t < v.aus_n) g *= static_cast<float>(v.ende - t) / static_cast<float>(v.aus_n);
       if (v.ramp_ein_ab >= 0 && t - v.ramp_ein_ab < v.ramp_n) g *= static_cast<float>(t - v.ramp_ein_ab) / static_cast<float>(v.ramp_n);
@@ -521,12 +613,40 @@ void Arrangement::stimmen_tauschen(const ArrSnapshot* neu, int64_t s, const Kart
 #ifdef CYPHERDJ_MUTATION_ARR_TAUSCH_OHNE_BINDUNG
     c2 = nullptr;   // Fehlerfall: jede Stimme blendet aus, auch eine unveränderte
 #endif
-    if (c2 && gleich(*v.clip, *c2)) v.clip = c2;   // spielt ohne Blende weiter, liest jetzt aus dem neuen Schnappschuss
+    if (c2 && gleich(*v.clip, *c2)) {   // spielt ohne Blende weiter, liest jetzt aus dem neuen Schnappschuss
+      v.clip = c2;
+      v.hk.binde(c2->hk, c2->hk_n);   // 1.12 slice 5: an equal table in the new snapshot, same index; the cursor must not stay on the old one
+    }
+    else if (v.werk < 0 && c2 && gleich_ausser_hk(*v.clip, *c2)) {   // 1.12 slice 5 (D8): only the envelope changed: the voice stays, the factor glides over ARR_NAHT
+      hk_umbinden(v, *c2, s, k);
+    }
+#ifndef CYPHERDJ_MUTATION_ARR_GAIN_TAUSCH_NEU   // error case (AK33 F4): a gain-only edit takes the old voice swap again (96-sample fade-out plus 32-sample fade-in: a click)
+    // AK33 F4: a RE-PITCH, BEATS or plain voice (not a warp engine voice) whose clip changes only in its gain keeps playing: it rebinds to the new clip and the gain
+    // glides from the current value to the new one over ARR_NAHT. Before, it faded out from a copy and a new voice faded in over ARR_EIN: the two fades do not
+    // sum to one (peak 1.67 times the level 32 samples after the edit). Clips of the warp engine modes (COMPLEX, TONES) are not touched here: their own branches follow.
+    else if (v.werk < 0 && c2 && !werk_clip(*c2) && gleich_ausser_gain(*v.clip, *c2)) {
+      v.gain_alt = gain_lauf(v.gain, v.gain_alt, v.gain_ab, s);
+      v.gain_ab = s;
+      v.gain = c2->gain;
+      // integration of 1.12 slice 5 (envelope) and AK33 F4 (gain glide): gleich_ausser_gain ignores the envelope, so the voice follows the table of c2 as the werk voice
+      // branch below does: an equal table keeps its index, a changed table glides (hk_umbinden); the cursor never stays on the old snapshot
+#ifndef CYPHERDJ_MUTATION_ARR_GAIN_HK_BINDUNG_OHNE   // error case (integration): the cursor stays on the table of the old snapshot, a table that changed with the gain never arrives
+      if (hk_gleich(*v.clip, *c2)) v.hk.binde(c2->hk, c2->hk_n);
+      else hk_umbinden(v, *c2, s, k);
+#endif
+      v.clip = c2;
+    }
+#endif
     else if (v.werk >= 0 && c2 && werk_clip(*c2) && gleich_ausser_gain(*v.clip, *c2)) {   // Nachbesserung 4 (R3): nur der Gain, neu binden, der Gain gleitet
       const float g = (v.gain_ab >= 0 && s - v.gain_ab < ARR_NAHT) ? v.gain_alt + (v.gain - v.gain_alt) * static_cast<float>(std::max<int64_t>(s - v.gain_ab, 0)) / ARR_NAHT : v.gain;
       v.gain_alt = g;
       v.gain_ab = s;
       v.gain = c2->gain;
+      // 1.12 slice 5 (U8b): the envelope of a werk voice follows at the same swap: equal table, same index; a changed table glides over ARR_NAHT, no new voice
+#ifndef CYPHERDJ_MUTATION_ARR_HK_WERK_BINDUNG_OHNE   // error case: the cursor stays on the table of the old snapshot (a table-only swap never arrives; after the old snapshot goes it reads freed memory)
+      if (hk_gleich(*v.clip, *c2)) v.hk.binde(c2->hk, c2->hk_n);
+      else hk_umbinden(v, *c2, s, k);
+#endif
       v.clip = c2;
     }
     else if (v.werk >= 0) werk_abloesen(k, v, c2, s, true);   // Slice 2, Nachbesserung 4: Brücke oder frei, die Nachfolgerin setzt werk_decken an

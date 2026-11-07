@@ -7,15 +7,18 @@ import { innen } from './hilfen/innen.mjs';
 import { bis, sse, ruf } from './hilfen/proj_stapel.mjs';
 import { GRUND_TEXT } from '../http/gruende.ts';   // Spec 6.34: jede Antwort mit Grund trägt einen englischen text
 
-const ROUTEN = ['GET /proj/liste', 'GET /proj/aktuell', 'GET /proj/verlauf', 'GET /proj/warp', 'GET /proj/auto', 'POST /proj/neu', 'POST /proj/oeffnen', 'POST /proj/aendern',
+const ROUTEN = ['GET /proj/liste', 'GET /proj/aktuell', 'GET /proj/verlauf', 'GET /proj/kits', 'GET /proj/warp', 'GET /proj/auto', 'POST /proj/neu', 'POST /proj/oeffnen', 'POST /proj/aendern',
   'POST /proj/undo', 'POST /proj/redo', 'POST /proj/transport',
+  'GET /proj/take_vorhoeren', 'POST /proj/take_vorhoeren',   // 1.14 comping, audition
+  'POST /proj/auto/uebersteuern', 'POST /proj/auto/re_enable', 'POST /proj/auto/arm', 'POST /proj/auto/geste',   // 1.12 slice 3
   'GET /proj/bk', 'POST /proj/bk/merken', 'POST /proj/bk/laden'];   // S17
 
-test('Routen: genau die neun aus Spec 3.4 plus GET /proj/warp (Paket 1.13) and GET /proj/auto (Automation Slice 1; ohne freeze und export, die bringt S3), alle POST mit fremdePost', async (t) => {
+test('Routes: exactly the nine of spec 3.4 plus GET /proj/kits (1.9 T2.3), GET /proj/warp, GET /proj/auto and GET/POST /proj/take_vorhoeren (no freeze and export, S3 brings those), every POST with fremdePost', async (t) => {
   const { o } = await stapel(t);
   const proj = o.routen().filter((e) => e.bereich === 'proj');
   assert.deepEqual(proj.map((e) => `${e.methode} ${e.pfad}`), ROUTEN);
   assert.ok(proj.filter((e) => e.methode === 'POST').every((e) => e.schutz === 'fremdePost'));
+  assert.equal(proj.find((e) => e.methode === 'POST' && e.pfad === '/proj/take_vorhoeren')?.schutz, 'fremdePost', 'the audition POST is guarded like the others');
 });
 
 test('Transport mit der Kern-Attrappe: Start (quant 0, Quittung 2 am Einsatz), /zustand/arr mit nr und Status über /strom, Stopp', async (t) => {

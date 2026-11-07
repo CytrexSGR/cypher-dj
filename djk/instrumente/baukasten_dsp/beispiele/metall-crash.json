@@ -1,0 +1,37 @@
+{
+  "format": "baukasten/2",
+  "name": "metall-crash",
+  "stimmen": 4,
+  "regler_namen": {"1": "Decay", "2": "Tune", "3": "Color", "4": "Noise", "5": "Low cut", "6": "Grab (choke on release)"},
+  "knoten": [
+    {"id": "note", "art": "note"},
+    {"id": "k_decay", "art": "regler", "nr": 1, "min": 1.5, "max": 8, "log": 1},
+    {"id": "k_tune", "art": "regler", "nr": 2, "min": 0.8, "max": 1.6, "log": 1},
+    {"id": "k_farbe", "art": "regler", "nr": 3, "min": 0.2, "max": 0.9},
+    {"id": "k_rauschen", "art": "regler", "nr": 4, "min": 0.3, "max": 0.9},
+    {"id": "k_hp", "art": "regler", "nr": 5, "min": 1500, "max": 6000, "log": 1},
+    {"id": "k_griff", "art": "regler", "nr": 6, "min": 0, "max": 1},
+    {"id": "minus_gate", "art": "mul", "b": -1},
+    {"id": "losgelassen", "art": "add", "b": 1},
+    {"id": "griff", "art": "mul"},
+    {"id": "crash", "art": "metall", "gruppe": 0, "schnitt": 30},
+    {"id": "pegel", "art": "mul", "b": 1.2},
+    {"id": "aus", "art": "ausgang"}
+  ],
+  "kanten": [
+    {"von": "note.trig", "nach": "crash.trig"},
+    {"von": "note.vel", "nach": "crash.vel"},
+    {"von": "note.gate", "nach": "minus_gate.a"},
+    {"von": "minus_gate.aus", "nach": "losgelassen.a"},
+    {"von": "losgelassen.aus", "nach": "griff.a"},
+    {"von": "k_griff.aus", "nach": "griff.b"},
+    {"von": "griff.aus", "nach": "crash.choke"},
+    {"von": "k_decay.aus", "nach": "crash.decay"},
+    {"von": "k_tune.aus", "nach": "crash.tune"},
+    {"von": "k_farbe.aus", "nach": "crash.farbe"},
+    {"von": "k_rauschen.aus", "nach": "crash.rauschen"},
+    {"von": "k_hp.aus", "nach": "crash.hp"},
+    {"von": "crash.aus", "nach": "pegel.a"},
+    {"von": "pegel.aus", "nach": "aus.x"}
+  ]
+}

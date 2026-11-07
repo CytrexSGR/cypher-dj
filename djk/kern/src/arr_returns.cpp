@@ -8,6 +8,7 @@
 #include <cmath>
 #include <vector>
 
+#include "cypherdj/hall_pool.h"
 #include "cypherdj/stellwerk/regler.h"
 
 namespace cdj {
@@ -43,6 +44,10 @@ ArrReturns::ArrReturns(bool mit_hall) {
 }
 
 ArrReturns::~ArrReturns() {
+#ifdef CYPHERDJ_MUTATION_HALL_OHNE_JOIN
+  for (int w = 0; w < HallPool::MAX_W; ++w)
+    if (offen_[w] && pool_ && !pool_->hole_zurueck(w)) pool_->warte(w);   // error case only: the pool may not be destroyed with a job outstanding (the test must end red, not hang)
+#endif
   for (Hall* h : hall_) delete h;
 }
 
@@ -151,6 +156,7 @@ void ArrReturns::hall_block(int r, int m) {
   }
 #endif
   hall_[r]->block(ein_l_[r], ein_r_[r], nass_l_[r], nass_r_[r], m);
+  ++hall_n_[r];
 #ifdef CYPHERDJ_MUTATION_ARR_HALL_ZUFALL_UHR
   {   // error case: the result depends on the clock (as a random state seeded from the clock would)
     const float f = 1.0f + 1e-6f * static_cast<float>(std::chrono::steady_clock::now().time_since_epoch().count() % 1000) / 1000.0f;
@@ -173,13 +179,63 @@ void ArrReturns::hall_block(int r, int m) {
     ruhe_[r] = 0;
     std::memset(nass_l_[r], 0, bytes);
     std::memset(nass_r_[r], 0, bytes);
-    ++nan_;
+    ++nan_r_[r];
     return;
   }
   if (ruhe_[r] > ARR_HALL_RUHE_SAMPLES && spitze < 1e-9f) {
     wach_[r] = false;
     ruhe_[r] = 0;
   }
+}
+
+void ArrReturns::job(void* ctx, int r) {
+  ArrReturns* self = static_cast<ArrReturns*>(ctx);
+  self->hall_block(r, self->m_job_);
+  ++self->pool_n_[r];
+}
+
+void ArrReturns::hall_parallel(int m) {
+  static_assert(ARR_RETURNS - 1 <= HallPool::MAX_W, "returns 1..n-1 map to the workers, return 0 stays with the caller");
+  for (bool& b : vorab_) b = false;
+  if (!pool_) return;
+#ifdef CYPHERDJ_MUTATION_HALL_OHNE_JOIN
+  static_assert(sizeof(offen_) / sizeof(offen_[0]) >= HallPool::MAX_W, "offen_ covers every worker");
+  for (int w = 0; w < HallPool::MAX_W; ++w)
+    if (offen_[w]) {   // the jobs of the last block are collected only now (a held worker's job is dropped, not waited for: the test must end red, not hang)
+      if (!pool_->hole_zurueck(w)) pool_->warte(w);
+      offen_[w] = false;
+    }
+#endif
+  pool_->block_anfang();   // once per mixed block, all workers are frei here (every job of the last block was joined)
+  bool lauf[ARR_RETURNS];   // the set of running Halls, read once: laeuft_ is not read again in this call
+  int n = 0;
+  for (int r = 0; r < ARR_RETURNS; ++r) {
+    lauf[r] = laeuft_[r];
+    n += lauf[r] ? 1 : 0;
+  }
+  if (n < 2) return;   // one Hall alone: nothing to share, the strip loop computes it
+  m_job_ = m;
+  bool gesandt[HallPool::MAX_W] = {};
+  for (int r = 1; r < ARR_RETURNS; ++r)
+    if (lauf[r] && r - 1 < pool_->faeden()) gesandt[r - 1] = pool_->schicke(r - 1, &ArrReturns::job, this, r);
+  for (int r = 0; r < ARR_RETURNS; ++r)
+    if (lauf[r] && (r == 0 || !gesandt[r - 1])) hall_block(r, m);   // the caller's share: return 0 and every Hall the pool did not take
+#ifndef CYPHERDJ_MUTATION_HALL_OHNE_JOIN
+  for (int w = 0; w < HallPool::MAX_W; ++w) {
+    if (!gesandt[w]) continue;
+    if (!pool_->fertig(w)) {
+      while (pool_->bereit(w) && !pool_->frist_um(w)) cpu_pause();   // the worker may still be waking: give it until the deadline
+      if (pool_->hole_zurueck(w)) {   // still not started after the deadline: it is ours (the worker never starts it, the pool counts it late)
+        hall_block(w + 1, m);
+        continue;
+      }
+    }
+    pool_->warte(w);   // started or done: wait for the end, the job is never abandoned
+  }
+#else
+  for (int w = 0; w < HallPool::MAX_W; ++w) offen_[w] = gesandt[w];   // error case: no wait
+#endif
+  for (int r = 0; r < ARR_RETURNS; ++r) vorab_[r] = lauf[r];
 }
 
 void ArrReturns::schlafen(int r) {

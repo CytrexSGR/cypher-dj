@@ -36,22 +36,22 @@ void ArrRbSenke::schiebe(Spur& p, const Ev& e) noexcept {
 }
 
 void ArrRbSenke::note(int spur, int64_t ziel, uint8_t ton, uint8_t vel, bool an) noexcept {
-  if (spur < 0 || spur >= ARR_SPUREN) return;
+  if (spur < 0 || spur >= ARR_SENKEN_PLAETZE) return;
   schiebe(sp_[spur], Ev{ziel, static_cast<uint8_t>(an ? 0 : 1), ton, vel});
 }
 
 void ArrRbSenke::alle_aus(int spur, int64_t ziel) noexcept {
-  if (spur < 0 || spur >= ARR_SPUREN) return;
+  if (spur < 0 || spur >= ARR_SENKEN_PLAETZE) return;
   schiebe(sp_[spur], Ev{ziel, 2, 0, 0});
 }
 
 void ArrRbSenke::transport_start(int spur, int64_t ziel) noexcept {
-  if (spur < 0 || spur >= ARR_SPUREN) return;
+  if (spur < 0 || spur >= ARR_SENKEN_PLAETZE) return;
   sp_[spur].start = ziel;   // wirkt im Block, der ziel enthält (die Stimme ruht danach bis zur ersten Note)
 }
 
 bool ArrRbSenke::spur_weg(int spur, int64_t, bool) noexcept {
-  if (spur < 0 || spur >= ARR_SPUREN || !sp_[spur].h) return false;
+  if (spur < 0 || spur >= ARR_SENKEN_PLAETZE || !sp_[spur].h) return false;
   sp_[spur].weg = true;   // wirkt im nächsten block() dieser Spur (Ausblende, dann zurücksetzen)
   return true;
 }
@@ -92,7 +92,7 @@ void ArrRbSenke::setze_(Spur& p, const char* name, float wert) noexcept {
 }
 
 void ArrRbSenke::auto_parameter(int spur, int param, float wert) noexcept {
-  if (spur < 0 || spur >= ARR_SPUREN || param < 0 || param >= ARR_GERAET_PARAMS) return;
+  if (spur < 0 || spur >= ARR_SENKEN_PLAETZE || param < 0 || param >= ARR_GERAET_PARAMS) return;
 #ifdef CYPHERDJ_MUTATION_ARR_RB_SPUR_NULL
   spur = 0;   // error case: every value is filed under track index 0
 #endif
@@ -100,6 +100,17 @@ void ArrRbSenke::auto_parameter(int spur, int param, float wert) noexcept {
   p.lane_wert[param] = wert;
   p.lane_da[param] = true;
   ++gemeldet_;
+}
+
+// 1.12 slice 5 (D9): a relative lane without an absolute one. The sink knows the base value, so it forms the stack: base + summand, clamped, then the same path as a lane value.
+void ArrRbSenke::auto_parameter_summand(int spur, int param, float delta) noexcept {
+  if (spur < 0 || spur >= ARR_SPUREN || param < 0 || param >= ARR_GERAET_PARAMS) return;
+  const float summe = basiswert(arr_.snapshot(), spur, param) + delta;
+#ifdef CYPHERDJ_MUTATION_ARR_AUTO_REL_OHNE_KLEMME   // error case: the stack is not clamped
+  auto_parameter(spur, param, summe);
+#else
+  auto_parameter(spur, param, summe < 0.0f ? 0.0f : (summe > 1.0f ? 1.0f : summe));
+#endif
 }
 
 namespace {
@@ -110,7 +121,7 @@ constexpr float RB_VORGABE_NORM[ARR_GERAET_PARAMS] = {0.71034f, 0.62565f, 0.3f, 
 float ArrRbSenke::basiswert(const ArrSnapshot* snap, int spur, int param) noexcept {
   float basis = RB_VORGABE_NORM[param];
   if (snap) {
-    const ArrSpur& q = snap->spur[spur];
+    const ArrSpur& q = snap->platz(spur);
     for (int i = 0; i < q.n_param; ++i)
       if (std::strncmp(q.param[i].name, ARR_GERAET_PARAM_NAME[param], sizeof q.param[i].name) == 0) basis = q.param[i].wert;
   }
@@ -160,7 +171,7 @@ void ArrRbSenke::parameter_setzen(Spur& p, const ArrSpur& q) noexcept {
 }
 
 void ArrRbSenke::block(int spur, int64_t s0, int m, float* l, float* r) noexcept {
-  if (spur < 0 || spur >= ARR_SPUREN || m <= 0 || m > ARR_BLOCK) return;
+  if (spur < 0 || spur >= ARR_SENKEN_PLAETZE || m <= 0 || m > ARR_BLOCK) return;
   Spur& p = sp_[spur];
   if (!p.h) return;
   auto versatz = [&](int64_t ziel) -> uint32_t {
@@ -179,9 +190,9 @@ void ArrRbSenke::block(int spur, int64_t s0, int m, float* l, float* r) noexcept
 #ifdef CYPHERDJ_MUTATION_ARR_RB_BK_ALS_RUECKKEHR
   const bool rueckkehr = true;   // error case (S20): a bk track after the swap counts as a return to the RB
 #else
-  const bool rueckkehr = arr_.snapshot() && std::strcmp(arr_.snapshot()->spur[spur].geraet, "bk") != 0;   // S20: a bk track is no return to the RB
+  const bool rueckkehr = arr_.snapshot() && std::strcmp(arr_.snapshot()->platz(spur).geraet, "bk") != 0;   // S20: a bk track is no return to the RB
 #endif
-  if (p.weg && arr_.snapshot() && arr_.snapshot()->spur[spur].art == ArrArt::intern && rueckkehr) {
+  if (p.weg && arr_.snapshot() && arr_.snapshot()->platz(spur).art == ArrArt::intern && rueckkehr) {
     {
       cypherdj::dsp::DenormalSchutz schutz;
       cypher_rb_block(p.h, puf_l_, puf_r_, static_cast<size_t>(m));
@@ -206,7 +217,7 @@ void ArrRbSenke::block(int spur, int64_t s0, int m, float* l, float* r) noexcept
   if (!p.weg) lanes_anwenden(p, snap, spur);   // error case: the lane value goes in BEFORE the defaults and base values, which then overwrite it
 #endif
   if (const ArrSnapshot* s = snap) {
-    const ArrSpur& q = s->spur[spur];
+    const ArrSpur& q = s->platz(spur);
 #ifdef CYPHERDJ_MUTATION_ARR_RB_TAUSCH_OHNE_PARAMETER
     if (start_hier || p.n_param < 0) parameter_setzen(p, q);   // Fehlerfall: Parameter nur beim Start
 #else

@@ -2,6 +2,9 @@
 """Vertragstest L3: Namenslisten für Tasten, Deck-Aktionen und Regler-Pfade gegeneinander.
 1.10 Slice 1: dazu grp/<n>/* und pm/fader in denselben Fundorten.
 S5r: dazu die Graph-Regler <kanal>/bk/<1..8> (Kanalmenge aus regler.cpp, in alle Fundorte getragen).
+1.15 A2 (mix tools): dazu die 345 Werkzeug-Regler gate, util, mb, lim, spektrum/kanal (Quelle: werkzeug_regler.h, strikt gelesen;
+dazu INTERFACES §1.5, Attrappe REGLER, regler_info.ts mit Bereich und Vorgabe, hand_bedienung.PFAD und defs.schema.json
+als Annahme-Menge gegen ein Universum aller Familien mal aller Kanäle; kein kurven.js ZIELE, wie beim Kompressor).
 D1 K1 (Spec A11): dazu die Spur-Regler spur/<n>/* in allen sieben Fundorten (Kern-Tabelle regler.cpp, §1.5,
 Attrappe REGLER, kurven.js ZIELE, regler_info.ts, hand_bedienung.PFAD, defs.schema.json regler_pfad) und die Gründe
 (§16.2 mit Kern als Vergeber gegen Attrappe GRUENDE, Attrappe GRUENDE gegen osc.json, Grund-Literale im Kern-Quelltext
@@ -806,6 +809,294 @@ def _pruefe_bk_regler(q: Quelle, befunde: list[str]) -> None:
             befunde.append(f"bk-Regler: R07 defs.schema.json regler_pfad nimmt {falsch} an")
 
 
+# ---------------------------------------------------------------- 1.15 A2: mix-tool controls (345 rows, plan A v2 section 3)
+_WZ_KOPF = "djk/kern/stellwerk/include/cypherdj/stellwerk/werkzeug_regler.h"
+_WZ_ZEILE = re.compile(r'^\{WzTool::[a-z]+, "([a-z_/]+)", (-?[0-9.]+)f?, (-?[0-9.]+)f?, (-?[0-9.]+)f?, KurvenTyp::(?:schalter|stufen|linear), '
+                       r'[0-9]+, (?:true|false), WzKanalart::(quellen|quellen_busse|busse|global)\},$')
+_WZ_ALLE_KANAELE = ([f"deck/{n}" for n in range(1, 5)] + [f"erz/{n}" for n in range(1, 9)] + ["pad/1", "pad/2"]
+                    + [f"bus/{n}" for n in range(1, 5)])
+_WZ_FILTER_JS = "(p)=>(!p.startsWith('ins/')&&/\\/(gate|util|mb|lim)\\//.test(p))||p.startsWith('spektrum/')"   # ins/lim/... is an insert row, not a mix tool
+
+
+def _wz_kopf(q: Quelle) -> dict[str, tuple[float, float, float]]:
+    """The 345 paths of the one flat table werkzeug_regler.h -> (min, max, default). One row per line; a line of the block this parser
+    cannot read, an empty block or a missing channel array is a ParserFehler, never an empty green."""
+    kopf = q.lies(_WZ_KOPF)
+    von = _index(kopf, "WERKZEUG_ZEILEN[] = {", _WZ_KOPF)
+    bis = _index(kopf, "\n};", _WZ_KOPF, von)
+    kanaele = {}
+    for name in ("QUELLEN", "BUSSE"):
+        m = _such(r"WERKZEUG_" + name + r"\[\] = \{([^}]*)\}", kopf, _WZ_KOPF + " " + name)
+        kanaele[name] = re.findall(r'"([a-z]+/\d+)"', m.group(1))
+        if not kanaele[name]:
+            raise ParserFehler(f"{_WZ_KOPF}: WERKZEUG_{name} ohne Kanäle, Parser blind oder Quelle umgebaut")
+    cpp = q.lies("djk/kern/stellwerk/src/regler.cpp")
+    for marke in ("for (const WerkzeugZeile& z : WERKZEUG_ZEILEN)", "WERKZEUG_QUELLEN", "WERKZEUG_BUSSE"):
+        if marke not in cpp:
+            raise ParserFehler(f"regler.cpp: {marke!r} nicht gefunden, die Tabelle wird nicht (mehr) aus werkzeug_regler.h gebaut")
+    aus: dict[str, tuple[float, float, float]] = {}
+    zeilen = [z.strip() for z in kopf[von:bis].split("\n")[1:] if z.strip()]
+    for zeile in zeilen:
+        zeile = re.sub(r"//.*$", "", zeile).strip()
+        if not zeile:
+            continue
+        m = _WZ_ZEILE.match(zeile)
+        if not m:
+            raise ParserFehler(f"{_WZ_KOPF}: Zeile nicht lesbar: {zeile!r}")
+        werte = (float(m.group(2)), float(m.group(3)), float(m.group(4)))
+        art = m.group(5)
+        ks = {"quellen": kanaele["QUELLEN"], "quellen_busse": kanaele["QUELLEN"] + kanaele["BUSSE"], "busse": kanaele["BUSSE"],
+              "global": [""]}[art]
+        for k in ks:
+            pfad = f"{k}/{m.group(1)}" if k else m.group(1)
+            if pfad in aus:
+                raise ParserFehler(f"{_WZ_KOPF}: Pfad {pfad} doppelt")
+            aus[pfad] = werte
+    if not aus:
+        raise ParserFehler(f"{_WZ_KOPF}: keine Zeilen gelesen, Parser blind oder Quelle umgebaut")
+    return aus
+
+
+def _wz_vertrag(q: Quelle) -> list[str]:
+    """The tool rows of INTERFACES section 1.5, expanded over the channel list of their own "Wer darf" cell ('Quellkanäle' without the
+    channels after 'ausser', 'Busse' = bus/1..4, '<b>' over 'b = tief, mitte, hoch'). A tool row it cannot read is a ParserFehler."""
+    spec = q.lies("docs/architecture/INTERFACES.md")
+    teil = spec[_index(spec, "### 1.5 Kanäle und Regler-Pfade", "§1.5"):_index(spec, "### 1.6", "§1.5")]
+    aus: list[str] = []
+    for zeile in teil.split("\n"):
+        if not re.match(r"^\| `(<k>/(gate|util)/|bus/<n>/(mb|lim)/|spektrum/)", zeile):
+            continue
+        z = [c.strip() for c in zeile.strip().strip("|").split("|")]
+        m = re.match(r"^`([^`]+)`(?: \(b = ([a-z]+(?:, [a-z]+)*)\))?$", z[0]) if len(z) == 6 else None
+        if not m:
+            raise ParserFehler(f"INTERFACES §1.5: Werkzeug-Zeile nicht lesbar: {zeile[:80]!r}")
+        pfad, baender, wer = m.group(1), m.group(2), z[5]
+        if pfad == "spektrum/kanal":
+            aus.append(pfad)
+            continue
+        ks: list[str] = []
+        if "Quellkanäle" in wer:
+            ausser = set(re.findall(r"(?:deck|erz|pad)/\d", wer.split("ausser", 1)[1])) if "ausser" in wer else set()
+            ks += [k for k in _WZ_ALLE_KANAELE if not k.startswith("bus/") and k not in ausser]
+        if "Busse" in wer:
+            ks += [k for k in _WZ_ALLE_KANAELE if k.startswith("bus/")]
+        if not ks:
+            raise ParserFehler(f"INTERFACES §1.5: keine Kanäle in der Zelle 'Wer darf' der Zeile {pfad}: {wer!r}")
+        rest = pfad.split("/", 2)[2] if pfad.startswith("bus/<n>/") else pfad[4:]
+        if "<b>" in rest and not baender:
+            raise ParserFehler(f"INTERFACES §1.5: Zeile {pfad} ohne 'b = tief, mitte, hoch'")
+        for k in ks:
+            aus += [f"{k}/{rest.replace('<b>', b)}" for b in (baender.split(", ") if baender else [""])] if "<b>" in rest else [f"{k}/{rest}"]
+    if not aus:
+        raise ParserFehler("INTERFACES §1.5: keine Werkzeug-Zeilen gefunden, Parser blind oder Quelle umgebaut")
+    return aus
+
+
+def _wz_node(q: Quelle) -> dict[str, dict[str, list[float]]]:
+    """Tool rows of the Attrappe (a) and of regler_info.ts (l) as path -> [min, max, default]."""
+    return q.node_json(
+        "const v=await import('file://@@/djk/vertrag/attrappe_kern/vertrag.mjs');"
+        "const l=await import('file://@@/djk/leitstand/src/regler_info.ts');"
+        f"const f={_WZ_FILTER_JS};"
+        "const s=(m)=>Object.fromEntries([...m.entries()].filter(([p])=>f(p)).map(([p,i])=>[p,[i.min,i.max,i.vorgabe]]));"
+        "console.log(JSON.stringify({a:s(v.REGLER),l:s(l.REGLER)}))")
+
+
+def werkzeug_regler_listen(q: Quelle) -> dict[str, list[str]]:
+    """The 345 mix-tool paths per location. R01 is the header (the table the Stellwerk is built from), R02 the contract text, R03 the
+    Attrappe, R05 regler_info.ts; R06 (PFAD) and R07 (schema) are acceptance patterns and are tested in _pruefe_werkzeug_regler. Working tree only."""
+    aus = _wz_node(q)
+    return {"R01 Kern werkzeug_regler.h": sorted(_wz_kopf(q)), "R02 INTERFACES §1.5": sorted(_wz_vertrag(q)),
+            "R03 Attrappe REGLER": sorted(aus["a"]), "R05 regler_info.ts": sorted(aus["l"])}
+
+
+def _wz_universum(kopf: dict[str, tuple[float, float, float]]) -> list[str]:
+    """Every tool suffix on every channel (incl. erz/8 and the buses), the families' unknown siblings, channel numbers just outside, and the
+    global row with a suffix: whatever a pattern accepts out of this and is not in the 345 is too wide."""
+    suffixe = sorted({p.split("/", 2)[2] if p.startswith(("deck/", "erz/", "pad/", "bus/")) else p for p in kopf})
+    fremd = ["gate/zz", "util/zz", "util/gain_db", "mb/zz", "mb/solo", "mb/tief/solo", "mb/zz/ratio", "lim/zz", "lim/vorhalt_ms", "lim/echtspitze"]
+    kanaele = _WZ_ALLE_KANAELE + ["deck/0", "deck/5", "erz/0", "erz/9", "pad/0", "pad/3", "bus/0", "bus/5"]
+    u = {f"{k}/{x}" for k in kanaele for x in suffixe + fremd if x != "spektrum/kanal"}
+    u |= {"spektrum", "spektrum/kanal/1", "spektrum/zz", "deck/1/spektrum/kanal", "master/gate/an", "fx/1/util/dc"}
+    return sorted(u - set(kopf))
+
+
+def _pruefe_werkzeug_regler(q: Quelle, befunde: list[str]) -> None:
+    listen = werkzeug_regler_listen(q)
+    soll = listen["R01 Kern werkzeug_regler.h"]
+    for name, ist in listen.items():
+        if name != "R01 Kern werkzeug_regler.h":
+            _diff(befunde, "Werkzeug-Regler=Kern", soll, ist, name)
+    # range and default in the Attrappe and in regler_info.ts equal the header (within 1e-6: the header writes float literals like 0.1f)
+    kopf = _wz_kopf(q)
+    zahlen = _wz_node(q)
+    for ort, schluessel in (("R03 Attrappe REGLER", "a"), ("R05 regler_info.ts", "l")):
+        for name in sorted(set(kopf) & set(zahlen[schluessel])):
+            ist = zahlen[schluessel][name]
+            if any(abs(x - y) > 1e-6 for x, y in zip(ist, kopf[name])):
+                befunde.append(f"Werkzeug-Regler: {ort} Bereich oder Vorgabe von {name} ist {ist}, werkzeug_regler.h sagt {list(kopf[name])}")
+    pfad = re.compile(_such(r"export const PFAD = /(.*)/;", q.lies("djk/oberflaeche/hand_bedienung.ts"),
+                            "hand_bedienung.ts").group(1).replace("\\/", "/"))
+    try:
+        schema = json.loads(q.lies("djk/vertrag/schemas/defs.schema.json"))["$defs"]["regler_pfad"]["pattern"]
+    except (ValueError, KeyError) as fehler:
+        raise ParserFehler(f"defs.schema.json: kein $defs.regler_pfad.pattern ({fehler})") from fehler
+    for name in soll:
+        if not pfad.search(name):
+            befunde.append(f"Werkzeug-Regler: R06 hand_bedienung.PFAD lehnt {name} ab")
+        if not re.fullmatch(schema, name):
+            befunde.append(f"Werkzeug-Regler: R07 defs.schema.json regler_pfad lehnt {name} ab")
+    for falsch in _wz_universum(kopf):   # Gegenprobe: kein Muster zu weit
+        if pfad.search(falsch):
+            befunde.append(f"Werkzeug-Regler: R06 hand_bedienung.PFAD nimmt {falsch} an")
+        if re.fullmatch(schema, falsch):
+            befunde.append(f"Werkzeug-Regler: R07 defs.schema.json regler_pfad nimmt {falsch} an")
+
+
+# ---------------------------------------------------------------- 1.10 Slice 4a/4b: insert controls ins/komp|eq|saett|lim/<n>/* (T6, T12)
+# Global project-only rows (spec section 3/4): R01 is the generated row table the Stellwerk is built from (insert_zeilen.inc, from
+# docs/schnittstellen/insert_module.json), R02 the contract text, R03 the Attrappe, R05 regler_info.ts; R06 (PFAD) and R07 (schema) are
+# acceptance patterns, tested here. No kurven.js ZIELE (like the mix tools): the page edits an insert through the project command, not a grip.
+_INS_INC = "djk/kern/stellwerk/src/insert_zeilen.inc"
+_INS_ZEILE = re.compile(r'^\{"(ins/[a-z]+/[0-9]+/[a-z0-9_/]+|rack/[0-9]+/m[1-4])", Rolle::[a-z_0-9]+, (-?[0-9.]+)f, (-?[0-9.]+)f, (-?[0-9.]+)f, '
+                        r'KurvenTyp::(?:schalter|stufen|linear), [0-9]+, (?:true|false)\},$')
+
+
+def _ins_inc(q: Quelle) -> dict[str, tuple[float, float, float]]:
+    """The rows of the generated table insert_zeilen.inc -> (min, max, default). One row per line; a line of the block this parser cannot
+    read, a duplicate or an empty block is a ParserFehler, never an empty green. regler.cpp must still build the table from it."""
+    inc = q.lies(_INS_INC)
+    von = _index(inc, "INSERT_ZEILEN[] = {", _INS_INC)
+    bis = _index(inc, "\n};", _INS_INC, von)
+    cpp = q.lies("djk/kern/stellwerk/src/regler.cpp")
+    for marke in ('#include "insert_zeilen.inc"', "INSERT_ZEILEN"):
+        if marke not in cpp:
+            raise ParserFehler(f"regler.cpp: {marke!r} nicht gefunden, die Tabelle wird nicht (mehr) aus insert_zeilen.inc gebaut")
+    aus: dict[str, tuple[float, float, float]] = {}
+    for zeile in (z.strip() for z in inc[von:bis].split("\n")[1:]):
+        if not zeile:
+            continue
+        m = _INS_ZEILE.match(zeile)
+        if not m:
+            raise ParserFehler(f"{_INS_INC}: Zeile nicht lesbar: {zeile!r}")
+        if m.group(1) in aus:
+            raise ParserFehler(f"{_INS_INC}: Pfad {m.group(1)} doppelt")
+        aus[m.group(1)] = (float(m.group(2)), float(m.group(3)), float(m.group(4)))
+    if not aus:
+        raise ParserFehler(f"{_INS_INC}: keine Zeilen gelesen, Parser blind oder Quelle umgebaut")
+    return aus
+
+
+def _ins_vertrag(q: Quelle) -> dict[str, tuple[float, float, float]]:
+    """The rows `ins/komp/<n>/<name>` of INTERFACES section 1.5 expanded over n = 1 to N (N read from the sentence under the table)
+    -> (min, max, default). A row it cannot read is a ParserFehler."""
+    spec = q.lies("docs/architecture/INTERFACES.md")
+    teil = spec[_index(spec, "### 1.5 Kanäle und Regler-Pfade", "§1.5"):_index(spec, "### 1.6", "§1.5")]
+    n = {art: int(_such(r"`ins/" + art + r"/<n>/\*` \(n = 1 to (\d+);", teil, f"INTERFACES §1.5 ins/{art}/<n>/*").group(1))
+         for art in ("komp", "eq", "saett", "lim")}
+    racks = int(_such(r"`rack/<k>/m<n>` \(k = 1 to (\d+);", teil, "INTERFACES §1.5 rack/<k>/m<n>").group(1))
+    aus: dict[str, tuple[float, float, float]] = {}
+    for zeile in teil.split("\n"):
+        if zeile.startswith("| `rack/"):   # slice 4c: the macro rows rack/<k>/m<n>, k = 1..racks, n = 1..4
+            z = [c.strip() for c in zeile.strip().strip("|").split("|")]
+            if len(z) != 6 or z[0] != "`rack/<k>/m<n>`":
+                raise ParserFehler(f"INTERFACES §1.5: Rack-Zeile nicht lesbar: {zeile[:80]!r}")
+            b = re.fullmatch(r"(\S+) to (\S+)", z[2].replace("−", "-"))
+            if not b:
+                raise ParserFehler(f"INTERFACES §1.5: Bereich der Rack-Zeile nicht lesbar: {z[2]!r}")
+            for k in range(1, racks + 1):
+                for i in range(1, 5):
+                    if f"rack/{k}/m{i}" in aus:
+                        raise ParserFehler(f"INTERFACES §1.5: Rack-Zeile rack/{k}/m{i} doppelt")
+                    aus[f"rack/{k}/m{i}"] = (float(b.group(1)), float(b.group(2)), float(z[3]))
+            continue
+        if not zeile.startswith("| `ins/"):
+            continue
+        z = [c.strip() for c in zeile.strip().strip("|").split("|")]
+        m = re.match(r"^`ins/(komp|eq|saett|lim)/<n>/((?:b(?:<m>|[1-8])/)?[a-z0-9_]+)`$", z[0]) if len(z) == 6 else None
+        if not m:
+            raise ParserFehler(f"INTERFACES §1.5: Insert-Zeile nicht lesbar: {zeile[:80]!r}")
+        b = re.fullmatch(r"(?:(\S+) to (\S+)|0/1)", z[2].replace("−", "-"))
+        if not b:
+            raise ParserFehler(f"INTERFACES §1.5: Bereich der Zeile {m.group(1)} nicht lesbar: {z[2]!r}")
+        lo, hi = (float(b.group(1)), float(b.group(2))) if b.group(1) else (0.0, 1.0)
+        werte = (lo, hi, float(z[3].replace("−", "-")))
+        namen = [m.group(2).replace("<m>", str(b)) for b in range(1, 9)] if "<m>" in m.group(2) else [m.group(2)]   # b<m>: the 8 EQ bands
+        for i in range(1, n[m.group(1)] + 1):
+            for name in namen:
+                if f"ins/{m.group(1)}/{i}/{name}" in aus:
+                    raise ParserFehler(f"INTERFACES §1.5: Insert-Zeile ins/{m.group(1)}/{i}/{name} doppelt")
+                aus[f"ins/{m.group(1)}/{i}/{name}"] = werte
+    if not aus:
+        raise ParserFehler("INTERFACES §1.5: keine Insert-Zeilen gefunden, Parser blind oder Quelle umgebaut")
+    return aus
+
+
+def _ins_node(q: Quelle) -> dict[str, dict[str, list[float]]]:
+    """Insert rows of the Attrappe (a) and of regler_info.ts (l) as path -> [min, max, default]. Working tree only. Both modules build the rows from the
+    generated lists insert_regler.mjs / insert_regler.ts; they are registered as read so that the mutation test copies them."""
+    q.lies("djk/vertrag/attrappe_kern/insert_regler.mjs")
+    q.lies("djk/leitstand/src/insert_regler.ts")
+    return q.node_json(
+        "const v=await import('file://@@/djk/vertrag/attrappe_kern/vertrag.mjs');"
+        "const l=await import('file://@@/djk/leitstand/src/regler_info.ts');"
+        "const s=(m)=>Object.fromEntries([...m.entries()].filter(([p])=>p.startsWith('ins/')||p.startsWith('rack/'))"
+        ".map(([p,i])=>[p,[i.min,i.max,i.vorgabe]]));"
+        "console.log(JSON.stringify({a:s(v.REGLER),l:s(l.REGLER)}))")
+
+
+def insert_regler_listen(q: Quelle) -> dict[str, dict[str, tuple[float, float, float]]]:
+    """Path -> (min, max, default) of the insert controls per location (R01 Kern, R02 contract text, R03 Attrappe, R05 regler_info.ts)."""
+    aus = _ins_node(q)
+    return {"R01 Kern insert_zeilen.inc": _ins_inc(q), "R02 INTERFACES §1.5": _ins_vertrag(q),
+            "R03 Attrappe REGLER": {p: tuple(w) for p, w in aus["a"].items()},
+            "R05 regler_info.ts": {p: tuple(w) for p, w in aus["l"].items()}}
+
+
+def _ins_universum(kern: dict[str, tuple[float, float, float]]) -> list[str]:
+    """What a pattern must refuse: instance numbers just outside, sibling names, a suffix, a kind that has no table rows, the
+    rack family just outside its numbers."""
+    u: set[str] = set()
+    for art in ("komp", "eq", "saett", "lim"):
+        namen = sorted({p.split("/", 3)[3] for p in kern if p.split("/")[1] == art})
+        n = max(int(p.split("/")[2]) for p in kern if p.split("/")[1] == art)
+        u |= {f"ins/{art}/{i}/{x}" for i in (0, n + 1) for x in namen}
+        u |= {f"ins/{art}/1/{x}" for x in ("zz", "an/x", "sc2", "schwelle/x", "")}
+        u |= {f"ins/{art}/1", f"ins/{art}", f"ins/{art}/01/an"}
+    u |= {f"ins/eq/1/b{b}/{x}" for b in (0, 9) for x in ("an", "freq")}   # band numbers just outside
+    u |= {"ins/eq/1/b1", "ins/eq/1/b1/zz", "ins/eq/1/b11/an", "ins/saett/1/b1/an", "ins/komp/1/b1/an", "ins/rack/1/an", "komp/1/an"}
+    # the rack macro family: instance numbers and macro numbers just outside, a sibling name, a suffix
+    u |= {"rack/0/m1", "rack/13/m1", "rack/01/m1", "rack/1/m0", "rack/1/m5", "rack/1/m11", "rack/1/m1/x", "rack/1/m", "rack/1", "rack", "rack/1/zz", "rack/1/m1x"}
+    return sorted(u - set(kern))
+
+
+def _pruefe_insert_regler(q: Quelle, befunde: list[str]) -> None:
+    listen = insert_regler_listen(q)
+    kern = listen["R01 Kern insert_zeilen.inc"]
+    for name, ist in listen.items():
+        if name != "R01 Kern insert_zeilen.inc":
+            _diff(befunde, "Insert-Regler=Kern", sorted(kern), sorted(ist), name)
+            for p in sorted(set(kern) & set(ist)):
+                if any(abs(a - b) > 1e-6 for a, b in zip(ist[p], kern[p])):
+                    befunde.append(f"Insert-Regler: {name} Bereich oder Vorgabe von {p} ist {list(ist[p])}, insert_zeilen.inc sagt {list(kern[p])}")
+    pfad = re.compile(_such(r"export const PFAD = /(.*)/;", q.lies("djk/oberflaeche/hand_bedienung.ts"),
+                            "hand_bedienung.ts").group(1).replace("\\/", "/"))
+    try:
+        schema = json.loads(q.lies("djk/vertrag/schemas/defs.schema.json"))["$defs"]["regler_pfad"]["pattern"]
+    except (ValueError, KeyError) as fehler:
+        raise ParserFehler(f"defs.schema.json: kein $defs.regler_pfad.pattern ({fehler})") from fehler
+    for name in sorted(kern):
+        if not pfad.search(name):
+            befunde.append(f"Insert-Regler: R06 hand_bedienung.PFAD lehnt {name} ab")
+        if not re.fullmatch(schema, name):
+            befunde.append(f"Insert-Regler: R07 defs.schema.json regler_pfad lehnt {name} ab")
+    for falsch in _ins_universum(kern):   # Gegenprobe: kein Muster zu weit
+        if pfad.search(falsch):
+            befunde.append(f"Insert-Regler: R06 hand_bedienung.PFAD nimmt {falsch} an")
+        if re.fullmatch(schema, falsch):
+            befunde.append(f"Insert-Regler: R07 defs.schema.json regler_pfad nimmt {falsch} an")
+
+
 # ---------------------------------------------------------------- D1 K1: Gründe (A11)
 _GRUND_LITERALE = [r'quittung\([^;]*?"([a-z_]+)"\s*\)', r'\bab\("([a-z_]+)"\)', r'Abbruch\("([a-z_]+)"',
                    r'\bgrund = "([a-z_]+)"']
@@ -905,7 +1196,9 @@ def pruefe(q: Quelle) -> list[str]:
         _pruefe_spur_regler(q, befunde)   # D1 K1
         _pruefe_routing_regler(q, befunde)   # 1.10 Slice 1
         _pruefe_bk_regler(q, befunde)     # S5r
+        _pruefe_werkzeug_regler(q, befunde)   # 1.15 A2
         _pruefe_return_regler(q, befunde)   # 1.10 Slice 3
+        _pruefe_insert_regler(q, befunde)   # 1.10 Slice 4a
         _pruefe_gruende(q, befunde)       # D1 K1
         _pruefe_zielarten(q, befunde)     # D1 K1 Slice 10
     for schluessel in AUSNAHMEN:
@@ -919,8 +1212,18 @@ def main() -> int:
     parser.add_argument("--wurzel", type=Path)
     parser.add_argument("--rev")
     args = parser.parse_args()
+    q = Quelle(args.wurzel, args.rev)
+    # The parsers read the German contract text. The public repository carries only its English edition, so the check
+    # is skipped there (ctest SKIP_RETURN_CODE 77); the working repository runs it against the German source of truth.
     try:
-        fehler = pruefe(Quelle(args.wurzel, args.rev))
+        kopf = q.lies("docs/architecture/INTERFACES.md")[:200]
+    except (OSError, subprocess.CalledProcessError):
+        kopf = ""
+    if kopf.startswith("# Cypher-DJ: Interfaces"):
+        print("SKIP: English edition of the interface contract; the name list parsers read the German source text")
+        return 77
+    try:
+        fehler = pruefe(q)
     except ParserFehler as problem:
         print(f"PARSERFEHLER: {problem}", file=sys.stderr)
         return 2

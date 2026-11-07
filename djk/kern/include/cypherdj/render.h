@@ -48,6 +48,8 @@ struct RenderAuftrag {
   int quantum = 256;                       // Blockgröße wie live (16..8192)
   double limiter_dbtp = -1.0;              // kern.toml
   double filter_guete = 0.707;             // kern.toml
+  double kanal_limiter_vorhalt_ms = 0.0;   // kern.toml (1.15 A5b): 0 = the bus limiters are not built (L = 0); the export is aligned with the master limiter's vh + L
+  bool kanal_limiter_echtspitze = false;   // kern.toml
   int64_t speicher_budget_bytes = 3800LL << 20;
   int64_t arr_budget_bytes = 1024LL << 20;
   const cdj_z_echtzeit* regler = nullptr;  // Neustart-Fach; nur die Regler werden übernommen (Quelle kern)
@@ -60,6 +62,9 @@ struct RenderAuftrag {
   // a bk track is refused with fehler "format". cypherdj-render: --bk-ordner, else $CYPHERDJ_BK_ORDNER, else $HOME/.config/cypherdj/baukasten
   // (the folder the live kern reads).
   std::string bk_ordner;
+  // 1.9: folder of the kits (<name>/kit.json and the sounds) of the project tracks with device kit. Empty: a playback with a kit track is
+  // refused with fehler "format". cypherdj-render: --kit-ordner, else $CYPHERDJ_KIT_ORDNER, else $HOME/.config/cypherdj/kits (the live folder).
+  std::string kit_ordner;
   int gegenprobe_spur = 0;                 // > 0: jeder Audio-Clip dieser Spur 1 Frame weiter in der Quelle (A7, 5.)
   // Automation Slice 1: true shifts every point of every lane by the beat distance of one sample (the lane runs one sample late). Counter-check of
   // the null test: a lane that the render evaluates wrongly by one sample must turn it red. Refused with grund gegenprobe when there is no lane.
@@ -76,7 +81,8 @@ struct RenderErgebnis {
   std::vector<float> l, r;                 // Master, frames Werte je Seite
   int64_t frames = 0;                      // (bis − von) Beats in Samples
   int64_t start_sample = -1;               // Kern-Sample des Einsatzes; l[0] klingt am Kern-Sample start + vorhalt
-  int vorhalt = 0;                         // Vorhalt des Master-Limiters
+  int pdc_latenz = 0;                      // 1.10 slice 4b T13: the largest path latency of the insert chains; the file starts that many samples after the first valid sample of the tap (0: no latency stage)
+  int vorhalt = 0;                         // Vorhalt des Master-Limiters plus the latency account L of the bus limiters (1.15 A5b; L = 0 without them)
   int phase = 0;                           // start_sample mod quantum
   int regler = 0;                          // übernommene Regler (kern: aus dem Fach, −1 ungültig; projekt: Spur-Regler)
   std::string regler_quelle;               // "kern", "projekt" oder "" (weder noch, nur Tests)

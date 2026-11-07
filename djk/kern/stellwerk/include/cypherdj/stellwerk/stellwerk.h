@@ -59,6 +59,19 @@ struct Zaehler {
   int64_t spruenge = 0;             // prozess() mit s0 != jetzt()
 };
 
+// 1.12 S3 D2: source of the lane value for the pickup. hand_anwenden asks it exactly where a hand step is certain to be
+// applied (after the first-value rule, the dead zone and the queue overflow), in the callback thread. Allocation-free.
+class PickupQuelle {
+ public:
+  virtual ~PickupQuelle() = default;
+  // True only if the transport plays, the regulator has an active lane that is not overridden, and the lane has played.
+  // `wert` is then the value the lane played last, in the unit of the regulator.
+  virtual bool lane_wert(int regler, float& wert) const = 0;
+};
+
+// Does the /k/hand/frei list (comma list; an entry ending in / is a prefix; *) name this regulator path?
+bool pfad_in_liste(const char* liste, const char* pfad);
+
 class Stellwerk {
  public:
   explicit Stellwerk(const Uhr& uhr, Pruefer* pruefer = nullptr);   // nullptr: leere Standard-Implementierung
@@ -69,6 +82,9 @@ class Stellwerk {
   void teil(const TeilBefehl& b);
   void abbruch(int64_t id, Quelle quelle, const char* plan, const int32_t* nrs, int anzahl);   // anzahl < 0: "*"
   void ki_stopp(int64_t id, Quelle quelle);          // id 0: Stopp-Taste, ohne Quittung (§7.3 Punkt 8)
+  // /k/hand/frei: gives the human holder of the named regulators back at once (comma list; an entry ending in / is a prefix, * is all). Returns how many
+  // regulators were released. Other holders and open parts stay. The caller checks that the source is andreas.
+  int hand_frei(const char* pfade, int64_t sample);
   void ki_frei(int64_t id, Quelle quelle);           // id 0: Freigabe plus Stopp, ohne Quittung
   bool ki_spur(int64_t id, Quelle quelle, const char* kanaele);   // "deck/3,deck/4,erz/1"; Spuren nur als "spur/0" (E3 P1), sonst abgelehnt
   // Die KI-Spur als Text in Normalform: nur Kanäle ("deck/3,deck/4"); "" ohne. Seit E3 P1 kein Spur-Teil.
@@ -91,6 +107,15 @@ class Stellwerk {
   // Hand-Schaltrampe (kill/*), ihr Ziel 0/1; sonst der Wert. Der Verlauf je Sample (aenderungen) trägt die Rampe.
   float wert_fest(int regler) const { return fest(reg_[regler]); }
   const Halter& halter(int regler) const { return reg_[regler].halter; }
+  // 1.12 S3 D1: grip signal. True if a hand step was APPLIED to this regulator in the last prozess() (a value that
+  // passed the first-value and dead-zone rules, or an explicit touch event). The holder state does not matter.
+  // `sample` is the absolute sample of the first grip in that cycle. Reset at the start of every prozess().
+  bool griff_im_zyklus(int regler, int64_t& sample) const;
+  // Same signal, the sample of the LAST grip of that cycle (the one the value of the regulator after the cycle belongs to, together with the course in aenderungen()).
+  bool griff_letzter_im_zyklus(int regler, int64_t& sample) const;
+  // 1.12 S3 D2: false while the physical position is still unknown (the next absolute value is swallowed).
+  void setze_pickup(const PickupQuelle* q) { pickup_ = q; }   // before the first cycle; nullptr: no pickup
+  bool stellung_bekannt(int regler) const { return regler >= 0 && regler < MAX_REGLER && reg_[regler].phys_bekannt; }
   bool ki_gestoppt() const { return ki_gestoppt_; }
   int ereignisse(const Ereignis** aus) const { *aus = ereignis_; return n_ereignis_; }
   void ereignisse_leeren() { n_ereignis_ = 0; }
@@ -149,6 +174,10 @@ class Stellwerk {
     float hr_von, hr_ziel;
     int64_t hr_sA;
     int32_t hr_schalt;
+    // 1.12 S3 D1: grip signal of the last prozess() (see griff_im_zyklus)
+    bool griff;
+    int64_t griff_sample;
+    int64_t griff_letzt;   // sample of the LAST grip of the cycle (griff_sample is the first)
   };
   static float fest(const ReglerZustand& z) { return z.hr_an ? z.hr_ziel : z.wert; }
 
@@ -172,6 +201,10 @@ class Stellwerk {
   void setze_wert(int r, int i, float v);
   // hand.cpp
   void hand_anwenden(const Griff& g, int64_t sample, int i, double beat);
+  // D1: an applied hand step; keeps the sample of the first one in the cycle. halter_gewechselt: the step changed the holder.
+  void pickup(int r);   // D2: set the regulator to the lane value before an applied hand step
+  const PickupQuelle* pickup_ = nullptr;
+  void markiere_griff(int r, int64_t sample, bool halter_gewechselt);
   void uebernehmen(int r, int64_t sample);
   bool mensch_bei(int r, int64_t sample, int n_hand_zyklus) const;
   // melder.cpp
@@ -197,6 +230,8 @@ class Stellwerk {
   int n_laufende_ = 0;
   int16_t starts_[MAX_TEILE];
   int n_starts_ = 0;
+  int16_t griff_r_[MAX_REGLER];   // regulators with a grip in this cycle (reset list, no scan of all regulators)
+  int n_griff_ = 0;
   Griff hand_[MAX_HAND];
   int n_hand_ = 0;
   Ereignis ereignis_[MAX_EREIGNISSE];

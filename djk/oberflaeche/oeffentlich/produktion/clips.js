@@ -20,7 +20,7 @@ const minLaenge = (clip, raster) => Math.min(clip.laenge_beats, raster > 0 ? ras
 
 // Welcher Clip liegt unter (x, y) der Spurfläche, und welche Zone: 'fade_ein' | 'fade_aus' (Namenszeile eines Audio-Clips,
 // nahe am Fade-Punkt) | 'links' | 'rechts' (Kürz-Griffe) | 'mitte' (verschieben). Der zuletzt gezeichnete Clip gewinnt.
-// tab: the row table (layout.js zeilenTabelle) when lane rows are open; a click in a lane row never hits a clip. Without it the old fixed grid.
+// tab: the row table (layout.js zeilenTabelle, ctx.zeilen() with lane and take rows) when rows are open; a click in a lane row never hits a clip. Without it the old fixed grid.
 export function trefferClip(projekt, a, x, y, tab = zeilenTabelle(projekt?.spuren?.length ?? 0)) {
   const i = spurIndexBeiTabelle(tab, y);
   if (i < 0) return null;

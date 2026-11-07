@@ -11,14 +11,14 @@ import { tmpOrdner } from './hilfen/projekt.mjs';
 const fehlerVon = async (p) => { try { await p; } catch (e) { return e; } return null; };
 const lies = (datei) => JSON.parse(fs.readFileSync(datei, 'utf8'));
 
-test('neu: Projekt angelegt, Wiedergabe 1 geschrieben und geladen, erz/4 neutral (14 Regler), alle Spur-Regler (4 · MAX_SPUREN), Loop, Metronom; SSE proj', async (t) => {
+test('neu: Projekt angelegt, Wiedergabe 1 geschrieben und geladen, erz/4 neutral (22 Regler), alle Spur-Regler (4 · MAX_SPUREN), Loop, Metronom; SSE proj', async (t) => {
   const { s, k, arr } = sitzung(t);
   const r = await s.neu('First Track', 'andreas');
   assert.equal(r.code, 200);
   assert.equal(r.j.slug, 'first-track'); assert.equal(r.j.projekt.rev, 0); assert.equal(r.j.projekt.wiedergabe_rev, 1);
   assert.deepEqual(k.an('/k/arr/laden').map((x) => x.felder), [{ quelle: 'andreas', nr: 1 }]);
   assert.deepEqual(lies(path.join(arr, 'wiedergabe-1.json')), { format: 'cypherdj-arr/1', nr: 1, spuren: [] });
-  assert.equal(k.teile(/^erz\/4\//).length, 16); assert.equal(k.teile(/^spur\/\d+\/(fader|pan|mute|solo)$/).length, 4 * MAX_SPUREN);
+  assert.equal(k.teile(/^erz\/4\//).length, 24); assert.equal(k.teile(/^spur\/\d+\/(fader|pan|mute|solo)$/).length, 4 * MAX_SPUREN);
   assert.equal(k.teile(/^grp\/\d+\/(fader|pan|mute|solo)$/).length, 4 * 8); assert.equal(k.teile(/^pm\/fader$/).length, 1);   // 1.10: das Öffnen setzt alle Gruppen-Slots und den PM
   assert.deepEqual(k.teile(/^erz\/4\/(ziel|xseite)$/).map((x) => [x.felder.pfad, x.felder.nach]), [['erz/4/ziel', 0], ['erz/4/xseite', 1]], 'P6: bei Quelle andreas gesendet');
   assert.deepEqual(k.teile(/^erz\/4\/send\/1$/)[0].felder, { quelle: 'andreas', plan: '', teil: 0, pfad: 'erz/4/send/1', ab_beat: k.teile(/^erz\/4\/send\/1$/)[0].felder.ab_beat,
@@ -82,7 +82,7 @@ test('P6 erz/4: Quelle cypher sendet ziel und xseite nicht (der Kern lehnte nur_
   c.s.ereignis('/e/regler', { pfad: 'erz/4/ziel', wert: 1, halter: 'frei', sample: 0n, beat: 0 });
   c.s.ereignis('/e/regler', { pfad: 'erz/4/xseite', wert: 1, halter: 'frei', sample: 0n, beat: 0 });
   const r = await c.s.neu('Cy', 'cypher');
-  assert.equal(c.k.teile(/^erz\/4\//).length, 14); assert.equal(c.k.teile(/^erz\/4\/(ziel|xseite)$/).length, 0);
+  assert.equal(c.k.teile(/^erz\/4\//).length, 22); assert.equal(c.k.teile(/^erz\/4\/(ziel|xseite)$/).length, 0);
   assert.deepEqual(r.j.kern.erz4_nur_hand, [{ pfad: 'erz/4/ziel', soll: 0, ist: 1 }], 'xseite steht schon auf 1: keine Meldung');
   const a = sitzung(t);
   a.s.ereignis('/e/regler', { pfad: 'erz/4/ziel', wert: 1, halter: 'frei', sample: 0n, beat: 0 });

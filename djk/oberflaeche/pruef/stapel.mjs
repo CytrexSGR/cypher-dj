@@ -8,10 +8,19 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { starteRelais } from './relais.mjs';
+import { hauptCheckout } from '../server.ts';
 
 const HIER = path.dirname(fileURLToPath(import.meta.url));
 const OB = path.resolve(HIER, '..');
 const REPO = path.resolve(OB, '..', '..');
+// The library folder `bestand/` is not tracked, so a git worktree has none: A2, A2b and A3 of abnahme.mjs failed in every
+// worktree ("fixture not in the library", 2026-11-04). Fall back to the library of the main checkout, like pythonVorgabe in server.ts.
+export function bestandVorgabe(repo = REPO) {
+  const eigen = path.join(repo, 'bestand');
+  if (fs.existsSync(eigen)) return eigen;
+  const haupt = hauptCheckout(repo);
+  return haupt !== null && haupt !== repo && fs.existsSync(path.join(haupt, 'bestand')) ? path.join(haupt, 'bestand') : eigen;
+}
 const warte = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function bereit(p, name, muster) {
@@ -25,7 +34,7 @@ function bereit(p, name, muster) {
 // proj (D1 S3, Auftrag 14 e: Proben gegen den echten Server): { wurzel, arbeitsordner } gibt dem Seiten-Server eigene Ordner für Projekte und
 // Wiedergaben (--proj-wurzel, --arr-ordner) und der Kern-Attrappe eine eigene kern.toml mit demselben arr_ordner (ein Freeze schreibt seine Datei
 // dorthin, nie nach ~/.cache/cypherdj-<i>/arr). Ohne proj bleibt alles wie bisher (die Projekt-Attrappe beantwortet /proj/* vor dem Server).
-export async function starteStapel(ordner, instanz = 'g', env = {}, { bestand = path.join(REPO, 'bestand'), vorher, serverArgs = [], proj = null } = {}) {
+export async function starteStapel(ordner, instanz = 'g', env = {}, { bestand = bestandVorgabe(), vorher, serverArgs = [], proj = null } = {}) {
   fs.mkdirSync(ordner, { recursive: true });
   const abWurzel = fs.mkdtempSync(`/dev/shm/djk60m-${instanz}-`);
   const k = 1000 * (instanz.charCodeAt(0) - 96);

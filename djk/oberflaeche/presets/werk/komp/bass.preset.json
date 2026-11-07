@@ -1,0 +1,42 @@
+{
+ "schema": 1,
+ "name": "Bass",
+ "geraet_typ": "effekt",
+ "geraet": "komp",
+ "werte": {
+  "thresh": -20,
+  "ratio": 4,
+  "knee": 6,
+  "attack": 5,
+  "release": 120,
+  "makeup": 3,
+  "mix": 1,
+  "extsc": false,
+  "schp": 0
+ },
+ "beschreibung": {
+  "art": "compressor",
+  "unterart": "channel",
+  "charakter": [
+   "tight",
+   "punchy"
+  ],
+  "genre": [
+   "techno",
+   "house",
+   "dnb"
+  ],
+  "einsatz": [
+   "drop",
+   "mixdown"
+  ],
+  "energie": 3,
+  "text": "Fast attack that evens out the bass level so the low end sits steady under the kick."
+ },
+ "tags": [
+  "bass"
+ ],
+ "notiz": "Starting point from practice (Senior, Mixing Secrets; Pirkle ch. 18), not measured. Same values as djk/instrumente/komp/presets/presets.json.",
+ "angelegt": "2026-11-02T00:00:00.000Z",
+ "geaendert": "2026-11-02T00:00:00.000Z"
+}

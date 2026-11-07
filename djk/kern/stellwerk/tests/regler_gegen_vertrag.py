@@ -14,6 +14,12 @@ S14: the row `<k>/bk/<n>` does NOT expand over all channels: it expands over the
 (deck/1..4, erz/1, 2, 3, 5, 6, 7 and pad/1, 2) with n = 1 to N read from the row. The row `fx/<n>/bk/<m>` (S14) expands over the
 n and m it names (fx/3, fx/4, m = 1 to 8). Both counts are asserted to be 8 (the Baukasten library has eight knobs). Before this
 repair the checker expanded `<k>/bk/<n>` over all 18 channels with a literal `<n>` and was red (measured at origin/main aa95b5f9).
+
+1.15 A1b (mix tools): the rows `<k>/gate/*`, `<k>/util/*`, `bus/<n>/mb/*`, `bus/<n>/lim/*` do NOT expand over all channels: they expand over
+the channel list of their own "Wer darf" cell ("alle; nur Quellkanäle ausser erz/8" = deck/1..4, erz/1..7, pad/1..2; "alle; Quellkanäle ausser
+erz/8 und Busse" = those plus bus/1..4; "alle; nur Busse" = bus/1..4), the same pattern as `<k>/bk/<n>`. `<b>` in a multiband row expands over the
+bands named in its first cell ("b = tief, mitte, hoch"). The total is asserted to be 345 (117 + 119 + 96 + 12 + 1) in the contract and in the
+table, classified by the five hand regexes of INTERFACES section 1.5 (an exact set, not a prefix). `spektrum/kanal` is a plain path.
 """
 import re
 import subprocess
@@ -21,6 +27,8 @@ import sys
 
 SPUREN = [0]   # E3: Zahl der Spur-Slots, aus dem Vertragstext gelesen (`spur/<n>/*` ... n = 1 bis N), nicht fest verdrahtet
 GRUPPEN = [0]   # 1.10: Zahl der Gruppen-Slots, aus dem Vertragstext gelesen (`grp/<n>/*` ... n = 1 bis N)
+RACKS = [0]   # 1.10 slice 4c: number of racks, read from the contract text (`rack/<k>/m<n>` (k = 1 to N; ...); 4 macro rows each
+INSERTS = {'komp': 0, 'eq': 0, 'saett': 0, 'lim': 0}   # 1.10 slice 4a/4b: pool size per insert kind, read from the contract text (`ins/<art>/<n>/*` ... n = 1 to N)
 RETURNS = [0]   # 1.10 Slice 3: Zahl der Returns, aus dem Vertragstext gelesen (`ret/<r>/*` ... r = 1 to N)
 BK_KNOEPFE = 8  # S14: graph knobs per channel / per send return (`regler nr 1..8` of the Baukasten library)
 KANAELE = [f'deck/{i}' for i in range(1, 5)] + [f'erz/{i}' for i in range(1, 9)] + [f'pad/{i}' for i in (1, 2)] + \
@@ -88,6 +96,12 @@ def expandiere(p):
         return [q for i in range(1, GRUPPEN[0] + 1) for q in expandiere_r(f'grp/{i}/{p[8:]}')]
     if p.startswith('ret/<r>/'):                        # 1.10 Slice 3: return strips, r = 1..4
         return [f'ret/{i}/{p[8:]}' for i in range(1, RETURNS[0] + 1)]
+    m = re.match(r'ins/(komp|eq|saett|lim)/<n>/(.*)$', p)
+    if m:                                               # 1.10 slice 4a/4b: insert pools, n = 1..pool size; the EQ band rows b<m>/... expand over the 8 bands
+        rest = [m.group(2).replace('<m>', str(b)) for b in range(1, 9)] if '<m>' in m.group(2) else [m.group(2)]
+        return [f'ins/{m.group(1)}/{i}/{r}' for i in range(1, INSERTS[m.group(1)] + 1) for r in rest]
+    if p == 'rack/<k>/m<n>':                            # 1.10 slice 4c: the macro knobs of the rack pool, k = 1..RACKS, n = 1..4
+        return [f'rack/{k}/m{i}' for k in range(1, RACKS[0] + 1) for i in range(1, 5)]
     if p.startswith('fx/<n>/'):
         rest = p[7:]
         return [f'fx/{i}/{rest}' for i in FX_N[rest]]
@@ -121,6 +135,63 @@ def bk_pfade(p, z):
     return None
 
 
+# INTERFACES section 1.5: the exact set of the 345 mix-tool paths, five regexes with the count each must have
+WERKZEUG_REGEX = [
+    (r'^(deck/[1-4]|erz/[1-7]|pad/[12])/gate/(an|schwelle|hysterese|ratio|bereich|attack|hold|release|sc)$', 117),
+    (r'^(deck/[1-4]|erz/[1-7]|pad/[12]|bus/[1-4])/util/(balance|breite|bassmono|phase_l|phase_r|tausch|dc)$', 119),
+    (r'^bus/[1-4]/mb/(an|grenze_tief|grenze_hoch|(tief|mitte|hoch)/(schwelle|ratio|attack|release|knie|makeup|umgehen))$', 96),
+    (r'^bus/[1-4]/lim/(an|decke|abklingen)$', 12),
+    (r'^spektrum/kanal$', 1),
+]
+WERKZEUG_ZEILE = re.compile(r'^(<k>/(gate|util)/|bus/<n>/(mb|lim)/)')
+
+
+def werkzeug_kanaele(zelle):
+    """1.15 A1b: channel list of a mix-tool row, read from its "Wer darf" cell: 'Quellkanäle' = deck/1..4, erz/1..8, pad/1..2 without the
+    channels named after 'ausser'; 'Busse' = bus/1..4 (so 'nur Busse' gives the buses only)."""
+    kanaele = []
+    if 'Quellkanäle' in zelle:
+        ausser = set(re.findall(r'(?:erz|deck|pad)/\d', zelle.split('ausser', 1)[1])) if 'ausser' in zelle else set()
+        kanaele += [k for k in KANAELE if not k.startswith('bus/') and k not in ausser]
+    if 'Busse' in zelle:
+        kanaele += [k for k in KANAELE if k.startswith('bus/')]
+    assert kanaele, f'Contract 1.5: no channels in the "Wer darf" cell of a mix-tool row: {zelle!r}'
+    return kanaele
+
+
+def werkzeug_pfade(p, z):
+    """1.15 A1b: expand a mix-tool row over the channel list of its own "Wer darf" cell (z[5]); None for every other path."""
+    if not WERKZEUG_ZEILE.match(p):
+        return None
+    rest = p.split('/', 2)[2] if p.startswith('bus/<n>/') else p[4:]
+    baender = [None]
+    if '<b>' in rest:
+        mb = re.search(r'b = (\w+(?:, \w+)*)', z[0])
+        assert mb, f'Contract 1.5: row `{p}` without "b = tief, mitte, hoch"'
+        baender = mb.group(1).split(', ')
+    return [f'{k}/{rest.replace("<b>", b) if b else rest}' for k in werkzeug_kanaele(z[5]) for b in baender]
+
+
+WERKZEUG_SOLL = [n for _, n in WERKZEUG_REGEX]
+WERKZEUG_PFAD = re.compile(r'^((deck|erz|pad|bus)/\d+/(gate|util|mb|lim)/|spektrum/)')
+
+
+def werkzeug_zaehlen(pfade):
+    """Counts the mix-tool paths per hand regex. Returns (counts, strays): a path with a tool prefix (gate, util, mb, lim, spektrum) that
+    matches none of the five regexes, or more than one, is a stray (a 13th limiter path `bus/1/lim/zz` is one) and must be reported."""
+    zaehler = [0] * len(WERKZEUG_REGEX)
+    verirrt = []
+    for q in sorted(pfade):
+        if not WERKZEUG_PFAD.match(q):
+            continue
+        treffer = [i for i, (muster, _) in enumerate(WERKZEUG_REGEX) if re.match(muster, q)]
+        if len(treffer) != 1:
+            verirrt.append(q)
+        for i in treffer:
+            zaehler[i] += 1
+    return zaehler, verirrt
+
+
 def vertrag(text):
     ab = text.index('### 1.5 Kanäle und Regler-Pfade')
     bis = text.index('### 1.6', ab)
@@ -133,6 +204,13 @@ def vertrag(text):
     mr = re.search(r'`ret/<r>/\*`[^\n]*?r = 1 to (\d+)', text[ab:bis])
     assert mr, 'Vertrag §1.5: der Satz "`ret/<r>/*` (...r = 1 to N...)" fehlt'
     RETURNS[0] = int(mr.group(1))
+    for art in INSERTS:
+        mi = re.search(r'`ins/' + art + r'/<n>/\*` \(n = 1 to (\d+)', text[ab:bis])
+        assert mi, f'Vertrag §1.5: der Satz "`ins/{art}/<n>/*` (n = 1 to N; ...)" fehlt'
+        INSERTS[art] = int(mi.group(1))
+    mk = re.search(r'`rack/<k>/m<n>` \(k = 1 to (\d+)', text[ab:bis])
+    assert mk, 'Vertrag §1.5: der Satz "`rack/<k>/m<n>` (k = 1 to N; ...)" fehlt'
+    RACKS[0] = int(mk.group(1))
     erg = {}
     for zeile in text[ab:bis].splitlines():
         if not zeile.startswith('| `'):
@@ -142,7 +220,7 @@ def vertrag(text):
         vorgabe = zahl(z[3]) if zahl(z[3]) is not None else (0.0 if 'Busse 0' in z[3] else None)
         nur_hand_alle = z[5].startswith('nur Hand')
         for p in pfade(z[0]):
-            for q in (bk_pfade(p, z) or expandiere(p)):
+            for q in (bk_pfade(p, z) or werkzeug_pfade(p, z) or expandiere(p)):
                 nh = nur_hand_alle or (q.startswith('bus/') and q.endswith('/fader') and 'bus/<n>/fader` nur Hand' in z[5])
                 erg[q] = (lo, hi, vorgabe, ms(z[4]), 1 if nh else 0)
     return erg
@@ -228,7 +306,53 @@ def main():
     if {f.split(':')[0] for f in f_pad} != soll_pad or len(f_pad) != 8:
         print('FEHLER: der Abgleich liest die Kanalliste der bk-Zeile nicht aus dem Vertragstext', f_pad[:3])
         return 1
+    # Self-test 6 (A1b): the gate cell loses "ausser erz/8" -> exactly the nine gate paths of erz/8 are in the contract but not in the table
+    gate_zelle = '| alle; nur Quellkanäle ausser erz/8 |'
+    assert text.count(gate_zelle) == 9, 'Self-test: the nine gate rows are not in the contract'
+    f_erz8 = abgleich(bib, vertrag(text.replace(gate_zelle, '| alle; nur Quellkanäle |')))
+    soll_erz8 = {f'erz/8/gate/{f}' for f in ('an', 'schwelle', 'hysterese', 'ratio', 'bereich', 'attack', 'hold', 'release', 'sc')}
+    print(f'Self-test gate cells with erz/8: {len(f_erz8)} deviations, expected 9 (erz/8/gate/*)')
+    if {f.split(':')[0] for f in f_erz8} != soll_erz8 or len(f_erz8) != 9 or any('steht im Vertrag, fehlt im Stellwerk' not in f for f in f_erz8):
+        print('ERROR: the comparison does not read the channel list of the gate rows from the contract text', f_erz8[:3])
+        return 1
+    # Self-test 7 (A1b): the multiband switch row says "nur Busse" -> "Quellkanäle ausser erz/8 und Busse": the 13 sources get a multiband
+    mb_zeile = [zl for zl in text.splitlines() if zl.startswith('| `bus/<n>/mb/an`')]
+    assert len(mb_zeile) == 1 and mb_zeile[0].endswith('| alle; nur Busse |'), 'Self-test: row bus/<n>/mb/an is not in the contract'
+    f_mb = abgleich(bib, vertrag(text.replace(mb_zeile[0], mb_zeile[0].replace('alle; nur Busse', 'alle; Quellkanäle ausser erz/8 und Busse'))))
+    print(f'Self-test mb/an on the source channels: {len(f_mb)} deviations, expected 13 (source channel/mb/an)')
+    if len(f_mb) != 13 or any(not f.split(':')[0].endswith('/mb/an') or 'steht im Vertrag, fehlt im Stellwerk' not in f for f in f_mb):
+        print('ERROR: the comparison does not read the channel list of the mb row from the contract text', f_mb[:3])
+        return 1
+    # Self-test 8 (A2): one more limiter path (a 13th, `bus/1/lim/zz`) matches none of the five regexes: the counter must report exactly that path
+    # as a stray and leave the counts per regex alone (the old counter saw only the five regexes and stayed green). Relative to the real
+    # table, so a stray that is really there makes the real check below red, not this self-test.
+    z_bib0, v_bib0 = werkzeug_zaehlen(bib)
+    extra = 'bus/1/lim/zz_selbsttest'
+    z_zz, v_zz = werkzeug_zaehlen(list(bib) + [extra])
+    print(f'Self-test extra limiter path: counts {z_zz}, new strays {sorted(set(v_zz) - set(v_bib0))}')
+    if z_zz != z_bib0 or sorted(set(v_zz) - set(v_bib0)) != [extra]:
+        print('ERROR: the mix-tool counter does not report a tool path outside the five regexes', z_zz, v_zz)
+        return 1
+    mehr = ['bus/1/lim/an/x', 'deck/1/gate/hold2', 'spektrum/kanal/1']
+    z_dop, v_dop = werkzeug_zaehlen(list(bib) + mehr)
+    print(f'Self-test three more strays: new strays {sorted(set(v_dop) - set(v_bib0))}')
+    if sorted(set(v_dop) - set(v_bib0)) != sorted(mehr) or z_dop != z_bib0:
+        print('ERROR: the mix-tool counter does not report several strays', z_dop, v_dop)
+        return 1
+    # negative control: paths without a tool prefix are no strays
+    if werkzeug_zaehlen(list(bib) + ['deck/1/komp/an', 'bus/9/fader']) != (z_bib0, v_bib0):
+        print('ERROR: the mix-tool counter reports a path without a tool prefix')
+        return 1
     ver = vertrag(text)
+    # A1b: 345 mix-tool paths, in the contract and in the table, by the five hand regexes (117, 119, 96, 12, 1); A2: and nothing else with a
+    # tool prefix (every such path matches exactly one regex, the sum is 345)
+    soll_wz = WERKZEUG_SOLL
+    (z_ver, v_ver), (z_bib, v_bib) = werkzeug_zaehlen(ver), werkzeug_zaehlen(bib)
+    print(f'Mix-tool paths per regex: contract {z_ver}, table {z_bib}, expected {soll_wz} (together {sum(soll_wz)}); '
+          f'strays: contract {v_ver}, table {v_bib}')
+    if z_ver != soll_wz or z_bib != soll_wz or sum(z_ver) != 345 or sum(z_bib) != 345 or v_ver or v_bib:
+        print('ERROR: the number of mix-tool paths is wrong or a tool path is outside the five regexes (345 = 117 + 119 + 96 + 12 + 1)')
+        return 1
     fehler = abgleich(bib, ver)
     for f in fehler:
         print('ABWEICHUNG', f)

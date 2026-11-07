@@ -14,7 +14,10 @@ export const KATALOG_TYPEN: readonly Typ[] = ['track', 'loop', 'oneshot'];
 // Facetten je Typ (Plan 2.1): feste Spaltennamen, nie aus der Anfrage
 export const FACETTEN: Record<Typ, readonly string[]> = { track: ['genre'], loop: ['pack'], oneshot: ['instrument', 'pack'] };
 // Facettenwert einer Spalte: NULL, '' und Leerraum → NULL (der Baum zeigt es als „(none)“). `feld` kommt nur aus FACETTEN.
-const facetteWert = (feld: string, pre = ''): string => `nullif(trim(${pre}${feld}), '')`;
+// Whitespace is the set of JS String.prototype.trim (tab, line breaks, NBSP, Unicode spaces, BOM); SQLite trim(x)
+// alone strips U+0020 only.
+const LEERRAUM = "char(9, 10, 11, 12, 13, 32, 160, 5760, 8192, 8193, 8194, 8195, 8196, 8197, 8198, 8199, 8200, 8201, 8202, 8232, 8233, 8239, 8287, 12288, 65279)";
+const facetteWert = (feld: string, pre = ''): string => `nullif(trim(${pre}${feld}, ${LEERRAUM}), '')`;
 export const SCHEMA = '1';
 // Camelot-Key → [gleich, −1, +1 (mit Umlauf 12→1), Paralleltonart]; Unsinn 400
 export function camelotNachbarn(k: string): string[] {
@@ -57,6 +60,12 @@ export function katalogVorgabe(mediathek: string): string {
 }
 
 const SHA = /^[0-9a-f]{64}$/;
+// Damage behind the stand table only shows up in a later query: SQLITE_CORRUPT (11) and SQLITE_NOTADB (26) become
+// 503 katalog_kaputt like a damaged header. Checked by result code, not by message: an FTS "malformed MATCH" stays 400.
+const kaputt = (e: unknown): unknown => {
+  const c = (e as { errcode?: unknown } | null)?.errcode;
+  return typeof c === 'number' && ((c & 0xff) === 11 || (c & 0xff) === 26) ? new KatalogFehler(503, 'katalog_kaputt') : e;
+};
 // LIKE-Muster aus Text: %, _ und \ sind Zeichen (ESCAPE '\')
 const maske = (s: string): string => s.normalize('NFC').toLowerCase().replace(/[\\%_]/g, '\\$&');
 
@@ -68,7 +77,9 @@ export class Katalog {
 
   private oeffne(): { db: DatabaseSync; stand: Record<string, string> } {
     if (!this.vorhanden()) throw new KatalogFehler(503, 'katalog_fehlt');
-    const db = new DatabaseSync(this.pfad, { readOnly: true });
+    // a path that exists but cannot be opened (a directory, no permission) is unavailable like a damaged file, not a 500
+    let db: DatabaseSync;
+    try { db = new DatabaseSync(this.pfad, { readOnly: true }); } catch { throw new KatalogFehler(503, 'katalog_kaputt'); }
     // Ordner-Vergleich unicode-gefaltet (S4-Review 2): SQLite lower() und LIKE falten nur ASCII, NFD-Pfade (macOS, Mediathek-Importe) passten nie
     db.function('klein', { deterministic: true }, (x) => (x == null ? null : String(x).normalize('NFC').toLowerCase()));
     let stand: Record<string, string>;
@@ -114,6 +125,7 @@ export class Katalog {
         .all(...par, limit, seite * limit) as unknown as Zeile[];
       return { zeilen, gesamt, gebaut_am: stand.gebaut_am ?? '' };
     } catch (e) {
+      if (kaputt(e) !== e) throw kaputt(e);
       // FTS-Syntaxfehler sollte es durch das Quoten nicht geben; falls doch, ist es ein 400 und kein 500
       if (!(e instanceof KatalogFehler) && f.text && /fts5|unterminated|syntax error|malformed match/i.test((e as Error).message)) throw new KatalogFehler(400, 'suche_ungueltig');
       throw e;
@@ -134,7 +146,7 @@ export class Katalog {
           .all(typ) as { wert: string; n: number }[]).map((r) => ({ wert: r.wert, n: r.n }));
       }
       return { ordner: ordner.map((o) => ({ pfad: o.pfad, n: o.n })), facetten, gebaut_am: stand.gebaut_am ?? '' };
-    } finally { db.close(); }
+    } catch (e) { throw kaputt(e); } finally { db.close(); }
   }
 
   eintrag(sha: string): Zeile | null {
@@ -145,7 +157,7 @@ export class Katalog {
       if (z) return z;
       // Ein Track hat mehrere Objekte (shas); ein Listen-Posten kann auf ein unterlegenes zeigen (S5-Review B6)
       return (db.prepare(`SELECT * FROM katalog WHERE typ = 'track' AND (' ' || shas || ' ') LIKE ? LIMIT 1`).get(`% ${sha} %`) as unknown as Zeile | undefined) ?? null;
-    } finally { db.close(); }
+    } catch (e) { throw kaputt(e); } finally { db.close(); }
   }
 
   // Für Sets: Eintrag per material_id (sha-Präfix 16); mehrdeutig oder unbekannt → null (Track-Geschwister sind unbekannt)
@@ -153,7 +165,7 @@ export class Katalog {
     if (!/^[0-9a-f]{16}$/.test(mid)) return null;
     const { db } = this.oeffne();
     try { const z = db.prepare('SELECT * FROM katalog WHERE sha >= ? AND sha < ? LIMIT 2').all(mid, `${mid}g`) as unknown as Zeile[]; return z.length === 1 ? { ...z[0] } : null; }
-    finally { db.close(); }
+    catch (e) { throw kaputt(e); } finally { db.close(); }
   }
 
   // Für das Detail einer Listen-Zeile: die kennt nur die material_id (sha-Präfix 16). Das ist das sha des Gewinner-Objekts oder, bei einem
@@ -166,6 +178,6 @@ export class Katalog {
       if (z.length) return z.length === 1 ? { ...z[0] } : null;
       const w = db.prepare(`SELECT * FROM katalog WHERE typ = 'track' AND (' ' || shas) LIKE ? LIMIT 2`).all(`% ${mid}%`) as unknown as Zeile[];
       return w.length === 1 ? { ...w[0] } : null;
-    } finally { db.close(); }
+    } catch (e) { throw kaputt(e); } finally { db.close(); }
   }
 }

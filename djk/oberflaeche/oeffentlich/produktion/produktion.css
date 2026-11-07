@@ -13,8 +13,8 @@ body.produktion #kopf { grid-area: kopf; }
 body.produktion #pult { display: none; }
 body.produktion #bestand { grid-area: bestand; min-width: 0; }
 body.produktion #produktion { grid-area: prod; display: grid; min-width: 0; min-height: 0; gap: 6px;
-  grid-template-rows: auto minmax(0, 1fr) auto auto auto var(--detail, 26vh); position: relative; }   /* Zeilen in Flussreihenfolge: Transport, Arrangement, Mischer (Gruppen und Master; meist versteckt), INPUTS (zu: nur die Summary), Detail; jedes Kind hat unten eine feste grid-row (1.10 N4) */
-.p-transport { grid-row: 1; } .p-arr { grid-row: 2; } .p-mixer { grid-row: 3; } .p-returns { grid-row: 4; } .p-geraete { grid-row: 5; } .p-detail { grid-row: 6; }
+  grid-template-rows: auto minmax(140px, 1fr) auto auto auto auto var(--detail, 26vh); position: relative; }   /* Zeilen in Flussreihenfolge: Transport, Arrangement, Mischer (Gruppen und Master; meist versteckt), INPUTS (zu: nur die Summary), Detail; jedes Kind hat unten eine feste grid-row (1.10 N4) */
+.p-transport { grid-row: 1; } .p-arr { grid-row: 2; } .p-mixer { grid-row: 3; } .p-returns { grid-row: 4; } .p-inserts { grid-row: 5; } .p-geraete { grid-row: 6; } .p-detail { grid-row: 7; }
 
 /* Browser links, schmal: nur LIBRARY, Baum über der Liste, Detail aus, nur die Namensspalte */
 /* Welche Tabelle des Browsers zeigt: in PRODUCTION immer LIBRARY, unabhängig vom DJ-Zustand (Reiter, BOTTOM-PANEL EFFECTS). Vorher
@@ -33,6 +33,29 @@ body.produktion #st-kopfzeile th:not(:first-child), body.produktion #libliste td
 body.produktion #libliste tr[data-prod-zieh] { cursor: grab; }
 body.produktion.lib-zu #bestand { padding: 6px 4px; }
 body.produktion.lib-zu #bestand > :not(.kopfzeile), body.produktion.lib-zu #bestand .kopfzeile > :not(#schublade) { display: none; }
+/* 1.16 rest (U6): the mode switch LIBRARY · DEVICES · PRESETS · COLLECTIONS (browserwahl.js). After the block above and with the same strength:
+   the library rule above shows LIBRARY with !important, body.bereich-effekte hides with !important. Outside PRODUCTION the switch is not shown. */
+.p-browserwahl { display: none; }
+body.produktion .p-browserwahl { display: flex; }
+body.produktion .p-browserwahl button { font-size: 10px; padding: 2px 6px; }
+body.produktion:not(.b-library) #bestand .tabelle[data-tabelle="library"] { display: none !important; }
+body.produktion #geraete-browser, body.produktion #presets, body.produktion #kollektionen { display: none !important; }
+body.produktion.b-geraete #geraete-browser { display: block !important; }
+body.produktion.b-presets #presets { display: block !important; }
+body.produktion.b-kollektionen #kollektionen { display: block !important; }
+#geraete-browser { overflow: auto; min-height: 0; }
+.geraete-liste { list-style: none; margin: 0 0 8px; padding: 0; }
+.geraete-zeile { padding: 3px 6px; border-radius: 4px; cursor: grab; }
+.geraete-zeile.aus { opacity: .45; cursor: not-allowed; }
+.geraete-art { margin-left: 6px; font-size: 10px; color: var(--dim); }
+/* 1.16 rest (U7): the PRESETS list in the narrow browser column. One row = name, device, origin (the rest is in the detail below); a row is dragged onto a track or a stage. */
+body.produktion #presets { overflow: auto; min-height: 0; }
+body.produktion .preset-rumpf { grid-template-columns: minmax(0, 1fr); }
+body.produktion .preset-zeile { grid-template-columns: minmax(0, 1fr) auto auto; cursor: grab; }
+body.produktion .preset-zeile .preset-beschreibung, body.produktion .preset-zeile .preset-tags { display: none; }
+body.produktion .preset-zeile.kaputt { cursor: default; }
+body.produktion .preset-ziehen-hinweis { margin: 0; color: var(--dim); font-size: 11px; }
+body.produktion .preset-kopf select { max-width: 14ch; }
 
 /* Transportleiste */
 .p-transport { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; background: var(--panel); border: 1px solid var(--line);
@@ -74,15 +97,15 @@ body.produktion.lib-zu #bestand > :not(.kopfzeile), body.produktion.lib-zu #best
 .p-leer { position: absolute; inset: 28px 0 0 0; display: flex; align-items: center; justify-content: center; color: var(--dim); font-size: 14px; pointer-events: none; }
 .p-leer[hidden] { display: none; }
 
-/* Spurkopf: 64 px wie eine Spurzeile (layout.js SPUR_HOEHE). Acht Spalten: Farbe | Name | Gerät | ↑ | ↓ | M | S | ✕ */
-.p-kopf { height: 64px; box-sizing: border-box; display: grid; grid-template-columns: 10px minmax(0, 1fr) auto 18px 18px 22px 22px 18px;
+/* Spurkopf: 64 px wie eine Spurzeile (layout.js SPUR_HOEHE). Neun Spalten: Farbe | Name | Gerät | ↑ | ↓ | M | S | (frei) | ✕; Zeile 2 endet mit AUTO ● in Spalte 9 (task 9) */
+.p-kopf { height: 64px; box-sizing: border-box; display: grid; grid-template-columns: 10px minmax(0, 1fr) auto 18px 18px 22px 22px 18px 36px;
   grid-template-rows: 20px 18px 14px; gap: 2px 4px; padding: 3px 6px 3px 0; border-bottom: 1px solid var(--line); font-size: 11px; }
 .p-farbe { grid-column: 1; grid-row: 1 / -1; width: 10px; padding: 0; border: 0; border-radius: 0; background: var(--farbe); }
 .p-spurname { grid-column: 2; grid-row: 1; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; align-self: center; }
 .p-namefeld { grid-column: 2 / 4; grid-row: 1; font: inherit; min-width: 0; }
 .p-geraet { grid-column: 3; grid-row: 1; color: var(--dim); font-size: 9px; letter-spacing: .08em; align-self: center; white-space: nowrap; }
 .p-hoch, .p-runter, .p-mute, .p-solo, .p-loeschen { grid-row: 1; font-size: 10px; font-weight: 800; padding: 0; border-radius: 4px; }
-.p-hoch { grid-column: 4; } .p-runter { grid-column: 5; } .p-mute { grid-column: 6; } .p-solo { grid-column: 7; } .p-loeschen { grid-column: 8; }
+.p-hoch { grid-column: 4; } .p-runter { grid-column: 5; } .p-mute { grid-column: 6; } .p-solo { grid-column: 7; } .p-loeschen { grid-column: 9; }   /* ✕ at the right edge (column 9, task 9) */
 .p-kopf button:disabled { opacity: .3; cursor: default; }
 .p-mute.an { background: var(--warn); color: #0e0f12; border-color: var(--warn); }
 .p-solo.an { background: var(--a); color: #0e0f12; border-color: var(--a); }
@@ -211,6 +234,8 @@ body.produktion.lib-zu #bestand > :not(.kopfzeile), body.produktion.lib-zu #best
 .p-menue button { display: block; width: 100%; text-align: left; padding: 5px 8px; border: 0; border-radius: 4px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
 .p-menue button:hover:not(:disabled), .p-menue button:focus-visible { background: #e0a83b; color: #0e0f12; outline: 0; }
 .p-menue button:disabled { opacity: .35; cursor: default; }
+/* 1.12 slice 4: a group label in a flat context menu (lane range menu: Insert shape) */
+.p-menue-gruppe { padding: 4px 8px 2px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--dim, #8a8f98); }
 
 /* Slice 4 (T10): Transienten der Quelle im Sample-Editor, grau mit 45 % Deckkraft (warp_editor_bedienung.js liest die Variable; sie gilt für das Canvas) */
 .p-warp-canvas { --p-transient: rgba(160, 165, 175, 0.45); }
@@ -235,4 +260,91 @@ body.produktion.lib-zu #bestand > :not(.kopfzeile), body.produktion.lib-zu #best
 .p-lanenwahl { flex: 1; }
 .p-lanenwahl[hidden], .p-lane-neu[hidden] { display: none; }
 .p-lane-sperre.an { background: var(--a); color: #0e0f12; border-color: var(--a); }
+.p-lane-zeichnen.an { background: var(--a); color: #0e0f12; border-color: var(--a); }   /* 1.12 slice 4: draw mode */
 .p-lanenkopf button:disabled { opacity: .4; }
+
+/* 1.12 Slice 3 task 5: a field the hand has taken over turns orange (regulator and lane line, arrangement.js), RE-ENABLE AUTOMATION ends it */
+.p-kopf.ueber-fader .p-fader, .p-kopf.ueber-pan .p-pan { accent-color: var(--ueber); }
+.p-kopf.ueber-fader .p-faderwert, .p-kopf.ueber-pan .p-panwert { color: var(--ueber); }
+.p-kopf.ueber-fader.auto .p-faderwert::before, .p-kopf.ueber-pan.auto-pan .p-panwert::before { color: var(--ueber); }
+.p-transport button.p-reenable.ueber { background: var(--ueber); color: #0e0f12; border-color: var(--ueber); font-weight: 800; }
+.p-transport button.p-reenable:disabled { opacity: .45; }
+
+/* fix round 1: M and S of an overridden field are orange too */
+.p-mute.ueber, .p-solo.ueber { background: var(--ueber); color: #0e0f12; border-color: var(--ueber); }
+
+/* 1.12 S3 task 9: AUTO ● per track head (column 9, row 2) and the mode buttons TOUCH / LATCH / WRITE in the transport bar. Armed: filled red like the audio arm. */
+.p-autoarm { grid-column: 9; grid-row: 2; font-size: 8px; font-weight: 800; letter-spacing: 0; padding: 0; border-radius: 4px; color: #e5484d; white-space: nowrap; }
+.p-autoarm.an { background: #e5484d; color: #0e0f12; border-color: #e5484d; }
+.p-transport .p-automodus { font-size: 10px; font-weight: 800; padding: 2px 5px; }
+.p-transport .p-automodus.an { background: #e5484d; color: #0e0f12; border-color: #e5484d; }
+.p-autotitel { font-size: 10px; letter-spacing: .08em; color: var(--dim); }
+
+/* 1.10 slice 4a T7: PRE/POST switch of a return and the INSERTS block (one row per strip, four places) */
+.p-prepost { grid-column: 4 / 6; font-size: 9px; font-weight: 800; letter-spacing: .06em; padding: 0 4px; border-radius: 4px; }
+.p-prepost.an { background: var(--a); color: #0e0f12; border-color: var(--a); }
+.p-inserts { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 4px 10px; min-width: 0; }
+.p-insertliste { display: flex; flex-direction: column; gap: 3px; padding-top: 4px; max-height: 170px; overflow-y: auto; overflow-x: hidden; }
+.p-kette { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; font-size: 11px; min-width: 0; }
+.p-kette-name { flex: 0 0 120px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dim); }
+.p-kette-latenz { flex: 0 0 auto; font-size: 11px; color: var(--dim); }
+.p-platz { display: inline-flex; align-items: center; gap: 2px; min-width: 64px; min-height: 22px; border: 1px dashed var(--line); border-radius: 5px; padding: 0 2px; box-sizing: border-box; }
+.p-platz.leer { justify-content: center; opacity: .85; }
+.p-platz.p-stufe { border-style: solid; background: var(--panel2); }
+.p-platz.p-stufe.aus .p-ins-name { opacity: .5; text-decoration: line-through; }
+.p-platz button { font-size: 10px; padding: 1px 4px; border-radius: 4px; min-height: 18px; }
+.p-ins-gr { min-width: 5.5ch; text-align: right; font-size: 10px; color: var(--dim); font-variant-numeric: tabular-nums; }
+.p-ins-gr.wirkt { color: var(--a); }
+.p-ins-preset { max-width: 20ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; color: var(--dim); }   /* 1.16 rest U7: origin mark of a stage */
+.p-ins-preset.geaendert { color: var(--warn); }
+.p-ins-an.an { background: var(--a); color: #0e0f12; border-color: var(--a); }
+.p-ins-neu:disabled { opacity: .45; }
+.p-ins-popover { flex: none; width: calc(100% - 126px); box-sizing: border-box; display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 2px 14px; padding: 4px 8px; margin: 2px 0 4px 126px;
+  background: #14171d; border: 1px solid var(--line); border-radius: 6px; }
+.p-ins-zeile { display: grid; grid-template-columns: 84px minmax(0, 1fr) 9ch; gap: 6px; align-items: center; color: var(--dim); white-space: nowrap; }
+.p-ins-zeile select { grid-column: 2; min-width: 0; width: 100%; font-size: 11px; }
+.p-ins-zeile input { min-width: 0; width: 100%; }
+.p-ins-wert { color: var(--text); text-align: right; }
+/* 1.10 slice 4b T12: the EQ popover has eight band blocks; a band block is one column cell of the popover grid, its rows are the same rows as the others */
+.p-ins-band { display: grid; gap: 2px; padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; min-width: 0; }
+.p-ins-band-kopf { font-size: 10px; letter-spacing: .08em; color: var(--dim); }
+.p-ins-zeile input[type="checkbox"] { width: auto; justify-self: start; }
+.p-ins-neu { margin-right: 2px; }
+/* 1.10 slice 4c: the rack of a strip. The panel reuses the popover grid; a macro block is one cell like an EQ band block. */
+.p-rack-knopf { font-size: 10px; padding: 1px 6px; border-radius: 4px; min-height: 18px; margin-left: auto; }
+.p-rack-knopf[aria-expanded="true"] { background: var(--a); color: #0e0f12; border-color: var(--a); }
+.p-makro-kopf { display: grid; grid-template-columns: minmax(0, 9ch) minmax(0, 1fr) 5ch; gap: 6px; align-items: center; }
+.p-makro-name { min-width: 0; font-size: 11px; }
+.p-makro-ziele { display: grid; gap: 2px; }
+.p-ziel { display: grid; grid-template-columns: minmax(0, 1fr) 7ch 7ch auto; gap: 4px; align-items: center; color: var(--dim); }
+.p-ziel-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.p-ziel input { min-width: 0; width: 100%; font-size: 11px; }
+.p-ziel input.falsch { outline: 1px solid #d9534f; }
+.p-makro-neu { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px; }
+.p-makro-neu select { min-width: 0; font-size: 11px; }
+.p-rack-info { grid-column: 1 / -1; font-size: 10px; color: var(--dim); }
+.p-ins-zeile.gemappt { opacity: .55; }
+.p-ins-zeile.gemappt input { cursor: not-allowed; }
+.p-ins-zeile.gemappt .p-ins-wert { color: var(--a); }
+@media (max-width: 700px) { .p-kette-name { flex-basis: 100%; } .p-kette-latenz { flex-basis: 100%; } .p-ins-popover { margin-left: 0; width: 100%; } .p-platz { min-width: 0; } }
+/* 1.14 Comping, task 7: the T button (left of A), the head of a take row (40 px like the row, layout.js TAKE_HOEHE) */
+.p-take { position: absolute; right: 28px; bottom: 3px; width: 18px; height: 14px; font-size: 9px; font-weight: 800; line-height: 1; padding: 0; border-radius: 4px; }
+.p-take[hidden] { display: none; }
+.p-take.an { background: var(--a); color: #0e0f12; border-color: var(--a); }
+.p-kopf.hat-takes .p-pegel { margin-right: 44px; }
+.p-takekopf { height: 40px; box-sizing: border-box; display: flex; align-items: center; gap: 6px; padding: 0 6px 0 10px; border-bottom: 1px solid var(--line);
+  border-left: 10px solid var(--farbe, #8a8d98); font-size: 11px; background: #0c0e12; }
+.p-takename { flex: 1; min-width: 0; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.p-takename[hidden] { display: none; }
+.p-takefeld { flex: 1; min-width: 0; font: inherit; }
+.p-takehoer { font-size: 11px; padding: 2px 6px; border-radius: 4px; opacity: .6; }
+.p-takehoer.an { background: var(--a); color: #0e0f12; border-color: var(--a); opacity: 1; }
+
+/* 1.12 slice 5: the tab row of the detail area and the ENVELOPES tab */
+.p-detail-reiter { display: flex; gap: 4px; }
+.p-detail-reiter[hidden], .p-clip-hk[hidden] { display: none; }
+.p-detail-reiter button.an { background: var(--a); color: #0e0f12; border-color: var(--a); }
+.p-clip-hk { display: flex; flex-direction: column; gap: 4px; min-height: 0; flex: 1; }
+.p-hk-leiste { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.p-hk-leiste button.an { background: var(--a); color: #0e0f12; border-color: var(--a); }
+.p-hk-canvas { width: 100%; height: 120px; background: var(--panel2); border-radius: 6px; touch-action: none; }

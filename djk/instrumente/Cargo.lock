@@ -308,11 +308,14 @@ name = "hall_ffi"
 version = "0.1.0"
 dependencies = [
  "baukasten_dsp",
+ "eq_dsp",
  "hall_dsp",
+ "hall_ffi",
  "komp_dsp",
  "nih_plug",
  "rb338",
  "rb_dsp",
+ "saett_dsp",
 ]
 
 [[package]]

@@ -1,0 +1,42 @@
+{
+ "schema": 1,
+ "name": "Classic Acid",
+ "geraet_typ": "instrument",
+ "geraet": "rb338",
+ "werte": {
+  "lautstaerke": 0.2511886432,
+  "wellenform": false,
+  "cutoff": 450,
+  "resonanz": 0.6,
+  "env_mod": 0,
+  "decay": 0.45,
+  "accent": 0.6
+ },
+ "beschreibung": {
+  "art": "bass",
+  "unterart": "acid",
+  "charakter": [
+   "aggressive",
+   "dirty",
+   "bright"
+  ],
+  "genre": [
+   "acid",
+   "techno",
+   "house"
+  ],
+  "einsatz": [
+   "drop",
+   "build"
+  ],
+  "energie": 4,
+  "text": "Welsh acid patch: 450 Hz cutoff, 60 percent resonance, no envelope, cutoff played by hand."
+ },
+ "tags": [
+  "303",
+  "acid"
+ ],
+ "notiz": "Values from Welsh, Synthesizer Cookbook p.95 (Acid Bass patch), transposed: amplitude decay 0.45 s, resonance 60 %, filter envelope 0 %.",
+ "angelegt": "2026-11-02T00:00:00.000Z",
+ "geaendert": "2026-11-02T00:00:00.000Z"
+}

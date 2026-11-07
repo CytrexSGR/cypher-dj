@@ -58,7 +58,13 @@ export function entwurfGueltig(x, laengen, band) {
 const unten = (band, w) => band.aus !== undefined && w <= band.min;
 const istRampe = (p) => p && p.form !== 'sprung';
 
-export function punkteZuFahrten(band, punkte) {
+// opt.schleife = n (1.12 S7): a loop of n bars; moves on bar n+1 (the end point) are dropped, the next pass sets that value again
+export function punkteZuFahrten(band, punkte, opt = {}) {
+  const f = punkteZuFahrtenEinmal(band, punkte);
+  return opt.schleife ? f.filter((x) => x.ab_takt <= opt.schleife) : f;
+}
+
+function punkteZuFahrtenEinmal(band, punkte) {
   const p = sortiert(punkte), f = [], z = band.ziel;
   const setzwert = (i) => (unten(band, p[i].wert) ? (istRampe(p[i + 1]) ? band.min : band.aus) : p[i].wert);
   const rampe = (i) => ({ ziel: z, ab_takt: p[i - 1].takt, takte: p[i].takt - p[i - 1].takt,
@@ -211,4 +217,38 @@ export function fremdPfad(band, fahrten, breite, hoehe, rand) {
   const punkte = fahrtenZuPunkte(band, fahrten), laenge = fremdeLaenge(fahrten, band.ziel);
   if (!punkte.length || laenge < 1) return '';
   return pfad(punkte, raster(band, laenge, breite, hoehe, rand), breite - rand);
+}
+
+// 1.12 S7: head position (bar, 1 .. length+1) at core beat `beat` for the own running track `lauf` (from GET /spur: anker_beat, and for a
+// loop schleife_takte); null = no head. A loop runs modulo its pass, also between two polls; a one-shot track stands only inside its span.
+export function kopfTakt(beat, lauf, laenge) {
+  if (lauf == null || lauf.anker_beat == null || beat == null || beat < lauf.anker_beat) return null;
+  const n = lauf.schleife_takte;
+  if (n) return ((beat - lauf.anker_beat) % (4 * n)) / 4 + 1;
+  const takt = (beat - lauf.anker_beat) / 4 + 1;
+  return takt <= laenge + 1 ? takt : null;
+}
+
+// 1.12 S7: the track PLAY (and a change of a running loop) sends for band `band` with the draft z = {laenge, punkte}: a loop over the length
+export const schleifenSpur = (name, band, z) => ({ name, schleife_takte: z.laenge, fahrten: punkteZuFahrten(band, z.punkte, { schleife: z.laenge }) });
+
+// 1.12 S7 (MAJOR 4 of the S8 plan review): sender for changes of a running loop. melde(spur) marks the state dirty; after `ruheMs` without a
+// further edit the last state goes to POST /spur/aendern. At most one request runs; an edit during it is sent right after it ends (the last
+// state, one request), never dropped, also when the request failed. stopp() (STOP, PLAY) drops what waits and the follow-up. antwort(ergebnis,
+// fehler) gets what post resolved to, or the error it threw. Timer functions are injectable for the tests.
+export function schleifenAenderer({ name, post, antwort = () => {}, ruheMs = 300, setTimeout: st = globalThis.setTimeout, clearTimeout: ct = globalThis.clearTimeout }) {
+  let letzte = null, schmutzig = false, laeuft = false, wecker = null;
+  const sende = async () => {
+    wecker = null;
+    if (!schmutzig || laeuft) return;
+    const spur = letzte;
+    schmutzig = false; laeuft = true;
+    try { antwort(await post('/spur/aendern', { name, spur }), null); } catch (e) { antwort(null, e); } finally { laeuft = false; }
+    if (schmutzig && wecker === null) await sende();
+  };
+  return {
+    melde(spur) { letzte = spur; schmutzig = true; if (wecker !== null) ct(wecker); wecker = st(sende, ruheMs); },
+    stopp() { schmutzig = false; if (wecker !== null) ct(wecker); wecker = null; },
+    get schmutzig() { return schmutzig; },
+  };
 }

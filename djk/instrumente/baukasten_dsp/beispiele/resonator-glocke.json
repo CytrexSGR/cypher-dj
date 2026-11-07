@@ -1,0 +1,31 @@
+{
+  "format": "baukasten/2",
+  "name": "resonator-glocke",
+  "stimmen": 8,
+  "regler_namen": {"1": "Material", "2": "Brightness", "3": "Strike position", "4": "Inharmonicity", "5": "Size", "6": "Level"},
+  "knoten": [
+    {"id": "note", "art": "note"},
+    {"id": "k_material", "art": "regler", "nr": 1, "min": 0.45, "max": 0.95},
+    {"id": "k_hell", "art": "regler", "nr": 2, "min": 0.3, "max": 1},
+    {"id": "k_pos", "art": "regler", "nr": 3, "min": 0, "max": 1},
+    {"id": "k_inh", "art": "regler", "nr": 4, "min": 0.5, "max": 1.5},
+    {"id": "k_groesse", "art": "regler", "nr": 5, "min": 0.5, "max": 2, "log": 1},
+    {"id": "k_pegel", "art": "regler", "nr": 6, "min": 0.04, "max": 0.2, "log": 1},
+    {"id": "glocke", "art": "resonator", "satz": 2},
+    {"id": "pegel", "art": "mul"},
+    {"id": "aus", "art": "ausgang"}
+  ],
+  "kanten": [
+    {"von": "note.hz", "nach": "glocke.hz"},
+    {"von": "note.trig", "nach": "glocke.trig"},
+    {"von": "note.vel", "nach": "glocke.staerke"},
+    {"von": "k_material.aus", "nach": "glocke.material"},
+    {"von": "k_hell.aus", "nach": "glocke.helligkeit"},
+    {"von": "k_pos.aus", "nach": "glocke.position"},
+    {"von": "k_inh.aus", "nach": "glocke.inharmonie"},
+    {"von": "k_groesse.aus", "nach": "glocke.groesse"},
+    {"von": "glocke.aus", "nach": "pegel.a"},
+    {"von": "k_pegel.aus", "nach": "pegel.b"},
+    {"von": "pegel.aus", "nach": "aus.x"}
+  ]
+}

@@ -51,3 +51,19 @@ test('S1 T10 layout: the clip box takes the row top from the table, not i * SPUR
   assert.equal(mit.h, ohne.h);
   assert.equal(mit.x, ohne.x);
 });
+
+test('T7 layout: takeZeilen defaults to nothing, so every old call shape gives the old table (negative control)', () => {
+  for (const offen of [[], [0], [0, 2], new Set([1])]) {
+    assert.deepEqual(zeilenTabelle(3, offen, new Map()), zeilenTabelle(3, offen));
+    assert.deepEqual(zeilenTabelle(3, offen, new Map([[1, 0]])), zeilenTabelle(3, offen), 'zero rows is no rows');
+  }
+  assert.ok(zeilenTabelle(3, [0]).every((z) => !('take' in z)), 'track and lane rows carry no take field');
+});
+
+test('T7 layout: take rows sit under their own track, above its lane, and shift everything below', () => {
+  const tab = zeilenTabelle(3, [0, 1], new Map([[0, 2], [1, 1]]));
+  assert.deepEqual(tab.map((z) => [z.art, z.spur, z.y, z.h]),
+    [['spur', 0, 0, 64], ['take', 0, 64, 40], ['take', 0, 104, 40], ['lane', 0, 144, 48], ['spur', 1, 192, 64], ['take', 1, 256, 40], ['lane', 1, 296, 48], ['spur', 2, 344, 64]]);
+  assert.equal(spurIndexBeiTabelle(tab, 350), 2);
+  assert.equal(spurIndexBeiTabelle(tab, 270), -1);
+});

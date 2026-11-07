@@ -36,11 +36,14 @@ function neutral<T>(x: T): T {
   return x;
 }
 
+// A key may hold a slash (the EQ rows 'b3/gain'): a path segment is the key with '~' as '~0' and '/' as '~1' (RFC 6901); IDs and every older key are unchanged.
+export const pfadSegment = (k: string): string => k.replace(/~/g, '~0').replace(/\//g, '~1');
+const segmentSchluessel = (x: string): string => x.replace(/~1/g, '/').replace(/~0/g, '~');
 function segmente(pfad: string): string[] {
   if (typeof pfad !== 'string' || !pfad.startsWith('/') || pfad.length < 2) throw new PatchFehler('pfad_ungueltig', `Pfad ${JSON.stringify(pfad)}`);
   const s = pfad.slice(1).split('/');
   if (s.some((x) => x === '' || GESPERRT.has(x))) throw new PatchFehler('pfad_ungueltig', `Pfad ${JSON.stringify(pfad)}`);
-  return s;
+  return s.map(segmentSchluessel);
 }
 const hatId = (x: unknown): x is { id: string } => istObjekt(x) && typeof x.id === 'string';
 const eigen = (o: object, k: string): boolean => Object.prototype.hasOwnProperty.call(o, k);
@@ -269,9 +272,9 @@ function ordnung(jetzt: string[], soll: string[]): { id: string; index: number }
 function unter(a: unknown, b: unknown, pfad: string, aus: Patch): void {
   if (gleich(a, b)) return;
   if (istObjekt(a) && istObjekt(b)) {
-    for (const k of Object.keys(a)) if (!eigen(b, k) && !ZAEHLER.has(k)) aus.push({ op: 'remove', pfad: `${pfad}/${k}` });
-    for (const k of Object.keys(a)) if (eigen(b, k) && !ABGELEITET.has(k) && !ZAEHLER.has(k)) unter(a[k], b[k], `${pfad}/${k}`, aus);
-    for (const k of Object.keys(b)) if (!eigen(a, k) && !ZAEHLER.has(k)) aus.push({ op: 'add', pfad: `${pfad}/${k}`, wert: neutral(b[k]) });
+    for (const k of Object.keys(a)) if (!eigen(b, k) && !ZAEHLER.has(k)) aus.push({ op: 'remove', pfad: `${pfad}/${pfadSegment(k)}` });
+    for (const k of Object.keys(a)) if (eigen(b, k) && !ABGELEITET.has(k) && !ZAEHLER.has(k)) unter(a[k], b[k], `${pfad}/${pfadSegment(k)}`, aus);
+    for (const k of Object.keys(b)) if (!eigen(a, k) && !ZAEHLER.has(k)) aus.push({ op: 'add', pfad: `${pfad}/${pfadSegment(k)}`, wert: neutral(b[k]) });
     return;
   }
   if (idListe(a) && idListe(b)) {

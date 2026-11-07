@@ -14,7 +14,8 @@ export const S3_QUELLE = /^(AusgabeFehler|FreezeFehler|StandFehler|fehl|grund-Fe
 // Gründe einer Datei d mit Inhalt t (Muster je Ort); dazu(grund, fundstelle)
 export function gruendeAusDatei(d, t, dazu) {
   for (const m of t.matchAll(new RegExp(`new (${KLASSEN})\\(\\s*(?:\\d+\\s*,\\s*)?'([a-z_]+)'`, 'g'))) dazu(m[2], `${m[1]} ${d}`);
-  if (d === 'projekt/befehle.ts' || d === 'projekt/stems.ts' || d === 'projekt/zusammenfuehren.ts') for (const m of t.matchAll(/\bab\(\s*'([a-z_]+)'/g)) dazu(m[1], `ab ${d}`);
+  if (d === 'projekt/befehle.ts' || d === 'projekt/stems.ts' || d === 'projekt/zusammenfuehren.ts'
+    || d === 'projekt/bounce.ts') for (const m of t.matchAll(/\bab\(\s*'([a-z_]+)'/g)) dazu(m[1], `ab ${d}`);
   // Gründe-Literale {fehler|grund: '…'} in bereiche/ und (V2 Fix F9) http/, auch als Zweige eines Ternärs (http/transport.ts:
   // { fehler: abweisung === 415 ? 'nur_json' : 'fremde_herkunft' }); gezählt werden der ganze Wert und die Zweige nach ? und :
   if (d.startsWith('bereiche/') || d.startsWith('http/')) {

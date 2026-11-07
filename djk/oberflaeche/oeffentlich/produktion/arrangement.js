@@ -4,7 +4,8 @@
 // Zeichenvokabular und Wellendaten aus welle.js (spalten, zeichneSpalte), kein WebGL.
 import { linien, beatZuX } from './zeitachse.js';
 import { SPUR_HOEHE, LOOP_ZONE, CLIP_KOPF, clipKasten, sichtbar, welleSpalteFuer, notenKaesten, zeilenTabelle, spurZeile } from './layout.js';
-import { lanePfad, wertZuY, gezeigteLane, bereich, laneSchutz } from './lanen.js';
+import { genutzteBereiche } from './takes.js';
+import { lanePfad, wertZuY, gezeigteLane, bereich, laneSchutz, laneLinienFarbe } from './lanen.js';
 import { stemsBalkenListe, stummDecke } from './stems.js';
 import { spalten, zeichneSpalte } from '../welle.js';
 
@@ -34,10 +35,10 @@ export class Arrangement {
     return true;
   }
   // loop: die gezeigte Klammer (beim Ziehen der Entwurf, sonst projekt.loop)
-  bild({ ansicht, projekt, loop, kopfBeat, startBeat, geist, stems = null, lanen = [], laneZiel = null }) {
+  bild({ ansicht, projekt, loop, kopfBeat, startBeat, geist, stems = null, lanen = [], laneZiel = null, ueber = [], takeZeilen = new Map() }) {
     // the key holds the target each open row shows, so that a new choice redraws
-    const tab = zeilenTabelle(projekt?.spuren?.length ?? 0, lanen), schluessel = lanen.join(',') + (laneZiel ? '|' + lanen.map((i) => laneZiel.get(projekt?.spuren?.[i]?.id) ?? '').join(',') : '');   // open lane rows (Automation S1); none = the old fixed grid
-    this.laneZiel = laneZiel;
+    const tab = zeilenTabelle(projekt?.spuren?.length ?? 0, lanen, takeZeilen), schluessel = lanen.join(',') + '#' + [...takeZeilen].join(';') + (laneZiel ? '|' + lanen.map((i) => laneZiel.get(projekt?.spuren?.[i]?.id) ?? '').join(',') : '') + '|' + ueber.map((x) => `${x.spur_id}:${x.ziel}`).join(',');   // open lane rows (Automation S1); none = the old fixed grid
+    this.laneZiel = laneZiel; this.ueber = ueber;
     if (this.passe(this.s) | this.passe(this.u)) this.schmutzig = true;
     this.passe(this.l);
     if (this.schmutzig || this.letzte.ansicht !== ansicht || this.letzte.projekt !== projekt || this.letzte.lanen !== schluessel) {
@@ -51,7 +52,7 @@ export class Arrangement {
     const g = this.gs, w = this.s.width, h = this.s.height;
     g.fillStyle = '#0b0d11'; g.fillRect(0, 0, w, h);
     if (!p) return;
-    for (const z of tab) { g.fillStyle = z.art === 'lane' ? '#0d1014' : z.spur % 2 ? '#12141a' : '#0f1116'; g.fillRect(0, z.y, w, z.h); }
+    for (const z of tab) { g.fillStyle = z.art === 'lane' ? '#0d1014' : z.art === 'take' ? '#0c0e12' : z.spur % 2 ? '#12141a' : '#0f1116'; g.fillRect(0, z.y, w, z.h); }
     if (p.loop) {
       const x0 = beatZuX(a, p.loop.von_beat), x1 = beatZuX(a, p.loop.bis_beat);
       g.fillStyle = p.loop.an ? 'rgba(47,214,195,0.07)' : 'rgba(255,255,255,0.025)'; g.fillRect(x0, 0, x1 - x0, h);
@@ -68,7 +69,31 @@ export class Arrangement {
         if (sichtbar(k, w)) this.zeichneClip(g, k, spur, c, a, p, w);
       }
     });
+    this.zeichneTakes(g, a, p, tab, w);
     this.zeichneLanen(g, a, p, tab, w, this.laneZiel);
+  }
+  // 1.14 Comping: the clips of every visible take row; the regions the main lane uses right now (genutzteBereiche, derived) in the track colour, the rest grey
+  zeichneTakes(g, a, p, tab, w) {
+    const genutzt = new Map();
+    for (const z of tab) {
+      if (z.art !== 'take') continue;
+      const spur = p.spuren[z.spur], take = spur?.takes?.[z.take];
+      if (!take) continue;
+      if (!genutzt.has(z.spur)) genutzt.set(z.spur, genutzteBereiche(spur, p.tempo_bpm));
+      const bereiche = genutzt.get(z.spur).filter((r) => r.take_id === take.id), grau = { ...spur, farbe: '#8a8d98', freeze: null }, farbig = { ...spur, freeze: null };
+      for (const c of take.clips) {
+        const k = { x: beatZuX(a, c.start_beat), y: z.y + 1, w: c.laenge_beats * a.pxProBeat, h: z.h - 2 };
+        if (!sichtbar(k, w)) continue;
+        this.zeichneClip(g, k, grau, c, a, p, w);
+        for (const r of bereiche) {
+          const x0 = Math.max(k.x, beatZuX(a, r.von)), x1 = Math.min(k.x + k.w, beatZuX(a, r.bis));
+          if (x1 <= x0) continue;
+          g.save(); g.beginPath(); g.rect(x0, z.y, x1 - x0, z.h); g.clip();
+          this.zeichneClip(g, k, farbig, c, a, p, w);
+          g.restore();
+        }
+      }
+    }
   }
   // Automation S1 + S2: the line of every open lane row (the target the row shows): the guide (0 dB, the pan centre, the two levels of a switch), the line,
   // the points. A locked lane is drawn dimmed.
@@ -80,7 +105,7 @@ export class Arrangement {
       const leitlinien = b.nurSprung ? [0, 1] : b.mittellinie === null ? [] : [b.mittellinie];
       for (const v of leitlinien) { g.beginPath(); const y0 = Math.round(wertZuY(z, v, ziel)) + 0.5; g.moveTo(0, y0); g.lineTo(w, y0); g.stroke(); }
       if (!lane) continue;
-      const f = HEX.test(spur.farbe) ? spur.farbe : '#2fd6c3';
+      const f = laneLinienFarbe(HEX.test(spur.farbe) ? spur.farbe : '#2fd6c3', this.ueber, spur.id, lane.ziel);   // orange while the hand overrides the field
       if (laneSchutz(lane)) g.globalAlpha = 0.35;     // locked or a target this page does not know: dimmed
       const pfad = lanePfad(lane.punkte, z, (x) => beatZuX(a, x), (x) => a.beat0 + x / a.pxProBeat, w, ziel);
       g.strokeStyle = f; g.lineWidth = 1.5; g.beginPath();

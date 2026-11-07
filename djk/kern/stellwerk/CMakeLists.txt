@@ -102,6 +102,13 @@ if(EXISTS ${D}/messung/kosten.cpp)
   stellwerk_ziel(stellwerk_kosten)
 endif()
 
+if(EXISTS ${D}/messung/bewegt_spitze.cpp)
+  add_executable(stellwerk_bewegt_spitze messung/bewegt_spitze.cpp)
+  target_include_directories(stellwerk_bewegt_spitze PRIVATE tests werkzeug)
+  target_link_libraries(stellwerk_bewegt_spitze cypherdj_stellwerk cypherdj_stellwerk_sim)
+  stellwerk_ziel(stellwerk_bewegt_spitze)
+endif()
+
 file(GLOB TESTDATEIEN CONFIGURE_DEPENDS ${D}/tests/test_*.cpp)
 foreach(f ${TESTDATEIEN})
   get_filename_component(n ${f} NAME_WE)
@@ -124,6 +131,39 @@ foreach(f ${TESTDATEIEN})
     stellwerk_ziel(stellwerk_${n}_leer)
   endif()
 endforeach()
+
+# 1.12 S3 task 1: error cases of the grip signal and of the pickup, each compiled with its switch; the test must go red (WILL_FAIL).
+#   GRIFF_NUR_HALTERWECHSEL: the signal only where the holder changes (case d of test_hand_griff)
+#   GRIFF_IN_TOTZONE: a discarded dead-zone step raises the signal;  GRIFF_SAMPLE_LETZTER: the last grip of a cycle wins
+#   RESEND_GRIFF: an absolute resend of the known position counts as a grip (test_hand_griff case i, test_hand_pickup case g)
+#   GRIFF_LETZTER_ERSTER: the last-grip sample (griff_letzter_im_zyklus, 1.12 S3 task 7) stays with the first grip
+#   INS_PFAD_ZU_LANG: one path of the insert vocabulary has 32 characters (test_insert_vertrag, 1.10 slice 4a T1)
+#   INS_BEREICH: ins/komp/<n>/schwelle ends at +6 dB instead of 0 (the range parity with the DJ-side komp/* rows, test_insert_vertrag)
+#   PICKUP_VOR_VERWURF: the pickup runs before the discard checks and for a release (test_hand_pickup)
+# The library sources are compiled again with the switch, so these executables do not link cypherdj_stellwerk.
+if(TARGET cypherdj_stellwerk_sim)
+  foreach(m
+      test_hand_griff:STELLWERK_GRIFF_NUR_HALTERWECHSEL test_hand_griff:STELLWERK_GRIFF_IN_TOTZONE
+      test_hand_griff:STELLWERK_GRIFF_SAMPLE_LETZTER test_hand_pickup:STELLWERK_PICKUP_VOR_VERWURF
+      test_hand_griff:STELLWERK_RESEND_GRIFF test_hand_pickup:STELLWERK_RESEND_GRIFF
+      test_hand_griff:STELLWERK_GRIFF_LETZTER_ERSTER
+      test_insert_vertrag:INS_PFAD_ZU_LANG test_insert_vertrag:INS_BEREICH)
+    string(REPLACE ":" ";" mp ${m})
+    list(GET mp 0 mt)
+    list(GET mp 1 mm)
+    if(EXISTS ${D}/tests/${mt}.cpp)
+      string(TOLOWER ${mm} mn)
+      set(mz stellwerk_${mt}_${mn}_mutation)
+      add_executable(${mz} tests/${mt}.cpp ${QUELLEN})
+      target_include_directories(${mz} PRIVATE include tests werkzeug)
+      target_compile_definitions(${mz} PRIVATE CYPHERDJ_MUTATION_${mm}=1)
+      target_link_libraries(${mz} cypherdj_stellwerk_sim)
+      stellwerk_ziel(${mz})
+      add_test(NAME ${mt}_${mn}_mutation COMMAND ${mz})
+      set_tests_properties(${mt}_${mn}_mutation PROPERTIES WILL_FAIL TRUE)
+    endif()
+  endforeach()
+endif()
 
 # Golden-Folgen des Vertrags (Scheibe 09, djk/vertrag/folgen/): je Datei ein Test, dazu alle fünf mit Block 64 und 1024
 set(VERTRAG_FOLGEN ${D}/../../vertrag/folgen CACHE PATH "Ordner der Golden-Folgen")

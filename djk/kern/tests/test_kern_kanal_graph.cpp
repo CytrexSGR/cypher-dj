@@ -585,6 +585,84 @@ int main() {
     a.spaeter.push_back(g2);
     a.spaeter.push_back(g5);
   }
+
+  // ---------------------------------------------------------------- S23 Fall 17: a plan of chained RAMPS on a graph knob (the live automation track)
+  // The live track (page server POST /spur) sends its moves as /k/teil of one plan "spur:<name>", teil 0, 1, 2, each with
+  // dauer_beats > 0, the next starting where the last ends. Cases 9 and 14..16 only SET knobs (dauer_beats 0). This pins that
+  // ramps of a plan reach the graph too, block by block: linear moves 1 -> 0 (4 beats), 0 -> 1 (4 beats), 1 -> 0.7 (2 beats),
+  // checked at the middle and at the end of each move against the gain the knob stands for. Negative control: the same
+  // ramp on deck/3/bk/1 afterwards leaves deck/2 where it is.
+  {
+    Lauf a;
+    a.zyklen(10 * N);
+    cdj::Befehl ld = a.neu(cdj::Befehl::DECK_LADEN, "leitstand");
+    ld.deck = 2;
+    std::snprintf(ld.material_id, sizeof ld.material_id, "%s", "f0f0000000000003");
+    ld.bpm = 128.0;
+    ld.fassung = 1;
+    a.sende(ld);
+    a.zyklen(20 * N);
+    cdj::Befehl fd = a.neu(cdj::Befehl::TEIL, "pruefstand");
+    std::snprintf(fd.pfad, sizeof fd.pfad, "%s", "deck/2/fader");
+    fd.ab_beat = 2.0;
+    fd.wert = 0.0f;
+    fd.politik = 1;
+    a.sende(fd);
+    cdj::Befehl st = a.neu(cdj::Befehl::DECK_START, "andreas");
+    st.deck = 2;
+    st.ab_beat = 8.0;
+    st.quell_beat = 0.0;
+    a.sende(st);
+    a.zyklen(10 * SPB);
+    const float voll = a.spitze(10 * SPB - 6000, 10 * SPB - 500);
+    PRUEF(voll > 0.05f);   // positive control: the deck sounds in the master
+    CypherBk* g1 = graph(REGLER_PEGEL);
+    a.graph_setzen("deck/2", g1);
+    const auto teil = [&](const char* pfad, double ab, double dauer, float nach, int nr, const char* plan) {
+      cdj::Befehl t = a.neu(cdj::Befehl::TEIL, "pruefstand");
+      std::snprintf(t.pfad, sizeof t.pfad, "%s", pfad);
+      std::snprintf(t.plan, sizeof t.plan, "%s", plan);
+      t.ab_beat = ab;
+      t.dauer_beats = dauer;
+      t.wert = nach;
+      t.form = 0;      // linear, so the middle of a move is the middle value
+      t.politik = 0;   // music: a late part is dropped, as the live track sends it
+      t.nr = nr;
+      return a.sende(t);
+    };
+    const int64_t s0 = teil("deck/2/bk/1", 11.0, 0.0, 1.0f, 0, "");   // knob 1 before the track (a set)
+    const int64_t m0 = teil("deck/2/bk/1", 12.0, 4.0, 0.0f, 0, "spur:t");
+    const int64_t m1 = teil("deck/2/bk/1", 16.0, 4.0, 1.0f, 1, "spur:t");
+    const int64_t m2 = teil("deck/2/bk/1", 20.0, 2.0, 0.7f, 2, "spur:t");
+    // gain at a sample, short window around it (ramp 1/90000 per sample: +-750 samples move the gain by 0.8 %)
+    const auto gewinn = [&](double beat) {
+      a.zyklen(static_cast<int64_t>(beat * SPB) + 1000);
+      return db(a.spitze(static_cast<int64_t>(beat * SPB) - 750, static_cast<int64_t>(beat * SPB) + 750), voll);
+    };
+    const double g_vor = gewinn(11.5);   // the set to 1
+    const double g_m0 = gewinn(14.0);    // middle of 1 -> 0
+    const double g_e0 = gewinn(16.0);    // end of the first move: 0
+    const double g_m1 = gewinn(18.0);    // middle of 0 -> 1
+    const double g_e1 = gewinn(20.0);    // end of the second move: 1
+    const double g_m2 = gewinn(21.0);    // middle of 1 -> 0.7: 0.85
+    const double g_e2 = gewinn(23.0);    // after the third move: 0.7
+    std::printf("Fall 17: 1.0 -> %.2f dB | 1->0 middle %.2f dB (soll -6,02), end %.2f dB (soll < -30) | 0->1 middle %.2f dB (soll -6,02), end %.2f dB (soll 0) | 1->0.7 middle %.2f dB (soll -1,41), after %.2f dB (soll -3,10)\n",
+                g_vor, g_m0, g_e0, g_m1, g_e1, g_m2, g_e2);
+    PRUEF(a.angenommen(s0) && a.angenommen(m0) && a.angenommen(m1) && a.angenommen(m2));   // the kern took every part, as in the live acknowledgement
+    PRUEF(std::fabs(g_vor) < 0.3);
+    PRUEF(std::fabs(g_m0 + 6.0206) < 0.5);
+    PRUEF(g_e0 < -30.0);
+    PRUEF(std::fabs(g_m1 + 6.0206) < 0.5);
+    PRUEF(std::fabs(g_e1) < 0.3);
+    PRUEF(std::fabs(g_m2 + 1.4116) < 0.4);
+    PRUEF(std::fabs(g_e2 + 3.0980) < 0.3);
+    // negative control: the same kind of ramp on another channel's knob leaves deck/2 at 0.7
+    teil("deck/3/bk/1", 24.0, 2.0, 0.0f, 0, "spur:u");
+    const double g_fremd = gewinn(26.5);
+    std::printf("Fall 17: deck/3/bk/1 ramped to 0 -> deck/2 %.2f dB (soll -3,10)\n", g_fremd);
+    PRUEF(std::fabs(g_fremd + 3.0980) < 0.3);
+    a.spaeter.push_back(g1);
+  }
   fs::remove_all(AB);
   PRUEF_ENDE();
 }

@@ -50,7 +50,35 @@ const SAMPLER_1: &str = r#"{"format":"baukasten/2","name":"sampler-1","stimmen":
 /// S21: four voices of saw through a faltung (4097 frame IR: head, 15 tail partitions), mix on a knob, predelay 7 ms
 const FALTUNG_1: &str = r#"{"format":"baukasten/2","name":"faltung-1","stimmen":4,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"saege"},{"id":"e","art":"adsr","a":0.01,"d":0.1,"s":1,"r":0.2},{"id":"vca","art":"mul"},{"id":"f","art":"faltung","datei":"ir.f32","pre":7},{"id":"k","art":"regler","nr":1,"min":0,"max":1},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"s.hz"},{"von":"n.gate","nach":"e.gate"},{"von":"n.trig","nach":"e.trig"},{"von":"s.aus","nach":"vca.a"},{"von":"e.aus","nach":"vca.b"},{"von":"vca.aus","nach":"f.x"},{"von":"k.aus","nach":"f.mix"},{"von":"f.l","nach":"o.l"},{"von":"f.r","nach":"o.r"}]}"#;
 
-const GRAPHEN: [&str; 31] = [
+/// Wavetable: four voices, seven copies on the vowel table; position, detune and width on knobs, so every cached value
+/// (detune ratios, pan gains, smoother, mip level) changes while playing
+const WAVETABLE_1: &str = r#"{"format":"baukasten/2","name":"wavetable-1","stimmen":4,"knoten":[{"id":"n","art":"note"},{"id":"w","art":"wavetable","tabelle":5,"kopien":7},{"id":"kp","art":"regler","nr":1,"min":0,"max":1},{"id":"kd","art":"regler","nr":2,"min":0,"max":50},{"id":"kb","art":"regler","nr":3,"min":0,"max":1},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"w.hz"},{"von":"n.trig","nach":"w.trig"},{"von":"kp.aus","nach":"w.pos"},{"von":"kd.aus","nach":"w.verstimmung"},{"von":"kb.aus","nach":"w.breite"},{"von":"w.l","nach":"o.l"},{"von":"w.r","nach":"o.r"}]}"#;
+
+/// Resonator: four voices, 32 bar modes struck by a noise burst while a saw drives the audio input; material,
+/// brightness, size, position and inharmonicity on knobs, so the coefficients are rebuilt while playing
+const RESONATOR_1: &str = r#"{"format":"baukasten/2","name":"resonator-1","stimmen":4,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"saege"},{"id":"r","art":"resonator","anregung":1},{"id":"k1","art":"regler","nr":1,"min":0,"max":1},{"id":"k2","art":"regler","nr":2,"min":0,"max":1},{"id":"k3","art":"regler","nr":3,"min":0.25,"max":4},{"id":"k4","art":"regler","nr":4,"min":0,"max":1},{"id":"k5","art":"regler","nr":5,"min":0,"max":2},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"r.hz"},{"von":"n.trig","nach":"r.trig"},{"von":"n.hz","nach":"s.hz"},{"von":"s.aus","nach":"r.x"},{"von":"k1.aus","nach":"r.material"},{"von":"k2.aus","nach":"r.helligkeit"},{"von":"k3.aus","nach":"r.groesse"},{"von":"k4.aus","nach":"r.position"},{"von":"k5.aus","nach":"r.inharmonie"},{"von":"r.aus","nach":"o.x"}]}"#;
+
+/// Metall: four voices, every input on a knob or the note (decay, tune, colour, noise, high-pass change while playing, so
+/// every cached coefficient is recomputed), group choke on, choke input 1 - gate (chokes on release)
+const METALL_1: &str = r#"{"format":"baukasten/2","name":"metall-1","stimmen":4,"knoten":[{"id":"n","art":"note"},{"id":"m","art":"metall"},{"id":"k1","art":"regler","nr":1,"min":0.01,"max":3},{"id":"k2","art":"regler","nr":2,"min":0.5,"max":2},{"id":"k3","art":"regler","nr":3,"min":0,"max":1},{"id":"k4","art":"regler","nr":4,"min":0,"max":1},{"id":"k5","art":"regler","nr":5,"min":500,"max":16000},{"id":"inv","art":"mul","b":-1},{"id":"los","art":"add","b":1},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.trig","nach":"m.trig"},{"von":"n.vel","nach":"m.vel"},{"von":"k1.aus","nach":"m.decay"},{"von":"k2.aus","nach":"m.tune"},{"von":"k3.aus","nach":"m.farbe"},{"von":"k4.aus","nach":"m.rauschen"},{"von":"k5.aus","nach":"m.hp"},{"von":"n.gate","nach":"inv.a"},{"von":"inv.aus","nach":"los.a"},{"von":"los.aus","nach":"m.choke"},{"von":"m.aus","nach":"o.x"}]}"#;
+
+/// FM: four voices, the six-operator stack with full feedback; index, feedback and decay on knobs (the guard and the
+/// envelope coefficients are recomputed while playing), pitch moved by an LFO (the guard's pitch band moves)
+const FM_1: &str = r#"{"format":"baukasten/2","name":"fm-1","stimmen":4,"knoten":[{"id":"n","art":"note"},{"id":"f","art":"fm","algo":8,"o2_pegel":0.3,"o3_pegel":0.3,"o4_pegel":0.3,"o5_pegel":0.3,"o6_pegel":0.3,"o3_verh":2,"o2_d":0.3,"o2_s":0},{"id":"l","art":"lfo","rate":6},{"id":"t","art":"transponiere"},{"id":"ki","art":"regler","nr":1,"min":0,"max":2},{"id":"kr","art":"regler","nr":2,"min":0,"max":1},{"id":"kz","art":"regler","nr":3,"min":0.05,"max":20,"log":1},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"t.hz"},{"von":"l.aus","nach":"t.st"},{"von":"t.aus","nach":"f.hz"},{"von":"n.gate","nach":"f.gate"},{"von":"n.trig","nach":"f.trig"},{"von":"n.vel","nach":"f.vel"},{"von":"ki.aus","nach":"f.index"},{"von":"kr.aus","nach":"f.rueck"},{"von":"kz.aus","nach":"f.zeit"},{"von":"f.aus","nach":"o.x"}]}"#;
+
+/// Granular: four voices recording a saw into the ring buffer, full pool (dichte 400 x 100 ms), every grain parameter
+/// and the freeze on knobs, so starts, drops, seam clamps and the frozen path all run
+const GRANULAR_1: &str = r#"{"format":"baukasten/2","name":"granular-1","stimmen":4,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"saege"},{"id":"g","art":"granular","quelle":1,"puffer":0.5,"groesse":100,"dichte":400,"streuung":0.5},{"id":"k1","art":"regler","nr":1,"min":0,"max":1},{"id":"k2","art":"regler","nr":2,"min":-24,"max":24},{"id":"k3","art":"regler","nr":3,"min":0,"max":1200},{"id":"k4","art":"regler","nr":4,"min":0,"max":1},{"id":"k5","art":"regler","nr":5,"min":1,"max":300},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"s.hz"},{"von":"n.hz","nach":"g.hz"},{"von":"n.trig","nach":"g.trig"},{"von":"s.aus","nach":"g.x"},{"von":"k1.aus","nach":"g.pos"},{"von":"k1.aus","nach":"g.pos_zufall"},{"von":"k2.aus","nach":"g.tonhoehe"},{"von":"k3.aus","nach":"g.ton_zufall"},{"von":"k4.aus","nach":"g.frieren"},{"von":"k4.aus","nach":"g.fenster"},{"von":"k4.aus","nach":"g.breite"},{"von":"k5.aus","nach":"g.groesse"},{"von":"g.l","nach":"o.l"},{"von":"g.r","nach":"o.r"}]}"#;
+
+/// String: four voices, hammer, piano soundboard; every input on a knob, so the loop design (pitch, decay, damping) runs
+/// again while playing; noise on x
+const SAITE_1: &str = r#"{"format":"baukasten/2","name":"saite-1","stimmen":4,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"saite","anreger":2,"koerper":3},{"id":"k1","art":"regler","nr":1,"min":0.05,"max":20,"log":1},{"id":"k2","art":"regler","nr":2,"min":0,"max":1},{"id":"k3","art":"regler","nr":3,"min":0,"max":1},{"id":"k4","art":"regler","nr":4,"min":0.02,"max":0.5},{"id":"k5","art":"regler","nr":5,"min":0,"max":1},{"id":"k6","art":"regler","nr":6,"min":0.5,"max":2},{"id":"t","art":"mul"},{"id":"r","art":"rauschen"},{"id":"rx","art":"mul","b":0.01},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"t.a"},{"von":"k6.aus","nach":"t.b"},{"von":"t.aus","nach":"s.hz"},{"von":"n.trig","nach":"s.trig"},{"von":"n.vel","nach":"s.vel"},{"von":"k1.aus","nach":"s.ausklang"},{"von":"k2.aus","nach":"s.daempfung"},{"von":"k3.aus","nach":"s.hell"},{"von":"k4.aus","nach":"s.lage"},{"von":"k5.aus","nach":"s.koerper_mix"},{"von":"r.aus","nach":"rx.a"},{"von":"rx.aus","nach":"s.x"},{"von":"s.aus","nach":"o.x"}]}"#;
+
+/// Hard sync: four voices, saw, pulse and triangle slaves on one saw master, slave pitch and pwm on knobs, so resets fall
+/// on every sub-sample position and the narrow pulse crosses its edge right after a reset
+const HARTSYNC_1: &str = r#"{"format":"baukasten/2","name":"hartsync-1","stimmen":4,"knoten":[{"id":"n","art":"note"},{"id":"m","art":"saege"},{"id":"k","art":"regler","nr":1,"min":0,"max":36},{"id":"w","art":"regler","nr":2,"min":-1,"max":1},{"id":"t","art":"transponiere"},{"id":"f1","art":"saege"},{"id":"f2","art":"puls"},{"id":"f3","art":"dreieck"},{"id":"a","art":"add"},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"m.hz"},{"von":"n.hz","nach":"t.hz"},{"von":"k.aus","nach":"t.st"},{"von":"t.aus","nach":"f1.hz"},{"von":"t.aus","nach":"f2.hz"},{"von":"t.aus","nach":"f3.hz"},{"von":"w.aus","nach":"f2.pwm"},{"von":"m.hart","nach":"f1.hart"},{"von":"m.hart","nach":"f2.hart"},{"von":"m.hart","nach":"f3.hart"},{"von":"f1.aus","nach":"a.a"},{"von":"f2.aus","nach":"a.b"},{"von":"f3.aus","nach":"a.c"},{"von":"a.aus","nach":"o.x"}]}"#;
+
+const GRAPHEN: [&str; 63] = [
     include_str!("../beispiele/saege-ladder.json"),
     include_str!("../beispiele/juno-pad.json"),
     include_str!("../beispiele/lead.json"),
@@ -82,6 +110,38 @@ const GRAPHEN: [&str; 31] = [
     FALTUNG_1,
     include_str!("../beispiele/fx-federhall.json"),
     include_str!("../beispiele/fx-filter-fahrt.json"),
+    WAVETABLE_1,
+    include_str!("../beispiele/wavetable-supersaw.json"),
+    include_str!("../beispiele/wavetable-reese.json"),
+    include_str!("../beispiele/wavetable-chor.json"),
+    RESONATOR_1,
+    include_str!("../beispiele/resonator-glocke.json"),
+    include_str!("../beispiele/resonator-marimba.json"),
+    include_str!("../beispiele/resonator-conga.json"),
+    include_str!("../beispiele/resonator-metall.json"),
+    include_str!("../beispiele/fx-resonator.json"),
+    METALL_1,
+    include_str!("../beispiele/metall-hihat.json"),
+    include_str!("../beispiele/metall-ride.json"),
+    include_str!("../beispiele/metall-crash.json"),
+    FM_1,
+    include_str!("../beispiele/fm-bass.json"),
+    include_str!("../beispiele/fm-epiano.json"),
+    include_str!("../beispiele/fm-glocke.json"),
+    include_str!("../beispiele/fm-lead.json"),
+    GRANULAR_1,
+    include_str!("../beispiele/granular-pad.json"),
+    include_str!("../beispiele/granular-textur.json"),
+    include_str!("../beispiele/granular-drone.json"),
+    SAITE_1,
+    include_str!("../beispiele/saite-gitarre.json"),
+    include_str!("../beispiele/saite-harfe.json"),
+    include_str!("../beispiele/saite-klavier.json"),
+    include_str!("../beispiele/saite-karplus.json"),
+    HARTSYNC_1,
+    include_str!("../beispiele/hartsync-lead.json"),
+    include_str!("../beispiele/hartsync-pad.json"),
+    include_str!("../beispiele/hartsync-bass.json"),
 ];
 
 #[test]

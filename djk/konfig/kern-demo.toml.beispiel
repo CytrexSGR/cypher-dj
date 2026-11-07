@@ -1,0 +1,11 @@
+# Kern configuration for a recorded demo set with spoken commentary (djk-demo, 2026-11-07). Copy the operating
+# ~/.config/cypherdj/kern.toml, add the three stimme_* lines and start with
+#   djk-start --kern-konfig <this file> --master ... --ton-frei --strudel --strudel-kit techno --instrumente
+# then `djk-demo stimme --eingang 4`. Only a kern that knows these keys accepts the file (unknown keys are a start error).
+version = 1
+controller_geraet = "softcontroller"
+hand_osc = true
+keylock_maschine = "bungee"
+stimme_eingang = 4        # the voice player cypherdj-stimme plays into ein_4; pick a pair no device assignment uses
+stimme_duck_db = -12.0    # music while the voice speaks
+stimme_pegel_db = 0.0     # voice gain in front of the master limiter (cypher-say normalises to -16 LUFS, -2 dBTP)

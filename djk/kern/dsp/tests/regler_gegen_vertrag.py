@@ -12,8 +12,19 @@ import sys
 
 # Regler-Pfade des Vertrags, die NICHT in den Kanalzug-DSP gehören (Mixer, Deck: Scheibe 25 und 31).
 NICHT_IM_KANALZUG = {'ziel', 'xseite', 'pfl', 'stem/drums', 'stem/bass', 'stem/vocals', 'stem/other',
+                     # bk/<n>: Baukasten graph knobs live in the mixer, not in the dsp strip (INTERFACES.md:168)
+                     'bk/<n>',
                      # Kompressor je Quellkanal (2026-10-11): lebt im Mixer (cdj::Komp), nicht im dsp-Kanalzug
                      'komp/an', 'komp/schwelle', 'komp/ratio', 'komp/attack', 'komp/release', 'komp/makeup', 'komp/mix', 'komp/sc'}
+
+
+# 1.15 A1b: the mix-tool rows `<k>/gate/*` and `<k>/util/*` (and `bus/<n>/mb/*`, `bus/<n>/lim/*`, which this reader never sees) live in the mixer
+# inserts, not in the dsp channel strip: skipped by prefix like the exact names above. `bk/` (graph knobs) is skipped by prefix as well.
+NICHT_IM_KANALZUG_PRAEFIX = ('gate/', 'util/', 'mb/', 'lim/', 'bk/')
+
+
+def nicht_im_kanalzug(pfad):
+    return pfad in NICHT_IM_KANALZUG or pfad.startswith(NICHT_IM_KANALZUG_PRAEFIX)
 
 
 def zahl(t):
@@ -36,7 +47,7 @@ def vertrag_zeilen(text):
             stamm, a = pfade[0].rsplit('/', 1)
             b = pfade[1].rsplit('/', 1)[1]
             pfade = [f'{stamm}/{i}' for i in range(int(a), int(b) + 1)]
-        if all(p in NICHT_IM_KANALZUG for p in pfade):
+        if all(nicht_im_kanalzug(p) for p in pfade):
             continue
         # Bereich steht in Spalte 3; beim Filter steht er in Spalte 2 und Spalte 3 ist leer
         bereich = zellen[2] if zellen[2] else zellen[1]
@@ -66,7 +77,7 @@ def bibliothek(programm):
 def abgleich(bib, vertrag):
     fehler = []
     for pfad, (lo, hi, vorgabe, ms, form) in vertrag.items():
-        if pfad in NICHT_IM_KANALZUG:
+        if nicht_im_kanalzug(pfad):
             continue
         if pfad not in bib:
             fehler.append(f'{pfad}: steht im Vertrag, fehlt in der Bibliothek')
@@ -103,8 +114,18 @@ def main():
     if not f_falsch:
         print('FEHLER: der Abgleich sieht einen verfälschten Vertrag nicht')
         return 1
+    # Self-test 2 (A1b): a mix-tool row with a wrong number is skipped (it is not in the library), a real library row (filter) with a wrong
+    # number is still compared. Both edits at once: exactly one deviation, and it is the filter.
+    schwelle, filt = '| `<k>/gate/schwelle` | dBFS | −90 bis 0 |', '| `<k>/filter` | −1 bis +1 | | 0 | 20 ms'
+    assert schwelle in text and filt in text, 'Self-test 2: gate or filter row is not in the contract'
+    zwei = text.replace(schwelle, schwelle.replace('−90', '−80')).replace(filt, filt.replace('20 ms', '30 ms'))
+    f_zwei = abgleich(bib, vertrag_zeilen(zwei))
+    print(f'Self-test mix-tool row skipped, filter compared: {len(f_zwei)} deviation(s)')
+    if len(f_zwei) != 1 or not f_zwei[0].startswith('filter:'):
+        print('ERROR: a mix-tool row is not skipped or filter is no longer compared', f_zwei[:3])
+        return 1
     vertrag = vertrag_zeilen(text)
-    geprueft = sorted(p for p in vertrag if p not in NICHT_IM_KANALZUG)
+    geprueft = sorted(p for p in vertrag if not nicht_im_kanalzug(p))
     print(f'Vertrag §1.5: {len(geprueft)} Kanalzug-Pfade: {" ".join(geprueft)}')
     fehler = abgleich(bib, vertrag)
     for f in fehler:

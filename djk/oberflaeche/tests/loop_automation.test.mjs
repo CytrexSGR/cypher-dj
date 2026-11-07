@@ -4,7 +4,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { pruefeAutomation, planeDurchgang, planeSpur, spurLaenge, naechsterDurchgang, leseLoopAutomation, schreibeLoopAutomation } from '../loop_automation.ts';
+import { pruefeAutomation, planeDurchgang, planeSpur, spurLaenge, naechsterDurchgang, leseLoopAutomation, schreibeLoopAutomation, AUTO_BEREICH } from '../loop_automation.ts';
+import { reglerInfo } from '../../leitstand/src/regler_info.ts';
 
 const spur = [{ pfad: 'komp/schwelle', punkte: [[0, -10], [4, -30], [6, -20]] }];
 
@@ -73,4 +74,25 @@ test('Länge in Durchgängen: Punkte bis Loop mal Durchgänge, Planung über die
   assert.deepEqual(t.map((x) => [x.ab_beat, x.dauer_beats, x.nach]), [[128, 56, -60], [184, 4, -6], [188, 4, -60]]);
   assert.equal(naechsterDurchgang(125, 64, 64), 128);   // Anfänge auf Vielfachen der Spurlänge
   assert.equal(naechsterDurchgang(130, 64, 128), null);
+});
+
+// 1.15 A2: a loop box is a source channel (pad/1, pad/2), so its automation may drive the continuous gate and utility rows, with the contract's range
+// (the same numbers as regler_info.ts). Switches and steps stay out (like komp/an and komp/sc); multiband and limiter are bus-only, not box rows.
+test('1.15 A2: AUTO_BEREICH holds the continuous gate and util rows with the contract range, no switches, no bus-only tools', () => {
+  const soll = { 'gate/schwelle': [-90, 0], 'gate/hysterese': [0, 24], 'gate/ratio': [1, 100], 'gate/bereich': [-120, 0], 'gate/attack': [0.1, 500],
+    'gate/hold': [0, 2000], 'gate/release': [1, 5000], 'util/balance': [-1, 1], 'util/breite': [0, 200], 'util/bassmono': [0, 500] };
+  for (const [p, bereich] of Object.entries(soll)) {
+    assert.deepEqual(AUTO_BEREICH[p], bereich, p);
+    const i = reglerInfo(`pad/1/${p}`);   // the contract row on a box channel: same range, and it is a continuous row
+    assert.deepEqual([i.einheit, i.min, i.max], ['linear', ...bereich], p);
+    assert.ok('automation' in pruefeAutomation([{ pfad: p, punkte: [[0, bereich[0]], [4, bereich[1]]] }], 8), p);
+    for (const aus of [bereich[0] - 1, bereich[1] + 1]) {
+      const r = pruefeAutomation([{ pfad: p, punkte: [[0, aus]] }], 8);   // negative control: just outside the range
+      assert.ok('fehler' in r && r.fehler.includes('value'), `${p} ${aus}`);
+    }
+  }
+  for (const p of ['gate/an', 'gate/sc', 'util/phase_l', 'util/phase_r', 'util/tausch', 'util/dc', 'mb/an', 'mb/tief/schwelle', 'lim/decke', 'spektrum/kanal']) {
+    const r = pruefeAutomation([{ pfad: p, punkte: [[0, 0]] }], 8);
+    assert.ok('fehler' in r && r.fehler.includes('pfad'), `${p} is refused`);
+  }
 });

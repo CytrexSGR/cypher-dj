@@ -1,14 +1,15 @@
 // PRODUCTION (1.10 Slice 1): Gruppen-Köpfe und Produktions-Master unter dem Arrangement (P1). Jede Bedienung geht über ctx.aendere an POST /proj/aendern
 // (gruppenspur_aendern, gruppenspur_neu, gruppenspur_loeschen, master_aendern), damit sie im Projekt und im Undo-Verlauf landet. Der Pegel kommt ohne
 // eigenen Code: app.js zeigePegel füllt jedes .meter[data-kanal="grp/<nr>"] und [data-kanal="pm"] aus /pegel.
-import { faderWert, faderText, panText, FADER_MIN, FADER_MAX, naechsteFarbe, istUmbenennenTaste } from './spurkoepfe.js';
+import { faderWert, faderText, panText, naechsteFarbe, istUmbenennenTaste } from './spurkoepfe.js';
+import { REGLER_MAX, REGLER_SCHRITT, reglerVonDb, dbVonRegler, tasteMerke, tasteWert } from './fader_kennlinie.js';
 import { gruppenLabels, neueGruppeBefehl } from './routing.js';
 
 const KOPF = `<button class="p-farbe" title="Group colour: click for the next one"></button>
 <span class="p-spurname" role="button" tabindex="0" title="Double click, Enter or F2 to rename"></span><span class="p-geraet">GROUP</span>
 <button class="p-mute" aria-pressed="false" title="Mute the group (silences its members)">M</button><button class="p-solo" aria-pressed="false" title="Solo the group (all its members play)">S</button>
 <button class="p-loeschen" title="Delete group (its tracks go back to Master; Undo brings it back)">✕</button>
-<input class="p-fader" type="range" min="${FADER_MIN}" max="${FADER_MAX}" step="0.5" title="Volume (double click: 0 dB)">
+<input class="p-fader" type="range" min="0" max="${REGLER_MAX}" step="${REGLER_SCHRITT}" title="Volume (double click: 0 dB)">
 <output class="p-faderwert"></output>
 <input class="p-pan" type="range" min="-1" max="1" step="0.01" title="Balance (double click: centre)">
 <output class="p-panwert"></output>
@@ -41,15 +42,16 @@ export function bindeGruppen(ctx) {
     for (const [klasse, feld, vorgabe] of [['.p-fader', 'fader_db', 0], ['.p-pan', 'pan', 0]]) {
       const r = q(klasse), k = `${id}:${feld}`;
       const sende = () => {
-        const v = feld === 'fader_db' ? faderWert(Number(r.value)) : Number(r.value);
+        const v = feld === 'fader_db' ? faderWert(tasteWert(r)) : Number(r.value);
         zeigeWerte(el, { ...gruppe(), [feld]: v });
         aendernG(id, `${feld === 'fader_db' ? 'Volume' : 'Balance'} group ${gruppe().name}`, { [feld]: v }, k);
       };
       r.addEventListener('pointerdown', () => greift.add(k));
+      r.addEventListener('keydown', (e) => { if (feld === 'fader_db') tasteMerke(r, e.key); });
       r.addEventListener('input', sende);
       r.addEventListener('change', () => greift.delete(k));
       r.addEventListener('pointerup', () => greift.delete(k));
-      r.addEventListener('dblclick', () => { r.value = String(vorgabe); sende(); greift.delete(k); });
+      r.addEventListener('dblclick', () => { r.value = String(feld === 'fader_db' ? reglerVonDb(vorgabe) : vorgabe); sende(); greift.delete(k); });
     }
     const name = q('.p-spurname');
     const umbenennen = () => {
@@ -77,7 +79,7 @@ export function bindeGruppen(ctx) {
     el.style.setProperty('--farbe', g.farbe);
     q('.p-spurname').textContent = g.name;
     for (const [k, an] of [['.p-mute', g.mute], ['.p-solo', g.solo]]) { q(k).classList.toggle('an', an); q(k).setAttribute('aria-pressed', String(an)); }
-    if (!greift.has(`${g.id}:fader_db`)) q('.p-fader').value = String(Math.max(FADER_MIN, g.fader_db));
+    if (!greift.has(`${g.id}:fader_db`)) q('.p-fader').value = String(reglerVonDb(g.fader_db));
     if (!greift.has(`${g.id}:pan`)) q('.p-pan').value = String(g.pan);
     const L = gruppenLabels(g.name);
     for (const [k, v] of [['.p-mute', L.mute], ['.p-solo', L.solo], ['.p-loeschen', L.loeschen], ['.p-spurname', L.umbenennen], ['.p-fader', L.fader], ['.p-pan', L.pan]]) q(k).setAttribute('aria-label', v);
@@ -90,15 +92,16 @@ export function bindeGruppen(ctx) {
   const pmFader = $('pm-fader'), pmWert = $('pm-wert');
   let pmGreift = false;
   const pmSende = () => {
-    const v = faderWert(Number(pmFader.value));
+    const v = faderWert(tasteWert(pmFader));
     pmWert.textContent = faderText(v);
     ctx.aendere('Master volume', [{ befehl: 'master_aendern', fader_db: v }], 'pm:fader');
   };
   pmFader.addEventListener('pointerdown', () => { pmGreift = true; });
+  pmFader.addEventListener('keydown', (e) => tasteMerke(pmFader, e.key));
   pmFader.addEventListener('input', pmSende);
   pmFader.addEventListener('change', () => { pmGreift = false; });
   pmFader.addEventListener('pointerup', () => { pmGreift = false; });
-  pmFader.addEventListener('dblclick', () => { pmFader.value = '0'; pmSende(); pmGreift = false; });
+  pmFader.addEventListener('dblclick', () => { pmFader.value = String(reglerVonDb(0)); pmSende(); pmGreift = false; });
 
   $('neu-gruppe').addEventListener('click', () => { const b = neueGruppeBefehl(ctx.st.projekt); if (b) ctx.aendere('Add group', [b]); });
 
@@ -116,7 +119,7 @@ export function bindeGruppen(ctx) {
       if (reihe.children[i] !== el) reihe.insertBefore(el, reihe.children[i] ?? null);
     });
     const fader = p?.master?.fader_db ?? 0;
-    if (!pmGreift) pmFader.value = String(Math.max(FADER_MIN, fader));
+    if (!pmGreift) pmFader.value = String(reglerVonDb(fader));
     pmWert.textContent = faderText(fader);
   });
 }

@@ -95,10 +95,11 @@ int main() {
     auto f = std::make_unique<cdj_z_echtzeit>();
     PRUEF(cdj::z_neuestes(z.daten()->echtzeit, *f) == -1);
   }
-  // 6) E1 (2026-10-20): Regler-Deckel 512 → 1024, CDJ_ZUSTAND_VERSION 1 → 2. Der Deckel des Zustands darf nicht unter dem
-  //    der Tabelle liegen, sonst schneidet kern_zustand.cpp still ab (nr < CDJ_Z_REGLER).
+  // 6) E1 (2026-10-20): controller ceiling 512 -> 1024, CDJ_ZUSTAND_VERSION 1 -> 2; A1a (2026-11-03): 1024 -> 2048, version 2 -> 3.
+  //    The ceiling of the state must not be below that of the table, or kern_zustand.cpp cuts off silently (nr < CDJ_Z_REGLER).
   PRUEF(CDJ_Z_REGLER >= cypherdj::stellwerk::MAX_REGLER);
-  PRUEF(CDJ_ZUSTAND_VERSION == 2u);
+  PRUEF(CDJ_ZUSTAND_VERSION == 3u);
+  PRUEF(CDJ_Z_REGLER == 2048);   // A1a: ceiling 1024 -> 2048, version 2 -> 3
   //    Eine Datei im Format Version 1 (512 Regler, 253 792 Bytes, gemessen mit dem Stand vor E1) wird nie gelesen: der
   //    Kern legt neu an (Größe passt nicht), meldet es und übernimmt nichts aus dem alten Inhalt.
   {
@@ -117,7 +118,7 @@ int main() {
     PRUEF(z.oeffne(alt_pfad));
     PRUEF(z.neu());
     PRUEF(z.meldung().find("253792") != std::string::npos && z.meldung().find("neu angelegt") != std::string::npos);
-    PRUEF(z.daten()->version == 2u && z.daten()->groesse == sizeof(cdj_z_datei));
+    PRUEF(z.daten()->version == CDJ_ZUSTAND_VERSION && z.daten()->groesse == sizeof(cdj_z_datei));
     const unsigned char* roh = reinterpret_cast<const unsigned char*>(z.daten());
     size_t rest = 0;
     for (size_t i = 64; i < sizeof(cdj_z_datei); ++i) rest += roh[i] != 0;   // hinter dem 64-Byte-Kopf alles leer
@@ -126,7 +127,30 @@ int main() {
     PRUEF(cdj::z_neuestes(z.daten()->echtzeit, *f) == -1);
     unlink(alt_pfad.c_str());
   }
-  //    Gleiche Größe, aber Version 1 im Kopf (ein Kern mit anderem Layout, derselben Größe): ebenfalls neu angelegt.
+  //    A1a: a file of version 2 (1024 controllers, 352 096 bytes, measured at the base 2f26eeb9) is recreated the same way.
+  {
+    constexpr size_t GROESSE_V2 = 352096;
+    std::vector<unsigned char> alt(GROESSE_V2, 0xAB);
+    std::memcpy(alt.data(), "CDJZ", 4);
+    const uint32_t v2 = 2, g2 = static_cast<uint32_t>(GROESSE_V2);
+    std::memcpy(alt.data() + 4, &v2, 4);
+    std::memcpy(alt.data() + 8, &g2, 4);
+    const std::string alt_pfad = ordner + "/zustand_v2";
+    const int fd = open(alt_pfad.c_str(), O_CREAT | O_WRONLY | O_TRUNC, 0600);
+    PRUEF(fd >= 0 && write(fd, alt.data(), alt.size()) == static_cast<ssize_t>(alt.size()));
+    if (fd >= 0) close(fd);
+    cdj::ZustandDatei z;
+    PRUEF(z.oeffne(alt_pfad));
+    PRUEF(z.neu());
+    PRUEF(z.meldung().find("352096") != std::string::npos && z.meldung().find("neu angelegt") != std::string::npos);
+    PRUEF(z.daten()->version == 3u && z.daten()->groesse == sizeof(cdj_z_datei));
+    const unsigned char* roh = reinterpret_cast<const unsigned char*>(z.daten());
+    size_t rest = 0;
+    for (size_t i = 64; i < sizeof(cdj_z_datei); ++i) rest += roh[i] != 0;
+    PRUEF(rest == 0);
+    unlink(alt_pfad.c_str());
+  }
+  //    Same size, but version 1 in the header (a core with another layout and the same size): recreated as well.
   {
     cdj::ZustandDatei z;
     PRUEF(z.oeffne(pfad));

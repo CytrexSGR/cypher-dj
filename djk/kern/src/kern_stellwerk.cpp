@@ -254,6 +254,22 @@ void Kern::einsortieren25(const Befehl& c) {
       if (n == -1) decks_abbruch(c.quelle, c.plan);  // Scheibe 31: wartende Deck-Teile des Plans (§4.3)
       break;
     }
+    case Befehl::HAND_FREI: {  // §4.3 /k/hand/frei: a project switch is a fresh start (Andreas, 2026-11-02); only Andreas' hand
+      if (q != sw::Quelle::andreas) {
+        quittung(c.id, c.quelle, 6, sample_, beat0, "nur_andreas");
+        break;
+      }
+      sw_->hand_frei(c.liste, sample_);
+      // A restart that restores holders replays them in the SECOND cycle (nachreichen_in_, teile_nachreichen): drop the named ones from that list,
+      // else the holder would come back after this command.
+      int n = 0;
+      for (int i = 0; i < n_mensch_wieder_; ++i)
+        if (!sw::pfad_in_liste(c.liste, sw_->tabelle().def(mensch_wieder_[i]).pfad)) mensch_wieder_[n++] = mensch_wieder_[i];
+      n_mensch_wieder_ = n;
+      quittung(c.id, c.quelle, 1, sample_, beat0);
+      quittung(c.id, c.quelle, 3, sample_, beat0);
+      break;
+    }
     case Befehl::KI_STOPP: sw_->ki_stopp(c.id, q); break;  // §4.7 (F13: wartende cypher-Loops verwirft Kern::audio)
     case Befehl::KI_FREI: sw_->ki_frei(c.id, q); break;
     case Befehl::KI_SPUR:
@@ -448,6 +464,23 @@ void Kern::pegel_melden(int64_t n0, int n) {
       melde(e);
     }
   }
+  for (int k = 0; k < ARR_INS_KOMP; ++k) {  // 1.10 slice 4a: ins/komp/<n>, the gain reduction of every pooled insert stage that computed in the last block
+    if (!arr_->inserts().lief(k)) continue;
+    Ereignis e{};
+    e.art = Ereignis::INS_GR;
+    e.sample = n0;
+    {  // "ins/komp/<n>", n = 1..12, written by hand: no snprintf in the callback (like the neighbours)
+      const char kopf[] = "ins/komp/";
+      std::memcpy(e.pfad, kopf, sizeof kopf - 1);
+      char* z = e.pfad + sizeof kopf - 1;
+      const int n = k + 1;
+      if (n >= 10) *z++ = static_cast<char>('0' + n / 10);
+      *z++ = static_cast<char>('0' + n % 10);
+      *z = '\0';
+    }
+    e.wert = arr_->inserts().gr_db(k);
+    melde(e);
+  }
   melden("master", Mixer::PEGEL_MASTER);
   melden("cue", Mixer::PEGEL_CUE);
   for (int k = 1; k <= EIN_PAARE; ++k) {  // I08: ein/<k>, immer (ohne Verbindung −200)
@@ -470,6 +503,138 @@ void Kern::pegel_melden(int64_t n0, int n) {
   z.ein_flanke = ein_bank_.flanke(1);
   melde(z);
   rec_zustand_melden(n0, n);
+}
+
+// 1.12 slice 3, D1: a grip is every hand step the Stellwerk applied to a track regulator in the sub-block just processed (value or touch; the holder does not matter).
+// It overrides the lane of that track and field from the grip sample on. Order in audio(): hand, prozess, aenderungen, arr_->verlauf, HERE, arr_->block.
+// Only spur/1..32/{fader,pan,mute,solo} count; the reverse table of the Arrangement has exactly these 128 entries. Not a grip: the touches teile_nachreichen replays
+// after a restart (nachreichen_sperre_, cleared after the first sub-block of that cycle). Allocation-free.
+void Kern::arr_griffe_pruefen(int64_t s0, int m) {
+  if (nachreichen_sperre_) {
+    nachreichen_sperre_ = false;
+    return;
+  }
+  auto_punkte_melden(s0, m);   // D12: before the override loop, which only reads the same grip signal
+  if (!arr_->auto_spielt()) return;   // D5: a stopped transport takes no override
+  for (int i = 0; i < ARR_SPUREN; ++i)
+    for (int f = 0; f < 4; ++f) {
+      const int r = arr_->auto_regler(i, f);
+      int64_t sample;
+      if (r >= 0 && sw_->griff_im_zyklus(r, sample)) arr_->auto_uebersteuern(i, f, true, sample);
+    }
+}
+
+// 1.12 S3 (D12, D13): the points of a hand gesture on an ARMED track, for /e/auto_punkt. Called once per sub-block after the grips are known. A grip (the same signal that
+// overrides the lane: a hand step the Stellwerk applied, value or touch) while the transport PLAYS makes the point of that regulator pending: project beat at the grip sample
+// (computed now, stored with the value: after a seam the origin has moved, so it can never be recomputed at send time), value of the regulator at the end of the sub-block.
+// A newer grip replaces a pending point. The point is sent at once when the 50 Hz window of the regulator (REGLER_MELDUNG_ABSTAND from the last sent point) is free, else it
+// waits for the window to end (trailing value: the last value of a gesture always arrives). A stopped transport takes no new point but sends the pending one. A full
+// event ring keeps the point pending. Allocation-free.
+void Kern::auto_punkte_melden(int64_t s0, int m) {
+#ifndef CYPHERDJ_MUTATION_ARR_PUNKT_OHNE_ARM
+  if (auto_armiert_ == 0) return;
+#endif
+  const int64_t ende = s0 + m;
+#ifdef CYPHERDJ_MUTATION_ARR_PUNKT_IM_STOPP   // error case: the stopped transport reports like a playing one
+  const bool spielt = true;
+#else
+  const bool spielt = arr_->auto_spielt();
+#endif
+  const Karte& karte = plan_.karte();
+  for (int i = 0; i < ARR_SPUREN; ++i) {
+#if defined(CYPHERDJ_MUTATION_ARR_PUNKT_OHNE_ARM)
+    // error case: armed or not, every track reports
+#elif defined(CYPHERDJ_MUTATION_ARR_PUNKT_ALLE_SPUREN)
+    // error case: one armed track arms them all (auto_armiert_ > 0 is checked above)
+#else
+    if (!auto_arm_[i]) continue;
+#endif
+    for (int f = 0; f < Arrangement::AUTO_FELDER; ++f) {
+      AutoPunkt& p = auto_punkt_[i][f];
+      const int r = arr_->auto_regler(i, f);
+      int64_t gs;
+#ifdef CYPHERDJ_MUTATION_ARR_PUNKT_PAARUNG_ERSTER   // error case: the beat of the FIRST grip of the sub-block with the value at its END
+      if (spielt && r >= 0 && sw_->griff_im_zyklus(r, gs)) {
+        p.beat = arr_->projekt_beat_bei(karte, gs);
+        p.wert = sw_->wert_fest(r);
+        p.aus = true;
+      }
+#else
+      if (spielt && r >= 0 && sw_->griff_letzter_im_zyklus(r, gs)) {
+#ifdef CYPHERDJ_MUTATION_ARR_PUNKT_NACHZUEGLER_ERSTER   // error case: a held point is never replaced, the first value of the window is sent
+        if (!p.aus)
+#endif
+        {
+#ifdef CYPHERDJ_MUTATION_ARR_PUNKT_BEAT_JETZT   // error case: the beat is taken when the block ends, not at the grip sample
+          p.beat = arr_->projekt_beat_bei(karte, ende);
+#else
+          p.beat = arr_->projekt_beat_bei(karte, gs);
+#endif
+          // D12: beat and value of ONE sample, the last grip of the sub-block. After a grip the Stellwerk value stays where the hand put it until the next step (a plan part
+          // cannot take a regulator the human holds, setze_direkt runs in the command phase), so the value after the sub-block IS the value at the last grip. A switch
+          // (mute, solo) has the target of its ramp, which holds from the grip sample on (wert_fest).
+          p.wert = sw_->wert_fest(r);
+          p.aus = true;
+        }
+      }
+#endif
+      if (!p.aus) continue;
+#ifdef CYPHERDJ_MUTATION_ARR_PUNKT_OHNE_DROSSEL   // error case: no rate cap, every grip is sent
+      const bool frei = true;
+#else
+      const bool frei = ende - p.gemeldet >= sw::REGLER_MELDUNG_ABSTAND;
+#endif
+#ifdef CYPHERDJ_MUTATION_ARR_PUNKT_STOPP_VERWIRFT   // error case: what is held when the transport stops is dropped
+      if (!spielt) {
+        p.aus = false;
+        continue;
+      }
+#endif
+#ifdef CYPHERDJ_MUTATION_ARR_PUNKT_OHNE_NACHZUEGLER   // error case: a point inside the window is dropped, nothing trails
+      if (!frei) {
+        p.aus = false;
+        continue;
+      }
+#endif
+      if (!frei && spielt) continue;   // held until the window ends
+      Ereignis x{};
+      x.art = Ereignis::AUTO_PUNKT;
+      x.sample = ende;
+      x.beat = p.beat;
+      x.wert = p.wert;
+      {   // "spur/<n>/<field>": the one helper of the neighbours (no snprintf in the callback), then the field name of the contract
+        spur_pegel_name(i, x.pfad);
+        size_t o = std::strlen(x.pfad);
+        x.pfad[o++] = '/';
+        const auto ziel = cypherdj::osc::werte::auto_ziel[static_cast<size_t>(f)];
+        for (size_t c = 0; c < ziel.size() && o + 1 < sizeof x.pfad; ++c) x.pfad[o++] = ziel[c];
+        x.pfad[o] = '\0';
+      }
+      if (!ereignisse_->schiebe(x)) {   // the ring is full: the point stays pending and goes in the next sub-block that finds room (a newer grip replaces it, a disarm drops it: no other loss)
+#ifdef CYPHERDJ_MUTATION_ARR_PUNKT_VOLL_VERWIRFT   // error case: a point that finds the ring full is dropped
+        p.aus = false;
+#endif
+        continue;
+      }
+      p.aus = false;
+      p.gemeldet = ende;
+    }
+  }
+}
+
+// D4 (the core side of "/k/arr/auto an 0|1"): the pickup of D2 for the page path. uebersteuern = true: the Stellwerk value is first set to the value the lane played
+// last, then the override starts, so the value stays there until the next /k/teil. The value is only taken when the lane has really played (auto_gespielt, the
+// condition of the Stellwerk pickup as well): a lane just swapped in or never played has no value, then nothing is set and the override just starts. An override
+// never starts without a lane or while the transport stands (D5). uebersteuern = false (re-enable) also works while stopped (D6): the state is cleared.
+bool Kern::auto_uebersteuern(int spur, int feld, bool uebersteuern) {
+  const int r = arr_->auto_regler(spur, feld);
+  if (r < 0) return false;
+#ifdef CYPHERDJ_MUTATION_ARR_AUTO_SETZE_OHNE_WAR
+  if (uebersteuern && arr_->auto_kann_uebersteuern(spur, feld)) sw_->setze_direkt(r, arr_->auto_letzter_wert(spur, feld));   // error case: no check that the lane has played
+#else
+  if (uebersteuern && arr_->auto_kann_uebersteuern(spur, feld) && arr_->auto_gespielt(spur, feld)) sw_->setze_direkt(r, arr_->auto_letzter_wert(spur, feld));
+#endif
+  return arr_->auto_uebersteuern(spur, feld, uebersteuern, sample_);
 }
 
 void Kern::audio(int64_t n0, int n) {
@@ -495,8 +660,14 @@ void Kern::audio(int64_t n0, int n) {
       decks_verlauf(a[i].regler, a[i].verlauf);  // Scheibe 31: stem/* ins Deck
       keylock_verlauf(a[i].regler, a[i].verlauf, s0, m);  // Keylock Task 3: Regler keylock an Decks und Boxen
       arr_->verlauf(a[i].regler, a[i].verlauf);  // D1 K1: spur/<n>/* ins Modul Arrangement (Verlauf je Sample)
-      if (const int o = bk_ort_[a[i].regler]; o >= 0) bk_wert_[o >> 3][o & 7] = a[i].verlauf[m - 1];  // S5r K6: Endwert des Blocks (m wie keylock_verlauf), die FFI glättet
+      if (const int o = bk_ort_[a[i].regler]; o >= 0) {
+#ifdef CYPHERDJ_MUTATION_BK_RAMPE_TOTZONE   // failure case S23: a change smaller than 0.005 inside one block is dropped, so every slow ramp stands still and only jumps get through
+        if (std::fabs(a[i].verlauf[m - 1] - a[i].verlauf[0]) < 0.005f) continue;
+#endif
+        bk_wert_[o >> 3][o & 7] = a[i].verlauf[m - 1];  // S5r K6: Endwert des Blocks (m wie keylock_verlauf), die FFI glättet
+      }
     }
+    arr_griffe_pruefen(s0, m);  // 1.12 S3 (D1): grips on spur/n/{fader,pan,mute,solo} override the lanes from their sample, before arr_->block
     decks_block(s0, m);  // Scheibe 31: Decks in die Eingänge deck/1..4, Starts und Stopps am Sample
     ErzAusloeser ausl;
     erz_->block(karte, s0, m, erz_l_, erz_r_, midi_aus_, zyklus_n0_, &ausl);  // Plan 2026-09-27 + Studio S5 (MIDI-Ströme)
@@ -515,6 +686,7 @@ void Kern::audio(int64_t n0, int n) {
     // erz/4, Metronom in die Master-Summe vor dem Limiter oder in die PFL-Summe. Ein KI-Stopp beendet Cyphers wartenden Start und ihren Freeze, einen laufenden Transport nicht (E-a).
     if (sw_->ki_gestoppt()) arr_->ki_stopp(s0, karte);
     arr_bk_->takt(karte.beat_at((double)s0), karte.bpm_at((double)s0) / 60.0 / 48000.0);   // S20: beat and tempo for the graphs of the bk tracks
+    arr_->dj_schluessel(erz_l_, erz_r_);   // 1.10 slice 5 U2b (E6, E7): deck/1..4 and erz/1 (indices 0..4) for the sidechain keys; always handed, live and in a render (a render's inputs are silent)
     arr_->block(karte, s0, m, erz_l_[arr_kanal_], erz_r_[arr_kanal_], mixer_->summe_eingang_l(),
                 mixer_->summe_eingang_r(), mixer_->pfl_eingang_l(), mixer_->pfl_eingang_r());
     std::memcpy(pm_abgriff_l_ + off, arr_->pm_l(), sizeof(float) * static_cast<size_t>(m));   // 1.10: Export-Abgriff (Spec 5.4)
@@ -597,6 +769,19 @@ void Kern::audio(int64_t n0, int n) {
     }
 #endif
     mixer_->fx_takt(karte.beat_at((double)s0), karte.bpm_at((double)s0) / 60.0 / 48000.0);  // Plan 3: LFO aus dem Beat
+    {   // voice channel (stimme.h): the input pair ein_<k> of this sub-block into the mixer, which sums it in front of the limiter
+#ifdef CYPHERDJ_MUTATION_STIMME_IMMER_AN
+      const int k = mixer_->stimme().an() ? mixer_->stimme().eingang() : 4;   // error case: pair 4 always reaches the mixer
+#else
+      const int k = mixer_->stimme().an() ? mixer_->stimme().eingang() : 0;
+#endif
+      const float* vl = ein_bank_.l(k);
+      const float* vr = ein_bank_.r(k);
+      if (vl && vr) {
+        std::memcpy(mixer_->stimme_eingang_l(), vl + off, sizeof(float) * static_cast<size_t>(m));
+        std::memcpy(mixer_->stimme_eingang_r(), vr + off, sizeof(float) * static_cast<size_t>(m));
+      }
+    }
     mixer_->verarbeite(m, links_ + off, rechts_ + off, cue_l_ + off, cue_r_ + off);
     {  // Baukasten S3c: abgelöste Kanal-Graphen zur Freigabe in den Netz-Faden (dasselbe Ereignis wie beim Erzeuger)
 #ifndef CYPHERDJ_MUTATION_KANAL_GRAPH_NICHT_ABHOLEN
@@ -764,6 +949,9 @@ void Kern::teile_nachreichen() {
   ki_stopp_wieder_ = false;
   for (int i = 0; i < n_mensch_wieder_; ++i)
     sw_->hand(sw::Griff{s, mensch_wieder_[i], sw::GriffArt::beruehrung, 0.0f, nullptr});
+#ifndef CYPHERDJ_MUTATION_ARR_AUTO_UEBER_NACHREICHEN_GRIFF
+  nachreichen_sperre_ = n_mensch_wieder_ > 0;   // 1.12 S3: these touches restore a holder, they are no grips (no pickup, no override)
+#endif
   n_mensch_wieder_ = 0;
   const sw::ReglerTabelle& tab = sw_->tabelle();
   for (int i = 0; i < TeilSchatten::MAX; ++i) {

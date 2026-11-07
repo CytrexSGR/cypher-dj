@@ -1,0 +1,37 @@
+{
+ "schema": 1,
+ "name": "Snare Presence",
+ "geraet_typ": "effekt",
+ "geraet": "saett",
+ "werte": {
+  "drive": 12,
+  "out": -6,
+  "mix": 0.8
+ },
+ "beschreibung": {
+  "art": "saturation",
+  "unterart": "distortion",
+  "charakter": [
+   "punchy",
+   "bright",
+   "aggressive"
+  ],
+  "genre": [
+   "breaks",
+   "garage",
+   "tech_house"
+  ],
+  "einsatz": [
+   "mixdown"
+  ],
+  "energie": 4,
+  "text": "Harmonics on the transient make a snare cut through a dense mix."
+ },
+ "tags": [
+  "snare",
+  "presence"
+ ],
+ "notiz": "Distortion on transients adding presence for snares: Snoman p.196; drive is practice.",
+ "angelegt": "2026-11-02T00:00:00.000Z",
+ "geaendert": "2026-11-02T00:00:00.000Z"
+}

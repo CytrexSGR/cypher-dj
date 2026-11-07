@@ -1,0 +1,42 @@
+{
+ "schema": 1,
+ "name": "Squelch Acid",
+ "geraet_typ": "instrument",
+ "geraet": "rb338",
+ "werte": {
+  "lautstaerke": 0.2511886432,
+  "wellenform": false,
+  "cutoff": 220,
+  "resonanz": 0.85,
+  "env_mod": 0.6,
+  "decay": 0.35,
+  "accent": 0.7
+ },
+ "beschreibung": {
+  "art": "bass",
+  "unterart": "acid",
+  "charakter": [
+   "aggressive",
+   "dirty",
+   "metallic"
+  ],
+  "genre": [
+   "acid",
+   "techno",
+   "electro"
+  ],
+  "einsatz": [
+   "drop",
+   "build"
+  ],
+  "energie": 5,
+  "text": "High resonance plus a deep envelope sweep gives the squelching, chirping acid line."
+ },
+ "tags": [
+  "303",
+  "squelch"
+ ],
+ "notiz": "Resonance near three quarters follows Welsh p.21; the envelope depth is practice.",
+ "angelegt": "2026-11-02T00:00:00.000Z",
+ "geaendert": "2026-11-02T00:00:00.000Z"
+}

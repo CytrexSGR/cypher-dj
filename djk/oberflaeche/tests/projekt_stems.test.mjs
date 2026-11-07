@@ -53,8 +53,8 @@ test('S6 Ziel: genau ein Audio-Clip (D14), Loop (D14), Bereich im Clip, Grenze 6
   const lang = lauf(projekt({ warp: false }), [{ befehl: 'clip_aendern', clip_id: 'c1', laenge_beats: 1300 }]);
   assert.equal(fehler(() => stemsPlan(lang, { clip_id: 'c1' })), 'stems_zu_gross');
   let voll = p;
-  for (let i = voll.spuren.length; i < 29; i++) voll = lauf(voll, [{ befehl: 'spur_neu', art: 'audio' }]);
-  assert.equal(fehler(() => stemsPlan(voll, { clip_id: 'c1' })), 'zu_viele_spuren');            // 29 + 4 > 32
+  for (let i = voll.spuren.length; i < 27; i++) voll = lauf(voll, [{ befehl: 'spur_neu', art: 'audio' }]);
+  assert.equal(fehler(() => stemsPlan(voll, { clip_id: 'c1' })), 'zu_viele_spuren');            // 27 + 6 > 32: the plan counts all six (D5)
   assert.equal(fehler(() => stemsPlan(lauf(voll, [{ befehl: 'spur_loeschen', spur_id: 's2' }]), { clip_id: 'c1' })), null);
 });
 
@@ -75,13 +75,13 @@ test('S6 Stem-Warp: W_stem(b) + F0/48000 = W_orig(b) im ganzen Bereich, Felder g
   assert.deepEqual(mitBeats.beats, { raster: '1/8', loop: 'aus', huelle: 50 });
 });
 
-test('S6 neuer Stand: Original im Bereich stumm, vier Spuren darunter in einer Gruppe, Clips mit Warp (F4, D8)', () => {
+test('S6 neuer Stand: Original im Bereich stumm, six tracks below in einer Gruppe, Clips mit Warp (F4, D8)', () => {
   const p = projekt();
   const z = stemsPlan(p, { clip_id: 'c1', von_beat: 10, bis_beat: 18 });
   const dateien = Object.fromEntries(STEMS.map((s, i) => [s, { sha256: String(i + 1).repeat(64), pfad: `/p/stems/7-groove-${s}.wav` }]));
   const r = baueStemsProjekt(p, z, dateien, 'andreas');
   const q = r.projekt;
-  assert.deepEqual(q.spuren.map((s) => s.name), ['Loop', 'Groove Drums', 'Groove Bass', 'Groove Other', 'Groove Vocals', 'Andere']);
+  assert.deepEqual(q.spuren.map((s) => s.name), ['Loop', 'Groove Drums', 'Groove Bass', 'Groove Other', 'Groove Vocals', 'Groove Guitar', 'Groove Piano', 'Andere']);
   const orig = q.spuren[0].clips;
   assert.deepEqual(orig.map((c) => [c.start_beat, c.laenge_beats, c.stumm === true]), [[8, 2, false], [10, 8, true], [18, 6, false]]);
   const g = q.gruppen.at(-1);
@@ -94,9 +94,16 @@ test('S6 neuer Stand: Original im Bereich stumm, vier Spuren darunter in einer G
     assert.equal(c.warp.versatz_beats, 10 - 8 + 2);
     assert.equal(c.warp.transpose_st, 3);
   }
-  assert.deepEqual(r.spuren, q.spuren.slice(1, 5).map((s) => s.id));
+  assert.deepEqual(r.spuren, q.spuren.slice(1, 7).map((s) => s.id));
   assert.equal(r.hinweis, undefined);
-  assert.ok(q.spuren.slice(1, 5).every((s) => s.fader_db === 0 && s.pan === 0));
+  assert.ok(q.spuren.slice(1, 7).every((s) => s.fader_db === 0 && s.pan === 0));
+  // four placed (D4: guitar and piano dropped by werkstatt.stems): only those four tracks, in order
+  const vier = Object.fromEntries(['drums', 'bass', 'other', 'vocals'].map((s) => [s, dateien[s]]));
+  const r4 = baueStemsProjekt(p, z, vier, 'andreas');
+  assert.deepEqual(r4.projekt.spuren.map((s) => s.name), ['Loop', 'Groove Drums', 'Groove Bass', 'Groove Other', 'Groove Vocals', 'Andere']);
+  const fuenf = { ...vier, piano: dateien.piano };
+  assert.deepEqual(baueStemsProjekt(p, z, fuenf, 'andreas').projekt.spuren.map((s) => s.name).slice(1, 6),
+    ['Groove Drums', 'Groove Bass', 'Groove Other', 'Groove Vocals', 'Groove Piano']);
 });
 
 test('S6 neuer Stand: Stem-Spuren erben Fader und Pan der Quellspur (Review MINOR 6), der Ausgang ist die neue Gruppe', () => {
@@ -126,6 +133,11 @@ test('S6 Veraltet (D16): Start, Länge, sha, Marker, Loop, weg; Gain ist egal (N
   const z = stemsPlan(p, { clip_id: 'c1', von_beat: 10, bis_beat: 18 });
   assert.equal(pruefeNochGleich(p, z), null);
   assert.equal(pruefeNochGleich(lauf(p, [{ befehl: 'clip_aendern', clip_id: 'c1', gain_db: -6 }]), z), null);
+  let eng = p;                                                                   // D5: after the run the placed count decides
+  for (let i = eng.spuren.length; i < 28; i++) eng = lauf(eng, [{ befehl: 'spur_neu', art: 'audio' }]);
+  assert.equal(pruefeNochGleich(eng, z, 4), null);                              // 28 + 4 = 32
+  assert.equal(pruefeNochGleich(eng, z, 5), 'zu_viele_spuren');
+  assert.equal(pruefeNochGleich(eng, z), 'zu_viele_spuren');                    // default: all six
   for (const b of [{ befehl: 'clip_aendern', clip_id: 'c1', start_beat: 9 }, { befehl: 'clip_aendern', clip_id: 'c1', laenge_beats: 9 },
     { befehl: 'warp_setzen', clip_id: 'c1', warp: { ...W, marker: [[0, 0], [11, 16]] } }, { befehl: 'clip_aendern', clip_id: 'c1', loop_beats: 4 },
     { befehl: 'clip_loeschen', clip_id: 'c1' }]) {

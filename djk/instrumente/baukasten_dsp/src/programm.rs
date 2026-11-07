@@ -16,6 +16,11 @@ use crate::vocoder::Vocoder;
 use crate::sampler::{Eingabe, Einstellung, Sampler};
 use crate::roehre::{Roehre, RoehrenSatz};
 use crate::svf::Svf;
+use crate::wavetable::{Eingabe as WtEingabe, Einstellung as WtEinstellung, Stimme as WtStimme, Tabelle};
+use crate::resonator::{Eingabe as RsEingabe, Einstellung as RsEinstellung, Satz, Stimme as RsStimme};
+use crate::metall::{Einstellung as MtEinstellung, Stimme as MtStimme};
+use crate::granular::{Eingabe as GrEingabe, Einstellung as GrEinstellung, Material as GrMaterial, Stimme as GrStimme};
+use crate::saite::{Eingabe as SaEingabe, Einstellung as SaEinstellung, Stimme as SaStimme};
 use rb_dsp::Ladder;
 use saett_dsp::Adaa1;
 
@@ -38,10 +43,11 @@ pub enum Schritt {
     Konst { aus: usize, wert: f32 },
     /// `nr` 0-basiert; Wert min..max linear oder (log) exponentiell über den Reglerweg 0..1
     Regler { aus: usize, nr: usize, min: f32, max: f32, log: bool },
-    Saege { hz: Quelle, sync: Quelle, aus: usize, zyklus: usize, osz: [Osz; MAX_STIMMEN] },
-    Puls { hz: Quelle, pwm: Quelle, sync: Quelle, aus: usize, zyklus: usize, osz: [Osz; MAX_STIMMEN] },
-    Dreieck { hz: Quelle, sync: Quelle, aus: usize, zyklus: usize, osz: [Osz; MAX_STIMMEN] },
-    Sinus { hz: Quelle, fm: Quelle, sync: Quelle, aus: usize, zyklus: usize, osz: [Sinus; MAX_STIMMEN] },
+    /// `hart`: the band-limited hard sync input, `Some` only with an edge (then `sync` has none); `hart_aus` its output slot
+    Saege { hz: Quelle, sync: Quelle, aus: usize, zyklus: usize, osz: [Osz; MAX_STIMMEN], hart: Option<Quelle>, hart_aus: usize },
+    Puls { hz: Quelle, pwm: Quelle, sync: Quelle, aus: usize, zyklus: usize, osz: [Osz; MAX_STIMMEN], hart: Option<Quelle>, hart_aus: usize },
+    Dreieck { hz: Quelle, sync: Quelle, aus: usize, zyklus: usize, osz: [Osz; MAX_STIMMEN], hart: Option<Quelle>, hart_aus: usize },
+    Sinus { hz: Quelle, fm: Quelle, sync: Quelle, aus: usize, zyklus: usize, osz: [Sinus; MAX_STIMMEN], hart_aus: usize },
     Rauschen { aus: usize, r: [Rauschen; MAX_STIMMEN] },
     /// `versatz` (beats) and `einmal` (ramp once, then hold) apply to the beat-synced mode (`takt` > 0) only (S21)
     Lfo { rate: Quelle, trig: Quelle, aus: usize, form: u8, neustart: bool, takt: f32, versatz: f64, einmal: bool, l: [Lfo; MAX_STIMMEN] },
@@ -86,6 +92,25 @@ pub enum Schritt {
     Vocoder { x: Quelle, l: Quelle, r: Quelle, zisch: Quelle, mix: Quelle, wl: usize, wr: usize, voreinstellung: [f32; 2], v: Vocoder },
     /// Sum point (S21): convolution on Σ(x + l) left and Σ(x + r) right, result in voice 0; mix from voice 0
     Faltung { x: Quelle, l: Quelle, r: Quelle, mix: Quelle, wl: usize, wr: usize, f: Box<Faltung> },
+    /// Per voice: wavetable oscillator with up to 7 unison copies (wavetable.rs). `t` is the node's table, shared read-only by
+    /// all voices; the voices are boxed so the step enum does not grow by their size. `aus` is the sum without pan.
+    Wavetable { hz: Quelle, trig: Quelle, pos: Quelle, verstimmung: Quelle, breite: Quelle, wl: usize, wr: usize, aus: usize, e: WtEinstellung, t: Box<Tabelle>, w: Box<[WtStimme; MAX_STIMMEN]> },
+    /// Per voice: modal resonator bank, up to 32 modes (resonator.rs). `satz` is the node's mode set, shared read-only by
+    /// all voices; the voices are boxed so the step enum does not grow by their size. `ein` in the order of `RsEingabe`.
+    Resonator { ein: [Quelle; 9], aus: usize, e: RsEinstellung, satz: Box<Satz>, v: Box<[RsStimme; MAX_STIMMEN]> },
+    /// Per voice (type 33): metallic oscillator bank for hats and cymbals (metall.rs). Inputs in the order of `metall::EIN`;
+    /// the voices are boxed so the step enum does not grow by their size.
+    Metall { ein: [Quelle; 8], aus: usize, huelle: usize, e: MtEinstellung, m: Box<[MtStimme; MAX_STIMMEN]> },
+    /// Per voice: six-operator FM (fm.rs); the voices are boxed so the step enum does not grow by their size
+    Fm { hz: Quelle, gate: Quelle, trig: Quelle, vel: Quelle, index: Quelle, rueck: Quelle, zeit: Quelle, aus: usize, e: crate::fm::Einstellung, v: Box<[crate::fm::Stimme; MAX_STIMMEN]> },
+    /// Per voice: granular engine with a fixed grain pool (granular.rs, type 36). `x` is recorded once per sample as the sum over
+    /// the voices into the node's ring buffer (`m`, shared read-only by the voices); `frieren` is read from voice 0 for it.
+    Granular { hz: Quelle, trig: Quelle, gate: Quelle, x: Quelle, groesse: Quelle, dichte: Quelle, pos: Quelle, pos_zufall: Quelle, tonhoehe: Quelle,
+               ton_zufall: Quelle, breite: Quelle, fenster: Quelle, frieren: Quelle, wl: usize, wr: usize, e: GrEinstellung, m: Box<GrMaterial>,
+               g: Box<[GrStimme; MAX_STIMMEN]> },
+    /// Per voice: physical string model (saite.rs). Each voice owns its delay lines (allocated at translation); the voices
+    /// are boxed so the step enum does not grow by their size.
+    Saite { x: Quelle, hz: Quelle, trig: Quelle, vel: Quelle, ausklang: Quelle, daempfung: Quelle, hell: Quelle, lage: Quelle, koerper_mix: Quelle, aus: usize, e: SaEinstellung, s: Box<[SaStimme; MAX_STIMMEN]> },
     /// Host-Audio (S3c): nur Stimme 0, wie die Summenpunkte; der Ausgang summiert über alle Stimmen
     Eingang { wl: usize, wr: usize },
     /// links = x + l, rechts = x + r, je über alle Stimmen summiert
@@ -345,6 +370,15 @@ impl Programm {
                 Schritt::Vocoder { v, .. } => v.zuruecksetzen(),
                 Schritt::Faltung { f, .. } => f.zuruecksetzen(),
                 Schritt::Sampler { s, .. } => *s = [Sampler::default(); MAX_STIMMEN],
+                Schritt::Wavetable { w, e, .. } => **w = std::array::from_fn(|i| WtStimme::neu(i, e)),
+                Schritt::Resonator { v, e, .. } => **v = std::array::from_fn(|i| RsStimme::neu(i, e)),
+                Schritt::Metall { m, e, .. } => **m = std::array::from_fn(|i| MtStimme::neu(i, e)),
+                Schritt::Fm { v, .. } => **v = [crate::fm::Stimme::neu(); MAX_STIMMEN],
+                Schritt::Granular { m, g, e, .. } => {
+                    m.zuruecksetzen();
+                    **g = std::array::from_fn(|i| GrStimme::neu(i, e));
+                }
+                Schritt::Saite { s, e, .. } => s.iter_mut().enumerate().for_each(|(i, v)| v.zuruecksetzen(i, e)),
                 Schritt::Roehre { r1, r2, .. } => {
                     *r1 = [Roehre::default(); MAX_STIMMEN];
                     *r2 = [Roehre::default(); MAX_STIMMEN];
@@ -397,41 +431,76 @@ impl Programm {
                     let w = if *log { *min * (*max / *min).powf(k) } else { *min + (*max - *min) * k };
                     slots[*aus] = [w; MAX_STIMMEN];
                 }
-                Schritt::Saege { hz: q, sync, aus, zyklus, osz } => {
+                Schritt::Saege { hz: q, sync, aus, zyklus, osz, hart, hart_aus } => {
                     let (f, sy) = (spur(*q, slots, vorher), spur(*sync, slots, vorher));
-                    let (mut o, mut z) = ([0.0; MAX_STIMMEN], [0.0; MAX_STIMMEN]);
-                    for i in 0..n {
-                        (o[i], z[i]) = osz[i].saege((f[i] / sr).clamp(0.0, 0.5), sy[i]);
+                    let (mut o, mut z, mut v) = ([0.0; MAX_STIMMEN], [0.0; MAX_STIMMEN], [0.0; MAX_STIMMEN]);
+                    match hart {
+                        None => for i in 0..n {
+                            (o[i], z[i]) = osz[i].saege((f[i] / sr).clamp(0.0, 0.5), sy[i]);
+                            v[i] = osz[i].hart();
+                        },
+                        Some(h) => {
+                            let h = spur(*h, slots, vorher);
+                            for i in 0..n {
+                                (o[i], z[i]) = osz[i].saege_hart((f[i] / sr).clamp(0.0, 0.5), h[i]);
+                                v[i] = osz[i].hart();
+                            }
+                        }
                     }
                     slots[*aus] = o;
                     slots[*zyklus] = z;
+                    slots[*hart_aus] = v;
                 }
-                Schritt::Puls { hz: q, pwm, sync, aus, zyklus, osz } => {
+                Schritt::Puls { hz: q, pwm, sync, aus, zyklus, osz, hart, hart_aus } => {
                     let (f, w, sy) = (spur(*q, slots, vorher), spur(*pwm, slots, vorher), spur(*sync, slots, vorher));
-                    let (mut o, mut z) = ([0.0; MAX_STIMMEN], [0.0; MAX_STIMMEN]);
-                    for i in 0..n {
-                        (o[i], z[i]) = osz[i].puls((f[i] / sr).clamp(0.0, 0.5), 0.5 + 0.45 * w[i].clamp(-1.0, 1.0), sy[i]);
+                    let (mut o, mut z, mut v) = ([0.0; MAX_STIMMEN], [0.0; MAX_STIMMEN], [0.0; MAX_STIMMEN]);
+                    match hart {
+                        None => for i in 0..n {
+                            (o[i], z[i]) = osz[i].puls((f[i] / sr).clamp(0.0, 0.5), 0.5 + 0.45 * w[i].clamp(-1.0, 1.0), sy[i]);
+                            v[i] = osz[i].hart();
+                        },
+                        Some(h) => {
+                            let h = spur(*h, slots, vorher);
+                            for i in 0..n {
+                                (o[i], z[i]) = osz[i].puls_hart((f[i] / sr).clamp(0.0, 0.5), 0.5 + 0.45 * w[i].clamp(-1.0, 1.0), h[i]);
+                                v[i] = osz[i].hart();
+                            }
+                        }
                     }
                     slots[*aus] = o;
                     slots[*zyklus] = z;
+                    slots[*hart_aus] = v;
                 }
-                Schritt::Dreieck { hz: q, sync, aus, zyklus, osz } => {
+                Schritt::Dreieck { hz: q, sync, aus, zyklus, osz, hart, hart_aus } => {
                     let (f, sy) = (spur(*q, slots, vorher), spur(*sync, slots, vorher));
-                    let (mut o, mut z) = ([0.0; MAX_STIMMEN], [0.0; MAX_STIMMEN]);
-                    for i in 0..n {
-                        (o[i], z[i]) = osz[i].dreieck((f[i] / sr).clamp(0.0, 0.5), sy[i]);
+                    let (mut o, mut z, mut v) = ([0.0; MAX_STIMMEN], [0.0; MAX_STIMMEN], [0.0; MAX_STIMMEN]);
+                    match hart {
+                        None => for i in 0..n {
+                            (o[i], z[i]) = osz[i].dreieck((f[i] / sr).clamp(0.0, 0.5), sy[i]);
+                            v[i] = osz[i].hart();
+                        },
+                        Some(h) => {
+                            let h = spur(*h, slots, vorher);
+                            for i in 0..n {
+                                (o[i], z[i]) = osz[i].dreieck_hart((f[i] / sr).clamp(0.0, 0.5), h[i]);
+                                v[i] = osz[i].hart();
+                            }
+                        }
                     }
                     slots[*aus] = o;
                     slots[*zyklus] = z;
+                    slots[*hart_aus] = v;
                 }
-                Schritt::Sinus { hz: q, fm, sync, aus, zyklus, osz } => {
+                Schritt::Sinus { hz: q, fm, sync, aus, zyklus, osz, hart_aus } => {
                     let (f, m, sy) = (spur(*q, slots, vorher), spur(*fm, slots, vorher), spur(*sync, slots, vorher));
-                    let (mut o, mut z) = ([0.0; MAX_STIMMEN], [0.0; MAX_STIMMEN]);
+                    let (mut o, mut z, mut v) = ([0.0; MAX_STIMMEN], [0.0; MAX_STIMMEN], [0.0; MAX_STIMMEN]);
                     for i in 0..n {
                         (o[i], z[i]) = osz[i].sample(((f[i] + m[i]) / sr).clamp(-0.5, 0.5), sy[i]);
+                        v[i] = osz[i].hart();
                     }
                     slots[*aus] = o;
                     slots[*zyklus] = z;
+                    slots[*hart_aus] = v;
                 }
                 Schritt::Rauschen { aus, r } => {
                     let mut o = [0.0; MAX_STIMMEN];
@@ -674,6 +743,64 @@ impl Programm {
                             y = r2[i].prozess_satz(satz, bi, y, 0.0, sr);
                         }
                         o[i] = y;
+                    }
+                    slots[*aus] = o;
+                }
+                Schritt::Wavetable { hz, trig, pos, verstimmung, breite, wl, wr, aus, e, t, w } => {
+                    let (h, tr, p) = (spur(*hz, slots, vorher), spur(*trig, slots, vorher), spur(*pos, slots, vorher));
+                    let (d, b) = (spur(*verstimmung, slots, vorher), spur(*breite, slots, vorher));
+                    let (mut ol, mut or, mut om) = ([0.0; MAX_STIMMEN], [0.0; MAX_STIMMEN], [0.0; MAX_STIMMEN]);
+                    for i in 0..n {
+                        (ol[i], or[i], om[i]) = w[i].prozess(t, e, sr, WtEingabe { hz: h[i], trig: tr[i], pos: p[i], verstimmung: d[i], breite: b[i] });
+                    }
+                    slots[*wl] = ol;
+                    slots[*wr] = or;
+                    slots[*aus] = om;
+                }
+                Schritt::Resonator { ein: q, aus, e, satz, v } => {
+                    let s: [Spur; 9] = std::array::from_fn(|j| spur(q[j], slots, vorher));
+                    let mut o = [0.0; MAX_STIMMEN];
+                    for i in 0..n {
+                        let x = RsEingabe { hz: s[0][i], trig: s[1][i], staerke: s[2][i], x: s[3][i], material: s[4][i], helligkeit: s[5][i], groesse: s[6][i], position: s[7][i], inharmonie: s[8][i] };
+                        o[i] = v[i].prozess(satz, e, sr, x);
+                    }
+                    slots[*aus] = o;
+                }
+                Schritt::Metall { ein: q, aus, huelle, e, m } => {
+                    let x: [Spur; 8] = std::array::from_fn(|j| spur(q[j], slots, vorher));
+                    (slots[*aus], slots[*huelle]) = crate::metall::prozess_stimmen(m, e, sr, n, &x);
+                }
+                Schritt::Fm { hz, gate, trig, vel, index, rueck, zeit, aus, e, v } => {
+                    let (h, g, t) = (spur(*hz, slots, vorher), spur(*gate, slots, vorher), spur(*trig, slots, vorher));
+                    let (ve, ix, rk, z) = (spur(*vel, slots, vorher), spur(*index, slots, vorher), spur(*rueck, slots, vorher), spur(*zeit, slots, vorher));
+                    let mut o = [0.0; MAX_STIMMEN];
+                    for i in 0..n {
+                        o[i] = v[i].prozess(e, sr, crate::fm::Eingabe { hz: h[i], gate: g[i], trig: t[i], vel: ve[i], index: ix[i], rueck: rk[i], zeit: z[i] });
+                    }
+                    slots[*aus] = o;
+                }
+                Schritt::Granular { hz, trig, gate, x, groesse, dichte, pos, pos_zufall, tonhoehe, ton_zufall, breite, fenster, frieren, wl, wr, e, m, g } => {
+                    let (xs, fr) = (spur(*x, slots, vorher), spur(*frieren, slots, vorher));
+                    m.schreibe(xs.iter().take(n).sum(), fr[0] > 0.5);
+                    let (h, tr, ga, gr) = (spur(*hz, slots, vorher), spur(*trig, slots, vorher), spur(*gate, slots, vorher), spur(*groesse, slots, vorher));
+                    let (di, po, pz) = (spur(*dichte, slots, vorher), spur(*pos, slots, vorher), spur(*pos_zufall, slots, vorher));
+                    let (th, tz, br, fe) = (spur(*tonhoehe, slots, vorher), spur(*ton_zufall, slots, vorher), spur(*breite, slots, vorher), spur(*fenster, slots, vorher));
+                    let (mut ol, mut or) = ([0.0; MAX_STIMMEN], [0.0; MAX_STIMMEN]);
+                    for i in 0..n {
+                        let ein = GrEingabe { hz: h[i], trig: tr[i], gate: ga[i], groesse: gr[i], dichte: di[i], pos: po[i], pos_zufall: pz[i], tonhoehe: th[i],
+                                              ton_zufall: tz[i], breite: br[i], fenster: fe[i], frieren: fr[i] };
+                        (ol[i], or[i]) = g[i].prozess(m, e, sr, ein);
+                    }
+                    slots[*wl] = ol;
+                    slots[*wr] = or;
+                }
+                Schritt::Saite { x, hz, trig, vel, ausklang, daempfung, hell, lage, koerper_mix, aus, e, s } => {
+                    let (xi, h, tr, ve) = (spur(*x, slots, vorher), spur(*hz, slots, vorher), spur(*trig, slots, vorher), spur(*vel, slots, vorher));
+                    let (au, da, he) = (spur(*ausklang, slots, vorher), spur(*daempfung, slots, vorher), spur(*hell, slots, vorher));
+                    let (la, km) = (spur(*lage, slots, vorher), spur(*koerper_mix, slots, vorher));
+                    let mut o = [0.0; MAX_STIMMEN];
+                    for i in 0..n {
+                        o[i] = s[i].prozess(e, sr, SaEingabe { x: xi[i], hz: h[i], trig: tr[i], vel: ve[i], ausklang: au[i], daempfung: da[i], hell: he[i], lage: la[i], koerper_mix: km[i] });
                     }
                     slots[*aus] = o;
                 }

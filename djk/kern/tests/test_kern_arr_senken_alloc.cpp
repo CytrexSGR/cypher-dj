@@ -124,8 +124,8 @@ int main() {
   PRUEF(x.kern->arr_rb().parameter_abgelehnt() == 0);   // the lane values were accepted by the FFI
   PRUEF(start_da && neustart_da);     // Start-Pfad und Neustart mit Kurzblende liefen im Zyklus unter dem Wächter
   PRUEF(quittung(st3, 2));
-  PRUEF(ruhend_lauf == cdj::ARR_SPUREN - 1 && ruhend_stopp == cdj::ARR_SPUREN);   // Ruhe-Reset lief
-  PRUEF(ruhend_vor_wechsel == cdj::ARR_SPUREN - 1 && ruhend_wechsel == cdj::ARR_SPUREN);   // Spurwechsel lief
+  PRUEF(ruhend_lauf == cdj::ARR_SENKEN_PLAETZE - 1 && ruhend_stopp == cdj::ARR_SENKEN_PLAETZE);   // Ruhe-Reset lief
+  PRUEF(ruhend_vor_wechsel == cdj::ARR_SENKEN_PLAETZE - 1 && ruhend_wechsel == cdj::ARR_SENKEN_PLAETZE);   // Spurwechsel lief
   PRUEF(cc_vor2 - cc_vor >= 1);
   PRUEF(quittung(st4, 2) && cc_doppel >= 1 && pegel_doppel > 20);   // Doppeltausch lief unter dem Wächter
   PRUEF_ENDE();

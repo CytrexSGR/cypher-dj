@@ -7,8 +7,9 @@ clock. An AI agent can play along through its own set of controls; the human alw
 Built in Germany by Andreas, a DJ, and Cypher, the lab's AI agent (Claude models), starting
 19 September 2026.
 
-> **Status: public beta.** It was built on one Linux machine, and Andreas plays and mixes on it there. The native parts build on
-> a fresh Ubuntu 24.04 (see [INSTALL.md](INSTALL.md)), but nobody else has played a set on it yet. Code comments are in German. Issues are welcome, see [Contributing](#contributing).
+> **Status: public beta.** It was built on one Linux machine, and Andreas plays and mixes on it there. This version was built and
+> its test suites run on a fresh Ubuntu 24.04 (7 November 2026, see [INSTALL.md](INSTALL.md)); tests that still need the local
+> media library are not in this repository yet. Nobody else has played a set on it yet. Code comments are in German. Issues are welcome, see [Contributing](#contributing).
 
 ![Overview: DJ view, studio, warp and stems, arrangement with piano roll, Cypher Modular, media library, cue tool, compressor](docs/screens/overview.png)
 
@@ -26,11 +27,22 @@ More pages: [Production, warp and stems](docs/production.md) · [Cypher Modular]
 - A compressor on every source channel (threshold, ratio, knee, attack, release, makeup, parallel mix) with
   presets and an external sidechain, for example the kick ducking the bass
 - A reverb send into Cypher Hall, our own spectral reverb (see below)
+- Mix tools in the channel strip: a noise gate and a utility (balance, width, bass mono, DC block, channel swap, phase switches) on
+  the source channels, a three-band multiband compressor on each of the four group buses (automatic make-up per band, so
+  compressing a band does not make the mix quieter), an optional look-ahead limiter per bus (off until
+  `kanal_limiter_vorhalt_ms` is set in `kern.toml`) and a spectrum analyser of 29 bands, three per octave, for one
+  channel or the master
 - Two loop boxes that record, resample and play back in time
 - Three [Strudel](https://strudel.cc) pattern channels (drums, bass, melody). Strudel runs as its own
   process; the core plays the resulting events at the sample
 - Real instruments: Surge XT hosted in Carla, played by the patterns
 - One clock: decks, loop boxes, patterns and effects are scheduled on the same sample counter in the core
+- Multi-core audio: the real-time core keeps its one sample clock but no longer does everything on one thread. A DJ
+  channel strip whose input is silent and whose effects are idle skips its DSP, with bit-equal output. In an
+  arrangement the return Halls 2 to 4 are computed on up to three worker threads, each pinned to its own physical core
+  (`hall_faeden` and `hall_cpus` in `kern.toml`); a Hall that is not ready at its deadline is computed in the callback
+  instead, and after repeated late blocks the pool switches itself off with the same sound. `djk-start` gives the core
+  four physical cores by default (`CYPHERDJ_KERN_KERNE`) and the remaining ones to stem separation
 - Live master tempo from 60 to 200 BPM, ramped over a bar: the decks and the loop boxes (key-locked,
   pitch kept), the pattern channels and recordings follow it
 
@@ -51,7 +63,7 @@ More pages: [Production, warp and stems](docs/production.md) · [Cypher Modular]
 **Produce** (since October 2026)
 - A PRODUCTION view next to DJ and STUDIO: arrangement with a timeline, library browser, detail area for the selected
   clip, transport bar
-- Up to 32 tracks and 8 group tracks; every track goes to the production master or into a group
+- Up to 32 tracks, 8 group tracks and 4 returns; every track goes to the production master or into a group
 - Audio tracks: drag a sample from the library onto a track; clips snap to the grid and can be moved, trimmed, split,
   duplicated, faded and looped inside their length
 - **Warp**: an audio clip follows the project tempo. The warp markers come from the workshop's beat grid, a Traktor
@@ -59,12 +71,32 @@ More pages: [Production, warp and stems](docs/production.md) · [Cypher Modular]
   bar one here, warp from here, take the project tempo from the clip). Four modes: RE-PITCH (varispeed), COMPLEX and
   TONES (time-stretched with Bungee, pitch kept) and BEATS (slices at the grid or at the transients). Transpose from
   -12 to +24 semitones, detune by ±50 cents. Quantize Audio pulls the transients onto a 1/16 grid
-- **Stems**: Separate Stems in a clip's menu splits it into drums, bass, other and vocals with Demucs, on the GPU in seconds (CPU fallback). Four
-  tracks appear under the clip in a group, beat-exact, and the original is muted; one undo step takes it all back. The
-  run shows its progress and can be cancelled
-- Instrument tracks with the built-in RB-338 or Surge XT (one hosted slot); notes are drawn in a piano
-  roll with velocity and 1/16 quantize
-- Recording: arm an audio track and record one of the studio's own channels onto it, bit-identical
+- **Stems**: Separate Stems in a clip's menu splits it with BS-RoFormer on the GPU into drums, bass, other and vocals,
+  plus guitar and piano when they carry signal (an empty stem is folded into other). Four to six tracks appear under the
+  clip in a group, beat-exact, and the original is muted; one undo step takes it all back. The run shows its progress
+  and can be cancelled. It needs a CUDA GPU, there is no CPU path
+- Instrument tracks with the built-in RB-338, a Cypher Modular graph (up to 8 such tracks) or Surge XT (one hosted
+  slot); notes are drawn in a piano roll with velocity and 1/16 quantize
+- Recording: arm an audio track and record one of the studio's own channels onto it, bit-identical. That includes the
+  extra pattern streams (see below). Every pass is kept as a take
+- **Takes and comping**: each take is its own lane under the track; drag a range on a take lane to comp it into the
+  track with seam fades, and audition a single take. Audio tracks only
+- **Automation**: lanes per track for fader, pan, mute, solo and four RB-338 parameters, drawn with points or recorded
+  from the hand (touch, latch or write). Grabbing a track's fader, pan, mute or solo by hand overrides its lane, which the
+  page shows until the override is ended. Clips carry envelopes of their own (gain, transpose, relative track volume
+  and pan)
+- **Inserts**: up to four stages per strip on a track, a group, a return and the production master, taken from a pool
+  of our own devices: compressors, EQs, a saturator and a limiter. Pre or post fader sends, a gain reduction readout
+  per stage, delay compensation across tracks and groups, and a rack of four macro knobs per strip (up to 16 mappings
+  per strip)
+- **Sidechain**: a compressor stage can be keyed by another track, and through the agent's tools also by a group, a
+  return or a DJ deck; keys that would form a cycle or arrive too late are refused with a reason. One command sets up
+  Duck by Kick
+- **Sends and returns**: four returns, each with four sends per track or group and an optional Cypher Hall
+- **Merge and bounce**: merge two or more tracks into one new audio track, or bounce a track in place, to a new track
+  or as a copy to paste, by an offline render of the same core. Tracks with insert stages are refused
+- **Presets**: a browser for presets of our own devices (48 factory presets, your own, collections) with names from
+  a closed vocabulary; drag one onto a track, a stage or a strip
 - Tempo, loop range and metronome; per track volume, pan, mute, solo and a meter
 - Projects are folders with a JSON file; every change is one undo step, and the undo history survives a restart
 - Variants: tracks can share a group (say bass A, B, C); one click in the transport bar makes one of them audible
@@ -74,9 +106,9 @@ More pages: [Production, warp and stems](docs/production.md) · [Cypher Modular]
 - Stop Cypher hands the arrangement over instead of stopping it: what plays keeps playing, Cypher stops acting, and a
   start of Cypher's that is still waiting for its bar is dropped
 - WAV export as an offline render by the same core that plays live. Hosted instrument tracks are frozen first, so the
-  file matches what was heard (see [Measured](#measured))
+  file matches what was heard (see [Measured](#measured)). Without a loop bracket the export takes the whole song
 - The agent builds and edits the same projects through its own tools (create tracks, write clips and notes, warp,
-  separate stems, mix, start the transport, export)
+  separate stems, automate, insert and key, comp, bounce, mix, start the transport, export)
 
 ![PRODUCTION view: one of our own songs split into four stems under the muted original, the warp editor below in COMPLEX mode](docs/screens/production-warp-stems.png)
 
@@ -91,7 +123,7 @@ More pages: [Production, warp and stems](docs/production.md) · [Cypher Modular]
   effects, write patterns and play instruments
 - Some controls stay human-only: crossfader, master, headphone cue, bus faders and effect routing
 - Any move by hand overrides the agent, and a stop control halts it
-- In the conductor process, autonomy levels from 0 (listen) to 3 (transitions on its own). The
+- In the conductor process, autonomy levels from 0 (observe only) to 3 (transitions on its own). The
   default is 1: the agent suggests, the human decides
 - A skill for Claude Code in [`skills/djk-live/`](skills/djk-live/SKILL.md) that teaches an agent how to play
   *with* a human: think about what a move does before making it, crossfade instead of swapping, one change
@@ -108,15 +140,17 @@ references before they went in:
   curves follow the analog target curve up to 20 kHz within 0.27 dB, where a plain bilinear design is
   off by several dB near the top
 - **Cypher Hall**: a spectral reverb (energy decay per frequency bin, early reflections, frequency-wise
-  ducking, freeze). It is the reverb on the send and the REVERB beat FX
+  ducking, freeze). It is the reverb on the send, the REVERB beat FX and the Hall of the arrangement's returns
 - **Cypher Komp**: a feed-forward compressor after Giannoulis, Massberg and Reiss (2012) with soft knee,
   parallel mix, external sidechain and a high-pass in the detector; six presets
 - **Cypher Saett**: a tanh saturator with first-order antiderivative antialiasing (Bilbao et al. 2017)
   at 2x oversampling; on a hard-driven sawtooth the aliasing stays below -60 dB, against -50 dB without
-  oversampling. Available as a plugin, not yet in the core
+  oversampling. Available as a plugin and as an insert stage in the production core
 - **Cypher Modular**: a modular synthesizer. A patch is a JSON graph of building blocks (oscillators, filters,
-  envelopes, LFOs, chorus, reverb, delay, dynamics and free feedback paths) with eight knobs that the human or the agent
-  can turn. It plays on the melody channel. Example patches: a Juno-style pad, a sync lead, a wobble bass. See [docs/cypher-modular.md](docs/cypher-modular.md)
+  envelopes, LFOs, chorus, reverb, delay, dynamics, free feedback paths and, among others, wavetable, FM, granular,
+  modal resonator, string and sampler blocks; 38 block types in all) with eight knobs that the human or the agent
+  can turn. It plays on the melody and bass channels, on extra pattern streams and on production instrument tracks, and it
+  runs as an effect on DJ channels and send returns. Example patches: a Juno-style pad, a sync lead, a wobble bass, FM bells, a plucked string. See [docs/cypher-modular.md](docs/cypher-modular.md)
 - **RB-338**: a 303-style bass voice with cutoff, resonance, envelope, decay, accent and slide, playable
   from the bass pattern channel instead of Surge XT
 
@@ -137,7 +171,10 @@ The lists above are the headline. Also in there:
 - **Grid by hand**: nudge a track's grid, set bar one on the real downbeat, and keep it for that track
 - **Cue pads** as jump cues or loop cues, quantized to the grid
 - **Sets**: collect tracks for a planned set and prepare all of them in one go
-- **The agent's side**: 56 tools in the MCP server. Besides playing it can listen to a deck behind its
+- **Extra pattern streams**: five more channels (erz/5 to erz/7 and the two loop box pads) can each carry a Cypher
+  Modular graph, started with `djk-start --strudel --bk-stroeme`; they can be recorded onto production tracks. The
+  graph knobs can be learned onto a MIDI controller, and a project remembers which graph sits on which channel
+- **The agent's side**: 72 tools in the MCP server. Besides playing it can measure a deck behind its
   closed fader, read the levels of the last seconds, wait on the master clock for a number of bars, run
   automation tracks and ramps over bars, and cancel everything it started. When it has an idea while the
   human plays, it proposes; the human accepts or rejects with one key
@@ -166,9 +203,9 @@ mostly against a silent test sink. Not benchmarks.
 | Key detection | 76.7 % exact and 82.5 % within a neighbouring key, compared with Mixed In Key on 120 held-out tracks | 2026-09-26 |
 | Production export against live playback (3 tracks: audio loop, RB-338, frozen Surge XT, 32 beats) | residual peak -200 dBFS, i.e. sample-identical; shifting one track by a single sample turns the test red | 2026-10-17 |
 | Audio callback p99.9 with an arrangement playing, quantum 256 | 642 to 789 µs over three runs; 755 to 904 µs with exports rendering in parallel | 2026-10-17 |
-| Stem separation of a four-minute track, RTX 4070 Ti | 4.2 to 4.6 s, about 1.2 GB of video memory (CPU: 3 to 4 minutes) | 2026-10-31 |
-| Stems against the warped original (real track, beats 16 to 48, at 124 and 128 BPM) | warp markers 0.000 samples apart, frame count exact, one undo restores the project exactly | 2026-10-31 |
-| Audio callback p99.9 while a stem separation runs on the CPU, quantum 256 | 1744 to 1838 µs, against 877 to 955 µs without (three runs each); 1407 to 1432 µs when core and Demucs are pinned to separate CPU cores | 2026-10-31 |
+| Stems against the warped original (real track, beats 16 to 48, at 124 and 128 BPM), measured with the previous separator, Demucs | warp markers 0.000 samples apart, frame count exact, one undo restores the project exactly | 2026-10-31 |
+| Audio callback while GPU stem jobs run next to it (back-to-back BS-RoFormer jobs, arrangement with four Halls playing, quantum 256 and 128) | no frame gaps and no xruns | 2026-11-07 |
+| Return Halls on worker threads (arrangement with four Halls, USB audio interface) | callback p99.9 lower at quantum 256 and 128, no xruns | 2026-11-06 |
 
 ## Known limits of the beta
 
@@ -187,17 +224,28 @@ mostly against a silent test sink. Not benchmarks.
 - Human and agent are told apart by a label on localhost. That is a convention, not a security boundary.
   Do not expose the ports to a network.
 - The measurement rule covers decks; the pattern channels are deliberately exempt.
-- Stem separation on the CPU is heavy: while it runs, the audio callback's tail doubles (see [Measured](#measured)). On a
-  free GPU it takes seconds instead. Without one, separate stems when nothing is playing live. Up to 600 s of source per run.
-- Stems are not sample-identical to the warped original: summed after warping they leave a residual of about -8 dB, so
-  do not play them together with the unmuted original. The drum hits scatter by up to 2 ms (p90) around the original's.
+- Stem separation needs an NVIDIA GPU with CUDA and about 4.5 GB of free video memory; there is no CPU path, and without
+  a GPU the request is refused. Up to 600 s of source per run. The weights of the model are downloaded from their
+  Hugging Face repository (checked by sha256), which does not state a license for them: see
+  [THIRD_PARTY.md](THIRD_PARTY.md) before any commercial use.
+- Stems are not sample-identical to the warped original: summed after warping they left a residual of about -8 dB when
+  measured with the previous separator (31 October, not repeated with BS-RoFormer), so do not play them together with
+  the unmuted original.
 - An energy fingerprint and cue suggestions are planned for the workshop, not built. An
   experimental cue-suggestion pipeline is included as a separate research tool.
 - Key detection is weak on major keys (the test library is almost all minor).
 - Learning from the human's judgement is planned, not built.
-- Production: one hosted Surge XT slot, no automation, sends or plugin inserts yet; recording takes the studio's own
-  channels only. Export is refused while the transport is running. The live track meters show sample peaks; loudness is
-  measured offline (per track or in the export).
+- Production: one hosted Surge XT slot. Inserts are our own devices only, no third-party plugins, and the pools are
+  small: 12 compressors, 2 EQs, 1 saturator and 1 limiter per project, at most four stages per strip. The limiter works
+  on sample peaks, not true peaks, and on the master chain it sits before the production master fader. Automation lanes cover fader, pan, mute,
+  solo and four RB-338 parameters, not yet insert, send or Cypher Modular parameters. Takes and comping are for audio
+  tracks; bounce and merge refuse a track that has insert stages. Recording takes the studio's own channels only. Export
+  is refused while the transport is running. The live track meters show sample peaks; loudness is measured offline (per
+  track or in the export).
+- The mix tools are costly at their maximum: with every gate, utility, multiband and limiter switched on at once, with
+  true peak, the callback did not hold its cost gate in most runs of 60 s (2026-11-03). With the tools off, with the limiters
+  built, or with a typical setting it held the gate in every run.
+- The multi-core paths were measured on one 8-core machine. The channel limiters on the DJ buses are off by default.
 - Sounds saved from a loop into the pattern channels play at their recorded speed, and parameter rides on the
   hosted instrument keep their duration in seconds; neither follows tempo changes yet.
 - Many moving parts: Rubber Band, JACK/PipeWire, ffmpeg, Node.js 22.18+, Python, and optionally

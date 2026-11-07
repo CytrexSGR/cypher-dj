@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "name": "Self Oscillation",
+  "geraet_typ": "instrument",
+  "geraet": "rb338",
+  "werte": {
+    "lautstaerke": 0.2511886432,
+    "wellenform": false,
+    "cutoff": 800,
+    "resonanz": 1,
+    "env_mod": 0,
+    "decay": 1.2,
+    "accent": 0
+  },
+  "beschreibung": {
+    "art": "lead",
+    "unterart": "acid",
+    "charakter": [
+      "smooth",
+      "thin",
+      "metallic"
+    ],
+    "genre": [
+      "techno",
+      "minimal",
+      "idm"
+    ],
+    "einsatz": [
+      "intro",
+      "breakdown"
+    ],
+    "energie": 2,
+    "text": "At full resonance the filter is a sine oscillator: the pitch is set by the cutoff knob."
+  },
+  "tags": [
+    "self-oscillation",
+    "sine"
+  ],
+  "notiz": "Welsh p.21: a self-resonating filter becomes a sine-wave oscillator. geraete.ts allows resonanz 1.",
+  "angelegt": "2026-11-02T00:00:00.000Z",
+  "geaendert": "2026-11-02T00:00:00.000Z"
+}

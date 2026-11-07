@@ -3,6 +3,7 @@
 # nächsten Bau ohne Änderung dieser Datei hinzu. src/main.cpp ist das Programm, alles andere unter src/ die Bibliothek.
 # Scheibe 08: Fremdquellen aus djk/third_party (toml++, nlohmann/json), Vertrag aus djk/vertrag (osc_adressen.h),
 # Mutationen für die Fehlerfälle der Abnahme, ThreadSanitizer-Bau für den Befehlsring.
+# Mutation programs share the objects their switch does not touch: see cmake/README.md and cmake/mutation_geteilt.cmake.
 cmake_minimum_required(VERSION 3.28)
 project(cypherdj_kern LANGUAGES C CXX)
 
@@ -10,6 +11,17 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE RelWithDebInfo)
+endif()
+# ccache is used as compiler launcher when it is installed; never required (not found: plain compiler). Switch off with
+# -DCYPHERDJ_CCACHE=OFF. The shared build of the mutation targets (cmake/README.md) works with and without it.
+option(CYPHERDJ_CCACHE "Use ccache as compiler launcher when found" ON)
+if(CYPHERDJ_CCACHE AND NOT CMAKE_CXX_COMPILER_LAUNCHER)
+  find_program(CCACHE_PROGRAM ccache)
+  if(CCACHE_PROGRAM)
+    set(CMAKE_CXX_COMPILER_LAUNCHER ${CCACHE_PROGRAM})
+    set(CMAKE_C_COMPILER_LAUNCHER ${CCACHE_PROGRAM})
+    message(STATUS "ccache: ${CCACHE_PROGRAM}")
+  endif()
 endif()
 option(CYPHERDJ_SANITIZE "ASan und UBSan (ADR 002)" OFF)
 # Bungee (MPL-2.0) als zweite Keylock-Maschine neben R3 (Umbauplan 2026-10-09-bungee-umbau, S0). Aus: kein Bungee gebaut,
@@ -20,7 +32,8 @@ option(CYPHERDJ_BUNGEE "Bungee als Keylock-Maschine und Warp-Maschine (djk/third
 option(CYPHERDJ_TSAN "ThreadSanitizer für den Befehlsring (Scheibe 08)" OFF)
 option(CYPHERDJ_MUTATION_RING_RELAXED "Fehlerfall: Ring ohne Release/Acquire (nur mit CYPHERDJ_TSAN)" OFF)
 if(CYPHERDJ_SANITIZE)
-  add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
+  # UBSan must abort (not just print): a run that only prints "runtime error" ends green and nobody reads it (A3 review: the out-of-bounds gate_[] read)
+  add_compile_options(-fsanitize=address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer)
   add_link_options(-fsanitize=address,undefined)
 endif()
 if(CYPHERDJ_TSAN)
@@ -62,6 +75,15 @@ endif()
 # Cypher Hall (Rust, djk/instrumente/hall_ffi) für fx/2, seit 2026-10-11 statt Faust zita_rev1: cargo baut die statische
 # Bibliothek; sie hängt an cypherdj::dsp, damit jedes Ziel, das mixer.cpp übersetzt, sie mitbekommt.
 find_program(CARGO cargo REQUIRED)
+# rustc version for the golden test (test_mixer_golden.cpp): the digest depends on the compiler of the hall and compressor
+# libraries. Asked in the Rust workspace so a rust-toolchain file there applies, as it does for cargo.
+execute_process(COMMAND rustc --version WORKING_DIRECTORY ${DJK}/instrumente OUTPUT_VARIABLE RUSTC_VERSION_ZEILE
+                RESULT_VARIABLE RUSTC_VERSION_RC OUTPUT_STRIP_TRAILING_WHITESPACE)
+if(RUSTC_VERSION_RC EQUAL 0 AND RUSTC_VERSION_ZEILE MATCHES "^rustc ([0-9][^ ]*)")
+  set(GOLDEN_RUSTC_VERSION ${CMAKE_MATCH_1})
+else()
+  set(GOLDEN_RUSTC_VERSION "unknown")
+endif()
 set(HALL_FFI_DIR ${DJK}/instrumente)
 set(HALL_FFI_LIB ${HALL_FFI_DIR}/target/release/libhall_ffi.a)
 # Seit 2026-10-11 trägt dieselbe Bibliothek auch Cypher Komp (komp_dsp): zwei Rust-Staticlibs kollidieren im Binary
@@ -112,17 +134,28 @@ add_executable(cypherdj-kern src/main.cpp)
 target_link_libraries(cypherdj-kern PRIVATE cypherdj_kernbib)
 target_compile_options(cypherdj-kern PRIVATE -Wall -Wextra)
 
-# Programme mit Mutation: dieselben Quellen, ein Schalter. Fehlerfälle der Abnahmen (nie ausliefern).
+# Mutation programs: the same sources, one switch. Failure cases of the acceptances (never ship).
+#
+# Fast build (cmake/mutation_geteilt.cmake): every helper below that builds a mutation program (kern_mutation, test_mutation,
+# test_bk_attrappe, deck_keylock_mutation, box_keylock_mutation, kern_keylock_faeden_mutation, deck_geplant_mutation,
+# deck_geplant_pruef, and the few direct kern_mut_exe calls) hands its sources to kern_mut_exe(). That compiles one object per
+# (source, flag signature) and shares it between all mutation targets of the same signature; a target compiles itself, with its
+# switch, only the units the switch can touch (its name occurs in the unit or in a file of its include closure, determined at
+# configure time, unplaceable means touched). Call signatures of the helpers are unchanged. The equivalence of the units and flags
+# against the old per-target build is proven for every target by messungen/2026-11-05-bau-schnell/aequivalenz.sh. A new switch
+# needs nothing special: it is classified automatically; if the scan cannot place it, its target compiles everything itself.
+# -DCYPHERDJ_MUTATION_GETEILT=OFF restores the old build (every target compiles all its sources). The libraries of the kern
+# mutation programs (the same list in every helper):
+set(KERN_MUT_LIBS PkgConfig::JACK Threads::Threads cypherdj::toml cypherdj::dsp cypherdj::stellwerk cypherdj_dsp_messer cypherdj::json
+    PkgConfig::CRYPTO cypherdj::hand PkgConfig::RUBBERBAND)  # 25, 31, 35; Keylock Slice 3: KERN_QUELLEN contains netz_loop.cpp and loop_stretch.cpp
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/mutation_geteilt.cmake)
 function(kern_mutation name schalter)
-  add_executable(${name} src/main.cpp ${KERN_QUELLEN})
-  target_include_directories(${name} PRIVATE include ${DJK}/vertrag)
-  target_compile_definitions(${name} PRIVATE ${schalter}=1)
-  target_link_libraries(${name} PRIVATE PkgConfig::JACK Threads::Threads cypherdj::toml cypherdj::dsp
-                        cypherdj::stellwerk cypherdj_dsp_messer cypherdj::json PkgConfig::CRYPTO cypherdj::hand PkgConfig::RUBBERBAND)  # 25, 31, 35; Keylock Slice 3: KERN_QUELLEN enthält netz_loop.cpp und loop_stretch.cpp
+  kern_mut_exe(${name} QUELLEN src/main.cpp ${KERN_QUELLEN} SCHALTER ${schalter} INCLUDES include ${DJK}/vertrag LIBS ${KERN_MUT_LIBS})
 endfunction()
 kern_mutation(cypherdj-kern-mutation CYPHERDJ_MUTATION_KLICK_BLOCKANFANG)       # Scheibe 01: Klick auf den Blockanfang
 kern_mutation(cypherdj-kern-mutation-rampe CYPHERDJ_MUTATION_RAMPE_IN_SAMPLES)  # Scheibe 08: Rampe in Samples statt Beats
 kern_mutation(cypherdj-kern-mutation-begin CYPHERDJ_MUTATION_ERZ_BEGIN_IGNORIERT)  # MVP 2 Scheibe 3: begin/end ignoriert
+kern_mutation(cypherdj-kern-mutation-bk-rampe CYPHERDJ_MUTATION_BK_RAMPE_TOTZONE)  # S23: slow ramps on graph knobs never reach the graph (live probe spur_bk_messen.py must go red)
 
 enable_testing()
 file(GLOB KERN_TESTS CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_*.cpp)
@@ -146,7 +179,8 @@ foreach(pfad ${KERN_TESTS})
   target_include_directories(${t} PRIVATE tests)
   target_link_libraries(${t} PRIVATE cypherdj_kernbib cypherdj::json cypherdj::toml)
   target_compile_definitions(${t} PRIVATE CYPHERDJ_DJK="${DJK}")
-  if(CYPHERDJ_TSAN AND (t STREQUAL "test_freeze_tsan" OR t STREQUAL "test_arr_auto_tsan"))
+  # mehrkern plan: the HallPool and its callers run under TSan too (test_hall_pool, test_arr_returns, test_hall_zustand)
+  if(CYPHERDJ_TSAN AND (t STREQUAL "test_freeze_tsan" OR t STREQUAL "test_arr_auto_tsan" OR t STREQUAL "test_hall_pool" OR t STREQUAL "test_arr_returns" OR t STREQUAL "test_hall_zustand"))
     add_test(NAME ${t} COMMAND ${TSAN_START} $<TARGET_FILE:${t}>)
     set_tests_properties(${t} PROPERTIES FAIL_REGULAR_EXPRESSION "ThreadSanitizer")   # jede TSan-Zeile ist ein Befund
   else()
@@ -163,6 +197,8 @@ target_link_libraries(test_kern_keylock_faeden PRIVATE PkgConfig::RUBBERBAND)
 target_link_libraries(test_loopbox_keylock PRIVATE PkgConfig::RUBBERBAND)
 # Keylock Task 6a: test_deck_geplant misst mit keylock_mess.h (bindet Rubber Band ein).
 target_link_libraries(test_deck_geplant PRIVATE PkgConfig::RUBBERBAND)
+# mehrkern Task 3: the HallPool stress case must fail, not hang
+set_tests_properties(test_hall_pool PROPERTIES TIMEOUT 120)
 # Task 2.5c: Speichersperre des Keylock-Baus in eigenen Prozessen (frischer Speicher), Vergleich mit Stand 2.5b
 add_test(NAME test_kern_keylock_faeden_sperre COMMAND test_kern_keylock_faeden sperre)
 add_test(NAME test_kern_keylock_faeden_sperre_alt COMMAND test_kern_keylock_faeden sperre_alt)
@@ -193,14 +229,14 @@ function(test_mutation name test schalter)
       return()
     endif()
   endforeach()
-  add_executable(${name} tests/${test}.cpp ${tm_quellen})
-  target_include_directories(${name} PRIVATE include tests ${DJK}/vertrag)
-  target_compile_definitions(${name} PRIVATE ${schalter}=1 CYPHERDJ_DJK="${DJK}")
+  set(tm_defs CYPHERDJ_DJK="${DJK}")
   if(CYPHERDJ_BUNGEE AND ("src/dehner_bungee.cpp" IN_LIST tm_quellen OR "src/arr_wiedergabe.cpp" IN_LIST tm_quellen OR "src/warp_werk.cpp" IN_LIST tm_quellen))  # nur die Ziele, die Bungee ausdrücklich einbinden;
-    target_compile_definitions(${name} PRIVATE CYPHERDJ_BUNGEE=1)   # Paket 1.13 Slice 2: der Lader fragt es nur (Maschinen-Tor für complex und tones), er bindet Bungee nicht
+    list(APPEND tm_defs CYPHERDJ_BUNGEE=1)   # Paket 1.13 Slice 2: der Lader fragt es nur (Maschinen-Tor für complex und tones), er bindet Bungee nicht
   endif()
-  target_link_libraries(${name} PRIVATE PkgConfig::JACK Threads::Threads cypherdj::dsp cypherdj::stellwerk
-                        cypherdj_dsp_messer cypherdj::json PkgConfig::CRYPTO cypherdj::hand ${tm_libs})  # Scheibe 25, 31, 35
+  kern_mut_exe(${name} QUELLEN tests/${test}.cpp ${tm_quellen} SCHALTER ${schalter} DEFS ${tm_defs}
+               INCLUDES include tests ${DJK}/vertrag
+               LIBS PkgConfig::JACK Threads::Threads cypherdj::dsp cypherdj::stellwerk
+                    cypherdj_dsp_messer cypherdj::json PkgConfig::CRYPTO cypherdj::hand ${tm_libs})  # Scheibe 25, 31, 35
   add_test(NAME ${name} COMMAND ${name})
   set_tests_properties(${name} PROPERTIES WILL_FAIL TRUE)
 endfunction()
@@ -210,14 +246,17 @@ set(ARR_QUELLEN src/arrangement.cpp src/arr_stimmen.cpp src/arr_ausgang.cpp src/
     src/arr_freeze.cpp  # Paket K3: Freeze
     src/arr_auto.cpp    # Automation Slice 1: fader lane per sample, blend (ADR 032)
     src/arr_returns.cpp # 1.10 Slice 3: Cypher Hall of the return strips
+    src/hall_pool.cpp   # mehrkern task 4: the return Halls compute on the HallPool
+    src/arr_inserts.cpp # 1.10 slice 4a: pooled compressor inserts of the strips
     src/arr_warp.cpp)   # Paket 1.13 Slice 2: Seite des Arrangements am Warp-Werk (nur die Schnittstelle warp_werk.h, kein Bungee)
-list(APPEND ARR_QUELLEN src/arr_bk_senke.cpp src/arr_intern_senke.cpp src/arr_rb_senke.cpp src/arr_wirt_senke.cpp)   # D1 K2b: Senken (RB-338 über cypherdj::dsp -> libhall_ffi.a, Wirt-Slots)
+list(APPEND ARR_QUELLEN src/arr_bk_senke.cpp src/arr_kit_senke.cpp src/arr_intern_senke.cpp src/arr_rb_senke.cpp src/arr_wirt_senke.cpp
+     src/arr_rack_senke.cpp)   # 1.9 U6: instrument rack. D1 K2b: Senken (RB-338 über cypherdj::dsp -> libhall_ffi.a, Wirt-Slots)
 test_mutation(test_klick_mutation test_klick CYPHERDJ_MUTATION_KLICK_BLOCKANFANG src/klick.cpp src/uhr.cpp)
 test_mutation(test_tempoplan_mutation test_tempoplan CYPHERDJ_MUTATION_RAMPE_IN_SAMPLES src/tempoplan.cpp src/uhr.cpp)
 test_mutation(test_befehle_mutation test_befehle CYPHERDJ_MUTATION_TAKT_AUS_KARTE
               src/kern.cpp src/erzeuger.cpp src/kit.cpp src/loopbox.cpp src/loop.cpp src/kern_stellwerk.cpp src/kern_arr.cpp ${ARR_QUELLEN} src/mixer.cpp src/beatfx.cpp src/teile.cpp src/klick.cpp src/tempoplan.cpp
               src/uhr.cpp  # Scheibe 25: kern.cpp braucht Stellwerk-Anbindung, Mixer und Schatten
-              src/kern_deck.cpp src/deck.cpp src/lader.cpp src/fassung.cpp  # Scheibe 31: und die Decks
+              src/kern_deck.cpp src/kern_mix.cpp src/deck.cpp src/lader.cpp src/fassung.cpp  # Scheibe 31: und die Decks
               src/kern_hand.cpp src/hand_ein.cpp  # Scheibe 35: Kern-Hand
               stub/dehner_stub.cpp)  # Keylock Task 2: kern_deck.cpp ruft die Fabrik (Vertrag 13)
 test_mutation(test_ausgang_mutation test_ausgang CYPHERDJ_MUTATION_OHNE_RIEGEL)
@@ -285,14 +324,12 @@ test_mutation(test_erzeuger_bk_werk_rampe_spaet_mutation test_erzeuger_bk_werk C
 test_mutation(test_erzeuger_bk_werk_ausklang_stumm_mutation test_erzeuger_bk_werk CYPHERDJ_MUTATION_BK_WERK_AUSKLANG_STUMM
               src/erzeuger.cpp src/kit.cpp src/uhr.cpp src/graph_werk.cpp)
 function(test_bk_attrappe name schalter)
-  add_executable(${name} tests/test_erzeuger_bk_werk_attrappe.cpp src/erzeuger.cpp src/kit.cpp src/uhr.cpp src/graph_werk.cpp)
-  target_include_directories(${name} PRIVATE include tests ${DJK}/vertrag   # nur Köpfe (mixer.h), nichts gelinkt
-    $<TARGET_PROPERTY:cypherdj::dsp,INTERFACE_INCLUDE_DIRECTORIES> $<TARGET_PROPERTY:cypherdj_dsp_messer,INTERFACE_INCLUDE_DIRECTORIES>
-    $<TARGET_PROPERTY:cypherdj::stellwerk,INTERFACE_INCLUDE_DIRECTORIES>)
-  target_link_libraries(${name} PRIVATE Threads::Threads cypherdj::json)
-  if(schalter)
-    target_compile_definitions(${name} PRIVATE ${schalter}=1)
-  endif()
+  kern_mut_exe(${name} QUELLEN tests/test_erzeuger_bk_werk_attrappe.cpp src/erzeuger.cpp src/kit.cpp src/uhr.cpp src/graph_werk.cpp
+               SCHALTER ${schalter}
+               INCLUDES include tests ${DJK}/vertrag   # nur Köpfe (mixer.h), nichts gelinkt
+                 $<TARGET_PROPERTY:cypherdj::dsp,INTERFACE_INCLUDE_DIRECTORIES> $<TARGET_PROPERTY:cypherdj_dsp_messer,INTERFACE_INCLUDE_DIRECTORIES>
+                 $<TARGET_PROPERTY:cypherdj::stellwerk,INTERFACE_INCLUDE_DIRECTORIES>
+               LIBS Threads::Threads cypherdj::json)
   if(CYPHERDJ_TSAN)
     add_test(NAME ${name} COMMAND ${TSAN_START} $<TARGET_FILE:${name}>)
   else()
@@ -334,11 +371,8 @@ test_mutation(test_loopbox_huelle_mutation test_loopbox CYPHERDJ_MUTATION_LOOP_O
 # Welle 2 F13, Fehlerfall: Laden in eine laufende Box tauscht hart. test_loopbox muss scheitern.
 test_mutation(test_loopbox_laden_mutation test_loopbox CYPHERDJ_MUTATION_LOOP_LADEN_HART src/loopbox.cpp src/loop.cpp src/uhr.cpp)
 # Keylock Task 3b: ein neuer Abonnent bekommt den Stand des Knopfs nicht (/e/regler keylock beim ersten /k/hallo): test_netz_deck rot.
-add_executable(test_netz_deck_knopf_mutation tests/test_netz_deck.cpp ${KERN_QUELLEN})
-target_include_directories(test_netz_deck_knopf_mutation PRIVATE include tests ${DJK}/vertrag)
-target_compile_definitions(test_netz_deck_knopf_mutation PRIVATE CYPHERDJ_MUTATION_KEYLOCK_HALLO_OHNE_KNOPF=1 CYPHERDJ_DJK="${DJK}")
-target_link_libraries(test_netz_deck_knopf_mutation PRIVATE PkgConfig::JACK Threads::Threads cypherdj::toml cypherdj::dsp cypherdj::stellwerk
-                      cypherdj_dsp_messer cypherdj::json PkgConfig::CRYPTO cypherdj::hand PkgConfig::RUBBERBAND)
+kern_mut_exe(test_netz_deck_knopf_mutation QUELLEN tests/test_netz_deck.cpp ${KERN_QUELLEN} SCHALTER CYPHERDJ_MUTATION_KEYLOCK_HALLO_OHNE_KNOPF
+             DEFS CYPHERDJ_DJK="${DJK}" INCLUDES include tests ${DJK}/vertrag LIBS ${KERN_MUT_LIBS})
 add_test(NAME test_netz_deck_knopf_mutation COMMAND test_netz_deck_knopf_mutation)
 set_tests_properties(test_netz_deck_knopf_mutation PROPERTIES WILL_FAIL TRUE)
 # Plan 3 (Beat-FX), Fehlerfall: LFO-Phase ab dem ersten Block statt aus dem absoluten Beat.
@@ -366,7 +400,7 @@ test_mutation(test_selbstwaechter_mutation_rand test_selbstwaechter CYPHERDJ_MUT
 kern_mutation(cypherdj-kern-mutation-hand CYPHERDJ_MUTATION_HAND_BLOCKANFANG)
 test_mutation(test_kern_hand_mutation test_kern_hand CYPHERDJ_MUTATION_HAND_BLOCKANFANG
               src/kern.cpp src/erzeuger.cpp src/kit.cpp src/loopbox.cpp src/loop.cpp src/kern_stellwerk.cpp src/kern_arr.cpp ${ARR_QUELLEN} src/mixer.cpp src/beatfx.cpp src/teile.cpp src/klick.cpp src/tempoplan.cpp src/uhr.cpp
-              src/kern_deck.cpp src/deck.cpp src/lader.cpp src/fassung.cpp  # Scheibe 31
+              src/kern_deck.cpp src/kern_mix.cpp src/deck.cpp src/lader.cpp src/fassung.cpp  # Scheibe 31
               src/kern_hand.cpp src/hand_ein.cpp  # Scheibe 35
               stub/dehner_stub.cpp)  # Keylock Task 2: Fabrik ohne Rubber Band
 # Scheibe 25, Fehlerfall der Abnahme „Limiter im Master“ (MVP, Lücken und Entscheide): Master ohne Limiter. test_limiter25
@@ -376,8 +410,98 @@ kern_mutation(cypherdj-kern-mutation-limiter CYPHERDJ_MUTATION_OHNE_LIMITER)
 test_mutation(test_limiter25_mutation test_limiter25 CYPHERDJ_MUTATION_OHNE_LIMITER src/mixer.cpp src/beatfx.cpp)
 # K2 Task 1.5: Duck ohne Wirkung auf den Kanälen. test_mixer_duck (vom Glob angelegt) gegen diese Mutation muss scheitern.
 test_mutation(test_mixer_duck_mutation test_mixer_duck CYPHERDJ_MUTATION_DUCK_AUS src/mixer.cpp src/beatfx.cpp)
+# Sleep state of silent strips: without the ruhig() and holder checks only the zero input decides, so a strip with a colour tail or a
+# noise colour move sleeps although it makes sound. test_mixer_schlaf (from the glob) against this mutation must fail.
+test_mutation(test_mixer_schlaf_mutation test_mixer_schlaf CYPHERDJ_MUTATION_SCHLAF_OHNE_RUHIG src/mixer.cpp src/beatfx.cpp)
 # K2 Task 2.2: Rückweg fx/2 ohne Hall in der Summe. test_mixer_hall (vom Glob angelegt) gegen diese Mutation muss scheitern.
 test_mutation(test_mixer_hall_mutation test_mixer_hall CYPHERDJ_MUTATION_HALL_TOT src/mixer.cpp src/beatfx.cpp)
+# Package 1.15 task A0: test_mixer_golden (digest recorded at base 2f26eeb9) against three mixer mutations must fail.
+# The definitions below belong to the mutation targets from the start (kern_mut_exe shares the unchanged objects between targets, so
+# a later target_compile_definitions() would reach only the units the target compiles itself; _kmg_pruefe rejects that).
+foreach(g test_mixer_golden_duck_aus_mutation test_mixer_golden_nur_cue_aus_mutation test_mixer_golden_fx_einheiten_mutation)
+  set(KMG_DEFS_${g} "CYPHERDJ_RUSTC_VERSION=\"${GOLDEN_RUSTC_VERSION}\"" CYPHERDJ_GOLDEN_MUTANT=1)
+endforeach()
+test_mutation(test_mixer_golden_duck_aus_mutation test_mixer_golden CYPHERDJ_MUTATION_DUCK_AUS src/mixer.cpp src/beatfx.cpp)
+test_mutation(test_mixer_golden_nur_cue_aus_mutation test_mixer_golden CYPHERDJ_MUTATION_NUR_CUE_AUS src/mixer.cpp src/beatfx.cpp)
+test_mutation(test_mixer_golden_fx_einheiten_mutation test_mixer_golden CYPHERDJ_MUTATION_FX_EINHEITEN_VERTAUSCHT src/mixer.cpp src/beatfx.cpp)
+# On another toolchain string these cannot tell a mutation from compiler noise: the test then exits 77 (SKIP) instead of falling
+# back to a tolerance. On the recorded toolchain they stay WILL_FAIL (digest differs, exit 1).
+foreach(g test_mixer_golden test_mixer_golden_duck_aus_mutation test_mixer_golden_nur_cue_aus_mutation
+        test_mixer_golden_fx_einheiten_mutation)
+  if(TARGET ${g})
+    if(g STREQUAL "test_mixer_golden")
+      target_compile_definitions(${g} PRIVATE CYPHERDJ_RUSTC_VERSION="${GOLDEN_RUSTC_VERSION}")
+    else()
+      set_tests_properties(${g} PROPERTIES SKIP_RETURN_CODE 77)   # definitions: KMG_DEFS_ above
+    endif()
+  endif()
+endforeach()
+# Package 1.15 task A3: gate and utility in the channel strip. Each test against its mutation must fail (WILL_FAIL):
+#   gate behind the compressor (G5), sidechain key = the own input (G3), utility called although neutral (U1 only: a neutral call is
+#   bit-identical to the input, so the golden digest cannot see it; measured 2026-11-03),
+#   mix-tool slots not carried on at the end of the block (review obligation 1).
+test_mutation(test_mixer_gate_nach_komp_mutation test_mixer_gate CYPHERDJ_MUTATION_GATE_NACH_KOMP src/mixer.cpp src/beatfx.cpp)
+test_mutation(test_mixer_gate_sc_eigen_mutation test_mixer_gate CYPHERDJ_MUTATION_GATE_SC_EIGEN src/mixer.cpp src/beatfx.cpp)
+test_mutation(test_mixer_utility_immer_mutation test_mixer_utility CYPHERDJ_MUTATION_UTIL_IMMER src/mixer.cpp src/beatfx.cpp)
+test_mutation(test_mixer_wz_nachfuehren_mutation test_mixer_wz_nachfuehren CYPHERDJ_MUTATION_WZ_OHNE_NACHFUEHREN src/mixer.cpp src/beatfx.cpp)
+# A3 fix round (reviews of 2026-11-03): each of these was a mutation the first version's tests let through.
+test_mutation(test_mixer_utility_gate_ohne_guard_mutation test_mixer_utility CYPHERDJ_MUTATION_GATE_OHNE_GUARD src/mixer.cpp src/beatfx.cpp)
+test_mutation(test_mixer_gate_start_zu_mutation test_mixer_gate CYPHERDJ_MUTATION_GATE_START_ZU src/mixer.cpp src/beatfx.cpp)
+test_mutation(test_mixer_gate_kein_reset_mutation test_mixer_gate CYPHERDJ_MUTATION_GATE_KEIN_RESET src/mixer.cpp src/beatfx.cpp)
+test_mutation(test_mixer_gate_f01_ohne_werkzeuge_mutation test_mixer_gate CYPHERDJ_MUTATION_F01_OHNE_WERKZEUGE src/mixer.cpp src/beatfx.cpp)
+test_mutation(test_mixer_gate_wz_wert_nur_w_mutation test_mixer_gate CYPHERDJ_MUTATION_WZ_WERT_NUR_W src/mixer.cpp src/beatfx.cpp)
+test_mutation(test_mixer_gate_util_nach_gate_mutation test_mixer_gate CYPHERDJ_MUTATION_UTIL_NACH_GATE src/mixer.cpp src/beatfx.cpp)
+test_mutation(test_mixer_wz_felder_hold_attack_mutation test_mixer_wz_felder CYPHERDJ_MUTATION_WZ_HOLD_ATTACK_VERTAUSCHT src/mixer.cpp src/beatfx.cpp)
+test_mutation(test_mixer_wz_felder_phaser_dc_mutation test_mixer_wz_felder CYPHERDJ_MUTATION_WZ_PHASER_DC_VERTAUSCHT src/mixer.cpp src/beatfx.cpp)
+test_mutation(test_mixer_gate_leeren_vor_setze_mutation test_mixer_gate CYPHERDJ_MUTATION_GATE_LEEREN_VOR_SETZE src/mixer.cpp src/beatfx.cpp)
+test_mutation(test_mixer_gate_f01_ohne_gate_mutation test_mixer_gate CYPHERDJ_MUTATION_F01_OHNE_GATE src/mixer.cpp src/beatfx.cpp)
+# Package 1.15 task A4: multiband compressor on the buses. Each of these must turn exactly the named test red:
+#   the three the task names (bands in the wrong order, makeup applied when bypassed, crossfade length 0) and the ones the A3 reviews call for:
+#   field constants swapped, D1 order (before the utility, behind the fader), D6 no reset on the way back, D9 slot value only, F01 guard
+#   without the multiband, and a multiband that swallows a NaN. The index guard (mb_[k - 14] for a source) has no registered mutant: its
+#   error case is undefined behaviour, shown by hand under CYPHERDJ_SANITIZE (CYPHERDJ_MUTATION_MB_OHNE_GUARD).
+test_mutation(test_mixer_multiband_baender_mutation test_mixer_multiband CYPHERDJ_MUTATION_MB_BAENDER_VERTAUSCHT src/mixer.cpp src/beatfx.cpp)
+test_mutation(test_mixer_multiband_makeup_umgehen_mutation test_mixer_multiband CYPHERDJ_MUTATION_MB_MAKEUP_BEI_UMGEHEN src/mixer.cpp src/beatfx.cpp)
+test_mutation(test_mixer_multiband_ausgleich_aus_mutation test_mixer_multiband CYPHERDJ_MUTATION_MB_AUSGLEICH_AUS src/mixer.cpp src/beatfx.cpp)   # mb-ausgleich fix: M3b
+test_mutation(test_mixer_multiband_blende_null_mutation test_mixer_multiband CYPHERDJ_MUTATION_MB_BLENDE_NULL src/mixer.cpp src/beatfx.cpp)
+test_mutation(test_mixer_multiband_vor_util_mutation test_mixer_multiband CYPHERDJ_MUTATION_MB_VOR_UTIL src/mixer.cpp src/beatfx.cpp)
+test_mutation(test_mixer_multiband_nach_fader_mutation test_mixer_multiband CYPHERDJ_MUTATION_MB_NACH_FADER src/mixer.cpp src/beatfx.cpp)
+test_mutation(test_mixer_multiband_kein_reset_mutation test_mixer_multiband CYPHERDJ_MUTATION_MB_KEIN_RESET src/mixer.cpp src/beatfx.cpp)
+test_mutation(test_mixer_multiband_f01_ohne_mutation test_mixer_multiband CYPHERDJ_MUTATION_MB_F01_OHNE src/mixer.cpp src/beatfx.cpp)
+test_mutation(test_mixer_multiband_nan_verschluckt_mutation test_mixer_multiband CYPHERDJ_MUTATION_MB_NAN_VERSCHLUCKT src/mixer.cpp src/beatfx.cpp)
+test_mutation(test_mixer_multiband_wz_wert_nur_w_mutation test_mixer_multiband CYPHERDJ_MUTATION_WZ_WERT_NUR_W src/mixer.cpp src/beatfx.cpp)
+test_mutation(test_mixer_wz_felder_mb_grenzen_mutation test_mixer_wz_felder CYPHERDJ_MUTATION_MB_GRENZEN_VERTAUSCHT src/mixer.cpp src/beatfx.cpp)
+test_mutation(test_mixer_wz_felder_mb_attack_release_mutation test_mixer_wz_felder CYPHERDJ_MUTATION_MB_ATTACK_RELEASE_VERTAUSCHT src/mixer.cpp src/beatfx.cpp)
+# A4 M5 fix (crossover change by crossfade of two objects): the old behaviour, the dynamics not handed over, the newest target lost.
+test_mutation(test_mixer_multiband_grenze_sofort_mutation test_mixer_multiband_grenzen CYPHERDJ_MUTATION_MB_GRENZE_SOFORT src/mixer.cpp src/beatfx.cpp)
+test_mutation(test_mixer_multiband_dynamik_nicht_kopiert_mutation test_mixer_multiband_grenzen CYPHERDJ_MUTATION_MB_DYNAMIK_NICHT_KOPIERT src/mixer.cpp src/beatfx.cpp)
+test_mutation(test_mixer_multiband_vormerken_verloren_mutation test_mixer_multiband_grenzen CYPHERDJ_MUTATION_MB_VORMERKEN_VERLOREN src/mixer.cpp src/beatfx.cpp)
+# fix round 1: the warm-up must not restart at every new target; the guard must reset the second object too; the dynamics are carried over whole
+test_mutation(test_mixer_multiband_warm_neu_start_mutation test_mixer_multiband_grenzen CYPHERDJ_MUTATION_MB_WARM_NEU_START src/mixer.cpp src/beatfx.cpp)
+test_mutation(test_mixer_multiband_f01_nur_erstes_mutation test_mixer_multiband CYPHERDJ_MUTATION_MB_F01_NUR_ERSTES src/mixer.cpp src/beatfx.cpp)
+test_mutation(test_mixer_multiband_dynamik_nur_rampen_mutation test_mixer_multiband_grenzen CYPHERDJ_MUTATION_MB_DYNAMIK_NUR_RAMPEN src/mixer.cpp src/beatfx.cpp)
+# fix round 2: the warm-up rule (anchor, both crossovers, big steps only pending)
+test_mutation(test_mixer_multiband_klass_nur_tief_mutation test_mixer_multiband_einlauf CYPHERDJ_MUTATION_MB_KLASSE_NUR_TIEF src/mixer.cpp src/beatfx.cpp)
+test_mutation(test_mixer_multiband_vergleich_letztes_ziel_mutation test_mixer_multiband_einlauf CYPHERDJ_MUTATION_MB_VERGLEICH_LETZTES_ZIEL src/mixer.cpp src/beatfx.cpp)
+test_mutation(test_mixer_multiband_gross_angewendet_mutation test_mixer_multiband_einlauf CYPHERDJ_MUTATION_MB_GROSS_ANGEWENDET src/mixer.cpp src/beatfx.cpp)
+test_mutation(test_mixer_multiband_einlauf_warm_neu_start_mutation test_mixer_multiband_einlauf CYPHERDJ_MUTATION_MB_WARM_NEU_START src/mixer.cpp src/beatfx.cpp)
+# Package 1.15 task A5a: the latency account. Each of these must turn test_mixer_latenzkonto red (WILL_FAIL):
+#   the four the task names (PFL ring without + L, metronome undelayed, bus_sum_ not merged, the merge in front of the hall return), a ring
+#   read one sample off, (fix round 1) the clamp removed, the same value clearing the lines, no check in front of the metronome line, the PFL ring not
+#   cleared by F01, the send-graph return after the merge, a PFL ring sized for vh = 84, a PFL ring that was not enlarged (stable red only through the wrong delay; under CYPHERDJ_SANITIZE the bounds check aborts), and the F01 guard without the delay lines / without the check in front of them.
+foreach(mut F01_PFL_RING_AUCH_L0 PFL_RING_VH84 KLEMME_AUS GLEICHER_WERT_LEERT METRO_OHNE_PRUEFUNG F01_OHNE_PFL_RING SEND_NACH_MERGE PFL_RING_KLEIN PFL_OHNE_L METRO_OHNE BUS_SUM_UEBERSPRUNGEN MERGE_VOR_HALL RING_PLUS_EINS F01_OHNE_RINGE F01_ERST_NACH_RING)
+  string(TOLOWER ${mut} mut_klein)
+  test_mutation(test_mixer_latenzkonto_${mut_klein}_mutation test_mixer_latenzkonto CYPHERDJ_MUTATION_LATENZ_${mut} src/mixer.cpp src/beatfx.cpp)
+endforeach()
+# Package 1.15 task A5b: the channel limiter. Each of these must turn test_mixer_kanal_limiter red (WILL_FAIL): the limiter in front of the fader (L3, L7), no crossfade
+#   (L5), lim/an 0 without the delay (the task names A5a's test_mixer_latenzkonto C1; it is also red here via L2/L4), the F01 guard without the limiter reset (F), the
+#   ceiling/release handed over once (L6), the reduction reported with lim/an 0 (G), L without the true-peak delay (B, L4), no warm-up (L5 with L = 962).
+#   Fix round 1: no leeren() on the switch-off (R), warm-up of L/2 (L5 fine), all buses on lim_[0] (I), an overshoot window a crossfade longer (U), a reduction reported in the warm-up (W).
+foreach(mut VOR_FADER BLENDE_NULL F01_OHNE DECKE_EINMAL RED_BEI_AUS L_OHNE_ECHTSPITZE WARM_OHNE AUS_OHNE_VERZOEGERUNG AUS_OHNE_LEEREN WARM_HALB GETEILT FENSTER_LANG RED_WARM)
+  string(TOLOWER ${mut} mut_klein)
+  test_mutation(test_mixer_kanal_limiter_${mut_klein}_mutation test_mixer_kanal_limiter CYPHERDJ_MUTATION_LIM_${mut} src/mixer.cpp src/beatfx.cpp)
+endforeach()
+test_mutation(test_mixer_latenzkonto_lim_aus_ohne_verzoegerung_mutation test_mixer_latenzkonto CYPHERDJ_MUTATION_LIM_AUS_OHNE_VERZOEGERUNG src/mixer.cpp src/beatfx.cpp)
 # K2 Task 3.3: Kleber in der Summe abgeschaltet. test_mixer_kleber (vom Glob angelegt) gegen diese Mutation muss scheitern.
 test_mutation(test_mixer_kleber_mutation test_mixer_kleber CYPHERDJ_MUTATION_KLEBER_AUS src/mixer.cpp src/beatfx.cpp)
 test_mutation(test_mixer_kleber_in_summe_mutation test_mixer_kleber CYPHERDJ_MUTATION_KLEBER_IN_SUMME src/mixer.cpp src/beatfx.cpp)
@@ -386,7 +510,7 @@ test_mutation(test_mixer_kleber_sofort_aus_mutation test_mixer_kleber CYPHERDJ_M
 # K2 Task 1.5: Kern-Verdrahtung. Der Auslöser geht ohne Sample-Versatz an den Mixer; test_kern_duck muss scheitern.
 test_mutation(test_kern_duck_mutation test_kern_duck CYPHERDJ_MUTATION_DUCK_VERSATZ_NULL
               src/kern.cpp src/erzeuger.cpp src/kit.cpp src/loopbox.cpp src/loop.cpp src/kern_stellwerk.cpp src/kern_arr.cpp ${ARR_QUELLEN} src/mixer.cpp src/beatfx.cpp src/teile.cpp src/klick.cpp src/tempoplan.cpp src/uhr.cpp
-              src/kern_deck.cpp src/deck.cpp src/lader.cpp src/fassung.cpp
+              src/kern_deck.cpp src/kern_mix.cpp src/deck.cpp src/lader.cpp src/fassung.cpp
               src/kern_hand.cpp src/hand_ein.cpp
               stub/dehner_stub.cpp)
 # Scheibe 25: test_mixer am Mixer ohne Limiter (siehe oben beim Einsammeln der Tests); kein WILL_FAIL.
@@ -489,13 +613,10 @@ if(CYPHERDJ_BUNGEE)
   target_link_libraries(test_dehner_bungee PRIVATE PkgConfig::RUBBERBAND)  # keylock_mess.h bindet Rubber Band ein
   # S2: der Kern mit Bungee; Fehlerfall: niemand treibt die Dehner (alle Kern-Quellen samt dehner_bungee.cpp, wie kern_keylock_faeden_mutation)
   target_link_libraries(test_kern_keylock_bungee PRIVATE PkgConfig::RUBBERBAND)
-  add_executable(test_kern_keylock_bungee_kein_antrieb_mutation tests/test_kern_keylock_bungee.cpp ${KERN_QUELLEN} src/dehner_bungee.cpp src/warp_werk_bungee.cpp)   # Slice 2: warp_werk.cpp liegt in KERN_QUELLEN und braucht die Maschine
-  target_include_directories(test_kern_keylock_bungee_kein_antrieb_mutation PRIVATE include tests ${DJK}/vertrag)
-  target_compile_definitions(test_kern_keylock_bungee_kein_antrieb_mutation PRIVATE CYPHERDJ_MUTATION_KEIN_ANTRIEB=1 CYPHERDJ_BUNGEE=1
-                             CYPHERDJ_DJK="${DJK}")
-  target_link_libraries(test_kern_keylock_bungee_kein_antrieb_mutation PRIVATE PkgConfig::JACK Threads::Threads cypherdj::toml
-                        cypherdj::dsp cypherdj::stellwerk cypherdj_dsp_messer cypherdj::json PkgConfig::CRYPTO cypherdj::hand
-                        PkgConfig::RUBBERBAND cypherdj::bungee)
+  kern_mut_exe(test_kern_keylock_bungee_kein_antrieb_mutation   # Slice 2: warp_werk.cpp liegt in KERN_QUELLEN und braucht die Maschine
+               QUELLEN tests/test_kern_keylock_bungee.cpp ${KERN_QUELLEN} src/dehner_bungee.cpp src/warp_werk_bungee.cpp
+               SCHALTER CYPHERDJ_MUTATION_KEIN_ANTRIEB DEFS CYPHERDJ_BUNGEE=1 CYPHERDJ_DJK="${DJK}"
+               INCLUDES include tests ${DJK}/vertrag LIBS ${KERN_MUT_LIBS} cypherdj::bungee)
   add_test(NAME test_kern_keylock_bungee_kein_antrieb_mutation COMMAND test_kern_keylock_bungee_kein_antrieb_mutation deck)
   set_tests_properties(test_kern_keylock_bungee_kein_antrieb_mutation PROPERTIES WILL_FAIL TRUE TIMEOUT 120)
   foreach(m BUNGEE_KORN_EINS_SPAET BUNGEE_OHNE_RESET)
@@ -526,7 +647,7 @@ kern_mutation(cypherdj-kern-mutation-drift CYPHERDJ_MUTATION_DECK_DRIFT)
 # Mutation muss scheitern (Klick und Quittung 2 am Blockanfang); der Kern damit fährt start_quell_beat rot.
 kern_mutation(cypherdj-kern-mutation-start CYPHERDJ_MUTATION_START_BLOCKANFANG)
 test_mutation(test_kern_deck_mutation test_kern_deck CYPHERDJ_MUTATION_START_BLOCKANFANG
-              src/kern.cpp src/erzeuger.cpp src/kit.cpp src/loopbox.cpp src/loop.cpp src/kern_stellwerk.cpp src/kern_arr.cpp ${ARR_QUELLEN} src/kern_deck.cpp src/mixer.cpp src/beatfx.cpp src/teile.cpp src/klick.cpp
+              src/kern.cpp src/erzeuger.cpp src/kit.cpp src/loopbox.cpp src/loop.cpp src/kern_stellwerk.cpp src/kern_arr.cpp ${ARR_QUELLEN} src/kern_deck.cpp src/kern_mix.cpp src/mixer.cpp src/beatfx.cpp src/teile.cpp src/klick.cpp
               src/tempoplan.cpp src/uhr.cpp src/deck.cpp src/lader.cpp src/fassung.cpp src/kern_hand.cpp src/hand_ein.cpp
               stub/dehner_stub.cpp)  # Keylock Task 2: Fabrik ohne Rubber Band
 # Scheibe 31: Vergleichsmessung der Zykluskosten ohne JACK mit vier spielenden Decks (kein Test; die Messung im Callback
@@ -572,12 +693,27 @@ if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/../vertrag/pruefe_namenslisten.py)
   add_test(NAME namenslisten_gegen_vertrag
            COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/../vertrag/pruefe_namenslisten.py"
                    --wurzel "${CMAKE_CURRENT_SOURCE_DIR}/../..")
+  set_tests_properties(namenslisten_gegen_vertrag PROPERTIES SKIP_RETURN_CODE 77)   # public repo: English contract only
+endif()
+
+# 1.10 slice 4a T1: the generated insert files equal what docs/schnittstellen/insert_module.json produces, and its ranges equal
+# presets/geraete.ts (the plugin ranges). Text only, no build. The C++ side is test_insert_vertrag in the stellwerk project.
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/../vertrag/erzeuge_insert.py)
+  add_test(NAME insert_vokabular_aktuell
+           COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/../vertrag/erzeuge_insert.py" --pruefe)
+endif()
+
+# 1.10 slice 5 U2a (plan E20): the generated key rule files equal what docs/schnittstellen/schluessel_regeln.json produces. Text only, no build. The C++ side of the cells is
+# test_arr_schluessel case 10 (every cell and every case of the file against the loader).
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/../vertrag/erzeuge_schluessel.py)
+  add_test(NAME schluessel_regeln_aktuell
+           COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/../vertrag/erzeuge_schluessel.py" --pruefe)
 endif()
 
 # Scheibe 35, Fehlerfall der Abnahme (Plan 35 E2): das MIDI-Ereignis wirkt am Anfang des Folgeblocks statt an seinem
 # Versatz (sample = s0 + n, wie 19 M01). test_kern_midi gegen diese Mutation muss scheitern (Griff bei 142 848 statt
 # 142 777); cypherdj-kern-mutation-folgeblock ist der Kern für den Fehlerfall am Ziel.
-set(KERN_QUELLEN35_OHNE_DEHNER src/kern.cpp src/erzeuger.cpp src/kit.cpp src/loopbox.cpp src/loop.cpp src/kern_stellwerk.cpp src/kern_arr.cpp ${ARR_QUELLEN} src/kern_deck.cpp src/kern_hand.cpp src/hand_ein.cpp src/mixer.cpp src/beatfx.cpp
+set(KERN_QUELLEN35_OHNE_DEHNER src/kern.cpp src/erzeuger.cpp src/kit.cpp src/loopbox.cpp src/loop.cpp src/kern_stellwerk.cpp src/kern_arr.cpp ${ARR_QUELLEN} src/kern_deck.cpp src/kern_mix.cpp src/kern_hand.cpp src/hand_ein.cpp src/mixer.cpp src/beatfx.cpp
     src/teile.cpp src/klick.cpp src/tempoplan.cpp src/uhr.cpp src/deck.cpp src/lader.cpp src/fassung.cpp)
 # Keylock Task 2 (Vertrag 13): kern_deck.cpp ruft die Fabrik dehner_neu; ohne Rubber Band liefert der Stub nullptr.
 set(KERN_QUELLEN35 ${KERN_QUELLEN35_OHNE_DEHNER} stub/dehner_stub.cpp)
@@ -628,6 +764,8 @@ foreach(mut NICHT_GEMELDET FALSCHER_KANAL TAUSCH_05)
   string(TOLOWER ${mut} mut_klein)
   test_mutation(test_kern_kanal_graph_regler_${mut_klein}_mutation test_kern_kanal_graph CYPHERDJ_MUTATION_BK_REGLER_${mut} ${KERN_QUELLEN35_KG})
 endforeach()
+# S23 case 17: a plan of chained ramps on a graph knob must reach the graph; the failure case drops a change below 0.005 inside one block (slow ramps stand still).
+test_mutation(test_kern_kanal_graph_bk_rampe_totzone_mutation test_kern_kanal_graph CYPHERDJ_MUTATION_BK_RAMPE_TOTZONE ${KERN_QUELLEN35_KG})
 # Dasselbe im Netz: netz_erz.cpp mutiert als eigenes Objekt vor der Bibliothek (Muster test_netz_arr_erz4_mutation);
 # test_netz_erz muss scheitern, wenn kein_eingang, die Latenz oder der Kanalbereich nicht mehr geprüft werden.
 foreach(mut NETZ_EINGANG_OFFEN NETZ_LATENZ_OFFEN NETZ_BEREICH_OFFEN)
@@ -761,11 +899,8 @@ test_mutation(test_kern_pegel_mutation test_kern_pegel CYPHERDJ_MUTATION_KEIN_PE
 # Keylock Task 2: Fehlerfälle gegen test_deck_keylock. Der Test fährt auch einen Kern-Neustart (Test 8, Zustandsdatei) und
 # braucht darum alle Kern-Quellen samt dehner.cpp und Rubber Band.
 function(deck_keylock_mutation name schalter)
-  add_executable(${name} tests/test_deck_keylock.cpp ${KERN_QUELLEN})
-  target_include_directories(${name} PRIVATE include tests ${DJK}/vertrag)
-  target_compile_definitions(${name} PRIVATE ${schalter}=1 CYPHERDJ_DJK="${DJK}")
-  target_link_libraries(${name} PRIVATE PkgConfig::JACK Threads::Threads cypherdj::toml cypherdj::dsp cypherdj::stellwerk
-                        cypherdj_dsp_messer cypherdj::json PkgConfig::CRYPTO cypherdj::hand PkgConfig::RUBBERBAND)
+  kern_mut_exe(${name} QUELLEN tests/test_deck_keylock.cpp ${KERN_QUELLEN} SCHALTER ${schalter} DEFS CYPHERDJ_DJK="${DJK}"
+               INCLUDES include tests ${DJK}/vertrag LIBS ${KERN_MUT_LIBS})
   add_test(NAME ${name} COMMAND ${name})
   set_tests_properties(${name} PROPERTIES WILL_FAIL TRUE)
 endfunction()
@@ -788,11 +923,8 @@ deck_keylock_mutation(test_deck_keylock_fuellen_grenze_mutation CYPHERDJ_MUTATIO
 # Keylock Task 7 (Detailschnitt 7a Abschnitt 7): Fehlerfälle gegen test_loopbox_keylock, je Ziel nur der betroffene Test
 # (Argument). Gegenprobe, dass die übrigen grün bleiben: jedes Mutationsziel über alle Tests (task-07/step5_mutationen.txt).
 function(box_keylock_mutation name schalter test)
-  add_executable(${name} tests/test_loopbox_keylock.cpp ${KERN_QUELLEN})
-  target_include_directories(${name} PRIVATE include tests ${DJK}/vertrag)
-  target_compile_definitions(${name} PRIVATE ${schalter}=1 CYPHERDJ_DJK="${DJK}")
-  target_link_libraries(${name} PRIVATE PkgConfig::JACK Threads::Threads cypherdj::toml cypherdj::dsp cypherdj::stellwerk
-                        cypherdj_dsp_messer cypherdj::json PkgConfig::CRYPTO cypherdj::hand PkgConfig::RUBBERBAND)
+  kern_mut_exe(${name} QUELLEN tests/test_loopbox_keylock.cpp ${KERN_QUELLEN} SCHALTER ${schalter} DEFS CYPHERDJ_DJK="${DJK}"
+               INCLUDES include tests ${DJK}/vertrag LIBS ${KERN_MUT_LIBS})
   add_test(NAME ${name} COMMAND ${name} ${test})
   set_tests_properties(${name} PROPERTIES WILL_FAIL TRUE TIMEOUT 300)
 endfunction()
@@ -825,23 +957,16 @@ box_keylock_mutation(test_box_keylock_raster_neuer_platz_mutation CYPHERDJ_MUTAT
 box_keylock_mutation(test_box_keylock_aus_basis_einfrieren_mutation CYPHERDJ_MUTATION_KEYLOCK_AUS_BASIS_EINFRIEREN basis_knopf_blende)
 box_keylock_mutation(test_box_keylock_basis_linear_mutation CYPHERDJ_MUTATION_KEYLOCK_BASIS_LINEAR basis_knopf_blende)
 # Keylock 7b.3: /zustand/box mit vertauschten Zählern -> test_kern_box_keylock k4 rot.
-add_executable(test_kern_box_keylock_zaehler_mutation tests/test_kern_box_keylock.cpp ${KERN_QUELLEN})
-target_include_directories(test_kern_box_keylock_zaehler_mutation PRIVATE include tests ${DJK}/vertrag)
-target_compile_definitions(test_kern_box_keylock_zaehler_mutation PRIVATE CYPHERDJ_MUTATION_BOX_ZAEHLER_VERTAUSCHT=1
-                           CYPHERDJ_DJK="${DJK}")
-target_link_libraries(test_kern_box_keylock_zaehler_mutation PRIVATE PkgConfig::JACK Threads::Threads cypherdj::toml
-                      cypherdj::dsp cypherdj::stellwerk cypherdj_dsp_messer cypherdj::json PkgConfig::CRYPTO cypherdj::hand
-                      PkgConfig::RUBBERBAND)
+kern_mut_exe(test_kern_box_keylock_zaehler_mutation QUELLEN tests/test_kern_box_keylock.cpp ${KERN_QUELLEN}
+             SCHALTER CYPHERDJ_MUTATION_BOX_ZAEHLER_VERTAUSCHT DEFS CYPHERDJ_DJK="${DJK}"
+             INCLUDES include tests ${DJK}/vertrag LIBS ${KERN_MUT_LIBS})
 add_test(NAME test_kern_box_keylock_zaehler_mutation COMMAND test_kern_box_keylock_zaehler_mutation k4)
 set_tests_properties(test_kern_box_keylock_zaehler_mutation PROPERTIES WILL_FAIL TRUE TIMEOUT 300)
 # Keylock Task 2.5: Fehlerfälle gegen test_kern_keylock_faeden (Kern mit echten Fäden, alle Kern-Quellen samt dehner.cpp).
 # Je Ziel nur der betroffene Test (Argument), damit der rote Lauf nicht die übrigen mitfährt.
 function(kern_keylock_faeden_mutation name schalter test)
-  add_executable(${name} tests/test_kern_keylock_faeden.cpp ${KERN_QUELLEN})
-  target_include_directories(${name} PRIVATE include tests ${DJK}/vertrag)
-  target_compile_definitions(${name} PRIVATE ${schalter}=1 CYPHERDJ_DJK="${DJK}")
-  target_link_libraries(${name} PRIVATE PkgConfig::JACK Threads::Threads cypherdj::toml cypherdj::dsp cypherdj::stellwerk
-                        cypherdj_dsp_messer cypherdj::json PkgConfig::CRYPTO cypherdj::hand PkgConfig::RUBBERBAND)
+  kern_mut_exe(${name} QUELLEN tests/test_kern_keylock_faeden.cpp ${KERN_QUELLEN} SCHALTER ${schalter} DEFS CYPHERDJ_DJK="${DJK}"
+               INCLUDES include tests ${DJK}/vertrag LIBS ${KERN_MUT_LIBS})
   add_test(NAME ${name} COMMAND ${name} ${test})
   set_tests_properties(${name} PROPERTIES WILL_FAIL TRUE TIMEOUT 120)
 endfunction()
@@ -902,11 +1027,8 @@ deck_keylock_mutation(test_deck_keylock_aus_basis_einfrieren_mutation CYPHERDJ_M
 deck_keylock_mutation(test_deck_keylock_basis_linear_mutation CYPHERDJ_MUTATION_KEYLOCK_BASIS_LINEAR)
 # Keylock Task 6a (Detailschnitt 6a, Abschnitt 8): Fehlerfälle gegen test_deck_geplant, je Ziel nur der betroffene Test (Argument).
 function(deck_geplant_mutation name schalter test)
-  add_executable(${name} tests/test_deck_geplant.cpp ${KERN_QUELLEN})
-  target_include_directories(${name} PRIVATE include tests ${DJK}/vertrag)
-  target_compile_definitions(${name} PRIVATE ${schalter}=1 CYPHERDJ_DJK="${DJK}")
-  target_link_libraries(${name} PRIVATE PkgConfig::JACK Threads::Threads cypherdj::toml cypherdj::dsp cypherdj::stellwerk
-                        cypherdj_dsp_messer cypherdj::json PkgConfig::CRYPTO cypherdj::hand PkgConfig::RUBBERBAND)
+  kern_mut_exe(${name} QUELLEN tests/test_deck_geplant.cpp ${KERN_QUELLEN} SCHALTER ${schalter} DEFS CYPHERDJ_DJK="${DJK}"
+               INCLUDES include tests ${DJK}/vertrag LIBS ${KERN_MUT_LIBS})
   add_test(NAME ${name} COMMAND ${name} ${test})
   set_tests_properties(${name} PROPERTIES WILL_FAIL TRUE TIMEOUT 300)
 endfunction()
@@ -960,14 +1082,8 @@ box_keylock_mutation(test_box_keylock_still_kurze_vorlage_mutation CYPHERDJ_MUTA
 # Keylock 6b W3 (Plan Task 6, 3.6): Prüfbau mit Generationszähler der Leihe (CYPHERDJ_PRUEF_GEN), je Ziel ein Test (Argument).
 # Weitere Schalter nach dem Test (Mutationen); WILL_FAIL setzt der Aufrufer.
 function(deck_geplant_pruef name test)
-  add_executable(${name} tests/test_deck_geplant.cpp ${KERN_QUELLEN})
-  target_include_directories(${name} PRIVATE include tests ${DJK}/vertrag)
-  target_compile_definitions(${name} PRIVATE CYPHERDJ_PRUEF_GEN=1 CYPHERDJ_DJK="${DJK}")
-  foreach(sch ${ARGN})
-    target_compile_definitions(${name} PRIVATE ${sch}=1)
-  endforeach()
-  target_link_libraries(${name} PRIVATE PkgConfig::JACK Threads::Threads cypherdj::toml cypherdj::dsp cypherdj::stellwerk
-                        cypherdj_dsp_messer cypherdj::json PkgConfig::CRYPTO cypherdj::hand PkgConfig::RUBBERBAND)
+  kern_mut_exe(${name} QUELLEN tests/test_deck_geplant.cpp ${KERN_QUELLEN} SCHALTER CYPHERDJ_PRUEF_GEN ${ARGN}
+               DEFS CYPHERDJ_DJK="${DJK}" INCLUDES include tests ${DJK}/vertrag LIBS ${KERN_MUT_LIBS})
   add_test(NAME ${name} COMMAND ${name} ${test})
   set_tests_properties(${name} PROPERTIES TIMEOUT 600)
 endfunction()
@@ -1022,13 +1138,18 @@ set_tests_properties(test_deck_geplant_pruef_frueh_frei_reihum_mutation PROPERTI
 # Leckprüfung P20 (S4b): das abgelöste Band bleibt bis zur nächsten Epoche, die Leihe läuft voll: P20 rot.
 deck_geplant_mutation(test_deck_geplant_leihe_alt_bleibt_p20_mutation CYPHERDJ_MUTATION_PLAN_LEIHE_ALT_BLEIBT platz_generation)
 # Effekt-Sektion 2026-10-11: ein neuer Abonnent bekommt den gemerkten Stand der Regler und Boxen nicht: test_netz_deck rot.
-add_executable(test_netz_deck_stand_mutation tests/test_netz_deck.cpp ${KERN_QUELLEN})
-target_include_directories(test_netz_deck_stand_mutation PRIVATE include tests ${DJK}/vertrag)
-target_compile_definitions(test_netz_deck_stand_mutation PRIVATE CYPHERDJ_MUTATION_HALLO_OHNE_STAND=1 CYPHERDJ_DJK="${DJK}")
-target_link_libraries(test_netz_deck_stand_mutation PRIVATE PkgConfig::JACK Threads::Threads cypherdj::toml cypherdj::dsp cypherdj::stellwerk
-                      cypherdj_dsp_messer cypherdj::json PkgConfig::CRYPTO cypherdj::hand PkgConfig::RUBBERBAND)
+kern_mut_exe(test_netz_deck_stand_mutation QUELLEN tests/test_netz_deck.cpp ${KERN_QUELLEN} SCHALTER CYPHERDJ_MUTATION_HALLO_OHNE_STAND
+             DEFS CYPHERDJ_DJK="${DJK}" INCLUDES include tests ${DJK}/vertrag LIBS ${KERN_MUT_LIBS})
 add_test(NAME test_netz_deck_stand_mutation COMMAND test_netz_deck_stand_mutation)
 set_tests_properties(test_netz_deck_stand_mutation PROPERTIES WILL_FAIL TRUE)
+
+# 1.15 A5c: the first /k/hallo of a generation carries /e/kanal_limiter; without it test_netz_kanal_limiter (H1, H2) must fail.
+add_executable(test_netz_kanal_limiter_mutation tests/test_netz_kanal_limiter.cpp src/netz.cpp)   # netz.cpp mutated as its own object before the library (pattern test_kern_arr_ki_mutation)
+target_include_directories(test_netz_kanal_limiter_mutation PRIVATE include tests)
+target_compile_definitions(test_netz_kanal_limiter_mutation PRIVATE CYPHERDJ_MUTATION_HALLO_OHNE_KANAL_LIMITER=1 CYPHERDJ_DJK="${DJK}")
+target_link_libraries(test_netz_kanal_limiter_mutation PRIVATE cypherdj_kernbib cypherdj::json cypherdj::toml)
+add_test(NAME test_netz_kanal_limiter_mutation COMMAND test_netz_kanal_limiter_mutation)
+set_tests_properties(test_netz_kanal_limiter_mutation PROPERTIES WILL_FAIL TRUE)
 
 # D1 K1: Fehlerfälle des Moduls Arrangement und des Wiedergabe-Laders (WILL_FAIL: der Test muss sie sehen)
 test_mutation(test_arr_transport_vorhalt_mutation test_arr_transport CYPHERDJ_MUTATION_ARR_START_OHNE_VORHALT ${ARR_QUELLEN} src/uhr.cpp)
@@ -1054,12 +1175,90 @@ test_mutation(test_arr_returns_hall_erste_entprellt_mutation test_arr_returns CY
 test_mutation(test_arr_returns_hall_kein_kredit_mutation test_arr_returns CYPHERDJ_MUTATION_ARR_HALL_KEIN_KREDIT ${ARR_QUELLEN} src/uhr.cpp)
 test_mutation(test_arr_returns_hall_zufall_uhr_mutation test_arr_returns CYPHERDJ_MUTATION_ARR_HALL_ZUFALL_UHR ${ARR_QUELLEN} src/uhr.cpp)
 test_mutation(test_arr_returns_hall_state_im_snapshot_mutation test_arr_returns CYPHERDJ_MUTATION_ARR_HALL_STATE_IM_SNAPSHOT ${ARR_QUELLEN} src/uhr.cpp)
+test_mutation(test_arr_returns_hall_ohne_join_mutation test_arr_returns CYPHERDJ_MUTATION_HALL_OHNE_JOIN ${ARR_QUELLEN} src/uhr.cpp)   # mehrkern task 4: returns_pool_bitgleich must go red
 test_mutation(test_arr_returns_send_pre_mutation test_arr_returns CYPHERDJ_MUTATION_ARR_SEND_PRE ${ARR_QUELLEN} src/uhr.cpp)
 test_mutation(test_arr_returns_send_ohne_mute_mutation test_arr_returns CYPHERDJ_MUTATION_ARR_SEND_OHNE_MUTE ${ARR_QUELLEN} src/uhr.cpp)
 test_mutation(test_arr_returns_send_ohne_gruppen_blende_mutation test_arr_returns CYPHERDJ_MUTATION_ARR_SEND_OHNE_GRUPPEN_BLENDE ${ARR_QUELLEN} src/uhr.cpp)
 test_mutation(test_arr_returns_ret_nach_pm_fader_mutation test_arr_returns CYPHERDJ_MUTATION_ARR_RET_NACH_PM_FADER ${ARR_QUELLEN} src/uhr.cpp)
 test_mutation(test_arr_returns_ret_solo_aus_mutation test_arr_returns CYPHERDJ_MUTATION_ARR_RET_SOLO_AUS ${ARR_QUELLEN} src/uhr.cpp)
 test_mutation(test_arr_returns_ruhe_schneidet_ab_mutation test_arr_returns CYPHERDJ_MUTATION_ARR_RUHE_SCHNEIDET_AB ${ARR_QUELLEN} src/uhr.cpp)
+# 1.10 slice 4a T2: insert chains in the strip (test_arr_inserts; the loader case needs arr_wiedergabe.cpp). Each mutation turns its named case red (INS_GRUPPE_UEBERSPRUNGEN also case 6, which counts the group stage in its checks).
+test_mutation(test_arr_inserts_nach_fader_mutation test_arr_inserts CYPHERDJ_MUTATION_INS_NACH_FADER ${ARR_QUELLEN} src/arr_wiedergabe.cpp src/uhr.cpp)       # case 1
+test_mutation(test_arr_inserts_pre_nach_fader_mutation test_arr_inserts CYPHERDJ_MUTATION_INS_PRE_NACH_FADER ${ARR_QUELLEN} src/arr_wiedergabe.cpp src/uhr.cpp) # case 3
+test_mutation(test_arr_inserts_pre_ohne_mute_mutation test_arr_inserts CYPHERDJ_MUTATION_INS_PRE_OHNE_MUTE ${ARR_QUELLEN} src/arr_wiedergabe.cpp src/uhr.cpp)   # case 3
+test_mutation(test_arr_inserts_tausch_leert_mutation test_arr_inserts CYPHERDJ_MUTATION_INS_TAUSCH_LEERT ${ARR_QUELLEN} src/arr_wiedergabe.cpp src/uhr.cpp)     # case 4
+test_mutation(test_arr_inserts_nan_durchlass_mutation test_arr_inserts CYPHERDJ_MUTATION_INS_NAN_DURCHLASS ${ARR_QUELLEN} src/arr_wiedergabe.cpp src/uhr.cpp)   # case 5
+test_mutation(test_arr_inserts_bypass_sprung_mutation test_arr_inserts CYPHERDJ_MUTATION_INS_BYPASS_SPRUNG ${ARR_QUELLEN} src/arr_wiedergabe.cpp src/uhr.cpp)   # case 2
+test_mutation(test_arr_inserts_gruppe_uebersprungen_mutation test_arr_inserts CYPHERDJ_MUTATION_INS_GRUPPE_UEBERSPRUNGEN ${ARR_QUELLEN} src/arr_wiedergabe.cpp src/uhr.cpp)   # case 8
+test_mutation(test_arr_inserts_gruppe_pre_nach_fader_mutation test_arr_inserts CYPHERDJ_MUTATION_INS_GRUPPE_PRE_NACH_FADER ${ARR_QUELLEN} src/arr_wiedergabe.cpp src/uhr.cpp)   # case 8
+test_mutation(test_arr_inserts_ret_vor_hall_mutation test_arr_inserts CYPHERDJ_MUTATION_INS_RET_VOR_HALL ${ARR_QUELLEN} src/arr_wiedergabe.cpp src/uhr.cpp)   # case 9
+test_mutation(test_arr_inserts_pm_nach_fader_mutation test_arr_inserts CYPHERDJ_MUTATION_INS_PM_NACH_FADER ${ARR_QUELLEN} src/arr_wiedergabe.cpp src/uhr.cpp)   # case 10
+test_mutation(test_arr_inserts_sc_ignoriert_mutation test_arr_inserts CYPHERDJ_MUTATION_INS_SC_IGNORIERT ${ARR_QUELLEN} src/arr_wiedergabe.cpp src/uhr.cpp)   # case 12 sidechain_kick
+test_mutation(test_arr_inserts_sc_nach_kette_mutation test_arr_inserts CYPHERDJ_MUTATION_INS_SC_NACH_KETTE ${ARR_QUELLEN} src/arr_wiedergabe.cpp src/uhr.cpp)   # case 12 sc_vor_kette
+test_mutation(test_arr_inserts_sc_nan_durchlass_mutation test_arr_inserts CYPHERDJ_MUTATION_INS_SC_NAN_DURCHLASS ${ARR_QUELLEN} src/arr_wiedergabe.cpp src/uhr.cpp)   # case 12 sc_nan
+test_mutation(test_arr_inserts_pre_sprung_mutation test_arr_inserts CYPHERDJ_MUTATION_INS_PRE_SPRUNG ${ARR_QUELLEN} src/arr_wiedergabe.cpp src/uhr.cpp)   # case 13
+test_mutation(test_arr_inserts_nan_nur_proben_mutation test_arr_inserts CYPHERDJ_MUTATION_INS_NAN_NUR_PROBEN ${ARR_QUELLEN} src/arr_wiedergabe.cpp src/uhr.cpp)   # case 14
+test_mutation(test_arr_inserts_gruppe_leer_laeuft_mutation test_arr_inserts CYPHERDJ_MUTATION_INS_GRUPPE_LEER_LAEUFT ${ARR_QUELLEN} src/arr_wiedergabe.cpp src/uhr.cpp)   # case 15
+test_mutation(test_arr_inserts_mix0_gr_steht_mutation test_arr_inserts CYPHERDJ_MUTATION_INS_MIX0_GR_STEHT ${ARR_QUELLEN} src/arr_wiedergabe.cpp src/uhr.cpp)   # case 15
+# 1.10 slice 4b T12: eq and saturator inserts (test_arr_inserts_4b). Each mutation turns its named case red.
+test_mutation(test_arr_inserts_4b_eq_band_vertauscht_mutation test_arr_inserts_4b CYPHERDJ_MUTATION_INS_EQ_BAND_VERTAUSCHT ${ARR_QUELLEN} src/arr_wiedergabe.cpp src/uhr.cpp)       # case 2 (and the b8 binding of case 1)
+test_mutation(test_arr_inserts_4b_saett_aus_nach_drive_mutation test_arr_inserts_4b CYPHERDJ_MUTATION_INS_SAETT_AUS_NACH_DRIVE ${ARR_QUELLEN} src/arr_wiedergabe.cpp src/uhr.cpp) # case 4
+test_mutation(test_arr_inserts_4b_pool_plus_eins_mutation test_arr_inserts_4b CYPHERDJ_MUTATION_INS_POOL_PLUS_EINS ${ARR_QUELLEN} src/arr_wiedergabe.cpp src/uhr.cpp)           # case 5
+test_mutation(test_arr_inserts_4b_nan_durchlass_mutation test_arr_inserts_4b CYPHERDJ_MUTATION_INS_NAN_DURCHLASS ${ARR_QUELLEN} src/arr_wiedergabe.cpp src/uhr.cpp)               # case 8
+test_mutation(test_arr_inserts_4b_komp_hash_nach_fader_mutation test_arr_inserts_4b_komp_hash CYPHERDJ_MUTATION_INS_NACH_FADER ${ARR_QUELLEN} src/arr_wiedergabe.cpp src/uhr.cpp)   # negative control: the komp-only result of 4a changes with the stage after the fader
+# Master limiter insert (test_arr_inserts_lim): the stage ignores the decke row and stays at -1 dB; the -6 dB assertion of case 1 goes red.
+test_mutation(test_arr_inserts_lim_decke_fest_mutation test_arr_inserts_lim CYPHERDJ_MUTATION_INS_LIM_DECKE_FEST ${ARR_QUELLEN} src/arr_wiedergabe.cpp src/uhr.cpp)   # case 1
+# 1.10 slice 4b T13: latency compensation (test_arr_pdc). Each mutation turns its named case red.
+test_mutation(test_arr_pdc_fehlt_mutation test_arr_pdc CYPHERDJ_MUTATION_PDC_FEHLT_TABELLE ${ARR_QUELLEN} src/arr_wiedergabe.cpp src/uhr.cpp)           # case 1 (four paths), 2, 3, 4, 5, 7
+test_mutation(test_arr_pdc_doppelt_mutation test_arr_pdc CYPHERDJ_MUTATION_PDC_DOPPELT ${ARR_QUELLEN} src/arr_wiedergabe.cpp src/uhr.cpp)               # case 1: the send path delayed twice
+test_mutation(test_arr_pdc_nur_bei_an_mutation test_arr_pdc CYPHERDJ_MUTATION_PDC_NUR_BEI_AN ${ARR_QUELLEN} src/arr_wiedergabe.cpp src/uhr.cpp)         # case 2: the delay depends on the project flag an
+test_mutation(test_arr_pdc_bypass_ohne_latenz_mutation test_arr_pdc CYPHERDJ_MUTATION_INS_BYPASS_OHNE_LATENZ ${ARR_QUELLEN} src/arr_wiedergabe.cpp src/uhr.cpp)   # case 2: a stage that is fully off does not delay
+test_mutation(test_arr_pdc_block_neu_mutation test_arr_pdc CYPHERDJ_MUTATION_PDC_BLOCK_NEU ${ARR_QUELLEN} src/arr_wiedergabe.cpp src/uhr.cpp)           # case 6: the ring is dropped at every block
+test_mutation(test_arr_pdc_metronom_mutation test_arr_pdc CYPHERDJ_MUTATION_METRONOM_PDC_FEHLT ${ARR_QUELLEN} src/arr_wiedergabe.cpp src/uhr.cpp)       # case 7: the click ignores the latency
+test_mutation(test_arr_pdc_allokation_mutation test_arr_pdc CYPHERDJ_MUTATION_PDC_ALLOKATION ${ARR_QUELLEN} src/arr_wiedergabe.cpp src/uhr.cpp)               # case 9: the ring code allocates in the callback
+# 1.10 slice 4c T15: rack macros (test_arr_rack). Each mutation turns its named case red.
+test_mutation(test_arr_rack_vertauscht_mutation test_arr_rack CYPHERDJ_MUTATION_MAKRO_VERTAUSCHT ${ARR_QUELLEN} src/arr_wiedergabe.cpp src/uhr.cpp)       # case 1: von and bis swapped
+test_mutation(test_arr_rack_row_gewinnt_mutation test_arr_rack CYPHERDJ_MUTATION_MAKRO_ROW_GEWINNT ${ARR_QUELLEN} src/arr_wiedergabe.cpp src/uhr.cpp)     # case 2: a written row wins over the macro
+test_mutation(test_arr_rack_spaet_mutation test_arr_rack CYPHERDJ_MUTATION_MAKRO_SPAET ${ARR_QUELLEN} src/arr_wiedergabe.cpp src/uhr.cpp)                   # case 3: the move acts one block late
+test_mutation(test_arr_rack_limit_17_mutation test_arr_rack CYPHERDJ_MUTATION_MAKRO_LIMIT_17 ${ARR_QUELLEN} src/arr_wiedergabe.cpp src/uhr.cpp)             # case 4: the 17th target is cut silently
+test_mutation(test_arr_rack_bleibt_mutation test_arr_rack CYPHERDJ_MUTATION_MAKRO_BLEIBT ${ARR_QUELLEN} src/arr_wiedergabe.cpp src/uhr.cpp)                 # case 5: the override stays after the rack has gone
+# 1.10 slice 5 U1: structural sidechain key track post, track order, key buffer zeroing (test_arr_schluessel). Each mutation turns its named case red.
+test_mutation(test_arr_schluessel_post_vor_fader_mutation test_arr_schluessel CYPHERDJ_MUTATION_SC_POST_VOR_FADER ${ARR_QUELLEN} src/arr_wiedergabe.cpp src/uhr.cpp)       # case 2 (AK14 core, post case), 3, 5
+test_mutation(test_arr_schluessel_ordnung_fest_mutation test_arr_schluessel CYPHERDJ_MUTATION_SC_ORDNUNG_FEST ${ARR_QUELLEN} src/arr_wiedergabe.cpp src/uhr.cpp)           # case 4: the order is ignored
+test_mutation(test_arr_schluessel_struktur_ignoriert_mutation test_arr_schluessel CYPHERDJ_MUTATION_SC_STRUKTUR_IGNORIERT ${ARR_QUELLEN} src/arr_wiedergabe.cpp src/uhr.cpp)   # case 2 (post at fader 0), 1, 4, 5
+test_mutation(test_arr_schluessel_kein_nullen_mutation test_arr_schluessel CYPHERDJ_MUTATION_SC_KEIN_NULLEN ${ARR_QUELLEN} src/arr_wiedergabe.cpp src/uhr.cpp)             # cases 6, 14, 15: the buffer keeps the block before
+# 1.10 slice 5 U2a: key rules as data, group and return sources, silent-source cases.
+test_mutation(test_arr_schluessel_gruppe_nach_kette_mutation test_arr_schluessel CYPHERDJ_MUTATION_SC_GRUPPE_NACH_KETTE ${ARR_QUELLEN} src/arr_wiedergabe.cpp src/uhr.cpp)   # cases 11, 12: the group pre key is the chain output
+test_mutation(test_arr_schluessel_tabelle_offen_mutation test_arr_schluessel CYPHERDJ_MUTATION_SC_TABELLE_OFFEN ${ARR_QUELLEN} src/arr_wiedergabe.cpp src/uhr.cpp)           # case 10: the loader does not consult the table
+test_mutation(test_arr_schluessel_ret_pre_nach_kette_mutation test_arr_schluessel CYPHERDJ_MUTATION_SC_RET_PRE_NACH_KETTE ${ARR_QUELLEN} src/arr_wiedergabe.cpp src/uhr.cpp)   # case 13b: the return pre key is the chain output
+# 1.10 slice 5 U2b: DJ sources and key alignment (test_arr_schluessel cases 16 to 21)
+test_mutation(test_arr_schluessel_dj_null_mutation test_arr_schluessel CYPHERDJ_MUTATION_SC_DJ_NULL ${ARR_QUELLEN} src/arr_wiedergabe.cpp src/uhr.cpp)               # case 16: the DJ pointers are ignored
+test_mutation(test_arr_schluessel_kein_versatz_mutation test_arr_schluessel CYPHERDJ_MUTATION_SC_KEIN_VERSATZ ${ARR_QUELLEN} src/arr_wiedergabe.cpp src/uhr.cpp)       # cases 18, 19: no key ring
+test_mutation(test_arr_schluessel_versatz_eine_stufe_mutation test_arr_schluessel CYPHERDJ_MUTATION_SC_VERSATZ_EINE_STUFE ${ARR_QUELLEN} src/arr_wiedergabe.cpp src/uhr.cpp)   # case 19: the delay of the nearest stage, not the path sum
+# 1.10 slice 4c T15: the export carries the rack macros (test_render_rack). render.cpp as its own mutated object: rack/... is no mixer control of the render (the export
+# refuses the rows with `regler`); the test itself drops the rack rows at macro 1 (the 6 dB case goes red).
+add_executable(test_render_rack_ohne_rack_pfad_mutation tests/test_render_rack.cpp src/render.cpp)
+target_include_directories(test_render_rack_ohne_rack_pfad_mutation PRIVATE include tests)
+target_compile_definitions(test_render_rack_ohne_rack_pfad_mutation PRIVATE CYPHERDJ_MUTATION_RENDER_OHNE_RACK_PFAD=1 CYPHERDJ_DJK="${DJK}")
+target_link_libraries(test_render_rack_ohne_rack_pfad_mutation PRIVATE cypherdj_kernbib cypherdj::json cypherdj::toml)
+add_test(NAME test_render_rack_ohne_rack_pfad_mutation COMMAND test_render_rack_ohne_rack_pfad_mutation)
+set_tests_properties(test_render_rack_ohne_rack_pfad_mutation PROPERTIES WILL_FAIL TRUE)
+add_executable(test_render_rack_ohne_rack_zeilen_mutation tests/test_render_rack.cpp)
+target_include_directories(test_render_rack_ohne_rack_zeilen_mutation PRIVATE include tests)
+target_compile_definitions(test_render_rack_ohne_rack_zeilen_mutation PRIVATE CYPHERDJ_MUTATION_RENDER_OHNE_RACK_ZEILEN=1 CYPHERDJ_DJK="${DJK}")
+target_link_libraries(test_render_rack_ohne_rack_zeilen_mutation PRIVATE cypherdj_kernbib cypherdj::json cypherdj::toml)
+add_test(NAME test_render_rack_ohne_rack_zeilen_mutation COMMAND test_render_rack_ohne_rack_zeilen_mutation)
+set_tests_properties(test_render_rack_ohne_rack_zeilen_mutation PROPERTIES WILL_FAIL TRUE)
+# 1.10 slice 4a seam S4: the page's own request through the real loader (daten/wiedergabe_ketten.json). The old page key `master` for the PM chain turns case 1 red.
+test_mutation(test_arr_naht_seite_pm_umbenannt_mutation test_arr_naht_seite CYPHERDJ_MUTATION_NAHT_PM_UMBENANNT ${ARR_QUELLEN} src/arr_wiedergabe.cpp src/uhr.cpp)   # case 1
+# 1.10 slice 4a seam S3: an export built without the insert rows is >= 6 dB too loud; test_render_ketten (project of daten/wiedergabe_ketten.json) must go red
+add_executable(test_render_ketten_ohne_ins_zeilen_mutation tests/test_render_ketten.cpp)
+target_include_directories(test_render_ketten_ohne_ins_zeilen_mutation PRIVATE include tests)
+target_compile_definitions(test_render_ketten_ohne_ins_zeilen_mutation PRIVATE CYPHERDJ_MUTATION_RENDER_OHNE_INS_ZEILEN=1 CYPHERDJ_DJK="${DJK}")
+target_link_libraries(test_render_ketten_ohne_ins_zeilen_mutation PRIVATE cypherdj_kernbib cypherdj::json cypherdj::toml)
+add_test(NAME test_render_ketten_ohne_ins_zeilen_mutation COMMAND test_render_ketten_ohne_ins_zeilen_mutation)
+set_tests_properties(test_render_ketten_ohne_ins_zeilen_mutation PROPERTIES WILL_FAIL TRUE)
+
 test_mutation(test_arr_noten_vorausblick_mutation test_arr_noten CYPHERDJ_MUTATION_ARR_OHNE_VORAUSBLICK ${ARR_QUELLEN} src/uhr.cpp)
 test_mutation(test_arr_noten_tausch_mutation test_arr_noten CYPHERDJ_MUTATION_ARR_TAUSCH_OHNE_NOTE_AUS ${ARR_QUELLEN} src/uhr.cpp)
 test_mutation(test_arr_noten_fenster_mutation test_arr_noten CYPHERDJ_MUTATION_ARR_FENSTER_LINEAR ${ARR_QUELLEN} src/uhr.cpp)
@@ -1081,6 +1280,48 @@ test_mutation(test_arr_auto_ziele_mute_hart_mutation test_arr_auto_ziele CYPHERD
 test_mutation(test_arr_auto_ziele_grund_mutation test_arr_auto_ziele CYPHERDJ_MUTATION_ARR_AUTO_GRUND_UEBERSCHRIEBEN ${ARR_QUELLEN} src/uhr.cpp)   # base mute overwritten by the lane value
 test_mutation(test_arr_auto_ziele_geraet_erstes_sample_mutation test_arr_auto_ziele CYPHERDJ_MUTATION_ARR_GERAET_ERSTES_SAMPLE ${ARR_QUELLEN} src/uhr.cpp)   # slice 2 task 4: the device lane value at the first running sample of the block
 test_mutation(test_arr_auto_ziele_pan_blende_hart_mutation test_arr_auto_ziele CYPHERDJ_MUTATION_ARR_AUTO_PAN_BLENDE_HART ${ARR_QUELLEN} src/uhr.cpp)   # pan lane deleted without the blend
+# 1.12 Automation slice 3 task 2: the lane override in the Arrangement (test_arr_auto_eingriff); each error case makes it red
+test_mutation(test_arr_auto_eingriff_ohne_blende_mutation test_arr_auto_eingriff CYPHERDJ_MUTATION_ARR_AUTO_UEBER_OHNE_BLENDE ${ARR_QUELLEN} src/uhr.cpp)   # the grip without the 480 source blend
+test_mutation(test_arr_auto_eingriff_tausch_loescht_mutation test_arr_auto_eingriff CYPHERDJ_MUTATION_ARR_AUTO_UEBER_TAUSCH_LOESCHT ${ARR_QUELLEN} src/uhr.cpp)   # a snapshot swap with the lane still there clears the override
+test_mutation(test_arr_auto_eingriff_im_stopp_mutation test_arr_auto_eingriff CYPHERDJ_MUTATION_ARR_AUTO_UEBER_IM_STOPP ${ARR_QUELLEN} src/uhr.cpp)   # D5: a grip while the transport stands overrides
+test_mutation(test_arr_auto_eingriff_freigabe_im_stopp_mutation test_arr_auto_eingriff CYPHERDJ_MUTATION_ARR_AUTO_FREIGABE_IM_STOPP ${ARR_QUELLEN} src/uhr.cpp)   # D6: the re-enable is refused while stopped
+test_mutation(test_arr_auto_eingriff_kern_setze_ohne_war_mutation test_arr_auto_eingriff_kern CYPHERDJ_MUTATION_ARR_AUTO_SETZE_OHNE_WAR ${KERN_QUELLEN35} src/aufnahme_faden.cpp src/take_schreiber.cpp src/arr_wiedergabe.cpp)   # the page path sets the Stellwerk value although the lane has not played
+test_mutation(test_arr_auto_eingriff_zwei_ueberschreibt_mutation test_arr_auto_eingriff CYPHERDJ_MUTATION_ARR_AUTO_UEBER_ZWEI_UEBERSCHREIBT ${ARR_QUELLEN} src/uhr.cpp)   # a second change in a block overwrites the first (jump)
+test_mutation(test_arr_auto_eingriff_kern_pickup_immer_mutation test_arr_auto_eingriff_kern CYPHERDJ_MUTATION_ARR_AUTO_UEBER_PICKUP_IMMER ${KERN_QUELLEN35} src/aufnahme_faden.cpp src/take_schreiber.cpp src/arr_wiedergabe.cpp)   # the pickup stays true while overridden: every step falls back to the lane value
+test_mutation(test_arr_auto_eingriff_kern_nachreichen_griff_mutation test_arr_auto_eingriff_kern CYPHERDJ_MUTATION_ARR_AUTO_UEBER_NACHREICHEN_GRIFF ${KERN_QUELLEN35} src/aufnahme_faden.cpp src/take_schreiber.cpp src/arr_wiedergabe.cpp)   # the touches of teile_nachreichen count as grips
+# 1.12 Automation slice 3 task 3: /k/arr/auto in the core (test_kern_arr_auto) and in the net thread (test_netz_arr_auto); each error case must make it red
+test_mutation(test_kern_arr_auto_cypher_mutation test_kern_arr_auto CYPHERDJ_MUTATION_ARR_AUTO_CYPHER_UEBERSTEUERT ${KERN_QUELLEN35} src/aufnahme_faden.cpp src/take_schreiber.cpp src/arr_wiedergabe.cpp)   # D9: the core lets cypher override
+test_mutation(test_kern_arr_auto_im_stopp_mutation test_kern_arr_auto CYPHERDJ_MUTATION_ARR_AUTO_UEBER_IM_STOPP ${KERN_QUELLEN35} src/aufnahme_faden.cpp src/take_schreiber.cpp src/arr_wiedergabe.cpp)   # D5: the stopped transport takes the override from the command
+test_mutation(test_kern_arr_auto_ohne_abgleich_mutation test_kern_arr_auto CYPHERDJ_MUTATION_ARR_AUTO_OHNE_ABGLEICH ${KERN_QUELLEN35} src/aufnahme_faden.cpp src/take_schreiber.cpp src/arr_wiedergabe.cpp)   # lost events are not re-reported
+test_mutation(test_kern_arr_auto_abgleich_vergisst_mutation test_kern_arr_auto CYPHERDJ_MUTATION_ARR_AUTO_ABGLEICH_VERGISST ${KERN_QUELLEN35} src/aufnahme_faden.cpp src/take_schreiber.cpp src/arr_wiedergabe.cpp)   # the re-report forgets the rest when the event ring of the core is full
+add_executable(test_netz_arr_auto_cypher_mutation tests/test_netz_arr_auto.cpp src/netz_arr.cpp)   # D9: the net thread lets cypher override; own object as test_netz_arr_erz4_mutation
+target_include_directories(test_netz_arr_auto_cypher_mutation PRIVATE include tests)
+target_compile_definitions(test_netz_arr_auto_cypher_mutation PRIVATE CYPHERDJ_MUTATION_ARR_AUTO_CYPHER_UEBERSTEUERT=1 CYPHERDJ_DJK="${DJK}")
+target_link_libraries(test_netz_arr_auto_cypher_mutation PRIVATE cypherdj_kernbib cypherdj::json cypherdj::toml)
+add_test(NAME test_netz_arr_auto_cypher_mutation COMMAND test_netz_arr_auto_cypher_mutation)
+set_tests_properties(test_netz_arr_auto_cypher_mutation PROPERTIES WILL_FAIL TRUE)
+# 1.12 Automation slice 3 task 7: /k/arr/arm and /e/auto_punkt in the core (test_kern_arr_arm) and in the net thread (test_netz_arr_arm); each error case must make it red
+test_mutation(test_kern_arr_arm_arm_cypher_mutation test_kern_arr_arm CYPHERDJ_MUTATION_ARR_ARM_CYPHER ${KERN_QUELLEN35} src/aufnahme_faden.cpp src/take_schreiber.cpp src/arr_wiedergabe.cpp)   # any source arms (core)
+test_mutation(test_kern_arr_arm_ohne_arm_mutation test_kern_arr_arm CYPHERDJ_MUTATION_ARR_PUNKT_OHNE_ARM ${KERN_QUELLEN35} src/aufnahme_faden.cpp src/take_schreiber.cpp src/arr_wiedergabe.cpp)   # points without any arm
+test_mutation(test_kern_arr_arm_alle_spuren_mutation test_kern_arr_arm CYPHERDJ_MUTATION_ARR_PUNKT_ALLE_SPUREN ${KERN_QUELLEN35} src/aufnahme_faden.cpp src/take_schreiber.cpp src/arr_wiedergabe.cpp)   # one armed track arms them all
+test_mutation(test_kern_arr_arm_im_stopp_mutation test_kern_arr_arm CYPHERDJ_MUTATION_ARR_PUNKT_IM_STOPP ${KERN_QUELLEN35} src/aufnahme_faden.cpp src/take_schreiber.cpp src/arr_wiedergabe.cpp)   # points while the transport stands
+test_mutation(test_kern_arr_arm_ohne_drossel_mutation test_kern_arr_arm CYPHERDJ_MUTATION_ARR_PUNKT_OHNE_DROSSEL ${KERN_QUELLEN35} src/aufnahme_faden.cpp src/take_schreiber.cpp src/arr_wiedergabe.cpp)   # no 50 Hz cap
+test_mutation(test_kern_arr_arm_ohne_nachzuegler_mutation test_kern_arr_arm CYPHERDJ_MUTATION_ARR_PUNKT_OHNE_NACHZUEGLER ${KERN_QUELLEN35} src/aufnahme_faden.cpp src/take_schreiber.cpp src/arr_wiedergabe.cpp)   # no trailing value, the last value of a gesture is lost
+test_mutation(test_kern_arr_arm_nachzuegler_erster_mutation test_kern_arr_arm CYPHERDJ_MUTATION_ARR_PUNKT_NACHZUEGLER_ERSTER ${KERN_QUELLEN35} src/aufnahme_faden.cpp src/take_schreiber.cpp src/arr_wiedergabe.cpp)   # the trailing value is the first of the window, not the newest
+test_mutation(test_kern_arr_arm_beat_jetzt_mutation test_kern_arr_arm CYPHERDJ_MUTATION_ARR_PUNKT_BEAT_JETZT ${KERN_QUELLEN35} src/aufnahme_faden.cpp src/take_schreiber.cpp src/arr_wiedergabe.cpp)   # the beat is taken at the end of the block, not at the grip sample
+test_mutation(test_kern_arr_arm_beat_linear_mutation test_kern_arr_arm CYPHERDJ_MUTATION_ARR_PUNKT_BEAT_LINEAR ${KERN_QUELLEN35} src/aufnahme_faden.cpp src/take_schreiber.cpp src/arr_wiedergabe.cpp)   # the beat ignores the tempo ramp
+test_mutation(test_kern_arr_arm_beat_ohne_naht_mutation test_kern_arr_arm CYPHERDJ_MUTATION_ARR_PUNKT_BEAT_OHNE_NAHT ${KERN_QUELLEN35} src/aufnahme_faden.cpp src/take_schreiber.cpp src/arr_wiedergabe.cpp)   # the beat behind the loop seam keeps the old origin
+test_mutation(test_kern_arr_arm_stopp_verwirft_mutation test_kern_arr_arm CYPHERDJ_MUTATION_ARR_PUNKT_STOPP_VERWIRFT ${KERN_QUELLEN35} src/aufnahme_faden.cpp src/take_schreiber.cpp src/arr_wiedergabe.cpp)   # a held point is dropped at the stop
+test_mutation(test_kern_arr_arm_arm_aus_behaelt_mutation test_kern_arr_arm CYPHERDJ_MUTATION_ARR_ARM_AUS_BEHAELT ${KERN_QUELLEN35} src/aufnahme_faden.cpp src/take_schreiber.cpp src/arr_wiedergabe.cpp)   # a disarm keeps the held point
+test_mutation(test_kern_arr_arm_paarung_erster_mutation test_kern_arr_arm CYPHERDJ_MUTATION_ARR_PUNKT_PAARUNG_ERSTER ${KERN_QUELLEN35} src/aufnahme_faden.cpp src/take_schreiber.cpp src/arr_wiedergabe.cpp)   # beat of the first grip with the value at the end of the sub-block
+test_mutation(test_kern_arr_arm_arm_aus_fenster_neu_mutation test_kern_arr_arm CYPHERDJ_MUTATION_ARR_ARM_AUS_FENSTER_NEU ${KERN_QUELLEN35} src/aufnahme_faden.cpp src/take_schreiber.cpp src/arr_wiedergabe.cpp)   # a disarm forgets the rate window
+test_mutation(test_kern_arr_arm_voll_verwirft_mutation test_kern_arr_arm CYPHERDJ_MUTATION_ARR_PUNKT_VOLL_VERWIRFT ${KERN_QUELLEN35} src/aufnahme_faden.cpp src/take_schreiber.cpp src/arr_wiedergabe.cpp)   # a point that finds the event ring full is dropped
+add_executable(test_netz_arr_arm_cypher_mutation tests/test_netz_arr_arm.cpp src/netz_arr.cpp)   # the net thread lets every source arm; own object as test_netz_arr_auto_cypher_mutation
+target_include_directories(test_netz_arr_arm_cypher_mutation PRIVATE include tests)
+target_compile_definitions(test_netz_arr_arm_cypher_mutation PRIVATE CYPHERDJ_MUTATION_ARR_ARM_CYPHER=1 CYPHERDJ_DJK="${DJK}")
+target_link_libraries(test_netz_arr_arm_cypher_mutation PRIVATE cypherdj_kernbib cypherdj::json cypherdj::toml)
+add_test(NAME test_netz_arr_arm_cypher_mutation COMMAND test_netz_arr_arm_cypher_mutation)
+set_tests_properties(test_netz_arr_arm_cypher_mutation PROPERTIES WILL_FAIL TRUE)
 test_mutation(test_arr_metronom_takt_mutation test_arr_metronom CYPHERDJ_MUTATION_ARR_METRONOM_KERN_TAKT ${ARR_QUELLEN} src/uhr.cpp)
 test_mutation(test_arr_wiedergabe_ref_mutation test_arr_wiedergabe CYPHERDJ_MUTATION_ARR_CACHE_OHNE_REF src/arr_wiedergabe.cpp)
 # Paket 1.13 Warp, Slice 1: Fehlerfälle des gewarpten Weges (RE-PITCH) und des /2-Laders; jeder muss den Test rot machen (WILL_FAIL)
@@ -1112,6 +1353,9 @@ test_mutation(test_warp_abbildung_erstes_segment_mutation test_warp_abbildung CY
 # Paket 1.13 Warp, Slice 2: COMPLEX und TONES im Arrangement (test_warp_werk_arr, automatisch eingesammelt): jede Mutation macht ihren Fall rot (WILL_FAIL)
 if(CYPHERDJ_BUNGEE)
   set(WARP_WERK_QUELLEN src/warp_werk.cpp src/warp_werk_bungee.cpp cypherdj::bungee)
+  # AK33 F4: a gain-only edit on a sounding RE-PITCH, BEATS or plain clip ramps the gain; the old voice swap must turn test_arr_gain_tausch red (WILL_FAIL).
+  # The test builds a warp engine for its COMPLEX control case, so the mutation target links the engine sources
+  test_mutation(test_arr_gain_tausch_neu_mutation test_arr_gain_tausch CYPHERDJ_MUTATION_ARR_GAIN_TAUSCH_NEU ${ARR_QUELLEN} src/uhr.cpp ${WARP_WERK_QUELLEN})
   # Nachbesserung 3 (Ereignisse im Frist-Fenster, Fälle 10 bis 13): OHNE_DECKUNG bis NAHT_VORFILTER. Nachbesserung 4 (eine Regel für Tausch und Karte, Fall 14):
   # ZWEIMAL_ANSETZEN entfällt (die Regel ist weg), TAUSCH_FREI bis UNGEHOERT kommen dazu (Fall 15). OHNE_PLATZTAUSCH, KETTE_LANG, BRUECKE_BLEIBT und
   # ENDE_ALTE_KARTE macht test_warp_werk_arr nicht rot (gemessen im dritten Beweislauf der Nachbesserung 4): sie haben nur Ziele gegen die Zufallsfolgen (unten)
@@ -1202,6 +1446,49 @@ test_mutation(test_arr_wiedergabe_bereich_mutation test_arr_wiedergabe CYPHERDJ_
 test_mutation(test_arr_wiedergabe_endlich_mutation test_arr_wiedergabe CYPHERDJ_MUTATION_ARR_OHNE_ENDLICH src/arr_wiedergabe.cpp)
 test_mutation(test_arr_wiedergabe_schnappschuss_mutation test_arr_wiedergabe CYPHERDJ_MUTATION_ARR_SCHNAPPSCHUSS_OFFEN src/arr_wiedergabe.cpp)
 test_mutation(test_arr_wiedergabe_audio_kopf_mutation test_arr_wiedergabe CYPHERDJ_MUTATION_ARR_AUDIO_KOPF_OFFEN src/arr_wiedergabe.cpp)
+# 1.12 slice 5 U8a T8.2 / T8.4: the gain envelope of the voice (test_arr_huellkurve); each error case makes it red
+# integration of AK33 F4 (in-place gain edit) with the gain envelope: the in-place branch must rebind the envelope cursor (test_arr_gain_tausch_hk)
+test_mutation(test_arr_gain_tausch_hk_bindung_mutation test_arr_gain_tausch_hk CYPHERDJ_MUTATION_ARR_GAIN_HK_BINDUNG_OHNE ${ARR_QUELLEN} src/uhr.cpp)
+test_mutation(test_arr_huellkurve_cursor_mutation test_arr_huellkurve CYPHERDJ_MUTATION_ARR_HK_CURSOR_ALT ${ARR_QUELLEN} src/uhr.cpp)   # the pool slot keeps its cursor: the loop wrap reads the end of the table
+test_mutation(test_arr_huellkurve_tausch_hart_mutation test_arr_huellkurve CYPHERDJ_MUTATION_ARR_HK_TAUSCH_HART ${ARR_QUELLEN} src/uhr.cpp)   # a table change at a swap jumps instead of gliding
+test_mutation(test_arr_huellkurve_ausklang_mutation test_arr_huellkurve CYPHERDJ_MUTATION_ARR_HK_AUSKLANG_OHNE ${ARR_QUELLEN} src/uhr.cpp)   # the tail copy ignores the envelope
+test_mutation(test_arr_huellkurve_blockanfang_mutation test_arr_huellkurve CYPHERDJ_MUTATION_ARR_WARP_BLOCKANFANG ${ARR_QUELLEN} src/uhr.cpp)   # the clip beat stands on the sub-block start (steep ramp)
+# 1.12 slice 5 U8b T8.3: the same checks through RE-PITCH and BEATS voices (test_arr_huellkurve)
+test_mutation(test_arr_huellkurve_warp_ohne_mutation test_arr_huellkurve CYPHERDJ_MUTATION_ARR_HK_WARP_OHNE ${ARR_QUELLEN} src/uhr.cpp)   # a warped voice ignores the envelope
+# 1.12 slice 5 U8b T8.3: the gain envelope through the warp werk voices (test_warp_werk_huellkurve, built only with Bungee like every warp_werk test)
+if(CYPHERDJ_BUNGEE)
+  test_mutation(test_warp_werk_huellkurve_schnellpfad_mutation test_warp_werk_huellkurve CYPHERDJ_MUTATION_ARR_HK_WERK_SCHNELLPFAD ${ARR_QUELLEN} src/uhr.cpp ${WARP_WERK_QUELLEN})   # the fast path ignores the envelope
+  test_mutation(test_warp_werk_huellkurve_bindung_mutation test_warp_werk_huellkurve CYPHERDJ_MUTATION_ARR_HK_WERK_BINDUNG_OHNE ${ARR_QUELLEN} src/uhr.cpp ${WARP_WERK_QUELLEN})   # the cursor stays on the old table at a swap
+  test_mutation(test_warp_werk_huellkurve_tausch_hart_mutation test_warp_werk_huellkurve CYPHERDJ_MUTATION_ARR_HK_TAUSCH_HART ${ARR_QUELLEN} src/uhr.cpp ${WARP_WERK_QUELLEN})   # the factor jumps at a table swap
+  test_mutation(test_warp_werk_huellkurve_cursor_mutation test_warp_werk_huellkurve CYPHERDJ_MUTATION_ARR_HK_CURSOR_ALT ${ARR_QUELLEN} src/uhr.cpp ${WARP_WERK_QUELLEN})   # the pool slot keeps its cursor
+  test_mutation(test_warp_werk_huellkurve_bruecke_mutation test_warp_werk_huellkurve CYPHERDJ_MUTATION_ARR_HK_BRUECKE_OHNE ${ARR_QUELLEN} src/uhr.cpp ${WARP_WERK_QUELLEN})   # the bridge does not keep the factor
+endif()
+# 1.12 slice 5 U8b T8.5: the null test with a gain envelope (test_arr_huellkurve_null). A bug that live and render share (a voice path that ignores the envelope) is found by case 3
+# (the render without the envelope against the live run with it must be red); the mutated voice code is linked ahead of the library (the pattern of the null tests above)
+foreach(m ARR_HK_WARP_OHNE:arr_stimmen ARR_HK_WERK_SCHNELLPFAD:arr_warp)
+  string(REPLACE ":" ";" mp ${m})
+  list(GET mp 0 mdef)
+  list(GET mp 1 mquelle)
+  string(TOLOWER ${mdef} mname)
+  add_executable(test_arr_huellkurve_null_${mname}_mutation tests/test_arr_huellkurve_null.cpp src/${mquelle}.cpp)
+  target_include_directories(test_arr_huellkurve_null_${mname}_mutation PRIVATE include tests)
+  target_compile_definitions(test_arr_huellkurve_null_${mname}_mutation PRIVATE CYPHERDJ_MUTATION_${mdef}=1 CYPHERDJ_DJK="${DJK}")
+  target_link_libraries(test_arr_huellkurve_null_${mname}_mutation PRIVATE cypherdj_kernbib cypherdj::json cypherdj::toml)
+  add_test(NAME test_arr_huellkurve_null_${mname}_mutation COMMAND test_arr_huellkurve_null_${mname}_mutation)
+  set_tests_properties(test_arr_huellkurve_null_${mname}_mutation PROPERTIES WILL_FAIL TRUE)
+endforeach()
+# 1.12 slice 5 U8a T8.1: the reader of gain_hk (test_arr_auto_lader); each error case makes it red
+test_mutation(test_arr_auto_lader_hk_pruefung_mutation test_arr_auto_lader CYPHERDJ_MUTATION_ARR_HK_OHNE_PRUEFUNG src/arr_wiedergabe.cpp)   # /1 takes gain_hk, no value is checked
+test_mutation(test_arr_auto_lader_hk_konto_mutation test_arr_auto_lader CYPHERDJ_MUTATION_ARR_HK_NICHT_GEBUCHT src/arr_wiedergabe.cpp)   # the hk points are not in je_bereich: not booked, not locked
+# 1.12 slice 5 U9 T9.1: the reader of `relativ` lanes (test_arr_auto_lader)
+test_mutation(test_arr_auto_lader_rel_eindeutig_mutation test_arr_auto_lader CYPHERDJ_MUTATION_ARR_REL_OHNE_EINDEUTIG src/arr_wiedergabe.cpp)   # an absolute and a relative lane of one target count as "twice"
+# 1.12 slice 5 U9 T9.2, T9.3: the value stack (test_arr_auto_stapel); each error case makes it red
+test_mutation(test_arr_auto_stapel_klemme_mutation test_arr_auto_stapel CYPHERDJ_MUTATION_ARR_AUTO_REL_OHNE_KLEMME ${ARR_QUELLEN} src/uhr.cpp)   # the stack is not clamped to the range of the target
+test_mutation(test_arr_auto_stapel_blende_mutation test_arr_auto_stapel CYPHERDJ_MUTATION_ARR_AUTO_REL_OHNE_BLENDE ${ARR_QUELLEN} src/uhr.cpp)   # the summand is added after the 480 blend: a hard step
+test_mutation(test_arr_auto_stapel_uebersteuerung_mutation test_arr_auto_stapel CYPHERDJ_MUTATION_ARR_AUTO_REL_BEI_UEBERSTEUERUNG ${ARR_QUELLEN} src/uhr.cpp)   # the relative lane stays on the hand value
+test_mutation(test_arr_auto_stapel_cursor_mutation test_arr_auto_stapel CYPHERDJ_MUTATION_ARR_AUTO_CURSOR_ALT ${ARR_QUELLEN} src/uhr.cpp)   # the relative cursor is not searched anew after the loop seam
+test_mutation(test_arr_auto_ziele_rel_klemme_mutation test_arr_auto_ziele CYPHERDJ_MUTATION_ARR_AUTO_REL_OHNE_KLEMME ${ARR_QUELLEN} src/uhr.cpp)   # device stack not clamped
+test_mutation(test_arr_auto_vorausschau_rel_mutation test_arr_auto_vorausschau CYPHERDJ_MUTATION_ARR_AUTO_REL_VORAUS_OHNE ${ARR_QUELLEN} src/uhr.cpp)   # the look-ahead of a stack ignores the relative lane
 test_mutation(test_kanten_erz4_mutation test_kanten CYPHERDJ_MUTATION_ARR_KANTE_ERZ4 src/kanten.cpp)
 # D1 K1 (A10): das Netz wartet aufs Laden; netz_arr.cpp mutiert als eigenes Objekt vor der Bibliothek (Muster
 # test_kern_vorhoeren_mutation). test_netz_arr_luecke muss scheitern (/uhr-Lücke so lang wie das Laden).
@@ -1257,6 +1544,61 @@ target_compile_definitions(test_kern_arr_ki_mutation PRIVATE CYPHERDJ_MUTATION_A
 target_link_libraries(test_kern_arr_ki_mutation PRIVATE cypherdj_kernbib cypherdj::json cypherdj::toml)
 add_test(NAME test_kern_arr_ki_mutation COMMAND test_kern_arr_ki_mutation)
 set_tests_properties(test_kern_arr_ki_mutation PROPERTIES WILL_FAIL TRUE)
+# 1.15 A6 (mix meters): kern_mix.cpp / netz_loop.cpp mutated as their own object before the library (pattern test_kern_arr_ki_mutation).
+#   every block instead of 10 Hz, 4864 instead of 4800 samples, every channel instead of the ones with a running tool, mid/high swapped, wire order swapped,
+#   A5c: the limiter is not a criterion (a bus whose only tool is the limiter publishes nothing)
+foreach(m JEDER_BLOCK ALLE_KANAELE BAND_VERTAUSCHT ABSTAND_4864 OHNE_LIMITER_KRITERIUM)
+  string(TOLOWER ${m} ml)
+  add_executable(test_kern_mix_zustand_${ml}_mutation tests/test_kern_mix_zustand.cpp src/kern_mix.cpp)
+  target_include_directories(test_kern_mix_zustand_${ml}_mutation PRIVATE include tests)
+  target_compile_definitions(test_kern_mix_zustand_${ml}_mutation PRIVATE CYPHERDJ_MUTATION_MIX_${m}=1 CYPHERDJ_DJK="${DJK}")
+  target_link_libraries(test_kern_mix_zustand_${ml}_mutation PRIVATE cypherdj_kernbib cypherdj::json cypherdj::toml)
+  add_test(NAME test_kern_mix_zustand_${ml}_mutation COMMAND test_kern_mix_zustand_${ml}_mutation)
+  set_tests_properties(test_kern_mix_zustand_${ml}_mutation PROPERTIES WILL_FAIL TRUE)
+endforeach()
+add_executable(test_netz_mix_zustand_mutation tests/test_netz_mix_zustand.cpp src/netz_loop.cpp)
+target_include_directories(test_netz_mix_zustand_mutation PRIVATE include tests ${DJK}/vertrag)
+target_compile_definitions(test_netz_mix_zustand_mutation PRIVATE CYPHERDJ_MUTATION_MIX_FELDER_VERTAUSCHT=1 CYPHERDJ_DJK="${DJK}")
+target_link_libraries(test_netz_mix_zustand_mutation PRIVATE cypherdj_kernbib cypherdj::json cypherdj::toml)
+add_test(NAME test_netz_mix_zustand_mutation COMMAND test_netz_mix_zustand_mutation)
+set_tests_properties(test_netz_mix_zustand_mutation PROPERTIES WILL_FAIL TRUE)
+add_executable(test_netz_ins_gr_mutation tests/test_netz_ins_gr.cpp src/netz_loop.cpp)
+target_include_directories(test_netz_ins_gr_mutation PRIVATE include tests ${DJK}/vertrag)
+target_compile_definitions(test_netz_ins_gr_mutation PRIVATE CYPHERDJ_MUTATION_INS_GR_NICHT_GEROUTET=1 CYPHERDJ_DJK="${DJK}")
+target_link_libraries(test_netz_ins_gr_mutation PRIVATE cypherdj_kernbib cypherdj::json cypherdj::toml)
+add_test(NAME test_netz_ins_gr_mutation COMMAND test_netz_ins_gr_mutation)
+set_tests_properties(test_netz_ins_gr_mutation PROPERTIES WILL_FAIL TRUE)   # 1.10 slice 4a S2: a dropped INS_GR must turn test_netz_ins_gr red
+# the Mixer getters (mixer.h): sign, band index, "ran in the last block" (the range guard is shown under CYPHERDJ_SANITIZE, not here)
+test_mutation(test_mixer_mix_reduktion_vorzeichen_mutation test_mixer_mix_reduktion CYPHERDJ_MUTATION_MIX_GATE_VORZEICHEN src/mixer.cpp src/beatfx.cpp)
+test_mutation(test_mixer_mix_reduktion_ohne_lief_mutation test_mixer_mix_reduktion CYPHERDJ_MUTATION_MIX_GATE_OHNE_LIEF src/mixer.cpp src/beatfx.cpp)
+test_mutation(test_mixer_mix_reduktion_band_mutation test_mixer_mix_reduktion CYPHERDJ_MUTATION_MIX_MB_BAND_VERSCHOBEN src/mixer.cpp src/beatfx.cpp)
+test_mutation(test_mixer_mix_reduktion_gate_oberkante_mutation test_mixer_mix_reduktion CYPHERDJ_MUTATION_MIX_GATE_OBERKANTE src/mixer.cpp src/beatfx.cpp)
+test_mutation(test_mixer_mix_reduktion_mb_oberkante_mutation test_mixer_mix_reduktion CYPHERDJ_MUTATION_MIX_MB_OBERKANTE src/mixer.cpp src/beatfx.cpp)
+if(CYPHERDJ_SANITIZE)   # the range guards: without them UBSan/ASan abort on the out-of-bounds read (in a plain build the read may pass by luck)
+  test_mutation(test_mixer_mix_reduktion_gate_guard_mutation test_mixer_mix_reduktion CYPHERDJ_MUTATION_MIX_GATE_OHNE_GUARD src/mixer.cpp src/beatfx.cpp)
+  test_mutation(test_mixer_mix_reduktion_mb_guard_mutation test_mixer_mix_reduktion CYPHERDJ_MUTATION_MIX_MB_OHNE_GUARD src/mixer.cpp src/beatfx.cpp)
+endif()
+# 1.15 A7b (spectrum path): mixer.cpp / netz.cpp mutated as their own object before the library (pattern test_kern_arr_ki_mutation); each must turn
+# test_mixer_spektrum red: cut 0 (stale samples stay), generation never bumped, tap writes while the selector is 0, tap on the neighbour channel (mixer.cpp);
+# leeren() only instead of verwerfe_bis(), no second generation read, tag from the current selection (netz.cpp)
+foreach(m SPEK_SCHNITT_NULL SPEK_GEN_STUMM SPEK_IMMER_SCHREIBEN SPEK_TAP_VERSCHOBEN SPEK_CUE_OHNE_ABGRIFF SPEK_OHNE_UNGERADE)
+  string(TOLOWER ${m} ml)
+  add_executable(test_mixer_spektrum_${ml}_mutation tests/test_mixer_spektrum.cpp src/mixer.cpp)
+  target_include_directories(test_mixer_spektrum_${ml}_mutation PRIVATE include tests)
+  target_compile_definitions(test_mixer_spektrum_${ml}_mutation PRIVATE CYPHERDJ_MUTATION_${m}=1 CYPHERDJ_DJK="${DJK}")
+  target_link_libraries(test_mixer_spektrum_${ml}_mutation PRIVATE cypherdj_kernbib cypherdj::json cypherdj::toml)
+  add_test(NAME test_mixer_spektrum_${ml}_mutation COMMAND test_mixer_spektrum_${ml}_mutation)
+  set_tests_properties(test_mixer_spektrum_${ml}_mutation PROPERTIES WILL_FAIL TRUE)
+endforeach()
+foreach(m SPEKTRUM_NUR_LEEREN SPEKTRUM_OHNE_G1 SPEKTRUM_ETIKETT_AKTUELL SPEKTRUM_OHNE_TAKT SPEKTRUM_OHNE_NEULESEN)
+  string(TOLOWER ${m} ml)
+  add_executable(test_mixer_spektrum_${ml}_mutation tests/test_mixer_spektrum.cpp src/netz.cpp)
+  target_include_directories(test_mixer_spektrum_${ml}_mutation PRIVATE include tests)
+  target_compile_definitions(test_mixer_spektrum_${ml}_mutation PRIVATE CYPHERDJ_MUTATION_${m}=1 CYPHERDJ_DJK="${DJK}")
+  target_link_libraries(test_mixer_spektrum_${ml}_mutation PRIVATE cypherdj_kernbib cypherdj::json cypherdj::toml)
+  add_test(NAME test_mixer_spektrum_${ml}_mutation COMMAND test_mixer_spektrum_${ml}_mutation)
+  set_tests_properties(test_mixer_spektrum_${ml}_mutation PROPERTIES WILL_FAIL TRUE)
+endforeach()
 # D1 K1 Fix-2 Punkt 2 (§4.7): das Netz prüft im KI-Stopp den Bereich vor ki_gestoppt (wie vorher); Fall 8 muss scheitern
 add_executable(test_kern_arr_ki_bereich_mutation tests/test_kern_arr_ki.cpp src/netz_arr.cpp)
 target_include_directories(test_kern_arr_ki_bereich_mutation PRIVATE include tests)
@@ -1264,13 +1606,44 @@ target_compile_definitions(test_kern_arr_ki_bereich_mutation PRIVATE CYPHERDJ_MU
 target_link_libraries(test_kern_arr_ki_bereich_mutation PRIVATE cypherdj_kernbib cypherdj::json cypherdj::toml)
 add_test(NAME test_kern_arr_ki_bereich_mutation COMMAND test_kern_arr_ki_bereich_mutation)
 set_tests_properties(test_kern_arr_ki_bereich_mutation PROPERTIES WILL_FAIL TRUE)
-# D1 K1 (A10): Kosten eines Zyklus mit spielendem Arrangement gegen die Lage ohne (kein Test; Zahlen in den Bericht)
+# D1 K1 (A10): cost of a cycle with a playing arrangement against the situation without (the numbers go into the report; only the hash cases below are ctest cases)
 add_executable(kern_kosten_arr tests/kosten/kosten_arr.cpp)
 target_link_libraries(kern_kosten_arr PRIVATE cypherdj_kernbib)
+# NOTE: the reference hash is bit-exact and bound to this host (DJ-Maschine, Ryzen 7800X3D, gcc and glibc as installed there): libm ifunc dispatch can differ on another CPU or glibc.
+# If kosten_arr_hash fails on another machine or after a toolchain change, measure the reference again before suspecting the code. PASS_REGULAR_EXPRESSION ignores the exit
+# code on purpose: the hash covers the audio, and the lane self-check may exit 2 in the control run.
+# Output hash of the arrangement lane (KOSTEN_HASH=1): FNV-1a over the production master and the master out, 2000 warm-up + 3000 measured cycles (blocks=5000). The reference values
+# are those of the probe of 2026-11-06 on main bccde012 (Hall fork-join probe, unchanged Hall path). The control mutes track 3: it passes only if a hash line was printed (the lane
+# self-check may exit 2, ctest ignores the exit code with PASS_REGULAR_EXPRESSION) AND neither reference value appears, so a crash or a missing line cannot pass it.
+add_test(NAME kosten_arr_hash COMMAND ${CMAKE_COMMAND} -E env KOSTEN_HASH=1 $<TARGET_FILE:kern_kosten_arr> 3000 arr32ins)
+set_tests_properties(kosten_arr_hash PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32ins pm=dc9cc27c4c3f4649 out=dc14fb5e7fa2cd46 blocks=5000" TIMEOUT 120)
+# mehrkern task 4: the same lane with the Halls on a HallPool of 3 workers must give exactly the same hash.
+# The deadline is 1 s: no take-back, no self switch-off from wake jitter (SCHED_OTHER). The single HASH line (stdout) carries everything, so no ordering of stdout and stderr is relied on:
+# the reference hash, pool_jobs > 0 (Hall blocks computed ON a worker: a pool that is merely attached cannot pass), no late and no taken-back job, the pool still on.
+add_test(NAME kosten_arr_hash_pool COMMAND ${CMAKE_COMMAND} -E env KOSTEN_HASH=1 KOSTEN_HALL_FAEDEN=3 KOSTEN_HALL_FRIST_US=1000000 $<TARGET_FILE:kern_kosten_arr> 3000 arr32ins)
+set_tests_properties(kosten_arr_hash_pool PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32ins pm=dc9cc27c4c3f4649 out=dc14fb5e7fa2cd46 blocks=5000 pool_jobs=[1-9][0-9]* hall_jobs=[1-9][0-9]* pool_spaet=0 pool_zurueck=0 pool_an=1" TIMEOUT 120)
+# Control of the line above: the pool is built but never attached (KOSTEN_HALL_POOL_UNBENUTZT). The hash is the same and pool_jobs is 0, so kosten_arr_hash_pool would be red on it.
+add_test(NAME kosten_arr_hash_pool_unbenutzt COMMAND ${CMAKE_COMMAND} -E env KOSTEN_HASH=1 KOSTEN_HALL_FAEDEN=3 KOSTEN_HALL_FRIST_US=1000000 KOSTEN_HALL_POOL_UNBENUTZT=1 $<TARGET_FILE:kern_kosten_arr> 3000 arr32ins)
+set_tests_properties(kosten_arr_hash_pool_unbenutzt PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32ins pm=dc9cc27c4c3f4649 out=dc14fb5e7fa2cd46 blocks=5000 pool_jobs=0 hall_jobs=[1-9][0-9]*" TIMEOUT 120)
+add_test(NAME kosten_arr_hash_kontrolle COMMAND ${CMAKE_COMMAND} -E env KOSTEN_HASH=1 KOSTEN_ARR32_STUMM=3 $<TARGET_FILE:kern_kosten_arr> 3000 arr32ins)
+set_tests_properties(kosten_arr_hash_kontrolle PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32ins pm=[0-9a-f]+ out=[0-9a-f]+ blocks=5000"
+                     FAIL_REGULAR_EXPRESSION "pm=dc9cc27c4c3f4649;out=dc14fb5e7fa2cd46" TIMEOUT 120)
+target_compile_definitions(kern_kosten_arr PRIVATE CYPHERDJ_DJK="${DJK}")   # 1.9: the lane arr32kit reads the repo test kits
 # 1.10 Slice 3 Task 1: cost of Cypher Hall as a return effect (no ctest test, the numbers go into the report)
 add_executable(kern_kosten_hall tests/kosten/kosten_hall.cpp)
 target_include_directories(kern_kosten_hall PRIVATE tests)
 target_link_libraries(kern_kosten_hall PRIVATE cypherdj_kernbib)
+# 1.10 slice 4b T11: cost per instance of the native insert kinds komp, eq, saett (pool sizes are decided from these numbers). The two ctest runs are the
+# harness self-check: a short run must pass (it counts the instances it measured), and the build with CYPHERDJ_MUTATION_KOSTEN_INS_EINS (one instance when
+# more are asked) must abort (WILL_FAIL).
+add_executable(kern_kosten_ins tests/kosten/kosten_ins.cpp)
+target_link_libraries(kern_kosten_ins PRIVATE cypherdj_kernbib)
+add_test(NAME kosten_ins_selbstpruefung COMMAND ${CMAKE_COMMAND} -E env KOSTEN_INS_ANZAHL=0,1,12 KOSTEN_INS_FAELLE=komp,eq_mix,saett $<TARGET_FILE:kern_kosten_ins> 300 1)
+add_executable(kern_kosten_ins_mutation tests/kosten/kosten_ins.cpp)
+target_compile_definitions(kern_kosten_ins_mutation PRIVATE CYPHERDJ_MUTATION_KOSTEN_INS_EINS=1)
+target_link_libraries(kern_kosten_ins_mutation PRIVATE cypherdj_kernbib)
+add_test(NAME kosten_ins_selbstpruefung_mutation COMMAND ${CMAKE_COMMAND} -E env KOSTEN_INS_ANZAHL=0,1,12 KOSTEN_INS_FAELLE=komp,eq_mix,saett $<TARGET_FILE:kern_kosten_ins_mutation> 300 1)
+set_tests_properties(kosten_ins_selbstpruefung_mutation PROPERTIES WILL_FAIL TRUE)
 # D1 K2b: Fehlerfälle der Senken (RB-338 intern, Wirt-Slots) und ihrer Verdrahtung im Kern (WILL_FAIL)
 test_mutation(test_arr_rb_senke_reihenfolge_mutation test_arr_rb_senke CYPHERDJ_MUTATION_ARR_RB_REIHENFOLGE ${ARR_QUELLEN} src/uhr.cpp)
 test_mutation(test_arr_rb_senke_tausch_mutation test_arr_rb_senke CYPHERDJ_MUTATION_ARR_RB_TAUSCH_OHNE_PARAMETER ${ARR_QUELLEN}
@@ -1286,6 +1659,8 @@ test_mutation(test_arr_rb_senke_auto_lane_vor_vorgabe_mutation test_arr_rb_senke
               src/uhr.cpp)   # slice 2 task 4: the lane value applied before the defaults, case 1 red
 test_mutation(test_arr_rb_senke_auto_spur_null_mutation test_arr_rb_senke_auto CYPHERDJ_MUTATION_ARR_RB_SPUR_NULL ${ARR_QUELLEN}
               src/uhr.cpp)   # fix round 1: the track index filed as 0, case 9 red
+test_mutation(test_arr_rb_senke_auto_rel_klemme_mutation test_arr_rb_senke_auto CYPHERDJ_MUTATION_ARR_AUTO_REL_OHNE_KLEMME ${ARR_QUELLEN}
+              src/uhr.cpp)   # 1.12 slice 5 U9: the summand sum is not clamped to 0..1, case 10b red
 test_mutation(test_arr_rb_senke_wechsel_mutation test_arr_rb_senke CYPHERDJ_MUTATION_ARR_SPURWECHSEL_HART ${ARR_QUELLEN}
               src/uhr.cpp)   # Fix F2: Spurwechsel ohne Ausblende und Zurücksetzen, Fall 6 rot
 test_mutation(test_kern_arr_rb_mutation test_kern_arr_rb CYPHERDJ_MUTATION_ARR_OHNE_RB_SENKE ${KERN_QUELLEN35} src/arr_wiedergabe.cpp)
@@ -1399,8 +1774,11 @@ test_mutation(test_arr_rb_senke_zurueck_mutation test_arr_rb_senke CYPHERDJ_MUTA
 # interne Spur schweigt, Fall 5); Fix L3: ohne Obergrenze für bis − von (Fall 1: 2048 + 1e-6 und 1e9 kein Aufruffehler);
 # Fix L6: Ring-Leser ohne Marge für den Block im Flug (Fall 4: CAP − 8192 + 1 Frames angenommen); Fix L9: WAV ersetzt ein
 # vorhandenes Ziel still (Fall 3 rot); Fix 2/P4: WAV verschränkt den ganzen Export in einer Kopie (Fall 8 rot)
+# 1.15 A5b: the export aligned with the master limiter only, without the latency account L of the bus limiters (Fall 2 red)
+# 1.10 slice 4a T6: ins/… is no mixer control of the render: the export has no inserts (Fall 12 red)
 foreach(m RENDER_ERZ4_NICHT_NEUTRAL:render ARR_OHNE_RB_SENKE:kern RENDER_OHNE_OBERGRENZE:render RING_OHNE_MARGE:ring_mitschnitt
-          WAV_ERSETZT:wav WAV_GANZE_KOPIE:wav ARR_RENDER_OHNE_HALL_SOFORT:render)
+          WAV_ERSETZT:wav WAV_GANZE_KOPIE:wav ARR_RENDER_OHNE_HALL_SOFORT:render RENDER_OHNE_KANAL_LATENZ:render RENDER_OHNE_INS:render
+          RENDER_RACK_OHNE_SURGE_PRUEFUNG:render)   # 1.9 U6 T6.4: a rack with a Surge member is not refused (case 1 red)
   string(REPLACE ":" ";" mq ${m})
   list(GET mq 0 schalter)
   list(GET mq 1 quelle)
@@ -1419,6 +1797,21 @@ target_compile_definitions(test_kern_arr_returns_alloc_mutation PRIVATE CYPHERDJ
 target_link_libraries(test_kern_arr_returns_alloc_mutation PRIVATE cypherdj_kernbib cypherdj::json cypherdj::toml)
 add_test(NAME test_kern_arr_returns_alloc_mutation COMMAND test_kern_arr_returns_alloc_mutation)
 set_tests_properties(test_kern_arr_returns_alloc_mutation PROPERTIES WILL_FAIL TRUE)
+# 1.10 slice 4b T13/T14: the export of the production tap with latency stages (test_render_pdc, collected automatically). The export that does not skip the largest
+# path latency (render.cpp as its own object before the library) must turn case 1 red; a start that does not wait for the EQ smoothing (render.cpp) and a delay ring that
+# drops its history at every block (arr_ausgang.cpp likewise) case 2.
+foreach(m RENDER_OHNE_PDC_VORHALT:render RENDER_OHNE_EINSCHWINGEN:render PDC_BLOCK_NEU:arr_ausgang)
+  string(REPLACE ":" ";" mq ${m})
+  list(GET mq 0 schalter)
+  list(GET mq 1 quelle)
+  string(TOLOWER ${schalter} klein)
+  add_executable(test_render_pdc_${klein}_mutation tests/test_render_pdc.cpp src/${quelle}.cpp)
+  target_include_directories(test_render_pdc_${klein}_mutation PRIVATE include tests)
+  target_compile_definitions(test_render_pdc_${klein}_mutation PRIVATE CYPHERDJ_MUTATION_${schalter}=1 CYPHERDJ_DJK="${DJK}")
+  target_link_libraries(test_render_pdc_${klein}_mutation PRIVATE cypherdj_kernbib cypherdj::json cypherdj::toml)
+  add_test(NAME test_render_pdc_${klein}_mutation COMMAND test_render_pdc_${klein}_mutation)
+  set_tests_properties(test_render_pdc_${klein}_mutation PROPERTIES WILL_FAIL TRUE)
+endforeach()
 # Null-Test (A7) am Offline-Kern: render.cpp bzw. nulltest.cpp mutiert als eigenes Objekt vor der Bibliothek; test_nulltest
 # (Fall 1) muss gegen beide scheitern (Master ohne Limiter-Vorhalt ausgerichtet; Messfenster bis an die Naht)
 foreach(m RENDER_OHNE_VORHALT:render NULL_OHNE_NAHTRAND:nulltest)
@@ -1485,6 +1878,16 @@ endif()
 add_executable(cypherdj-render src/werkzeuge/render_main.cpp)
 target_link_libraries(cypherdj-render PRIVATE cypherdj_kernbib)
 target_compile_options(cypherdj-render PRIVATE -Wall -Wextra)
+# Set recording (demo 2026-11-07): the live master of a running kern for a whole set, read only from the audio ring, to a WAV
+add_executable(cypherdj-setmitschnitt src/werkzeuge/setmitschnitt_main.cpp)
+target_link_libraries(cypherdj-setmitschnitt PRIVATE cypherdj_kernbib)
+target_compile_options(cypherdj-setmitschnitt PRIVATE -Wall -Wextra)
+add_test(NAME test_setmitschnitt_probe COMMAND python3 ${CMAKE_CURRENT_SOURCE_DIR}/pruef/setmitschnitt_probe.py $<TARGET_FILE:cypherdj-setmitschnitt>)
+# Voice player (demo 2026-11-07): JACK client that stays on the kern's input pair ein_<k> and plays queued speech clips
+add_executable(cypherdj-stimme src/werkzeuge/stimme_main.cpp)
+target_link_libraries(cypherdj-stimme PRIVATE PkgConfig::JACK Threads::Threads)
+target_include_directories(cypherdj-stimme PRIVATE include)
+target_compile_options(cypherdj-stimme PRIVATE -Wall -Wextra)
 add_executable(cypherdj-mitschnitt src/werkzeuge/mitschnitt_main.cpp)
 target_link_libraries(cypherdj-mitschnitt PRIVATE cypherdj_kernbib)
 target_compile_options(cypherdj-mitschnitt PRIVATE -Wall -Wextra)
@@ -1508,6 +1911,8 @@ test_mutation(test_kern_ein_midi_mutation test_kern_ein CYPHERDJ_MUTATION_EIN_MI
 test_mutation(test_kanten_ein_trennen_mutation test_kanten_ein CYPHERDJ_MUTATION_EIN_KANTEN_KEIN_TRENNEN src/kanten.cpp)
 test_mutation(test_kern_ein_leser_mutation test_kern_ein CYPHERDJ_MUTATION_EIN_MIDI_OHNE_ABFLUSS ${KERN_QUELLEN35})
 test_mutation(test_kern_ein_achse_mutation test_kern_ein CYPHERDJ_MUTATION_EIN_MIDI_ALTE_ACHSE ${KERN_QUELLEN35})
+# Voice channel (stimme.h): with stimme_eingang 0 the master stays bit-identical; the voice path running on pair 4 anyway must be red
+test_mutation(test_kern_stimme_mutation test_kern_stimme CYPHERDJ_MUTATION_STIMME_IMMER_AN ${KERN_QUELLEN35})
 test_mutation(test_kern_ein_reset_mutation test_kern_ein CYPHERDJ_MUTATION_EIN_ACHSE_OHNE_RESET ${KERN_QUELLEN35})
 add_executable(test_netz_ein_mutation tests/test_netz_ein.cpp src/netz.cpp)
 target_include_directories(test_netz_ein_mutation PRIVATE include tests ${DJK}/vertrag)
@@ -1613,10 +2018,49 @@ bk_lader_mutation(test_arr_bk_lader_leser_mutation CYPHERDJ_MUTATION_ARR_BK_FREI
 bk_lader_mutation(test_arr_bk_lader_effekt_mutation CYPHERDJ_MUTATION_ARR_BK_EFFEKT_OFFEN)       # effect graph accepted: case 2
 bk_lader_mutation(test_arr_bk_lader_ref_mutation CYPHERDJ_MUTATION_ARR_BK_OHNE_REF)              # no bk_gib in gib_wiedergabe: cases 3, 4
 
+# Package 1.9 U1a: faults of the kit store for kit tracks (WILL_FAIL). Same shape as bk_lader_mutation: the mutated arr_wiedergabe.cpp is linked
+# before the library, so it replaces the library's copy. The ctest names are counted by U1a T1.4 (ctest -N | grep -c _mutation).
+function(kit_lader_mutation name schalter)
+  add_executable(${name} tests/test_arr_kit_lader.cpp src/arr_wiedergabe.cpp)
+  target_include_directories(${name} PRIVATE include tests)
+  target_compile_definitions(${name} PRIVATE ${schalter}=1 CYPHERDJ_DJK="${DJK}")
+  target_link_libraries(${name} PRIVATE cypherdj_kernbib cypherdj::json cypherdj::toml)
+  add_test(NAME ${name} COMMAND ${name})
+  set_tests_properties(${name} PROPERTIES WILL_FAIL TRUE)
+endfunction()
+kit_lader_mutation(test_arr_kit_lader_teilen_mutation CYPHERDJ_MUTATION_ARR_KIT_OHNE_TEILEN)       # key without sharing: case 1
+kit_lader_mutation(test_arr_kit_lader_leser_mutation CYPHERDJ_MUTATION_ARR_KIT_FREI_OHNE_LESER)    # free without asking the sink: case 5
+kit_lader_mutation(test_arr_kit_lader_ref_mutation CYPHERDJ_MUTATION_ARR_KIT_OHNE_REF)              # no kit_gib in gib_wiedergabe: case 7
+kit_lader_mutation(test_arr_kit_lader_fehler_mutation CYPHERDJ_MUTATION_ARR_KIT_FEHLER_OHNE_GIB)    # no kit_gib on the error exits of lade_wiedergabe: case 8
+test_mutation(test_arr_wiedergabe_kit_name_mutation test_arr_wiedergabe CYPHERDJ_MUTATION_ARR_KIT_NAME_UNGEPRUEFT src/arr_wiedergabe.cpp)   # kit name not checked by the parser: the bad-name refusal text
+# the mutated arr_lader.cpp is linked before the library (own object, like test_arr_lader_werk_mutation): without the kit_nachholen call case 10 goes red
+add_executable(test_arr_kit_lader_nachholen_mutation tests/test_arr_kit_lader.cpp src/arr_lader.cpp)
+target_include_directories(test_arr_kit_lader_nachholen_mutation PRIVATE include tests)
+target_compile_definitions(test_arr_kit_lader_nachholen_mutation PRIVATE CYPHERDJ_MUTATION_ARR_KIT_OHNE_NACHHOLEN=1 CYPHERDJ_DJK="${DJK}")
+target_link_libraries(test_arr_kit_lader_nachholen_mutation PRIVATE cypherdj_kernbib cypherdj::json cypherdj::toml)
+add_test(NAME test_arr_kit_lader_nachholen_mutation COMMAND test_arr_kit_lader_nachholen_mutation)
+set_tests_properties(test_arr_kit_lader_nachholen_mutation PROPERTIES WILL_FAIL TRUE)
+
 # Baukasten S20 task 4: faults of the Baukasten sink and the device dispatch of the internal tracks (WILL_FAIL)
 foreach(m VERSATZ_NULL OHNE_ZURUECKSETZEN REGLER_NUR_START WECHSEL_HART OHNE_AKTIV)
   string(TOLOWER ${m} mk)
   test_mutation(test_arr_bk_senke_${mk}_mutation test_arr_bk_senke CYPHERDJ_MUTATION_ARR_BK_${m} ${ARR_QUELLEN} src/uhr.cpp)
+endforeach()
+# Package 1.9 U1b T1.5: faults of the kit sink (WILL_FAIL): onset at the block start (a), youngest voice stolen (c), start without clearing (d), nutzt blind to the fade (f2)
+foreach(m BLOCKANFANG RAUB_JUENGSTE START_OHNE_LEEREN NUTZT_FALSCH)
+  string(TOLOWER ${m} mk)
+  test_mutation(test_arr_kit_senke_${mk}_mutation test_arr_kit_senke CYPHERDJ_MUTATION_ARR_KIT_${m} ${ARR_QUELLEN} src/kit.cpp src/uhr.cpp)   # kit.cpp: the test loads kit_impuls with lade_kit
+endforeach()
+# Package 1.9 U6 T6.1: member slots in the sinks (WILL_FAIL): the sinks sized to the 32 track slots refuse a member slot
+test_mutation(test_arr_glied_plaetze_nur_spuren_mutation test_arr_glied_plaetze CYPHERDJ_MUTATION_ARR_PLAETZE_NUR_SPUREN ${ARR_QUELLEN} src/uhr.cpp)
+# Package 1.9 U6 T6.2: faults of the rack parser (WILL_FAIL): a zone taken as it is (inverted, out of range), a Surge slot used twice
+test_mutation(test_arr_rack_wiedergabe_zone_mutation test_arr_rack_wiedergabe CYPHERDJ_MUTATION_ARR_RACK_ZONE_UNGEPRUEFT src/arr_wiedergabe.cpp)
+test_mutation(test_arr_rack_wiedergabe_slot_mutation test_arr_rack_wiedergabe CYPHERDJ_MUTATION_ARR_RACK_SLOT_DOPPELT src/arr_wiedergabe.cpp)
+# Package 1.9 U6 T6.3: faults of the rack sink (WILL_FAIL): an exclusive upper key bound (R1), a note off to every member (R4), a gain step instead of
+# the ramp (R5), no Wirt lead (R6)
+foreach(m ZONE_EXKLUSIV OFF_AN_ALLE GAIN_SPRUNG OHNE_VORHALT)
+  string(TOLOWER ${m} mk)
+  test_mutation(test_arr_rack_senke_${mk}_mutation test_arr_rack_senke CYPHERDJ_MUTATION_ARR_RACK_${m} ${ARR_QUELLEN} src/uhr.cpp)
 endforeach()
 test_mutation(test_arr_intern_senke_ohne_wechsel_mutation test_arr_intern_senke CYPHERDJ_MUTATION_ARR_INTERN_OHNE_WECHSEL ${ARR_QUELLEN} src/uhr.cpp)
 test_mutation(test_arr_intern_senke_rb_rueckkehr_mutation test_arr_intern_senke CYPHERDJ_MUTATION_ARR_RB_BK_ALS_RUECKKEHR ${ARR_QUELLEN} src/uhr.cpp)
@@ -1624,9 +2068,22 @@ test_mutation(test_arr_intern_senke_ohne_auto_mutation test_arr_intern_senke CYP
 test_mutation(test_kern_arr_bk_mutation test_kern_arr_bk CYPHERDJ_MUTATION_ARR_OHNE_RB_SENKE ${KERN_QUELLEN35} src/arr_wiedergabe.cpp)
 
 # Baukasten S20 task 5: the render does not hand the graph folder to the loader (WILL_FAIL); the mutated render.cpp is linked before the library
+# Package 1.9 U1b T1.7: the render does not hand the kit folder and the loader to the cache (WILL_FAIL); same shape as the bk precedent above
+add_executable(test_render_kit_ohne_kit_ordner_mutation tests/test_render_kit.cpp src/render.cpp)
+target_include_directories(test_render_kit_ohne_kit_ordner_mutation PRIVATE include tests)
+target_compile_definitions(test_render_kit_ohne_kit_ordner_mutation PRIVATE CYPHERDJ_MUTATION_RENDER_OHNE_KIT_ORDNER=1 CYPHERDJ_DJK="${DJK}")
+target_link_libraries(test_render_kit_ohne_kit_ordner_mutation PRIVATE cypherdj_kernbib cypherdj::json cypherdj::toml)
+add_test(NAME test_render_kit_ohne_kit_ordner_mutation COMMAND test_render_kit_ohne_kit_ordner_mutation)
+set_tests_properties(test_render_kit_ohne_kit_ordner_mutation PROPERTIES WILL_FAIL TRUE)
+
 add_executable(test_render_bk_ohne_bk_ordner_mutation tests/test_render_bk.cpp src/render.cpp)
 target_include_directories(test_render_bk_ohne_bk_ordner_mutation PRIVATE include tests)
 target_compile_definitions(test_render_bk_ohne_bk_ordner_mutation PRIVATE CYPHERDJ_MUTATION_RENDER_OHNE_BK_ORDNER=1 CYPHERDJ_DJK="${DJK}")
 target_link_libraries(test_render_bk_ohne_bk_ordner_mutation PRIVATE cypherdj_kernbib cypherdj::json cypherdj::toml)
 add_test(NAME test_render_bk_ohne_bk_ordner_mutation COMMAND test_render_bk_ohne_bk_ordner_mutation)
 set_tests_properties(test_render_bk_ohne_bk_ordner_mutation PROPERTIES WILL_FAIL TRUE)
+
+# Public probe build 2026-11-07: tests that start klick_fassung.py read the interpreter from CYPHERDJ_PYTHON3, the one
+# CMake found above (venv on a fresh machine, /usr/bin/python3 here), instead of a fixed /usr/bin/python3.
+get_property(cdj_alle_tests DIRECTORY PROPERTY TESTS)
+set_property(TEST ${cdj_alle_tests} APPEND PROPERTY ENVIRONMENT "CYPHERDJ_PYTHON3=${Python3_EXECUTABLE}")

@@ -4,19 +4,29 @@
 // nachLaden, vorBild, beimBild, beimEreignis, beimSichtwechsel. Spricht nur die Projekt-API (Spec 3.4); der Wechsel
 // der Ansicht schickt nichts an den Kern (A1). Oberfläche englisch. Gezeichnet wird nur, solange die Ansicht sichtbar
 // ist (eigener rAF-Takt, Ring window.djkProdBild wie window.djkBild).
+import { UEBER_FARBE } from './lanen.js';
+import { REGLER_MAX, REGLER_SCHRITT } from './fader_kennlinie.js';
 import { neuerSchreiber } from './schreiber.js';
-import { neuerLader, serverWeg, offlineNach } from './laden.js';
+import { neuerLader, neuerNachlader, serverWeg, offlineNach } from './laden.js';
 import { bindeZeitachse } from './zeitachse_bedienung.js';
 import { bindeProjektwahl } from './projektwahl.js';
 import { bindeSpuren } from './spurkoepfe.js';
+import { armStand } from './auto_aufnahme.js';
 import { bindeGruppen } from './gruppen.js';
 import { bindeReturns } from './returns.js';
+import { bindeInserts } from './inserts.js';
 import { MAX_SPUREN } from './grenzen.js';
 import { bindeAblage } from './ablage.js';
+import { bindeBrowserwahl } from './browserwahl.js';      // 1.16 rest: browser mode switch
+import { bindeGeraeteBrowser } from './geraete_browser.js';   // 1.16 rest: DEVICES list
+import { bindePresetMarken } from './preset_marke.js';   // 1.16 rest U7: origin mark of a stage / device
+import { bindePresetHost } from './preset_host.js';   // 1.16 rest U7: host of the PRESETS panel in PRODUCTION
+import { bindeKollektionen } from '../kollektionen.js';   // 1.16 rest U8: the COLLECTIONS panel and "Add to collection"
 import { bindeTransport } from './transport.js';
 import { bindeVerlauf } from './verlauf_anzeige.js';
 import { bindeClips } from './clip_bedienung.js';
 import { bindeLanen } from './lanen_bedienung.js';
+import { bindeComp } from './takes_bedienung.js';
 import { bindeDetail } from './detail.js';
 import { bindeAusgabe } from './freeze_export.js';
 import { bindeVariantenReihen } from './varianten.js';
@@ -25,7 +35,8 @@ import { bindeAufnahme } from './aufnahme.js';
 import { AUSGABE_FEHLER, mehrdeutigText } from './ausgabe.js';
 import { nachladenNoetig, stemsEreignis, stemsFuerProjekt } from './stems.js';
 
-const BINDER = [bindeZeitachse, bindeProjektwahl, bindeSpuren, bindeGruppen, bindeReturns, bindeAblage, bindeTransport, bindeVerlauf, bindeLanen, bindeClips, bindeDetail, bindeAusgabe, bindeVariantenReihen, bindeGeraete, bindeAufnahme];
+const BINDER = [bindeZeitachse, bindeProjektwahl, bindeSpuren, bindeGruppen, bindeReturns, bindeInserts, bindeAblage, bindeTransport, bindeVerlauf, bindeLanen, bindeComp, bindeClips, bindeDetail, bindeAusgabe, bindeVariantenReihen, bindeGeraete, bindeAufnahme,
+  bindeBrowserwahl, bindeGeraeteBrowser, bindePresetHost, bindePresetMarken, bindeKollektionen];
 
 const GERUEST = `
 <div class="p-transport" role="toolbar" aria-label="Transport">
@@ -45,6 +56,8 @@ const GERUEST = `
     <label for="p-tempo">TEMPO</label><input id="p-tempo" data-p="tempo" inputmode="decimal" size="6" autocomplete="off" title="Project tempo, 60 to 200 BPM: Enter sets it" disabled>
     <button data-p="loop" aria-pressed="false" title="Loop the bracket in the ruler" disabled>LOOP</button>
     <button data-p="metronom" aria-pressed="false" title="Metronome" disabled>METRO</button>
+    <span class="p-autotitel" title="Automation recording: arm tracks with AUTO ● in the track head, play, and move a fader, pan, M or S">AUTO</span><button data-p="auto-touch" class="p-automodus" aria-pressed="true">TOUCH</button><button data-p="auto-latch" class="p-automodus" aria-pressed="false">LATCH</button><button data-p="auto-write" class="p-automodus" aria-pressed="false">WRITE</button>
+    <button data-p="re-enable" class="p-reenable" title="Give every lane that you took over by hand back to its automation" disabled>RE-ENABLE AUTOMATION</button>
   </div>
   <div class="p-gruppe">
     <label for="p-raster">GRID</label><select id="p-raster" data-p="raster" title="Snap grid"></select>
@@ -64,7 +77,7 @@ const GERUEST = `
 <ol class="p-verlauf" data-p="verlauf-liste" aria-label="History" hidden></ol>
 <div class="p-arr">
   <div class="p-ecke">
-    <button data-p="neu-audio" title="Add an audio track" disabled>+ AUDIO</button><button data-p="neu-rb" title="Add an instrument track with the RB-338" disabled>+ RB-338</button><button data-p="neu-surge" title="Add an instrument track with Surge (host slot 1)" disabled>+ SURGE</button>
+    <button data-p="neu-audio" title="Add an audio track" disabled>+ AUDIO</button><button data-p="neu-rb" title="Add an instrument track with the RB-338" disabled>+ RB-338</button><button data-p="neu-surge" title="Add an instrument track with Surge (host slot 1 or 2)" disabled>+ SURGE</button><button data-p="neu-kit" title="Add an instrument track that plays a kit from the kit folder (pick the kit)" disabled>+ KIT</button>
   </div>
   <canvas class="p-lineal" data-p="lineal" title="Top strip: drag the loop bracket · bottom strip: click sets the start marker"></canvas>
   <div class="p-koerper" data-p="koerper">
@@ -79,7 +92,7 @@ const GERUEST = `
   <div class="p-gruppenreihe" data-p="mixer-gruppen"></div>
   <div class="p-pm" aria-label="Production master">
     <span class="p-mixer-titel">MASTER</span>
-    <input class="p-pm-fader" data-p="pm-fader" type="range" min="-60" max="6" step="0.5" title="Production master volume (double click: 0 dB). The export is taken here, before the set limiter." aria-label="Volume production master">
+    <input class="p-pm-fader" data-p="pm-fader" type="range" min="0" max="${REGLER_MAX}" step="${REGLER_SCHRITT}" title="Production master volume (double click: 0 dB). The export is taken here, before the set limiter." aria-label="Volume production master">
     <output class="p-pm-wert" data-p="pm-wert"></output>
     <div class="meter waagrecht p-pm-pegel" data-kanal="pm"><i></i></div>
   </div>
@@ -89,8 +102,17 @@ const GERUEST = `
   <div class="p-gruppenreihe" data-p="mixer-returns"></div>
   <details class="p-sendblock" data-p="sends" hidden><summary class="p-mixer-titel">SENDS</summary><div class="p-sendraster" data-p="mixer-sends"></div></details>
 </section>
+<details class="p-inserts p-mixer" data-p="inserts" aria-label="Insert chains" hidden>
+  <summary class="p-mixer-titel" data-p="inserts-titel">INSERTS</summary>
+  <div class="p-insertliste" data-p="inserts-liste"></div>
+</details>
 <details class="p-geraete" data-p="geraete"><summary>INPUTS</summary><div data-p="geraete-liste" role="group" aria-label="Audio and MIDI inputs"></div></details>
 <section class="p-detail" data-p="detail" aria-label="Detail"><div class="p-detail-kopf">CLIP</div><div class="p-detail-leer">No clip selected.</div></section>`;
+
+// 1.12 S3: events after which the list of overridden lanes is fetched again. /e/neustart and /k/willkommen: a new core generation clears the server
+// mirror without any /e/auto, so the page would keep a stale orange. Only a visible page reloads (a hidden one loads in zeige()).
+export const LADE_EREIGNISSE = new Set(['/e/auto', '/e/neustart', '/k/willkommen']);
+export const ladeNachEreignis = (a, sichtbar) => !!sichtbar && LADE_EREIGNISSE.has(a);
 
 // Texte zu den Gründen der Projekt-API: die Gründe aus S2-Kern (projekt/befehle.ts, verlauf.ts) und Spec 3.4. Fehlt einer,
 // zeigt die Seite „Rejected: <code>“ (tests/produktion_wurzel.test.mjs hält die Liste beisammen).
@@ -98,36 +120,58 @@ export const FEHLER_TEXT = {
   veraltet: 'The clip changed while separating: nothing was placed',
   audio_fehlt: 'An audio clip is still being prepared: try again in a moment',
   stems_laeuft: 'A stem separation is already running',
-  stems_gpu_aus: 'Stem separation on the GPU is not available yet; it runs on the CPU',
+  stems_nur_gpu: 'Stems run on the GPU only',
+  gpu_belegt: 'The GPU is busy (4.5 GB free needed): nothing was changed, try again later',
+  keine_gpu: 'No GPU available for stems: nothing was changed',
   stems_fehler: 'The stem separation failed: nothing was changed',
   stems_loop: 'Switch the clip loop off before separating stems',
   stems_zu_gross: 'The range to separate is longer than 600 s: choose a shorter range',
   stems_zeitlimit: 'The stem separation took too long and was stopped: nothing was changed',
   abbruch: 'The stem separation was cancelled',
   zu_spaet: 'The stems are already placed: use undo to remove them',
-  stems_quantum: 'Stems run only at the core quantum 256',
   kein_kernstand: 'The core has not reported its state yet: try again in a moment',
+  nur_andreas: 'Only Andreas may do this',
+  auto_ziel_unbekannt: 'The lane field is none of fader, pan, mute, solo',
+  auto_abgelehnt: 'The core refused the lane override',
   nur_andreas_spur: 'This track belongs to Andreas: Cypher may not separate it',
   kein_auftrag: 'No stem separation with this id is running',
   mehrere_clips: 'Exactly one audio clip must lie in the range',
   zu_viele_spuren: 'Separating stems needs four free tracks',
   merge_leer: 'The tracks play nothing in this range',
-  merge_gruppen: 'The tracks feed different groups: merge tracks of one group',
+  merge_gruppen: 'The tracks feed different groups: merge or bounce tracks of one group',
   merge_teil_solo: 'Some of the tracks are solo: solo all of them or none',
   merge_sends: 'The tracks have different sends: give them identical sends or none',
+  merge_inserts: 'A track has an insert chain: remove the inserts and merge or bounce again',
   merge_freeze_noetig: 'A Surge track has unfrozen notes: freeze it first',
-  merge_andreas_spur: 'This track belongs to Andreas: Cypher may not merge it',
-  merge_keine_spur_frei: 'Merging needs one free track',
+  merge_andreas_spur: 'This track belongs to Andreas: Cypher may not merge or bounce it',
+  merge_keine_spur_frei: 'Merging or bouncing needs one free track',
+  bounce_nur_audio: 'Only an audio track can be bounced in place: use Bounce to New Track, or Freeze for a Surge track',
+  bounce_ziel_art: 'Bounced audio can only be pasted onto an audio track',
+  export_bereich: 'The range must be 1 to 1024 beats long, starting at beat 0 or later',
   rev_veraltet: 'The project changed elsewhere: reloaded, please repeat',
   regler_abgelehnt: 'The core refused a mixer change: nothing was changed',
+  auto_an_nicht_quittiert: 'The core did not confirm the automation override: the take may be missing it',
+  projekt_gewechselt: 'The project was switched meanwhile: the action was dropped',
   nichts_zu_tun: 'Nothing to undo or redo', kein_projekt: 'No project open', unbekannt: 'No such project', name_ungueltig: 'A project name needs 1 to 80 characters',
   ki_gestoppt: 'Stop Cypher is set', ki_stopp: 'Stop Cypher was pressed: the start was dropped', deck_laeuft: 'A deck is playing: the tempo stays until it stops', nicht_geladen: 'The core has no arrangement loaded yet',
   zu_gross: AUSGABE_FEHLER.zu_gross, server_fehler: 'The project server did not answer: showing the last state', netz: 'Page server unreachable', keine_antwort: 'No answer from the core',
   routing_zyklus: 'A group cannot feed itself', routing_grenze: 'Groups do not nest, and there are at most 8 groups and 4 returns',
   ziel_unbekannt: 'That output or target does not exist for this track', gruppe_unbekannt: 'That group no longer exists', return_unbekannt: 'That return no longer exists',
-  lane_unbekannt: 'That automation line no longer exists', lane_doppelt: 'This track already has a lane for that target', lane_gesperrt: 'That line is locked: unlock it first', geraet_lanes: 'Delete the device lines of this track before switching to a host instrument', punkte_ungueltig: 'The line points are not valid (mute and solo points must be jumps)',
-  spur_bereich: `At most ${MAX_SPUREN} tracks`, slot_belegt: 'D1 has one Surge slot', spur_unbekannt: 'That track no longer exists', clip_unbekannt: 'That clip no longer exists',
-  kein_eingang: 'A track can only be armed with a recording input', eingang_fehlt: 'That recording input does not exist', zu_viele_scharf: 'At most 8 audio tracks can be armed at once', aufnahme_laeuft: 'A recording is running', nichts_scharf: 'No track is armed', keine_aufnahme: 'No recording is running', kein_platz: 'Not enough free disk space to record', ersetzen_loop: 'The take could not replace a looped clip; it is saved as a file', veraltet_spur: 'The armed track no longer exists', ueberlappung: 'A transport is already running; stop it before recording', transport_abgelehnt: 'The transport did not start; nothing was recorded', aufnahme_abgelehnt: 'The core refused the recording', aufnahme_abgebrochen: 'The core dropped the recording before it began; nothing was recorded', leer: 'The take contains no audio', take_zu_lang: 'The take is longer than a WAV file can hold (about 3 hours); the raw file is kept', uebernahme_fehler: 'The take could not be placed on the track; the raw file is kept',
+  insert_unbekannt: 'That insert stage no longer exists', art_unbekannt: 'That insert kind is not available (compressor, EQ, saturator and limiter exist in this version)',
+  sidechain_spaet: 'That key source is computed after this stage: tracks can listen to tracks and DJ inputs, groups also to the pre of other groups',
+  sidechain_zyklus: 'That key would depend on the stage itself: its own strip, its own group, the master, or two tracks keying each other',
+  sidechain_quelle: 'That key source is not available in the arrangement (erz/2, erz/3, erz/5 to erz/8 and pad/1, pad/2 come after the mixer)',
+  kette_voll: 'The insert chain of that strip is full (four stages at most)', ins_voll: 'All stages of that kind are in use (twelve compressors, two EQs, one saturator and one limiter at most)',
+  rack_unbekannt: 'That strip has no rack any more', rack_voll: 'All twelve racks are in use', makro_voll: 'A strip can have at most 16 macro mappings',
+  ziel_doppelt: 'A parameter can be driven by one macro only', param_nicht_stetig: 'A macro drives continuous parameters only, not switches or step lists',
+  param_gemappt: 'That parameter is driven by a macro: remove the mapping first',
+  lane_ziel_spaeter: 'Insert and rack controls cannot be automated yet (Slice 5)', lane_unbekannt: 'That automation line no longer exists', lane_doppelt: 'This track already has a lane for that target', lane_gesperrt: 'That line is locked: unlock it first', bereich_leer: 'Select a range on the line first (it must not be empty)', huellkurve_ziel: 'That envelope does not fit this clip', huellkurve_unbekannt: 'That clip has no such envelope', geraet_huellkurven: 'Delete the device envelopes of this track\'s clips before switching to a host instrument', form_ungueltig: 'That shape is not available on this line (mute and solo take Square only)', geraet_lanes: 'Delete the device lines of this track before switching to a host instrument', punkte_ungueltig: 'The line points are not valid (mute and solo points must be jumps)',
+  kit_unbekannt: 'That kit is not in the kit folder',
+  richtung_unbekannt: 'That direction word is not known for this track\'s device', richtung_grenze: 'That direction cannot go further: the parameters are at their bound',
+  preset_unbekannt: 'That preset does not exist',
+  wirt_wert_unbekannt: 'The current value of that Surge parameter is not known: start the Surge host or set the parameter first',
+  spur_bereich: `At most ${MAX_SPUREN} tracks`, slot_belegt: 'Both Surge slots are in use (1, 2)', spur_unbekannt: 'That track no longer exists', clip_unbekannt: 'That clip no longer exists',
+  kein_eingang: 'A track can only be armed with a recording input', eingang_fehlt: 'That recording input does not exist', zu_viele_scharf: 'At most 8 audio tracks can be armed at once', aufnahme_laeuft: 'A recording is running', nichts_scharf: 'No track is armed', keine_aufnahme: 'No recording is running', kein_platz: 'Not enough free disk space to record', ersetzen_loop: 'A looped clip is in the way; split or move it first (a recorded take is kept as a file)', veraltet_spur: 'The armed track no longer exists', ueberlappung: 'A transport is already running; stop it before recording', transport_abgelehnt: 'The transport did not start; nothing was recorded', aufnahme_abgelehnt: 'The core refused the recording', aufnahme_abgebrochen: 'The core dropped the recording before it began; nothing was recorded', leer: 'The take contains no audio', take_zu_lang: 'The take is longer than a WAV file can hold (about 3 hours); the raw file is kept', uebernahme_fehler: 'The take could not be placed on the track; the raw file is kept',
   index_bereich: 'No such track position', tempo_bereich: 'Tempo: 60 to 200 BPM', loop_bereich: 'The loop needs at least 1 beat',
   argument_ungueltig: 'That value is not allowed', argument_unbekannt: 'The core does not know that setting', befehl_unbekannt: 'The server does not know that command',
   art_passt_nicht: 'That clip does not fit this track', sha_ungueltig: 'That sample is not in the catalogue', clip_nicht_midi: 'That is not a MIDI clip',
@@ -172,6 +216,10 @@ export const FEHLER_TEXT = {
   bk_nicht_geladen: 'No Baukasten graph is loaded on that channel: load one before saving the sound',
   bk_nichts_geladen: 'No Baukasten graph is loaded on a default channel: load one or name the channels to save',
   kein_baukasten: 'This server has no Baukasten graph bridge: the sound snapshot is not available',
+  // 1.14 Comping, take lanes (task 7: the reasons of rename, delete and audition; the comp reasons come with the gesture)
+  comp_leer: 'The range is empty or outside the take lane: drag over a part of the take lane',
+  take_unbekannt: 'That take lane no longer exists', takes_voll: 'A track holds at most 32 take lanes', take_nur_audio: 'Only audio tracks have take lanes',
+  take_name_ungueltig: 'A take lane name has 1 to 64 characters, not only spaces',
 };
 // V2 Fix-Runde 2 H7 (Spec 6.34): beschaeftigt und zu_gross sind mehrdeutig (ein Freeze, ein Öffnen, eine Tempo-Rampe; Grenzen des Kerns). Wie in
 // ausgabe.js (F12) zeigt die Seite dann den text der Antwort, wenn er da ist, sonst einen neutralen Text, der keine Ursache behauptet (vorher fest
@@ -233,10 +281,11 @@ export const antwortText = (r) => fehlerText(serverWeg(r) && r.status !== 0 ? { 
 const lies = (k, v) => { try { return localStorage.getItem(k) ?? v; } catch { return v; } };
 const merke = (k, v) => { try { localStorage.setItem(k, v); } catch { /* ohne Speicher: nur jetzt */ } };
 
-export function bindeProduktion({ post, bpm, stoebern, bibliothek = null, wurzel = document.querySelector('#produktion') }) {
+export function bindeProduktion({ post, bpm, stoebern, bibliothek = null, presetsZeigen = null, presetsNeu = null, presetListe = () => [], wurzel = document.querySelector('#produktion') }) {
   wurzel.innerHTML = GERUEST;
   const $ = (n) => wurzel.querySelector(`[data-p="${n}"]`);
-  const st = { slug: null, projekt: null, sichtbar: false, laeuft: false, arr: null, kopfBeat: null, start: 0, getrennt: false, analyse: [], stems: null };
+  const st = { slug: null, projekt: null, sichtbar: false, laeuft: false, arr: null, kopfBeat: null, start: 0, getrennt: false, analyse: [], stems: null, autoUeber: [] };
+  document.documentElement.style.setProperty('--ueber', UEBER_FARBE);   // the one orange for the stylesheet (produktion.css uses var(--ueber))
   window.djkProd = st;            // für die Browserprobe (lesen)
   window.djkProdBild = [];        // Zeichendauer je Bild in ms, Ring 600
   let meldeUhr = 0;
@@ -259,7 +308,9 @@ export function bindeProduktion({ post, bpm, stoebern, bibliothek = null, wurzel
     catch (e) { return merkeAntwort({ status: 0, j: { fehler: 'netz', text: e.message } }); }
   }
   const ctx = { st, $, bpm, stoebern, melde, holeJson, holeGet, lies, merke, fehlerText, antwortText,
-    beimProjekt: [], nachLaden: [], vorBild: [], beimBild: [], beimEreignis: [], beimSichtwechsel: [],
+    beimProjekt: [], nachLaden: [], vorBild: [], beimBild: [], beimEreignis: [], beimSichtwechsel: [], beimMarken: [],
+    presetsZeigen, presetsNeu,   // 1.16 rest U7: app.js callbacks of the PRESETS panel (see preset_host.js)
+    presetListe,                 // 1.16 rest U8: the rows of the PRESETS panel (right click "Add to collection", kollektionen.js)
     ausgabeLauf: () => {} };   // V2 Fix F14: freeze_export.js setzt es (ausgabe_lauf aus GET /proj/aktuell)
 
   // Neuer Stand vom Server; ein älterer Stand desselben Projekts als der gezeigte wird verworfen
@@ -276,18 +327,22 @@ export function bindeProduktion({ post, bpm, stoebern, bibliothek = null, wurzel
   ctx.uebernimm = (slug, p) => { setzeProjekt(slug, p); for (const h of ctx.nachLaden) h(); };
   // Server weg (Status 0 oder 5xx): der gezeigte Stand bleibt, die Ansicht meldet es; kommt der Server wieder (SSE-Strom
   // verbindet neu), lädt ereignis() neu. Nur eine Antwort des Servers leert die Ansicht (laden.js).
-  const ladeAktuell = neuerLader({
+  const ladeRoh = neuerLader({
     hole: () => holeGet('/proj/aktuell'),
-    uebernimm: (slug, p, j) => { st.analyse = Array.isArray(j?.analyse) ? j.analyse : []; st.stems = stemsFuerProjekt(j?.stems, slug);
+    uebernimm: (slug, p, j) => { st.autoArm = armStand(j?.auto_arm); if (j?.auto_arm) st.autoModus = st.autoArm.modus;   // 1.12 S3 task 9: armed tracks and mode, from the server only
+      st.autoUeber = Array.isArray(j?.auto_uebersteuert) ? j.auto_uebersteuert : [];   // 1.12 S3 (D8): overridden lanes, from the server only
+      st.analyse = Array.isArray(j?.analyse) ? j.analyse : []; st.stems = stemsFuerProjekt(j?.stems, slug);
+      st.vorhoeren = j?.vorhoeren && typeof j.vorhoeren === 'object' ? j.vorhoeren : {};   // 1.14: audition map {spur_id: take_id}, from the server only
       ctx.uebernimm(slug, p); ctx.ausgabeLauf(j?.ausgabe_lauf ?? null); },   // Slice 3a: Analysen, Slice 6: stems
-    leere: (j) => { st.analyse = []; st.stems = null; setzeProjekt(null, null); ctx.ausgabeLauf(j?.ausgabe_lauf ?? null); },
+    leere: (j) => { st.autoArm = armStand(null); st.autoUeber = []; st.analyse = []; st.stems = null; st.vorhoeren = {}; setzeProjekt(null, null); ctx.ausgabeLauf(j?.ausgabe_lauf ?? null); },
     // 7b: OFFLINE setzt holeGet (merkeAntwort); ein 5xx mit Grund behält den Stand und zeigt den Text des Grunds
     beiWeg: (r) => melde(antwortText(r), true),
     beiDa: () => setzeGetrennt(false),
   });
+  const nachlader = neuerNachlader(ladeRoh, 30);
+  const ladeAktuell = nachlader.starte;
   ctx.ladeAktuell = ladeAktuell;
-  let ladeUhr = 0;
-  const planeLaden = () => { clearTimeout(ladeUhr); ladeUhr = setTimeout(ladeAktuell, 30); };
+  const planeLaden = nachlader.plane;
 
   // Schreibweg: nacheinander, mit rev (Spec 3.4); 409 rev_veraltet lädt neu
   ctx.schreiber = neuerSchreiber({
@@ -301,9 +356,11 @@ export function bindeProduktion({ post, bpm, stoebern, bibliothek = null, wurzel
       melde(antwortText(r), true);
       if (r.status === 409 && r.j?.fehler === 'rev_veraltet') return ladeAktuell();
     },
+    beiWiederhole: async () => { nachlader.starte(); await nachlader.fertig(); },   // task 9: the retry waits for the NEWEST applied load (an overtaken one does not count)
+    beiFremdeRev: () => planeLaden(),   // task 9: an event taken for our own write was not (a server take): fetch the state
     beiVerworfen: (n) => melde(`The project changed elsewhere: reloaded, ${n} waiting change${n === 1 ? '' : 's'} dropped, please repeat`, true),
   });
-  ctx.aendere = (label, befehle, schluessel) => ctx.schreiber.aendere(label, befehle, schluessel);
+  ctx.aendere = (label, befehle, schluessel, optionen) => ctx.schreiber.aendere(label, befehle, schluessel, optionen);
   ctx.aendereMit = (rechne) => ctx.schreiber.aendereMit(rechne);   // V2 Fix F2: Zug beim Senden aus dem dann gültigen Stand
   // V2 Fix-Runde 2 H1 (Spec 6.34): jede Änderung, deren Befehle aus dem Projektstand folgen (Pfeiltasten, Quantisieren, Duplizieren, Umschalter …),
   // rechnet erst, wenn sie im Schreiber an der Reihe ist: rechne(p) → {label, befehle} | null aus genau dem Stand p, dessen rev mitgeht. Eine
@@ -350,6 +407,7 @@ export function bindeProduktion({ post, bpm, stoebern, bibliothek = null, wurzel
       if (se.nachladen) planeLaden();
       return;
     }
+    if (ladeNachEreignis(a, st.sichtbar)) planeLaden();   // 1.12 S3: an override changed in the core; the server mirror has it already, fetch the list (orange follows)
     if (a === 'proj') { const m = analyseMeldung(f); if (m) melde(m.text, m.fehler); }   // Slice 3a: Analyse-Ereignisse mit Meldung
     // Das Anfangsbild 'stand' kommt bei jedem (Wieder-)Verbinden des Stroms: nach einem Ausfall den Stand neu holen
     if (a === 'stand') { standN++; if (st.sichtbar && (st.getrennt || standN > 1)) planeLaden(); }
@@ -358,5 +416,5 @@ export function bindeProduktion({ post, bpm, stoebern, bibliothek = null, wurzel
     for (const h of ctx.beimEreignis) h(a, f);
   }
   setzeProjekt(null, null);
-  return { zeige, verberge, ereignis };
+  return { zeige, verberge, ereignis, presetHost: ctx.presetHost };
 }

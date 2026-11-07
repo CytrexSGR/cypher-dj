@@ -305,3 +305,117 @@ test('S7 Final-Review F2: fremde Spur im Raster IHRER Länge, dasselbe x-Feld, n
   assert.equal(fremdPfad(fader, [], 366, 72, 8), '', 'nichts zu zeichnen');
   assert.equal(fremdPfad(fader, [{ ziel: 'erz/1/fader', ab_takt: 1, takte: 4, nach: 0 }], 366, 72, 8), '');
 });
+
+// 1.12 S7 (M13) U12 T12.5 = S8 plan task 4: PLAY as a loop, head modulo
+import { kopfTakt } from '../oeffentlich/spurband.js';
+test('S7 loop T12.5: punkteZuFahrten with schleife drops moves behind bar n (the end point), the server takes it as a loop', () => {
+  const b = baender(2)[0];
+  const p = [{ takt: 1, wert: 0, form: 'gerade' }, { takt: 5, wert: -60, form: 'gerade' }];
+  const f = punkteZuFahrten(b, p, { schleife: 4 });
+  assert.deepEqual(f, [{ ziel: 'erz/2/fader', ab_takt: 1, nach: 0 }, { ziel: 'erz/2/fader', ab_takt: 1, takte: 4, nach: -60, form: 'linear' }]);
+  assert.ok('spur' in pruefeSpur({ name: 'band-2-fader', schleife_takte: 4, fahrten: f }, FAHRBAR));
+  assert.deepEqual(punkteZuFahrten(b, p), [...f, { ziel: 'erz/2/fader', ab_takt: 5, nach: -200 }], 'without schleife unchanged');
+  // a jump on the end point is a set on bar n+1: dropped as well; the wirt band keeps its ramps
+  const s = [{ takt: 1, wert: -10, form: 'gerade' }, { takt: 3, wert: -20, form: 'gerade' }, { takt: 5, wert: -30, form: 'sprung' }];
+  assert.ok(punkteZuFahrten(b, s, { schleife: 4 }).every((x) => x.ab_takt <= 4));
+  assert.ok('spur' in pruefeSpur({ name: 'band-2-fader', schleife_takte: 4, fahrten: punkteZuFahrten(b, s, { schleife: 4 }) }, FAHRBAR));
+  const w = baender(2).find((x) => x.wirt);
+  const fw = punkteZuFahrten(w, [{ takt: 1, wert: -40, form: 'gerade' }, { takt: 3, wert: 20, form: 'rund' }], { schleife: 2 });
+  assert.ok('spur' in pruefeSpur({ name: 'band-2-cutoff', schleife_takte: 2, fahrten: fw }, FAHRBAR));
+});
+
+test('S7 loop T12.5: the head of a loop runs modulo the pass; a one-shot track as before', () => {
+  const lauf = { anker_beat: 100, schleife_takte: 2 };
+  assert.equal(kopfTakt(100, lauf, 2), 1);
+  assert.equal(kopfTakt(104, lauf, 2), 2);
+  assert.equal(kopfTakt(107.5, lauf, 2), 2.875);
+  assert.equal(kopfTakt(108, lauf, 2), 1, 'the next pass starts left again');
+  assert.equal(kopfTakt(118, lauf, 2), 1.5, 'between two polls the head keeps wrapping');
+  assert.equal(kopfTakt(99, lauf, 2), null, 'before the first pass: no head');
+  assert.equal(kopfTakt(null, lauf, 2), null);
+  // negative control: without schleife_takte as before (1 .. length+1, else null)
+  const einmal = { anker_beat: 100 };
+  assert.equal(kopfTakt(104, einmal, 2), 2);
+  assert.equal(kopfTakt(108, einmal, 2), 3);
+  assert.equal(kopfTakt(108.5, einmal, 2), null);
+  assert.equal(kopfTakt(104, null, 2), null);
+});
+
+import { schleifenSpur } from '../oeffentlich/spurband.js';
+test('S7 loop T12.5: PLAY sends the line as a loop over its length (schleifenSpur), the server check accepts it', () => {
+  const b = baender(3).find((x) => x.schluessel === 'filter');
+  const z = { laenge: 8, punkte: [{ takt: 1, wert: 0, form: 'gerade' }, { takt: 5, wert: -1, form: 'rund' }, { takt: 9, wert: 0, form: 'gerade' }] };
+  const s = schleifenSpur('band-3-filter', b, z);
+  assert.equal(s.schleife_takte, 8);
+  assert.deepEqual(s.fahrten, punkteZuFahrten(b, z.punkte, { schleife: 8 }));
+  assert.ok(s.fahrten.every((f) => f.ab_takt <= 8));
+  assert.ok('spur' in pruefeSpur(s, FAHRBAR), JSON.stringify(pruefeSpur(s, FAHRBAR)));
+  for (const l of [4, 16, 32]) assert.ok('spur' in pruefeSpur(schleifenSpur('x', b, { laenge: l, punkte: vorgabePunkte(b, l) }), FAHRBAR), `default line, ${l} bars`);
+  // a fader line that ends at the bottom has a set -200 on bar n+1 when played once; the loop leaves it out
+  const f = fader(2), zf = { laenge: 4, punkte: [{ takt: 1, wert: 0, form: 'gerade' }, { takt: 5, wert: -60, form: 'gerade' }] };
+  const sf = schleifenSpur('band-2-fader', f, zf);
+  assert.ok(sf.fahrten.every((x) => x.ab_takt <= 4), JSON.stringify(sf.fahrten));
+  assert.ok('spur' in pruefeSpur(sf, FAHRBAR), JSON.stringify(pruefeSpur(sf, FAHRBAR)));
+});
+
+// 1.12 S7 (M13) U13 T13.3 (MAJOR 4, AK31 (4)): a change of a running loop is sent 300 ms after the last edit; a change during a running request
+// is sent after it (the last state, exactly one extra request), never dropped
+import { schleifenAenderer } from '../oeffentlich/spurband.js';
+function uhrAttrappe() {
+  let jetzt = 0, nr = 0;
+  const wecker = new Map();
+  return {
+    setTimeout: (f, ms) => { wecker.set(++nr, { f, bis: jetzt + ms }); return nr; },
+    clearTimeout: (id) => { wecker.delete(id); },
+    vor: async (ms) => {
+      jetzt += ms;
+      for (const [id, w] of [...wecker].sort((a, b) => a[1].bis - b[1].bis)) if (w.bis <= jetzt) { wecker.delete(id); w.f(); }
+      for (let i = 0; i < 5; i++) await Promise.resolve();
+    },
+  };
+}
+function gehalteneAntworten() {
+  const anfragen = [];
+  const post = (pfad, daten) => new Promise((fertig) => anfragen.push({ pfad, daten, fertig }));
+  return { anfragen, post, antworte: async (i, j = { ok: true, ab_takt: 9 }) => { anfragen[i].fertig(j); for (let k = 0; k < 10; k++) await Promise.resolve(); } };
+}
+
+test('S7 loop T13.3: debounced, one request at a time, the last state follows a running request (held fake response)', async () => {
+  const u = uhrAttrappe(), h = gehalteneAntworten(), antworten = [];
+  const a = schleifenAenderer({ name: 'band-2-fader', post: h.post, antwort: (j) => antworten.push(j), setTimeout: u.setTimeout, clearTimeout: u.clearTimeout });
+  a.melde({ v: 'A' });
+  await u.vor(299);
+  assert.equal(h.anfragen.length, 0, 'not before 300 ms of quiet');
+  a.melde({ v: 'B' });   // restarts the wait
+  await u.vor(299);
+  assert.equal(h.anfragen.length, 0);
+  await u.vor(1);
+  assert.deepEqual(h.anfragen.map((x) => [x.pfad, x.daten.name, x.daten.spur.v]), [['/spur/aendern', 'band-2-fader', 'B']]);
+  // while the request is held: two more edits, the wait passes, no second request in flight
+  a.melde({ v: 'C' }); await u.vor(100); a.melde({ v: 'D' }); await u.vor(1000);
+  assert.equal(h.anfragen.length, 1, 'never two requests at once');
+  await h.antworte(0);
+  assert.deepEqual(h.anfragen.map((x) => x.daten.spur.v), ['B', 'D'], 'exactly one extra request with the last state');
+  await h.antworte(1);
+  await u.vor(5000);
+  assert.equal(h.anfragen.length, 2, 'nothing more without a new edit (negative control)');
+  assert.equal(antworten.length, 2);
+});
+
+test('S7 loop T13.3: STOP cancels a waiting change and the follow-up of a running one; a failed request does not lose the last state', async () => {
+  const u = uhrAttrappe(), h = gehalteneAntworten();
+  const a = schleifenAenderer({ name: 'x', post: h.post, antwort: () => {}, setTimeout: u.setTimeout, clearTimeout: u.clearTimeout });
+  a.melde({ v: 1 }); a.stopp(); await u.vor(1000);
+  assert.equal(h.anfragen.length, 0, 'a waiting change is not sent after STOP');
+  a.melde({ v: 2 }); await u.vor(300);
+  a.melde({ v: 3 }); a.stopp();
+  await h.antworte(0); await u.vor(1000);
+  assert.equal(h.anfragen.length, 1, 'no follow-up after STOP');
+  // a request that throws (page server away): the edit made meanwhile still goes out afterwards
+  let wurf = true;
+  const anfragen = [];
+  const b = schleifenAenderer({ name: 'x', post: async (p, d) => { anfragen.push(d.spur.v); if (wurf) { wurf = false; throw new Error('weg'); } return { ok: true }; },
+    antwort: () => {}, setTimeout: u.setTimeout, clearTimeout: u.clearTimeout });
+  b.melde({ v: 'a' }); await u.vor(300); b.melde({ v: 'b' }); await u.vor(300);
+  assert.deepEqual(anfragen, ['a', 'b']);
+});

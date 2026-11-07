@@ -26,6 +26,9 @@ use crate::sampler::{lade_datei, Einstellung, Sampler};
 use crate::roehre::{Roehre, RoehrenSatz, BIAS_MAX, BIAS_MIN};
 use crate::svf::Svf;
 use crate::vocoder::Vocoder;
+use crate::wavetable::{Stimme as WtStimme, Tabelle, TABELLEN};
+use crate::resonator::{Satz, Stimme as RsStimme, SAETZE};
+use crate::saite::{Stimme as SaStimme, ANREGER, KOERPER};
 use rb_dsp::Ladder;
 use saett_dsp::Adaa1;
 use std::collections::{BTreeMap, BTreeSet};
@@ -82,14 +85,15 @@ pub struct ArtDef {
     pub frei: &'static [(&'static str, f32)],
 }
 
-pub const ARTEN: [ArtDef; 32] = [
+pub const ARTEN: [ArtDef; 38] = [
     ArtDef { art: "note", ein: &[], aus: &["hz", "gate", "vel", "trig", "erste"], werte: &[], frei: &[] },
     ArtDef { art: "konst", ein: &[], aus: &["aus"], werte: &["wert"], frei: &[] },
     ArtDef { art: "regler", ein: &[], aus: &["aus"], werte: &["nr", "min", "max"], frei: &[("log", 0.0)] },
-    ArtDef { art: "saege", ein: &["hz", "sync"], aus: &["aus", "zyklus"], werte: &[], frei: &[] },
-    ArtDef { art: "puls", ein: &["hz", "pwm", "sync"], aus: &["aus", "zyklus"], werte: &[], frei: &[] },
-    ArtDef { art: "dreieck", ein: &["hz", "sync"], aus: &["aus", "zyklus"], werte: &[], frei: &[] },
-    ArtDef { art: "sinus", ein: &["hz", "fm", "sync"], aus: &["aus", "zyklus"], werte: &[], frei: &[] },
+    // `hart` (appended, hard sync slice): band-limited hard sync, input = a master's output `hart` (osz.rs)
+    ArtDef { art: "saege", ein: &["hz", "sync", "hart"], aus: &["aus", "zyklus", "hart"], werte: &[], frei: &[] },
+    ArtDef { art: "puls", ein: &["hz", "pwm", "sync", "hart"], aus: &["aus", "zyklus", "hart"], werte: &[], frei: &[] },
+    ArtDef { art: "dreieck", ein: &["hz", "sync", "hart"], aus: &["aus", "zyklus", "hart"], werte: &[], frei: &[] },
+    ArtDef { art: "sinus", ein: &["hz", "fm", "sync"], aus: &["aus", "zyklus", "hart"], werte: &[], frei: &[] },
     ArtDef { art: "rauschen", ein: &[], aus: &["aus"], werte: &[], frei: &[] },
     ArtDef { art: "lfo", ein: &["rate", "trig"], aus: &["aus"], werte: &[], frei: &[("form", 0.0), ("neustart", 0.0), ("takt", 0.0), ("versatz", 0.0), ("einmal", 0.0)] },
     ArtDef { art: "transponiere", ein: &["hz", "st", "cent"], aus: &["aus"], werte: &[], frei: &[] },
@@ -128,6 +132,35 @@ pub const ARTEN: [ArtDef; 32] = [
              frei: &[("grund", 261.6256), ("scheiben", 1.0), ("schleife", 0.0), ("gate", 1.0)] },
     // S21: convolution with an IR file (sum point, zero latency); type 31. `datei` is a named field like sampler's.
     ArtDef { art: "faltung", ein: &["x", "l", "r", "mix"], aus: &["l", "r"], werte: &[], frei: &[("mix", 1.0), ("pre", 0.0), ("laenge_max", 1000.0)] },
+    // wavetable oscillator with unison inside the voice (wavetable.rs); type 32. `aus` is the sum without pan.
+    ArtDef { art: "wavetable", ein: &["hz", "trig", "pos", "verstimmung", "breite"], aus: &["l", "r", "aus"], werte: &[],
+             frei: &[("tabelle", 0.0), ("kopien", 1.0), ("pos", 0.0), ("verstimmung", 0.0), ("breite", 0.0), ("zufall", 1.0), ("saat", 0.0), ("glatt", 10.0)] },
+    // metallic oscillator bank for hats and cymbals (metall.rs); type 33 (appended in merge order after wavetable). Inputs in the order of `metall::EIN`.
+    ArtDef { art: "metall", ein: &["trig", "vel", "decay", "tune", "farbe", "rauschen", "hp", "choke"], aus: &["aus", "huelle"], werte: &[],
+             frei: &[("vel", 1.0), ("decay", 0.3), ("tune", 1.0), ("farbe", 0.5), ("rauschen", 0.2), ("hp", 6000.0), ("schnitt", 8.0), ("gruppe", 1.0), ("saat", 0.0)] },
+    // modal resonator bank (resonator.rs); type 34 (appended in merge order after metall)
+    ArtDef { art: "resonator", ein: &["hz", "trig", "staerke", "x", "material", "helligkeit", "groesse", "position", "inharmonie"], aus: &["aus"], werte: &[],
+             frei: &[("satz", 0.0), ("moden", 32.0), ("anregung", 0.0), ("burst", 5.0), ("saat", 0.0), ("staerke", 1.0), ("material", 0.5),
+                     ("helligkeit", 0.5), ("groesse", 1.0), ("position", 0.3), ("inharmonie", 1.0)] },
+    // multi-operator FM (fm.rs); type 35 (appended in merge order after resonator). Six operators o1..o6 with ratio, fine (cent), level and ADSR each.
+    ArtDef { art: "fm", ein: &["hz", "gate", "trig", "vel", "index", "rueck", "zeit"], aus: &["aus"], werte: &[],
+             frei: &[("algo", 0.0), ("gate", 1.0), ("vel", 1.0), ("index", 1.0), ("rueck", 0.0), ("zeit", 1.0), ("anschlag", 0.0), ("sync", 1.0),
+                   ("o1_verh", 1.0), ("o1_fein", 0.0), ("o1_pegel", 1.0), ("o1_a", 0.001), ("o1_d", 1.0), ("o1_s", 1.0), ("o1_r", 0.1),
+                   ("o2_verh", 1.0), ("o2_fein", 0.0), ("o2_pegel", 0.0), ("o2_a", 0.001), ("o2_d", 1.0), ("o2_s", 1.0), ("o2_r", 0.1),
+                   ("o3_verh", 1.0), ("o3_fein", 0.0), ("o3_pegel", 0.0), ("o3_a", 0.001), ("o3_d", 1.0), ("o3_s", 1.0), ("o3_r", 0.1),
+                   ("o4_verh", 1.0), ("o4_fein", 0.0), ("o4_pegel", 0.0), ("o4_a", 0.001), ("o4_d", 1.0), ("o4_s", 1.0), ("o4_r", 0.1),
+                   ("o5_verh", 1.0), ("o5_fein", 0.0), ("o5_pegel", 0.0), ("o5_a", 0.001), ("o5_d", 1.0), ("o5_s", 1.0), ("o5_r", 0.1),
+                   ("o6_verh", 1.0), ("o6_fein", 0.0), ("o6_pegel", 0.0), ("o6_a", 0.001), ("o6_d", 1.0), ("o6_s", 1.0), ("o6_r", 0.1),
+             ] },
+    // granular engine on generated sources (granular.rs); type 36 (appended in merge order after fm)
+    ArtDef { art: "granular", ein: &["hz", "trig", "gate", "x", "groesse", "dichte", "pos", "pos_zufall", "tonhoehe", "ton_zufall", "breite", "fenster", "frieren"],
+             aus: &["l", "r"], werte: &[],
+             frei: &[("quelle", 0.0), ("tabelle", 0.0), ("puffer", 2.0), ("grund", 261.6256), ("streuung", 0.0), ("saat", 0.0), ("hz", 261.6256), ("gate", 1.0),
+                     ("groesse", 80.0), ("dichte", 20.0), ("pos", 0.0), ("pos_zufall", 0.0), ("tonhoehe", 0.0), ("ton_zufall", 0.0), ("breite", 0.0),
+                     ("fenster", 0.0), ("frieren", 0.0)] },
+    // physical string model, digital waveguide (saite.rs); type 37 (appended in merge order after granular). `x` is an external excitation, added to the internal one.
+    ArtDef { art: "saite", ein: &["x", "hz", "trig", "vel", "ausklang", "daempfung", "hell", "lage", "koerper_mix"], aus: &["aus"], werte: &[],
+             frei: &[("anreger", 1.0), ("koerper", 0.0), ("saat", 0.0), ("vel", 1.0), ("ausklang", 2.0), ("daempfung", 0.5), ("hell", 0.5), ("lage", 0.13), ("koerper_mix", 0.5)] },
 ];
 
 /// Arts whose node carries a `datei` (a file in the sample root, read at translation).
@@ -256,7 +289,63 @@ pub fn uebersetze_mit_wurzel(json: &str, sr: f32, wurzel: Option<&Path>) -> Resu
             "roehre" if !ganz(w("stufen"), 1.0, 2.0) => return falsch("stufen", "1 or 2"),
             "roehre" if !(BIAS_MIN as f32..=BIAS_MAX as f32).contains(&w("bias")) => return falsch("bias", "-3..-0.5 volts"),
             "svf" if w("pole") != 2.0 && w("pole") != 4.0 => return falsch("pole", "2 or 4"),
+            "wavetable" if !ganz(w("tabelle"), 0.0, (TABELLEN.len() - 1) as f32) => return falsch("tabelle", "0 saege, 1 rechteck, 2 dreieck, 3 sinus, 4 analog, 5 vokale, 6 orgel"),
+            "wavetable" if !ganz(w("kopien"), 1.0, crate::wavetable::MAX_KOPIEN as f32) => return falsch("kopien", "integer 1..7"),
+            "wavetable" if !(0.0..=1.0).contains(&w("pos")) => return falsch("pos", "0..1"),
+            "wavetable" if !(0.0..=crate::wavetable::MAX_VERSTIMMUNG).contains(&w("verstimmung")) => return falsch("verstimmung", "0..50 cent"),
+            "wavetable" if !(0.0..=1.0).contains(&w("breite")) => return falsch("breite", "0..1"),
+            "wavetable" if !(0.0..=1.0).contains(&w("zufall")) => return falsch("zufall", "0..1"),
+            "wavetable" if !ganz(w("saat"), 0.0, 65_535.0) => return falsch("saat", "integer 0..65535"),
+            "wavetable" if !(0.0..=1000.0).contains(&w("glatt")) => return falsch("glatt", "0..1000 ms"),
+            "resonator" if !ganz(w("satz"), 0.0, (SAETZE.len() - 1) as f32) => return falsch("satz", "0 stab, 1 marimba, 2 glocke, 3 glas, 4 holzblock, 5 membran, 6 platte"),
+            "resonator" if !ganz(w("moden"), 1.0, crate::resonator::MAX_MODEN as f32) => return falsch("moden", "integer 1..32"),
+            "resonator" if !ganz(w("anregung"), 0.0, 1.0) => return falsch("anregung", "0 impulse, 1 noise burst"),
+            "resonator" if !(crate::resonator::BURST_MIN_MS..=crate::resonator::BURST_MAX_MS).contains(&w("burst")) => return falsch("burst", "0.5..50 ms"),
+            "resonator" if !ganz(w("saat"), 0.0, 65_535.0) => return falsch("saat", "integer 0..65535"),
+            "resonator" if !(0.0..=crate::resonator::STAERKE_MAX).contains(&w("staerke")) => return falsch("staerke", "0..10"),
+            "resonator" if !(0.0..=1.0).contains(&w("material")) => return falsch("material", "0..1"),
+            "resonator" if !(0.0..=1.0).contains(&w("helligkeit")) => return falsch("helligkeit", "0..1"),
+            "resonator" if !(crate::resonator::GROESSE_MIN..=crate::resonator::GROESSE_MAX).contains(&w("groesse")) => return falsch("groesse", "0.25..4"),
+            "resonator" if !(0.0..=1.0).contains(&w("position")) => return falsch("position", "0..1"),
+            "resonator" if !(0.0..=crate::resonator::INHARMONIE_MAX).contains(&w("inharmonie")) => return falsch("inharmonie", "0..2"),
+            "metall" if !(0.0..=1.0).contains(&w("vel")) => return falsch("vel", "0..1"),
+            "metall" if !(crate::metall::DECAY_MIN..=crate::metall::DECAY_MAX).contains(&w("decay")) => return falsch("decay", "0.01..10 seconds to -60 dB"),
+            "metall" if !(crate::metall::TUNE_MIN..=crate::metall::TUNE_MAX).contains(&w("tune")) => return falsch("tune", "0.5..2 (factor on the six frequencies)"),
+            "metall" if !(0.0..=1.0).contains(&w("farbe")) => return falsch("farbe", "0..1"),
+            "metall" if !(0.0..=1.0).contains(&w("rauschen")) => return falsch("rauschen", "0..1"),
+            "metall" if !(crate::metall::HP_MIN..=crate::metall::HP_MAX).contains(&w("hp")) => return falsch("hp", "500..16000 Hz"),
+            "metall" if !(crate::metall::SCHNITT_MIN..=crate::metall::SCHNITT_MAX).contains(&w("schnitt")) => return falsch("schnitt", "1..100 ms to -60 dB"),
+            "metall" if w("gruppe") != 0.0 && w("gruppe") != 1.0 => return falsch("gruppe", "0 or 1"),
+            "metall" if !ganz(w("saat"), 0.0, 65_535.0) => return falsch("saat", "integer 0..65535"),
+            "granular" if !ganz(w("quelle"), 0.0, (crate::granular::QUELLEN.len() - 1) as f32) => return falsch("quelle", "0 wavetable, 1 puffer (input x), 2 rauschen"),
+            "granular" if !ganz(w("tabelle"), 0.0, (TABELLEN.len() - 1) as f32) => return falsch("tabelle", "0 saege, 1 rechteck, 2 dreieck, 3 sinus, 4 analog, 5 vokale, 6 orgel"),
+            "granular" if !(crate::granular::PUFFER_MIN_S..=crate::granular::PUFFER_MAX_S).contains(&w("puffer")) => return falsch("puffer", "0.05..10 seconds"),
+            "granular" if !(20.0..=2000.0).contains(&w("grund")) => return falsch("grund", "20..2000 Hz"),
+            "granular" if !(0.0..=1.0).contains(&w("streuung")) => return falsch("streuung", "0..1"),
+            "granular" if !ganz(w("saat"), 0.0, 65_535.0) => return falsch("saat", "integer 0..65535"),
+            "granular" if !(0.0..=20_000.0).contains(&w("hz")) => return falsch("hz", "0..20000 Hz"),
+            "granular" if !(crate::granular::GROESSE_MIN_MS..=crate::granular::GROESSE_MAX_MS).contains(&w("groesse")) => return falsch("groesse", "1..2000 ms"),
+            "granular" if !(0.0..=crate::granular::MAX_DICHTE).contains(&w("dichte")) => return falsch("dichte", "0..1000 grains per second"),
+            "granular" if !(0.0..=1.0).contains(&w("pos")) => return falsch("pos", "0..1"),
+            "granular" if !(0.0..=1.0).contains(&w("pos_zufall")) => return falsch("pos_zufall", "0..1"),
+            "granular" if !(-crate::granular::MAX_TONHOEHE..=crate::granular::MAX_TONHOEHE).contains(&w("tonhoehe")) => return falsch("tonhoehe", "-48..48 semitones"),
+            "granular" if !(0.0..=crate::granular::MAX_TON_ZUFALL).contains(&w("ton_zufall")) => return falsch("ton_zufall", "0..1200 cent"),
+            "granular" if !(0.0..=1.0).contains(&w("breite")) => return falsch("breite", "0..1"),
+            "granular" if !(0.0..=1.0).contains(&w("fenster")) => return falsch("fenster", "0..1"),
+            "saite" if !ganz(w("anreger"), 0.0, (ANREGER.len() - 1) as f32) => return falsch("anreger", "0 rauschen, 1 zupfen, 2 hammer, 3 keiner"),
+            "saite" if !ganz(w("koerper"), 0.0, (KOERPER.len() - 1) as f32) => return falsch("koerper", "0 keiner, 1 gitarre, 2 harfe, 3 klavier"),
+            "saite" if !ganz(w("saat"), 0.0, 65_535.0) => return falsch("saat", "integer 0..65535"),
+            "saite" if !(0.0..=1.0).contains(&w("vel")) => return falsch("vel", "0..1"),
+            "saite" if !(crate::saite::AUSKLANG_MIN..=crate::saite::AUSKLANG_MAX).contains(&w("ausklang")) => return falsch("ausklang", "0.01..60 seconds"),
+            "saite" if !(0.0..=1.0).contains(&w("daempfung")) => return falsch("daempfung", "0..1"),
+            "saite" if !(0.0..=1.0).contains(&w("hell")) => return falsch("hell", "0..1"),
+            "saite" if !(crate::saite::LAGE_MIN..=crate::saite::LAGE_MAX).contains(&w("lage")) => return falsch("lage", "0.02..0.5"),
+            "saite" if !(0.0..=1.0).contains(&w("koerper_mix")) => return falsch("koerper_mix", "0..1"),
+            "saite" if k.werte.contains_key("hz") && !(crate::saite::MIN_HZ as f32..=crate::saite::MAX_HZ_ANTEIL as f32 * sr).contains(&w("hz")) => return falsch("hz", "20 Hz ..= sr / 8"),
             "glatt" if !(w("zeit") >= 0.0) => return falsch("zeit", ">= 0 seconds"),
+            "fm" => if let Some((wert, grund)) = crate::fm::pruefe(&w) { return falsch(&wert, grund); },
+            // hard sync: a fixed value would reset the phase in every sample
+            "saege" | "puls" | "dreieck" if k.werte.contains_key("hart") => return falsch("hart", "hart takes edges only (a master's hart output)"),
             _ => {}
         }
     }
@@ -354,6 +443,15 @@ pub fn uebersetze_mit_wurzel(json: &str, sr: f32, wurzel: Option<&Path>) -> Resu
         if !hat(p) && hat(andere) { q(andere) } else { q(p) }
     };
     let schluessel_aktiv = |k: &str| ["kl", "kr"].iter().any(|p| eingang.contains_key(&(k.to_string(), p.to_string())));
+    // hard sync: the `hart` input is active only with an edge; it excludes the old `sync` input
+    let hart_ein = |k: &str, q: &mut dyn FnMut(&str) -> Quelle| -> Result<Option<Quelle>, Fehler> {
+        let hat = |p: &str| eingang.contains_key(&(k.to_string(), p.to_string()));
+        match (hat("hart"), hat("sync")) {
+            (false, _) => Ok(None),
+            (true, false) => Ok(Some(q("hart"))),
+            (true, true) => Err(Fehler::Wert { knoten: k.to_string(), wert: "hart".to_string(), grund: "hart and sync exclude each other" }),
+        }
+    };
     let mut schritte = Vec::with_capacity(reihe.len());
     let mut geladen = 0usize;
     let mut lat: BTreeMap<&str, usize> = BTreeMap::new();
@@ -378,10 +476,10 @@ pub fn uebersetze_mit_wurzel(json: &str, sr: f32, wurzel: Option<&Path>) -> Resu
             "note" => Schritt::Note { hz: aus(k, "hz"), gate: aus(k, "gate"), vel: aus(k, "vel"), trig: aus(k, "trig"), erste: aus(k, "erste") },
             "konst" => Schritt::Konst { aus: aus(k, "aus"), wert: w("wert") },
             "regler" => Schritt::Regler { aus: aus(k, "aus"), nr: w("nr") as usize - 1, min: w("min"), max: w("max"), log: w("log") == 1.0 },
-            "saege" => Schritt::Saege { hz: q("hz"), sync: q("sync"), aus: aus(k, "aus"), zyklus: aus(k, "zyklus"), osz: [Osz::default(); MAX_STIMMEN] },
-            "puls" => Schritt::Puls { hz: q("hz"), pwm: q("pwm"), sync: q("sync"), aus: aus(k, "aus"), zyklus: aus(k, "zyklus"), osz: [Osz::default(); MAX_STIMMEN] },
-            "dreieck" => Schritt::Dreieck { hz: q("hz"), sync: q("sync"), aus: aus(k, "aus"), zyklus: aus(k, "zyklus"), osz: [Osz::default(); MAX_STIMMEN] },
-            "sinus" => Schritt::Sinus { hz: q("hz"), fm: q("fm"), sync: q("sync"), aus: aus(k, "aus"), zyklus: aus(k, "zyklus"), osz: [Sinus::default(); MAX_STIMMEN] },
+            "saege" => Schritt::Saege { hz: q("hz"), sync: q("sync"), aus: aus(k, "aus"), zyklus: aus(k, "zyklus"), osz: [Osz::default(); MAX_STIMMEN], hart: hart_ein(k, &mut q)?, hart_aus: aus(k, "hart") },
+            "puls" => Schritt::Puls { hz: q("hz"), pwm: q("pwm"), sync: q("sync"), aus: aus(k, "aus"), zyklus: aus(k, "zyklus"), osz: [Osz::default(); MAX_STIMMEN], hart: hart_ein(k, &mut q)?, hart_aus: aus(k, "hart") },
+            "dreieck" => Schritt::Dreieck { hz: q("hz"), sync: q("sync"), aus: aus(k, "aus"), zyklus: aus(k, "zyklus"), osz: [Osz::default(); MAX_STIMMEN], hart: hart_ein(k, &mut q)?, hart_aus: aus(k, "hart") },
+            "sinus" => Schritt::Sinus { hz: q("hz"), fm: q("fm"), sync: q("sync"), aus: aus(k, "aus"), zyklus: aus(k, "zyklus"), osz: [Sinus::default(); MAX_STIMMEN], hart_aus: aus(k, "hart") },
             "rauschen" => Schritt::Rauschen { aus: aus(k, "aus"), r: std::array::from_fn(Rauschen::neu) },
             "lfo" => Schritt::Lfo { rate: q("rate"), trig: q("trig"), aus: aus(k, "aus"), form: w("form") as u8, neustart: w("neustart") == 1.0, takt: w("takt"), versatz: w("versatz") as f64, einmal: w("einmal") == 1.0, l: std::array::from_fn(Lfo::neu) },
             "transponiere" => Schritt::Transponiere { hz: q("hz"), st: q("st"), cent: q("cent"), aus: aus(k, "aus") },
@@ -535,6 +633,95 @@ pub fn uebersetze_mit_wurzel(json: &str, sr: f32, wurzel: Option<&Path>) -> Resu
                 let pre = (w("pre") as f64 * sr as f64 / 1000.0).round() as usize;
                 // the IR data are dropped after `neu`: only the head taps and the partition spectra stay in memory
                 Schritt::Faltung { x: q("x"), l: q("l"), r: q("r"), mix: q("mix"), wl: aus(k, "l"), wr: aus(k, "r"), f: Box::new(Faltung::neu(&d, pre, w("mix"), sr)) }
+            }
+            "wavetable" => {
+                let e = crate::wavetable::Einstellung { kopien: w("kopien") as usize, zufall: w("zufall"), glatt_ms: w("glatt"), saat: w("saat") as u32 };
+                Schritt::Wavetable {
+                    hz: q("hz"),
+                    trig: q("trig"),
+                    pos: q("pos"),
+                    verstimmung: q("verstimmung"),
+                    breite: q("breite"),
+                    wl: aus(k, "l"),
+                    wr: aus(k, "r"),
+                    aus: aus(k, "aus"),
+                    e,
+                    t: Box::new(Tabelle::neu(w("tabelle") as usize)),
+                    w: Box::new(std::array::from_fn(|i| WtStimme::neu(i, &e))),
+                }
+            }
+            "resonator" => {
+                let e = crate::resonator::Einstellung { moden: w("moden") as usize, anregung: w("anregung") as u8, burst_ms: w("burst"), saat: w("saat") as u32 };
+                Schritt::Resonator {
+                    ein: [q("hz"), q("trig"), q("staerke"), q("x"), q("material"), q("helligkeit"), q("groesse"), q("position"), q("inharmonie")],
+                    aus: aus(k, "aus"),
+                    e,
+                    satz: Box::new(Satz::neu(w("satz") as usize)),
+                    v: Box::new(std::array::from_fn(|i| RsStimme::neu(i, &e))),
+                }
+            }
+            "metall" => {
+                let e = crate::metall::Einstellung::neu(w("gruppe") == 1.0, w("schnitt"), w("saat") as u32, sr);
+                Schritt::Metall {
+                    ein: crate::metall::EIN.map(|p| q(p)),
+                    aus: aus(k, "aus"),
+                    huelle: aus(k, "huelle"),
+                    e,
+                    m: Box::new(std::array::from_fn(|i| crate::metall::Stimme::neu(i, &e))),
+                }
+            }
+            "fm" => Schritt::Fm {
+                hz: q("hz"),
+                gate: q("gate"),
+                trig: q("trig"),
+                vel: q("vel"),
+                index: q("index"),
+                rueck: q("rueck"),
+                zeit: q("zeit"),
+                aus: aus(k, "aus"),
+                e: crate::fm::Einstellung::aus_werten(&w),
+                v: Box::new([crate::fm::Stimme::neu(); MAX_STIMMEN]),
+            },
+            "granular" => {
+                let e = crate::granular::Einstellung { quelle: w("quelle") as usize, grund: w("grund"), streuung: w("streuung"), saat: w("saat") as u32 };
+                Schritt::Granular {
+                    hz: q("hz"),
+                    trig: q("trig"),
+                    gate: q("gate"),
+                    x: q("x"),
+                    groesse: q("groesse"),
+                    dichte: q("dichte"),
+                    pos: q("pos"),
+                    pos_zufall: q("pos_zufall"),
+                    tonhoehe: q("tonhoehe"),
+                    ton_zufall: q("ton_zufall"),
+                    breite: q("breite"),
+                    fenster: q("fenster"),
+                    frieren: q("frieren"),
+                    wl: aus(k, "l"),
+                    wr: aus(k, "r"),
+                    e,
+                    // the table or the ring buffer is allocated here, at translation
+                    m: Box::new(crate::granular::Material::neu(&e, w("tabelle") as usize, w("puffer"), sr)),
+                    g: Box::new(std::array::from_fn(|i| crate::granular::Stimme::neu(i, &e))),
+                }
+            }
+            "saite" => {
+                let e = crate::saite::Einstellung::neu(w("anreger") as usize, w("koerper") as usize, w("saat") as u32, sr);
+                Schritt::Saite {
+                    x: q("x"),
+                    hz: q("hz"),
+                    trig: q("trig"),
+                    vel: q("vel"),
+                    ausklang: q("ausklang"),
+                    daempfung: q("daempfung"),
+                    hell: q("hell"),
+                    lage: q("lage"),
+                    koerper_mix: q("koerper_mix"),
+                    aus: aus(k, "aus"),
+                    e,
+                    s: Box::new(std::array::from_fn(|i| SaStimme::neu(i, &e, sr))),
+                }
             }
             "eingang" => Schritt::Eingang { wl: aus(k, "l"), wr: aus(k, "r") },
             "ausgang" => Schritt::Ausgang { x: q("x"), l: q("l"), r: q("r") },

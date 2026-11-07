@@ -75,7 +75,7 @@ class ArrBkSenke final : public ArrSenke, public ArrBkLeser {
   void schiebe(Spur& p, const Ev& e) noexcept;
 
   const Arrangement& arr_;
-  Spur sp_[ARR_SPUREN];
+  Spur sp_[ARR_SENKEN_PLAETZE];
   double beat0_ = 0.0, bps_ = 0.0;
   uint64_t verloren_ = 0;
   float puf_l_[ARR_BLOCK] = {};

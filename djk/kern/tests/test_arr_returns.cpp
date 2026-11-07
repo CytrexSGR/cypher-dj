@@ -4,6 +4,9 @@
 // Task 5b adds the Cypher Hall cases 9 to 17 (mapping, determinism pin, AK11, wake, first application, debounce and credit, swap, hall on).
 // Mutations: ARR_SEND_PRE (case 1 red), ARR_SEND_OHNE_MUTE (case 3 red), ARR_SEND_OHNE_GRUPPEN_BLENDE (case 4 red), ARR_RET_NACH_PM_FADER (case 6 red),
 // ARR_RET_SOLO_AUS (case 2 red), ARR_RUHE_SCHNEIDET_AB (case 8 red).
+// mehrkern task 4 adds the Halls on the HallPool: returns_pool_bitgleich (5000 blocks, four Halls, pool on equals pool off), returns_pool_tausch (a swap that removes
+// return 4 while the pool runs), returns_pool_zurueck (all workers held in every 64th block: take-back over many blocks, pool stays on), returns_ohne_pool (nullptr = serial).
+// Mutation HALL_OHNE_JOIN (the caller does not wait for the workers) must turn returns_pool_bitgleich red.
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -12,9 +15,11 @@
 #include <vector>
 
 #include <fstream>
+#include <functional>
 #include <nlohmann/json.hpp>
 
 #include "arr_bau.h"
+#include "cypherdj/hall_pool.h"
 #include "pruef.h"
 
 using namespace arrtest;
@@ -565,6 +570,135 @@ int main() {
     setze(sauber, "spur/1/send/1", 0.0f);
     spiele_hall(sauber, snap(&a->a, {0}, 1), 120000);
     PRUEF(sauber.arr.returns().nan_treffer() == 0);
+  }
+
+  // ---- mehrkern task 4: the Halls of the returns on the HallPool, bit-equal to the serial path
+  {
+    using cdj::HallPool;
+    using cdj::HallPoolEinstellung;
+    // FNV-1a over the bits of the left/right output and the PM tap
+    auto hash = [](const Treiber& t) {
+      uint64_t h = 1469598103934665603ULL;
+      for (const std::vector<float>* v : {&t.l, &t.r, &t.pml, &t.pmr})
+        for (float f : *v) {
+          uint32_t w;
+          std::memcpy(&w, &f, 4);
+          h = (h ^ w) * 1099511628211ULL;
+        }
+      return h;
+    };
+    // one project: track 1 sends 0 dB to all four returns, a sine for ~11 s, then silence (the Halls ring out and fall asleep); the decay of every return
+    // moves every 97 blocks (setze credit, wake, sleep). A snapshot with a clip of 30 beats and the sine below.
+    auto sin_audio = Audio::sinus(400000, 220.0, 0.3f);
+    auto projekt = [&](Treiber& t, HallPool* pool, int bloecke, int tausch_bei, unsigned ret_nach, const std::function<void(int)>& vor_block = nullptr, const std::function<void(int)>& nach_block = nullptr) {
+      t.arr.setze_hall_pool(pool);
+      for (int r = 1; r <= 4; ++r) setze(t, (std::string("spur/1/send/") + std::to_string(r)).c_str(), 0.0f);
+      spiele_hall(t, snap(&sin_audio->a, {0}, 15), 0);
+      for (int b = 0; b < bloecke; ++b) {
+        if (b % 97 == 0)
+          for (int r = 1; r <= 4; ++r)
+            setze(t, (std::string("ret/") + std::to_string(r) + "/hall/decay").c_str(), 0.2f + 0.1f * static_cast<float>(r) + 0.003f * static_cast<float>((b / 97) % 40));
+        if (b == tausch_bei) t.laden(snap(&sin_audio->a, {0}, ret_nach, 2));
+        if (vor_block) vor_block(b);
+        t.lauf(t.s + 256);
+        if (nach_block) nach_block(b);
+      }
+    };
+    // The deadline is the wake-jitter knob of the pool: with a long one (1 s) no job is ever taken back and the pool never switches itself off, so a green run proves
+    // bit-equality ON the workers. Every such case asserts that the jobs really ran on workers (pool_berechnet) and that the pool is still on.
+    HallPoolEinstellung e;
+    e.faeden = 3;
+    e.frist_us = 1000000;
+    auto pool = std::make_unique<HallPool>(e);
+    PRUEF(pool->faeden() == 3 && pool->an());
+    // the Halls of returns 2..4 (index 1..3) ran on workers in at least half of their blocks, and never in the caller's own return 1
+    auto auf_workern = [](const Treiber& t) {
+      bool ok = t.arr.returns().pool_berechnet(0) == 0;
+      for (int r = 1; r < 4; ++r) ok = ok && t.arr.returns().pool_berechnet(r) > 0 && 2 * t.arr.returns().pool_berechnet(r) >= t.arr.returns().hall_berechnet(r);
+      return ok;
+    };
+    {  // returns_pool_bitgleich
+      TR(aus) TR(an)
+      projekt(aus, nullptr, 5000, -1, 15);
+      projekt(an, pool.get(), 5000, -1, 15);
+      PRUEF(aus.arr.returns().hall_berechnet(0) > 1000 && aus.arr.returns().hall_berechnet(3) > 1000);   // the Halls ran, in all four returns
+      PRUEF(an.arr.returns().hall_berechnet(3) == aus.arr.returns().hall_berechnet(3));
+      PRUEF(hash(an) == hash(aus));
+      PRUEF(gleich_bits(an.l, aus.l, 0, static_cast<int64_t>(aus.l.size())) && gleich_bits(an.pml, aus.pml, 0, static_cast<int64_t>(aus.pml.size())));
+      PRUEF(an.arr.returns().setze_gesamt() == aus.arr.returns().setze_gesamt());
+      PRUEF(an.arr.returns().nan_treffer() == 0);
+      PRUEF(pool->an() && pool->zurueck() == 0 && pool->spaet() == 0);
+      PRUEF(auf_workern(an) && aus.arr.returns().pool_berechnet(1) == 0);
+      std::printf("returns_pool_bitgleich: pool_berechnet %llu %llu %llu of hall_berechnet %llu %llu %llu\n", (unsigned long long)an.arr.returns().pool_berechnet(1),
+                  (unsigned long long)an.arr.returns().pool_berechnet(2), (unsigned long long)an.arr.returns().pool_berechnet(3), (unsigned long long)an.arr.returns().hall_berechnet(1),
+                  (unsigned long long)an.arr.returns().hall_berechnet(2), (unsigned long long)an.arr.returns().hall_berechnet(3));
+    }
+    {  // returns_pool_tausch: a snapshot without return 4 comes in while the pool runs; afterwards nothing computes it
+      TR(aus) TR(an)
+      projekt(aus, nullptr, 1500, 700, 7);
+      projekt(an, pool.get(), 1500, 700, 7);
+      PRUEF(hash(an) == hash(aus));
+      PRUEF(!an.arr.returns().hall_laeuft(3) && !an.arr.returns().wach(3));
+      // return 4 is gone after the 480 sample fade: its Hall count stops there (block 700 plus the fade) and stays
+      const uint64_t n4 = an.arr.returns().hall_berechnet(3);
+      PRUEF(n4 == aus.arr.returns().hall_berechnet(3) && n4 < 400);
+      PRUEF(an.arr.returns().hall_berechnet(0) > n4 + 100);   // the others went on
+      an.lauf(an.s + 256 * 50);
+      PRUEF(an.arr.returns().hall_berechnet(3) == n4 && an.arr.returns().pool_berechnet(3) <= n4);
+      PRUEF(pool->an() && pool->zurueck() == 0 && auf_workern(an));
+    }
+    {  // returns_pool_zurueck: every worker is held in every 64th block: all jobs of that block are taken back. Late budget: 3 late events per 64-block window, the pool
+       // switches off at more than 4 (reserve 1 event); the others run on the workers; the pool never switches off
+      HallPoolEinstellung eh;
+      eh.faeden = 3;
+      eh.frist_us = 50000;
+      HallPool gehalten(eh);
+      TR(aus) TR(an)
+      projekt(aus, nullptr, 1500, -1, 15);
+      projekt(an, &gehalten, 1500, -1, 15, [&](int b) { gehalten.anhalten(b % 64 == 0); });
+      gehalten.anhalten(false);
+      PRUEF(gehalten.zurueck() >= 20 && gehalten.an());
+      PRUEF(hash(an) == hash(aus));
+      PRUEF(an.arr.returns().hall_berechnet(3) == aus.arr.returns().hall_berechnet(3) && auf_workern(an));
+      std::printf("returns_pool_zurueck: zurueck %llu spaet %llu an %d\n", (unsigned long long)gehalten.zurueck(), (unsigned long long)gehalten.spaet(), (int)gehalten.an());
+    }
+    {  // returns_pool_gemischt: only worker 1 (return index 2) is held, in every 32nd block: 2 late events per 64-block window against a limit of more than 4
+       // (reserve 2). Exactly return index 2 is taken back, the returns with index 1 and 3 stay on their workers, bit-equal over the whole length. The blocks are
+       // counted per block through hall_vorab (a Hall that hall_parallel computed in that block, i.e. a dispatched job for the indices 1..3), so the test does not
+       // depend on a Hall ever running alone.
+      HallPoolEinstellung eh;
+      eh.faeden = 3;
+      eh.frist_us = 50000;
+      HallPool gehalten(eh);
+      TR(aus) TR(an)
+      uint64_t versandt[4] = {};
+      projekt(aus, nullptr, 1600, -1, 15);
+      projekt(an, &gehalten, 1600, -1, 15, [&](int b) { gehalten.anhalten(1, b % 32 == 0); },
+              [&](int) {
+                for (int r = 1; r < 4; ++r)
+                  if (an.arr.returns().hall_vorab(r)) ++versandt[r];
+              });
+      gehalten.anhalten(1, false);
+      const auto& rt = an.arr.returns();
+      PRUEF(gehalten.zurueck() >= 30 && gehalten.an());
+      PRUEF(hash(an) == hash(aus));
+      // worker w serves return index w + 1, so the held worker 1 is return index 2
+      PRUEF(versandt[2] > 1000 && rt.pool_berechnet(2) + gehalten.zurueck() == versandt[2]);
+      PRUEF(rt.pool_berechnet(1) == versandt[1] && rt.pool_berechnet(3) == versandt[3] && rt.pool_berechnet(0) == 0);
+      std::printf("returns_pool_gemischt: zurueck %llu, versandt %llu %llu %llu, pool_berechnet %llu %llu %llu\n", (unsigned long long)gehalten.zurueck(), (unsigned long long)versandt[1],
+                  (unsigned long long)versandt[2], (unsigned long long)versandt[3], (unsigned long long)rt.pool_berechnet(1), (unsigned long long)rt.pool_berechnet(2),
+                  (unsigned long long)rt.pool_berechnet(3));
+    }
+    {  // returns_ohne_pool: nullptr after a pool was set is the serial path; the pool is not touched and no Hall ran on a worker
+      TR(aus) TR(ohne)
+      const uint64_t z0 = pool->zurueck();
+      projekt(aus, nullptr, 600, -1, 15);
+      ohne.arr.setze_hall_pool(pool.get());
+      ohne.arr.setze_hall_pool(nullptr);
+      projekt(ohne, nullptr, 600, -1, 15);
+      PRUEF(hash(ohne) == hash(aus) && pool->zurueck() == z0 && pool->an());
+      for (int r = 0; r < 4; ++r) PRUEF(ohne.arr.returns().pool_berechnet(r) == 0 && ohne.arr.returns().hall_berechnet(r) == aus.arr.returns().hall_berechnet(r));
+    }
   }
   PRUEF_ENDE();
 }

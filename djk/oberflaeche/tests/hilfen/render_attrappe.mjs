@@ -58,6 +58,11 @@ if (a['spur-regler'] !== undefined) {
   try { regler = JSON.parse(fs.readFileSync(a['spur-regler'], 'utf8')); } catch (e) { ende(2, `Spur-Regler: ${a['spur-regler']}: fehlt, nicht lesbar oder kein JSON (${e.message})`); }
   if (regler === null || typeof regler !== 'object' || Array.isArray(regler)) ende(2, `Spur-Regler: ${a['spur-regler']}: kein JSON-Objekt Pfad -> Wert`);
   for (const [p, v] of Object.entries(regler)) {
+    // 1.10 slices 3 and 4 (render.cpp mixer_pfad): sends, returns, insert rows and rack rows are mixer controls too; the double checks the name and that the value is a number
+    if (/^(spur|grp)\/\d+\/send\/\d+$/.test(p) || /^ret\/\d+\//.test(p) || /^ins\/(komp|eq|saett)\/\d+\//.test(p) || /^rack\/\d+\//.test(p)) {
+      if (typeof v !== 'number' || !Number.isFinite(v)) ende(2, `Spur-Regler: ${p} ist keine Zahl`);
+      continue;
+    }
     const m = /^spur\/([1-9]|[12][0-9]|3[0-2])\/(fader|pan|mute|solo)$/.exec(p) ?? /^grp\/([1-8])\/(fader|pan|mute|solo)$/.exec(p) ?? (p === 'pm/fader' ? [p, '0', 'fader'] : null);
     if (!m) ende(2, `Spur-Regler: ${p} ist kein Mixer-Regler (spur/<1..32>, grp/<1..8>/{fader,pan,mute,solo}, pm/fader)`);
     if (typeof v !== 'number') ende(2, `Spur-Regler: ${p} ist keine Zahl`);

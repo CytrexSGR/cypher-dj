@@ -11,8 +11,10 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import os from 'node:os';
 import { anschlagPhase } from '../ohr.ts';
+import { bestandVorgabe } from './stapel.mjs';
 
 const REPO = path.resolve(new URL('.', import.meta.url).pathname, '..', '..', '..');
+const BESTAND = bestandVorgabe(REPO);
 const MESSER = path.join(REPO, 'djk/kern/dsp/build-ohr-messer/messer/messer_baender_datei');
 const RASTER_ORDNER = path.join(os.homedir(), '.config', 'cypherdj', 'raster');
 const AUS_PFAD = path.join(os.homedir(), 'messungen', '2026-09-28-ohr-slice2', 'anschlag_echt.json');
@@ -30,7 +32,7 @@ const FASSUNGEN = [
 ];
 
 function liesFassung(material_id, fassung) {
-  const ordner = path.join(REPO, 'bestand', material_id, 'fassungen', `128000_r${fassung}`);
+  const ordner = path.join(BESTAND, material_id, 'fassungen', `128000_r${fassung}`);
   const f = JSON.parse(fs.readFileSync(path.join(ordner, 'fassung.json'), 'utf8'));
   return { ordner, f };
 }

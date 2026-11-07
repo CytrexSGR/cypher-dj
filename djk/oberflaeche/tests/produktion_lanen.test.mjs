@@ -9,6 +9,7 @@ import { laneWert, wertZuY, yZuWert, lanePfad, trefferPunkt, ziehePunkt, setzePu
 import { ZIEL_BEREICH } from '../projekt/modell.ts';
 
 const REF = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'kern', 'tests', 'daten', 'lane_ref.json');
+import { posVonDb } from '../oeffentlich/produktion/fader_kennlinie.js';
 const zeile = { y: 100, h: LANE_HOEHE };
 
 test('S1 T10 lanen.js: laneWert equals the reference file at 1000 pairs (relative 1e-4), the same pairs as the core and the server', () => {
@@ -34,8 +35,9 @@ test('S1 T10 lanen.js: negative control, a jump read as linear differs from the 
 
 test('S1 T10 lanen.js: value to y and back, limits clamp', () => {
   assert.ok(wertZuY(zeile, WERT_MAX, 'fader') < wertZuY(zeile, -60, 'fader'), 'louder is higher (smaller y)');
-  assert.equal(wertZuY(zeile, -200, 'fader'), wertZuY(zeile, -60, 'fader'), 'below the display range sits on the bottom edge');
-  for (const db of [-60, -30, 0, 6]) assert.ok(Math.abs(yZuWert(zeile, wertZuY(zeile, db, 'fader'), 'fader') - db) < 1e-9, `db=${db}`);
+  assert.ok(wertZuY(zeile, -200, 'fader') > wertZuY(zeile, -60, 'fader'), 'fader taper: off sits on the bottom edge, -60 dB just above it');
+  assert.equal(wertZuY(zeile, -200, 'fader'), zeile.y + zeile.h - 3, 'off = bottom edge');
+  for (const db of [-30, 0, 6]) assert.ok(Math.abs(yZuWert(zeile, wertZuY(zeile, db, 'fader'), 'fader') - db) < 1e-9, `db=${db}`);
   assert.equal(yZuWert(zeile, 0, 'fader'), WERT_MAX, 'above the row clamps to +6');
   assert.ok(yZuWert(zeile, 1000, 'fader') >= WERT_MIN && yZuWert(zeile, 1000, 'fader') <= -59.9, 'below the row clamps to the bottom of the display range');
 });
@@ -192,8 +194,8 @@ test('S2 T6 negative control: a slice 1 project with only a fader lane looks and
   const alt = lanePfad(f.punkte, zeile, (b) => b * 10, (x) => x / 10, 200, 'fader');
   const neu = lanePfad(f.punkte, zeile, (b) => b * 10, (x) => x / 10, 200, 'fader');
   assert.ok(neu.length > 50 && neu.every(([x, y]) => Number.isFinite(x) && Number.isFinite(y)), 'a fader path is drawn');
-  assert.equal(wertZuY(zeile, -30, 'fader'), zeile.y + 3 + (1 - 30 / 66) * 42, 'the old formula: -60..+6 over the row');
-  assert.ok(yZuWert(zeile, 1000, 'fader') >= WERT_MIN && yZuWert(zeile, 1000, 'fader') <= -59.9, 'unchanged clamp');
+  assert.equal(wertZuY(zeile, -30, 'fader'), zeile.y + 3 + (1 - posVonDb(-30)) * 42, 'the fader taper over the row (fader_kennlinie.js)');
+  assert.equal(yZuWert(zeile, 1000, 'fader'), -200, 'below the row clamps to off');
   assert.deepEqual(freieZiele(s), ['pan', 'mute', 'solo']);
 });
 

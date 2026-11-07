@@ -10,7 +10,8 @@ from referencing import Registry, Resource
 
 
 def schema_ordner():
-    basis = os.environ.get("CYPHERDJ_VERTRAG", str(Path.home() / "cypher-dj" / "djk" / "vertrag"))
+    # Default: djk/vertrag of the checkout this file lives in (was ~/cypher-dj, which broke any other checkout).
+    basis = os.environ.get("CYPHERDJ_VERTRAG", str(Path(__file__).resolve().parents[2] / "vertrag"))
     return Path(basis) / "schemas"
 
 

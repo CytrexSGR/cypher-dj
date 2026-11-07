@@ -62,6 +62,9 @@ void ArrLader::rueckgabe_frei(ArrSnapshot* s, bool& arbeit) {
 
 bool ArrLader::einmal(ArrLaderRinge& r) {
   bool arbeit = cache_.bk_nachholen();   // S20: graph instances whose free waited for the sink
+#ifndef CYPHERDJ_MUTATION_ARR_KIT_OHNE_NACHHOLEN
+  arbeit |= cache_.kit_nachholen();      // 1.9: kits whose free waited for the sink
+#endif
   for (int i = 0; i < n_aufgeschoben_;) {   // zuerst, was auf das Werk wartet
     ArrSnapshot* s = aufgeschoben_[i];
     if (werk_ && werk_->liest(s)) {

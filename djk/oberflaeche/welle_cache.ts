@@ -26,10 +26,17 @@ export function fassungQuelle(bestand: string, material: string, basisBpm: numbe
     throw new WelleFehler(400, 'unbekannte_fassung');
   }
   const ordner = path.join(bestand, material, 'fassungen', `${Math.round(basisBpm * 1000)}_r${fassung}`);
-  let j: { datei?: string; sha256?: string };
+  let j: { datei?: unknown; sha256?: unknown } | null;
   try { j = JSON.parse(fs.readFileSync(path.join(ordner, 'fassung.json'), 'utf8')); } catch { throw new WelleFehler(404, 'fassung_fehlt'); }
-  const datei = path.join(ordner, j.datei ?? 'basis.f32');
-  if (!fs.existsSync(datei) || !j.sha256) throw new WelleFehler(404, 'fassung_fehlt');
+  // fassung.json is trusted only within the contract: sha256 is 64 lower-case hex (vertrag defs.schema.json, it becomes
+  // part of the cache file name), datei is relative below the version folder (the rule of arbeitsbestand.ts pruefePfad)
+  const rel = (j && typeof j === 'object' ? j.datei : undefined) ?? 'basis.f32';
+  if (!j || typeof j !== 'object' || typeof j.sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(j.sha256) || typeof rel !== 'string' || rel === ''
+    || rel.includes('\\') || rel.includes('\0') || path.isAbsolute(rel) || rel.split('/').some((g) => g === '' || g === '.' || g === '..')) {
+    throw new WelleFehler(404, 'fassung_fehlt');
+  }
+  const datei = path.join(ordner, rel);
+  if (!fs.existsSync(datei)) throw new WelleFehler(404, 'fassung_fehlt');
   return { datei, schluessel: `fassung-${j.sha256}` };
 }
 
@@ -49,8 +56,9 @@ export const STROM_RATE = 48000;
 // Mono als Mittel aus L und R (wie der Dateimodus; ffmpegs -ac 1 mischt +3 dB lauter), 48 kHz wie der Dateimodus: alle Bänder, Hop und Fenster gleich.
 export const ffmpegArgumente = (datei: string, vor: string[] = []): string[] => ['-nostdin', '-v', 'error', ...vor, '-i', datei, '-map', '0:a:0',
   '-af', 'aformat=channel_layouts=stereo,pan=mono|c0=0.5*c0+0.5*c1', '-ar', String(STROM_RATE), '-f', 'f32le', '-'];
-// 30 s + 0,1 × Dauer; ohne bekannte Dauer rechnen wir mit einer Stunde
-export const zeitlimitVorgabe = (dauerS?: number): number => Math.round((30 + 0.1 * (dauerS && dauerS > 0 ? dauerS : 3600)) * 1000);
+// 30 s + 0,1 × Dauer; ohne bekannte Dauer rechnen wir mit einer Stunde. At most 2^31-1 ms (about 24.8 days): setTimeout
+// turns a larger delay into 1 ms, and an absurd duration from a corrupt tag would kill the decoder at once.
+export const zeitlimitVorgabe = (dauerS?: number): number => Math.min(2 ** 31 - 1, Math.round((30 + 0.1 * (dauerS && dauerS > 0 ? dauerS : 3600)) * 1000));
 
 interface Auftrag {
   q: WelleQuelle; ziel: string; refs: number; laeuft: boolean; weg: boolean; prozesse: ChildProcess[];
@@ -92,7 +100,8 @@ export class WelleCache {
 
   async hole(q: WelleQuelle, signal?: AbortSignal): Promise<string> {
     const ziel = path.join(this.ordner, `${q.schluessel}.welle`);
-    if (fs.existsSync(ziel)) return ziel;
+    // an empty file (power cut after rename without fsync) is not a waveform: computed again and replaced
+    if ((fs.statSync(ziel, { throwIfNoEntry: false })?.size ?? 0) > 0) return ziel;
     if (!q.dekodieren) {
       let p = this.laufend.get(q.schluessel);
       if (!p) {

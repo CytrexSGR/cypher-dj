@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstring>
 
+#include "cypherdj/hall_pool.h"
 #include "cypherdj/kern.h"
 
 namespace cdj {
@@ -150,9 +151,98 @@ void Kern::einsortieren_arr(const Befehl& c, double beat0) {
       quittung(c.id, c.quelle, 1, sample_, beat0);
       quittung(c.id, c.quelle, 3, sample_, beat0);
       return;
+    case Befehl::ARR_AUTO: {   // 1.12 S3 (§4.11 /k/arr/auto); the net thread checks the same, this is the backstop and the filter of D5 (in the Arrangement)
+      const bool cy = ist_cypher(c.quelle);
+      if (cy && sw_->ki_gestoppt()) return ab("ki_gestoppt");
+      if (c.nr < 0 || c.nr > ARR_SPUREN || (c.an != 0 && c.an != 1)) return ab("format");
+      if (c.politik < 0 || c.politik >= Arrangement::AUTO_FELDER) return ab("auto_ziel_unbekannt");
+      if (c.nr == 0 && c.an == 0) return ab("format");
+#ifndef CYPHERDJ_MUTATION_ARR_AUTO_CYPHER_UEBERSTEUERT   // error case: cypher may override
+      if (cy && c.an == 0) return ab("nur_andreas");   // D9
+#endif
+      quittung(c.id, c.quelle, 1, sample_, beat0);
+      if (c.nr == 0) arr_->auto_alle_freigeben(sample_);
+      else auto_uebersteuern(auto_spur_index(c.nr), c.politik, c.an == 0);   // false (no lane, stopped, no change) is no refusal: acknowledged, nothing happens (D5)
+      quittung(c.id, c.quelle, 3, sample_, beat0);
+      return;
+    }
+    case Befehl::ARR_ARM: {   // 1.12 S3 (D11, §4.11 /k/arr/arm); the net thread checks the same, this is the backstop
+      if (ist_cypher(c.quelle) && sw_->ki_gestoppt()) return ab("ki_gestoppt");
+      if (c.nr < 0 || c.nr > ARR_SPUREN || (c.an != 0 && c.an != 1) || c.politik < 0 || c.politik > 2) return ab("format");
+      if (c.nr == 0 && c.an == 1) return ab("format");   // spur 0 only disarms
+#ifndef CYPHERDJ_MUTATION_ARR_ARM_CYPHER   // error case: any source may arm
+      if (std::strcmp(c.quelle, "andreas")) return ab("nur_andreas");   // D11: only Andreas arms
+#endif
+      quittung(c.id, c.quelle, 1, sample_, beat0);
+      const int von = c.nr == 0 ? 0 : auto_spur_index(c.nr), bis = c.nr == 0 ? ARR_SPUREN : von + 1;
+      for (int i = von; i < bis; ++i) {
+        const int8_t neu = c.an == 1 ? static_cast<int8_t>(c.politik + 1) : static_cast<int8_t>(0);
+        if (!auto_arm_[i] != !neu) auto_armiert_ += neu ? 1 : -1;
+        auto_arm_[i] = neu;
+        if (c.an == 0) {   // disarmed: a held point is stale and goes; the rate window stays, so a quick re-arm cannot send inside 960 samples (an arm that repeats the mode changes nothing)
+#ifdef CYPHERDJ_MUTATION_ARR_ARM_AUS_FENSTER_NEU   // error case: the disarm forgets the window too
+          for (AutoPunkt& p : auto_punkt_[i]) p = AutoPunkt{};
+#elif !defined(CYPHERDJ_MUTATION_ARR_ARM_AUS_BEHAELT)   // error case: the held point stays and comes out at the next arm
+          for (AutoPunkt& p : auto_punkt_[i]) p.aus = false;
+#endif
+        }
+      }
+      quittung(c.id, c.quelle, 3, sample_, beat0);
+      return;
+    }
     default:
       return;
   }
+}
+
+// 1.12 S3 (D8, D6): /e/auto. The ring of the Arrangement has ONE reader, this callback thread. Events the ring dropped (auto_ereignis_verloren rose) or this function could not push
+// (event ring full) leave the reader behind. Then the queued events are discarded (the full state supersedes them) and every field that has a lane or was last reported as 1
+// is reported with the truth (auto_uebersteuert, valid in this thread only). A field is reported until pushed; a full event ring continues the re-report in the next cycle.
+void Kern::auto_melden(int64_t n0) {
+  auto push = [&](int64_t sample, int spur, int feld, int zustand) {
+    Ereignis x{};
+    x.art = Ereignis::AUTO_ZUSTAND;
+    x.sample = sample;
+    x.deck = auto_spur_osc(spur);
+    x.fassung = feld;
+    x.status = zustand;
+    if (!ereignisse_->schiebe(x)) return false;
+    auto_gemeldet_[spur][feld] = zustand != 0;
+    return true;
+  };
+  ArrAutoEreignis a;
+#ifndef CYPHERDJ_MUTATION_ARR_AUTO_OHNE_ABGLEICH   // error case: lost events are never re-reported
+  const uint32_t verloren = arr_->auto_ereignis_verloren();
+  if (verloren != auto_verloren_gesehen_) {
+    auto_verloren_gesehen_ = verloren;
+    auto_abgleich_ = 0;
+    while (arr_->auto_ereignis_holen(a)) {
+    }
+  }
+#endif
+  while (auto_abgleich_ < 0 && arr_->auto_ereignis_holen(a)) {
+    if (a.spur < 0 || a.spur >= ARR_SPUREN || a.feld < 0 || a.feld >= Arrangement::AUTO_FELDER) continue;
+    if (!push(a.sample, a.spur, a.feld, a.zustand)) {   // the event ring is full: this one is lost
+#ifndef CYPHERDJ_MUTATION_ARR_AUTO_OHNE_ABGLEICH
+      auto_abgleich_ = 0;
+      while (arr_->auto_ereignis_holen(a)) {
+      }
+#endif
+      break;
+    }
+  }
+  if (auto_abgleich_ < 0) return;
+  for (; auto_abgleich_ < ARR_SPUREN * Arrangement::AUTO_FELDER; ++auto_abgleich_) {
+    const int spur = auto_abgleich_ / Arrangement::AUTO_FELDER, feld = auto_abgleich_ % Arrangement::AUTO_FELDER;
+    const bool ist = arr_->auto_uebersteuert(spur, feld);
+    if (!ist && !auto_gemeldet_[spur][feld] && !arr_->auto_lane_da(spur, feld)) continue;
+#ifdef CYPHERDJ_MUTATION_ARR_AUTO_ABGLEICH_VERGISST   // error case: a full event ring ends the re-report, the rest is forgotten
+    if (!push(n0, spur, feld, ist ? 1 : 0)) { auto_abgleich_ = -1; return; }
+#else
+    if (!push(n0, spur, feld, ist ? 1 : 0)) return;   // continue in the next cycle
+#endif
+  }
+  auto_abgleich_ = -1;
 }
 
 bool Kern::dj_laeuft() const noexcept {
@@ -366,6 +456,26 @@ void Kern::warp_zustand(int64_t n0, int n) {
   e.warp_kein_platz = v[2];
   e.warp_spaet = v[3];
   e.warp_faeden = w->faeden();
+  melde(e);
+}
+
+// mehrkern Task 5 (§5.13): state of the Hall pool. Reported on every change and otherwise at 2 Hz (also without a pool: 0 0 0 0, so a late subscriber hears it too). A pool that switched itself off keeps
+// reporting (an 0 with its counters), so the page and the end-of-run line can see it. The reads are relaxed atomics of the pool; nothing here allocates or locks.
+void Kern::hall_zustand(int64_t n0, int n) {
+  const HallPool* p = hall_pool_;   // without a pool the kern still says an 0, faeden 0 (hall_faeden 0, no free core, no threads), so /lage can tell it from an old kern
+  const auto sat = [](uint64_t x) { return static_cast<int32_t>(x > 0x7fffffffu ? 0x7fffffffu : x); };
+  const int32_t v[4] = {p && p->an() ? 1 : 0, p ? p->faeden() : 0, p ? sat(p->spaet()) : 0, p ? sat(p->zurueck()) : 0};
+  const bool geaendert = std::memcmp(v, hall_gemeldet_, sizeof v) != 0;
+  const bool takt = (n0 + 24000 - 1) / 24000 * 24000 < n0 + n;
+  if (!geaendert && !takt) return;
+  std::memcpy(hall_gemeldet_, v, sizeof v);
+  Ereignis e{};
+  e.art = Ereignis::HALL_ZUSTAND;
+  e.sample = n0;
+  e.hall_an = v[0];
+  e.hall_faeden = v[1];
+  e.hall_spaet = v[2];
+  e.hall_zurueck = v[3];
   melde(e);
 }
 

@@ -116,13 +116,21 @@ def pruefe(vertrag: Path, json_pfad: Path, mit_erzeugten: bool) -> list[str]:
     return fehler
 
 
+def pruefe_sicher(vertrag: Path, json_pfad: Path, mit_erzeugten: bool) -> list[str]:
+    """Like pruefe, but a missing anchor in the contract text is a finding, not a traceback."""
+    try:
+        return pruefe(vertrag, json_pfad, mit_erzeugten)
+    except vertragstext.AnkerFehlt as e:
+        return [f"Anker: {e}"]
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--vertrag", type=Path, default=vertragstext.VERTRAG)
     ap.add_argument("--json", type=Path, default=HIER / "osc.json")
     ap.add_argument("--ohne-erzeugte", action="store_true", help="erzeugte Kopfdateien nicht vergleichen")
     args = ap.parse_args()
-    fehler = pruefe(args.vertrag, args.json, not args.ohne_erzeugte)
+    fehler = pruefe_sicher(args.vertrag, args.json, not args.ohne_erzeugte)
     for f in fehler:
         print(f"ROT: {f}")
     if fehler:

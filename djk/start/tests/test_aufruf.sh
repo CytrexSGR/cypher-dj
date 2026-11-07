@@ -24,6 +24,12 @@ pruef() { if [ "$1" = 0 ]; then echo "OK   $2"; OK=$((OK + 1)); else echo "FEHL 
 # Läuft höchstens 3 s; Rückgabe 124 heißt: hing.
 lauf() { local aus=$1; shift; timeout 3 "$@" > "$aus" 2>&1; }
 VN=(--instanz i --vorlagen-nach)
+# Host independent: the core split always comes from an invented sysfs tree (8 cores, 16 threads like the dev box), never from the real machine.
+SYS="$O/sys"; mkdir -p "$SYS"
+for c in $(seq 0 15); do mkdir -p "$SYS/cpu$c/topology"; echo $((c % 8)) > "$SYS/cpu$c/topology/core_id"; echo 0 > "$SYS/cpu$c/topology/physical_package_id"; done
+echo 0-15 > "$SYS/online"
+export CYPHERDJ_SYSFS_CPU="$SYS"
+unset CYPHERDJ_KERN_KERNE CYPHERDJ_KERN_CPUS CYPHERDJ_STEMS_CPUS
 
 # A1 fehlende Werte
 for opt in --instanz --master --cue --kern-konfig --leitstand-konfig --vorlagen-nach; do
@@ -135,7 +141,63 @@ lauf "$O/a6.txt" "$START/djk-start" --help; R=$?
 [ "$R" = 0 ] && grep -q -- "^  --arr1 " "$O/a6.txt"; pruef $? "A6 --help beschreibt --arr1: Rückgabe $R"
 grep -q 'djk-instrumente" ${I:+--instanz "$I"} --arr1' "$START/djk-start"; pruef $? "A6 der Startweg ruft djk-instrumente --arr1"
 lauf "$O/a6.txt" "$START/djk-start" "${VN[@]}" "$O/v" --arr2; R=$?
-[ "$R" = 2 ]; pruef $? "A6 Negativ-Kontrolle --arr2: Rückgabe $R"
+pruef $([ "$R" = 0 ]; echo $?) "A6 djk-start --arr2 (Vorlagen-Modus, 1.9): Rückgabe $R"
+rm -rf "$O/v"; lauf "$O/a6.txt" "$START/djk-start" "${VN[@]}" "$O/v" --arr1 --arr2; R=$?
+pruef $([ "$R" = 0 ]; echo $?) "A6 djk-start --arr1 --arr2 zusammen: Rückgabe $R"
+lauf "$O/a6.txt" "$START/djk-start" --help; R=$?
+[ "$R" = 0 ] && grep -q -- "^  --arr2 " "$O/a6.txt"; pruef $? "A6 --help beschreibt --arr2: Rückgabe $R"
+grep -q 'djk-instrumente" ${I:+--instanz "$I"} --arr2' "$START/djk-start"; pruef $? "A6 der Startweg ruft djk-instrumente --arr2"
+lauf "$O/a6.txt" "$START/djk-start" "${VN[@]}" "$O/v" --arr3; R=$?
+[ "$R" = 2 ]; pruef $? "A6 Negativ-Kontrolle --arr3: Rückgabe $R"
+
+# A7 --kit-ordner (package 1.9 T2.0): the option is known (Vorlagen mode accepts it), is in --help, an existing directory is accepted, a file or a missing
+#    path is return 2 with a message naming the option, and the start path hands CYPHERDJ_KIT_ORDNER to the units (systemd-run --setenv on the starte line).
+#    Negative control: without --kit-ordner the same call stays return 0 and the start path still sets CYPHERDJ_INSTANZ.
+mkdir -p "$O/kitsd"; : > "$O/keinordner"
+rm -rf "$O/v"; lauf "$O/a7.txt" "$START/djk-start" "${VN[@]}" "$O/v" --kit-ordner "$O/kitsd"; R=$?
+pruef $([ "$R" = 0 ]; echo $?) "A7 djk-start --kit-ordner DIR (Vorlagen-Modus): Rückgabe $R"
+lauf "$O/a7.txt" "$START/djk-start" --help; R=$?
+[ "$R" = 0 ] && grep -q -- "^  --kit-ordner " "$O/a7.txt"; pruef $? "A7 --help beschreibt --kit-ordner: Rückgabe $R"
+grep -E '^ *systemd-run .*--setenv=CYPHERDJ_KIT_ORDNER=\$KIT_ORDNER' "$START/djk-start" | grep -q 'CYPHERDJ_INSTANZ=\$I'; pruef $? "A7 die starte-Zeile gibt CYPHERDJ_KIT_ORDNER neben CYPHERDJ_INSTANZ weiter"
+for z in "$O/keinordner" "$O/gibtsnicht"; do
+  lauf "$O/a7.txt" "$START/djk-start" "${VN[@]}" "$O/v" --kit-ordner "$z"; R=$?
+  [ "$R" = 2 ] && grep -q -- "--kit-ordner" "$O/a7.txt" && ! grep -q Traceback "$O/a7.txt"; pruef $? "A7 --kit-ordner $(basename "$z") (kein Ordner): Rückgabe $R: $(head -1 "$O/a7.txt")"
+done
+lauf "$O/a7.txt" "$START/djk-start" --kit-ordner; R=$?
+[ "$R" = 2 ] && grep -q -- "--kit-ordner" "$O/a7.txt"; pruef $? "A7 --kit-ordner (letztes, ohne Wert): Rückgabe $R"
+rm -rf "$O/v"; lauf "$O/a7.txt" "$START/djk-start" "${VN[@]}" "$O/v"; R=$?
+pruef $([ "$R" = 0 ]; echo $?) "A7 Negativ-Kontrolle ohne --kit-ordner: Rückgabe $R"
+
+# A7 Core allocation (kerne.py): on an invented sysfs tree (8 cores, 16 threads like the dev box) the kern process gets 4 physical cores with siblings
+#    (CPUAffinity 0-3 8-11), the page gets the rest as CYPHERDJ_STEMS_CPUS (4-7,12-15), the start line "Cores:" names both.
+#    CYPHERDJ_KERN_KERNE=2 changes both; an explicit CYPHERDJ_KERN_CPUS wins (stems = the rest); an explicit CYPHERDJ_STEMS_CPUS wins for the stems;
+#    a core count outside the range is clamped (with a note); a core count that is no number, and a CPU that does not exist -> return 2, nothing filled.
+kerne_lauf() { rm -rf "$O/v"; env -u CYPHERDJ_KERN_CPUS -u CYPHERDJ_STEMS_CPUS -u CYPHERDJ_KERN_KERNE CYPHERDJ_UMGEBUNG=/nicht/da CYPHERDJ_SYSFS_CPU="$SYS" "$@" > "$O/a7.txt" 2>&1; }
+kerne_lauf timeout 3 "$START/djk-start" "${VN[@]}" "$O/v"; R=$?
+AFF=$(grep '^CPUAffinity=' "$O/v/cypherdj-kern.service.d/betrieb.conf" 2>/dev/null); STE=$(grep '^Environment=CYPHERDJ_STEMS_CPUS=' "$O/v/cypherdj-oberflaeche.service" 2>/dev/null)
+[ "$R" = 0 ] && [ "$AFF" = "CPUAffinity=\"0-3 8-11\"" ] && [ "$STE" = "Environment=CYPHERDJ_STEMS_CPUS=4-7,12-15" ] && grep -q "^Cores: kern process 4 physical cores (CPUs 0-3 8-11), stems CPUs 4-7,12-15$" "$O/a7.txt"
+pruef $? "A7 default 4 cores: $AFF, $STE (return $R)"
+kerne_lauf env CYPHERDJ_KERN_KERNE=2 timeout 3 "$START/djk-start" "${VN[@]}" "$O/v"; R=$?
+AFF=$(grep '^CPUAffinity=' "$O/v/cypherdj-kern.service.d/betrieb.conf" 2>/dev/null); STE=$(grep '^Environment=CYPHERDJ_STEMS_CPUS=' "$O/v/cypherdj-oberflaeche.service" 2>/dev/null)
+[ "$R" = 0 ] && [ "$AFF" = "CPUAffinity=\"0-1 8-9\"" ] && [ "$STE" = "Environment=CYPHERDJ_STEMS_CPUS=2-7,10-15" ]
+pruef $? "A7 CYPHERDJ_KERN_KERNE=2: $AFF, $STE (return $R)"
+kerne_lauf env CYPHERDJ_KERN_CPUS="0 1 8 9" timeout 3 "$START/djk-start" "${VN[@]}" "$O/v"; R=$?
+AFF=$(grep '^CPUAffinity=' "$O/v/cypherdj-kern.service.d/betrieb.conf" 2>/dev/null); STE=$(grep '^Environment=CYPHERDJ_STEMS_CPUS=' "$O/v/cypherdj-oberflaeche.service" 2>/dev/null)
+[ "$R" = 0 ] && [ "$AFF" = "CPUAffinity=\"0-1 8-9\"" ] && [ "$STE" = "Environment=CYPHERDJ_STEMS_CPUS=2-7,10-15" ] && grep -q "^Cores: kern process CYPHERDJ_KERN_CPUS (CPUs 0-1 8-9)" "$O/a7.txt"
+pruef $? "A7 explicit CYPHERDJ_KERN_CPUS wins: $AFF, $STE (return $R)"
+kerne_lauf env CYPHERDJ_STEMS_CPUS="6-7" timeout 3 "$START/djk-start" "${VN[@]}" "$O/v"; R=$?
+AFF=$(grep '^CPUAffinity=' "$O/v/cypherdj-kern.service.d/betrieb.conf" 2>/dev/null); STE=$(grep '^Environment=CYPHERDJ_STEMS_CPUS=' "$O/v/cypherdj-oberflaeche.service" 2>/dev/null)
+[ "$R" = 0 ] && [ "$AFF" = "CPUAffinity=\"0-3 8-11\"" ] && [ "$STE" = "Environment=CYPHERDJ_STEMS_CPUS=6-7" ]
+pruef $? "A7 explicit CYPHERDJ_STEMS_CPUS wins for the stems: $STE (return $R)"
+kerne_lauf env CYPHERDJ_KERN_KERNE=8 timeout 3 "$START/djk-start" "${VN[@]}" "$O/v"; R=$?
+AFF=$(grep '^CPUAffinity=' "$O/v/cypherdj-kern.service.d/betrieb.conf" 2>/dev/null); STE=$(grep '^Environment=CYPHERDJ_STEMS_CPUS=' "$O/v/cypherdj-oberflaeche.service" 2>/dev/null)
+[ "$R" = 0 ] && [ "$AFF" = "CPUAffinity=\"0-6 8-14\"" ] && [ "$STE" = "Environment=CYPHERDJ_STEMS_CPUS=7,15" ] && grep -q "note: CYPHERDJ_KERN_KERNE = 8 is outside 1 to 7.*using 7" "$O/a7.txt"
+pruef $? "A7 core count 8 is clamped: $AFF, $STE (return $R)"
+kerne_lauf env CYPHERDJ_KERN_KERNE=vier timeout 3 "$START/djk-start" "${VN[@]}" "$O/v"; R=$?
+[ "$R" = 2 ] && grep -q "whole number" "$O/a7.txt" && [ ! -e "$O/v/cypherdj-kern.service.d/betrieb.conf" ]
+pruef $? "A7 negative control core count 'vier': return $R, nothing filled"
+kerne_lauf env CYPHERDJ_KERN_CPUS="0 99" timeout 3 "$START/djk-start" "${VN[@]}" "$O/v"; R=$?
+[ "$R" = 2 ] && grep -q "not online" "$O/a7.txt"; pruef $? "A7 negative control CPU 99: return $R"
 
 echo "ERGEBNIS $OK OK, $FEHL FEHL"
 [ "$FEHL" = 0 ]

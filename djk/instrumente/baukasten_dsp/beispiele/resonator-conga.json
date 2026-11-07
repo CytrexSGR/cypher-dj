@@ -1,0 +1,29 @@
+{
+  "format": "baukasten/2",
+  "name": "resonator-conga",
+  "stimmen": 8,
+  "regler_namen": {"1": "Damping", "2": "Brightness", "3": "Strike position", "4": "Tuning", "5": "Level"},
+  "knoten": [
+    {"id": "note", "art": "note"},
+    {"id": "k_material", "art": "regler", "nr": 1, "min": 0.3, "max": 0.05},
+    {"id": "k_hell", "art": "regler", "nr": 2, "min": 0.3, "max": 0.8},
+    {"id": "k_pos", "art": "regler", "nr": 3, "min": 0, "max": 0.9},
+    {"id": "k_groesse", "art": "regler", "nr": 4, "min": 0.25, "max": 1, "log": 1},
+    {"id": "k_pegel", "art": "regler", "nr": 5, "min": 0.1, "max": 0.5, "log": 1},
+    {"id": "fell", "art": "resonator", "satz": 5, "anregung": 1, "burst": 2},
+    {"id": "pegel", "art": "mul"},
+    {"id": "aus", "art": "ausgang"}
+  ],
+  "kanten": [
+    {"von": "note.hz", "nach": "fell.hz"},
+    {"von": "note.trig", "nach": "fell.trig"},
+    {"von": "note.vel", "nach": "fell.staerke"},
+    {"von": "k_material.aus", "nach": "fell.material"},
+    {"von": "k_hell.aus", "nach": "fell.helligkeit"},
+    {"von": "k_pos.aus", "nach": "fell.position"},
+    {"von": "k_groesse.aus", "nach": "fell.groesse"},
+    {"von": "fell.aus", "nach": "pegel.a"},
+    {"von": "k_pegel.aus", "nach": "pegel.b"},
+    {"von": "pegel.aus", "nach": "aus.x"}
+  ]
+}

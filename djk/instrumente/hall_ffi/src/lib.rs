@@ -1,5 +1,5 @@
 //! C-ABI um hall_dsp für den djk-Kern (Rückweg fx/2). Kopf: djk/kern/include/cypherdj/cypher_hall_ffi.h.
-//! Daneben Cypher Komp (komp.rs) und die RB-338 für das Arrangement (rb.rs, D1 K2a), je mit eigenem Kopf.
+//! Daneben Cypher Komp (komp.rs), der native EQ-Insert (eq.rs), die Sättigung (saett.rs) und die RB-338 für das Arrangement (rb.rs, D1 K2a), je mit eigenem Kopf.
 //!
 //! `cypher_hall_neu` allokiert (außerhalb des Callbacks); `cypher_hall_block`, `_setze` und `_leeren` allokieren nicht.
 //! Der Block liefert nur den nassen Anteil (der Kern mischt über `fx/2/rueckweg`). Panics werden nicht über die
@@ -7,6 +7,10 @@
 
 mod komp;
 pub use komp::*;
+mod eq;
+pub use eq::*;
+mod saett;
+pub use saett::*;
 mod rb;
 pub use rb::*;
 pub mod baukasten;

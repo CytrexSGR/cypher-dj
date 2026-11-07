@@ -23,10 +23,13 @@
 #include "cypherdj/deck_werk.h"
 #include "cypherdj/dsp/analyse_baender.h"
 #include "cypherdj/arrangement.h"
+#include "cypherdj/auto_pickup.h"
 #include "cypherdj/aufnahme.h"
 #include "cypherdj/arr_bk_senke.h"
 #include "cypherdj/arr_intern_senke.h"
+#include "cypherdj/arr_kit_senke.h"
 #include "cypherdj/arr_rb_senke.h"
+#include "cypherdj/arr_rack_senke.h"
 #include "cypherdj/arr_wirt_senke.h"
 #include "cypherdj/erzeuger.h"
 #include "cypherdj/huellen.h"
@@ -84,7 +87,10 @@ struct Befehl {
     DECK_LOOP_LAENGE = 44,  // §4.4 /k/deck/loop_laenge: Loop mit festem Start: quell_beat = start_beat, wert_beats = laenge_beats
     REC_SPUR = 45, REC_START = 46, REC_STOPP = 47,  // 1.8 (§4.12): REC_SPUR nr = spur, an = scharf, deck = eingang, zeiger = RecSpur*; REC_START nr = kennung, fassung = nachlauf_samples, versatz_f = frist_samples (0: Vorgabe)
     KANAL_GRAPH = 48,  // Baukasten S3c (§4.10 /k/kanal/graph): pfad = kanal (deck/1..4), zeiger = CypherBk* oder null (entfernen)
-    LERNEN = 49        // S19 (§4.7 /k/lernen): an 1 arm / 0 disarm the MIDI learn capture, id is reported back in GELERNT
+    LERNEN = 49,       // S19 (§4.7 /k/lernen): an 1 arm / 0 disarm the MIDI learn capture, id is reported back in GELERNT
+    ARR_AUTO = 50,     // 1.12 S3 (§4.11 /k/arr/auto): nr = spur (1..32, 0 = all), politik = field (0 fader, 1 pan, 2 mute, 3 solo), an (1 lane plays, 0 the hand overrides)
+    HAND_FREI = 52,    // §4.3 /k/hand/frei: liste = pfade (Komma-Liste, Präfix auf /, *); only andreas; releases the human holder
+    ARR_ARM = 51       // 1.12 S3 (§4.11 /k/arr/arm): nr = spur (1..32, 0 = all, only with an 0), an (1 arm, 0 disarm), politik = modus (0 touch, 1 latch, 2 write)
   };
   int32_t art;
   int32_t an;          // KLICK: 0 oder 1; KI_STUFE: Stufe 0 bis 3
@@ -165,6 +171,11 @@ struct Ereignis {
     WARP_ZUSTAND = 37,               // 1.13 Slice 2, §5.13b /zustand/warp: warp_stimmen, warp_unterlauf, warp_kein_platz, warp_spaet, warp_faeden
     ERZ_BK_ALT = 38,                 // Baukasten S3a: abgelöster Baukasten-Graph zur Freigabe im Netz-Faden (zeiger = CypherBk*)
     GELERNT = 39,                    // S19 (§5.8 /e/gelernt): id, deck = quelle (0 hand_in, 1 midi_ein_1), fassung = kanal, teil = nr, neu = wert, status = belegt
+    AUTO_ZUSTAND = 40,               // 1.12 S3 (§5.13 /e/auto): deck = spur (1..32), fassung = field (0 fader .. 3 solo), status = 1 overridden / 0 the lane plays
+    AUTO_PUNKT = 41,                 // 1.12 S3 (§5.13 /e/auto_punkt): pfad = spur/<n>/<field>, beat = project beat at the grip sample, wert = hand value, sample = end of the block that sent it
+    MIX_ZUSTAND = 42,                // 1.15 A6 (§5.5d /zustand/mix): pfad = channel, pegel[0..4] = gate, multiband low/mid/high, limiter reduction in dB (>= 0), 10 Hz, only where a tool runs
+    HALL_ZUSTAND = 44,               // mehrkern Task 5 (§5.13 /zustand/hall_pool): hall_an, hall_faeden, hall_spaet, hall_zurueck; on change and at 2 Hz; without a HallPool an 0, faeden 0
+    INS_GR = 43,                     // 1.10 S4a (/e/ins_gr): pfad = ins/komp/<n>, wert = gain reduction of the pooled compressor stage in dB (>= 0), 20 Hz with the levels, only stages that ran in the last block; netz_loop sends it as /e/ins_gr ,sf (§5.5f)
   };
   int32_t art;
   int32_t status;   // QUITTUNG: §5.1; KI: gestoppt 0/1
@@ -217,6 +228,7 @@ struct Ereignis {
   // I08, EIN_ZUSTAND: MIDI-Zähler seit Kernstart, Kern-Sample des letzten MIDI-Ereignisses bzw. der letzten Flanke auf ein_1 (−1 ohne)
   int64_t ein_gesehen, ein_verloren, ein_midi_sample, ein_flanke;
   int32_t warp_stimmen, warp_unterlauf, warp_kein_platz, warp_spaet, warp_faeden;   // 1.13 Slice 2, WARP_ZUSTAND (§5.13b)
+  int32_t hall_an, hall_faeden, hall_spaet, hall_zurueck;   // mehrkern Task 5, HALL_ZUSTAND (§5.13)
   int32_t rec_scharf;   // 1.8, REC_ZUSTAND: Zahl der scharfen Spuren
   int64_t rec_luecken;  // 1.8, REC_ZUSTAND: Lücken des laufenden Takes
 };
@@ -226,7 +238,10 @@ constexpr int32_t ARR_FREEZE_ABGELEHNT = 3;  // Paket K3: Ereignis ARR_FREEZE ei
 using Befehlsring = SpscRing<Befehl, 256>;
 using Ereignisring = SpscRing<Ereignis, 8192>;
 
+struct KernPruefZugang;   // tests only (test_arr_auto_eingriff_kern): plays the restart state of teile_nachreichen
+
 class Kern {
+  friend struct KernPruefZugang;
  public:
   Kern(double start_bpm, cdj_ring_kopf* ring, Befehlsring* befehle, Ereignisring* ereignisse);
   ~Kern();
@@ -262,12 +277,18 @@ class Kern {
   void setze_filter_guete(double q) { mixer_->setze_filter_guete(q); }
   // Scheibe 25: Decke des Master-Limiters (kern.toml limiter_dbtp, §2.1). Nicht im Callback.
   void setze_limiter_dbtp(double decke) { mixer_->setze_limiter_dbtp(decke); }
+  // 1.15 A5b: the channel limiters on bus/1..4 (kern.toml kanal_limiter_vorhalt_ms / kanal_limiter_echtspitze, D8). 0 builds nothing (L = 0). Not in the callback,
+  // before the audio starts (it sets the latency account).
+  void setze_kanal_limiter(double vorhalt_ms, bool echtspitze) { mixer_->setze_kanal_limiter(vorhalt_ms, echtspitze); }
   // D1 K2b (Spec 2.4, 6.24): die RB-338, die der Kern für alle internen Spuren anlegt (setze_arr_senke_intern ersetzt
   // sie); der Render (K3) treibt denselben Kern und bekommt sie damit ohne Zutun
   const ArrRbSenke& arr_rb() const { return *arr_rb_; }
   // S20: the Baukasten sink of the internal tracks (project tracks with device bk) and its reader for the graph store of the loader
   const ArrBkSenke& arr_bk() const { return *arr_bk_; }
   const ArrBkLeser* arr_bk_leser() const { return arr_bk_.get(); }
+  const ArrKitSenke& arr_kit() const { return *arr_kit_; }   // 1.9
+  const ArrKitLeser* arr_kit_leser() const { return arr_kit_.get(); }
+  const ArrRackSenke& arr_rack() const { return *arr_rack_; }   // 1.9 U6
   // D1 K2b: Wirt-Slots s = 1..2 (setze_arr_senke_wirt ersetzt sie). arr_rueck: Rückweg arr_rueck_<s>_L/R für den NÄCHSTEN
   // zyklus() (wie rueck(), n Samples ab Index 0); arr_midi_aus: MIDI an arr_midi_<s> dieses Zyklus, gültig bis zum
   // nächsten zyklus().
@@ -290,11 +311,22 @@ class Kern {
     arr_->setze_warp_werk(w);
     arr_->setze_karten_generation(plan_.generation_zeiger());
   }
+  // mehrkern task 4: the HallPool for the return Halls of the arrangement; before the first cycle, owner stays with the caller (it stops the
+  // callback before it deletes the pool). nullptr: the Halls compute serially in the callback.
+  void setze_hall_pool(HallPool* p) { hall_pool_ = p; arr_->setze_hall_pool(p); }   // task 5: the kern also reports the pool's state (HALL_ZUSTAND)
   void setze_arr_senke_wirt(int slot, ArrSenke* s) { arr_->setze_senke_wirt(slot, s); }
   // Baukasten S3b: das Graph-Werk (graph_werk.h) für die Baukasten-Ströme des Erzeugers; vor dem ersten Zyklus, Besitz beim
   // Aufrufer (er stoppt es nach jack_deactivate). nullptr: Graphen rechnen im Callback (S3a).
   void setze_graph_werk(GraphWerk* w) { erz_->setze_graph_werk(w); }
   void setze_arr_auto_schritt(int n) { arr_->setze_auto_schritt(n); }   // Automation Slice 1: test seam, 1 = lane without the step hold (before the callback runs)
+  // 1.12 S3 task 1 (D2): source of the lane value for the pickup hook in the hand loop; before the callback runs, owner stays with the caller.
+  void setze_auto_pickup(const AutoPickup* p) { sw_->setze_pickup(p); }   // the Stellwerk asks it inside hand_anwenden
+  // 1.12 S3 (D4): the core side of the page path "/k/arr/auto an 0|1" (spur is the 0-based track). uebersteuern = true: the Stellwerk value of the regulator is first
+  // set to the value the lane played last (D2), then the override starts, so the value stays there until the next /k/teil. false: the lane plays again (blend).
+  // Callback thread, at the start of a cycle. Returns what Arrangement::auto_uebersteuern returns.
+  bool auto_uebersteuern(int spur, int feld, bool uebersteuern);
+  // 1.12 S3 (D11): the arm of the track (OSC number 1..32): -1 not armed, else the mode (0 touch, 1 latch, 2 write). Callback thread (tests).
+  int auto_arm(int spur_osc) const { return spur_osc >= 1 && spur_osc <= ARR_SPUREN ? auto_arm_[spur_osc - 1] - 1 : -1; }
   const Arrangement& arrangement() const { return *arr_; }   // Tests, Diagnose (nur aus dem Callback-Faden lesen)
   // 1.10 Slice 2 (E2): Produktions-Master des zuletzt gelaufenen Zyklus, Index 0..n−1 (n = Größe des Zyklus). Nach dem PM-Fader, vor erz/4,
   // ohne Metronom, Kleber, master/pegel und Set-Limiter: der Export-Abgriff. Nur aus dem Callback-Faden (und Tests, Render) lesen.
@@ -412,6 +444,8 @@ class Kern {
   // I08: Audio-Eingänge ein_1..4_L/R für den NÄCHSTEN zyklus(); nullptr = Port fehlt. Wie rueck(): main.cpp setzt vor jedem zyklus() die
   // JACK-Puffer dieses Zyklus.
   void ein(int paar, const float* l, const float* r) noexcept { ein_bank_.zeiger(paar, l, r); }
+  // Voice channel (stimme.h, kern.toml stimme_*): before the first cycle, not in the callback.
+  void stimme_einstellen(const StimmEinstellung& e) { mixer_->stimme_einstellen(e); }
   // I08: roher MIDI-Eingang midi_ein_1, je Ereignis mit JACK-Versatz; aufzurufen im Callback vor dem zyklus(). Das Ereignis wird erst in
   // zyklus() gestempelt, NACH dem Einsortieren der Befehle: so trägt es die Zeitachse, auf der dieser Zyklus läuft (nach /k/set/neu die
   // neue), wie die Hand-MIDI (Review-Nachzug MINOR 4). Höchstens MAX_MIDI je Zyklus, mehr zählt midi_ein_ring().verloren().
@@ -481,6 +515,16 @@ class Kern {
   void pegel_melden(int64_t n0, int n);
   void ereignisse_uebernehmen();
   void teile_nachreichen();
+  void arr_griffe_pruefen(int64_t s0, int m);   // 1.12 S3 (D1): after the Stellwerk cycle of a sub-block, grips on spur/n/{fader,pan,mute,solo} override the lanes
+  // The pickup source for the Stellwerk (D2): the Arrangement, but not for the touches teile_nachreichen replays after a restart (they are no grips)
+  class ArrPickup final : public AutoPickup {
+   public:
+    Arrangement* arr = nullptr;
+    const bool* sperre = nullptr;
+    bool lane_wert(int regler, float& wert) const override { return arr && !(sperre && *sperre) && arr->auto_lane_wert(regler, wert); }
+  };
+  ArrPickup arr_pickup_;
+  bool nachreichen_sperre_ = false;   // teile_nachreichen replayed holder touches in this cycle: not a grip, not a pickup (cleared after the first sub-block)
   // Scheibe 31 (kern_deck.cpp)
   void decks_anlegen();
   void einsortieren31(const Befehl& c);
@@ -490,8 +534,31 @@ class Kern {
   // D1 K1 (kern_arr.cpp): Modul Arrangement
   void einsortieren_arr(const Befehl& c, double beat0);
   void arr_zustand(int64_t n0, int n);
+  // 1.12 S3 (§5.13 /e/auto): callback thread, at the end of the cycle. Drains the Arrangement ring into the event ring; when events were lost (the ring dropped one, or
+  // the event ring was full) the queue is discarded and the full state is re-reported (every field with a lane, every field last reported as 1).
+  void auto_melden(int64_t n0);
+  bool auto_gemeldet_[ARR_SPUREN][Arrangement::AUTO_FELDER] = {};    // what the reader was last told (only pushed events count)
+  uint32_t auto_verloren_gesehen_ = 0;
+  int auto_abgleich_ = -1;            // >= 0: the re-report is under way, next field index (spur * 4 + field)
+  // 1.12 S3 (D11, D12): the arm per track (-1 off, else the mode) and the recorded points (/e/auto_punkt). Callback thread only, no allocation.
+  // auto_punkte_melden runs in arr_griffe_pruefen (after the grips of the sub-block are known): a grip on an armed track while the transport plays becomes a
+  // pending point (project beat at the grip sample, hand value at the end of the sub-block). It is sent at once when the 50 Hz window of that regulator is
+  // free, else held until the window ends (trailing value, newer points replace it). A stopped transport sends what is held and takes nothing new.
+  struct AutoPunkt {
+    int64_t gemeldet = INT64_MIN / 2;   // end of the sub-block that sent the last point of this regulator
+    double beat = 0.0;
+    float wert = 0.0f;
+    bool aus = false;                   // a point is pending
+  };
+  int8_t auto_arm_[ARR_SPUREN] = {};   // 0 off, else the mode + 1
+  AutoPunkt auto_punkt_[ARR_SPUREN][Arrangement::AUTO_FELDER];
+  int auto_armiert_ = 0;              // number of armed tracks (the fast path of auto_punkte_melden)
+  void auto_punkte_melden(int64_t s0, int m);
   void warp_zustand(int64_t n0, int n);   // 1.13 Slice 2: /zustand/warp (§5.13b), bei Änderung und mit 2 Hz, solange ein Warp-Werk hängt
   int32_t warp_gemeldet_[4] = {-1, -1, -1, -1};
+  void hall_zustand(int64_t n0, int n);   // mehrkern Task 5: /zustand/hall_pool (§5.13), on change and at 2 Hz
+  HallPool* hall_pool_ = nullptr;         // not owned; set before the first cycle, cleared after the callback stopped
+  int32_t hall_gemeldet_[4] = {-1, -1, -1, -1};
   void limiter_beobachten(int64_t s0, int m);   // 1.10 Slice 2: liest die Absenkung des Set-Limiters nach jedem Mischer-Block
   static constexpr float LIMITER_LAMPE_DB = -0.1f;
   static constexpr int64_t LIMITER_HALTE = 24000;
@@ -547,6 +614,7 @@ class Kern {
   int arr_warte_n_ = 0;
   char arr_start_quelle_[48] = {}, arr_stopp_quelle_[48] = {};
   void komp_zustand(int64_t n0, int n);   // Effekt-Sektion: /zustand/komp (§5.5c) je aktivem Kompressor, 10 Hz  // Keylock 7b.3: /zustand/box (§5.5b), Takt wie decks_zustand
+  void mix_zustand(int64_t n0, int n);    // 1.15 A6: /zustand/mix (§5.5d) je Kanal mit laufendem Werkzeug (Gate, Multiband, Limiter), 10 Hz; kern_mix.cpp
   void decks_block(int64_t s0, int m);
   void decks_verlauf(int regler, const float* verlauf);
   void keylock_verlauf(int regler, const float* verlauf, int64_t s0, int m);  // Keylock Task 3: Regler keylock am Sample
@@ -632,7 +700,9 @@ class Kern {
   MidiAus midi_aus_[ERZ_MIDI_PORTS];
   std::unique_ptr<ArrRbSenke> arr_rb_;                      // D1 K2b: RB-338 des Arrangements, im Konstruktor angelegt
   std::unique_ptr<ArrBkSenke> arr_bk_;                      // S20: Baukasten graphs of the internal tracks
+  std::unique_ptr<ArrKitSenke> arr_kit_;                    // 1.9: Kits of the internal tracks
   std::unique_ptr<ArrInternSenke> arr_intern_;              // S20: the one internal sink of the arrangement, forwards by device
+  std::unique_ptr<ArrRackSenke> arr_rack_;                  // 1.9 U6: the sink of the instrument-rack tracks, after the dispatcher and the Wirt sinks
   std::unique_ptr<ArrWirtSenke> arr_wirt_[ARR_WIRT_SLOTS];  // D1 K2b: Wirt-Slots 1..2, im Konstruktor angelegt
   int64_t zyklus_n0_ = 0;
   int64_t rueck_unendlich_ = 0;  // Audit F01: nicht endliche Samples am Wirt-Rückweg (verworfen)

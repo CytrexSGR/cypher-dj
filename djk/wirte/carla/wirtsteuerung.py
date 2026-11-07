@@ -3,7 +3,7 @@ eine zurück. Befehle: {"befehl":"lade","pfad":"/abs/klang.fxp"} → {"ok","name
 {"ok","xml","patch_b64"} · {"befehl":"note","note":0..127,"velocity":1..127,"dauer":s} → {"ok"} ·
 {"befehl":"fahre","name","bis","dauer"[,"von"][,"ab"][,"spur"][,"form"]} → {"ok"} (Studio S6: ab = Start in time.monotonic()
 Sekunden, höchstens 1 s zurück und 1 h voraus; ohne von gilt der Ist-Wert beim Start; Studio S7: form linear (Vorgabe) oder s
-wie im Kern, 3u²−2u³) · {"befehl":"halte"[,"spur"]} →
+wie im Kern, 3u²−2u³) · {"befehl":"ist","namen":[…]} → {"ok","werte":{name: Anzeigewert}} (1.9 U5: Ist-Werte lesen, lädt nichts) · {"befehl":"halte"[,"spur"]} →
 {"ok","gehalten"} (verwirft wartende und laufende Fahrten, mit spur nur deren). Fehler → {"ok": false, "fehler": "…"},
 der Wirt läuft weiter. Getrennt von wirt.py, damit ohne Carla testbar."""
 import base64
@@ -101,6 +101,14 @@ class Steuerung:
                 if dauer == 0 and ab <= jetzt:
                     self.takt(jetzt)
                 return {"ok": True, "ersetzt": ersetzt} if ersetzt else {"ok": True}
+            if art == "ist":  # 1.9 U5: current display values (the driven value if there is one, else the plugin state); loads nothing
+                namen = befehl.get("namen")
+                if not isinstance(namen, list) or not namen or len(namen) > 64 or not all(isinstance(n, str) for n in namen):
+                    raise ValueError("namen: a list of 1..64 parameter names")
+                for n in namen:
+                    if n not in self.bereiche:
+                        raise ValueError(f"{n} nicht fahrbar (kein stufenloser Parameter in surge_bereiche.json)")
+                return {"ok": True, "werte": {n: self.istwert(n) for n in namen}}
             if art == "halte":
                 spur, gehalten = befehl.get("spur"), 0
                 for name in list(self.rampen):

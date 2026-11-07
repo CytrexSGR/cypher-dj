@@ -25,13 +25,16 @@ function sse(url) {
 }
 async function bis(s, pruef, ms = 1000) { for (let t = 0; t < ms && !pruef(); t += 20) await warte(20); return pruef(); }
 
-test('SSE Anfangsbild: erstes Ereignis stand mit genau den Schlüsseln decks, fx, fxRouting, fxZuweisung, geladen, graphen_geladen, kern, loops, pruefmodus, regler', async (t) => {
+test('SSE Anfangsbild: erstes Ereignis stand mit genau den Schlüsseln decks, fx, fxRouting, fxZuweisung, geladen, graphen_geladen, hallPool, kanalLimiter, kern, loops, pruefmodus, regler', async (t) => {
   const { url } = await stapel(t);
   const s = sse(url); t.after(s.zu);
   assert.ok(await bis(s, () => s.ereignisse.length > 0), 'kein Ereignis auf /strom');
   const [e] = s.ereignisse;
   assert.equal(e.a, 'stand');
-  assert.deepEqual(Object.keys(e.f).sort(), ['decks', 'fx', 'fxRouting', 'fxZuweisung', 'geladen', 'graphen_geladen', 'kern', 'loops', 'pruefmodus', 'regler']);
+  assert.deepEqual(Object.keys(e.f).sort(), ['decks', 'fx', 'fxRouting', 'fxZuweisung', 'geladen', 'graphen_geladen', 'hallPool', 'kanalLimiter', 'kern', 'loops', 'pruefmodus', 'regler']);
+  // 1.15 A5c: null until the kern sent /e/kanal_limiter, else the kern's own word with a real boolean
+  assert.ok(e.f.kanalLimiter === null || typeof e.f.kanalLimiter.gebaut === 'boolean', `kanalLimiter ${JSON.stringify(e.f.kanalLimiter)}`);
+  assert.ok(e.f.hallPool === null || typeof e.f.hallPool.an === 'boolean', `hallPool ${JSON.stringify(e.f.hallPool)}`);   // mehrkern Task 5: null until /zustand/hall_pool came
   assert.equal(e.f.kern, 'verbunden');
   assert.equal(e.f.pruefmodus, 'an', 'stapel startet mit kernPruefmodus true');
   assert.deepEqual([e.f.fx, e.f.fxZuweisung, e.f.fxRouting], [[null, null], [{}, {}], 'post_fader']);

@@ -8,12 +8,16 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <functional>
+#include <initializer_list>
 #include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "cypherdj/arrangement.h"
+#include "cypherdj/arr_pdc.h"
+#include "cypherdj/arr_schluessel.h"
 #include "cypherdj/warp_werk.h"
 
 namespace arrtest {
@@ -71,11 +75,11 @@ struct Audio {
 // Baut einen Schnappschuss; spur()/clip()/note() vor fertig(), danach zeigen die Zeiger in die Vektoren.
 struct Bau {
   std::unique_ptr<cdj::ArrSnapshot> s{new cdj::ArrSnapshot()};
-  struct C { int spur; cdj::ArrClip c; std::vector<double> wb, wf; int wm = 0; double wp = 1.0; std::vector<double> eb, ef; int lp = 0, hu = 100; };   // wb, wf: Warp-Marker des Clips (Paket 1.13), leer = ungewarpt; wm: Modus (0 repitch, 2 complex, 3 tones)
+  struct C { int spur; cdj::ArrClip c; std::vector<double> wb, wf; int wm = 0; double wp = 1.0; std::vector<double> eb, ef; int lp = 0, hu = 100; std::vector<cdj::ArrAutoPunkt> hk; };   // wb, wf: Warp-Marker des Clips (Paket 1.13), leer = ungewarpt; wm: Modus (0 repitch, 2 complex, 3 tones)
   struct N { int spur; cdj::ArrNote n; };
   std::vector<C> cs;
   std::vector<N> ns;
-  struct L { int spur; std::vector<cdj::ArrAutoPunkt> p; uint8_t ziel = cdj::ARR_AUTO_FADER; uint8_t param = 0; };   // Automation: one lane of a track (default target fader)
+  struct L { int spur; std::vector<cdj::ArrAutoPunkt> p; uint8_t ziel = cdj::ARR_AUTO_FADER; uint8_t param = 0; bool relativ = false; };   // Automation: one lane of a track (default target fader)
   std::vector<L> ls;
   explicit Bau(int64_t nr = 1) { s->nr = nr; }
   Bau& spur(int nr, cdj::ArrArt art, int slot = 0) {
@@ -85,6 +89,26 @@ struct Bau {
     return *this;
   }
   Bau& ausgang(int nr, int gruppe) { s->spur[nr - 1].ausgang = static_cast<int8_t>(gruppe); return *this; }   // 1.10: 0 master, 1..8 Gruppe
+  // 1.10 slice 4a: the insert chain of a strip (tracks 1..32 by nr, groups by grp(g)); the stages in order, slot 0-based
+  Bau& kette(int nr, std::initializer_list<cdj::ArrStufe> st) { return kette_streifen(nr - 1, st); }
+  Bau& gruppen_kette(int g, std::initializer_list<cdj::ArrStufe> st) { return kette_streifen(cdj::ARR_SPUREN + g - 1, st); }
+  Bau& ret_kette(int r, std::initializer_list<cdj::ArrStufe> st) { return kette_streifen(cdj::ARR_KETTE_RET0 + r - 1, st); }   // slice 4a T3
+  Bau& pm_kette(std::initializer_list<cdj::ArrStufe> st) { return kette_streifen(cdj::ARR_KETTE_PM, st); }
+  Bau& kette_streifen(int idx, std::initializer_list<cdj::ArrStufe> st) {
+    cdj::ArrKette& k = s->kette[idx];
+    k.n = 0;
+    for (const cdj::ArrStufe& x : st) k.st[k.n++] = x;
+    return *this;
+  }
+  // 1.10 slice 4c T15: the rack of a strip (0-based pool slot) with its mapping table; strip numbering as the chains
+  Bau& rack(int nr, int slot, std::initializer_list<cdj::ArrMakroZiel> z) { return rack_streifen(nr - 1, slot, z); }
+  Bau& rack_streifen(int idx, int slot, std::initializer_list<cdj::ArrMakroZiel> z) {
+    cdj::ArrRack& r = s->rack[idx];
+    r.slot = static_cast<int8_t>(slot);
+    r.n = 0;
+    for (const cdj::ArrMakroZiel& x : z) r.z[r.n++] = x;
+    return *this;
+  }
   Bau& clip(int nr, const char* id, double start, double laenge, const cdj::ArrAudio* a, int64_t offset = 0,
             float gain = 1.0f, double ein = 0.0, double aus = 0.0) {
     cs.push_back({nr, cdj::ArrClip{cdj::arr_id(id), start, laenge, a, offset, gain, ein, aus}});
@@ -107,10 +131,15 @@ struct Bau {
     cs.back().hu = huelle;
     return *this;
   }
+  // 1.12 slice 5 (U8a): hängt dem zuletzt hinzugefügten Clip eine Gain-Hüllkurve an: Punkte (Clip-Beat der Kopie, dB -200..0, Form 0 linear, 1 s, 2 Sprung), Beats nicht fallend
+  Bau& hk(std::vector<cdj::ArrAutoPunkt> p) {
+    cs.back().hk = std::move(p);
+    return *this;
+  }
   // Automation: a lane on track nr; points (beat, wert in the unit of the target, form 0 linear, 1 s, 2 jump), beats not falling. ziel is one of cdj::ARR_AUTO_*
   // (default fader), param the device parameter index for ARR_AUTO_GERAET. Several lanes per track keep the call order.
-  Bau& lane(int nr, std::vector<cdj::ArrAutoPunkt> p, uint8_t ziel = cdj::ARR_AUTO_FADER, uint8_t param = 0) {
-    ls.push_back({nr, std::move(p), ziel, param});
+  Bau& lane(int nr, std::vector<cdj::ArrAutoPunkt> p, uint8_t ziel = cdj::ARR_AUTO_FADER, uint8_t param = 0, bool relativ = false) {
+    ls.push_back({nr, std::move(p), ziel, param, relativ});
     return *this;
   }
   Bau& note(int nr, const char* id, double beat, double laenge, int ton, int vel = 100) {
@@ -132,6 +161,9 @@ struct Bau {
     for (const L& l : ls) n_ap += l.p.size();
     s->auto_lane_liste.reserve(ls.size());   // Automation Slice 1: pointers into these vectors, they never grow afterwards
     s->auto_punkte.reserve(n_ap);
+    size_t n_hk = 0;
+    for (const C& c : cs) n_hk += c.hk.size();
+    s->hk_punkte.reserve(n_hk);       // 1.12 slice 5: ArrClip::hk zeigt hinein, wie im Lader vorab reserviert
     s->warps.reserve(n_warps);        // die Zeiger der Clips zeigen in diese Vektoren, sie wachsen danach nie
     s->warp_beat.reserve(n_punkte);
     s->warp_frame.reserve(n_punkte);
@@ -163,6 +195,12 @@ struct Bau {
             }
             s->warps.push_back(w);
             x.warp = &s->warps.back();
+          }
+          if (!c.hk.empty()) {
+            const size_t h0 = s->hk_punkte.size();
+            s->hk_punkte.insert(s->hk_punkte.end(), c.hk.begin(), c.hk.end());
+            x.hk = s->hk_punkte.data() + h0;
+            x.hk_n = static_cast<int>(c.hk.size());
           }
           s->clips.push_back(x);
         }
@@ -196,6 +234,7 @@ struct Bau {
           al.param = l.param;
           al.n = static_cast<int>(l.p.size());
           al.p = s->auto_punkte.data() + p0;
+          al.relativ = l.relativ;
           s->auto_lane_liste.push_back(al);
           if (sp.n_auto == 0) sp.auto_lanes = s->auto_lane_liste.data() + (s->auto_lane_liste.size() - 1);
           ++sp.n_auto;
@@ -204,6 +243,9 @@ struct Bau {
     }
     for (const C& c : cs)   // Slice 2: jedes genutzte Audio genau einmal (wie der Lader; das Warp-Werk fragt danach in liest())
       if (std::find(s->audios.begin(), s->audios.end(), c.c.audio) == s->audios.end()) s->audios.push_back(const_cast<cdj::ArrAudio*>(c.c.audio));
+    cdj::arr_schluessel_rechnen(*s);   // slice 5 U1: the track order over the post keys (the loader does this too); a cycle leaves the identity and is the loader's refusal
+    cdj::arr_pdc_rechnen(*s);   // the loader does this once the routing is complete; a test that sets ret_da afterwards calls it again
+    cdj::arr_schluessel_versatz(*s);   // slice 5 U2b: the key delays against the PDC table just computed (the loader does this too); a test that calls arr_pdc_rechnen again calls it again
     return s.release();
   }
 };
@@ -263,6 +305,10 @@ struct Treiber {
   std::vector<PruefSenke*> senken;            // bekommen vor jedem Block dessen Anfang
   std::unique_ptr<cdj::WarpWerk> werk;        // Slice 2: das Warp-Werk (mit_werk), vor den Schnappschüssen abgebaut
   uint32_t gen = 1;                           // Slice 2: Karten-Generation (mit_werk hängt sie ans Arrangement); wer die Karte ändert, erhöht sie
+  std::function<void(int64_t)> vor_block;     // slice 5 U2b: called with the first sample of every block just before arr.block() (a test hands the DJ inputs here, Arrangement::dj_schluessel)
+  // slice 5 U2b: DJ inputs as signals indexed by kern sample (0..3 = deck/1..4, 4 = erz/1; both channels equal). An empty signal is a nullptr (silent input). dj_sig_an = false: no call at all.
+  std::vector<float> dj_sig[cdj::Arrangement::DJ_EINGAENGE];
+  bool dj_sig_an = false;
   ~Treiber() {
     if (werk) werk->stoppe();
     for (const cdj::ArrSnapshot* x : alt) delete x;
@@ -284,6 +330,13 @@ struct Treiber {
     while (s < bis) {
       for (auto& x : b) std::fill(x, x + n, 0.0f);
       for (PruefSenke* p : senken) p->block_s0 = s;
+      if (vor_block) vor_block(s);
+      if (dj_sig_an) {
+        const float* dl[cdj::Arrangement::DJ_EINGAENGE];
+        for (int i = 0; i < cdj::Arrangement::DJ_EINGAENGE; ++i)
+          dl[i] = !dj_sig[i].empty() && s + n <= static_cast<int64_t>(dj_sig[i].size()) ? dj_sig[i].data() + s : nullptr;
+        arr.dj_schluessel(dl, dl);
+      }
       arr.block(k, s, n, b[0], b[1], b[2], b[3], b[4], b[5]);
       l.insert(l.end(), b[0], b[0] + n);
       r.insert(r.end(), b[1], b[1] + n);

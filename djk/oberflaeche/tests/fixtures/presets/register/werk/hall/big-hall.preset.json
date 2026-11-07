@@ -1,0 +1,34 @@
+{
+ "schema": 1,
+ "name": "Big Hall",
+ "geraet_typ": "effekt",
+ "geraet": "hall",
+ "werte": {
+  "size": 180,
+  "decay": 6,
+  "mix": 0.35
+ },
+ "beschreibung": {
+  "art": "reverb",
+  "unterart": "hall",
+  "charakter": [
+   "wide",
+   "wet",
+   "airy"
+  ],
+  "genre": [
+   "trance",
+   "ambient"
+  ],
+  "einsatz": [
+   "breakdown",
+   "transition"
+  ],
+  "energie": 2,
+  "text": "Long bright hall tail for washing out a lead before the next drop."
+ },
+ "tags": [],
+ "notiz": "",
+ "angelegt": "2026-11-02T00:00:00.000Z",
+ "geaendert": "2026-11-02T00:00:00.000Z"
+}

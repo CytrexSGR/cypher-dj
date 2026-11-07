@@ -23,8 +23,9 @@ export function suchTerme(text: string, zusatz: readonly string[] = []): Terme {
   const terme: Terme['terme'] = [], ordner: string[] = [], gesehen = new Set<string>();
   // Steuerzeichen (NUL, C0, DEL, C1) sind Trenner wie Leerraum: ein NUL im FTS-String ließ SQLite mit „unterminated string“ (500) antworten (S4-Review 1)
   const ein = text.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/g, ' ');
-  const neu = (t: { spalte: string | null; wert: string }): void => {   // gleiche Terme zählen einmal (S4-Review 3)
-    const k = `${t.spalte ?? ''}\u0001${t.wert.toLowerCase()}`;
+  // gleiche Terme zählen einmal (S4-Review 3); NFC and NFD spellings are the same term (FTS matches both anyway)
+  const neu = (t: { spalte: string | null; wert: string }): void => {
+    const k = `${t.spalte ?? ''}\u0001${t.wert.normalize('NFC').toLowerCase()}`;
     if (!gesehen.has(k)) { gesehen.add(k); terme.push(t); }
   };
   for (const m of ein.matchAll(TOKEN)) {

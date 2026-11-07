@@ -9,15 +9,16 @@ namespace cdj {
 
 ArrSenke* ArrInternSenke::innen(int spur) const noexcept {
   const ArrSnapshot* s = arr_.snapshot();
-  if (!s || spur < 0 || spur >= ARR_SPUREN) return nullptr;
-  const ArrSpur& x = s->spur[spur];
+  if (!s || spur < 0 || spur >= ARR_SENKEN_PLAETZE) return nullptr;
+  const ArrSpur& x = s->platz(spur);
   if (x.art != ArrArt::intern) return nullptr;
-  return std::strcmp(x.geraet, "bk") == 0 ? bk_ : rb_;
+  if (std::strcmp(x.geraet, "bk") == 0) return bk_;
+  return std::strcmp(x.geraet, "kit") == 0 ? kit_ : rb_;
 }
 
 ArrSenke* ArrInternSenke::ziel(int spur) const noexcept {
   if (ArrSenke* s = innen(spur)) return s;
-  return spur >= 0 && spur < ARR_SPUREN ? zuletzt_[spur] : nullptr;
+  return spur >= 0 && spur < ARR_SENKEN_PLAETZE ? zuletzt_[spur] : nullptr;
 }
 
 void ArrInternSenke::note(int spur, int64_t z, uint8_t ton, uint8_t vel, bool an) noexcept {
@@ -36,7 +37,7 @@ bool ArrInternSenke::spur_weg(int spur, int64_t s, bool andere_spur) noexcept {
   ArrSenke* a = ziel(spur);
   if (!a) return false;
   // the sink this track last played on fades it out; zuletzt_ stays until the block runs (it clears it)
-  if (spur >= 0 && spur < ARR_SPUREN && zuletzt_[spur]) a = zuletzt_[spur];
+  if (spur >= 0 && spur < ARR_SENKEN_PLAETZE && zuletzt_[spur]) a = zuletzt_[spur];
   return a->spur_weg(spur, s, andere_spur);
 }
 
@@ -48,8 +49,12 @@ void ArrInternSenke::auto_parameter(int spur, int param, float wert) noexcept {
 #endif
 }
 
+void ArrInternSenke::auto_parameter_summand(int spur, int param, float delta) noexcept {
+  if (ArrSenke* s = innen(spur)) s->auto_parameter_summand(spur, param, delta);
+}
+
 void ArrInternSenke::block(int spur, int64_t s0, int m, float* l, float* r) noexcept {
-  if (spur < 0 || spur >= ARR_SPUREN) return;
+  if (spur < 0 || spur >= ARR_SENKEN_PLAETZE) return;
   ArrSenke* cur = innen(spur);
   ArrSenke*& z = zuletzt_[spur];
   // The arrangement sees one sink for every internal track, so it calls no spur_weg when the device of a track changes (rb338 <-> bk)

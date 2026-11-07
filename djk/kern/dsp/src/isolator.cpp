@@ -22,6 +22,22 @@ void Isolator::leeren() {
     }
 }
 
+void Isolator::abschneiden(double schwelle) {
+    for (Kanal& k : k_) {
+        k.tp_hoch.abschneiden(schwelle);
+        k.hp_hoch.abschneiden(schwelle);
+        k.tp_tief.abschneiden(schwelle);
+        k.hp_tief_mitte.abschneiden(schwelle);
+        k.hp_tief_hoch.abschneiden(schwelle);
+    }
+}
+
+bool Isolator::leer() const {
+    for (const Kanal& k : k_)
+        if (!(k.tp_hoch.leer() && k.hp_hoch.leer() && k.tp_tief.leer() && k.hp_tief_mitte.leer() && k.hp_tief_hoch.leer())) return false;
+    return true;
+}
+
 void Isolator::verarbeite(const float* in_l, const float* in_r, float* out_l, float* out_r, int n,
                           const float* g_tief, const float* g_mitte, const float* g_hoch) {
     const float* in[2] = {in_l, in_r};

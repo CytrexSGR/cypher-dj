@@ -7,6 +7,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace cdj {
 
@@ -41,6 +42,22 @@ struct KernKonfig {
   int warp_faeden = 4;
   // Baukasten S3b: Arbeitsfäden der Baukasten-Graphen (ein Block Vorlauf), 0 bis 8; 0 rechnet im Callback. SCHED_FIFO JACK − 7
   int graph_faeden = 2;
+  // 1.15 A1b (mix tools): the channel limiter on bus/1..4 is built once and cannot change afterwards (vorhalt and true peak set the
+  // latency). D8: 0 (default) = the four limiters are not built, latency 0, the lim/* rows exist but do nothing (the "not built" behaviour
+  // itself is A5b: setze_kanal_limiter); 0.1 to 20 builds them with this lookahead. True peak off = sample peaks, on adds 12 samples.
+  double kanal_limiter_vorhalt_ms = 0.0;
+  bool kanal_limiter_echtspitze = false;
+  // Multi-core work: the Hall pool (hall_pool.h): 0 to 3 worker threads for the Halls of the arrangement's return strips (0 = no pool, the callback computes
+  // all Halls itself), pinned to the CPUs of hall_cpus (comma separated CPU ids; fewer ids than workers start as many workers as ids and say so; ids outside the unit's CPU mask or SMT siblings give a warning) or, when empty, to distinct physical cores
+  // chosen by waehle_hall_cpus inside the CPU mask the process may use, and the JACK thread is pinned to the reserved core. Fewer free cores than workers asked for gives
+  // fewer workers and a line at start.
+  int hall_faeden = 3;
+  std::string hall_cpus = "";
+  // Voice channel (stimme.h): input pair ein_<k> summed into the master in front of the limiter, music ducked while it
+  // speaks. 0 (default) = off, the master is bit-identical to a kern without it.
+  int stimme_eingang = 0;
+  double stimme_duck_db = -12.0;
+  double stimme_pegel_db = 0.0;
 };
 
 // Schlüssel mit TOML-Typ, wie §2.1 sie schreibt: "version", dann je Schlüssel "float", "int", "str", "Pfad", "bool"
@@ -48,15 +65,17 @@ struct KonfigSchluessel {
   const char* name;
   const char* typ;
 };
-extern const KonfigSchluessel KERN_SCHLUESSEL[23];
+extern const KonfigSchluessel KERN_SCHLUESSEL[30];
 
 class KonfigFehler : public std::runtime_error {
  public:
   using std::runtime_error::runtime_error;
 };
 
-// Liest TOML-Text; `quelle` erscheint in Fehlermeldungen. Wirft KonfigFehler.
-KernKonfig lies_kern_toml_text(std::string_view text, const std::string& quelle);
+// Reads TOML text; `quelle` appears in error messages. Throws KonfigFehler. `anzahl_cpus` < 0: hall_cpus is checked against the CPUs of this machine
+// (/sys/devices/system/cpu/cpu<N> exists and is online), else against 0 to anzahl_cpus - 1 (tests). Only with hall_faeden > 0: with 0 (no pool) the key
+// is unused, so only its syntax is checked and a warning goes to stderr. A hall_cpus of only blanks is empty (automatic), like "".
+KernKonfig lies_kern_toml_text(std::string_view text, const std::string& quelle, int anzahl_cpus = -1);
 // Liest eine Datei; fehlt sie, wirft sie KonfigFehler.
 KernKonfig lies_kern_toml(const std::string& pfad);
 // Standardpfad ~/.config/cypherdj[-<instanz>]/kern.toml (instanz "" oder a bis i, aus instanz.h)
@@ -65,5 +84,36 @@ std::string standard_konfig_pfad(const char* instanz);
 void wende_instanz_an(KernKonfig& k, const char* instanz);
 // D1 K1: wirksamer Arbeitsordner der Wiedergaben: arr_ordner, sonst $HOME/.cache/cypherdj[-<instanz>]/arr
 std::string arr_ordner_von(const KernKonfig& k, const char* instanz);
+
+
+// hall_cpus "1,2,3" -> {1, 2, 3}. Blanks around the ids are allowed, "" gives an empty list. Anything else (not a non-negative decimal number, a range like
+// "1-3", an empty element, a duplicate) throws KonfigFehler naming 'hall_cpus'.
+std::vector<int> hall_cpus_liste(const std::string& text);
+
+// One logical CPU with the physical core it belongs to: CPUs with the same (package, core_id) are SMT siblings.
+struct CpuKern {
+  int cpu;
+  int core_id;
+  int package;
+};
+// Reads cpu<N>/topology/core_id and physical_package_id below `wurzel`, sorted by cpu; a CPU without readable files is left out. An unreadable tree gives {}.
+std::vector<CpuKern> lies_cpu_topologie(const std::string& wurzel = "/sys/devices/system/cpu");
+
+struct HallCpuWahl {
+  std::vector<int> cpus;       // one CPU per worker, ascending; fewer than `gewollt` when there are not enough free physical cores
+  std::vector<int> reserviert; // the CPUs (allowed siblings) of the core kept for the callback and the rest; the JACK thread is pinned to them
+  int gewollt = 0;
+  bool unbekannt = false;      // the topology was empty (unreadable): no choice made, cpus empty; the caller starts the workers unpinned
+  std::string meldung;         // "" when everything asked for was found, else one line for the start log
+};
+// Automatic CPU choice for the Hall workers (pure function). `erlaubt` is the CPU mask the process may run on (main: sched_getaffinity), nullptr = all.
+// Only allowed CPUs count; a physical core is a group of equal (package, core_id) among them, ordered by its lowest allowed cpu. The first one (normally
+// CPU 0 and its sibling) stays with the JACK callback and the rest of the system (HallCpuWahl::reserviert). Each further core takes one worker on its
+// lowest allowed cpu, so no worker has an SMT sibling that is another worker. `faeden` <= 0 gives an empty choice. An empty (not null) mask allows nothing.
+HallCpuWahl waehle_hall_cpus(const std::vector<CpuKern>& topologie, int faeden, const std::vector<int>* erlaubt = nullptr);
+
+// Warnings (never errors) for an explicit hall_cpus list: an id outside the allowed mask (the pin would leave the unit's CPUAffinity), two ids that are SMT
+// siblings of each other. With an unreadable topology only the mask check can run. One line per finding, empty when all is well.
+std::vector<std::string> hall_cpus_warnungen(const std::vector<int>& ids, const std::vector<CpuKern>& topologie, const std::vector<int>* erlaubt);
 
 }  // namespace cdj

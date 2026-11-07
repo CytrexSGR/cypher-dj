@@ -7,6 +7,7 @@
 
 #include "cypherdj/stellwerk/regler.h"
 #include "cypherdj/stellwerk/typen.h"
+#include "cypherdj/stellwerk/werkzeug_regler.h"
 
 namespace cypherdj::stellwerk {
 
@@ -33,6 +34,18 @@ int send_nr(const char* pfad) {
   int zahl = 0, ziffern = 0;
   while (*p >= '0' && *p <= '9') { zahl = zahl * 10 + (*p - '0'); ++p; if (++ziffern > 3) return 0; }
   return *p == '\0' ? zahl : 0;
+}
+
+namespace {
+#include "insert_zeilen.inc"   // 1.10 slice 4a T1: struct InsertZeile, INSERT_ZEILEN (komp rows), INSERT_VERTRAG_PFADE (whole vocabulary)
+}  // namespace
+
+int insert_vertrag_anzahl() { return static_cast<int>(sizeof INSERT_VERTRAG_PFADE / sizeof INSERT_VERTRAG_PFADE[0]); }
+const char* insert_vertrag_pfad(int i) {
+#ifdef CYPHERDJ_MUTATION_INS_PFAD_ZU_LANG
+  if (i == 5) return "ins/komp/1/aaaaaaaaaaaaaaaaaaaaa";   // mutation: 32 characters, the length test must go red
+#endif
+  return INSERT_VERTRAG_PFADE[i];
 }
 
 namespace {
@@ -233,6 +246,36 @@ ReglerTabelle::ReglerTabelle() {
       std::snprintf(p, sizeof p, "%s/bk/%d", kn_bk_send, nr);
       neu(p, -1, Rolle::bk_regler, 0, 1, 0.5f, 0, false, false, false, false, linear(0, 1));
     }
+  }
+  // 1.15 A1b (mix tools, INTERFACES section 1.5), 345 controls, everybody may. Appended after the fx/3|4 bk block: no index moves
+  // (913..1257). Dedicated loops over the one flat table werkzeug_regler.h, never inside the per-channel loop above: erz/8 and the
+  // buses must not get rows of tools they do not carry. Ramp 10 ms for continuous rows, none for switches and steps (like komp/*).
+  for (const WerkzeugZeile& z : WERKZEUG_ZEILEN) {
+    const Kurve kv{z.kurve, z.min, z.max, false};
+    const bool ganz = z.ganz;
+    const Rolle rolle = z.kanalart == WzKanalart::global ? Rolle::spektrum_kanal : Rolle::werkzeug;
+    auto zeile = [&](const char* kn_wz) {
+      if (kn_wz) std::snprintf(p, sizeof p, "%s/%s", kn_wz, z.suffix);
+      else std::snprintf(p, sizeof p, "%s", z.suffix);
+      neu(p, kn_wz ? kanal_suche(kn_wz) : -1, rolle, z.min, z.max, z.vorgabe, ganz ? 0 : MS(z.ms), false, false, ganz, ganz, kv);
+    };
+    if (z.kanalart == WzKanalart::global) zeile(nullptr);
+    if (z.kanalart == WzKanalart::quellen || z.kanalart == WzKanalart::quellen_busse)
+      for (const char* kn_wz : WERKZEUG_QUELLEN) zeile(kn_wz);
+    if (z.kanalart == WzKanalart::busse || z.kanalart == WzKanalart::quellen_busse)
+      for (const char* kn_wz : WERKZEUG_BUSSE) zeile(kn_wz);
+  }
+  // 1.10 slice 4a T1: the compressor inserts ins/komp/<1..12>/<parameter>, 120 controls, everybody may. Appended after the tool block: no
+  // index moves (1258..1377). Generated from docs/schnittstellen/insert_module.json; the ranges equal the DJ-side komp/* rows (checked by
+  // test_insert_vertrag). Curves: switch, steps or linear, as the DJ side. Global rows (channel -1): an insert belongs to a strip of the
+  // arrangement, not to a mixer channel.
+  for (const InsertZeile& z : INSERT_ZEILEN) {
+    float mx = z.max;
+#ifdef CYPHERDJ_MUTATION_INS_BEREICH
+    if (z.rolle == Rolle::ins_komp_schwelle) mx = 6;   // mutation: threshold up to +6 dB, the range parity test must go red
+#endif
+    const Kurve kv{z.kurve, z.min, mx, false};
+    neu(z.pfad, -1, z.rolle, z.min, mx, z.vorgabe, z.ganz ? 0 : MS(z.rampe_ms), false, false, z.ganz, z.ganz, kv);
   }
   for (int i = 0; i < n_; i++) sortiert_[i] = static_cast<int16_t>(i);
   std::sort(sortiert_, sortiert_ + n_, [&](int16_t a, int16_t b) { return std::strcmp(def_[a].pfad, def_[b].pfad) < 0; });

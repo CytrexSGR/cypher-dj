@@ -27,9 +27,16 @@ class AutoLane {
   AutoLane() noexcept = default;
   AutoLane(const ArrAutoPunkt* p, int n) noexcept : p_(p), n_(n) {}
 
+  // 1.12 slice 5: the table moves to an equal copy in another snapshot (a swap of equal content): same index, new pointer. The cursor stays, clamped to the table.
+  void binde(const ArrAutoPunkt* p, int n) noexcept {
+    p_ = p;
+    n_ = n;
+    if (i_ >= n_) i_ = n_ > 0 ? n_ - 1 : 0;
+  }
+
   // binary search for the last point with beat <= the given beat (0 when the beat lies before the first point)
   void neu_suchen(double beat) noexcept {
-#ifdef CYPHERDJ_MUTATION_ARR_AUTO_CURSOR_ALT
+#if defined(CYPHERDJ_MUTATION_ARR_AUTO_CURSOR_ALT) || defined(CYPHERDJ_MUTATION_ARR_HK_CURSOR_ALT)   // (HK: the gain envelope of a voice; test_arr_huellkurve)
     (void)beat;   // error case: the cursor is not searched anew after a backward jump
 #else
     int lo = 0, hi = n_ > 0 ? n_ - 1 : 0;
@@ -44,7 +51,7 @@ class AutoLane {
   // lane value in dB at the project beat (-200 means mute)
   float wert_bei(double beat) noexcept {
     if (n_ <= 0 || p_ == nullptr) return 0.0f;
-#ifndef CYPHERDJ_MUTATION_ARR_AUTO_CURSOR_ALT
+#if !defined(CYPHERDJ_MUTATION_ARR_AUTO_CURSOR_ALT) && !defined(CYPHERDJ_MUTATION_ARR_HK_CURSOR_ALT)
     if (i_ > 0 && beat + EPS_BEAT < p_[i_].beat) neu_suchen(beat);   // a caller that forgot the seam still gets a right answer
 #endif
     if (!(beat + EPS_BEAT >= p_[0].beat)) return p_[0].wert;

@@ -182,6 +182,15 @@ void Netz::hallo(const osc::Nachricht& m, int64_t jetzt_ns) {
     an_port(port, r);
   }
 #endif
+  // 1.15 A5c: the channel limiter state (built, latency account L), the kern's real runtime state, fixed after start. ALWAYS on the first hallo of
+  // a generation, also when nothing is built (0, 0), so a subscriber can tell "not built" from "the kern never said".
+#ifndef CYPHERDJ_MUTATION_HALLO_OHNE_KANAL_LIMITER
+  if (erstes_in_generation) {
+    osc::Schreiber k(v::e_kanal_limiter);
+    k.i(kl_lim_gebaut_ ? 1 : 0).i(kl_lim_gebaut_ ? kl_lim_latenz_ : 0);
+    an_port(port, k);
+  }
+#endif
   // Effekt-Sektion (2026-10-11): danach der gemerkte Stand aller gemeldeten Regler (Halter frei) und der Boxen
 #ifndef CYPHERDJ_MUTATION_HALLO_OHNE_STAND
   if (erstes_in_generation) {
@@ -412,6 +421,18 @@ void Netz::paket(const char* p, size_t n, int64_t jetzt_ns) {
     b.id = m.werte[f::id].h;
     kopiere(b.quelle, m.werte[f::quelle].s, sizeof b.quelle);
     kopiere(b.hoerschein, m.werte[f::hs_id].s, sizeof b.hoerschein);
+    if (!quelle_bekannt(b.quelle)) {
+      quittung(b.id, b.quelle, 6, stand_sample_, stand_beat_, "ausserhalb_bereich");
+      return;
+    }
+    einreihen(b);
+  } else if (a->pfad == v::k_hand_frei.pfad) {  // §4.3 /k/hand/frei; the core checks andreas
+    namespace f = v::feld::k_hand_frei;
+    Befehl b{};
+    b.art = Befehl::HAND_FREI;
+    b.id = m.werte[f::id].h;
+    kopiere(b.quelle, m.werte[f::quelle].s, sizeof b.quelle);
+    kopiere(b.liste, m.werte[f::pfade].s, sizeof b.liste);
     if (!quelle_bekannt(b.quelle)) {
       quittung(b.id, b.quelle, 6, stand_sample_, stand_beat_, "ausserhalb_bereich");
       return;
@@ -661,6 +682,84 @@ void Netz::zustand_senden(int64_t jetzt_ns) {
   an_alle(s);
 }
 
+// ---- 1.15 A7b: spectrum sender (D11, D12) ----
+const char* SpektrumSender::quelle_name(int sel) {
+  if (sel >= 1 && sel <= MIX_KANAELE) return Mixer::kanal_name(sel - 1);
+  return sel == Mixer::SPEK_MASTER ? "master" : "";
+}
+
+std::string SpektrumSender::kodiere(const float* db, int n) {
+  std::string aus;
+  aus.reserve(static_cast<size_t>(n) * 7);
+  char z[16];
+  for (int b = 0; b < n; ++b) {
+    float w = db[b];
+    if (!(w > -200.0f)) w = -200.0f;   // silence and NaN
+    if (w > 200.0f) w = 200.0f;
+    std::snprintf(z, sizeof z, "%s%ld", b ? "," : "", std::lround(w * 10.0f));
+    aus += z;
+  }
+  return aus;
+}
+
+std::vector<SpektrumRahmen> SpektrumSender::tick(int64_t jetzt_ns) {
+  std::vector<SpektrumRahmen> aus;
+#ifndef CYPHERDJ_MUTATION_SPEKTRUM_OHNE_TAKT   // error case: no 40 ms cadence, every call of the 2 ms loop analyses and sends
+  if (hat_ticks_ && jetzt_ns - letzter_ns_ < SPEKTRUM_ABSTAND_NS) return aus;
+#endif
+  hat_ticks_ = true;
+  letzter_ns_ = jetzt_ns;
+  auto& a = mixer_.spektrum();
+  const uint32_t g0 = mixer_.spek_generation();   // acquire
+  if (haken_) haken_(haken_ctx_, 0);
+  if (g0 & 1u) return aus;   // seqlock: odd = the audio thread is inside a change, source and cut are not whole yet; next tick
+  if (g0 != bedient_) {
+    const int quelle = mixer_.spek_quelle();
+    const std::size_t schnitt = mixer_.spek_schnitt();
+#ifndef CYPHERDJ_MUTATION_SPEKTRUM_OHNE_NEULESEN   // error case: no check that source and cut still belong to g0
+    if (mixer_.spek_generation() != g0) return aus;   // the pair was written under another generation: do not serve now, the next tick starts over
+#endif
+#ifdef CYPHERDJ_MUTATION_SPEKTRUM_NUR_LEEREN   // error case: the first design, leeren() only (samples of the old source still in the ring are analysed)
+    (void)schnitt;
+    a.leeren();
+#else
+    a.verwerfe_bis(schnitt);   // everything written before the cut is dropped, then leeren(): rahmen() restarts
+#endif
+    bedient_ = g0;
+    quelle_ = quelle;
+  }
+  if (haken_) haken_(haken_ctx_, 1);
+  if (quelle_ == 0) return aus;   // off: nothing is written, nothing to analyse
+  const int n = a.analysiere();
+  const uint32_t g1 = mixer_.spek_generation();
+  if (haken_) haken_(haken_ctx_, 2);
+#ifndef CYPHERDJ_MUTATION_SPEKTRUM_OHNE_G1   // error case: no second generation read, frames that may mix two sources are sent
+  if (g1 != g0) return aus;   // the source changed while this tick ran: its frames are discarded, the next tick cuts
+#else
+  (void)g1;
+#endif
+  if (n < 1) return aus;
+  SpektrumRahmen r;
+#ifndef CYPHERDJ_MUTATION_SPEKTRUM_ETIKETT_AKTUELL
+  r.kanal = quelle_name(quelle_);   // the source of the generation the frames were computed in
+#else   // error case: tagged with the selection of this moment (a switch after the second read puts the new name on the old frames)
+  r.kanal = quelle_name(mixer_.spek_quelle());
+#endif
+  r.rahmen = static_cast<int32_t>(a.rahmen());
+  r.pegel = kodiere(a.pegel_db(), a.anzahl_baender());
+  aus.push_back(std::move(r));
+  return aus;
+}
+
+void Netz::spektrum_senden(int64_t jetzt_ns) {
+  if (!spektrum_) return;
+  for (const SpektrumRahmen& r : spektrum_->tick(jetzt_ns)) {
+    osc::Schreiber s(v::zustand_spektrum);
+    s.s(r.kanal.c_str()).i(r.rahmen).s(r.pegel.c_str());
+    an_alle(s);
+  }
+}
+
 void Netz::laufen(const std::atomic<bool>& stop) {
   char buf[osc::MAX_PAKET + 4];
   pollfd pf{sock_, POLLIN, 0};
@@ -682,6 +781,7 @@ void Netz::laufen(const std::atomic<bool>& stop) {
       zustand_senden(jetzt);
       naechster_zustand = jetzt + ZUSTAND_ABSTAND_NS;
     }
+    spektrum_senden(jetzt);   // 1.15 A7b: the sender holds the 40 ms cadence itself
   }
   keylock_beenden();  // Slice 3b (F6): ein laufender Render bricht ab, kein weiterer startet (auch nicht aus main nach dem join)
 }

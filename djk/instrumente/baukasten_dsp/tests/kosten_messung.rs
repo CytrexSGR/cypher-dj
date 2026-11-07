@@ -9,7 +9,7 @@ use std::time::Instant;
 #[test]
 #[ignore]
 fn kosten_beispielgraph_alle_stimmen() {
-    for g in [include_str!("../beispiele/saege-ladder.json"), include_str!("../beispiele/juno-pad.json"), include_str!("../beispiele/juno-pad-hall.json"), include_str!("../beispiele/juno-pad-echo.json"), include_str!("../beispiele/juno-pad-dyn.json"), include_str!("../beispiele/lead.json"), include_str!("../beispiele/saite.json"), include_str!("../beispiele/fx-echo-achtel.json"), include_str!("../beispiele/fx-filter-wobble.json"), include_str!("../beispiele/fx-filter-regler.json"), include_str!("../beispiele/bassmusik.json"), include_str!("../beispiele/fx-phaser.json"), include_str!("../beispiele/fx-flanger.json"), include_str!("../beispiele/fx-lofi-sp1200.json"), include_str!("../beispiele/roehre-lead.json"), include_str!("../beispiele/fx-roehre.json"), include_str!("../beispiele/fx-vocoder-robot.json")] {
+    for g in [include_str!("../beispiele/saege-ladder.json"), include_str!("../beispiele/juno-pad.json"), include_str!("../beispiele/juno-pad-hall.json"), include_str!("../beispiele/juno-pad-echo.json"), include_str!("../beispiele/juno-pad-dyn.json"), include_str!("../beispiele/lead.json"), include_str!("../beispiele/saite.json"), include_str!("../beispiele/fx-echo-achtel.json"), include_str!("../beispiele/fx-filter-wobble.json"), include_str!("../beispiele/fx-filter-regler.json"), include_str!("../beispiele/bassmusik.json"), include_str!("../beispiele/fx-phaser.json"), include_str!("../beispiele/fx-flanger.json"), include_str!("../beispiele/fx-lofi-sp1200.json"), include_str!("../beispiele/roehre-lead.json"), include_str!("../beispiele/fx-roehre.json"), include_str!("../beispiele/fx-vocoder-robot.json"), include_str!("../beispiele/wavetable-supersaw.json"), include_str!("../beispiele/wavetable-reese.json"), include_str!("../beispiele/wavetable-chor.json"), include_str!("../beispiele/fm-bass.json"), include_str!("../beispiele/fm-epiano.json"), include_str!("../beispiele/fm-glocke.json"), include_str!("../beispiele/fm-lead.json"), include_str!("../beispiele/granular-pad.json"), include_str!("../beispiele/granular-textur.json"), include_str!("../beispiele/granular-drone.json")] {
         miss(g, 256);
     }
 }
@@ -112,3 +112,191 @@ fn miss_n(g: &str, block: usize, wurzel: Option<&std::path::Path>, neu: usize) {
         k.quantil_us(0.999) / periode_us, senke.is_finite()
     );
 }
+
+/// Wavetable cost: `wavetable-supersaw` at its 16 voices with 1, 2 and 7 copies, against the same sound built the old way
+/// (seven `saege` nodes per voice, each behind a `transponiere`, summed by `add` nodes, then the same filter and envelope,
+/// mono). Blocks of 64, 128 and 256. Not gated.
+#[test]
+#[ignore]
+fn kosten_wavetable() {
+    let supersaw = include_str!("../beispiele/wavetable-supersaw.json");
+    let mut graphen: Vec<String> = [1, 2, 7].iter().map(|k| {
+        supersaw.replace(r#""kopien": 7"#, &format!(r#""kopien": {k}"#)).replace(r#""name": "wavetable-supersaw""#, &format!(r#""name": "wavetable-supersaw-x{k}""#))
+    }).collect();
+    graphen.push(sieben_saegen(16));
+    for g in &graphen {
+        for block in [64, 128, 256] {
+            miss(g, block);
+        }
+    }
+}
+
+/// The supersaw without the wavetable block: seven saws at -25 .. +25 cent per voice.
+fn sieben_saegen(stimmen: usize) -> String {
+    let mut k = vec![r#"{"id":"n","art":"note"}"#.to_string()];
+    let mut e = Vec::new();
+    for i in 0..7 {
+        let c = (i as f32 / 3.0 - 1.0) * 25.0;
+        k.push(format!(r#"{{"id":"t{i}","art":"transponiere","cent":{c}}},{{"id":"s{i}","art":"saege"}}"#));
+        e.push(format!(r#"{{"von":"n.hz","nach":"t{i}.hz"}},{{"von":"t{i}.aus","nach":"s{i}.hz"}}"#));
+    }
+    k.push(r#"{"id":"a0","art":"add"},{"id":"a1","art":"add"},{"id":"a2","art":"add"},{"id":"f","art":"svf","cutoff":5000,"reso":0.3},{"id":"env","art":"adsr","a":0.05,"d":0.4,"s":0.85,"r":0.4},{"id":"v","art":"mul"},{"id":"g","art":"mul","b":0.06},{"id":"o","art":"ausgang"}"#.to_string());
+    e.push(r#"{"von":"s0.aus","nach":"a0.a"},{"von":"s1.aus","nach":"a0.b"},{"von":"s2.aus","nach":"a0.c"},{"von":"s3.aus","nach":"a0.d"},{"von":"s4.aus","nach":"a1.a"},{"von":"s5.aus","nach":"a1.b"},{"von":"s6.aus","nach":"a1.c"},{"von":"a0.aus","nach":"a2.a"},{"von":"a1.aus","nach":"a2.b"},{"von":"a2.aus","nach":"f.x"},{"von":"n.gate","nach":"env.gate"},{"von":"n.trig","nach":"env.trig"},{"von":"f.tp","nach":"v.a"},{"von":"env.aus","nach":"v.b"},{"von":"v.aus","nach":"g.a"},{"von":"g.aus","nach":"o.x"}"#.to_string());
+    format!(r#"{{"format":"baukasten/2","name":"sieben-saegen-x7","stimmen":{stimmen},"knoten":[{}],"kanten":[{}]}}"#, k.join(","), e.join(","))
+}
+
+/// Resonator cost: 32 modes x 16 voices, every voice struck again every 4800 samples (so no voice goes idle), with 8, 16
+/// and 32 modes and the five examples at their own sizes. Blocks of 64, 128 and 256. Not gated.
+#[test]
+#[ignore]
+fn kosten_resonator() {
+    let voll = |moden: usize| format!(
+        r#"{{"format":"baukasten/2","name":"resonator-16x{moden}","stimmen":16,"knoten":[{{"id":"n","art":"note"}},{{"id":"r","art":"resonator","satz":0,"moden":{moden},"material":1,"helligkeit":1}},{{"id":"g","art":"mul","b":0.05}},{{"id":"o","art":"ausgang"}}],"kanten":[{{"von":"n.hz","nach":"r.hz"}},{{"von":"n.trig","nach":"r.trig"}},{{"von":"r.aus","nach":"g.a"}},{{"von":"g.aus","nach":"o.x"}}]}}"#);
+    for g in [voll(8), voll(16), voll(32)] {
+        for block in [64, 128, 256] {
+            miss_n(&g, block, None, 4_800);
+        }
+    }
+    for g in [include_str!("../beispiele/resonator-glocke.json"), include_str!("../beispiele/resonator-marimba.json"), include_str!("../beispiele/resonator-conga.json"), include_str!("../beispiele/resonator-metall.json"), include_str!("../beispiele/fx-resonator.json")] {
+        miss_n(g, 256, None, 4_800);
+    }
+}
+
+/// Metall cost: 16 voices of one `metall` node (group choke off, decay 2 s, noise 0.3), all 16 struck again every
+/// 0.25 s so every voice computes all the time (an idle voice computes nothing); against the same graph with 1 and 4
+/// voices, and the three examples at their own voice counts. Blocks of 64, 128 and 256. Not gated.
+#[test]
+#[ignore]
+fn kosten_metall() {
+    let g = |stimmen: usize| format!(r#"{{"format":"baukasten/2","name":"metall-x{stimmen}","stimmen":{stimmen},"knoten":[{{"id":"n","art":"note"}},{{"id":"m","art":"metall","gruppe":0,"decay":2,"rauschen":0.3}},{{"id":"g","art":"mul","b":0.1}},{{"id":"o","art":"ausgang"}}],"kanten":[{{"von":"n.trig","nach":"m.trig"}},{{"von":"n.vel","nach":"m.vel"}},{{"von":"m.aus","nach":"g.a"}},{{"von":"g.aus","nach":"o.x"}}]}}"#);
+    for s in [1, 4, 16] {
+        for block in [64, 128, 256] {
+            miss_n(&g(s), block, None, 12_000);
+        }
+    }
+    for b in [include_str!("../beispiele/metall-hihat.json"), include_str!("../beispiele/metall-ride.json"), include_str!("../beispiele/metall-crash.json")] {
+        miss_n(b, 256, None, 12_000);
+    }
+}
+/// FM cost: one fm node at 16 voices, all sounding, for a 4-operator and a 6-operator algorithm with every operator at
+/// work (levels 0.3, feedback 0.5), the node alone with a gain and the output; plus the 6-operator case built the old way from `sinus` nodes (phase modulation through the `fm` input is linear FM there,
+/// so this compares the cost, not the sound). Blocks of 64, 128 and 256. Not gated.
+#[test]
+#[ignore]
+fn kosten_fm() {
+    let fm = |algo: usize, name: &str| format!(
+        r#"{{"format":"baukasten/2","name":"{name}","stimmen":16,"knoten":[{{"id":"n","art":"note"}},{{"id":"f","art":"fm","algo":{algo},"rueck":0.5,"o2_pegel":0.3,"o3_pegel":0.3,"o4_pegel":0.3,"o5_pegel":0.3,"o6_pegel":0.3,"o2_verh":2,"o3_verh":3,"o4_verh":1,"o5_verh":2,"o6_verh":1}},{{"id":"g","art":"mul","b":0.05}},{{"id":"o","art":"ausgang"}}],"kanten":[{{"von":"n.hz","nach":"f.hz"}},{{"von":"n.gate","nach":"f.gate"}},{{"von":"n.trig","nach":"f.trig"}},{{"von":"f.aus","nach":"g.a"}},{{"von":"g.aus","nach":"o.x"}}]}}"#);
+    let mut graphen = vec![fm(0, "fm-4op-x16"), fm(8, "fm-6op-x16"), fm(10, "fm-6op-paare-x16")];
+    graphen.push(sechs_sinus(16));
+    for g in &graphen {
+        for block in [64, 128, 256] {
+            miss(g, block);
+        }
+    }
+}
+
+/// String cost: the four string examples at their own voice counts and all at 16 voices, plus the piano with vibrato on
+/// the pitch (the loop is designed again every sample) and the old `saite.json` (a `leitung` loop built from blocks).
+/// Blocks of 64, 128 and 256. Not gated.
+#[test]
+#[ignore]
+fn kosten_saite() {
+    let beispiele = [include_str!("../beispiele/saite-gitarre.json"), include_str!("../beispiele/saite-harfe.json"),
+                     include_str!("../beispiele/saite-klavier.json"), include_str!("../beispiele/saite-karplus.json")];
+    let mut graphen: Vec<String> = beispiele.iter().map(|g| g.to_string()).collect();
+    for g in beispiele {
+        let name = g.split("\"name\": \"").nth(1).unwrap().split('"').next().unwrap();
+        let stimmen = g.split("\"stimmen\": ").nth(1).unwrap().split(',').next().unwrap();
+        if stimmen != "16" {
+            graphen.push(g.replace(&format!("\"stimmen\": {stimmen},"), "\"stimmen\": 16,").replace(&format!("\"name\": \"{name}\""), &format!("\"name\": \"{name}-x16\"")));
+        }
+    }
+    // vibrato: 5 Hz, +-20 cent on every voice, so hz changes every sample
+    let klavier = include_str!("../beispiele/saite-klavier.json");
+    let vibrato = klavier
+        .replace(r#"{"id": "aus", "art": "ausgang"}"#, r#"{"id": "aus", "art": "ausgang"}, {"id": "vib", "art": "lfo", "rate": 5}, {"id": "vib_c", "art": "mul", "b": 20}, {"id": "vib_t", "art": "transponiere"}"#)
+        .replace(r#"{"von": "note.hz", "nach": "saite.hz"}"#, r#"{"von": "note.hz", "nach": "vib_t.hz"}, {"von": "vib.aus", "nach": "vib_c.a"}, {"von": "vib_c.aus", "nach": "vib_t.cent"}, {"von": "vib_t.aus", "nach": "saite.hz"}"#)
+        .replace(r#""name": "saite-klavier""#, r#""name": "saite-klavier-vibrato""#);
+    assert_ne!(vibrato, klavier, "the vibrato variant must differ from the example");
+    graphen.push(vibrato);
+    graphen.push(include_str!("../beispiele/saite.json").to_string());
+    for g in &graphen {
+        for block in [64, 128, 256] {
+            miss(g, block);
+        }
+    }
+}
+/// Granular cost: 16 voices, every voice with a full pool (dichte 400 x 100 ms wants 40 grains, 16 sound), for each source,
+/// against the same graph at an overlap of about 4 (dichte 40). Blocks of 64, 128 and 256. Not gated.
+#[test]
+#[ignore]
+fn kosten_granular() {
+    for (quelle, name) in [(0, "wavetable"), (1, "puffer"), (2, "rauschen")] {
+        for dichte in [400, 40] {
+            let g = format!(r#"{{"format":"baukasten/2","name":"granular-{name}-16x-dichte{dichte}","stimmen":16,"knoten":[{{"id":"n","art":"note"}},{{"id":"s","art":"saege"}},{{"id":"g","art":"granular","quelle":{quelle},"tabelle":5,"pos":0.3,"pos_zufall":0.3,"ton_zufall":20,"breite":1,"groesse":100,"dichte":{dichte}}},{{"id":"o","art":"ausgang"}}],"kanten":[{{"von":"n.hz","nach":"s.hz"}},{{"von":"s.aus","nach":"g.x"}},{{"von":"n.hz","nach":"g.hz"}},{{"von":"n.trig","nach":"g.trig"}},{{"von":"g.l","nach":"o.l"}},{{"von":"g.r","nach":"o.r"}}]}}"#);
+            for block in [64, 128, 256] {
+                miss(&g, block);
+            }
+        }
+    }
+}
+
+/// Six `sinus` nodes per voice chained through their `fm` inputs, each behind a `transponiere` and a `mul` (level), with
+/// six `adsr` and six `mul` for the envelopes: the parts an fm node replaces.
+fn sechs_sinus(stimmen: usize) -> String {
+    let mut k = vec![r#"{"id":"n","art":"note"}"#.to_string()];
+    let mut e = Vec::new();
+    for i in 0..6 {
+        k.push(format!(r#"{{"id":"t{i}","art":"transponiere","st":{}}},{{"id":"s{i}","art":"sinus"}},{{"id":"h{i}","art":"adsr","a":0.001,"d":1,"s":1,"r":0.1}},{{"id":"v{i}","art":"mul"}},{{"id":"p{i}","art":"mul","b":300}}"#, i % 3 * 12));
+        e.push(format!(r#"{{"von":"n.hz","nach":"t{i}.hz"}},{{"von":"t{i}.aus","nach":"s{i}.hz"}},{{"von":"n.gate","nach":"h{i}.gate"}},{{"von":"n.trig","nach":"h{i}.trig"}},{{"von":"s{i}.aus","nach":"v{i}.a"}},{{"von":"h{i}.aus","nach":"v{i}.b"}},{{"von":"v{i}.aus","nach":"p{i}.a"}}"#));
+        if i > 0 {
+            e.push(format!(r#"{{"von":"p{i}.aus","nach":"s{}.fm"}}"#, i - 1));
+        }
+    }
+    k.push(r#"{"id":"g","art":"mul","b":0.05},{"id":"o","art":"ausgang"}"#.to_string());
+    e.push(r#"{"von":"v0.aus","nach":"g.a"},{"von":"g.aus","nach":"o.x"}"#.to_string());
+    format!(r#"{{"format":"baukasten/2","name":"sechs-sinus-x6","stimmen":{stimmen},"knoten":[{}],"kanten":[{}]}}"#, k.join(","), e.join(","))
+}
+/// Hard sync cost: 16 voices of one saw master and one slave each (no filter, no envelope), the slave a saw on the new
+/// `hart` input, on the old `sync` input, and free running (no sync), plus the `hartsync-lead` example at 16 voices
+/// (also with the old sync edge and without sync) and the old `lead` example at 16 voices.
+/// The slave runs a fifth and a bit above the master, so about every second sample of the slave sees a reset or its
+/// aftermath. Blocks of 64, 128 and 256. Not gated.
+#[test]
+#[ignore]
+fn kosten_hartsync() {
+    // `hoch`: the master 60 semitones up (2.6 to 6.4 kHz), so a reset or its aftermath falls on every second to fifth sample
+    let paar = |name: &str, kante: &str, hoch: f32| format!(
+        r#"{{"format":"baukasten/2","name":"{name}","stimmen":16,"knoten":[{{"id":"n","art":"note"}},{{"id":"h","art":"transponiere","st":{hoch}}},{{"id":"m","art":"saege"}},{{"id":"t","art":"transponiere","st":7.31}},{{"id":"s","art":"saege"}},{{"id":"o","art":"ausgang"}}],"kanten":[{{"von":"n.hz","nach":"h.hz"}},{{"von":"h.aus","nach":"m.hz"}},{{"von":"h.aus","nach":"t.hz"}},{{"von":"t.aus","nach":"s.hz"}},{{"von":"s.aus","nach":"o.x"}}{kante}]}}"#);
+    let (k_hart, k_alt) = (r#",{"von":"m.hart","nach":"s.hart"}"#, r#",{"von":"m.zyklus","nach":"s.sync"}"#);
+    let mut graphen = vec![paar("hart-x16", k_hart, 0.0), paar("sync-alt-x16", k_alt, 0.0), paar("frei-x16", "", 0.0)];
+    graphen.push(include_str!("../beispiele/hartsync-lead.json").replace(r#""stimmen": 1"#, r#""stimmen": 16"#).replace(r#""name": "hartsync-lead""#, r#""name": "hartsync-lead-x16""#));
+    // the same example with the old sync edge and without sync: what of its cost is the hard sync
+    let lead = &graphen[3];
+    let alt = lead.replace(r#"{"von": "leiter.hart", "nach": "folger.hart"}"#, r#"{"von": "leiter.zyklus", "nach": "folger.sync"}"#).replace("hartsync-lead-x16", "hartsync-lead-alter-sync-x16");
+    let ohne = lead.replace(r#"{"von": "leiter.hart", "nach": "folger.hart"},"#, "").replace("hartsync-lead-x16", "hartsync-lead-ohne-sync-x16");
+    assert!(alt != *lead && ohne != *lead);
+    graphen.push(alt);
+    graphen.push(ohne);
+    graphen.push(include_str!("../beispiele/lead.json").replace(r#""stimmen": 1"#, r#""stimmen": 16"#).replace(r#""name": "sync-lead""#, r#""name": "lead-alter-sync-x16""#));
+    for g in &graphen {
+        for block in [64, 128, 256] {
+            miss(g, block);
+        }
+    }
+    // the 5 us histogram bins are coarse for the bare pairs: also the best of 7 runs of 1 s each, in ns per voice and sample
+    let paare = [graphen[0].clone(), graphen[1].clone(), graphen[2].clone(), paar("hart-hoch-x16", k_hart, 60.0), paar("sync-alt-hoch-x16", k_alt, 60.0), paar("frei-hoch-x16", "", 60.0)];
+    for g in &paare {
+        let mut p = uebersetze_mit_wurzel(g, 48_000.0, None).unwrap();
+        for n in 0..p.stimmen { p.note_an(40 + n as u8, 0.8); }
+        let mut senke = 0.0f32;
+        let mut best = f64::INFINITY;
+        for _ in 0..7 {
+            let t = Instant::now();
+            for _ in 0..48_000 { senke += p.sample(); }
+            best = best.min(t.elapsed().as_secs_f64());
+        }
+        println!("{{\"graph\":\"{}\",\"ns_je_stimme_und_sample\":{:.2},\"senke\":{}}}", p.name, best * 1e9 / (48_000.0 * p.stimmen as f64), senke.is_finite());
+    }
+}
+

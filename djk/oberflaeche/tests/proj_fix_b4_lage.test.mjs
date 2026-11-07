@@ -11,7 +11,10 @@ const N = (beat) => ({ beat, laenge: 1, ton: 60, vel: 100 });
 test('B4 GET /proj/aktuell?noten=zahl: MIDI-Clips mit noten_zahl statt noten, sonst wie /proj/aktuell; ?nur=rev: {slug, rev}', async (t) => {
   const { url } = await stapel(t);
   assert.deepEqual((await ruf(url, 'GET', '/proj/aktuell?nur=rev')).j, { slug: null, rev: null });
-  assert.deepEqual((await ruf(url, 'GET', '/proj/aktuell?noten=zahl')).j, { slug: null, projekt: null, kern: null });
+  assert.deepEqual((await ruf(url, 'GET', '/proj/aktuell?noten=zahl')).j, {
+    slug: null, projekt: null, kern: null,
+    wirte: { 1: { laeuft: false, fehler: [] }, 2: { laeuft: false, fehler: [] } },   // 1.9 U3: the host state is reported without a project too
+  });
   await ruf(url, 'POST', '/proj/neu', { name: 'Lage' });
   await ruf(url, 'POST', '/proj/aendern', { rev: 0, label: 'x', befehle: [{ befehl: 'spur_neu', art: 'instrument' },
     { befehl: 'clip_neu', spur_id: 's1', art: 'midi', start_beat: 0, laenge_beats: 4, noten: [N(0), N(1), N(2)] },
@@ -23,6 +26,8 @@ test('B4 GET /proj/aktuell?noten=zahl: MIDI-Clips mit noten_zahl statt noten, so
   const ohneNoten = structuredClone(voll);
   delete ohneNoten.ausgabe_lauf;                       // Spec 6.34: nur die Seite (ohne Abfrage) bekommt ausgabe_lauf
   for (const c of ohneNoten.projekt.spuren[0].clips) { c.noten_zahl = c.noten.length; delete c.noten; }
+  assert.ok(kurz.wirte && !('wirte' in voll), '1.9 U3: only the ?noten=zahl answer (the one proj_lage reads) carries the host state');
+  delete kurz.wirte;
   assert.deepEqual(kurz, ohneNoten, 'sonst unverändert: rev, Mixer, Tempo, kern');
   assert.deepEqual((await ruf(url, 'GET', '/proj/aktuell?nur=rev')).j, { slug: 'lage', rev: 1 });
   assert.equal((await ruf(url, 'GET', '/proj/aktuell')).j.projekt.spuren[0].clips[0].noten.length, 3, 'das lebende Projekt hat seine Noten behalten');

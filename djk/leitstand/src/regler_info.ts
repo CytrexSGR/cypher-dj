@@ -2,6 +2,8 @@
 // „leiser machen“ im Sinn der Autonomie-Positivliste (§10 Stufe 1: Fader oder Send nach unten, Kill an).
 // Die Pfadmenge gleicht tests/regler_info.test.ts mit dem Muster regler_pfad aus djk/vertrag/schemas/defs.schema.json ab.
 
+import { INSERT_REGLER_ZEILEN } from './insert_regler.ts';
+
 export type Einheit = 'db' | 'schalter' | 'linear' | 'stufe';
 
 export interface ReglerInfo {
@@ -99,6 +101,37 @@ export const BK_SEND_KANAELE: readonly string[] = ['fx/3', 'fx/4'];
 for (const k of BK_SEND_KANAELE) {
   for (let m = 1; m <= 8; m++) tabelle.set(`${k}/bk/${m}`, { pfad: `${k}/bk/${m}`, kanal: null, ...r('linear', 0, 1, 0.5) });
 }
+
+// 1.15 A2 (§1.5, the 345 mix-tool rows): gate on the 13 live source channels, utility on those plus bus/1..4, multiband and channel
+// limiter on bus/1..4, one global spectrum row. erz/8 has no tool rows (cue only). All rows: everybody may, no "leiser machen"
+// (default deny, machtLeiser). Ranges and defaults equal werkzeug_regler.h; tests/regler_info.test.ts compares both.
+const WZ_QUELLEN: readonly string[] = [...DECKS, ...ERZ.slice(0, 7), ...PADS];
+const WZ_BAND: readonly (readonly [string, Einheit, number, number, number])[] = [
+  ['schwelle', 'linear', -60, 0, 0], ['ratio', 'linear', 1, 20, 1], ['attack', 'linear', 0.1, 500, 10], ['release', 'linear', 1, 5000, 100],
+  ['knie', 'linear', 0, 24, 0], ['makeup', 'linear', -24, 24, 0], ['umgehen', 'schalter', 0, 1, 0],
+];
+const WZ_REIHEN: readonly { kanaele: readonly string[]; zeilen: readonly (readonly [string, Einheit, number, number, number])[] }[] = [
+  { kanaele: WZ_QUELLEN, zeilen: [
+    ['gate/an', 'schalter', 0, 1, 0], ['gate/schwelle', 'linear', -90, 0, -40], ['gate/hysterese', 'linear', 0, 24, 4],
+    ['gate/ratio', 'linear', 1, 100, 100], ['gate/bereich', 'linear', -120, 0, -80], ['gate/attack', 'linear', 0.1, 500, 1],
+    ['gate/hold', 'linear', 0, 2000, 20], ['gate/release', 'linear', 1, 5000, 100], ['gate/sc', 'stufe', 0, 14, 0]] },
+  { kanaele: [...WZ_QUELLEN, ...BUSSE], zeilen: [
+    ['util/balance', 'linear', -1, 1, 0], ['util/breite', 'linear', 0, 200, 100], ['util/bassmono', 'linear', 0, 500, 0],
+    ['util/phase_l', 'schalter', 0, 1, 0], ['util/phase_r', 'schalter', 0, 1, 0], ['util/tausch', 'schalter', 0, 1, 0],
+    ['util/dc', 'schalter', 0, 1, 0]] },
+  { kanaele: BUSSE, zeilen: [
+    ['mb/an', 'schalter', 0, 1, 0], ['mb/grenze_tief', 'linear', 20, 20000, 200], ['mb/grenze_hoch', 'linear', 20, 20000, 2000],
+    ...['tief', 'mitte', 'hoch'].flatMap((b) => WZ_BAND.map(([f, e, lo, hi, v]) => [`mb/${b}/${f}`, e, lo, hi, v] as const)),
+    ['lim/an', 'schalter', 0, 1, 0], ['lim/decke', 'linear', -60, 0, -0.3], ['lim/abklingen', 'linear', 1, 2000, 80]] },
+];
+for (const { kanaele, zeilen } of WZ_REIHEN) {
+  for (const k of kanaele) for (const [f, e, lo, hi, v] of zeilen) tabelle.set(`${k}/${f}`, { pfad: `${k}/${f}`, kanal: k, ...r(e, lo, hi, v) });
+}
+tabelle.set('spektrum/kanal', { pfad: 'spektrum/kanal', kanal: null, ...r('stufe', 0, 19, 0) });   // 0 off, 1..18 channel + 1, 19 = master sum
+
+// 1.10 slice 4a/4b (§1.5): the insert controls ins/komp|eq|saett|lim/<n>/*, global rows, everybody may, project-only (the server refuses POST /regler on them).
+// The rows are generated from docs/schnittstellen/insert_module.json (insert_regler.ts); the namenslisten checker compares them with insert_zeilen.inc.
+for (const [pfad, e, lo, hi, v] of INSERT_REGLER_ZEILEN) tabelle.set(pfad, { pfad, kanal: null, ...r(e, lo, hi, v) });
 
 export const REGLER: ReadonlyMap<string, ReglerInfo> = tabelle;
 

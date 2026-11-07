@@ -2,6 +2,8 @@
 // Adressen und Typ-Zeichenketten wörtlich aus §4, §5, §19.0 und ROADMAP Z1. Ein Test gleicht sie
 // gegen den Vertragstext und gegen djk/vertrag/osc.json ab (tests/vertrag.test.mjs).
 
+import { INSERT_REGLER_ZEILEN } from './insert_regler.mjs';
+
 export const PROTOKOLL = 1;
 export const KERN_VERSION = 'attrappe-13.1';
 
@@ -67,6 +69,9 @@ export const BEFEHLE = {
   '/k/arr/loop': f('hsidd', 'id quelle an von_beat bis_beat'),
   '/k/arr/metronom': f('hsifi', 'id quelle an pegel_db ziel'),
   '/k/arr/freeze': f('hsiddi', 'id quelle spur von_beat bis_beat kennung'),        // Paket K3
+  '/k/hand/frei': f('hss', 'id quelle pfade'),                                      // §4.3: a project switch releases the human holder
+  '/k/arr/auto': f('hsisi', 'id quelle spur ziel an'),                              // 1.12 Slice 3 (§4.11)
+  '/k/arr/arm': f('hsiii', 'id quelle spur an modus'),                              // 1.12 Slice 3 (§4.11)
   '/test/hand': f('sfh', 'pfad midi_roh sample'),
   '/test/klick': f('hssi', 'id quelle kanal an'),
 };
@@ -82,6 +87,9 @@ export const AUSGABEN = {
   '/zustand/deck': f('iisdidddfiifii', 'deck status material_id basis_bpm fassung quell_beat beats_bis_ende faktor vorlauf_ms hoerweg stretcher_fuell versatz_intern_ms keylock_unterlauf keylock_aufgegeben'),
   '/zustand/box': f('iiiiii', 'box status keylock_unterlauf keylock_aufgegeben keylock_ring_voll keylock_kein_platz'),  // Keylock 7b.3 (die Attrappe spielt keine Boxen und sendet es nicht)
   '/zustand/komp': f('sf', 'kanal gr_db'),   // Effekt-Sektion Schritt 2 (§5.5c), osc.json: /zustand/komp
+  '/zustand/mix': f('sfffff', 'kanal gate_db mb_tief_db mb_mitte_db mb_hoch_db lim_db'),   // 1.15 A6 (§5.5d), type entry only: the Attrappe never sends it
+  '/e/ins_gr': f('sf', 'kanal gr_db'),   // 1.10 slice 4a (§5.5f), type entry only: the Attrappe never sends it
+  '/zustand/spektrum': f('sis', 'kanal rahmen pegel'),   // 1.15 A6 (§5.5e), type entry only: the sender is the real core (A7b)
   '/pegel': f('sfffffff', 'kanal spitze_db echtspitze_dbtp lufs_m lufs_s band_tief_db band_mitte_db band_hoch_db'),
   '/e/regler': f('sfshd', 'pfad wert halter sample beat'),
   '/e/hand': f('sfhd', 'pfad wert sample beat'),
@@ -106,17 +114,23 @@ export const AUSGABEN = {
   '/e/fx': f('iidddddi', 'einheit art beats wet param1 param2 param3 an'),   // AUFTRAG 2026-09-28 (§5.12)
   '/e/fx/zuweisung': f('isi', 'einheit kanal an'),                          // AUFTRAG 2026-09-28 (§5.12)
   '/e/fx/routing': f('i', 'routing'),                                       // Ohr Task 15 (§5.12)
+  '/e/kanal_limiter': f('ii', 'gebaut latenz_samples'),                             // 1.15 A5c (§5.12)
   '/e/graph': f('ss', 'kanal name'),   // Baukasten S16 (§5.12)
   '/e/mitschnitt': f('siid', 'name beats status ab_beat'),
   '/zustand/arr': f('iiidhdif', 'nr status loop_an projekt_beat ursprung_sample start_beat metronom_an limiter_db'),   // D1 K1 (§5.13)
   '/zustand/ein': f('ihhhh', 'verbunden midi_gesehen midi_verloren midi_sample flanke_sample'),   // I08 (§5.14)
   '/zustand/rec': f('iiihd', 'status kennung scharf luecken projekt_beat'),   // 1.8 (§5.14)
   '/zustand/warp': f('iiiii', 'stimmen unterlauf kein_platz spaet faeden'),   // 1.13 Slice 2 (§5.13): Zähler des Warp-Werks
+  '/zustand/hall_pool': f('iiii', 'an faeden spaet zurueck'),   // mehrkern Task 5 (§5.13): Zustand des Hall-Pools
   '/e/aufnahme': f('iiihhi', 'spur kennung status frames start_sample luecken'),
+  '/e/auto_punkt': f('sdf', 'pfad projekt_beat wert'),                                                      // 1.12 Slice 3 (§5.13)
+  '/e/auto': f('isi', 'spur ziel zustand'),                                                                 // 1.12 Slice 3 (§5.13)
   '/e/freeze': f('iiih', 'spur kennung status frames'),                                                    // Paket K3
 };
 
 export const STATUS = { angenommen: 1, gestartet: 2, fertig: 3, verspaetet_verworfen: 4, verspaetet_ausgefuehrt: 5, abgelehnt: 6, abgebrochen: 7, storniert: 8 };
+// 1.12 S3 (§4.11 /k/arr/auto): the overridable fields, index = field 0..3; osc.json werte.auto_ziel is the source, tests/arr_auto.test.mjs compares
+export const AUTO_ZIELE = ['fader', 'pan', 'mute', 'solo'];
 export const QUELLEN = ['andreas', 'cypher', 'leitstand', 'erzeuger', 'werkstatt', 'pruefstand'];
 
 // §16.2, nur die Codes, die der Kern selbst vergibt
@@ -129,7 +143,8 @@ export const GRUENDE = new Set(['zu_spaet', 'regler_beim_menschen', 'regler_verp
   'form',                                                                                   // §16.2 Kern (netz.cpp /k/hoerschein)
   'datei_fehlt', 'format', 'audio_fehlt', 'zu_gross', 'spur_bereich', 'reserviert',       // D1 K1 (§4.11)
   'kein_eingang', 'aufnahme_laeuft', 'zu_viele_scharf', 'eingang_fehlt', 'kein_platz',   // 1.8 (§4.12)
-  'warp_maschine_fehlt']);                                                                  // 1.13 Slice 2 (§4.11, §16.2)
+  'warp_maschine_fehlt',                                                                    // 1.13 Slice 2 (§4.11, §16.2)
+  'nur_andreas', 'auto_ziel_unbekannt']);                                                   // 1.12 Slice 3 (§4.11, §16.2)
 
 // §1.5 Kanäle
 export const DECKS = [1, 2, 3, 4].map((n) => `deck/${n}`);
@@ -199,6 +214,9 @@ for (let r = 1; r <= 4; r++) {
   REGLER.set(`ret/${r}/hall/an`, { ...R(SCHALTER, 0, 1, 1), kanal: null });
   for (const [f, v] of Object.entries(HALL_VORGABE)) REGLER.set(`ret/${r}/hall/${f}`, { ...R(LIN, 0, 1, v), kanal: null });
 }
+// 1.10 Slice 4a/4b (§1.5): the insert controls ins/komp|eq|saett/<n>/* of the arrangement strips, global, project-only, everybody may. The rows are generated
+// from docs/schnittstellen/insert_module.json (insert_regler.mjs); the namenslisten checker compares them with insert_zeilen.inc.
+for (const [pfad, e, lo, hi, v] of INSERT_REGLER_ZEILEN) REGLER.set(pfad, { ...R(e === 'lin' ? LIN : e === 'stufe' ? STUFE : SCHALTER, lo, hi, v), kanal: null });
 // S5r (§1.5): acht Graph-Regler <kanal>/bk/<1..8> auf den Kanälen, auf denen der Kern einen Baukasten-Graphen annimmt
 // (deck/1..4 als Effekt, erz/1,2,3,5,6,7 und pad/1,2 als Instrument; nicht erz/4 und erz/8), alle dürfen, 0..1, Vorgabe 0,5
 export const BK_KANAELE = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'erz/1', 'erz/2', 'erz/3', 'erz/5', 'erz/6', 'erz/7', 'pad/1', 'pad/2'];
@@ -206,6 +224,24 @@ for (const k of BK_KANAELE) for (let n = 1; n <= 8; n++) REGLER.set(`${k}/bk/${n
 // S14 (§1.5): eight graph knobs fx/<n>/bk/<m> per send return fx/3, fx/4; global (no channel), alle dürfen, 0..1, default 0.5
 export const BK_SEND_KANAELE = ['fx/3', 'fx/4'];
 for (const k of BK_SEND_KANAELE) for (let n = 1; n <= 8; n++) REGLER.set(`${k}/bk/${n}`, { ...R(LIN, 0, 1, 0.5), kanal: null });
+// 1.15 A2 (§1.5, the 345 mix-tool rows): gate on the 13 live source channels (erz/8 has none: cue only), utility on those plus bus/1..4,
+// multiband and channel limiter on bus/1..4, one global spectrum row. All rows: everybody may. Ranges and defaults as the C++ table
+// (kern/stellwerk/include/cypherdj/stellwerk/werkzeug_regler.h); pruefe_namenslisten.py compares the path sets.
+const WZ_QUELLEN = [...DECKS, ...ERZ.slice(0, 7), ...PADS];
+const WZ_BAND = [['schwelle', LIN, -60, 0, 0], ['ratio', LIN, 1, 20, 1], ['attack', LIN, 0.1, 500, 10], ['release', LIN, 1, 5000, 100],
+  ['knie', LIN, 0, 24, 0], ['makeup', LIN, -24, 24, 0], ['umgehen', SCHALTER, 0, 1, 0]];
+const WZ_REIHEN = [
+  [WZ_QUELLEN, [['gate/an', SCHALTER, 0, 1, 0], ['gate/schwelle', LIN, -90, 0, -40], ['gate/hysterese', LIN, 0, 24, 4], ['gate/ratio', LIN, 1, 100, 100],
+    ['gate/bereich', LIN, -120, 0, -80], ['gate/attack', LIN, 0.1, 500, 1], ['gate/hold', LIN, 0, 2000, 20], ['gate/release', LIN, 1, 5000, 100],
+    ['gate/sc', STUFE, 0, 14, 0]]],
+  [[...WZ_QUELLEN, ...BUSSE], [['util/balance', LIN, -1, 1, 0], ['util/breite', LIN, 0, 200, 100], ['util/bassmono', LIN, 0, 500, 0],
+    ['util/phase_l', SCHALTER, 0, 1, 0], ['util/phase_r', SCHALTER, 0, 1, 0], ['util/tausch', SCHALTER, 0, 1, 0], ['util/dc', SCHALTER, 0, 1, 0]]],
+  [BUSSE, [['mb/an', SCHALTER, 0, 1, 0], ['mb/grenze_tief', LIN, 20, 20000, 200], ['mb/grenze_hoch', LIN, 20, 20000, 2000],
+    ...['tief', 'mitte', 'hoch'].flatMap((b) => WZ_BAND.map(([f, e, lo, hi, v]) => [`mb/${b}/${f}`, e, lo, hi, v])),
+    ['lim/an', SCHALTER, 0, 1, 0], ['lim/decke', LIN, -60, 0, -0.3], ['lim/abklingen', LIN, 1, 2000, 80]]],
+];
+for (const [kanaele, zeilen] of WZ_REIHEN) for (const k of kanaele) for (const [f, e, lo, hi, v] of zeilen) REGLER.set(`${k}/${f}`, { ...R(e, lo, hi, v), kanal: k });
+REGLER.set('spektrum/kanal', { ...R(STUFE, 0, 19, 0), kanal: null });   // 0 off, 1..18 = channel index + 1, 19 = master sum
 
 export const kanalVon = (pfad) => REGLER.get(pfad)?.kanal ?? null;
 export const istDeck = (k) => typeof k === 'string' && /^deck\/[1-4]$/.test(k);

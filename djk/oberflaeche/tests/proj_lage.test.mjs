@@ -62,8 +62,13 @@ test('abbildung: alle 4 · MAX_SPUREN Spur-Regler, belegte Slots mit Werten (mut
   assert.deepEqual(AB.ERZ4_NUR_HAND.map((x) => x.pfad), ['erz/4/ziel', 'erz/4/xseite']);
   // P6: bei Quelle andreas gehören ziel=0 und xseite=1 in die Sollliste (der Kern lehnt nur_hand nur bei cypher ab, einsortieren.cpp:38)
   assert.deepEqual(AB.erz4Soll('andreas').slice(-2), [{ pfad: 'erz/4/ziel', wert: 0 }, { pfad: 'erz/4/xseite', wert: 1 }]);
-  assert.equal(AB.erz4Soll('andreas').length, 16); assert.equal(AB.erz4Soll('cypher').length, 14);
+  assert.equal(AB.erz4Soll('andreas').length, 24); assert.equal(AB.erz4Soll('cypher').length, 22);
   assert.equal(AB.ERZ4_NEUTRAL.find((x) => x.pfad === 'erz/4/send/2').wert, -200);
+  // 1.15 A3: the gate switch and the 7 utility values of erz/4 are reset on opening, with the neutral values of the table
+  const wz = Object.fromEntries(AB.ERZ4_NEUTRAL.filter((x) => /^erz\/4\/(gate|util)\//.test(x.pfad)).map((x) => [x.pfad, x.wert]));
+  assert.deepEqual(wz, { 'erz/4/gate/an': 0, 'erz/4/util/balance': 0, 'erz/4/util/breite': 100, 'erz/4/util/bassmono': 0, 'erz/4/util/phase_l': 0,
+    'erz/4/util/phase_r': 0, 'erz/4/util/tausch': 0, 'erz/4/util/dc': 0 });
+  assert.ok(!AB.ERZ4_NEUTRAL.some((x) => /^erz\/4\/gate\/(?!an$)/.test(x.pfad)), 'negative control: the gate parameters stay, only the switch is reset');
 });
 
 test('abbildung: Rückweg /e/regler → spur_aendern (Nummer → ID, 0/1 → bool, Klemmen), gleicher Wert und fremde Pfade → null', () => {

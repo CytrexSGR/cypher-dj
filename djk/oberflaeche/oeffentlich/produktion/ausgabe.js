@@ -21,7 +21,9 @@ export const AUSGABE_FEHLER = {
   kein_kernstand: 'The core has not reported its state yet: try again in a moment',
   deck_laeuft: 'A deck is playing: stop it first (freezing needs the project tempo on the master)',
   freeze_fehler: 'Freezing failed in the core',
-  wirt_fehlt: 'The Surge host for this track is not running: start it with djk-instrumente --arr1',
+  wirt_fehlt: 'The Surge host for this track is not running: start it with djk-instrumente --arr1 or --arr2',
+  wirt_fehler: 'The Surge host for this track stopped with an error: start it again with djk-instrumente --arr1 or --arr2',
+  wirt_spiegel_fehler: 'The Surge host did not take the track\'s parameter map, so a freeze would sound different from the project: check the Surge host and try again',
   render_fehler: 'The export render failed',
   export_bereich: 'The export range must be 1 to 1024 beats long',
 };
@@ -54,6 +56,7 @@ export function laufText(lauf, arr, jetzt) {
   if (lauf.art === 'freeze') return lauf.an ? `Freezing ${lauf.name}${wo}${sek}` : `Unfreezing ${lauf.name}…`;
   if (lauf.art === 'lautheit') return `Measuring loudness${sek}`;   // Paket 1.18 E-b: ein Lauf von proj_lautheit (Cypher), ausgabe_lauf {art: 'lautheit'}
   if (lauf.art === 'merge') return `Merging tracks${sek}`;   // Slice 7: a merge run (own page or Cypher), ausgabe_lauf {art: 'merge'}
+  if (lauf.art === 'bounce') return `Bouncing${sek}`;        // 1.14 slice 4: a bounce run (own page or Cypher), ausgabe_lauf {art: 'bounce'}
   return `${arr?.status === 3 ? `Exporting: freezing${wo}` : 'Exporting: rendering'}${sek}`;
 }
 

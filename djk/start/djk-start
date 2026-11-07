@@ -1,15 +1,21 @@
 #!/usr/bin/env bash
 # djk-start: ein Befehl für die Spiel-Sitzung. Prüft Ports und Geräte, legt den Arbeitsbestand an, startet Kern,
 # Notbahn (daneben), Leitstand und Oberfläche als transiente User-Units (systemd-run, nie enable) in dieser
-# Reihenfolge mit Wartebedingungen und zeigt URL und Zustand. djk-stop räumt alles ab, auch den Produktions-Wirt arr1
-# (djk-instrumente --arr1); liegt der noch von einem früheren Lauf, meldet djk-start belegt (Rückgabe 4).
+# Reihenfolge mit Wartebedingungen und zeigt URL und Zustand. djk-stop räumt alles ab, auch die Produktions-Wirte arr1 und arr2
+# (djk-instrumente --arr1, --arr2); liegt einer noch von einem früheren Lauf, meldet djk-start belegt (Rückgabe 4).
 #
-# Aufruf: djk-start [--master PRÄFIX] [--cue PRÄFIX | --ohne-cue] [--ton-frei] [--strudel [--strudel-kit NAME] [--strudel-kit2 NAME] [--strudel-kit3 NAME] [--instrumente [--melodie surge|fluegel|baukasten] [--bass surge|rb338]]] [--arr1] [--bk-stroeme] [--instanz a..i]
+# Aufruf: djk-start [--master PRÄFIX] [--cue PRÄFIX | --ohne-cue] [--ton-frei] [--strudel [--strudel-kit NAME] [--strudel-kit2 NAME] [--strudel-kit3 NAME] [--instrumente [--melodie surge|fluegel|baukasten] [--bass surge|rb338]]] [--arr1] [--arr2] [--bk-stroeme] [--instanz a..i]
 #   CYPHERDJ_KATALOG=<absoluter Pfad>  (Umgebung, keine Option) andere katalog.sqlite für die Oberfläche der Prüfinstanz; ohne: neben der Mediathek.
 #   CYPHERDJ_ANALYSE=<absoluter Pfad>  (Umgebung, keine Option) Analyse-Ablage der Oberfläche (Karten der Nachtanalyse, Aufträge „nur Analyse“). Eine Prüfinstanz nimmt nur /tmp oder /dev/shm.
 #   CYPHERDJ_KORREKTUREN=<absoluter Pfad>  (Umgebung, keine Option) Bestand des Decks, in den Set 1.1.1 Here die Eins-Korrektur schreibt. Eine Prüfinstanz nimmt nur /tmp oder /dev/shm.
+#   CYPHERDJ_KERN_KERNE=<n>            (environment, no option) physical cores (with SMT siblings) for the kern process, default 4; the first n cores by lowest CPU number
+#                   (dev box: 0-3 8-11), all other online CPUs go to the stems (4-7,12-15). A value outside 1 to cores-1 is clamped, with a note; text that is no number is
+#                   an error (2). Computation: kerne.py; start line "Cores: ...". CYPHERDJ_SYSFS_CPU: another sysfs tree (tests).
+#   CYPHERDJ_KERN_CPUS="<list>", CYPHERDJ_STEMS_CPUS="<list>"  (environment) set the kern or the stems CPUs explicitly and win. Changed behaviour of CYPHERDJ_KERN_CPUS
+#                   (until 2026-11-06 the stems were fixed at 2-7,10-15): the stems are now all OTHER online CPUs, a CPU that is not online is a start error (2), and the list
+#                   is written back normalised as ranges ("0 1 8 9" -> "0-1 8-9"). CYPHERDJ_STEMS_CPUS overlapping the kern CPUs gives a note, not an error.
 #   CYPHERDJ_PYTHON=<absoluter Pfad>   (Umgebung, keine Option) Python der Oberfläche (Werkstatt-Aufträge, welle.py); ohne: die Vorgabe der Seite (pythonVorgabe).
-#                   [--kern-konfig DATEI] [--leitstand-konfig DATEI] [--ohne-pruefmodus]
+#                   [--kern-konfig DATEI] [--leitstand-konfig DATEI] [--kit-ordner DIR] [--ohne-pruefmodus]
 #         djk-start --zustand [--instanz a..i]
 #         djk-start --vorlagen-nach DIR [--master ...]   (füllt die Betriebs-Drop-ins, installiert nichts)
 #   --master/--cue  Präfix "<Senke>:<Portbasis>" des Ziels, an das "L" und "R" gehängt werden (INTERFACES §8),
@@ -24,6 +30,10 @@
 #                   djk/start/djk-stroeme. Without it the page refuses a graph on those channels with 409 kein_erzeuger.
 #   --arr1          Startet nach dem Studio den Produktions-Wirt arr1 (djk-instrumente --arr1): die Surge-Spur des Arrangements (D1). Ohne
 #                   ihn lehnen /proj/freeze, /proj/export und /proj/lautheit (sobald eine Surge-Spur einzufrieren wäre) mit wirt_fehlt ab. Unabhängig von --strudel und --instrumente; djk-stop räumt ihn ab.
+#   --arr2          1.9 (L10): wie --arr1 für den zweiten Produktions-Slot (djk-instrumente --arr2): die zweite Surge-Spur des Arrangements. --arr1 --arr2 starten beide; djk-stop räumt beide ab.
+#   --kit-ordner DIR  Kit folder of the instance (kit tracks of the production arrangement): sets CYPHERDJ_KIT_ORDNER on the units of this start, so
+#                   core, server and cypherdj-render read DIR instead of ~/.config/cypherdj/kits. Must be an existing directory (else return 2).
+#                   Without it every program reads the default kit folder as before. Meant for test instances.
 #   --ohne-cue      Kein Cue-Ziel. Bei einem echten Master (--ton-frei) ist das die einzige Form ohne Cue-Senke:
 #                   Zwischenstufe Digital-Out allein, kein Profilwechsel (Plan M-1 Entscheidung 7).
 #                   Grenze Pro Audio: der Kern baut das Ziel als Präfix + "L"/"R" (kern main.cpp: snprintf "%s%s").
@@ -63,7 +73,7 @@ if [ -f "$UMG" ]; then
   [ -z "$_gesetzt" ] || eval "$_gesetzt"
 fi
 
-I=${CYPHERDJ_INSTANZ:-}; MASTER=""; CUE=""; OHNE_CUE=0; TON_FREI=0; STRUDEL=0; INSTR=0; ARR1=0; KIT=techno; KIT2=battery; KIT3=battery; MELODIE=surge; BASS=""; BK_STROEME=0; KERN_KONFIG=""; LS_KONFIG=""; PRUEF=1
+I=${CYPHERDJ_INSTANZ:-}; MASTER=""; CUE=""; OHNE_CUE=0; TON_FREI=0; STRUDEL=0; INSTR=0; ARR1=0; ARR2=0; KIT=techno; KIT2=battery; KIT3=battery; MELODIE=surge; BASS=""; BK_STROEME=0; KERN_KONFIG=""; LS_KONFIG=""; KIT_ORDNER=""; PRUEF=1
 MODUS=start; VORLAGEN_NACH=""
 # Option mit Wert: fehlt er (letztes Argument) oder ist er selbst eine Option, Abbruch 2. Nur --instanz darf leer sein.
 wert() {
@@ -73,13 +83,14 @@ wert() {
 }
 while [ $# -gt 0 ]; do
   case "$1" in
-    --master|--cue|--strudel-kit|--strudel-kit2|--strudel-kit3|--melodie|--bass|--instanz|--kern-konfig|--leitstand-konfig|--vorlagen-nach) wert "$1" $# "${2-}";;
+    --master|--cue|--strudel-kit|--strudel-kit2|--strudel-kit3|--melodie|--bass|--instanz|--kern-konfig|--leitstand-konfig|--kit-ordner|--vorlagen-nach) wert "$1" $# "${2-}";;
   esac
   case "$1" in
-    --master) MASTER=$2; shift 2;; --cue) CUE=$2; shift 2;; --ohne-cue) OHNE_CUE=1; shift;; --strudel) STRUDEL=1; shift;; --instrumente) INSTR=1; shift;; --arr1) ARR1=1; shift;; --bk-stroeme) BK_STROEME=1; shift;; --melodie) MELODIE=$2; shift 2;; --bass) BASS=$2; shift 2;; --strudel-kit) KIT=$2; shift 2;; --strudel-kit2) KIT2=$2; shift 2;; --strudel-kit3) KIT3=$2; shift 2;;
+    --master) MASTER=$2; shift 2;; --cue) CUE=$2; shift 2;; --ohne-cue) OHNE_CUE=1; shift;; --strudel) STRUDEL=1; shift;; --instrumente) INSTR=1; shift;; --arr1) ARR1=1; shift;; --arr2) ARR2=1; shift;; --bk-stroeme) BK_STROEME=1; shift;; --melodie) MELODIE=$2; shift 2;; --bass) BASS=$2; shift 2;; --strudel-kit) KIT=$2; shift 2;; --strudel-kit2) KIT2=$2; shift 2;; --strudel-kit3) KIT3=$2; shift 2;;
     --ton-frei) TON_FREI=1; shift;; --instanz) I=$2; shift 2;;
     --kern-konfig) KERN_KONFIG=$(readlink -f -- "$2"); shift 2;;
     --leitstand-konfig) LS_KONFIG=$(readlink -f -- "$2"); shift 2;;
+    --kit-ordner) KIT_ORDNER=$(readlink -f -- "$2"); [ -d "$KIT_ORDNER" ] || { echo "djk-start: --kit-ordner $2 is not a directory" >&2; exit 2; }; shift 2;;
     --pruefmodus) PRUEF=1; shift;; --ohne-pruefmodus) PRUEF=0; shift;; --zustand) MODUS=zustand; shift;;
     --vorlagen-nach) MODUS=vorlagen; VORLAGEN_NACH=$2; shift 2;;
     -h|--help) sed -n '2,/^set -uo/p' "$0" | sed '$d; s/^# \{0,1\}//'; exit 0;;
@@ -262,11 +273,17 @@ if [ -n "${CYPHERDJ_PYTHON:-}" ]; then
   [[ "$CYPHERDJ_PYTHON" =~ ^/[A-Za-z0-9._/+=,:-]+$ && "$CYPHERDJ_PYTHON" != *..* ]] || { echo "djk-start: CYPHERDJ_PYTHON must be an absolute path without spaces, quotes or '..', is '$CYPHERDJ_PYTHON'. Nothing started." >&2; exit 2; }
   OF_ARGS="$OF_ARGS --python $CYPHERDJ_PYTHON"
 fi
-# AK26-Nachzug (2026-10-31): der Kern bekommt einen eigenen physischen Kern, demucs (stems_lauf.ts) liegt auf 2 bis 7.
-# Zwei physische Kerne (CPU 0,1 und ihre SMT-Geschwister 8,9), damit die Kern-Arbeiter (Keylock, Warp, Graph) Platz haben.
-KERN_CPUS=${CYPHERDJ_KERN_CPUS:-0 1 8 9}
-[[ "$KERN_CPUS" =~ ^[0-9][0-9\ ,-]*$ ]] || { echo "djk-start: CYPHERDJ_KERN_CPUS must be a CPU list like '0 8', is '$KERN_CPUS'. Nothing started." >&2; exit 2; }
-VARS=(--var "MASTER=$KMASTER" --var "CUE_ARG=$CUE_ARG" --var "TON_FREI=$TF_ARG" --var "KERN_ARGS=$KERN_ARGS" --var "KERN_CPUS=$KERN_CPUS"
+# Core allocation in ONE place (kerne.py, multi-core spec 2026-11-06, Andreas yes): CYPHERDJ_KERN_KERNE physical cores (default 4) with their SMT siblings belong to
+# the kern process (CPUAffinity of the unit; core 0 holds the JACK callback and the rest, the others the Hall workers, which the kern picks inside this mask), all other
+# online CPUs belong to the stems (demucs, handed to the page as CYPHERDJ_STEMS_CPUS). Explicit CYPHERDJ_KERN_CPUS (kern) and CYPHERDJ_STEMS_CPUS (stems) win.
+# CYPHERDJ_SYSFS_CPU: another sysfs tree (tests).
+KERNE_AUS=$(python3 "$HIER/kerne.py" --sysfs "${CYPHERDJ_SYSFS_CPU:-/sys/devices/system/cpu}" --n "${CYPHERDJ_KERN_KERNE:-4}" \
+  --kern-cpus "${CYPHERDJ_KERN_CPUS:-}" --stems-cpus "${CYPHERDJ_STEMS_CPUS:-}") || exit 2
+KERN_CPUS=$(sed -n 's/^KERN_CPUS=//p' <<<"$KERNE_AUS"); STEMS_CPUS=$(sed -n 's/^STEMS_CPUS=//p' <<<"$KERNE_AUS"); KERN_KERNE=$(sed -n 's/^KERN_KERNE=//p' <<<"$KERNE_AUS")
+[[ "$KERN_CPUS" =~ ^[0-9][0-9\ ,-]*$ && "$STEMS_CPUS" =~ ^[0-9][0-9,-]*$ ]] || { echo "djk-start: CPU lists '$KERN_CPUS' / '$STEMS_CPUS' malformed. Nothing started." >&2; exit 2; }
+if [ "$KERN_KERNE" = - ]; then KERN_TXT="kern process CYPHERDJ_KERN_CPUS"; else KERN_TXT="kern process $KERN_KERNE physical cores"; fi
+echo "Cores: $KERN_TXT (CPUs $KERN_CPUS), stems CPUs $STEMS_CPUS" >&2
+VARS=(--var "MASTER=$KMASTER" --var "CUE_ARG=$CUE_ARG" --var "TON_FREI=$TF_ARG" --var "KERN_ARGS=$KERN_ARGS" --var "KERN_CPUS=$KERN_CPUS" --var "STEMS_CPUS=$STEMS_CPUS"
       --var "KERN_CLIENT=$KERN_CLIENT" --var "LEITSTAND_ARGS=$LS_ARGS" --var "OBERFLAECHE_ARGS=$OF_ARGS")
 
 if [ "$MODUS" = vorlagen ]; then
@@ -298,12 +315,14 @@ for u in "${UNITS[@]}"; do
     BELEGT+=("unit $u.service is installed as a file; start the installed target instead of djk-start")
   fi
 done
-# Der Produktions-Wirt (djk-instrumente --arr1, D1) hängt sich an ein laufendes Studio und steht nicht in UNITS; ein Rest
-# davon (Restart=always) liefe neben dem neuen Kern weiter. djk-stop räumt ihn ab.
-U_ARR1=cypherdj-wirt-arr1$SFX
-if systemctl --user list-units --all --no-legend --plain "$U_ARR1.service" 2>/dev/null | grep -q .; then
-  BELEGT+=("unit $U_ARR1.service (production slot wirt, djk-instrumente --arr1) is still loaded ($(systemctl --user is-active "$U_ARR1.service" 2>/dev/null)); run djk-stop${I:+ --instanz $I} first")
-fi
+# Die Produktions-Wirte (djk-instrumente --arr1, --arr2) hängen sich an ein laufendes Studio und stehen nicht in UNITS; ein Rest
+# davon (Restart=always) liefe neben dem neuen Kern weiter. djk-stop räumt sie ab.
+for slot in 1 2; do
+  U_ARR=cypherdj-wirt-arr$slot$SFX
+  if systemctl --user list-units --all --no-legend --plain "$U_ARR.service" 2>/dev/null | grep -q .; then
+    BELEGT+=("unit $U_ARR.service (production slot wirt, djk-instrumente --arr$slot) is still loaded ($(systemctl --user is-active "$U_ARR.service" 2>/dev/null)); run djk-stop${I:+ --instanz $I} first")
+  fi
+done
 port_frei() {  # $1 tcp|udp, $2 port, $3 wofür
   local z
   if [ "$1" = tcp ]; then z=$(ss -Hlntp "sport = :$2" 2>/dev/null); else z=$(ss -Hlnup "sport = :$2" 2>/dev/null); fi
@@ -323,7 +342,9 @@ fi
 
 # 4 Ziele: die stumme Vorgabe-Senke wird angelegt, ein ausdrückliches Ziel muss da sein.
 MODID=""
-ports_da() { pw-link -i | grep -qx "${1}L" && pw-link -i | grep -qx "${1}R"; }
+# The list is read first and searched afterwards: `pw-link -i | grep -q` under pipefail returns 141 (SIGPIPE) when grep leaves at its first match
+# while pw-link is still writing, and an existing port is reported missing (ledger D33).
+ports_da() { local liste; liste=$(pw-link -i 2>/dev/null); grep -qx "${1}L" <<<"$liste" && grep -qx "${1}R" <<<"$liste"; }
 if ! ports_da "$MASTER" && [ "$MASTER" = "$STUMM:playback_F" ]; then
   MODID=$(pactl load-module module-null-sink sink_name="$STUMM" channels=4 \
     channel_map=front-left,front-right,rear-left,rear-right sink_properties=node.description="$STUMM") \
@@ -382,7 +403,7 @@ starte() {  # $1 Unit, $2 Unit-Datei, $3 Drop-in (oder leer)
   mapfile -t args < <(python3 "$HIER/einheit.py" --unit "$2" ${3:+--dropin "$3"} --djk "$DJK" "${VARS[@]}") \
     || abbruch "cannot build unit $1" ""
   [ ${#args[@]} -gt 2 ] || abbruch "cannot build unit $1" ""
-  systemd-run --user --quiet --collect --unit="$1" ${I:+--setenv=CYPHERDJ_INSTANZ=$I} "${args[@]}" 2>&1 \
+  systemd-run --user --quiet --collect --unit="$1" ${I:+--setenv=CYPHERDJ_INSTANZ=$I} ${KIT_ORDNER:+--setenv=CYPHERDJ_KIT_ORDNER=$KIT_ORDNER} "${args[@]}" 2>&1 \
     | sed 's/^/    /' >&2
   [ "${PIPESTATUS[0]}" = 0 ] || abbruch "unit $1 failed to start" "$1"
 }
@@ -486,6 +507,10 @@ fi
 if [ "$ARR1" = 1 ]; then  # Paket 1.18: der Produktions-Wirt arr1 (Surge-Spuren des Arrangements, D1 Spec 2.4); ohne ihn lehnen /proj/freeze, /proj/export und /proj/lautheit mit wirt_fehlt ab
   "$HIER/djk-instrumente" ${I:+--instanz "$I"} --arr1 | sed 's/^/  /' || abbruch "production host failed (djk-instrumente --arr1)" "cypherdj-wirt-arr1$SFX"  # pipefail: Rückgabe von djk-instrumente
   echo "  production host arr1 ready (Surge track slot 1 of the arrangement; /proj/freeze, /proj/export and /proj/lautheit need it for Surge tracks)"
+fi
+if [ "$ARR2" = 1 ]; then  # 1.9 (L10): der zweite Produktions-Wirt, wie arr1
+  "$HIER/djk-instrumente" ${I:+--instanz "$I"} --arr2 | sed 's/^/  /' || abbruch "production host failed (djk-instrumente --arr2)" "cypherdj-wirt-arr2$SFX"
+  echo "  production host arr2 ready (Surge track slot 2 of the arrangement; /proj/freeze, /proj/export and /proj/lautheit need it for Surge tracks on that slot)"
 fi
 for u in "${UNITS[@]}"; do aktiv "$u" || abbruch "$u died during start" "$u"; done
 echo "  midi       $MIDI output ports visible (controller mapping: INTERFACES §7)"

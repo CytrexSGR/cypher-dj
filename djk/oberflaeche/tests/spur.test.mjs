@@ -136,3 +136,38 @@ test('S7 T9: plane gibt form an den Wirt-Plan weiter (Vorgabe linear)', () => {
   ] }, 100);
   assert.deepEqual(g.wirt.map((w) => w.form), ['s', 'linear']);
 });
+
+// 1.12 S7 (M13) U12 T12.1 = S8 plan task 1: schleife_takte 1..64, every move inside one pass, no set on bar n+1, no pattern targets
+test('S7 loop T12.1: schleife_takte 1..64, moves inside the pass, no set on bar n+1, no patterns', () => {
+  const f = (fahrten, schleife_takte) => pruefeSpur({ name: 'l', fahrten, schleife_takte }, FAHRBAR);
+  const rampe = { ziel: 'erz/2/fader', ab_takt: 1, takte: 4, nach: -30, form: 'linear' };
+  assert.ok('spur' in f([{ ziel: 'erz/2/fader', ab_takt: 1, nach: 0 }, rampe], 4));
+  assert.equal(f([rampe], 4).spur.schleife_takte, 4);
+  assert.ok('spur' in f([rampe]), 'without schleife_takte as before');
+  assert.equal('schleife_takte' in f([rampe]).spur, false, 'no key written when absent');
+  for (const n of [0, 65, 2.5, '4', null]) assert.match(f([rampe], n).fehler, /schleife_takte/, String(n));
+  assert.match(f([rampe], 3).fehler, /beyond the loop/, 'ramp ends behind n+1');
+  assert.match(f([rampe, { ziel: 'erz/2/fader', ab_takt: 5, nach: -200 }], 4).fehler, /beyond the loop/, 'set on bar n+1');
+  assert.match(f([{ ziel: 'strom:2', ab_takt: 1, muster: 'silence' }], 4).fehler, /pattern/, 'no pattern entry in a loop');
+  // negative control: the same set on bar 5 and the same pattern entry are fine without a loop
+  assert.ok('spur' in f([rampe, { ziel: 'erz/2/fader', ab_takt: 5, nach: -200 }]));
+  assert.ok('spur' in f([{ ziel: 'strom:2', ab_takt: 1, muster: 'silence' }]));
+  // a ramp that ends exactly at n+1 is inside (the end is exclusive); a wirt ramp too
+  assert.ok('spur' in f([{ ziel: 'wirt:bass/a_filter1_cutoff', ab_takt: 1, takte: 4, nach: 0, von: -40 }], 4));
+});
+
+// 1.12 S7 (M13) U12 T12.2 = S8 plan task 2: one pass of a loop, shifted by k·4n beats, part numbers continue from teilNr
+import { planeDurchlauf } from '../spur.ts';
+test('S7 loop T12.2: planeDurchlauf shifts by k·4n beats, part numbers count from teilNr, the end is the next start', () => {
+  const spur = { name: 'l', schleife_takte: 2, fahrten: [
+    { ziel: 'erz/2/fader', ab_takt: 1, nach: 0 }, { ziel: 'erz/2/fader', ab_takt: 1, takte: 2, nach: -30, form: 'linear' }] };
+  const g0 = planeDurchlauf(spur, 100, 0, 0), g2 = planeDurchlauf(spur, 100, 2, 7);
+  assert.deepEqual(g0.teile.map((t) => [t.ab_beat, t.nr]), [[100, 0], [100, 1]]);
+  assert.deepEqual(g2.teile.map((t) => [t.ab_beat, t.nr]), [[116, 7], [116, 8]]);
+  assert.equal(g2.anfang_beat, 116); assert.equal(g2.ende_beat, 124);
+  // the end is the start of the next pass even when the last move ends earlier (a short ramp in a long loop)
+  const kurz = planeDurchlauf({ ...spur, schleife_takte: 4 }, 0, 1, 0);
+  assert.equal(kurz.anfang_beat, 16); assert.equal(kurz.ende_beat, 32);
+  // negative control: k = 0 and teilNr 0 give the same parts as plane at that anchor
+  assert.deepEqual(g0.teile.map(({ nr, ...t }) => t), plane(spur, 100).teile);
+});

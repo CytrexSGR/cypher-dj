@@ -2,6 +2,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { GERAETE } from '../presets/geraete.ts';
+import { WERK_FELDER, WERK_STREIFEN, werkText, werkzeugStreifenHtml, werkzeugKlickNach, werkzeugAnfrage, setzeWerkzeug,
+  BUS_FELDER, BUS_KANAELE, busStreifenHtml, limiterZustand, LIMITER_GRUND, mixAufnehmen, mixLesung, MIX_FRIST_MS,
+  GATE_KANAELE, gateAufnehmen, mixAblaufIn, MIX_FELDER } from '../oeffentlich/effekte.js';
+import { kanalArtVon, kernGeraetAnfragen, kernGeraetWerte } from '../oeffentlich/presets.js';
 import { kennlinie, kennlinienPfad, KOMP_PRESETS, AUTO_BEREICH, punktAusStelle, fxInhaltText } from '../oeffentlich/effekte.js';
 import { AUTO_BEREICH as SERVER_AUTO, pruefeAutomation } from '../loop_automation.ts';
 import { AUTO_VORLAGEN, vorlagePunkte, knobListe, KNOB_GRUPPE, htmlText, bkKnobListe, bkKnobHtml, graphWahlOptionen, graphWahlHtml, sendRueckHtml, lernKnopfHtml, lernStand } from '../oeffentlich/effekte.js';
@@ -320,4 +325,240 @@ test('S18 app.js: the strip list and the mixer index of every Baukasten channel 
   assert.deepEqual([index['pad/1'], index['pad/2']], [12, 13]);
   for (const s of BK_STROEME) assert.ok(kanaele.includes(kanalVonStrom(s)), `stream ${s}`);
   assert.ok(!kanaele.includes('erz/4') && !kanaele.includes('erz/8'), 'erz/4 (production) and erz/8 have no strip');
+});
+
+// ---- A8: Gate and Utility strips on the FX page, and kern device presets ---------------------------------------------------------
+const APP = readFileSync(new URL('../oeffentlich/app.js', import.meta.url), 'utf8');
+const KOPF_ZEILEN = [...readFileSync(new URL('../../kern/stellwerk/include/cypherdj/stellwerk/werkzeug_regler.h', import.meta.url), 'utf8')
+  .matchAll(/^\s*\{WzTool::(\w+), "([a-z_/]+)", (-?[\d.]+)f?, (-?[\d.]+)f?, (-?[\d.]+)f?, KurvenTyp::(\w+), \d+, (true|false), WzKanalart::(\w+)\},$/gm)]
+  .map((m) => ({ tool: m[1], suffix: m[2], min: Number(m[3]), max: Number(m[4]), vorgabe: Number(m[5]), kurve: m[6], ganz: m[7] === 'true', kanalart: m[8] }));
+const FX_KAN = [...APP.match(/const FX_KANAELE = \[(.*)\];/)[1].matchAll(/\['([a-z]+\/\d)', '([^']+)'\]/g)].map((m) => [m[1], m[2]]);
+
+test('A8 the strip fields carry the ranges and defaults of the header, and every strip field is a row for source channels', () => {
+  assert.equal(KOPF_ZEILEN.length, 44, 'the regex read the whole header');
+  assert.equal(Object.keys(WERK_FELDER).length, 16, 'gate 9 + utility 7');
+  for (const [suffix, f] of Object.entries(WERK_FELDER)) {
+    const z = KOPF_ZEILEN.find((x) => x.suffix === suffix);
+    assert.ok(z, `${suffix} is a header row`);
+    assert.deepEqual([f.min, f.max, f.vorgabe], [z.min, z.max, z.vorgabe], suffix);
+    assert.deepEqual([f.kurve, f.ganz], [z.kurve, z.ganz], `${suffix}: curve and integer flag`);
+    assert.ok(['quellen', 'quellen_busse'].includes(z.kanalart), `${suffix} exists on source channels`);
+  }
+  for (const s of WERK_STREIFEN) for (const suffix of [s.an, ...s.regler.map((r) => r.feld), ...s.schalter.map((x) => x.feld)].filter(Boolean)) assert.ok(suffix in WERK_FELDER, suffix);
+});
+
+test('A8 the page builds a Gate and a Utility strip for each of the FX_KANAELE channels and sends nothing while building', () => {
+  assert.equal(FX_KAN.length, 10);
+  const gesendet = [];
+  const echt = globalThis.fetch;
+  globalThis.fetch = async (...a) => { gesendet.push(a); return { status: 200, json: async () => ({}) }; };
+  try {
+    for (const [k, name] of FX_KAN) {
+      const html = werkzeugStreifenHtml(k, name);
+      assert.equal((html.match(/class="fxwerk fxwerk-gate"/g) ?? []).length, 1, `${k} gate strip`);
+      assert.equal((html.match(/class="fxwerk fxwerk-util"/g) ?? []).length, 1, `${k} utility strip`);
+      const pfade = [...html.matchAll(/data-werk-pfad="([^"]+)"/g)].map((m) => m[1]);
+      assert.ok(pfade.length >= 9, `${k}: ${pfade.length} controls`);
+      for (const p of pfade) {
+        assert.ok(p.startsWith(`${k}/`), p);
+        assert.ok(KOPF_ZEILEN.some((z) => z.suffix === p.slice(k.length + 1)), `${p} is a controller row`);
+      }
+      assert.ok(pfade.includes(`${k}/gate/an`) && pfade.includes(`${k}/gate/schwelle`) && pfade.includes(`${k}/util/breite`) && pfade.includes(`${k}/util/dc`), k);
+    }
+  } finally { globalThis.fetch = echt; }
+  assert.deepEqual(gesendet, [], 'building the strips sends nothing');
+  // the page wires the strips into the same loop that builds the compressor strips, and sends through the shared helper
+  assert.match(APP, /\+ werkzeugStreifenHtml\(k, name\)/);
+  assert.match(APP, /setzeWerkzeug\(fetch, /);
+  assert.ok(!/gate\/an.*FX_KANAELE|FX_KANAELE.*deck\/3/.test(APP), 'no channel outside FX_KANAELE is added by hand');
+  // negative control: a harmless name goes through, a hostile one is escaped
+  assert.ok(!werkzeugStreifenHtml('deck/1', '<img onerror=x>').includes('<img'));
+});
+
+test('A8 bass mono reads "off" only at 0 or below; 1..19 act as 20 Hz like the library clamp (utility.cpp:56)', () => {
+  assert.equal(werkText('util/bassmono', 0), 'off');
+  assert.equal(werkText('util/bassmono', 0.5), '20 Hz');
+  assert.equal(werkText('util/bassmono', 1), '20 Hz');
+  assert.equal(werkText('util/bassmono', 120), '120 Hz');
+});
+
+test('A8 a strip control sends /regler with ab "jetzt" like the compressor, a switch toggles from the live value, a failure is reported', async () => {
+  assert.deepEqual(werkzeugAnfrage('erz/1/gate/schwelle', -30), { pfad: 'erz/1/gate/schwelle', nach: -30, ab: 'jetzt' });
+  assert.equal(werkzeugKlickNach({ 'erz/1/gate/an': 0 }, 'erz/1/gate/an'), 1);
+  assert.equal(werkzeugKlickNach({ 'erz/1/gate/an': 1 }, 'erz/1/gate/an'), 0);
+  assert.equal(werkzeugKlickNach({}, 'erz/1/util/dc'), 1, 'no live value yet: the default is off, so the click switches on');
+  const gesendet = [];
+  const ok = async (url, o) => { gesendet.push([url, JSON.parse(o.body)]); return { status: 200, json: async () => ({ quittung: { status: 1 } }) }; };
+  assert.deepEqual(await setzeWerkzeug(ok, 'pad/1/util/breite', 150), { ok: true });
+  assert.deepEqual(gesendet, [['/regler', { pfad: 'pad/1/util/breite', nach: 150, ab: 'jetzt' }]]);
+  const abgelehnt = async () => ({ status: 200, json: async () => ({ quittung: { status: 6, grund: 'out of range' } }) });
+  assert.deepEqual(await setzeWerkzeug(abgelehnt, 'pad/1/util/breite', 999), { ok: false, text: 'Tool control refused: out of range' });
+  const tot = async () => { throw new Error('ECONNREFUSED'); };
+  assert.deepEqual(await setzeWerkzeug(tot, 'pad/1/util/breite', 1), { ok: false, text: 'Page server unreachable: ECONNREFUSED' });
+  const http400 = async () => ({ status: 400, json: async () => ({ fehler: 'pfad_unbekannt' }) });
+  assert.deepEqual(await setzeWerkzeug(http400, 'bus/9/util/dc', 1), { ok: false, text: 'Tool control refused: pfad_unbekannt' });
+});
+
+test('A8 channel kind of a path and the kern device preset: one /regler per field, switches as 0/1, a wrong channel kind is refused', () => {
+  assert.deepEqual(['deck/1', 'erz/4', 'erz/7', 'pad/2', 'bus/3', 'master', 'fx/3', 'erz/8', 'erz/9', 'bus/5'].map(kanalArtVon),
+    ['quelle', 'quelle', 'quelle', 'quelle', 'bus', null, null, null, null, null], 'erz/8 is cue only and has no tool rows (D2)');
+  const gate = GERAETE.find((g) => g.id === 'gate'), util = GERAETE.find((g) => g.id === 'utility');
+  const mb = GERAETE.find((g) => g.id === 'multiband'), lim = GERAETE.find((g) => g.id === 'kanal-limiter');
+  const r = kernGeraetAnfragen(gate, { an: true, schwelle: -35, sc: 5 }, 'erz/1');
+  assert.deepEqual(r.anfragen, [
+    { pfad: 'erz/1/gate/schwelle', nach: -35, ab: 'jetzt' }, { pfad: 'erz/1/gate/sc', nach: 5, ab: 'jetzt' }, { pfad: 'erz/1/gate/an', nach: 1, ab: 'jetzt' }]);
+  assert.equal(r.fehler, undefined);
+  assert.match(kernGeraetAnfragen(gate, { an: true }, 'erz/8').fehler, /erz\/8/);
+  assert.deepEqual(kernGeraetAnfragen(gate, { an: false }, 'pad/2').anfragen, [{ pfad: 'pad/2/gate/an', nach: 0, ab: 'jetzt' }]);
+  // utility works on both kinds; multiband and limiter on buses only; gate on sources only
+  assert.equal(kernGeraetAnfragen(util, { breite: 150 }, 'bus/2').anfragen[0].pfad, 'bus/2/util/breite');
+  assert.equal(kernGeraetAnfragen(util, { breite: 150 }, 'deck/1').anfragen[0].pfad, 'deck/1/util/breite');
+  assert.equal(kernGeraetAnfragen(mb, { tief_schwelle: -20, mitte_umgehen: true }, 'bus/1').anfragen.map((a) => `${a.pfad}=${a.nach}`).join(), 'bus/1/mb/tief/schwelle=-20,bus/1/mb/mitte/umgehen=1');
+  assert.equal(kernGeraetAnfragen(lim, { decke: -1 }, 'bus/4').anfragen[0].pfad, 'bus/4/lim/decke');
+  for (const [g, kanal, wort] of [[gate, 'bus/1', 'source'], [mb, 'deck/1', 'bus'], [lim, 'erz/1', 'bus'], [gate, 'master', 'channel']]) {
+    const x = kernGeraetAnfragen(g, { an: true }, kanal);
+    assert.deepEqual(x.anfragen, [], `${g.id} on ${kanal}`);
+    assert.match(x.fehler, new RegExp(wort), x.fehler);
+  }
+  // a plugin device is not a kern device: no requests, an explanation
+  assert.deepEqual(kernGeraetAnfragen(GERAETE.find((g) => g.id === 'komp'), { thresh: -10 }, 'deck/1').anfragen, []);
+  // unknown names in a stored preset are reported, not sent
+  assert.deepEqual(kernGeraetAnfragen(gate, { schwelle: -35, alt: 1 }, 'deck/1').uebrig, ['alt']);
+});
+
+test('A8 SAVE CURRENT of a kern device reads the live values of the channel; a missing value is skipped; a wrong channel kind gives null', () => {
+  const gate = GERAETE.find((g) => g.id === 'gate'), mb = GERAETE.find((g) => g.id === 'multiband');
+  const stand = { 'erz/1/gate/an': 1, 'erz/1/gate/schwelle': -33, 'erz/1/gate/hold': Number.NaN };
+  assert.deepEqual(kernGeraetWerte(gate, 'erz/1', (p) => stand[p]), { an: true, schwelle: -33 });
+  assert.equal(kernGeraetWerte(gate, 'erz/1', () => undefined), null, 'nothing known: nothing to save');
+  assert.equal(kernGeraetWerte(mb, 'erz/1', () => 0), null, 'multiband has no source channel');
+  assert.deepEqual(Object.keys(kernGeraetWerte(mb, 'bus/1', () => 0)).length, 24);
+});
+
+// ---- A8b: bus panel (multiband, limiter, utility per bus) and its meters ------------------------------------------------------------
+const BUS_ZEILEN = KOPF_ZEILEN.filter((z) => z.kanalart === 'busse');
+const BUS_PFADE = (html) => [...html.matchAll(/data-werk-pfad="([^"]+)"/g)].map((m) => m[1]);
+
+test('A8b the bus fields are exactly the 27 bus-only header rows (multiband 24, limiter 3), ranges and defaults equal in both directions', () => {
+  assert.equal(BUS_ZEILEN.length, 27, 'the header has 24 multiband + 3 limiter rows for buses');
+  assert.equal(Object.keys(BUS_FELDER).length, 27);
+  for (const z of BUS_ZEILEN) {
+    const f = BUS_FELDER[z.suffix];
+    assert.ok(f, `${z.suffix} is a page field`);
+    assert.deepEqual([f.min, f.max, f.vorgabe, f.kurve, f.ganz], [z.min, z.max, z.vorgabe, z.kurve, z.ganz], z.suffix);
+  }
+  for (const suffix of Object.keys(BUS_FELDER)) assert.ok(BUS_ZEILEN.some((z) => z.suffix === suffix), `${suffix} is a header row`);
+  for (const [suffix, f] of Object.entries(BUS_FELDER)) if (!f.ganz) assert.ok(f.schritt > 0 && f.schritt <= f.max - f.min, `${suffix}: a slider step`);
+  assert.deepEqual(BUS_KANAELE, ['bus/1', 'bus/2', 'bus/3', 'bus/4']);
+});
+
+test('A8b the bus strips: mb/an, lim/an, lim/decke, lim/abklingen, 3 x 7 band knobs, both crossovers, the Utility block; no gate; nothing sent', () => {
+  assert.equal(BUS_KANAELE.length, 4, 'four strips to loop over (no vacuous green)');
+  const gesendet = [];
+  const echt = globalThis.fetch;
+  globalThis.fetch = async (...a) => { gesendet.push(a); return { status: 200, json: async () => ({}) }; };
+  try {
+    for (const k of BUS_KANAELE) {
+      const html = busStreifenHtml(k, k.toUpperCase());
+      const pfade = BUS_PFADE(html);
+      for (const p of pfade) { assert.ok(p.startsWith(`${k}/`), p); assert.ok(BUS_ZEILEN.concat(KOPF_ZEILEN).some((z) => z.suffix === p.slice(k.length + 1)), `${p} is a header row`); }
+      for (const suffix of ['mb/an', 'lim/an', 'lim/decke', 'lim/abklingen', 'mb/grenze_tief', 'mb/grenze_hoch']) assert.ok(pfade.includes(`${k}/${suffix}`), `${k} ${suffix}`);
+      for (const b of ['tief', 'mitte', 'hoch']) for (const f of ['schwelle', 'ratio', 'attack', 'release', 'knie', 'makeup', 'umgehen']) assert.ok(pfade.includes(`${k}/mb/${b}/${f}`), `${k} ${b} ${f}`);
+      for (const f of ['balance', 'breite', 'bassmono', 'phase_l', 'phase_r', 'tausch', 'dc']) assert.ok(pfade.includes(`${k}/util/${f}`), `${k} util ${f}`);
+      assert.equal(pfade.length, 6 + 21 + 7 + 0, `${k}: 6 main + 21 band + 7 utility controls`);
+      assert.ok(!pfade.some((p) => p.includes('/gate/')), 'no gate on buses (D2)');
+      assert.match(html, /data-baender="bus\/\d"[^>]*hidden/, 'the per-band block is collapsed by default');
+    }
+  } finally { globalThis.fetch = echt; }
+  assert.deepEqual(gesendet, []);
+  assert.ok(!busStreifenHtml('bus/1', '<img onerror=x>').includes('<img'), 'a hostile name is escaped');
+});
+
+test('A8b the limiter controls are built disabled with the reason (the /lage field is absent until the kern delivers it)', () => {
+  const html = busStreifenHtml('bus/2', 'BUS 2');
+  for (const f of ['lim/an', 'lim/decke', 'lim/abklingen']) assert.match(html, new RegExp(`(data-werk-pfad="bus/2/${f}"[^>]*disabled|disabled[^>]*data-werk-pfad="bus/2/${f}")`), f);
+  assert.ok(html.includes(LIMITER_GRUND));
+  assert.equal(LIMITER_GRUND, 'limiter not built (kanal_limiter_vorhalt_ms = 0)');
+  assert.ok(!/data-werk-pfad="bus\/2\/mb\/an"[^>]*disabled/.test(html), 'negative control: the multiband switch is not disabled');
+});
+
+test('A8b limiterZustand: only gebaut === true enables the limiter; absent, false, wrong types and garbage keep it disabled with the reason', () => {
+  assert.deepEqual(limiterZustand({ kanal_limiter: { gebaut: true, latenz_samples: 96 } }), { gebaut: true, latenzSamples: 96, grund: '' });
+  assert.deepEqual(limiterZustand({ kanal_limiter: { gebaut: true } }), { gebaut: true, latenzSamples: null, grund: '' });
+  for (const lage of [undefined, null, {}, { kanal_limiter: null }, { kanal_limiter: {} }, { kanal_limiter: { gebaut: false, latenz_samples: 0 } },
+    { kanal_limiter: { gebaut: 1 } }, { kanal_limiter: { gebaut: 'true' } }, { kanal_limiter: true }]) {
+    assert.deepEqual(limiterZustand(lage), { gebaut: false, latenzSamples: null, grund: LIMITER_GRUND }, JSON.stringify(lage));
+  }
+  assert.equal(limiterZustand({ kanal_limiter: { gebaut: true, latenz_samples: -3 } }).latenzSamples, null, 'a nonsense latency is not shown');
+});
+
+test('A8b meters: reductions >= 0, negative clamped to 0, non-finite ignored, other channels ignored, a reading expires after 500 ms (fake clock)', () => {
+  assert.equal(MIX_FRIST_MS, 500);
+  const stand = {};
+  assert.equal(mixAufnehmen(stand, { kanal: 'bus/1', gate_db: 0, mb_tief_db: 3.5, mb_mitte_db: -2, mb_hoch_db: Number.NaN, lim_db: 6 }, 1000), true);
+  assert.equal(mixLesung(stand, 'bus/1', 'mb_tief_db', 1000), 3.5);
+  assert.equal(mixLesung(stand, 'bus/1', 'mb_mitte_db', 1000), 0, 'negative clamped to 0');
+  assert.equal(mixLesung(stand, 'bus/1', 'mb_hoch_db', 1000), null, 'NaN ignored: no reading');
+  assert.equal(mixLesung(stand, 'bus/1', 'lim_db', 1000), 6);
+  assert.equal(mixLesung(stand, 'bus/1', 'mb_tief_db', 1499.9), 3.5, 'still fresh just under 500 ms');
+  assert.equal(mixLesung(stand, 'bus/1', 'mb_tief_db', 1500), null, 'no event for 500 ms: no reading');
+  assert.equal(mixLesung(stand, 'bus/2', 'mb_tief_db', 1000), null, 'a bus that never reported has no reading');
+  for (const f of [{ kanal: 'deck/1', mb_tief_db: 4 }, { kanal: 'bus/9', mb_tief_db: 4 }, { kanal: 'bus/1/x', mb_tief_db: 4 }, { mb_tief_db: 4 }]) assert.equal(mixAufnehmen({}, f, 0), false, JSON.stringify(f));
+  assert.equal(mixAufnehmen(stand, { kanal: 'bus/1', mb_tief_db: Infinity, mb_mitte_db: '7' }, 1100), true);
+  assert.equal(mixLesung(stand, 'bus/1', 'mb_tief_db', 1100), 3.5, 'Infinity is ignored and does not refresh the old reading');
+  assert.equal(mixLesung(stand, 'bus/1', 'mb_mitte_db', 1100), 0, 'a string is not a number: the old reading stays');
+});
+
+test('A6 gate meters: only the 13 live source channels count, reductions >= 0, non-finite ignored, 500 ms expiry, the next expiry is reported', () => {
+  assert.equal(GATE_KANAELE.length, 13);
+  assert.ok(!GATE_KANAELE.includes('erz/8') && !GATE_KANAELE.some((k) => k.startsWith('bus/')), 'no gate on erz/8 or the buses (D2)');
+  const stand = {};
+  assert.equal(gateAufnehmen(stand, { kanal: 'erz/4', gate_db: 12.5 }, 1000), true);
+  assert.equal(mixLesung(stand, 'erz/4', 'gate_db', 1000), 12.5);
+  assert.equal(gateAufnehmen(stand, { kanal: 'erz/4', gate_db: -3 }, 1100), true);
+  assert.equal(mixLesung(stand, 'erz/4', 'gate_db', 1100), 0, 'negative clamped to 0');
+  assert.equal(gateAufnehmen(stand, { kanal: 'erz/4', gate_db: Number.NaN }, 1200), true);
+  assert.equal(mixLesung(stand, 'erz/4', 'gate_db', 1200), 0, 'NaN ignored: the old reading stays');
+  assert.equal(mixLesung(stand, 'erz/4', 'gate_db', 1600), null, '500 ms after the last accepted reading (1100): none');
+  for (const f of [{ kanal: 'bus/1', gate_db: 4 }, { kanal: 'erz/8', gate_db: 4 }, { kanal: 'deck/5', gate_db: 4 }, { kanal: 'erz/1/x', gate_db: 4 }, { gate_db: 4 }])
+    assert.equal(gateAufnehmen({}, f, 0), false, JSON.stringify(f));
+  const st2 = {};
+  gateAufnehmen(st2, { kanal: 'pad/1', gate_db: 5 }, 2000);
+  assert.equal(mixAblaufIn(st2, 2100, GATE_KANAELE, ['gate_db']), 400, 'the page schedules its reset 400 ms later');
+  assert.equal(mixAblaufIn(st2, 2100), null, 'the bus defaults do not see a source channel (A8b behaviour unchanged)');
+});
+
+test('A6 the page reads /zustand/mix with the field names of the contract (osc.json), in its order', () => {
+  const osc = JSON.parse(readFileSync(new URL('../../vertrag/osc.json', import.meta.url), 'utf8'));
+  const a = osc.adressen.find((x) => x.adresse === '/zustand/mix');
+  assert.ok(a, '/zustand/mix is in the contract');
+  assert.equal(a.typen, ',sfffff');
+  assert.deepEqual(a.felder.map((x) => x.name), ['kanal', 'gate_db', ...MIX_FELDER]);
+});
+
+test('A8b werkText for the new fields', () => {
+  assert.equal(werkText('mb/grenze_tief', 200), '200 Hz');
+  assert.equal(werkText('mb/tief/schwelle', -12), '-12 dB');
+  assert.equal(werkText('mb/mitte/ratio', 4), '4.0:1');
+  assert.equal(werkText('mb/hoch/makeup', 3), '+3.0 dB');
+  assert.equal(werkText('mb/hoch/attack', 2.5), '2.5 ms');
+  assert.equal(werkText('lim/decke', -0.3), '-0.3 dB');
+  assert.equal(werkText('lim/abklingen', 80), '80 ms');
+});
+
+test('A8b the built controls carry exactly the ranges of the header rows (no narrower, no wider), switches are 0/1 buttons', () => {
+  for (const k of BUS_KANAELE) {
+    const html = busStreifenHtml(k, k);
+    const eingaben = [...html.matchAll(/<input type="range" data-werk-pfad="([^"]+)" min="([^"]+)" max="([^"]+)" step="([^"]+)" value="([^"]+)"/g)];
+    const knoepfe = [...html.matchAll(/<button[^>]*data-werk-pfad="([^"]+)"/g)].map((m) => m[1]);
+    assert.equal(eingaben.length, 2 + 18 + 2 + 3 + 0, `${k}: crossovers 2, band knobs 18, limiter 2, utility sliders 3`);
+    for (const [, pfad, min, max, schritt, wert] of eingaben) {
+      const z = KOPF_ZEILEN.find((x) => x.suffix === pfad.slice(k.length + 1));
+      assert.ok(z, pfad);
+      assert.deepEqual([Number(min), Number(max), Number(wert)], [z.min, z.max, z.vorgabe], pfad);
+      assert.ok(!z.ganz && Number(schritt) > 0, `${pfad}: a continuous row with a step`);
+    }
+    for (const pfad of knoepfe) assert.equal(KOPF_ZEILEN.find((x) => x.suffix === pfad.slice(k.length + 1)).kurve, 'schalter', `${pfad} is a switch row`);
+    assert.equal(knoepfe.length, 1 + 3 + 1 + 4, `${k}: mb/an, 3 band bypass, lim/an, 4 utility switches`);
+  }
 });

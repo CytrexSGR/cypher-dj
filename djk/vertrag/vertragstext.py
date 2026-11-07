@@ -29,6 +29,17 @@ class Definition:
     felder: list[str] = field(default_factory=list)
 
 
+class AnkerFehlt(ValueError):
+    """An anchor the checks read the contract text by is not there (a renamed heading, a language the anchor does not know)."""
+
+
+def _finde(iterierbar, was: str):
+    """First element, or AnkerFehlt naming what was looked for (instead of a bare StopIteration)."""
+    for x in iterierbar:
+        return x
+    raise AnkerFehlt(f"Anker nicht gefunden: {was}")
+
+
 def lies(pfad: Path = VERTRAG) -> str:
     return pfad.read_text(encoding="utf-8")
 
@@ -36,7 +47,7 @@ def lies(pfad: Path = VERTRAG) -> str:
 def abschnitt(text: str, nummer: int) -> tuple[str, int]:
     """Text von '## <nummer>.' bis zur nächsten '## '-Überschrift, dazu die Startzeile (1-basiert)."""
     zeilen = text.split("\n")
-    start = next(i for i, z in enumerate(zeilen) if z.startswith(f"## {nummer}. "))
+    start = _finde((i for i, z in enumerate(zeilen) if z.startswith(f"## {nummer}. ")), f"Überschrift '## {nummer}. '")
     ende = next((i for i in range(start + 1, len(zeilen)) if zeilen[i].startswith("## ")), len(zeilen))
     return "\n".join(zeilen[start:ende]), start + 1
 
@@ -45,8 +56,10 @@ def abschnitt_19_0(text: str) -> tuple[str, int]:
     """§19.0 ist der Listenpunkt '0. **Werkstück V0' bis vor '1. **Kern-Attrappe**'."""
     teil, start = abschnitt(text, 19)
     zeilen = teil.split("\n")
-    a = next(i for i, z in enumerate(zeilen) if z.startswith("0. **Werkstück V0"))
-    e = next(i for i, z in enumerate(zeilen) if z.startswith("1. **Kern-Attrappe**"))
+    # Language independent: the list items "0. **" and "1. **" of section 19 (German "Werkstück V0" / "Kern-Attrappe",
+    # English "Work item V0" / "Core mock").
+    a = _finde((i for i, z in enumerate(zeilen) if z.startswith("0. **")), "§19 Listenpunkt '0. **'")
+    e = _finde((i for i, z in enumerate(zeilen) if i > a and z.startswith("1. **")), "§19 Listenpunkt '1. **'")
     return "\n".join(zeilen[a:e]), start + a
 
 
@@ -113,7 +126,7 @@ def definitionen(text: str, name: str, startzeile: int) -> list[Definition]:
             elif rest_zeile.lstrip("*").startswith(":"):
                 koerper = danach.split(":", 1)[1]
                 koerper = koerper.split("\n\n")[0].replace("\n", " ")
-                wie = re.match(r"\*?\*?\s*dieselben Felder wie `(/[a-z0-9_/]+)`", koerper)
+                wie = re.match(r"\*?\*?\s*(?:dieselben Felder wie|[Tt]he same fields as|[Ss]ame fields as) `(/[a-z0-9_/]+)`", koerper)
                 d.felder = ["=" + wie.group(1)] if wie else _namen(_bis_satzende(koerper))
             elif rest_zeile.strip() == "":
                 d.felder = _felder_aus_feldtabelle(zeilen, i)
@@ -144,7 +157,7 @@ def _felder_aus_feldtabelle(zeilen: list[str], i: int) -> list[str]:
     j = i + 1
     while j < len(zeilen) and zeilen[j].strip() == "":
         j += 1
-    if j >= len(zeilen) or not zeilen[j].startswith("| Nr | Feld"):
+    if j >= len(zeilen) or not zeilen[j].startswith(("| Nr | Feld", "| No. | Field")):
         return []
     namen = []
     for z in zeilen[j + 2:]:
@@ -173,7 +186,8 @@ def osc_definitionen(text: str) -> list[Definition]:
 
 def politik_codes(text: str) -> dict[str, str]:
     teil, _ = abschnitt(text, 4)
-    absatz = next(a for a in teil.split("\n\n") if a.startswith("**Politik-Codes**"))
+    absatz = _finde((a for a in teil.split("\n\n") if a.startswith(("**Politik-Codes**", "**Policy codes**"))),
+                    "§4 Absatz '**Politik-Codes**' / '**Policy codes**'")
     return {n: w for n, w in re.findall(r"(\d) = `([a-z_]+)`", absatz.replace("\n", " "))}
 
 
@@ -194,20 +208,22 @@ def gruende(text: str) -> list[str]:
 
 def quellen(text: str) -> list[str]:
     teil, _ = abschnitt(text, 1)
-    zeile = next(z for z in teil.split("\n") if z.startswith("| `quelle` |"))
+    zeile = _finde((z for z in teil.split("\n") if z.startswith("| `quelle` |")), "§1 Tabellenzeile '| `quelle` |'")
     return _namen(_tabellenspalten(zeile)[1])
 
 
 def tasten(text: str) -> list[str]:
     teil, _ = abschnitt(text, 5)
     zeilen = teil.split("\n")
-    i = next(k for k, z in enumerate(zeilen) if z.startswith("- `/e/taste`:"))
+    i = _finde((k for k, z in enumerate(zeilen) if z.startswith("- `/e/taste`:")), "§5 Zeile '- `/e/taste`:'")
     stueck = [zeilen[i]]
     for z in zeilen[i + 1:]:
         if z.startswith("- ") or z.strip() == "" or z.startswith("#"):
             break
         stueck.append(z)
-    namen_teil = " ".join(stueck).split("Namen:", 1)[1]
+    gesamt = " ".join(stueck)
+    marke = _finde((m for m in ("Namen:", "Names:") if m in gesamt), "§5 '/e/taste': 'Namen:' / 'Names:'")
+    namen_teil = gesamt.split(marke, 1)[1]
     return _namen(ohne_klammern(namen_teil))
 
 

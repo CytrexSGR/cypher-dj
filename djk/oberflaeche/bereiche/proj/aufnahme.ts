@@ -86,6 +86,7 @@ export class Aufnahme {
     let behalten = false;
     this.abbruch = null;
     try {
+      await this.zugang.beendeVorhoeren();   // 1.14 (R3): a recording start ends any audition first; the core must play the main lane
       await this.zugang.tempoAnMaster();
       // Scharf-Stand im Kern angleichen: einmalig alle Spuren bereinigen (der Kern kann von früher armiert sein), dann nur die Unterschiede
       const nrScharf = new Set(scharf.map((s) => s.nr));

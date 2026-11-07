@@ -178,3 +178,20 @@ test('Routentabelle: keine POST- oder *-Route ist offen', async (t) => {
   assert.ok(liste.filter((e) => e.methode === 'POST').length >= 19, 'Kontrolle: die POST-Routen sind in der Liste');
   assert.deepEqual(liste.filter((e) => (e.methode === 'POST' || e.methode === '*') && e.schutz === 'offen'), []);
 });
+
+// Package 1.16 rest T1.4: through the real server path the header x-djk-quelle reaches ctx.quelle() of the presets Bereich and the
+// author mark of the written file
+test('presets on the real server: x-djk-quelle cypher writes autor cypher, without the header no mark', async (t) => {
+  const fs = await import('node:fs'), os = await import('node:os'), path = await import('node:path');
+  const nutzer = fs.mkdtempSync(path.join(os.tmpdir(), 'presets-kontext-'));
+  t.after(() => fs.rmSync(nutzer, { recursive: true, force: true }));
+  const { url } = await stapel(t, { presets: { nutzer } });
+  const B = { art: 'compressor', unterart: 'peak', charakter: ['clean'], genre: [], einsatz: ['mixdown'], energie: 2, text: 'Context test.' };
+  const sende = (name, kopf = {}) => fetch(`${url}/presets`, { method: 'POST', headers: { 'content-type': 'application/json', ...kopf },
+    body: JSON.stringify({ name, geraet: 'komp', werte: { thresh: -10 }, beschreibung: B }) });
+  assert.equal((await sende('Von Cypher', { 'x-djk-quelle': 'cypher' })).status, 201);
+  assert.equal((await sende('Von Andreas')).status, 201);
+  const lies = (slug) => JSON.parse(fs.readFileSync(path.join(nutzer, 'komp', `${slug}.preset.json`), 'utf8'));
+  assert.equal(lies('von-cypher').autor, 'cypher');
+  assert.equal('autor' in lies('von-andreas'), false);
+});

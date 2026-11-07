@@ -1,0 +1,36 @@
+{
+ "schema": 1,
+ "name": "Warm Pad",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "pad",
+ "werte": {
+  "knob1": 0.5,
+  "knob2": 0.8,
+  "knob3": 0.9
+ },
+ "beschreibung": {
+  "art": "pad",
+  "unterart": "analog",
+  "charakter": [
+   "warm",
+   "wide",
+   "evolving"
+  ],
+  "genre": [
+   "ambient",
+   "downtempo",
+   "deep_house"
+  ],
+  "einsatz": [
+   "intro",
+   "breakdown"
+  ],
+  "energie": 1,
+  "text": "Slow-opening detuned pad that fills the stereo field under a breakdown."
+ },
+ "tags": [],
+ "notiz": "",
+ "angelegt": "2026-11-02T00:00:00.000Z",
+ "geaendert": "2026-11-02T00:00:00.000Z"
+}

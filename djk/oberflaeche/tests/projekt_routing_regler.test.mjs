@@ -17,7 +17,7 @@ const aufbau = () => {
 
 test('alleRegler: alle 4·32 Spur-Regler, alle 4·8 Gruppen-Regler (freie Slots mit Vorgabe) und pm/fader', () => {
   const p = aufbau(), r = alleRegler(p);
-  assert.equal(r.length, 4 * MAX_SPUREN + 4 * MAX_GRUPPEN + 1 + 204, 'slice 3: + 160 sends and 4 · 11 return controls');
+  assert.equal(r.length, 4 * MAX_SPUREN + 4 * MAX_GRUPPEN + 1 + 204 + 245 + 48, 'slice 3: + 160 sends and 4 · 11 return controls; slice 4a/4b: + 245 insert rows (12 · 10 komp, 2 · 59 eq, 4 saett, 3 lim); slice 4c: + 48 rack rows');
   const wert = (pfad) => r.find((x) => x.pfad === pfad)?.wert;
   assert.deepEqual([wert('grp/1/fader'), wert('grp/1/pan'), wert('grp/1/mute'), wert('grp/1/solo')], [-6, 0.5, 0, 1]);
   assert.deepEqual([wert('grp/2/fader'), wert('grp/8/solo')], [0, 0], 'freie Slots stehen auf der Vorgabe');
@@ -78,9 +78,9 @@ const mitReturns = () => {
   return fuehreAus(p, { befehl: 'return_aendern', return_id: 'r2', fader_db: -4, mute: true }).projekt;
 };
 
-test('slice 3 alleRegler: 161 old + 204 new = 365 paths (160 sends, 4 · 11 return controls), free slots with the defaults, no duplicates', () => {
+test('slice 3 alleRegler: 161 old + 204 new + 245 insert rows + 48 rack rows = 658 paths (160 sends, 4 · 11 return controls), free slots with the defaults, no duplicates', () => {
   const p = mitReturns(), r = alleRegler(p);
-  assert.equal(r.length, 161 + 204);
+  assert.equal(r.length, 161 + 204 + 245 + 48);
   assert.equal(alleSendRegler(p).length, 4 * (MAX_SPUREN + MAX_GRUPPEN));
   assert.equal(alleRetRegler(p).length, 4 * 11);
   assert.equal(new Set(r.map((x) => x.pfad)).size, r.length);
@@ -88,7 +88,7 @@ test('slice 3 alleRegler: 161 old + 204 new = 365 paths (160 sends, 4 · 11 retu
   assert.deepEqual([wert('spur/1/send/1'), wert('spur/2/send/2'), wert('grp/1/send/2'), wert('spur/1/send/2'), wert('spur/32/send/4')], [-6, -12, -3, -200, -200]);
   assert.deepEqual([wert('ret/1/fader'), wert('ret/2/fader'), wert('ret/2/mute'), wert('ret/2/hall/decay'), wert('ret/1/hall/decay')], [0, -4, 1, 0.8, 0.5252]);
   assert.deepEqual([wert('ret/3/fader'), wert('ret/3/hall/an'), wert('ret/3/hall/fahne'), wert('ret/4/hall/highcut')], [0, 1, 0.66667, 0.8039], 'free slots: the stellwerk defaults');
-  assert.equal(alleRegler(neuesProjekt('N')).length, 365, 'a project without returns still sets all of them (the defaults)');
+  assert.equal(alleRegler(neuesProjekt('N')).length, 365 + 245 + 48, 'a project without returns still sets all of them (the defaults)');
 });
 
 test('slice 3 hand path: send and return controls become commands, the label names track and return; same value and foreign paths give null', () => {

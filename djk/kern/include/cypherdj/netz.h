@@ -27,6 +27,7 @@
 namespace cdj {
 
 constexpr int MAX_ABONNENTEN = 8;
+constexpr int64_t SPEKTRUM_ABSTAND_NS = 40'000'000LL;  // 1.15 A7b, §5.5e: 25 Hz
 constexpr int64_t ZUSTAND_ABSTAND_NS = 50'000'000LL;  // §5.4: 20 Hz
 constexpr const char* KERN_VERSION = "0.5.0-djk31";
 
@@ -37,6 +38,38 @@ struct Abonnent {
   int64_t zuletzt_ns;        // CLOCK_MONOTONIC des letzten /k/hallo
   int32_t protokoll;         // Scheibe 18: für den Neustart-Zustand (§6.3)
   int32_t hallo_generation;  // Scheibe 18: Generation seines letzten /k/hallo, -1: in dieser noch keins
+};
+
+// 1.15 A7b (D11, D12): the analysis side of the spectrum path, on the network thread. tick(jetzt_ns) is called by the 2 ms loop; every 40 ms it
+// follows the source change of the Mixer (generation read before and after analysiere(), cut with verwerfe_bis()), calls analysiere() and returns
+// the frame to send (0 or 1: the levels after the frames the ring held, numbered since the last cut). Frames are tagged with the source read
+// together with the generation they belong to, never with the current selection. Testable without a socket.
+struct SpektrumRahmen {
+  std::string kanal;    // "deck/1" ... "bus/4" or "master"
+  int32_t rahmen = 0;   // frames computed since the last source change
+  std::string pegel;    // 29 integers in 0.1 dB, comma separated
+};
+class SpektrumSender {
+ public:
+  explicit SpektrumSender(const Mixer& m) : mixer_(m) {}
+  std::vector<SpektrumRahmen> tick(int64_t jetzt_ns);
+  // The text of the contract: round(10 x db) per band, floor -2000 (silence), comma separated, no spaces.
+  static std::string kodiere(const float* db, int n);
+  // Name of a selector value: 1..18 the mixer channel, 19 "master", else "".
+  static const char* quelle_name(int sel);
+  // Test seam (null in operation): called with stage 0 right after the first generation read (before source and cut are loaded), stage 1 after the generation was read (before analysiere), 2 after the second read (before tagging).
+  using Haken = void (*)(void* ctx, int stufe);
+  void setze_haken(Haken h, void* ctx) { haken_ = h; haken_ctx_ = ctx; }
+  uint32_t bediente_generation() const { return bedient_; }
+
+ private:
+  const Mixer& mixer_;
+  uint32_t bedient_ = 0;     // generation whose cut was applied
+  int quelle_ = 0;           // the source belonging to bedient_
+  bool hat_ticks_ = false;
+  int64_t letzter_ns_ = 0;
+  Haken haken_ = nullptr;
+  void* haken_ctx_ = nullptr;
 };
 
 class Netz {
@@ -69,12 +102,17 @@ class Netz {
   // D1 K1 (Spec 2.1): Ringe zum Arrangement-Lade-Faden; vor dem Netz-Faden. nullptr: /k/arr/laden mit datei_fehlt.
   void verbinde_arr(ArrLaderRinge* r) { arr_ringe_ = r; }
   void verbinde_rec(AufnahmeFaden* f) { rec_faden_ = f; }   // 1.8: der Aufnahme-Faden (main.cpp), Besitz bleibt dort
+  void verbinde_spektrum(SpektrumSender* s) { spektrum_ = s; }   // 1.15 A7b: /zustand/spektrum from the 2 ms loop; the owner stays in main.cpp
+  void spektrum_senden(int64_t jetzt_ns);                        // 1.15 A7b: one tick of the sender, every frame as /zustand/spektrum
   // Paket K3 (Spec 2.9, 6.14): Arbeitsordner der Instanz, derselbe wie der des Arrangement-Lade-Fadens (der schreibt dort
   // freeze-<spur>-<kennung>.f32). Vor dem Netz-Faden. Leer: /k/arr/freeze mit datei_fehlt abgelehnt.
   void setze_arr_ordner(std::string ordner) { arr_ordner_ = std::move(ordner); }
   // Keylock Slice 4: Einstellungen des Render-Fadens der REC-Umrechnung (Test-Zugang: Render-Funktion, Priorität). Vor dem
   // ersten Auftrag; der Faden entsteht erst mit ihm.
   void setze_keylock(const KeylockOpt& o) { kl_opt_ = o; }
+  // 1.15 A5c: the channel limiter state for /e/kanal_limiter (first /k/hallo of a generation). A plain setter, called once from main.cpp right
+  // after Kern::setze_kanal_limiter and before the net thread starts: the values are fixed after start, so no atomic is needed.
+  void setze_kanal_limiter(bool gebaut, int latenz_samples) { kl_lim_gebaut_ = gebaut; kl_lim_latenz_ = latenz_samples; }
   // Keylock Slice 3b (F6): Shutdown. Bricht einen laufenden Render ab und startet keinen weiteren (auch nicht aus
   // ereignisse_senden() nach dem Stopp des Netz-Fadens). laufen() ruft es am Ende selbst; Tests rufen es direkt.
   void keylock_beenden();
@@ -145,6 +183,7 @@ class Netz {
   void rec_alt_frei(RecSpur* p);
   void rec_melden(const TakeMeldung& m);
   AufnahmeFaden* rec_faden_ = nullptr;
+  SpektrumSender* spektrum_ = nullptr;   // 1.15 A7b
   // Paket K3 (netz_arr_freeze.cpp, Spec 6.29): /k/arr/freeze prüfen und als Auftrag zum Lade-Faden reihen; dessen
   // Ergebnis als Befehl ARR_FREEZE in den Kern; Ereignis ARR_FREEZE zurück an den Lade-Faden; seine Meldung als /e/freeze.
   // Der Netz-Faden legt keinen Puffer an und schreibt keine Datei.
@@ -170,6 +209,8 @@ class Netz {
   std::map<std::string, std::pair<float, std::string>> regler_stand_;
   struct LoopStand { bool da = false; int32_t status = 0, beats = 0, fx_art = 0; std::string name; double fx_beats = 0; float fx_wet = 0; };
   LoopStand loop_stand_[3];
+  bool kl_lim_gebaut_ = false;     // 1.15 A5c: set once before the net thread runs
+  int kl_lim_latenz_ = 0;
   bool kl_knopf_bekannt_ = false;  // mindestens eine /uhr gesehen (sonst bekommt ein neuer Abonnent nichts)
   int sock_ = -1;
   int port_ = 0;

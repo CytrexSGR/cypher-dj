@@ -18,6 +18,10 @@ class Isolator {
 public:
     explicit Isolator(double fs = kAbtastrate, double grenze_tief_hz = 246.0, double grenze_hoch_hz = 2484.0);
     void leeren();
+    // All filter states exactly zero: zero input then gives exactly zero output and leaves the states as they are.
+    bool leer() const;
+    // Filter states below `schwelle` in magnitude become exactly zero (see Kanalzug).
+    void abschneiden(double schwelle);
     // in → out, 1 ≤ n ≤ kMaxFrames; in und out dürfen gleich sein.
     // g_*: linearer Band-Gain je Sample (EQ mal (1 − Kill)).
     void verarbeite(const float* in_l, const float* in_r, float* out_l, float* out_r, int n,

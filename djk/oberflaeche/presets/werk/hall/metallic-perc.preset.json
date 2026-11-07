@@ -1,0 +1,51 @@
+{
+ "schema": 1,
+ "name": "Metallic Perc",
+ "geraet_typ": "effekt",
+ "geraet": "hall",
+ "werte": {
+  "mix": 0.3,
+  "early": 0.7,
+  "tail": 0,
+  "pre": 10,
+  "size": 30,
+  "decay": 1,
+  "lowx": 0.9,
+  "highx": 1.8,
+  "lowcut": 400,
+  "highcut": 14000,
+  "diff": 0.5,
+  "width": 1,
+  "duck": 0,
+  "freeze": false,
+  "kill": false,
+  "fft": "1024"
+ },
+ "beschreibung": {
+  "art": "reverb",
+  "unterart": "room",
+  "charakter": [
+   "metallic",
+   "bright",
+   "tight"
+  ],
+  "genre": [
+   "idm",
+   "techno",
+   "breaks"
+  ],
+  "einsatz": [
+   "mixdown",
+   "build"
+  ],
+  "energie": 3,
+  "text": "A short frame and a long high decay give percussion a ringing, metallic space."
+ },
+ "tags": [
+  "percussion",
+  "metallic"
+ ],
+ "notiz": "HF damping factor purpose from Snoman p.233; the values are practice.",
+ "angelegt": "2026-11-02T00:00:00.000Z",
+ "geaendert": "2026-11-02T00:00:00.000Z"
+}

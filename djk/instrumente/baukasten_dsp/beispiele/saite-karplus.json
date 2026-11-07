@@ -1,0 +1,40 @@
+{
+  "format": "baukasten/2",
+  "name": "saite-karplus",
+  "stimmen": 8,
+  "regler_namen": {"1": "Decay", "2": "Damping", "3": "Brightness", "4": "Pick position", "5": "Release"},
+  "knoten": [
+    {"id": "note", "art": "note"},
+    {"id": "k_decay", "art": "regler", "nr": 1, "min": 0.2, "max": 6, "log": 1},
+    {"id": "k_damp", "art": "regler", "nr": 2, "min": 0, "max": 1},
+    {"id": "k_hell", "art": "regler", "nr": 3, "min": 0, "max": 1},
+    {"id": "k_lage", "art": "regler", "nr": 4, "min": 0.02, "max": 0.5},
+    {"id": "k_rel", "art": "regler", "nr": 5, "min": 0.05, "max": 2, "log": 1},
+    {"id": "saite", "art": "saite", "anreger": 0, "koerper": 0},
+    {"id": "halt", "art": "mul"},
+    {"id": "los_g", "art": "mul"},
+    {"id": "los_n", "art": "mul", "b": -1},
+    {"id": "ausklang", "art": "add"},
+    {"id": "pegel", "art": "mul", "b": 0.5},
+    {"id": "aus", "art": "ausgang"}
+  ],
+  "kanten": [
+    {"von": "note.hz", "nach": "saite.hz"},
+    {"von": "note.trig", "nach": "saite.trig"},
+    {"von": "note.vel", "nach": "saite.vel"},
+    {"von": "note.gate", "nach": "halt.a"},
+    {"von": "k_decay.aus", "nach": "halt.b"},
+    {"von": "k_damp.aus", "nach": "saite.daempfung"},
+    {"von": "k_hell.aus", "nach": "saite.hell"},
+    {"von": "k_lage.aus", "nach": "saite.lage"},
+    {"von": "note.gate", "nach": "los_g.a"},
+    {"von": "k_rel.aus", "nach": "los_g.b"},
+    {"von": "k_rel.aus", "nach": "ausklang.c"},
+    {"von": "los_g.aus", "nach": "los_n.a"},
+    {"von": "halt.aus", "nach": "ausklang.a"},
+    {"von": "los_n.aus", "nach": "ausklang.b"},
+    {"von": "ausklang.aus", "nach": "saite.ausklang"},
+    {"von": "saite.aus", "nach": "pegel.a"},
+    {"von": "pegel.aus", "nach": "aus.x"}
+  ]
+}

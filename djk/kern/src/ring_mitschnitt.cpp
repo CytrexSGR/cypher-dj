@@ -36,10 +36,7 @@ bool RingLeser::lies(RingMitschnitt& m) {
     m.grenze = m.s0;
     return true;
   }
-  if (smw != smw_) {
-    m.fehler = "sprung";
-    return false;
-  }
+  const bool sprung = smw != smw_;
   if (ueberholt(w, w_)) {
     m.fehler = "ueberlauf";
     return false;
@@ -55,6 +52,10 @@ bool RingLeser::lies(RingMitschnitt& m) {
     return false;
   }
   w_ = w;
+  if (sprung) {   // the frames up to w are in m (w runs on over a new time axis); the caller starts a new reader at w
+    m.fehler = "sprung";
+    return false;
+  }
   return true;
 }
 

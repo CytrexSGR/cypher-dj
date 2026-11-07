@@ -33,7 +33,7 @@ int main() {
     if (props.contains(n)) PRUEF(props[n]["x-typ"].get<std::string>() == cdj::KERN_SCHLUESSEL[i].typ);
   }
   PRUEF(im_schema == im_leser);
-  PRUEF(im_leser.size() == 22);  // Keylock Task 3: keylock dazu; Bungee S2: keylock_maschine; D1 K1: arr_ordner, arr_budget_mib; 1.13 Slice 2: warp_faeden; Baukasten S3b: graph_faeden
+  PRUEF(im_leser.size() == 29);  // 1.15 A1b: kanal_limiter_vorhalt_ms, kanal_limiter_echtspitze; Keylock Task 3: keylock dazu; Bungee S2: keylock_maschine; D1 K1: arr_ordner, arr_budget_mib; 1.13 Slice 2: warp_faeden; Baukasten S3b: graph_faeden; mehrkern Task 5: hall_faeden, hall_cpus; voice channel: stimme_eingang, stimme_duck_db, stimme_pegel_db
 
   // Jede Vorgabe aus dem Schema als TOML-Zeile: der Leser nimmt sie an (Negativ-Kontrolle)
   std::ostringstream toml;

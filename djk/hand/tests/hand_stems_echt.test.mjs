@@ -18,6 +18,8 @@ const { baueKatalog } = await import(path.join(OB, 'katalog.mjs'));
 const { wav } = await import(path.join(OB, 'proj_kontext.mjs'));
 const { ruf, warte, CYPHER } = await import(path.join(OB, 'proj_stapel.mjs'));
 const SHA = 'e'.repeat(64);
+// stems run on the GPU only (werkstatt/stems.py, keine_gpu); without an NVIDIA device the real runs cannot finish
+const OHNE_GPU = !fs.existsSync('/dev/nvidia0') && 'no NVIDIA GPU: stems run on the GPU only';
 
 // vonAndreas: die Spur entsteht ohne x-djk-quelle (= andreas, transport.ts:36-38); sonst legt Cypher sie an (Riegel nur_andreas_spur, D15)
 async function aufbau(t, trenner, { vonAndreas = false } = {}) {
@@ -39,14 +41,14 @@ async function aufbau(t, trenner, { vonAndreas = false } = {}) {
 }
 const stems = async (c, args) => { const t0 = Date.now(); const r = await c.callTool({ name: 'proj_stems', arguments: args }); return { ms: Date.now() - t0, r, j: JSON.parse(r.content[0].text) }; };
 
-test('T9 echt: proj_stems → fertig mit vier Spuren', async (t) => {
+test('T9 echt: proj_stems → fertig mit sechs Spuren', { skip: OHNE_GPU }, async (t) => {
   const { c } = await aufbau(t, 'identitaet');
   const x = await stems(c, { clip_id: 'c1' });
   assert.ok(!x.r.isError, JSON.stringify(x.j));
-  assert.deepEqual([x.j.zustand, typeof x.j.auftrag_id, x.j.spuren?.length], ['fertig', 'number', 4]);
+  assert.deepEqual([x.j.zustand, typeof x.j.auftrag_id, x.j.spuren?.length], ['fertig', 'number', 6]);
 });
 
-test('T9 echt: Projektwechsel mitten im Lauf → unbekannt vor der Frist', async (t) => {
+test('T9 echt: Projektwechsel mitten im Lauf → unbekannt vor der Frist', { skip: OHNE_GPU }, async (t) => {
   const { c, url } = await aufbau(t, 'langsam');
   const p = stems(c, { clip_id: 'c1' });
   await warte(1200);

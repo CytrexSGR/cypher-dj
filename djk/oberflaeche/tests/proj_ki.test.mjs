@@ -48,6 +48,10 @@ test('Neustart des Kerns (Spec 2.12): letzte Wiedergabe neu laden, alle Spur-Reg
 test('Neustart ohne offenes Projekt tut nichts', async (t) => {
   const { s, k } = sitzung(t);
   s.ereignis('/k/willkommen', { generation: 1 });
+  await new Promise((r) => setTimeout(r, 30));
+  // 1.12 slice 3 (AK34, D6): the first /k/willkommen sends exactly the two release commands (lanes back, tracks disarmed); the restart then sends nothing else
+  assert.deepEqual(k.gesendet.map((x) => [x.adresse, x.felder.spur, x.felder.an]), [['/k/arr/auto', 0, 1], ['/k/arr/arm', 0, 0]]);
+  k.leere();
   s.ereignis('/e/neustart', { generation: 2, sample: 0n });
   await new Promise((r) => setTimeout(r, 30));
   assert.equal(k.gesendet.length, 0);

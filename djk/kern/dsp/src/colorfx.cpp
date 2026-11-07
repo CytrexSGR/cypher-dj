@@ -62,6 +62,13 @@ ColorFx::ColorFx(double fs) : fs_(fs) {
 }
 
 void ColorFx::leeren() {
+    leeren_intern();
+    seite_ = -1;   // B2: a reset restores a fresh state (renders after zuruecksetzen() are reproducible)
+    rng_[0] = 0x9E3779B9u;
+    rng_[1] = 0x7F4A7C15u;
+}
+
+void ColorFx::leeren_intern() {
     for (auto& st : f_)
         for (auto& s : st) s = Svf{};
     halt_[0] = halt_[1] = 0.0f;
@@ -78,6 +85,7 @@ void ColorFx::leeren() {
     }
     for (auto& c : ap_pos_) c[0] = c[1] = 0;
     space_gefuellt_ = 0;
+    fdn_g_gesetzt_ = false;
     fahne_ = 0;
     ruht_ = true;
 }
@@ -86,37 +94,54 @@ void ColorFx::setze(int art, float param, double samples_pro_beat) {
     const ColorArt neu = (art >= 0 && art <= kColorArtMax) ? static_cast<ColorArt>(art) : ColorArt::filter;
     if (neu != art_) {
         art_ = neu;
-        leeren();
+        leeren_intern();
     }
     p_ = std::isnan(param) ? kColorParamVorgabe : std::clamp(param, 0.0f, 1.0f);
     spb_ = samples_pro_beat > 0.0 ? samples_pro_beat : 0.5 * fs_ / 0.75;
 }
 
+bool ColorFx::ruhig(double k) const {
+    if (art_ == ColorArt::filter) return true;
+    return fahne_ <= 0 && !(std::fabs(k) > kTotzone) && ruht_;
+}
+
 void ColorFx::verarbeite(float* l, float* r, int n, const double* k) {
     if (art_ == ColorArt::filter) return;
-    bool aktiv = fahne_ > 0;
-    for (int i = 0; i < n && !aktiv; ++i) aktiv = std::fabs(k[i]) > kTotzone;
-    if (!aktiv) {   // bitgleich trocken; der nächste Einstieg beginnt mit leeren Zuständen
-        if (!ruht_) leeren();
-        return;
-    }
-    ruht_ = false;
-    switch (art_) {
-        case ColorArt::space: space(l, r, n, k); break;
-        case ColorArt::dub_echo: dub_echo(l, r, n, k); break;
-        case ColorArt::sweep: sweep(l, r, n, k); break;
-        case ColorArt::noise: noise(l, r, n, k); break;
-        case ColorArt::crush: crush(l, r, n, k); break;
-        case ColorArt::filter: break;
+    // Decided per sample, so that split calls are bit-identical (B1 of BERICHT-haertung.md): a sample with the knob
+    // in the dead zone (or k NaN) and no tail running is dry and bit-exact, the states are cleared once; each art
+    // processes an active run and stops at the first dry sample.
+    int i = 0;
+    while (i < n) {
+        if (fahne_ <= 0 && !(std::fabs(k[i]) > kTotzone)) {
+            if (!ruht_) leeren_intern();
+            ++i;
+            continue;
+        }
+        ruht_ = false;
+        switch (art_) {
+            case ColorArt::space: i += space(l + i, r + i, n - i, k + i); break;
+            case ColorArt::dub_echo: i += dub_echo(l + i, r + i, n - i, k + i); break;
+            case ColorArt::sweep: i += sweep(l + i, r + i, n - i, k + i); break;
+            case ColorArt::noise: i += noise(l + i, r + i, n - i, k + i); break;
+            case ColorArt::crush: i += crush(l + i, r + i, n - i, k + i); break;
+            case ColorArt::filter: return;
+        }
     }
 }
 
 // SPACE: Hall. Links speist Mitten und Tiefen (Tiefpass 2,5 kHz), rechts Mitten und Höhen (Hochpass 350 Hz);
 // PARAMETER rechts = mehr Rückkopplung (T60 0,8 bis 4 s). Fahne läuft nach.
-void ColorFx::space(float* l, float* r, int n, const double* k) {
+int ColorFx::space(float* l, float* r, int n, const double* k) {
     const double t60 = 0.8 + 3.2 * p_;
-    double g[kLeitungen];
-    for (int i = 0; i < kLeitungen; ++i) g[i] = std::pow(10.0, -3.0 * fdn_len_[i] / (t60 * fs_));
+    double g_ziel[kLeitungen];
+    for (int i = 0; i < kLeitungen; ++i) g_ziel[i] = std::pow(10.0, -3.0 * fdn_len_[i] / (t60 * fs_));
+    if (!fdn_g_gesetzt_) {   // first sample after a clear: start on the target
+        for (int i = 0; i < kLeitungen; ++i) fdn_g_[i] = g_ziel[i];
+        fdn_g_gesetzt_ = true;
+    }
+    // A PARAMETER change glides (one pole, 50 ms) instead of stepping the feedback of every line (click, B3). With
+    // the gains on the target the update adds 0, so the steady sound is bit-identical to a fixed gain.
+    const double g_gleit = einpol(0.05, fs_);
     const double dkoef = einpol(1.0 / (2.0 * kPi * 6000.0), fs_);
     const Koef tp = koef(2500.0, 0.707, fs_), hp = koef(350.0, 0.707, fs_);
     const double wet = 0.7;
@@ -125,6 +150,10 @@ void ColorFx::space(float* l, float* r, int n, const double* k) {
         if (a > 0.0) {
             seite_ = k[i] < 0.0 ? -1 : 1;
             fahne_ = static_cast<int>(t60 * 1.2 * fs_);
+        } else if (fahne_ <= 0) {
+            return i;   // dry from here on
+        } else {
+            --fahne_;   // the tail counts down per sample, not per block
         }
         double ein[2];
         const float x[2] = {l[i], r[i]};
@@ -152,19 +181,20 @@ void ColorFx::space(float* l, float* r, int n, const double* k) {
         const double h[4] = {0.5 * (o[0] + o[1] + o[2] + o[3]), 0.5 * (o[0] - o[1] + o[2] - o[3]),
                              0.5 * (o[0] + o[1] - o[2] - o[3]), 0.5 * (o[0] - o[1] - o[2] + o[3])};
         for (int j = 0; j < kLeitungen; ++j) {
-            fdn_[j][static_cast<std::size_t>(fdn_pos_[j])] = static_cast<float>(g[j] * h[j] + ein[j & 1]);
+            fdn_g_[j] += (g_ziel[j] - fdn_g_[j]) * g_gleit;
+            fdn_[j][static_cast<std::size_t>(fdn_pos_[j])] = static_cast<float>(fdn_g_[j] * h[j] + ein[j & 1]);
             if (++fdn_pos_[j] >= fdn_len_[j]) fdn_pos_[j] = 0;
         }
         if (space_gefuellt_ < (1 << 30)) ++space_gefuellt_;
         l[i] = static_cast<float>(x[0] + wet * 0.5 * (o[0] + o[2]));
         r[i] = static_cast<float>(x[1] + wet * 0.5 * (o[1] + o[3]));
     }
-    fahne_ = std::max(0, fahne_ - n);
+    return n;
 }
 
 // DUB ECHO: Echo 3/4 Beat, mehrfach und abnehmend. Links nur Mitten (Bandpass 1 kHz), rechts nur Höhen
 // (Hochpass 2,5 kHz); jede Wiederholung läuft erneut durch das Filter (wird dünner). PARAMETER = Rückkopplung.
-void ColorFx::dub_echo(float* l, float* r, int n, const double* k) {
+int ColorFx::dub_echo(float* l, float* r, int n, const double* k) {
     const double fb = 0.35 + 0.55 * p_;
     const double ziel = std::clamp(0.75 * spb_, 480.0, static_cast<double>(kEchoMax - 2));
     if (echo_d_ <= 0.0) echo_d_ = ziel;
@@ -176,6 +206,10 @@ void ColorFx::dub_echo(float* l, float* r, int n, const double* k) {
         if (a > 0.0) {
             seite_ = k[i] < 0.0 ? -1 : 1;
             fahne_ = static_cast<int>((wiederholungen + 1) * ziel);
+        } else if (fahne_ <= 0) {
+            return i;   // dry from here on
+        } else {
+            --fahne_;   // the tail counts down per sample, not per block
         }
         echo_d_ += (ziel - echo_d_) * gleit;
         double lesen = echo_pos_ - echo_d_;
@@ -200,12 +234,12 @@ void ColorFx::dub_echo(float* l, float* r, int n, const double* k) {
         if (++echo_pos_ >= kEchoMax) echo_pos_ = 0;
         if (echo_gefuellt_ < kEchoMax) ++echo_gefuellt_;
     }
-    fahne_ = std::max(0, fahne_ - n);
+    return n;
 }
 
 // SWEEP: links ein Gate (Klang wird enger, PARAMETER zieht es weiter zu), rechts ein Bandpass, der mit dem Regler
 // schmaler wird; PARAMETER rechts = Mittenfrequenz 150 Hz bis 10 kHz.
-void ColorFx::sweep(float* l, float* r, int n, const double* k) {
+int ColorFx::sweep(float* l, float* r, int n, const double* k) {
     const double h_an = einpol(0.0005, fs_), h_ab = einpol(0.03, fs_), s_ab = einpol(1.0, fs_);
     const double g_an = einpol(0.0003, fs_), g_ab = einpol(0.010, fs_);
     const double fc = expo(p_, 150.0, 10000.0);
@@ -213,6 +247,7 @@ void ColorFx::sweep(float* l, float* r, int n, const double* k) {
     Koef c;
     for (int i = 0; i < n; ++i) {
         const double a = anteil(k[i]);
+        if (!(a > 0.0)) return i;   // dry from here on
         const double w = std::min(1.0, 4.0 * a);
         const float x[2] = {l[i], r[i]};
         if (k[i] < 0.0) {
@@ -237,16 +272,18 @@ void ColorFx::sweep(float* l, float* r, int n, const double* k) {
             }
         }
     }
+    return n;
 }
 
 // NOISE: weißes Rauschen durch ein Filter in den Kanal gemischt. Links Tiefpass 18 kHz → 250 Hz, rechts Hochpass
 // 250 Hz → 14 kHz; der Anteil wächst mit dem Regler, PARAMETER = Rauschpegel (−36 bis −6 dBFS am Anschlag).
-void ColorFx::noise(float* l, float* r, int n, const double* k) {
+int ColorFx::noise(float* l, float* r, int n, const double* k) {
     const double pegel = std::pow(10.0, (-36.0 + 30.0 * p_) / 20.0);
     double k_alt = NAN;
     Koef c;
     for (int i = 0; i < n; ++i) {
         const double a = anteil(k[i]);
+        if (!(a > 0.0)) return i;   // dry from here on
         if (k[i] != k_alt) {
             k_alt = k[i];
             c = k[i] < 0.0 ? koef(expo(a, 18000.0, 250.0), 0.707, fs_) : koef(expo(a, 250.0, 14000.0), 0.707, fs_);
@@ -259,16 +296,18 @@ void ColorFx::noise(float* l, float* r, int n, const double* k) {
             y = static_cast<float>(y + a * pegel * z);
         }
     }
+    return n;
 }
 
 // CRUSH: links Verzerrung (Bittiefe 16 → 4, Abtasthalt bis 1/24), rechts dasselbe vor einem Hochpass
 // 20 Hz → 8 kHz; PARAMETER verstärkt die Wirkung.
-void ColorFx::crush(float* l, float* r, int n, const double* k) {
+int ColorFx::crush(float* l, float* r, int n, const double* k) {
     const double s = 0.3 + 0.7 * p_;
     double k_alt = NAN;
     Koef c;
     for (int i = 0; i < n; ++i) {
         const double a = anteil(k[i]);
+        if (!(a > 0.0)) return i;   // dry from here on
         const double tiefe = a * s;
         const double w = std::min(1.0, 4.0 * a);
         const double stufen = std::exp2(15.0 - 12.0 * tiefe);
@@ -296,6 +335,7 @@ void ColorFx::crush(float* l, float* r, int n, const double* k) {
             (ch == 0 ? l : r)[i] = static_cast<float>(x[ch] * (1.0 - w) + z * w);
         }
     }
+    return n;
 }
 
 }  // namespace cypherdj::dsp

@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cstring>
 
+#include "arr_gain_intern.h"
 #include "cypherdj/arrangement.h"
 
 namespace cdj {
@@ -22,8 +23,6 @@ static_assert(ARR_RETURNS == sw::RET_REGLER_RETURNS, "return slots and return co
 static_assert(ARR_RETURNS == sw::SND_REGLER, "send controls per source must match the return slots (1.10 slice 3)");
 
 namespace {
-
-inline float db_lin(float db) { return db <= -120.0f ? 0.0f : std::pow(10.0f, db / 20.0f); }   // §1.2 Stumm-Grenze
 
 inline void pan_gain(float pan, float& gl, float& gr) {
   const float p = std::clamp(pan, -1.0f, 1.0f);
@@ -44,16 +43,95 @@ inline void balance_gain(float pan, float& gl, float& gr) {
   gr = p < 0.0f ? 1.0f + p : 1.0f;
 }
 
+// "ins/<art>/<n>/<rest>" -> n (1..max) and the rest after the third slash, else 0
+inline int ins_nr(const char* pfad, const char* kopf, int max, const char** rest) {
+  const size_t k = std::strlen(kopf);
+  if (std::strncmp(pfad, kopf, k) != 0) return 0;
+  const char* p = pfad + k;
+  int n = 0;
+  for (int z = 0; *p >= '0' && *p <= '9' && z < 3; ++p, ++z) n = n * 10 + (*p - '0');
+  if (*p != '/' || n < 1 || n > max) return 0;
+  *rest = p + 1;
+  return n;
+}
+
+// The global slot and parameter index (arr_inserts.h) of an insert row, or false for a row that is no insert row.
+bool ins_zeile(const sw::ReglerDef& d, int* slot, int* param) {
+  const char* rest = nullptr;
+  const sw::Rolle r = d.rolle;
+  if (r >= sw::Rolle::ins_komp_an && r <= sw::Rolle::ins_komp_sc) {
+    const int n = ins_nr(d.pfad, "ins/komp/", ARR_INS_KOMP, &rest);
+    if (n < 1) return false;
+    *slot = ins_global(ArrInsArt::komp, n - 1);
+    *param = static_cast<int>(r) - static_cast<int>(sw::Rolle::ins_komp_an);
+    return true;
+  }
+  if (r >= sw::Rolle::ins_eq_an && r <= sw::Rolle::ins_eq_b_platz) {
+    const int n = ins_nr(d.pfad, "ins/eq/", ARR_INS_EQ, &rest);
+    if (n < 1) return false;
+    *slot = ins_global(ArrInsArt::eq, n - 1);
+    if (r <= sw::Rolle::ins_eq_propq) {
+      *param = static_cast<int>(r) - static_cast<int>(sw::Rolle::ins_eq_an);
+    } else {   // "b<m>/<name>", m = 1..8
+      if (rest[0] != 'b' || rest[1] < '1' || rest[1] > '8' || rest[2] != '/') return false;
+#ifdef CYPHERDJ_MUTATION_INS_EQ_BAND_VERTAUSCHT
+      *param = 3 + (rest[1] - '0') * INS_EQ_BAND_PARAM + (static_cast<int>(r) - static_cast<int>(sw::Rolle::ins_eq_b_an));   // error case: the band index of the binding is off by one (b8 falls off the end)
+#else
+      *param = 3 + (rest[1] - '1') * INS_EQ_BAND_PARAM + (static_cast<int>(r) - static_cast<int>(sw::Rolle::ins_eq_b_an));
+#endif
+    }
+    return true;
+  }
+  if (r >= sw::Rolle::ins_saett_an && r <= sw::Rolle::ins_saett_mix) {
+    const int n = ins_nr(d.pfad, "ins/saett/", ARR_INS_SAETT, &rest);
+    if (n < 1) return false;
+    *slot = ins_global(ArrInsArt::saett, n - 1);
+    *param = static_cast<int>(r) - static_cast<int>(sw::Rolle::ins_saett_an);
+    return true;
+  }
+  if (r >= sw::Rolle::ins_lim_an && r <= sw::Rolle::ins_lim_abklingen) {   // the limiter roles come after rack_m4, so they need their own branch
+    const int n = ins_nr(d.pfad, "ins/lim/", ARR_INS_LIM, &rest);
+    if (n < 1) return false;
+    *slot = ins_global(ArrInsArt::lim, n - 1);
+    *param = static_cast<int>(r) - static_cast<int>(sw::Rolle::ins_lim_an);
+    return true;
+  }
+  return false;
+}
+
 }  // namespace
 
 void Arrangement::regler_binden(const sw::ReglerTabelle& tab) {
   for (int r = 0; r < sw::MAX_REGLER; ++r) {
     regler_spur_[r] = -1;   // strip index (track 0..31, group 32..39, PM 40, returns 41..44), name from D1 K1
     regler_feld_[r] = -1;
+    regler_ins_[r] = -1;
+    regler_rack_[r] = -1;
   }
+  for (auto& je_spur : spur_regler_)
+    for (int16_t& x : je_spur) x = -1;
   for (int r = 0; r < tab.anzahl(); ++r) {
     const sw::ReglerDef& d = tab.def(r);
     int feld = -1, streifen = -1;
+    if (d.rolle >= sw::Rolle::rack_m1 && d.rolle <= sw::Rolle::rack_m4) {   // 1.10 slice 4c: the macro rows rack/<k>/m1..m4
+      const char* rest = nullptr;
+      const int k = ins_nr(d.pfad, "rack/", ARR_RACKS, &rest);
+      if (k >= 1) {
+        const int nr = static_cast<int>(d.rolle) - static_cast<int>(sw::Rolle::rack_m1);
+        regler_rack_[r] = static_cast<int16_t>((k - 1) * ARR_MAKROS + nr);
+        ins_.makro_binde(k - 1, nr, d.vorgabe);
+      }
+      continue;
+    }
+    if ((d.rolle >= sw::Rolle::ins_komp_an && d.rolle <= sw::Rolle::ins_saett_mix) ||
+        (d.rolle >= sw::Rolle::ins_lim_an && d.rolle <= sw::Rolle::ins_lim_abklingen)) {   // 1.10 slice 4a/4b + limiter: the pooled insert rows (komp, eq, saett, lim)
+      int slot = 0, param = 0;
+      if (ins_zeile(d, &slot, &param)) {
+        regler_ins_[r] = static_cast<int16_t>(slot * INS_PARAM_MAX + param);
+        ins_.binde(slot, param, d.vorgabe);
+      }
+      continue;
+    }
     switch (d.rolle) {
       case sw::Rolle::spur_fader: case sw::Rolle::grp_fader: case sw::Rolle::pm_fader: feld = 0; break;
       case sw::Rolle::spur_pan: case sw::Rolle::grp_pan: feld = 1; break;
@@ -97,6 +175,9 @@ void Arrangement::regler_binden(const sw::ReglerTabelle& tab) {
     if (streifen < 0) continue;
     regler_spur_[r] = static_cast<int16_t>(streifen);
     regler_feld_[r] = static_cast<int8_t>(feld);
+    if (streifen < ARR_SPUREN && feld < 4 &&
+        (d.rolle == sw::Rolle::spur_fader || d.rolle == sw::Rolle::spur_pan || d.rolle == sw::Rolle::spur_mute || d.rolle == sw::Rolle::spur_solo))
+      spur_regler_[streifen][feld] = static_cast<int16_t>(r);   // 1.12 S3: only spur/1..32/{fader,pan,mute,solo} can be grabbed (D1)
     w_[streifen][feld].w = d.vorgabe;
   }
   for (float& g : ms_gain_) g = 1.0f;
@@ -105,6 +186,14 @@ void Arrangement::regler_binden(const sw::ReglerTabelle& tab) {
 }
 
 void Arrangement::setze_sofort(int regler, float wert) {
+  if (regler >= 0 && regler < sw::MAX_REGLER && regler_rack_[regler] >= 0) {
+    ins_.makro_sofort(regler_rack_[regler] / ARR_MAKROS, regler_rack_[regler] % ARR_MAKROS, wert);
+    return;
+  }
+  if (regler >= 0 && regler < sw::MAX_REGLER && regler_ins_[regler] >= 0) {
+    ins_.setze_sofort(regler_ins_[regler] / INS_PARAM_MAX, regler_ins_[regler] % INS_PARAM_MAX, wert);
+    return;
+  }
   if (regler < 0 || regler >= sw::MAX_REGLER || regler_spur_[regler] < 0) return;
   Wert& w = w_[regler_spur_[regler]][regler_feld_[regler]];
   w.w = wert;
@@ -113,6 +202,14 @@ void Arrangement::setze_sofort(int regler, float wert) {
 }
 
 void Arrangement::verlauf(int regler, const float* werte) {
+  if (regler >= 0 && regler < sw::MAX_REGLER && regler_rack_[regler] >= 0) {
+    ins_.makro_verlauf(regler_rack_[regler] / ARR_MAKROS, regler_rack_[regler] % ARR_MAKROS, werte);
+    return;
+  }
+  if (regler >= 0 && regler < sw::MAX_REGLER && regler_ins_[regler] >= 0) {
+    ins_.verlauf(regler_ins_[regler] / INS_PARAM_MAX, regler_ins_[regler] % INS_PARAM_MAX, werte);
+    return;
+  }
   if (regler < 0 || regler >= sw::MAX_REGLER || regler_spur_[regler] < 0 || !werte) return;
   Wert& w = w_[regler_spur_[regler]][regler_feld_[regler]];
   w.vl = werte;
@@ -143,6 +240,8 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
   ziele_pruefen();
   // 1.10 slice 3: a return exists when the playback knows it (ret_da); an unloaded playback knows none (P15)
   const auto da = [&](int r) { return snap_ && snap_->ret_da[r]; };
+  // 1.10 slice 4b T13: the delay of a place of the latency compensation in this playback (arr_pdc.h); 0 = no ring, the place is not touched
+  const auto pd = [&](int key) { return snap_ ? static_cast<int>(snap_->pdc.d[key]) : 0; };
   // Solo irgendwo (Spuren, Gruppen und vorhandene Returns). E3 P5: ein Scan je Block statt je Spur und Sample, Ergebnis bitgleich.
   bool solo_vl = false, solo_fest = false;
   for (int i = 0; i < ARR_PM; ++i) {
@@ -245,13 +344,76 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
     }
     return n;
   };
-  // 1. Spuren → Ziel
-  for (int i = 0; i < ARR_SPUREN; ++i) {
+  // 1.10 slice 4a: a return set to pre takes its sends before the fader and pan of the source (after the insert chain and the mute/solo fade).
+  // The flag is two different signals: a flip (swap) blends from one to the other over ARR_STUMM_BLENDE samples, 0 = post, 1 = pre (review echtzeit-1).
+  for (int r = 0; r < ARR_RETURNS; ++r) {
+    const float ziel = (snap_ && snap_->ret_pre[r]) ? 1.0f : 0.0f;
+    float w = ret_pre_w_[r];
+    for (int t = 0; t < m; ++t) {
+#ifdef CYPHERDJ_MUTATION_INS_PRE_SPRUNG
+      w = ziel;   // error case: the flag is a hard per-sample switch
+#else
+      if (w < ziel) w = std::min(ziel, w + 1.0f / ARR_STUMM_BLENDE);
+      else if (w > ziel) w = std::max(ziel, w - 1.0f / ARR_STUMM_BLENDE);
+#endif
+      ret_pre_t_[r][t] = w;
+    }
+    ret_pre_w_[r] = w;
+  }
+  auto pre_post = [](float post, float pre, float w) { return w <= 0.0f ? post : (w >= 1.0f ? pre : post + (pre - post) * w); };
+  // 1.10 slice 4a: the insert chains of the tracks, a block-wise pass in place over the track input, before the fader loop below. A track without a
+  // chain (or tail) takes no pass and no copy: its output stays bit-equal to the build before this slice (AK1).
+  // Sidechain keys (T4, spec 2.3): the input of a track that some stage names as its key is copied BEFORE any chain runs, so the key is never a
+  // chain output and does not depend on the order of the strips. A track without signal has a silent bus (memset above): a silent key.
+  ins_.makros_planen(snap_ ? snap_->kette : nullptr, snap_ ? snap_->rack : nullptr, m);   // 1.10 slice 4c: the macro values of the racks become parameter values, before any parameter is read
+  ins_.schluessel_planen(m);
+  // 1.10 slice 5 U2b (E6, E7): the DJ inputs of this block (deck/1..4, erz/1) go into the key buffers of the stages that listen to them. They are there before any strip runs, for every consumer. A nullptr
+  // input captures nothing: the buffer keeps the zero schluessel_planen() wrote, so a deck that stopped gives a silent key, never the samples of the block before.
+#ifndef CYPHERDJ_MUTATION_SC_DJ_NULL   // error case: the DJ pointers are ignored, the keys of deck and erz stay silent
+  for (int i = 0; i < DJ_EINGAENGE; ++i)
+    if (dj_l_[i] && dj_r_[i]) ins_.kopiere(i < 4 ? ARR_SCHL_DECK : ARR_SCHL_ERZ, ARR_SCHL_POST, i < 4 ? i + 1 : 1, dj_l_[i], dj_r_[i], m);
+#endif
+#ifndef CYPHERDJ_MUTATION_INS_SC_NACH_KETTE
+  for (int t = 0; t < ARR_SPUREN; ++t)
+    if ((ins_.schluessel_maske() >> t) & 1u) ins_.schluessel_sichern(t, bus_l_[t], bus_r_[t], m);
+#endif
+  // 1.10 slice 5 U1: one pass per track in snap_->spur_ordnung: the chain, the delay compensation, then the fader loop of the track below. A track whose stage listens to the
+  // post of another track runs after it (arr_schluessel.h); the order is the identity without such keys, so the sums are formed in the order of the build before this slice.
+  for (int ii = 0; ii < ARR_SPUREN; ++ii) {
+#ifdef CYPHERDJ_MUTATION_INS_SC_NACH_KETTE
+    const int i = ARR_SPUREN - 1 - ii;   // error case: the key is taken after the key track's own chain (high tracks run first so that it is there in time)
+#else
+    const int i = snap_ ? static_cast<int>(snap_->spur_ordnung[ii]) : ii;
+#endif
+    if (ins_.hat(i)) {
+#ifdef CYPHERDJ_MUTATION_INS_NACH_FADER
+      {   // error case: the chain sits after the fader (the base value of the fader is applied first, the loop below then multiplies by 1)
+        const float f0 = db_lin(w_[i][0].w);
+        for (int t = 0; t < m; ++t) {
+          bus_l_[i][t] *= f0;
+          bus_r_[i][t] *= f0;
+        }
+      }
+#endif
+      ins_.kette(i, snap_ ? &snap_->kette[i] : nullptr, bus_l_[i], bus_r_[i], m);
+    }
+    // 1.10 slice 4b T13: the track is aligned with the track of the longest chain (arrival T_trk); its sends are taken from the aligned signal
+    if (pd(PDC_SPUR0 + i) > 0) pdc_.verzoegere(PDC_SPUR0 + i, pd(PDC_SPUR0 + i), bus_l_[i], bus_r_[i], m);
+#ifdef CYPHERDJ_MUTATION_INS_SC_NACH_KETTE
+    if ((ins_.schluessel_maske() >> i) & 1u) ins_.schluessel_sichern(i, bus_l_[i], bus_r_[i], m);
+#endif
+    // 1. Spuren → Ziel (the fader loop of the track just processed)
     const Wert& fa = w_[i][0];
     const Wert& pa = w_[i][1];
     const Wert& mu = w_[i][2];
     const Wert& so = w_[i][3];
     float lin = db_lin(fa.w), gl = 0.0f, gr = 0.0f;
+#ifdef CYPHERDJ_MUTATION_INS_NACH_FADER
+    const bool fader_schon = ins_.hat(i);   // error case: the fader was applied before the chain
+    if (fader_schon) lin = 1.0f;
+#else
+    constexpr bool fader_schon = false;
+#endif
     pan_gain(pa.w, gl, gr);
     float sp = spitze_[i];
     float g_ms = ms_gain_[i];
@@ -273,8 +435,11 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
     Send sd[ARR_RETURNS];
     const int n_sends = sends_bereiten(i, sd);
     const float* gbl = zg > 0 ? gblende_[zg - 1] : nullptr;   // fade of the target group: a muted group silences the sends of its members too
+    float* kpl[ARR_INS_KOMP];   // structural post keys (slice 5 U1): the key buffers of the stages listening to the post of this track, mostly none
+    float* kpr[ARR_INS_KOMP];
+    const int nk = ins_.post_ziele(i, kpl, kpr);
     for (int t = 0; t < m; ++t) {
-      if (fa.vl && (t == 0 || fa.vl[t] != fa.vl[t - 1])) lin = db_lin(fa.vl[t]);   // the same value gives the same gain: pow only on a change
+      if (!fader_schon && fa.vl && (t == 0 || fa.vl[t] != fa.vl[t - 1])) lin = db_lin(fa.vl[t]);   // the same value gives the same gain: pow only on a change
       if (pa.vl && (t == 0 || pa.vl[t] != pa.vl[t - 1])) pan_gain(pa.vl[t], gl, gr);   // the same pan gives the same gains: cos/sin only on a change (E8)
       const bool solo_irgendwo = solo_vl ? solo_t_[t] : solo_fest;
       const bool stumm = (mu.vl ? mu.vl[t] : mu.w) >= 0.5f;
@@ -289,6 +454,15 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
 #endif
       const float l = bl[t] * lin * gl * g_ms;
       const float r = br[t] * lin * gr * g_ms;
+      for (int q = 0; q < nk; ++q) {   // the capture point of the track post: what the track sends on to its target after fader, pan and mute/solo fade
+#ifdef CYPHERDJ_MUTATION_SC_POST_VOR_FADER
+        kpl[q][t] = bl[t];   // error case: the post key is the chain output, before fader, pan and mute
+        kpr[q][t] = br[t];
+#else
+        kpl[q][t] = l;
+        kpr[q][t] = r;
+#endif
+      }
       if (!blende) {
         zl[t] += l;
         zr[t] += r;
@@ -306,6 +480,14 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
 #else
         const float gb = gbl ? gbl[t] : 1.0f;
 #endif
+        // pre tap: the chain output times the mute/solo fade, without fader and pan (spec D6)
+#if defined(CYPHERDJ_MUTATION_INS_PRE_NACH_FADER)
+        const float pl = l, pr = r;   // error case: the pre tap is taken after the fader
+#elif defined(CYPHERDJ_MUTATION_INS_PRE_OHNE_MUTE)
+        const float pl = bl[t], pr = br[t];   // error case: the pre tap ignores mute and solo
+#else
+        const float pl = bl[t] * g_ms, pr = br[t] * g_ms;
+#endif
 #ifdef CYPHERDJ_MUTATION_ARR_SEND_PRE
         const float sl = bl[t], sr = br[t];   // error case: send before fader, pan and mute
 #elif defined(CYPHERDJ_MUTATION_ARR_SEND_OHNE_MUTE)
@@ -317,8 +499,8 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
           if (!sd[q].aktiv) continue;
           if (sd[q].vl && (t == 0 || sd[q].vl[t] != sd[q].vl[t - 1])) sd[q].lin = db_lin(sd[q].vl[t]);
           const float k = sd[q].lin * gb;
-          ret_.ein_l(q)[t] += sl * k;
-          ret_.ein_r(q)[t] += sr * k;
+          ret_.ein_l(q)[t] += pre_post(sl, pl, ret_pre_t_[q][t]) * k;
+          ret_.ein_r(q)[t] += pre_post(sr, pr, ret_pre_t_[q][t]) * k;
         }
       }
       sp = std::max(sp, std::max(std::fabs(l), std::fabs(r)));
@@ -326,6 +508,52 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
     ms_gain_[i] = g_ms;
     spitze_[i] = sp;
     ziel_w_[i] = zw;
+    if (nk) ins_.post_fertig(i, m);
+  }
+  // 1.10 slice 4b T13: the sum of the tracks that went to the master is all that the PM sum holds now: it waits for the longest of the three arrivals (groups, returns).
+  // The sends of the tracks wait for the groups' sends: the sum in each return input holds the track part only until the groups add theirs below.
+  if (pd(PDC_PM_SPUR) > 0) pdc_.verzoegere(PDC_PM_SPUR, pd(PDC_PM_SPUR), pm_l_, pm_r_, m);
+  for (int r = 0; r < ARR_RETURNS; ++r) {
+    const int d = pd(PDC_RETSPUR0 + r);
+    if (d <= 0) continue;
+    if (ret_.benutzt(r)) {
+      pdc_.verzoegere(PDC_RETSPUR0 + r, d, ret_.ein_l(r), ret_.ein_r(r), m);
+    } else if (pdc_.schwanz(PDC_RETSPUR0 + r, d) && ret_.rechnet(r, da(r))) {   // the sends stopped: what the ring still holds comes out first
+      ret_.leere_eingang(r, m);
+      ret_.benutzt(r) = true;
+      pdc_.verzoegere(PDC_RETSPUR0 + r, d, ret_.ein_l(r), ret_.ein_r(r), m, false);
+    }
+  }
+  // 1.10 slice 5 U2a: the key `pre` of a group = the sum of its members before ANY group chain. Copied for all groups before the first chain runs, so a group keyed by another group
+  // (or a return, or the PM) sees the sum, not the chain output. An unused group has no signal and no capture: its key buffer stays at the zero of the block start.
+#ifndef CYPHERDJ_MUTATION_SC_GRUPPE_NACH_KETTE   // error case: the copy sits behind the chains (below)
+  for (int g = 0; g < ARR_GRUPPEN; ++g)
+    if (benutzt[g]) ins_.kopiere(ARR_SCHL_GRP, ARR_SCHL_PRE, g + 1, grp_l_[g], grp_r_[g], m);
+#endif
+  // 1.10 slice 4a: the insert chains of the groups, over the sum of the members, before the group fader and the group sends. An unused group has no signal and no pass.
+#ifndef CYPHERDJ_MUTATION_INS_GRUPPE_UEBERSPRUNGEN   // error case: the group pass is skipped
+  for (int g = 0; g < ARR_GRUPPEN; ++g) {
+    if (!ins_.hat(ARR_SPUREN + g)) continue;
+    if (benutzt[g]) ins_.kette(ARR_SPUREN + g, snap_ ? &snap_->kette[ARR_SPUREN + g] : nullptr, grp_l_[g], grp_r_[g], m);
+#ifndef CYPHERDJ_MUTATION_INS_GRUPPE_LEER_LAEUFT
+    else ins_.schweige(ARR_SPUREN + g);   // no member, no signal, no pass: the stages are cleared and report nothing (review echtzeit-3)
+#endif
+  }
+#endif
+#ifdef CYPHERDJ_MUTATION_SC_GRUPPE_NACH_KETTE
+  for (int g = 0; g < ARR_GRUPPEN; ++g)
+    if (benutzt[g]) ins_.kopiere(ARR_SCHL_GRP, ARR_SCHL_PRE, g + 1, grp_l_[g], grp_r_[g], m);   // error case: the group pre key is the chain output
+#endif
+  for (int g = 0; g < ARR_GRUPPEN; ++g)   // 1.10 slice 4b T13: the group is aligned with the group of the longest arrival (T_G); its sends are taken from the aligned sum
+    if (benutzt[g] && pd(PDC_GRP0 + g) > 0) pdc_.verzoegere(PDC_GRP0 + g, pd(PDC_GRP0 + g), grp_l_[g], grp_r_[g], m);
+  const int d_gruppen = pd(PDC_PM_GRP);
+  float* gpm_l = pm_l_;   // where the groups add: the PM sum, or a sum of their own that is delayed and then joins it (bit-equal without a delay)
+  float* gpm_r = pm_r_;
+  if (d_gruppen > 0) {
+    gpm_l = pdcs_l_;
+    gpm_r = pdcs_r_;
+    std::memset(gpm_l, 0, bytes);
+    std::memset(gpm_r, 0, bytes);
   }
   // 2. Gruppen → PM. Eine Gruppe ohne Mitglieder rechnet nicht, ihre Blende steht sofort auf dem Ziel (es klingt nichts).
   for (int g = 0; g < ARR_GRUPPEN; ++g) {
@@ -349,25 +577,45 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
     const float* br = grp_r_[g];
     Send sd[ARR_RETURNS];
     const int n_sends = sends_bereiten(s, sd);
+    float* kpl[ARR_INS_KOMP];   // structural post keys of this group (slice 5 U2a): the key buffers of the stages listening to it, mostly none
+    float* kpr[ARR_INS_KOMP];
+    const int nk = ins_.ziele(ARR_SCHL_GRP, ARR_SCHL_POST, g + 1, kpl, kpr);
     for (int t = 0; t < m; ++t) {
       if (fa.vl) lin = db_lin(fa.vl[t]);
       if (pa.vl) balance_gain(pa.vl[t], gl, gr);
       const float g_ms = gblende_[g][t];
       const float l = bl[t] * lin * gl * g_ms;
       const float r = br[t] * lin * gr * g_ms;
-      pm_l_[t] += l;
-      pm_r_[t] += r;
+      for (int q = 0; q < nk; ++q) {   // the capture point of the group post: what the group sends on to the PM after its fader, balance and mute/solo fade
+        kpl[q][t] = l;
+        kpr[q][t] = r;
+      }
+      gpm_l[t] += l;
+      gpm_r[t] += r;
       if (n_sends) {   // the group sends after its own fader, balance and fade (spec 5.4)
         for (int q = 0; q < ARR_RETURNS; ++q) {
           if (!sd[q].aktiv) continue;
           if (sd[q].vl && (t == 0 || sd[q].vl[t] != sd[q].vl[t - 1])) sd[q].lin = db_lin(sd[q].vl[t]);
-          ret_.ein_l(q)[t] += l * sd[q].lin;
-          ret_.ein_r(q)[t] += r * sd[q].lin;
+#ifdef CYPHERDJ_MUTATION_INS_GRUPPE_PRE_NACH_FADER
+          const float pl = l, pr = r;   // error case: the pre tap of a group is taken after its fader
+#else
+          const float pl = bl[t] * g_ms, pr = br[t] * g_ms;   // pre tap of a group: the chain output times its mute/solo fade
+#endif
+          ret_.ein_l(q)[t] += pre_post(l, pl, ret_pre_t_[q][t]) * sd[q].lin;
+          ret_.ein_r(q)[t] += pre_post(r, pr, ret_pre_t_[q][t]) * sd[q].lin;
         }
       }
       sp = std::max(sp, std::max(std::fabs(l), std::fabs(r)));
     }
+    if (nk) ins_.fertig(ARR_SCHL_GRP, ARR_SCHL_POST, g + 1, m);
     spitze_[s] = sp;
+  }
+  if (d_gruppen > 0) {
+    pdc_.verzoegere(PDC_PM_GRP, d_gruppen, gpm_l, gpm_r, m);
+    for (int t = 0; t < m; ++t) {
+      pm_l_[t] += gpm_l[t];
+      pm_r_[t] += gpm_r[t];
+    }
   }
   // 2b. Returns → PM (before the PM fader, P2). The input goes through the Cypher Hall of the return (hall on: wet only, off: dry, 480 samples blend).
   // Presence fade 480 samples (P9), mute fade like a group, solo only by solo of another return (P7): a solo on a track or group does not silence a return.
@@ -386,7 +634,14 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
       ret_.benutzt(r) = true;
     }
   }
+#ifdef CYPHERDJ_MUTATION_INS_RET_VOR_HALL
+  // error case: the chain of a return sits in front of the Hall (over the send sum, in place)
+  for (int r = 0; r < ARR_RETURNS; ++r)
+    if (hrech[r] && ins_.hat(ARR_KETTE_RET0 + r))
+      ins_.kette(ARR_KETTE_RET0 + r, snap_ ? &snap_->kette[ARR_KETTE_RET0 + r] : nullptr, ret_.ein_l(r), ret_.ein_r(r), m);
+#endif
   ret_.hall_vorlauf(m, hx, han, hrech);
+  ret_.hall_parallel(m);   // mehrkern task 4: the Halls on the HallPool (no-op without a pool)
   for (int r = 0; r < ARR_RETURNS; ++r) {
     const int s = ARR_RET0 + r;
     const bool dd = da(r);
@@ -410,11 +665,61 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
     const float az = han[r] ? 1.0f : 0.0f;
     float& ag = ret_.an_g(r);
     const bool nass = ret_.hall_laeuft(r);
-    if (nass) ret_.hall_block(r, m);
+    if (nass && !ret_.hall_vorab(r)) ret_.hall_block(r, m);
     const float* bl = ret_.ein_l(r);
     const float* br = ret_.ein_r(r);
     const float* nl = nass ? ret_.nass_l(r) : nullptr;
     const float* nr = nass ? ret_.nass_r(r) : nullptr;
+    // 1.10 slice 4a T3: the insert chain of a return, over the Hall output (the dry/wet blend of the return input) and before the return fader. The blend is
+    // written over the input buffer, then the chain runs in place, and the strip loop below reads the result. A return without a chain (or tail) takes
+    // no pass and keeps its output bit-equal to the build before this slice. The wet/dry weight ag advances here on a copy; the loop below advances the real one.
+    bool vorgemischt = false;
+    float* kpl[ARR_INS_KOMP];   // structural keys of this return (slice 5 U2a): pre = the Hall blend before the chain, post = after fader, fades and presence; mostly none
+    float* kpr[ARR_INS_KOMP];
+    float* kql[ARR_INS_KOMP];
+    float* kqr[ARR_INS_KOMP];
+    const int nkp = ins_.ziele(ARR_SCHL_RET, ARR_SCHL_PRE, r + 1, kpl, kpr);
+    const int nkq = ins_.ziele(ARR_SCHL_RET, ARR_SCHL_POST, r + 1, kql, kqr);
+#ifndef CYPHERDJ_MUTATION_INS_RET_VOR_HALL
+    if (ins_.hat(ARR_KETTE_RET0 + r)) {
+      float* el = ret_.ein_l(r);
+      float* er = ret_.ein_r(r);
+      float agl = ag;
+      for (int t = 0; t < m; ++t) {
+        if (agl < az) agl = std::min(az, agl + 1.0f / ARR_RET_BLENDE);
+        else if (agl > az) agl = std::max(az, agl - 1.0f / ARR_RET_BLENDE);
+        el[t] = el[t] * (1.0f - agl) + (nl ? nl[t] * agl : 0.0f);
+        er[t] = er[t] * (1.0f - agl) + (nr ? nr[t] * agl : 0.0f);
+      }
+#ifndef CYPHERDJ_MUTATION_SC_RET_PRE_NACH_KETTE   // error case: the copy sits behind the chain (below)
+      for (int q = 0; q < nkp; ++q) {   // the pre key of a return with a chain: the blend, as it goes into the chain
+        std::memcpy(kpl[q], el, bytes);
+        std::memcpy(kpr[q], er, bytes);
+      }
+#endif
+      ins_.kette(ARR_KETTE_RET0 + r, snap_ ? &snap_->kette[ARR_KETTE_RET0 + r] : nullptr, el, er, m);
+#ifdef CYPHERDJ_MUTATION_SC_RET_PRE_NACH_KETTE
+      for (int q = 0; q < nkp; ++q) {
+        std::memcpy(kpl[q], el, bytes);   // error case: the return pre key is the chain output
+        std::memcpy(kpr[q], er, bytes);
+      }
+#endif
+      vorgemischt = true;
+    }
+#endif
+    // 1.10 slice 4b T13: the output of the return waits for the longest arrival at the PM sum; it adds into a sum of its own that is delayed and then joins the PM sum
+    int d_ret = pd(PDC_PM_RET0 + r);
+#ifdef CYPHERDJ_MUTATION_PDC_DOPPELT
+    d_ret += pd(PDC_RETSPUR0 + r);   // error case: the send path is delayed once at the return input and once more at the return output
+#endif
+    float* rpm_l = pm_l_;
+    float* rpm_r = pm_r_;
+    if (d_ret > 0) {
+      rpm_l = pdcs_l_;
+      rpm_r = pdcs_r_;
+      std::memset(rpm_l, 0, bytes);
+      std::memset(rpm_r, 0, bytes);
+    }
     for (int t = 0; t < m; ++t) {
       if (fa.vl && (t == 0 || fa.vl[t] != fa.vl[t - 1])) lin = db_lin(fa.vl[t]);
       if (pa.vl) balance_gain(pa.vl[t], gl, gr);
@@ -432,18 +737,36 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
       else if (dg > dz) dg = std::max(dz, dg - 1.0f / ARR_RET_BLENDE);
       if (ag < az) ag = std::min(az, ag + 1.0f / ARR_RET_BLENDE);
       else if (ag > az) ag = std::max(az, ag - 1.0f / ARR_RET_BLENDE);
-      const float ql = bl[t] * (1.0f - ag) + (nl ? nl[t] * ag : 0.0f);   // dry share falling, wet share rising
-      const float qr = br[t] * (1.0f - ag) + (nr ? nr[t] * ag : 0.0f);
+      const float ql = vorgemischt ? bl[t] : bl[t] * (1.0f - ag) + (nl ? nl[t] * ag : 0.0f);   // dry share falling, wet share rising
+      const float qr = vorgemischt ? br[t] : br[t] * (1.0f - ag) + (nr ? nr[t] * ag : 0.0f);
       const float l = ql * lin * gl * g_ms * dg;
       const float rr = qr * lin * gr * g_ms * dg;
+      if (!vorgemischt)   // the pre key of a return without a chain: the blend in front of the fader (with a chain it was copied above, before the chain)
+        for (int q = 0; q < nkp; ++q) {
+          kpl[q][t] = ql;
+          kpr[q][t] = qr;
+        }
+      for (int q = 0; q < nkq; ++q) {   // the capture point of the return post
+        kql[q][t] = l;
+        kqr[q][t] = rr;
+      }
 #ifdef CYPHERDJ_MUTATION_ARR_RET_NACH_PM_FADER
       ret_.ein_l(r)[t] = l;   // error case: the return output is added after the PM fader (collected here, added below)
       ret_.ein_r(r)[t] = rr;
 #else
-      pm_l_[t] += l;
-      pm_r_[t] += rr;
+      rpm_l[t] += l;
+      rpm_r[t] += rr;
 #endif
       sp = std::max(sp, std::max(std::fabs(l), std::fabs(rr)));
+    }
+    if (nkp) ins_.fertig(ARR_SCHL_RET, ARR_SCHL_PRE, r + 1, m);
+    if (nkq) ins_.fertig(ARR_SCHL_RET, ARR_SCHL_POST, r + 1, m);
+    if (d_ret > 0) {
+      pdc_.verzoegere(PDC_PM_RET0 + r, d_ret, rpm_l, rpm_r, m);
+      for (int t = 0; t < m; ++t) {
+        pm_l_[t] += rpm_l[t];
+        pm_r_[t] += rpm_r[t];
+      }
     }
     ms_gain_[s] = g_ms;
     spitze_[s] = sp;
@@ -451,6 +774,10 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
     if (!dd && dg == 0.0f) ret_.schlafen(r);          // the return is gone (P9, P15): state to zero after the fade
   }
   // 3. PM-Fader, dann in den Eingang von erz/4. Bei 0 dB ist die Multiplikation x · 1,0f (bitgleich zu vorher, AK1).
+  // 1.10 slice 4a T3: the insert chain of the PM, a block-wise pass over the sum (tracks, groups, returns) before the PM fader, so the export tap carries it.
+#ifndef CYPHERDJ_MUTATION_INS_PM_NACH_FADER
+  if (ins_.hat(ARR_KETTE_PM)) ins_.kette(ARR_KETTE_PM, snap_ ? &snap_->kette[ARR_KETTE_PM] : nullptr, pm_l_, pm_r_, m);
+#endif
   {
     const Wert& pf = w_[ARR_PM][0];
     float plin = db_lin(pf.w);
@@ -464,12 +791,23 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
       const float r = pm_r_[t] * plin;
       pm_l_[t] = l;
       pm_r_[t] = r;
+#ifndef CYPHERDJ_MUTATION_INS_PM_NACH_FADER
       aus_l[t] += l;
       aus_r[t] += r;
+#endif
       sp = std::max(sp, std::max(std::fabs(l), std::fabs(r)));
     }
     spitze_[ARR_PM] = sp;
   }
+#ifdef CYPHERDJ_MUTATION_INS_PM_NACH_FADER
+  {   // error case: the chain sits after the PM fader (tap and output both)
+    if (ins_.hat(ARR_KETTE_PM)) ins_.kette(ARR_KETTE_PM, snap_ ? &snap_->kette[ARR_KETTE_PM] : nullptr, pm_l_, pm_r_, m);
+    for (int t = 0; t < m; ++t) {
+      aus_l[t] += pm_l_[t];
+      aus_r[t] += pm_r_[t];
+    }
+  }
+#endif
 #ifdef CYPHERDJ_MUTATION_ARR_RET_NACH_PM_FADER
   for (int r = 0; r < ARR_RETURNS; ++r)
     if (ret_.rechnet(r, da(r)))
@@ -483,6 +821,7 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
 }
 
 void Arrangement::verlaeufe_nachfuehren(int m) {
+  ins_.nachfuehren(m);
   for (int s = 0; s < ARR_STREIFEN; ++s)
     for (int f = 0; f < ARR_FELDER; ++f) {
       Wert& w = w_[s][f];

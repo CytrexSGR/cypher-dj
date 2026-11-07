@@ -1,8 +1,9 @@
 // PRODUCTION (1.10 Slice 3): return strips with Cypher Hall and the send controls, below the groups. Every operation goes through ctx.aendere to
 // POST /proj/aendern (return_neu, return_aendern, return_loeschen, send_setzen), so it lands in the project and in the undo history. A drag of a fader
 // or a send carries a coalescing key (one history line per drag). The level of a strip comes without code of its own: app.js fills every
-// .meter[data-kanal="ret/<nr>"] from /pegel. The pre/post switch of a send is slice 4 and is not here.
+// .meter[data-kanal="ret/<nr>"] from /pegel. The PRE/POST switch of a return (slice 4: its sends are taken before the track fader) sends return_aendern {pre}.
 import { faderWert, faderText, panText, FADER_MIN, FADER_MAX, naechsteFarbe, istUmbenennenTaste } from './spurkoepfe.js';
+import { REGLER_MAX, REGLER_SCHRITT, reglerVonDb, dbVonRegler, tasteMerke, tasteWert } from './fader_kennlinie.js';
 import { HALL_FELDER_ANZEIGE, hallText, neuerReturnBefehl, returnLabels, returnListe, sendBefehl, sendLabel, sendWert } from './routing.js';
 import { MAX_RETURNS } from './grenzen.js';
 
@@ -12,8 +13,9 @@ const HALL_ZEILEN = HALL_FELDER_ANZEIGE.map(([feld, text]) => `<label class="p-h
 const KOPF = `<button class="p-farbe" title="Return colour: click for the next one"></button>
 <span class="p-spurname" role="button" tabindex="0" title="Double click, Enter or F2 to rename"></span><span class="p-geraet">RETURN</span>
 <button class="p-mute" aria-pressed="false" title="Mute the return">M</button><button class="p-solo" aria-pressed="false" title="Solo the return (silences the tracks that do not feed it)">S</button>
+<button class="p-prepost" aria-pressed="false" title="Sends into this return are taken after the track fader (POST) or before it (PRE)">POST</button>
 <button class="p-loeschen" title="Delete return (its sends go away; Undo brings it back)">✕</button>
-<input class="p-fader" type="range" min="${FADER_MIN}" max="${FADER_MAX}" step="0.5" title="Volume (double click: 0 dB)">
+<input class="p-fader" type="range" min="0" max="${REGLER_MAX}" step="${REGLER_SCHRITT}" title="Volume (double click: 0 dB)">
 <output class="p-faderwert"></output>
 <input class="p-pan" type="range" min="-1" max="1" step="0.01" title="Balance (double click: centre)">
 <output class="p-panwert"></output>
@@ -40,9 +42,11 @@ export function bindeReturns(ctx) {
     q('.p-solo').addEventListener('click', () => returnAus(id, (r) => ({ label: `${r.solo ? 'Unsolo' : 'Solo'} return ${r.name}`, felder: { solo: !r.solo } })));
     q('.p-farbe').addEventListener('click', () => returnAus(id, (r) => ({ label: `Colour return ${r.name}`, felder: { farbe: naechsteFarbe(r.farbe) } })));
     q('.p-hallan').addEventListener('click', () => returnAus(id, (r) => ({ label: `Hall ${r.hall.an ? 'off' : 'on'} return ${r.name}`, felder: { hall: { an: !r.hall.an } } })));
+    q('.p-prepost').addEventListener('click', () => returnAus(id, (r) => ({ label: `Sends ${r.pre ? 'post' : 'pre'} fader, return ${r.name}`, felder: { pre: !r.pre } })));
     q('.p-loeschen').addEventListener('click', () => ctx.aendere(`Delete return ${ret().name}`, [{ befehl: 'return_loeschen', return_id: id }]));
     const regler = (r, k, vorgabe, wert, sende) => {
       r.addEventListener('pointerdown', () => greift.add(k));
+      r.addEventListener('keydown', (e) => { if (r.classList?.contains('p-fader')) tasteMerke(r, e.key); });
       r.addEventListener('input', sende);
       r.addEventListener('change', () => greift.delete(k));
       r.addEventListener('pointerup', () => greift.delete(k));
@@ -50,8 +54,8 @@ export function bindeReturns(ctx) {
     };
     for (const [klasse, feld, vorgabe] of [['.p-fader', 'fader_db', 0], ['.p-pan', 'pan', 0]]) {
       const r = q(klasse), k = `${id}:${feld}`;
-      regler(r, k, vorgabe, null, () => {
-        const v = feld === 'fader_db' ? faderWert(Number(r.value)) : Number(r.value);
+      regler(r, k, feld === 'fader_db' ? reglerVonDb(vorgabe) : vorgabe, null, () => {
+        const v = feld === 'fader_db' ? faderWert(tasteWert(r)) : Number(r.value);
         zeigeWerte(el, { ...ret(), [feld]: v });
         ctx.aendere(`${feld === 'fader_db' ? 'Volume' : 'Balance'} return ${ret().name}`, [{ befehl: 'return_aendern', return_id: id, [feld]: v }], k);
       });
@@ -91,7 +95,8 @@ export function bindeReturns(ctx) {
     q('.p-spurname').textContent = r.name;
     for (const [k, an] of [['.p-mute', r.mute], ['.p-solo', r.solo], ['.p-hallan', r.hall.an]]) { q(k).classList.toggle('an', an); q(k).setAttribute('aria-pressed', String(an)); }
     q('.p-hallan').textContent = r.hall.an ? 'ON' : 'OFF';
-    if (!greift.has(`${r.id}:fader_db`)) q('.p-fader').value = String(Math.max(FADER_MIN, r.fader_db));
+    q('.p-prepost').classList.toggle('an', !!r.pre); q('.p-prepost').setAttribute('aria-pressed', String(!!r.pre)); q('.p-prepost').textContent = r.pre ? 'PRE' : 'POST';
+    if (!greift.has(`${r.id}:fader_db`)) q('.p-fader').value = String(reglerVonDb(r.fader_db));
     if (!greift.has(`${r.id}:pan`)) q('.p-pan').value = String(r.pan);
     for (const h of el.querySelectorAll('.p-hall')) {
       if (!greift.has(`${r.id}:hall:${h.dataset.feld}`)) h.value = String(r.hall[h.dataset.feld]);
@@ -101,6 +106,7 @@ export function bindeReturns(ctx) {
     for (const [k, v] of [['.p-mute', L.mute], ['.p-solo', L.solo], ['.p-loeschen', L.loeschen], ['.p-spurname', L.umbenennen], ['.p-fader', L.fader], ['.p-pan', L.pan], ['.p-hallan', L.hall]]) {
       q(k).setAttribute('aria-label', v);
     }
+    q('.p-prepost').setAttribute('aria-label', `Sends into return ${r.name} taken ${r.pre ? 'before' : 'after'} the track fader: switch`);
     q('.p-faderwert').textContent = faderText(r.fader_db);
     q('.p-panwert').textContent = panText(r.pan);
     q('.p-pegel').dataset.kanal = `ret/${r.nr}`;
@@ -130,7 +136,7 @@ export function bindeReturns(ctx) {
           reg.type = 'range'; reg.min = String(FADER_MIN); reg.max = String(FADER_MAX); reg.step = '0.5'; reg.className = 'p-sendregler';
           reg.dataset.ret = r.id; reg.dataset.strang = s.id;
           reg.setAttribute('aria-label', sendLabel(s.name, r.name));
-          reg.title = 'Send level (post fader and post mute). Double click: off';
+          reg.title = 'Send level (after the track fader and mute; if the return is set to PRE before the fader and pan, mute and solo still silence it). Double click: off';
           const out = document.createElement('output');
           out.className = 'p-sendwert';
           const k = `${s.id}:send:${r.id}`;

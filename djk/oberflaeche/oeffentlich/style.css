@@ -437,6 +437,13 @@ body.lib-gross .fxdetail { display: grid; flex: 1; grid-template-columns: minmax
 .fxstreifen .fxpegel { display: grid; grid-template-columns: 1fr 40px; gap: 4px; align-items: center; }
 .fxstreifen .fxpegel span { text-align: right; font-variant-numeric: tabular-nums; color: var(--dim); }
 .fxstreifen .grzahl { text-align: right; color: var(--dim); font-variant-numeric: tabular-nums; }
+.fxstreifen .fxwerk { display: flex; flex-direction: column; gap: 3px; border-top: 1px solid var(--line); padding-top: 4px; }
+.fxstreifen .fxwerk .werk-titel { font-weight: 800; letter-spacing: 0.08em; color: var(--dim); font-size: 10px; }
+.fxstreifen .fxwerk button { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px; }
+.fxstreifen .fxwerk .werk-an { align-self: flex-start; }
+.fxstreifen .fxwerk button.an { background: var(--warn); border-color: var(--warn); color: #0e0f12; }
+.fxstreifen .fxwerk .werk-schalter { display: flex; gap: 4px; flex-wrap: wrap; }
+.fxstreifen .fxwerk .busgr { display: grid; grid-template-columns: 34px 1fr 56px; align-items: center; gap: 4px; color: var(--dim); }   /* A6: gate meter */
 .colorfx [data-colorart].an { background: var(--warn); border-color: var(--warn); color: #0e0f12; }   /* SOUND COLOR FX: die gewählte Art */
 .colorfx .colorparam { display: flex; align-items: center; gap: 4px; font-size: 9px; color: var(--dim); }
 .colorfx .colorparam input { width: 80px; }
@@ -649,3 +656,56 @@ button.laden.in-box:disabled { opacity: .4; }
 .lern-badge { font-size: 10px; padding: 2px 6px; border: 1px solid var(--line); border-radius: 10px; color: var(--dim); font-variant-numeric: tabular-nums; }
 .lern-weg { font-size: 12px; line-height: 1; padding: 1px 6px; border-radius: 6px; cursor: pointer; }
 @media (prefers-reduced-motion: reduce) { .lern.wartet { animation: none; } }
+.fxstreifen .fxwerk label { grid-template-columns: 48px 1fr 56px; }
+.fxstreifen .fxwerk output { white-space: nowrap; }
+
+/* A8b: BUS panel (multiband, limiter, utility per bus), a full row in the strip grid */
+.fxstreifen-reihe .buspanel { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 6px; }
+.buspanel .buskopf { display: flex; align-items: center; gap: 10px; }
+.buspanel .buskopf .klein { color: var(--dim); font-size: 11px; }
+.buspanel button.bus-panel-knopf { font-size: 11px; font-weight: 800; letter-spacing: 0.08em; padding: 2px 8px; border-radius: 4px; }
+.buspanel .busreihe { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; }
+.buspanel .busreihe[hidden] { display: none; }
+.busstreifen { border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; display: flex; flex-direction: column; gap: 4px; font-size: 11px; }
+.busstreifen .fxname { font-weight: 800; letter-spacing: 0.08em; color: var(--dim); }
+.busstreifen .fxwerk { display: flex; flex-direction: column; gap: 3px; border-top: 1px solid var(--line); padding-top: 4px; }
+.busstreifen .fxwerk .werk-titel { font-weight: 800; letter-spacing: 0.08em; color: var(--dim); font-size: 10px; }
+.busstreifen .fxwerk button { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px; }
+.busstreifen .fxwerk .werk-an { align-self: flex-start; }
+.busstreifen .fxwerk button.an { background: var(--warn); border-color: var(--warn); color: #0e0f12; }
+.busstreifen .fxwerk button:disabled, .busstreifen .fxwerk input:disabled { opacity: .4; cursor: not-allowed; }
+.busstreifen .fxwerk .werk-schalter { display: flex; gap: 4px; flex-wrap: wrap; }
+.busstreifen label { display: grid; grid-template-columns: 58px 1fr 56px; white-space: nowrap; align-items: center; gap: 4px; color: var(--dim); }
+.busstreifen input[type=range] { width: 100%; min-width: 0; }
+.busstreifen output { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.busstreifen .busgr { display: grid; grid-template-columns: 34px 1fr 56px; align-items: center; gap: 4px; color: var(--dim); }
+.busstreifen .gr { position: relative; height: 8px; background: rgba(255,255,255,0.06); border-radius: 3px; overflow: hidden; }
+.busstreifen .gr i { position: absolute; right: 0; top: 0; bottom: 0; width: 0; background: var(--warn); transition: width 80ms linear; }
+.busstreifen .grzahl { text-align: right; color: var(--dim); font-variant-numeric: tabular-nums; }
+.busstreifen .bus-baender-knopf { align-self: flex-start; }
+.busstreifen .mb-baender { display: flex; flex-direction: column; gap: 6px; }
+.busstreifen .mb-baender[hidden] { display: none; }
+.busstreifen .mb-band { display: flex; flex-direction: column; gap: 2px; border-left: 2px solid var(--line); padding-left: 6px; }
+.busstreifen .lim-grund { color: var(--warn); font-size: 10px; }
+.busstreifen .lim-grund[hidden] { display: none; }
+/* A8b: the four Utility switches (Ø L, Ø R, SWAP, DC) stay in one row, also in the narrowest strip (150 px): no wrap, tighter padding and gap */
+.fxstreifen .fxwerk .werk-schalter, .busstreifen .fxwerk .werk-schalter { flex-wrap: nowrap; gap: 2px; }
+.fxstreifen .fxwerk .werk-schalter button, .busstreifen .fxwerk .werk-schalter button { padding: 1px 3px; min-width: 0; flex: 0 1 auto; white-space: nowrap; }
+
+/* 1.15 A7b: spectrum view in the EFFECTS panel */
+.spektrum { flex: 0 0 360px; display: flex; flex-direction: column; gap: 6px; background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 8px; min-width: 0; align-self: flex-start; }
+.spektrum-kopf { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.spektrum-kopf select { font: inherit; font-size: 12px; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; }
+#spektrum-info { color: var(--dim); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#spektrum-leinwand { width: 100%; height: auto; aspect-ratio: 600 / 160; background: var(--panel); border-radius: 6px; }
+
+/* Demo overlay (POST /ansage): one line over every view, bottom centre, above the library bar */
+#demo-ansage { position: fixed; left: 50%; bottom: calc(var(--lib) + 2 * var(--abstand)); transform: translate(-50%, 12px);
+  max-width: min(1100px, calc(100vw - 48px)); display: flex; align-items: baseline; gap: 14px; padding: 14px 22px;
+  background: rgba(14, 15, 18, .92); border: 1px solid var(--a); border-radius: 14px; box-shadow: 0 10px 40px rgba(0, 0, 0, .5);
+  font-size: 26px; line-height: 1.3; font-weight: 600; color: var(--text); opacity: 0; pointer-events: none; z-index: 1000;
+  transition: opacity .35s ease, transform .35s ease; }
+#demo-ansage.an { opacity: 1; transform: translate(-50%, 0); }
+#demo-ansage .ansage-wer { font-size: 12px; letter-spacing: .2em; font-weight: 800; color: var(--a); flex: none; }
+#demo-ansage[data-art="stimme"] { border-color: var(--c); }
+#demo-ansage[data-art="stimme"] .ansage-wer { color: var(--c); }

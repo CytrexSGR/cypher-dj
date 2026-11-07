@@ -21,3 +21,5 @@ hand_osc = false                              # erlaubt /test/hand auch ohne pru
 filter_guete = 0.707                          # Güte des DJ-Filters, 0.5 bis 4 (A27, Nachtrag 04; über 4 gesperrt bis zum Hörvergleich)
 warp_faeden = 4                               # Arbeitsfäden des Warp-Werks für COMPLEX und TONES, 1 bis 8 (Paket 1.13 Slice 2, ADR 031 Teil 2)
 graph_faeden = 2                              # Arbeitsfäden der Baukasten-Graphen (ein Block Vorlauf), 0 bis 8; 0 rechnet im Callback (Baukasten S3b)
+hall_faeden = 3                               # worker threads of the Hall pool for the return Halls, 0 to 3; 0 computes everything in the callback
+hall_cpus = ""                                # CPU ids of the Hall workers, e.g. "1,2,3" (no ranges); empty: one physical core per worker inside the allowed CPUs, the first core (CPU 0) stays with the JACK thread

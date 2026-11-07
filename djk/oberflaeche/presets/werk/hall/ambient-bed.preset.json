@@ -1,0 +1,51 @@
+{
+ "schema": 1,
+ "name": "Ambient Bed",
+ "geraet_typ": "effekt",
+ "geraet": "hall",
+ "werte": {
+  "mix": 0.6,
+  "early": 0.3,
+  "tail": 0,
+  "pre": 80,
+  "size": 150,
+  "decay": 8,
+  "lowx": 1.6,
+  "highx": 0.5,
+  "lowcut": 60,
+  "highcut": 5000,
+  "diff": 1,
+  "width": 1,
+  "duck": 0,
+  "freeze": false,
+  "kill": false,
+  "fft": "8192 (smooth)"
+ },
+ "beschreibung": {
+  "art": "reverb",
+  "unterart": "hall",
+  "charakter": [
+   "evolving",
+   "airy",
+   "deep"
+  ],
+  "genre": [
+   "ambient",
+   "downtempo",
+   "idm"
+  ],
+  "einsatz": [
+   "intro",
+   "breakdown"
+  ],
+  "energie": 2,
+  "text": "An eight second tail with a slow low decay turns the reverb into a pad of its own."
+ },
+ "tags": [
+  "ambient",
+  "tail"
+ ],
+ "notiz": "Long decay warnings from Snoman p.233 (long tails become a convoluted mess); used deliberately here. Values are practice.",
+ "angelegt": "2026-11-02T00:00:00.000Z",
+ "geaendert": "2026-11-02T00:00:00.000Z"
+}

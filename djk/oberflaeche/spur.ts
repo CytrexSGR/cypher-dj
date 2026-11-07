@@ -11,9 +11,10 @@ export const STROM_ZIEL = /^strom:([123])$/;
 export const MAX_TAKT = 256;             // ab_takt höchstens 256: bei 128 BPM rund 8 Minuten ab Anker
 export const MAX_TEILE = 200;            // Stellwerk hält 256 offene Teile (stellwerk/typen.h MAX_TEILE), Rest für Hand und Leitstand
 export const MUSTER_VORLAUF_BEATS = 2;   // Muster so weit vor ihrer Takt-Eins schreiben (Planer: Wechsel ab dem nächsten Takt ≥ 0,25 Beat)
+export const MAX_SCHLEIFE_TAKTE = 64;    // 1.12 S7: a loop pass is 1..64 bars
 
 export interface Fahrt { ziel: string; ab_takt: number; takte?: number; nach?: number; von?: number; form?: string; muster?: string }
-export interface Spur { name: string; fahrten: Fahrt[] }
+export interface Spur { name: string; fahrten: Fahrt[]; schleife_takte?: number }
 export interface TeilPlan { pfad: string; ab_beat: number; dauer_beats: number; nach: number; form: 0 | 1; politik: 0 | 1 }
 export interface WirtPlan { gruppe: string; name: string; ab_beat: number; dauer_beats: number; bis: number; von?: number; form: 'linear' | 's' }
 export interface MusterPlan { strom: number; text: string; ab_beat: number }
@@ -48,6 +49,11 @@ export function pruefeSpur(x: unknown, fahrbar: Set<string>): { spur: Spur } | {
   const s = x as Record<string, unknown>;
   if (typeof s.name !== 'string' || !SPUR_NAME.test(s.name)) return { fehler: 'name: [a-z0-9_-]{1,32}' };
   if (!Array.isArray(s.fahrten) || s.fahrten.length === 0) return { fehler: 'fahrten: non-empty list expected' };
+  // 1.12 S7 (M13): a loop of n bars; every move lies inside one pass (see the loop rule below)
+  const n = s.schleife_takte;
+  if (n !== undefined && !(Number.isInteger(n) && (n as number) >= 1 && (n as number) <= MAX_SCHLEIFE_TAKTE)) {
+    return { fehler: `schleife_takte: integer 1..${MAX_SCHLEIFE_TAKTE}` };
+  }
   const belegt: Record<string, [number, number, number][]> = {};
   let teile = 0;
   for (const [i, roh] of s.fahrten.entries()) {
@@ -71,6 +77,12 @@ export function pruefeSpur(x: unknown, fahrbar: Set<string>): { spur: Spur } | {
       if (f.muster !== undefined) return { fehler: `${wo}.muster: only for strom targets` };
       if (!wirt && ++teile > MAX_TEILE) return { fehler: `fahrten: at most ${MAX_TEILE} channel moves` };
     }
+    // Loop rule: a pass is bars 1..n. A set on bar n+1 would fall on the same beat as the start set of the next pass (two sets
+    // at one beat overlap in the core, einsortieren.cpp:19); a ramp may end exactly at n+1 (its end is exclusive).
+    if (n !== undefined) {
+      if (strom) return { fehler: `${wo}: no pattern entries in a loop` };
+      if (f.ab_takt > (n as number) || f.ab_takt + takte > (n as number) + 1) return { fehler: `${wo}: beyond the loop of ${n} bars` };
+    }
     // Überlappung je Ziel: das Stellwerk lehnt sie ab (I4), im Wirt ersetzt eine spätere Fahrt die frühere
     const a = 4 * (f.ab_takt - 1), d = 4 * takte;
     for (const [c, cd, nr] of belegt[f.ziel] ?? []) {
@@ -78,7 +90,7 @@ export function pruefeSpur(x: unknown, fahrbar: Set<string>): { spur: Spur } | {
     }
     (belegt[f.ziel] ??= []).push([a, d, i]);
   }
-  return { spur: { name: s.name, fahrten: s.fahrten as Fahrt[] } };
+  return { spur: { name: s.name, fahrten: s.fahrten as Fahrt[], ...(n !== undefined ? { schleife_takte: n as number } : {}) } };
 }
 
 // Politik (§16.1): Ausblenden, Kill an, Fader zu = 1 zustand (zu spät heißt: nachholen); alles andere 0 musik (verwerfen)
@@ -107,6 +119,16 @@ export function plane(spur: Spur, ankerBeat: number): Geplant {
   const frueh = (x: { ab_beat: number }, y: { ab_beat: number }) => x.ab_beat - y.ab_beat;
   g.teile.sort(frueh); g.wirt.sort(frueh); g.muster.sort(frueh);
   return g;
+}
+
+// 1.12 S7 (M13): pass k of a loop track. Start = anker + k·4n; part numbers from teilNr (continuing over all passes, so that
+// no (plan, part) pair repeats in the core); end = start of the next pass. The server always calls it with k = 0 and the
+// start of the pass as anker, which also covers a change of n between passes.
+export function planeDurchlauf(spur: Spur, anker: number, k: number, teilNr: number):
+  Geplant & { anfang_beat: number; teile: (TeilPlan & { nr: number })[] } {
+  const n = spur.schleife_takte as number, anfang = anker + k * 4 * n;
+  const g = plane(spur, anfang);
+  return { ...g, anfang_beat: anfang, ende_beat: anfang + 4 * n, teile: g.teile.map((t, i) => ({ ...t, nr: teilNr + i })) };
 }
 
 // Plan Hand D8 über die ganze Spur: Fader und Trim in Zeitfolge durchspielen; der erste Teil, der einen geschlossenen

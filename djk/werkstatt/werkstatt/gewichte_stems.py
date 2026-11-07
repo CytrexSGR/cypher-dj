@@ -1,6 +1,6 @@
-"""Gewichte von htdemucs (Paket 1.13 Slice 6, D3) vorab holen: aus einer lokalen Datei (--von, z. B. dem Cache der Probe) oder aus dem Netz.
-sha256 festgenagelt (gemessen 2026-10-30 an ~/werkstatt/cypher-dj/s6-demucs-probe/torch/hub/checkpoints/955717e8-8726e21a.th, 84 141 911 Bytes).
-Grenze G3: ueber 1 GB wird nichts geladen (Exit 3). Aufruf: python -m werkstatt.gewichte_stems [--von PFAD] [--ziel PFAD] [--nur-pruefen]"""
+"""Fetch the BS-RoFormer-SW weights for werkstatt.stems ahead of time (plan 2026-11-06-stems-roformer-gpu, Task 1): from a local file
+(--von, e.g. ~/werkstatt/stems-vergleich/dl/BS-Rofo-SW-Fixed.ckpt) or from the network. sha256 and size pinned (measured 2026-11-06).
+Limit G3: nothing over 1 GB is downloaded (exit 3). Call: python -m werkstatt.gewichte_stems [--von PATH] [--ziel PATH] [--nur-pruefen]"""
 import argparse
 import shutil
 import sys
@@ -9,10 +9,10 @@ from pathlib import Path
 
 from werkstatt.gewichte import GRENZE, groesse_im_netz, sha256
 
-URL = "https://dl.fbaipublicfiles.com/demucs/hybrid_transformer/955717e8-8726e21a.th"   # demucs remote/files.txt, Wurzel hybrid_transformer/
-GROESSE = 84141911
-SHA256 = "8726e21a993978c7ba086d3872e7608d7d5bfca646ca4aca459ffda844faa8b4"
-ZIEL = Path(__file__).resolve().parent.parent / "gewichte" / "htdemucs-955717e8.th"
+URL = "https://huggingface.co/enerjazzer/BS-ROFO-SW-Fixed/resolve/main/BS-Rofo-SW-Fixed.ckpt"   # bs-roformer-infer 0.1.5 overrides.json
+GROESSE = 699412152
+SHA256 = "24e7d35ee9c64415673d3fd33e06a67cac2c103c5df6267ba1576459c775916e"
+ZIEL = Path(__file__).resolve().parent.parent / "gewichte" / "BS-Rofo-SW-Fixed.ckpt"
 
 
 def uebernimm(von, ziel, soll=SHA256):

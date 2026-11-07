@@ -268,6 +268,10 @@ function mixerSchluessel(befehle: unknown[]): string | null {
   if (!b) return null;
   // 1.10 slice 3: a send drag (send_setzen) is one move per track/group and return; a single mixer field of a return coalesces like a track fader
   if (b.befehl === 'send_setzen' && typeof b.strang_id === 'string' && typeof b.return_id === 'string') return `${b.strang_id}:send:${b.return_id}`;
+  // 1.10 slice 4a: a knob sweep on an insert stage is one move per stage and parameter (a drag sends one command per step)
+  if (b.befehl === 'insert_param_setzen' && typeof b.insert_id === 'string' && typeof b.param === 'string') return `${b.insert_id}:insert:${b.param}`;
+  // 1.10 slice 4c: a macro sweep is one move per strip and macro
+  if (b.befehl === 'rack_makro' && typeof b.strang_id === 'string' && typeof b.nr === 'number') return `${b.strang_id}:rack:${b.nr}`;
   const idFeld = b.befehl === 'return_aendern' ? 'return_id' : b.befehl === 'spur_aendern' ? 'spur_id'
     : b.befehl === 'gruppenspur_aendern' ? 'gruppe_id' : b.befehl === 'master_aendern' ? '' : null;
   if (idFeld === null || (idFeld !== '' && typeof b[idFeld] !== 'string')) return null;
@@ -354,16 +358,24 @@ export function zieheNach(v: Verlauf, projekt: Projekt): { projekt: Projekt; ang
 
 // Spec 6.35 (zu 6.7, 6.26): Die Zähler stehen in keinem Patch, das Nachziehen allein brächte eine angelegte und wieder gelöschte ID nach einem
 // Absturz zurück. Deshalb hebt es die Zähler über jede ID, die ein nachgezogener Eintrag nennt: in den Pfaden (/spuren/<s>/clips/<c>/noten/<n>)
-// und in den Werten eines add oder replace (eine ganze Spur, ein Clip, eine Note), in vor und zurück (ein Undo-Eintrag löscht in vor, was er
-// anlegte). Gezählt werden nur IDs der Form s<n>, c<n>, n<n> (wie hoechste in modell.ts). Die Zähler steigen nur.
-function hebeZaehler(p: Projekt, eintraege: readonly Eintrag[]): void {
-  const m = { s: 0, c: 0, n: 0 };
-  const nimm = (praefix: 's' | 'c' | 'n', id: unknown): void => {
+// und in den Werten eines add oder replace (eine ganze Spur, ein Clip, eine Note; 1.14: a takes list, a take, a take clip),
+// in vor und zurück (ein Undo-Eintrag löscht in vor, was er anlegte). Gezählt werden nur IDs der Form s<n>, c<n>, n<n>, t<n>
+// (wie hoechste in modell.ts). Die Zähler steigen nur.
+export function hebeZaehler(p: Projekt, eintraege: readonly Eintrag[]): void {   // exported for the model tests
+  const m = { s: 0, c: 0, n: 0, t: 0 };
+  const nimm = (praefix: 's' | 'c' | 'n' | 't', id: unknown): void => {
     if (typeof id === 'string' && id.length > 1 && id[0] === praefix && /^\d+$/.test(id.slice(1))) m[praefix] = Math.max(m[praefix], Number(id.slice(1)));
   };
   const note = (x: unknown): void => { if (istObjekt(x)) nimm('n', x.id); };
   const clip = (x: unknown): void => { if (!istObjekt(x)) return; nimm('c', x.id); if (Array.isArray(x.noten)) x.noten.forEach(note); };
-  const spur = (x: unknown): void => { if (!istObjekt(x)) return; nimm('s', x.id); if (Array.isArray(x.clips)) x.clips.forEach(clip); };
+  const take = (x: unknown): void => { if (!istObjekt(x)) return; nimm('t', x.id); if (Array.isArray(x.clips)) x.clips.forEach(clip); };
+  const takes = (x: unknown): void => { if (Array.isArray(x)) x.forEach(take); };
+  const spur = (x: unknown): void => {
+    if (!istObjekt(x)) return;
+    nimm('s', x.id);
+    if (Array.isArray(x.clips)) x.clips.forEach(clip);
+    takes(x.takes);
+  };
   for (const e of eintraege) {
     for (const o of [...e.vor, ...e.zurueck]) {
       if (typeof o?.pfad !== 'string') continue;
@@ -372,14 +384,18 @@ function hebeZaehler(p: Projekt, eintraege: readonly Eintrag[]): void {
       nimm('s', seg[1]);
       if (seg[2] === 'clips') nimm('c', seg[3]);
       if (seg[2] === 'clips' && seg[4] === 'noten') nimm('n', seg[5]);
+      if (seg[2] === 'takes') { nimm('t', seg[3]); if (seg[4] === 'clips') nimm('c', seg[5]); }
       if (o.wert === undefined) continue;
       if (seg.length === 2) spur(o.wert);
+      else if (seg.length === 3 && seg[2] === 'takes') takes(o.wert);
+      else if (seg.length === 4 && seg[2] === 'takes') take(o.wert);
+      else if (seg.length === 6 && seg[2] === 'takes' && seg[4] === 'clips') clip(o.wert);
       else if (seg.length === 4 && seg[2] === 'clips') clip(o.wert);
       else if (seg.length === 6 && seg[4] === 'noten') note(o.wert);
     }
   }
   const z = p.naechste_id;
   const gehoben = { spur: Math.max(z?.spur ?? 1, m.s + 1), clip: Math.max(z?.clip ?? 1, m.c + 1) };
-  p.naechste_id = { ...z, ...gehoben };
+  p.naechste_id = { ...z, ...gehoben, ...(m.t > 0 ? { take: Math.max(z?.take ?? 1, m.t + 1) } : {}) };   // 1.14: the take counter only with a take id
   p.naechste_noten_id = Math.max(notenZaehler(p), m.n + 1);
 }

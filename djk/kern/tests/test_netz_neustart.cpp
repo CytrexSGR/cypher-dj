@@ -108,8 +108,9 @@ int main() {
     hallo(a, "pruefstand", y.port, 1'100'000'000);
     hallo(a, "wirt", w.port, 1'200'000'000);
     auto mx = x.alle();
-    // Negativ: Generation 0, kein neustart; Keylock 3b: dazu der Stand des Knopfs (/uhr gesehen) als letzte Meldung
-    PRUEF(mx.size() == 2 && mx[0].adresse == "/k/willkommen" && mx[0].i[1] == 0 && mx[1].adresse == "/e/regler");
+    // Negativ: Generation 0, kein neustart; Keylock 3b: dazu der Stand des Knopfs (/uhr gesehen); 1.15 A5c: zuletzt /e/kanal_limiter (nichts gebaut: 0, 0)
+    PRUEF(mx.size() == 3 && mx[0].adresse == "/k/willkommen" && mx[0].i[1] == 0 && mx[1].adresse == "/e/regler" &&
+          mx[2].adresse == "/e/kanal_limiter" && mx[2].i[0] == 0 && mx[2].i[1] == 0);
     tschuess(a, "pruefstand", 1'300'000'000);
     y.alle();
     w.alle();
@@ -163,8 +164,8 @@ int main() {
   // 4) x meldet sich (sein Herzschlag): /k/willkommen, /e/neustart, /q/stand für 7 (läuft) und 8 (wartet), nicht 9
   hallo(b, "leitstand", x.port, t_neu + 800'000'000);
   mx = x.alle();
-  PRUEF(mx.size() == 6);  // Keylock 3b: zuletzt /e/regler keylock (Stand nach dem Neustart des Kerns)
-  if (mx.size() == 6) {
+  PRUEF(mx.size() == 7);  // Keylock 3b: /e/regler keylock (Stand nach dem Neustart des Kerns); 1.15 A5c: zuletzt /e/kanal_limiter
+  if (mx.size() == 7) {
     PRUEF(mx[0].adresse == "/k/willkommen" && mx[0].i[1] == 1);
     PRUEF(mx[1].adresse == "/e/neustart" && mx[1].i[0] == 1 && mx[1].h[0] == 1'665'536);
     PRUEF(mx[2].adresse == "/e/fx/routing" && mx[2].i[0] == 0);  // Ohr T17
@@ -172,6 +173,7 @@ int main() {
     PRUEF(mx[3].s[0] == "leitstand" && mx[3].s[1].empty());
     PRUEF(mx[4].adresse == "/q/stand" && mx[4].h[0] == 8 && mx[4].i[0] == 1);
     PRUEF(mx[5].adresse == "/e/regler");
+    PRUEF(mx[6].adresse == "/e/kanal_limiter" && mx[6].i[0] == 0 && mx[6].i[1] == 0);   // 1.15 A5c: again in the new generation
   }
 
   // 5) Negativ-Kontrolle: der nächste Herzschlag in derselben Generation bekommt nur /k/willkommen
@@ -182,8 +184,8 @@ int main() {
   // 6) Ein neuer Abonnent in Generation 1 bekommt dasselbe wie x beim ersten Mal
   hallo(b, "analyse", neu.port, t_neu + 900'000'000);
   auto mn = neu.alle();
-  PRUEF(mn.size() == 6 && mn[1].adresse == "/e/neustart" && mn[2].adresse == "/e/fx/routing" && mn[4].adresse == "/q/stand" &&
-        mn[5].adresse == "/e/regler");  // Keylock 3b: zuletzt der Knopf
+  PRUEF(mn.size() == 7 && mn[1].adresse == "/e/neustart" && mn[2].adresse == "/e/fx/routing" && mn[4].adresse == "/q/stand" &&
+        mn[5].adresse == "/e/regler" && mn[6].adresse == "/e/kanal_limiter");  // Keylock 3b: der Knopf; 1.15 A5c: zuletzt der Limiter-Stand
 
   // 7) Die 5-s-Frist der übernommenen Abonnenten beginnt mit dem Neustart: "wirt" meldet sich nie
   b.abonnenten_pruefen(t_neu + 4'900'000'000LL);

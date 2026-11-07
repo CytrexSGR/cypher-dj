@@ -9,13 +9,14 @@ import path from 'node:path';
 import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import { starteStapel } from './stapel.mjs';
+import { starteStapel, bestandVorgabe } from './stapel.mjs';
 import { starteBrowser } from './cdp.mjs';
 import { GRIFF, art, wertAusMidi, ZIELE } from '../oeffentlich/kurven.js';
 import { baueBestand } from '../tests/hilfen/bestand.mjs';
 
 const HIER = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HIER, '..', '..', '..');
+const BESTAND = bestandVorgabe(REPO);
 const inhalt = (d) => (fs.existsSync(d) ? fs.readdirSync(d) : []);
 const { values: opt } = parseArgs({ options: { instanz: { type: 'string' }, bild: { type: 'string' } } });
 if (!/^[a-i]$/.test(opt.instanz ?? '')) {
@@ -87,8 +88,8 @@ try {
   // (Hinweis-Spans und Sortierung ändern den Text; auf bfdd3983 warf die Titelsuche einen TypeError). Die Liste ist
   // asynchron (/bestand), also erst abwarten; die Zeile liegt bei 70 Fassungen außerhalb des sichtbaren Ausschnitts,
   // also vor dem Mausereignis ins Bild holen (sonst traf der Klick die Tabelle, nie den Knopf: 0× /k/deck/laden).
-  const midVon = (titel) => inhalt(path.join(REPO, 'bestand')).find((d) => {
-    const f = path.join(REPO, 'bestand', d, 'material.json');
+  const midVon = (titel) => inhalt(BESTAND).find((d) => {
+    const f = path.join(BESTAND, d, 'material.json');
     try { return fs.existsSync(f) && JSON.parse(fs.readFileSync(f, 'utf8')).titel === titel; } catch { return false; }
   });
   const tListe = Date.now();
@@ -121,7 +122,7 @@ try {
     const g = sondeAb(t).filter((m) => m.n.typ === 'ereignis' && m.n.daten.art === 'geladen' && m.n.daten.deck === deck);
     const titelSeite = await b.werte(`document.querySelector('.deck[data-deck="${deck}"] [data-titel]').textContent`);
     // Kopie am Ziel: fassung.json bytegleich, basis.f32 gleich groß, kein .kopie-Rest; Server-Log mit Dauer
-    const q = path.join(REPO, 'bestand', mid, 'fassungen', '128000_r1');
+    const q = path.join(BESTAND, mid, 'fassungen', '128000_r1');
     const z = path.join(s.ab, mid, 'fassungen', '128000_r1');
     const jsonGleich = fs.existsSync(path.join(z, 'fassung.json')) && fs.readFileSync(path.join(z, 'fassung.json')).equals(fs.readFileSync(path.join(q, 'fassung.json')));
     const groesse = fs.existsSync(path.join(z, 'basis.f32')) ? fs.statSync(path.join(z, 'basis.f32')).size : -1;

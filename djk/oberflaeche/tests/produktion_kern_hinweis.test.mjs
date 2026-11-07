@@ -33,7 +33,7 @@ async function oben() {
 }
 const post = async (url, weg, d) => { const r = await fetch(url + weg.slice(1), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(d) }); return { status: r.status, j: await r.json() }; };
 
-test('V2 Attrappe: kern-Antwort auf Wunsch (einmal), nur Wirt-Slot 1', async () => {
+test('V2 Attrappe: kern-Antwort auf Wunsch (einmal), Wirt-Slots 1 and 2', async () => {
   const o = await oben(), at = await starteProjAttrappe({ oben: o.url });
   try {
     await post(at.url, '/proj/neu', { name: 'Kern' });
@@ -44,12 +44,14 @@ test('V2 Attrappe: kern-Antwort auf Wunsch (einmal), nur Wirt-Slot 1', async () 
     const b = await post(at.url, '/proj/aendern', { rev: a.j.rev, label: 'Metronome off', befehle: [{ befehl: 'metronom_setzen', an: false }] });
     assert.equal(b.j.kern, undefined, 'nur einmal');
     const surge = (slot) => ({ befehl: 'spur_neu', art: 'instrument', geraet: { art: 'wirt', name: 'surge', ...(slot ? { slot } : {}) } });
-    const s2 = await post(at.url, '/proj/aendern', { rev: b.j.rev, label: 'x', befehle: [surge(2)] });
-    assert.deepEqual([s2.status, s2.j.fehler], [409, 'slot_belegt'], 'Slot 2 gibt es in D1 nicht');
+    const s3 = await post(at.url, '/proj/aendern', { rev: b.j.rev, label: 'x', befehle: [surge(3)] });
+    assert.deepEqual([s3.status, s3.j.fehler], [400, 'argument_ungueltig'], 'slot 3 does not exist');
     const s1 = await post(at.url, '/proj/aendern', { rev: b.j.rev, label: 'Add Surge track', befehle: [surge()] });
     assert.equal(s1.j.projekt.spuren[0].geraet.slot, 1);
-    const zweite = await post(at.url, '/proj/aendern', { rev: s1.j.rev, label: 'x', befehle: [surge()] });
-    assert.deepEqual([zweite.status, zweite.j.fehler], [409, 'slot_belegt'], 'eine zweite Surge-Spur: slot_belegt (Spec 6.28)');
+    const s2 = await post(at.url, '/proj/aendern', { rev: s1.j.rev, label: 'Add Surge track 2', befehle: [surge()] });
+    assert.equal(s2.j.projekt.spuren[1].geraet.slot, 2, 'the second Surge track takes slot 2');
+    const dritte = await post(at.url, '/proj/aendern', { rev: s2.j.rev, label: 'x', befehle: [surge()] });
+    assert.deepEqual([dritte.status, dritte.j.fehler], [409, 'slot_belegt'], 'a third Surge track: slot_belegt');
   } finally { await at.stoppe(); await o.stoppe(); }
 });
 

@@ -52,12 +52,16 @@ Kern::Kern(double start_bpm, cdj_ring_kopf* ring, Befehlsring* befehle, Ereignis
     erz_->setze_bk_wert(bk_wert_);
   }
   loops_ = std::make_unique<LoopBoxen>();  // MVP 2: feste Puffer, darum hier und nicht im Callback
-  arr_ = std::make_unique<Arrangement>(sw_->tabelle());  // D1 K1: fixed buffers (sizeof(Arrangement) is 1,303,248 bytes with 32 tracks, of which 512 KiB lane buffers; measured 2026-11-01), not in the callback
+  arr_ = std::make_unique<Arrangement>(sw_->tabelle());  // D1 K1: fixed buffers (sizeof(Arrangement) is 1,358,656 bytes with 32 tracks (1,327,296 before 1.10 slice 4a), of which 512 KiB lane buffers and 16 KiB event ring; measured 2026-11-04 with -O2 -std=gnu++20 -DCYPHERDJ_BUNGEE=1), not in the callback
+  arr_pickup_.arr = arr_.get();   // 1.12 S3 (D2): the Stellwerk asks the Arrangement for the lane value at the first applied hand step
+  arr_pickup_.sperre = &nachreichen_sperre_;
+  sw_->setze_pickup(&arr_pickup_);
   arr_kanal_ = Mixer::kanal_index(ARR_KANAL);
   // D1 K2b (Spec 2.4): die RB-338 spielt alle internen Spuren (je Spur-Slot eine Instanz)
   arr_rb_ = std::make_unique<ArrRbSenke>(*arr_);
   arr_bk_ = std::make_unique<ArrBkSenke>(*arr_);   // S20: a Baukasten graph per internal track with device bk
-  arr_intern_ = std::make_unique<ArrInternSenke>(*arr_, arr_rb_.get(), arr_bk_.get());
+  arr_kit_ = std::make_unique<ArrKitSenke>(*arr_);   // 1.9: a Kit per internal track with device kit (before the dispatcher that holds it)
+  arr_intern_ = std::make_unique<ArrInternSenke>(*arr_, arr_rb_.get(), arr_bk_.get(), arr_kit_.get());
 #ifndef CYPHERDJ_MUTATION_ARR_OHNE_RB_SENKE
   arr_->setze_senke_intern(arr_intern_.get());
 #endif
@@ -65,6 +69,9 @@ Kern::Kern(double start_bpm, cdj_ring_kopf* ring, Befehlsring* befehle, Ereignis
     arr_wirt_[s] = std::make_unique<ArrWirtSenke>(s + 1, &zyklus_n_, &sample_);
     arr_->setze_senke_wirt(s + 1, arr_wirt_[s].get());
   }
+  // 1.9 U6: the instrument rack routes its notes to the member slots of the dispatcher and to the Wirt sinks (made above)
+  arr_rack_ = std::make_unique<ArrRackSenke>(*arr_, arr_intern_.get(), arr_wirt_[0].get(), arr_wirt_[1].get());
+  arr_->setze_senke_rack(arr_rack_.get());
   decks_anlegen();  // Scheibe 31: Decks, Regler-Indizes für offen und hörbar (kern_deck.cpp)
   std::memset(cue_l_, 0, sizeof cue_l_);
   std::memset(cue_r_, 0, sizeof cue_r_);
@@ -300,7 +307,11 @@ void Kern::einsortieren(const Befehl& c) {
     case Befehl::ARR_STOPP:
     case Befehl::ARR_LOOP:
     case Befehl::ARR_METRONOM:
+    case Befehl::ARR_AUTO:   // 1.12 S3: needs the lanes of the playback, so it waits behind a pending load like the rest
       if (!arr_befehl_wartet(c)) einsortieren_arr(c, beat0);  // D1 K1 (kern_arr.cpp); wartet hinter einer Rückgabe
+      break;
+    case Befehl::ARR_ARM:   // 1.12 S3: touches no playback, so it does not wait behind a pending load
+      einsortieren_arr(c, beat0);
       break;
     case Befehl::ARR_FREEZE:  // Paket K3 (kern_arr.cpp); wartet wie die übrigen /k/arr/* hinter einem wartenden Laden
 #ifdef CYPHERDJ_MUTATION_ARR_FREEZE_UEBERHOLT
@@ -376,8 +387,10 @@ void Kern::zyklus(int n, int64_t mono_ns) {
   decks_zustand(n0, n);  // Scheibe 31: /zustand/deck direkt nach /uhr desselben Zyklus (§5.5)
   boxen_zustand(n0, n);  // Keylock 7b.3: /zustand/box im selben Zyklus (§5.5b)
   komp_zustand(n0, n);   // Effekt-Sektion: Absenkung je aktivem Kompressor (§5.5c)
+  mix_zustand(n0, n);    // 1.15 A6: Absenkung der Mix-Werkzeuge je Kanal (§5.5d)
   arr_zustand(n0, n);    // D1 K1: /zustand/arr (§5.13)
   warp_zustand(n0, n);   // 1.13 Slice 2: /zustand/warp (§5.13b)
+  hall_zustand(n0, n);   // mehrkern Task 5: /zustand/hall_pool (§5.13)
 
   // 3) Takt-Anfänge in diesem Block (§5.3): Beats 4(t-1) mit llround(sample_at) in [n0, n0+n)
   const double b_lo = karte.beat_at((double)n0 - 0.5);
@@ -404,6 +417,7 @@ void Kern::zyklus(int n, int64_t mono_ns) {
   pegel_melden(n0, n);  // Scheibe 35: /pegel (§5.6)
 #endif
   decks_frist(n0, n);  // Scheibe 31: /e/frist (§5.9)
+  auto_melden(n0);     // 1.12 S3: /e/auto (§5.13), after the grips of this cycle
 
   // 5) Audio-Ring: Daten, dann Taktfelder, dann w (je Release, §6.1)
   float* d = cdj_ring_daten(ring_);

@@ -41,3 +41,21 @@ export function nurJuengste(hole) {
     return mein === zaehler ? { gilt: true, r } : { gilt: false };
   };
 }
+
+// 1.12 S3 task 9 fixup 2: the loads of the page. plane() starts one after verzoegerungMs (events), starte() at once; fertig() resolves when the NEWEST started load
+// has been applied: a load that was overtaken (neuerLader answers 'ueberholt') waits for its successor. A retry that needs the new revision awaits this.
+export function neuerNachlader(lade, verzoegerungMs = 30) {
+  let neueste = null, uhr = 0;
+  const starte = () => { const p = lade(); neueste = p; return p; };
+  return {
+    starte,
+    plane() { clearTimeout(uhr); uhr = setTimeout(starte, verzoegerungMs); },
+    async fertig() {
+      if (neueste === null) return 'keine';
+      let e = 'ueberholt';
+      for (let i = 0; i < NACHLADE_RUNDEN && e === 'ueberholt'; i++) { const p = neueste; e = await p; if (p !== neueste) e = 'ueberholt'; }
+      return e;
+    },
+  };
+}
+const NACHLADE_RUNDEN = 5;

@@ -80,6 +80,14 @@ async function stapel(t, mutationen = [], { bestand = BESTAND, vorher, kernPruef
   laufend = o;
   for (let i = 0; i < 100 && o.kern.zustand !== 'verbunden'; i++) await warte(20);
   assert.equal(o.kern.zustand, 'verbunden');
+  // 1.12 slice 3 (AK34): the first /k/willkommen makes the server send /k/arr/auto spur 0 an 1 (the project area ends any override of a core that kept
+  // running), and since task 8 also /k/arr/arm spur 0 an 0 (plan automation-slice3 line 38: a core that kept running is disarmed). Wait for those
+  // two commands and count from there, so that the tests' "0 commands" still mean: nothing happened because of the test.
+  for (let i = 0; i < 100 && o.gesendet < 2; i++) await warte(20);
+  const start = log.filter((z) => z.typ === 'an_kern' && z.adresse !== '/k/graph/frage').map((z) => z.adresse).sort();
+  assert.deepEqual(start, ['/k/arr/arm', '/k/arr/auto'], 'the start sends exactly the release and the disarm command');
+  assert.equal(o.gesendet, 2, 'the start sends exactly the release and the disarm command');
+  o.gesendet = 0;
   // Die Attrappe steht auf Generation 0 und antwortet auf jedes erneute /k/hallo mit /k/willkommen 0. Tests, die einen
   // Kern-Neustart mit höherer Generation einspeisen (o.vomKern), würden das seit dem Final-Review als gebremsten Kern lesen.
   // Darum fallen echte Begrüßungen nach dem Verbinden weg; Tests speisen /k/willkommen selbst ein.
@@ -456,6 +464,33 @@ test('Kompressor: erz/1/komp/* setzen, Lage nur abweichend, bus abgelehnt', asyn
   assert.equal(l.regler['erz/1/komp/schwelle'], -30);
   assert.equal(l.regler['pad/2/komp/mix'], 0.5);
   assert.ok(!('erz/1/komp/ratio' in l.regler), 'unverändertes Feld bleibt unsichtbar');
+  s.zu();
+});
+
+// 1.15 A2 (mix tools): tool controls travel through /regler and show in /lage only once they differ from their default (like komp/*);
+// erz/8 and bus-only tools on a source channel are refused (400). lim/decke defaults to -0.3, which is not exact in float32: it must still
+// count as the default after the OSC round trip.
+test('1.15 A2 /regler + /lage: gate, util, mb, lim, spektrum show in lage only after leaving the default; erz/8 and wrong-kind paths are 400', async (t) => {
+  const { url } = await stapel(t);
+  const s = sse(url);
+  await warte(100);
+  const werkzeug = (l) => Object.keys(l.regler).filter((p) => /\/(gate|util|mb|lim)\/|^spektrum\//.test(p));
+  const l0 = await (await fetch(`${url}/lage`)).json();
+  assert.deepEqual(werkzeug(l0), [], 'default: no tool control in lage');
+  for (const [pfad, nach] of [['deck/1/gate/an', 1], ['erz/7/gate/schwelle', -55], ['pad/2/util/breite', 150], ['bus/3/mb/tief/makeup', 6],
+    ['bus/1/lim/decke', -6], ['spektrum/kanal', 19], ['deck/2/gate/ratio', 100], ['bus/2/lim/decke', -0.3], ['bus/4/util/dc', 0]]) {
+    const r = await postJson(url, '/regler', { pfad, nach, ab: 'jetzt' }, CYPHER);
+    assert.equal(r.code, 200, `${pfad}: ${JSON.stringify(r.j)}`);
+  }
+  for (const pfad of ['erz/8/gate/an', 'bus/1/gate/an', 'deck/1/mb/an', 'deck/1/lim/an', 'bus/1/mb/tief/solo', 'bus/1/util/gain_db', 'spektrum/kanal/1']) {
+    assert.equal((await postJson(url, '/regler', { pfad, nach: 1 }, CYPHER)).code, 400, pfad);   // negative controls
+  }
+  await warte(300);
+  const l = await (await fetch(`${url}/lage`)).json();
+  const soll = { 'deck/1/gate/an': 1, 'erz/7/gate/schwelle': -55, 'pad/2/util/breite': 150, 'bus/3/mb/tief/makeup': 6, 'bus/1/lim/decke': -6, 'spektrum/kanal': 19 };
+  assert.deepEqual(Object.fromEntries(werkzeug(l).map((p) => [p, l.regler[p]])), soll, JSON.stringify(l.regler));
+  assert.ok(!('deck/2/gate/ratio' in l.regler) && !('bus/2/lim/decke' in l.regler) && !('bus/4/util/dc' in l.regler),
+    'a value set to its default stays invisible (lim/decke -0.3 after the float32 round trip too)');
   s.zu();
 });
 
@@ -3413,4 +3448,36 @@ test('V2 Fix-Runde 2 H2: stapel() lässt unter TMPDIR nichts liegen, ein überge
   assert.ok(waehrend.length >= 1, 'Positiv-Kontrolle: während des Laufs liegt der tmp-Ordner des Stapels unter TMPDIR');
   assert.deepEqual(neu, [], 'nach t.after liegt unter TMPDIR nichts Neues');
   assert.ok(bleibt, 'Negativ-Kontrolle: der übergebene loops-Ordner bleibt stehen');
+});
+
+// Demo overlay (2026-11-07): POST /ansage sets one line, the stream carries it to every page (also to a page that connects
+// later), an empty text clears it, bad bodies are refused
+test('demo overlay: POST /ansage reaches the stream, a late page gets the current line, empty clears, bad bodies 400', async (t) => {
+  const { url } = await stapel(t);
+  const s = sse(url);
+  await warte(100);
+  assert.deepEqual((await (await fetch(`${url}/ansage`)).json()), { ansage: null });
+  const r = await postJson(url, '/ansage', { text: '  Ich  bringe gleich die Bassline rein  ' }, CYPHER);
+  assert.equal(r.code, 200, JSON.stringify(r.j));
+  assert.equal(r.j.ansage.text, 'Ich bringe gleich die Bassline rein');
+  assert.equal(r.j.ansage.von, 'cypher');
+  assert.equal(r.j.ansage.art, 'tat');
+  await warte(100);
+  const e = s.ereignisse.filter((x) => x.a === 'ansage');
+  assert.equal(e.length, 1, JSON.stringify(s.ereignisse.map((x) => x.a)));
+  assert.equal(e[0].f.text, 'Ich bringe gleich die Bassline rein');
+  const spaet = sse(url);   // a page that connects later gets the current line right after the state
+  await warte(150);
+  assert.equal(spaet.ereignisse.find((x) => x.a === 'ansage')?.f.text, 'Ich bringe gleich die Bassline rein');
+  const st = await postJson(url, '/ansage', { text: 'Gesprochen', quelle: 'stimme' }, CYPHER);
+  assert.equal(st.j.ansage.art, 'stimme');
+  const leer = await postJson(url, '/ansage', { text: '' }, CYPHER);
+  assert.equal(leer.code, 200);
+  assert.equal(leer.j.ansage, null);
+  await warte(100);
+  assert.equal(s.ereignisse.filter((x) => x.a === 'ansage').at(-1).f, null);
+  assert.equal((await postJson(url, '/ansage', { text: 5 }, CYPHER)).code, 400);
+  assert.equal((await postJson(url, '/ansage', { text: 'x'.repeat(301) }, CYPHER)).j.fehler, 'text_zu_lang');
+  s.zu();
+  spaet.zu();
 });

@@ -53,6 +53,9 @@ class EingangsBank {
     sp_[paar - 1] = 0.0f;
     return v;
   }
+  // The buffers of pair 1..4 for this cycle (voice channel, stimme.h); nullptr without a port or outside 1..4.
+  const float* l(int paar) const noexcept { return paar >= 1 && paar <= EIN_PAARE ? l_[paar - 1] : nullptr; }
+  const float* r(int paar) const noexcept { return paar >= 1 && paar <= EIN_PAARE ? r_[paar - 1] : nullptr; }
   // Neue Zeitachse (/k/set/neu): die letzten Flanken gehören zur alten Achse.
   void achse_neu() noexcept { for (int k = 0; k < EIN_PAARE; ++k) flanke_[k] = -1; }
   // Kern-Sample der letzten Flanke (linker Kanal), −1 ohne.

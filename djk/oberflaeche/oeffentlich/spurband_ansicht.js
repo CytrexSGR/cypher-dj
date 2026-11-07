@@ -1,6 +1,6 @@
 // Studio S7: Spurbänder in der STUDIO-Ansicht zeichnen und bedienen. Rechnen: spurband.js. Senden: POST /spur, /spur/stopp
 // (Seiten-Server, Studio S6). Entwurf je Band im localStorage (nur Bequemlichkeit: ohne Speicher gilt die Vorgabe-Linie).
-import { baender, spurName, vorgabePunkte, setzePunkt, verschiebePunkt, loeschePunkt, kuerze, entwurfGueltig, griffBei, zugStart, zugBewegung, segmentFuerKlick, naechsteForm, setzeForm, pfad, punkteZuFahrten, fremdPfad, raster, LAENGEN } from './spurband.js';
+import { baender, spurName, vorgabePunkte, setzePunkt, verschiebePunkt, loeschePunkt, kuerze, entwurfGueltig, griffBei, zugStart, zugBewegung, segmentFuerKlick, naechsteForm, setzeForm, pfad, fremdPfad, raster, LAENGEN, kopfTakt, schleifenSpur, schleifenAenderer } from './spurband.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 // viewBox = echte Pixelgröße des SVG (ResizeObserver), nichts wird gestreckt; Maße in Pixeln (Slice-1-Review F2)
@@ -21,7 +21,8 @@ function neuesBand(wurzel, strom, band, post, geaendert = () => {}) {
   b.innerHTML = `<div class="spurband-kopf">
       <select aria-label="Length in bars">${LAENGEN.map((l) => `<option value="${l}"${l === z.laenge ? ' selected' : ''}>${l} bars</option>`).join('')}</select>
       <button class="spielen" title="Play this lane from the next bar">PLAY</button>
-      <button class="halten" title="Stop this lane; values stay where they are">STOP</button></div>
+      <button class="halten" title="Stop this lane; values stay where they are">STOP</button>
+      <span class="naechste" hidden title="Your change sounds from the next pass of the loop">next loop</span></div>
       <span class="meldung" role="status"></span>`;
   const svg = el('svg', { role: 'group', 'aria-label': `${band.name} automation lane (mouse only)` });
   b.append(svg);
@@ -33,7 +34,7 @@ function neuesBand(wurzel, strom, band, post, geaendert = () => {}) {
   const titel = el('title');   // Hinweis beim Überfahren eines Segments (Tooltip des SVG), wird bei jedem Zeichnen wieder angehängt
   let kopf = null;    // Abspielkopf (Slice 4); VOR dem ersten zeichne() deklariert (TDZ, Review S7 #4)
   let fremd = null;   // gestrichelte Linie einer fremden Spur auf diesem Ziel (ebenfalls vor dem ersten zeichne())
-  let eigenAnker = null, kopfTakt = null, fremdFahrten = [];   // Stand der laufenden Spuren (GET /spur), überlebt jedes Neuzeichnen
+  let eigenLauf = null, kopfBei = null, fremdFahrten = [];   // Stand der laufenden Spuren (GET /spur), überlebt jedes Neuzeichnen
 
   const zeichne = () => {
     svg.replaceChildren();
@@ -54,29 +55,34 @@ function neuesBand(wurzel, strom, band, post, geaendert = () => {}) {
   };
   // Kopf und fremde Linie aus dem gemerkten Laufstand setzen (nach jedem Zeichnen und bei jedem neuen Beat)
   const stelleLaufEin = () => {
-    if (kopf) { const x = kopfTakt == null ? -10 : r().x(kopfTakt); kopf.setAttribute('x1', x); kopf.setAttribute('x2', x); }
+    if (kopf) { const x = kopfBei == null ? -10 : r().x(kopfBei); kopf.setAttribute('x1', x); kopf.setAttribute('x2', x); }
     if (fremd) fremd.setAttribute('d', fremdFahrten.length ? fremdPfad(band, fremdFahrten, B, H, RAND) : '');   // im Raster IHRER Länge (Final-Review F2)
   };
-  // Abspielkopf aus dem Kern-Beat: nur die eigene Spur hat einen Kopf; vor dem Anker und hinter dem Ende steht er bei −10
+  // Abspielkopf aus dem Kern-Beat: nur die eigene Spur hat einen Kopf; vor dem Anker und hinter dem Ende steht er bei −10.
+  // 1.12 S7: a loop runs modulo its pass (kopfTakt in spurband.js)
   const kopfNachBeat = (beat) => {
-    const takt = eigenAnker != null && beat != null ? (beat - eigenAnker) / 4 + 1 : null;
-    const neu = takt != null && takt >= 1 && takt <= z.laenge + 1 ? takt : null;
-    if (neu !== kopfTakt) { kopfTakt = neu; stelleLaufEin(); } else if (neu != null) stelleLaufEin();
+    const neu = kopfTakt(beat, eigenLauf, z.laenge);
+    if (neu !== kopfBei) { kopfBei = neu; stelleLaufEin(); } else if (neu != null) stelleLaufEin();
   };
   // liste = GET /spur; beat = Kern-Beat (oder null). Antwort: läuft auf diesem Ziel eine Spur (eigene oder fremde)?
   const zeigeLauf = (liste, beat) => {
     const eigen = liste.find((x) => x.name === name);
     const andere = liste.filter((x) => x.name !== name && (x.fahrten ?? []).some((f) => f.ziel === band.ziel));
-    eigenAnker = eigen ? eigen.anker_beat : null;
+    eigenLauf = eigen ?? null;
     fremdFahrten = andere.length ? andere[0].fahrten : [];
     spielen.classList.toggle('an', !!eigen);
+    b.querySelector('.naechste').hidden = !eigen?.naechste;   // 1.12 S7: a change waits for the next pass
     b.title = andere.length ? `${andere[0].name} (${andere[0].quelle}) is moving this lane` : '';
     kopfNachBeat(beat);
     stelleLaufEin();
     return !!eigen || andere.length > 0;
   };
   // speichern = false während des Ziehens: localStorage erst beim Ende der Änderung (Review F4)
-  const aendere = (punkte, speichern = true) => { z.punkte = punkte; if (speichern) merke(speicher, z); zeichne(); };
+  const aendere = (punkte, speichern = true) => { z.punkte = punkte; if (speichern) { merke(speicher, z); imLauf(); } zeichne(); };
+  // 1.12 S7: a finished edit while the own loop runs goes to /spur/aendern (through `aenderer`, set up with PLAY/STOP below)
+  // While PLAY is on its way (startet) an edit is not sent: it would reach the run PLAY replaces; PLAY sends it after its answer (review timing 2)
+  let startet = false;
+  const imLauf = () => { if (!startet && eigenLauf?.schleife_takte) aenderer.melde(schleifenSpur(name, band, z)); };
   const lokal = (ev) => {   // Mauskoordinaten → Pixel im SVG (viewBox = Pixel)
     const k = svg.getBoundingClientRect();
     return { x: ev.clientX - k.left - svg.clientLeft, y: ev.clientY - k.top - svg.clientTop };
@@ -105,7 +111,7 @@ function neuesBand(wurzel, strom, band, post, geaendert = () => {}) {
   });
   const loslassen = (ev) => {   // pointerup, pointercancel und lostpointercapture (Rereview R4)
     if (!zug || (ev.isPrimary === false)) return;
-    if (zug.aktiv) merke(speicher, z);
+    if (zug.aktiv) { merke(speicher, z); imLauf(); }
     zug = null;
   };
   svg.addEventListener('pointerup', loslassen);
@@ -132,16 +138,34 @@ function neuesBand(wurzel, strom, band, post, geaendert = () => {}) {
   // PLAY/STOP (Review F5): Stopp und Start getrennt behandelt, Antwort-JSON im eigenen try, PLAY gesperrt, solange es wartet
   const spielen = b.querySelector('.spielen'), halten = b.querySelector('.halten');
   const sperre = (an) => { spielen.disabled = an; };   // STOP bleibt bedienbar, auch während PLAY auf die Antwort wartet (Rereview R5)
-  const FEHLER = { keine_uhr: 'no kernel clock yet', ki_gestoppt: 'AI stopped', laeuft: 'lane is running, stop it first', ab: 'bad start mode', spur: 'kernel refused the lane' };
+  const FEHLER = { keine_uhr: 'no kernel clock yet', ki_gestoppt: 'AI stopped', laeuft: 'lane is running, stop it first', ab: 'bad start mode', spur: 'kernel refused the lane',
+    keine_spur: 'the lane is not running any more' };
   const fehlerText = (j, status) => j?.text ?? FEHLER[j?.fehler] ?? (j?.fehler ? `error: ${j.fehler}` : `error ${status}`);
   // Zug-Zähler (Rereview2 Q2): STOP erhöht ihn; ein PLAY, dessen Antwort erst nach einem STOP kommt, schreibt nichts mehr und
   // bricht die eben gestartete Spur wieder ab, sonst überschriebe „from bar N“ das „stopped“ und die Spur liefe trotzdem.
   let zaehler = 0;
+  // 1.12 S7 (S8 plan task 7, MAJOR 4): changes of the running loop, 300 ms after the last edit; the last state follows a running request.
+  // An answer that arrives after a STOP writes nothing (zaehler, as for PLAY).
+  const aenderer = schleifenAenderer({
+    name,
+    post: async (pfad, daten) => { const mein = zaehler; try { return { r: await post(pfad, daten), mein }; } catch (e) { return { fehler: e, mein }; } },
+    antwort: async (x) => {
+      if (!x || x.mein !== zaehler) return;
+      if (x.fehler) return meldung('page server unreachable, change not sent', 'fehler');
+      let j = null;
+      try { j = await x.r.json(); } catch { /* no JSON answer */ }
+      if (x.mein !== zaehler) return;
+      if (!x.r.ok) return meldung(`change not applied (${fehlerText(j, x.r.status)})`, 'fehler');
+      meldung(`change from bar ${j?.ab_takt ?? '?'}${j?.uebernaechster ? ' (the next pass was already on its way)' : ''}`, 'ok');
+      geaendert();
+    },
+  });
   spielen.addEventListener('click', async () => {
     if (spielen.disabled) return;
+    aenderer.stopp();   // PLAY sends the whole line anyway
     const mein = zaehler, gilt = () => zaehler === mein;
     const melde = (t, art) => { if (gilt()) meldung(t, art); };
-    sperre(true); meldung('');
+    sperre(true); meldung(''); startet = true;
     geaendert();   // Antworten von GET /spur, die vor diesem PLAY gestartet wurden, sind veraltet (Final-Review F1)
     try {
       let s;
@@ -150,7 +174,9 @@ function neuesBand(wurzel, strom, band, post, geaendert = () => {}) {
       if (!gilt()) return;   // STOP kam schon, bevor der Start gesendet war: nicht mehr starten
       let r2;
       const vor = s.ok ? 'stopped, ' : '';   // die alte Spur ist dann wirklich weg (Rereview R3)
-      try { r2 = await post('/spur', { spur: { name, fahrten: punkteZuFahrten(band, z.punkte) }, ab: 'takt' }); } catch { return melde(`${vor}new lane not started (page server unreachable)`, 'fehler'); }
+      // 1.12 S7: PLAY loops the line over its length until STOP
+      const gesendet = schleifenSpur(name, band, z);
+      try { r2 = await post('/spur', { spur: gesendet, ab: 'takt' }); } catch { return melde(`${vor}new lane not started (page server unreachable)`, 'fehler'); }
       let j = null;
       try { j = await r2.json(); } catch { /* keine JSON-Antwort */ }
       if (!gilt()) {   // STOP kam, während der Start unterwegs war: die eben gestartete Spur wieder stoppen, Meldung gehört dem STOP
@@ -160,11 +186,14 @@ function neuesBand(wurzel, strom, band, post, geaendert = () => {}) {
       if (!r2.ok) return meldung(`${vor}new lane not started (${fehlerText(j, r2.status)})`, 'fehler');
       if (j?.abgelehnt?.length) return meldung(`${vor}kernel rejected ${j.abgelehnt.length} part(s)`, 'fehler');
       const takt = j?.anker_takt ?? (Number.isFinite(j?.anker_beat) ? Math.floor(j.anker_beat / 4) + 1 : null);
-      meldung(takt === null ? 'started' : `from bar ${takt}`, 'ok');
-    } finally { sperre(false); geaendert(); }
+      meldung(takt === null ? 'looping' : `looping from bar ${takt}`, 'ok');
+      const jetzt = schleifenSpur(name, band, z);   // an edit made while PLAY was on its way goes to the new loop as a change
+      if (JSON.stringify(jetzt) !== JSON.stringify(gesendet)) aenderer.melde(jetzt);
+    } finally { startet = false; sperre(false); geaendert(); }
   });
   halten.addEventListener('click', async () => {
     zaehler++;   // gilt für ein gerade wartendes PLAY
+    aenderer.stopp();   // 1.12 S7: a waiting change of the loop is not sent any more
     geaendert();
     try {
       const r2 = await post('/spur/stopp', { name });

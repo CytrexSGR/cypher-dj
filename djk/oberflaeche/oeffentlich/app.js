@@ -2,12 +2,17 @@
 // Öffnen sendet nichts an den Kern: gesendet wird nur auf einen Griff (Zeiger, Rad, Klick) oder LOAD.
 // Lesen: /strom (Kern über den Seiten-Server), Leitstand-WS als Rolle "anzeige" (takt, ansage, ereignis).
 import { DECKS, ERZEUGER, LOOPBOXEN, GRIFF, art, griffZuMidi, formatiere, vorgabe, setzeZielKurve } from './kurven.js';
-import { KOMP_PRESETS, KOMP_SCHLUESSEL, kennlinienPfad, AUTO_BEREICH, DURCHGAENGE, AUTO_VORLAGEN, vorlagePunkte, punktAusStelle, fxInhaltText, knobListe, KNOB_GRUPPE, htmlText, bkKnobListe, bkKnobHtml, graphWahlHtml, GRAPH_KANAL_ART, sendRueckHtml, lernKnopfHtml, lernStand, bkMarke, bkSpeichernHtml } from './effekte.js';
+import { KOMP_PRESETS, KOMP_SCHLUESSEL, kennlinienPfad, AUTO_BEREICH, DURCHGAENGE, AUTO_VORLAGEN, vorlagePunkte, punktAusStelle, fxInhaltText, knobListe, KNOB_GRUPPE, htmlText, bkKnobListe, bkKnobHtml, graphWahlHtml, GRAPH_KANAL_ART, sendRueckHtml, lernKnopfHtml, lernStand, bkMarke, bkSpeichernHtml,
+  werkFeld, werkText, werkzeugStreifenHtml, werkzeugKlickNach, setzeWerkzeug,
+  BUS_KANAELE, MIX_FELDER, busPanelHtml, limiterZustand, mixAufnehmen, mixLesung, mixAblaufIn,
+  GATE_KANAELE, GATE_FELDER, GATE_SKALA_DB, gateAufnehmen } from './effekte.js';
 import { KOPIE_TEXT, HAND_PRUEFMODUS_TEXT, cypherStand, ausgangAnzeige, keylockStand, keylockAnfrage, keylockMeldung, variText, einsHinweis, EINS_HINWEIS_TEXT } from './meldungen.js';
 import { leseWelle, Kopf, Laufansicht, Uebersicht, SR, laengeFrames, ersteVolleEins } from './welle.js';
 import { bindeSpurbaender } from './spurband_ansicht.js';
 import { ScrubZieher } from './scrub.js';
 import { bindeProduktion } from './produktion/produktion.js';
+import { SpektrumAnsicht, SPEKTRUM_FRIST_MS } from './spektrum.js';   // 1.15 A7b: spectrum view
+import { bauePresetPanel, hostWechsel, kanalPlanHolen, presetAusKernKomp, kernGeraetAnfragen, kernGeraetWerte, istKernGeraet } from './presets.js';   // 1.16: preset browser
 import { vorhoerFolgt, vorhoerCursor, SPALTEN, LISTEN_SPALTEN, LISTEN_TEXT, TYP_TEXT, stoebernUrl, zelle, baueBaum, listenArtFuer, ziehZiel, postenArtText, filterFuer, filterBereinigt, detailFakten, welleStatus, feldText, aktionenFuer, loopBoxStatus, IMPORT_FEHLER_TEXT, vorbereitText, statusText, setzeVorbereitLive, fehlerAnzeige } from './stoebern.js';
 
 const $ = (s, w = document) => w.querySelector(s);
@@ -600,6 +605,9 @@ function setzeBereich(b) {
   for (const t of $$('[data-bereich]')) { const an = t.dataset.bereich === b; t.classList.toggle('an', an); t.setAttribute('aria-selected', String(an)); }
   $('#effekte').hidden = b !== 'effekte';
   if (b === 'effekte') holeFxInhalt();
+  document.body.classList.toggle('bereich-presets', b === 'presets');   // 1.16
+  $('#presets').hidden = b !== 'presets';
+  if (b === 'presets') zeigePresets();
   try { localStorage.setItem('djk-bereich', b); } catch { /* ohne Speicher: nur jetzt */ }
 }
 async function setzeKomp(pfad, nach) {
@@ -633,6 +641,10 @@ function zeigeGraphWahl() {
 let bkGespeichert = null, bkTimer = null, bkMarkeTimer = null;
 async function holeBk() {
   try {
+    // GET /proj/bk answers 409 without an open project, and the browser logs every 4xx as a console error (the DJ acceptance A0/A0b/A6
+    // counts it); so ask the cheap rev view first, which answers 200 with slug null when nothing is open
+    const offen = await fetch('/proj/aktuell?nur=rev');
+    if (!offen.ok || (await offen.json()).slug == null) { bkGespeichert = null; zeigeGraphWahl(); return; }
     const r = await fetch('/proj/bk');
     bkGespeichert = r.ok ? ((await r.json()).gespeichert ?? []) : null;
   } catch { /* the page server is gone: keep what the marker had */ }
@@ -686,7 +698,8 @@ function baueFxStreifen() {
       + (GRAPH_KANAL_ART[k] ? `<div class="graphplatz" data-graphplatz="${k}"></div>` : '')
       + `<div class="fxpegel"><div class="meter waagrecht" data-kanal="${k}"><i></i></div><span data-fxpegel="${k}">−∞</span></div>`
       + KOMP_REGLER.map((r) => `<label>${r.name}<input type="range" data-komp-feld="${r.feld}" min="${r.min}" max="${r.max}" step="${r.schritt}" aria-label="${name} compressor ${r.name}"><output></output></label>`).join('')
-      + '<div class="gr" title="Gain reduction"><i></i></div><div class="grzahl">GR –</div>';
+      + '<div class="gr" title="Gain reduction"><i></i></div><div class="grzahl">GR –</div>'
+      + werkzeugStreifenHtml(k, name);   // A8: GATE and UTIL strips (<k>/gate/*, <k>/util/*); nothing is sent while building
     s.querySelector('.komp-an').addEventListener('click', () => setzeKomp(`${k}/komp/an`, kompWert(k, 'an', 0) >= 0.5 ? 0 : 1));
     for (const inp of s.querySelectorAll('input[data-komp-feld]')) {
       let warte = null;
@@ -702,9 +715,129 @@ function baueFxStreifen() {
   send.className = 'sendrueck';
   send.innerHTML = sendRueckHtml();
   reihe.append(send);
+  const bus = document.createElement('div');   // A8b: BUS panel (multiband, limiter, utility per bus); its controls use the same handlers as the strips
+  bus.className = 'buspanel';
+  bus.innerHTML = busPanelHtml();
+  reihe.append(bus);
   zeigeGraphWahl();
   baueSendKnobs();
   zeigeKomp();
+  zeigeWerkzeug();
+  zeigeLimiter(limiterStand);
+  zeigeBusMesser();
+}
+// A8: the Gate and Utility strips. One handler on the strip row: sliders send after 40 ms like the compressor, switches toggle from the live value.
+async function sendeWerkzeug(pfad, nach) {
+  const r = await setzeWerkzeug(fetch, pfad, nach);
+  if (!r.ok) melde(r.text, true);
+  return r;
+}
+const werkWarte = new Map();
+function bindeWerkzeug(reihe) {
+  reihe.addEventListener('input', (e) => {
+    const inp = e.target.closest?.('input[data-werk-pfad]');
+    if (!inp) return;
+    if (inp.disabled) return;   // A8b: the limiter controls while the limiter is not built
+    const pfad = inp.dataset.werkPfad, feld = pfad.split('/').slice(2).join('/');
+    inp.nextElementSibling.textContent = werkText(feld, Number(inp.value));
+    if (werkWarte.has(pfad)) return;
+    werkWarte.set(pfad, setTimeout(() => { werkWarte.delete(pfad); sendeWerkzeug(pfad, Number(inp.value)); }, 40));
+  });
+  reihe.addEventListener('click', (e) => {
+    const b = e.target.closest?.('button[data-werk-pfad]');
+    if (b?.disabled) return;
+    if (b) { b.blur(); sendeWerkzeug(b.dataset.werkPfad, werkzeugKlickNach(zustand.regler, b.dataset.werkPfad)); }
+  });
+}
+// A8b: folding of the BUS panel and of the per-band block of a bus (both collapsed state is the page's, nothing is sent)
+function bindeBus(reihe) {
+  reihe.addEventListener('click', (e) => {
+    const p = e.target.closest?.('button.bus-panel-knopf');
+    if (p) {
+      const zu = p.getAttribute('aria-expanded') === 'true';
+      p.setAttribute('aria-expanded', String(!zu));
+      p.textContent = zu ? 'BUS ▸' : 'BUS ▾';
+      reihe.querySelector('.busreihe').hidden = zu;
+      return;
+    }
+    const b = e.target.closest?.('button[data-baender-knopf]');
+    if (b) {
+      const k = b.dataset.baenderKnopf, offen = b.getAttribute('aria-expanded') === 'true';
+      b.setAttribute('aria-expanded', String(!offen));
+      b.textContent = offen ? 'BANDS ▸' : 'BANDS ▾';
+      reihe.querySelector(`[data-baender="${k}"]`).hidden = offen;
+    }
+  });
+}
+// A8b: the channel limiter exists only when the kern built it (kern.toml kanal_limiter_vorhalt_ms > 0); /lage says so in kanal_limiter.
+// Absent or not built: lim/an, lim/decke and lim/abklingen are disabled and the reason is shown. Built: enabled, latency shown if known.
+let limiterStand = limiterZustand(null);
+function zeigeLimiter(z) {
+  limiterStand = z;
+  for (const s of $$('.busstreifen')) {
+    for (const c of s.querySelectorAll('.fxwerk-lim [data-werk-pfad]')) c.disabled = !z.gebaut;
+    const g = s.querySelector('[data-lim-grund]');
+    g.textContent = z.gebaut ? (z.latenzSamples === null ? '' : `latency ${z.latenzSamples} samples`) : z.grund;
+    g.hidden = z.gebaut && z.latenzSamples === null;
+  }
+}
+// A8b: gain-reduction meters of the buses from /zustand/mix (D10). A reading counts for 500 ms; the reset to "no reading" is scheduled
+// for the moment the next reading expires, so a meter falls back without any event.
+const busMix = {};
+// 1.15 A7b: the spectrum view in the EFFECTS panel. The selector is the kern's row spektrum/kanal (echo /e/regler, state snapshot); frames come as /zustand/spektrum.
+const spektrumAnsicht = new SpektrumAnsicht({ leinwand: $('#spektrum-leinwand'), wahl: $('#spektrum-quelle'), info: $('#spektrum-info'), sende: sendeWerkzeug });
+let spektrumTimer = null;
+function spektrumNachsehen() {   // after the last frame the plot must go empty by itself (no event arrives then)
+  clearTimeout(spektrumTimer);
+  spektrumTimer = setTimeout(() => spektrumAnsicht.zeichne(), SPEKTRUM_FRIST_MS + 30);
+}
+let busMesserTimer = null;
+function zeigeBusMesser() {
+  const jetzt = performance.now();
+  for (const k of BUS_KANAELE) for (const feld of MIX_FELDER) {
+    const db = mixLesung(busMix, k, feld, jetzt);
+    const i = $(`[data-messer="${k}|${feld}"]`), z = $(`[data-messer-zahl="${k}|${feld}"]`);
+    if (!i || !z) continue;
+    i.style.width = `${Math.min(100, ((db ?? 0) / 24) * 100)}%`;
+    z.textContent = db === null ? '–' : `${db.toFixed(1)} dB`;
+  }
+  clearTimeout(busMesserTimer);
+  const warte = mixAblaufIn(busMix, jetzt);
+  busMesserTimer = warte === null ? null : setTimeout(zeigeBusMesser, warte + 5);
+}
+// A6: gate meters of the source channels from /zustand/mix (gate_db), same 500 ms rule and self-scheduled reset as the bus meters.
+const gateMix = {};
+let gateMesserTimer = null;
+function zeigeGateMesser() {
+  const jetzt = performance.now();
+  for (const k of GATE_KANAELE) {
+    const db = mixLesung(gateMix, k, 'gate_db', jetzt);
+    const i = $(`[data-messer="${k}|gate_db"]`), z = $(`[data-messer-zahl="${k}|gate_db"]`);
+    if (!i || !z) continue;   // not every source channel has a strip on the page
+    i.style.width = `${Math.min(100, ((db ?? 0) / GATE_SKALA_DB) * 100)}%`;
+    z.textContent = db === null ? '–' : `${db.toFixed(1)} dB`;
+  }
+  clearTimeout(gateMesserTimer);
+  const warte = mixAblaufIn(gateMix, jetzt, GATE_KANAELE, GATE_FELDER);
+  gateMesserTimer = warte === null ? null : setTimeout(zeigeGateMesser, warte + 5);
+}
+// Show the live control state in the strips (from /e/regler); a slider under the pointer is not moved.
+function zeigeWerkzeug(nur) {
+  for (const s of $$('.fxstreifen, .busstreifen')) {
+    const k = s.dataset.kanal;
+    if (nur && nur !== k) continue;
+    for (const b of s.querySelectorAll('button[data-werk-pfad]')) {
+      const an = (zustand.regler?.[b.dataset.werkPfad] ?? 0) >= 0.5;
+      b.classList.toggle('an', an);
+      b.setAttribute('aria-pressed', String(an));
+    }
+    for (const inp of s.querySelectorAll('input[data-werk-pfad]')) {
+      const feld = inp.dataset.werkPfad.slice(k.length + 1), w = zustand.regler?.[inp.dataset.werkPfad];
+      const v = typeof w === 'number' ? w : werkFeld(feld).vorgabe;
+      if (document.activeElement !== inp) inp.value = String(v);
+      inp.nextElementSibling.textContent = werkText(feld, v);
+    }
+  }
 }
 function zeigeKomp(nur) {
   for (const s of $$('.fxstreifen')) {
@@ -1015,12 +1148,42 @@ function zeichneVerlauf() {
   g.stroke();
 }
 
+// 1.16 preset browser (oeffentlich/presets.js). The page reads and sets the kern's channel compressor (komp) and, since A8, the kern mix tools
+// (Gate, Utility; Multiband and Limiter only on buses, which have their own panel since A8b but are not in fxGewaehlt) of the channel picked in EFFECTS (fxGewaehlt), so that is
+// what SAVE CURRENT and APPLY reach; the plugin devices are browsable, not applicable.
+let presetPanel = null;
+const presetSenden = async (pfad, daten) => { const r = await fetch(pfad, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(daten ?? {}) }); return { code: r.status, j: await r.json().catch(() => ({})) }; };
+const presetGeraet = (id) => presetPanel?.z.geraete.find((x) => x.id === id);
+function zeigePresets() {
+  if (presetPanel) { presetPanel.lade(); return; }
+  // 1.16 rest U7: the same panel sits in the PRODUCTION browser; while the page is in PRODUCTION the production host answers (hostWechsel)
+  presetPanel = bauePresetPanel($('#presets'), hostWechsel({
+    geraet: 'komp',
+    aktuell: (g) => {
+      const d = presetGeraet(g);
+      if (istKernGeraet(d)) return kernGeraetWerte(d, fxGewaehlt, (pfad) => zustand.regler?.[pfad]);
+      return g === 'komp' ? presetAusKernKomp((feld) => kompWert(fxGewaehlt, feld, undefined)) : null;
+    },
+    kannAnwenden: (g) => g === 'komp' || kernGeraetAnfragen(presetGeraet(g), {}, fxGewaehlt).fehler === undefined,
+    anwenden: async (preset, g, id) => {
+      // 1.16 U3b: the server computes the requests (POST /presets/anwenden, target kanal); the page sends them one by one and stops at the first refusal
+      const kanal = FX_KANAELE.find(([p]) => p === fxGewaehlt)?.[1] ?? fxGewaehlt;
+      const plan = await kanalPlanHolen(presetSenden, id, fxGewaehlt);
+      if (!plan.ok) return { ok: false, text: plan.text };
+      for (const a of plan.anfragen) { const r = await sendeWerkzeug(a.pfad, a.nach); if (!r.ok) return { ok: false, text: r.text }; }
+      const uebrig = plan.uebersprungen;
+      return { ok: true, text: `channel ${kanal}${uebrig.length ? `; not in the table: ${uebrig.join(', ')}` : ''}` };
+    },
+  }, () => produktion?.presetHost, () => document.body.classList.contains('produktion')));
+}
+
 // Was auf jedem Kanal läuft, aus /lage (dieselbe Quelle wie Cyphers Hand): Deck-Titel, Strudel-Muster und Klang, Loop der Box.
 // Nur abgefragt, solange die Effekt-Sektion offen ist (alle 2 s).
 async function holeFxInhalt() {
   if ($('#effekte').hidden) return;
   try {
     const lage = await (await fetch('/lage')).json();
+    zeigeLimiter(limiterZustand(lage));   // A8b, before the loop: a missing deck field there must not leave the limiter state stale
     for (const [k] of FX_KANAELE) {
       const el = $(`[data-fxinhalt="${CSS.escape(k)}"]`);
       if (el) { const t = fxInhaltText(k, lage); el.textContent = t; el.title = t; el.classList.toggle('laeuft', t.startsWith('▶')); }
@@ -1031,6 +1194,8 @@ async function holeFxInhalt() {
 function bindeEffekte() {
   for (const t of $$('[data-bereich]')) t.addEventListener('click', () => setzeBereich(t.dataset.bereich));
   baueFxStreifen();
+  bindeWerkzeug($('#fxstreifen'));
+  bindeBus($('#fxstreifen'));
   $('#fxstreifen').addEventListener('click', (e) => {
     const s = e.target.closest('.fxstreifen');
     if (s && !e.target.closest('button, input, select')) waehleFx(s.dataset.kanal);
@@ -1059,7 +1224,7 @@ function bindeEffekte() {
   }, 100);
   let b = 'library';
   try { b = localStorage.getItem('djk-bereich') || 'library'; } catch { /* ohne Speicher: Library */ }
-  setzeBereich(b === 'effekte' ? 'effekte' : 'library');
+  setzeBereich(b === 'effekte' || b === 'presets' ? b : 'library');
   setInterval(() => { if (!$('#effekte').hidden) zeigeKomp(); }, 250);   // GR fällt ohne Meldung auf 0
   setInterval(holeFxInhalt, 2000);
 }
@@ -2072,6 +2237,28 @@ function zeigeBox(n) {
   loopAnsicht[n].ansicht.takte = Math.max(1, (z?.beats ?? 4) / 4);   // ganze Loop-Länge im Bild
 }
 
+// Demo overlay: the line "what Cypher is doing now" (POST /ansage). It stays while the text is new and fades after a
+// reading time (4 s plus 60 ms per character); an empty line (f null) hides it at once.
+let ansageFrist = null;
+function zeigeAnsage(f) {
+  let el = document.getElementById('demo-ansage');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'demo-ansage';   // not 'ansage': that id is the control centre's event line in the header
+    el.setAttribute('role', 'status');
+    el.setAttribute('aria-live', 'polite');
+    el.innerHTML = '<span class="ansage-wer">CYPHER</span><span class="ansage-text"></span>';
+    document.body.appendChild(el);
+  }
+  clearTimeout(ansageFrist);
+  if (!f || !f.text) { el.classList.remove('an'); return; }
+  el.querySelector('.ansage-text').textContent = f.text;
+  el.dataset.art = f.art || 'tat';
+  el.classList.add('an');
+  const alter = Date.now() - (f.zeit || Date.now());
+  ansageFrist = setTimeout(() => el.classList.remove('an'), Math.max(0, 4000 + 60 * f.text.length - alter));
+}
+
 function strom() {
   const q = new EventSource('/strom');
   q.onmessage = (m) => {
@@ -2083,6 +2270,8 @@ function strom() {
         for (const [n, z] of Object.entries(f.decks)) zustand.decks[n] = z;
         for (const [n, g] of Object.entries(f.geladen)) zustand.geladen[n] = g.material_id;
         for (const p of Object.keys(f.regler)) zeigeWert(p);
+        zeigeWerkzeug();   // A8: a state (load, reconnect) fills the Gate/Utility strips; they have no polling like the compressor
+        if ('spektrum/kanal' in f.regler) spektrumAnsicht.setzeQuelle(f.regler['spektrum/kanal']);   // A7b
         zeigeKeylock();   // Keylock 3
         DECKS.forEach(zeigeDeck);
         for (const [n, l] of Object.entries(f.loops ?? {})) zustand.loops[n] = l;
@@ -2094,6 +2283,7 @@ function strom() {
         $('#v-kern').classList.toggle('an', f.kern === 'verbunden');
         zeigePruefmodus(f.pruefmodus);
         break;
+      case 'ansage': zeigeAnsage(f); break;   // demo overlay (POST /ansage)
       case 'graphen': setzeGraphenGeladen(f.geladen); break;   // S12
       case 'lernen': lernEreignis(f); break;   // S19
       case 'proj': holeBkSpaeter(); break;   // S17: the project changed or was opened
@@ -2114,11 +2304,20 @@ function strom() {
         if (f.pfad === 'keylock') { zeigeKeylock(); zeigeDeck(1); zeigeDeck(2); }   // Keylock 3: Taste und VARI
         if (f.pfad === 'color/art' || f.pfad === 'color/param') zeigeColor();
         { const m = /^(.+)\/komp\/\w+$/.exec(f.pfad); if (m) { zeigeKomp(m[1]); if (m[1] === fxGewaehlt) zeigeFxDetail(); } }
+        if (f.pfad === 'spektrum/kanal') spektrumAnsicht.setzeQuelle(f.wert);   // A7b
+        { const m = /^(.+?\/\d)\/(?:gate|util|mb|lim)\/[\w/]+$/.exec(f.pfad); if (m) zeigeWerkzeug(m[1]); }   // A8, A8b (bus multiband and limiter)
         if (/^fx\/[34]\/bk\//.test(f.pfad)) zeigeSendKnobs();   // S14: the send-return knobs follow the echo (also a move by Cypher)
+        break;
+      case '/zustand/spektrum':   // A7b: 25 Hz while a source is selected
+        if (spektrumAnsicht.aufnehmen(f)) spektrumNachsehen();
         break;
       case '/zustand/komp':
         kompGr[f.kanal] = { db: Number(f.gr_db), t: performance.now() };
         zeigeKomp(f.kanal);
+        break;
+      case '/zustand/mix':   // A8b (D10): gain reduction of the bus tools; A6: the server passes the address on, the kern sends it, gate_db feeds the source strips
+        if (mixAufnehmen(busMix, f, performance.now())) zeigeBusMesser();
+        if (gateAufnehmen(gateMix, f, performance.now())) zeigeGateMesser();   // A6: gate_db of a source channel
         break;
       case '/zustand/deck':
         zustand.decks[f.deck] = f;
@@ -2737,7 +2936,7 @@ bindeColor();
 bindeEffekte();
 bindeMusterFeld();
 try { bindeSpurbaender(jsonPost, () => letzterBeat); } catch (e) { console.error('Studio S7 lanes:', e); }   // Studio S7
-try { produktion = bindeProduktion({ post: jsonPost, bpm: () => zustand.bpm ?? 128, stoebern: () => zustand.stoebern, bibliothek: () => { if (!stz.treffer.length) { stoebernLaden(); ladeBaum(); } } }); } catch (e) { console.error('Production view:', e); }   // D1 V1
+try { produktion = bindeProduktion({ presetsZeigen: () => zeigePresets(), presetsNeu: () => presetPanel?.aktualisiereZiele(), presetListe: () => presetPanel?.z.liste ?? [], post: jsonPost, bpm: () => zustand.bpm ?? 128, stoebern: () => zustand.stoebern, bibliothek: () => { if (!stz.treffer.length) { stoebernLaden(); ladeBaum(); } } }); } catch (e) { console.error('Production view:', e); }   // D1 V1
 bindeAnsicht();
 bindeFx();
 bindeFxZuweisung();

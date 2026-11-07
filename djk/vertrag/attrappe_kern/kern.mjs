@@ -17,6 +17,10 @@ export const VORGABE_CFG = {
   // Paket K3 (S3-Befund 16.10.): jeder Schlüssel des Schemas, sonst startet die Attrappe mit einer echten kern.toml nicht
   // (tests/konfig.test.mjs). arr_ordner "" heißt wie im Kern ~/.cache/cypherdj[-<i>]/arr (attrappe_kern.mjs).
   hoerschein_pflicht: true, keylock: true, keylock_maschine: 'r3', arr_ordner: '', arr_budget_mib: 1024,
+  // 1.15 mix tools (A1b, D8): 0 = the four channel limiters are not built; warp_faeden and graph_faeden were missing since 1.13 / Baukasten S3b
+  kanal_limiter_vorhalt_ms: 0.0, kanal_limiter_echtspitze: false, warp_faeden: 4, graph_faeden: 2,
+  hall_faeden: 3, hall_cpus: '',   // mehrkern Task 5
+  stimme_eingang: 0, stimme_duck_db: -12.0, stimme_pegel_db: 0.0,   // voice channel (demo)
 };
 const ABO_FRIST = 5 * SR;          // §4.1: Abonnent nach 5 s Stille gestrichen
 const MAX_ABOS = 8;
@@ -380,6 +384,12 @@ export const verbindung = {
           const s = b.status === 1 ? K.jetzt : b.s_start ?? K.jetzt;
           K.aus('/q/stand', [b.id, b.quelle, b.status === 5 ? 2 : b.status, BigInt(s), K.uhr.beat(s), ''], a.port);
         }
+      }
+      // 1.15 A5c (like netz.cpp hallo): the channel limiter state from the config, always on the first hallo of a generation, also when not built (0, 0).
+      // L = round(vorhalt_ms * 48) + 2, + 12 with echtspitze (konfig.schema.json kanal_limiter_vorhalt_ms)
+      if (neueGeneration) {
+        const gebaut = K.cfg.kanal_limiter_vorhalt_ms > 0;
+        K.aus('/e/kanal_limiter', [gebaut ? 1 : 0, gebaut ? Math.round(K.cfg.kanal_limiter_vorhalt_ms * 48) + 2 + (K.cfg.kanal_limiter_echtspitze ? 12 : 0) : 0], a.port);
       }
       // wie der Kern (netz.cpp hallo, Effekt-Sektion 2026-10-11): wer sich zum ersten Mal in dieser Generation meldet, bekommt den gemerkten
       // Stand aller schon gemeldeten Regler (Halter frei). Ein Seiten-Server nach dem Ende der Abonnenten-Frist kennt so die Spur-Regler

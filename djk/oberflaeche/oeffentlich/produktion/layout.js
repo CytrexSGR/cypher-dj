@@ -11,6 +11,7 @@ export const CLIP_KOPF = 14;            // Namenszeile eines Clips
 export const FARBEN = ['#e0563b', '#e0a33e', '#d6c94a', '#58d66b', '#2fd6c3', '#3b8de0', '#8c9bff', '#9b59d0', '#e08cff'];
 
 export const LANE_HOEHE = 48;           // Automation Slice 1: height of the lane row under a track (the row exists only while the lane is open)
+export const TAKE_HOEHE = 40;           // 1.14 Comping: height of a take row (one per take of a track whose T button is on); the CSS head has the same 40 px
 
 export const linealZone = (y) => (y < LOOP_ZONE ? 'loop' : 'position');
 export function spurIndexBei(y, anzahl) {
@@ -18,14 +19,17 @@ export function spurIndexBei(y, anzahl) {
   return y >= 0 && i < anzahl ? i : -1;
 }
 
-// Row table (AK28): a track row of SPUR_HOEHE, directly below it its lane row of LANE_HOEHE when the lane of that track is open. offen: indices of the
-// tracks with an open lane (array or Set). Without an open lane the table is the old fixed grid: row i starts at i * SPUR_HOEHE.
-export function zeilenTabelle(anzahl, offen = []) {
+// Row table (AK28): a track row of SPUR_HOEHE, then its take rows (TAKE_HOEHE each, 1.14), then its lane row of LANE_HOEHE when the lane of that track is open.
+// offen: indices of the tracks with an open lane (array or Set). takeZeilen: Map track index -> number of visible take rows (takes.js takeZeilenVon).
+// Without open lanes and take rows the table is the old fixed grid: row i starts at i * SPUR_HOEHE. The ORDER (track, takes, lane) is written once, here;
+// the heads (spurkoepfe.js zeige) follow it.
+export function zeilenTabelle(anzahl, offen = [], takeZeilen = new Map()) {
   const o = offen instanceof Set ? offen : new Set(offen), z = [];
   let y = 0;
   for (let i = 0; i < anzahl; i++) {
     z.push({ art: 'spur', spur: i, y, h: SPUR_HOEHE });
     y += SPUR_HOEHE;
+    for (let t = 0, n = takeZeilen.get(i) ?? 0; t < n; t++) { z.push({ art: 'take', spur: i, take: t, y, h: TAKE_HOEHE }); y += TAKE_HOEHE; }
     if (o.has(i)) { z.push({ art: 'lane', spur: i, y, h: LANE_HOEHE }); y += LANE_HOEHE; }
   }
   return z;
@@ -48,6 +52,7 @@ export function spurIndexBeiTabelle(tabelle, y) {
 }
 export const spurZeile = (tabelle, spur) => tabelle.find((z) => z.art === 'spur' && z.spur === spur) ?? null;
 export const laneZeile = (tabelle, spur) => tabelle.find((z) => z.art === 'lane' && z.spur === spur) ?? null;
+export const takeZeile = (tabelle, spur, take) => tabelle.find((z) => z.art === 'take' && z.spur === spur && z.take === take) ?? null;
 
 // Rechteck eines Clips in der Spurfläche (Pixel), 1 px Luft oben und unten. y0: Oberkante der Spurzeile (Zeilentabelle); ohne: das feste Raster
 export function clipKasten(a, spurIndex, clip, y0 = spurIndex * SPUR_HOEHE) {

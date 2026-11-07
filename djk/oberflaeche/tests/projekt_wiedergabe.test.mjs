@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { uebersetze, schreibeWiedergabe, WiedergabeFehler } from '../projekt/wiedergabe.ts';
+import { uebersetze, schreibeWiedergabe, WiedergabeFehler, zaehleWarpMarker } from '../projekt/wiedergabe.ts';
 import { fuehreAus } from '../projekt/befehle.ts';
 import { MAX_SPUREN, pruefeProjekt } from '../projekt/modell.ts';
 import { tmpOrdner, specProjekt, kopie, SHA_A, SHA_B } from './hilfen/projekt.mjs';
@@ -199,4 +199,52 @@ test('1.10 slice 3 translator: returns make the file /2 with returns [{nr, ausga
   assert.deepEqual(w.spuren, basis.spuren, 'the tracks are unchanged');
   const leer = fuehreAus(fuehreAus(p, { befehl: 'return_loeschen', return_id: 'r1' }).projekt, { befehl: 'return_loeschen', return_id: 'r2' }).projekt;
   assert.equal(uebersetze(leer, opt()).format, 'cypherdj-arr/1', 'negative control: no returns left, back to /1');
+});
+
+// --- 1.14 comping, slice 1, task 6: the audition option of the live translator (spec R8) ------------------------------------------------------
+function mitTakes() {
+  const p = pruefeProjekt(kopie(specProjekt())).projekt;
+  const klon = (id, sha, start) => ({ ...kopie(p.spuren[0].clips[0]), id, start_beat: start, quelle: { sha256: sha, pfad_hinweis: '' } });
+  p.spuren[0].takes = [{ id: 't1', name: 'Take 1', clips: [klon('c10', SHA_B, 2)] }, { id: 't2', name: 'Take 2', clips: [klon('c11', SHA_B, 6)] }];
+  return p;
+}
+const ids0 = (w) => w.spuren[0].clips.map((c) => [c.id, c.start_beat, c.sha256 === SHA_A ? 'A' : 'B']);
+
+test('1.14 audition: the auditioned track plays the take clips instead of the main lane; the other tracks are untouched', () => {
+  const p = mitTakes();
+  const w = uebersetze(p, opt({ vorhoeren: new Map([['s1', 't1']]) }));
+  assert.deepEqual(ids0(w), [['c10', 2, 'B']]);
+  assert.deepEqual(w.spuren.slice(1), uebersetze(p, opt()).spuren.slice(1));
+});
+
+test('1.14 audition: without the option the output equals today (deep equal), also with an empty map and with take lanes present', () => {
+  const p = mitTakes();
+  const ohneTakes = uebersetze(specProjekt(), opt());
+  const q = kopie(p); for (const s of q.spuren) delete s.takes;
+  assert.deepEqual(uebersetze(p, opt()), uebersetze(q, opt()), 'take lanes never reach the playback without an audition');
+  assert.deepEqual(uebersetze(p, opt({ vorhoeren: new Map() })), uebersetze(p, opt()));
+  assert.deepEqual(uebersetze(pruefeProjekt(kopie(specProjekt())).projekt, opt()).spuren, ohneTakes.spuren);
+  assert.deepEqual(ids0(uebersetze(p, opt())), [['c1', 0, 'A']]);
+});
+
+test('1.14 audition: an unknown take id or an unknown track id plays the main lane (second guard)', () => {
+  const p = mitTakes();
+  assert.deepEqual(ids0(uebersetze(p, opt({ vorhoeren: new Map([['s1', 't9']]) }))), [['c1', 0, 'A']]);
+  assert.deepEqual(uebersetze(p, opt({ vorhoeren: new Map([['s9', 't1']]) })), uebersetze(p, opt()));
+  const q = kopie(p); delete q.spuren[0].takes;
+  assert.deepEqual(ids0(uebersetze(q, opt({ vorhoeren: new Map([['s1', 't1']]) }))), [['c1', 0, 'A']]);
+});
+
+test('1.14 audition: take clips follow the same rules as main clips (only decoded ones play)', () => {
+  const p = mitTakes();
+  p.spuren[0].takes[0].clips[0].dekodiert = 'laeuft';
+  assert.deepEqual(uebersetze(p, opt({ vorhoeren: new Map([['s1', 't1']]) })).spuren[0].clips, [], 'a take clip that is not decoded is silent, the track stays');
+});
+
+test('1.14 audition: the warp marker count follows the auditioned lane (the core refuses over MAX_WARP_PUNKTE)', () => {
+  const p = mitTakes();
+  const warp = { an: true, modus: 'repitch', marker: [[0, 0], [1, 2], [2, 4]], versatz_beats: 0, quelle: 'takte', transpose_st: 0, detune_ct: 0 };
+  p.spuren[0].takes[0].clips[0].warp = warp;
+  assert.equal(zaehleWarpMarker(p), 0);
+  assert.equal(zaehleWarpMarker(p, { vorhoeren: new Map([['s1', 't1']]) }), 3);
 });

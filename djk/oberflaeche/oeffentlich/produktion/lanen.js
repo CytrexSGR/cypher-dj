@@ -1,9 +1,10 @@
 // PRODUCTION (Automation Slice 1 + 2, AK28): the lanes of a track as a row under the track (one target at a time). Pure functions (browser and node): evaluation (the same
 // formula as the core arr_auto.h and the server projekt/lane.ts, bound by kern/tests/daten/lane_ref.json), the drawing path, hit testing, and the limits
 // of a drag. The gestures live in lanen_bedienung.js.
+import { posVonDb, dbVonPos } from './fader_kennlinie.js';
 export const LANE_HOEHE = 48;
 export const WERT_MIN = -200, WERT_MAX = 6;          // project limits of the fader (dB); -200 is mute
-export const ANZEIGE_MIN = -60;                      // the fader row shows -60..+6 dB; everything below sits on the bottom edge
+export const ANZEIGE_MIN = -60;                      // the fader row runs from off (bottom edge) to +6 dB on the fader taper (fader_kennlinie.js); -60 dB sits at 5 % of the height
 
 // Slice 2 (E1, E2): the targets of a lane. The page does not import server code: this table is a copy of ZIEL_BEREICH in projekt/modell.ts and a test
 // compares both. min/max: the project limits; anzeigeMin: the bottom edge of the row (only the fader shows less than its range); mittellinie: the guide
@@ -35,6 +36,7 @@ export const MAX_PUNKTE = 8192;                      // per lane
 export const PUNKT_RADIUS = 5;                       // hit radius of a point in px
 export const ZUG_SCHWELLE = 3;                       // px: a twitch of the hand moves nothing
 export const NACHBAR_ABSTAND = 1 / 16;               // a dragged point stops this far from its neighbour (beats)
+const STUMM_WERT = -200;
 const STUMM = -200, STUMM_GRENZE = -120, STUMM_RAMPE = -60;
 const FORMEN = ['linear', 's', 'sprung'];
 
@@ -69,15 +71,18 @@ export function laneWert(punkte, beat, ziel) {
 // value <-> y inside a lane row (zeile = {y, h}); 3 px of air above and below
 const LUFT = 3;
 export const wertZuY = (zeile, wert, ziel) => {
-  const { max, anzeigeMin } = bereich(ziel);
-  const t = (Math.min(max, Math.max(anzeigeMin, wert)) - anzeigeMin) / (max - anzeigeMin);
+  const { min, max, anzeigeMin } = bereich(ziel);
+  // the fader row uses the fader taper (the same as the slider of the track head); every other target is linear
+  const t = ziel === 'fader' ? posVonDb(Math.min(max, Math.max(min, wert))) : (Math.min(max, Math.max(anzeigeMin, wert)) - anzeigeMin) / (max - anzeigeMin);
   return zeile.y + LUFT + (1 - t) * (zeile.h - 2 * LUFT);
 };
 // a switch (mute, solo) has two levels: the upper half of the row is 1, the lower half 0
 export const yZuWert = (zeile, y, ziel) => {
   const { min, max, anzeigeMin, nurSprung } = bereich(ziel);
   const t = 1 - (y - zeile.y - LUFT) / (zeile.h - 2 * LUFT);
-  const w = Math.min(max, Math.max(min, anzeigeMin + t * (max - anzeigeMin)));
+  // the fader: back through the taper. On the lane the axis ends at -60 dB: the bottom 5 % band is -60, never off; off (-200) only at or below the very bottom edge (t <= 0)
+  const w = ziel === 'fader' ? (t <= 0 ? STUMM_WERT : Math.max(ANZEIGE_MIN, dbVonPos(Math.min(1, t)))) : Math.min(max, Math.max(min, anzeigeMin + t * (max - anzeigeMin)));
+  if (ziel === 'fader') return w;
   return nurSprung ? (w >= 0.5 ? 1 : 0) : w;
 };
 
@@ -153,6 +158,10 @@ export function setzePunkt(punkte, beat, wert, raster, ziel) {
 export const loeschePunkt = (punkte, i) => (punkte.length <= 1 || i < 0 || i >= punkte.length ? null : punkte.filter((_, k) => k !== i));
 
 export const formGueltig = (f) => FORMEN.includes(f);
+// 1.12 S3 task 5: the lane line turns orange while the hand overrides its field (list: auto_uebersteuert of the server). UEBER_FARBE is the one source of
+// the orange: produktion.js writes it into the CSS variable --ueber, the stylesheet only uses var(--ueber).
+export const UEBER_FARBE = '#ff8a1f';
+export const laneLinienFarbe = (farbe, liste, spurId, ziel) => (Array.isArray(liste) && liste.some((x) => x.spur_id === spurId && x.ziel === ziel) ? UEBER_FARBE : farbe);
 // the lane of a track for one target, or null
 export const laneFuer = (spur, ziel) => (spur?.automation ?? []).find((l) => l.ziel === ziel) ?? null;
 export const faderLane = (spur) => laneFuer(spur, 'fader');
@@ -181,3 +190,43 @@ export function punkteNach(punkte, befehl) {
 // Indices of the tracks whose lane row is open. offen: a Set of track ids kept in the page state (not in the project: it survives a reload of the
 // project from the server, and a track that is gone simply drops out).
 export const offeneIndizes = (projekt, offen) => (projekt && offen && offen.size ? projekt.spuren.flatMap((s, i) => (offen.has(s.id) ? [i] : [])) : []);
+
+// 1.12 slice 4 (D2): the handles of a selected range {von, bis} on a lane row. A strip of GRIFF_BREITE px around either edge in the top band of the row
+// (GRIFF_OBEN px) is the skew handle; the same strip at the right edge below that band is the stretch handle. null: no handle under (x, y).
+export const GRIFF_BREITE = 5, GRIFF_OBEN = 8;
+export function bereichGriff(wahl, zeile, beatZuX, x, y) {
+  if (!wahl || y < zeile.y || y > zeile.y + zeile.h) return null;
+  const xl = beatZuX(wahl.von), xr = beatZuX(wahl.bis), oben = y <= zeile.y + GRIFF_OBEN;
+  if (oben && (Math.abs(x - xl) <= GRIFF_BREITE || Math.abs(x - xr) <= GRIFF_BREITE)) return 'neigen';
+  if (!oben && Math.abs(x - xr) <= GRIFF_BREITE) return 'dehnen';
+  return null;
+}
+
+// 1.12 slice 4 (D1): the points of a freehand stroke. pfad: the pointer samples [{x, beat, wert}] in drawing order. Grid on (raster > 0): one point per
+// grid step from the first to the last step the stroke touches, with the value of the sample nearest to the step, form `sprung` (a staircase like the
+// draw mode of Live). Grid off: one linear point per 2 px of pointer travel, sorted by beat (a later sample at the same beat wins). Values are clamped to
+// the target range. bestehend: the lane points now; the stroke replaces those in [von, bis], the others count against MAX_PUNKTE: beyond it, null.
+export function freihandPunkte(pfad, raster, ziel, bestehend = []) {
+  if (!pfad.length) return null;
+  const beatVon = (b) => runde(klemme(b, 0, MAX_BEAT));
+  let punkte;
+  if (raster > 0) {
+    const beats = pfad.map((q) => q.beat), k0 = Math.round(Math.min(...beats) / raster), k1 = Math.round(Math.max(...beats) / raster);
+    punkte = [];
+    for (let k = k0; k <= k1; k++) {
+      const g = beatVon(k * raster);
+      let best = pfad[0];
+      for (const q of pfad) if (Math.abs(q.beat - g) < Math.abs(best.beat - g)) best = q;
+      punkte.push({ beat: g, wert: wertKlemmt(best.wert, ziel), form: 'sprung' });
+    }
+  } else {
+    const gewaehlt = [pfad[0]];
+    for (const q of pfad) if (Math.abs(q.x - gewaehlt[gewaehlt.length - 1].x) >= 2) gewaehlt.push(q);
+    const proBeat = new Map();
+    for (const q of gewaehlt) proBeat.set(beatVon(q.beat), wertKlemmt(q.wert, ziel));
+    punkte = [...proBeat].sort((a, b) => a[0] - b[0]).map(([beat, wert]) => ({ beat, wert }));
+  }
+  const von = punkte[0].beat, bis = punkte[punkte.length - 1].beat;
+  const aussen = bestehend.filter((q) => q.beat < von || q.beat > bis).length;
+  return punkte.length + aussen > MAX_PUNKTE ? null : { von, bis, punkte };
+}

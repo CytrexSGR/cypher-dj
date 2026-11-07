@@ -1,14 +1,21 @@
 // Reine Abbildungen des Bereichs proj (Spec D1 2.3, 2.12, 3.4, 6.15): Grund → HTTP-Code, Projekt → Regler-Sollwerte, Regler-Ereignis →
 // Befehl (Rückweg). Kein Server, kein Kern, keine Datei.
-import { FADER_MAX, FADER_MIN, HALL_FELDER, HALL_VORGABE, MAX_GRUPPEN, MAX_RETURNS, MAX_SPUREN, type Projekt, type Spur } from '../../projekt/modell.ts';
+import {
+  FADER_MAX, FADER_MIN, HALL_FELDER, HALL_VORGABE, alleInserts, alleRacks, insertVorgabe, insertZeilen, MAX_GRUPPEN, MAX_MAKROS, MAX_RACK, MAX_INS,
+  MAX_RETURNS, MAX_SPUREN,
+  type Projekt, type Spur,
+} from '../../projekt/modell.ts';
 import type { Quelle } from '../../projekt/verlauf.ts';
 
 // --- Gründe → HTTP ----------------------------------------------------------------------------------------------------
 // Die Gründe sind die aus projekt/befehle.ts (Spec 4) plus die des Bereichs; die Seite zeigt für jeden einen Text.
 const C400 = new Set(['argument_ungueltig', 'argument_unbekannt', 'befehl_unbekannt', 'sha_ungueltig', 'slug_ungueltig', 'name_ungueltig',
-  'label_ungueltig', 'quelle_ungueltig', 'json', 'koerper_kein_objekt', 'beat_ungueltig', 'aktion_unbekannt']);
+  'label_ungueltig', 'quelle_ungueltig', 'lane_ziel_spaeter', 'json', 'koerper_kein_objekt', 'beat_ungueltig', 'aktion_unbekannt',
+  'take_name_ungueltig', 'comp_leer', 'sidechain_spaet', 'sidechain_zyklus', 'sidechain_quelle',
+  'bereich_leer', 'form_ungueltig', 'huellkurve_ziel', 'geraet_huellkurven']);   // 1.12 slices 4 and 5 (lane editor tools, envelopes)
 const C404 = new Set(['unbekannt', 'spur_unbekannt', 'clip_unbekannt', 'noten_unbekannt', 'sha_unbekannt', 'gruppe_unbekannt', 'ziel_unbekannt',
-  'lane_unbekannt', 'return_unbekannt']);
+  'lane_unbekannt', 'return_unbekannt', 'insert_unbekannt', 'take_unbekannt', 'huellkurve_unbekannt',
+  'kit_unbekannt', 'richtung_unbekannt', 'preset_unbekannt']);
 // lane_gesperrt and geraet_lanes (automation slice 2) are conflicts with the current state: they fall through to 409 like lane_doppelt
 export function grundCode(grund: string): number {
   if (C400.has(grund)) return 400;
@@ -33,6 +40,12 @@ export const ERZ4_NEUTRAL: readonly Soll[] = [
   { pfad: 'erz/4/eq/tief', wert: 0 }, { pfad: 'erz/4/eq/mitte', wert: 0 }, { pfad: 'erz/4/eq/hoch', wert: 0 },
   { pfad: 'erz/4/kill/tief', wert: 0 }, { pfad: 'erz/4/kill/mitte', wert: 0 }, { pfad: 'erz/4/kill/hoch', wert: 0 },
   { pfad: 'erz/4/filter', wert: 0 }, { pfad: 'erz/4/komp/an', wert: 0 },
+  // 1.15 A3: gate and utility act on the production now (like komp/an: the switch of the gate, every value of the utility, whose
+  // neutral values are the Vorgabe of the table); a setting left by the hand or by Cypher must not follow into the next project
+  { pfad: 'erz/4/gate/an', wert: 0 },
+  { pfad: 'erz/4/util/balance', wert: 0 }, { pfad: 'erz/4/util/breite', wert: 100 }, { pfad: 'erz/4/util/bassmono', wert: 0 },
+  { pfad: 'erz/4/util/phase_l', wert: 0 }, { pfad: 'erz/4/util/phase_r', wert: 0 }, { pfad: 'erz/4/util/tausch', wert: 0 },
+  { pfad: 'erz/4/util/dc', wert: 0 },
   { pfad: 'erz/4/send/1', wert: -200 }, { pfad: 'erz/4/send/2', wert: -200 }, { pfad: 'erz/4/send/3', wert: -200 }, { pfad: 'erz/4/send/4', wert: -200 },
 ];
 export const ERZ4_NUR_HAND: readonly Soll[] = [{ pfad: 'erz/4/ziel', wert: 0 }, { pfad: 'erz/4/xseite', wert: 1 }];
@@ -90,8 +103,34 @@ export function alleRetRegler(p: Projekt): Soll[] {
   }
   return aus;
 }
+// 1.10 slice 4a/4b: ALL pooled rows ins/<art>/<slot>/* of every kind (komp 10 per slot, eq 59, saett 4, lim 3; the switch last).
+// A used slot gets the values of its stage, a free slot the pool defaults with the switch off: the core keeps the rows of the
+// previously opened project, and a stage added later sends
+// only the rows that differ from the defaults (befehle.ts insertReglerAenderungen), so a stale free slot would sound through it.
+export function alleInsertRegler(p: Projekt): Soll[] {
+  const aus: Soll[] = [];
+  for (const art of ['komp', 'eq', 'saett', 'lim'] as const) {
+    const benutzt = new Map(alleInserts(p).filter((x) => x.insert.art === art).map((x) => [x.insert.slot, x.insert] as const));
+    for (let slot = 1; slot <= MAX_INS[art]; slot++) {
+      const i = benutzt.get(slot) ?? { id: '', art, slot, an: false, werte: insertVorgabe(art) } as const;
+      for (const [pfad, wert] of Object.entries(insertZeilen(i))) aus.push({ pfad, wert });
+    }
+  }
+  return aus;
+}
+// 1.10 slice 4c: ALL macro rows rack/<slot>/m1..m4 (a used slot carries the live macro values of its rack, a free slot the default 0), for the
+// same reason as the insert rows
+export function alleRackRegler(p: Projekt): Soll[] {
+  const aus: Soll[] = [];
+  const benutzt = new Map(alleRacks(p).map((x) => [x.rack.slot, x.rack] as const));
+  for (let slot = 1; slot <= MAX_RACK; slot++) {
+    const r = benutzt.get(slot);
+    for (let n = 1; n <= MAX_MAKROS; n++) aus.push({ pfad: `rack/${slot}/m${n}`, wert: r ? r.werte[n - 1] : 0 });
+  }
+  return aus;
+}
 export const alleRegler = (p: Projekt): Soll[] => [...alleSpurRegler(p), ...alleGruppenRegler(p), { pfad: 'pm/fader', wert: p.master?.fader_db ?? 0 },
-  ...alleSendRegler(p), ...alleRetRegler(p)];
+  ...alleSendRegler(p), ...alleRetRegler(p), ...alleInsertRegler(p), ...alleRackRegler(p)];
 
 // Rückweg (Spec 3.4): /e/regler spur/<n>/<feld> mit Halter mensch → Befehl spur_aendern, oder null (keine Spur auf n, Wert schon da)
 const REGLER_PFAD = /^spur\/([1-9][0-9]?)\/(fader|pan|mute|solo)$/;

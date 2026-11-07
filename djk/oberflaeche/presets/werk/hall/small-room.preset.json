@@ -1,0 +1,50 @@
+{
+ "schema": 1,
+ "name": "Small Room",
+ "geraet_typ": "effekt",
+ "geraet": "hall",
+ "werte": {
+  "mix": 0.18,
+  "early": 0.7,
+  "tail": 0,
+  "pre": 8,
+  "size": 25,
+  "decay": 0.7,
+  "lowx": 1.0,
+  "highx": 0.6,
+  "lowcut": 120,
+  "highcut": 9000,
+  "diff": 1,
+  "width": 0.7,
+  "duck": 0,
+  "freeze": false,
+  "kill": false,
+  "fft": "2048"
+ },
+ "beschreibung": {
+  "art": "reverb",
+  "unterart": "room",
+  "charakter": [
+   "dry",
+   "tight",
+   "punchy"
+  ],
+  "genre": [
+   "techno",
+   "house",
+   "tech_house"
+  ],
+  "einsatz": [
+   "mixdown"
+  ],
+  "energie": 2,
+  "text": "A short, narrow room that puts the drums in a space without washing them out."
+ },
+ "tags": [
+  "room",
+  "drums"
+ ],
+ "notiz": "Parameter meanings from Snoman p.232-233 (early reflections, RT60, HF damping); the values are practice.",
+ "angelegt": "2026-11-02T00:00:00.000Z",
+ "geaendert": "2026-11-02T00:00:00.000Z"
+}

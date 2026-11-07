@@ -1,4 +1,4 @@
-"""werkstatt.gewichte_stems: Gewichte von htdemucs aus einer lokalen Datei übernehmen, sha256 entscheidet (Slice 6, D3). Ohne Netz."""
+"""werkstatt.gewichte_stems: take the BS-RoFormer-SW weights from a local file, sha256 decides (plan 2026-11-06-stems-roformer-gpu). No network."""
 import os
 
 from werkstatt import gewichte_stems as g
@@ -7,7 +7,7 @@ from werkstatt.gewichte import sha256
 
 def test_falsche_sha_bleibt_teil_und_kein_ziel(tmp_path):
     von = tmp_path / "x.th"; von.write_bytes(b"nicht die gewichte")
-    ziel = tmp_path / "gewichte" / "htdemucs-955717e8.th"
+    ziel = tmp_path / "gewichte" / "BS-Rofo-SW-Fixed.ckpt"
     assert g.uebernimm(von, ziel, g.SHA256) == 2
     assert not ziel.exists()
     assert ziel.with_suffix(".teil").exists()                  # zur Ansicht, wie gewichte.py
@@ -33,7 +33,7 @@ def test_main_vorhanden_ohne_netz(tmp_path, monkeypatch):
 
 
 def test_festgenagelt():
-    assert g.SHA256 == "8726e21a993978c7ba086d3872e7608d7d5bfca646ca4aca459ffda844faa8b4"
-    assert g.GROESSE == 84141911
-    assert g.URL.endswith("/hybrid_transformer/955717e8-8726e21a.th")
-    assert g.ZIEL.name == "htdemucs-955717e8.th"
+    assert g.SHA256 == "24e7d35ee9c64415673d3fd33e06a67cac2c103c5df6267ba1576459c775916e"
+    assert g.GROESSE == 699412152
+    assert g.URL.endswith("/BS-ROFO-SW-Fixed/resolve/main/BS-Rofo-SW-Fixed.ckpt")
+    assert g.ZIEL.name == "BS-Rofo-SW-Fixed.ckpt"

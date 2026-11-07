@@ -7,6 +7,9 @@ namespace cypherdj::dsp {
 static constexpr int kA_Taps = 49;
 static constexpr int kB_Taps = MasterLimiter::kB_Phasen * MasterLimiter::kB_Abgriffe;  // 192
 static constexpr double kB_Beta = 6.0;
+// B6: input beyond +-1e6 (+120 dBFS) is clamped; the needed gain then stays far above the rounding step of the
+// moving-average sum (otherwise the ceiling breaks from about +230 dBFS and the output can even be inverted)
+static constexpr float kGrenze = 1e6f;
 
 MasterLimiter::MasterLimiter(const LimiterEinstellung& e) {
   // (a) wie libebur128 interp_create(49, 4, ...): Sinc mit Hann-Fenster, Nullen weggelassen.
@@ -42,7 +45,10 @@ MasterLimiter::MasterLimiter(const LimiterEinstellung& e) {
   // um -20*log10(cos(pi * 20000 / (8 * 48000))) = 0,119 dB höher liegen (Probe: ohne Gitterreserve MFB +6 dB
   // 8-fach -0,958, 32-fach -0,963 dBTP).
   const double gitter_db = -20.0 * std::log10(std::cos(M_PI * 20000.0 / (kB_Phasen * 48000.0)));
-  decke_ = static_cast<float>(std::pow(10.0, (e.decke_dbtp - kRundungsReserveDb - gitter_db) / 20.0));
+  // B5: like anstieg / halten, invalid values fall back to the default (NaN or an infinite ceiling would switch the
+  // limiter off, a negative or NaN release time lets the gain run away or never limit)
+  const float decke_dbtp = std::isfinite(e.decke_dbtp) ? e.decke_dbtp : -1.0f;
+  decke_ = static_cast<float>(std::pow(10.0, (decke_dbtp - kRundungsReserveDb - gitter_db) / 20.0));
   anstieg_ = e.anstieg < 1 ? 1 : e.anstieg;
   halten_ = e.halten < 0 ? 0 : e.halten;
   if (anstieg_ + 2 * halten_ + 1 > kMaxFenster) {  // ausserhalb der Grenzen: auf Vorgabe zurück
@@ -51,7 +57,8 @@ MasterLimiter::MasterLimiter(const LimiterEinstellung& e) {
   }
   fenster_ = anstieg_ + 2 * halten_ + 1;
   vorhalt_ = anstieg_ + halten_ + kInterpVerzug;
-  abkling_koeff_ = 1.0 - std::exp(-1.0 / (static_cast<double>(e.abklingen_ms) * 0.001 * 48000.0));
+  const float abklingen_ms = e.abklingen_ms >= 0.0f ? e.abklingen_ms : 50.0f;  // NaN and negative: default
+  abkling_koeff_ = 1.0 - std::exp(-1.0 / (static_cast<double>(abklingen_ms) * 0.001 * 48000.0));
   zuruecksetzen();
 }
 
@@ -164,8 +171,9 @@ float MasterLimiter::naechste_verstaerkung(float xl, float xr) {
 
 void MasterLimiter::verarbeite(float* l, float* r, int n) {
   for (int i = 0; i < n; ++i) {
-    const float xl = std::isfinite(l[i]) ? l[i] : 0.0f;
-    const float xr = std::isfinite(r[i]) ? r[i] : 0.0f;
+    // NaN/Inf count as 0; beyond +-kGrenze clamped (B6), bit-identical for every |x| <= 1e6
+    const float xl = std::isfinite(l[i]) ? std::fmax(-kGrenze, std::fmin(kGrenze, l[i])) : 0.0f;
+    const float xr = std::isfinite(r[i]) ? std::fmax(-kGrenze, std::fmin(kGrenze, r[i])) : 0.0f;
     const float g = naechste_verstaerkung(xl, xr);
     if (g < kleinste_verstaerkung_) kleinste_verstaerkung_ = g;
     // Verzögerung um vorhalt_ Samples

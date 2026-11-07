@@ -7,6 +7,7 @@
 #include <cstring>
 
 #include "arr_bau.h"
+#include "cypherdj/arr_rack_senke.h"
 #include "pruef.h"
 
 using arrtest::SPB;
@@ -158,6 +159,43 @@ int main() {
     PRUEF(t.arr.hole_freeze_fertig() == &g && g.status == 1);
     std::printf("Fall 6b: start_beat nach dem Abbruch %.1f\n", t.arr.start_beat());
     PRUEF(t.arr.start_beat() == 8.0);
+  }
+  // 7 (1.9 U6 T6.4): a rack track with an internal member and a Surge member freezes like any track: the tap holds the sum of both members at the
+  // onset sample (stand-in sinks put 0.25 on the target sample each), before the fader, and the sample before and after is quiet
+  {
+    arrtest::Treiber t;
+    arrtest::PruefSenke intern(0), surge(537);
+    cdj::ArrRackSenke rack(t.arr, &intern, &surge, nullptr);
+    t.arr.setze_senke_rack(&rack);
+    t.arr.setze_senke_wirt(1, &surge);
+    arrtest::Bau b;
+    b.spur(1, cdj::ArrArt::rack).note(1, "n", 1.0, 0.5, 60, 127);
+    cdj::ArrSnapshot* sn = b.fertig();
+    cdj::ArrSpur& sp = sn->spur[0];
+    sp.n_glieder = 2;
+    sp.glied[0].id = 1;
+    sp.glied[0].art = cdj::ArrArt::intern;
+    sp.glied[0].platz = cdj::ARR_SPUREN;
+    sp.glied[1].id = 2;
+    sp.glied[1].art = cdj::ArrArt::wirt;
+    sp.glied[1].slot = 1;
+    sp.glied[1].platz = cdj::ARR_SPUREN + 1;
+    sn->glied_spur[0].art = cdj::ArrArt::intern;
+    sn->glied_spur[1].art = cdj::ArrArt::wirt;
+    sn->glied_spur[1].slot = 1;
+    sn->rack_wirt = 1;
+    t.laden(sn);
+    t.arr.setze_sofort(t.tab.suche("spur/1/fader"), -6.0f);
+    cdj::ArrFreeze f = auftrag(1, 0.0, 2.0);
+    const char* grund = "";
+    PRUEF(t.arr.freeze(&f, 0, false, 0, 0, t.n, t.k, grund));
+    t.senken.push_back(&intern);
+    t.senken.push_back(&surge);
+    t.lauf(256 + 4 * SPB + 4096);
+    std::printf("Fall 7: rack freeze at the onset sample %.4f (before %.4f, after %.4f)\n", f.daten[2 * SPB], f.daten[2 * SPB - 2], f.daten[2 * SPB + 2]);
+    PRUEF(f.daten[2 * SPB] == 0.5f);
+    PRUEF(f.daten[2 * SPB - 2] == 0.0f && f.daten[2 * SPB + 2] == 0.0f);
+    PRUEF(t.arr.hole_freeze_fertig() == &f && f.status == 0);
   }
   PRUEF_ENDE();
 }

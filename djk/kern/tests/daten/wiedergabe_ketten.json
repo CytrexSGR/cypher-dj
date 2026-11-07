@@ -1,0 +1,115 @@
+{
+ "format": "cypherdj-arr/2",
+ "nr": 1,
+ "spuren": [
+  {
+   "nr": 1,
+   "art": "audio",
+   "clips": [
+    {
+     "id": "c1",
+     "start_beat": 0,
+     "laenge_beats": 16,
+     "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+     "datei": "@AUDIO@/cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc.f32",
+     "frames": 400000,
+     "offset_frames": 0,
+     "gain_db": 0,
+     "ein_beats": 0,
+     "aus_beats": 0
+    }
+   ],
+   "chain": [
+    {
+     "art": "komp",
+     "slot": 1,
+     "an": true
+    }
+   ]
+  },
+  {
+   "nr": 2,
+   "art": "audio",
+   "clips": [
+    {
+     "id": "c2",
+     "start_beat": 0,
+     "laenge_beats": 16,
+     "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+     "datei": "@AUDIO@/cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc.f32",
+     "frames": 400000,
+     "offset_frames": 0,
+     "gain_db": 0,
+     "ein_beats": 0,
+     "aus_beats": 0
+    }
+   ],
+   "ausgang": {
+    "art": "gruppe",
+    "nr": 1
+   }
+  },
+  {
+   "nr": 3,
+   "art": "audio",
+   "clips": [
+    {
+     "id": "c3",
+     "start_beat": 0,
+     "laenge_beats": 16,
+     "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+     "datei": "@AUDIO@/cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc.f32",
+     "frames": 400000,
+     "offset_frames": 0,
+     "gain_db": 0,
+     "ein_beats": 0,
+     "aus_beats": 0
+    }
+   ],
+   "ausgang": {
+    "art": "gruppe",
+    "nr": 1
+   }
+  }
+ ],
+ "gruppen": [
+  {
+   "nr": 1,
+   "ausgang": {
+    "art": "master"
+   },
+   "chain": [
+    {
+     "art": "komp",
+     "slot": 2,
+     "an": true
+    }
+   ]
+  }
+ ],
+ "returns": [
+  {
+   "nr": 1,
+   "ausgang": {
+    "art": "master"
+   },
+   "pre": true,
+   "chain": [
+    {
+     "art": "komp",
+     "slot": 3,
+     "an": true
+    }
+   ]
+  }
+ ],
+ "pm": {
+  "chain": [
+   {
+    "art": "komp",
+    "slot": 4,
+    "an": true
+   }
+  ]
+ }
+}

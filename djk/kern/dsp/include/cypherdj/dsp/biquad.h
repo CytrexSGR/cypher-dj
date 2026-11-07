@@ -3,6 +3,8 @@
 // Teil der öffentlichen Naht von cypherdj_dsp (14 baut die Analyse-Bänder daraus).
 #pragma once
 
+#include <cypherdj/dsp/denormal.h>
+
 namespace cypherdj::dsp {
 
 struct BiquadKoeff {
@@ -23,6 +25,12 @@ struct Biquad {
         return y;
     }
     void leeren() { z1 = z2 = 0.0; }
+    bool leer() const { return z1 == 0.0 && z2 == 0.0; }   // state exactly zero (NaN is not)
+    // States of magnitude below `schwelle` become exactly zero (NaN stays NaN).
+    void abschneiden(double schwelle) {
+        auf_null_unter(z1, schwelle);
+        auf_null_unter(z2, schwelle);
+    }
 };
 
 // Linkwitz-Riley 8. Ordnung = Butterworth 4. Ordnung zweimal = vier Abschnitte (48 dB/Oktave).
@@ -32,6 +40,8 @@ struct Lr8 {
         return b[3].schritt(b[2].schritt(b[1].schritt(b[0].schritt(x))));
     }
     void leeren() { for (Biquad& q : b) q.leeren(); }
+    void abschneiden(double schwelle) { for (Biquad& q : b) q.abschneiden(schwelle); }
+    bool leer() const { return b[0].leer() && b[1].leer() && b[2].leer() && b[3].leer(); }
 };
 Lr8 lr8_tiefpass(double fc, double fs);
 Lr8 lr8_hochpass(double fc, double fs);

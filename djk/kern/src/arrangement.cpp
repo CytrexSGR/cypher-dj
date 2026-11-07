@@ -19,11 +19,26 @@ Arrangement::Arrangement(const sw::ReglerTabelle& tab, bool mit_hall) : ret_(mit
   klick_form_bauen();
   for (auto& je_spur : blende_s_)
     for (int64_t& b : je_spur) b = INT64_MIN;
+  for (auto& je_spur : blende_s2_)
+    for (int64_t& b : je_spur) b = INT64_MIN;
 }
 
 int64_t Arrangement::naht_sample(const Karte& k) const {
   if (!klammer() || status_ != ArrStatus::spielt) return -1;
   return std::llround(k.sample_at(bis_ + ursprung_ - start_beat_));
+}
+
+double Arrangement::projekt_beat_bei(const Karte& k, int64_t s) const {
+#ifdef CYPHERDJ_MUTATION_ARR_PUNKT_BEAT_LINEAR   // error case: the tempo of the grip is taken as constant from the start of the transport
+  return static_cast<double>(s - start_s_) * (k.beat_at(static_cast<double>(s)) - k.beat_at(static_cast<double>(s - 1))) + start_beat_;
+#else
+  double urs = ursprung_;
+#ifndef CYPHERDJ_MUTATION_ARR_PUNKT_BEAT_OHNE_NAHT   // error case: the origin of the pass that is about to end is used behind the seam too
+  const int64_t w = naht_sample(k);
+  if (w >= 0 && s >= w) urs += bis_ - von_;
+#endif
+  return k.beat_at(static_cast<double>(s)) - urs + start_beat_;
+#endif
 }
 
 ArrZustand Arrangement::zustand(const Karte& k, int64_t s) const {
@@ -46,6 +61,9 @@ const ArrSnapshot* Arrangement::tausche(const ArrSnapshot* neu, int64_t s, const
   noten_tauschen(neu, s);     // offene Noten ohne Gegenstück: Off sofort
   senken_wechsel(neu, s);     // Spuren, die ihre Senke verlassen: Ausblende (RB), All Notes Off an den Slot (Wirt)
   snap_ = neu;
+  if (!alt)   // first snapshot: the pre/post flag of the returns stands at once, a later flip blends (review echtzeit-1)
+    for (int r = 0; r < ARR_RETURNS; ++r) ret_pre_w_[r] = (neu && neu->ret_pre[r]) ? 1.0f : 0.0f;
+  ins_.tausche(neu ? neu->kette : nullptr);   // 1.10 slice 4a: the stages keep, enter or leave by slot identity
   snap_werk_ = false;   // Slice 2: hat der neue Schnappschuss Clips des Warp-Werks (COMPLEX, TONES)?
   if (snap_)
     for (const ArrSpur& sp : snap_->spur)
@@ -253,6 +271,7 @@ void Arrangement::segment(const Karte& k, int64_t a, int64_t b, int64_t s0) {
 // Der PM-Abgriff ist Stille (1.10). Ziele bleiben, wie sie sind: ohne Schnappschuss gibt es keine neuen.
 void Arrangement::ruhe(int m) {
   ++ruhe_n_;
+  ins_.ruhe();   // 1.10 slice 4a: nothing plays, no stage keeps state
   std::memset(pm_l_, 0, sizeof(float) * static_cast<size_t>(m));
   std::memset(pm_r_, 0, sizeof(float) * static_cast<size_t>(m));
   auto ende = [&](int i, int f) { return w_[i][f].vl ? w_[i][f].vl[m - 1] : w_[i][f].w; };
@@ -274,15 +293,24 @@ void Arrangement::ruhe(int m) {
     for (int f = 0; f < AUTO_FELDER; ++f) {
       blende_n_[i][f] = 0;
       blende_s_[i][f] = INT64_MIN;
+      blende_s2_[i][f] = INT64_MIN;
       auto_war_[i][f] = false;
     }
   }
   verlaeufe_nachfuehren(m);
 }
 
+void Arrangement::dj_schluessel(const float* const* l, const float* const* r) {
+  for (int i = 0; i < DJ_EINGAENGE; ++i) {
+    dj_l_[i] = l ? l[i] : nullptr;
+    dj_r_[i] = r ? r[i] : nullptr;
+  }
+}
+
 void Arrangement::block(const Karte& k, int64_t s0, int m, float* aus_l, float* aus_r, float* metro_master_l,
                         float* metro_master_r, float* metro_cue_l, float* metro_cue_r) {
   if (m > ARR_BLOCK) m = ARR_BLOCK;
+  pdc_.neuer_block();   // 1.10 slice 4b T13: the delay places not asked in a block lose their history, also across the quiet path
   const bool weg = n_weg_ > 0;   // Fix F2: eine Senke blendet eine Spur noch aus
 #ifdef CYPHERDJ_MUTATION_ARR_RUHE_SCHNEIDET_AB
   const bool ret_blendet = false;   // error case: an unloaded playback cuts a return strip off instead of fading it out
@@ -291,6 +319,7 @@ void Arrangement::block(const Karte& k, int64_t s0, int m, float* aus_l, float* 
 #endif
   if (!snap_ && n_offen_ == 0 && klick_rest_ == 0 && stimmen() == 0 && !weg && !ret_blendet) {   // nichts geladen, nichts klingt:
     ruhe(m);                                                                      // DJ-Betrieb ohne Kosten (Slice 11)
+    for (int i = 0; i < DJ_EINGAENGE; ++i) dj_l_[i] = dj_r_[i] = nullptr;         // slice 5 U2b: the pointers of dj_schluessel() are good for one block
     return;
   }
   auto_von_ = auto_bis_ = 0;   // Automation Slice 1: a new block, no lane sample yet
@@ -354,7 +383,9 @@ void Arrangement::block(const Karte& k, int64_t s0, int m, float* aus_l, float* 
   freeze_abgriff(s0, m);   // Paket K3: Spur-Signal vor dem Fader
   auto_block(s0, m);       // Automation Slice 1: the lane (or its blend) replaces the fader course of a track for this block
   mischen(m, aus_l, aus_r);
+  for (int i = 0; i < DJ_EINGAENGE; ++i) dj_l_[i] = dj_r_[i] = nullptr;   // slice 5 U2b: the pointers of dj_schluessel() are good for one block; the next block without a call has a silent DJ key
   verlaeufe_nachfuehren(m);
+  auto_ueber_abschluss(s0 + m);   // 1.12 S3: an override change inside this block has passed
   if (werk_) werk_->takt(s0 + m);   // Slice 2: Stand des Callbacks an das Warp-Werk (synchron: es füllt die Ringe jetzt)
 }
 

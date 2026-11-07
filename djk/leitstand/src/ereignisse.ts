@@ -21,7 +21,13 @@ export const ART_JE_ADRESSE: Record<string, string> = {
 // 187,5 Zeilen je Sekunde, /zustand/kern und /pegel je 20 Hz, /zustand/deck 50 Hz je Deck, /zustand/box 50 Hz je Box
 // (Keylock 7b.3, §5.5b).
 // /zustand/komp 10 Hz je aktivem Kompressor (2026-10-11); /zustand/ein 20 Hz ohne Änderungs-Auslöser (§5.14, 2026-10-26: 60 % der Zeilen)
-export const NICHT_INS_JOURNAL = new Set(['/uhr', '/zustand/kern', '/zustand/deck', '/zustand/box', '/zustand/komp', '/zustand/ein', '/pegel']);
+// A6 (1.15 mix tools): /zustand/mix 10 Hz x one line per channel with a running tool (up to 17 channels = 170 lines per second),
+// /zustand/spektrum 25 Hz while a source is selected; a journal.jsonl of 0.3 GB already exists (review M3), these would add more than the
+// rest together. Neither carries a decision, both are meters.
+export const NICHT_INS_JOURNAL = new Set([
+  '/uhr', '/zustand/kern', '/zustand/deck', '/zustand/box', '/zustand/komp', '/zustand/ein', '/pegel', '/zustand/mix', '/zustand/spektrum',
+  '/e/ins_gr',   // 1.10 slice 4a: gain reduction of up to 12 insert stages at 20 Hz = 240 lines per second, a meter, no decision
+]);
 
 // Jede Adresse, die dieser Leitstand liest oder schreibt; tests/adressen.test.ts prüft, dass der Vertrag
 // (djk/vertrag/osc_adressen.ts) sie alle kennt.
@@ -34,6 +40,8 @@ export const GENUTZT = [
   '/k/vorschlag_kanal', '/e/regler', '/e/taste', '/zustand/deck', '/zustand/kern', '/test/hand',
   '/zustand/box',  // Keylock 7b.3: nur gelesen, um es aus dem Journal zu halten
   '/zustand/komp',  // Effekt-Sektion 2026-10-11: ebenso
+  '/zustand/mix', '/zustand/spektrum',  // A6: ebenso
+  '/e/ins_gr',  // 1.10 slice 4a: read only to keep it out of the journal
 ];
 
 export type AnsageArt = 'vorschlag' | 'plan' | 'rueckfall' | 'warnung' | 'info';

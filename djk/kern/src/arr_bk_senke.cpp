@@ -49,33 +49,33 @@ void ArrBkSenke::schiebe(Spur& p, const Ev& e) noexcept {
 }
 
 void ArrBkSenke::note(int spur, int64_t ziel, uint8_t ton, uint8_t vel, bool an) noexcept {
-  if (spur < 0 || spur >= ARR_SPUREN) return;
+  if (spur < 0 || spur >= ARR_SENKEN_PLAETZE) return;
   schiebe(sp_[spur], Ev{ziel, static_cast<uint8_t>(an ? 0 : 1), ton, vel});
 }
 
 void ArrBkSenke::alle_aus(int spur, int64_t ziel) noexcept {
-  if (spur < 0 || spur >= ARR_SPUREN) return;
+  if (spur < 0 || spur >= ARR_SENKEN_PLAETZE) return;
   schiebe(sp_[spur], Ev{ziel, 2, 0, 0});
 }
 
 void ArrBkSenke::transport_start(int spur, int64_t ziel) noexcept {
-  if (spur < 0 || spur >= ARR_SPUREN) return;
+  if (spur < 0 || spur >= ARR_SENKEN_PLAETZE) return;
   sp_[spur].start = ziel;   // acts in the block that holds ziel
 }
 
 bool ArrBkSenke::spur_weg(int spur, int64_t, bool) noexcept {
-  if (spur < 0 || spur >= ARR_SPUREN || !sp_[spur].h_last) return false;
+  if (spur < 0 || spur >= ARR_SENKEN_PLAETZE || !sp_[spur].h_last) return false;
   sp_[spur].weg = true;   // acts in the next block() of this track: fade out, reset, release
   return true;
 }
 
 void ArrBkSenke::block(int spur, int64_t s0, int m, float* l, float* r) noexcept {
-  if (spur < 0 || spur >= ARR_SPUREN || m <= 0 || m > ARR_BLOCK) return;
+  if (spur < 0 || spur >= ARR_SENKEN_PLAETZE || m <= 0 || m > ARR_BLOCK) return;
   Spur& p = sp_[spur];
   const ArrSnapshot* snap = arr_.snapshot();
   const ArrSpur* q = nullptr;   // the track of the current snapshot when it is a bk track with an instance
   if (snap) {
-    const ArrSpur& x = snap->spur[spur];
+    const ArrSpur& x = snap->platz(spur);
     if (x.art == ArrArt::intern && std::strcmp(x.geraet, "bk") == 0 && x.bk) q = &x;
   }
   CypherBk* h_neu = q ? q->bk : nullptr;

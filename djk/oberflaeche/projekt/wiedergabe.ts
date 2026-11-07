@@ -7,9 +7,10 @@
 // Clip-Grenzen geschnitten. Mixer-Werte stehen nicht darin (Regler, 2.3), Tempo auch nicht (Beats sind absolut).
 import fs from 'node:fs';
 import path from 'node:path';
-import { BEATS_VORGABE, MAX_AUTO_PUNKTE, ZIEL_BEREICH, MAX_CLIPS, MAX_NOTEN, MAX_SPUREN, SAMPLERATE, pitchFaktor } from './modell.ts';
+import { BEATS_VORGABE, MAX_AUTO_PUNKTE, ZIEL_BEREICH, MAX_CLIPS, MAX_NOTEN, MAX_SPUREN, SAMPLERATE, pitchFaktor, rackSicht } from './modell.ts';
 import { MAX_BEATS_EINHEITEN, beatsEinheiten, beatsEinheitenZahl } from './warp.ts';
-import type { AudioClip, Lane, Ziel, MidiClip, Note, Projekt, Spur, Warp } from './modell.ts';
+import { hkStrecke, hkWert, istModulation, modulationsZiel, type Huellkurve } from './huellkurve.ts';
+import type { AudioClip, Clip, Insert, InsertTraeger, Lane, Ziel, MidiClip, Note, Projekt, Punkt, Spur, Warp } from './modell.ts';
 
 export const WIEDERGABE_FORMAT = 'cypherdj-arr/1';
 // /2, wenn das Projekt Gruppen hat oder eine Spur nicht auf master zeigt (1.10, P2) oder ein Audio-Clip Warp an trägt (1.13); sonst /1 byteweise wie bisher
@@ -30,20 +31,43 @@ export interface WAudioClip {
   gain_db: number; ein_beats: number; aus_beats: number;
   // Paket 1.13 (nur /2): Marker [Clip-Beat der Kopie, Quell-Frame], nur bei Warp an; pitch (Slice 5) nur bei != 1
   warp?: { modus: number; w: [number, number][]; pitch?: number; e?: [number, number][]; loop?: number; huelle?: number };
+  gain_hk?: [number, number, number][];   // 1.12 slice 5 (/2 only, D8): the gain envelope of this copy [copy beat, dB, formcode]
 }
 export interface WNote { id: string; beat: number; laenge: number; ton: number; vel: number }
 export type WZiel = { art: 'gruppe'; nr: number };   // fehlt `ausgang`, zeigt die Spur auf den Produktions-Master
 // Automation Slice 1 (nur /2): je Lane Ziel und Punkte [beat, wert dB, formcode], Formcode 0 linear, 1 s, 2 sprung; die Spur trägt `auto` nur mit Lane
 // Slice 2: `ziel` is the project string (Ziel: fader, pan, mute, solo, geraet.cutoff ...); mute and solo points always carry formcode 2
-export interface WAuto { ziel: Ziel; punkte: [number, number, number][] }
+// 1.12 slice 5 (D9): relativ marks the merged modulation lane of a track (stacked on the base value or the absolute lane of the same target)
+export interface WAuto { ziel: Ziel; punkte: [number, number, number][]; relativ?: true }
 const FORM_NR: Readonly<Record<string, number>> = { linear: 0, s: 1, sprung: 2 };
+// slice 4 (only /2): the insert chain of a strip, in signal order. `an` is the kern's structural flag and is ALWAYS true here: the kern runs a stage when
+// this flag AND its row ins/komp/<n>/an are on, and insert_an is a light command that only sends the row, so the bypass must live in the
+// row alone (a false flag would make the stage impossible to switch on again until the next structure change)
+// slice 5: `key` is the structural sidechain key {q, nr, punkt} (the core's chain[j].key); absent = the row key sc or own signal
+export interface WInsert {
+  art: Insert['art']; slot: number; an: boolean; key?: { q: 'spur' | 'grp' | 'ret' | 'deck' | 'erz'; nr: number; punkt: 'pre' | 'post' };
+}
 export type WSpur =
-  | { nr: number; art: 'audio'; clips: WAudioClip[]; ausgang?: WZiel; auto?: WAuto[] }
-  | { nr: number; art: 'intern'; geraet: 'rb338' | 'bk'; graph?: string; parameter: Record<string, number>; noten: WNote[]; ausgang?: WZiel; auto?: WAuto[] }
-  | { nr: number; art: 'wirt'; slot: number; noten: WNote[]; ausgang?: WZiel; auto?: WAuto[] };
-export interface WGruppe { nr: number; ausgang: { art: 'master' } }   // Tiefe 1 (P2): eine Gruppe führt immer in den Master
+  | { nr: number; art: 'audio'; clips: WAudioClip[]; ausgang?: WZiel; auto?: WAuto[]; chain?: WInsert[]; rack?: WRack }
+  | { nr: number; art: 'intern'; geraet: 'rb338' | 'bk'; graph?: string; parameter: Record<string, number>; noten: WNote[]; ausgang?: WZiel;
+    auto?: WAuto[]; chain?: WInsert[]; rack?: WRack }
+  // 1.9 (L25): no parameter, the kit is the device
+  | { nr: number; art: 'intern'; geraet: 'kit'; kit: string; noten: WNote[]; ausgang?: WZiel; auto?: WAuto[]; chain?: WInsert[]; rack?: WRack }
+  | { nr: number; art: 'wirt'; slot: number; noten: WNote[]; ausgang?: WZiel; auto?: WAuto[]; chain?: WInsert[]; rack?: WRack };
+export interface WGruppe { nr: number; ausgang: { art: 'master' }; chain?: WInsert[]; rack?: WRack }   // Tiefe 1 (P2): eine Gruppe führt immer in den Master
+export interface WReturn extends WGruppe { pre?: true }   // slice 4: the send taps before the fader (absent = post)
 export interface Wiedergabe { format: typeof WIEDERGABE_FORMAT | typeof WIEDERGABE_FORMAT_2; nr: number; spuren: WSpur[]; gruppen?: WGruppe[];
-  returns?: WGruppe[] }   // returns (slice 3): {nr, ausgang master} like the groups
+  // returns (slice 3) like the groups; pm = the production master's chain, the kern's key (slice 4)
+  returns?: WReturn[]; pm?: { chain: WInsert[]; rack?: WRack } }
+// slice 4c: the rack of a strip: its pooled slot and the mapping table (`stufe` = position in the chain, `param` = parameter index of the kind, `makro` 0..3)
+export interface WRack { slot: number; ziele: { makro: number; stufe: number; param: number; von: number; bis: number }[] }
+const kette = (liste: readonly Insert[] | undefined, strang?: InsertTraeger): { chain: WInsert[]; rack?: WRack } | Record<string, never> => {
+  if (!liste?.length) return {};
+  const rack = strang ? rackSicht(strang) : undefined;
+  const stufe = (i: Insert): WInsert => ({ art: i.art, slot: i.slot, an: true,
+    ...(i.key ? { key: { q: i.key.quelle, nr: i.key.nr, punkt: i.key.punkt } } : {}) });
+  return { chain: liste.map(stufe), ...(rack ? { rack } : {}) };
+};
 
 export interface UebersetzOptionen {
   nr: number;                                                // Wiedergabe-Nummer (WiedergabeZaehler.naechste())
@@ -52,6 +76,9 @@ export interface UebersetzOptionen {
   arbeitsordner?: string;                                    // nötig, sobald eine Spur eingefroren ist: freeze.datei ist relativ dazu (Spec 6.14, 6.29)
   existiert?: (datei: string) => boolean;                    // Vorgabe fs.existsSync (Haken für Tests)
   transienten?: (sha256: string) => number[] | null;         // Slice 4: Transienten einer Quelle in Sekunden, aufsteigend; fehlt sie, gilt null (Raster 1/16)
+  // 1.14 comping (spec R8): spur_id -> take_id. The live translator only: a listed track plays the clips of that take instead of its main lane.
+  // Export, loudness and merge never pass it. An unknown track or take id is ignored (the track plays its main lane).
+  vorhoeren?: ReadonlyMap<string, string>;
 }
 
 const sortiereNoten = (a: WNote, b: WNote): number => a.beat - b.beat || a.ton - b.ton || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
@@ -138,6 +165,12 @@ function beatsFeld(c: AudioClip, o: UebersetzOptionen, frames: number): { e?: [n
   return { e, loop: BEATS_LOOP_NR[b.loop], huelle: b.huelle };
 }
 
+// 1.14 comping (R8): the clips a track plays live: its main lane, or the clips of the auditioned take when the map names a take the track has
+const spurClips = (s: Spur, vorhoeren?: ReadonlyMap<string, string>): readonly Clip[] => {
+  const id = vorhoeren?.get(s.id);
+  return id === undefined ? s.clips : s.takes?.find((t) => t.id === id)?.clips ?? s.clips;
+};
+
 function audioClips(c: AudioClip, o: Required<Pick<UebersetzOptionen, 'frames'>> & UebersetzOptionen): WAudioClip[] {
   if (c.stumm) return [];   // Slice 6 (D12): stumm, Live und Export gleich
   if (c.dekodiert !== 'fertig') return [];                   // Spec 3.2: nur fertig dekodierte Clips
@@ -148,18 +181,71 @@ function audioClips(c: AudioClip, o: Required<Pick<UebersetzOptionen, 'frames'>>
   if (offset >= frames) return [];                           // hinter dem Dateiende: nichts zu spielen
   const datei = path.join(o.audioOrdner, `${c.quelle.sha256}.f32`);
   const bf = marker ? beatsFeld(c, o, frames) : {};
+  const hk = c.huellkurven?.find((h) => h.ziel === 'gain');
   return audioKopien(c).map((k) => ({ id: k.id, start_beat: k.start_beat, laenge_beats: k.laenge_beats, sha256: c.quelle.sha256,
     datei, frames, offset_frames: offset, gain_db: c.gain_db, ein_beats: k.ein_beats, aus_beats: k.aus_beats,
     ...(marker ? { warp: { modus: WARP_MODUS_NR[c.warp!.modus], w: marker.map((m): [number, number] => [m[0], m[1]]),
-      ...pitchFeld(c.warp!), ...bf } } : {}) }));
+      ...pitchFeld(c.warp!), ...bf } } : {}),
+    ...(hk ? { gain_hk: tripel(hkStrecke(hk, k.start_beat - c.start_beat, k.laenge_beats, c.loop_beats)) } : {}) }));
+}
+// 1.12 slice 5: points as playback triples [beat, wert, formcode]
+const tripel = (p: readonly Punkt[]): [number, number, number][] => p.map((q) => [q.beat, q.wert, FORM_NR[q.form ?? 'linear']]);
+// The loop copies of any clip as [clip beat of the copy start, length] (audio and MIDI follow the same rule, audioKopien)
+const kopienVon = (c: Clip): [number, number][] => (c.loop_beats == null ? [[0, c.laenge_beats]]
+  : Array.from({ length: Math.ceil(c.laenge_beats / c.loop_beats - 1e-9) },
+    (_, k): [number, number] => [k * c.loop_beats!, Math.min(c.loop_beats!, c.laenge_beats - k * c.loop_beats!)]));
+// 1.12 slice 5 (D7): the gain_hk points the translator writes for a clip, summed over its loop copies (the command check counts these)
+export function gainHkPunkte(c: Clip): number {
+  const hk = c.art === 'audio' && !c.stumm ? c.huellkurven?.find((h) => h.ziel === 'gain') : undefined;
+  return hk ? kopienVon(c).reduce((n, [k0, laenge]) => n + hkStrecke(hk, k0, laenge, c.loop_beats).length, 0) : 0;
+}
+// 1.12 slice 5 (D9): the modulation envelopes of a track's clips merged into one relative lane per target: 0 outside the clip spans, a jump pair at
+// every copy edge (two points at one beat at most: of a run at one beat the first and the last stay). Muted clips do not modulate.
+// Clips may overlap on a track: the copy that starts later takes the modulation over from its start (the earlier one is cut there), so the beats rise.
+export function relativeLanen(clips: readonly Clip[]): WAuto[] {
+  type Kopie = { a: number; k0: number; laenge: number; hk: Huellkurve; loop: number | null | undefined };
+  const kopienJeZiel = new Map<string, Kopie[]>();
+  const sortiert = [...clips].sort((a, b) => a.start_beat - b.start_beat);
+  for (const c of sortiert) {
+    if (c.art === 'audio' && c.stumm) continue;
+    for (const hk of c.huellkurven ?? []) {
+      if (!istModulation(hk.ziel)) continue;
+      const ziel = modulationsZiel(hk.ziel), liste = kopienJeZiel.get(ziel) ?? [];
+      for (const [k0, laenge] of kopienVon(c)) liste.push({ a: c.start_beat + k0, k0, laenge, hk, loop: c.loop_beats });
+      kopienJeZiel.set(ziel, liste);
+    }
+  }
+  const proZiel = new Map<string, Punkt[]>();
+  for (const [ziel, kopien] of kopienJeZiel) {
+    const liste: Punkt[] = [];
+    kopien.forEach(({ a, k0, laenge: voll, hk, loop }, i) => {
+      const laenge = i + 1 < kopien.length ? Math.min(voll, kopien[i + 1].a - a) : voll;
+      if (!(laenge > 1e-12)) return;
+      liste.push({ beat: a, wert: 0 });
+      hkStrecke(hk, k0, laenge, loop).forEach((q, j) => liste.push({ ...q, beat: a + q.beat, ...(j === 0 ? { form: 'sprung' as const } : {}) }));
+      liste.push({ beat: a + laenge, wert: 0, form: 'sprung' });
+    });
+    proZiel.set(ziel, liste);
+  }
+  return [...proZiel].map(([ziel, liste]) => {
+    const aus: Punkt[] = [];
+    for (let i = 0; i < liste.length; i++) {
+      let j = i;
+      while (j + 1 < liste.length && liste[j + 1].beat === liste[i].beat) j++;
+      aus.push(liste[i]);
+      if (j > i && liste[j].wert !== liste[i].wert) aus.push({ ...liste[j], form: 'sprung' });
+      i = j;
+    }
+    return { ziel: ziel as Ziel, punkte: tripel(aus), relativ: true as const };
+  });
 }
 
 // Zahl der Warp-Marker aller Audio-Clips nach dem Ausrollen der Loops (jede Kopie trägt ihre Liste); der Kern lehnt über MAX_WARP_PUNKTE ab
 // Slice 4: ein BEATS-Clip zählt zusätzlich seine Einheiten (e) je Kopie; wirft nie (D9). `o` liefert die Transienten, ohne gilt das Raster.
-export function zaehleWarpMarker(p: Projekt, o?: Pick<UebersetzOptionen, 'transienten'>): number {
+export function zaehleWarpMarker(p: Projekt, o?: Pick<UebersetzOptionen, 'transienten' | 'vorhoeren'>): number {
   let n = 0;
   for (const s of p.spuren) {
-    for (const c of s.clips) {
+    for (const c of spurClips(s, o?.vorhoeren)) {
       if (c.art !== 'audio' || !c.warp?.an) continue;
       const k = audioKopien(c).length;
       n += c.warp.marker.length * k;
@@ -173,7 +259,10 @@ function noten(s: Spur): WNote[] {
   const aus: WNote[] = [];
   for (const c of s.clips) {
     if (c.art !== 'midi') continue;
-    fuerAusgerollteNoten(c, (id, beat, laenge, n) => { aus.push({ id, beat, laenge, ton: n.ton, vel: n.vel }); });
+    // 1.12 slice 5 (D10): a transpose envelope moves the pitch, read at the note start in the clip and rounded; the same id
+    const hk = c.huellkurven?.find((h) => h.ziel === 'transpose');
+    const ton = (n: Note, beat: number): number => (hk ? Math.min(127, Math.max(0, n.ton + Math.round(hkWert(hk, beat - c.start_beat, c.loop_beats)))) : n.ton);
+    fuerAusgerollteNoten(c, (id, beat, laenge, n) => { aus.push({ id, beat, laenge, ton: ton(n, beat), vel: n.vel }); });
   }
   return aus.sort(sortiereNoten);
 }
@@ -185,7 +274,7 @@ export function uebersetze(p: Projekt, opt: UebersetzOptionen): Wiedergabe {
   let clips = 0, nZahl = 0;
   const ohneZiel = (s: Spur): WSpur => {
     if (s.art === 'audio') {
-      const cs = s.clips.flatMap((c) => (c.art === 'audio' ? audioClips(c, o) : []))
+      const cs = spurClips(s, o.vorhoeren).flatMap((c) => (c.art === 'audio' ? audioClips(c, o) : []))
         .sort((a, b) => a.start_beat - b.start_beat || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
       clips += cs.length;
       return { nr: s.nr, art: 'audio', clips: cs };
@@ -204,7 +293,9 @@ export function uebersetze(p: Projekt, opt: UebersetzOptionen): Wiedergabe {
     return g.art === 'intern'
       ? (g.name === 'bk'                                        // Baukasten S20: the graph name goes to the kern, which builds the graph off the callback
         ? { nr: s.nr, art: 'intern', geraet: 'bk', graph: g.graph, parameter: { ...g.parameter }, noten: n }
-        : { nr: s.nr, art: 'intern', geraet: 'rb338', parameter: { ...g.parameter }, noten: n })
+        : g.name === 'kit'                                      // 1.9 (L25): the kern loads <kit folder>/<kit> in its loader thread
+          ? { nr: s.nr, art: 'intern', geraet: 'kit', kit: g.kit, noten: n }
+          : { nr: s.nr, art: 'intern', geraet: 'rb338', parameter: { ...g.parameter }, noten: n })
       : { nr: s.nr, art: 'wirt', slot: g.slot, noten: n };
   };
   // 1.10 (P2): Ziel je Spur; die Gruppen-Nummer, nicht die ID, steht in der Wiedergabe (der Kern kennt nur Nummern)
@@ -225,7 +316,13 @@ export function uebersetze(p: Projekt, opt: UebersetzOptionen): Wiedergabe {
         l.punkte.map((q) => [q.beat, q.wert, ZIEL_BEREICH[l.ziel].nurSprung ? FORM_NR.sprung : FORM_NR[q.form ?? 'linear']]);   // mute/solo: always a jump
       w = { ...w, auto: lanes.map((l) => ({ ziel: l.ziel, punkte: punkte(l) })) };
     }
-    return w;
+    const relativ = relativeLanen(spurClips(s, o.vorhoeren));   // 1.12 slice 5 (D9): modulation envelopes, after the absolute lanes
+    if (relativ.length) {
+      autoPunkte += relativ.reduce((n, l) => n + l.punkte.length, 0);
+      w = { ...w, auto: [...(w.auto ?? []), ...relativ] };
+    }
+    if (w.art === 'audio') autoPunkte += w.clips.reduce((n, c) => n + (c.gain_hk?.length ?? 0), 0);   // gain_hk counts with the lanes (D7)
+    return { ...w, ...kette(s.inserts, s) };
   });
   if (autoPunkte > MAX_AUTO_PUNKTE) throw new WiedergabeFehler('zu_gross', `auto-punkte: ${autoPunkte} > ${MAX_AUTO_PUNKTE}`);
   if (clips > MAX_CLIPS) throw new WiedergabeFehler('zu_gross', `clips: ${clips} > ${MAX_CLIPS}`);
@@ -235,12 +332,17 @@ export function uebersetze(p: Projekt, opt: UebersetzOptionen): Wiedergabe {
   // Paket 1.13: ein gewarpter Clip braucht /2 (der Kern lehnt warp in /1 ab); gruppen steht dann immer da, auch leer
   const gewarpt = spuren.some((sp) => sp.art === 'audio' && sp.clips.some((c) => c.warp !== undefined));
   if (gewarpt && zaehleWarpMarker(p, opt) > MAX_WARP_PUNKTE) throw new WiedergabeFehler('zu_gross', `warp-marker: > ${MAX_WARP_PUNKTE}`);
+  const eingefuegt = (p.spuren.some((sp) => sp.inserts?.length) || (p.gruppen ?? []).some((g) => g.inserts?.length)
+    || (p.returns ?? []).some((r) => r.inserts?.length || r.pre) || !!p.master?.inserts?.length);   // slice 4: a chain or pre needs /2
   const automatisiert = spuren.some((sp) => sp.auto !== undefined);       // Automation braucht /2 (der Kern lehnt auto in /1 ab)
+  const huellen = spuren.some((sp) => sp.art === 'audio' && sp.clips.some((c) => c.gain_hk !== undefined));   // 1.12 slice 5: gain_hk is /2 only
   // ohne Routing, Warp und Lane byteweise die alte Datei (AK3)
-  if (!routing && !gewarpt && !automatisiert && !hatReturns) return { format: WIEDERGABE_FORMAT, nr: opt.nr, spuren };
+  if (!routing && !gewarpt && !automatisiert && !hatReturns && !eingefuegt && !huellen) return { format: WIEDERGABE_FORMAT, nr: opt.nr, spuren };
   return { format: WIEDERGABE_FORMAT_2, nr: opt.nr, spuren,
-    gruppen: [...(p.gruppen ?? [])].sort((a, b) => a.nr - b.nr).map((g) => ({ nr: g.nr, ausgang: { art: 'master' as const } })),
-    ...(hatReturns ? { returns: [...(p.returns ?? [])].sort((a, b) => a.nr - b.nr).map((r) => ({ nr: r.nr, ausgang: { art: 'master' as const } })) } : {}) };
+    gruppen: [...(p.gruppen ?? [])].sort((a, b) => a.nr - b.nr).map((g) => ({ nr: g.nr, ausgang: { art: 'master' as const }, ...kette(g.inserts, g) })),
+    ...(hatReturns ? { returns: [...(p.returns ?? [])].sort((a, b) => a.nr - b.nr)
+      .map((r) => ({ nr: r.nr, ausgang: { art: 'master' as const }, ...(r.pre ? { pre: true as const } : {}), ...kette(r.inserts, r) })) } : {}),
+    ...(p.master?.inserts?.length ? { pm: kette(p.master.inserts, p.master) as { chain: WInsert[]; rack?: WRack } } : {}) };
 }
 
 export const wiedergabeDatei = (arbeitsordner: string, nr: number): string => path.join(arbeitsordner, `wiedergabe-${nr}.json`);

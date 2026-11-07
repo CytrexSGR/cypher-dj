@@ -26,13 +26,111 @@ function universum(): string[] {
   u.push(...kanaele.flatMap((k) => [0, 1, 8, 9].map((n) => `${k}/bk/${n}`)), 'master/bk/1', 'cue/bk/1', 'pad/3/bk/1');
   // S14: the same for the send returns fx/1..5 (only fx/3 and fx/4 have graph knobs)
   u.push(...[1, 2, 3, 4, 5].flatMap((n) => [0, 1, 8, 9].map((m) => `fx/${n}/bk/${m}`)));
+  // 1.15 A2: every mix-tool suffix on every channel kind (positives where the contract has a row, wrong-kind negatives everywhere
+  // else), plus near misses that are deliberately not exposed (utility gain_db, per-band solo, limiter vorhalt_ms / echtspitze)
+  u.push(...kanaele.flatMap((k) => WERKZEUG_SUFFIXE.map((s) => `${k}/${s}`)));
+  u.push('spektrum/kanal', 'spektrum/kanal/1', 'spektrum', 'deck/1/spektrum/kanal', 'bus/5/util/dc', 'bus/0/lim/an', 'erz/9/gate/an',
+    ...kanaele.flatMap((k) => ['util/gain_db', 'mb/tief/solo', 'mb/solo', 'lim/vorhalt_ms', 'lim/echtspitze', 'gate/zz', 'util/zz', 'lim/zz',
+      'mb/zz/ratio', 'mb/tief/zz'].map((s) => `${k}/${s}`)));
   return u;
+}
+
+// The suffixes of section 3 (INTERFACES 1.5), written out here independently of regler_info.ts and of the C++ header
+const GATE = ['an', 'schwelle', 'hysterese', 'ratio', 'bereich', 'attack', 'hold', 'release', 'sc'].map((s) => `gate/${s}`);
+const UTIL = ['balance', 'breite', 'bassmono', 'phase_l', 'phase_r', 'tausch', 'dc'].map((s) => `util/${s}`);
+const MB = ['mb/an', 'mb/grenze_tief', 'mb/grenze_hoch', ...['tief', 'mitte', 'hoch'].flatMap((b) =>
+  ['schwelle', 'ratio', 'attack', 'release', 'knie', 'makeup', 'umgehen'].map((s) => `mb/${b}/${s}`))];
+const LIM = ['lim/an', 'lim/decke', 'lim/abklingen'];
+const WERKZEUG_SUFFIXE = [...GATE, ...UTIL, ...MB, ...LIM];
+const Q13 = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'erz/1', 'erz/2', 'erz/3', 'erz/4', 'erz/5', 'erz/6', 'erz/7', 'pad/1', 'pad/2'];
+const B4 = ['bus/1', 'bus/2', 'bus/3', 'bus/4'];
+// The exact set of the 345 tool paths: gate on Q13, utility on Q13 + B4, multiband and limiter on B4, one global row
+function werkzeugPfade(): string[] {
+  return [...Q13.flatMap((k) => GATE.map((s) => `${k}/${s}`)), ...[...Q13, ...B4].flatMap((k) => UTIL.map((s) => `${k}/${s}`)),
+    ...B4.flatMap((k) => MB.map((s) => `${k}/${s}`)), ...B4.flatMap((k) => LIM.map((s) => `${k}/${s}`)), 'spektrum/kanal'];
 }
 
 test('Pfadmenge gleich dem Vertragsmuster regler_pfad', () => {
   const abweichend = universum().filter((p) => muster.test(p) !== REGLER.has(p));
   assert.deepEqual(abweichend, []);
-  assert.ok(REGLER.size > 300, `nur ${REGLER.size} Pfade`); // Gegenprobe: die Tabelle ist nicht leer
+  assert.ok(REGLER.size >= 600, `nur ${REGLER.size} Pfade`); // Gegenprobe: die Tabelle ist nicht leer (A2: with the tool rows, 1254)
+});
+
+test('1.15 A2: the table holds exactly the 345 tool paths of section 3 and grows by exactly 345 (909 -> 1254)', () => {
+  const soll = werkzeugPfade();
+  assert.equal(soll.length, 345);
+  assert.equal(new Set(soll).size, 345);
+  const werkzeug = [...REGLER.keys()].filter((p) => !p.startsWith('ins/') && /\/(gate|util|mb|lim)\/|^spektrum\//.test(p));
+  assert.deepEqual(werkzeug.sort(), [...soll].sort());
+  // 909 listed rows before A2 (measured at b257b17c; the controller table has 4 more unlisted ones), + 120 insert rows ins/komp/1..12/* (slice 4a T6) + 59 ins/eq/1/* + 4 ins/saett/1/* (slice 4b T12) + 59 ins/eq/2/* (eq pool 2, 2026-11-06) + 3 ins/lim/1/* (master limiter kind; the tool-row filter below skips ins/ because bus lim rows share the segment)
+  assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/')).length, 245);
+  assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/eq/')).length, 2 * 59);
+  assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/saett/')).length, 4);
+  assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/lim/')).length, 3);
+  assert.equal([...REGLER.keys()].filter((p) => p.startsWith('rack/')).length, 48);   // slice 4c: 12 racks x 4 macro rows
+  assert.equal(REGLER.size, 909 + 345 + 245 + 48);
+  for (const p of soll) assert.equal(muster.test(p), true, `schema takes ${p}`);
+});
+
+// Strict parser of the one machine-readable source: one `{...}` row per line of werkzeug_regler.h. Throws on any line of the block it
+// cannot read, so a reformatted header never yields an empty green.
+function kopfZeilen(): { suffix: string; min: number; max: number; vorgabe: number; kurve: string; ganz: boolean; kanalart: string }[] {
+  const kopf = fs.readFileSync(path.join(import.meta.dirname, '..', '..', 'kern', 'stellwerk', 'include', 'cypherdj', 'stellwerk',
+    'werkzeug_regler.h'), 'utf8');
+  const von = kopf.indexOf('WERKZEUG_ZEILEN[] = {');
+  const bis = kopf.indexOf('\n};', von);
+  assert.ok(von > 0 && bis > von, 'WERKZEUG_ZEILEN block not found in werkzeug_regler.h');
+  const zahl = '(-?[0-9]+(?:\\.[0-9]+)?)f?';
+  const zeile = new RegExp(`^\\{WzTool::[a-z]+, "([a-z_/]+)", ${zahl}, ${zahl}, ${zahl}, KurvenTyp::(schalter|stufen|linear), [0-9]+, (true|false), ` +
+    'WzKanalart::(quellen|quellen_busse|busse|global)\\},$');
+  return kopf.slice(von, bis).split('\n').slice(1).map((l) => {
+    const m = zeile.exec(l.trim());
+    if (!m) throw new Error(`werkzeug_regler.h: unreadable row: ${l}`);
+    return { suffix: m[1], min: Number(m[2]), max: Number(m[3]), vorgabe: Number(m[4]), kurve: m[5], ganz: m[6] === 'true', kanalart: m[7] };
+  });
+}
+
+test('1.15 A2: range, default, unit and channel set of every tool row equal the rows of werkzeug_regler.h (both directions)', () => {
+  const zeilen = kopfZeilen();
+  assert.equal(zeilen.length, 44);
+  const kanaele: Record<string, readonly string[]> = { quellen: Q13, quellen_busse: [...Q13, ...B4], busse: B4, global: [''] };
+  const einheit: Record<string, string> = { schalter: 'schalter', stufen: 'stufe', linear: 'linear' };
+  const ausKopf: string[] = [];
+  for (const z of zeilen) {
+    for (const k of kanaele[z.kanalart]) {
+      const pfad = k === '' ? z.suffix : `${k}/${z.suffix}`;
+      ausKopf.push(pfad);
+      const i = reglerInfo(pfad);
+      assert.ok(i, `${pfad} missing in regler_info`);
+      assert.equal(i.einheit, einheit[z.kurve], pfad);
+      assert.equal(i.nurHand, false, pfad);
+      assert.equal(i.kanal, k === '' ? null : k, pfad);
+      // the header writes 0.1f / -0.3f (float), the table holds the double: equal within float precision
+      for (const f of ['min', 'max', 'vorgabe'] as const) assert.ok(Math.abs(i[f] - z[f]) < 1e-6, `${pfad}.${f}: ${i[f]} vs ${z[f]}`);
+      assert.equal(z.ganz, i.einheit !== 'linear', pfad);   // switch or steps = integer value
+    }
+  }
+  assert.deepEqual(ausKopf.sort(), werkzeugPfade().sort());
+});
+
+test('1.15 A2: tool rows are never "leiser machen" for Cypher (D16, default deny); wrong channel kinds are not in the table', () => {
+  assert.equal(machtLeiser('deck/1/gate/an', 0, 1), false);
+  assert.equal(machtLeiser('bus/1/lim/an', 0, 1), false);
+  assert.equal(machtLeiser('bus/1/mb/an', 0, 1), false);
+  assert.equal(machtLeiser('deck/1/gate/schwelle', -40, -90), false);   // lowering a threshold is not "leiser"
+  assert.equal(machtLeiser('bus/2/mb/tief/makeup', 0, -24), false);
+  assert.equal(machtLeiser('deck/3/fader', -6, -20), true);   // control: the rule itself is still alive
+  for (const p of ['erz/8/gate/an', 'erz/8/util/dc', 'bus/1/gate/an', 'deck/1/mb/an', 'deck/1/lim/an', 'bus/5/util/dc', 'spektrum/kanal/1',
+    'bus/1/mb/tief/solo', 'bus/1/util/gain_db']) assert.equal(REGLER.has(p), false, p);   // negative list of A1b (d)
+  assert.equal(kanalVon('bus/2/mb/mitte/makeup'), 'bus/2');
+  assert.equal(kanalVon('spektrum/kanal'), null);
+  assert.equal(imBereich(reglerInfo('deck/1/gate/an')!, 1, 0), true);
+  assert.equal(imBereich(reglerInfo('deck/1/gate/an')!, 1, 4), false);   // switch never as a ramp
+  assert.equal(imBereich(reglerInfo('spektrum/kanal')!, 19, 0), true);
+  assert.equal(imBereich(reglerInfo('spektrum/kanal')!, 20, 0), false);
+  assert.equal(imBereich(reglerInfo('spektrum/kanal')!, 2.5, 0), false);   // steps are integers
+  assert.equal(imBereich(reglerInfo('bus/1/mb/tief/ratio')!, 20, 3), true);
+  assert.equal(imBereich(reglerInfo('bus/1/mb/tief/ratio')!, 20.5, 3), false);
 });
 
 test('S5r: <kanal>/bk/<1..8> nur auf Kanälen mit Graph, 0..1, Vorgabe 0,5, alle dürfen', () => {

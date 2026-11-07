@@ -372,3 +372,28 @@ def test_panik_ist_ein_eigener_befehl_und_schickt_note_off_fuer_alle():
     assert h.noten == [(n, 0) for n in range(128)]
     st.takt(10.0)
     assert len(h.noten) == 128  # das wartende Off der Note 36 ist verworfen, kein zweites
+
+
+# --- 1.9 U5 (O28 on Surge): `ist` reads the current display values, so a direction word can start from what the host really plays ---------------
+
+def test_u5_ist_liest_zustand_und_gefahrenen_wert(tmp_path):
+    h = FahrHost()
+    s = Steuerung(h, str(tmp_path), None, BEREICHE)
+    # Init patch: a_filter1_cutoff = 3.0 (see test_fahre_startwert_aus_zustand_und_dauer_null)
+    r = s.bearbeite({"befehl": "ist", "namen": ["a_filter1_cutoff"]}, 0.0)
+    assert r == {"ok": True, "werte": {"a_filter1_cutoff": 3.0}}
+    # after a drive the driven value wins over the (lagging) plugin state
+    s.bearbeite({"befehl": "fahre", "name": "a_filter1_cutoff", "bis": 12.5, "dauer": 0}, 0.0)
+    assert s.bearbeite({"befehl": "ist", "namen": ["a_filter1_cutoff"]}, 0.0)["werte"] == {"a_filter1_cutoff": 12.5}
+    assert h.geladen == []  # reading loads nothing: no click
+
+
+def test_u5_ist_lehnt_unbekannte_und_falsche_namen_ab(tmp_path):
+    s = Steuerung(FahrHost(), str(tmp_path), None, BEREICHE)
+    r = s.bearbeite({"befehl": "ist", "namen": ["a_filter1_type"]}, 0.0)
+    assert r["ok"] is False and "nicht fahrbar" in r["fehler"]
+    assert s.bearbeite({"befehl": "ist", "namen": "a_filter1_cutoff"}, 0.0)["ok"] is False
+    assert s.bearbeite({"befehl": "ist", "namen": []}, 0.0)["ok"] is False
+    assert s.bearbeite({"befehl": "ist"}, 0.0)["ok"] is False
+    # negative control: a known name is answered right after the refusals
+    assert s.bearbeite({"befehl": "ist", "namen": ["a_filter1_cutoff"]}, 0.0)["ok"] is True

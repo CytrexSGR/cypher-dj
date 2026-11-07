@@ -25,9 +25,10 @@ export function mergeBereich(projekt, spuren) {
 // Menu items: [] for a MIDI clip without a second track; else one item { id: 'merge', text, aus, grund?, koerper }.
 // aus is true for: a running run, fewer than two tracks, a range over 1024 or under 1 beat, an audio clip in the range that is not decoded,
 // a Surge track with notes and no freeze, solo on only some of the tracks.
+// 1.14 slice 4 (plan 3.1): with one track there is no merge item (Bounce to New Track takes its place, bounce.js).
 export function mergePunkte(projekt, auswahl, clip, lauf) {
   const spuren = mergeSpuren(projekt, auswahl, clip.id);
-  if (clip.art !== 'audio' && spuren.length < 2) return [];
+  if (spuren.length < 2) return [];
   const b = mergeBereich(projekt, spuren), n = b.bis_beat - b.von_beat;
   const gewaehlt = (projekt?.spuren ?? []).filter((s) => spuren.includes(s.id));
   const imBereich = (c) => c.start_beat < b.bis_beat && c.start_beat + c.laenge_beats > b.von_beat;

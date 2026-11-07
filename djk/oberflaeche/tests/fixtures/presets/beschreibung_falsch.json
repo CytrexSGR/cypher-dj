@@ -1,0 +1,12 @@
+{
+ "schema": 1,
+ "name": "Fat Glue",
+ "geraet_typ": "effekt",
+ "geraet": "komp",
+ "werte": { "thresh": -10, "ratio": 2, "mix": 0.5, "extsc": false },
+ "beschreibung": { "art": "compressor", "unterart": "glue", "charakter": ["fat", "smooth"], "genre": [], "einsatz": ["mixdown"], "energie": 2, "text": "Synthetic glue compressor for the tests." },
+ "tags": ["test"],
+ "notiz": "synthetic fixture",
+ "angelegt": "2026-01-01T00:00:00.000Z",
+ "geaendert": "2026-01-02T00:00:00.000Z"
+}

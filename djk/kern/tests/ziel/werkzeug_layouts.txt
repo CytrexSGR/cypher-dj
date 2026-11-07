@@ -1,0 +1,131 @@
+# Layouts for the A10 cost instrument (--werkzeuge in kosten25.sh / kosten25_sender.py, layouts in kosten25.cpp).
+# One source for the sender, the shell script and the offline program. Line format (blank lines and # comments ignored):
+#   layout NAME            starts a layout
+#   konfig KEY VALUE       kern.toml line the layout needs (kosten25.sh writes it into the run's kern.toml)
+#   zeile PATH NUMBER      one row set with the OSC message of the hand's server path (/k/teil, quelle andreas, a beat ahead)
+# Strict grammar, the same in kosten25.sh, kosten25_sender.py and kosten25.cpp: '#' comments and blank lines only; unknown keyword, wrong token
+# count, malformed or non-numeric value, CR/VT/FF outside a comment (CRLF files), a line before the first layout, duplicate layout/key/path are errors (exit 4). Row counts are
+# pinned in all three: aus 0, limiter-gebaut 4, typisch 19, voll 76.
+# Paths and ranges: docs/architecture/stand/mix-werkzeuge.md and the 345-row table (plan A, section 3); every value is inside its range.
+# aus             tools off, all rows at default, limiters not built (kanal_limiter_vorhalt_ms 0): today's cost
+# limiter-gebaut  limiters built (vorhalt 5 ms), all four lim/an explicitly 0: the pure cost of the latency account
+# typisch         2 gates (hard), 4 utilities, 1 multiband compressing, 1 limiter (no true peak), spectrum on master
+# voll            13 gates (ratio mode), 17 utilities with bass mono, 4 multibands compressing, 4 limiters with true peak, spectrum
+
+layout aus
+# no rows
+konfig kanal_limiter_vorhalt_ms 0
+
+layout limiter-gebaut
+# limiters built, all off
+konfig kanal_limiter_vorhalt_ms 5
+konfig kanal_limiter_echtspitze false
+zeile bus/1/lim/an 0
+zeile bus/2/lim/an 0
+zeile bus/3/lim/an 0
+zeile bus/4/lim/an 0
+
+layout typisch
+# 2 gates hard, 4 utilities, 1 multiband, 1 limiter without true peak, spectrum master
+konfig kanal_limiter_vorhalt_ms 5
+konfig kanal_limiter_echtspitze false
+zeile deck/1/gate/an 1
+zeile deck/1/gate/ratio 100
+zeile deck/1/gate/schwelle -50
+zeile deck/2/gate/an 1
+zeile deck/2/gate/ratio 100
+zeile deck/2/gate/schwelle -50
+zeile deck/1/util/breite 150
+zeile deck/2/util/balance 0.2
+zeile bus/1/util/breite 120
+zeile bus/2/util/balance -0.1
+zeile bus/1/mb/an 1
+zeile bus/1/mb/tief/ratio 3
+zeile bus/1/mb/tief/schwelle -24
+zeile bus/1/mb/mitte/ratio 3
+zeile bus/1/mb/mitte/schwelle -24
+zeile bus/1/mb/hoch/ratio 3
+zeile bus/1/mb/hoch/schwelle -24
+zeile bus/1/lim/an 1
+zeile spektrum/kanal 19
+
+layout voll
+# 13 gates ratio mode, 17 utilities bass mono, 4 multibands compressing, 4 limiters true peak, spectrum master
+konfig kanal_limiter_vorhalt_ms 5
+konfig kanal_limiter_echtspitze true
+zeile deck/1/gate/an 1
+zeile deck/1/gate/ratio 4
+zeile deck/2/gate/an 1
+zeile deck/2/gate/ratio 4
+zeile deck/3/gate/an 1
+zeile deck/3/gate/ratio 4
+zeile deck/4/gate/an 1
+zeile deck/4/gate/ratio 4
+zeile erz/1/gate/an 1
+zeile erz/1/gate/ratio 4
+zeile erz/2/gate/an 1
+zeile erz/2/gate/ratio 4
+zeile erz/3/gate/an 1
+zeile erz/3/gate/ratio 4
+zeile erz/4/gate/an 1
+zeile erz/4/gate/ratio 4
+zeile erz/5/gate/an 1
+zeile erz/5/gate/ratio 4
+zeile erz/6/gate/an 1
+zeile erz/6/gate/ratio 4
+zeile erz/7/gate/an 1
+zeile erz/7/gate/ratio 4
+zeile pad/1/gate/an 1
+zeile pad/1/gate/ratio 4
+zeile pad/2/gate/an 1
+zeile pad/2/gate/ratio 4
+zeile deck/1/util/bassmono 120
+zeile deck/2/util/bassmono 120
+zeile deck/3/util/bassmono 120
+zeile deck/4/util/bassmono 120
+zeile erz/1/util/bassmono 120
+zeile erz/2/util/bassmono 120
+zeile erz/3/util/bassmono 120
+zeile erz/4/util/bassmono 120
+zeile erz/5/util/bassmono 120
+zeile erz/6/util/bassmono 120
+zeile erz/7/util/bassmono 120
+zeile pad/1/util/bassmono 120
+zeile pad/2/util/bassmono 120
+zeile bus/1/util/bassmono 120
+zeile bus/2/util/bassmono 120
+zeile bus/3/util/bassmono 120
+zeile bus/4/util/bassmono 120
+zeile bus/1/mb/an 1
+zeile bus/1/mb/tief/ratio 4
+zeile bus/1/mb/tief/schwelle -30
+zeile bus/1/mb/mitte/ratio 4
+zeile bus/1/mb/mitte/schwelle -30
+zeile bus/1/mb/hoch/ratio 4
+zeile bus/1/mb/hoch/schwelle -30
+zeile bus/1/lim/an 1
+zeile bus/2/mb/an 1
+zeile bus/2/mb/tief/ratio 4
+zeile bus/2/mb/tief/schwelle -30
+zeile bus/2/mb/mitte/ratio 4
+zeile bus/2/mb/mitte/schwelle -30
+zeile bus/2/mb/hoch/ratio 4
+zeile bus/2/mb/hoch/schwelle -30
+zeile bus/2/lim/an 1
+zeile bus/3/mb/an 1
+zeile bus/3/mb/tief/ratio 4
+zeile bus/3/mb/tief/schwelle -30
+zeile bus/3/mb/mitte/ratio 4
+zeile bus/3/mb/mitte/schwelle -30
+zeile bus/3/mb/hoch/ratio 4
+zeile bus/3/mb/hoch/schwelle -30
+zeile bus/3/lim/an 1
+zeile bus/4/mb/an 1
+zeile bus/4/mb/tief/ratio 4
+zeile bus/4/mb/tief/schwelle -30
+zeile bus/4/mb/mitte/ratio 4
+zeile bus/4/mb/mitte/schwelle -30
+zeile bus/4/mb/hoch/ratio 4
+zeile bus/4/mb/hoch/schwelle -30
+zeile bus/4/lim/an 1
+zeile spektrum/kanal 19

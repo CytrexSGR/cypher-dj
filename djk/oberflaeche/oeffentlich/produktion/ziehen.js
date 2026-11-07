@@ -34,3 +34,42 @@ export function ablageBefehl(projekt, nutz, spurIndex, beat, raster) {
     laenge_beats: (nutz.dauer_s * projekt.tempo_bpm) / 60, sha256: nutz.sha, warp: 'auto', ...(nutz.name ? { name: nutz.name } : {}) } };
 }
 export const ABLAGE_TEXT = { keine_spur: 'Drop the sample on a track', keine_audiospur: 'Samples go on audio tracks only' };
+
+// ---- package 1.16 rest U6 (S3): devices from the DEVICES list (geraete_browser.js), drag type application/x-djk-geraet ----
+// The payload is the catalogue entry of GET /presets/katalog. An instrument always makes a new track (spur_neu), wherever it is dropped; an effect
+// becomes a stage at the end of the chain of the track row it is dropped on (insert_setzen). Inactive kinds give no command, only their reason.
+import { MAX_PLAETZE, freieKomp, straenge } from './inserts.js';
+export const GERAET_TYP = 'application/x-djk-geraet';
+export const GERAET_TEXT = {
+  keine_spur: 'Drop the effect on a track row', kette_voll: `All ${MAX_PLAETZE} stages of this strip are used`, ins_voll: 'No free compressor in the project',
+};
+const GRAPH = /^[a-z0-9_-]{1,32}$/;
+export function geraetNutzlast(e) {
+  if (!e || typeof e !== 'object' || typeof e.titel !== 'string') return null;
+  if (e.ziel === 'spur_neu' && (e.geraet === 'rb338' || e.geraet === 'surge')) return { geraet: e.geraet, titel: e.titel, ziel: e.ziel };
+  if (e.ziel === 'spur_neu' && e.geraet === 'bk' && typeof e.graph === 'string' && GRAPH.test(e.graph)) return { geraet: 'bk', titel: e.titel, ziel: e.ziel, graph: e.graph };
+  if (e.ziel === 'insert' && typeof e.geraet === 'string') return { geraet: e.geraet, titel: e.titel, ziel: e.ziel, aktiv: e.aktiv === true, ...(e.grund ? { grund: e.grund } : {}) };
+  return null;
+}
+// rb338 as spurkoepfe.js NEU['neu-rb'], surge as NEU['neu-surge'] (one host slot), a graph as a bk device
+export function instrumentBefehl(n) {
+  const geraet = n.geraet === 'rb338' ? { art: 'intern', name: 'rb338', parameter: {} }
+    : n.geraet === 'surge' ? { art: 'wirt', name: 'surge', slot: 1 } : { art: 'intern', name: 'bk', graph: n.graph, parameter: {} };
+  return { label: `Add ${n.titel} track`, befehl: { befehl: 'spur_neu', art: 'instrument', name: n.titel.slice(0, 80), geraet } };
+}
+export function effektBefehl(projekt, strangId, n) {
+  if (!n.aktiv) return { fehler: 'art_nicht_aktiv', text: n.grund ?? 'not available yet' };
+  const s = straenge(projekt).find((x) => x.id === strangId);
+  if (!s) return { fehler: 'keine_spur', text: GERAET_TEXT.keine_spur };
+  if (s.inserts.length >= MAX_PLAETZE) return { fehler: 'kette_voll', text: GERAET_TEXT.kette_voll };
+  if (n.geraet === 'komp' && freieKomp(projekt) <= 0) return { fehler: 'ins_voll', text: GERAET_TEXT.ins_voll };
+  return { label: `Add ${n.titel} to ${s.name}`, befehl: { befehl: 'insert_setzen', strang_id: strangId, pos: s.inserts.length, art: n.geraet } };
+}
+// A drop on the arrangement: spurIndex is the track row under the pointer (-1 or past the end: none)
+export function geraetAblage(projekt, n, spurIndex) {
+  if (n.ziel === 'spur_neu') { const r = instrumentBefehl(n); return { label: r.label, befehle: [r.befehl] }; }
+  const spur = projekt?.spuren?.[spurIndex];
+  if (!spur) return { fehler: 'keine_spur', text: GERAET_TEXT.keine_spur };
+  const r = effektBefehl(projekt, spur.id, n);
+  return r.befehl ? { label: r.label, befehle: [r.befehl] } : r;
+}

@@ -3,8 +3,9 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fuehreListeAus } from './befehle.ts';
-import { sucheSpur, type AudioClip, type Projekt } from './modell.ts';
+import { BefehlFehler, fuehreListeAus, pruefeGrenzen, teileClipsAn } from './befehle.ts';
+import { MAX_CLIPS, MAX_TAKES_PRO_SPUR, neueId, sucheSpur, type AudioClip, type Clip, type Projekt } from './modell.ts';
+import { istTakeKopie, klingtGleich, TAKE_KOPIE_EPS } from './takes.ts';
 import { REC_EINGANG } from '../../vertrag/stroeme.ts';
 
 export class TakeFehler extends Error {
@@ -90,26 +91,67 @@ export async function schreibeWavAusF32Stueckweise(quelle: string, ziel: string)
 export interface TakeAngabe { spurId: string; startBeat: number; laengeBeats: number; sha256: string; pfadHinweis: string; name: string }
 const EPS = 1e-9;
 const lauf = (p: Projekt, b: unknown): Projekt => fuehreListeAus(p, [b]).projekt;
+export const ORIGINAL_NAME = 'Original';   // 1.14 comping (spec R3): the lane that keeps what a recording overwrote
 
-// Der Take ersetzt den Bereich [start, start + länge): überlappende Clips werden an den Rändern geteilt, was ganz darin liegt, entfällt, dann kommt der Take.
+// 1.14 comping (spec R3): the take replaces the range [start, start + length) of the main lane as before, but nothing is lost any more.
+// The take clip also goes into a take lane (the newest one without a clip in the range, else a new "Take <n>"). Overlapped main clips are cut at the
+// range edges (shared with comp_waehlen); parts inside that are copies of a take clip (R6) are dropped, all others move into the Original lane.
+// Pure: the input is never touched; every failure throws before anything is returned (takes_voll, zu_gross, ersetzen_loop, veraltet_spur).
 export function nehmeTakeAuf(projekt: Projekt, a: TakeAngabe): Projekt {
   if (!sucheSpur(projekt, a.spurId)) throw new TakeFehler('veraltet_spur', a.spurId);
+  try { return nehme(projekt, a); } catch (e) {
+    if (e instanceof BefehlFehler && e.grund === 'zu_gross') throw new TakeFehler('zu_gross', e.detail);   // MAX_CLIPS: report the reason
+    throw e;
+  }
+}
+function nehme(projekt: Projekt, a: TakeAngabe): Projekt {
   const von = a.startBeat, bis = a.startBeat + a.laengeBeats;
-  const clipsDerSpur = (p: Projekt) => sucheSpur(p, a.spurId)!.clips;
   const schneidet = (c: { start_beat: number; laenge_beats: number }, t: number) => c.start_beat < t - EPS && c.start_beat + c.laenge_beats > t + EPS;
   const ueberlappt = (c: { start_beat: number; laenge_beats: number }) => c.start_beat < bis - EPS && c.start_beat + c.laenge_beats > von + EPS;
   let p = structuredClone(projekt);
-  // Loop-Clips lassen sich nicht teilen (clip_teilen); sie dürfen nur ganz überdeckt oder unberührt sein
-  for (const c of clipsDerSpur(p)) {
+  let spur = sucheSpur(p, a.spurId)!;
+  // Loop clips cannot be split (clip_teilen); they may only be covered completely or untouched
+  for (const c of spur.clips) {
     if (c.loop_beats != null && (schneidet(c, von) || schneidet(c, bis))) throw new TakeFehler('ersetzen_loop', c.id);
   }
-  for (const t of [von, bis]) {   // erst teilen, dann löschen
-    const c = clipsDerSpur(p).find((x) => schneidet(x, t));
-    if (c) p = lauf(p, { befehl: 'clip_teilen', clip_id: c.id, beat: t });
+  teileClipsAn(p, spur, [von, bis]);
+  // what the range overwrites: a part that is a copy of a take clip (inside its range) is dropped, every other part is kept in the Original lane
+  const alleTakeClips = (spur.takes ?? []).flatMap((t) => t.clips);
+  const istKopie = (c: Clip): boolean => c.art === 'audio' && alleTakeClips.some((t) => klingtGleich(c, t, p.tempo_bpm)
+    && c.start_beat >= t.start_beat - TAKE_KOPIE_EPS && c.start_beat + c.laenge_beats <= t.start_beat + t.laenge_beats + TAKE_KOPIE_EPS);
+  const drin = spur.clips.filter(ueberlappt);
+  const zuOriginal = drin.filter((c) => !istKopie(c)) as AudioClip[];
+  // lane choice: the newest take lane (never the Original lane) without a clip in the range, else a new one
+  const takeLanes = (spur.takes ?? []).filter((t) => t.art === undefined);
+  const neueste = takeLanes.at(-1);
+  const wiederverwenden = neueste !== undefined && !neueste.clips.some(ueberlappt);
+  const hatOriginal = (spur.takes ?? []).some((t) => t.art === 'original');
+  const noetig = (wiederverwenden ? 0 : 1) + (zuOriginal.length > 0 && !hatOriginal ? 1 : 0);
+  if ((spur.takes ?? []).length + noetig > MAX_TAKES_PRO_SPUR) throw new TakeFehler('takes_voll', `${(spur.takes ?? []).length} lanes + ${noetig}`);
+  const verschoben = structuredClone(zuOriginal);
+  spur.clips = spur.clips.filter((c) => !drin.includes(c));
+  if (!wiederverwenden) p = lauf(p, { befehl: 'take_neu', spur_id: a.spurId });
+  if (verschoben.length > 0 && !hatOriginal) {
+    p = lauf(p, { befehl: 'take_neu', spur_id: a.spurId, name: ORIGINAL_NAME });
+    sucheSpur(p, a.spurId)!.takes!.at(-1)!.art = 'original';
   }
-  for (const c of clipsDerSpur(p).filter((x) => ueberlappt(x))) p = lauf(p, { befehl: 'clip_loeschen', clip_id: c.id });
+  spur = sucheSpur(p, a.spurId)!;
+  const original = spur.takes?.find((t) => t.art === 'original');
+  if (original) {
+    original.clips.push(...verschoben);
+    original.clips.sort((x, y) => x.start_beat - y.start_beat);
+  }
+  // MAX_CLIPS counts main and take clips; the recording adds two (main and take lane). Named here so the reason is zu_gross, not a model error.
+  const vorhanden = p.spuren.reduce((n, x) => n + x.clips.length + (x.takes ?? []).reduce((m, t) => m + t.clips.length, 0), 0);
+  if (vorhanden + 2 > MAX_CLIPS) throw new TakeFehler('zu_gross', `${vorhanden + 2} clips (at most ${MAX_CLIPS})`);
+  const vorher = new Set(spur.clips.map((c) => c.id));
   p = lauf(p, { befehl: 'clip_neu', spur_id: a.spurId, art: 'audio', start_beat: von, laenge_beats: a.laengeBeats,
     sha256: a.sha256, pfad_hinweis: a.pfadHinweis, name: a.name });
+  spur = sucheSpur(p, a.spurId)!;
+  const haupt = spur.clips.find((c) => !vorher.has(c.id)) as AudioClip;
+  const lane = spur.takes!.filter((t) => t.art === undefined).at(-1)!;
+  lane.clips.push({ ...structuredClone(haupt), id: neueId(p, 'clip') });
+  pruefeGrenzen(p);
   return p;
 }
 export type { AudioClip };

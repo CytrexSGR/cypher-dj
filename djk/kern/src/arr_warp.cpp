@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include "arr_gain_intern.h"
 #include "cypherdj/arrangement.h"
 
 namespace cdj {
@@ -100,6 +101,9 @@ Arrangement::Stimme* Arrangement::werk_stimme_starten(const Karte& k, const ArrC
   v->fade_ein = 0;
   v->nachfolgerin = false;
   v->spaet_deckung = false;
+  // 1.12 slice 5 (U8b, D8): a fresh cursor on the gain envelope of c, searched at the clip beat of the first sample the voice plays (never one left over from the pool slot's
+  // former voice, never a pointer into a snapshot other than the one the clip lives in; rebound at every swap, see stimmen_tauschen)
+  hk_binden(*v, c, c.hk_n > 0 ? k.beat_at(static_cast<double>(ab)) + v->p_off - c.start_beat : 0.0);
   WarpAnsatz a;
   a.clip = &c;
   a.s_h = s_h;
@@ -162,6 +166,7 @@ void Arrangement::werk_abloesen(const Karte& k, Stimme& v, const ArrClip* c2, in
       return;
     }
   }
+  hk_festhalten(v, k, s);   // 1.12 slice 5 (U8b): the bridge plays the old state from its ring; its cursor goes with the clip, the factor in force at s stays
   v.clip = nullptr;
   v.tausch_bruecke = tausch;
   if (v.werk_ab >= s) {
@@ -186,6 +191,23 @@ void Arrangement::werk_abloesen(const Karte& k, Stimme& v, const ArrClip* c2, in
   const int64_t ab = neu_werk ? s + ARR_WARP_FRIST : s;
 #endif
   if (v.ab_aus < 0 || v.ab_aus > ab) v.ab_aus = ab;
+}
+
+// 1.12 slice 5 (U8b): a werk voice becomes a bridge (v.clip goes to nullptr, the snapshot of its clip may be released). The bridge has no table to read any more: it
+// keeps the factor of the gain envelope in force at the sample s (the glide of a swap still running included; for a voice that sounds only later, its first sample) for
+// the rest of its life (at most ARR_WARP_FRIST + ARR_NAHT samples, longer only where the pool is full and the bridge has to carry the clip on), and the successor (werk_decken)
+// starts on the envelope of the new state and takes over with the crossfade over ARR_NAHT. A voice without a table is left as it is (hk_fest stays false).
+void Arrangement::hk_festhalten(Stimme& v, const Karte& k, int64_t s) {
+  if (v.hk.punkte() > 0 || v.hk_ab >= 0) {
+    const int64_t t = std::max(s, v.werk_ab);
+    const float lin = v.hk.punkte() > 0 ? hk_halten(v.hk, k.beat_at(static_cast<double>(t)) + v.beat_versatz, v.hk_db, v.hk_lin) : 1.0f;
+    v.hk_lin = hk_gleiten(lin, v.hk_alt, v.hk_ab, t);
+#ifndef CYPHERDJ_MUTATION_ARR_HK_BRUECKE_OHNE   // error case: the bridge plays at 0 dB (the factor is not kept): a level jump at the swap
+    v.hk_fest = true;
+#endif
+  }
+  v.hk = AutoLane();   // never leave the cursor on the table of a snapshot that may go
+  v.hk_ab = -1;
 }
 
 // Bis wohin spielt eine Brücke (gelöste Werk-Stimme) dieses Clips und Durchlaufs, die bei s noch nicht ausblendet? INT64_MIN: keine.
@@ -422,7 +444,13 @@ void Arrangement::werk_stimme_spielen(const Karte& karte, Stimme& v, int64_t a, 
     // k == n: ring_g bleibt 1,0f, die Deckung wird nie gelesen), ist g = gain, und aus der Schleife unten wird bl[j] += (wl_[i] * 1,0f) * gain, die Multiplikation mit 1,0f ist exakt.
     // Jede Bedingung ist die Verneinung eines Zweigs der Schleife für das ungünstigste t des Blocks (t0 für Einblenden, t1 − 1 für Ausblenden); ein Zweig, der nur ein Mal
     // in t trifft, schickt den Block auf den langen Weg.
-    const bool glatt = k == n && v.fade_ein == 0 && t0 - v.clip_s0 >= v.ein_n && v.ende - (t1 - 1) >= v.aus_n &&
+    const bool hk_an = v.hk.punkte() > 0 || v.hk_ab >= 0;   // 1.12 slice 5 (U8b): the voice has a gain envelope (or the glide of a swap), the factor changes per sample
+#ifdef CYPHERDJ_MUTATION_ARR_HK_WERK_SCHNELLPFAD   // error case: the fast path (g = gain for the whole block) runs although the voice has an envelope: the envelope is not heard
+    const bool hk_weg = false;
+#else
+    const bool hk_weg = hk_an || v.hk_fest;
+#endif
+    const bool glatt = !hk_weg && k == n && v.fade_ein == 0 && t0 - v.clip_s0 >= v.ein_n && v.ende - (t1 - 1) >= v.aus_n &&
                        (v.ramp_ein_ab < 0 || t0 - v.ramp_ein_ab >= v.ramp_n) && (naht < 0 || naht - (t1 - 1) >= ARR_NAHT) && (v.ab_aus < 0 || t1 <= v.ab_aus) &&
                        (v.gain_ab < 0 || t0 - v.gain_ab >= ARR_NAHT);
     if (glatt) {
@@ -442,6 +470,8 @@ void Arrangement::werk_stimme_spielen(const Karte& karte, Stimme& v, int64_t a, 
 #ifndef CYPHERDJ_MUTATION_ARR_WARP_WERK_GAIN_SPRUNG   // Fehlerfall (Nachbesserung 4, R3): der neue Gain springt am Tausch-Sample (Knack)
       if (v.gain_ab >= 0 && t - v.gain_ab < ARR_NAHT) g = v.gain_alt + (v.gain - v.gain_alt) * static_cast<float>(std::max<int64_t>(t - v.gain_ab, 0)) / ARR_NAHT;
 #endif
+      if (hk_an) g *= hk_faktor(v, karte.beat_at(static_cast<double>(t)) + v.beat_versatz, t);   // the clip beat of sample t, as the ring of the werk is asked for it
+      else if (v.hk_fest) g *= v.hk_lin;                                                           // a bridge: the factor it was released with
       const int64_t pos = t - v.clip_s0;
       if (pos < v.ein_n) g *= static_cast<float>(pos) / static_cast<float>(v.ein_n);
       if (v.ende - t < v.aus_n) g *= static_cast<float>(v.ende - t) / static_cast<float>(v.aus_n);

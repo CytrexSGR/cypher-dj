@@ -1,0 +1,33 @@
+{
+ "schema": 1,
+ "name": "Mein Lead",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "lead",
+ "werte": {
+  "knob1": 0.7,
+  "knob2": 0.2
+ },
+ "beschreibung": {
+  "art": "lead",
+  "unterart": "supersaw",
+  "charakter": [
+   "bright",
+   "wide",
+   "aggressive"
+  ],
+  "genre": [
+   "trance",
+   "progressive"
+  ],
+  "einsatz": [
+   "drop"
+  ],
+  "energie": 4,
+  "text": "Seven-voice detuned saw lead that soars over a trance drop."
+ },
+ "tags": [],
+ "notiz": "",
+ "angelegt": "2026-11-02T00:00:00.000Z",
+ "geaendert": "2026-11-02T00:00:00.000Z"
+}

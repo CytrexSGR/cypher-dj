@@ -48,7 +48,11 @@ test('je Takt eine takt-Nachricht, seq lückenlos, Kern-Ereignisse als ereignis 
   const s2 = baue('/e/invariante', { art: 'sub_doppelt', plan: 'p17', teil: 2, sample: 123456, beat: 10.5 });
   const s3 = baue('/e/neustart', { generation: 1, sample: 123456 });
   const s4 = baue('/zustand/ein', { verbunden: 0, midi_gesehen: 0, midi_verloren: 0, midi_sample: -1, flanke_sample: -1 });
-  for (const s of [s1, s2, s3, s4, s4, s4]) await new Promise((ok) => u.send(s, aboL, '127.0.0.1', ok));
+  // A6: the two meter streams (10 Hz x channels, 25 Hz) stay out of the journal as well
+  const s5 = baue('/zustand/mix', { kanal: 'bus/1', gate_db: 0, mb_tief_db: 1, mb_mitte_db: 2, mb_hoch_db: 3, lim_db: 0 });
+  const s6 = baue('/zustand/spektrum', { kanal: 'master', rahmen: 7, pegel: '-300,-290,-280' });
+  const s7 = baue('/e/ins_gr', { kanal: 'ins/komp/3', gr_db: 4.5 });   // 4a: the insert gain reduction stream
+  for (const s of [s1, s2, s3, s4, s4, s4, s5, s5, s5, s6, s6, s6, s7, s7, s7]) await new Promise((ok) => u.send(s, aboL, '127.0.0.1', ok));
   u.close();
   const e = await ps.warteAuf((n) => n.typ === 'ereignis' && n.daten.art === 'invariante', 3000, abPs);
   assert.equal(e.daten.invariante, 'sub_doppelt');
@@ -77,6 +81,9 @@ test('je Takt eine takt-Nachricht, seq lückenlos, Kern-Ereignisse als ereignis 
   assert.deepEqual(takte.filter((t) => !jt.has(t)), []);
   assert.equal(j.filter((z) => z.typ === '/e/luecke').length, 1);
   assert.equal(j.filter((z) => z.typ === '/zustand/ein').length, 0); // 20-Hz-Tick bleibt draußen (§5.14), /e/luecke daneben kam an
+  assert.equal(j.filter((z) => z.typ === '/zustand/mix').length, 0); // A6: 3 sent, 0 journaled; /e/luecke above is the positive control (1)
+  assert.equal(j.filter((z) => z.typ === '/zustand/spektrum').length, 0);
+  assert.equal(j.filter((z) => z.typ === '/e/ins_gr').length, 0); // 4a: 3 sent, 0 journaled
   const vj = pruefer(SCHEMA_JOURNAL);
   assert.deepEqual(j.map((z) => vj(z)).filter((p) => !p.ok), []);
   ps.schliesse(); an.schliesse();

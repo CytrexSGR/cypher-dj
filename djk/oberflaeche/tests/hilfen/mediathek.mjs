@@ -115,7 +115,7 @@ export function baueEinleser(dir, { schlaf = 0, ausgabe = '{"status":"neu","mate
   return { skript, log, laeufe: () => (fs.existsSync(log) ? fs.readFileSync(log, 'utf8').split('---\n').filter(Boolean) : []) };
 }
 
-export async function stapel(t, { mediathek, python, bestand, einleserModul, sammlungen, loops, katalog, vorhoeren, musterBibliothek, musterSets, musterOrdner, welleFfmpeg, welleZeitlimit, loopWerkzeug, proj, geraete, stems, lernen } = {}) {
+export async function stapel(t, { mediathek, python, bestand, einleserModul, sammlungen, loops, katalog, vorhoeren, musterBibliothek, musterSets, musterOrdner, welleFfmpeg, welleZeitlimit, loopWerkzeug, proj, geraete, stems, lernen, presets, kollektionen } = {}) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-mt-'));
   const ab = path.join(fs.mkdtempSync('/dev/shm/djk-mt-test-'), 'material');
   fs.mkdirSync(ab, { recursive: true });
@@ -148,7 +148,8 @@ export async function stapel(t, { mediathek, python, bestand, einleserModul, sam
     proj: { wurzel: path.join(tmp, 'proj'), ...(proj ?? {}), arbeitsordner },
     stems,
     geraete: { konfigPfad: path.join(tmp, 'geraete.json'), kantenPfad: path.join(tmp, 'eingaenge-kanten'), cacheMs: 0, erkenne: async () => ({ audio: [], midi: [] }), ...(geraete ?? {}) },
-    lernen: { ordner: path.join(tmp, 'controller'), geraeteKonfig: path.join(tmp, 'geraete.json'), ...(lernen ?? {}) } };   // S19: never ~/.config
+    lernen: { ordner: path.join(tmp, 'controller'), geraeteKonfig: path.join(tmp, 'geraete.json'), ...(lernen ?? {}) },   // S19: never ~/.config
+    ...(presets ? { presets } : {}), ...(kollektionen ? { kollektionen } : {}) };   // 1.16 rest T1.4: only when given, the default stays unchanged
   serverInstanzSetzen(t);   // Nachzug R2 (m4): die Testinstanz gilt auch im Server, nie der Betrieb
   const o = new Oberflaeche(optionen);
   await o.starte();

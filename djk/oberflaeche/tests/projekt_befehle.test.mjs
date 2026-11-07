@@ -30,12 +30,15 @@ test('spur_neu: Audio-Spur bekommt kleinste freie nr, ID, Farbe, Name; Regler-Sa
   assert.equal(p.spuren.length, 0, 'Eingabe unberührt');
 });
 
-test('spur_neu: Instrument vorgabe RB-338 intern; Wirt Surge mit Slot 1 (Spec 6.28: einer in D1); Slot belegt → Grund', () => {
+test('spur_neu: Instrument vorgabe RB-338 intern; Wirt Surge mit Slot 1, then slot 2 (1.9 U3), the third is slot_belegt', () => {
   let p = leer();
   p = ok(p, { befehl: 'spur_neu', art: 'instrument' }).projekt;
   assert.deepEqual(p.spuren[0].geraet, { art: 'intern', name: 'rb338', parameter: {} });
   p = ok(p, { befehl: 'spur_neu', art: 'instrument', geraet: { art: 'wirt', name: 'surge' } }).projekt;
   assert.deepEqual(p.spuren[1].geraet, { art: 'wirt', name: 'surge', slot: 1 }); assert.equal(p.spuren[1].freeze, null);
+  lehntAb(p, { befehl: 'spur_neu', art: 'instrument', geraet: { art: 'wirt', name: 'surge', slot: 1 } }, 'slot_belegt');
+  p = ok(p, { befehl: 'spur_neu', art: 'instrument', geraet: { art: 'wirt', name: 'surge' } }).projekt;
+  assert.deepEqual(p.spuren[2].geraet, { art: 'wirt', name: 'surge', slot: 2 });
   lehntAb(p, { befehl: 'spur_neu', art: 'instrument', geraet: { art: 'wirt', name: 'surge' } }, 'slot_belegt');
   lehntAb(p, { befehl: 'spur_neu', art: 'instrument', geraet: { art: 'wirt', name: 'surge', slot: 2 } }, 'slot_belegt');
   lehntAb(p, { befehl: 'spur_neu', art: 'audio', geraet: { art: 'intern', name: 'rb338' } }, 'argument_ungueltig');
@@ -103,11 +106,13 @@ test('spur_aendern geraet: Wechsel Wirt→intern entfernt freeze, intern→Wirt 
   const a = ok(p, { befehl: 'spur_aendern', spur_id: 's3', geraet: { art: 'intern', name: 'rb338' } });
   pruefeErgebnis(p, a);
   assert.equal('freeze' in a.projekt.spuren[2], false); assert.equal(a.betrifft_wiedergabe, true);
-  const p2 = a.projekt;                                       // s3 ist jetzt intern, Slot 1 frei (Spec 6.28: ein Slot in D1)
+  const p2 = a.projekt;                                       // s3 ist jetzt intern, Slot 1 frei
   const b = ok(p2, { befehl: 'spur_aendern', spur_id: 's2', geraet: { art: 'wirt', name: 'surge' } });
   pruefeErgebnis(p2, b); assert.equal(b.projekt.spuren[1].freeze, null); assert.equal(b.projekt.spuren[1].geraet.slot, 1);
   lehntAb(p, { befehl: 'spur_aendern', spur_id: 's2', geraet: { art: 'wirt', name: 'surge', slot: 1 } }, 'slot_belegt');
-  lehntAb(p, { befehl: 'spur_aendern', spur_id: 's2', geraet: { art: 'wirt', name: 'surge', slot: 2 } }, 'slot_belegt');
+  const d = ok(p, { befehl: 'spur_aendern', spur_id: 's2', geraet: { art: 'wirt', name: 'surge', slot: 2 } });        // 1.9 U3: slot 2 is free next to s3 on slot 1
+  pruefeErgebnis(p, d); assert.equal(d.projekt.spuren[1].geraet.slot, 2);
+  lehntAb(d.projekt, { befehl: 'spur_neu', art: 'instrument', geraet: { art: 'wirt', name: 'surge' } }, 'slot_belegt');   // both slots in use
   lehntAb(p, { befehl: 'spur_aendern', spur_id: 's1', geraet: { art: 'intern', name: 'rb338' } }, 'argument_ungueltig');
   const c = ok(p, { befehl: 'spur_aendern', spur_id: 's3', geraet: { art: 'wirt', name: 'surge', slot: 1 } });
   assert.deepEqual(c.vor, [], 'derselbe Slot: nichts zu tun, kein Selbstkonflikt');
