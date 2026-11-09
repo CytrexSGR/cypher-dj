@@ -75,12 +75,19 @@ More pages: [Production, warp and stems](docs/production.md) · [Cypher Modular]
   plus guitar and piano when they carry signal (an empty stem is folded into other). Four to six tracks appear under the
   clip in a group, beat-exact, and the original is muted; one undo step takes it all back. The run shows its progress
   and can be cancelled. It needs a CUDA GPU, there is no CPU path
-- Instrument tracks with the built-in RB-338, a Cypher Modular graph (up to 8 such tracks) or Surge XT (one hosted
-  slot); notes are drawn in a piano roll with velocity and 1/16 quantize
-- Recording: arm an audio track and record one of the studio's own channels onto it, bit-identical. That includes the
-  extra pattern streams (see below). Every pass is kept as a take
+- Instrument tracks with the built-in RB-338, a Cypher Modular graph (up to 8 such tracks), a one-shot kit or Surge XT
+  (two hosted slots; the patch is chosen from the Surge library and stored in the project); notes are drawn in a
+  piano roll with velocity and 1/16 quantize
+- **Instrument racks**: several instruments on one track with key and velocity zones and a chain selector, four macro
+  knobs that drive parameters across the members, and stored variations of the macro settings
+- Recording: arm audio tracks for an external input or one of the studio's own channels, and instrument tracks for
+  MIDI in. Count-in, punch in and out, overdub, input monitoring, and takes placed with the latency compensated.
+  Every pass is kept as a take
 - **Takes and comping**: each take is its own lane under the track; drag a range on a take lane to comp it into the
   track with seam fades, and audition a single take. Audio tracks only
+- **Routing**: group tracks that fold in the arrangement (Ctrl+G groups the selected tracks), a routing matrix
+  for outputs, sends and sidechain keys, and resampling of any track, group, return or the master into a new audio
+  track
 - **Automation**: lanes per track for fader, pan, mute, solo and four RB-338 parameters, drawn with points or recorded
   from the hand (touch, latch or write). Grabbing a track's fader, pan, mute or solo by hand overrides its lane, which the
   page shows until the override is ended. Clips carry envelopes of their own (gain, transpose, relative track volume
@@ -235,7 +242,7 @@ mostly against a silent test sink. Not benchmarks.
   experimental cue-suggestion pipeline is included as a separate research tool.
 - Key detection is weak on major keys (the test library is almost all minor).
 - Learning from the human's judgement is planned, not built.
-- Production: one hosted Surge XT slot. Inserts are our own devices only, no third-party plugins, and the pools are
+- Production: two hosted Surge XT slots. Inserts are our own devices only, no third-party plugins, and the pools are
   small: 12 compressors, 2 EQs, 1 saturator and 1 limiter per project, at most four stages per strip. The limiter works
   on sample peaks, not true peaks, and on the master chain it sits before the production master fader. Automation lanes cover fader, pan, mute,
   solo and four RB-338 parameters, not yet insert, send or Cypher Modular parameters. Takes and comping are for audio
