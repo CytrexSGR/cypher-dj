@@ -42,9 +42,14 @@ python3 -m venv .venv && . .venv/bin/activate
 pip install -r djk/requirements.txt
 for t in kern notbahn vorhoerer; do
   cmake -S djk/$t -B djk/$t/build -G Ninja -DCMAKE_BUILD_TYPE=Release
-  ninja -C djk/$t/build
 done
+ninja -C djk/core/build cypherdj-kern cypherdj-render cypherdj-setmitschnitt cypherdj-stimme cypherdj-mitschnitt
+ninja -C djk/fallback/build
+ninja -C djk/previewer/build
 ```
+
+That builds only the programs. The core's build folder also defines about 4,000 test and mutation targets; to run
+the core's tests (section 3), build everything first with `ninja -C djk/core/build`.
 
 This gives `cypherdj-kern` (the real-time core), `cypherdj-notbahn` (a fallback path that keeps audio
 going if the core dies) and `cypherdj-vorhoerer` (the headphone previewer).

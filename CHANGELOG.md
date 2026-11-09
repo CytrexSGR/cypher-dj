@@ -20,7 +20,8 @@ builds cypher-dj.
 **Routing**
 - Group tracks that can be folded in the arrangement, Ctrl+G groups the selected tracks.
 - A routing matrix in the page and for the agent: outputs, sends and sidechain keys in one grid.
-- Sidechain keys before or after the fader of the source, from tracks, groups and returns.
+- Sidechain keys before or after the fader of the source; group, return and master stages can also listen to
+  groups and returns.
 - Resample any track, group, return or the master into a new audio track.
 - Loudness per group and per return.
 
