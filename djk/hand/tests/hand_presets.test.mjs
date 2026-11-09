@@ -11,12 +11,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { Router } from '../../oberflaeche/http/router.ts';
-import { json, postAbgewiesen } from '../../oberflaeche/http/transport.ts';
-import { presetsBereich } from '../../oberflaeche/presets/bereich.ts';
-import { kollektionenBereich } from '../../oberflaeche/kollektionen/bereich.ts';
-import { neuesProjekt } from '../../oberflaeche/projekt/modell.ts';
-import { fuehreListeAus } from '../../oberflaeche/projekt/befehle.ts';
+import { Router } from '../../ui/http/router.ts';
+import { json, postAbgewiesen } from '../../ui/http/transport.ts';
+import { presetsBereich } from '../../ui/presets/area.ts';
+import { kollektionenBereich } from '../../ui/collections/area.ts';
+import { neuesProjekt } from '../../ui/project/model.ts';
+import { fuehreListeAus } from '../../ui/project/commands.ts';
 
 const HAND = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'hand.ts');
 const SECHS = ['presets_suchen', 'presets_lesen', 'presets_speichern', 'presets_anwenden', 'kollektionen', 'kollektion_aendern'];
@@ -45,7 +45,7 @@ async function echterStapel(t, rest, { projekt = null, quelle = 'andreas' } = {}
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'hand-presets-'));
   const router = new Router();
   const ctx = { log: () => {}, quelle: () => quelle };
-  router.melde(presetsBereich(ctx, { nutzer: path.join(d, 'nutzer'), projekt: () => projekt, graphen: () => [] }));
+  router.melde(presetsBereich(ctx, { nutzer: path.join(d, 'user'), projekt: () => projekt, graphen: () => [] }));
   router.melde(kollektionenBereich(ctx, { ordner: path.join(d, 'koll') }));
   const gesehen = [];
   let port = 0;
@@ -135,7 +135,7 @@ test('presets_lesen: a register id becomes GET /presets/<herkunft>/<geraet>/<slu
 
 test('presets_lesen: a hyphenated device id (kanal-limiter style) and a user preset are read; an unknown preset is the server refusal as a tool error', async (t) => {
   const { c, gesehen } = await aufbau(t, (m, u) => (u === '/presets/nutzer/kanal-limiter/mein-x' ? [200, { name: 'Mein X' }]
-    : u.startsWith('/presets/werk/komp/') ? [404, { fehler: 'preset_unbekannt', text: 'no such preset' }] : null));
+    : u.startsWith('/presets/factory/comp/') ? [404, { fehler: 'preset_unbekannt', text: 'no such preset' }] : null));
   const ok = await c.callTool({ name: 'presets_lesen', arguments: { id: 'nutzer:kanal-limiter/mein-x' } });
   assert.ok(!ok.isError, text(ok));
   const nein = await c.callTool({ name: 'presets_lesen', arguments: { id: 'werk:komp/gibt-es-nicht' } });
@@ -368,7 +368,7 @@ test('AK-B16-8: tools/list length = N + 6 (N = 66 on the base) = the count of to
   const laenge = (await c.listTools()).tools.length;
   const quelle = fs.readFileSync(HAND, 'utf8');
   const imCode = quelle.split('\n').filter((z) => z.startsWith("  { name: '")).length;
-  assert.equal(laenge, 66 + 6 + 1 + 1);   // + ansage (demo overlay) + proj_kits (1.9 T2.5)
+  assert.equal(laenge, 66 + 6 + 1 + 1 + 1 + 1);   // + ansage (demo overlay) + proj_kits (1.9 T2.5) + proj_routing (1.10 T1) + proj_resample (1.10 T6)
   assert.equal(imCode, laenge, 'grep -c "^  { name: \'" djk/hand/hand.ts');
   const wurzel = path.resolve(path.dirname(HAND), '..', '..');
   // the English edition lives under docs/veroeffentlichung in the working repo; the public repo carries only djk/hand/AUFRUF.md

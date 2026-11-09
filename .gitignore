@@ -1,6 +1,6 @@
 # build output
 djk/*/build*/
-djk/kern/build*/
+djk/core/build*/
 __pycache__/
 *.pyc
 .venv/

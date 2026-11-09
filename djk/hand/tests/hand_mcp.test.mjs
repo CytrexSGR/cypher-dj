@@ -1,8 +1,8 @@
 // djk-hand über stdio mit dem SDK-Client, gegen eine Seiten-Attrappe (HTTP): Werkzeugliste, Quellkopf, Fehlerabbildung.
 import fs from 'node:fs';
-import { ALLE_STROEME, REC_EINGANG } from '../../vertrag/stroeme.ts';
-import { PFAD } from '../../oberflaeche/hand_bedienung.ts';
-import { bandMitteHz, SPEKTRUM_FRIST_MS } from '../../oberflaeche/oeffentlich/spektrum.js';
+import { ALLE_STROEME, REC_EINGANG } from '../../contract/streams.ts';
+import { PFAD } from '../../ui/hand_operation.ts';
+import { bandMitteHz, SPEKTRUM_FRIST_MS } from '../../ui/public/spectrum.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
@@ -17,7 +17,7 @@ const NAMEN = ['lage', 'bestand', 'laden', 'deck_start', 'deck_stopp', 'sprung',
   'studio', 'loops', 'rec', 'loop_klang', 'spur', 'spur_stopp', 'spuren', 'stille', 'pegel', 'graphen', 'graph', 'klang', 'instrumente', 'bibliothek', 'anschluss', 'stoebern', 'klaenge', 'bestand_karte', 'vorbereiten',
   'sets', 'set_zeige', 'set_lege', 'set_vorbereiten', 'tempo', 'ansage',
   'proj_liste', 'proj_neu', 'proj_oeffnen', 'proj_lage', 'proj_auto_zustand', 'proj_aendern', 'proj_undo', 'proj_redo', 'proj_verlauf', 'proj_transport', 'proj_freeze', 'proj_export', 'proj_lautheit', 'geraete_lage', 'proj_aufnahme', 'proj_warp', 'proj_auto', 'proj_bk', 'proj_stems', 'proj_stems_abbrechen', 'proj_zusammenfuehren', 'proj_bounce', 'proj_strom_aufnehmen',
-  'spektrum', 'take_vorhoeren', 'proj_kits',
+  'spektrum', 'take_vorhoeren', 'proj_kits', 'proj_routing', 'proj_resample',
   'presets_suchen', 'presets_lesen', 'presets_speichern', 'presets_anwenden', 'kollektionen', 'kollektion_aendern'];   // 1.16 rest U5; 1.9 T2.5 proj_kits; 1.14 comping S1 T9; D1 S2 (Spec 3.5), Paket 1.18 E-b, Paket 1.13 Warp, Slice 6 Stems
 
 async function aufbau(t, antworten, env) {
@@ -669,8 +669,8 @@ test('R6: proj_freeze und proj_export mit eigenem Zeitlimit (Umgebung), klare Me
 });
 
 test('R6: Vorgabe-Zeitlimits liegen über der längsten erlaubten Dauer (und über 300 s), die Werkzeugbeschreibung nennt sie', async (t) => {
-  const { FREEZE_MAX_BEATS, FREEZE_NACHLAUF_BEATS } = await import('../../oberflaeche/projekt/freeze.ts');
-  // längste erlaubte Dauer nach den Grenzen des Servers (bereiche/proj/ausgabe.ts, sitzung.ts, lautheit.ts, befehle.ts TEMPO_MIN 60):
+  const { FREEZE_MAX_BEATS, FREEZE_NACHLAUF_BEATS } = await import('../../ui/project/freeze.ts');
+  // längste erlaubte Dauer nach den Grenzen des Servers (areas/proj/output.ts, session.ts, loudness.ts, commands.ts TEMPO_MIN 60):
   // Rampe bis 20 s, Quittung bis 4 s, Freeze-Frist (Beats + Nachlauf + 4) bei 60 BPM + 5 s; Export: Freeze + Render 4 · 1024 s + 60 s + ffmpeg 120 s
   const freezeMs = 20_000 + 4_000 + (FREEZE_MAX_BEATS + FREEZE_NACHLAUF_BEATS + 4) * 1000 + 5_000;
   const exportMs = freezeMs + 4 * 1024 * 1000 + 60_000 + 120_000;
@@ -1029,8 +1029,8 @@ test('djk-hand proj_auto (Automation Slice 1): GET with query, source cypher, re
   assert.ok(werkzeuge.find((x) => x.name === 'proj_lage').description.includes('lanes [{id, ziel, punkte_zahl, gesperrt?'));
   assert.ok(werkzeuge.find((x) => x.name === 'spur').description.includes('is a lane, not a spur'));
   // count: base (57 tools, 17 of them proj_*) plus one
-  assert.equal(werkzeuge.length, 57 + 1 + 2 /* S12: graphen, graph */ + 1 /* S17: proj_bk */ + 1 /* S15: proj_strom_aufnehmen */ + 1 /* Automation Slice 3: proj_auto_zustand */ + 1 /* 1.14 T9: take_vorhoeren */ + 1 /* 1.15 A9: spektrum */ + 1 /* 1.14 slice 4: proj_bounce */ + 6 /* 1.16 rest U5: presets and collections */ + 1 /* demo overlay: ansage */ + 1 /* 1.9 T2.5: proj_kits */);
-  assert.equal(werkzeuge.filter((x) => x.name.startsWith('proj_')).length, 17 + 1 + 1 + 1 + 1 + 1 /* 1.14 slice 4: proj_bounce */ + 1 /* 1.9 T2.5: proj_kits */);
+  assert.equal(werkzeuge.length, 57 + 1 + 2 /* S12: graphen, graph */ + 1 /* S17: proj_bk */ + 1 /* S15: proj_strom_aufnehmen */ + 1 /* Automation Slice 3: proj_auto_zustand */ + 1 /* 1.14 T9: take_vorhoeren */ + 1 /* 1.15 A9: spektrum */ + 1 /* 1.14 slice 4: proj_bounce */ + 6 /* 1.16 rest U5: presets and collections */ + 1 /* demo overlay: ansage */ + 1 /* 1.9 T2.5: proj_kits */ + 1 /* 1.10 T1: proj_routing */ + 1 /* 1.10 T6: proj_resample */);
+  assert.equal(werkzeuge.filter((x) => x.name.startsWith('proj_')).length, 17 + 1 + 1 + 1 + 1 + 1 /* 1.14 slice 4: proj_bounce */ + 1 /* 1.9 T2.5: proj_kits */ + 1 /* 1.10 T1: proj_routing */ + 1 /* 1.10 T6: proj_resample */);
 });
 
 // Automation Slice 2 (task 7): the hand MCP forwards the new targets and the lock unchanged, shows ziel/gesperrt/bei of a pan lane, and a locked lane is a tool error with its reason.
@@ -1077,7 +1077,7 @@ test('djk-hand proj_aendern/proj_auto (Automation Slice 2): auto_neu pan and aut
   assert.ok(werkzeuge.find((x) => x.name === 'proj_auto').inputSchema.properties.bei_beat.description.includes('lane value'));
   assert.ok(!werkzeuge.find((x) => x.name === 'proj_auto').inputSchema.properties.bei_beat.description.includes('(dB)'));
   assert.ok(werkzeuge.find((x) => x.name === 'proj_zusammenfuehren').description.includes('lanes_verworfen'));
-  assert.equal(werkzeuge.length, 66 + 6 + 1 + 1);   // + proj_kits (1.9 T2.5); + ansage (demo overlay); 62 + proj_auto_zustand (Automation Slice 3) + spektrum (1.15 A9) + take_vorhoeren (1.14 T9) + proj_bounce (1.14 slice 4) + 6 presets and collections tools (1.16 rest U5)
+  assert.equal(werkzeuge.length, 66 + 6 + 1 + 1 + 1 + 1);   // + proj_resample (1.10 T6); + proj_routing (1.10 T1); + proj_kits (1.9 T2.5); + ansage (demo overlay); 62 + proj_auto_zustand (Automation Slice 3) + spektrum (1.15 A9) + take_vorhoeren (1.14 T9) + proj_bounce (1.14 slice 4) + 6 presets and collections tools (1.16 rest U5)
 });
 
 test('djk-hand proj_aendern (Automation Slice 2): a locked lane answers lane_gesperrt as a tool error with the reason; negative control: an unlocked change succeeds', async (t) => {
@@ -1267,7 +1267,7 @@ test('djk-hand proj_auto_zustand (Automation Slice 3): re_enable all and one, ki
   const pl = werkzeuge.find((x) => x.name === 'proj_lage').description;
   assert.ok(pl.includes('uebersteuert: true'), 'proj_lage names uebersteuert');
   assert.ok(!pl.includes('auto_uebersteuert'), 'proj_lage promises no list that its view does not carry');
-  assert.equal(werkzeuge.length, 66 + 6 + 1 + 1);   // + proj_kits (1.9 T2.5); + ansage (demo overlay); + take_vorhoeren (1.14 T9); + spektrum (1.15 A9); + proj_bounce (1.14 slice 4); + 6 (1.16 rest U5)
+  assert.equal(werkzeuge.length, 66 + 6 + 1 + 1 + 1 + 1);   // + proj_resample (1.10 T6); + proj_routing (1.10 T1); + proj_kits (1.9 T2.5); + ansage (demo overlay); + take_vorhoeren (1.14 T9); + spektrum (1.15 A9); + proj_bounce (1.14 slice 4); + 6 (1.16 rest U5)
 });
 
 // Automation Slice 3 (task 6, fixup 2): exactly one of two shapes; every half call, a numeric spur_id and an unknown ziel are refused locally with the real problem; nothing is sent.
@@ -1521,8 +1521,23 @@ test('djk-hand take_vorhoeren (1.14 T9): audition on and off, source cypher, bad
   assert.match(werkzeuge.find((x) => x.name === 'take_vorhoeren').description, /ki_gestoppt/);
 });
 
+// 1.8 S2b.4: the descriptions of proj_aendern and proj_aufnahme name the external inputs, the release refusal and what the answer carries
+test('djk-hand 1.8 S2b: proj_aendern and proj_aufnahme describe external inputs, eingang_nicht_frei, versatz_samples and hinweise; the tool count stays', async (t) => {
+  const { c } = await aufbau(t, () => [200, {}]);
+  const werkzeuge = (await c.listTools()).tools;
+  const beschreibung = (n) => werkzeuge.find((x) => x.name === n).description;
+  for (const n of ['proj_aendern', 'proj_aufnahme']) assert.ok(beschreibung(n).includes('eingang_nicht_frei'), `${n} names eingang_nicht_frei`);
+  const pae = beschreibung('proj_aendern'), pau = beschreibung('proj_aufnahme');
+  for (const wort of ['art: extern', 'paar', 'stereo|links|rechts|summe']) assert.ok(pae.includes(wort), `proj_aendern names ${wort}`);
+  for (const wort of ['frei_fuer_cypher', 'geraete_lage', 'versatz_samples', 'nachlauf_samples', 'hinweise', 'latenz_fehlt', 'latenz_veraltet', 'kein_eingang']) {
+    assert.ok(pau.includes(wort), `proj_aufnahme names ${wort}`);
+  }
+  assert.ok(!pau.includes('External inputs (microphone, XDJ-XZ) are not part of this'), 'the slice 1 sentence is gone');
+  assert.equal(werkzeuge.length, 76, 'no new tool (D5); 76 as main asserts in the schleife_takte case');
+});
+
 // 1.12 S7 (M13) U13 T13.4: spur with schleife_takte loops until spur_stopp; aendern: true changes a running loop of mine from its next pass
-test('djk-hand spur: schleife_takte goes into the body, aendern posts /spur/aendern, the description names the loop rules; still 74 tools', async (t) => {
+test('djk-hand spur: schleife_takte goes into the body, aendern posts /spur/aendern, the description names the loop rules; still 76 tools', async (t) => {
   const { c, gesehen } = await aufbau(t, (m, u) => {
     if (u === '/spur') return [200, { ok: true, anker_beat: 16 }];
     if (u === '/spur/aendern') return [409, { fehler: 'nur_andreas', text: 'this loop is Andreas\'s' }];
@@ -1539,7 +1554,7 @@ test('djk-hand spur: schleife_takte goes into the body, aendern posts /spur/aend
   await c.callTool({ name: 'spur', arguments: { name: 'x', fahrten } });
   assert.deepEqual(gesehen[2].koerper, { spur: { name: 'x', fahrten }, ab: 'takt' });
   const werkzeuge = (await c.listTools()).tools;
-  assert.equal(werkzeuge.length, 66 + 6 + 1 + 1);   // 74 = 66 + the 6 presets and collections tools (1.16 rest U5) + ansage (demo overlay) + proj_kits (1.9 T2.5)
+  assert.equal(werkzeuge.length, 66 + 6 + 1 + 1 + 1 + 1);   // 76 = 66 + the 6 presets and collections tools (1.16 rest U5) + ansage (demo overlay) + proj_kits (1.9 T2.5) + proj_routing (1.10 T1) + proj_resample (1.10 T6)
   const w = werkzeuge.find((x) => x.name === 'spur');
   for (const wort of ['schleife_takte', 'aendern', 'keine_schleife', 'nur_andreas', 'next pass']) assert.ok(w.description.includes(wort), `spur names ${wort}`);
   assert.equal(w.inputSchema.properties.schleife_takte.maximum, 64);
@@ -1704,8 +1719,8 @@ test('djk-hand presets_suchen with 1.9 T4.4: POST /presets/suche with the query 
   const { tools } = await c.listTools();
   const t1 = tools.find((x) => x.name === 'presets_suchen');
   // the tool schema is the schema the server hands out (same function, same vocabulary): the character words are the vocabulary's
-  const { frageSchema } = await import('../../oberflaeche/presets/register.ts');
-  const { ladeVokabular } = await import('../../oberflaeche/presets/vokabular.ts');
+  const { frageSchema } = await import('../../ui/presets/register.ts');
+  const { ladeVokabular } = await import('../../ui/presets/vocabulary.ts');
   assert.deepEqual(t1.inputSchema, frageSchema(ladeVokabular()).input_schema);
   assert.ok(t1.inputSchema.properties.charakter.items.enum.includes('dark'));
   assert.match(t1.description, /<herkunft>:<geraet>\/<slug>/, 'the description says what an id looks like (merge: the 1.16 search tool text)');
@@ -1714,7 +1729,7 @@ test('djk-hand presets_suchen with 1.9 T4.4: POST /presets/suche with the query 
     assert.ok(pae.includes(wort), `proj_aendern nennt ${wort}`);
   }
   // review U4 MAJOR: the size of the deep move in the text is the one of the code (DEEP_FAKTOR), not the first spec version
-  const { DEEP_FAKTOR } = await import('../../oberflaeche/projekt/richtung.ts');
+  const { DEEP_FAKTOR } = await import('../../ui/project/direction.ts');
   assert.ok(pae.includes(`deep (cutoff down by ${DEEP_FAKTOR} steps, volume untouched)`), 'proj_aendern says deep moves the cutoff by DEEP_FAKTOR steps');
   assert.ok(!pae.includes('half a step'), 'the withdrawn half-step text is gone');
   // review U4 MINOR: tight only shortens the filter-envelope decay on the RB-338; the label recommendation is pinned
@@ -1725,7 +1740,7 @@ test('djk-hand presets_suchen with 1.9 T4.4: POST /presets/suche with the query 
   assert.ok(!aufruf.includes('half a step'), 'AUFRUF.md: no half a step');
   assert.match(aufruf, /`tight` \(decay -; filter envelope only/, 'AUFRUF.md: tight caveat');
   // 1.9 U5: the Surge side of the word call and the parameter map of the wirt device are named, in the tool text and in AUFRUF.md
-  for (const wort of ['a_filter1_cutoff', 'a_filter1_resonance', 'a_env1_release', 'wirt_wert_unbekannt', 'parameter? = a sparse map', 'surge_bereiche']) {
+  for (const wort of ['a_filter1_cutoff', 'a_filter1_resonance', 'a_env1_release', 'wirt_wert_unbekannt', 'richtung_wirkungslos', 'parameter? = a sparse map', 'surge_bereiche']) {
     assert.ok(pae.includes(wort), `proj_aendern names ${wort} for Surge`);
     assert.ok(aufruf.includes(wort.replace('parameter? = a sparse map', 'sparse parameter map')), `AUFRUF.md names ${wort} for Surge`);
   }
@@ -1735,4 +1750,227 @@ test('djk-hand presets_suchen with 1.9 T4.4: POST /presets/suche with the query 
   const bad = await c2.callTool({ name: 'presets_suchen', arguments: { charakter: ['grumpy'] } });
   assert.equal(bad.isError, true);
   assert.match(bad.content[0].text, /anfrage_ungueltig/);
+});
+
+// 1.8 T5: count-in, punch and overdub in the descriptions (aufnahme_setzen in proj_aendern; start, punch result and refusals in proj_aufnahme)
+test('djk-hand (1.8 T5): proj_aendern names aufnahme_setzen with its fields; proj_aufnahme names count-in, running start, punch result and the new reasons', async (t) => {
+  const { c } = await aufbau(t, () => undefined);
+  const werkzeuge = (await c.listTools()).tools;
+  const text = (n) => werkzeuge.find((x) => x.name === n).description;
+  for (const g of ['aufnahme_setzen {vorzaehler_takte?', 'punch? {ein?, aus?, von_beat?, bis_beat?}', 'overdub?']) assert.ok(text('proj_aendern').includes(g), `proj_aendern nennt ${g}`);
+  for (const g of ['count-in', 'vorzaehler_takte', 'laufend', 'transport_laeuft', 'punch_leer', 'einsatz_ausgeblieben', 'punch {von_beat, bis_beat}', 'punch.ein']) {
+    assert.ok(text('proj_aufnahme').includes(g), `proj_aufnahme nennt ${g}`);
+  }
+  assert.equal(werkzeuge.length, 76 + 0, 'tool count unchanged');
+});
+
+// 1.8 T8: MIDI recording in the descriptions (the instrument track input in proj_aendern; the MIDI run, release, offset, overdub and reasons in proj_aufnahme)
+test('djk-hand (1.8 T8): proj_aendern offers {art: midi} for an instrument track; proj_aufnahme describes the MIDI run, the release, the offset, replace and overdub', async (t) => {
+  const { c } = await aufbau(t, () => undefined);
+  const werkzeuge = (await c.listTools()).tools;
+  const text = (n) => werkzeuge.find((x) => x.name === n).description;
+  for (const g of ['{art: midi}', 'instrument track', 'midi_ein_1']) assert.ok(text('proj_aendern').includes(g), `proj_aendern nennt ${g}`);
+  for (const g of ['instrument tracks', 'midi_ein_1', 'midi-<kennung>.bin', 'frei_fuer_cypher of midi', 'midi.versatz_samples', 'overdub', 'ersetzen_loop', 'keine_noten', 'ONE undo step']) {
+    assert.ok(text('proj_aufnahme').includes(g), `proj_aufnahme nennt ${g}`);
+  }
+  assert.ok(!text('proj_aufnahme').startsWith('Record onto the armed audio tracks'), 'the first sentence is no longer audio only');
+  assert.equal(werkzeuge.length, 76 + 0, 'tool count unchanged');
+});
+
+// 1.8 T10: ONE scripted session of the real hand (stdio) against the real page server and the stand-in core (the stand-in writes the take files). Cypher sets up a
+// track, reads the release of the inputs, sets input, arm, monitor and the count-in, records through proj_aufnahme and finds the take in proj_lage; the history entry
+// carries the source cypher. The stack letter is the suite default h unless CYPHERDJ_TEST_INSTANZ says otherwise (tests/support/instance.mjs); the imports are lazy so the
+// other tests of this file do not take the instance lock.
+test('djk-hand (1.8 T10): a recording session through the tools: devices, arm, input, monitor, count-in, proj_aufnahme start and stopp, proj_lage shows the take, history source cypher', async (t) => {
+  const OB = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'oberflaeche');
+  const { stapel } = await import(path.join(OB, 'tests', 'support', 'media_library.mjs'));
+  const { ruf, warte, anKern } = await import(path.join(OB, 'tests', 'support', 'proj_stack.mjs'));
+  const { GeraeteSpeicher, standard } = await import(path.join(OB, 'areas', 'devices', 'store.ts'));
+  const os = await import('node:os');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-hand-rec-'));
+  t.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
+  const konfigPfad = path.join(tmp, 'geraete.json');
+  {   // input 1 has a device and is released for Cypher, input 2 has a device and is not
+    const k = standard();
+    const latenz = { samples: 256, streuung: 0, min: 256, max: 256, laeufe: 20, quantum: 256, rate: 48000, art: 'software', gemessen_am: '2026-11-08' };
+    for (const n of [1, 2]) { const e = k.eingaenge[n - 1]; e.profil = 'pc-eingang'; e.name = `Dev ${n}`; e.audio = { knoten: `knoten-${n}`, ports: [`dev:in_${n}_L`, `dev:in_${n}_R`] }; e.latenz = latenz; e.frei_fuer_cypher = n === 1; }
+    new GeraeteSpeicher(konfigPfad).schreibe(k);
+  }
+  const { url, log } = await stapel(t, { geraete: { konfigPfad } });
+  const c = new Client({ name: 'test', version: '0' });
+  await c.connect(new StdioClientTransport({ command: process.execPath, args: [HAND, '--seite', url] }));
+  t.after(() => c.close());
+  const ruft = async (name, args) => {
+    const r = await c.callTool({ name, arguments: args });
+    assert.ok(!r.isError, `${name} ${JSON.stringify(args)}: ${r.content[0].text}`);
+    return JSON.parse(r.content[0].text);
+  };
+  const rev = async () => (await ruft('proj_lage', {})).projekt.rev;
+  const aendern = async (label, befehle) => ruft('proj_aendern', { rev: await rev(), label, befehle });
+
+  // devices: the release per input is visible to Cypher (and only Andreas sets it, geraete_lage is a read)
+  const g = await ruft('geraete_lage', {});
+  const eingang = (k) => g.eingaenge.find((e) => e.k === k);
+  assert.equal(eingang(1).frei_fuer_cypher, true);
+  assert.equal(eingang(2).frei_fuer_cypher, false);
+
+  await ruft('proj_neu', { name: 'Hand rec' });
+  await aendern('setup', [{ befehl: 'tempo_setzen', bpm: 120 }, { befehl: 'spur_neu', art: 'audio', name: 'Vox' }]);
+  const spur = (await ruft('proj_lage', {})).projekt.spuren.find((s) => s.name === 'Vox');
+  assert.ok(spur, 'the track exists');
+  // an input without release is refused at the start, not at the arm: first the released external input with mode and monitor
+  await aendern('input', [{ befehl: 'spur_aendern', spur_id: spur.id, eingang: { art: 'extern', paar: 1, modus: 'links' }, arm: true, monitor: 'ein' }]);
+  const aktuell = async () => (await ruf(url, 'GET', '/proj/aktuell')).j.projekt;
+  const e1 = (await aktuell()).spuren[0].aufnahme;
+  assert.deepEqual([e1.scharf, e1.eingang, e1.monitor], [true, { art: 'extern', paar: 1, modus: 'links' }, 'ein']);
+  let kern = null;
+  for (let i = 0; i < 100 && !(kern = anKern(log, '/k/rec/spur').at(-1)); i++) await warte(20);
+  assert.deepEqual([kern.felder.scharf, kern.felder.eingang, kern.felder.modus, kern.felder.monitor], [1, 1, 1, 2], 'the core got arm, ein_1, mode L, monitor IN');
+  // then the internal tap for the take (the stand-in has no device behind ein_1), count-in off
+  await aendern('tap', [{ befehl: 'spur_aendern', spur_id: spur.id, eingang: { art: 'intern', name: 'erz/1' }, arm: true }, { befehl: 'aufnahme_setzen', vorzaehler_takte: 0 }]);
+  const a = (await aktuell()).aufnahme;
+  assert.equal(a.vorzaehler_takte, 0);
+  // the run
+  const start = await ruft('proj_aufnahme', { aktion: 'start' });
+  assert.equal(start.aufnahme, 'laeuft');
+  assert.equal(start.spuren[0].id, spur.id);
+  await warte(1200);
+  const stopp = await ruft('proj_aufnahme', { aktion: 'stopp' });
+  assert.equal(stopp.takes.length, 1);
+  assert.equal(stopp.takes[0].spur_id, spur.id);
+  assert.ok(!stopp.takes[0].fehler && stopp.takes[0].frames > 0, JSON.stringify(stopp.takes[0]));
+  // the take sits in the project and in the history, from Cypher
+  const lage = await ruft('proj_lage', {});
+  const clips = lage.projekt.spuren.find((s) => s.id === spur.id).clips;
+  assert.equal(clips.length, 1);
+  assert.equal(clips[0].art, 'audio');
+  const verlauf = await ruft('proj_verlauf', {});
+  const eintraege = Array.isArray(verlauf) ? verlauf : verlauf.eintraege;
+  const letzter = eintraege.at(-1);
+  assert.deepEqual([letzter.quelle, /^Record /.test(letzter.label)], ['cypher', true], JSON.stringify(letzter));
+  // control: a second start while nothing is armed any more is refused with nichts_scharf (a tool error with the reason)
+  await aendern('disarm', [{ befehl: 'spur_aendern', spur_id: spur.id, arm: false }]);
+  const nein = await c.callTool({ name: 'proj_aufnahme', arguments: { aktion: 'start' } });
+  assert.equal(nein.isError, true);
+  assert.match(nein.content[0].text, /nichts_scharf/);
+});
+
+// 1.10 slice 6, T1: proj_routing is a read (GET /proj/routing, source cypher, no guard); stufe becomes ?optionen=; the description names stufe and the five
+// reasons; an unknown stage (400 argument_ungueltig) is a tool error that carries the reason.
+test('1.10 T1 djk-hand proj_routing: GET /proj/routing, stufe -> ?optionen=, the description names stufe and the reasons, a 400 is a tool error', async (t) => {
+  const matrix = { slug: 'p', rev: 3, ziele: [{ wert: 'master', name: 'Master' }], returns: [], straenge: [] };
+  const { c, gesehen } = await aufbau(t, (m, u) => {
+    if (u === '/proj/routing') return [200, matrix];
+    if (u === '/proj/routing?optionen=i1') return [200, { ...matrix, straenge: [{ id: 's1' }] }];
+    if (u === '/proj/routing?optionen=i9') return [400, { fehler: 'argument_ungueltig', text: 'optionen: no stage i9' }];
+  });
+  const namen = (await c.listTools()).tools.map((x) => x.name);
+  assert.deepEqual(namen.sort(), [...NAMEN].sort());
+  assert.ok(namen.includes('proj_routing'));
+  const t1 = (await c.listTools()).tools.find((x) => x.name === 'proj_routing');
+  for (const wort of ['stufe', 'routing_zyklus', 'routing_grenze', 'sidechain_spaet', 'sidechain_zyklus', 'sidechain_quelle']) {
+    assert.ok(t1.description.includes(wort), `proj_routing names ${wort}`);
+  }
+  const a = await c.callTool({ name: 'proj_routing', arguments: {} });
+  assert.ok(!a.isError, a.content[0].text);
+  assert.deepEqual(JSON.parse(a.content[0].text), matrix);
+  const b = await c.callTool({ name: 'proj_routing', arguments: { stufe: 'i1' } });
+  assert.deepEqual(JSON.parse(b.content[0].text).straenge, [{ id: 's1' }]);
+  const e = await c.callTool({ name: 'proj_routing', arguments: { stufe: 'i9' } });
+  assert.equal(e.isError, true); assert.match(e.content[0].text, /argument_ungueltig/);
+  assert.deepEqual(gesehen.map((x) => [x.methode, x.pfad, x.quelle]),
+    [['GET', '/proj/routing', 'cypher'], ['GET', '/proj/routing?optionen=i1', 'cypher'], ['GET', '/proj/routing?optionen=i9', 'cypher']]);
+});
+
+// 1.10 slice 7, T6: proj_resample posts /proj/resample with only the given fields (source cypher), waits like proj_freeze (frist_ms is its own entry), answers the
+// narrow result; the description names the reasons and says that the monitor of an armed track is part of post and not of pre; a refusal is a tool error.
+test('1.10 T6 djk-hand proj_resample: POST /proj/resample, only the given fields, the description names reasons and the monitor rule, a refusal is a tool error', async (t) => {
+  const antwort = { rev: 9, spur_id: 's5', clip_id: 'c7', datei: '/p/resample/resample-4.wav', frames: 192000, quelle: 's2', punkt: 'post', von_beat: 0, bis_beat: 8 };
+  const { c, gesehen } = await aufbau(t, (m, u, k) => {
+    if (u === '/proj/resample' && k?.strang_id === 'g9') return [404, { fehler: 'spur_unbekannt', text: 'there is no strip g9' }];
+    if (u === '/proj/resample' && k?.strang_id === 's9') return [409, { fehler: 'resample_leer', text: 'Bass is silent in beat 0 to 8' }];
+    if (u === '/proj/resample') return [200, antwort];
+  });
+  const namen = (await c.listTools()).tools.map((x) => x.name);
+  assert.deepEqual(namen.sort(), [...NAMEN].sort());
+  assert.ok(namen.includes('proj_resample'));
+  const w = (await c.listTools()).tools.find((x) => x.name === 'proj_resample');
+  for (const wort of ['resample_leer', 'resample_fehler', 'ki_gestoppt', 'transport_laeuft', 'beschaeftigt', 'nicht_geladen', 'kein_kernstand', 'zu_gross', 'export_bereich',
+    'veraltet', 'spur_unbekannt', 'merge_keine_spur_frei', 'wirt_fehlt', 'wirt_fehler', 'hand_frist', 'master', 'resampled', 'ONE undo step']) {
+    assert.ok(w.description.includes(wort), `proj_resample names ${wort}`);
+  }
+  assert.match(w.description, /monitor of an armed track is part of a `post` resample and not of a `pre` one/);
+  assert.deepEqual(w.inputSchema.required, ['strang_id']);
+  assert.deepEqual(Object.keys(w.inputSchema.properties).sort(), ['bis_beat', 'punkt', 'strang_id', 'von_beat']);
+  const a = await c.callTool({ name: 'proj_resample', arguments: { strang_id: 's2' } });
+  assert.ok(!a.isError, a.content[0].text);
+  assert.deepEqual(JSON.parse(a.content[0].text), antwort);
+  const b = await c.callTool({ name: 'proj_resample', arguments: { strang_id: 'master', punkt: 'pre', von_beat: 4, bis_beat: 12 } });
+  assert.ok(!b.isError);
+  const e1 = await c.callTool({ name: 'proj_resample', arguments: { strang_id: 'g9' } });
+  assert.equal(e1.isError, true); assert.match(e1.content[0].text, /spur_unbekannt/);
+  const e2 = await c.callTool({ name: 'proj_resample', arguments: { strang_id: 's9' } });
+  assert.equal(e2.isError, true); assert.match(e2.content[0].text, /resample_leer/);
+  assert.deepEqual(gesehen.map((x) => [x.methode, x.pfad, x.quelle, x.koerper]), [
+    ['POST', '/proj/resample', 'cypher', { strang_id: 's2' }],
+    ['POST', '/proj/resample', 'cypher', { strang_id: 'master', punkt: 'pre', von_beat: 4, bis_beat: 12 }],
+    ['POST', '/proj/resample', 'cypher', { strang_id: 'g9' }],
+    ['POST', '/proj/resample', 'cypher', { strang_id: 's9' }]]);
+});
+
+// 1.10 slice 7 (T7, D12): proj_lage passes /proj/aktuell through, so kern.limiter_db arrives as the server says it; the text names it and the tap status
+test('djk-hand (1.10 T7): proj_lage names kern.limiter_db and passes it through; a tool it does not concern does not', async (t) => {
+  const { c } = await aufbau(t, (m, u) => {
+    if (u === '/proj/aktuell?noten=zahl') return [200, { slug: 'p', projekt: { rev: 4, name: 'P' }, kern: { rev_geladen: 3, status: 0, limiter_db: -2.5 } }];
+  });
+  const text = (await c.listTools()).tools.find((x) => x.name === 'proj_lage').description;
+  assert.match(text, /kern\.limiter_db = gain reduction of the set limiter in dB/);
+  assert.match(text, /3 a freeze or resample tap runs/);
+  assert.equal(JSON.parse((await c.callTool({ name: 'proj_lage', arguments: {} })).content[0].text).kern.limiter_db, -2.5);
+  const andere = (await c.listTools()).tools.find((x) => x.name === 'proj_transport').description;
+  assert.doesNotMatch(andere, /limiter_db/);
+});
+
+test('djk-hand proj_aendern names the instrument rack: three commands, art rack, the limits and the five reasons; AUFRUF.md in both languages says the same (1.9 T6)', async (t) => {
+  const { c } = await aufbau(t, () => [200, {}]);
+  const werkzeuge = (await c.listTools()).tools;
+  const d = werkzeuge.find((x) => x.name === 'proj_aendern').description;
+  for (const b of ['rack_glied_setzen', 'rack_glied_entfernen', 'rack_kette']) assert.ok(d.includes(b), b);
+  assert.ok(d.includes("art: 'rack'"), "art: 'rack'");
+  for (const g of ['keine_rackspur', 'rack_voll_glieder', 'glied_unbekannt', 'rack_letztes_glied', 'slot_belegt']) assert.match(d, new RegExp(`${g} \\(`), g);
+  assert.match(d, /at most 4 members/);
+  assert.match(d, /RB-338, a bk graph, a kit or a Surge slot/);
+  assert.match(d, /zones \[lo, hi\]/);
+  assert.ok(!d.includes('insert chain', d.indexOf('Instrument rack')), 'a member kette is a zone, not an insert chain');
+  const wurzel = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+  for (const datei of ['djk/hand/AUFRUF.md', 'docs/veroeffentlichung/englisch/djk/hand/AUFRUF.md'].filter((x) => fs.existsSync(path.join(wurzel, x)))) {
+    const md = fs.readFileSync(path.join(wurzel, datei), 'utf8');
+    for (const b of ['rack_glied_setzen', 'rack_glied_entfernen', 'rack_kette', 'keine_rackspur', 'slot_belegt']) assert.ok(md.includes(b), `${datei} ${b}`);
+    const absatz = md.slice(md.indexOf('**Instrument rack**'), md.indexOf('**Instrument rack**') + 2500);
+    assert.ok(md.includes('**Instrument rack**') && /a bk graph, a kit or a Surge slot/.test(absatz) && /\[lo, hi\]/.test(absatz), `${datei} members and zones`);
+    assert.ok(!/insert chain/.test(absatz.split('\n\n')[0]), `${datei}: kette is no insert chain`);
+  }
+  // negative control: a tool that has nothing to do with it does not carry the words
+  assert.doesNotMatch(werkzeuge.find((x) => x.name === 'proj_lage').description, /rack_glied|rack_kette|keine_rackspur/);
+});
+
+test('djk-hand proj_aendern names member macro targets and the three variation commands; AUFRUF.md in both languages says the same (1.9 T11)', async (t) => {
+  const { c } = await aufbau(t, () => [200, {}]);
+  const werkzeuge = (await c.listTools()).tools;
+  const d = werkzeuge.find((x) => x.name === 'proj_aendern').description;
+  for (const b of ['makro_variation_speichern', 'makro_variation_laden', 'makro_variation_loeschen']) assert.ok(d.includes(b), b);
+  for (const g of ['variation_voll', 'variation_unbekannt', 'glied_ohne_rack', 'makro_ziel_wirt']) assert.ok(d.includes(g), g);
+  assert.match(d, /\{glied \(a member id g1\.\.g4/);
+  assert.match(d, /gain_db of any internal member/);
+  assert.match(d, /no mapping at all removes the rack and with it its variations/);
+  const wurzel = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+  for (const datei of ['djk/hand/AUFRUF.md', 'docs/veroeffentlichung/englisch/djk/hand/AUFRUF.md'].filter((x) => fs.existsSync(path.join(wurzel, x)))) {
+    const md = fs.readFileSync(path.join(wurzel, datei), 'utf8');
+    for (const b of ['makro_variation_speichern', 'makro_variation_laden', 'makro_variation_loeschen', 'variation_voll', 'variation_unbekannt', 'glied_ohne_rack', 'makro_ziel_wirt', '{glied, param, von, bis}']) {
+      assert.ok(md.includes(b), `${datei} ${b}`);
+    }
+  }
+  assert.equal(werkzeuge.length, 66 + 6 + 1 + 1 + 1 + 1, 'no tool was added');
+  // negative control: a tool that has nothing to do with it does not carry the words
+  assert.doesNotMatch(werkzeuge.find((x) => x.name === 'proj_lage').description, /makro_variation/);
 });

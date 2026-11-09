@@ -1,0 +1,125 @@
+{
+ "slug": "erster-track",
+ "projekt": {
+  "format": "cypherdj-projekt/2",
+  "gruppen": [],
+  "loop": {
+   "an": true,
+   "von_beat": 0,
+   "bis_beat": 16
+  },
+  "master": {
+   "fader_db": 0
+  },
+  "metronom": {
+   "an": false,
+   "pegel_db": -12,
+   "ziel": "master"
+  },
+  "naechste_id": {
+   "spur": 4,
+   "clip": 4,
+   "gruppe": 1
+  },
+  "naechste_noten_id": 3,
+  "name": "Erster Track",
+  "rev": 1,
+  "spuren": [
+   {
+    "id": "s1",
+    "von": "andreas",
+    "nr": 1,
+    "name": "Kick",
+    "farbe": "#e0563b",
+    "art": "audio",
+    "fader_db": 0,
+    "pan": 0,
+    "mute": false,
+    "solo": false,
+    "clips": [
+     {
+      "id": "c1",
+      "art": "audio",
+      "name": "kick",
+      "start_beat": 0,
+      "laenge_beats": 1,
+      "quelle": {
+       "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+       "pfad_hinweis": "<tmp>/daten/kick.wav"
+      },
+      "dekodiert": "fertig",
+      "offset_s": 0,
+      "gain_db": 0,
+      "fade_ein_beats": 0,
+      "fade_aus_beats": 0
+     }
+    ]
+   },
+   {
+    "id": "s2",
+    "von": "andreas",
+    "nr": 2,
+    "name": "Bass",
+    "farbe": "#3b8de0",
+    "art": "instrument",
+    "geraet": {
+     "art": "intern",
+     "name": "rb338",
+     "parameter": {}
+    },
+    "fader_db": 0,
+    "pan": 0,
+    "mute": false,
+    "solo": false,
+    "clips": [
+     {
+      "id": "c2",
+      "art": "midi",
+      "name": "MIDI",
+      "start_beat": 0,
+      "laenge_beats": 16,
+      "noten_zahl": 1
+     }
+    ]
+   },
+   {
+    "id": "s3",
+    "von": "andreas",
+    "nr": 3,
+    "name": "Lead",
+    "farbe": "#9b59d0",
+    "art": "instrument",
+    "geraet": {
+     "art": "wirt",
+     "name": "surge",
+     "slot": 1
+    },
+    "freeze": null,
+    "fader_db": 0,
+    "pan": 0,
+    "mute": false,
+    "solo": false,
+    "clips": [
+     {
+      "id": "c3",
+      "art": "midi",
+      "name": "MIDI",
+      "start_beat": 8,
+      "laenge_beats": 8,
+      "noten_zahl": 1
+     }
+    ]
+   }
+  ],
+  "taktart": [
+   4,
+   4
+  ],
+  "tempo_bpm": 120,
+  "wiedergabe_rev": 3
+ },
+ "kern": {
+  "rev_geladen": 3,
+  "status": 0
+ }
+}

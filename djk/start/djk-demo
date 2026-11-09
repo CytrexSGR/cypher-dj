@@ -4,7 +4,7 @@
 #
 #   djk-demo stimme [--eingang K]   start the voice player cypherdj-stimme on the kern's input pair ein_K (default 4).
 #                                   The kern must run with kern.toml stimme_eingang = K (djk-start --kern-konfig, see
-#                                   konfig/kern-demo.toml.beispiel). One graph edge, made once here, never per sentence.
+#                                   config/kern-demo.toml.beispiel). One graph edge, made once here, never per sentence.
 #   djk-demo stimme-stopp
 #   djk-demo start [--name N] [--ohne-obs]
 #                                   start the set recording (cypherdj-setmitschnitt, read only from the kern's audio ring,
@@ -26,7 +26,7 @@ case "$I" in ""|[a-i]) ;; *) echo "djk-demo: instance must be empty or a..i" >&2
 SFX=${I:+-$I}
 SHM=/dev/shm/cypherdj$SFX
 KERN=cypherdj-kern$SFX
-BAU=$DJK/kern/build
+BAU=$DJK/core/build
 WURZEL=${DJK_DEMO_ORDNER:-$HOME/werkstatt/cypher-dj-demo/aufnahmen}
 AKTUELL=$WURZEL/.aktuell$SFX
 OBS_WS="python3 $DJK/start/obs_ws.py"
@@ -112,7 +112,7 @@ zusammen() {
   local v; v=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("obs_datei") or "")' "$d/demo.json")
   [ -n "$v" ] && [ -e "$v" ] || { echo "djk-demo: no OBS file in $d/demo.json" >&2; exit 1; }
   for _ in $(seq 100); do ffprobe -v error "$v" >/dev/null 2>&1 && break; sleep 0.2; done   # OBS closes the file after StopRecord returns
-  python3 "$DJK/start/demo_zusammen.py" "$v" "$d/master.wav" "$d/demo.mp4"
+  python3 "$DJK/start/demo_together.py" "$v" "$d/master.wav" "$d/demo.mp4"
 }
 
 lage() {

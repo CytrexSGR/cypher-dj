@@ -1,4 +1,4 @@
-"""Plan MVP 2 Task 6: pruef_loop.py und loop_bauen.py schreiben Loops, die der Kern lädt (ADR 025, §4.9)."""
+"""Plan MVP 2 Task 6: check_loop.py und loop_build.py schreiben Loops, die der Kern lädt (ADR 025, §4.9)."""
 import json
 import subprocess
 import sys
@@ -8,8 +8,8 @@ import numpy as np
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import loop_bauen  # noqa: E402
-import pruef_loop  # noqa: E402
+import loop_build as loop_bauen  # noqa: E402
+import check_loop as pruef_loop  # noqa: E402
 
 SPB = 22500
 

@@ -9,17 +9,17 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 
 const HIER = path.dirname(fileURLToPath(import.meta.url));
 const HAND = path.resolve(HIER, '..', 'hand.ts');
-const OB = path.resolve(HIER, '..', '..', 'oberflaeche', 'tests', 'hilfen');
+const OB = path.resolve(HIER, '..', '..', 'ui', 'tests', 'support');
 process.env.CYPHERDJ_TEST_INSTANZ ??= 'c';
-const { stapel } = await import(path.join(OB, 'mediathek.mjs'));
-const { baueKatalog, ksha } = await import(path.join(OB, 'katalog.mjs'));
-const { karteLinear, schreibeKarte } = await import(path.join(OB, 'karte.mjs'));
-const { tmpOrdner } = await import(path.join(OB, 'projekt.mjs'));
-const { wav } = await import(path.join(OB, 'proj_kontext.mjs'));
+const { stapel } = await import(path.join(OB, 'media_library.mjs'));
+const { baueKatalog, ksha } = await import(path.join(OB, 'catalog.mjs'));
+const { karteLinear, schreibeKarte } = await import(path.join(OB, 'map.mjs'));
+const { tmpOrdner } = await import(path.join(OB, 'project.mjs'));
+const { wav } = await import(path.join(OB, 'proj_context.mjs'));
 
 test('AK28: über das Werkzeug proj_aendern Marker setzen, ×2 und Set 1.1.1, mit proj_warp zurücklesen; Quelle cypher im Verlauf; Ablehnung mit Grund', async (t) => {
   const d = tmpOrdner(t, 'djk-hand-s3b-');
-  const katalog = baueKatalog(path.join(d, 'kat'), [{ n: 6, typ: 'track', werk_id: 2, titel: 'Song', bpm: 120, dauer_s: 25, pfad: wav(path.join(d, 'daten'), 'track.wav', 3.84) }]);
+  const katalog = baueKatalog(path.join(d, 'kat'), [{ n: 6, typ: 'track', werk_id: 2, titel: 'Song', bpm: 120, dauer_s: 25, pfad: wav(path.join(d, 'data'), 'track.wav', 3.84) }]);
   const analyse = path.join(d, 'analyse');
   schreibeKarte(analyse, ksha(6), { karte: karteLinear(40, { t0: 0.5, bpm: 120 }), eins: 2, unsicher: true });
   const { url } = await stapel(t, { katalog, proj: { analyse } });

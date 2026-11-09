@@ -1,0 +1,30 @@
+// Zusammenbau der Kern-Attrappe: Maschine plus Fachmodule in Aufrufreihenfolge. Die Haken nachSample und nachBlock
+// laufen in dieser Reihenfolge: erst die Invarianten, dann der Frist-Wächter. Jeder Task, der ein Modul bringt,
+// trägt es hier ein (und die Mutationen, die es kennt).
+
+import { Kern, verbindung } from './core.mjs';
+import regler from './controls.mjs';
+import decks from './decks.mjs';
+import hand from './hand.mjs';
+import hoerschein from './listening_slip.mjs';
+import erzeuger from './generator.mjs';
+import ki from './ai.mjs';
+import invarianten from './invariants.mjs';
+import frist from './deadline.mjs';
+import fxRouting from './fx_routing.mjs';
+import arr from './arr.mjs';
+import rec from './rec.mjs';
+import graph from './graph.mjs';
+
+export const MODULE = [verbindung, regler, decks, hand, hoerschein, erzeuger, ki, invarianten, frist, fxRouting, arr, rec, graph];
+
+// Mutationen für den Fehlerfall der Abnahme: je eine Regel aus (INTERFACES §17, ROADMAP Scheibe 13)
+// arr_ki_stopp_ab (D1 Spec 6.27): /k/arr/stopp von cypher während des KI-Stopps abgelehnt wie vor 6.27; arr_zustand_alt
+// (K1-Fix 12): /zustand/arr ohne metronom_an
+export const MUTATIONEN = ['i1_aus', 'i2_aus', 'i3a_aus', 'i3b_aus', 'i3c_aus', 'i3d_aus', 'i4_aus', 'frist_aus', 'arr_ki_stopp_ab', 'arr_zustand_alt',
+  'arr_freeze_ohne_rampenpruefung', 'arr_freeze_rampe_ohne_abbruch', 'arr_freeze_set_neu_bleibt', 'arr_auto_cypher_uebersteuert', 'arr_arm_cypher', 'arr_punkt_ohne_drossel'];
+
+export function neuerKern({ cfg = {}, sende = () => {}, mutationen = [] } = {}) {
+  for (const m of mutationen) if (!MUTATIONEN.includes(m)) throw new Error(`unbekannte Mutation ${m}`);
+  return new Kern({ cfg, sende, module: MODULE, mutationen });
+}

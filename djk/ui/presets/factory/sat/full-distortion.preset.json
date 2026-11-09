@@ -1,0 +1,38 @@
+{
+ "schema": 1,
+ "name": "Full Distortion",
+ "geraet_typ": "effekt",
+ "geraet": "saett",
+ "werte": {
+  "drive": 36,
+  "out": -18,
+  "mix": 1
+ },
+ "beschreibung": {
+  "art": "saturation",
+  "unterart": "distortion",
+  "charakter": [
+   "dirty",
+   "aggressive",
+   "bright"
+  ],
+  "genre": [
+   "hardstyle",
+   "breaks",
+   "dnb"
+  ],
+  "einsatz": [
+   "build",
+   "drop"
+  ],
+  "energie": 5,
+  "text": "The whole range into the curve: the signal becomes a hard, bright wall of harmonics."
+ },
+ "tags": [
+  "effect",
+  "extreme"
+ ],
+ "notiz": "Top of the drive range from devices.ts; the result is a deliberate effect, values practice.",
+ "angelegt": "2026-11-02T00:00:00.000Z",
+ "geaendert": "2026-11-02T00:00:00.000Z"
+}

@@ -52,5 +52,5 @@ Measured or read in the code, deviating from the text above (the text above rema
 - **Status:** The hosts run in operation (Surge XT, SFZ-Flügel (grand piano), since RB-338 W1 also an own VST3). M7 (host decoupling) has not been made up as a separate measurement in operation; `node.async` is set in the unit.
 - **No. 2:** The units are transient (`systemd-run`, `cypherdj-wirt-<gruppe>[-<i>]`), not a template `cypherdj-wirt@<gruppe>`. There is **no Xvfb**; Carla runs headless without DISPLAY (VST3 too). The return path is the host client itself (`audio-out1/2` → `rueck_erz_<n>_L/R` in the core). A **pulse port does not exist**, neither in the host nor in the core.
 - **No. 3:** CC via `set_parameter_mapped_control_index` is not used in the code. For nih-plug VST3, raw CC/pitch bend do not reach the plugin via Carla (`IMidiMapping`); the Carla mapping takes effect, W1 goes the way via the host command `param`.
-- **No. 4:** Instead of latency per slot, the core reserves in advance (`2·n + 25` samples, `kern.cpp:252`).
+- **No. 4:** Instead of latency per slot, the core reserves in advance (`2·n + 25` samples, `core.cpp:252`).
 - **Addendum:** VST3 is the only way for own (nih-plug) instruments: Carla 2.5.8 does not load CLAP, nih-plug does not build LV2.

@@ -5,14 +5,14 @@ Rückgabe 0 = geschrieben, 2 = Aufruf/Datei falsch. Schreibt kit.json zuletzt (d
 import argparse, contextlib, json, re, subprocess, sys, time
 from pathlib import Path
 
-MAX_FRAMES = 480_000  # 10 s bei 48 kHz, wie kit_schreiben.mjs
+MAX_FRAMES = 480_000  # 10 s bei 48 kHz, wie kit_write.mjs
 NAME = re.compile(r"^[a-z][a-z0-9_]{0,15}$")
 ERSTE_NOTE = 112
 
 
 @contextlib.contextmanager
 def sperre(ordner: Path):
-    """Dieselbe Sperre wie kit_schreiben.mjs:30-44 (mkdir .sperre, nach 10 s verwaist), damit Loop-Box und dieses
+    """Dieselbe Sperre wie kit_write.mjs:30-44 (mkdir .sperre, nach 10 s verwaist), damit Loop-Box und dieses
     Werkzeug sich keine Einträge überschreiben."""
     s, bis = ordner / ".sperre", time.time() + 5
     while True:

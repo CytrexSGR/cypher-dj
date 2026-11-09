@@ -1,0 +1,258 @@
+// Der Vertrag (INTERFACES.md, Version 1) als Tabellen für die Kern-Attrappe.
+// Adressen und Typ-Zeichenketten wörtlich aus §4, §5, §19.0 und ROADMAP Z1. Ein Test gleicht sie
+// gegen den Vertragstext und gegen djk/contract/osc.json ab (tests/contract.test.mjs).
+
+import { INSERT_REGLER_ZEILEN } from './insert_controls.mjs';
+
+export const PROTOKOLL = 1;
+export const KERN_VERSION = 'attrappe-13.1';
+
+const f = (typen, felder) => ({ typen, felder: felder.split(' ') });
+const DECK_PLAN = 'id quelle plan gruppe hoerschein deck ab_beat';
+
+// Befehle an den Kern (§4, §19.0 /test/hand, ROADMAP Z1 /test/klick)
+export const BEFEHLE = {
+  '/k/hallo': f('sii', 'name port protokoll'),
+  '/k/tschuess': f('s', 'name'),
+  '/k/set/neu': f('hsd', 'id quelle start_bpm'),
+  '/k/tempo/rampe': f('hsddd', 'id quelle ab_beat ziel_bpm dauer_beats'),
+  '/k/storno': f('hsh', 'id quelle ziel_id'),
+  '/k/teil': f('hssisddfiiss', 'id quelle plan teil pfad ab_beat dauer_beats nach form politik gruppe hoerschein'),
+  '/k/abbruch': f('hsss', 'id quelle plan teile'),
+  '/k/deck/laden': f('hsisdii', 'id quelle deck material_id basis_bpm fassung mit_stems'),
+  '/k/deck/entladen': f('hsi', 'id quelle deck'),
+  '/k/deck/start': f('hssssiddi', `${DECK_PLAN} quell_beat politik`),
+  '/k/deck/stopp': f('hssssidi', `${DECK_PLAN} politik`),
+  '/k/deck/loop': f('hssssiddid', `${DECK_PLAN} laenge_beats politik raster_beats`),
+  '/k/deck/loop_laenge': f('hssssidddid', `${DECK_PLAN} start_beat laenge_beats politik raster_beats`),   // Loop mit festem Start (§4.4, 2026-10-21)
+  '/k/deck/roll': f('hssssiddiid', `${DECK_PLAN} laenge_beats art politik raster_beats`),
+  '/k/deck/sprung': f('hssssiddid', `${DECK_PLAN} delta_beats politik raster_beats`),
+  '/k/deck/hotcue': f('hssssidiid', `${DECK_PLAN} nr politik raster_beats`),
+  '/k/deck/hotcue_setzen': f('hsiid', 'id quelle deck nr quell_beat'),
+  '/k/deck/raster': f('hsisdii', 'id quelle deck material_id basis_bpm fassung versatz_frames'),
+  '/k/deck/scrub': f('hsiid', 'id quelle deck phase delta_beats'),                       // Hörbares Ziehen 2026-10-17 (§4.4)
+  '/k/deck/slip': f('hsii', 'id quelle deck an'),
+  '/k/deck/basis_tausch': f('hsidid', 'id quelle deck basis_bpm fassung ab_beat'),
+  '/k/hoerschein': f('hsssssddddfff', 'id quelle hs_id kanal inhalt urteil bpm_messung gueltig_bis_beat quell_von quell_bis sync_ms pegel_diff_db lufs_kurz'),
+  '/k/hoerschein/weg': f('hss', 'id quelle hs_id'),
+  '/k/schuss': f('hsdsiiifi', 'id quelle ab_beat material_id fassung schuss_nr pad pegel_db politik'),
+  '/k/ki/stopp': f('hs', 'id quelle'),
+  '/k/rec/spur': f('hsiiiii', 'id quelle spur scharf eingang modus monitor'),                        // 1.8 (§4.12)
+  '/k/rec/start': f('hsiiii', 'id quelle kennung nachlauf_samples frist_samples vorzaehler_takte'),
+  '/k/rec/stopp': f('hs', 'id quelle'),
+  '/k/ki/frei': f('hs', 'id quelle'),
+  '/k/ki/spur': f('hss', 'id quelle kanaele'),
+  '/k/ki/stufe': f('hsi', 'id quelle stufe'),
+  '/k/vorschlag_kanal': f('hss', 'id quelle kanal'),
+  '/k/led': f('hssi', 'id quelle name zustand'),
+  '/k/kiste': f('hs', 'id quelle'),
+  '/k/mapping': f('hss', 'id quelle geraet'),
+  '/k/lernen': f('hsi', 'id quelle an'),
+  '/k/latenz': f('hssi', 'id quelle ziel samples'),
+  '/erz/strom': f('hsiss', 'id quelle strom ziel kanal'),
+  '/erz/fenster': f('iiiiddh', 'strom sendung modus kappe ab_beat bis_beat t_send_us'),
+  '/erz/ev': f('iiiiddf', 'strom muster ev_id note beat dauer_beats velocity'),
+  '/erz/cc': f('iiidf', 'strom ev_id cc beat wert'),
+  '/k/loop/laden': f('hsis', 'id quelle box name'),
+  '/k/loop/start': f('hsi', 'id quelle box'),
+  '/k/fx': f('hsiidddddi', 'id quelle einheit art beats wet param1 param2 param3 an'),   // AUFTRAG 2026-09-28 (§4.10)
+  '/k/fx/zuweisung': f('hsisi', 'id quelle einheit kanal an'),                          // AUFTRAG 2026-09-28 (§4.10)
+  '/k/fx/routing': f('hsi', 'id quelle routing'),                                        // Ohr Task 15 (§4.10)
+  '/k/kanal/graph': f('hsss', 'id quelle kanal name'),   // Baukasten S3c (§4.10)
+  '/k/graph/frage': f('hs', 'id quelle'),   // Baukasten S16 (§4.10)
+  '/k/loop/stopp': f('hsi', 'id quelle box'),
+  '/k/loop/raster': f('hsii', 'id quelle box versatz_frames'),
+  '/k/loop/rec': f('hsis', 'id quelle beats name'),
+  '/k/arr/laden': f('hsi', 'id quelle nr'),                                       // D1 K1 (§4.11)
+  '/k/arr/start': f('hsdi', 'id quelle start_beat quant'),
+  '/k/arr/stopp': f('hsi', 'id quelle quant'),
+  '/k/arr/loop': f('hsidd', 'id quelle an von_beat bis_beat'),
+  '/k/arr/metronom': f('hsifi', 'id quelle an pegel_db ziel'),
+  '/k/arr/freeze': f('hsiddi', 'id quelle spur von_beat bis_beat kennung'),        // Paket K3
+  '/k/arr/abgriff': f('hsiiiddi', 'id quelle art nr punkt von_beat bis_beat kennung'),   // 1.10 slice 7 (T5)
+  '/k/hand/frei': f('hss', 'id quelle pfade'),                                      // §4.3: a project switch releases the human holder
+  '/k/arr/auto': f('hsisi', 'id quelle spur ziel an'),                              // 1.12 Slice 3 (§4.11)
+  '/k/arr/arm': f('hsiii', 'id quelle spur an modus'),                              // 1.12 Slice 3 (§4.11)
+  '/test/hand': f('sfh', 'pfad midi_roh sample'),
+  '/test/klick': f('hssi', 'id quelle kanal an'),
+};
+
+// Ausgaben des Kerns (§5 ohne /nb, das sendet die Notbahn; dazu /erz/quittung aus §4.8)
+export const AUSGABEN = {
+  '/q': f('hsihds', 'id quelle status ist_sample ist_beat grund'),
+  '/q/stand': f('hsihds', 'id quelle status ist_sample ist_beat grund'),
+  '/k/willkommen': f('iihdds', 'protokoll generation sample beat bpm kern_version'),
+  '/uhr': f('hhddd', 'sample mono_ns beat bpm bpm_pro_s'),
+  '/takt': f('iihdd', 'takt phrase sample beat bpm'),
+  '/zustand/kern': f('iihiiiiiiiih', 'generation quantum sample frame_luecken ausgelassene_perioden cb_max_us cb_p99_us aufwach_max_us stretcher_aktiv befehle_wartend ki_gestoppt ereignisse_verloren'),
+  '/zustand/deck': f('iisdidddfiifii', 'deck status material_id basis_bpm fassung quell_beat beats_bis_ende faktor vorlauf_ms hoerweg stretcher_fuell versatz_intern_ms keylock_unterlauf keylock_aufgegeben'),
+  '/zustand/box': f('iiiiii', 'box status keylock_unterlauf keylock_aufgegeben keylock_ring_voll keylock_kein_platz'),  // Keylock 7b.3 (die Attrappe spielt keine Boxen und sendet es nicht)
+  '/zustand/komp': f('sf', 'kanal gr_db'),   // Effekt-Sektion Schritt 2 (§5.5c), osc.json: /zustand/komp
+  '/zustand/mix': f('sfffff', 'kanal gate_db mb_tief_db mb_mitte_db mb_hoch_db lim_db'),   // 1.15 A6 (§5.5d), type entry only: the Attrappe never sends it
+  '/e/ins_gr': f('sf', 'kanal gr_db'),   // 1.10 slice 4a (§5.5f), type entry only: the Attrappe never sends it
+  '/zustand/spektrum': f('sis', 'kanal rahmen pegel'),   // 1.15 A6 (§5.5e), type entry only: the sender is the real core (A7b)
+  '/pegel': f('sfffffff', 'kanal spitze_db echtspitze_dbtp lufs_m lufs_s band_tief_db band_mitte_db band_hoch_db'),
+  '/e/regler': f('sfshd', 'pfad wert halter sample beat'),
+  '/e/hand': f('sfhd', 'pfad wert sample beat'),
+  '/e/taste': f('sihd', 'name wert sample beat'),
+  '/e/gelernt': f('hiiiii', 'id quelle kanal nr wert belegt'),
+  '/e/geladen': f('isdiih', 'deck material_id basis_bpm fassung mit_stems sample'),
+  '/e/halter': f('sshd', 'pfad halter sample beat'),
+  '/e/invariante': f('ssihd', 'art plan teil sample beat'),
+  '/e/rueckfall': f('iidddh', 'deck an quell_beat_start laenge_beats beat sample'),
+  '/e/frist': f('iddh', 'deck beats_bis_ende beat sample'),
+  '/e/luecke': f('hii', 'sample frames zyklen'),
+  '/e/quantum': f('iih', 'alt neu sample'),
+  '/e/raster': f('isdfh', 'deck material_id quell_beat versatz_ms sample'),
+  '/e/hotcue': f('isidh', 'deck material_id nr quell_beat sample'),
+  '/e/rueckweg': f('sih', 'kanal lebt sample'),
+  '/e/ki': f('ish', 'gestoppt grund sample'),
+  '/e/tempo': f('dddh', 'bpm ab_beat dauer_beats sample'),
+  '/e/neustart': f('ih', 'generation sample'),
+  '/e/protokollfehler': f('ss', 'adresse grund'),
+  '/erz/quittung': f('iiiiiii', 'strom sendung verworfen verworfen_anderes_muster eingefuegt zu_spaet ungehoert'),
+  '/e/loop': f('iisiidf', 'box status name beats fx_art fx_beats fx_wet'),
+  '/e/fx': f('iidddddi', 'einheit art beats wet param1 param2 param3 an'),   // AUFTRAG 2026-09-28 (§5.12)
+  '/e/fx/zuweisung': f('isi', 'einheit kanal an'),                          // AUFTRAG 2026-09-28 (§5.12)
+  '/e/fx/routing': f('i', 'routing'),                                       // Ohr Task 15 (§5.12)
+  '/e/kanal_limiter': f('ii', 'gebaut latenz_samples'),                             // 1.15 A5c (§5.12)
+  '/e/graph': f('ss', 'kanal name'),   // Baukasten S16 (§5.12)
+  '/e/mitschnitt': f('siid', 'name beats status ab_beat'),
+  '/zustand/arr': f('iiidhdif', 'nr status loop_an projekt_beat ursprung_sample start_beat metronom_an limiter_db'),   // D1 K1 (§5.13)
+  '/zustand/ein': f('ihhhh', 'verbunden midi_gesehen midi_verloren midi_sample flanke_sample'),   // I08 (§5.14)
+  '/zustand/rec': f('iiihdiii', 'status kennung scharf luecken projekt_beat ausgang_vorhalt quantum rec_midi_scharf'),   // 1.8 (§5.14)
+  '/zustand/warp': f('iiiii', 'stimmen unterlauf kein_platz spaet faeden'),   // 1.13 Slice 2 (§5.13): Zähler des Warp-Werks
+  '/zustand/spur_pool': f('iiiiiiiii', 'an modus blocks_parallel einheiten_worker einheiten_caller seriell_summe haengt spaet zurueck'),   // mehrkern slice 3.2 (§5.13): track phases on the Hall pool
+  '/zustand/hall_pool': f('iiii', 'an faeden spaet zurueck'),   // mehrkern Task 5 (§5.13): Zustand des Hall-Pools
+  '/e/aufnahme': f('iiihhii', 'spur kennung status frames start_sample luecken art'),
+  '/e/auto_punkt': f('sdf', 'pfad projekt_beat wert'),                                                      // 1.12 Slice 3 (§5.13)
+  '/e/auto': f('isi', 'spur ziel zustand'),                                                                 // 1.12 Slice 3 (§5.13)
+  '/e/freeze': f('iiih', 'spur kennung status frames'),                                                    // Paket K3
+  '/e/abgriff': f('iiiih', 'art nr kennung status frames'),                                                // 1.10 slice 7 (T5)
+};
+
+export const STATUS = { angenommen: 1, gestartet: 2, fertig: 3, verspaetet_verworfen: 4, verspaetet_ausgefuehrt: 5, abgelehnt: 6, abgebrochen: 7, storniert: 8 };
+// 1.12 S3 (§4.11 /k/arr/auto): the overridable fields, index = field 0..3; osc.json werte.auto_ziel is the source, tests/arr_auto.test.mjs compares
+export const AUTO_ZIELE = ['fader', 'pan', 'mute', 'solo'];
+export const QUELLEN = ['andreas', 'cypher', 'leitstand', 'erzeuger', 'werkstatt', 'pruefstand'];
+
+// §16.2, nur die Codes, die der Kern selbst vergibt
+export const GRUENDE = new Set(['zu_spaet', 'regler_beim_menschen', 'regler_verplant', 'ueberlappung', 'nur_hand',
+  'unbekannter_regler', 'unbekanntes_deck', 'ausserhalb_bereich', 'kein_hoerschein', 'hoerschein_anderer_kanal',
+  'hoerschein_anderer_inhalt', 'hoerschein_anderes_tempo', 'hoerschein_abgelaufen', 'hoerschein_anderer_abschnitt',
+  'ziel_ungehoert', 'keine_stems', 'invariante_sub_doppelt', 'invariante_master_leer', 'deck_beruehrt', 'deck_hoerbar',
+  'deck_laeuft', 'nicht_geladen', 'material_fehlt', 'pruefung', 'budget_speicher', 'karte_voll', 'tempo_rampe', 'ki_gestoppt',
+  'kein_stretcher', 'hand', 'abbruch', 'ki_stopp', 'unbekannte_adresse', 'falsche_typen', 'protokoll',
+  'form',                                                                                   // §16.2 Kern (net.cpp /k/hoerschein)
+  'datei_fehlt', 'format', 'audio_fehlt', 'zu_gross', 'spur_bereich', 'reserviert',       // D1 K1 (§4.11)
+  'kein_eingang', 'aufnahme_laeuft', 'zu_viele_scharf', 'eingang_fehlt', 'kein_platz',   // 1.8 (§4.12)
+  'warp_maschine_fehlt',                                                                    // 1.13 Slice 2 (§4.11, §16.2)
+  'nur_andreas', 'auto_ziel_unbekannt']);                                                   // 1.12 Slice 3 (§4.11, §16.2)
+
+// §1.5 Kanäle
+export const DECKS = [1, 2, 3, 4].map((n) => `deck/${n}`);
+export const ERZ = [1, 2, 3, 4, 5, 6, 7, 8].map((n) => `erz/${n}`);
+export const PADS = ['pad/1', 'pad/2'];
+export const BUSSE = [1, 2, 3, 4].map((n) => `bus/${n}`);
+export const SPIELKANAELE = [...DECKS, ...ERZ, ...PADS];     // Kanäle, die "hörbar" werden können
+export const KANALZUG_KANAELE = [...SPIELKANAELE, ...BUSSE];
+
+const DB = 'db', LIN = 'lin', SCHALTER = 'schalter', STUFE = 'stufe';
+const R = (einheit, min, max, vorgabe, nurHand = false) => ({ einheit, min, max, vorgabe, nurHand });
+
+function kanalzug(k) {
+  const bus = k.startsWith('bus/');
+  const m = {
+    fader: R(DB, -200, 0, -200, bus), trim: R(DB, -24, 24, 0),
+    'eq/tief': R(DB, -200, 6, 0), 'eq/mitte': R(DB, -200, 6, 0), 'eq/hoch': R(DB, -200, 6, 0),
+    'kill/tief': R(SCHALTER, 0, 1, 0), 'kill/mitte': R(SCHALTER, 0, 1, 0), 'kill/hoch': R(SCHALTER, 0, 1, 0),
+    filter: R(LIN, -1, 1, 0),
+    'send/1': R(DB, -200, 0, -200), 'send/2': R(DB, -200, 0, -200), 'send/3': R(DB, -200, 0, -200), 'send/4': R(DB, -200, 0, -200),
+    xseite: R(STUFE, 0, 2, 1, true), pfl: R(SCHALTER, 0, 1, 0, true),
+  };
+  if (!bus) m.ziel = R(STUFE, 0, 4, 0, true);
+  if (!bus) Object.assign(m, {   // Kompressor je Quellkanal (2026-10-11), alle dürfen
+    'komp/an': R(SCHALTER, 0, 1, 0), 'komp/schwelle': R(LIN, -60, 0, -18), 'komp/ratio': R(LIN, 1, 20, 4), 'komp/attack': R(LIN, 0.1, 100, 10),
+    'komp/release': R(LIN, 10, 1000, 120), 'komp/makeup': R(LIN, 0, 24, 0), 'komp/mix': R(LIN, 0, 1, 1), 'komp/sc': R(STUFE, 0, 14, 0),
+  });
+  if (k.startsWith('deck/')) for (const s of ['drums', 'bass', 'vocals', 'other']) m[`stem/${s}`] = R(DB, -200, 6, 0);
+  return m;
+}
+
+export const REGLER = new Map();
+for (const k of KANALZUG_KANAELE) for (const [p, info] of Object.entries(kanalzug(k))) REGLER.set(`${k}/${p}`, { ...info, kanal: k });
+for (const [p, info] of Object.entries({
+  xfader: R(LIN, -1, 1, 0, true), 'master/pegel': R(DB, -200, 0, 0, true), 'master/kleber': R(LIN, 0, 1, 0, true), 'cue/mix': R(LIN, -1, 1, -1, true),
+  'cue/pegel': R(DB, -200, 0, -12, true), 'cue/split': R(SCHALTER, 0, 1, 0, true), 'master/pfl': R(SCHALTER, 0, 1, 0, true),
+  'fx/1/notenwert': R(LIN, 1 / 32, 4, 0.75), 'fx/2/notenwert': R(LIN, 1 / 32, 4, 0.75),
+  'fx/1/rueckkopplung': R(LIN, 0, 0.95, 0.5), 'fx/2/rueckkopplung': R(LIN, 0, 0.95, 0.5),
+  'fx/1/rueckweg': R(DB, -200, 0, 0), 'fx/2/rueckweg': R(DB, -200, 0, 0), 'fx/3/rueckweg': R(DB, -200, 0, 0), 'fx/4/rueckweg': R(DB, -200, 0, 0),
+  'duck/tiefe': R(DB, -24, 0, 0), 'duck/release': R(LIN, 50, 600, 200),
+  'color/art': R(STUFE, 0, 5, 0), 'color/param': R(LIN, 0, 1, 0.5),   // SOUND COLOR FX, alle dürfen
+  keylock: R(SCHALTER, 0, 1, 1),   // Keylock Task 3 (Fassung 4): EIN Knopf für alle Quellen, alle dürfen
+})) REGLER.set(p, { ...info, kanal: null });
+for (let n = 1; n <= 32; n++) {   // D1 K1 (§1.5), E3: 32 Slots: Spur-Regler des Arrangements, global, alle dürfen; Fader bis +6 dB (Spec 6.16)
+  REGLER.set(`spur/${n}/fader`, { ...R(DB, -200, 6, 0), kanal: null });
+  REGLER.set(`spur/${n}/pan`, { ...R(LIN, -1, 1, 0), kanal: null });
+  REGLER.set(`spur/${n}/mute`, { ...R(SCHALTER, 0, 1, 0), kanal: null });
+  REGLER.set(`spur/${n}/solo`, { ...R(SCHALTER, 0, 1, 0), kanal: null });
+}
+for (let n = 1; n <= 8; n++) {   // 1.10 Slice 1 (§1.5): Gruppen-Regler, global, alle dürfen
+  REGLER.set(`grp/${n}/fader`, { ...R(DB, -200, 6, 0), kanal: null });
+  REGLER.set(`grp/${n}/pan`, { ...R(LIN, -1, 1, 0), kanal: null });
+  REGLER.set(`grp/${n}/mute`, { ...R(SCHALTER, 0, 1, 0), kanal: null });
+  REGLER.set(`grp/${n}/solo`, { ...R(SCHALTER, 0, 1, 0), kanal: null });
+}
+REGLER.set('pm/fader', { ...R(DB, -200, 6, 0), kanal: null });
+// 1.10 Slice 3 (§1.5): sends (post fader) from tracks and groups to the 4 returns, return strips and Cypher Hall values; global, everybody may.
+// Sends default to -200 (off). Hall values are normalised 0..1 (the unit mapping lives in the kernel, arr_returns.cpp); hall/an is a switch.
+const HALL_VORGABE = { pre: 0.04, decay: 0.5252, groesse: 0.282, tief: 0.5658, highcut: 0.8039, fahne: 0.66667 };
+for (let r = 1; r <= 4; r++) {
+  for (let n = 1; n <= 32; n++) REGLER.set(`spur/${n}/send/${r}`, { ...R(DB, -200, 6, -200), kanal: null });
+  for (let n = 1; n <= 8; n++) REGLER.set(`grp/${n}/send/${r}`, { ...R(DB, -200, 6, -200), kanal: null });
+  REGLER.set(`ret/${r}/fader`, { ...R(DB, -200, 6, 0), kanal: null });
+  REGLER.set(`ret/${r}/pan`, { ...R(LIN, -1, 1, 0), kanal: null });
+  REGLER.set(`ret/${r}/mute`, { ...R(SCHALTER, 0, 1, 0), kanal: null });
+  REGLER.set(`ret/${r}/solo`, { ...R(SCHALTER, 0, 1, 0), kanal: null });
+  REGLER.set(`ret/${r}/hall/an`, { ...R(SCHALTER, 0, 1, 1), kanal: null });
+  for (const [f, v] of Object.entries(HALL_VORGABE)) REGLER.set(`ret/${r}/reverb/${f}`, { ...R(LIN, 0, 1, v), kanal: null });
+}
+// 1.10 Slice 4a/4b (§1.5): the insert controls ins/komp|eq|saett/<n>/* of the arrangement strips, global, project-only, everybody may. The rows are generated
+// from docs/interfaces/insert_module.json (insert_controls.mjs); the namenslisten checker compares them with insert_zeilen.inc.
+for (const [pfad, e, lo, hi, v] of INSERT_REGLER_ZEILEN) REGLER.set(pfad, { ...R(e === 'lin' ? LIN : e === 'stufe' ? STUFE : SCHALTER, lo, hi, v), kanal: null });
+// S5r (§1.5): acht Graph-Regler <kanal>/bk/<1..8> auf den Kanälen, auf denen der Kern einen Baukasten-Graphen annimmt
+// (deck/1..4 als Effekt, erz/1,2,3,5,6,7 und pad/1,2 als Instrument; nicht erz/4 und erz/8), alle dürfen, 0..1, Vorgabe 0,5
+export const BK_KANAELE = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'erz/1', 'erz/2', 'erz/3', 'erz/5', 'erz/6', 'erz/7', 'pad/1', 'pad/2'];
+for (const k of BK_KANAELE) for (let n = 1; n <= 8; n++) REGLER.set(`${k}/bk/${n}`, { ...R(LIN, 0, 1, 0.5), kanal: k });
+// S14 (§1.5): eight graph knobs fx/<n>/bk/<m> per send return fx/3, fx/4; global (no channel), alle dürfen, 0..1, default 0.5
+export const BK_SEND_KANAELE = ['fx/3', 'fx/4'];
+for (const k of BK_SEND_KANAELE) for (let n = 1; n <= 8; n++) REGLER.set(`${k}/bk/${n}`, { ...R(LIN, 0, 1, 0.5), kanal: null });
+// 1.15 A2 (§1.5, the 345 mix-tool rows): gate on the 13 live source channels (erz/8 has none: cue only), utility on those plus bus/1..4,
+// multiband and channel limiter on bus/1..4, one global spectrum row. All rows: everybody may. Ranges and defaults as the C++ table
+// (core/signalbox/include/cypherdj/signalbox/tool_controls.h); check_name_lists.py compares the path sets.
+const WZ_QUELLEN = [...DECKS, ...ERZ.slice(0, 7), ...PADS];
+const WZ_BAND = [['schwelle', LIN, -60, 0, 0], ['ratio', LIN, 1, 20, 1], ['attack', LIN, 0.1, 500, 10], ['release', LIN, 1, 5000, 100],
+  ['knie', LIN, 0, 24, 0], ['makeup', LIN, -24, 24, 0], ['umgehen', SCHALTER, 0, 1, 0]];
+const WZ_REIHEN = [
+  [WZ_QUELLEN, [['gate/an', SCHALTER, 0, 1, 0], ['gate/schwelle', LIN, -90, 0, -40], ['gate/hysterese', LIN, 0, 24, 4], ['gate/ratio', LIN, 1, 100, 100],
+    ['gate/bereich', LIN, -120, 0, -80], ['gate/attack', LIN, 0.1, 500, 1], ['gate/hold', LIN, 0, 2000, 20], ['gate/release', LIN, 1, 5000, 100],
+    ['gate/sc', STUFE, 0, 14, 0]]],
+  [[...WZ_QUELLEN, ...BUSSE], [['util/balance', LIN, -1, 1, 0], ['util/breite', LIN, 0, 200, 100], ['util/bassmono', LIN, 0, 500, 0],
+    ['util/phase_l', SCHALTER, 0, 1, 0], ['util/phase_r', SCHALTER, 0, 1, 0], ['util/tausch', SCHALTER, 0, 1, 0], ['util/dc', SCHALTER, 0, 1, 0]]],
+  [BUSSE, [['mb/an', SCHALTER, 0, 1, 0], ['mb/grenze_tief', LIN, 20, 20000, 200], ['mb/grenze_hoch', LIN, 20, 20000, 2000],
+    ...['tief', 'mitte', 'hoch'].flatMap((b) => WZ_BAND.map(([f, e, lo, hi, v]) => [`mb/${b}/${f}`, e, lo, hi, v])),
+    ['lim/an', SCHALTER, 0, 1, 0], ['lim/decke', LIN, -60, 0, -0.3], ['lim/abklingen', LIN, 1, 2000, 80]]],
+];
+for (const [kanaele, zeilen] of WZ_REIHEN) for (const k of kanaele) for (const [f, e, lo, hi, v] of zeilen) REGLER.set(`${k}/${f}`, { ...R(e, lo, hi, v), kanal: k });
+REGLER.set('spektrum/kanal', { ...R(STUFE, 0, 19, 0), kanal: null });   // 0 off, 1..18 = channel index + 1, 19 = master sum
+
+export const kanalVon = (pfad) => REGLER.get(pfad)?.kanal ?? null;
+export const istDeck = (k) => typeof k === 'string' && /^deck\/[1-4]$/.test(k);
+export const deckNr = (k) => Number(k.split('/')[1]);
+
+// §7.4 LED-Namen
+export const LEDS = new Set(['vorschlag', 'plan_laeuft', 'rueckfall', 'notbahn', 'ki_gestoppt',
+  'autonomie_0', 'autonomie_1', 'autonomie_2', 'autonomie_3',
+  ...[1, 2, 3, 4].flatMap((n) => ['halter_andreas', 'halter_cypher', 'hoerschein_ok', 'hoerschein_rot', 'frist', 'loop', 'roll'].map((x) => `deck${n}_${x}`))]);
+
+export const ID_MUSTER = /^[a-z0-9_-]{1,24}$/;

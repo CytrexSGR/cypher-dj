@@ -29,11 +29,11 @@ estimates are uncalibrated.
      the GPU machine is free, M1 as soon as device and yes are there. Reason: judge 3 ("nobody makes the deck real-time
      test a precondition"), judges 1 and 2 (grid, choice, generation unmeasured).
    - **Slice 1, three work items in parallel after a short shared lead-in:** first **V0** (one owner, roughly half a
-     session day): test reference prototypes into the repo, `djk/third_party/`, machine-readable contract `djk/vertrag/`
+     session day): test reference prototypes into the repo, `djk/third_party/`, machine-readable contract `djk/contract/`
      with golden sequences, test hand input and ring mock (`INTERFACES.md` §19.0). Then core (with Notbahn (the
      fallback path), direct-path decks, chaos test rig v1), Leitstand with MCP and player against a **core mock**, and
      the workshop chain v1. Reason: parallelism is Andreas' engine; the contract makes it possible, but only if there is
-     exactly one machine-readable truth (two sessions that each generate `djk/vertrag/` themselves deliver two).
+     exactly one machine-readable truth (two sessions that each generate `djk/contract/` themselves deliver two).
    - **Slice 2:** Cypher chooses, the code computes, silent, with the attack cases from 09 NP as regression.
    - **Slice 3, hand and ear:** controller, interface (M1), Andreas plays alone, **listening session M18** before the
      expensive keylock parts are built. Reason: judge 2 ("the largest unmeasured quantity is Andreas' ear and hand") and

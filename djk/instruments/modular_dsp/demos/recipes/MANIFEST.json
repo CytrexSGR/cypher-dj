@@ -1,0 +1,2205 @@
+{
+  "format": "baukasten-rezepte/1",
+  "quelle": "djk/instruments/modular_dsp/recipes/RECIPES.md",
+  "erzeugt_von": "djk/instruments/modular_dsp/recipes/build_recipes.py",
+  "status_werte": {
+    "exact": "every oscillator, filter, envelope, modulation and voice value of the card is built; the effect order is kept; only bell-EQ moves and values the card leaves open are engineering choices (listed in naeherung)",
+    "approximated": "something on the card is replaced by a substitute (listed in naeherung); exakt_mit names the module that would make it exact, null when no module of the parallel work does",
+    "blocked": "the card's defining module does not exist; the patch is a stand-in"
+  },
+  "energie": "1 (calm bed) .. 5 (peak of a drop)",
+  "patches": [
+    {
+      "datei": "bass-sub.json",
+      "karte": "bass.sub",
+      "titel": "sub",
+      "zitat": "Snoman [B3] p. 443",
+      "machbarkeit_karte": "baubar mit Näherung (there is no free-running sine oscillator, the kit's sine exists only as the FM carrier; use triangle for the fundamental and a sine-FM carrier with index 0 as the clean layer).",
+      "status": "exact",
+      "beschreibung": {
+        "art": "bass",
+        "unterart": "sub",
+        "charakter": [
+          "deep",
+          "sub",
+          "tight",
+          "mono",
+          "clean"
+        ],
+        "einsatz": [
+          "drop",
+          "breakdown"
+        ],
+        "energie": 4,
+        "text": "Clean mono sub: sine plus a quiet triangle an octave up under a 12 dB low-pass that tracks the note."
+      },
+      "stimmen": 1,
+      "regler": {
+        "1": "Tone",
+        "2": "Upper octave",
+        "3": "Drive",
+        "4": "Decay",
+        "5": "Release"
+      },
+      "naeherung": [
+        "The card asks for a sine-FM carrier because it assumed no free-running sine; the kit's `sinus` block is one, so the sine is used directly.",
+        "Saturation sits before the low-pass so its harmonics are filtered with the rest."
+      ],
+      "exakt_mit": null,
+      "besser_mit": [],
+      "probe": {
+        "art": "note",
+        "noten": [
+          40
+        ]
+      }
+    },
+    {
+      "datei": "bass-reese.json",
+      "karte": "bass.reese",
+      "titel": "reese",
+      "zitat": "DNB Academy [W], “[quote omitted]”, updated 22 Oct 2026",
+      "machbarkeit_karte": "baubar (two saws + ladder/SVF notch + LFO is exactly the kit).",
+      "status": "exact",
+      "beschreibung": {
+        "art": "bass",
+        "unterart": "reese",
+        "charakter": [
+          "thick",
+          "dirty",
+          "aggressive",
+          "warm",
+          "deep",
+          "evolving"
+        ],
+        "einsatz": [
+          "drop"
+        ],
+        "energie": 5,
+        "text": "Dark DnB reese: two saws detuned +-38 cent, tube drive and a slowly moving notch, legato with glide."
+      },
+      "stimmen": 1,
+      "regler": {
+        "1": "Cutoff",
+        "2": "Detune",
+        "3": "Notch rate",
+        "4": "Drive",
+        "5": "Sub",
+        "6": "Hall mix"
+      },
+      "naeherung": [
+        "Two detuned saws are one wavetable node with 2 unison copies at +-38 cent, so the patch costs one voice.",
+        "Chorus 'on the mids only': the signal is split at 150 Hz, the lows stay mono and dry, the rest goes through the chorus.",
+        "'Short hall on the highs': the hall's low-band decay factor is 0.3, so lows die fast in the tail.",
+        "The card's multiband compressor is a single-band compressor (no multiband block)."
+      ],
+      "exakt_mit": null,
+      "besser_mit": [],
+      "probe": {
+        "art": "note",
+        "noten": [
+          40
+        ]
+      }
+    },
+    {
+      "datei": "bass-acid.json",
+      "karte": "bass.acid",
+      "titel": "acid",
+      "zitat": "Welsh [B1] p. 95, patch Acid Bass, table transcribed.",
+      "machbarkeit_karte": "baubar (pulse + square + ladder 24 dB + resonance 60 % + drive).",
+      "status": "exact",
+      "beschreibung": {
+        "art": "bass",
+        "unterart": "acid",
+        "charakter": [
+          "bright",
+          "harsh",
+          "aggressive",
+          "dirty",
+          "nasal"
+        ],
+        "einsatz": [
+          "drop",
+          "build"
+        ],
+        "energie": 5,
+        "text": "Squelchy acid bass: square plus 25 % pulse into a 24 dB ladder at 450 Hz with 60 % resonance, drive and slide."
+      },
+      "stimmen": 1,
+      "regler": {
+        "1": "Cutoff",
+        "2": "Resonance",
+        "3": "Cutoff LFO",
+        "4": "Drive",
+        "5": "Delay mix",
+        "6": "Hall mix"
+      },
+      "naeherung": [
+        "Welsh writes the square at -2 oct under the pulse; here the square sits on the played note and the pulse two octaves above it.",
+        "Knob 3 is the card's substitute for hand automation: a 0.3 Hz LFO on the cutoff, off at the midpoint (+-12 st at the ends)."
+      ],
+      "exakt_mit": null,
+      "besser_mit": [],
+      "probe": {
+        "art": "note",
+        "noten": [
+          40
+        ]
+      }
+    },
+    {
+      "datei": "bass-fm.json",
+      "karte": "bass.fm",
+      "titel": "fm",
+      "zitat": "Cann [B4] p. 110, patch FM Bass",
+      "machbarkeit_karte": "baubar mit Näherung (the kit has one sine-FM pair, not a five-operator stack: op 1 ← op 2 reproduces the body, the second modulator that adds the metallic edge is lost).",
+      "status": "approximated",
+      "beschreibung": {
+        "art": "bass",
+        "unterart": "fm",
+        "charakter": [
+          "punchy",
+          "bright",
+          "metallic",
+          "tight",
+          "digital"
+        ],
+        "einsatz": [
+          "drop",
+          "groove"
+        ],
+        "energie": 4,
+        "text": "Punchy FM bass: three sine operators sharing one 2 s exponential decay, so the brightness falls with the note."
+      },
+      "stimmen": 1,
+      "regler": {
+        "1": "FM depth",
+        "2": "Decay",
+        "3": "Op 3 level",
+        "4": "Drive"
+      },
+      "naeherung": [
+        "Three operators from `sinus` blocks with linear FM (the card assumed one FM pair; the kit can stack sines).",
+        "Cann's operator levels (mod level 60) have no defined index; both modulators run at index 1.5 at the knob midpoint, my choice.",
+        "Pitches keep the card's intervals with op 3 (the lowest sounding operator) on the played note: op 1 +12 st, op 2 -7 st."
+      ],
+      "exakt_mit": "FM operators (several operators with ratios, per-operator envelopes and calibrated levels)",
+      "besser_mit": [],
+      "probe": {
+        "art": "note",
+        "noten": [
+          40
+        ]
+      }
+    },
+    {
+      "datei": "bass-wobble.json",
+      "karte": "bass.wobble",
+      "titel": "wobble",
+      "zitat": "KAN Samples [W], “[quote omitted]”, 22 May 2026",
+      "machbarkeit_karte": "baubar (saw/pulse + ladder + LFO with tempo sync; the sub layer costs one more voice per note).",
+      "status": "approximated",
+      "beschreibung": {
+        "art": "bass",
+        "unterart": "wobble",
+        "charakter": [
+          "thick",
+          "dirty",
+          "aggressive",
+          "punchy",
+          "evolving"
+        ],
+        "einsatz": [
+          "drop"
+        ],
+        "energie": 5,
+        "text": "Dubstep wobble: detuned saws under a resonant ladder swept by a tempo-synced LFO, with a clean sine sub."
+      },
+      "stimmen": 1,
+      "regler": {
+        "1": "Wobble depth",
+        "2": "Resonance",
+        "3": "Detune",
+        "4": "Sub",
+        "5": "Crush bits",
+        "6": "Room mix"
+      },
+      "naeherung": [
+        "The card's compressor is sidechained to the kick; a patch has no kick, so the compressor runs without a key.",
+        "The wobble is a beat-synced LFO (1/8 note, `takt` 0.5) between 200 Hz and 2.5 kHz; the sync division is a fixed value, not a knob.",
+        "The saws are one wavetable node with 3 copies at +-8 cent; the clean sine sub joins after the filter."
+      ],
+      "exakt_mit": null,
+      "besser_mit": [],
+      "probe": {
+        "art": "note",
+        "noten": [
+          40
+        ]
+      }
+    },
+    {
+      "datei": "bass-analog.json",
+      "karte": "bass.analog",
+      "titel": "analog",
+      "zitat": "Snoman [B3] p. 294",
+      "machbarkeit_karte": "baubar (square + saw, ladder, ADSR used as AR, glide, drive, chorus).",
+      "status": "exact",
+      "beschreibung": {
+        "art": "bass",
+        "unterart": "analog",
+        "charakter": [
+          "warm",
+          "deep",
+          "thick",
+          "smooth",
+          "analog",
+          "punchy"
+        ],
+        "einsatz": [
+          "groove",
+          "drop"
+        ],
+        "energie": 4,
+        "text": "Warm analog bass: saw and square an octave apart, open ladder, AR envelope, drive, compression and a light chorus."
+      },
+      "stimmen": 1,
+      "regler": {
+        "1": "Cutoff",
+        "2": "Drive",
+        "3": "Release",
+        "4": "Chorus mix"
+      },
+      "naeherung": [
+        "Detroit Bass variant [B1] p. 96: saw on the played note, square an octave above, ladder fully open, AR envelope, glide 10 ms.",
+        "The chorus mix knob is the FX-bus send: dry plus wet, so the dry weight survives.",
+        "The cutoff knob reaches 20 kHz at its midpoint (the card's open filter); above the midpoint the ladder is clamped at 0.45 sr."
+      ],
+      "exakt_mit": null,
+      "besser_mit": [],
+      "probe": {
+        "art": "note",
+        "noten": [
+          40
+        ]
+      }
+    },
+    {
+      "datei": "bass-rolling.json",
+      "karte": "bass.rolling",
+      "titel": "rolling",
+      "zitat": "Snoman [B3] p. 443",
+      "machbarkeit_karte": "baubar (saw/pulse + ladder + ADSR + compressor with sidechain input; if the kit's compressor has no key input, use the gate inverted by a kick-triggered envelope, Näherung).",
+      "status": "approximated",
+      "beschreibung": {
+        "art": "bass",
+        "unterart": "rolling",
+        "charakter": [
+          "punchy",
+          "tight",
+          "warm",
+          "thick",
+          "smooth"
+        ],
+        "einsatz": [
+          "groove",
+          "drop"
+        ],
+        "energie": 4,
+        "text": "Rolling 16th-note bass: detuned saws an octave over a sine sub, plucked by a fast filter envelope, ends before the next 16th."
+      },
+      "stimmen": 1,
+      "regler": {
+        "1": "Cutoff",
+        "2": "Resonance",
+        "3": "Env amount",
+        "4": "Decay",
+        "5": "Sub"
+      },
+      "naeherung": [
+        "The kick sidechain (ratio 9:1, attack 5 ms, release 200 ms) is a plain compressor with those times: a patch has no kick input.",
+        "'A quarter open' is 25 % on Welsh's scale (113 Hz) and 'D quarter' is 0.18 s; 'moderate' env amount is 40 % (48 st).",
+        "The two detuned saws are one wavetable node (2 copies, +-6 cent) an octave above a sine sub on the played note."
+      ],
+      "exakt_mit": null,
+      "besser_mit": [],
+      "probe": {
+        "art": "note",
+        "noten": [
+          40
+        ]
+      }
+    },
+    {
+      "datei": "bass-pluck.json",
+      "karte": "bass.pluck",
+      "titel": "pluck (bass)",
+      "zitat": "Snoman [B3] p. 444",
+      "machbarkeit_karte": "baubar.",
+      "status": "exact",
+      "beschreibung": {
+        "art": "bass",
+        "unterart": "pluck",
+        "charakter": [
+          "punchy",
+          "tight",
+          "bright",
+          "thick",
+          "thin"
+        ],
+        "einsatz": [
+          "groove"
+        ],
+        "energie": 4,
+        "text": "Tight plucked bass: unison saws through a ladder opened by a short, deep filter envelope, no sustain."
+      },
+      "stimmen": 1,
+      "regler": {
+        "1": "Cutoff",
+        "2": "Resonance",
+        "3": "Env amount",
+        "4": "Decay",
+        "5": "Delay mix"
+      },
+      "naeherung": [
+        "Unison saws: one wavetable node with 4 copies at +-12 cent (one voice).",
+        "Resonance 50 %, env amount 85 % and amp decay 0.29 s from the parallel Welsh Funk Bass table the card cites."
+      ],
+      "exakt_mit": null,
+      "besser_mit": [],
+      "probe": {
+        "art": "note",
+        "noten": [
+          40
+        ]
+      }
+    },
+    {
+      "datei": "lead-mono.json",
+      "karte": "lead.mono",
+      "titel": "mono lead",
+      "zitat": "Welsh [B1] p. 91, patch Mellow 70's Lead, table transcribed. Glide rationale: Reid [B2] part 18",
+      "machbarkeit_karte": "baubar (2 pulse/saw, ladder open, glide, 1 voice).",
+      "status": "exact",
+      "beschreibung": {
+        "art": "lead",
+        "unterart": "mono",
+        "charakter": [
+          "warm",
+          "smooth",
+          "bright",
+          "clean",
+          "mono"
+        ],
+        "einsatz": [
+          "drop",
+          "melody"
+        ],
+        "energie": 3,
+        "text": "Mellow 70s mono lead: two squares 10 cent apart, open filter, fast 20 ms glide, overdrive, eighth delay and short hall."
+      },
+      "stimmen": 1,
+      "regler": {
+        "1": "Cutoff",
+        "2": "Drive",
+        "3": "Release",
+        "4": "Delay mix",
+        "5": "Hall mix"
+      },
+      "naeherung": [
+        "The two squares at -10/+10 cent are one wavetable node (`rechteck` at width 50 %, 2 copies, +-10 cent)."
+      ],
+      "exakt_mit": null,
+      "besser_mit": [],
+      "probe": {
+        "art": "note",
+        "noten": [
+          57
+        ]
+      }
+    },
+    {
+      "datei": "lead-poly.json",
+      "karte": "lead.poly",
+      "titel": "poly lead",
+      "zitat": "Welsh [B1] p. 91, patch Brass Section, table transcribed; polyphony note: Reid [B2] part 20",
+      "machbarkeit_karte": "baubar (2 voices per note → 8 notes within 16 voices).",
+      "status": "exact",
+      "beschreibung": {
+        "art": "lead",
+        "unterart": "poly",
+        "charakter": [
+          "warm",
+          "wide",
+          "thick",
+          "smooth",
+          "bright"
+        ],
+        "einsatz": [
+          "melody",
+          "breakdown"
+        ],
+        "energie": 3,
+        "text": "Brassy poly lead: two pulse waves with 5.5 Hz PWM, a fast-opening ladder, chorus, eighth delay and hall."
+      },
+      "stimmen": 8,
+      "regler": {
+        "1": "Cutoff",
+        "2": "Env amount",
+        "3": "PWM depth",
+        "4": "Delay mix",
+        "5": "Hall mix"
+      },
+      "naeherung": [
+        "Brass Section [B1] p. 91: the 100 % filter envelope (120 st) opens the 40 Hz ladder fully in 30 ms and holds it open.",
+        "PWM depth 45 % is read as a pulse-width swing of +-20 % (pwm input 0.45)."
+      ],
+      "exakt_mit": null,
+      "besser_mit": [],
+      "probe": {
+        "art": "akkord",
+        "noten": [
+          57,
+          61,
+          64,
+          69
+        ]
+      }
+    },
+    {
+      "datei": "lead-supersaw.json",
+      "karte": "lead.supersaw",
+      "titel": "supersaw / trance lead",
+      "zitat": "Snoman [B3] p. 447",
+      "machbarkeit_karte": "baubar mit Näherung (3 saws per note → a 5-note chord uses 15 of 16 voices; a 7-saw supersaw is not reachable without voice stealing).",
+      "status": "exact",
+      "beschreibung": {
+        "art": "lead",
+        "unterart": "supersaw",
+        "charakter": [
+          "bright",
+          "wide",
+          "thick",
+          "airy",
+          "aggressive",
+          "evolving"
+        ],
+        "einsatz": [
+          "drop",
+          "build"
+        ],
+        "energie": 5,
+        "text": "Trance supersaw: seven detuned saws in one voice, spread wide, hall with pre-delay, gated tail and a short delay."
+      },
+      "stimmen": 8,
+      "regler": {
+        "1": "Detune",
+        "2": "Width",
+        "3": "Cutoff",
+        "4": "Hall mix",
+        "5": "Delay mix"
+      },
+      "naeherung": [
+        "The card's voice problem is gone: 7 detuned saws are one wavetable node (7 copies), so a note costs one voice and 8 notes fit.",
+        "'As far apart as possible without separating' is 25 cent for the outermost copy at the knob midpoint (my choice).",
+        "Gate after the hall (threshold -40 dBFS) cuts the tail; the optional parallel compression is left out."
+      ],
+      "exakt_mit": null,
+      "besser_mit": [],
+      "probe": {
+        "art": "akkord",
+        "noten": [
+          57,
+          61,
+          64,
+          69
+        ]
+      }
+    },
+    {
+      "datei": "lead-acid.json",
+      "karte": "lead.acid",
+      "titel": "acid lead",
+      "zitat": "Welsh [B1] p. 95 (Acid Bass); the octave lift is derived, the rest is the table as printed.",
+      "machbarkeit_karte": "baubar.",
+      "status": "exact",
+      "beschreibung": {
+        "art": "lead",
+        "unterart": "acid",
+        "charakter": [
+          "harsh",
+          "bright",
+          "nasal",
+          "aggressive",
+          "dirty"
+        ],
+        "einsatz": [
+          "build",
+          "drop"
+        ],
+        "energie": 5,
+        "text": "Acid lead: the 303-style acid bass lifted an octave, 60 % resonance, tube drive and a dotted 16th delay."
+      },
+      "stimmen": 1,
+      "regler": {
+        "1": "Cutoff",
+        "2": "Resonance",
+        "3": "Cutoff LFO",
+        "4": "Drive",
+        "5": "Delay mix",
+        "6": "Hall mix"
+      },
+      "naeherung": [
+        "The acid bass patch with every oscillator one octave up (the card's derived lift); tube drive instead of the bass's tanh drive."
+      ],
+      "exakt_mit": null,
+      "besser_mit": [],
+      "probe": {
+        "art": "note",
+        "noten": [
+          57
+        ]
+      }
+    },
+    {
+      "datei": "lead-sync.json",
+      "karte": "lead.sync",
+      "titel": "sync lead",
+      "zitat": "Welsh [B1] p. 93, patch Screaming Sync",
+      "machbarkeit_karte": "fehlt: Hard-Sync (no sync-capable oscillator in the kit). Nearest approximation: pulse with heavy pitch-LFO + bitcrusher, which gives the edge but not the harmonic jump.",
+      "status": "exact",
+      "beschreibung": {
+        "art": "lead",
+        "unterart": "sync",
+        "charakter": [
+          "aggressive",
+          "harsh",
+          "bright",
+          "metallic",
+          "thin"
+        ],
+        "einsatz": [
+          "drop",
+          "melody"
+        ],
+        "energie": 5,
+        "text": "Screaming sync lead: a square hard-synced to a silent master, tuned up, with slow 4.5 cent vibrato and light drive."
+      },
+      "stimmen": 1,
+      "regler": {
+        "1": "Sync pitch",
+        "2": "Cutoff",
+        "3": "Drive",
+        "4": "Delay mix",
+        "5": "Hall mix"
+      },
+      "naeherung": [
+        "The card says hard sync is missing; the kit's oscillators have had a `sync` input since slice 1 (`zyklus` of a master into `sync`), so the patch uses it.",
+        "That sync smooths only the half of the step after the reset, so a fast sync sweep aliases; a band-limited sync oscillator would remove it.",
+        "Unison is a second master/slave pair 8 cent up. The card gives no osc 2 offset; +7 st at the knob midpoint is my choice (an integer ratio would hide the sync)."
+      ],
+      "exakt_mit": null,
+      "besser_mit": [
+        "band-limited hard-sync oscillator"
+      ],
+      "probe": {
+        "art": "note",
+        "noten": [
+          57
+        ]
+      }
+    },
+    {
+      "datei": "lead-fm.json",
+      "karte": "lead.fm",
+      "titel": "FM lead",
+      "zitat": "Reid [B2] part 13",
+      "machbarkeit_karte": "baubar mit Näherung (single carrier–modulator pair: 1:1 and integer ratios work, cascaded 4-operator timbres do not).",
+      "status": "exact",
+      "beschreibung": {
+        "art": "lead",
+        "unterart": "fm",
+        "charakter": [
+          "bright",
+          "metallic",
+          "digital",
+          "thin",
+          "harsh",
+          "smooth"
+        ],
+        "einsatz": [
+          "melody",
+          "breakdown"
+        ],
+        "energie": 3,
+        "text": "Digital FM lead: sine carrier with a 1:2 modulator whose index jumps at the attack and settles, velocity sets the bite."
+      },
+      "stimmen": 8,
+      "regler": {
+        "1": "Index",
+        "2": "Bite",
+        "3": "Decay",
+        "4": "Delay mix",
+        "5": "Hall mix"
+      },
+      "naeherung": [
+        "Carrier on the played note, modulator at 1:2. Index 1 at sustain plus an attack envelope adding 3 (the bite), scaled by velocity.",
+        "Amp envelope A 5 ms, D 1.2 s, S 45 %, R 0.3 s inside the card's ranges; optional 12 dB low-pass at 9 kHz included."
+      ],
+      "exakt_mit": null,
+      "besser_mit": [
+        "FM operators (several operators with ratios, per-operator envelopes and calibrated levels)"
+      ],
+      "probe": {
+        "art": "akkord",
+        "noten": [
+          57,
+          61,
+          64,
+          69
+        ]
+      }
+    },
+    {
+      "datei": "lead-arp.json",
+      "karte": "lead.arp",
+      "titel": "arp lead",
+      "zitat": "Snoman [B3] p. 438",
+      "machbarkeit_karte": "baubar für den Klang; die Arpeggiator-Funktion selbst fehlt im Baukasten (Noten müssen von außen kommen).",
+      "status": "exact",
+      "beschreibung": {
+        "art": "lead",
+        "unterart": "arp",
+        "charakter": [
+          "bright",
+          "tight",
+          "clean",
+          "punchy",
+          "smooth"
+        ],
+        "einsatz": [
+          "build",
+          "groove"
+        ],
+        "energie": 4,
+        "text": "Bright arp lead: saw and pulse with a short filter blip, high-passed off the bass, tempo-synced 16th delay."
+      },
+      "stimmen": 8,
+      "regler": {
+        "1": "Cutoff",
+        "2": "Env amount",
+        "3": "High-pass",
+        "4": "Delay mix",
+        "5": "Hall mix"
+      },
+      "naeherung": [
+        "The kit has no arpeggiator: the notes must come from the host, as the card says. The sound is complete.",
+        "Saw plus 30 % pulse 7 cent up; filter envelope D 0.12 s; 24 dB high-pass at 300 Hz (the card gives no slope); delay damped at 3 kHz ('filtered')."
+      ],
+      "exakt_mit": null,
+      "besser_mit": [],
+      "probe": {
+        "art": "akkord",
+        "noten": [
+          57,
+          61,
+          64,
+          69
+        ]
+      }
+    },
+    {
+      "datei": "pad-strings.json",
+      "karte": "pad.strings",
+      "titel": "strings",
+      "zitat": "Snoman [B3] p. 437–438",
+      "machbarkeit_karte": "baubar (the kit has both waveforms, detune, chorus, phaser and hall; watch the 16-voice budget).",
+      "status": "exact",
+      "beschreibung": {
+        "art": "pad",
+        "unterart": "strings",
+        "charakter": [
+          "warm",
+          "wide",
+          "smooth",
+          "thick",
+          "soft",
+          "evolving"
+        ],
+        "einsatz": [
+          "breakdown",
+          "intro"
+        ],
+        "energie": 2,
+        "text": "String section: triangle and detuned squares under a mid-resonance ladder that opens slowly after the bow, chorus, phaser, hall."
+      },
+      "stimmen": 8,
+      "regler": {
+        "1": "Cutoff",
+        "2": "Resonance",
+        "3": "Env amount",
+        "4": "Filter attack",
+        "5": "Hall mix"
+      },
+      "naeherung": [
+        "Triangle plus a square detuned 4 cent; the 'second layer detuned further' is a wavetable square with 3 copies at +-12 cent.",
+        "Pitch LFO 0.4 Hz, 8 cent on the square; cutoff LFO 0.15 Hz, +-3 st; filter envelope A 0.8 s, D 0.6 s, S 70 %, R 0.6 s.",
+        "The optional sidechain compression from a rhythmic element is left out (no key source in a patch)."
+      ],
+      "exakt_mit": null,
+      "besser_mit": [],
+      "probe": {
+        "art": "akkord",
+        "noten": [
+          57,
+          61,
+          64,
+          69
+        ]
+      }
+    },
+    {
+      "datei": "pad-choir.json",
+      "karte": "pad.choir",
+      "titel": "choir",
+      "zitat": "Welsh [B1] p. 77, patch Choir, table transcribed. Formant numbers: Reid [B2] part 23",
+      "machbarkeit_karte": "baubar mit Näherung (the pulse/LFO patch is exact; real vowels need three band-passes per note, the kit's SVF can do it, the vocoder is the cheaper route, but the vowel source must be sampled or synthesized).",
+      "status": "approximated",
+      "beschreibung": {
+        "art": "pad",
+        "unterart": "choir",
+        "charakter": [
+          "warm",
+          "soft",
+          "wide",
+          "smooth",
+          "airy",
+          "nasal"
+        ],
+        "einsatz": [
+          "breakdown",
+          "intro"
+        ],
+        "energie": 2,
+        "text": "Synth choir: two scattered pulse layers with slow vibrato and swell, a formant band-pass bank, strong chorus and long hall."
+      },
+      "stimmen": 8,
+      "regler": {
+        "1": "Cutoff",
+        "2": "Vowel",
+        "3": "Attack",
+        "4": "Release",
+        "5": "Hall mix"
+      },
+      "naeherung": [
+        "Welsh Choir exact: pulses at 15 % and 25 % (the second -2 oct), 24 dB ladder at 1.7 kHz, A 0.32 / R 0.93 s, 2.4 Hz 20 cent vibrato.",
+        "Each pulse is a wavetable `rechteck` with 3 copies at +-6 cent, the card's 'pitch scatter per voice for a section'.",
+        "Vowel: three SVF band-passes at 640 / 1200 / 2400 Hz (the card's last formant set) crossfade with the low-pass (knob 2); one fixed vowel, no vowel morph.",
+        "The EQ cut 1-3 kHz is not built (no bell EQ block)."
+      ],
+      "exakt_mit": null,
+      "besser_mit": [],
+      "probe": {
+        "art": "akkord",
+        "noten": [
+          57,
+          61,
+          64,
+          69
+        ]
+      }
+    },
+    {
+      "datei": "pad-atmosphere.json",
+      "karte": "pad.atmosphere",
+      "titel": "atmosphere",
+      "zitat": "Welsh [B1] p. 99, patch Celestial Wash",
+      "machbarkeit_karte": "baubar (noise + ladder at 100 % resonance + LFO + hall is the kit's strongest combination).",
+      "status": "exact",
+      "beschreibung": {
+        "art": "pad",
+        "unterart": "atmosphere",
+        "charakter": [
+          "airy",
+          "wide",
+          "wet",
+          "evolving",
+          "metallic",
+          "thin"
+        ],
+        "einsatz": [
+          "intro",
+          "breakdown"
+        ],
+        "energie": 1,
+        "text": "Celestial wash: noise rings a self-oscillating, key-tracked ladder pulsed at 5.5 Hz, slow swell, very long hall."
+      },
+      "stimmen": 8,
+      "regler": {
+        "1": "Tracking",
+        "2": "Ring depth",
+        "3": "Attack",
+        "4": "Hall mix",
+        "5": "Delay mix"
+      },
+      "naeherung": [
+        "Celestial Wash [B1] p. 99: noise into a self-oscillating ladder (resonance 100 %), the 5.5 Hz square LFO switches the resonance 0..1.",
+        "Keyboard tracking on: cutoff = 3.82 x note frequency (1 kHz at C4)."
+      ],
+      "exakt_mit": null,
+      "besser_mit": [],
+      "probe": {
+        "art": "akkord",
+        "noten": [
+          57,
+          61,
+          64,
+          69
+        ]
+      }
+    },
+    {
+      "datei": "pad-analog.json",
+      "karte": "pad.analog",
+      "titel": "analog pad",
+      "zitat": "Welsh [B1] p. 101, patches Galactic Cathedral and Galactic Chapel, tables transcribed.",
+      "machbarkeit_karte": "baubar (2 squares, ladder, slow LFO, long release).",
+      "status": "exact",
+      "beschreibung": {
+        "art": "pad",
+        "unterart": "analog",
+        "charakter": [
+          "warm",
+          "soft",
+          "analog",
+          "wide",
+          "evolving",
+          "smooth"
+        ],
+        "einsatz": [
+          "breakdown",
+          "intro"
+        ],
+        "energie": 2,
+        "text": "Analog pad: two squares two octaves apart under a resonant ladder that breathes at 0.3 Hz, long release, chorus, phaser, hall."
+      },
+      "stimmen": 8,
+      "regler": {
+        "1": "Cutoff",
+        "2": "Resonance",
+        "3": "LFO depth",
+        "4": "Release",
+        "5": "Hall mix"
+      },
+      "naeherung": [
+        "Galactic Cathedral [B1] p. 101: squares at -11 cent and +2 oct +11 cent, ladder 1.2 kHz / 60 %, 0.3 Hz LFO on the cutoff, R 2.25 s.",
+        "LFO depth 10 % is read as +-6 st (one octave peak to peak). The Galactic Chapel amplitude LFO (17 %) is left out."
+      ],
+      "exakt_mit": null,
+      "besser_mit": [],
+      "probe": {
+        "art": "akkord",
+        "noten": [
+          57,
+          61,
+          64,
+          69
+        ]
+      }
+    },
+    {
+      "datei": "pad-granular.json",
+      "karte": "pad.granular",
+      "titel": "granular pad",
+      "zitat": "Snoman [B3] p. 138",
+      "machbarkeit_karte": "fehlt: Granular-Engine (the sampler can play grains only as fixed slices; a true grain cloud needs a granular module).",
+      "status": "blocked",
+      "beschreibung": {
+        "art": "pad",
+        "unterart": "granular",
+        "charakter": [
+          "evolving",
+          "airy",
+          "wide",
+          "smooth",
+          "thick"
+        ],
+        "einsatz": [
+          "intro",
+          "breakdown"
+        ],
+        "energie": 1,
+        "text": "Stand-in for a granular pad: a slowly scanned, randomly jittered wavetable cloud with long hall and chorus."
+      },
+      "stimmen": 8,
+      "regler": {
+        "1": "Position",
+        "2": "Motion",
+        "3": "Cutoff",
+        "4": "Hall mix"
+      },
+      "naeherung": [
+        "Stand-in, not a granular pad: the kit has no grain engine. A wavetable (`analog`, 4 frames) with 5 copies stands in for the grain cloud.",
+        "'Grain position' is the wavetable position, moved by a 0.07 Hz LFO plus a random LFO (S&H, 3 Hz) smoothed over 80 ms; grain size has no equivalent.",
+        "Low-pass 3.8 kHz after the source, amp A 1 s / S 90 % / R 2.5 s, hall (very long) then chorus, as on the card."
+      ],
+      "exakt_mit": "granular engine (grain size, position, density, random scatter)",
+      "besser_mit": [],
+      "probe": {
+        "art": "akkord",
+        "noten": [
+          57,
+          61,
+          64,
+          69
+        ]
+      }
+    },
+    {
+      "datei": "pad-drone.json",
+      "karte": "pad.drone",
+      "titel": "drone",
+      "zitat": "Welsh [B1] p. 102, patch Portus, table transcribed.",
+      "machbarkeit_karte": "baubar (2 triangles, resonant ladder, 1.5 s glide, long hall).",
+      "status": "exact",
+      "beschreibung": {
+        "art": "pad",
+        "unterart": "drone",
+        "charakter": [
+          "deep",
+          "dark",
+          "warm",
+          "smooth",
+          "evolving",
+          "thick"
+        ],
+        "einsatz": [
+          "intro",
+          "breakdown"
+        ],
+        "energie": 1,
+        "text": "Dark drone bed: two triangles an octave apart under a resonant ladder that opens over two seconds, long glide and hall."
+      },
+      "stimmen": 8,
+      "regler": {
+        "1": "Cutoff",
+        "2": "Resonance",
+        "3": "Env amount",
+        "4": "Attack",
+        "5": "Hall mix"
+      },
+      "naeherung": [
+        "Portus [B1] p. 102: triangles at 0 and +1 oct, ladder 75 Hz / 70 % with env 70 % (84 st), amp A 1.5 / R 3.3 s, filter A 1.8 / R 2.9 s.",
+        "Glide 1.5 s per voice (`glatt` 1.5 s): in a poly patch a voice glides from the last note it played.",
+        "Optional slow filter drift added: 0.1 Hz, +-2 st."
+      ],
+      "exakt_mit": null,
+      "besser_mit": [],
+      "probe": {
+        "art": "akkord",
+        "noten": [
+          45,
+          49,
+          52,
+          57
+        ]
+      }
+    },
+    {
+      "datei": "keys-piano.json",
+      "karte": "keys.piano",
+      "titel": "piano",
+      "zitat": "Welsh [B1] p. 76, patch Piano, table transcribed. Envelope logic: Cann [B4] p. 19",
+      "machbarkeit_karte": "baubar mit Näherung (a synthesized piano is recognisable at best; without a sample library the attack transients and the unison-string beating are missing).",
+      "status": "approximated",
+      "beschreibung": {
+        "art": "keys",
+        "unterart": "piano",
+        "charakter": [
+          "bright",
+          "warm",
+          "punchy",
+          "thin",
+          "boxy"
+        ],
+        "einsatz": [
+          "breakdown",
+          "groove"
+        ],
+        "energie": 3,
+        "text": "Synth piano: saw and synced pulse whose filter brightness decays with the note, velocity sets the touch, short room."
+      },
+      "stimmen": 8,
+      "regler": {
+        "1": "Cutoff",
+        "2": "Env amount",
+        "3": "Decay",
+        "4": "Room mix"
+      },
+      "naeherung": [
+        "Welsh Piano: saw 75 % plus a 15 % pulse at +1 oct +2 st hard-synced to the saw, ladder 40 Hz with env 75 % (90 st) and D 5.22 s.",
+        "Velocity scales the filter envelope (the card's touch). The EQ cut at 200-400 Hz is not built (no bell EQ block).",
+        "A synthesized piano: no hammer transient and no string beating, as the card says; a physical string model would add them."
+      ],
+      "exakt_mit": "physical string (Karplus-Strong or waveguide, pitch-tracked)",
+      "besser_mit": [],
+      "probe": {
+        "art": "akkord",
+        "noten": [
+          57,
+          61,
+          64,
+          69
+        ]
+      }
+    },
+    {
+      "datei": "keys-electric-piano.json",
+      "karte": "keys.electric_piano",
+      "titel": "electric piano",
+      "zitat": "Welsh [B1] p. 74, patch Electric Piano, table transcribed.",
+      "machbarkeit_karte": "baubar mit Näherung (sync-free kits lose the tine: substitute FM, carrier + modulator at 3:1 with fast mod-envelope decay).",
+      "status": "exact",
+      "beschreibung": {
+        "art": "keys",
+        "unterart": "electric_piano",
+        "charakter": [
+          "warm",
+          "bright",
+          "soft",
+          "smooth",
+          "metallic",
+          "wide"
+        ],
+        "einsatz": [
+          "breakdown",
+          "groove"
+        ],
+        "energie": 2,
+        "text": "Electric piano: saw and synced thin pulse for the tine, velocity bark, long decay to silence, chorus, phaser, room."
+      },
+      "stimmen": 8,
+      "regler": {
+        "1": "Cutoff",
+        "2": "Env amount",
+        "3": "Decay",
+        "4": "Room mix"
+      },
+      "naeherung": [
+        "Welsh Electric Piano: saw plus a 5 % pulse at +2 oct +9 st, synced (the kit has sync, so the card's FM substitute is not needed).",
+        "Ladder 630 Hz, env 50 % (60 st) with D 0.33 s, scaled by velocity (the bark); amp D 5.14 s to silence.",
+        "A tine model (FM operators or a modal resonator) would give a truer bell attack."
+      ],
+      "exakt_mit": null,
+      "besser_mit": [
+        "FM operators (several operators with ratios, per-operator envelopes and calibrated levels)",
+        "modal resonator (bank of tuned resonant modes)"
+      ],
+      "probe": {
+        "art": "akkord",
+        "noten": [
+          57,
+          61,
+          64,
+          69
+        ]
+      }
+    },
+    {
+      "datei": "keys-organ.json",
+      "karte": "keys.organ",
+      "titel": "organ",
+      "zitat": "Welsh [B1] p. 75, patch Organ, table transcribed.",
+      "machbarkeit_karte": "baubar (triangles = 8' and 16'; drawbar partials need one voice per partial, 4 partials × 4 notes = 16 voices, so polyphony is the limit).",
+      "status": "exact",
+      "beschreibung": {
+        "art": "keys",
+        "unterart": "organ",
+        "charakter": [
+          "warm",
+          "bright",
+          "thick",
+          "smooth",
+          "clean"
+        ],
+        "einsatz": [
+          "groove",
+          "breakdown"
+        ],
+        "energie": 3,
+        "text": "Two-triangle organ: 8' and 16' with a slow click-free attack, rotary-style chorus and tremolo, tube warmth, short room."
+      },
+      "stimmen": 8,
+      "regler": {
+        "1": "Attack",
+        "2": "Release",
+        "3": "Rotary",
+        "4": "Drive",
+        "5": "Room mix"
+      },
+      "naeherung": [
+        "Welsh Organ: triangles at 0 and -2 oct, no filter, A 0.6 s, R 0.4 s, no velocity.",
+        "Rotary = chorus plus a 6.5 Hz tremolo (depth 20 % at the knob midpoint); the drawbar variant could use the `orgel` wavetable instead."
+      ],
+      "exakt_mit": null,
+      "besser_mit": [],
+      "probe": {
+        "art": "akkord",
+        "noten": [
+          57,
+          61,
+          64,
+          69
+        ]
+      }
+    },
+    {
+      "datei": "keys-mallet.json",
+      "karte": "keys.mallet",
+      "titel": "mallet (glockenspiel / marimba)",
+      "zitat": "Welsh [B1] pp. 82–83, patches Glockenspiel and Marimba, tables transcribed.",
+      "machbarkeit_karte": "baubar (two triangles, short decay, LFO tremolo).",
+      "status": "exact",
+      "beschreibung": {
+        "art": "keys",
+        "unterart": "mallet",
+        "charakter": [
+          "bright",
+          "metallic",
+          "clean",
+          "punchy",
+          "thin",
+          "smooth"
+        ],
+        "einsatz": [
+          "melody",
+          "breakdown"
+        ],
+        "energie": 2,
+        "text": "Glockenspiel: two triangles at an inharmonic +2 oct +6 st, a bright filter tick, 1.2 s decay, plate and a soft 16th delay."
+      },
+      "stimmen": 8,
+      "regler": {
+        "1": "Cutoff",
+        "2": "Env amount",
+        "3": "Decay",
+        "4": "Hall mix",
+        "5": "Delay mix"
+      },
+      "naeherung": [
+        "Glockenspiel [B1] p. 82: triangles at 0 and +2 oct +6 st, ladder 3.8 kHz with env 75 % (90 st) D 0.1 s, amp D 1.2 / R 1.2 s, no sustain.",
+        "Room/plate 1.1 s, then high-pass 200 Hz, then a low 1/16 delay, as on the card."
+      ],
+      "exakt_mit": null,
+      "besser_mit": [
+        "modal resonator (bank of tuned resonant modes)"
+      ],
+      "probe": {
+        "art": "akkord",
+        "noten": [
+          57,
+          61,
+          64,
+          69
+        ]
+      }
+    },
+    {
+      "datei": "keys-chord.json",
+      "karte": "keys.chord",
+      "titel": "chord / stacked keys",
+      "zitat": "Welsh [B1] p. 94, patch Trance 5th, table transcribed; interval logic: Cann [B4] p. 55",
+      "machbarkeit_karte": "baubar (2 voices per key, unison doubles it again → ~4 keys within 16 voices).",
+      "status": "approximated",
+      "beschreibung": {
+        "art": "keys",
+        "unterart": "chord",
+        "charakter": [
+          "bright",
+          "wide",
+          "thick",
+          "punchy",
+          "aggressive"
+        ],
+        "einsatz": [
+          "build",
+          "drop"
+        ],
+        "energie": 4,
+        "text": "Stacked fifth chord: two PWM squares a fifth apart with unison, hard gate envelope, chorus, eighth delay and short hall."
+      },
+      "stimmen": 8,
+      "regler": {
+        "1": "PWM depth",
+        "2": "Detune",
+        "3": "Release",
+        "4": "Delay mix",
+        "5": "Hall mix"
+      },
+      "naeherung": [
+        "Trance 5th: squares on the root and +7 st, each a wavetable `rechteck` with 2 unison copies (+-10 cent); open filter, hard gated R.",
+        "PWM 6 Hz / 80 %: the wavetable position swings the width 50 % -> 14 % and back (same spectrum as +-36 % around 50 %).",
+        "The kick sidechain on the compressor is a plain compressor (no key in a patch)."
+      ],
+      "exakt_mit": null,
+      "besser_mit": [],
+      "probe": {
+        "art": "akkord",
+        "noten": [
+          57,
+          61,
+          64,
+          69
+        ]
+      }
+    },
+    {
+      "datei": "keys-bell.json",
+      "karte": "keys.bell",
+      "titel": "bell",
+      "zitat": "Cann [B4] p. 135, patch Another Bell",
+      "machbarkeit_karte": "baubar mit Näherung (one FM pair reproduces the 1:7 ring, not four carriers with individual decay and detune).",
+      "status": "approximated",
+      "beschreibung": {
+        "art": "keys",
+        "unterart": "bell",
+        "charakter": [
+          "metallic",
+          "bright",
+          "thin",
+          "airy",
+          "harsh",
+          "smooth"
+        ],
+        "einsatz": [
+          "breakdown",
+          "intro"
+        ],
+        "energie": 2,
+        "text": "FM bell: four sine carriers, three rung by one 1:7 modulator that dies in a second, detuned for beating, long ring."
+      },
+      "stimmen": 8,
+      "regler": {
+        "1": "Index",
+        "2": "Decay",
+        "3": "Hall mix",
+        "4": "Delay mix"
+      },
+      "naeherung": [
+        "Cann Another Bell: one modulator at 7x (C:M 1:7, decay 1 s) on three of four sine carriers (amounts 47 / 74 / 100 %), carriers at 0, -32 and +16 cent.",
+        "Carrier decays 7 s, the third carrier 1.2 s ('just over 1 s'); velocity scales carrier and modulator levels.",
+        "The index scale (2.5 at amount 100 %) is my choice: Cann's synth defines its own level curve, which a calibrated FM operator block would reproduce."
+      ],
+      "exakt_mit": "FM operators (several operators with ratios, per-operator envelopes and calibrated levels)",
+      "besser_mit": [
+        "modal resonator (bank of tuned resonant modes)"
+      ],
+      "probe": {
+        "art": "akkord",
+        "noten": [
+          57,
+          61,
+          64,
+          69
+        ]
+      }
+    },
+    {
+      "datei": "pluck-synth.json",
+      "karte": "pluck.synth",
+      "titel": "synth pluck",
+      "zitat": "Cann [B4] p. 217, patch Thin",
+      "machbarkeit_karte": "baubar (SVF in band-pass mode + short envelope + velocity routing).",
+      "status": "exact",
+      "beschreibung": {
+        "art": "pluck",
+        "unterart": "synth",
+        "charakter": [
+          "thin",
+          "bright",
+          "punchy",
+          "tight",
+          "nasal"
+        ],
+        "einsatz": [
+          "groove",
+          "build"
+        ],
+        "energie": 4,
+        "text": "Thin synth pluck: a combed pulse through a resonant 2 kHz band-pass with a fast envelope, velocity on the cutoff, gated verb."
+      },
+      "stimmen": 8,
+      "regler": {
+        "1": "Cutoff",
+        "2": "Resonance",
+        "3": "Velocity amount",
+        "4": "Decay",
+        "5": "Hall mix",
+        "6": "Delay mix"
+      },
+      "naeherung": [
+        "Cann 'Thin': a pulse of width 1/3 (every third harmonic missing, a comb-like spectrum) into a 12 dB band-pass at 2 kHz, resonance 32 %.",
+        "Filter env D 91 ms, S 7/127, R 142 ms, amount 58/127 of 48 st (22 st); velocity -> cutoff 100 % is 24 st per unit velocity below full.",
+        "'8-tap/gated reverb' is the hall followed by a gate."
+      ],
+      "exakt_mit": null,
+      "besser_mit": [],
+      "probe": {
+        "art": "akkord",
+        "noten": [
+          57,
+          61,
+          64,
+          69
+        ]
+      }
+    },
+    {
+      "datei": "pluck-mallet.json",
+      "karte": "pluck.mallet",
+      "titel": "mallet pluck (xylophone / marimba)",
+      "zitat": "Welsh [B1] pp. 83–84, patches Marimba and Xylophone, tables transcribed.",
+      "machbarkeit_karte": "baubar (triangles + short decay + tremolo; the wooden attack transient is a near-miss without samples).",
+      "status": "exact",
+      "beschreibung": {
+        "art": "pluck",
+        "unterart": "mallet",
+        "charakter": [
+          "bright",
+          "punchy",
+          "clean",
+          "thin",
+          "metallic",
+          "smooth"
+        ],
+        "einsatz": [
+          "melody",
+          "groove"
+        ],
+        "energie": 3,
+        "text": "Wooden xylophone: two triangles at +1 oct +10 st, a filter envelope for the strike, 1.9 s decay with light tremolo."
+      },
+      "stimmen": 8,
+      "regler": {
+        "1": "Cutoff",
+        "2": "Env amount",
+        "3": "Decay",
+        "4": "Tremolo",
+        "5": "Room mix",
+        "6": "Delay mix"
+      },
+      "naeherung": [
+        "Xylophone [B1] p. 84: triangles at 0 and +1 oct +10 st, ladder 300 Hz with env 60 % (72 st) and D 0.53 s, amp D 1.88 / R 1.78 s.",
+        "Tremolo 7.5 Hz, depth 5 % (bar ringing)."
+      ],
+      "exakt_mit": null,
+      "besser_mit": [
+        "modal resonator (bank of tuned resonant modes)"
+      ],
+      "probe": {
+        "art": "akkord",
+        "noten": [
+          57,
+          61,
+          64,
+          69
+        ]
+      }
+    },
+    {
+      "datei": "pluck-string.json",
+      "karte": "pluck.string",
+      "titel": "plucked string (guitar / harp)",
+      "zitat": "Welsh [B1] p. 55, patch Guitar Acoustic, table transcribed; harp variant p. 56.",
+      "machbarkeit_karte": "baubar mit Näherung (sync-free kit: replace the sync transient with a 3–8 ms noise burst + a fast filter-envelope; a Karplus-Strong resonator needs delay time = 1/f, which the kit's delay can do but not pitch-tracked).",
+      "status": "exact",
+      "beschreibung": {
+        "art": "pluck",
+        "unterart": "string",
+        "charakter": [
+          "bright",
+          "thin",
+          "punchy",
+          "metallic",
+          "smooth"
+        ],
+        "einsatz": [
+          "melody",
+          "groove"
+        ],
+        "energie": 3,
+        "text": "Plucked string: synced pulse pair with a noise pick and a falling filter, 1.7 s decay, light chorus and room."
+      },
+      "stimmen": 8,
+      "regler": {
+        "1": "Cutoff",
+        "2": "Env amount",
+        "3": "Decay",
+        "4": "Pick noise",
+        "5": "Room mix"
+      },
+      "naeherung": [
+        "Guitar Acoustic [B1] p. 55: 25 % pulse master and a 10 % pulse at +10 st synced to it (the kit has sync), ladder 3.1 kHz, env 70 %.",
+        "The pick: a 5 ms noise burst (the card's 'very short noise burst'); amp D 1.7 / R 1.7 s.",
+        "The bell EQ cut at 300-500 Hz is not built. A physical string (Karplus-Strong) block would make the string itself."
+      ],
+      "exakt_mit": null,
+      "besser_mit": [
+        "physical string (Karplus-Strong or waveguide, pitch-tracked)"
+      ],
+      "probe": {
+        "art": "akkord",
+        "noten": [
+          57,
+          61,
+          64,
+          69
+        ]
+      }
+    },
+    {
+      "datei": "pluck-stab.json",
+      "karte": "pluck.stab",
+      "titel": "stab",
+      "zitat": "Cann [B4] p. 44, patches Bass + Stab and Gentle Stab",
+      "machbarkeit_karte": "baubar (2 oscillators, ladder, ADSR×2 if the kit's filter accepts two mod sources; otherwise resonance is set statically, Näherung).",
+      "status": "approximated",
+      "beschreibung": {
+        "art": "pluck",
+        "unterart": "stab",
+        "charakter": [
+          "punchy",
+          "bright",
+          "tight",
+          "thin",
+          "aggressive"
+        ],
+        "einsatz": [
+          "drop",
+          "build"
+        ],
+        "energie": 4,
+        "text": "House stab: two detuned saws with a snappy filter, velocity brightness, resonance blip on the attack, short room."
+      },
+      "stimmen": 8,
+      "regler": {
+        "1": "Cutoff",
+        "2": "Env amount",
+        "3": "Velocity amount",
+        "4": "Decay",
+        "5": "Room mix",
+        "6": "Delay mix"
+      },
+      "naeherung": [
+        "Velocity -> cutoff (24 st per unit below full velocity) and a second envelope on the resonance (+0.5, D 80 ms) as on the card.",
+        "Key scaling is linear in Hz (the kit has no logarithm block): -0.03 st per Hz above C4, so upper octaves are cut away.",
+        "The kick sidechain is left out (no key in a patch)."
+      ],
+      "exakt_mit": null,
+      "besser_mit": [],
+      "probe": {
+        "art": "akkord",
+        "noten": [
+          57,
+          61,
+          64,
+          69
+        ]
+      }
+    },
+    {
+      "datei": "drums-kick.json",
+      "karte": "drums.kick",
+      "titel": "kick",
+      "zitat": "Snoman [B3] p. 440–441",
+      "machbarkeit_karte": "baubar (sine-FM carrier at index 0, pitch envelope, fast amp decay, saturation, compressor).",
+      "status": "exact",
+      "beschreibung": {
+        "art": "drums",
+        "unterart": "kick",
+        "charakter": [
+          "punchy",
+          "tight",
+          "deep",
+          "sub",
+          "clean",
+          "boomy"
+        ],
+        "einsatz": [
+          "drop",
+          "groove"
+        ],
+        "energie": 5,
+        "text": "Punchy kick: a sine with a fast exponential pitch drop, short body, noise click, saturation and compression."
+      },
+      "stimmen": 1,
+      "regler": {
+        "1": "Tune",
+        "2": "Pitch drop",
+        "3": "Decay",
+        "4": "Click",
+        "5": "Drive",
+        "6": "Room mix"
+      },
+      "naeherung": [
+        "Drum pitch is fixed (tune knob, F2 87 Hz at the midpoint), not the played note. Pitch envelope: +24 st falling exponentially (D 50 ms).",
+        "Amp A 0 / D 0.12 / S 0 / R 0.12 s (Welsh); a 4 ms noise click; saturation, compressor 4:1 with 10 ms attack, room with 90 ms pre-delay.",
+        "The card's multiband EQ is not built (no EQ block)."
+      ],
+      "exakt_mit": null,
+      "besser_mit": [],
+      "probe": {
+        "art": "note",
+        "noten": [
+          60
+        ]
+      }
+    },
+    {
+      "datei": "drums-snare.json",
+      "karte": "drums.snare",
+      "titel": "snare",
+      "zitat": "Welsh [B1] p. 89, patch Snare Drum, table transcribed; layering practice: Snoman [B3] p. 441",
+      "machbarkeit_karte": "baubar (triangle + noise + filter + short envelopes).",
+      "status": "exact",
+      "beschreibung": {
+        "art": "drums",
+        "unterart": "snare",
+        "charakter": [
+          "punchy",
+          "bright",
+          "tight",
+          "harsh",
+          "thick"
+        ],
+        "einsatz": [
+          "drop",
+          "groove"
+        ],
+        "energie": 5,
+        "text": "Snare: noise-dominated rattle with a short triangle body and a small pitch drop, light saturation, room and compressor."
+      },
+      "stimmen": 1,
+      "regler": {
+        "1": "Tune",
+        "2": "Snares",
+        "3": "Decay",
+        "4": "Noise decay",
+        "5": "Room mix"
+      },
+      "naeherung": [
+        "Welsh Snare: triangle body (fixed 180 Hz, tune knob) at a fifth of the noise level, noise dominates; body D 0.27 s, noise D 0.12 s.",
+        "Body pitch drops 3 st over about 30 ms (the card's derived drum-machine fix). The EQ cut at 200-400 Hz is not built."
+      ],
+      "exakt_mit": null,
+      "besser_mit": [],
+      "probe": {
+        "art": "note",
+        "noten": [
+          60
+        ]
+      }
+    },
+    {
+      "datei": "drums-clap.json",
+      "karte": "drums.clap",
+      "titel": "clap",
+      "zitat": "Welsh [B1] p. 86, patch Clap",
+      "machbarkeit_karte": "baubar (noise + band-limited filter + retriggered square LFO on amplitude).",
+      "status": "exact",
+      "beschreibung": {
+        "art": "drums",
+        "unterart": "clap",
+        "charakter": [
+          "bright",
+          "harsh",
+          "punchy",
+          "thin",
+          "wide"
+        ],
+        "einsatz": [
+          "drop",
+          "groove"
+        ],
+        "energie": 4,
+        "text": "Analog clap: filtered noise chopped by a retriggered 32 Hz square, short decay, high-passed plate."
+      },
+      "stimmen": 1,
+      "regler": {
+        "1": "Cutoff",
+        "2": "Env amount",
+        "3": "Clap depth",
+        "4": "Decay",
+        "5": "Hall mix"
+      },
+      "naeherung": [
+        "Welsh Clap: noise into the 12 dB filter the card prefers, 1.1 kHz, resonance 30 %, env 50 % (60 st) with D 0.15 s.",
+        "32 Hz square LFO on the amplitude, depth 45 %, retriggered by every hit (`neustart`), which makes the multi-hand clap."
+      ],
+      "exakt_mit": null,
+      "besser_mit": [],
+      "probe": {
+        "art": "note",
+        "noten": [
+          60
+        ]
+      }
+    },
+    {
+      "datei": "drums-hihat.json",
+      "karte": "drums.hihat",
+      "titel": "hi-hat",
+      "zitat": "Welsh [B1] p. 88, patch Cymbal note",
+      "machbarkeit_karte": "baubar mit Näherung (six pulses + three SVF band-passes is 6 voices per hit; with 16 voices that is two simultaneous hits. The noise+high-pass fallback is cheaper but sounds like a sample-less 808).",
+      "status": "exact",
+      "beschreibung": {
+        "art": "drums",
+        "unterart": "hihat",
+        "charakter": [
+          "bright",
+          "metallic",
+          "thin",
+          "harsh",
+          "tight"
+        ],
+        "einsatz": [
+          "groove",
+          "drop"
+        ],
+        "energie": 4,
+        "text": "Closed hi-hat: six inharmonic squares through three band-passes with their own short envelopes, high-passed, gated, small room."
+      },
+      "stimmen": 1,
+      "regler": {
+        "1": "Tune",
+        "2": "Decay",
+        "3": "High-pass",
+        "4": "Room mix"
+      },
+      "naeherung": [
+        "The metallic method: six squares at the TR-808 frequencies (205.3, 304.4, 369.6, 522.7, 540, 800 Hz; engineering values, the card gives the architecture).",
+        "Three band-passes at 3 / 6 / 10 kHz, each with its own envelope (decays 1, 0.8, 0.6 x the knob, 60 ms at the midpoint), then a high-pass.",
+        "Six oscillators are nodes inside one voice, so a hit costs one voice, not six. The gate after the EQ trims the tail."
+      ],
+      "exakt_mit": null,
+      "besser_mit": [
+        "metallic oscillator bank (many inharmonic square or pulse partials)"
+      ],
+      "probe": {
+        "art": "note",
+        "noten": [
+          60
+        ]
+      }
+    },
+    {
+      "datei": "drums-cymbal.json",
+      "karte": "drums.cymbal",
+      "titel": "cymbal",
+      "zitat": "Welsh [B1] p. 88, patch Cymbal, table transcribed; the author's own note calls it the least realistic patch in the book.",
+      "machbarkeit_karte": "baubar mit Näherung (noise + resonant high-pass + distortion reads as a cymbal in a mix; a believable ride or crash needs samples, the source itself calls it the least realistic patch in the book).",
+      "status": "approximated",
+      "beschreibung": {
+        "art": "drums",
+        "unterart": "cymbal",
+        "charakter": [
+          "bright",
+          "metallic",
+          "harsh",
+          "airy",
+          "thin"
+        ],
+        "einsatz": [
+          "build",
+          "drop"
+        ],
+        "energie": 4,
+        "text": "Crash-like cymbal: noise and a six-square metal layer, resonant filter, high-pass, distortion and a long hall."
+      },
+      "stimmen": 1,
+      "regler": {
+        "1": "Cutoff",
+        "2": "Decay",
+        "3": "Metal",
+        "4": "Drive",
+        "5": "Hall mix"
+      },
+      "naeherung": [
+        "Welsh Cymbal: noise into a 24 dB ladder, cutoff 89 % = 9.0 kHz (the card's '904 Hz' is the OCR'd 9.04 kHz), resonance 50 %, env 70 %.",
+        "A six-square metallic layer is mixed with the noise (knob 3), the card's alternative; then high-pass 400 Hz, distortion and a 3 s hall.",
+        "As the card says, a believable ride or crash needs samples or a dense metallic oscillator bank."
+      ],
+      "exakt_mit": "metallic oscillator bank (many inharmonic square or pulse partials)",
+      "besser_mit": [],
+      "probe": {
+        "art": "note",
+        "noten": [
+          60
+        ]
+      }
+    },
+    {
+      "datei": "percussion-tom.json",
+      "karte": "percussion.tom",
+      "titel": "tom",
+      "zitat": "Welsh [B1] p. 83, patch Timpani, table transcribed; the tom/timpani distinction: Reid [B2] part 31",
+      "machbarkeit_karte": "baubar.",
+      "status": "exact",
+      "beschreibung": {
+        "art": "percussion",
+        "unterart": "tom",
+        "charakter": [
+          "deep",
+          "punchy",
+          "thick",
+          "boomy"
+        ],
+        "einsatz": [
+          "groove",
+          "build"
+        ],
+        "energie": 4,
+        "text": "Analog tom: two squares a minor seventh apart with a quick pitch drop, resonant filter thump and a short room."
+      },
+      "stimmen": 1,
+      "regler": {
+        "1": "Tune",
+        "2": "Pitch drop",
+        "3": "Decay",
+        "4": "Env amount",
+        "5": "Room mix"
+      },
+      "naeherung": [
+        "Timpani [B1] p. 83 turned into a tom: squares at the tune pitch and -10 st, ladder 800 Hz / 45 % with env 35 % (42 st) D 0.35 s.",
+        "Amp D 0.6 s at the midpoint (rack tom; the card's range 0.4-0.8 s), pitch drop 5 st with a 0.1 s exponential envelope (90 % in ~33 ms)."
+      ],
+      "exakt_mit": null,
+      "besser_mit": [
+        "modal resonator (bank of tuned resonant modes)"
+      ],
+      "probe": {
+        "art": "note",
+        "noten": [
+          60
+        ]
+      }
+    },
+    {
+      "datei": "percussion-shaker.json",
+      "karte": "percussion.shaker",
+      "titel": "shaker",
+      "zitat": "Welsh [B1] p. 85, patch Castanets, table transcribed (derived for shaker, same noise-plus-resonance structure, 40 ms decay). Role in the arrangement: Snoman [B3] p. 427",
+      "machbarkeit_karte": "baubar (noise + resonant low-pass + 40 ms envelope).",
+      "status": "exact",
+      "beschreibung": {
+        "art": "percussion",
+        "unterart": "shaker",
+        "charakter": [
+          "bright",
+          "thin",
+          "tight",
+          "harsh",
+          "airy"
+        ],
+        "einsatz": [
+          "groove"
+        ],
+        "energie": 3,
+        "text": "Shaker: a 40 ms grain of noise ringing a resonant 7.6 kHz filter, high-passed, velocity-sensitive, tiny room."
+      },
+      "stimmen": 1,
+      "regler": {
+        "1": "Cutoff",
+        "2": "Decay",
+        "3": "Room mix"
+      },
+      "naeherung": [
+        "Castanets [B1] p. 85 retuned (the card's derivation): noise into a ladder at 7.6 kHz with resonance 100 %, a 40 ms grain.",
+        "Velocity scales the level, so alternating velocities give the shaker pattern."
+      ],
+      "exakt_mit": null,
+      "besser_mit": [],
+      "probe": {
+        "art": "note",
+        "noten": [
+          60
+        ]
+      }
+    },
+    {
+      "datei": "percussion-conga.json",
+      "karte": "percussion.conga",
+      "titel": "conga",
+      "zitat": "Welsh [B1] p. 82, patch Conga, table transcribed; single-membrane acoustics: Reid [B2] part 31",
+      "machbarkeit_karte": "baubar.",
+      "status": "exact",
+      "beschreibung": {
+        "art": "percussion",
+        "unterart": "conga",
+        "charakter": [
+          "punchy",
+          "warm",
+          "tight",
+          "boxy"
+        ],
+        "einsatz": [
+          "groove"
+        ],
+        "energie": 3,
+        "text": "Conga: two squares a ninth apart with a quick filter slap and a 150 ms decay, short room and compressor."
+      },
+      "stimmen": 1,
+      "regler": {
+        "1": "Tune",
+        "2": "Cutoff",
+        "3": "Decay",
+        "4": "Room mix"
+      },
+      "naeherung": [
+        "Welsh Conga: squares at the tune pitch and +1 oct +2 st (the second at 0.47 = -6.5 dB), ladder 300 Hz / 40 %, env 50 % (60 st) D 0.02 s S 80 %.",
+        "Amp D 0.15 s, mono. The EQ boost and cut are not built."
+      ],
+      "exakt_mit": null,
+      "besser_mit": [
+        "modal resonator (bank of tuned resonant modes)"
+      ],
+      "probe": {
+        "art": "note",
+        "noten": [
+          60
+        ]
+      }
+    },
+    {
+      "datei": "percussion-rim.json",
+      "karte": "percussion.rim",
+      "titel": "rim / side stick",
+      "zitat": "Welsh [B1] p. 88, patch Side Stick, table transcribed; architecture: Reid [B2] part 41",
+      "machbarkeit_karte": "baubar.",
+      "status": "exact",
+      "beschreibung": {
+        "art": "percussion",
+        "unterart": "rim",
+        "charakter": [
+          "thin",
+          "bright",
+          "tight",
+          "nasal",
+          "metallic"
+        ],
+        "einsatz": [
+          "groove"
+        ],
+        "energie": 3,
+        "text": "Rim shot: a 90 ms click of noise ringing a self-oscillating 2.7 kHz filter, very short room."
+      },
+      "stimmen": 1,
+      "regler": {
+        "1": "Cutoff",
+        "2": "Env amount",
+        "3": "Decay",
+        "4": "Room mix"
+      },
+      "naeherung": [
+        "Welsh Side Stick: noise into a self-oscillating ladder at 2.7 kHz (resonance 100 %), env 85 % (102 st) D 1.19 s, amp D 90 ms.",
+        "The resonant filter is the card's band-pass; very short room after it.",
+        "Measured: with the transcribed env 85 % and filter D 1.19 s the cutoff stays near the top of its range for the whole 90 ms click, so the ring sits near 11 kHz, not at 2.7 kHz. A shorter filter decay (0.19 s?) would bring it to 2.7 kHz; the OCR'd table cannot settle it."
+      ],
+      "exakt_mit": null,
+      "besser_mit": [],
+      "probe": {
+        "art": "note",
+        "noten": [
+          60
+        ]
+      }
+    },
+    {
+      "datei": "percussion-metallic.json",
+      "karte": "percussion.metallic",
+      "titel": "metallic percussion (cowbell / claves / agogô)",
+      "zitat": "Welsh [B1] p. 87, patches Cowbell and “[quote omitted]”, tables transcribed. Frequency cross-check: Reid [B2] part 41",
+      "machbarkeit_karte": "baubar (two pulses, filter, 150 ms decay).",
+      "status": "exact",
+      "beschreibung": {
+        "art": "percussion",
+        "unterart": "metallic",
+        "charakter": [
+          "metallic",
+          "bright",
+          "harsh",
+          "thin",
+          "nasal"
+        ],
+        "einsatz": [
+          "groove"
+        ],
+        "energie": 3,
+        "text": "Analog cowbell: two narrow pulses at 587 and 845 Hz, a bright filter snap, 150 ms decay and a short room."
+      },
+      "stimmen": 1,
+      "regler": {
+        "1": "Tune",
+        "2": "Decay",
+        "3": "Room mix",
+        "4": "Drive"
+      },
+      "naeherung": [
+        "Cowbell: pulses of 10 % and 35 % at the CR-8000's measured 587 and 845 Hz (the card's frequency cross-check) instead of Welsh's +5 st.",
+        "Ladder 8.1 kHz, env 65 % (78 st) D 0.02 s S 65 %, amp D 0.15 s; high-pass 500 Hz, short room, optional saturation."
+      ],
+      "exakt_mit": null,
+      "besser_mit": [
+        "metallic oscillator bank (many inharmonic square or pulse partials)"
+      ],
+      "probe": {
+        "art": "note",
+        "noten": [
+          60
+        ]
+      }
+    },
+    {
+      "datei": "fx-riser.json",
+      "karte": "fx.riser",
+      "titel": "riser",
+      "zitat": "Snoman [B3] p. 301",
+      "machbarkeit_karte": "baubar (noise + SVF band-pass + mod envelope + hall; the wet automation must come from the well, not the synth).",
+      "status": "exact",
+      "beschreibung": {
+        "art": "fx",
+        "unterart": "riser",
+        "charakter": [
+          "bright",
+          "airy",
+          "wide",
+          "wet",
+          "evolving",
+          "aggressive"
+        ],
+        "einsatz": [
+          "build"
+        ],
+        "energie": 4,
+        "text": "Noise riser: white noise through a band-pass that sweeps up over four seconds into a long hall."
+      },
+      "stimmen": 1,
+      "regler": {
+        "1": "Cutoff",
+        "2": "Rise time",
+        "3": "Env amount",
+        "4": "Hall mix"
+      },
+      "naeherung": [
+        "Noise into a 12 dB band-pass a quarter open (300 Hz, resonance 25 %); a mod envelope with a 4 s attack (knob), no decay or sustain, opens it 60 st.",
+        "Amp: immediate attack, full sustain, 1.5 s release. The upward wet automation comes from the host, as the card says (the hall mix is a knob)."
+      ],
+      "exakt_mit": null,
+      "besser_mit": [],
+      "probe": {
+        "art": "note",
+        "noten": [
+          60
+        ],
+        "sekunden": 4.0
+      }
+    },
+    {
+      "datei": "fx-downlifter.json",
+      "karte": "fx.downlifter",
+      "titel": "downlifter / fall",
+      "zitat": "Snoman [B3] p. 301",
+      "machbarkeit_karte": "baubar (same patch as the riser with the envelope inverted; the kit's LFO/mod matrix needs negative amounts).",
+      "status": "exact",
+      "beschreibung": {
+        "art": "fx",
+        "unterart": "downlifter",
+        "charakter": [
+          "dark",
+          "wet",
+          "evolving",
+          "soft",
+          "deep"
+        ],
+        "einsatz": [
+          "breakdown",
+          "outro"
+        ],
+        "energie": 2,
+        "text": "Noise downlifter: a band-passed noise wash that falls from bright to dark over four seconds into hall and delay."
+      },
+      "stimmen": 1,
+      "regler": {
+        "1": "Cutoff",
+        "2": "Fall time",
+        "3": "Env amount",
+        "4": "Hall mix",
+        "5": "Delay mix"
+      },
+      "naeherung": [
+        "The riser inverted: the band-pass starts three quarters open (3.6 kHz) and the same slow envelope pulls it down 48 st (negative amount).",
+        "Hall (long) then a 1/4 delay; the downward wet automation comes from the host."
+      ],
+      "exakt_mit": null,
+      "besser_mit": [],
+      "probe": {
+        "art": "note",
+        "noten": [
+          60
+        ],
+        "sekunden": 4.0
+      }
+    },
+    {
+      "datei": "fx-impact.json",
+      "karte": "fx.impact",
+      "titel": "impact / boom",
+      "zitat": "derived, the source set has no impact patch. Building blocks: Snoman [B3] p. 299 (“[quote omitted]”) names the category; the pitch-fall method is the one given for the kick (p. 441) and the pitched riser (p. 302); the body is Welsh's Bass Drum [B1] p. 85.",
+      "machbarkeit_karte": "baubar (sine + pitch envelope + heavy saturation + long hall).",
+      "status": "approximated",
+      "beschreibung": {
+        "art": "fx",
+        "unterart": "impact",
+        "charakter": [
+          "deep",
+          "punchy",
+          "heavy",
+          "sub",
+          "dark",
+          "aggressive"
+        ],
+        "einsatz": [
+          "drop",
+          "transition"
+        ],
+        "energie": 5,
+        "text": "Cinematic impact: a sine boom falling an octave and a half, noise debris, heavy saturation and a long hall."
+      },
+      "stimmen": 1,
+      "regler": {
+        "1": "Tune",
+        "2": "Pitch drop",
+        "3": "Decay",
+        "4": "Debris",
+        "5": "Drive",
+        "6": "Hall mix"
+      },
+      "naeherung": [
+        "Sine body (60 Hz, tune knob) with a pitch fall of 18 st over ~200 ms (exponential, D 0.2 s), body D 1.2 s; noise debris band-passed at 1 kHz, D 0.12 s.",
+        "Heavy saturation, hall (6 s, 45 ms pre-delay), limiter. The reversed crash layer needs a sample and is left out; the EQ is not built.",
+        "The slow LFO on the reverb wet is left out: the hall mix must stay on a knob (convention)."
+      ],
+      "exakt_mit": null,
+      "besser_mit": [],
+      "probe": {
+        "art": "note",
+        "noten": [
+          60
+        ],
+        "sekunden": 3.0
+      }
+    },
+    {
+      "datei": "fx-noise.json",
+      "karte": "fx.noise",
+      "titel": "noise / wind / ocean",
+      "zitat": "Welsh [B1] p. 108, patch Ocean Waves, table transcribed.",
+      "machbarkeit_karte": "baubar (noise + slow LFO on amplitude + hall).",
+      "status": "exact",
+      "beschreibung": {
+        "art": "fx",
+        "unterart": "noise",
+        "charakter": [
+          "airy",
+          "wide",
+          "soft",
+          "wet",
+          "smooth",
+          "evolving"
+        ],
+        "einsatz": [
+          "intro",
+          "breakdown"
+        ],
+        "energie": 1,
+        "text": "Ocean wind: filtered noise swelling slowly at 0.2 Hz, long hall, high- and low-passed."
+      },
+      "stimmen": 8,
+      "regler": {
+        "1": "Cutoff",
+        "2": "Swell depth",
+        "3": "Swell rate",
+        "4": "Attack",
+        "5": "Hall mix"
+      },
+      "naeherung": [
+        "Ocean Waves [B1] p. 108: noise into a 24 dB ladder at 4.3 kHz, resonance 30 %, amp A 0.4 / R 1.0 s.",
+        "LFO triangle 0.2 Hz, depth 75 % on the amplitude (the level swings between 25 % and 100 %). The optional chorus and the foghorn saw are left out."
+      ],
+      "exakt_mit": null,
+      "besser_mit": [],
+      "probe": {
+        "art": "akkord",
+        "noten": [
+          57,
+          61,
+          64,
+          69
+        ],
+        "sekunden": 6.0
+      }
+    },
+    {
+      "datei": "fx-texture.json",
+      "karte": "fx.texture",
+      "titel": "texture / machine bed",
+      "zitat": "Welsh [B1] p. 108, patch Nerd-O-Tron 2000, table transcribed.",
+      "machbarkeit_karte": "baubar (saw + square + resonant filter + noise-shaped LFO; random LFO is the one thing to check in the kit's LFO list).",
+      "status": "exact",
+      "beschreibung": {
+        "art": "fx",
+        "unterart": "texture",
+        "charakter": [
+          "evolving",
+          "dark",
+          "thick",
+          "metallic",
+          "wide",
+          "airy"
+        ],
+        "einsatz": [
+          "intro",
+          "breakdown"
+        ],
+        "energie": 2,
+        "text": "Machine texture bed: saw and square two octaves apart, a resonant filter wandering at random, phaser, delay and spring."
+      },
+      "stimmen": 8,
+      "regler": {
+        "1": "Cutoff",
+        "2": "Resonance",
+        "3": "Random depth",
+        "4": "Phaser mix",
+        "5": "Delay mix",
+        "6": "Spring mix"
+      },
+      "naeherung": [
+        "Nerd-O-Tron 2000 [B1] p. 108: saw plus square at +2 oct, ladder 680 Hz / 85 %, amp R 2 s; each layer is a wavetable with 3 copies (+-12 cent) for width.",
+        "'Noise as LFO source': a random (S&H) LFO at 0.9 Hz smoothed over 100 ms, depth 25 % = +-15 st on the cutoff.",
+        "Phaser, 1/4 delay with 40 % feedback, convolution with the spring impulse `feder-ir.f32` (a short metallic IR from proben.rs), high-pass."
+      ],
+      "exakt_mit": null,
+      "besser_mit": [],
+      "probe": {
+        "art": "akkord",
+        "noten": [
+          45,
+          49,
+          52,
+          57
+        ]
+      }
+    }
+  ]
+}

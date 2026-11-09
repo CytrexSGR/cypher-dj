@@ -72,7 +72,7 @@ level (K10), and when a deadline is missed a fallback is missing ("What is missi
 
 - Invariants can hold a transition; the core reports it, and the control centre asks Cypher anew (turn trigger).
 - The thresholds are set; wrong thresholds make Cypher too cautious or let flams (flams) through.
-- Regression tests: the 12 tests from `stellwerk.test.mjs` and the cases a1 to a5 from `nachpruefung/angriff.mjs`
+- Regression tests: the 12 tests from `signalbox.test.mjs` and the cases a1 to a5 from `nachpruefung/angriff.mjs`
   must turn red against the C++ core if the respective rule is missing, and green with it.
 
 ## Evidence

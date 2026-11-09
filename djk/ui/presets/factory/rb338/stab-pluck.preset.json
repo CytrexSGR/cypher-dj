@@ -1,0 +1,42 @@
+{
+ "schema": 1,
+ "name": "Stab Pluck",
+ "geraet_typ": "instrument",
+ "geraet": "rb338",
+ "werte": {
+  "lautstaerke": 0.2511886432,
+  "wellenform": false,
+  "cutoff": 700,
+  "resonanz": 0.7,
+  "env_mod": 0.4,
+  "decay": 0.25,
+  "accent": 0.6
+ },
+ "beschreibung": {
+  "art": "bass",
+  "unterart": "pluck",
+  "charakter": [
+   "punchy",
+   "tight",
+   "aggressive"
+  ],
+  "genre": [
+   "techno",
+   "tech_house",
+   "garage"
+  ],
+  "einsatz": [
+   "drop",
+   "build"
+  ],
+  "energie": 4,
+  "text": "A quarter second decay and a fast filter sweep make a short, percussive stab."
+ },
+ "tags": [
+  "stab",
+  "pluck"
+ ],
+ "notiz": "Values are practice; decay 0.25 s sits at the low end of devices.ts (0.2-2 s).",
+ "angelegt": "2026-11-02T00:00:00.000Z",
+ "geaendert": "2026-11-02T00:00:00.000Z"
+}

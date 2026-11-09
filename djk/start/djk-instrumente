@@ -6,12 +6,12 @@
 # Aufruf: djk-instrumente [--instanz a..i] [--nur-wirte] [--melodie surge|fluegel|baukasten] [--bass surge|rb338]
 #         djk-instrumente [--instanz a..i] --arr1 [--arr2]
 #         djk-instrumente [--instanz a..i] --arr2
-#   --bass rb338 (RB-338 W1): der Bass-Wirt spielt die eigene 303 (VST3 aus djk/instrumente, installiere.sh) statt Surge.
+#   --bass rb338 (RB-338 W1): der Bass-Wirt spielt die eigene 303 (VST3 aus djk/instruments, install.sh) statt Surge.
 #   Ohne --bass bleibt der Bass-Wirt, wie er läuft (läuft er nicht: Surge). klang/fahre gibt es nur mit Surge; rb338 kennt param.
-#   --melodie fluegel (Glanz Welle 4): der Melodie-Wirt spielt den Flügel (Carla-SFZ, wirte/carla/instrument_bauen.py,
+#   --melodie fluegel (Glanz Welle 4): der Melodie-Wirt spielt den Flügel (Carla-SFZ, hosts/carla/instrument_build.py,
 #   baut ~/.config/cypherdj/instrumente/grand beim ersten Mal) statt Surge. Läuft der Wirt schon in der anderen Art, wird
 #   nur er neu gestartet; seine Kanten bleiben (gleicher Klientname). Ohne --melodie bleibt die Melodie, wie die Status-Datei sagt (keine Datei: Surge). klang/fahre gibt es nur mit Surge.
-#   --melodie baukasten (Baukasten S1): der Melodie-Wirt spielt Cypher Modular (VST3 aus djk/instrumente, installiere.sh
+#   --melodie baukasten (Baukasten S1): der Melodie-Wirt spielt Cypher Modular (VST3 aus djk/instruments, install.sh
 #   baukasten). Den Graphen liest das Plugin bei jedem Start des Wirts aus ~/.config/cypherdj<-i>/baukasten-melodie.json
 #   (fehlt die Datei: eingebauter Graph; ist sie fehlerhaft: eingebauter Graph und eine Zeile "graph rejected" im Journal
 #   der Unit). Neuer Graph = Datei schreiben, dann systemctl --user restart cypherdj-wirt-melodie<-i>.
@@ -59,9 +59,9 @@ if [ "$ARR1$ARR2" != 00 ] && [ -n "$MELODIE$BASS" ]; then
   echo "djk-instrumente: --arr1/--arr2 are production slots only; --bass and --melodie belong to the DJ instruments (separate call)" >&2; exit 2
 fi
 RB338_VST3="$HOME/.local/lib/cypherdj/vst3/rb338.vst3"
-if [ "$BASS" = rb338 ] && [ ! -d "$RB338_VST3" ]; then echo "djk-instrumente: rb338 missing (djk/instrumente/installiere.sh)" >&2; exit 2; fi
+if [ "$BASS" = rb338 ] && [ ! -d "$RB338_VST3" ]; then echo "djk-instrumente: rb338 missing (djk/instruments/install.sh)" >&2; exit 2; fi
 BAUKASTEN_VST3="$HOME/.local/lib/cypherdj/vst3/baukasten.vst3"
-if [ "$MELODIE" = baukasten ] && [ ! -d "$BAUKASTEN_VST3" ]; then echo "djk-instrumente: baukasten missing (djk/instrumente/installiere.sh baukasten)" >&2; exit 2; fi
+if [ "$MELODIE" = baukasten ] && [ ! -d "$BAUKASTEN_VST3" ]; then echo "djk-instrumente: baukasten missing (djk/instruments/install.sh baukasten)" >&2; exit 2; fi
 FLUEGEL_SFZ="$HOME/.config/cypherdj/instrumente/grand/grand.sfz"
 case "$I" in "") SFX="";; [a-i]) SFX="-$I";; *) echo "djk-instrumente: instance '$I' invalid, use a..i or empty" >&2; exit 2;; esac
 KERN_CLIENT=cypherdj-kern$SFX
@@ -76,8 +76,8 @@ if [ "$ARR1$ARR2" = 00 ]; then
 fi
 [ -f "$KANTEN_DATEI" ] || : > "$KANTEN_DATEI"
 if [ "$MELODIE" = fluegel ] && [ ! -f "$FLUEGEL_SFZ" ]; then
-  python3 "$DJK/wirte/carla/instrument_bauen.py" --ziel "$(dirname "$FLUEGEL_SFZ")" --name grand >/dev/null \
-    || { echo "djk-instrumente: grand piano could not be built (wirte/carla/instrument_bauen.py; Ableton Core Library missing?)" >&2; exit 2; }
+  python3 "$DJK/hosts/carla/instrument_build.py" --ziel "$(dirname "$FLUEGEL_SFZ")" --name grand >/dev/null \
+    || { echo "djk-instrumente: grand piano could not be built (hosts/carla/instrument_build.py; Ableton Core Library missing?)" >&2; exit 2; }
 fi
 
 W_IN=events-in; W_OUT1=audio-out1; W_OUT2=audio-out2
@@ -120,14 +120,14 @@ for g in $GRUPPEN; do
   else
     # Die Art kann auch aus der Status-Datei kommen (Review R1): fehlt das Bundle dann, sofort melden statt 30 s auf "bereit" zu warten
     if [ "$ART" = vst3:rb338 ] && [ ! -d "$RB338_VST3" ]; then
-      echo "djk-instrumente: wirt $G was rb338 (status file) but rb338 is missing (djk/instrumente/installiere.sh, or --bass surge)" >&2; exit 2
+      echo "djk-instrumente: wirt $G was rb338 (status file) but rb338 is missing (djk/instruments/install.sh, or --bass surge)" >&2; exit 2
     fi
     if [ "$ART" = vst3:baukasten ] && [ ! -d "$BAUKASTEN_VST3" ]; then
-      echo "djk-instrumente: wirt $G was baukasten (status file) but baukasten is missing (djk/instrumente/installiere.sh baukasten, or --melodie surge)" >&2; exit 2
+      echo "djk-instrumente: wirt $G was baukasten (status file) but baukasten is missing (djk/instruments/install.sh baukasten, or --melodie surge)" >&2; exit 2
     fi
     # Surge XT ist nur nötig, wenn diese Gruppe wirklich Surge startet (rb338 und Flügel brauchen es nicht)
     if [ "$ART" = lv2 ] && [ ! -f "$HOME/.local/lib/cypherdj/lv2/Surge XT.lv2/manifest.ttl" ]; then
-      echo "djk-instrumente: Surge XT missing (djk/wirte/carla/installiere_surge.sh)" >&2; exit 2
+      echo "djk-instrumente: Surge XT missing (djk/hosts/carla/install_surge.sh)" >&2; exit 2
     fi
     # Eine tote, noch geladene Unit (failed, ohne --collect-Abräumung) blockiert den Namen: zurücksetzen.
     systemctl --user reset-failed "$U.service" 2>/dev/null
@@ -151,7 +151,7 @@ for g in $GRUPPEN; do
     systemd-run --user --quiet --collect --unit="$U" -p Restart=always -p RestartSec=2 -p RestartPreventExitStatus=2 \
       -p PartOf=cypherdj.target --setenv=HOME="$WH" "${GRAPH_ENV[@]}" \
       --setenv=PIPEWIRE_PROPS="{ node.async = true node.group = cypherdj$SFX node.lock-quantum = true }" \
-      /usr/bin/pw-jack -p 256 /usr/bin/python3 "$DJK/wirte/carla/wirt.py" --name "$C" "${INSTR_ARGS[@]}" --status "$ST" \
+      /usr/bin/pw-jack -p 256 /usr/bin/python3 "$DJK/hosts/carla/host.py" --name "$C" "${INSTR_ARGS[@]}" --status "$ST" \
       --sock "/dev/shm/cypherdj$SFX/wirt-$G.sock" \
       || fehler "wirt $G: systemd-run failed" "$U"
     for _ in $(seq 60); do grep -q '"bereit": true' "$ST" 2>/dev/null && break; sleep 0.5; done
@@ -173,7 +173,7 @@ for g in $GRUPPEN; do
     else
       pw-link -l | grep -A8 -x "$Q" | grep -q -- "|-> *$Z\$" || pw-link "$Q" "$Z" || fehler "wirt $G: link $Q -> $Z failed" "$U"
     fi
-    # flock auf dem Ordner: dieselbe Sperre nimmt die Oberfläche, wenn sie ihre Vorhörer-Zeilen entfernt (vorhoeren.ts unterSperre);
+    # flock auf dem Ordner: dieselbe Sperre nimmt die Oberfläche, wenn sie ihre Vorhörer-Zeilen entfernt (prelisten.ts unterSperre);
     # sonst ginge eine hier angehängte Zeile zwischen Lesen und rename dort verloren (S7-Re-Review F3)
     flock -x -w 5 "$(dirname "$KANTEN_DATEI")" sh -c 'grep -qxF -- "$2" "$1" 2>/dev/null || printf "%s\n" "$2" >> "$1"' sh "$KANTEN_DATEI" "$k" || fehler "wirt $G: kanten lock failed" "$U"
   done
@@ -212,4 +212,4 @@ for e in 2:1 3:2; do
   fi
   echo "  erzeuger$N  now plays into $ZIEL (pattern kept)"
 done
-echo "instruments live: bass midi_aus_1 -> erz/2, melody midi_aus_2 -> erz/3 · sounds: djk/wirte/carla/djk-klang${I:+ --instanz $I} bass|melodie lade NAME"
+echo "instruments live: bass midi_aus_1 -> erz/2, melody midi_aus_2 -> erz/3 · sounds: djk/hosts/carla/djk-klang${I:+ --instanz $I} bass|melodie lade NAME"

@@ -10,7 +10,7 @@ StartLimitIntervalSec=0
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/pw-jack -p 256 %h/cypher-dj/djk/notbahn/build/cypherdj-notbahn --master cypher_stumm:playback_F --daneben --vor cypherdj-kern:notbahn_vor
+ExecStart=/usr/bin/pw-jack -p 256 %h/cypher-dj/djk/fallback/build/cypherdj-notbahn --master cypher_stumm:playback_F --daneben --vor cypherdj-kern:notbahn_vor
 Restart=always
 RestartSec=0
 Nice=-5

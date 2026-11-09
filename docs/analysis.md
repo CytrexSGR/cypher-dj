@@ -1,6 +1,6 @@
 # Track analysis
 
-The workshop (`djk/werkstatt`) reads a track once and prepares it for the set. It runs offline, at low priority, and
+The workshop (`djk/workshop`) reads a track once and prepares it for the set. It runs offline, at low priority, and
 writes its results next to the track's version so the decks, the cue tool, the library and the PRODUCTION warp can use
 them.
 
@@ -9,7 +9,7 @@ them.
 - **Loudness**: integrated LUFS, loudness range and true peak.
 - **Tempo map and beat grid**: beats from `beat_this`, then `phase.py` measures the constant offset of the grid
   against the kick hits and snaps it. Tracks that cannot be measured cleanly keep the raw grid. A separate kick messer
-  (`kick_messer.py`, one event per expected beat) checks warped exports against their source.
+  (`kick_meter.py`, one event per expected beat) checks warped exports against their source.
   On the two tracks checked against Ableton Live's warp markers, the median offset is about 1 ms; the spread from beat
   to beat is larger.
 - **Bar one** (the downbeat): detected, but unreliable. Set it by hand where it is wrong (Set 1.1.1 Here in the warp

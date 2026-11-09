@@ -19,7 +19,7 @@ A23 allows an in-house build in C++ or Rust.
 - Satellites: Leitstand (control room), MCP, player driver in Node/TypeScript; Rechner (planner), analysis, Werkstatt (workshop) in Python.
 - Rust stays open for parts without C/C++ dependencies.
 - **Why C++ nonetheless:** the measured reference prototypes of this night are C/C++ (`uhrkern.cpp`, `klick_kern.cpp`,
-  `deckprobe.cpp`, `minikern.c`, `notbahn.c`), and Rubber Band has only a thin Rust bridge (crate 0.1.5, 120
+  `deckprobe.cpp`, `minikern.c`, `fallback.c`), and Rubber Band has only a thin Rust bridge (crate 0.1.5, 120
   downloads). Weighed against this: memory errors are exactly the crash class that Rust excludes, and a
   core crash costs a Notbahn loop (01 NP K5). Compensation as a mechanism: an ASan/UBSan build in every test run
   of the test rig, plus the allocation and lock guard.

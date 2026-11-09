@@ -3,6 +3,30 @@
 One entry per public update, newest first. Each entry names what changed for someone who plays, produces or
 builds cypher-dj.
 
+## 2026-11-09
+
+**Recording**
+- Audio and MIDI takes in the arrangement: count-in, punch in and out, overdub, take lanes, input monitoring and
+  latency-exact placement.
+
+**Instruments**
+- Instrument racks: several instruments on one track with key and velocity zones and a chain selector, four macro
+  knobs that drive parameters across the members, and stored variations of the macro settings.
+- A second Surge XT slot, so two Surge tracks can play side by side.
+- A Surge track stores its patch in the project. The patch is chosen from the Surge library and loaded again when
+  the project opens.
+- A sound word such as `dark` on a Surge patch whose filter is off is refused with a reason instead of doing nothing.
+
+**Routing**
+- Group tracks that can be folded in the arrangement, Ctrl+G groups the selected tracks.
+- A routing matrix in the page and for the agent: outputs, sends and sidechain keys in one grid.
+- Sidechain keys before or after the fader of the source, from tracks, groups and returns.
+- Resample any track, group, return or the master into a new audio track.
+- Loudness per group and per return.
+
+**Engine**
+- The freeze, export and bounce paths wait for the engine's stop report, so two of them in a row no longer refuse.
+
 ## 2026-11-07
 
 **Mixing and effects in production**

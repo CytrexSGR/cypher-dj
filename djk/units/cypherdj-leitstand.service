@@ -10,8 +10,8 @@ After=cypherdj-kern.service
 
 [Service]
 Type=simple
-WorkingDirectory=%h/cypher-dj/djk/leitstand
-ExecStart=/usr/bin/node %h/cypher-dj/djk/leitstand/src/leitstand.ts
+WorkingDirectory=%h/cypher-dj/djk/conductor
+ExecStart=/usr/bin/node %h/cypher-dj/djk/conductor/src/conductor.ts
 Environment=NODE_NO_WARNINGS=1
 Restart=always
 RestartSec=1

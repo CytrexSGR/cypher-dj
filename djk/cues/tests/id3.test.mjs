@@ -4,8 +4,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { leseTags, camelot } from '../id3.ts';
-import { ladeBibliothek, ladeListen, titelAusName } from '../bibliothek.ts';
-import { mp3, tmpOrdner } from './hilfen.mjs';
+import { ladeBibliothek, ladeListen, titelAusName } from '../library.ts';
+import { mp3, tmpOrdner } from './helpers.mjs';
 
 test('ID3v2.3 mit MIK-Tags: Titel, Artist, TBPM, TKEY, TXXX:EnergyLevel (UTF-16 Umlaute)', (t) => {
   const d = tmpOrdner(t);

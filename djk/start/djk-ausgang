@@ -3,7 +3,7 @@
 Ändert nichts: nur `pw-link -l`, `pactl list short sinks`, `pactl list sink-inputs`, `pactl get-default-sink`, `pw-dump`.
 
 Aufruf: djk-ausgang [--senke NAME]
-  NAME     node.name, Beschreibung oder ein Ziel-Präfix "<Senke>:<Portbasis>" (wie --master an djk-start; ziel.py
+  NAME     node.name, Beschreibung oder ein Ziel-Präfix "<Senke>:<Portbasis>" (wie --master an djk-start; target.py
            löst es auf). Vorgabe: die Standard-Senke (pactl get-default-sink).
 Ausgabe: je Client, der an der Senke hängt (pw-link) oder als Sink-Input auf sie zeigt (pactl): Name, Herkunft, und ob
          er djk-eigen ist (Name beginnt mit "cypherdj-") oder fremd; am Ende die Bilanz.
@@ -19,7 +19,7 @@ import sys
 
 HIER = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, HIER)
-import ziel  # noqa: E402
+import target as ziel  # noqa: E402
 
 
 def lauf(fix, befehl):

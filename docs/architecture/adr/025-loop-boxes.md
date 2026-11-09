@@ -21,4 +21,4 @@ Two loop boxes in the core on `pad/1` and `pad/2`. A loop is exactly N bars at 1
 | Route | Why not | Evidence |
 |---|---|---|
 | Loops on deck 3 and 4 (deck engine, slice 38) | stretcher, loader, grammar: large; unnecessary for loops at set tempo | ROADMAP 38 |
-| Beat FX as §1.5 control in the channel strip | seam of the channel strip is fixed; controls would have to pass through the table, the core mock, the Leitstand, page curves | `kanalzug.h` header, spec decision 8 |
+| Beat FX as §1.5 control in the channel strip | seam of the channel strip is fixed; controls would have to pass through the table, the core mock, the Leitstand, page curves | `channel_strip.h` header, spec decision 8 |

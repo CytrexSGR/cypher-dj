@@ -24,14 +24,14 @@ ppm, factor never 1.0) and the factor rule (map tempo in the middle of the next 
 1. **One button, global.** Control `keylock` (switch, default 1, no deck argument, INTERFACES §1.5) for decks,
    loop on the deck and, from task 7, loop boxes. Off means varispeed (ADR 028 decision 1). `kern.toml keylock = false`
    builds no stretcher (§2.1). Page and control station show the button, the display follows the listening path (task 3, 3b).
-2. **Stretcher (Dehner): R3 in work threads with a lead-in ring** (`dehner.h/.cpp`). Source-agnostic: band and base come through
+2. **Stretcher (Dehner): R3 in work threads with a lead-in ring** (`stretcher.h/.cpp`). Source-agnostic: band and base come through
    `DehnerQuelle`; the stretcher knows no deck. One work thread per source (SCHED_FIFO, JACK priority − 5, error path to
    SCHED_OTHER reported), one preparer for all, one watchdog reports a thread that does not acknowledge within 500 ms (task 2.5).
    The thread also fills while the deck stands still and during keylock (otherwise loading and unloading wait without limit, measured 21.3 s,
    version 4.1 point 2). Building after the first cycle in its own thread, only the stretcher memory is locked (2.5b, 2.5c).
    Factor and control per M4, counted in samples (`DEHNER_REGEL_TAKT` = 43 · 256); band start correction `dehner_versatz()`
    for decks 0 (decision 8, since keylock 4.6; until c06b2b8 a table over the factor 0.75 to 1.35, calibrated on the Hann click).
-3. **Reading through the `StreckLeser`** (`streck_quelle.h`, since 633362d): approach, bridge, epoch, fades and seam at one
+3. **Reading through the `StreckLeser`** (`stretch_source.h`, since 633362d): approach, bridge, epoch, fades and seam at one
    place; the deck uses it, the loop box uses it in task 7 (no copy of the deck logic).
 4. **Every event sets in at the sample.** Start, jump, ramp, restart, button on: approach with target sample
    `s_h = s + ANSATZ_FRIST` (4096 samples, 85 ms); until then the deck plays the varispeed bridge. The ring has not yet settled from `s_h`, the fade bridge → ring (960 samples) begins at `s_h + STRECK_EINSCHWING` (1408, measured on the click, version 4.1 point 1). Audible from about 115 ms after the event. On the base (factor 1) the direct path plays, bit-exact (R3 at factor 1 is not transparent, ADR 020), **for a source that sets in there, without the ring sounding.** Restricted with 7b.1 (08.10., decision of the main instance): if the map comes to the base while the ring sounds (ramp X → 128), the ring stays audible until the next event (start, stop, jump, load, grid, button);
@@ -53,7 +53,7 @@ ppm, factor never 1.0) and the factor rule (map tempo in the middle of the next 
 
 ## Evidence
 
-MEASURED, where not noted otherwise. Acceptance on target: test instance g (own ports, own null sink, tone guard, real-time lock), core from `keylock-4`, measuring tool `djk/kern/tests/deck/ziel_lauf.py` (4.1 277ec2e, 51190a4; 4.2 a90a7b4; 4.3
+MEASURED, where not noted otherwise. Acceptance on target: test instance g (own ports, own null sink, tone guard, real-time lock), core from `keylock-4`, measuring tool `djk/core/tests/deck/target_run.py` (4.1 277ec2e, 51190a4; 4.2 a90a7b4; 4.3
 ba4f679). Raw data `~/messungen/2026-10-07-keylock-echtzeit/task-04/` (result per run under `laeufe/<lauf>/ergebnis.json`).
 
 | What | Value | Limit | Source |
@@ -182,6 +182,6 @@ Limits of the boxes:
    against the ideal linear transition (≤ 0.02) do not concern (b): they all lie outside the base.
 4. **Box counters** (underrun, given up, ring_voll, kein_platz per box): since 7b.3 and 7c.3 respectively in `/zustand/box ,iiiiii`
    (INTERFACES §5.5b, additive, 50 Hz per box with a loop; test K4 in `test_kern_box_keylock` over the network, kein_platz with
-   value 2, mutation `BOX_ZAEHLER_VERTAUSCHT` red; ring_voll only as a guard, always 0 in the test; `ziel_lauf_boxen.py` evaluates them in the
+   value 2, mutation `BOX_ZAEHLER_VERTAUSCHT` red; ring_voll only as a guard, always 0 in the test; `target_run_boxes.py` evaluates them in the
    gate). `frei_verloren` remains only as an access function.
 5. **Not heard:** sound live against the offline render; material `task-07/hoerprobe/` (1 to 5).

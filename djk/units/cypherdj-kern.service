@@ -1,6 +1,6 @@
 # cypherdj-kern: der Echtzeit-Kern (ARCHITECTURE §2, §7; ADR 001, ADR 016 mit Nachtrag 2026-09-25). Scheibe 18.
 # Nie "systemctl --user enable" oder "link": das Einschalten des Verbunds entscheidet Andreas (ROADMAP §8.4, §8.11).
-# Prüfläufe starten ihn transient mit genau diesen Eigenschaften (djk/kern/tests/neustart/unit_eigenschaften.py liest
+# Prüfläufe starten ihn transient mit genau diesen Eigenschaften (djk/core/tests/restart/unit_properties.py liest
 # diese Datei; nur ExecStart und Environment setzt der Prüflauf selbst).
 # Ausgang daneben (10k): der Kern spielt mit --master direkt an die Senke, die Notbahn sitzt daneben mit
 # --vor cypherdj-kern:notbahn_vor (cypherdj-notbahn.service). Vorgabe stumm: die geteilte Null-Senke cypher_stumm; das
@@ -22,7 +22,7 @@ StartLimitIntervalSec=0
 [Service]
 Type=notify
 NotifyAccess=main
-ExecStart=/usr/bin/pw-jack -p 256 %h/cypher-dj/djk/kern/build/cypherdj-kern --master cypher_stumm:playback_F --waechter-ms 100
+ExecStart=/usr/bin/pw-jack -p 256 %h/cypher-dj/djk/core/build/cypherdj-kern --master cypher_stumm:playback_F --waechter-ms 100
 Restart=always
 RestartSec=0
 RestartSteps=5

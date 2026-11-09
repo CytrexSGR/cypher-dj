@@ -4,7 +4,7 @@ Status: part 1 (mapping, format, RE-PITCH) implemented in package 1.13 slice 1, 
 according to the plan `docs/superpowers/plans/2026-10-22-warp-slice1.md`. Part 2 (engine with lead time for COMPLEX
 and TONES) is implemented in package 1.13 slice 2, branch `w2`, according to the plan
 `docs/superpowers/plans/2026-10-24-warp-slice2.md`; the prerequisite was the work-thread load measurement
-(`kern/tests/deck/warp_last_lauf.sh`, verdict "S2 as planned", 2026-10-24). Target acceptance and listening
+(`core/tests/deck/warp_load_run.sh`, verdict "S2 as planned", 2026-10-24). Target acceptance and listening
 acceptance of slice 2 are in `stand/produktion-warp.md`.
 Andreas, 2026-10-22 CLI, on questions F1 to F6 of the spec: "all according to recommendation". Spec:
 `~/messungen/2026-10-22-breite1-specs/1.13-warp-stems.md`.
@@ -13,7 +13,7 @@ ADR 033 (routing, same format `/2`), guardrails L1, L2, L5.
 
 ## Context
 
-The arrangement played audio at original speed (`arr_stimmen.cpp`: source frame = `offset_frames + (t − Einsatz)`,
+The arrangement played audio at original speed (`arr_voices.cpp`: source frame = `offset_frames + (t − Einsatz)`,
 where Einsatz is the entry point). A clip that was not recorded at project tempo sits on the beat at the start and
 then drifts away. Operation stretches decks and loop boxes with Bungee in the callback (ADR 029), but the
 arrangement has neither stretching nor markers.
@@ -24,8 +24,8 @@ arrangement has neither stretching nor markers.
    `versatz_beats`, source of the markers (`takte`, `mediathek`, later `werkstatt`, `traktor`, `hand`), mode. The
    source file remains untouched; computation happens at playback.
 2. **The mapping W(b)** (clip beat → source position) is linear between two markers; before and after, the edge
-   segment applies. Server and page compute in seconds (`projekt/warp.ts`, `oeffentlich/produktion/warp.js`), the core
-   in frames (`cypherdj/warp_abbildung.h`). A reference file (`vertrag/warp_referenz.json`, 1000 cases, computed
+   segment applies. Server and page compute in seconds (`project/warp.ts`, `public/production/warp.js`), the core
+   in frames (`cypherdj/warp_mapping.h`). A reference file (`contract/warp_referenz.json`, 1000 cases, computed
    exactly) binds all three to 1e-12.
 3. **The source position follows the project beat of the tempo map, not the elapsed time since the entry.** A warped
    clip reads the source at sample t at W(p(t) − start_beat). Because p(t) comes from the same map as everything else
@@ -51,7 +51,7 @@ arrangement has neither stretching nor markers.
    unsure"); one-shots never; without tempo a hint `kein_tempo`. The project tempo never changes the placement (F2).
    Auto-warp needs `dauer_s`: without duration there is no end marker and no length in beats, so `kein_tempo`, even
    if the media library knows a BPM (overall review 2026-10-24, minor 3: 1013 of 7713 loops in the catalogue). The
-   page does not offer such entries for dragging anyway (`ziehen.js` `nutzlast`); only `clip_neu` with `warp: "auto"`
+   page does not offer such entries for dragging anyway (`drag.js` `nutzlast`); only `clip_neu` with `warp: "auto"`
    via MCP is affected. The source (4) of the spec without duration (marker `[0,0],[60/bpm,1]`, length from the
    caller) comes with slice 3. Slice 3a puts the workshop tempo map and the Traktor grid in front of it (point 9).
 8. **Null test with warp:** gate: residual below −90 dBFS (D1 A7). Measured −145 dB, not −200 as without warp: live
@@ -61,7 +61,7 @@ arrangement has neither stretching nor markers.
 ## Decision (part 2, built in slice 2)
 
 COMPLEX (mode 2, Bungee grain 512) and TONES (mode 3, grain 256) are computed by a **warp engine (Warp-Werk)**
-(`cypherdj/warp_werk.h`, `warp_werk.cpp`, the machine in `warp_werk_bungee.cpp`), not by the callback. Bungee's
+(`cypherdj/warp_factory.h`, `warp_factory.cpp`, the machine in `warp_factory_bungee.cpp`), not by the callback. Bungee's
 position API accepts the marker mapping unchanged: `req.position = W(b(m))` with b(m) = beat_at(m) + offset from the
 same map as everything else. Discarded remain: stretching in the callback (32 · 121 to 248 µs in the tail against
 5.33 ms), R3 (no arbitrary marker path), pre-render per clip (ADR 029: "no longer computing every audio up and down").

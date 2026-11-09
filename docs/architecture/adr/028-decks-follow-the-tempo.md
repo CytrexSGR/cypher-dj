@@ -6,7 +6,7 @@ Trigger: Andreas 05.10.: "we also made live tempo changes" (park item `e65c5c17`
 
 ## Context
 
-Up to wave 2 the core rejected a tempo change as long as a deck was running (`kern.cpp`, acknowledgement 6 `kein_stretcher`), and a deck started only at its base (`kern_deck.cpp`). Measured 06.10. on check instance i: `POST /tempo 132` with a running deck → `{"status":6,"grund":"kein_stretcher"}` (`~/messungen/2026-10-06-welle3-beatmatch/`). Loop boxes, REC and Strudel have followed the tempo since ADR 026/027, the decks have not. The ROADMAP foresaw Rubber Band R3 in the real-time path per deck for this (slices 34, 50 to 52); before that lie four open slices, and the real-time measurement series M3 (slice 30) was paused on 25.09. at Andreas' objection ("you're blocking my computer").
+Up to wave 2 the core rejected a tempo change as long as a deck was running (`core.cpp`, acknowledgement 6 `kein_stretcher`), and a deck started only at its base (`core_deck.cpp`). Measured 06.10. on check instance i: `POST /tempo 132` with a running deck → `{"status":6,"grund":"kein_stretcher"}` (`~/messungen/2026-10-06-welle3-beatmatch/`). Loop boxes, REC and Strudel have followed the tempo since ADR 026/027, the decks have not. The ROADMAP foresaw Rubber Band R3 in the real-time path per deck for this (slices 34, 50 to 52); before that lie four open slices, and the real-time measurement series M3 (slice 30) was paused on 25.09. at Andreas' objection ("you're blocking my computer").
 
 ## Decision
 

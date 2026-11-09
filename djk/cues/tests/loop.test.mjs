@@ -1,12 +1,12 @@
-// Loops (Andreas, 2026-09-26: "neue loop mit 4 oder 8 takten"): Länge, Ende-Sekunde/-Takt (raster.js), Schema-Rundlauf
-// mit laenge_takte -> ende_s/ende_takt (speicher.ts), Traktor-Loop-Rundung auf die nächste Zweierpotenz.
+// Loops (Andreas, 2026-09-26: "neue loop mit 4 oder 8 takten"): Länge, Ende-Sekunde/-Takt (grid.js), Schema-Rundlauf
+// mit laenge_takte -> ende_s/ende_takt (store.ts), Traktor-Loop-Rundung auf die nächste Zweierpotenz.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import fs from 'node:fs';
-import { loopLaengeS, loopEndeS, loopFelder, naechsteLoopLaenge, LAENGEN_TAKTE, taktSchlag } from '../oeffentlich/raster.js';
-import { speichere, lade, EingabeFehler } from '../speicher.ts';
-import { mp3, tmpOrdner } from './hilfen.mjs';
+import { loopLaengeS, loopEndeS, loopFelder, naechsteLoopLaenge, LAENGEN_TAKTE, taktSchlag } from '../public/grid.js';
+import { speichere, lade, EingabeFehler } from '../store.ts';
+import { mp3, tmpOrdner } from './helpers.mjs';
 
 const R = { bpm: 120, eins_s: 0.5 }; // Takt 2 s
 const nahe = (a, b, eps = 1e-9) => assert.ok(Math.abs(a - b) < eps, `${a} != ${b}`);
@@ -31,7 +31,7 @@ test('naechsteLoopLaenge: rundet im log2-Raum (3 -> 4, 6 -> 8 (näher an log2 8 
 function aufbau(t) {
   const d = tmpOrdner(t);
   const wurzel = path.join(d, 'musik');
-  const daten = path.join(d, 'daten');
+  const daten = path.join(d, 'data');
   const rel = path.join('ordner', 'Loop_Track.mp3');
   mp3(path.join(wurzel, rel), { f: 100, dauer: 70, meta: { title: 'Loop', TBPM: '120', TKEY: '8A' } });
   return { daten, wurzel, rel };

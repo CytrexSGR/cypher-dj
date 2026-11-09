@@ -12,8 +12,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
-import { kodiere, dekodiere } from '../vertrag/attrappe_kern/osc.mjs';
-import { loopZuKlang } from './kit_schreiben.mjs';
+import { kodiere, dekodiere } from '../contract/mock_core/osc.mjs';
+import { loopZuKlang } from './kit_write.mjs';
 
 const AUFRUF = 'Aufruf: djk-loop [--instanz i] [--quelle cypher|andreas] liste | laden <box> <name> | start <box> | ' +
               'stopp <box> | rec <beats> <name> | kit <loop> [<klang>] [--kit battery] [--kit-zusatz rec]';
@@ -112,7 +112,7 @@ sock.on('message', (buf) => {
 sock.bind(0, '127.0.0.1', () => {
   const hallo = () => sock.send(kodiere('/k/hallo', 'sii', [name, sock.address().port, 1]), KERN, '127.0.0.1');
   hallo();
-  // Der Kern streicht Abonnenten nach 5 s ohne /k/hallo (netz.h frist_ns); ein langer REC wartet länger
+  // Der Kern streicht Abonnenten nach 5 s ohne /k/hallo (net.h frist_ns); ein langer REC wartet länger
   // (Abschluss-Review Scheibe 3 Fund 1: rec 16 meldete Scheitern, obwohl die Datei stand). Alle 2 s erneuern.
   const lebt = setInterval(hallo, 2000);
   lebt.unref();

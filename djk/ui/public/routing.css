@@ -1,0 +1,50 @@
+/* 1.10 slice 6 (T3): groups in the arrangement. Kept out of production.css (shared with the 1.9 strand). */
+
+/* Header row of a group in the head column: 28 px = layout.js GRUPPEN_HOEHE. NOT .p-gruppenkopf (that is the mixer strip, counted by the probes). */
+.p-arr-gruppe { height: 28px; box-sizing: border-box; display: flex; align-items: center; gap: 6px; padding: 0 6px 0 0; font-size: 11px;
+  background: #171a21; border-bottom: 1px solid var(--line); overflow: hidden; }
+.p-arr-farbe { align-self: stretch; width: 3px; background: var(--farbe, #8a8d98); flex: none; }
+.p-arr-falte { width: 20px; height: 20px; padding: 0; border-radius: 4px; flex: none; font-size: 11px; line-height: 1; }
+.p-arr-name { font-weight: 700; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.p-arr-zahl { color: var(--dim); font-size: 9px; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; flex: none; }
+.p-arr-punkte { display: inline-flex; gap: 3px; flex: none; }
+.p-punkt { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+.p-punkt[hidden] { display: none; }
+.p-punkt--arm { background: #e5484d; }
+.p-punkt--solo { background: #e0a33e; }
+.p-punkt--stumm { background: #6b7080; }
+.p-punkt--lane { background: var(--a, #2fd6c3); }
+.p-arr-gruppe.gewaehlt, .p-kopf.gewaehlt { outline: 2px solid #fff; outline-offset: -2px; }
+
+/* Members: indent 12 px and the colour bar of the group at the left edge. A folded member has no row: display none (its head element stays for its state). */
+.p-kopf--mitglied { margin-left: 12px; position: relative; }
+.p-kopf--mitglied::before { content: ""; position: absolute; left: -12px; top: 0; bottom: 0; width: 3px; background: var(--gruppenfarbe, #8a8d98); }
+.p-kopf--verborgen { display: none; }
+
+/* 1.10 slice 6 (T4): the routing matrix view. */
+.p-mx-rolle { overflow-x: auto; }
+.p-mx-status { font-size: 11px; color: var(--dim); padding: 2px 6px; }
+.p-mx { border-collapse: collapse; font-size: 11px; }
+.p-mx th, .p-mx td { border-bottom: 1px solid var(--line); padding: 2px 6px; text-align: center; white-space: nowrap; }
+.p-mx th { font-weight: 600; }
+.p-mx .p-mx-name { text-align: left; min-width: 90px; }
+.p-mx-kopf-ret { min-width: 78px; }
+.p-mx-retname { display: block; }
+.p-mx-pre { font-size: 9px; padding: 0 6px; border-radius: 4px; }
+.p-mx-ziel, .p-mx-send { min-width: 40px; height: 22px; padding: 0 4px; border-radius: 4px; font-size: 11px; }
+.p-mx-ziel.aktiv { background: var(--a, #2fd6c3); color: #000; }
+.p-mx-ziel.gesperrt { opacity: .3; cursor: not-allowed; }
+.p-mx-send { color: var(--dim); }
+.p-mx-send.an { color: inherit; background: #26303a; }
+.p-mx-sendfeld { width: 56px; font-size: 11px; }
+.p-mx-schl { text-align: left; }
+.p-mx-key { font-size: 10px; padding: 0 6px; height: 22px; border-radius: 4px; margin-right: 4px; }
+.p-mx-keysel { font-size: 11px; max-width: 220px; }
+.p-mx-gruppe th, .p-mx-pm th { color: var(--dim); }
+@media (max-width: 600px) { .p-mx { font-size: 10px; } .p-mx th, .p-mx td { padding: 2px 3px; } }
+
+/* The matrix is a section of its own, between the returns and the inserts: one more row in the page grid (production.css has seven, this file is linked after it). */
+body.produktion #produktion { grid-template-rows: auto minmax(140px, 1fr) auto auto auto auto auto var(--detail, 26vh); }
+.p-matrix { grid-row: 5; display: block; }
+.p-inserts { grid-row: 6; } .p-geraete { grid-row: 7; } .p-detail { grid-row: 8; }
+.p-matrix > summary { cursor: pointer; }

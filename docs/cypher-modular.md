@@ -1,7 +1,7 @@
 # Cypher Modular
 
-A modular synthesizer, written in Rust (`djk/instrumente/baukasten_dsp`) and built as a VST3 plugin with nih-plug
-(`djk/instrumente/baukasten`). It plays on the melody channel, and the core can also load a graph itself, so it sits in
+A modular synthesizer, written in Rust (`djk/instruments/modular_dsp`) and built as a VST3 plugin with nih-plug
+(`djk/instruments/modular`). It plays on the melody channel, and the core can also load a graph itself, so it sits in
 other places too: on the bass channel, on five extra pattern streams, on production instrument tracks and as an effect
 on DJ channels and send returns (see "Where a graph can sit"). Its patch is not a preset file of knob positions but a graph: building blocks and
 the wires between them, in JSON.
@@ -11,7 +11,7 @@ the wires between them, in JSON.
 ## Install and run
 
 ```sh
-djk/instrumente/installiere.sh baukasten
+djk/instruments/install.sh baukasten
 djk/start/djk-instrumente --melodie baukasten
 ```
 
@@ -20,7 +20,7 @@ plays the built-in `saege-ladder` patch; a broken file also falls back to it and
 
 ## A patch
 
-The smallest example, `beispiele/saege-ladder.json`: a sawtooth through a ladder filter, shaped by an envelope.
+The smallest example, `demos/saege-ladder.json`: a sawtooth through a ladder filter, shaped by an envelope.
 
 ```json
 {
@@ -91,7 +91,7 @@ on which channel with its knob values.
 
 ## Example patches
 
-In `djk/instrumente/baukasten_dsp/beispiele/`: `juno-pad` (eight voices, chorus; with reverb, echo or dynamics in the
+In `djk/instruments/modular_dsp/demos/`: `juno-pad` (eight voices, chorus; with reverb, echo or dynamics in the
 `-hall`, `-echo` and `-dyn` variants), `lead` (sync lead), `bassmusik` (wobble bass with growl), `saite` (a plucked
 string), `rueckkopplung` (a feedback patch), `saege-ladder`, and since then `fm-*` (bass, electric piano, bell, lead),
 `wavetable-*` (supersaw, reese, choir), `granular-*`, `resonator-*`, `metall-*` (hi-hat, ride, crash), `saite-*`

@@ -1,0 +1,344 @@
+// Plan 2026-09-27 Task 8: der Prozess meldet den Strom an (/erz/strom kit:t), folgt /uhr und schickt je Takt die
+// nächsten zwei Takte; eine neue Musterdatei wirkt am nächsten Takt; nach /e/neustart meldet er den Strom neu an.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import dgram from 'node:dgram';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { kodiere, dekodiere } from '../../contract/mock_core/osc.mjs';
+
+const HIER = path.dirname(fileURLToPath(import.meta.url));
+const warte = (ms) => new Promise((r) => setTimeout(r, ms));
+
+test('Strom anmelden, zwei Takte voraus, Musterwechsel, Neustart', { timeout: 20000 }, async (t) => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'erz-'));
+  fs.mkdirSync(path.join(tmp, 'kits/t'), { recursive: true });
+  fs.writeFileSync(path.join(tmp, 'kits/t/kit.json'), JSON.stringify({ schema: 1, name: 't', klaenge: [
+    { note: 0, name: 'bd:0', datei: 'bd_0.f32', frames: 1 }, { note: 1, name: 'hh:0', datei: 'hh_0.f32', frames: 1 }] }));
+  const muster = path.join(tmp, 'strom1.js');
+  fs.writeFileSync(muster, 's("bd*4")');
+  const kern = dgram.createSocket('udp4');
+  await new Promise((r) => kern.bind(0, '127.0.0.1', r));
+  const eingang = [];
+  let abo = null;
+  kern.on('message', (b, rinfo) => { const m = dekodiere(b); eingang.push(m); if (m.adresse === '/k/hallo') abo = m.werte[1]; });
+  const p = spawn(process.execPath, ['--permission', `--allow-fs-read=${path.resolve(HIER, '../..')}`,
+    `--allow-fs-read=${process.env.HOME}/strudel`, `--allow-fs-read=${tmp}`, `--allow-fs-write=${tmp}`,
+    path.join(HIER, '../generator.mjs'), '--kern-port', String(kern.address().port), '--abo-port', '0',
+    '--kit-ordner', path.join(tmp, 'kits'), '--kit', 't', '--muster', muster], { stdio: ['ignore', 'ignore', 'pipe'] });
+  let log = '';
+  p.stderr.on('data', (d) => { log += d; });
+  t.after(() => { p.kill('SIGTERM'); kern.close(); fs.rmSync(tmp, { recursive: true, force: true }); });
+  for (let i = 0; i < 100 && !abo; i++) await warte(50);
+  assert.ok(abo, `kein /k/hallo: ${log}`);
+  // Uhr: 128 BPM, Beat 6,0 jetzt (mono_ns aus derselben Uhr wie process.hrtime)
+  const bpm = 128;
+  const uhr = (beat) => kern.send(kodiere('/uhr', 'hhddd', [0n, process.hrtime.bigint(), beat, bpm, 0]), abo, '127.0.0.1');
+  uhr(6.0);
+  await warte(300);
+  const strom = eingang.find((m) => m.adresse === '/erz/strom');
+  assert.deepEqual(strom?.werte.slice(1), ['erzeuger', 1, 'kit:t', 'erz/1']);
+  const fenster = () => eingang.filter((m) => m.bundle).map((b) => ({ ab: b.elemente[0].werte[4], bis: b.elemente[0].werte[5],
+    evs: b.elemente.slice(1).map((e) => [e.werte[4], e.werte[3]]) }));
+  const f0 = fenster();
+  assert.deepEqual([f0[0].ab, f0[0].bis], [8, 16]);                 // Takt 1 (Beat 4..8) läuft: Takte 2 und 3
+  assert.deepEqual(f0[0].evs.map((e) => e[0]), [8, 9, 10, 11, 12, 13, 14, 15]);
+  // Musterwechsel: die Datei ersetzt (atomar), gilt ab dem nächsten Takt nach „jetzt“ (Beat ≈ 6,6 → 8)
+  fs.writeFileSync(`${muster}.neu`, 's("hh*2")');
+  fs.renameSync(`${muster}.neu`, muster);
+  await warte(600);
+  const f1 = fenster().slice(f0.length);
+  assert.ok(f1.length >= 1, `kein Wechsel-Fenster: ${log}`);
+  assert.equal(f1[0].ab, 8);
+  assert.deepEqual(f1[0].evs, [[8, 1], [10, 1], [12, 1], [14, 1]]);
+  const st = JSON.parse(fs.readFileSync(path.join(tmp, 'status.json'), 'utf8'));   // Plan 2 T6
+  assert.equal(st.ab_beat, 8);
+  assert.ok(st.nr >= 2);
+  assert.equal(st.fehler, null);
+  // Review F11: ein kaputtes Muster schreibt den Fehler mit Zeile in status.json, ab_beat null
+  fs.writeFileSync(`${muster}.neu`, 's("hh*2"');
+  fs.renameSync(`${muster}.neu`, muster);
+  await warte(600);
+  const sf = JSON.parse(fs.readFileSync(path.join(tmp, 'status.json'), 'utf8'));
+  assert.match(sf.fehler ?? '', /^Zeile 1: /);
+  assert.equal(sf.ab_beat, null);
+  // Kern neu gestartet: Strom neu anmelden
+  const vorher = eingang.filter((m) => m.adresse === '/erz/strom').length;
+  kern.send(kodiere('/e/neustart', 'ih', [1, 0n]), abo, '127.0.0.1');
+  await warte(300);
+  assert.equal(eingang.filter((m) => m.adresse === '/erz/strom').length, vorher + 1);
+  assert.match(log, /Muster 2 gilt ab Beat 8/);
+});
+
+// Task 1.4: taube Strudel-Felder stehen in status.json (Strudel meldet lpf als cutoff, hpf als hcutoff, fm als fmi)
+test('taube Felder in status.json, Musterwechsel setzt sie zurück, nr/ab_beat/fehler bleiben', { timeout: 20000 }, async (t) => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'erz-taub-'));
+  fs.mkdirSync(path.join(tmp, 'kits/t'), { recursive: true });
+  fs.writeFileSync(path.join(tmp, 'kits/t/kit.json'), JSON.stringify({ schema: 1, name: 't', klaenge: [
+    { note: 0, name: 'bd:0', datei: 'bd_0.f32', frames: 1 }] }));
+  const muster = path.join(tmp, 'strom1.js');
+  fs.writeFileSync(muster, 's("bd").lpf(800).room(0.3)');
+  const kern = dgram.createSocket('udp4');
+  await new Promise((r) => kern.bind(0, '127.0.0.1', r));
+  let abo = null;
+  kern.on('message', (b) => { const m = dekodiere(b); if (m.adresse === '/k/hallo') abo = m.werte[1]; });
+  const p = spawn(process.execPath, ['--permission', `--allow-fs-read=${path.resolve(HIER, '../..')}`,
+    `--allow-fs-read=${process.env.HOME}/strudel`, `--allow-fs-read=${tmp}`, `--allow-fs-write=${tmp}`,
+    path.join(HIER, '../generator.mjs'), '--kern-port', String(kern.address().port), '--abo-port', '0',
+    '--kit-ordner', path.join(tmp, 'kits'), '--kit', 't', '--muster', muster], { stdio: ['ignore', 'ignore', 'pipe'] });
+  let log = '';
+  p.stderr.on('data', (d) => { log += d; });
+  t.after(() => { p.kill('SIGTERM'); kern.close(); fs.rmSync(tmp, { recursive: true, force: true }); });
+  for (let i = 0; i < 100 && !abo; i++) await warte(50);
+  assert.ok(abo, `kein /k/hallo: ${log}`);
+  kern.send(kodiere('/uhr', 'hhddd', [0n, process.hrtime.bigint(), 6.0, 128, 0]), abo, '127.0.0.1');
+  await warte(400);
+  const lies = () => JSON.parse(fs.readFileSync(path.join(tmp, 'status.json'), 'utf8'));
+  const s1 = lies();
+  assert.deepEqual([...s1.taub].sort(), ['cutoff', 'room']);
+  assert.equal(s1.taub_muster, s1.nr);
+  assert.equal(s1.fehler, null);
+  assert.ok('ab_beat' in s1 && 'nr' in s1, `nr/ab_beat fehlen: ${JSON.stringify(s1)}`);  // erstes Muster vor der Uhr: ab_beat null
+  // Negativ-Kontrolle: Muster ohne taube Felder
+  fs.writeFileSync(`${muster}.neu`, 's("bd").gain(0.8)');
+  fs.renameSync(`${muster}.neu`, muster);
+  await warte(1500);   // bis zum nächsten Wecker: erst dann ist das neue Muster einen Takt lang geprüft
+  const s2 = lies();
+  assert.ok(s2.nr > s1.nr, `kein neues Muster: ${log}`);
+  assert.deepEqual(s2.taub, []);
+  assert.equal(s2.taub_muster, s2.nr);   // Fund 3: leer UND geprüft (taub_muster === nr)
+  assert.equal(s2.fehler, null);
+});
+
+// Task 1.4: ein kaputtes Muster ersetzt das alte nicht, also bleibt dessen taub stehen, der Fehler kommt dazu
+test('kaputtes Muster: taub des alten Musters bleibt, fehler gesetzt', { timeout: 20000 }, async (t) => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'erz-taub2-'));
+  fs.mkdirSync(path.join(tmp, 'kits/t'), { recursive: true });
+  fs.writeFileSync(path.join(tmp, 'kits/t/kit.json'), JSON.stringify({ schema: 1, name: 't', klaenge: [
+    { note: 0, name: 'bd:0', datei: 'bd_0.f32', frames: 1 }] }));
+  const muster = path.join(tmp, 'strom1.js');
+  fs.writeFileSync(muster, 's("bd").lpf(800)');
+  const kern = dgram.createSocket('udp4');
+  await new Promise((r) => kern.bind(0, '127.0.0.1', r));
+  let abo = null;
+  kern.on('message', (b) => { const m = dekodiere(b); if (m.adresse === '/k/hallo') abo = m.werte[1]; });
+  const p = spawn(process.execPath, ['--permission', `--allow-fs-read=${path.resolve(HIER, '../..')}`,
+    `--allow-fs-read=${process.env.HOME}/strudel`, `--allow-fs-read=${tmp}`, `--allow-fs-write=${tmp}`,
+    path.join(HIER, '../generator.mjs'), '--kern-port', String(kern.address().port), '--abo-port', '0',
+    '--kit-ordner', path.join(tmp, 'kits'), '--kit', 't', '--muster', muster], { stdio: ['ignore', 'ignore', 'pipe'] });
+  let log = '';
+  p.stderr.on('data', (d) => { log += d; });
+  t.after(() => { p.kill('SIGTERM'); kern.close(); fs.rmSync(tmp, { recursive: true, force: true }); });
+  for (let i = 0; i < 100 && !abo; i++) await warte(50);
+  assert.ok(abo, `kein /k/hallo: ${log}`);
+  kern.send(kodiere('/uhr', 'hhddd', [0n, process.hrtime.bigint(), 6.0, 128, 0]), abo, '127.0.0.1');
+  await warte(400);
+  const lies = () => JSON.parse(fs.readFileSync(path.join(tmp, 'status.json'), 'utf8'));
+  const s1 = lies();
+  assert.deepEqual(s1.taub, ['cutoff']);
+  fs.writeFileSync(`${muster}.neu`, 's("bd"');
+  fs.renameSync(`${muster}.neu`, muster);
+  await warte(600);
+  const s2 = lies();
+  assert.match(s2.fehler ?? '', /^Zeile 1: /);
+  assert.deepEqual(s2.taub, ['cutoff']);
+  assert.equal(s2.taub_muster, s1.taub_muster);
+});
+
+// Task 1.4 Review Fund 4: schon das allererste Muster kaputt, dann stehen taub/taub_muster trotzdem in status.json
+test('erstes Muster kaputt: status.json hat taub [] und taub_muster null', { timeout: 20000 }, async (t) => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'erz-taub3-'));
+  fs.mkdirSync(path.join(tmp, 'kits/t'), { recursive: true });
+  fs.writeFileSync(path.join(tmp, 'kits/t/kit.json'), JSON.stringify({ schema: 1, name: 't', klaenge: [
+    { note: 0, name: 'bd:0', datei: 'bd_0.f32', frames: 1 }] }));
+  const muster = path.join(tmp, 'strom1.js');
+  fs.writeFileSync(muster, 's("bd"');
+  const kern = dgram.createSocket('udp4');
+  await new Promise((r) => kern.bind(0, '127.0.0.1', r));
+  let abo = null;
+  kern.on('message', (b) => { const m = dekodiere(b); if (m.adresse === '/k/hallo') abo = m.werte[1]; });
+  const p = spawn(process.execPath, ['--permission', `--allow-fs-read=${path.resolve(HIER, '../..')}`,
+    `--allow-fs-read=${process.env.HOME}/strudel`, `--allow-fs-read=${tmp}`, `--allow-fs-write=${tmp}`,
+    path.join(HIER, '../generator.mjs'), '--kern-port', String(kern.address().port), '--abo-port', '0',
+    '--kit-ordner', path.join(tmp, 'kits'), '--kit', 't', '--muster', muster], { stdio: ['ignore', 'ignore', 'pipe'] });
+  let log = '';
+  p.stderr.on('data', (d) => { log += d; });
+  t.after(() => { p.kill('SIGTERM'); kern.close(); fs.rmSync(tmp, { recursive: true, force: true }); });
+  for (let i = 0; i < 100 && !abo; i++) await warte(50);
+  assert.ok(abo, `kein /k/hallo: ${log}`);
+  kern.send(kodiere('/uhr', 'hhddd', [0n, process.hrtime.bigint(), 6.0, 128, 0]), abo, '127.0.0.1');
+  await warte(400);
+  const s = JSON.parse(fs.readFileSync(path.join(tmp, 'status.json'), 'utf8'));
+  assert.match(s.fehler ?? '', /^Zeile 1: /);
+  assert.deepEqual(s.taub, []);
+  assert.equal(s.taub_muster, null);
+});
+
+// Task 1.4 Review Fund 1: ein später Zweig (erst im 4. Takt) meldet sein Feld auch noch, nicht nur der erste Takt
+test('Feld eines späten Zweigs kommt nachträglich in status.json (room nach cutoff)', { timeout: 20000 }, async (t) => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'erz-taub4-'));
+  fs.mkdirSync(path.join(tmp, 'kits/t'), { recursive: true });
+  fs.writeFileSync(path.join(tmp, 'kits/t/kit.json'), JSON.stringify({ schema: 1, name: 't', klaenge: [
+    { note: 0, name: 'bd:0', datei: 'bd_0.f32', frames: 1 }] }));
+  const muster = path.join(tmp, 'strom1.js');
+  fs.writeFileSync(muster, 'stack(s("bd").lpf(800), s("<~ ~ ~ bd>").room(0.3))');
+  const kern = dgram.createSocket('udp4');
+  await new Promise((r) => kern.bind(0, '127.0.0.1', r));
+  let abo = null;
+  kern.on('message', (b) => { const m = dekodiere(b); if (m.adresse === '/k/hallo') abo = m.werte[1]; });
+  const p = spawn(process.execPath, ['--permission', `--allow-fs-read=${path.resolve(HIER, '../..')}`,
+    `--allow-fs-read=${process.env.HOME}/strudel`, `--allow-fs-read=${tmp}`, `--allow-fs-write=${tmp}`,
+    path.join(HIER, '../generator.mjs'), '--kern-port', String(kern.address().port), '--abo-port', '0',
+    '--kit-ordner', path.join(tmp, 'kits'), '--kit', 't', '--muster', muster], { stdio: ['ignore', 'ignore', 'pipe'] });
+  let log = '';
+  p.stderr.on('data', (d) => { log += d; });
+  t.after(() => { p.kill('SIGTERM'); kern.close(); fs.rmSync(tmp, { recursive: true, force: true }); });
+  for (let i = 0; i < 100 && !abo; i++) await warte(50);
+  assert.ok(abo, `kein /k/hallo: ${log}`);
+  const t0 = process.hrtime.bigint();   // 400 BPM: ein Takt 0,6 s; die Uhr läuft per Nachricht weiter
+  const bpm = 400;
+  const beatAb = (ns) => 0.5 + Number(ns - t0) / 1e9 * bpm / 60;
+  const tick = () => kern.send(kodiere('/uhr', 'hhddd', [0n, process.hrtime.bigint(), beatAb(process.hrtime.bigint()), bpm, 0]), abo, '127.0.0.1');
+  tick();
+  const lies = () => JSON.parse(fs.readFileSync(path.join(tmp, 'status.json'), 'utf8'));
+  for (let i = 0; i < 60; i++) { await warte(100); tick(); }
+  const s = lies();
+  assert.deepEqual([...s.taub].sort(), ['cutoff', 'room'], log);
+});
+
+// Baukasten S3a Task 4: --ziel bk:<graph> meldet /erz/strom mit diesem Ziel und lädt kein Kit (der Kit-Ordner existiert
+// nicht: ein Kit-Ladeversuch bräche den Prozess ab); die Noten des Musters kommen als Ereignisse an.
+test('Ziel bk:<name>: Strom mit diesem Ziel, kein Kit geladen, Noten im Fenster', { timeout: 20000 }, async (t) => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'erz-bk-'));
+  const muster = path.join(tmp, 'strom1.js');
+  fs.writeFileSync(muster, 'note("a2 c3 e3 a3")');
+  const kern = dgram.createSocket('udp4');
+  await new Promise((r) => kern.bind(0, '127.0.0.1', r));
+  const eingang = [];
+  let abo = null;
+  kern.on('message', (b) => { const m = dekodiere(b); eingang.push(m); if (m.adresse === '/k/hallo') abo = m.werte[1]; });
+  const p = spawn(process.execPath, ['--permission', `--allow-fs-read=${path.resolve(HIER, '../..')}`,
+    `--allow-fs-read=${process.env.HOME}/strudel`, `--allow-fs-read=${tmp}`, `--allow-fs-write=${tmp}`,
+    path.join(HIER, '../generator.mjs'), '--kern-port', String(kern.address().port), '--abo-port', '0',
+    '--kit-ordner', path.join(tmp, 'kein-kit-ordner'), '--ziel', 'bk:juno-pad', '--muster', muster], { stdio: ['ignore', 'ignore', 'pipe'] });
+  let log = '';
+  p.stderr.on('data', (d) => { log += d; });
+  t.after(() => { p.kill('SIGTERM'); kern.close(); fs.rmSync(tmp, { recursive: true, force: true }); });
+  for (let i = 0; i < 100 && !abo; i++) await warte(50);
+  assert.ok(abo, `kein /k/hallo: ${log}`);
+  kern.send(kodiere('/uhr', 'hhddd', [0n, process.hrtime.bigint(), 6.0, 128, 0]), abo, '127.0.0.1');
+  await warte(300);
+  const strom = eingang.find((m) => m.adresse === '/erz/strom');
+  assert.deepEqual(strom?.werte.slice(1), ['erzeuger', 1, 'bk:juno-pad', 'erz/1'], log);
+  const b = eingang.find((m) => m.bundle);
+  assert.ok(b, `kein Fenster: ${log}`);
+  assert.deepEqual(b.elemente.slice(1).map((e) => e.werte[3]), [45, 48, 52, 57, 45, 48, 52, 57]);   // a2 c3 e3 a3, zwei Takte
+  assert.doesNotMatch(log, /nicht lesbar/);   // kein Kit-Ladeversuch (der Kit-Ordner existiert nicht)
+});
+
+// Baukasten S15 task 2 (break 7): the erzeuger reports its note mode in status.json, from the process start on (before any
+// /uhr, so a restarted process never leaves the previous process's file). The page server refuses an instrument graph on a
+// stream whose mode is "kit" (its notes are kit indices, a graph would get the wrong notes or none).
+async function starteErzeuger(t, { ziel = '', vorMuster = null } = {}) {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'erz-noten-'));
+  fs.mkdirSync(path.join(tmp, 'kits/t'), { recursive: true });
+  fs.writeFileSync(path.join(tmp, 'kits/t/kit.json'), JSON.stringify({ schema: 1, name: 't', klaenge: [
+    { note: 0, name: 'bd:0', datei: 'bd_0.f32', frames: 1 }, { note: 1, name: 'hh:0', datei: 'hh_0.f32', frames: 1 }] }));
+  const muster = path.join(tmp, 'strom1.js');
+  if (vorMuster !== null) fs.writeFileSync(muster, vorMuster);
+  const kern = dgram.createSocket('udp4');
+  await new Promise((r) => kern.bind(0, '127.0.0.1', r));
+  let abo = null;
+  const eingang = [];
+  kern.on('message', (b) => { const m = dekodiere(b); eingang.push(m); if (m.adresse === '/k/hallo') abo = m.werte[1]; });
+  const args = ['--permission', `--allow-fs-read=${path.resolve(HIER, '../..')}`,
+    `--allow-fs-read=${process.env.HOME}/strudel`, `--allow-fs-read=${tmp}`, `--allow-fs-write=${tmp}`,
+    path.join(HIER, '../generator.mjs'), '--kern-port', String(kern.address().port), '--abo-port', '0',
+    '--kit-ordner', path.join(tmp, 'kits'), '--kit', 't', '--muster', muster];
+  if (ziel) args.push('--ziel', ziel);
+  const p = spawn(process.execPath, args, { stdio: ['ignore', 'ignore', 'pipe'] });
+  let log = '';
+  p.stderr.on('data', (d) => { log += d; });
+  t.after(() => { p.kill('SIGTERM'); kern.close(); fs.rmSync(tmp, { recursive: true, force: true }); });
+  for (let i = 0; i < 100 && !abo; i++) await warte(50);
+  assert.ok(abo, `kein /k/hallo: ${log}`);
+  const uhr = (beat) => kern.send(kodiere('/uhr', 'hhddd', [0n, process.hrtime.bigint(), beat, 128, 0]), abo, '127.0.0.1');
+  const status = () => { try { return JSON.parse(fs.readFileSync(path.join(tmp, 'status.json'), 'utf8')); } catch { return null; } };
+  const senden = (buf) => kern.send(buf, abo, '127.0.0.1');
+  return { tmp, muster, uhr, status, senden, eingang, log: () => log };
+}
+
+test('status.json carries noten from the start: kit without --ziel, midi with midi:2:1 and bk:x', { timeout: 30000 }, async (t) => {
+  const erwartet = [['', 'kit'], ['midi:2:1', 'midi'], ['bk:juno-pad', 'midi']];
+  for (const [ziel, noten] of erwartet) {
+    const e = await starteErzeuger(t, { ziel });   // no /uhr is ever sent
+    let st = null;
+    for (let i = 0; i < 20 && !st; i++) { st = e.status(); if (!st) await warte(50); }
+    assert.ok(st, `no status.json before /uhr for ziel "${ziel}": ${e.log()}`);
+    assert.equal(st.noten, noten, `ziel "${ziel}"`);
+    assert.deepEqual(st.taub, []);
+    assert.equal(st.taub_muster, null);
+  }
+});
+
+test('noten stays in status.json after a pattern and after a broken pattern', { timeout: 20000 }, async (t) => {
+  const e = await starteErzeuger(t);
+  e.uhr(6.0);
+  await warte(300);
+  fs.writeFileSync(`${e.muster}.neu`, 's("bd*4")');
+  fs.renameSync(`${e.muster}.neu`, e.muster);
+  let st = null;
+  for (let i = 0; i < 40 && !(st && st.nr >= 1); i++) { await warte(50); st = e.status(); }
+  assert.ok(st && st.nr >= 1, `no pattern status: ${e.log()}`);
+  assert.equal(st.noten, 'kit');
+  assert.equal(st.fehler, null);
+  fs.writeFileSync(`${e.muster}.neu`, 's("hh*2")');   // second valid pattern: it takes over at the next bar (the first one starts at once)
+  fs.renameSync(`${e.muster}.neu`, e.muster);
+  await warte(600);
+  const s2 = e.status();
+  assert.equal(s2.noten, 'kit');
+  assert.equal(s2.ab_beat, 8);
+  assert.equal(s2.fehler, null);
+  fs.writeFileSync(`${e.muster}.neu`, 's("hh*2"');
+  fs.renameSync(`${e.muster}.neu`, e.muster);
+  await warte(600);
+  const sf = e.status();
+  assert.equal(sf.noten, 'kit');
+  assert.match(sf.fehler ?? '', /^Zeile 1: /);
+  assert.equal(sf.ab_beat, null);
+  assert.deepEqual(sf.taub, []);
+});
+
+// S17 race: the kern sends /e/neustart twice per generation (once as a broadcast at its start, once on the subscriber's
+// next heartbeat, net.cpp erstes_in_generation). Announcing on both let the second announcement replace a graph that the
+// page server had restored in between. The stream is announced once per generation.
+test('after a kern restart the stream is announced once per generation', { timeout: 30000 }, async (t) => {
+  const e = await starteErzeuger(t, { ziel: 'midi:1:1' });
+  const strom = () => e.eingang.filter((m) => m.adresse === '/erz/strom').length;
+  const neustart = (g) => e.senden(kodiere('/e/neustart', 'ih', [g, 0n]));
+  const willkommen = (g) => e.senden(kodiere('/k/willkommen', 'iihdds', [1, g, 0n, 0, 128, 'test']));
+  e.uhr(6.0);
+  await warte(300);
+  const start = strom();
+  assert.equal(start, 1, 'one announcement on the first /uhr');
+  neustart(1);                                // the broadcast at the kern start
+  await warte(300);
+  assert.equal(strom(), start + 1, 'the first /e/neustart of generation 1 announces');
+  willkommen(1);                              // the heartbeat repeat of net.cpp: /k/willkommen then /e/neustart, same generation
+  neustart(1);
+  await warte(300);
+  assert.equal(strom(), start + 1, 'the repeat of generation 1 must not announce again');
+  // negative control: a real new generation announces again
+  neustart(2);
+  await warte(300);
+  assert.equal(strom(), start + 2, 'generation 2 announces');
+  // reset rule: a /k/willkommen with another generation (a braked kern start, generation 0) forgets the announced one,
+  // so a later /e/neustart that happens to carry generation 2 again is a new kern and announces
+  willkommen(0);
+  neustart(2);
+  await warte(300);
+  assert.equal(strom(), start + 3, 'after a /k/willkommen of another generation the same number announces again');
+});

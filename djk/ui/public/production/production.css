@@ -1,0 +1,405 @@
+/* PRODUCTION-Ansicht (D1 V1, Spec 2.11). Gilt nur unter body.produktion; DJ und STUDIO bleiben unberührt (style.css
+   wird nicht angefasst, Konfliktdatei V1/V2). Raster: Kopf oben über die ganze Breite, links der vorhandene #bestand
+   (derselbe Knoten, kein zweiter Browser) mit dem Reiter LIBRARY schmal, rechts #produktion: Transportleiste,
+   Arrangement, Detailbereich (leerer Rahmen bis V2). lib-zu klappt den Browser auf 34 px ein; lib-gross gilt hier nicht. */
+#produktion { display: none; }
+body.produktion, body.produktion.lib-zu, body.produktion.lib-gross {
+  grid-template-rows: var(--kopf) minmax(0, 1fr);
+  grid-template-columns: minmax(240px, 18vw) minmax(0, 1fr);
+  grid-template-areas: "kopf kopf" "bestand prod";
+}
+body.produktion.lib-zu { grid-template-columns: var(--lib-zu) minmax(0, 1fr); }
+body.produktion #kopf { grid-area: kopf; }
+body.produktion #pult { display: none; }
+body.produktion #bestand { grid-area: bestand; min-width: 0; }
+body.produktion #produktion { grid-area: prod; display: grid; min-width: 0; min-height: 0; gap: 6px;
+  grid-template-rows: auto minmax(140px, 1fr) auto auto auto auto var(--detail, 26vh); position: relative; }   /* Zeilen in Flussreihenfolge: Transport, Arrangement, Mischer (Gruppen und Master; meist versteckt), INPUTS (zu: nur die Summary), Detail; jedes Kind hat unten eine feste grid-row (1.10 N4) */
+.p-transport { grid-row: 1; } .p-arr { grid-row: 2; } .p-mixer { grid-row: 3; } .p-returns { grid-row: 4; } .p-inserts { grid-row: 5; } .p-geraete { grid-row: 6; } .p-detail { grid-row: 7; }
+
+/* Browser links, schmal: nur LIBRARY, Baum über der Liste, Detail aus, nur die Namensspalte */
+/* Welche Tabelle des Browsers zeigt: in PRODUCTION immer LIBRARY, unabhängig vom DJ-Zustand (Reiter, BOTTOM-PANEL EFFECTS). Vorher
+   klickte production.js die DJ-Knöpfe an; das schrieb djk-bereich und setzte den Fokus in die Suche. !important, weil
+   body.bereich-effekte alle .tabelle mit !important ausblendet; eingeklappt (lib-zu) gilt die Regel nicht. */
+body.produktion #bestand .tabelle:not([data-tabelle="library"]) { display: none !important; }
+body.produktion:not(.lib-zu) #bestand .tabelle[data-tabelle="library"] { display: block !important; }
+body.produktion #bestand .reiter, body.produktion #bestand .bereich, body.produktion #gross, body.produktion #suche,
+body.produktion #bestand-info, body.produktion .st-detail, body.produktion #effekte { display: none; }   /* #effekte: .effekte {display:flex} in style.css überstimmt hidden, auch in DJ (Nebenbefund) */
+body.produktion #bestand .kopfzeile { flex-wrap: wrap; gap: 6px; }
+body.produktion .stoebern { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(60px, 28%) minmax(0, 1fr); gap: 6px; }
+body.produktion .st-baum { display: block; border-right: 0; border-bottom: 1px solid var(--line); padding: 0 0 4px; }
+body.produktion .st-typen button { font-size: 10px; padding: 2px 6px; }
+body.produktion .lib-filter { flex-wrap: wrap; }
+body.produktion #st-kopfzeile th:not(:first-child), body.produktion #libliste td:not(:first-child) { display: none; }
+body.produktion #libliste tr[data-prod-zieh] { cursor: grab; }
+body.produktion.lib-zu #bestand { padding: 6px 4px; }
+body.produktion.lib-zu #bestand > :not(.kopfzeile), body.produktion.lib-zu #bestand .kopfzeile > :not(#schublade) { display: none; }
+/* 1.16 rest (U6): the mode switch LIBRARY · DEVICES · PRESETS · COLLECTIONS (browser_choice.js). After the block above and with the same strength:
+   the library rule above shows LIBRARY with !important, body.bereich-effekte hides with !important. Outside PRODUCTION the switch is not shown. */
+.p-browserwahl { display: none; }
+body.produktion .p-browserwahl { display: flex; }
+body.produktion .p-browserwahl button { font-size: 10px; padding: 2px 6px; }
+body.produktion:not(.b-library) #bestand .tabelle[data-tabelle="library"] { display: none !important; }
+body.produktion #geraete-browser, body.produktion #presets, body.produktion #kollektionen { display: none !important; }
+body.produktion.b-geraete #geraete-browser { display: block !important; }
+body.produktion.b-presets #presets { display: block !important; }
+body.produktion.b-kollektionen #kollektionen { display: block !important; }
+#geraete-browser { overflow: auto; min-height: 0; }
+.geraete-liste { list-style: none; margin: 0 0 8px; padding: 0; }
+.geraete-zeile { padding: 3px 6px; border-radius: 4px; cursor: grab; }
+.geraete-zeile.aus { opacity: .45; cursor: not-allowed; }
+.geraete-art { margin-left: 6px; font-size: 10px; color: var(--dim); }
+/* 1.16 rest (U7): the PRESETS list in the narrow browser column. One row = name, device, origin (the rest is in the detail below); a row is dragged onto a track or a stage. */
+body.produktion #presets { overflow: auto; min-height: 0; }
+body.produktion .preset-rumpf { grid-template-columns: minmax(0, 1fr); }
+body.produktion .preset-zeile { grid-template-columns: minmax(0, 1fr) auto auto; cursor: grab; }
+body.produktion .preset-zeile .preset-beschreibung, body.produktion .preset-zeile .preset-tags { display: none; }
+body.produktion .preset-zeile.kaputt { cursor: default; }
+body.produktion .preset-ziehen-hinweis { margin: 0; color: var(--dim); font-size: 11px; }
+body.produktion .preset-kopf select { max-width: 14ch; }
+
+/* Transportleiste */
+.p-transport { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 8px; padding: 4px 10px; min-width: 0; }
+.p-gruppe { display: flex; align-items: center; gap: 4px; }
+.p-transport button, .p-transport select, .p-transport input { font-size: 11px; font-weight: 700; letter-spacing: .06em; padding: 3px 8px;
+  border-radius: 5px; background: var(--panel2); color: var(--text); border: 1px solid var(--line); }
+.p-transport button.an { background: var(--a); color: #0e0f12; border-color: var(--a); }
+.p-transport button:disabled, .p-ecke button:disabled { opacity: .4; cursor: default; }
+.p-transport input { width: 7ch; font-variant-numeric: tabular-nums; user-select: text; }
+.p-name { font-weight: 800; max-width: 18ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.p-position { font: 700 18px ui-monospace, monospace; min-width: 8ch; text-align: right; }
+.p-meldung { flex: 1; min-width: 10ch; color: var(--dim); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.p-meldung.fehler { color: var(--kill); }
+.p-offline { font-size: 11px; font-weight: 700; letter-spacing: .08em; padding: 2px 8px; border-radius: 4px; color: var(--kill); border: 1px solid var(--kill); }
+.p-offline[hidden] { display: none; }
+.p-kern { color: var(--dim); font-size: 11px; }
+.p-limiter { color: #0e0f12; background: var(--warn); font-size: 10px; font-weight: 800; letter-spacing: .08em; padding: 1px 6px; border-radius: 4px; }
+.p-limiter[hidden] { display: none; }
+.p-verlauf { position: absolute; right: 10px; top: 44px; z-index: 20; margin: 0; padding: 6px 10px 6px 28px; max-height: 50vh; overflow: auto;
+  background: #14171d; border: 1px solid var(--line); border-radius: 6px; font-size: 12px; box-shadow: 0 6px 18px rgba(0, 0, 0, .5); }
+.p-verlauf[hidden] { display: none; }
+.p-verlauf li { white-space: nowrap; }
+.p-verlauf .p-verlauf-undo, .p-verlauf .p-verlauf-redo { color: var(--dim); }
+
+/* Arrangement: Ecke | Lineal, darunter Köpfe | Spurfläche in EINEM senkrecht scrollenden Körper */
+.p-arr { display: grid; grid-template-columns: 264px minmax(0, 1fr); grid-template-rows: 28px minmax(0, 1fr) 14px; min-height: 0;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; position: relative; }
+.p-ecke { display: flex; gap: 2px; align-items: center; padding: 0 4px; border-right: 1px solid var(--line); }
+.p-ecke button { font-size: 9px; font-weight: 700; padding: 2px 4px; border-radius: 4px; white-space: nowrap; }
+.p-lineal { display: block; width: 100%; height: 28px; cursor: pointer; touch-action: none; }
+.p-koerper { grid-column: 1 / -1; display: grid; grid-template-columns: 264px minmax(0, 1fr); overflow-y: auto; overflow-x: hidden; min-height: 0; }
+.p-koepfe { border-right: 1px solid var(--line); }
+.p-hleiste { grid-column: 2; overflow-x: auto; overflow-y: hidden; height: 14px; }   /* sichtbare Scrollleiste (Andreas 2026-10-30) */
+.p-hleiste > div { height: 1px; }
+.p-flaeche { position: relative; min-height: 100%; }
+.p-flaeche canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block; }
+.p-ueber { touch-action: none; }
+.p-leer { position: absolute; inset: 28px 0 0 0; display: flex; align-items: center; justify-content: center; color: var(--dim); font-size: 14px; pointer-events: none; }
+.p-leer[hidden] { display: none; }
+
+/* Spurkopf: 64 px wie eine Spurzeile (layout.js SPUR_HOEHE). Neun Spalten: Farbe | Name | Gerät | ↑ | ↓ | M | S | (frei) | ✕; Zeile 2 endet mit AUTO ● in Spalte 9 (task 9) */
+.p-kopf { height: 64px; box-sizing: border-box; display: grid; grid-template-columns: 10px minmax(0, 1fr) auto 18px 18px 22px 22px 18px 36px;
+  grid-template-rows: 20px 18px 14px; gap: 2px 4px; padding: 3px 6px 3px 0; border-bottom: 1px solid var(--line); font-size: 11px; }
+.p-farbe { grid-column: 1; grid-row: 1 / -1; width: 10px; padding: 0; border: 0; border-radius: 0; background: var(--farbe); }
+.p-spurname { grid-column: 2; grid-row: 1; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; align-self: center; }
+.p-namefeld { grid-column: 2 / 4; grid-row: 1; font: inherit; min-width: 0; }
+.p-geraet { grid-column: 3; grid-row: 1; color: var(--dim); font-size: 9px; letter-spacing: .08em; align-self: center; white-space: nowrap; }
+.p-hoch, .p-runter, .p-mute, .p-solo, .p-loeschen { grid-row: 1; font-size: 10px; font-weight: 800; padding: 0; border-radius: 4px; }
+.p-hoch { grid-column: 4; } .p-runter { grid-column: 5; } .p-mute { grid-column: 6; } .p-solo { grid-column: 7; } .p-loeschen { grid-column: 9; }   /* ✕ at the right edge (column 9, task 9) */
+.p-kopf button:disabled { opacity: .3; cursor: default; }
+.p-mute.an { background: var(--warn); color: #0e0f12; border-color: var(--warn); }
+.p-solo.an { background: var(--a); color: #0e0f12; border-color: var(--a); }
+.p-fader { grid-column: 2 / 4; grid-row: 2; min-width: 0; height: 14px; accent-color: var(--farbe); }
+/* 1.10 (N3): Ausgang-Wahl in Zeile 2 neben dem Fader, bei allen Spuren; Zeile 3 gehört Arm, Eingang und Pegel (I08) */
+.p-ausgang { grid-column: 4 / 6; grid-row: 2; min-width: 0; height: 14px; font-size: 9px; padding: 0 2px; appearance: none; text-overflow: ellipsis; background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 3px; }   /* ohne den Pfeil des Systems: in 40 px bleibt Platz für „Master“ (gemessen 27,5 px bei 9 px) */
+.p-faderwert { grid-column: 6 / 9; grid-row: 2; font-size: 10px; text-align: right; }
+.p-pan { grid-column: 2; grid-row: 3; min-width: 0; height: 12px; }
+.p-panwert { grid-column: 3; grid-row: 3; font-size: 10px; }
+.p-pegel { grid-column: 4 / 9; grid-row: 3; align-self: center; height: 6px; }
+
+/* Detailbereich: leerer Rahmen, gefüllt in V2 (Clip-Bearbeitung, Piano-Roll) */
+.p-detail { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; min-height: 0; overflow: hidden; }
+.p-detail-kopf { font-size: 11px; font-weight: 700; letter-spacing: .16em; color: var(--dim); }
+.p-detail-leer { color: var(--dim); font-size: 13px; padding-top: 8px; }
+
+/* D1 V2 Slice 1: Spurfläche mit Tastaturfokus (Entf, Strg+D, Strg+E, Strg+L wirken nur dort) */
+.p-ueber:focus { outline: 1px solid rgba(47, 214, 195, .45); outline-offset: -1px; }
+
+/* D1 V2 Slice 2: Detailbereich (Clip-Ansicht) und Piano-Roll */
+.p-roll:focus { outline: 1px solid rgba(47, 214, 195, .45); outline-offset: -1px; }
+.p-detail { display: flex; flex-direction: column; gap: 4px; }
+.p-detail-kopf { display: flex; align-items: center; gap: 10px; min-height: 22px; }
+.p-detail-info { letter-spacing: 0; font-weight: 400; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.p-detail-knoepfe { margin-left: auto; display: flex; gap: 4px; }
+.p-detail button, .p-detail input, .p-detail select { font-size: 11px; font-weight: 700; padding: 2px 6px; border-radius: 5px;
+  background: var(--panel2); color: var(--text); border: 1px solid var(--line); }
+.p-detail button:disabled { opacity: .4; cursor: default; }
+.p-detail-leer[hidden], .p-clip-audio[hidden], .p-clip-midi[hidden], .p-irack[hidden] { display: none; }
+.p-clip-audio { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; font-size: 11px; color: var(--dim); }
+.p-clip-audio input:not([type="range"]) { width: 8ch; font-variant-numeric: tabular-nums; user-select: text; }
+/* Paket 1.13 Warp: Zeile im Detailbereich eines Audio-Clips */
+.p-clip-audio label[hidden] { display: none; }
+.p-warp { display: flex; gap: 8px; align-items: center; }
+.p-warp button.an { background: #e0a83b; color: #0e0f12; border-color: #e0a83b; }
+.p-warp-modus { letter-spacing: 0.06em; color: var(--fg, inherit); background: transparent; border: 1px solid var(--dim); border-radius: 4px; font: inherit; padding: 1px 4px; }
+.p-warp-modus:disabled { opacity: 0.4; }
+.p-warp-info { color: var(--dim); cursor: help; }
+.p-warp-ton { color: var(--dim); display: inline-flex; gap: 4px; align-items: center; }
+.p-warp-ton input { width: 4.2em; text-align: right; }
+.p-clip-audio input[data-f="name"] { width: 18ch; }
+.p-clip-midi { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 4px; }
+.p-roll-leiste { display: flex; gap: 12px; align-items: center; font-size: 11px; color: var(--dim); }
+.p-roll-leiste input { width: 5ch; }
+.p-roll-hilfe { margin-left: auto; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.p-roll { flex: 1; min-height: 0; width: 100%; display: block; border-radius: 4px; touch-action: none; }
+.p-detail-knoepfe button.an { background: #2fd6c3; color: #0e0f12; border-color: #2fd6c3; }
+
+/* D1 V2 Slice 3: FREEZE im Spurkopf einer Wirt-Spur (Spalte 5, Zeile 2; der Fader wird dort schmaler), EXPORT in der Transportleiste */
+/* 1.10: der Fader endet bei Spalte 4 (Ausgang-Wahl 4 / 6); FREEZE rückt dafür auf Spalte 6, der Faderwert auf 7 / 9 */
+.p-kopf[data-wirt] .p-faderwert { grid-column: 7 / 9; }
+.p-freeze { grid-column: 6; grid-row: 2; font-size: 11px; line-height: 1; padding: 0; border-radius: 4px; }
+.p-freeze.an { background: #8ad4ff; color: #0e0f12; border-color: #8ad4ff; }
+.p-freeze.laeuft { animation: p-puls .8s infinite alternate; }
+@keyframes p-puls { from { opacity: 1; } to { opacity: .35; } }
+.p-ausgabe-text { font-size: 11px; color: var(--dim); max-width: 44ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.p-ausgabe-text.warnung { color: var(--kill); }
+/* 1.10 Slice 2: eine Warnung (CLIPPING, ABOVE SET LIMITER CEILING) wird nie mit Auslassung gekürzt; die Zeile bricht lieber in die nächste Reihe der Leiste um */
+.p-ausgabe-text.warnung { max-width: none; }
+
+/* Paket 1.18, E-c: Varianten-Tasten A, B, C … je Gruppe in der Transportleiste */
+.p-varianten[hidden] { display: none; }
+.p-var-reihe { display: inline-flex; align-items: center; gap: 2px; margin-right: 8px; }
+.p-var-name { font-size: 10px; letter-spacing: .08em; color: var(--dim); max-width: 12ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-right: 2px; }
+/* .p-transport vorn: sonst gewinnt .p-transport button (0,1,1) gegen .p-var (Review S2, gemessen per getComputedStyle) */
+.p-transport .p-var { min-width: 22px; padding: 2px 4px; font-size: 10px; font-weight: 800; border-radius: 4px; }
+.p-transport .p-var.an { background: var(--a); color: #0e0f12; border-color: var(--a); }
+
+/* I08: Geräte-Panel (Panel INPUTS) */
+.p-geraete { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 4px 10px; font-size: 12px; }
+.p-geraete summary { cursor: pointer; font-size: 11px; font-weight: 700; letter-spacing: .16em; color: var(--dim); }
+.p-gzeile { display: grid; grid-template-columns: 9ch 22ch 24ch 160px auto minmax(0, 1fr); gap: 4px 10px; align-items: center; padding: 3px 0; border-top: 1px solid var(--line); }
+.p-gname { font-weight: 700; }
+.p-gstatus { color: var(--dim); }
+.p-glatenz, .p-ghinweis { color: var(--dim); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.p-gzeile select, .p-gzeile input { font-size: 11px; }
+.p-gzeile .meter { height: 6px; }
+.p-geraete [data-p="geraete-liste"] { max-height: 30vh; overflow: auto; }
+
+/* 1.8: Arm und Eingang im Spurkopf (Zeile 3), REC in der Transportleiste */
+.p-arm { grid-column: 4; grid-row: 3; font-size: 10px; font-weight: 800; padding: 0; border-radius: 9px; color: #e5484d; }
+.p-eingang { grid-column: 5 / 7; grid-row: 3; min-width: 0; height: 14px; font-size: 9px; padding: 0; }
+.p-kopf:has(.p-arm:not([hidden])) .p-pegel { grid-column: 7 / 9; }
+.p-modus { grid-column: 7 / 9; grid-row: 3; min-width: 0; height: 14px; font-size: 9px; padding: 0; }   /* 1.8 S2b: mode of an external input; the level bar gives way */
+.p-kopf:has(.p-modus:not([hidden])) .p-pegel { grid-column: 9; }   /* Instrument-Spuren haben weder Arm noch Eingang: dort bleibt der Pegel breit (4 / 9) */
+/* 1.8 S3: monitoring buttons IN / AUTO / OFF and the level bar of the input, external inputs only (class .extern set in track_heads.js). The head has no free cell, so
+   they take the places of the value texts: the monitor group replaces the fader value in row 2, the input level bar the pan value in row 3; both values stay in the
+   sliders' aria-valuetext of the browser. */
+.p-monitor { grid-column: 6 / 9; grid-row: 2; display: flex; gap: 1px; min-width: 0; }
+.p-monitor[hidden], .p-eingpegel[hidden] { display: none; }
+.p-mon { flex: 1 1 auto; min-width: 0; height: 14px; font-size: 8px; font-weight: 800; letter-spacing: 0; padding: 0 2px; border-radius: 3px; }   /* by content: AUTO is wider than IN (measured 23 px was too narrow with equal thirds) */
+.p-mon.an { background: var(--a); color: #0e0f12; border-color: var(--a); }
+.p-eingpegel { grid-column: 3; grid-row: 3; align-self: center; height: 6px; }
+.p-kopf.extern .p-faderwert, .p-kopf.extern .p-panwert { display: none; }
+.p-arm.an { background: #e5484d; color: #0e0f12; border-color: #e5484d; }
+.p-transport .p-rec.an { background: #e5484d; color: #0e0f12; border-color: #e5484d; }
+.p-recstatus { font-size: 11px; color: var(--dim); min-width: 14ch; }
+.p-aufnahme { gap: 4px; }   /* 1.8 T5: count-in, punch, overdub */
+.p-aufnahme label { font-size: 11px; color: var(--dim); }
+.p-aufnahme .p-takt { width: 4ch; text-align: center; }
+.p-aufnahme button.an { background: #e5484d; color: #0e0f12; border-color: #e5484d; }
+
+/* 1.10 Slice 1: Gruppen und Master unter dem Arrangement (P1) */
+.p-mixer { display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 4px 6px; min-width: 0; }
+.p-mixer[hidden] { display: none; }
+.p-mixer-kopf { display: flex; align-items: center; gap: 8px; }
+.p-mixer-titel { font-size: 10px; font-weight: 700; letter-spacing: .16em; color: var(--dim); }
+.p-mixer-kopf button { font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 4px; }
+.p-mixer-kopf button:disabled { opacity: .4; cursor: default; }
+.p-gruppenreihe { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; min-width: 0; }
+.p-gruppenkopf { width: 264px; border: 1px solid var(--line); border-radius: 4px; }
+.p-gruppenkopf .p-fader { grid-column: 2 / 6; }   /* keine Ausgang-Wahl, keine Pfeile: der Fader nimmt die Spalten bis 5 */
+/* 1.10 slice 3: returns (the head is the group head with Hall rows) and the send grid */
+.p-returnkopf { width: 300px; height: auto; grid-template-rows: 20px 18px 14px auto; max-height: 40vh; overflow-y: auto; }
+.p-hallblock { grid-column: 1 / -1; font-size: 10px; }
+.p-hallblock summary { cursor: pointer; letter-spacing: .12em; color: var(--dim); font-weight: 700; }
+.p-hallan { font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 4px; margin-left: 6px; }
+.p-hallzeile { display: grid; grid-template-columns: 76px 1fr 10ch; white-space: nowrap; gap: 6px; align-items: center; }
+.p-hall { min-width: 0; height: 12px; }
+.p-hallwert, .p-sendwert { text-align: right; font-variant-numeric: tabular-nums; }
+.p-sendblock { flex-basis: 100%; font-size: 10px; margin-top: 4px; }
+.p-sendraster { display: flex; flex-direction: column; gap: 2px; padding-top: 4px; max-height: 220px; overflow-y: auto; }
+.p-sendzeile { display: flex; align-items: center; gap: 10px; }
+.p-sendname { width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.p-send { display: grid; grid-template-columns: 56px 110px 6ch; gap: 4px; align-items: center; }
+.p-sendregler { min-width: 0; height: 12px; }
+.p-pm { display: grid; grid-template-columns: auto 160px 6ch; gap: 2px 8px; align-items: center; margin-left: auto; }
+.p-pm-fader { min-width: 0; height: 14px; }
+.p-pm-wert { font-size: 10px; text-align: right; }
+.p-pm-pegel { grid-column: 1 / -1; height: 6px; }
+
+/* Paket 1.13 Warp, Slice 3b: ×2, :2 (Task 4), SET PROJECT TEMPO (Task 10), Sample-Editor und Kontextmenü (Task 17) */
+.p-warp-tempo { display: inline-flex; gap: 4px; }
+.p-warp-editor { flex-basis: 100%; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.p-warp-editor[hidden] { display: none; }
+.p-warp-editor-leiste { display: flex; gap: 12px; align-items: center; font-size: 11px; color: var(--dim); }
+.p-warp-canvas { width: 100%; height: 10vh; min-height: 72px; display: block; border-radius: 4px; touch-action: none; }
+.p-warp-canvas:focus { outline: 1px solid rgba(224, 168, 59, .5); outline-offset: -1px; }
+.p-menue { position: fixed; z-index: 1000; margin: 0; padding: 4px; list-style: none; min-width: 220px; background: var(--panel2); color: var(--text);
+  border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 6px 18px rgba(0, 0, 0, .5); font-size: 12px; }
+.p-menue button { display: block; width: 100%; text-align: left; padding: 5px 8px; border: 0; border-radius: 4px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.p-menue button:hover:not(:disabled), .p-menue button:focus-visible { background: #e0a83b; color: #0e0f12; outline: 0; }
+.p-menue button:disabled { opacity: .35; cursor: default; }
+/* 1.12 slice 4: a group label in a flat context menu (lane range menu: Insert shape) */
+.p-menue-gruppe { padding: 4px 8px 2px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--dim, #8a8f98); }
+
+/* Slice 4 (T10): Transienten der Quelle im Sample-Editor, grau mit 45 % Deckkraft (warp_editor_operation.js liest die Variable; sie gilt für das Canvas) */
+.p-warp-canvas { --p-transient: rgba(160, 165, 175, 0.45); }
+
+/* Automation Slice 1: the A button, AUTO in front of the fader value, and the head of an open lane row (48 px like the lane row, layout.js LANE_HOEHE).
+   The A button sits over the right end of row 3 (absolute) and the level meter ends before it, so the grid of the head and every row height stay as they were. */
+.p-kopf { position: relative; }
+.p-pegel { margin-right: 22px; }
+.p-lane { position: absolute; right: 6px; bottom: 3px; width: 18px; height: 14px; font-size: 9px; font-weight: 800; line-height: 1; padding: 0; border-radius: 4px; }
+.p-lane.hat { border-color: var(--a); color: var(--a); }
+.p-lane.an { background: var(--a); color: #0e0f12; border-color: var(--a); }
+.p-kopf.auto .p-faderwert::before { content: "AUTO "; color: var(--a); font-weight: 800; letter-spacing: .06em; }
+.p-lanenkopf { height: 48px; box-sizing: border-box; display: flex; align-items: center; gap: 6px; padding: 0 6px 0 10px; border-bottom: 1px solid var(--line);
+  border-left: 10px solid var(--farbe, #8a8d98); font-size: 11px; background: #0d1014; }
+.p-lanentitel { font-weight: 700; flex: 1; }
+.p-lanenkopf button { font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 4px; }
+.p-lanenkopf button[hidden] { display: none; }
+
+/* Automation Slice 2: the lane selector, "+ Lane", the lock, AUTO in front of the pan value */
+.p-kopf.auto-pan .p-panwert::before { content: "AUTO "; color: var(--a); font-weight: 800; letter-spacing: .06em; }
+.p-lanenwahl, .p-lane-neu { font-size: 10px; max-width: 96px; min-width: 0; }
+.p-lanenwahl { flex: 1; }
+.p-lanenwahl[hidden], .p-lane-neu[hidden] { display: none; }
+.p-lane-sperre.an { background: var(--a); color: #0e0f12; border-color: var(--a); }
+.p-lane-zeichnen.an { background: var(--a); color: #0e0f12; border-color: var(--a); }   /* 1.12 slice 4: draw mode */
+.p-lanenkopf button:disabled { opacity: .4; }
+
+/* 1.12 Slice 3 task 5: a field the hand has taken over turns orange (regulator and lane line, arrangement.js), RE-ENABLE AUTOMATION ends it */
+.p-kopf.ueber-fader .p-fader, .p-kopf.ueber-pan .p-pan { accent-color: var(--ueber); }
+.p-kopf.ueber-fader .p-faderwert, .p-kopf.ueber-pan .p-panwert { color: var(--ueber); }
+.p-kopf.ueber-fader.auto .p-faderwert::before, .p-kopf.ueber-pan.auto-pan .p-panwert::before { color: var(--ueber); }
+.p-transport button.p-reenable.ueber { background: var(--ueber); color: #0e0f12; border-color: var(--ueber); font-weight: 800; }
+.p-transport button.p-reenable:disabled { opacity: .45; }
+
+/* fix round 1: M and S of an overridden field are orange too */
+.p-mute.ueber, .p-solo.ueber { background: var(--ueber); color: #0e0f12; border-color: var(--ueber); }
+
+/* 1.12 S3 task 9: AUTO ● per track head (column 9, row 2) and the mode buttons TOUCH / LATCH / WRITE in the transport bar. Armed: filled red like the audio arm. */
+.p-autoarm { grid-column: 9; grid-row: 2; font-size: 8px; font-weight: 800; letter-spacing: 0; padding: 0; border-radius: 4px; color: #e5484d; white-space: nowrap; }
+.p-autoarm.an { background: #e5484d; color: #0e0f12; border-color: #e5484d; }
+.p-transport .p-automodus { font-size: 10px; font-weight: 800; padding: 2px 5px; }
+.p-transport .p-automodus.an { background: #e5484d; color: #0e0f12; border-color: #e5484d; }
+.p-autotitel { font-size: 10px; letter-spacing: .08em; color: var(--dim); }
+
+/* 1.10 slice 4a T7: PRE/POST switch of a return and the INSERTS block (one row per strip, four places) */
+.p-prepost { grid-column: 4 / 6; font-size: 9px; font-weight: 800; letter-spacing: .06em; padding: 0 4px; border-radius: 4px; }
+.p-prepost.an { background: var(--a); color: #0e0f12; border-color: var(--a); }
+.p-inserts { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 4px 10px; min-width: 0; }
+.p-insertliste { display: flex; flex-direction: column; gap: 3px; padding-top: 4px; max-height: 170px; overflow-y: auto; overflow-x: hidden; }
+.p-kette { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; font-size: 11px; min-width: 0; }
+.p-kette-name { flex: 0 0 120px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dim); }
+.p-kette-latenz { flex: 0 0 auto; font-size: 11px; color: var(--dim); }
+.p-platz { display: inline-flex; align-items: center; gap: 2px; min-width: 64px; min-height: 22px; border: 1px dashed var(--line); border-radius: 5px; padding: 0 2px; box-sizing: border-box; }
+.p-platz.leer { justify-content: center; opacity: .85; }
+.p-platz.p-stufe { border-style: solid; background: var(--panel2); }
+.p-platz.p-stufe.aus .p-ins-name { opacity: .5; text-decoration: line-through; }
+.p-platz button { font-size: 10px; padding: 1px 4px; border-radius: 4px; min-height: 18px; }
+.p-ins-gr { min-width: 5.5ch; text-align: right; font-size: 10px; color: var(--dim); font-variant-numeric: tabular-nums; }
+.p-ins-gr.wirkt { color: var(--a); }
+.p-ins-preset { max-width: 20ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; color: var(--dim); }   /* 1.16 rest U7: origin mark of a stage */
+.p-ins-preset.geaendert { color: var(--warn); }
+.p-ins-an.an { background: var(--a); color: #0e0f12; border-color: var(--a); }
+.p-ins-neu:disabled { opacity: .45; }
+.p-ins-popover { flex: none; width: calc(100% - 126px); box-sizing: border-box; display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 2px 14px; padding: 4px 8px; margin: 2px 0 4px 126px;
+  background: #14171d; border: 1px solid var(--line); border-radius: 6px; }
+.p-ins-zeile { display: grid; grid-template-columns: 84px minmax(0, 1fr) 9ch; gap: 6px; align-items: center; color: var(--dim); white-space: nowrap; }
+.p-ins-zeile select { grid-column: 2; min-width: 0; width: 100%; font-size: 11px; }
+.p-ins-zeile input { min-width: 0; width: 100%; }
+.p-ins-wert { color: var(--text); text-align: right; }
+/* 1.10 slice 4b T12: the EQ popover has eight band blocks; a band block is one column cell of the popover grid, its rows are the same rows as the others */
+.p-ins-band { display: grid; gap: 2px; padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; min-width: 0; }
+.p-ins-band-kopf { font-size: 10px; letter-spacing: .08em; color: var(--dim); }
+.p-ins-zeile input[type="checkbox"] { width: auto; justify-self: start; }
+.p-ins-neu { margin-right: 2px; }
+/* 1.10 slice 4c: the rack of a strip. The panel reuses the popover grid; a macro block is one cell like an EQ band block. */
+.p-rack-knopf { font-size: 10px; padding: 1px 6px; border-radius: 4px; min-height: 18px; margin-left: auto; }
+.p-rack-knopf[aria-expanded="true"] { background: var(--a); color: #0e0f12; border-color: var(--a); }
+.p-duck { font-size: 10px; padding: 1px 4px; border-radius: 4px; min-height: 18px; max-width: 120px; background: var(--panel2); border: 1px solid var(--line); color: var(--text); }
+.p-makro-kopf { display: grid; grid-template-columns: minmax(0, 9ch) minmax(0, 1fr) 5ch; gap: 6px; align-items: center; }
+.p-makro-name { min-width: 0; font-size: 11px; }
+.p-makro-ziele { display: grid; gap: 2px; }
+.p-ziel { display: grid; grid-template-columns: minmax(0, 1fr) 7ch 7ch auto; gap: 4px; align-items: center; color: var(--dim); }
+.p-ziel-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.p-ziel input { min-width: 0; width: 100%; font-size: 11px; }
+.p-ziel input.falsch { outline: 1px solid #d9534f; }
+.p-makro-neu { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px; }
+.p-makro-neu select { min-width: 0; font-size: 11px; }
+.p-rack-info { grid-column: 1 / -1; font-size: 10px; color: var(--dim); }
+.p-variationen { grid-column: 1 / -1; display: grid; gap: 3px; font-size: 11px; }
+.p-variationen-kopf { font-size: 10px; letter-spacing: .08em; color: var(--dim); }
+.p-variationen-liste { display: flex; flex-wrap: wrap; gap: 2px 14px; color: var(--dim); }
+.p-variation { display: inline-flex; gap: 4px; align-items: center; }
+.p-variation-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.p-variation-neu { display: grid; grid-template-columns: minmax(0, 18ch) auto; gap: 4px; justify-content: start; }
+.p-variation-name { min-width: 0; font-size: 11px; }
+.p-ins-zeile.gemappt { opacity: .55; }
+.p-ins-zeile.gemappt input { cursor: not-allowed; }
+.p-ins-zeile.gemappt .p-ins-wert { color: var(--a); }
+@media (max-width: 700px) { .p-kette-name { flex-basis: 100%; } .p-kette-latenz { flex-basis: 100%; } .p-ins-popover { margin-left: 0; width: 100%; } .p-platz { min-width: 0; } }
+/* 1.14 Comping, task 7: the T button (left of A), the head of a take row (40 px like the row, layout.js TAKE_HOEHE) */
+.p-take { position: absolute; right: 28px; bottom: 3px; width: 18px; height: 14px; font-size: 9px; font-weight: 800; line-height: 1; padding: 0; border-radius: 4px; }
+.p-take[hidden] { display: none; }
+.p-take.an { background: var(--a); color: #0e0f12; border-color: var(--a); }
+.p-kopf.hat-takes .p-pegel { margin-right: 44px; }
+.p-takekopf { height: 40px; box-sizing: border-box; display: flex; align-items: center; gap: 6px; padding: 0 6px 0 10px; border-bottom: 1px solid var(--line);
+  border-left: 10px solid var(--farbe, #8a8d98); font-size: 11px; background: #0c0e12; }
+.p-takename { flex: 1; min-width: 0; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.p-takename[hidden] { display: none; }
+.p-takefeld { flex: 1; min-width: 0; font: inherit; }
+.p-takehoer { font-size: 11px; padding: 2px 6px; border-radius: 4px; opacity: .6; }
+.p-takehoer.an { background: var(--a); color: #0e0f12; border-color: var(--a); opacity: 1; }
+
+/* 1.12 slice 5: the tab row of the detail area and the ENVELOPES tab */
+.p-detail-reiter { display: flex; gap: 4px; }
+.p-detail-reiter[hidden], .p-clip-hk[hidden] { display: none; }
+.p-detail-reiter button.an { background: var(--a); color: #0e0f12; border-color: var(--a); }
+.p-clip-hk { display: flex; flex-direction: column; gap: 4px; min-height: 0; flex: 1; }
+.p-hk-leiste { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.p-hk-leiste button.an { background: var(--a); color: #0e0f12; border-color: var(--a); }
+.p-hk-canvas { width: 100%; height: 120px; background: var(--panel2); border-radius: 6px; touch-action: none; }
+
+/* 1.9 U7 T5: the rack panel in the detail area */
+.p-irack { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 6px; font-size: 11px; }
+.p-irack-kopf { display: flex; align-items: center; gap: 12px; }
+.p-irack-kette, .p-irack-gain, .p-irack-kz { display: flex; align-items: center; gap: 6px; color: var(--dim); font-weight: 700; letter-spacing: .08em; }
+.p-irack-ketten-zahl, .p-irack-gainzahl, .p-irack-kette-lo, .p-irack-kette-hi { width: 4.2em; text-align: right; }
+.p-irack-einheit { font-weight: 400; letter-spacing: 0; }
+.p-irack-glied { display: grid; grid-template-columns: 9em 1fr 1fr auto auto auto; align-items: center; gap: 10px; padding: 4px 6px; background: var(--bg, #0e0f12); border: 1px solid var(--line); border-radius: 6px; }
+.p-irack-name { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.p-irack-zone { position: relative; height: 22px; background: #1b1d23; border: 1px solid var(--line); border-radius: 4px; min-width: 120px; }
+.p-irack-fuell { position: absolute; top: 0; bottom: 0; background: var(--farbe, #2fd6c3); opacity: .45; }
+.p-irack-vel .p-irack-fuell { background: #e8b13a; }
+.p-irack-zwrap { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.p-irack-zonentext { flex: none; width: 7.5em; font-size: 10px; color: var(--dim); font-weight: 700; letter-spacing: .06em; white-space: nowrap; }
+.p-irack-zone { flex: 1; margin: 0 5px; }   /* room for the edge handles: the left one must not cover the text */
+.p-irack-griff { position: absolute; top: -2px; bottom: -2px; width: 8px; margin-left: -4px; padding: 0; border: 0; border-radius: 2px; background: var(--text); cursor: ew-resize; touch-action: none; }
+.p-irack-neu { margin-left: auto; }
+.p-irack-makros { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
+.p-irack-makro { display: flex; align-items: center; gap: 6px; color: var(--dim); font-weight: 700; letter-spacing: .06em; }
+.p-irack-makro-regler { width: 110px; }
+.p-irack-makro-wert { width: 4ch; text-align: right; font-weight: 400; letter-spacing: 0; }
+.p-irack-makro-hinweis { font-size: 10px; color: var(--dim); }
+
+/* the patch picker of a Surge track (surge_patch_choice.js) */
+.p-patchwahl { position: fixed; z-index: 1000; left: 50%; top: 20%; transform: translateX(-50%); width: min(420px, calc(100vw - 32px)); padding: 12px; background: var(--panel2); color: var(--text);
+  border: 1px solid #e0a83b; border-radius: 6px; box-shadow: 0 6px 24px rgba(0,0,0,.5); font-size: 13px; }
+.p-patchwahl input { width: 100%; margin-top: 6px; padding: 5px 8px; box-sizing: border-box; background: var(--panel, #16181d); color: inherit; border: 1px solid #555; border-radius: 4px; font: inherit; }
+.p-patchwahl-knoepfe { display: flex; gap: 6px; margin-top: 8px; }
+.p-patchwahl-knoepfe button { padding: 4px 12px; border: 1px solid #555; border-radius: 4px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.p-patchwahl-knoepfe button:hover:not(:disabled), .p-patchwahl-knoepfe button:focus-visible { background: #e0a83b; color: #0e0f12; outline: 0; }
+.p-patchwahl-knoepfe button:disabled { opacity: .35; cursor: default; }
+.p-patchwahl-hinweis { margin-top: 6px; min-height: 1.2em; color: var(--dim, #8a8f98); font-size: 12px; }

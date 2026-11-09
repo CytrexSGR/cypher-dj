@@ -1,0 +1,249 @@
+// node --test tests/decks.test.mjs: Decks: Laden aus dem Arbeitsbestand, Start auf Quell-Beat, Loop, Roll, Sprung, Hotcue
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { fahre } from '../sequences_fast.mjs';
+import { S, ID, ID2, inhalt, arbeitsbestand, legeMaterial, sende, erwarte, wert, laden, start, hoerschein, q } from './help.mjs';
+
+const gruen = (r) => assert.ok(r.ok, r.fehler.join('\n'));
+const AB = arbeitsbestand({ materialien: [{ hotcues: [[1, 64]], lufs: -9.4 }, { id: ID2, stems: true }] });
+legeMaterial(AB, { id: 'badbadbadbadbad0', nan: true });
+const cfg = { arbeitsbestand: AB };
+const deckTeil = (adr, typen, id, deck, ab, ...rest) => [adr, typen, id, 'cypher', '', '', '', deck, ab, ...rest];
+
+test('laden: 1 dann 2/3 und /e/geladen; Fader −200, Trim = ziel_lufs − lufs (−16 − −9,4 = −6,6)', () => {
+  const r = fahre([
+    sende(1000, laden(1, 1)),
+    erwarte(1100, q(1, 'leitstand', 1)),
+    erwarte(1300, q(1, 'leitstand', 3, 1024)),
+    erwarte(1300, ['/e/geladen', 'isdiih', 1, ID, 128, 1, 0, 1024]),
+    wert(2000, 'deck/1/trim', -6.6, 1e-4),
+    wert(2000, 'deck/1/fader', -200),
+    wert(2000, 'deck/1/status', 1),
+  ], { cfg });
+  gruen(r);
+});
+
+test('laden Fehlerfälle: material_fehlt, pruefung (Stems passen nicht, NaN in der Stichprobe)', () => {
+  const r = fahre([
+    sende(1000, laden(1, 1, { mid: '0000000000000000' })),
+    sende(1000, laden(2, 1, { mid: ID, stems: 1 })),
+    sende(1000, laden(3, 1, { mid: 'badbadbadbadbad0' })),
+    sende(1000, laden(4, 2, { mid: ID2, stems: 1 })),
+    erwarte(1100, q(1, 'leitstand', 6, null, 'material_fehlt')),
+    erwarte(1100, q(2, 'leitstand', 6, null, 'pruefung')),
+    erwarte(1100, q(3, 'leitstand', 6, null, 'pruefung')),
+    erwarte(1300, q(4, 'leitstand', 3)),
+  ], { cfg });
+  gruen(r);
+});
+
+test('start_quell_beat: bei ab_beat erklingt genau quell_beat, danach 1:1 mit dem Master', () => {
+  const r = fahre([
+    sende(1000, laden(1, 1)),
+    sende(2000, start(2, 'leitstand', 1, 16, 8)),
+    erwarte(S(16), q(2, 'leitstand', 2, S(16))),
+    wert(S(16), 'deck/1/quell_beat', 8),
+    wert(S(16) - 1, 'deck/1/status', 1),
+    wert(S(16), 'deck/1/status', 2),
+    wert(S(20), 'deck/1/quell_beat', 12),
+  ], { cfg });
+  gruen(r);
+});
+
+test('Materialende: Deck bleibt bei Q stehen (Status 1)', () => {
+  const r = fahre([sende(1000, laden(1, 1)), sende(2000, start(2, 'leitstand', 1, 4, 0)), wert(S(99.99), 'deck/1/status', 2), wert(S(100), 'deck/1/status', 1), wert(S(101), 'deck/1/quell_beat', 96)], { cfg });
+  gruen(r);
+});
+
+test('loop: ab Quellposition bei ab_beat, Wiederholung, Status 3, Sprung im Loop verschiebt den Loop', () => {
+  const r = fahre([
+    sende(1000, laden(1, 1)),
+    sende(2000, start(2, 'leitstand', 1, 16, 0)),
+    sende(3000, deckTeil('/k/deck/loop', 'hssssiddid', 3, 1, 32, 4, 0, 0)),
+    wert(S(32), 'deck/1/quell_beat', 16),
+    wert(S(37), 'deck/1/quell_beat', 17),
+    wert(S(37), 'deck/1/status', 3),
+    sende(S(38), deckTeil('/k/deck/sprung', 'hssssiddid', 4, 1, 40, 8, 0, 0)),
+    wert(S(40), 'deck/1/quell_beat', 24),
+    wert(S(43), 'deck/1/quell_beat', 27),
+    wert(S(44), 'deck/1/quell_beat', 24),
+  ], { cfg });
+  gruen(r);
+  const z = r.log.filter((m) => m.adresse === '/zustand/deck' && m.s > S(33) && m.s < S(38));
+  assert.ok(z.length > 0 && z.every((m) => m.werte[6] === Infinity && m.werte[1] === 3));
+  // Keylock Task 3 (Fassung 4.1 Punkt 3): 14 Felder, die Zähler keylock_unterlauf und keylock_aufgegeben (Attrappe ohne Dehner: 0)
+  assert.ok(z.every((m) => m.werte.length === 14 && m.werte[12] === 0 && m.werte[13] === 0));
+});
+
+test('loop_laenge: Länge ändern, der Start bleibt; Verkürzen wickelt den Kopf in den Loop; Start außerhalb des Materials wird abgelehnt', () => {
+  const ll = (id, ab, start, laenge) => ['/k/deck/loop_laenge', 'hssssidddid', id, 'cypher', '', '', '', 1, ab, start, laenge, 1, 0];
+  const r = fahre([
+    sende(1000, laden(1, 1)),
+    sende(2000, start(2, 'leitstand', 1, 16, 0)),
+    sende(3000, deckTeil('/k/deck/loop', 'hssssiddid', 3, 1, 32, 4, 0, 0)),
+    wert(S(37), 'deck/1/quell_beat', 17),                 // Loop [16, 20)
+    sende(S(38), ll(4, 40, 16, 8)),                       // Länge 8, Start bleibt 16 (der alte Weg setzte ihn an den Kopf)
+    wert(S(44), 'deck/1/quell_beat', 20),                 // läuft über das alte Ende 20 hinaus
+    wert(S(47), 'deck/1/quell_beat', 23),
+    wert(S(48.5), 'deck/1/quell_beat', 16.5),             // Naht bei 24 zurück auf 16
+    sende(S(50), ll(5, 52, 16, 2)),                       // Verkürzen: Kopf (Quell 20) hinter dem neuen Ende 18
+    wert(S(53), 'deck/1/quell_beat', 17),                 // wickelt in [16, 18)
+    wert(S(54), 'deck/1/quell_beat', 16),
+    sende(S(55), ll(6, 58, 1e6, 4)),                      // Negativ: Start hinter dem Material
+    erwarte(S(60), q(4, 'cypher', 2)),
+    erwarte(S(60), q(5, 'cypher', 2)),
+    erwarte(S(60), q(6, 'cypher', 6, null, 'ausserhalb_bereich')),
+    wert(S(61), 'deck/1/quell_beat', 17),                 // der Loop [16, 18) läuft unverändert weiter
+  ], { cfg });
+  gruen(r);
+});
+
+test('roll: Band mit Schatten, beim Aus zurück zur Schattenposition', () => {
+  const r = fahre([
+    sende(1000, laden(1, 1)),
+    sende(2000, start(2, 'leitstand', 1, 16, 0)),
+    sende(3000, deckTeil('/k/deck/roll', 'hssssiddiid', 3, 1, 32, 1, 0, 0, 0)),
+    sende(S(33), deckTeil('/k/deck/roll', 'hssssiddiid', 4, 1, 36, 0, 0, 0, 0)),
+    wert(S(34.5), 'deck/1/quell_beat', 16.5),
+    wert(S(34.5), 'deck/1/status', 4),
+    wert(S(36), 'deck/1/quell_beat', 20),
+  ], { cfg });
+  gruen(r);
+});
+
+test('hotcue_phase: Deck bei 37,30, Hotcue 64,00 -> Ziel 64,30', () => {
+  const r = fahre([
+    sende(1000, laden(1, 1)),
+    sende(2000, start(2, 'leitstand', 1, 16, 21.3)),
+    sende(3000, deckTeil('/k/deck/hotcue', 'hssssidiid', 3, 1, 32, 1, 0, 0)),
+    wert(S(32) - 1, 'deck/1/quell_beat', 37.3, 1e-3),
+    wert(S(32), 'deck/1/quell_beat', 64.3, 1e-9),
+  ], { cfg });
+  gruen(r);
+});
+
+test('politik_raster: zu spät mit Politik 2 -> nächster erreichbarer Rasterpunkt, Quittung 5', () => {
+  const r = fahre([
+    sende(1000, laden(1, 1)),
+    sende(2000, start(2, 'leitstand', 1, 4, 0)),
+    sende(S(21.5), deckTeil('/k/deck/sprung', 'hssssiddid', 3, 1, 20, 4, 2, 4)),
+    erwarte(S(24), q(3, 'cypher', 5, S(24))),
+    wert(S(24), 'deck/1/quell_beat', 24),
+  ], { cfg });
+  gruen(r);
+});
+
+test('hotcue_setzen meldet /e/hotcue; entladen und laden bei laufendem offenem Deck -> deck_hoerbar', () => {
+  const r = fahre([
+    sende(1000, laden(1, 1)),
+    sende(2000, ['/k/deck/hotcue_setzen', 'hsiid', 2, 'andreas', 1, 3, 12.5]),
+    erwarte(3000, ['/e/hotcue', 'isidh', 1, ID, 3, 12.5, null]),
+    sende(3000, hoerschein(3, 'h1', 'deck/1', inhalt())),
+    sende(4000, ['/k/teil', 'hssisddfiiss', 4, 'andreas', '', 0, 'deck/1/fader', 2, 0, 0, 0, 0, '', 'h1']),
+    erwarte(S(2), q(4, 'andreas', 3, S(2))),
+    sende(S(2), start(7, 'andreas', 1, 3, 0)),   // §4.4 (2026-09-27): gesperrt nur laufend und offen
+    sende(S(4), ['/k/deck/entladen', 'hsi', 5, 'leitstand', 1]),
+    sende(S(4), laden(6, 1)),
+    erwarte(S(5), q(5, 'leitstand', 6, null, 'deck_hoerbar')),
+    erwarte(S(5), q(6, 'leitstand', 6, null, 'deck_hoerbar')),
+  ], { cfg });
+  gruen(r);
+});
+
+test('laden auf stehendem Deck mit offenem Fader: erlaubt (§4.4, 2026-09-27)', () => {
+  const r = fahre([
+    sende(1000, laden(1, 1)),
+    sende(3000, hoerschein(3, 'h1', 'deck/1', inhalt())),
+    sende(4000, ['/k/teil', 'hssisddfiiss', 4, 'andreas', '', 0, 'deck/1/fader', 2, 0, 0, 0, 0, '', 'h1']),
+    erwarte(S(2), q(4, 'andreas', 3, S(2))),
+    sende(S(3), laden(6, 1)),
+    erwarte(S(4), q(6, 'leitstand', 3, null)),
+  ], { cfg });
+  gruen(r);
+});
+
+test('Welle 3 (ADR 028): Tempo-Rampe bei laufendem Deck angenommen, das Deck folgt im Varispeed (bis Welle 2 kein_stretcher)', () => {
+  const r = fahre([
+    sende(1000, laden(1, 1)),
+    sende(2000, start(2, 'leitstand', 1, 4, 0)),
+    sende(S(5), ['/k/tempo/rampe', 'hsddd', 3, 'leitstand', 16, 130, 8]),
+    erwarte(S(6), q(3, 'leitstand', 1)),
+  ], { cfg });
+  gruen(r);
+});
+
+test('Welle 3 (ADR 028): Start bei fremdem Tempo angenommen (Rampe auf 130 vorher, Deck-Basis 128)', () => {
+  const r = fahre([
+    sende(1000, ['/k/tempo/rampe', 'hsddd', 3, 'leitstand', 4, 130, 4]),
+    sende(1000, laden(1, 1)),
+    sende(S(10), start(2, 'leitstand', 1, 16, 0)),
+    erwarte(S(11), q(2, 'leitstand', 1)),
+    erwarte(S(20), q(2, 'leitstand', 2)),   // ausgeführt: bis Welle 2 kam hier 6 kein_stretcher
+  ], { cfg });
+  gruen(r);
+});
+
+test('Deck-Befehl auf leerem Deck -> nicht_geladen; unbekanntes Deck -> unbekanntes_deck', () => {
+  const r = fahre([
+    sende(1000, start(1, 'leitstand', 3, 4, 0)),
+    sende(1000, start(2, 'leitstand', 7, 4, 0)),
+    erwarte(1200, q(2, 'leitstand', 6, null, 'unbekanntes_deck')),
+    erwarte(S(4), q(1, 'leitstand', 6, S(4), 'nicht_geladen')),
+  ], { cfg });
+  gruen(r);
+});
+
+// Hörbares Ziehen (2026-10-17): /k/deck/scrub ohne Quittung; stehend folgt die Position der Hand, laufend versetzt das Los die Phase
+const scrub = (id, deck, phase, delta, quelle = 'andreas') => ['/k/deck/scrub', 'hsiid', id, quelle, deck, phase, delta];
+
+test('scrub stehend: die Position folgt der Hand, nach dem Los bleibt der Kopf; keine Quittung', () => {
+  const r = fahre([
+    sende(1000, laden(1, 1)),
+    sende(S(2), scrub(10, 1, 1, 0)),
+    sende(S(2) + 4000, scrub(11, 1, 2, 1.5)),
+    wert(S(2) + 8000, 'deck/1/quell_beat', 1.5),
+    sende(S(3), scrub(12, 1, 2, -0.25)),
+    sende(S(3) + 4000, scrub(13, 1, 0, -0.25)),
+    wert(S(4), 'deck/1/quell_beat', 0),                         // vor dem Anfang klemmt die Position auf 0
+    wert(S(4), 'deck/1/status', 1),
+  ], { cfg });
+  gruen(r);
+  const q_ = r.log.filter((y) => y.adresse === '/q' && [10, 11, 12, 13].includes(Number(y.werte[0])));
+  assert.equal(q_.length, 0, 'scrub quittiert nicht');
+  assert.ok(r.log.some((y) => y.adresse === '/zustand/deck'), 'Gegenprobe: das Log enthält Zustandsmeldungen (der Filter trifft etwas, wenn es etwas gäbe)');
+});
+
+test('scrub laufend: Griff ohne Strecke ändert die Phase nicht, das Los mit Strecke versetzt sie', () => {
+  const r = fahre([
+    sende(1000, laden(1, 1)),
+    sende(2000, start(2, 'leitstand', 1, 4, 0)),
+    wert(S(6), 'deck/1/quell_beat', 2),
+    sende(S(6) + 100, scrub(20, 1, 1, 0)),
+    sende(S(7), scrub(21, 1, 0, 0)),
+    wert(S(8), 'deck/1/quell_beat', 4),                         // Phase unverändert: Quell = Master − 4
+    sende(S(8) + 100, scrub(22, 1, 1, 0)),
+    sende(S(8) + 4000, scrub(23, 1, 2, 3)),
+    sende(S(9), scrub(24, 1, 0, 3)),
+    wert(S(10), 'deck/1/quell_beat', 9),                        // +3 Beats versetzt
+    wert(S(10), 'deck/1/status', 2),
+  ], { cfg });
+  gruen(r);
+});
+
+test('scrub Fehlerfälle: unbekanntes Deck, Phase 3 und NaN werden abgelehnt (Quittung 6); ohne Griff und ohne Material ohne Wirkung', () => {
+  const r = fahre([
+    sende(1000, laden(1, 1)),
+    sende(2000, scrub(30, 5, 1, 0)),
+    sende(2000, scrub(31, 1, 3, 0)),
+    sende(2000, scrub(32, 1, 2, NaN)),
+    erwarte(2400, q(30, 'andreas', 6, null, 'unbekanntes_deck')),
+    erwarte(2400, q(31, 'andreas', 6, null, 'ausserhalb_bereich')),
+    erwarte(2400, q(32, 'andreas', 6, null, 'ausserhalb_bereich')),
+    sende(S(2), scrub(33, 1, 2, 5)),                           // Zug ohne Griff: ohne Wirkung
+    wert(S(3), 'deck/1/quell_beat', 0),
+    sende(S(3), scrub(34, 2, 1, 0)),                           // Deck 2 leer: ohne Wirkung, keine Quittung
+    sende(S(3) + 2000, scrub(35, 2, 2, 4)),
+    wert(S(4), 'deck/2/quell_beat', 0),
+  ], { cfg });
+  gruen(r);
+});

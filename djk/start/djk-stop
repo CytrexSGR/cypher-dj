@@ -5,8 +5,8 @@
 # (tmpfs, beim nächsten Start wieder da; weg mit dem Neustart des Rechners).
 # Aufruf: djk-stop [--instanz a..i] [--still] [--alles [--trocken]]
 #   --alles    Sammelstopp: zusätzlich die djk-eigenen Prozesse der Instanz, die in keiner Unit laufen, der Cue-Server
-#              (djk/cues/server.ts) und der Vorhörer (djk/vorhoerer/build/cypherdj-vorhoerer). Erkannt an Exe-Pfad,
-#              Skript und CYPHERDJ_INSTANZ (eigene.py); fremde Prozesse bleiben unberührt, es wird nie per
+#              (djk/cues/server.ts) und der Vorhörer (djk/previewer/build/cypherdj-vorhoerer). Erkannt an Exe-Pfad,
+#              Skript und CYPHERDJ_INSTANZ (own.py); fremde Prozesse bleiben unberührt, es wird nie per
 #              PID-Substitution beendet (KILL-REGEL), die PID wird gelesen, geprüft, dann gezielt beendet. Ohne
 #              --instanz gilt die Instanz Betrieb: dazu zählt ein von Hand gestarteter Vorhörer.
 #   --trocken  (nur mit --alles) nur auflisten, was beendet würde, nichts ändern.
@@ -38,11 +38,11 @@ if [ "$ALLES" = 1 ]; then
       u=cypherdj-$n$SFX.service
       systemctl --user list-units --all --no-legend --plain "$u" 2>/dev/null | grep -q . && echo "  would stop $u"
     done
-    python3 "$HIER/eigene.py" --djk "$DJK" --instanz "$I" --liste
+    python3 "$HIER/own.py" --djk "$DJK" --instanz "$I" --liste
     echo "djk-stop: dry run, nothing changed"
     exit 0
   fi
-  python3 "$HIER/eigene.py" --djk "$DJK" --instanz "$I" --beenden || echo "djk-stop: a djk process did not stop (see above)" >&2
+  python3 "$HIER/own.py" --djk "$DJK" --instanz "$I" --beenden || echo "djk-stop: a djk process did not stop (see above)" >&2
 fi
 for n in digitalwache wirt-bass wirt-melodie wirt-arr1 wirt-arr2 erzeuger erzeuger2 erzeuger3 erzeuger-bk oberflaeche leitstand notbahn kern; do
   u=cypherdj-$n$SFX.service

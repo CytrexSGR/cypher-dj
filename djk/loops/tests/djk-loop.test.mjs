@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { kodiere, dekodiere } from '../../vertrag/attrappe_kern/osc.mjs';
+import { kodiere, dekodiere } from '../../contract/mock_core/osc.mjs';
 
 const WERKZEUG = path.join(path.dirname(fileURLToPath(import.meta.url)), '../djk-loop');
 
@@ -132,7 +132,7 @@ test('Quittung Status 4 → Rückgabe 1; Laden mit Quittung 1, dann 3, dann /e/l
   assert.match(r.aus, /Box 1: bereit \(gut, 4 Beat/);
 });
 
-// Abschluss-Review Scheibe 3 Fund 1: der Kern streicht Abonnenten nach 5 s ohne /k/hallo (netz.h frist_ns). Ein
+// Abschluss-Review Scheibe 3 Fund 1: der Kern streicht Abonnenten nach 5 s ohne /k/hallo (net.h frist_ns). Ein
 // langer REC (ab ~8 Beats) muss sich daher selbst am Leben halten, sonst kommt /e/mitschnitt nie an.
 test('langer rec: djk-loop wiederholt /k/hallo, solange es wartet', { timeout: 20000 }, async (t) => {
   const k = await kern((m) => {

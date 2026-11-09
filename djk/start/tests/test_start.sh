@@ -22,7 +22,7 @@
 #   P17 Digital-Out-Wache (Glanz 2.1, F22): mit CYPHERDJ_DIGITALWACHE_PCI startet sie und schreibt den Stand, djk-stop räumt
 #       ab; kaputte PCI -> Warnung, Studio läuft; ohne Variable an der stummen Senke keine Wache
 # Rückgabe: 0 alle Punkte OK, 1 mindestens einer FEHL, 2 Aufbau (Last, Schloss).
-. "$(dirname "$0")/../../konfig/echtzeit_schloss.sh"   # CYPHERDJ_ECHTZEIT_SCHLOSS
+. "$(dirname "$0")/../../config/realtime_lock.sh"   # CYPHERDJ_ECHTZEIT_SCHLOSS
 set -uo pipefail
 HIER=$(cd "$(dirname "$0")" && pwd)
 START=$(cd "$HIER/.." && pwd)
@@ -145,7 +145,7 @@ pruef $? "P10 Vorgabe stumme Senke: Start $R, aktiv $A, Senke $S1 -> nach Stopp 
 
 # P11 abweichender Kern-Port und Arbeitsbestand aus --kern-konfig
 sed -e 's|^udp_port *=.*|udp_port = 47170|' -e 's|^arbeitsbestand *=.*|arbeitsbestand = "/dev/shm/cypherdj/material-abw"|' \
-  "$START/../konfig/kern.toml" > "$O/kern.toml"
+  "$START/../config/kern.toml" > "$O/kern.toml"
 KP=$((47170 + 1000 * K))
 T=$(date '+%Y-%m-%d %H:%M:%S')
 "$START/djk-start" "${ZIEL[@]}" --kern-konfig "$O/kern.toml" > "$O/p11.txt" 2>&1; R=$?
@@ -205,7 +205,7 @@ pruef $? "P15 --strudel: Start $R, Erzeuger $E, Zeile 'strudel ready' $(grep -c 
 DJK=$(cd "$START/.." && pwd)
 P_OF16=$(( 47300 + 1000 * ($(printf '%d' "'$I") - 96) ))
 "$START/djk-start" "${ZIEL[@]}" > "$O/p16.txt" 2>&1; R=$?
-"$DJK/werkstatt/.venv/bin/python" "$DJK/loops/pruef_loop.py" "/dev/shm/cypherdj-$I/loops" p16-probe > /dev/null 2>&1
+"$DJK/werkstatt/.venv/bin/python" "$DJK/loops/check_loop.py" "/dev/shm/cypherdj-$I/loops" p16-probe > /dev/null 2>&1
 L=$(curl -s --max-time 3 "http://127.0.0.1:$P_OF16/loops")
 EXEC=$(systemctl --user show -p ExecStart --value "cypherdj-oberflaeche-$I")  # Review: CYPHERDJ_INSTANZ allein fände den Ordner auch
 "$START/djk-stop" --instanz "$I" > "$O/p16stop.txt" 2>&1

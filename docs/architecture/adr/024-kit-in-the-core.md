@@ -18,7 +18,7 @@ core swaps the pointer in the cycle and returns the old one as an event for rele
 
 - Sample-exact without return path; no synthesis, no pitch: melodic material stays with slice 57.
 - I3c is suspended in stage 1 (INTERFACES §4.8), because there is no listening pass for generators yet.
-- Kits are kept together under `~/.config/cypherdj/kits/`; `djk/erzeuger/kit_bauen.py` builds them from Strudel lists.
+- Kits are kept together under `~/.config/cypherdj/kits/`; `djk/generator/kit_build.py` builds them from Strudel lists.
 
 ## Discarded
 

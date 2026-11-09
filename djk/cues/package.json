@@ -8,6 +8,6 @@
   "scripts": {
     "start": "node server.ts",
     "test": "node --test --test-concurrency=1 tests/*.test.mjs",
-    "pruef": "node pruef/bild.mjs"
+    "pruef": "node check/image.mjs"
   }
 }

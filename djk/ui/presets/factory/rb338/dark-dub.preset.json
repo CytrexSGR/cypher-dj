@@ -1,0 +1,42 @@
+{
+ "schema": 1,
+ "name": "Dark Dub",
+ "geraet_typ": "instrument",
+ "geraet": "rb338",
+ "werte": {
+  "lautstaerke": 0.2511886432,
+  "wellenform": true,
+  "cutoff": 200,
+  "resonanz": 0.4,
+  "env_mod": 0.2,
+  "decay": 0.9,
+  "accent": 0.3
+ },
+ "beschreibung": {
+  "art": "bass",
+  "unterart": "analog",
+  "charakter": [
+   "dark",
+   "deep",
+   "thick"
+  ],
+  "genre": [
+   "dubstep",
+   "downtempo",
+   "minimal"
+  ],
+  "einsatz": [
+   "breakdown",
+   "intro"
+  ],
+  "energie": 2,
+  "text": "A square wave under a low cutoff: hollow, dark bass with a soft attack on the filter."
+ },
+ "tags": [
+  "dub",
+  "square"
+ ],
+ "notiz": "Square as the second waveform from devices.ts (wellenform bool); values are practice.",
+ "angelegt": "2026-11-02T00:00:00.000Z",
+ "geaendert": "2026-11-02T00:00:00.000Z"
+}

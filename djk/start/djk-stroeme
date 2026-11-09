@@ -3,7 +3,7 @@
 # studio, as a transient user unit (systemd-run, never enabled). One process = one kern subscriber slot (the kern keeps
 # at most 8); the process says one hello as "erzeuger-bk" and announces all five streams with MIDI targets, so a
 # `bk:<graph>` instrument can be put on these channels and removed again. A pattern goes to a stream with
-# djk/erzeuger/djk-muster --strom N, a graph with the page picker or the djk-hand tool `graph`.
+# djk/generator/djk-muster --strom N, a graph with the page picker or the djk-hand tool `graph`.
 # Without this process the page refuses a graph on these channels with 409 kein_erzeuger.
 #
 # Usage: djk-stroeme [--instanz a..i] [--kern-port N] [--trocken]
@@ -35,17 +35,17 @@ case "$I" in
   [a-i]) SFX="-$I"; V=$(( 1000 * ($(printf '%d' "'$I") - 96) ));;
   *) echo "djk-stroeme: instance '$I' invalid, use a..i or empty" >&2; exit 2;;
 esac
-STROEME=(5 6 7 9 10)   # = BK_STROEME of djk/vertrag/stroeme.ts
+STROEME=(5 6 7 9 10)   # = BK_STROEME of djk/contract/streams.ts
 P_KERN=${KERN_PORT:-$(( 47100 + V ))}
 P=$(( 47160 + V + 5 ))   # P_ERZ + 5: the studio's erzeuger use P_ERZ .. P_ERZ + 2, 47170 is taken by tests/test_start.sh
 U=cypherdj-erzeuger-bk$SFX
-BASIS=/dev/shm/cypherdj$SFX/erzeuger
+BASIS=/dev/shm/cypherdj$SFX/generator
 FS=()
 for s in "${STROEME[@]}"; do FS+=("--allow-fs-read=$BASIS$s" "--allow-fs-write=$BASIS$s"); done
 CMD=(systemd-run --user --quiet --collect --unit="$U" ${I:+--setenv=CYPHERDJ_INSTANZ=$I}
      -p Restart=always -p RestartSec=1 -p RestartPreventExitStatus=2 -p PartOf=cypherdj.target
      /usr/bin/node --permission --allow-fs-read="$DJK" --allow-fs-read="$HOME/strudel" "${FS[@]}"
-     "$DJK/erzeuger/erzeuger_bk.mjs" --kern-port "$P_KERN" --abo-port "$P" --strom "$(IFS=,; echo "${STROEME[*]}")"
+     "$DJK/generator/generator_bk.mjs" --kern-port "$P_KERN" --abo-port "$P" --strom "$(IFS=,; echo "${STROEME[*]}")"
      --muster-basis "$BASIS" --name erzeuger-bk)
 if [ "$TROCKEN" = 1 ]; then echo "${CMD[*]}"; exit 0; fi
 
@@ -62,4 +62,4 @@ if ! lauscht || ! aktiv; then
   systemctl --user stop "$U.service" 2>/dev/null; systemctl --user reset-failed "$U.service" 2>/dev/null
   exit 5
 fi
-echo "  bk streams ready (5,6,7 -> erz/5..7, 9,10 -> pad/1,2; udp $P; pattern: djk/erzeuger/djk-muster${I:+ --instanz $I} --strom N --text '<pattern>')"
+echo "  bk streams ready (5,6,7 -> erz/5..7, 9,10 -> pad/1,2; udp $P; pattern: djk/generator/djk-muster${I:+ --instanz $I} --strom N --text '<pattern>')"

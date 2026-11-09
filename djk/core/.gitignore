@@ -1,0 +1,14 @@
+# Bauordner dieses Ordners (djk/core/dsp/ hat eine eigene .gitignore, Scheibe 04)
+/build/
+/build-asan/
+/build-tsan/
+/build-tsan-mut/
+/build-asan35/
+
+# Glanz 1.6 (2026-10-06): Ohr-Build-Ordner
+build-ohr/
+build-ohr-asan/
+
+# D1 K3 (Fix L13): Hand- und Stellwerk-Bauten neben dem Kern-Bau
+/build-stellwerk/
+/build-hand/

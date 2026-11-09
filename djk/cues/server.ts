@@ -10,27 +10,27 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import crypto from 'node:crypto';
-import { ladeBibliothek, ladeListen, ladeTraktor, verschiebeTraktor, traktorVersatz, type Liste, type Track, type TraktorEintrag } from './bibliothek.ts';
-import { dekodiereKopf, rechneUndCache } from './welle.ts';
-import { EingabeFehler, lade, sha1ErsteMib, speichere, zaehleAlle } from './speicher.ts';
-import { VorhoererKlient } from './vorhoerer-klient.ts';
+import { ladeBibliothek, ladeListen, ladeTraktor, verschiebeTraktor, traktorVersatz, type Liste, type Track, type TraktorEintrag } from './library.ts';
+import { dekodiereKopf, rechneUndCache } from './wave.ts';
+import { EingabeFehler, lade, sha1ErsteMib, speichere, zaehleAlle } from './store.ts';
+import { VorhoererKlient } from './previewer-client.ts';
 
 const HIER = path.dirname(fileURLToPath(import.meta.url));
-const OEFFENTLICH = path.join(HIER, 'oeffentlich');
+const OEFFENTLICH = path.join(HIER, 'public');
 const BASIS = path.join(os.homedir(), 'cypher-dj', 'cues');
 
 export const VORGABE = {
   port: 47730,
   wurzel: process.env.CYPHERDJ_MUSIK ?? '',            // Pflicht (Umgebung CYPHERDJ_MUSIK oder --wurzel), main prüft
   nml: process.env.CYPHERDJ_NML || null,              // optional (Traktor collection.nml)
-  daten: path.join(BASIS, 'daten'),
+  daten: path.join(BASIS, 'data'),
   cache: path.join(BASIS, 'cache'),
 };
 
 export interface Optionen {
   port: number; wurzel: string; nml: string | null; daten: string; cache: string; lastGrenze?: number;
   log?: (z: Record<string, unknown>) => void;
-  // Nativer Vorhörer (djk/vorhoerer, OSC/UDP): ohne `ausgang` kein Kindprozess, die Seite bleibt auf <audio>
+  // Nativer Vorhörer (djk/previewer, OSC/UDP): ohne `ausgang` kein Kindprozess, die Seite bleibt auf <audio>
   // (Andreas 2026-09-26: „browser dann nur anzeige“ ist das Ziel, aber nur mit `--ausgang` auf seine Senke).
   ausgang?: string; tonFrei?: boolean; ohneBlende?: boolean;
   vorhoererBin?: string; vorhoererInstanz?: string; vorhoererPort?: number; vorhoererQuantum?: number;
@@ -86,7 +86,7 @@ export class CueServer {
   // Start scheitert (Binärdatei fehlt, Riegel, JACK weg): ebenso Fallback, aber geloggt statt verschluckt.
   private async starteVorhoerer(): Promise<void> {
     if (!this.opt.ausgang) return;
-    const bin = this.opt.vorhoererBin ?? path.join(HIER, '..', 'vorhoerer', 'build', 'cypherdj-vorhoerer');
+    const bin = this.opt.vorhoererBin ?? path.join(HIER, '..', 'previewer', 'build', 'cypherdj-vorhoerer');
     const v = new VorhoererKlient({
       bin, ausgang: this.opt.ausgang, tonFrei: this.opt.tonFrei, ohneBlende: this.opt.ohneBlende,
       instanz: this.opt.vorhoererInstanz, port: this.opt.vorhoererPort, quantum: this.opt.vorhoererQuantum,
@@ -170,7 +170,7 @@ export class CueServer {
         const ziel = this.welleDatei(t);
         if (fs.existsSync(ziel)) { this.vorrechnen.fertig++; continue; }
         const rc = await new Promise<number>((ok) => {
-          const p = spawn('nice', ['-n', '19', process.execPath, path.join(HIER, 'welle.ts'), path.join(this.opt.wurzel, t.rel), ziel], { stdio: 'ignore' });
+          const p = spawn('nice', ['-n', '19', process.execPath, path.join(HIER, 'wave.ts'), path.join(this.opt.wurzel, t.rel), ziel], { stdio: 'ignore' });
           p.once('close', (c) => ok(c ?? 1));
           p.once('error', () => ok(1));
         });
@@ -265,7 +265,7 @@ export class CueServer {
     fs.createReadStream(p, { flags: 'r' }).pipe(a);
   }
 
-  // Zweiter Weg für spieler.js (oeffentlich/spieler.js), dieselbe API wie das <audio>-Element: laden, play, pause,
+  // Zweiter Weg für player.js (public/player.js), dieselbe API wie das <audio>-Element: laden, play, pause,
   // springe, loop/loop_aus, dazu status (welcher Weg aktiv) und stream (SSE: position, geladen, fehler, ended).
   // Ohne Kindprozess (kein --ausgang oder Start gescheitert): 409, die Seite fällt auf <audio> zurück.
   private vorhoererAnfrage(q: http.IncomingMessage, a: http.ServerResponse, u: URL): void {
@@ -312,7 +312,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   } });
   const wurzel = values.wurzel ?? VORGABE.wurzel;
   if (!wurzel) {
-    process.stderr.write('djk cues: keine Musikwurzel. Umgebungsvariable CYPHERDJ_MUSIK setzen (Wurzel der Musiksammlung) oder --wurzel DIR angeben; Vorlage: djk/konfig/umgebung.env.beispiel\n');
+    process.stderr.write('djk cues: keine Musikwurzel. Umgebungsvariable CYPHERDJ_MUSIK setzen (Wurzel der Musiksammlung) oder --wurzel DIR angeben; Vorlage: djk/config/umgebung.env.beispiel\n');
     process.exit(2);
   }
   const s = new CueServer({

@@ -44,7 +44,7 @@ clock was already the master tempo (the Strudel streams followed it), only not e
 
 | Path | Why not | Evidence |
 |---|---|---|
-| store loops at the tempo of their recording | frames per beat not integer (130 BPM: 22 153.85), second read path even at the same tempo, all tools compute with 22 500 | `loop.h` `LOOP_SPB`, `loops.ts`, `loop_bauen.py` |
+| store loops at the tempo of their recording | frames per beat not integer (130 BPM: 22 153.85), second read path even at the same tempo, all tools compute with 22 500 | `loop.h` `LOOP_SPB`, `loops.ts`, `loop_build.py` |
 | pin operation to 128 | contradicts Andreas' sentence; the Strudel streams already ran at 130 | spec 2026-09-27 lines 162 to 168 |
 | wait for the stretcher | large (slices 34, 50 to 52), until then no loop outside 128 | ROADMAP |
 

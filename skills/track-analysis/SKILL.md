@@ -26,8 +26,8 @@ Six steps. Each one ends with a measurement.
 | 5 | **Wire them in** | the target file is provably fetched by the player |
 | 6 | **Listen** | level measured against a real zero point, or the human |
 
-In cypher-dj: `djk/werkstatt/werkstatt/stems.py` separates a range on the GPU (or Separate Stems in the PRODUCTION
-view; there is no CPU path), `kick_messer.py` finds where the kick of each expected beat starts, `phase.py` measures the grid's phase against
+In cypher-dj: `djk/workshop/werkstatt/stems.py` separates a range on the GPU (or Separate Stems in the PRODUCTION
+view; there is no CPU path), `kick_meter.py` finds where the kick of each expected beat starts, `phase.py` measures the grid's phase against
 the hits.
 
 ## Is the grid constant? Measure, then decide

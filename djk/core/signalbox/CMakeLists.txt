@@ -1,0 +1,203 @@
+# Stellwerk-RT (Scheibe 11): eigenständiges CMake-Projekt, baut und testet allein (ROADMAP §3, Bibliotheks-Nähte).
+# Strang A bindet es mit add_subdirectory ein und linkt cypherdj::stellwerk; Tests, leere Schnittstelle und Werkzeuge
+# entstehen nur, wenn dieses Projekt oben steht (STELLWERK_TESTS), damit im Kern keine Zielnamen kollidieren.
+cmake_minimum_required(VERSION 3.21)
+project(cypherdj_stellwerk CXX)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+if(NOT CMAKE_BUILD_TYPE AND PROJECT_IS_TOP_LEVEL)
+  set(CMAKE_BUILD_TYPE RelWithDebInfo)
+endif()
+
+option(STELLWERK_TESTS "Tests, leere Schnittstelle, Folgenleser, Kostenmessung" ${PROJECT_IS_TOP_LEVEL})
+option(STELLWERK_SANITIZE "ASan und UBSan für alle Ziele dieses Projekts (ADR 002)" OFF)
+
+set(D ${CMAKE_CURRENT_SOURCE_DIR})
+set(WARN -Wall -Wextra -Wno-missing-field-initializers)
+set(SAN)
+if(STELLWERK_SANITIZE)
+  set(SAN -fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=undefined)
+endif()
+
+# Jede Regel-Datei gibt es zweimal: src/<teil>.cpp (die Regel) und leer/<teil>.cpp (erfüllt nur die Kopfdatei).
+# cypherdj_stellwerk nimmt src/, sobald die Datei existiert (neu konfigurieren, wenn eine dazukommt).
+# cypherdj_stellwerk_leer ist die leere Schnittstelle für den Fehlerfall: Regler-Tabelle (Daten) aus src/, sonst leer/.
+set(TEILE controls core sort_in hand ai reporter view flow)
+set(QUELLEN src/types.cpp)
+set(QUELLEN_LEER src/types.cpp)
+foreach(t ${TEILE})
+  if(EXISTS ${D}/src/${t}.cpp)
+    list(APPEND QUELLEN src/${t}.cpp)
+  else()
+    list(APPEND QUELLEN leer/${t}.cpp)
+  endif()
+  if(t STREQUAL "controls" AND EXISTS ${D}/src/controls.cpp)
+    list(APPEND QUELLEN_LEER src/controls.cpp)
+  else()
+    list(APPEND QUELLEN_LEER leer/${t}.cpp)
+  endif()
+endforeach()
+# i3 (Task 13): eigenständige Klassen (HoerscheinRegister, PrueferI3), kein Teil der Stellwerk-Ablaufkette und
+# darum nicht Teil des leer/-Fehlerfalls (der prüft die Ablaufkette ohne I3a-Logik); beide Bibliotheken linken
+# dieselbe Datei, wie schon src/typen.cpp.
+if(EXISTS ${D}/src/i3.cpp)
+  list(APPEND QUELLEN src/i3.cpp)
+  list(APPEND QUELLEN_LEER src/i3.cpp)
+endif()
+
+function(stellwerk_ziel ziel)
+  target_compile_options(${ziel} PRIVATE ${WARN} ${SAN})
+  target_link_options(${ziel} PRIVATE ${SAN})
+endfunction()
+
+add_library(cypherdj_stellwerk STATIC ${QUELLEN})
+target_include_directories(cypherdj_stellwerk PUBLIC include)
+stellwerk_ziel(cypherdj_stellwerk)
+add_library(cypherdj::stellwerk ALIAS cypherdj_stellwerk)
+
+if(EXISTS ${D}/sim/sim_clock.cpp)
+  add_library(cypherdj_stellwerk_sim STATIC sim/sim_clock.cpp)
+  target_include_directories(cypherdj_stellwerk_sim PUBLIC include sim)
+  stellwerk_ziel(cypherdj_stellwerk_sim)
+  add_library(cypherdj::stellwerk_sim ALIAS cypherdj_stellwerk_sim)
+endif()
+
+if(NOT STELLWERK_TESTS)
+  return()
+endif()
+
+add_library(cypherdj_stellwerk_leer STATIC ${QUELLEN_LEER})
+target_include_directories(cypherdj_stellwerk_leer PUBLIC include)
+stellwerk_ziel(cypherdj_stellwerk_leer)
+
+enable_testing()
+
+if(EXISTS ${D}/tool/sequence_reader.cpp)
+  add_executable(stellwerk_folgen tool/sequence_reader.cpp)
+  target_link_libraries(stellwerk_folgen cypherdj_stellwerk cypherdj_stellwerk_sim)
+  stellwerk_ziel(stellwerk_folgen)
+  add_executable(stellwerk_folgen_leer tool/sequence_reader.cpp)
+  target_link_libraries(stellwerk_folgen_leer cypherdj_stellwerk_leer cypherdj_stellwerk_sim)
+  stellwerk_ziel(stellwerk_folgen_leer)
+endif()
+
+if(EXISTS ${D}/tool/controls_list.cpp)
+  add_executable(stellwerk_regler_liste tool/controls_list.cpp)
+  target_link_libraries(stellwerk_regler_liste cypherdj_stellwerk)
+  stellwerk_ziel(stellwerk_regler_liste)
+  # Regler-Tabelle gegen den Vertragstext §1.5 (mit Selbsttest gegen einen verfälschten Text)
+  set(VERTRAG_TEXT ${D}/../../../docs/architecture/INTERFACES.md CACHE FILEPATH "INTERFACES.md")
+  if(EXISTS ${VERTRAG_TEXT})
+    add_test(NAME regler_gegen_vertrag
+             COMMAND python3 ${D}/tests/controls_against_contract.py $<TARGET_FILE:stellwerk_regler_liste> ${VERTRAG_TEXT})
+  else()
+    message(WARNING "Vertragstext fehlt: ${VERTRAG_TEXT}")
+  endif()
+endif()
+
+if(EXISTS ${D}/measurement/cost.cpp)
+  add_executable(stellwerk_kosten measurement/cost.cpp)
+  target_link_libraries(stellwerk_kosten cypherdj_stellwerk cypherdj_stellwerk_sim)
+  stellwerk_ziel(stellwerk_kosten)
+endif()
+
+if(EXISTS ${D}/measurement/moving_peak.cpp)
+  add_executable(stellwerk_bewegt_spitze measurement/moving_peak.cpp)
+  target_include_directories(stellwerk_bewegt_spitze PRIVATE tests werkzeug)
+  target_link_libraries(stellwerk_bewegt_spitze cypherdj_stellwerk cypherdj_stellwerk_sim)
+  stellwerk_ziel(stellwerk_bewegt_spitze)
+endif()
+
+file(GLOB TESTDATEIEN CONFIGURE_DEPENDS ${D}/tests/test_*.cpp)
+foreach(f ${TESTDATEIEN})
+  get_filename_component(n ${f} NAME_WE)
+  if(STELLWERK_SANITIZE AND n STREQUAL "test_realtime")
+    continue()   # ersetzt malloc; verträgt sich nicht mit ASan
+  endif()
+  add_executable(stellwerk_${n} ${f})
+  target_include_directories(stellwerk_${n} PRIVATE tests werkzeug)
+  target_link_libraries(stellwerk_${n} cypherdj_stellwerk)
+  if(TARGET cypherdj_stellwerk_sim)
+    target_link_libraries(stellwerk_${n} cypherdj_stellwerk_sim)
+  endif()
+  stellwerk_ziel(stellwerk_${n})
+  add_test(NAME ${n} COMMAND stellwerk_${n})
+  # Fehlerfall: dieselben Fälle gegen die leere Schnittstelle (nicht in ctest, von Hand gestartet)
+  if(n STREQUAL "test_ported" OR n STREQUAL "test_attacks")
+    add_executable(stellwerk_${n}_leer ${f})
+    target_include_directories(stellwerk_${n}_leer PRIVATE tests werkzeug)
+    target_link_libraries(stellwerk_${n}_leer cypherdj_stellwerk_leer cypherdj_stellwerk_sim)
+    stellwerk_ziel(stellwerk_${n}_leer)
+  endif()
+endforeach()
+
+# 1.12 S3 task 1: error cases of the grip signal and of the pickup, each compiled with its switch; the test must go red (WILL_FAIL).
+#   GRIFF_NUR_HALTERWECHSEL: the signal only where the holder changes (case d of test_hand_grip)
+#   GRIFF_IN_TOTZONE: a discarded dead-zone step raises the signal;  GRIFF_SAMPLE_LETZTER: the last grip of a cycle wins
+#   RESEND_GRIFF: an absolute resend of the known position counts as a grip (test_hand_grip case i, test_hand_pickup case g)
+#   GRIFF_LETZTER_ERSTER: the last-grip sample (griff_letzter_im_zyklus, 1.12 S3 task 7) stays with the first grip
+#   INS_PFAD_ZU_LANG: one path of the insert vocabulary has 32 characters (test_insert_contract, 1.10 slice 4a T1)
+#   INS_BEREICH: ins/komp/<n>/schwelle ends at +6 dB instead of 0 (the range parity with the DJ-side komp/* rows, test_insert_contract)
+#   PICKUP_VOR_VERWURF: the pickup runs before the discard checks and for a release (test_hand_pickup)
+# The library sources are compiled again with the switch, so these executables do not link cypherdj_stellwerk.
+if(TARGET cypherdj_stellwerk_sim)
+  foreach(m
+      test_hand_grip:STELLWERK_GRIFF_NUR_HALTERWECHSEL test_hand_grip:STELLWERK_GRIFF_IN_TOTZONE
+      test_hand_grip:STELLWERK_GRIFF_SAMPLE_LETZTER test_hand_pickup:STELLWERK_PICKUP_VOR_VERWURF
+      test_hand_grip:STELLWERK_RESEND_GRIFF test_hand_pickup:STELLWERK_RESEND_GRIFF
+      test_hand_grip:STELLWERK_GRIFF_LETZTER_ERSTER
+      test_insert_contract:INS_PFAD_ZU_LANG test_insert_contract:INS_BEREICH)
+    string(REPLACE ":" ";" mp ${m})
+    list(GET mp 0 mt)
+    list(GET mp 1 mm)
+    if(EXISTS ${D}/tests/${mt}.cpp)
+      string(TOLOWER ${mm} mn)
+      set(mz stellwerk_${mt}_${mn}_mutation)
+      add_executable(${mz} tests/${mt}.cpp ${QUELLEN})
+      target_include_directories(${mz} PRIVATE include tests werkzeug)
+      target_compile_definitions(${mz} PRIVATE CYPHERDJ_MUTATION_${mm}=1)
+      target_link_libraries(${mz} cypherdj_stellwerk_sim)
+      stellwerk_ziel(${mz})
+      add_test(NAME ${mt}_${mn}_mutation COMMAND ${mz})
+      set_tests_properties(${mt}_${mn}_mutation PROPERTIES WILL_FAIL TRUE)
+    endif()
+  endforeach()
+endif()
+
+# Golden-Folgen des Vertrags (Scheibe 09, djk/contract/sequences/): je Datei ein Test, dazu alle fünf mit Block 64 und 1024
+set(VERTRAG_FOLGEN ${D}/../../contract/sequences CACHE PATH "Ordner der Golden-Folgen")
+set(FOLGEN_11 teil_rampe hand_gewinnt zu_spaet i4_ueberlappung ki_stopp)
+if(TARGET stellwerk_folgen)
+  set(alle)
+  foreach(n ${FOLGEN_11})
+    if(EXISTS ${VERTRAG_FOLGEN}/${n}.jsonl)
+      add_test(NAME folge_${n} COMMAND stellwerk_folgen --leise ${VERTRAG_FOLGEN}/${n}.jsonl)
+      list(APPEND alle ${VERTRAG_FOLGEN}/${n}.jsonl)
+    else()
+      message(WARNING "Golden-Folge fehlt: ${VERTRAG_FOLGEN}/${n}.jsonl (Scheibe 09 fertig?)")
+    endif()
+  endforeach()
+  if(alle)
+    add_test(NAME folgen_block_64 COMMAND stellwerk_folgen --leise --block 64 ${alle})
+    add_test(NAME folgen_block_1024 COMMAND stellwerk_folgen --leise --block 1024 ${alle})
+    # Fehlerfall, dauerhaft: jede Folge ist gegen die leere Schnittstelle rot (Rückgabe 1, kein Formfehler)
+    foreach(f ${alle})
+      get_filename_component(n ${f} NAME_WE)
+      add_test(NAME folge_leer_rot_${n} COMMAND sh -c "\"$<TARGET_FILE:stellwerk_folgen_leer>\" --leise \"${f}\" > /dev/null; test $? -eq 1")
+    endforeach()
+  endif()
+  # Der Folgenleser selbst: gruen_* muss 0 liefern, rot_* 1, form_* 2
+  file(GLOB FORMFOLGEN CONFIGURE_DEPENDS ${D}/tests/folgen_form/*.jsonl)
+  foreach(f ${FORMFOLGEN})
+    get_filename_component(n ${f} NAME_WE)
+    if(n MATCHES "^gruen_")
+      set(soll 0)
+    elseif(n MATCHES "^rot_")
+      set(soll 1)
+    else()
+      set(soll 2)
+    endif()
+    add_test(NAME folgenleser_${n} COMMAND sh -c "\"$<TARGET_FILE:stellwerk_folgen>\" --leise \"${f}\" > /dev/null; test $? -eq ${soll}")
+  endforeach()
+endif()
