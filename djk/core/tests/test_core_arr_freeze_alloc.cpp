@@ -1,5 +1,5 @@
 // Paket K3 (A10, L5): kein malloc im Kern-Zyklus während eines Freeze. Eine Wirt-Spur an einer Prüfsenke (Vorhalt
-// 2n + 25) wird über 8 Beats plus Nachlauf eingefroren, mit Loop-Klammer (ausgesetzt), Fader-Rampe der Spur und
+// 2n) wird über 8 Beats plus Nachlauf eingefroren, mit Loop-Klammer (ausgesetzt), Fader-Rampe der Spur und
 // Rückgabe des Auftrags als Ereignis; dann ein zweiter Freeze, der durch Stopp abbricht. Gezählt wird nur in
 // kern->zyklus() (alloc_intercept.h); der Puffer entsteht vorher, wie im Arrangement-Lade-Faden (Spec 6.29). Fix L2: dazu
 // free, blockierende Sperren und Schlafen; Positiv-Kontrolle abfang_gegenprobe(): je Art ein Aufruf, der Wächter zählt
@@ -28,7 +28,7 @@ int main() {
   }
   k35::Arbeitsbestand ab("test_kern_arr_freeze_alloc");
   arr35::Lauf x(ab.pfad, "test_kern_arr_freeze_alloc");
-  arrtest::PruefSenke wirt(2 * N + 25);
+  arrtest::PruefSenke wirt(2 * N);
   x.kern->setze_arr_senke_wirt(1, &wirt);
   std::string noten;
   for (int i = 0; i < 16; ++i)
@@ -125,7 +125,7 @@ int main() {
   cdj::Befehl g7 = x.neu(cdj::Befehl::ARR_FREEZE);
   g7.zeiger = f7.get();
   x.sende(g7);
-  zyklen(100);   // läuft (Einsatz nach 3n + 25)
+  zyklen(100);   // läuft (Einsatz nach 3n)
   const bool f7_lief = x.kern->arrangement().freeze_laeuft() && f7->start_s > 0;
   set_neu(100.0);
   zyklen(20);

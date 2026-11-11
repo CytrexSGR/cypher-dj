@@ -34,6 +34,7 @@ export function geraetText(s) {
   if (s.geraet?.art === 'intern' && s.geraet.name === 'rb338') return 'RB-338';
   if (s.geraet?.art === 'intern' && s.geraet.name === 'bk') return `BK · ${s.geraet.graph}`;   // S20: a Baukasten graph plays the notes of the track
   if (s.geraet?.art === 'intern' && s.geraet.name === 'kit') return `KIT · ${s.geraet.kit}`;   // 1.9 (L25): a core kit plays the notes of the track
+  if (s.geraet?.art === 'wirt' && s.geraet.plugin) return `PLUGIN · ${s.geraet.plugin.name} · ${s.geraet.slot}`;   // plan 1.11 task 17: a foreign instrument
   if (s.geraet?.art === 'wirt') return `${String(s.geraet.name).toUpperCase()} · ${s.geraet.slot}${s.geraet.patch ? ` · ${s.geraet.patch}` : ''}`;   // the stored patch name follows
   if (s.geraet?.art === 'rack') return `RACK · ${s.geraet.glieder.length}`;   // 1.9 U7: the number of members
   return String(s.geraet?.name ?? '?').toUpperCase();
@@ -208,7 +209,7 @@ function zeigeArmKnopf(el, an) {
 }
 export function bindeKoepfe(behaelter, { aendere, aendereAus, offen = () => new Set(), umschalten = () => {}, takeOffen = () => new Set(), takeKoepfe = null, takesUmschalten = () => {}, wahl = () => undefined, waehle = () => {},
   spurWahl = () => new Set(), wahlUmschalten = () => {}, gruppeFalten = () => {},
-  ueber = () => [], uebersteuere = async () => true, kopfBeat = () => null, gesten = KEINE_GESTEN, armiere = async () => {}, armStandJetzt = () => null, marke = () => null, geraete = () => null, rackOeffnen = () => {} }) {
+  ueber = () => [], uebersteuere = async () => true, kopfBeat = () => null, gesten = KEINE_GESTEN, armiere = async () => {}, armStandJetzt = () => null, marke = () => null, geraete = () => null, rackOeffnen = () => {}, instrumente = () => [] }) {
   const frost = neuerFrost();
   const jetzt = () => performance.now();
   const stand = new Map();     // spur_id → Spur laut letztem Projekt
@@ -411,9 +412,14 @@ export function bindeKoepfe(behaelter, { aendere, aendereAus, offen = () => new 
     q('.p-spurname').textContent = s.name;
     // 1.16 rest U7 (F8): the preset that set the device, and "modified" when the sound moved on; nothing is added for a device without `preset` (golden)
     const pm = s.geraet?.preset ? marke(s.id) : null;
-    q('.p-geraet').textContent = geraetText(s) + (pm ? ` · ${pm.text}` : '') + (s.freeze ? ' · FROZEN' : '');
+    // plan 1.11 task 17: a plugin track whose host says `fehlt` (plugin file gone, not an instrument) is marked MISSING with the reason as the tooltip
+    const ih = s.geraet?.plugin ? instrumente().find((x) => x.spur_id === s.id) : null;
+    const fehlt = ih && ih.status === 'fehlt';
+    q('.p-geraet').textContent = geraetText(s) + (pm ? ` · ${pm.text}` : '') + (s.freeze ? ' · FROZEN' : '') + (fehlt ? ' · MISSING' : '');
     const ge = q('.p-geraet');
-    if (pm) ge.title = pm.titel; else if (ge.title) ge.removeAttribute('title');   // only touch the attribute when a mark put it there (golden: no title attribute appears)
+    el.classList.toggle('fehlt', !!fehlt);
+    if (fehlt) ge.title = `The plugin cannot be used: ${ih.grund ?? 'not loadable'}`;
+    else if (pm) ge.title = pm.titel; else if (ge.title) ge.removeAttribute('title');   // only touch the attribute when a mark put it there (golden: no title attribute appears)
     el.classList.toggle('auto', faderLane(s) !== null);          // AUTO in front of the fader value (CSS): a volume line controls this fader
     el.classList.toggle('auto-pan', laneFuer(s, 'pan') !== null);   // and in front of the pan value
     // 1.12 S3: the hand has the field, the lane waits (orange): the head (regulators) or the button (M, S)
@@ -591,7 +597,7 @@ export function bindeSpuren(ctx) {
     ctx.aendere('Group tracks', [b]);
     return true;
   };
-  const koepfe = bindeKoepfe($('koepfe'), { aendere: ctx.aendere, spurWahl: () => st.spurWahl, wahlUmschalten, gruppeFalten, aendereAus: ctx.aendereAus, offen: () => st?.laneOffen ?? new Set(),
+  const koepfe = bindeKoepfe($('koepfe'), { instrumente: () => st?.instrumente ?? [], aendere: ctx.aendere, spurWahl: () => st.spurWahl, wahlUmschalten, gruppeFalten, aendereAus: ctx.aendereAus, offen: () => st?.laneOffen ?? new Set(),
     takeOffen: () => st?.takeOffen ?? new Set(), takeKoepfe, rackOeffnen: (id) => ctx.rackOeffnen?.(id),
     takesUmschalten: (id) => { if (st.takeOffen.has(id)) st.takeOffen.delete(id); else st.takeOffen.add(id); ctx.layoutNeu(); koepfe.zeige(st.projekt); },
     gesten, armiere: (id, an) => aufnahme.armiere(id, an), armStandJetzt: () => st?.autoArm,

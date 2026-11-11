@@ -1,0 +1,8 @@
+{"t":"sende","sample":0,"osc":["/k/set/neu",",hsd",1,"pruefstand",124.0],"bereich":"zeitachse","herleitung":"§4.2: neue Zeitachse mit 124 BPM, Beat 0 am nächsten Zyklus = Sample 0 (§1.1)"}
+{"t":"sende","sample":23226,"osc":["/test/klick",",hssi",2,"pruefstand","master",1],"bereich":"pruefstand","herleitung":"ROADMAP Z1: Klick je Schlag auf master"}
+{"t":"aktion","sample":1532903,"was":"kern_kill9","bereich":"pruefstand","herleitung":"Absturz bei Beat 66 (Takt 17, Schlag 3)"}
+{"t":"erwarte","ab_sample":1532903,"bis_sample":1537703,"osc":["/nb",",iiih",1,null,null,null],"bereich":"pruefstand","herleitung":"§5.10 Zustand 1 Schleife"}
+{"t":"messung","sample":1532903,"name":"schleife_frames","wert":92904,"toleranz":0,"bereich":"pruefstand","herleitung":"§6.1: Schleife um takt_frames = llround(sample(64)) − llround(sample(60)) = 92904"}
+{"t":"messung","sample":1544903,"name":"stille_ms","wert":0,"toleranz":0,"bereich":"pruefstand","herleitung":"ARCHITECTURE §7: 0 ms Stille"}
+{"t":"erwarte","ab_sample":1532903,"bis_sample":1628903,"osc":["/nb",",iiih",0,null,null,null],"bereich":"pruefstand","herleitung":"§5.10 zurück zu durchreichen"}
+{"t":"messung","sample":1628903,"name":"rueckgabe_raster_abw_samples","wert":0,"toleranz":1,"bereich":"pruefstand","herleitung":"ARCHITECTURE §7: Klicks nach der Rückgabe auf llround(sample_at(b)) ± 1 Sample"}

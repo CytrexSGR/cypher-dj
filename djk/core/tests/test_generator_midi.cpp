@@ -45,9 +45,9 @@ struct Welt {
       s += N;
     }
   }
-  // Glanz 2.7 Prüfung R3: ein Zyklus wie im Kern, Vorhalt aus dem Quantum n (2 · n + 25), dann ein block über n Samples
+  // Glanz 2.7 Prüfung R3: ein Zyklus wie im Kern, Vorhalt aus dem Quantum n (2 · n, der Rundweg), dann ein block über n Samples
   void zyklus(int n) {
-    erz.setze_midi_vorhalt((int64_t)cdj::ERZ_MIDI_RUNDWEG_ZYKLEN * n + cdj::ERZ_MIDI_VORHALT_REST);
+    erz.setze_midi_vorhalt(cdj::erz_midi_vorhalt(n));
     std::fill(pl.begin(), pl.end(), 0.0f);
     std::fill(pr.begin(), pr.end(), 0.0f);
     for (auto& m : midi) m.leer();
@@ -130,7 +130,7 @@ int main() {
     v.bis(2 * SPB, false);
     PRUEF(v.evs.empty());
   }
-  {  // 4) Glanz 2.7 (F19): Vorhalt 537 = 2 · 256 + 25: On/Off 537 Samples vor dem Beat. Negativ-Kontrolle: ein Kit-Strom mit
+  {  // 4) Glanz 2.7 (F19): Vorhalt 537 (a fixed example value): On/Off 537 Samples vor dem Beat. Negativ-Kontrolle: ein Kit-Strom mit
      // demselben Vorhalt klingt weiter genau am Sample des Beats.
     Welt w;
     w.erz.setze_midi_vorhalt(537);
@@ -173,8 +173,8 @@ int main() {
                 (int)z.zu_spaet, (int)z.eingefuegt);
     PRUEF(on36 == 1 && on38 == 1 && z.zu_spaet == 1 && z.eingefuegt == 1);
   }
-  {  // 6) Glanz 2.7 Prüfung R3 (E3): Quantum 1024 -> 256 bei 88064. Gesendet ist bis 88064 + 2073, der erste 256er-Zyklus rechnet
-     // MIDI-jetzt mit 88064 + 537. 40 Noten ab Beat 3,9 alle 112,5 Samples, ein spätes Fenster bringt alle noch einmal.
+  {  // 6) Glanz 2.7 Prüfung R3 (E3): Quantum 1024 -> 256 bei 88064. Gesendet ist bis 88064 + 2048, der erste 256er-Zyklus rechnet
+     // MIDI-jetzt mit 88064 + 512. 40 Noten ab Beat 3,9 alle 112,5 Samples, ein spätes Fenster bringt alle noch einmal.
      // Soll: keine doppelt, keine fehlt (vorher 14 doppelt). Negativ-Kontrolle 6b: dasselbe ohne Quantumwechsel.
     for (int wechsel = 1; wechsel >= 0; --wechsel) {
       Welt w;
@@ -186,7 +186,7 @@ int main() {
       for (const auto& e : v) f.ev[f.n++] = e;
       w.erz.fenster(f, 0.0);
       while (w.s < 88064) w.zyklus(wechsel ? 1024 : 256);
-      w.erz.setze_midi_vorhalt(2 * 256 + 25);  // Kern: Zyklusanfang mit neuem Quantum, vor dem Einsortieren
+      w.erz.setze_midi_vorhalt(cdj::erz_midi_vorhalt(256));  // Kern: Zyklusanfang mit neuem Quantum, vor dem Einsortieren
       const double jetzt = w.karte.beat_at((double)w.s);
       f.ab_beat = jetzt;
       const auto z = w.erz.fenster(f, jetzt);

@@ -2,6 +2,8 @@
 // (#libliste, app.js stoebernZeile) bekommen nur in PRODUCTION draggable, und nur, wenn nutzlast() sie annimmt; die
 // DJ-Ansicht bleibt unverändert. Ablegen schickt clip_neu mit dem Katalog-sha (Pfad löst der Server).
 import { ZIEH_TYP, nutzlast, ablageBefehl, ABLAGE_TEXT, GERAET_TYP, geraetAblage, effektBefehl } from './drag.js';
+import { pluginSpurBefehl } from './devices_browser.js';
+import { MAX_PLAETZE, straenge } from './inserts.js';
 import { xZuBeat, rasterBeats } from './timeline.js';
 import { spurIndexBeiTabelle } from './layout.js';
 import { PRESET_TYP, presetZiel } from './preset_target.js';
@@ -60,10 +62,21 @@ export function bindeAblage(ctx) {
   function legeGeraet(e) {
     const n = lies(e);
     if (!n) return;
+    if (n.art === 'instrument') { const r = pluginSpurBefehl(n); ctx.aendere(r.label, [r.befehl]); return; }   // plan 1.11 task 17: anywhere on the arrangement
+    if (n.art === 'host') { const i = spurIndexBeiTabelle(ctx.zeilen(), e.offsetY); legePlugin(st.projekt?.spuren?.[i]?.id, n); return; }
     const r = geraetAblage(st.projekt, n, spurIndexBeiTabelle(ctx.zeilen(), e.offsetY));
     if (r.fehler) { ctx.melde(r.text, true); return; }
     ctx.aendere(r.label, r.befehle);
   }
+  // plan 1.11 task 11: a foreign effect plugin ({art: 'host', plugin_id}) becomes a stage at the end of the chain of a strip; the click in the PLUGINS list
+  // uses the first selected strip. A full chain or no strip only shows its text; nothing is sent.
+  function legePlugin(strangId, n) {
+    const s = strangId ? straenge(st.projekt).find((x) => x.id === strangId) : null;
+    if (!s) { ctx.melde('Drop the plugin on a track row, or select a strip first', true); return; }
+    if (s.inserts.length >= MAX_PLAETZE) { ctx.melde(`All ${MAX_PLAETZE} stages of this strip are used`, true); return; }
+    ctx.aendere(`Add ${n.titel ?? 'plugin'} to ${s.name}`, [{ befehl: 'insert_setzen', strang_id: strangId, art: 'host', plugin_id: n.plugin_id }]);
+  }
+  ctx.fuegePluginEin = (n) => legePlugin([...(st.spurWahl ?? [])][0], n);
   // 1.16 rest (U7, S4): a preset from the PRESETS list. presetZiel() picks the target (or the reason), the server computes the plan, one write follows.
   const liesPreset = (e) => { try { return JSON.parse(e.dataTransfer.getData(PRESET_TYP)); } catch { return null; } };
   function legePreset(e, wohin) {
@@ -92,6 +105,7 @@ export function bindeAblage(ctx) {
     }
     const n = lies(e);
     if (!n) return;
+    if (n.art === 'host') { legePlugin(z.dataset.strang, n); return; }
     if (n.ziel !== 'insert') { ctx.melde('Drop instruments on the arrangement', true); return; }
     const r = effektBefehl(st.projekt, z.dataset.strang, n);
     if (r.fehler) { ctx.melde(r.text, true); return; }

@@ -194,7 +194,7 @@ int main(int argc, char** argv) {
     e = cdj::rendere(a);
     if (!e.fehler.empty()) {
       std::fprintf(stderr, "Render: %s: %s\n", e.fehler.c_str(), e.meldung.c_str());
-      return e.fehler == "wirt_nicht_eingefroren" ? 5 : (e.fehler == "aufruf" || e.fehler == "regler") ? 2 : 4;
+      return e.fehler == "wirt_nicht_eingefroren" || e.fehler == "host_insert_echtzeit" ? 5 : (e.fehler == "aufruf" || e.fehler == "regler") ? 2 : 4;
     }
     std::string fehler;
     bool besteht = false;

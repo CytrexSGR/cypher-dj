@@ -50,7 +50,27 @@ export function freezeKnopf(spur, lauf) {
 
 // Text während eines Laufs (jede Bildschleife): Phase, Takt des Durchlaufs, Sekunden. V2 Fix-Runde 2 H3: ein fremder Lauf (ausgabe_lauf nach
 // einem Reload, Spec 6.34 ohne Startfeld) hat kein seit; dann keine Sekunden, statt die Zeit seit dem Reload als Laufzeit zu zeigen.
+// plan 1.11 task 13: a project with an active host stage (foreign plugin) exports in real time. The page tells the length up front and shows a progress bar.
+const zwei = (n) => String(n).padStart(2, '0');
+export const mmss = (s) => `${zwei(Math.floor(Math.max(0, s) / 60))}:${zwei(Math.round(Math.max(0, s)) % 60)}`;
+export function hatHostStufe(p) {
+  const traeger = [...(p?.spuren ?? []), ...(p?.gruppen ?? []), ...(p?.returns ?? []), ...(p?.master ? [p.master] : [])];
+  return traeger.some((t) => (t.inserts ?? []).some((i) => i.art === 'host' && i.an));
+}
+// the range of a default export (loop bracket when on, else the whole song) as seconds at the project tempo
+export function exportDauerS(p) {
+  let bis = 0, von = 0;
+  if (p?.loop?.an) { von = p.loop.von_beat; bis = p.loop.bis_beat; } else for (const s of p?.spuren ?? []) for (const c of s.clips ?? []) bis = Math.max(bis, c.start_beat + c.laenge_beats);
+  return Math.max(0, bis - von) * 60 / (p?.tempo_bpm || 120);
+}
+export const echtzeitHinweis = (p) => (hatHostStufe(p) ? `Real-time export (foreign plugins): about ${mmss(exportDauerS(p))}` : '');
+// progress of a real-time run 0..1 from ausgabe_lauf {start_ms, dauer_s}; null when unknown
+export const echtzeitFortschritt = (lauf, jetztMs = Date.now()) =>
+  (lauf?.echtzeit && typeof lauf.start_ms === 'number' && lauf.dauer_s > 0 ? Math.min(1, Math.max(0, (jetztMs - lauf.start_ms) / 1000 / lauf.dauer_s)) : null);
 export function laufText(lauf, arr, jetzt) {
+  if (lauf.art === 'export' && lauf.echtzeit && typeof lauf.start_ms === 'number') {
+    return `Real-time export (foreign plugins): ${mmss((Date.now() - lauf.start_ms) / 1000)} of ${mmss(lauf.dauer_s)}`;
+  }
   const sek = typeof lauf.seit === 'number' ? ` · ${Math.max(0, Math.floor((jetzt - lauf.seit) / 1000))} s` : '';
   const wo = arr?.status === 3 && Number.isFinite(arr.projekt_beat) ? ` · bar ${positionText(arr.projekt_beat)}` : '';
   if (lauf.art === 'freeze') return lauf.an ? `Freezing ${lauf.name}${wo}${sek}` : `Unfreezing ${lauf.name}…`;

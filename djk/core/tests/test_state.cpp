@@ -95,11 +95,11 @@ int main() {
     auto f = std::make_unique<cdj_z_echtzeit>();
     PRUEF(cdj::z_neuestes(z.daten()->echtzeit, *f) == -1);
   }
-  // 6) E1 (2026-10-20): controller ceiling 512 -> 1024, CDJ_ZUSTAND_VERSION 1 -> 2; A1a (2026-11-03): 1024 -> 2048, version 2 -> 3.
+  // 6) E1 (2026-10-20): controller ceiling 512 -> 1024, CDJ_ZUSTAND_VERSION 1 -> 2; A1a (2026-11-03): 1024 -> 2048, version 2 -> 3; arr-bk (2026-11-11): 2048 -> 4096, version 3 -> 4.
   //    The ceiling of the state must not be below that of the table, or core_state.cpp cuts off silently (nr < CDJ_Z_REGLER).
   PRUEF(CDJ_Z_REGLER >= cypherdj::stellwerk::MAX_REGLER);
-  PRUEF(CDJ_ZUSTAND_VERSION == 3u);
-  PRUEF(CDJ_Z_REGLER == 2048);   // A1a: ceiling 1024 -> 2048, version 2 -> 3
+  PRUEF(CDJ_ZUSTAND_VERSION == 4u);
+  PRUEF(CDJ_Z_REGLER == 4096);   // arr-bk: ceiling 2048 -> 4096, version 3 -> 4
   //    Eine Datei im Format Version 1 (512 Regler, 253 792 Bytes, gemessen mit dem Stand vor E1) wird nie gelesen: der
   //    Kern legt neu an (Größe passt nicht), meldet es und übernimmt nichts aus dem alten Inhalt.
   {
@@ -143,11 +143,74 @@ int main() {
     PRUEF(z.oeffne(alt_pfad));
     PRUEF(z.neu());
     PRUEF(z.meldung().find("352096") != std::string::npos && z.meldung().find("neu angelegt") != std::string::npos);
-    PRUEF(z.daten()->version == 3u && z.daten()->groesse == sizeof(cdj_z_datei));
+    PRUEF(z.daten()->version == CDJ_ZUSTAND_VERSION && z.daten()->groesse == sizeof(cdj_z_datei));
     const unsigned char* roh = reinterpret_cast<const unsigned char*>(z.daten());
     size_t rest = 0;
     for (size_t i = 64; i < sizeof(cdj_z_datei); ++i) rest += roh[i] != 0;
     PRUEF(rest == 0);
+    unlink(alt_pfad.c_str());
+  }
+  //    arr-bk: a file of version 3 (2048 controllers, 548 704 bytes = 253 792 + 2 * 1536 * 96, the layout of the cores before the bk pool) is TAKEN OVER, not recreated:
+  //    the live studio keeps its mixer rows, tempo plan and decks over the first restart of a version 4 core. The test image is built with literal offsets (not from the
+  //    header), every byte of the body is a distinct pattern, so a misplaced section is seen.
+  {
+    constexpr size_t GROESSE_V3 = 548704;
+    PRUEF(253792 + 2 * (2048 - 512) * sizeof(cdj_z_regler) == GROESSE_V3);
+    constexpr size_t E3 = 208 + 2 * 64 * 48 + 256 * 256 + 2048 * 96 + 32 * 144 + 4 * 168;   // one subject of version 3
+    constexpr size_t REGLER_AB = 208 + 2 * 64 * 48 + 256 * 256;                              // the table starts here inside a subject
+    PRUEF(64 + 2 * E3 + 2 * (32 + 8 * 64) == GROESSE_V3);
+    std::vector<unsigned char> alt(GROESSE_V3);
+    for (size_t k = 0; k < alt.size(); ++k) alt[k] = static_cast<unsigned char>((k * 7 + k / 251) % 255 + 1);   // never 0
+    std::memcpy(alt.data(), "CDJZ", 4);
+    const uint32_t v3 = 3, g3 = static_cast<uint32_t>(GROESSE_V3);
+    std::memcpy(alt.data() + 4, &v3, 4);
+    std::memcpy(alt.data() + 8, &g3, 4);
+    const std::string alt_pfad = ordner + "/zustand_v3";
+    const int fd = open(alt_pfad.c_str(), O_CREAT | O_WRONLY | O_TRUNC, 0600);
+    PRUEF(fd >= 0 && write(fd, alt.data(), alt.size()) == static_cast<ssize_t>(alt.size()));
+    if (fd >= 0) close(fd);
+    {
+      cdj::ZustandDatei z;
+      PRUEF(z.oeffne(alt_pfad));
+      PRUEF(!z.neu());   // taken over: the time axis goes on
+      PRUEF(z.meldung().find("version 3 taken over") != std::string::npos);
+      PRUEF(z.daten()->version == 4u && z.daten()->groesse == sizeof(cdj_z_datei));
+      PRUEF(std::memcmp(z.daten()->magic, "CDJZ", 4) == 0);
+      const unsigned char* roh = reinterpret_cast<const unsigned char*>(z.daten());
+      PRUEF(std::memcmp(roh + 12, alt.data() + 12, 52) == 0);   // reserve words of the head
+      for (size_t i = 0; i < 2; ++i) {
+        const unsigned char* von = alt.data() + 64 + i * E3;
+        const unsigned char* nach = reinterpret_cast<const unsigned char*>(&z.daten()->echtzeit[i]);
+        PRUEF(std::memcmp(nach, von, REGLER_AB + 2048 * 96) == 0);   // everything in front of the table and its 2048 rows, byte for byte
+        PRUEF(std::memcmp(nach + offsetof(cdj_z_echtzeit, hoerscheine), von + REGLER_AB + 2048 * 96, 32 * 144 + 4 * 168) == 0);   // the sections behind it moved, unchanged
+        size_t neu_rest = 0;
+        for (size_t k = REGLER_AB + 2048 * 96; k < REGLER_AB + CDJ_Z_REGLER * 96; ++k) neu_rest += nach[k] != 0;
+        PRUEF(neu_rest == 0);   // the rows the old table did not have are empty
+      }
+      for (size_t i = 0; i < 2; ++i)
+        PRUEF(std::memcmp(&z.daten()->abos[i], alt.data() + 64 + 2 * E3 + i * (32 + 8 * 64), 32 + 8 * 64) == 0);
+      z.daten()->echtzeit[0].n_regler = 2036;   // a version 4 core writes on
+    }
+    {
+      cdj::ZustandDatei z;   // the next open sees an ordinary version 4 file
+      PRUEF(z.oeffne(alt_pfad));
+      PRUEF(!z.neu() && z.meldung() == "vorhanden" && z.daten()->echtzeit[0].n_regler == 2036);
+    }
+    // a version 3 file whose head and size disagree is not trusted: recreated, nothing taken over
+    {
+      const uint32_t falsch = g3 + 8;
+      std::memcpy(alt.data() + 8, &falsch, 4);
+      const int fd2 = open(alt_pfad.c_str(), O_CREAT | O_WRONLY | O_TRUNC, 0600);
+      PRUEF(fd2 >= 0 && write(fd2, alt.data(), alt.size()) == static_cast<ssize_t>(alt.size()));
+      if (fd2 >= 0) close(fd2);
+      cdj::ZustandDatei z;
+      PRUEF(z.oeffne(alt_pfad));
+      PRUEF(z.neu());
+      const unsigned char* roh = reinterpret_cast<const unsigned char*>(z.daten());
+      size_t rest = 0;
+      for (size_t i = 64; i < sizeof(cdj_z_datei); ++i) rest += roh[i] != 0;
+      PRUEF(rest == 0);
+    }
     unlink(alt_pfad.c_str());
   }
   //    Same size, but version 1 in the header (a core with another layout and the same size): recreated as well.

@@ -1,6 +1,6 @@
 {
  "vertrag": "insert_module/1",
- "hinweis": "Single source of the insert vocabulary (package 1.10 slice 4). Generated from this file by djk/contract/generate_insert.py: djk/core/signalbox/src/insert_zeilen.inc and djk/ui/project/insert_schluessel.ts. Never edit those by hand. Paths are '<praefix>/<n>/<gruppe><m>/<name>' or '<praefix>/<n>/<name>', at most 31 characters. 'tabelle' says whether the kind has rows in the controller table yet (komp from 4a, eq/saett from 4b, rack from 4c, lim from the master limiter). 'latenz' is the latency in samples a stage of the kind adds at 48 kHz (the delay compensation of the arrangement, slice 4b T13; pinned to cypher_*_latenz() by test_arr_pdc; lim: 74 samples, pinned to KanalLimiter(48000, {vorhalt 1.5 ms, sample peak}).latenz_samples()); 'instanzen' is the pool size; for eq and saett it was decided by the cost measurement (slice 4b T11, docs/architecture/stand/routing-1-10.md), not guessed; the other kinds only contribute their paths to the vocabulary. 'geraet' is the plugin parameter id in djk/ui/presets/devices.ts ('<n>' is the band number); null where the plugin has no such parameter. Units and ranges are the plugin's. Curve 'schalter' = switch, 'stufen' = integer steps, 'linear' = continuous (kurven as in controls.h KurvenTyp).",
+ "hinweis": "Single source of the insert vocabulary (package 1.10 slice 4). Generated from this file by djk/contract/generate_insert.py: djk/core/signalbox/src/insert_zeilen.inc and djk/ui/project/insert_schluessel.ts. Never edit those by hand. Paths are '<praefix>/<n>/<gruppe><m>/<name>' or '<praefix>/<n>/<name>', at most 31 characters. 'tabelle' says whether the kind has rows in the controller table yet (komp from 4a, eq/saett from 4b, rack from 4c, lim from the master limiter, host from plan 1.11 T4, utility from arr-fx: width, bass mono, gain and balance, 0 samples of latency, the 1.15 Utility module, bk from arr-bk: a Baukasten effect graph with the knobs k1..k8, 0..1, default 0.5; the instance smooths a changed knob over 20 ms itself, so rampe_ms is 0). 'latenz' is the latency in samples a stage of the kind adds at 48 kHz (the delay compensation of the arrangement, slice 4b T13; pinned to cypher_*_latenz() by test_arr_pdc; host: 0 here because the latency of a foreign plugin is a property of the stage, ArrStufe::latenz from the playback file, plan 1.11 D4; bk: 0 here because the latency of a graph is a property of the stage too, measured from the instance by the loader (cypher_bk_latenz), at most 128 samples; lim: 74 samples, pinned to KanalLimiter(48000, {vorhalt 1.5 ms, sample peak}).latenz_samples()); 'instanzen' is the pool size; for eq and saett it was decided by the cost measurement (slice 4b T11, docs/architecture/stand/routing-1-10.md), not guessed; the other kinds only contribute their paths to the vocabulary. 'geraet' is the plugin parameter id in djk/ui/presets/devices.ts ('<n>' is the band number); null where the plugin has no such parameter. Units and ranges are the plugin's. Curve 'schalter' = switch, 'stufen' = integer steps, 'linear' = continuous (kurven as in controls.h KurvenTyp).",
  "arten": [
   {
    "art": "komp",
@@ -135,7 +135,7 @@
   {
    "art": "eq",
    "praefix": "ins/eq",
-   "instanzen": 2,
+   "instanzen": 8,
    "latenz": 69,
    "tabelle": true,
    "geraet": "eq",
@@ -295,7 +295,7 @@
   {
    "art": "saett",
    "praefix": "ins/saett",
-   "instanzen": 1,
+   "instanzen": 4,
    "latenz": 69,
    "tabelle": true,
    "geraet": "saett",
@@ -411,7 +411,7 @@
   {
    "art": "lim",
    "praefix": "ins/lim",
-   "instanzen": 1,
+   "instanzen": 2,
    "latenz": 74,
    "tabelle": true,
    "geraet": null,
@@ -451,6 +451,216 @@
      "rampe_ms": 0,
      "geraet": null,
      "rolle": "ins_lim_abklingen"
+    }
+   ]
+  },
+  {
+   "art": "host",
+   "praefix": "ins/host",
+   "instanzen": 4,
+   "latenz": 0,
+   "tabelle": true,
+   "geraet": null,
+   "parameter": [
+    {
+     "name": "an",
+     "einheit": "",
+     "min": 0,
+     "max": 1,
+     "vorgabe": 0,
+     "kurve": "schalter",
+     "ganz": true,
+     "rampe_ms": 0,
+     "geraet": null,
+     "rolle": "ins_host_an"
+    }
+   ]
+  },
+  {
+   "art": "utility",
+   "praefix": "ins/utility",
+   "instanzen": 8,
+   "latenz": 0,
+   "tabelle": true,
+   "geraet": null,
+   "parameter": [
+    {
+     "name": "an",
+     "einheit": "",
+     "min": 0,
+     "max": 1,
+     "vorgabe": 0,
+     "kurve": "schalter",
+     "ganz": true,
+     "rampe_ms": 0,
+     "geraet": null,
+     "rolle": "ins_util_an"
+    },
+    {
+     "name": "breite",
+     "einheit": "",
+     "min": 0,
+     "max": 4,
+     "vorgabe": 1,
+     "kurve": "linear",
+     "ganz": false,
+     "rampe_ms": 10,
+     "geraet": null,
+     "rolle": "ins_util_breite"
+    },
+    {
+     "name": "mono_unter",
+     "einheit": "Hz",
+     "min": 0,
+     "max": 500,
+     "vorgabe": 0,
+     "kurve": "linear",
+     "ganz": false,
+     "rampe_ms": 0,
+     "geraet": null,
+     "rolle": "ins_util_mono_unter"
+    },
+    {
+     "name": "gain",
+     "einheit": "dB",
+     "min": -60,
+     "max": 24,
+     "vorgabe": 0,
+     "kurve": "linear",
+     "ganz": false,
+     "rampe_ms": 10,
+     "geraet": null,
+     "rolle": "ins_util_gain"
+    },
+    {
+     "name": "balance",
+     "einheit": "",
+     "min": -1,
+     "max": 1,
+     "vorgabe": 0,
+     "kurve": "linear",
+     "ganz": false,
+     "rampe_ms": 10,
+     "geraet": null,
+     "rolle": "ins_util_balance"
+    }
+   ]
+  },
+  {
+   "art": "bk",
+   "praefix": "ins/bk",
+   "instanzen": 8,
+   "latenz": 0,
+   "tabelle": true,
+   "geraet": null,
+   "parameter": [
+    {
+     "name": "an",
+     "einheit": "",
+     "min": 0,
+     "max": 1,
+     "vorgabe": 0,
+     "kurve": "schalter",
+     "ganz": true,
+     "rampe_ms": 0,
+     "geraet": null,
+     "rolle": "ins_bk_an"
+    },
+    {
+     "name": "k1",
+     "einheit": "",
+     "min": 0,
+     "max": 1,
+     "vorgabe": 0.5,
+     "kurve": "linear",
+     "ganz": false,
+     "rampe_ms": 0,
+     "geraet": null,
+     "rolle": "ins_bk_k1"
+    },
+    {
+     "name": "k2",
+     "einheit": "",
+     "min": 0,
+     "max": 1,
+     "vorgabe": 0.5,
+     "kurve": "linear",
+     "ganz": false,
+     "rampe_ms": 0,
+     "geraet": null,
+     "rolle": "ins_bk_k2"
+    },
+    {
+     "name": "k3",
+     "einheit": "",
+     "min": 0,
+     "max": 1,
+     "vorgabe": 0.5,
+     "kurve": "linear",
+     "ganz": false,
+     "rampe_ms": 0,
+     "geraet": null,
+     "rolle": "ins_bk_k3"
+    },
+    {
+     "name": "k4",
+     "einheit": "",
+     "min": 0,
+     "max": 1,
+     "vorgabe": 0.5,
+     "kurve": "linear",
+     "ganz": false,
+     "rampe_ms": 0,
+     "geraet": null,
+     "rolle": "ins_bk_k4"
+    },
+    {
+     "name": "k5",
+     "einheit": "",
+     "min": 0,
+     "max": 1,
+     "vorgabe": 0.5,
+     "kurve": "linear",
+     "ganz": false,
+     "rampe_ms": 0,
+     "geraet": null,
+     "rolle": "ins_bk_k5"
+    },
+    {
+     "name": "k6",
+     "einheit": "",
+     "min": 0,
+     "max": 1,
+     "vorgabe": 0.5,
+     "kurve": "linear",
+     "ganz": false,
+     "rampe_ms": 0,
+     "geraet": null,
+     "rolle": "ins_bk_k6"
+    },
+    {
+     "name": "k7",
+     "einheit": "",
+     "min": 0,
+     "max": 1,
+     "vorgabe": 0.5,
+     "kurve": "linear",
+     "ganz": false,
+     "rampe_ms": 0,
+     "geraet": null,
+     "rolle": "ins_bk_k7"
+    },
+    {
+     "name": "k8",
+     "einheit": "",
+     "min": 0,
+     "max": 1,
+     "vorgabe": 0.5,
+     "kurve": "linear",
+     "ganz": false,
+     "rampe_ms": 0,
+     "geraet": null,
+     "rolle": "ins_bk_k8"
     }
    ]
   }

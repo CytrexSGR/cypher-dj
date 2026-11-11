@@ -31,23 +31,25 @@ def test_veraltete_datei_wird_erkannt():
 
 
 def test_zaehlung_und_tabellenzeilen():
-    """Slice 4b T12: the pools of eq and saett are the measured sizes (T11), so the count follows the contract: rows per instance times instances.
-    komp 12 x 10, eq 2 x 59 (pool 2 since 2026-11-06), saett 1 x 4 are table rows (242), and since slice 4c the rack 12 x 4 macro rows too (48): 290;
-    the master limiter lim 1 x 3 adds 3: 293."""
+    """The count follows the contract: rows per instance times instances. komp 12 x 10 = 120, eq 8 x 59 = 472 (pool 8 since arr-fx slice 2, 2 before),
+    saett 4 x 4 = 16 (1 x 4 before), the rack 12 x 4 = 48 (slice 4c), the limiters 2 x 3 = 6 (1 x 3 before), the effect hosts 4 x 1 (plan 1.11 T4)
+    the utilities 8 x 5 = 40 (arr-fx slice 1) and the Baukasten effects bk 8 x 9 = 72 (arr-bk slice 3: an and k1..k8): 778 rows, every one a table row."""
     z = erzeuge_insert.ausfalten(vertrag())
-    assert len(z) == 120 + 2 * 59 + 4 + 48 + 3
-    assert sum(1 for r in z if r["tabelle"]) == 242 + 48 + 3
+    soll = 120 + 8 * 59 + 4 * 4 + 48 + 2 * 3 + 4 + 8 * 5 + 8 * 9
+    assert len(z) == soll == 778
+    assert sum(1 for r in z if r["tabelle"]) == soll
     assert all(r["tabelle"] for r in z if r["art"] == "rack"), "every macro row is a table row (slice 4c)"
-    assert {r["art"]: sum(1 for q in z if q["art"] == r["art"]) for r in z} == {"komp": 120, "eq": 118, "saett": 4, "rack": 48, "lim": 3}
-    assert max(len(r["pfad"]) for r in z) == 20
+    assert {r["art"]: sum(1 for q in z if q["art"] == r["art"]) for r in z} == {"komp": 120, "eq": 472, "saett": 16, "rack": 48, "lim": 6, "host": 4, "utility": 40, "bk": 72}
+    assert max(len(r["pfad"]) for r in z) == 24   # ins/utility/8/mono_unter (20 before the utility kind)
 
 
 def test_poolgroessen_sind_die_gemessenen():
     """The pool sizes of eq and saett come from the cost table of slice 4b T11 (docs/architecture/stand/routing-1-10.md), not from the spec's starting
     values 4 and 8. A change of either number is a decision with a new measurement: this pin goes red first.
-    2026-11-06: eq 2 on Andreas' decision (lane gate 1650 us, measured quiet, routing-1-10.md section "EQ pool 2")."""
+    2026-11-06: eq 2 on Andreas' decision (lane gate 1650 us, measured quiet, routing-1-10.md section "EQ pool 2").
+    2026-11-10 (arr-fx slice 2): eq 8, saett 4, lim 2 on the order of the generalprobe; the cost of the full pool is measured and reported with the change."""
     n = {a["art"]: a["instanzen"] for a in vertrag()["arten"]}
-    assert n == {"komp": 12, "eq": 2, "saett": 1, "rack": 12, "lim": 1}
+    assert n == {"komp": 12, "eq": 8, "saett": 4, "rack": 12, "lim": 2, "host": 4, "utility": 8, "bk": 8}
     assert all(a["tabelle"] for a in vertrag()["arten"] if a["art"] in ("komp", "eq", "saett"))
 
 

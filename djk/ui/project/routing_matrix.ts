@@ -8,7 +8,7 @@ import { schluesselErlaubt, type SchluesselFrage } from './routing_rules.ts';
 export interface ZielZelle { ziel: string; aktiv: boolean; erlaubt: boolean; grund?: string; text?: string }
 export interface Option { quelle: string; nr: number; punkt: 'pre' | 'post'; erlaubt: boolean; grund?: string; text?: string }
 export interface Stufe {
-  insert_id: string; art: 'komp' | 'eq' | 'saett' | 'lim'; slot: number; an: boolean;
+  insert_id: string; art: 'komp' | 'eq' | 'saett' | 'lim' | 'utility' | 'bk'; slot: number; an: boolean;
   schluessel: null | { quelle: 'spur' | 'grp' | 'ret' | 'deck' | 'erz'; nr: number; punkt: 'pre' | 'post' }; optionen?: Option[];
 }
 export interface Strang {

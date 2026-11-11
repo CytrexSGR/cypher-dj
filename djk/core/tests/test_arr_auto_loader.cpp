@@ -92,6 +92,8 @@ int main() {
     PRUEF(grund(true, intern(o.auto_lane(norm, "geraet.decay"))) == "format");       // only four device parameters
     PRUEF(grund(true, intern(o.auto_lane(norm, "geraet.wellenform"))) == "format");
     PRUEF(grund(true, intern(o.auto_lane(norm, "geraet.accent"))) == "format");
+    PRUEF(grund(true, intern(o.auto_lane(norm, "geraet.k1"))) == "format");          // 1.12 slice 7: a Baukasten knob is no target of an RB-338 track
+    PRUEF(grund(true, spur(o.auto_lane(norm, "geraet.k1"))) == "format");            // nor of an audio track
     PRUEF(grund(true, intern(o.auto_lane(norm, "geraet.cutoff") + "," + o.auto_lane(norm, "geraet.resonanz"))).empty());   // two device lanes, different parameters
     PRUEF(grund(true, intern(o.auto_lane(norm, "geraet.cutoff") + "," + o.auto_lane(norm, "geraet.cutoff"))) == "format");   // the same parameter twice
     PRUEF(grund(true, spur(o.auto_lane(gut, "bogus"))) == "format");
@@ -149,7 +151,27 @@ int main() {
     PRUEF(lade2(bkspur("")).empty());                                  // positive control: the bk track loads
     PRUEF(lade2(bkspur(o.auto_lane({{0.0, -1.0, 0}, {4.0, 1.0, 0}}, "pan"))).empty());   // a pan lane on a bk track loads
     for (const char* z : {"geraet.lautstaerke", "geraet.cutoff", "geraet.resonanz", "geraet.env_mod"})
-      PRUEF(lade2(bkspur(o.auto_lane(norm, z))) == "format");           // the device target on a bk track is refused (rb338: line above loads)
+      PRUEF(lade2(bkspur(o.auto_lane(norm, z))) == "format");           // an RB-338 target on a bk track is refused (rb338: line above loads)
+    // 1.12 slice 7: the Baukasten knobs k1..k8 are bk lane targets: they load on a bk track with the knob index in `param`, in order, all eight and a pan lane together
+    std::string alle;
+    for (int k = 1; k <= 8; ++k) alle += (k > 1 ? "," : "") + o.auto_lane(norm, ("geraet.k" + std::to_string(k)).c_str());
+    PRUEF(lade2(bkspur(alle)).empty());
+    PRUEF(lade2(bkspur(alle + "," + o.auto_lane({{0.0, -1.0, 0}, {4.0, 1.0, 0}}, "pan") + "," + o.auto_lane({{0.0, 0.0, 0}, {4.0, -3.0, 0}}, "fader"))).empty());
+    PRUEF(lade2(bkspur(o.auto_lane(norm, "geraet.k1") + "," + o.auto_lane(norm, "geraet.k1"))) == "format");   // the same knob twice
+    PRUEF(lade2(bkspur(o.auto_lane({{0.0, 0.0, 0}, {4.0, 1.5, 0}}, "geraet.k3"))) == "format");              // above 1
+    PRUEF(lade2(bkspur(o.auto_lane({{0.0, -0.5, 0}, {4.0, 0.5, 0}}, "geraet.k3"))) == "format");             // below 0
+    PRUEF(lade2(bkspur(o.auto_lane(norm, "geraet.k9"))) == "format");                                         // there is no k9
+    {
+      ++nr;
+      o.wiedergabe2_auto(nr, bkspur(o.auto_lane(norm, "geraet.k3") + "," + o.auto_lane(norm, "geraet.k8")));
+      cdj::ArrLadeErgebnis e = cdj::lade_wiedergabe(o.pfad, nr, cache2);
+      PRUEF(e.snap && e.snap->spur[0].n_auto == 2);
+      if (e.snap && e.snap->spur[0].n_auto == 2) {   // ziel and the knob index come from the one table
+        const cdj::ArrAutoLane* l = e.snap->spur[0].auto_lanes;
+        PRUEF(l[0].ziel == cdj::ARR_AUTO_GERAET && l[0].param == 2 && l[1].ziel == cdj::ARR_AUTO_GERAET && l[1].param == 7);
+      }
+      cdj::gib_wiedergabe(e.snap.release(), cache2);
+    }
   }
   {  // (d)(e) beats, values, forms
     PRUEF(grund(true, mit({{8.0, 0.0, 0}, {4.0, 0.0, 0}})) == "format");                           // falling

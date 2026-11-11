@@ -15,7 +15,7 @@ Built in Germany by Andreas, a DJ, and Cypher, an AI agent (Claude models), sinc
 
 One real-time core in C++ and Rust keeps a single sample clock for everything: the decks, the pattern channels and
 the arrangement. The browser page and the agent sit on the same functions. The agent reaches them through an MCP
-server with 76 tools, so nearly everything you can click, it can do too (a few controls such as the crossfader stay
+server with 79 tools, so nearly everything you can click, it can do too (a few controls such as the crossfader stay
 in your hand), and anything it does shows up on your page. When it
 cannot do something it answers with a reason (for example `sidechain_zyklus` for a sidechain that would depend on
 itself) instead of guessing. When you grab a fader, your
@@ -65,7 +65,7 @@ In this order, without dates:
 3. **Live.** A session view with a clip launcher and scenes, follow actions, recording into slots, four decks,
    swapping motifs live, MIDI effects.
 
-Not planned for now: third-party plugins.
+Not planned for now: automation of plugin parameters, sidechain into plugins, CLAP plugins.
 
 ## Try it: we are looking for testers
 
@@ -89,7 +89,7 @@ No music is included: bring your own tracks and samples.
 The main ones; the full list is in [docs/features.md](docs/features.md#known-limits-of-the-beta).
 
 - Linux with PipeWire only, tested on Ubuntu 24.04, built and used on one machine.
-- No third-party plugins: the instruments and effects are our own, plus Surge XT hosted through Carla.
+- Third-party plugins (VST3, LV2) run in their own host processes through Carla, at most four effect hosts at a time; most commercial plugins have no Linux build and need yabridge and Wine.
 - Human and agent are told apart by a label on localhost. That is a convention, not a security boundary: do not
   expose the ports to a network.
 - Bar one (the downbeat) detection is unreliable; set it by hand where it is wrong.

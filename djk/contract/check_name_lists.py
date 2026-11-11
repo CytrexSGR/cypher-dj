@@ -993,7 +993,7 @@ def _ins_vertrag(q: Quelle) -> dict[str, tuple[float, float, float]]:
     spec = q.lies("docs/architecture/INTERFACES.md")
     teil = spec[_index(spec, "### 1.5 Kanäle und Regler-Pfade", "§1.5"):_index(spec, "### 1.6", "§1.5")]
     n = {art: int(_such(r"`ins/" + art + r"/<n>/\*` \(n = 1 to (\d+);", teil, f"INTERFACES §1.5 ins/{art}/<n>/*").group(1))
-         for art in ("komp", "eq", "saett", "lim")}
+         for art in ("komp", "eq", "saett", "lim", "host", "utility", "bk")}
     racks = int(_such(r"`rack/<k>/m<n>` \(k = 1 to (\d+);", teil, "INTERFACES §1.5 rack/<k>/m<n>").group(1))
     aus: dict[str, tuple[float, float, float]] = {}
     for zeile in teil.split("\n"):
@@ -1013,7 +1013,7 @@ def _ins_vertrag(q: Quelle) -> dict[str, tuple[float, float, float]]:
         if not zeile.startswith("| `ins/"):
             continue
         z = [c.strip() for c in zeile.strip().strip("|").split("|")]
-        m = re.match(r"^`ins/(komp|eq|saett|lim)/<n>/((?:b(?:<m>|[1-8])/)?[a-z0-9_]+)`$", z[0]) if len(z) == 6 else None
+        m = re.match(r"^`ins/(komp|eq|saett|lim|host|utility|bk)/<n>/((?:b(?:<m>|[1-8])/)?[a-z0-9_]+)`$", z[0]) if len(z) == 6 else None
         if not m:
             raise ParserFehler(f"INTERFACES §1.5: Insert-Zeile nicht lesbar: {zeile[:80]!r}")
         b = re.fullmatch(r"(?:(\S+) to (\S+)|0/1)", z[2].replace("−", "-"))
@@ -1057,7 +1057,7 @@ def _ins_universum(kern: dict[str, tuple[float, float, float]]) -> list[str]:
     """What a pattern must refuse: instance numbers just outside, sibling names, a suffix, a kind that has no table rows, the
     rack family just outside its numbers."""
     u: set[str] = set()
-    for art in ("komp", "eq", "saett", "lim"):
+    for art in ("komp", "eq", "saett", "lim", "host", "utility", "bk"):
         namen = sorted({p.split("/", 3)[3] for p in kern if p.split("/")[1] == art})
         n = max(int(p.split("/")[2]) for p in kern if p.split("/")[1] == art)
         u |= {f"ins/{art}/{i}/{x}" for i in (0, n + 1) for x in namen}
@@ -1207,6 +1207,18 @@ def pruefe(q: Quelle) -> list[str]:
     return befunde
 
 
+def ist_englische_ausgabe(q: Quelle) -> bool:
+    """True if the interface contract in this tree is the English edition (the public export ships only that)."""
+    try:
+        kopf = q.lies("docs/architecture/INTERFACES.md")[:200]
+    except (OSError, subprocess.CalledProcessError):
+        kopf = ""
+    return kopf.startswith("# Cypher-DJ: Interfaces")
+
+
+SKIP_GRUND = "English edition of the interface contract; the name list parsers read the German source text"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--wurzel", type=Path)
@@ -1215,12 +1227,8 @@ def main() -> int:
     q = Quelle(args.wurzel, args.rev)
     # The parsers read the German contract text. The public repository carries only its English edition, so the check
     # is skipped there (ctest SKIP_RETURN_CODE 77); the working repository runs it against the German source of truth.
-    try:
-        kopf = q.lies("docs/architecture/INTERFACES.md")[:200]
-    except (OSError, subprocess.CalledProcessError):
-        kopf = ""
-    if kopf.startswith("# Cypher-DJ: Interfaces"):
-        print("SKIP: English edition of the interface contract; the name list parsers read the German source text")
+    if ist_englische_ausgabe(q):
+        print(f"SKIP: {SKIP_GRUND}")
         return 77
     try:
         fehler = pruefe(q)

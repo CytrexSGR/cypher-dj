@@ -228,13 +228,14 @@ def tasten(text: str) -> list[str]:
 
 
 def _zahl(s: str) -> tuple[float, int]:
-    """Deutsche Zahl mit Leerzeichen als Tausender und Komma: Wert und Zahl der Nachkommastellen."""
-    s = s.replace(" ", "").replace("−", "-")
-    nachkomma = len(s.split(",")[1]) if "," in s else 0
-    return float(s.replace(",", ".")), nachkomma
+    """Number with spaces as thousands separator and a decimal comma (German text) or a decimal point (English edition):
+    value and number of decimal places."""
+    s = s.replace(" ", "").replace("−", "-").replace(",", ".")
+    nachkomma = len(s.split(".")[1]) if "." in s else 0
+    return float(s), nachkomma
 
 
-_ZAHL = r"-?\d{1,3}(?: \d{3})*(?:,\d+)?"
+_ZAHL = r"-?\d{1,3}(?: \d{3})*(?:[,.]\d+)?"
 
 
 def golden_1_3(text: str) -> dict[str, tuple[float, int]]:
@@ -243,31 +244,33 @@ def golden_1_3(text: str) -> dict[str, tuple[float, int]]:
     zeilen = [z for z in teil.split("\n") if z.startswith("| ")]
     werte: dict[str, tuple[float, int]] = {}
 
-    def zelle(muster: str) -> str:
-        z = next(z for z in zeilen if muster in z)
+    def zelle(*muster: str) -> str:
+        """Second column of the first row that contains one of the patterns (German text, English edition)."""
+        z = _finde((z for z in zeilen if any(m in z for m in muster)), f"§1.3 table row {muster[0]!r}")
         return _tabellenspalten(z)[1]
 
     werte["sample(64)"] = _zahl(re.match(_ZAHL, zelle("`sample(64,0)`")).group(0))
     werte["beat(1440000)"] = _zahl(re.match(_ZAHL, zelle("`beat(1 440 000)`")).group(0))
-    start = zelle("Rampe 128 → 132 ab Beat 128 über 32 Beats: Start")
-    werte["rampe_start"] = _zahl(re.search(r"Sample (" + _ZAHL + ")", start).group(1))
+    start = zelle("Rampe 128 → 132 ab Beat 128 über 32 Beats: Start", "ramp 128 → 132 from beat 128 over 32 beats: start")
+    werte["rampe_start"] = _zahl(re.search(r"[Ss]ample (" + _ZAHL + ")", start).group(1))
     werte["rampe_T"] = _zahl(re.search(r"`T` = (" + _ZAHL + ")", start).group(1))
     werte["rampe_k"] = _zahl(re.search(r"`k` = (" + _ZAHL + ")", start).group(1))
     for b in (144, 160, 192):
         z = zelle(f"`sample({b},0)`")
         werte[f"sample({b})"] = _zahl(re.match(_ZAHL, z).group(0))
-        werte[f"sample({b})_gerundet"] = _zahl(re.search(r"gerundet (" + _ZAHL + ")", z).group(1))
+        werte[f"sample({b})_gerundet"] = _zahl(re.search(r"(?:gerundet|rounded) (" + _ZAHL + ")", z).group(1))
         if b == 144:
-            werte["bpm(144)"] = _zahl(re.search(r"`bpm` dort (" + _ZAHL + ")", z).group(1))
+            werte["bpm(144)"] = _zahl(re.search(r"`bpm` (?:dort|there) (" + _ZAHL + ")", z).group(1))
     return werte
 
 
 def takt_schlag_phrase_1_3(text: str) -> list[tuple[float, int, int, int]]:
     """Zeile 'Takt/Schlag/Phrase für Beat ...' aus §1.3: [(beat, takt, schlag, phrase), ...]."""
     teil, _ = abschnitt(text, 1)
-    z = next(z for z in teil.split("\n") if z.startswith("| Takt/Schlag/Phrase für Beat"))
+    z = _finde((z for z in teil.split("\n") if z.startswith(("| Takt/Schlag/Phrase für Beat", "| Bar/beat/phrase for beat"))),
+               "§1.3 table row 'Takt/Schlag/Phrase für Beat' / 'Bar/beat/phrase for beat'")
     links, rechts = _tabellenspalten(z)[:2]
-    beats = [_zahl(b.strip())[0] for b in links.split("Beat", 1)[1].split("/")]
+    beats = [_zahl(b.strip())[0] for b in re.split(r"[Bb]eat\s+(?=-?\d)", links, maxsplit=1)[1].split("/")]
     tsp = [re.fullmatch(r"(\d+)\.(\d) P(\d+)", r.strip()).groups() for r in rechts.split("/")]
     return [(b, int(t), int(s), int(p)) for b, (t, s, p) in zip(beats, tsp)]
 
@@ -279,13 +282,13 @@ def konfig_schluessel(text: str) -> list[tuple[str, str, str, object]]:
     ergebnis = []
     datei = ""
     for z in unter.split("\n"):
-        if not z.startswith("| ") or z.startswith("| Datei") or z.startswith("|---"):
+        if not z.startswith("| ") or z.startswith(("| Datei", "| File")) or z.startswith("|---"):
             continue
         spalten = _tabellenspalten(z)
         if spalten[0]:
             datei = spalten[0].strip("`")
         namen = _namen(spalten[1])
-        typ = spalten[2]
+        typ = {"path": "Pfad"}.get(spalten[2], spalten[2])   # the English edition says "path"
         vorgaben = [v.strip() for v in spalten[3].split(", ")] if not spalten[3].startswith("(") else [None] * len(namen)
         if len(vorgaben) != len(namen):
             raise ValueError(f"§2.1: {len(namen)} Schlüssel, {len(vorgaben)} Vorgaben in Zeile: {z}")

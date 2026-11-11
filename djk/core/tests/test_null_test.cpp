@@ -130,7 +130,7 @@ void fall1(const std::string& ab, double bpm, int64_t leerlauf, const char* name
   const Live v = live_lauf(x, 0, bpm);
   PRUEF(v.ursprung > 0 && v.m.fehler.empty());
   const cdj::RenderErgebnis r = cdj::rendere(auftrag(x, v, bpm));
-  PRUEF(r.fehler.empty() && r.regler > 0 && r.phase == 25);
+  PRUEF(r.fehler.empty() && r.regler > 0 && r.phase == 0);
   PRUEF(r.frames == std::llround(8.0 * spb_von(bpm)));
   PRUEF(cdj::null_phase(v.ursprung, v.m.grenze, N) == r.phase);
   const cdj::NullErgebnis e = vergleiche(v, r);
@@ -153,7 +153,7 @@ int main() {
   // 1: bestanden, Blockphase gleich; dazu gebrochene Samples je Beat und ein hohes Kern-Sample
   {
     const cdj::RenderErgebnis r = cdj::rendere(auf);
-    PRUEF(r.fehler.empty() && r.frames == 8 * 22500 && r.regler > 0 && r.phase == 25);
+    PRUEF(r.fehler.empty() && r.frames == 8 * 22500 && r.regler > 0 && r.phase == 0);
     PRUEF(cdj::null_phase(v.ursprung, v.m.grenze, N) == r.phase);
     const cdj::NullErgebnis e = vergleiche(v, r);
     std::printf("Fall 1: %s rest %.1f dB, signal %.1f dB, verschoben %.1f dB, fenster %lld\n", cdj::null_urteil_text(e.urteil),

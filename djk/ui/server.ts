@@ -41,6 +41,8 @@ import { kollektionenBereich, type KollektionBereichOptionen } from './collectio
 import { ausgabeBereich } from './areas/proj/output.ts';   // Paket S3
 import { aufnahmeBereich } from './areas/proj/recording.ts';   // 1.8 Slice 1
 import { stemsBereich, type StemsOptionen } from './areas/proj/stems.ts';   // 1.13 Slice 6
+import { pluginsBereich } from './areas/plugins/area.ts';   // 1.11 task 10
+import { PluginIndex, type ScanBefehl } from './plugins/index.ts';
 import type { Dekodiert, Felder } from '../conductor/src/addresses.ts';
 import { ZIELE, ZIEL_KURVE, ZIEL_KURVEN } from './public/curves.js';
 
@@ -101,7 +103,7 @@ export function pythonVorgabe(repo: string = REPO, env: NodeJS.ProcessEnv = proc
 }
 // Mixer-Regler des Projekts (spur/*, grp/*, pm/fader) ändern sich nur über das Projekt (Spec 6.22), auf keinem Weg am Projekt vorbei
 // 1.10 slice 3: also the sends (spur|grp/<n>/send/<r>) and the return strips (ret/*, Hall values included)
-// 1.10 slice 4a/4b/4c: also the insert stages (ins/komp|eq|saett|lim/<n>/*) and the rack macros (rack/<k>/m1..m4)
+// 1.10 slice 4a/4b/4c: also the insert stages (ins/komp|eq|saett|lim|utility|bk/<n>/*) and the rack macros (rack/<k>/m1..m4)
 const ueberProjekt = (pfad: string): boolean => pfad.startsWith('spur/') || pfad.startsWith('grp/') || pfad.startsWith('ret/') || pfad.startsWith('ins/') || pfad.startsWith('rack/') || pfad === 'pm/fader';
 const ueberProjektText = (pfad: string): string => (pfad.startsWith('rack/')
   ? 'rack macros are changed through the project (/proj/aendern: rack_makro for the value, rack_setzen for the mapping)'
@@ -129,6 +131,7 @@ export interface ServerOptionen {
   welleFfmpeg?: string[];  // Tests: anderer Aufruf statt ffmpeg (z. B. eine langsame Attrappe)
   welleZeitlimit?: (dauerS?: number) => number;  // Tests: Zeitlimit der Dekodierung in ms
   python?: string;      // Vorgabe: pythonVorgabe() (waveform.py braucht numpy)
+  plugins?: { datei?: string; scan?: ScanBefehl };   // 1.11 task 10: the plugin index file and the scan command (tests replace both)
   musterOrdner?: string;  // Plan 2: Vorgabe /dev/shm/cypherdj[-i]/erzeuger
   hotcueOrdner?: string;  // Plan E9: Vorgabe ~/.config/cypherdj/hotcues
   rasterOrdner?: string;  // Plan Grid: Vorgabe ~/.config/cypherdj/raster
@@ -528,7 +531,8 @@ export class Oberflaeche {
     const analyseOrdner = opt.analyse !== undefined ? opt.analyse : analyseVorgabe(inst);
     const analysierer = analyseOrdner ? new WerkstattAnalyse({ python, cwd: REPO_PFADE.werkstatt, ablage: analyseOrdner, modul: opt.einleserModul, log: opt.log }) : null;
     const presets = presetsBereich(this.bereichKontext(), { ...(opt.presets ?? {}), projekt: () => this.proj.zugang.offen()?.projekt ?? null });   // 1.9 (O28): built first, the project command preset_anwenden reads its store
-    this.proj = projBereich(this.bereichKontext(), { presetLies: (id) => presetInhaltVon(presets.speicher, id), katalog: opt.katalog ?? katalogVorgabe(opt.mediathek ?? MEDIATHEK_VORGABE), mediathek: opt.mediathek ?? MEDIATHEK_VORGABE,
+    const pluginIndex = new PluginIndex({ python, ...opt.plugins, log: opt.log, bei: (scan) => this.bereichKontext().verteile({ a: 'plugins', f: { scan } }) });
+    this.proj = projBereich(this.bereichKontext(), { pluginIndex: (id) => pluginIndex.finde(id), presetLies: (id) => presetInhaltVon(presets.speicher, id), katalog: opt.katalog ?? katalogVorgabe(opt.mediathek ?? MEDIATHEK_VORGABE), mediathek: opt.mediathek ?? MEDIATHEK_VORGABE,
       wirtOrdner: () => this.wirtBasis(), analyse: analyseOrdner, analysierer, bestand: opt.korrekturen !== undefined ? opt.korrekturen : (inst === '' ? opt.bestand : null), ...opt.proj });
     this.router.melde(this.proj);
     this.ausgabe = ausgabeBereich(this.bereichKontext(), this.proj.zugang, { wirtOrdner: () => this.wirtBasis() });   // Paket S3: /proj/freeze, /proj/export (Spec 3.4)
@@ -537,6 +541,10 @@ export class Oberflaeche {
     this.router.melde(this.aufnahme);
     this.stems = stemsBereich(this.bereichKontext(), this.proj.zugang, { python, cwd: REPO_PFADE.werkstatt, ...opt.stems });   // 1.13 S6
     this.router.melde(this.stems);
+    this.router.melde(pluginsBereich(this.bereichKontext(), pluginIndex, { insertParameter: (id) => this.proj.sitzung.insertParameter(id),
+      insertFenster: (id, d, q) => this.proj.sitzung.insertFenster(id, d, q),
+      geraetParameter: (id) => this.proj.sitzung.geraetParameter(id), geraetParam: (id, d, q) => this.proj.sitzung.geraetParam(id, d, q),
+      geraetFenster: (id, d, q) => this.proj.sitzung.geraetFenster(id, d, q) }));   // 1.11 task 10: /plugins, the parameter list and the window
     this.router.melde(geraeteBereich(this.bereichKontext(), opt.geraete ?? {}));   // I08: /geraete
     this.router.melde(lernenBereich(this.bereichKontext(), opt.lernen ?? {}));   // S19: /lernen
     this.router.melde(presets);   // 1.16: /presets (presets/area.ts), built above so that the project command preset_anwenden reads its store
@@ -568,6 +576,7 @@ export class Oberflaeche {
     this.aufnahme.aufnahme.schliesse();
     this.stems.stems.schliesse();
     this.ausgabe.ausgabe.schliesse();   // Fix-Runde S3 R7: ein wartender Freeze endet jetzt mit freeze_fehler, nicht erst nach Stille oder Frist
+    await this.proj.sitzung.beende();   // plan 1.11 D8: the plugin states first (at most 3 s)
     this.proj.sitzung.schliesse();   // D1 S2: ausstehenden Mixer-Eintrag schreiben, Projekt-Sperre frei
     for (const l of this.spuren.values()) for (const t of l.timer) clearTimeout(t);
     for (const s of this.stroeme) s.end();

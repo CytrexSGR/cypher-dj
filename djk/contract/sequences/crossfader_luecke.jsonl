@@ -1,0 +1,22 @@
+{"t":"sende","sample":0,"osc":["/k/set/neu",",hsd",1,"pruefstand",128.0],"bereich":"zeitachse","herleitung":"§4.2: neue Zeitachse mit 128 BPM, Beat 0 am nächsten Zyklus = Sample 0 (§1.1)"}
+{"t":"sende","sample":45000,"osc":["/k/deck/laden",",hsisdii",2,"leitstand",2,"f0000000000000b2",128.0,1,0],"bereich":"deck","herleitung":"§4.4 /k/deck/laden, Fixture material/f0000000000000b2/ next to the sequences"}
+{"t":"erwarte","ab_sample":45000,"bis_sample":47400,"osc":["/q",",hsihds",2,"leitstand",1,null,null,""],"bereich":"deck","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"erwarte","ab_sample":45000,"bis_sample":93000,"osc":["/q",",hsihds",2,"leitstand",3,null,null,""],"bereich":"deck","herleitung":"§4.4: Quittung fertig nach dem Tausch"}
+{"t":"erwarte","ab_sample":45000,"bis_sample":93000,"osc":["/e/geladen",",isdiih",2,"f0000000000000b2",128.0,1,0,null],"toleranz":1e-06,"bereich":"deck","herleitung":"§4.4, §5.9 /e/geladen"}
+{"t":"sende","sample":630000,"osc":["/k/deck/start",",hssssiddi",3,"andreas","","","",2,32.0,16.0,0],"bereich":"deck"}
+{"t":"erwarte","ab_sample":630000,"bis_sample":632400,"osc":["/q",",hsihds",3,"andreas",1,null,null,""],"bereich":"deck","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"erwarte","ab_sample":720000,"bis_sample":722400,"osc":["/q",",hsihds",3,"andreas",2,720000,32.0,""],"toleranz":1e-06,"bereich":"deck","herleitung":"§5.1 Status 2 am Ziel-Sample llround(sample_at(32)) = 720000"}
+{"t":"hand","sample":765000,"pfad":"deck/2/xseite","midi_roh":0.5,"bereich":"regler","herleitung":"erster Wert nur Stellung"}
+{"t":"hand","sample":787500,"pfad":"deck/2/xseite","midi_roh":1.0,"bereich":"regler","herleitung":"FORMAT.md Punkt 22 g: xseite = round(2·midi_roh) → 2 = Seite B"}
+{"t":"hand","sample":810000,"pfad":"xfader","midi_roh":0.5,"bereich":"regler","herleitung":"erster Wert nur Stellung"}
+{"t":"hand","sample":832500,"pfad":"xfader","midi_roh":0.0,"bereich":"regler","herleitung":"Anschlag unten = −1, nur Seite A (§1.2)"}
+{"t":"wert","sample":900000,"pfad":"deck/2/xseite","wert":2,"toleranz":0,"bereich":"regler","herleitung":"prüft die Annahme zur Schalter-Abbildung am Ziel"}
+{"t":"wert","sample":900000,"pfad":"xfader","wert":-1.0,"toleranz":0.001,"bereich":"regler"}
+{"t":"sende","sample":1080000,"osc":["/k/teil",",hssisddfiiss",4,"cypher","p1",0,"deck/2/fader",64.0,0.0,-15.0,0,0,"",""],"bereich":"regler","herleitung":"öffnet (offen ohne Crossfader), aber nicht hörbar"}
+{"t":"erwarte","ab_sample":1080000,"bis_sample":1082400,"osc":["/q",",hsihds",4,"cypher",1,null,null,""],"bereich":"regler","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"erwarte","ab_sample":1440000,"bis_sample":1442400,"osc":["/q",",hsihds",4,"cypher",6,1440000,64.0,"kein_hoerschein"],"toleranz":1e-06,"bereich":"regler","herleitung":"§17: am Start abgelehnt (kein_hoerschein), Start = Sample 1440000"}
+{"t":"erlaube","ab_sample":1440000,"bis_sample":1442400,"osc":["/e/invariante",",ssihd","hoerschein",null,null,null,null],"bereich":"invariante","herleitung":"FORMAT.md Punkt 22 a: ob eine I3-Ablehnung zusätzlich /e/invariante hoerschein meldet, lässt §5.9 offen"}
+{"t":"sende","sample":1440000,"osc":["/k/teil",",hssisddfiiss",5,"cypher","p2",0,"deck/2/fader",72.0,0.0,-30.0,0,0,"",""],"bereich":"regler","herleitung":"Negativ-Kontrolle: −30 ≤ −26 öffnet nicht"}
+{"t":"erwarte","ab_sample":1440000,"bis_sample":1442400,"osc":["/q",",hsihds",5,"cypher",1,null,null,""],"bereich":"regler","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"erwarte","ab_sample":1620000,"bis_sample":1622400,"osc":["/q",",hsihds",5,"cypher",2,1620000,72.0,""],"toleranz":1e-06,"bereich":"regler","herleitung":"§5.1 Status 2 am Ziel-Sample llround(sample_at(72)) = 1620000"}
+{"t":"wert","sample":1665000,"pfad":"deck/2/fader","wert":-30.0,"toleranz":0.01,"bereich":"regler"}

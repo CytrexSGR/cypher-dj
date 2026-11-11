@@ -411,8 +411,10 @@ async function z2() {
     f2.length === 3 && sp2 < LAUT && r2.gesehen1 - r2.gesehen0 >= 6, `${f2.length} notes, the core saw ${r2.gesehen1 - r2.gesehen0} MIDI events, master peak ${f1(dbOf(sp2))} dBFS`);
   await z2Surge();
 }
-// The wirt sink puts a live note at offset 0 of the cycle (ledger T7 minor 7), and the Surge host answers two cycles and 25 samples later (spec 9.4): the
-// sound begins at cycle start + 2n + 25, so delay (sound minus stamp) + offset in the cycle = 2n + 25 for every offset. The offsets differ on purpose.
+// The wirt sink puts a live note at offset 0 of the cycle (ledger T7 minor 7), and the Surge host answers two cycles later (the round trip core -> host ->
+// core is exactly 2n; T1 of plan 1.11, and wirt-timing 2026-11-10 showed that the "+ 25" of spec 9.4 was a measurement bias, not part of the path): the
+// sound begins at cycle start + 2n + the rise of the patch to the threshold, so delay (sound minus stamp) + offset in the cycle = 2n + rise for every
+// offset. The offsets differ on purpose. The rise is the part above 2n: 87 to 89 samples measured with the default patch (599 to 601 in total), it depends on the patch.
 async function z2Surge() {
   const j = await prog(path.join(path.dirname(path.dirname(BAU)), 'start', 'djk-instrumente'), ['--instanz', instanz, '--arr1']);
   roh.z2_surge_start = { rc: j.rc, out: j.out.trim().split('\n').slice(-3), err: j.err.trim().split('\n').slice(-3) };
@@ -428,7 +430,7 @@ async function z2Surge() {
   const flanken = frischeFlanken(r.beob.flanken, m.s0);
   const tone = flanken.map((f) => tonAb(m.l, m.s0, f, LAUT, 12000));
   const summen = tone.map((t, i) => (t.laut ? t.verzug + P.offsets[i % P.offsets.length] : NaN));
-  const soll = 2 * n + 25;
+  const soll = 2 * n;   // the round trip; the rise of the default patch to -60 dBFS comes on top (reported as the excess)
   roh.z2_surge = { quantum: n, soll, flanken, tone, summen, spuren: bp };
   notiere('Z2 Surge: after each of the 8 notes the master rises above -60 dBFS (live path through the wirt host)', flanken.length === 8 && tone.every((t) => t.laut),
     `${flanken.length} notes, ${tone.filter((t) => t.laut).length} audible; delays ${tone.map((t) => t.verzug).join(' ')} samples; level before each ${tone.map((t) => f1(t.spitzeDavorDb)).join(' ')} dBFS`);
@@ -439,9 +441,9 @@ async function z2Surge() {
   const mittel = gueltig.length ? gueltig.reduce((a, b) => a + b, 0) / gueltig.length : NaN;
   notiere('Z2 Surge: delay + offset in the cycle is the same for every note (spread <= 2): the wirt sink puts a live note at the cycle start', gueltig.length === 8 && spreiz <= 2,
     `delay + offset: ${summen.join(' ')}; spread ${spreiz}`);
-  notiere(`Z2 Surge: the sound is not earlier than the round trip 2n + 25 = ${soll} samples (n = ${n}) and not later than one cycle after it`,
+  notiere(`Z2 Surge: the sound is not earlier than the round trip 2n = ${soll} samples (n = ${n}) and not later than one cycle after it`,
     gueltig.length === 8 && Math.min(...gueltig) >= soll - 2 && Math.max(...gueltig) <= soll + n,
-    `delay + offset ${Math.min(...gueltig)} to ${Math.max(...gueltig)}; excess over 2n + 25: ${f1(mittel - soll)} samples (${f1((mittel - soll) / 48)} ms)`);
+    `delay + offset ${Math.min(...gueltig)} to ${Math.max(...gueltig)}; excess over 2n (the rise of the patch to -60 dBFS): ${f1(mittel - soll)} samples (${f1((mittel - soll) / 48)} ms)`);
 }
 
 // ---- Z3 ----

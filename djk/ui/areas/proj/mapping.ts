@@ -10,25 +10,30 @@ import type { Quelle } from '../../project/history.ts';
 // --- Gründe → HTTP ----------------------------------------------------------------------------------------------------
 // Die Gründe sind die aus project/commands.ts (Spec 4) plus die des Bereichs; die Seite zeigt für jeden einen Text.
 const C400 = new Set(['argument_ungueltig', 'argument_unbekannt', 'befehl_unbekannt', 'sha_ungueltig', 'slug_ungueltig', 'name_ungueltig',
-  'label_ungueltig', 'quelle_ungueltig', 'lane_ziel_spaeter', 'json', 'koerper_kein_objekt', 'beat_ungueltig', 'aktion_unbekannt',
+  'label_ungueltig', 'quelle_ungueltig', 'json', 'koerper_kein_objekt', 'beat_ungueltig', 'aktion_unbekannt',
   'take_name_ungueltig', 'comp_leer', 'sidechain_spaet', 'sidechain_zyklus', 'sidechain_quelle',
-  'bereich_leer', 'form_ungueltig', 'huellkurve_ziel', 'geraet_huellkurven']);   // 1.12 slices 4 and 5 (lane editor tools, envelopes)
+  'bereich_leer', 'form_ungueltig', 'huellkurve_ziel', 'geraet_huellkurven',   // 1.12 slices 4 and 5 (lane editor tools, envelopes)
+  'muster_fehler', 'klang_unbekannt', 'muster_zeitlimit', 'muster_zu_gross']);   // strudel-clip: a pattern that does not run, a sound the kit lacks
 const C404 = new Set(['unbekannt', 'spur_unbekannt', 'clip_unbekannt', 'noten_unbekannt', 'sha_unbekannt', 'gruppe_unbekannt', 'ziel_unbekannt',
-  'lane_unbekannt', 'return_unbekannt', 'insert_unbekannt', 'take_unbekannt', 'huellkurve_unbekannt',
-  'kit_unbekannt', 'patch_unbekannt', 'richtung_unbekannt', 'preset_unbekannt', 'glied_unbekannt', 'variation_unbekannt']);
+  'lane_unbekannt', 'return_unbekannt', 'insert_unbekannt', 'param_unbekannt', 'take_unbekannt', 'huellkurve_unbekannt',
+  'kit_unbekannt', 'plugin_unbekannt', 'patch_unbekannt', 'richtung_unbekannt', 'preset_unbekannt', 'glied_unbekannt', 'variation_unbekannt']);
 // lane_gesperrt and geraet_lanes (automation slice 2) are conflicts with the current state: they fall through to 409 like lane_doppelt
 export function grundCode(grund: string): number {
   if (C400.has(grund)) return 400;
   if (C404.has(grund)) return 404;
   if (grund === 'koerper_zu_gross') return 413;
-  if (grund === 'katalog_fehlt') return 503;
+  if (grund === 'katalog_fehlt' || grund === 'muster_nicht_verfuegbar') return 503;
   return 409;
 }
 // Gründe, die nur der Bereich vergibt (zusätzlich zu commands.ts, history.ts, storage.ts): Liste für die Seite (V1/V2) und AUFRUF.md
 export const BEREICH_GRUENDE: readonly string[] = ['kein_projekt', 'rev_veraltet', 'regler_abgelehnt', 'deck_laeuft', 'ki_gestoppt',
   'koerper_zu_gross', 'json', 'koerper_kein_objekt', 'katalog_fehlt', 'sha_unbekannt', 'nur_live', 'quelle_fehlt', 'beat_ungueltig',
   'aktion_unbekannt', 'tempo_abgelehnt', 'rampe_haengt', 'log_voraus', 'kein_kern', 'transport_laeuft', 'kein_tempo', 'warp_auto_neuer_clip',
-  'bk_nicht_geladen', 'bk_nichts_geladen', 'kein_baukasten'];
+  'bk_nicht_geladen', 'bk_nichts_geladen', 'kein_baukasten',
+  'host_grenze', 'host_fehlt', 'plugin_nicht_ladbar', 'zustand_passt_nicht', 'param_unbekannt', 'host_insert_echtzeit',   // plan 1.11 task 7
+  'plugin_unbekannt', 'plugin_blockiert', 'kein_effekt', 'kein_instrument', 'scan_laeuft', 'kein_fenster', 'keine_anzeige', 'nur_andreas',
+  'absturz_schleife', 'zustand_fehler', 'latenz_zu_gross',   // part 4: host states that lage and the page show as the reason
+  'export_host_ausfall', 'export_luecke'];   // plan 1.11 tasks 10, 15, 13
 
 // --- Regler -----------------------------------------------------------------------------------------------------------
 export interface Soll { pfad: string; wert: number }
@@ -103,13 +108,13 @@ export function alleRetRegler(p: Projekt): Soll[] {
   }
   return aus;
 }
-// 1.10 slice 4a/4b: ALL pooled rows ins/<art>/<slot>/* of every kind (komp 10 per slot, eq 59, saett 4, lim 3; the switch last).
+// 1.10 slice 4a/4b: ALL pooled rows ins/<art>/<slot>/* of every kind (komp 10 per slot, eq 59, saett 4, lim 3, host 1, utility 5, bk 9; the switch last).
 // A used slot gets the values of its stage, a free slot the pool defaults with the switch off: the core keeps the rows of the
 // previously opened project, and a stage added later sends
 // only the rows that differ from the defaults (commands.ts insertReglerAenderungen), so a stale free slot would sound through it.
 export function alleInsertRegler(p: Projekt): Soll[] {
   const aus: Soll[] = [];
-  for (const art of ['komp', 'eq', 'saett', 'lim'] as const) {
+  for (const art of ['komp', 'eq', 'saett', 'lim', 'host', 'utility', 'bk'] as const) {
     const benutzt = new Map(alleInserts(p).filter((x) => x.insert.art === art).map((x) => [x.insert.slot, x.insert] as const));
     for (let slot = 1; slot <= MAX_INS[art]; slot++) {
       const i = benutzt.get(slot) ?? { id: '', art, slot, an: false, werte: insertVorgabe(art) } as const;

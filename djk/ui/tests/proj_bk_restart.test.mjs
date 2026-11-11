@@ -38,7 +38,7 @@ test('S17 T3.18 a kern restart re-sends the knobs and the graph with source andr
   k.leere(); k.bk.aufrufe.length = 0;
   s.ereignis('/e/neustart', { generation: 2 });
   await schlaf(150);
-  assert.equal(k.bk.aufrufe.length, 0); assert.equal(k.teile(/\/bk\//).length, 0);
+  assert.equal(k.bk.aufrufe.length, 0); assert.equal(k.teile(/^(deck|erz|pad|fx)\/\d+\/bk\//).length, 0);
 });
 
 test('S17 T3.19 a project without a snapshot sends nothing after a kern restart', async (t) => {
@@ -50,5 +50,5 @@ test('S17 T3.19 a project without a snapshot sends nothing after a kern restart'
   e.s.ereignis('/e/neustart', { generation: 2 });
   assert.ok(await warteBis(() => k.an('/k/arr/loop').length > 0, 2000), 'the restart handler ran');
   await schlaf(50);
-  assert.equal(k.bk.aufrufe.length, 0); assert.equal(k.teile(/\/bk\//).length, 0);
+  assert.equal(k.bk.aufrufe.length, 0); assert.equal(k.teile(/^(deck|erz|pad|fx)\/\d+\/bk\//).length, 0);
 });

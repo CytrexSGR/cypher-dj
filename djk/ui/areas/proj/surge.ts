@@ -21,11 +21,15 @@ function lade(): Map<string, [number, number]> {
 export const surgeBereich = (name: string): [number, number] | null => lade().get(name) ?? null;
 
 // --- the mirror -------------------------------------------------------------------------------------------------------------------------------
-// The project holds a sparse map per Surge track (geraet.parameter, display values); the host of the slot (wirt-arr<slot>.sock, host.py) plays what it
+// The project holds a sparse map per Surge track (geraet.parameter, display values); the host of the slot (wirt-arr<slot>.sock, instrument_host.py) plays what it
 // was told. The mirror sends `fahre` with dauer 0 for every entry whose value differs from what it sent last, and takes an entry that left the map
 // (undo, delete, project change) back to the value the host had before the mirror first touched it. All work runs one job after the other in a chain;
 // a job never throws: a missing host or an error answer is logged and the entry stays pending (it is sent again at the next sync, e.g. before a freeze).
-export interface SpiegelOptionen { ordner: (() => string) | undefined; log: (e: Record<string, unknown>) => void; fristMs?: number }
+// slotBereit (plan 1.11 task 17): resolves when the host of a slot is not being swapped (a plugin instrument host going back to Surge); a job waits for it
+// in the background chain, so a patch or parameter never hits the plugin host or a vanishing socket
+export interface SpiegelOptionen {
+  ordner: (() => string) | undefined; log: (e: Record<string, unknown>) => void; fristMs?: number; slotBereit?: (slot: number) => Promise<void>;
+}
 export interface SpiegelErgebnis { gesendet: number; zurueck: number; fehler: string[] }
 const SCHLUESSEL = (slot: number, name: string): string => `${slot}:${name}`;
 
@@ -86,7 +90,7 @@ export class SurgeSpiegel {
   private soll(p: Projekt | null): Map<string, { slot: number; name: string; wert: number }> {
     const m = new Map<string, { slot: number; name: string; wert: number }>();
     for (const s of p?.spuren ?? []) {
-      if (s.geraet?.art !== 'wirt') continue;
+      if (s.geraet?.art !== 'wirt' || s.geraet.name !== 'surge') continue;   // a plugin instrument has no Surge map
       for (const [name, wert] of Object.entries(s.geraet.parameter ?? {})) m.set(SCHLUESSEL(s.geraet.slot, name), { slot: s.geraet.slot, name, wert });
     }
     return m;
@@ -95,7 +99,9 @@ export class SurgeSpiegel {
   // the wanted patch per slot: geraet.patch of the Surge tracks (a track without patch wants none: the host stays as it is)
   private sollPatch(p: Projekt | null): Map<number, string> {
     const m = new Map<number, string>();
-    for (const s of p?.spuren ?? []) if (s.geraet?.art === 'wirt' && s.geraet.patch !== undefined) m.set(s.geraet.slot, s.geraet.patch);
+    for (const s of p?.spuren ?? []) {
+      if (s.geraet?.art === 'wirt' && s.geraet.name === 'surge' && s.geraet.patch !== undefined) m.set(s.geraet.slot, s.geraet.patch);
+    }
     return m;
   }
 
@@ -109,6 +115,11 @@ export class SurgeSpiegel {
     const soll = this.soll(projekt);
     const patches = this.sollPatch(projekt);
     return this.reihe(async () => {
+      if (this.opt.slotBereit) {
+        const slots = new Set<number>([...patches.keys(), ...[...soll.values()].map((e) => e.slot)]);
+        for (const k of this.zuletzt.keys()) slots.add(Number(k.split(':')[0]));
+        await Promise.all([...slots].map((s) => this.opt.slotBereit!(s)));
+      }
       const aus: SpiegelErgebnis = { gesendet: 0, zurueck: 0, fehler: [] };
       const ohnePatch = new Set<number>();                                  // slots whose wanted patch did not load: their entries wait
       if (projekt === null) this.geladen.clear();

@@ -70,6 +70,9 @@ export const BEFEHLE = {
   '/k/arr/metronom': f('hsifi', 'id quelle an pegel_db ziel'),
   '/k/arr/freeze': f('hsiddi', 'id quelle spur von_beat bis_beat kennung'),        // Paket K3
   '/k/arr/abgriff': f('hsiiiddi', 'id quelle art nr punkt von_beat bis_beat kennung'),   // 1.10 slice 7 (T5)
+  '/k/arr/ins_host': f('hsii', 'id quelle h gesund'),                                // plan 1.11 T5 (§4.11)
+  '/k/arr/ins_mess': f('hsi', 'id quelle h'),                                         // plan 1.11 T5 (§4.11)
+  '/k/arr/export_lauf': f('hssdd', 'id quelle pfad von_beat bis_beat'),               // plan 1.11 T12 (§4.11)
   '/k/hand/frei': f('hss', 'id quelle pfade'),                                      // §4.3: a project switch releases the human holder
   '/k/arr/auto': f('hsisi', 'id quelle spur ziel an'),                              // 1.12 Slice 3 (§4.11)
   '/k/arr/arm': f('hsiii', 'id quelle spur an modus'),                              // 1.12 Slice 3 (§4.11)
@@ -128,7 +131,11 @@ export const AUSGABEN = {
   '/e/auto_punkt': f('sdf', 'pfad projekt_beat wert'),                                                      // 1.12 Slice 3 (§5.13)
   '/e/auto': f('isi', 'spur ziel zustand'),                                                                 // 1.12 Slice 3 (§5.13)
   '/e/freeze': f('iiih', 'spur kennung status frames'),                                                    // Paket K3
-  '/e/abgriff': f('iiiih', 'art nr kennung status frames'),                                                // 1.10 slice 7 (T5)
+  '/e/abgriff': f('iiiih', 'art nr kennung status frames'),
+  '/e/ins_host': f('ii', 'h gesund'),                                                                      // plan 1.11 T5 (§5.13)
+  '/e/export_lauf': f('hfiis', 'frames spitze luecken ungesund grund'),                                    // plan 1.11 T12 (§5.13)
+  '/e/ins_mess': f('iis', 'h rundweg grund'),                                                              // plan 1.11 T5 (§5.13)
+  '/zustand/ins_host': f('iiiiiiiiiiii', 'h_1 gesund_1 rundweg_1 h_2 gesund_2 rundweg_2 h_3 gesund_3 rundweg_3 h_4 gesund_4 rundweg_4'),   // plan 1.11 T5 (§5.13), type entry only: the sender is the real core                                                // 1.10 slice 7 (T5)
 };
 
 export const STATUS = { angenommen: 1, gestartet: 2, fertig: 3, verspaetet_verworfen: 4, verspaetet_ausgefuehrt: 5, abgelehnt: 6, abgebrochen: 7, storniert: 8 };
@@ -147,7 +154,8 @@ export const GRUENDE = new Set(['zu_spaet', 'regler_beim_menschen', 'regler_verp
   'datei_fehlt', 'format', 'audio_fehlt', 'zu_gross', 'spur_bereich', 'reserviert',       // D1 K1 (§4.11)
   'kein_eingang', 'aufnahme_laeuft', 'zu_viele_scharf', 'eingang_fehlt', 'kein_platz',   // 1.8 (§4.12)
   'warp_maschine_fehlt',                                                                    // 1.13 Slice 2 (§4.11, §16.2)
-  'nur_andreas', 'auto_ziel_unbekannt']);                                                   // 1.12 Slice 3 (§4.11, §16.2)
+  'nur_andreas', 'auto_ziel_unbekannt',
+  'laeuft', 'host_fehlt', 'kein_rueckweg', 'belegt', 'schreiber_ueberlauf']);                                                 // 1.12 Slice 3 (§4.11, §16.2)
 
 // §1.5 Kanäle
 export const DECKS = [1, 2, 3, 4].map((n) => `deck/${n}`);

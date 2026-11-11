@@ -13,7 +13,7 @@ import { surgePatchDatei, listeSurgePatches } from '../areas/proj/surge_patches.
 import { grundCode } from '../areas/proj/mapping.ts';
 import { GRUND_TEXT } from '../http/reasons.ts';
 import { sitzung, warteBis } from './support/proj_context.mjs';
-import { falscherWirt, wirtOrdner } from './support/surge_host.mjs';
+import { falscherWirt, wirtOrdner } from './support/surge_instrument_host.mjs';
 import { stapel, hole, post } from './support/media_library.mjs';
 
 // the library: a factory folder and an own folder in a temp dir (the server reads CYPHERDJ_SURGE_PATCHES and CYPHERDJ_KLAENGE at every call)

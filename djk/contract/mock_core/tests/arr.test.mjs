@@ -220,7 +220,7 @@ test('arr: freeze gegen Tempo-Rampe (Spec 6.33): tempo_rampe, danach angenommen,
     erwarte(202000, q(43, 'andreas', 1)),
     erwarte(300000, q(43, 'andreas', 3)),
     erwarte(300000, ['/e/freeze', 'iiih', 1, 2, 0, null]),
-    sende(320000, freeze(44, 1, 0.0, 4.0, 3)),        // (d) wartend: Einsatz bei 320 256 + 537 + 256
+    sende(320000, freeze(44, 1, 0.0, 4.0, 3)),        // (d) wartend: Einsatz bei 320 256 + 512 + 256
     erwarte(320300, q(44, 'andreas', 1)),       // Stempel des Blocks, in dem er ankommt (320 256)
     sende(320256, rampe(45, 20, 130, 4, 'andreas')),
     erwarte(322000, q(44, 'andreas', 7, null, 'abbruch')),
@@ -285,7 +285,7 @@ test('arr: /k/set/neu bricht einen laufenden und einen wartenden Freeze ab (7 ab
     erwarte(31000, q(62, 'leitstand', 2, 0)),
     erwarte(31000, q(61, 'andreas', 7, 0, 'abbruch')),
     erwarte(31000, ['/e/freeze', 'iiih', 1, 21, 1, 0]),
-    sende(32000, freeze(63, 1, 0.0, 4.0, 22)),       // wartend: Einsatz rund 793 Samples nach dem Annahme-Block
+    sende(32000, freeze(63, 1, 0.0, 4.0, 22)),       // wartend: Einsatz rund 768 Samples nach dem Annahme-Block
     erwarte(32300, q(63, 'andreas', 1)),
     sende(32300, setNeu(64)),
     erwarte(33000, q(64, 'leitstand', 2, 0)),

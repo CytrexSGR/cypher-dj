@@ -1,0 +1,43 @@
+{"t":"sende","sample":0,"osc":["/k/set/neu",",hsd",1,"pruefstand",128.0],"bereich":"zeitachse","herleitung":"§4.2: neue Zeitachse mit 128 BPM, Beat 0 am nächsten Zyklus = Sample 0 (§1.1)"}
+{"t":"sende","sample":22500,"osc":["/k/deck/laden",",hsisdii",2,"leitstand",1,"f000000000000128",128.0,1,0],"bereich":"deck","herleitung":"§4.4 /k/deck/laden, Fixture material/f000000000000128/ next to the sequences"}
+{"t":"erwarte","ab_sample":22500,"bis_sample":24900,"osc":["/q",",hsihds",2,"leitstand",1,null,null,""],"bereich":"deck","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"erwarte","ab_sample":22500,"bis_sample":70500,"osc":["/q",",hsihds",2,"leitstand",3,null,null,""],"bereich":"deck","herleitung":"§4.4: Quittung fertig nach dem Tausch"}
+{"t":"erwarte","ab_sample":22500,"bis_sample":70500,"osc":["/e/geladen",",isdiih",1,"f000000000000128",128.0,1,0,null],"toleranz":1e-06,"bereich":"deck","herleitung":"§4.4, §5.9 /e/geladen"}
+{"t":"sende","sample":90000,"osc":["/k/deck/start",",hssssiddi",3,"andreas","","","",1,8.0,0.0,0],"bereich":"deck","herleitung":"A: Andreas' Deck, ohne Plan"}
+{"t":"erwarte","ab_sample":90000,"bis_sample":92400,"osc":["/q",",hsihds",3,"andreas",1,null,null,""],"bereich":"deck","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"erwarte","ab_sample":180000,"bis_sample":182400,"osc":["/q",",hsihds",3,"andreas",2,180000,8.0,""],"toleranz":1e-06,"bereich":"deck","herleitung":"§5.1 Status 2 am Ziel-Sample llround(sample_at(8)) = 180000"}
+{"t":"hand","sample":202500,"pfad":"deck/1/fader","midi_roh":0.0,"bereich":"regler","herleitung":"§7.3 Punkt 2: erster Wert setzt nur die Stellung"}
+{"t":"hand","sample":225000,"pfad":"deck/1/fader","midi_roh":1.0,"bereich":"regler","herleitung":"§7.2 Übernahme skaliert: Anschlag oben = Obergrenze"}
+{"t":"erwarte","ab_sample":225000,"bis_sample":227400,"osc":["/e/halter",",sshd","deck/1/fader","mensch",225000,10.0],"toleranz":1e-06,"bereich":"regler","herleitung":"§7.3 Punkt 3, ADR 023: Halter mensch am selben Sample"}
+{"t":"erwarte","ab_sample":945000,"bis_sample":945512,"osc":["/e/halter",",sshd","deck/1/fader","frei",null,null],"bereich":"regler","herleitung":"§7.3 Punkt 4: 32 Beats ohne Handbewegung → frei bei Beat 42"}
+{"t":"sende","sample":247500,"osc":["/k/deck/laden",",hsisdii",4,"leitstand",2,"f0000000000000b2",128.0,1,0],"bereich":"deck","herleitung":"§4.4 /k/deck/laden, Fixture material/f0000000000000b2/ next to the sequences"}
+{"t":"erwarte","ab_sample":247500,"bis_sample":249900,"osc":["/q",",hsihds",4,"leitstand",1,null,null,""],"bereich":"deck","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"erwarte","ab_sample":247500,"bis_sample":295500,"osc":["/q",",hsihds",4,"leitstand",3,null,null,""],"bereich":"deck","herleitung":"§4.4: Quittung fertig nach dem Tausch"}
+{"t":"erwarte","ab_sample":247500,"bis_sample":295500,"osc":["/e/geladen",",isdiih",2,"f0000000000000b2",128.0,1,0,null],"toleranz":1e-06,"bereich":"deck","herleitung":"§4.4, §5.9 /e/geladen"}
+{"t":"sende","sample":1080000,"osc":["/k/deck/start",",hssssiddi",5,"cypher","p1","b_rein","",2,64.0,32.0,0],"bereich":"deck"}
+{"t":"erwarte","ab_sample":1080000,"bis_sample":1082400,"osc":["/q",",hsihds",5,"cypher",1,null,null,""],"bereich":"deck","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"sende","sample":1080000,"osc":["/k/teil",",hssisddfiiss",6,"cypher","p1",1,"deck/2/eq/tief",63.0,0.0,-30.0,0,0,"b_rein",""],"bereich":"regler","herleitung":"Bass zu einen Beat vor S, B noch stumm (FORMAT.md Punkt 22 n)"}
+{"t":"erwarte","ab_sample":1080000,"bis_sample":1082400,"osc":["/q",",hsihds",6,"cypher",1,null,null,""],"bereich":"regler","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"sende","sample":1080000,"osc":["/k/teil",",hssisddfiiss",7,"cypher","p1",2,"deck/2/fader",64.0,0.0,-15.0,0,0,"",""],"bereich":"regler","herleitung":"öffnet deck/2 (−15 > −26, §1.6): I3a braucht den Hörschein"}
+{"t":"erwarte","ab_sample":1080000,"bis_sample":1082400,"osc":["/q",",hsihds",7,"cypher",1,null,null,""],"bereich":"regler","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"sende","sample":1080000,"osc":["/k/teil",",hssisddfiiss",8,"cypher","p1",3,"deck/2/fader",64.0,32.0,0.0,0,0,"",""],"bereich":"regler"}
+{"t":"erwarte","ab_sample":1080000,"bis_sample":1082400,"osc":["/q",",hsihds",8,"cypher",1,null,null,""],"bereich":"regler","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"erwarte","ab_sample":1440000,"bis_sample":1442400,"osc":["/q",",hsihds",7,"cypher",6,1440000,64.0,"kein_hoerschein"],"toleranz":1e-06,"bereich":"regler","herleitung":"§17: am Start abgelehnt (kein_hoerschein), Start = Sample 1440000"}
+{"t":"erlaube","ab_sample":1440000,"bis_sample":1442400,"osc":["/e/invariante",",ssihd","hoerschein",null,null,null,null],"bereich":"invariante","herleitung":"FORMAT.md Punkt 22 a: ob eine I3-Ablehnung zusätzlich /e/invariante hoerschein meldet, lässt §5.9 offen"}
+{"t":"erwarte","ab_sample":1440000,"bis_sample":1442400,"osc":["/q",",hsihds",8,"cypher",6,1440000,64.0,"kein_hoerschein"],"toleranz":1e-06,"bereich":"regler","herleitung":"§17 I3a: die Rampe auf 0 öffnet ebenfalls"}
+{"t":"erlaube","ab_sample":1440000,"bis_sample":1442400,"osc":["/e/invariante",",ssihd","hoerschein",null,null,null,null],"bereich":"invariante","herleitung":"FORMAT.md Punkt 22 a: ob eine I3-Ablehnung zusätzlich /e/invariante hoerschein meldet, lässt §5.9 offen"}
+{"t":"sende","sample":1080000,"osc":["/k/teil",",hssisddfiiss",9,"cypher","p1",4,"deck/1/fader",80.0,16.0,-40.0,0,1,"a_raus",""],"bereich":"regler"}
+{"t":"erwarte","ab_sample":1080000,"bis_sample":1082400,"osc":["/q",",hsihds",9,"cypher",1,null,null,""],"bereich":"regler","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"sende","sample":1080000,"osc":["/k/deck/stopp",",hssssidi",10,"cypher","p1","a_raus","",1,100.0,1],"bereich":"deck"}
+{"t":"erwarte","ab_sample":1080000,"bis_sample":1082400,"osc":["/q",",hsihds",10,"cypher",1,null,null,""],"bereich":"deck","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"erwarte","ab_sample":1800000,"bis_sample":1802400,"osc":["/q",",hsihds",9,"cypher",2,1800000,80.0,""],"toleranz":1e-06,"bereich":"regler","herleitung":"§5.1 Status 2 am Ziel-Sample llround(sample_at(80)) = 1800000"}
+{"t":"erwarte","ab_sample":2033488,"bis_sample":2034512,"osc":["/e/invariante",",ssihd","master_leer","p1",4,null,null],"bereich":"invariante"}
+{"t":"erlaube","ab_sample":2250000,"bis_sample":3600000,"osc":["/e/invariante",",ssihd","master_leer","p1",null,null,null],"bereich":"invariante","herleitung":"FORMAT.md Punkt 22 f: ob der wartende Plan-Stopp eine eigene Meldung trägt, lässt §17 offen"}
+{"t":"erwarte_nicht","ab_sample":1800000,"bis_sample":3600000,"osc":["/q",",hsihds",9,"cypher",3,null,null,null],"bereich":"regler"}
+{"t":"erwarte_nicht","ab_sample":2250000,"bis_sample":3600000,"osc":["/q",",hsihds",10,"cypher",2,null,null,null],"bereich":"deck","herleitung":"§17 I2: der Stopp wartet (Status bleibt angenommen)"}
+{"t":"erwarte_nicht","ab_sample":0,"bis_sample":2339999,"osc":["/e/rueckfall",",iidddh",1,1,null,null,null,null],"bereich":"invariante"}
+{"t":"erwarte","ab_sample":2340000,"bis_sample":2340512,"osc":["/e/rueckfall",",iidddh",1,1,112.0,16.0,null,null],"toleranz":1e-06,"bereich":"invariante","herleitung":"§17 Frist-Wächter: q0 = 0 + floor((128 − 0 − 16)/16)·16 = 112"}
+{"t":"deck_wert","sample":3375000,"deck":1,"feld":"quell_beat","wert":126.0,"toleranz":0.01,"bereich":"invariante","herleitung":"Rückfall-Loop [112, 128): Quell-Beat 126"}
+{"t":"deck_wert","sample":3600000,"deck":1,"feld":"quell_beat","wert":120.0,"toleranz":0.01,"bereich":"invariante","herleitung":"Rückfall-Loop [112, 128): Quell-Beat 120"}
+{"t":"deck_wert","sample":3375000,"deck":1,"feld":"status","wert":5,"toleranz":0,"bereich":"invariante","herleitung":"§5.5 Status 5 Rückfall"}
+{"t":"wert","sample":3375000,"pfad":"deck/1/fader","wert":-25.985,"toleranz":0.015,"bereich":"invariante","herleitung":"A bleibt hörbar: keine Stille"}

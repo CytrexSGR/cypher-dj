@@ -4,7 +4,7 @@
 // nachLaden, vorBild, beimBild, beimEreignis, beimSichtwechsel. Spricht nur die Projekt-API (Spec 3.4); der Wechsel
 // der Ansicht schickt nichts an den Kern (A1). Oberfläche englisch. Gezeichnet wird nur, solange die Ansicht sichtbar
 // ist (eigener rAF-Takt, Ring window.djkProdBild wie window.djkBild).
-import { UEBER_FARBE } from './lanes.js';
+import { UEBER_FARBE, setzeKettenZiele } from './lanes.js';
 import { menueOffen } from './context_menu.js';
 import { REGLER_MAX, REGLER_SCHRITT } from './fader_curve.js';
 import { neuerSchreiber } from './writer.js';
@@ -31,13 +31,14 @@ import { bindeLanen } from './lanes_operation.js';
 import { bindeComp } from './takes_operation.js';
 import { bindeDetail } from './detail.js';
 import { bindeAusgabe } from './freeze_export.js';
+import { bindeMidiImport, MIDI_FEHLER } from './midi_import.js';
 import { bindeVariantenReihen } from './variants.js';
 import { bindeGeraete } from './devices.js';
 import { bindeAufnahme } from './recording.js';
 import { AUSGABE_FEHLER, mehrdeutigText } from './output.js';
 import { nachladenNoetig, stemsEreignis, stemsFuerProjekt } from './stems.js';
 
-const BINDER = [bindeZeitachse, bindeProjektwahl, bindeSpuren, bindeGruppen, bindeReturns, bindeMatrix, bindeInserts, bindeAblage, bindeTransport, bindeVerlauf, bindeLanen, bindeComp, bindeClips, bindeDetail, bindeAusgabe, bindeVariantenReihen, bindeGeraete, bindeAufnahme,
+const BINDER = [bindeZeitachse, bindeProjektwahl, bindeSpuren, bindeGruppen, bindeReturns, bindeMatrix, bindeInserts, bindeAblage, bindeTransport, bindeVerlauf, bindeLanen, bindeComp, bindeClips, bindeDetail, bindeAusgabe, bindeMidiImport, bindeVariantenReihen, bindeGeraete, bindeAufnahme,
   bindeBrowserwahl, bindeGeraeteBrowser, bindePresetHost, bindePresetMarken, bindeKollektionen];
 
 const GERUEST = `
@@ -132,6 +133,7 @@ export const ladeNachEreignis = (a, sichtbar) => !!sichtbar && LADE_EREIGNISSE.h
 // Texte zu den Gründen der Projekt-API: die Gründe aus S2-Kern (project/commands.ts, history.ts) und Spec 3.4. Fehlt einer,
 // zeigt die Seite „Rejected: <code>“ (tests/production_root.test.mjs hält die Liste beisammen).
 export const FEHLER_TEXT = {
+  ...MIDI_FEHLER,   // MIDI import (midi_import.js)
   veraltet: 'The clip changed while separating: nothing was placed',
   audio_fehlt: 'An audio clip is still being prepared: try again in a moment',
   stems_laeuft: 'A stem separation is already running',
@@ -174,16 +176,26 @@ export const FEHLER_TEXT = {
   zu_gross: AUSGABE_FEHLER.zu_gross, server_fehler: 'The project server did not answer: showing the last state', netz: 'Page server unreachable', keine_antwort: 'No answer from the core',
   routing_zyklus: 'A group cannot feed itself', routing_grenze: 'Groups do not nest, and there are at most 8 groups and 4 returns',
   ziel_unbekannt: 'That output or target does not exist for this track', gruppe_unbekannt: 'That group no longer exists', return_unbekannt: 'That return no longer exists',
-  insert_unbekannt: 'That insert stage no longer exists', art_unbekannt: 'That insert kind is not available (compressor, EQ, saturator and limiter exist in this version)',
+  insert_unbekannt: 'That insert stage no longer exists', art_unbekannt: 'That insert kind is not available (compressor, EQ, saturator, limiter, utility and effect graph exist in this version)',
   sidechain_spaet: 'That key source is computed after this stage: tracks can listen to tracks and DJ inputs, groups also to the pre of other groups',
   sidechain_zyklus: 'That key would depend on the stage itself: its own strip, its own group, the master, or two tracks keying each other',
   sidechain_quelle: 'That key source is not available in the arrangement (erz/2, erz/3, erz/5 to erz/8 and pad/1, pad/2 come after the mixer)',
-  kette_voll: 'The insert chain of that strip is full (four stages at most)', ins_voll: 'All stages of that kind are in use (twelve compressors, two EQs, one saturator and one limiter at most)',
+  kette_voll: 'The insert chain of that strip is full (four stages at most)', ins_voll: 'All stages of that kind are in use (twelve compressors, eight EQs, four saturators, two limiters, eight utilities and eight effect graphs at most)',
+  host_grenze: 'All four plugin hosts are in use: remove a plugin stage before adding another', host_fehlt: 'The plugin host is not running or not ready yet',
+  plugin_nicht_ladbar: 'That plugin cannot be loaded', zustand_passt_nicht: 'The saved plugin state belongs to another plugin and was not applied',
+  param_unbekannt: 'That plugin has no such parameter',
+  plugin_unbekannt: 'That plugin is not in the index: scan first', plugin_blockiert: 'That plugin failed its scan and is blocked',
+  absturz_schleife: 'The plugin keeps crashing: switch the stage off and on to try again', zustand_fehler: 'The saved plugin state could not be restored: the stage stays off',
+  latenz_zu_gross: 'The plugin latency is too large: the stage is left out',
+  kein_effekt: 'That plugin is not an effect', kein_instrument: 'That plugin is not an instrument', scan_laeuft: 'A plugin scan is already running',
+  kein_fenster: 'That plugin cannot show a window here', keine_anzeige: 'That plugin has no user interface', host_insert_echtzeit: 'A strip with an active plugin stage cannot be rendered offline: use Resample',
+  export_host_ausfall: 'A plugin host failed during the real-time export: nothing was exported, try again',
+  export_luecke: 'The real-time export dropped audio: nothing was exported, try again',
   rack_unbekannt: 'That strip has no rack any more', variation_voll: 'A rack holds at most 8 variations',
   variation_unbekannt: 'That variation no longer exists', rack_voll: 'All twelve racks are in use', makro_voll: 'A strip can have at most 16 macro mappings',
   ziel_doppelt: 'A parameter can be driven by one macro only', param_nicht_stetig: 'A macro drives continuous parameters only, not switches or step lists', glied_ohne_rack: 'A member target needs a track with an instrument rack', makro_ziel_wirt: 'A Surge member takes no macro target',
-  param_gemappt: 'That parameter is driven by a macro: remove the mapping first',
-  lane_ziel_spaeter: 'Insert and rack controls cannot be automated yet (Slice 5)', lane_unbekannt: 'That automation line no longer exists', lane_doppelt: 'This track already has a lane for that target', lane_gesperrt: 'That line is locked: unlock it first', bereich_leer: 'Select a range on the line first (it must not be empty)', huellkurve_ziel: 'That envelope does not fit this clip', huellkurve_unbekannt: 'That clip has no such envelope', geraet_huellkurven: 'Delete the device envelopes of this track\'s clips before switching to a host instrument', form_ungueltig: 'That shape is not available on this line (mute and solo take Square only)', geraet_lanes: 'Delete the device lines of this track before switching to a host instrument', punkte_ungueltig: 'The line points are not valid (mute and solo points must be jumps)',
+  param_gemappt: 'That parameter is driven by a macro: remove the mapping first, or automate the macro instead',
+  param_hat_lane: 'That parameter has an automation line: delete the line first, or automate the macro instead', lane_unbekannt: 'That automation line no longer exists', lane_doppelt: 'This track already has a lane for that target', lane_gesperrt: 'That line is locked: unlock it first', bereich_leer: 'Select a range on the line first (it must not be empty)', huellkurve_ziel: 'That envelope does not fit this clip', huellkurve_unbekannt: 'That clip has no such envelope', geraet_huellkurven: 'Delete the device envelopes of this track\'s clips before switching to a host instrument', form_ungueltig: 'That shape is not available on this line (mute and solo take Square only)', geraet_lanes: 'Delete the device lines of this track before switching to a host instrument', punkte_ungueltig: 'The line points are not valid (mute and solo points must be jumps)',
   kit_unbekannt: 'That kit is not in the kit folder',
   keine_rackspur: 'That track has no instrument rack', rack_voll_glieder: 'A rack holds at most 4 members', glied_unbekannt: 'That rack member no longer exists',
   rack_letztes_glied: 'The last member of a rack cannot be removed: convert the track to a plain device instead',
@@ -197,6 +209,11 @@ export const FEHLER_TEXT = {
   index_bereich: 'No such track position', tempo_bereich: 'Tempo: 60 to 200 BPM', loop_bereich: 'The loop needs at least 1 beat',
   argument_ungueltig: 'That value is not allowed', argument_unbekannt: 'The core does not know that setting', befehl_unbekannt: 'The server does not know that command',
   art_passt_nicht: 'That clip does not fit this track', sha_ungueltig: 'That sample is not in the catalogue', clip_nicht_midi: 'That is not a MIDI clip',
+  muster_fehler: 'The pattern does not run', muster_zeitlimit: 'The pattern took too long to evaluate: make it smaller',
+  muster_ziel_passt_nicht: 'The pattern does not fit this track: s(...) belongs on a kit track, note(...) on an instrument track', muster_fehlt: 'That clip has no stored pattern',
+  muster_zu_gross: 'The pattern is too big: make it smaller',
+  handarbeit_vorhanden: 'The notes or envelopes of this clip were changed by hand since the pattern made them: tick OVERWRITE to replace them',
+  muster_nicht_verfuegbar: 'This server cannot translate patterns', klang_unbekannt: 'A sound of the pattern is not in the kit of this track',
   warp_marker: 'The warp markers are not valid', warp_faktor: 'A warp segment has a tempo outside 15 to 800 BPM',
   transienten_fehlen: 'The audio is not decoded yet, so its transients are unknown', keine_transienten: 'There is no transient in that range',
  marker_unbekannt: 'There is no warp marker at that beat any more', warp_modus: 'That warp mode does not exist yet',
@@ -246,9 +263,12 @@ export const FEHLER_TEXT = {
 // V2 Fix-Runde 2 H7 (Spec 6.34): beschaeftigt und zu_gross sind mehrdeutig (ein Freeze, ein Öffnen, eine Tempo-Rampe; Grenzen des Kerns). Wie in
 // output.js (F12) zeigt die Seite dann den text der Antwort, wenn er da ist, sonst einen neutralen Text, der keine Ursache behauptet (vorher fest
 // „A freeze is running“ und „The change is too big“). Der S2-Text zu zu_gross ist heute deutsch (project/commands.ts); S3 stellt die Server-Texte um.
+const MUSTER_GRUENDE = new Set(['muster_fehler', 'klang_unbekannt', 'muster_ziel_passt_nicht', 'muster_zeitlimit', 'muster_zu_gross', 'handarbeit_vorhanden']);
 export function fehlerText(r) {
   if (r?.j && 'quittung' in r.j && r.j.quittung === null) return FEHLER_TEXT.keine_antwort;   // der Kern hat nicht geantwortet: nie stiller Erfolg
   const code = r?.j?.fehler ?? r?.j?.grund;
+  // strudel-clip: the detail of a pattern refusal is the useful part (line and column, the sounds of the kit), so it is shown
+  if (MUSTER_GRUENDE.has(code) && typeof r?.j?.detail === 'string') return `${FEHLER_TEXT[code]}: ${r.j.detail}`;
   return mehrdeutigText(r) ?? FEHLER_TEXT[code] ?? `Rejected: ${code ?? `HTTP ${r?.status}`}`;
 }
 // D1 V2 Nachzug (7c, 7d): eine angenommene Änderung, die der Kern nicht nachvollzieht, ist kein stiller Erfolg. /proj/aendern (und
@@ -276,10 +296,12 @@ export const HINWEIS_TEXT = {
   eins_gemeldet: 'Bar one set. The correction is saved with the track: the decks use it too, and the next warp of this track starts there',
   eins_nur_hier: 'Bar one set in this clip only: no correction written (the track is not in the deck stock, or this instance writes none)',
   eins_rueckweg_fehler: 'Bar one set in this clip, but the correction could not be saved with the track',
+  // 1.12: a write to a parameter on which a lane lies (the server's text names the lane; this one is the fallback)
+  lane_treibt: 'This parameter is driven by an automation lane while the arrangement plays: the value is saved as the rest value',
 };
 export function hinweisMeldung(hinweise) {
   if (!Array.isArray(hinweise) || hinweise.length === 0) return null;
-  const texte = [...new Set(hinweise.map((h) => HINWEIS_TEXT[h.hinweis] ?? `Note: ${h.hinweis}`))];
+  const texte = [...new Set(hinweise.map((h) => (h.hinweis === 'lane_treibt' && h.text ? h.text.charAt(0).toUpperCase() + h.text.slice(1) : HINWEIS_TEXT[h.hinweis] ?? `Note: ${h.hinweis}`)))];
   return { text: texte.join(' · '), fehler: hinweise.some((h) => h.hinweis === 'kein_tempo' || h.hinweis === 'eins_rueckweg_fehler') };
 }
 // Slice 3a: SSE {a: 'proj', f: {clip_id, analyse: 'wartet'|'laeuft'|'karte_bereit'|'fertig'|'fehler'|'verworfen', grund?}}. Die Seite lädt bei clip_id ohnehin nach
@@ -294,8 +316,17 @@ export function analyseMeldung(f) {
 }
 // Nach einem angenommenen Schreibzug (beiProjekt des Schreibers in bindeProduktion): der Kern-Hinweis hat Vorrang, sonst die Hinweise des Schreibwegs, sonst nichts
 export function meldeNachSchreiben(j, melde) {
-  const h = kernHinweis(j?.kern), m = hinweisMeldung(j?.hinweise);
-  if (h) melde(h, true); else if (m) melde(m.text, m.fehler);
+  const h = kernHinweis(j?.kern), m = hinweisMeldung(j?.hinweise), p = musterMeldung(j?.muster);
+  // the core hint keeps its precedence over the other hints; the pattern report is said next to it (it names the fields that were not applied)
+  const ganz = [h, p?.text, h || p ? null : m?.text].filter(Boolean).join(' · ');
+  if (ganz) melde(ganz, h !== null || p?.fehler === true || (!p && m?.fehler === true));
+}
+// strudel-clip: the report of a generated clip (answer key `muster`): what was written and, never silent, which Strudel fields have no target here
+export function musterMeldung(liste) {
+  if (!Array.isArray(liste) || liste.length === 0) return null;
+  const texte = liste.map((m) => `Pattern: ${m.noten_zahl} note${m.noten_zahl === 1 ? '' : 's'}, ${m.takte} bar${m.takte === 1 ? '' : 's'}${m.loop_beats ? `, loop ${m.loop_beats} beats` : ''}${m.huellkurven?.length ? `, envelopes ${m.huellkurven.join(', ')}` : ''}`
+    + `${m.ohne_ziel?.length ? `. Not applied (no target here): ${m.ohne_ziel.join(', ')}` : ''}${m.hinweise?.length ? `. ${m.hinweise.join('. ')}` : ''}`);
+  return { text: texte.join(' · '), fehler: liste.some((m) => m.ohne_ziel?.length > 0) };
 }
 // Text zu einer Antwort ohne Erfolg: ein 5xx ohne Grund ist „der Server antwortet nicht“, nie „Rejected: HTTP 503“. Gilt für den Schreibweg
 // und (V2 Fix F3) für FREEZE und EXPORT (freeze_export.js über ctx.antwortText)
@@ -345,7 +376,7 @@ export function bindeProduktion({ post, bpm, stoebern, bibliothek = null, preset
     if (slug !== null && slug === st.slug && st.projekt && p.rev < st.projekt.rev) return;
     const wechsel = slug !== st.slug;
     if (wechsel) st.stems = stemsFuerProjekt(st.stems, slug);   // Projektwechsel: ein fremder Stand fällt weg
-    st.slug = slug; st.projekt = p;
+    st.slug = slug; st.projekt = p; setzeKettenZiele(p);   // 1.12 slice 6: the ranges of the insert and rack lane targets come from the project
     if (slug !== null) ctx.schreiber.setze(slug, p.rev);
     $('leer').hidden = !!p;
     $('name').textContent = p ? p.name : 'No project';
@@ -357,6 +388,7 @@ export function bindeProduktion({ post, bpm, stoebern, bibliothek = null, preset
   const ladeRoh = neuerLader({
     hole: () => holeGet('/proj/aktuell'),
     uebernimm: (slug, p, j) => { st.autoArm = armStand(j?.auto_arm); if (j?.auto_arm) st.autoModus = st.autoArm.modus;   // 1.12 S3 task 9: armed tracks and mode, from the server only
+      st.instrumente = Array.isArray(j?.instrumente) ? j.instrumente : [];   // plan 1.11 task 17: states of the plugin instrument hosts
       st.autoUeber = Array.isArray(j?.auto_uebersteuert) ? j.auto_uebersteuert : [];   // 1.12 S3 (D8): overridden lanes, from the server only
       st.analyse = Array.isArray(j?.analyse) ? j.analyse : []; st.stems = stemsFuerProjekt(j?.stems, slug);
       st.vorhoeren = j?.vorhoeren && typeof j.vorhoeren === 'object' ? j.vorhoeren : {};   // 1.14: audition map {spur_id: take_id}, from the server only

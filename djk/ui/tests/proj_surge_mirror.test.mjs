@@ -1,9 +1,9 @@
 // Package 1.9 U5 (O28 on Surge), T5.2: the mirror of the project's Surge parameter map into the host of the slot (`fahre`, dauer 0, wirt-arr<slot>.sock).
-// A fake host (tests/support/surge_host.mjs) records what arrives. Spec E7: on open, on every change, on undo and redo; a missing host is not an error here.
+// A fake host (tests/support/surge_instrument_host.mjs) records what arrives. Spec E7: on open, on every change, on undo and redo; a missing host is not an error here.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { sitzung, warteBis } from './support/proj_context.mjs';
-import { falscherWirt, wirtOrdner } from './support/surge_host.mjs';
+import { falscherWirt, wirtOrdner } from './support/surge_instrument_host.mjs';
 
 const SURGE = (parameter) => ({ art: 'wirt', name: 'surge', ...(parameter ? { parameter } : {}) });
 const neueSpur = (parameter) => [{ befehl: 'spur_neu', art: 'instrument', geraet: SURGE(parameter) }];

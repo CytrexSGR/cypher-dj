@@ -28,7 +28,7 @@ import sys
 SPUREN = [0]   # E3: Zahl der Spur-Slots, aus dem Vertragstext gelesen (`spur/<n>/*` ... n = 1 bis N), nicht fest verdrahtet
 GRUPPEN = [0]   # 1.10: Zahl der Gruppen-Slots, aus dem Vertragstext gelesen (`grp/<n>/*` ... n = 1 bis N)
 RACKS = [0]   # 1.10 slice 4c: number of racks, read from the contract text (`rack/<k>/m<n>` (k = 1 to N; ...); 4 macro rows each
-INSERTS = {'komp': 0, 'eq': 0, 'saett': 0, 'lim': 0}   # 1.10 slice 4a/4b: pool size per insert kind, read from the contract text (`ins/<art>/<n>/*` ... n = 1 to N)
+INSERTS = {'komp': 0, 'eq': 0, 'saett': 0, 'lim': 0, 'host': 0, 'utility': 0, 'bk': 0}   # 1.10 slice 4a/4b: pool size per insert kind, read from the contract text (`ins/<art>/<n>/*` ... n = 1 to N)
 RETURNS = [0]   # 1.10 Slice 3: Zahl der Returns, aus dem Vertragstext gelesen (`ret/<r>/*` ... r = 1 to N)
 BK_KNOEPFE = 8  # S14: graph knobs per channel / per send return (`regler nr 1..8` of the Baukasten library)
 KANAELE = [f'deck/{i}' for i in range(1, 5)] + [f'erz/{i}' for i in range(1, 9)] + [f'pad/{i}' for i in (1, 2)] + \
@@ -96,7 +96,7 @@ def expandiere(p):
         return [q for i in range(1, GRUPPEN[0] + 1) for q in expandiere_r(f'grp/{i}/{p[8:]}')]
     if p.startswith('ret/<r>/'):                        # 1.10 Slice 3: return strips, r = 1..4
         return [f'ret/{i}/{p[8:]}' for i in range(1, RETURNS[0] + 1)]
-    m = re.match(r'ins/(komp|eq|saett|lim)/<n>/(.*)$', p)
+    m = re.match(r'ins/(komp|eq|saett|lim|host|utility|bk)/<n>/(.*)$', p)
     if m:                                               # 1.10 slice 4a/4b: insert pools, n = 1..pool size; the EQ band rows b<m>/... expand over the 8 bands
         rest = [m.group(2).replace('<m>', str(b)) for b in range(1, 9)] if '<m>' in m.group(2) else [m.group(2)]
         return [f'ins/{m.group(1)}/{i}/{r}' for i in range(1, INSERTS[m.group(1)] + 1) for r in rest]

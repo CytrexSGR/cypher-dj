@@ -1,0 +1,21 @@
+{"t":"sende","sample":0,"osc":["/k/set/neu",",hsd",1,"pruefstand",128.0],"bereich":"zeitachse","herleitung":"§4.2: neue Zeitachse mit 128 BPM, Beat 0 am nächsten Zyklus = Sample 0 (§1.1)"}
+{"t":"sende","sample":360000,"osc":["/k/teil",",hssisddfiiss",2,"leitstand","p1",0,"deck/1/eq/tief",64.0,0.0,-10.0,0,0,"",""],"bereich":"regler","herleitung":"I4: [64, 64) gegen angenommene Teile am selben Regler"}
+{"t":"erwarte","ab_sample":360000,"bis_sample":362400,"osc":["/q",",hsihds",2,"leitstand",1,null,null,""],"bereich":"regler","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"sende","sample":360000,"osc":["/k/teil",",hssisddfiiss",3,"leitstand","p1",1,"deck/1/eq/tief",64.0,8.0,-20.0,0,0,"",""],"bereich":"regler","herleitung":"I4: [64, 72) gegen angenommene Teile am selben Regler"}
+{"t":"erwarte","ab_sample":360000,"bis_sample":362400,"osc":["/q",",hsihds",3,"leitstand",1,null,null,""],"bereich":"regler","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"sende","sample":360000,"osc":["/k/teil",",hssisddfiiss",4,"leitstand","p1",2,"deck/1/eq/tief",70.0,4.0,0.0,0,0,"",""],"bereich":"regler","herleitung":"I4: [70, 74) gegen angenommene Teile am selben Regler"}
+{"t":"erwarte","ab_sample":360000,"bis_sample":362400,"osc":["/q",",hsihds",4,"leitstand",6,null,null,"ueberlappung"],"bereich":"regler","herleitung":"§17 I4: beim Einsortieren abgelehnt"}
+{"t":"sende","sample":360000,"osc":["/k/teil",",hssisddfiiss",5,"leitstand","p1",3,"deck/1/eq/tief",72.0,4.0,-30.0,0,0,"",""],"bereich":"regler","herleitung":"I4: [72, 76) gegen angenommene Teile am selben Regler"}
+{"t":"erwarte","ab_sample":360000,"bis_sample":362400,"osc":["/q",",hsihds",5,"leitstand",1,null,null,""],"bereich":"regler","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"sende","sample":360000,"osc":["/k/teil",",hssisddfiiss",6,"leitstand","p1",4,"deck/1/eq/tief",74.0,0.0,-5.0,0,0,"",""],"bereich":"regler","herleitung":"I4: [74, 74) gegen angenommene Teile am selben Regler"}
+{"t":"erwarte","ab_sample":360000,"bis_sample":362400,"osc":["/q",",hsihds",6,"leitstand",6,null,null,"ueberlappung"],"bereich":"regler","herleitung":"§17 I4: beim Einsortieren abgelehnt"}
+{"t":"sende","sample":360000,"osc":["/k/teil",",hssisddfiiss",7,"leitstand","p2",0,"deck/1/eq/tief",66.0,2.0,0.0,0,0,"",""],"bereich":"regler","herleitung":"I4: [66, 68) gegen angenommene Teile am selben Regler"}
+{"t":"erwarte","ab_sample":360000,"bis_sample":362400,"osc":["/q",",hsihds",7,"leitstand",6,null,null,"ueberlappung"],"bereich":"regler","herleitung":"§17 I4: beim Einsortieren abgelehnt"}
+{"t":"sende","sample":360000,"osc":["/k/teil",",hssisddfiiss",8,"leitstand","p2",1,"deck/1/eq/mitte",66.0,2.0,-6.0,0,0,"",""],"bereich":"regler","herleitung":"I4: [66, 68) gegen angenommene Teile am selben Regler"}
+{"t":"erwarte","ab_sample":360000,"bis_sample":362400,"osc":["/q",",hsihds",8,"leitstand",1,null,null,""],"bereich":"regler","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"sende","sample":360000,"osc":["/k/teil",",hssisddfiiss",9,"leitstand","p1",5,"deck/1/eq/tief",76.0,0.0,0.0,0,0,"",""],"bereich":"regler","herleitung":"I4: [76, 76) gegen angenommene Teile am selben Regler"}
+{"t":"erwarte","ab_sample":360000,"bis_sample":362400,"osc":["/q",",hsihds",9,"leitstand",1,null,null,""],"bereich":"regler","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"wert","sample":1530000,"pfad":"deck/1/eq/tief","wert":-15.0,"toleranz":0.01,"bereich":"regler","herleitung":"Rampe startet beim Zielwert des Setzens am selben Beat"}
+{"t":"wert","sample":1642500,"pfad":"deck/1/eq/tief","wert":-22.5,"toleranz":0.01,"bereich":"regler","herleitung":"angrenzende Rampe [72, 76) war erlaubt"}
+{"t":"wert","sample":1507500,"pfad":"deck/1/eq/mitte","wert":-3.0,"toleranz":0.01,"bereich":"regler","herleitung":"Negativ-Kontrolle: anderer Regler, gleiche Zeit, angenommen"}
+{"t":"wert","sample":1721250,"pfad":"deck/1/eq/tief","wert":0.0,"toleranz":0.01,"bereich":"regler","herleitung":"Setzen am Ende-Beat einer Rampe liegt außerhalb [72, 76)"}

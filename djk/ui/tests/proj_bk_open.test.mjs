@@ -5,6 +5,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pruefKontext, sitzung, ist, arrNr } from './support/proj_context.mjs';
 import { Projekte } from '../project/storage.ts';
+// the knob rows of a Baukasten INSTRUMENT or effect channel (erz/3/bk/1, deck/1/bk/2, ...); the insert rows ins/bk/<n>/.. (arr-bk) are a different thing and are sent on open
+const BK_KANAL_ZEILEN = /^(deck|erz|pad|fx)\/\d+\/bk\//;
 
 const HASH = 'b'.repeat(64);
 const acht = (x) => Array(8).fill(x);
@@ -39,7 +41,7 @@ test('S17 T3.10 negative control: a project without a snapshot sends nothing; ch
   a.k.bk.geladen['deck/1'] = 'fx-bandecho';
   const r = await a.s.oeffnen(a.slug, 'andreas');
   assert.equal(r.code, 200);
-  assert.equal(a.k.teile(/\/bk\//).length, 0); assert.equal(a.k.bk.aufrufe.length, 0);
+  assert.equal(a.k.teile(BK_KANAL_ZEILEN).length, 0); assert.equal(a.k.bk.aufrufe.length, 0);
   assert.equal('baukasten' in r.j.kern, false);
   // a snapshot with erz2 only: deck/1 stays, no call for it
   const b = aufbau(t, [eintrag('erz2', 'juno-pad-dyn')]);
@@ -143,7 +145,7 @@ test('S17 T3.17 a restart of the page server in front of a running kern (wiedera
   z.s.ereignis('/zustand/arr', arrNr(7));
   const r = await z.s.oeffnen(slug, 'andreas');
   assert.equal(r.j.kern.wiederanlauf, true);
-  assert.equal(k.teile(/\/bk\//).length, 0); assert.equal(k.bk.aufrufe.length, 0);
+  assert.equal(k.teile(BK_KANAL_ZEILEN).length, 0); assert.equal(k.bk.aufrufe.length, 0);
   assert.equal(r.j.kern.baukasten.uebersprungen, 'wiederanlauf');
   z.s.schliesse();   // releases the project lock
   // negative control: another playback number is a real open

@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 BUNDLE = Path(os.environ.get("BAUKASTEN_BUNDLE") or Path.home() / ".local/lib/cypherdj/vst3/baukasten.vst3")
-WIRT = Path(__file__).resolve().parent.parent / "host.py"
+WIRT = Path(__file__).resolve().parent.parent / "instrument_host.py"
 BEISPIEL = Path(__file__).resolve().parents[3] / "instruments/modular_dsp/demos/saege-ladder.json"
 PAD = BEISPIEL.with_name("juno-pad.json")
 

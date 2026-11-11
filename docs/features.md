@@ -76,18 +76,33 @@ of the beta. The short version is the [README](../README.md).
 - **Routing**: group tracks that fold in the arrangement (Ctrl+G groups the selected tracks), a routing matrix
   for outputs, sends and sidechain keys, and resampling of any track, group, return or the master into a new audio
   track
-- **Automation**: lanes per track for fader, pan, mute, solo and four RB-338 parameters, drawn with points or recorded
+- **Automation**: lanes per track for fader, pan, mute, solo and four RB-338 parameters, and lanes on the parameters
+  of insert stages, on the four rack macros and on the eight knobs of a Cypher Modular track, drawn with points or recorded
   from the hand (touch, latch or write). Grabbing a track's fader, pan, mute or solo by hand overrides its lane, which the
   page shows until the override is ended. Clips carry envelopes of their own (gain, transpose, relative track volume
   and pan)
 - **Inserts**: up to four stages per strip on a track, a group, a return and the production master, taken from a pool
-  of our own devices: compressors, EQs, a saturator and a limiter. Pre or post fader sends, a gain reduction readout
+  of our own devices: compressors, EQs, a saturator, a limiter, a utility (stereo width 0 to 4 and bass mono) and a
+  Cypher Modular effect graph as a stage, with a tempo-synced delay return shipped as an example. Pre or post fader sends, a gain reduction readout
   per stage, delay compensation across tracks and groups, and a rack of four macro knobs per strip (up to 16 mappings
   per strip)
+- **Third-party plugins** (VST3 and LV2, Linux builds; Windows plugins through yabridge and Wine): a plugin is an
+  insert stage on any strip or the instrument of a track. Each plugin runs in its own host process, so a crashing or
+  hung plugin makes its strip play dry (time-aligned, with a fade) instead of stopping the music. A crash-proof scan
+  builds the plugin list (a plugin that crashes or hangs in the scan is listed as blocked, with its reason), the
+  plugin's own window opens on the desktop, its state is stored in the project, and its latency is measured and
+  compensated like that of our own devices. A project with an active plugin stage is exported in real time through the
+  production master. The agent can list, insert, bypass and set the parameters of plugins; the scan and the plugin
+  window stay with the human
 - **Sidechain**: a compressor stage can be keyed by another track, and through the agent's tools also by a group, a
   return or a DJ deck; keys that would form a cycle or arrive too late are refused with a reason. One command sets up
   Duck by Kick
 - **Sends and returns**: four returns, each with four sends per track or group and an optional Cypher Hall
+- **MIDI import**: a Standard MIDI file (format 0 or 1) becomes one track with one MIDI clip per MIDI track and
+  channel, with tempo and a preview before anything changes. The whole import is one undo step
+- **Pattern to clip**: a [Strudel](https://strudel.cc) pattern written under the piano roll becomes an ordinary MIDI
+  clip with notes and clip envelopes; nothing of Strudel runs at playback time. Generating again refuses to overwrite
+  hand edits unless asked to
 - **Merge and bounce**: merge two or more tracks into one new audio track, or bounce a track in place, to a new track
   or as a copy to paste, by an offline render of the same core. Tracks with insert stages are refused
 - **Presets**: a browser for presets of our own devices (48 factory presets, your own, collections) with names from
@@ -169,7 +184,7 @@ The lists above are the headline. Also in there:
 - **Extra pattern streams**: five more channels (erz/5 to erz/7 and the two loop box pads) can each carry a Cypher
   Modular graph, started with `djk-start --strudel --bk-stroeme`; they can be recorded onto production tracks. The
   graph knobs can be learned onto a MIDI controller, and a project remembers which graph sits on which channel
-- **The agent's side**: 76 tools in the MCP server. Besides playing it can measure a deck behind its
+- **The agent's side**: 79 tools in the MCP server. Besides playing it can measure a deck behind its
   closed fader, read the levels of the last seconds, wait on the master clock for a number of bars, run
   automation tracks and ramps over bars, and cancel everything it started. When it has an idea while the
   human plays, it proposes; the human accepts or rejects with one key
@@ -221,8 +236,11 @@ mostly against a silent test sink. Not benchmarks.
   experimental cue-suggestion pipeline is included as a separate research tool.
 - Key detection is weak on major keys (the test library is almost all minor).
 - Learning from the human's judgement is planned, not built.
-- Production: two hosted Surge XT slots. Inserts are our own devices only, no third-party plugins, and the pools are
-  small: 12 compressors, 2 EQs, 1 saturator and 1 limiter per project, at most four stages per strip. The limiter works
+- Production: two hosted instrument slots (Surge XT or a third-party plugin). The pools of our own insert devices are
+  small: 12 compressors, 2 EQs, 1 saturator and 1 limiter per project, at most four stages per strip. Third-party
+  plugins: at most four effect hosts at a time, no sidechain into a plugin, no automation or controller mapping of
+  plugin parameters, no CLAP, a multi-plugin VST3 bundle loads only its first plugin (use the LV2 version), and a
+  project with an active plugin stage takes as long to export as the song lasts. The limiter works
   on sample peaks, not true peaks, and on the master chain it sits before the production master fader. Automation lanes cover fader, pan, mute,
   solo and four RB-338 parameters, not yet insert, send or Cypher Modular parameters. Takes and comping are for audio
   tracks; bounce and merge refuse a track that has insert stages. Export

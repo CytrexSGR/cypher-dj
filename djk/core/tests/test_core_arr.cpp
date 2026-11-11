@@ -51,7 +51,7 @@ int main() {
     PRUEF(x.quittung(l1, 1) && x.quittung(l1, 3) && x.quittung(l1, 3)->sample == 11 * N);
     const int64_t s1 = x.start(0.0, 0);
     x.lauf(20 * N);
-    const int64_t einsatz = 12 * N + 2 * N + 25 + N;   // jetzt + Vorhalt (2n + 25) + ein Zyklus
+    const int64_t einsatz = 12 * N + 2 * N + N;   // jetzt + Vorhalt (2n) + ein Zyklus
     PRUEF(x.quittung(s1, 1) && x.quittung(s1, 1)->sample == 12 * N);
     PRUEF(x.quittung(s1, 2) && x.quittung(s1, 2)->sample == einsatz);
     PRUEF(arr35::Lauf::erster(x.l, 0, 20 * N) == einsatz + x.vh);
@@ -90,7 +90,7 @@ int main() {
     x.metronom(true, -6.0f, ziel);
     x.start(2.0, 0);
     x.lauf(20 * N);
-    const int64_t s = 4 * N + 2 * N + 25 + N;
+    const int64_t s = 4 * N + 2 * N + N;
     const double g = 0.5 * 0.50118723;
     if (ziel == 0) {
       PRUEF(arr35::Lauf::erster(x.l, 0, 20 * N) == s + x.vh);
@@ -189,7 +189,7 @@ int main() {
       x.laden(1, sp);
       x.lauf(2 * N);
       const int64_t s1 = x.start(0.0, 0);
-      x.lauf(3 * N);   // s1 wartet (Einsatz 2N + 2N + 25 + N)
+      x.lauf(3 * N);   // s1 wartet (Einsatz 2N + 2N + N)
       const int64_t s2 = x.start(0.0, 0);
       x.lauf(12 * N);
       PRUEF(x.quittung(s1, 1) && x.quittung(s1, 7) && x.quittung(s1, 7)->grund == "abbruch" && !x.quittung(s1, 2));

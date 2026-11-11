@@ -23,11 +23,11 @@ const mit = async (t, opt, k) => { const x = bereich(t, opt, k); await x.s.neu('
 
 // --- P5: Fassade ------------------------------------------------------------------------------------------------------------------------
 
-test('P5 Fassade: projBereich liefert zugang mit allen siebzehn Funktionen (B3: naechsteNummer; S3: ausgabeLauf, Spec 6.34; 1.8: transport, aufnahmeLauf, aufnahmeAktiv, beiStand; Slice 6: stemsStand, beiSchliessen; 1.9: wirtSpiegel), the routes stay nine plus GET /proj/warp (Paket 1.13) and GET /proj/auto (Automation Slice 1); offen() ist null ohne Projekt', (t) => {
+test('P5 Fassade: projBereich liefert zugang mit allen zweiundzwanzig Funktionen (B3: naechsteNummer; S3: ausgabeLauf, Spec 6.34; 1.8: transport, aufnahmeLauf, aufnahmeAktiv, beiStand; Slice 6: stemsStand, beiSchliessen; 1.9: wirtSpiegel; 1.11: hostZustandSichern, hostLage, hostGesundAlterMs, ladeEchtzeitSicht, ladeLiveNeu), the routes stay nine plus GET /proj/warp (Paket 1.13) and GET /proj/auto (Automation Slice 1); offen() ist null ohne Projekt', (t) => {
   const { b, z } = bereich(t);
-  for (const f of ['offen', 'arbeitsordner', 'haken', 'uebernimm', 'schreibeWiedergabe', 'naechsteNummer', 'tempoAnMaster', 'sperreLaden', 'ausgabeLauf', 'transport', 'aufnahmeLauf', 'aufnahmeAktiv', 'stemsStand', 'beiSchliessen', 'beendeVorhoeren', 'beiStand', 'wirtSpiegel']) assert.equal(typeof z[f], 'function', f);
-  assert.equal(Object.keys(z).length, 17);
-  assert.equal(b.routen().length, 23);   // 1.12 slice 3: plus uebersteuern, re_enable, arm and geste; 1.14: plus GET and POST take_vorhoeren; 1.9: plus GET kits; 1.10 T1: plus GET routing; plus GET surge_patches (the patch picker)
+  for (const f of ['offen', 'arbeitsordner', 'haken', 'uebernimm', 'schreibeWiedergabe', 'naechsteNummer', 'tempoAnMaster', 'sperreLaden', 'ausgabeLauf', 'transport', 'aufnahmeLauf', 'aufnahmeAktiv', 'stemsStand', 'beiSchliessen', 'beendeVorhoeren', 'beiStand', 'wirtSpiegel', 'hostZustandSichern', 'hostLage', 'hostGesundAlterMs', 'ladeEchtzeitSicht', 'ladeLiveNeu']) assert.equal(typeof z[f], 'function', f);
+  assert.equal(Object.keys(z).length, 22);   // plan 1.11 T7: plus hostZustandSichern; later lanes: hostLage, hostGesundAlterMs, ladeEchtzeitSicht, ladeLiveNeu
+  assert.equal(b.routen().length, 25);   // MIDI import: plus POST midi_import; 1.12 slice 3: plus uebersteuern, re_enable, arm and geste; 1.14: plus GET and POST take_vorhoeren; 1.9: plus GET kits; 1.11 T7: plus POST insert param; 1.10 T1: plus GET routing; plus GET surge_patches (the patch picker)
   assert.equal(b.name, 'proj');
   assert.equal(z.offen(), null);
   assert.equal(z.arbeitsordner(), b.sitzung.arbeitsordner);

@@ -133,6 +133,53 @@ int main() {
     PRUEF(cdj::filtere_kanten({{"w:out_L", kern + "rueck_erz_4_L"}, {kern + "midi_aus_1", "w:in"}}, kern, &res4).size() == 1 &&
           res4 == 1);
   }
+  {  // plan 1.11 T3: effect-host ports arr_ins_<h>_{L,R} (out) and arr_insret_<h>_{L,R} (in), h = 1..4
+    const std::string kern = "cypherdj-kern-d:";
+    const std::vector<cdj::Kante> gut = {{kern + "arr_ins_2_L", "x:audio-in1"},
+                                         {kern + "arr_ins_2_R", "x:audio-in2"},
+                                         {"x:audio-out1", kern + "arr_insret_2_L"},
+                                         {"x:audio-out2", kern + "arr_insret_2_R"},
+                                         {kern + "arr_ins_1_L", "x:audio-in1"},
+                                         {kern + "arr_ins_4_R", "x:audio-in2"},
+                                         {"x:audio-out1", kern + "arr_insret_4_L"}};
+    size_t res = 99;
+    PRUEF(cdj::filtere_kanten(gut, kern, &res) == gut && res == 0);
+    // error case: families not allowed (mutation CYPHERDJ_MUTATION_HOST_KANTEN_ZU) -> the accepted set above fails here
+    const std::vector<cdj::Kante> schlecht = {{kern + "arr_ins_5_L", "x:audio-in1"},        // h out of range
+                                              {kern + "arr_ins_0_L", "x:audio-in1"},
+                                              {kern + "arr_ins_10_L", "x:audio-in1"},
+                                              {"x:audio-out1", kern + "arr_insret_5_L"},
+                                              {"x:audio-out1", kern + "arr_insret_0_R"},
+                                              {kern + "arr_ins_1_X", "x:audio-in1"},         // wrong form
+                                              {kern + "arr_ins_1", "x:audio-in1"},
+                                              {"x:audio-out1", kern + "arr_insret_1_X"},
+                                              {kern + "arr_insret_1_L", "x:audio-in1"},       // input as source
+                                              {"x:audio-out1", kern + "arr_ins_1_L"},         // output as target
+                                              {kern + "arr_ins_1_L", kern + "arr_insret_1_L"},   // self loop
+                                              {kern + "arr_ins_1_L", kern + "arr_insret_2_L"},   // self loop across hosts
+                                              {kern + "master_L", kern + "arr_insret_1_L"},      // bolt
+                                              {kern + "master_L", "x:audio-in1"},                // g_aus stays refused
+                                              {kern + "cue_R", "x:audio-in1"},
+                                              {"anderer:arr_ins_1_L", "x:audio-in1"},            // foreign client
+                                              {kern + "arr_ins_1_Lxyz", "x:audio-in1"},          // suffix after L
+                                              {"x:audio-out1", kern + "arr_insret_1_Rx"}};
+    PRUEF(cdj::filtere_kanten(schlecht, kern).empty());
+    // plan 1.11 T4 pre-step B: the far end must not be a port of ANY core instance (kern_client), or the file would wire core to core across instances
+    const std::vector<cdj::Kante> kern_zu_kern = {{kern + "arr_ins_1_L", "cypherdj-kern-e:arr_insret_1_L"},
+                                                  {kern + "arr_ins_2_R", "cypherdj-kern:arr_insret_2_R"},
+                                                  {"cypherdj-kern-e:arr_ins_1_L", kern + "arr_insret_1_L"},
+                                                  {"cypherdj-kern:arr_ins_3_R", kern + "arr_insret_3_R"},
+                                                  {kern + "arr_ins_1_L", "cypherdj-kern-e:hand_in"},
+                                                  {"cypherdj-kern-e:master_L", kern + "arr_insret_1_L"}};
+    PRUEF(cdj::filtere_kanten(kern_zu_kern, kern).empty());
+    // negative control: a foreign client whose name merely starts with the core name is still a foreign client
+    PRUEF(cdj::filtere_kanten({{kern + "arr_ins_1_L", "cypherdj-kernel:in"}, {"cypherdj-kerne:out", kern + "arr_insret_1_L"}}, kern).size() == 2);
+    // negative control: the older families are untouched, rueck_erz_4 stays reserved
+    size_t res4 = 99;
+    PRUEF(cdj::filtere_kanten({{kern + "arr_midi_1", "w:in"}, {"w:out", kern + "arr_rueck_2_R"},
+                               {"w:out", kern + "rueck_erz_4_L"}, {kern + "arr_ins_1_L", "x:in"}}, kern, &res4).size() == 3 &&
+          res4 == 1);
+  }
   {  // MINOR-5: Duplikate und Obergrenze
     std::vector<cdj::Kante> v;
     for (int i = 0; i < 100; ++i) v.push_back({"q" + std::to_string(i % 80), "z"});

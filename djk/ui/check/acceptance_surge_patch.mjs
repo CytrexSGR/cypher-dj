@@ -15,7 +15,7 @@ import { spawnSync } from 'node:child_process';
 import { erzeugeApi, exportiere, kernExeStimmt, grundNoten, BPM, BEATS } from './i19_base_project.mjs';
 import { messeDatei } from './direction_measure.mjs';
 import { wirtRuf } from '../track.ts';
-import { wirtDatei, wirtLebt } from '../areas/proj/host.ts';
+import { wirtDatei, wirtLebt } from '../areas/proj/instrument_host.ts';
 
 const HIER = path.dirname(fileURLToPath(import.meta.url));
 const { values: opt } = parseArgs({ options: { url: { type: 'string' }, bau: { type: 'string' }, ausgabe: { type: 'string' }, patch: { type: 'string' }, andere: { type: 'string' } } });

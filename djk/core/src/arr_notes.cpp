@@ -1,5 +1,5 @@
 // D1 K1 Slice 6: Noten des Moduls Arrangement an Senken (Spec D1 2.2). Jede Note mit Ziel-Sample T geht im Block
-// hinaus, der T − vorhalt() der Senke enthält (Wirt: Rundweg 2n + 25, intern: 0); der Vorausblick rechnet über die
+// hinaus, der T − vorhalt() der Senke enthält (Wirt: Rundweg 2n, intern: 0); der Vorausblick rechnet über die
 // Loop-Klammer und schickt die Noten des nächsten Durchlaufs rechtzeitig. Offene Noten (On gesendet, Off ausstehend)
 // stehen in einer Liste fester Größe unabhängig vom Schnappschuss; ihr Off-Ziel ist an Naht und Stopp gekappt. Beim
 // Tausch geht das Off einer Note sofort hinaus, wenn sie fehlt, ein anderes Ende, einen anderen Ton oder eine andere
@@ -109,7 +109,7 @@ void Arrangement::noten_block(const Karte& k, int64_t s0, int m) {
 #else
     const int64_t v = se->vorhalt();
 #endif
-    // Grenze (Review K2b F6): steigt das Quantum, wächst der Vorhalt der Wirt-Senke (2n + 25) und von springt über
+    // Grenze (Review K2b F6): steigt das Quantum, wächst der Vorhalt der Wirt-Senke (2n) und von springt über
     // gesendet_bis hinaus. Note-Ein im übersprungenen Fenster [gesendet_bis, s0 + v) fallen weg (Probe 256 -> 512: 598
     // statt 600 gesendet); node.lock-quantum verhindert den Fall im Betrieb. Sinkt das Quantum, geht nichts verloren, die
     // schon gesendeten Noten kommen um die Differenz der Vorhalte zu früh (Probe 512 -> 256: höchstens 512 Samples).

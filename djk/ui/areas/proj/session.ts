@@ -13,9 +13,11 @@ import path from 'node:path';
 import type { BereichKontext } from '../../http/router.ts';
 import { Katalog, type Zeile } from '../../catalog.ts';
 import { Projekte, projektWurzelVorgabe } from '../../project/storage.ts';
-import { alleAudioClips, fuehreListeAus, laneStart, setzeDekodiert, vergleiche, type PresetInhalt } from '../../project/commands.ts';
+import { alleAudioClips, fuehreListeAus, laneStart, setzeDekodiert, vergleiche, type PluginEintrag, type PresetInhalt } from '../../project/commands.ts';
 import { findeGraph } from '../../graphs.ts';
-import { kitDa } from './kits.ts';
+import { kitDa, kitKlaenge } from './kits.ts';
+import { uebersetzeAusCache, ausCache, vorlauf, type Anfrage } from './pattern_run.ts';
+import type { MusterMeldung } from '../../project/commands.ts';
 import { SurgeSpiegel, surgeBereich } from './surge.ts';
 import { surgePatchDatei } from './surge_patches.ts';
 const surgePatchDa = (name: string): boolean => surgePatchDatei(name) !== null;
@@ -23,7 +25,7 @@ import { SURGE_RICHTUNGEN, nurFilter1, surgeParameterVon } from '../../project/d
 import { TransientenLager } from '../../project/transients.ts';
 import { DekodierCache, type DekodierEreignis } from '../../project/decode.ts';
 import {
-  HALL_FELDER, MAX_BEAT, kanonisch, sucheClip, sucheSpur, wertImBereich,
+  alleInserts, alleStraenge, HALL_FELDER, MAX_BEAT, kanonisch, sucheClip, sucheSpur, sucheStrang, wertImBereich,
   type AudioClip, type Clip, type DekodiertZustand, type Lane, type Projekt, type Spur, type Warp, type Ziel,
 } from '../../project/model.ts';
 import { laneWert } from '../../project/lane.ts';
@@ -50,6 +52,12 @@ import { GESTE_RUHE_MS } from './times.ts';
 // 1.12 slice 3 (task 8): takes into lanes
 import { AUFNAHME_ZIELE, AutoAufnahme, modusVon, type AufnahmeZiel, type AutoOptionen, type Modus } from './recording_auto.ts';
 import { bkDefVonId } from '../../project/modular.ts';
+// plan 1.11 task 7: foreign effect plugins (host manager)
+import { HostVerwaltung, insertAusfuehren, sockAnfrage, type HostAbhaengig, type HostZeiten } from '../../plugins/hostverwaltung.ts';
+import type { SicherGrund } from '../../plugins/state.ts';
+import {
+  InstrumentWirte, instrumenteStart, wirtSockAnfrage, wirtStandLesen, type InstrumentAbhaengig, type InstrumentZeiten,
+} from '../../plugins/instrumentwirte.ts';
 
 export class ProjFehler extends Error {
   readonly code: number;
@@ -81,23 +89,36 @@ export interface ProjOptionen {
   autoAufnahme?: AutoOptionen;   // 1.12 slice 3 test seam: gesture rest, mouse safety net, grace after a stop
   // 1.9 (O28): reads a preset by id for preset_anwenden (server.ts passes the preset store); absent = the command refuses
   presetLies?: (id: string) => PresetInhalt | null;
+  // plan 1.11 task 7: the host manager. `abhaengig` replaces parts of the real dependencies (djk-insert, the host socket,
+  // the core calls), `zeiten` the time scale
+  pluginIndex?: (id: string) => PluginEintrag | null;   // plan 1.11 T10: the plugin index (insert_setzen with plugin_id)
+  instrument?: { abhaengig?: Partial<InstrumentAbhaengig>; zeiten?: Partial<InstrumentZeiten> };   // plan 1.11 task 17: the plugin instrument hosts
+  host?: { abhaengig?: Partial<HostAbhaengig>; zeiten?: Partial<HostZeiten>; befehl?: string };
   uhrStillMs?: number;         // Spec 6.30: läuft /uhr so lange nicht weiter, bricht das Warten auf die Rampe ab (503 kein_kern, Vorgabe 1 s)
 }
 // merk (Spec 6.30, 6.31): was die Freeze-Sperre aufgeschoben hat und nach der letzten Freigabe nachgeholt wird. Es gehört zum offenen Projekt und
 // verfällt mit ihm: ein anderes Projekt lädt beim Öffnen ohnehin seine eigene Wiedergabe.
 interface Merk { laden: boolean; loop: boolean; tempo: boolean }
 // Spec 6.34: was GET /proj/aktuell als ausgabe_lauf zeigt, solange S3 einen Freeze oder Export fährt (Spur nur beim Freeze)
-export type AusgabeLauf = { art: 'freeze'; spur_id: string } | { art: 'export' } | { art: 'lautheit' } | { art: 'merge' }
+export type AusgabeLauf = { art: 'freeze'; spur_id: string }
+  | { art: 'export'; echtzeit?: true; start_ms?: number; dauer_s?: number } | { art: 'lautheit' } | { art: 'merge' }
   | { art: 'bounce' }   // 1.14 slice 4 (spec R11)
   | { art: 'resample'; strang_id: string };   // 1.10 slice 7 (T6): the strip being tapped
 // vorhoeren (1.14 comping, spec R8): spur_id -> take_id of the audition. Session state: never saved, never undoable, gone with the open project.
 interface Offen { slug: string; projekt: Projekt; verlauf: Verlauf; merk: Merk; vorhoeren: Map<string, string> }
 type Koerper = Record<string, unknown>;
-interface Hinweis { index: number; hinweis: string }                // Paket 1.13: z. B. kein_tempo (Auto-Warp fand kein Tempo)
+interface Hinweis { index: number; hinweis: string; [feld: string]: unknown }                // Paket 1.13: z. B. kein_tempo (Auto-Warp fand kein Tempo)
 
 const schlaf = (ms: number): Promise<void> => new Promise((ok) => setTimeout(ok, ms));
 // Baukasten S20: lookup of a graph in the graph folder for the commands that set a bk device (null = no such graph)
 const graphArt = (name: string): 'instrument' | 'effekt' | null => findeGraph(name)?.art ?? null;
+// arr-bk: the bk stages of the project whose graph file is not in the graph folder (the core plays such a stage dry and logs it): [{strang_id, stufe, graph}]
+type BkFehlt = { strang_id: string; stufe: string; graph: string };
+export function bkGraphenFehlen(p: Projekt, art: (name: string) => 'instrument' | 'effekt' | null = graphArt): BkFehlt[] {
+  return alleInserts(p).filter((x) => x.insert.art === 'bk' && art(x.insert.graph!) === null)
+    .map((x) => ({ strang_id: x.strangId, stufe: x.insert.id, graph: x.insert.graph! }));
+}
+const MAX_MUSTER_JE_AUFRUF = 8;   // strudel-clip: clip_aus_muster commands in one call (each can need a child of up to 5 s)
 const MARKER_TOLERANZ_S = 0.05;   // Rundung zwischen Katalog-Dauer und Dekodierung
 // Flache Kopie für proj_lage: MIDI-Clips tragen noten_zahl statt noten, alles andere wird geteilt (nur lesen, nicht verändern)
 // Paket 1.13: ein Audio-Clip zeigt seinen Warp ohne Marker-Liste (marker_zahl; die Marker liest proj_warp)
@@ -109,11 +130,12 @@ const warpKurz = (w: Warp): unknown => {
 // without a lane the shape stays as before
 // 1.12 slice 3 (task 4): ueber(spur id, ziel) marks a lane the hand overrides (`uebersteuert: true`, absent otherwise)
 type UeberFrage = (spurId: string, ziel: string) => boolean;
-const ohneLanePunkte = (s: Spur, ueber?: UeberFrage): Omit<Spur, 'automation'> & { lanes?: unknown } => {
+// 1.12 slice 6: a group, a return and the master carry lanes too (insert and rack lanes), shown the same way; `id` is the strip's ID ('master' for the master)
+const ohneLanePunkte = <T extends { automation?: Lane[] }>(s: T, id: string, ueber?: UeberFrage): Omit<T, 'automation'> & { lanes?: unknown } => {
   const { automation, ...rest } = s;
   return automation?.length
     ? { ...rest, lanes: automation.map((l) => ({ id: l.id, ziel: l.ziel, punkte_zahl: l.punkte.length, ...(l.gesperrt ? { gesperrt: true } : {}),
-      ...(ueber?.(s.id, l.ziel) ? { uebersteuert: true } : {}) })) }
+      ...(ueber?.(id, l.ziel) ? { uebersteuert: true } : {}) })) }
     : rest;
 };
 // S17: the sound snapshot shows only {kanal, graph} (the values come with proj_bk lage)
@@ -132,8 +154,12 @@ export const hkKurz = <T extends { huellkurven?: Huellkurve[] }>(c: T): Omit<T, 
       ...(h.verknuepft === false ? { verknuepft: false } : {}), ...(h.loop_beats !== undefined ? { loop_beats: h.loop_beats } : {}) })) }
     : rest;
 };
-const ohneNoten = (p: Projekt, ueber?: UeberFrage): unknown => ({ ...p, ...bkKurz(p), spuren: p.spuren.map((s) => ({
-  ...ohneTakes(ohneLanePunkte(s, ueber)), clips: s.clips.map((c) => {
+const ohneNoten = (p: Projekt, ueber?: UeberFrage): unknown => ({ ...p, ...bkKurz(p),
+  ...(p.gruppen?.some((g) => g.automation) ? { gruppen: p.gruppen.map((g) => ohneLanePunkte(g, g.id, ueber)) } : {}),
+  ...(p.returns?.some((r) => r.automation) ? { returns: p.returns.map((r) => ohneLanePunkte(r, r.id, ueber)) } : {}),
+  ...(p.master?.automation ? { master: ohneLanePunkte(p.master, 'master', ueber) } : {}),
+  spuren: p.spuren.map((s) => ({
+  ...ohneTakes(ohneLanePunkte(s, s.id, ueber)), clips: s.clips.map((c) => {
   if (c.art === 'audio') return c.warp ? { ...hkKurz(c), warp: warpKurz(c.warp) } : hkKurz(c);
   const { noten, ...rest } = hkKurz(c);
   return { ...rest, noten_zahl: noten.length };
@@ -239,12 +265,47 @@ export class ProjSitzung {
 
   private readonly presetLies: ProjOptionen['presetLies'];   // 1.9 (O28)
   private readonly surge: SurgeSpiegel;                        // 1.9 U5: the Surge parameter map of the project mirrored into the hosts
+  private readonly pluginIndex: ProjOptionen['pluginIndex'];
+  readonly instrumente: InstrumentWirte;                         // plan 1.11 task 17: the foreign instrument hosts (plugin tracks)
+  readonly hosts: HostVerwaltung;                                // plan 1.11 task 7: the foreign effect hosts
+  // a host slot never changes strips inside one playback load (kern contract, task 4): what the last written playback holds per slot, when a slot was
+  // released, and what the next load has to do first (key: the number of the playback file)
+  private hostBelegt = new Map<number, string>();
+  private readonly hostFreiMs = new Map<number, number>();
+  private readonly hostFreiLatenz = new Map<number, number>();   // samples of the stage that last left a slot
+  private readonly hostVorab = new Map<number, { zwischen: number | null; konflikt: number[]; eintritt: number[]; geraeumt: number[];
+    span: Map<number, number> }>();
 
   constructor(ctx: BereichKontext, opt: ProjOptionen = {}) {
     const instanz = opt.instanz ?? process.env.CYPHERDJ_INSTANZ ?? '';
     this.ctx = ctx;
     this.presetLies = opt.presetLies;
-    this.surge = new SurgeSpiegel({ ordner: opt.wirtOrdner, log: (e) => ctx.log(e) });
+    this.pluginIndex = opt.pluginIndex;
+    this.surge = new SurgeSpiegel({ ordner: opt.wirtOrdner, log: (e) => ctx.log(e), slotBereit: (slot) => this.instrumente.slotFertig(slot) });
+    this.hosts = new HostVerwaltung({
+      insert: (a) => insertAusfuehren(a, instanz, opt.host?.befehl),
+      sock: sockAnfrage,
+      // the flag and the measurement go out as `leitstand`: Stop Cypher never holds them back (a `cypher` source would be refused ki_gestoppt)
+      kern: {
+        insHost: async (h, g) => { ctx.sende('/k/arr/ins_host', { quelle: 'leitstand', h, gesund: g }); },
+        insMess: (h) => { ctx.sende('/k/arr/ins_mess', { quelle: 'leitstand', h }); },
+      },
+      ordner: () => (this.offen ? path.resolve(this.projekte.wurzelPfad, this.offen.slug) : null),
+      transportSteht: () => this.lage.arr !== null && this.lage.arr.status === 0,
+      neuLaden: () => this.hostNeuLaden(),
+      log: (z) => ctx.log(z),
+      ...opt.host?.abhaengig,
+    }, opt.host?.zeiten);
+    // without a status folder (a session that was not given one) no instrument host is ever started
+    const wo = opt.wirtOrdner;
+    this.instrumente = new InstrumentWirte({
+      start: wo ? instrumenteStart(instanz) : async () => ({ code: 1, fehler: 'no host folder' }),
+      stand: (slot) => (wo ? wirtStandLesen(wo(), slot) : { lebt: false, bereit: false, art: null, kennung: null, pid: null }),
+      sock: wo ? wirtSockAnfrage(wo) : async () => { throw new Error('sock_verbindung: no host folder'); },
+      ordner: () => (this.offen ? path.resolve(this.projekte.wurzelPfad, this.offen.slug) : null),
+      log: (z) => ctx.log(z),
+      ...opt.instrument?.abhaengig,
+    }, opt.instrument?.zeiten);
     this.kern = new KernWeg(ctx, this.lage, opt.kernWeg);
     this.bk = new ProjBk(ctx, this.lage, this.kern, opt.bkFristMs ?? 5000);
     this.projekte = new Projekte(opt.wurzel ?? projektWurzelVorgabe(instanz));
@@ -343,13 +404,123 @@ export class ProjSitzung {
     // Slice 3a (T8): laufende Analysen dieses Projekts, flüchtig (nie im Projekt); nur wenn welche laufen, damit sich sonst nichts an der Antwort ändert
     const an = this.analysen?.stand(o.slug) ?? [];
     const limiter = a && Number.isFinite(a.limiter_db) ? { limiter_db: a.limiter_db } : {};   // D12: absent without core state or from an older core
-    const kern = { rev_geladen: a ? a.nr : null, status: a ? a.status : null, ...limiter };
+    const kern = { rev_geladen: a ? a.nr : null, status: a ? a.status : null, ...limiter, ...(this.lage.insHost ? { ins_host: this.lage.insHost } : {}) };
     // the page (full view) learns the overridden fields from here after a reload (D8); only present when something is overridden
     const ueber = ansicht === 'voll' ? this.uebersteuertListe(o.projekt) : [];
     return { code: 200, j: { slug: o.slug, projekt, kern, ...lauf, ...(an.length ? { analyse: an } : {}),
       ...(o.vorhoeren.size ? { vorhoeren: Object.fromEntries(o.vorhoeren) } : {}),
+      // plugins: the T7 name; hosts: the name the plan, the page and proj_lage use
+      ...(this.hosts.lage().length ? { plugins: this.hosts.lage(), hosts: this.hosts.lage() } : {}),
+      ...(this.instrumente.lage().length ? { instrumente: this.instrumente.lage() } : {}),
       ...(ueber.length ? { auto_uebersteuert: ueber } : {}), ...(this.aufAuto.istArm() ? { auto_arm: this.aufAuto.ansicht() } : {}),
       ...(this.stemsStand && this.stemsStand.slug === o.slug ? { stems: this.stemsStand } : {}) } };
+  }
+  // POST /proj/insert/<insert_id>/param {werte: {<index>: 0..1}} (plan 1.11 D3): a plugin knob goes straight to the host.
+  // It is no command: no history entry, no project write, not queued behind a playback load. Stop Cypher blocks the source cypher.
+  async insertParam(insertId: string, d: Koerper, quelle: Quelle): Promise<Antwort> {
+    this.riegel(quelle);
+    const o = this.brauchOffen();
+    const t = alleInserts(o.projekt).find((x) => x.insert.id === insertId);
+    if (!t || t.insert.art !== 'host') throw new ProjFehler(404, 'insert_unbekannt');
+    const roh = d.werte;
+    if (roh === null || typeof roh !== 'object' || Array.isArray(roh) || Object.keys(roh).length < 1 || Object.keys(roh).length > 256) {
+      throw new ProjFehler(400, 'argument_ungueltig', { text: 'werte: an object {index: 0..1} with 1 to 256 entries is required' });
+    }
+    const werte: Record<string, number> = {};
+    for (const [k, v] of Object.entries(roh as Record<string, unknown>)) {
+      if (!/^\d{1,5}$/.test(k) || typeof v !== 'number' || !Number.isFinite(v)) {
+        throw new ProjFehler(400, 'argument_ungueltig', { text: 'werte: every key is a parameter index and every value a number from 0 to 1' });
+      }
+      werte[k] = v;
+    }
+    const r = await this.hosts.param(insertId, werte);
+    if (!r.ok) {
+      if (r.fehler === 'wert_ungueltig') throw new ProjFehler(400, 'argument_ungueltig', { text: 'werte: a value the plugin host refused' });
+      throw new ProjFehler(r.fehler === 'param_unbekannt' ? 404 : 409, r.fehler);
+    }
+    return { code: 200, j: { ok: true, werte: r.werte } };
+  }
+  // GET /proj/insert/<insert_id>/parameter (plan 1.11 T10): the host's parameter list joined with the current values
+  async insertParameter(insertId: string): Promise<Antwort> {
+    const o = this.brauchOffen();
+    const t = alleInserts(o.projekt).find((x) => x.insert.id === insertId);
+    if (!t || t.insert.art !== 'host') throw new ProjFehler(404, 'insert_unbekannt');
+    const r = await this.hosts.parameter(insertId);
+    if (!r.ok) throw new ProjFehler(409, r.fehler);
+    return { code: 200, j: { insert_id: insertId, parameter: r.parameter } };
+  }
+  // POST /proj/insert/<insert_id>/fenster {an} (plan 1.11 T15, D4/D8): the plugin's own window; Andreas' hand only
+  async insertFenster(insertId: string, d: Koerper, quelle: Quelle): Promise<Antwort> {
+    if (quelle !== 'andreas') throw new ProjFehler(403, 'nur_andreas');
+    const o = this.brauchOffen();
+    const t = alleInserts(o.projekt).find((x) => x.insert.id === insertId);
+    if (!t || t.insert.art !== 'host') throw new ProjFehler(404, 'insert_unbekannt');
+    if (typeof d.an !== 'boolean') throw new ProjFehler(400, 'argument_ungueltig', { text: 'an: true or false is required' });
+    const r = await this.hosts.fenster(insertId, d.an);
+    if (!r.ok) throw new ProjFehler(409, r.fehler);
+    return { code: 200, j: { ok: true, fenster: r.fenster } };
+  }
+  // plan 1.11 task 17: parameters and window of the plugin instrument of a track (GET .../geraet/parameter, POST .../geraet/param, POST .../geraet/fenster)
+  private pluginSpur(spurId: string): void {
+    const o = this.brauchOffen();
+    const g = sucheSpur(o.projekt, spurId)?.geraet;
+    if (!g || g.art !== 'wirt' || g.name !== 'plugin') throw new ProjFehler(404, 'spur_unbekannt');
+  }
+  async geraetParam(spurId: string, d: Koerper, quelle: Quelle): Promise<Antwort> {
+    this.riegel(quelle);
+    this.pluginSpur(spurId);
+    const roh = d.werte;
+    if (roh === null || typeof roh !== 'object' || Array.isArray(roh) || Object.keys(roh).length < 1 || Object.keys(roh).length > 256) {
+      throw new ProjFehler(400, 'argument_ungueltig', { text: 'werte: an object {index: 0..1} with 1 to 256 entries is required' });
+    }
+    const werte: Record<string, number> = {};
+    for (const [k, v] of Object.entries(roh as Record<string, unknown>)) {
+      if (!/^\d{1,5}$/.test(k) || typeof v !== 'number' || !Number.isFinite(v)) {
+        throw new ProjFehler(400, 'argument_ungueltig', { text: 'werte: every key is a parameter index and every value a number from 0 to 1' });
+      }
+      werte[k] = v;
+    }
+    const r = await this.instrumente.param(spurId, werte);
+    if (!r.ok) {
+      if (r.fehler === 'wert_ungueltig') throw new ProjFehler(400, 'argument_ungueltig', { text: 'werte: a value the plugin host refused' });
+      throw new ProjFehler(r.fehler === 'param_unbekannt' ? 404 : 409, r.fehler);
+    }
+    return { code: 200, j: { ok: true, werte: r.werte } };
+  }
+  async geraetParameter(spurId: string): Promise<Antwort> {
+    this.pluginSpur(spurId);
+    const r = await this.instrumente.parameter(spurId);
+    if (!r.ok) throw new ProjFehler(409, r.fehler);
+    return { code: 200, j: { spur_id: spurId, parameter: r.parameter } };
+  }
+  async geraetFenster(spurId: string, d: Koerper, quelle: Quelle): Promise<Antwort> {
+    if (quelle !== 'andreas') throw new ProjFehler(403, 'nur_andreas');
+    this.pluginSpur(spurId);
+    if (typeof d.an !== 'boolean') throw new ProjFehler(400, 'argument_ungueltig', { text: 'an: true or false is required' });
+    const r = await this.instrumente.fenster(spurId, d.an);
+    if (!r.ok) throw new ProjFehler(409, r.fehler);
+    return { code: 200, j: { ok: true, fenster: r.fenster } };
+  }
+  hostLage(): ReturnType<HostVerwaltung['lage']> { return this.hosts.lage(); }
+  hostZustandSichern(grund: SicherGrund): Promise<void> {
+    return Promise.all([this.hosts.zustandSichern(grund), this.instrumente.zustandSichern(grund)]).then(() => undefined);
+  }
+  hostGesundAlterMs(nur?: ReadonlySet<string>): number { return this.hosts.gesundAlterMs(nur); }
+  // plan 1.11 task 13: the real-time export plays `p` (host stages live, nothing frozen) as its own playback: written with the next number of the one
+  // counter and loaded now. The caller holds sperreLaden and calls ladeLiveNeu() afterwards.
+  async ladeEchtzeitSicht(p: Projekt): Promise<{ nr: number; datei: string }> {
+    const nr = this.zaehler.naechste();
+    const datei = schreibeWiedergabe(this.arbeitsordner, this.uebersetzeFuer(p, nr, undefined, true));
+    const q = await this.kern.laden(nr, 'andreas');
+    if (quittungAbgelehnt(q)) {
+      fs.rmSync(datei, { force: true });
+      throw new ProjFehler(409, q.grund || 'nicht_geladen', { kern: { wiedergabe: { nr, quittung: q } } });
+    }
+    return { nr, datei };
+  }
+  // the live view again (what the core played before the real-time export)
+  ladeLiveNeu(): Promise<void> {
+    return this.seriell(async () => { if (this.offen) await this.ladeWiedergabe('andreas'); });
   }
   // zeit in Millisekunden seit 1970 (Festlegung V1, Seite rechnet damit), volle Liste
   verlaufListe(): Antwort {
@@ -418,15 +589,16 @@ export class ProjSitzung {
     if (!laneId && !spurId) throw new ProjFehler(400, 'argument_ungueltig', { text: 'lane_id, spur_id or clip_id is required' });
     const grenze = max ?? AUTO_PUNKTE_VORGABE;
     if (laneId) {
-      for (const s of o.projekt.spuren) {
-        const l = (s.automation ?? []).find((x) => x.id === laneId);
-        if (l) return { code: 200, j: laneAnsicht(s.id, l, von, bis, bei, grenze) };
+      for (const { strang, strangId } of alleStraenge(o.projekt)) {   // 1.12 slice 6: a lane may sit on a group, a return or the master
+        const l = (strang.automation ?? []).find((x) => x.id === laneId);
+        if (l) return { code: 200, j: laneAnsicht(strangId, l, von, bis, bei, grenze) };
       }
       throw new ProjFehler(404, 'lane_unbekannt');
     }
-    const s = sucheSpur(o.projekt, spurId!);
+    const s = sucheStrang(o.projekt, spurId!);   // a track, group, return or 'master'
     if (!s) throw new ProjFehler(404, 'spur_unbekannt');
-    return { code: 200, j: { spur_id: s.id, lanes: (s.automation ?? []).map((l) => laneAnsicht(s.id, l, von, bis, bei, grenze)) } };
+    const sid = s === o.projekt.master ? 'master' : (s as { id: string }).id;
+    return { code: 200, j: { spur_id: sid, lanes: (s.automation ?? []).map((l) => laneAnsicht(sid, l, von, bis, bei, grenze)) } };
   }
 
   // --- S17: sound snapshot ------------------------------------------------------------------------------------------------
@@ -512,6 +684,8 @@ export class ProjSitzung {
     this.gleicheDekodiertAb(projekt, true);
     this.offen = { slug, projekt, verlauf: o.verlauf, merk: { laden: false, loop: false, tempo: false }, vorhoeren: new Map() };
     this.meldeStand(this.offen);               // 1.8 S3 (D13): the core follows the opened project (tracks of the one before are disarmed)
+    this.hosts.abgleich(projekt);              // plan 1.11 task 7: the hosts start in the background; open never waits for one
+    this.instrumente.abgleich(projekt);        // plan 1.11 task 17: the same for the plugin instrument hosts
     void this.surge.gleiche(projekt, true);                       // 1.9 U5: the Surge map of the opened project goes to the hosts (all entries)
     // AK34 / D6: a project open or new ends every override in the core (the override is never part of a project); the mirror starts empty
     this.uebersteuert.clear();
@@ -543,13 +717,20 @@ export class ProjSitzung {
     this.rueckwegSpeichern();                                            // Spec 6.30: wartende Rückweg-Werte gehören diesem Projekt
     if (this.lage.arr && (this.lage.arr.status === 1 || this.lage.arr.status === 2)) await this.kern.stopp(quelle);
     this.rueckwegSpeichern();                                            // Spec 6.31: auch, was während des Stopps kam (nach dem letzten await)
+    await this.hostZustandSichern('schliessen');                         // plan 1.11 D8: the plugin states of the closing project (at most 3 s)
     this.transportQuelle = null;
     this.offen = null;
+    this.hosts.abgleich(null);                                           // the hosts of the closed project stop in the background
+    this.instrumente.abgleich(null);                                     // first: the swap back to Surge is queued before the mirror asks for the slot
     void this.surge.gleiche(null);                                       // 1.9 U5: the hosts go back to the values they had before this project's entries
     try { o.verlauf.schliesse(); } catch (e) { this.ctx.log({ typ: 'proj_verlauf_fehler', slug: o.slug, fehler: (e as Error).message }); }
   }
   // Beim Beenden des Servers: ausstehenden Mixer-Eintrag schreiben, Sperre freigeben
+  // plan 1.11 D8: the server ends: the plugin states are written first (at most 3 s), then schliesse()
+  async beende(): Promise<void> { await Promise.all([this.hosts.beende(), this.instrumente.beende()]); }
   schliesse(): void {
+    this.hosts.halt();
+    this.instrumente.halt();
     this.aufAuto.beende();
     this.analysen?.stoppe();
     if (this.rueckwegTimer) { clearTimeout(this.rueckwegTimer); this.rueckwegTimer = null; }
@@ -581,8 +762,9 @@ export class ProjSitzung {
     const nurHand = erz4 && !wiederanlauf && quelle === 'cypher'
       ? ERZ4_NUR_HAND.filter((r) => { const ist = this.lage.reglerWert(r.pfad); return ist !== null && ist !== r.wert; })
       .map((r) => ({ pfad: r.pfad, soll: r.wert, ist: this.lage.reglerWert(r.pfad) })) : [];
+    const bkFehlt = bkGraphenFehlen(o.projekt);   // arr-bk: a stage whose graph file is gone plays dry; the answer says which
     return { wiedergabe, regler: regler.ergebnis.length, regler_nicht_gesendet: regler.nicht_gesendet, ...reglerBefund(regler.ergebnis),
-      loop, metronom, ki, erz4_nur_hand: nurHand };
+      loop, metronom, ki, erz4_nur_hand: nurHand, ...(bkFehlt.length > 0 ? { bk_graph_fehlt: bkFehlt } : {}) };
   }
 
   // Spec 6.21: gleicht /zustand/arr.nr der wiedergabe_rev des Projekts, spielt der Kern genau dessen letzte Wiedergabe. Kennt der Server den
@@ -638,7 +820,7 @@ export class ProjSitzung {
     if (typeof nr !== 'number') return nr;
     this.speichereStand(o);
     const ladeNr = this.schreibeVorhoerWiedergabe(o.projekt, vorhoeren ?? o.vorhoeren) ?? nr;
-    return { nr: ladeNr, quittung: await this.kern.laden(ladeNr, quelle) };
+    return { nr: ladeNr, quittung: await this.ladeNr(ladeNr, quelle, nr) };
   }
   // 1.14 comping (R8): while an audition is on, the core plays a second file next to the main playback. The main playback is written as always and is
   // the only one that becomes p.wiedergabe_rev (restart guard: a core restart and a page-server restart both fall back to it). The audition file
@@ -659,16 +841,62 @@ export class ProjSitzung {
     }
   }
   // The one place that sets the translator options of the live playback and of the export paths; only the live ones pass `vorhoeren`.
-  private uebersetzeFuer(p: Projekt, nr: number, vorhoeren?: ReadonlyMap<string, string>): Wiedergabe {
+  // `live`: the playback goes to the core (the host stages are written from the host manager); the export paths write no host stage as ready
+  private uebersetzeFuer(p: Projekt, nr: number, vorhoeren?: ReadonlyMap<string, string>, live = true, ohneHost?: ReadonlySet<number>): Wiedergabe {
+    const ohne = new Set([...(ohneHost ?? []), ...this.hosts.ausgelassen()]);   // plus the stages whose latency the core would refuse (latenz_zu_gross)
     return uebersetze(p, { nr, audioOrdner: path.join(this.arbeitsordner, 'audio'), frames: (sha) => this.cache.frames(sha), transienten: this.transienten,
-      arbeitsordner: this.arbeitsordner, ...(vorhoeren ? { vorhoeren } : {}) });
+      arbeitsordner: this.arbeitsordner, ...(vorhoeren ? { vorhoeren } : {}),
+      ...(live ? { host: (slot: number) => this.hosts.stufe(slot), ...(ohne.size ? { ohneHost: ohne } : {}) } : {}) });
+  }
+  // plan 1.11 task 7: the host manager asks for a new playback (a host became ready, failed or changed its latency)
+  private hostNeuLaden(): void {
+    void this.seriell(async () => {
+      const o = this.offen;
+      if (!o) return;
+      if (this.sperren > 0) { o.merk.laden = true; return; }
+      const w = await this.ladeWiedergabe('andreas');
+      if (typeof w.nr !== 'number') this.ctx.log({ typ: 'host_neu_laden_abgelehnt', fehler: w.fehler });
+      const q = w.quittung as { status: number; grund: string } | null | undefined;
+      if (q && [4, 6, 7, 8].includes(q.status)) this.hosts.ladeAbgelehnt(q.grund);   // pdc_zu_lang: the stage with the most latency leaves the playback
+    }).catch((e) => this.ctx.log({ typ: 'host_neu_laden_fehler', fehler: (e as Error).message }));
+  }
+  // The host slot -> strip map of a project, and the loads a change needs: an entry into a slot another strip held in the last playback (or released
+  // less than `latenz + 480` samples ago) waits for a load without that stage first (removal in one load, entry in a later one).
+  private hostBelegung(p: Projekt): Map<number, string> {
+    return new Map(alleInserts(p).filter((x) => x.insert.art === 'host').map((x) => [x.insert.slot, x.strangId] as const));
+  }
+  private async ladeNr(ladeNr: number, quelle: Quelle, schluessel: number = ladeNr): Promise<Quittung> {
+    const v = this.hostVorab.get(schluessel);
+    this.hostVorab.delete(schluessel);
+    if (v) {
+      if (v.zwischen !== null) {
+        await this.kern.laden(v.zwischen, quelle);
+        for (const s of v.konflikt) this.hostFreiMs.set(s, Date.now());
+      }
+      const warte = Math.max(0, ...v.eintritt.map((s) => (this.hostFreiMs.get(s) ?? -Infinity) + (v.span.get(s) ?? 0) - Date.now()));
+      if (warte > 0) await schlaf(warte);
+    }
+    const q = await this.kern.laden(ladeNr, quelle);
+    if (v) for (const s of v.geraeumt) this.hostFreiMs.set(s, Date.now());
+    return q;
   }
   // Wiedergabe-Datei zum Stand p mit der nächsten Nummer schreiben und p.wiedergabe_rev setzen (ohne Speichern, ohne Laden). Gibt die Nummer zurück
   // oder, wenn der Übersetzer ablehnt, {nr: null, fehler, text}.
   private schreibeNeueWiedergabe(p: Projekt): number | Record<string, unknown> {
+    // plan 1.11 task 7: a host slot that would change strips inside this load: first a playback without the entering stage, then this one
+    const neuB = this.hostBelegung(p), konflikt = [...neuB].filter(([s, st]) => this.hostBelegt.has(s) && this.hostBelegt.get(s) !== st).map(([s]) => s);
+    const eintritt = [...neuB.keys()].filter((s) => this.hostBelegt.get(s) !== neuB.get(s) || this.hostFreiMs.has(s));
+    const geraeumt = [...this.hostBelegt.keys()].filter((s) => !neuB.has(s) || konflikt.includes(s));
+    // samples -> ms, with a margin
+    // the entry wait follows the latency of the stage that LEFT the slot (the one in the hosts map before the abgleich), not of the entering one
+    for (const s of geraeumt) this.hostFreiLatenz.set(s, this.hosts.stufe(s).latenz);
+    const span = new Map([...neuB.keys(), ...geraeumt].map((s) => [s, ((this.hostFreiLatenz.get(s) ?? this.hosts.stufe(s).latenz) + 480) / 48 + 30] as const));
+    this.hosts.extrasSetzen(p);
+    const zwischenNr = konflikt.length ? this.zaehler.naechste() : null;
     const nr = this.zaehler.naechste();
     let w;
     try {
+      if (zwischenNr !== null) schreibeWiedergabe(this.arbeitsordner, this.uebersetzeFuer(p, zwischenNr, undefined, true, new Set(konflikt)));
       w = this.uebersetzeFuer(p, nr);                                       // Spec 6.14, 6.29: freeze.datei ist relativ zum Arbeitsordner
     } catch (e) {
       if (e instanceof WiedergabeFehler) {
@@ -679,6 +907,8 @@ export class ProjSitzung {
     }
     schreibeWiedergabe(this.arbeitsordner, w);
     p.wiedergabe_rev = nr;
+    this.hostBelegt = neuB;
+    if (neuB.size || geraeumt.length || this.hostFreiMs.size) this.hostVorab.set(nr, { zwischen: zwischenNr, konflikt, eintritt, geraeumt, span });
     return nr;
   }
   // Für vollziehe, unmittelbar vor der einen Speicherung: während der Freeze-Sperre (Spec 6.23, 6.30) merken statt schreiben, sonst die Wiedergabe
@@ -791,7 +1021,8 @@ export class ProjSitzung {
       const davor = bisher.filter((v) => v !== null);
       if (davor.length === 0) return projekt;
       try {
-        return fuehreListeAus(projekt, davor, { transienten: this.transienten, graphArt, kitDa, presetLies: this.presetLies, surgeBereich }).projekt;
+        return fuehreListeAus(projekt, davor, { transienten: this.transienten, graphArt, kitDa, presetLies: this.presetLies, surgeBereich,
+          musterUebersetze: uebersetzeAusCache, kitKlaenge }).projekt;
       } catch { return projekt; }
     };
     const loese = (b: unknown, index: number): unknown => {
@@ -895,7 +1126,7 @@ export class ProjSitzung {
       const x = b as Koerper;
       if (x?.befehl !== 'geraet_richtung' || typeof x.spur_id !== 'string' || typeof x.wort !== 'string') continue;
       const g = sucheSpur(p, x.spur_id)?.geraet;
-      if (g?.art !== 'wirt') continue;
+      if (g?.art !== 'wirt' || g.name !== 'surge') continue;
       if (Object.hasOwn(SURGE_RICHTUNGEN, x.wort) && nurFilter1(x.wort)) filterSlots.add(g.slot);
       for (const n of surgeParameterVon(x.wort)) if (!Object.hasOwn(g.parameter ?? {}, n)) noetig.set(g.slot, (noetig.get(g.slot) ?? new Set<string>()).add(n));
     }
@@ -930,6 +1161,7 @@ export class ProjSitzung {
       o.verlauf.pruefeMeta(meta);
       const { befehle, quellen, hinweise, wuensche } = this.loeseQuellenAuf(d.befehle, o.projekt);
       const alt = o.projekt;
+      const musterBerichte: MusterMeldung[] = [];
       if (befehle.length === 0) {                                   // Slice 3a: alles war ein warp_auto, das nur eine Analyse anstieß
         this.starteAnalysen(o, quelle, wuensche, alt);
         return { code: 200, j: { rev: alt.rev, projekt: alt, hinweise } };
@@ -940,13 +1172,17 @@ export class ProjSitzung {
       this.pruefeAufnahmeSpuren(o.projekt, befehle);
       // 1.9 U5: a direction word on a Surge track starts from what the host plays now; read before the (synchronous) command run
       const surgeIst = await this.surgeIstFuer(o.projekt, befehle);
+      await this.musterVorlauf(befehle, o.projekt);               // strudel-clip: the children run here, async; the command run below only reads the cache
       // the host read is an await: a writer outside the queue (uebernimm: freeze, export, recording, stems) can have replaced the project meanwhile;
       // the caller's rev is checked again (spec 6.31), and the open project must still be the one this call started with
       if (this.offen !== o) throw new ProjFehler(409, 'projekt_gewechselt');
       this.pruefeRev(o, d.rev);
       // quelle: Herkunft für spur_neu (Spec 6.22)
       const probe = fuehreListeAus(o.projekt, befehle, { quelle, transienten: this.transienten, graphArt, kitDa, presetLies: this.presetLies, surgeBereich,
-        surgePatchDa,        ...(surgeIst ? { surgeIst: surgeIst.ist, surgeFilter1An: surgeIst.filter1An } : {}) });
+        surgePatchDa, pluginDa: (pl) => pl.format !== 'vst3' || fs.existsSync(pl.pfad),
+        musterUebersetze: uebersetzeAusCache, kitKlaenge, musterMeldung: (m) => musterBerichte.push(m),
+        ...(this.pluginIndex ? { pluginIndex: this.pluginIndex } : {}),
+        ...(surgeIst ? { surgeIst: surgeIst.ist, surgeFilter1An: surgeIst.filter1An } : {}) });
       if (probe.vor.length === 0) {
         this.starteAnalysen(o, quelle, wuensche, alt);
         return { code: 200, j: { rev: o.projekt.rev, projekt: o.projekt, ...(hinweise.length ? { hinweise } : {}) } };
@@ -961,9 +1197,42 @@ export class ProjSitzung {
       const antwort = await this.vollziehe(o, quelle, probe.regler_aenderungen,
         (h) => aendere(o.verlauf, projekt, befehle as never, meta, h, { ergebnis: probe }), quellen, probe.betrifft_wiedergabe);
       if (antwort.code === 200) this.starteAnalysen(o, quelle, wuensche, alt);
-      const alle = antwort.code === 200 ? [...hinweise, ...this.einsRueckweg(o, d.befehle, quelle)] : hinweise;
-      return alle.length && antwort.code === 200 ? { code: 200, j: { ...(antwort.j as object), hinweise: alle } } : antwort;
+      const alle = antwort.code === 200 ? [...hinweise, ...(probe.hinweise ?? []), ...this.einsRueckweg(o, d.befehle, quelle)] : hinweise;
+      const mitMuster = (j: object): object => (musterBerichte.length ? { ...j, muster: musterBerichte } : j);   // strudel-clip: one report per generated clip
+      return antwort.code === 200 && (alle.length || musterBerichte.length)
+        ? { code: 200, j: mitMuster(alle.length ? { ...(antwort.j as object), hinweise: alle } : (antwort.j as object)) } : antwort;
     });
+  }
+  // strudel-clip: the Strudel side of every clip_aus_muster is evaluated in child processes BEFORE the synchronous command run, asynchronously, so the
+  // server thread never waits for a pattern. First the patterns that are known from the list itself (in parallel, at most MUSTER_KINDER_MAX at a time),
+  // then a dry run of the list finds those that depend on earlier commands of the same list (a clip_id whose length an earlier command changes); each
+  // round evaluates what the dry run found missing, until it finds nothing. Every outcome (answer, time limit, crash) is cached, so the real run only reads.
+  private async musterVorlauf(befehle: unknown[], projekt: Projekt): Promise<void> {
+    const muster = befehle.filter((b) => (b as Koerper)?.befehl === 'clip_aus_muster');
+    if (muster.length === 0) return;
+    if (muster.length > MAX_MUSTER_JE_AUFRUF) {
+      throw new ProjFehler(400, 'argument_ungueltig', { text: `at most ${MAX_MUSTER_JE_AUFRUF} clip_aus_muster commands in one call` });
+    }
+    const bekannt: Anfrage[] = [];
+    for (const b of muster) {
+      const x = b as Koerper;
+      const g = typeof x.clip_id === 'string' ? sucheClip(projekt, x.clip_id) : undefined;
+      const code = typeof x.code === 'string' ? x.code : g?.clip.art === 'midi' ? g.clip.muster?.code : undefined;
+      const takte = typeof x.takte === 'number' ? x.takte : g ? g.clip.laenge_beats / 4 : null;
+      if (typeof code === 'string' && code.trim() !== '' && code.length <= 8192 && (takte === null || (Number.isFinite(takte) && takte > 0))) {
+        bekannt.push({ code, takte });
+      }
+    }
+    await vorlauf(bekannt);
+    for (let runde = 0; runde <= MAX_MUSTER_JE_AUFRUF; runde++) {
+      const fehlend: Anfrage[] = [];
+      try {
+        fuehreListeAus(projekt, befehle, { transienten: this.transienten, graphArt, kitDa, presetLies: this.presetLies, surgeBereich, kitKlaenge,
+          musterUebersetze: (a) => { const r = ausCache(a); if (!r) fehlend.push(a); return r ?? uebersetzeAusCache(a); } });
+      } catch { /* the real run reports its own refusals; here only the missing patterns count */ }
+      if (fehlend.length === 0) return;
+      await vorlauf(fehlend);
+    }
   }
   // Slice 3b (D3, F6): Set 1.1.1 Here geht als Zeile art = eins in die Korrekturen des Decks, wenn der Bestand den Track kennt. Das Projekt ist da
   // schon geändert; ein Schreibfehler kippt es nicht, er kommt als Hinweis eins_rueckweg_fehler. Ohne Rückweg sagt eins_nur_hier, dass nur der Clip
@@ -1121,6 +1390,7 @@ export class ProjSitzung {
     o.projekt = neu;
     this.meldeStand(o);                        // 1.8 S3 (D13): also the way of undo and redo
     if (vorab.vorhoeren) this.setzeVorhoeren(o, vorab.vorhoeren);
+    this.instrumente.abgleich(neu);                                        // plan 1.11 task 17: before the Surge mirror (it waits for a swapped slot)
     void this.surge.gleiche(neu);                                          // 1.9 U5: command, undo and redo (no await: the hosts answer in their own time)
     const kern: Record<string, unknown> = {};
     if (gesetzt.length) kern.regler = gesetzt.some((r) => r.quittung === null) ? 'kein_kern' : 'ok';
@@ -1128,7 +1398,7 @@ export class ProjSitzung {
     // kein await. War sie gesetzt, bleibt die Änderung gespeichert und das Laden folgt nach der Freigabe.
     const nr = wiedergabe?.nr;
     const ladeNr = typeof wiedergabe?.laden === 'number' ? wiedergabe.laden : nr;   // 1.14: the audition file when one is on
-    if (wiedergabe) kern.wiedergabe = typeof nr === 'number' ? { nr: ladeNr, quittung: await this.kern.laden(ladeNr as number, quelle) } : wiedergabe;
+    if (wiedergabe) kern.wiedergabe = typeof nr === 'number' ? { nr: ladeNr, quittung: await this.ladeNr(ladeNr as number, quelle, nr) } : wiedergabe;
     // Spec 6.31: Loop und Tempo sperrt 6.23 wie das Laden. Kam die Änderung vor der Sperre durch die Prüfung, werden sie gemerkt und nach der
     // Freigabe gesendet (holeNach, mit dem Stand von dann). Das Metronom sperrt 6.23 nicht.
     if (kanonisch(alt.loop) !== kanonisch(neu.loop)) {
@@ -1138,6 +1408,7 @@ export class ProjSitzung {
     if (alt.tempo_bpm !== neu.tempo_bpm) {                                                               // Spec 2.7: ein Tempo-Weg
       if (this.sperren > 0) { o.merk.tempo = true; kern.tempo = { aufgeschoben: true }; } else kern.tempo = await this.kern.tempo(neu.tempo_bpm, quelle);
     }
+    this.hosts.abgleich(neu);                  // plan 1.11 task 7: after the playback is loaded (a removed stage is gone from the core before its host stops)
     this.ctx.verteile({ a: 'proj', f: { slug: o.slug, rev: neu.rev, label: w.eintrag.label, quelle } });
     return { code: 200, j: { rev: neu.rev, projekt: neu, kern } };
   }
@@ -1437,6 +1708,7 @@ export class ProjSitzung {
   }
   setzeAusgabeLauf(l: AusgabeLauf | null): void {
     this.ausgabeLauf = l === null ? null : l.art === 'freeze' ? { art: 'freeze', spur_id: l.spur_id }
+      : l.art === 'export' && l.echtzeit ? { art: 'export', echtzeit: true, start_ms: l.start_ms, dauer_s: l.dauer_s }
       : l.art === 'resample' ? { art: 'resample', strang_id: l.strang_id } : { art: l.art };
   }
   // Spec 6.25: die nächste Nummer des einen Wiedergabe-Zählers der Instanz (derselbe wie für /k/arr/laden, mit Zustandsdatei, Spec 6.30), für die
@@ -1445,7 +1717,7 @@ export class ProjSitzung {
   // Wiedergabe-Datei mit der nächsten Nummer des einen Zählers, ohne /k/arr/laden (Plan S3: Freeze, Export)
   schreibeWiedergabeFuer(p: Projekt): { nr: number; datei: string } {
     const nr = this.zaehler.naechste();
-    const w = this.uebersetzeFuer(p, nr);
+    const w = this.uebersetzeFuer(p, nr, undefined, false);
     return { nr, datei: schreibeWiedergabe(this.arbeitsordner, w) };
   }
   // Was /proj/aendern nach aendere() tut, für einen Schreiber außerhalb (S3): Stand synchron setzen, dann nachziehen. Die Freeze-Sperre lehnt hier
@@ -1458,6 +1730,7 @@ export class ProjSitzung {
     neu.wiedergabe_rev = alt.wiedergabe_rev;
     o.projekt = neu;                                                     // synchron, vor dem ersten await
     this.meldeStand(o);
+    this.instrumente.abgleich(neu);
     void this.surge.gleiche(neu);
     return this.seriell(async () => {
       if (this.offen !== o) return;                                      // inzwischen geschlossen
@@ -1701,6 +1974,7 @@ export class ProjSitzung {
     const { neustart } = this.lage.nimm(adresse, f);
     // 1.12 slice 3 (D6/D8): a new core generation clears the mirror (the new core overrides nothing); the first /k/willkommen since this server
     // started ends any override of a core that kept running (AK34, own start). A re-hello of the same generation changes nothing.
+    if (adresse === '/e/ins_mess' || adresse === '/zustand/arr') this.hosts.ereignis(adresse, f);   // plan 1.11 task 7
     if (adresse === '/e/auto') this.nimmAuto(f);
     if (neustart || (adresse === '/k/willkommen' && vorherGeneration !== null && Number(f.generation) !== vorherGeneration)) {
       this.uebersteuert.clear();
@@ -1738,7 +2012,7 @@ export class ProjSitzung {
     // (ki_gestoppt), aus dem auch server.ts den Riegel nachführt.
     const kiAn = adresse === '/e/ki' ? f.gestoppt : adresse === '/zustand/kern' ? f.ki_gestoppt : undefined;
     if (Number(kiAn) === 1 && this.transportQuelle === 'cypher') this.transportQuelle = 'andreas';
-    if (neustart) this.nachNeustart();
+    if (neustart) { this.hostBelegt = new Map(); this.hostFreiMs.clear(); this.hostVorab.clear(); this.hosts.kernNeustart(); this.nachNeustart(); }
   }
   // Spec 3.4 Rückweg: Andreas' Hand an spur/<n>/* landet im Projekt (Quelle andreas). Spec 6.30: zusammengefasst. Je Pfad zählt der letzte Wert;
   // gespeichert wird höchstens einmal je RUECKWEG_MS (das erste Ereignis nach einer Pause sofort), und eine Geste ist ein Verlaufseintrag: sie

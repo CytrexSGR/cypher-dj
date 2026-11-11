@@ -62,7 +62,9 @@ cdj::ArrSnapshot* snap(Audio& au, int64_t nr, const std::vector<Spec>& ls) {
 
 struct Szene {
   std::unique_ptr<Audio> au = Audio::gleich(1200000);
-  Treiber t;
+  // arr-bk: the driver holds a whole Stellwerk (about 4 MB since the table ceiling is 4096), so it lives on the heap; several scenes at once overflowed the 8 MB stack
+  std::unique_ptr<Treiber> tp = std::make_unique<Treiber>();
+  Treiber& t = *tp;
   float hand[4][cdj::ARR_BLOCK];
   int r[4];
   std::vector<float> buf[4];   // auto_buf_ of track 0 per field, index = core sample

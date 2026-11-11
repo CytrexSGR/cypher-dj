@@ -1,0 +1,34 @@
+{"t":"sende","sample":0,"osc":["/k/set/neu",",hsd",1,"pruefstand",128.0],"bereich":"zeitachse","herleitung":"§4.2: neue Zeitachse mit 128 BPM, Beat 0 am nächsten Zyklus = Sample 0 (§1.1)"}
+{"t":"sende","sample":45000,"osc":["/k/deck/laden",",hsisdii",2,"leitstand",1,"f0000000000000c3",128.0,1,0],"bereich":"deck","herleitung":"§4.4 /k/deck/laden, Fixture material/f0000000000000c3/ next to the sequences"}
+{"t":"erwarte","ab_sample":45000,"bis_sample":47400,"osc":["/q",",hsihds",2,"leitstand",1,null,null,""],"bereich":"deck","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"erwarte","ab_sample":45000,"bis_sample":93000,"osc":["/q",",hsihds",2,"leitstand",3,null,null,""],"bereich":"deck","herleitung":"§4.4: Quittung fertig nach dem Tausch"}
+{"t":"erwarte","ab_sample":45000,"bis_sample":93000,"osc":["/e/geladen",",isdiih",1,"f0000000000000c3",128.0,1,0,null],"toleranz":1e-06,"bereich":"deck","herleitung":"§4.4, §5.9 /e/geladen"}
+{"t":"wert","sample":135000,"pfad":"deck/1/trim","wert":-6.6,"toleranz":0.01,"bereich":"deck","herleitung":"§1.5: −16 − (−9,4) = −6,6 dB"}
+{"t":"wert","sample":135000,"pfad":"deck/1/fader","wert":-200.0,"toleranz":0.0,"bereich":"deck","herleitung":"§1.5: nach Laden immer −200"}
+{"t":"deck_wert","sample":135000,"deck":1,"feld":"status","wert":1,"toleranz":0,"bereich":"deck","herleitung":"§5.5 Status 1 geladen"}
+{"t":"sende","sample":180000,"osc":["/k/deck/laden",",hsisdii",3,"leitstand",2,"f0000000000000d4",128.0,1,0],"bereich":"deck","herleitung":"§4.4 /k/deck/laden, Fixture material/f0000000000000d4/ next to the sequences"}
+{"t":"erwarte","ab_sample":180000,"bis_sample":182400,"osc":["/q",",hsihds",3,"leitstand",1,null,null,""],"bereich":"deck","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"erwarte","ab_sample":180000,"bis_sample":228000,"osc":["/q",",hsihds",3,"leitstand",3,null,null,""],"bereich":"deck","herleitung":"§4.4: Quittung fertig nach dem Tausch"}
+{"t":"erwarte","ab_sample":180000,"bis_sample":228000,"osc":["/e/geladen",",isdiih",2,"f0000000000000d4",128.0,1,0,null],"toleranz":1e-06,"bereich":"deck","herleitung":"§4.4, §5.9 /e/geladen"}
+{"t":"wert","sample":270000,"pfad":"deck/2/trim","wert":24.0,"toleranz":0.0,"bereich":"deck","herleitung":"§1.5: +29 auf +24 begrenzt"}
+{"t":"sende","sample":315000,"osc":["/k/deck/laden",",hsisdii",4,"leitstand",3,"f0000000000000ff",128.0,1,0],"bereich":"deck","herleitung":"§4.4 /k/deck/laden, Fixture material/f0000000000000ff/ next to the sequences"}
+{"t":"erwarte","ab_sample":315000,"bis_sample":363000,"osc":["/q",",hsihds",4,"leitstand",6,null,null,"material_fehlt"],"bereich":"deck","herleitung":"§4.4: Laden abgelehnt, Grund material_fehlt"}
+{"t":"sende","sample":360000,"osc":["/k/deck/laden",",hsisdii",5,"leitstand",4,"f0000000000000c3",128.0,1,1],"bereich":"deck","herleitung":"§4.4 /k/deck/laden, Fixture material/f0000000000000c3/ next to the sequences"}
+{"t":"erwarte","ab_sample":360000,"bis_sample":408000,"osc":["/q",",hsihds",5,"leitstand",6,null,null,"pruefung"],"bereich":"deck","herleitung":"§4.4: Laden abgelehnt, Grund pruefung"}
+{"t":"hand","sample":450000,"pfad":"deck/1/fader","midi_roh":0.0,"bereich":"regler","herleitung":"§7.3 Punkt 2: erster Wert setzt nur die Stellung"}
+{"t":"hand","sample":472500,"pfad":"deck/1/fader","midi_roh":1.0,"bereich":"regler","herleitung":"§7.2 Übernahme skaliert: Anschlag oben = Obergrenze"}
+{"t":"erwarte","ab_sample":472500,"bis_sample":474900,"osc":["/e/halter",",sshd","deck/1/fader","mensch",472500,21.0],"toleranz":1e-06,"bereich":"regler","herleitung":"§7.3 Punkt 3, ADR 023: Halter mensch am selben Sample"}
+{"t":"erwarte","ab_sample":1192500,"bis_sample":1193012,"osc":["/e/halter",",sshd","deck/1/fader","frei",null,null],"bereich":"regler","herleitung":"§7.3 Punkt 4: 32 Beats ohne Handbewegung → frei bei Beat 53"}
+{"t":"sende","sample":472500,"osc":["/k/deck/start",",hssssiddi",6,"andreas","","","",1,24.0,0.0,0],"bereich":"deck"}
+{"t":"erwarte","ab_sample":472500,"bis_sample":474900,"osc":["/q",",hsihds",6,"andreas",1,null,null,""],"bereich":"deck","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"erwarte","ab_sample":540000,"bis_sample":542400,"osc":["/q",",hsihds",6,"andreas",2,540000,24.0,""],"toleranz":1e-06,"bereich":"deck","herleitung":"§5.1 Status 2 am Ziel-Sample llround(sample_at(24)) = 540000"}
+{"t":"sende","sample":585000,"osc":["/k/deck/laden",",hsisdii",7,"leitstand",1,"f0000000000000c3",128.0,1,0],"bereich":"deck","herleitung":"§4.4 /k/deck/laden, Fixture material/f0000000000000c3/ next to the sequences"}
+{"t":"erwarte","ab_sample":585000,"bis_sample":633000,"osc":["/q",",hsihds",7,"leitstand",6,null,null,"deck_hoerbar"],"bereich":"deck","herleitung":"§4.4: Laden abgelehnt, Grund deck_hoerbar"}
+{"t":"sende","sample":607500,"osc":["/k/deck/stopp",",hssssidi",8,"andreas","","","",1,28.0,1],"bereich":"deck"}
+{"t":"erwarte","ab_sample":607500,"bis_sample":609900,"osc":["/q",",hsihds",8,"andreas",1,null,null,""],"bereich":"deck","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"erwarte","ab_sample":630000,"bis_sample":632400,"osc":["/q",",hsihds",8,"andreas",2,630000,28.0,""],"toleranz":1e-06,"bereich":"deck","herleitung":"§5.1 Status 2 am Ziel-Sample llround(sample_at(28)) = 630000"}
+{"t":"sende","sample":675000,"osc":["/k/deck/laden",",hsisdii",9,"leitstand",1,"f0000000000000c3",128.0,1,0],"bereich":"deck","herleitung":"§4.4 /k/deck/laden, Fixture material/f0000000000000c3/ next to the sequences"}
+{"t":"erwarte","ab_sample":675000,"bis_sample":677400,"osc":["/q",",hsihds",9,"leitstand",1,null,null,""],"bereich":"deck","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"erwarte","ab_sample":675000,"bis_sample":723000,"osc":["/q",",hsihds",9,"leitstand",3,null,null,""],"bereich":"deck","herleitung":"§4.4: Quittung fertig nach dem Tausch"}
+{"t":"erwarte","ab_sample":675000,"bis_sample":723000,"osc":["/e/geladen",",isdiih",1,"f0000000000000c3",128.0,1,0,null],"toleranz":1e-06,"bereich":"deck","herleitung":"§4.4, §5.9 /e/geladen"}
+{"t":"wert","sample":720000,"pfad":"deck/1/fader","wert":-200.0,"toleranz":0.0,"bereich":"deck","herleitung":"§1.5: nach Laden −200, auch aus offenem Fader"}

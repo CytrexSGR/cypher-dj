@@ -41,12 +41,16 @@ ECHTZEIT = [
     "src/arr_metronom.cpp",
     "src/arr_freeze.cpp",
     "src/arr_tap.cpp",   # 1.10 slice 7: the real-time tap
+    "src/arr_host_stufe.cpp",      # plan 1.11 T4/T5: the effect-host stage and its health run in the callback
+    "src/arr_host_measurement.cpp",    # plan 1.11 T5: the round-trip measurement is a state machine in the callback
+    "include/cypherdj/arr_host_stufe.h",
+    "include/cypherdj/arr_host_measurement.h",
     "src/arr_rb_sink.cpp",
-    "src/arr_host_sink.cpp",
+    "src/arr_instrument_host_sink.cpp",
     "include/cypherdj/arrangement.h",
     "include/cypherdj/warp_factory.h",
     "include/cypherdj/arr_rb_sink.h",
-    "include/cypherdj/arr_host_sink.h",
+    "include/cypherdj/arr_instrument_host_sink.h",
     "src/generator.cpp",             # Baukasten S3a: Erzeuger-Ströme mit Graph laufen im Callback
     "include/cypherdj/generator.h",
     "src/core_hand.cpp",            # 1.8 T7a: Kern::midi_ein_stempeln hands the MIDI of the cycle to the recorder (callback)

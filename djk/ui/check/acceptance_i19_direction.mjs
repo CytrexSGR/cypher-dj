@@ -35,7 +35,7 @@ import { erzeugeApi, baueGrundprojekt, exportiere, loescheGrundprojekt, kernExeS
 import { messeDatei, bewegung, MESSUNG, MESSUNG_SURGE } from './direction_measure.mjs';
 import { grundNoten } from './i19_base_project.mjs';
 import { wirtRuf } from '../track.ts';
-import { wirtDatei, wirtLebt } from '../areas/proj/host.ts';
+import { wirtDatei, wirtLebt } from '../areas/proj/instrument_host.ts';
 import { SURGE_RICHTUNGEN } from '../project/direction.ts';
 import { normZuWert } from '../project/rb_mapping.ts';
 import { RICHTUNGEN } from '../project/direction.ts';

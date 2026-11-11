@@ -1,0 +1,200 @@
+#!/usr/bin/env bash
+# djk-insert: start, stop and inspect the host of a foreign effect plugin (plan 1.11 task 6). One host per insert slot
+# h = 1..4 (pool ins/host/<h>, playback slot h-1), a Carla rack in its own transient unit cypherdj-ins<h>[-<i>].
+#
+# Usage: djk-insert start <h> <format>:<path>#<uid> [--instanz a..i]
+#        djk-insert stop <h> [--instanz a..i]
+#        djk-insert status <h> [--instanz a..i]
+#   <format> is vst3 or lv2 (LV2: path = URI, uid may be empty: lv2:<uri>#).
+#   start: pre-checks that the plugin exists (VST3 bundle / LV2 URI on the LV2 path, otherwise exit 2, nothing is started),
+#     starts the host with an EMPTY rack (status "leer"; it does NOT send `lade`, the server owns measure-then-lade), waits at
+#     most 30 s (DJK_INSERT_WARTE overrides, for tests) for its status file, links kern arr_ins_<h>_L/R -> audio-in1/2 and
+#     audio-out1/2 -> arr_insret_<h>_L/R, and records the four edges in /dev/shm/cypherdj[-<i>]/kanten (under the directory
+#     lock djk-instrumente uses; a second start adds nothing twice). The kern links them itself when its ports are missing.
+#     Carla's rack exposes stereo ports for every plugin (measured, also for a mono one): the four edges are the same for all.
+#     The unit runs with the real HOME, DISPLAY and XAUTHORITY (D16: plugin editors need the user's X session).
+#     Restart=always with RestartPreventExitStatus=2: a plugin that fails at `lade` makes the host exit 2, no restart loop.
+#   stop: stops the unit, removes the four edges of this host (other lines stay) and the status, socket and heartbeat files.
+#   status: one JSON line {h, laeuft, bereit, grund, sock, puls, pid, starts}; bereit = state in the host's status file ("leer",
+#     "geladen", "fehler" or null), puls = heartbeat counter or null, pid = MainPID of the unit, starts = NRestarts of the unit.
+#     A status file written by another pid than the unit's MainPID (systemd restarted the host with an EMPTY rack) is stale: bereit
+#     null, grund "neustart", puls null, until the new process writes its own file. A host that never ran answers laeuft false, exit 0.
+# Exit: 0 ok, 2 plugin not loadable / usage (reason on stderr), 3 host_grenze (h outside 1..4), 4 belegt (slot h already runs a
+#   different plugin: stop it first), 5 host did not come up (engine error, timeout, systemd-run failed; reason on stderr).
+set -uo pipefail
+export XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
+export DBUS_SESSION_BUS_ADDRESS=${DBUS_SESSION_BUS_ADDRESS:-unix:path=$XDG_RUNTIME_DIR/bus}
+HIER=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
+DJK=${DJK:-$(cd "$HIER/.." && pwd)}
+I=${CYPHERDJ_INSTANZ:-}
+POS=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --instanz) [ $# -ge 2 ] || { echo "djk-insert: --instanz needs a value" >&2; exit 2; }; I=$2; shift 2;;
+    -h|--help) sed -n '2,/^set -uo/p' "$0" | sed '$d; s/^# \{0,1\}//'; exit 0;;
+    *) POS+=("$1"); shift;;
+  esac
+done
+CMD=${POS[0]:-}; H=${POS[1]-}; SPEC=${POS[2]:-}
+case "$CMD" in start|stop|status) ;; *) echo "djk-insert: usage: djk-insert start|stop|status <h> ... (see --help)" >&2; exit 2;; esac
+case "$H" in [1-4]) ;; *) echo "djk-insert: host_grenze: host '$H' outside 1..4" >&2; exit 3;; esac
+case "$I" in "") SFX="";; [a-i]) SFX="-$I";; *) echo "djk-insert: instance '$I' invalid, use a..i or empty" >&2; exit 2;; esac
+U="cypherdj-ins$H$SFX"; KERN="cypherdj-kern$SFX"
+RT="/dev/shm/cypherdj$SFX"; ST="$RT/ins-$H.json"; SPECDATEI="$RT/ins-$H.spec"; SOCK="$RT/ins-$H.sock"; KANTEN="$RT/kanten"
+aktiv() { [ "$(systemctl --user is-active "$1.service" 2>/dev/null)" = active ]; }
+# stop a unit and wait until it is gone
+weg() {
+  systemctl --user stop "$1.service" 2>/dev/null
+  systemctl --user reset-failed "$1.service" 2>/dev/null
+  for _ in $(seq 50); do systemctl --user list-units --all --no-legend --plain "$1.service" 2>/dev/null | grep -q . || break; sleep 0.1; done
+}
+# the four edges of this host as "source<TAB>target" lines
+kanten_zeilen() {
+  printf '%s\t%s\n' "$KERN:arr_ins_${H}_L" "$U:audio-in1" "$KERN:arr_ins_${H}_R" "$U:audio-in2" \
+                    "$U:audio-out1" "$KERN:arr_insret_${H}_L" "$U:audio-out2" "$KERN:arr_insret_${H}_R"
+}
+port_da() { local liste; liste=$(pw-link "$1" 2>/dev/null); grep -qxF -- "$2" <<<"$liste"; }
+port_warte() { local _; for _ in $(seq 20); do port_da "$1" "$2" && return 0; sleep 0.25; done; return 1; }
+# remove this host's edge lines (not the other hosts', not the instruments'); rename under the same directory lock
+kanten_weg() {
+  [ -f "$KANTEN" ] || return 0
+  flock -x -w 5 "$RT" sh -c 'T=$(mktemp "$1.XXXXXX") && { grep -vF -e "$2:arr_ins_$3_" -e "$2:arr_insret_$3_" "$1" > "$T"; chmod --reference="$1" "$T"; mv -f "$T" "$1"; }' \
+    sh "$KANTEN" "$KERN" "$H"
+}
+aufraeumen_dateien() { rm -f "$ST" "$ST.puls" "$SOCK" "$SPECDATEI"; rm -rf "$ST.arbeit"; }
+
+case "$CMD" in
+status)
+  python3 - "$H" "$ST" "$SOCK" "$(aktiv "$U" && echo 1 || echo 0)" "$(systemctl --user show -p MainPID --value "$U.service" 2>/dev/null)" \
+    "$(systemctl --user show -p NRestarts --value "$U.service" 2>/dev/null)" <<'PY'
+import json, sys
+h, st, sock, laeuft = int(sys.argv[1]), sys.argv[2], sys.argv[3], sys.argv[4] == "1"
+def zahl(t):
+    try:
+        return int(t.strip())
+    except ValueError:
+        return None
+pid, starts = (zahl(sys.argv[5]), zahl(sys.argv[6])) if laeuft else (None, None)
+if pid == 0:
+    pid = None
+d = {}
+try:
+    d = json.load(open(st))
+except (OSError, ValueError):
+    pass
+fehler = d.get("fehler") or []
+if not d:
+    bereit = None
+elif d.get("bereit"):
+    bereit = d.get("effekt") or "leer"
+else:
+    bereit = "fehler" if (fehler or d.get("grund")) else None
+grund = d.get("grund") or (fehler[-1] if fehler else None)
+try:
+    puls = int(open(st + ".puls").read().strip())
+except (OSError, ValueError):
+    puls = None
+if d and not laeuft and bereit != "fehler":   # nothing runs: an old "bereit" is not a state
+    bereit, puls = None, None
+if laeuft and pid is not None and d and d.get("pid") != pid:   # the file belongs to a dead process: no state, no pulse
+    bereit, grund, puls = None, "neustart", None
+print(json.dumps({"h": h, "laeuft": laeuft, "bereit": bereit, "grund": grund, "sock": d.get("sock") or (sock if laeuft else None), "puls": puls,
+                  "pid": pid, "starts": starts}))
+PY
+  exit 0;;
+stop)
+  weg "$U"
+  kanten_weg
+  aufraeumen_dateien
+  echo "djk-insert: host $H stopped"
+  exit 0;;
+esac
+
+# ---- start
+[ -n "$SPEC" ] || { echo "djk-insert: start needs <format>:<path>#<uid>" >&2; exit 2; }
+FMT=${SPEC%%:*}; REST=${SPEC#*:}
+[ "$REST" != "$SPEC" ] || { echo "djk-insert: plugin '$SPEC' is not <format>:<path>#<uid>" >&2; exit 2; }
+case "$FMT" in
+  vst3)
+    PFAD=${REST%#*}; [ "$REST" = "$PFAD" ] && PFAD=$REST   # the host splits at the last '#'
+    [ -e "$PFAD" ] || { echo "djk-insert: plugin not loadable: VST3 '$PFAD' does not exist" >&2; exit 2; };;
+  lv2)
+    PFAD=$REST; case "$REST" in *"#"*) PFAD=${REST%#*};; esac
+    # a manifest names a plugin as <uri> or, as the LSP and Dragonfly bundles do, as prefix:name with an @prefix line
+    gefunden=0
+    python3 - "$PFAD" /usr/lib/lv2 /usr/local/lib/lv2 "$HOME/.lv2" "$HOME/.local/lib/cypherdj/lv2" <<'PY' && gefunden=1
+import glob, os, re, sys
+uri = sys.argv[1]
+for d in sys.argv[2:]:
+    for m in glob.glob(os.path.join(d, "*", "manifest.ttl")):
+        try:
+            t = open(m, encoding="utf-8", errors="replace").read()
+        except OSError:
+            continue
+        if f"<{uri}>" in t:
+            sys.exit(0)
+        for pre, base in re.findall(r"@prefix\s+([A-Za-z0-9_-]*):\s*<([^>]*)>", t):
+            if uri.startswith(base) and re.search(r"(?<![\w:])" + re.escape(pre + ":" + uri[len(base):]) + r"(?![\w-])", t):
+                sys.exit(0)
+sys.exit(1)
+PY
+    [ "$gefunden" = 1 ] || { echo "djk-insert: plugin not loadable: LV2 URI '$PFAD' not found on the LV2 path" >&2; exit 2; };;
+  *) echo "djk-insert: format '$FMT' unknown, use vst3 or lv2" >&2; exit 2;;
+esac
+WARTE=${DJK_INSERT_WARTE:-30}
+fehler() { echo "djk-insert: $1" >&2; exit 5; }
+
+mkdir -p "$RT"
+if aktiv "$U"; then
+  LAEUFT_MIT=$(cat "$SPECDATEI" 2>/dev/null || echo "unknown plugin")
+  [ "$LAEUFT_MIT" = "$SPEC" ] || { echo "djk-insert: belegt: host $H already runs '$LAEUFT_MIT', stop it first (djk-insert stop $H)" >&2; exit 4; }
+  echo "  host $H    already running"
+else
+  systemctl --user reset-failed "$U.service" 2>/dev/null
+  aufraeumen_dateien
+  printf '%s' "$SPEC" > "$SPECDATEI"
+  # the unit's environment is fixed at creation: DISPLAY and XAUTHORITY of the user's session (D16), taken from here or the user manager
+  ENVS=()
+  for v in DISPLAY XAUTHORITY; do
+    w=${!v:-}
+    [ -n "$w" ] || w=$(systemctl --user show-environment 2>/dev/null | sed -n "s/^$v=//p" | head -1)
+    [ -n "$w" ] && ENVS+=("--setenv=$v=$w")
+  done
+  systemd-run --user --quiet --collect --unit="$U" -p Restart=always -p RestartSec=2 -p RestartPreventExitStatus=2 \
+    -p PartOf=cypherdj.target "${ENVS[@]}" \
+    --setenv=PIPEWIRE_PROPS="{ node.async = true node.group = cypherdj$SFX node.lock-quantum = true }" \
+    /usr/bin/pw-jack -p 256 /usr/bin/python3 "$DJK/hosts/carla/instrument_host.py" --name "$U" --effekt "$SPEC" --sock "$SOCK" --status "$ST" \
+    || { weg "$U"; kanten_weg; aufraeumen_dateien; fehler "host $H: systemd-run failed"; }
+  t0=$SECONDS
+  while :; do
+    grep -q '"bereit": true' "$ST" 2>/dev/null && break
+    # the host exited by itself (exit 2 does not restart): its reason is in the status file
+    if [ -s "$ST" ] && ! aktiv "$U"; then
+      # exit 2 only for a plugin reason of the host (nicht_ladbar, kein_effekt); any other early exit (engine, JACK) is exit 5
+      mapfile -t R < <(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); f=d.get("fehler") or []; print(1 if any(x in ("nicht_ladbar","kein_effekt") for x in f) else 0); print(d.get("grund") or (f[-1] if f else "unknown"))' "$ST" 2>/dev/null)
+      weg "$U"; aufraeumen_dateien
+      if [ "${R[0]:-0}" = 1 ]; then echo "djk-insert: plugin not loadable: ${R[1]:-unknown}" >&2; exit 2; fi
+      echo "djk-insert: host $H exited before ready: ${R[1]:-unknown}" >&2; exit 5
+    fi
+    [ $((SECONDS - t0)) -ge "$WARTE" ] && { weg "$U"; aufraeumen_dateien; fehler "host $H not ready after ${WARTE} s ($ST)"; }
+    sleep 0.2
+  done
+  echo "  host $H    started ($SPEC), rack empty"
+fi
+
+# own ports of the host must exist after the status file; the kern side may be missing (then only recorded, the kern links)
+for p in "-i $U:audio-in1" "-i $U:audio-in2" "-o $U:audio-out1" "-o $U:audio-out2"; do
+  port_warte ${p%% *} "${p#* }" || { weg "$U"; kanten_weg; aufraeumen_dateien; fehler "host $H: own port ${p#* } missing after ready"; }
+done
+[ -f "$KANTEN" ] || : > "$KANTEN"
+while IFS=$'\t' read -r Q Z; do
+  if port_da -o "$Q" && port_da -i "$Z"; then
+    pw-link -l | grep -A8 -x "$Q" | grep -q -- "|-> *$Z\$" || pw-link "$Q" "$Z" || { weg "$U"; kanten_weg; aufraeumen_dateien; fehler "host $H: link $Q -> $Z failed"; }
+  else
+    echo "  host $H    $Q -> $Z: recorded, not linked (port missing, the kern links it)"
+  fi
+  flock -x -w 5 "$RT" sh -c 'grep -qxF -- "$2" "$1" 2>/dev/null || printf "%s\n" "$2" >> "$1"' sh "$KANTEN" "$Q"$'\t'"$Z" \
+    || { weg "$U"; kanten_weg; aufraeumen_dateien; fehler "host $H: kanten lock failed"; }
+done < <(kanten_zeilen)
+echo "insert host $H ready: $KERN:arr_ins_${H}_L/R -> $U -> arr_insret_${H}_L/R (edges in $KANTEN)"
+exit 0

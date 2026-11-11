@@ -27,7 +27,7 @@ import type { Bereich, BereichKontext } from '../../http/router.ts';
 import { json, koerper } from '../../http/transport.ts';
 import { grundText } from '../../http/reasons.ts';
 import { instanz, renderProgramm, wirtOrdnerVorgabe } from '../../paths.ts';
-import { wirtStand } from './host.ts';
+import { wirtStand } from './instrument_host.ts';
 import {
   KENNUNG_MAX, alleInserts, MAX_SPUREN, SAMPLERATE, kanonisch, spurSicht, sucheSpur,
   wirtSlots, type Clip, type Freeze, type Gruppe, type Projekt, type Return, type Spur } from '../../project/model.ts';
@@ -69,6 +69,7 @@ export interface AusgabeOptionen {
   ffmpeg?: string[];              // ffmpeg für die Lautheit (Vorgabe ['ffmpeg'])
   wirtOrdner?: () => string;      // Ordner der Wirt-Status-Dateien (Vorgabe pfade.wirtOrdnerVorgabe(), der Server gibt seinen mit)
   zeitlimitMs?: number;           // Test-Haken: Zeitlimit des Merge-Renders (Vorgabe 4 · Dauer + 60 s)
+  gesundMs?: number;              // plan 1.11 T13: every host healthy this long before a real-time export starts (Vorgabe 1100: the core's 1 s hold-off)
 }
 
 const STATUS: Record<string, number> = {
@@ -78,7 +79,7 @@ const STATUS: Record<string, number> = {
   merge_leer: 409, merge_gruppen: 409, merge_teil_solo: 409, merge_sends: 409, merge_inserts: 409, merge_freeze_noetig: 409, merge_andreas_spur: 409,
   merge_keine_spur_frei: 409,
   resample_leer: 409, resample_fehler: 502,                                  // 1.10 slice 7 (T6)
-  freeze_fehler: 502, render_fehler: 502,
+  freeze_fehler: 502, render_fehler: 502, export_host_ausfall: 502, export_luecke: 502,   // plan 1.11 T13
   bounce_nur_audio: 409, bounce_ziel_art: 409, takes_voll: 409, ersetzen_loop: 409, gruppe_unbekannt: 400,   // 1.14 slice 4 (spec D12)
 };
 
@@ -177,9 +178,12 @@ export async function spitzeDbVonF32(datei: string): Promise<number> {
   return spitze > 0 ? 20 * Math.log10(spitze) : -200;
 }
 
-export { wirtLebt } from './host.ts';
+export { wirtLebt } from './instrument_host.ts';
 
 export const EXPORT_MAX_BEATS = 1024;
+// plan 1.11 task 13: an active host stage (a foreign plugin in its own process) cannot be rendered offline: the export is captured in real time
+export const brauchtEchtzeit = (p: Projekt): boolean => alleInserts(p).some((x) => x.insert.art === 'host' && x.insert.an);
+const ECHTZEIT_ZUGABE_MS = 15_000;   // a real-time export may take its length plus this much before it counts as lost
 
 // sha256 über die ganze Datei, im Strom (Vorbild freeze.ts pruefeFreezeDatei)
 export async function sha256Datei(datei: string): Promise<string> {
@@ -247,7 +251,7 @@ export function kurzeFreezeAntwort(r: { rev: number; projekt: Projekt }, spurId:
 // die Sample-Spitze des Exports liegt über der Limiter-Decke (P10), limiter_db_max = größte Absenkung des Set-Limiters während des Renders
 // (positive dB, 0 = griff nie ein).
 export type ExportAntwort = Pick<RenderAntwort, 'frames' | 'spitze_db' | 'regler_quelle'>
-  & { datei: string; abgriff: Abgriff; ueber_decke: boolean; limiter_db_max: number; dj_schluessel?: true } & Lautheit;
+  & { datei: string; abgriff: Abgriff; ueber_decke: boolean; limiter_db_max: number; dj_schluessel?: true; echtzeit?: true; dauer_s?: number } & Lautheit;
 // 1.10 slice 5 (plan E7): a stage keyed by a DJ input (deck/1..4, erz/1) hears nothing in an export (no deck plays in the render): the answer says so,
 // only when it is true
 export const hatDjSchluessel = (p: Projekt): boolean => alleInserts(p).some((x) => x.insert.key?.quelle === 'deck' || x.insert.key?.quelle === 'erz');
@@ -397,6 +401,7 @@ const LAUF_TEXT: Record<AusgabeLauf['art'], string> = { freeze: 'a freeze', expo
 
 // Ende eines Freeze aus Sicht des Wartenden: /e/freeze (status, frames), ein neuer Kern, Stille, Frist (1.10 slice 7: ebenso /e/abgriff)
 type FreezeEnde = { art: 'e_freeze'; status: number; frames: number } | { art: 'e_abgriff'; status: number; frames: number }
+  | { art: 'e_export'; frames: number; luecken: number; ungesund: number; grund: string }   // plan 1.11 T13: /e/export_lauf
   | { art: 'neustart' } | { art: 'stille' } | { art: 'frist' } | { art: 'geschlossen' };
 
 export class Ausgabe {
@@ -446,6 +451,14 @@ export class Ausgabe {
       const k = `a:${Number(f.art)}:${Number(f.nr)}:${Number(f.kennung)}`;
       const w = this.wartend.get(k);
       if (w) { this.wartend.delete(k); w({ art: 'e_abgriff', status: Number(f.status), frames: Number(f.frames) }); }
+      return;
+    }
+    if (adresse === '/e/export_lauf') {                                  // plan 1.11 T13: the end of a real-time export
+      const w = this.wartend.get('export');
+      if (w) {
+        this.wartend.delete('export');
+        w({ art: 'e_export', frames: Number(f.frames), luecken: Number(f.luecken), ungesund: Number(f.ungesund), grund: String(f.grund ?? '') });
+      }
       return;
     }
     if (adresse === '/q') {
@@ -512,9 +525,9 @@ export class Ausgabe {
     } catch (e) { throw this.nachFehler(e); } finally { this.gib(); }
   }
 
-  // Die Produktions-Wirte (djk-instrumente --arr1, --arr2) schreiben /dev/shm/cypherdj[-i]/wirt-arr<s>.json (host.py: name, pid, bereit, fehler, …). Fehlt der
+  // Die Produktions-Wirte (djk-instrumente --arr1, --arr2) schreiben /dev/shm/cypherdj[-i]/wirt-arr<s>.json (instrument_host.py: name, pid, bereit, fehler, …). Fehlt der
   // Wirt eines Slots, spielt im Kern keine Surge für diesen Slot, und der Freeze wäre eine leere Datei ohne Fehlermeldung (Erhebung 2026-10-20). Darum lehnt
-  // der Freeze vorher ab. Die Datei allein genügt nicht (S3-Fix W2): host.py und djk-stop löschen sie nie, sie bleibt mit bereit:true und toter pid
+  // der Freeze vorher ab. Die Datei allein genügt nicht (S3-Fix W2): instrument_host.py und djk-stop löschen sie nie, sie bleibt mit bereit:true und toter pid
   // liegen (wirtLebt()). 1.9 (E3): je Slot; lebt der Wirt, zählt kein fehler-Eintrag; ist er tot, nennt ein fataler Eintrag den Grund (wirt_fehler).
   private pruefeWirt(slots: number[]): void {
     const ordner = (this.opt.wirtOrdner ?? (() => wirtOrdnerVorgabe()))();
@@ -726,6 +739,10 @@ export class Ausgabe {
     const abgriff: Abgriff = d.abgriff === 'set' ? 'set' : 'produktion';
     this.belege({ art: 'export' });
     try {
+      if (brauchtEchtzeit(this.offen().projekt)) {
+        if (d.abgriff === 'set') fehl('argument_ungueltig', 'abgriff: the real-time export captures the production master only');
+        return await this.exportiereEchtzeit(von, bis);
+      }
       const { jetzt, p, w } = await this.friereEinUndSchreibe('export');
       const ordner = path.join(jetzt.ordner, 'export');
       let r: RenderAntwort, ziel: string;
@@ -758,6 +775,122 @@ export class Ausgabe {
       this.ctx.log({ typ: 'proj_export', slug: jetzt.slug, nr: w.nr, von_beat: von, bis_beat: bis, ...antwort });
       return antwort;
     } catch (e) { throw this.nachFehler(e); } finally { this.gib(); }
+  }
+
+  // plan 1.11 task 13: the real-time path of the export. Host stages cannot be rendered offline, so the core plays the project once in real time and
+  // writes the production master (post point, aligned like the tap) to a raw file: /k/arr/export_lauf. The hosts are checked first (all `bereit`, each
+  // healthy for 1.1 s: the core's dry hold-off after a health rise is not counted in `ungesund`), the project is loaded as its own export view (host
+  // tracks unfrozen and live), and the live view is loaded again in every outcome. Any unhealthy block or gap removes the file.
+  private async exportiereEchtzeit(von: number, bis: number): Promise<ExportAntwort> {
+    const z = this.zugang;
+    const o0 = this.offen(), p0 = o0.projekt;
+    await z.hostZustandSichern?.('export');                              // plan 1.11 D8: the plugin states of this project are on disk
+    const hostIds = new Set(alleInserts(p0).filter((x) => x.insert.art === 'host' && x.insert.an).map((x) => x.insert.id));
+    await this.pruefeHostBereit(p0, hostIds);
+    this.pruefeWirt([...new Set(p0.spuren.filter(brauchtFreeze).flatMap(wirtSlots))].sort());
+    const spiegel = await z.wirtSpiegel?.();
+    if (spiegel && spiegel.length > 0) fehl('wirt_spiegel_fehler', `the Surge host did not take the parameter map (${spiegel.join('; ')})`);
+    const frei = z.sperreLaden();                                        // nothing else loads a playback while the core plays the export view
+    let sicht: { nr: number; datei: string } | null = null, roh: string | null = null;
+    try {
+      const o = this.offen();
+      const q = structuredClone(o.projekt);                              // exportSicht without its filter: unfrozen host tracks play live
+      sicht = await (z.ladeEchtzeitSicht ?? (() => fehl('kein_kernstand', 'no real-time export without the session')))(q);
+      const dauerS = (bis - von) * 60 / q.tempo_bpm;
+      z.ausgabeLauf({ art: 'export', echtzeit: true, start_ms: Date.now(), dauer_s: dauerS });
+      // /k/arr/export_lauf carries the path as an OSC string (47 bytes at most, §1.4): the work folder (~/.cache/cypherdj[-<i>]/arr) is too long for it
+      // (found on the real core), so the raw capture goes to a short folder of its own
+      roh = path.join(os.tmpdir(), `cdj-${process.pid}`, `export-${z.naechsteNummer()}.f32`);
+      fs.mkdirSync(path.dirname(roh), { recursive: true });
+      if (Buffer.byteLength(roh) > 47) fehl('render_fehler', `the raw capture path is longer than the 47 bytes an OSC string holds: ${roh}`);
+      const e = await this.exportLauf(roh, von, bis, Math.ceil(dauerS * 1000) + ECHTZEIT_ZUGABE_MS + (this.opt.zugabeMs ?? 0));
+      await this.liveNeu(sicht);                                         // the live view is back before anything else is decided
+      sicht = null;
+      if (e.ungesund > 0) fehl('export_host_ausfall', `a plugin host was not healthy in ${e.ungesund} blocks of the run; nothing was exported`);
+      if (e.luecken > 0) fehl('export_luecke', `${e.luecken} audio blocks were lost during the run; nothing was exported`);
+      if (e.grund) fehl('export_luecke', `the core stopped the real-time export (${e.grund}); nothing was exported`);
+      if (!fs.existsSync(roh) || fs.statSync(roh).size !== e.frames * 8) {
+        fehl('render_fehler', 'the raw capture of the real-time export is missing or has the wrong size');
+      }
+      const jetzt = this.offen();
+      const ordner = path.join(jetzt.ordner, 'export');
+      fs.mkdirSync(ordner, { recursive: true });
+      const ziel = exportZiel(ordner, jetzt.slug, (this.opt.jetzt ?? (() => new Date()))());
+      const spitze = await spitzeDbVonF32(roh);
+      const wav = await schreibeWavAusF32Stueckweise(roh, ziel);
+      this.datei = ziel;
+      const lautheit = await messeLautheit(ziel, this.opt.ffmpeg);
+      const antwort: ExportAntwort = { datei: ziel, frames: wav.frames, spitze_db: spitze, regler_quelle: 'kern', abgriff: 'produktion', ueber_decke: false,
+        limiter_db_max: 0, ...(hatDjSchluessel(p0) ? { dj_schluessel: true as const } : {}), echtzeit: true, dauer_s: dauerS, ...lautheit };
+      this.ctx.log({ typ: 'proj_export', slug: jetzt.slug, von_beat: von, bis_beat: bis, ...antwort });
+      return antwort;
+    } finally {
+      if (sicht) await this.liveNeu(sicht);
+      if (roh) { fs.rmSync(roh, { force: true }); try { fs.rmdirSync(path.dirname(roh)); } catch { /* not empty or gone */ } }
+      frei();
+    }
+  }
+
+  // every host stage that is on must be `bereit` (host_fehlt names the strip), then every one of them must have been healthy for `gesundMs`
+  private async pruefeHostBereit(p: Projekt, ids: ReadonlySet<string>): Promise<void> {
+    const z = this.zugang;
+    const gesundMs = this.opt.gesundMs ?? 1100;
+    const pruefe = (): void => {
+      const lage = z.hostLage?.() ?? [];
+      for (const x of alleInserts(p)) {
+        if (!ids.has(x.insert.id)) continue;
+        const l = lage.find((y) => y.insert_id === x.insert.id);
+        if (l?.status !== 'bereit') {
+          const wie = l ? `not ready (${l.status}${l.grund ? `: ${l.grund}` : ''})` : 'not running';
+          fehl('host_fehlt', `the plugin host of ${x.insert.plugin?.name ?? x.insert.id} on ${x.strangId} is ${wie}`);
+        }
+      }
+    };
+    pruefe();
+    const bis = Date.now() + gesundMs + 5000;
+    while ((z.hostGesundAlterMs?.(ids) ?? Infinity) < gesundMs) {
+      if (Date.now() > bis) fehl('host_fehlt', 'a plugin host did not stay healthy long enough for the real-time export');
+      await new Promise((ok) => setTimeout(ok, 25));
+      pruefe();
+    }
+  }
+
+  // the live view again after the real-time run; a refusal is logged (the page shows the old state until the next load), never thrown over the result
+  private async liveNeu(sicht: { nr: number; datei: string }): Promise<void> {
+    try { await this.zugang.ladeLiveNeu?.(); } catch (e) { this.ctx.log({ typ: 'proj_export_live_fehler', fehler: (e as Error).message }); }
+    fs.rmSync(sicht.datei, { force: true });                             // the export view pushes out the loaded playback otherwise (BEHALTE 5)
+  }
+
+  // /k/arr/export_lauf: sends, waits for /e/export_lauf with the deadline and silence handling of the freeze
+  private async exportLauf(roh: string, von: number, bis: number, fristMs: number):
+    Promise<{ frames: number; luecken: number; ungesund: number; grund: string }> {
+    const ende = this.warteAuf('export', fristMs);                       // before sending: /e/export_lauf must not slip past
+    let id = -1;
+    try {
+      id = this.ctx.sende('/k/arr/export_lauf', { quelle: this.ctx.quelle(), pfad: roh, von_beat: von, bis_beat: bis });
+      const q = await this.ctx.warteQuittung(id);
+      if (q === null) fehl('kein_kernstand', 'no answer from the core to /k/arr/export_lauf');
+      if (q.status === 6 || q.status === 7) this.exportAbgelehnt(q.grund);
+      const e = await ende.versprechen;
+      if (e.art === 'neustart') fehl('export_luecke', 'the core restarted during the export; nothing was exported');
+      if (e.art === 'geschlossen') fehl('export_luecke', 'the server is shutting down; the export was abandoned');
+      if (e.art === 'stille') fehl('export_luecke', `no message from the core for ${this.opt.stilleMs ?? 2000} ms (core lost?); nothing was exported`);
+      if (e.art === 'frist') fehl('export_luecke', `no /e/export_lauf within ${fristMs} ms; nothing was exported`);
+      if (e.art !== 'e_export') return fehl('render_fehler', 'unexpected end of the real-time export');
+      return e;
+    } finally { ende.weg(); }
+  }
+
+  // the refusal (/q 6) or abort (/q 7) reasons of /k/arr/export_lauf: zu_gross, belegt, schreiber_ueberlauf, nicht_geladen, tempo_rampe, ausserhalb_bereich
+  private exportAbgelehnt(grund: string): never {
+    if (grund === 'ki_gestoppt' || grund === 'ki_stopp') return fehl('ki_gestoppt', 'Stop Cypher is set');
+    if (grund === 'nicht_geladen') return fehl('nicht_geladen', 'the core has not loaded the export view');
+    if (grund === 'belegt' || grund === 'ueberlappung') return fehl('beschaeftigt', 'the core is recording, freezing, tapping or exporting; try again later');
+    if (grund === 'tempo_rampe') return fehl('beschaeftigt', 'the core is still ramping the tempo; the export waits until the ramp is done');
+    if (grund === 'zu_gross') return fehl('zu_gross', 'the core accepts at most 3600 seconds for a real-time export');
+    if (grund === 'ausserhalb_bereich') return fehl('export_bereich', 'the core refused the export range');
+    if (grund === 'schreiber_ueberlauf') return fehl('export_luecke', 'the disk writer fell behind and the file was removed; nothing was exported');
+    return fehl('render_fehler', `the core refused the real-time export (${grund || 'no reason given'}); nothing was exported`);
   }
 
   // Slice 2 (E10): the playback for the single render of `s`: the export view without the lanes of all other tracks, the own ones stay. null if no

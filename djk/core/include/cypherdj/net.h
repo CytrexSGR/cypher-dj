@@ -15,6 +15,7 @@
 #include <string>
 #include <vector>
 
+#include "cypherdj/arr_export_run.h"
 #include "cypherdj/arr_loader.h"
 #include "cypherdj/recording_thread.h"
 #include "cypherdj/core.h"
@@ -177,6 +178,11 @@ class Netz {
   void arr_zyklus();
   void arr_zurueck(ArrSnapshot* s);
   ArrLaderRinge* arr_ringe_ = nullptr;
+  // plan 1.11 T12 (net_arr_export_run.cpp): /k/arr/export_lauf: check, allocate the job, start its writer thread, queue it to the core; export_zyklus() sends /e/export_lauf when the writer is done
+  bool arr_export_paket(const osc::Nachricht& m);
+  void export_zyklus();
+  std::unique_ptr<ArrExportSchreiber> export_;
+  int32_t export_luecken0_ = 0;   // frame_luecken when the run was queued
   // 1.8 (net_rec.cpp): /k/rec/* annehmen (false: keine dieser Adressen), abgelöste RecSpur freigeben, Take-Meldungen des Aufnahme-Fadens als /e/aufnahme senden
   bool rec_paket(const cypherdj::osc::Adresse* a, const osc::Nachricht& m);
   void rec_zyklus();
@@ -196,6 +202,9 @@ class Netz {
   // 1.10 slice 7 (net_arr_tap.cpp): /k/arr/abgriff the same way: check and queue a job for the load thread, its result as command ARR_ABGRIFF, event ARR_ABGRIFF back to the
   // load thread (file, free), its message as /e/abgriff. The net thread allocates no buffer and writes no file.
   bool arr_abgriff_paket(const osc::Nachricht& m);
+  // plan 1.11 T5 (net_arr_host.cpp): /k/arr/ins_host and /k/arr/ins_mess: check the fields, hand the command to the callback; the answers /e/ins_host, /e/ins_mess and /zustand/ins_host come from its events
+  bool arr_host_paket(const osc::Nachricht& m, bool messung);
+  bool arr_host_ereignis(const Ereignis& e);
   void arr_abgriff_ergebnis(const ArrErgebnis& e);
   void arr_abgriff_ereignis(const Ereignis& e);
   void arr_abgriff_zurueck(ArrAbgriff* f);

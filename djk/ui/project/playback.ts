@@ -7,7 +7,8 @@
 // Clip-Grenzen geschnitten. Mixer-Werte stehen nicht darin (Regler, 2.3), Tempo auch nicht (Beats sind absolut).
 import fs from 'node:fs';
 import path from 'node:path';
-import { BEATS_VORGABE, MAX_AUTO_PUNKTE, ZIEL_BEREICH, MAX_CLIPS, MAX_NOTEN, MAX_SPUREN, SAMPLERATE, pitchFaktor, rackSicht, wirtSlots } from './model.ts';
+import { BEATS_VORGABE, MAX_AUTO_PUNKTE, ZIEL_BEREICH, MAX_CLIPS, MAX_NOTEN, MAX_SPUREN, SAMPLERATE, insertParamIndex, istKettenZiel,
+  MAX_KETTEN_LANEN, makroVon, pitchFaktor, rackSicht, wirtSlots, zerlegeKettenZiel, type InsertPoolArt } from './model.ts';
 import { MAX_BEATS_EINHEITEN, beatsEinheiten, beatsEinheitenZahl } from './warp.ts';
 import { hkStrecke, hkWert, istModulation, modulationsZiel, type Huellkurve } from './envelope.ts';
 import type { GliedGeraet, AudioClip, Clip, Insert, InsertTraeger, Lane, Ziel, MidiClip, Note, Projekt, Punkt, Spur, Warp } from './model.ts';
@@ -39,51 +40,90 @@ export type WZiel = { art: 'gruppe'; nr: number };   // fehlt `ausgang`, zeigt d
 // Slice 2: `ziel` is the project string (Ziel: fader, pan, mute, solo, geraet.cutoff ...); mute and solo points always carry formcode 2
 // 1.12 slice 5 (D9): relativ marks the merged modulation lane of a track (stacked on the base value or the absolute lane of the same target)
 export interface WAuto { ziel: Ziel; punkte: [number, number, number][]; relativ?: true }
+// 1.12 slice 6 (only /2): the lanes of a strip's insert stages and rack macros. `stufe` = position of the stage in the strip's chain, `param` = its parameter
+// index of the kind (as in the rack mapping table), `makro` = 0..3; points as in `auto`. The core takes at most 64 of them in a playback (ARR_KLANES_MAX).
+export type WKettenLane = { stufe: number; param: number; punkte: [number, number, number][] } | { makro: number; punkte: [number, number, number][] };
 const FORM_NR: Readonly<Record<string, number>> = { linear: 0, s: 1, sprung: 2 };
 // slice 4 (only /2): the insert chain of a strip, in signal order. `an` is the kern's structural flag and is ALWAYS true here: the kern runs a stage when
 // this flag AND its row ins/komp/<n>/an are on, and insert_an is a light command that only sends the row, so the bypass must live in the
 // row alone (a false flag would make the stage impossible to switch on again until the next structure change)
 // slice 5: `key` is the structural sidechain key {q, nr, punkt} (the core's chain[j].key); absent = the row key sc or own signal
+// plan 1.11 T7: a host stage carries `latenz` (D4: samples of the round trip, structure); its `an` is the host's readiness
+// (false = the strip plays dry, aligned)
 export interface WInsert {
-  art: Insert['art']; slot: number; an: boolean; key?: { q: 'spur' | 'grp' | 'ret' | 'deck' | 'erz'; nr: number; punkt: 'pre' | 'post' };
+  art: Insert['art']; slot: number; an: boolean; key?: { q: 'spur' | 'grp' | 'ret' | 'deck' | 'erz'; nr: number; punkt: 'pre' | 'post' }; latenz?: number;
+  graph?: string;   // arr-bk: the effect graph of a bk stage (the core builds the instance off the callback)
 }
+/** what the translator asks the host manager for one host stage: ready (the stage may play wet) and the latency to write */
+export type HostStufe = { an: boolean; latenz: number };
 export type WSpur =
-  | { nr: number; art: 'audio'; clips: WAudioClip[]; ausgang?: WZiel; auto?: WAuto[]; chain?: WInsert[]; rack?: WRack }
+  | { nr: number; art: 'audio'; clips: WAudioClip[]; ausgang?: WZiel; auto?: WAuto[]; chain?: WInsert[]; rack?: WRack; chain_auto?: WKettenLane[] }
   | { nr: number; art: 'intern'; geraet: 'rb338' | 'bk'; graph?: string; parameter: Record<string, number>; noten: WNote[]; ausgang?: WZiel;
-    auto?: WAuto[]; chain?: WInsert[]; rack?: WRack }
+    auto?: WAuto[]; chain?: WInsert[]; rack?: WRack; chain_auto?: WKettenLane[] }
   // 1.9 (L25): no parameter, the kit is the device
-  | { nr: number; art: 'intern'; geraet: 'kit'; kit: string; noten: WNote[]; ausgang?: WZiel; auto?: WAuto[]; chain?: WInsert[]; rack?: WRack }
-  | { nr: number; art: 'wirt'; slot: number; noten: WNote[]; ausgang?: WZiel; auto?: WAuto[]; chain?: WInsert[]; rack?: WRack }
+  | { nr: number; art: 'intern'; geraet: 'kit'; kit: string; noten: WNote[]; ausgang?: WZiel; auto?: WAuto[]; chain?: WInsert[]; rack?: WRack;
+      chain_auto?: WKettenLane[] }
+  | { nr: number; art: 'wirt'; slot: number; noten: WNote[]; ausgang?: WZiel; auto?: WAuto[]; chain?: WInsert[]; rack?: WRack; chain_auto?: WKettenLane[] }
   // 1.9 U7 (E9): an instrument rack; zones and gain_db are always written, explicit (the core's contract, arr_playback.cpp geraet_lesen / rack branch)
   | { nr: number; art: 'intern'; geraet: 'rack'; kette: number; glieder: WGlied[]; noten: WNote[]; ausgang?: WZiel; auto?: WAuto[]; chain?: WInsert[];
-    rack?: WRack };
+    rack?: WRack; chain_auto?: WKettenLane[] };
 export type WGliedGeraet =
   | { art: 'intern'; geraet: 'rb338' | 'bk'; graph?: string; parameter: Record<string, number> }
   | { art: 'intern'; geraet: 'kit'; kit: string }
   | { art: 'wirt'; slot: number };
 export type WGlied = { id: string; ton: [number, number]; vel: [number, number]; kette: [number, number]; gain_db: number } & WGliedGeraet;
-export interface WGruppe { nr: number; ausgang: { art: 'master' }; chain?: WInsert[]; rack?: WRack }   // Tiefe 1 (P2): eine Gruppe führt immer in den Master
+// Depth 1 (P2): a group always leads into the master
+export interface WGruppe { nr: number; ausgang: { art: 'master' }; chain?: WInsert[]; rack?: WRack; chain_auto?: WKettenLane[] }
 export interface WReturn extends WGruppe { pre?: true }   // slice 4: the send taps before the fader (absent = post)
 export interface Wiedergabe { format: typeof WIEDERGABE_FORMAT | typeof WIEDERGABE_FORMAT_2; nr: number; spuren: WSpur[]; gruppen?: WGruppe[];
   // returns (slice 3) like the groups; pm = the production master's chain, the kern's key (slice 4)
-  returns?: WReturn[]; pm?: { chain: WInsert[]; rack?: WRack } }
+  returns?: WReturn[]; pm?: { chain: WInsert[]; rack?: WRack; chain_auto?: WKettenLane[] } }
 // slice 4c: the rack of a strip: its pooled slot and the mapping table (`stufe` = position in the chain, `param` = parameter index of the kind, `makro` 0..3)
 // 1.9 U8 T7 (E12): a member target has `glied` (the member's position 0..3 in the rack device) instead of `stufe`; its `param` is the core's member index space
 // (0..3 RB-338, 8..15 bk k1..k8, 16 gain_db)
 export interface WRack { slot: number; ziele: ({ makro: number; stufe: number; param: number; von: number; bis: number }
   | { makro: number; glied: number; param: number; von: number; bis: number })[] }
 // `eingefroren`: the track goes out as its freeze audio clip, so it has no members; member targets are left out and a rack without an insert target is dropped
-const kette = (liste: readonly Insert[] | undefined, strang?: InsertTraeger, eingefroren = false):
-  { chain: WInsert[]; rack?: WRack } | { rack: WRack } | Record<string, never> => {
-  let rack = strang ? rackSicht(strang) : undefined;
+let hostHaken: { host?: (slot: number) => HostStufe; ohne?: ReadonlySet<number> } = {};
+const kette = (liste0: readonly Insert[] | undefined, strang?: InsertTraeger, eingefroren = false):
+  { chain?: WInsert[]; rack?: WRack; chain_auto?: WKettenLane[] } => {
+  // a stage the playback leaves out (a host slot that must not change strips inside one load) is not in the chain; the rack mapping follows the chain
+  const liste = hostHaken.ohne?.size ? liste0?.filter((i) => !(i.art === 'host' && hostHaken.ohne!.has(i.slot))) : liste0;
+  let rack = strang ? rackSicht(liste === liste0 ? strang : { ...strang, inserts: liste } as InsertTraeger) : undefined;
   if (rack && eingefroren) {
     const ziele = rack.ziele.filter((z) => 'stufe' in z);
     rack = ziele.length > 0 && liste?.length ? { slot: rack.slot, ziele } : undefined;
   }
-  if (!liste?.length) return rack ? { rack } : {};   // 1.9 U8 T7: a rack track without a chain still carries its member targets
-  const stufe = (i: Insert): WInsert => ({ art: i.art, slot: i.slot, an: true,
-    ...(i.key ? { key: { q: i.key.quelle, nr: i.key.nr, punkt: i.key.punkt } } : {}) });
-  return { chain: liste.map(stufe), ...(rack ? { rack } : {}) };
+  const ca = strang ? kettenAuto(strang, liste ?? [], rack) : [];
+  // 1.9 U8 T7: a rack track without a chain still carries its member targets
+  if (!liste?.length) return { ...(rack ? { rack } : {}), ...(ca.length ? { chain_auto: ca } : {}) };
+  const stufe = (i: Insert): WInsert => {
+    if (i.art === 'host') {
+      const h = hostHaken.host?.(i.slot) ?? { an: false, latenz: 0 };
+      return { art: 'host', slot: i.slot, an: h.an, latenz: h.latenz };
+    }
+    const graph = i.art === 'bk' ? { graph: i.graph! } : {};
+    return { art: i.art, slot: i.slot, an: true, ...graph, ...(i.key ? { key: { q: i.key.quelle, nr: i.key.nr, punkt: i.key.punkt } } : {}) };
+  };
+  return { chain: liste.map(stufe), ...(rack ? { rack } : {}), ...(ca.length ? { chain_auto: ca } : {}) };
+};
+// 1.12 slice 6: the chain lanes of a strip as the playback takes them. A lane whose stage is not in this playback's chain
+// (a left-out host slot) or whose rack is not written goes; a lane on a parameter a macro drives goes too
+// (the macro wins, as in the core: the project refuses such a lane, this is the safety net).
+const kettenPunkte = (k: { chain_auto?: WKettenLane[] }): number =>
+  (k.chain_auto ?? []).reduce((n, l) => n + l.punkte.length, 0);
+const kettenAuto = (strang: InsertTraeger, liste: readonly Insert[], rack: WRack | undefined): WKettenLane[] => {
+  const aus: WKettenLane[] = [];
+  for (const l of strang.automation ?? []) {
+    if (!istKettenZiel(l.ziel)) continue;
+    const k = zerlegeKettenZiel(l.ziel)!;
+    const punkte = tripel(l.punkte);
+    if ('makro' in k) { if (rack) aus.push({ makro: k.makro - 1, punkte }); continue; }
+    const stufe = liste.findIndex((x) => x.id === k.insert);
+    if (stufe < 0 || makroVon(strang, k.insert, k.param)) continue;
+    aus.push({ stufe, param: insertParamIndex(liste[stufe].art as InsertPoolArt, k.param), punkte });
+  }
+  return aus;
 };
 
 export interface UebersetzOptionen {
@@ -96,6 +136,9 @@ export interface UebersetzOptionen {
   // 1.14 comping (spec R8): spur_id -> take_id. The live translator only: a listed track plays the clips of that take instead of its main lane.
   // Export, loudness and merge never pass it. An unknown track or take id is ignored (the track plays its main lane).
   vorhoeren?: ReadonlyMap<string, string>;
+  // plan 1.11 T7: the host manager's answer per host stage (slot = host number h). Absent = no host is ready (the export path): every host stage `an: false`.
+  host?: (slot: number) => HostStufe;
+  ohneHost?: ReadonlySet<number>;   // host slots left out of this playback (the split of a slot that would change strips inside one load)
 }
 
 const sortiereNoten = (a: WNote, b: WNote): number => a.beat - b.beat || a.ton - b.ton || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
@@ -290,6 +333,10 @@ const gliedGeraet = (g: GliedGeraet): WGliedGeraet => (g.art === 'wirt' ? { art:
     : g.name === 'kit' ? { art: 'intern', geraet: 'kit', kit: g.kit } : { art: 'intern', geraet: 'rb338', parameter: { ...g.parameter } });
 
 export function uebersetze(p: Projekt, opt: UebersetzOptionen): Wiedergabe {
+  hostHaken = { host: opt.host, ohne: opt.ohneHost };
+  try { return uebersetzeIntern(p, opt); } finally { hostHaken = {}; }
+}
+function uebersetzeIntern(p: Projekt, opt: UebersetzOptionen): Wiedergabe {
   if (!Number.isInteger(opt.nr) || opt.nr < 1) throw new WiedergabeFehler('nr_ungueltig', `Wiedergabe-Nummer ${opt.nr}`);
   if (p.spuren.length > MAX_SPUREN) throw new WiedergabeFehler('zu_gross', `spuren: ${p.spuren.length} > ${MAX_SPUREN}`);
   const o = { ...opt, frames: opt.frames ?? dateiFrames(opt.audioOrdner) };
@@ -336,12 +383,13 @@ export function uebersetze(p: Projekt, opt: UebersetzOptionen): Wiedergabe {
       if (nr === undefined) throw new WiedergabeFehler('ziel_unbekannt', `Spur ${s.id} zeigt auf ${s.ausgang.id}`);
       w = { ...w0, ausgang: { art: 'gruppe' as const, nr } };
     }
-    const lanes = s.automation ?? [];
+    const lanes = (s.automation ?? []).filter((l) => !istKettenZiel(l.ziel));
     if (lanes.length) {                                      // Automation: `auto` only with a lane, else the file stays the previous one
       autoPunkte += lanes.reduce((n, l) => n + l.punkte.length, 0);
       const punkte = (l: Lane): [number, number, number][] =>
-        l.punkte.map((q) => [q.beat, q.wert, ZIEL_BEREICH[l.ziel].nurSprung ? FORM_NR.sprung : FORM_NR[q.form ?? 'linear']]);   // mute/solo: always a jump
-      w = { ...w, auto: lanes.map((l) => ({ ziel: l.ziel, punkte: punkte(l) })) };
+        // mute/solo: always a jump
+        l.punkte.map((q) => [q.beat, q.wert, ZIEL_BEREICH[l.ziel as Ziel].nurSprung ? FORM_NR.sprung : FORM_NR[q.form ?? 'linear']]);
+      w = { ...w, auto: lanes.map((l) => ({ ziel: l.ziel as Ziel, punkte: punkte(l) })) };
     }
     const relativ = relativeLanen(spurClips(s, o.vorhoeren));   // 1.12 slice 5 (D9): modulation envelopes, after the absolute lanes
     if (relativ.length) {
@@ -349,8 +397,19 @@ export function uebersetze(p: Projekt, opt: UebersetzOptionen): Wiedergabe {
       w = { ...w, auto: [...(w.auto ?? []), ...relativ] };
     }
     if (w.art === 'audio') autoPunkte += w.clips.reduce((n, c) => n + (c.gain_hk?.length ?? 0), 0);   // gain_hk counts with the lanes (D7)
-    return { ...w, ...kette(s.inserts, s, s.art === 'instrument' && wirtSlots(s).length > 0 && !!s.freeze) };
+    const ke = kette(s.inserts, s, s.art === 'instrument' && wirtSlots(s).length > 0 && !!s.freeze);
+    autoPunkte += kettenPunkte(ke);
+    return { ...w, ...ke };
   });
+  // groups, returns and the PM (slice 6: their chain lanes count with the others and go to the core, at most ARR_KLANES_MAX of them in all)
+  const gruppenW = [...(p.gruppen ?? [])].sort((a, b) => a.nr - b.nr).map((g) => ({ nr: g.nr, ausgang: { art: 'master' as const }, ...kette(g.inserts, g) }));
+  const returnsW = [...(p.returns ?? [])].sort((a, b) => a.nr - b.nr)
+    .map((r) => ({ nr: r.nr, ausgang: { art: 'master' as const }, ...(r.pre ? { pre: true as const } : {}), ...kette(r.inserts, r) }));
+  const pmW = p.master?.inserts?.length ? kette(p.master.inserts, p.master) as { chain: WInsert[]; rack?: WRack; chain_auto?: WKettenLane[] } : undefined;
+  const streifen: { chain_auto?: WKettenLane[] }[] = [...gruppenW, ...returnsW, ...(pmW ? [pmW] : [])];
+  for (const k of streifen) autoPunkte += kettenPunkte(k);   // the tracks were counted above
+  const kettenLanen = [...spuren as { chain_auto?: WKettenLane[] }[], ...streifen].reduce((n, k) => n + (k.chain_auto?.length ?? 0), 0);
+  if (kettenLanen > MAX_KETTEN_LANEN) throw new WiedergabeFehler('zu_gross', `insert and rack lanes: ${kettenLanen} > ${MAX_KETTEN_LANEN}`);
   if (autoPunkte > MAX_AUTO_PUNKTE) throw new WiedergabeFehler('zu_gross', `auto-punkte: ${autoPunkte} > ${MAX_AUTO_PUNKTE}`);
   if (clips > MAX_CLIPS) throw new WiedergabeFehler('zu_gross', `clips: ${clips} > ${MAX_CLIPS}`);
   if (nZahl > MAX_NOTEN) throw new WiedergabeFehler('zu_gross', `noten: ${nZahl} > ${MAX_NOTEN}`);
@@ -367,10 +426,9 @@ export function uebersetze(p: Projekt, opt: UebersetzOptionen): Wiedergabe {
   // ohne Routing, Warp und Lane byteweise die alte Datei (AK3)
   if (!routing && !gewarpt && !automatisiert && !hatReturns && !eingefuegt && !huellen && !hatRack) return { format: WIEDERGABE_FORMAT, nr: opt.nr, spuren };
   return { format: WIEDERGABE_FORMAT_2, nr: opt.nr, spuren,
-    gruppen: [...(p.gruppen ?? [])].sort((a, b) => a.nr - b.nr).map((g) => ({ nr: g.nr, ausgang: { art: 'master' as const }, ...kette(g.inserts, g) })),
-    ...(hatReturns ? { returns: [...(p.returns ?? [])].sort((a, b) => a.nr - b.nr)
-      .map((r) => ({ nr: r.nr, ausgang: { art: 'master' as const }, ...(r.pre ? { pre: true as const } : {}), ...kette(r.inserts, r) })) } : {}),
-    ...(p.master?.inserts?.length ? { pm: kette(p.master.inserts, p.master) as { chain: WInsert[]; rack?: WRack } } : {}) };
+    gruppen: gruppenW,
+    ...(hatReturns ? { returns: returnsW } : {}),
+    ...(pmW ? { pm: pmW } : {}) };
 }
 
 export const wiedergabeDatei = (arbeitsordner: string, nr: number): string => path.join(arbeitsordner, `wiedergabe-${nr}.json`);

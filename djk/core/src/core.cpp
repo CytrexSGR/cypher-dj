@@ -60,6 +60,7 @@ Kern::Kern(double start_bpm, cdj_ring_kopf* ring, Befehlsring* befehle, Ereignis
   // D1 K2b (Spec 2.4): die RB-338 spielt alle internen Spuren (je Spur-Slot eine Instanz)
   arr_rb_ = std::make_unique<ArrRbSenke>(*arr_);
   arr_bk_ = std::make_unique<ArrBkSenke>(*arr_);   // S20: a Baukasten graph per internal track with device bk
+  arr_bk_->setze_zweiten_leser(&arr_->inserts());   // arr-bk slice 3: the graph store asks one reader; it also covers the Baukasten insert stages
   arr_kit_ = std::make_unique<ArrKitSenke>(*arr_);   // 1.9: a Kit per internal track with device kit (before the dispatcher that holds it)
   arr_intern_ = std::make_unique<ArrInternSenke>(*arr_, arr_rb_.get(), arr_bk_.get(), arr_kit_.get());
 #ifndef CYPHERDJ_MUTATION_ARR_OHNE_RB_SENKE
@@ -135,6 +136,10 @@ void Kern::einsortieren(const Befehl& c) {
       if (arr_->abgriff_laeuft()) {   // 1.10 slice 7: the tap aborts the same way
         arr_->abgriff_abbrechen(0, plan_.karte());
         arr_abgriff_quittungen(plan_.karte());
+      }
+      if (arr_->export_laeuft()) {   // plan 1.11 T12: the export run too
+        arr_->export_abbrechen(0, plan_.karte());
+        arr_export_quittungen(plan_.karte());
       }
 #ifndef CYPHERDJ_MUTATION_ARR_FREEZE_SET_NEU_BLEIBT
       // Fix L1: ein wartender oder laufender Freeze bricht ab wie bei Start, Stopp, Laden und Rampe (Quittung 7 abbruch
@@ -289,6 +294,7 @@ void Kern::einsortieren(const Befehl& c) {
       if (aufnahme_.status() != 0) { quittung(c.id, c.quelle, 6, sample_, beat0, "tempo_rampe"); break; }
 #endif
       if (arr_->abgriff_laeuft()) arr_->stopp(0, sample_, plan_.karte());   // 1.10 slice 7: a tap aborts on a ramp too (not part of the freeze mutation)
+      if (arr_->export_laeuft()) arr_->stopp(0, sample_, plan_.karte());    // plan 1.11 T12: and an export run
 #ifndef CYPHERDJ_MUTATION_ARR_FREEZE_RAMPE_OHNE_ABBRUCH
       // Spec 6.33: eine Rampe, gleich von welcher Quelle, bricht einen wartenden oder laufenden Freeze ab wie ein Stopp
       // (Quittung 7 abbruch und Rückgabe 1 in arr_freeze_quittungen); die Rampe selbst gilt wie immer
@@ -332,6 +338,15 @@ void Kern::einsortieren(const Befehl& c) {
     case Befehl::ARR_ABGRIFF:  // 1.10 slice 7 (core_arr.cpp): waits behind a pending load like the freeze
       if (!arr_befehl_wartet(c)) einsortieren_abgriff(c, beat0);
       break;
+    case Befehl::ARR_EXPORT_LAUF:  // plan 1.11 T12 (core_arr.cpp): waits behind a pending load like the freeze
+      if (!arr_befehl_wartet(c)) einsortieren_export(c, beat0);
+      break;
+    case Befehl::ARR_INS_HOST:   // plan 1.11 T5: health flag of the server, applied at once (an atomic), no playback involved
+      ins_host_befehl(c);
+      break;
+    case Befehl::ARR_INS_MESS:   // plan 1.11 T5: round-trip measurement
+      ins_mess_befehl(c);
+      break;
     case Befehl::REC_SPUR:
     case Befehl::REC_START:
     case Befehl::REC_STOPP:
@@ -348,15 +363,15 @@ void Kern::zyklus(int n, int64_t mono_ns) {
   if (freeze_kopf_) freeze_nachreichen();             // Paket K3: Freeze-Rückgaben, die nicht in den Ring passten
   if (abgriff_kopf_) abgriff_nachreichen();           // 1.10 slice 7: the same for the tap
   if (n > MAX_BLOCK) n = MAX_BLOCK;
-  zyklus_n_ = n;  // D1 K1: Start-Regel des Arrangements (Vorhalt 2n + 25 und ein Zyklus)
+  zyklus_n_ = n;  // D1 K1: Start-Regel des Arrangements (Vorhalt 2n und ein Zyklus)
   zyklus_ns_ = mono_ns;  // mehrkern 3.2: the true start of the cycle for the time gates of phase Q (audio() adds the offset of the sub-block)
   keylock_uebernehmen();  // Keylock (Prüfung m5): gestellte Vorgabe übernehmen, danach kein setze_keylock_vorgabe mehr
   // Glanz 2.7 (F19): MIDI-Ströme um den Wirt-Rundweg vorziehen; vor dem Einsortieren, damit ERZ_FENSTER ihn schon kennt.
   // Wechselt das Quantum, springt der Vorhalt mit (bekannte Grenze, Plan Glanz 2.7).
 #ifdef CYPHERDJ_MUTATION_MIDI_VORHALT_FEST
-  erz_->setze_midi_vorhalt(537);  // Fehlerfall Prüfung R5: Vorhalt fest für Quantum 256, unabhängig von n
+  erz_->setze_midi_vorhalt(512);  // Fehlerfall Prüfung R5: Vorhalt fest für Quantum 256, unabhängig von n
 #else
-  erz_->setze_midi_vorhalt((int64_t)ERZ_MIDI_RUNDWEG_ZYKLEN * n + ERZ_MIDI_VORHALT_REST);
+  erz_->setze_midi_vorhalt(erz_midi_vorhalt(n));
 #endif
   // 1) Vergangene Segmente verwerfen, Befehle am Blockanfang einsortieren, Fälliges im Block melden (§1.3, §4.2)
   neue_zeitachse_ = false;
@@ -404,6 +419,7 @@ void Kern::zyklus(int n, int64_t mono_ns) {
   mix_zustand(n0, n);    // 1.15 A6: Absenkung der Mix-Werkzeuge je Kanal (§5.5d)
   arr_zustand(n0, n);    // D1 K1: /zustand/arr (§5.13)
   warp_zustand(n0, n);   // 1.13 Slice 2: /zustand/warp (§5.13b)
+  ins_host_zustand(n0, n);   // plan 1.11 T5: /zustand/ins_host
   spur_zustand(n0, n);   // mehrkern slice 3.2 task 7: /zustand/spur_pool (§5.13)
   hall_zustand(n0, n);   // mehrkern Task 5: /zustand/hall_pool (§5.13)
 

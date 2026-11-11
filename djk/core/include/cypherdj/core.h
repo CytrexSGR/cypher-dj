@@ -22,6 +22,7 @@
 
 #include "cypherdj/deck_factory.h"
 #include "cypherdj/dsp/analysis_bands.h"
+#include "cypherdj/arr_host_measurement.h"
 #include "cypherdj/arrangement.h"
 #include "cypherdj/auto_pickup.h"
 #include "cypherdj/recording.h"
@@ -30,7 +31,7 @@
 #include "cypherdj/arr_kit_sink.h"
 #include "cypherdj/arr_rb_sink.h"
 #include "cypherdj/arr_rack_sink.h"
-#include "cypherdj/arr_host_sink.h"
+#include "cypherdj/arr_instrument_host_sink.h"
 #include "cypherdj/generator.h"
 #include "cypherdj/hulls.h"
 #include "cypherdj/loopbox.h"
@@ -91,7 +92,10 @@ struct Befehl {
     ARR_AUTO = 50,     // 1.12 S3 (§4.11 /k/arr/auto): nr = spur (1..32, 0 = all), politik = field (0 fader, 1 pan, 2 mute, 3 solo), an (1 lane plays, 0 the hand overrides)
     HAND_FREI = 52,    // §4.3 /k/hand/frei: liste = pfade (Komma-Liste, Präfix auf /, *); only andreas; releases the human holder
     ARR_ARM = 51,      // 1.12 S3 (§4.11 /k/arr/arm): nr = spur (1..32, 0 = all, only with an 0), an (1 arm, 0 disarm), politik = modus (0 touch, 1 latch, 2 write)
-    ARR_ABGRIFF = 53   // 1.10 slice 7 (§4.11 /k/arr/abgriff): zeiger = ArrAbgriff* (job with buffer, allocated in the load thread), nr = the strip number
+    ARR_ABGRIFF = 53,  // 1.10 slice 7 (§4.11 /k/arr/abgriff): zeiger = ArrAbgriff* (job with buffer, allocated in the load thread), nr = the strip number
+    ARR_INS_HOST = 54, // plan 1.11 T5 (§4.11 /k/arr/ins_host): nr = host h (1..4), an = the server's health flag (0/1); applied at once, answered by event INS_HOST
+    ARR_INS_MESS = 55, // plan 1.11 T5 (§4.11 /k/arr/ins_mess): nr = host h (1..4); starts the round-trip measurement, answered by event INS_MESS
+    ARR_EXPORT_LAUF = 56  // plan 1.11 T12 (§4.11 /k/arr/export_lauf): zeiger = ArrExportLauf* (job with its ring, owned by a writer thread of the net layer); von/bis in the job; no event comes back, the job reports through its own phase
   };
   int32_t art;
   int32_t an;          // KLICK: 0 oder 1; KI_STUFE: Stufe 0 bis 3
@@ -178,6 +182,9 @@ struct Ereignis {
     HALL_ZUSTAND = 44,               // mehrkern Task 5 (§5.13 /zustand/hall_pool): hall_an, hall_faeden, hall_spaet, hall_zurueck; on change and at 2 Hz; without a HallPool an 0, faeden 0
     SPUR_ZUSTAND = 45,               // mehrkern slice 3.2 task 7 (§5.13 /zustand/spur_pool): spur_an, spur_modus, spur_blocks_parallel, spur_einheiten_worker, spur_einheiten_caller, spur_seriell, spur_haengt, spur_spaet, spur_zurueck; on change of an/modus/haengt/spaet and at 2 Hz (the running counters and zurueck only with the beat); without a pool the pool-side values are 0, but seriell still counts the serial phases of the tracks
     ARR_ABGRIFF = 46,                // 1.10 slice 7: finished or refused tap job (zeiger = ArrAbgriff*), status 0 done, 1 aborted, ARR_ABGRIFF_ABGELEHNT free only; the load thread writes the file, the net sends /e/abgriff
+    INS_HOST = 47,                   // plan 1.11 T5 (/e/ins_host): deck = h, status = the stage's health after the command (edge check AND server flag, 0/1)
+    INS_MESS = 48,                   // plan 1.11 T5 (/e/ins_mess): deck = h, status = round trip in samples or -1, grund = "" or laeuft, host_fehlt, kein_rueckweg
+    INS_HOST_ZUSTAND = 49,           // plan 1.11 T5 (/zustand/ins_host): host_gesund[h-1], host_rundweg[h-1]; on change and at 2 Hz while the host ports exist
     INS_GR = 43,                     // 1.10 S4a (/e/ins_gr): pfad = ins/komp/<n>, wert = gain reduction of the pooled compressor stage in dB (>= 0), 20 Hz with the levels, only stages that ran in the last block; netz_loop sends it as /e/ins_gr ,sf (§5.5f)
   };
   int32_t art;
@@ -235,6 +242,7 @@ struct Ereignis {
   // mehrkern slice 3.2 task 7, SPUR_ZUSTAND (§5.13): spur_blocks_parallel, spur_einheiten_*, spur_seriell are the low 31 bits of the kern's 64-bit counters (wrap, never negative);
   // spur_haengt, spur_spaet, spur_zurueck saturate at INT32_MAX like the Hall pool's
   int32_t spur_an, spur_modus, spur_blocks_parallel, spur_einheiten_worker, spur_einheiten_caller, spur_seriell, spur_haengt, spur_spaet, spur_zurueck;
+  int32_t host_gesund[4], host_rundweg[4];   // plan 1.11 T5, INS_HOST_ZUSTAND (ARR_INS_HOST = 4 hosts)
   int32_t rec_scharf;   // 1.8, REC_ZUSTAND: Zahl der scharfen Spuren (Audio)
   int32_t rec_midi_scharf;   // 1.8 T7a, REC_ZUSTAND: Zahl der MIDI-scharfen Spuren (eingang 30)
   int64_t rec_luecken;  // 1.8, REC_ZUSTAND: Lücken des laufenden Takes
@@ -303,7 +311,7 @@ class Kern {
     if (slot >= 1 && slot <= ARR_WIRT_SLOTS) arr_wirt_[slot - 1]->rueck(l, r);
   }
   const MidiAus& arr_midi_aus(int slot) const { return arr_wirt_[std::clamp(slot, 1, ARR_WIRT_SLOTS) - 1]->midi(); }
-  // D1 K2b: Messpunkt A4 je Wirt-Slot (arr_host_sink.h); nur ein Leser, der Hauptfaden (main.cpp)
+  // D1 K2b: Messpunkt A4 je Wirt-Slot (arr_instrument_host_sink.h); nur ein Leser, der Hauptfaden (main.cpp)
   bool arr_wirt_messung(int slot, ArrWirtMessung& m) noexcept {
     return slot >= 1 && slot <= ARR_WIRT_SLOTS && arr_wirt_[slot - 1]->messung_holen(m);
   }
@@ -461,6 +469,30 @@ class Kern {
   void rueck(int erz, const float* l, const float* r) noexcept {
     if (erz >= 1 && erz <= 8) { rueck_l_[erz - 1] = l; rueck_r_[erz - 1] = r; }
   }
+  // Plan 1.11 T3/T4: effect-host ports h = 1..ARR_INS_HOST. ins_rueck: return arr_insret_<h>_L/R for the NEXT zyklus() (like rueck(), n samples from index 0);
+  // ins_aus: the writable send buffers arr_ins_<h>_L/R of this cycle (main.cpp has zeroed them). One source of truth: main.cpp registers all 16 ports or none, so every
+  // pointer is non-null exactly when host_ports_da() is true (a test that drives zyklus() without main.cpp sets the pointers itself). The ins_* pointers are for the callback
+  // thread only (plain members, no atomics); other threads read host_ports_da(). Both setters are pointer stores from the callback, nothing allocates.
+  void ins_rueck(int h, const float* l, const float* r) noexcept {
+    if (h >= 1 && h <= ARR_INS_HOST) { ins_rueck_[h - 1][0] = l; ins_rueck_[h - 1][1] = r; }
+  }
+  void ins_aus(int h, float* l, float* r) noexcept {
+    if (h >= 1 && h <= ARR_INS_HOST) { ins_aus_[h - 1][0] = l; ins_aus_[h - 1][1] = r; }
+  }
+  const float* ins_rueck_zeiger(int h, int seite) const noexcept {
+    return h >= 1 && h <= ARR_INS_HOST && (seite == 0 || seite == 1) ? ins_rueck_[h - 1][seite] : nullptr;
+  }
+  float* ins_aus_zeiger(int h, int seite) const noexcept {
+    return h >= 1 && h <= ARR_INS_HOST && (seite == 0 || seite == 1) ? ins_aus_[h - 1][seite] : nullptr;
+  }
+  // All 4 x 4 host ports registered? Set once by main before the audio starts; false (JACK refused any of them, none is kept): the host kind is unavailable and
+  // the loader refuses a playback with a host stage as host_fehlt (plan 1.11 T4). Readable from any thread.
+  void setze_host_ports_da(bool da) noexcept { host_ports_da_.store(da, std::memory_order_release); }
+  bool host_ports_da() const noexcept { return host_ports_da_.load(std::memory_order_acquire); }
+  // plan 1.11 T5 (D7): the edge check's verdict on host h (main thread, every 500 ms); one of the two sources of the stage's health. A core without the host ports never sets it.
+  void setze_host_kante(int h, bool ok) noexcept {
+    if (host_ports_da()) arr_->host_stufe().setze_kante(h, ok);
+  }
   // I08: Audio-Eingänge ein_1..4_L/R für den NÄCHSTEN zyklus(); nullptr = Port fehlt. Wie rueck(): main.cpp setzt vor jedem zyklus() die
   // JACK-Puffer dieses Zyklus.
   void ein(int paar, const float* l, const float* r) noexcept { ein_bank_.zeiger(paar, l, r); }
@@ -554,6 +586,14 @@ class Kern {
   // D1 K1 (core_arr.cpp): Modul Arrangement
   void einsortieren_arr(const Befehl& c, double beat0);
   void arr_zustand(int64_t n0, int n);
+  // plan 1.11 T5 (core_arr.cpp): effect-host commands, the measurement per sub-block and the state event
+  void ins_host_befehl(const Befehl& c);
+  void ins_mess_befehl(const Befehl& c);
+  void ins_mess_block(int off, int m);
+  void ins_host_zustand(int64_t n0, int n);
+  void ins_mess_melden(int h, int rundweg, ArrHostMessung::Grund g);
+  ArrHostMessung host_mess_;
+  int32_t host_gemeldet_[8] = {-1, -1, -1, -1, -1, -1, -1, -1};
   // 1.12 S3 (§5.13 /e/auto): callback thread, at the end of the cycle. Drains the Arrangement ring into the event ring; when events were lost (the ring dropped one, or
   // the event ring was full) the queue is discarded and the full state is re-reported (every field with a lane, every field last reported as 1).
   void auto_melden(int64_t n0);
@@ -633,6 +673,12 @@ class Kern {
   ArrAbgriff* abgriff_kopf_ = nullptr;
   ArrAbgriff* abgriff_schwanz_ = nullptr;
   int abgriff_wartend_ = 0;
+  // plan 1.11 T12 (core_arr.cpp): /k/arr/export_lauf, the third sibling of the freeze: the same receipts (1, 2 at the onset, 3 at the end, 7 on abort, 6 on refusal). The job goes back to
+  // its writer thread through its own atomic phase (ArrExportLauf), so no event and no chain are needed; a refusal tells the writer through ArrExportLauf::verwerfen.
+  void einsortieren_export(const Befehl& c, double beat0);
+  void arr_export_quittungen(const Karte& k);
+  int64_t arr_export_id_ = 0;
+  char arr_export_quelle_[48] = {};
   bool dj_laeuft() const noexcept;   // Deck, Loop-Box oder Erzeuger-Strom läuft (Spec 2.2: dann Quant 2)
   std::unique_ptr<Arrangement> arr_;
   int arr_kanal_ = -1;              // Mixer-Index von erz/4 (ARR_KANAL)
@@ -641,7 +687,7 @@ class Kern {
   // S14: rows 0..17 are the mixer channels, row MIX_BK_SEND_ZEILE (18) is fx/3 and 19 is fx/4 (graph knobs of the send returns).
   float bk_wert_[MIX_BK_ZEILEN][8] = {};
   int16_t bk_ort_[cypherdj::stellwerk::MAX_REGLER];
-  int zyklus_n_ = 256;              // Größe des laufenden Zyklus (Start-Regel: Vorhalt 2n + 25 und + 1 Zyklus)
+  int zyklus_n_ = 256;              // Größe des laufenden Zyklus (Start-Regel: Vorhalt 2n und + 1 Zyklus)
   int64_t zyklus_ns_ = 0;           // mehrkern 3.2: Blockanfang des Zyklus (CLOCK_MONOTONIC, der Stempel von zyklus()); 0 = unbekannt. Basis der Zeit-Tore der Spur-Phase
   int64_t arr_start_id_ = 0, arr_stopp_id_ = 0;
   const ArrSnapshot* arr_alt_offen_ = nullptr;   // abgelöster Schnappschuss, den der volle Ring nicht nahm
@@ -744,6 +790,9 @@ class Kern {
   int64_t rueck_unendlich_ = 0;  // Audit F01: nicht endliche Samples am Wirt-Rückweg (verworfen)
   const float* rueck_l_[8] = {};
   const float* rueck_r_[8] = {};
+  const float* ins_rueck_[ARR_INS_HOST][2] = {};   // plan 1.11 T3
+  float* ins_aus_[ARR_INS_HOST][2] = {};
+  std::atomic<bool> host_ports_da_{false};
   EingangsBank ein_bank_;
   MidiEin midi_ein_;
   std::atomic<uint32_t> ein_verbunden_{0};

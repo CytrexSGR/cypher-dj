@@ -97,7 +97,7 @@ test('T2 conversion: RB-338 track to rack by {art: rack} alone, explicit members
   assert.deepEqual(zurueck.projekt.spuren[0].geraet, { art: 'intern', name: 'rb338', parameter: {} });
   assert.equal(zurueck.betrifft_wiedergabe, true);
   // frees the member count: eight single-member racks are the limit, a plain device in place of one makes room
-  // Surge track to rack (T4): the Surge becomes member g1 and keeps its slot; the full case is in project_rack_host.test.mjs
+  // Surge track to rack (T4): the Surge becomes member g1 and keeps its slot; the full case is in project_rack_instrument_host.test.mjs
   const surge = mitSpur({ art: 'wirt', name: 'surge', slot: 1 }); surge.spuren[0].freeze = null;
   assert.equal(aendere(surge, { befehl: 'spur_aendern', spur_id: 'r1', geraet: { art: 'rack' } }).projekt.spuren[0].geraet.glieder[0].geraet.slot, 1);
   // a track without a device has nothing to become g1

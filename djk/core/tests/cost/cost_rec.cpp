@@ -98,7 +98,7 @@ static Messung messe_lage(const Lage& lg, int n, int Q, const std::string& ordne
 #ifndef KOSTEN_REC_OHNE_MIDI
   std::vector<cdj::RecMidi*> rm;
 #endif
-  Kostensenke intern(0), wirt(2 * 256 + 25);
+  Kostensenke intern(0), wirt(2 * 256 + 25);   // stand-in sink with an explicit lead (537); the cost lanes do not use the kernel constant for it
   l.kern->setze_arr_senke_intern(&intern);
   l.kern->setze_arr_senke_wirt(1, &wirt);
   cdj::Befehl f = l.neu(cdj::Befehl::TEIL); std::snprintf(f.pfad, sizeof f.pfad, "erz/4/fader"); f.politik = 1; l.bef->schiebe(f);

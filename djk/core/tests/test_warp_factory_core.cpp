@@ -73,7 +73,7 @@ int main() {
     const std::string a = sinus_datei(x.ordner, 'a', F, 1000.0);
     x.laden(1, spuren_json(x, a, F, 8.0), "andreas", true);
     x.start(0.0, 0);
-    x.lauf(x.kern->sample() + 40 * N);   // Einsatz bei Sample 3n + 25 + ARR_WARP_FRIST, danach Klang
+    x.lauf(x.kern->sample() + 40 * N);   // Einsatz bei Sample 3n + ARR_WARP_FRIST, danach Klang
     int i = letzter(x);
     PRUEF(i >= 0);
     if (i >= 0) {

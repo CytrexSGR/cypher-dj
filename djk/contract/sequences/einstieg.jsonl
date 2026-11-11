@@ -1,0 +1,17 @@
+{"t":"sende","sample":0,"osc":["/k/set/neu",",hsd",1,"pruefstand",128.0],"bereich":"zeitachse","herleitung":"§4.2: neue Zeitachse mit 128 BPM, Beat 0 am nächsten Zyklus = Sample 0 (§1.1)"}
+{"t":"sende","sample":45000,"osc":["/k/deck/laden",",hsisdii",2,"leitstand",2,"f0000000000000b2",128.0,1,0],"bereich":"deck","herleitung":"§4.4 /k/deck/laden, Fixture material/f0000000000000b2/ next to the sequences"}
+{"t":"erwarte","ab_sample":45000,"bis_sample":47400,"osc":["/q",",hsihds",2,"leitstand",1,null,null,""],"bereich":"deck","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"erwarte","ab_sample":45000,"bis_sample":93000,"osc":["/q",",hsihds",2,"leitstand",3,null,null,""],"bereich":"deck","herleitung":"§4.4: Quittung fertig nach dem Tausch"}
+{"t":"erwarte","ab_sample":45000,"bis_sample":93000,"osc":["/e/geladen",",isdiih",2,"f0000000000000b2",128.0,1,0,null],"toleranz":1e-06,"bereich":"deck","herleitung":"§4.4, §5.9 /e/geladen"}
+{"t":"sende","sample":270000,"osc":["/k/deck/start",",hssssiddi",3,"leitstand","","","",2,16.0,64.0,0],"bereich":"deck","herleitung":"§10 vorhoeren: Deck startet synchron am Einstieg, hinter dem Fader"}
+{"t":"erwarte","ab_sample":270000,"bis_sample":272400,"osc":["/q",",hsihds",3,"leitstand",1,null,null,""],"bereich":"deck","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"erwarte","ab_sample":360000,"bis_sample":362400,"osc":["/q",",hsihds",3,"leitstand",2,360000,16.0,""],"toleranz":1e-06,"bereich":"deck","herleitung":"§5.1 Status 2 am Ziel-Sample llround(sample_at(16)) = 360000"}
+{"t":"sende","sample":742500,"osc":["/k/hoerschein",",hsssssddddfff",4,"pruefstand","h_e","deck/2","f0000000000000b2/128000_r1","ok",128.0,96.0,64.0,80.0,0.5,0.0,-14.0],"bereich":"hoerschein","herleitung":"§4.5 Hörschein registrieren (Quelle pruefstand: §1.4 kennt keine Quelle analyse)"}
+{"t":"erwarte","ab_sample":742500,"bis_sample":744900,"osc":["/q",",hsihds",4,"pruefstand",null,null,null,null],"bereich":"hoerschein","herleitung":"§4: jeder Befehl bekommt eine /q; welchen Status legt §4.5 nicht fest"}
+{"t":"sende","sample":1080000,"osc":["/k/deck/start",",hssssiddi",5,"cypher","p1","b_rein","",2,64.0,64.0,0],"bereich":"deck"}
+{"t":"erwarte","ab_sample":1080000,"bis_sample":1082400,"osc":["/q",",hsihds",5,"cypher",1,null,null,""],"bereich":"deck","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"sende","sample":1080000,"osc":["/k/teil",",hssisddfiiss",6,"cypher","p1",1,"deck/2/fader",64.0,0.0,-15.0,0,0,"","h_e"],"bereich":"regler"}
+{"t":"erwarte","ab_sample":1080000,"bis_sample":1082400,"osc":["/q",",hsihds",6,"cypher",1,null,null,""],"bereich":"regler","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"erwarte","ab_sample":1440000,"bis_sample":1442400,"osc":["/q",",hsihds",5,"cypher",2,1440000,64.0,""],"toleranz":1e-06,"bereich":"deck","herleitung":"§5.1 Status 2 am Ziel-Sample llround(sample_at(64)) = 1440000"}
+{"t":"erwarte","ab_sample":1440000,"bis_sample":1442400,"osc":["/q",",hsihds",6,"cypher",2,1440000,64.0,""],"toleranz":1e-06,"bereich":"regler","herleitung":"§14.2: Start am Einstieg, Quell-Beat 64 in [64, 144]"}
+{"t":"deck_wert","sample":1530000,"deck":2,"feld":"quell_beat","wert":68.0,"toleranz":0.01,"bereich":"deck","herleitung":"ab S erklingt genau der gemessene Abschnitt"}

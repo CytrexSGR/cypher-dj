@@ -49,7 +49,7 @@ uhr() {
   local rc=$?
   cat "$B/uhr.txt"
   material
-  node "$A/golden.mjs" --vertrag "$V" --material "$MATERIAL" "$V/folgen/uhr_golden.jsonl" | tee -a "$B/uhr.txt" | tail -1
+  node "$A/golden.mjs" --vertrag "$V" --material "$MATERIAL" "$V/sequences/uhr_golden.jsonl" | tee -a "$B/uhr.txt" | tail -1
   grep -q '^GRÜN uhr_golden' "$B/uhr.txt" && [ $rc -eq 0 ]
 }
 

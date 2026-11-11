@@ -1,8 +1,11 @@
-// 1.10 slice 4a T2 / 4b T12: pooled compressor, EQ, saturator and limiter inserts of the arrangement strips (see arr_inserts.h for the life of a stage).
+// 1.10 slice 4a T2 / 4b T12 (arr-fx: and utility, arr-bk: and Baukasten effect graphs): pooled compressor, EQ, saturator, limiter, utility and Baukasten inserts of the arrangement strips (see arr_inserts.h for the life of a stage).
 #include "cypherdj/arr_inserts.h"
 
 #include "cypherdj/arr_arbeit.h"
 #include "cypherdj/arr_pdc.h"
+#include "cypherdj/cypher_bk_ffi.h"
+
+#include <cypherdj/dsp/denormal.h>
 
 #include <algorithm>
 #include <cmath>
@@ -15,8 +18,9 @@ ArrInserts::ArrInserts() : arbeit0_(std::make_unique<ArrArbeit>()) {
   for (int s = 0; s < ARR_INS_EQ; ++s) eq_[s] = std::make_unique<EqNativ>();
   for (int s = 0; s < ARR_INS_SAETT; ++s) saett_[s] = std::make_unique<SaettNativ>();
   for (int s = 0; s < ARR_INS_LIM; ++s) lim_[s] = std::make_unique<cypherdj::dsp::KanalLimiter>(INS_LIM_FS, ins_lim_einstellung());
+  for (int s = 0; s < ARR_INS_UTIL; ++s) util_[s] = std::make_unique<cypherdj::dsp::Utility>(INS_LIM_FS);
   for (int& b : besitzer_) b = -1;
-  for (int s = 0; s < ARR_INS_ALLE; ++s) {
+  for (int s = 0; s < INS_G_HOST0; ++s) {   // the native kinds; a host slot takes the latency of its stage at the swap (tausche)
     lat_[s] = ins_latenz(ins_art(s));
     if (lat_[s] < 0 || lat_[s] > INS_LAT_MAX) throw std::runtime_error("insert stage latency exceeds the dry ring");
   }
@@ -31,8 +35,30 @@ ArrInserts::ArrInserts() : arbeit0_(std::make_unique<ArrArbeit>()) {
 }
 ArrInserts::~ArrInserts() = default;
 
-void ArrInserts::binde(int slot, int param, float vorgabe) {
-  if (slot >= 0 && slot < ARR_INS_ALLE && param >= 0 && param < n_param(slot)) p_[slot][param].w = vorgabe;
+void ArrInserts::binde(int slot, int param, float vorgabe, float mn, float mx) {
+  if (slot >= 0 && slot < ARR_INS_ALLE && param >= 0 && param < n_param(slot)) {
+    p_[slot][param].w = vorgabe;
+    mn_[slot][param] = mn;
+    mx_[slot][param] = mx;
+  }
+}
+
+// ---- lanes (1.12 slice 6): one value per block from Arrangement::auto_kette(), before makros_planen()
+void ArrInserts::lane_stufe(int strip, const ArrKette& k, int stufe, int param, float v) {
+  if (stufe < 0 || stufe >= k.n || stufe >= ARR_KETTE) return;
+  const int g = ins_global(k.st[stufe].art, k.st[stufe].slot);
+  if (g < 0 || besitzer_[g] != strip || param < 1 || param >= n_param(g) || (g < ARR_INS_KOMP && param == 9)) return;   // not the stage switch, not the compressor key
+  if (!std::isfinite(v)) return;   // a lane never hands NaN to a module (the loader checks the points; this guards a hand-built snapshot)
+  if (mn_[g][param] < mx_[g][param]) v = v < mn_[g][param] ? mn_[g][param] : (v > mx_[g][param] ? mx_[g][param] : v);
+  lane_w_[g][param] = v;
+  lane_[g][param] = true;
+  lane_aktiv_ = true;
+}
+void ArrInserts::lane_makro(int rack, int nr, float v) {
+  if (rack < 0 || rack >= ARR_RACKS || nr < 0 || nr >= ARR_MAKROS || !std::isfinite(v)) return;
+  lane_mkw_[rack][nr] = v > 0.0f ? (v < 1.0f ? v : 1.0f) : 0.0f;
+  lane_mk_[rack][nr] = true;
+  lane_aktiv_ = true;
 }
 void ArrInserts::setze_sofort(int slot, int param, float w) {
   if (slot < 0 || slot >= ARR_INS_ALLE || param < 0 || param >= n_param(slot)) return;
@@ -81,6 +107,7 @@ void ArrInserts::makro_verlauf(int rack, int nr, const float* werte) {
 
 float ArrInserts::makro_wert(int rack, int nr, int m) const noexcept {
   if (rack < 0 || rack >= ARR_RACKS || nr < 0 || nr >= ARR_MAKROS || m < 1) return 0.0f;
+  if (lane_mk_[rack][nr]) return lane_mkw_[rack][nr];   // 1.12 slice 6: a lane drives the macro in this block (already clamped)
   const Wert& w = mk_[rack][nr];
   const float mv = w.vl ? w.vl[m - 1] : w.w;
   return mv > 0.0f ? (mv < 1.0f ? mv : 1.0f) : 0.0f;   // a NaN reads as 0, as in makros_planen()
@@ -106,7 +133,7 @@ void ArrInserts::makros_planen(const ArrKette* ketten, const ArrRack* racks, int
       const int g = ins_global(k.st[z.stufe].art, k.st[z.stufe].slot);
       if (g < 0 || besitzer_[g] != st || z.param >= n_param(g)) continue;
       const Wert& w = mk_[r.slot][z.makro];
-      float mv = w.vl ? w.vl[m - 1] : w.w;
+      float mv = lane_mk_[r.slot][z.makro] ? lane_mkw_[r.slot][z.makro] : (w.vl ? w.vl[m - 1] : w.w);   // 1.12 slice 6: a lane on the macro replaces the macro row
 #ifdef CYPHERDJ_MUTATION_MAKRO_SPAET
       { const float jetzt = mv; mv = mk_alt_[r.slot][z.makro]; mk_alt_[r.slot][z.makro] = jetzt; }   // error case: the move acts one block late (the value of the block before)
 #endif
@@ -225,9 +252,13 @@ void ArrInserts::ring_leere(int s) {
 void ArrInserts::leere(int s) {
   ring_leere(s);   // slice 5 U2b: a cleared stage starts with a clean key history
   if (s < ARR_INS_KOMP) komp_[s]->leeren();
-  else if (s < ARR_INS_KOMP + ARR_INS_EQ) eq_[s - ARR_INS_KOMP]->leeren();
-  else if (s < ARR_INS_KOMP + ARR_INS_EQ + ARR_INS_SAETT) saett_[s - ARR_INS_KOMP - ARR_INS_EQ]->leeren();
-  else lim_[s - ARR_INS_KOMP - ARR_INS_EQ - ARR_INS_SAETT]->leeren();
+  else if (s < INS_G_SAETT0) eq_[s - ARR_INS_KOMP]->leeren();
+  else if (s < INS_G_LIM0) saett_[s - INS_G_SAETT0]->leeren();
+  else if (s < INS_G_UTIL0) lim_[s - INS_G_LIM0]->leeren();
+  else if (s < INS_G_BK0) util_[s - INS_G_UTIL0]->leeren();
+  else if (s < INS_G_HOST0) {   // arr-bk slice 3: the instance starts from the beginning (phases, envelopes, delay lines); the knobs stay
+    if (CypherBk* h = bk_[s - INS_G_BK0].h) cypher_bk_zuruecksetzen(h);
+  } else host_.leere(s - INS_G_HOST0 + 1);
   gr_[s] = 0.0f;
   lief_[s] = false;
 }
@@ -252,6 +283,10 @@ void ArrInserts::trocken_speise(int s, const float* l, const float* r, int m, fl
   tp_[s] = p;
 }
 void ArrInserts::trocken_leere(int s) {
+  if (s >= INS_G_HOST0) {   // plan 1.11: the dry ring of a host stage is the host module's
+    host_.trocken_leere(s - INS_G_HOST0 + 1, lat_[s]);
+    return;
+  }
   std::memset(tl_[s], 0, sizeof tl_[s]);
   std::memset(tr_[s], 0, sizeof tr_[s]);
   tp_[s] = 0;
@@ -261,6 +296,9 @@ void ArrInserts::tausche(const ArrKette* ketten) {
   int anspruch[ARR_INS_ALLE];
   ArrSchluessel neu_key[ARR_INS_KOMP];
   int neu_vs[ARR_INS_KOMP] = {}, neu_vz[ARR_INS_KOMP] = {}, neu_sp[ARR_INS_KOMP] = {};
+  int neu_lat[ARR_INS_ALLE] = {};   // plan 1.11: the latency of the host stages of the new snapshot (arr-bk: and of the Baukasten stages)
+  CypherBk* neu_bk[ARR_INS_BK] = {};   // arr-bk slice 3: the instance of each Baukasten stage of the new snapshot
+  uint64_t neu_bk_gen[ARR_INS_BK] = {};
   for (int& a : anspruch) a = -1;
   if (ketten)
     for (int st = 0; st < ARR_KETTEN; ++st)
@@ -268,6 +306,12 @@ void ArrInserts::tausche(const ArrKette* ketten) {
         const ArrStufe& x = ketten[st].st[j];
         const int g = ins_global(x.art, x.slot);
         if (g >= 0) anspruch[g] = st;
+        if (g >= INS_G_HOST0) neu_lat[g] = x.latenz;
+        if (g >= INS_G_BK0 && g < INS_G_HOST0) {
+          neu_lat[g] = x.latenz;
+          neu_bk[g - INS_G_BK0] = x.bk;
+          neu_bk_gen[g - INS_G_BK0] = x.bk_gen;
+        }
         if (g >= 0 && g < ARR_INS_KOMP) {
           neu_key[g] = x.key;
           neu_vs[g] = x.schl_verz;
@@ -275,6 +319,13 @@ void ArrInserts::tausche(const ArrKette* ketten) {
           neu_sp[g] = x.schl_spaet;
         }
       }
+  // plan 1.11 (fix round 3): ONE host process serves one strip at a time. A host slot whose owner strip is another one in the new snapshot, while the slot is still active or in its tail, is a removal
+  // only: the old owner leaves with its normal exit tail, the new owner's stage is not taken over (it stays out, the strip plays its undelayed input) until a later load claims the slot again after the
+  // tail has ended. A move must therefore be a removal in one load and an entry in a later load at least latenz + HOST_BLENDE samples apart (contract rule for the server, T7; INTERFACES 4.11).
+#ifndef CYPHERDJ_MUTATION_HOST_VERSCHIEBUNG_HART   // error case: the slot moves strips inside one swap, the tail of the old owner is cut (a click)
+  for (int s = INS_G_HOST0; s < ARR_INS_ALLE; ++s)
+    if (anspruch[s] >= 0 && besitzer_[s] >= 0 && besitzer_[s] != anspruch[s]) anspruch[s] = -1;
+#endif
   maske_ = 0;
   for (int s = 0; s < ARR_INS_ALLE; ++s) {
     if (anspruch[s] >= 0) {
@@ -286,10 +337,34 @@ void ArrInserts::tausche(const ArrKette* ketten) {
         verz_z_[s] = neu_vz[s];
         spaet_[s] = neu_sp[s];
       }
+      if (s >= INS_G_HOST0) lat_[s] = std::min<int>(neu_lat[s], ARR_HOST_LAT_MAX - 1);   // a host stage's latency is structure: taken over with the snapshot (a tail keeps the one it had)
+      if (s >= INS_G_BK0 && s < INS_G_HOST0) {   // arr-bk slice 3: the instance and its latency are structure of the snapshot (the loader measured it, at most INS_LAT_MAX)
+        const int nl = std::min<int>(neu_lat[s], INS_LAT_MAX);
+        const bool neuer = besitzer_[s] != anspruch[s];
+        BkSlot& b = bk_[s - INS_G_BK0];
+        if (!neuer && (neu_bk[s - INS_G_BK0] != b.h || neu_bk_gen[s - INS_G_BK0] != b.gen)) {   // the same owner, another instance: the old one fades out in the next block
+          b.alt = b.h;
+          b.blende.store(b.alt, std::memory_order_release);   // published before aktiv is overwritten: the loader never sees the old instance unprotected
+          b.h = neu_bk[s - INS_G_BK0];
+          b.gen = neu_bk_gen[s - INS_G_BK0];
+          b.aktiv.store(b.h, std::memory_order_release);
+          if (b.h) cypher_bk_zuruecksetzen(b.h);   // a shared instance may carry state of an earlier use
+          gesetzt_[s] = false;   // the knobs jump to their values on the new instance
+          if (nl != lat_[s]) trocken_leere(s);
+        } else if (neuer) {   // a new owner: a tail of the old one is cut (the stage starts cleared below)
+          b.alt = nullptr;
+          b.blende.store(nullptr, std::memory_order_release);
+          b.h = neu_bk[s - INS_G_BK0];
+          b.gen = neu_bk_gen[s - INS_G_BK0];
+          b.aktiv.store(b.h, std::memory_order_release);
+          gesetzt_[s] = false;
+        }
+        lat_[s] = nl;
+      }
       if (besitzer_[s] != anspruch[s]) {   // a new owner: a tail of the old one is cut, the new stage starts cleared and fades in
         leere(s);
         trocken_leere(s);
-        pos_[s] = 0;
+        pos_[s] = s >= INS_G_HOST0 ? INS_BLENDE : 0;   // a host stage has no outer blend: its own entry/exit blend (ArrHostStufe) keeps the strip playing; pos_ > 0 keeps it a tail when it leaves
         besitzer_[s] = anspruch[s];
       }
 #ifdef CYPHERDJ_MUTATION_INS_TAUSCH_LEERT
@@ -305,6 +380,7 @@ void ArrInserts::tausche(const ArrKette* ketten) {
         if (lief_[s]) leere(s);
         besitzer_[s] = -1;
         pos_[s] = 0;
+        bk_besitz_frei(s);
       }
     }
   }
@@ -312,6 +388,7 @@ void ArrInserts::tausche(const ArrKette* ketten) {
 }
 
 void ArrInserts::ruhe() {
+  lanen_loeschen();   // 1.12 slice 6: nothing plays, no lane drives a parameter
   for (ArrSchluessel& k : skey_) k = ArrSchluessel{};
   for (int s = 0; s < ARR_INS_KOMP; ++s) {
     ring_leere(s);
@@ -323,9 +400,29 @@ void ArrInserts::ruhe() {
     besitzer_[s] = -1;
     in_kette_[s] = false;
     pos_[s] = 0;
+    bk_besitz_frei(s);
   }
   maske_ = 0;
   spiegel_neu();
+}
+
+// arr-bk slice 3: the slot has no owner any more (tail ended, stage removed, rest): the instance is not ours any more, so it is unpublished and the loader may free it.
+void ArrInserts::bk_besitz_frei(int s) {
+  if (s < INS_G_BK0 || s >= INS_G_HOST0) return;
+  BkSlot& b = bk_[s - INS_G_BK0];
+  b.h = nullptr;
+  b.gen = 0;
+  b.alt = nullptr;
+  b.blende.store(nullptr, std::memory_order_release);
+  b.aktiv.store(nullptr, std::memory_order_release);
+  gesetzt_[s] = false;
+}
+
+bool ArrInserts::nutzt(const CypherBk* h) const noexcept {
+  if (!h) return false;
+  for (const BkSlot& b : bk_)   // aktiv first, blende second: tausche() publishes blende before it overwrites aktiv
+    if (b.aktiv.load(std::memory_order_acquire) == h || b.blende.load(std::memory_order_acquire) == h) return true;
+  return false;
 }
 
 // Gives the parameter set of a slot to its module when a value changed since the last block (the first block always).
@@ -337,7 +434,7 @@ void ArrInserts::setze_dsp(int s, int m) {
   if (!neu && std::memcmp(e + 1, angewandt_[s] + 1, sizeof(float) * static_cast<size_t>(n - 1)) == 0) return;
   if (s < ARR_INS_KOMP) {
     komp_[s]->setze(CypherKompEinstellung{e[1], e[2], e[3], e[4], e[5], e[6], e[7], e[8]});
-  } else if (s < ARR_INS_KOMP + ARR_INS_EQ) {
+  } else if (s < INS_G_SAETT0) {
     EqNativ& q = *eq_[s - ARR_INS_KOMP];
     const float* alt = angewandt_[s];
     if (neu || e[1] != alt[1] || e[2] != alt[2]) q.setze_global(e[2] >= 0.5f, static_cast<double>(e[1]));
@@ -348,14 +445,30 @@ void ArrInserts::setze_dsp(int s, int m) {
                                       static_cast<uint8_t>(e[o] >= 0.5f ? 1 : 0), static_cast<uint8_t>(std::lround(e[o + 1])),
                                       static_cast<uint8_t>(std::lround(e[o + 5])), static_cast<uint8_t>(std::lround(e[o + 6]))});
     }
-  } else if (s < ARR_INS_KOMP + ARR_INS_EQ + ARR_INS_SAETT) {
+  } else if (s < INS_G_LIM0) {
 #ifdef CYPHERDJ_MUTATION_INS_SAETT_AUS_NACH_DRIVE
-    saett_[s - ARR_INS_KOMP - ARR_INS_EQ]->setze(static_cast<double>(e[2]), static_cast<double>(e[1]), static_cast<double>(e[3]));   // error case: drive and output gain swapped
+    saett_[s - INS_G_SAETT0]->setze(static_cast<double>(e[2]), static_cast<double>(e[1]), static_cast<double>(e[3]));   // error case: drive and output gain swapped
 #else
-    saett_[s - ARR_INS_KOMP - ARR_INS_EQ]->setze(static_cast<double>(e[1]), static_cast<double>(e[2]), static_cast<double>(e[3]));
+    saett_[s - INS_G_SAETT0]->setze(static_cast<double>(e[1]), static_cast<double>(e[2]), static_cast<double>(e[3]));
+#endif
+  } else if (s >= INS_G_HOST0) {
+    // plan 1.11: a host stage has no setting to give (the row an is read by the chain); it must never fall into the limiter branch below
+  } else if (s >= INS_G_BK0) {   // arr-bk slice 3: the knobs k1..k8 (rows 1..8) go to the instance; the first application (also after a take-over) jumps, later changes are smoothed over 20 ms by the instance
+    if (CypherBk* h = bk_[s - INS_G_BK0].h)
+      for (int k = 1; k <= 8; ++k) {
+        if (neu) cypher_bk_regler_sofort(h, static_cast<uint32_t>(k), e[k]);
+        else if (e[k] != angewandt_[s][k]) cypher_bk_regler(h, static_cast<uint32_t>(k), e[k]);
+      }
+  } else if (s >= INS_G_UTIL0) {
+#ifdef CYPHERDJ_MUTATION_INS_UTIL_BREITE_FEST
+    cypherdj::dsp::UtilityParameter p = util_einstellung(e);   // error case: the stage ignores the breite row and keeps the width at 100 %
+    p.breite_prozent = 100.0f;
+    util_[s - INS_G_UTIL0]->setze(p);
+#else
+    util_[s - INS_G_UTIL0]->setze(util_einstellung(e));   // arr-fx slice 1: the module ramps a changed matrix over 10 ms itself
 #endif
   } else {
-    cypherdj::dsp::KanalLimiter& q = *lim_[s - ARR_INS_KOMP - ARR_INS_EQ - ARR_INS_SAETT];
+    cypherdj::dsp::KanalLimiter& q = *lim_[s - INS_G_LIM0];
 #ifdef CYPHERDJ_MUTATION_INS_LIM_DECKE_FEST
     q.setze_decke_db(-1.0f);   // error case: the stage ignores the decke row and stays at the default ceiling
 #else
@@ -367,7 +480,12 @@ void ArrInserts::setze_dsp(int s, int m) {
   gesetzt_[s] = true;
 }
 
-void ArrInserts::rechne(int s, float* l, float* r, int m) {
+void ArrInserts::rechne(int s, float* l, float* r, int m, bool ziel_an, float* tl, float* tr, ArrArbeit* a) {
+  if (s >= INS_G_HOST0) {   // plan 1.11: the host stage (its own latency, its own dry ring)
+    const int h = s - INS_G_HOST0 + 1;
+    host_.block(h, l, r, l, r, m, lat_[s], ziel_an, host_.gesund(h), tl, tr, in_kette_[s]);
+    return;
+  }
   if (s < ARR_INS_KOMP) {
     const float* kl = nullptr;
     const float* kr = nullptr;
@@ -416,20 +534,60 @@ void ArrInserts::rechne(int s, float* l, float* r, int m) {
       kr = dr;
     }
     komp_[s]->block_sc(l, r, kl, kr, m);
-  } else if (s < ARR_INS_KOMP + ARR_INS_EQ) {
+  } else if (s < INS_G_SAETT0) {
     eq_[s - ARR_INS_KOMP]->block(l, r, m);
-  } else if (s < ARR_INS_KOMP + ARR_INS_EQ + ARR_INS_SAETT) {
-    saett_[s - ARR_INS_KOMP - ARR_INS_EQ]->block(l, r, m);
-  } else {
+  } else if (s < INS_G_LIM0) {
+    saett_[s - INS_G_SAETT0]->block(l, r, m);
+  } else if (s < INS_G_UTIL0) {
     static_assert(INS_BLOCK <= cypherdj::dsp::kMaxFrames, "the limiter takes a whole block in one call");
-    lim_[s - ARR_INS_KOMP - ARR_INS_EQ - ARR_INS_SAETT]->verarbeite(l, r, l, r, m);   // in place
+    lim_[s - INS_G_LIM0]->verarbeite(l, r, l, r, m);   // in place
+  } else if (s < INS_G_BK0) {
+    static_assert(INS_BLOCK <= cypherdj::dsp::kMaxFrames, "the utility takes a whole block in one call");
+    util_[s - INS_G_UTIL0]->verarbeite(l, r, l, r, m);   // in place
+  } else if (a) {
+    rechne_bk(s, l, r, m, *a);
+  }
+}
+
+// arr-bk slice 3: one block of the Baukasten effect graph of slot s, in place from the caller's point of view. cypher_bk_effekt takes separate input and output, so the graph writes into the
+// scratch of the lane and the result is copied back. A changed instance (tausche() set `alt`) is rendered too, on the same input, and the two outputs are crossfaded linearly over this block;
+// the old instance is then reset and unpublished. The output is clamped to INS_BK_AUS_MAX (a non-finite sample is left to the guard in stufe(), which silences the block and counts it).
+void ArrInserts::rechne_bk(int s, float* l, float* r, int m, ArrArbeit& a) {
+  BkSlot& b = bk_[s - INS_G_BK0];
+  if (!b.h || m <= 0 || m > INS_BLOCK) return;   // no instance (a hand-built snapshot): the stage passes the signal through
+  float* const nl = a.bke_l[0];
+  float* const nr = a.bke_r[0];
+  cypherdj::dsp::DenormalSchutz schutz;
+  cypher_bk_takt(b.h, takt_beat0_, takt_bps_);
+  if (cypher_bk_effekt(b.h, l, r, nl, nr, static_cast<size_t>(m)) != 0) ++a.nan_zaehler;   // a panic inside gives silence, a reset and rc -1: the output is zeros, the event is counted
+  if (b.alt) {
+    float* const ol = a.bke_l[1];
+    float* const orr = a.bke_r[1];
+    cypher_bk_takt(b.alt, takt_beat0_, takt_bps_);
+    cypher_bk_effekt(b.alt, l, r, ol, orr, static_cast<size_t>(m));
+    for (int t = 0; t < m; ++t) {
+#ifdef CYPHERDJ_MUTATION_INS_BK_WECHSEL_HART
+      const float g = 0.0f;   // error case: the old instance is cut at the first sample of the block (a step)
+#else
+      const float g = static_cast<float>(m - 1 - t) / static_cast<float>(m);
+#endif
+      nl[t] += g * (ol[t] - nl[t]);
+      nr[t] += g * (orr[t] - nr[t]);
+    }
+    cypher_bk_zuruecksetzen(b.alt);   // a later take-over of the same instance (an undo) starts clean
+    b.alt = nullptr;
+    b.blende.store(nullptr, std::memory_order_release);
+  }
+  for (int t = 0; t < m; ++t) {
+    l[t] = std::isfinite(nl[t]) ? std::clamp(nl[t], -INS_BK_AUS_MAX, INS_BK_AUS_MAX) : nl[t];
+    r[t] = std::isfinite(nr[t]) ? std::clamp(nr[t], -INS_BK_AUS_MAX, INS_BK_AUS_MAX) : nr[t];
   }
 }
 
 void ArrInserts::spiegel_neu() {
-  for (uint32_t& e : slot_eigen_) e = 0;
+  for (uint64_t& e : slot_eigen_) e = 0;
   for (int s = 0; s < ARR_INS_ALLE; ++s)
-    if (besitzer_[s] >= 0 && besitzer_[s] < ARR_KETTEN) slot_eigen_[besitzer_[s]] |= uint32_t{1} << s;
+    if (besitzer_[s] >= 0 && besitzer_[s] < ARR_KETTEN) slot_eigen_[besitzer_[s]] |= uint64_t{1} << s;
 }
 
 // One stage over m samples in place. ziel_an: the stage should run (project flag and row an). Scratch and NaN count come from the lane `a`.
@@ -442,7 +600,28 @@ void ArrInserts::stufe(int s, bool ziel_an, float* l, float* r, int m, ArrArbeit
   float* const dry_r = a.dry_r;
 #endif
   const int ziel = ziel_an ? INS_BLENDE : 0;
-  const bool lat = lat_[s] > 0;
+  const bool host = s >= INS_G_HOST0;   // plan 1.11: the host stage keeps its own dry ring (ArrHostStufe) and gives the delayed dry signal back; tl_/tr_ are for the native kinds
+  const bool lat = lat_[s] > 0 && !host;
+  if (host) {   // plan 1.11 (fix round 2): the host stage does everything itself in one pass: return against delayed dry (an, health), and the entry/exit blend against the undelayed input
+    rechne(s, l, r, m, ziel_an, nullptr, nullptr);
+#ifndef CYPHERDJ_MUTATION_INS_NAN_DURCHLASS
+    bool endlich = true;
+    for (int t = 0; t < m; ++t) endlich = endlich && std::isfinite(l[t]) && std::isfinite(r[t]);
+    if (!endlich) {   // NaN or Inf: this block of the strip is silent, the stage is cleared, counted
+      std::memset(l, 0, sizeof(float) * static_cast<size_t>(m));
+      std::memset(r, 0, sizeof(float) * static_cast<size_t>(m));
+      leere(s);
+      trocken_leere(s);
+      lief_[s] = true;
+      ++a.nan_zaehler;
+      return;
+    }
+#endif
+    lief_[s] = true;
+    gr_[s] = 0.0f;
+    if (!in_kette_[s] && host_.ruhig(s - INS_G_HOST0 + 1)) pos_[s] = 0;   // a tail ends when the blends have run out
+    return;
+  }
   if (pos_[s] == 0 && ziel == 0) {   // fully off: not computed, state cleared; the signal still passes the latency of the stage
     if (lief_[s]) leere(s);
 #ifndef CYPHERDJ_MUTATION_INS_BYPASS_OHNE_LATENZ
@@ -455,15 +634,17 @@ void ArrInserts::stufe(int s, bool ziel_an, float* l, float* r, int m, ArrArbeit
   if (in_kette_[s]) pos_[s] = ziel;   // error case: no blend on the bypass of a stage in the chain, the weight jumps (the tail of a removed stage still fades)
 #endif
   const bool fest = pos_[s] == INS_BLENDE && ziel == INS_BLENDE;
-  if (lat) {
-    // dry_ = the input delayed by the latency of the stage (the ring is fed with the input, also when the stage is fully on and the dry signal is not read)
-    if (!fest) trocken_speise(s, l, r, m, dry_l, dry_r);
-    else trocken_speise(s, l, r, m, nullptr, nullptr);
-  } else if (!fest) {
-    std::memcpy(dry_l, l, sizeof(float) * static_cast<size_t>(m));
-    std::memcpy(dry_r, r, sizeof(float) * static_cast<size_t>(m));
+  {
+    if (lat) {
+      // dry_ = the input delayed by the latency of the stage (the ring is fed with the input, also when the stage is fully on and the dry signal is not read)
+      if (!fest) trocken_speise(s, l, r, m, dry_l, dry_r);
+      else trocken_speise(s, l, r, m, nullptr, nullptr);
+    } else if (!fest) {
+      std::memcpy(dry_l, l, sizeof(float) * static_cast<size_t>(m));
+      std::memcpy(dry_r, r, sizeof(float) * static_cast<size_t>(m));
+    }
+    rechne(s, l, r, m, true, nullptr, nullptr, &a);
   }
-  rechne(s, l, r, m);
   if (!fest) {
     int pos = pos_[s];
     for (int t = 0; t < m; ++t) {
@@ -502,8 +683,8 @@ void ArrInserts::stufe(int s, bool ziel_an, float* l, float* r, int m, ArrArbeit
 #else
     gr_[s] = angewandt_[s][7] <= 0.0f ? 0.0f : komp_[s]->gr_db();   // mix 0: the Komp does not compute (lib.rs Komp::block), nothing is applied, so nothing is shown
 #endif
-  } else if (s >= ARR_INS_KOMP + ARR_INS_EQ + ARR_INS_SAETT) {
-    gr_[s] = std::max(0.0f, -lim_[s - ARR_INS_KOMP - ARR_INS_EQ - ARR_INS_SAETT]->groesste_absenkung_db());   // the deepest reduction of the block, >= 0
+  } else if (s >= INS_G_LIM0 && s < INS_G_UTIL0) {
+    gr_[s] = std::max(0.0f, -lim_[s - INS_G_LIM0]->groesste_absenkung_db());   // the deepest reduction of the block, >= 0
   } else {
     gr_[s] = 0.0f;
   }
@@ -516,15 +697,15 @@ void ArrInserts::schweige(int streifen) {
 
 void ArrInserts::schweige_bahn(int streifen, ArrArbeit& a) {
   bool noch = false;
-  uint32_t eigen = slot_eigen_[streifen];
+  uint64_t eigen = slot_eigen_[streifen];
   for (int s = 0; s < ARR_INS_ALLE; ++s) {
     if (!((eigen >> s) & 1u)) continue;
     if (lief_[s]) leere(s);
     trocken_leere(s);
-    pos_[s] = 0;   // when the signal comes back the stage fades in again
+    pos_[s] = s >= INS_G_HOST0 && in_kette_[s] ? INS_BLENDE : 0;   // when the signal comes back the stage fades in again; a host stage has no outer blend (its entry blend is armed by trocken_leere), pos_ > 0 keeps its exit tail
     if (!in_kette_[s]) {   // a tail has nothing left to fade
-      eigen &= ~(uint32_t{1} << s);
-      a.slot_frei |= uint32_t{1} << s;
+      eigen &= ~(uint64_t{1} << s);
+      a.slot_frei |= uint64_t{1} << s;
 #ifdef CYPHERDJ_MUTATION_SPUR_BESITZER_GEMEINSAM
       besitzer_[s] = -1;   // error case: the shared owner table is written during the fork
 #endif
@@ -543,11 +724,11 @@ void ArrInserts::kette(int streifen, const ArrKette* k, float* l, float* r, int 
 
 void ArrInserts::kette_bahn(int streifen, const ArrKette* k, float* l, float* r, int m, ArrArbeit& a) {
 #ifdef CYPHERDJ_MUTATION_SPUR_BESITZER_GELESEN
-  uint32_t eigen = 0;   // error case: the lane form reads the shared owner table instead of its own mirror entry
+  uint64_t eigen = 0;   // error case: the lane form reads the shared owner table instead of its own mirror entry
   for (int s = 0; s < ARR_INS_ALLE; ++s)
-    if (besitzer_[s] == streifen) eigen |= uint32_t{1} << s;
+    if (besitzer_[s] == streifen) eigen |= uint64_t{1} << s;
 #else
-  uint32_t eigen = slot_eigen_[streifen];
+  uint64_t eigen = slot_eigen_[streifen];
 #endif
   if (k)
     for (int j = 0; j < k->n && j < ARR_KETTE; ++j) {
@@ -563,8 +744,8 @@ void ArrInserts::kette_bahn(int streifen, const ArrKette* k, float* l, float* r,
       stufe(s, false, l, r, m, a);
       if (pos_[s] == 0) {
         if (lief_[s]) leere(s);
-        eigen &= ~(uint32_t{1} << s);   // own mirror bit now; the shared owner entry is cleared by nach_join
-        a.slot_frei |= uint32_t{1} << s;
+        eigen &= ~(uint64_t{1} << s);   // own mirror bit now; the shared owner entry is cleared by nach_join
+        a.slot_frei |= uint64_t{1} << s;
 #ifdef CYPHERDJ_MUTATION_SPUR_BESITZER_GEMEINSAM
         besitzer_[s] = -1;   // error case: the shared owner table is written during the fork
 #endif
@@ -581,7 +762,10 @@ void ArrInserts::nach_join(ArrArbeit* lanes, int n) {
   for (int i = 0; i < n; ++i) {
     ArrArbeit& a = lanes[i];
     for (int s = 0; s < ARR_INS_ALLE; ++s)
-      if ((a.slot_frei >> s) & 1u) besitzer_[s] = -1;
+      if ((a.slot_frei >> s) & 1u) {
+        besitzer_[s] = -1;
+        bk_besitz_frei(s);
+      }
     maske_ &= ~a.maske_loeschen;
     nan_ += a.nan_zaehler;
     a.slot_frei = 0;

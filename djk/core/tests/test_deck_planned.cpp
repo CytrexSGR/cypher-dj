@@ -3151,7 +3151,7 @@ int main(int argc, char** argv) {
                      {"raster_wartend", test_start_raster_wartend},
                      {"negativ", test_negativ},
                      {"faeden", test_faeden},
-                     {"kern", test_kern_start_geplant},
+                     {"core_start", test_kern_start_geplant},
                      {"stopp_dann_plan", test_stopp_dann_plan},
                      {"fruehansatz", test_fruehansatz},
                      {"ziel_ohne_start", test_ziel_ohne_start},

@@ -193,7 +193,7 @@ foreach(pfad ${KERN_TESTS})
   # 1.8 T3: the recording threads (callback, net thread swapping RecSpur, AufnahmeFaden) and the monitor of the external inputs run under TSan too; only names in this list
   # start through setarch -R and carry the failure pattern, any other test would run plain and could abort with "unexpected memory mapping" or hide TSan lines
   # mehrkern plan: the HallPool and its callers run under TSan too (test_reverb_pool, test_arr_returns, test_reverb_state)
-  if(CYPHERDJ_TSAN AND (t STREQUAL "test_freeze_tsan" OR t STREQUAL "test_arr_tap" OR t STREQUAL "test_arr_tap_pool" OR t STREQUAL "test_core_arr_tap" OR t STREQUAL "test_net_arr_tap" OR t STREQUAL "test_arr_auto_tsan" OR t STREQUAL "test_reverb_pool" OR t STREQUAL "test_arr_returns" OR t STREQUAL "test_reverb_state" OR t STREQUAL "test_arr_track_path" OR t STREQUAL "test_arr_inserts_path" OR t STREQUAL "test_arr_track_phase" OR t STREQUAL "test_arr_track_pool" OR t STREQUAL "test_arr_rack_path" OR t STREQUAL "test_arr_rack_macro" OR t STREQUAL "test_core_track_time" OR t STREQUAL "test_track_state" OR t STREQUAL "test_recording_tsan" OR t STREQUAL "test_recording_thread" OR t STREQUAL "test_core_rec" OR t STREQUAL "test_arr_monitor" OR t STREQUAL "test_render_nur_key"))
+  if(CYPHERDJ_TSAN AND (t STREQUAL "test_freeze_tsan" OR t STREQUAL "test_arr_tap" OR t STREQUAL "test_arr_tap_pool" OR t STREQUAL "test_core_arr_tap" OR t STREQUAL "test_net_arr_tap" OR t STREQUAL "test_arr_auto_tsan" OR t STREQUAL "test_reverb_pool" OR t STREQUAL "test_arr_returns" OR t STREQUAL "test_reverb_state" OR t STREQUAL "test_arr_track_path" OR t STREQUAL "test_arr_inserts_path" OR t STREQUAL "test_arr_host_stufe" OR t STREQUAL "test_arr_host_ausfall" OR t STREQUAL "test_arr_host_measurement" OR t STREQUAL "test_arr_track_phase" OR t STREQUAL "test_arr_track_pool" OR t STREQUAL "test_arr_rack_path" OR t STREQUAL "test_arr_rack_macro" OR t STREQUAL "test_arr_auto_chain" OR t STREQUAL "test_arr_auto_bk_button" OR t STREQUAL "test_core_track_time" OR t STREQUAL "test_track_state" OR t STREQUAL "test_recording_tsan" OR t STREQUAL "test_recording_thread" OR t STREQUAL "test_core_rec" OR t STREQUAL "test_arr_monitor" OR t STREQUAL "test_render_nur_key" OR t STREQUAL "test_arr_export_run" OR t STREQUAL "test_net_arr_export_run"))
     add_test(NAME ${t} COMMAND ${TSAN_START} $<TARGET_FILE:${t}>)
     set_tests_properties(${t} PROPERTIES FAIL_REGULAR_EXPRESSION "ThreadSanitizer")   # jede TSan-Zeile ist ein Befund
   else()
@@ -258,14 +258,17 @@ endfunction()
 set(ARR_QUELLEN src/arrangement.cpp src/arr_voices.cpp src/arr_output.cpp src/arr_notes.cpp src/arr_metronom.cpp
     src/arr_freeze.cpp  # Paket K3: Freeze
     src/arr_tap.cpp # 1.10 slice 7: the real-time tap of any strip
+    src/arr_export_run.cpp # plan 1.11 T12: the real-time export run of the production master (the writer thread is arr_export_writer.cpp, in the library only)
     src/arr_auto.cpp    # Automation Slice 1: fader lane per sample, blend (ADR 032)
     src/arr_returns.cpp # 1.10 Slice 3: Cypher Hall of the return strips
     src/reverb_pool.cpp   # mehrkern task 4: the return Halls compute on the HallPool
     src/arr_inserts.cpp # 1.10 slice 4a: pooled compressor inserts of the strips
+    src/arr_host_stufe.cpp # plan 1.11 T4: the effect-host insert stage (send, return guard, delayed dry path)
+    src/arr_host_measurement.cpp # plan 1.11 T5: the round-trip measurement of an effect host
     src/arr_track_phase.cpp # mehrkern slice 3.1: the sticky plan of the track phase
     src/arr_monitor.cpp # 1.8 Slice 3: monitor of the external inputs (R10)
     src/arr_warp.cpp)   # Paket 1.13 Slice 2: Seite des Arrangements am Warp-Werk (nur die Schnittstelle warp_factory.h, kein Bungee)
-list(APPEND ARR_QUELLEN src/arr_bk_sink.cpp src/arr_kit_sink.cpp src/arr_intern_sink.cpp src/arr_rb_sink.cpp src/arr_host_sink.cpp
+list(APPEND ARR_QUELLEN src/arr_bk_sink.cpp src/arr_kit_sink.cpp src/arr_intern_sink.cpp src/arr_rb_sink.cpp src/arr_instrument_host_sink.cpp
      src/arr_rack_sink.cpp)   # 1.9 U6: instrument rack. D1 K2b: Senken (RB-338 über cypherdj::dsp -> libhall_ffi.a, Wirt-Slots)
 test_mutation(test_klick_mutation test_click CYPHERDJ_MUTATION_KLICK_BLOCKANFANG src/click.cpp src/clock.cpp)
 test_mutation(test_tempoplan_mutation test_tempo_plan CYPHERDJ_MUTATION_RAMPE_IN_SAMPLES src/tempo_plan.cpp src/clock.cpp)
@@ -641,6 +644,7 @@ if(CYPHERDJ_BUNGEE)
                QUELLEN tests/test_core_keylock_bungee.cpp ${KERN_QUELLEN} src/stretcher_bungee.cpp src/warp_factory_bungee.cpp
                SCHALTER CYPHERDJ_MUTATION_KEIN_ANTRIEB DEFS CYPHERDJ_BUNGEE=1 CYPHERDJ_DJK="${DJK}"
                INCLUDES include tests ${DJK}/contract LIBS ${KERN_MUT_LIBS} cypherdj::bungee)
+  cdj_require_selector(tests/test_core_keylock_bungee.cpp deck)
   add_test(NAME test_kern_keylock_bungee_kein_antrieb_mutation COMMAND test_kern_keylock_bungee_kein_antrieb_mutation deck)
   set_tests_properties(test_kern_keylock_bungee_kein_antrieb_mutation PROPERTIES WILL_FAIL TRUE TIMEOUT 120)
   foreach(m BUNGEE_KORN_EINS_SPAET BUNGEE_OHNE_RESET)
@@ -852,7 +856,7 @@ test_mutation(test_erzeuger_midi_off_mutation test_generator_midi CYPHERDJ_MUTAT
 # Bug t_bffc3708 (stille), Fehlerfall: die Kappe wird nie vorgemerkt, das Note-Off der gehaltenen MIDI-Note kommt erst am Ende ihrer dauer.
 test_mutation(test_erzeuger_midi_kappe_mutation test_generator_midi CYPHERDJ_MUTATION_ERZ_KAPPE_IGNORIERT src/generator.cpp src/kit.cpp src/clock.cpp)
 test_mutation(test_erzeuger_midi_kappe_nicht_aufgehoben_mutation test_generator_midi CYPHERDJ_MUTATION_ERZ_KAPPE_NICHT_AUFGEHOBEN src/generator.cpp src/kit.cpp src/clock.cpp)
-# Glanz 2.7 Prüfung R5, Fehlerfall: Vorhalt fest 537 statt 2 · n + 25 (test_core_instrument Fall 6, Quantum 128 und 512).
+# Glanz 2.7 Prüfung R5, Fehlerfall: Vorhalt fest 512 statt 2 · n (test_core_instrument Fall 6, Quantum 128 und 512).
 test_mutation(test_kern_instrument_fest_mutation test_core_instrument CYPHERDJ_MUTATION_MIDI_VORHALT_FEST ${KERN_QUELLEN35})
 # Kern für die Gegenprobe am Prüfstand (Task 2.7.2 Step 4)
 kern_mutation(cypherdj-kern-mutation-midi CYPHERDJ_MUTATION_MIDI_OHNE_VORHALT)
@@ -950,6 +954,7 @@ deck_keylock_mutation(test_deck_keylock_fuellen_grenze_mutation CYPHERDJ_MUTATIO
 # Keylock Task 7 (Detailschnitt 7a Abschnitt 7): Fehlerfälle gegen test_loopbox_keylock, je Ziel nur der betroffene Test
 # (Argument). Gegenprobe, dass die übrigen grün bleiben: jedes Mutationsziel über alle Tests (task-07/step5_mutationen.txt).
 function(box_keylock_mutation name schalter test)
+  cdj_require_selector(tests/test_loopbox_keylock.cpp ${test})
   kern_mut_exe(${name} QUELLEN tests/test_loopbox_keylock.cpp ${KERN_QUELLEN} SCHALTER ${schalter} DEFS CYPHERDJ_DJK="${DJK}"
                INCLUDES include tests ${DJK}/contract LIBS ${KERN_MUT_LIBS})
   add_test(NAME ${name} COMMAND ${name} ${test})
@@ -987,15 +992,18 @@ box_keylock_mutation(test_box_keylock_basis_linear_mutation CYPHERDJ_MUTATION_KE
 kern_mut_exe(test_kern_box_keylock_zaehler_mutation QUELLEN tests/test_core_box_keylock.cpp ${KERN_QUELLEN}
              SCHALTER CYPHERDJ_MUTATION_BOX_ZAEHLER_VERTAUSCHT DEFS CYPHERDJ_DJK="${DJK}"
              INCLUDES include tests ${DJK}/contract LIBS ${KERN_MUT_LIBS})
+cdj_require_selector(tests/test_core_box_keylock.cpp k4)
 add_test(NAME test_kern_box_keylock_zaehler_mutation COMMAND test_kern_box_keylock_zaehler_mutation k4)
 set_tests_properties(test_kern_box_keylock_zaehler_mutation PROPERTIES WILL_FAIL TRUE TIMEOUT 300)
 # Keylock Task 2.5: Fehlerfälle gegen test_core_keylock_threads (Kern mit echten Fäden, alle Kern-Quellen samt stretcher.cpp).
 # Je Ziel nur der betroffene Test (Argument), damit der rote Lauf nicht die übrigen mitfährt.
 function(kern_keylock_faeden_mutation name schalter test)
+  cdj_require_selector(tests/test_core_keylock_threads.cpp ${test})
   kern_mut_exe(${name} QUELLEN tests/test_core_keylock_threads.cpp ${KERN_QUELLEN} SCHALTER ${schalter} DEFS CYPHERDJ_DJK="${DJK}"
                INCLUDES include tests ${DJK}/contract LIBS ${KERN_MUT_LIBS})
   add_test(NAME ${name} COMMAND ${name} ${test})
-  set_tests_properties(${name} PROPERTIES WILL_FAIL TRUE TIMEOUT 120)
+  # 77: the selected case could not run here (startfehler as root); skipped instead of "failed as intended" without a red check.
+  set_tests_properties(${name} PROPERTIES WILL_FAIL TRUE TIMEOUT 120 SKIP_RETURN_CODE 77)
 endfunction()
 # Pflicht aus der Nachprüfung (N3) verletzt: der Arbeits-Thread füllt nur bei spielendem Deck -> quittung rot.
 kern_keylock_faeden_mutation(test_kern_keylock_faeden_nur_laufend_mutation CYPHERDJ_MUTATION_KEYLOCK_FUELLE_NUR_LAUFEND quittung)
@@ -1054,6 +1062,7 @@ deck_keylock_mutation(test_deck_keylock_aus_basis_einfrieren_mutation CYPHERDJ_M
 deck_keylock_mutation(test_deck_keylock_basis_linear_mutation CYPHERDJ_MUTATION_KEYLOCK_BASIS_LINEAR)
 # Keylock Task 6a (Detailschnitt 6a, Abschnitt 8): Fehlerfälle gegen test_deck_planned, je Ziel nur der betroffene Test (Argument).
 function(deck_geplant_mutation name schalter test)
+  cdj_require_selector(tests/test_deck_planned.cpp ${test})
   kern_mut_exe(${name} QUELLEN tests/test_deck_planned.cpp ${KERN_QUELLEN} SCHALTER ${schalter} DEFS CYPHERDJ_DJK="${DJK}"
                INCLUDES include tests ${DJK}/contract LIBS ${KERN_MUT_LIBS})
   add_test(NAME ${name} COMMAND ${name} ${test})
@@ -1064,7 +1073,7 @@ deck_geplant_mutation(test_deck_geplant_naht_hart_mutation CYPHERDJ_MUTATION_KEY
 # 6a-2/6a-3 (Detailschnitt 6a, Abschnitt 3.8 und 8): je Schalter genau sein Test rot (Gegenprobe über alle Tests: Ablage 6a).
 # Stand vor 6a (kein Plan, jeder Start über die Brücke): P4a und der Kern-Weg K6a rot.
 deck_geplant_mutation(test_deck_geplant_start_aus_mutation CYPHERDJ_MUTATION_PLAN_START_AUS start_stand)
-deck_geplant_mutation(test_deck_geplant_kern_start_aus_mutation CYPHERDJ_MUTATION_PLAN_START_AUS core)
+deck_geplant_mutation(test_deck_geplant_kern_start_aus_mutation CYPHERDJ_MUTATION_PLAN_START_AUS core_start)
 # Am Ziel trotz Plan neuer Ansatz (Brücke): P4a rot.
 deck_geplant_mutation(test_deck_geplant_ausfuehrung_friert_mutation CYPHERDJ_MUTATION_PLAN_AUSFUEHRUNG_FRIERT start_stand)
 # s_h = n0 + ANSATZ_FRIST, kein Start aus Stille, keine Vorlage: P4a rot.
@@ -1109,6 +1118,7 @@ box_keylock_mutation(test_box_keylock_still_kurze_vorlage_mutation CYPHERDJ_MUTA
 # Keylock 6b W3 (Plan Task 6, 3.6): Prüfbau mit Generationszähler der Leihe (CYPHERDJ_PRUEF_GEN), je Ziel ein Test (Argument).
 # Weitere Schalter nach dem Test (Mutationen); WILL_FAIL setzt der Aufrufer.
 function(deck_geplant_pruef name test)
+  cdj_require_selector(tests/test_deck_planned.cpp ${test})
   kern_mut_exe(${name} QUELLEN tests/test_deck_planned.cpp ${KERN_QUELLEN} SCHALTER CYPHERDJ_PRUEF_GEN ${ARGN}
                DEFS CYPHERDJ_DJK="${DJK}" INCLUDES include tests ${DJK}/contract LIBS ${KERN_MUT_LIBS})
   add_test(NAME ${name} COMMAND ${name} ${test})
@@ -1235,6 +1245,23 @@ test_mutation(test_arr_inserts_4b_nan_durchlass_mutation test_arr_inserts_4b CYP
 test_mutation(test_arr_inserts_4b_komp_hash_nach_fader_mutation test_arr_inserts_4b_comp_hash CYPHERDJ_MUTATION_INS_NACH_FADER ${ARR_QUELLEN} src/arr_playback.cpp src/clock.cpp)   # negative control: the komp-only result of 4a changes with the stage after the fader
 # Master limiter insert (test_arr_inserts_lim): the stage ignores the decke row and stays at -1 dB; the -6 dB assertion of case 1 goes red.
 test_mutation(test_arr_inserts_lim_decke_fest_mutation test_arr_inserts_lim CYPHERDJ_MUTATION_INS_LIM_DECKE_FEST ${ARR_QUELLEN} src/arr_playback.cpp src/clock.cpp)   # case 1
+# arr-fx slice 1: the utility insert (test_arr_inserts_util): the stage ignores the breite row; the width assertions of case 1 go red.
+test_mutation(test_arr_inserts_util_breite_fest_mutation test_arr_inserts_util CYPHERDJ_MUTATION_INS_UTIL_BREITE_FEST ${ARR_QUELLEN} src/arr_playback.cpp src/clock.cpp)   # case 1
+# arr-bk slice 3: the bk insert (test_arr_inserts_bk): the old instance is cut at the first sample of the block of a graph swap; the jump measure of case 4 goes red (registered, not run in the arr-bk round).
+test_mutation(test_arr_inserts_bk_wechsel_hart_mutation test_arr_inserts_bk CYPHERDJ_MUTATION_INS_BK_WECHSEL_HART ${ARR_QUELLEN} src/arr_playback.cpp src/clock.cpp)   # case 4
+# plan 1.11 T4: the effect-host insert (test_arr_host_stufe). Each mutation turns its named case red.
+test_mutation(test_arr_host_ohne_waechter_mutation test_arr_host_stufe CYPHERDJ_MUTATION_HOST_OHNE_WAECHTER ${ARR_QUELLEN} src/arr_playback.cpp src/clock.cpp)   # case 3: the return guard is gone
+test_mutation(test_arr_host_ring_kurz_mutation test_arr_host_stufe CYPHERDJ_MUTATION_HOST_RING_KURZ ${ARR_QUELLEN} src/arr_playback.cpp src/clock.cpp)           # case 2: the dry path reads one sample too late
+test_mutation(test_arr_host_latenz_null_mutation test_arr_host_stufe CYPHERDJ_MUTATION_HOST_LATENZ_NULL ${ARR_QUELLEN} src/arr_playback.cpp src/clock.cpp)       # case 5, 8: the compensation does not count the host latency
+test_mutation(test_arr_host_pdc_ohne_blende_mutation test_arr_host_stufe CYPHERDJ_MUTATION_HOST_PDC_OHNE_BLENDE ${ARR_QUELLEN} src/arr_playback.cpp src/clock.cpp) # case 6: the delay change is not faded
+test_mutation(test_arr_host_pm_nicht_gefuettert_mutation test_arr_host_stufe CYPHERDJ_MUTATION_HOST_PM_NICHT_GEFUETTERT ${ARR_QUELLEN} src/arr_playback.cpp src/clock.cpp)   # case 6: PM_GRP and PM_RET are fed only while delayed (stage on a return chain)
+test_mutation(test_arr_host_ohne_ein_ausblendung_mutation test_arr_host_stufe CYPHERDJ_MUTATION_HOST_OHNE_EIN_AUSBLENDUNG ${ARR_QUELLEN} src/arr_playback.cpp src/clock.cpp)   # case 6: the stage entering or leaving a strip has no blend against the undelayed input
+test_mutation(test_arr_host_verschiebung_hart_mutation test_arr_host_stufe CYPHERDJ_MUTATION_HOST_VERSCHIEBUNG_HART ${ARR_QUELLEN} src/arr_playback.cpp src/clock.cpp)   # case 6b: a host slot moves strips inside one swap and cuts the old strip
+# plan 1.11 T5: health, fade and round-trip measurement (test_arr_host_ausfall, test_arr_host_measurement)
+test_mutation(test_arr_host_ohne_blende_mutation test_arr_host_ausfall CYPHERDJ_MUTATION_HOST_OHNE_BLENDE src/arr_host_stufe.cpp src/edges.cpp)   # case 1: no fade, the weight jumps (step above the limit)
+test_mutation(test_arr_host_trocken_unverzoegert_mutation test_arr_host_ausfall CYPHERDJ_MUTATION_HOST_TROCKEN_UNVERZOEGERT src/arr_host_stufe.cpp src/edges.cpp)   # case 1: the fade runs against the undelayed dry signal (time jump)
+test_mutation(test_arr_host_stillstand_regel_mutation test_arr_host_ausfall CYPHERDJ_MUTATION_HOST_STILLSTAND_REGEL src/arr_host_stufe.cpp src/edges.cpp)   # case 2: a stall rule in the stage
+test_mutation(test_arr_host_mess_schwelle_mutation test_arr_host_measurement CYPHERDJ_MUTATION_HOST_MESS_SCHWELLE src/arr_host_measurement.cpp)   # case 3: threshold 0, a hum is taken for the return
 # 1.10 slice 4b T13: latency compensation (test_arr_pdc). Each mutation turns its named case red.
 test_mutation(test_arr_pdc_fehlt_mutation test_arr_pdc CYPHERDJ_MUTATION_PDC_FEHLT_TABELLE ${ARR_QUELLEN} src/arr_playback.cpp src/clock.cpp)           # case 1 (four paths), 2, 3, 4, 5, 7
 test_mutation(test_arr_pdc_doppelt_mutation test_arr_pdc CYPHERDJ_MUTATION_PDC_DOPPELT ${ARR_QUELLEN} src/arr_playback.cpp src/clock.cpp)               # case 1: the send path delayed twice
@@ -1249,6 +1276,8 @@ test_mutation(test_arr_rack_row_gewinnt_mutation test_arr_rack CYPHERDJ_MUTATION
 test_mutation(test_arr_rack_spaet_mutation test_arr_rack CYPHERDJ_MUTATION_MAKRO_SPAET ${ARR_QUELLEN} src/arr_playback.cpp src/clock.cpp)                   # case 3: the move acts one block late
 test_mutation(test_arr_rack_limit_17_mutation test_arr_rack CYPHERDJ_MUTATION_MAKRO_LIMIT_17 ${ARR_QUELLEN} src/arr_playback.cpp src/clock.cpp)             # case 4: the 17th target is cut silently
 test_mutation(test_arr_rack_bleibt_mutation test_arr_rack CYPHERDJ_MUTATION_MAKRO_BLEIBT ${ARR_QUELLEN} src/arr_playback.cpp src/clock.cpp)                 # case 5: the override stays after the rack has gone
+# 1.12 slice 6: insert and rack lanes (test_arr_auto_chain). The mutation turns K1, K3 and K7 red.
+test_mutation(test_arr_auto_kette_bleibt_mutation test_arr_auto_chain CYPHERDJ_MUTATION_ARR_KETTE_LANE_BLEIBT ${ARR_QUELLEN} src/arr_playback.cpp src/clock.cpp)   # a lane that ends keeps driving
 # 1.9 U8 T9: macros on rack members (test_arr_rack_macro). Each mutation turns its named cases red.
 test_mutation(test_arr_rack_makro_glied_row_gewinnt_mutation test_arr_rack_macro CYPHERDJ_MUTATION_MAKRO_GLIED_ROW_GEWINNT ${ARR_QUELLEN} src/arr_playback.cpp src/clock.cpp)       # M1 to M5: the member's snapshot value wins over the macro
 test_mutation(test_arr_rack_makro_glied_falsches_glied_mutation test_arr_rack_macro CYPHERDJ_MUTATION_MAKRO_GLIED_FALSCHES_GLIED ${ARR_QUELLEN} src/arr_playback.cpp src/clock.cpp)   # M1 to M7 (M6, M7 in part): the member index is off by one
@@ -1305,6 +1334,13 @@ target_compile_definitions(test_render_ketten_ohne_ins_zeilen_mutation PRIVATE C
 target_link_libraries(test_render_ketten_ohne_ins_zeilen_mutation PRIVATE cypherdj_kernbib cypherdj::json cypherdj::toml)
 add_test(NAME test_render_ketten_ohne_ins_zeilen_mutation COMMAND test_render_ketten_ohne_ins_zeilen_mutation)
 set_tests_properties(test_render_ketten_ohne_ins_zeilen_mutation PROPERTIES WILL_FAIL TRUE)
+# arr-fx slice 1: an export built without the insert rows does not widen; test_render_utility must go red
+add_executable(test_render_utility_ohne_ins_zeilen_mutation tests/test_render_utility.cpp)
+target_include_directories(test_render_utility_ohne_ins_zeilen_mutation PRIVATE include tests)
+target_compile_definitions(test_render_utility_ohne_ins_zeilen_mutation PRIVATE CYPHERDJ_MUTATION_RENDER_OHNE_INS_ZEILEN=1 CYPHERDJ_DJK="${DJK}")
+target_link_libraries(test_render_utility_ohne_ins_zeilen_mutation PRIVATE cypherdj_kernbib cypherdj::json cypherdj::toml)
+add_test(NAME test_render_utility_ohne_ins_zeilen_mutation COMMAND test_render_utility_ohne_ins_zeilen_mutation)
+set_tests_properties(test_render_utility_ohne_ins_zeilen_mutation PROPERTIES WILL_FAIL TRUE)
 
 test_mutation(test_arr_noten_vorausblick_mutation test_arr_notes CYPHERDJ_MUTATION_ARR_OHNE_VORAUSBLICK ${ARR_QUELLEN} src/clock.cpp)
 test_mutation(test_arr_noten_tausch_mutation test_arr_notes CYPHERDJ_MUTATION_ARR_TAUSCH_OHNE_NOTE_AUS ${ARR_QUELLEN} src/clock.cpp)
@@ -1662,53 +1698,56 @@ target_link_libraries(kern_kosten_rec PRIVATE cypherdj_kernbib)
 # NOTE: the reference hash is bit-exact and bound to this host (DJ-Maschine, Ryzen 7800X3D, gcc and glibc as installed there): libm ifunc dispatch can differ on another CPU or glibc.
 # If kosten_arr_hash fails on another machine or after a toolchain change, measure the reference again before suspecting the code. PASS_REGULAR_EXPRESSION ignores the exit
 # code on purpose: the hash covers the audio, and the lane self-check may exit 2 in the control run.
+# Re-measured 2026-11-10 (wirt-timing): the lead of a host slot is 2n instead of 2n + 25, so the start of the arrangement moves 25 samples earlier and every pinned hash below changed; the
+# variants (pool, serial, unused, no fifo, at 256 and 128) still agree with each other, which is what these tests pin. The previous values (main bccde012 and later): arr32ins 256 pm=dc9cc27c4c3f4649
+# out=dc14fb5e7fa2cd46, 128 pm=e1912e21c15a1803 out=aff09e7d1d21b7ea; arr32rack 256 pm=dc46d62c4d78220f out=c6368275c50516af, 128 pm=6eadcb3158850ccf out=fbfb37bf1999fc47.
 # Output hash of the arrangement lane (KOSTEN_HASH=1): FNV-1a over the production master and the master out, 2000 warm-up + 3000 measured cycles (blocks=5000). The reference values
 # are those of the probe of 2026-11-06 on main bccde012 (Hall fork-join probe, unchanged Hall path). The control mutes track 3: it passes only if a hash line was printed (the lane
 # self-check may exit 2, ctest ignores the exit code with PASS_REGULAR_EXPRESSION) AND neither reference value appears, so a crash or a missing line cannot pass it.
 add_test(NAME kosten_arr_hash COMMAND ${CMAKE_COMMAND} -E env KOSTEN_HASH=1 $<TARGET_FILE:kern_kosten_arr> 3000 arr32ins)
-set_tests_properties(kosten_arr_hash PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32ins pm=dc9cc27c4c3f4649 out=dc14fb5e7fa2cd46 blocks=5000" TIMEOUT 120)
+set_tests_properties(kosten_arr_hash PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32ins pm=e134482f0c43ea8b out=8962e4bdef0c6d5b blocks=5000" TIMEOUT 120)
 # mehrkern task 4: the same lane with the Halls on a HallPool of 3 workers must give exactly the same hash.
 # The deadline is 1 s: no take-back, no self switch-off from wake jitter (SCHED_OTHER). The single HASH line (stdout) carries everything, so no ordering of stdout and stderr is relied on:
 # the reference hash, pool_jobs > 0 (Hall blocks computed ON a worker: a pool that is merely attached cannot pass), no late and no taken-back job, the pool still on.
 add_test(NAME kosten_arr_hash_pool COMMAND ${CMAKE_COMMAND} -E env KOSTEN_HASH=1 KOSTEN_HALL_FAEDEN=3 KOSTEN_HALL_FRIST_US=1000000 $<TARGET_FILE:kern_kosten_arr> 3000 arr32ins)
-set_tests_properties(kosten_arr_hash_pool PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32ins pm=dc9cc27c4c3f4649 out=dc14fb5e7fa2cd46 blocks=5000 pool_jobs=[1-9][0-9]* hall_jobs=[1-9][0-9]* pool_spaet=0 pool_zurueck=0 pool_an=1" TIMEOUT 120)
+set_tests_properties(kosten_arr_hash_pool PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32ins pm=e134482f0c43ea8b out=8962e4bdef0c6d5b blocks=5000 pool_jobs=[1-9][0-9]* hall_jobs=[1-9][0-9]* pool_spaet=0 pool_zurueck=0 pool_an=1" TIMEOUT 120)
 # Control of the line above: the pool is built but never attached (KOSTEN_HALL_POOL_UNBENUTZT). The hash is the same and pool_jobs is 0, so kosten_arr_hash_pool would be red on it.
 add_test(NAME kosten_arr_hash_pool_unbenutzt COMMAND ${CMAKE_COMMAND} -E env KOSTEN_HASH=1 KOSTEN_HALL_FAEDEN=3 KOSTEN_HALL_FRIST_US=1000000 KOSTEN_HALL_POOL_UNBENUTZT=1 $<TARGET_FILE:kern_kosten_arr> 3000 arr32ins)
-set_tests_properties(kosten_arr_hash_pool_unbenutzt PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32ins pm=dc9cc27c4c3f4649 out=dc14fb5e7fa2cd46 blocks=5000 pool_jobs=0 hall_jobs=[1-9][0-9]*" TIMEOUT 120)
+set_tests_properties(kosten_arr_hash_pool_unbenutzt PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32ins pm=e134482f0c43ea8b out=8962e4bdef0c6d5b blocks=5000 pool_jobs=0 hall_jobs=[1-9][0-9]*" TIMEOUT 120)
 add_test(NAME kosten_arr_hash_kontrolle COMMAND ${CMAKE_COMMAND} -E env KOSTEN_HASH=1 KOSTEN_ARR32_STUMM=3 $<TARGET_FILE:kern_kosten_arr> 3000 arr32ins)
 set_tests_properties(kosten_arr_hash_kontrolle PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32ins pm=[0-9a-f]+ out=[0-9a-f]+ blocks=5000"
-                     FAIL_REGULAR_EXPRESSION "pm=dc9cc27c4c3f4649;out=dc14fb5e7fa2cd46" TIMEOUT 120)
+                     FAIL_REGULAR_EXPRESSION "pm=e134482f0c43ea8b;out=8962e4bdef0c6d5b" TIMEOUT 120)
 target_compile_definitions(kern_kosten_arr PRIVATE CYPHERDJ_DJK="${DJK}")   # 1.9: the lane arr32kit reads the repo test kits
 # mehrkern-s3 task 0: the same lane at 128 samples per block (KOSTEN_BLOCK=128), serial (no pool). blocks=5000 is still one hash step per cycle.
 # The reference pair was measured on f5db257d with the lane switch of this commit; it is not the 256 pair (a run that ignored KOSTEN_BLOCK would print that one).
 add_test(NAME kosten_arr_hash_128 COMMAND ${CMAKE_COMMAND} -E env KOSTEN_HASH=1 KOSTEN_BLOCK=128 $<TARGET_FILE:kern_kosten_arr> 3000 arr32ins)
-set_tests_properties(kosten_arr_hash_128 PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32ins pm=e1912e21c15a1803 out=aff09e7d1d21b7ea blocks=5000" TIMEOUT 120)
+set_tests_properties(kosten_arr_hash_128 PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32ins pm=002a476ac0d1b78f out=139fbb6f629b78eb blocks=5000" TIMEOUT 120)
 # Negative control of the line above: track 3 muted at 128. A hash line must be printed and neither reference value may appear.
 add_test(NAME kosten_arr_hash_128_kontrolle COMMAND ${CMAKE_COMMAND} -E env KOSTEN_HASH=1 KOSTEN_BLOCK=128 KOSTEN_ARR32_STUMM=3 $<TARGET_FILE:kern_kosten_arr> 3000 arr32ins)
 set_tests_properties(kosten_arr_hash_128_kontrolle PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32ins pm=[0-9a-f]+ out=[0-9a-f]+ blocks=5000"
-                     FAIL_REGULAR_EXPRESSION "pm=e1912e21c15a1803;out=aff09e7d1d21b7ea" TIMEOUT 120)
+                     FAIL_REGULAR_EXPRESSION "pm=002a476ac0d1b78f;out=139fbb6f629b78eb" TIMEOUT 120)
 # mehrkern slice 3.2 task 5: phase Q (the track sources) on the Hall pool, the same hashes. The positive counters are in the regex: a run that stayed serial cannot pass
 # (spur_blocks_parallel and spur_einheiten_worker > 0). FIFO_TEST lets the SCHED_OTHER test pool count as FIFO; without it the phase stays serial (the control below).
 # The existing four hash ctests above are unchanged.
 add_test(NAME kosten_arr_hash_spur COMMAND ${CMAKE_COMMAND} -E env KOSTEN_HASH=1 KOSTEN_SPUR_POOL=1 KOSTEN_SPUR_FIFO_TEST=1 KOSTEN_HALL_FAEDEN=3 KOSTEN_HALL_FRIST_US=1000000 $<TARGET_FILE:kern_kosten_arr> 3000 arr32ins)
-set_tests_properties(kosten_arr_hash_spur PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32ins pm=dc9cc27c4c3f4649 out=dc14fb5e7fa2cd46 blocks=5000 [^\n]*spur_blocks_parallel=[1-9][0-9]* spur_einheiten_worker=[1-9][0-9]*" TIMEOUT 120)
+set_tests_properties(kosten_arr_hash_spur PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32ins pm=e134482f0c43ea8b out=8962e4bdef0c6d5b blocks=5000 [^\n]*spur_blocks_parallel=[1-9][0-9]* spur_einheiten_worker=[1-9][0-9]*" TIMEOUT 120)
 add_test(NAME kosten_arr_hash_spur_128 COMMAND ${CMAKE_COMMAND} -E env KOSTEN_HASH=1 KOSTEN_BLOCK=128 KOSTEN_SPUR_POOL=1 KOSTEN_SPUR_FIFO_TEST=1 KOSTEN_HALL_FAEDEN=3 KOSTEN_HALL_FRIST_US=1000000 $<TARGET_FILE:kern_kosten_arr> 3000 arr32ins)
-set_tests_properties(kosten_arr_hash_spur_128 PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32ins pm=e1912e21c15a1803 out=aff09e7d1d21b7ea blocks=5000 [^\n]*spur_blocks_parallel=[1-9][0-9]* spur_einheiten_worker=[1-9][0-9]*" TIMEOUT 120)
+set_tests_properties(kosten_arr_hash_spur_128 PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32ins pm=002a476ac0d1b78f out=139fbb6f629b78eb blocks=5000 [^\n]*spur_blocks_parallel=[1-9][0-9]* spur_einheiten_worker=[1-9][0-9]*" TIMEOUT 120)
 # control: the load threshold above the live load (24 live units x 256 samples = 6144): the pool exists, nothing forks, the hash is the same
 add_test(NAME kosten_arr_hash_spur_unbenutzt COMMAND ${CMAKE_COMMAND} -E env KOSTEN_HASH=1 KOSTEN_SPUR_POOL=1 KOSTEN_SPUR_FIFO_TEST=1 KOSTEN_SPUR_MIN_LAST=1000000 KOSTEN_HALL_FAEDEN=3 KOSTEN_HALL_FRIST_US=1000000 $<TARGET_FILE:kern_kosten_arr> 3000 arr32ins)
-set_tests_properties(kosten_arr_hash_spur_unbenutzt PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32ins pm=dc9cc27c4c3f4649 out=dc14fb5e7fa2cd46 blocks=5000 [^\n]*spur_blocks_parallel=0 spur_einheiten_worker=0 spur_einheiten_caller=0 spur_seriell_weg=[0-9]+ spur_seriell_wenig=[1-9][0-9]*" TIMEOUT 120)
+set_tests_properties(kosten_arr_hash_spur_unbenutzt PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32ins pm=e134482f0c43ea8b out=8962e4bdef0c6d5b blocks=5000 [^\n]*spur_blocks_parallel=0 spur_einheiten_worker=0 spur_einheiten_caller=0 spur_seriell_weg=[0-9]+ spur_seriell_wenig=[1-9][0-9]*" TIMEOUT 120)
 # control: SPUR_POOL=1 without FIFO_TEST, SCHED_OTHER workers: the phase stays serial, the hash is the same (shows that the positive regex discriminates)
 add_test(NAME kosten_arr_hash_spur_ohne_fifo COMMAND ${CMAKE_COMMAND} -E env KOSTEN_HASH=1 KOSTEN_SPUR_POOL=1 KOSTEN_HALL_FAEDEN=3 KOSTEN_HALL_FRIST_US=1000000 $<TARGET_FILE:kern_kosten_arr> 3000 arr32ins)
-set_tests_properties(kosten_arr_hash_spur_ohne_fifo PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32ins pm=dc9cc27c4c3f4649 out=dc14fb5e7fa2cd46 blocks=5000 [^\n]*spur_blocks_parallel=0 spur_einheiten_worker=0 spur_einheiten_caller=0 spur_seriell_weg=[0-9]+ spur_seriell_wenig=0 spur_seriell_fifo=[1-9][0-9]*" TIMEOUT 120)
+set_tests_properties(kosten_arr_hash_spur_ohne_fifo PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32ins pm=e134482f0c43ea8b out=8962e4bdef0c6d5b blocks=5000 [^\n]*spur_blocks_parallel=0 spur_einheiten_worker=0 spur_einheiten_caller=0 spur_seriell_weg=[0-9]+ spur_seriell_wenig=0 spur_seriell_fifo=[1-9][0-9]*" TIMEOUT 120)
 # mehrkern slice 3 task 6b: the arr32rack lane (8 racks of 3 RB-338 and a Kit) equals itself serial against the pool; the pool run must compute rack units on workers
 add_test(NAME kosten_arr_hash_rack COMMAND ${CMAKE_COMMAND} -E env KOSTEN_HASH=1 $<TARGET_FILE:kern_kosten_arr> 3000 arr32rack)
-set_tests_properties(kosten_arr_hash_rack PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32rack pm=dc46d62c4d78220f out=c6368275c50516af blocks=5000" TIMEOUT 120)
+set_tests_properties(kosten_arr_hash_rack PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32rack pm=0b489968030f994f out=0808091c3dfefaab blocks=5000" TIMEOUT 120)
 add_test(NAME kosten_arr_hash_rack_spur COMMAND ${CMAKE_COMMAND} -E env KOSTEN_HASH=1 KOSTEN_SPUR_POOL=1 KOSTEN_SPUR_FIFO_TEST=1 KOSTEN_HALL_FAEDEN=3 KOSTEN_HALL_FRIST_US=1000000 $<TARGET_FILE:kern_kosten_arr> 3000 arr32rack)
-set_tests_properties(kosten_arr_hash_rack_spur PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32rack pm=dc46d62c4d78220f out=c6368275c50516af blocks=5000 [^\n]*spur_blocks_parallel=[1-9][0-9]* spur_einheiten_worker=[1-9][0-9]* [^\n]*spur_rack_worker=[1-9][0-9]*" TIMEOUT 120)
+set_tests_properties(kosten_arr_hash_rack_spur PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32rack pm=0b489968030f994f out=0808091c3dfefaab blocks=5000 [^\n]*spur_blocks_parallel=[1-9][0-9]* spur_einheiten_worker=[1-9][0-9]* [^\n]*spur_rack_worker=[1-9][0-9]*" TIMEOUT 120)
 add_test(NAME kosten_arr_hash_rack_128 COMMAND ${CMAKE_COMMAND} -E env KOSTEN_HASH=1 KOSTEN_BLOCK=128 $<TARGET_FILE:kern_kosten_arr> 3000 arr32rack)
-set_tests_properties(kosten_arr_hash_rack_128 PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32rack pm=6eadcb3158850ccf out=fbfb37bf1999fc47 blocks=5000" TIMEOUT 120)
+set_tests_properties(kosten_arr_hash_rack_128 PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32rack pm=b5de7d51b09cdb6f out=59d80112d94209ff blocks=5000" TIMEOUT 120)
 add_test(NAME kosten_arr_hash_rack_spur_128 COMMAND ${CMAKE_COMMAND} -E env KOSTEN_HASH=1 KOSTEN_BLOCK=128 KOSTEN_SPUR_POOL=1 KOSTEN_SPUR_FIFO_TEST=1 KOSTEN_HALL_FAEDEN=3 KOSTEN_HALL_FRIST_US=1000000 $<TARGET_FILE:kern_kosten_arr> 3000 arr32rack)
-set_tests_properties(kosten_arr_hash_rack_spur_128 PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32rack pm=6eadcb3158850ccf out=fbfb37bf1999fc47 blocks=5000 [^\n]*spur_blocks_parallel=[1-9][0-9]* spur_einheiten_worker=[1-9][0-9]* [^\n]*spur_rack_worker=[1-9][0-9]*" TIMEOUT 120)
+set_tests_properties(kosten_arr_hash_rack_spur_128 PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32rack pm=b5de7d51b09cdb6f out=59d80112d94209ff blocks=5000 [^\n]*spur_blocks_parallel=[1-9][0-9]* spur_einheiten_worker=[1-9][0-9]* [^\n]*spur_rack_worker=[1-9][0-9]*" TIMEOUT 120)
 # KOSTEN_BLOCK is checked first thing in main(): an invalid value exits 4 before any file is created. The test needs exactly exit 4 plus the message (WILL_FAIL would also pass
 # on a crash) and counts the pid-named /dev/shm/kern_kosten_arr_* directories before and after: none may be left behind.
 add_test(NAME kosten_arr_block_ungueltig COMMAND sh -c "n0=$(ls -d /dev/shm/kern_kosten_arr_* 2>/dev/null | wc -l); KOSTEN_BLOCK=100 $<TARGET_FILE:kern_kosten_arr> 10 arr32ins; rc=$?; n1=$(ls -d /dev/shm/kern_kosten_arr_* 2>/dev/null | wc -l); echo \"rc=$rc dirs_before=$n0 dirs_after=$n1\"; [ $rc -eq 4 ] && [ $n1 -le $n0 ]")
@@ -1731,11 +1770,13 @@ target_link_libraries(kern_kosten_hall PRIVATE cypherdj_kernbib)
 # more are asked) must abort (WILL_FAIL).
 add_executable(kern_kosten_ins tests/cost/cost_ins.cpp)
 target_link_libraries(kern_kosten_ins PRIVATE cypherdj_kernbib)
-add_test(NAME kosten_ins_selbstpruefung COMMAND ${CMAKE_COMMAND} -E env KOSTEN_INS_ANZAHL=0,1,12 KOSTEN_INS_FAELLE=komp,eq_mix,saett $<TARGET_FILE:kern_kosten_ins> 300 1)
+target_compile_definitions(kern_kosten_ins PRIVATE CYPHERDJ_DJK="${DJK}")
+add_test(NAME kosten_ins_selbstpruefung COMMAND ${CMAKE_COMMAND} -E env KOSTEN_INS_ANZAHL=0,1,12 KOSTEN_INS_FAELLE=komp,eq_mix,saett,utility_mono,bk_fx-echo-achtel $<TARGET_FILE:kern_kosten_ins> 300 1)
 add_executable(kern_kosten_ins_mutation tests/cost/cost_ins.cpp)
 target_compile_definitions(kern_kosten_ins_mutation PRIVATE CYPHERDJ_MUTATION_KOSTEN_INS_EINS=1)
 target_link_libraries(kern_kosten_ins_mutation PRIVATE cypherdj_kernbib)
-add_test(NAME kosten_ins_selbstpruefung_mutation COMMAND ${CMAKE_COMMAND} -E env KOSTEN_INS_ANZAHL=0,1,12 KOSTEN_INS_FAELLE=komp,eq_mix,saett $<TARGET_FILE:kern_kosten_ins_mutation> 300 1)
+target_compile_definitions(kern_kosten_ins_mutation PRIVATE CYPHERDJ_DJK="${DJK}")
+add_test(NAME kosten_ins_selbstpruefung_mutation COMMAND ${CMAKE_COMMAND} -E env KOSTEN_INS_ANZAHL=0,1,12 KOSTEN_INS_FAELLE=komp,eq_mix,saett,utility_mono,bk_fx-echo-achtel $<TARGET_FILE:kern_kosten_ins_mutation> 300 1)
 set_tests_properties(kosten_ins_selbstpruefung_mutation PROPERTIES WILL_FAIL TRUE)
 # D1 K2b: Fehlerfälle der Senken (RB-338 intern, Wirt-Slots) und ihrer Verdrahtung im Kern (WILL_FAIL)
 test_mutation(test_arr_rb_senke_reihenfolge_mutation test_arr_rb_sink CYPHERDJ_MUTATION_ARR_RB_REIHENFOLGE ${ARR_QUELLEN} src/clock.cpp)
@@ -1757,25 +1798,27 @@ test_mutation(test_arr_rb_senke_auto_rel_klemme_mutation test_arr_rb_sink_auto C
 test_mutation(test_arr_rb_senke_wechsel_mutation test_arr_rb_sink CYPHERDJ_MUTATION_ARR_SPURWECHSEL_HART ${ARR_QUELLEN}
               src/clock.cpp)   # Fix F2: Spurwechsel ohne Ausblende und Zurücksetzen, Fall 6 rot
 test_mutation(test_kern_arr_rb_mutation test_core_arr_rb CYPHERDJ_MUTATION_ARR_OHNE_RB_SENKE ${KERN_QUELLEN35} src/arr_playback.cpp)
-test_mutation(test_kern_arr_wirt_vorhalt_mutation test_core_arr_host CYPHERDJ_MUTATION_ARR_WIRT_OHNE_VORHALT ${KERN_QUELLEN35}
+test_mutation(test_kern_arr_wirt_vorhalt_mutation test_core_arr_instrument_host CYPHERDJ_MUTATION_ARR_WIRT_OHNE_VORHALT ${KERN_QUELLEN35}
               src/arr_playback.cpp)
-test_mutation(test_kern_arr_wirt_leeren_mutation test_core_arr_host CYPHERDJ_MUTATION_ARR_MIDI_LEER_SPAET ${KERN_QUELLEN35}
+test_mutation(test_kern_arr_wirt_leeren_mutation test_core_arr_instrument_host CYPHERDJ_MUTATION_ARR_MIDI_LEER_SPAET ${KERN_QUELLEN35}
               src/arr_playback.cpp)
-test_mutation(test_kern_arr_wirt_wechsel_mutation test_core_arr_host CYPHERDJ_MUTATION_ARR_SPURWECHSEL_HART ${KERN_QUELLEN35}
+test_mutation(test_kern_arr_wirt_wechsel_mutation test_core_arr_instrument_host CYPHERDJ_MUTATION_ARR_SPURWECHSEL_HART ${KERN_QUELLEN35}
               src/arr_playback.cpp)   # Fix F2: Wirt-Slot verlassen ohne CC 123 und Ausblende, Fall 6 rot
-test_mutation(test_kern_arr_wirt_achse_mutation test_core_arr_host CYPHERDJ_MUTATION_ARR_A4_ACHSE_ALT ${KERN_QUELLEN35}
+test_mutation(test_kern_arr_wirt_achse_mutation test_core_arr_instrument_host CYPHERDJ_MUTATION_ARR_A4_ACHSE_ALT ${KERN_QUELLEN35}
               src/arr_playback.cpp)   # Fix F7: offene A4-Messungen über /k/set/neu behalten, Fall 7 rot
-test_mutation(test_kern_arr_wirt_nachreichen_mutation test_core_arr_host CYPHERDJ_MUTATION_ARR_MIDI_LEER_NACH_NACHREICHEN
+test_mutation(test_kern_arr_wirt_nachreichen_mutation test_core_arr_instrument_host CYPHERDJ_MUTATION_ARR_MIDI_LEER_NACH_NACHREICHEN
               ${KERN_QUELLEN35} src/arr_playback.cpp)   # Fix F1: Leeren hinter arr_nachreichen(), Fall 5 rot
-test_mutation(test_kern_arr_wirt_rueckweg_mutation test_core_arr_host CYPHERDJ_MUTATION_ARR_WIRT_OHNE_RUECKWEG ${KERN_QUELLEN35}
+test_mutation(test_kern_arr_wirt_rueckweg_mutation test_core_arr_instrument_host CYPHERDJ_MUTATION_ARR_WIRT_OHNE_RUECKWEG ${KERN_QUELLEN35}
               src/arr_playback.cpp)
-test_mutation(test_kern_arr_wirt_a4_mutation test_core_arr_host CYPHERDJ_MUTATION_ARR_A4_BLOCKANFANG ${KERN_QUELLEN35}
+test_mutation(test_kern_arr_wirt_a4_mutation test_core_arr_instrument_host CYPHERDJ_MUTATION_ARR_A4_BLOCKANFANG ${KERN_QUELLEN35}
               src/arr_playback.cpp)
 test_mutation(test_kanten_arr_zu_mutation test_edges CYPHERDJ_MUTATION_ARR_KANTEN_ZU src/edges.cpp)
 test_mutation(test_kanten_riegel_mutation test_edges CYPHERDJ_MUTATION_KANTEN_OHNE_RIEGEL src/edges.cpp)
+test_mutation(test_kanten_host_zu_mutation test_edges CYPHERDJ_MUTATION_HOST_KANTEN_ZU src/edges.cpp)   # plan 1.11 T3: arr_ins_<h>/arr_insret_<h> families not allowed
+test_mutation(test_kanten_host_kern_mutation test_edges CYPHERDJ_MUTATION_HOST_KANTEN_KERN src/edges.cpp)   # plan 1.11 T4 pre-step B: another core instance accepted as the far end
 test_mutation(test_midi_ausgabe_mutation test_midi_output CYPHERDJ_MUTATION_MIDI_UNSORTIERT src/edges.cpp)
 # D1 K2b (Spec 6.28, A10): Messpunkt A4 über zwei Fäden; unter -DCYPHERDJ_TSAN=ON der Lauf für A10 (Ablage)
-test_mutation(test_kern_arr_wirt_faden_mutation test_core_arr_host_thread CYPHERDJ_MUTATION_ARR_A4_BLOCKANFANG ${KERN_QUELLEN35}
+test_mutation(test_kern_arr_wirt_faden_mutation test_core_arr_instrument_host_thread CYPHERDJ_MUTATION_ARR_A4_BLOCKANFANG ${KERN_QUELLEN35}
               src/arr_playback.cpp)
 
 # ---- Paket K3 (Spec D1 2.5, 3.1, A7): Freeze, Render, Ring-Mitschnitt, Null-Test
@@ -1864,8 +1907,8 @@ if(CYPHERDJ_TSAN)
   set_tests_properties(test_freeze_tsan_ohne_ring PROPERTIES PASS_REGULAR_EXPRESSION
                        "ThreadSanitizer: reported [1-9][0-9]* warnings")
 endif()
-# K2b-Rest (a): ein Platz je Spur für die verlassene Senke (wie vor dem Re-Review): test_core_arr_host (Fall 8) muss scheitern
-test_mutation(test_kern_arr_wirt_weg_mutation test_core_arr_host CYPHERDJ_MUTATION_ARR_WEG_EIN_PLATZ ${KERN_QUELLEN35}
+# K2b-Rest (a): ein Platz je Spur für die verlassene Senke (wie vor dem Re-Review): test_core_arr_instrument_host (Fall 8) muss scheitern
+test_mutation(test_kern_arr_wirt_weg_mutation test_core_arr_instrument_host CYPHERDJ_MUTATION_ARR_WEG_EIN_PLATZ ${KERN_QUELLEN35}
               src/arr_playback.cpp)
 # K2b-Rest (b): eine im selben Zyklus zurückgekehrte interne Spur geht durch den Zweig weg verloren: test_arr_rb_sink (Fall 7)
 test_mutation(test_arr_rb_senke_zurueck_mutation test_arr_rb_sink CYPHERDJ_MUTATION_ARR_RB_ZURUECK_VERLOREN ${ARR_QUELLEN}
@@ -2180,6 +2223,9 @@ endforeach()
 test_mutation(test_arr_intern_senke_ohne_wechsel_mutation test_arr_intern_sink CYPHERDJ_MUTATION_ARR_INTERN_OHNE_WECHSEL ${ARR_QUELLEN} src/clock.cpp)
 test_mutation(test_arr_intern_senke_rb_rueckkehr_mutation test_arr_intern_sink CYPHERDJ_MUTATION_ARR_RB_BK_ALS_RUECKKEHR ${ARR_QUELLEN} src/clock.cpp)
 test_mutation(test_arr_intern_senke_ohne_auto_mutation test_arr_intern_sink CYPHERDJ_MUTATION_ARR_INTERN_OHNE_AUTO ${ARR_QUELLEN} src/clock.cpp)   # 1.12 S2: device lane values must pass the dispatcher
+# 1.12 slice 7: lanes on the Baukasten knobs (test_arr_auto_bk_button): the dispatcher drops the lane values (B1 to B4), the bk sink drops the summand (B4)
+test_mutation(test_arr_auto_bk_knopf_ohne_auto_mutation test_arr_auto_bk_button CYPHERDJ_MUTATION_ARR_INTERN_OHNE_AUTO ${ARR_QUELLEN} src/clock.cpp)
+test_mutation(test_arr_auto_bk_knopf_ohne_summand_mutation test_arr_auto_bk_button CYPHERDJ_MUTATION_ARR_BK_OHNE_SUMMAND ${ARR_QUELLEN} src/clock.cpp)
 # mehrkern slice 3 task 6b (WILL_FAIL): the rack lane unit renders its members into the sink's own scratch (test_arr_rack_path case 2), the Kit mixes into its own buffers
 # (cases 2, 5), the cleanliness scan says true (cases 3 and 7), the plan check sits after each rest track again (case 8: a clean rack stays in the remainder)
 test_mutation(spur_rack_scratch_gemeinsam_mutation test_arr_rack_path CYPHERDJ_MUTATION_SPUR_RACK_SCRATCH_GEMEINSAM ${ARR_QUELLEN} src/clock.cpp)
@@ -2350,6 +2396,21 @@ if(CYPHERDJ_SANITIZE)
   add_test(NAME aufnahme_alt_nicht_zurueck_asan_gate COMMAND aufnahme_alt_nicht_zurueck_asan_gate)
   set_tests_properties(aufnahme_alt_nicht_zurueck_asan_gate PROPERTIES PASS_REGULAR_EXPRESSION "LeakSanitizer")
 endif()
+# plan 1.11 T12: the real-time export of the production master (test_arr_export_run, collected automatically; under CYPHERDJ_TSAN it runs with setarch -R: the callback thread against the
+# writer thread). Each file as its own mutated object before the library. HOST_EXPORT_OHNE_VERSATZ (arr_export_run.cpp): the window is not shifted by the path latency, the clicks of
+# case 2 are late by 600. HOST_RENDER_OHNE_PRUEFUNG (render.cpp): the offline render takes a host stage that is on, case 4 goes red.
+foreach(m HOST_EXPORT_OHNE_VERSATZ:arr_export_run HOST_RENDER_OHNE_PRUEFUNG:render)
+  string(REPLACE ":" ";" mq ${m})
+  list(GET mq 0 schalter)
+  list(GET mq 1 quelle)
+  string(TOLOWER ${schalter} klein)
+  add_executable(test_arr_export_lauf_${klein}_mutation tests/test_arr_export_run.cpp src/${quelle}.cpp)
+  target_include_directories(test_arr_export_lauf_${klein}_mutation PRIVATE include tests)
+  target_compile_definitions(test_arr_export_lauf_${klein}_mutation PRIVATE CYPHERDJ_MUTATION_${schalter}=1 CYPHERDJ_DJK="${DJK}")
+  target_link_libraries(test_arr_export_lauf_${klein}_mutation PRIVATE cypherdj_kernbib cypherdj::json cypherdj::toml)
+  add_test(NAME test_arr_export_lauf_${klein}_mutation COMMAND test_arr_export_lauf_${klein}_mutation)
+  set_tests_properties(test_arr_export_lauf_${klein}_mutation PROPERTIES WILL_FAIL TRUE)
+endforeach()
 # 1.10 slice 7 (T5): the real-time tap /k/arr/abgriff (test_arr_tap). Each mutation turns its named cases red.
 test_mutation(test_arr_abgriff_vor_fader_mutation test_arr_tap CYPHERDJ_MUTATION_ABGRIFF_VOR_FADER ${ARR_QUELLEN} src/arr_playback.cpp src/clock.cpp)       # cases 3 (group post level) and 4 (track pre/post): the post is taken in front of the fader
 test_mutation(test_arr_abgriff_nachlauf_mutation test_arr_tap CYPHERDJ_MUTATION_ABGRIFF_NACHLAUF ${ARR_QUELLEN} src/arr_playback.cpp src/clock.cpp)         # case 1 (frames): the freeze tail is added to the length

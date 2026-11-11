@@ -101,8 +101,8 @@ int main() {
         if ((m.ev[i].b[0] & 0xf0) == 0x80) offs.push_back({z0 + m.ev[i].t, m.ev[i].b[1]});
       }
     }
-    // Glanz 2.7 (F19): MIDI geht um den Wirt-Rundweg früher hinaus, ERZ_MIDI_RUNDWEG_ZYKLEN · N + ERZ_MIDI_VORHALT_REST = 2 · 256 + 25
-    constexpr int64_t VORHALT = 2 * N + 25;
+    // Glanz 2.7 (F19): MIDI geht um den Wirt-Rundweg früher hinaus, erz_midi_vorhalt(N) = ERZ_MIDI_RUNDWEG_ZYKLEN · N = 2 · 256
+    constexpr int64_t VORHALT = 2 * N;
     const int64_t soll_on = std::llround(8.5 * SPB) - VORHALT, soll_off = std::llround(9.5 * SPB) - VORHALT;
     std::printf("instrument midi: ons %zu (erstes %lld, Soll %lld), offs %zu (erstes %lld, Soll %lld)\n", ons.size(),
                 ons.empty() ? -1LL : (long long)ons[0].first, (long long)soll_on, offs.size(),
@@ -128,30 +128,30 @@ int main() {
     PRUEF(mit > -20.0f && mit < 0.0f);
     PRUEF(ohne <= -100.0f);
   }
-  {  // 3) Glanz 2.7 Prüfung R2: Doppelnoten-Schutz am Kern (ERZ_FENSTER mit MIDI-jetzt). Quantum 256, On 36 bei 90000 − 537 =
-     // 89463 ist im Zyklus 89344..89600 hinaus; ein spätes Fenster bei s = 89600 (Beat 3,982) bringt Note 36 noch einmal.
+  {  // 3) Glanz 2.7 Prüfung R2: Doppelnoten-Schutz am Kern (ERZ_FENSTER mit MIDI-jetzt). Quantum 256, On 36 bei 90000 − 512 =
+     // 89488 ist im Zyklus 89344..89600 hinaus; ein spätes Fenster bei s = 89600 (Beat 3,982) bringt Note 36 noch einmal.
     const Spaet k1 = spaetes_fenster(ab.pfad, 256, 256, 89600, 6 * SPB);
     zeige("K1 Quantum 256, spaetes Fenster bei 89600", k1);
-    PRUEF(k1.on36.size() == 1 && k1.on36[0] == 90000 - 537);
+    PRUEF(k1.on36.size() == 1 && k1.on36[0] == 90000 - 512);
     PRUEF(k1.on38 == 1 && k1.zu_spaet == 1 && k1.eingefuegt == 1);
   }
-  {  // 4) Glanz 2.7 Prüfung R3: Quantum 1024 -> 256. Im letzten 1024er-Zyklus (87040..88064) ist On 36 bei 90000 − 2073 = 87927
-     // schon hinaus; der erste 256er-Zyklus rechnet MIDI-jetzt nur mit s + 537 = 88601 < 90000. Das späte Fenster darf die Note
-     // trotzdem nicht ein zweites Mal bringen (vorher: On bei 87927 und 89463).
+  {  // 4) Glanz 2.7 Prüfung R3: Quantum 1024 -> 256. Im letzten 1024er-Zyklus (87040..88064) ist On 36 bei 90000 − 2048 = 87952
+     // schon hinaus; der erste 256er-Zyklus rechnet MIDI-jetzt nur mit s + 512 = 88576 < 90000. Das späte Fenster darf die Note
+     // trotzdem nicht ein zweites Mal bringen (vorher: On bei 87952 und 89488).
     const Spaet k2 = spaetes_fenster(ab.pfad, 1024, 256, 88064, 6 * SPB);
     zeige("K2 Quantum 1024->256, spaetes Fenster bei 88064", k2);
-    PRUEF(k2.on36.size() == 1 && k2.on36[0] == 90000 - 2073);
+    PRUEF(k2.on36.size() == 1 && k2.on36[0] == 90000 - 2048);
     PRUEF(k2.on38 == 1 && k2.zu_spaet == 1 && k2.eingefuegt == 1);
   }
-  {  // 5) Glanz 2.7 Prüfung R3: Quantum 256 -> 1024 bei 88064 mit kurzer Note 36 (0,004 Beat = 90 Samples). On (87927) und Off
-     // (90090 − 2073 = 88017) liegen beide vor dem Zyklusanfang und gingen am selben Sample hinaus (Länge 0 am Wirt). Soll: Off
+  {  // 5) Glanz 2.7 Prüfung R3: Quantum 256 -> 1024 bei 88064 mit kurzer Note 36 (0,004 Beat = 90 Samples). On (87952) und Off
+     // (90090 − 2048 = 88042) liegen beide vor dem Zyklusanfang und gingen am selben Sample hinaus (Länge 0 am Wirt). Soll: Off
      // mindestens ein Sample nach dem On.
     const Spaet k3 = spaetes_fenster(ab.pfad, 256, 1024, 88064, 6 * SPB, 0.004);
     zeige("K3 Quantum 256->1024 bei 88064, Note 36 kurz", k3);
     PRUEF(k3.on36.size() == 1 && k3.off36.size() == 1);
     if (k3.on36.size() == 1 && k3.off36.size() == 1) PRUEF(k3.on36[0] == 88064 && k3.off36[0] > k3.on36[0]);
   }
-  {  // 6) Glanz 2.7 Prüfung R5: der Vorhalt folgt dem Quantum (2 · n + 25), nicht fest 537. Quantum 128 und 512, Note auf Beat 8,5.
+  {  // 6) Glanz 2.7 Prüfung R5: der Vorhalt folgt dem Quantum (2 · n), nicht fest 512. Quantum 128 und 512, Note auf Beat 8,5.
     for (const int n : {128, 512}) {
       Lauf x(ab.pfad, nullptr);
       auto s = x.neu(cdj::Befehl::ERZ_STROM, "erzeuger");
@@ -179,7 +179,7 @@ int main() {
           if ((m.ev[i].b[0] & 0xf0) == 0x80) offs.push_back(z0 + m.ev[i].t);
         }
       }
-      const int64_t vorhalt = 2 * n + 25, soll_on = std::llround(8.5 * SPB) - vorhalt, soll_off = std::llround(9.5 * SPB) - vorhalt;
+      const int64_t vorhalt = 2 * n, soll_on = std::llround(8.5 * SPB) - vorhalt, soll_off = std::llround(9.5 * SPB) - vorhalt;
       std::printf("instrument quantum %d: On %lld (Soll %lld), Off %lld (Soll %lld)\n", n, ons.empty() ? -1LL : (long long)ons[0],
                   (long long)soll_on, offs.empty() ? -1LL : (long long)offs[0], (long long)soll_off);
       PRUEF(ons.size() == 1 && ons[0] == soll_on);
@@ -236,13 +236,13 @@ int main() {
     for (auto t : ons) std::printf(" %lld", (long long)t);
     std::printf("\n");
     PRUEF(ons.size() == 8);
-    if (ons.size() == 8) PRUEF(ons[0] == SPB - 537 && ons[7] == 8 * SPB - 537);
+    if (ons.size() == 8) PRUEF(ons[0] == SPB - 512 && ons[7] == 8 * SPB - 512);
     delete f1;
     delete f2;
   }
   {  // 8) Glanz 2.7 Re-Prüfung N2: Quantum 256 -> 1024 bei 87808, ein Ersatz-Fenster tauscht Note 36 auf Beat 3,93 (Sample 88425,
      // gesendet erst bis 88345) gegen Note 40. Die 36 ist noch nicht hinaus, also gilt der Ersatz: 40 klingt, 36 nicht. Fehlerfall:
-     // "jetzt" aus Sample + neuem Vorhalt (87808 + 2073) statt aus dem Gesendeten, 40 zählt zu_spaet und die alte 36 klingt.
+     // "jetzt" aus Sample + neuem Vorhalt (87808 + 2048) statt aus dem Gesendeten, 40 zählt zu_spaet und die alte 36 klingt.
     Lauf x(ab.pfad, nullptr);
     auto s = x.neu(cdj::Befehl::ERZ_STROM, "erzeuger");
     s.nr = 2;

@@ -1,0 +1,13 @@
+{"t":"sende","sample":0,"osc":["/k/set/neu",",hsd",1,"pruefstand",128.0],"bereich":"zeitachse","herleitung":"§4.2: neue Zeitachse mit 128 BPM, Beat 0 am nächsten Zyklus = Sample 0 (§1.1)"}
+{"t":"sende","sample":990000,"osc":["/k/teil",",hssisddfiiss",2,"leitstand","p1",0,"deck/2/eq/mitte",40.0,8.0,-20.0,0,0,"",""],"bereich":"regler","herleitung":"ab_beat 40 liegt beim Senden (Beat 44) in der Vergangenheit"}
+{"t":"erwarte","ab_sample":990000,"bis_sample":992400,"osc":["/q",",hsihds",2,"leitstand",4,null,null,"zu_spaet"],"bereich":"regler","herleitung":"§16.1 Politik 0: verworfen, Quittung 4, Grund zu_spaet (§16.2)"}
+{"t":"wert","sample":1125000,"pfad":"deck/2/eq/mitte","wert":0.0,"toleranz":0.0,"bereich":"regler","herleitung":"verworfen: Wert unverändert (§1.5 Vorgabe 0)"}
+{"t":"sende","sample":1440000,"osc":["/k/teil",",hssisddfiiss",3,"leitstand","p1",1,"deck/2/eq/hoch",60.0,16.0,-30.0,0,1,"",""],"bereich":"regler"}
+{"t":"erwarte","ab_sample":1440000,"bis_sample":1442400,"osc":["/q",",hsihds",3,"leitstand",5,null,64.0,null],"toleranz":0.05,"bereich":"regler","herleitung":"§16.1 Politik 1: am nächsten Zyklus (ist_sample = nächster Blockanfang nach der Ankunft), Quittung 5; Grund \"\" oder zu_spaet (FORMAT.md Punkt 22 i)"}
+{"t":"wert","sample":1575000,"pfad":"deck/2/eq/hoch","wert":-15.0,"toleranz":0.1,"bereich":"regler","herleitung":"§16.1 Restrampe vom Ist-Wert bis zum unveränderten Ende-Beat 76 (Start höchstens 1 000 Samples nach Beat 64)"}
+{"t":"erwarte","ab_sample":1710000,"bis_sample":1712400,"osc":["/q",",hsihds",3,"leitstand",3,1710000,76.0,""],"toleranz":1e-06,"bereich":"regler","herleitung":"§5.1 Status 3: Rampe am Ende, Beat 76 = Sample 1710000"}
+{"t":"wert","sample":1755000,"pfad":"deck/2/eq/hoch","wert":-30.0,"toleranz":0.01,"bereich":"regler","herleitung":"Ende-Beat unverändert"}
+{"t":"sende","sample":1800000,"osc":["/k/teil",",hssisddfiiss",4,"leitstand","p1",2,"deck/2/filter",88.0,4.0,0.5,0,0,"",""],"bereich":"regler","herleitung":"Negativ-Kontrolle: rechtzeitig gesendet"}
+{"t":"erwarte","ab_sample":1800000,"bis_sample":1802400,"osc":["/q",",hsihds",4,"leitstand",1,null,null,""],"bereich":"regler","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"erwarte","ab_sample":1980000,"bis_sample":1982400,"osc":["/q",",hsihds",4,"leitstand",2,1980000,88.0,""],"toleranz":1e-06,"bereich":"regler","herleitung":"§5.1 Status 2 am Ziel-Sample llround(sample_at(88)) = 1980000"}
+{"t":"erwarte","ab_sample":2070000,"bis_sample":2072400,"osc":["/q",",hsihds",4,"leitstand",3,2070000,92.0,""],"toleranz":1e-06,"bereich":"regler","herleitung":"§5.1 Status 3: Rampe am Ende, Beat 92 = Sample 2070000"}

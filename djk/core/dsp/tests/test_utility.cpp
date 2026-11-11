@@ -294,12 +294,12 @@ int main(int argc, char** argv) {
         Utility u(kFs);
         UtilityParameter p;
         p.gain_db = std::nanf("");
-        p.breite_prozent = 500.0f;
+        p.breite_prozent = 500.0f;   // above 400 %
         p.balance = -3.0f;
         p.bass_mono_hz = 5.0f;
         u.setze(p);
         PRUEF(u.parameter().gain_db == 0.0f);
-        PRUEF(u.parameter().breite_prozent == 200.0f);
+        PRUEF(u.parameter().breite_prozent == 400.0f);   // arr-fx: the limit is 400 % (was 200 %)
         PRUEF(u.parameter().balance == -1.0f);
         PRUEF(u.parameter().bass_mono_hz == 20.0f);
     }

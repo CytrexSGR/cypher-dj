@@ -1,0 +1,23 @@
+{"t":"sende","sample":0,"osc":["/k/set/neu",",hsd",1,"pruefstand",128.0],"bereich":"zeitachse","herleitung":"§4.2: neue Zeitachse mit 128 BPM, Beat 0 am nächsten Zyklus = Sample 0 (§1.1)"}
+{"t":"sende","sample":45000,"osc":["/k/deck/laden",",hsisdii",2,"leitstand",1,"f0000000000000a1",128.0,1,0],"bereich":"deck","herleitung":"§4.4 /k/deck/laden, Fixture material/f0000000000000a1/ next to the sequences"}
+{"t":"erwarte","ab_sample":45000,"bis_sample":47400,"osc":["/q",",hsihds",2,"leitstand",1,null,null,""],"bereich":"deck","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"erwarte","ab_sample":45000,"bis_sample":93000,"osc":["/q",",hsihds",2,"leitstand",3,null,null,""],"bereich":"deck","herleitung":"§4.4: Quittung fertig nach dem Tausch"}
+{"t":"erwarte","ab_sample":45000,"bis_sample":93000,"osc":["/e/geladen",",isdiih",1,"f0000000000000a1",128.0,1,0,null],"toleranz":1e-06,"bereich":"deck","herleitung":"§4.4, §5.9 /e/geladen"}
+{"t":"sende","sample":270000,"osc":["/k/deck/start",",hssssiddi",3,"andreas","","","",1,16.0,0.0,0],"bereich":"deck"}
+{"t":"erwarte","ab_sample":270000,"bis_sample":272400,"osc":["/q",",hsihds",3,"andreas",1,null,null,""],"bereich":"deck","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"erwarte","ab_sample":360000,"bis_sample":362400,"osc":["/q",",hsihds",3,"andreas",2,360000,16.0,""],"toleranz":1e-06,"bereich":"deck","herleitung":"§5.1 Status 2 am Ziel-Sample llround(sample_at(16)) = 360000"}
+{"t":"sende","sample":450000,"osc":["/k/deck/hotcue_setzen",",hsiid",4,"andreas",1,1,64.0],"bereich":"deck"}
+{"t":"erwarte","ab_sample":450000,"bis_sample":452400,"osc":["/q",",hsihds",4,"andreas",1,null,null,""],"bereich":"deck","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"erwarte","ab_sample":450000,"bis_sample":452400,"osc":["/e/hotcue",",isidh",1,"f0000000000000a1",1,64.0,null],"toleranz":1e-06,"bereich":"deck","herleitung":"§4.4 hotcue_setzen → Ereignis /e/hotcue"}
+{"t":"sende","sample":1109250,"osc":["/k/deck/hotcue",",hssssidiid",5,"andreas","","","",1,53.3,1,0,0.0],"bereich":"deck"}
+{"t":"erwarte","ab_sample":1109250,"bis_sample":1111650,"osc":["/q",",hsihds",5,"andreas",1,null,null,""],"bereich":"deck","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"erwarte","ab_sample":1199250,"bis_sample":1201650,"osc":["/q",",hsihds",5,"andreas",2,1199250,53.3,""],"toleranz":1e-06,"bereich":"deck","herleitung":"§5.1 Status 2 am Ziel-Sample llround(sample_at(53.3)) = 1199250"}
+{"t":"deck_wert","sample":1221750,"deck":1,"feld":"quell_beat","wert":65.3,"toleranz":0.01,"bereich":"deck","herleitung":"§4.4: 64 + wrap(phase(37.30) − 0) = 64.30"}
+{"t":"sende","sample":1273500,"osc":["/k/deck/hotcue",",hssssidiid",6,"andreas","","","",1,60.6,1,0,0.0],"bereich":"deck"}
+{"t":"erwarte","ab_sample":1273500,"bis_sample":1275900,"osc":["/q",",hsihds",6,"andreas",1,null,null,""],"bereich":"deck","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"erwarte","ab_sample":1363500,"bis_sample":1365900,"osc":["/q",",hsihds",6,"andreas",2,1363500,60.6,""],"toleranz":1e-06,"bereich":"deck","herleitung":"§5.1 Status 2 am Ziel-Sample llround(sample_at(60.6)) = 1363500"}
+{"t":"deck_wert","sample":1386000,"deck":1,"feld":"quell_beat","wert":64.6,"toleranz":0.01,"bereich":"deck","herleitung":"§4.4: 64 + wrap(phase(71.60) − 0) = 63.60"}
+{"t":"sende","sample":1450125,"osc":["/k/deck/hotcue",",hssssidiid",7,"andreas","","","",1,68.45,1,0,0.0],"bereich":"deck"}
+{"t":"erwarte","ab_sample":1450125,"bis_sample":1452525,"osc":["/q",",hsihds",7,"andreas",1,null,null,""],"bereich":"deck","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"erwarte","ab_sample":1540125,"bis_sample":1542525,"osc":["/q",",hsihds",7,"andreas",2,1540125,68.45,""],"toleranz":1e-06,"bereich":"deck","herleitung":"§5.1 Status 2 am Ziel-Sample llround(sample_at(68.45)) = 1540125"}
+{"t":"deck_wert","sample":1562625,"deck":1,"feld":"quell_beat","wert":65.45,"toleranz":0.01,"bereich":"deck","herleitung":"§4.4: 64 + wrap(phase(71.45) − 0) = 64.45"}

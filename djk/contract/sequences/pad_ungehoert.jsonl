@@ -1,0 +1,19 @@
+{"t":"sende","sample":0,"osc":["/k/set/neu",",hsd",1,"pruefstand",128.0],"bereich":"zeitachse","herleitung":"§4.2: neue Zeitachse mit 128 BPM, Beat 0 am nächsten Zyklus = Sample 0 (§1.1)"}
+{"t":"hand","sample":90000,"pfad":"pad/1/fader","midi_roh":0.0,"bereich":"regler","herleitung":"§7.3 Punkt 2: erster Wert setzt nur die Stellung"}
+{"t":"hand","sample":112500,"pfad":"pad/1/fader","midi_roh":1.0,"bereich":"regler","herleitung":"§7.2 Übernahme skaliert: Anschlag oben = Obergrenze"}
+{"t":"erwarte","ab_sample":112500,"bis_sample":114900,"osc":["/e/halter",",sshd","pad/1/fader","mensch",112500,5.0],"toleranz":1e-06,"bereich":"regler","herleitung":"§7.3 Punkt 3, ADR 023: Halter mensch am selben Sample"}
+{"t":"erwarte","ab_sample":832500,"bis_sample":833012,"osc":["/e/halter",",sshd","pad/1/fader","frei",null,null],"bereich":"regler","herleitung":"§7.3 Punkt 4: 32 Beats ohne Handbewegung → frei bei Beat 37"}
+{"t":"sende","sample":1260000,"osc":["/k/schuss",",hsdsiiifi",2,"cypher",64.0,"f0000000000000e5",1,1,1,0.0,0],"bereich":"schuss","herleitung":"§4.6 Schuss 1 auf pad/1"}
+{"t":"erwarte","ab_sample":1440000,"bis_sample":1442400,"osc":["/q",",hsihds",2,"cypher",6,1440000,64.0,"kein_hoerschein"],"toleranz":1e-06,"bereich":"schuss","herleitung":"§4.6 I3b: offenes Pad, kein Hörschein"}
+{"t":"erlaube","ab_sample":1440000,"bis_sample":1442400,"osc":["/e/invariante",",ssihd","hoerschein",null,null,null,null],"bereich":"invariante","herleitung":"FORMAT.md Punkt 22 a: ob eine I3-Ablehnung zusätzlich /e/invariante hoerschein meldet, lässt §5.9 offen"}
+{"t":"sende","sample":1485000,"osc":["/k/hoerschein",",hsssssddddfff",3,"pruefstand","h_s2","pad/1","f0000000000000e5/128000_r1/s2","ok",128.0,192.0,"NaN","NaN",0.5,0.0,-14.0],"bereich":"hoerschein","herleitung":"§4.5 Hörschein registrieren (Quelle pruefstand: §1.4 kennt keine Quelle analyse)"}
+{"t":"erwarte","ab_sample":1485000,"bis_sample":1487400,"osc":["/q",",hsihds",3,"pruefstand",null,null,null,null],"bereich":"hoerschein","herleitung":"§4: jeder Befehl bekommt eine /q; welchen Status legt §4.5 nicht fest"}
+{"t":"sende","sample":1530000,"osc":["/k/schuss",",hsdsiiifi",4,"cypher",72.0,"f0000000000000e5",1,1,1,0.0,0],"bereich":"schuss","herleitung":"§4.6 Schuss 1 auf pad/1"}
+{"t":"erwarte","ab_sample":1620000,"bis_sample":1622400,"osc":["/q",",hsihds",4,"cypher",6,1620000,72.0,"kein_hoerschein"],"toleranz":1e-06,"bereich":"schuss","herleitung":"§4.6: Hörschein nur für Schuss 2"}
+{"t":"erlaube","ab_sample":1620000,"bis_sample":1622400,"osc":["/e/invariante",",ssihd","hoerschein",null,null,null,null],"bereich":"invariante","herleitung":"FORMAT.md Punkt 22 a: ob eine I3-Ablehnung zusätzlich /e/invariante hoerschein meldet, lässt §5.9 offen"}
+{"t":"sende","sample":1710000,"osc":["/k/schuss",",hsdsiiifi",5,"cypher",80.0,"f0000000000000e5",1,2,1,0.0,0],"bereich":"schuss","herleitung":"§4.6 Schuss 2 auf pad/1"}
+{"t":"erwarte","ab_sample":1800000,"bis_sample":1802400,"osc":["/q",",hsihds",5,"cypher",2,1800000,80.0,""],"toleranz":1e-06,"bereich":"schuss","herleitung":"Hörschein mit genau diesem Schuss"}
+{"t":"sende","sample":1890000,"osc":["/k/schuss",",hsdsiiifi",6,"andreas",88.0,"f0000000000000e5",1,1,1,0.0,0],"bereich":"schuss","herleitung":"§4.6 Schuss 1 auf pad/1"}
+{"t":"erwarte","ab_sample":1980000,"bis_sample":1982400,"osc":["/q",",hsihds",6,"andreas",2,1980000,88.0,""],"toleranz":1e-06,"bereich":"schuss","herleitung":"§4.6: Quelle andreas braucht keinen Hörschein"}
+{"t":"sende","sample":2070000,"osc":["/k/schuss",",hsdsiiifi",7,"cypher",96.0,"f0000000000000e5",1,1,2,0.0,0],"bereich":"schuss","herleitung":"§4.6 Schuss 1 auf pad/2"}
+{"t":"erwarte","ab_sample":2160000,"bis_sample":2162400,"osc":["/q",",hsihds",7,"cypher",2,2160000,96.0,""],"toleranz":1e-06,"bereich":"schuss","herleitung":"Negativ-Kontrolle: geschlossenes Pad 2 = Vorhören"}

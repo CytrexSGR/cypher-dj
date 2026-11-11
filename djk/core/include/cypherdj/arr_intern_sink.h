@@ -28,7 +28,7 @@ class ArrInternSenke final : public ArrSenke {
     return !cur || cur->leer(spur);
   }
   bool parallel_faehig(int spur) const noexcept override;
-  void auto_parameter(int spur, int param, float wert) noexcept override;   // `geraet` lane values: to the sink of the device (the RB-338; the bk sink ignores them)
+  void auto_parameter(int spur, int param, float wert) noexcept override;   // `geraet` lane values: to the sink of the device (the RB-338 parameters, the Baukasten knobs k1..k8)
   void auto_parameter_summand(int spur, int param, float delta) noexcept override;   // 1.12 slice 5: a relative device lane without an absolute one, same dispatch
   bool spur_weg(int spur, int64_t s, bool andere_spur) noexcept override;
 

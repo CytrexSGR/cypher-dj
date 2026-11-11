@@ -70,7 +70,7 @@ int main() {
   fs::create_directories(tmp);
   PRUEF(cdj::lies_fassung((tmp / "gibt_es_nicht").string(), a, m) == cdj::FassungFehler::fehlt);
   fs::create_directories(tmp / "broken");
-  std::ofstream(tmp / "kaputt" / "fassung.json") << "{\"schema\": 1,";
+  std::ofstream(tmp / "broken" / "fassung.json") << "{\"schema\": 1,";
   PRUEF(cdj::lies_fassung((tmp / "broken").string(), a, m) == cdj::FassungFehler::form);
   PRUEF(cdj::lies_fassung(kopie(tmp, "schema2", [](json& j) { j["schema"] = 2; }), a, m) ==
         cdj::FassungFehler::form);

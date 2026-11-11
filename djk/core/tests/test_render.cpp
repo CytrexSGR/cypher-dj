@@ -144,7 +144,7 @@ int main() {
     const auto fach = fach_erz4();
     r.regler = fach.get();
     const cdj::RenderErgebnis e = cdj::rendere(r);
-    PRUEF(e.fehler.empty() && e.regler == 1 && e.frames == 4 * 22500 && e.start_sample == 3 * 256 + 25);
+    PRUEF(e.fehler.empty() && e.regler == 1 && e.frames == 4 * 22500 && e.start_sample == 3 * 256);
     PRUEF(e.l.size() == 4 * 22500 && e.spitze > 0.1f && e.l[22500] > 0.1f);
     PRUEF(e.regler_quelle == "kern");
     kern_l = e.l;
@@ -325,7 +325,7 @@ int main() {
     const cdj::RenderErgebnis eqs = cdj::rendere(r);
     std::printf("Fall 12: eq and saett rows: Fehler '%s', Regler %d\n", eqs.fehler.c_str(), eqs.regler);
     PRUEF(eqs.fehler.empty() && eqs.regler == 4);
-    for (const char* pfad : {"ins/komp/13/schwelle", "ins/komp/0/schwelle", "ins/eq/3/an", "ins/saett/2/an", "ins/eq/1/b9/gain", "ins/eq/1/b8/gain/x", "ins/komp/1/zz"}) {
+    for (const char* pfad : {"ins/komp/13/schwelle", "ins/komp/0/schwelle", "ins/eq/9/an", "ins/saett/5/an", "ins/lim/3/an", "ins/utility/9/an", "ins/utility/1/zz", "ins/eq/1/b9/gain", "ins/eq/1/b8/gain/x", "ins/komp/1/zz"}) {
       r.spur_regler = {{pfad, 0.0f}};
       const cdj::RenderErgebnis e = cdj::rendere(r);
       std::printf("Fall 12: %s: Fehler '%s'\n", pfad, e.fehler.c_str());

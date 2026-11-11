@@ -7,7 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { pruefeSpur, plane, oeffnetKanal, beatZuMono, wirtRuf } from '../track.ts';
 import { oeffnet } from '../hand_operation.ts';
-import { pruefeWirtOrdner } from './support/host_sock.mjs';
+import { pruefeWirtOrdner } from './support/instrument_host_sock.mjs';
 
 const FAHRBAR = new Set(['a_filter1_cutoff', 'a_filter1_resonance']);
 const ok = (fahrten, name = 'probe') => pruefeSpur({ name, fahrten }, FAHRBAR);

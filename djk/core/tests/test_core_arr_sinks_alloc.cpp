@@ -76,7 +76,7 @@ int main() {
       if (i == id && s == st) return true;
     return false;
   };
-  const int64_t st1 = x.start(0.0, 0);   // Start-Pfad unter dem Wächter: Einsatz nach 537 + 256 Samples
+  const int64_t st1 = x.start(0.0, 0);   // Start-Pfad unter dem Wächter: Einsatz nach 512 + 256 Samples
   zyklen(10);
   const bool start_da = quittung(st1, 2);
   PRUEF(x.kern->arrangement().snapshot() && x.kern->arrangement().snapshot()->n_auto_lanes == 2);   // positive control: the geraet lanes are in the playing snapshot

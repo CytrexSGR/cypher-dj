@@ -37,7 +37,7 @@ bool ArrBkSenke::nutzt(const CypherBk* h) const noexcept {
   if (!h) return false;
   for (const Spur& p : sp_)   // aktiv first, blende second: the sink publishes blende before it overwrites aktiv and clears it last
     if (p.aktiv.load(std::memory_order_acquire) == h || p.blende.load(std::memory_order_acquire) == h) return true;
-  return false;
+  return zweiter_ && zweiter_->nutzt(h);
 }
 
 void ArrBkSenke::schiebe(Spur& p, const Ev& e) noexcept {
@@ -76,6 +76,17 @@ void ArrBkSenke::auto_parameter(int spur, int param, float wert) noexcept {
   p.knopf_da[param] = true;
 }
 
+void ArrBkSenke::auto_parameter_summand(int spur, int param, float delta) noexcept {
+#ifdef CYPHERDJ_MUTATION_ARR_BK_OHNE_SUMMAND
+  (void)spur; (void)param; (void)delta;   // error case: the sink drops the summand of a relative lane
+  return;
+#endif
+  if (spur < 0 || spur >= ARR_SENKEN_PLAETZE || param < 0 || param >= 8 || !(delta == delta)) return;
+  Spur& p = sp_[spur];
+  p.knopf_delta[param] = delta;
+  p.delta_da[param] = true;
+}
+
 void ArrBkSenke::block(int spur, int64_t s0, int m, float* l, float* r) noexcept { block_bahn(spur, s0, m, l, r, arbeit0_); }
 
 void ArrBkSenke::block_bahn(int spur, int64_t s0, int m, float* l, float* r, ArrArbeit& a) noexcept {
@@ -84,12 +95,15 @@ void ArrBkSenke::block_bahn(int spur, int64_t s0, int m, float* l, float* r, Arr
   ++a.einheiten;
   if (spur < 0 || spur >= ARR_SENKEN_PLAETZE || m <= 0 || m > ARR_BLOCK) return;
   Spur& p = sp_[spur];
-  float k_gemeldet[8];   // the knobs reported for this block (auto_parameter): taken and cleared at once, so a block that returns early leaves nothing for a later one
-  bool k_da[8];
+  float k_gemeldet[8], k_delta[8];   // the knobs and summands reported for this block (auto_parameter, auto_parameter_summand): taken and cleared at once, so a block that returns early leaves nothing for a later one
+  bool k_da[8], d_da[8];
   for (int i = 0; i < 8; ++i) {
     k_gemeldet[i] = p.knopf_wert[i];
     k_da[i] = p.knopf_da[i];
     p.knopf_da[i] = false;
+    k_delta[i] = p.knopf_delta[i];
+    d_da[i] = p.delta_da[i];
+    p.delta_da[i] = false;
   }
   const ArrSnapshot* snap = arr_.snapshot();
   const ArrSpur* q = nullptr;   // the track of the current snapshot when it is a bk track with an instance
@@ -168,7 +182,11 @@ void ArrBkSenke::block_bahn(int spur, int64_t s0, int m, float* l, float* r, Arr
 #ifdef CYPHERDJ_MUTATION_ARR_BK_REGLER_NUR_START
     if (!sofort) continue;   // error case: knobs only at the start, a knob edited during playback never arrives
 #endif
-    const float w = k_da[k - 1] ? k_gemeldet[k - 1] : knopf_wert(*q, k);   // a value reported for this block wins over the snapshot
+    float w = k_da[k - 1] ? k_gemeldet[k - 1] : knopf_wert(*q, k);   // a value reported for this block wins over the snapshot
+    if (!k_da[k - 1] && d_da[k - 1]) {   // a relative lane only: the snapshot's knob plus the summand
+      w += k_delta[k - 1];
+      w = w < 0.0f ? 0.0f : (w > 1.0f ? 1.0f : w);
+    }
     if (sofort)
       cypher_bk_regler_sofort(h, static_cast<uint32_t>(k), w);
     else

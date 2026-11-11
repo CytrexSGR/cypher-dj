@@ -140,7 +140,7 @@ inline int arr_schluessel_streifen_ankunft(const ArrSnapshot& s, int streifen) {
 inline int arr_schluessel_stufe_ankunft(const ArrSnapshot& s, int streifen, int j) {
   int n = arr_schluessel_streifen_ankunft(s, streifen);
   const ArrKette& k = s.kette[streifen];
-  for (int i = 0; i < j && i < k.n && i < ARR_KETTE; ++i) n += ins_latenz(k.st[i].art);
+  for (int i = 0; i < j && i < k.n && i < ARR_KETTE; ++i) n += ins_latenz(k.st[i]);
   return n;
 }
 // Arrival of the key at its capture point. The row sc (a track input before any chain) and the DJ inputs are raw: 0. The capture points of the mixer sit behind the alignment of their
@@ -168,7 +168,7 @@ inline bool arr_schluessel_versatz(ArrSnapshot& s, std::string* meldung = nullpt
       if (st.art != ArrInsArt::komp) continue;
       const int ein = arr_schluessel_stufe_ankunft(s, c, j);
 #ifdef CYPHERDJ_MUTATION_SC_VERSATZ_EINE_STUFE
-      const int nah = j > 0 ? ins_latenz(kt.st[j - 1].art) : 0;   // error case: the delay is the latency of the nearest stage in front, not the path sum
+      const int nah = j > 0 ? ins_latenz(kt.st[j - 1]) : 0;   // error case: the delay is the latency of the nearest stage in front, not the path sum
       const int zeile = ein > 0 ? std::min(ein, nah) : 0;
 #else
       const int zeile = ein;

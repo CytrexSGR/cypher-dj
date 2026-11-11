@@ -24,12 +24,13 @@ inline constexpr double kUtilityRampeMs = 10.0;  // ramp of all switches and mat
 inline constexpr double kUtilityDcHz = 5.0;      // -3 dB point of the DC blocker
 inline constexpr float kUtilityBassMonoMinHz = 20.0f;
 inline constexpr float kUtilityBassMonoMaxHz = 500.0f;
+inline constexpr float kUtilityBreiteMaxProzent = 400.0f;   // arr-fx: 400 % = side x4 (+12 dB); the mixer rows stay at 200 % by their table range
 
 // Parameters with their ranges. setze() clamps; a NaN keeps the previous value of that field.
 struct UtilityParameter {
     float gain_db = 0.0f;           // [-120, +24]; ≤ -120 = silent (gain exactly 0)
     float balance = 0.0f;           // [-1, +1]; +0.5 = left at 0.5 (-6.02 dB), right 1; linear balance law
-    float breite_prozent = 100.0f;  // [0, 200]; 0 = mono, 100 = unchanged, 200 = side doubled
+    float breite_prozent = 100.0f;  // [0, 400]; 0 = mono, 100 = unchanged, 200 = side doubled, 400 = side x4 (+12 dB; the peak can rise)
     float bass_mono_hz = 0.0f;      // 0 = off, else [20, 500]
     bool phase_umkehren_l = false;  // invert the input left channel
     bool phase_umkehren_r = false;

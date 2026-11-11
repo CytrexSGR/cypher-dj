@@ -108,6 +108,7 @@ class ArrLader {
   void setze_kit_ordner(std::string o) { cache_.setze_kit_ordner(std::move(o)); }
   void setze_kit_leser(const ArrKitLeser* l) { cache_.setze_kit_leser(l); }
   void setze_kit_lader(ArrKitLader l) { cache_.setze_kit_lader(l); }
+  void setze_host_da(bool da) { cache_.setze_host_da(da); }   // plan 1.11 T4: Kern::host_ports_da(); before the thread starts
   int aufgeschoben() const { return n_aufgeschoben_; }
   static constexpr int WARTE_MAX = 16;
 

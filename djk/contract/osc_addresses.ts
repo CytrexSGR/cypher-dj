@@ -65,6 +65,9 @@ export const ADRESSEN = {
   '/k/arr/metronom': { typen: ',hsifi', abschnitt: '4.11', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'an', 'pegel_db', 'ziel'], bereiche: { an: [0, 1], pegel_db: [-60, 0], ziel: [0, 1] } },
   '/k/arr/freeze': { typen: ',hsiddi', abschnitt: '4.11', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'spur', 'von_beat', 'bis_beat', 'kennung'], bereiche: { spur: [1, 32], von_beat: [0.0, null], kennung: [0, null] } },
   '/k/arr/abgriff': { typen: ',hsiiiddi', abschnitt: '4.11', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'art', 'nr', 'punkt', 'von_beat', 'bis_beat', 'kennung'], bereiche: { art: [0, 3], nr: [1, 32], punkt: [0, 1], von_beat: [0.0, null], kennung: [0, null] } },
+  '/k/arr/export_lauf': { typen: ',hssdd', abschnitt: '4.11', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'pfad', 'von_beat', 'bis_beat'], bereiche: { von_beat: [0.0, null] } },
+  '/k/arr/ins_host': { typen: ',hsii', abschnitt: '4.11', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'h', 'gesund'], bereiche: { h: [1, 4], gesund: [0, 1] } },
+  '/k/arr/ins_mess': { typen: ',hsi', abschnitt: '4.11', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'h'], bereiche: { h: [1, 4] } },
   '/k/arr/auto': { typen: ',hsisi', abschnitt: '4.11', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'spur', 'ziel', 'an'], bereiche: { spur: [0, 32], an: [0, 1] } },
   '/k/arr/arm': { typen: ',hsiii', abschnitt: '4.11', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'spur', 'an', 'modus'], bereiche: { spur: [0, 32], an: [0, 1], modus: [0, 2] } },
   '/k/rec/spur': { typen: ',hsiiiii', abschnitt: '4.12', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'spur', 'scharf', 'eingang', 'modus', 'monitor'], bereiche: { spur: [1, 32], scharf: [0, 1], eingang: [0, 30], modus: [0, 3], monitor: [0, 2] } },
@@ -110,6 +113,7 @@ export const ADRESSEN = {
   '/e/graph': { typen: ',ss', abschnitt: '5.12', richtung: 'vom_kern', nurPruefmodus: false, felder: ['kanal', 'name'], bereiche: {} },
   '/zustand/arr': { typen: ',iiidhdif', abschnitt: '5.13', richtung: 'vom_kern', nurPruefmodus: false, felder: ['nr', 'status', 'loop_an', 'projekt_beat', 'ursprung_sample', 'start_beat', 'metronom_an', 'limiter_db'], bereiche: { status: [0, 3], loop_an: [0, 1], metronom_an: [0, 1], limiter_db: [-200, 0] } },
   '/zustand/warp': { typen: ',iiiii', abschnitt: '5.13', richtung: 'vom_kern', nurPruefmodus: false, felder: ['stimmen', 'unterlauf', 'kein_platz', 'spaet', 'faeden'], bereiche: {} },
+  '/zustand/ins_host': { typen: ',iiiiiiiiiiii', abschnitt: '5.13', richtung: 'vom_kern', nurPruefmodus: false, felder: ['h_1', 'gesund_1', 'rundweg_1', 'h_2', 'gesund_2', 'rundweg_2', 'h_3', 'gesund_3', 'rundweg_3', 'h_4', 'gesund_4', 'rundweg_4'], bereiche: { h_1: [1, 1], gesund_1: [0, 1], rundweg_1: [-1, 16383], h_2: [2, 2], gesund_2: [0, 1], rundweg_2: [-1, 16383], h_3: [3, 3], gesund_3: [0, 1], rundweg_3: [-1, 16383], h_4: [4, 4], gesund_4: [0, 1], rundweg_4: [-1, 16383] } },
   '/zustand/hall_pool': { typen: ',iiii', abschnitt: '5.13', richtung: 'vom_kern', nurPruefmodus: false, felder: ['an', 'faeden', 'spaet', 'zurueck'], bereiche: { an: [0, 1] } },
   '/zustand/spur_pool': { typen: ',iiiiiiiii', abschnitt: '5.13', richtung: 'vom_kern', nurPruefmodus: false, felder: ['an', 'modus', 'blocks_parallel', 'einheiten_worker', 'einheiten_caller', 'seriell_summe', 'haengt', 'spaet', 'zurueck'], bereiche: { an: [0, 1], modus: [0, 2] } },
   '/zustand/ein': { typen: ',ihhhh', abschnitt: '5.14', richtung: 'vom_kern', nurPruefmodus: false, felder: ['verbunden', 'midi_gesehen', 'midi_verloren', 'midi_sample', 'flanke_sample'], bereiche: {} },
@@ -117,6 +121,9 @@ export const ADRESSEN = {
   '/e/aufnahme': { typen: ',iiihhii', abschnitt: '5.14', richtung: 'vom_kern', nurPruefmodus: false, felder: ['spur', 'kennung', 'status', 'frames', 'start_sample', 'luecken', 'art'], bereiche: { spur: [0, 32], status: [0, 3], art: [0, 1] } },
   '/e/freeze': { typen: ',iiih', abschnitt: '5.13', richtung: 'vom_kern', nurPruefmodus: false, felder: ['spur', 'kennung', 'status', 'frames'], bereiche: { spur: [1, 32], status: [0, 2] } },
   '/e/abgriff': { typen: ',iiiih', abschnitt: '5.13', richtung: 'vom_kern', nurPruefmodus: false, felder: ['art', 'nr', 'kennung', 'status', 'frames'], bereiche: { art: [0, 3], nr: [1, 32], status: [0, 2] } },
+  '/e/export_lauf': { typen: ',hfiis', abschnitt: '5.13', richtung: 'vom_kern', nurPruefmodus: false, felder: ['frames', 'spitze', 'luecken', 'ungesund', 'grund'], bereiche: {} },
+  '/e/ins_host': { typen: ',ii', abschnitt: '5.13', richtung: 'vom_kern', nurPruefmodus: false, felder: ['h', 'gesund'], bereiche: { h: [1, 4], gesund: [0, 1] } },
+  '/e/ins_mess': { typen: ',iis', abschnitt: '5.13', richtung: 'vom_kern', nurPruefmodus: false, felder: ['h', 'rundweg', 'grund'], bereiche: { h: [1, 4], rundweg: [-1, 16383] } },
   '/e/auto': { typen: ',isi', abschnitt: '5.13', richtung: 'vom_kern', nurPruefmodus: false, felder: ['spur', 'ziel', 'zustand'], bereiche: { spur: [1, 32], zustand: [0, 1] } },
   '/e/auto_punkt': { typen: ',sdf', abschnitt: '5.13', richtung: 'vom_kern', nurPruefmodus: false, felder: ['pfad', 'projekt_beat', 'wert'], bereiche: {} },
   '/e/mitschnitt': { typen: ',siid', abschnitt: '5.11', richtung: 'vom_kern', nurPruefmodus: false, felder: ['name', 'beats', 'status', 'ab_beat'], bereiche: { status: [0, 1] } },
@@ -185,6 +192,9 @@ export interface Werte {
   '/k/arr/metronom': [id: bigint, quelle: string, an: number, pegel_db: number, ziel: number];
   '/k/arr/freeze': [id: bigint, quelle: string, spur: number, von_beat: number, bis_beat: number, kennung: number];
   '/k/arr/abgriff': [id: bigint, quelle: string, art: number, nr: number, punkt: number, von_beat: number, bis_beat: number, kennung: number];
+  '/k/arr/export_lauf': [id: bigint, quelle: string, pfad: string, von_beat: number, bis_beat: number];
+  '/k/arr/ins_host': [id: bigint, quelle: string, h: number, gesund: number];
+  '/k/arr/ins_mess': [id: bigint, quelle: string, h: number];
   '/k/arr/auto': [id: bigint, quelle: string, spur: number, ziel: string, an: number];
   '/k/arr/arm': [id: bigint, quelle: string, spur: number, an: number, modus: number];
   '/k/rec/spur': [id: bigint, quelle: string, spur: number, scharf: number, eingang: number, modus: number, monitor: number];
@@ -230,6 +240,7 @@ export interface Werte {
   '/e/graph': [kanal: string, name: string];
   '/zustand/arr': [nr: number, status: number, loop_an: number, projekt_beat: number, ursprung_sample: bigint, start_beat: number, metronom_an: number, limiter_db: number];
   '/zustand/warp': [stimmen: number, unterlauf: number, kein_platz: number, spaet: number, faeden: number];
+  '/zustand/ins_host': [h_1: number, gesund_1: number, rundweg_1: number, h_2: number, gesund_2: number, rundweg_2: number, h_3: number, gesund_3: number, rundweg_3: number, h_4: number, gesund_4: number, rundweg_4: number];
   '/zustand/hall_pool': [an: number, faeden: number, spaet: number, zurueck: number];
   '/zustand/spur_pool': [an: number, modus: number, blocks_parallel: number, einheiten_worker: number, einheiten_caller: number, seriell_summe: number, haengt: number, spaet: number, zurueck: number];
   '/zustand/ein': [verbunden: number, midi_gesehen: bigint, midi_verloren: bigint, midi_sample: bigint, flanke_sample: bigint];
@@ -237,6 +248,9 @@ export interface Werte {
   '/e/aufnahme': [spur: number, kennung: number, status: number, frames: bigint, start_sample: bigint, luecken: number, art: number];
   '/e/freeze': [spur: number, kennung: number, status: number, frames: bigint];
   '/e/abgriff': [art: number, nr: number, kennung: number, status: number, frames: bigint];
+  '/e/export_lauf': [frames: bigint, spitze: number, luecken: number, ungesund: number, grund: string];
+  '/e/ins_host': [h: number, gesund: number];
+  '/e/ins_mess': [h: number, rundweg: number, grund: string];
   '/e/auto': [spur: number, ziel: string, zustand: number];
   '/e/auto_punkt': [pfad: string, projekt_beat: number, wert: number];
   '/e/mitschnitt': [name: string, beats: number, status: number, ab_beat: number];
@@ -267,4 +281,4 @@ export const TASTE = ['annehmen', 'verwerfen', 'cypher_vorschlag', 'cypher_hoere
 export const INVARIANTE_ART = ['sub_doppelt', 'master_leer', 'hoerschein'] as const;
 export const PROTOKOLLFEHLER_GRUND = ['unbekannte_adresse', 'falsche_typen', 'protokoll'] as const;
 export const NB_ZUSTAND = { durchreichen: 0, schleife: 1, ausgeblendet: 2, rueckgabe: 3 } as const;
-export const GRUENDE = ['zu_spaet', 'regler_beim_menschen', 'regler_verplant', 'ueberlappung', 'nur_hand', 'unbekannter_regler', 'unbekanntes_deck', 'ausserhalb_bereich', 'kein_hoerschein', 'hoerschein_anderer_kanal', 'hoerschein_anderer_inhalt', 'hoerschein_anderes_tempo', 'hoerschein_abgelaufen', 'hoerschein_anderer_abschnitt', 'ziel_ungehoert', 'keine_stems', 'hoerschein_nicht_sync', 'hoerschein_pegel', 'invariante_sub_doppelt', 'invariante_master_leer', 'deck_beruehrt', 'deck_hoerbar', 'deck_laeuft', 'nicht_geladen', 'material_fehlt', 'pruefung', 'budget_speicher', 'budget_stretcher', 'karte_voll', 'tempo_rampe', 'ki_gestoppt', 'rechner_fehlt', 'kein_stretcher', 'autonomie', 'form', 'hand', 'abbruch', 'ki_stopp', 'unbekannte_adresse', 'falsche_typen', 'protokoll', 'grenze_sub', 'neustart', 'datei_fehlt', 'format', 'audio_fehlt', 'zu_gross', 'spur_bereich', 'reserviert', 'kein_eingang', 'aufnahme_laeuft', 'zu_viele_scharf', 'eingang_fehlt', 'kein_platz', 'warp_maschine_fehlt', 'nur_andreas', 'auto_ziel_unbekannt'] as const;
+export const GRUENDE = ['zu_spaet', 'regler_beim_menschen', 'regler_verplant', 'ueberlappung', 'nur_hand', 'unbekannter_regler', 'unbekanntes_deck', 'ausserhalb_bereich', 'kein_hoerschein', 'hoerschein_anderer_kanal', 'hoerschein_anderer_inhalt', 'hoerschein_anderes_tempo', 'hoerschein_abgelaufen', 'hoerschein_anderer_abschnitt', 'ziel_ungehoert', 'keine_stems', 'hoerschein_nicht_sync', 'hoerschein_pegel', 'invariante_sub_doppelt', 'invariante_master_leer', 'deck_beruehrt', 'deck_hoerbar', 'deck_laeuft', 'nicht_geladen', 'material_fehlt', 'pruefung', 'budget_speicher', 'budget_stretcher', 'karte_voll', 'tempo_rampe', 'ki_gestoppt', 'rechner_fehlt', 'kein_stretcher', 'autonomie', 'form', 'hand', 'abbruch', 'ki_stopp', 'unbekannte_adresse', 'falsche_typen', 'protokoll', 'grenze_sub', 'neustart', 'datei_fehlt', 'format', 'audio_fehlt', 'zu_gross', 'spur_bereich', 'reserviert', 'kein_eingang', 'aufnahme_laeuft', 'zu_viele_scharf', 'eingang_fehlt', 'kein_platz', 'warp_maschine_fehlt', 'nur_andreas', 'auto_ziel_unbekannt', 'laeuft', 'host_fehlt', 'kein_rueckweg', 'belegt', 'schreiber_ueberlauf'] as const;

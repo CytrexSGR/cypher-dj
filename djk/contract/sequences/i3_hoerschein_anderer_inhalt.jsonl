@@ -1,0 +1,21 @@
+{"t":"sende","sample":0,"osc":["/k/set/neu",",hsd",1,"pruefstand",128.0],"bereich":"zeitachse","herleitung":"§4.2: neue Zeitachse mit 128 BPM, Beat 0 am nächsten Zyklus = Sample 0 (§1.1)"}
+{"t":"sende","sample":45000,"osc":["/k/deck/laden",",hsisdii",2,"leitstand",2,"f0000000000000b2",128.0,1,0],"bereich":"deck","herleitung":"§4.4 /k/deck/laden, Fixture material/f0000000000000b2/ next to the sequences"}
+{"t":"erwarte","ab_sample":45000,"bis_sample":47400,"osc":["/q",",hsihds",2,"leitstand",1,null,null,""],"bereich":"deck","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"erwarte","ab_sample":45000,"bis_sample":93000,"osc":["/q",",hsihds",2,"leitstand",3,null,null,""],"bereich":"deck","herleitung":"§4.4: Quittung fertig nach dem Tausch"}
+{"t":"erwarte","ab_sample":45000,"bis_sample":93000,"osc":["/e/geladen",",isdiih",2,"f0000000000000b2",128.0,1,0,null],"toleranz":1e-06,"bereich":"deck","herleitung":"§4.4, §5.9 /e/geladen"}
+{"t":"sende","sample":630000,"osc":["/k/deck/start",",hssssiddi",3,"andreas","","","",2,32.0,16.0,0],"bereich":"deck"}
+{"t":"erwarte","ab_sample":630000,"bis_sample":632400,"osc":["/q",",hsihds",3,"andreas",1,null,null,""],"bereich":"deck","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"erwarte","ab_sample":720000,"bis_sample":722400,"osc":["/q",",hsihds",3,"andreas",2,720000,32.0,""],"toleranz":1e-06,"bereich":"deck","herleitung":"§5.1 Status 2 am Ziel-Sample llround(sample_at(32)) = 720000"}
+{"t":"sende","sample":900000,"osc":["/k/hoerschein",",hsssssddddfff",4,"pruefstand","h_a","deck/2","f0000000000000a1/128000_r1","ok",128.0,192.0,40.0,60.0,0.5,0.0,-14.0],"bereich":"hoerschein","herleitung":"§4.5 Hörschein registrieren (Quelle pruefstand: §1.4 kennt keine Quelle analyse)"}
+{"t":"erwarte","ab_sample":900000,"bis_sample":902400,"osc":["/q",",hsihds",4,"pruefstand",null,null,null,null],"bereich":"hoerschein","herleitung":"§4: jeder Befehl bekommt eine /q; welchen Status legt §4.5 nicht fest"}
+{"t":"sende","sample":900000,"osc":["/k/hoerschein",",hsssssddddfff",5,"pruefstand","h_ok","deck/2","f0000000000000b2/128000_r1","ok",128.0,192.0,40.0,60.0,0.5,0.0,-14.0],"bereich":"hoerschein","herleitung":"§4.5 Hörschein registrieren (Quelle pruefstand: §1.4 kennt keine Quelle analyse)"}
+{"t":"erwarte","ab_sample":900000,"bis_sample":902400,"osc":["/q",",hsihds",5,"pruefstand",null,null,null,null],"bereich":"hoerschein","herleitung":"§4: jeder Befehl bekommt eine /q; welchen Status legt §4.5 nicht fest"}
+{"t":"sende","sample":1080000,"osc":["/k/teil",",hssisddfiiss",6,"cypher","p1",0,"deck/2/fader",64.0,0.0,-15.0,0,0,"","h_a"],"bereich":"regler","herleitung":"öffnet deck/2 mit 'h_a'"}
+{"t":"erwarte","ab_sample":1080000,"bis_sample":1082400,"osc":["/q",",hsihds",6,"cypher",1,null,null,""],"bereich":"regler","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"erwarte","ab_sample":1440000,"bis_sample":1442400,"osc":["/q",",hsihds",6,"cypher",6,1440000,64.0,"hoerschein_anderer_inhalt"],"toleranz":1e-06,"bereich":"regler","herleitung":"§17: am Start abgelehnt (hoerschein_anderer_inhalt), Start = Sample 1440000"}
+{"t":"erlaube","ab_sample":1440000,"bis_sample":1442400,"osc":["/e/invariante",",ssihd","hoerschein",null,null,null,null],"bereich":"invariante","herleitung":"FORMAT.md Punkt 22 a: ob eine I3-Ablehnung zusätzlich /e/invariante hoerschein meldet, lässt §5.9 offen"}
+{"t":"wert","sample":1800000,"pfad":"deck/2/fader","wert":-200.0,"toleranz":0.0,"bereich":"hoerschein","herleitung":"verriegelt: Kanal bleibt zu"}
+{"t":"sende","sample":1980000,"osc":["/k/teil",",hssisddfiiss",7,"cypher","p3",0,"deck/2/fader",96.0,0.0,-15.0,0,0,"","h_ok"],"bereich":"regler","herleitung":"Gegenprobe: gültiger Hörschein"}
+{"t":"erwarte","ab_sample":1980000,"bis_sample":1982400,"osc":["/q",",hsihds",7,"cypher",1,null,null,""],"bereich":"regler","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"erwarte","ab_sample":2160000,"bis_sample":2162400,"osc":["/q",",hsihds",7,"cypher",2,2160000,96.0,""],"toleranz":1e-06,"bereich":"regler","herleitung":"§5.1 Status 2 am Ziel-Sample llround(sample_at(96)) = 2160000"}
+{"t":"wert","sample":2250000,"pfad":"deck/2/fader","wert":-15.0,"toleranz":0.01,"bereich":"regler"}

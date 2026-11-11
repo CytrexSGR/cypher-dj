@@ -143,7 +143,7 @@ bool Arrangement::start(double start_beat, int quant, bool von_cypher, int64_t s
     stopp(0, s, k);
     beende(s);
   }
-  int64_t frueh = s + vorhalt + n;   // Spec 2.2: frühestens jetzt + Vorhalt (2n + 25) + 1 Zyklus
+  int64_t frueh = s + vorhalt + n;   // Spec 2.2: frühestens jetzt + Vorhalt (2n) + 1 Zyklus
 #ifndef CYPHERDJ_MUTATION_ARR_WARP_WERK_START_OHNE_FRIST   // Fehlerfall: der Start gibt dem Werk keine Zeit, ein klingender Clip setzt spät und mit Einblende ein
   if (werk_am_start(start_beat)) frueh += ARR_WARP_FRIST;
 #endif   // Slice 2: das Werk braucht die Zeit, um den klingenden Clip vor dem Einsatz zu rechnen
@@ -181,6 +181,7 @@ void Arrangement::stopp(int quant, int64_t s, const Karte& k) {
   if (status_ == ArrStatus::wartet) {   // noch nicht eingesetzt: sofort aus
     if (freeze_) freeze_ende(s, 1);     // Paket K3: Freeze vor dem Einsatz abgebrochen
     if (abg_) abg_ende(s, 1);           // 1.10 slice 7: the tap too
+    if (exp_) export_ende(s, 1, "abbruch");   // plan 1.11 T12: the export run too
     // Slice 2: vorab angesetzte Stimmen des Werks haben nie geklungen. Nachbesserung 5 (Prüfung 5, fable m6): eine Werk-Stimme, die schon in der Ausblende ist (ab_aus
     // gesetzt und erreicht, Einsatz davor), stammt vom vorigen Lauf (start() bei laufendem Transport: stopp, beende, dann der Stopp im selben Block); sie blendet zu Ende,
     // statt hart zu enden. Nur die Ausblende zählt, nicht werk_ab < s: der Stopp kann ein Ziel-Sample hinter einem noch ausstehenden Einsatz tragen (Zufallsfolgen, Seed 25).
@@ -246,7 +247,7 @@ void Arrangement::loop(bool an, double von, double bis, int64_t s, const Karte& 
 // 6.37). Was noch nicht klingt, verwirft er wie bisher: einen wartenden Start von cypher (status wartet, Einsatz steht aus; Quittung 7 ki_stopp aus
 // core_arr.cpp) und ihren Freeze (ein Auftrag für sie, Spec 6.27, kein Klang).
 void Arrangement::ki_stopp(int64_t s, const Karte& k) {
-  if (von_cypher_ && status_ != ArrStatus::steht && stopp_s_ != s && (freeze_ || abg_ || status_ == ArrStatus::wartet)) stopp(0, s, k);
+  if (von_cypher_ && status_ != ArrStatus::steht && stopp_s_ != s && (freeze_ || abg_ || exp_ || status_ == ArrStatus::wartet)) stopp(0, s, k);
 }
 
 void Arrangement::beginne(const Karte& k, int64_t s) {
@@ -258,12 +259,14 @@ void Arrangement::beginne(const Karte& k, int64_t s) {
   gestartet_bei_ = s;
   if (freeze_) freeze_gestartet_bei_ = s;   // Paket K3
   if (abg_) abg_gestartet_bei_ = s;   // 1.10 slice 7: the onset of the run (receipt 2); the window starts `ankunft` samples later
+  if (exp_) exp_gestartet_bei_ = s;   // plan 1.11 T12: the same for the export run
   geaendert_ = true;
 }
 
 void Arrangement::beende(int64_t s) {
   if (freeze_ && s < freeze_->start_s + freeze_->frames) freeze_ende(s, 1);   // Paket K3: vor dem Ende abgebrochen
   if (abg_ && s < abg_->start_s + abg_->frames) abg_ende(s, 1);   // 1.10 slice 7: the tap
+  if (exp_ && s < exp_->start_s + exp_->frames) export_ende(s, 1, "abbruch");   // plan 1.11 T12
   if (status_ == ArrStatus::spielt) auto_stopp(s);   // Automation Slice 1: the lane ends here, the fader blends to the base value
   status_ = ArrStatus::steht;
   stopp_s_ = -1;
@@ -578,17 +581,21 @@ void Arrangement::block(const Karte& k, int64_t s0, int m, float* aus_l, float* 
     a = b;
   }
   auto_geraet();   // Automation slice 2 (E9): the `geraet` lane values go to the sinks before their block()
+  auto_kette();    // 1.12 slice 6: the insert-parameter and rack-macro lane values go to ArrInserts, read by makros_planen() and the chains in mischen()
   glied_makros_(s0, m);   // 1.9 U8 T9 (E12): the macro values of the member targets of the rack tracks, on the caller before phase Q (stopped transport included)
   spur_quelle(s0, m);
   n_weg_ = 0;
   freeze_abgriff(s0, m);   // Paket K3: Spur-Signal vor dem Fader
   abgriff_block(s0, m);    // 1.10 slice 7: block start for mischen() and the tap of a track pre
+  export_block(s0, m);     // plan 1.11 T12: block start for the export run (the capture sits at the end of mischen())
   monitor_planen(k, s0, m);   // 1.8 S3 (R10): which external inputs sound; mischen() adds them after the chain and the PDC delay of their track (T1), the freeze tap above never sees them
 #ifdef CYPHERDJ_MUTATION_MONITOR_VOR_KETTE
   for (int i = 0; i < ARR_SPUREN; ++i)   // error case (1.8 T1): the monitor sits in the track bus before the insert chain and the PDC delay, as before slice 3b-lite
     if (mon_[i].klingt) { monitor_spur_addieren(i, m, bus_l_[i], bus_r_[i]); mon_[i].klingt = false; }
 #endif
   auto_block(s0, m);       // Automation Slice 1: the lane (or its blend) replaces the fader course of a track for this block
+  // arr-bk slice 3: beat and tempo for the Baukasten insert stages, once per block (the beat of the project while it plays, so a loop jump is followed; the tempo of the map at the block start)
+  ins_.takt(status_ == ArrStatus::spielt ? projekt_beat(k, static_cast<double>(s0)) : k.beat_at(static_cast<double>(s0)), k.bpm_at(static_cast<double>(s0)) / 60.0 / 48000.0);
   mischen(m, aus_l, aus_r);
   monitor_loeschen();   // 1.8 S3: the sources are valid for one block only
   for (int i = 0; i < DJ_EINGAENGE; ++i) dj_l_[i] = dj_r_[i] = nullptr;   // slice 5 U2b: the pointers of dj_schluessel() are good for one block; the next block without a call has a silent DJ key

@@ -12,25 +12,42 @@
 // shows and writes back both target kinds. The variations list (up to 8 named snapshots of the four macro values) sends makro_variation_*.
 // The pre/post switch of a return is in returns.js (preBefehl lives here with the other command builders).
 
-import { pdcRechnen, latenzZeile, streifenText } from './pdc.js';
+import { pdcRechnen, latenzZeile, streifenText, hostLatenzen, msText } from './pdc.js';
+import { baueParameterListe } from './plugin_parameter.js';
 import { SC_EIGEN, schluesselGruppen, schluesselBefehl, schluesselWert, schluesselLabel, duckBefehl, duckKicks } from './key_choice.js';
 import { geraetName } from './rack_device.js';
 
 export const MAX_PLAETZE = 4;      // equal to project/model.ts MAX_INSERTS_PRO_STRANG, checked by tests/production_inserts.test.mjs
 export const MAX_KOMP = 12;        // equal to MAX_INS_KOMP
-export const MAX_EQ = 2;           // equal to MAX_INS_EQ (pool 2 measured 2026-11-06, routing-1-10.md)
-export const MAX_SAETT = 1;        // equal to MAX_INS_SAETT
-export const MAX_LIM = 1;          // equal to MAX_INS_LIM
+export const MAX_EQ = 8;           // equal to MAX_INS_EQ (pool 2 measured 2026-11-06, routing-1-10.md; 8 since arr-fx slice 2)
+export const MAX_SAETT = 4;        // equal to MAX_INS_SAETT (4 since arr-fx slice 2)
+export const MAX_LIM = 2;          // equal to MAX_INS_LIM (2 since arr-fx slice 2)
+export const MAX_UTIL = 8;         // equal to MAX_INS_UTIL (arr-fx)
+export const MAX_BK = 8;           // equal to MAX_INS_BK (arr-bk)
 export const MAX_VARIATIONEN = 8;     // equal to MAX_VARIATIONEN of project/model.ts (tests/production_rack.test.mjs)
 export const VARIATION_NAME_MAX = 32;  // equal to VARIATION_NAME_MAX
-export const MAX_ART = { komp: MAX_KOMP, eq: MAX_EQ, saett: MAX_SAETT, lim: MAX_LIM };
+export const MAX_ART = { komp: MAX_KOMP, eq: MAX_EQ, saett: MAX_SAETT, lim: MAX_LIM, utility: MAX_UTIL, bk: MAX_BK };
+// arr-bk: the graph the `+ Fx` button puts on a strip; another effect graph is chosen with insert_setzen (replace) from the Hand or the graphen list
+export const BK_STANDARD_GRAPH = 'fx-delay-sync';
 // per kind: the short button text, the name of the stage, the pool-full text
 export const ARTEN = {
   komp: { kurz: 'Comp', name: 'compressor', voll: 'No free compressor', neu: 'Add a compressor' },
   eq: { kurz: 'EQ', name: 'EQ', voll: 'No free EQ', neu: 'Add an EQ' },
   saett: { kurz: 'Sat', name: 'saturator', voll: 'No free saturator', neu: 'Add a saturator' },
   lim: { kurz: 'Lim', name: 'limiter', voll: 'No free limiter', neu: 'Add a limiter' },
+  utility: { kurz: 'Util', name: 'utility', voll: 'No free utility', neu: 'Add a utility (width, bass mono, gain, balance)' },
+  bk: { kurz: 'Fx', name: 'effect', voll: 'No free effect stage', neu: 'Add a Baukasten effect (the tempo-synchronous delay; other graphs through the Hand)' },
 };
+// Plan 1.11 task 11: a plugin (host) stage. Not in ARTEN (those are the kinds with a button "+ ..." and a pool the page counts); added by the PLUGINS list.
+export const HOST_ART = { kurz: 'Plugin', name: 'plugin', voll: 'No free plugin host', neu: 'Add a plugin' };
+export const HOST_STATUS_TEXT = { startet: 'Starting', bereit: 'Ready', fehlt: 'Missing', ausfall: 'Failed' };
+export const HOST_FENSTER_TEXT = { kein_fenster: 'This plugin has no window', keine_anzeige: 'The studio machine has no display for a plugin window' };
+export const HOST_POLL_MS = { warten: 1000, ruhe: 4000 };
+export const hostName = (i) => i.plugin?.name ?? 'Plugin';
+export function hostDotTitel(h) {
+  if (!h) return 'Waiting for the plugin host';
+  return `${HOST_STATUS_TEXT[h.status] ?? h.status}${h.grund ? `: ${h.grund}` : ''}`;
+}
 export const KOMP_VOLL_TEXT = 'No free compressor';
 export const KOMP_NEU_TEXT = 'Add a compressor';
 // The compressor parameters, a literal list on purpose (the page cannot import the generated .ts table); tests/production_inserts.test.mjs binds
@@ -66,6 +83,15 @@ export const LIM_PARAMETER = [
   { name: 'decke', label: 'Ceiling', einheit: 'dB', min: -60, max: 0, vorgabe: -1, schritt: 0.1 },
   { name: 'abklingen', label: 'Release', einheit: 'ms', min: 1, max: 2000, vorgabe: 80, schritt: 1 },
 ];
+// arr-fx: the utility stage (stereo width, bass mono, gain, balance); literal like the others, bound to the contract by tests/production_inserts.test.mjs
+export const UTIL_PARAMETER = [
+  { name: 'breite', label: 'Width', einheit: '', min: 0, max: 4, vorgabe: 1, schritt: 0.01 },
+  { name: 'mono_unter', label: 'Mono below', einheit: 'Hz', min: 0, max: 500, vorgabe: 0, schritt: 1 },
+  { name: 'gain', label: 'Gain', einheit: 'dB', min: -60, max: 24, vorgabe: 0, schritt: 0.1 },
+  { name: 'balance', label: 'Balance', einheit: '', min: -1, max: 1, vorgabe: 0, schritt: 0.01 },
+];
+// arr-bk: the eight knobs of a Baukasten effect stage (0..1, the graph maps them; the names come from the graph, the page shows K1..K8)
+export const BK_PARAMETER = Array.from({ length: 8 }, (_, i) => ({ name: `k${i + 1}`, label: `K${i + 1}`, einheit: '', min: 0, max: 1, vorgabe: 0.5, schritt: 0.01 }));
 export const EQ_KOPF_PARAMETER = [
   { name: 'out', label: 'Output', einheit: 'dB', min: -24, max: 24, vorgabe: 0, schritt: 0.1 },
   { name: 'propq', label: 'Proportional Q', einheit: '', min: 0, max: 1, vorgabe: 0, typ: 'schalter' },
@@ -98,6 +124,8 @@ export function parameterVon(art, name) {
   if (art === 'komp') return KOMP_PARAMETER.find((x) => x.name === name) ?? null;
   if (art === 'saett') return SAETT_PARAMETER.find((x) => x.name === name) ?? null;
   if (art === 'lim') return LIM_PARAMETER.find((x) => x.name === name) ?? null;
+  if (art === 'utility') return UTIL_PARAMETER.find((x) => x.name === name) ?? null;
+  if (art === 'bk') return BK_PARAMETER.find((x) => x.name === name) ?? null;
   const m = /^b([1-8])\/([a-z]+)$/.exec(name);
   if (m) {
     const q = EQ_BAND_PARAMETER.find((x) => x.name === m[2]);
@@ -115,6 +143,11 @@ export function wertText(art, name, v) {
   if (q.typ === 'wahl') return q.optionen[Math.round(v)] ?? String(v);
   if (art === 'komp') return paramText(name, v);
   if (art === 'lim' && name === 'abklingen') return `${Math.round(v)} ms`;
+  if (art === 'utility') {   // width as a percentage (100 % = unchanged), mono below as a frequency or off, balance as a side and an amount
+    if (name === 'breite') return `${Math.round(v * 100)} %`;
+    if (name === 'mono_unter') return v < 1 ? 'off' : `${Math.round(Math.max(v, 20))} Hz`;
+    if (name === 'balance') return Math.abs(v) < 0.005 ? 'centre' : `${v < 0 ? 'L' : 'R'} ${Math.round(Math.abs(v) * 100)} %`;
+  }
   if (q.einheit === 'Hz') return v >= 1000 ? `${(v / 1000).toFixed(v >= 10000 ? 1 : 2)} kHz` : `${v.toFixed(v >= 100 ? 0 : 1)} Hz`;
   if (name === 'mix') return `${Math.round(v * 100)} %`;
   if (name.endsWith('q')) return v.toFixed(2);
@@ -143,7 +176,7 @@ export const plaetze = (strang) => Array.from({ length: MAX_PLAETZE }, (_, i) =>
 export function neuerInsertBefehl(p, strangId, art = 'komp') {
   const s = straenge(p).find((x) => x.id === strangId);
   if (!s || !MAX_ART[art] || s.inserts.length >= MAX_PLAETZE || frei(p, art) <= 0) return null;
-  return { befehl: 'insert_setzen', strang_id: strangId, pos: s.inserts.length, art };
+  return { befehl: 'insert_setzen', strang_id: strangId, pos: s.inserts.length, art, ...(art === 'bk' ? { graph: BK_STANDARD_GRAPH } : {}) };
 }
 export const paramBefehl = (insertId, param, wert) => ({ befehl: 'insert_param_setzen', insert_id: insertId, param, wert });
 export const anBefehl = (insertId, an) => ({ befehl: 'insert_an', insert_id: insertId, an });
@@ -181,7 +214,7 @@ export function insGrAblaufIn(stand, jetzt) {
 }
 export const insGrText = (db) => (db === null ? '–' : `${db.toFixed(1)} dB`);
 export const insertLabels = (strang, nr, art = 'komp') => {
-  const n = ARTEN[art].name;
+  const n = (ARTEN[art] ?? HOST_ART).name;
   return {
     neu: `Add ${art === 'eq' ? 'an' : 'a'} ${n} to ${strang}`, an: `Bypass ${n} ${nr} on ${strang}`, name: `${n[0].toUpperCase()}${n.slice(1)} ${nr} on ${strang}: parameters`,
     links: `Move ${n} ${nr} on ${strang} earlier`, rechts: `Move ${n} ${nr} on ${strang} later`, weg: `Remove ${n} ${nr} from ${strang}`,
@@ -197,13 +230,14 @@ export const MAKRO_NAME_MAX = 24;
 export const makroFaehig = (q) => !!q && q.typ !== 'schalter' && q.typ !== 'wahl';
 // every parameter name of a stage in popover order (the EQ: head rows then the bands)
 export function parameterNamen(art) {
+  if (art === 'host') return [];   // a plugin's parameters are not macro targets (task 11)
   const kopf = KOPF[art].map((q) => q.name);
   if (art !== 'eq') return kopf;
   const baender = [];
   for (let m = 1; m <= EQ_BAENDER; m++) for (const q of EQ_BAND_PARAMETER) baender.push(eqBandName(m, q.name));
   return [...kopf, ...baender];
 }
-const parameterLabel = (art, name) => {
+export const parameterLabel = (art, name) => {
   const q = parameterVon(art, name), m = /^b([1-8])\//.exec(name);
   return `${m ? `Band ${m[1]} ` : ''}${q.label}`;
 };
@@ -311,7 +345,7 @@ export const rackLabels = (strang) => ({
 
 // ---- the page ----------------------------------------------------------------------------------------------------------------------------------
 // the parameter descriptors of a kind in popover order (the EQ: the head rows, then bands)
-const KOPF = { komp: KOMP_PARAMETER, saett: SAETT_PARAMETER, lim: LIM_PARAMETER, eq: EQ_KOPF_PARAMETER };
+const KOPF = { komp: KOMP_PARAMETER, saett: SAETT_PARAMETER, lim: LIM_PARAMETER, utility: UTIL_PARAMETER, bk: BK_PARAMETER, eq: EQ_KOPF_PARAMETER };
 const zeileHtml = (art, q, name, beschriftung) => {
   const wahl = q.typ === 'wahl', schalter = q.typ === 'schalter';
   const titel = `Double click: ${wertText(art, name, q.vorgabe)}`;
@@ -330,6 +364,8 @@ export function bindeInserts(ctx) {
   const greift = new Set();    // `${insert}:${param}` while the hand is on a slider
   const schl = new Map();      // insert id -> {gruppen} (the server's key options of the stage) or {fehler} (why they are not available)
   let schluessel = '';
+  const lage = new Map();      // insert id -> HostLage {status, latenz, gemessen, grund?, fenster?} of the plugin stages (polled while the project has any)
+  let lageTimer = null;
   const gr = {};               // {slot: {db, t}} the readings of /e/ins_gr (compressor slots only: the EQ and the saturator report none)
   let grTimer = null;
 
@@ -347,15 +383,30 @@ export function bindeInserts(ctx) {
   }
 
   function stufe(s, i, pos, p) {
-    const A = ARTEN[i.art];
+    const host = i.art === 'host';
+    const A = host ? { ...HOST_ART, kurz: hostName(i) } : ARTEN[i.art];
     const L = insertLabels(s.name, pos + 1, i.art);
     const el = document.createElement('span');
     el.className = 'p-platz p-stufe'; el.dataset.insert = i.id; el.dataset.pos = String(pos); el.dataset.slot = String(i.slot); el.dataset.art = i.art;
-    el.innerHTML = `<button class="p-ins-an" aria-pressed="true">ON</button><button class="p-ins-name" aria-expanded="false">${A.kurz.toUpperCase()}</button>`
+    el.innerHTML = `<button class="p-ins-an" aria-pressed="true">ON</button>`
+      + (host ? '<span class="p-host-punkt" role="img"></span>' : '')
+      + `<button class="p-ins-name" aria-expanded="false"${host ? ` title="${hostName(i).replace(/"/g, '&quot;')}"` : ''}></button>`
+      + (host ? '<span class="p-host-latenz"></span><button class="p-host-fenster" aria-label="Open plugin window" title="Open plugin window">UI</button>' : '')
       + (i.art === 'komp' ? '<span class="p-ins-gr" title="Gain reduction of this compressor right now">–</span>' : '')
       + '<button class="p-ins-links" title="Move earlier in the chain">◀</button><button class="p-ins-rechts" title="Move later in the chain">▶</button>'
       + `<button class="p-ins-weg" title="Remove the ${A.name} (Undo brings it back)">✕</button>`;
     const q = (x) => el.querySelector(x);
+    q('.p-ins-name').textContent = host ? hostName(i) : A.kurz.toUpperCase();
+    if (host) {
+      q('.p-ins-name').setAttribute('aria-label', `${hostName(i)} on ${s.name}: parameters`);
+      q('.p-host-fenster').addEventListener('click', async () => {
+        const h = lage.get(i.id);
+        const r = await ctx.holeJson(`/proj/insert/${encodeURIComponent(i.id)}/fenster`, { an: !h?.fenster });
+        if (r.status !== 200) { ctx.melde(ctx.antwortText(r), true); return; }
+        if (r.j?.fenster === false && r.j.grund) ctx.melde(HOST_FENSTER_TEXT[r.j.grund] ?? r.j.grund, true);
+        if (r.j && typeof r.j.fenster === 'boolean') { lage.set(i.id, { ...(h ?? {}), fenster: r.j.fenster }); zeige(ctx.st.projekt); }
+      });
+    }
     q('.p-ins-an').setAttribute('aria-label', L.an); q('.p-ins-name').setAttribute('aria-label', L.name);
     q('.p-ins-links').setAttribute('aria-label', L.links); q('.p-ins-rechts').setAttribute('aria-label', L.rechts); q('.p-ins-weg').setAttribute('aria-label', L.weg);
     q('.p-ins-an').addEventListener('click', () => ctx.aendereAus((pr) => {
@@ -515,6 +566,11 @@ export function bindeInserts(ctx) {
   function popover(s, i, p) {
     const el = document.createElement('div');
     el.className = `p-ins-popover p-ins-${i.art}`; el.dataset.insert = i.id;
+    if (i.art === 'host') {   // the generic parameter list of a plugin: its own module, the values live in the plugin
+      const weg = `/proj/insert/${encodeURIComponent(i.id)}`;
+      baueParameterListe(el, { holeListe: () => ctx.holeGet(`${weg}/parameter`), sende: (w) => ctx.holeJson(`${weg}/param`, { werte: w }), fehler: (r) => ctx.melde(ctx.antwortText(r), true) });
+      return el;
+    }
     let html = KOPF[i.art].map((q) => zeileHtml(i.art, q, q.name, q.label)).join('');
     if (i.art === 'komp') html += `<label class="p-ins-zeile">Key<select class="p-ins-sc" aria-label="Sidechain key of the compressor on ${s.name}"></select><output></output></label>`;
     if (i.art === 'eq') {
@@ -600,6 +656,32 @@ export function bindeInserts(ctx) {
     sc.closest('label').querySelector('output').textContent = info?.fehler ?? '';
   }
 
+  // the status dot, the latency and the window button of one plugin stage from its HostLage
+  function zeigeHost(el, i) {
+    const h = lage.get(i.id), punkt = el.querySelector('.p-host-punkt');
+    const status = h?.status ?? 'unbekannt';
+    punkt.className = `p-host-punkt ${status}`; punkt.dataset.status = status; punkt.title = hostDotTitel(h); punkt.setAttribute('aria-label', hostDotTitel(h));
+    const l = el.querySelector('.p-host-latenz');
+    l.textContent = h && Number.isFinite(h.latenz) ? msText(h.latenz) : '';
+    l.title = h ? (h.gemessen ? 'Latency the plugin reports' : 'Estimated latency: not measured yet') : '';
+    const f = el.querySelector('.p-host-fenster');
+    f.classList.toggle('an', !!h?.fenster); f.setAttribute('aria-label', h?.fenster ? 'Close plugin window' : 'Open plugin window'); f.title = f.getAttribute('aria-label');
+  }
+  // the state of the hosts: GET /proj/aktuell `hosts`, every second while one is not ready, else every 4 s; no plugin stage in the project: no request at all
+  async function holeHosts() {
+    clearTimeout(lageTimer); lageTimer = null;
+    const p = ctx.st.projekt;
+    if (!p || !straenge(p).some((x) => x.inserts.some((y) => y.art === 'host'))) { lage.clear(); return; }
+    const r = await ctx.holeGet('/proj/aktuell');
+    if (r.status === 200 && Array.isArray(r.j?.hosts)) {
+      const alt = JSON.stringify([...lage.entries()]);
+      lage.clear(); for (const h of r.j.hosts) lage.set(h.insert_id, h);
+      if (JSON.stringify([...lage.entries()]) !== alt) zeige(ctx.st.projekt);
+    }
+    const noch = [...lage.values()].some((h) => h.status === 'startet') || lage.size === 0;
+    lageTimer = setTimeout(holeHosts, noch ? HOST_POLL_MS.warten : HOST_POLL_MS.ruhe);
+  }
+
   function zeige(p, neuBauen = false) {
     block.hidden = !p;
     if (!p) { liste.textContent = ''; schluessel = ''; return; }
@@ -607,11 +689,11 @@ export function bindeInserts(ctx) {
     const ids = new Set(str.flatMap((s) => s.inserts.map((i) => i.id)));
     for (const id of [...offen]) if (!ids.has(id)) offen.delete(id);
     for (const id of [...rackOffen]) if (!str.some((x) => x.id === id && hatRack(x))) rackOffen.delete(id);
-    // the header: the compressor count as in 4a, then the EQ and the saturator; every full pool is said in words too (a tooltip does not exist on a phone)
-    titel.textContent = `INSERTS (${anzahl(p, 'komp')}/${MAX_KOMP})` + ` · EQ ${anzahl(p, 'eq')}/${MAX_EQ} · Sat ${anzahl(p, 'saett')}/${MAX_SAETT}` + ` · Lim ${anzahl(p, 'lim')}/${MAX_LIM}`
+    // the header: the compressor count as in 4a, then the EQ, the saturator, the limiter and the utility; every full pool is said in words too (a tooltip does not exist on a phone)
+    titel.textContent = `INSERTS (${anzahl(p, 'komp')}/${MAX_KOMP})` + ` · EQ ${anzahl(p, 'eq')}/${MAX_EQ} · Sat ${anzahl(p, 'saett')}/${MAX_SAETT}` + ` · Lim ${anzahl(p, 'lim')}/${MAX_LIM}` + ` · Util ${anzahl(p, 'utility')}/${MAX_UTIL}` + ` · Fx ${anzahl(p, 'bk')}/${MAX_BK}`
       + Object.keys(MAX_ART).filter((a) => f[a] <= 0).map((a) => ` · ${ARTEN[a].voll}`).join('')
-      + (latenzZeile(p) ? ` · ${latenzZeile(p)}` : '');
-    const pdc = pdcRechnen(p);
+      + (latenzZeile(p, hostLatenzen([...lage.values()])) ? ` · ${latenzZeile(p, hostLatenzen([...lage.values()]))}` : '');
+    const pdc = pdcRechnen(p, hostLatenzen([...lage.values()]));
     const neu = JSON.stringify([str.map((s) => [s.id, s.name, s.inserts.map((i) => [i.id, i.an]), s.rack ? [s.rack.slot, s.rack.namen, s.rack.makros, s.rack.variationen] : null, s.geraet?.art === 'rack' ? s.geraet.glieder : null]), f, [...offen].sort(), [...rackOffen].sort(), (p.spuren ?? []).map((s) => [s.nr, s.name]), (p.gruppen ?? []).map((g) => [g.nr, g.name]), (p.returns ?? []).map((r) => [r.nr, r.name]), pdc.streifen, pdc.gesamt]);
     if (neu !== schluessel || neuBauen) {
       schluessel = neu;
@@ -673,6 +755,7 @@ export function bindeInserts(ctx) {
       for (const i of s.inserts) {
         const st = zeile.querySelector(`.p-stufe[data-insert="${i.id}"]`);
         st.classList.toggle('aus', !i.an);
+        if (i.art === 'host') zeigeHost(st, i);
         const an = st.querySelector('.p-ins-an');
         an.classList.toggle('an', i.an); an.setAttribute('aria-pressed', String(i.an)); an.textContent = i.an ? 'ON' : 'OFF';
         // 1.16 rest U7 (F8): the origin mark of a stage set by a preset; a stage without `preset` gets no element at all
@@ -692,5 +775,9 @@ export function bindeInserts(ctx) {
   ctx.beimMarken?.push(() => zeige(ctx.st.projekt));   // a preset mark arrived or changed (preset_marker.js)
   ctx.beimEreignis.push((a, f) => { if (a === '/e/ins_gr' && insGrAufnehmen(gr, f, performance.now())) zeigeGr(); });
   // a project that has inserts opens the block; an empty one keeps it closed (the arrangement needs the height)
-  ctx.beimProjekt.push((p, wechsel) => { if (wechsel && p) block.open = straenge(p).some((s) => s.inserts.length > 0); zeige(p); });
+  ctx.beimProjekt.push((p, wechsel) => {
+    if (wechsel && p) block.open = straenge(p).some((s) => s.inserts.length > 0);
+    zeige(p);
+    if (p && straenge(p).some((x) => x.inserts.some((y) => y.art === 'host'))) { if (!lageTimer) holeHosts(); } else { clearTimeout(lageTimer); lageTimer = null; lage.clear(); }
+  });
 }

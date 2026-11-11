@@ -17,8 +17,8 @@ HIER=$(cd "$(dirname "$0")" && pwd)
 DJK=$(cd "$HIER/../../.." && pwd)
 KERN_ARGS=${KERN_ARGS---konfig $DJK/config/kern.toml}
 FOLGEN=("$@")
-[ ${#FOLGEN[@]} -eq 0 ] && FOLGEN=("$DJK/vertrag/folgen/uhr_golden.jsonl" "$DJK/vertrag/folgen/storno.jsonl" \
-                                   "$DJK/vertrag/folgen/protokollfehler.jsonl")
+[ ${#FOLGEN[@]} -eq 0 ] && FOLGEN=("$DJK/contract/sequences/uhr_golden.jsonl" "$DJK/contract/sequences/storno.jsonl" \
+                                   "$DJK/contract/sequences/protokollfehler.jsonl")
 SENKE=cypherdj-pruef-$CYPHERDJ_INSTANZ-$NAME
 mkdir -p "$AUS"
 SCHLOSS_STAND=${CYPHERDJ_SCHLOSS:-${SCHLOSS:-1}}  # gehalten: der Aufrufer hält es (acceptance.sh); 0: nur Proben

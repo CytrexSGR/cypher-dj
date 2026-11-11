@@ -9,7 +9,7 @@
     "start": "node src/conductor.ts",
     "test": "node --test --test-concurrency=1 \"tests/*.test.ts\" \"../announcement/tests/*.test.ts\"",
     "typen": "tsc --noEmit -p tsconfig.json",
-    "folgen": "node check/runner.ts pruef/folgen/*.jsonl ../vertrag/folgen/autonomie_1_eq.jsonl",
+    "folgen": "node check/runner.ts pruef/folgen/*.jsonl ../contract/sequences/autonomie_1_eq.jsonl",
     "abnahme": "node check/acceptance_21.ts",
     "positivliste": "node check/mutation_allow_list.ts"
   },

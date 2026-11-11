@@ -11,6 +11,8 @@ import { schreibeLeerenRing } from './support/ring.mjs';
 import { K, TEST_INSTANZ, belegeTestInstanz } from './support/instance.mjs';
 import { pruefKontext, sitzung } from './support/proj_context.mjs';
 import { Projekte } from '../project/storage.ts';
+// the knob rows of a Baukasten INSTRUMENT or effect channel (erz/3/bk/1, deck/1/bk/2, ...); the insert rows ins/bk/<n>/.. (arr-bk) are a different thing and are sent on open
+const BK_KANAL_ZEILEN = /^(deck|erz|pad|fx)\/\d+\/bk\//;
 
 belegeTestInstanz();
 const hol = (u, o = {}) => fetch(u, { ...o, headers: { connection: 'close', ...(o.headers ?? {}) } });
@@ -61,7 +63,7 @@ test('S17 K1 measure: open without a kern, with and without a snapshot', { timeo
   const mit = Date.now() - t1;
   assert.equal(rb.code, 200, JSON.stringify(rb.j));
   const bk = rb.j.kern.baukasten;
-  const gesendet = log.filter((z) => z.typ === 'an_kern' && (z.adresse === '/erz/strom' || (z.adresse === '/k/teil' && /\/bk\//.test(String(z.felder?.pfad ?? '')))));
+  const gesendet = log.filter((z) => z.typ === 'an_kern' && (z.adresse === '/erz/strom' || (z.adresse === '/k/teil' && BK_KANAL_ZEILEN.test(String(z.felder?.pfad ?? '')))));
   console.log(`MESS oeffnen_ohne_kern ohne_bk=${ohne} mit_bk=${mit} grund=${bk?.[0]?.grund} gesendet_strom_und_bk_teile=${gesendet.length}`);
   // acceptance: the snapshot adds no wait of its own, says why, and sends nothing. The remaining ~4 s are the control
   // synchronisation of the same open (warteQuittung hard cap without a /uhr), not the snapshot.
@@ -95,7 +97,7 @@ test('S17 K2 without a kern the restore sends nothing and returns at once with k
   assert.equal(r.code, 200, JSON.stringify(r.j));
   assert.ok(dauer < 300, `open returned after ${dauer} ms`);
   assert.equal(k.bk.aufrufe.length, 0);
-  assert.equal(k.teile(/\/bk\//).length, 0);
+  assert.equal(k.teile(BK_KANAL_ZEILEN).length, 0);
   assert.deepEqual(r.j.kern.baukasten.map((x) => [x.kanal, x.ok, x.grund, x.text]),
     [['erz/3', false, 'kein_kern', 'the core is not running'], ['deck/1', false, 'kein_kern', 'the core is not running']]);
   // the explicit load answers the same, at once
@@ -103,7 +105,7 @@ test('S17 K2 without a kern the restore sends nothing and returns at once with k
   const l = await s.bkLaden({}, 'andreas');
   assert.ok(Date.now() - t1 < 300, `bkLaden returned after ${Date.now() - t1} ms`);
   assert.equal(k.bk.aufrufe.length, 0);
-  assert.equal(k.teile(/\/bk\//).length, 0);
+  assert.equal(k.teile(BK_KANAL_ZEILEN).length, 0);
   assert.deepEqual(l.j.baukasten.map((x) => [x.kanal, x.ok, x.grund, x.text]),
     [['erz/3', false, 'kein_kern', 'the core is not running'], ['deck/1', false, 'kein_kern', 'the core is not running']]);
 });

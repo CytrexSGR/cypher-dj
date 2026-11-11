@@ -16,7 +16,7 @@ import { parseArgs } from 'node:util';
 import { starteStapel } from './stack.mjs';
 import { starteBrowser } from './cdp.mjs';
 import { baueKatalog } from '../tests/support/catalog.mjs';
-import { starteWirtProzess, schreibeWirtStatus } from '../tests/support/host_process.mjs';
+import { starteWirtProzess, schreibeWirtStatus } from '../tests/support/instrument_host_process.mjs';
 
 const HIER = path.dirname(fileURLToPath(import.meta.url));
 const { values: opt } = parseArgs({ options: { instanz: { type: 'string', default: process.env.CYPHERDJ_PROBE_INSTANZ ?? 'i' } } });
@@ -68,7 +68,7 @@ const geladen = async () => { for (let i = 0; i < 150; i++) { const a = await ak
 
 const WIRT = `/dev/shm/cypherdj-${opt.instanz}`;   // Wirt-Ordner der Prüfinstanz (nie der Betrieb): die Status-Datei, die djk-instrumente --arr1 schreibt
 fs.mkdirSync(WIRT, { recursive: true });
-// S3-Fix W2: der Server prüft bereit:true und eine lebende pid namens host.py; ein Stellvertreter (tests/support/host_process.mjs) steht dafür ein
+// S3-Fix W2: der Server prüft bereit:true und eine lebende pid namens instrument_host.py; ein Stellvertreter (tests/support/instrument_host_process.mjs) steht dafür ein
 const wirtProzess = await starteWirtProzess({ after: () => {} });   // beendet wird im finally unten (beende)
 schreibeWirtStatus(WIRT, { pid: wirtProzess.pid });
 

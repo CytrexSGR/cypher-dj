@@ -306,6 +306,15 @@ for d in "$DJK/units/cypherdj-kern.service" "$DJK/units/cypherdj-notbahn.service
 done
 pw-link -o >/dev/null 2>&1 || { echo "djk-start: PipeWire not reachable (pw-link failed)" >&2; exit 2; }
 
+# 2b Shipped graphs the product relies on (arr-bk: the page button "+ Fx" and the Hand text name fx-delay-sync): copy them into the graph folder
+# of the kern when missing. Never overwrites a file, and only this list, so a graph deleted on purpose from the folder stays deleted.
+BK_ORDNER="$HOME/.config/cypherdj/baukasten"
+for g in fx-delay-sync; do
+  if [ ! -e "$BK_ORDNER/$g.json" ] && [ -f "$DJK/instruments/modular_dsp/demos/$g.json" ]; then
+    mkdir -p "$BK_ORDNER" && cp -- "$DJK/instruments/modular_dsp/demos/$g.json" "$BK_ORDNER/$g.json" && echo "djk-start: installed the shipped graph $g into $BK_ORDNER"
+  fi
+done
+
 # 3 Belegt: Units, Ports, Shared Memory. Alle Funde auf einmal melden.
 BELEGT=()
 for u in "${UNITS[@]}"; do

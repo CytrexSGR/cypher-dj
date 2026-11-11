@@ -60,7 +60,7 @@ int main() {
     // 1.10 Slice 3: dazu 204 Send-, Return- und Hall-Regler (spur|grp/<n>/send/<r>, ret/<r>/*), ebenfalls Modul Arrangement
     // S14: fx/3, fx/4 x 8 bk/<n>, global, the Mixer ignores them (the kern ctor carries the values to the send graphs)
     // 1.10 slice 4a T1: plus the 120 ins/komp/<n>/* rows, global, owned by the Arrangement module (the Mixer ignores them)
-    PRUEF(n[static_cast<int>(cdj::MixRolle::spaeter)] == 16 + 4 + 1 + 4 * cdj::ARR_SPUREN + 4 * sw::GRP_REGLER_GRUPPEN + 1 + 12 * 8 + 204 + 2 * 8 + 120 + 2 * 59 + 4 + 48 + 3);   // master limiter: + 3 ins/lim rows (role class spaeter); 1.10 slice 4b: + 59 eq and 4 saett insert rows (eq pool 2 since 2026-11-06: 2 x 59); slice 4c T15: + 48 rack macro rows rack/<k>/m<n>
+    PRUEF(n[static_cast<int>(cdj::MixRolle::spaeter)] == 16 + 4 + 1 + 4 * cdj::ARR_SPUREN + 4 * sw::GRP_REGLER_GRUPPEN + 1 + 12 * 8 + 204 + 2 * 8 + 120 + 8 * 59 + 4 * 4 + 48 + 2 * 3 + 4 + 8 * 5 + 8 * 9);   // arr-bk: + 8 bk instances x 9 rows; arr-fx: pools 8 eq, 4 saett, 2 lim and 8 utilities x 5 rows; master limiter: + 3 ins/lim rows (role class spaeter); 1.10 slice 4b: + 59 eq and 4 saett insert rows (eq pool 2 since 2026-11-06: 2 x 59); slice 4c T15: + 48 rack macro rows rack/<k>/m<n>
     PRUEF(n[static_cast<int>(cdj::MixRolle::fx_rueckweg)] == 4);                     // fx/1..4/rueckweg (K2 Slice 2)
     int abweichend = 0;
     for (int r = 0; r < p.tab.anzahl(); ++r) {

@@ -5,10 +5,12 @@
 // [0, clip loop) repeat with every loop copy of the clip; unlinked (verknuepft: false): they repeat modulo the envelope's own loop_beats from the clip
 // start over the whole clip. `verknuepft: true` and an empty list are never written.
 import { laneWert, type Punkt } from './lane.ts';
-import { AUTO_FORMEN, LOOP_MIN, MAX_BEAT, MAX_LANE_PUNKTE, istObjekt, istRbGeraet, type Clip } from './model.ts';
+import { AUTO_FORMEN, LOOP_MIN, MAX_BEAT, MAX_LANE_PUNKTE, istObjekt, passtGeraetZiel, type Clip } from './model.ts';
 
 export interface Huellkurve { ziel: string; verknuepft?: false; loop_beats?: number; punkte: Punkt[] }
-export const HK_GERAET = ['geraet.lautstaerke', 'geraet.cutoff', 'geraet.resonanz', 'geraet.env_mod'];
+// 1.12 slice 7: the last eight are the bk knobs (BK_ZIELE of model.ts, which imports this file)
+export const HK_GERAET = ['geraet.lautstaerke', 'geraet.cutoff', 'geraet.resonanz', 'geraet.env_mod',
+  'geraet.k1', 'geraet.k2', 'geraet.k3', 'geraet.k4', 'geraet.k5', 'geraet.k6', 'geraet.k7', 'geraet.k8'];
 export const HK_ZIELE = ['gain', 'transpose', 'spur_fader', 'spur_pan', ...HK_GERAET];
 export function HK_BEREICH(ziel: string): { min: number; max: number } {
   if (ziel === 'gain') return { min: -200, max: 0 };
@@ -21,13 +23,14 @@ export function HK_BEREICH(ziel: string): { min: number; max: number } {
 export const istModulation = (ziel: string): boolean => ziel === 'spur_fader' || ziel === 'spur_pan' || ziel.startsWith('geraet.');
 type ClipArt = { art: string; laenge_beats: number };
 type SpurArt = { art: string; geraet?: unknown };
-// Which target a clip may carry: gain on audio, transpose on MIDI, geraet.* on MIDI clips of RB-338 tracks; spur_* on every clip.
+// Which target a clip may carry: gain on audio, transpose on MIDI, geraet.* on MIDI clips of tracks whose device owns that parameter
+// (RB-338: four, bk: k1..k8); spur_* on every clip.
 // spur null: the track is not known here (the model checks the RB rule in pruefeSpur).
 export function hkZielErlaubt(ziel: string, clip: ClipArt, spur: SpurArt | null): boolean {
   if (!HK_ZIELE.includes(ziel)) return false;
   if (ziel === 'gain') return clip.art === 'audio';
   if (ziel === 'transpose') return clip.art === 'midi';
-  if (ziel.startsWith('geraet.')) return clip.art === 'midi' && (spur === null || (spur.art === 'instrument' && istRbGeraet(spur.geraet)));
+  if (ziel.startsWith('geraet.')) return clip.art === 'midi' && (spur === null || (spur.art === 'instrument' && passtGeraetZiel(ziel, spur.geraet)));
   return true;
 }
 

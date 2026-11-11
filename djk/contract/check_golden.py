@@ -67,12 +67,12 @@ def pruefe_nachricht(ort, n, soll_richtung):
 def folgen_namen(text):
     """Die Folgen-Namen aus §19 Punkt 3: je Aufzählungspunkt und je ';'-Abschnitt die führende Liste in Backticks
     (Klammerzusätze vorher entfernt), z. B. "`laden`, `start_quell_beat` (...), `loop`"."""
-    punkt3 = re.search(r"\n3\. \*\*Golden-Folgen\*\*(.*?)\n4\. ", text, re.S).group(1)
+    punkt3 = re.search(r"\n3\. \*\*(?:Golden-Folgen|Golden sequences)\*\*(.*?)\n4\. ", text, re.S).group(1)   # German text / English edition
     ohne = re.sub(r"\([^()]*\)", "", punkt3)
     namen = set()
     for punkt in re.split(r"\n\s*- ", ohne)[1:]:
         for abschnitt in punkt.split(";"):
-            kopf = re.match(r"\s*((?:`[a-z0-9_]+`\s*(?:,|und)?\s*)+)", abschnitt)
+            kopf = re.match(r"\s*((?:`[a-z0-9_]+`\s*(?:,|und|and)?\s*)+)", abschnitt)
             if kopf:
                 namen |= set(re.findall(r"`([a-z0-9_]+)`", kopf.group(1)))
     return namen
@@ -80,11 +80,13 @@ def folgen_namen(text):
 
 def anker(text):
     """Die drei Zahlen, die §19.3 selbst nennt (Abnahme Scheibe 09)."""
-    punkt3 = re.search(r"\n3\. \*\*Golden-Folgen\*\*(.*?)\n4\. ", text, re.S).group(1)
+    punkt3 = re.search(r"\n3\. \*\*(?:Golden-Folgen|Golden sequences)\*\*(.*?)\n4\. ", text, re.S).group(1)   # German text / English edition
     zahl = lambda s: float(s.replace("−", "-").replace(" ", "").replace(" ", "").replace(",", "."))
-    m = re.search(r"Wert bei Beat (\d+) \(Sample ([\d  ]+)\) = (−?[\d,]+) dB", punkt3)
-    hc = re.search(r"Hotcue (\d+,\d+) → Ziel (\d+,\d+)", punkt3)
-    lp = re.search(r"Loop\s+`\[(\d+), (\d+)\)`", punkt3)
+    # decimal comma and "Wert bei Beat ... Hotcue ... Ziel ... Loop" in the German text; decimal point and "value at beat ...
+    # hotcue ... target ... loop" in the English edition
+    m = re.search(r"(?:Wert bei|[Vv]alue at) [Bb]eat (\d+) \([Ss]ample ([\d  ]+)\) = (−?[\d,.]+) dB", punkt3)
+    hc = re.search(r"[Hh]otcue (\d+[,.]\d+) → (?:Ziel|target) (\d+[,.]\d+)", punkt3)
+    lp = re.search(r"[Ll]oop\s+`\[(\d+), (\d+)\)`", punkt3)
     if not (m and hc and lp):
         raise ValueError("§19.3: Ankerzahlen nicht gefunden (Vertragstext geändert?)")
     return {"teil_rampe": (int(zahl(m.group(2))), zahl(m.group(3))), "hotcue_phase": zahl(hc.group(2)),

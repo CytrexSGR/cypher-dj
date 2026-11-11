@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { Oberflaeche } from '../server.ts';
 import { schreibeLeerenRing } from './support/ring.mjs';
 import { K, TEST_INSTANZ, belegeTestInstanz, serverInstanzSetzen } from './support/instance.mjs';
-import { pruefeWirtOrdner } from './support/host_sock.mjs';
+import { pruefeWirtOrdner } from './support/instrument_host_sock.mjs';
 
 belegeTestInstanz();
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');

@@ -34,7 +34,7 @@ sag() { [ "$STILL" = 1 ] || echo "$@"; }
 if [ "$ALLES" = 1 ]; then
   # Erst die Prozesse außerhalb der Units (Cue-Server samt Vorhörer), dann wie gehabt die Units.
   if [ "$TROCKEN" = 1 ]; then
-    for n in digitalwache wirt-bass wirt-melodie wirt-arr1 wirt-arr2 erzeuger erzeuger2 erzeuger3 erzeuger-bk oberflaeche leitstand notbahn kern; do
+    for n in digitalwache wirt-bass wirt-melodie wirt-arr1 wirt-arr2 ins1 ins2 ins3 ins4 erzeuger erzeuger2 erzeuger3 erzeuger-bk oberflaeche leitstand notbahn kern; do
       u=cypherdj-$n$SFX.service
       systemctl --user list-units --all --no-legend --plain "$u" 2>/dev/null | grep -q . && echo "  would stop $u"
     done
@@ -44,7 +44,7 @@ if [ "$ALLES" = 1 ]; then
   fi
   python3 "$HIER/own.py" --djk "$DJK" --instanz "$I" --beenden || echo "djk-stop: a djk process did not stop (see above)" >&2
 fi
-for n in digitalwache wirt-bass wirt-melodie wirt-arr1 wirt-arr2 erzeuger erzeuger2 erzeuger3 erzeuger-bk oberflaeche leitstand notbahn kern; do
+for n in digitalwache wirt-bass wirt-melodie wirt-arr1 wirt-arr2 ins1 ins2 ins3 ins4 erzeuger erzeuger2 erzeuger3 erzeuger-bk oberflaeche leitstand notbahn kern; do
   u=cypherdj-$n$SFX.service
   if systemctl --user list-units --all --no-legend --plain "$u" 2>/dev/null | grep -q .; then
     systemctl --user stop "$u" 2>/dev/null
@@ -72,7 +72,7 @@ for f in "/dev/shm/cypherdj$SFX/zustand" "/dev/shm/cypherdj$SFX/bus" "/dev/shm/c
   fi
 done
 REST=$(systemctl --user list-units --all --no-legend --plain "cypherdj-kern$SFX.service" "cypherdj-notbahn$SFX.service" \
-  "cypherdj-leitstand$SFX.service" "cypherdj-oberflaeche$SFX.service" "cypherdj-wirt-bass$SFX.service" "cypherdj-wirt-melodie$SFX.service" "cypherdj-wirt-arr1$SFX.service" "cypherdj-wirt-arr2$SFX.service" "cypherdj-erzeuger$SFX.service" "cypherdj-erzeuger2$SFX.service" "cypherdj-erzeuger3$SFX.service" "cypherdj-digitalwache$SFX.service" 2>/dev/null)
+  "cypherdj-leitstand$SFX.service" "cypherdj-oberflaeche$SFX.service" "cypherdj-wirt-bass$SFX.service" "cypherdj-wirt-melodie$SFX.service" "cypherdj-wirt-arr1$SFX.service" "cypherdj-wirt-arr2$SFX.service" "cypherdj-ins1$SFX.service" "cypherdj-ins2$SFX.service" "cypherdj-ins3$SFX.service" "cypherdj-ins4$SFX.service" "cypherdj-erzeuger$SFX.service" "cypherdj-erzeuger2$SFX.service" "cypherdj-erzeuger3$SFX.service" "cypherdj-digitalwache$SFX.service" 2>/dev/null)
 if [ -n "$REST" ]; then echo "djk-stop: still loaded:" >&2; echo "$REST" >&2; exit 1; fi
 sag "djk-stop: cypherdj$SFX is down, 0 units"
 exit 0

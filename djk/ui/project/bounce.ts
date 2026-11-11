@@ -60,7 +60,14 @@ const spurVon = (p: Projekt, id: unknown, feld: string): Spur => {
   return sucheSpur(p, id) ?? ab('spur_unbekannt', id);
 };
 // D10 (1.10 slice 4): the bounce is dry and bakes no insert chain, so a strip whose sound is part of the bounce may not carry one
+// plan 1.11 task 13: the offline render refuses an active host stage (it is captured in real time), so the bounce says so up front
+const ohneHostEchtzeit = (s: Spur): void => {
+  if ((s.inserts ?? []).some((i) => i.art === 'host' && i.an)) {
+    ab('host_insert_echtzeit', `${s.name} has an active plugin stage that is captured in real time; bounce cannot render it offline, use resample`);
+  }
+};
 const ohneInserts = (s: Spur, rolle: string): void => {
+  ohneHostEchtzeit(s);
   if ((s.inserts ?? []).length > 0) {
     ab('merge_inserts', `${s.name} has an insert chain; the bounce is dry and does not bake it. Remove the inserts of the ${rolle} and bounce again`);
   }
@@ -101,7 +108,7 @@ function planOhneSicht(p: Projekt, d: Record<string, unknown>, quelle: Herkunft)
     } else ids = quellIds(d.spur_ids);
     const h = huelle(ids.flatMap((id) => sucheSpur(p, id)?.clips ?? []));
     const von = (d.von_beat as number | undefined) ?? h?.von, bis = (d.bis_beat as number | undefined) ?? h?.bis;
-    for (const id of ids) sucheSpur(p, id) ?? ab('spur_unbekannt', id);
+    for (const id of ids) ohneHostEchtzeit(sucheSpur(p, id) ?? ab('spur_unbekannt', id));
     if (von === undefined || bis === undefined) return ab('merge_leer', 'the tracks have no clips; give von_beat and bis_beat');
     pruefeBereich(von, bis);
     const merge = mergePlan(p, { spur_ids: ids, von_beat: von, bis_beat: bis }, quelle, { min: 1, praefix: BOUNCE_PRAEFIX });

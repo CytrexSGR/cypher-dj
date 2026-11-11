@@ -1,0 +1,12 @@
+{"t": "sende", "sample": 0, "osc": ["/k/set/neu", ",hsd", 1, "pruefstand", 128.0], "notiz": "neue Zeitachse; sample 0 = sofort (FORMAT.md Punkt 2)"}
+{"t": "erwarte", "bis_sample": 48000, "osc": ["/q", ",hsihds", 1, "pruefstand", 1, null, null, ""], "notiz": "angenommen"}
+{"t": "erwarte", "bis_sample": 48000, "osc": ["/q", ",hsihds", 1, "pruefstand", 2, 0, 0.0, ""], "toleranz": 1e-06, "notiz": "gestartet am ersten Zyklus der neuen Zeitachse"}
+{"t": "sende", "sample": 90000, "osc": ["/k/gibt_es_nicht", ",hs", 2, "pruefstand"], "absicht": "unbekannte_adresse", "notiz": "unbekannte Adresse"}
+{"t": "erwarte", "bis_sample": 138000, "osc": ["/e/protokollfehler", ",ss", "/k/gibt_es_nicht", "unbekannte_adresse"]}
+{"t": "sende", "sample": 180000, "osc": ["/k/tempo/rampe", ",hsdd", 3, "pruefstand", 64.0, 132.0], "absicht": "falsche_typen", "notiz": "dauer_beats fehlt"}
+{"t": "erwarte", "bis_sample": 228000, "osc": ["/e/protokollfehler", ",ss", "/k/tempo/rampe", "falsche_typen"]}
+{"t": "sende", "sample": 270000, "osc": ["/k/storno", ",hsi", 4, "pruefstand", 2], "absicht": "falsche_typen", "notiz": "ziel_id als i statt h"}
+{"t": "erwarte", "bis_sample": 318000, "osc": ["/e/protokollfehler", ",ss", "/k/storno", "falsche_typen"]}
+{"t": "sende", "sample": 360000, "osc": ["/k/tempo/rampe", ",hsddd", 5, "pruefstand", 64.0, 132.0, 32.0], "notiz": "Negativ-Kontrolle: richtige Nachricht, kein Protokollfehler (FORMAT.md Punkt 8)"}
+{"t": "erwarte", "bis_sample": 408000, "osc": ["/q", ",hsihds", 5, "pruefstand", 1, null, null, ""], "notiz": "angenommen"}
+{"t": "erwarte", "bis_sample": 1488000, "osc": ["/q", ",hsihds", 5, "pruefstand", 2, 1440000, 64.0, ""], "toleranz": 1e-06, "notiz": "gestartet"}

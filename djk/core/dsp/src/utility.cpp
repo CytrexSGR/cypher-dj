@@ -51,7 +51,7 @@ void Utility::setze(const UtilityParameter& p) {
 
     if (!std::isnan(p.gain_db)) p_.gain_db = ist_stumm(p.gain_db) ? kStummDb : std::min(p.gain_db, 24.0f);
     uebernimm(p_.balance, p.balance, -1.0f, 1.0f);
-    uebernimm(p_.breite_prozent, p.breite_prozent, 0.0f, 200.0f);
+    uebernimm(p_.breite_prozent, p.breite_prozent, 0.0f, kUtilityBreiteMaxProzent);
     if (!std::isnan(p.bass_mono_hz))
         p_.bass_mono_hz = p.bass_mono_hz <= 0.0f ? 0.0f : std::clamp(p.bass_mono_hz, kUtilityBassMonoMinHz, kUtilityBassMonoMaxHz);
     p_.phase_umkehren_l = p.phase_umkehren_l;

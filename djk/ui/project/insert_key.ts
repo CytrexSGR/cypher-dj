@@ -27,7 +27,7 @@ export const INSERT_ARTEN = {
     { name: 'schp', einheit: 'Hz', min: 0, max: 300, vorgabe: 0, kurve: 'linear', ganz: false, rampeMs: 10, geraet: 'schp' },
     { name: 'sc', einheit: '', min: 0, max: 32, vorgabe: 0, kurve: 'stufen', ganz: true, rampeMs: 0, geraet: null },
   ] },
-  eq: { praefix: 'ins/eq', instanzen: 2, latenz: 69, tabelle: true, parameter: [
+  eq: { praefix: 'ins/eq', instanzen: 8, latenz: 69, tabelle: true, parameter: [
     { name: 'an', einheit: '', min: 0, max: 1, vorgabe: 0, kurve: 'schalter', ganz: true, rampeMs: 0, geraet: null },
     { name: 'out', einheit: 'dB', min: -24, max: 24, vorgabe: 0, kurve: 'linear', ganz: false, rampeMs: 10, geraet: 'out' },
     { name: 'propq', einheit: '', min: 0, max: 1, vorgabe: 0, kurve: 'schalter', ganz: true, rampeMs: 0, geraet: 'propq' },
@@ -88,7 +88,7 @@ export const INSERT_ARTEN = {
     { name: 'b8/steil', einheit: '', min: 0, max: 3, vorgabe: 0, kurve: 'stufen', ganz: true, rampeMs: 0, geraet: 'slope_8' },
     { name: 'b8/platz', einheit: '', min: 0, max: 2, vorgabe: 0, kurve: 'stufen', ganz: true, rampeMs: 0, geraet: 'place_8' },
   ] },
-  saett: { praefix: 'ins/saett', instanzen: 1, latenz: 69, tabelle: true, parameter: [
+  saett: { praefix: 'ins/saett', instanzen: 4, latenz: 69, tabelle: true, parameter: [
     { name: 'an', einheit: '', min: 0, max: 1, vorgabe: 0, kurve: 'schalter', ganz: true, rampeMs: 0, geraet: null },
     { name: 'drive', einheit: 'dB', min: 0, max: 36, vorgabe: 12, kurve: 'linear', ganz: false, rampeMs: 10, geraet: 'drive' },
     { name: 'out', einheit: 'dB', min: -24, max: 12, vorgabe: -6, kurve: 'linear', ganz: false, rampeMs: 10, geraet: 'out' },
@@ -100,10 +100,31 @@ export const INSERT_ARTEN = {
     { name: 'm3', einheit: '', min: 0, max: 1, vorgabe: 0, kurve: 'linear', ganz: false, rampeMs: 10, geraet: null },
     { name: 'm4', einheit: '', min: 0, max: 1, vorgabe: 0, kurve: 'linear', ganz: false, rampeMs: 10, geraet: null },
   ] },
-  lim: { praefix: 'ins/lim', instanzen: 1, latenz: 74, tabelle: true, parameter: [
+  lim: { praefix: 'ins/lim', instanzen: 2, latenz: 74, tabelle: true, parameter: [
     { name: 'an', einheit: '', min: 0, max: 1, vorgabe: 0, kurve: 'schalter', ganz: true, rampeMs: 0, geraet: null },
     { name: 'decke', einheit: 'dB', min: -60, max: 0, vorgabe: -1, kurve: 'linear', ganz: false, rampeMs: 10, geraet: null },
     { name: 'abklingen', einheit: 'ms', min: 1, max: 2000, vorgabe: 80, kurve: 'linear', ganz: false, rampeMs: 0, geraet: null },
+  ] },
+  host: { praefix: 'ins/host', instanzen: 4, latenz: 0, tabelle: true, parameter: [
+    { name: 'an', einheit: '', min: 0, max: 1, vorgabe: 0, kurve: 'schalter', ganz: true, rampeMs: 0, geraet: null },
+  ] },
+  utility: { praefix: 'ins/utility', instanzen: 8, latenz: 0, tabelle: true, parameter: [
+    { name: 'an', einheit: '', min: 0, max: 1, vorgabe: 0, kurve: 'schalter', ganz: true, rampeMs: 0, geraet: null },
+    { name: 'breite', einheit: '', min: 0, max: 4, vorgabe: 1, kurve: 'linear', ganz: false, rampeMs: 10, geraet: null },
+    { name: 'mono_unter', einheit: 'Hz', min: 0, max: 500, vorgabe: 0, kurve: 'linear', ganz: false, rampeMs: 0, geraet: null },
+    { name: 'gain', einheit: 'dB', min: -60, max: 24, vorgabe: 0, kurve: 'linear', ganz: false, rampeMs: 10, geraet: null },
+    { name: 'balance', einheit: '', min: -1, max: 1, vorgabe: 0, kurve: 'linear', ganz: false, rampeMs: 10, geraet: null },
+  ] },
+  bk: { praefix: 'ins/bk', instanzen: 8, latenz: 0, tabelle: true, parameter: [
+    { name: 'an', einheit: '', min: 0, max: 1, vorgabe: 0, kurve: 'schalter', ganz: true, rampeMs: 0, geraet: null },
+    { name: 'k1', einheit: '', min: 0, max: 1, vorgabe: 0.5, kurve: 'linear', ganz: false, rampeMs: 0, geraet: null },
+    { name: 'k2', einheit: '', min: 0, max: 1, vorgabe: 0.5, kurve: 'linear', ganz: false, rampeMs: 0, geraet: null },
+    { name: 'k3', einheit: '', min: 0, max: 1, vorgabe: 0.5, kurve: 'linear', ganz: false, rampeMs: 0, geraet: null },
+    { name: 'k4', einheit: '', min: 0, max: 1, vorgabe: 0.5, kurve: 'linear', ganz: false, rampeMs: 0, geraet: null },
+    { name: 'k5', einheit: '', min: 0, max: 1, vorgabe: 0.5, kurve: 'linear', ganz: false, rampeMs: 0, geraet: null },
+    { name: 'k6', einheit: '', min: 0, max: 1, vorgabe: 0.5, kurve: 'linear', ganz: false, rampeMs: 0, geraet: null },
+    { name: 'k7', einheit: '', min: 0, max: 1, vorgabe: 0.5, kurve: 'linear', ganz: false, rampeMs: 0, geraet: null },
+    { name: 'k8', einheit: '', min: 0, max: 1, vorgabe: 0.5, kurve: 'linear', ganz: false, rampeMs: 0, geraet: null },
   ] },
 } as const satisfies Record<string, InsertArt>;
 

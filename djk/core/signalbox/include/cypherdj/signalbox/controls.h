@@ -7,10 +7,12 @@
 
 namespace cypherdj::stellwerk {
 
-constexpr int MAX_REGLER = 2048;   // 2026-10-11: 384 → 512 für komp/* je Quellkanal (98 Regler); 2026-10-20 (E1): 512 → 1024, Deckel
+constexpr int MAX_REGLER = 4096;   // 2026-10-11: 384 → 512 für komp/* je Quellkanal (98 Regler); 2026-10-20 (E1): 512 → 1024, Deckel
                                    // für 32 Spuren (564 Regler), gemessen: Median und p99,9 des Zyklus unverändert
                                    // (~/messungen/2026-10-20-e1-deckel/BERICHT.md). CDJ_Z_REGLER (state.h) muss mit.
                                    // 2026-11-03 (1.15 A1a): 1024 -> 2048, room for the 96 insert controls of slice 4 plus margin; cost measured (A0).
+                                   // 2026-11-11 (arr-bk): 2048 -> 4096. The bk insert pool (8 stages x 9 rows = 72) took the table to 2036 rows and left 12; the check demands 44.
+                                   // CDJ_Z_REGLER and the state file version move with it (state.h). Memory and cycle cost: ~/messungen/2026-11-10-kanban-vor-welle1/arr-bk.md.
 constexpr int MAX_KANAELE = 20;     // deck/1..4, erz/1..8, pad/1..2, bus/1..4, master, cue
 
 enum class Rolle : uint8_t {
@@ -47,7 +49,13 @@ enum class Rolle : uint8_t {
   // 1.10 slice 4c T15 (appended after ins_saett_mix: the order of the roles stays). The rack macros rack/<k>/m1..m4, k = 1..12 (0..1): one role per macro number.
   rack_m1, rack_m2, rack_m3, rack_m4,
   // Master limiter (appended after rack_m4: the order of the roles stays). The limiter insert ins/lim/<n>/{an,decke,abklingen}.
-  ins_lim_an, ins_lim_decke, ins_lim_abklingen
+  ins_lim_an, ins_lim_decke, ins_lim_abklingen,
+  // Plan 1.11 T4 (appended after ins_lim_abklingen: the order of the roles stays). The effect-host insert ins/host/<n>/an, n = 1..4 (a foreign plugin in a host process; no mapped parameter rows).
+  ins_host_an,
+  // arr-fx slice 1 (appended after ins_host_an: the order of the roles stays). The utility insert ins/utility/<n>/{an,breite,mono_unter,gain,balance}.
+  ins_util_an, ins_util_breite, ins_util_mono_unter, ins_util_gain, ins_util_balance,
+  // arr-bk slice 3 (appended after ins_util_balance). The Baukasten insert ins/bk/<n>/{an,k1..k8}.
+  ins_bk_an, ins_bk_k1, ins_bk_k2, ins_bk_k3, ins_bk_k4, ins_bk_k5, ins_bk_k6, ins_bk_k7, ins_bk_k8
 };
 constexpr int SPUR_REGLER_SPUREN = 32;   // D1 K1 (Spec 2.3): spur/<n>/{fader,pan,mute,solo}, n = 1..32 (E3)
 constexpr int GRP_REGLER_GRUPPEN = 8;    // 1.10 (F1: eigene Plätze neben den 32 Spuren): grp/<n>/{fader,pan,mute,solo}, n = 1..8

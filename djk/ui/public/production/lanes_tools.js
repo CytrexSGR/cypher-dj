@@ -2,12 +2,13 @@
 // The page does not import server code: dehne, neige, formPunkte, setzeForm and formBereich are a copy of project/lane_tools.ts (laneWert from
 // lanes.js instead of project/lane.ts) and tests/production_lanes_tools.test.mjs compares both on one fixture set. Change one, change the other.
 // Used for the draft of a stretch, skew or shape gesture (draft.js), so what is shown is what the server will store. Simplify is server only.
-import { laneWert, bereich } from './lanes.js';
+import { laneWert, bereich, istKettenZiel } from './lanes.js';
 
 export const FORMEN_EINFUEGEN = ['rampe_auf', 'rampe_ab', 'sinus', 'dreieck', 'rechteck'];
 export function formBereich(ziel) {
   if (ziel === 'fader') return { unten: -60, oben: 0 };
   if (ziel === 'pan') return { unten: -1, oben: 1 };
+  if (istKettenZiel(ziel)) { const { min, max } = bereich(ziel); return { unten: min, oben: max }; }   // slice 6: a chain lane's shape spans the parameter's range
   return { unten: 0, oben: 1 };
 }
 

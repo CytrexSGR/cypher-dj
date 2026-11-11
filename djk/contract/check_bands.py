@@ -33,7 +33,9 @@ MINUS3 = -10 * np.log10(2.0)   # -3,0103 dB
 def baender_aus_vertrag(text):
     """[(name, unten_hz, oben_hz)] aus dem Satz in §6.2 über die sechs Analyse-Bänder."""
     teil = text[text.index("### 6.2"):text.index("### 6.3")]
-    muster = r",\s+".join(rf"{t}\s+(\d+)\s+bis\s+(\d+)" for t, _ in NAMEN) + r"\s+Hz"
+    # "Sub 30 bis 90, Tief 90 bis 250, ..." (German) or "Sub 30 to 90, Tief (low) 90 to 250, ..." (English edition: the band
+    # names stay, a gloss in brackets follows)
+    muster = r",\s+".join(rf"{t}(?:\s+\([^)]*\))?\s+(\d+)\s+(?:bis|to)\s+(\d+)" for t, _ in NAMEN) + r"\s+Hz"
     m = re.search(muster, teil)
     if not m:
         raise ValueError("§6.2: Satz mit den sechs Bandgrenzen nicht gefunden (Vertragstext geändert?)")

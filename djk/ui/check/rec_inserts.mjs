@@ -5,7 +5,7 @@
 // Without --inserts the scripts build their project as before (no chain). The PDC effect itself is not checked here.
 import { Fehl } from './w3a_target.mjs';
 
-export const INSERT_POOL = ['komp', 'eq', 'saett', 'lim'];   // main:project/commands.ts INS_POOL
+export const INSERT_POOL = ['komp', 'eq', 'saett', 'lim', 'utility'];   // main:project/commands.ts INS_POOL without host (a host stage needs a plugin, not just a name)
 export const MAX_KETTE = 4;                                    // MAX_INSERTS_PRO_STRANG
 export const INSERT_OPTIONEN = { inserts: { type: 'string' }, 'inserts-spur': { type: 'string' } };
 export const INSERT_HILFE = '[--inserts eq,saett,lim [--inserts-spur <n>]]';

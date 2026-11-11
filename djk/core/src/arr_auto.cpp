@@ -75,7 +75,7 @@ inline float stapel_klemme_geraet(float v) {
 }  // namespace
 
 void Arrangement::auto_segment(const Karte& k, int64_t a, int64_t b, int64_t s0) {
-  if (!snap_ || snap_->n_auto_lanes == 0 || b <= a) return;
+  if (!snap_ || (snap_->n_auto_lanes == 0 && snap_->n_klanes == 0) || b <= a) return;   // 1.12 slice 6: an insert or rack lane needs the project beat too
   const int von = static_cast<int>(a - s0), bis = static_cast<int>(b - s0);
 #ifdef CYPHERDJ_MUTATION_ARR_AUTO_BEAT_LINEAR
   {   // error case: the project beat is linear between the two ends of the sub-block (wrong inside a tempo ramp)
@@ -126,8 +126,10 @@ void Arrangement::auto_tausch(const ArrSnapshot* neu, int64_t s) {
       if (f < AUTO_BLENDE_FELDER && status_ == ArrStatus::spielt && (alt_lane || neu_lane || alt_rel || nr) && (!ue || (!neu_lane && nr)))
         blende_vormerken(i, f, s);   // the new source may differ: AK23, lane gone, lane new
     }
+  for (int k = 0; k < ARR_KLANES_MAX; ++k)   // 1.12 slice 6: the insert and rack lanes: only the table (auto_kette searches the cursor once per block)
+    auto_k_[k] = neu && k < neu->n_klanes ? AutoLane(neu->klane[k].p, neu->klane[k].n) : AutoLane();
   for (int i = 0; i < ARR_SPUREN; ++i)   // device lanes: only the cursor, the sink sees the lane value per block and handles a change itself
-    for (int g = 0; g < ARR_GERAET_PARAMS; ++g) {
+    for (int g = 0; g < ARR_GERAET_LANE_PARAMS; ++g) {
       const ArrAutoLane* gl = neu ? geraet_lane(neu->spur[i], g) : nullptr;
       auto_g_[i][g] = gl ? AutoLane(gl->p, gl->n) : AutoLane();
       const ArrAutoLane* gr = neu ? geraet_rel(neu->spur[i], g) : nullptr;
@@ -149,7 +151,7 @@ void Arrangement::auto_geraet() {
     if (sp.n_auto == 0) continue;
     ArrSenke* se = senke_fuer(snap_, i);
     if (!se) continue;
-    for (int g = 0; g < ARR_GERAET_PARAMS; ++g) {
+    for (int g = 0; g < ARR_GERAET_LANE_PARAMS; ++g) {
       const bool absolut = geraet_lane(sp, g) != nullptr, relativ = geraet_rel(sp, g) != nullptr;
       if (!absolut && !relativ) continue;
       float v = 0.0f;
@@ -169,6 +171,33 @@ void Arrangement::auto_geraet() {
         v = stapel_klemme_geraet(v + summand);
       }
       se->auto_parameter(i, g, v);
+    }
+  }
+}
+
+// 1.12 slice 6: the insert-parameter and rack-macro lanes. Per block ONE value per lane, the lane at the project beat of the last running sample (like auto_geraet), handed to ArrInserts, which
+// lets it replace the row of the parameter (or the macro row) for this block. A block without a running sample (transport stands or waits) hands nothing: ArrInserts has cleared the previous
+// block's values, so a lane that ends gives its parameter back to the row in the next block. Runs before mischen() (makros_planen reads the macro lanes there), on the callback thread: no
+// allocation, no lock, no logarithm.
+void Arrangement::auto_kette() {
+  ins_.lanen_loeschen();
+  if (!snap_ || snap_->n_klanes == 0) return;
+  // Running: the beat of the last running sample. Waiting for the start (lead time, quantum wait, count-in): the lane's value AT the start beat, so a stage opens the playback on the value it
+  // will play and its module does not glide from the row value to the lane (the start glide the RB-338 had, 1.9 T9). Stopped: nothing, the rows rule.
+  double p;
+  if (auto_bis_ > auto_von_) p = ap_[auto_bis_ - 1];
+  else if (status_ == ArrStatus::wartet) p = start_beat_;
+  else return;
+  for (int k = 0; k < snap_->n_klanes; ++k) {
+    const ArrKettenLane& l = snap_->klane[k];
+    AutoLane& al = auto_k_[k];
+    al.neu_suchen(p);   // once per block: a start in the middle, a loop seam or a swap needs no special case
+    const float v = al.wert_bei(p);
+    if (l.makro >= 0) {
+      const ArrRack& r = snap_->rack[l.strip];
+      if (r.slot >= 0) ins_.lane_makro(r.slot, l.makro, v);
+    } else {
+      ins_.lane_stufe(l.strip, snap_->kette[l.strip], l.stufe, l.param, v);
     }
   }
 }

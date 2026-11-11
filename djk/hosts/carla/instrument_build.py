@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Flügel für den Carla-Wirt bauen (Glanz Welle 4): aus dem Ableton-Core-Library-Flügel (30 Tonorte x 4 Anschlagstufen,
-offene AIFF) ein SFZ mit Tonbereichen und lovel/hivel, gespielt von Carlas eingebautem SFZ-Sampler (host.py --sfz).
+offene AIFF) ein SFZ mit Tonbereichen und lovel/hivel, gespielt von Carlas eingebautem SFZ-Sampler (instrument_host.py --sfz).
 
 Carla wählt den Decoder nach der Endung: ".aif" lehnt es ab („ad_open(): no decoder backend"), ".aiff" und ".ogg"
 lädt libsndfile (gemessen 2026-10-06, ~/messungen/2026-10-06-welle4-fluegel/). Deshalb Symlinks mit Endung .aiff statt

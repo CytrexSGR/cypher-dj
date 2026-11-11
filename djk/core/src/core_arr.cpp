@@ -4,6 +4,7 @@
 // Sperre, kein I/O.
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 
 #include "cypherdj/reverb_pool.h"
@@ -50,6 +51,7 @@ void Kern::arr_nachreichen() {
     if (arr_warte_[i].art == Befehl::ARR_LADEN && arr_alt_offen_) break;
     if (arr_warte_[i].art == Befehl::ARR_FREEZE) einsortieren_freeze(arr_warte_[i], beat0);   // Paket K3
     else if (arr_warte_[i].art == Befehl::ARR_ABGRIFF) einsortieren_abgriff(arr_warte_[i], beat0);   // 1.10 slice 7
+    else if (arr_warte_[i].art == Befehl::ARR_EXPORT_LAUF) einsortieren_export(arr_warte_[i], beat0);   // plan 1.11 T12
     else einsortieren_arr(arr_warte_[i], beat0);
   }
   for (int j = i; j < arr_warte_n_; ++j) arr_warte_[j - i] = arr_warte_[j];
@@ -70,6 +72,8 @@ bool Kern::arr_befehl_wartet(const Befehl& c) {
       freeze_melden(static_cast<ArrFreeze*>(const_cast<void*>(c.zeiger)), ARR_FREEZE_ABGELEHNT);
     if (c.art == Befehl::ARR_ABGRIFF && c.zeiger)   // 1.10 slice 7
       abgriff_melden(static_cast<ArrAbgriff*>(const_cast<void*>(c.zeiger)), ARR_ABGRIFF_ABGELEHNT);
+    if (c.art == Befehl::ARR_EXPORT_LAUF && c.zeiger)   // plan 1.11 T12: the writer is told, it answers /e/export_lauf with the reason
+      static_cast<ArrExportLauf*>(const_cast<void*>(c.zeiger))->verwerfen("zu_spaet");
     return true;
   }
 #else
@@ -99,7 +103,7 @@ void Kern::einsortieren_arr(const Befehl& c, double beat0) {
       if (ist_cypher(c.quelle) && sw_->ki_gestoppt()) return ab("ki_gestoppt");
       if (!(c.ab_beat >= 0.0) || !std::isfinite(c.ab_beat) || c.politik < 0 || c.politik > 2)
         return ab("ausserhalb_bereich");   // das Netz prüft schon; hier auch am Netz vorbei
-      const int64_t vorhalt = (int64_t)ERZ_MIDI_RUNDWEG_ZYKLEN * zyklus_n_ + ERZ_MIDI_VORHALT_REST;
+      const int64_t vorhalt = erz_midi_vorhalt(zyklus_n_);
       // 1.8 S4a.4 (D7): a recording that waits for its Einsatz brings its count-in: the entry moves 4 * bars core beats behind the first quant point. Any other start (a recording that
       // runs, no recording, the arrangement already waits) has none.
 #ifdef CYPHERDJ_MUTATION_REC_VORZAEHLER_NICHT_GEREICHT
@@ -274,7 +278,7 @@ bool Kern::arr_hand_start_stopp(int64_t s) noexcept {
     if (arr_->status() == ArrStatus::steht) arr_start_abbrechen(s, k.beat_at((double)s), "hand");   // wartete noch
     wirkung = true;
   } else if (arr_->snapshot()) {
-    const int64_t vorhalt = (int64_t)ERZ_MIDI_RUNDWEG_ZYKLEN * zyklus_n_ + ERZ_MIDI_VORHALT_REST;
+    const int64_t vorhalt = erz_midi_vorhalt(zyklus_n_);
 #ifdef CYPHERDJ_MUTATION_ARR_HAND_IMMER_SOFORT
     wirkung = arr_->start(arr_->start_beat(), 0, false, s, vorhalt, zyklus_n_, k);   // Fehlerfall: ohne DJ-Quant
 #else
@@ -311,7 +315,7 @@ void Kern::einsortieren_freeze(const Befehl& c, double beat0) {
   // die Datei. Der Tempo-Plan hält jeden Eintrag bis zu seinem Ende; nur der Kern weiß das verlässlich.
   if (plan_.eintraege() > 0) return ab("tempo_rampe");
 #endif
-  const int64_t vorhalt = (int64_t)ERZ_MIDI_RUNDWEG_ZYKLEN * zyklus_n_ + ERZ_MIDI_VORHALT_REST;
+  const int64_t vorhalt = erz_midi_vorhalt(zyklus_n_);
   const char* grund = "";
   if (!arr_->freeze(f, dj_laeuft() ? 2 : 0, ist_cypher(c.quelle), sample_, vorhalt, zyklus_n_, plan_.karte(), grund))
     return ab(grund);
@@ -323,6 +327,7 @@ void Kern::einsortieren_freeze(const Befehl& c, double beat0) {
 // Nach arr_->block() eines Teilblocks: Freeze-Einsatz (2), Ende (3) oder Abbruch (7, Grund ki_stopp oder abbruch)
 void Kern::arr_freeze_quittungen(const Karte& k) {
   arr_abgriff_quittungen(k);   // 1.10 slice 7: the tap's receipts ride on the call sites of the freeze's (core_signalbox.cpp stays untouched)
+  arr_export_quittungen(k);    // plan 1.11 T12: and the export run's
   if (const int64_t s = arr_->hole_freeze_gestartet(); s >= 0 && arr_freeze_id_)
     quittung(arr_freeze_id_, arr_freeze_quelle_, 2, s, k.beat_at((double)s));
   ArrFreeze* f = arr_->hole_freeze_fertig();
@@ -404,12 +409,45 @@ void Kern::einsortieren_abgriff(const Befehl& c, double beat0) {
   };
   if (ist_cypher(c.quelle) && sw_->ki_gestoppt()) return ab("ki_gestoppt");
   if (plan_.eintraege() > 0) return ab("tempo_rampe");   // an open tempo ramp moves the grid under the run (spec 6.33)
-  const int64_t vorhalt = (int64_t)ERZ_MIDI_RUNDWEG_ZYKLEN * zyklus_n_ + ERZ_MIDI_VORHALT_REST;
+  const int64_t vorhalt = erz_midi_vorhalt(zyklus_n_);
   const char* grund = "";
   if (!arr_->abgriff(f, dj_laeuft() ? 2 : 0, ist_cypher(c.quelle), sample_, vorhalt, zyklus_n_, plan_.karte(), grund)) return ab(grund);
   arr_abgriff_id_ = c.id;
   std::memcpy(arr_abgriff_quelle_, c.quelle, sizeof arr_abgriff_quelle_);
   quittung(c.id, c.quelle, 1, sample_, beat0);
+}
+
+// plan 1.11 T12 (/k/arr/export_lauf): the sibling of einsortieren_abgriff. Same quant rule, same refusals (ki_gestoppt, tempo_rampe, then belegt while a recording takes or waits, then those
+// of Arrangement::export_lauf). A refused job is handed back to its writer thread (verwerfen), which answers /e/export_lauf with the reason; the receipt 6 comes from here.
+void Kern::einsortieren_export(const Befehl& c, double beat0) {
+  auto* f = static_cast<ArrExportLauf*>(const_cast<void*>(c.zeiger));
+  if (!f) return quittung(c.id, c.quelle, 6, sample_, beat0, "form");
+  auto ab = [&](const char* grund) {
+    quittung(c.id, c.quelle, 6, sample_, beat0, grund);
+    f->verwerfen(grund);
+  };
+  if (ist_cypher(c.quelle) && sw_->ki_gestoppt()) return ab("ki_gestoppt");
+  if (plan_.eintraege() > 0) return ab("tempo_rampe");   // an open tempo ramp moves the grid under the run (spec 6.33)
+  if (aufnahme_.status() != 0) return ab("belegt");      // a recording waits or runs
+  const int64_t vorhalt = erz_midi_vorhalt(zyklus_n_);
+  const char* grund = "";
+  if (!arr_->export_lauf(f, dj_laeuft() ? 2 : 0, ist_cypher(c.quelle), sample_, vorhalt, zyklus_n_, plan_.karte(), grund)) return ab(grund);
+  arr_export_id_ = c.id;
+  std::memcpy(arr_export_quelle_, c.quelle, sizeof arr_export_quelle_);
+  quittung(c.id, c.quelle, 1, sample_, beat0);
+}
+
+void Kern::arr_export_quittungen(const Karte& k) {
+  if (const int64_t s = arr_->hole_export_gestartet(); s >= 0 && arr_export_id_)
+    quittung(arr_export_id_, arr_export_quelle_, 2, s, k.beat_at((double)s));
+  int32_t status = 0;
+  int64_t ende_s = -1;
+  if (!arr_->hole_export_fertig(status, ende_s)) return;
+  const double b = k.beat_at((double)ende_s);
+  if (status == 0) quittung(arr_export_id_, arr_export_quelle_, 3, ende_s, b);
+  else
+    quittung(arr_export_id_, arr_export_quelle_, 7, ende_s, b, sw_->ki_gestoppt() && arr_->von_cypher() ? "ki_stopp" : "abbruch");
+  arr_export_id_ = 0;
 }
 
 void Kern::arr_abgriff_quittungen(const Karte& k) {
@@ -742,6 +780,79 @@ void Kern::rec_zustand_melden(int64_t n0, int n) {   // /zustand/rec: 10 Hz beim
   z.arr_beat = arr_->status() == ArrStatus::spielt ? arr_->zustand(plan_.karte(), n0).projekt_beat : 0.0;     // Projekt-Beat wie /zustand/arr (m2)
 #endif
   melde(z);
+}
+
+}  // namespace cdj
+
+namespace cdj {
+
+// plan 1.11 T5 (§4.11 /k/arr/ins_host, §5.13 /e/ins_host): the server's health flag of host h. The net thread checked the range. The flag is one source of the stage's health atomic (the other is the
+// core's own edge check, main.cpp); the answer carries the health the stage has now.
+void Kern::ins_host_befehl(const Befehl& c) {
+  if (c.nr < 1 || c.nr > ARR_INS_HOST) return;
+  arr_->host_stufe().setze_server(c.nr, c.an != 0);
+  Ereignis e{};
+  e.art = Ereignis::INS_HOST;
+  e.sample = sample_;
+  e.deck = c.nr;
+  e.status = arr_->host_stufe().gesund(c.nr) ? 1 : 0;
+  melde(e);
+}
+
+void Kern::ins_mess_melden(int h, int rundweg, ArrHostMessung::Grund g) {
+  Ereignis e{};
+  e.art = Ereignis::INS_MESS;
+  e.sample = sample_;
+  e.deck = h;
+  e.status = rundweg;
+  std::snprintf(e.grund, sizeof e.grund, "%s", ArrHostMessung::name(g));
+  melde(e);
+}
+
+// /k/arr/ins_mess: only while the transport is stopped (not steht, i.e. waiting, playing or freezing, is `laeuft`) and the host is healthy (`host_fehlt`). A refusal answers at once; an armed
+// measurement answers from ins_mess_block(). While it runs the stage of the host plays the dry path.
+void Kern::ins_mess_befehl(const Befehl& c) {
+  if (c.nr < 1 || c.nr > ARR_INS_HOST) return;
+  const ArrHostMessung::Grund g = host_mess_.starte(c.nr, arr_->status() != ArrStatus::steht, arr_->host_stufe().gesund(c.nr));
+  if (g != ArrHostMessung::Grund::ok) {
+    ins_mess_melden(c.nr, -1, g);
+    return;
+  }
+  arr_->host_stufe().setze_messung(c.nr, true);
+}
+
+void Kern::ins_mess_block(int off, int m) {
+  for (int h = 1; h <= ARR_INS_HOST; ++h) {
+    if (!host_mess_.aktiv(h)) continue;
+    const bool fertig = host_mess_.block(h, ins_aus_[h - 1][0] ? ins_aus_[h - 1][0] + off : nullptr, ins_aus_[h - 1][1] ? ins_aus_[h - 1][1] + off : nullptr,
+                                         ins_rueck_[h - 1][0] ? ins_rueck_[h - 1][0] + off : nullptr, ins_rueck_[h - 1][1] ? ins_rueck_[h - 1][1] + off : nullptr, m,
+                                         arr_->status() != ArrStatus::steht, arr_->host_stufe().gesund(h));
+    if (!fertig) continue;
+    arr_->host_stufe().setze_messung(h, false);
+    ins_mess_melden(h, host_mess_.rundweg(h), host_mess_.grund(h));
+  }
+}
+
+// /zustand/ins_host: health and last round trip of the four hosts, on change and at 2 Hz, only while the core has the host ports (a core without them has nothing to report).
+void Kern::ins_host_zustand(int64_t n0, int n) {
+  if (!host_ports_da()) return;
+  int32_t v[8];
+  for (int h = 1; h <= ARR_INS_HOST; ++h) {
+    v[h - 1] = arr_->host_stufe().gesund(h) ? 1 : 0;
+    v[4 + h - 1] = host_mess_.rundweg(h);
+  }
+  const bool geaendert = std::memcmp(v, host_gemeldet_, sizeof v) != 0;
+  const bool takt = (n0 + 24000 - 1) / 24000 * 24000 < n0 + n;
+  if (!geaendert && !takt) return;
+  std::memcpy(host_gemeldet_, v, sizeof v);
+  Ereignis e{};
+  e.art = Ereignis::INS_HOST_ZUSTAND;
+  e.sample = n0;
+  for (int h = 0; h < ARR_INS_HOST; ++h) {
+    e.host_gesund[h] = v[h];
+    e.host_rundweg[h] = v[4 + h];
+  }
+  melde(e);
 }
 
 }  // namespace cdj

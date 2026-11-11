@@ -6,6 +6,7 @@
 # Aufruf: djk-instrumente [--instanz a..i] [--nur-wirte] [--melodie surge|fluegel|baukasten] [--bass surge|rb338]
 #         djk-instrumente [--instanz a..i] --arr1 [--arr2]
 #         djk-instrumente [--instanz a..i] --arr2
+#         djk-instrumente [--instanz a..i] start arr1|arr2 surge|plugin:<format>:<pfad>#<uid>
 #   --bass rb338 (RB-338 W1): der Bass-Wirt spielt die eigene 303 (VST3 aus djk/instruments, install.sh) statt Surge.
 #   Ohne --bass bleibt der Bass-Wirt, wie er läuft (läuft er nicht: Surge). klang/fahre gibt es nur mit Surge; rb338 kennt param.
 #   --melodie fluegel (Glanz Welle 4): der Melodie-Wirt spielt den Flügel (Carla-SFZ, hosts/carla/instrument_build.py,
@@ -31,6 +32,16 @@
 #   idempotent wie die anderen Gruppen. djk-stop räumt den Wirt ab.
 #   --arr2 (1.9, L10): der zweite Produktions-Slot, genau wie --arr1 (Unit cypherdj-wirt-arr2<-i>, Status wirt-arr2.json, Socket wirt-arr2.sock, Klang
 #   klang-arr2.fxp, Kanten arr_midi_2 -> Wirt -> arr_rueck_2_L/R). --arr1 --arr2 zusammen startet beide Slots in einem Aufruf.
+#   start <arr1|arr2> <surge|plugin:<format>:<pfad>#<uid>> (plan 1.11 task 16): start ONE production slot, with Surge (same as
+#   --arrN) or with a foreign plugin instrument. <format> is vst3 or lv2 (LV2: path = URI, uid may be empty: plugin:lv2:<uri>#;
+#   the identity always ends in '#'). Same unit name, status file, socket and edges as the Surge slot; the host runs
+#   `instrument_host.py --instrument <format>:<pfad>#<uid>` (loads the plugin at start, no empty rack: an instrument's latency is
+#   measured like Surge's) with the REAL HOME, DISPLAY and XAUTHORITY (D16: plugin editors need the user's X session).
+#   Status file: art "plugin" plus kennung "<format>:<pfad>#<uid>" (art alone would read as Surge). The plugin must exist
+#   (VST3 bundle / LV2 URI on the LV2 path) or exit 2 "not loadable", nothing started. A plugin without a MIDI input is no
+#   instrument: the host exits 2 with "kein_instrument" and this script exits 2 with that reason (no restart loop, no edges).
+#   Running the slot with the same plugin again does nothing; with another plugin or `surge` only its host is swapped. A plain
+#   --arrN leaves a running plugin host as it is (like --bass without a value keeps the RB-338).
 # Rückgabe: 0 Instrumente hängen, 2 Aufruf/Aufbau (kein Kern, kein Surge), 5 ein Schritt scheiterte (Bericht auf stderr;
 # Gestartetes bleibt stehen, djk-stop räumt ab).
 set -uo pipefail
@@ -41,18 +52,58 @@ export DBUS_SESSION_BUS_ADDRESS=${DBUS_SESSION_BUS_ADDRESS:-unix:path=$XDG_RUNTI
 HIER=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
 DJK=${DJK:-$(cd "$HIER/.." && pwd)}
 I=${CYPHERDJ_INSTANZ:-}; NUR_WIRTE=0; MELODIE=; BASS=; ARR1=0; ARR2=0
+START=0; POS=(); ARRSPEC_1=; ARRSPEC_2=
 while [ $# -gt 0 ]; do
   case "$1" in
     --instanz) [ $# -ge 2 ] || { echo "djk-instrumente: --instanz needs a value" >&2; exit 2; }; I=$2; shift 2;;
     --nur-wirte) NUR_WIRTE=1; shift;;
     --arr1) ARR1=1; shift;;
     --arr2) ARR2=1; shift;;
+    start) if [ "$START" = 0 ] && [ ${#POS[@]} = 0 ]; then START=1; shift; else echo "djk-instrumente: unknown option start (see --help)" >&2; exit 2; fi;;
     --melodie) [ $# -ge 2 ] || { echo "djk-instrumente: --melodie needs surge, fluegel or baukasten" >&2; exit 2; }; MELODIE=$2; shift 2;;
     --bass) [ $# -ge 2 ] || { echo "djk-instrumente: --bass needs surge or rb338" >&2; exit 2; }; BASS=$2; shift 2;;
     -h|--help) sed -n '2,/^set -uo/p' "$0" | sed '$d; s/^# \{0,1\}//'; exit 0;;
-    *) echo "djk-instrumente: unknown option $1 (see --help)" >&2; exit 2;;
+    *) if [ "$START" = 1 ]; then POS+=("$1"); shift; else echo "djk-instrumente: unknown option $1 (see --help)" >&2; exit 2; fi;;
   esac
 done
+if [ "$START" = 1 ]; then
+  [ ${#POS[@]} -ge 2 ] || { echo "djk-instrumente: start needs <arr1|arr2> <surge|plugin:<format>:<path>#<uid>>" >&2; exit 2; }
+  [ ${#POS[@]} -le 2 ] || { echo "djk-instrumente: start: unexpected argument '${POS[2]}'" >&2; exit 2; }
+  case "${POS[0]}" in arr1) ARR1=1;; arr2) ARR2=1;; *) echo "djk-instrumente: start: group '${POS[0]}' must be arr1 or arr2" >&2; exit 2;; esac
+  case "${POS[1]}" in
+    surge) ;;
+    plugin:*)
+      PSPEC=${POS[1]#plugin:}; PFMT=${PSPEC%%:*}; PREST=${PSPEC#*:}
+      { [ -n "$PSPEC" ] && [ "$PREST" != "$PSPEC" ] && [ -n "$PREST" ]; } || { echo "djk-instrumente: start: plugin '${POS[1]}' is not plugin:<format>:<path>#<uid>" >&2; exit 2; }
+      case "$PFMT" in
+        vst3) PPFAD=${PREST%#*}; [ -e "$PPFAD" ] || { echo "djk-instrumente: plugin not loadable: VST3 '$PPFAD' does not exist" >&2; exit 2; };;
+        lv2)
+          PPFAD=${PREST%#*}
+          # a manifest names a plugin as <uri> or, as the LSP and Dragonfly bundles do, as prefix:name with an @prefix line
+          python3 - "$PPFAD" /usr/lib/lv2 /usr/local/lib/lv2 "$HOME/.lv2" "$HOME/.local/lib/cypherdj/lv2" <<'PY' || { echo "djk-instrumente: plugin not loadable: LV2 URI '$PPFAD' not found on the LV2 path" >&2; exit 2; }
+import glob, os, re, sys
+uri = sys.argv[1]
+for d in sys.argv[2:]:
+    for m in glob.glob(os.path.join(d, "*", "manifest.ttl")):
+        try:
+            t = open(m, encoding="utf-8", errors="replace").read()
+        except OSError:
+            continue
+        if f"<{uri}>" in t:
+            sys.exit(0)
+        for pre, base in re.findall(r"@prefix\s+([A-Za-z0-9_-]*):\s*<([^>]*)>", t):
+            if uri.startswith(base) and re.search(r"(?<![\w:])" + re.escape(pre + ":" + uri[len(base):]) + r"(?![\w-])", t):
+                sys.exit(0)
+sys.exit(1)
+PY
+          ;;
+        *) echo "djk-instrumente: start: plugin format '$PFMT' unknown, use vst3 or lv2" >&2; exit 2;;
+      esac;;
+    *) echo "djk-instrumente: start: '${POS[1]}' must be surge or plugin:<format>:<path>#<uid>" >&2; exit 2;;
+  esac
+  [ "${POS[0]}" = arr1 ] && ARRSPEC_1=${POS[1]}
+  [ "${POS[0]}" = arr2 ] && ARRSPEC_2=${POS[1]}
+fi
 case "$MELODIE" in ""|surge|fluegel|baukasten) ;; *) echo "djk-instrumente: --melodie '$MELODIE' invalid, use surge, fluegel or baukasten" >&2; exit 2;; esac
 case "$BASS" in ""|surge|rb338) ;; *) echo "djk-instrumente: --bass '$BASS' invalid, use surge or rb338" >&2; exit 2;; esac
 if [ "$ARR1$ARR2" != 00 ] && [ -n "$MELODIE$BASS" ]; then
@@ -108,8 +159,20 @@ for g in $GRUPPEN; do
   # auch nicht nach einem toten Wirt oder einem Studio-Neustart: die Status-Datei entscheidet)
   [ "$G" = bass ] && [ -z "$BASS" ] && ART=$IST
   [ "$G" = melodie ] && [ -z "$MELODIE" ] && ART=$IST  # dasselbe für die Melodie (Review X2: Flügel kippte auf Surge)
+  # production slots with a plugin instrument (task 16): `start <slot> plugin:...` names it, `start <slot> surge` names Surge, a plain
+  # --arrN keeps a RUNNING plugin host (taking the plugin from its status file) and otherwise means Surge
+  PS=""; KENN=""
+  if ist_arr "$G"; then
+    eval "SPEC=\$ARRSPEC_${G#arr}"
+    KENN=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("kennung",""))' "$ST" 2>/dev/null || echo "")
+    case "$SPEC" in
+      plugin:*) PS=${SPEC#plugin:};;
+      "") if aktiv "$U" && [ "$IST" = plugin ] && [ -n "$KENN" ]; then PS=$KENN; fi;;
+    esac
+    [ -n "$PS" ] && ART=plugin
+  fi
   if aktiv "$U"; then  # läuft er in der anderen Art, nur ihn tauschen
-    if [ "$IST" != "$ART" ]; then
+    if [ "$IST" != "$ART" ] || { [ "$ART" = plugin ] && [ "$KENN" != "$PS" ]; }; then
       systemctl --user stop "$U.service" || fehler "wirt $G: stop failed" "$U"
       for _ in $(seq 50); do systemctl --user list-units --all --no-legend --plain "$U.service" | grep -q . || break; sleep 0.1; done
       echo "  wirt $G    $IST stopped, switching to $ART"
@@ -134,7 +197,9 @@ for g in $GRUPPEN; do
     rm -f "$ST"
     WH="$HOME/.local/state/cypherdj/wirt-$G$SFX"; mkdir -p "$WH/.local/share"
     if [ -d "$SD" ]; then ln -sfn "$SD" "$WH/.local/share/surge-xt"; fi
-    if [ "$ART" = lv2 ]; then
+    if [ "$ART" = plugin ]; then
+      INSTR_ARGS=(--instrument "$PS")
+    elif [ "$ART" = lv2 ]; then
       INSTR_ARGS=(--lv2 https://surge-synthesizer.github.io/lv2/surge-xt --lv2-pfad "$HOME/.local/lib/cypherdj/lv2"
                   --aktiv "$HOME/.config/cypherdj$SFX/klang-$G.fxp")
     elif [ "$ART" = vst3:rb338 ]; then
@@ -147,16 +212,38 @@ for g in $GRUPPEN; do
     # Der Graph des Baukastens liegt unter dem echten HOME (der Wirt läuft mit HOME=$WH): Pfad als Variable mitgeben, immer,
     # auch wenn die Datei noch fehlt; die Umgebung einer transienten Unit steht beim Anlegen fest, ein Neustart liest sie neu
     GRAPH_ENV=()
+    # a plugin host runs with the real HOME (the plugin's own config, presets, licences) and the user's X session (D16); the unit's
+    # environment is fixed at creation: DISPLAY and XAUTHORITY from here or the user manager
+    HOME_ENV=(--setenv=HOME="$WH"); PLUG_ENV=()
+    if [ "$ART" = plugin ]; then
+      HOME_ENV=(--setenv=HOME="$HOME")
+      for v in DISPLAY XAUTHORITY; do
+        w=${!v:-}
+        [ -n "$w" ] || w=$(systemctl --user show-environment 2>/dev/null | sed -n "s/^$v=//p" | head -1)
+        [ -n "$w" ] && PLUG_ENV+=("--setenv=$v=$w")
+      done
+    fi
     [ "$ART" = vst3:baukasten ] && GRAPH_ENV=(--setenv=CYPHERDJ_BAUKASTEN_GRAPH="$HOME/.config/cypherdj$SFX/baukasten-$G.json")
     systemd-run --user --quiet --collect --unit="$U" -p Restart=always -p RestartSec=2 -p RestartPreventExitStatus=2 \
-      -p PartOf=cypherdj.target --setenv=HOME="$WH" "${GRAPH_ENV[@]}" \
+      -p PartOf=cypherdj.target "${HOME_ENV[@]}" "${GRAPH_ENV[@]}" "${PLUG_ENV[@]}" \
       --setenv=PIPEWIRE_PROPS="{ node.async = true node.group = cypherdj$SFX node.lock-quantum = true }" \
-      /usr/bin/pw-jack -p 256 /usr/bin/python3 "$DJK/hosts/carla/host.py" --name "$C" "${INSTR_ARGS[@]}" --status "$ST" \
+      /usr/bin/pw-jack -p 256 /usr/bin/python3 "$DJK/hosts/carla/instrument_host.py" --name "$C" "${INSTR_ARGS[@]}" --status "$ST" \
       --sock "/dev/shm/cypherdj$SFX/wirt-$G.sock" \
       || fehler "wirt $G: systemd-run failed" "$U"
-    for _ in $(seq 60); do grep -q '"bereit": true' "$ST" 2>/dev/null && break; sleep 0.5; done
+    for _ in $(seq 60); do
+      grep -q '"bereit": true' "$ST" 2>/dev/null && break
+      # a plugin host that ends by itself (exit 2: kein_instrument, nicht_ladbar) has written its reason to the status file
+      [ "$ART" = plugin ] && [ -s "$ST" ] && ! aktiv "$U" && break
+      sleep 0.5
+    done
+    if [ "$ART" = plugin ] && ! grep -q '"bereit": true' "$ST" 2>/dev/null && [ -s "$ST" ] && ! aktiv "$U"; then
+      mapfile -t R < <(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); f=d.get("fehler") or []; print(1 if any(x in ("nicht_ladbar","kein_instrument") for x in f) else 0); print((f[-1] if f else "unknown") + ": " + str(d.get("grund") or ""))' "$ST" 2>/dev/null)
+      systemctl --user reset-failed "$U.service" 2>/dev/null; rm -f "$ST" "/dev/shm/cypherdj$SFX/wirt-$G.sock"
+      if [ "${R[0]:-0}" = 1 ]; then echo "djk-instrumente: wirt $G: plugin rejected: ${R[1]:-unknown}" >&2; exit 2; fi
+      echo "djk-instrumente: wirt $G exited before ready: ${R[1]:-unknown}" >&2; exit 5
+    fi
     grep -q '"bereit": true' "$ST" 2>/dev/null || fehler "wirt $G not ready ($ST)" "$U"
-    echo "  wirt $G    started ($ART)"
+    echo "  wirt $G    started ($ART${PS:+ $PS})"
   fi
   # Kanten: verbinden (eine schon bestehende meldet pw-link als Fehler, deshalb vorher prüfen) und festhalten
   for k in "$KERN_CLIENT:$MIDI	$C:$W_IN" "$C:$W_OUT1	$KERN_CLIENT:${RUECK}_L" "$C:$W_OUT2	$KERN_CLIENT:${RUECK}_R"; do
@@ -184,7 +271,9 @@ if [ "$ARR1$ARR2" != 00 ]; then
     if [[ " $ARR_KERN_FEHLT " == *" $g "* ]]; then
       echo "production slot $n: wirt ready, edges recorded in $KANTEN_DATEI; the running kern is older than D1 K2b (no arr ports): restart the studio (djk-stop, djk-start) and the kern links them"
     else
-      echo "production slot $n live: $KERN_CLIENT:arr_midi_$n -> Surge -> arr_rueck_${n}_L/R (edges in $KANTEN_DATEI)"
+      eval "SPEC=\$ARRSPEC_$n"; WAS=Surge; case "$SPEC" in plugin:*) WAS="plugin ${SPEC#plugin:}";; esac
+      [ "$SPEC" = "" ] && [ "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("art",""))' "/dev/shm/cypherdj$SFX/wirt-$g.json" 2>/dev/null)" = plugin ] && WAS=plugin
+      echo "production slot $n live: $KERN_CLIENT:arr_midi_$n -> $WAS -> arr_rueck_${n}_L/R (edges in $KANTEN_DATEI)"
     fi
   done
   exit 0

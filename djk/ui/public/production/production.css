@@ -134,7 +134,14 @@ body.produktion .preset-kopf select { max-width: 14ch; }
 .p-detail button, .p-detail input, .p-detail select { font-size: 11px; font-weight: 700; padding: 2px 6px; border-radius: 5px;
   background: var(--panel2); color: var(--text); border: 1px solid var(--line); }
 .p-detail button:disabled { opacity: .4; cursor: default; }
-.p-detail-leer[hidden], .p-clip-audio[hidden], .p-clip-midi[hidden], .p-irack[hidden] { display: none; }
+.p-detail-leer[hidden], .p-clip-audio[hidden], .p-clip-midi[hidden], .p-irack[hidden], .p-clip-muster[hidden] { display: none; }
+/* strudel-clip: PATTERN field under the piano roll */
+.p-clip-muster { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: flex-start; font-size: 11px; color: var(--dim); }
+.p-muster-code { flex: 1 1 28em; display: flex; gap: 6px; align-items: flex-start; }
+.p-muster-code textarea { flex: 1; min-height: 2.6em; resize: vertical; font: 11px/1.35 ui-monospace, monospace; padding: 3px 6px; border-radius: 5px; background: var(--panel2); color: var(--text); border: 1px solid var(--line); user-select: text; }
+.p-muster-rechts { display: flex; gap: 8px; align-items: center; }
+.p-muster-rechts input { width: 6ch; }
+.p-muster-info { flex-basis: 100%; }
 .p-clip-audio { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; font-size: 11px; color: var(--dim); }
 .p-clip-audio input:not([type="range"]) { width: 8ch; font-variant-numeric: tabular-nums; user-select: text; }
 /* Paket 1.13 Warp: Zeile im Detailbereich eines Audio-Clips */
@@ -403,3 +410,44 @@ body.produktion .preset-kopf select { max-width: 14ch; }
 .p-patchwahl-knoepfe button:hover:not(:disabled), .p-patchwahl-knoepfe button:focus-visible { background: #e0a83b; color: #0e0f12; outline: 0; }
 .p-patchwahl-knoepfe button:disabled { opacity: .35; cursor: default; }
 .p-patchwahl-hinweis { margin-top: 6px; min-height: 1.2em; color: var(--dim, #8a8f98); font-size: 12px; }
+
+/* plan 1.11 task 11: the PLUGINS group of the device browser and the plugin stage (status dot, latency, window button, parameter list) */
+.plugin-gruppe { margin-top: 6px; }
+.plugin-kopf { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px; }
+.plugin-suche { flex: 1 1 90px; min-width: 0; font-size: 11px; }
+.plugin-format { flex: 0 0 auto; min-width: 0; font-size: 11px; }
+.plugin-rescan { font-size: 10px; padding: 2px 6px; border-radius: 6px; }
+.plugin-stand { min-height: 0; font-size: 10px; color: var(--dim); }
+.plugin-stand:empty { display: none; }
+.plugin-zeile { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; }
+.plugin-zeile .geraete-name { min-width: 0; overflow-wrap: anywhere; }
+.plugin-zeile.aus { cursor: not-allowed; }
+.plugin-zeile.instrument { cursor: default; opacity: .7; }
+.plugin-grund { flex-basis: 100%; font-size: 10px; color: var(--warn); }
+.geraete-zeile.geraete-leer { color: var(--dim); font-size: 11px; cursor: default; }
+.p-host-punkt { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--dim); display: inline-block; }
+.p-host-punkt.bereit { background: var(--gut); }
+.p-host-punkt.fehlt, .p-host-punkt.ausfall { background: var(--kill); }
+.p-host-latenz { font-size: 10px; color: var(--dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.p-stufe[data-art="host"] .p-ins-name { max-width: 14ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.p-host-fenster.an { background: var(--a); color: #0e0f12; border-color: var(--a); }
+.p-ins-popover.p-ins-host { display: block; }
+.p-hp-filter { width: 100%; max-width: 360px; font-size: 11px; }
+.p-hp-zahl { margin-left: 8px; font-size: 10px; color: var(--dim); }
+.p-hp-liste { max-height: 260px; overflow: auto; margin-top: 4px; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 2px 14px; }
+.p-hp-zeile { display: grid; grid-template-columns: minmax(0, 110px) minmax(0, 1fr) 9ch; gap: 6px; align-items: center; color: var(--dim); font-size: 11px; letter-spacing: 0; font-weight: 400; }
+.p-hp-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.p-hp-regler { min-width: 0; width: 100%; }
+.p-hp-wert { color: var(--text); text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.p-ausgabe-balken { width: 90px; height: 6px; accent-color: var(--kill); }
+
+/* MIDI import preview (midi_import.js) */
+.p-midi { position: absolute; right: 10px; top: 44px; z-index: 21; width: min(560px, calc(100vw - 20px)); max-height: 60vh; overflow: auto; padding: 8px 10px;
+  background: var(--panel, #1b1b1b); border: 1px solid var(--line); border-radius: 4px; font-size: 12px; }
+.p-midi[hidden] { display: none; }
+.p-midi-kopf { margin-bottom: 6px; }
+.p-midi-spuren, .p-midi-hinweise { margin: 0 0 6px; padding: 0; list-style: none; }
+.p-midi-spuren { max-height: 30vh; overflow: auto; }
+.p-midi-spuren label { display: flex; gap: 6px; align-items: center; white-space: nowrap; }
+.p-midi-hinweise li { color: var(--dim); padding-left: 10px; text-indent: -10px; }
+.p-midi-hinweise li::before { content: "· "; }

@@ -131,11 +131,13 @@ const aufn = (r) => r.log.filter((m) => m.adresse === '/e/aufnahme').map((m) => 
 const nichts = (bis) => erwarte(bis, ['/nie']);   // läuft die Uhr bis `bis`; der Fehlschlag dieses Schritts ist erwartet und wird ausgefiltert
 const gruenOhneNie = (r) => assert.deepEqual(r.fehler.filter((f) => !f.includes('"/nie"')), [], r.fehler.join('\n'));
 
-test('rec: Messwerte: start_sample = Sample der Quittung 2, frames = Dateilänge = Ende − Einsatz, Muster am Kern-Sample, Begleitdatei, /zustand/rec 3 dann 0', () => {
+for (const quant of [0, 1]) test(`rec: Messwerte (Quant ${quant}): start_sample = Sample der Quittung 2, frames = Dateilänge = Ende − Einsatz, Muster am Kern-Sample, Begleitdatei, /zustand/rec 3 dann 0`, () => {
   const ordner = fs.mkdtempSync(path.join(os.tmpdir(), 'attrappe-rec8-'));
   const cfg = { arbeitsbestand: arbeitsbestand(), arr_ordner: ordner };
+  // Since the host lead is 2n (2026-11-10, was 2n + 25) a start at quant 0 lands on a block boundary; quant 1 (next beat) puts the Einsatz inside a block.
+  // The take must begin at the Einsatz sample in both cases: on the boundary and inside the block (the case the old +25 phase used to cover).
   const r = fahre([
-    sende(0, laden(1, 1)), sende(300, spur(2, 3, 1, 11)), sende(2100, rstart(3, 7)), sende(3100, astart(4)),
+    sende(0, laden(1, 1)), sende(300, spur(2, 3, 1, 11)), sende(2100, rstart(3, 7)), sende(3100, ['/k/arr/start', 'hsdi', 4, 'andreas', 0, quant]),
     sende(100000, astopp(5)), nichts(130000),
   ], { cfg });
   gruenOhneNie(r);
@@ -143,7 +145,8 @@ test('rec: Messwerte: start_sample = Sample der Quittung 2, frames = Dateilänge
   assert.ok(s2 > 3100 && s2 < 100000, `Einsatz-Sample ${s2}`);
   const sArr = N(quitt(r, 4, 2).werte[3]);
   assert.equal(s2, sArr, 'der Take beginnt am Einsatz-Sample des Arrangements (Quittung 2 von /k/arr/start), nicht am Blockanfang');
-  assert.notEqual(s2 % 256, 0, 'Vorbedingung: der Einsatz liegt nicht auf einer Blockgrenze');
+  if (quant === 1) assert.notEqual(s2 % 256, 0, 'Vorbedingung: der Einsatz liegt nicht auf einer Blockgrenze');
+  else assert.equal(s2 % 256, 0, 'quant 0: the Einsatz sits on a block boundary (host lead 2n, start rule 3n)');
   const e = aufn(r);
   assert.equal(e.length, 1);
   const [sp, kennung, st, frames, start] = e[0];

@@ -1,4 +1,4 @@
-// 1.10 slice 7 (T5, /k/arr/abgriff): the tap in the kern, the sibling of test_kern_arr_freeze. Receipt 1 at acceptance, 2 at the onset sample (now + 2n + 25 + one cycle),
+// 1.10 slice 7 (T5, /k/arr/abgriff): the tap in the kern, the sibling of test_kern_arr_freeze. Receipt 1 at acceptance, 2 at the onset sample (now + 2n + one cycle),
 // 3 at the end of the window (no tail), /zustand/arr status 3; the job comes back exactly once as event ARR_ABGRIFF (0 done, 1 aborted, ARR_ABGRIFF_ABGELEHNT).
 // Cases: 1 done (receipts, data in front of the fader for a track pre, post after it, one return), 2 abort by /k/arr/stopp (7 abbruch at the stop sample),
 // 3 AI stop (the running tap of cypher aborts with ki_stopp, a new one of cypher is refused ki_gestoppt), 4 nicht_geladen, spur_bereich and ueberlappung with a freeze
@@ -63,7 +63,7 @@ int main() {
     auto f = auftrag(0, 1, 0, 0.0, 4.0);
     const int64_t id = abgriff(x, f.get());
     x.lauf(10 * N + 4 * 22500 + 8 * N);
-    const int64_t einsatz = 10 * N + 2 * N + 25 + N;
+    const int64_t einsatz = 10 * N + 2 * N + N;
     PRUEF(x.quittung(id, 1) && x.quittung(id, 1)->sample == 10 * N);
     PRUEF(x.quittung(id, 2) && x.quittung(id, 2)->sample == einsatz);
     PRUEF(x.quittung(id, 3) && x.quittung(id, 3)->sample == einsatz + 4 * 22500);   // no tail

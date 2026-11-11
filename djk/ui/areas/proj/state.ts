@@ -1,6 +1,8 @@
 // Was der Bereich proj vom Kern wissen muss (Spec D1 2.2, 2.7, 2.12), gelesen nur aus Kern-Ereignissen über den Haken ereignis
 // (Spec 2.10): Uhr, Decks, Loop-Boxen, Regler mit Halter, /zustand/arr, Generation. Keine Innereien der Oberflaeche.
 // Was ein Ereignis nie gemeldet hat, ist unbekannt: ein Regler ohne /e/regler seit dem Serverstart gilt als nicht offen (−200).
+import { insHostListe } from '../../plugins/hostverwaltung.ts';
+
 export interface ArrZustand {
   nr: number; status: number; loop_an: number; projekt_beat: number; ursprung_sample: number; start_beat: number; metronom_an: number;
   limiter_db: number;   // 1.10: gain reduction of the set limiter in dB (<= 0); NaN from an older core that does not send the field
@@ -28,13 +30,14 @@ export class KernLage {
         nr: Number(f.nr), status: Number(f.status), loop_an: Number(f.loop_an), projekt_beat: Number(f.projekt_beat),
         ursprung_sample: Number(f.ursprung_sample), start_beat: Number(f.start_beat), metronom_an: Number(f.metronom_an), limiter_db: Number(f.limiter_db) };
         break;
+      case '/zustand/ins_host': this.insHost = insHostListe(f); break;   // plan 1.11: per effect host the core's health and last round trip
       case '/k/willkommen': this.generation = Number(f.generation); break;
       case '/e/neustart': {
         const alt = this.generation, g = Number(f.generation);
         this.generation = g;
         // Spec 6.30: ein neuer Kern kennt nichts von dem, was der alte gemeldet hat (Decks, Boxen, Regler, Arrangement); bis er es
         // neu meldet, ist es unbekannt. Die Uhr bleibt (sie kommt ohnehin laufend nach).
-        if (g !== alt) { this.decks.clear(); this.boxen.clear(); this.regler.clear(); this.arr = null; }
+        if (g !== alt) { this.decks.clear(); this.boxen.clear(); this.regler.clear(); this.arr = null; this.insHost = null; }
         return { neustart: g !== alt };
       }
       default: break;
@@ -42,6 +45,7 @@ export class KernLage {
     return { neustart: false };
   }
 
+  insHost: ReturnType<typeof insHostListe> | null = null;
   reglerWert(pfad: string): number | null { return this.regler.get(pfad) ?? null; }
   deckLaeuft(): boolean { for (const s of this.decks.values()) if (s >= 2) return true; return false; }
   // Spec 2.2: quant 2, sobald ein Deck, eine Loop-Box oder ein Studio-Strom läuft. Den Strom sieht der Server nur am offenen Kanal

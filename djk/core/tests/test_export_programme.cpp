@@ -159,7 +159,7 @@ int main() {
   const std::string wav = ab.pfad + "/export.wav";
   PRUEF(lauf(bin("cypherdj-render") + " --nr 1 --von-beat 0 --bis-beat 8 --bpm 128 --aus " + wav + gemeinsam, z) == 0);
   std::printf("render: %s", z.c_str());
-  PRUEF(feld(z, "frames") == 8 * 22500 && feld(z, "phase") == 25 && feld(z, "quantum") == N && feld(z, "regler") > 0);
+  PRUEF(feld(z, "frames") == 8 * 22500 && feld(z, "phase") == 0 && feld(z, "quantum") == N && feld(z, "regler") > 0);
   PRUEF(text(z, "regler_quelle") == "kern");
   PRUEF(std::filesystem::file_size(wav) == 58 + 8 * 22500 * 8);
   const std::string vergleich = bin("cypherdj-nulltest") + " --live " + live + " --live-s0 " + std::to_string(m.s0) +

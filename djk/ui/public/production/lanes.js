@@ -2,6 +2,7 @@
 // formula as the core arr_auto.h and the server project/lane.ts, bound by core/tests/data/lane_ref.json), the drawing path, hit testing, and the limits
 // of a drag. The gestures live in lanes_operation.js.
 import { posVonDb, dbVonPos } from './fader_curve.js';
+import { ARTEN, parameterNamen, parameterVon, parameterLabel, makroFaehig, gemapptVon } from './inserts.js';
 export const LANE_HOEHE = 48;
 export const WERT_MIN = -200, WERT_MAX = 6;          // project limits of the fader (dB); -200 is mute
 export const ANZEIGE_MIN = -60;                      // the fader row runs from off (bottom edge) to +6 dB on the fader taper (fader_curve.js); -60 dB sits at 5 % of the height
@@ -18,19 +19,60 @@ export const ZIEL_ANZEIGE = {
   'geraet.cutoff': { min: 0, max: 1, anzeigeMin: 0, label: 'Cutoff', nurSprung: false, mittellinie: null },
   'geraet.resonanz': { min: 0, max: 1, anzeigeMin: 0, label: 'Resonance', nurSprung: false, mittellinie: null },
   'geraet.env_mod': { min: 0, max: 1, anzeigeMin: 0, label: 'Env Mod', nurSprung: false, mittellinie: null },
+  // 1.12 slice 7: the eight knobs of a Baukasten (bk) track
+  'geraet.k1': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 1', nurSprung: false, mittellinie: null },
+  'geraet.k2': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 2', nurSprung: false, mittellinie: null },
+  'geraet.k3': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 3', nurSprung: false, mittellinie: null },
+  'geraet.k4': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 4', nurSprung: false, mittellinie: null },
+  'geraet.k5': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 5', nurSprung: false, mittellinie: null },
+  'geraet.k6': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 6', nurSprung: false, mittellinie: null },
+  'geraet.k7': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 7', nurSprung: false, mittellinie: null },
+  'geraet.k8': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 8', nurSprung: false, mittellinie: null },
 };
 export const ZIELE = Object.keys(ZIEL_ANZEIGE);
+// 1.12 slice 6: the targets of a lane on an insert stage (`insert.<stage id>.<param>`) or a rack macro (`rack.m1..m4`) of the strip. Their range comes from the
+// stage's parameter (inserts.js, bound to the contract by tests/production_inserts.test.mjs), so it depends on the project: `setzeKettenZiele(projekt)` (called
+// whenever the page takes a project) fills the table that `bereich` reads; a chain target not in it is unknown and its lane is shown dimmed and locked.
+// Same pattern as the server regex in project/model.ts (KETTEN_ZIEL).
+export const KETTEN_ZIEL = /^(?:insert\.[A-Za-z][A-Za-z0-9_-]{0,31}\.[a-z0-9_]{1,16}(?:\/[a-z0-9_]{1,16})?|rack\.m[1-4])$/;
+export const istKettenZiel = (ziel) => typeof ziel === 'string' && KETTEN_ZIEL.test(ziel);
+const kettenAnzeige = (q, label) => ({ min: q.min, max: q.max, anzeigeMin: q.min, label, nurSprung: false, mittellinie: null, einheit: q.einheit ?? '' });
+// every chain target the project's strips can carry a lane for now (continuous parameters of built-in stages, the four macros of a rack), as a table ziel -> display
+export function kettenZieleVon(strang) {
+  const aus = new Map();
+  (strang?.inserts ?? []).forEach((st, pos) => {
+    if (st.art === 'host') return;
+    for (const name of parameterNamen(st.art)) {
+      const q = parameterVon(st.art, name);
+      if (makroFaehig(q)) aus.set(`insert.${st.id}.${name}`, { ...kettenAnzeige(q, `${ARTEN[st.art].kurz} ${pos + 1} · ${parameterLabel(st.art, name)}`), insert: st.id, param: name });
+    }
+  });
+  if (strang?.rack) for (let m = 1; m <= 4; m++) aus.set(`rack.m${m}`, kettenAnzeige({ min: 0, max: 1, einheit: '' }, `Macro ${m}`));
+  return aus;
+}
+let kettenZiele = new Map();
+export function setzeKettenZiele(projekt) {
+  const neu = new Map();
+  const straenge = [...(projekt?.spuren ?? []), ...(projekt?.gruppen ?? []), ...(projekt?.returns ?? []), ...(projekt?.master ? [projekt.master] : [])];
+  for (const st of straenge) for (const [z, d] of kettenZieleVon(st)) if (!neu.has(z)) neu.set(z, d);
+  kettenZiele = neu;
+}
 // The range of a target. The target is a REQUIRED argument of every geometry function (a forgotten one throws instead of silently applying the dB rule).
 // A target this page does not know (a newer server) gets a plain 0..1 frame and `unbekannt: true`: the lane is shown dimmed and cannot be edited.
 export function bereich(ziel) {
   if (typeof ziel !== 'string') throw new TypeError(`lane target expected, got ${typeof ziel}`);
-  return ZIEL_ANZEIGE[ziel] ?? { min: 0, max: 1, anzeigeMin: 0, label: ziel, nurSprung: false, mittellinie: null, unbekannt: true };
+  return ZIEL_ANZEIGE[ziel] ?? kettenZiele.get(ziel) ?? { min: 0, max: 1, anzeigeMin: 0, label: ziel, nurSprung: false, mittellinie: null, unbekannt: true };
 }
-export const unbekanntesZiel = (lane) => !!lane && !(lane.ziel in ZIEL_ANZEIGE);
+export const unbekanntesZiel = (lane) => !!lane && !(lane.ziel in ZIEL_ANZEIGE) && !kettenZiele.has(lane.ziel);
 // A lane no gesture may change: locked, or of a target this page does not know. The reason is the hint text key of LANEN_TEXT.
 export const laneSchutz = (lane) => (lane?.gesperrt ? 'gesperrt' : unbekanntesZiel(lane) ? 'unbekannt' : null);
-export const zielLabel = (ziel) => ZIEL_ANZEIGE[ziel]?.label ?? String(ziel);
+export const zielLabel = (ziel) => ZIEL_ANZEIGE[ziel]?.label ?? kettenZiele.get(ziel)?.label ?? String(ziel);
 export const istGeraetZiel = (ziel) => typeof ziel === 'string' && ziel.startsWith('geraet.');
+// does the device of this track own the device target? (the rule of passtGeraetZiel in project/model.ts: RB-338 four parameters, bk the knobs k1..k8)
+export const passtGeraetZiel = (ziel, spur) => {
+  const g = spur?.art === 'instrument' && spur.geraet?.art === 'intern' ? spur.geraet.name : null;
+  return g === 'rb338' ? /^geraet\.(lautstaerke|cutoff|resonanz|env_mod)$/.test(ziel) : g === 'bk' ? /^geraet\.k[1-8]$/.test(ziel) : false;
+};
 export const MAX_BEAT = 100_000;                     // = project/model.ts MAX_BEAT
 export const MAX_PUNKTE = 8192;                      // per lane
 export const PUNKT_RADIUS = 5;                       // hit radius of a point in px
@@ -170,8 +212,12 @@ export const hatLane = (spur) => faderLane(spur) !== null;
 // The lane the open row shows: the chosen target if the track has it, else the volume lane (as in slice 1), else the first lane, else null.
 // wahl: the target the user picked (page state, not in the project).
 export const gezeigteLane = (spur, wahl) => laneFuer(spur, wahl) ?? faderLane(spur) ?? (spur?.automation ?? [])[0] ?? null;
-// The targets a track can still get a lane for, in menu order: no target twice, `geraet.*` only on a track with the internal RB-338 device (art intern, name rb338; not bk)
-export const freieZiele = (spur) => ZIELE.filter((z) => !laneFuer(spur, z) && (!istGeraetZiel(z) || spur?.geraet?.art === 'intern' && spur.geraet.name === 'rb338'));
+// The targets a track can still get a lane for, in menu order: no target twice, `geraet.*` only on a track whose device owns the parameter (RB-338: four, bk: knobs 1 to 8)
+// 1.12 slice 6: then the chain targets of the track's own stages and rack that have no lane and are not driven by a macro (one writer per parameter)
+export const freieZiele = (spur) => [
+  ...ZIELE.filter((z) => !laneFuer(spur, z) && (!istGeraetZiel(z) || passtGeraetZiel(z, spur))),
+  ...[...kettenZieleVon(spur)].filter(([z, d]) => !laneFuer(spur, z) && (d.insert === undefined || gemapptVon(spur, d.insert, d.param) === null)).map(([z]) => z),
+];
 // the lane with this id in the project, with its track, or null
 export function laneMitId(projekt, id) {
   for (const spur of projekt?.spuren ?? []) { const lane = (spur.automation ?? []).find((l) => l.id === id); if (lane) return { spur, lane }; }

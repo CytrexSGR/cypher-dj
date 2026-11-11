@@ -66,7 +66,7 @@ if (a['spur-regler'] !== undefined) {
   if (regler === null || typeof regler !== 'object' || Array.isArray(regler)) ende(2, `Spur-Regler: ${a['spur-regler']}: kein JSON-Objekt Pfad -> Wert`);
   for (const [p, v] of Object.entries(regler)) {
     // 1.10 slices 3 and 4 (render.cpp mixer_pfad): sends, returns, insert rows and rack rows are mixer controls too; the double checks the name and that the value is a number
-    if (/^(spur|grp)\/\d+\/send\/\d+$/.test(p) || /^ret\/\d+\//.test(p) || /^ins\/(komp|eq|saett)\/\d+\//.test(p) || /^rack\/\d+\//.test(p)) {
+    if (/^(spur|grp)\/\d+\/send\/\d+$/.test(p) || /^ret\/\d+\//.test(p) || /^ins\/(komp|eq|saett|lim|host)\/\d+\//.test(p) || /^rack\/\d+\//.test(p)) {
       if (typeof v !== 'number' || !Number.isFinite(v)) ende(2, `Spur-Regler: ${p} ist keine Zahl`);
       continue;
     }

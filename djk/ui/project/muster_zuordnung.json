@@ -1,0 +1,10 @@
+{
+  "schema": 1,
+  "kommentar": "Strudel control -> clip envelope target of a MIDI clip (strudel-clip). One row per Strudel control, named by the MAIN name Strudel stores (lpf and ctf arrive as cutoff, lpq as resonance). ziel: an envelope target of envelope.ts (HK_ZIELE). umrechnung turns the Strudel value into the unit of the target: rb_norm {parameter} = RB-338 display value to 0..1 (rb_mapping.ts), linear {von, nach} = linear map with clamping, gain_db {min_db} = 20 log10 of a gain factor. basis: 'spur' means the envelope is relative to the track, so the track's current value of basis_ziel is subtracted (the sound then equals the Strudel value while the track keeps that value); absent = the converted value is already relative (a gain curve in dB). nur_stetig: the row applies only to a control driven by a continuous signal; a discrete value of that control is read per note (gain becomes the velocity). Add a row to map a new control; a control without a row is reported as ohne_ziel.",
+  "felder": {
+    "cutoff": { "ziel": "geraet.cutoff", "umrechnung": { "art": "rb_norm", "parameter": "cutoff" }, "basis": "spur", "basis_ziel": "geraet.cutoff" },
+    "resonance": { "ziel": "geraet.resonanz", "umrechnung": { "art": "linear", "von": [0, 40], "nach": [0, 1] }, "basis": "spur", "basis_ziel": "geraet.resonanz" },
+    "pan": { "ziel": "spur_pan", "umrechnung": { "art": "linear", "von": [0, 1], "nach": [-1, 1] }, "basis": "spur", "basis_ziel": "pan" },
+    "gain": { "ziel": "spur_fader", "nur_stetig": true, "umrechnung": { "art": "gain_db", "min_db": -60 } }
+  }
+}

@@ -1,4 +1,4 @@
-// D1 K1 Slice 4: Transport des Moduls Arrangement (Spec D1 2.2). Start-Regel (jetzt + Vorhalt 2n + 25 + 1 Zyklus),
+// D1 K1 Slice 4: Transport des Moduls Arrangement (Spec D1 2.2). Start-Regel (jetzt + Vorhalt + 1 Zyklus; der Vorhalt ist hier ein explizites Argument von start(), 537 wie früher der Kern-Wert 2n + 25, der Kern rechnet seit 2026-11-10 2n),
 // Quantisierung (sofort, Beat, Takt mit (Kern-Beat − start_beat) ≡ 0 mod 4), Stopp mit Quant, Loop-Klammer mit Wrap am
 // Sample der Naht, Neustart eines laufenden Transports, KI-Stopp. 128 BPM: 22 500 Samples je Beat, Blöcke zu 256.
 // Mutationen: CYPHERDJ_MUTATION_ARR_START_OHNE_VORHALT (Fall 1 rot), CYPHERDJ_MUTATION_ARR_NAHT_BLOCKANFANG (Fall 5 rot),
@@ -18,7 +18,7 @@ using namespace arrtest;
 using cdj::ArrArt;
 using cdj::ArrStatus;
 
-static constexpr int64_t V = 2 * 256 + 25;   // Vorhalt bei Quantum 256: 537
+static constexpr int64_t V = 2 * 256 + 25;   // explicit lead argument of start(), 537; independent of the kernel constant (erz_midi_vorhalt = 2n since 2026-11-10)
 
 int main() {
   auto a = Audio::impuls(1000);
@@ -256,7 +256,7 @@ int main() {
           t.k = cdj::Karte(tk.bpm, 0);
           t.laden(Bau().spur(1, ArrArt::audio).clip(1, "lang", 0.0, 64.0, &g->a).fertig());
           t.arr.loop(true, 0.0, 4.0, t.s, t.k);
-          PRUEF(t.arr.start(0.0, 2, false, 0, 2 * tk.n + 25, tk.n, t.k));
+          PRUEF(t.arr.start(0.0, 2, false, 0, 2 * tk.n + 25, tk.n, t.k));   // explicit lead argument, as V above
           t.lauf(4 * tk.n);
           const int64_t urs = t.arr.zustand(t.k, 0).ursprung_sample;
           const int64_t spb = std::llround(48000.0 * 60.0 / tk.bpm);

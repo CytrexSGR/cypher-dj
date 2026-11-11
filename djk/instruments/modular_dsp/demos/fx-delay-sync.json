@@ -1,0 +1,36 @@
+{
+  "format": "baukasten/2",
+  "name": "fx-delay-sync",
+  "stimmen": 1,
+  "regler_namen": {"1": "Feedback", "2": "Level"},
+  "knoten": [
+    {"id": "ein", "art": "eingang"},
+    {"id": "k_fb", "art": "regler", "nr": 1, "min": 0, "max": 0.9},
+    {"id": "k_lvl", "art": "regler", "nr": 2, "min": 0, "max": 2},
+    {"id": "echo", "art": "delay", "takt": 0.75, "fb": 0.45, "mix": 1, "max": 2000, "pingpong": 1, "daempf": 5000},
+    {"id": "minus_l", "art": "mul", "b": -1},
+    {"id": "minus_r", "art": "mul", "b": -1},
+    {"id": "nass_l", "art": "add"},
+    {"id": "nass_r", "art": "add"},
+    {"id": "pegel_l", "art": "mul"},
+    {"id": "pegel_r", "art": "mul"},
+    {"id": "aus", "art": "ausgang"}
+  ],
+  "kanten": [
+    {"von": "k_fb.aus", "nach": "echo.fb"},
+    {"von": "ein.l", "nach": "echo.l"},
+    {"von": "ein.r", "nach": "echo.r"},
+    {"von": "ein.l", "nach": "minus_l.a"},
+    {"von": "ein.r", "nach": "minus_r.a"},
+    {"von": "echo.l", "nach": "nass_l.a"},
+    {"von": "minus_l.aus", "nach": "nass_l.b"},
+    {"von": "echo.r", "nach": "nass_r.a"},
+    {"von": "minus_r.aus", "nach": "nass_r.b"},
+    {"von": "nass_l.aus", "nach": "pegel_l.a"},
+    {"von": "nass_r.aus", "nach": "pegel_r.a"},
+    {"von": "k_lvl.aus", "nach": "pegel_l.b"},
+    {"von": "k_lvl.aus", "nach": "pegel_r.b"},
+    {"von": "pegel_l.aus", "nach": "aus.l"},
+    {"von": "pegel_r.aus", "nach": "aus.r"}
+  ]
+}

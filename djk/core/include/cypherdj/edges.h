@@ -29,10 +29,12 @@ std::vector<Kante> fehlende_kanten(const std::vector<Kante>& soll, const KantenI
 // Slice 2 (F03): Kanten-Datei von djk-start, je Zeile QUELLE<TAB>ZIEL. Zeilen ohne TAB, leere Zeilen und Zeilen mit leerer
 // Hälfte werden verworfen.
 std::vector<Kante> lies_kanten(const std::string& text);
-// B9: aus der Datei nur `<kern>midi_aus_N -> *` und `* -> <kern>rueck_erz_N_{L,R}` (kern_praefix = Client-Name plus ":").
-// Audio-Ausgänge des Kerns sind über die Datei nie verbindbar (Riegel), fremde Kanten ohne Kern-Port fallen weg.
-// D1 K1 (Spec 2.3): Kanten auf <kern>rueck_erz_4_* fallen weg (erz/4 gehört der Produktion); ihre Zahl in *reserviert.
-// D1 K2b (Spec 2.4): dazu die Wirt-Slots des Arrangements, `<kern>arr_midi_S -> *` und `* -> <kern>arr_rueck_S_{L,R}`.
+// B9: from the file only `<kern>midi_aus_N -> *` and `* -> <kern>rueck_erz_N_{L,R}` (kern_praefix = client name plus ":").
+// The core's master and cue outputs can never be wired by the file (bolt); edges whose other end is not a core port are dropped.
+// D1 K1 (Spec 2.3): edges onto `<kern>rueck_erz_4_*` are dropped (erz/4 belongs to the production); their count goes to *reserviert.
+// D1 K2b (Spec 2.4): plus the host slots of the arrangement, `<kern>arr_midi_S -> *` and `* -> <kern>arr_rueck_S_{L,R}`.
+// Plan 1.11 T3/T4: plus the effect hosts, `<kern>arr_ins_H_{L,R} -> *` (audio send, an output) and `* -> <kern>arr_insret_H_{L,R}`, H = 1..ARR_INS_HOST (4).
+// These two families only connect to foreign clients: a port of any core instance (cypherdj-kern, cypherdj-kern-<i>) as the far end is dropped.
 std::vector<Kante> filtere_kanten(const std::vector<Kante>& kanten, const std::string& kern_praefix,
                                   size_t* reserviert = nullptr);
 
@@ -65,6 +67,12 @@ class VerlustBuch {
   std::set<std::string> offen_;
   std::map<std::string, int64_t> fehl_;
 };
+
+// Plan 1.11 T5 (D7): the edge check of the effect hosts, the core's own source of host health. Bit h - 1 of the result is set when host h (1..4) is wired completely and the wiring holds right now:
+// the edge list has at least one edge on each of the four ports arr_ins_<h>_L/R (send) and arr_insret_<h>_L/R (return) of this instance (kern_praefix = client name plus ":"), and every edge that
+// touches one of them has both its ports in JACK and is connected. A host client that vanished, a port that is gone, an edge that cannot be held and a half wired host all clear the bit; a host
+// without edges has none. Pure logic (ist answers the questions), run by main.cpp every 500 ms after the connect pass, so a vanished host is seen within one supervision period.
+uint32_t host_kanten_gesund(const std::vector<Kante>& soll, const std::string& kern_praefix, const KantenIst& ist);
 
 // Übergänge der Zielports (Fixup m2): je Ziel einmal "weg" beim Übergang da -> fehlt, einmal "wieder" beim Rückweg.
 // Ein Ziel gilt anfangs als da (der Start hat es verbunden); wer von Anfang an fehlt, meldet "weg" beim ersten Blick.

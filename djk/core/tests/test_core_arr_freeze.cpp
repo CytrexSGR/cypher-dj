@@ -1,5 +1,5 @@
 // Paket K3 (Spec D1 2.5, 2.12, 3.1 /k/arr/freeze): Freeze im Kern. Quittung 1 bei Annahme, 2 am Einsatz-Sample (jetzt +
-// Vorhalt 2n + 25 + ein Zyklus), 3 am Ende des Nachlaufs, /zustand/arr Status 3; der Auftrag kommt genau einmal als
+// Vorhalt 2n + ein Zyklus), 3 am Ende des Nachlaufs, /zustand/arr Status 3; der Auftrag kommt genau einmal als
 // Ereignis ARR_FREEZE zurück (0 fertig, 1 abgebrochen, ARR_FREEZE_ABGELEHNT). Abbruch durch Stopp (7 abbruch) und
 // KI-Stopp (7 ki_stopp), Ablehnung nicht_geladen und ki_gestoppt (Quelle cypher), Rückgabe bei vollem Ereignisring.
 // Mutation: ARR_FREEZE_VERLIERBAR (Fall 5 rot: die Rückgabe geht bei vollem Ring verloren). Fall 6: Reihenfolge hinter
@@ -63,7 +63,7 @@ int main() {
     auto f = auftrag(1, 0.0, 4.0);
     const int64_t id = freeze(x, f.get());
     x.lauf(10 * N + 6 * 22500 + 8 * N);
-    const int64_t einsatz = 10 * N + 2 * N + 25 + N;
+    const int64_t einsatz = 10 * N + 2 * N + N;
     PRUEF(x.quittung(id, 1) && x.quittung(id, 1)->sample == 10 * N);
     PRUEF(x.quittung(id, 2) && x.quittung(id, 2)->sample == einsatz);
     PRUEF(x.quittung(id, 3) && x.quittung(id, 3)->sample == einsatz + 6 * 22500);
@@ -193,7 +193,7 @@ int main() {
     PRUEF(bis_quittung(ic, 3) && !x.quittung(ic, 6) && !x.quittung(ic, 7));
     x.lauf(x.kern->sample() + 2 * N);
     PRUEF(rueck(x, fc.get()) == std::vector<int32_t>{0} && fc->status == 0);
-    // (d) wartend: die Rampe kommt im Zyklus nach der Annahme, vor dem Einsatz (jetzt + 2n + 25 + n)
+    // (d) wartend: die Rampe kommt im Zyklus nach der Annahme, vor dem Einsatz (jetzt + 2n + n)
     auto fd = auftrag(1, 0.0, 4.0);
     const int64_t id_ = freeze(x, fd.get());
     x.lauf(x.kern->sample() + N);

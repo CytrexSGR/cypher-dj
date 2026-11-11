@@ -40,6 +40,7 @@ export async function starteProjAttrappe({ oben, port = 0, dekodierMs = 300, fre
     lauf: null, kennungen: new Map(), exporte: new Set(),   // D1 V2 Slice 3: Freeze/Export nach dem S3-Plan
     ausgabe: { freezeMs, renderMs, spitze_db: -6.02, lufs_i: -14.2, lra: 5.1, true_peak_dbtp: -1.0, regler_quelle: 'kern', ueber_decke: false, limiter_db_max: 0, loudness_fehler: null, fehler: null },
     gespeichertePresets: [],   // 1.16 rest U7: what POST /presets/von_ziel would have saved (see presetPlan)
+    pl: { plugins: [], hosts: [], parameter: {}, fenster: {}, rescans: 0 },   // plan 1.11 task 11: the plugin routes (POST /attrappe/plugins)
     katalog: new Map(),   // Paket 1.13: sha → {typ, bpm, takte, dauer_s, instrument, kategorie} (Slice 2 D10: Drum-Loops RE-PITCH, sonst COMPLEX), die Tempo-Angaben, aus denen der Server warp 'auto' auflöst (POST /attrappe/katalog)
     dekodierUhren: new Set() };   // V2 Fix-Runde 2 H9: laufende Dekodier-Timer; stoppe() beendet sie (dekodierMs 60000 hielt den Testprozess ~62 s am Leben)
   // D1 V2 Nachzug (7f, Spec 6.23, 6.31, 6.32): läuft ein Freeze-Durchlauf (z.lauf.durchlauf, ab V2 Slice 3 vom simulierten Freeze gesetzt;
@@ -305,6 +306,25 @@ export async function starteProjAttrappe({ oben, port = 0, dekodierMs = 300, fre
       z.katalog = new Map((Array.isArray(d.eintraege) ? d.eintraege : []).map((e) => [e.sha, { typ: e.typ ?? null, bpm: e.bpm ?? null, takte: e.takte ?? null, dauer_s: e.dauer_s ?? null, instrument: e.instrument ?? null, kategorie: e.kategorie ?? null, karte: e.karte ?? null, traktor: e.traktor ?? null }]));
       return json(a, 200, { ok: true, n: z.katalog.size });
     }
+    // plan 1.11 task 11 (plugin page): the stand-in of the server's plugin routes. POST /attrappe/plugins {plugins, hosts, parameter: {<insert_id>: [...]}, fenster: {<insert_id>: {fenster, grund?}}, rescanMs}
+    // sets what GET /plugins, GET /proj/aktuell `hosts`, GET /proj/insert/<id>/parameter and POST .../fenster answer. Every request lands in GET /attrappe/log.
+    if (q.method === 'POST' && weg === '/attrappe/plugins') { Object.assign(z.pl, d); return json(a, 200, { ok: true }); }
+    if (q.method === 'GET' && weg === '/plugins') {
+      const t = (u.searchParams.get('text') ?? '').toLowerCase(), art = u.searchParams.get('art') ?? '', fm = u.searchParams.get('format') ?? '';
+      return json(a, 200, z.pl.plugins.filter((x) => (!t || x.name.toLowerCase().includes(t)) && (!art || x.art === art) && (!fm || x.format === fm)));
+    }
+    if (q.method === 'POST' && weg === '/plugins/rescan') { z.pl.rescans++; return json(a, 200, { ok: true }); }
+    const pm = /^\/proj\/insert\/([^/]+)\/(parameter|param|fenster)$/.exec(weg);
+    if (pm) {
+      const id = decodeURIComponent(pm[1]);
+      if (pm[2] === 'parameter' && q.method === 'GET') return json(a, 200, z.pl.parameter[id] ?? []);
+      if (pm[2] === 'param' && q.method === 'POST') {
+        const liste = z.pl.parameter[id] ?? [];
+        for (const [k, v] of Object.entries(d.werte ?? {})) { const e = liste.find((x) => String(x.index) === k); if (e) e.wert = v; }
+        return json(a, 200, { ok: true, werte: d.werte ?? {} });
+      }
+      if (pm[2] === 'fenster' && q.method === 'POST') return json(a, 200, z.pl.fenster[id] ?? { fenster: d.an === true });
+    }
     if (q.method === 'POST' && weg === '/attrappe/saat') {
       const slug = slugVon(d.projekt?.name ?? 'saat');
       z.projekte.set(slug, fertigMarken(kopie(d.projekt))); z.slug = slug;
@@ -317,7 +337,7 @@ export async function starteProjAttrappe({ oben, port = 0, dekodierMs = 300, fre
         : z.lauf.art === 'resample' ? { art: 'resample', strang_id: z.lauf.strang_id } : { art: z.lauf.art }) : null;   // 1.10 slice 7: resample names its strip
       if (!z.slug) return json(a, 200, { slug: null, projekt: null, kern: null, ausgabe_lauf });
       const p = aktuell();
-      return json(a, 200, { slug: z.slug, projekt: p, kern: { rev_geladen: p.wiedergabe_rev, status: freezeLaeuft() || z.lauf?.art === 'resample' ? 3 : z.transport ? 2 : 0 }, ausgabe_lauf });
+      return json(a, 200, { hosts: z.pl.hosts, slug: z.slug, projekt: p, kern: { rev_geladen: p.wiedergabe_rev, status: freezeLaeuft() || z.lauf?.art === 'resample' ? 3 : z.transport ? 2 : 0 }, ausgabe_lauf });
     }
     if (q.method === 'GET' && weg === '/proj/routing') {   // 1.10 slice 6: the real function over the stand-in's project, like the page server
       if (!z.slug) return json(a, 200, { slug: null });
@@ -637,7 +657,7 @@ export async function starteProjAttrappe({ oben, port = 0, dekodierMs = 300, fre
     if (q.method === 'POST' && (u.pathname === '/presets/anwenden' || u.pathname === '/presets/von_ziel')) {
       return presetPlan(q, a, u).catch((e) => json(a, e instanceof Fehl ? e.code : 500, { fehler: e instanceof Fehl ? e.fehler : 'intern', text: e.message }));
     }
-    if (!u.pathname.startsWith('/proj/') && !u.pathname.startsWith('/attrappe/')) return durchreichen(q, a, u);
+    if (!u.pathname.startsWith('/proj/') && !u.pathname.startsWith('/attrappe/') && !u.pathname.startsWith('/plugins')) return durchreichen(q, a, u);
     proj(q, a, u).catch((e) => json(a, e instanceof Fehl ? e.code : 500, { fehler: e instanceof Fehl ? e.fehler : 'intern', text: e.message }));
   });
   await new Promise((ok) => srv.listen(port, '127.0.0.1', ok));

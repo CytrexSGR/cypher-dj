@@ -13,6 +13,7 @@ import { bindeHuellkurven } from './envelopes_operation.js';
 import { HkWahl, HK_TEXT } from './envelopes.js';
 import { bindeRackPanel } from './rack_device_operation.js';
 import { RACK_TEXT } from './rack_device.js';
+import { bindeMusterFeld } from './pattern_field.js';
 
 // Gain-Regler: Bereich aus FELDER.gain_db (Spec 6.27, −96..+24 dB), sonst schnitte er Werte ab (V2 Fix F8: vorher −36..+12, +20 dB zeigte 12)
 const GERUEST = `<div class="p-detail-kopf"><span data-d="titel">CLIP</span><span class="p-detail-info" data-d="info"></span>
@@ -46,6 +47,7 @@ const GERUEST = `<div class="p-detail-kopf"><span data-d="titel">CLIP</span><spa
   </div>
 </div>
 <div class="p-clip-midi" data-d="midi" hidden></div>
+<div class="p-clip-muster" data-d="muster" hidden></div>
 <div class="p-clip-hk" data-d="hk" hidden></div>
 <div class="p-irack" data-d="rack" hidden></div>`;
 const LABEL = { name: 'Rename clip', start_beat: 'Move clip', laenge_beats: 'Clip length', gain_db: 'Clip gain', fade_ein_beats: 'Fade in', fade_aus_beats: 'Fade out', offset_s: 'Clip offset', versatz_beats: 'Clip offset' };
@@ -58,6 +60,7 @@ export function bindeDetail(ctx) {
   const felder = [...sek.querySelectorAll('[data-f]')];
   const rolle = bindeRolle(ctx, d('midi'));
   const rackTeil = bindeRackPanel(ctx, d('rack'));
+  const musterTeil = bindeMusterFeld(ctx, d('muster'));   // strudel-clip: PATTERN field of a MIDI clip
   // 1.9 U7: mode `rack`: a click on the device label of a rack track (ctx.rackOeffnen, track_heads.js) replaces the clip detail with the rack panel;
   // selecting a clip goes back (st.rackSpur is the track id while the panel is open)
   st.rackSpur = null;
@@ -159,9 +162,9 @@ export function bindeDetail(ctx) {
     const rs = st.rackSpur ? st.projekt?.spuren.find((x) => x.id === st.rackSpur) : null;
     if (rs?.geraet?.art === 'rack') {   // rack mode
       for (const k of ['loop', 'teilen', 'duplizieren', 'loeschen']) d(k).disabled = true;
-      for (const k of ['leer', 'audio', 'midi', 'reiter', 'hk']) d(k).hidden = true;
+      for (const k of ['leer', 'audio', 'midi', 'reiter', 'hk', 'muster']) d(k).hidden = true;
       d('rack').hidden = false; d('titel').textContent = RACK_TEXT.titel; d('info').textContent = `${rs.name} · ${RACK_TEXT.info}`;
-      rolle.zeige(null); editor.zeige(null); hkTeil.zeige(null); rackTeil.zeige(rs);
+      rolle.zeige(null); editor.zeige(null); hkTeil.zeige(null); musterTeil.zeige(null); rackTeil.zeige(rs);
       return;
     }
     st.rackSpur = null; d('rack').hidden = true; rackTeil.zeige(null);
@@ -173,7 +176,7 @@ export function bindeDetail(ctx) {
     d('audio').hidden = t?.clip.art !== 'audio';
     d('midi').hidden = t?.clip.art !== 'midi';
     d('reiter').hidden = !t; d('hk').hidden = true;
-    if (!t) { d('titel').textContent = 'CLIP'; d('info').textContent = ''; rolle.zeige(null); editor.zeige(null); hkTeil.zeige(null); return; }
+    if (!t) { d('titel').textContent = 'CLIP'; d('info').textContent = ''; rolle.zeige(null); editor.zeige(null); hkTeil.zeige(null); musterTeil.zeige(null); return; }
     const c = t.clip, frozen = t.spur.freeze ? ' · FROZEN: changing notes unfreezes the track' : '';
     d('titel').textContent = c.art === 'audio' ? 'AUDIO CLIP' : 'MIDI CLIP';
     d('info').textContent = `${c.name} · ${t.spur.name} · bar ${positionText(c.start_beat)} · ${zahlText(c.laenge_beats)} beats${c.loop_beats != null ? ` · loop ${zahlText(c.loop_beats)} beats` : ''}${st.auswahl.length > 1 ? ` · ${st.auswahl.length} selected` : ''}${frozen}`;
@@ -181,10 +184,10 @@ export function bindeDetail(ctx) {
     d('reiterclip').textContent = c.art === 'midi' ? HK_TEXT.reiter_noten : HK_TEXT.reiter_clip;
     d('reiterclip').setAttribute('aria-selected', String(!hkAn)); d('reiterhk').setAttribute('aria-selected', String(hkAn));
     d('reiterclip').classList.toggle('an', !hkAn); d('reiterhk').classList.toggle('an', hkAn);
-    if (hkAn) { d('audio').hidden = true; d('midi').hidden = true; d('hk').hidden = false; rolle.zeige(null); editor.zeige(null); hkTeil.zeige(t); return; }
+    if (hkAn) { d('audio').hidden = true; d('midi').hidden = true; d('hk').hidden = false; rolle.zeige(null); editor.zeige(null); hkTeil.zeige(t); musterTeil.zeige(null); return; }
     hkTeil.zeige(null);
-    if (c.art === 'midi') { rolle.zeige(c.id); editor.zeige(null); return; }
-    rolle.zeige(null);
+    if (c.art === 'midi') { rolle.zeige(c.id); editor.zeige(null); musterTeil.zeige(t, erzwungen); return; }
+    rolle.zeige(null); musterTeil.zeige(null);
     for (const f of felder) {
       if (!erzwungen && document.activeElement === f) continue;
       f.value = f.dataset.f === 'name' ? c.name : zahlText(f.dataset.f === 'versatz_beats' ? (c.warp?.versatz_beats ?? 0) : c[f.dataset.f]);

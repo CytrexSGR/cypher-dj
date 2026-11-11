@@ -34,29 +34,53 @@ FALL(zahl_der_regler_und_kanaele) {
   // 1.10 slice 4b T12: plus the eq rows (59 per instance, 1 instance) and the saett rows (4 per instance, 1 instance): 1378 + 63 = 1441.
   // The pool sizes are the measured ones (T11): a change of either is a decision with a new measurement, and this pin goes red first.
   // 2026-11-06: the eq pool has 2 instances (Andreas' decision of 2026-11-05, lane measured quiet): 59 more rows.
-  PRUEFE_GLEICH(tab().anzahl(), 597 + 12 * 8 + 204 + 2 * 8 + WERKZEUG_REGLER + 120 + 2 * 59 + 4 + 48 + 3);   // + the 48 rack rows (slice 4c), + the 3 ins/lim rows (master limiter)
+  PRUEFE_GLEICH(tab().anzahl(), 597 + 12 * 8 + 204 + 2 * 8 + WERKZEUG_REGLER + 120 + 8 * 59 + 4 * 4 + 48 + 2 * 3 + 4 + 8 * 5 + 8 * 9);   // + the 48 rack rows (slice 4c), + the 3 ins/lim rows per limiter, + the 4 ins/host rows (plan 1.11), + the 5 ins/utility rows per instance (arr-fx)
   // 1.10 slice 4c T15: plus the 48 rack macro rows rack/<1..12>/m1..m4: 1500 + 48 = 1548.
   // Master limiter: plus the 3 rows ins/lim/1/{an,decke,abklingen}: 1548 + 3 = 1551.
-  PRUEFE_GLEICH(tab().anzahl(), 913 + 345 + 120 + 122 + 48 + 3);
-  PRUEFE_GLEICH(tab().anzahl(), 1551);
+  // Plan 1.11 T4: plus the 4 rows ins/host/1..4/an: 1551 + 4 = 1555.
+  // arr-fx slice 1: plus the utility kind, 8 instances x 5 rows (an, breite, mono_unter, gain, balance), appended last: 1555 + 40 = 1595.
+  // arr-fx slice 2: the pools grow to 8 EQs (+6 x 59), 4 saturators (+3 x 4) and 2 limiters (+3): 1595 + 354 + 12 + 3 = 1964; rack, lim, host and utility rows move up.
+  // arr-bk slice 3: plus the bk kind, 8 instances x 9 rows (an, k1..k8), appended last: 1964 + 72 = 2036 of the ceiling 4096.
+  PRUEFE_GLEICH(tab().anzahl(), 913 + 345 + 120 + 8 * 59 + 4 * 4 + 48 + 2 * 3 + 4 + 8 * 5 + 8 * 9);
+  PRUEFE_GLEICH(tab().anzahl(), 2036);
   // the contract (INTERFACES 1.5) says indices 1258 to 1377: the table counts the 4 deck/<n>/transport rows, the dump of stellwerk_regler_liste does not (1374 lines)
   PRUEFE_GLEICH(tab().suche("ins/komp/1/an"), 1258);
   PRUEFE_GLEICH(tab().suche("ins/komp/12/sc"), 1377);
-  // slice 4b: the eq block follows the komp block (indices 1378 to 1495, two instances of 59), then the saett block (1496 to 1499)
+  // slice 4b: the eq block follows the komp block (indices 1378 to 1849, eight instances of 59 since arr-fx slice 2), then the saett block (1850 to 1865, four of 4)
   PRUEFE_GLEICH(tab().suche("ins/eq/1/an"), 1378);
   PRUEFE_GLEICH(tab().suche("ins/eq/1/b8/platz"), 1436);
   PRUEFE_GLEICH(tab().suche("ins/eq/2/an"), 1437);
-  PRUEFE_GLEICH(tab().suche("ins/eq/2/b8/platz"), 1495);
-  PRUEFE_GLEICH(tab().suche("ins/saett/1/an"), 1496);
-  PRUEFE_GLEICH(tab().suche("ins/saett/1/mix"), 1499);
-  // slice 4c: the rack block follows the saett block (1500 to 1547)
-  PRUEFE_GLEICH(tab().suche("rack/1/m1"), 1500);
-  PRUEFE_GLEICH(tab().suche("rack/12/m4"), 1547);
-  // master limiter: the lim block is appended after the rack block (1548 to 1550), so every earlier index stays
-  PRUEFE_GLEICH(tab().suche("ins/lim/1/an"), 1548);
-  PRUEFE_GLEICH(tab().suche("ins/lim/1/decke"), 1549);
-  PRUEFE_GLEICH(tab().suche("ins/lim/1/abklingen"), 1550);
-  PRUEFE(tab().suche("ins/lim/2/an") < 0);   // pool 1
+  PRUEFE_GLEICH(tab().suche("ins/eq/8/b8/platz"), 1849);
+  PRUEFE(tab().suche("ins/eq/9/an") < 0);   // pool 8
+  PRUEFE_GLEICH(tab().suche("ins/saett/1/an"), 1850);
+  PRUEFE_GLEICH(tab().suche("ins/saett/4/mix"), 1865);
+  PRUEFE(tab().suche("ins/saett/5/an") < 0);   // pool 4
+  // slice 4c: the rack block follows the saett block (1866 to 1913)
+  PRUEFE_GLEICH(tab().suche("rack/1/m1"), 1866);
+  PRUEFE_GLEICH(tab().suche("rack/12/m4"), 1913);
+  // master limiter: the lim block is appended after the rack block (1914 to 1919, two instances of 3)
+  PRUEFE_GLEICH(tab().suche("ins/lim/1/an"), 1914);
+  PRUEFE_GLEICH(tab().suche("ins/lim/1/decke"), 1915);
+  PRUEFE_GLEICH(tab().suche("ins/lim/1/abklingen"), 1916);
+  PRUEFE_GLEICH(tab().suche("ins/lim/2/abklingen"), 1919);
+  PRUEFE(tab().suche("ins/lim/3/an") < 0);   // pool 2
+  // plan 1.11 T4: the host block is appended after the lim block (1920 to 1923)
+  PRUEFE_GLEICH(tab().suche("ins/host/1/an"), 1920);
+  PRUEFE_GLEICH(tab().suche("ins/host/4/an"), 1923);
+  PRUEFE(tab().suche("ins/host/5/an") < 0);   // pool 4
+  // arr-fx slice 1: the utility block is the last kind of the contract (1924 to 1963, eight instances of 5)
+  PRUEFE_GLEICH(tab().suche("ins/utility/1/an"), 1924);
+  PRUEFE_GLEICH(tab().suche("ins/utility/8/balance"), 1963);
+  PRUEFE(tab().suche("ins/utility/9/an") < 0);   // pool 8
+  // arr-bk slice 3: the bk block follows the utility block (eight instances of 9: an, k1..k8), 1964 to 2035
+  PRUEFE_GLEICH(tab().suche("ins/bk/1/an"), 1964);
+  PRUEFE_GLEICH(tab().suche("ins/bk/1/k1"), 1965);
+  PRUEFE_GLEICH(tab().suche("ins/bk/8/k8"), 2035);
+  PRUEFE(tab().suche("ins/bk/9/an") < 0);   // pool 8
+  PRUEFE(tab().suche("ins/bk/1/k9") < 0);
+  PRUEFE(tab().suche("ins/utility/1/decke") < 0);
+  PRUEFE(tab().suche("ins/host/0/an") < 0);
+  PRUEFE(tab().suche("ins/host/1/decke") < 0);   // one row per instance
   PRUEFE(tab().anzahl() < cypherdj::stellwerk::MAX_REGLER);
   PRUEFE_GLEICH(tab().kanaele(), 20);
   PRUEFE_GLEICH(tab().kanal_suche("deck/1"), 0);
@@ -104,8 +128,8 @@ FALL(spur_fader_bis_plus_6_db) {
 FALL(kapazitaet_hat_luft_fuer_k2) {
   // K2 Task 0.2: Luft für neue Pfade, und ein voller Speicher darf nicht überlaufen
   PRUEFE(cypherdj::stellwerk::MAX_REGLER >= 384);
-  // Package 1.10 slice 4 T0: the capacity of package 1.15 A1a (2048) is the start state of the insert rows
-  PRUEFE(cypherdj::stellwerk::MAX_REGLER == 2048);
+  // Package 1.10 slice 4 T0: the capacity of package 1.15 A1a (2048) was the start state of the insert rows; arr-bk (2026-11-11) raised it to 4096 for the bk pool (the table was at 2036)
+  PRUEFE(cypherdj::stellwerk::MAX_REGLER == 4096);
   // D1 K1 (Spec 2.3) verlangte 512 − 468 >= 44. E1 (2026-10-20): Reserve gegen 1024. 32 Spuren statt 8 brauchen
   // 24 · 4 = 96 Regler mehr (468 → 564, Paket E3), dazu dieselbe Luft von 44. Bei MAX_REGLER 512 sind es nur 44: rot.
   // 1.10 Slice 3: the 96 of E3 are spent and 204 send/return/hall controls took more of the 1024; the reserve is 127 now (S14: 111 with the 16 send-return knobs), so the
@@ -462,7 +486,7 @@ FALL(werkzeug_zeilen_345_und_ihre_zaehlung) {
   PRUEFE_GLEICH(spektrum, 1);
   PRUEFE_GLEICH(gesamt, 345);
   PRUEFE_GLEICH(WERKZEUG_REGLER, 345);
-  PRUEFE_GLEICH(tab().anzahl(), 1258 + 120 + 122 + 48 + 3);   // 1.10 slice 4a/4b/4c + limiter: the 293 insert rows (120 komp, 2 x 59 eq, 4 saett, 48 rack, 3 lim) follow the tool block
+  PRUEFE_GLEICH(tab().anzahl(), 1258 + 120 + 8 * 59 + 4 * 4 + 48 + 2 * 3 + 4 + 8 * 5 + 8 * 9);   // arr-bk: + 8 x 9 bk rows;   // 1.10 slice 4a/4b/4c + limiter + arr-fx: the 706 insert rows (120 komp, 8 x 59 eq, 4 x 4 saett, 48 rack, 2 x 3 lim, 4 host, 8 x 5 utility) follow the tool block
   // and the table holds no other row of this kind: the count by role is 345 as well
   int rollen = 0;
   for (int r = 0; r < tab().anzahl(); r++)

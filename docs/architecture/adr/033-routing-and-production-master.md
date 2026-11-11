@@ -144,7 +144,7 @@ Decisions D1 to D13 of `docs/superpowers/plans/2026-11-09-1.10-routing-rest.md`;
 32. **Loudness per strip keeps its keys (slice 8).** The render has two render-only masks on the arrangement that no live path sets: `--nur-schluessel` (a key source computes but writes zero) and `--trocken-aus` (the wet part of a return). A group entry is the members plus the group; a return entry is the wet part through the master chain alone,
     which is not the exact share of the mix when the master chain is non-linear (documented in the tool text).
 
-Not decided here and left open: the insert and rack automation lanes (`lane_ziel_spaeter`), Kanban `t_dea1bae4`.
+Left open on 2026-11-09 and decided on 2026-11-10 (1.12 slice 6, Kanban `t_dea1bae4`): the insert and rack automation lanes. A lane targets `insert.<stage id>.<param>` or `rack.m1..m4` and is stored on the strip that carries the stage or the rack (new `automation` field on group, return and master); the playback carries it as `chain_auto` per strip (`cypherdj-arr/2`), evaluated once per block, precedence macro, lane, row; one writer per parameter is enforced both ways (`param_gemappt`, `param_hat_lane`, as in spec D13). Slice 7 (same day, on Andreas' order): the eight knobs of a bk track are lane and clip envelope targets `geraet.k1..k8` through the existing device lane path (`ARR_AUTO_GERAET`, param 0..7, the value goes to the bk sink once per block and the graph smooths it over 20 ms), no new playback, no per-sample path; a relative lane (clip envelope) is added to the knob by `auto_parameter_summand`. Details: `docs/architecture/stand/routing-1-10.md`, last section, and `INTERFACES.md` §4.11 and §20.13.
 
 ## Rejected
 

@@ -1,0 +1,17 @@
+{"t":"sende","sample":0,"osc":["/k/set/neu",",hsd",1,"pruefstand",128.0],"bereich":"zeitachse","herleitung":"§4.2: neue Zeitachse mit 128 BPM, Beat 0 am nächsten Zyklus = Sample 0 (§1.1)"}
+{"t":"sende","sample":45000,"osc":["/k/deck/laden",",hsisdii",2,"leitstand",1,"f0000000000000a1",128.0,1,0],"bereich":"deck","herleitung":"§4.4 /k/deck/laden, Fixture material/f0000000000000a1/ next to the sequences"}
+{"t":"erwarte","ab_sample":45000,"bis_sample":47400,"osc":["/q",",hsihds",2,"leitstand",1,null,null,""],"bereich":"deck","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"erwarte","ab_sample":45000,"bis_sample":93000,"osc":["/q",",hsihds",2,"leitstand",3,null,null,""],"bereich":"deck","herleitung":"§4.4: Quittung fertig nach dem Tausch"}
+{"t":"erwarte","ab_sample":45000,"bis_sample":93000,"osc":["/e/geladen",",isdiih",1,"f0000000000000a1",128.0,1,0,null],"toleranz":1e-06,"bereich":"deck","herleitung":"§4.4, §5.9 /e/geladen"}
+{"t":"sende","sample":630000,"osc":["/k/deck/start",",hssssiddi",3,"andreas","","","",1,32.0,16.5,0],"bereich":"deck"}
+{"t":"erwarte","ab_sample":630000,"bis_sample":632400,"osc":["/q",",hsihds",3,"andreas",1,null,null,""],"bereich":"deck","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"erwarte","ab_sample":720000,"bis_sample":722400,"osc":["/q",",hsihds",3,"andreas",2,720000,32.0,""],"toleranz":1e-06,"bereich":"deck","herleitung":"§5.1 Status 2 am Ziel-Sample llround(sample_at(32)) = 720000"}
+{"t":"deck_wert","sample":720000,"deck":1,"feld":"quell_beat","wert":16.5,"toleranz":0.01,"bereich":"deck"}
+{"t":"deck_wert","sample":900000,"deck":1,"feld":"quell_beat","wert":24.5,"toleranz":0.01,"bereich":"deck","herleitung":"Faktor 1 (bpm = basis_bpm)"}
+{"t":"deck_wert","sample":900000,"deck":1,"feld":"status","wert":2,"toleranz":0,"bereich":"deck"}
+{"t":"sende","sample":990000,"osc":["/k/deck/start",",hssssiddi",4,"andreas","","","",1,48.0,100.25,0],"bereich":"deck","herleitung":"Start auf laufendem Deck: 128-Frame-Blende"}
+{"t":"erwarte","ab_sample":990000,"bis_sample":992400,"osc":["/q",",hsihds",4,"andreas",1,null,null,""],"bereich":"deck","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"erwarte","ab_sample":1080000,"bis_sample":1082400,"osc":["/q",",hsihds",4,"andreas",2,1080000,48.0,""],"toleranz":1e-06,"bereich":"deck","herleitung":"§5.1 Status 2 am Ziel-Sample llround(sample_at(48)) = 1080000"}
+{"t":"deck_wert","sample":1170000,"deck":1,"feld":"quell_beat","wert":104.25,"toleranz":0.01,"bereich":"deck"}
+{"t":"sende","sample":1170000,"osc":["/k/deck/start",",hssssiddi",5,"andreas","","","",3,56.0,0.0,0],"bereich":"deck","herleitung":"Deck 3 ist leer"}
+{"t":"erwarte","ab_sample":1170000,"bis_sample":1262400,"osc":["/q",",hsihds",5,"andreas",6,null,null,"nicht_geladen"],"bereich":"deck","herleitung":"§16.2 nicht_geladen; beim Einsortieren oder am Start, das Fenster deckt beides"}

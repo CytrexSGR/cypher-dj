@@ -38,11 +38,17 @@ constexpr float ERZ_KANTE = 0.001f; // -60 dBFS: leiser ist keine Kante, keine R
 // sofort frei, wenn er während eines Ausklangs abgelöst wird).
 constexpr int ERZ_BK_FREI = 2 * ERZ_STROEME;
 
-// Glanz 2.7 (F19): MIDI-Ströme klingen erst nach dem Rundweg Kern → Wirt → Kern zurück: zwei Zyklen (Dossier 05 Z. 509: 512 bei
-// 256) plus der Anteil des Wirts. Gemessen 545 Samples Median bei Quantum 256 (Lord Sawtooth; Fingered 556; Bias des Instruments
-// +14; ~/messungen/2026-09-30-k2-sidechain/rundweg.md). Der Kern sendet Note-On/Off um so viel früher; Kit-Ströme unberührt.
+// Glanz 2.7 (F19), corrected 2026-11-10 (wirt-timing): MIDI streams sound only after the round trip core -> host -> core: two cycles
+// (the JACK graph loop closes one cycle after each of the two hops, the offset inside the cycle is kept). The core sends Note-On/Off
+// that much earlier; kit streams are untouched. The lead is exactly the round trip, nothing is added: until 2026-11-10 it was
+// 2 * n + 25, taken from 545 samples measured on 2026-09-30 (rundweg.md, 50 % of the band peak of a bass patch, a method with a
+// bias of +14 on a synthetic test and the envelope of the patch on top), and every note of the host path started 24 samples (0.5 ms)
+// before its grid point. With 2 * n the onset on the real host is the grid point plus the attack of the synth (Surge +2/+1,
+// reasonablesynth +3/+2, RB-338 0/0, Vital +3/+3 at the -80 dBFS threshold; `test_kern_arr_wirt` case 9 pins the arithmetic,
+// part 3 of `acceptance_p1.mjs` measures the real hosts; docs/architecture/stand/plugins-1-11.md "note timing"). A host with a
+// declared plugin latency would add that latency to the lead; the four instruments measured here sit on the grid without it, other plugins are not measured.
 constexpr int ERZ_MIDI_RUNDWEG_ZYKLEN = 2;
-constexpr int ERZ_MIDI_VORHALT_REST = 25;  // Samples über die zwei Zyklen hinaus: 545 − 512 = 33, minus Bias 5 bis 14
+constexpr int64_t erz_midi_vorhalt(int64_t n) { return static_cast<int64_t>(ERZ_MIDI_RUNDWEG_ZYKLEN) * n; }
 
 // Studio S5: MIDI eines Zyklus je Port, im Callback gefüllt, in main.cpp nach zyklus() auf JACK ausgegeben.
 // t = Versatz im Zyklus (Samples). Reihenfolge ist NICHT garantiert aufsteigend; main.cpp sortiert vor der Ausgabe.
@@ -97,7 +103,7 @@ class Erzeuger {
   // Offene Noten gehen im nächsten block() auf dem ALTEN Port/Kanal aus. Solange MIDI gilt, spielt das Kit nicht.
   void setze_midi(int strom, int port, int midi_kanal);
   // Glanz 2.7 (F19): Note-On/Off der MIDI-Ströme gehen um samples früher hinaus. Der Kern setzt das je Zyklus auf
-  // ERZ_MIDI_RUNDWEG_ZYKLEN · n + ERZ_MIDI_VORHALT_REST; 0 (Vorgabe) = am Sample des Beats.
+  // erz_midi_vorhalt(n) = ERZ_MIDI_RUNDWEG_ZYKLEN · n; 0 (Vorgabe) = am Sample des Beats.
   void setze_midi_vorhalt(int64_t samples) { midi_vorhalt_ = samples > 0 ? samples : 0; }
   // Baukasten S3a: Strom als Baukasten-Graph (bk aus cypher_bk_neu, nullptr = keiner) auf Mixer-Kanal kanal. Der Erzeuger
   // besitzt ihn bis bk_frei(). Solange ein Graph gilt, spielen Kit und MIDI dieses Stroms nicht; Noten gehen am Sample

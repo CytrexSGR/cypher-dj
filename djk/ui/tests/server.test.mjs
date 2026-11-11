@@ -17,7 +17,7 @@ import { kodiere } from '../../contract/mock_core/osc.mjs';
 import { schreibeLeerenRing, schreibeRing } from './support/ring.mjs';
 import { K as OHR_K } from '../ear.ts';
 import { K, TEST_INSTANZ, belegeTestInstanz, serverInstanzSetzen } from './support/instance.mjs';
-import { pruefeWirtOrdner } from './support/host_sock.mjs';
+import { pruefeWirtOrdner } from './support/instrument_host_sock.mjs';
 belegeTestInstanz();   // Plan d1-s1 Task 1
 // Paket S3 (Auftrag 16 b): jeder Ordner, den ein Testkörper dieser Datei anlegt (hc, loops, muster, wirt, raster, kits, welle, Hüllen, …), liegt unter
 // einem tmp-Ordner dieser Datei, den after() am Ende wegräumt. Vorher blieben je Lauf 166 Einträge unter TMPDIR (gemessen 2026-10-16,

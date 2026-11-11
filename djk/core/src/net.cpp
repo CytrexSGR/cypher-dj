@@ -675,6 +675,7 @@ void Netz::ereignisse_senden() {
   keylock_zyklus();  // Keylock Slice 4: umgerechnete REC-Mitschnitte schreiben
   arr_zyklus();      // D1 K1: Ergebnisse des Arrangement-Lade-Fadens
   rec_zyklus();      // 1.8: Take-Meldungen des Aufnahme-Fadens
+  export_zyklus();   // plan 1.11 T12: the export writer is done: /e/export_lauf
 }
 
 void Netz::zustand_senden(int64_t jetzt_ns) {

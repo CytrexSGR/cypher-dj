@@ -175,7 +175,7 @@ class Folge:
         s = self.S(sende_beat)
         self.material.add(material_id)
         self.sende(s, osc("/k/deck/laden", i, quelle, deck, material_id, 128.0, 1, mit_stems), "deck",
-                   f"§4.4 /k/deck/laden, Fixture sequences/material/{material_id}/")
+                   f"§4.4 /k/deck/laden, Fixture material/{material_id}/ next to the sequences")
         if ergebnis == "fertig":
             self.angenommen(i, quelle, s, "deck")
             self.q(i, quelle, FERTIG, None, None, "", s + LADEN_FRIST, ab=s, bereich="deck",

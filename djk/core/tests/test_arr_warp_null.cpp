@@ -151,13 +151,13 @@ void fall1(const std::string& ab, double bpm, const char* name, int modus1 = 0, 
   PRUEF(v.ursprung > 0 && v.m.fehler.empty());
   const cdj::RenderErgebnis r = cdj::rendere(auftrag(x, v, bpm));
   if (!r.fehler.empty()) std::printf("Render-Fehler: %s: %s\n", r.fehler.c_str(), r.meldung.c_str());
-  PRUEF(r.fehler.empty() && r.regler > 0 && r.phase == 25);
+  PRUEF(r.fehler.empty() && r.regler > 0 && r.phase == 0);
   PRUEF(r.frames == std::llround(8.0 * 48000.0 * 60.0 / bpm));
   const cdj::NullErgebnis e = vergleiche(v, r);
   std::printf("Fall %s (%.1f BPM): %s rest %.1f dB, signal %.1f dB, verschoben %.1f dB, fenster %lld\n", beats ? "8" : (pitch1 != 1.0 || pitch2 != 1.0) ? "7" : (modus1 || modus2) ? "4" : "1", bpm,
               cdj::null_urteil_text(e.urteil), e.rest_db, e.signal_db, e.verschoben_db, (long long)e.fenster);
   // Tor A7: Rest unter −90 dBFS. Gemessen −145 dB, nicht −200: der Warp rechnet seine Quellposition aus dem absoluten Kern-Beat, und
-  // live (Einsatz bei Sample ~10 000) und Render (Einsatz bei 3n + 25) runden ihn verschieden; gelegentlich kippt ein Float-Ulp.
+  // live (Einsatz bei Sample ~10 000) und Render (Einsatz bei 3n) runden ihn verschieden; gelegentlich kippt ein Float-Ulp.
   // Die Schranke −120 dB hält diesen Befund fest und trennt von der Gegenprobe (Rest um −8 dB) um über 100 dB.
   PRUEF(e.urteil == cdj::NullUrteil::bestanden && e.rest_db < -120.0 && e.signal_db > -20.0);
 }

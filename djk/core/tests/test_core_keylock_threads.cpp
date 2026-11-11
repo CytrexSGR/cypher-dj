@@ -12,7 +12,7 @@
 //   quittung  Fassung 4.1 Punkt 2 (Pflicht aus der Nachprüfung, N3): nach Spielen und Stopp, bei STEHENDEM Deck, bekommen
 //             Entladen, Laden und Tausch ihre Quittung binnen 2 s, und alles Material kommt zurück (gesperrt 0).
 //             Vertrag 18: im Stand ruht der R3 (der Ring bekommt keinen Frame mehr), beim Spielen läuft er.
-//   waechter  gesunder Lauf: keine Meldung; Arbeits-Thread von Deck 1 angehalten (keylock_test_halte): Meldung nach
+//   guard     gesunder Lauf: keine Meldung; Arbeits-Thread von Deck 1 angehalten (keylock_test_halte): Meldung nach
 //             500 ms, danach (wieder frei) Quittung und keine weitere Meldung.
 //   stopp     Herunterfahren mit laufenden Fäden (4 Decks spielen) binnen 2 s, gemessen (TimeoutStopSec 2 s).
 //   prio      Vertrag 12: ohne Aufruf (ohne JACK) SCHED_OTHER; mit Recht SCHED_FIFO = JACK-Priorität − 5; ohne Recht
@@ -29,8 +29,8 @@
 //             ±2 ct; Arbeits-Thread der Box angehalten -> Wächter meldet, der abgelöste Loop bleibt verliehen; nach
 //             keylock_faeden_stoppen kommt er heraus (kein Faden liest mehr).
 // Fehlerfälle (CMake kern_keylock_faeden_mutation, WILL_FAIL): FUELLE_NUR_LAUFEND (der Arbeits-Thread füllt nur bei
-// spielendem Deck: Pflicht verletzt) -> quittung rot; OHNE_WAECHTER -> waechter rot; FADEN_HAELT (Arbeits-Thread von
-// Deck 1 hält nach rund 1 s an) -> waechter rot; STOPP_OHNE_WECKEN -> stopp rot; PRIO_STILL -> prio rot;
+// spielendem Deck: Pflicht verletzt) -> quittung rot; OHNE_WAECHTER -> guard rot; FADEN_HAELT (Arbeits-Thread von
+// Deck 1 hält nach rund 1 s an) -> guard rot; STOPP_OHNE_WECKEN -> stopp rot; PRIO_STILL -> prio rot;
 // VORGABE_VOR_FAEDEN (Stand 2.5: Dehner gestellt, obwohl kein Faden lief) -> startfehler rot; SPAET_OHNE_ANSATZ (ein
 // laufendes Deck setzt beim späten Anhängen nicht an) -> spaet rot.
 #include <pthread.h>
@@ -999,11 +999,15 @@ void test_prio() {
 // Ist ein Faden nicht anlegbar (hier: RLIMIT_NPROC 1 nur um keylock_bauen), bleibt der Keylock wirklich aus: kein Dehner an
 // den Decks, keine Fäden; das Deck spielt Varispeed (1031,25 Hz bei 132), Laden, Stopp und Entladen quittieren, alles
 // Material kommt zurück. Stand 2.5 (Mutation VORGABE_VOR_FAEDEN): Dehner hingen trotzdem an, Entladen ohne Quittung 3.
+// Set when a selected test could not run here; a run that selected such a test alone exits with SKIP_RETURN_CODE (see main).
+bool skipped = false;
+
 void test_startfehler() {
   // root ignores RLIMIT_NPROC (CAP_SYS_RESOURCE), so the thread start cannot be made to fail, e.g. in a container.
   if (geteuid() == 0) {
     std::printf("TEST faeden_startfehler: SKIP (running as root, RLIMIT_NPROC does not apply)\n");
     std::fflush(stdout);
+    skipped = true;
     return;
   }
   Lauf k(Weg::ANGEKUENDIGT, true);
@@ -1442,7 +1446,7 @@ int main(int argc, char** argv) {
     const char* name;
     void (*f)();
   };
-  const T tests[] = {{"rampe", test_rampe}, {"quittung", test_quittung}, {"waechter", test_waechter},
+  const T tests[] = {{"rampe", test_rampe}, {"quittung", test_quittung}, {"guard", test_waechter},
                      {"stopp", test_stopp}, {"prio", test_prio}, {"startfehler", test_startfehler},
                      {"spaet", test_spaet}, {"neustart", test_neustart}, {"knopf", test_knopf},
                      {"konfig", test_konfig}, {"sperre", test_sperre}, {"sperre_alt", test_sperre_alt},
@@ -1453,5 +1457,11 @@ int main(int argc, char** argv) {
     if ((argc < 2 && !allein) || (argc >= 2 && !std::strcmp(argv[1], t.name))) t.f();
   }
   fs::remove_all(AB);
+  // A single selected test that was skipped proved nothing. Exit 77 (ctest SKIP_RETURN_CODE) instead of 0, so that a mutation test
+  // (WILL_FAIL) does not "pass" for lack of a red check and shows as skipped instead.
+  if (argc >= 2 && skipped && !pruef_fehler) {
+    std::printf("selected test skipped, exit 77\n");
+    return 77;
+  }
   PRUEF_ENDE();
 }

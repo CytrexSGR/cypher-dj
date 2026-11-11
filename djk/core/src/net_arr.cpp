@@ -46,6 +46,9 @@ bool Netz::arr_paket(const v::Adresse* a, const osc::Nachricht& m) {
   const bool metronom = a->pfad == v::k_arr_metronom.pfad, auto_ = a->pfad == v::k_arr_auto.pfad, arm = a->pfad == v::k_arr_arm.pfad;
   if (a->pfad == v::k_arr_freeze.pfad) return arr_freeze_paket(m);    // Paket K3
   if (a->pfad == v::k_arr_abgriff.pfad) return arr_abgriff_paket(m);  // 1.10 slice 7
+  if (a->pfad == v::k_arr_export_lauf.pfad) return arr_export_paket(m);   // plan 1.11 T12
+  if (a->pfad == v::k_arr_ins_host.pfad) return arr_host_paket(m, false);   // plan 1.11 T5
+  if (a->pfad == v::k_arr_ins_mess.pfad) return arr_host_paket(m, true);
   if (!laden && !start && !stopp && !loop && !metronom && !auto_ && !arm) return false;
   Befehl b{};
   b.id = m.werte[0].h;
@@ -189,6 +192,7 @@ bool Netz::arr_ereignis(const Ereignis& e) {
     arr_abgriff_ereignis(e);
     return true;
   }
+  if (arr_host_ereignis(e)) return true;   // plan 1.11 T5: /e/ins_host, /e/ins_mess, /zustand/ins_host
   if (e.art == Ereignis::AUTO_ZUSTAND) {   // 1.12 S3, §5.13 /e/auto: spur, ziel, zustand
     if (e.deck < 1 || e.deck > ARR_SPUREN || e.fassung < 0 || e.fassung >= Arrangement::AUTO_FELDER) return true;   // not a field of the contract: dropped, never mapped to another
     osc::Schreiber s(v::e_auto);

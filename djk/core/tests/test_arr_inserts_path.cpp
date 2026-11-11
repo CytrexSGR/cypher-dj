@@ -495,21 +495,19 @@ void fall4b() {
 // (NaN for the dry copy), the call must overwrite them. A scratch that ignores the lane leaves the pattern standing.
 void fall6() {
   auto lanes = std::make_unique<ArrArbeit[]>(ARR_ARBEIT_BAHNEN);
-  // PDC: the tail of the input (the last min(d, m) samples of the right channel, the channel shifted last) ends in the scratch
+  // PDC (plan 1.11: the place is a write-index ring; the scratch holds the output of the right channel, the channel computed last): the call must write the scratch OF ITS LANE
+  // with the m samples it delivers and nothing beyond them
   for (const int d : {100, 255, 256, 300}) {
     ArrArbeit& a = lanes[2];
     for (int i = 0; i < ARR_PDC_RING; ++i) a.pdc_tmp[i] = 12345.0f + static_cast<float>(i);
     ArrPdc pdc;
     pdc.neuer_block();
-    float l[M], r[M], r0[M];
+    float l[M], r[M];
     signal(3, d, l, r, false);
-    std::memcpy(r0, r, sizeof r);
     pdc.verzoegere(0, d, l, r, M, a.pdc_tmp);
-    const int n = d < M ? d : M;
-    const int von = d < M ? M - d : 0;   // m >= d: the last d input samples; m < d: the whole block
     bool ok = true;
-    for (int i = 0; i < n; ++i) ok = ok && std::memcmp(&a.pdc_tmp[i], &r0[von + i], sizeof(float)) == 0;
-    for (int i = n; i < ARR_PDC_RING; ++i) ok = ok && a.pdc_tmp[i] == 12345.0f + static_cast<float>(i);   // nothing beyond what was shifted
+    for (int i = 0; i < M; ++i) ok = ok && std::memcmp(&a.pdc_tmp[i], &r[i], sizeof(float)) == 0;   // the output of the block
+    for (int i = M; i < ARR_PDC_RING; ++i) ok = ok && a.pdc_tmp[i] == 12345.0f + static_cast<float>(i);   // nothing beyond what was delivered
     PRUEF(ok);
   }
   // dry: a stage that blends (an switched on in the first block, weight rising) writes the dry copy into the lane buffer. Strip 3 has no latency

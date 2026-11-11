@@ -1,6 +1,6 @@
 // Arrangement (INTERFACES §4.11, §5.13; D1 K1) in der Attrappe: Zustand, Quittungen und /zustand/arr wie der Kern,
 // ohne Ton. Die Attrappe liest keine Wiedergabe-Datei: /k/arr/laden merkt sich nur nr (Quittung 1 und 3). Der Einsatz
-// folgt der Start-Regel des Kerns bei Quantum 256 (jetzt + Vorhalt 537 + 256, dann Quant: 0 sofort, 1 Beat, 2 Takt mit
+// folgt der Start-Regel des Kerns bei Quantum 256 (jetzt + Vorhalt 512 + 256, dann Quant: 0 sofort, 1 Beat, 2 Takt mit
 // (Kern-Beat − start_beat) ≡ 0 mod 4), Quittung 2 am Einsatz-Sample. Stopp gilt sofort (Quittung 1 und 3), ohne Quant.
 // /zustand/arr geht bei jeder Änderung hinaus und, wie im Kern (core_arr.cpp arr_zustand), im Takt: 50 Hz (je 960 Samples), solange er
 // wartet oder spielt, sonst 2 Hz (je 24 000), Stempel am Blockanfang (D1 Fix4 J1).
@@ -23,7 +23,7 @@ import { llround } from './clock.mjs';
 import { AUTO_ZIELE } from './contract.mjs';   // field 0..3 of the lane override (§4.11 /k/arr/auto)
 
 const N = 256;
-const VORHALT = 2 * N + 25;
+const VORHALT = 2 * N;   // the core: erz_midi_vorhalt(n), exactly the host round trip (was 2 * N + 25 until 2026-11-10)
 
 // Project beat at sample s while playing. With the loop on (bis > von) the beat wraps like the core's: after the loop end it continues at the loop start.
 export function projektBeat(K, s) {
@@ -118,6 +118,8 @@ export default {
     K.arr = { nr: -1, status: 0, start_beat: 0, ursprung: 0, start_s: -1, b_start: null, cypher: false,
       loop: { an: false, von: 0, bis: 0 }, metro: { an: false, pegel_db: -12, ziel: 0 },
       auto: new Set(),     // 1.12 Slice 3: overridden fields "spur/feld" (spur 1..32, feld 0..3)
+      export: { ungesund: 0, luecken: 0 },   // plan 1.11 T12: the numbers the stand-in reports for /k/arr/export_lauf
+      host: { gesund: [0, 0, 0, 0] },   // plan 1.11 T5: the server's health flag per effect host (the stand-in has no edge check: health = the flag)
       arm: new Map(),      // 1.12 Slice 3 (D11): armed tracks, spur 1..32 -> mode (0 touch, 1 latch, 2 write); a new core generation (a new stand-in) starts empty
       punkte: new Map(),   // 1.12 Slice 3 (D12): "spur/ziel" -> { gemeldet: sample of the block end that sent the last point, halt: the held point or null }
       lanen: new Set() };  // the fields that have a lane in the loaded playback, same keys
@@ -261,6 +263,39 @@ export default {
         }
         K.q(b, 3);
       });
+    },
+    // plan 1.11 T5 (§4.11): the server's health flag of an effect host. Answered by /e/ins_host (h, health). The stand-in has no JACK edges, so health is the flag alone.
+    '/k/arr/ins_host': (K, a, b) => {
+      if (!(a.h >= 1 && a.h <= 4) || (a.gesund !== 0 && a.gesund !== 1)) return K.q(b, 6, 'ausserhalb_bereich');
+      K.arr.host.gesund[a.h - 1] = a.gesund;
+      K.aus('/e/ins_host', [a.h, a.gesund]);
+    },
+    // plan 1.11 T5 (§4.11): the round trip of an effect host with an empty rack: refused `laeuft` while the transport is not stopped, `host_fehlt` while the host is not healthy,
+    // else 2 x quantum (512, measured in T1). Answered by /e/ins_mess (h, rundweg, grund).
+    '/k/arr/ins_mess': (K, a, b) => {
+      if (!(a.h >= 1 && a.h <= 4)) return K.q(b, 6, 'ausserhalb_bereich');
+      if (K.arr.status !== 0) return K.aus('/e/ins_mess', [a.h, -1, 'laeuft']);
+      if (!K.arr.host.gesund[a.h - 1]) return K.aus('/e/ins_mess', [a.h, -1, 'host_fehlt']);
+      K.aus('/e/ins_mess', [a.h, 2 * N, '']);
+    },
+    // plan 1.11 T12 (§4.11): the real-time export of the production master. The stand-in plays no audio: the run is answered at once (receipts 1 and 3) with a file of zeros of the exact range
+    // length (never replacing: datei_fehlt) and /e/export_lauf; K.arr.export.{ungesund, luecken} are the numbers a test wants the core to report (default 0).
+    '/k/arr/export_lauf': (K, a, b) => {
+      if (typeof a.pfad !== 'string' || !a.pfad.endsWith('.f32') || !(a.von_beat >= 0) || !(a.bis_beat - a.von_beat >= 1)) return K.q(b, 6, 'ausserhalb_bereich');
+      if (!(a.bis_beat - a.von_beat <= 3600)) return K.q(b, 6, 'zu_gross');
+      const A = K.arr;
+      if (A.nr < 0) return K.q(b, 6, 'nicht_geladen');
+      if (A.status !== 0) return K.q(b, 6, 'belegt');
+      if (rampeOffen(K)) return K.q(b, 6, 'tempo_rampe');
+      K.q(b, 1);
+      const kb = K.uhr.beat(K.jetzt + VORHALT + N);
+      const frames = llround(K.uhr.sample(kb + (a.bis_beat - a.von_beat))) - llround(K.uhr.sample(kb));
+      const z = A.export ?? { ungesund: 0, luecken: 0 };
+      let ok = true;
+      try { fs.writeFileSync(a.pfad, Buffer.alloc(frames * 8), { flag: 'wx' }); } catch { ok = false; }
+      if (ok) K.q(b, 3);
+      else K.q(b, 7, 'datei_fehlt');
+      K.aus('/e/export_lauf', [BigInt(ok ? frames : 0), 0.0, z.luecken, z.ungesund, ok ? '' : 'datei_fehlt']);
     },
     '/k/arr/freeze': (K, a, b) => {   // Paket K3 (KI-Stopp für cypher prüft core.mjs vor allem anderen)
       if (!(a.spur >= 1 && a.spur <= 32) || !(a.von_beat >= 0) || !(a.bis_beat - a.von_beat >= 1) ||

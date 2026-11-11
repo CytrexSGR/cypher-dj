@@ -3,6 +3,7 @@
 // x-djk-quelle (ctx.quelle(), zu Beginn der Anfrage gelesen), KI-Stopp sperrt Cyphers Schreiben (Sitzung). Körperlimit 1 MiB.
 import type http from 'node:http';
 import type { Bereich, BereichKontext, Route } from '../../http/router.ts';
+import type { SicherGrund } from '../../plugins/state.ts';
 import { json } from '../../http/transport.ts';
 import { AblageFehler } from '../../project/storage.ts';
 import { BefehlFehler } from '../../project/commands.ts';
@@ -17,7 +18,8 @@ import { listeKits } from './kits.ts';
 import { listeSurgePatches } from './surge_patches.ts';
 import { routingMatrix } from '../../project/routing_matrix.ts';
 import { grundText } from '../../http/reasons.ts';
-import { wirtLage } from './host.ts';
+import { wirtLage } from './instrument_host.ts';
+import { MIDI_KOERPER_MAX, midiImport } from './midi_import.ts';
 import { ProjFehler, ProjSitzung, TRANSIENTEN_MAX, hkKurz, type Antwort, type AusgabeLauf, type ProjOptionen } from './session.ts';
 
 export type { AusgabeLauf, ProjOptionen };
@@ -45,6 +47,11 @@ export interface ProjZugang {
   // 1.8 S3 (D13): ruft f(projekt) synchron nach jeder Zuweisung des offenen Projekts (Öffnen, Ändern, Undo/Redo, Hand-Rückweg, Mixer nach Wiederanlauf,
   // Übernahme von Freeze und Aufnahme) und am Ende von nachNeustart. f darf nicht werfen; ein Fehler wird protokolliert.
   beiStand(f: (p: Projekt) => void): void;
+  hostZustandSichern?(grund: SicherGrund): Promise<void>;   // plan 1.11 D8: the plugin states are written (before an export), at most 3 s
+  hostLage?(): { insert_id: string; status: string; grund?: string }[];   // plan 1.11 T13: the host manager's states
+  hostGesundAlterMs?(nur?: ReadonlySet<string>): number;   // plan 1.11 T13: ms since the last health rise of those hosts (export waits for 1.1 s)
+  ladeEchtzeitSicht?(p: Projekt): Promise<{ nr: number; datei: string }>;   // plan 1.11 T13: write and load the project as an export playback
+  ladeLiveNeu?(): Promise<void>;                                            // plan 1.11 T13: load the live playback again
 }
 export const KOERPER_MAX = 1024 * 1024;   // Spec 3.4: 1 MiB
 
@@ -90,8 +97,9 @@ const notenZahl = (p: Projekt): Record<string, number> => {
 };
 export function kurzeAntwort(r: Antwort): Antwort {
   if (r.code !== 200) return r;
-  const j = r.j as { rev: number; projekt: Projekt; kern?: Record<string, unknown>; hinweise?: unknown[] };
-  return { code: 200, j: { rev: j.rev, kern: j.kern ?? {}, noten_zahl: notenZahl(j.projekt), ...(j.hinweise ? { hinweise: j.hinweise } : {}) } };
+  const j = r.j as { rev: number; projekt: Projekt; kern?: Record<string, unknown>; hinweise?: unknown[]; muster?: unknown[] };
+  return { code: 200, j: { rev: j.rev, kern: j.kern ?? {}, noten_zahl: notenZahl(j.projekt), ...(j.hinweise ? { hinweise: j.hinweise } : {}),
+    ...(j.muster ? { muster: j.muster } : {}) } };   // strudel-clip: the report of each generated clip
 }
 // S17: like kurzeAntwort, plus what bkMerken captured
 export function kurzeBkAntwort(r: Antwort): Antwort {
@@ -123,6 +131,9 @@ export function projBereich(ctx: BereichKontext, opt: ProjOptionen = {}): Bereic
     stemsStand: (x) => s.setzeStemsStand(x), beiSchliessen: (f) => s.beiSchliessen(f), beendeVorhoeren: () => s.beendeVorhoeren(),
     beiStand: (f) => s.beiStand(f),
     wirtSpiegel: () => s.wirtSpiegel(),
+    hostZustandSichern: (grund) => s.hostZustandSichern(grund),
+    hostLage: () => s.hostLage(), hostGesundAlterMs: (nur) => s.hostGesundAlterMs(nur),
+    ladeEchtzeitSicht: (p) => s.ladeEchtzeitSicht(p), ladeLiveNeu: () => s.ladeLiveNeu(),
   };
   const antworte = async (a: http.ServerResponse, f: () => Antwort | Promise<Antwort>): Promise<void> => {
     let r: Antwort;
@@ -216,6 +227,30 @@ export function projBereich(ctx: BereichKontext, opt: ProjOptionen = {}): Bereic
       schreib('/proj/neu', (d, quelle) => s.neu(d.name, quelle), kurzeOeffnenAntwort),
       schreib('/proj/oeffnen', (d, quelle) => s.oeffnen(d.slug, quelle), kurzeOeffnenAntwort),
       // Spec 6.31: ?antwort=kurz (Werkzeuge) liefert rev, kern und noten_zahl je Clip statt des Projekts
+      // plan 1.11 D3: a plugin knob (not a command: no history, no project write); the insert ID is in the path
+      {
+        methode: 'POST', pfad: (pfad: string) => /^\/proj\/insert\/[A-Za-z][A-Za-z0-9_-]{0,31}\/param$/.test(pfad), schutz: 'fremdePost',
+        handler: async (q, a, url) => {
+          const quelle = ctx.quelle(), id = url.pathname.split('/')[3];
+          await antworte(a, async () => s.insertParam(id, await leseKoerper(q), quelle));
+        },
+      },
+      // MIDI import (spec 2026-11-10-midi-import): the file as base64 or a path, preview or import in ONE history step; its own body limit for the file
+      {
+        methode: 'POST', pfad: '/proj/midi_import', schutz: 'fremdePost',
+        handler: async (q, a) => {
+          const quelle = ctx.quelle();
+          await antworte(a, async () => {
+            let d: Record<string, unknown>;
+            try { d = await leseKoerper(q, MIDI_KOERPER_MAX); } catch (e) {
+              if (e instanceof ProjFehler && e.fehler === 'koerper_zu_gross') throw new ProjFehler(413, 'koerper_zu_gross',
+                { text: `the request body is larger than ${(MIDI_KOERPER_MAX / 1048576).toFixed(1)} MiB` });
+              throw e;
+            }
+            return midiImport(s, d, quelle);
+          });
+        },
+      },
       schreib('/proj/aendern', (d, quelle) => s.aendern(d, quelle), kurzeAntwort),
       schreib('/proj/undo', (d, quelle) => s.umkehr('undo', d, quelle), kurzeAntwort),
       schreib('/proj/redo', (d, quelle) => s.umkehr('redo', d, quelle), kurzeAntwort),

@@ -15,6 +15,14 @@ export const HK_ANZEIGE = {
   'geraet.resonanz': { min: -1, max: 1, anzeigeMin: -1, label: 'Resonance', einheit: '' },
   'geraet.env_mod': { min: -1, max: 1, anzeigeMin: -1, label: 'Env Mod', einheit: '' },
   'geraet.lautstaerke': { min: -1, max: 1, anzeigeMin: -1, label: 'Device Volume', einheit: '' },
+  'geraet.k1': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 1', einheit: '' },
+  'geraet.k2': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 2', einheit: '' },
+  'geraet.k3': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 3', einheit: '' },
+  'geraet.k4': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 4', einheit: '' },
+  'geraet.k5': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 5', einheit: '' },
+  'geraet.k6': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 6', einheit: '' },
+  'geraet.k7': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 7', einheit: '' },
+  'geraet.k8': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 8', einheit: '' },
 };
 export const HK_TEXT = {
   reiter_clip: 'CLIP',
@@ -38,11 +46,13 @@ export const HK_TEXT = {
 };
 const LANE_ZIEL = 'geraet.cutoff';                 // a plain 0..1 lane frame of lanes.js: the row of a normalised envelope
 const GERAET = ['geraet.cutoff', 'geraet.resonanz', 'geraet.env_mod', 'geraet.lautstaerke'];
+const BK_KNOEPFE = ['geraet.k1', 'geraet.k2', 'geraet.k3', 'geraet.k4', 'geraet.k5', 'geraet.k6', 'geraet.k7', 'geraet.k8'];   // 1.12 slice 7
 const istRb = (spur) => spur?.art === 'instrument' && spur.geraet?.art === 'intern' && spur.geraet.name === 'rb338';
-// T10.1: the targets of a clip in menu order (gain on audio, transpose on MIDI, the device targets on MIDI clips of RB-338 tracks)
+const istBk = (spur) => spur?.art === 'instrument' && spur.geraet?.art === 'intern' && spur.geraet.name === 'bk';
+// T10.1: the targets of a clip in menu order (gain on audio, transpose on MIDI, the device targets on MIDI clips of RB-338 tracks (four) and bk tracks (knobs 1 to 8))
 export function hkZiele(clip, spur) {
   if (clip?.art === 'audio') return ['gain', 'spur_fader', 'spur_pan'];
-  return ['transpose', 'spur_fader', 'spur_pan', ...(istRb(spur) ? GERAET : [])];
+  return ['transpose', 'spur_fader', 'spur_pan', ...(istRb(spur) ? GERAET : istBk(spur) ? BK_KNOEPFE : [])];
 }
 
 const runde = (x) => Math.round(x * 1000) / 1000;

@@ -51,26 +51,39 @@ struct AutoZiel {
   double min, max;
   bool nur_sprung;
   double rel_min, rel_max;
+  uint8_t geraet;   // ARR_AUTO_GERAET only: 1 = the RB-338 (param 0..3, ARR_GERAET_PARAM_NAME), 2 = the Baukasten device (param 0..7 = k1..k8)
 };
 constexpr AutoZiel AUTO_ZIELE[] = {
-    {"fader", ARR_AUTO_FADER, 0, -200.0, 6.0, false, -60.0, 6.0},
-    {"pan", ARR_AUTO_PAN, 0, -1.0, 1.0, false, -2.0, 2.0},
-    {"mute", ARR_AUTO_MUTE, 0, 0.0, 1.0, true, 0.0, 0.0},
-    {"solo", ARR_AUTO_SOLO, 0, 0.0, 1.0, true, 0.0, 0.0},
-    {"geraet.lautstaerke", ARR_AUTO_GERAET, 0, 0.0, 1.0, false, -1.0, 1.0},   // param = index into the device parameter names
-    {"geraet.cutoff", ARR_AUTO_GERAET, 1, 0.0, 1.0, false, -1.0, 1.0},
-    {"geraet.resonanz", ARR_AUTO_GERAET, 2, 0.0, 1.0, false, -1.0, 1.0},
-    {"geraet.env_mod", ARR_AUTO_GERAET, 3, 0.0, 1.0, false, -1.0, 1.0},
+    {"fader", ARR_AUTO_FADER, 0, -200.0, 6.0, false, -60.0, 6.0, 0},
+    {"pan", ARR_AUTO_PAN, 0, -1.0, 1.0, false, -2.0, 2.0, 0},
+    {"mute", ARR_AUTO_MUTE, 0, 0.0, 1.0, true, 0.0, 0.0, 0},
+    {"solo", ARR_AUTO_SOLO, 0, 0.0, 1.0, true, 0.0, 0.0, 0},
+    {"geraet.lautstaerke", ARR_AUTO_GERAET, 0, 0.0, 1.0, false, -1.0, 1.0, 1},   // param = index into the device parameter names
+    {"geraet.cutoff", ARR_AUTO_GERAET, 1, 0.0, 1.0, false, -1.0, 1.0, 1},
+    {"geraet.resonanz", ARR_AUTO_GERAET, 2, 0.0, 1.0, false, -1.0, 1.0, 1},
+    {"geraet.env_mod", ARR_AUTO_GERAET, 3, 0.0, 1.0, false, -1.0, 1.0, 1},
+    // 1.12 slice 7: the eight Baukasten knobs of a bk track (param = knob index 0..7); the bk sink takes them through auto_parameter and smooths over 20 ms
+    {"geraet.k1", ARR_AUTO_GERAET, 0, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k2", ARR_AUTO_GERAET, 1, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k3", ARR_AUTO_GERAET, 2, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k4", ARR_AUTO_GERAET, 3, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k5", ARR_AUTO_GERAET, 4, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k6", ARR_AUTO_GERAET, 5, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k7", ARR_AUTO_GERAET, 6, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k8", ARR_AUTO_GERAET, 7, 0.0, 1.0, false, -1.0, 1.0, 2},
 };
-static_assert(2 * sizeof(AUTO_ZIELE) / sizeof(AUTO_ZIELE[0]) == ARR_AUTO_LANES_JE_SPUR, "one absolute and one relative lane per target and track: 2 x 8");
+static_assert(2 * sizeof(AUTO_ZIELE) / sizeof(AUTO_ZIELE[0]) == ARR_AUTO_LANES_JE_SPUR, "one absolute and one relative lane per target and track: 2 x 16");
 
 constexpr bool gleich(const char* a, const char* b) {
   while (*a && *a == *b) ++a, ++b;
   return *a == *b;
 }
-constexpr bool geraet_namen_gebunden() {   // every geraet.* entry carries the name ARR_GERAET_PARAM_NAME[param] after the prefix
-  for (const AutoZiel& z : AUTO_ZIELE)
-    if (z.ziel == ARR_AUTO_GERAET && !gleich(z.name + 7, ARR_GERAET_PARAM_NAME[z.param])) return false;
+constexpr bool geraet_namen_gebunden() {   // every RB-338 geraet.* entry carries the name ARR_GERAET_PARAM_NAME[param] after the prefix; every bk entry is "k" + (param + 1)
+  for (const AutoZiel& z : AUTO_ZIELE) {
+    if (z.ziel == ARR_AUTO_GERAET && z.geraet == 1 && !(z.param < ARR_GERAET_PARAMS && gleich(z.name + 7, ARR_GERAET_PARAM_NAME[z.param]))) return false;
+    if (z.ziel == ARR_AUTO_GERAET && z.geraet == 2 && !(z.param < ARR_GERAET_LANE_PARAMS && z.name[7] == 'k' && z.name[8] == '1' + z.param && z.name[9] == 0)) return false;
+    if (z.ziel == ARR_AUTO_GERAET && z.geraet == 0) return false;
+  }
   return true;
 }
 static_assert(geraet_namen_gebunden(), "AUTO_ZIELE geraet.* entries must match ARR_GERAET_PARAM_NAME");
@@ -122,9 +135,11 @@ int64_t erstes_unendliches(const float* x, int64_t n) {
   return -1;
 }
 
-// 1.10 slice 4a/4b: the insert chain of a strip, `chain: [{art: "komp" | "eq" | "saett" | "lim", slot: 1..pool of the kind, an: bool}, ...]` (at most ARR_KETTE stages,
+// 1.10 slice 4a/4b: the insert chain of a strip, `chain: [{art: "komp" | "eq" | "saett" | "lim" | "utility" | "host", slot: 1..pool of the kind, an: bool, latenz: samples (host only)}, ...]` (at most ARR_KETTE stages,
 // optional; an defaults to true). A slot belongs to one stage of the whole playback (the pool is shared): slot_belegt (ARR_INS_ALLE entries, global index) marks the used ones.
-void lese_kette(const json& o, const std::string& wo, ArrKette& k, bool* slot_belegt) {
+bool bk_name_ok(const std::string& n);   // defined below with the graph rules
+void lese_kette(const json& o, const std::string& wo, ArrKette& k, bool* slot_belegt, ArrAudioCache& cache, ArrSnapshot& snap) {
+  const bool host_da = cache.host_da();
   if (!o.contains("chain")) return;
   const json& ch = o.at("chain");
   if (!ch.is_array()) format(wo + "chain ist keine Liste");
@@ -138,10 +153,13 @@ void lese_kette(const json& o, const std::string& wo, ArrKette& k, bool* slot_be
     if (art == "komp") { a = ArrInsArt::komp; pool = ARR_INS_KOMP; versatz = 0; }
     else if (art == "eq") { a = ArrInsArt::eq; pool = ARR_INS_EQ; versatz = ARR_INS_KOMP; }
     else if (art == "saett") { a = ArrInsArt::saett; pool = ARR_INS_SAETT; versatz = ARR_INS_KOMP + ARR_INS_EQ; }
-    else if (art == "lim") { a = ArrInsArt::lim; pool = ARR_INS_LIM; versatz = ARR_INS_KOMP + ARR_INS_EQ + ARR_INS_SAETT; }
-    else format(wx + "art " + art + " unbekannt (art_unbekannt; komp, eq, saett, lim)");
+    else if (art == "lim") { a = ArrInsArt::lim; pool = ARR_INS_LIM; versatz = INS_G_LIM0; }
+    else if (art == "utility") { a = ArrInsArt::utility; pool = ARR_INS_UTIL; versatz = INS_G_UTIL0; }   // arr-fx slice 1
+    else if (art == "bk") { a = ArrInsArt::bk; pool = ARR_INS_BK; versatz = INS_G_BK0; }   // arr-bk slice 3
+    else if (art == "host") { a = ArrInsArt::host; pool = ARR_INS_HOST; versatz = INS_G_HOST0; }   // plan 1.11 T4
+    else format(wx + "art " + art + " unbekannt (art_unbekannt; komp, eq, saett, lim, utility, bk, host)");
     const int64_t sl = ganz(x, "slot", wx);
-    if (sl < 1 || sl > pool) format(wx + "slot außerhalb 1 bis " + std::to_string(pool) + " (" + art + ")");
+    if (sl < 1 || sl > pool) format(wx + "slot außerhalb 1 bis " + std::to_string(pool) + " (" + art + (a == ArrInsArt::host ? "; ungueltig: host h is pool instance ins/host/h)" : ")"));
     if (slot_belegt[versatz + sl - 1]) format(wx + "slot " + art + "/" + std::to_string(sl) + " doppelt");
     slot_belegt[versatz + sl - 1] = true;
     bool an = true;
@@ -189,7 +207,35 @@ void lese_kette(const json& o, const std::string& wo, ArrKette& k, bool* slot_be
             format(wk + "punkt " + punkt + " of " + q + " is the row sc, not a key (the pair has one writer)");
       }
     }
-    k.st[k.n++] = ArrStufe{a, static_cast<uint8_t>(sl - 1), an, key};
+    ArrStufe stufe{a, static_cast<uint8_t>(sl - 1), an, key};
+    if (a == ArrInsArt::host) {   // plan 1.11 T4 (D4): the latency of a host stage is structure, `latenz` in samples (the round trip through the host process); a value the rings cannot hold is pdc_zu_lang
+      if (!host_da) throw Abbruch("format", wx + "host_fehlt: the effect-host ports of this core are not there (a stage of art host cannot play)");
+      const int64_t lz = x.contains("latenz") ? ganz(x, "latenz", wx) : 0;
+      if (lz < 0 || lz > 65535) format(wx + "latenz " + std::to_string(lz) + " outside 0 to 65535 samples");
+      stufe.latenz = static_cast<uint16_t>(lz);   // 8192 and more is refused by arr_pdc_rechnen (pdc_zu_lang)
+    } else if (a == ArrInsArt::bk) {   // arr-bk slice 3: a Baukasten effect graph; built here (loader thread), handed to the callback inside the snapshot
+      if (x.contains("latenz")) format(wx + "latenz is measured from the graph (a stage of art bk takes no latenz)");
+      const std::string gr = text(x, "graph", wx);
+      if (!bk_name_ok(gr)) format(wx + "graph \"" + gr + "\": name must be 1 to 32 characters of [a-z0-9_-]");
+      std::snprintf(stufe.graph, sizeof stufe.graph, "%s", gr.c_str());
+      std::string grund, meldung;
+      int lat = 0;
+      const int32_t ref = cache.bk_hole(ARR_BK_INSERT_NR + INS_G_BK0 + static_cast<int>(sl - 1), gr, &stufe.bk, &stufe.bk_gen, grund, meldung, true, INS_LAT_MAX, &lat);
+      if (ref < 0 && grund == "bk_graph_fehlt") {   // the graph file is gone (a project from another machine, a graph deleted from the folder): the stage plays dry, the playback loads
+        std::fprintf(stderr, "arr: %s%s; the stage passes the signal through (dry)\n", wx.c_str(), meldung.c_str());
+        stufe.bk = nullptr;
+        stufe.bk_gen = 0;
+        lat = 0;
+      } else {
+        if (ref < 0) throw Abbruch(grund, wx + meldung);
+        snap.bk_refs.push_back(ref);
+      }
+      stufe.latenz = static_cast<uint16_t>(lat);   // the delay compensation counts it like a host stage (arr_pdc.h)
+    } else {
+      if (x.contains("graph")) format(wx + "graph belongs to a stage of art bk (" + art + ")");
+      if (x.contains("latenz")) format(wx + "latenz belongs to a stage of art host (" + art + ")");
+    }
+    k.st[k.n++] = stufe;
   }
 }
 
@@ -197,7 +243,7 @@ void lese_kette(const json& o, const std::string& wo, ArrKette& k, bool* slot_be
 // (optional; only on a strip with a chain; at most ARR_MAKRO_ZIELE targets). A rack slot belongs to one strip of the whole playback; a target (stufe, param) is driven by one macro only
 // (one writer per parameter, spec D13). The stage switch (index 0) and the compressor key cannot be mapped. Every refusal names the field and the rule (reason `format`).
 int ins_param_zahl(ArrInsArt a) {
-  return a == ArrInsArt::komp ? INS_KOMP_PARAM : a == ArrInsArt::eq ? INS_EQ_PARAM : a == ArrInsArt::lim ? INS_LIM_PARAM : INS_SAETT_PARAM;
+  return a == ArrInsArt::komp ? INS_KOMP_PARAM : a == ArrInsArt::eq ? INS_EQ_PARAM : a == ArrInsArt::lim ? INS_LIM_PARAM : a == ArrInsArt::host ? INS_HOST_PARAM : a == ArrInsArt::utility ? INS_UTIL_PARAM : a == ArrInsArt::bk ? INS_BK_PARAM : INS_SAETT_PARAM;
 }
 // 1.9 U8 T9 (spec E12): an entry with `glied` (a member index) instead of `stufe` is a macro target on a member of an instrument rack. It exists only on a rack track strip
 // (`roh` != nullptr): there lese_rack only remembers the position of such an entry in `roh`, because the members of the track are parsed after it (lese_glied_ziele fills
@@ -297,6 +343,79 @@ void lese_glied_ziele(const json& o, const std::string& wo, const ArrSnapshot& s
     z.von = static_cast<float>(von);
     z.bis = static_cast<float>(bis);
     r.g[r.ng++] = z;
+  }
+}
+
+// 1.12 slice 6: the insert-parameter and rack-macro lanes of a strip, `chain_auto: [{stufe, param, punkte} | {makro, punkte}, ...]` (any strip with a chain, only /2). `stufe`/`param` as in a rack
+// target (the position in the chain of the strip, the parameter index of the stage kind: not the stage switch 0, not the compressor key 9, and not on a host stage: its plugin keeps its own
+// parameters); `makro` 0..3 drives a macro of the strip's rack (the strip must have one). `punkte` are [beat, wert, form] triples like an `auto` lane; a stage lane value is in the real unit of the
+// parameter (finite; ArrInserts clamps it to the row's range), a macro lane value is 0..1. One lane per (stufe, param) and one per macro on a strip; a (stufe, param) that a rack target maps
+// is refused (one writer per parameter, spec D13); at most ARR_KLANES_MAX lanes in all strips. The points go behind those of the track lanes into the reserved snapshot vector.
+void lese_kette_auto(const json& o, const std::string& wo, int strip, ArrSnapshot& snap) {
+  if (!o.contains("chain_auto")) return;
+  const json& al = o.at("chain_auto");
+  if (!al.is_array()) format(wo + "chain_auto is not a list");
+  const ArrKette& k = snap.kette[strip];
+  const ArrRack& rk = snap.rack[strip];
+  const size_t l0 = static_cast<size_t>(snap.n_klanes);
+  for (size_t li = 0; li < al.size(); ++li) {
+    const json& l = al[li];
+    const std::string wl = wo + "chain_auto[" + std::to_string(li) + "].";
+    if (!l.is_object()) format(wl + "not an object");
+    if (snap.n_klanes >= ARR_KLANES_MAX) throw Abbruch("zu_gross", "more than " + std::to_string(ARR_KLANES_MAX) + " insert and rack lanes in all strips");
+    ArrKettenLane lane{};
+    lane.strip = static_cast<uint8_t>(strip);
+    if (l.contains("makro")) {
+      if (l.contains("stufe") || l.contains("param")) format(wl + "makro and stufe/param in one lane (a stage lane names stufe and param, a macro lane makro)");
+      const int64_t mk = ganz(l, "makro", wl);
+      if (mk < 0 || mk >= ARR_MAKROS) format(wl + "makro outside 0 to " + std::to_string(ARR_MAKROS - 1));
+      if (rk.slot < 0) format(wl + "makro: the strip has no rack");
+      for (size_t q = l0; q < static_cast<size_t>(snap.n_klanes); ++q)
+        if (snap.klane[q].strip == strip && snap.klane[q].makro == mk) format(wl + "makro " + std::to_string(mk) + " twice on one strip");
+      lane.makro = static_cast<int8_t>(mk);
+    } else {
+      const int64_t st = ganz(l, "stufe", wl), pa = ganz(l, "param", wl);
+      if (st < 0 || st >= k.n) format(wl + "stufe " + std::to_string(st) + " is not in the chain (" + std::to_string(k.n) + " stages)");
+      const ArrInsArt art = k.st[st].art;
+      if (art == ArrInsArt::host) format(wl + "a host stage has no lane parameter (the plugin keeps its parameters)");
+      if (pa < 0 || pa >= ins_param_zahl(art)) format(wl + "param " + std::to_string(pa) + " outside the parameters of the stage");
+      if (pa == 0) format(wl + "param 0 (an) cannot be automated");
+      if (art == ArrInsArt::komp && pa == 9) format(wl + "param 9 (sc, the key) cannot be automated");
+      for (size_t q = l0; q < static_cast<size_t>(snap.n_klanes); ++q)
+        if (snap.klane[q].strip == strip && snap.klane[q].makro < 0 && snap.klane[q].stufe == st && snap.klane[q].param == pa)
+          format(wl + "ziel (stufe " + std::to_string(st) + ", param " + std::to_string(pa) + ") twice on one strip");
+      for (int q = 0; q < rk.n; ++q)
+        if (rk.z[q].stufe == st && rk.z[q].param == pa)
+          format(wl + "ziel (stufe " + std::to_string(st) + ", param " + std::to_string(pa) + ") is mapped by a rack macro (one writer per parameter)");
+      lane.stufe = static_cast<uint8_t>(st);
+      lane.param = static_cast<uint8_t>(pa);
+    }
+    const json& pl = feld(l, "punkte", wl);
+    if (!pl.is_array() || pl.empty()) format(wl + "punkte is not a non-empty list");
+    const size_t p0 = snap.auto_punkte.size();
+    for (size_t pi = 0; pi < pl.size(); ++pi) {
+      const json& q = pl[pi];
+      const std::string wq = wl + "punkte[" + std::to_string(pi) + "]";
+      if (!q.is_array() || q.size() != 3) format(wq + " is not [beat, wert, form]");
+      if (!q[0].is_number() || !q[1].is_number() || !q[2].is_number_integer()) format(wq + " has a non-number");
+      ArrAutoPunkt x{};
+      x.beat = q[0].get<double>();
+      const double w = q[1].get<double>();
+      const int64_t fm = q[2].get<int64_t>();
+      if (!std::isfinite(x.beat) || x.beat < 0.0) format(wq + " beat negative or not finite");
+      if (!std::isfinite(w) || (lane.makro >= 0 && (w < 0.0 || w > 1.0))) format(wq + " wert " + (lane.makro >= 0 ? "outside 0 to 1" : "not finite"));
+      if (!std::isfinite(static_cast<float>(w))) format(wq + " wert not representable as a float");
+      if (fm < 0 || fm > 2) format(wq + " form outside 0 to 2");
+      x.wert = static_cast<float>(w);
+      x.form = static_cast<uint8_t>(fm);
+      if (pi > 0 && x.beat < snap.auto_punkte.back().beat) format(wq + " beats fall");
+      if (pi > 1 && x.beat == snap.auto_punkte[snap.auto_punkte.size() - 1].beat && x.beat == snap.auto_punkte[snap.auto_punkte.size() - 2].beat)
+        format(wq + " three points at one beat");
+      snap.auto_punkte.push_back(x);
+    }
+    lane.n = static_cast<int>(pl.size());
+    lane.p = snap.auto_punkte.data() + p0;
+    snap.klane[snap.n_klanes++] = lane;
   }
 }
 
@@ -531,15 +650,19 @@ constexpr size_t BK_DATEI_MAX = 4u << 20;   // a graph file larger than this is 
 }
 
 int32_t ArrAudioCache::bk_hole(int nr, const std::string& graph, CypherBk** h, uint64_t* gen, std::string& grund,
-                               std::string& meldung) {
+                               std::string& meldung, bool effekt, int lat_max, int* lat) {
   grund = "format";
+  // arr-bk: for an insert stage (effekt) a graph file that is not there is its own reason: the loader plays the stage dry instead of refusing the whole playback
+  const char* const fehlt = effekt ? "bk_graph_fehlt" : "format";
   if (bk_ordner_.empty()) {
+    grund = fehlt;
     meldung = "graph " + graph + ": no graph folder set";
     return -1;
   }
   const std::string pfad = bk_ordner_ + "/" + graph + ".json";
   std::ifstream f(pfad, std::ios::binary);
   if (!f) {
+    grund = fehlt;
     meldung = "graph " + graph + ": " + pfad + " cannot be read";
     return -1;
   }
@@ -559,6 +682,7 @@ int32_t ArrAudioCache::bk_hole(int nr, const std::string& graph, CypherBk** h, u
     ++bk_[i].ref;
     *h = bk_[i].h;
     *gen = bk_[i].gen;
+    if (lat) *lat = bk_[i].lat;
     return static_cast<int32_t>(i);
   }
   char fehler[256] = {};
@@ -568,17 +692,32 @@ int32_t ArrAudioCache::bk_hole(int nr, const std::string& graph, CypherBk** h, u
     meldung = "graph " + graph + ": " + fehler;
     return -1;
   }
+  if (effekt) {   // arr-bk slice 3: an insert stage needs an effect graph; its latency goes into the delay compensation (up to the dry ring of the stage)
+    if (!cypher_bk_hat_eingang(b)) {
+      cypher_bk_frei(b);
+      meldung = "graph " + graph + " is an instrument graph (it has no input node), an effect graph is expected";
+      return -1;
+    }
+    const uint32_t l = cypher_bk_latenz(b);
+    if (l > static_cast<uint32_t>(lat_max)) {
+      cypher_bk_frei(b);
+      meldung = "graph " + graph + " has a latency of " + std::to_string(l) + " samples (an insert stage takes at most " + std::to_string(lat_max) + ")";
+      return -1;
+    }
+    if (lat) *lat = static_cast<int>(l);
+  } else {
 #ifndef CYPHERDJ_MUTATION_ARR_BK_EFFEKT_OFFEN
-  if (cypher_bk_hat_eingang(b)) {
-    cypher_bk_frei(b);
-    meldung = "graph " + graph + " is an effect graph, an instrument is expected";
-    return -1;
-  }
+    if (cypher_bk_hat_eingang(b)) {
+      cypher_bk_frei(b);
+      meldung = "graph " + graph + " is an effect graph, an instrument is expected";
+      return -1;
+    }
 #endif
-  if (const uint32_t lat = cypher_bk_latenz(b); lat > 0) {
-    cypher_bk_frei(b);
-    meldung = "graph " + graph + " has a latency of " + std::to_string(lat) + " samples (not supported on a project track)";
-    return -1;
+    if (const uint32_t l = cypher_bk_latenz(b); l > 0) {
+      cypher_bk_frei(b);
+      meldung = "graph " + graph + " has a latency of " + std::to_string(l) + " samples (not supported on a project track)";
+      return -1;
+    }
   }
   size_t slot = 0;
   while (slot < bk_.size() && !bk_[slot].schluessel.empty()) ++slot;
@@ -587,6 +726,7 @@ int32_t ArrAudioCache::bk_hole(int nr, const std::string& graph, CypherBk** h, u
   bk_[slot].h = b;
   bk_[slot].gen = ++bk_zaehler_;
   bk_[slot].ref = 1;
+  bk_[slot].lat = effekt && lat ? *lat : 0;
   *h = b;
   *gen = bk_[slot].gen;
   return static_cast<int32_t>(slot);
@@ -839,7 +979,7 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
         gruppe_da[gn] = true;
         const json& ag = feld(g, "ausgang", wg);
         if (text(ag, "art", wg + "ausgang.") != "master") format(wg + "ausgang: Gruppen verschachteln nicht (nur master)");
-        lese_kette(g, wg, snap->kette[ARR_SPUREN + gn - 1], ins_belegt);
+        lese_kette(g, wg, snap->kette[ARR_SPUREN + gn - 1], ins_belegt, cache, *snap);
         lese_rack(g, wg, snap->kette[ARR_SPUREN + gn - 1], snap->rack[ARR_SPUREN + gn - 1], rack_belegt);   // 1.10 slice 4c T15
       }
     }
@@ -847,7 +987,7 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
     if (j.contains("pm")) {
       if (!v2) format("pm gibt es erst in cypherdj-arr/2");
       if (!j.at("pm").is_object()) format("pm ist kein Objekt");
-      lese_kette(j.at("pm"), "pm.", snap->kette[ARR_KETTE_PM], ins_belegt);
+      lese_kette(j.at("pm"), "pm.", snap->kette[ARR_KETTE_PM], ins_belegt, cache, *snap);
       lese_rack(j.at("pm"), "pm.", snap->kette[ARR_KETTE_PM], snap->rack[ARR_KETTE_PM], rack_belegt);
     }
     // 1.10 Slice 3: returns (only /2). The core needs only WHICH returns exist; the sends are controls, not data (spec 5.1).
@@ -869,7 +1009,7 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
         }
         const json& ar = feld(r, "ausgang", wr);
         if (text(ar, "art", wr + "ausgang.") != "master") format(wr + "ausgang: Returns senden nicht weiter (nur master)");
-        lese_kette(r, wr, snap->kette[ARR_KETTE_RET0 + rn - 1], ins_belegt);
+        lese_kette(r, wr, snap->kette[ARR_KETTE_RET0 + rn - 1], ins_belegt, cache, *snap);
         lese_rack(r, wr, snap->kette[ARR_KETTE_RET0 + rn - 1], snap->rack[ARR_KETTE_RET0 + rn - 1], rack_belegt);   // 1.10 slice 4c T15
       }
     }
@@ -898,6 +1038,20 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
         }
       }
     }
+    // 1.12 slice 6: the points of the insert and rack lanes (chain_auto of every strip) share the vector and the budget
+    auto zaehle_kette_auto = [&](const json& o) {
+      if (!(o.is_object() && o.contains("chain_auto") && o.at("chain_auto").is_array())) return;
+      for (const json& l : o.at("chain_auto")) {
+        if (!(l.is_object() && l.contains("punkte") && l.at("punkte").is_array())) continue;
+        if (l.at("punkte").size() > static_cast<size_t>(ARR_AUTO_LANE_PUNKTE_MAX))
+          throw Abbruch("zu_gross", "more than " + std::to_string(ARR_AUTO_LANE_PUNKTE_MAX) + " points in one automation lane");
+        n_auto_p += l.at("punkte").size();
+      }
+    };
+    for (const json& s : spuren) zaehle_kette_auto(s);
+    if (j.contains("gruppen") && j.at("gruppen").is_array()) for (const json& g : j.at("gruppen")) zaehle_kette_auto(g);
+    if (j.contains("returns") && j.at("returns").is_array()) for (const json& r : j.at("returns")) zaehle_kette_auto(r);
+    if (j.contains("pm")) zaehle_kette_auto(j.at("pm"));
     if (n_auto_p > static_cast<size_t>(ARR_AUTO_PUNKTE_MAX))
       throw Abbruch("zu_gross", "more than " + std::to_string(ARR_AUTO_PUNKTE_MAX) + " automation points in all lanes");
     // 1.12 slice 5: the gain envelopes count against the same budget as the lanes (one number for the server's roll-out, D7)
@@ -1010,7 +1164,7 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
       sp.nr = static_cast<int>(nr);
       if (s.contains("rack") && !v2) format(wo + "rack gibt es erst in cypherdj-arr/2");
       if (s.contains("chain") && !v2) format(wo + "chain gibt es erst in cypherdj-arr/2");   // like ausgang below
-      lese_kette(s, wo, snap->kette[nr - 1], ins_belegt);
+      lese_kette(s, wo, snap->kette[nr - 1], ins_belegt, cache, *snap);
       GliedRoh glied_roh;   // 1.9 U8 T9: the member targets of this strip, checked after its members are parsed
       const bool ist_rack_spur = s.contains("art") && s.at("art").is_string() && s.at("art").get<std::string>() == "intern" && s.contains("geraet") &&
                                  s.at("geraet").is_string() && s.at("geraet").get<std::string>() == "rack";
@@ -1338,8 +1492,10 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
           for (const AutoZiel& z : AUTO_ZIELE)
             if (zname == z.name) az = &z;
           if (!az) format(wl + "ziel " + zname + " unknown");
-          if (az->ziel == ARR_AUTO_GERAET && !(sp.art == ArrArt::intern && std::strcmp(sp.geraet, "rb338") == 0))   // 1.12: the four parameters are the RB-338's; the bk sink has no auto_parameter
+          if (az->geraet == 1 && !(sp.art == ArrArt::intern && std::strcmp(sp.geraet, "rb338") == 0))   // the four parameters are the RB-338's
             format(wl + "ziel " + zname + " only on an RB-338 track");
+          if (az->geraet == 2 && !(sp.art == ArrArt::intern && std::strcmp(sp.geraet, "bk") == 0))   // 1.12 slice 7: the knobs are the Baukasten device's
+            format(wl + "ziel " + zname + " only on a Baukasten (bk) track");
           bool relativ = false;   // 1.12 slice 5: a summand lane of the value stack; absent or false: an absolute lane (only in /2, like `auto` itself)
           if (l.contains("relativ")) {
             if (!l.at("relativ").is_boolean()) format(wl + "relativ is not a boolean");
@@ -1390,7 +1546,15 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
         sp.auto_lanes = sp.n_auto ? snap->auto_lane_liste.data() + l0 : nullptr;
         snap->n_auto_lanes += sp.n_auto;
       }
+      if (s.contains("chain_auto") && !v2) format(wo + "chain_auto exists only in cypherdj-arr/2");
+      lese_kette_auto(s, wo, nr - 1, *snap);   // 1.12 slice 6: the insert-parameter and rack-macro lanes of this track
     }
+    // 1.12 slice 6: the same for groups, the returns and the PM (their chains and racks are parsed above; the points go into the vector reserved above)
+    if (j.contains("gruppen"))
+      for (const json& g : j.at("gruppen")) lese_kette_auto(g, "gruppen[nr " + std::to_string(g.at("nr").get<int64_t>()) + "].", ARR_SPUREN + static_cast<int>(g.at("nr").get<int64_t>()) - 1, *snap);
+    if (j.contains("pm")) lese_kette_auto(j.at("pm"), "pm.", ARR_KETTE_PM, *snap);
+    if (j.contains("returns"))
+      for (const json& r : j.at("returns")) lese_kette_auto(r, "returns[nr " + std::to_string(r.at("nr").get<int64_t>()) + "].", ARR_KETTE_RET0 + static_cast<int>(r.at("nr").get<int64_t>()) - 1, *snap);
     // 1.10 slice 5 U2a: every structural key against the table of docs/interfaces/schluessel_regeln.json (a source computed after the consumer, a strip keyed by itself, the PM)
     if (std::string m; !arr_schluessel_pruefe(*snap, &m)) format(m);
     // 1.10 slice 5 U1: the order the tracks run in when a stage listens to the post of another track; a track keyed by itself or a cycle is refused

@@ -14,9 +14,9 @@ echo "== raster_versatz";              lauf meter.py 's/v = float(np.median(nach
 echo "== klick_pausen";                lauf meter.py 's/fehlend += int(round(g \/ spb)) - 1 if g > 1.5 \* spb else 0/fehlend += 0/' tests/test_meter.py
 echo "== schleife_treue";              lauf meter.py 's/"abweichend": int(np.sum(d > 1e-6))/"abweichend": int(np.sum(d > 1e-1))/' tests/test_meter.py
 echo "== raster_luecken";              lauf meter.py 's/luecken = int(sum(int(round(d\[i\] \/ quantum)) for i in idx if d\[i\] > 0))/luecken = len(idx)/' tests/test_meter.py
-echo "== Treue-Fenster daneben";       lauf evaluation.py 's/von = a0 if ist_kern else a + int(4 \* spb) + SR \/\/ 10/von = a0 if ist_kern else a + SR \/\/ 10/' tests/test_auswertung.py
-echo "== Spins im Aufnahmefenster";    lauf evaluation.py 's/if t_auf <= t < t_ende_auf)/)/' tests/test_auswertung.py
-echo "== Aufnehmer-Lücke unbrauchbar"; lauf evaluation.py 's/brauchbar = meta\["luecken"\] == 0 and/brauchbar = True or/' tests/test_auswertung.py
-echo "== Rückgabe-Folge";              lauf evaluation.py 's/return all(any(x == t for x in it) for t in teil)/return True/' tests/test_auswertung.py
+echo "== Treue-Fenster daneben";       lauf evaluation.py 's/von = a0 if ist_kern else a + int(4 \* spb) + SR \/\/ 10/von = a0 if ist_kern else a + SR \/\/ 10/' tests/test_evaluation.py
+echo "== Spins im Aufnahmefenster";    lauf evaluation.py 's/if t_auf <= t < t_ende_auf)/)/' tests/test_evaluation.py
+echo "== Aufnehmer-Lücke unbrauchbar"; lauf evaluation.py 's/brauchbar = meta\["luecken"\] == 0 and/brauchbar = True or/' tests/test_evaluation.py
+echo "== Rückgabe-Folge";              lauf evaluation.py 's/return all(any(x == t for x in it) for t in teil)/return True/' tests/test_evaluation.py
 echo "blind: $blind"
 exit $(( blind > 0 ))

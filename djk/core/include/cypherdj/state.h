@@ -17,10 +17,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define CDJ_ZUSTAND_VERSION 3u
+#define CDJ_ZUSTAND_VERSION 4u
 #define CDJ_Z_SEGMENTE 64    /* §1.3 */
 #define CDJ_Z_BEFEHLE 256    /* §6.3: ausstehende Befehle bis 256 */
-#define CDJ_Z_REGLER 2048    /* §1.5; >= MAX_REGLER (signalbox/controls.h), sonst schneidet core_state.cpp still ab (E1) */
+#define CDJ_Z_REGLER 4096    /* §1.5; >= MAX_REGLER (signalbox/controls.h), sonst schneidet core_state.cpp still ab (E1) */
 #define CDJ_Z_HOERSCHEINE 32 /* §4.5 */
 #define CDJ_Z_DECKS 4        /* §1.5 */
 #define CDJ_Z_HOTCUES 8      /* §4.4 */

@@ -104,6 +104,9 @@ static jack_port_t* g_rueck[8][2] = {};                    // Studio S5: §8 rue
 // D1 K2b (Spec 2.4): Wirt-Slots des Arrangements, §7.1 arr_midi_<s> hinaus, §8 arr_rueck_<s>_L/R herein, je mit All-Off-Plan
 static jack_port_t* g_arr_midi[cdj::ARR_WIRT_SLOTS] = {};
 static jack_port_t* g_arr_rueck[cdj::ARR_WIRT_SLOTS][2] = {};
+// Plan 1.11 T3: effect hosts h = 1..ARR_INS_HOST, send arr_ins_<h>_L/R (out), return arr_insret_<h>_L/R (in)
+static jack_port_t* g_ins_aus[cdj::ARR_INS_HOST][2] = {};
+static jack_port_t* g_ins_rueck[cdj::ARR_INS_HOST][2] = {};
 static cdj::AllAusPlan g_arr_allaus_plan[cdj::ARR_WIRT_SLOTS];
 static std::atomic<uint64_t> g_arr_allaus_gesendet[cdj::ARR_WIRT_SLOTS] = {};
 static std::atomic<uint64_t> g_arr_allaus_luecken[cdj::ARR_WIRT_SLOTS] = {};
@@ -201,6 +204,15 @@ static int process(jack_nframes_t n, void*) {
   for (int s = 0; s < cdj::ARR_WIRT_SLOTS; ++s)  // D1 K2b: Rückwege der Wirt-Slots in die Spur, die den Slot spielt
     g_kern->arr_rueck(s + 1, g_arr_rueck[s][0] ? (const float*)jack_port_get_buffer(g_arr_rueck[s][0], n) : nullptr,
                       g_arr_rueck[s][1] ? (const float*)jack_port_get_buffer(g_arr_rueck[s][1], n) : nullptr);
+  for (int h = 0; h < cdj::ARR_INS_HOST; ++h) {  // plan 1.11 T3: effect-host sends (zeroed, the stage writes into them) and returns; pointer stores only
+    float* al = g_ins_aus[h][0] ? (float*)jack_port_get_buffer(g_ins_aus[h][0], n) : nullptr;
+    float* ar = g_ins_aus[h][1] ? (float*)jack_port_get_buffer(g_ins_aus[h][1], n) : nullptr;
+    if (al) std::memset(al, 0, n * sizeof(float));
+    if (ar) std::memset(ar, 0, n * sizeof(float));
+    g_kern->ins_aus(h + 1, al, ar);
+    g_kern->ins_rueck(h + 1, g_ins_rueck[h][0] ? (const float*)jack_port_get_buffer(g_ins_rueck[h][0], n) : nullptr,
+                      g_ins_rueck[h][1] ? (const float*)jack_port_get_buffer(g_ins_rueck[h][1], n) : nullptr);
+  }
   g_kern->zyklus((int)n, (int64_t)cu * 1000);                // cu: Blockanfang in µs (CLOCK_MONOTONIC)
   if (g_stolper_an) st_vor = mono_ns();
   for (int p = 0; p < cdj::ERZ_MIDI_PORTS; ++p) {  // Studio S5: MIDI dieses Zyklus, nach Versatz sortiert
@@ -222,7 +234,7 @@ static int process(jack_nframes_t n, void*) {
       if (ev.t < n) jack_midi_event_write(mb, ev.t, ev.b, 3);
     }
   }
-  for (int s = 0; s < cdj::ARR_WIRT_SLOTS; ++s)  // D1 K2b: Wirt-Slots des Arrangements (Noten um 2n + 25 vorgezogen)
+  for (int s = 0; s < cdj::ARR_WIRT_SLOTS; ++s)  // D1 K2b: Wirt-Slots des Arrangements (Noten um 2n vorgezogen)
     midi_ausgeben(g_arr_midi[s], n, (int64_t)cu * 1000, g_arr_allaus_plan[s], g_arr_allaus_gesendet[s],
                   g_arr_allaus_luecken[s], g_kern->arr_midi_aus(s + 1));
   for (int s = 0; s < cdj::ARR_WIRT_SLOTS; ++s)  // F9: Zähler fortlaufend seit Start, gespiegelt für die Diagnosezeile
@@ -749,6 +761,31 @@ int main(int argc, char** argv) {
     if (!g_arr_midi[a] || !g_arr_rueck[a][0] || !g_arr_rueck[a][1])
       std::fprintf(stderr, "Wirt-Slot %d des Arrangements: Ports nicht vollständig angelegt\n", a + 1);
   }
+  {  // plan 1.11 T3/T4: effect-host ports; one source of truth: either all 16 are registered (host_ports_da true) or none is (every pointer null, flag false)
+    bool alle = true;
+    for (int h = 0; h < cdj::ARR_INS_HOST && alle; ++h)
+      for (int s = 0; s < 2 && alle; ++s) {
+        char name[32];
+        std::snprintf(name, sizeof name, "arr_ins_%d_%c", h + 1, s ? 'R' : 'L');
+        g_ins_aus[h][s] = jack_port_register(g_client, name, JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput, 0);
+        if (!g_ins_aus[h][s]) { std::fprintf(stderr, "Effect-host port %s: JACK refused the registration\n", name); alle = false; break; }
+        std::snprintf(name, sizeof name, "arr_insret_%d_%c", h + 1, s ? 'R' : 'L');
+        g_ins_rueck[h][s] = jack_port_register(g_client, name, JACK_DEFAULT_AUDIO_TYPE, JackPortIsInput, 0);
+        if (!g_ins_rueck[h][s]) { std::fprintf(stderr, "Effect-host port %s: JACK refused the registration\n", name); alle = false; }
+      }
+    if (!alle) {   // a partial set is worth nothing: take back what was registered, so that no pointer is non-null while the flag says "unavailable"
+      for (int h = 0; h < cdj::ARR_INS_HOST; ++h)
+        for (int s = 0; s < 2; ++s) {
+          if (g_ins_aus[h][s]) jack_port_unregister(g_client, g_ins_aus[h][s]);
+          if (g_ins_rueck[h][s]) jack_port_unregister(g_client, g_ins_rueck[h][s]);
+          g_ins_aus[h][s] = nullptr;
+          g_ins_rueck[h][s] = nullptr;
+        }
+      std::fprintf(stderr, "Effect-host ports (arr_ins_*, arr_insret_*) not fully registered: none kept, no effect hosts in this run\n");
+    }
+    g_kern->setze_host_ports_da(alle);
+    arr_lader.setze_host_da(alle);   // the loader refuses a playback with a host stage as host_fehlt when the ports are not there
+  }
   g_ring = ring;
   // Scheibe 18: Neustart-Zustand lesen und übernehmen (INTERFACES §6.3), gespeicherte Abonnenten ans Netz
   // Keylock Task 2.5b (Vertrag 17, Prüfung F2): Vorgabe 1 im Betrieb, hier nur angekündigt (kostet nichts); Dehner und
@@ -1050,6 +1087,11 @@ int main(int argc, char** argv) {
       }
       std::fprintf(stderr, "Kante neu verbunden: %s -> %s (mono_ns %lld, Neuverbindung %llu)\n", k.quelle.c_str(),
                    k.ziel.c_str(), (long long)mono_ns(), (unsigned long long)aus_neu);
+    }
+    {  // plan 1.11 T5 (D7): the core's own source of effect-host health, once per supervision period and after the connect pass: a host client that vanished, a port that is gone or an edge that
+       // cannot be held clears the bit within 500 ms. No I/O, no JACK call beyond the two lookups above; the server's flag is the other source (/k/arr/ins_host).
+      const uint32_t maske = cdj::host_kanten_gesund(soll_alle, kern_praefix, ist_jack);
+      for (int h = 1; h <= cdj::ARR_INS_HOST; ++h) g_kern->setze_host_kante(h, (maske >> (h - 1)) & 1u);
     }
   };
   auto verbinde = [&]() {

@@ -44,9 +44,14 @@ class ArrBkSenke final : public ArrSenke, public ArrBkLeser {
   // 1.9 U8 T9 (E12): the value of knob `param` (0..7 = k1..k8) of the slot for the next block(): a value reported in a block wins over the knob of the snapshot in that block (also at a
   // take-over and a transport start); no report in a block: the snapshot's knob is used again. Caller thread, before block() (the macro hook of the rack); never from a lane unit.
   void auto_parameter(int spur, int param, float wert) noexcept override;
+  // 1.12 slice 7: a knob with a RELATIVE lane (a clip envelope) and no absolute one: `delta` is added to the knob of the snapshot (clamped 0..1) for the next block, under the same rules
+  // as auto_parameter (a value reported in a block wins; no report: the snapshot knob alone).
+  void auto_parameter_summand(int spur, int param, float delta) noexcept override;
 
   // ArrBkLeser: does the callback still use this instance (play it or fade it)? Called from the loader thread.
-  bool nutzt(const CypherBk* h) const noexcept override;
+  bool nutzt(const CypherBk* h) const noexcept override;   // true also when the second reader (the insert stages, arr-bk slice 3) uses it
+  // arr-bk slice 3: the graph store has one reader, so the sink answers for the insert stages as well. Before the loader thread starts.
+  void setze_zweiten_leser(const ArrBkLeser* l) noexcept { zweiter_ = l; }
   // beat of the first sample of the next block and beats per sample, set by the kern before the arrangement block
   void takt(double beat0, double bps) noexcept {
     beat0_ = beat0;
@@ -75,12 +80,15 @@ class ArrBkSenke final : public ArrSenke, public ArrBkLeser {
     bool neu = false;                   // an instance was just taken over: the knobs jump to their values
     float knopf_wert[8] = {};           // knobs reported for the next block (auto_parameter)
     bool knopf_da[8] = {};
+    float knopf_delta[8] = {};          // summands reported for the next block (auto_parameter_summand)
+    bool delta_da[8] = {};
     std::atomic<const CypherBk*> aktiv{nullptr};    // published with release order: the instance this slot plays
     std::atomic<const CypherBk*> blende{nullptr};   // the instance this slot fades out in the current block
   };
   void schiebe(Spur& p, const Ev& e) noexcept;
 
   const Arrangement& arr_;
+  const ArrBkLeser* zweiter_ = nullptr;
   Spur sp_[ARR_SENKEN_PLAETZE];
   double beat0_ = 0.0, bps_ = 0.0;
   std::atomic<uint64_t> verloren_{0};

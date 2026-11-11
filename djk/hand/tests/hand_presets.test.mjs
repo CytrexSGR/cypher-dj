@@ -368,7 +368,7 @@ test('AK-B16-8: tools/list length = N + 6 (N = 66 on the base) = the count of to
   const laenge = (await c.listTools()).tools.length;
   const quelle = fs.readFileSync(HAND, 'utf8');
   const imCode = quelle.split('\n').filter((z) => z.startsWith("  { name: '")).length;
-  assert.equal(laenge, 66 + 6 + 1 + 1 + 1 + 1);   // + ansage (demo overlay) + proj_kits (1.9 T2.5) + proj_routing (1.10 T1) + proj_resample (1.10 T6)
+  assert.equal(laenge, 66 + 6 + 1 + 1 + 1 + 1 + 1 + 1 + 1 /* MIDI import */);   // + plugins (1.11 T8) + ansage (demo overlay) + proj_kits (1.9 T2.5) + proj_routing (1.10 T1) + proj_resample (1.10 T6) + proj_muster (strudel-clip)
   assert.equal(imCode, laenge, 'grep -c "^  { name: \'" djk/hand/hand.ts');
   const wurzel = path.resolve(path.dirname(HAND), '..', '..');
   // the English edition lives under docs/veroeffentlichung in the working repo; the public repo carries only djk/hand/AUFRUF.md

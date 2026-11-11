@@ -8,7 +8,7 @@ import { fuehreListeAus } from '../project/commands.ts';
 import { neuesProjekt } from '../project/model.ts';
 import { INSERT_ARTEN } from '../project/insert_key.ts';
 import { starteSeite, warte } from '../check/page_mock.mjs';
-import { KOMP_PARAMETER, KOMP_VOLL_TEXT, MAX_PLAETZE, MAX_KOMP, MAX_EQ, MAX_SAETT, MAX_LIM, LIM_PARAMETER, plaetze, neuerInsertBefehl, paramBefehl, preBefehl,
+import { KOMP_PARAMETER, KOMP_VOLL_TEXT, MAX_PLAETZE, MAX_KOMP, MAX_EQ, MAX_SAETT, MAX_LIM, LIM_PARAMETER, MAX_UTIL, UTIL_PARAMETER, MAX_BK, BK_PARAMETER, BK_STANDARD_GRAPH, plaetze, neuerInsertBefehl, paramBefehl, preBefehl,
   SAETT_PARAMETER, EQ_KOPF_PARAMETER, EQ_BAND_PARAMETER, EQ_BAENDER, EQ_BAND_TYP_VORGABE, EQ_BAND_FREQ_VORGABE, EQ_TYPEN, EQ_STEIL, EQ_PLATZ, parameterVon, wertText,
   freqVonPos, posVonFreq, POS_MAX, anzahl, frei, ARTEN,
   INS_GR_FRIST_MS, insGrAufnehmen, insGrLesung, insGrAblaufIn, insGrText } from '../public/production/inserts.js';
@@ -162,6 +162,10 @@ test('inserts.js 4b: the literal saturator and EQ tables equal the generated con
   assert.equal(MAX_EQ, INSERT_ARTEN.eq.instanzen); assert.equal(MAX_SAETT, INSERT_ARTEN.saett.instanzen);
   assert.deepEqual(LIM_PARAMETER.map((q) => [q.name, q.min, q.max, q.vorgabe, q.einheit]), vertragWerte('lim').map((q) => [q.name, q.min, q.max, q.vorgabe, q.einheit]));
   assert.equal(MAX_LIM, INSERT_ARTEN.lim.instanzen);
+  assert.deepEqual(UTIL_PARAMETER.map((q) => [q.name, q.min, q.max, q.vorgabe, q.einheit]), vertragWerte('utility').map((q) => [q.name, q.min, q.max, q.vorgabe, q.einheit]), 'arr-fx: the utility table');
+  assert.equal(MAX_UTIL, INSERT_ARTEN.utility.instanzen);
+  assert.deepEqual(BK_PARAMETER.map((q) => [q.name, q.min, q.max, q.vorgabe, q.einheit]), vertragWerte('bk').map((q) => [q.name, q.min, q.max, q.vorgabe, q.einheit]), 'arr-bk: the knob table k1..k8');
+  assert.equal(MAX_BK, INSERT_ARTEN.bk.instanzen);
   const eq = Object.fromEntries(vertragWerte('eq').map((q) => [q.name, q]));
   for (const q of EQ_KOPF_PARAMETER) assert.deepEqual([q.min, q.max, q.vorgabe, q.einheit], [eq[q.name].min, eq[q.name].max, eq[q.name].vorgabe, eq[q.name].einheit], q.name);
   assert.equal(EQ_BAENDER, 8);
@@ -190,26 +194,41 @@ test('inserts.js 4b: the log frequency slider maps both ends exactly and round-t
   assert.throws(() => wertText('eq', 'b9/gain', 0)); assert.throws(() => wertText('saett', 'schwelle', 0));
   assert.equal(wertText('lim', 'decke', -1), '-1.0 dB'); assert.equal(wertText('lim', 'abklingen', 80), '80 ms');
   assert.throws(() => wertText('lim', 'schwelle', 0));
+  // arr-fx: the utility texts (width as a percentage, mono below as a frequency or off, balance as a side)
+  assert.equal(wertText('utility', 'breite', 1), '100 %'); assert.equal(wertText('utility', 'breite', 1.5), '150 %'); assert.equal(wertText('utility', 'breite', 4), '400 %');
+  assert.equal(wertText('utility', 'mono_unter', 0), 'off'); assert.equal(wertText('utility', 'mono_unter', 120), '120 Hz'); assert.equal(wertText('utility', 'mono_unter', 5), '20 Hz', 'the module clamps 1..19 to 20');
+  assert.equal(wertText('utility', 'gain', 6), '6.0 dB'); assert.equal(wertText('utility', 'balance', 0), 'centre'); assert.equal(wertText('utility', 'balance', -0.5), 'L 50 %');
+  assert.throws(() => wertText('utility', 'schwelle', 0));
+  const pu = projekt({ s1: 3, master: 1 }, 'utility');
+  assert.deepEqual([anzahl(pu, 'utility'), frei(pu, 'utility')], [4, 4], 'four of eight utilities placed on a track and the master');
+  assert.notEqual(neuerInsertBefehl(pu, 's2', 'utility'), null);
   const p1 = projekt({ s1: 1 }, 'eq');
-  assert.deepEqual([anzahl(p1, 'eq'), frei(p1, 'eq')], [1, 1], 'one EQ placed, one left in the pool of two');
+  assert.deepEqual([anzahl(p1, 'eq'), frei(p1, 'eq')], [1, 7], 'one EQ placed, seven left in the pool of eight');
   assert.deepEqual(neuerInsertBefehl(p1, 's1', 'eq'), { befehl: 'insert_setzen', strang_id: 's1', pos: 1, art: 'eq' }, 'negative control: the second EQ is offered');
   const p = projekt({ s1: 2 }, 'eq');
-  assert.deepEqual([anzahl(p, 'eq'), frei(p, 'eq'), anzahl(p, 'komp'), frei(p, 'komp'), frei(p, 'saett')], [2, 0, 0, 12, 1]);
-  assert.equal(neuerInsertBefehl(p, 's1', 'eq'), null, 'the pool of two EQs is empty');
+  assert.deepEqual([anzahl(p, 'eq'), frei(p, 'eq'), anzahl(p, 'komp'), frei(p, 'komp'), frei(p, 'saett')], [2, 6, 0, 12, 4]);
+  const pv = projekt({ s1: 4, s2: 4 }, 'eq');
+  assert.deepEqual([anzahl(pv, 'eq'), frei(pv, 'eq')], [8, 0], 'the pool of eight EQs is placed');
+  assert.equal(neuerInsertBefehl(pv, 's3', 'eq'), null, 'the pool of eight EQs is empty');
+  assert.notEqual(neuerInsertBefehl(pv, 's3', 'saett'), null, 'negative control: a saturator is still offered');
   assert.deepEqual(neuerInsertBefehl(p, 's1', 'saett'), { befehl: 'insert_setzen', strang_id: 's1', pos: 2, art: 'saett' });
   assert.deepEqual(neuerInsertBefehl(p, 's1'), { befehl: 'insert_setzen', strang_id: 's1', pos: 2, art: 'komp' }, 'the default kind is the compressor');
-  assert.equal(neuerInsertBefehl(p, 's1', 'bk'), null, 'an unknown kind');
-  assert.deepEqual(Object.keys(ARTEN), ['komp', 'eq', 'saett', 'lim']);
+  assert.equal(neuerInsertBefehl(p, 's1', 'host'), null, 'an unknown kind');
+  assert.deepEqual(neuerInsertBefehl(p, 's1', 'bk'), { befehl: 'insert_setzen', strang_id: 's1', pos: 2, art: 'bk', graph: BK_STANDARD_GRAPH }, 'arr-bk: the Fx button names the shipped delay');
+  assert.deepEqual(Object.keys(ARTEN), ['komp', 'eq', 'saett', 'lim', 'utility', 'bk']);
   const pl = projekt({ s1: 1 }, 'lim');
-  assert.deepEqual([anzahl(pl, 'lim'), frei(pl, 'lim')], [1, 0], 'the one limiter of the pool is placed');
-  assert.equal(neuerInsertBefehl(pl, 's2', 'lim'), null, 'the pool of one limiter is empty');
+  assert.deepEqual([anzahl(pl, 'lim'), frei(pl, 'lim')], [1, 1], 'one of the two limiters of the pool is placed');
+  assert.notEqual(neuerInsertBefehl(pl, 's2', 'lim'), null, 'negative control: the second limiter is offered');
+  const pl2 = projekt({ s1: 2 }, 'lim');
+  assert.deepEqual([anzahl(pl2, 'lim'), frei(pl2, 'lim')], [2, 0], 'both limiters of the pool are placed');
+  assert.equal(neuerInsertBefehl(pl2, 's2', 'lim'), null, 'the pool of two limiters is empty');
   assert.notEqual(neuerInsertBefehl(pl, 's2', 'komp'), null, 'negative control: a compressor is still offered');
 });
 
 test('page 4b: production.js says the new reasons in words (art_unbekannt, ins_voll); the temporary pdc_fehlt is gone', () => {
   const t = fs.readFileSync(new URL('../public/production/production.js', import.meta.url), 'utf8');
   assert.doesNotMatch(t, /pdc_fehlt/);
-  assert.match(t, /art_unbekannt: 'That insert kind is not available \(compressor, EQ, saturator and limiter exist/);
+  assert.match(t, /art_unbekannt: 'That insert kind is not available \(compressor, EQ, saturator, limiter, utility and effect graph exist/);
   assert.match(t, /ins_voll: 'All stages of that kind are in use/);
 });
 
@@ -255,33 +274,47 @@ test('saett_popover_hat_drei_regler', { skip: !CHROME && 'no google-chrome' }, a
 test('neu_knoepfe_je_art_und_pool_voll', { skip: !CHROME && 'no google-chrome' }, async (t) => {
   const s = await seite(t, projekt());
   await s.w(`document.querySelector('[data-p="inserts"]').open = true`);   // a project without inserts keeps the block closed
-  assert.deepEqual(await s.w(`[...document.querySelectorAll('.p-kette[data-strang="s1"] .p-ins-neu')].map((b) => b.textContent)`), ['+ Comp', '+ EQ', '+ Sat', '+ Lim']);
-  assert.match(await s.w(`document.querySelector('[data-p="inserts"] summary').textContent`), /INSERTS \(0\/12\) · EQ 0\/2 · Sat 0\/1 · Lim 0\/1$/, 'no pool is full: no message');
+  assert.deepEqual(await s.w(`[...document.querySelectorAll('.p-kette[data-strang="s1"] .p-ins-neu')].map((b) => b.textContent)`), ['+ Comp', '+ EQ', '+ Sat', '+ Lim', '+ Util', '+ Fx']);
+  assert.match(await s.w(`document.querySelector('[data-p="inserts"] summary').textContent`), /INSERTS \(0\/12\) · EQ 0\/8 · Sat 0\/4 · Lim 0\/2 · Util 0\/8 · Fx 0\/8$/, 'no pool is full: no message');
   await s.b.klick('.p-kette[data-strang="s1"] .p-ins-neu[data-art="eq"]');
   assert.ok(await s.bis(async () => (await s.projekt()).spuren[0].inserts?.[0]?.art === 'eq'), 'the EQ button placed an EQ');
-  assert.ok(await s.bis(() => s.w(`/EQ 1\\/2/.test(document.querySelector('[data-p="inserts"] summary').textContent)`)), 'one of two EQs used');
+  assert.ok(await s.bis(() => s.w(`/EQ 1\\/8/.test(document.querySelector('[data-p="inserts"] summary').textContent)`)), 'one of eight EQs used');
   assert.equal(await s.w(`document.querySelector('.p-kette[data-strang="s1"] .p-ins-neu[data-art="eq"]').disabled`), false, 'negative control: the second EQ is still offered');
   await s.b.klick('.p-kette[data-strang="s1"] .p-ins-neu[data-art="eq"]');
   assert.ok(await s.bis(async () => (await s.projekt()).spuren[0].inserts?.[1]?.art === 'eq'), 'the EQ button placed the second EQ');
+  assert.doesNotMatch(await s.w(`document.querySelector('[data-p="inserts"] summary').textContent`), /No free/, 'two of eight: no pool is full');
+});
+
+test('neu_knoepfe_pool_voll: the last EQ of the pool says it in the header and disables the button on every strip', { skip: !CHROME && 'no google-chrome' }, async (t) => {
+  const s = await seite(t, projekt({ s1: 4, s2: 3 }, 'eq'));   // seven of eight EQs placed
+  await s.w(`document.querySelector('[data-p="inserts"]').open = true`);
+  assert.match(await s.w(`document.querySelector('[data-p="inserts"] summary').textContent`), /EQ 7\/8/);
+  await s.b.klick('.p-kette[data-strang="s2"] .p-ins-neu[data-art="eq"]');
+  assert.ok(await s.bis(async () => (await s.projekt()).spuren[1].inserts?.[3]?.art === 'eq'), 'the EQ button placed the eighth EQ');
   assert.ok(await s.bis(() => s.w(`/No free EQ/.test(document.querySelector('[data-p="inserts"] summary').textContent)`)), 'the full EQ pool is said in the header');
-  assert.equal(await s.w(`document.querySelector('.p-kette[data-strang="s1"] .p-ins-neu[data-art="eq"]').disabled`), true);
-  assert.equal(await s.w(`document.querySelector('.p-kette[data-strang="s1"] .p-ins-neu[data-art="eq"]').title`), 'No free EQ');
-  // negative control: the other two kinds are still offered on that strip
-  assert.equal(await s.w(`document.querySelector('.p-kette[data-strang="s1"] .p-ins-neu[data-art="saett"]').disabled`), false);
-  assert.equal(await s.w(`document.querySelector('.p-kette[data-strang="s1"] .p-ins-neu[data-art="komp"]').disabled`), false);
+  assert.equal(await s.w(`document.querySelector('.p-kette[data-strang="s3"] .p-ins-neu[data-art="eq"]').disabled`), true);
+  assert.equal(await s.w(`document.querySelector('.p-kette[data-strang="s3"] .p-ins-neu[data-art="eq"]').title`), 'No free EQ');
+  // negative control: the other kinds are still offered on that strip
+  assert.equal(await s.w(`document.querySelector('.p-kette[data-strang="s3"] .p-ins-neu[data-art="saett"]').disabled`), false);
+  assert.equal(await s.w(`document.querySelector('.p-kette[data-strang="s3"] .p-ins-neu[data-art="komp"]').disabled`), false);
   assert.doesNotMatch(await s.w(`document.querySelector('[data-p="inserts"] summary').textContent`), /No free (compressor|saturator)/);
 });
 
 test('master_lim_knopf_legt_limiter_auf_den_master', { skip: !CHROME && 'no google-chrome' }, async (t) => {
   const s = await seite(t, projekt());
   await s.w(`document.querySelector('[data-p="inserts"]').open = true`);
-  assert.deepEqual(await s.w(`[...document.querySelectorAll('.p-kette[data-strang="master"] .p-ins-neu')].map((b) => b.textContent)`), ['+ Comp', '+ EQ', '+ Sat', '+ Lim']);
+  assert.deepEqual(await s.w(`[...document.querySelectorAll('.p-kette[data-strang="master"] .p-ins-neu')].map((b) => b.textContent)`), ['+ Comp', '+ EQ', '+ Sat', '+ Lim', '+ Util', '+ Fx']);
   await s.w(`document.querySelector('.p-kette[data-strang="master"]').scrollIntoView({ block: 'center' })`);   // the master row is the last: below the fold
   await s.b.klick('.p-kette[data-strang="master"] .p-ins-neu[data-art="lim"]');
   assert.ok(await s.bis(async () => (await s.projekt()).master.inserts?.[0]?.art === 'lim'), 'the Lim button placed a limiter on the master');
-  assert.ok(await s.bis(() => s.w(`/Lim 1\\/1/.test(document.querySelector('[data-p="inserts"] summary').textContent)`)), 'the header counts the limiter');
-  assert.equal(await s.w(`document.querySelector('.p-kette[data-strang="s1"] .p-ins-neu[data-art="lim"]').disabled`), true);
-  assert.equal(await s.w(`document.querySelector('.p-kette[data-strang="s1"] .p-ins-neu[data-art="lim"]').title`), 'No free limiter');
+  assert.ok(await s.bis(() => s.w(`/Lim 1\\/2/.test(document.querySelector('[data-p="inserts"] summary').textContent)`)), 'the header counts the limiter');
+  assert.equal(await s.w(`document.querySelector('.p-kette[data-strang="s1"] .p-ins-neu[data-art="lim"]').disabled`), false, 'negative control: the second limiter of the pool is still offered');
+  await s.w(`document.querySelector('.p-kette[data-strang="s1"]').scrollIntoView({ block: 'center' })`);
+  await s.b.klick('.p-kette[data-strang="s1"] .p-ins-neu[data-art="lim"]');
+  assert.ok(await s.bis(async () => (await s.projekt()).spuren[0].inserts?.[0]?.art === 'lim'), 'the Lim button placed the second limiter');
+  await s.w(`document.querySelector('.p-kette[data-strang="master"]').scrollIntoView({ block: 'center' })`);
+  assert.equal(await s.w(`document.querySelector('.p-kette[data-strang="s2"] .p-ins-neu[data-art="lim"]').disabled`), true);
+  assert.equal(await s.w(`document.querySelector('.p-kette[data-strang="s2"] .p-ins-neu[data-art="lim"]').title`), 'No free limiter');
   // negative control: the compressor button of a strip stays enabled
   assert.equal(await s.w(`document.querySelector('.p-kette[data-strang="s1"] .p-ins-neu[data-art="komp"]').disabled`), false);
   // the popover of the stage: ceiling and release move the value in the project
@@ -289,4 +322,33 @@ test('master_lim_knopf_legt_limiter_auf_den_master', { skip: !CHROME && 'no goog
   assert.equal(await zaehle(s, '.p-ins-popover .p-ins-param'), 2, 'ceiling and release');
   await s.w(`(() => { const e = document.querySelector('.p-ins-popover .p-ins-param[data-param="decke"]'); e.value = '-3'; e.dispatchEvent(new Event('input', { bubbles: true })); })()`);
   assert.ok(await s.bis(async () => (await s.projekt()).master.inserts[0].werte.decke === -3), 'the ceiling reached the project');
+});
+
+test('arr-fx: the Util button places a utility stage as a stage on a track; the popover moves width and mono below in the project, the stage shows no latency', { skip: !CHROME && 'no google-chrome' }, async (t) => {
+  const s = await seite(t, projekt());
+  await s.w(`document.querySelector('[data-p="inserts"]').open = true`);
+  await s.b.klick('.p-kette[data-strang="s1"] .p-ins-neu[data-art="utility"]');
+  assert.ok(await s.bis(async () => (await s.projekt()).spuren[0].inserts?.[0]?.art === 'utility'), 'the Util button placed a utility on track 1');
+  assert.ok(await s.bis(() => s.w(`/Util 1\\/8/.test(document.querySelector('[data-p="inserts"] summary').textContent)`)), 'the header counts the utility');
+  assert.doesNotMatch(await s.w(`document.querySelector('[data-p="inserts"] summary').textContent`), /No free utility/);
+  await s.b.klick('.p-kette[data-strang="s1"] .p-stufe .p-ins-name');
+  assert.equal(await zaehle(s, '.p-ins-popover .p-ins-param'), 4, 'width, mono below, gain and balance');
+  await s.w(`(() => { const e = document.querySelector('.p-ins-popover .p-ins-param[data-param="breite"]'); e.value = '1.6'; e.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+  await s.w(`(() => { const e = document.querySelector('.p-ins-popover .p-ins-param[data-param="mono_unter"]'); e.value = '120'; e.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+  assert.ok(await s.bis(async () => { const w = (await s.projekt()).spuren[0].inserts[0].werte; return w.breite === 1.6 && w.mono_unter === 120; }), 'width and mono below reached the project');
+  assert.equal(await s.w(`document.querySelector('.p-ins-popover .p-ins-wert[data-param="breite"]').textContent`), '160 %');
+  // negative control: the other kinds of that strip are still offered
+  assert.equal(await s.w(`document.querySelector('.p-kette[data-strang="s1"] .p-ins-neu[data-art="komp"]').disabled`), false);
+});
+
+test('arr-bk: the Fx button places a Baukasten effect stage with the shipped delay graph; the popover shows the eight knobs and moves one in the project', { skip: !CHROME && 'no google-chrome' }, async (t) => {
+  const s = await seite(t, projekt());
+  await s.w(`document.querySelector('[data-p="inserts"]').open = true`);
+  await s.b.klick('.p-kette[data-strang="s1"] .p-ins-neu[data-art="bk"]');
+  assert.ok(await s.bis(async () => { const i = (await s.projekt()).spuren[0].inserts?.[0]; return i?.art === 'bk' && i.graph === BK_STANDARD_GRAPH; }), 'the Fx button placed a bk stage with the standard graph');
+  assert.ok(await s.bis(() => s.w(`/Fx 1\\/8/.test(document.querySelector('[data-p="inserts"] summary').textContent)`)), 'the header counts the effect stage');
+  await s.b.klick('.p-kette[data-strang="s1"] .p-stufe .p-ins-name');
+  assert.equal(await zaehle(s, '.p-ins-popover .p-ins-param'), 8, 'k1 to k8');
+  await s.w(`(() => { const e = document.querySelector('.p-ins-popover .p-ins-param[data-param="k2"]'); e.value = '0.8'; e.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+  assert.ok(await s.bis(async () => (await s.projekt()).spuren[0].inserts[0].werte.k2 === 0.8), 'the knob reached the project');
 });

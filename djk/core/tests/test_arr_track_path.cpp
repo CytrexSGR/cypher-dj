@@ -26,7 +26,7 @@
 #include "cypherdj/arr_bk_sink.h"
 #include "cypherdj/arr_intern_sink.h"
 #include "cypherdj/arr_rb_sink.h"
-#include "cypherdj/arr_host_sink.h"
+#include "cypherdj/arr_instrument_host_sink.h"
 #include "check.h"
 
 using namespace arrtest;

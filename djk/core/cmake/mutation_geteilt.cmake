@@ -308,3 +308,17 @@ function(_kmg_pruefe)
   endforeach()
 endfunction()
 cmake_language(DEFER DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} CALL _kmg_pruefe)
+
+# A mutation test that names a test case (argument) must name one that exists in the test source. An unknown case runs nothing and
+# the program exits 0, which a WILL_FAIL test reports as "failed as intended" (and a plain test as passed): the check is void and
+# nobody sees it. This happened in the public export (2026-11-09): the export renames German words, "guard" and "core" in the CMake
+# call became "guard" and "core", the string in the test source did not, three mutation tests ran nothing. Checked at configure time:
+# the selector must occur as a string literal in the source.
+function(cdj_require_selector source selector)
+  file(READ "${CMAKE_CURRENT_SOURCE_DIR}/${source}" _cdj_src)
+  string(FIND "${_cdj_src}" "\"${selector}\"" _cdj_pos)
+  if(_cdj_pos EQUAL -1)
+    message(FATAL_ERROR "test case \"${selector}\" does not occur as a string literal in ${source}: "
+                        "a test that selects an unknown case runs nothing and passes for the wrong reason")
+  endif()
+endfunction()

@@ -66,3 +66,25 @@ test('pdc: texts - milliseconds at 48 kHz, the strip row and the header line', (
   assert.equal(streifenText(r.s2), 'delayed 1.4 ms to match');
   assert.equal(streifenText({ kette: 0, versatz: 0 }), '');
 });
+
+test('pdc: a Baukasten stage has a latency the page does not know: it says "unknown" instead of showing a sum that looks complete (arr-bk)', () => {
+  const p = projekt('A');
+  p.returns[0].inserts = [I('bk')];
+  const r = pdcRechnen(p);
+  assert.equal(r.bk, 1);
+  assert.equal(r.streifen.r1.bk, 1);
+  assert.equal(r.streifen.s1.bk, 0);
+  assert.equal(r.gesamt, pdcRechnen(projekt('A')).gesamt, 'the stage adds 0 to the numbers (the page does not get the graph latency)');
+  assert.equal(streifenText(r.streifen.r1), 'Baukasten latency unknown');
+  assert.match(latenzZeile(p), /latency of 1 Baukasten stage unknown/);
+  p.spuren[1].inserts = [I('bk')];
+  assert.match(latenzZeile(p), /latency of 2 Baukasten stages unknown/);
+  // negative control: a project without a Baukasten stage says nothing about it
+  assert.doesNotMatch(latenzZeile(projekt('A')), /Baukasten/);
+  assert.equal(pdcRechnen(projekt('A')).bk, 0);
+  assert.equal(latenzZeile(projekt('none')), '');
+  // a project with only a Baukasten stage: the line is not empty (before, the sum 0 hid the stage)
+  const q = projekt('none');
+  q.master.inserts = [I('bk')];
+  assert.match(latenzZeile(q), /Baukasten/);
+});

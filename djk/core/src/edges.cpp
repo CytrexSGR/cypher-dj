@@ -1,5 +1,7 @@
 #include "cypherdj/edges.h"
 
+#include "cypherdj/arr_playback.h"
+
 namespace cdj {
 
 std::vector<Kante> fehlende_kanten(const std::vector<Kante>& soll, const KantenIst& ist) {
@@ -40,11 +42,19 @@ static bool nr_lr(const std::string& rest) {
          ziffern(rest.substr(0, rest.size() - 2));
 }
 
+static bool kern_client(const std::string& quelle);   // defined below (any core instance: cypherdj-kern, cypherdj-kern-<i>)
+
+// Rest of an effect-host port behind the prefix: <h>_L or <h>_R with h = 1..ARR_INS_HOST (plan 1.11 T3; unlike nr_lr, range checked)
+static bool host_lr(const std::string& rest) {
+  return rest.size() == 3 && rest[0] >= '1' && rest[0] < '1' + ARR_INS_HOST && rest[1] == '_' && (rest[2] == 'L' || rest[2] == 'R');
+}
+
 std::vector<Kante> filtere_kanten(const std::vector<Kante>& kanten, const std::string& kern_praefix,
                                   size_t* reserviert) {
   std::vector<Kante> ok;
   const std::string midi = kern_praefix + "midi_aus_", rueck = kern_praefix + "rueck_erz_";
   const std::string arr_midi = kern_praefix + "arr_midi_", arr_rueck = kern_praefix + "arr_rueck_";   // D1 K2b
+  const std::string arr_ins = kern_praefix + "arr_ins_", arr_insret = kern_praefix + "arr_insret_";   // plan 1.11 T3
   const std::string erz4 = kern_praefix + "rueck_erz_4_";
   if (reserviert) *reserviert = 0;
   for (const Kante& k : kanten) {
@@ -62,6 +72,18 @@ std::vector<Kante> filtere_kanten(const std::vector<Kante>& kanten, const std::s
     // D1 K2b (Spec 2.4): Wirt-Slots des Arrangements, arr_midi_<s> -> Wirt und Wirt -> arr_rueck_<s>_{L,R}
     if (!zu && k.quelle.compare(0, arr_midi.size(), arr_midi) == 0) zu = ziffern(k.quelle.substr(arr_midi.size()));
     if (!zu && k.ziel.compare(0, arr_rueck.size(), arr_rueck) == 0) zu = nr_lr(k.ziel.substr(arr_rueck.size()));
+#endif
+#ifndef CYPHERDJ_MUTATION_HOST_KANTEN_ZU
+    // plan 1.11 T3: effect hosts, arr_ins_<h>_{L,R} -> host and host -> arr_insret_<h>_{L,R}, h = 1..ARR_INS_HOST.
+    // T4 pre-step B: the far end of these two families is never a port of another core instance (kern_client), or the file would wire
+    // kern-d:arr_ins_1_L to kern-e:arr_insret_1_L; the bolt above only covers this instance's own prefix.
+#ifdef CYPHERDJ_MUTATION_HOST_KANTEN_KERN
+    const bool fremd_ziel = true, fremd_quelle = true;   // error case: another core instance is accepted as the far end
+#else
+    const bool fremd_ziel = !kern_client(k.ziel), fremd_quelle = !kern_client(k.quelle);
+#endif
+    if (!zu && k.quelle.compare(0, arr_ins.size(), arr_ins) == 0) zu = fremd_ziel && host_lr(k.quelle.substr(arr_ins.size()));
+    if (!zu && k.ziel.compare(0, arr_insret.size(), arr_insret) == 0) zu = fremd_quelle && host_lr(k.ziel.substr(arr_insret.size()));
 #endif
 #ifndef CYPHERDJ_MUTATION_ARR_KANTE_ERZ4
     if (zu && k.ziel.compare(0, erz4.size(), erz4) == 0) {   // D1 K1: rueck_erz_4 ist reserviert
@@ -157,6 +179,32 @@ std::vector<ZielEreignis> ZielUebergaenge::pruefe(const std::vector<Kante>& soll
     da_[k.ziel] = jetzt;
   }
   return ev;
+}
+
+uint32_t host_kanten_gesund(const std::vector<Kante>& soll, const std::string& kern_praefix, const KantenIst& ist) {
+  uint32_t da = 0;   // bit (h - 1) * 4 + port: which of the four ports has an edge
+  uint32_t schlecht = 0;
+  const std::string aus = kern_praefix + "arr_ins_", rueck = kern_praefix + "arr_insret_";
+  for (const Kante& k : soll) {
+    int h = 0, port = -1;
+    for (int pass = 0; pass < 2 && port < 0; ++pass) {
+      const std::string& pre = pass == 0 ? aus : rueck;
+      const std::string& name = pass == 0 ? k.quelle : k.ziel;   // a send is the source of its edge, a return the target
+      if (name.compare(0, pre.size(), pre) != 0) continue;
+      const std::string rest = name.substr(pre.size());
+      if (!host_lr(rest)) continue;
+      h = rest[0] - '0';
+      port = pass * 2 + (rest[2] == 'R' ? 1 : 0);
+    }
+    if (port < 0) continue;
+    da |= 1u << ((h - 1) * 4 + port);
+    if (!ist.existiert(ist.ctx, k.quelle.c_str()) || !ist.existiert(ist.ctx, k.ziel.c_str()) || !ist.verbunden(ist.ctx, k.quelle.c_str(), k.ziel.c_str()))
+      schlecht |= 1u << (h - 1);
+  }
+  uint32_t ok = 0;
+  for (int h = 1; h <= ARR_INS_HOST; ++h)
+    if (((da >> ((h - 1) * 4)) & 0xFu) == 0xFu && !(schlecht & (1u << (h - 1)))) ok |= 1u << (h - 1);
+  return ok;
 }
 
 int alle_aus_ereignisse(uint8_t out[][3], int max) {

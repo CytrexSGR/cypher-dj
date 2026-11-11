@@ -63,8 +63,8 @@ proj_take_prelisten.test.mjs
 proj_variant_stack.test.mjs
 proj_warp_hand_stack.test.mjs
 proj_warp_route.test.mjs
-proj_host_missing.test.mjs
-project_rack_host.test.mjs
+proj_instrument_host_missing.test.mjs
+project_rack_instrument_host.test.mjs
 proj_merge_route.test.mjs
 routes_golden.test.mjs
 collection_listen.test.mjs

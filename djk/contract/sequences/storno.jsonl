@@ -1,0 +1,16 @@
+{"t": "sende", "sample": 0, "osc": ["/k/set/neu", ",hsd", 1, "pruefstand", 128.0], "notiz": "neue Zeitachse; sample 0 = sofort (FORMAT.md Punkt 2)"}
+{"t": "erwarte", "bis_sample": 48000, "osc": ["/q", ",hsihds", 1, "pruefstand", 1, null, null, ""], "notiz": "angenommen"}
+{"t": "erwarte", "bis_sample": 48000, "osc": ["/q", ",hsihds", 1, "pruefstand", 2, 0, 0.0, ""], "toleranz": 1e-06, "notiz": "gestartet am ersten Zyklus der neuen Zeitachse"}
+{"t": "sende", "sample": 360000, "osc": ["/k/tempo/rampe", ",hsddd", 2, "pruefstand", 64.0, 132.0, 32.0], "notiz": "Rampe A ab Beat 64; wird vor ihrem Start storniert"}
+{"t": "erwarte", "bis_sample": 408000, "osc": ["/q", ",hsihds", 2, "pruefstand", 1, null, null, ""], "notiz": "Rampe A angenommen"}
+{"t": "sende", "sample": 720000, "osc": ["/k/storno", ",hsh", 3, "pruefstand", 2], "notiz": "zieht Rampe A (id 2) zurück, 32 Beats vor ihrem Start"}
+{"t": "erwarte", "bis_sample": 768000, "osc": ["/q", ",hsihds", 2, "pruefstand", 8, null, null, ""], "notiz": "Rampe A storniert"}
+{"t": "erwarte", "bis_sample": 768000, "osc": ["/q", ",hsihds", 3, "pruefstand", 1, null, null, ""], "notiz": "Storno selbst angenommen (§3, Andreas 2026-09-25)"}
+{"t": "erwarte", "bis_sample": 768000, "osc": ["/q", ",hsihds", 3, "pruefstand", 2, null, null, ""], "notiz": "Storno selbst gestartet, kein fertig (§3, Andreas 2026-09-25)"}
+{"t": "erwarte_nicht", "ab_sample": 720000, "bis_sample": 1440000, "osc": ["/q", ",hsihds", 3, "pruefstand", 3, null, null, ""], "notiz": "kein fertig für den Storno selbst (§3, Andreas 2026-09-25; FORMAT.md Punkt 13)"}
+{"t": "erwarte", "bis_sample": 1488000, "osc": ["/takt", ",iihdd", 17, 3, 1440000, 64.0, 128.0], "toleranz": 1e-06, "notiz": "Beat 64 bei 128 BPM"}
+{"t": "erwarte", "bis_sample": 2208000, "osc": ["/takt", ",iihdd", 25, 4, 2160000, 96.0, 128.0], "toleranz": 1e-06, "notiz": "ohne Storno läge Beat 96 bei Sample 2148923 und 132 BPM (Fehlerfall)"}
+{"t": "sende", "sample": 2160000, "osc": ["/k/tempo/rampe", ",hsddd", 4, "pruefstand", 128.0, 132.0, 32.0], "notiz": "Rampe B ab Beat 128, nicht storniert (Positiv-Kontrolle: eine Rampe wirkt)"}
+{"t": "erwarte", "bis_sample": 2208000, "osc": ["/q", ",hsihds", 4, "pruefstand", 1, null, null, ""], "notiz": "Rampe B angenommen"}
+{"t": "erwarte", "bis_sample": 2928000, "osc": ["/q", ",hsihds", 4, "pruefstand", 2, 2880000, 128.0, ""], "toleranz": 1e-06, "notiz": "Rampe B gestartet"}
+{"t": "erwarte", "bis_sample": 3636923, "osc": ["/takt", ",iihdd", 41, 6, 3588923, 160.0, 132.0], "toleranz": 1e-06, "notiz": "Ende von Rampe B: wie uhr_golden, Sample 3 588 923, 132 BPM"}

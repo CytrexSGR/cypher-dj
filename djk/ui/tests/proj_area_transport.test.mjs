@@ -7,7 +7,8 @@ import { innen } from './support/inside.mjs';
 import { bis, sse, ruf } from './support/proj_stack.mjs';
 import { GRUND_TEXT } from '../http/reasons.ts';   // Spec 6.34: jede Antwort mit Grund trägt einen englischen text
 
-const ROUTEN = ['GET /proj/liste', 'GET /proj/aktuell', 'GET /proj/verlauf', 'GET /proj/kits', 'GET /proj/routing', 'GET /proj/warp', 'GET /proj/auto', 'POST /proj/neu', 'POST /proj/oeffnen', 'POST /proj/aendern',
+  // 'POST (muster)' = POST /proj/insert/<insert_id>/param (plan 1.11 T7)
+const ROUTEN = ['GET /proj/liste', 'GET /proj/aktuell', 'GET /proj/verlauf', 'GET /proj/kits', 'GET /proj/surge_patches', 'GET /proj/routing', 'GET /proj/warp', 'GET /proj/auto', 'POST /proj/neu', 'POST /proj/oeffnen', 'POST (muster)', 'POST /proj/midi_import', 'POST /proj/aendern',
   'POST /proj/undo', 'POST /proj/redo', 'POST /proj/transport',
   'GET /proj/take_vorhoeren', 'POST /proj/take_vorhoeren',   // 1.14 comping, audition
   'POST /proj/auto/uebersteuern', 'POST /proj/auto/re_enable', 'POST /proj/auto/arm', 'POST /proj/auto/geste',   // 1.12 slice 3

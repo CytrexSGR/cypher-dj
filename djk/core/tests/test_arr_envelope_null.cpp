@@ -178,7 +178,7 @@ int main() {
         aufbau(l, ab.pfad, (tag + "_r").c_str(), kind, bpm, rampe);
         const cdj::RenderErgebnis r = cdj::rendere(auftrag(*l.x, l.v, bpm));
         if (!r.fehler.empty()) std::printf("Render error: %s: %s\n", r.fehler.c_str(), r.meldung.c_str());
-        PRUEF(r.fehler.empty() && r.regler > 0 && r.phase == 25);
+        PRUEF(r.fehler.empty() && r.regler > 0 && r.phase == 0);
         PRUEF(r.frames == std::llround(16.0 * 48000.0 * 60.0 / bpm));
         const cdj::NullErgebnis e = vergleiche(l.v, r);
         std::printf("Case 1 (%s, ramp, %.0f BPM): %s rest %.1f dB, signal %.1f dB\n", kind_name(kind), bpm, cdj::null_urteil_text(e.urteil), e.rest_db, e.signal_db);

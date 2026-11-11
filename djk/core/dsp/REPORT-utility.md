@@ -41,7 +41,7 @@ target, which also serves as "apply now".
 | 7 | switching on bass mono 200 Hz (50 Hz sine, L only): largest step | ≤ 1.5 × the dry sine's largest step 0.003272 | 0.003272 |
 | 8 | random block sizes vs 256 blocks; latency: impulse at gain +6 dB, width 0 | bitwise; output at sample 0, then 0 | yes |
 | 9 | 1 s noise then 30 s silence with DC blocker and bass mono: subnormal outputs | 0 | 0 |
-| 10 | NaN keeps the old value, clamping (width 500 → 200, balance −3 → −1, bass mono 5 Hz → 20 Hz) | | yes |
+| 10 | NaN keeps the old value, clamping (width 500 → 400, balance −3 → −1, bass mono 5 Hz → 20 Hz) | | yes |
 
 The real-time check in `test_mix_waechter` (together with the gate): 0 allocations, 0 frees and 0 locks in 10^5
 calls. Whole suite and ASan/UBSan results: see `REPORT-gate.md` (the only red test there, `regler_gegen_vertrag`,
@@ -69,7 +69,7 @@ everything on, which is mostly the 16 biquads of bass mono.
 |---|---|---|---|
 | `gain_db` | −120 (= silent, stored as −200) … +24 | 0 | dB |
 | `balance` | −1 … +1 | 0 | linear law |
-| `breite_prozent` | 0 … 200 | 100 | % (0 = mono) |
+| `breite_prozent` | 0 … 400 (200 until arr-fx, 2026-11-11) | 100 | % (0 = mono) |
 | `bass_mono_hz` | 0 = off, 20 … 500 | 0 | Hz |
 | `phase_umkehren_l`, `phase_umkehren_r` | bool | false | |
 | `seiten_tauschen` | bool | false | after phase invert |

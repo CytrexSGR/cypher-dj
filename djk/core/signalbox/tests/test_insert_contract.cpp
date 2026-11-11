@@ -30,7 +30,7 @@ float d_max(const char* pfad) {
 
 FALL(pfade_des_vertrags_sind_hoechstens_31_zeichen_und_eindeutig) {
   const int n = insert_vertrag_anzahl();
-  PRUEFE_GLEICH(n, 12 * 10 + 2 * 59 + 1 * 4 + 12 * 4 + 1 * 3);   // 293: komp, eq (pool 2 since 2026-11-06), saett, rack, lim
+  PRUEFE_GLEICH(n, 12 * 10 + 8 * 59 + 4 * 4 + 12 * 4 + 2 * 3 + 4 * 1 + 8 * 5 + 8 * 9);   // 778 (arr-bk: + bk, 8 instances x 9 rows); 706 before: komp, eq (pool 8 since arr-fx slice 2), saett (4), rack, lim (2), host (plan 1.11 T4: 4 instances, one row `an`), utility (arr-fx slice 1: 8 x 5)
   std::set<std::string> gesehen;
   int zu_lang = 0, doppelt = 0, laengster = 0;
   for (int i = 0; i < n; i++) {
@@ -48,7 +48,10 @@ FALL(pfade_des_vertrags_sind_hoechstens_31_zeichen_und_eindeutig) {
   std::printf("%d Pfade, laengster %d Zeichen\n", n, laengster);
   PRUEFE(gesehen.count("ins/eq/1/b8/steil") == 1);   // the example of spec section 3: 17 characters
   PRUEFE(gesehen.count("ins/eq/2/b8/steil") == 1);   // the second eq of the pool (2026-11-06)
-  PRUEFE(gesehen.count("ins/eq/3/b8/steil") == 0);
+  PRUEFE(gesehen.count("ins/eq/8/b8/steil") == 1);   // the last eq of the pool of eight (arr-fx slice 2)
+  PRUEFE(gesehen.count("ins/eq/9/b8/steil") == 0);
+  PRUEFE(gesehen.count("ins/utility/8/mono_unter") == 1);   // arr-fx slice 1: eight utilities, the longest name has 25 characters
+  PRUEFE(gesehen.count("ins/utility/9/an") == 0);
 }
 
 FALL(komp_zeilen_stehen_in_der_tabelle_und_gleichen_den_dj_zeilen) {
@@ -87,21 +90,32 @@ FALL(komp_zeilen_neue_felder_und_form) {
     PRUEFE(!d.nur_hand);
     PRUEFE_GLEICH(d.keine_rampe, d.ganzzahlig);
   }
-  PRUEFE_GLEICH(ins, 120 + 2 * 59 + 4 + 3);   // slice 4b: komp, eq (2 instances) and saett have table rows; master limiter: lim (1 instance, 3 rows)
+  PRUEFE_GLEICH(ins, 120 + 8 * 59 + 4 * 4 + 2 * 3 + 4 + 8 * 5 + 8 * 9);   // arr-bk: + bk (8 x 9);   // slice 4b: komp, eq (8 instances since arr-fx slice 2) and saett (4) have table rows; lim (2 instances, 3 rows); plan 1.11 T4: host (4 instances, 1 row); arr-fx: utility (8 instances, 5 rows)
   PRUEFE_GLEICH(d_min("ins/komp/3/knie"), 0.0f);
   PRUEFE_GLEICH(d_max("ins/komp/3/knie"), 24.0f);
   PRUEFE_GLEICH(d_max("ins/komp/12/schp"), 300.0f);
   PRUEFE_GLEICH(d_max("ins/komp/12/sc"), 32.0f);   // 32 key sources, the DJ side has 14
   PRUEFE(tab().suche("ins/komp/13/an") < 0);
   PRUEFE(tab().suche("ins/komp/0/an") < 0);
-  // slice 4b: eq has two instances (2026-11-06), saett one; the next one does not exist
+  // slice 4b / arr-fx slice 2: eq has eight instances, saett four, lim two; the next one does not exist
   PRUEFE(tab().suche("ins/eq/1/an") >= 0);
-  PRUEFE(tab().suche("ins/eq/2/an") >= 0);
-  PRUEFE(tab().suche("ins/eq/3/an") < 0);
+  PRUEFE(tab().suche("ins/eq/8/an") >= 0);
+  PRUEFE(tab().suche("ins/eq/9/an") < 0);
   PRUEFE(tab().suche("ins/saett/1/an") >= 0);
-  PRUEFE(tab().suche("ins/saett/2/an") < 0);
-  PRUEFE(tab().suche("ins/lim/1/an") >= 0);   // master limiter: one instance
-  PRUEFE(tab().suche("ins/lim/2/an") < 0);
+  PRUEFE(tab().suche("ins/saett/4/an") >= 0);
+  PRUEFE(tab().suche("ins/saett/5/an") < 0);
+  PRUEFE(tab().suche("ins/lim/1/an") >= 0);
+  PRUEFE(tab().suche("ins/lim/2/an") >= 0);
+  PRUEFE(tab().suche("ins/lim/3/an") < 0);
+  PRUEFE(tab().suche("ins/utility/8/an") >= 0);   // arr-fx slice 1: eight utilities, five rows each
+  PRUEFE(tab().suche("ins/utility/9/an") < 0);
+  PRUEFE(tab().suche("ins/host/1/an") >= 0);   // plan 1.11 T4: effect hosts, four instances, one row each
+  PRUEFE(tab().suche("ins/host/4/an") >= 0);
+  PRUEFE(tab().suche("ins/host/5/an") < 0);
+  PRUEFE(tab().suche("ins/host/0/an") < 0);
+  PRUEFE(tab().suche("ins/host/1/decke") < 0);
+  PRUEFE_GLEICH(d_min("ins/host/2/an"), 0.0f);
+  PRUEFE_GLEICH(d_max("ins/host/2/an"), 1.0f);
   PRUEFE_GLEICH(d_min("ins/lim/1/decke"), -60.0f);
   PRUEFE_GLEICH(d_max("ins/lim/1/decke"), 0.0f);
   PRUEFE_GLEICH(d_min("ins/lim/1/abklingen"), 1.0f);

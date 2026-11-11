@@ -1,0 +1,16 @@
+{"t": "sende", "sample": 0, "osc": ["/k/set/neu", ",hsd", 1, "pruefstand", 128.0], "notiz": "neue Zeitachse; sample 0 = sofort (FORMAT.md Punkt 2)"}
+{"t": "erwarte", "bis_sample": 48000, "osc": ["/q", ",hsihds", 1, "pruefstand", 1, null, null, ""], "notiz": "angenommen"}
+{"t": "erwarte", "bis_sample": 48000, "osc": ["/q", ",hsihds", 1, "pruefstand", 2, 0, 0.0, ""], "toleranz": 1e-06, "notiz": "gestartet am ersten Zyklus der neuen Zeitachse"}
+{"t": "erwarte", "bis_sample": 48000, "osc": ["/takt", ",iihdd", 1, 1, 0, 0.0, 128.0], "toleranz": 1e-06, "notiz": "§1.3: Beat 0 = Takt 1, Phrase 1"}
+{"t": "erwarte", "bis_sample": 1488000, "osc": ["/uhr", ",hhddd", 1440000, null, 64.0, 128.0, 0.0], "toleranz": 1e-06, "notiz": "§1.3: beat(1 440 000) = 64,000000"}
+{"t": "erwarte", "bis_sample": 1488000, "osc": ["/takt", ",iihdd", 17, 3, 1440000, 64.0, 128.0], "toleranz": 1e-06, "notiz": "§1.3: sample(64,0) = 1 440 000; Beat 64 = Takt 17, Phrase 3"}
+{"t": "sende", "sample": 2160000, "osc": ["/k/tempo/rampe", ",hsddd", 2, "pruefstand", 128.0, 132.0, 32.0], "notiz": "Rampe 128 -> 132 ab Beat 128 über 32 Beats, 32 Beats Vorlauf (§3: mindestens 1 Beat)"}
+{"t": "erwarte", "bis_sample": 2208000, "osc": ["/q", ",hsihds", 2, "pruefstand", 1, null, null, ""], "notiz": "angenommen"}
+{"t": "erwarte", "bis_sample": 2928000, "osc": ["/q", ",hsihds", 2, "pruefstand", 2, 2880000, 128.0, ""], "toleranz": 1e-06, "notiz": "gestartet; §1.3: Start Sample 2 880 000, T = 14.769231 s, k = 0.270833 BPM/s"}
+{"t": "erwarte", "bis_sample": 2928000, "osc": ["/takt", ",iihdd", 33, 5, 2880000, 128.0, 128.0], "toleranz": 1e-06, "notiz": "Beat 128 = Takt 33, Phrase 5"}
+{"t": "erwarte", "bis_sample": 3285120, "osc": ["/uhr", ",hhddd", 3237120, null, 143.99693, 130.015, 0.2708333333333333], "toleranz": 1e-06, "notiz": "Blockanfang vor Beat 144, mitten in der Rampe"}
+{"t": "erwarte", "bis_sample": 3285188, "osc": ["/takt", ",iihdd", 37, 5, 3237188, 144.0, 130.01538370516005], "toleranz": 1e-06, "notiz": "§1.3: sample(144,0) = 3 237 188,004, gerundet 3 237 188; bpm dort 130,015384"}
+{"t": "erwarte", "bis_sample": 3636923, "osc": ["/takt", ",iihdd", 41, 6, 3588923, 160.0, 132.0], "toleranz": 1e-06, "notiz": "§1.3: sample(160,0) = 3 588 923,077, gerundet 3 588 923 (Ende der Rampe)"}
+{"t": "erwarte", "bis_sample": 3636923, "osc": ["/q", ",hsihds", 2, "pruefstand", 3, null, null, ""], "notiz": "fertig (Rampe am Ende)"}
+{"t": "erwarte", "bis_sample": 4334976, "osc": ["/uhr", ",hhddd", 4286976, null, 191.9940923076923, 132.0, 0.0], "toleranz": 1e-06, "notiz": "Blockanfang vor Beat 192, konstant 132"}
+{"t": "erwarte", "bis_sample": 4335105, "osc": ["/takt", ",iihdd", 49, 7, 4287105, 192.0, 132.0], "toleranz": 1e-06, "notiz": "§1.3: sample(192,0) = 4 287 104,895, gerundet 4 287 105"}

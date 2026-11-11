@@ -1,5 +1,6 @@
 import { MAX_RACK_GERAETE, rackBelegt } from './rack_device.js';
 import { oeffnePatchWahl } from './surge_patch_choice.js';
+import { oeffnePluginGeraet, schaltePluginFenster } from './plugin_device.js';
 
 // PRODUCTION (Paket 1.13 Warp, Slice 3b): ein kleines Kontextmenü (Rechtsklick). Es gab bisher keins in der Produktion. oeffneMenue(punkte, x, y): x und y sind
 // Fensterpixel (clientX, clientY); punkte = [{ text, aus?, aktion }]. Es schließt bei Klick daneben, Esc, Rad und Fokusverlust des Fensters, und nach jedem Punkt.
@@ -40,11 +41,14 @@ export const KOPF_MENUE = [
   // 1.10 slice 7: every strip kind (track, group, return) and the master, strang = {id, name}
   { text: 'Resample', zeige: (strang) => typeof strang?.id === 'string', aktion: (ctx, strang) => ctx.resample(strang) },
   // 1.9 U7: an instrument track with a device becomes a rack, its device the member g1; disabled at the rack limit. The command goes out here (one undo step)
-  { text: 'MAKE RACK', zeige: (s) => s.art === 'instrument' && s.geraet !== undefined && s.geraet.art !== 'rack',
+  { text: 'MAKE RACK', zeige: (s) => s.art === 'instrument' && s.geraet !== undefined && s.geraet.art !== 'rack' && !s.geraet.plugin,
     aus: (s, ctx) => rackBelegt(ctx.st?.projekt?.spuren ?? []) >= MAX_RACK_GERAETE,
     aktion: (ctx, s) => ctx.aendere(`Make rack ${s.id}`, [{ befehl: 'spur_aendern', spur_id: s.id, geraet: { art: 'rack' } }]) },
   // a Surge track stores its sound in the project: the picker offers the patch library, the pick is geraet.patch (spur_aendern, one undo step)
-  { text: 'SURGE PATCH', zeige: (s) => s.art === 'instrument' && s.geraet?.art === 'wirt', aktion: (ctx, s) => oeffnePatchWahl(ctx, s) },
+  { text: 'SURGE PATCH', zeige: (s) => s.art === 'instrument' && s.geraet?.art === 'wirt' && !s.geraet.plugin, aktion: (ctx, s) => oeffnePatchWahl(ctx, s) },
+  // plan 1.11 task 17: the parameters and the own window of a plugin instrument (the same list and routes as a plugin effect stage, keyed by the track)
+  { text: 'PLUGIN PARAMETERS', zeige: (s) => s.art === 'instrument' && !!s.geraet?.plugin, aktion: (ctx, s) => oeffnePluginGeraet(ctx, s) },
+  { text: 'PLUGIN WINDOW', zeige: (s) => s.art === 'instrument' && !!s.geraet?.plugin, aktion: (ctx, s) => schaltePluginFenster(ctx, s) },
 ];
 export const kopfMenuePunkte = (ctx, strang) => (strang ? KOPF_MENUE.filter((m) => m.zeige(strang, ctx)).map((m) => ({ text: m.text, aus: !!m.aus?.(strang, ctx), aktion: () => m.aktion(ctx, strang) })) : []);
 // the contextmenu handler of every strip head: opens the menu when an entry applies, else the browser menu stays

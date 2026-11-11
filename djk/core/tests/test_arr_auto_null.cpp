@@ -141,7 +141,7 @@ int main() {
     Lauf1 l = aufbau(ab.pfad, bpm == 128.0 ? "test_arr_auto_null_r128" : "test_arr_auto_null_r120", bpm, rampe);
     const cdj::RenderErgebnis r = cdj::rendere(auftrag(*l.x, l.v, bpm));
     if (!r.fehler.empty()) std::printf("Render-Fehler: %s: %s\n", r.fehler.c_str(), r.meldung.c_str());
-    PRUEF(r.fehler.empty() && r.regler > 0 && r.phase == 25);
+    PRUEF(r.fehler.empty() && r.regler > 0 && r.phase == 0);
     PRUEF(r.frames == std::llround(16.0 * 48000.0 * 60.0 / bpm));
     const cdj::NullErgebnis e = vergleiche(l.v, r);
     std::printf("Fall 1 (Rampe, %.0f BPM): %s rest %.1f dB, signal %.1f dB\n", bpm, cdj::null_urteil_text(e.urteil), e.rest_db, e.signal_db);

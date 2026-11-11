@@ -5,7 +5,7 @@
 // Vorgaben der Regler-Tabelle, erz/4 neutral (2.3: Fader 0 dB, sonst Vorgabe, Sends −200) und darüber die Spur-Regler
 // des Projekts (Quelle „projekt“). Interne Spuren spielt die RB-338, die der Kern selbst anlegt (K2b, Spec 6.24).
 // Die Wiedergabe lädt lade_wiedergabe() (derselbe Lader wie der Lade-Faden, ohne mlock). Der Transport startet im ersten
-// Zyklus mit Quant 0 aus dem Stand: der Einsatz liegt 3n + 25 Samples nach Sample 0, die Blockphase ist 25 wie live bei
+// Zyklus mit Quant 0 aus dem Stand: der Einsatz liegt 3n Samples nach Sample 0 (bis 2026-11-10 3n + 25), die Blockphase ist 0 wie live bei
 // Quant 0. Ergebnis: Master ab Einsatz plus Limiter-Vorhalt, (bis − von) Beats lang, Loop-Klammer aus.
 #pragma once
 
@@ -83,7 +83,8 @@ struct RenderAuftrag {
 
 struct RenderErgebnis {
   // "" fertig; sonst aufruf, datei_fehlt, format, audio_fehlt, zu_gross, spur_bereich, wirt_nicht_eingefroren,
-  // gegenprobe, regler (ein Spur-Regler außerhalb der Tabelle), abgelehnt (Quittung 6 des Kerns), kein_einsatz.
+  // gegenprobe, regler (ein Spur-Regler außerhalb der Tabelle), abgelehnt (Quittung 6 des Kerns), kein_einsatz, host_insert_echtzeit (plan 1.11 T12: a host stage with an true, the strip
+  // is named in meldung; the project plays only in real time, /k/arr/export_lauf; cypherdj-render exit 5).
   // Kein OSC-Grund (§16.2), darum nicht „grund“.
   std::string fehler;
   std::string meldung;

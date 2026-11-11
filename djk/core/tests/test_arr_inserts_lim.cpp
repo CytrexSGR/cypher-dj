@@ -141,7 +141,7 @@ int main() {
     delete leer;
   }
 
-  {  // 4 lim_lader: a playback chain entry {art: lim, slot: 1} loads, slot 2 is refused (pool 1)
+  {  // 4 lim_lader: a playback chain entry {art: lim, slot: 1} loads, the slot beyond the pool is refused (pool 2 since arr-fx slice 2)
     arrdatei::Ordner o("test_arr_inserts_lim");
     const std::string a = o.audio('a', 48000);
     cdj::SpeicherKonto konto(100LL << 20);
@@ -159,7 +159,8 @@ int main() {
       return g;
     };
     PRUEF(grund(81, ",\"chain\":[{\"art\":\"lim\",\"slot\":1,\"an\":true}]") == "+snap");
-    PRUEF(grund(82, ",\"chain\":[{\"art\":\"lim\",\"slot\":2}]") == "format");                                  // one beyond the pool
+    PRUEF(grund(82, ",\"chain\":[{\"art\":\"lim\",\"slot\":" + std::to_string(cdj::ARR_INS_LIM + 1) + "}]") == "format");   // one beyond the pool
+    PRUEF(grund(85, ",\"chain\":[{\"art\":\"lim\",\"slot\":" + std::to_string(cdj::ARR_INS_LIM) + "}]") == "+snap");        // the last slot of the pool (arr-fx slice 2: 2)
     PRUEF(grund(83, ",\"chain\":[{\"art\":\"lim\",\"slot\":1},{\"art\":\"lim\",\"slot\":1}]") == "format");     // the same slot twice
     PRUEF(grund(84, ",\"chain\":[{\"art\":\"lim\",\"slot\":0}]") == "format");                                  // slot numbers start at 1
   }
@@ -175,7 +176,8 @@ int main() {
     PRUEF((slot) == (cdj::ARR_INS_KOMP + cdj::ARR_INS_EQ + cdj::ARR_INS_SAETT));
     PRUEF((cdj::ins_global(ArrInsArt::lim, cdj::ARR_INS_LIM)) == (-1));
     PRUEF((cdj::ins_art(slot)) == (ArrInsArt::lim));
-    PRUEF((cdj::ARR_INS_ALLE) == (slot + cdj::ARR_INS_LIM));
+    PRUEF((cdj::ARR_INS_ALLE) == (slot + cdj::ARR_INS_LIM + cdj::ARR_INS_UTIL + cdj::ARR_INS_BK + cdj::ARR_INS_HOST));   // plan 1.11 T4 / arr-fx / arr-bk: the utility, bk and host slots follow the limiter
+    PRUEF((cdj::INS_G_HOST0) == (slot + cdj::ARR_INS_LIM + cdj::ARR_INS_UTIL + cdj::ARR_INS_BK));
     std::printf("5: pool lim %d, rows %d, global index %d, ARR_INS_ALLE %d\n", cdj::ARR_INS_LIM, n, slot, cdj::ARR_INS_ALLE);
   }
   PRUEF_ENDE();

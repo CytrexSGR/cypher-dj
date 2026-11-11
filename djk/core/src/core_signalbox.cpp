@@ -701,9 +701,13 @@ void Kern::audio(int64_t n0, int n) {
     }
     arr_bk_->takt(karte.beat_at((double)s0), karte.bpm_at((double)s0) / 60.0 / 48000.0);   // S20: beat and tempo for the graphs of the bk tracks
     arr_->dj_schluessel(erz_l_, erz_r_);   // 1.10 slice 5 U2b (E6, E7): deck/1..4 and erz/1 (indices 0..4) for the sidechain keys; always handed, live and in a render (a render's inputs are silent)
+    for (int h = 1; h <= ARR_INS_HOST; ++h)   // plan 1.11 T4: the effect-host ports of this cycle, offset to this sub-block (pointer stores; a port that is not there stays nullptr: the stage plays dry)
+      arr_->host_stufe().setze_zeiger(h, ins_aus_[h - 1][0] ? ins_aus_[h - 1][0] + off : nullptr, ins_aus_[h - 1][1] ? ins_aus_[h - 1][1] + off : nullptr,
+                                      ins_rueck_[h - 1][0] ? ins_rueck_[h - 1][0] + off : nullptr, ins_rueck_[h - 1][1] ? ins_rueck_[h - 1][1] + off : nullptr);
     arr_->setze_zyklus_start(zyklus_ns_ != 0 ? zyklus_ns_ + static_cast<int64_t>(off) * 1000000000LL / 48000 : 0);   // mehrkern 3.2: the nominal start of this sub-block, for the time gates of phase Q
     arr_->block(karte, s0, m, erz_l_[arr_kanal_], erz_r_[arr_kanal_], mixer_->summe_eingang_l(),
                 mixer_->summe_eingang_r(), mixer_->pfl_eingang_l(), mixer_->pfl_eingang_r());
+    ins_mess_block(off, m);   // plan 1.11 T5: a running round-trip measurement owns the send buffers of its host (after the stage wrote its copy of the input)
     std::memcpy(pm_abgriff_l_ + off, arr_->pm_l(), sizeof(float) * static_cast<size_t>(m));   // 1.10: Export-Abgriff (Spec 5.4)
     std::memcpy(pm_abgriff_r_ + off, arr_->pm_r(), sizeof(float) * static_cast<size_t>(m));
     arr_quittungen(karte);

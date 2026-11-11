@@ -22,7 +22,7 @@ int main() {
   }
   k35::Arbeitsbestand ab("test_kern_arr_alloc");
   arr35::Lauf x(ab.pfad, "test_kern_arr_alloc");
-  arrtest::PruefSenke rb(0), wirt(2 * N + 25);
+  arrtest::PruefSenke rb(0), wirt(2 * N);
   x.kern->setze_arr_senke_intern(&rb);
   x.kern->setze_arr_senke_wirt(1, &wirt);
   const std::string a = x.ordner.audio('a', 200000, 0.25f);

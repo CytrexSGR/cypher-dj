@@ -16,6 +16,7 @@
 
 #include "cypherdj/arr_arbeit.h"
 #include "cypherdj/arr_auto.h"
+#include "cypherdj/arr_export_run.h"
 #include "cypherdj/arr_inserts.h"
 #include "cypherdj/arr_pdc.h"
 #include "cypherdj/arr_returns.h"
@@ -29,6 +30,8 @@
 namespace cdj {
 
 constexpr int ARR_BLOCK = 1024;         // größter Teilblock (= MIX_BLOCK; Kern::audio teilt danach)
+static_assert(PDC_BLOCK_MAX == ARR_BLOCK, "ArrPdc::verzoegere() takes the longest block of the mixer");
+static_assert(ARR_HOST_BLOCK == ARR_BLOCK, "ArrHostStufe::block() takes the longest block of the mixer");
 constexpr int ARR_STIMMEN = 8 * ARR_SPUREN;    // gleichzeitig klingende Audio-Clips (fester Pool), je Spur wie bei 8 Spuren (E3)
 constexpr int ARR_NAHT = 96;            // Kurzblende an Naht, Stopp und Tausch (2 ms, wie ERZ_AUS)
 constexpr int ARR_EIN = 32;             // Kurz-Einblende beim Einstieg mitten in einen Clip (wie ERZ_EIN)
@@ -53,7 +56,7 @@ static_assert(sizeof(ArrArbeit::rack_l) == sizeof(float) * ARR_BLOCK && sizeof(A
 class ArrSenke {
  public:
   virtual ~ArrSenke() = default;
-  // Noten mit Ziel-Sample T kommen im Block an, der T − vorhalt() enthält (Wirt: Rundweg 2n + 25; intern: 0).
+  // Noten mit Ziel-Sample T kommen im Block an, der T − vorhalt() enthält (Wirt: Rundweg 2n; intern: 0).
   virtual int64_t vorhalt() const noexcept = 0;
   virtual void note(int spur, int64_t ziel, uint8_t ton, uint8_t vel, bool an) noexcept = 0;
   virtual void alle_aus(int spur, int64_t ziel) noexcept = 0;            // Stopp: All-Notes-Off der Spur
@@ -317,6 +320,7 @@ class Arrangement {
   bool ret_blendet() const { return ret_.blendet(); }                        // a return strip still fades (P15)
   void hall_sofort();                                                        // main thread before block 0 (render) and in the constructor: Halls take the base values of their controls now
   const ArrInserts& inserts() const { return ins_; }                         // 1.10 slice 4a: readings of the insert pool
+  ArrHostStufe& host_stufe() { return ins_.host(); }                          // plan 1.11 T4: the host stages (the core hands the port buffers per block, T5 the health)
   int pdc_latenz() const { return snap_ ? snap_->pdc.gesamt : 0; }           // 1.10 slice 4b T13: the largest path latency of the playback in force, samples
   int pdc_historie(int key) const { return pdc_.historie(key); }             // test seam: samples a delay place holds (0: no ring in use)
   // mehrkern task 4: the pool the return Halls compute on (reverb_pool.h); nullptr = serial. Not owned. Before the first block.
@@ -420,6 +424,21 @@ class Arrangement {
   void abgriff_abbrechen(int64_t s, const Karte& k);   // /k/set/neu: like freeze_abbrechen
   int64_t hole_abgriff_gestartet() { const int64_t v = abg_gestartet_bei_; abg_gestartet_bei_ = -1; return v; }
   ArrAbgriff* hole_abgriff_fertig() { ArrAbgriff* f = abg_fertig_; abg_fertig_ = nullptr; return f; }
+  // ---- plan 1.11 T12 (arr_export_run.cpp): the real-time export of the production master, the third sibling of the freeze (untouched). Called in the callback at the block start s.
+  // false with grund: nicht_geladen, belegt (transport, freeze, tap or another export runs or waits to be collected), ausserhalb_bereich, zu_gross (more than 3600 s). The job is NOT
+  // touched on a refusal (the caller tells the writer). Afterwards the job belongs to the writer thread as soon as the run ended (ArrExportLauf::phase): the core keeps only copies.
+  bool export_lauf(ArrExportLauf* a, int quant, bool von_cypher, int64_t s, int64_t vorhalt, int n, const Karte& k, const char*& grund);
+  bool export_laeuft() const { return exp_ != nullptr; }
+  void export_abbrechen(int64_t s, const Karte& k);   // /k/set/neu: like freeze_abbrechen
+  int64_t hole_export_gestartet() { const int64_t v = exp_gestartet_bei_; exp_gestartet_bei_ = -1; return v; }
+  // the end of a run, once: status 0 done, 1 aborted; ende_s the core sample (value copies, the job may be gone)
+  bool hole_export_fertig(int32_t& status, int64_t& ende_s) {
+    if (!exp_fertig_da_) return false;
+    exp_fertig_da_ = false;
+    status = exp_fertig_status_;
+    ende_s = exp_fertig_ende_;
+    return true;
+  }
 
  private:
   friend struct ArrPruefZugang;
@@ -550,6 +569,7 @@ class Arrangement {
   void auto_tausch(const ArrSnapshot* neu, int64_t s);                    // in tausche(): lanes appear, change or go; blend from the last played value
   void auto_stopp(int64_t s);                                             // in beende(): the lane stops, the fader blends back to the base value
   void auto_geraet();                                                     // before the sinks' block(): hands the `geraet` lane values to the sink (E9)
+  void auto_kette();                                                      // 1.12 slice 6: before mischen(): hands the insert-parameter and rack-macro lane values to ArrInserts, one per block
   void glied_makros_(int64_t s0, int m);                                  // 1.9 U8 T9 (E12): the macro values of the member targets of the rack tracks go to their rack sink; caller thread, before phase Q, every block
   void auto_ueber_abschluss(int64_t s_ende);                              // 1.12 S3: after a block, an override change inside it has passed
   void auto_ueber_setzen(int spur, int feld, bool an, int64_t sample);    // the state change itself (no checks), with the source blend and the event
@@ -591,7 +611,11 @@ class Arrangement {
   void abg_ende(int64_t s, int32_t status);
   void abg_blockende(int m);   // end of mischen(): silence for an idle strip, then the end of the run when the window is complete
   bool abg_ziel(int art, int punkt) const { return abg_ && abg_->art == art && abg_->punkt == punkt; }
-  bool sonderlauf() const { return freeze_ || abg_; }   // a freeze or a tap suspends the loop bracket and the start beat of the user
+  // plan 1.11 T12 (arr_export_run.cpp): export_block() runs in block() next to abgriff_block (sets exp_s0_), export_blockende() at the end of mischen() after the PM post point
+  void export_block(int64_t s0, int m);
+  void export_blockende(int m);
+  void export_ende(int64_t s, int32_t status, const char* grund);
+  bool sonderlauf() const { return freeze_ || abg_ || exp_; }   // a freeze, a tap or an export run suspends the loop bracket and the start beat of the user
 
   // Metronom (arr_metronom.cpp)
   void klick_form_bauen();
@@ -625,10 +649,11 @@ class Arrangement {
   float auto_buf_[ARR_SPUREN][AUTO_FELDER][ARR_BLOCK] = {};   // the lane value or the blend per sample; Wert::vl points here for a block
   int auto_von_ = 0, auto_bis_ = 0;                // block-relative range [von, bis) in which the lane plays (transport running)
   AutoLane auto_l_[ARR_SPUREN][AUTO_FELDER];       // cursor per track and field on the lane of the current snapshot
-  AutoLane auto_g_[ARR_SPUREN][ARR_GERAET_PARAMS]; // cursor per track and device parameter on the `geraet` lane of the current snapshot
+  AutoLane auto_g_[ARR_SPUREN][ARR_GERAET_LANE_PARAMS]; // cursor per track and device parameter on the `geraet` lane of the current snapshot
   // 1.12 slice 5 (D9): the cursors of the RELATIVE lanes (summands of the value stack), per track and fader/pan field and per device parameter. New names: kern_bitgleich_auto reads the ones above.
   AutoLane auto_r_[ARR_SPUREN][AUTO_BLENDE_FELDER];
-  AutoLane auto_gr_[ARR_SPUREN][ARR_GERAET_PARAMS];
+  AutoLane auto_gr_[ARR_SPUREN][ARR_GERAET_LANE_PARAMS];
+  AutoLane auto_k_[ARR_KLANES_MAX];                // 1.12 slice 6: cursor per insert / rack lane of the current snapshot (index = ArrSnapshot::klane)
   float auto_zuletzt_[ARR_SPUREN][AUTO_FELDER] = {};   // last value written to auto_buf_ (dB for the fader, pan units for pan)
   bool auto_war_[ARR_SPUREN][AUTO_FELDER] = {};        // the field wrote auto_buf_ in the last block
   // Step hold (task 8 fallback): the lane value is taken over for up to auto_schritt_ samples, so the mixer computes the gain (std::pow, cos/sin) only when the
@@ -768,6 +793,14 @@ class Arrangement {
   bool abg_geerntet_ = false;       // a capture point wrote this block; if none did (strip idle), mischen() writes silence
   alignas(32) float abg_l_[ARR_BLOCK] = {};   // scratch of the per-sample capture points (track, group and return post)
   alignas(32) float abg_r_[ARR_BLOCK] = {};
+  // plan 1.11 T12: the export run. Callback thread only (exp_s0_ is set in block() and read in mischen() of the same block)
+  ArrExportLauf* exp_ = nullptr;
+  int64_t exp_gestartet_bei_ = -1;
+  int64_t exp_s0_ = 0;
+  uint32_t exp_host_maske_ = 0;     // bit h-1: the project has a host stage with the flag an on host h
+  bool exp_fertig_da_ = false;
+  int32_t exp_fertig_status_ = 0;
+  int64_t exp_fertig_ende_ = -1;
   int64_t freeze_gestartet_bei_ = -1;
   bool loop_gemerkt_ = false;        // Loop-Klammer des Nutzers, während eines Freeze ausgesetzt
   double start_gemerkt_ = 0.0;       // Fix L10: start_beat des Nutzers, während eines Freeze von_beat

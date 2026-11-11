@@ -14,7 +14,7 @@ import { wiedergabeDatei } from '../../project/playback.ts';
 import { aendere } from '../../project/history.ts';
 import { baueKatalog } from './catalog.mjs';
 import { wav, warteBis } from './proj_context.mjs';
-import { starteWirtProzess, schreibeWirtStatus } from './host_process.mjs';
+import { starteWirtProzess, schreibeWirtStatus } from './instrument_host_process.mjs';
 
 export const RENDER_ATTRAPPE = [process.execPath, path.join(import.meta.dirname, 'render_mock.mjs')];
 
@@ -39,8 +39,9 @@ const warte = (ms) => new Promise((r) => setTimeout(r, ms));
 //   { art: 'neustart' }                  Quittung 1, dann /e/neustart mit neuer Generation · { art: 'haengt' } Status 3 im Takt bis zum Testende
 //   { art: 'ohne_quittung' }             warteQuittung null
 // mitWirt (Paket 1.18): false = die Status-Datei wirt-arr1.json fehlt im Wirt-Ordner (wirtDir), der Produktions-Wirt läuft nicht; true = Datei mit
-// bereit:true und der pid eines lebenden Stellvertreters (host_process.mjs, endet bei t.after)
-export async function aufbau(t, { tempo = 120, kern = { art: 'ok' }, abgriff = { art: 'ok' }, opt = {}, mitKick = true, mitWirt = true } = {}) {
+// bereit:true und der pid eines lebenden Stellvertreters (instrument_host_process.mjs, endet bei t.after)
+// host (plan 1.11 T13): ProjOptionen.host, e.g. dependencies that never start a real host process
+export async function aufbau(t, { tempo = 120, kern = { art: 'ok' }, abgriff = { art: 'ok' }, opt = {}, mitKick = true, mitWirt = true, host = null } = {}) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-s3-ablauf-'));
   const uhren = new Set();
   t.after(() => { for (const u of uhren) clearInterval(u); fs.rmSync(tmp, { recursive: true, force: true }); });
@@ -48,7 +49,7 @@ export async function aufbau(t, { tempo = 120, kern = { art: 'ok' }, abgriff = {
   // Paket 1.18: eigener Wirt-Ordner, damit ein Freeze nie vom Betrieb unter /dev/shm/cypherdj abhängt; mitWirt: false = der Wirt arr1 läuft nicht
   const wirtDir = path.join(tmp, 'wirt');
   fs.mkdirSync(wirtDir);
-  if (mitWirt) schreibeWirtStatus(wirtDir, { pid: (await starteWirtProzess(t)).pid });   // S3-Fix W2: bereit:true und eine lebende pid namens host.py
+  if (mitWirt) schreibeWirtStatus(wirtDir, { pid: (await starteWirtProzess(t)).pid });   // S3-Fix W2: bereit:true und eine lebende pid namens instrument_host.py
   const kick = wav(path.join(tmp, 'data'), 'kick.wav', 0.5);
   const katalog = baueKatalog(path.join(tmp, 'kat'), [{ n: 1, typ: 'oneshot', pfad: kick, dauer_s: 0.5, sha: 'a'.repeat(64) }]);
   const protokoll = { gesendet: [], reihenfolge: [], uebernommen: [], verteilt: [], log: [], wiedergaben: [] };
@@ -142,7 +143,7 @@ export async function aufbau(t, { tempo = 120, kern = { art: 'ok' }, abgriff = {
     }, k.ms ?? 20);
   }
 
-  b = projBereich(ctx, { wurzel, arbeitsordner, katalog, arrFristMs: 30 });
+  b = projBereich(ctx, { wurzel, arbeitsordner, katalog, arrFristMs: 30, ...(host ? { host } : {}) });
   t.after(() => b.sitzung.schliesse());
   const echt = b.zugang;
   // Mantel um den echten Zugang: zeichnet auf, ändert nichts (zu: kein Projekt, wie ein geschlossenes)

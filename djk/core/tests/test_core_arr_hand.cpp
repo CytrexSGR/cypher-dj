@@ -30,7 +30,7 @@ int main() {
     x.midi_bei(5100, 0x80, 60, 0);   // Loslassen: ohne Wirkung
     x.lauf(10000);
     PRUEF(x.kern->arrangement().status() == ArrStatus::spielt);
-    PRUEF(x.kern->arrangement().zustand(x.kern->karte(), 10000).ursprung_sample == 5000 + 2 * N + 25 + N);
+    PRUEF(x.kern->arrangement().zustand(x.kern->karte(), 10000).ursprung_sample == 5000 + 2 * N + N);
     x.midi_bei(20000, 0x90, 60, 100);
     x.lauf(21000);
     PRUEF(x.kern->arrangement().status() == ArrStatus::steht);
@@ -47,7 +47,7 @@ int main() {
     x.test_hand("arr/start_stopp", 1.0f, 9300);
     x.lauf(12000);
     PRUEF(x.kern->arrangement().status() == ArrStatus::spielt);
-    PRUEF(x.kern->arrangement().zustand(x.kern->karte(), 12000).ursprung_sample == 9300 + 2 * N + 25 + N);
+    PRUEF(x.kern->arrangement().zustand(x.kern->karte(), 12000).ursprung_sample == 9300 + 2 * N + N);
   }
   {  // 3: ein Deck läuft: Start auf den Takt (Kern-Beat ≡ start_beat mod 4)
     k35::traeger(ab.pfad, "a2a0000000000e01", "--ohne-klick --traeger 0.1");

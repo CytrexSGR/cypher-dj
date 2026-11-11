@@ -24,8 +24,13 @@ KONTROLL_NAMEN = ("konst134", "drift_synth", "mfbass", "eins_synth")
 
 
 def c_drift_werte():
-    """bpm_fest und klarheit_median je Datei aus proben/07 c_drift.json (Vergleich, Pulsklarheit)."""
-    return {Path(e["datei"]).name: e for e in json.loads((K.PROBEN07 / "c_drift.json").read_text())}
+    """bpm_fest und klarheit_median je Datei aus proben/07 c_drift.json (Vergleich, Pulsklarheit). The file is a local
+    measurement of the author's files and is not part of the public repository: without it no file has a value
+    (callers treat a missing entry as "not measured")."""
+    pfad = K.PROBEN07 / "c_drift.json"
+    if not pfad.is_file():
+        return {}
+    return {Path(e["datei"]).name: e for e in json.loads(pfad.read_text())}
 
 
 def eins_erwartet(karte, eins_zeiten):

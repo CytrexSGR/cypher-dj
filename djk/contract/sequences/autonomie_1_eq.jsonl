@@ -1,0 +1,18 @@
+{"t":"sende","sample":0,"osc":["/k/set/neu",",hsd",1,"pruefstand",128.0],"bereich":"zeitachse","herleitung":"§4.2: neue Zeitachse mit 128 BPM, Beat 0 am nächsten Zyklus = Sample 0 (§1.1)"}
+{"t":"sende","sample":22500,"osc":["/k/deck/laden",",hsisdii",2,"leitstand",1,"f0000000000000a1",128.0,1,0],"bereich":"deck","herleitung":"§4.4 /k/deck/laden, Fixture material/f0000000000000a1/ next to the sequences"}
+{"t":"erwarte","ab_sample":22500,"bis_sample":24900,"osc":["/q",",hsihds",2,"leitstand",1,null,null,""],"bereich":"deck","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"erwarte","ab_sample":22500,"bis_sample":70500,"osc":["/q",",hsihds",2,"leitstand",3,null,null,""],"bereich":"deck","herleitung":"§4.4: Quittung fertig nach dem Tausch"}
+{"t":"erwarte","ab_sample":22500,"bis_sample":70500,"osc":["/e/geladen",",isdiih",1,"f0000000000000a1",128.0,1,0,null],"toleranz":1e-06,"bereich":"deck","herleitung":"§4.4, §5.9 /e/geladen"}
+{"t":"sende","sample":90000,"osc":["/k/deck/start",",hssssiddi",3,"andreas","","","",1,8.0,0.0,0],"bereich":"deck","herleitung":"A: Andreas' Deck, ohne Plan"}
+{"t":"erwarte","ab_sample":90000,"bis_sample":92400,"osc":["/q",",hsihds",3,"andreas",1,null,null,""],"bereich":"deck","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"erwarte","ab_sample":180000,"bis_sample":182400,"osc":["/q",",hsihds",3,"andreas",2,180000,8.0,""],"toleranz":1e-06,"bereich":"deck","herleitung":"§5.1 Status 2 am Ziel-Sample llround(sample_at(8)) = 180000"}
+{"t":"hand","sample":202500,"pfad":"deck/1/fader","midi_roh":0.0,"bereich":"regler","herleitung":"§7.3 Punkt 2: erster Wert setzt nur die Stellung"}
+{"t":"hand","sample":225000,"pfad":"deck/1/fader","midi_roh":1.0,"bereich":"regler","herleitung":"§7.2 Übernahme skaliert: Anschlag oben = Obergrenze"}
+{"t":"erwarte","ab_sample":225000,"bis_sample":227400,"osc":["/e/halter",",sshd","deck/1/fader","mensch",225000,10.0],"toleranz":1e-06,"bereich":"regler","herleitung":"§7.3 Punkt 3, ADR 023: Halter mensch am selben Sample"}
+{"t":"erwarte","ab_sample":945000,"bis_sample":945512,"osc":["/e/halter",",sshd","deck/1/fader","frei",null,null],"bereich":"regler","herleitung":"§7.3 Punkt 4: 32 Beats ohne Handbewegung → frei bei Beat 42"}
+{"t":"ws_sende","sample":270000,"typ":"hallo","daten":{"rolle":"mcp","name":"golden-autonomie","protokoll":1},"bereich":"leitstand","herleitung":"§9.2 Anmeldung als mcp"}
+{"t":"ws_erwarte","ab_sample":270000,"bis_sample":318000,"typ":"willkommen","daten":{"rolle":"mcp","autonomie":1},"bereich":"leitstand","herleitung":"§2.1 autonomie_start = 1"}
+{"t":"ws_sende","sample":900000,"typ":"rpc","daten":{"id":1,"methode":"plan_einreichen","parameter":{"grund":"Höhen von A zurück","teile":[{"regler":"deck/1/eq/hoch","art":"setze","ab_takt":17,"nach":-6.0}]}},"bereich":"leitstand","herleitung":"§10 plan_einreichen, Takt 17 = Beat 64"}
+{"t":"ws_erwarte","ab_sample":900000,"bis_sample":948000,"typ":"rpc_antwort","daten":{"id":1,"ergebnis":{"status":"vorgeschlagen"}},"bereich":"leitstand","herleitung":"§10 Stufe 1: jede Einreichung wird Vorschlag"}
+{"t":"erwarte_nicht","ab_sample":900000,"bis_sample":1800000,"osc":["/q",",hsihds",null,"cypher",null,null,null,null],"bereich":"leitstand","herleitung":"kein /k/teil mit Quelle cypher am Kern, also keine Quittung dafür"}
+{"t":"wert","sample":1530000,"pfad":"deck/1/eq/hoch","wert":0.0,"toleranz":0.0,"bereich":"regler","herleitung":"unverändert"}

@@ -1,8 +1,15 @@
 """Gemeinsame Helfer der Kettentests: kurzer synthetischer Klick mit bekannter Wahrheit, sha256 je Datei."""
 import hashlib
+import importlib.util
 
 import numpy as np
+import pytest
 import soundfile as sf
+
+# Heavy dependencies that requirements.txt leaves out (see the comment there): tests that really run the chain need essentia
+# (beat map of the second tool), tests that run the stem separator need torch. Without them these tests are skipped.
+braucht_essentia = pytest.mark.skipif(importlib.util.find_spec("essentia") is None, reason="needs essentia (not installed)")
+braucht_torch = pytest.mark.skipif(importlib.util.find_spec("torch") is None, reason="needs torch (not installed)")
 
 SR = 48000
 

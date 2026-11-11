@@ -60,6 +60,7 @@ RenderErgebnis rendere(const RenderAuftrag& a) {
     return abbruch("aufruf", "von >= 0, bis - von 1..2048 Beats, bpm 60..200, quantum 16..8192, nr >= 0");
   SpeicherKonto konto(a.speicher_budget_bytes);
   ArrAudioCache cache(&konto, a.arr_budget_bytes, false);
+  cache.setze_host_da(true);   // plan 1.11 T12: the loader takes a host stage (the render has no host to play it); a stage with `an` true is refused below as host_insert_echtzeit, one with `an` false runs on the dry path, aligned
 #ifndef CYPHERDJ_MUTATION_RENDER_OHNE_BK_ORDNER
   cache.setze_bk_ordner(a.bk_ordner);   // S20: graphs of the bk tracks, read by the loader (never in the callback)
 #endif
@@ -83,6 +84,18 @@ RenderErgebnis rendere(const RenderAuftrag& a) {
           return weg("wirt_nicht_eingefroren", "Spur " + std::to_string(sp.nr) + " ist ein Rack mit Surge-Glied (erst einfrieren)");
 #endif
   }
+#ifndef CYPHERDJ_MUTATION_HOST_RENDER_OHNE_PRUEFUNG   // error case (plan 1.11 T12): the offline render takes a host stage with `an` true and renders it dry, not what the real-time export captures
+  for (int i = 0; i < ARR_KETTEN; ++i)   // plan 1.11 T12 (D10): a host stage that is on is a live process the render cannot play: the project is exported in real time (/k/arr/export_lauf)
+    for (int j = 0; j < w.snap->kette[i].n; ++j) {
+      const ArrStufe& st = w.snap->kette[i].st[j];
+      if (st.art != ArrInsArt::host || !st.an) continue;
+      const std::string streifen = i < ARR_SPUREN ? "Spur " + std::to_string(i + 1)
+                                 : i < ARR_KETTE_PM ? "Gruppe " + std::to_string(i - ARR_SPUREN + 1)
+                                 : i == ARR_KETTE_PM ? std::string("PM")
+                                                     : "Return " + std::to_string(i - ARR_KETTE_RET0 + 1);
+      return weg("host_insert_echtzeit", streifen + " has a host stage (slot " + std::to_string(st.slot + 1) + ") with an true: a foreign plugin plays only in real time (export in real time, /k/arr/export_lauf)");
+    }
+#endif
   if (a.gegenprobe_spur != 0) {
     if (a.gegenprobe_spur < 1 || a.gegenprobe_spur > ARR_SPUREN)
       return weg("gegenprobe", "Spur 1.." + std::to_string(ARR_SPUREN));
@@ -225,7 +238,7 @@ RenderErgebnis rendere(const RenderAuftrag& a) {
   const int n = a.quantum;
   const int64_t vorlauf_zyklen = (vorlauf_samples + n - 1) / n;   // cycles between the load and the start command
   int64_t zyklen = 0;
-  const int64_t grenze = vorlauf_zyklen * n + 4LL * n + 25 + (werk ? ARR_WARP_FRIST : 0);   // der Einsatz liegt bei 3n + 25 (Quittung 2 im vierten Zyklus), mit Warp-Werk um ARR_WARP_FRIST später (Start-Regel)
+  const int64_t grenze = vorlauf_zyklen * n + 4LL * n + (werk ? ARR_WARP_FRIST : 0);   // der Einsatz liegt bei 3n (Quittung 2 im vierten Zyklus), mit Warp-Werk um ARR_WARP_FRIST später (Start-Regel)
   const bool pm = a.abgriff == RenderAbgriff::produktion;   // 1.10 Slice 2 (E2)
   e.abgriff = pm ? "produktion" : "set";
   int64_t ab = -1;                       // Kern-Sample des ersten Export-Werts (Master: plus Vorhalt; Abgriff: der Einsatz selbst)
@@ -333,7 +346,7 @@ bool lies_spur_regler(const std::string& pfad, std::vector<SpurRegler>& aus, std
     const int r = mixer_pfad(p) ? tab.suche(p.c_str()) : -1;
     if (r < 0) {
       fehler = pfad + ": " + p + " ist kein Mixer-Regler (spur/<1.." + std::to_string(ARR_SPUREN) + ">, grp/<1.." + std::to_string(ARR_GRUPPEN) +
-               ">/{fader,pan,mute,solo,send/<r>}, ret/<r>/…, ins/{komp,eq,saett,lim}/<n>/…, pm/fader)";
+               ">/{fader,pan,mute,solo,send/<r>}, ret/<r>/…, ins/{komp,eq,saett,lim,utility,host}/<n>/…, pm/fader)";
       return false;
     }
     if (!it.value().is_number()) {

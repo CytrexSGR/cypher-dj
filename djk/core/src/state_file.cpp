@@ -6,8 +6,53 @@
 #include <unistd.h>
 
 #include <cerrno>
+#include <vector>
 
 namespace cdj {
+
+namespace {
+
+// arr-bk: version 3 -> 4. Version 4 only widened the table of controls (2048 -> 4096 rows; the rows of a table keep their place: the 72 new rows are
+// appended at the end, and a row carries its path anyway), so everything in front of the table has the same offsets and the sections behind it move.
+// The layout of a version 3 file is spelled out here with literal sizes (not derived from the current header), so the takeover does not follow a later
+// change of the header by accident: head 64, two subjects of 208 + 2 x 64 x 48 + 256 x 256 + 2048 x 96 + 32 x 144 + 4 x 168 bytes, two subscriber subjects of 32 + 8 x 64.
+constexpr std::size_t Z3_REGLER = 2048;
+constexpr std::size_t Z3_VOR_REGLER = 208 + 2 * 64 * 48 + 256 * 256;                 // the offset of `regler` inside a subject (also the offset in version 4)
+constexpr std::size_t Z3_HINTER_REGLER = 32 * 144 + 4 * 168;                          // hoerscheine and decks, behind the table
+constexpr std::size_t Z3_ECHTZEIT = Z3_VOR_REGLER + Z3_REGLER * 96 + Z3_HINTER_REGLER;
+constexpr std::size_t Z3_ABOS = 32 + 8 * 64;
+constexpr std::size_t Z3_DATEI = 64 + 2 * Z3_ECHTZEIT + 2 * Z3_ABOS;
+static_assert(offsetof(cdj_z_echtzeit, regler) == Z3_VOR_REGLER, "the sections in front of the table did not move");
+static_assert(offsetof(cdj_z_datei, echtzeit) == 64 && sizeof(cdj_z_abos) == Z3_ABOS, "head and subscriber subject as in version 3");
+static_assert(sizeof(cdj_z_hoerschein) * CDJ_Z_HOERSCHEINE + sizeof(cdj_z_deck) * CDJ_Z_DECKS == Z3_HINTER_REGLER, "sections behind the table as in version 3");
+static_assert(CDJ_Z_REGLER >= Z3_REGLER, "the table only grew");
+
+bool ist_v3(const unsigned char* roh, std::size_t n) {
+  if (n != Z3_DATEI) return false;
+  uint32_t v, g;
+  std::memcpy(&v, roh + 4, 4);
+  std::memcpy(&g, roh + 8, 4);
+  return std::memcmp(roh, "CDJZ", 4) == 0 && v == 3u && g == Z3_DATEI;
+}
+
+// Fills `d` (zeroed, the size of the current file) from a version 3 image; the magic is written last, as for a new file.
+void uebernimm_v3(cdj_z_datei* d, const unsigned char* roh) {
+  auto* aus = reinterpret_cast<unsigned char*>(d);
+  std::memcpy(aus + 12, roh + 12, 52);   // the reserve words of the head
+  for (std::size_t i = 0; i < 2; ++i) {
+    const unsigned char* von = roh + 64 + i * Z3_ECHTZEIT;
+    unsigned char* nach = reinterpret_cast<unsigned char*>(&d->echtzeit[i]);
+    std::memcpy(nach, von, Z3_VOR_REGLER + Z3_REGLER * 96);                       // up to and including the 2048 rows
+    std::memcpy(nach + offsetof(cdj_z_echtzeit, hoerscheine), von + Z3_VOR_REGLER + Z3_REGLER * 96, Z3_HINTER_REGLER);
+  }
+  for (std::size_t i = 0; i < 2; ++i) std::memcpy(&d->abos[i], roh + 64 + 2 * Z3_ECHTZEIT + i * Z3_ABOS, Z3_ABOS);
+  d->version = CDJ_ZUSTAND_VERSION;
+  d->groesse = sizeof(cdj_z_datei);
+  __atomic_thread_fence(__ATOMIC_RELEASE);
+  std::memcpy(d->magic, "CDJZ", 4);
+}
+
+}  // namespace
 
 bool z_lies_befehle(const cdj_z_datei* d, cdj_z_befehl* befehle, int& n) noexcept {
   constexpr std::size_t KOPF = offsetof(cdj_z_echtzeit, segmente);
@@ -57,6 +102,11 @@ bool ZustandDatei::oeffne(const std::string& pfad) {
   fstat(fd, &st);
   const off_t soll = static_cast<off_t>(sizeof(cdj_z_datei));
   neu_ = false;
+  std::vector<unsigned char> alt_v3;   // arr-bk: an intact version 3 file is taken over instead of being recreated
+  if (st.st_size == static_cast<off_t>(Z3_DATEI)) {
+    alt_v3.resize(Z3_DATEI);
+    if (pread(fd, alt_v3.data(), alt_v3.size(), 0) != static_cast<ssize_t>(alt_v3.size()) || !ist_v3(alt_v3.data(), alt_v3.size())) alt_v3.clear();
+  }
   if (st.st_size != soll) {
     neu_ = true;
     meldung_ = st.st_size == 0 ? "neu angelegt"
@@ -80,7 +130,12 @@ bool ZustandDatei::oeffne(const std::string& pfad) {
     neu_ = true;
     meldung_ = "Kopf passt nicht (Version " + std::to_string(d_->version) + "), neu angelegt";
   }
-  if (neu_) {
+  if (neu_ && !alt_v3.empty()) {
+    std::memset(d_, 0, sizeof(cdj_z_datei));
+    uebernimm_v3(d_, alt_v3.data());
+    neu_ = false;
+    meldung_ = "version 3 taken over (control table 2048 -> " + std::to_string(CDJ_Z_REGLER) + ")";
+  } else if (neu_) {
     std::memset(d_, 0, sizeof(cdj_z_datei));
     d_->version = CDJ_ZUSTAND_VERSION;
     d_->groesse = sizeof(cdj_z_datei);

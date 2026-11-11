@@ -1,0 +1,21 @@
+{"t":"sende","sample":0,"osc":["/k/set/neu",",hsd",1,"pruefstand",128.0],"bereich":"zeitachse","herleitung":"§4.2: neue Zeitachse mit 128 BPM, Beat 0 am nächsten Zyklus = Sample 0 (§1.1)"}
+{"t":"sende","sample":45000,"osc":["/k/deck/laden",",hsisdii",2,"leitstand",1,"f0000000000000a1",128.0,1,0],"bereich":"deck","herleitung":"§4.4 /k/deck/laden, Fixture material/f0000000000000a1/ next to the sequences"}
+{"t":"erwarte","ab_sample":45000,"bis_sample":47400,"osc":["/q",",hsihds",2,"leitstand",1,null,null,""],"bereich":"deck","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"erwarte","ab_sample":45000,"bis_sample":93000,"osc":["/q",",hsihds",2,"leitstand",3,null,null,""],"bereich":"deck","herleitung":"§4.4: Quittung fertig nach dem Tausch"}
+{"t":"erwarte","ab_sample":45000,"bis_sample":93000,"osc":["/e/geladen",",isdiih",1,"f0000000000000a1",128.0,1,0,null],"toleranz":1e-06,"bereich":"deck","herleitung":"§4.4, §5.9 /e/geladen"}
+{"t":"sende","sample":270000,"osc":["/k/deck/start",",hssssiddi",3,"andreas","","","",1,16.0,0.0,0],"bereich":"deck"}
+{"t":"erwarte","ab_sample":270000,"bis_sample":272400,"osc":["/q",",hsihds",3,"andreas",1,null,null,""],"bereich":"deck","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"erwarte","ab_sample":360000,"bis_sample":362400,"osc":["/q",",hsihds",3,"andreas",2,360000,16.0,""],"toleranz":1e-06,"bereich":"deck","herleitung":"§5.1 Status 2 am Ziel-Sample llround(sample_at(16)) = 360000"}
+{"t":"sende","sample":810000,"osc":["/k/deck/sprung",",hssssiddid",4,"andreas","","","",1,40.0,8.0,0,0.0],"bereich":"deck"}
+{"t":"erwarte","ab_sample":810000,"bis_sample":812400,"osc":["/q",",hsihds",4,"andreas",1,null,null,""],"bereich":"deck","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"erwarte","ab_sample":900000,"bis_sample":902400,"osc":["/q",",hsihds",4,"andreas",2,900000,40.0,""],"toleranz":1e-06,"bereich":"deck","herleitung":"§5.1 Status 2 am Ziel-Sample llround(sample_at(40)) = 900000"}
+{"t":"deck_wert","sample":990000,"deck":1,"feld":"quell_beat","wert":36.0,"toleranz":0.01,"bereich":"deck"}
+{"t":"sende","sample":1260000,"osc":["/k/deck/loop",",hssssiddid",5,"andreas","","","",1,60.0,4.0,0,0.0],"bereich":"deck"}
+{"t":"erwarte","ab_sample":1260000,"bis_sample":1262400,"osc":["/q",",hsihds",5,"andreas",1,null,null,""],"bereich":"deck","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"erwarte","ab_sample":1350000,"bis_sample":1352400,"osc":["/q",",hsihds",5,"andreas",2,1350000,60.0,""],"toleranz":1e-06,"bereich":"deck","herleitung":"§5.1 Status 2 am Ziel-Sample llround(sample_at(60)) = 1350000"}
+{"t":"sende","sample":1395000,"osc":["/k/deck/sprung",",hssssiddid",6,"andreas","","","",1,66.0,4.0,0,0.0],"bereich":"deck","herleitung":"§4.4: im aktiven Loop verschiebt der Sprung den Loop"}
+{"t":"erwarte","ab_sample":1395000,"bis_sample":1397400,"osc":["/q",",hsihds",6,"andreas",1,null,null,""],"bereich":"deck","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"erwarte","ab_sample":1485000,"bis_sample":1487400,"osc":["/q",",hsihds",6,"andreas",2,1485000,66.0,""],"toleranz":1e-06,"bereich":"deck","herleitung":"§5.1 Status 2 am Ziel-Sample llround(sample_at(66)) = 1485000"}
+{"t":"deck_wert","sample":1507500,"deck":1,"feld":"quell_beat","wert":59.0,"toleranz":0.01,"bereich":"deck","herleitung":"Loop [56, 60) nach dem Sprung"}
+{"t":"deck_wert","sample":1552500,"deck":1,"feld":"quell_beat","wert":57.0,"toleranz":0.01,"bereich":"deck","herleitung":"Loop [56, 60) nach dem Sprung"}
+{"t":"deck_wert","sample":1552500,"deck":1,"feld":"status","wert":3,"toleranz":0,"bereich":"deck"}

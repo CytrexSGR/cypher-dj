@@ -5,13 +5,14 @@
 // Der Schalter wird in den vorhandenen Spurkopf (track_heads.js) eingesetzt, nicht in dessen Vorlage: V1 bleibt unverändert.
 import { resampleBefehl, strangName } from './resample.js';
 import { brauchtSlot } from './rack_device.js';
-import { freezeKnopf, laufText, ergebnisText, ausgabeFehler } from './output.js';
+import { freezeKnopf, laufText, ergebnisText, ausgabeFehler, echtzeitHinweis, echtzeitFortschritt } from './output.js';
 
 export function bindeAusgabe(ctx) {
   const { st, $ } = ctx;
   const gruppe = document.createElement('div');
   gruppe.className = 'p-gruppe p-ausgabe';
   gruppe.innerHTML = '<button data-p="export" title="Export the loop bracket when it is on, otherwise the whole song, as a WAV file (48 kHz, 32 bit float); Surge tracks are frozen first" disabled>EXPORT</button>'
+    + '<progress data-p="ausgabe-fortschritt" class="p-ausgabe-balken" max="1" value="0" hidden></progress>'
     + '<output data-p="ausgabe" class="p-ausgabe-text" aria-live="polite"></output>';
   $('meldung').before(gruppe);
   st.lauf = null;            // { art: 'freeze'|'export', spur_id?, name?, an?, seit } während einer Anfrage (seit: Start dieser Seite, performance.now())
@@ -23,11 +24,15 @@ export function bindeAusgabe(ctx) {
   let frage = 0;
   ctx.ausgabeLauf = (x) => {
     clearTimeout(frage);
+    // plan 1.11 T13: the real-time export (own or foreign) carries start_ms and dauer_s for the text and the bar
+    if (st.lauf && x?.art === 'export' && x.echtzeit) { st.lauf.echtzeit = true; st.lauf.start_ms = x.start_ms; st.lauf.dauer_s = x.dauer_s; return; }
     if (!x || (x.art !== 'freeze' && x.art !== 'export' && x.art !== 'lautheit' && x.art !== 'merge' && x.art !== 'bounce' && x.art !== 'resample') || st.lauf) { if (st.fremdLauf) { st.fremdLauf = null; knoepfe(); } return; }
     const s = x.art === 'freeze' ? st.projekt?.spuren.find((y) => y.id === x.spur_id) : null;
-    const gleich = st.fremdLauf && st.fremdLauf.art === x.art && st.fremdLauf.spur_id === x.spur_id && st.fremdLauf.strang_id === x.strang_id;
+    const gleich = st.fremdLauf && st.fremdLauf.art === x.art && st.fremdLauf.spur_id === x.spur_id && st.fremdLauf.strang_id === x.strang_id
+      && st.fremdLauf.start_ms === x.start_ms;
     st.fremdLauf = gleich ? st.fremdLauf : { art: x.art, ...(x.art === 'freeze' ? { spur_id: x.spur_id, name: s?.name ?? x.spur_id, an: !s?.freeze } : {}),
-      ...(x.art === 'resample' ? { strang_id: x.strang_id, name: strangName(st.projekt, x.strang_id) } : {}), seit: null };   // H3: kein Start bekannt
+      ...(x.art === 'resample' ? { strang_id: x.strang_id, name: strangName(st.projekt, x.strang_id) } : {}),
+      ...(x.echtzeit ? { echtzeit: true, start_ms: x.start_ms, dauer_s: x.dauer_s } : {}), seit: null };   // H3: kein Start bekannt
     knoepfe();
     frage = setTimeout(() => ctx.ladeAktuell(), 500);
   };
@@ -58,7 +63,10 @@ export function bindeAusgabe(ctx) {
     st.lauf = { art, seit: performance.now(), ...extra };
     if (art === 'export') st.exportErgebnis = null;
     knoepfe();
-    const r = await ctx.holeJson(weg, koerper);
+    // an export may run in real time: the server says so in ausgabe_lauf, so the page asks for it while the request is open
+    const uhr = art === 'export' ? setInterval(() => ctx.ladeAktuell(), 1000) : null;
+    let r;
+    try { r = await ctx.holeJson(weg, koerper); } finally { clearInterval(uhr); }
     st.lauf = null; st.fremdLauf = null;
     knoepfe();
     if (r.status !== 200) { ctx.melde(ausgabeFehler(r, ctx.antwortText), true); return null; }   // V2 Fix F3: 5xx ohne Grund wie der Schreibweg
@@ -102,7 +110,10 @@ export function bindeAusgabe(ctx) {
   let letzter = null;
   ctx.vorBild.push((t0) => {
     const l = laufJetzt();
-    const e = l ? { text: laufText(l, st.arr, t0), titel: '', warnung: false } : st.exportErgebnis ? ergebnisText(st.exportErgebnis) : { text: '', titel: '', warnung: false };
+    const e = l ? { text: laufText(l, st.arr, t0), titel: '', warnung: false } : st.exportErgebnis ? ergebnisText(st.exportErgebnis)
+      : { text: echtzeitHinweis(st.projekt), titel: '', warnung: false };
+    const balken = $('ausgabe-fortschritt'), f = echtzeitFortschritt(l);
+    if (balken) { balken.hidden = f === null; if (f !== null) balken.value = f; }
     const schluessel = `${e.text}|${e.titel}|${e.warnung}`;
     if (schluessel === letzter) return;
     letzter = schluessel;

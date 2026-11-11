@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 BUNDLE = Path.home() / ".local/lib/cypherdj/vst3/rb338.vst3"
-WIRT = Path(__file__).resolve().parent.parent / "host.py"
+WIRT = Path(__file__).resolve().parent.parent / "instrument_host.py"
 
 
 ECHT = os.environ.get("RB338_ECHT") == "1"

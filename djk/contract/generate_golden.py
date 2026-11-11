@@ -10,7 +10,6 @@ gebaut, dass jede Invariante, die eine Folge NICHT prüft, eindeutig hält: eine
 
 Aufruf: python3 djk/contract/generate_golden.py [--ordner ZIEL]   (Vorgabe: folgen/ neben diesem Skript)
 """
-import importlib
 import json
 import pathlib
 import sys
@@ -18,13 +17,20 @@ import sys
 HIER = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HIER))
 import generate_sequences as erzeuge_folgen  # noqa: E402  (Scheibe 02)
+# Plain import statements, not importlib.import_module("folgen_11"): the public export renames modules and rewrites import
+# statements, it cannot see a module name inside a string (probe build 2026-11-10: ModuleNotFoundError).
+import sequences_11 as folgen_11  # noqa: E402
+import sequences_17 as folgen_17  # noqa: E402
+import sequences_20 as folgen_20  # noqa: E402
+import sequences_operation as folgen_betrieb  # noqa: E402
+import sequences_deck as folgen_deck  # noqa: E402
 
-MODULE = ["folgen_11", "folgen_20", "folgen_17", "folgen_deck", "folgen_betrieb"]
+MODULE = [folgen_11, folgen_20, folgen_17, folgen_deck, folgen_betrieb]
 VON_02 = {"uhr_golden": ["08", "13"], "storno": ["08", "13"], "protokollfehler": ["08", "13"]}
 
 
 def alle_folgen():
-    return [bau() for m in MODULE for bau in importlib.import_module(m).FOLGEN]
+    return [bau() for m in MODULE for bau in m.FOLGEN]
 
 
 def zeile_text(z):

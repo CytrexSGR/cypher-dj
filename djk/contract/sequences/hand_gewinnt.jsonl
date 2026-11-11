@@ -1,0 +1,32 @@
+{"t":"sende","sample":0,"osc":["/k/set/neu",",hsd",1,"pruefstand",128.0],"bereich":"zeitachse","herleitung":"§4.2: neue Zeitachse mit 128 BPM, Beat 0 am nächsten Zyklus = Sample 0 (§1.1)"}
+{"t":"sende","sample":45000,"osc":["/k/deck/laden",",hsisdii",2,"leitstand",2,"f0000000000000b2",128.0,1,0],"bereich":"deck","herleitung":"§4.4 /k/deck/laden, Fixture material/f0000000000000b2/ next to the sequences"}
+{"t":"erwarte","ab_sample":45000,"bis_sample":47400,"osc":["/q",",hsihds",2,"leitstand",1,null,null,""],"bereich":"deck","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"erwarte","ab_sample":45000,"bis_sample":93000,"osc":["/q",",hsihds",2,"leitstand",3,null,null,""],"bereich":"deck","herleitung":"§4.4: Quittung fertig nach dem Tausch"}
+{"t":"erwarte","ab_sample":45000,"bis_sample":93000,"osc":["/e/geladen",",isdiih",2,"f0000000000000b2",128.0,1,0,null],"toleranz":1e-06,"bereich":"deck","herleitung":"§4.4, §5.9 /e/geladen"}
+{"t":"sende","sample":180000,"osc":["/k/hoerschein",",hsssssddddfff",3,"pruefstand","h2","deck/2","f0000000000000b2/128000_r1","ok",128.0,128.0,16.0,32.0,0.5,0.0,-14.0],"bereich":"hoerschein","herleitung":"§4.5 Hörschein registrieren (Quelle pruefstand: §1.4 kennt keine Quelle analyse)"}
+{"t":"erwarte","ab_sample":180000,"bis_sample":182400,"osc":["/q",",hsihds",3,"pruefstand",null,null,null,null],"bereich":"hoerschein","herleitung":"§4: jeder Befehl bekommt eine /q; welchen Status legt §4.5 nicht fest"}
+{"t":"sende","sample":1080000,"osc":["/k/deck/start",",hssssiddi",4,"cypher","p1","b_rein","",2,64.0,32.0,0],"bereich":"deck"}
+{"t":"erwarte","ab_sample":1080000,"bis_sample":1082400,"osc":["/q",",hsihds",4,"cypher",1,null,null,""],"bereich":"deck","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"sende","sample":1080000,"osc":["/k/teil",",hssisddfiiss",5,"cypher","p1",1,"deck/2/eq/tief",63.0,0.0,-30.0,0,0,"b_rein",""],"bereich":"regler","herleitung":"Bass zu einen Beat vor S, B noch stumm (FORMAT.md Punkt 22 n)"}
+{"t":"erwarte","ab_sample":1080000,"bis_sample":1082400,"osc":["/q",",hsihds",5,"cypher",1,null,null,""],"bereich":"regler","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"sende","sample":1080000,"osc":["/k/teil",",hssisddfiiss",6,"cypher","p1",2,"deck/2/fader",64.0,0.0,-15.0,0,0,"b_rein","h2"],"bereich":"regler","herleitung":"öffnet deck/2 (−15 > −26, §1.6): I3a braucht den Hörschein"}
+{"t":"erwarte","ab_sample":1080000,"bis_sample":1082400,"osc":["/q",",hsihds",6,"cypher",1,null,null,""],"bereich":"regler","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"sende","sample":1080000,"osc":["/k/teil",",hssisddfiiss",7,"cypher","p1",3,"deck/2/fader",64.0,32.0,0.0,0,0,"b_rein","h2"],"bereich":"regler"}
+{"t":"erwarte","ab_sample":1080000,"bis_sample":1082400,"osc":["/q",",hsihds",7,"cypher",1,null,null,""],"bereich":"regler","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"sende","sample":1080000,"osc":["/k/teil",",hssisddfiiss",8,"cypher","p1",4,"deck/2/eq/tief",76.0,4.0,0.0,0,0,"b_rein",""],"bereich":"regler","herleitung":"wartet bei Beat 72, gehört zur Gruppe b_rein"}
+{"t":"erwarte","ab_sample":1080000,"bis_sample":1082400,"osc":["/q",",hsihds",8,"cypher",1,null,null,""],"bereich":"regler","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"sende","sample":1080000,"osc":["/k/teil",",hssisddfiiss",9,"cypher","p1",5,"deck/2/send/1",68.0,16.0,-20.0,0,0,"echo",""],"bereich":"regler","herleitung":"läuft bei Beat 72, andere Gruppe"}
+{"t":"erwarte","ab_sample":1080000,"bis_sample":1082400,"osc":["/q",",hsihds",9,"cypher",1,null,null,""],"bereich":"regler","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"erwarte","ab_sample":1440000,"bis_sample":1442400,"osc":["/q",",hsihds",7,"cypher",2,1440000,64.0,""],"toleranz":1e-06,"bereich":"regler","herleitung":"§5.1 Status 2 am Ziel-Sample llround(sample_at(64)) = 1440000"}
+{"t":"hand","sample":1500000,"pfad":"deck/2/fader","midi_roh":0.5,"bereich":"regler","herleitung":"§19.3: 0,5 bei Sample 1 500 000 ist erster Wert, nur Stellung (§7.3 Punkt 2)"}
+{"t":"wert","sample":1560000,"pfad":"deck/2/fader","wert":-12.500000000000002,"toleranz":0.01,"bereich":"regler","herleitung":"Negativ-Kontrolle: Stellung allein ändert nichts"}
+{"t":"erwarte_nicht","ab_sample":0,"bis_sample":1619999,"osc":["/q",",hsihds",null,"cypher",7,null,null,null],"bereich":"regler","herleitung":"vor dem Griff kein Abbruch"}
+{"t":"hand","sample":1620000,"pfad":"deck/2/fader","midi_roh":0.53125,"bereich":"regler","herleitung":"§19.3: 0,5 + 4/128 bei Sample 1 620 000, über der Totzone 3/128"}
+{"t":"erwarte","ab_sample":1620000,"bis_sample":1622400,"osc":["/q",",hsihds",7,"cypher",7,1620000,72.0,"hand"],"toleranz":1e-06,"bereich":"regler","herleitung":"§7.3 Punkt 3: Abbruch am selben Sample, Grund hand"}
+{"t":"erwarte","ab_sample":1620000,"bis_sample":1622400,"osc":["/q",",hsihds",8,"cypher",7,1620000,72.0,"hand"],"toleranz":1e-06,"bereich":"regler","herleitung":"ADR 023 Entscheidung 2: wartender Teil derselben Gruppe fällt mit"}
+{"t":"erwarte","ab_sample":1620000,"bis_sample":1622400,"osc":["/e/halter",",sshd","deck/2/fader","mensch",1620000,72.0],"toleranz":1e-06,"bereich":"regler","herleitung":"§7.3 Punkt 3: Halter mensch am selben Sample"}
+{"t":"erwarte_nicht","ab_sample":1620000,"bis_sample":1800000,"osc":["/q",",hsihds",4,"cypher",7,null,null,null],"bereich":"deck","herleitung":"FORMAT.md Punkt 22 c: der ausgeführte Deck-Start ist abgeschlossen und fällt nicht mehr"}
+{"t":"wert","sample":1800000,"pfad":"deck/2/eq/tief","wert":-30.0,"toleranz":0.01,"bereich":"regler","herleitung":"Teil 4 entfiel: Bass bleibt beim gesetzten −30"}
+{"t":"wert","sample":1710000,"pfad":"deck/2/send/1","wert":-40.0,"toleranz":0.01,"bereich":"regler","herleitung":"Gruppe echo läuft weiter; von stumm ab −60 interpoliert (§1.2)"}
+{"t":"erwarte","ab_sample":1890000,"bis_sample":1892400,"osc":["/q",",hsihds",9,"cypher",3,1890000,84.0,""],"toleranz":1e-06,"bereich":"regler","herleitung":"§5.1 Status 3: Rampe am Ende, Beat 84 = Sample 1890000"}
+{"t":"wert","sample":1800000,"pfad":"deck/2/fader","wert":-5.625,"toleranz":5.625,"bereich":"regler","herleitung":"nach der Übernahme führt die Hand; skaliert nach oben heißt zwischen Ist-Wert −11,25 und 0 dB (die genaue Kurve legt §7.2 nicht fest, FORMAT.md Punkt 22 d)"}

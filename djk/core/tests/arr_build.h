@@ -81,6 +81,8 @@ struct Bau {
   std::vector<N> ns;
   struct L { int spur; std::vector<cdj::ArrAutoPunkt> p; uint8_t ziel = cdj::ARR_AUTO_FADER; uint8_t param = 0; bool relativ = false; };   // Automation: one lane of a track (default target fader)
   std::vector<L> ls;
+  struct KL { int strip; int stufe, param, makro; std::vector<cdj::ArrAutoPunkt> p; };   // 1.12 slice 6: an insert-parameter or rack-macro lane of the strip with this chain index
+  std::vector<KL> kls;
   explicit Bau(int64_t nr = 1) { s->nr = nr; }
   Bau& spur(int nr, cdj::ArrArt art, int slot = 0) {
     s->spur[nr - 1].nr = nr;
@@ -142,6 +144,10 @@ struct Bau {
     ls.push_back({nr, std::move(p), ziel, param, relativ});
     return *this;
   }
+  // 1.12 slice 6: a lane on stage `stufe` parameter `param` of the strip with chain index `strip` (track nr - 1, group ARR_SPUREN + g - 1, PM ARR_KETTE_PM, return ARR_KETTE_RET0 + r - 1)
+  Bau& kette_lane(int strip, int stufe, int param, std::vector<cdj::ArrAutoPunkt> p) { kls.push_back({strip, stufe, param, -1, std::move(p)}); return *this; }
+  // the same for macro `makro` (0..3) of the rack of that strip
+  Bau& makro_lane(int strip, int makro, std::vector<cdj::ArrAutoPunkt> p) { kls.push_back({strip, 0, 0, makro, std::move(p)}); return *this; }
   Bau& note(int nr, const char* id, double beat, double laenge, int ton, int vel = 100) {
     ns.push_back({nr, cdj::ArrNote{cdj::arr_id(id), beat, laenge, static_cast<uint8_t>(ton), static_cast<uint8_t>(vel)}});
     return *this;
@@ -159,6 +165,7 @@ struct Bau {
       }
     size_t n_ap = 0;
     for (const L& l : ls) n_ap += l.p.size();
+    for (const KL& l : kls) n_ap += l.p.size();
     s->auto_lane_liste.reserve(ls.size());   // Automation Slice 1: pointers into these vectors, they never grow afterwards
     s->auto_punkte.reserve(n_ap);
     size_t n_hk = 0;
@@ -240,6 +247,18 @@ struct Bau {
           ++sp.n_auto;
           ++s->n_auto_lanes;
         }
+    }
+    for (const KL& l : kls) {   // 1.12 slice 6: the insert and rack lanes behind the track lanes
+      const size_t p0 = s->auto_punkte.size();
+      s->auto_punkte.insert(s->auto_punkte.end(), l.p.begin(), l.p.end());
+      cdj::ArrKettenLane kl{};
+      kl.strip = static_cast<uint8_t>(l.strip);
+      kl.makro = static_cast<int8_t>(l.makro);
+      kl.stufe = static_cast<uint8_t>(l.stufe);
+      kl.param = static_cast<uint8_t>(l.param);
+      kl.n = static_cast<int>(l.p.size());
+      kl.p = s->auto_punkte.data() + p0;
+      s->klane[s->n_klanes++] = kl;
     }
     for (const C& c : cs)   // Slice 2: jedes genutzte Audio genau einmal (wie der Lader; das Warp-Werk fragt danach in liest())
       if (std::find(s->audios.begin(), s->audios.end(), c.c.audio) == s->audios.end()) s->audios.push_back(const_cast<cdj::ArrAudio*>(c.c.audio));

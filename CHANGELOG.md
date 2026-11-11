@@ -3,6 +3,30 @@
 One entry per public update, newest first. Each entry names what changed for someone who plays, produces or
 builds cypher-dj.
 
+## 2026-11-11
+
+**Production**
+- Automation lanes on the parameters of insert stages, on the four rack macros and on the eight knobs of a Cypher
+  Modular track.
+- A utility insert with stereo width from 0 to 4 and bass mono; larger pools per project (8 EQs, 4 saturators,
+  2 limiters, 8 utilities).
+- A Cypher Modular effect graph as an insert stage, with a tempo-synced delay return as the first shipped graph.
+- MIDI import: Standard MIDI files (format 0 and 1) into tracks and MIDI clips, with a preview and a single undo step.
+- A Strudel pattern can be turned into an ordinary MIDI clip with notes and clip envelopes.
+
+**Agent**
+- The agent has 79 tools, new ones for the MIDI import and the pattern clip.
+
+## 2026-11-10
+
+**Plugins**
+- Third-party VST3 and LV2 plugins as insert stages on tracks, groups, returns and the master, and as instruments on
+  tracks. Each plugin runs in its own process: if it crashes or hangs, its strip plays dry and in time, and the rest
+  keeps playing.
+- A scan that survives crashing and hanging plugins, a plugin browser with search, the plugin's own window, plugin
+  state stored in the project, and latency compensation for the plugin.
+- Projects with plugin stages are exported in real time; the agent can list, insert, bypass and set parameters.
+
 ## 2026-11-09
 
 **Recording**

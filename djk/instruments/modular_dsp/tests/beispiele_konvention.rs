@@ -25,6 +25,7 @@ const SPITZE_GRENZE: f32 = 0.9;
 /// Graphs whose delay/hall mix is deliberately not a knob, each with its reason.
 const MIX_OHNE_KNOB: &[(&str, &str)] = &[
     ("fx-bandecho", "wet-only send return for fx/3, fx/4: the wet level is the send level, and those channels have no kern knobs yet"),
+    ("fx-delay-sync", "wet-only effect return (arr-bk slice 4): the delay's own mix stays at 1 and the dry is subtracted; the wet level is the Level knob and the send level"),
 ];
 
 fn beispiele_dir() -> PathBuf {

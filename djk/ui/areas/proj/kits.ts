@@ -37,3 +37,14 @@ export function listeKits(): KitEintrag[] {
   }
   return aus;
 }
+
+// strudel-clip: the sounds of a kit as clip_aus_muster resolves Strudel names against them: {note, name: "bd:0"}; null = no such kit or an unreadable kit.json.
+export function kitKlaenge(name: string): { note: number; name: string }[] | null {
+  if (!KIT_NAME.test(name)) return null;
+  try {
+    const j = JSON.parse(fs.readFileSync(path.join(kitsOrdnerVorgabe(), name, 'kit.json'), 'utf8')) as { klaenge?: unknown };
+    if (!Array.isArray(j.klaenge)) return null;
+    return j.klaenge.filter((k): k is { note: number; name: string } => typeof k === 'object' && k !== null && Number.isInteger((k as { note?: unknown }).note)
+      && typeof (k as { name?: unknown }).name === 'string').map((k) => ({ note: k.note, name: k.name }));
+  } catch { return null; }
+}

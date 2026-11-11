@@ -27,6 +27,8 @@ namespace cdj {
 constexpr int ARR_SPUREN = 32;           // Spur-Slots spur/1..32 (Spec 2.3, E3); = SPUR_REGLER_SPUREN (static_assert)
 constexpr int ARR_CLIPS_MAX = 4096;     // je Wiedergabe (Spec 3.2)
 constexpr int ARR_NOTEN_MAX = 65536;    // je Wiedergabe (Spec 3.2)
+constexpr int ARR_HOST_LAT_MAX = 8192;  // plan 1.11 (D5): longest host-stage latency in samples (the dry ring of a host stage and, with the PDC ring, the bound of the loader): a latency of this value or more is refused (pdc_zu_lang)
+constexpr int ARR_INS_HOST = 4;         // plan 1.11 (D1): effect hosts, one Carla process per plugin; host h = pool instance ins/host/<h> = playback slot h - 1; ports arr_ins_<h>_L/R out, arr_insret_<h>_L/R in
 constexpr int ARR_WIRT_SLOTS = 2;       // arr_midi_<s>, s = 1..2 (Spec 2.4)
 constexpr int ARR_GRUPPEN = 8;          // Gruppen-Spuren grp/1..8 (1.10, F1: eigene Plätze neben den 32 Spuren); = GRP_REGLER_GRUPPEN (static_assert in arr_output.cpp)
 constexpr int ARR_RETURNS = 4;          // 1.10 Slice 3: return strips ret/1..4 (own places next to the 32 tracks and 8 groups); = RET_REGLER_RETURNS (static_assert in arr_returns.cpp)
@@ -38,17 +40,24 @@ constexpr int ARR_INS_KOMP = 12;        // 1.10 slice 4a: pooled compressors ins
 // 1.10 slice 4b: pooled EQs ins/eq/1..ARR_INS_EQ and saturators ins/saett/1..ARR_INS_SAETT. The sizes were decided by the cost measurement (T11, routing-1-10.md)
 // and equal "instanzen" of docs/interfaces/insert_module.json (pinned by test_arr_inserts_vertrag and by the contract test in the stellwerk project).
 #ifdef CYPHERDJ_MUTATION_INS_POOL_PLUS_EINS   // error case: a pool constant one above the rows of the table (the pool pin in test_arr_inserts_4b must go red)
-constexpr int ARR_INS_EQ = 3;
-constexpr int ARR_INS_SAETT = 2;
-constexpr int ARR_INS_LIM = 2;
+constexpr int ARR_INS_EQ = 9;
+constexpr int ARR_INS_SAETT = 5;
+constexpr int ARR_INS_LIM = 3;
 #else
-constexpr int ARR_INS_EQ = 2;             // 2026-11-06: 1 -> 2 on Andreas' decision of 2026-11-05 (lane gate median 1650 us, measured on a quiet machine)
-constexpr int ARR_INS_SAETT = 1;
-constexpr int ARR_INS_LIM = 1;           // master limiter: ins/lim/1 (pool 1 over the whole project, "instanzen" in the contract)
+constexpr int ARR_INS_EQ = 8;             // arr-fx slice 2: 2 -> 8 on the order of 2026-11-10 (was 2 on Andreas' decision of 2026-11-05, lane gate median 1650 us); cost: see the arr-fx report
+constexpr int ARR_INS_SAETT = 4;          // arr-fx slice 2: 1 -> 4
+constexpr int ARR_INS_LIM = 2;            // arr-fx slice 2: 1 -> 2 (the pool is shared over the whole project)
 #endif
-constexpr int ARR_INS_ALLE = ARR_INS_KOMP + ARR_INS_EQ + ARR_INS_SAETT + ARR_INS_LIM;   // one global slot index: komp first, then eq, saett, lim
+// one global slot index: komp first, then eq, saett, lim, and since plan 1.11 the host stages ins/host/1..ARR_INS_HOST at the end (INS_G_HOST0 in arr_inserts.h)
+// arr-fx slice 1: the utility stages ins/utility/1..ARR_INS_UTIL (Utility of package 1.15: width, bass mono, gain, balance) sit between lim and host (INS_G_UTIL0), so host stays last.
+constexpr int ARR_INS_UTIL = 8;           // "instanzen" of the kind utility in docs/interfaces/insert_module.json (pinned by test_arr_inserts_util)
+// arr-bk slice 3: the Baukasten effect stages ins/bk/1..ARR_INS_BK (a Baukasten effect graph with the knobs k1..k8) sit between utility and host (INS_G_BK0), so host stays last.
+// Pool size: "instanzen" of the kind bk in docs/interfaces/insert_module.json (pinned by test_arr_inserts_bk); the row table (MAX_REGLER) was raised for the 9 rows per slot.
+constexpr int ARR_INS_BK = 8;
+constexpr int ARR_INS_ALLE = ARR_INS_KOMP + ARR_INS_EQ + ARR_INS_SAETT + ARR_INS_LIM + ARR_INS_UTIL + ARR_INS_BK + ARR_INS_HOST;
 constexpr int ARR_PARAMETER = 8;        // RB-338-Parameter je interner Spur (K2 liest sie)
 constexpr int ARR_BK_MAX = 8;           // S20: Baukasten tracks per playback; = MAX_BK_SPUREN in model.ts
+constexpr int ARR_BK_INSERT_NR = 1000;  // arr-bk slice 3: the track number an insert stage uses in the key of the graph store (tracks and members are below 100)
 constexpr int ARR_KIT_MAX = 8;          // 1.9: kit tracks per playback (spec E15); counted over tracks AND rack members
 // 1.9 U6 (spec E10, E15): instrument racks. A rack track holds up to ARR_RACK_GLIEDER members; every member of every rack takes one member slot
 // of the internal sinks (ARR_GLIED_PLAETZE in all). The sinks (RB-338, Baukasten, kit) index their per-slot arrays with ARR_SENKEN_PLAETZE: slots
@@ -80,7 +89,8 @@ constexpr uint8_t ARR_AUTO_GERAET = 4;           // a parameter of the internal 
 // Device parameter names by ArrAutoLane::param: own 0..3 numbering, not the rb_dsp ID order; task 4 maps it to the ID string via this table.
 constexpr int ARR_GERAET_PARAMS = 4;             // device lane parameters; every table and array of them is sized by this
 constexpr const char* ARR_GERAET_PARAM_NAME[ARR_GERAET_PARAMS] = {"lautstaerke", "cutoff", "resonanz", "env_mod"};
-constexpr int ARR_AUTO_LANES_JE_SPUR = 16;       // at most one absolute and one relative lane per (ziel, param): 8 + 8 slots (mute and solo take no relative lane, so 14 in use)
+constexpr int ARR_GERAET_LANE_PARAMS = 8;        // 1.12 slice 7: device lane parameters of the largest device (the Baukasten knobs k1..k8); the RB-338 uses the first ARR_GERAET_PARAMS
+constexpr int ARR_AUTO_LANES_JE_SPUR = 32;       // at most one absolute and one relative lane per (ziel, param): 16 targets x 2 slots (an RB-338 track uses at most 14 of them, a bk track 22)
 constexpr double ARR_BLENDE_TOLERANZ = 1e-9;  // ein_beats + aus_beats <= laenge_beats + Toleranz (wie S2, model.ts)
 
 // FNV-1a 64 über den ID-Text (Clip-ID, Noten-ID "<clip_id>/<noten_id>"); der Lader prüft Eindeutigkeit je Spur.
@@ -104,12 +114,26 @@ struct ArrAutoPunkt {
 };
 struct ArrAutoLane {
   uint8_t ziel;                     // ARR_AUTO_FADER, _PAN, _MUTE, _SOLO or _GERAET
-  uint8_t param;                    // ARR_AUTO_GERAET: index into ARR_GERAET_PARAM_NAME (0..3); else 0
+  uint8_t param;                    // ARR_AUTO_GERAET: RB-338: index into ARR_GERAET_PARAM_NAME (0..3); bk: knob index 0..7 (k1..k8); else 0
   bool relativ;                     // 1.12 slice 5: a summand lane (modulation), added to the base value or the absolute lane of the same target, then clamped; fader (dB), pan, geraet.* only
   int n;                            // points, at least 1, beats not falling (two at one beat are a jump)
   const ArrAutoPunkt* p;            // into ArrSnapshot::auto_punkte
 };
 static_assert(sizeof(ArrAutoLane) == 16, "the flag sits in the padding: the lane table keeps its size (the snapshot pages are booked by it)");
+
+// 1.12 slice 6: automation lanes on the parameters of an insert stage and on the macros of a rack, for ANY strip with a chain (track, group, PM, return: `strip` is the chain index of
+// ARR_KETTEN). A stage lane drives parameter `param` (the index of the stage kind, as in ArrMakroZiel) of the stage at position `stufe` of the strip's chain; a macro lane (`makro` 0..3)
+// drives that macro of the strip's rack. The values are in the real unit of the parameter (a macro lane: 0..1). Block rate, like the device lanes (Arrangement::auto_kette): the value of the
+// lane at the project beat of the last running sample of the block replaces the row, a macro, or the macro row, for that block. The points live in ArrSnapshot::auto_punkte.
+constexpr int ARR_KLANES_MAX = 64;               // chain lanes per playback, all strips
+struct ArrKettenLane {
+  uint8_t strip = 0;                // chain index 0..ARR_KETTEN - 1
+  int8_t makro = -1;                // 0..ARR_MAKROS - 1: a rack macro lane; -1: a stage parameter lane
+  uint8_t stufe = 0;                // stage position in the chain of the strip (stage lanes)
+  uint8_t param = 0;                // parameter index of the stage kind (stage lanes)
+  int n = 0;                        // points, at least 1
+  const ArrAutoPunkt* p = nullptr;  // into ArrSnapshot::auto_punkte
+};
 
 struct ArrAudio;   // unten, nach den Seiten-Helfern (eigene Seiten)
 
@@ -237,7 +261,7 @@ struct ArrSeiten {
 
 // 1.10 slice 4a/4b: one stage of an insert chain. slot is the 0-based index into the pool of its kind (ins/<art>/<slot + 1>); an is the project's on flag
 // (a stage runs when this AND its row ins/<art>/<n>/an are on).
-enum class ArrInsArt : uint8_t { leer = 0, komp = 1, eq = 2, saett = 3, lim = 4 };
+enum class ArrInsArt : uint8_t { leer = 0, komp = 1, eq = 2, saett = 3, lim = 4, host = 5, utility = 6, bk = 7 };   // host: plan 1.11, a foreign plugin in an effect host process (arr_host_stufe.h)
 // 1.10 slice 5 U1: the structural sidechain key of a compressor stage (spec 5.5, plan E8). quelle 0 = none (the stage listens to the row sc, the 4a path); this unit knows the
 // source kind ARR_SCHL_SPUR with the point ARR_SCHL_POST (the output of track `nr` after fader, pan and mute/solo fade). The pair (spur, pre) has exactly one writer, the row sc.
 constexpr uint8_t ARR_SCHL_KEINE = 0;
@@ -264,6 +288,15 @@ struct ArrStufe {
   uint16_t schl_verz = 0;          // the structural key arrives EARLIER than the stage input: it is delayed by this much in a ring of the slot
   uint16_t schl_verz_zeile = 0;    // the same for a key from the row sc (the input of a track before any chain: arrival 0)
   uint16_t schl_spaet = 0;         // the structural key arrives LATER than the stage input by this much: used as it is, the lag is shown (proj_routing, page)
+  // plan 1.11 (D4): the latency of the stage in samples, 0 for the native kinds (they report theirs through ins_latenz(ArrInsArt)). For a host stage it is structure from the playback file
+  // (the round trip through the host process: 2 x quantum plus the latency the plugin reports); a changed value is a new playback load. Loaded, never changed in the callback.
+  uint16_t latenz = 0;
+  // arr-bk slice 3: a stage of art bk carries a Baukasten EFFECT graph. The loader (never the callback) builds the instance, takes a reference for the snapshot (ArrSnapshot::bk_refs) and
+  // sets graph, bk, bk_gen and latenz (cypher_bk_latenz of the instance, structure like a host stage). bk_gen is unique per built instance (never reused), so the stage tells "same
+  // instance" from "another instance at a reused address". The callback reads these fields only; ArrInserts publishes the instance it runs (ArrBkLeser) so the loader never frees it early.
+  char graph[33] = {};
+  CypherBk* bk = nullptr;
+  uint64_t bk_gen = 0;
 };
 struct ArrKette {
   uint8_t n = 0;
@@ -346,6 +379,9 @@ struct ArrSnapshot {
   std::vector<double, ArrSeiten<double>> warp_beat, warp_frame;
   // Automation Slice 1: lanes and their points (pointers in ArrSpur::auto_lanes / ArrAutoLane::p point into these vectors)
   int n_auto_lanes = 0;
+  // 1.12 slice 6: the insert and rack lanes (head of the snapshot, fixed size); their points are in auto_punkte too
+  int n_klanes = 0;
+  ArrKettenLane klane[ARR_KLANES_MAX];
   std::vector<ArrAutoLane, ArrSeiten<ArrAutoLane>> auto_lane_liste;
   std::vector<ArrAutoPunkt, ArrSeiten<ArrAutoPunkt>> auto_punkte;
   // 1.12 slice 5 (D8): the gain envelope points of all clips, hintereinander. Own vector, reserved in the prescan before any push_back: ArrClip::hk points into it,
@@ -411,7 +447,9 @@ class ArrAudioCache {
   void setze_bk_leser(const ArrBkLeser* l) { bk_leser_ = l; }
   // Reads <bk_ordner>/<graph>.json, takes a reference on the instance for track nr (building it on a miss; never in the callback) and
   // returns its slot (>= 0, for ArrSnapshot::bk_refs) or -1 with grund "format" and meldung (the sample root is <bk_ordner>/samples).
-  int32_t bk_hole(int nr, const std::string& graph, CypherBk** h, uint64_t* gen, std::string& grund, std::string& meldung);
+  // effekt = true (arr-bk slice 3, an insert stage): the graph must be an EFFECT graph (it has an `eingang` node) and may have a latency up to `lat_max` samples (reported in *lat); the key of
+  // the store entry carries `nr` like a track's, so an insert stage passes ARR_BK_INSERT_NR + global slot (never a track number).
+  int32_t bk_hole(int nr, const std::string& graph, CypherBk** h, uint64_t* gen, std::string& grund, std::string& meldung, bool effekt = false, int lat_max = 0, int* lat = nullptr);
   void bk_gib(int32_t slot);   // reference - 1; at 0 free the instance, or defer the free while the sink still uses it
   bool bk_nachholen();         // free deferred instances the sink has let go of; true = something was freed
   int bk_eintraege() const;    // live instances (with at least one reference)
@@ -423,6 +461,10 @@ class ArrAudioCache {
   void setze_kit_ordner(std::string ordner) { kit_ordner_ = std::move(ordner); }
   void setze_kit_leser(const ArrKitLeser* l) { kit_leser_ = l; }
   void setze_kit_lader(ArrKitLader l) { kit_lader_ = l; }
+  // plan 1.11 T4: are the effect-host ports there (Kern::host_ports_da())? Without them the loader refuses a host stage (host_fehlt). Before the load thread starts; default false, so a
+  // loader without a core behind it (the offline render) refuses a playback that needs a host.
+  void setze_host_da(bool da) { host_da_ = da; }
+  bool host_da() const { return host_da_; }
   // Takes a reference on the Kit <name> (loading it on a miss; never in the callback) and returns its slot (>= 0, for ArrSnapshot::kit_refs),
   // or -1 with grund "format" (no loader, no folder, not loadable; meldung names <ordner>/<name>) or "zu_gross" (account or mlock).
   int32_t kit_hole(const std::string& name, const Kit** k, uint64_t* gen, std::string& grund, std::string& meldung);
@@ -437,6 +479,7 @@ class ArrAudioCache {
     CypherBk* h = nullptr;
     uint64_t gen = 0;
     int32_t ref = 0;
+    int lat = 0;               // latency of an effect instance (arr-bk slice 3), reported again to every snapshot that shares it
   };
   std::string bk_ordner_;
   const ArrBkLeser* bk_leser_ = nullptr;
@@ -454,6 +497,7 @@ class ArrAudioCache {
   std::string kit_ordner_;
   const ArrKitLeser* kit_leser_ = nullptr;
   ArrKitLader kit_lader_ = nullptr;
+  bool host_da_ = false;
   std::vector<KitEintrag> kit_;
   std::vector<KitEintrag> kit_aufgeschoben_;   // reference count 0, but the sink still uses it (memory stays booked until freed)
   uint64_t kit_zaehler_ = 0;

@@ -55,7 +55,7 @@ Z=$K/tests/target
 "$Z/sequences_run.sh" "$K/build/cypherdj-kern" "$AUS" karte_voll "$Z/karte_voll.jsonl"; echo "karte_voll $?" >> "$AUS/laeufe.txt"
 KERN_ARGS="" "$Z/sequences_run.sh" "$KERN01" "$AUS" folgen01;                         echo "folgen01 $?" >> "$AUS/laeufe.txt"
 "$Z/sequences_run.sh" "$K/build/cypherdj-kern-mutation-rampe" "$AUS" folgen_mut \
-  "$DJK/vertrag/folgen/uhr_golden.jsonl";                                            echo "folgen_mut $?" >> "$AUS/laeufe.txt"
+  "$DJK/contract/sequences/uhr_golden.jsonl";                                            echo "folgen_mut $?" >> "$AUS/laeufe.txt"
 wiederhole klick_rampe "$Z/click_ramp_run.sh" "$K/build/cypherdj-kern" "$AUS" klick_rampe
 wiederhole klick_rampe_mut "$Z/click_ramp_run.sh" "$K/build/cypherdj-kern-mutation-rampe" "$AUS" klick_rampe_mut
 wiederhole luecken_last "$Z/gaps_run.sh" "$K/build/cypherdj-kern" "$AUS" luecken_last 120 einige \

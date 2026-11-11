@@ -178,7 +178,7 @@ def test_lade_vergisst_istwert(tmp_path):
 
 
 def test_takt_ueberlebt_kaputten_zustand(tmp_path, capsys):
-    # istwert läuft in takt, außerhalb des try von bearbeite; host.py ruft takt ungeschützt (Plan-Review 29.09.)
+    # istwert läuft in takt, außerhalb des try von bearbeite; instrument_host.py ruft takt ungeschützt (Plan-Review 29.09.)
     h = FahrHost()
     s = Steuerung(h, str(tmp_path), None, BEREICHE)
     s.bearbeite({"befehl": "fahre", "name": "a_filter1_cutoff", "bis": 5.0, "dauer": 1.0, "ab": 101.0}, 100.0)
@@ -344,7 +344,7 @@ def test_param_steuerung_gleicht_vorgaben_beim_start_ab():
 
 
 def test_param_steuerung_kaputte_parameterliste_wirft_im_konstruktor():
-    """host.py fängt das und beendet mit Startfehler (rc 2, Status-Eintrag) statt mit Traceback."""
+    """instrument_host.py fängt das und beendet mit Startfehler (rc 2, Status-Eintrag) statt mit Traceback."""
     h = FakeVst3Host()
     h.get_parameter_info = lambda plugin, i: (_ for _ in ()).throw(RuntimeError("kaputt"))
     with pytest.raises(RuntimeError):

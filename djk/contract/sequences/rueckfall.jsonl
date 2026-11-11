@@ -1,0 +1,24 @@
+{"t":"sende","sample":0,"osc":["/k/set/neu",",hsd",1,"pruefstand",128.0],"bereich":"zeitachse","herleitung":"§4.2: neue Zeitachse mit 128 BPM, Beat 0 am nächsten Zyklus = Sample 0 (§1.1)"}
+{"t":"sende","sample":22500,"osc":["/k/deck/laden",",hsisdii",2,"leitstand",1,"f000000000000096",128.0,1,0],"bereich":"deck","herleitung":"§4.4 /k/deck/laden, Fixture material/f000000000000096/ next to the sequences"}
+{"t":"erwarte","ab_sample":22500,"bis_sample":24900,"osc":["/q",",hsihds",2,"leitstand",1,null,null,""],"bereich":"deck","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"erwarte","ab_sample":22500,"bis_sample":70500,"osc":["/q",",hsihds",2,"leitstand",3,null,null,""],"bereich":"deck","herleitung":"§4.4: Quittung fertig nach dem Tausch"}
+{"t":"erwarte","ab_sample":22500,"bis_sample":70500,"osc":["/e/geladen",",isdiih",1,"f000000000000096",128.0,1,0,null],"toleranz":1e-06,"bereich":"deck","herleitung":"§4.4, §5.9 /e/geladen"}
+{"t":"sende","sample":90000,"osc":["/k/deck/start",",hssssiddi",3,"andreas","","","",1,8.0,0.0,0],"bereich":"deck","herleitung":"A: Andreas' Deck, ohne Plan"}
+{"t":"erwarte","ab_sample":90000,"bis_sample":92400,"osc":["/q",",hsihds",3,"andreas",1,null,null,""],"bereich":"deck","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"erwarte","ab_sample":180000,"bis_sample":182400,"osc":["/q",",hsihds",3,"andreas",2,180000,8.0,""],"toleranz":1e-06,"bereich":"deck","herleitung":"§5.1 Status 2 am Ziel-Sample llround(sample_at(8)) = 180000"}
+{"t":"hand","sample":202500,"pfad":"deck/1/fader","midi_roh":0.0,"bereich":"regler","herleitung":"§7.3 Punkt 2: erster Wert setzt nur die Stellung"}
+{"t":"hand","sample":225000,"pfad":"deck/1/fader","midi_roh":1.0,"bereich":"regler","herleitung":"§7.2 Übernahme skaliert: Anschlag oben = Obergrenze"}
+{"t":"erwarte","ab_sample":225000,"bis_sample":227400,"osc":["/e/halter",",sshd","deck/1/fader","mensch",225000,10.0],"toleranz":1e-06,"bereich":"regler","herleitung":"§7.3 Punkt 3, ADR 023: Halter mensch am selben Sample"}
+{"t":"erwarte","ab_sample":945000,"bis_sample":945512,"osc":["/e/halter",",sshd","deck/1/fader","frei",null,null],"bereich":"regler","herleitung":"§7.3 Punkt 4: 32 Beats ohne Handbewegung → frei bei Beat 42"}
+{"t":"erwarte","ab_sample":900000,"bis_sample":900512,"osc":["/e/frist",",iddh",1,64.0,null,null],"toleranz":0.05,"bereich":"invariante","herleitung":"§5.9 /e/frist bei 64 Beats vor dem Ende eines hörbaren Decks"}
+{"t":"erwarte","ab_sample":1620000,"bis_sample":1620512,"osc":["/e/frist",",iddh",1,32.0,null,null],"toleranz":0.05,"bereich":"invariante","herleitung":"§5.9 /e/frist bei 32 Beats vor dem Ende eines hörbaren Decks"}
+{"t":"erwarte_nicht","ab_sample":0,"bis_sample":1619999,"osc":["/e/rueckfall",",iidddh",1,1,null,null,null,null],"bereich":"invariante"}
+{"t":"erwarte","ab_sample":1620000,"bis_sample":1620512,"osc":["/e/rueckfall",",iidddh",1,1,80.0,16.0,null,null],"toleranz":1e-06,"bereich":"invariante","herleitung":"§19.3 rueckfall: Loop [80, 96), sobald beats_bis_ende < 32 (§17 q0-Formel)"}
+{"t":"deck_wert","sample":2475000,"deck":1,"feld":"quell_beat","wert":86.0,"toleranz":0.01,"bereich":"invariante"}
+{"t":"deck_wert","sample":2722500,"deck":1,"feld":"quell_beat","wert":81.0,"toleranz":0.01,"bereich":"invariante"}
+{"t":"deck_wert","sample":2475000,"deck":1,"feld":"status","wert":5,"toleranz":0,"bereich":"invariante","herleitung":"§5.5 Status 5 Rückfall"}
+{"t":"sende","sample":2767500,"osc":["/k/deck/stopp",",hssssidi",4,"andreas","","","",1,124.0,1],"bereich":"deck"}
+{"t":"erwarte","ab_sample":2767500,"bis_sample":2769900,"osc":["/q",",hsihds",4,"andreas",1,null,null,""],"bereich":"deck","herleitung":"§5.1 Status 1: im Ring, Prüfung beim Einsortieren bestanden"}
+{"t":"erwarte","ab_sample":2790000,"bis_sample":2792400,"osc":["/q",",hsihds",4,"andreas",2,2790000,124.0,""],"toleranz":1e-06,"bereich":"deck","herleitung":"§5.1 Status 2 am Ziel-Sample llround(sample_at(124)) = 2790000"}
+{"t":"erwarte","ab_sample":2767500,"bis_sample":2790512,"osc":["/e/rueckfall",",iidddh",1,0,null,null,null,null],"bereich":"invariante","herleitung":"§17: jeder Befehl an dieses Deck beendet den Rückfall (an = 0); ob schon beim Eintreffen oder erst beim Ausführen, lässt der Text offen: Fenster ab dem Senden"}
+{"t":"deck_wert","sample":2835000,"deck":1,"feld":"status","wert":1,"toleranz":0,"bereich":"deck","herleitung":"nach dem Stopp: geladen"}
