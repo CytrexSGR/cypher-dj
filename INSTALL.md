@@ -40,7 +40,7 @@ use it to generate test material.
 ```sh
 python3 -m venv .venv && . .venv/bin/activate
 pip install -r djk/requirements.txt
-for t in kern notbahn vorhoerer; do
+for t in core fallback previewer; do
   cmake -S djk/$t -B djk/$t/build -G Ninja -DCMAKE_BUILD_TYPE=Release
 done
 ninja -C djk/core/build cypherdj-kern cypherdj-render cypherdj-setmitschnitt cypherdj-stimme cypherdj-mitschnitt

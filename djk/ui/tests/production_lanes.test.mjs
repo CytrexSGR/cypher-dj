@@ -8,7 +8,7 @@ import { laneWert, wertZuY, yZuWert, lanePfad, trefferPunkt, ziehePunkt, setzePu
   NACHBAR_ABSTAND, WERT_MIN, WERT_MAX, MAX_BEAT, ZIEL_ANZEIGE, ZIELE, freieZiele, gezeigteLane, laneFuer, bereich, laneSchutz, unbekanntesZiel } from '../public/production/lanes.js';
 import { ZIEL_BEREICH } from '../project/model.ts';
 
-const REF = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'kern', 'tests', 'daten', 'lane_ref.json');
+const REF = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'core', 'tests', 'data', 'lane_ref.json');
 import { posVonDb } from '../public/production/fader_curve.js';
 const zeile = { y: 100, h: LANE_HOEHE };
 

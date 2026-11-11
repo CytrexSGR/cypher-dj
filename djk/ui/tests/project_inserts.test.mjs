@@ -294,7 +294,7 @@ test('wiedergabe_traegt_kette: the request holds chain (art, slot, an) per strip
 });
 
 test('golden: a project without inserts serialises, translates and views byte-identical to the recorded old format', () => {
-  const golden = JSON.parse(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'hilfen', 'inserts_ohne_golden.json'), 'utf8'));
+  const golden = JSON.parse(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'support', 'inserts_ohne_golden.json'), 'utf8'));
   const s = szenarioOhneInserts();
   assert.equal(s.kanonisch, golden.kanonisch);
   assert.equal(s.wiedergabe, golden.wiedergabe);

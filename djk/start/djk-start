@@ -487,7 +487,7 @@ if [ "$STRUDEL" = 1 ]; then  # Plan 2026-09-27 + Studio S1: drei Strudel-Erzeuge
     ZIEL=""
     case $s in 1) K=$KIT; N=""; ZUSATZ="--kit-zusatz rec$SFX";; 2) K=$KIT2; N=2; ZUSATZ=""; [ "$INSTR" = 1 ] && ZIEL="--ziel midi:1:1";; 3) K=$KIT3; N=3; ZUSATZ=""; [ "$INSTR" = 1 ] && ZIEL="--ziel midi:2:1";; esac
     [ -f "$HOME/.config/cypherdj/kits/$K/kit.json" ] || abbruch "kit $K missing (djk/generator/kit_build.py)" ""
-    ORD="/dev/shm/cypherdj$SFX/generator$N"; U="cypherdj-erzeuger$N$SFX"; P=$(( P_ERZ + s - 1 ))
+    ORD="/dev/shm/cypherdj$SFX/erzeuger$N"; U="cypherdj-erzeuger$N$SFX"; P=$(( P_ERZ + s - 1 ))
     mkdir -p "$ORD"
     systemd-run --user --quiet --collect --unit="$U" ${I:+--setenv=CYPHERDJ_INSTANZ=$I} \
       -p Restart=always -p RestartSec=1 -p RestartPreventExitStatus=2 -p PartOf=cypherdj.target \

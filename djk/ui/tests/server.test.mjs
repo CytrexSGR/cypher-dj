@@ -855,7 +855,7 @@ test('/strudel (Plan-Review M3): Muster läuft ohne Schreibrecht und mit Zeitlim
 
 test('/strudel (Review F1–F4, F11): Reihenfolge, localhost, Endlosschleife, langer Körper, fehlender Ordner', { skip: OHNE_STRUDEL }, async (t) => {
   const eltern = fs.mkdtempSync(path.join(TMP, 'djk-muster-'));
-  const d = path.join(eltern, 'generator');   // F4: existiert noch nicht
+  const d = path.join(eltern, 'erzeuger');   // F4: existiert noch nicht
   const { url } = await stapel(t, [], { musterOrdner: d });
   // F4: erster POST in einen fehlenden Ordner geht
   assert.equal((await postJson(url, '/strudel', { text: 's("bd")' })).code, 200);

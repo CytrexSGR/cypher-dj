@@ -6,7 +6,7 @@ import signal
 import sys
 import time
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "pruefstand"))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "testbench"))
 from osc import Hoerer  # noqa: E402
 
 h = Hoerer(sys.argv[1], inst="e", mit_kern=True, name="abnahme_p1")

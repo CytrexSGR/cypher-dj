@@ -221,7 +221,7 @@ test('T7 heads: column order equals the row table (track, takes, automation lane
 });
 
 test('T7 texts are English: no German words or umlauts in the new files', () => {
-  const dir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'oeffentlich', 'produktion');
+  const dir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public', 'production');
   const texte = Object.values(TAKE_TEXT).join('\n');
   assert.doesNotMatch(texte, /[äöüÄÖÜß]/);
   assert.doesNotMatch(texte, /\b(und|oder|nicht|Spur|L[oö]schen|Umbenennen)\b/);

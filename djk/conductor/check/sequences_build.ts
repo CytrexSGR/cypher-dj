@@ -7,7 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { MenschenPlan } from '../src/plan.ts';
 
-const ZIEL = path.join(path.dirname(fileURLToPath(import.meta.url)), 'folgen');
+const ZIEL = path.join(path.dirname(fileURLToPath(import.meta.url)), 'sequences');
 const S = (beat: number) => Math.round(beat * 22500);
 type Z = Record<string, unknown>;
 

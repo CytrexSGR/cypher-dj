@@ -27,7 +27,7 @@ async function starte(t, { strom = STROEME.join(',') } = {}) {
   const p = spawn(process.execPath, ['--permission', `--allow-fs-read=${path.resolve(HIER, '../..')}`,
     `--allow-fs-read=${process.env.HOME}/strudel`, `--allow-fs-read=${tmp}`, `--allow-fs-write=${tmp}`,
     PROZESS, '--kern-port', String(kern.address().port), '--abo-port', '0', '--strom', strom,
-    '--muster-basis', path.join(tmp, 'generator'), '--name', 'erzeuger-bk'], { stdio: ['ignore', 'ignore', 'pipe'] });
+    '--muster-basis', path.join(tmp, 'erzeuger'), '--name', 'erzeuger-bk'], { stdio: ['ignore', 'ignore', 'pipe'] });
   const r = { tmp, kern, eingang, p, log: '' };
   p.stderr.on('data', (d) => { r.log += d; });
   t.after(() => { p.kill('SIGTERM'); kern.close(); fs.rmSync(tmp, { recursive: true, force: true }); });

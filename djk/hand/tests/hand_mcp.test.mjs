@@ -1337,7 +1337,7 @@ function wzUniversum() {
 }
 // Which of the universe paths does `re` accept, and how does that differ from the 345? [] = exactly the set.
 const wzAbweichung = (re) => wzUniversum().filter((p) => re.test(p) !== WZ_345.includes(p));
-const SCHEMA_REGLER_PFAD = new RegExp(JSON.parse(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'vertrag', 'schemas',
+const SCHEMA_REGLER_PFAD = new RegExp(JSON.parse(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'contract', 'schemas',
   'defs.schema.json'), 'utf8')).$defs.regler_pfad.pattern);
 
 test('1.15 A2: PFAD (hand) and regler_pfad (schema) take exactly the 345 tool paths and none of the negative list', () => {
@@ -1783,7 +1783,7 @@ test('djk-hand (1.8 T8): proj_aendern offers {art: midi} for an instrument track
 // carries the source cypher. The stack letter is the suite default h unless CYPHERDJ_TEST_INSTANZ says otherwise (tests/support/instance.mjs); the imports are lazy so the
 // other tests of this file do not take the instance lock.
 test('djk-hand (1.8 T10): a recording session through the tools: devices, arm, input, monitor, count-in, proj_aufnahme start and stopp, proj_lage shows the take, history source cypher', async (t) => {
-  const OB = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'oberflaeche');
+  const OB = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'ui');
   const { stapel } = await import(path.join(OB, 'tests', 'support', 'media_library.mjs'));
   const { ruf, warte, anKern } = await import(path.join(OB, 'tests', 'support', 'proj_stack.mjs'));
   const { GeraeteSpeicher, standard } = await import(path.join(OB, 'areas', 'devices', 'store.ts'));

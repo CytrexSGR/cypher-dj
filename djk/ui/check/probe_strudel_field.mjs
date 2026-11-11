@@ -11,7 +11,7 @@ const I = process.argv[2] ?? 'i';
 const BILDER = process.argv[3] ?? '/tmp';
 const K = 'abcdefghi'.indexOf(I) + 1;
 const URL_SEITE = `http://127.0.0.1:${47300 + 1000 * K}`;
-const ORDNER = `/dev/shm/cypherdj-${I}/generator`;
+const ORDNER = `/dev/shm/cypherdj-${I}/erzeuger`;
 const warte = (ms) => new Promise((r) => setTimeout(r, ms));
 const muster = (text) => spawnSync(path.join(REPO, 'djk/generator/djk-muster'), ['--instanz', I, '--text', text], { encoding: 'utf8' });
 const strom = () => fs.readFileSync(path.join(ORDNER, 'strom1.js'), 'utf8').trim();

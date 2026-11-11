@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 
-const SKRIPT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', 'pruef', 'acceptance_i19_direction.mjs');
+const SKRIPT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', 'check', 'acceptance_i19_direction.mjs');
 const lauf = (args) => spawnSync(process.execPath, [SKRIPT, ...args], { encoding: 'utf8', timeout: 60000 });
 
 test('abnahme_i19_richtung refuses the operation, letter a, c, f, a missing url or bau (exit 2), and lets b, d, e through the guards', (t) => {

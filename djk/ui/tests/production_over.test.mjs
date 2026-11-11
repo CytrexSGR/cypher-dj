@@ -123,7 +123,7 @@ test('one page table of the override targets, bound to the server list KERN_AUTO
 });
 
 test('the orange has ONE source: the literal stands in lanes.js only, the CSS and the other scripts use the variable', () => {
-  const dir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'oeffentlich', 'produktion');
+  const dir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public', 'production');
   const treffer = fs.readdirSync(dir).filter((f) => /\.(js|css)$/.test(f)).filter((f) => /#ff8a1f/i.test(fs.readFileSync(path.join(dir, f), 'utf8')));
   assert.deepEqual(treffer, ['lanes.js']);
   assert.match(fs.readFileSync(path.join(dir, 'production.css'), 'utf8'), /var\(--ueber\)/, 'the CSS uses the variable');

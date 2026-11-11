@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Ajv2020 from 'ajv/dist/2020.js';
 
-export const VERTRAG_ORDNER = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'vertrag');
+export const VERTRAG_ORDNER = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'contract');
 export const SCHEMA_ORDNER = path.join(VERTRAG_ORDNER, 'schemas');
 export const SCHEMA_WS = 'schemas/ws_nachricht.schema.json';       // 09: Umschlag §9.1, daten je typ §9.2 bis §9.4
 export const SCHEMA_JOURNAL = 'schemas/journal_zeile.schema.json'; // 09: §15

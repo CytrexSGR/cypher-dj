@@ -39,7 +39,7 @@ STROEME=(5 6 7 9 10)   # = BK_STROEME of djk/contract/streams.ts
 P_KERN=${KERN_PORT:-$(( 47100 + V ))}
 P=$(( 47160 + V + 5 ))   # P_ERZ + 5: the studio's erzeuger use P_ERZ .. P_ERZ + 2, 47170 is taken by tests/test_start.sh
 U=cypherdj-erzeuger-bk$SFX
-BASIS=/dev/shm/cypherdj$SFX/generator
+BASIS=/dev/shm/cypherdj$SFX/erzeuger
 FS=()
 for s in "${STROEME[@]}"; do FS+=("--allow-fs-read=$BASIS$s" "--allow-fs-write=$BASIS$s"); done
 CMD=(systemd-run --user --quiet --collect --unit="$U" ${I:+--setenv=CYPHERDJ_INSTANZ=$I}

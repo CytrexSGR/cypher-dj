@@ -8,7 +8,7 @@ import path from 'node:path';
 import { spawnSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-const MUTIERE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'pruef', 'mutate.mjs');
+const MUTIERE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'check', 'mutate.mjs');
 function aufbau() {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-mutiere-'));
   fs.writeFileSync(path.join(d, 'mod.mjs'), 'export const doppelt = (x) => x * 2; // Kommentar\n');

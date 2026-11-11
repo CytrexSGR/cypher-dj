@@ -104,7 +104,7 @@ test('S1 T10 gesture: the draft shows the same lane the server will hold (entwur
 });
 
 test('S1 T10 texts are English: no German words in the new page files or texts', () => {
-  const dir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'oeffentlich', 'produktion');
+  const dir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public', 'production');
   const woerter = /\b(Lautst[aä]rke|Spur|Hinzuf[uü]gen|L[oö]schen|Linie|Punkt setzen|Fehler|Abbrechen|und|oder|nicht)\b/;
   const texte = Object.values(LANEN_TEXT).join('\n');
   assert.equal(woerter.test(texte), false, texte);

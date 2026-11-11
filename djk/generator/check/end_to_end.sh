@@ -7,7 +7,7 @@ I=i; SFX=-i; V=9000
 KP=$((47100 + V)); ABO=$((47160 + V))
 O=$(mktemp -d "${TMPDIR:-/tmp}/durchstich-XXXX")
 KIT=$HOME/.config/cypherdj/kits/pruef-impuls
-mkdir -p "$KIT" "/dev/shm/cypherdj$SFX/generator"
+mkdir -p "$KIT" "/dev/shm/cypherdj$SFX/erzeuger"
 "$PY" - "$KIT" <<'EOF'
 import json, sys, numpy as np
 d = sys.argv[1]
@@ -18,7 +18,7 @@ EOF
 echo 's("[~ bd]*4")' > "/dev/shm/cypherdj$SFX/erzeuger/strom1.js"
 "$DJK/start/djk-start" --instanz "$I" > "$O/start.txt" 2>&1 || { cat "$O/start.txt"; exit 2; }
 node --permission --allow-fs-read="$DJK" --allow-fs-read="$HOME/strudel" --allow-fs-read="$KIT/.." \
-  --allow-fs-read="/dev/shm/cypherdj$SFX/generator" "$DJK/generator/generator.mjs" --kern-port "$KP" --abo-port "$ABO" \
+  --allow-fs-read="/dev/shm/cypherdj$SFX/erzeuger" "$DJK/generator/generator.mjs" --kern-port "$KP" --abo-port "$ABO" \
   --kit pruef-impuls --muster "/dev/shm/cypherdj$SFX/erzeuger/strom1.js" 2> "$O/erzeuger.log" &
 EP=$!
 hand() {  # /test/hand an den Kern: erst die Stellung, dann der Wert (§7.3 Punkt 2)

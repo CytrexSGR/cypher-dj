@@ -18,7 +18,7 @@ import {
   sortiere, type Eintrag, type Filter, type Herkunft, type NeuEingabe, type Preset,
 } from './model.ts';
 
-export const WERK_VORGABE = path.join(path.dirname(fileURLToPath(import.meta.url)), 'werk');
+export const WERK_VORGABE = path.join(path.dirname(fileURLToPath(import.meta.url)), 'factory');
 export function nutzerVorgabe(i: string = instanz()): string { return path.join(os.homedir(), '.config', i ? `cypherdj-${i}` : 'cypherdj', 'presets'); }
 
 // vok: the vocabulary descriptions are checked against (default presets/vokabular.json, loaded once per store)

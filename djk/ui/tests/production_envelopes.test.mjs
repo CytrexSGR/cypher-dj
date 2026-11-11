@@ -101,7 +101,7 @@ test('U10 T10.4 the chosen target per clip lives in page state; switching clips 
   assert.equal(w.ziel(midi, wirt), 'transpose');
   w.waehle('c2', 'geraet.cutoff');
   assert.equal(w.ziel(midi, wirt), 'transpose', 'a choice the track cannot take falls back');
-  const dir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'oeffentlich', 'produktion');
+  const dir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public', 'production');
   for (const f of ['envelopes.js', 'envelopes_operation.js']) {
     const quelle = fs.readFileSync(path.join(dir, f), 'utf8');
     const strings = [...quelle.matchAll(/'([^'\n]{12,})'/g)].map((x) => x[1]).filter((s) => !/^[./\w-]+$/.test(s) && !s.startsWith('#'));
@@ -113,7 +113,7 @@ test('U10 T10.4 the chosen target per clip lives in page state; switching clips 
 // U10 page probe finding (2026-11-05, instance d): detail.js hides the tab row and the ENVELOPES panel with the hidden attribute, but their CSS
 // sets display:flex, which beats the user agent's [hidden] rule: with no clip selected the tab row and the envelope toolbar were on screen.
 test('U10 probe finding: every detail element that detail.js hides with the hidden attribute has a [hidden] rule next to its display rule', () => {
-  const css = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'oeffentlich', 'produktion', 'production.css'), 'utf8');
+  const css = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public', 'production', 'production.css'), 'utf8');
   for (const klasse of ['p-detail-reiter', 'p-clip-hk']) {
     assert.match(css, new RegExp(`\\.${klasse}\\s*\\{[^}]*display:\\s*flex`), `${klasse} sets display (the case this guards)`);
     assert.match(css, new RegExp(`\\.${klasse}\\[hidden\\][^{]*\\{[^}]*display:\\s*none`), `${klasse}[hidden] must hide it`);

@@ -644,7 +644,7 @@ const onsets = (x, schwelle = ONSET_SCHWELLE) => NOTEN3.map((n) => { const g = r
 const imLead = (o) => o.every((x) => x.versatz !== null && x.versatz >= LEAD_UNTEN && x.versatz <= leadOben());
 const hellig = (x, a, b) => { let e = 0, d = 0; for (let i = a + 1; i < b; i++) { e += x[i] * x[i]; const t = x[i] - x[i - 1]; d += t * t; } return e > 0 ? Math.sqrt(d / e) : 0; };   // brightness: rms of the first difference over rms
 const ARBEIT = path.join(process.env.HOME ?? '', '.cache', `cypherdj-${z.instanz}`, 'arr');
-const klang = (slot, patch) => sh('python3', [path.join(path.dirname(new URL(import.meta.url).pathname), '..', '..', 'wirte', 'carla', 'djk-klang'), '--instanz', z.instanz, `arr${slot}`, 'lade', patch], 30000);
+const klang = (slot, patch) => sh('python3', [path.join(path.dirname(new URL(import.meta.url).pathname), '..', '..', 'hosts', 'carla', 'djk-klang'), '--instanz', z.instanz, `arr${slot}`, 'lade', patch], 30000);
 const instrumente = async () => (await aktuell()).instrumente ?? [];
 async function warteInstrumente(n, ms = 120000) {
   const t0 = Date.now();

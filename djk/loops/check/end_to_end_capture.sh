@@ -10,7 +10,7 @@ I=i; SFX=-i; V=9000
 KP=$((47100 + V))
 O=$(mktemp -d "${TMPDIR:-/tmp}/mitschnitt-durchstich-XXXX")
 KIT=$HOME/.config/cypherdj/kits/pruef-impuls
-mkdir -p "$KIT" "/dev/shm/cypherdj$SFX/generator"
+mkdir -p "$KIT" "/dev/shm/cypherdj$SFX/erzeuger"
 "$PY" - "$KIT" <<'EOF'
 import json, sys, numpy as np
 d = sys.argv[1]

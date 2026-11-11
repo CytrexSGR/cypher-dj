@@ -78,7 +78,7 @@ test('1.15 A2: the table holds exactly the 345 tool paths of section 3 and grows
 // Strict parser of the one machine-readable source: one `{...}` row per line of tool_controls.h. Throws on any line of the block it
 // cannot read, so a reformatted header never yields an empty green.
 function kopfZeilen(): { suffix: string; min: number; max: number; vorgabe: number; kurve: string; ganz: boolean; kanalart: string }[] {
-  const kopf = fs.readFileSync(path.join(import.meta.dirname, '..', '..', 'kern', 'stellwerk', 'include', 'cypherdj', 'stellwerk',
+  const kopf = fs.readFileSync(path.join(import.meta.dirname, '..', '..', 'core', 'signalbox', 'include', 'cypherdj', 'signalbox',
     'tool_controls.h'), 'utf8');
   const von = kopf.indexOf('WERKZEUG_ZEILEN[] = {');
   const bis = kopf.indexOf('\n};', von);

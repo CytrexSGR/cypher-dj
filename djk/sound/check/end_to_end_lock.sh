@@ -15,7 +15,7 @@ KP=$((47100 + V))
 O=${ZIEL:-$HOME/messungen/klang/durchstich-$(date +%Y%m%d-%H%M%S)}
 mkdir -p "$O"
 KIT=$HOME/.config/cypherdj/kits/pruef-ton
-mkdir -p "$KIT" "/dev/shm/cypherdj-$I/generator"
+mkdir -p "$KIT" "/dev/shm/cypherdj-$I/erzeuger"
 "$PY" - "$KIT" <<'PYEOF'
 import json, sys, numpy as np
 d = sys.argv[1]; sr = 48000; n = sr

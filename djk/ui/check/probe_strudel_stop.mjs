@@ -10,7 +10,7 @@ const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../.
 const I = process.argv[2] ?? 'i';
 const K = 'abcdefghi'.indexOf(I) + 1;
 const URL_SEITE = `http://127.0.0.1:${47300 + 1000 * K}`;
-const ORDNER = `/dev/shm/cypherdj-${I}/generator`;
+const ORDNER = `/dev/shm/cypherdj-${I}/erzeuger`;
 const warte = (ms) => new Promise((r) => setTimeout(r, ms));
 const strom = () => fs.readFileSync(path.join(ORDNER, 'strom1.js'), 'utf8').trim();
 const autoDatei = () => { try { return JSON.parse(fs.readFileSync(path.join(ORDNER, 'autonom.json'), 'utf8')).an; } catch { return true; } };

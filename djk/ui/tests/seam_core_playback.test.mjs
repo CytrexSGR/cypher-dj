@@ -12,7 +12,7 @@ import { neuesProjekt } from '../project/model.ts';
 import { uebersetze } from '../project/playback.ts';
 import { reglerAusProjekt } from '../project/render.ts';
 
-const DATEN = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'kern', 'tests', 'daten');
+const DATEN = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'core', 'tests', 'data');
 const FIXTURE = path.join(DATEN, 'wiedergabe_ketten.json');
 const FIXTURE_REGLER = path.join(DATEN, 'render_regler_ketten.json');   // the export's control file of the same project (cypherdj-render --spur-regler)
 const SHA = 'c'.repeat(64);

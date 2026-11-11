@@ -11,7 +11,7 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { laneWert } from '../project/lane.ts';
 
-const DATEN = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'kern', 'tests', 'daten');
+const DATEN = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'core', 'tests', 'data');
 const REF = path.join(DATEN, 'lane_ref.json');
 const sha = (p) => crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex');
 
