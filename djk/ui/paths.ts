@@ -16,6 +16,7 @@ export const REPO_PFADE = {
   sammlungen: path.join(REPO, 'bibliothek', 'sets'),
   musterBibliothek: path.join(REPO, 'bibliothek', 'muster'),
   musterSets: path.join(REPO, 'sets'),
+  musterStarter: path.join(REPO, 'djk', 'starter', 'muster'),
   werkstatt: path.join(REPO, 'djk', 'workshop'),
   djkMuster: path.join(REPO, 'djk', 'generator', 'djk-muster'),
   djkKlang: path.join(REPO, 'djk', 'hosts', 'carla', 'djk-klang'),

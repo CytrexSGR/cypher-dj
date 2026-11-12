@@ -32,6 +32,7 @@ import {
   KENNUNG_MAX, alleInserts, MAX_SPUREN, SAMPLERATE, kanonisch, spurSicht, sucheSpur,
   wirtSlots, type Clip, type Freeze, type Gruppe, type Projekt, type Return, type Spur } from '../../project/model.ts';
 import { istModulation } from '../../project/envelope.ts';
+import { nachkommen, vorfahren } from '../../project/routing_rules.ts';
 import type { Meta } from '../../project/history.ts';
 import { aendereStand, StandFehler } from '../../project/state.ts';
 import {
@@ -39,7 +40,8 @@ import {
   pruefeFreezeDatei, setzeFreeze,
 } from '../../project/freeze.ts';
 import {
-  reglerAusProjekt, routingRegler, rendere, RenderFehler, schluesselPlan, schluesselReturns, type Abgriff, type Pfad, type RenderAntwort, type SchluesselPlan,
+  pfadVon, pfadVonGruppe, reglerAusProjekt, routingRegler, rendere, RenderFehler, schluesselPlan, schluesselReturns,
+  type Abgriff, type Pfad, type RenderAntwort, type SchluesselPlan,
 } from '../../project/render.ts';
 import { messeLautheit, type Lautheit } from '../../project/loudness.ts';
 import {
@@ -315,20 +317,29 @@ export function belegteSpuren(p: Projekt, von: number, bis: number): Spur[] {
 // Spur-Regler für den Render EINER Spur (Datei --spur-regler): alle anderen Slots stumm, Solo überall aus, Fader und Pan der Spur aus dem Projekt,
 // ihr Mute auch (eine stumme Spur rendert Stille). Pfade und Wertebereiche wie lies_spur_regler (render.cpp).
 // Does the mix silence this track from the project's own state (mute, fader off, a solo elsewhere)? 1.10: a group solo counts, a member of a solo group sounds.
+// Nested groups (decision 1): a solo on X lets X, all its descendants and all its ancestors play. A track sounds under a solo when it carries it
+// or when a group above it (its target, that group's target, ...) does;
+// a group sounds when it carries the solo, a group above it does, or a track or group below it does.
+// Mute acts downwards through the render chain (reglerEinzeln, schluesselRegler set the mute of every group above) and wins over a solo.
+const gruppeVon = (p: Projekt, id: string): Gruppe | undefined => (p.gruppen ?? []).find((g) => g.id === id);
+const soloImMix = (p: Projekt): boolean => p.spuren.some((x) => x.solo) || (p.gruppen ?? []).some((g) => g.solo);
+const spurSoloKlingt = (p: Projekt, s: Spur): boolean =>
+  s.solo || (!!s.ausgang && [s.ausgang.id, ...vorfahren(p, s.ausgang.id)].some((id) => gruppeVon(p, id)?.solo));
+const gruppeSoloKlingt = (p: Projekt, g: Gruppe): boolean => {
+  if (g.solo || vorfahren(p, g.id).some((id) => gruppeVon(p, id)?.solo)) return true;
+  const n = nachkommen(p, g.id);
+  return n.gruppen.some((id) => gruppeVon(p, id)?.solo) || p.spuren.some((m) => m.solo && n.spuren.includes(m.id));
+};
 export function stummImMix(p: Projekt, s: Spur): boolean {
-  const gruppen = p.gruppen ?? [];
-  const solo = p.spuren.some((x) => x.solo) || gruppen.some((g) => g.solo);
-  const gruppenSolo = !!s.ausgang && gruppen.some((g) => g.id === s.ausgang!.id && g.solo);
-  return s.mute || s.fader_db <= STUMM_GRENZE || (solo && !s.solo && !gruppenSolo);
+  return s.mute || s.fader_db <= STUMM_GRENZE || (soloImMix(p) && !spurSoloKlingt(p, s));
 }
 
 // the controls of the key sources of a plan (see reglerEinzeln): the tracks follow the project's own state, the key groups take fader, pan and mute from it
 function schluesselRegler(p: Projekt, sl: SchluesselPlan, r: Record<string, number>): void {
   for (const t of sl.spuren) spurGrund(p, t, r);
-  const solo = p.spuren.some((x) => x.solo) || (p.gruppen ?? []).some((x) => x.solo);
+  const solo = soloImMix(p);
   for (const g of sl.gruppen) {
-    const mitSolo = g.solo || p.spuren.some((m) => m.solo && m.ausgang?.id === g.id);
-    r[`grp/${g.nr}/fader`] = g.fader_db; r[`grp/${g.nr}/pan`] = g.pan; r[`grp/${g.nr}/mute`] = g.mute || (solo && !mitSolo) ? 1 : 0;
+    r[`grp/${g.nr}/fader`] = g.fader_db; r[`grp/${g.nr}/pan`] = g.pan; r[`grp/${g.nr}/mute`] = g.mute || (solo && !gruppeSoloKlingt(p, g)) ? 1 : 0;
   }
 }
 const hatLane = (t: Spur): boolean => (t.automation ?? []).some((l) => l.ziel === 'fader' || l.ziel === 'mute' || l.ziel === 'solo');
@@ -340,16 +351,16 @@ function spurGrund(p: Projekt, t: Spur, r: Record<string, number>): void {
 
 // 1.10 T10: does the mix silence this group from the project's own state (mute, fader off, a solo elsewhere)? A solo on one of its members keeps it sounding.
 export function gruppeStummImMix(p: Projekt, g: Gruppe): boolean {
-  const solo = p.spuren.some((x) => x.solo) || (p.gruppen ?? []).some((x) => x.solo);
-  const mitSolo = g.solo || p.spuren.some((m) => m.solo && m.ausgang?.id === g.id);
-  return g.mute || g.fader_db <= STUMM_GRENZE || (solo && !mitSolo);
+  // mute and fader off act downwards
+  const obenStumm = vorfahren(p, g.id).some((id) => { const v = gruppeVon(p, id); return !!v && (v.mute || v.fader_db <= STUMM_GRENZE); });
+  return g.mute || obenStumm || g.fader_db <= STUMM_GRENZE || (soloImMix(p) && !gruppeSoloKlingt(p, g));
 }
 // 1.10 T10: does the mix silence this return (mute, fader off, a solo on another return)? A solo on a track or group does not silence a return (P7).
 export function returnStummImMix(p: Projekt, x: Return): boolean {
   return x.mute || x.fader_db <= STUMM_GRENZE || ((p.returns ?? []).some((y) => y.solo) && !x.solo);
 }
-// 1.10 T10: the members of a group, the strips of its entry
-export const mitgliederVon = (p: Projekt, g: Gruppe): Spur[] => p.spuren.filter((m) => m.ausgang?.id === g.id);
+// 1.10 T10: the members of a group, the strips of its entry. Nested: the tracks of the group and of every group below it.
+export const mitgliederVon = (p: Projekt, g: Gruppe): Spur[] => pfadVonGruppe(p, g).spuren;
 // 1.10 T10 (AK24): the controls for the render of ONE group: its members run as the mix has them (mute, fader, pan; the project's solo decides through
 // stummImMix), every other track is muted, the group strip with its fader, balance and fade, the master, the returns the members and the group feed, and
 // the key sources of the stages on that path (schluesselPlan of the whole path). The same mechanics as a track entry with several tracks.
@@ -357,10 +368,11 @@ export function reglerGruppe(g: Gruppe, p: Projekt): Record<string, number> {
   const r: Record<string, number> = {};
   for (let n = 1; n <= MAX_SPUREN; n++) { r[`spur/${n}/mute`] = 1; r[`spur/${n}/solo`] = 0; }
   // a return solo elsewhere does not act in a group entry: routingRegler sets solo 0 (the T9 convention of the isolated renders)
-  const pfad: Pfad = { spuren: mitgliederVon(p, g), gruppe: g };
+  const pfad: Pfad = pfadVonGruppe(p, g);
   const sl = schluesselPlan(p, pfad);
   for (const t of pfad.spuren) spurGrund(p, t, r);
-  schluesselRegler(p, { ...sl, gruppen: [...sl.gruppen, g] }, r);   // the group strip itself: fader, pan and the mix's mute (mute, a solo elsewhere)
+  // the group strips of the path (the group, below and above it): fader, pan and the mix's mute
+  schluesselRegler(p, { ...sl, gruppen: [...sl.gruppen, ...pfad.gruppen] }, r);
   if ((p.master?.fader_db ?? 0) !== 0) r['pm/fader'] = p.master.fader_db;
   Object.assign(r, routingRegler(p, { nur: pfad, schluessel: sl }));
   return r;
@@ -384,8 +396,8 @@ export function reglerEinzeln(s: Spur, p?: Projekt): Record<string, number> {
   r[`spur/${s.nr}/fader`] = s.fader_db;
   r[`spur/${s.nr}/pan`] = s.pan;
   if (p) {   // 1.10: Ziel-Kette der Spur (Gruppe, PM); andere Gruppen tragen keine klingende Spur und bleiben auf der Vorgabe
-    const g = s.ausgang ? (p.gruppen ?? []).find((x) => x.id === s.ausgang!.id) : undefined;
-    if (g) { r[`grp/${g.nr}/fader`] = g.fader_db; r[`grp/${g.nr}/pan`] = g.pan; r[`grp/${g.nr}/mute`] = g.mute ? 1 : 0; }
+    // the whole chain
+    for (const g of pfadVon(p, s).gruppen) { r[`grp/${g.nr}/fader`] = g.fader_db; r[`grp/${g.nr}/pan`] = g.pan; r[`grp/${g.nr}/mute`] = g.mute ? 1 : 0; }
     if ((p.master?.fader_db ?? 0) !== 0) r['pm/fader'] = p.master.fader_db;
     // 1.10 T9 (AK24): the key sources of the stages on the path run (the render-only mask silences them): their state is the project's own, so a
     // source the PROJECT mutes stays muted and its key stays silent, as in the sum. A key group takes its fader, pan and mute from the project too.
@@ -962,7 +974,7 @@ export class Ausgabe {
             gruppen.push({ ...kopf, ...OHNE_LAUTHEIT, spitze_db: -200, stumm: true, unter_messgrenze: false });
             continue;
           }
-          const sl = schluesselPlan(p, { spuren: mit, gruppe: g });
+          const sl = schluesselPlan(p, pfadVonGruppe(p, g));
           const einzel = this.schreibeOhneFremdeLanes(p, mit[0], [...mit.slice(1), ...sl.spuren]);
           let res: { r: RenderAntwort; l: Lautheit; unter: boolean };
           try {

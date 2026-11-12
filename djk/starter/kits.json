@@ -1,0 +1,28 @@
+[
+  {"name": "starter", "graph": "drums-909", "klaenge": [
+    {"note": 36, "name": "bd:0", "dauer_s": 1.5}, {"note": 37, "name": "rim:0", "dauer_s": 1.5},
+    {"note": 38, "name": "sd:0", "dauer_s": 1.5}, {"note": 39, "name": "cp:0", "dauer_s": 1.5},
+    {"note": 40, "name": "sd:1", "dauer_s": 1.5}, {"note": 41, "name": "lt:0", "dauer_s": 1.5},
+    {"note": 42, "name": "hh:0", "dauer_s": 1.5}, {"note": 43, "name": "lt:1", "dauer_s": 1.5},
+    {"note": 44, "name": "hh:1", "dauer_s": 1.5}, {"note": 45, "name": "mt:0", "dauer_s": 1.5},
+    {"note": 46, "name": "oh:0", "dauer_s": 2.0}, {"note": 47, "name": "mt:1", "dauer_s": 1.5},
+    {"note": 48, "name": "ht:0", "dauer_s": 1.5}, {"note": 49, "name": "cr:0", "dauer_s": 4.0},
+    {"note": 50, "name": "ht:1", "dauer_s": 1.5}, {"note": 51, "name": "rd:0", "dauer_s": 4.0},
+    {"note": 53, "name": "rd:1", "dauer_s": 4.0}, {"note": 55, "name": "cr:1", "dauer_s": 4.0},
+    {"note": 57, "name": "cr:2", "dauer_s": 4.0}, {"note": 59, "name": "rd:2", "dauer_s": 4.0}
+  ]},
+  {"name": "starter-808", "graph": "drums-808", "klaenge": [
+    {"note": 35, "name": "bd:1", "dauer_s": 1.5}, {"note": 36, "name": "bd:0", "dauer_s": 1.5},
+    {"note": 37, "name": "rim:0", "dauer_s": 1.5}, {"note": 38, "name": "sd:0", "dauer_s": 1.5},
+    {"note": 39, "name": "cp:0", "dauer_s": 1.5}, {"note": 40, "name": "sd:1", "dauer_s": 1.5},
+    {"note": 41, "name": "lt:0", "dauer_s": 1.5}, {"note": 42, "name": "hh:0", "dauer_s": 1.5},
+    {"note": 43, "name": "lt:1", "dauer_s": 1.5}, {"note": 44, "name": "hh:1", "dauer_s": 1.5},
+    {"note": 45, "name": "mt:0", "dauer_s": 1.5}, {"note": 46, "name": "oh:0", "dauer_s": 2.0},
+    {"note": 47, "name": "mt:1", "dauer_s": 1.5}, {"note": 48, "name": "ht:0", "dauer_s": 1.5},
+    {"note": 49, "name": "cr:0", "dauer_s": 4.0}, {"note": 50, "name": "ht:1", "dauer_s": 1.5},
+    {"note": 51, "name": "rd:0", "dauer_s": 4.0}, {"note": 53, "name": "rd:1", "dauer_s": 4.0},
+    {"note": 55, "name": "cr:1", "dauer_s": 4.0}, {"note": 56, "name": "perc:0", "dauer_s": 1.5},
+    {"note": 57, "name": "cr:2", "dauer_s": 4.0}, {"note": 59, "name": "rd:2", "dauer_s": 4.0},
+    {"note": 75, "name": "perc:1", "dauer_s": 1.5}
+  ]}
+]

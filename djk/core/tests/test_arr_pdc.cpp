@@ -103,6 +103,55 @@ static Lage lauf(Form f, int wer, int n = 256, int64_t bis = 140000) {
   return l;
 }
 
+
+// nested groups (plan task 5): topologies E, F, G. Groups 3 in 2 in 1 (1 into the master), track 1 sits directly in group 1, track 2 in group 3.
+// E: a latency stage (eq) on group 3 only; F: eq on group 3 and saett on group 2 (two levels add); G: no latency anywhere.
+enum Tiefe { TE, TF, TG };
+enum Quelle { Q_DIREKT, Q_SPURSEND, Q_GRUPPENSEND };
+static cdj::ArrSnapshot* bauen_tief(Tiefe f, int wer, const cdj::ArrAudio* a) {
+  Bau b(1);
+  b.spur(1, ArrArt::audio).spur(2, ArrArt::audio);
+  b.ausgang(1, 1).ausgang(2, 3);
+  b.gruppe_ausgang(2, 1).gruppe_ausgang(3, 2);
+  b.clip(wer, "c1", 0.0, 8.0, a);
+  if (f == TE || f == TF) b.gruppen_kette(3, {EQ});
+  if (f == TF) b.gruppen_kette(2, {SA});
+  cdj::ArrSnapshot* s = b.fertig();
+  s->ret_da[0] = true;
+  s->ret_pre[0] = true;   // the pre send is taken in front of the fader: the fader at -120 dB silences the direct path and leaves the send alone
+  cdj::arr_pdc_rechnen(*s);
+  return s;
+}
+// q: Q_DIREKT the plain path to the master; Q_SPURSEND the track's own send (track fader down); Q_GRUPPENSEND the send of group `grp` (that group's fader down)
+static Lage lauf_tief(Tiefe f, int wer, Quelle q, int grp = 0) {
+  auto au = Audio::impuls(400000);
+  TR(t)
+  t.n = 256;
+  setze(t, "ret/1/hall/an", 0.0f);
+  setze(t, "ins/eq/1/an", 1.0f);
+  setze(t, "ins/saett/1/an", 1.0f);
+  setze(t, "ins/saett/1/drive", 0.0f);
+  setze(t, "ins/saett/1/out", 0.0f);
+  setze(t, "ins/saett/1/mix", 1.0f);
+  if (q == Q_SPURSEND) {
+    setze(t, "spur/" + std::to_string(wer) + "/send/1", 0.0f);
+    setze(t, "spur/" + std::to_string(wer) + "/fader", -120.0f);
+  }
+  if (q == Q_GRUPPENSEND) {
+    setze(t, "grp/" + std::to_string(grp) + "/send/1", 0.0f);
+    setze(t, "grp/" + std::to_string(grp) + "/fader", -120.0f);
+  }
+  t.laden(bauen_tief(f, wer, &au->a));
+  t.arr.start(0.0, 2, false, 0, V, 256, t.k);
+  t.lauf(140000);
+  Lage l;
+  for (int64_t i = 0; i < static_cast<int64_t>(t.pml.size()); ++i)
+    if (std::fabs(t.pml[i]) > l.spitze) { l.spitze = std::fabs(t.pml[i]); l.pos = i; }
+  l.gesamt = t.arr.snapshot()->pdc.gesamt;
+  l.ringe = t.arr.snapshot()->pdc.ringe;
+  return l;
+}
+
 int main() {
   const int L_EQ = cdj::EqNativ().latenz();
   const int L_SA = cdj::SaettNativ().latenz();
@@ -407,6 +456,49 @@ int main() {
     std::printf("9: allocations while constructing the rings = %ld\n", bau_zaehlt);
     PRUEF(bau_zaehlt > 0);   // positive control: the counter sees allocations
     for (const cdj::ArrSnapshot* a : alt) delete a;
+  }
+
+  {  // 10 pdc_gruppen_ebenen (plan task 5): every path of the nested topologies E, F, G arrives in the same sample (tracks, track sends, group sends)
+    const Lage ref = lauf_tief(TG, 1, Q_DIREKT);
+    PRUEF(ref.spitze > 0.5);
+    PRUEF((ref.gesamt) == (0));
+    PRUEF((ref.ringe) == (0));   // G: no latency anywhere, no place has a delay (the new places too)
+    {
+      auto au = Audio::impuls(1000);
+      cdj::ArrSnapshot* sg = bauen_tief(TG, 1, &au->a);
+      for (int k = 0; k < cdj::ARR_PDC_SCHLUESSEL; ++k) PRUEF((sg->pdc.d[k]) == (0));
+      delete sg;
+      cdj::ArrSnapshot* se = bauen_tief(TE, 1, &au->a);
+      PRUEF((se->pdc.d[cdj::PDC_GRPEIN0 + 0]) == (L_EQ));   // E: group 1 holds track 1 directly, its sum waits for the child that arrives L_EQ late
+      PRUEF((se->pdc.d[cdj::PDC_GRPEIN0 + 1]) == (0));      // group 2 has no direct track
+      PRUEF((se->pdc.d[cdj::PDC_GRPEIN0 + 2]) == (0));
+      delete se;
+      cdj::ArrSnapshot* sf = bauen_tief(TF, 1, &au->a);
+      PRUEF((sf->pdc.d[cdj::PDC_GRPSEND0 + 2]) == (L_SA));  // F: group 3's output arrives at ein(2) = L_EQ, the returns wait for T_G = L_EQ + L_SA
+      PRUEF((sf->pdc.d[cdj::PDC_GRPSEND0 + 0]) == (0));     // the top-level group arrives at T_G
+      delete sf;
+    }
+    struct Topo { Tiefe f; const char* name; int erwartet; };
+    const Topo topos[] = {{TE, "E eq on group 3", L_EQ}, {TF, "F eq on group 3 + saett on group 2", L_EQ + L_SA}};
+    for (const Topo& tp : topos) {
+      int n = 0;
+      for (int wer = 1; wer <= 2; ++wer) {
+        const int ein_grp = wer == 1 ? 1 : 3;   // the group the track sits in; every group on the way up silences its own direct path in turn
+        for (int q = 0; q < 2 + (wer == 1 ? 1 : 3); ++q) {
+          Lage l;
+          if (q == 0) l = lauf_tief(tp.f, wer, Q_DIREKT);
+          else if (q == 1) l = lauf_tief(tp.f, wer, Q_SPURSEND);
+          else l = lauf_tief(tp.f, wer, Q_GRUPPENSEND, wer == 1 ? ein_grp : (q == 2 ? 3 : q == 3 ? 2 : 1));
+          std::printf("10: %s: track %d source %d: impulse at %lld, expected %lld\n", tp.name, wer, q, static_cast<long long>(l.pos),
+                      static_cast<long long>(ref.pos + tp.erwartet));
+          PRUEF(l.spitze > 0.2);
+          PRUEF((l.gesamt) == (tp.erwartet));
+          PRUEF((l.pos) == (ref.pos + tp.erwartet));
+          ++n;
+        }
+      }
+      PRUEF((n) == (8));
+    }
   }
 
   PRUEF_ENDE();

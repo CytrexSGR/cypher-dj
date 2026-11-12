@@ -10,11 +10,15 @@ import { KOPIE_TEXT, HAND_PRUEFMODUS_TEXT, cypherStand, ausgangAnzeige, keylockS
 import { leseWelle, Kopf, Laufansicht, Uebersicht, SR, laengeFrames, ersteVolleEins } from './wave.js';
 import { bindeSpurbaender } from './track_tape_view.js';
 import { bindeInstrumente, lernPfadVon, geraeteseiteKlasse } from './instruments_view.js';
+import { bindeModule } from './module_library.js';   // plan live-module task 10: the MODULES tab
 import { bindeKopplung } from './coupling.js';   // task 10: pair a tablet (main page only)
 import { baueFrontplatte, vorgaben as panelVorgaben, steuerungen, parameterVon } from './panel.js';
 import { baueKopf, standardBeschreibung, tagVonGraph, geraeteknopfHtml, GERAETEKNOPF } from './panel_kopf.js';
 import { ScrubZieher } from './scrub.js';
 import { bindeProduktion } from './production/production.js';
+import { faderWert, faderText } from './production/track_heads.js';
+import { reglerVonDb, tasteMerke, tasteWert } from './production/fader_curve.js';
+import { modulAnsicht, modulHtml, exportKnopf, faderBefehl, oeffneLive, exportiere, leere, trenneNeu, setzeBlend, passeTonartAn, cueAn, cueGriffe, blendText } from './live_module.js';   // live modules task 4
 import { SpektrumAnsicht, SpektrumLeihe, spektrumFlaeche, SPEKTRUM_FRIST_MS } from './spectrum.js';   // 1.15 A7b: spectrum view
 import { bauePresetPanel, hostWechsel, kanalPlanHolen, fehlerText, presetAusKernKomp, kernGeraetAnfragen, kernGeraetWerte, istKernGeraet } from './presets.js';   // 1.16: preset browser
 import { vorhoerFolgt, vorhoerCursor, SPALTEN, LISTEN_SPALTEN, LISTEN_TEXT, TYP_TEXT, stoebernUrl, zelle, baueBaum, listenArtFuer, ziehZiel, postenArtText, filterFuer, filterBereinigt, detailFakten, welleStatus, feldText, aktionenFuer, loopBoxStatus, IMPORT_FEHLER_TEXT, vorbereitText, statusText, setzeVorbereitLive, fehlerAnzeige } from './browse.js';
@@ -23,9 +27,12 @@ import { hostAdapter, RB338_HOST_NAME, rb338HostZuPanel, hostKnobName, knobHostN
 
 const $ = (s, w = document) => w.querySelector(s);
 const $$ = (s, w = document) => [...w.querySelectorAll(s)];
-const BUCHSTABE = { 1: 'A', 2: 'B' };
+const BUCHSTABE = { 1: 'A', 2: 'B', 3: '3' };
+const DECK3 = 3;                                            // compact third deck: a strip, no channel strip, no waveform
+const LADE_DECKS = [...DECKS, DECK3];   // LOAD buttons: A, B and the compact deck 3
+const klasseLaden = (n) => (n === DECK3 ? 'd3' : BUCHSTABE[n].toLowerCase());
 const STATUS_TEXT = ['LOADED', 'LOADED', 'PLAYING', 'LOOP', 'ROLL', 'FALLBACK'];
-const LOOP_LAENGEN = [1, 2, 4, 8, 16];                      // Plan E9: Loop-Reihe (Beats)
+const LOOP_LAENGEN = [1, 2, 4, 8, 16, 32, 64];                      // Plan E9: Loop-Reihe (Beats)
 // AUFTRAG 2026-09-28: zwei Beat-FX-Einheiten, drei Parameter je Einheit (S8-Layout). fxStand/fxZuweisung sind je
 // Einheit (Index 0 = FX1, 1 = FX2). Nur param1 wirkt im Kern (Vorgabe je Art, aus S8-Abgleich).
 const FX_ARTEN = [{ art: 1, name: 'ECHO', param1: 'FEEDBACK' }, { art: 2, name: 'FLANGER', param1: 'FEEDBACK' },
@@ -288,9 +295,9 @@ async function ladeBestand() {
     }
     const td = document.createElement('td');
     td.className = 'aktion';
-    for (const n of DECKS) {
+    for (const n of LADE_DECKS) {
       const b = document.createElement('button');
-      b.className = `laden ${BUCHSTABE[n].toLowerCase()}`;
+      b.className = `laden ${klasseLaden(n)}`;
       b.textContent = `LOAD ${BUCHSTABE[n]}`;
       b.dataset.deck = n;
       b.addEventListener('click', () => laden(n, e));
@@ -355,6 +362,7 @@ function zeigeDeck(n) {
   for (const t of $$('[data-taste]', d)) t.disabled = status === 0;
   for (const t of $$('.bedienreihe button', d)) t.disabled = status === 0;   // Plan E9
   const la = loopAktiv(z);
+  zeigeExport(n);
   $('[data-loopan]', d)?.classList.toggle('an', la);
   if (deckAnsicht[n] && deckAnsicht[n].loopWar !== la) { deckAnsicht[n].loopWar = la; if (la) holeLoop(n); else deckAnsicht[n].loop = null; }
   $('.taste.play', d).classList.toggle('an', status >= 2);
@@ -1771,7 +1779,7 @@ async function stoebernLaden() {
   const r = await fetch(stoebernUrl(stz));
   const j = await r.json();
   if (nr !== stz.lauf) return;
-  if (!r.ok) { leereDetail(); stz.seite = stz.seiteOk; $('#libliste').textContent = ''; zustand.libraryInfo = j.fehler === 'katalog_fehlt' ? 'Catalog missing — run “mediathek katalog”'
+  if (!r.ok) { leereDetail(); stz.seite = stz.seiteOk; $('#libliste').textContent = ''; zustand.libraryInfo = j.fehler === 'katalog_fehlt' ? 'No library catalog found (is its drive mounted?). To build one from your own folders: djk/start/djk-bibliothek dazu <folder>, then bauen'
     : j.fehler === 'suchfeld_nicht_anwendbar' ? 'Library: patterns have only name: and rolle: as search fields' : `Library: ${j.fehler}`; return zeigeReiterInfo(); }
   stz.seiteOk = j.seite;
   Object.assign(stz, { treffer: j.treffer, gesamt: j.gesamt, limit: j.limit, sort: j.sort, ab: j.richtung === 'ab' });
@@ -1904,9 +1912,9 @@ function trackKnoepfe(td, t) {
   td.textContent = '';
   const e = t.laden_mid ? zustand.bestand.find((x) => x.material_id === t.laden_mid) : null;
   if (e) {
-    for (const n of DECKS) {
+    for (const n of LADE_DECKS) {
       const b = document.createElement('button');
-      b.className = `laden ${BUCHSTABE[n].toLowerCase()}`; b.textContent = `LOAD ${BUCHSTABE[n]}`;
+      b.className = `laden ${klasseLaden(n)}`; b.textContent = `LOAD ${BUCHSTABE[n]}`;
       b.addEventListener('click', () => laden(n, e));
       td.append(b);
     }
@@ -2019,7 +2027,7 @@ async function zeigeDetail(i, scrollen = true) {
     const r = await fetch(`/stoebern/detail?${t.sha ? `sha=${t.sha}` : `mid=${t.material_id}`}`);
     if (nr !== detailLauf) return;
     j = r.ok ? await r.json() : null;
-    if (!j) { d.append(el('div', 'st-hinweis', r.status === 404 ? 'Not in the catalog (rebuild it with “mediathek katalog”).' : `Details unavailable (${r.status}).`)); if (!status.anfordern) return; }
+    if (!j) { d.append(el('div', 'st-hinweis', r.status === 404 ? 'This entry is not in the library catalog anymore (the catalog may have been rebuilt); search again' : `Details unavailable (${r.status}).`)); if (!status.anfordern) return; }
   } catch (e) { if (nr === detailLauf) d.append(el('div', 'st-hinweis', `Details unavailable: ${e.message}`)); return; }
   if (nr !== detailLauf) return;
   if (j) {
@@ -2355,9 +2363,9 @@ function libKnoepfe(td, t) {
   td.textContent = '';
   const e = zustand.bestand.find((x) => x.material_id === t.material_id);
   if (e) {
-    for (const n of DECKS) {
+    for (const n of LADE_DECKS) {
       const b = document.createElement('button');
-      b.className = `laden ${BUCHSTABE[n].toLowerCase()}`; b.textContent = `LOAD ${BUCHSTABE[n]}`;
+      b.className = `laden ${klasseLaden(n)}`; b.textContent = `LOAD ${BUCHSTABE[n]}`;
       b.addEventListener('click', () => laden(n, e));
       td.append(b);
     }
@@ -2510,9 +2518,9 @@ function setZeile(p) {
     td.append(hinweis);
   }
   const e = p.laden_mid ? zustand.bestand.find((x) => x.material_id === p.laden_mid) : null;
-  if (e) for (const n of DECKS) {
+  if (e) for (const n of LADE_DECKS) {
     const b = document.createElement('button');
-    b.className = `laden ${BUCHSTABE[n].toLowerCase()}`; b.textContent = `LOAD ${BUCHSTABE[n]}`;
+    b.className = `laden ${klasseLaden(n)}`; b.textContent = `LOAD ${BUCHSTABE[n]}`;
     b.addEventListener('click', () => laden(n, e));
     td.append(b);
   }
@@ -2698,7 +2706,7 @@ function strom() {
         zeigeWerkzeug();   // A8: a state (load, reconnect) fills the Gate/Utility strips; they have no polling like the compressor
         if ('spektrum/kanal' in f.regler) { for (const a of spektrumAnsichten) a.setzeQuelle(f.regler['spektrum/kanal']); spektrumLeihe.beiStand(f.regler['spektrum/kanal']); }   // A7b; a key left by a reload while the device page was open
         zeigeKeylock();   // Keylock 3
-        DECKS.forEach(zeigeDeck);
+        DECKS.forEach(zeigeDeck); zeigeStreifen(); pruefeLiveSpaeter(0);   // live modules: the stream (re)connects, read the live container again
         for (const [n, l] of Object.entries(f.loops ?? {})) zustand.loops[n] = l;
         if (Array.isArray(f.fx)) f.fx.forEach((x, u) => { if (x) fxVomKern(u, x); });
         if (f.fxZuweisung) f.fxZuweisung.forEach((m, u) => { for (const [kanal, an] of Object.entries(m)) fxZuweisungVomKern(u, kanal, an ? 1 : 0); });
@@ -2711,7 +2719,8 @@ function strom() {
       case 'ansage': zeigeAnsage(f); break;   // demo overlay (POST /ansage)
       case 'graphen': setzeGraphenGeladen(f.geladen); break;   // S12
       case 'lernen': lernEreignis(f); break;   // S19
-      case 'proj': holeBkSpaeter(); break;   // S17: the project changed or was opened
+      case 'proj': holeBkSpaeter(); liveEreignis(a, f); break;   // S17: the project changed or was opened; live modules task 4: the panel follows
+      case 'modul': liveEreignis(a, f); break;   // live modules task 4: slot state of the module export (separation)
       case 'pruefmodus': zeigePruefmodus(f.stand); break;
       case 'kern': $('#v-kern').classList.toggle('an', f.zustand === 'verbunden'); break;
       case '/uhr':
@@ -2725,6 +2734,8 @@ function strom() {
         break;
       case '/e/regler':
         zustand.regler[f.pfad] = f.wert; zeigeWert(f.pfad);
+        if (f.pfad === `deck/${DECK3}/pfl`) zeigeStreifen();
+        if (/^grp\/\d+\/cue$/.test(f.pfad) && liveOffen()) zeichneLive();   // task 6: the CUE button of a slot follows the core row
         if (/\/bk\/([1-9]|[1-5][0-9]|6[0-4])$/.test(f.pfad)) bkMarkeSpaeter();   // S17: the saved/differs marker follows the graph knobs
         if (f.pfad === 'keylock') { zeigeKeylock(); zeigeDeck(1); zeigeDeck(2); }   // Keylock 3: Taste und VARI
         if (f.pfad === 'color/art' || f.pfad === 'color/param') zeigeColor();
@@ -2749,7 +2760,7 @@ function strom() {
       case '/zustand/deck':
         zustand.decks[f.deck] = f;
         deckAnsicht[f.deck]?.kopf.melde(f.quell_beat, zustand.bpm ?? 128, performance.now(), f.status >= 2);
-        if (f.deck <= 2) zeigeDeck(f.deck);
+        if (f.deck <= 2) zeigeDeck(f.deck); else if (f.deck === DECK3) zeigeStreifen();
         break;
       case '/e/hotcue': if (f.deck <= 2) holeHotcues(f.deck); break;   // Plan E9
       case '/e/raster': if (f.deck <= 2) holeRaster(f.deck); break;     // Plan Grid
@@ -2764,7 +2775,7 @@ function strom() {
         melde(`Deck ${BUCHSTABE[f.deck] ?? f.deck}: “${e?.titel ?? f.material_id}” loaded`);
         const d = $(`.deck[data-deck="${f.deck}"]`);
         if (deckAnsicht[f.deck]) deckAnsicht[f.deck].id = null;
-        if (f.deck <= 2) zeigeDeck(f.deck);
+        if (f.deck <= 2) zeigeDeck(f.deck); else if (f.deck === DECK3) zeigeStreifen();
         break;
       }
       case '/q': {
@@ -3100,6 +3111,246 @@ function bindeFxZuweisung() {   // Tasten [1] [2] je Kanalzug (wie an der S8: li
   }
 }
 
+// ---------- Deck 3: compact strip (plan live modules, task 0): title, PLAY, SYNC, loop lengths, PFL ----------
+// The strip has no waveform and no cue pads: Cypher serves loops from deck 3 (load a track, set a loop), Andreas can load, start, loop and pre-listen.
+const streifen = { loopLaenge: 4, loop: null, loopWar: false };
+function streifenPost(pfad, daten, was) { return deckPost(pfad, { deck: DECK3, ...daten }, was); }
+function baueStreifen() {
+  const d = $('#deck-3');
+  $('[data-play]', d).addEventListener('click', async () => {
+    const laeuft = (zustand.decks[DECK3]?.status ?? 0) >= 2;
+    await streifenPost(laeuft ? '/deck/stopp' : '/deck/start', { ab: 'jetzt' }, laeuft ? 'Stop deck 3' : 'Play deck 3');
+  });
+  $('[data-sync]', d).addEventListener('click', () => streifenPost('/deck/start', { ab: 'takt' }, 'Sync deck 3'));
+  // PFL goes through /regler (the strip has no hand path: /griff only knows decks 1 and 2); a switch like the channel strips: 1 = on
+  $('[data-pfl]', d).addEventListener('click', async () => {
+    const an = (zustand.regler[`deck/${DECK3}/pfl`] ?? 0) >= 0.5;
+    await deckPost('/regler', { pfad: `deck/${DECK3}/pfl`, nach: an ? 0 : 1 }, 'PFL deck 3');
+  });
+  const loops = $('[data-loops]', d);
+  for (const l of LOOP_LAENGEN) {
+    const b = document.createElement('button');
+    b.textContent = String(l); b.dataset.loopl = String(l); b.title = `Loop length ${l} beat${l > 1 ? 's' : ''}`;
+    b.classList.toggle('an', l === streifen.loopLaenge);
+    b.addEventListener('click', async () => {
+      streifen.loopLaenge = l; for (const x of $$('[data-loopl]', d)) x.classList.toggle('an', x === b);
+      if (!loopAktiv(zustand.decks[DECK3])) return;   // no loop yet: only the preselection for the next loop
+      if (await streifenPost('/deck/loop', { laenge: l, raster: 0, behalte_start: true }, 'Loop length')) holeStreifenLoop();
+    });
+    loops.append(b);
+  }
+  const an = document.createElement('button');
+  an.textContent = 'LOOP'; an.dataset.loopan = ''; an.title = 'Loop on/off at the bar';
+  an.addEventListener('click', async () => {
+    await streifenPost('/deck/loop', { laenge: an.classList.contains('an') ? 0 : streifen.loopLaenge, raster: 4 }, 'Loop');
+    holeStreifenLoop();
+  });
+  loops.append(an);
+  loops.append(exportTaste(DECK3));
+  $('[data-liveoeffnen]', d).addEventListener('click', liveOeffnen);
+}
+async function holeStreifenLoop() {
+  try { streifen.loop = await (await fetch(`/deck/loop?deck=${DECK3}`)).json(); } catch { return; }
+  const l = streifen.loop?.laenge;
+  if (l && LOOP_LAENGEN.includes(l) && l !== streifen.loopLaenge) {
+    streifen.loopLaenge = l;
+    for (const x of $$('#deck-3 [data-loopl]')) x.classList.toggle('an', Number(x.dataset.loopl) === l);
+  }
+}
+function zeigeStreifen() {
+  const d = $('#deck-3');
+  if (!d) return;
+  const z = zustand.decks[DECK3];
+  const id = z?.material_id ?? zustand.geladen[DECK3];
+  const e = id ? eintragVon(id) : null;
+  const status = z ? z.status : (id ? 1 : 0);
+  const st = $('[data-status]', d);
+  st.textContent = status === 0 ? 'EMPTY' : STATUS_TEXT[status] ?? String(status);
+  st.className = `status ${status >= 2 ? 'laeuft' : status === 1 ? 'geladen' : ''}`;
+  for (const b of $$('button:not([data-pfl]):not([data-liveoeffnen])', d)) b.disabled = status === 0;
+  $('[data-pfl]', d).classList.toggle('an', (zustand.regler[`deck/${DECK3}/pfl`] ?? 0) >= 0.5);
+  const la = loopAktiv(z);
+  zeigeExport(DECK3);
+  $('[data-loopan]', d).classList.toggle('an', la);
+  if (streifen.loopWar !== la) { streifen.loopWar = la; if (la) holeStreifenLoop(); else streifen.loop = null; }
+  $('[data-play]', d).classList.toggle('an', status >= 2);
+  if (!id) return;
+  const g = z ?? zustand.geladenFelder?.[DECK3] ?? e;
+  $('[data-titel]', d).textContent = e?.titel ?? id;
+  $('[data-meta]', d).textContent = e ? `${e.camelot ?? '–'} · plays at ${Number(g?.basis_bpm ?? e.basis_bpm).toFixed(0)} · ${fmtZeit(e.dauer_s)}` : id;
+  if (!z) { $('[data-bar]', d).textContent = '–'; $('[data-rest]', d).textContent = '–'; return; }
+  const eg = g?.fassung ? zustand.bestand.find((x) => x.material_id === id && x.basis_bpm === g.basis_bpm && x.fassung === g.fassung) ?? e : e;
+  const rel = z.quell_beat - (eg?.erste_eins_quell_beat ?? 0);
+  $('[data-bar]', d).textContent = rel < 0 ? '–' : `${Math.floor(rel / 4) + 1}.${Math.floor(((rel % 4) + 4) % 4) + 1}`;
+  $('[data-rest]', d).textContent = Number.isFinite(z.beats_bis_ende) ? `${Math.max(0, Math.floor(z.beats_bis_ende / 4))} bars` : 'loop';
+}
+
+// ---------- Live modules (plan live-module task 4): EXPORT at the deck loop, the live container panel, LIVE ----------
+// The panel shows the open live container (project flag live): two slots, per module the module fader and one original fader per stem, CLEAR, and the
+// state of the stem separation. Faders write project commands over POST /proj/aendern (one at a time, the newest value of a fader replaces a waiting one).
+const live = { slug: null, projekt: null, rev: null, stand: {}, stems: null, greift: 0, neuZeichnen: false, pruefen: null, schreiben: new Map(), laeuft: false };
+async function holeJson(weg, daten) {
+  try {
+    const r = await fetch(weg, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(daten) });
+    return { status: r.status, j: await r.json().catch(() => ({})) };
+  } catch (e) { return { status: 0, j: { fehler: 'netz', text: `page server unreachable: ${e.message}` } }; }
+}
+const liveOffen = () => !!live.projekt?.live;
+function exportTaste(n) {
+  const b = document.createElement('button');
+  b.textContent = 'EXPORT'; b.dataset.exportloop = String(n); b.className = 'exportknopf';
+  b.addEventListener('click', async () => {
+    if (b.disabled) return;
+    if (!liveOffen()) { melde('Open the live container first (LIVE), then export', true); return; }
+    b.disabled = true;
+    const r = await exportiere(n, holeJson);
+    melde(r.text, !r.ok);
+    zeigeExport(n);
+    pruefeLiveSpaeter(0);
+  });
+  return b;
+}
+function zeigeExport(n) {
+  const z = zustand.decks[n];
+  const b = $(`[data-exportloop="${n}"]`);
+  if (!b) return;
+  const k = exportKnopf({ loop: loopAktiv(z), geladen: !!(z?.material_id ?? zustand.geladen[n]), live: liveOffen() });
+  b.disabled = k.aus; b.title = k.titel;
+}
+async function liveOeffnen() {
+  const r = await oeffneLive(holeJson, (t) => window.confirm(t));
+  if (!r.abgelehnt) melde(r.text, !r.ok);
+  pruefeLiveSpaeter(0);
+}
+function zeichneLive() {
+  const p = $('#live-panel');
+  if (!p) return;
+  if (live.greift > 0) { live.neuZeichnen = true; return; }   // a fader is under the hand: the markup stays until it is let go
+  const a = modulAnsicht(live.projekt, live.stand, live.stems, zustand.regler);
+  p.hidden = !a.offen;
+  document.body.classList.toggle('live-offen', a.offen);
+  p.innerHTML = modulHtml(a);
+  $('[data-liveoeffnen]')?.classList.toggle('an', a.offen);
+  for (const n of [1, 2, DECK3]) zeigeExport(n);
+}
+// What the server says now: the slug and rev first (cheap), the whole project only when the live container changed
+function pruefeLiveSpaeter(ms = 250) {
+  clearTimeout(live.pruefen);
+  live.pruefen = setTimeout(pruefeLive, ms);
+}
+async function pruefeLive() {
+  if (live.schreiben.size || live.laeuft) { pruefeLiveSpaeter(300); return; }
+  try {
+    const k = await (await fetch('/proj/aktuell?nur=rev')).json();
+    if (k.slug === null || k.slug === undefined) { live.projekt = null; live.rev = null; zeichneLive(); return; }
+    if (k.slug === (live.projekt ? live.slug : null) && k.rev === live.rev) return;
+    if (k.slug !== 'live' && !live.projekt?.live) { if (live.rev !== null) { live.rev = null; zeichneLive(); } return; }   // a production project is open
+    const j = await (await fetch('/proj/aktuell')).json();
+    live.slug = j.slug; live.projekt = j.projekt?.live ? j.projekt : null; live.rev = j.projekt?.rev ?? null;
+    if (j.stems) live.stems = j.stems;
+    if (live.projekt) live.stand = await (await fetch('/modul/stand')).json();
+    zeichneLive();
+  } catch { /* the next event or reconnect tries again */ }
+}
+function liveEreignis(a, f) {
+  if (a === 'modul') {   // the event's stand has no key distance: read /modul/stand again (it adds tonart_abstand per slot)
+    live.stand = f.stand ?? live.stand; zeichneLive();
+    if (f.stand && live.projekt) fetch('/modul/stand').then((r) => r.json()).then((s) => { live.stand = s; zeichneLive(); }, () => undefined);
+    return;
+  }
+  if (a !== 'proj') return;
+  if (f?.stems) { live.stems = f.stems; if (liveOffen()) zeichneLive(); }
+  if (!f?.stems || f.stems.zustand !== 'laeuft') pruefeLiveSpaeter();
+}
+// Faders: pump with one request in flight; a newer value of the same fader replaces the waiting one
+async function liveSchreibe(schluessel, befehl, label) {
+  live.schreiben.set(schluessel, { befehl, label });
+  if (live.laeuft) return;
+  live.laeuft = true;
+  try {
+    while (live.schreiben.size) {
+      const [k, a] = live.schreiben.entries().next().value;
+      live.schreiben.delete(k);
+      let r = await holeJson('/proj/aendern', { rev: live.rev, label: a.label, befehle: [a.befehl] });
+      if (r.status === 409 && r.j?.fehler === 'rev_veraltet') {   // changed elsewhere: read the new revision, write the value once more (it is absolute)
+        const j = await (await fetch('/proj/aktuell')).json();
+        if (j.projekt?.live) { live.projekt = j.projekt; live.rev = j.projekt.rev; }
+        r = await holeJson('/proj/aendern', { rev: live.rev, label: a.label, befehle: [a.befehl] });
+      }
+      if (r.status === 200 && r.j?.projekt) { live.projekt = r.j.projekt; live.rev = r.j.rev; } else melde(`Fader refused: ${r.j?.text ?? r.j?.fehler ?? r.status}`, true);
+    }
+  } finally { live.laeuft = false; }
+  zeichneLive();
+}
+function bindeLive() {
+  const p = $('#live-panel');
+  if (!p) return;
+  const loslassen = () => { if (live.greift > 0) live.greift = 0; if (live.neuZeichnen) { live.neuZeichnen = false; zeichneLive(); } };
+  p.addEventListener('pointerdown', (e) => { if (e.target.closest('.live-regler, .live-blendregler')) live.greift = 1; });
+  window.addEventListener('pointerup', loslassen);
+  window.addEventListener('pointercancel', loslassen);
+  const ziel = (r) => (r.dataset.modulFader !== undefined
+    ? { art: 'modul', id: r.dataset.gruppeId, name: r.closest('.live-slot').dataset.slot, ausgabe: '[data-modul-wert]', label: 'Module volume' }
+    : { art: 'stem', id: r.dataset.spurId, name: r.closest('.live-stem').firstChild.textContent, ausgabe: '[data-stem-wert]',
+      label: r.dataset.neuFader !== undefined ? 'New volume' : 'Original volume' });
+  const sendeFader = (r) => {
+    const z = ziel(r), db = faderWert(tasteWert(r));
+    r.parentElement.querySelector(z.ausgabe).textContent = faderText(db);
+    liveSchreibe(`${z.art}:${z.id}`, faderBefehl(z.art, z.id, db), `${z.label} ${z.name}`);
+  };
+  // Blend: absolute values, one request in flight, a newer value replaces the waiting one (POST /modul/blend, no takte)
+  const blendWartet = new Map();
+  let blendLaeuft = false;
+  const sendeBlend = async (r) => {
+    r.parentElement.querySelector('[data-blend-wert]').textContent = blendText(Number(r.value));
+    blendWartet.set(`${r.closest('.live-slot').dataset.slot}/${r.dataset.stem}`, Number(r.value));
+    if (blendLaeuft) return;
+    blendLaeuft = true;
+    try {
+      while (blendWartet.size) {
+        const [k, wert] = blendWartet.entries().next().value;
+        blendWartet.delete(k);
+        const [slot, stem] = k.split('/');
+        const x = await setzeBlend(slot, stem, wert, holeJson);
+        if (!x.ok) melde(x.text, true);
+      }
+    } finally { blendLaeuft = false; }
+    pruefeLiveSpaeter(0);
+  };
+  p.addEventListener('keydown', (e) => { if (e.target.matches?.('.live-regler')) tasteMerke(e.target, e.key); });
+  p.addEventListener('input', (e) => { if (e.target.matches?.('.live-regler')) sendeFader(e.target); else if (e.target.matches?.('.live-blendregler')) sendeBlend(e.target); });
+  p.addEventListener('dblclick', (e) => {   // a stem back to 0 dB, the module fader closed: the safe direction for a fader that may be live
+    const r = e.target.closest?.('.live-regler');
+    if (!r) return;
+    r.value = String(reglerVonDb(r.dataset.modulFader !== undefined ? -200 : 0));
+    sendeFader(r); live.greift = 0;
+  });
+  p.addEventListener('dblclick', (e) => {   // the blend back to the original alone
+    const r = e.target.closest?.('.live-blendregler');
+    if (!r) return;
+    r.value = '0';
+    sendeBlend(r); live.greift = 0;
+  });
+  p.addEventListener('click', async (e) => {
+    const slot = e.target.closest('.live-slot')?.dataset.slot;
+    if (!slot) return;
+    if (e.target.closest('[data-leeren]')) {
+      const r = await leere(slot, Number(p.querySelector(`[data-slot="${slot}"] [data-leeren-takte]`).value), holeJson);
+      melde(r.text, !r.ok);
+    } else if (e.target.closest('[data-cue]')) {   // the hand path of the page (/griff, Andreas only), like the other switches
+      const nr = Number(e.target.closest('[data-cue]').dataset.nr);
+      for (const g of cueGriffe(nr, cueAn(zustand.regler, nr))) sende(g.pfad, g.u, true);   // priming value, then the target (see cueGriffe)
+    } else if (e.target.closest('[data-key]')) {
+      const r = await passeTonartAn(slot, holeJson);
+      melde(r.text, !r.ok);
+      pruefeLiveSpaeter(0);
+    } else if (e.target.closest('[data-trennen]')) {
+      const r = await trenneNeu(slot, holeJson);
+      melde(r.text, !r.ok);
+    }
+  });
+}
+
 // ---------- Deck-Bedienung (Plan E9): Raster, Sprung per Übersicht, Ziehen, Hotcues SHOT/LOOP, Loop ----------
 async function deckPost(pfad, daten, was) {
   try {
@@ -3239,6 +3490,7 @@ function bindeDeckBedienung(n, d) {
     });
     loops.append(m);
   }
+  loops.append(exportTaste(n));   // live modules task 4
   // Springen in der Übersicht: Klick → Quell-Beat, der Server rastet ein (stehend) bzw. hält die Phase (laufend)
   $('[data-ueber]', d).addEventListener('click', (e) => {
     if (!a.ueber.w || !a.raster) return;
@@ -3379,6 +3631,7 @@ try { bindeSpurbaender(jsonPost, () => letzterBeat); } catch (e) { console.error
 try { produktion = bindeProduktion({ presetsZeigen: () => zeigePresets(), presetsNeu: () => presetPanel?.aktualisiereZiele(), presetListe: () => presetPanel?.z.liste ?? [], post: jsonPost, bpm: () => zustand.bpm ?? 128, stoebern: () => zustand.stoebern, bibliothek: () => { if (!stz.treffer.length) { stoebernLaden(); ladeBaum(); } } }); } catch (e) { console.error('Production view:', e); }   // D1 V1
 bindeAnsicht();
 bindeTablet();
+{ const reiter = $('[data-reiter="module"]'), tabelle = $('#module-tabelle'); if (reiter && tabelle) bindeModule({ reiter, tabelle, melde: (t) => melde(t) }); }   // task 10
 { const knopf = $('#kopplung-knopf'), dialog = $('#kopplung'); if (knopf && dialog) bindeKopplung({ knopf, dialog }); }   // task 10: the QR code of a one-time pairing link
 bindeFx();
 bindeFxZuweisung();
@@ -3387,7 +3640,11 @@ for (const o of $$('[data-wert]')) zeigeWert(o.dataset.wert);
 for (const k of $$('.schalter[data-pfad]')) zeigeWert(k.dataset.pfad);
 for (const g of $$('.xzuweisung[data-pfad]')) zeigeWert(g.dataset.pfad);  // Vorgabe THRU blass, bis der Kern meldet
 DECKS.forEach(zeigeDeck);
-ladeBestand().then(() => DECKS.forEach(zeigeDeck));
+baueStreifen();
+bindeLive();
+pruefeLive();
+zeigeStreifen();
+ladeBestand().then(() => { DECKS.forEach(zeigeDeck); zeigeStreifen(); });
 BOXEN.forEach(zeigeBox);
 ladeLoops();
 requestAnimationFrame(bild);

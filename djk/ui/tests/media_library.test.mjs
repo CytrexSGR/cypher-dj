@@ -15,7 +15,8 @@ import { GRUND_TEXT } from '../http/reasons.ts';   // Spec 6.34: jede Antwort mi
 test('Mediathek: Datei fehlt → 503 mediathek_fehlt (Suche und Vorbereiten), kein Absturz', async (t) => {
   const s = await stapel(t, { mediathek: '/nicht/da/mediathek.sqlite' });
   assert.deepEqual(await hole(s.url, '/mediathek?text=x'), { code: 503, j: { fehler: 'mediathek_fehlt' } });
-  assert.deepEqual(await post(s.url, '/mediathek/vorbereiten', { material_id: mid(2) }), { code: 503, j: { fehler: 'mediathek_fehlt' } });
+  // Task 17: without a media library the prepare path asks the own catalog; none there either → katalog_fehlt (was mediathek_fehlt)
+  assert.deepEqual(await post(s.url, '/mediathek/vorbereiten', { material_id: mid(2) }), { code: 503, j: { fehler: 'katalog_fehlt' } });
   assert.equal((await hole(s.url, '/bestand')).code, 200);   // der Rest der Seite lebt
 });
 

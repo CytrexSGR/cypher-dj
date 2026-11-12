@@ -76,7 +76,8 @@ export class OhrLeser {
     for (const k of kanaele) this.puffer.set(k, []);
   }
 
-  lies(): number {
+  // hoechstens: read at most this many of the newest records (a one-shot reader for the oscilloscope does not need the whole ring)
+  lies(hoechstens?: number): number {
     let fd: number;
     try {
       fd = fs.openSync(this.pfad, 'r');
@@ -95,6 +96,7 @@ export class OhrLeser {
       const spanne = wNeu - vonR;
       const cap = BigInt(kopf.cap);
       if (spanne > cap - 1024n) vonR = wNeu - cap + 1024n; // §6.2: zu alt, ab hier lesen
+      if (hoechstens !== undefined && wNeu - vonR > BigInt(hoechstens)) vonR = wNeu - BigInt(hoechstens);
       const anzahl = Number(wNeu - vonR);
 
       // Zusammenhängende Zeilen (16 Kanäle × 64 Byte) in höchstens zwei Aufrufen lesen (Ringende geteilt).
@@ -121,6 +123,11 @@ export class OhrLeser {
     } finally {
       fs.closeSync(fd);
     }
+  }
+
+  // everything held for one channel, oldest first
+  alle(kanal: number): Satz[] {
+    return this.puffer.get(kanal) ?? [];
   }
 
   saetze(kanal: number, vonBeat: number, bisBeat: number): Satz[] {
@@ -557,4 +564,162 @@ export class Hoerscheinstelle {
     if (!s || s.urteil !== 'ok' || s.inhalt !== inhalt || uhrBeat > s.gueltig_bis_beat) return null;
     return s;
   }
+}
+
+// ---- Oscilloscope: condenses the 1 ms envelope records of one channel (Hand tool `oszilloskop`, GET /oszi) ----
+// This is the envelope ring (peak, band RMS per 48-sample window), not samples: a true sample jump is invisible here.
+// Channels the kern writes into the ring (core_signalbox.cpp huellen_block: ring index = mixer order, erz/5..8 never, then pad/1, pad/2, master, cue).
+export const OSZI_KANAELE: Record<string, number> = {
+  'deck/1': 0, 'deck/2': 1, 'deck/3': 2, 'deck/4': 3, 'erz/1': 4, 'erz/2': 5, 'erz/3': 6, 'erz/4': 7,
+  'pad/1': 12, 'pad/2': 13, master: 14, cue: 15,
+};
+export const OSZI_PUNKTE_MAX = 600;
+export const OSZI_BODEN_DB = -200;                // silence, finite on purpose (no -Infinity in JSON)
+export const OSZI_EINSATZ_SCHWELLE_DB = 6;        // onset: block level rises this far over the quietest of the blocks before
+export const OSZI_KLICK_SCHWELLE_DB = 20;         // click suspect: one ms peak exceeds both neighbours by more than this
+const OSZI_BLOCK_MS = 10;                         // onset detection works on the median peak of 10 ms blocks
+const OSZI_VORLAUF_BLOECKE = 5;
+const OSZI_PAUSE_MS = 100;                        // no second onset within this time
+const OSZI_HOERBAR_DB = -70;                      // blocks below this never start an onset; click needs the peak above it
+const OSZI_PUMP_HOERBAR_DB = -60;                 // beats whose low band stays below this do not count for the pump depth
+
+export interface OsziOpt {
+  sek: number;                    // window length in seconds
+  bpm: number | null;             // tempo for the pump depth, null or <= 0: no pump depth
+  einsatzSchwelleDb?: number;
+  klickSchwelleDb?: number;
+}
+
+export interface OsziAntwort {
+  n: number;
+  angefragt_ms: number;
+  verfuegbar_ms: number;
+  vollstaendig: boolean;
+  ms_je_punkt: number;
+  huellkurve_min_db: number[];    // per point: lowest peak in dB inside the point's span
+  huellkurve_max_db: number[];    // highest peak, so short peaks survive the condensing
+  spitze_db: number;
+  spitze_t_ms: number;            // <= 0, relative to the window end
+  rms_db: number;                 // power sum of the 6 band RMS values, averaged over the window
+  einsaetze: { t_ms: number; db: number }[];
+  pumptiefe_db: number | null;
+  klick_verdacht: number[];       // ms relative to the window end
+}
+
+const rund1 = (x: number): number => Math.round(x * 10) / 10;
+const dbAmp = (x: number): number => (x > 0 ? Math.max(OSZI_BODEN_DB, 20 * Math.log10(x)) : OSZI_BODEN_DB);
+
+export function oszi(saetze: Satz[], opt: OsziOpt): OsziAntwort {
+  const angefragt = Math.round(opt.sek * 1000);
+  const s = saetze.length > angefragt ? saetze.slice(saetze.length - angefragt) : saetze;
+  const n = s.length;
+  const ende = n - 1;
+  const rel = (i: number): number => i - ende;   // one record per ms
+  const einsatzSchwelle = opt.einsatzSchwelleDb ?? OSZI_EINSATZ_SCHWELLE_DB;
+  const klickFaktor = 10 ** ((opt.klickSchwelleDb ?? OSZI_KLICK_SCHWELLE_DB) / 20);
+  const sp = s.map((x) => (Number.isFinite(x.spitze) && x.spitze > 0 ? x.spitze : 0));
+
+  // envelope: at most OSZI_PUNKTE_MAX points, min and max of the peak per point
+  const punkte = Math.min(OSZI_PUNKTE_MAX, n);
+  const min_db: number[] = [];
+  const max_db: number[] = [];
+  for (let p = 0; p < punkte; ++p) {
+    const von = Math.floor((p * n) / punkte);
+    const bis = Math.floor(((p + 1) * n) / punkte);
+    let lo = Infinity;
+    let hi = 0;
+    for (let i = von; i < bis; ++i) {
+      lo = Math.min(lo, sp[i]);
+      hi = Math.max(hi, sp[i]);
+    }
+    min_db.push(rund1(dbAmp(lo === Infinity ? 0 : lo)));
+    max_db.push(rund1(dbAmp(hi)));
+  }
+
+  // peak and RMS
+  let iMax = -1;
+  let spMax = 0;
+  let leistung = 0;
+  for (let i = 0; i < n; ++i) {
+    if (sp[i] > spMax) { spMax = sp[i]; iMax = i; }
+    let l = 0;
+    for (const b of s[i].band) if (Number.isFinite(b)) l += b * b;
+    leistung += l;
+  }
+  const rms = n ? Math.sqrt(leistung / n) : 0;
+
+  // onsets: median peak of 10 ms blocks against the quietest of the blocks before
+  const einsaetze: { t_ms: number; db: number }[] = [];
+  const bloecke: number[] = [];
+  for (let b = 0; (b + 1) * OSZI_BLOCK_MS <= n; ++b) {
+    const w = sp.slice(b * OSZI_BLOCK_MS, (b + 1) * OSZI_BLOCK_MS).sort((x, y) => x - y);
+    bloecke.push(dbAmp((w[OSZI_BLOCK_MS / 2 - 1] + w[OSZI_BLOCK_MS / 2]) / 2));
+  }
+  let sperreBis = -1;
+  for (let b = OSZI_VORLAUF_BLOECKE; b < bloecke.length; ++b) {
+    const t = b * OSZI_BLOCK_MS;
+    if (t < sperreBis || bloecke[b] < OSZI_HOERBAR_DB) continue;
+    const vorher = Math.min(...bloecke.slice(b - OSZI_VORLAUF_BLOECKE, b));
+    const anstieg = bloecke[b] - Math.max(vorher, -90);
+    if (anstieg >= einsatzSchwelle) {
+      einsaetze.push({ t_ms: rel(t), db: rund1(anstieg) });
+      sperreBis = t + OSZI_PAUSE_MS;
+    }
+  }
+
+  // pump depth: per whole beat (counted back from the window end) max/min of the smoothed low-band envelope, averaged
+  let pumptiefe: number | null = null;
+  if (opt.bpm && opt.bpm > 0 && Number.isFinite(opt.bpm)) {
+    const takt = 60000 / opt.bpm;
+    const schlaege = Math.floor(n / takt);
+    if (schlaege >= 1) {
+      const glatt = 5;
+      const tief = s.map((x) => Math.hypot(x.band[0] || 0, x.band[1] || 0));
+      const tiefDb: number[] = [];
+      for (let i = 0; i + glatt <= n; ++i) {
+        let m = 0;
+        for (let k = 0; k < glatt; ++k) m += tief[i + k];
+        tiefDb.push(dbAmp(m / glatt));
+      }
+      let summe = 0;
+      let zaehl = 0;
+      for (let j = 0; j < schlaege; ++j) {
+        const bis = Math.round(n - j * takt);
+        const von = Math.round(n - (j + 1) * takt);
+        let hi = OSZI_BODEN_DB;
+        let lo = Infinity;
+        for (let i = von; i < Math.min(bis, tiefDb.length); ++i) {
+          hi = Math.max(hi, tiefDb[i]);
+          lo = Math.min(lo, tiefDb[i]);
+        }
+        if (lo === Infinity || hi < OSZI_PUMP_HOERBAR_DB) continue;
+        summe += hi - Math.max(lo, -90);
+        zaehl += 1;
+      }
+      pumptiefe = zaehl ? rund1(summe / zaehl) : 0;
+    }
+  }
+
+  // click suspects: one ms whose peak exceeds both neighbours by more than the threshold
+  const klick: number[] = [];
+  const hoerbar = 10 ** (OSZI_HOERBAR_DB / 20);
+  for (let i = 1; i < n - 1; ++i) {
+    if (sp[i] > hoerbar && sp[i] > klickFaktor * sp[i - 1] && sp[i] > klickFaktor * sp[i + 1]) klick.push(rel(i));
+  }
+
+  return {
+    n,
+    angefragt_ms: angefragt,
+    verfuegbar_ms: n,
+    vollstaendig: n >= angefragt,
+    ms_je_punkt: punkte ? Math.round((n / punkte) * 10) / 10 : 0,
+    huellkurve_min_db: min_db,
+    huellkurve_max_db: max_db,
+    spitze_db: rund1(dbAmp(spMax)),
+    spitze_t_ms: iMax >= 0 ? rel(iMax) : 0,
+    rms_db: rund1(dbAmp(rms)),
+    einsaetze,
+    pumptiefe_db: pumptiefe,
+    klick_verdacht: klick,
+  };
 }

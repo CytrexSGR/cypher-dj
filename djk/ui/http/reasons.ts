@@ -19,7 +19,7 @@ export const GRUND_TEXT: Readonly<Record<string, string>> = {
   deck_laeuft: 'a deck is playing; the project tempo can only be set when no deck plays',
   ki_gestoppt: 'Stop Cypher is set',
   ki_stopp: 'Stop Cypher was pressed; the start was dropped and nothing was started',
-  katalog_fehlt: 'the sample catalogue is not available',
+  katalog_fehlt: 'no library catalog found (is its drive mounted?). To build one from your own folders: djk/start/djk-bibliothek dazu <folder>, then bauen',
   sha_unbekannt: 'that sample is not in the catalogue',
   nur_live: 'that sample is protected (Ableton Live only)',
   quelle_fehlt: 'the sample file is missing',
@@ -31,6 +31,7 @@ export const GRUND_TEXT: Readonly<Record<string, string>> = {
   kein_kern: 'the core is not running',
   transport_laeuft: 'a transport is running; stop it first',
   nur_andreas: 'only Andreas may do this',
+  live_laeuft: 'the live container is running while a deck plays; opening another project would stop it (Andreas must confirm, Cypher cannot)',
   freigabe_nur_andreas: 'only Andreas releases an input for Cypher',
   latenz_nur_andreas: 'a cable-loop latency can only be entered by Andreas (he plugs the cable)',
   profil_unbekannt: 'unknown device profile',
@@ -110,8 +111,8 @@ export const GRUND_TEXT: Readonly<Record<string, string>> = {
   take_zu_lang: 'the take is longer than a WAV file can hold (about 3 hours); the raw file is kept',
   uebernahme_fehler: 'the take could not be placed on the track; the raw file is kept',
   spur_bereich: `at most ${MAX_SPUREN} tracks`,
-  routing_zyklus: 'that routing would feed a group into itself',
-  routing_grenze: 'groups do not nest, and at most 8 groups and 4 returns exist',
+  routing_zyklus: 'that routing would feed a group into itself or into one of its own members',
+  routing_grenze: 'at most 16 groups and 4 returns exist',
   ziel_unbekannt: 'that routing or automation target does not exist (insert and rack lanes: the stage or rack must be on that strip)',
   lane_unbekannt: 'that automation lane does not exist',
   lane_doppelt: 'that track already has an automation lane for this target',
@@ -281,6 +282,20 @@ export const GRUND_TEXT: Readonly<Record<string, string>> = {
   bk_frist: 'the restore did not finish within its time limit; the channel may still be loading',
   bk_graph_fehlt: 'the saved graph file is missing from the graph folder; the channel was left as it is',
   bk_graph_geaendert: 'the graph file changed since the sound was saved; it was loaded anyway',
+  // live modules (plan live-module task 2); slot_belegt keeps its Surge text here, the module export gives its own text
+  unbekanntes_deck: 'there is no such deck (1 to 3)',
+  kein_loop: 'the deck has no active loop to export',
+  kein_bibliothekstrack: 'the deck track is not a library track; only library tracks can become a module',
+  kein_liveprojekt: 'the live container is not open; open it first',
+  kein_liveprojekt_flag: 'a project named live exists without the live flag; rename it',
+  slot_leer: 'that live slot holds no module',
+  modul_hat_stems: 'that module already has its stems',
+  modul_unbekannt: 'no module with that id is saved in the library',   // task 10
+  modul_nicht_einsetzbar: 'this module holds something the target project cannot take (sends, inserts, takes, freezes or host instruments)',
+  rampe_laeuft: 'that live slot is already being cleared or blended; its fader ramp is still running',   // tasks 3 and 8
+  kein_neuer_pfad: 'that stem has no new instrument path to blend to (only Drums and Bass get one, once their MIDI is in)',   // task 8
+  kein_deck: 'no deck is playing on the master, so there is no key to adapt to',   // task 11
+  tonart_unbekannt: 'the key of the module or of the deck on the master is unknown',
 };
 
 // Text zu einem Grund; ein Grund ohne Eintrag bekommt einen englischen Rückfall (der Test hält die Tabelle vollständig)

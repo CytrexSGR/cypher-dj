@@ -129,7 +129,63 @@ cp djk/config/umgebung.env.beispiel ~/.config/cypherdj/umgebung.env
 
 Edit it: where your music is, an optional Traktor `collection.nml`, sample folders for the kits.
 
-## 9. Start
+## 9. First sounds (optional)
+
+A fresh install has no music and no kits. One command generates something to play on your machine, from this
+project's own Cypher Modular graphs:
+
+```sh
+djk/start/djk-starter
+```
+
+It needs `cargo` (section 1) and writes only files that are absent; a file you edited or deleted a sound from is kept
+and reported as `kept`. Steps:
+
+- `graphen`: the example graphs go into `~/.config/cypherdj/baukasten/` (the core's graph folder), with the three
+  generated sample files that some of them need.
+- `kits`: the drum kits `starter` (909 style), `starter-808` and `gm` (a copy of `starter`, written only if you have
+  neither `gm` nor `techno`) go into `~/.config/cypherdj/kits/`.
+- `loops`: three loops go into `~/.config/cypherdj/loops/`.
+- `demo`: a small demo project, `demo`, goes into `~/cypherdj-projekte/`.
+- `bibliothek`: the generated sounds become a library folder (section 10) and the catalog is built.
+
+`--nur <step>` runs one step (repeatable). Return codes: 0 all done, 2 usage, 4 done with skipped steps; the missing
+tool (for example no usable `cargo`) is named on stderr. If the catalog at the target was built by another program,
+that step leaves it alone and says so. The demo plays in the studio; `djk/starter/render_project.ts` renders it
+offline to a WAV file, which needs the `cypherdj-render` built in section 2. Surge XT factory sounds are not part of
+this repository and not generated.
+
+## 10. Your own folders (optional)
+
+`djk-bibliothek` turns your own music and sample folders into the catalog the web interface browses, searches and
+previews. It needs no database of yours; it reads the folders you name.
+
+```sh
+djk/start/djk-bibliothek dazu ~/Music/samples     # add a folder (optional: --typ track|loop|oneshot)
+djk/start/djk-bibliothek dazu ~/Music/tracks
+djk/start/djk-bibliothek bauen                    # scan and build the catalog
+djk/start/djk-bibliothek zeige                    # folders, target, state and counts
+djk/start/djk-bibliothek weg ~/Music/tracks       # remove a folder again
+```
+
+The folders are listed in `~/.config/cypherdj/bibliothek.json`. Every file with an audio extension becomes a track, a
+loop or a one-shot, by three rules. A folder added with `--typ` gives all its files that type. With the default
+`auto`, a `loop` or `oneshot` word in the path decides first (for a loop under two minutes, for a one-shot under 30
+seconds). Otherwise length decides: a minute or more is a track, a file of at least four beats (one bar) at the BPM in its name
+is a loop, everything else is a one-shot. Files that are empty, cut off, unreadable or not audio are skipped and counted
+by reason; the build still succeeds.
+
+The catalog is written as a whole new file at the path the page reads: `CYPHERDJ_KATALOG`, else `katalog.sqlite` next
+to `CYPHERDJ_MEDIATHEK`, else `~/.local/share/cypherdj/mediathek/katalog.sqlite`. A catalog that another program built
+is never replaced: `bauen` returns 3 and `zeige` prints `state: foreign` and `built by another program, read only`; point `CYPHERDJ_KATALOG` at another file to
+build your own. Other returns: 4 a folder is missing (an unplugged drive; nothing is changed; `--ohne-fehlende` builds
+without it), 5 the file system cannot take the catalog (it needs hard links, so not exFAT or FAT), 6 the scan found
+nothing but your catalog has rows (`--leer-erlaubt` empties it on purpose), 2 usage or no tool to read the files.
+
+`mutagen` (in `djk/requirements.txt`) is optional: it reads tags and durations. Without it the build says so, reads
+durations with soundfile or ffprobe, and stores no tags. A second `bauen` with nothing changed hashes no files.
+
+## 11. Start
 
 ```sh
 djk/start/djk-start              # silent test sink, nothing reaches your speakers
@@ -139,6 +195,9 @@ djk/start/djk-start --strudel    # with the three pattern channels
 `djk-start` starts everything as transient systemd user units and prints the address of the web
 interface. To hear it, pass your output with `--master <sink>:<port>` and `--ton-frei`; see the
 comments at the top of `djk/start/djk-start`. `djk/start/djk-stop` stops everything.
+
+If the kit `techno` is missing, `--strudel` uses the starter kit from section 9 and says so, as long as its `kit.json`
+is valid. A kit you name yourself with `--strudel-kit` and that is missing stops the start with a message.
 
 `djk/start/djk-start --strudel --bk-stroeme` adds five more pattern streams for Cypher Modular graphs (erz/5 to erz/7 and
 the two loop box pads).

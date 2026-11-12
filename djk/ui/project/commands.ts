@@ -10,7 +10,7 @@
 import {
   AUTO_ZIELE, MAX_AUTO_PUNKTE, MAX_LANE_PUNKTE, MAX_LANES_PRO_SPUR, MAX_KETTEN_LANEN,
   GERAET_PRAEFIX, BK_KNOPF_VORGABE, RB_VORGABE_NORM, istGeraetZiel, istRbGeraet, passtGeraetZiel, normalisiereLane, punktePruefung,
-  istKettenZiel, zerlegeKettenZiel, kettenZielBereich, zielBereichVon, alleStraenge,
+  istKettenZiel, istBlendZiel, blendFader, blendPfad, NEU_TRIM_MIN, NEU_TRIM_MAX, zerlegeKettenZiel, kettenZielBereich, zielBereichVon, alleStraenge,
   type Lane, type Punkt, type Ziel,
   FADER_MAX, FADER_MIN, GAIN_MAX, GAIN_MIN, GRUPPE_MAX, INTERNE_EINGAENGE, LOOP_MIN, MAX_ARM_AUDIO, MAX_BEAT, MAX_CLIPS,
   MAX_GRUPPEN, MAX_NOTEN, MAX_RETURNS, MAX_SPUREN, HALL_FELDER, HALL_VORGABE,
@@ -22,7 +22,7 @@ import {
   TEMPO_MAX, TEMPO_MIN, WIRT_SLOTS, SURGE_NAME, SURGE_PARAMETER_MAX, istPatchName,
   MAX_TAKES_PRO_SPUR, TAKE_NAME_MAX, entferneLeereTakes, type Take,
   istObjekt, kanonisch, neueId, neueNotenId, notenNummer, notenZaehler,
-  pruefeFehler, spurSicht, sucheClip, sucheSpur, wiedergabeSicht, warpPruefung, entstehungPruefung, type Entstehung,
+  pruefeFehler, pruefeModulFehler, spurSicht, sucheClip, sucheSpur, wiedergabeSicht, warpPruefung, entstehungPruefung, type Entstehung,
   type AudioClip, type Clip, type Glied, type RackGeraet, MAX_GLIEDER, type Gruppe, type Herkunft, type Geraet,
   type Insert, type InsertSchluessel, type InsertTraeger, type MidiClip, type Note, type Projekt, type Return, type Send, type Spur, type Warp,
   type DekodiertZustand, HOST_PFAD_ZEICHEN, HOST_UID_ZEICHEN, MAX_LATENZ_EXTRA,
@@ -30,7 +30,7 @@ import {
 } from './model.ts';
 import { INSERT_ARTEN } from './insert_key.ts';
 import { wendeMusterAn, musterAbdruck, type KitKlang, type MusterErgebnis, type MusterFehlschlag } from './pattern_clip.ts';
-import { pruefeSchluessel, type SchluesselFrage } from './routing_rules.ts';
+import { nachkommen, pruefeAlleSchluessel, pruefeSchluessel, vorfahren, type SchluesselFrage } from './routing_rules.ts';
 import { PRESET_ID } from '../presets/preset_id.ts';
 import { unterschied, type Patch, pfadSegment } from './patch.ts';
 import { klingtGleich, TAKE_KOPIE_EPS } from './takes.ts';
@@ -366,6 +366,7 @@ function rackGeraetVon(p: Projekt, a: Args): RackGeraet {
 }
 // start value of a new lane: what the track has now, so the new line changes nothing audible until a point is moved
 export function laneStart(strang: Spur | InsertTraeger, ziel: string): number {
+  if (istBlendZiel(ziel)) return (strang as { blend?: number }).blend ?? 0;
   const k = zerlegeKettenZiel(ziel);
   if (k) {   // 1.12 slice 6: a chain lane starts at the row value of its parameter (the macro value for a macro lane)
     if ('makro' in k) return strang.rack?.werte[k.makro - 1] ?? 0;
@@ -1245,7 +1246,7 @@ const PRO_BEFEHL: Record<string, (p: Projekt, a: Args, ctx: Kontext) => void> = 
     if (gl.length >= MAX_GRUPPEN) ab('routing_grenze', `all ${MAX_GRUPPEN} groups are used`);
     const nr = Array.from({ length: MAX_GRUPPEN }, (_, i) => i + 1).find((n) => !gl.some((g) => g.nr === n)) ?? ab('routing_grenze', 'no free group number');
     if (a.farbe !== undefined && (typeof a.farbe !== 'string' || !FARBE_OK.test(a.farbe))) ab('argument_ungueltig', 'farbe: #rrggbb erwartet');
-    let mitglieder: Spur[] = [];
+    let mitglieder: (Spur | Gruppe)[] = [];
     if (a.mitglieder !== undefined) {
       if (!Array.isArray(a.mitglieder) || a.mitglieder.length < 1 || a.mitglieder.length > MAX_SPUREN) {
         ab('argument_ungueltig', 'mitglieder: nicht leere Liste von Spur-IDs erwartet');
@@ -1254,13 +1255,19 @@ const PRO_BEFEHL: Record<string, (p: Projekt, a: Args, ctx: Kontext) => void> = 
       mitglieder = a.mitglieder.map((x: unknown) => {
         if (typeof x !== 'string' || ids.has(x)) return ab('argument_ungueltig', 'mitglieder: Spur-IDs ohne Doppelte erwartet');
         ids.add(x);
-        return spurVon(p, x);
+        return sucheSpur(p, x) ?? (p.gruppen ?? []).find((q) => q.id === x) ?? ab('spur_unbekannt', x);   // a member is a track or a group
       });
     }
     const g: Gruppe = { id: neueId(p, 'gruppe'), nr, name: text(a, 'name', 80) ?? `Group ${nr}`, farbe: a.farbe ?? SPUR_FARBEN[(nr - 1) % SPUR_FARBEN.length],
       fader_db: 0, pan: 0, mute: false, solo: false, gefaltet: false };
     gl.push(g);
-    for (const s of mitglieder) s.ausgang = { art: 'gruppe', id: g.id };
+    // only the top-most selected members move: a selected member that already plays into another selected group stays inside it
+    const gewaehlt = new Set(mitglieder.map((m) => m.id));
+    for (const s of mitglieder) {
+      const oben = s.ausgang ? [s.ausgang.id, ...vorfahren(p, s.ausgang.id)] : [];
+      if (!oben.some((id) => gewaehlt.has(id))) s.ausgang = { art: 'gruppe', id: g.id };   // the new group is a leaf now, so no member can be above it
+    }
+    pruefeAlleSchluessel(p);
   },
 
   gruppenspur_aendern(p, a) {
@@ -1280,18 +1287,59 @@ const PRO_BEFEHL: Record<string, (p: Projekt, a: Args, ctx: Kontext) => void> = 
     if (gefaltet !== undefined) g.gefaltet = gefaltet;
   },
 
-  gruppenspur_loeschen(p, a) {   // Mitglieder wechseln auf master (derselbe Schritt), nie verwaiste Ziele
+  // Live modules (decision 7): the blend of a stem group. Stores `blend` (0..1) on the group and sets the faders of its two tracks (the original audio
+  // track and the new instrument track) by the equal-power law. A group without a new path has no blend (kein_neuer_pfad).
+  blend_setzen(p, a) {
+    erlaube(a, 'gruppe_id', 'wert');
+    const g = gruppeVon(p, idArg(a, 'gruppe_id'));
+    const wert = zahl(a, 'wert', 0, 1)!;
+    const pf = blendPfad(p, g.id);
+    if (pf === null) ab('kein_neuer_pfad', `${g.id} has no new instrument path to blend`);
+    const f = blendFader(wert, g.neu_trim_db ?? 0);
+    g.blend = wert;
+    pf.original.fader_db = f.original;
+    pf.neu.fader_db = f.neu;
+  },
+
+  // Level offset of the new path against the original (dB, measured by the server after the MIDI render): stored on the stem group; the new fader follows
+  // the current blend with it. 0 removes the field.
+  blend_trim_setzen(p, a) {
+    erlaube(a, 'gruppe_id', 'db');
+    const g = gruppeVon(p, idArg(a, 'gruppe_id'));
+    const db = zahl(a, 'db', NEU_TRIM_MIN, NEU_TRIM_MAX)!;
+    const pf = blendPfad(p, g.id);
+    if (pf === null) ab('kein_neuer_pfad', `${g.id} has no new instrument path to trim`);
+    if (db === 0) delete g.neu_trim_db; else g.neu_trim_db = db;
+    pf.neu.fader_db = blendFader(g.blend ?? 0, db).neu;
+  },
+
+  // Live modules (plan live-module decision 15): marks a top-level group as the module of slot A or B. Internal: only baueModul (project/live.ts) calls it
+  // as one step of building the module tree; gruppenspur_aendern's allow list stays as it is. One module per slot.
+  modul_setzen(p, a) {
+    erlaube(a, 'gruppe_id', 'modul');
+    const g = gruppeVon(p, idArg(a, 'gruppe_id'));
+    if (g.ausgang) ab('argument_ungueltig', 'modul: only a group that plays into the master can be a module');
+    const f = pruefeModulFehler(a.modul);
+    if (f) ab('argument_ungueltig', f);
+    const slot = (a.modul as { slot?: 'A' | 'B' }).slot;
+    const belegt = (p.gruppen ?? []).some((x) => x.id !== g.id && x.ausgang === undefined && x.modul?.slot === slot);
+    if (slot !== undefined && belegt) ab('slot_belegt', `live slot ${slot} is taken`);
+    g.modul = structuredClone(a.modul) as NonNullable<Gruppe['modul']>;
+  },
+
+  gruppenspur_loeschen(p, a) {   // tracks and child groups move to the deleted group's own target (its parent or master, same step), never orphaned targets
     erlaube(a, 'gruppe_id');
     const gl = (p.gruppen ??= []);
     const g = gruppeVon(p, idArg(a, 'gruppe_id'));
-    for (const s of p.spuren) if (s.ausgang?.id === g.id) delete s.ausgang;
+    for (const s of [...p.spuren, ...gl]) if (s.ausgang?.id === g.id) { if (g.ausgang) s.ausgang = { art: 'gruppe', id: g.ausgang.id }; else delete s.ausgang; }
     gl.splice(gl.indexOf(g), 1);
     // slice 5: a key on this group would dangle
     for (const x of alleInserts(p)) if (x.insert.key?.quelle === 'grp' && x.insert.key.nr === g.nr) delete x.insert.key;
+    pruefeAlleSchluessel(p);   // the children moved up: levels changed, a remaining key may now be late
   },
 
-  // strang_id: eine Spur- oder Gruppen-ID. Spuren dürfen in eine Gruppe (Tiefe 1); eine Gruppe kann nur auf master zeigen:
-  // in sich selbst ist routing_zyklus, in eine andere routing_grenze.
+  // strang_id: a track or group ID. A track may feed any group; a group may feed the master or another group, except itself or one of its
+  // descendants (routing_zyklus).
   ziel_setzen(p, a) {
     erlaube(a, 'strang_id', 'ausgang');
     const id = idArg(a, 'strang_id');
@@ -1304,12 +1352,16 @@ const PRO_BEFEHL: Record<string, (p: Projekt, a: Args, ctx: Kontext) => void> = 
     const spur = sucheSpur(p, id);
     if (spur) {
       if (gid === null) delete spur.ausgang; else spur.ausgang = { art: 'gruppe', id: gid };
+      pruefeAlleSchluessel(p);
       return;
     }
     const grp = (p.gruppen ?? []).find((g) => g.id === id);
     if (!grp) return ab('spur_unbekannt', id);
-    if (gid === null) return;
-    return gid === grp.id ? ab('routing_zyklus', `group ${id} cannot feed itself`) : ab('routing_grenze', 'groups do not nest (depth 1)');
+    if (gid === null) { delete grp.ausgang; pruefeAlleSchluessel(p); return; }
+    if (gid === grp.id) return ab('routing_zyklus', `group ${id} cannot feed itself`);
+    if (nachkommen(p, grp.id).gruppen.includes(gid)) return ab('routing_zyklus', `group ${gid} plays into group ${id}, so ${id} cannot feed it`);
+    grp.ausgang = { art: 'gruppe', id: gid };
+    pruefeAlleSchluessel(p);   // levels and ancestors changed: a key that is now a cycle or too late refuses the move
   },
 
   master_aendern(p, a) {
@@ -1729,14 +1781,19 @@ const PRO_BEFEHL: Record<string, (p: Projekt, a: Args, ctx: Kontext) => void> = 
     const kennung = strangKennung(p, strang);
     if (a.ziel === undefined) ab('argument_ungueltig', 'ziel: fehlt');
     const kettig = istKettenZiel(a.ziel);
-    if (!kettig && !(AUTO_ZIELE as readonly unknown[]).includes(a.ziel)) {
+    if (istBlendZiel(a.ziel)) {   // live modules decision 7: the blend lane lives on the stem group it names, nowhere else
+      const g = (p.gruppen ?? []).find((x) => x.id === (strang as { id?: string }).id);
+      if (!g || a.ziel !== `blend:${g.id}` || blendPfad(p, g.id) === null) {
+        ab('ziel_unbekannt', `${a.ziel} (only on a stem group with a new path, as blend:<its id>)`);
+      }
+    } else if (!kettig && !(AUTO_ZIELE as readonly unknown[]).includes(a.ziel)) {
       ab('ziel_unbekannt', `${String(a.ziel)} (${AUTO_ZIELE.join(' | ')} | insert.<stage id>.<param> | rack.m1..m4)`);
     }
     const s = strang as Spur;
-    if (!kettig && (strang === p.master || sucheSpur(p, kennung) !== strang)) {
+    if (!kettig && !istBlendZiel(a.ziel) && (strang === p.master || sucheSpur(p, kennung) !== strang)) {
       ab('ziel_unbekannt', `${String(a.ziel)} (a device lane belongs to a track; ${kennung} is not one)`);
     }
-    if (!kettig && istGeraetZiel(a.ziel as string) && !(s.art === 'instrument' && passtGeraetZiel(a.ziel as string, s.geraet))) {
+    if (!kettig && !istBlendZiel(a.ziel) && istGeraetZiel(a.ziel as string) && !(s.art === 'instrument' && passtGeraetZiel(a.ziel as string, s.geraet))) {
       ab('ziel_unbekannt', `${String(a.ziel)} (only on a track whose device has that parameter: RB-338 lautstaerke, cutoff, resonanz, env_mod; bk k1 to k64)`);
     }
     if (kettig) {

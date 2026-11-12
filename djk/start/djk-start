@@ -73,7 +73,7 @@ if [ -f "$UMG" ]; then
   [ -z "$_gesetzt" ] || eval "$_gesetzt"
 fi
 
-I=${CYPHERDJ_INSTANZ:-}; MASTER=""; CUE=""; OHNE_CUE=0; TON_FREI=0; STRUDEL=0; INSTR=0; ARR1=0; ARR2=0; KIT=techno; KIT2=battery; KIT3=battery; MELODIE=surge; BASS=""; BK_STROEME=0; KERN_KONFIG=""; LS_KONFIG=""; KIT_ORDNER=""; PRUEF=1
+I=${CYPHERDJ_INSTANZ:-}; MASTER=""; CUE=""; OHNE_CUE=0; TON_FREI=0; STRUDEL=0; INSTR=0; ARR1=0; ARR2=0; KIT=techno; KIT2=battery; KIT3=battery; KIT_G=0; KIT2_G=0; KIT3_G=0; MELODIE=surge; BASS=""; BK_STROEME=0; KERN_KONFIG=""; LS_KONFIG=""; KIT_ORDNER=""; PRUEF=1
 MODUS=start; VORLAGEN_NACH=""
 # Option mit Wert: fehlt er (letztes Argument) oder ist er selbst eine Option, Abbruch 2. Nur --instanz darf leer sein.
 wert() {
@@ -86,7 +86,7 @@ while [ $# -gt 0 ]; do
     --master|--cue|--strudel-kit|--strudel-kit2|--strudel-kit3|--melodie|--bass|--instanz|--kern-konfig|--leitstand-konfig|--kit-ordner|--vorlagen-nach) wert "$1" $# "${2-}";;
   esac
   case "$1" in
-    --master) MASTER=$2; shift 2;; --cue) CUE=$2; shift 2;; --ohne-cue) OHNE_CUE=1; shift;; --strudel) STRUDEL=1; shift;; --instrumente) INSTR=1; shift;; --arr1) ARR1=1; shift;; --arr2) ARR2=1; shift;; --bk-stroeme) BK_STROEME=1; shift;; --melodie) MELODIE=$2; shift 2;; --bass) BASS=$2; shift 2;; --strudel-kit) KIT=$2; shift 2;; --strudel-kit2) KIT2=$2; shift 2;; --strudel-kit3) KIT3=$2; shift 2;;
+    --master) MASTER=$2; shift 2;; --cue) CUE=$2; shift 2;; --ohne-cue) OHNE_CUE=1; shift;; --strudel) STRUDEL=1; shift;; --instrumente) INSTR=1; shift;; --arr1) ARR1=1; shift;; --arr2) ARR2=1; shift;; --bk-stroeme) BK_STROEME=1; shift;; --melodie) MELODIE=$2; shift 2;; --bass) BASS=$2; shift 2;; --strudel-kit) KIT=$2; KIT_G=1; shift 2;; --strudel-kit2) KIT2=$2; KIT2_G=1; shift 2;; --strudel-kit3) KIT3=$2; KIT3_G=1; shift 2;;
     --ton-frei) TON_FREI=1; shift;; --instanz) I=$2; shift 2;;
     --kern-konfig) KERN_KONFIG=$(readlink -f -- "$2"); shift 2;;
     --leitstand-konfig) LS_KONFIG=$(readlink -f -- "$2"); shift 2;;
@@ -101,6 +101,15 @@ done
 [ "$BK_STROEME" = 1 ] && [ "$STRUDEL" != 1 ] && { echo "djk-start: --bk-stroeme needs --strudel" >&2; exit 2; }
 [ "$MELODIE" != surge ] && [ "$INSTR" != 1 ] && { echo "djk-start: --melodie needs --instrumente" >&2; exit 2; }
 [ -n "$BASS" ] && [ "$INSTR" != 1 ] && { echo "djk-start: --bass needs --instrumente" >&2; exit 2; }
+# Starter kit (plan 2026-11-12): the Strudel kits are chosen here, before anything starts, in the kit folder of this start. A default kit that is
+# missing falls back to the starter kit (djk-starter); a kit named with --strudel-kit* that is missing, or no kit at all, is an error (2).
+KITS=${KIT_ORDNER:-$HOME/.config/cypherdj/kits}
+if [ "$STRUDEL" = 1 ] && [ "$MODUS" != zustand ]; then
+  . "$HIER/kit_choice.sh"
+  KIT=$(kit_wahl "$KITS" "$KIT_G" "$KIT") || exit 2
+  KIT2=$(kit_wahl "$KITS" "$KIT2_G" "$KIT2") || exit 2
+  KIT3=$(kit_wahl "$KITS" "$KIT3_G" "$KIT3") || exit 2
+fi
 case "$BASS" in ""|surge|rb338) ;; *) echo "djk-start: --bass '$BASS' invalid, use surge or rb338" >&2; exit 2;; esac
 case "$MELODIE" in surge|fluegel|baukasten) ;; *) echo "djk-start: --melodie '$MELODIE' invalid, use surge, fluegel or baukasten" >&2; exit 2;; esac
 case "$I" in
@@ -519,14 +528,14 @@ if [ "$STRUDEL" = 1 ]; then  # Plan 2026-09-27 + Studio S1: drei Strudel-Erzeuge
   for s in 1 2 3; do
     ZIEL=""
     case $s in 1) K=$KIT; N=""; ZUSATZ="--kit-zusatz rec$SFX";; 2) K=$KIT2; N=2; ZUSATZ=""; [ "$INSTR" = 1 ] && ZIEL="--ziel midi:1:1";; 3) K=$KIT3; N=3; ZUSATZ=""; [ "$INSTR" = 1 ] && ZIEL="--ziel midi:2:1";; esac
-    [ -f "$HOME/.config/cypherdj/kits/$K/kit.json" ] || abbruch "kit $K missing (djk/generator/kit_build.py)" ""
+    [ -f "$KITS/$K/kit.json" ] || abbruch "kit $K missing (djk/generator/kit_build.py)" ""
     ORD="/dev/shm/cypherdj$SFX/erzeuger$N"; U="cypherdj-erzeuger$N$SFX"; P=$(( P_ERZ + s - 1 ))
     mkdir -p "$ORD"
     systemd-run --user --quiet --collect --unit="$U" ${I:+--setenv=CYPHERDJ_INSTANZ=$I} \
       -p Restart=always -p RestartSec=1 -p RestartPreventExitStatus=2 -p PartOf=cypherdj.target \
       /usr/bin/node --permission --allow-fs-read="$DJK" --allow-fs-read="$HOME/strudel" \
-      --allow-fs-read="$HOME/.config/cypherdj/kits" --allow-fs-read="$ORD" --allow-fs-write="$ORD" \
-      "$DJK/generator/generator.mjs" --kern-port "$P_KERN" --abo-port "$P" --kit "$K" $ZUSATZ $ZIEL \
+      --allow-fs-read="$KITS" --allow-fs-read="$ORD" --allow-fs-write="$ORD" \
+      "$DJK/generator/generator.mjs" --kern-port "$P_KERN" --abo-port "$P" ${KIT_ORDNER:+--kit-ordner "$KIT_ORDNER"} --kit "$K" $ZUSATZ $ZIEL \
       --name "erzeuger$N" --strom "$s" --kanal "erz/$s" --muster "$ORD/strom1.js" 2>&1 | sed 's/^/    /' >&2
     UNITS+=("$U")
     warte 10 "$U" lauscht u "$P" || abbruch "$(w "erzeuger $s does not listen on udp $P")" "$U"

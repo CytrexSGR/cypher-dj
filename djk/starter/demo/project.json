@@ -1,0 +1,1289 @@
+{
+ "format": "cypherdj-projekt/2",
+ "name": "Demo",
+ "rev": 1,
+ "wiedergabe_rev": 1,
+ "tempo_bpm": 128,
+ "taktart": [
+  4,
+  4
+ ],
+ "loop": {
+  "an": true,
+  "von_beat": 0,
+  "bis_beat": 64
+ },
+ "metronom": {
+  "an": false,
+  "pegel_db": -12,
+  "ziel": "master"
+ },
+ "spuren": [
+  {
+   "id": "s1",
+   "nr": 1,
+   "name": "Drums",
+   "farbe": "#e0563b",
+   "art": "instrument",
+   "geraet": {
+    "art": "intern",
+    "name": "kit",
+    "kit": "starter"
+   },
+   "fader_db": -4.5,
+   "pan": 0,
+   "mute": false,
+   "solo": false,
+   "von": "andreas",
+   "clips": [
+    {
+     "id": "c1",
+     "art": "midi",
+     "name": "drums",
+     "start_beat": 0,
+     "laenge_beats": 64,
+     "loop_beats": 16,
+     "noten": [
+      {
+       "id": "n1",
+       "beat": 0,
+       "laenge": 0.25,
+       "ton": 36,
+       "vel": 110
+      },
+      {
+       "id": "n2",
+       "beat": 0.5,
+       "laenge": 0.125,
+       "ton": 42,
+       "vel": 90
+      },
+      {
+       "id": "n3",
+       "beat": 0.25,
+       "laenge": 0.125,
+       "ton": 42,
+       "vel": 55
+      },
+      {
+       "id": "n4",
+       "beat": 0.75,
+       "laenge": 0.125,
+       "ton": 42,
+       "vel": 55
+      },
+      {
+       "id": "n5",
+       "beat": 1,
+       "laenge": 0.25,
+       "ton": 36,
+       "vel": 110
+      },
+      {
+       "id": "n6",
+       "beat": 1,
+       "laenge": 0.25,
+       "ton": 39,
+       "vel": 100
+      },
+      {
+       "id": "n7",
+       "beat": 1.5,
+       "laenge": 0.125,
+       "ton": 42,
+       "vel": 90
+      },
+      {
+       "id": "n8",
+       "beat": 1.25,
+       "laenge": 0.125,
+       "ton": 42,
+       "vel": 55
+      },
+      {
+       "id": "n9",
+       "beat": 1.75,
+       "laenge": 0.125,
+       "ton": 42,
+       "vel": 55
+      },
+      {
+       "id": "n10",
+       "beat": 2,
+       "laenge": 0.25,
+       "ton": 36,
+       "vel": 110
+      },
+      {
+       "id": "n11",
+       "beat": 2.5,
+       "laenge": 0.125,
+       "ton": 42,
+       "vel": 90
+      },
+      {
+       "id": "n12",
+       "beat": 2.25,
+       "laenge": 0.125,
+       "ton": 42,
+       "vel": 55
+      },
+      {
+       "id": "n13",
+       "beat": 2.75,
+       "laenge": 0.125,
+       "ton": 42,
+       "vel": 55
+      },
+      {
+       "id": "n14",
+       "beat": 3,
+       "laenge": 0.25,
+       "ton": 36,
+       "vel": 110
+      },
+      {
+       "id": "n15",
+       "beat": 3,
+       "laenge": 0.25,
+       "ton": 39,
+       "vel": 100
+      },
+      {
+       "id": "n16",
+       "beat": 3.25,
+       "laenge": 0.125,
+       "ton": 42,
+       "vel": 55
+      },
+      {
+       "id": "n17",
+       "beat": 3.75,
+       "laenge": 0.125,
+       "ton": 42,
+       "vel": 55
+      },
+      {
+       "id": "n18",
+       "beat": 3.5,
+       "laenge": 0.25,
+       "ton": 46,
+       "vel": 85
+      },
+      {
+       "id": "n19",
+       "beat": 4,
+       "laenge": 0.25,
+       "ton": 36,
+       "vel": 110
+      },
+      {
+       "id": "n20",
+       "beat": 4.5,
+       "laenge": 0.125,
+       "ton": 42,
+       "vel": 90
+      },
+      {
+       "id": "n21",
+       "beat": 4.25,
+       "laenge": 0.125,
+       "ton": 42,
+       "vel": 55
+      },
+      {
+       "id": "n22",
+       "beat": 4.75,
+       "laenge": 0.125,
+       "ton": 42,
+       "vel": 55
+      },
+      {
+       "id": "n23",
+       "beat": 5,
+       "laenge": 0.25,
+       "ton": 36,
+       "vel": 110
+      },
+      {
+       "id": "n24",
+       "beat": 5,
+       "laenge": 0.25,
+       "ton": 39,
+       "vel": 100
+      },
+      {
+       "id": "n25",
+       "beat": 5.5,
+       "laenge": 0.125,
+       "ton": 42,
+       "vel": 90
+      },
+      {
+       "id": "n26",
+       "beat": 5.25,
+       "laenge": 0.125,
+       "ton": 42,
+       "vel": 55
+      },
+      {
+       "id": "n27",
+       "beat": 5.75,
+       "laenge": 0.125,
+       "ton": 42,
+       "vel": 55
+      },
+      {
+       "id": "n28",
+       "beat": 6,
+       "laenge": 0.25,
+       "ton": 36,
+       "vel": 110
+      },
+      {
+       "id": "n29",
+       "beat": 6.5,
+       "laenge": 0.125,
+       "ton": 42,
+       "vel": 90
+      },
+      {
+       "id": "n30",
+       "beat": 6.25,
+       "laenge": 0.125,
+       "ton": 42,
+       "vel": 55
+      },
+      {
+       "id": "n31",
+       "beat": 6.75,
+       "laenge": 0.125,
+       "ton": 42,
+       "vel": 55
+      },
+      {
+       "id": "n32",
+       "beat": 7,
+       "laenge": 0.25,
+       "ton": 36,
+       "vel": 110
+      },
+      {
+       "id": "n33",
+       "beat": 7,
+       "laenge": 0.25,
+       "ton": 39,
+       "vel": 100
+      },
+      {
+       "id": "n34",
+       "beat": 7.25,
+       "laenge": 0.125,
+       "ton": 42,
+       "vel": 55
+      },
+      {
+       "id": "n35",
+       "beat": 7.75,
+       "laenge": 0.125,
+       "ton": 42,
+       "vel": 55
+      },
+      {
+       "id": "n36",
+       "beat": 7.5,
+       "laenge": 0.25,
+       "ton": 46,
+       "vel": 85
+      },
+      {
+       "id": "n37",
+       "beat": 8,
+       "laenge": 0.25,
+       "ton": 36,
+       "vel": 110
+      },
+      {
+       "id": "n38",
+       "beat": 8.5,
+       "laenge": 0.125,
+       "ton": 42,
+       "vel": 90
+      },
+      {
+       "id": "n39",
+       "beat": 8.25,
+       "laenge": 0.125,
+       "ton": 42,
+       "vel": 55
+      },
+      {
+       "id": "n40",
+       "beat": 8.75,
+       "laenge": 0.125,
+       "ton": 42,
+       "vel": 55
+      },
+      {
+       "id": "n41",
+       "beat": 9,
+       "laenge": 0.25,
+       "ton": 36,
+       "vel": 110
+      },
+      {
+       "id": "n42",
+       "beat": 9,
+       "laenge": 0.25,
+       "ton": 39,
+       "vel": 100
+      },
+      {
+       "id": "n43",
+       "beat": 9.5,
+       "laenge": 0.125,
+       "ton": 42,
+       "vel": 90
+      },
+      {
+       "id": "n44",
+       "beat": 9.25,
+       "laenge": 0.125,
+       "ton": 42,
+       "vel": 55
+      },
+      {
+       "id": "n45",
+       "beat": 9.75,
+       "laenge": 0.125,
+       "ton": 42,
+       "vel": 55
+      },
+      {
+       "id": "n46",
+       "beat": 10,
+       "laenge": 0.25,
+       "ton": 36,
+       "vel": 110
+      },
+      {
+       "id": "n47",
+       "beat": 10.5,
+       "laenge": 0.125,
+       "ton": 42,
+       "vel": 90
+      },
+      {
+       "id": "n48",
+       "beat": 10.25,
+       "laenge": 0.125,
+       "ton": 42,
+       "vel": 55
+      },
+      {
+       "id": "n49",
+       "beat": 10.75,
+       "laenge": 0.125,
+       "ton": 42,
+       "vel": 55
+      },
+      {
+       "id": "n50",
+       "beat": 11,
+       "laenge": 0.25,
+       "ton": 36,
+       "vel": 110
+      },
+      {
+       "id": "n51",
+       "beat": 11,
+       "laenge": 0.25,
+       "ton": 39,
+       "vel": 100
+      },
+      {
+       "id": "n52",
+       "beat": 11.25,
+       "laenge": 0.125,
+       "ton": 42,
+       "vel": 55
+      },
+      {
+       "id": "n53",
+       "beat": 11.75,
+       "laenge": 0.125,
+       "ton": 42,
+       "vel": 55
+      },
+      {
+       "id": "n54",
+       "beat": 11.5,
+       "laenge": 0.25,
+       "ton": 46,
+       "vel": 85
+      },
+      {
+       "id": "n55",
+       "beat": 12,
+       "laenge": 0.25,
+       "ton": 36,
+       "vel": 110
+      },
+      {
+       "id": "n56",
+       "beat": 12.5,
+       "laenge": 0.125,
+       "ton": 42,
+       "vel": 90
+      },
+      {
+       "id": "n57",
+       "beat": 12.25,
+       "laenge": 0.125,
+       "ton": 42,
+       "vel": 55
+      },
+      {
+       "id": "n58",
+       "beat": 12.75,
+       "laenge": 0.125,
+       "ton": 42,
+       "vel": 55
+      },
+      {
+       "id": "n59",
+       "beat": 13,
+       "laenge": 0.25,
+       "ton": 36,
+       "vel": 110
+      },
+      {
+       "id": "n60",
+       "beat": 13,
+       "laenge": 0.25,
+       "ton": 39,
+       "vel": 100
+      },
+      {
+       "id": "n61",
+       "beat": 13.5,
+       "laenge": 0.125,
+       "ton": 42,
+       "vel": 90
+      },
+      {
+       "id": "n62",
+       "beat": 13.25,
+       "laenge": 0.125,
+       "ton": 42,
+       "vel": 55
+      },
+      {
+       "id": "n63",
+       "beat": 13.75,
+       "laenge": 0.125,
+       "ton": 42,
+       "vel": 55
+      },
+      {
+       "id": "n64",
+       "beat": 14,
+       "laenge": 0.25,
+       "ton": 36,
+       "vel": 110
+      },
+      {
+       "id": "n65",
+       "beat": 14.5,
+       "laenge": 0.125,
+       "ton": 42,
+       "vel": 90
+      },
+      {
+       "id": "n66",
+       "beat": 14.25,
+       "laenge": 0.125,
+       "ton": 42,
+       "vel": 55
+      },
+      {
+       "id": "n67",
+       "beat": 14.75,
+       "laenge": 0.125,
+       "ton": 42,
+       "vel": 55
+      },
+      {
+       "id": "n68",
+       "beat": 15,
+       "laenge": 0.25,
+       "ton": 36,
+       "vel": 110
+      },
+      {
+       "id": "n69",
+       "beat": 15,
+       "laenge": 0.25,
+       "ton": 39,
+       "vel": 100
+      },
+      {
+       "id": "n70",
+       "beat": 15.25,
+       "laenge": 0.125,
+       "ton": 42,
+       "vel": 55
+      },
+      {
+       "id": "n71",
+       "beat": 15.75,
+       "laenge": 0.125,
+       "ton": 42,
+       "vel": 55
+      },
+      {
+       "id": "n72",
+       "beat": 15.5,
+       "laenge": 0.25,
+       "ton": 46,
+       "vel": 85
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "s2",
+   "nr": 2,
+   "name": "Bass",
+   "farbe": "#3b7be0",
+   "art": "instrument",
+   "geraet": {
+    "art": "intern",
+    "name": "bk",
+    "graph": "synth-mono",
+    "parameter": {}
+   },
+   "fader_db": 1.5,
+   "pan": 0,
+   "mute": false,
+   "solo": false,
+   "von": "andreas",
+   "clips": [
+    {
+     "id": "c2",
+     "art": "midi",
+     "name": "bass",
+     "start_beat": 0,
+     "laenge_beats": 64,
+     "loop_beats": 16,
+     "noten": [
+      {
+       "id": "n73",
+       "beat": 0.5,
+       "laenge": 0.25,
+       "ton": 33,
+       "vel": 100
+      },
+      {
+       "id": "n74",
+       "beat": 1.5,
+       "laenge": 0.25,
+       "ton": 33,
+       "vel": 100
+      },
+      {
+       "id": "n75",
+       "beat": 2.5,
+       "laenge": 0.25,
+       "ton": 33,
+       "vel": 100
+      },
+      {
+       "id": "n76",
+       "beat": 3.5,
+       "laenge": 0.25,
+       "ton": 33,
+       "vel": 100
+      },
+      {
+       "id": "n77",
+       "beat": 4.5,
+       "laenge": 0.25,
+       "ton": 33,
+       "vel": 100
+      },
+      {
+       "id": "n78",
+       "beat": 5.5,
+       "laenge": 0.25,
+       "ton": 33,
+       "vel": 100
+      },
+      {
+       "id": "n79",
+       "beat": 6.5,
+       "laenge": 0.25,
+       "ton": 33,
+       "vel": 100
+      },
+      {
+       "id": "n80",
+       "beat": 7.5,
+       "laenge": 0.25,
+       "ton": 45,
+       "vel": 100
+      },
+      {
+       "id": "n81",
+       "beat": 8.5,
+       "laenge": 0.25,
+       "ton": 36,
+       "vel": 100
+      },
+      {
+       "id": "n82",
+       "beat": 9.5,
+       "laenge": 0.25,
+       "ton": 36,
+       "vel": 100
+      },
+      {
+       "id": "n83",
+       "beat": 10.5,
+       "laenge": 0.25,
+       "ton": 36,
+       "vel": 100
+      },
+      {
+       "id": "n84",
+       "beat": 11.5,
+       "laenge": 0.25,
+       "ton": 36,
+       "vel": 100
+      },
+      {
+       "id": "n85",
+       "beat": 12.5,
+       "laenge": 0.25,
+       "ton": 31,
+       "vel": 100
+      },
+      {
+       "id": "n86",
+       "beat": 13.5,
+       "laenge": 0.25,
+       "ton": 31,
+       "vel": 100
+      },
+      {
+       "id": "n87",
+       "beat": 14.5,
+       "laenge": 0.25,
+       "ton": 31,
+       "vel": 100
+      },
+      {
+       "id": "n88",
+       "beat": 15.5,
+       "laenge": 0.25,
+       "ton": 43,
+       "vel": 100
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "s3",
+   "nr": 3,
+   "name": "Acid",
+   "farbe": "#9be03b",
+   "art": "instrument",
+   "geraet": {
+    "art": "intern",
+    "name": "rb338",
+    "parameter": {
+     "lautstaerke": 1.0,
+     "cutoff": 0.7,
+     "resonanz": 0.5
+    }
+   },
+   "fader_db": -1.5,
+   "pan": 0,
+   "mute": false,
+   "solo": false,
+   "von": "andreas",
+   "clips": [
+    {
+     "id": "c3",
+     "art": "midi",
+     "name": "acid",
+     "start_beat": 0,
+     "laenge_beats": 64,
+     "loop_beats": 16,
+     "noten": [
+      {
+       "id": "n89",
+       "beat": 0.0,
+       "laenge": 0.2,
+       "ton": 45,
+       "vel": 110
+      },
+      {
+       "id": "n90",
+       "beat": 0.25,
+       "laenge": 0.2,
+       "ton": 45,
+       "vel": 85
+      },
+      {
+       "id": "n91",
+       "beat": 0.5,
+       "laenge": 0.2,
+       "ton": 57,
+       "vel": 85
+      },
+      {
+       "id": "n92",
+       "beat": 0.75,
+       "laenge": 0.2,
+       "ton": 45,
+       "vel": 85
+      },
+      {
+       "id": "n93",
+       "beat": 1.0,
+       "laenge": 0.2,
+       "ton": 48,
+       "vel": 110
+      },
+      {
+       "id": "n94",
+       "beat": 1.25,
+       "laenge": 0.2,
+       "ton": 45,
+       "vel": 85
+      },
+      {
+       "id": "n95",
+       "beat": 1.5,
+       "laenge": 0.2,
+       "ton": 52,
+       "vel": 85
+      },
+      {
+       "id": "n96",
+       "beat": 1.75,
+       "laenge": 0.2,
+       "ton": 45,
+       "vel": 85
+      },
+      {
+       "id": "n97",
+       "beat": 2.0,
+       "laenge": 0.2,
+       "ton": 45,
+       "vel": 110
+      },
+      {
+       "id": "n98",
+       "beat": 2.25,
+       "laenge": 0.2,
+       "ton": 57,
+       "vel": 85
+      },
+      {
+       "id": "n99",
+       "beat": 2.5,
+       "laenge": 0.2,
+       "ton": 45,
+       "vel": 85
+      },
+      {
+       "id": "n100",
+       "beat": 2.75,
+       "laenge": 0.2,
+       "ton": 60,
+       "vel": 85
+      },
+      {
+       "id": "n101",
+       "beat": 3.0,
+       "laenge": 0.2,
+       "ton": 45,
+       "vel": 110
+      },
+      {
+       "id": "n102",
+       "beat": 3.25,
+       "laenge": 0.2,
+       "ton": 52,
+       "vel": 85
+      },
+      {
+       "id": "n103",
+       "beat": 3.5,
+       "laenge": 0.2,
+       "ton": 48,
+       "vel": 85
+      },
+      {
+       "id": "n104",
+       "beat": 3.75,
+       "laenge": 0.2,
+       "ton": 45,
+       "vel": 85
+      },
+      {
+       "id": "n105",
+       "beat": 4.0,
+       "laenge": 0.2,
+       "ton": 45,
+       "vel": 110
+      },
+      {
+       "id": "n106",
+       "beat": 4.25,
+       "laenge": 0.2,
+       "ton": 45,
+       "vel": 85
+      },
+      {
+       "id": "n107",
+       "beat": 4.5,
+       "laenge": 0.2,
+       "ton": 57,
+       "vel": 85
+      },
+      {
+       "id": "n108",
+       "beat": 4.75,
+       "laenge": 0.2,
+       "ton": 45,
+       "vel": 85
+      },
+      {
+       "id": "n109",
+       "beat": 5.0,
+       "laenge": 0.2,
+       "ton": 48,
+       "vel": 110
+      },
+      {
+       "id": "n110",
+       "beat": 5.25,
+       "laenge": 0.2,
+       "ton": 45,
+       "vel": 85
+      },
+      {
+       "id": "n111",
+       "beat": 5.5,
+       "laenge": 0.2,
+       "ton": 52,
+       "vel": 85
+      },
+      {
+       "id": "n112",
+       "beat": 5.75,
+       "laenge": 0.2,
+       "ton": 45,
+       "vel": 85
+      },
+      {
+       "id": "n113",
+       "beat": 6.0,
+       "laenge": 0.2,
+       "ton": 45,
+       "vel": 110
+      },
+      {
+       "id": "n114",
+       "beat": 6.25,
+       "laenge": 0.2,
+       "ton": 57,
+       "vel": 85
+      },
+      {
+       "id": "n115",
+       "beat": 6.5,
+       "laenge": 0.2,
+       "ton": 45,
+       "vel": 85
+      },
+      {
+       "id": "n116",
+       "beat": 6.75,
+       "laenge": 0.2,
+       "ton": 60,
+       "vel": 85
+      },
+      {
+       "id": "n117",
+       "beat": 7.0,
+       "laenge": 0.2,
+       "ton": 45,
+       "vel": 110
+      },
+      {
+       "id": "n118",
+       "beat": 7.25,
+       "laenge": 0.2,
+       "ton": 52,
+       "vel": 85
+      },
+      {
+       "id": "n119",
+       "beat": 7.5,
+       "laenge": 0.2,
+       "ton": 48,
+       "vel": 85
+      },
+      {
+       "id": "n120",
+       "beat": 7.75,
+       "laenge": 0.2,
+       "ton": 45,
+       "vel": 85
+      },
+      {
+       "id": "n121",
+       "beat": 8.0,
+       "laenge": 0.2,
+       "ton": 45,
+       "vel": 110
+      },
+      {
+       "id": "n122",
+       "beat": 8.25,
+       "laenge": 0.2,
+       "ton": 45,
+       "vel": 85
+      },
+      {
+       "id": "n123",
+       "beat": 8.5,
+       "laenge": 0.2,
+       "ton": 57,
+       "vel": 85
+      },
+      {
+       "id": "n124",
+       "beat": 8.75,
+       "laenge": 0.2,
+       "ton": 45,
+       "vel": 85
+      },
+      {
+       "id": "n125",
+       "beat": 9.0,
+       "laenge": 0.2,
+       "ton": 48,
+       "vel": 110
+      },
+      {
+       "id": "n126",
+       "beat": 9.25,
+       "laenge": 0.2,
+       "ton": 45,
+       "vel": 85
+      },
+      {
+       "id": "n127",
+       "beat": 9.5,
+       "laenge": 0.2,
+       "ton": 52,
+       "vel": 85
+      },
+      {
+       "id": "n128",
+       "beat": 9.75,
+       "laenge": 0.2,
+       "ton": 45,
+       "vel": 85
+      },
+      {
+       "id": "n129",
+       "beat": 10.0,
+       "laenge": 0.2,
+       "ton": 45,
+       "vel": 110
+      },
+      {
+       "id": "n130",
+       "beat": 10.25,
+       "laenge": 0.2,
+       "ton": 57,
+       "vel": 85
+      },
+      {
+       "id": "n131",
+       "beat": 10.5,
+       "laenge": 0.2,
+       "ton": 45,
+       "vel": 85
+      },
+      {
+       "id": "n132",
+       "beat": 10.75,
+       "laenge": 0.2,
+       "ton": 60,
+       "vel": 85
+      },
+      {
+       "id": "n133",
+       "beat": 11.0,
+       "laenge": 0.2,
+       "ton": 45,
+       "vel": 110
+      },
+      {
+       "id": "n134",
+       "beat": 11.25,
+       "laenge": 0.2,
+       "ton": 52,
+       "vel": 85
+      },
+      {
+       "id": "n135",
+       "beat": 11.5,
+       "laenge": 0.2,
+       "ton": 48,
+       "vel": 85
+      },
+      {
+       "id": "n136",
+       "beat": 11.75,
+       "laenge": 0.2,
+       "ton": 45,
+       "vel": 85
+      },
+      {
+       "id": "n137",
+       "beat": 12.0,
+       "laenge": 0.2,
+       "ton": 45,
+       "vel": 110
+      },
+      {
+       "id": "n138",
+       "beat": 12.25,
+       "laenge": 0.2,
+       "ton": 45,
+       "vel": 85
+      },
+      {
+       "id": "n139",
+       "beat": 12.5,
+       "laenge": 0.2,
+       "ton": 57,
+       "vel": 85
+      },
+      {
+       "id": "n140",
+       "beat": 12.75,
+       "laenge": 0.2,
+       "ton": 45,
+       "vel": 85
+      },
+      {
+       "id": "n141",
+       "beat": 13.0,
+       "laenge": 0.2,
+       "ton": 48,
+       "vel": 110
+      },
+      {
+       "id": "n142",
+       "beat": 13.5,
+       "laenge": 0.2,
+       "ton": 52,
+       "vel": 85
+      },
+      {
+       "id": "n143",
+       "beat": 13.75,
+       "laenge": 0.2,
+       "ton": 45,
+       "vel": 85
+      },
+      {
+       "id": "n144",
+       "beat": 14.0,
+       "laenge": 0.2,
+       "ton": 45,
+       "vel": 110
+      },
+      {
+       "id": "n145",
+       "beat": 14.25,
+       "laenge": 0.2,
+       "ton": 57,
+       "vel": 85
+      },
+      {
+       "id": "n146",
+       "beat": 14.5,
+       "laenge": 0.2,
+       "ton": 45,
+       "vel": 85
+      },
+      {
+       "id": "n147",
+       "beat": 14.75,
+       "laenge": 0.2,
+       "ton": 60,
+       "vel": 85
+      },
+      {
+       "id": "n148",
+       "beat": 15.0,
+       "laenge": 0.2,
+       "ton": 45,
+       "vel": 110
+      },
+      {
+       "id": "n149",
+       "beat": 15.5,
+       "laenge": 0.2,
+       "ton": 48,
+       "vel": 85
+      },
+      {
+       "id": "n150",
+       "beat": 15.75,
+       "laenge": 0.2,
+       "ton": 52,
+       "vel": 85
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "s4",
+   "nr": 4,
+   "name": "Chords",
+   "farbe": "#c03be0",
+   "art": "instrument",
+   "geraet": {
+    "art": "intern",
+    "name": "bk",
+    "graph": "synth-poly",
+    "parameter": {}
+   },
+   "fader_db": -6,
+   "pan": 0,
+   "mute": false,
+   "solo": false,
+   "von": "andreas",
+   "clips": [
+    {
+     "id": "c4",
+     "art": "midi",
+     "name": "chords",
+     "start_beat": 0,
+     "laenge_beats": 64,
+     "loop_beats": 16,
+     "noten": [
+      {
+       "id": "n151",
+       "beat": 0,
+       "laenge": 3.5,
+       "ton": 57,
+       "vel": 80
+      },
+      {
+       "id": "n152",
+       "beat": 0,
+       "laenge": 3.5,
+       "ton": 60,
+       "vel": 80
+      },
+      {
+       "id": "n153",
+       "beat": 0,
+       "laenge": 3.5,
+       "ton": 64,
+       "vel": 80
+      },
+      {
+       "id": "n154",
+       "beat": 4,
+       "laenge": 3.5,
+       "ton": 53,
+       "vel": 80
+      },
+      {
+       "id": "n155",
+       "beat": 4,
+       "laenge": 3.5,
+       "ton": 57,
+       "vel": 80
+      },
+      {
+       "id": "n156",
+       "beat": 4,
+       "laenge": 3.5,
+       "ton": 60,
+       "vel": 80
+      },
+      {
+       "id": "n157",
+       "beat": 8,
+       "laenge": 3.5,
+       "ton": 55,
+       "vel": 80
+      },
+      {
+       "id": "n158",
+       "beat": 8,
+       "laenge": 3.5,
+       "ton": 60,
+       "vel": 80
+      },
+      {
+       "id": "n159",
+       "beat": 8,
+       "laenge": 3.5,
+       "ton": 64,
+       "vel": 80
+      },
+      {
+       "id": "n160",
+       "beat": 12,
+       "laenge": 3.5,
+       "ton": 55,
+       "vel": 80
+      },
+      {
+       "id": "n161",
+       "beat": 12,
+       "laenge": 3.5,
+       "ton": 59,
+       "vel": 80
+      },
+      {
+       "id": "n162",
+       "beat": 12,
+       "laenge": 3.5,
+       "ton": 62,
+       "vel": 80
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "naechste_id": {
+  "spur": 5,
+  "clip": 5,
+  "gruppe": 1
+ },
+ "naechste_noten_id": 163,
+ "gruppen": [],
+ "master": {
+  "fader_db": 0
+ }
+}

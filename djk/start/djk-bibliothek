@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# djk-bibliothek: turns your own music folders into the browser catalog (katalog.sqlite). Folders are listed in
+# ~/.config/cypherdj/bibliothek.json. Never replaces a catalog it did not build.
+#
+#   djk-bibliothek dazu DIR [--typ auto|track|loop|oneshot]   add a folder
+#   djk-bibliothek weg DIR                                    remove a folder
+#   djk-bibliothek zeige [--json]                             config, target, state, counts
+#   djk-bibliothek bauen [--ohne-fehlende]                    scan and build (runs at nice 10)
+#
+# Return: 0 ok, 2 usage/config/no read tool, 3 foreign catalog at the target, 4 a folder is missing, 5 target not writable.
+set -uo pipefail
+HIER=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
+DJK=${DJK:-$(cd "$HIER/.." && pwd)}
+# Personal paths, same rule as djk-start: variables already set by the caller win against the file.
+UMG=${CYPHERDJ_UMGEBUNG:-$HOME/.config/cypherdj/umgebung.env}
+if [ -f "$UMG" ]; then
+  _gesetzt=$(export -p | grep '^declare -x CYPHERDJ_')
+  set -a; . "$UMG"; set +a
+  [ -z "$_gesetzt" ] || eval "$_gesetzt"
+fi
+PY=${CYPHERDJ_PYTHON:-}
+if [ -z "$PY" ]; then
+  for k in "$DJK/werkstatt/.venv/bin/python" "$DJK/../.venv/bin/python"; do
+    [ -x "$k" ] && { PY=$k; break; }
+  done
+fi
+PY=${PY:-python3}
+# No cd: relative folders of "dazu" are resolved against the caller's directory. PYTHONSAFEPATH keeps that directory
+# out of the module path (Python 3.11+).
+PYTHONPATH="$DJK${PYTHONPATH:+:$PYTHONPATH}" PYTHONSAFEPATH=1 exec nice -n 10 "$PY" -m bibliothek "$@"

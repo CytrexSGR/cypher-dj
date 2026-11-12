@@ -33,7 +33,12 @@ export const BEREICH_GRUENDE: readonly string[] = ['kein_projekt', 'rev_veraltet
   'host_grenze', 'host_fehlt', 'plugin_nicht_ladbar', 'zustand_passt_nicht', 'param_unbekannt', 'host_insert_echtzeit',   // plan 1.11 task 7
   'plugin_unbekannt', 'plugin_blockiert', 'kein_effekt', 'kein_instrument', 'scan_laeuft', 'kein_fenster', 'keine_anzeige', 'nur_andreas',
   'absturz_schleife', 'zustand_fehler', 'latenz_zu_gross',   // part 4: host states that lage and the page show as the reason
-  'export_host_ausfall', 'export_luecke'];   // plan 1.11 tasks 10, 15, 13
+  'export_host_ausfall', 'export_luecke',
+  'live_laeuft',   // plan 1.11 tasks 10, 15, 13
+  'kein_loop', 'kein_bibliothekstrack', 'kein_liveprojekt', 'slot_leer', 'modul_hat_stems',
+  'rampe_laeuft', 'kein_neuer_pfad', 'kein_deck', 'tonart_unbekannt',   // plan live-module tasks 2, 3, 8 and 11
+  'modul_unbekannt', 'modul_nicht_einsetzbar',   // task 10
+  'kein_liveprojekt_flag'];   // review fix
 
 // --- Regler -----------------------------------------------------------------------------------------------------------
 export interface Soll { pfad: string; wert: number }
@@ -79,7 +84,7 @@ export function alleGruppenRegler(p: Projekt): Soll[] {
   }
   return aus;
 }
-// 1.10 slice 3: the send controls spur|grp/<n>/send/<r> (dB, -200 = off) of all 32 tracks and 8 groups (4 · 40 = 160) and the 11 controls of each of the 4
+// 1.10 slice 3: the send controls spur|grp/<n>/send/<r> (dB, -200 = off) of all 32 tracks and the 16 groups (4 · 48 = 192) and the 11 controls of each of the 4
 // return strips (fader, pan, mute, solo, hall/an and the six Hall values; 44). Free slots carry the defaults.
 export function alleSendRegler(p: Projekt): Soll[] {
   const aus: Soll[] = [];
@@ -139,8 +144,8 @@ export const alleRegler = (p: Projekt): Soll[] => [...alleSpurRegler(p), ...alle
 
 // Rückweg (Spec 3.4): /e/regler spur/<n>/<feld> mit Halter mensch → Befehl spur_aendern, oder null (keine Spur auf n, Wert schon da)
 const REGLER_PFAD = /^spur\/([1-9][0-9]?)\/(fader|pan|mute|solo)$/;
-const GRUPPEN_PFAD = /^grp\/([1-8])\/(fader|pan|mute|solo)$/;
-const SEND_PFAD = /^(?:(spur)\/([1-9]|[12][0-9]|3[0-2])|(grp)\/([1-8]))\/send\/([1-4])$/;
+const GRUPPEN_PFAD = /^grp\/([1-9]|1[0-6])\/(fader|pan|mute|solo)$/;
+const SEND_PFAD = /^(?:(spur)\/([1-9]|[12][0-9]|3[0-2])|(grp)\/([1-9]|1[0-6]))\/send\/([1-4])$/;
 const RET_PFAD = /^ret\/([1-4])\/(fader|pan|mute|solo)$/;
 const HALL_PFAD = new RegExp(`^ret/([1-4])/reverb/(an|${HALL_FELDER.join('|')})$`);
 const klemme = (k: keyof typeof FELD, wert: number): number | boolean => (k === 'mute' || k === 'solo' ? wert >= 0.5

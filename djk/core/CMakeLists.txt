@@ -1206,6 +1206,10 @@ test_mutation(test_arr_gruppen_ziel_mutation test_arr_groups CYPHERDJ_MUTATION_A
 test_mutation(test_arr_gruppen_hart_mutation test_arr_groups CYPHERDJ_MUTATION_ARR_ZIEL_HART ${ARR_QUELLEN} src/clock.cpp)
 test_mutation(test_arr_gruppen_pm_mutation test_arr_groups CYPHERDJ_MUTATION_ARR_PM_FADER_AUS ${ARR_QUELLEN} src/clock.cpp)
 test_mutation(test_arr_gruppen_mute_mutation test_arr_groups CYPHERDJ_MUTATION_ARR_MUTE_HART ${ARR_QUELLEN} src/clock.cpp)
+# Live modules task 6: headphone cue per group (test_arr_groups_cue)
+test_mutation(test_arr_gruppen_cue_aus_mutation test_arr_groups_cue CYPHERDJ_MUTATION_ARR_GRUPPE_CUE_AUS ${ARR_QUELLEN} src/clock.cpp)               # cases 1, 2, 3, 6: the tap is skipped
+test_mutation(test_arr_gruppen_cue_nach_fader_mutation test_arr_groups_cue CYPHERDJ_MUTATION_ARR_GRUPPE_CUE_NACH_FADER ${ARR_QUELLEN} src/clock.cpp) # case 4: the tap sits behind fader and mute
+test_mutation(test_arr_gruppen_cue_master_mutation test_arr_groups_cue CYPHERDJ_MUTATION_ARR_GRUPPE_CUE_MASTER ${ARR_QUELLEN} src/clock.cpp)         # case 1, 3, 6: the master moves
 # 1.10 Slice 3 Task 5a: sends and return strips
 test_mutation(test_arr_returns_hall_tot_mutation test_arr_returns CYPHERDJ_MUTATION_ARR_HALL_TOT ${ARR_QUELLEN} src/clock.cpp)
 test_mutation(test_arr_returns_hall_ohne_ausklang_mutation test_arr_returns CYPHERDJ_MUTATION_ARR_HALL_OHNE_AUSKLANG ${ARR_QUELLEN} src/clock.cpp)
@@ -1441,6 +1445,9 @@ if(CYPHERDJ_BUNGEE)
   # AK33 F4: a gain-only edit on a sounding RE-PITCH, BEATS or plain clip ramps the gain; the old voice swap must turn test_arr_gain_swap red (WILL_FAIL).
   # The test builds a warp engine for its COMPLEX control case, so the mutation target links the engine sources
   test_mutation(test_arr_gain_tausch_neu_mutation test_arr_gain_swap CYPHERDJ_MUTATION_ARR_GAIN_TAUSCH_NEU ${ARR_QUELLEN} src/clock.cpp ${WARP_WERK_QUELLEN})
+  # Live modules (reload that changes only module B): a track that arrives or goes must not blend its target through the master; the old blend (every change blends) turns cases 1 and 2 of
+  # test_arr_reload_stabil red (WILL_FAIL). The test builds a warp engine, so the target links the engine sources.
+  test_mutation(test_arr_reload_stabil_blende_mutation test_arr_reload_stabil CYPHERDJ_MUTATION_ARR_ZIEL_BLENDE_IMMER ${ARR_QUELLEN} src/clock.cpp ${WARP_WERK_QUELLEN})
   # Nachbesserung 3 (Ereignisse im Frist-Fenster, Fälle 10 bis 13): OHNE_DECKUNG bis NAHT_VORFILTER. Nachbesserung 4 (eine Regel für Tausch und Karte, Fall 14):
   # ZWEIMAL_ANSETZEN entfällt (die Regel ist weg), TAUSCH_FREI bis UNGEHOERT kommen dazu (Fall 15). OHNE_PLATZTAUSCH, KETTE_LANG, BRUECKE_BLEIBT und
   # ENDE_ALTE_KARTE macht test_warp_factory_arr nicht rot (gemessen im dritten Beweislauf der Nachbesserung 4): sie haben nur Ziele gegen die Zufallsfolgen (unten)

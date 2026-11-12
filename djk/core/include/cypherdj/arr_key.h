@@ -37,7 +37,7 @@ inline uint8_t arr_schluessel_dj_urteil(const std::string& quelle, int64_t nr) {
   return SCHL_QUELLE;
 }
 
-// The answer (SCHL_JA, SCHL_SPAET, SCHL_ZYKLUS) for the stage `stufe` of the strip with chain index `streifen` (tracks 0..31, groups 32..39, PM 40, returns 41..44) keyed by `k`.
+// The answer (SCHL_JA, SCHL_SPAET, SCHL_ZYKLUS) for the stage `stufe` of the strip with chain index `streifen` (tracks 0..31, groups 32..47, PM 48, returns 49..52) keyed by `k`.
 // The table says what the block order allows; two rules need the project and sit here: a strip keyed by its own output or input is a cycle, and so is a member track keyed by
 // its own group (the group sums the member). A source number outside its range or a source kind the loader does not know is not a cell: the loader has refused it before.
 inline uint8_t arr_schluessel_urteil(const ArrSnapshot& s, int streifen, const ArrSchluessel& k) {
@@ -53,6 +53,16 @@ inline uint8_t arr_schluessel_urteil(const ArrSnapshot& s, int streifen, const A
   uint8_t a = SCHL_ZELLEN[v][q][k.punkt];
   if (v == q && v != 3 && k.nr == nr) a = SCHL_ZYKLUS;                                  // its own strip: the key depends on the consumer
   if (v == 0 && q == 1 && s.spur[streifen].ausgang == static_cast<int8_t>(k.nr)) a = SCHL_ZYKLUS;   // a member keyed by its own group
+  // nested groups (decision 6): a track keyed by any ancestor of the group it sits in is a cycle too (the ancestor sums the track), and between groups the levels decide
+  if (v == 0 && q == 1 && s.spur[streifen].ausgang > 0 && arr_ist_vorfahr(s, k.nr, s.spur[streifen].ausgang)) a = SCHL_ZYKLUS;
+  if (v == 1 && q == 1 && k.nr != nr && k.nr >= 1 && k.nr <= ARR_GRUPPEN && nr >= 1 && nr <= ARR_GRUPPEN) {
+    if (arr_ist_vorfahr(s, k.nr, nr)) {
+      a = SCHL_ZYKLUS;   // the source group sums the consumer: its sum depends on the consumer's output, pre and post
+    } else {
+      const int ls = s.gruppen_ebene[k.nr - 1], lc = s.gruppen_ebene[nr - 1];   // groups run lowest level first: the source must have run (post) or have its sum complete (pre) when the consumer's chain starts
+      a = k.punkt == ARR_SCHL_PRE ? (ls <= lc ? SCHL_JA : SCHL_SPAET) : (ls < lc ? SCHL_JA : SCHL_SPAET);   // one level: pre ja, post spaet, the table's cell
+    }
+  }
   return a;
 }
 
@@ -129,10 +139,10 @@ inline bool arr_schluessel_rechnen(ArrSnapshot& s, std::string* meldung = nullpt
 
 // ---- key alignment (slice 5 U2b, plan E9)
 
-// Arrival (samples after the raw input of a track) of the input of the strip `streifen` (tracks 0..31, groups 32..39, PM 40, returns 41..44) in front of its chain.
+// Arrival (samples after the raw input of a track) of the input of the strip `streifen` (tracks 0..31, groups 32..47, PM 48, returns 49..52) in front of its chain.
 inline int arr_schluessel_streifen_ankunft(const ArrSnapshot& s, int streifen) {
   if (streifen < ARR_SPUREN) return 0;
-  if (streifen < ARR_KETTE_PM) return s.pdc.t_trk;
+  if (streifen < ARR_KETTE_PM) return s.pdc.ein_g[streifen - ARR_SPUREN];   // a group: its sum waits for the direct tracks and the child outputs (ein(g), arr_pdc.h)
   if (streifen == ARR_KETTE_PM) return s.pdc.p_in;
   return s.pdc.in_r;
 }
@@ -144,11 +154,13 @@ inline int arr_schluessel_stufe_ankunft(const ArrSnapshot& s, int streifen, int 
   return n;
 }
 // Arrival of the key at its capture point. The row sc (a track input before any chain) and the DJ inputs are raw: 0. The capture points of the mixer sit behind the alignment of their
-// sum (track post: t_trk, group pre: t_trk, group post: t_g, return pre: in_r, return post: in_r plus the latency of the return chain).
+// sum (track post: t_trk, group pre: ein(g), group post: the arrival its target expects (ank(g)), return pre: in_r, return post: in_r plus the latency of the return chain).
 inline int arr_schluessel_quelle_ankunft(const ArrSnapshot& s, const ArrSchluessel& k) {
   switch (k.quelle) {
     case ARR_SCHL_SPUR: return k.punkt == ARR_SCHL_POST ? s.pdc.t_trk : 0;
-    case ARR_SCHL_GRP: return k.punkt == ARR_SCHL_PRE ? s.pdc.t_trk : s.pdc.t_g;
+    case ARR_SCHL_GRP:
+      if (k.nr < 1 || k.nr > ARR_GRUPPEN) return k.punkt == ARR_SCHL_PRE ? s.pdc.t_trk : s.pdc.t_g;
+      return k.punkt == ARR_SCHL_PRE ? s.pdc.ein_g[k.nr - 1] : s.pdc.ank_g[k.nr - 1];
     case ARR_SCHL_RET:
       if (k.nr < 1 || k.nr > ARR_RETURNS) return s.pdc.in_r;
       return k.punkt == ARR_SCHL_PRE ? s.pdc.in_r : s.pdc.in_r + arr_kette_latenz(s.kette[ARR_KETTE_RET0 + k.nr - 1]);

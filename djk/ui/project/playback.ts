@@ -8,7 +8,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { BEATS_VORGABE, MAX_AUTO_PUNKTE, ZIEL_BEREICH, MAX_CLIPS, MAX_NOTEN, MAX_SPUREN, SAMPLERATE, insertParamIndex, istKettenZiel,
-  MAX_KETTEN_LANEN, makroVon, pitchFaktor, rackSicht, wirtSlots, zerlegeKettenZiel, type InsertPoolArt } from './model.ts';
+  istBlendZiel, blendFader, blendPfad, MAX_KETTEN_LANEN, makroVon, pitchFaktor, rackSicht, wirtSlots, zerlegeKettenZiel,
+  type InsertPoolArt } from './model.ts';
 import { MAX_BEATS_EINHEITEN, beatsEinheiten, beatsEinheitenZahl } from './warp.ts';
 import { hkStrecke, hkWert, istModulation, modulationsZiel, type Huellkurve } from './envelope.ts';
 import type { GliedGeraet, AudioClip, Clip, Insert, InsertTraeger, Lane, Ziel, MidiClip, Note, Projekt, Punkt, Spur, Warp } from './model.ts';
@@ -72,9 +73,10 @@ export type WGliedGeraet =
   | { art: 'intern'; geraet: 'kit'; kit: string }
   | { art: 'wirt'; slot: number };
 export type WGlied = { id: string; ton: [number, number]; vel: [number, number]; kette: [number, number]; gain_db: number } & WGliedGeraet;
-// Depth 1 (P2): a group always leads into the master
-export interface WGruppe { nr: number; ausgang: { art: 'master' }; chain?: WInsert[]; rack?: WRack; chain_auto?: WKettenLane[] }
-export interface WReturn extends WGruppe { pre?: true }   // slice 4: the send taps before the fader (absent = post)
+// A group leads into the master or into another group (nested groups); returns always into the master
+export interface WGruppe { nr: number; ausgang: { art: 'master' } | { art: 'gruppe'; nr: number }; chain?: WInsert[]; rack?: WRack; chain_auto?: WKettenLane[] }
+// slice 4: the send taps before the fader (absent = post)
+export interface WReturn extends Omit<WGruppe, 'ausgang'> { ausgang: { art: 'master' }; pre?: true }
 export interface Wiedergabe { format: typeof WIEDERGABE_FORMAT | typeof WIEDERGABE_FORMAT_2; nr: number; spuren: WSpur[]; gruppen?: WGruppe[];
   // returns (slice 3) like the groups; pm = the production master's chain, the kern's key (slice 4)
   returns?: WReturn[]; pm?: { chain: WInsert[]; rack?: WRack; chain_auto?: WKettenLane[] } }
@@ -110,6 +112,26 @@ const kette = (liste0: readonly Insert[] | undefined, strang?: InsertTraeger, ei
 // 1.12 slice 6: the chain lanes of a strip as the playback takes them. A lane whose stage is not in this playback's chain
 // (a left-out host slot) or whose rack is not written goes; a lane on a parameter a macro drives goes too
 // (the macro wins, as in the core: the project refuses such a lane, this is the safety net).
+// Live modules (decision 7): a blend lane of a stem group becomes one fader lane on each of its two tracks (the original audio track and the new
+// instrument track) by the equal-power law. A segment that moves is sampled every 1/4 of its length at most 16 steps (the law is not linear in dB);
+// a `sprung` point stays one. A track that has a fader lane of its own keeps it (the blend never overrides a hand-drawn lane).
+const BLEND_SCHRITTE = 16;
+export function blendLanen(lane: Lane, welche: 'original' | 'neu', trim = 0): [number, number, number][] {
+  const aus: [number, number, number][] = [];
+  const db = (w: number): number => blendFader(w, trim)[welche];
+  lane.punkte.forEach((q, i) => {
+    const n = lane.punkte[i + 1];
+    const form = q.form ?? 'linear';
+    aus.push([q.beat, db(q.wert), form === 'sprung' ? FORM_NR.sprung : FORM_NR.linear]);
+    if (!n || form === 'sprung' || n.beat <= q.beat || n.wert === q.wert) return;
+    const k = Math.min(BLEND_SCHRITTE, Math.max(2, Math.ceil((n.beat - q.beat) * 4)));
+    for (let j = 1; j < k; j++) {
+      const t = j / k, u = form === 's' ? t * t * (3 - 2 * t) : t;
+      aus.push([q.beat + (n.beat - q.beat) * t, db(q.wert + (n.wert - q.wert) * u), FORM_NR.linear]);
+    }
+  });
+  return aus;
+}
 const kettenPunkte = (k: { chain_auto?: WKettenLane[] }): number =>
   (k.chain_auto ?? []).reduce((n, l) => n + l.punkte.length, 0);
 const kettenAuto = (strang: InsertTraeger, liste: readonly Insert[], rack: WRack | undefined): WKettenLane[] => {
@@ -384,12 +406,23 @@ function uebersetzeIntern(p: Projekt, opt: UebersetzOptionen): Wiedergabe {
       w = { ...w0, ausgang: { art: 'gruppe' as const, nr } };
     }
     const lanes = (s.automation ?? []).filter((l) => !istKettenZiel(l.ziel));
+    const gr = s.ausgang ? (p.gruppen ?? []).find((g) => g.id === s.ausgang!.id) : undefined;
+    const bl = gr?.automation?.find((l) => istBlendZiel(l.ziel) && l.ziel === `blend:${gr.id}`);
+    if (bl && !lanes.some((l) => l.ziel === 'fader') && (s.art === 'audio' || s.art === 'instrument')) {
+      const pf = blendPfad(p, gr!.id);
+      const welche = pf?.original === s ? 'original' : pf?.neu === s ? 'neu' : null;
+      if (welche) {
+        const punkte = blendLanen(bl, welche, gr!.neu_trim_db ?? 0);
+        autoPunkte += punkte.length;
+        w = { ...w, auto: [{ ziel: 'fader' as Ziel, punkte }] };
+      }
+    }
     if (lanes.length) {                                      // Automation: `auto` only with a lane, else the file stays the previous one
       autoPunkte += lanes.reduce((n, l) => n + l.punkte.length, 0);
       const punkte = (l: Lane): [number, number, number][] =>
         // mute/solo: always a jump
         l.punkte.map((q) => [q.beat, q.wert, ZIEL_BEREICH[l.ziel as Ziel].nurSprung ? FORM_NR.sprung : FORM_NR[q.form ?? 'linear']]);
-      w = { ...w, auto: lanes.map((l) => ({ ziel: l.ziel as Ziel, punkte: punkte(l) })) };
+      w = { ...w, auto: [...(w.auto ?? []), ...lanes.map((l) => ({ ziel: l.ziel as Ziel, punkte: punkte(l) }))] };
     }
     const relativ = relativeLanen(spurClips(s, o.vorhoeren));   // 1.12 slice 5 (D9): modulation envelopes, after the absolute lanes
     if (relativ.length) {
@@ -402,7 +435,12 @@ function uebersetzeIntern(p: Projekt, opt: UebersetzOptionen): Wiedergabe {
     return { ...w, ...ke };
   });
   // groups, returns and the PM (slice 6: their chain lanes count with the others and go to the core, at most ARR_KLANES_MAX of them in all)
-  const gruppenW = [...(p.gruppen ?? [])].sort((a, b) => a.nr - b.nr).map((g) => ({ nr: g.nr, ausgang: { art: 'master' as const }, ...kette(g.inserts, g) }));
+  const gruppenNr = new Map((p.gruppen ?? []).map((g) => [g.id, g.nr]));
+  const gruppenW = [...(p.gruppen ?? [])].sort((a, b) => a.nr - b.nr).map((g) => {
+    const ziel = g.ausgang ? gruppenNr.get(g.ausgang.id) : undefined;
+    if (g.ausgang && ziel === undefined) throw new WiedergabeFehler('ziel_unbekannt', `Gruppe ${g.id} zeigt auf ${g.ausgang.id}`);
+    return { nr: g.nr, ausgang: ziel === undefined ? { art: 'master' as const } : { art: 'gruppe' as const, nr: ziel }, ...kette(g.inserts, g) };
+  });
   const returnsW = [...(p.returns ?? [])].sort((a, b) => a.nr - b.nr)
     .map((r) => ({ nr: r.nr, ausgang: { art: 'master' as const }, ...(r.pre ? { pre: true as const } : {}), ...kette(r.inserts, r) }));
   const pmW = p.master?.inserts?.length ? kette(p.master.inserts, p.master) as { chain: WInsert[]; rack?: WRack; chain_auto?: WKettenLane[] } : undefined;

@@ -4,6 +4,7 @@
 import { fuehreListeAus } from './commands.ts';
 import { FREEZE_MAX_BEATS, istWirt, klingendeNoten } from './freeze.ts';
 import { PAN_MITTE_DB } from './merge.ts';
+import { nachkommen } from './routing_rules.ts';
 import { MAX_SPUREN, sucheGruppe, sucheSpur, type Herkunft, type Projekt, type Spur } from './model.ts';
 
 export const RESAMPLE_MAX_BEATS = FREEZE_MAX_BEATS;   // the core limit of the tap (bis - von, zu_gross above)
@@ -55,7 +56,7 @@ export function resamplePlan(p: Projekt, a: Record<string, unknown>, vorgabe: { 
 // silent file. Muted tracks do not count. A track feeds its own strip; a group the tracks whose target it is; a return and the master every track.
 export function wirtSpurenImStrang(p: Projekt, z: ResamplePlan): Spur[] {
   const quellen = z.art === 0 ? p.spuren.filter((s) => s.id === z.strangId)
-    : z.art === 1 ? p.spuren.filter((s) => s.ausgang?.id === z.strangId) : p.spuren;
+    : z.art === 1 ? p.spuren.filter((s) => nachkommen(p, z.strangId).spuren.includes(s.id)) : p.spuren;   // a group: the tracks of every level below it
   return quellen.filter((s) => istWirt(s) && !s.freeze && !s.mute && klingendeNoten(s) > 0
     && s.clips.some((c) => c.start_beat < z.bis && c.start_beat + c.laenge_beats > z.von));
 }

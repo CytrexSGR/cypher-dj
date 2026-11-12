@@ -8,7 +8,7 @@ plays the arrangement, on the same sample clock.
 
 ## Tracks, groups, returns, master
 
-Up to 32 tracks, 8 group tracks and 4 returns. Every track goes to the production master or into one group. Audio tracks
+Up to 32 tracks, 16 group tracks and 4 returns. Every track goes to the production master or into one group, and a group can go into another group: a DRUMS group can hold a KICK, a PERC and a HATS group, each with its own inserts, fader and sends. Audio tracks
 take samples and tracks dragged from the library; instrument tracks play the RB-338, a Cypher Modular graph (up to 8 such
 tracks) or one hosted Surge XT. Per track: volume, pan, mute, solo, a meter. Every change is one undo step, and the undo
 history survives a restart.

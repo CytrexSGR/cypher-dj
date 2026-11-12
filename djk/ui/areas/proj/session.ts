@@ -12,7 +12,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { BereichKontext } from '../../http/router.ts';
 import { Katalog, type Zeile } from '../../catalog.ts';
-import { Projekte, projektWurzelVorgabe, setzeVorgabenQuelle } from '../../project/storage.ts';
+import { AblageFehler, Projekte, projektWurzelVorgabe, setzeVorgabenQuelle } from '../../project/storage.ts';
+import { liveSlots } from '../../project/live.ts';
+import { teileReglerLive } from '../../project/controls_order.ts';
 import { alleAudioClips, fuehreListeAus, laneStart, setzeDekodiert, vergleiche, type PluginEintrag, type PresetInhalt } from '../../project/commands.ts';
 import { findeGraph, vorgabenVon } from '../../graphs.ts';
 import { kitDa, kitKlaenge } from './kits.ts';
@@ -25,7 +27,7 @@ import { SURGE_RICHTUNGEN, nurFilter1, surgeParameterVon } from '../../project/d
 import { TransientenLager } from '../../project/transients.ts';
 import { DekodierCache, type DekodierEreignis } from '../../project/decode.ts';
 import {
-  alleInserts, alleStraenge, HALL_FELDER, MAX_BEAT, kanonisch, sucheClip, sucheSpur, sucheStrang, wertImBereich,
+  alleInserts, alleStraenge, HALL_FELDER, MAX_BEAT, TEMPO_MIN, TEMPO_MAX, kanonisch, sucheClip, sucheSpur, sucheStrang, wertImBereich,
   type AudioClip, type Clip, type DekodiertZustand, type Lane, type Projekt, type Spur, type Warp, type Ziel,
 } from '../../project/model.ts';
 import { laneWert } from '../../project/lane.ts';
@@ -98,7 +100,7 @@ export interface ProjOptionen {
 }
 // merk (Spec 6.30, 6.31): was die Freeze-Sperre aufgeschoben hat und nach der letzten Freigabe nachgeholt wird. Es gehört zum offenen Projekt und
 // verfällt mit ihm: ein anderes Projekt lädt beim Öffnen ohnehin seine eigene Wiedergabe.
-interface Merk { laden: boolean; loop: boolean; tempo: boolean }
+interface Merk { laden: boolean; loop: boolean; tempo: boolean; reglerNach: Soll[] }   // reglerNach: live rows that wait for the load
 // Spec 6.34: was GET /proj/aktuell als ausgabe_lauf zeigt, solange S3 einen Freeze oder Export fährt (Spur nur beim Freeze)
 export type AusgabeLauf = { art: 'freeze'; spur_id: string }
   | { art: 'export'; echtzeit?: true; start_ms?: number; dauer_s?: number } | { art: 'lautheit' } | { art: 'merge' }
@@ -109,6 +111,8 @@ interface Offen { slug: string; projekt: Projekt; verlauf: Verlauf; merk: Merk; 
 type Koerper = Record<string, unknown>;
 interface Hinweis { index: number; hinweis: string; [feld: string]: unknown }                // Paket 1.13: z. B. kein_tempo (Auto-Warp fand kein Tempo)
 
+const LIVE_SLUG = 'live';
+const liveSlotsAntwort = (p: Projekt): { A: string | null; B: string | null } => { const s = liveSlots(p); return { A: s.A ?? null, B: s.B ?? null }; };
 const schlaf = (ms: number): Promise<void> => new Promise((ok) => setTimeout(ok, ms));
 // Baukasten S20: lookup of a graph in the graph folder for the commands that set a bk device (null = no such graph)
 const graphArt = (name: string): 'instrument' | 'effekt' | null => findeGraph(name)?.art ?? null;
@@ -640,10 +644,11 @@ export class ProjSitzung {
   }
 
   // --- öffnen ---------------------------------------------------------------------------------------------------------
-  neu(name: unknown, quelle: Quelle): Promise<Antwort> {
+  neu(name: unknown, quelle: Quelle, bestaetigt = false): Promise<Antwort> {
     return this.seriell(async () => {
       this.riegel(quelle);
       this.sperreOeffnen();
+      this.sperreLiveLaeuft(quelle, bestaetigt);
       this.sperreFremderTransport(quelle);
       return this.oeffnetGerade(() => {
         const { slug } = this.projekte.lege(name as string);
@@ -651,11 +656,59 @@ export class ProjSitzung {
       });
     });
   }
-  oeffnen(slug: unknown, quelle: Quelle): Promise<Antwort> {
+  oeffnen(slug: unknown, quelle: Quelle, bestaetigt = false): Promise<Antwort> {
     return this.seriell(async () => {
-      this.riegel(quelle); this.sperreOeffnen(); this.sperreFremderTransport(quelle);
+      this.riegel(quelle); this.sperreOeffnen(); this.sperreLiveLaeuft(quelle, bestaetigt); this.sperreFremderTransport(quelle);
       return this.oeffnetGerade(() => this.oeffneIntern(slug as string, quelle));
     });
+  }
+  // POST /live/oeffnen (plan live-module task 1): open the live container (slug `live`), creating it on the first call (flag live, loop region on, 0..64).
+  // Already open: nothing is reopened (a reopen would stop the set); the answer is the same. Opening it from another project is guarded like any open.
+  async liveOeffnen(quelle: Quelle, bestaetigt = false): Promise<Antwort> {
+    const r = await this.liveOeffnenOhneTempo(quelle, bestaetigt);
+    if (r.code === 200) await this.liveTempo(quelle);
+    return r;
+  }
+  // The live container follows the core tempo (display and render length only: the project says 120, the core plays 128). Only while no deck plays,
+  // because tempo_setzen is refused then; with a playing deck it stays as it is. Never fails the open.
+  private async liveTempo(quelle: Quelle): Promise<void> {
+    const o = this.offen, bpm = this.lage.uhr?.bpm;
+    if (!o?.projekt.live || typeof bpm !== 'number' || !(bpm >= TEMPO_MIN && bpm <= TEMPO_MAX) || this.lage.deckLaeuft()) return;
+    if (Math.abs(o.projekt.tempo_bpm - bpm) < 1e-9) return;
+    const d = { rev: o.projekt.rev, label: 'Live tempo', befehle: [{ befehl: 'tempo_setzen', bpm }] };
+    try { await this.aendern(d, quelle); } catch { /* shown tempo only */ }
+  }
+  private liveOeffnenOhneTempo(quelle: Quelle, bestaetigt = false): Promise<Antwort> {
+    return this.seriell(async () => {
+      this.riegel(quelle);
+      if (this.offen?.projekt.live) return { code: 200, j: { slug: this.offen.slug, slots: liveSlotsAntwort(this.offen.projekt) } };
+      this.sperreOeffnen(); this.sperreLiveLaeuft(quelle, bestaetigt); this.sperreFremderTransport(quelle);
+      return this.oeffnetGerade(async () => {
+        try {
+          // a project named `live` without the flag is somebody's project: opening it as the container would send the 24 erz/4 rows (nothing is sent before)
+          if (this.projekte.lies(LIVE_SLUG).live !== true) {
+            throw new ProjFehler(409, 'kein_liveprojekt_flag', { text: 'a project named live exists without the live flag; rename it' });
+          }
+        } catch (e) {
+          if (e instanceof ProjFehler) throw e;
+          if (!(e instanceof AblageFehler) || e.fehler !== 'unbekannt') throw e;
+          const { slug } = this.projekte.lege('Live', { live: true });
+          if (slug !== LIVE_SLUG) throw new ProjFehler(409, 'beschaeftigt', { text: 'the folder for the live container is taken by something else' });
+        }
+        const r = await this.oeffneIntern(LIVE_SLUG, quelle);
+        if (r.code !== 200) return r;
+        return { code: 200, j: { slug: LIVE_SLUG, slots: liveSlotsAntwort(this.brauchOffen().projekt) } };
+      });
+    });
+  }
+  // The live container plays a loop in a set: while its transport runs (status 1 or 2) and a deck plays, opening or creating another project would
+  // stop it. Cypher is always refused; Andreas only with bestaetigt (the page's confirm), then the switch goes through and stops the transport as always.
+  private sperreLiveLaeuft(quelle: Quelle, bestaetigt: boolean): void {
+    const a = this.lage.arr;
+    if (!this.offen?.projekt.live || !a || !(a.status === 1 || a.status === 2) || !this.lage.djLaeuft()) return;
+    if (quelle === 'andreas' && bestaetigt) return;
+    throw new ProjFehler(409, 'live_laeuft', { text: 'the live container is running while a deck plays; opening another project would stop it '
+      + '(Andreas must confirm, Cypher cannot)' });
   }
   // Spec 6.31: Öffnen lädt die Wiedergabe des Projekts in den Kern, und jedes Laden bricht einen laufenden Freeze ab (6.23). Geprüft in der
   // Kette, also gegen die Sperre zu dem Zeitpunkt, an dem das Öffnen wirklich läuft; vor lege(), damit ein abgelehntes neu() keinen Ordner anlegt.
@@ -695,7 +748,7 @@ export class ProjSitzung {
     }
     const projekt = structuredClone(o.projekt);
     this.gleicheDekodiertAb(projekt, true);
-    this.offen = { slug, projekt, verlauf: o.verlauf, merk: { laden: false, loop: false, tempo: false }, vorhoeren: new Map() };
+    this.offen = { slug, projekt, verlauf: o.verlauf, merk: { laden: false, loop: false, tempo: false, reglerNach: [] }, vorhoeren: new Map() };
     this.meldeStand(this.offen);               // 1.8 S3 (D13): the core follows the opened project (tracks of the one before are disarmed)
     this.hosts.abgleich(projekt);              // plan 1.11 task 7: the hosts start in the background; open never waits for one
     this.instrumente.abgleich(projekt);        // plan 1.11 task 17: the same for the plugin instrument hosts
@@ -759,7 +812,7 @@ export class ProjSitzung {
   private async synchronisiere(quelle: Quelle, erz4: boolean, wiederanlauf = false): Promise<Record<string, unknown>> {
     const o = this.brauchOffen();
     const soll: Soll[] = wiederanlauf ? this.unbekannteSpurRegler(o.projekt)
-      : [...(erz4 ? erz4Soll(quelle) : []), ...alleRegler(o.projekt)];
+      : [...(erz4 && !o.projekt.live ? erz4Soll(quelle) : []), ...alleRegler(o.projekt)];   // live container: erz/4 belongs to the set, never moved
     // A switch is a fresh start (Andreas, 2026-11-02): the hand holder of the regulators written below ends first, in the same order as the writes.
     // Not on a restart of the page server in front of a running core (wiederanlauf): there the core wins. Only Andreas's own switch breaks his hand (D9):
     // when Cypher opens or creates, nothing is sent and the core's refusal stays visible in kern.regler_fehler.
@@ -772,7 +825,7 @@ export class ProjSitzung {
       wiederanlauf ? Promise.resolve(null) : this.loopOderMerke(o, quelle),
       wiederanlauf ? Promise.resolve(null) : this.kern.metronom(o.projekt, quelle), this.leereKiMaske()]);
     // P6: nur bei Quelle cypher werden ziel und xseite nicht gesendet (der Kern lehnt nur_hand ab) und als Meldung geführt
-    const nurHand = erz4 && !wiederanlauf && quelle === 'cypher'
+    const nurHand = erz4 && !o.projekt.live && !wiederanlauf && quelle === 'cypher'
       ? ERZ4_NUR_HAND.filter((r) => { const ist = this.lage.reglerWert(r.pfad); return ist !== null && ist !== r.wert; })
       .map((r) => ({ pfad: r.pfad, soll: r.wert, ist: this.lage.reglerWert(r.pfad) })) : [];
     const bkFehlt = bkGraphenFehlen(o.projekt);   // arr-bk: a stage whose graph file is gone plays dry; the answer says which
@@ -1542,7 +1595,7 @@ export class ProjSitzung {
       this.sperren -= 1;
       if (fuer === 'aufnahme') this.sperrenAufnahme -= 1;
       const o = this.offen;
-      if (this.sperren > 0 || !o || !(o.merk.laden || o.merk.loop || o.merk.tempo)) return;
+      if (this.sperren > 0 || !o || !(o.merk.laden || o.merk.loop || o.merk.tempo || o.merk.reglerNach.length)) return;
       // Spec 6.31: das Nachholen läuft in der Kette, also später. Ist das Projekt bis dahin geschlossen, verfällt es; setzt S3 inzwischen eine
       // neue Sperre (nächster Freeze), prüft holeNach sie direkt vor jedem Senden und lässt den Rest gemerkt bis zu deren Freigabe.
       void this.seriell(async () => { if (this.offen === o) await this.holeNach(o); })
@@ -1555,6 +1608,10 @@ export class ProjSitzung {
       if (this.sperren > 0) return;
       ergebnis.wiedergabe = await this.ladeWiedergabe('andreas');
       o.merk.laden = false;                                              // erst nach dem gelungenen Laden: wirft es, bleibt es gemerkt (Fix3 G9)
+      if (o.merk.reglerNach.length && !quittungAbgelehnt((ergebnis.wiedergabe as { quittung?: Quittung }).quittung ?? null)) {
+        const z = o.merk.reglerNach; o.merk.reglerNach = [];
+        this.meldeRegler(o, await this.kern.setzeRegler(z, 'andreas'));
+      }
     }
     if (o.merk.loop) {
       if (this.sperren > 0 || this.offen !== o) return;
@@ -1747,17 +1804,33 @@ export class ProjSitzung {
     void this.surge.gleiche(neu);
     return this.seriell(async () => {
       if (this.offen !== o) return;                                      // inzwischen geschlossen
-      const regler = await this.kern.setzeRegler(w.regler_aenderungen, quelle);
-      const abgelehnt = regler.filter((r) => quittungAbgelehnt(r.quittung)), keinKern = regler.filter((r) => r.quittung === null);   // Spec 6.31
-      if (abgelehnt.length || keinKern.length) {
-        this.ctx.log({ typ: 'proj_uebernimm_regler', slug: o.slug, abgelehnt: abgelehnt.map((r) => r.pfad), kein_kern: keinKern.map((r) => r.pfad) });
+      // Live container: rows that make something louder wait for the core's receipt of the playback load (project/controls_order.ts)
+      const dekodiert = neu.live ? this.betrifftWiedergabe(neu, this.gleicheDekodiertAb(neu, false)) : false;
+      const teilen = neu.live === true && (w.betrifft_wiedergabe || dekodiert);
+      const { vorher, nachher } = teilen ? teileReglerLive(alt, w.regler_aenderungen) : { vorher: w.regler_aenderungen, nachher: [] };
+      this.meldeRegler(o, await this.kern.setzeRegler(vorher, quelle));
+      const dekodiertAnders = neu.live ? dekodiert : this.betrifftWiedergabe(neu, this.gleicheDekodiertAb(neu, false));
+      if (w.betrifft_wiedergabe || dekodiertAnders) {
+        const l = await this.ladeOderMerke(quelle);
+        if (nachher.length) {
+          if (l.aufgeschoben === true) o.merk.reglerNach.push(...nachher);
+          else if (typeof l.nr === 'number' && !quittungAbgelehnt((l.quittung ?? null) as Quittung)) {
+            this.meldeRegler(o, await this.kern.setzeRegler(nachher, quelle));
+          } else {   // the old playback stays: its rows stay too
+            this.ctx.log({ typ: 'proj_uebernimm_regler_nach_abgelehnt', slug: o.slug, zeilen: nachher.length });
+          }
+        }
       }
-      const dekodiertAnders = this.betrifftWiedergabe(neu, this.gleicheDekodiertAb(neu, false));
-      if (w.betrifft_wiedergabe || dekodiertAnders) await this.ladeOderMerke(quelle);
       if (kanonisch(alt.loop) !== kanonisch(neu.loop)) await this.loopOderMerke(o, quelle);
       if (kanonisch(alt.metronom) !== kanonisch(neu.metronom)) await this.kern.metronom(neu, quelle);
       this.ctx.verteile({ a: 'proj', f: { slug: o.slug, rev: neu.rev, label: w.eintrag.label, quelle } });
     });
+  }
+  private meldeRegler(o: Offen, regler: ReglerErgebnis[]): void {
+    const abgelehnt = regler.filter((r) => quittungAbgelehnt(r.quittung)), keinKern = regler.filter((r) => r.quittung === null);   // Spec 6.31
+    if (abgelehnt.length || keinKern.length) {
+      this.ctx.log({ typ: 'proj_uebernimm_regler', slug: o.slug, abgelehnt: abgelehnt.map((r) => r.pfad), kein_kern: keinKern.map((r) => r.pfad) });
+    }
   }
   // 1.9 U5: brings the hosts to the open project's Surge map and resolves when they answered (the freeze path waits for it). A missing host or an
   // error answer is logged, never thrown, and the entries stay pending; the errors come back as text so the freeze can refuse a sound that would not

@@ -431,3 +431,11 @@ test('export answer: dj_schluessel true when a stage has a DJ key, absent otherw
   assert.equal(dj.body.dj_schluessel, true);
   assert.deepEqual(Object.keys(dj.body).sort(), [...Object.keys(ohne.body), 'dj_schluessel'].sort());
 });
+
+test('groups 9 to 16 can key each other: a compressor on group 12 keyed by group 10 pre is accepted (both level 0)', () => {
+  let p = mit(1);
+  for (let i = 0; i < 12; i++) p = ok(p, { befehl: 'gruppenspur_neu' }).projekt;
+  const r = stufe(p, 'g12', { quelle: 'grp', nr: 10, punkt: 'pre' }).projekt;
+  assert.deepEqual(alleInserts(r).find((x) => x.strangId === 'g12').insert.key, { quelle: 'grp', nr: 10, punkt: 'pre' });
+  lehntAb(p, { befehl: 'insert_setzen', strang_id: 'g12', pos: 0, art: 'komp', key: { quelle: 'grp', nr: 10, punkt: 'post' } }, 'sidechain_spaet');
+});

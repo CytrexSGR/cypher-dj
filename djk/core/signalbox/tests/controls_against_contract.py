@@ -92,7 +92,7 @@ def expandiere(p):
         return [f'deck/{i}/{p[9:]}' for i in range(1, 5)]
     if p.startswith('spur/<n>/'):                       # D1 K1: Spur-Regler des Arrangements, n = 1..32
         return [q for i in range(1, SPUREN[0] + 1) for q in expandiere_r(f'spur/{i}/{p[9:]}')]
-    if p.startswith('grp/<n>/'):                        # 1.10 Slice 1: Gruppen-Regler des Arrangements, n = 1..8
+    if p.startswith('grp/<n>/'):                        # 1.10 Slice 1: Gruppen-Regler des Arrangements, n = 1..16 (9..16 since nested groups)
         return [q for i in range(1, GRUPPEN[0] + 1) for q in expandiere_r(f'grp/{i}/{p[8:]}')]
     if p.startswith('ret/<r>/'):                        # 1.10 Slice 3: return strips, r = 1..4
         return [f'ret/{i}/{p[8:]}' for i in range(1, RETURNS[0] + 1)]
@@ -280,12 +280,12 @@ def main():
     if len(f_acht) != erwartet_acht:
         print('FEHLER: der Abgleich liest den Bereich nicht aus dem Vertragstext')
         return 1
-    # Selbsttest 3 (1.10): sagt der Vertragstext „n = 1 bis 4“ für die Gruppen, muss der Abgleich die Pfade der Gruppen 5 bis 8 melden (4 mal 4 Regler plus 4 mal 4 Sends)
-    satz = '`grp/<n>/*` (1.10, ADR 033, n = 1 bis 8)'
+    # Selbsttest 3 (1.10): sagt der Vertragstext „n = 1 bis 4“ für die Gruppen, muss der Abgleich die Pfade der Gruppen 5 bis 16 melden (12 mal 4 Regler plus cue plus 12 mal 4 Sends)
+    satz = '`grp/<n>/*` (1.10, ADR 033, n = 1 bis 16)'
     assert satz in text, 'Selbsttest: Satz der Gruppen-Regler im Vertrag nicht gefunden'
-    f_vier = abgleich(bib, vertrag(text.replace(satz, satz.replace('n = 1 bis 8', 'n = 1 bis 4'))))
-    erwartet_vier = 4 * (4 + RETURNS[0])   # groups 5..8 x (4 controls + one send per return); the 16 of 1.10 slice 1 predate the sends
-    print(f'Selbsttest Vertragstext Gruppen n = 1 bis 4: {len(f_vier)} Abweichungen, erwartet {erwartet_vier} (Gruppen 5 bis 8 mal 4 Regler plus {RETURNS[0]} Sends)')
+    f_vier = abgleich(bib, vertrag(text.replace(satz, satz.replace('n = 1 bis 16', 'n = 1 bis 4'))))
+    erwartet_vier = 12 * (5 + RETURNS[0])   # groups 5..16 x (4 controls + the cue switch + one send per return)
+    print(f'Selbsttest Vertragstext Gruppen n = 1 bis 4: {len(f_vier)} Abweichungen, erwartet {erwartet_vier} (Gruppen 5 bis 16 mal 4 Regler plus {RETURNS[0]} Sends)')
     if len(f_vier) != erwartet_vier:
         print('FEHLER: der Abgleich liest die Gruppenzahl nicht aus dem Vertragstext')
         return 1

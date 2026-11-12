@@ -231,4 +231,46 @@ fn echtzeitpfad_allokiert_nicht() {
         assert_eq!(ANFORDERUNGEN.load(Ordering::SeqCst), start, "Echtzeitpfad hat Speicher angefordert: {}", p.name);
         assert!(summe.is_finite());
     }
+    umschalten_der_zweige_allokiert_nicht();
+}
+
+/// Branches of a `wahl` (zweige.rs): all 64 knobs jump to new values every 2048 samples, so every switch `wahl` changes its
+/// position again and again, and branches that were off are reset and started while the allocation counter watches. Includes a
+/// full `zuruecksetzen` in the middle. Called from `echtzeitpfad_allokiert_nicht`, not a test of its own: the counter is global,
+/// two tests running side by side would count each other's translations.
+fn umschalten_der_zweige_allokiert_nicht() {
+    let wurzel = std::env::temp_dir().join(format!("bk-zweige-alloc-{}", std::process::id()));
+    std::fs::create_dir_all(&wurzel).unwrap();
+    let graphen = [
+        include_str!("../demos/synth-poly.json"),
+        include_str!("../demos/synth-mono.json"),
+        include_str!("../demos/synth-neuro.json"),
+        include_str!("../demos/fx-filterbox.json"),
+    ];
+    for g in graphen {
+        let mut p = uebersetze_mit_wurzel(g, 48_000.0, Some(&wurzel)).unwrap();
+        assert!(!p.zweige_info().is_empty(), "{}: no branches, the test would prove nothing", p.name);
+        let start = ANFORDERUNGEN.load(Ordering::SeqCst);
+        let mut summe = 0.0f32;
+        let mut z = 0x1234_5678u32;
+        for i in 0..400_000u32 {
+            if i % 20_000 == 0 { p.note_an(40 + (i / 20_000 % 12) as u8, 0.8); }
+            if i % 2048 == 0 {
+                for nr in 1..=baukasten_dsp::REGLER {
+                    z ^= z << 13;
+                    z ^= z >> 17;
+                    z ^= z << 5;
+                    p.setze_regler(nr, (z % 1001) as f32 / 1000.0);
+                }
+            }
+            if i == 200_000 { p.zuruecksetzen(); }
+            if p.hat_eingang() { p.setze_eingang(0.3, -0.3); }
+            let (l, r) = p.sample_stereo();
+            summe += l + r;
+        }
+        assert_eq!(ANFORDERUNGEN.load(Ordering::SeqCst), start, "branches allocated in the real-time path: {}", p.name);
+        assert!(summe.is_finite());
+        assert!(p.uebersprungen() > 0, "{}: nothing skipped", p.name);
+        assert_eq!(p.rettungen, 0, "{}: rescue ran", p.name);
+    }
 }

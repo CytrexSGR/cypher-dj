@@ -10,6 +10,9 @@
 using namespace cypherdj::stellwerk;
 
 namespace {
+// nested groups task 1: groups 9..16 are appended at the end of the table: 8 x 4 controls (fader, pan, mute, solo) + 4 returns x 8 sends
+constexpr int GRUPPEN_NEU_ZEILEN = GRP_REGLER_GRUPPEN_NEU * 4 + RET_REGLER_RETURNS * GRP_REGLER_GRUPPEN_NEU;
+constexpr int GRUPPEN_CUE_ZEILEN = GRP_REGLER_GRUPPEN_ALLE;   // live modules task 6: grp/1..16/cue at the very end
 const ReglerTabelle& tab() {
   static ReglerTabelle t;
   return t;
@@ -34,15 +37,15 @@ FALL(zahl_der_regler_und_kanaele) {
   // 1.10 slice 4b T12: plus the eq rows (59 per instance, 1 instance) and the saett rows (4 per instance, 1 instance): 1378 + 63 = 1441.
   // The pool sizes are the measured ones (T11): a change of either is a decision with a new measurement, and this pin goes red first.
   // 2026-11-06: the eq pool has 2 instances (Andreas' decision of 2026-11-05, lane measured quiet): 59 more rows.
-  PRUEFE_GLEICH(tab().anzahl(), 597 + 12 * 8 + 204 + 2 * 8 + WERKZEUG_REGLER + 120 + 8 * 59 + 4 * 4 + 48 + 2 * 3 + 4 + 8 * 5 + 8 * 65 + 14 * 56);   // + the 48 rack rows (slice 4c), + the 3 ins/lim rows per limiter, + the 4 ins/host rows (plan 1.11), + the 5 ins/utility rows per instance (arr-fx)
+  PRUEFE_GLEICH(tab().anzahl(), 597 + 12 * 8 + 204 + 2 * 8 + WERKZEUG_REGLER + 120 + 8 * 59 + 4 * 4 + 48 + 2 * 3 + 4 + 8 * 5 + 8 * 65 + 14 * 56 + GRUPPEN_NEU_ZEILEN + GRUPPEN_CUE_ZEILEN);   // + the 48 rack rows (slice 4c), + the 3 ins/lim rows per limiter, + the 4 ins/host rows (plan 1.11), + the 5 ins/utility rows per instance (arr-fx)
   // 1.10 slice 4c T15: plus the 48 rack macro rows rack/<1..12>/m1..m4: 1500 + 48 = 1548.
   // Master limiter: plus the 3 rows ins/lim/1/{an,decke,abklingen}: 1548 + 3 = 1551.
   // Plan 1.11 T4: plus the 4 rows ins/host/1..4/an: 1551 + 4 = 1555.
   // arr-fx slice 1: plus the utility kind, 8 instances x 5 rows (an, breite, mono_unter, gain, balance), appended last: 1555 + 40 = 1595.
   // arr-fx slice 2: the pools grow to 8 EQs (+6 x 59), 4 saturators (+3 x 4) and 2 limiters (+3): 1595 + 354 + 12 + 3 = 1964; rack, lim, host and utility rows move up.
   // arr-bk slice 3: plus the bk kind, 8 instances x 9 rows (an, k1..k8), appended last: 1964 + 72 = 2036 of the ceiling 4096.
-  PRUEFE_GLEICH(tab().anzahl(), 913 + 345 + 120 + 8 * 59 + 4 * 4 + 48 + 2 * 3 + 4 + 8 * 5 + 8 * 65 + 14 * 56);
-  PRUEFE_GLEICH(tab().anzahl(), 3268);   // 64-knob widening: 2564 + 8 x 32 (ins/bk/<n>/k33..k64) + 14 x 32 (<kanal>/bk/33..64 of 12 channels, fx/3, fx/4) of the ceiling 4096
+  PRUEFE_GLEICH(tab().anzahl(), 913 + 345 + 120 + 8 * 59 + 4 * 4 + 48 + 2 * 3 + 4 + 8 * 5 + 8 * 65 + 14 * 56 + GRUPPEN_NEU_ZEILEN + GRUPPEN_CUE_ZEILEN);
+  PRUEFE_GLEICH(tab().anzahl(), 3268 + GRUPPEN_NEU_ZEILEN + GRUPPEN_CUE_ZEILEN);   // nested groups task 1: + 64 rows of groups 9..16 at the end; 64-knob widening: 2564 + 8 x 32 (ins/bk/<n>/k33..k64) + 14 x 32 (<kanal>/bk/33..64 of 12 channels, fx/3, fx/4) of the ceiling 4096
   // the contract (INTERFACES 1.5) says indices 1258 to 1377: the table counts the 4 deck/<n>/transport rows, the dump of stellwerk_regler_liste does not (1374 lines)
   PRUEFE_GLEICH(tab().suche("ins/komp/1/an"), 1258);
   PRUEFE_GLEICH(tab().suche("ins/komp/12/sc"), 1377);
@@ -289,7 +292,7 @@ FALL(gruppen_regler_und_pm_global_mit_vorgaben) {
   PRUEFE(pm.kanal == -1 && pm.rolle == Rolle::pm_fader && pm.min == -200.0f && pm.max == 6.0f && pm.vorgabe == 0.0f && pm.db && !pm.nur_hand &&
          pm.schalt_samples == 480);
   // Negativ-Kontrollen: n+1, 0, fremde Felder, PM hat nur den Fader
-  for (const char* p : {"grp/9/fader", "grp/0/pan", "grp/1/trim", "grp/1/send/0", "pm/pan", "pm/mute", "pm/fader/x"}) PRUEFE_GLEICH(tab().suche(p), -1);
+  for (const char* p : {"grp/17/fader", "grp/0/pan", "grp/1/trim", "grp/1/send/0", "pm/pan", "pm/mute", "pm/fader/x"}) PRUEFE_GLEICH(tab().suche(p), -1);
 }
 
 FALL(neue_regler_stehen_hinter_spur_32_ohne_index_verschiebung) {
@@ -359,7 +362,7 @@ FALL(send_und_return_regler_global_mit_vorgaben) {
   }
   PRUEFE_GLEICH(gezaehlt, 204);
   // Negativ-Kontrollen: n+1, 0, fremde Felder, Returns senden nicht an Returns
-  for (const char* p : {"spur/33/send/1", "spur/1/send/5", "spur/1/send/0", "grp/9/send/1", "grp/1/send/5", "ret/5/fader", "ret/0/fader", "ret/1/hall/mix",
+  for (const char* p : {"spur/33/send/1", "spur/1/send/5", "spur/1/send/0", "grp/17/send/1", "grp/1/send/5", "ret/5/fader", "ret/0/fader", "ret/1/hall/mix",
                         "ret/1/send/1", "ret/1/trim", "ret/1/hall", "ret/1/hall/an/x", "spur/1/send/01", "spur/1/send/10"})
     PRUEFE_GLEICH(tab().suche(p), -1);
 }
@@ -381,7 +384,7 @@ FALL(send_und_return_regler_stehen_hinter_dem_bk_block_ohne_index_verschiebung) 
   int ab_snd = 0;
   for (int r = 0; r < tab().anzahl(); r++)
     if (tab().def(r).rolle >= Rolle::snd_spur && tab().def(r).rolle <= Rolle::ret_hall_fahne) ab_snd++;
-  PRUEFE_GLEICH(ab_snd, 204);
+  PRUEFE_GLEICH(ab_snd, 204 + RET_REGLER_RETURNS * GRP_REGLER_GRUPPEN_NEU);   // nested groups task 1: + the sends of groups 9..16 (32), appended at the table end
   PRUEFE_GLEICH(tab().suche("fx/4/bk/8") - 897 + 1, 16);   // A1b: the tail of the old table is fx/4/bk/8 (912), the mix-tool block follows
 }
 
@@ -503,7 +506,7 @@ FALL(werkzeug_zeilen_345_und_ihre_zaehlung) {
   PRUEFE_GLEICH(spektrum, 1);
   PRUEFE_GLEICH(gesamt, 345);
   PRUEFE_GLEICH(WERKZEUG_REGLER, 345);
-  PRUEFE_GLEICH(tab().anzahl(), 1258 + 120 + 8 * 59 + 4 * 4 + 48 + 2 * 3 + 4 + 8 * 5 + 8 * 65 + 14 * 56);   // arr-bk: + 8 x 9 bk rows;   // 1.10 slice 4a/4b/4c + limiter + arr-fx: the 706 insert rows (120 komp, 8 x 59 eq, 4 x 4 saett, 48 rack, 2 x 3 lim, 4 host, 8 x 5 utility) follow the tool block
+  PRUEFE_GLEICH(tab().anzahl(), 1258 + 120 + 8 * 59 + 4 * 4 + 48 + 2 * 3 + 4 + 8 * 5 + 8 * 65 + 14 * 56 + GRUPPEN_NEU_ZEILEN + GRUPPEN_CUE_ZEILEN);   // arr-bk: + 8 x 9 bk rows;   // 1.10 slice 4a/4b/4c + limiter + arr-fx: the 706 insert rows (120 komp, 8 x 59 eq, 4 x 4 saett, 48 rack, 2 x 3 lim, 4 host, 8 x 5 utility) follow the tool block
   // and the table holds no other row of this kind: the count by role is 345 as well
   int rollen = 0;
   for (int r = 0; r < tab().anzahl(); r++)
@@ -658,10 +661,10 @@ FALL(die_ersten_1258_zeilen_sind_unveraendert) {
 // the send returns), the rows 9..32 moved by 256 (2228 -> 2484) because the insert block before them grew to 65 rows per stage; the restart state is keyed by path, so nothing reads them by index; two-digit numbers are their own rows and never alias bk/1..bk/8.
 FALL(bk_regler_9_bis_64_haengen_am_tabellenende) {
   const int n = tab().anzahl();
-  PRUEFE_GLEICH(n, 3268);
+  PRUEFE_GLEICH(n, 3268 + GRUPPEN_NEU_ZEILEN + GRUPPEN_CUE_ZEILEN);
   PRUEFE(n < cypherdj::stellwerk::MAX_REGLER);
   PRUEFE_GLEICH(cypherdj::stellwerk::BK_REGLER_N, 64);
-  PRUEFE_GLEICH(cypherdj::stellwerk::MAX_REGLER - n, 828);   // "Regler 3268 von 4096, Reserve 828"
+  PRUEFE_GLEICH(cypherdj::stellwerk::MAX_REGLER - n, 748);   // "Regler 3348 von 4096, Reserve 748" (live modules task 6: 16 grp/<n>/cue rows; 764 before, 3268 and 828 before nested groups task 1)
   // rows 9..32: 12 channels x 24 knobs, then fx/3 and fx/4 x 24, at 2484..2819 (the block of the 32-knob widening, unmoved)
   PRUEFE_GLEICH(tab().suche("deck/1/bk/9"), 2484);
   PRUEFE_GLEICH(tab().suche("deck/1/bk/32"), 2484 + 23);
@@ -673,9 +676,9 @@ FALL(bk_regler_9_bis_64_haengen_am_tabellenende) {
   PRUEFE_GLEICH(tab().suche("deck/1/bk/33"), 2820);
   PRUEFE_GLEICH(tab().suche("deck/1/bk/64"), 2820 + 31);
   PRUEFE_GLEICH(tab().suche("deck/2/bk/33"), 2820 + 32);
-  PRUEFE_GLEICH(tab().suche("pad/2/bk/64"), n - 2 * 32 - 1);
-  PRUEFE_GLEICH(tab().suche("fx/3/bk/33"), n - 2 * 32);
-  PRUEFE_GLEICH(tab().suche("fx/4/bk/64"), n - 1);
+  PRUEFE_GLEICH(tab().suche("pad/2/bk/64"), 3268 - 2 * 32 - 1);
+  PRUEFE_GLEICH(tab().suche("fx/3/bk/33"), 3268 - 2 * 32);
+  PRUEFE_GLEICH(tab().suche("fx/4/bk/64"), 3268 - 1);
   // the old rows did not move
   PRUEFE_GLEICH(tab().suche("deck/1/bk/1"), 597);
   PRUEFE_GLEICH(tab().suche("pad/2/bk/8"), 692);
@@ -706,3 +709,35 @@ FALL(bk_regler_9_bis_64_haengen_am_tabellenende) {
 }
 
 PRUEF_MAIN
+
+// nested groups task 1: groups 9..16 (64 rows) sit behind the last old row (3267), nothing moves, and the rows carry the values of groups 1..8
+FALL(gruppen_9_bis_16_haengen_am_tabellenende) {
+  PRUEFE_GLEICH(GRUPPEN_NEU_ZEILEN, 64);
+  PRUEFE_GLEICH(GRP_REGLER_GRUPPEN_ALLE, 16);
+  PRUEFE_GLEICH(tab().suche("grp/9/fader"), 3268);
+  PRUEFE_GLEICH(tab().suche("grp/16/solo"), 3268 + 31);
+  PRUEFE_GLEICH(tab().suche("grp/9/send/1"), 3300);
+  PRUEFE_GLEICH(tab().suche("grp/16/send/1"), 3307);
+  PRUEFE_GLEICH(tab().suche("grp/16/send/4"), 3331);
+  PRUEFE(tab().suche("grp/8/send/4") < 3268 && tab().suche("grp/1/fader") == 564);   // the old group rows keep their place
+  PRUEFE_GLEICH(std::strcmp(tab().def(3267).pfad, "fx/4/bk/64"), 0);   // the last old row
+  for (int n = 9; n <= 16; n++) {
+    char p[32];
+    std::snprintf(p, sizeof p, "grp/%d/fader", n);
+    PRUEFE(d(p).kanal == -1 && d(p).rolle == Rolle::grp_fader && d(p).vorgabe == 0.0f && d(p).min == -200.0f && d(p).max == 6.0f && d(p).db &&
+           d(p).schalt_samples == 480 && d(p).kurve.typ == KurvenTyp::fader_db);
+    std::snprintf(p, sizeof p, "grp/%d/pan", n);
+    PRUEFE(d(p).rolle == Rolle::grp_pan && d(p).min == -1.0f && d(p).max == 1.0f);
+    std::snprintf(p, sizeof p, "grp/%d/mute", n);
+    PRUEFE(d(p).rolle == Rolle::grp_mute && d(p).ganzzahlig && d(p).keine_rampe && d(p).schalt_samples == 0);
+    std::snprintf(p, sizeof p, "grp/%d/solo", n);
+    PRUEFE(d(p).rolle == Rolle::grp_solo && d(p).ganzzahlig && d(p).keine_rampe && d(p).schalt_samples == 0);
+    for (int r = 1; r <= RET_REGLER_RETURNS; r++) {
+      std::snprintf(p, sizeof p, "grp/%d/send/%d", n, r);
+      PRUEFE(d(p).rolle == Rolle::snd_grp && d(p).vorgabe == -200.0f && d(p).min == -200.0f && d(p).max == 6.0f && d(p).db && d(p).schalt_samples == 480);
+    }
+    std::snprintf(p, sizeof p, "grp/%d/fader", n);
+    PRUEFE_GLEICH(grp_nr(p), n);
+  }
+  for (const char* p : {"grp/17/fader", "grp/17/send/1", "grp/16/send/5", "grp/16/trim", "grp/016/fader"}) PRUEFE_GLEICH(tab().suche(p), -1);
+}

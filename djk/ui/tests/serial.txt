@@ -15,6 +15,7 @@ collections_area.test.mjs
 state_controls_generator.test.mjs
 learn_route.test.mjs
 loop_import.test.mjs
+live_container.test.mjs
 media_library.test.mjs
 pattern_library.test.mjs
 presets_apply_route.test.mjs
@@ -96,3 +97,7 @@ proj_recording_lock18.test.mjs
 project_routing_matrix.test.mjs
 coupling.test.mjs
 graph_vorgaben.test.mjs
+starter_pattern.test.mjs
+vorbereit_source.test.mjs
+graph_restart.test.mjs
+oszi_route.test.mjs

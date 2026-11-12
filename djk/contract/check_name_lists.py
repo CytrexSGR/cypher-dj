@@ -548,7 +548,8 @@ def _pruefe_spur_regler(q: Quelle, befunde: list[str]) -> None:
 def routing_regler_listen(q: Quelle) -> tuple[int, dict[str, list[str]]]:
     """grp/<n>/* und pm/fader je Fundort; n = GRP_REGLER_GRUPPEN aus controls.h. Nur im Arbeitsbaum (node)."""
     regler_h = q.lies("djk/core/signalbox/include/cypherdj/signalbox/controls.h")
-    n = int(_such(r"constexpr int GRP_REGLER_GRUPPEN = (\d+);", regler_h, "controls.h").group(1))
+    n = (int(_such(r"constexpr int GRP_REGLER_GRUPPEN = (\d+);", regler_h, "controls.h").group(1))
+         + int(_such(r"constexpr int GRP_REGLER_GRUPPEN_NEU = (\d+);", regler_h, "controls.h").group(1)))   # nested groups task 1: groups 9..16 are the second constant
     cpp = q.lies("djk/core/signalbox/src/controls.cpp")
     felder = re.findall(r'"grp/%d/([a-z_]+)"', cpp)
     if not felder:
@@ -628,7 +629,8 @@ def _kern_return_regler(q: Quelle) -> tuple[list[str], dict[str, tuple[float, fl
     regler_h = q.lies("djk/core/signalbox/include/cypherdj/signalbox/controls.h")
     nr = int(_such(r"constexpr int RET_REGLER_RETURNS = (\d+);", regler_h, "controls.h").group(1))
     ns = int(_such(r"constexpr int SPUR_REGLER_SPUREN = (\d+);", regler_h, "controls.h").group(1))
-    ng = int(_such(r"constexpr int GRP_REGLER_GRUPPEN = (\d+);", regler_h, "controls.h").group(1))
+    ng = (int(_such(r"constexpr int GRP_REGLER_GRUPPEN = (\d+);", regler_h, "controls.h").group(1))
+         + int(_such(r"constexpr int GRP_REGLER_GRUPPEN_NEU = (\d+);", regler_h, "controls.h").group(1)))   # nested groups task 1: groups 9..16 are the second constant
     cpp = q.lies("djk/core/signalbox/src/controls.cpp")
     for muster in ('"spur/%d/send/%d"', '"grp/%d/send/%d"'):
         if muster not in cpp:
@@ -725,7 +727,7 @@ def _pruefe_return_regler(q: Quelle, befunde: list[str]) -> None:
             befunde.append(f"Return-Regler: R06 hand_bedienung.PFAD lehnt {name} ab")
         if not re.fullmatch(schema, name):
             befunde.append(f"Return-Regler: R07 defs.schema.json regler_pfad lehnt {name} ab")
-    for falsch in ("spur/33/send/1", "spur/1/send/5", "spur/1/send/0", "grp/9/send/1", "ret/5/fader", "ret/0/fader", "ret/1/hall/mix",
+    for falsch in ("spur/33/send/1", "spur/1/send/5", "spur/1/send/0", "grp/17/send/1", "ret/5/fader", "ret/0/fader", "ret/1/hall/mix",
                    "ret/1/send/1", "ret/1/trim"):   # Gegenprobe: kein Muster zu weit
         if pfad_re.search(falsch):
             befunde.append(f"Return-Regler: R06 hand_bedienung.PFAD nimmt {falsch} an")

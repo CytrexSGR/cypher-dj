@@ -224,8 +224,10 @@ export function projBereich(ctx: BereichKontext, opt: ProjOptionen = {}): Bereic
           zahlArg('bei_beat'), mx, url.searchParams.get('clip_id') || null, url.searchParams.get('ziel') || null);
       }),
       // Spec 6.32: ?antwort=kurz (Werkzeuge proj_neu, proj_oeffnen) liefert slug, rev, Spuren ohne Noten, noten_zahl und kern statt des Projekts
-      schreib('/proj/neu', (d, quelle) => s.neu(d.name, quelle), kurzeOeffnenAntwort),
-      schreib('/proj/oeffnen', (d, quelle) => s.oeffnen(d.slug, quelle), kurzeOeffnenAntwort),
+      // plan live-module task 1: bestaetigt = Andreas's confirm of a switch away from a running live container (the session ignores it for Cypher)
+      schreib('/proj/neu', (d, quelle) => s.neu(d.name, quelle, d.bestaetigt === true), kurzeOeffnenAntwort),
+      schreib('/proj/oeffnen', (d, quelle) => s.oeffnen(d.slug, quelle, d.bestaetigt === true), kurzeOeffnenAntwort),
+      schreib('/live/oeffnen', (d, quelle) => s.liveOeffnen(quelle, d.bestaetigt === true)),
       // Spec 6.31: ?antwort=kurz (Werkzeuge) liefert rev, kern und noten_zahl je Clip statt des Projekts
       // plan 1.11 D3: a plugin knob (not a command: no history, no project write); the insert ID is in the path
       {

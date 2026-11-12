@@ -95,6 +95,15 @@ export const INSTRUMENT_KANAELE: string[] = INSTRUMENT_STROEME.map((s) => kanalV
 export const EFFEKT_KANAELE = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'fx/3', 'fx/4'];
 export const GRAPH_KANAELE = ['erz/1', ...INSTRUMENT_KANAELE, ...EFFEKT_KANAELE];
 
+// Kern restart (Kanban t_e998388c): the kern keeps no graph over a restart, the page server loads again what was loaded. `vorher` is the server's map
+// before it clears it, `besitzer` the source of the last load per channel (unknown counts as andreas: a graph that was sounding comes back), and
+// `projektKanaele` the channels of the open project's sound snapshot, which the project restore (session.ts nachNeustart) loads itself.
+export function graphenNachNeustart(vorher: Record<string, string>, besitzer: Record<string, string>, projektKanaele: readonly string[]): { kanal: string; name: string; besitzer: string }[] {
+  return Object.entries(vorher)
+    .filter(([kanal, name]) => name !== '' && GRAPH_KANAELE.includes(kanal) && !projektKanaele.includes(kanal))
+    .map(([kanal, name]) => ({ kanal, name, besitzer: besitzer[kanal] === 'cypher' ? 'cypher' : 'andreas' }));
+}
+
 // ---- Front panels (sidecar files) -----------------------------------------------------------------------------------------------
 // A panel is a separate description of how a graph's knobs are laid out on the page: <graph folder>/panels/<graph>.json, format
 // "cypherdj-panel/2" (v1 "baukasten-panel/1" files are read as v2). The graph file stays untouched (the core rejects unknown keys and its sha256 is a project fingerprint). The

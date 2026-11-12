@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# djk-starter: gives a fresh HOME something to play. Copies the shipped Cypher Modular graphs into the core's graph folder
+# ($CYPHERDJ_BK_ORDNER or ~/.config/cypherdj/baukasten) and writes the generated sample files they need. Later steps (kits,
+# loops, demo project, library) hang on the same command. Never overwrites a file of the user.
+#
+#   djk-starter [--nur graphen|kits|loops|demo|bibliothek]... [--instanz a..i]
+#
+# One line per item on stdout: "installed <what>" or "kept <what>". Steps that could not run are named on stderr.
+# Return: 0 all done, 2 usage, 4 done with skipped steps (missing tool, see stderr).
+set -uo pipefail
+HIER=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
+DJK=${DJK:-$(cd "$HIER/.." && pwd)}
+# Personal paths, same rule as djk-start: variables already set by the caller win against the file.
+UMG=${CYPHERDJ_UMGEBUNG:-$HOME/.config/cypherdj/umgebung.env}
+if [ -f "$UMG" ]; then
+  _gesetzt=$(export -p | grep '^declare -x CYPHERDJ_')
+  set -a; . "$UMG"; set +a
+  [ -z "$_gesetzt" ] || eval "$_gesetzt"
+fi
+# Interpreter in the order of the page server (pythonVorgabe): CYPHERDJ_PYTHON, werkstatt venv, repo venv, python3.
+PY=${CYPHERDJ_PYTHON:-}
+if [ -z "$PY" ]; then
+  for k in "$DJK/werkstatt/.venv/bin/python" "$DJK/../.venv/bin/python"; do
+    [ -x "$k" ] && { PY=$k; break; }
+  done
+fi
+PY=${PY:-python3}
+cd "$DJK" && exec "$PY" -m starter "$@"

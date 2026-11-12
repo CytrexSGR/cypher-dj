@@ -70,11 +70,12 @@ for (let n = 1; n <= 32; n++) {   // D1 K1 (§1.5), E3: 32 Slots: Spur-Regler de
   tabelle.set(`spur/${n}/mute`, { pfad: `spur/${n}/mute`, kanal: null, ...r('schalter', 0, 1, 0) });
   tabelle.set(`spur/${n}/solo`, { pfad: `spur/${n}/solo`, kanal: null, ...r('schalter', 0, 1, 0) });
 }
-for (let n = 1; n <= 8; n++) {   // 1.10 Slice 1 (§1.5): Gruppen-Regler des Arrangements, global, alle dürfen; Fader bis +6 dB
+for (let n = 1; n <= 16; n++) {   // 1.10 Slice 1 (§1.5): Gruppen-Regler des Arrangements, global, alle dürfen; Fader bis +6 dB
   tabelle.set(`grp/${n}/fader`, { pfad: `grp/${n}/fader`, kanal: null, ...r('db', -200, 6, 0) });
   tabelle.set(`grp/${n}/pan`, { pfad: `grp/${n}/pan`, kanal: null, ...r('linear', -1, 1, 0) });
   tabelle.set(`grp/${n}/mute`, { pfad: `grp/${n}/mute`, kanal: null, ...r('schalter', 0, 1, 0) });
   tabelle.set(`grp/${n}/solo`, { pfad: `grp/${n}/solo`, kanal: null, ...r('schalter', 0, 1, 0) });
+  tabelle.set(`grp/${n}/cue`, { pfad: `grp/${n}/cue`, kanal: null, ...r('schalter', 0, 1, 0) });   // live modules task 6: headphone cue of the group, hand only
 }
 tabelle.set('pm/fader', { pfad: 'pm/fader', kanal: null, ...r('db', -200, 6, 0) });
 // 1.10 Slice 3 (§1.5): sends (post fader) from tracks and groups to the 4 returns, return strips and Cypher Hall values; global, everybody may.
@@ -82,7 +83,7 @@ tabelle.set('pm/fader', { pfad: 'pm/fader', kanal: null, ...r('db', -200, 6, 0) 
 const HALL_VORGABE: Record<string, number> = { pre: 0.04, decay: 0.5252, groesse: 0.282, tief: 0.5658, highcut: 0.8039, fahne: 0.66667 };
 for (let ret = 1; ret <= 4; ret++) {
   for (let n = 1; n <= 32; n++) tabelle.set(`spur/${n}/send/${ret}`, { pfad: `spur/${n}/send/${ret}`, kanal: null, ...r('db', -200, 6, -200) });
-  for (let n = 1; n <= 8; n++) tabelle.set(`grp/${n}/send/${ret}`, { pfad: `grp/${n}/send/${ret}`, kanal: null, ...r('db', -200, 6, -200) });
+  for (let n = 1; n <= 16; n++) tabelle.set(`grp/${n}/send/${ret}`, { pfad: `grp/${n}/send/${ret}`, kanal: null, ...r('db', -200, 6, -200) });
   tabelle.set(`ret/${ret}/fader`, { pfad: `ret/${ret}/fader`, kanal: null, ...r('db', -200, 6, 0) });
   tabelle.set(`ret/${ret}/pan`, { pfad: `ret/${ret}/pan`, kanal: null, ...r('linear', -1, 1, 0) });
   tabelle.set(`ret/${ret}/mute`, { pfad: `ret/${ret}/mute`, kanal: null, ...r('schalter', 0, 1, 0) });

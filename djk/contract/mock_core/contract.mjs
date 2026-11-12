@@ -205,11 +205,12 @@ for (let n = 1; n <= 32; n++) {   // D1 K1 (§1.5), E3: 32 Slots: Spur-Regler de
   REGLER.set(`spur/${n}/mute`, { ...R(SCHALTER, 0, 1, 0), kanal: null });
   REGLER.set(`spur/${n}/solo`, { ...R(SCHALTER, 0, 1, 0), kanal: null });
 }
-for (let n = 1; n <= 8; n++) {   // 1.10 Slice 1 (§1.5): Gruppen-Regler, global, alle dürfen
+for (let n = 1; n <= 16; n++) {   // 1.10 Slice 1 (§1.5): Gruppen-Regler, global, alle dürfen
   REGLER.set(`grp/${n}/fader`, { ...R(DB, -200, 6, 0), kanal: null });
   REGLER.set(`grp/${n}/pan`, { ...R(LIN, -1, 1, 0), kanal: null });
   REGLER.set(`grp/${n}/mute`, { ...R(SCHALTER, 0, 1, 0), kanal: null });
   REGLER.set(`grp/${n}/solo`, { ...R(SCHALTER, 0, 1, 0), kanal: null });
+  REGLER.set(`grp/${n}/cue`, { ...R(SCHALTER, 0, 1, 0), kanal: null });   // live modules task 6: headphone cue of the group, hand only
 }
 REGLER.set('pm/fader', { ...R(DB, -200, 6, 0), kanal: null });
 // 1.10 Slice 3 (§1.5): sends (post fader) from tracks and groups to the 4 returns, return strips and Cypher Hall values; global, everybody may.
@@ -217,7 +218,7 @@ REGLER.set('pm/fader', { ...R(DB, -200, 6, 0), kanal: null });
 const HALL_VORGABE = { pre: 0.04, decay: 0.5252, groesse: 0.282, tief: 0.5658, highcut: 0.8039, fahne: 0.66667 };
 for (let r = 1; r <= 4; r++) {
   for (let n = 1; n <= 32; n++) REGLER.set(`spur/${n}/send/${r}`, { ...R(DB, -200, 6, -200), kanal: null });
-  for (let n = 1; n <= 8; n++) REGLER.set(`grp/${n}/send/${r}`, { ...R(DB, -200, 6, -200), kanal: null });
+  for (let n = 1; n <= 16; n++) REGLER.set(`grp/${n}/send/${r}`, { ...R(DB, -200, 6, -200), kanal: null });
   REGLER.set(`ret/${r}/fader`, { ...R(DB, -200, 6, 0), kanal: null });
   REGLER.set(`ret/${r}/pan`, { ...R(LIN, -1, 1, 0), kanal: null });
   REGLER.set(`ret/${r}/mute`, { ...R(SCHALTER, 0, 1, 0), kanal: null });

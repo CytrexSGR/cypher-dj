@@ -5,13 +5,13 @@
 import { linien, beatZuX } from './timeline.js';
 import { SPUR_HOEHE, LOOP_ZONE, CLIP_KOPF, clipKasten, sichtbar, welleSpalteFuer, notenKaesten, zeilenFuer, spurZeile } from './layout.js';
 import { genutzteBereiche } from './takes.js';
+import { gruppenEltern, gruppenKette, spurGruppe } from './routing.js';
 import { lanePfad, wertZuY, gezeigteLane, bereich, laneSchutz, laneLinienFarbe } from './lanes.js';
 import { stemsBalkenListe, stummDecke } from './stems.js';
 import { punchBand } from './recording.js';
 import { spalten, zeichneSpalte } from '../wave.js';
 
 const HEX = /^#[0-9a-f]{6}$/i;
-const gruppeIndex = (p, spur) => (p.gruppen ?? []).findIndex((x) => x.id === spur?.ausgang?.id);
 const alpha = (f, a) => (HEX.test(f) ? f + a : `rgba(140,140,150,0.25)`);
 
 export class Arrangement {
@@ -54,15 +54,18 @@ export class Arrangement {
     const g = this.gs, w = this.s.width, h = this.s.height;
     g.fillStyle = '#0b0d11'; g.fillRect(0, 0, w, h);
     if (!p) return;
+    // nested groups: one 3 px bar at the left edge per group in the chain (outermost first); a flat project has one bar at x 0 as before
+    const eltern = gruppenEltern(p), farbe = (id) => { const f = p.gruppen?.find((x) => x.id === id)?.farbe; return HEX.test(f) ? f : '#8a8d98'; };
+    const balken = (kette, y, h) => kette.forEach((id, k) => { g.fillStyle = farbe(id); g.fillRect(3 * k, y, 3, h); });
     for (const z of tab) {
       if (z.art === 'gruppe') {   // 1.10 T3: header row of a group: a band in the group colour, a stronger bar on the left
-        const f = p.gruppen?.[z.gruppe]?.farbe;
+        if (z.h === 0) continue;   // a child group of a folded group
         g.fillStyle = '#171a21'; g.fillRect(0, z.y, w, z.h);
-        g.fillStyle = HEX.test(f) ? f : '#8a8d98'; g.fillRect(0, z.y, 3, z.h);
+        balken(gruppenKette(p, p.gruppen[z.gruppe].id, eltern), z.y, z.h);
         continue;
       }
       g.fillStyle = z.art === 'lane' ? '#0d1014' : z.art === 'take' ? '#0c0e12' : z.spur % 2 ? '#12141a' : '#0f1116'; g.fillRect(0, z.y, w, z.h);
-      if (z.tiefe > 0 && z.h > 0) { const f = p.gruppen?.[gruppeIndex(p, p.spuren[z.spur])]?.farbe; g.fillStyle = HEX.test(f) ? f : '#8a8d98'; g.fillRect(0, z.y, 3, z.h); }
+      if (z.tiefe > 0 && z.h > 0) balken(gruppenKette(p, spurGruppe(p, p.spuren[z.spur]), eltern), z.y, z.h);
     }
     if (p.loop) {
       const x0 = beatZuX(a, p.loop.von_beat), x1 = beatZuX(a, p.loop.bis_beat);

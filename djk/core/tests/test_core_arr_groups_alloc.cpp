@@ -1,5 +1,5 @@
-// 1.10 Slice 1 (L5): kein malloc im Kern-Zyklus mit Gruppen: vier Audio-Spuren in zwei Gruppen, Ziel-Wechsel mitten im Lauf (Tausch der Wiedergabe mit
-// anderem ausgang), Fader-Rampen an Gruppe und PM (Verlauf je Sample), Mute/Solo von Gruppe und Spur, Stopp. Gezählt wird nur in kern->zyklus().
+// 1.10 Slice 1 (L5): kein malloc im Kern-Zyklus mit Gruppen: vier Audio-Spuren in drei Gruppen auf drei Ebenen (Gruppe 3 in 2 in 1, nested groups task 2), Ziel-Wechsel mitten im
+// Lauf (Tausch der Wiedergabe mit anderem ausgang, auch einer Gruppe: Gruppe 3 wechselt von Gruppe 2 nach master), Fader-Rampen an Gruppe und PM (Verlauf je Sample), Mute/Solo von Gruppe und Spur, Stopp. Gezählt wird nur in kern->zyklus().
 // Positiv-Kontrolle: ein malloc wird gezählt. Unter ASan/TSan fehlt der Abfang: dann „übersprungen“, nie „bestanden“.
 #include <cstdlib>
 
@@ -19,7 +19,13 @@ int main() {
   k35::Arbeitsbestand ab("test_kern_arr_gruppen_alloc");
   arr35::Lauf x(ab.pfad, "test_kern_arr_gruppen_alloc");
   const std::string a = x.ordner.audio('a', 400000, 0.2f);
-  const std::string gruppen = "{\"nr\":1,\"ausgang\":{\"art\":\"master\"}},{\"nr\":2,\"ausgang\":{\"art\":\"master\"}}";
+  // delay compensation across levels (plan task 5): an eq on group 3 and a saturator on group 2 make GRPEIN of group 1 (direct tracks 1, 2 wait for the child) and GRPSEND of group 3 non-zero,
+  // and group 3 sends into return 1, so the delayed send path runs inside the counted cycles
+  const std::string eq_kette = ",\"chain\":[{\"art\":\"eq\",\"slot\":1}]", saett_kette = ",\"chain\":[{\"art\":\"saett\",\"slot\":1}]";
+  const std::string gruppen_von = "{\"nr\":1,\"ausgang\":{\"art\":\"master\"}},{\"nr\":2,\"ausgang\":{\"art\":\"gruppe\",\"nr\":1}" + saett_kette + "},";
+  const std::string gruppen = gruppen_von + "{\"nr\":3,\"ausgang\":{\"art\":\"gruppe\",\"nr\":2}" + eq_kette + "}";    // three levels: 3 in 2 in 1
+  const std::string gruppen_neu = gruppen_von + "{\"nr\":3,\"ausgang\":{\"art\":\"master\"}" + eq_kette + "}";          // group 3 moves to the master
+  const std::string returns = "{\"nr\":1,\"ausgang\":{\"art\":\"master\"}}";
   auto spuren = [&](int g3, int g4) {   // Spur 1 und 2 in Gruppe 1, Spur 3 und 4 in g3 und g4 (0 = master)
     std::string s;
     const int ziel[4] = {1, 1, g3, g4};
@@ -30,13 +36,30 @@ int main() {
     }
     return s;
   };
-  x.laden2(1, spuren(2, 2), gruppen);
+  x.laden3(1, spuren(3, 3), gruppen, returns);   // tracks 3 and 4 in the deepest group
   x.loop(true, 0.0, 8.0);
   x.start(0.0, 0);
+  x.teil("grp/3/send/1", 0.0f, 0.0, 0.0);
+  x.teil("ret/1/hall/an", 0.0f, 0.0, 0.0);
   x.teil("grp/1/fader", -6.0f, 2.0, 6.0);   // Rampen: Verlauf je Sample ins Modul
   x.teil("pm/fader", -3.0f, 2.0, 6.0);
   x.teil("grp/2/pan", 0.5f, 2.0, 6.0);
+  x.teil("grp/3/fader", -4.0f, 2.0, 6.0);
+  // live modules task 6: the headphone cue taps of a parent and the deepest child run inside the counted cycles. The rows are hand only (nur_hand): the source must be "andreas",
+  // any other source is refused by the Stellwerk and the row would stay 0 (the tap would never run in the counted cycles), so the value is checked below.
+  x.teil("grp/1/cue", 1.0f, 0.0, 0.0, "andreas");
+  x.teil("grp/3/cue", 1.0f, 0.0, 0.0, "andreas");
   x.lauf(4 * N);
+  PRUEF(x.wert("grp/1/cue") == 1.0 && x.wert("grp/3/cue") == 1.0);   // the cue rows really are on: the taps run in the counted cycles
+  {   // the places of the nested model are non-zero in this project (so the counted cycles run them)
+    const cdj::ArrSnapshot* sn = x.kern->arrangement().snapshot();
+    PRUEF(sn != nullptr);
+    if (sn) {
+      std::printf("arr_gruppen_alloc: GRPEIN0 %d, GRPSEND0+2 %d samples\n", sn->pdc.d[cdj::PDC_GRPEIN0], sn->pdc.d[cdj::PDC_GRPSEND0 + 2]);
+      PRUEF(sn->pdc.d[cdj::PDC_GRPEIN0] > 0);
+      PRUEF(sn->pdc.d[cdj::PDC_GRPSEND0 + 2] > 0);
+    }
+  }
   long im_zyklus = 0;
   auto zyklen = [&](int n) {
     for (int i = 0; i < n; ++i) {
@@ -53,7 +76,7 @@ int main() {
   x.teil("grp/2/mute", 1.0f, 0.0, 0.0);
   x.teil("spur/1/solo", 1.0f, 0.0, 0.0);
   zyklen(500);
-  x.laden2(2, spuren(0, 1), gruppen);   // Ziel-Wechsel: Spur 3 nach master, Spur 4 nach Gruppe 1 (Blende 480 Samples)
+  x.laden3(2, spuren(0, 2), gruppen_neu, returns);   // Ziel-Wechsel: Spur 3 nach master, Spur 4 nach Gruppe 2, Gruppe 3 nach master (Blende 480 Samples)
   zyklen(1000);
   x.teil("grp/2/mute", 0.0f, 0.0, 0.0);
   x.teil("spur/1/solo", 0.0f, 0.0, 0.0);

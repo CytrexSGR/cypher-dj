@@ -1,0 +1,154 @@
+{
+ "datei": "{\"format\":\"cypherdj-projekt/2\",\"gruppen\":[{\"fader_db\":0,\"farbe\":\"#e0563b\",\"gefaltet\":false,\"id\":\"g1\",\"inserts\":[{\"an\":true,\"art\":\"eq\",\"id\":\"i3\",\"slot\":1,\"werte\":{\"b1/an\":0,\"b1/freq\":30,\"b1/gain\":0,\"b1/platz\":0,\"b1/q\":0.707,\"b1/steil\":0,\"b1/typ\":3,\"b2/an\":0,\"b2/freq\":100,\"b2/gain\":0,\"b2/platz\":0,\"b2/q\":0.707,\"b2/steil\":0,\"b2/typ\":1,\"b3/an\":0,\"b3/freq\":250,\"b3/gain\":0,\"b3/platz\":0,\"b3/q\":0.707,\"b3/steil\":0,\"b3/typ\":0,\"b4/an\":0,\"b4/freq\":800,\"b4/gain\":0,\"b4/platz\":0,\"b4/q\":0.707,\"b4/steil\":0,\"b4/typ\":0,\"b5/an\":0,\"b5/freq\":2500,\"b5/gain\":0,\"b5/platz\":0,\"b5/q\":0.707,\"b5/steil\":0,\"b5/typ\":0,\"b6/an\":0,\"b6/freq\":6000,\"b6/gain\":0,\"b6/platz\":0,\"b6/q\":0.707,\"b6/steil\":0,\"b6/typ\":0,\"b7/an\":0,\"b7/freq\":10000,\"b7/gain\":0,\"b7/platz\":0,\"b7/q\":0.707,\"b7/steil\":0,\"b7/typ\":2,\"b8/an\":0,\"b8/freq\":18000,\"b8/gain\":0,\"b8/platz\":0,\"b8/q\":0.707,\"b8/steil\":0,\"b8/typ\":4,\"out\":0,\"propq\":0}}],\"mute\":false,\"name\":\"Music\",\"nr\":1,\"pan\":0,\"sends\":[{\"db\":-9,\"id\":\"r1\"}],\"solo\":false},{\"fader_db\":0,\"farbe\":\"#3b8de0\",\"gefaltet\":false,\"id\":\"g2\",\"inserts\":[{\"an\":true,\"art\":\"komp\",\"id\":\"i2\",\"key\":{\"nr\":1,\"punkt\":\"pre\",\"quelle\":\"grp\"},\"slot\":2,\"werte\":{\"attack\":10,\"knie\":6,\"makeup\":0,\"mix\":1,\"ratio\":4,\"release\":120,\"schp\":0,\"schwelle\":-18}}],\"mute\":false,\"name\":\"Empty\",\"nr\":2,\"pan\":0,\"solo\":false}],\"loop\":{\"an\":true,\"bis_beat\":32,\"von_beat\":0},\"master\":{\"fader_db\":0},\"metronom\":{\"an\":false,\"pegel_db\":-12,\"ziel\":\"master\"},\"naechste_id\":{\"clip\":3,\"gruppe\":3,\"insert\":4,\"return\":2,\"spur\":4},\"naechste_noten_id\":2,\"name\":\"First Track\",\"returns\":[{\"fader_db\":0,\"farbe\":\"#e0a83b\",\"hall\":{\"an\":true,\"decay\":0.5252,\"fahne\":0.66667,\"groesse\":0.282,\"highcut\":0.8039,\"pre\":0.04,\"tief\":0.5658},\"id\":\"r1\",\"mute\":false,\"name\":\"Return 1\",\"nr\":1,\"pan\":0,\"solo\":false}],\"rev\":17,\"spuren\":[{\"art\":\"audio\",\"clips\":[{\"art\":\"audio\",\"dekodiert\":\"fertig\",\"fade_aus_beats\":0,\"fade_ein_beats\":0,\"gain_db\":0,\"id\":\"c1\",\"laenge_beats\":1,\"name\":\"kick\",\"offset_s\":0,\"quelle\":{\"pfad_hinweis\":\"/abs/kick.wav\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"},\"start_beat\":0}],\"fader_db\":0,\"farbe\":\"#e0563b\",\"id\":\"s1\",\"inserts\":[{\"an\":true,\"art\":\"komp\",\"id\":\"i1\",\"key\":{\"nr\":2,\"punkt\":\"post\",\"quelle\":\"spur\"},\"slot\":1,\"werte\":{\"attack\":10,\"knie\":6,\"makeup\":0,\"mix\":1,\"ratio\":4,\"release\":120,\"schp\":0,\"schwelle\":-18}}],\"mute\":false,\"name\":\"Kick\",\"nr\":1,\"pan\":0,\"sends\":[{\"db\":-6,\"id\":\"r1\"}],\"solo\":false,\"von\":\"andreas\"},{\"art\":\"instrument\",\"ausgang\":{\"art\":\"gruppe\",\"id\":\"g1\"},\"clips\":[{\"art\":\"midi\",\"id\":\"c2\",\"laenge_beats\":16,\"name\":\"bassline\",\"noten\":[{\"beat\":0,\"id\":\"n1\",\"laenge\":0.5,\"ton\":36,\"vel\":100}],\"start_beat\":0}],\"fader_db\":0,\"farbe\":\"#3b8de0\",\"geraet\":{\"art\":\"intern\",\"name\":\"rb338\",\"parameter\":{}},\"id\":\"s2\",\"mute\":false,\"name\":\"Bass\",\"nr\":2,\"pan\":0,\"solo\":false,\"von\":\"andreas\"},{\"art\":\"instrument\",\"ausgang\":{\"art\":\"gruppe\",\"id\":\"g1\"},\"clips\":[],\"fader_db\":0,\"farbe\":\"#9b59d0\",\"freeze\":null,\"geraet\":{\"art\":\"wirt\",\"name\":\"surge\",\"slot\":1},\"id\":\"s3\",\"mute\":false,\"name\":\"Lead\",\"nr\":3,\"pan\":0,\"solo\":false,\"von\":\"andreas\"}],\"taktart\":[4,4],\"tempo_bpm\":124,\"wiedergabe_rev\":15}",
+ "wiedergabe1": {
+  "format": "cypherdj-arr/1",
+  "nr": 1,
+  "spuren": [
+   {
+    "nr": 1,
+    "art": "audio",
+    "clips": [
+     {
+      "id": "c1",
+      "start_beat": 0,
+      "laenge_beats": 1,
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "datei": "/arbeit/arr/audio/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.f32",
+      "frames": 24000,
+      "offset_frames": 0,
+      "gain_db": 0,
+      "ein_beats": 0,
+      "aus_beats": 0
+     }
+    ]
+   },
+   {
+    "nr": 2,
+    "art": "intern",
+    "geraet": "rb338",
+    "parameter": {},
+    "noten": [
+     {
+      "id": "c2/n1",
+      "beat": 0,
+      "laenge": 0.5,
+      "ton": 36,
+      "vel": 100
+     }
+    ]
+   },
+   {
+    "nr": 3,
+    "art": "wirt",
+    "slot": 1,
+    "noten": []
+   }
+  ]
+ },
+ "wiedergabe2": {
+  "format": "cypherdj-arr/2",
+  "nr": 1,
+  "spuren": [
+   {
+    "nr": 1,
+    "art": "audio",
+    "clips": [
+     {
+      "id": "c1",
+      "start_beat": 0,
+      "laenge_beats": 1,
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "datei": "/arbeit/arr/audio/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.f32",
+      "frames": 24000,
+      "offset_frames": 0,
+      "gain_db": 0,
+      "ein_beats": 0,
+      "aus_beats": 0
+     }
+    ],
+    "chain": [
+     {
+      "art": "komp",
+      "slot": 1,
+      "an": true,
+      "key": {
+       "q": "spur",
+       "nr": 2,
+       "punkt": "post"
+      }
+     }
+    ]
+   },
+   {
+    "nr": 2,
+    "art": "intern",
+    "geraet": "rb338",
+    "parameter": {},
+    "noten": [
+     {
+      "id": "c2/n1",
+      "beat": 0,
+      "laenge": 0.5,
+      "ton": 36,
+      "vel": 100
+     }
+    ],
+    "ausgang": {
+     "art": "gruppe",
+     "nr": 1
+    }
+   },
+   {
+    "nr": 3,
+    "art": "wirt",
+    "slot": 1,
+    "noten": [],
+    "ausgang": {
+     "art": "gruppe",
+     "nr": 1
+    }
+   }
+  ],
+  "gruppen": [
+   {
+    "nr": 1,
+    "ausgang": {
+     "art": "master"
+    },
+    "chain": [
+     {
+      "art": "eq",
+      "slot": 1,
+      "an": true
+     }
+    ]
+   },
+   {
+    "nr": 2,
+    "ausgang": {
+     "art": "master"
+    },
+    "chain": [
+     {
+      "art": "komp",
+      "slot": 2,
+      "an": true,
+      "key": {
+       "q": "grp",
+       "nr": 1,
+       "punkt": "pre"
+      }
+     }
+    ]
+   }
+  ],
+  "returns": [
+   {
+    "nr": 1,
+    "ausgang": {
+     "art": "master"
+    }
+   }
+  ]
+ }
+}

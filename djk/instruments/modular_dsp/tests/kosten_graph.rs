@@ -52,6 +52,8 @@ fn kosten_graph() {
     let (json, _) = aus_umgebung();
     let block: usize = std::env::var("BK_KOSTEN_BLOCK").ok().map(|s| s.parse().expect("BK_KOSTEN_BLOCK")).unwrap_or(256);
     let mut p = uebersetze_mit_wurzel(&json, 48_000.0, None).unwrap();
+    // BK_KOSTEN_ZWEIGE=0 runs every unselected `wahl` branch, as the engine did before branches existed
+    if std::env::var("BK_KOSTEN_ZWEIGE").as_deref() == Ok("0") { p.setze_zweige(false); }
     for n in 0..p.stimmen { p.note_an(40 + n as u8, 0.8); }
     // exact quantiles from the sorted block times: the `Kosten` histogram stops at 1280 us and poly at 8 voices is above that
     let mut zeiten: Vec<f64> = Vec::with_capacity(4000);
@@ -75,7 +77,7 @@ fn kosten_graph() {
     zeiten.sort_by(|a, b| a.partial_cmp(b).unwrap());
     let q = |q: f64| zeiten[(((q * zeiten.len() as f64).ceil() as usize).max(1) - 1).min(zeiten.len() - 1)];
     println!(
-        "{{\"graph\":\"{}\",\"stimmen\":{},\"block\":{},\"p50_us\":{:.1},\"p99_us\":{:.1},\"p999_us\":{:.1},\"max_us\":{:.1},\"senke\":{}}}",
-        p.name, p.stimmen, block, q(0.5), q(0.99), q(0.999), zeiten[zeiten.len() - 1], senke.is_finite()
+        "{{\"graph\":\"{}\",\"stimmen\":{},\"block\":{},\"p50_us\":{:.1},\"p99_us\":{:.1},\"p999_us\":{:.1},\"max_us\":{:.1},\"senke\":{},\"uebersprungen\":{}}}",
+        p.name, p.stimmen, block, q(0.5), q(0.99), q(0.999), zeiten[zeiten.len() - 1], senke.is_finite(), p.uebersprungen()
     );
 }

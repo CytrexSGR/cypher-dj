@@ -25,7 +25,19 @@ export const stemsZeitlimitMs = (n: number): number => Math.max(10 * 60_000, Mat
 export interface StemsOptionen extends Partial<StemsLaufOptionen> { python: string; cwd: string; zeitlimitMs?: number;
   schreibeWav?: (quelle: string, ziel: string) => Promise<{ frames: number; sha256: string }> }   // Test: den Schreiber verlangsamen
 type Zustand = 'laeuft' | 'fertig' | 'abgebrochen' | 'veraltet' | 'fehler';
-interface Lauf { id: number; slug: string; quelle: 'andreas' | 'cypher'; plan: StemsPlan; tmp: string; kennung: number; prozess: StemsLauf;
+// What happens with the separated files (plan live-module decision 14): the stems runner only separates and writes the WAVs; the caller decides what
+// they become. `hinfaellig` judges the fresh project (null = still fine); `setze` takes the files and changes the project in ONE edit, with no await
+// before that edit; it calls markiere() right after the edit (from then on the WAVs count as taken over) and returns extra fields of the end state.
+type Offen = NonNullable<ReturnType<ProjZugang['offen']>>;
+export interface Uebernahme {
+  hinfaellig(o: Offen | null, anzahl: number): Record<string, unknown> | null;
+  setze(o: Offen, dateien: Partial<Record<Stem, { sha256: string; pfad: string }>>, e: { rest_db?: unknown },
+    markiere: () => void): Promise<Record<string, unknown>>;
+  dateiName(plan: StemsPlan): string;
+}
+type EndeHaken = (stand: Record<string, unknown>) => void;
+interface Lauf { id: number; slug: string; quelle: 'andreas' | 'cypher'; plan: StemsPlan; uebernahme: Uebernahme; ende?: EndeHaken;
+  tmp: string; kennung: number; prozess: StemsLauf;
   abgebrochen: 'abbruch' | 'stems_zeitlimit' | null; wavs: string[];
   rechnet: boolean; gespeichert: boolean; uhr: NodeJS.Timeout; frist: NodeJS.Timeout }
 const FELDER = ['clip_id', 'spur_id', 'von_beat', 'bis_beat', 'geraet'];
@@ -46,14 +58,19 @@ export class Stems {
     zugang.beiSchliessen((slug) => { const l = this.lauf; if (l && l.rechnet && l.slug === slug) this.bricheAb(l, 'abbruch'); });
   }
 
+  // The checks every run needs before it starts (the proj_stems route and the live module separation share them)
+  private pruefeBereit(quelle: 'andreas' | 'cypher'): void {
+    if (this.lauf) throw new ProjFehler(409, 'stems_laeuft', { auftrag_id: this.lauf.id });
+    if (quelle === 'cypher' && this.ctx.kiGestoppt()) throw new ProjFehler(409, 'ki_gestoppt');   // P5: nur Cyphers Läufe
+    if (this.quantum === null) throw new ProjFehler(409, 'kein_kernstand');
+  }
+
   starte(d: Record<string, unknown>, quelle: 'andreas' | 'cypher'): Antwort {
     for (const k of Object.keys(d)) if (!FELDER.includes(k)) throw new ProjFehler(400, 'argument_unbekannt', { detail: k });
     const geraet = d.geraet ?? 'gpu';
     if (geraet === 'cpu') throw new ProjFehler(400, 'stems_nur_gpu');
     if (geraet !== 'gpu') throw new ProjFehler(400, 'argument_ungueltig', { detail: "geraet: only 'gpu'" });
-    if (this.lauf) throw new ProjFehler(409, 'stems_laeuft', { auftrag_id: this.lauf.id });
-    if (quelle === 'cypher' && this.ctx.kiGestoppt()) throw new ProjFehler(409, 'ki_gestoppt');   // P5: nur Cyphers Läufe
-    if (this.quantum === null) throw new ProjFehler(409, 'kein_kernstand');
+    this.pruefeBereit(quelle);
     // D10 retired 2026-11-07: the quantum-256 rule came from CPU stems; M9 measured GPU jobs next to the kern at 256 and 128 with 0 gaps
     const o = this.zugang.offen();
     if (!o) throw new ProjFehler(409, 'kein_projekt');
@@ -62,11 +79,55 @@ export class Stems {
     if (quelle === 'cypher' && herkunft(g.spur) === 'andreas') throw new ProjFehler(409, 'nur_andreas_spur');   // D15
     const quellDatei = path.join(this.zugang.arbeitsordner(), 'audio', `${plan.sha256}.f32`);
     if (g.clip.art !== 'audio' || g.clip.dekodiert !== 'fertig' || !fs.existsSync(quellDatei)) throw new ProjFehler(409, 'audio_fehlt');
+    return this.beginne(o.slug, plan, quelle, this.projUebernahme());
+  }
+
+  // Live module separation (plan live-module decision 14): the same run for a decoded file of the open project; the caller says what the files become.
+  // ende(stand) is called once with the end state (fertig, fehler, abgebrochen, veraltet) after it was published.
+  starteTrennung(plan: StemsPlan, quelle: 'andreas' | 'cypher', uebernahme: Uebernahme, ende?: EndeHaken): Antwort {
+    this.pruefeBereit(quelle);
+    const o = this.zugang.offen();
+    if (!o) throw new ProjFehler(409, 'kein_projekt');
+    if (!fs.existsSync(path.join(this.zugang.arbeitsordner(), 'audio', `${plan.sha256}.f32`))) throw new ProjFehler(409, 'audio_fehlt');
+    return this.beginne(o.slug, plan, quelle, uebernahme, ende);
+  }
+  // True while a run is in progress (the live export reports gpu_belegt-like waits itself; one job at a time stays the rule)
+  laeuft(): boolean { return this.lauf !== null; }
+
+  // The proj_stems way: the original is cut and muted, the stems become tracks under it (baueStemsProjekt), one undo step
+  private projUebernahme(): Uebernahme {
+    return {
+      dateiName: (plan) => dateiName(plan.clipName),
+      hinfaellig: (o, anzahl) => {
+        if (!o) return { zustand: 'veraltet', grund: 'veraltet', text: 'the clip changed while separating; nothing was placed' };
+        const l = this.lauf!;
+        if (o.slug !== l.slug) return { zustand: 'veraltet', grund: 'veraltet', text: 'the clip changed while separating; nothing was placed' };
+        const alt = pruefeNochGleich(o.projekt, l.plan, anzahl);
+        if (alt === 'zu_viele_spuren') return { zustand: 'veraltet', grund: 'zu_viele_spuren', text: `separating stems needs ${anzahl} free tracks` };
+        if (alt !== null) return { zustand: 'veraltet', grund: 'veraltet', text: 'the clip changed while separating; nothing was placed' };
+        return null;
+      },
+      setze: async (o, dateien, e, markiere) => {
+        const l = this.lauf!;
+        const neu = baueStemsProjekt(o.projekt, l.plan, dateien, l.quelle);
+        const meta = { quelle: l.quelle, label: `Stems ${l.plan.clipName}` };
+        const w = aendereStand(o.verlauf, o.projekt, neu.projekt, meta, this.zugang.haken());
+        markiere();
+        if (w.eintrag !== null) await this.zugang.uebernimm(w, meta);
+        return { spuren: neu.spuren, rev: this.zugang.offen()?.projekt.rev ?? w.projekt.rev,
+          rest_db: e.rest_db ?? null, ...(neu.hinweis ? { hinweis: neu.hinweis } : {}), ...(neu.hinweisText ? { hinweis_text: neu.hinweisText } : {}) };
+      },
+    };
+  }
+
+  private beginne(slug: string, plan: StemsPlan, quelle: 'andreas' | 'cypher', uebernahme: Uebernahme, ende?: EndeHaken): Antwort {
+    const quellDatei = path.join(this.zugang.arbeitsordner(), 'audio', `${plan.sha256}.f32`);
     const id = this.naechste++;
     const tmp = path.join(this.zugang.arbeitsordner(), `stems-${id}`);
     const auftrag = { quelle: quellDatei, f0: plan.f0, f1: plan.f1, aus: tmp };
     const prozess = new StemsLauf({ ...this.o }, auftrag, (stufe, prozent) => this.melde(stufe, prozent));
-    const l: Lauf = { id, slug: o.slug, quelle, plan, tmp, kennung: this.zugang.naechsteNummer(), prozess, abgebrochen: null, wavs: [],
+    const l: Lauf = { id, slug, quelle, plan, uebernahme, ...(ende ? { ende } : {}), tmp, kennung: this.zugang.naechsteNummer(), prozess,
+      abgebrochen: null, wavs: [],
       rechnet: true, gespeichert: false,
       uhr: setInterval(() => this.stand({ cpu_s: prozess.cpuSekunden() }, false), 1000),
       frist: setTimeout(() => { if (l.rechnet) this.bricheAb(l, 'stems_zeitlimit'); },
@@ -110,6 +171,7 @@ export class Stems {
     this.stand({ ...e, ...(e.grund && !e.text ? { text: grundText(e.grund) } : {}) }, true);
     clearInterval(l.uhr); clearTimeout(l.frist);
     this.lauf = null;
+    try { l.ende?.({ ...this.aktuellerStand }); } catch (x) { this.ctx.log({ typ: 'stems_ende_fehler', fehler: (x as Error).message }); }
   }
 
   private async beende(l: Lauf): Promise<void> {
@@ -137,18 +199,12 @@ export class Stems {
       // B1/M1 (Review T6): geprüft wird vor den WAVs (billig) und NOCH EINMAL frisch nach dem letzten await, gebaut und gespeichert wird nur aus dem
       // frischen Stand (wie setze() in output.ts); zwischen dem frischen offen() und aendereStand steht kein await.
       const o0 = this.zugang.offen();
-      const hinfaellig = (o: ReturnType<ProjZugang['offen']>): Record<string, unknown> | null => {
-        if (!o || o.slug !== l.slug) return { zustand: 'veraltet', grund: 'veraltet', text: 'the clip changed while separating; nothing was placed' };
-        const alt = pruefeNochGleich(o.projekt, l.plan, gesetzt.length);
-        if (alt === 'zu_viele_spuren') return { zustand: 'veraltet', grund: 'zu_viele_spuren', text: `separating stems needs ${gesetzt.length} free tracks` };
-        if (alt !== null) return { zustand: 'veraltet', grund: 'veraltet', text: 'the clip changed while separating; nothing was placed' };
-        return null;
-      };
+      const hinfaellig = (o: ReturnType<ProjZugang['offen']>): Record<string, unknown> | null => l.uebernahme.hinfaellig(o, gesetzt.length);
       const vor = hinfaellig(o0);
       if (vor) { this.endStand(l, vor as { zustand: Zustand }); return; }
       const dateien: Partial<Record<Stem, { sha256: string; pfad: string }>> = {};
       for (const s of STEMS.filter((x) => gesetzt.includes(x))) {
-        const ziel = path.join(o0!.ordner, 'stems', `${l.kennung}-${dateiName(l.plan.clipName)}-${s}.wav`);
+        const ziel = path.join(o0!.ordner, 'stems', `${l.kennung}-${l.uebernahme.dateiName(l.plan)}-${s}.wav`);
         const w = await (this.o.schreibeWav ?? schreibeWavAusF32Stueckweise)(path.join(l.tmp, `${s}.f32`), ziel);   // Review MINOR 5: Event-Loop frei
         l.wavs.push(ziel);
         if (w.frames !== l.plan.n) throw new Error(`${s}: ${w.frames} frames, expected ${l.plan.n}`);
@@ -161,13 +217,10 @@ export class Stems {
       if (l.quelle === 'cypher' && this.ctx.kiGestoppt()) {                     // D15 MAJOR T8: Stop im WAV-Fenster (wie session.ts:864)
         this.endStand(l, { zustand: 'veraltet', grund: 'ki_gestoppt', text: 'Stop Cypher is set; the result was discarded' }); return;
       }
-      const neu = baueStemsProjekt(o!.projekt, l.plan, dateien, l.quelle);
-      const meta = { quelle: l.quelle, label: `Stems ${l.plan.clipName}` };
-      const w = aendereStand(o!.verlauf, o!.projekt, neu.projekt, meta, this.zugang.haken());
-      gespeichert = true; l.gespeichert = true; l.wavs = [];                     // m1: ab hier gelten die WAVs als übernommen, nie mehr löschen
-      if (w.eintrag !== null) await this.zugang.uebernimm(w, meta);
-      this.endStand(l, { zustand: 'fertig', spuren: neu.spuren, rev: this.zugang.offen()?.projekt.rev ?? w.projekt.rev,
-        rest_db: e.zeile.rest_db ?? null, ...(neu.hinweis ? { hinweis: neu.hinweis } : {}) });
+      // m1: from markiere() on the WAVs count as taken over, never delete them again
+      const markiere = (): void => { gespeichert = true; l.gespeichert = true; l.wavs = []; };
+      const extra = await l.uebernahme.setze(o!, dateien, { rest_db: e.zeile.rest_db }, markiere);
+      this.endStand(l, { zustand: 'fertig', ...extra });
     } catch (x) {
       for (const f of l.wavs) fs.rmSync(f, { force: true });
       if (gespeichert) {                                                         // m1: gespeichert, nur das Laden/Melden scheiterte; WAVs bleiben
@@ -210,6 +263,10 @@ export function raeumeStemsReste(arbeitsordner: string, log: (z: Record<string, 
     if (arg.includes('werkstatt.stems') && i >= 0 && (arg[i + 1] ?? '').startsWith(praefix)) {
       try { process.kill(Number(d), 'SIGKILL'); prozesse.push(Number(d)); } catch { /* schon weg */ }
     }
+  }
+  // leftovers of a live module export that died mid-cut (areas/live/export.ts): the cut file of the loop
+  if (fs.existsSync(arbeitsordner)) {
+    for (const f of fs.readdirSync(arbeitsordner)) if (/^live-export-\d+\.f32$/.test(f)) fs.rmSync(path.join(arbeitsordner, f), { force: true });
   }
   const ordner = fs.existsSync(arbeitsordner) ? fs.readdirSync(arbeitsordner).filter((f) => /^stems-\d+$/.test(f)) : [];
   for (const f of ordner) fs.rmSync(path.join(arbeitsordner, f), { recursive: true, force: true });

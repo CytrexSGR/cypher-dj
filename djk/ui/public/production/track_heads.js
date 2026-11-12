@@ -6,8 +6,8 @@ import { FARBEN, zeilenFuer } from './layout.js';
 import { MAX_SPUREN, MAX_GRUPPEN, MAX_KIT_GERAETE, WIRT_SLOTS } from './limits.js';
 import { MAX_RACK_GERAETE, RB_GLIED_GERAET, wirtBelegt, kitBelegt, rackBelegt } from './rack_device.js';
 import { armZustand, eingangVonWert, eingangsOptionen, MODUS_OPTIONEN, MONITOR_OPTIONEN } from './recording.js';
-import { ausgangOptionen, ausgangWert, ausgangBefehl, gruppenKopfZustand, gruppeAusWahl } from './routing.js';
-import { baueGruppenKopf, zeigeGruppenKopf, foldLabel } from './groups_kopf.js';
+import { ausgangOptionen, ausgangWert, ausgangBefehl, gruppenKopfZustand, gruppeAusWahl, gruppenEltern, gruppenKette, spurGruppe } from './routing.js';
+import { baueGruppenKopf, zeigeGruppenKopf, foldLabel, balkenVerlauf } from './groups_kopf.js';
 import { faderLane, laneWert, laneFuer, gezeigteLane, freieZiele, zielLabel, offeneIndizes } from './lanes.js';
 import { REGLER_MAX, REGLER_SCHRITT, reglerVonDb, dbVonRegler, tasteMerke, tasteWert } from './fader_curve.js';
 import { LANEN_TEXT, sperrBefehl, zeichenModus } from './lanes_operation.js';
@@ -54,7 +54,7 @@ export function zielIndex(anzahl, index, richtung) {
 export function kopfFolge(projekt, offen = new Set(), takeOffen = new Set()) {
   const tab = zeilenFuer(projekt, offeneIndizes(projekt, offen), takeZeilenVon({ takeOffen }, projekt)), aus = [], takes = new Set();
   for (const z of tab) {
-    if (z.art === 'gruppe') aus.push({ art: 'gruppe', id: projekt.gruppen[z.gruppe].id });
+    if (z.art === 'gruppe') aus.push({ art: 'gruppe', id: projekt.gruppen[z.gruppe].id, tiefe: z.tiefe ?? 0, verborgen: !!z.verborgen });
     else if (z.art === 'spur') aus.push({ art: 'spur', id: projekt.spuren[z.spur].id, tiefe: z.tiefe ?? 0, verborgen: !!z.verborgen });
     else if (z.art === 'take') { const id = projekt.spuren[z.spur].id; if (!takes.has(id)) { takes.add(id); aus.push({ art: 'take', id }); } }
     else if (z.art === 'lane') aus.push({ art: 'lane', id: projekt.spuren[z.spur].id });
@@ -221,9 +221,10 @@ export function bindeKoepfe(behaelter, { aendere, aendereAus, offen = () => new 
   const laneEls = new Map();   // spur_id → head of the open lane row
   const gruppenEls = new Map();   // gruppe_id → the header row of a group in the arrangement (T3)
   const gruppeFarbe = (id) => { const f = gruppenStand.find((g) => g.id === id)?.farbe; return /^#[0-9a-f]{6}$/i.test(f ?? '') ? f : '#8a8d98'; };
-  const gruppeGewaehlt = (id) => { const m = [...stand.values()].filter((x) => x.ausgang?.id === id); return m.length > 0 && m.every((x) => spurWahl().has(x.id)); };
+  const gruppeGewaehlt = (id) => spurWahl().has(id);   // nested groups: the selection holds the head id itself
   const gruppenHandler = { falten: (id) => { const g = gruppenStand.find((x) => x.id === id); if (g) gruppeFalten(g); },
-    waehle: (id, e) => wahlUmschalten([...stand.values()].filter((x) => x.ausgang?.id === id).map((x) => x.id), e, true) };
+    waehle: (id, e) => wahlUmschalten([id], e, !(e.ctrlKey || e.shiftKey || e.metaKey)),
+    ziel: (id, wert) => aendere(`Output group ${gruppenStand.find((x) => x.id === id)?.name ?? id}`, [ausgangBefehl(id, wert)]) };
   zeichenModus.hoerer.add((an) => {                 // 1.12 slice 4 (D1): every open lane head shows the draw mode
     for (const le of laneEls.values()) { const b = le.querySelector('.p-lane-zeichnen'); b.classList.toggle('an', an); b.setAttribute('aria-pressed', String(an)); }
   });
@@ -502,6 +503,7 @@ export function bindeKoepfe(behaelter, { aendere, aendereAus, offen = () => new 
       for (const [id, el] of els) if (!stand.has(id)) { el.remove(); els.delete(id); frost.loescheSpur(id); griff.loescheSpur(id); offeneKopfAnfragen.delete(id); gesten.verwerfeSpur(id); }
       takeKoepfe?.begin();
       const folge = kopfFolge(projekt ?? { spuren: [], gruppen: [] }, offen(), takeOffen());   // display order, one function (T3)
+      const eltern = gruppenEltern(projekt);
       const soll = [], mitLane = new Set(folge.filter((f) => f.art === 'lane').map((f) => f.id)), gebraucht = new Set();
       for (const s of spuren) {
         let el = els.get(s.id);
@@ -519,12 +521,18 @@ export function bindeKoepfe(behaelter, { aendere, aendereAus, offen = () => new 
           const g = gruppenStand.find((x) => x.id === f.id);
           let ge = gruppenEls.get(f.id);
           if (!ge) { ge = baueGruppenKopf(f.id, gruppenHandler); gruppenEls.set(f.id, ge); }
-          zeigeGruppenKopf(ge, g, gruppenKopfZustand(projekt, f.id, offen()), gruppeGewaehlt(f.id));
+          zeigeGruppenKopf(ge, g, gruppenKopfZustand(projekt, f.id, offen()), gruppeGewaehlt(f.id),
+            { tiefe: f.tiefe, verborgen: f.verborgen, balken: gruppenKette(projekt, f.id, eltern).slice(0, -1).map(gruppeFarbe), optionen: ausgangOptionen(projekt, f.id) });
           gebraucht.add(f.id); soll.push(ge);
         } else if (f.art === 'spur') {
           const el = els.get(f.id);
-          el.classList.toggle('p-kopf--mitglied', f.tiefe > 0); el.classList.toggle('p-kopf--verborgen', f.verborgen);
-          if (f.tiefe > 0) el.style.setProperty('--gruppenfarbe', gruppeFarbe(stand.get(f.id)?.ausgang?.id));   // only read by .p-kopf--mitglied
+          el.classList.toggle('p-kopf--mitglied', f.tiefe > 0); el.classList.toggle('p-kopf--verborgen', f.verborgen); el.classList.toggle('p-kopf--tief', f.tiefe > 1);
+          if (f.tiefe > 0) {   // only read by .p-kopf--mitglied: indent by depth, one bar per group above
+            const kette = gruppenKette(projekt, spurGruppe(projekt, stand.get(f.id)), eltern);
+            el.style.setProperty('--gruppenfarbe', gruppeFarbe(kette.at(-1)));
+            if (f.tiefe > 1) { el.style.setProperty('--tiefe', String(f.tiefe)); el.style.setProperty('--balken', balkenVerlauf(kette.map(gruppeFarbe))); }   // depth 1: the CSS defaults, the head stays byte-equal
+            else { el.style.removeProperty('--tiefe'); el.style.removeProperty('--balken'); }
+          }
           el.classList.toggle('gewaehlt', spurWahl().has(f.id));
           soll.push(el);
         } else if (f.art === 'take') soll.push(...takeKoepfe.fuer(stand.get(f.id)));
@@ -579,9 +587,11 @@ export function bindeSpuren(ctx) {
   st.spurWahl = new Set();
   const wahlGeaendert = () => koepfeRef?.zeigeWahl();
   const wahlLeeren = () => { if (st.spurWahl.size) { st.spurWahl.clear(); wahlGeaendert(); } };
-  const wahlUmschalten = (ids, e, gruppe = false) => {
-    const alle = ids.length > 0 && ids.every((i) => st.spurWahl.has(i));
-    for (const i of ids) { if (gruppe ? alle : st.spurWahl.has(i)) st.spurWahl.delete(i); else st.spurWahl.add(i); }
+  // ersetzen: a plain click on a group head makes it the whole selection (a second plain click lets go of it); Ctrl/Shift+click toggles
+  const wahlUmschalten = (ids, e, ersetzen = false) => {
+    const nurDas = st.spurWahl.size === ids.length && ids.every((i) => st.spurWahl.has(i));
+    if (ersetzen) st.spurWahl.clear();
+    for (const i of ids) { if (ersetzen ? !nurDas : !st.spurWahl.has(i)) st.spurWahl.add(i); else st.spurWahl.delete(i); }
     wahlGeaendert();
   };
   const gruppeFalten = (g) => ctx.aendere(foldLabel(g.name, g.gefaltet), [{ befehl: 'gruppenspur_aendern', gruppe_id: g.id, gefaltet: !g.gefaltet }]);
@@ -591,7 +601,7 @@ export function bindeSpuren(ctx) {
     if (!p) return false;
     const b = gruppeAusWahl(p, [...st.spurWahl]);
     if (!b) {
-      const voll = (p.gruppen?.length ?? 0) >= MAX_GRUPPEN && [...st.spurWahl].some((i) => p.spuren.some((x) => x.id === i));
+      const voll = (p.gruppen?.length ?? 0) >= MAX_GRUPPEN && [...st.spurWahl].some((i) => p.spuren.some((x) => x.id === i) || p.gruppen.some((x) => x.id === i));
       ctx.melde(voll ? ctx.fehlerText({ j: { fehler: 'routing_grenze' } }) : 'Select tracks first (Ctrl+click on the names)', voll);
       return false;
     }
@@ -687,7 +697,7 @@ export function bindeSpuren(ctx) {
   ctx.wahlLeeren = wahlLeeren;   // production.js: a plain click elsewhere and Escape clear the selection
   ctx.beimProjekt.push((p, wechsel) => {
     const n = p?.spuren.length ?? 0;
-    if (st.spurWahl.size) { const da = new Set((p?.spuren ?? []).map((x) => x.id)); for (const i of [...st.spurWahl]) if (wechsel || !da.has(i)) st.spurWahl.delete(i); }
+    if (st.spurWahl.size) { const da = new Set([...(p?.spuren ?? []), ...(p?.gruppen ?? [])].map((x) => x.id)); /* track ids and group-head ids */ for (const i of [...st.spurWahl]) if (wechsel || !da.has(i)) st.spurWahl.delete(i); }
     $('neu-audio').disabled = $('neu-rb').disabled = !p || n >= MAX_SPUREN;
     $('neu-surge').disabled = !p || n >= MAX_SPUREN || wirtBelegt(p.spuren) >= WIRT_SLOTS;   // tracks plus rack members (Review Focus 1)
     $('neu-kit').disabled = !p || n >= MAX_SPUREN || kitBelegt(p.spuren) >= MAX_KIT_GERAETE;   // tracks plus rack members

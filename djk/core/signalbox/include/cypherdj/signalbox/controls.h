@@ -59,11 +59,15 @@ enum class Rolle : uint8_t {
   // 32-knob widening (appended after ins_bk_k8, still the last role: the order stays). ins/bk/<n>/k9..k32.
   ins_bk_k9, ins_bk_k10, ins_bk_k11, ins_bk_k12, ins_bk_k13, ins_bk_k14, ins_bk_k15, ins_bk_k16, ins_bk_k17, ins_bk_k18, ins_bk_k19, ins_bk_k20, ins_bk_k21, ins_bk_k22, ins_bk_k23, ins_bk_k24, ins_bk_k25, ins_bk_k26, ins_bk_k27, ins_bk_k28, ins_bk_k29, ins_bk_k30, ins_bk_k31, ins_bk_k32,
   // 64-knob widening (appended after ins_bk_k32, still the last role: the order stays). ins/bk/<n>/k33..k64.
-  ins_bk_k33, ins_bk_k34, ins_bk_k35, ins_bk_k36, ins_bk_k37, ins_bk_k38, ins_bk_k39, ins_bk_k40, ins_bk_k41, ins_bk_k42, ins_bk_k43, ins_bk_k44, ins_bk_k45, ins_bk_k46, ins_bk_k47, ins_bk_k48, ins_bk_k49, ins_bk_k50, ins_bk_k51, ins_bk_k52, ins_bk_k53, ins_bk_k54, ins_bk_k55, ins_bk_k56, ins_bk_k57, ins_bk_k58, ins_bk_k59, ins_bk_k60, ins_bk_k61, ins_bk_k62, ins_bk_k63, ins_bk_k64
+  ins_bk_k33, ins_bk_k34, ins_bk_k35, ins_bk_k36, ins_bk_k37, ins_bk_k38, ins_bk_k39, ins_bk_k40, ins_bk_k41, ins_bk_k42, ins_bk_k43, ins_bk_k44, ins_bk_k45, ins_bk_k46, ins_bk_k47, ins_bk_k48, ins_bk_k49, ins_bk_k50, ins_bk_k51, ins_bk_k52, ins_bk_k53, ins_bk_k54, ins_bk_k55, ins_bk_k56, ins_bk_k57, ins_bk_k58, ins_bk_k59, ins_bk_k60, ins_bk_k61, ins_bk_k62, ins_bk_k63, ins_bk_k64,
+  // Live modules task 6 (appended after ins_bk_k64, now the last role: the order stays). grp/<n>/cue, n = 1..16: headphone cue of a group of the arrangement.
+  grp_cue
 };
 constexpr int BK_REGLER_N = 64;   // knobs of a Baukasten graph reachable through the table: <kanal>/bk/1..64, ins/bk/<n>/k1..k64 (engine: baukasten_dsp::REGLER)
 constexpr int SPUR_REGLER_SPUREN = 32;   // D1 K1 (Spec 2.3): spur/<n>/{fader,pan,mute,solo}, n = 1..32 (E3)
-constexpr int GRP_REGLER_GRUPPEN = 8;    // 1.10 (F1: eigene Plätze neben den 32 Spuren): grp/<n>/{fader,pan,mute,solo}, n = 1..8
+constexpr int GRP_REGLER_GRUPPEN = 8;    // 1.10 (F1: eigene Plätze neben den 32 Spuren): grp/<n>/{fader,pan,mute,solo}, n = 1..8 (the rows inside the first 1258 hashed rows: this stays 8)
+constexpr int GRP_REGLER_GRUPPEN_NEU = 8;   // nested groups, task 1: groups 9..16 are appended at the end of the table (no index moves)
+constexpr int GRP_REGLER_GRUPPEN_ALLE = GRP_REGLER_GRUPPEN + GRP_REGLER_GRUPPEN_NEU;   // 16 = ARR_GRUPPEN
 // 1.10 slice 4a: the insert vocabulary of docs/interfaces/insert_module.json (all kinds, also those without table rows yet):
 // number of paths and the i-th path (0 <= i < insert_vertrag_anzahl()). Each is at most 31 characters (ReglerDef::pfad).
 int insert_vertrag_anzahl();

@@ -58,17 +58,24 @@ export function schreibeLoopVersatz(dir: string, name: string, v: number): void 
   fs.renameSync(tmp, datei);
 }
 
+// The cut itself: `frames` stereo float32 frames of the rendering file from `startFrame`; outside the file silence. Shared by the loop library
+// (schreibeLoopAusFassung) and the live module export, so both cut the same samples.
+export function schneideAusFassung(basis: string, startFrame: number, frames: number): Buffer {
+  const buf = Buffer.alloc(frames * 8);
+  const fd = fs.openSync(basis, 'r');
+  try {
+    const gesamt = fs.fstatSync(fd).size / 8;
+    const von = Math.max(0, startFrame), bis = Math.min(gesamt, startFrame + frames);
+    if (bis > von) fs.readSync(fd, buf, (von - startFrame) * 8, (bis - von) * 8, von * 8);
+  } finally { fs.closeSync(fd); }
+  return buf;
+}
+
 // Deck-Loop → Loop der Bibliothek: Ausschnitt der Fassung (Stereo float32, 8 Byte je Frame) ab startFrame, frames lang;
 // außerhalb der Datei Stille. Atomar über .<name>.neu (leseLoops überspringt halbe Ordner).
 export function schreibeLoopAusFassung(o: { basis: string; dir: string; name: string; startFrame: number; frames: number;
   bpm: number; beats: number; herkunft: Record<string, unknown> }): void {
-  const buf = Buffer.alloc(o.frames * 8);
-  const fd = fs.openSync(o.basis, 'r');
-  try {
-    const gesamt = fs.fstatSync(fd).size / 8;
-    const von = Math.max(0, o.startFrame), bis = Math.min(gesamt, o.startFrame + o.frames);
-    if (bis > von) fs.readSync(fd, buf, (von - o.startFrame) * 8, (bis - von) * 8, von * 8);
-  } finally { fs.closeSync(fd); }
+  const buf = schneideAusFassung(o.basis, o.startFrame, o.frames);
   const tmp = path.join(o.dir, `.${o.name}.neu`), ziel = path.join(o.dir, o.name);
   fs.rmSync(tmp, { recursive: true, force: true });
   fs.mkdirSync(tmp, { recursive: true });

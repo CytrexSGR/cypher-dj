@@ -3,7 +3,7 @@
 // (routing_rules.ts); tests/project_routing_matrix.test.mjs proves that every cell equals what the commands do.
 import { BefehlFehler } from './commands.ts';
 import { alleInserts, type Insert, type InsertTraeger, type Projekt, type Send } from './model.ts';
-import { schluesselErlaubt, type SchluesselFrage } from './routing_rules.ts';
+import { nachkommen, schluesselErlaubt, type SchluesselFrage } from './routing_rules.ts';
 
 export interface ZielZelle { ziel: string; aktiv: boolean; erlaubt: boolean; grund?: string; text?: string }
 export interface Option { quelle: string; nr: number; punkt: 'pre' | 'post'; erlaubt: boolean; grund?: string; text?: string }
@@ -72,12 +72,17 @@ export function routingMatrix(p: Projekt, optionenFuer?: string): RoutingMatrix 
       sends: sends(s.sends), stufen: mitStufen(s.id, s) });
   }
   for (const g of gruppen) {
-    straenge.push({ art: 'gruppe', id: g.id, nr: g.nr, name: g.name, ausgang: 'master',
-      // a group may feed the master only: itself is routing_zyklus, another group routing_grenze (groups do not nest, depth 1)
+    const unter = new Set(nachkommen(p, g.id).gruppen);
+    const aktiv = g.ausgang?.id ?? 'master';
+    straenge.push({ art: 'gruppe', id: g.id, nr: g.nr, name: g.name, ausgang: aktiv,
+      // a group may feed the master or another group; itself and its descendants are routing_zyklus
       ziel_zellen: ziele.map((z): ZielZelle => {
-        if (z.wert === 'master') return { ziel: z.wert, aktiv: true, erlaubt: true };
-        return z.wert === g.id ? { ziel: z.wert, aktiv: false, erlaubt: false, grund: 'routing_zyklus', text: `group ${g.id} cannot feed itself` }
-          : { ziel: z.wert, aktiv: false, erlaubt: false, grund: 'routing_grenze', text: 'groups do not nest (depth 1)' };
+        if (z.wert === g.id) return { ziel: z.wert, aktiv: false, erlaubt: false, grund: 'routing_zyklus', text: `group ${g.id} cannot feed itself` };
+        if (unter.has(z.wert)) {
+          const text = `group ${z.wert} plays into group ${g.id}, so ${g.id} cannot feed it`;
+          return { ziel: z.wert, aktiv: false, erlaubt: false, grund: 'routing_zyklus', text };
+        }
+        return { ziel: z.wert, aktiv: z.wert === aktiv, erlaubt: true };
       }),
       sends: sends(g.sends), stufen: mitStufen(g.id, g) });
   }

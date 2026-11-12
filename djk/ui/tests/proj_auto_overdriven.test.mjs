@@ -207,6 +207,8 @@ test('F2.2 Stop Cypher: both routes refuse Cypher, Andreas still works, nothing 
   const { o, url, log } = await aufbau(t);
   innen(o).vomKern('/e/ki', { gestoppt: 1, grund: 'hand', sample: 0 });
   assert.ok(await bis(() => innen(o).kiGestoppt === true));
+  // the stand-in core reports its own state (/zustand/kern ki_gestoppt 0) every 50 ms and would undo the injected stop between two requests: pin it
+  o.setzeKiGestoppt = () => {};
   const n0 = anKern(log, '/k/arr/auto').length;
   const a = await ruf(url, 'POST', '/proj/auto/uebersteuern', { spur_id: 's1', ziel: 'fader' }, CYPHER);
   const b = await ruf(url, 'POST', '/proj/auto/re_enable', { spur_id: 's1', ziel: 'fader' }, CYPHER);

@@ -88,3 +88,48 @@ test('pdc: a Baukasten stage has a latency the page does not know: it says "unkn
   q.master.inserts = [I('bk')];
   assert.match(latenzZeile(q), /Baukasten/);
 });
+
+// nested groups (plan task 5): the topologies E, F, G of test_arr_pdc case 10. Groups g3 in g2 in g1, track s1 directly in g1, track s2 in g3.
+const tief = (f) => {
+  const p = { spuren: [spur('s1', { ausgang: { art: 'gruppe', id: 'g1' } }), spur('s2', { ausgang: { art: 'gruppe', id: 'g3' } })],
+    gruppen: [{ id: 'g1', nr: 1, name: 'G1', inserts: [] }, { id: 'g2', nr: 2, name: 'G2', inserts: [], ausgang: { art: 'gruppe', id: 'g1' } },
+      { id: 'g3', nr: 3, name: 'G3', inserts: [], ausgang: { art: 'gruppe', id: 'g2' } }],
+    returns: [{ id: 'r1', nr: 1, name: 'R', inserts: [] }], master: { fader_db: 0, inserts: [] } };
+  if (f === 'E' || f === 'F') p.gruppen[2].inserts = [I('eq')];
+  if (f === 'F') p.gruppen[1].inserts = [I('saett')];
+  return p;
+};
+
+test('pdc nested: E (eq on the innermost group) and F (two levels add) give the core largest path latency; G has no delay anywhere', () => {
+  const e = LATENZ.eq, s = LATENZ.saett;
+  assert.equal(pdcRechnen(tief('E')).gesamt, e);
+  assert.equal(pdcRechnen(tief('F')).gesamt, e + s);
+  const g = pdcRechnen(tief('G'));
+  assert.equal(g.gesamt, 0);
+  assert.equal(g.ringe, 0, 'every new place is 0');
+});
+
+test('pdc nested: the group outputs wait for what their target expects (the delay of each strip, as the core places)', () => {
+  const e = LATENZ.eq, s = LATENZ.saett;
+  const E = pdcRechnen(tief('E')).streifen;
+  assert.equal(E.s1.versatz, 0);
+  assert.equal(E.s2.versatz, 0);
+  assert.equal(E.g3.versatz, 0, 'g3 arrives at ein(g2) = its own aus');
+  assert.equal(E.g1.versatz, 0);
+  const F = pdcRechnen(tief('F')).streifen;
+  assert.equal(F.g3.kette, e);
+  assert.equal(F.g2.versatz, 0);
+  assert.equal(F.g1.versatz, 0);
+  assert.ok(pdcRechnen(tief('E')).ringe > 0, 'positive control: the direct-track sum of g1 waits for g3');
+  assert.ok(s > 0);
+});
+
+test('pdc nested: a sibling that is earlier than its parent waits for the parent input (D under P with latency stage on C)', () => {
+  const p = tief('E');
+  p.gruppen.push({ id: 'g4', nr: 4, name: 'G4', inserts: [], ausgang: { art: 'gruppe', id: 'g2' } });
+  p.spuren.push(spur('s3', { ausgang: { art: 'gruppe', id: 'g4' } }));
+  p.gruppen[1].inserts = [I('saett')];
+  const r = pdcRechnen(p);
+  assert.equal(r.streifen.g4.versatz, LATENZ.eq, 'g4 has no chain, g3 has the eq: g4 waits for ein(g2)');
+  assert.equal(r.gesamt, LATENZ.eq + LATENZ.saett);
+});

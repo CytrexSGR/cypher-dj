@@ -2,8 +2,58 @@
 // fehlt es, spielt die Spur auf den Master; sonst zeigt {art: 'gruppe', id} auf eine Gruppen-Spur.
 import { MAX_GRUPPEN, MAX_RETURNS, MAX_SPUREN } from './limits.js';
 
-export const ausgangOptionen = (projekt) => [{ wert: 'master', text: 'Master' },
-  ...[...(projekt?.gruppen ?? [])].sort((a, b) => a.nr - b.nr).map((g) => ({ wert: g.id, text: g.name }))];
+// ---- nested groups (plan 2026-11-12): the tree of the groups. A group's `ausgang` names its parent group (absent = Master). ------------------------
+// Parent id of every group (null = top level). An unknown parent, itself, or a parent that would close a cycle (a damaged file) counts as top level.
+export function gruppenEltern(projekt) {
+  const gl = projekt?.gruppen ?? [], ids = new Set(gl.map((g) => g.id));
+  const roh = new Map(gl.map((g) => [g.id, g.ausgang?.art === 'gruppe' && g.ausgang.id !== g.id && ids.has(g.ausgang.id) ? g.ausgang.id : null]));
+  const eltern = new Map();
+  for (const g of gl) {
+    let zyklus = false;
+    for (let n = 0, c = roh.get(g.id); c !== null && c !== undefined && n <= gl.length; n++, c = roh.get(c)) if (c === g.id) { zyklus = true; break; }
+    eltern.set(g.id, zyklus ? null : roh.get(g.id));
+  }
+  return eltern;
+}
+// The group a track plays into, or null (master or an unknown group)
+export const spurGruppe = (projekt, spur) => (spur?.ausgang?.art === 'gruppe' && (projekt?.gruppen ?? []).some((g) => g.id === spur.ausgang.id) ? spur.ausgang.id : null);
+// The chain of group ids from the outermost group down to `gruppeId` itself
+export function gruppenKette(projekt, gruppeId, eltern = gruppenEltern(projekt)) {
+  const k = [];
+  for (let c = gruppeId, n = 0; c !== null && c !== undefined && n <= eltern.size; n++, c = eltern.get(c)) k.unshift(c);
+  return k;
+}
+// The ids of all groups below `gruppeId` (not itself)
+export function nachkommenGruppen(projekt, gruppeId) {
+  const eltern = gruppenEltern(projekt), aus = new Set();
+  for (const g of projekt?.gruppen ?? []) if (g.id !== gruppeId && gruppenKette(projekt, g.id, eltern).includes(gruppeId)) aus.add(g.id);
+  return aus;
+}
+// The tracks that play into `gruppeId` directly or through child groups
+export function alleSpuren(projekt, gruppeId) {
+  const unter = nachkommenGruppen(projekt, gruppeId); unter.add(gruppeId);
+  return (projekt?.spuren ?? []).filter((s) => unter.has(spurGruppe(projekt, s)));
+}
+// Array position of the first track at or below a group (Infinity: no track below it). It orders siblings in the arrangement and in Ctrl+G.
+export function gruppenSchluessel(projekt) {
+  const eltern = gruppenEltern(projekt), m = new Map((projekt?.gruppen ?? []).map((g) => [g.id, Infinity]));
+  (projekt?.spuren ?? []).forEach((s, i) => { for (const id of gruppenKette(projekt, spurGruppe(projekt, s), eltern)) if (i < m.get(id)) m.set(id, i); });
+  return m;
+}
+// The strips of the mixer in tree order (depth first, siblings by group number) with their depth. A flat project: number order, all depth 0.
+export function gruppenStreifenFolge(projekt) {
+  const gl = [...(projekt?.gruppen ?? [])].sort((a, b) => a.nr - b.nr), eltern = gruppenEltern(projekt), aus = [];
+  const gehe = (vater, tiefe) => { for (const g of gl) if (eltern.get(g.id) === vater) { aus.push({ id: g.id, tiefe }); gehe(g.id, tiefe + 1); } };
+  gehe(null, 0);
+  return aus;
+}
+// Output choices: Master and the groups. For a group (`gruppeId`) not itself and not a group below it (the server refuses a cycle with routing_zyklus).
+export const ausgangOptionen = (projekt, gruppeId = null) => {
+  const aus = gruppeId === null ? new Set() : nachkommenGruppen(projekt, gruppeId);
+  if (gruppeId !== null) aus.add(gruppeId);
+  return [{ wert: 'master', text: 'Master' },
+    ...[...(projekt?.gruppen ?? [])].sort((a, b) => a.nr - b.nr).filter((g) => !aus.has(g.id)).map((g) => ({ wert: g.id, text: g.name }))];
+};
 export const ausgangWert = (spur) => spur?.ausgang?.id ?? 'master';
 export const ausgangBefehl = (spurId, wert) => ({ befehl: 'ziel_setzen', strang_id: spurId, ausgang: wert === 'master' ? 'master' : { art: 'gruppe', id: wert } });
 export const mitglieder = (projekt, gruppeId) => (projekt?.spuren ?? []).filter((s) => s.ausgang?.id === gruppeId);
@@ -49,16 +99,24 @@ export function hallText(feld, x) {
 export const HALL_FELDER_ANZEIGE = [['pre', 'Pre-Delay'], ['groesse', 'Size'], ['decay', 'Decay'], ['tief', 'Low Decay'], ['highcut', 'High Cut'], ['fahne', 'Level']];
 
 // ---- 1.10 slice 6: groups in the arrangement ------------------------------------------------------------------------------------------------
-// What a folded group header must still show (review focus 1): dots for armed, solo, muted and an open lane among the members. `offen`: the set of track
-// ids with an open lane row (page state, not in the project).
+// What a folded group header must still show (review focus 1): dots for armed, solo, muted and an open lane among everything below it, tracks and
+// child groups at any depth. `offen`: the set of track ids with an open lane row (page state, not in the project). `mitglieder` counts the tracks below.
 export function gruppenKopfZustand(projekt, gruppeId, offen = new Set()) {
-  const g = (projekt?.gruppen ?? []).find((x) => x.id === gruppeId), m = mitglieder(projekt, gruppeId);
-  return { gefaltet: !!g?.gefaltet, mitglieder: m.length, armiert: m.some((s) => !!s.aufnahme?.scharf), solo: m.some((s) => !!s.solo),
-    stumm: m.some((s) => !!s.mute), lane: m.some((s) => offen.has(s.id)) };
+  const g = (projekt?.gruppen ?? []).find((x) => x.id === gruppeId), m = alleSpuren(projekt, gruppeId);
+  const unter = (projekt?.gruppen ?? []).filter((x) => nachkommenGruppen(projekt, gruppeId).has(x.id));
+  return { gefaltet: !!g?.gefaltet, mitglieder: m.length, armiert: m.some((s) => !!s.aufnahme?.scharf), solo: m.some((s) => !!s.solo) || unter.some((x) => !!x.solo),
+    stumm: m.some((s) => !!s.mute) || unter.some((x) => !!x.mute), lane: m.some((s) => offen.has(s.id)) };
 }
-// The body of Ctrl+G: ONE gruppenspur_neu with the selected tracks that exist (project order, no duplicates). null: nothing usable selected or all groups used.
+// The body of Ctrl+G: ONE gruppenspur_neu with the selected tracks and group heads that exist (array position of the first track, no duplicates). A
+// selected thing below a selected group stays where it is (it moves with that group). null: nothing usable selected or all groups used.
 export function gruppeAusWahl(projekt, ids) {
   if (!projekt || (projekt.gruppen?.length ?? 0) >= MAX_GRUPPEN) return null;
-  const wahl = new Set(ids ?? []), m = projekt.spuren.filter((s) => wahl.has(s.id)).map((s) => s.id).slice(0, MAX_SPUREN);
+  const wahl = new Set(ids ?? []), eltern = gruppenEltern(projekt), schluessel = gruppenSchluessel(projekt);
+  const unterWahl = (gruppe) => gruppe !== null && gruppenKette(projekt, gruppe, eltern).slice(0, -1).some((x) => wahl.has(x));   // a selected group above `gruppe`
+  const teile = [
+    ...(projekt.spuren ?? []).map((s, i) => ({ id: s.id, pos: i, ueber: spurGruppe(projekt, s) })).filter((x) => wahl.has(x.id) && !(x.ueber !== null && (wahl.has(x.ueber) || unterWahl(x.ueber)))),
+    ...(projekt.gruppen ?? []).map((g) => ({ id: g.id, pos: schluessel.get(g.id), nr: g.nr, ueber: eltern.get(g.id) })).filter((x) => wahl.has(x.id) && !(x.ueber !== null && (wahl.has(x.ueber) || unterWahl(x.ueber)))),
+  ].sort((a, b) => a.pos - b.pos || (a.nr ?? 0) - (b.nr ?? 0));
+  const m = teile.map((x) => x.id).slice(0, MAX_SPUREN);
   return m.length ? { befehl: 'gruppenspur_neu', mitglieder: m } : null;
 }

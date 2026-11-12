@@ -78,7 +78,7 @@ export function stemWarp(w: Warp, bClip0: number, f0: number, f1: number): Warp 
 // (four to six) right under the source track, je einen Clip
 // über den Bereich (Warp nach stemWarp, sonst offset 0), Gain und Fades des Mittelstücks, und eine Gruppe „Stems: <Name>“, solange eine frei ist.
 export function baueStemsProjekt(p0: Projekt, z: StemsPlan, dateien: Partial<Record<Stem, { sha256: string; pfad: string }>>, quelle: Herkunft):
-  { projekt: Projekt; spuren: string[]; hinweis?: string } {
+  { projekt: Projekt; spuren: string[]; hinweis?: string; hinweisText?: string } {
   const lauf = (p: Projekt, b: unknown): Projekt => fuehreListeAus(p, [b], { quelle }).projekt;
   let p = p0;
   const clipId = (id: string) => sucheSpur(p, z.spurId)!.clips.find((c) => c.id === id) as AudioClip;
@@ -101,7 +101,8 @@ export function baueStemsProjekt(p0: Projekt, z: StemsPlan, dateien: Partial<Rec
     const id = p.spuren[p.spuren.length - 1].id;                                 // spur_neu hängt hinten an (commands.ts:213-230)
     p = lauf(p, { befehl: 'spur_verschieben', spur_id: id, index: index + 1 + i });
     const q = sucheSpur(p, z.spurId)!;                                          // Review MINOR 6: Fader und Pan der Quellspur erben, Ausgang nach D8
-    // mute erben (stumme Quelle, stumme Stems); solo nicht (Abhörzustand); Gruppen verschachteln nicht (Gruppe hat keinen Ausgang), also bleibt D8
+    // mute erben (stumme Quelle, stumme Stems); solo nicht (Abhörzustand); der Ausgang der Quelle (Gruppe darüber) kommt über die neue
+    // Stems-Gruppe (unten), also bleibt D8
     if (q.fader_db !== 0 || q.pan !== 0 || q.mute) p = lauf(p, { befehl: 'spur_aendern', spur_id: id, fader_db: q.fader_db, pan: q.pan, mute: q.mute });
     p = lauf(p, { befehl: 'clip_neu', spur_id: id, art: 'audio', start_beat: z.von, laenge_beats: z.bis - z.von, sha256: dateien[stem]!.sha256,
       pfad_hinweis: dateien[stem]!.pfad, name: `${z.clipName.slice(0, 70)} ${STEM_NAME[stem]}`,
@@ -114,6 +115,21 @@ export function baueStemsProjekt(p0: Projekt, z: StemsPlan, dateien: Partial<Rec
   });
   if ((p.gruppen?.length ?? 0) >= MAX_GRUPPEN) return { projekt: p, spuren, hinweis: 'stems_ohne_gruppe' };
   p = lauf(p, { befehl: 'gruppenspur_neu', name: `Stems: ${z.clipName}`.slice(0, 80), mitglieder: spuren });
+  // nested groups: the stems keep the source's bus. The new group plays into the source's own group, so the whole chain above the source applies to them
+  // (a source on the master gives a group on the master, as before).
+  const ziel = sucheSpur(p, z.spurId)?.ausgang;
+  if (ziel) {
+    // Nesting raises the source group's level: a sidechain key into it that was fine flat may now be late or a cycle. The command judges the would-be tree
+    // (pruefeAlleSchluessel); then the stems group stays on the master, as before nesting, and the hint says why.
+    try { p = lauf(p, { befehl: 'ziel_setzen', strang_id: p.gruppen!.at(-1)!.id, ausgang: { art: 'gruppe', id: ziel.id } }); } catch (e) {
+      const grund = (e as { grund?: string }).grund;
+      if (typeof grund !== 'string' || !grund.startsWith('sidechain_')) throw e;
+      return {
+        projekt: p, spuren, hinweis: 'stems_nicht_verschachtelt',
+        hinweisText: `the stems group stays on the master: nesting it under ${ziel.id} would break a sidechain key (${grund}: ${(e as Error).message})`,
+      };
+    }
+  }
   return { projekt: p, spuren };
 }
 

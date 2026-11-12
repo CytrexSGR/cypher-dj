@@ -1,9 +1,10 @@
 // Paket 1.13 Slice 7 (G08, AK27): reine Merge-Rechnung. Plan und Ablehnungen (D6, D7, D9, D10), Regler-Datei des Renders (D3, D6), Wiedergabe-Ausschnitt (P5),
 // der neue Stand (D5) und die Veraltet-Prüfung (D12). Kein fs, kein Prozess.
 import { fuehreListeAus } from './commands.ts';
-import { routingRegler } from './render.ts';
+import { gruppenKette, routingRegler } from './render.ts';
+import { nachkommen } from './routing_rules.ts';
 import { brauchtFreeze, istWirt } from './freeze.ts';
-import { MAX_SPUREN, SAMPLERATE, herkunft, kanonisch, spurSicht, sucheSpur, type Herkunft, type Projekt, type Spur } from './model.ts';
+import { MAX_SPUREN, SAMPLERATE, herkunft, kanonisch, spurSicht, sucheSpur, type Gruppe, type Herkunft, type Projekt, type Spur } from './model.ts';
 
 // Das Pan-Gesetz der Spur (cos/sin über (pan+1)·π/4, arr_output.cpp:2, :26-33) senkt jeden Kanal bei Pan 0 um 20·log10(√2).
 // Der Render enthält das Gesetz der Quellen schon; die neue Spur wendet es mit Pan 0 ein zweites Mal an.
@@ -21,12 +22,30 @@ export interface MergePlan {
   spurIds: string[]; von: number; bis: number; ausgang: string | null; index: number; name: string; solo: boolean; ausserhalb: boolean;
   tempo: number; sicht: string;
   sends: { id: string; db: number }[];   // slice 3: the sends all sources share (the new track takes them over)
+  // nested groups: the bounced group. The sources sit in it or in groups below it; the new track plays into it (`ausgang`), the groups strictly between
+  // the sources and it sound in the render (see zwischenGruppen). Absent: all sources share one target, as always.
+  unter?: string;
+}
+
+// The groups strictly between the sources and the group `unter`: the chain of each source's target up to, not including, `unter`. Their fader, pan and
+// mute are part of the bounced sound (the new track plays into `unter`, which then acts once). Empty when every source plays into `unter` directly.
+export function zwischenGruppen(p: Projekt, ids: string[], unter: string | null | undefined): Gruppe[] {
+  if (!unter) return [];
+  const aus = new Map<string, Gruppe>();
+  for (const id of ids) {
+    const s = sucheSpur(p, id);
+    if (!s?.ausgang) continue;
+    for (const g of gruppenKette(p, s.ausgang.id)) { if (g.id === unter) break; aus.set(g.id, g); }
+  }
+  return [...aus.values()].sort((a, b) => a.nr - b.nr);
 }
 
 // Alles, was den Klang der Quellen und ihren Platz bestimmt, ohne `dekodiert` (ein Dekodierzustand ändert den Klang nicht,
 // sonst wäre jeder Merge "veraltet"), dazu Fader, Pan, Mute, Solo, Ziel und das Tempo (die WAV ist in Sekunden fest).
-export function mergeSicht(p: Projekt, ids: string[]): string {
+export function mergeSicht(p: Projekt, ids: string[], unter?: string): string {
+  const zwischen = zwischenGruppen(p, ids, unter).map((g) => ({ id: g.id, fader_db: g.fader_db, pan: g.pan, mute: g.mute, ausgang: g.ausgang?.id ?? null }));
   return kanonisch({
+    ...(zwischen.length ? { zwischen } : {}),
     tempo: p.tempo_bpm,
     spuren: ids.map((id) => {
       const s = sucheSpur(p, id);
@@ -50,7 +69,7 @@ export function liegtAusserhalb(s: Spur, von: number, bis: number, tempo: number
 
 // 1.14 slice 4 (bounce, spec D5): `opt.min` 1 lets one source through (bounce to new track), `opt.praefix` names the new track (default 'Merge: ')
 export function mergePlan(p: Projekt, a: { spur_ids?: unknown; von_beat?: unknown; bis_beat?: unknown }, quelle: Herkunft,
-  opt: { min?: number; praefix?: string } = {}): MergePlan {
+  opt: { min?: number; praefix?: string; unter?: string } = {}): MergePlan {
   const roh = a.spur_ids, min = opt.min ?? 2;
   if (!Array.isArray(roh) || roh.length < min || roh.length > MAX_SPUREN || roh.some((x) => typeof x !== 'string') || new Set(roh).size !== roh.length) {
     ab('argument_ungueltig', `spur_ids: ${min} or more distinct track ids expected`);
@@ -68,6 +87,18 @@ export function mergePlan(p: Projekt, a: { spur_ids?: unknown; von_beat?: unknow
     if (brauchtFreeze(s)) ab('merge_freeze_noetig', `${s.name} has notes that are not frozen; freeze it first (proj_freeze)`);
   }
   const ziele = new Set(spuren.map((s) => s.ausgang?.id ?? null));
+  if (opt.unter !== undefined) {   // a group bounce: the sources may sit in the group or below it; the new track plays into the group
+    const unten = new Set([opt.unter, ...nachkommen(p, opt.unter).gruppen]);
+    if (spuren.some((s) => !s.ausgang || !unten.has(s.ausgang.id))) ab('merge_gruppen', `the tracks do not all play into group ${opt.unter}`);
+    const zw = zwischenGruppen(p, ids, opt.unter);
+    if (zw.some((g) => (g.inserts ?? []).length > 0)) {
+      ab('merge_inserts', `a group inside group ${opt.unter} has an insert chain; remove the inserts of the inner groups and bounce again`);
+    }
+    if (zw.some((g) => (g.sends ?? []).length > 0)) {
+      ab('merge_sends', `a group inside group ${opt.unter} has sends; remove the sends of the inner groups and bounce again`);
+    }
+    ziele.clear(); ziele.add(opt.unter);
+  }
   if (ziele.size !== 1) {
     ab('merge_gruppen', 'the tracks feed different groups or the master; merge tracks of one group, or of the master');
   }
@@ -86,14 +117,16 @@ export function mergePlan(p: Projekt, a: { spur_ids?: unknown; von_beat?: unknow
   return {
     spurIds: ids, von, bis, ausgang: [...ziele][0], index: Math.max(...spuren.map((s) => p.spuren.indexOf(s))) + 1,
     name: ((opt.praefix ?? 'Merge: ') + spuren.map((s) => s.name).join(' + ')).slice(0, 80), solo: spuren.every((s) => s.solo),
-    ausserhalb: spuren.some((s) => liegtAusserhalb(s, von, bis, p.tempo_bpm)), tempo: p.tempo_bpm, sicht: mergeSicht(p, ids),
+    ausserhalb: spuren.some((s) => liegtAusserhalb(s, von, bis, p.tempo_bpm)), tempo: p.tempo_bpm, sicht: mergeSicht(p, ids, opt.unter),
     sends: sendsSortiert(spuren[0]).map((x) => ({ ...x })),
+    ...(opt.unter !== undefined ? { unter: opt.unter } : {}),
   };
 }
 
 // Regler-Datei des Renders (--spur-regler): Quellen mit ihrem Fader, Pan und Mute, alle anderen Spuren stumm, Solo überall aus,
-// Gruppen neutral (sie wirken später einmal auf der neuen Spur), kein pm/fader (D3, D6).
-export function mergeRegler(p: Projekt, ids: string[]): Record<string, number> {
+// Gruppen neutral (sie wirken später einmal auf der neuen Spur), kein pm/fader (D3, D6). Ausnahme verschachtelt (unter): die Gruppen zwischen den Quellen
+// und der gebouncten Gruppe klingen mit Fader, Pan und Mute des Projekts, denn die neue Spur spielt erst in `unter`.
+export function mergeRegler(p: Projekt, ids: string[], unter?: string): Record<string, number> {
   const r: Record<string, number> = {};
   for (let n = 1; n <= MAX_SPUREN; n++) { r[`spur/${n}/mute`] = 1; r[`spur/${n}/solo`] = 0; }
   for (const id of ids) {
@@ -104,6 +137,7 @@ export function mergeRegler(p: Projekt, ids: string[]): Record<string, number> {
   for (const g of p.gruppen ?? []) {
     r[`grp/${g.nr}/fader`] = 0; r[`grp/${g.nr}/pan`] = 0; r[`grp/${g.nr}/mute`] = 0; r[`grp/${g.nr}/solo`] = 0;
   }
+  for (const g of zwischenGruppen(p, ids, unter)) { r[`grp/${g.nr}/fader`] = g.fader_db; r[`grp/${g.nr}/pan`] = g.pan; r[`grp/${g.nr}/mute`] = g.mute ? 1 : 0; }
   Object.assign(r, routingRegler(p, { trocken: true }));   // slice 3: dry, the Sends are not part of the render tap
   return r;
 }
@@ -146,7 +180,7 @@ export function baueMergeProjekt(p0: Projekt, z: MergePlan, datei: { sha256: str
 
 // D12: null = die Quellen sind noch die vom Start; sonst der Grund
 export function pruefeMergeNochGleich(p: Projekt, z: MergePlan): 'veraltet' | 'merge_keine_spur_frei' | null {
-  if (mergeSicht(p, z.spurIds) !== z.sicht) return 'veraltet';
+  if (mergeSicht(p, z.spurIds, z.unter) !== z.sicht) return 'veraltet';
   if (p.spuren.length >= MAX_SPUREN) return 'merge_keine_spur_frei';
   return null;
 }

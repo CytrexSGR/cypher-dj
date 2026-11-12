@@ -95,6 +95,10 @@ const ArrSnapshot* Arrangement::tausche(const ArrSnapshot* neu, int64_t s, const
   if (snap_)
     for (const ArrSpur& sp : snap_->spur)
       if (sp.art != ArrArt::leer && sp.ausgang > 0) grp_belegt_[sp.ausgang - 1] = true;
+  if (snap_)   // nested groups: a group that holds only child groups counts as used when a child does (bounded passes: the parent of a used group, G times, covers any depth)
+    for (int pass = 0; pass < ARR_GRUPPEN; ++pass)
+      for (int g = 0; g < ARR_GRUPPEN; ++g)
+        if (grp_belegt_[g] && snap_->gruppe_ausgang[g] > 0) grp_belegt_[snap_->gruppe_ausgang[g] - 1] = true;
   if (status_ == ArrStatus::spielt) einstieg_ = true;   // neue oder geänderte Clips am laufenden Ort ansetzen
   geaendert_ = true;
   return alt;
@@ -311,16 +315,23 @@ void Arrangement::ruhe(int m) {
   auto ende = [&](int i, int f) { return w_[i][f].vl ? w_[i][f].vl[m - 1] : w_[i][f].w; };
   bool solo = false;
   for (int i = 0; i < ARR_PM; ++i) solo = solo || ende(i, 3) >= 0.5f;   // returns never exist here (ruhe() runs without a playback), so they never count
-  bool msolo[ARR_GRUPPEN] = {};
+  bool msolo[ARR_GRUPPEN] = {};   // a track or a group below the group has solo
   for (int i = 0; i < ARR_SPUREN; ++i)
     if (ziel_[i] > 0 && ende(i, 3) >= 0.5f) msolo[ziel_[i] - 1] = true;
+  bool vsolo[ARR_GRUPPEN] = {};   // nested groups: the group or an ancestor has solo (bounded passes, G times covers any depth; the targets gziel_ stay as they are, as ziel_)
+  for (int pass = 0; pass < ARR_GRUPPEN; ++pass)
+    for (int g = 0; g < ARR_GRUPPEN; ++g) {
+      if (gziel_[g] > 0 && (ende(ARR_SPUREN + g, 3) >= 0.5f || msolo[g])) msolo[gziel_[g] - 1] = true;
+      vsolo[g] = ende(ARR_SPUREN + g, 3) >= 0.5f || (gziel_[g] > 0 && vsolo[gziel_[g] - 1]);
+    }
   for (int i = 0; i < ARR_SPUREN; ++i) {
-    const bool gs = ziel_[i] > 0 && ende(ARR_SPUREN + ziel_[i] - 1, 3) >= 0.5f;
+    const bool gs = ziel_[i] > 0 && vsolo[ziel_[i] - 1];
     ms_gain_[i] = (ende(i, 2) >= 0.5f || (solo && ende(i, 3) < 0.5f && !gs)) ? 0.0f : 1.0f;
   }
   for (int g = 0; g < ARR_GRUPPEN; ++g) {
     const int s = ARR_SPUREN + g;
-    ms_gain_[s] = (ende(s, 2) >= 0.5f || (solo && ende(s, 3) < 0.5f && !msolo[g])) ? 0.0f : 1.0f;
+    const bool oben = gziel_[g] > 0 && vsolo[gziel_[g] - 1];
+    ms_gain_[s] = (ende(s, 2) >= 0.5f || (solo && ende(s, 3) < 0.5f && !msolo[g] && !oben)) ? 0.0f : 1.0f;
   }
   for (int r = 0; r < ARR_RETURNS; ++r) ms_gain_[ARR_RET0 + r] = ende(ARR_RET0 + r, 2) >= 0.5f ? 0.0f : 1.0f;
   for (int i = 0; i < ARR_SPUREN; ++i) {   // Automation Slice 1: nothing is loaded, no lane and no blend
@@ -536,6 +547,8 @@ void Arrangement::block(const Karte& k, int64_t s0, int m, float* aus_l, float* 
     std::memset(bus_l_[i], 0, sizeof(float) * static_cast<size_t>(m));
     std::memset(bus_r_[i], 0, sizeof(float) * static_cast<size_t>(m));
   }
+  cue_l_ = metro_cue_l;
+  cue_r_ = metro_cue_r;
   metro_l_ = metro_ziel_ == 1 ? metro_cue_l : metro_master_l;
   metro_r_ = metro_ziel_ == 1 ? metro_cue_r : metro_master_r;
   noten_block(k, s0, m);   // Vorausblick: Noten mit Ziel in [s0 + Vorhalt, s0 + m + Vorhalt)

@@ -20,6 +20,9 @@ pytest>=8.4
 # Audio-Dateien lesen und schreiben (Werkstatt, Klang, Prüfstand-Auswertung)
 soundfile>=0.14
 
+# tags and durations of your own files; without it djk-bibliothek reads durations with soundfile or ffprobe and no tags
+mutagen>=1.47
+
 # Tonart und Energie (djk/key_energy)
 pandas>=3.0
 scikit-learn>=1.8

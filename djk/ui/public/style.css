@@ -1,7 +1,7 @@
 /* djk MVP-Oberfläche (Scheibe 60m). Farben aus Andreas' Pult (pult.html) und Deck (deck/index.html, 22.09.). */
 :root {
   --bg: #0e0f12; --panel: #16181e; --panel2: #1c1f27; --line: #2a2d36; --text: #e8e8ec; --dim: #8a8d98;
-  --a: #2fd6c3; --b: #e0a33e; --c: #b48cff; --c2: #8c9bff; --c3: #e08cff; --kill: #ff5a1f; --gut: #58d66b; --warn: #ffb020;
+  --d3: #7fb6ff; --a: #2fd6c3; --b: #e0a33e; --c: #b48cff; --c2: #8c9bff; --c3: #e08cff; --kill: #ff5a1f; --gut: #58d66b; --warn: #ffb020;
   --kopf: 64px; --lib: 40px; --lib-auf: 60vh; --abstand: 12px;
 }
 * { box-sizing: border-box; }
@@ -166,6 +166,8 @@ td.aktion { text-align: right; white-space: nowrap; width: 1%; }
 .laden { padding: 3px 14px; font-size: 12px; font-weight: 800; letter-spacing: .1em; margin-left: 8px; border-radius: 7px; }
 .laden.a { border-color: color-mix(in srgb, var(--a) 60%, var(--line)); color: var(--a); }
 .laden.b { border-color: color-mix(in srgb, var(--b) 60%, var(--line)); color: var(--b); }
+.laden.d3 { border-color: color-mix(in srgb, var(--d3) 60%, var(--line)); color: var(--d3); }
+.laden.d3:hover { background: var(--d3); color: #0e0f12; }
 .laden.a:hover { background: var(--a); color: #0e0f12; } .laden.b:hover { background: var(--b); color: #0e0f12; }
 tr.auf-1 td.titelzelle { color: var(--a); } tr.auf-2 td.titelzelle { color: var(--b); }
 .tor-ok { color: var(--gut); } .tor-nein { color: var(--dim); }
@@ -361,7 +363,7 @@ body.lib-zu #bestand .tabelle { display: none; }
 .muster-auto.an { background: var(--farbe); border-color: var(--farbe); color: #0e0f12; }
 
 /* Plan E9: Deck-Bedienung (Raster, Cue-Pads, Loop) */
-.bedienreihe { display: flex; align-items: center; gap: 10px; font-size: 11px; min-width: 0; flex-wrap: nowrap; }
+.bedienreihe { display: flex; align-items: center; gap: 10px; font-size: 11px; min-width: 0; flex-wrap: wrap; row-gap: 4px;   /* loop lengths 32 and 64 widen the row: wrap instead of cutting the grid buttons */ }
 .bedienreihe button { font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; min-width: 22px; }
 .bedienreihe button:disabled { opacity: 0.35; }
 .raster, .pads, .loopreihe, .gridreihe { display: flex; gap: 3px; }
@@ -709,3 +711,64 @@ button.laden.in-box:disabled { opacity: .4; }
 #demo-ansage .ansage-wer { font-size: 12px; letter-spacing: .2em; font-weight: 800; color: var(--a); flex: none; }
 #demo-ansage[data-art="stimme"] { border-color: var(--c); }
 #demo-ansage[data-art="stimme"] .ansage-wer { color: var(--c); }
+
+/* Deck 3 (plan live modules, task 0): compact strip under both deck rows, across the whole desk. Studio view hides it (it only shows Strudel). */
+#pult { grid-template-rows: minmax(0, 1fr) minmax(0, 1fr) auto; grid-template-areas: "a mo b" "c mu d" "s s s"; }
+#deck-3 { grid-area: s; display: flex; align-items: center; gap: 12px; padding: 6px 12px; min-height: 0; background: var(--panel);
+  border: 1px solid var(--line); border-top: 2px solid var(--farbe); border-radius: 8px; }
+#deck-3 .status { margin-left: 0; }
+#deck-3 .streifenname { font-size: 11px; letter-spacing: .16em; font-weight: 600; color: var(--dim); }
+#deck-3 .streifentitel { display: flex; flex-direction: column; flex: 1 1 0; min-width: 0; line-height: 1.2; }
+#deck-3 .streifentitel b, #deck-3 .streifentitel span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#deck-3 .streifentitel span { color: var(--dim); font-size: 11px; }
+#deck-3 .streifenpos { display: flex; align-items: baseline; gap: 6px; }
+#deck-3 .streifenpos b { min-width: 3.2em; }
+#deck-3 .taste { height: 34px; padding: 0 16px; font-size: 14px; border-radius: 8px; }
+#deck-3 .taste.sync { letter-spacing: .12em; }
+#deck-3 .loopreihe button { height: 34px; min-width: 32px; padding: 0 6px; font-size: 13px; }
+#deck-3 .pfl { height: 34px; padding: 0 14px; font-weight: 700; }
+#deck-3 button:disabled { opacity: .35; cursor: default; }
+body.studio #deck-3 { display: none; }
+
+/* Live modules (plan live-module task 4): EXPORT in the deck loop rows, LIVE in the deck 3 strip, the live container panel under it. */
+.exportknopf { margin-left: 6px; font-weight: 700; letter-spacing: .08em; border-color: var(--farbe); color: var(--farbe); }
+.exportknopf:disabled { opacity: .35; color: var(--dim); border-color: var(--line); }
+#deck-3 .exportknopf { height: 34px; padding: 0 12px; font-size: 13px; }
+#deck-3 .livetaste { height: 34px; padding: 0 14px; font-weight: 700; letter-spacing: .12em; }
+#deck-3 .livetaste.an { background: var(--farbe); border-color: var(--farbe); color: #0e0f12; }
+#live-panel { grid-area: l; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; min-height: 0; }
+#live-panel[hidden] { display: none; }
+body.live-offen #pult { grid-template-rows: minmax(0, 1fr) minmax(0, 1fr) auto auto; grid-template-areas: "a mo b" "c mu d" "s s s" "l l l"; }
+body.studio #live-panel { display: none; }
+.live-slot { --farbe: var(--d3); display: flex; flex-direction: column; gap: 6px; padding: 6px 10px 8px; min-width: 0; background: var(--panel);
+  border: 1px solid var(--line); border-top: 2px solid var(--farbe); border-radius: 8px; }
+.live-slot.leer { opacity: .7; border-top-color: var(--line); }
+.live-kopf { display: flex; align-items: center; gap: 10px; min-height: 40px; min-width: 0; }
+.live-buchstabe { font-size: 22px; color: var(--farbe); width: 1.1em; text-align: center; }
+.live-slot.leer .live-buchstabe { color: var(--dim); }
+.live-leer { font-size: 12px; letter-spacing: .16em; font-weight: 600; color: var(--dim); }
+.live-hinweis { color: var(--dim); font-size: 11px; }
+.live-titel { display: flex; flex-direction: column; flex: 1 1 0; min-width: 0; line-height: 1.2; }
+.live-titel b, .live-titel span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.live-titel span { color: var(--dim); font-size: 11px; }
+.live-zustand { position: relative; display: flex; flex-direction: column; justify-content: center; min-width: 118px; max-width: 220px; padding: 3px 10px; border-radius: 6px;
+  border: 1px solid var(--line); font-size: 11px; font-weight: 700; letter-spacing: .1em; overflow: hidden; line-height: 1.2; }
+.live-zustand.bereit { color: #7ddc9a; border-color: #2f6b45; }
+.live-zustand.trennt { color: var(--text); border-color: var(--farbe); background: linear-gradient(90deg, rgba(255, 255, 255, .14) var(--fortschritt, 8%), transparent var(--fortschritt, 8%)); }
+.live-zustand.fehler { color: #ffb86b; border-color: #8a5a22; }
+.live-grund { font-weight: 400; letter-spacing: 0; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.live-knopf { height: 38px; min-width: 64px; padding: 0 12px; font-size: 12px; font-weight: 700; letter-spacing: .08em; border-radius: 8px; }
+.live-loeschen { border-color: #8a3a3a; }
+.live-leeren { display: flex; gap: 4px; }
+.live-leeren select { height: 38px; font: inherit; font-size: 12px; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+.live-modulfader { display: flex; align-items: center; gap: 6px; width: 250px; font-size: 11px; letter-spacing: .1em; color: var(--dim); }
+.live-modulfader .live-regler { flex: 1 1 0; min-width: 0; }
+.live-regler { height: 34px; margin: 0; accent-color: var(--farbe); cursor: pointer; touch-action: none; }
+.live-modulfader output, .live-stem output { width: 3.6em; text-align: right; font-size: 11px; color: var(--text); font-variant-numeric: tabular-nums; }
+.live-stems { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 4px 14px; }
+.live-stem { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.live-stemname { width: 4.2em; font-size: 11px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.live-blendregler { flex: 1 1 0; min-width: 0; height: 30px; }
+.live-cue.an { background: var(--akzent, #2fd6c3); color: #000; }
+.live-key[disabled] { opacity: .5; }
+.live-stem .live-regler { flex: 1 1 0; min-width: 0; height: 30px; }

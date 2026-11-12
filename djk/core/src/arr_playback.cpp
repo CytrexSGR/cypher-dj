@@ -1033,7 +1033,7 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
     if (spuren.size() > static_cast<size_t>(ARR_SPUREN))
       throw Abbruch("spur_bereich", "mehr als " + std::to_string(ARR_SPUREN) + " Spuren");
     snap->nr = nummer;
-    // 1.10: Gruppen (nur /2). Tiefe 1: ausgang einer Gruppe ist master; jede Nummer 1..ARR_GRUPPEN höchstens einmal.
+    // 1.10: Gruppen (nur /2). ausgang einer Gruppe: master (fehlt = master) oder eine andere Gruppe der Liste (nested groups); jede Nummer 1..ARR_GRUPPEN höchstens einmal.
     bool gruppe_da[ARR_GRUPPEN + 1] = {};
     bool rack_belegt[ARR_RACKS] = {};      // 1.10 slice 4c: rack pool slots used by a strip
     bool ins_belegt[ARR_INS_ALLE] = {};   // 1.10 slice 4a/4b: pool slots (global index) used by a stage
@@ -1049,10 +1049,21 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
         if (gruppe_da[gn]) format(wg + "nr doppelt");
         gruppe_da[gn] = true;
         const json& ag = feld(g, "ausgang", wg);
-        if (text(ag, "art", wg + "ausgang.") != "master") format(wg + "ausgang: Gruppen verschachteln nicht (nur master)");
+        const std::string g_art = text(ag, "art", wg + "ausgang.");
+        if (g_art == "gruppe") {   // nested groups: the parent group; self and cycles are refused below (arr_gruppen_rechnen), a missing parent after the loop
+          const int64_t pn = ganz(ag, "nr", wg + "ausgang.");
+          if (pn < 1 || pn > ARR_GRUPPEN) format(wg + "ausgang.nr außerhalb 1 bis " + std::to_string(ARR_GRUPPEN));
+          if (pn == gn) format(wg + "ausgang: eine Gruppe kann nicht in sich selbst ausgeben");
+          snap->gruppe_ausgang[gn - 1] = static_cast<int8_t>(pn);
+        } else if (g_art != "master") {
+          format(wg + "ausgang.art " + g_art + " unbekannt (master oder gruppe)");
+        }
         lese_kette(g, wg, snap->kette[ARR_SPUREN + gn - 1], ins_belegt, cache, *snap);
         lese_rack(g, wg, snap->kette[ARR_SPUREN + gn - 1], snap->rack[ARR_SPUREN + gn - 1], rack_belegt);   // 1.10 slice 4c T15
       }
+      for (int gi = 0; gi < ARR_GRUPPEN; ++gi)
+        if (snap->gruppe_ausgang[gi] > 0 && !gruppe_da[snap->gruppe_ausgang[gi]])
+          format("gruppen[nr " + std::to_string(gi + 1) + "].ausgang.nr " + std::to_string(snap->gruppe_ausgang[gi]) + " steht nicht in gruppen");
     }
     // 1.10 slice 4a T3: the chain of the production master, `pm: {chain: [...]}` (only /2), before the PM fader.
     if (j.contains("pm")) {
@@ -1626,6 +1637,8 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
     if (j.contains("pm")) lese_kette_auto(j.at("pm"), "pm.", ARR_KETTE_PM, *snap);
     if (j.contains("returns"))
       for (const json& r : j.at("returns")) lese_kette_auto(r, "returns[nr " + std::to_string(r.at("nr").get<int64_t>()) + "].", ARR_KETTE_RET0 + static_cast<int>(r.at("nr").get<int64_t>()) - 1, *snap);
+    // nested groups: the level and the order of every group, a cycle is refused (the server refuses it at the command too). Before the key check: the key rules read the levels.
+    if (std::string m; !arr_gruppen_rechnen(*snap, &m)) format(m);
     // 1.10 slice 5 U2a: every structural key against the table of docs/interfaces/schluessel_regeln.json (a source computed after the consumer, a strip keyed by itself, the PM)
     if (std::string m; !arr_schluessel_pruefe(*snap, &m)) format(m);
     // 1.10 slice 5 U1: the order the tracks run in when a stage listens to the post of another track; a track keyed by itself or a cycle is refused

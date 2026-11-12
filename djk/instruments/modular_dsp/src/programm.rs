@@ -77,6 +77,17 @@ pub enum Schritt {
     Add { a: Quelle, b: Quelle, c: Quelle, d: Quelle, aus: usize },
     /// Per voice (type 38): selector over `ein` (e1..e8), position from `wahl` (wahl.rs); the voices are boxed so the step enum does not grow
     Wahl { ein: [Quelle; 8], wahl: Quelle, aus: usize, e: crate::wahl::Einstellung, v: Box<[crate::wahl::Stimme; MAX_STIMMEN]> },
+    /// Branch split of a switch `wahl` (zweige.rs, made at translation, never by a graph): first half. Moves the position and the
+    /// weights of every voice on from `wahl` and stores in `braucht` (bit k = candidate k) which candidates the second half reads.
+    WahlVor { wahl: Quelle, e: crate::wahl::Einstellung, v: Box<[crate::wahl::Stimme; MAX_STIMMEN]>, braucht: u8 },
+    /// Guard in front of the exclusive branch of candidate `k` of the `WahlVor` at `vor`: the steps up to `ende` (exclusive) run
+    /// only while a voice reads that candidate. `lief` = they ran in the previous sample; when they did not, their state and
+    /// output slots (`slots`) are reset before they run again.
+    /// `phasen` = indices (in the whole step list) of the oscillator steps inside, nested branches included: while the branch is
+    /// skipped these advance their phase only (`phase_weiter`), so they never lose their place and are never reset.
+    Zweig { vor: usize, k: usize, ende: usize, lief: bool, slots: Box<[usize]>, phasen: Box<[usize]> },
+    /// Second half of a split `wahl`: the output from the weights the `WahlVor` at `vor` left.
+    WahlMisch { vor: usize, ein: [Quelle; 8], aus: usize },
     /// Summenpunkt (Slice 2b, D1): rechnet auf der Summe aller Stimmen, Ergebnis in Stimme 0, die übrigen Stimmen 0
     Chorus { x: Quelle, mix: Quelle, l: usize, r: usize, c: Chorus },
     /// Summenpunkt (Slice 4a): Cypher Hall auf Σ(x + l) links und Σ(x + r) rechts, Ergebnis in Stimme 0. Nur `mix` ändert
@@ -186,15 +197,198 @@ pub struct Programm {
     regler_vorgabe: [f32; REGLER],
     /// (nr 1..8, Name) aus `regler_namen`, nur zur Anzeige
     pub regler_namen: Vec<(usize, String)>,
+    /// false: every branch of a split `wahl` runs in every sample (the engine as it was before zweige.rs); reference for tests
+    zweige: bool,
+    /// steps a `Zweig` has jumped over since loading (diagnostic: how much work the branches save)
+    uebersprungen: u64,
+    fehlerprobe: Fehlerprobe,
+}
+
+/// Ways to break the branch rule on purpose, so that tests can show they would notice (tests/zweige.rs: every property
+/// they pin must turn red under the matching mutation). Not for hosts; `Keine` is the real rule.
+#[doc(hidden)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Fehlerprobe {
+    Keine,
+    /// skip every branch, also the selected one
+    ZielAuslassen,
+    /// read only the selected candidate: the branch fading out is cut off as soon as the fade starts
+    FadeAbschneiden,
+}
+
+impl Schritt {
+    /// State back to the translated start (plug-in reset, rescue, and the re-entry of a skipped branch, zweige.rs).
+    /// Without a placeholder arm: a new kind with state must stand here, or it does not compile (Slice 4a, D7).
+    pub(crate) fn zuruecksetzen(&mut self) {
+        match self {
+            Schritt::Saege { osz, .. } | Schritt::Puls { osz, .. } | Schritt::Dreieck { osz, .. } => *osz = [Osz::default(); MAX_STIMMEN],
+            Schritt::Sinus { osz, .. } => *osz = [Sinus::default(); MAX_STIMMEN],
+            Schritt::Rauschen { r, .. } => *r = std::array::from_fn(Rauschen::neu),
+            Schritt::Lfo { l, .. } => *l = std::array::from_fn(Lfo::neu),
+            Schritt::Sh { s, .. } => *s = std::array::from_fn(Sh::neu),
+            Schritt::Mseg { e, .. } => *e = [Mseg::default(); MAX_STIMMEN],
+            Schritt::Folger { f, .. } => *f = [Folger::default(); MAX_STIMMEN],
+            Schritt::Svf { f, .. } => *f = [Svf::default(); MAX_STIMMEN],
+            Schritt::Sem { f, .. } => *f = [Sem::default(); MAX_STIMMEN],
+            Schritt::Wahl { v, .. } => **v = [crate::wahl::Stimme::default(); MAX_STIMMEN],
+            Schritt::Saett { a, .. } => *a = [Adaa1::default(); MAX_STIMMEN],
+            Schritt::Glatt { z, .. } => *z = [0.0; MAX_STIMMEN],
+            Schritt::Leitung { l, .. } => l.iter_mut().for_each(|v| v.zuruecksetzen()),
+            Schritt::Ladder { f, reso_glatt, .. } => {
+                *f = [Ladder::default(); MAX_STIMMEN];
+                *reso_glatt = [0.0; MAX_STIMMEN];
+            }
+            Schritt::Adsr { e, .. } => *e = [Adsr::default(); MAX_STIMMEN],
+            Schritt::Chorus { c, .. } => c.zuruecksetzen(),
+            Schritt::Hall { h, mix_alt, mix_start, .. } => {
+                // the mix input moves the hall's setting while playing: back to the translated value, as after the load
+                // (S20 review: otherwise the smoother of a played instance starts at the last modulated mix, a fresh one at the static one)
+                *mix_alt = *mix_start;
+                h.setze(hall_dsp::HallEinstellung { mix: *mix_start as f64, ..h.einstellung() });
+                h.reset();
+            }
+            Schritt::Delay { d, .. } => d.zuruecksetzen(),
+            Schritt::Limiter { b, .. } => b.zuruecksetzen(),
+            Schritt::Gate { g, .. } => g.zuruecksetzen(),
+            Schritt::Komp { k, .. } => k.leeren(),
+            Schritt::Krume { k, .. } => *k = [Krume::default(); MAX_STIMMEN],
+            Schritt::Phaser { p, .. } => p.zuruecksetzen(),
+            Schritt::Vocoder { v, .. } => v.zuruecksetzen(),
+            Schritt::Faltung { f, .. } => f.zuruecksetzen(),
+            Schritt::Sampler { s, .. } => *s = [Sampler::default(); MAX_STIMMEN],
+            Schritt::Wavetable { w, e, .. } => **w = std::array::from_fn(|i| WtStimme::neu(i, e)),
+            Schritt::Resonator { v, e, .. } => **v = std::array::from_fn(|i| RsStimme::neu(i, e)),
+            Schritt::Metall { m, e, .. } => **m = std::array::from_fn(|i| MtStimme::neu(i, e)),
+            Schritt::Fm { v, .. } => **v = [crate::fm::Stimme::neu(); MAX_STIMMEN],
+            Schritt::Granular { m, g, e, .. } => {
+                m.zuruecksetzen();
+                **g = std::array::from_fn(|i| GrStimme::neu(i, e));
+            }
+            Schritt::Diode { f, .. } => *f = [Diode::default(); MAX_STIMMEN],
+            Schritt::Saite { s, e, .. } => s.iter_mut().enumerate().for_each(|(i, v)| v.zuruecksetzen(i, e)),
+            Schritt::Kamm { k, .. } => k.iter_mut().for_each(|v| v.zuruecksetzen()),
+            Schritt::Formant { f, .. } => **f = [crate::formant::Stimme::neu(); MAX_STIMMEN],
+            Schritt::Ms20 { f, .. } => **f = [crate::ms20::Ms20::default(); MAX_STIMMEN],
+            Schritt::Falter { f, .. } => f.iter_mut().for_each(|v| v.zuruecksetzen()),
+            Schritt::Drift { d, saat, .. } => *d = std::array::from_fn(|i| crate::drift::Drift::neu(i, *saat)),
+            Schritt::Roehre { r1, r2, .. } => {
+                *r1 = [Roehre::default(); MAX_STIMMEN];
+                *r2 = [Roehre::default(); MAX_STIMMEN];
+            }
+            Schritt::Trommeln { t, e, .. } => t.zuruecksetzen(e),
+            Schritt::WahlVor { v, braucht, .. } => {
+                **v = [crate::wahl::Stimme::default(); MAX_STIMMEN];
+                *braucht = u8::MAX;
+            }
+            // a freshly reset branch is the state a reset would produce: it needs no further reset
+            Schritt::Zweig { lief, .. } => *lief = true,
+            Schritt::Note { .. }
+            | Schritt::WahlMisch { .. }
+            | Schritt::Konst { .. }
+            | Schritt::Regler { .. }
+            | Schritt::Transponiere { .. }
+            | Schritt::Mul { .. }
+            | Schritt::Add { .. }
+            | Schritt::Eingang { .. }
+            | Schritt::Ausgang { .. } => {}
+        }
+    }
 }
 
 #[inline]
+/// One sample of an oscillator step inside a skipped branch (zweige.rs, `Wirkung::Phase`): only the phase, the noise stream and
+/// the LFO's random value move, with the same inputs and the same arithmetic as the audible step, but no waveform, no
+/// band-limiting and no write into a slot. The inputs are slots of steps that always run (the translation keeps every
+/// oscillator out of a branch whose input comes from a branch), so they are current. Work: one pass over `n` voices, no allocation.
+fn phase_weiter(s: &mut Schritt, n: usize, sr: f32, beat: f64, slots: &[Spur], vorher: &[Spur]) {
+    match s {
+        Schritt::Saege { hz: q, sync, osz, hart, .. } => {
+            let (f, sy) = (spur(*q, slots, vorher), spur(*sync, slots, vorher));
+            match hart {
+                None => for i in 0..n { osz[i].phase_nur((f[i] / sr).clamp(0.0, 0.5), sy[i]); },
+                Some(h) => {
+                    let h = spur(*h, slots, vorher);
+                    for i in 0..n { osz[i].phase_nur_hart(0, (f[i] / sr).clamp(0.0, 0.5), 0.0, h[i]); }
+                }
+            }
+        }
+        Schritt::Puls { hz: q, pwm, sync, osz, hart, .. } => {
+            let (f, sy) = (spur(*q, slots, vorher), spur(*sync, slots, vorher));
+            match hart {
+                None => for i in 0..n { osz[i].phase_nur((f[i] / sr).clamp(0.0, 0.5), sy[i]); },
+                Some(h) => {
+                    let (w, h) = (spur(*pwm, slots, vorher), spur(*h, slots, vorher));
+                    for i in 0..n { osz[i].phase_nur_hart(1, (f[i] / sr).clamp(0.0, 0.5), 0.5 + 0.45 * w[i].clamp(-1.0, 1.0), h[i]); }
+                }
+            }
+        }
+        Schritt::Dreieck { hz: q, sync, osz, hart, .. } => {
+            let (f, sy) = (spur(*q, slots, vorher), spur(*sync, slots, vorher));
+            match hart {
+                None => for i in 0..n { osz[i].phase_nur((f[i] / sr).clamp(0.0, 0.5), sy[i]); },
+                Some(h) => {
+                    let h = spur(*h, slots, vorher);
+                    for i in 0..n { osz[i].phase_nur_hart(2, (f[i] / sr).clamp(0.0, 0.5), 0.0, h[i]); }
+                }
+            }
+        }
+        Schritt::Sinus { hz: q, fm, sync, osz, .. } => {
+            let (f, m, sy) = (spur(*q, slots, vorher), spur(*fm, slots, vorher), spur(*sync, slots, vorher));
+            for i in 0..n { osz[i].phase_nur(((f[i] + m[i]) / sr).clamp(-0.5, 0.5), sy[i]); }
+        }
+        Schritt::Rauschen { r, .. } => r[..n].iter_mut().for_each(|r| r.weiter()),
+        Schritt::Lfo { rate, trig: t, takt, versatz, einmal, neustart, l, .. } => {
+            if *takt > 0.0 {
+                let rel = (beat - *versatz) / *takt as f64;
+                let ph = if *einmal { rel.clamp(0.0, 1.0) } else { rel.rem_euclid(1.0) } as f32;
+                for i in 0..n { l[i].phase_nur_takt(ph); }
+            } else {
+                let (r, t) = (spur(*rate, slots, vorher), spur(*t, slots, vorher));
+                for i in 0..n { l[i].phase_nur(r[i], *neustart && t[i] > 0.5, sr); }
+            }
+        }
+        _ => {}
+    }
+}
+
 fn spur(q: Quelle, slots: &[Spur], vorher: &[Spur]) -> Spur {
     match q {
         Quelle::Slot(s) => slots[s],
         Quelle::Vorher(s) => vorher[s],
         Quelle::Fest(w) => [w; MAX_STIMMEN],
     }
+}
+
+/// An input resolved once per step, read per voice: no copy of the track, one branch per read.
+#[derive(Clone, Copy)]
+enum Lese<'a> {
+    Spur(&'a Spur),
+    Fest(f32),
+}
+
+impl Lese<'_> {
+    #[inline(always)]
+    fn bei(&self, i: usize) -> f32 {
+        match self {
+            Lese::Spur(s) => s[i],
+            Lese::Fest(w) => *w,
+        }
+    }
+}
+
+#[inline]
+fn lese_spur<'a>(q: Quelle, slots: &'a [Spur], vorher: &'a [Spur]) -> Lese<'a> {
+    match q {
+        Quelle::Slot(s) => Lese::Spur(&slots[s]),
+        Quelle::Vorher(s) => Lese::Spur(&vorher[s]),
+        Quelle::Fest(w) => Lese::Fest(w),
+    }
+}
+
+/// The `n` candidates of a `wahl` in use, as per-voice readers (the others are never looked at)
+#[inline]
+fn kandidaten<'a>(ein: &[Quelle; 8], n: usize, slots: &'a [Spur], vorher: &'a [Spur]) -> [Lese<'a>; crate::wahl::MAX_EIN] {
+    std::array::from_fn(|k| if k < n { lese_spur(ein[k], slots, vorher) } else { Lese::Fest(0.0) })
 }
 
 /// Summenpunkt-Eingang: Σ(x + l) und Σ(x + r) über n Stimmen
@@ -257,6 +451,7 @@ impl Programm {
     /// Nur für `uebersetzen`: Schritte und Slot-Zahl kommen fertig geprüft.
     pub(crate) fn neu(name: String, stimmen: usize, sr: f32, schritte: Vec<Schritt>, n_slots: usize, verzoegert: Vec<usize>,
                       regler_namen: Vec<(usize, String)>, latenz: usize, regler_vorgabe: [f32; REGLER]) -> Self {
+        let schritte = crate::zweige::zerlege(schritte);
         let eingang = schritte.iter().any(|s| matches!(s, Schritt::Eingang { .. }));
         Self {
             name,
@@ -286,6 +481,39 @@ impl Programm {
             regler: regler_vorgabe,
             regler_vorgabe,
             regler_namen,
+            zweige: true,
+            uebersprungen: 0,
+            fehlerprobe: Fehlerprobe::Keine,
+        }
+    }
+
+    #[doc(hidden)]
+    pub fn setze_fehlerprobe(&mut self, f: Fehlerprobe) { self.fehlerprobe = f; }
+
+    /// Steps skipped so far because their `wahl` branch was not read (diagnostic for tests and cost reports).
+    pub fn uebersprungen(&self) -> u64 { self.uebersprungen }
+
+    /// Size in steps of every branch the translation made, in program order (empty: nothing is skipped in this graph).
+    pub fn zweige_info(&self) -> Vec<usize> {
+        self.schritte.iter().enumerate().filter_map(|(i, s)| match s { Schritt::Zweig { ende, .. } => Some(*ende - i - 1), _ => None }).collect()
+    }
+
+    /// Switch the skipping of unselected `wahl` branches on (default) or off. Off runs every step in every sample, as the
+    /// engine did before branches existed; the output is the same wherever no `wahl` changes its position (zweige.rs).
+    pub fn setze_zweige(&mut self, an: bool) { self.zweige = an; }
+
+    /// (position, jump target) of every branch guard and the number of steps; for the translation tests
+    #[cfg(test)]
+    pub(crate) fn zweig_grenzen(&self) -> (Vec<(usize, usize)>, usize) {
+        let z = self.schritte.iter().enumerate().filter_map(|(i, s)| match s { Schritt::Zweig { ende, .. } => Some((i, *ende)), _ => None }).collect();
+        (z, self.schritte.len())
+    }
+
+    /// Test hook: set the jump target of every branch guard to `ende`, to check that the run loop survives a bad one.
+    #[cfg(test)]
+    pub(crate) fn zweig_ende_setzen(&mut self, ende: usize) {
+        for s in self.schritte.iter_mut() {
+            if let Schritt::Zweig { ende: e, .. } = s { *e = ende; }
         }
     }
 
@@ -395,72 +623,7 @@ impl Programm {
         self.alter = [0; MAX_STIMMEN];
         self.uhr = 0;
         for s in self.schritte.iter_mut() {
-            // ohne Platzhalterarm: eine neue Art mit Zustand muss hier stehen, sonst kompiliert es nicht (Slice 4a, D7)
-            match s {
-                Schritt::Saege { osz, .. } | Schritt::Puls { osz, .. } | Schritt::Dreieck { osz, .. } => *osz = [Osz::default(); MAX_STIMMEN],
-                Schritt::Sinus { osz, .. } => *osz = [Sinus::default(); MAX_STIMMEN],
-                Schritt::Rauschen { r, .. } => *r = std::array::from_fn(Rauschen::neu),
-                Schritt::Lfo { l, .. } => *l = std::array::from_fn(Lfo::neu),
-                Schritt::Sh { s, .. } => *s = std::array::from_fn(Sh::neu),
-                Schritt::Mseg { e, .. } => *e = [Mseg::default(); MAX_STIMMEN],
-                Schritt::Folger { f, .. } => *f = [Folger::default(); MAX_STIMMEN],
-                Schritt::Svf { f, .. } => *f = [Svf::default(); MAX_STIMMEN],
-                Schritt::Sem { f, .. } => *f = [Sem::default(); MAX_STIMMEN],
-                Schritt::Wahl { v, .. } => **v = [crate::wahl::Stimme::default(); MAX_STIMMEN],
-                Schritt::Saett { a, .. } => *a = [Adaa1::default(); MAX_STIMMEN],
-                Schritt::Glatt { z, .. } => *z = [0.0; MAX_STIMMEN],
-                Schritt::Leitung { l, .. } => l.iter_mut().for_each(|v| v.zuruecksetzen()),
-                Schritt::Ladder { f, reso_glatt, .. } => {
-                    *f = [Ladder::default(); MAX_STIMMEN];
-                    *reso_glatt = [0.0; MAX_STIMMEN];
-                }
-                Schritt::Adsr { e, .. } => *e = [Adsr::default(); MAX_STIMMEN],
-                Schritt::Chorus { c, .. } => c.zuruecksetzen(),
-                Schritt::Hall { h, mix_alt, mix_start, .. } => {
-                    // the mix input moves the hall's setting while playing: back to the translated value, as after the load
-                    // (S20 review: otherwise the smoother of a played instance starts at the last modulated mix, a fresh one at the static one)
-                    *mix_alt = *mix_start;
-                    h.setze(hall_dsp::HallEinstellung { mix: *mix_start as f64, ..h.einstellung() });
-                    h.reset();
-                }
-                Schritt::Delay { d, .. } => d.zuruecksetzen(),
-                Schritt::Limiter { b, .. } => b.zuruecksetzen(),
-                Schritt::Gate { g, .. } => g.zuruecksetzen(),
-                Schritt::Komp { k, .. } => k.leeren(),
-                Schritt::Krume { k, .. } => *k = [Krume::default(); MAX_STIMMEN],
-                Schritt::Phaser { p, .. } => p.zuruecksetzen(),
-                Schritt::Vocoder { v, .. } => v.zuruecksetzen(),
-                Schritt::Faltung { f, .. } => f.zuruecksetzen(),
-                Schritt::Sampler { s, .. } => *s = [Sampler::default(); MAX_STIMMEN],
-                Schritt::Wavetable { w, e, .. } => **w = std::array::from_fn(|i| WtStimme::neu(i, e)),
-                Schritt::Resonator { v, e, .. } => **v = std::array::from_fn(|i| RsStimme::neu(i, e)),
-                Schritt::Metall { m, e, .. } => **m = std::array::from_fn(|i| MtStimme::neu(i, e)),
-                Schritt::Fm { v, .. } => **v = [crate::fm::Stimme::neu(); MAX_STIMMEN],
-                Schritt::Granular { m, g, e, .. } => {
-                    m.zuruecksetzen();
-                    **g = std::array::from_fn(|i| GrStimme::neu(i, e));
-                }
-                Schritt::Diode { f, .. } => *f = [Diode::default(); MAX_STIMMEN],
-                Schritt::Saite { s, e, .. } => s.iter_mut().enumerate().for_each(|(i, v)| v.zuruecksetzen(i, e)),
-                Schritt::Kamm { k, .. } => k.iter_mut().for_each(|v| v.zuruecksetzen()),
-                Schritt::Formant { f, .. } => **f = [crate::formant::Stimme::neu(); MAX_STIMMEN],
-                Schritt::Ms20 { f, .. } => **f = [crate::ms20::Ms20::default(); MAX_STIMMEN],
-                Schritt::Falter { f, .. } => f.iter_mut().for_each(|v| v.zuruecksetzen()),
-                Schritt::Drift { d, saat, .. } => *d = std::array::from_fn(|i| crate::drift::Drift::neu(i, *saat)),
-                Schritt::Roehre { r1, r2, .. } => {
-                    *r1 = [Roehre::default(); MAX_STIMMEN];
-                    *r2 = [Roehre::default(); MAX_STIMMEN];
-                }
-                Schritt::Trommeln { t, e, .. } => t.zuruecksetzen(e),
-                Schritt::Note { .. }
-                | Schritt::Konst { .. }
-                | Schritt::Regler { .. }
-                | Schritt::Transponiere { .. }
-                | Schritt::Mul { .. }
-                | Schritt::Add { .. }
-                | Schritt::Eingang { .. }
-                | Schritt::Ausgang { .. } => {}
-            }
+            s.zuruecksetzen();
         }
         self.ein = (0.0, 0.0);
     }
@@ -483,9 +646,15 @@ impl Programm {
         let sr = self.sr;
         let k_reso = self.k_reso;
         let (beat, bps) = (self.beat, self.bps);
-        let Programm { schritte, slots, vorher, hz, gate, vel, trig, erste, regler, ein, .. } = self;
+        let (zweige_an, probe) = (self.zweige, self.fehlerprobe);
+        let Programm { schritte, slots, vorher, hz, gate, vel, trig, erste, regler, ein, uebersprungen, .. } = self;
         let (mut links, mut rechts) = (0.0f32, 0.0f32);
-        for s in schritte.iter_mut() {
+        let laenge = schritte.len();
+        let mut pc = 0;
+        // a `Zweig` can jump over its branch, so the steps run by index; `kopf` is every step before the current one
+        while pc < laenge {
+            let (kopf, rest) = schritte.split_at_mut(pc);
+            let (s, folge) = rest.split_first_mut().unwrap();
             match s {
                 Schritt::Note { hz: h, gate: g, vel: v, trig: t, erste: e } => {
                     slots[*h] = *hz;
@@ -494,14 +663,16 @@ impl Programm {
                     slots[*t] = *trig;
                     slots[*e] = *erste;
                 }
-                Schritt::Konst { aus, wert } => slots[*aus] = [*wert; MAX_STIMMEN],
+                // the arithmetic steps write the `n` voices in use straight into the slot: no temporary track, no copy of 16 lanes
+                // (lanes n.. of a slot are never read, every consumer loops over `n`)
+                Schritt::Konst { aus, wert } => slots[*aus][..n].fill(*wert),
                 Schritt::Regler { aus, nr, min, max, log, mitte } => {
                     let k = regler[*nr];
                     let w = match mitte {
                         None => if *log { *min * (*max / *min).powf(k) } else { *min + (*max - *min) * k },
                         Some(m) => regler_mit_mitte(*min, *max, *log, *m, k),
                     };
-                    slots[*aus] = [w; MAX_STIMMEN];
+                    slots[*aus][..n].fill(w);
                 }
                 Schritt::Saege { hz: q, sync, aus, zyklus, osz, hart, hart_aus } => {
                     let (f, sy) = (spur(*q, slots, vorher), spur(*sync, slots, vorher));
@@ -630,11 +801,10 @@ impl Programm {
                 }
                 Schritt::Transponiere { hz: q, st, cent, aus } => {
                     let (f, s, c) = (spur(*q, slots, vorher), spur(*st, slots, vorher), spur(*cent, slots, vorher));
-                    let mut o = [0.0; MAX_STIMMEN];
+                    let o = &mut slots[*aus];
                     for i in 0..n {
                         o[i] = f[i] * ((s[i] + c[i] * 0.01) / 12.0).exp2();
                     }
-                    slots[*aus] = o;
                 }
                 Schritt::Svf { x, cutoff, reso, tp, bp, hp, vier, f } => {
                     let (x, c, r) = (spur(*x, slots, vorher), spur(*cutoff, slots, vorher), spur(*reso, slots, vorher));
@@ -712,29 +882,29 @@ impl Programm {
                 }
                 Schritt::Mul { a, b, aus } => {
                     let (a, b) = (spur(*a, slots, vorher), spur(*b, slots, vorher));
-                    let mut o = [0.0; MAX_STIMMEN];
+                    let o = &mut slots[*aus];
                     for i in 0..n {
                         o[i] = a[i] * b[i];
                     }
-                    slots[*aus] = o;
                 }
                 Schritt::Add { a, b, c, d, aus } => {
                     let (a, b, c, d) = (spur(*a, slots, vorher), spur(*b, slots, vorher), spur(*c, slots, vorher), spur(*d, slots, vorher));
-                    let mut o = [0.0; MAX_STIMMEN];
+                    let o = &mut slots[*aus];
                     for i in 0..n {
                         o[i] = a[i] + b[i] + c[i] + d[i];
                     }
-                    slots[*aus] = o;
                 }
                 Schritt::Wahl { ein, wahl, aus, e, v } => {
-                    let sp: [Spur; 8] = std::array::from_fn(|k| spur(ein[k], slots, vorher));
-                    let w = spur(*wahl, slots, vorher);
+                    // read only the `e.n` candidates in use, one voice at a time (the block never looks at the others)
                     let mut o = [0.0; MAX_STIMMEN];
-                    for i in 0..n {
-                        let x: [f32; crate::wahl::MAX_EIN] = std::array::from_fn(|k| sp[k][i]);
-                        o[i] = v[i].prozess(e, &x, w[i]);
+                    {
+                        let (kand, w) = (kandidaten(ein, e.n, slots, vorher), lese_spur(*wahl, slots, vorher));
+                        for i in 0..n {
+                            let x: [f32; crate::wahl::MAX_EIN] = std::array::from_fn(|k| kand[k].bei(i));
+                            o[i] = v[i].prozess(e, &x, w.bei(i));
+                        }
                     }
-                    slots[*aus] = o;
+                    slots[*aus][..n].copy_from_slice(&o[..n]);
                 }
                 Schritt::Chorus { x, mix, l, r, c } => {
                     let (x, m) = (spur(*x, slots, vorher), spur(*mix, slots, vorher));
@@ -994,7 +1164,69 @@ impl Programm {
                         rechts += x[v] + r[v];
                     }
                 }
+                Schritt::WahlVor { wahl, e, v, braucht } => {
+                    let mut b = 0u8;
+                    let w = lese_spur(*wahl, slots, vorher);
+                    for vi in 0..n {
+                        v[vi].aktualisiere(e, w.bei(vi));
+                        b |= v[vi].braucht(e.n);
+                    }
+                    *braucht = b;
+                }
+                Schritt::Zweig { vor, k, ende, lief, slots: block, phasen } => {
+                    let noetig = !zweige_an || match &kopf[*vor] {
+                        Schritt::WahlVor { braucht, v, .. } => match probe {
+                            Fehlerprobe::Keine => (*braucht >> *k) & 1 == 1,
+                            Fehlerprobe::ZielAuslassen => false,
+                            Fehlerprobe::FadeAbschneiden => v[..n].iter().any(|s| s.ziel() == *k),
+                        },
+                        _ => true,
+                    };
+                    // a branch that ends at or before its own guard cannot be built by `zerlege`; should one ever get here, run it
+                    // as a branch of no steps rather than loop or index out of range
+                    let ende_ok = (*ende).clamp(pc + 1, laenge);
+                    if !noetig {
+                        *lief = false;
+                        *uebersprungen += (ende_ok - pc - 1) as u64;
+                        // the oscillators inside keep their place: phase only
+                        for &i in phasen.iter() {
+                            if i > pc && i < ende_ok {
+                                phase_weiter(&mut folge[i - pc - 1], n, sr, beat, slots, vorher);
+                            }
+                        }
+                        pc = ende_ok;
+                        continue;
+                    }
+                    if !*lief {
+                        // the branch was off: it starts from the state of a fresh program, not from where it stopped. The
+                        // oscillators are not reset: they kept their phase while the branch was off (as the reference does).
+                        for st in folge[..ende_ok - pc - 1].iter_mut() {
+                            if crate::zweige::wirkung(st) != Some(crate::zweige::Wirkung::Phase) {
+                                st.zuruecksetzen();
+                            }
+                        }
+                        for &sl in block.iter() {
+                            slots[sl] = [0.0; MAX_STIMMEN];
+                            vorher[sl] = [0.0; MAX_STIMMEN];
+                        }
+                        *lief = true;
+                    }
+                }
+                Schritt::WahlMisch { vor, ein, aus } => {
+                    if let Schritt::WahlVor { e, v, .. } = &kopf[*vor] {
+                        let mut o = [0.0; MAX_STIMMEN];
+                        {
+                            let kand = kandidaten(ein, e.n, slots, vorher);
+                            for i in 0..n {
+                                let x: [f32; crate::wahl::MAX_EIN] = std::array::from_fn(|k| kand[k].bei(i));
+                                o[i] = v[i].mische(e, &x);
+                            }
+                        }
+                        slots[*aus][..n].copy_from_slice(&o[..n]);
+                    }
+                }
             }
+            pc += 1;
         }
         self.beat += self.bps;
         *trig = [0.0; MAX_STIMMEN];

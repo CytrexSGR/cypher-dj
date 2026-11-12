@@ -372,9 +372,17 @@ int main() {
     PRUEF(lade(43).grund == "format");
     o.wiedergabe2(44, s2, "{\"nr\":1,\"ausgang\":{\"art\":\"gruppe\",\"nr\":1}}");   // Zyklus: Gruppe 1 in Gruppe 1
     PRUEF(lade(44).grund == "format");
-    o.wiedergabe2(45, s2, "{\"nr\":1,\"ausgang\":{\"art\":\"gruppe\",\"nr\":2}}," + g);   // Gruppen verschachteln nicht
-    PRUEF(lade(45).grund == "format");
-    o.wiedergabe2(46, s2, "{\"nr\":9,\"ausgang\":{\"art\":\"master\"}}");
+    // nested groups: group 2 into group 1 loads now; levels {1, 0}, two levels, the child runs first (all 16 groups are in the order: the empty ones sit on level 0)
+    o.wiedergabe2(45, s2, "{\"nr\":1,\"ausgang\":{\"art\":\"master\"}},{\"nr\":2,\"ausgang\":{\"art\":\"gruppe\",\"nr\":1}}");
+    e = lade(45);
+    PRUEF(e.snap != nullptr);
+    if (e.snap) {
+      PRUEF(e.snap->gruppe_ausgang[0] == 0 && e.snap->gruppe_ausgang[1] == 1);
+      PRUEF(e.snap->gruppen_ebene[0] == 1 && e.snap->gruppen_ebene[1] == 0 && e.snap->ebenen == 2);
+      PRUEF(e.snap->gruppen_ordnung[0] == 1 && e.snap->gruppen_ordnung[1] == 2 && e.snap->gruppen_ordnung[cdj::ARR_GRUPPEN - 1] == 0);
+      cdj::gib_wiedergabe(e.snap.release(), cache);
+    }
+    o.wiedergabe2(46, s2, "{\"nr\":17,\"ausgang\":{\"art\":\"master\"}}");
     PRUEF(lade(46).grund == "format");
     o.wiedergabe2(47, s2, g + "," + g);
     PRUEF(lade(47).grund == "format");
@@ -382,6 +390,22 @@ int main() {
     PRUEF(lade(48).grund == "format");
     o.wiedergabe2(49, "{\"nr\":1,\"art\":\"audio\",\"ausgang\":{\"art\":\"gruppe\",\"nr\":0},\"clips\":[]}", g);
     PRUEF(lade(49).grund == "format");
+    // nested groups: a three-cycle 1 to 2 to 3 to 1 is refused; a parent that is not in the list is refused; a chain 3 in 2 in 1 loads with levels {2, 1, 0}
+    auto gz = [](int n, int in) { return "{\"nr\":" + std::to_string(n) + ",\"ausgang\":" + (in ? "{\"art\":\"gruppe\",\"nr\":" + std::to_string(in) + "}" : std::string("{\"art\":\"master\"}")) + "}"; };
+    o.wiedergabe2(54, s2, gz(1, 2) + "," + gz(2, 3) + "," + gz(3, 1));
+    PRUEF(lade(54).grund == "format");
+    o.wiedergabe2(55, s2, gz(1, 3));   // group 3 is not in gruppen
+    PRUEF(lade(55).grund == "format");
+    o.wiedergabe2(56, s2, gz(1, 0) + "," + gz(2, 1) + "," + gz(3, 2));
+    e = lade(56);
+    PRUEF(e.snap != nullptr);
+    if (e.snap) {
+      PRUEF(e.snap->gruppen_ebene[0] == 2 && e.snap->gruppen_ebene[1] == 1 && e.snap->gruppen_ebene[2] == 0 && e.snap->ebenen == 3);
+      PRUEF(e.snap->gruppen_ordnung[0] == 2 && e.snap->gruppen_ordnung[cdj::ARR_GRUPPEN - 2] == 1 && e.snap->gruppen_ordnung[cdj::ARR_GRUPPEN - 1] == 0);   // level 0 (group 3 and the empty ones), then 1, then 2
+      PRUEF(cdj::arr_ist_vorfahr(*e.snap, 1, 3) && cdj::arr_ist_vorfahr(*e.snap, 2, 3) && cdj::arr_ist_vorfahr(*e.snap, 1, 2));
+      PRUEF(!cdj::arr_ist_vorfahr(*e.snap, 3, 1) && !cdj::arr_ist_vorfahr(*e.snap, 2, 2) && !cdj::arr_ist_vorfahr(*e.snap, 2, 1));
+      cdj::gib_wiedergabe(e.snap.release(), cache);
+    }
     // Negativ-Kontrolle: ein azyklisches Projekt gleicher Größe (acht Gruppen, 32 Spuren auf sie verteilt) wird angenommen
     std::string viele, gr;
     for (int n = 1; n <= 8; ++n) gr += std::string(n > 1 ? "," : "") + "{\"nr\":" + std::to_string(n) + ",\"ausgang\":{\"art\":\"master\"}}";

@@ -248,3 +248,15 @@ test('1.14 audition: the warp marker count follows the auditioned lane (the core
   assert.equal(zaehleWarpMarker(p), 0);
   assert.equal(zaehleWarpMarker(p, { vorhoeren: new Map([['s1', 't1']]) }), 3);
 });
+
+test('nested groups: the translator writes the parent number; flat projects keep master', () => {
+  const p = pruefeProjekt(specProjekt()).projekt;
+  const g = (id, nr, extra = {}) => ({ id, nr, name: id, farbe: '#3b8de0', fader_db: 0, pan: 0, mute: false, solo: false, gefaltet: false, ...extra });
+  p.gruppen.push(g('g1', 3, { ausgang: { art: 'gruppe', id: 'g2' } }), g('g2', 5));
+  p.spuren[1].ausgang = { art: 'gruppe', id: 'g1' };
+  const w = uebersetze(p, opt());
+  assert.equal(w.format, 'cypherdj-arr/2');
+  assert.deepEqual(w.gruppen, [{ nr: 3, ausgang: { art: 'gruppe', nr: 5 } }, { nr: 5, ausgang: { art: 'master' } }]);
+  const q = kopie(p); q.gruppen[0].ausgang = { art: 'gruppe', id: 'g9' };
+  assert.throws(() => uebersetze(q, opt()), (e) => e instanceof WiedergabeFehler && e.grund === 'ziel_unbekannt');
+});

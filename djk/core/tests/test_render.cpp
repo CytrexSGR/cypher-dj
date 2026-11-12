@@ -365,8 +365,8 @@ int main() {
     PRUEF(!regler_datei(p, "{\"spur/1/fader\":\"0\"}", v, fehler));       // Zahl
     PRUEF(!cdj::lies_spur_regler(o.pfad + "/gibtsnicht.json", v, fehler) && !fehler.empty());
     // 1.10: Gruppen-Regler und PM-Fader sind Mixer-Regler des Projekts; Grenzen der Tabelle gelten
-    PRUEF(regler_datei(p, "{\"grp/1/fader\":-6,\"grp/8/pan\":0.5,\"grp/2/mute\":1,\"grp/3/solo\":0,\"pm/fader\":-1.5}", v, fehler) && v.size() == 5);
-    PRUEF(!regler_datei(p, "{\"grp/9/fader\":0}", v, fehler));        // n+1
+    PRUEF(regler_datei(p, "{\"grp/1/fader\":-6,\"grp/8/pan\":0.5,\"grp/2/mute\":1,\"grp/3/solo\":0,\"grp/16/pan\":0.25,\"pm/fader\":-1.5}", v, fehler) && v.size() == 6);
+    PRUEF(!regler_datei(p, "{\"grp/17/fader\":0}", v, fehler));        // n+1
     PRUEF(!regler_datei(p, "{\"grp/1/send/5\":0}", v, fehler));       // r+1 (the group sends exist since slice 3: grp/n/send/1..4)
     // 1.10 slice 3: send, return and hall controls are project mixer controls; the table checks their ranges
     PRUEF(regler_datei(p, "{\"spur/1/send/1\":-6,\"grp/2/send/4\":-200,\"ret/1/fader\":-3,\"ret/4/pan\":0.5,\"ret/2/mute\":1,\"ret/3/hall/an\":0,\"ret/1/hall/decay\":0.8}", v, fehler) && v.size() == 7);
@@ -437,8 +437,8 @@ int main() {
     PRUEF(std::fabs(pm.l[22500] / roh.l[22500] - 0.5f) < 1e-3f);
     r.spur_regler = {{"grp/1/mute", 1.0f}};
     PRUEF(cdj::rendere(r).spitze == 0.0f);   // Gruppen-Mute: der Export schweigt
-    r.spur_regler = {{"grp/9/fader", 0.0f}};
-    PRUEF(cdj::rendere(r).fehler == "regler");   // Negativ-Kontrolle: keine Gruppe 9
+    r.spur_regler = {{"grp/17/fader", 0.0f}};
+    PRUEF(cdj::rendere(r).fehler == "regler");   // Negativ-Kontrolle: keine Gruppe 17
   }
   // 10 (1.10 Slice 2, AK18): heißes Material (Spur 1,5 · 0,7071 = 1,06 am PM): abgriff produktion enthält die ungebremste Spitze, abgriff set hält die Decke;
   // ueber_decke und limiter_db_max sagen es; leises Material: set ist der Abgriff durch den erz/4-Isolator (Gains 1,0), um den Limiter-Vorhalt ausgerichtet,

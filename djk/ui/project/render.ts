@@ -5,6 +5,7 @@
 // Rückgaben wie render_main.cpp (K3 05a91adb, am Baum gelesen): 0 geschrieben, 2 Aufruf, 3 Konfiguration oder Zustand, 4 Wiedergabe oder Render,
 // 5 Wirt-Spur nicht eingefroren, 6 Schreiben, 7 Speicher, 8 Ziel besteht (der Render ersetzt nie; S3 vergibt eigene Namen).
 import { spawn } from 'node:child_process';
+import { nachkommen, vorfahren } from './routing_rules.ts';
 import { HALL_FELDER, insertZeilen, rackZeilen, type Gruppe, type InsertTraeger, type Projekt, type Return, type Spur } from './model.ts';
 
 export interface RenderAufruf {
@@ -82,15 +83,30 @@ export function reglerAusProjekt(p: Projekt): Record<string, number> {
 // return sees only the measured track (the other members and senders stay muted by the isolation; they cannot run silently inside an audible strip).
 // 1.10 T10: what sounds in one measured entry. A track entry: the track and its group. A group entry: all members of the group and the group. The key plan, the
 // insert rows and the routing rows of an entry are taken from this path (a track alone is the path of one track).
-export interface Pfad { spuren: Spur[]; gruppe?: Gruppe }
-export const pfadVon = (p: Projekt, s: Spur): Pfad => ({ spuren: [s], gruppe: s.ausgang ? (p.gruppen ?? []).find((x) => x.id === s.ausgang!.id) : undefined });
+// Nested groups: `gruppen` holds every group that sounds in the entry. A track entry: the chain of its target group,
+// nearest first (the group, its target, ...).
+// A group entry: the group, all groups below it and its chain above (the chain order is only guaranteed for a track entry).
+export interface Pfad { spuren: Spur[]; gruppen: Gruppe[] }
+/** the group with this id and the groups above it, nearest first (empty for an unknown id) */
+export function gruppenKette(p: Projekt, id: string): Gruppe[] {
+  const alle = p.gruppen ?? [];
+  const g = alle.find((x) => x.id === id);
+  return g ? [g, ...vorfahren(p, id).map((v) => alle.find((x) => x.id === v)).filter((x): x is Gruppe => !!x)] : [];
+}
+/** the path of a group entry: its tracks (all levels below), the group, the groups below it and the chain above it */
+export function pfadVonGruppe(p: Projekt, g: Gruppe): Pfad {
+  const n = nachkommen(p, g.id), alle = p.gruppen ?? [];
+  return { spuren: p.spuren.filter((s) => n.spuren.includes(s.id)),
+    gruppen: [...gruppenKette(p, g.id), ...n.gruppen.map((i) => alle.find((x) => x.id === i)).filter((x): x is Gruppe => !!x)] };
+}
+export const pfadVon = (p: Projekt, s: Spur): Pfad => ({ spuren: [s], gruppen: s.ausgang ? gruppenKette(p, s.ausgang.id) : [] });
 const alsPfad = (p: Projekt, nur: Spur | Pfad): Pfad => ('spuren' in nur ? nur : pfadVon(p, nur));
 export interface SchluesselPlan { ids: string[]; spuren: Spur[]; gruppen: Gruppe[]; returns: Return[] }
 const SEND_AUS_DB = -120;
 export function schluesselPlan(p: Projekt, nur: Spur | Pfad): SchluesselPlan {
   const gruppen = p.gruppen ?? [], returns = p.returns ?? [];
-  const pfad = alsPfad(p, nur), g = pfad.gruppe;
-  const gespeist = new Set([...pfad.spuren.flatMap((t) => t.sends ?? []), ...(g?.sends ?? [])].map((sd) => sd.id));
+  const pfad = alsPfad(p, nur);
+  const gespeist = new Set([...pfad.spuren.flatMap((t) => t.sends ?? []), ...pfad.gruppen.flatMap((x) => x.sends ?? [])].map((sd) => sd.id));
   const bedarf = new Map<string, { ziel: boolean; sends: boolean }>();
   const sp = new Map<number, Spur>(), gr = new Map<number, Gruppe>(), rt = new Map<number, Return>();
   const fertig = new Set<InsertTraeger>(), warte: InsertTraeger[] = [];
@@ -104,9 +120,14 @@ export function schluesselPlan(p: Projekt, nur: Spur | Pfad): SchluesselPlan {
     if (pfad.spuren.includes(t)) return;
     sp.set(t.nr, t); vermerke(`spur/${t.nr}`, art); reihe(t);
   };
-  const mitglieder = (gg: Gruppe): void => { for (const m of p.spuren) if (m.ausgang?.id === gg.id) spurQuelle(m, 'ziel'); };
+  // the members of a key group: its tracks and, nested, the tracks and groups below it; they keep feeding it (`:ziel`)
+  const mitglieder = (gg: Gruppe): void => {
+    const n = nachkommen(p, gg.id);
+    for (const m of p.spuren) if (n.spuren.includes(m.id)) spurQuelle(m, 'ziel');
+    for (const k of gruppen) if (n.gruppen.includes(k.id) && !pfad.gruppen.includes(k)) { gr.set(k.nr, k); vermerke(`grp/${k.nr}`, 'ziel'); reihe(k); }
+  };
   const gruppeQuelle = (gg: Gruppe, art: '' | 'sends', post: boolean): void => {
-    if (gg === g) return;
+    if (pfad.gruppen.includes(gg)) return;
     gr.set(gg.nr, gg); vermerke(`grp/${gg.nr}`, art);
     if (post || art === 'sends') reihe(gg);
     mitglieder(gg);
@@ -116,7 +137,7 @@ export function schluesselPlan(p: Projekt, nur: Spur | Pfad): SchluesselPlan {
     rt.set(r.nr, r); vermerke(`ret/${r.nr}`, '');
     if (post) reihe(r);
     for (const t of p.spuren) if (!pfad.spuren.includes(t) && sendetAn(t.sends, r)) spurQuelle(t, 'sends');
-    for (const gg of gruppen) if (gg !== g && sendetAn(gg.sends, r)) gruppeQuelle(gg, 'sends', true);
+    for (const gg of gruppen) if (!pfad.gruppen.includes(gg) && sendetAn(gg.sends, r)) gruppeQuelle(gg, 'sends', true);
   };
   const strang = (st: InsertTraeger): void => {
     for (const i of st.inserts ?? []) {
@@ -128,7 +149,7 @@ export function schluesselPlan(p: Projekt, nur: Spur | Pfad): SchluesselPlan {
     }
   };
   for (const t of pfad.spuren) reihe(t);
-  if (g) reihe(g);
+  for (const x of pfad.gruppen) reihe(x);
   for (const r of returns) if (gespeist.has(r.id)) reihe(r);
   if (p.master) reihe(p.master);
   for (let i = 0; i < warte.length; i++) strang(warte[i]);
@@ -177,9 +198,9 @@ export const schluesselQuellen = (p: Projekt, spur: Spur | Pfad): string[] => sc
 export function insertRegler(p: Projekt, nur?: Spur | Pfad, plan?: SchluesselPlan): Record<string, number> {
   const straenge: InsertTraeger[] = [];
   if (nur) {
-    const pf = alsPfad(p, nur), g = pf.gruppe;
-    const gespeist = new Set([...pf.spuren.flatMap((t) => t.sends ?? []), ...(g?.sends ?? [])].map((sd) => sd.id));
-    straenge.push(...pf.spuren, ...(g ? [g] : []), ...(p.master ? [p.master] : []), ...(p.returns ?? []).filter((x) => gespeist.has(x.id)));
+    const pf = alsPfad(p, nur);
+    const gespeist = new Set([...pf.spuren.flatMap((t) => t.sends ?? []), ...pf.gruppen.flatMap((x) => x.sends ?? [])].map((sd) => sd.id));
+    straenge.push(...pf.spuren, ...pf.gruppen, ...(p.master ? [p.master] : []), ...(p.returns ?? []).filter((x) => gespeist.has(x.id)));
     if (plan) straenge.push(...plan.spuren, ...plan.gruppen, ...plan.returns);   // T9: the stages of the key sources run for their key too
   } else {
     straenge.push(...p.spuren, ...(p.gruppen ?? []), ...(p.returns ?? []), ...(p.master ? [p.master] : []));
@@ -214,7 +235,7 @@ export function routingRegler(p: Projekt, opt: { nur?: Spur | Pfad; trocken?: bo
   if (nur) {
     const pf = alsPfad(p, nur);
     for (const t of pf.spuren) strang('spur', t.nr, t.sends);
-    if (pf.gruppe) strang('grp', pf.gruppe.nr, pf.gruppe.sends);
+    for (const x of pf.gruppen) strang('grp', x.nr, x.sends);   // a parent's fader does not act on the sends of its children (the child's own fader does)
     const sl = opt.schluessel;   // T9: the sends of the key sources into the key returns only (the mask silences the rest)
     if (sl) {
       const ids = new Set(sl.returns.map((x) => x.id));

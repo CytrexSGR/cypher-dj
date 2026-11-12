@@ -208,3 +208,31 @@ test('S6 NB MINOR 2: mute der Quellspur wird geerbt, solo nicht; Ausgang bleibt 
   const n = baueStemsProjekt(projekt(), stemsPlan(projekt(), { clip_id: 'c1' }), dat(), 'andreas').projekt;
   assert.ok(n.spuren.slice(1, 5).every((s) => s.mute === false));
 });
+
+test('nested groups: the stems group keeps the source track\'s full group chain (it plays into the source\'s group)', () => {
+  let p = projekt();
+  p = lauf(p, ['G1', 'G2'].map((name) => ({ befehl: 'gruppenspur_neu', name })));
+  p = lauf(p, [{ befehl: 'ziel_setzen', strang_id: 'g2', ausgang: { art: 'gruppe', id: 'g1' } }, { befehl: 'ziel_setzen', strang_id: 's1', ausgang: { art: 'gruppe', id: 'g2' } }]);
+  const dateien = Object.fromEntries(STEMS.map((s) => [s, { sha256: 'f'.repeat(64), pfad: `/p/${s}.wav` }]));
+  const q = baueStemsProjekt(p, stemsPlan(p, { clip_id: 'c1' }), dateien, 'andreas').projekt;
+  const stems = q.gruppen.at(-1);
+  assert.equal(stems.ausgang?.id, 'g2', 'the stems group feeds the source\'s group; its ancestor g1 follows from g2');
+  const kette = []; for (let g = stems; g; g = q.gruppen.find((x) => x.id === g.ausgang?.id)) kette.push(g.id);
+  assert.deepEqual(kette.slice(1), ['g2', 'g1']);
+  // a source on the master gives a stems group on the master, as before
+  const flach = baueStemsProjekt(projekt(), stemsPlan(projekt(), { clip_id: 'c1' }), dateien, 'andreas').projekt;
+  assert.equal(flach.gruppen.at(-1).ausgang, undefined);
+});
+
+test('nested groups: a key into the source group would turn late by nesting, so the stems group stays on the master with a hint; the plain case still nests', () => {
+  let p = projekt();
+  p = lauf(p, ['G1', 'G2'].map((name) => ({ befehl: 'gruppenspur_neu', name })));
+  p = lauf(p, [{ befehl: 'ziel_setzen', strang_id: 's1', ausgang: { art: 'gruppe', id: 'g1' } },
+    { befehl: 'insert_setzen', strang_id: 'g2', pos: 0, art: 'komp', werte: { schwelle: -30, ratio: 8 }, key: { quelle: 'grp', nr: 1, punkt: 'pre' } }]);
+  const dateien = Object.fromEntries(STEMS.map((s) => [s, { sha256: 'f'.repeat(64), pfad: `/p/${s}.wav` }]));
+  const r = baueStemsProjekt(p, stemsPlan(p, { clip_id: 'c1' }), dateien, 'andreas');
+  assert.equal(r.hinweis, 'stems_nicht_verschachtelt');
+  assert.match(r.hinweisText, /sidechain_/);
+  assert.equal(r.projekt.gruppen.at(-1).ausgang, undefined, 'stems group at the master');
+  assert.equal(r.projekt.spuren.slice(1, 7).every((s) => s.ausgang?.id === r.projekt.gruppen.at(-1).id), true, 'the stems still sit in their group');
+});

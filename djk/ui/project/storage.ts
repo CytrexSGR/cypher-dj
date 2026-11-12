@@ -135,7 +135,8 @@ export class Projekte {
     return g.projekt;
   }
 
-  lege(name: string): { slug: string; projekt: Projekt } {
+  // live: the live container (plan live-module): flag set, loop region on over beats 0..64. Without it the project is exactly what it was before.
+  lege(name: string, opt: { live?: true } = {}): { slug: string; projekt: Projekt } {
     const n = typeof name === 'string' ? name.trim() : '';
     if (n.length < 1 || n.length > 80) throw new AblageFehler(400, 'name_ungueltig');
     const basis = projektSlug(n);
@@ -147,6 +148,7 @@ export class Projekte {
       slug = `${basis.slice(0, 44)}-${i}`;
     }
     const projekt = neuesProjekt(n);
+    if (opt.live) { projekt.live = true; projekt.loop = { an: true, von_beat: 0, bis_beat: 64 }; }
     this.schreibe(slug, projekt);
     fs.writeFileSync(path.join(this.ordner(slug), 'undo.jsonl'), '', { flag: 'wx' });
     fsyncVerzeichnis(this.ordner(slug)); fsyncVerzeichnis(this.wurzel);

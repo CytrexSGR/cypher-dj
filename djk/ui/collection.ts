@@ -16,7 +16,7 @@ export const ERLAUBT: Record<ListenArt, readonly PostenArt[]> = {
   set: ['track', 'loop', 'oneshot', 'muster'], playlist: ['track'], looplist: ['loop', 'oneshot'], strudellist: ['muster'],
 };
 // Muster-Referenz: <quelle>:<name> bzw. <quelle>:<datei>:<schlüssel> (pattern_library.ts, Task 2b.3); nie ein Pfad
-export const MUSTER_REF = /^(eigen:[a-z0-9][a-z0-9_-]{0,47}|track:[a-z0-9][a-z0-9_-]{0,47}:[A-Za-z0-9_]{1,48}|dirigent:[a-z0-9][a-z0-9_-]{0,47}:[a-z0-9][a-z0-9_-]{0,47})$/;
+export const MUSTER_REF = /^(eigen:[a-z0-9][a-z0-9_-]{0,47}|starter:[a-z0-9][a-z0-9_-]{0,47}|track:[a-z0-9][a-z0-9_-]{0,47}:[A-Za-z0-9_]{1,48}|dirigent:[a-z0-9][a-z0-9_-]{0,47}:[a-z0-9][a-z0-9_-]{0,47})$/;
 // Spec §7: Loops (und, als Erweiterung, Samples) tragen quelle 'mediathek'; Muster tragen ref statt material_id
 export interface Posten { id: string; art: PostenArt; material_id?: string; ref?: string; quelle?: 'mediathek'; notiz?: string }
 export interface Sammlung { schema: 1; art?: ListenArt; name: string; angelegt: string; notiz: string; posten: Posten[]; ablauf: null }

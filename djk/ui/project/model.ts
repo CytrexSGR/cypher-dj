@@ -8,6 +8,7 @@ import type { Punkt } from './lane.ts';
 import { BK_INSERT_OPTIONAL, BK_REGLER_MIN, BK_REGLER_ZAHL, bkInsertAuffuellen, pruefeBkListe, type BkKanal } from './modular.ts';
 import { INSERT_ARTEN } from './insert_key.ts';
 import { SCHLUESSEL_DJ, SCHLUESSEL_NUR_ZEILE } from './key_table.ts';
+import { ersterUngueltigerSchluessel } from './routing_verdict.ts';
 import { huellkurvenPruefung, type Huellkurve } from './envelope.ts';
 import { PRESET_ID } from '../presets/preset_id.ts';   // 1.16 rest: zero-import file, keeps this module free of file access
 export type { Punkt, LaneForm } from './lane.ts';
@@ -15,8 +16,8 @@ export type { Punkt, LaneForm } from './lane.ts';
 export const FORMAT = 'cypherdj-projekt/2';
 export const FORMAT_ALT = 'cypherdj-projekt/1';   // 1.10 (P3): /1 öffnet weiter und wird beim Laden im Speicher zu /2
 export const MAX_SPUREN = 32;          // gleich public/production/limits.js, geprüft von tests/limits.test.mjs
-export const MAX_GRUPPEN = 8;          // 1.10 (F1: eigene Plätze neben den 32 Spuren); gleich limits.js
-// 1.10 slice 3: returns (own strips next to the 8 groups); equal to public/production/limits.js, checked by tests/limits.test.mjs
+export const MAX_GRUPPEN = 16;         // 1.10 (F1: eigene Plätze neben den 32 Spuren), 16 since nested groups; gleich limits.js
+// 1.10 slice 3: returns (own strips next to the 16 groups); equal to public/production/limits.js, checked by tests/limits.test.mjs
 export const MAX_RETURNS = 4;
 // 1.10 slice 4: insert chain per strip (track, group, return, master). The pool sizes equal the generated contract (insert_key.ts),
 // pinned by tests/projekt_inserts.test.mjs. `komp` (4a), `eq`, `saett` and `lim` (4b) and `utility` (arr-fx) are accepted
@@ -163,7 +164,10 @@ export const MAX_AUTO_PUNKTE = 65536;
 // or a macro of the rack of the strip (`rack.m1` .. `rack.m4`). Such a lane is stored on the strip that carries the stage or rack (a track, group,
 // return or the master: `automation` exists on every strip); its value range is the parameter's own (macro: 0..1), its points are never `sprung`-only.
 export type KettenZiel = `insert.${string}.${string}` | `rack.m${1 | 2 | 3 | 4}`;
-export interface Lane { id: string; ziel: Ziel | KettenZiel; punkte: Punkt[]; gesperrt?: true }
+// Live modules (decision 7): `blend:<group id>` is the blend lane of a stem group (value 0..1, only on that group). The playback expands it into
+// the fader lanes of the two tracks of the group (blendFader); the core never sees the target.
+export type BlendZiel = `blend:${string}`;
+export interface Lane { id: string; ziel: Ziel | KettenZiel | BlendZiel; punkte: Punkt[]; gesperrt?: true }
 export interface ZielBereich { min: number; max: number; nurSprung: boolean }
 // 1.8 Slice 1: optional; fehlt es, ist die Spur nicht scharf und ohne Eingang.
 // 1.8 S0: external pairs (audio tracks, slice 2), midi_ein_1 (instrument tracks, slice 5) and the monitor setting. `monitor` absent means auto (Live's default,
@@ -335,6 +339,21 @@ export interface Send { id: string; db: number }
 export interface Gruppe {
   id: string; nr: number; name: string; farbe: string; fader_db: number; pan: number; mute: boolean; solo: boolean; gefaltet: boolean;
   sends?: Send[]; inserts?: Insert[]; rack?: Rack; automation?: Lane[];
+  // nested groups: the group this one outputs into. Absent = master (never written for master, so a flat project file is unchanged).
+  ausgang?: AusgangGruppe;
+  // live modules (plan live-module, decision 15): the origin of a module group and its live slot; absent on every other group, never written then
+  modul?: ModulHerkunft & { slot?: 'A' | 'B' };   // slot: absent once the module sits in a production project (task 10)
+  blend?: number;   // 0..1 blend position of a module group; absent = not set, never written then
+  neu_trim_db?: number;   // level offset of the new path against the original (dB, measured by the render after the MIDI); absent = 0
+}
+// Where a live module comes from: one loop of a deck rendering, split into stems. von_beat is on the beat axis of the rendering.
+export interface ModulHerkunft {
+  quelle_sha256: string; titel: string; fassung: string; basis_bpm: number; von_beat: number; laenge_beats: number;
+  bpm: number; set?: string; datum: string;
+  kuenstler?: string; tonart?: string;   // absent when the track has no tag or analysis (never written empty)
+  id?: string;   // the store id, given once at export (project/module_storage.ts); absent on a group without origin id: the content hash is used
+  eins_beat?: number;   // first downbeat of the rendering on its beat axis (bar phase of the source = (von_beat - eins_beat) mod 4); absent = 0
+  transponiert?: number;   // task 11: semitones the module was adapted to the deck key (-12..12); absent = 0, never written at 0
 }
 // Hall of a return: all values normalised 0..1 (the mapping to units lives in the core and in the page); defaults = the stellwerk defaults
 export interface ReturnHall { an: boolean; pre: number; decay: number; groesse: number; tief: number; highcut: number; fahne: number }
@@ -428,6 +447,7 @@ export interface Projekt {
   // 1.10 slice 3: only in /2 and only with at least one return (absent otherwise: projects without returns stay byte-identical)
   returns?: Return[];
   baukasten?: BkKanal[];   // S17: sound snapshot (project/modular.ts), only in /2, absent when empty
+  live?: true;             // the live container (plan live-module): the one project that runs during a DJ set; never written when absent
 }
 
 export const aufnahmeVon = (p: Projekt): ProjektAufnahme => p.aufnahme ?? structuredClone(AUFNAHME_VORGABE);
@@ -798,7 +818,26 @@ export function kettenZielBereich(strang: { inserts?: Insert[]; rack?: Rack }, z
 /** the range of any lane target on a strip: a device target of the fixed table, or a chain target of this strip (null = does not exist) */
 export function zielBereichVon(ziel: string, strang?: { inserts?: Insert[]; rack?: Rack }): ZielBereich | null {
   if (Object.hasOwn(ZIEL_BEREICH, ziel)) return ZIEL_BEREICH[ziel as Ziel];
+  if (istBlendZiel(ziel)) return BLEND_BEREICH;
   return strang ? kettenZielBereich(strang, ziel) : null;
+}
+export const istBlendZiel = (z: unknown): z is BlendZiel => typeof z === 'string' && z.startsWith('blend:') && ID.test(z.slice(6));
+export const BLEND_BEREICH: ZielBereich = { min: 0, max: 1, nurSprung: false };
+// Decision 7: the equal-power law of a blend value 0..1 as the two track faders in dB (0 = original 0 dB and new closed, 1 = the other way round,
+// between them cos and sin); "closed" is -200 (the fader floor). `trim` is the level offset of the new path (Gruppe.neu_trim_db): the new fader at
+// blend 1 sits at `trim`, so the new path is as loud as the original at 0 dB; the fader maximum caps it.
+export const NEU_TRIM_MIN = -60, NEU_TRIM_MAX = 24;
+export function blendFader(wert: number, trim = 0): { original: number; neu: number } {
+  const w = Math.min(1, Math.max(0, wert)) * Math.PI / 2;
+  const db = (x: number): number => (x < 1e-10 ? -200 : Math.max(-200, Math.round(20 * Math.log10(x) * 1e6) / 1e6));
+  const neu = db(Math.sin(w));
+  return { original: db(Math.cos(w)), neu: neu <= -200 ? -200 : Math.min(FADER_MAX, Math.max(-200, Math.round((neu + trim) * 1e6) / 1e6)) };
+}
+// the two tracks a stem group blends: its audio track (the original) and its instrument track (the new path); null while the group lacks either
+export function blendPfad(p: { spuren: Spur[] }, gruppeId: string): { original: Spur; neu: Spur } | null {
+  const kinder = p.spuren.filter((s) => s.ausgang?.id === gruppeId);
+  const original = kinder.find((s) => s.art === 'audio'), neu = kinder.find((s) => s.art === 'instrument');
+  return original && neu ? { original, neu } : null;
 }
 const kettenLanen_ = (st: { automation?: Lane[] }): number => (st.automation ?? []).filter((l) => istKettenZiel(l.ziel)).length;
 /** the lanes of a strip that drive its chain or rack */
@@ -816,6 +855,8 @@ export function lanePruefung(l: unknown, strang?: { inserts?: Insert[]; rack?: R
     const b = strang ? kettenZielBereich(strang, l.ziel) : null;
     if (!b) return ab('ziel_unbekannt', `lane.ziel: ${l.ziel} is no stage parameter or macro of this strip`);
     bereich = b;
+  } else if (istBlendZiel(l.ziel)) {
+    bereich = BLEND_BEREICH;
   } else if (!(AUTO_ZIELE as readonly unknown[]).includes(l.ziel)) {
     return ab('ziel_unbekannt', `lane.ziel: ${AUTO_ZIELE.join(' | ')} or insert.<id>.<param> or rack.m1..m4 expected`);
   }
@@ -1233,7 +1274,11 @@ function pruefeLanen(automation: unknown, wo: string, strang: { inserts?: Insert
     const f = lanePruefung(lx, strang);
     if (f) werfe(`${wo}.automation[${i}]`, f.text);
     const ziel = (lx as Lane).ziel;
-    if (!istSpur && !istKettenZiel(ziel)) {
+    if (istBlendZiel(ziel)) {
+      if (istSpur || ziel !== `blend:${(strang as { id?: string }).id}`) {
+        werfe(`${wo}.automation[${i}].ziel`, `${ziel}: only on the stem group it names (ziel_unbekannt)`);
+      }
+    } else if (!istSpur && !istKettenZiel(ziel)) {
       werfe(`${wo}.automation[${i}].ziel`, `${ziel}: a group, return or master takes insert and rack lanes only (ziel_unbekannt)`);
     }
     if (istGeraetZiel(ziel) && !passtGeraetZiel(ziel, geraet)) {
@@ -1317,8 +1362,42 @@ function pruefeSpur(s: unknown, wo: string, warpErlaubt: boolean): Spur {
   return o as unknown as Spur;
 }
 
+function pruefeModul(m: unknown, wo: string): void {
+  const o = felder(m, wo, ['quelle_sha256', 'titel', 'fassung', 'basis_bpm', 'von_beat', 'laenge_beats', 'bpm', 'datum'],
+    ['set', 'eins_beat', 'transponiert', 'slot', 'kuenstler', 'tonart', 'id']);
+  if ('id' in o && (typeof o.id !== 'string' || !/^[0-9a-f]{16}$/.test(o.id))) werfe(`${wo}.id`, '16 hex characters expected');
+  if ('transponiert' in o && (!ganz(o.transponiert) || o.transponiert < -12 || o.transponiert > 12 || o.transponiert === 0)) {
+    werfe(`${wo}.transponiert`, 'integer -12..12 except 0 expected');
+  }
+  if ('eins_beat' in o) zahlIn(o.eins_beat, `${wo}.eins_beat`, -MAX_BEAT, MAX_BEAT);
+  if (typeof o.quelle_sha256 !== 'string' || !SHA.test(o.quelle_sha256)) werfe(`${wo}.quelle_sha256`, 'sha256 (64 hex characters) expected');
+  for (const k of ['titel', 'fassung', 'datum']) text(o[k], `${wo}.${k}`, 200);
+  for (const k of ['kuenstler', 'tonart']) if (k in o) text(o[k], `${wo}.${k}`, 200);
+  if ('set' in o) text(o.set, `${wo}.set`, 200);
+  zahlIn(o.basis_bpm, `${wo}.basis_bpm`, 1, 1000); zahlIn(o.bpm, `${wo}.bpm`, 1, 1000);
+  zahlIn(o.von_beat, `${wo}.von_beat`, 0, MAX_BEAT);
+  if (!zahl(o.laenge_beats) || o.laenge_beats <= 0 || o.laenge_beats > MAX_BEAT) {
+    werfe(`${wo}.laenge_beats`, `number above 0 up to ${MAX_BEAT} expected`);
+  }
+  if ('slot' in o && o.slot !== 'A' && o.slot !== 'B') werfe(`${wo}.slot`, "'A' or 'B' expected");
+}
+
+// The check of a module record as a message (null = fine), for the command modul_setzen
+export function pruefeModulFehler(m: unknown): string | null {
+  try { pruefeModul(m, 'modul'); return null; } catch (e) { if (e instanceof Fehl) return e.message; throw e; }
+}
+
 function pruefeGruppe(g: unknown, wo: string): Gruppe {
-  const o = felder(g, wo, ['id', 'nr', 'name', 'farbe', 'fader_db', 'pan', 'mute', 'solo', 'gefaltet'], ['sends', 'inserts', 'rack', 'automation']);
+  const o = felder(g, wo, ['id', 'nr', 'name', 'farbe', 'fader_db', 'pan', 'mute', 'solo', 'gefaltet'],
+    ['sends', 'inserts', 'rack', 'automation', 'ausgang', 'modul', 'blend', 'neu_trim_db']);
+  if ('modul' in o) pruefeModul(o.modul, `${wo}.modul`);
+  if ('blend' in o) zahlIn(o.blend, `${wo}.blend`, 0, 1);
+  if ('neu_trim_db' in o) zahlIn(o.neu_trim_db, `${wo}.neu_trim_db`, NEU_TRIM_MIN, NEU_TRIM_MAX);
+  if ('ausgang' in o) {   // master is never stored
+    const au = felder(o.ausgang, `${wo}.ausgang`, ['art', 'id']);
+    if (au.art !== 'gruppe') werfe(`${wo}.ausgang.art`, 'gruppe erwartet (master steht nie in der Datei)');
+    if (typeof au.id !== 'string' || !ID.test(au.id)) werfe(`${wo}.ausgang.id`, 'ID erwartet');
+  }
   if ('sends' in o) pruefeSends(o.sends, `${wo}.sends`, true);
   if ('inserts' in o) pruefeInserts(o.inserts, `${wo}.inserts`, true);
   if ('rack' in o) pruefeRack(o.rack, `${wo}.rack`);
@@ -1371,7 +1450,8 @@ function pruefeAlles(x: unknown): void {
   const neu2 = istObjekt(x) && x.format === FORMAT;   // /2 verlangt gruppen und master, /1 hat sie nicht
   const pflicht = ['format', 'name', 'rev', 'wiedergabe_rev', 'tempo_bpm', 'taktart', 'loop', 'metronom', 'spuren', ...(neu2 ? ['gruppen', 'master'] : [])];
   // returns, baukasten in /1: unknown field
-  const o = felder(x, 'projekt', pflicht, ['naechste_id', 'naechste_noten_id', ...(neu2 ? ['returns', 'baukasten', 'aufnahme'] : [])]);
+  const o = felder(x, 'projekt', pflicht, ['naechste_id', 'naechste_noten_id', ...(neu2 ? ['returns', 'baukasten', 'aufnahme', 'live'] : [])]);
+  if ('live' in o && o.live !== true) werfe('live', 'true expected (absent when not a live container)');
   if ('naechste_noten_id' in o) zahlIn(o.naechste_noten_id, 'naechste_noten_id', 1, Number.MAX_SAFE_INTEGER, true);
   if ('naechste_id' in o) {
     const z = felder(o.naechste_id, 'naechste_id', [], ['spur', 'clip', 'gruppe', 'lane', 'return', 'insert', 'take']);
@@ -1454,6 +1534,19 @@ function pruefeAlles(x: unknown): void {
       gruppenIds.add(g.id); gruppenNrs.add(g.nr);
       laneZaehle(g, `gruppen[${i}]`);
     });
+    // group targets: a known group, not itself, and the tree has no cycle
+    const ziel = new Map<string, string>();
+    (o.gruppen as Gruppe[]).forEach((g, i) => {
+      if (!g.ausgang) return;
+      if (!gruppenIds.has(g.ausgang.id)) werfe(`gruppen[${i}].ausgang.id`, `unbekannte Gruppe ${g.ausgang.id}`);
+      if (g.ausgang.id === g.id) werfe(`gruppen[${i}].ausgang.id`, 'Zyklus: eine Gruppe kann nicht in sich selbst spielen (cycle)');
+      ziel.set(g.id, g.ausgang.id);
+    });
+    (o.gruppen as Gruppe[]).forEach((g, i) => {
+      for (let x = g.id, n = 0; ziel.has(x); x = ziel.get(x)!) {
+        if (++n > ziel.size) werfe(`gruppen[${i}].ausgang`, 'Zyklus: die Gruppen bilden einen Kreis (cycle)');
+      }
+    });
     const ms = felder(o.master, 'master', ['fader_db'], ['inserts', 'rack', 'automation']);
     zahlIn(ms.fader_db, 'master.fader_db', FADER_MIN, FADER_MAX);
     if ('inserts' in ms) pruefeInserts(ms.inserts, 'master.inserts', true);
@@ -1497,6 +1590,9 @@ function pruefeAlles(x: unknown): void {
       werfe(`${strangId}.inserts`, `key: ${kq.quelle} ${kq.nr} does not exist`);
     }
   }
+  // nested groups: a stage key must be valid for the group tree of this file (a retarget can invalidate it; the core refuses such a playback)
+  const ungueltig = ersterUngueltigerSchluessel(o as unknown as Projekt, true);
+  if (ungueltig) werfe(`${ungueltig.strangId}.inserts`, `${ungueltig.ablehnung.grund}: ${ungueltig.ablehnung.text}`);
   // slice 4c: racks. The slot is unique over the project; a rack sits on a strip with a chain; every target is a stage of that chain and a
   // continuous parameter in
   // its range; a parameter has one macro at most; at most MAX_MAKRO_ZIELE targets per rack
@@ -1596,7 +1692,8 @@ export const wiedergabeSicht = (p: Projekt): unknown => ({
   spuren: [...p.spuren].sort((a, b) => a.nr - b.nr).map((s) => spurSicht(s)),
   // 1.10: die Topologie nur, wenn es welche gibt (neutral: wie vorher)
   ...((p.gruppen ?? []).length ? { gruppen: [...p.gruppen].sort((a, b) => a.nr - b.nr)
-    .map((g) => ({ id: g.id, nr: g.nr, ...(g.inserts?.length ? { inserts: kettenSicht(g.inserts) } : {}), ...(g.rack ? { rack: rackSicht(g) } : {}),
+    .map((g) => ({ id: g.id, nr: g.nr, ...(g.ausgang ? { ausgang: g.ausgang.id } : {}),
+      ...(g.inserts?.length ? { inserts: kettenSicht(g.inserts) } : {}), ...(g.rack ? { rack: rackSicht(g) } : {}),
       ...laneSicht(g) })) } : {}),
   // 1.10 slice 3: the return topology (id, nr) only when there are returns; sends and hall values are controls, not part of the view
   ...((p.returns ?? []).length ? { returns: [...(p.returns ?? [])].sort((a, b) => a.nr - b.nr).map((r) => ({ id: r.id, nr: r.nr,

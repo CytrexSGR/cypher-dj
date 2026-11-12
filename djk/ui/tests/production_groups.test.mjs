@@ -25,7 +25,7 @@ test('1.10 Seite: Mitglieder und der Knopf „+ GROUP“ (höchstens 8)', () => 
   assert.deepEqual(mitglieder(p, 'g1').map((s) => s.id), ['s1', 's3']); assert.deepEqual(mitglieder(p, 'g2'), []);
   assert.deepEqual(neueGruppeBefehl(p), { befehl: 'gruppenspur_neu' });
   assert.equal(neueGruppeBefehl(null), null);
-  assert.equal(neueGruppeBefehl({ gruppen: Array.from({ length: MAX_GRUPPEN }, (_, i) => g(i + 1)), spuren: [] }), null, 'acht Gruppen sind das Ende');
+  assert.equal(neueGruppeBefehl({ gruppen: Array.from({ length: MAX_GRUPPEN }, (_, i) => g(i + 1)), spuren: [] }), null, '16 Gruppen sind das Ende');
 });
 
 test('1.10 Seite: jedes Bedienelement einer Gruppe trägt ihren Namen im zugänglichen Namen (englisch)', () => {

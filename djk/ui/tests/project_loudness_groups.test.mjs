@@ -10,7 +10,7 @@ import path from 'node:path';
 import { fuehreListeAus } from '../project/commands.ts';
 import { neuesProjekt } from '../project/model.ts';
 import { reglerAusProjekt, renderArgumente, schluesselQuellen, schluesselReturns } from '../project/render.ts';
-import { alsAntwort, reglerGruppe, reglerReturn } from '../areas/proj/output.ts';
+import { alsAntwort, gruppeStummImMix, reglerEinzeln, reglerGruppe, reglerReturn, stummImMix } from '../areas/proj/output.ts';
 import { aufbau } from './support/output_setup.mjs';
 
 const SHA = 'c'.repeat(64);
@@ -55,7 +55,7 @@ test('reglerReturn: the controls of the project, every other return muted', () =
 
 test('schluesselQuellen of a group path: the members are on the path, a key from a member is no source; a key from outside is', () => {
   let p = lauf(basis(), [komp('s2', { quelle: 'spur', nr: 1, punkt: 'post' })]);
-  const pfad = (q) => ({ spuren: q.spuren.filter((s) => s.ausgang?.id === 'g1'), gruppe: q.gruppen[0] });
+  const pfad = (q) => ({ spuren: q.spuren.filter((s) => s.ausgang?.id === 'g1'), gruppen: [q.gruppen[0]] });
   assert.deepEqual(schluesselQuellen(p, pfad(p)), [], 'track 1 is a member: it plays in the group render');
   p = lauf(basis(), [komp('s2', { quelle: 'spur', nr: 3, punkt: 'post' })]);
   assert.deepEqual(schluesselQuellen(p, pfad(p)), ['spur/3'], 'track 3 is outside the group: it runs for its key and adds nothing');
@@ -233,4 +233,78 @@ test('Lautheit: a return entry ducks like the mix when a PM stage is keyed by an
   assert.ok(Math.abs(nr(rm.body.returns, 1).lufs_i - nr(r0.body.returns, 1).lufs_i) <= 0.1, 'no key, no ducking');
   // a project without a return key: no flag at all
   assert.equal(aufrufe(ohne).filter(trocken).every((x) => !x.argv.includes('--nur-schluessel')), true);
+});
+
+// --- Slice 3 (nested groups, task 6): the single-strip render machine follows the whole group chain.
+// g1 holds g2 and the track s3; g2 holds g3 and s2; g3 holds s1 (3 in 2 in 1).
+const ketteBefehle = [{ befehl: 'gruppenspur_neu', name: 'G1' }, { befehl: 'gruppenspur_neu', name: 'G2' }, { befehl: 'gruppenspur_neu', name: 'G3' },
+  { befehl: 'ziel_setzen', strang_id: 'g2', ausgang: { art: 'gruppe', id: 'g1' } }, { befehl: 'ziel_setzen', strang_id: 'g3', ausgang: { art: 'gruppe', id: 'g2' } },
+  { befehl: 'ziel_setzen', strang_id: 's1', ausgang: { art: 'gruppe', id: 'g3' } }, { befehl: 'ziel_setzen', strang_id: 's2', ausgang: { art: 'gruppe', id: 'g2' } },
+  { befehl: 'ziel_setzen', strang_id: 's3', ausgang: { art: 'gruppe', id: 'g1' } }];
+const OFFSETS = [{ befehl: 'spur_aendern', spur_id: 's1', fader_db: -2 }, { befehl: 'gruppenspur_aendern', gruppe_id: 'g3', fader_db: -3 },
+  { befehl: 'gruppenspur_aendern', gruppe_id: 'g2', fader_db: -4 }, { befehl: 'gruppenspur_aendern', gruppe_id: 'g1', fader_db: -5 }];
+const ohneGruppen = () => {   // basis() without its group and returns
+  let p = neuesProjekt('T');
+  p = lauf(p, ['A', 'B', 'C'].map((name) => ({ befehl: 'spur_neu', art: 'audio', name })));
+  for (const id of ['s1', 's2', 's3']) p = lauf(p, [{ befehl: 'clip_neu', spur_id: id, art: 'audio', start_beat: 0, laenge_beats: 16, sha256: SHA, name: id }]);
+  return p;
+};
+const baum = (extra = []) => lauf(ohneGruppen(), [...ketteBefehle, ...extra]);
+
+test('reglerEinzeln: a track in 3 in 2 in 1 carries the fader, pan and mute of every group above it, and nothing of the others', () => {
+  const p = baum([...OFFSETS, { befehl: 'gruppenspur_aendern', gruppe_id: 'g2', pan: 0.5 }]);
+  const r = reglerEinzeln(spur(p, 1), p);
+  assert.deepEqual([r['grp/3/fader'], r['grp/2/fader'], r['grp/1/fader']], [-3, -4, -5]);
+  assert.equal(r['grp/2/pan'], 0.5);
+  assert.deepEqual([r['grp/3/mute'], r['grp/2/mute'], r['grp/1/mute']], [0, 0, 0]);
+  // a track one level up does not see g3
+  const r2 = reglerEinzeln(spur(p, 2), p);
+  assert.equal(r2['grp/3/fader'], undefined);
+  assert.deepEqual([r2['grp/2/fader'], r2['grp/1/fader']], [-4, -5]);
+  // mute acts downwards: a muted middle group is muted in the chain of the track below, and wins over a solo on the track
+  const m = lauf(p, [{ befehl: 'gruppenspur_aendern', gruppe_id: 'g2', mute: true }, { befehl: 'spur_aendern', spur_id: 's1', solo: true }]);
+  assert.equal(reglerEinzeln(spur(m, 1), m)['grp/2/mute'], 1);
+});
+
+test('Lautheit: a track in 3 in 2 in 1 with fader offsets on every level equals the soloed mix (the sum with the other tracks muted), and every group entry agrees', async (t) => {
+  const mit = (extra = []) => aufbau(t).then(async (a) => { await a.aendern([...ketteBefehle, ...extra], 'Tree'); return a; });
+  const a = await mit(OFFSETS);
+  const r = await lautheit(a);
+  assert.equal(r.code, 200, JSON.stringify(r.body));
+  // soloed on s1: the same project with s2 muted (s3 has no content in 0..8), measured as the sum
+  const b = await mit([...OFFSETS, { befehl: 'spur_aendern', spur_id: 's2', mute: true }]);
+  const rb = await lautheit(b);
+  assert.equal(rb.code, 200, JSON.stringify(rb.body));
+  const s1 = nr(r.body.spuren, 1), solo = rb.body.summe.lufs_i;
+  assert.ok(Math.abs(s1.lufs_i - solo) <= 0.1, `track entry ${s1.lufs_i} against the soloed sum ${solo}`);
+  // 14 dB under the unnested, unattenuated track
+  const c = await aufbau(t);
+  const rc = await lautheit(c);
+  assert.ok(Math.abs((nr(rc.body.spuren, 1).lufs_i - s1.lufs_i) - 14) <= 0.1, `the four faders take ${nr(rc.body.spuren, 1).lufs_i - s1.lufs_i} LU, 14 expected`);
+  // the groups: g3 holds s1 only (+ chain above), g2 and g1 hold more; every one with s1 + the chain
+  const g3 = r.body.gruppen.find((g) => g.gruppe_id === 'g3');
+  assert.ok(g3 && Math.abs(g3.lufs_i - s1.lufs_i) <= 0.1, 'group 3 holds the one track: same level as its entry');
+  const g1 = r.body.gruppen.find((g) => g.gruppe_id === 'g1');
+  assert.ok(g1 && Math.abs(g1.lufs_i - r.body.summe.lufs_i) <= 0.1, 'group 1 holds all content of the project: same level as the sum');
+  assert.equal(r.body.gruppen.length, 3, 'a group whose members sit in child groups is listed too');
+  // the render of g3 carries the chain above it
+  const call = aufrufe(a).find((x) => x.regler && x.regler['grp/3/fader'] === -3 && x.regler['grp/2/fader'] === -4 && x.regler['grp/1/fader'] === -5 && x.regler['spur/1/mute'] === 0 && x.regler['spur/2/mute'] === 1);
+  assert.ok(call, 'a render exists for group 3 with the whole chain, the other tracks muted');
+});
+
+test('mute/solo mirror in a three-level tree: solo plays the strip, its descendants and its ancestors; mute acts downwards and wins', () => {
+  const stumm = (p) => [1, 2, 3].map((n) => stummImMix(p, spur(p, n)) ? n : 0).filter(Boolean).concat(p.gruppen.map((g) => gruppeStummImMix(p, g) ? `g${g.nr}` : '').filter(Boolean));
+  const mit = (b) => baum([{ befehl: 'gruppenspur_neu', name: 'G4' }, { befehl: 'ziel_setzen', strang_id: 'g4', ausgang: { art: 'gruppe', id: 'g1' } }, ...b]);
+  assert.deepEqual(stumm(mit([])), [], 'no solo, no mute: all sound');
+  assert.deepEqual(stumm(mit([{ befehl: 'gruppenspur_aendern', gruppe_id: 'g2', solo: true }])), [3, 'g4'], 'solo g2: g2, g3, s1, s2 and ancestor g1 play; sibling s3 and g4 are silent');
+  assert.deepEqual(stumm(mit([{ befehl: 'spur_aendern', spur_id: 's1', solo: true }])), [2, 3, 'g4'], 'solo s1: s1 and its three groups play');
+  assert.deepEqual(stumm(mit([{ befehl: 'gruppenspur_aendern', gruppe_id: 'g1', solo: true }])), [], 'solo g1 (the top): everything below plays');
+  assert.deepEqual(stumm(mit([{ befehl: 'gruppenspur_aendern', gruppe_id: 'g3', solo: true }, { befehl: 'gruppenspur_aendern', gruppe_id: 'g2', mute: true }])).filter((x) => typeof x === 'string'),
+    ['g2', 'g3', 'g4'], 'mute wins over solo, and acts downwards: g3 under muted g2 is silent although soloed');
+});
+
+test('gruppeStummImMix: an ancestor with its fader off silences the child group like an ancestor mute', () => {
+  const p = baum([{ befehl: 'gruppenspur_aendern', gruppe_id: 'g1', fader_db: -200 }]);
+  assert.equal(gruppeStummImMix(p, p.gruppen.find((g) => g.id === 'g3')), true);
+  assert.equal(gruppeStummImMix(baum(), baum().gruppen.find((g) => g.id === 'g3')), false);
 });

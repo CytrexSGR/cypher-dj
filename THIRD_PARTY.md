@@ -63,3 +63,7 @@ Sources in `djk/core/gen/*.dsp`, rebuild with `djk/core/gen/generate.sh`.
 
 No music, no samples, no stems and no recordings of other people's tracks are part of this repository.
 Bring your own audio. Sample-kit paths are configured on your machine (`djk/config/umgebung.env.beispiel`).
+
+## Sounds you generate
+
+Surge XT factory sounds are not part of this repository; they come with your Surge XT installation.

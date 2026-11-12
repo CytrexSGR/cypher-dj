@@ -1,4 +1,4 @@
-// 1.10 Slice 3 Task 3 (plan F6): the 204 send, return and hall controls are grabbable on the page (ZIELE), have a control kind, a default,
+// 1.10 Slice 3 Task 3 (plan F6): the 236 send, return and hall controls are grabbable on the page (ZIELE), have a control kind, a default,
 // a range and a display text, and the curve round trip holds. The source of truth for range and default is the contract table of the
 // mock core (djk/contract/mock_core/contract.mjs), which is checked against the real stellwerk by check_name_lists.py.
 import test from 'node:test';
@@ -10,14 +10,14 @@ const RETS = [1, 2, 3, 4];
 const HALL = ['an', 'pre', 'decay', 'groesse', 'tief', 'highcut', 'fahne'];
 const alle = [
   ...RETS.flatMap((r) => Array.from({ length: 32 }, (_, i) => `spur/${i + 1}/send/${r}`)),
-  ...RETS.flatMap((r) => Array.from({ length: 8 }, (_, i) => `grp/${i + 1}/send/${r}`)),
+  ...RETS.flatMap((r) => Array.from({ length: 16 }, (_, i) => `grp/${i + 1}/send/${r}`)),
   ...RETS.flatMap((r) => ['fader', 'pan', 'mute', 'solo'].map((f) => `ret/${r}/${f}`)),
   ...RETS.flatMap((r) => HALL.map((f) => `ret/${r}/reverb/${f}`)),
 ];
 
-test('204 Pfade: alle in ZIELE, mit Art, Vorgabe und Bereich gleich der Vertragstabelle', () => {
-  assert.equal(alle.length, 204);
-  assert.equal(new Set(alle).size, 204);
+test('236 Pfade: alle in ZIELE, mit Art, Vorgabe und Bereich gleich der Vertragstabelle', () => {
+  assert.equal(alle.length, 236);
+  assert.equal(new Set(alle).size, 236);
   for (const p of alle) {
     assert.ok(ZIELE.has(p), `${p} fehlt in ZIELE`);
     assert.notEqual(art(p), null, `${p}: keine Art`);
@@ -51,7 +51,7 @@ test('Arten: Send wie Fader mit Vorgabe aus, Return wie Gruppe, Hall-Werte eigen
 });
 
 test('Negativ-Kontrolle: Pfade ausserhalb sind weder Ziel noch Art', () => {
-  for (const p of ['spur/33/send/1', 'spur/1/send/5', 'spur/1/send/0', 'grp/9/send/1', 'ret/5/fader', 'ret/0/fader', 'ret/1/hall/mix', 'ret/1/send/1',
+  for (const p of ['spur/33/send/1', 'spur/1/send/5', 'spur/1/send/0', 'grp/17/send/1', 'ret/5/fader', 'ret/0/fader', 'ret/1/hall/mix', 'ret/1/send/1',
     'ret/1/hall', 'ret/1/hall/an/x', 'spur/1/send/01']) {
     assert.ok(!ZIELE.has(p), p);
     assert.equal(art(p), null, p);

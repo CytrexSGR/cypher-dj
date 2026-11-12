@@ -90,6 +90,7 @@ struct Bau {
     s->spur[nr - 1].slot = slot;
     return *this;
   }
+  Bau& gruppe_ausgang(int g, int eltern) { s->gruppe_ausgang[g - 1] = static_cast<int8_t>(eltern); return *this; }   // nested groups: group g outputs into group `eltern` (0 = master)
   Bau& ausgang(int nr, int gruppe) { s->spur[nr - 1].ausgang = static_cast<int8_t>(gruppe); return *this; }   // 1.10: 0 master, 1..8 Gruppe
   // 1.10 slice 4a: the insert chain of a strip (tracks 1..32 by nr, groups by grp(g)); the stages in order, slot 0-based
   Bau& kette(int nr, std::initializer_list<cdj::ArrStufe> st) { return kette_streifen(nr - 1, st); }
@@ -262,6 +263,7 @@ struct Bau {
     }
     for (const C& c : cs)   // Slice 2: jedes genutzte Audio genau einmal (wie der Lader; das Warp-Werk fragt danach in liest())
       if (std::find(s->audios.begin(), s->audios.end(), c.c.audio) == s->audios.end()) s->audios.push_back(const_cast<cdj::ArrAudio*>(c.c.audio));
+    cdj::arr_gruppen_rechnen(*s);   // nested groups: levels and order from gruppe_ausgang (the loader does this before the key check); a cycle leaves the flat defaults
     cdj::arr_schluessel_rechnen(*s);   // slice 5 U1: the track order over the post keys (the loader does this too); a cycle leaves the identity and is the loader's refusal
     cdj::arr_pdc_rechnen(*s);   // the loader does this once the routing is complete; a test that sets ret_da afterwards calls it again
     cdj::arr_schluessel_versatz(*s);   // slice 5 U2b: the key delays against the PDC table just computed (the loader does this too); a test that calls arr_pdc_rechnen again calls it again
@@ -315,7 +317,9 @@ struct PruefSenke : cdj::ArrSenke {
 struct Treiber {
   cypherdj::stellwerk::ReglerTabelle tab;
   cdj::Karte k{128.0, 0};
-  cdj::Arrangement arr{tab};
+  // On the heap: the Arrangement is about 2 MB since 16 groups (arr_ausgang per-group arrays), and tests keep several drivers in one frame (8 MB stack)
+  std::unique_ptr<cdj::Arrangement> arr_heap{std::make_unique<cdj::Arrangement>(tab)};
+  cdj::Arrangement& arr{*arr_heap};
   int n = 256;
   int64_t s = 0;
   std::vector<float> l, r, ml, mr, cl, cr;

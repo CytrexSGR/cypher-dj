@@ -4,7 +4,7 @@
   "verbraucher": ["spur", "grp", "ret", "pm"],
   "quellen": ["spur", "grp", "ret", "pm"],
   "punkte": ["pre", "post"],
-  "nummern": {"spur": [1, 32], "grp": [1, 8], "ret": [1, 4], "pm": [0, 0]},
+  "nummern": {"spur": [1, 32], "grp": [1, 16], "ret": [1, 4], "pm": [0, 0]},
   "antworten": {
     "ja": "the key is there in the block before the consumer needs it",
     "spaet": "sidechain_spaet: the source is computed after the consumer in the block order (tracks, group chains, group faders, returns, PM)",

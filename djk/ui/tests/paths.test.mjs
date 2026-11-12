@@ -36,7 +36,8 @@ test('pfade: Repo-Pfade zeigen in dieses Repo (server.ts liegt in HIER)', () => 
   assert.equal(path.join(P.HIER, 'server.ts'), path.resolve(import.meta.dirname, '..', 'server.ts'));
   assert.equal(P.REPO, path.resolve(import.meta.dirname, '..', '..', '..'));
   assert.deepEqual(P.REPO_PFADE, { bestand: path.join(P.REPO, 'bestand'), sammlungen: path.join(P.REPO, 'bibliothek', 'sets'),
-    musterBibliothek: path.join(P.REPO, 'bibliothek', 'muster'), musterSets: path.join(P.REPO, 'sets'), werkstatt: path.join(P.REPO, 'djk', 'workshop'),
+    musterBibliothek: path.join(P.REPO, 'bibliothek', 'muster'), musterSets: path.join(P.REPO, 'sets'), musterStarter: path.join(P.REPO, 'djk', 'starter', 'muster'),
+    werkstatt: path.join(P.REPO, 'djk', 'workshop'),
     djkMuster: path.join(P.REPO, 'djk', 'generator', 'djk-muster'), djkKlang: path.join(P.REPO, 'djk', 'hosts', 'carla', 'djk-klang'),
     surgeBereiche: path.join(P.REPO, 'djk', 'hosts', 'carla', 'surge_bereiche.json'), welleSkript: path.join(P.HIER, 'waveform.py') });
 });

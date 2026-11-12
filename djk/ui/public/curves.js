@@ -26,7 +26,7 @@ const SPUR_REGLER = ['fader', 'pan', 'mute', 'solo'];
 // S5r (§1.5): graph knobs <kanal>/bk/<1..64> auf den Kanälen, die einen Baukasten-Graphen annehmen (nicht erz/4, erz/8)
 export const BK_KANAELE = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'erz/1', 'erz/2', 'erz/3', 'erz/5', 'erz/6', 'erz/7', 'pad/1', 'pad/2'];
 export const BK_SEND_KANAELE = ['fx/3', 'fx/4'];   // S14: graph knobs of the send returns (global controls fx/<n>/bk/1..64)
-export const GRUPPEN = Array.from({ length: 8 }, (_, i) => i + 1);   // 1.10 Slice 1: Gruppen-Regler des Arrangements (§1.5 grp/<n>/*)
+export const GRUPPEN = Array.from({ length: 16 }, (_, i) => i + 1);   // 1.10 Slice 1: Gruppen-Regler des Arrangements (§1.5 grp/<n>/*)
 export const RETURNS = [1, 2, 3, 4];   // 1.10 Slice 3: return strips with Cypher Hall (§1.5 ret/<r>/*, spur|grp/<n>/send/<r>)
 const RET_REGLER = ['fader', 'pan', 'mute', 'solo'];
 export const RET_HALL = ['an', 'pre', 'decay', 'groesse', 'tief', 'highcut', 'fahne'];   // ret/<r>/hall/*: normalised 0..1, `an` is a switch
@@ -41,6 +41,7 @@ export const ZIELE = new Set([
   'master/pfl',   // MASTER CUE (2026-10-10): Master auf die PFL-Seite des Kopfhörers, nur Hand
   ...SPUREN.flatMap((n) => SPUR_REGLER.map((p) => `spur/${n}/${p}`)),   // D1 K1: Spur-Mixer der Produktion
   ...GRUPPEN.flatMap((n) => SPUR_REGLER.map((p) => `grp/${n}/${p}`)),   // 1.10: Gruppen-Mixer der Produktion
+  ...GRUPPEN.map((n) => `grp/${n}/cue`),                               // live modules task 6: headphone cue of a group, hand only
   'pm/fader',                                                          // 1.10: Fader des Produktions-Masters
   ...SPUREN.flatMap((n) => RETURNS.map((r) => `spur/${n}/send/${r}`)),   // 1.10 Slice 3: post-fader sends of a track
   ...GRUPPEN.flatMap((n) => RETURNS.map((r) => `grp/${n}/send/${r}`)),   // ... and of a group
@@ -66,10 +67,10 @@ export function art(pfad) {
   if (pfad === 'master/pfl') return 'pfl';
   const sp = /^spur\/(?:[1-9]|[12][0-9]|3[0-2])\/(fader|pan|mute|solo)$/.exec(pfad);   // D1 K1
   if (sp) return sp[1] === 'fader' ? 'spur_fader' : sp[1] === 'pan' ? 'pan' : 'schalter';
-  const gp = /^grp\/[1-8]\/(fader|pan|mute|solo)$/.exec(pfad);   // 1.10: wie die Spur-Regler
+  const gp = /^grp\/([1-9]|1[0-6])\/(fader|pan|mute|solo|cue)$/.exec(pfad);   // 1.10: wie die Spur-Regler
   if (gp) return gp[1] === 'fader' ? 'spur_fader' : gp[1] === 'pan' ? 'pan' : 'schalter';
   if (pfad === 'pm/fader') return 'spur_fader';
-  if (/^(?:spur\/(?:[1-9]|[12][0-9]|3[0-2])|grp\/[1-8])\/send\/[1-4]$/.test(pfad)) return 'send';   // 1.10 Slice 3
+  if (/^(?:spur\/(?:[1-9]|[12][0-9]|3[0-2])|grp\/([1-9]|1[0-6]))\/send\/[1-4]$/.test(pfad)) return 'send';   // 1.10 Slice 3
   const rt = /^ret\/[1-4]\/(fader|pan|mute|solo|hall\/(an|pre|decay|groesse|tief|highcut|fahne))$/.exec(pfad);   // 1.10 Slice 3
   if (rt) return rt[1] === 'fader' ? 'spur_fader' : rt[1] === 'pan' ? 'pan' : rt[1] === 'mute' || rt[1] === 'solo' || rt[2] === 'an' ? 'schalter' : 'hall';
   if (/^(?:deck\/[1-4]|erz\/[1-35-7]|pad\/[12]|fx\/[34])\/bk\/([1-9]|[1-5][0-9]|6[0-4])$/.test(pfad)) return 'bk';   // S5r: linear 0..1, Vorgabe 0,5

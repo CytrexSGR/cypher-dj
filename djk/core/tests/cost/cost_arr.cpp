@@ -32,6 +32,8 @@
 //   arr32ins_ol  master limiter plan: arr32ins with only the lim bypassed; arr32ins - arr32ins_ol (same pass, interleaved) is the price of the limiter.
 //   arr32ins_k, arr32ins_ke, arr32ins_ks  slice 4b T12, the pool decision: the same file and rows as arr32ins, but the eq (_k, _ks) or the saett (_k, _ke) is switched off (`an` 0), so the lane
 //          shape of slice 4a (_k), plus the eq only (_ke), plus the saett only (_ks). Measure them interleaved with arr32ins in one pass and read the paired differences.
+//   arr32grp3  nested groups task 9: arr32r (32 tracks, 4 returns with a Hall each, 128 sends) with 12 groups in three levels (tracks -> groups 1..6 -> groups 7..10 -> groups 11, 12 -> master), one komp
+//          stage per group (slots 1..12, the rows of arr32ins), the master limiter on the PM, no stage on a track or a return. Self-check as arr32ins_k: 13 stages in the chains, 13 computing, gain reduction > 0.
 //   arr32voll  1.10 slices 5 to 8, U0: the full-load lane. The arr32ins stages (12 komp, the eq, the saett: every pool full) plus four 4c racks with 16 mappings each (rack 1 on track 5: the two
 //          komp stages, all 8 mappable parameters each; rack 2 on track 6: the eq, out, the q of band 1, the gain of all 8 bands and the frequency of the bands 3 to 8; rack 3 on track 25: two komp
 //          stages; rack 4 on group 1: two komp stages), the 16 macro rows set to four different values, and the delay compensation active with a latency stage on a track (the eq, track 6)
@@ -503,7 +505,7 @@ int main(int argc, char** argv) {
     const std::string eine = lagen.substr(a + 1, b - a - 1);
     if (!eine.empty() && eine != "ohne" && eine != "arr3" && eine != "arr3rb" && eine != "hand" && eine != "arr32" && eine != "arr32g" && eine != "arr32au" && eine != "arr32warp" &&
         eine != "arr32fest" && eine != "arr32lane" && eine != "arr32lanet" && eine != "arr32auto" && eine != "arr32ueber" && eine != "arr32arm" && eine != "arr32armgriff" && eine != "arr32solo" && eine != "arr32pan" && eine != "arr32cut" && eine != "arr32rb" && eine != "arr32steil" && eine != "arr32hk" && eine != "arr32hk32" && eine != "arr32fest32" && eine != "arr32mod" &&
-        eine != "arr32r" && eine != "arr32r_setze" && eine != "arr32r_oeffnen" && eine != "arr32ins" && eine != "arr32ins_aus" && eine != "arr32ins_k" && eine != "arr32ins_ke" && eine != "arr32ins_ks" && eine != "arr32ins_ol" && eine != "arr32voll" && eine != "arr32kit" && eine != "arr32rack") {
+        eine != "arr32r" && eine != "arr32r_setze" && eine != "arr32r_oeffnen" && eine != "arr32ins" && eine != "arr32ins_aus" && eine != "arr32ins_k" && eine != "arr32ins_ke" && eine != "arr32ins_ks" && eine != "arr32ins_ol" && eine != "arr32voll" && eine != "arr32grp3" && eine != "arr32kit" && eine != "arr32rack") {
       std::fprintf(stderr, "kosten_arr: unbekannte Lage \"%s\"\n", eine.c_str());
       return 3;
     }
@@ -563,7 +565,7 @@ int main(int argc, char** argv) {
                       lagen.find(",arr32r,") != std::string::npos || lagen.find(",arr32r_setze,") != std::string::npos ||
                       lagen.find(",arr32r_oeffnen,") != std::string::npos || lagen.find(",arr32ins,") != std::string::npos || lagen.find(",arr32ins_aus,") != std::string::npos ||
                       lagen.find(",arr32ins_k,") != std::string::npos || lagen.find(",arr32ins_ke,") != std::string::npos || lagen.find(",arr32ins_ks,") != std::string::npos || lagen.find(",arr32ins_ol,") != std::string::npos ||
-                      lagen.find(",arr32voll,") != std::string::npos ||
+                      lagen.find(",arr32voll,") != std::string::npos || lagen.find(",arr32grp3,") != std::string::npos ||
                       lagen.find(",arr32kit,") != std::string::npos || lagen.find(",arr32rack,") != std::string::npos;
   struct Aufraeumen {   // Ende 1, 2 oder 3 und Normalende räumen gleich auf (arr32 legt 8 x 5,8 MB in /dev/shm ab)
     std::string d;
@@ -613,7 +615,7 @@ int main(int argc, char** argv) {
       std::ofstream(ordner + "/audio/" + sha32_von(sp) + ".f32", std::ios::binary)
           .write(reinterpret_cast<const char*>(ton.data()), (std::streamsize)(ton.size() * sizeof(float)));
     }
-    // 1.10 slice 4a (T8): the insert chains of arr32ins as `,"chain":[...]` per strip (index as ARR_KETTEN: tracks 0..31, groups 32.., PM 40, returns 41..); each slot 1..12 once
+    // 1.10 slice 4a (T8): the insert chains of arr32ins as `,"chain":[...]` per strip (index as ARR_KETTEN: tracks 0..31, groups 32..47, PM 48, returns 49..); each slot 1..12 once
     const auto ins_kette = [](int streifen, bool voll) -> std::string {
       if (voll && streifen >= 8 && streifen < 8 + voll_host_n())   // plan 1.11 T18: the host stage of the track (slot = position), declared round trip 512 samples
         return ",\"chain\":[{\"art\":\"host\",\"slot\":" + std::to_string(streifen - 7) + ",\"latenz\":512}]";
@@ -631,9 +633,9 @@ int main(int argc, char** argv) {
         case 25: sl = voll ? std::vector<int>{} : std::vector<int>{7}; break;
         case 32: sl = voll ? std::vector<int>{8, 9, 201} : std::vector<int>{8}; break;   // group 1
         case 33: sl = voll ? std::vector<int>{} : std::vector<int>{9}; break;            // group 2
-        case 40: sl = {12, 301}; break;  // PM: komp 12, then the master limiter lim 1 (code 301, master limiter plan 2026-11-06), last in the chain
-        case 41: sl = {10}; break;  // return 1
-        case 42: sl = {11}; break;  // return 2
+        case cdj::ARR_KETTE_PM: sl = {12, 301}; break;  // PM: komp 12, then the master limiter lim 1 (code 301, master limiter plan 2026-11-06), last in the chain
+        case cdj::ARR_KETTE_RET0: sl = {10}; break;  // return 1
+        case cdj::ARR_KETTE_RET0 + 1: sl = {11}; break;  // return 2
         default: break;
       }
       if (voll && voll_max()) {   // arr-fx slice 2: the rest of the pools (codes: 100 + n = eq n, 200 + n = saett n, 300 + n = lim n, 400 + n = utility n)
@@ -696,14 +698,15 @@ int main(int argc, char** argv) {
       }
       return c;
     };
-    const auto bau32 = [&](int nr, bool mit_gruppen, bool mit_lane = false, int mit_ret = 0, int mit_auto = 0, bool mit_ins = false, bool voll = false, bool mit_kit = false, bool mit_rack = false) {   // mit_kit / mit_rack: 1.9 arr32kit / U6 arr32rack (merge 2026-11-07: numbers 19 and 20)   // mit_auto: 9 = arr32mod (arr32auto plus a relative fader lane on all 32 tracks), 6 = arr32hk (gain envelope on the 8 audio clips), 7 = arr32hk32 (32 audio tracks with the envelope), 8 = arr32fest32 (32 audio tracks, no envelope), 1 = slice 2 lanes (fader, pan, cutoff), 2 = plus solo lane, 3 = pan lane only, 4 = cutoff lane on tracks 1..8 only, 5 = steep fader and pan lanes on all tracks   // mit_ret: number of returns (1.10 slice 3, format /2)   // 1.10: nr 2 ohne Gruppen (/1), nr 3 mit 8 Gruppen zu je 4 Spuren (/2)
-    std::string j = std::string("{\"format\":\"") + (mit_gruppen || mit_lane || mit_ret || mit_auto || mit_ins || mit_rack ? "cypherdj-arr/2" : "cypherdj-arr/1") + "\",\"nr\":" + std::to_string(nr) + ",\"spuren\":[";
+    const auto bau32 = [&](int nr, bool mit_gruppen, bool mit_lane = false, int mit_ret = 0, int mit_auto = 0, bool mit_ins = false, bool voll = false, bool mit_kit = false, bool mit_rack = false, bool grp3 = false) {   // mit_kit / mit_rack: 1.9 arr32kit / U6 arr32rack (merge 2026-11-07: numbers 19 and 20)   // mit_auto: 9 = arr32mod (arr32auto plus a relative fader lane on all 32 tracks), 6 = arr32hk (gain envelope on the 8 audio clips), 7 = arr32hk32 (32 audio tracks with the envelope), 8 = arr32fest32 (32 audio tracks, no envelope), 1 = slice 2 lanes (fader, pan, cutoff), 2 = plus solo lane, 3 = pan lane only, 4 = cutoff lane on tracks 1..8 only, 5 = steep fader and pan lanes on all tracks   // mit_ret: number of returns (1.10 slice 3, format /2)   // 1.10: nr 2 ohne Gruppen (/1), nr 3 mit 8 Gruppen zu je 4 Spuren (/2)
+    std::string j = std::string("{\"format\":\"") + (mit_gruppen || mit_lane || mit_ret || mit_auto || mit_ins || mit_rack || grp3 ? "cypherdj-arr/2" : "cypherdj-arr/1") + "\",\"nr\":" + std::to_string(nr) + ",\"spuren\":[";
     const int leer_ab = std::getenv("KOSTEN_ARR32_LEER") ? std::atoi(std::getenv("KOSTEN_ARR32_LEER")) : 0;   // KOSTEN_ARR32_LEER=<n>: the RB tracks above n are not in the playback at all (unloaded: no work), unlike KOSTEN_ARR32_LIVE, which only mutes
     for (int sp = 1; sp <= 32; ++sp) {
       if (leer_ab >= 1 && sp > leer_ab && sp <= 24) continue;
       j += (j.back() != '[' ? "," : "") + std::string("{\"nr\":") + std::to_string(sp);
       if (mit_gruppen) j += ",\"ausgang\":{\"art\":\"gruppe\",\"nr\":" + std::to_string((sp - 1) % 8 + 1) + "}";   // 8 Gruppen zu je 4 Spuren
       const bool a32spur = mit_auto == 7 || mit_auto == 8;
+      if (grp3) j += ",\"ausgang\":{\"art\":\"gruppe\",\"nr\":" + std::to_string((sp - 1) % 6 + 1) + "}";   // nested groups task 9: the 32 tracks play into the six groups of level 1
       if (mit_ins && sp <= 8) j += ",\"ausgang\":{\"art\":\"gruppe\",\"nr\":" + std::to_string((sp - 1) / 4 + 1) + "}";   // slice 4a: tracks 1..4 -> group 1, 5..8 -> group 2
       if (mit_ins) j += ins_kette(sp - 1, voll);
       if (mit_rack && sp <= 8) {   // 1.9 U6 arr32rack: tracks 1..8 are racks of four internal members (three RB-338 on 36..47, 48..59, 60..71 and kit_zwei on 0..1; the playback allows at most 8 kit uses, so one kit member per rack); each sixteenth plays one note per member, so every member plays as dense as a plain track
@@ -809,11 +812,21 @@ int main(int argc, char** argv) {
     if (mit_ins) {   // slice 4a: groups 1 and 2 with their chains, the PM chain
       j += ",\"gruppen\":[";
       for (int g = 1; g <= 2; ++g) j += (g > 1 ? "," : "") + std::string("{\"nr\":") + std::to_string(g) + ",\"ausgang\":{\"art\":\"master\"}" + ins_kette(31 + g, voll) + "}";
-      j += "],\"pm\":{" + ins_kette(40, voll).substr(1) + "}";
+      j += "],\"pm\":{" + ins_kette(cdj::ARR_KETTE_PM, voll).substr(1) + "}";
+    }
+    if (grp3) {   // nested groups task 9: 12 groups in three levels, one komp each (slots 1..12), the PM keeps only the master limiter
+      // level 1: groups 1..6 (tracks); level 2: 7 (1, 2), 8 (3, 4), 9 (5), 10 (6); level 3: 11 (7, 8), 12 (9, 10); 11 and 12 play into the master
+      static const int ZIEL[12] = {7, 7, 8, 8, 9, 10, 11, 11, 12, 12, 0, 0};
+      j += ",\"gruppen\":[";
+      for (int g = 1; g <= 12; ++g)
+        j += (g > 1 ? "," : "") + std::string("{\"nr\":") + std::to_string(g) + ",\"ausgang\":" +
+             (ZIEL[g - 1] ? "{\"art\":\"gruppe\",\"nr\":" + std::to_string(ZIEL[g - 1]) + "}" : std::string("{\"art\":\"master\"}")) +
+             ",\"chain\":[{\"art\":\"komp\",\"slot\":" + std::to_string(g) + "}]}";
+      j += "],\"pm\":{\"chain\":[{\"art\":\"lim\",\"slot\":1}]}";
     }
     if (mit_ret) {
       j += ",\"returns\":[";
-      for (int r = 1; r <= 4 && r <= mit_ret; ++r) j += (r > 1 ? "," : "") + std::string("{\"nr\":") + std::to_string(r) + ",\"ausgang\":{\"art\":\"master\"}" + (mit_ins ? ins_kette(40 + r, voll) : std::string()) + "}";
+      for (int r = 1; r <= 4 && r <= mit_ret; ++r) j += (r > 1 ? "," : "") + std::string("{\"nr\":") + std::to_string(r) + ",\"ausgang\":{\"art\":\"master\"}" + (mit_ins ? ins_kette(cdj::ARR_KETTE_RET0 + r - 1, voll) : std::string()) + "}";
       j += "]";
     }
     j += "}";
@@ -825,6 +838,7 @@ int main(int argc, char** argv) {
       std::ofstream(ordner + "/wiedergabe-4.json") << bau32(4, false, true);
       std::ofstream(ordner + "/wiedergabe-5.json") << bau32(5, false, false, 4);   // 1.10 slice 3: 32 tracks, 4 returns
       std::ofstream(ordner + "/wiedergabe-13.json") << bau32(13, false, false, 4, 0, true);   // 1.10 slice 4a: arr32r plus 12 komp stages (arr32ins and arr32ins_aus); slice 4b adds the eq and saett stage
+      std::ofstream(ordner + "/wiedergabe-21.json") << bau32(21, false, false, 4, 0, false, false, false, false, true);   // nested groups task 9: arr32r plus 12 groups in three levels, one komp each (arr32grp3)
       std::ofstream(ordner + "/wiedergabe-18.json") << bau32(18, false, false, 4, 0, true, true);   // 1.10 slices 5 to 8, U0: arr32voll = the arr32ins stages regrouped + 4 racks with 16 mappings each
       std::ofstream(ordner + "/wiedergabe-7.json") << bau32(7, false, false, 0, 1);   // slice 2: arr32auto
       std::ofstream(ordner + "/wiedergabe-8.json") << bau32(8, false, false, 0, 2);   // slice 2: arr32solo
@@ -872,7 +886,7 @@ int main(int argc, char** argv) {
     }
     if (rc) return rc;
   }
-  for (const char* lage : {"ohne", "arr3", "arr3rb", "hand", "arr32", "arr32g", "arr32fest", "arr32lane", "arr32lanet", "arr32auto", "arr32ueber", "arr32arm", "arr32armgriff", "arr32solo", "arr32pan", "arr32cut", "arr32rb", "arr32steil", "arr32hk", "arr32hk32", "arr32fest32", "arr32mod", "arr32r", "arr32r_setze", "arr32r_oeffnen", "arr32ins", "arr32ins_aus", "arr32ins_k", "arr32ins_ke", "arr32ins_ks", "arr32ins_ol", "arr32voll", "arr32kit", "arr32rack"}) {
+  for (const char* lage : {"ohne", "arr3", "arr3rb", "hand", "arr32", "arr32g", "arr32fest", "arr32lane", "arr32lanet", "arr32auto", "arr32ueber", "arr32arm", "arr32armgriff", "arr32solo", "arr32pan", "arr32cut", "arr32rb", "arr32steil", "arr32hk", "arr32hk32", "arr32fest32", "arr32mod", "arr32r", "arr32r_setze", "arr32r_oeffnen", "arr32ins", "arr32ins_aus", "arr32ins_k", "arr32ins_ke", "arr32ins_ks", "arr32ins_ol", "arr32voll", "arr32grp3", "arr32kit", "arr32rack"}) {
     if (!lagen.empty() && lagen.find(std::string(",") + lage + ",") == std::string::npos) continue;
     Lauf l;
     if (const char* sc = std::getenv("KOSTEN_SCHLAF"); sc && std::string(sc) == "0") {   // reference arm: sleep off, right after the kern is built, so schlaf_bloecke counts nothing
@@ -991,15 +1005,16 @@ int main(int argc, char** argv) {
       taps.push_back(std::move(f));
     };
     const bool eq_an = lage_s == "arr32ins" || lage_s == "arr32ins_ke" || lage_s == "arr32ins_ol" || voll, saett_an = lage_s == "arr32ins" || lage_s == "arr32ins_ks" || lage_s == "arr32ins_ol" || voll;
-    const bool ins_an = lage_s == "arr32ins" || lage_s == "arr32ins_k" || lage_s == "arr32ins_ke" || lage_s == "arr32ins_ks" || lage_s == "arr32ins_ol" || voll, ins_aus = lage_s == "arr32ins_aus", ins_lage = ins_an || ins_aus;
+    const bool grp3 = lage_s == "arr32grp3";   // nested groups task 9: arr32r + 12 groups in 3 levels, one komp per group (the rows are those of the 12 komp of arr32ins, eq and saett are not in the file)
+    const bool ins_an = grp3 || lage_s == "arr32ins" || lage_s == "arr32ins_k" || lage_s == "arr32ins_ke" || lage_s == "arr32ins_ks" || lage_s == "arr32ins_ol" || voll, ins_aus = lage_s == "arr32ins_aus", ins_lage = ins_an || ins_aus;
     // master limiter plan (2026-11-06): lim 1 on the PM computes in every lane that computes stages (an 1, ceiling -1 dB); arr32ins_aus bypasses it with the rest,
     // arr32ins_ol is arr32ins with only the lim bypassed (the paired price of the limiter: arr32ins - arr32ins_ol in one interleaved pass)
     const bool lim_an = ins_an && lage_s != "arr32ins_ol";
     const int ins_erwartet = ins_an ? 12 + (eq_an ? lane_eq_n(voll) : 0) + (saett_an ? lane_saett_n(voll) : 0) + (lim_an ? lane_lim_n(voll) : 0) + lane_util_n(voll) : 0;
-    const int stufen_basis = 12 + lane_eq_n(voll) + lane_saett_n(voll) + lane_lim_n(voll) + lane_util_n(voll);   // the stages of the file in the snapshot chains (without the host stages)   // 1.10 slice 4a (T8)
+    const int stufen_basis = grp3 ? 12 + lane_lim_n(voll) : 12 + lane_eq_n(voll) + lane_saett_n(voll) + lane_lim_n(voll) + lane_util_n(voll);   // the stages of the file in the snapshot chains (without the host stages)   // 1.10 slice 4a (T8)
     const bool ret_lage = r32 || r32s || r32o || ins_lage;   // 1.10 slice 3: 32 tracks, 4 returns with a Hall each, 128 sends; _setze moves a Hall control every block, _oeffnen swaps the playback every 500 blocks
     const bool a32 = std::string(lage) == "arr32" || g32 || ohne_rampen || ret_lage || kitl || rackl;
-    const int arr_nr32 = rackl ? 20 : kitl ? 19 : voll ? 18 : ins_lage ? 13 : ret_lage ? 5 : g32 ? 3 : (lane || lanet) ? 4 : aut ? 7 : aut_solo ? 8 : aut_pan ? 9 : aut_cut ? 10 : aut_rb ? 11 : aut_steil ? 12 : hk ? 14 : hk32 ? 15 : fest32 ? 16 : mod ? 17 : 2;
+    const int arr_nr32 = rackl ? 20 : kitl ? 19 : voll ? 18 : grp3 ? 21 : ins_lage ? 13 : ret_lage ? 5 : g32 ? 3 : (lane || lanet) ? 4 : aut ? 7 : aut_solo ? 8 : aut_pan ? 9 : aut_cut ? 10 : aut_rb ? 11 : aut_steil ? 12 : hk ? 14 : hk32 ? 15 : fest32 ? 16 : mod ? 17 : 2;
     const int stumm_nr = std::getenv("KOSTEN_ARR32_STUMM") ? std::atoi(std::getenv("KOSTEN_ARR32_STUMM")) : 0;
     const int live_n = std::getenv("KOSTEN_ARR32_LIVE") ? std::atoi(std::getenv("KOSTEN_ARR32_LIVE")) : 0;   // 0: all tracks live
     float spitze_db[33], zuletzt_db[33];   // arr32: höchste Spur-Spitze seit Zyklus 100 je Spur (dB)

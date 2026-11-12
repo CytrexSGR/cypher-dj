@@ -37,7 +37,7 @@ export const SPALTEN = {
   ],
 };
 const ROLLE_TEXT = { drums: 'DRUMS', bass: 'BASS', melodie: 'MELODY' };
-const QUELLE_TEXT = { eigen: 'mine', track: 'track', dirigent: 'archive' };
+const QUELLE_TEXT = { eigen: 'mine', track: 'track', dirigent: 'archive', starter: 'Starter' };
 SPALTEN.strudel = [
   { titel: 'Name', sort: 'name', wert: (t) => `${t.name}${t.ladbar ? '' : ' · archive'}`, klasse: 'titelzelle' },
   { titel: 'Role', sort: 'rolle', wert: (t) => ROLLE_TEXT[t.rolle] ?? '–' },
@@ -200,7 +200,7 @@ const IMPORT_GRUND = {
   zu_lang: ['Over 8 bars', 'Longer than 8 bars (32 beats): the loop box takes no more'],
 };
 export const IMPORT_FEHLER_TEXT = { ...Object.fromEntries(Object.entries(IMPORT_GRUND).map(([k, v]) => [k, v[1]])),
-  nur_live: 'Ableton Live only', unbekannt: 'not in the catalog (rebuild it with “mediathek katalog”)', kein_loop: 'this is not a loop', name_vergeben: 'a loop with that name already exists', sha_ungueltig: 'invalid file id', datei_fehlt: 'file not found', import_laeuft: 'another import is running, try again in a moment',
+  nur_live: 'Ableton Live only', unbekannt: 'this entry is not in the library catalog anymore (the catalog may have been rebuilt); search again', kein_loop: 'this is not a loop', name_vergeben: 'a loop with that name already exists', sha_ungueltig: 'invalid file id', datei_fehlt: 'file not found', import_laeuft: 'another import is running, try again in a moment',
   zeitlimit: 'the import took too long and was stopped', dekodierung: 'the file could not be decoded', dehnung: 'the stretch failed' };
 export function loopBoxStatus(t) {
   if (t.nur_live) return { aktiv: false, grund: 'Live only', titel: 'Ableton Live only: protected, cannot be loaded here' };

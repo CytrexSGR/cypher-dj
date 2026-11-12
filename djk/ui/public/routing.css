@@ -16,10 +16,17 @@
 .p-punkt--lane { background: var(--a, #2fd6c3); }
 .p-arr-gruppe.gewaehlt, .p-kopf.gewaehlt { outline: 2px solid #fff; outline-offset: -2px; }
 
-/* Members: indent 12 px and the colour bar of the group at the left edge. A folded member has no row: display none (its head element stays for its state). */
-.p-kopf--mitglied { margin-left: 12px; position: relative; }
-.p-kopf--mitglied::before { content: ""; position: absolute; left: -12px; top: 0; bottom: 0; width: 3px; background: var(--gruppenfarbe, #8a8d98); }
-.p-kopf--verborgen { display: none; }
+/* Members: indent 12 px per level (--tiefe, set by track_heads.js; 1 without it) and one colour bar per group above at the left edge (--balken, a gradient from
+   groups_kopf.js balkenVerlauf). A folded member has no row: display none (its head element stays for its state). */
+.p-kopf--mitglied, .p-gruppenkopf--tief { margin-left: calc(12px * var(--tiefe, 1)); position: relative; }
+.p-kopf--mitglied::before, .p-gruppenkopf--tief::before { content: ""; position: absolute; left: calc(-12px * var(--tiefe, 1)); top: 0; bottom: 0; width: calc(12px * var(--tiefe, 1));
+  background: var(--balken, linear-gradient(to right, var(--gruppenfarbe, #8a8d98) 0 3px, transparent 3px)); }
+.p-kopf--verborgen, .p-arr-gruppe.p-kopf--verborgen { display: none; }
+/* From the second level on the head is 24 px narrower: the device label gives its room to the name */
+.p-kopf--tief .p-geraet { display: none; }
+/* A child group header row in the arrangement: padding for the indent, the bars of the groups above painted into it */
+.p-arr-gruppe--tief { padding-left: calc(12px * var(--tiefe, 1)); background: var(--balken, none) left top / calc(12px * var(--tiefe, 1)) 100% no-repeat, #171a21; }
+.p-arr-gruppe .p-ausgang { flex: 0 0 64px; width: 64px; }
 
 /* 1.10 slice 6 (T4): the routing matrix view. */
 .p-mx-rolle { overflow-x: auto; }

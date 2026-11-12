@@ -188,6 +188,31 @@ impl Osz {
     #[inline]
     pub fn zyklus(&self) -> f32 { self.zyklus }
 
+    /// Phase only, for an oscillator whose branch is skipped (zweige.rs): the same phase, `zyklus` and `hart` bookkeeping as
+    /// `saege`, `puls` and `dreieck` (all three advance the phase alike), without waveform, band-limiting corrections or output.
+    #[inline]
+    pub fn phase_nur(&mut self, inc: f32, sync: f32) {
+        let _ = self.sync(sync, inc);
+        self.weiter(inc);
+    }
+
+    /// `phase_nur` for an oscillator with the hard sync input. `art` 0 saw, 1 pulse with duty cycle `breite`, 2 triangle. Without
+    /// an announced reset (and none pending from the last interval) the phase moves as in `phase_nur`; only the sample of an
+    /// event runs the full hard sync step, so the phase and the pending correction stay exactly those of the audible path.
+    #[inline]
+    pub fn phase_nur_hart(&mut self, art: u8, inc: f32, breite: f32, hart: f32) {
+        if hart < 1.0 && !self.nach_gilt {
+            self.phase_nur(inc, 0.0);
+            return;
+        }
+        let form = match art {
+            0 => Form::Saege,
+            1 => Form::Puls(breite.clamp(0.02, 0.98)),
+            _ => Form::Dreieck,
+        };
+        let _ = self.hart_schritt(form, inc, hart);
+    }
+
     /// Säge −1..1, `inc` = Frequenz / Abtastrate (0..0,5).
     #[inline]
     pub fn saege(&mut self, inc: f32, sync: f32) -> (f32, f32) {
@@ -379,6 +404,26 @@ impl Sinus {
     /// Output `hart` of the sample just computed (forward wraps only; a phase running backwards under FM announces none).
     #[inline]
     pub fn hart(&self) -> f32 { self.hart }
+
+    /// Phase only (a skipped branch, zweige.rs): the phase arithmetic of `sample` without the sine.
+    #[inline]
+    pub fn phase_nur(&mut self, inc: f32, sync: f32) {
+        if sync >= 1.0 {
+            self.phase = (sync - 1.0).clamp(0.0, 1.0) * inc.max(0.0);
+        }
+        let rest = 1.0 - self.phase;
+        self.phase += inc;
+        self.zyklus = 0.0;
+        self.hart = 0.0;
+        if self.phase >= 1.0 {
+            self.phase -= 1.0;
+            self.zyklus = 1.0 + if inc > 0.0 { (self.phase / inc).min(0.999_999) } else { 0.0 };
+            self.hart = 1.0 + if inc > 0.0 { (rest / inc).min(1.0) } else { 1.0 };
+        } else if self.phase < 0.0 {
+            self.phase += 1.0;
+        }
+        self.phase = self.phase.clamp(0.0, 0.999_999_9);
+    }
 }
 
 /// Weißes Rauschen −1..1, xorshift32 je Stimme mit eigenem Startwert (bitgleich bei gleichem Graphen).
@@ -398,6 +443,16 @@ impl Rauschen {
         x ^= x << 5;
         self.s = x;
         x as i32 as f32 * (1.0 / 2_147_483_648.0)
+    }
+
+    /// One step of the stream without the value (a skipped branch, zweige.rs): the stream stays where it would be.
+    #[inline]
+    pub fn weiter(&mut self) {
+        let mut x = self.s;
+        x ^= x << 13;
+        x ^= x >> 17;
+        x ^= x << 5;
+        self.s = x;
     }
 }
 

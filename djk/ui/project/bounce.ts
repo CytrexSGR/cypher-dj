@@ -4,6 +4,7 @@
 // track: the 1.13 merge with one source allowed, or all members of a group), einfuegen (paste bounced audio: post-fader render onto an audio track
 // at a beat, overwriting its main lane there).
 import { fuehreListeAus, teileClipsAn } from './commands.ts';
+import { nachkommen } from './routing_rules.ts';
 import { brauchtFreeze } from './freeze.ts';
 import {
   MAX_BEAT, MAX_SPUREN, MAX_TAKES_PRO_SPUR, herkunft, kanonisch, neueId, spurSicht, sucheSpur, type AudioClip, type Clip, type Herkunft, type Projekt,
@@ -99,11 +100,13 @@ function planOhneSicht(p: Projekt, d: Record<string, unknown>, quelle: Herkunft)
   for (const k of ['von_beat', 'bis_beat']) if (d[k] !== undefined && !zahlOk(d[k])) ab('argument_ungueltig', `${k}: a number is required`);
   if (art === 'neue_spur') {
     if ((d.spur_ids === undefined) === (d.gruppe_id === undefined)) ab('argument_ungueltig', 'give exactly one of spur_ids and gruppe_id');
-    let ids: string[];
+    let ids: string[], unter: string | undefined;
     if (d.gruppe_id !== undefined) {
       const g = typeof d.gruppe_id === 'string' ? d.gruppe_id : ab('argument_ungueltig', 'gruppe_id: a group id is required');
       if (!(p.gruppen ?? []).some((x) => x.id === g)) ab('gruppe_unbekannt', `there is no group ${g}`);
-      ids = p.spuren.filter((s) => s.ausgang?.id === g).map((s) => s.id);
+      unter = g;
+      const unten = nachkommen(p, g).spuren;                                          // nested groups: the tracks of the group and of every group below it
+      ids = p.spuren.filter((s) => unten.includes(s.id)).map((s) => s.id);
       if (!ids.length) ab('merge_leer', `group ${g} has no member tracks`);
     } else ids = quellIds(d.spur_ids);
     const h = huelle(ids.flatMap((id) => sucheSpur(p, id)?.clips ?? []));
@@ -111,7 +114,8 @@ function planOhneSicht(p: Projekt, d: Record<string, unknown>, quelle: Herkunft)
     for (const id of ids) ohneHostEchtzeit(sucheSpur(p, id) ?? ab('spur_unbekannt', id));
     if (von === undefined || bis === undefined) return ab('merge_leer', 'the tracks have no clips; give von_beat and bis_beat');
     pruefeBereich(von, bis);
-    const merge = mergePlan(p, { spur_ids: ids, von_beat: von, bis_beat: bis }, quelle, { min: 1, praefix: BOUNCE_PRAEFIX });
+    const merge = mergePlan(p, { spur_ids: ids, von_beat: von, bis_beat: bis }, quelle,
+      { min: 1, praefix: BOUNCE_PRAEFIX, ...(unter !== undefined ? { unter } : {}) });
     return { art, spurIds: merge.spurIds, von, bis, quelle, name: merge.name, merge, sicht: '' };
   }
   // einfuegen (D6): no group, solo or sends rule; the sources stay unchanged, so a track of Andreas may be read
@@ -142,8 +146,8 @@ export function schneidetLoop(s: Spur, von: number, bis: number): string | null 
 
 // R6: the sources as the merge sees them (clips without dekodiert, fader, pan, mute, solo, target, sends, tempo); for an_ort also the ids of the
 // track's take lanes (a lane added or removed meanwhile); for einfuegen also the target's main lane view without dekodiert.
-export function bounceSicht(p: Projekt, z: Pick<BouncePlan, 'art' | 'spurIds' | 'ziel'>): string {
-  const quellen = mergeSicht(p, z.spurIds);
+export function bounceSicht(p: Projekt, z: Pick<BouncePlan, 'art' | 'spurIds' | 'ziel' | 'merge'>): string {
+  const quellen = mergeSicht(p, z.spurIds, z.merge?.unter);
   if (z.art === 'an_ort') return kanonisch({ quellen, takes: (sucheSpur(p, z.spurIds[0])?.takes ?? []).map((t) => t.id) });
   if (z.art === 'neue_spur' || !z.ziel) return quellen;
   const ziel = sucheSpur(p, z.ziel.spurId);
@@ -156,7 +160,7 @@ export function bounceSicht(p: Projekt, z: Pick<BouncePlan, 'art' | 'spurIds' | 
 // R5, D3: neue_spur and einfuegen render post-fader like the merge; an_ort renders the track before its mixer (fader 0, pan 0, mute off; sends are
 // dry and groups neutral in mergeRegler already)
 export function bounceRegler(p: Projekt, z: BouncePlan): Record<string, number> {
-  const r = mergeRegler(p, z.spurIds);
+  const r = mergeRegler(p, z.spurIds, z.merge?.unter);
   if (z.art !== 'an_ort') return r;
   const s = sucheSpur(p, z.spurIds[0]);
   if (s) { r[`spur/${s.nr}/fader`] = 0; r[`spur/${s.nr}/pan`] = 0; r[`spur/${s.nr}/mute`] = 0; }

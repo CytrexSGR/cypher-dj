@@ -18,7 +18,11 @@ const NAMEN = ['lage', 'bestand', 'laden', 'deck_start', 'deck_stopp', 'sprung',
   'sets', 'set_zeige', 'set_lege', 'set_vorbereiten', 'tempo', 'ansage',
   'proj_liste', 'proj_neu', 'proj_oeffnen', 'proj_lage', 'proj_auto_zustand', 'proj_aendern', 'proj_undo', 'proj_redo', 'proj_verlauf', 'proj_transport', 'proj_freeze', 'proj_export', 'proj_lautheit', 'geraete_lage', 'proj_aufnahme', 'proj_warp', 'proj_auto', 'proj_bk', 'proj_stems', 'proj_stems_abbrechen', 'proj_zusammenfuehren', 'proj_bounce', 'proj_strom_aufnehmen',
   'spektrum', 'take_vorhoeren', 'proj_kits', 'proj_muster', 'proj_routing', 'proj_resample', 'proj_midi_import',
-  'presets_suchen', 'presets_lesen', 'presets_speichern', 'presets_anwenden', 'kollektionen', 'kollektion_aendern', 'plugins'];   // 1.16 rest U5; 1.9 T2.5 proj_kits; 1.14 comping S1 T9; D1 S2 (Spec 3.5), Paket 1.18 E-b, Paket 1.13 Warp, Slice 6 Stems
+  'presets_suchen', 'presets_lesen', 'presets_speichern', 'presets_anwenden', 'kollektionen', 'kollektion_aendern', 'plugins',
+  'live_oeffnen', 'modul_export', 'modul_leeren', 'modul_stems', 'modul_stand', 'modul_tonart', 'modul_blend',
+  'module_suchen', 'modul_einsetzen', 'modul_speichern',
+  'oszilloskop'];   // live-module task 10
+  //   // 1.16 rest U5; 1.9 T2.5 proj_kits; 1.14 comping S1 T9; D1 S2 (Spec 3.5), Paket 1.18 E-b, Paket 1.13 Warp, Slice 6 Stems
 
 async function aufbau(t, antworten, env) {
   const gesehen = [];
@@ -572,14 +576,14 @@ test('1.10 Slice 1: proj_aendern nennt die Gruppen-Befehle und ihre Gründe, peg
   const text = (n) => werkzeuge.find((x) => x.name === n).description;
   for (const b of ['gruppenspur_neu', 'gruppenspur_aendern', 'gruppenspur_loeschen', 'ziel_setzen', 'master_aendern']) assert.ok(text('proj_aendern').includes(b), b);
   for (const g of ['routing_zyklus', 'routing_grenze', 'ziel_unbekannt', 'gruppe_unbekannt']) assert.ok(text('proj_aendern').includes(g), g);
-  assert.ok(text('pegel').includes('grp/1..8') && text('pegel').includes('pm'));
+  assert.ok(text('pegel').includes('grp/1..16') && text('pegel').includes('pm'));
   // Prüfung 2, C3: die Grenze steht an beiden Werkzeugen, die den Server erreichen: regler (POST /regler) und spur (POST /spur, Automationsspur)
-  for (const w of ['regler', 'spur']) assert.ok(text(w).includes('grp/1..8') && text(w).includes('pm/fader') && text(w).includes('ueber_projekt'), w);
+  for (const w of ['regler', 'spur']) assert.ok(text(w).includes('grp/1..16') && text(w).includes('pm/fader') && text(w).includes('ueber_projekt'), w);
   assert.match(text('spur'), /spur\/1\.\.32.*ueber_projekt.*proj_aendern/s, 'der Wortlaut aus dem Bestandstest (spur, Fix A5) bleibt');
   assert.ok(!text('proj_aendern').includes('gruppen_neu'), 'Negativ-Kontrolle: der Name kollidiert nicht mit dem Feld gruppe der Varianten');
   // die Art der Gruppe heißt im Befehl "gruppe" (nicht "group"), der Text muss den Befehlswortlaut tragen
   assert.ok(text('proj_aendern').includes('{art: "gruppe", id}'), 'Art der Gruppe im Befehlswortlaut');
-  assert.ok(text('proj_aendern').includes('Solo on a track keeps its group sounding'), 'Solo-Regel (P7)');
+  assert.ok(text('proj_aendern').includes('Solo on a track keeps all groups above it sounding'), 'Solo-Regel (P7)');
   // N1: die I08-Beschreibung (arm, eingang) bleibt, der Text wird ergänzt, nicht ersetzt
   assert.match(text('proj_aendern'), /arm\? \(true\|false\), eingang\? \(\{art: intern/, 'N1: I08-Text bleibt');
 });
@@ -1033,7 +1037,7 @@ test('djk-hand proj_auto (Automation Slice 1): GET with query, source cypher, re
   assert.ok(werkzeuge.find((x) => x.name === 'proj_lage').description.includes('lanes [{id, ziel, punkte_zahl, gesperrt?'));
   assert.ok(werkzeuge.find((x) => x.name === 'spur').description.includes('is a lane, not a spur'));
   // count: base (57 tools, 17 of them proj_*) plus one
-  assert.equal(werkzeuge.length, 57 + 1 + 2 /* S12: graphen, graph */ + 1 /* S17: proj_bk */ + 1 /* S15: proj_strom_aufnehmen */ + 1 /* Automation Slice 3: proj_auto_zustand */ + 1 /* 1.14 T9: take_vorhoeren */ + 1 /* 1.15 A9: spektrum */ + 1 /* 1.14 slice 4: proj_bounce */ + 6 /* 1.16 rest U5: presets and collections */ + 1 /* demo overlay: ansage */ + 1 /* 1.9 T2.5: proj_kits */ + 1 /* 1.10 T1: proj_routing */ + 1 /* 1.10 T6: proj_resample */ + 1 /* 1.11 T8: plugins */ + 1 /* MIDI import: proj_midi_import */ + 1 /* strudel-clip: proj_muster */);
+  assert.equal(werkzeuge.length, 57 + 1 + 2 /* S12: graphen, graph */ + 1 /* S17: proj_bk */ + 1 /* S15: proj_strom_aufnehmen */ + 1 /* Automation Slice 3: proj_auto_zustand */ + 1 /* 1.14 T9: take_vorhoeren */ + 1 /* 1.15 A9: spektrum */ + 1 /* 1.14 slice 4: proj_bounce */ + 6 /* 1.16 rest U5: presets and collections */ + 1 /* demo overlay: ansage */ + 1 /* 1.9 T2.5: proj_kits */ + 1 /* 1.10 T1: proj_routing */ + 1 /* 1.10 T6: proj_resample */ + 1 /* 1.11 T8: plugins */ + 1 /* MIDI import: proj_midi_import */ + 1 /* strudel-clip: proj_muster */ + 5 /* live-module task 4 */ + 1 /* live-module task 11: modul_tonart */ + 1 /* live-module task 8: modul_blend */ + 3 /* live-module task 10 */ + 1 /* oszilloskop */);
   assert.equal(werkzeuge.filter((x) => x.name.startsWith('proj_')).length, 17 + 1 + 1 + 1 + 1 + 1 /* 1.14 slice 4: proj_bounce */ + 1 /* 1.9 T2.5: proj_kits */ + 1 /* 1.10 T1: proj_routing */ + 1 /* 1.10 T6: proj_resample */ + 1 /* MIDI import: proj_midi_import */ + 1 /* strudel-clip: proj_muster */);
 });
 
@@ -1081,7 +1085,7 @@ test('djk-hand proj_aendern/proj_auto (Automation Slice 2): auto_neu pan and aut
   assert.ok(werkzeuge.find((x) => x.name === 'proj_auto').inputSchema.properties.bei_beat.description.includes('lane value'));
   assert.ok(!werkzeuge.find((x) => x.name === 'proj_auto').inputSchema.properties.bei_beat.description.includes('(dB)'));
   assert.ok(werkzeuge.find((x) => x.name === 'proj_zusammenfuehren').description.includes('lanes_verworfen'));
-  assert.equal(werkzeuge.length, 66 + 6 + 1 + 1 + 1 + 1 + 1 + 1 /* MIDI import: proj_midi_import */ + 1 /* strudel-clip: proj_muster */);   // + proj_resample (1.10 T6); + proj_routing (1.10 T1); + proj_kits (1.9 T2.5); + ansage (demo overlay); 62 + proj_auto_zustand (Automation Slice 3) + spektrum (1.15 A9) + take_vorhoeren (1.14 T9) + proj_bounce (1.14 slice 4) + 6 presets and collections tools (1.16 rest U5)
+  assert.equal(werkzeuge.length, 66 + 6 + 1 + 1 + 1 + 1 + 1 + 1 /* MIDI import: proj_midi_import */ + 1 /* strudel-clip: proj_muster */ + 5 /* live-module task 4 */ + 1 /* live-module task 11: modul_tonart */ + 1 /* live-module task 8: modul_blend */ + 3 /* live-module task 10 */ + 1 /* oszilloskop */);   // + proj_resample (1.10 T6); + proj_routing (1.10 T1); + proj_kits (1.9 T2.5); + ansage (demo overlay); 62 + proj_auto_zustand (Automation Slice 3) + spektrum (1.15 A9) + take_vorhoeren (1.14 T9) + proj_bounce (1.14 slice 4) + 6 presets and collections tools (1.16 rest U5)
 });
 
 test('djk-hand proj_aendern (Automation Slice 2): a locked lane answers lane_gesperrt as a tool error with the reason; negative control: an unlocked change succeeds', async (t) => {
@@ -1271,7 +1275,7 @@ test('djk-hand proj_auto_zustand (Automation Slice 3): re_enable all and one, ki
   const pl = werkzeuge.find((x) => x.name === 'proj_lage').description;
   assert.ok(pl.includes('uebersteuert: true'), 'proj_lage names uebersteuert');
   assert.ok(!pl.includes('auto_uebersteuert'), 'proj_lage promises no list that its view does not carry');
-  assert.equal(werkzeuge.length, 66 + 6 + 1 + 1 + 1 + 1 + 1 + 1 /* MIDI import: proj_midi_import */ + 1 /* strudel-clip: proj_muster */);   // + proj_resample (1.10 T6); + proj_routing (1.10 T1); + proj_kits (1.9 T2.5); + ansage (demo overlay); + take_vorhoeren (1.14 T9); + spektrum (1.15 A9); + proj_bounce (1.14 slice 4); + 6 (1.16 rest U5)
+  assert.equal(werkzeuge.length, 66 + 6 + 1 + 1 + 1 + 1 + 1 + 1 /* MIDI import: proj_midi_import */ + 1 /* strudel-clip: proj_muster */ + 5 /* live-module task 4 */ + 1 /* live-module task 11: modul_tonart */ + 1 /* live-module task 8: modul_blend */ + 3 /* live-module task 10 */ + 1 /* oszilloskop */);   // + proj_resample (1.10 T6); + proj_routing (1.10 T1); + proj_kits (1.9 T2.5); + ansage (demo overlay); + take_vorhoeren (1.14 T9); + spektrum (1.15 A9); + proj_bounce (1.14 slice 4); + 6 (1.16 rest U5)
 });
 
 // Automation Slice 3 (task 6, fixup 2): exactly one of two shapes; every half call, a numeric spur_id and an unknown ziel are refused locally with the real problem; nothing is sent.
@@ -1538,11 +1542,11 @@ test('djk-hand 1.8 S2b: proj_aendern and proj_aufnahme describe external inputs,
     assert.ok(pau.includes(wort), `proj_aufnahme names ${wort}`);
   }
   assert.ok(!pau.includes('External inputs (microphone, XDJ-XZ) are not part of this'), 'the slice 1 sentence is gone');
-  assert.equal(werkzeuge.length, 79, 'no new tool (D5); 79 with proj_midi_import and proj_muster, as main asserts in the schleife_takte case (+ proj_muster)');
+  assert.equal(werkzeuge.length, 90, 'no new tool (D5; 89 before oszilloskop); 79 with proj_midi_import and proj_muster, plus the five live module tools of task 4 and modul_tonart');
 });
 
 // 1.12 S7 (M13) U13 T13.4: spur with schleife_takte loops until spur_stopp; aendern: true changes a running loop of mine from its next pass
-test('djk-hand spur: schleife_takte goes into the body, aendern posts /spur/aendern, the description names the loop rules; still 79 tools', async (t) => {
+test('djk-hand spur: schleife_takte goes into the body, aendern posts /spur/aendern, the description names the loop rules; still 90 tools', async (t) => {
   const { c, gesehen } = await aufbau(t, (m, u) => {
     if (u === '/spur') return [200, { ok: true, anker_beat: 16 }];
     if (u === '/spur/aendern') return [409, { fehler: 'nur_andreas', text: 'this loop is Andreas\'s' }];
@@ -1559,7 +1563,7 @@ test('djk-hand spur: schleife_takte goes into the body, aendern posts /spur/aend
   await c.callTool({ name: 'spur', arguments: { name: 'x', fahrten } });
   assert.deepEqual(gesehen[2].koerper, { spur: { name: 'x', fahrten }, ab: 'takt' });
   const werkzeuge = (await c.listTools()).tools;
-  assert.equal(werkzeuge.length, 66 + 6 + 1 + 1 + 1 + 1 + 1 + 1 /* MIDI import: proj_midi_import */ + 1 /* strudel-clip: proj_muster */);   // 77 = 66 + the 6 presets and collections tools (1.16 rest U5) + ansage (demo overlay) + proj_kits (1.9 T2.5) + proj_routing (1.10 T1) + proj_resample (1.10 T6) + plugins (1.11 T8)
+  assert.equal(werkzeuge.length, 66 + 6 + 1 + 1 + 1 + 1 + 1 + 1 /* MIDI import: proj_midi_import */ + 1 /* strudel-clip: proj_muster */ + 5 /* live-module task 4 */ + 1 /* live-module task 11: modul_tonart */ + 1 /* live-module task 8: modul_blend */ + 3 /* live-module task 10 */ + 1 /* oszilloskop */);   // 77 = 66 + the 6 presets and collections tools (1.16 rest U5) + ansage (demo overlay) + proj_kits (1.9 T2.5) + proj_routing (1.10 T1) + proj_resample (1.10 T6) + plugins (1.11 T8)
   const w = werkzeuge.find((x) => x.name === 'spur');
   for (const wort of ['schleife_takte', 'aendern', 'keine_schleife', 'nur_andreas', 'next pass']) assert.ok(w.description.includes(wort), `spur names ${wort}`);
   assert.equal(w.inputSchema.properties.schleife_takte.maximum, 64);
@@ -1766,7 +1770,7 @@ test('djk-hand (1.8 T5): proj_aendern names aufnahme_setzen with its fields; pro
   for (const g of ['count-in', 'vorzaehler_takte', 'laufend', 'transport_laeuft', 'punch_leer', 'einsatz_ausgeblieben', 'punch {von_beat, bis_beat}', 'punch.ein']) {
     assert.ok(text('proj_aufnahme').includes(g), `proj_aufnahme nennt ${g}`);
   }
-  assert.equal(werkzeuge.length, 79 + 0, 'tool count unchanged');
+  assert.equal(werkzeuge.length, 79 + 7 + 3 + 1 /* oszilloskop */, 'tool count unchanged since the live module tools');
 });
 
 // 1.8 T8: MIDI recording in the descriptions (the instrument track input in proj_aendern; the MIDI run, release, offset, overdub and reasons in proj_aufnahme)
@@ -1779,7 +1783,7 @@ test('djk-hand (1.8 T8): proj_aendern offers {art: midi} for an instrument track
     assert.ok(text('proj_aufnahme').includes(g), `proj_aufnahme nennt ${g}`);
   }
   assert.ok(!text('proj_aufnahme').startsWith('Record onto the armed audio tracks'), 'the first sentence is no longer audio only');
-  assert.equal(werkzeuge.length, 79 + 0, 'tool count unchanged');
+  assert.equal(werkzeuge.length, 79 + 7 + 3 + 1 /* oszilloskop */, 'tool count unchanged since the live module tools');
 });
 
 // 1.8 T10: ONE scripted session of the real hand (stdio) against the real page server and the stand-in core (the stand-in writes the take files). Cypher sets up a
@@ -1975,7 +1979,7 @@ test('djk-hand proj_aendern names member macro targets and the three variation c
       assert.ok(md.includes(b), `${datei} ${b}`);
     }
   }
-  assert.equal(werkzeuge.length, 66 + 6 + 1 + 1 + 1 + 1 + 1 + 1 /* MIDI import: proj_midi_import */ + 1 /* strudel-clip: proj_muster */, 'no tool was added');
+  assert.equal(werkzeuge.length, 66 + 6 + 1 + 1 + 1 + 1 + 1 + 1 /* MIDI import: proj_midi_import */ + 1 /* strudel-clip: proj_muster */ + 5 /* live-module task 4 */ + 1 /* live-module task 11: modul_tonart */ + 1 /* live-module task 8: modul_blend */ + 3 /* live-module task 10 */ + 1 /* oszilloskop */, 'no tool was added by this slice');
   // negative control: a tool that has nothing to do with it does not carry the words
   assert.doesNotMatch(werkzeuge.find((x) => x.name === 'proj_lage').description, /makro_variation/);
 });
@@ -2004,4 +2008,36 @@ test('djk-hand proj_midi_import (MIDI import): the preview posts vorschau withou
   const w = (await c.listTools()).tools.find((x) => x.name === 'proj_midi_import');
   for (const wort of ['ONE undo step', 'midi_zu_viele_spuren', 'RB-338', 'ONE note at a time', 'taktart', 'zuordnung', 'vorschau', '4/4']) assert.ok(w.description.includes(wort), `description names ${wort}`);
   assert.deepEqual(w.inputSchema.required, ['pfad']);
+});
+
+// Oscilloscope: GET /oszi?kanal=&sek= (default 5), the answer is compact text for a language model: figures first, then one line of block characters.
+test('djk-hand: oszilloskop asks /oszi and answers figures first, then an envelope line; server errors are tool errors', async (t) => {
+  const huelle = Array.from({ length: 600 }, (_, i) => (i >= 300 && i < 330 ? -3 : -58));
+  const { c, gesehen } = await aufbau(t, (m, u) => {
+    if (u === '/oszi?kanal=master&sek=5') return [200, { kanal: 'master', bpm: 128, n: 5000, angefragt_ms: 5000, verfuegbar_ms: 5000, vollstaendig: true, ms_je_punkt: 8.3,
+      huellkurve_min_db: huelle.map((x) => x - 6), huellkurve_max_db: huelle, spitze_db: -3.1, spitze_t_ms: -2400, rms_db: -18.2,
+      einsaetze: [{ t_ms: -2500, db: 41.2 }, { t_ms: -1200, db: 38 }], pumptiefe_db: 5.9, klick_verdacht: [-300] }];
+    if (u === '/oszi?kanal=cue&sek=2') return [409, { fehler: 'kein_ring' }];
+  });
+  const o = await c.callTool({ name: 'oszilloskop', arguments: { kanal: 'master' } });
+  assert.ok(!o.isError, o.content[0].text);
+  const text = o.content[0].text;
+  console.log(text);
+  assert.ok(gesehen.some((x) => x.methode === 'GET' && x.pfad === '/oszi?kanal=master&sek=5'));
+  const zeilen = text.split('\n');
+  assert.match(zeilen[0], /master/);
+  assert.match(text, /Peak -3\.1 dB at -2400 ms/);
+  assert.match(text, /RMS -18\.2 dB/);
+  assert.match(text, /Onsets \(2\): -2500 ms \+41\.2 dB, -1200 ms \+38 dB/);
+  assert.match(text, /Pump depth: 5\.9 dB per beat \(128 BPM\)/);
+  assert.match(text, /Click suspects \(1\): -300 ms/);
+  assert.ok(text.indexOf('Peak') < text.indexOf('Envelope'), 'figures before the envelope line');
+  const linie = zeilen.find((z) => z.startsWith('Envelope')).split(': ')[1];
+  assert.equal(linie.length, 60);
+  assert.ok(linie.includes('\u2588') && linie.includes('\u2581'), linie);
+  const e = await c.callTool({ name: 'oszilloskop', arguments: { kanal: 'cue', sek: 2 } });
+  assert.equal(e.isError, true); assert.match(e.content[0].text, /kein_ring/);
+  const td = (await c.listTools()).tools.find((x) => x.name === 'oszilloskop');
+  assert.match(td.description, /1 ms/); assert.match(td.description, /not samples/i);
+  assert.ok(td.inputSchema.properties.kanal.enum.includes('erz/4') && td.inputSchema.properties.kanal.enum.length === 12);
 });

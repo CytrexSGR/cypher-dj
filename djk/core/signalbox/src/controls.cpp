@@ -180,9 +180,8 @@ ReglerTabelle::ReglerTabelle() {
     std::snprintf(p, sizeof p, "spur/%d/solo", n);
     neu(p, -1, Rolle::spur_solo, 0, 1, 0, 0, false, false, true, true, K_SCHALTER);
   }
-  // 1.10 Slice 1 (Spec 5.3): Gruppen-Regler und Fader des Produktions-Masters, global (Kanal −1), alle dürfen. Werte und Rampen wie
-  // spur/<n>/*; die Blende von Mute und Solo macht das Modul Arrangement (arr_output.cpp). Am Ende der Tabelle: kein Index wandert.
-  for (int n = 1; n <= GRP_REGLER_GRUPPEN; n++) {
+  // The four controls of one group; used for groups 1..8 here and for groups 9..16 at the end of the table (nested groups task 1).
+  auto gruppen_regler = [&](int n) {
     std::snprintf(p, sizeof p, "grp/%d/fader", n);
     neu(p, -1, Rolle::grp_fader, -200, 6, 0, MS(10), false, true, false, false, K_SPUR_FADER);
     std::snprintf(p, sizeof p, "grp/%d/pan", n);
@@ -191,6 +190,11 @@ ReglerTabelle::ReglerTabelle() {
     neu(p, -1, Rolle::grp_mute, 0, 1, 0, 0, false, false, true, true, K_SCHALTER);
     std::snprintf(p, sizeof p, "grp/%d/solo", n);
     neu(p, -1, Rolle::grp_solo, 0, 1, 0, 0, false, false, true, true, K_SCHALTER);
+  };
+  // 1.10 Slice 1 (Spec 5.3): Gruppen-Regler und Fader des Produktions-Masters, global (Kanal −1), alle dürfen. Werte und Rampen wie
+  // spur/<n>/*; die Blende von Mute und Solo macht das Modul Arrangement (arr_output.cpp). Am Ende der Tabelle: kein Index wandert.
+  for (int n = 1; n <= GRP_REGLER_GRUPPEN; n++) {
+    gruppen_regler(n);
   }
   neu("pm/fader", -1, Rolle::pm_fader, -200, 6, 0, MS(10), false, true, false, false, K_SPUR_FADER);
   // S5r: acht Graph-Regler je Kanal, auf dem der Kern einen Baukasten-Graphen annimmt: deck/1..4 (Effekt über
@@ -306,6 +310,24 @@ ReglerTabelle::ReglerTabelle() {
       std::snprintf(p, sizeof p, "%s/bk/%d", kn_bk_send_hoch2, nr);
       neu(p, -1, Rolle::bk_regler, 0, 1, 0.5f, 0, false, false, false, false, linear(0, 1));
     }
+  }
+  // Nested groups, task 1 (2026-11-12): groups 9..16, 64 controls, global (channel -1), everybody may. Appended behind the 64-knob block so that no
+  // index moves (the loops of grp/1..8 above sit inside the first 1258 hashed rows). Same values and ramps as grp/1..8: fader/pan/mute/solo first, then
+  // the sends in the order of the ret loop (return outer, group inner).
+  for (int n = GRP_REGLER_GRUPPEN + 1; n <= GRP_REGLER_GRUPPEN_ALLE; n++) {
+    gruppen_regler(n);
+  }
+  for (int r = 1; r <= RET_REGLER_RETURNS; r++) {
+    for (int n = GRP_REGLER_GRUPPEN + 1; n <= GRP_REGLER_GRUPPEN_ALLE; n++) {
+      std::snprintf(p, sizeof p, "grp/%d/send/%d", n, r);
+      neu(p, -1, Rolle::snd_grp, -200, 6, -200, MS(10), false, true, false, false, K_SPUR_FADER);
+    }
+  }
+  // Live modules task 6: headphone cue per group, grp/1..16/cue. A switch like <kanal>/pfl: only the hand sets it (nur_hand), no ramp. Appended at the very end so that no index
+  // moves (the first 1258 rows are hashed). The group signal behind its chain and in front of its fader goes to the cue bus (arr_output.cpp).
+  for (int n = 1; n <= GRP_REGLER_GRUPPEN_ALLE; n++) {
+    std::snprintf(p, sizeof p, "grp/%d/cue", n);
+    neu(p, -1, Rolle::grp_cue, 0, 1, 0, 0, true, false, true, true, K_SCHALTER);
   }
   for (int i = 0; i < n_; i++) sortiert_[i] = static_cast<int16_t>(i);
   std::sort(sortiert_, sortiert_ + n_, [&](int16_t a, int16_t b) { return std::strcmp(def_[a].pfad, def_[b].pfad) < 0; });

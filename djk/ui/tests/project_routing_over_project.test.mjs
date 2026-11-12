@@ -34,15 +34,15 @@ test('1.10 POST /regler mit Pfad grp/* oder pm/fader → 409 ueber_projekt (jede
   assert.equal(anKern(log, '/k/teil').length, 0, 'nichts ging an den Kern');
 });
 
-test('1.10 Negativ-Kontrolle: erz/* geht weiter durch, grp/9 und pm/pan bleiben 400, ein anderes Ziel in einer Spur bleibt 200', async (t) => {
+test('1.10 Negativ-Kontrolle: erz/* geht weiter durch, grp/17 und pm/pan bleiben 400, ein anderes Ziel in einer Spur bleibt 200', async (t) => {
   const { url, log } = await stapel(t);
   const ok = await ruf(url, 'POST', '/spur', spur('erlaubt', 'erz/2/filter'), CYPHER);
   assert.deepEqual([ok.code, ok.j.ok], [200, true], JSON.stringify(ok.j));
   assert.deepEqual(anKern(log, '/k/teil').map((z) => z.felder.pfad), ['erz/2/filter']);
   assert.equal((await ruf(url, 'POST', '/regler', { pfad: 'erz/2/fader', nach: -3 })).j.ok, true);
-  assert.equal((await ruf(url, 'POST', '/regler', { pfad: 'grp/9/fader', nach: 0 })).j.fehler, 'pfad');
+  assert.equal((await ruf(url, 'POST', '/regler', { pfad: 'grp/17/fader', nach: 0 })).j.fehler, 'pfad');
   assert.equal((await ruf(url, 'POST', '/regler', { pfad: 'pm/pan', nach: 0 })).j.fehler, 'pfad');
-  assert.deepEqual((await ruf(url, 'POST', '/spur', spur('neun', 'grp/9/fader'))).j.fehler, 'spur');
+  assert.deepEqual((await ruf(url, 'POST', '/spur', spur('neun', 'grp/17/fader'))).j.fehler, 'spur');
 });
 
 // ---- 1.10 slice 3: sends and return strips (Hall values included) change only through the project -----------------------------------------------
@@ -74,4 +74,15 @@ test('slice 3 POST /spur: an automation track cannot drive ret/1/hall/decay or a
   assert.equal((await ruf(url, 'POST', '/regler', { pfad: 'ret/5/fader', nach: 0 })).j.fehler, 'pfad');
   assert.equal((await ruf(url, 'POST', '/regler', { pfad: 'spur/1/send/5', nach: 0 })).j.fehler, 'pfad');
   assert.equal((await ruf(url, 'POST', '/spur', spur('ok', 'erz/2/filter'), CYPHER)).code, 200);
+});
+
+test('live modules: grp/<n>/cue is no project value: POST /regler lets Andreas through to the core, Cypher gets the core refusal, not ueber_projekt', async (t) => {
+  const { url, log } = await stapel(t);
+  const cue = () => anKern(log, '/k/teil').filter((z) => JSON.stringify(z).includes('grp/1/cue')).length;
+  const a = await ruf(url, 'POST', '/regler', { pfad: 'grp/1/cue', nach: 1 });
+  assert.equal(a.code, 200, JSON.stringify(a.j));
+  assert.equal(cue(), 1, 'Andreas: the row went to the core');
+  const c = await ruf(url, 'POST', '/regler', { pfad: 'grp/1/cue', nach: 1 }, CYPHER);
+  assert.notEqual(c.j.fehler, 'ueber_projekt', JSON.stringify(c.j));
+  assert.equal((await ruf(url, 'POST', '/regler', { pfad: 'grp/1/fader', nach: 0 })).j.fehler, 'ueber_projekt', 'the other group rows stay with the project');
 });

@@ -15,7 +15,7 @@ Built in Germany by Andreas, a DJ, and Cypher, an AI agent (Claude models), sinc
 
 One real-time core in C++ and Rust keeps a single sample clock for everything: the decks, the pattern channels and
 the arrangement. The browser page and the agent sit on the same functions. The agent reaches them through an MCP
-server with 79 tools, so nearly everything you can click, it can do too (a few controls such as the crossfader stay
+server with 90 tools, so nearly everything you can click, it can do too (a few controls such as the crossfader stay
 in your hand), and anything it does shows up on your page. When it
 cannot do something it answers with a reason (for example `sidechain_zyklus` for a sidechain that would depend on
 itself) instead of guessing. When you grab a fader, your
@@ -85,7 +85,7 @@ What helps us most, each as a [test report issue](../../issues/new?template=test
 3. **If you have an agent:** ask it for something in your own words, for example "put bass and pad in a group, add a
    reverb return and duck the bass under the kick". What did it get wrong?
 
-No music is included: bring your own tracks and samples.
+No music is included. djk-starter generates kits, loops and a demo on your machine; djk-bibliothek reads your own folders.
 
 ## Known limits
 

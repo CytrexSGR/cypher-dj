@@ -930,7 +930,7 @@ test('/deck/sprung (Plan E9): stehendes Deck rastet ab der Takt-Eins ein, Attrap
   const z2 = await zustand(o, (x) => Math.abs(x.quell_beat - (e + 10.3)) < 1e-6);
   assert.ok(Math.abs(z2.quell_beat - (e + 10.3)) < 1e-6);
   // Ablehnungen
-  assert.equal((await postJson(url, '/deck/sprung', { deck: 3, ziel: 1, raster: 1 })).code, 400);
+  assert.equal((await postJson(url, '/deck/sprung', { deck: 4, ziel: 1, raster: 1 })).code, 400);
   assert.equal((await postJson(url, '/deck/sprung', { deck: 1, ziel: 1, raster: 3 })).code, 400);
   assert.equal((await post(url, '/deck/sprung', { deck: 1, ziel: 1, raster: 1 })).code, 415);
 });
@@ -952,7 +952,7 @@ test('/deck/scrub (Hörbares Ziehen): Griff, Zug, Los gehen als /k/deck/scrub an
   assert.deepEqual(s3.map((g) => [g.deck, g.phase, g.delta_beats, g.quelle]), [[1, 1, 0, 'andreas'], [1, 2, 2.5, 'andreas'], [1, 0, 3, 'andreas']]);
   // Ablehnungen: nichts geht an den Kern
   const n0 = gesendet.length;
-  assert.equal((await postJson(url, '/deck/scrub', { deck: 3, phase: 1, delta: 0 })).code, 400);
+  assert.equal((await postJson(url, '/deck/scrub', { deck: 4, phase: 1, delta: 0 })).code, 400);
   assert.equal((await postJson(url, '/deck/scrub', { deck: 1, phase: 3, delta: 0 })).code, 400);
   assert.equal((await postJson(url, '/deck/scrub', { deck: 1, phase: 1, delta: 'x' })).code, 400);
   assert.equal((await postJson(url, '/deck/scrub', { deck: 1, phase: 1, delta: 1e9 })).code, 400);
@@ -1350,7 +1350,7 @@ test('/deck/raster (Plan Grid): Schritt und absolut gehen als /k/deck/raster an 
   assert.equal((await postJson(url, '/deck/raster', { deck: 1, versatz_frames: 0 })).j.versatz_frames, 0);
   // Ablehnungen, nichts an den Kern
   const vorher = o.gesendet;
-  assert.equal((await postJson(url, '/deck/raster', { deck: 3, schritt_ms: 5 })).code, 400);
+  assert.equal((await postJson(url, '/deck/raster', { deck: 4, schritt_ms: 5 })).code, 400);
   assert.equal((await postJson(url, '/deck/raster', { deck: 1, schritt_ms: 500 })).code, 400);
   assert.equal((await postJson(url, '/deck/raster', { deck: 1, versatz_frames: 1.5 })).code, 400);
   assert.equal((await postJson(url, '/deck/raster', { deck: 1 })).code, 400);
@@ -1421,7 +1421,7 @@ test('/deck/raster/fix (Plan Grid): speichert je Fassung, nach Laden und nach /e
   assert.equal((await postJson(url, '/laden', { deck: 1, material_id: NIGHTSHIFT })).code, 200);
   await warte(600);
   assert.equal(log.filter((z) => z.typ === 'an_kern' && z.adresse === '/k/deck/raster').length, k0);
-  assert.equal((await postJson(url, '/deck/raster/fix', { deck: 3 })).code, 400);
+  assert.equal((await postJson(url, '/deck/raster/fix', { deck: 4 })).code, 400);
 });
 
 // --- Grid-Eins (2026-10-11, Bericht grid-phase): FIX/SET schreibt die Eins ins Material, neue Fassungen erben den Versatz ---

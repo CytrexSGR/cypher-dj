@@ -173,8 +173,16 @@ export const FEHLER_TEXT = {
   projekt_gewechselt: 'The project was switched meanwhile: the action was dropped',
   nichts_zu_tun: 'Nothing to undo or redo', kein_projekt: 'No project open', unbekannt: 'No such project', name_ungueltig: 'A project name needs 1 to 80 characters',
   ki_gestoppt: 'Stop Cypher is set', ki_stopp: 'Stop Cypher was pressed: the start was dropped', deck_laeuft: 'A deck is playing: the tempo stays until it stops', nicht_geladen: 'The core has no arrangement loaded yet',
+  live_laeuft: 'The live container is playing while a deck plays: opening another project would stop it',
+  kein_loop: 'The deck has no active loop to export', kein_bibliothekstrack: 'The deck track is not a library track', kein_liveprojekt: 'The live container is not open',
+  kein_liveprojekt_flag: 'A project named live exists without the live flag: rename it',
+  slot_leer: 'That live slot holds no module', modul_hat_stems: 'That module already has its stems',
+  modul_unbekannt: 'No module with that id is saved', modul_nicht_einsetzbar: 'This module holds something the project cannot take',   // task 10
+  rampe_laeuft: 'That live slot is already being cleared or blended', kein_neuer_pfad: 'That stem has no new instrument path to blend to',
+  unbekanntes_deck: 'There is no such deck',
+  kein_deck: 'No deck is playing on the master, so there is no key to adapt to', tonart_unbekannt: 'The key of the module or of the deck is unknown',
   zu_gross: AUSGABE_FEHLER.zu_gross, server_fehler: 'The project server did not answer: showing the last state', netz: 'Page server unreachable', keine_antwort: 'No answer from the core',
-  routing_zyklus: 'A group cannot feed itself', routing_grenze: 'Groups do not nest, and there are at most 8 groups and 4 returns',
+  routing_zyklus: 'A group cannot feed itself or one of its own members', routing_grenze: 'There are at most 16 groups and 4 returns',
   ziel_unbekannt: 'That output or target does not exist for this track', gruppe_unbekannt: 'That group no longer exists', return_unbekannt: 'That return no longer exists',
   insert_unbekannt: 'That insert stage no longer exists', art_unbekannt: 'That insert kind is not available (compressor, EQ, saturator, limiter, utility and effect graph exist in this version)',
   sidechain_spaet: 'That key source is computed after this stage: tracks can listen to tracks and DJ inputs, groups also to the pre of other groups',
@@ -438,7 +446,7 @@ export function bindeProduktion({ post, bpm, stoebern, bibliothek = null, preset
   // 1.10 T3 (D5): a plain click elsewhere or Escape clears the track selection (Ctrl/Shift+click on a name keeps it)
   document.addEventListener('click', (e) => {
     if (!st.spurWahl?.size) return;
-    if ((e.ctrlKey || e.shiftKey || e.metaKey) && e.target?.closest?.('.p-spurname, .p-arr-name')) return;
+    if (e.target?.closest?.('.p-arr-name, .p-arr-gruppe .p-ausgang') || ((e.ctrlKey || e.shiftKey || e.metaKey) && e.target?.closest?.('.p-spurname'))) return;   // a click on a group head name selects the head itself; a click on the output select of a group head keeps the selection
     ctx.wahlLeeren();
   });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && st.sichtbar && !menueOffen() && !e.defaultPrevented && !document.body.classList.contains('geraeteseite') && st.spurWahl?.size) ctx.wahlLeeren(); });

@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { fuehreListeAus } from '../project/commands.ts';
 import { neuesProjekt } from '../project/model.ts';
 import { mergePlan, MergeFehler } from '../project/merge.ts';
-import { bouncePlan, huelle, BOUNCE_LANE_NAME, BOUNCE_MAX_BEATS } from '../project/bounce.ts';
+import { bouncePlan, bounceRegler, huelle, BOUNCE_LANE_NAME, BOUNCE_MAX_BEATS } from '../project/bounce.ts';
 import { EXPORT_MAX_BEATS } from '../areas/proj/output.ts';
 
 const SHA = 'c'.repeat(64);
@@ -146,4 +146,36 @@ test('1a.3 rights (D11): Cypher may not bounce or paste onto a track of Andreas,
   assert.equal(bouncePlan(p, { art: 'an_ort', spur_id: 's6' }, 'cypher').spurIds[0], 's6', 'own track in place');
   assert.deepEqual(bouncePlan(p, { art: 'einfuegen', spur_ids: ['s1'], von_beat: 0, bis_beat: 4, ziel_spur_id: 's6', ziel_beat: 8 }, 'cypher').ziel,
     { spurId: 's6', beat: 8 }, 'a track of Andreas as a paste source is allowed');
+});
+
+test('nested groups: the bounce of group 2 takes the tracks of group 2 and of its child group 3, not those of group 1 or a sibling', () => {
+  let p = projekt();
+  p = lauf(p, [{ befehl: 'spur_neu', art: 'audio', name: 'Hat' }, { befehl: 'spur_neu', art: 'audio', name: 'Lead' }]);
+  p = lauf(p, [{ befehl: 'clip_neu', spur_id: 's3', art: 'audio', start_beat: 0, laenge_beats: 16, sha256: SHA, name: 's3' }]);
+  p = lauf(p, ['G1', 'G2', 'G3'].map((name) => ({ befehl: 'gruppenspur_neu', name })));
+  p = lauf(p, [{ befehl: 'ziel_setzen', strang_id: 'g2', ausgang: { art: 'gruppe', id: 'g1' } }, { befehl: 'ziel_setzen', strang_id: 'g3', ausgang: { art: 'gruppe', id: 'g2' } },
+    { befehl: 'ziel_setzen', strang_id: 's1', ausgang: { art: 'gruppe', id: 'g3' } }, { befehl: 'ziel_setzen', strang_id: 's2', ausgang: { art: 'gruppe', id: 'g2' } },
+    { befehl: 'ziel_setzen', strang_id: 's3', ausgang: { art: 'gruppe', id: 'g1' } }]);
+  const z = (id) => bouncePlan(p, { art: 'neue_spur', gruppe_id: id }, 'andreas').spurIds.slice().sort();
+  assert.deepEqual(z('g2'), ['s1', 's2']);
+  assert.deepEqual(z('g3'), ['s1']);
+  assert.deepEqual(z('g1'), ['s1', 's2', 's3']);
+});
+
+test('nested groups: a group bounce renders the inner groups with their own controls, the bounced group neutral, and the new track plays into it', () => {
+  let p = projekt();
+  p = lauf(p, ['G1', 'G2'].map((name) => ({ befehl: 'gruppenspur_neu', name })));
+  p = lauf(p, [{ befehl: 'ziel_setzen', strang_id: 'g2', ausgang: { art: 'gruppe', id: 'g1' } }, { befehl: 'ziel_setzen', strang_id: 's1', ausgang: { art: 'gruppe', id: 'g2' } },
+    { befehl: 'ziel_setzen', strang_id: 's2', ausgang: { art: 'gruppe', id: 'g1' } },
+    { befehl: 'gruppenspur_aendern', gruppe_id: 'g1', fader_db: -6 }, { befehl: 'gruppenspur_aendern', gruppe_id: 'g2', fader_db: -3 }]);
+  const z = bouncePlan(p, { art: 'neue_spur', gruppe_id: 'g1' }, 'andreas');
+  assert.equal(z.merge.ausgang, 'g1', 'the new track plays into the bounced group');
+  const r = bounceRegler(p, z);
+  assert.equal(r['grp/2/fader'], -3, 'the inner group is part of the bounced sound');
+  assert.equal(r['grp/1/fader'], 0, 'the bounced group acts later, once, on the new track');
+  // the inner group's state is part of the freshness key
+  assert.notEqual(bouncePlan(lauf(p, [{ befehl: 'gruppenspur_aendern', gruppe_id: 'g2', fader_db: -9 }]), { art: 'neue_spur', gruppe_id: 'g1' }, 'andreas').sicht, z.sicht);
+  // an inner group with an insert chain would lose it in the dry render: refused
+  const mitInsert = lauf(p, [{ befehl: 'insert_setzen', strang_id: 'g2', pos: 0, art: 'komp', werte: { schwelle: -30, ratio: 8 } }]);
+  assert.equal(grund(() => bouncePlan(mitInsert, { art: 'neue_spur', gruppe_id: 'g1' }, 'andreas')), 'merge_inserts');
 });

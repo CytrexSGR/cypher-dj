@@ -29,6 +29,26 @@ builds cypher-dj.
   today's build-out, six for the wavetable instruments and three for Saw Ladder. The preset browser now lists
   103 factory presets.
 
+**Production**
+- Up to 16 group tracks, and groups can sit inside groups: a DRUMS group can hold KICK, PERC and HATS groups, each
+  with its own inserts, fader and sends. Mute acts on everything below a group, solo keeps the groups above it
+  sounding. A project without nested groups sounds and saves exactly as before.
+- Cypher Modular graphs come back after a restart of the kern alone.
+- Cypher Modular skips the branches of a switch that are not selected. That saves compute; the sound stays bit for
+  bit the same.
+
+**Live modules**
+- A running loop on a deck can become a live module in slot A or B: it sounds at once, the stems are separated in
+  the background. Per stem you can blend between the original and a new instrument path (drums on Drums 909, bass
+  on Neuro Bass), adapt the module to the key of the deck on the master, and fade it out over up to 16 bars.
+- Modules can be saved, searched and placed again in a later set or a production project, with one undo step.
+
+**First start**
+- New users no longer need their own music to begin: `djk-starter` renders kits, loops and a demo project from the
+  project's own graphs on your machine, with three starter patterns in the Strudel browser.
+- `djk-bibliothek` builds the catalog from your own folders (add, remove, show, build). A deck can prepare a track
+  from that catalog when there is no other media library. A catalog built elsewhere is only read, never replaced.
+
 **Panels**
 - Every instrument channel has a front panel (a plate) with real units on the knobs, envelope, LFO shape and filter
   curve displays and MIDI learn; Cypher Modular plates also have a preset picker and a save button in the header. A device without a hand-made panel gets an
@@ -46,8 +66,9 @@ builds cypher-dj.
   Paired devices expire 30 days after last use. A tablet cannot start or stop playback, change projects or evaluate code.
 
 **Agent**
-- The agent still has 79 tools. The new knobs, the 64 knob rows and the new presets are reached through the existing
-  tools.
+- The agent has 90 tools: ten for live modules and `oszilloskop`, which shows the last seconds of a channel as an
+  envelope with peak, RMS, onsets, pump depth and click suspects. The new knobs, the 64 knob rows and the new presets
+  are reached through the existing tools.
 
 ## 2026-11-11
 

@@ -19,7 +19,7 @@ test('neu: Projekt angelegt, Wiedergabe 1 geschrieben und geladen, erz/4 neutral
   assert.deepEqual(k.an('/k/arr/laden').map((x) => x.felder), [{ quelle: 'andreas', nr: 1 }]);
   assert.deepEqual(lies(path.join(arr, 'wiedergabe-1.json')), { format: 'cypherdj-arr/1', nr: 1, spuren: [] });
   assert.equal(k.teile(/^erz\/4\//).length, 24); assert.equal(k.teile(/^spur\/\d+\/(fader|pan|mute|solo)$/).length, 4 * MAX_SPUREN);
-  assert.equal(k.teile(/^grp\/\d+\/(fader|pan|mute|solo)$/).length, 4 * 8); assert.equal(k.teile(/^pm\/fader$/).length, 1);   // 1.10: das Öffnen setzt alle Gruppen-Slots und den PM
+  assert.equal(k.teile(/^grp\/\d+\/(fader|pan|mute|solo)$/).length, 4 * 16); assert.equal(k.teile(/^pm\/fader$/).length, 1);   // 1.10: das Öffnen setzt alle 16 Gruppen-Slots und den PM
   assert.deepEqual(k.teile(/^erz\/4\/(ziel|xseite)$/).map((x) => [x.felder.pfad, x.felder.nach]), [['erz/4/ziel', 0], ['erz/4/xseite', 1]], 'P6: bei Quelle andreas gesendet');
   assert.deepEqual(k.teile(/^erz\/4\/send\/1$/)[0].felder, { quelle: 'andreas', plan: '', teil: 0, pfad: 'erz/4/send/1', ab_beat: k.teile(/^erz\/4\/send\/1$/)[0].felder.ab_beat,
     dauer_beats: 0, nach: -200, form: 0, politik: 1, gruppe: '', hoerschein: '' });

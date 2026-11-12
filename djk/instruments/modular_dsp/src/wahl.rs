@@ -1,5 +1,7 @@
 //! Selector (multiplexer), type 38: the input `wahl` picks one of `e1`..`e8`, per voice, for audio and control signals alike.
-//! The graph computes every candidate every sample anyway; the block only selects, it saves no cost.
+//! The block itself only selects. In switch mode the steps that feed nothing but one candidate (its exclusive branch, see
+//! zweige.rs) are skipped while no voice reads that candidate; morph mode and every step that has another consumer still run
+//! in every sample.
 //!
 //! Switch (`modus` 0): `norm` 1 splits the input 0..1 into `n` equal zones (position = min(n-1, floor(wahl * n)), computed
 //! in f64); `norm` 0 reads the plain index 0..n-1, rounded. A change of position crossfades linearly over `blende` ms:
@@ -70,6 +72,15 @@ impl Stimme {
             let y = endlich(ein[i]) * (1.0 - t) + endlich(ein[j]) * t;
             return if y.is_finite() { y } else { 0.0 };
         }
+        self.aktualisiere(e, wahl);
+        self.mische(e, ein)
+    }
+
+    /// Switch mode, first half of a sample: move the position and the weights on from the selector input. Reads no candidate,
+    /// so a graph can run it before it knows which candidates it has to compute (`braucht`).
+    #[inline]
+    pub fn aktualisiere(&mut self, e: &Einstellung, wahl: f32) {
+        let n = e.n;
         match position(wahl, n, e.norm) {
             Some(p) if !self.gesetzt => {
                 self.gesetzt = true;
@@ -99,6 +110,30 @@ impl Stimme {
                 self.w[z] += d;
             }
         }
+    }
+
+    /// The selected position (switch mode).
+    #[inline]
+    pub fn ziel(&self) -> usize { self.ziel }
+
+    /// Switch mode: the candidates `mische` reads in this sample, bit k = candidate k of the first `n`: the selected position and
+    /// every input that still has weight in a running fade. Only valid after `aktualisiere` of the same sample.
+    #[inline]
+    pub fn braucht(&self, n: usize) -> u8 {
+        let mut b = 1u8 << self.ziel;
+        if self.blendet {
+            for k in 0..n {
+                b |= ((self.w[k] > 0.0) as u8) << k;
+            }
+        }
+        b
+    }
+
+    /// Switch mode, second half of a sample: the output from the weights `aktualisiere` left. Candidates `braucht` denies
+    /// carry weight 0 and are not read for their value.
+    #[inline]
+    pub fn mische(&self, e: &Einstellung, ein: &[f32; MAX_EIN]) -> f32 {
+        let n = e.n;
         if !self.blendet {
             return endlich(ein[self.ziel]);
         }
@@ -120,6 +155,38 @@ mod tests {
         assert_eq!(position(9.0, 3, true), Some(2));
         assert_eq!(position(-1.0, 3, true), Some(0));
         assert_eq!(position(f32::NAN, 3, true), None);
+    }
+
+    #[test]
+    fn braucht_folgt_dem_ziel_und_dem_fade() {
+        let e = Einstellung::neu(3, true, false, 10.0, 48_000.0); // 480 samples
+        let mut s = Stimme::default();
+        s.aktualisiere(&e, 0.0);
+        assert_eq!(s.braucht(3), 0b001, "first position applies at once");
+        s.aktualisiere(&e, 0.5);
+        assert_eq!(s.braucht(3), 0b011, "the target and the branch fading out");
+        for _ in 0..600 {
+            s.aktualisiere(&e, 0.5);
+        }
+        assert_eq!(s.braucht(3), 0b010, "the fade is over: only the target");
+        s.aktualisiere(&e, 1.0);
+        assert_eq!(s.braucht(3), 0b110);
+    }
+
+    #[test]
+    fn prozess_ist_aktualisiere_und_mische() {
+        let e = Einstellung::neu(4, true, false, 3.0, 48_000.0);
+        let (mut a, mut b) = (Stimme::default(), Stimme::default());
+        let mut z = 12345u32;
+        for i in 0..5_000 {
+            z = z.wrapping_mul(1664525).wrapping_add(1013904223);
+            let ein: [f32; MAX_EIN] = std::array::from_fn(|k| ((z >> k) & 255) as f32 / 100.0 - 1.0);
+            // the selector hops between the zones now and then
+            let wahl = ((i / 700) % 4) as f32 / 4.0 + 0.05;
+            let x = a.prozess(&e, &ein, wahl);
+            b.aktualisiere(&e, wahl);
+            assert_eq!(x.to_bits(), b.mische(&e, &ein).to_bits());
+        }
     }
 
     #[test]

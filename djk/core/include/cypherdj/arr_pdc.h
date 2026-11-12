@@ -5,15 +5,24 @@
 // every sum by delaying the earlier inputs, so each path is delayed exactly once:
 //   tracks:   A_i = latency of the chain of track i; all existing tracks are aligned at the output of their chain to T_trk = max A_i (in place, key PDC_SPUR0 + i). The
 //             sends of a track are taken from this aligned signal, so a send needs no delay of its own against its own track.
-//   groups:   A_g = T_trk + latency of the group chain (a group is used when some existing track targets it); aligned in place to T_G = max A_g (key PDC_GRP0 + g).
-//             T_G = T_trk when no group is used.
-//   returns:  the sends of tracks (arrival T_trk) and of groups (arrival T_G) meet at the return input at in_r = T_G. The track part of the sum is delayed by T_G - T_trk
-//             (key PDC_RETSPUR0 + r, applied to the sum of the track sends before the groups add theirs). A_r = in_r + latency of the return chain.
+//   groups:   groups nest (a group's output goes to the master or into a parent group), so the arrival is per group. T_trk is the arrival of every track. ein(g) = the arrival of the
+//             sum of group g in front of its chain = max(T_trk if a track sits directly in g, aus(c) for every used child c). aus(g) = ein(g) + latency of the chain of g. A group is used when
+//             some existing track targets it or a used child does.
+//             PDC_GRPEIN0 + g delays the direct-track sum of g in place by ein(g) - T_trk before the children add (children run on lower levels, so they add later).
+//             PDC_GRP0 + g delays the output of g to the arrival its target expects: ank(g) = ein(parent) for a parent, T_G for the master, so a child's output arrives at ein(parent) exactly.
+//             T_G = max(T_trk, aus(g) over the top-level groups); T_G = T_trk when no group is used.
+//   returns:  the sends of tracks (arrival T_trk) and of groups (arrival ank(g), taken after the group's output place) meet at the return input at in_r = T_S = T_G (a top-level group arrives
+//             at T_G and every other arrival is earlier). The track part of the sum is delayed by T_S - T_trk (key PDC_RETSPUR0 + r, applied to the sum of the track sends before the groups add
+//             theirs), the sends of group g by T_S - ank(g) (key PDC_GRPSEND0 + g, one place per group, not per group and return, at the price that the returns wait for the latest source).
+//             A_r = in_r + latency of the return chain.
+//   Limits of the send place: one place per group delays the PRE signal of the group (its sum times the mute/solo fade). The send level, the pre/post choice, the fader and balance and the
+//             ancestor blend factor are applied after the ring, so automation of those on the sends of a child group under latency runs early by up to the delay of the place; static settings are
+//             exact. The tail in the send ring is dropped when a group becomes unused, as for PDC_GRP0 and the chain of the group today.
 //   PM:       P_in = max(T_trk, T_G, A_r of the existing returns). The master tracks' sum is delayed by P_in - T_trk (PDC_PM_SPUR), the groups' sum by P_in - T_G
 //             (PDC_PM_GRP, only when a group is used), each return's output by P_in - A_r (PDC_PM_RET0 + r). The largest path latency is P_in + latency of the PM chain.
 // The sends of a source are not known to the snapshot (they are controls and may be raised at any time), so the model assumes that every track and every used group may
 // feed every existing return. The price: a group chain with latency raises the arrival of every track; the model can be more than the longest real path, never less.
-// No latency stage anywhere: every delay is 0, no ring is touched and the output is bit-equal to the build before the slice.
+// With one level the model is the one before nesting (ein = T_trk). No latency stage anywhere: every delay is 0, no ring is touched and the output is bit-equal to the build before the slice.
 //
 // ArrPdc holds the rings, owned by the Arrangement (all memory exists after the constructor, nothing allocates in the callback). A ring is a history of `d` samples per
 // channel; a place that is not asked in a block loses its history (silence), so a place that comes back starts clean. A change of d (a swap) pads zeros in front or drops
@@ -40,7 +49,9 @@ constexpr int PDC_RETSPUR0 = PDC_GRP0 + ARR_GRUPPEN;
 constexpr int PDC_PM_SPUR = PDC_RETSPUR0 + ARR_RETURNS;
 constexpr int PDC_PM_GRP = PDC_PM_SPUR + 1;
 constexpr int PDC_PM_RET0 = PDC_PM_GRP + 1;
-static_assert(PDC_PM_RET0 + ARR_RETURNS == ARR_PDC_SCHLUESSEL, "the key list and the table size must agree");
+constexpr int PDC_GRPEIN0 = PDC_PM_RET0 + ARR_RETURNS;     // nested groups: the direct-track sum of group g, delayed in place before its child groups add
+constexpr int PDC_GRPSEND0 = PDC_GRPEIN0 + ARR_GRUPPEN;    // nested groups: the sends of group g (one place per group, not per return)
+static_assert(PDC_GRPSEND0 + ARR_GRUPPEN == ARR_PDC_SCHLUESSEL, "the key list and the table size must agree");
 // longest delay of one place; the loader refuses a playback that needs more (pdc_zu_lang). Plan 1.11 (D5): 1024 -> 8192, so that a host stage of up to ARR_HOST_LAT_MAX - 1 samples fits and every
 // other place can still be delayed by it. Memory: ARR_PDC_SCHLUESSEL places x 2 channels x ARR_PDC_RING floats in ArrPdc (3.1 MiB), 32 KiB shift scratch per lane (ArrArbeit), all preallocated.
 constexpr int ARR_PDC_RING = 8192;
@@ -105,15 +116,34 @@ inline bool arr_pdc_rechnen(ArrSnapshot& s) {
     t_trk = std::max(t_trk, a_spur[i]);
     if (s.spur[i].ausgang > 0 && s.spur[i].ausgang <= ARR_GRUPPEN) grp_benutzt[s.spur[i].ausgang - 1] = true;
   }
-  int a_grp[ARR_GRUPPEN] = {};
-  int t_g = t_trk;
+  for (int pass = 0; pass < ARR_GRUPPEN; ++pass)   // nested groups: a group that holds only child groups is used when a child is (bounded passes)
+    for (int g = 0; g < ARR_GRUPPEN; ++g)
+      if (grp_benutzt[g] && s.gruppe_ausgang[g] > 0) grp_benutzt[s.gruppe_ausgang[g] - 1] = true;
+  // Nested groups, the level-aware model (header comment). ein(g) = what the sum of group g waits for before its chain: the direct tracks (T_trk) and every used child's aus. aus(g) = ein(g) + chain.
+  // Computed by relaxation over at most ARR_GRUPPEN + 1 passes (the tree is acyclic, the loader refuses a cycle), so it needs no order and is bounded.
+  bool grp_spur[ARR_GRUPPEN] = {};   // the group holds a track directly
+  for (int i = 0; i < ARR_SPUREN; ++i)
+    if (s.spur[i].nr > 0 && s.spur[i].ausgang > 0 && s.spur[i].ausgang <= ARR_GRUPPEN) grp_spur[s.spur[i].ausgang - 1] = true;
+  int ein_g[ARR_GRUPPEN] = {}, aus_g[ARR_GRUPPEN] = {}, ank_g[ARR_GRUPPEN] = {};
+  for (int pass = 0; pass <= ARR_GRUPPEN; ++pass) {
+    for (int g = 0; g < ARR_GRUPPEN; ++g) {
+      if (!grp_benutzt[g]) continue;
+      int e = grp_spur[g] ? t_trk : 0;
+      for (int c = 0; c < ARR_GRUPPEN; ++c)
+        if (grp_benutzt[c] && s.gruppe_ausgang[c] == g + 1) e = std::max(e, aus_g[c]);
+      ein_g[g] = e;
+      aus_g[g] = e + arr_kette_latenz(s.kette[ARR_SPUREN + g]);
+    }
+  }
+  int t_g = t_trk;   // the master's arrival: the longest top-level group (a top-level group's aus already contains everything below it)
   bool gruppen = false;
   for (int g = 0; g < ARR_GRUPPEN; ++g) {
     if (!grp_benutzt[g]) continue;
     gruppen = true;
-    a_grp[g] = t_trk + arr_kette_latenz(s.kette[ARR_SPUREN + g]);
-    t_g = std::max(t_g, a_grp[g]);
+    if (!(s.gruppe_ausgang[g] > 0 && s.gruppe_ausgang[g] <= ARR_GRUPPEN)) t_g = std::max(t_g, aus_g[g]);
   }
+  for (int g = 0; g < ARR_GRUPPEN; ++g)   // the arrival of a group's output (and sends) = what its target expects
+    if (grp_benutzt[g]) ank_g[g] = s.gruppe_ausgang[g] > 0 && s.gruppe_ausgang[g] <= ARR_GRUPPEN ? ein_g[s.gruppe_ausgang[g] - 1] : t_g;
   const int in_r = t_g;
   int p_in = t_g;
   int a_ret[ARR_RETURNS] = {};
@@ -130,8 +160,14 @@ inline bool arr_pdc_rechnen(ArrSnapshot& s) {
   bool ok = true;
   for (int i = 0; i < ARR_SPUREN; ++i)
     if (s.spur[i].nr > 0) ok = setze(PDC_SPUR0 + i, t_trk - a_spur[i]) && ok;
-  for (int g = 0; g < ARR_GRUPPEN; ++g)
-    if (grp_benutzt[g]) ok = setze(PDC_GRP0 + g, t_g - a_grp[g]) && ok;
+  for (int g = 0; g < ARR_GRUPPEN; ++g) {
+    if (!grp_benutzt[g]) continue;
+    ok = setze(PDC_GRP0 + g, ank_g[g] - aus_g[g]) && ok;
+    if (grp_spur[g]) ok = setze(PDC_GRPEIN0 + g, ein_g[g] - t_trk) && ok;
+    ok = setze(PDC_GRPSEND0 + g, in_r - ank_g[g]) && ok;
+    t.ein_g[g] = static_cast<uint16_t>(std::min(ein_g[g], 65535));
+    t.ank_g[g] = static_cast<uint16_t>(std::min(ank_g[g], 65535));
+  }
   for (int r = 0; r < ARR_RETURNS; ++r) {
     if (!s.ret_da[r]) continue;
     ok = setze(PDC_RETSPUR0 + r, in_r - t_trk) && ok;

@@ -956,5 +956,54 @@ int main() {
     delete so;
   }
 
+  {  // 22 gruppen_ebenen (nested groups, decision 6): a key between groups follows the levels. A source that is an ancestor of the consumer (or of the group a track sits in) is a cycle, pre and post;
+     // otherwise pre needs level(source) <= level(consumer), post needs level(source) < level(consumer), else sidechain_spaet. One level gives today's cell (pre ja, post spaet).
+    arrdatei::Ordner o("test_arr_schluessel_e");
+    const std::string a = o.audio('a', 48000);
+    cdj::SpeicherKonto konto(100LL << 20);
+    cdj::ArrAudioCache cache(&konto, 50LL << 20, false);
+    int nr_datei = 300;
+    const auto komp = [](const std::string& q, int nr, const std::string& punkt) {
+      return "\"chain\":[{\"art\":\"komp\",\"slot\":1,\"key\":{\"q\":\"" + q + "\",\"nr\":" + std::to_string(nr) + ",\"punkt\":\"" + punkt + "\"}}]";
+    };
+    const auto gruppe = [](int n, int in, const std::string& kette) {
+      return "{\"nr\":" + std::to_string(n) + ",\"ausgang\":" + (in ? "{\"art\":\"gruppe\",\"nr\":" + std::to_string(in) + "}" : std::string("{\"art\":\"master\"}")) + (kette.empty() ? "" : "," + kette) + "}";
+    };
+    const auto spur = [&](int nr, int in, const std::string& kette) {
+      return "{\"nr\":" + std::to_string(nr) + ",\"art\":\"audio\"" + (in ? ",\"ausgang\":{\"art\":\"gruppe\",\"nr\":" + std::to_string(in) + "}" : std::string()) + ",\"clips\":[" +
+             o.clip(("c" + std::to_string(nr)).c_str(), 0.0, 1.0, a, 48000) + "]" + (kette.empty() ? "" : "," + kette) + "}";
+    };
+    // gruppen: the groups of the project as JSON objects; answer: "+snap" (loads) or the reason text the refusal names ("" when it names none)
+    const auto lade = [&](const std::string& sp, const std::string& gr) {
+      const int64_t nr = nr_datei++;
+      o.roh(nr, "{\"format\":\"cypherdj-arr/2\",\"nr\":" + std::to_string(nr) + ",\"spuren\":[" + sp + "],\"gruppen\":[" + gr + "]}");
+      cdj::ArrLadeErgebnis x = cdj::lade_wiedergabe(o.pfad, nr, cache);
+      const std::string r = x.snap ? std::string("+snap") : x.grund + ": " + x.meldung;
+      cdj::gib_wiedergabe(x.snap.release(), cache);
+      return r;
+    };
+    const auto enthaelt = [](const std::string& r, const char* t) { return r.find(t) != std::string::npos; };
+    // groups 1 (level 1, holds group 2), 2 (level 0, in 1), 3 (level 0, master): group 3 is level 0 and no ancestor of anything
+    const auto drei = [&](const std::string& k1, const std::string& k2, const std::string& k3) { return gruppe(1, 0, k1) + "," + gruppe(2, 1, k2) + "," + gruppe(3, 0, k3); };
+    // a level-1 group keyed pre by a level-0 non-ancestor group loads (group 1 by group 3), and post too (the source level is lower)
+    PRUEF(lade("", drei(komp("grp", 3, "pre"), "", "")) == "+snap");
+    PRUEF(lade("", drei(komp("grp", 3, "post"), "", "")) == "+snap");
+    // a level-0 group keyed pre by a level-1 group is refused sidechain_spaet (group 3 by group 1), also post
+    PRUEF(enthaelt(lade("", drei("", "", komp("grp", 1, "pre"))), "sidechain_spaet"));
+    PRUEF(enthaelt(lade("", drei("", "", komp("grp", 1, "post"))), "sidechain_spaet"));
+    // same level: pre loads, post is late (today's cell): groups 2 and 3 are both level 0
+    PRUEF(lade("", drei("", komp("grp", 3, "pre"), "")) == "+snap");
+    PRUEF(enthaelt(lade("", drei("", komp("grp", 3, "post"), "")), "sidechain_spaet"));
+    // a child keyed by its parent, pre and post: sidechain_zyklus
+    PRUEF(enthaelt(lade("", drei("", komp("grp", 1, "pre"), "")), "sidechain_zyklus"));
+    PRUEF(enthaelt(lade("", drei("", komp("grp", 1, "post"), "")), "sidechain_zyklus"));
+    // a track in group 3 (in 2 in 1) keyed by group 1 or 2: sidechain_zyklus; by an unrelated group (4): not a cycle (the table's own answer for a track keyed by a group stands)
+    const std::string kette3 = gruppe(1, 0, "") + "," + gruppe(2, 1, "") + "," + gruppe(3, 2, "") + "," + gruppe(4, 0, "");
+    PRUEF(enthaelt(lade(spur(1, 3, komp("grp", 1, "pre")), kette3), "sidechain_zyklus"));
+    PRUEF(enthaelt(lade(spur(1, 3, komp("grp", 2, "post")), kette3), "sidechain_zyklus"));
+    PRUEF(enthaelt(lade(spur(1, 3, komp("grp", 3, "pre")), kette3), "sidechain_zyklus"));   // the group it sits in (as before)
+    PRUEF(!enthaelt(lade(spur(1, 3, komp("grp", 4, "pre")), kette3), "sidechain_zyklus"));
+  }
+
   PRUEF_ENDE();
 }

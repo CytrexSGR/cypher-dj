@@ -115,7 +115,7 @@ export function baueEinleser(dir, { schlaf = 0, ausgabe = '{"status":"neu","mate
   return { skript, log, laeufe: () => (fs.existsSync(log) ? fs.readFileSync(log, 'utf8').split('---\n').filter(Boolean) : []) };
 }
 
-export async function stapel(t, { mediathek, python, bestand, einleserModul, sammlungen, loops, katalog, vorhoeren, musterBibliothek, musterSets, musterOrdner, welleFfmpeg, welleZeitlimit, loopWerkzeug, proj, geraete, stems, lernen, presets, kollektionen, attrappe } = {}) {
+export async function stapel(t, { mediathek, python, bestand, einleserModul, sammlungen, loops, katalog, vorhoeren, musterBibliothek, musterSets, musterStarter, musterOrdner, welleFfmpeg, welleZeitlimit, loopWerkzeug, proj, geraete, stems, lernen, presets, kollektionen, attrappe } = {}) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-mt-'));
   const ab = path.join(fs.mkdtempSync('/dev/shm/djk-mt-test-'), 'material');
   fs.mkdirSync(ab, { recursive: true });
@@ -142,7 +142,7 @@ export async function stapel(t, { mediathek, python, bestand, einleserModul, sam
   const bestandDir = bestand ?? baueBestand(path.join(tmp, 'bestand'), []);
   const log = [];
   const optionen = { port: 47300 + K, kernPort: 47100 + K, aboPort: 47150 + K, leitstandWs: 47200 + K, bestand: bestandDir, arbeitsbestand: ab,
-    kernPruefmodus: true, loops: loops ?? tmpd('loops'), kits: tmpd('kits'), welleCache: tmpd('welle'), musterOrdner: musterOrdner ?? tmpd('muster'), musterBibliothek, musterSets, hotcueOrdner: tmpd('hc'),
+    kernPruefmodus: true, loops: loops ?? tmpd('loops'), kits: tmpd('kits'), welleCache: tmpd('welle'), musterOrdner: musterOrdner ?? tmpd('muster'), musterBibliothek, musterSets, musterStarter: musterStarter ?? '', hotcueOrdner: tmpd('hc'),
     rasterOrdner: tmpd('raster'), huellen, wirtOrdner: tmpd('wirt'), mediathek, katalog, vorhoeren, python, welleFfmpeg, welleZeitlimit, loopWerkzeug, einleserModul, sammlungen, log: (z) => log.push(z),
     // D1 S2: nie ~/.cache oder /dev/shm der Instanz. Fix3 G8: Projektwurzel, Arbeitsordner und damit auch <arbeitsordner>.zaehler (Spec 6.31) liegen im
     // eigenen tmp-Ordner des Stapels, den t.after wegräumt (vorher tmpd(): je Lauf ein djk-proj-*, ein djk-arr-* und ein .zaehler unter TMPDIR, nie entfernt)

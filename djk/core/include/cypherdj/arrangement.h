@@ -1,7 +1,7 @@
 // D1 K1 (Spec D1 2.2, 2.3, 2.6): Modul Arrangement im Kern. Spielt einen Wiedergabe-Schnappschuss (arr_playback.h)
 // sample-genau auf der einen Uhr. Projekt-Beat p = Kern-Beat − ursprung + start_beat; ein Ereignis auf Projekt-Beat p
 // liegt auf llround(sample_at(p + ursprung − start_beat)) (Konvention des Kerns). Teile: Transport mit Start-Regel,
-// Quantisierung und Loop-Klammer (arrangement.cpp), Audio-Clip-Stimmen (arr_voices.cpp), Spur-Mixer spur/1..32, Gruppen grp/1..8 und Produktions-Master (1.10)
+// Quantisierung und Loop-Klammer (arrangement.cpp), Audio-Clip-Stimmen (arr_voices.cpp), Spur-Mixer spur/1..32, Gruppen grp/1..16 (die auch in Gruppen münden können) und Produktions-Master (1.10)
 // (arr_output.cpp), Noten an Senken (arr_notes.cpp), Metronom (arr_metronom.cpp). Die Summe geht in den Eingang
 // von erz/4. Echtzeit: außer Konstruktor und setze_*/sperre_* (vor dem Start) läuft alles im Callback: keine
 // Allokation, keine Sperre, kein I/O.
@@ -39,12 +39,15 @@ constexpr int ARR_STUMM_BLENDE = 480;   // Mute und Solo: 10 ms
 constexpr int ARR_OFFEN = 32 * ARR_SPUREN;     // offene Noten (Off ausstehend), Liste fester Größe, je Spur wie bei 8 Spuren (E3)
 constexpr int ARR_KLICK_LAENGE = 96;    // Metronom-Klick, Form wie der Prüfklick (click.h)
 constexpr int ARR_ZIEL_BLENDE = 480;    // 1.10: Ziel-Wechsel einer Spur (master ↔ Gruppe) blendet über 10 ms
-constexpr int ARR_PM = ARR_SPUREN + ARR_GRUPPEN;   // Streifen-Index des Produktions-Masters: 0..31 Spuren, 32..39 Gruppen, 40 PM
+constexpr int ARR_PM = ARR_SPUREN + ARR_GRUPPEN;   // Streifen-Index des Produktions-Masters: 0..31 Spuren, 32..47 Gruppen, 48 PM
 constexpr int ARR_RET0 = ARR_PM + 1;              // 1.10 Slice 3 (P2): the return strips follow the PM, no existing index moves
 constexpr int ARR_STREIFEN = ARR_PM + 1 + ARR_RETURNS;
 // Fields per strip: 0 fader (dB), 1 pan, 2 mute, 3 solo. Tracks and groups: 4..7 send to return 1..4 (dB). Returns: 4 hall on, 5..10 hall pre, decay, size, low, highcut, tail.
 constexpr int ARR_FELDER = 11;
 constexpr int ARR_F_SEND0 = 4;
+// Live modules task 6: field 8 of a GROUP strip is its headphone cue switch (grp/<n>/cue). Groups use 0..3 and the sends 4..7, so 8 is free there (the return fields 8..10 belong to the return strips).
+constexpr int ARR_F_CUE = 8;
+static_assert(ARR_F_CUE >= ARR_F_SEND0 + ARR_RETURNS && ARR_F_CUE < ARR_FELDER, "the group cue field must not collide with the sends");
 static_assert(ARR_KETTE_PM == ARR_PM && ARR_KETTE_RET0 == ARR_RET0 && ARR_KETTEN == ARR_STREIFEN, "the chain index is the strip index");
 static_assert(ARR_BLOCK == INS_BLOCK, "the insert scratch buffers must match the block size");
 static_assert(ARR_BLOCK == ARR_RET_BLOCK, "the return buffers must match the block size");
@@ -352,7 +355,7 @@ class Arrangement {
   bool spur_plan_gueltig() const { return spur_plan_gueltig_; }               // test seam: false = it is rebuilt at the start of the next block
   const ArrReturns& returns() const { return ret_; }                         // counters and test seams of the return Halls
   uint64_t ruhe_zaehler() const { return ruhe_n_; }                              // blocks taken on the quiet path (test seam, P15)
-  bool gruppe_belegt(int g) const { return grp_belegt_[g]; }                  // mindestens eine Spur im Schnappschuss schickt in die Gruppe
+  bool gruppe_belegt(int g) const { return grp_belegt_[g]; }                  // mindestens eine Spur oder benutzte Untergruppe im Schnappschuss schickt in die Gruppe
   // Produktions-Master des zuletzt gerechneten Teilblocks (m Werte, nach dem PM-Fader, ohne Metronom): Summe in erz/4 und Export-Abgriff
   const float* pm_l() const { return pm_l_; }
   const float* pm_r() const { return pm_r_; }
@@ -702,9 +705,11 @@ class Arrangement {
   float bus_l_[ARR_SPUREN][ARR_BLOCK] = {};
   float bus_r_[ARR_SPUREN][ARR_BLOCK] = {};
   bool msolo_t_[ARR_GRUPPEN][ARR_BLOCK] = {};   // 1.10: je Sample, ob ein Mitglied der Gruppe Solo hat (nur bei Solo-Verlauf)
-  float grp_l_[ARR_GRUPPEN][ARR_BLOCK] = {};    // 1.10: Eingang der Gruppen (Summe der Mitglieder nach deren Fader und Pan)
+  float grp_l_[ARR_GRUPPEN][ARR_BLOCK] = {};    // 1.10: Eingang der Gruppen (Summe der Mitglieder nach deren Fader und Pan; seit den verschachtelten Gruppen auch der Ausgang der Untergruppen)
   float grp_r_[ARR_GRUPPEN][ARR_BLOCK] = {};
   float gblende_[ARR_GRUPPEN][ARR_BLOCK] = {};  // 1.10 Slice 3 (P14): mute/solo fade of each used group per sample, computed before the tracks (the sends of the members use it)
+  float gblende_s_[ARR_GRUPPEN][ARR_BLOCK] = {};   // nested groups: the product of the fades of the group and all its ancestors (only for a group with a parent; else gblende_ itself is the product): what sends are scaled by
+  bool vsolo_t_[ARR_GRUPPEN][ARR_BLOCK] = {};   // nested groups: per sample, the group or one of its ancestors has solo (only with a solo course)
   uint64_t ruhe_n_ = 0;
   float ret_pre_w_[ARR_RETURNS] = {};             // 1.10 slice 4a: blend 0 = post .. 1 = pre of the sends into each return (state across blocks)
   float ret_pre_t_[ARR_RETURNS][ARR_BLOCK] = {};  // the same per sample for the current block
@@ -712,12 +717,24 @@ class Arrangement {
   const float* dj_l_[DJ_EINGAENGE] = {};         // 1.10 slice 5 U2b: the DJ inputs of this block (dj_schluessel), reset at the end of block()
   const float* dj_r_[DJ_EINGAENGE] = {};
   ArrPdc pdc_;                                   // 1.10 slice 4b T13: delay rings of the compensation (exist after the constructor)
+  float gsd_l_[ARR_BLOCK] = {}, gsd_r_[ARR_BLOCK] = {};     // nested groups: the pre signal (group sum times its mute/solo fade) of the group in the pass, delayed at its send place (PDC_GRPSEND0 + g)
   float pdcs_l_[ARR_BLOCK] = {}, pdcs_r_[ARR_BLOCK] = {};   // scratch for a sum that is delayed before it joins the PM sum (groups, one return at a time)
   ArrReturns ret_;                               // 1.10 Slice 3: return inputs and presence fades
   float pm_l_[ARR_BLOCK] = {};                  // 1.10: Produktions-Master
   float pm_r_[ARR_BLOCK] = {};
-  int8_t ziel_[ARR_SPUREN] = {};                // gültiges Ziel der Spur: 0 master, 1..8 Gruppe
+  int8_t ziel_[ARR_SPUREN] = {};                // gültiges Ziel der Spur: 0 master, 1..ARR_GRUPPEN Gruppe
   int8_t ziel_alt_[ARR_SPUREN] = {};            // Ziel vor dem letzten Wechsel (nur während der Blende)
+  // nested groups: the target state of the groups, as of the tracks (0 master, 1..ARR_GRUPPEN the parent). A change blends over ARR_ZIEL_BLENDE only when the old target
+  // is still open when the group adds (its level in the new order is higher than the group's), else it switches hard at the block start (ziele_pruefen).
+  int8_t gziel_[ARR_GRUPPEN] = {};
+  int8_t gziel_alt_[ARR_GRUPPEN] = {};
+  float gziel_w_[ARR_GRUPPEN] = {};             // 1 = no blend running (regler_binden sets 1)
+  // Live modules (reload of a playback that only changes module B): the target of a strip is blended only while the strip keeps playing. A track slot that was empty and is
+  // now held (a track arrives), or a group nobody fed and now somebody does, takes its target at once (the old target carries nothing to fade out, so the blend would only
+  // leak the new sound into the master); a track slot that is empty now (the track is gone) keeps its last target, so its tail runs out through its group and not around the
+  // group faders into the master. A group nobody feeds takes the target of the snapshot at once: the order of the group passes (parents first) comes from the snapshot. `ziel_ok_` / `gziel_ok_`: the strip's target in ziel_ / gziel_ was taken while the strip was held; set and read in ziele_pruefen only.
+  bool ziel_ok_[ARR_SPUREN] = {};
+  bool gziel_ok_[ARR_GRUPPEN] = {};
   int16_t regler_ins_[cypherdj::stellwerk::MAX_REGLER];   // 1.10 slice 4a: controller -> global slot * INS_PARAM_MAX + parameter of ins/<art>/<n>/*, -1: none
   int16_t regler_rack_[cypherdj::stellwerk::MAX_REGLER];   // 1.10 slice 4c: controller -> rack slot * ARR_MAKROS + macro of rack/<k>/m<n>, -1: none
   float ziel_w_[ARR_SPUREN];                    // Anteil des neuen Ziels 0..1, 1 = Blende fertig (regler_binden setzt 1)
@@ -782,6 +799,8 @@ class Arrangement {
   float klick_pegel_ = 0.0f;
   float* metro_l_ = nullptr;         // Ziel des laufenden Blocks (Master- oder PFL-Eingang des Mixers)
   float* metro_r_ = nullptr;
+  float* cue_l_ = nullptr;           // live modules task 6: the PFL input of the mixer in any case (also when the metronome goes to the master): the group cue taps are added here
+  float* cue_r_ = nullptr;
 
   ArrFreeze* freeze_ = nullptr;      // laufender Freeze (Paket K3)
   ArrFreeze* freeze_fertig_ = nullptr;

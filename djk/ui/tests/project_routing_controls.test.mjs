@@ -15,9 +15,9 @@ const aufbau = () => {
   return fuehreAus(p, { befehl: 'master_aendern', fader_db: -1.5 }).projekt;
 };
 
-test('alleRegler: alle 4·32 Spur-Regler, alle 4·8 Gruppen-Regler (freie Slots mit Vorgabe) und pm/fader', () => {
+test('alleRegler: alle 4·32 Spur-Regler, alle 4·16 Gruppen-Regler (freie Slots mit Vorgabe) und pm/fader', () => {
   const p = aufbau(), r = alleRegler(p);
-  assert.equal(r.length, 4 * MAX_SPUREN + 4 * MAX_GRUPPEN + 1 + 204 + 1178 + 48, 'slice 3: + 160 sends and 4 · 11 return controls; slice 4a/4b: + 1178 insert rows (520 of them bk, arr-bk) (12 · 10 komp, 8 · 59 eq, 4 · 4 saett, 2 · 3 lim, 4 host, 8 · 5 utility); slice 4c: + 48 rack rows');
+  assert.equal(r.length, 4 * MAX_SPUREN + 4 * MAX_GRUPPEN + 1 + 236 + 1178 + 48, 'slice 3: + 4 · (32 + 16) sends and 4 · 11 return controls; slice 4a/4b: + 1178 insert rows (520 of them bk, arr-bk) (12 · 10 komp, 8 · 59 eq, 4 · 4 saett, 2 · 3 lim, 4 host, 8 · 5 utility); slice 4c: + 48 rack rows');
   const wert = (pfad) => r.find((x) => x.pfad === pfad)?.wert;
   assert.deepEqual([wert('grp/1/fader'), wert('grp/1/pan'), wert('grp/1/mute'), wert('grp/1/solo')], [-6, 0.5, 0, 1]);
   assert.deepEqual([wert('grp/2/fader'), wert('grp/8/solo')], [0, 0], 'freie Slots stehen auf der Vorgabe');
@@ -36,12 +36,12 @@ test('Rückweg der Hand: grp/<n>/* und pm/fader werden zu Befehlen, Werte schon 
   assert.equal(reglerZuBefehl(p, 'grp/1/fader', -6), null, 'Wert schon da');
   assert.equal(reglerZuBefehl(p, 'pm/fader', -1.5), null);
   assert.equal(reglerZuBefehl(p, 'grp/5/fader', -3), null, 'keine Gruppe auf Platz 5');
-  assert.equal(reglerZuBefehl(p, 'grp/9/fader', -3), null);
+  assert.equal(reglerZuBefehl(p, 'grp/17/fader', -3), null);
   assert.equal(reglerZuBefehl(p, 'pm/pan', 0), null);
   assert.equal(reglerZuBefehl(p, 'pm/fader', Number.NaN), null);
   assert.ok(reglerZuBefehl(p, 'spur/2/fader', -3), 'Spur-Regler wie bisher');
   for (const x of ['spur/1/fader', 'grp/8/solo', 'pm/fader']) assert.ok(istMixerRegler(x), x);
-  for (const x of ['grp/9/fader', 'grp/1/send/5', 'pm/pan', 'erz/4/fader']) assert.ok(!istMixerRegler(x), x);   // grp/1/send/1 is a mixer control since slice 3
+  for (const x of ['grp/17/fader', 'grp/1/send/5', 'pm/pan', 'erz/4/fader']) assert.ok(!istMixerRegler(x), x);   // grp/1/send/1 is a mixer control since slice 3
   assert.ok(istSpurRegler('spur/3/pan') && !istSpurRegler('grp/1/pan'));
 });
 
@@ -78,9 +78,9 @@ const mitReturns = () => {
   return fuehreAus(p, { befehl: 'return_aendern', return_id: 'r2', fader_db: -4, mute: true }).projekt;
 };
 
-test('slice 3 alleRegler: 161 old + 204 new + 1178 insert rows + 48 rack rows = 1591 paths (160 sends, 4 · 11 return controls), free slots with the defaults, no duplicates', () => {
+test('slice 3 alleRegler: 161 old + 204 new + 1178 insert rows + 48 rack rows = 1655 paths (1591 before nested groups task 1: + 64 for groups 9..16) (160 sends, 4 · 11 return controls), free slots with the defaults, no duplicates', () => {
   const p = mitReturns(), r = alleRegler(p);
-  assert.equal(r.length, 161 + 204 + 1178 + 48);
+  assert.equal(r.length, 161 + 204 + 64 + 1178 + 48);
   assert.equal(alleSendRegler(p).length, 4 * (MAX_SPUREN + MAX_GRUPPEN));
   assert.equal(alleRetRegler(p).length, 4 * 11);
   assert.equal(new Set(r.map((x) => x.pfad)).size, r.length);
@@ -88,7 +88,7 @@ test('slice 3 alleRegler: 161 old + 204 new + 1178 insert rows + 48 rack rows = 
   assert.deepEqual([wert('spur/1/send/1'), wert('spur/2/send/2'), wert('grp/1/send/2'), wert('spur/1/send/2'), wert('spur/32/send/4')], [-6, -12, -3, -200, -200]);
   assert.deepEqual([wert('ret/1/fader'), wert('ret/2/fader'), wert('ret/2/mute'), wert('ret/2/hall/decay'), wert('ret/1/hall/decay')], [0, -4, 1, 0.8, 0.5252]);
   assert.deepEqual([wert('ret/3/fader'), wert('ret/3/hall/an'), wert('ret/3/hall/fahne'), wert('ret/4/hall/highcut')], [0, 1, 0.66667, 0.8039], 'free slots: the stellwerk defaults');
-  assert.equal(alleRegler(neuesProjekt('N')).length, 365 + 1178 + 48, 'a project without returns still sets all of them (the defaults)');
+  assert.equal(alleRegler(neuesProjekt('N')).length, 429 + 1178 + 48, 'a project without returns still sets all of them (the defaults)');
 });
 
 test('slice 3 hand path: send and return controls become commands, the label names track and return; same value and foreign paths give null', () => {
@@ -110,7 +110,7 @@ test('slice 3 hand path: send and return controls become commands, the label nam
   assert.equal(reglerZuBefehl(p, 'ret/1/hall/mix', 0.5), null);
   assert.equal(reglerZuBefehl(p, 'ret/3/fader', -3), null, 'no return 3');
   for (const x of ['spur/1/send/1', 'grp/8/send/4', 'ret/1/fader', 'ret/4/hall/fahne', 'ret/2/hall/an']) assert.ok(istMixerRegler(x), x);
-  for (const x of ['spur/1/send/5', 'grp/9/send/1', 'ret/5/fader', 'ret/1/hall/mix', 'ret/1/hall', 'ret/1/send/1']) assert.ok(!istMixerRegler(x), x);
+  for (const x of ['spur/1/send/5', 'grp/17/send/1', 'ret/5/fader', 'ret/1/hall/mix', 'ret/1/hall', 'ret/1/send/1']) assert.ok(!istMixerRegler(x), x);
 });
 
 test('slice 3 export controls: sends only for existing returns, every existing return complete; no returns means the file is as before', () => {

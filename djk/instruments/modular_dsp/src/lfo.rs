@@ -44,6 +44,28 @@ impl Lfo {
         y
     }
 
+    /// Phase only (a skipped branch, zweige.rs): what `sample` does to the phase and the random value, without the wave.
+    #[inline]
+    pub fn phase_nur(&mut self, rate_hz: f32, neu: bool, sr: f32) {
+        if neu {
+            self.phase = 0.0;
+        }
+        self.phase += (rate_hz / sr).clamp(0.0, 0.5);
+        if self.phase >= 1.0 {
+            self.phase -= 1.0;
+            self.halt = self.zufall.sample();
+        }
+    }
+
+    /// Phase only, beat-synchronous: what `bei_phase` does to the state, without the wave.
+    #[inline]
+    pub fn phase_nur_takt(&mut self, t: f32) {
+        if t < self.phase {
+            self.halt = self.zufall.sample();
+        }
+        self.phase = t;
+    }
+
     /// Taktsynchron (S3c, D8): Phase 0..1 vom Host-Beat; Zufall zieht beim Umlauf (Phase fällt) einen neuen Wert
     #[inline]
     pub fn bei_phase(&mut self, t: f32, form: u8) -> f32 {

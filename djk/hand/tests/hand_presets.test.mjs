@@ -96,8 +96,13 @@ test('presets_suchen: the input schema equals GET /presets/suche/schema of a rea
   const r = await c.callTool({ name: 'presets_suchen', arguments: { art: ['bass'] } });
   assert.ok(!r.isError, text(r));
   const j = JSON.parse(text(r));
-  assert.equal(j.gesamt, 7);
-  assert.ok(j.treffer.every((x) => x.art === 'bass' && x.geraet === 'rb338'));
+  // the register holds bass presets of several devices (rb338 and the Cypher Modular baukasten); the unfiltered count follows the register
+  assert.ok(j.gesamt > 7, `bass presets of more than one device, got ${j.gesamt}`);
+  assert.ok(j.treffer.every((x) => x.art === 'bass'));
+  assert.ok(new Set(j.treffer.map((x) => x.geraet)).size > 1, 'bass presets come from more than one device');
+  const rb = JSON.parse(text(await c.callTool({ name: 'presets_suchen', arguments: { art: ['bass'], geraet: ['rb338'] } })));
+  assert.equal(rb.gesamt, 7);
+  assert.ok(rb.treffer.every((x) => x.art === 'bass' && x.geraet === 'rb338'));
   assert.ok(gesehen.some((x) => x.methode === 'POST' && x.pfad === '/presets/suche'));
 });
 
@@ -368,7 +373,7 @@ test('AK-B16-8: tools/list length = N + 6 (N = 66 on the base) = the count of to
   const laenge = (await c.listTools()).tools.length;
   const quelle = fs.readFileSync(HAND, 'utf8');
   const imCode = quelle.split('\n').filter((z) => z.startsWith("  { name: '")).length;
-  assert.equal(laenge, 66 + 6 + 1 + 1 + 1 + 1 + 1 + 1 + 1 /* MIDI import */);   // + plugins (1.11 T8) + ansage (demo overlay) + proj_kits (1.9 T2.5) + proj_routing (1.10 T1) + proj_resample (1.10 T6) + proj_muster (strudel-clip)
+  assert.equal(laenge, 66 + 6 + 1 + 1 + 1 + 1 + 1 + 1 + 1 /* MIDI import */ + 5 /* live-module task 4 */ + 1 /* live-module task 11: modul_tonart */ + 1 /* live-module task 8: modul_blend */ + 3 /* live-module task 10 */ + 1 /* oszilloskop */);   // + plugins (1.11 T8) + ansage (demo overlay) + proj_kits (1.9 T2.5) + proj_routing (1.10 T1) + proj_resample (1.10 T6) + proj_muster (strudel-clip)
   assert.equal(imCode, laenge, 'grep -c "^  { name: \'" djk/hand/hand.ts');
   const wurzel = path.resolve(path.dirname(HAND), '..', '..');
   // the English edition lives under docs/veroeffentlichung in the working repo; the public repo carries only djk/hand/AUFRUF.md

@@ -38,11 +38,12 @@ pub mod kamm;
 pub mod formant;
 pub mod ms20;
 pub mod wahl;
+pub mod zweige;
 pub mod trommeln;
 pub mod falter;
 pub mod drift;
 
 pub use format::{Graph, Kante, Knoten, FORMAT, FORMATE};
 pub use kosten::Kosten;
-pub use programm::{Programm, MAX_STIMMEN, REGLER};
+pub use programm::{Fehlerprobe, Programm, MAX_STIMMEN, REGLER};
 pub use uebersetzen::{hall_vorgabe, uebersetze, uebersetze_mit_wurzel, Fehler, ARTEN};

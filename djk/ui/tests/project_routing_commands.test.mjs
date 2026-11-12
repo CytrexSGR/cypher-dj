@@ -41,13 +41,13 @@ test('gruppenspur_neu: kleinste freie nr, ID g1, Name, Farbe, vier Regler grp/1/
   assert.deepEqual(zwei.projekt.gruppen.map((g) => [g.id, g.nr, g.name]), [['g1', 1, 'Music'], ['g2', 2, 'Group 2']]);
 });
 
-test('gruppenspur_neu: Grenzen und Ablehnungen (acht Gruppen, unbekannte Mitglieder, fremde Felder); eine ID wird nie wiederverwendet', () => {
+test('gruppenspur_neu: Grenzen und Ablehnungen (16 Gruppen, unbekannte Mitglieder, fremde Felder); eine ID wird nie wiederverwendet', () => {
   let p = neuesProjekt('T');
   for (let i = 0; i < MAX_GRUPPEN; i++) p = ok(p, { befehl: 'gruppenspur_neu' }).projekt;
   lehntAb(p, { befehl: 'gruppenspur_neu' }, 'routing_grenze');
   const q = ok(p, { befehl: 'gruppenspur_loeschen', gruppe_id: 'g3' }).projekt;
   const n = ok(q, { befehl: 'gruppenspur_neu' }).projekt;
-  assert.deepEqual(n.gruppen.at(-1).id, 'g9', 'ID nie wiederverwendet (Spec 6.26)'); assert.equal(n.gruppen.at(-1).nr, 3, 'die Nummer (Regler-Slot) wird frei');
+  assert.deepEqual(n.gruppen.at(-1).id, 'g17', 'ID nie wiederverwendet (Spec 6.26)'); assert.equal(n.gruppen.at(-1).nr, 3, 'die Nummer (Regler-Slot) wird frei');
   const k = mit3();
   lehntAb(k, { befehl: 'gruppenspur_neu', mitglieder: ['s9'] }, 'spur_unbekannt');
   lehntAb(k, { befehl: 'gruppenspur_neu', mitglieder: [] }, 'argument_ungueltig');
@@ -91,7 +91,12 @@ test('ziel_setzen (AK7): Spur in Gruppe und zurück; Zyklus, Verschachtelung und
   const z2 = ok(r.projekt, { befehl: 'ziel_setzen', strang_id: 's1', ausgang: { art: 'master' } }); assert.equal(z2.projekt.spuren[0].ausgang, undefined);
   lehntAb(p, { befehl: 'ziel_setzen', strang_id: 'g1', ausgang: { art: 'gruppe', id: 'g1' } }, 'routing_zyklus');     // Gruppe in sich selbst
   const zwei = ok(p, { befehl: 'gruppenspur_neu' }).projekt;
-  lehntAb(zwei, { befehl: 'ziel_setzen', strang_id: 'g1', ausgang: { art: 'gruppe', id: 'g2' } }, 'routing_grenze');   // Tiefe 1
+  const eins = ok(zwei, { befehl: 'ziel_setzen', strang_id: 'g1', ausgang: { art: 'gruppe', id: 'g2' } }); pruefe(zwei, eins);   // group 1 into group 2
+  assert.deepEqual(eins.projekt.gruppen[0].ausgang, { art: 'gruppe', id: 'g2' }); assert.equal(eins.betrifft_wiedergabe, true);
+  lehntAb(eins.projekt, { befehl: 'ziel_setzen', strang_id: 'g2', ausgang: { art: 'gruppe', id: 'g1' } }, 'routing_zyklus');   // and back: a cycle
+  const dreiG = ok(eins.projekt, { befehl: 'gruppenspur_neu' }).projekt;
+  const kette = ok(dreiG, { befehl: 'ziel_setzen', strang_id: 'g2', ausgang: { art: 'gruppe', id: 'g3' } }).projekt;   // 1 in 2 in 3
+  lehntAb(kette, { befehl: 'ziel_setzen', strang_id: 'g3', ausgang: { art: 'gruppe', id: 'g1' } }, 'routing_zyklus');   // a descendant two levels down
   lehntAb(p, { befehl: 'ziel_setzen', strang_id: 's1', ausgang: { art: 'gruppe', id: 'g9' } }, 'ziel_unbekannt');
   lehntAb(p, { befehl: 'ziel_setzen', strang_id: 's9', ausgang: 'master' }, 'spur_unbekannt');
   lehntAb(p, { befehl: 'ziel_setzen', strang_id: 's1', ausgang: 'return' }, 'argument_ungueltig');
@@ -322,4 +327,67 @@ test('ki_gestoppt-style source: the commands carry the source into the history l
   const w = new Verlauf(path.join(tmpOrdner(t), 'undo.jsonl'), { jetzt: () => 1, zeitgeber: false });
   const e = aendere(w, mitRet(), [{ befehl: 'return_neu' }], { quelle: 'cypher', label: 'Hall' });
   assert.equal(e.eintrag.quelle, 'cypher');
+});
+
+test('nested groups: gruppenspur_loeschen of the middle group moves its tracks and child group to its own target; undo restores the tree', () => {
+  let p = ok(mit3(), { befehl: 'gruppenspur_neu', mitglieder: ['s1'] }).projekt;                  // g1 (s1)
+  p = ok(p, { befehl: 'gruppenspur_neu', mitglieder: ['s2'] }).projekt;                            // g2 (s2)
+  p = ok(p, { befehl: 'gruppenspur_neu', mitglieder: ['s3'] }).projekt;                            // g3 (s3)
+  p = ok(p, { befehl: 'ziel_setzen', strang_id: 'g3', ausgang: { art: 'gruppe', id: 'g2' } }).projekt;   // 3 in 2
+  p = ok(p, { befehl: 'ziel_setzen', strang_id: 'g2', ausgang: { art: 'gruppe', id: 'g1' } }).projekt;   // 2 in 1
+  const r = ok(p, { befehl: 'gruppenspur_loeschen', gruppe_id: 'g2' }); pruefe(p, r);
+  assert.deepEqual(r.projekt.gruppen.map((g) => [g.id, g.ausgang ?? null]), [['g1', null], ['g3', { art: 'gruppe', id: 'g1' }]]);
+  assert.deepEqual(r.projekt.spuren.map((s) => s.ausgang?.id ?? null), ['g1', 'g1', 'g3'], 'its track follows to the deleted group target, g1');
+  // a top-level group: members and children go to master
+  const t = ok(p, { befehl: 'gruppenspur_loeschen', gruppe_id: 'g1' }); pruefe(p, t);
+  assert.deepEqual(t.projekt.gruppen.map((g) => [g.id, g.ausgang ?? null]), [['g2', null], ['g3', { art: 'gruppe', id: 'g2' }]]);
+});
+
+test('nested groups: gruppenspur_neu accepts group ids as members', () => {
+  let p = ok(mit3(), { befehl: 'gruppenspur_neu', mitglieder: ['s1'] }).projekt;
+  const r = ok(p, { befehl: 'gruppenspur_neu', mitglieder: ['g1', 's2'] }); pruefe(p, r);
+  assert.deepEqual(r.projekt.gruppen[0].ausgang, { art: 'gruppe', id: 'g2' });
+  assert.equal(r.projekt.spuren[1].ausgang.id, 'g2');
+  lehntAb(p, { befehl: 'gruppenspur_neu', mitglieder: ['g9'] }, 'spur_unbekannt');
+});
+
+// ---- retarget and sidechain keys: a move that breaks a key is refused, the project stays as it was ------------------------------------------------------
+const mitGruppen = (n) => { let p = mit3(); for (let i = 0; i < n; i++) p = ok(p, { befehl: 'gruppenspur_neu' }).projekt; return p; };
+const schluessel = (p, strang, quelle, nr, punkt) => ok(p, { befehl: 'insert_setzen', strang_id: strang, pos: 0, art: 'komp', key: { quelle, nr, punkt } }).projekt;
+const inG = (p, kind, ziel) => ok(p, { befehl: 'ziel_setzen', strang_id: kind, ausgang: { art: 'gruppe', id: ziel } }).projekt;
+const unveraendert = (p, b, grund) => {
+  const vorher = kanonisch(p);
+  assert.throws(() => fuehreAus(p, b), (e) => e instanceof BefehlFehler && e.grund === grund && /stage i\d+ on g\d/.test(e.detail), `expected ${grund}`);
+  assert.equal(kanonisch(p), vorher, 'the input project is unchanged');
+};
+
+test('retarget A: g1 keyed by group 2 pre, then g1 into g2 is refused sidechain_zyklus (g2 now sums g1)', () => {
+  const p = schluessel(mitGruppen(2), 'g1', 'grp', 2, 'pre');
+  unveraendert(p, { befehl: 'ziel_setzen', strang_id: 'g1', ausgang: { art: 'gruppe', id: 'g2' } }, 'sidechain_zyklus');
+  // negative control: without the key the same move works
+  assert.equal(ok(mitGruppen(2), { befehl: 'ziel_setzen', strang_id: 'g1', ausgang: { art: 'gruppe', id: 'g2' } }).projekt.gruppen[0].ausgang.id, 'g2');
+});
+
+test('retarget B: g1 keyed by group 2 pre, then g3 into g2 is refused sidechain_spaet (g2 rises to level 1)', () => {
+  const p = schluessel(mitGruppen(3), 'g1', 'grp', 2, 'pre');
+  unveraendert(p, { befehl: 'ziel_setzen', strang_id: 'g3', ausgang: { art: 'gruppe', id: 'g2' } }, 'sidechain_spaet');
+});
+
+test('retarget C: deleting the middle group is refused when a surviving key becomes late', () => {
+  let p = mitGruppen(5);
+  p = inG(p, 'g1', 'g2'); p = inG(p, 'g2', 'g3'); p = inG(p, 'g5', 'g4');      // g3 (level 2) > g2 > g1; g4 (level 1) > g5
+  p = schluessel(p, 'g3', 'grp', 4, 'post');                                   // post: level 1 < level 2, allowed now
+  unveraendert(p, { befehl: 'gruppenspur_loeschen', gruppe_id: 'g2' }, 'sidechain_spaet');   // g3 would drop to level 1
+});
+
+test('gruppenspur_neu: a selected group and its selected child: only the top-most moves, the child stays inside', () => {
+  let p = mitGruppen(2);
+  p = inG(p, 'g2', 'g1');                                                         // g2 in g1
+  p = ok(p, { befehl: 'spur_neu', art: 'audio', name: 'X' }).projekt; p = inG(p, 's4', 'g1');   // s4 in g1
+  const r = ok(p, { befehl: 'gruppenspur_neu', mitglieder: ['g1', 'g2', 's4', 's1'] }); pruefe(p, r);
+  const g = r.projekt.gruppen;
+  assert.equal(g.find((x) => x.id === 'g1').ausgang.id, 'g3', 'the top-most selected group moves into the new group');
+  assert.equal(g.find((x) => x.id === 'g2').ausgang.id, 'g1', 'its selected child stays in it');
+  assert.equal(r.projekt.spuren.find((s) => s.id === 's4').ausgang.id, 'g1', 'a selected track stays in its selected group');
+  assert.equal(r.projekt.spuren.find((s) => s.id === 's1').ausgang.id, 'g3');
 });

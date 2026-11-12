@@ -88,11 +88,11 @@ void teil_a() {
   cdj::ArrAbgriff* f = static_cast<cdj::ArrAbgriff*>(const_cast<void*>(b.zeiger));
   PRUEF(f->art == 1 && f->nr == 2 && f->punkt == 0 && f->kennung == 17 && f->von_beat == 4.0 && f->bis_beat == 8.0);
   PRUEF(f->kap == 4 * 48000 + 2 && f->daten.size() == static_cast<size_t>(f->kap) * 2);   // no tail beats
-  // 3: range errors: art, nr per kind (track 33, group 9, return 5, PM 2), punkt, bis - von < 1, kennung < 0, von < 0, NaN, a stranger; above 256 beats zu_gross
+  // 3: range errors: art, nr per kind (track 33, group 17, return 5, PM 2), punkt, bis - von < 1, kennung < 0, von < 0, NaN, a stranger; above 256 beats zu_gross
   struct Bf { int art, nr, punkt; double von, bis; int kennung; const char* quelle; const char* grund; };
   const Bf bfs[] = {{4, 1, 1, 0.0, 4.0, 1, "andreas", "ausserhalb_bereich"}, {-1, 1, 1, 0.0, 4.0, 1, "andreas", "ausserhalb_bereich"},
                     {0, 0, 1, 0.0, 4.0, 1, "andreas", "ausserhalb_bereich"}, {0, 33, 1, 0.0, 4.0, 1, "andreas", "ausserhalb_bereich"},
-                    {1, 9, 1, 0.0, 4.0, 1, "andreas", "ausserhalb_bereich"}, {2, 5, 1, 0.0, 4.0, 1, "andreas", "ausserhalb_bereich"},
+                    {1, 17, 1, 0.0, 4.0, 1, "andreas", "ausserhalb_bereich"}, {2, 5, 1, 0.0, 4.0, 1, "andreas", "ausserhalb_bereich"},
                     {3, 2, 1, 0.0, 4.0, 1, "andreas", "ausserhalb_bereich"}, {0, 1, 2, 0.0, 4.0, 1, "andreas", "ausserhalb_bereich"},
                     {0, 1, 1, 0.0, 0.5, 1, "andreas", "ausserhalb_bereich"}, {0, 1, 1, 0.0, 4.0, -1, "andreas", "ausserhalb_bereich"},
                     {0, 1, 1, -1.0, 4.0, 1, "andreas", "ausserhalb_bereich"}, {0, 1, 1, 0.0, std::nan(""), 1, "andreas", "ausserhalb_bereich"},

@@ -43,7 +43,7 @@ export async function probe() {
   process.env.CYPHERDJ_INSTANZ = TEST_INSTANZ;   // nicht gelenkte Vorgaben (Vorhören, Klang) zeigen auf die Prüfinstanz, nie auf den Betrieb
   const o = new Oberflaeche({ port: 47300 + K, kernPort: 47100 + K, aboPort: 47150 + K, leitstandWs: 47200 + K, bestand: tmp('rg-bestand-'), arbeitsbestand: tmp('rg-ab-'),
     mutationen: [], loops: tmp('rg-loops-'), kits: tmp('rg-kits-'), welleCache: tmp('rg-welle-'), musterOrdner: tmp('rg-muster-'), hotcueOrdner: tmp('rg-hc-'),
-    rasterOrdner: tmp('rg-raster-'), huellen, wirtOrdner: tmp('rg-wirt-'), sammlungen: tmp('rg-sets-'), musterBibliothek: tmp('rg-mb-'), musterSets: tmp('rg-ms-'),
+    rasterOrdner: tmp('rg-raster-'), huellen, wirtOrdner: tmp('rg-wirt-'), sammlungen: tmp('rg-sets-'), musterBibliothek: tmp('rg-mb-'), musterSets: tmp('rg-ms-'), musterStarter: '',
     mediathek: path.join(tmp('rg-med-'), 'gibt-es-nicht.sqlite'), katalog: path.join(tmp('rg-kat-'), 'gibt-es-nicht.sqlite'),
     digitalout: path.join(tmp('rg-do-'), 'nix'), kernPruefmodus: true,
     geraete: { konfigPfad: path.join(tmp('rg-ger-'), 'geraete.json'), kantenPfad: path.join(tmp('rg-ger-'), 'eingaenge-kanten'), cacheMs: 0, erkenne: async () => ({ audio: [], midi: [] }) },

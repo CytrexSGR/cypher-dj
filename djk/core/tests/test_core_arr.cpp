@@ -305,6 +305,23 @@ int main() {
       PRUEF_NAH(pm.back().pegel[0], -9.03, 0.2);
     }
   }
+  {  // nested groups task 1: a group above 9 meters under a multi-digit name (grp/12), the single-digit names stay silent
+    arr35::Lauf x(ab.pfad, "test_kern_arr_grp12");
+    const std::string a = x.ordner.audio('a', 200000, 0.25f);
+    const std::string clip = x.ordner.clip("c1", 0.0, 4.0, a, 200000);
+    x.lauf(10 * N);
+    const int64_t l1 = x.laden2(7,
+        "{\"nr\":1,\"art\":\"audio\",\"ausgang\":{\"art\":\"gruppe\",\"nr\":12},\"clips\":[" + clip + "]}",
+        "{\"nr\":12,\"ausgang\":{\"art\":\"master\"}}");
+    x.lauf(12 * N);
+    x.start(0.0, 0);
+    x.lauf(80 * N);
+    PRUEF(x.quittung(l1, 3));
+    const auto g12 = x.alle(cdj::Ereignis::PEGEL, "grp/12");
+    PRUEF(!g12.empty());
+    PRUEF(x.alle(cdj::Ereignis::PEGEL, "grp/2").empty() && x.alle(cdj::Ereignis::PEGEL, "grp/1").empty());   // negative control: not folded onto grp/1 or grp/2
+    if (!g12.empty()) PRUEF_NAH(g12.back().pegel[0], -15.05, 0.2);   // 0.25 * 0.7071 as in the grp/1 case above
+  }
   {  // 1.10 slice 3 (Task 6): /pegel ret/<r> only for returns the playback knows, peak after the return fader; -200 without a signal
     arr35::Lauf x(ab.pfad, "test_kern_arr_ret");
     const std::string a = x.ordner.audio('a', 200000, 0.25f);

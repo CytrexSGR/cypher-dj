@@ -31,12 +31,12 @@ constexpr int ARR_NOTEN_MAX = 65536;    // je Wiedergabe (Spec 3.2)
 constexpr int ARR_HOST_LAT_MAX = 8192;  // plan 1.11 (D5): longest host-stage latency in samples (the dry ring of a host stage and, with the PDC ring, the bound of the loader): a latency of this value or more is refused (pdc_zu_lang)
 constexpr int ARR_INS_HOST = 4;         // plan 1.11 (D1): effect hosts, one Carla process per plugin; host h = pool instance ins/host/<h> = playback slot h - 1; ports arr_ins_<h>_L/R out, arr_insret_<h>_L/R in
 constexpr int ARR_WIRT_SLOTS = 2;       // arr_midi_<s>, s = 1..2 (Spec 2.4)
-constexpr int ARR_GRUPPEN = 8;          // Gruppen-Spuren grp/1..8 (1.10, F1: eigene Plätze neben den 32 Spuren); = GRP_REGLER_GRUPPEN (static_assert in arr_output.cpp)
-constexpr int ARR_RETURNS = 4;          // 1.10 Slice 3: return strips ret/1..4 (own places next to the 32 tracks and 8 groups); = RET_REGLER_RETURNS (static_assert in arr_returns.cpp)
+constexpr int ARR_GRUPPEN = 16;         // Gruppen-Spuren grp/1..16 (1.10, F1; 16 since nested groups task 1: eigene Plätze neben den 32 Spuren); = GRP_REGLER_GRUPPEN_ALLE (static_assert in arr_output.cpp)
+constexpr int ARR_RETURNS = 4;          // 1.10 Slice 3: return strips ret/1..4 (own places next to the 32 tracks and 16 groups); = RET_REGLER_RETURNS (static_assert in arr_returns.cpp)
 constexpr int ARR_KETTE = 4;            // 1.10 slice 4a: stages per insert chain
 constexpr int ARR_KETTE_PM = ARR_SPUREN + ARR_GRUPPEN;     // chain index of the PM (= ARR_PM, static_assert in arrangement.h)
 constexpr int ARR_KETTE_RET0 = ARR_KETTE_PM + 1;           // chain index of return 1 (= ARR_RET0)
-constexpr int ARR_KETTEN = ARR_KETTE_RET0 + ARR_RETURNS;   // strips with a chain, indexed like the strips: tracks 0..31, groups 32..39, PM 40, returns 41..44
+constexpr int ARR_KETTEN = ARR_KETTE_RET0 + ARR_RETURNS;   // strips with a chain, indexed like the strips: tracks 0..31, groups 32..47, PM 48, returns 49..52
 constexpr int ARR_INS_KOMP = 12;        // 1.10 slice 4a: pooled compressors ins/komp/1..12
 // 1.10 slice 4b: pooled EQs ins/eq/1..ARR_INS_EQ and saturators ins/saett/1..ARR_INS_SAETT. The sizes were decided by the cost measurement (T11, routing-1-10.md)
 // and equal "instanzen" of docs/interfaces/insert_module.json (pinned by test_arr_inserts_vertrag and by the contract test in the stellwerk project).
@@ -184,7 +184,7 @@ struct ArrGlied {
 struct ArrSpur {
   int nr = 0;                        // 1..ARR_SPUREN (32); 0 = leer
   ArrArt art = ArrArt::leer;
-  int8_t ausgang = 0;                // 1.10: 0 master, 1..ARR_GRUPPEN Gruppe (Wiedergabe /2); Tiefe 1
+  int8_t ausgang = 0;                // 1.10: 0 master, 1..ARR_GRUPPEN Gruppe (Wiedergabe /2)
   int slot = 0;                      // wirt: 1..2
   char geraet[16] = {};              // intern: "rb338" or "bk"
   // S20, device bk: graph name (the file stem in the graph folder) and the instance. The instance belongs to the graph store of the
@@ -352,7 +352,7 @@ struct ArrRack {
 // 1.10 slice 4b T13: the latency compensation of one playback (spec 2.4, D9, D10). Computed once per snapshot by arr_pdc_rechnen() (arr_pdc.h), never changed during a
 // playback. d[key] is the delay in samples of the place `key` (the keys are PDC_* of arr_pdc.h); 0 = no ring. gesamt is the largest path latency (the sum the
 // whole production adds to the transport), what the export skips and what the page shows.
-constexpr int ARR_PDC_SCHLUESSEL = ARR_SPUREN + ARR_GRUPPEN + ARR_RETURNS + 2 + ARR_RETURNS;   // tracks, groups, track sends per return, PM tracks, PM groups, PM returns
+constexpr int ARR_PDC_SCHLUESSEL = ARR_SPUREN + ARR_GRUPPEN + ARR_RETURNS + 2 + ARR_RETURNS + 2 * ARR_GRUPPEN;   // tracks, groups, track sends per return, PM tracks, PM groups, PM returns, then the nested-group places: group input (direct-track sum) and group sends
 struct ArrPdcTabelle {
   uint16_t d[ARR_PDC_SCHLUESSEL] = {};
   uint16_t gesamt = 0;
@@ -362,14 +362,27 @@ struct ArrPdcTabelle {
   uint16_t t_g = 0;    // output of every used group after the alignment (= t_trk without a group)
   uint16_t in_r = 0;   // input of the returns (= t_g)
   uint16_t p_in = 0;   // input of the PM chain
+  // nested groups: per used group the arrival of its input (ein, in front of its chain: the direct tracks and the child outputs) and of its output and sends (ank, what its target expects: ein of the parent, T_G for the master)
+  uint16_t ein_g[ARR_GRUPPEN] = {};
+  uint16_t ank_g[ARR_GRUPPEN] = {};
 };
 
 struct ArrSnapshot {
   ArrSnapshot() {
     for (int i = 0; i < ARR_SPUREN; ++i) spur_ordnung[i] = static_cast<uint8_t>(i);
+    for (int g = 0; g < ARR_GRUPPEN; ++g) {   // nested groups: the defaults are the flat project (every group into the master, one level, identity order)
+      gruppe_ausgang[g] = 0;
+      gruppen_ebene[g] = 0;
+      gruppen_ordnung[g] = static_cast<uint8_t>(g);
+    }
   }
   int64_t nr = 0;
   uint8_t spur_ordnung[ARR_SPUREN];  // 1.10 slice 5 U1: the order the tracks run in (chain, then fader loop): a stable topological order over the track-post key edges, the identity without such edges (arr_key.h). A fixed array in the head, so inside the first locked region.
+  // Nested groups (computed once by arr_gruppen_rechnen() below, in the loader and in the test builder; the callback only reads them). Fixed arrays in the head.
+  int8_t gruppe_ausgang[ARR_GRUPPEN];   // output of group g+1: 0 = master, 1..ARR_GRUPPEN = the parent group
+  uint8_t gruppen_ebene[ARR_GRUPPEN];   // height: a group with no child group 0, a parent 1 + its highest child; the mixer runs the levels lowest first
+  uint8_t gruppen_ordnung[ARR_GRUPPEN]; // the groups sorted by level, then index (the identity for a flat project)
+  uint8_t ebenen = 1;                   // number of levels (highest level + 1)
   ArrKette kette[ARR_KETTEN];        // 1.10 slice 4a: insert chain per strip (index as ARR_KETTEN); a chain with n = 0 costs nothing
   ArrRack rack[ARR_KETTEN];           // 1.10 slice 4c: rack macros per strip (index as kette); a strip with slot -1 or n = 0 has no mapping pass
   ArrPdcTabelle pdc;                 // 1.10 slice 4b T13: delays that align every path at the sums; set by arr_pdc_rechnen() (loader, test harness)
@@ -407,6 +420,53 @@ struct ArrSnapshot {
   static void* operator new(size_t n) { return arr_seiten_neu(n); }
   static void operator delete(void* p, size_t n) noexcept { arr_seiten_frei(p, n); }
 };
+
+// Nested groups: levels and order from gruppe_ausgang. Returns false (and names the group in *meldung) when a group is its own ancestor (a group into itself or a cycle); the
+// snapshot keeps the flat defaults then. Bounded loops only (G passes), no allocation. Level = height, so a child is always on a lower level than its parent and the order
+// puts every child before its parent; groups of one level keep index order, and a project without nesting gets the identity order on one level.
+inline bool arr_gruppen_rechnen(ArrSnapshot& s, std::string* meldung = nullptr) {
+  const auto eltern = [&s](int g) { const int p = s.gruppe_ausgang[g]; return p < 0 || p > ARR_GRUPPEN ? 0 : p; };   // a value outside 0..ARR_GRUPPEN (hand-built snapshot) counts as master
+  for (int g = 0; g < ARR_GRUPPEN; ++g) {
+    int p = eltern(g);
+    int h = 0;
+    while (p > 0 && p - 1 != g && h <= ARR_GRUPPEN) {   // walk up; reaching g again, or no end after G steps, is a cycle
+      p = eltern(p - 1);
+      ++h;
+    }
+    if (p > 0) {
+      if (meldung) *meldung = "gruppen[nr " + std::to_string(g + 1) + "].ausgang: group output cycle";
+      return false;
+    }
+  }
+  uint8_t eb[ARR_GRUPPEN] = {};
+  for (int pass = 0; pass < ARR_GRUPPEN; ++pass)
+    for (int g = 0; g < ARR_GRUPPEN; ++g) {
+      const int p = eltern(g);
+      if (p > 0 && eb[p - 1] < eb[g] + 1) eb[p - 1] = static_cast<uint8_t>(eb[g] + 1);
+    }
+  int hoechste = 0, n = 0;
+  for (int g = 0; g < ARR_GRUPPEN; ++g) {
+    s.gruppen_ebene[g] = eb[g];
+    hoechste = eb[g] > hoechste ? eb[g] : hoechste;
+  }
+  for (int lv = 0; lv <= hoechste; ++lv)
+    for (int g = 0; g < ARR_GRUPPEN; ++g)
+      if (eb[g] == lv) s.gruppen_ordnung[n++] = static_cast<uint8_t>(g);
+  s.ebenen = static_cast<uint8_t>(hoechste + 1);
+  return true;
+}
+
+// True when group `a` (1..ARR_GRUPPEN) is an ancestor of group `b` (the group `b` outputs into, directly or through other groups). A group is not its own ancestor.
+// Bounded walk up from b; false for numbers out of range.
+inline bool arr_ist_vorfahr(const ArrSnapshot& s, int a, int b) {
+  if (a < 1 || a > ARR_GRUPPEN || b < 1 || b > ARR_GRUPPEN || a == b) return false;
+  int p = s.gruppe_ausgang[b - 1];
+  for (int h = 0; p > 0 && h < ARR_GRUPPEN; ++h) {
+    if (p == a) return true;
+    p = s.gruppe_ausgang[p - 1];
+  }
+  return false;
+}
 
 // S20: the sink tells the store whether the callback still uses a graph instance (published with release order each block). The store
 // frees an instance only when no snapshot holds it AND the sink does not use it; otherwise the free waits for the next loader pass

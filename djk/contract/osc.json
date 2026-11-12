@@ -420,7 +420,7 @@
       {"name": "id", "typ": "h", "einheit": "kennung"},
       {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle"},
       {"name": "art", "typ": "i", "einheit": "code", "bereich": [0, 3], "notiz": "strip kind: 0 track, 1 group, 2 return, 3 production master"},
-      {"name": "nr", "typ": "i", "einheit": "nummer", "bereich": [1, 32], "notiz": "1 to 32 track, 1 to 8 group, 1 to 4 return, 1 for the master (checked per kind)"},
+      {"name": "nr", "typ": "i", "einheit": "nummer", "bereich": [1, 32], "notiz": "1 to 32 track, 1 to 16 group, 1 to 4 return, 1 for the master (checked per kind)"},
       {"name": "punkt", "typ": "i", "einheit": "code", "bereich": [0, 1], "notiz": "0 pre (strip input, before its chain), 1 post (what the strip sends on to its target)"},
       {"name": "von_beat", "typ": "d", "einheit": "beat", "bereich": [0.0, null]},
       {"name": "bis_beat", "typ": "d", "einheit": "beat", "notiz": "bis - von at least 1 and at most 256 (zu_gross above)"},

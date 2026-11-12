@@ -3,14 +3,15 @@
 // eigenen Code: app.js zeigePegel füllt jedes .meter[data-kanal="grp/<nr>"] und [data-kanal="pm"] aus /pegel.
 import { faderWert, faderText, panText, naechsteFarbe, istUmbenennenTaste } from './track_heads.js';
 import { REGLER_MAX, REGLER_SCHRITT, reglerVonDb, dbVonRegler, tasteMerke, tasteWert } from './fader_curve.js';
-import { gruppenLabels, neueGruppeBefehl } from './routing.js';
+import { gruppenLabels, neueGruppeBefehl, ausgangOptionen, ausgangWert, ausgangBefehl, gruppenStreifenFolge, gruppenEltern, gruppenKette } from './routing.js';
+import { balkenVerlauf } from './groups_kopf.js';
 import { kopfMenueAuf } from './context_menu.js';
 
 const KOPF = `<button class="p-farbe" title="Group colour: click for the next one"></button>
 <span class="p-spurname" role="button" tabindex="0" title="Double click, Enter or F2 to rename"></span><span class="p-geraet">GROUP</span>
 <button class="p-mute" aria-pressed="false" title="Mute the group (silences its members)">M</button><button class="p-solo" aria-pressed="false" title="Solo the group (all its members play)">S</button>
-<button class="p-loeschen" title="Delete group (its tracks go back to Master; Undo brings it back)">✕</button>
-<input class="p-fader" type="range" min="0" max="${REGLER_MAX}" step="${REGLER_SCHRITT}" title="Volume (double click: 0 dB)">
+<button class="p-loeschen" title="Delete group (its tracks and child groups move to the output of the deleted group; Undo brings it back)">✕</button>
+<input class="p-fader" type="range" min="0" max="${REGLER_MAX}" step="${REGLER_SCHRITT}" title="Volume (double click: 0 dB)"><select class="p-ausgang" title="Output: Master or another group"></select>
 <output class="p-faderwert"></output>
 <input class="p-pan" type="range" min="-1" max="1" step="0.01" title="Balance (double click: centre)">
 <output class="p-panwert"></output>
@@ -40,6 +41,7 @@ export function bindeGruppen(ctx) {
     q('.p-mute').addEventListener('click', () => gruppeAus(id, (g) => ({ label: `${g.mute ? 'Unmute' : 'Mute'} group ${g.name}`, felder: { mute: !g.mute } })));
     q('.p-solo').addEventListener('click', () => gruppeAus(id, (g) => ({ label: `${g.solo ? 'Unsolo' : 'Solo'} group ${g.name}`, felder: { solo: !g.solo } })));
     q('.p-farbe').addEventListener('click', () => gruppeAus(id, (g) => ({ label: `Colour group ${g.name}`, felder: { farbe: naechsteFarbe(g.farbe) } })));
+    q('.p-ausgang').addEventListener('change', (e) => ctx.aendere(`Output group ${gruppe().name}`, [ausgangBefehl(id, e.target.value)]));   // nested groups: the group feeds Master or another group
     q('.p-loeschen').addEventListener('click', () => ctx.aendere(`Delete group ${gruppe().name}`, [{ befehl: 'gruppenspur_loeschen', gruppe_id: id }]));
     for (const [klasse, feld, vorgabe] of [['.p-fader', 'fader_db', 0], ['.p-pan', 'pan', 0]]) {
       const r = q(klasse), k = `${id}:${feld}`;
@@ -76,8 +78,19 @@ export function bindeGruppen(ctx) {
     return el;
   }
 
-  function zeigeWerte(el, g) {
+  // extra: { tiefe, balken (colours of the groups above, outermost first), optionen (ausgangOptionen of this group) }
+  function zeigeWerte(el, g, extra = {}) {
     const q = (x) => el.querySelector(x);
+    const tiefe = extra.tiefe ?? 0;
+    el.classList.toggle('p-gruppenkopf--tief', tiefe > 0);
+    if (tiefe > 0) { el.style.setProperty('--tiefe', String(tiefe)); el.style.setProperty('--balken', balkenVerlauf(extra.balken ?? [])); }
+    else { el.style.removeProperty('--tiefe'); el.style.removeProperty('--balken'); }
+    const sel = q('.p-ausgang'), opts = extra.optionen ?? [{ wert: 'master', text: 'Master' }], schluessel = JSON.stringify(opts);
+    if (sel.dataset.optionen !== schluessel) {   // rebuilt only when the choices change
+      sel.dataset.optionen = schluessel;
+      sel.replaceChildren(...opts.map((o) => { const e = document.createElement('option'); e.value = o.wert; e.textContent = o.text; return e; }));
+    }
+    sel.value = ausgangWert(g); sel.setAttribute('aria-label', `Output of group ${g.name}`);
     el.style.setProperty('--farbe', g.farbe);
     q('.p-spurname').textContent = g.name;
     for (const [k, an] of [['.p-mute', g.mute], ['.p-solo', g.solo]]) { q(k).classList.toggle('an', an); q(k).setAttribute('aria-pressed', String(an)); }
@@ -111,14 +124,15 @@ export function bindeGruppen(ctx) {
   ctx.beimProjekt.push((p) => {
     $('mixer').hidden = !p;
     $('neu-gruppe').disabled = !neueGruppeBefehl(p);
-    const gruppen = [...(p?.gruppen ?? [])].sort((a, b) => a.nr - b.nr);
+    const folge = gruppenStreifenFolge(p), eltern = gruppenEltern(p);   // tree order, depth first; a flat project: number order
     stand.clear();
-    for (const g of gruppen) stand.set(g.id, g);
+    for (const g of p?.gruppen ?? []) stand.set(g.id, g);
     for (const [id, el] of els) if (!stand.has(id)) { el.remove(); els.delete(id); }
-    gruppen.forEach((g, i) => {
+    folge.forEach(({ id, tiefe }, i) => {
+      const g = stand.get(id);
       let el = els.get(g.id);
       if (!el) { el = baue(g.id); els.set(g.id, el); }
-      zeigeWerte(el, g);
+      zeigeWerte(el, g, { tiefe, balken: gruppenKette(p, id, eltern).slice(0, -1).map((x) => stand.get(x)?.farbe), optionen: ausgangOptionen(p, id) });
       if (reihe.children[i] !== el) reihe.insertBefore(el, reihe.children[i] ?? null);
     });
     const fader = p?.master?.fader_db ?? 0;

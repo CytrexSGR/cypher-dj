@@ -168,6 +168,22 @@ export class Katalog {
     catch (e) { throw kaputt(e); } finally { db.close(); }
   }
 
+  // Prepare path without a media library (vorbereit_source.ts): the rows of a material id, at most 2, same SQL as eintragMid without the length rule
+  eintraegeMid(mid: string): Zeile[] {
+    const { db } = this.oeffne();
+    try { return (db.prepare('SELECT * FROM katalog WHERE sha >= ? AND sha < ? LIMIT 2').all(mid, `${mid}g`) as unknown as Zeile[]).map((z) => ({ ...z })); }
+    catch (e) { throw kaputt(e); } finally { db.close(); }
+  }
+
+  // Who built this catalog and which folders it scanned (stand table); wurzeln stays empty when the entry is missing or not a list of paths
+  herkunft(): { erbauer: string | null; wurzeln: string[] } {
+    const { db, stand } = this.oeffne();
+    db.close();
+    let wurzeln: string[] = [];
+    try { const j = JSON.parse(stand.wurzeln ?? '[]') as unknown; if (Array.isArray(j)) wurzeln = j.map((w) => (w as { pfad?: unknown } | null)?.pfad).filter((p): p is string => typeof p === 'string'); } catch { /* none */ }
+    return { erbauer: stand.erbauer ?? null, wurzeln };
+  }
+
   // Für das Detail einer Listen-Zeile: die kennt nur die material_id (sha-Präfix 16). Das ist das sha des Gewinner-Objekts oder, bei einem
   // Track, das eines seiner anderen Objekte (shas). Mehrdeutig oder unbekannt → null.
   eintragVonMid(mid: string): Zeile | null {

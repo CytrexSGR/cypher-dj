@@ -1,6 +1,7 @@
 // Strudel-Muster für den Browser (Plan 2026-10-10-mediathek-browser, S2b). Drei Quellen:
 //  eigen    — bibliothek/muster/<name>.js (+ .json), im Git; geschrieben nur über speichere() (SAVE am Strudel-Deck)
 //  track    — sets/<ordner>/track.mjs, export const M { d_*|b_*|m_*: Ausdruck } (vorgeplante Tracks, 15/15 prüfbar)
+//  starter  — djk/starter/muster/<name>.js (+ .json), shipped with the repo, read-only (no save path), only when `starter` is given
 //  dirigent — sets/*.json, Blöcke {name, bars, bpm, code|layers} des alten Dirigenten: NUR ansehen (gemessen 2026-10-10:
 //             code 0/26 und stack(layers) 103/213 gehen durch djk-muster, 128/213 nutzen .bank() mit Web-Samples)
 // ids sind <quelle>:… (collection.ts MUSTER_REF), nie Pfade. Laden in eine Instanz macht die Seite (Editor füllen, nicht senden).
@@ -11,7 +12,7 @@ import { pathToFileURL } from 'node:url';
 import { MUSTER_REF } from './collection.ts';
 
 export type Rolle = 'drums' | 'bass' | 'melodie';
-export interface MusterEintrag { id: string; quelle: 'eigen' | 'track' | 'dirigent'; name: string; rolle: Rolle | null; bpm: number | null; takte: number | null; text: string; ladbar: boolean }
+export interface MusterEintrag { id: string; quelle: 'eigen' | 'track' | 'dirigent' | 'starter'; name: string; rolle: Rolle | null; bpm: number | null; takte: number | null; text: string; ladbar: boolean }
 export class MusterFehler extends Error {
   readonly code: number; readonly fehler: string;
   constructor(code: number, fehler: string) { super(fehler); this.code = code; this.fehler = fehler; }
@@ -21,8 +22,8 @@ const PRAEFIX: Record<string, Rolle> = { d: 'drums', b: 'bass', m: 'melodie' };
 const liesJson = (p: string): unknown => { try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return null; } };
 
 export class MusterBibliothek {
-  private readonly o: { eigen: string; sets: string };
-  constructor(o: { eigen: string; sets: string }) { this.o = o; }
+  private readonly o: { eigen: string; sets: string; starter?: string };
+  constructor(o: { eigen: string; sets: string; starter?: string }) { this.o = o; }
 
   async liste(): Promise<MusterEintrag[]> {
     const aus: MusterEintrag[] = [];
@@ -31,6 +32,12 @@ export class MusterBibliothek {
       const meta = (liesJson(path.join(this.o.eigen, `${name}.json`)) ?? {}) as { rolle?: Rolle; bpm?: number };
       aus.push({ id: `eigen:${name}`, quelle: 'eigen', name, rolle: meta.rolle ?? null, bpm: meta.bpm ?? null, takte: null,
         text: fs.readFileSync(path.join(this.o.eigen, f), 'utf8').trim(), ladbar: true });
+    }
+    if (this.o.starter !== undefined && fs.existsSync(this.o.starter)) for (const f of fs.readdirSync(this.o.starter).filter((x) => x.endsWith('.js')).sort()) {
+      const name = f.slice(0, -3); if (!NAME.test(name)) continue;
+      const meta = (liesJson(path.join(this.o.starter, `${name}.json`)) ?? {}) as { rolle?: Rolle; bpm?: number };
+      aus.push({ id: `starter:${name}`, quelle: 'starter', name, rolle: meta.rolle ?? null, bpm: meta.bpm ?? null, takte: null,
+        text: fs.readFileSync(path.join(this.o.starter, f), 'utf8').trim(), ladbar: true });
     }
     if (!fs.existsSync(this.o.sets)) return aus;
     for (const e of fs.readdirSync(this.o.sets, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {

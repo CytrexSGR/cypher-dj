@@ -70,7 +70,7 @@ if (a['spur-regler'] !== undefined) {
       if (typeof v !== 'number' || !Number.isFinite(v)) ende(2, `Spur-Regler: ${p} ist keine Zahl`);
       continue;
     }
-    const m = /^spur\/([1-9]|[12][0-9]|3[0-2])\/(fader|pan|mute|solo)$/.exec(p) ?? /^grp\/([1-8])\/(fader|pan|mute|solo)$/.exec(p) ?? (p === 'pm/fader' ? [p, '0', 'fader'] : null);
+    const m = /^spur\/([1-9]|[12][0-9]|3[0-2])\/(fader|pan|mute|solo)$/.exec(p) ?? /^grp\/([1-9]|1[0-6])\/(fader|pan|mute|solo)$/.exec(p) ?? (p === 'pm/fader' ? [p, '0', 'fader'] : null);
     if (!m) ende(2, `Spur-Regler: ${p} ist kein Mixer-Regler (spur/<1..32>, grp/<1..8>/{fader,pan,mute,solo}, pm/fader)`);
     if (typeof v !== 'number') ende(2, `Spur-Regler: ${p} ist keine Zahl`);
     const [lo, hi, ganz] = GRENZE[m[2]];
@@ -128,8 +128,13 @@ if (process.env.RENDER_ATTRAPPE_MISCHUNG === '1') {
   const pmDuck = ((w.pm?.chain) ?? []).some((st) => st.key?.q === 'ret' && st.key.punkt === 'post' && retLebt(st.key.nr)) ? 10 ** (-12 / 20) : 1;
   for (const sp of (w.spuren ?? []).filter((x) => laeuft(x))) {
     const basis = 0.2 * 10 ** (regel(sp.nr, 'fader', 0) / 20) * (gesenkt(sp) ? 10 ** (-12 / 20) : 1);
-    const gn = sp.ausgang?.art === 'gruppe' ? sp.ausgang.nr : 0;
-    const gruppe = gn && db(`grp/${gn}/mute`, 0) === 1 ? 0 : gn ? 10 ** (db(`grp/${gn}/fader`, 0) / 20) : 1;
+    // nested groups: the factor is the product over the whole chain (track target, that group's target, ...); a mute anywhere in it silences
+    let gruppe = 1;
+    for (let gn = sp.ausgang?.art === 'gruppe' ? sp.ausgang.nr : 0, schritt = 0; gn && schritt < 64; schritt++) {
+      gruppe *= db(`grp/${gn}/mute`, 0) === 1 ? 0 : 10 ** (db(`grp/${gn}/fader`, 0) / 20);
+      const gr = (w.gruppen ?? []).find((q) => q.nr === gn);
+      gn = gr?.ausgang?.art === 'gruppe' ? gr.ausgang.nr : 0;
+    }
     if (!maskiert(sp.nr) && !a.trocken_aus) stimmen.push([220 * sp.nr, basis * gruppe * pmDuck]);
     if (sendet(sp.nr)) {
       for (const r of w.returns ?? []) {

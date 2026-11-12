@@ -226,7 +226,7 @@ body.produktion .preset-kopf select { max-width: 14ch; }
 .p-mixer-kopf button:disabled { opacity: .4; cursor: default; }
 .p-gruppenreihe { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; min-width: 0; }
 .p-gruppenkopf { width: 264px; border: 1px solid var(--line); border-radius: 4px; }
-.p-gruppenkopf .p-fader { grid-column: 2 / 6; }   /* keine Ausgang-Wahl, keine Pfeile: der Fader nimmt die Spalten bis 5 */
+.p-gruppenkopf .p-fader { grid-column: 2 / 4; }   /* nested groups: the output selector (.p-ausgang, columns 4 and 5) sits next to the fader like on a track */
 /* 1.10 slice 3: returns (the head is the group head with Hall rows) and the send grid */
 .p-returnkopf { width: 300px; height: auto; grid-template-rows: 20px 18px 14px auto; max-height: 40vh; overflow-y: auto; }
 .p-hallblock { grid-column: 1 / -1; font-size: 10px; }

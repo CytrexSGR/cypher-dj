@@ -18,7 +18,7 @@ namespace cdj {
 namespace sw = cypherdj::stellwerk;
 
 static_assert(ARR_SPUREN == sw::SPUR_REGLER_SPUREN, "Spur-Slots und Spur-Regler müssen gleich viele sein (E3)");
-static_assert(ARR_GRUPPEN == sw::GRP_REGLER_GRUPPEN, "Gruppen-Slots und Gruppen-Regler müssen gleich viele sein (1.10)");
+static_assert(ARR_GRUPPEN == sw::GRP_REGLER_GRUPPEN_ALLE, "Gruppen-Slots und Gruppen-Regler müssen gleich viele sein (1.10)");
 static_assert(ARR_RETURNS == sw::RET_REGLER_RETURNS, "return slots and return controls must be the same number (1.10 slice 3)");
 static_assert(ARR_RETURNS == sw::SND_REGLER, "send controls per source must match the return slots (1.10 slice 3)");
 
@@ -124,7 +124,7 @@ bool ins_zeile(const sw::ReglerDef& d, int* slot, int* param) {
 
 void Arrangement::regler_binden(const sw::ReglerTabelle& tab) {
   for (int r = 0; r < sw::MAX_REGLER; ++r) {
-    regler_spur_[r] = -1;   // strip index (track 0..31, group 32..39, PM 40, returns 41..44), name from D1 K1
+    regler_spur_[r] = -1;   // strip index (track 0..31, group 32..47, PM 48, returns 49..52), name from D1 K1
     regler_feld_[r] = -1;
     regler_ins_[r] = -1;
     regler_rack_[r] = -1;
@@ -158,6 +158,7 @@ void Arrangement::regler_binden(const sw::ReglerTabelle& tab) {
       case sw::Rolle::spur_pan: case sw::Rolle::grp_pan: feld = 1; break;
       case sw::Rolle::spur_mute: case sw::Rolle::grp_mute: feld = 2; break;
       case sw::Rolle::spur_solo: case sw::Rolle::grp_solo: feld = 3; break;
+      case sw::Rolle::grp_cue: feld = ARR_F_CUE; break;   // live modules task 6
       case sw::Rolle::snd_spur: case sw::Rolle::snd_grp: {
         const int ri = sw::send_nr(d.pfad) - 1;   // "…/send/<r>"
         if (ri >= 0 && ri < ARR_RETURNS) feld = ARR_F_SEND0 + ri;
@@ -186,7 +187,7 @@ void Arrangement::regler_binden(const sw::ReglerTabelle& tab) {
       const int g = sw::grp_nr(d.pfad) - 1;   // "grp/<n>/send/<r>"
       if (g >= 0 && g < ARR_GRUPPEN) streifen = ARR_SPUREN + g;
     } else if (d.rolle == sw::Rolle::grp_fader || d.rolle == sw::Rolle::grp_pan || d.rolle == sw::Rolle::grp_mute ||
-               d.rolle == sw::Rolle::grp_solo) {
+               d.rolle == sw::Rolle::grp_solo || d.rolle == sw::Rolle::grp_cue) {
       const int g = sw::grp_nr(d.pfad) - 1;   // "grp/<n>/…"
       if (g >= 0 && g < ARR_GRUPPEN) streifen = ARR_SPUREN + g;
     } else {
@@ -203,6 +204,7 @@ void Arrangement::regler_binden(const sw::ReglerTabelle& tab) {
   }
   for (float& g : ms_gain_) g = 1.0f;
   for (float& w : ziel_w_) w = 1.0f;
+  for (float& w : gziel_w_) w = 1.0f;
   hall_sofort();   // the Halls start on the default controls (constructor, outside the callback)
 }
 
@@ -238,6 +240,9 @@ void Arrangement::verlauf(int regler, const float* werte) {
 }
 
 // Am Blockanfang: weicht das Ziel einer Spur im Schnappschuss vom gültigen ab, beginnt die Blende (alt → neu).
+// Nur eine Spur, die schon vorher gehalten wurde und weiter gehalten wird, blendet (Live-Module: ein Reload, der nur Modul B ändert, darf B nicht in den Master lecken):
+//  - Platz leer im neuen Schnappschuss (Spur weg): das letzte Ziel bleibt, der Ausklang der Spur läuft durch ihre Gruppe, nicht an den Fadern vorbei in den Master.
+//  - Platz vorher leer, jetzt gehalten (Spur neu): das Ziel gilt sofort, es gibt nichts auszublenden (die Blende ließ den neuen Klang 10 ms lang in den Master laufen).
 void Arrangement::ziele_pruefen() {
   if (!snap_) return;
   for (int i = 0; i < ARR_SPUREN; ++i) {
@@ -245,6 +250,18 @@ void Arrangement::ziele_pruefen() {
     const int8_t soll = 0;   // Fehlerfall: jede Spur bleibt auf master, die Gruppe bekommt nie ein Signal
 #else
     const int8_t soll = snap_->spur[i].ausgang;
+#endif
+#ifndef CYPHERDJ_MUTATION_ARR_ZIEL_BLENDE_IMMER   // Fehlerfall (Live-Module-Reload): jede Änderung blendet, auch eine neue oder weggefallene Spur (B leckt in den Master)
+    if (snap_->spur[i].art == ArrArt::leer) {
+      ziel_ok_[i] = false;
+      continue;
+    }
+    if (!ziel_ok_[i]) {
+      ziel_ok_[i] = true;
+      ziel_[i] = soll;
+      ziel_w_[i] = 1.0f;
+      continue;
+    }
 #endif
     if (soll == ziel_[i]) continue;
     ziel_alt_[i] = ziel_[i];
@@ -254,6 +271,36 @@ void Arrangement::ziele_pruefen() {
 #else
     ziel_w_[i] = 0.0f;
 #endif
+  }
+  // Nested groups, decision 4: a group changes its target like a track, but the blend needs the old target to be open when the group adds, i.e. its level in the NEW order is higher than the
+  // group's (the master always is). An old target on the same or a lower level has run already in the new order, a blend into it would lose the tail: a hard switch at the block start (at most
+  // one block of discontinuity, only in these moves; A in B becoming B in A needs no blend into a cycle). A blend that runs on into a block whose order closed the old target ends the same way.
+  for (int g = 0; g < ARR_GRUPPEN; ++g) {
+    const int8_t soll = snap_->gruppe_ausgang[g];
+#ifndef CYPHERDJ_MUTATION_ARR_ZIEL_BLENDE_IMMER
+    if (!grp_belegt_[g]) {   // nobody feeds the group (but the tail of tracks that just left): its target follows the snapshot at once. It must, the order of the passes (parents first) comes from the snapshot
+      gziel_ok_[g] = false;
+      gziel_[g] = soll;
+      gziel_alt_[g] = 0;
+      gziel_w_[g] = 1.0f;
+      continue;
+    }
+    if (!gziel_ok_[g]) {   // the group is fed from now on: its target holds at once, nothing to blend
+      gziel_ok_[g] = true;
+      gziel_[g] = soll;
+      gziel_alt_[g] = 0;
+      gziel_w_[g] = 1.0f;
+      continue;
+    }
+#endif
+    if (soll != gziel_[g]) {
+      const int alt = gziel_[g];
+      gziel_alt_[g] = static_cast<int8_t>(alt);
+      gziel_[g] = soll;
+      gziel_w_[g] = (alt == 0 || snap_->gruppen_ebene[alt - 1] > snap_->gruppen_ebene[g]) ? 0.0f : 1.0f;
+    } else if (gziel_w_[g] < 1.0f && gziel_alt_[g] > 0 && snap_->gruppen_ebene[gziel_alt_[g] - 1] <= snap_->gruppen_ebene[g]) {
+      gziel_w_[g] = 1.0f;
+    }
   }
 }
 
@@ -285,10 +332,19 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
       if (da(r) && solo_bei(ARR_RET0 + r, t)) return true;
     return false;
   };
-  bool benutzt[ARR_GRUPPEN] = {};   // schickt irgendeine Spur in diesem Block in die Gruppe (auch in der Blende)?
+  // nested groups: the groups in the order they run (level, then index; the identity without a snapshot) and the level of a group
+  const auto g_ordnung = [&](int k) { return snap_ ? static_cast<int>(snap_->gruppen_ordnung[k]) : k; };
+  const auto g_ebene = [&](int g) { return snap_ ? static_cast<int>(snap_->gruppen_ebene[g]) : 0; };
+  bool benutzt[ARR_GRUPPEN] = {};   // schickt irgendeine Spur oder eine benutzte Untergruppe in diesem Block in die Gruppe (auch in der Blende)?
   for (int i = 0; i < ARR_SPUREN; ++i) {
     if (ziel_[i] > 0) benutzt[ziel_[i] - 1] = true;
     if (ziel_w_[i] < 1.0f && ziel_alt_[i] > 0) benutzt[ziel_alt_[i] - 1] = true;
+  }
+  for (int k = 0; k < ARR_GRUPPEN; ++k) {   // transitive: children come before their parents in the order, so one pass marks every ancestor of a used group
+    const int g = g_ordnung(k);
+    if (!benutzt[g]) continue;
+    if (gziel_[g] > 0) benutzt[gziel_[g] - 1] = true;
+    if (gziel_w_[g] < 1.0f && gziel_alt_[g] > 0) benutzt[gziel_alt_[g] - 1] = true;
   }
   const size_t bytes = sizeof(float) * static_cast<size_t>(m);
   std::memset(pm_l_, 0, bytes);
@@ -318,6 +374,32 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
     for (int i = 0; i < ARR_SPUREN; ++i)
       if (ziel_[i] > 0 && w_[i][3].w >= 0.5f) msolo_fest[ziel_[i] - 1] = true;
   }
+  // Nested groups, solo (decision 1), once per block: msolo = a track or a group below has solo (the group must play, so that the soloed signal reaches the master),
+  // vsolo = the group or an ancestor has solo (everything below plays). Children before parents for the first, parents before children for the second; flat: vsolo = the group's own solo.
+  bool vsolo_fest[ARR_GRUPPEN] = {};
+  if (solo_vl) {
+    for (int k = 0; k < ARR_GRUPPEN; ++k) {
+      const int g = g_ordnung(k);
+      if (!benutzt[g] || gziel_[g] == 0) continue;
+      const int p = gziel_[g] - 1;
+      for (int t = 0; t < m; ++t) msolo_t_[p][t] = msolo_t_[p][t] || solo_bei(ARR_SPUREN + g, t) || msolo_t_[g][t];
+    }
+    for (int k = ARR_GRUPPEN - 1; k >= 0; --k) {
+      const int g = g_ordnung(k);
+      if (!benutzt[g]) continue;
+      const int p = gziel_[g] - 1;
+      for (int t = 0; t < m; ++t) vsolo_t_[g][t] = solo_bei(ARR_SPUREN + g, t) || (p >= 0 && vsolo_t_[p][t]);
+    }
+  } else {
+    for (int k = 0; k < ARR_GRUPPEN; ++k) {
+      const int g = g_ordnung(k);
+      if (benutzt[g] && gziel_[g] > 0 && (w_[ARR_SPUREN + g][3].w >= 0.5f || msolo_fest[g])) msolo_fest[gziel_[g] - 1] = true;
+    }
+    for (int k = ARR_GRUPPEN - 1; k >= 0; --k) {
+      const int g = g_ordnung(k);
+      if (benutzt[g]) vsolo_fest[g] = w_[ARR_SPUREN + g][3].w >= 0.5f || (gziel_[g] > 0 && vsolo_fest[gziel_[g] - 1]);
+    }
+  }
   // 0. Gruppen-Blende im Vorlauf (P14): Mute/Solo-Blende jeder benutzten Gruppe je Sample. Sie hängt nur an Reglern, nicht am Audio; die Sends der Mitglieder
   // (Schritt 1) und die Gruppen-Schleife (Schritt 2) lesen sie. Dieselbe Arithmetik wie früher in der Gruppen-Schleife (bitgleich, AK1).
   for (int g = 0; g < ARR_GRUPPEN; ++g) {
@@ -326,12 +408,14 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
     const Wert& mu = w_[s][2];
     const Wert& so = w_[s][3];
     float g_ms = ms_gain_[s];
+    const int gp = gziel_[g];
     for (int t = 0; t < m; ++t) {
       const bool solo_irgendwo = solo_vl ? solo_t_[t] : solo_fest;
       const bool stumm = (mu.vl ? mu.vl[t] : mu.w) >= 0.5f;
       const bool solo = (so.vl ? so.vl[t] : so.w) >= 0.5f;
       const bool mitglied_solo = solo_vl ? msolo_t_[g][t] : msolo_fest[g];
-      const float ziel = (stumm || (solo_irgendwo && !solo && !mitglied_solo)) ? 0.0f : 1.0f;
+      const bool oben_solo = gp > 0 && (solo_vl ? vsolo_t_[gp - 1][t] : vsolo_fest[gp - 1]);   // an ancestor has solo: everything below it plays
+      const float ziel = (stumm || (solo_irgendwo && !solo && !mitglied_solo && !oben_solo)) ? 0.0f : 1.0f;
 #ifdef CYPHERDJ_MUTATION_ARR_MUTE_HART
       g_ms = ziel;
 #else
@@ -341,6 +425,20 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
       gblende_[g][t] = g_ms;
     }
     ms_gain_[s] = g_ms;
+  }
+  // Nested groups: what a send is scaled by is the product of the fades of the group and of all its ancestors (decision 2: the fader and pan of a parent do not act on the sends of its
+  // children, only mute and solo do). A top-level group: its own fade is the product (gblende_ itself, no copy, no extra multiplication); parents come first.
+  const float* gsend[ARR_GRUPPEN] = {};
+  for (int k = ARR_GRUPPEN - 1; k >= 0; --k) {
+    const int g = g_ordnung(k);
+    if (!benutzt[g]) continue;
+    const int p = gziel_[g] - 1;
+    if (p < 0) {
+      gsend[g] = gblende_[g];
+      continue;
+    }
+    for (int t = 0; t < m; ++t) gblende_s_[g][t] = gblende_[g][t] * gsend[p][t];
+    gsend[g] = gblende_s_[g];
   }
   // Send einer Quelle (Spur oder Gruppe) in die Returns vorbereiten: aktiv = der Return rechnet, und der Send hat einen Verlauf oder liegt über −120 dB
   // (sonst bleibt ein Projekt ohne Sends bitgleich, AK1). Gibt die Zahl der aktiven Sends zurück.
@@ -447,7 +545,8 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
     const int zg = ziel_[i];
     float* zl = zg == 0 ? pm_l_ : grp_l_[zg - 1];
     float* zr = zg == 0 ? pm_r_ : grp_r_[zg - 1];
-    const Wert* gso = zg > 0 ? &w_[ARR_SPUREN + zg - 1][3] : nullptr;   // Solo der Gruppe: die Spur klingt mit
+    const bool* gso_t = zg > 0 && solo_vl ? vsolo_t_[zg - 1] : nullptr;   // solo of the group or of an ancestor: the track plays along
+    const bool gso_f = zg > 0 && !solo_vl && vsolo_fest[zg - 1];
     float zw = ziel_w_[i];
     bool blende = zw < 1.0f;
     float* al = nullptr;
@@ -459,7 +558,7 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
     }
     Send sd[ARR_RETURNS];
     const int n_sends = sends_bereiten(i, sd);
-    const float* gbl = zg > 0 ? gblende_[zg - 1] : nullptr;   // fade of the target group: a muted group silences the sends of its members too
+    const float* gbl = zg > 0 ? gsend[zg - 1] : nullptr;   // fade of the target group and of its ancestors: a muted group silences the sends of its members too
     float* kpl[ARR_INS_KOMP];   // structural post keys (slice 5 U1): the key buffers of the stages listening to the post of this track, mostly none
     float* kpr[ARR_INS_KOMP];
     const int nk = ins_.post_ziele(i, kpl, kpr);
@@ -472,7 +571,7 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
       const bool solo_irgendwo = solo_vl ? solo_t_[t] : solo_fest;
       const bool stumm = (mu.vl ? mu.vl[t] : mu.w) >= 0.5f;
       const bool solo = (so.vl ? so.vl[t] : so.w) >= 0.5f;
-      const bool gruppe_solo = gso && (gso->vl ? gso->vl[t] : gso->w) >= 0.5f;
+      const bool gruppe_solo = gso_t ? gso_t[t] : gso_f;
       const float ziel = (stumm || (solo_irgendwo && !solo && !gruppe_solo)) ? 0.0f : 1.0f;
 #ifdef CYPHERDJ_MUTATION_ARR_MUTE_HART
       g_ms = ziel;   // Fehlerfall: Mute und Solo ohne Blende (Knack)
@@ -570,32 +669,13 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
       pdc_.verzoegere(PDC_RETSPUR0 + r, d, ret_.ein_l(r), ret_.ein_r(r), m, false);
     }
   }
-  // 1.10 slice 5 U2a: the key `pre` of a group = the sum of its members before ANY group chain. Copied for all groups before the first chain runs, so a group keyed by another group
-  // (or a return, or the PM) sees the sum, not the chain output. An unused group has no signal and no capture: its key buffer stays at the zero of the block start.
-#ifndef CYPHERDJ_MUTATION_SC_GRUPPE_NACH_KETTE   // error case: the copy sits behind the chains (below)
+  // Nested groups, the place where the tracks' sums stand: every group buffer now holds the sum of its DIRECT tracks, and a project without nested groups has exactly one level.
+  // Nested groups, delay compensation: the direct-track sum of a group waits in place for the latest child before the children add (place PDC_GRPEIN0 + g, delay ein(g) - T_trk; 0 when no child is late).
+  // The ring is fed in every block of a used group, so a stage added later finds history.
   for (int g = 0; g < ARR_GRUPPEN; ++g)
-    if (benutzt[g]) ins_.kopiere(ARR_SCHL_GRP, ARR_SCHL_PRE, g + 1, grp_l_[g], grp_r_[g], m);
-#endif
-  if (abg_ziel(1, 0) && abg_->nr >= 1 && abg_->nr <= ARR_GRUPPEN && benutzt[abg_->nr - 1])   // 1.10 slice 7: tap, group pre = the sum of the members in front of any chain
-    abg_ernte(grp_l_[abg_->nr - 1], grp_r_[abg_->nr - 1], m);
-  // 1.10 slice 4a: the insert chains of the groups, over the sum of the members, before the group fader and the group sends. An unused group has no signal and no pass.
-#ifndef CYPHERDJ_MUTATION_INS_GRUPPE_UEBERSPRUNGEN   // error case: the group pass is skipped
-  for (int g = 0; g < ARR_GRUPPEN; ++g) {
-    if (!ins_.hat(ARR_SPUREN + g)) continue;
-    if (benutzt[g]) ins_.kette(ARR_SPUREN + g, snap_ ? &snap_->kette[ARR_SPUREN + g] : nullptr, grp_l_[g], grp_r_[g], m);
-#ifndef CYPHERDJ_MUTATION_INS_GRUPPE_LEER_LAEUFT
-    else ins_.schweige(ARR_SPUREN + g);   // no member, no signal, no pass: the stages are cleared and report nothing (review echtzeit-3)
-#endif
-  }
-#endif
-#ifdef CYPHERDJ_MUTATION_SC_GRUPPE_NACH_KETTE
-  for (int g = 0; g < ARR_GRUPPEN; ++g)
-    if (benutzt[g]) ins_.kopiere(ARR_SCHL_GRP, ARR_SCHL_PRE, g + 1, grp_l_[g], grp_r_[g], m);   // error case: the group pre key is the chain output
-#endif
-  for (int g = 0; g < ARR_GRUPPEN; ++g)   // 1.10 slice 4b T13: the group is aligned with the group of the longest arrival (T_G); its sends are taken from the aligned sum
-    if (benutzt[g]) pdc_.verzoegere(PDC_GRP0 + g, pd(PDC_GRP0 + g), grp_l_[g], grp_r_[g], m);
+    if (benutzt[g]) pdc_.verzoegere(PDC_GRPEIN0 + g, pd(PDC_GRPEIN0 + g), grp_l_[g], grp_r_[g], m);
   const int d_gruppen = pd(PDC_PM_GRP);
-  float* gpm_l = pm_l_;   // where the groups add: the PM sum, or a sum of their own that is delayed and then joins it (bit-equal without a delay)
+  float* gpm_l = pm_l_;   // where the top-level groups add: the PM sum, or a sum of their own that is delayed and then joins it (bit-equal without a delay)
   float* gpm_r = pm_r_;
   // plan 1.11 (fix round 2): the place PM_GRP keeps its ring fed also without a delay, so that a stage added on a return chain finds history. Delayed or crossfading: the sum of its own as before.
   // Else the sum goes straight into the PM sum (bit-equal to before) and a SIDE sum of the same terms feeds the ring; the side sum is never read as output.
@@ -618,81 +698,209 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
     std::memset(gfl, 0, bytes);
     std::memset(gfr, 0, bytes);
   }
-  // 2. Gruppen → PM. Eine Gruppe ohne Mitglieder rechnet nicht, ihre Blende steht sofort auf dem Ziel (es klingt nichts).
-  for (int g = 0; g < ARR_GRUPPEN; ++g) {
-    const int s = ARR_SPUREN + g;
-    const Wert& fa = w_[s][0];
-    const Wert& pa = w_[s][1];
-    const Wert& mu = w_[s][2];
-    const Wert& so = w_[s][3];
-    if (!benutzt[g]) {
-      const int e = m - 1;
-      const bool stumm_e = (mu.vl ? mu.vl[e] : mu.w) >= 0.5f;
-      const bool solo_e = (so.vl ? so.vl[e] : so.w) >= 0.5f;
-      const bool irgendwo_e = solo_vl ? solo_t_[e] : solo_fest;
-      ms_gain_[s] = (stumm_e || (irgendwo_e && !solo_e)) ? 0.0f : 1.0f;
-      continue;
+  // Nested groups: the groups run level by level, lowest first, and inside a level in index order (the order of snap_->gruppen_ordnung). A group of level L adds into its parent's sum buffer,
+  // the parent is on a higher level and runs later, so its sum is open (children before parents). One level (a flat project): the four passes below run once over all groups, as before nesting.
+  const int ebenen = snap_ ? static_cast<int>(snap_->ebenen) : 1;
+  int k0 = 0;
+  for (int ee = 0; ee < ebenen && k0 < ARR_GRUPPEN; ++ee) {
+    int k1 = k0;
+    while (k1 < ARR_GRUPPEN && g_ebene(g_ordnung(k1)) == ee) ++k1;
+    // 1.10 slice 5 U2a: the key `pre` of a group = the sum of its members (tracks and child groups) before ANY chain of the groups of its level. Copied for all groups of the level before the first
+    // chain runs, so a group keyed by another group (or a return, or the PM) sees the sum, not the chain output. An unused group has no signal and no capture: its key buffer stays at the zero of the block start.
+#ifndef CYPHERDJ_MUTATION_SC_GRUPPE_NACH_KETTE   // error case: the copy sits behind the chains (below)
+    for (int k = k0; k < k1; ++k) {
+      const int g = g_ordnung(k);
+      if (benutzt[g]) ins_.kopiere(ARR_SCHL_GRP, ARR_SCHL_PRE, g + 1, grp_l_[g], grp_r_[g], m);
     }
-    float lin = db_lin(fa.w), gl = 1.0f, gr = 1.0f;
-    balance_gain(pa.w, gl, gr);
-    float sp = spitze_[s];
-    const float* bl = grp_l_[g];
-    const float* br = grp_r_[g];
-    Send sd[ARR_RETURNS];
-    const int n_sends = sends_bereiten(s, sd);
-    float* kpl[ARR_INS_KOMP];   // structural post keys of this group (slice 5 U2a): the key buffers of the stages listening to it, mostly none
-    float* kpr[ARR_INS_KOMP];
-    const int nk = ins_.ziele(ARR_SCHL_GRP, ARR_SCHL_POST, g + 1, kpl, kpr);
-    const float gz = nur_schl_ && (nur_ziel_aus_[s] || trocken_aus_) ? 0.0f : 1.0f, gs = nur_schl_ && nur_sends_aus_[s] ? 0.0f : 1.0f;   // 1.10 T9, T10: render-only key mask and dry-out (live: both 1.0f)
-    const bool abg_post = abg_ziel(1, 1) && abg_->nr == g + 1;   // 1.10 slice 7: the tap of this group's post
-    for (int t = 0; t < m; ++t) {
-      if (fa.vl) lin = db_lin(fa.vl[t]);
-      if (pa.vl) balance_gain(pa.vl[t], gl, gr);
-      const float g_ms = gblende_[g][t];
-      const float l = bl[t] * lin * gl * g_ms;
-      const float r = br[t] * lin * gr * g_ms;
-      if (abg_post) {
-#ifdef CYPHERDJ_MUTATION_ABGRIFF_VOR_FADER
-        abg_l_[t] = bl[t];   // error case: the group tap is taken in front of the group fader
-        abg_r_[t] = br[t];
-#else
-        abg_l_[t] = l;
-        abg_r_[t] = r;
 #endif
-      }
-      for (int q = 0; q < nk; ++q) {   // the capture point of the group post: what the group sends on to the PM after its fader, balance and mute/solo fade
-#ifdef CYPHERDJ_MUTATION_NUR_SCHLUESSEL_STUMM
-        kpl[q][t] = l * gz;   // error case (T9): the render mask zeroes the key as well
-        kpr[q][t] = r * gz;
-#else
-        kpl[q][t] = l;
-        kpr[q][t] = r;
+    for (int k = k0; k < k1; ++k) {
+      const int g = g_ordnung(k);
+      if (abg_ziel(1, 0) && abg_->nr == g + 1 && benutzt[g])   // 1.10 slice 7: tap, group pre = the sum of the members in front of any chain
+        abg_ernte(grp_l_[g], grp_r_[g], m);
+    }
+    // 1.10 slice 4a: the insert chains of the groups, over the sum of the members, before the group fader and the group sends. An unused group has no signal and no pass.
+#ifndef CYPHERDJ_MUTATION_INS_GRUPPE_UEBERSPRUNGEN   // error case: the group pass is skipped
+    for (int k = k0; k < k1; ++k) {
+      const int g = g_ordnung(k);
+      if (!ins_.hat(ARR_SPUREN + g)) continue;
+      if (benutzt[g]) ins_.kette(ARR_SPUREN + g, snap_ ? &snap_->kette[ARR_SPUREN + g] : nullptr, grp_l_[g], grp_r_[g], m);
+#ifndef CYPHERDJ_MUTATION_INS_GRUPPE_LEER_LAEUFT
+      else ins_.schweige(ARR_SPUREN + g);   // no member, no signal, no pass: the stages are cleared and report nothing (review echtzeit-3)
 #endif
-      }
-      gpm_l[t] += l * gz;
-      gpm_r[t] += r * gz;
-      if (gfl) {
-        gfl[t] += l * gz;
-        gfr[t] += r * gz;
-      }
-      if (n_sends) {   // the group sends after its own fader, balance and fade (spec 5.4)
-        for (int q = 0; q < ARR_RETURNS; ++q) {
-          if (!sd[q].aktiv) continue;
-          if (sd[q].vl && (t == 0 || sd[q].vl[t] != sd[q].vl[t - 1])) sd[q].lin = db_lin(sd[q].vl[t]);
-#ifdef CYPHERDJ_MUTATION_INS_GRUPPE_PRE_NACH_FADER
-          const float pl = l, pr = r;   // error case: the pre tap of a group is taken after its fader
-#else
-          const float pl = bl[t] * g_ms, pr = br[t] * g_ms;   // pre tap of a group: the chain output times its mute/solo fade
+    }
 #endif
-          ret_.ein_l(q)[t] += pre_post(l, pl, ret_pre_t_[q][t]) * sd[q].lin * gs;
-          ret_.ein_r(q)[t] += pre_post(r, pr, ret_pre_t_[q][t]) * sd[q].lin * gs;
+#ifdef CYPHERDJ_MUTATION_SC_GRUPPE_NACH_KETTE
+    for (int k = k0; k < k1; ++k) {
+      const int g = g_ordnung(k);
+      if (benutzt[g]) ins_.kopiere(ARR_SCHL_GRP, ARR_SCHL_PRE, g + 1, grp_l_[g], grp_r_[g], m);   // error case: the group pre key is the chain output
+    }
+#endif
+    for (int k = k0; k < k1; ++k) {   // 1.10 slice 4b T13: the group is aligned with the group of the longest arrival (T_G); its sends are taken from the aligned sum
+      const int g = g_ordnung(k);
+      if (benutzt[g]) pdc_.verzoegere(PDC_GRP0 + g, pd(PDC_GRP0 + g), grp_l_[g], grp_r_[g], m);
+    }
+    // Live modules task 6, headphone cue per group: the group signal behind its chain and its delay alignment, in front of fader, balance and the mute/solo fade (so the cue is
+    // independent of mute and solo, like the PFL of a DJ channel with the fader down), goes to the PFL input of the mixer. A parent's signal already holds its children. Two cued
+    // groups add. Only a used group has a signal. With every row at 0 nothing is written: the master and the cue bus stay bit-identical to a project without the rows.
+#if !defined(CYPHERDJ_MUTATION_ARR_GRUPPE_CUE_AUS) && !defined(CYPHERDJ_MUTATION_ARR_GRUPPE_CUE_NACH_FADER)   // error cases: the tap is skipped / taken behind the fader (below)
+    if (cue_l_ && cue_r_) {
+      for (int k = k0; k < k1; ++k) {
+        const int g = g_ordnung(k);
+        if (!benutzt[g] || w_[ARR_SPUREN + g][ARR_F_CUE].w < 0.5f) continue;
+        const float* bl = grp_l_[g];
+        const float* br = grp_r_[g];
+        for (int t = 0; t < m; ++t) {
+          cue_l_[t] += bl[t];
+          cue_r_[t] += br[t];
+#ifdef CYPHERDJ_MUTATION_ARR_GRUPPE_CUE_MASTER   // error case: the tap also lands on the master (input erz/4)
+          aus_l[t] += bl[t];
+          aus_r[t] += br[t];
+#endif
         }
       }
-      sp = std::max(sp, std::max(std::fabs(l), std::fabs(r)));
     }
-    if (nk) ins_.fertig(ARR_SCHL_GRP, ARR_SCHL_POST, g + 1, m);
-    if (abg_post) abg_ernte(abg_l_, abg_r_, m);
-    spitze_[s] = sp;
+#endif
+    // 2. Gruppen → target (PM sum, or the sum of the parent group). Eine Gruppe ohne Mitglieder rechnet nicht, ihre Blende steht sofort auf dem Ziel (es klingt nichts).
+    for (int k = k0; k < k1; ++k) {
+      const int g = g_ordnung(k);
+      const int s = ARR_SPUREN + g;
+      const Wert& fa = w_[s][0];
+      const Wert& pa = w_[s][1];
+      const Wert& mu = w_[s][2];
+      const Wert& so = w_[s][3];
+      if (!benutzt[g]) {
+        const int e = m - 1;
+        const bool stumm_e = (mu.vl ? mu.vl[e] : mu.w) >= 0.5f;
+        const bool solo_e = (so.vl ? so.vl[e] : so.w) >= 0.5f;
+        const bool irgendwo_e = solo_vl ? solo_t_[e] : solo_fest;
+        ms_gain_[s] = (stumm_e || (irgendwo_e && !solo_e)) ? 0.0f : 1.0f;
+        continue;
+      }
+      float lin = db_lin(fa.w), gl = 1.0f, gr = 1.0f;
+      balance_gain(pa.w, gl, gr);
+      float sp = spitze_[s];
+      const float* bl = grp_l_[g];
+      const float* br = grp_r_[g];
+      const int zg = gziel_[g];   // the target: 0 = the PM sum, else the parent group (a higher level: its sum is open)
+      float* zl = zg == 0 ? gpm_l : grp_l_[zg - 1];
+      float* zr = zg == 0 ? gpm_r : grp_r_[zg - 1];
+      float zw = gziel_w_[g];
+      bool blende = zw < 1.0f;
+      float* al = nullptr;
+      float* ar = nullptr;
+      const int za = gziel_alt_[g];
+      if (blende) {
+        al = za == 0 ? gpm_l : grp_l_[za - 1];
+        ar = za == 0 ? gpm_r : grp_r_[za - 1];
+      }
+      const bool z_pm = zg == 0, a_pm = blende && za == 0;   // the side sum of the PM place is fed by what goes into the PM sum only
+      // a group's sends: its own fade is in the signal already; the fades of its ancestors scale them on top (decision 2). A top-level group: nothing more (bit-equal to before nesting)
+      const float* ganc = zg > 0 ? gsend[zg - 1] : nullptr;
+      Send sd[ARR_RETURNS];
+      const int n_sends = sends_bereiten(s, sd);
+      float* kpl[ARR_INS_KOMP];   // structural post keys of this group (slice 5 U2a): the key buffers of the stages listening to it, mostly none
+      float* kpr[ARR_INS_KOMP];
+      const int nk = ins_.ziele(ARR_SCHL_GRP, ARR_SCHL_POST, g + 1, kpl, kpr);
+      // 1.10 T9, T10: render-only key mask and dry-out (live: both 1.0f). The dry-out zeroes a group only when it goes to the master, as it does a track (zg == 0)
+      const float gz = nur_schl_ && (nur_ziel_aus_[s] || (trocken_aus_ && zg == 0)) ? 0.0f : 1.0f, gs = nur_schl_ && nur_sends_aus_[s] ? 0.0f : 1.0f;
+      const bool abg_post = abg_ziel(1, 1) && abg_->nr == g + 1;   // 1.10 slice 7: the tap of this group's post
+      // The sends of the group arrive where its target expects the output (after the group's output place above). The returns wait for the latest source, so the sends are delayed by
+      // T_S - ank(g) at the place PDC_GRPSEND0 + g. One place per group: it delays the pre signal (the sum times the mute/solo fade) and the post signal is rebuilt from it with fader and balance.
+      // With a delay of 0 and no crossfade nothing changes: the original expressions below run (bit-equal). The ring is fed in every block of a used group.
+      const int d_gs = pd(PDC_GRPSEND0 + g);
+      const bool gs_verz = d_gs > 0 || pdc_.kreuzt(PDC_GRPSEND0 + g, d_gs);
+      {
+        const float* gbm = gblende_[g];
+        for (int t = 0; t < m; ++t) {
+          gsd_l_[t] = bl[t] * gbm[t];
+          gsd_r_[t] = br[t] * gbm[t];
+        }
+        pdc_.verzoegere(PDC_GRPSEND0 + g, d_gs, gsd_l_, gsd_r_, m);
+      }
+      for (int t = 0; t < m; ++t) {
+        if (fa.vl) lin = db_lin(fa.vl[t]);
+        if (pa.vl) balance_gain(pa.vl[t], gl, gr);
+        const float g_ms = gblende_[g][t];
+        const float l = bl[t] * lin * gl * g_ms;
+        const float r = br[t] * lin * gr * g_ms;
+#ifdef CYPHERDJ_MUTATION_ARR_GRUPPE_CUE_NACH_FADER   // error case: the group cue is taken behind fader, balance and mute fade
+        if (cue_l_ && cue_r_ && w_[s][ARR_F_CUE].w >= 0.5f) {
+          cue_l_[t] += l;
+          cue_r_[t] += r;
+        }
+#endif
+        if (abg_post) {
+#ifdef CYPHERDJ_MUTATION_ABGRIFF_VOR_FADER
+          abg_l_[t] = bl[t];   // error case: the group tap is taken in front of the group fader
+          abg_r_[t] = br[t];
+#else
+          abg_l_[t] = l;
+          abg_r_[t] = r;
+#endif
+        }
+        for (int q = 0; q < nk; ++q) {   // the capture point of the group post: what the group sends on to its target after its fader, balance and mute/solo fade
+#ifdef CYPHERDJ_MUTATION_NUR_SCHLUESSEL_STUMM
+          kpl[q][t] = l * gz;   // error case (T9): the render mask zeroes the key as well
+          kpr[q][t] = r * gz;
+#else
+          kpl[q][t] = l;
+          kpr[q][t] = r;
+#endif
+        }
+        const float lz = l * gz, rz = r * gz;
+        if (!blende) {
+          zl[t] += lz;
+          zr[t] += rz;
+          if (gfl && z_pm) {
+            gfl[t] += lz;
+            gfr[t] += rz;
+          }
+        } else {   // a target change that blends (decision 4): the old target is still open, so the tail goes there
+          zw = std::min(1.0f, zw + 1.0f / ARR_ZIEL_BLENDE);
+          al[t] += lz * (1.0f - zw);
+          ar[t] += rz * (1.0f - zw);
+          zl[t] += lz * zw;
+          zr[t] += rz * zw;
+          if (gfl) {
+            if (a_pm) {
+              gfl[t] += lz * (1.0f - zw);
+              gfr[t] += rz * (1.0f - zw);
+            }
+            if (z_pm) {
+              gfl[t] += lz * zw;
+              gfr[t] += rz * zw;
+            }
+          }
+          blende = zw < 1.0f;
+        }
+        if (n_sends) {   // the group sends after its own fader, balance and fade (spec 5.4)
+          const float ka = ganc ? ganc[t] : 1.0f;
+          for (int q = 0; q < ARR_RETURNS; ++q) {
+            if (!sd[q].aktiv) continue;
+            if (sd[q].vl && (t == 0 || sd[q].vl[t] != sd[q].vl[t - 1])) sd[q].lin = db_lin(sd[q].vl[t]);
+#ifdef CYPHERDJ_MUTATION_INS_GRUPPE_PRE_NACH_FADER
+            const float pl = l, pr = r;   // error case: the pre tap of a group is taken after its fader
+#else
+            const float pl = bl[t] * g_ms, pr = br[t] * g_ms;   // pre tap of a group: the chain output times its mute/solo fade
+#endif
+            if (gs_verz) {   // the delayed pre signal; the post signal is it times fader and balance
+              const float dpl = gsd_l_[t], dpr = gsd_r_[t];
+              ret_.ein_l(q)[t] += pre_post(dpl * lin * gl, dpl, ret_pre_t_[q][t]) * sd[q].lin * gs * ka;
+              ret_.ein_r(q)[t] += pre_post(dpr * lin * gr, dpr, ret_pre_t_[q][t]) * sd[q].lin * gs * ka;
+              continue;
+            }
+            ret_.ein_l(q)[t] += pre_post(l, pl, ret_pre_t_[q][t]) * sd[q].lin * gs * ka;
+            ret_.ein_r(q)[t] += pre_post(r, pr, ret_pre_t_[q][t]) * sd[q].lin * gs * ka;
+          }
+        }
+        sp = std::max(sp, std::max(std::fabs(l), std::fabs(r)));
+      }
+      gziel_w_[g] = zw;
+      if (nk) ins_.fertig(ARR_SCHL_GRP, ARR_SCHL_POST, g + 1, m);
+      if (abg_post) abg_ernte(abg_l_, abg_r_, m);
+      spitze_[s] = sp;
+    }
+    k0 = k1;
   }
   if (grp_sep) {
     pdc_.verzoegere(PDC_PM_GRP, d_gruppen, gpm_l, gpm_r, m);

@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { FORMAT, MAX_GRUPPEN, neuesProjekt, pruefeProjekt, pruefeFehler, kanonisch, wiedergabeSicht, spurSicht } from '../project/model.ts';
+import { FORMAT, MAX_GRUPPEN, insertVorgabe, neuesProjekt, pruefeProjekt, pruefeFehler, kanonisch, wiedergabeSicht, spurSicht } from '../project/model.ts';
 import { Projekte } from '../project/storage.ts';
 import { specProjekt, kopie, tmpOrdner } from './support/project.mjs';
 
@@ -65,14 +65,17 @@ test('1.10 Modell: Gruppen und Ziele werden geprüft', () => {
   schlecht((p) => { p.gruppen[0].nr = MAX_GRUPPEN + 1; }, /nr/);
   schlecht((p) => { p.gruppen[0].name = ''; }, /name/);
   schlecht((p) => { p.gruppen[0].fader_db = 7; }, /fader_db/);
-  schlecht((p) => { p.gruppen[0].ausgang = { art: 'master' }; }, /unbekanntes Feld/);                     // Tiefe 1: Gruppen haben (noch) kein Ziel
+  schlecht((p) => { p.gruppen[0].ausgang = { art: 'master' }; }, /ausgang/);                              // master wird nie gespeichert
+  schlecht((p) => { p.gruppen[0].ausgang = { art: 'gruppe', id: 'g9' }; }, /ausgang/);                    // unbekannte Gruppe
+  schlecht((p) => { p.gruppen[0].ausgang = { art: 'gruppe', id: 'g1' }; }, /ausgang/);                    // a group into itself
+  schlecht((p) => { p.gruppen.push(gruppe(2, { ausgang: { art: 'gruppe', id: 'g1' } })); p.gruppen[0].ausgang = { art: 'gruppe', id: 'g2' }; }, /Zyklus|cycle/i);
   schlecht((p) => { p.master.extra = 1; }, /unbekanntes Feld/);
   schlecht((p) => { p.master.fader_db = -201; }, /fader_db/);
   schlecht((p) => { p.gruppen = Array.from({ length: MAX_GRUPPEN + 1 }, (_, i) => gruppe(i + 1)); }, /gruppen|nr/);
-  // Negativ-Kontrolle: acht Gruppen, 32 Spuren verteilt, werden angenommen
+  // Negativ-Kontrolle: 16 Gruppen, 32 Spuren verteilt, werden angenommen
   const p = pruefeProjekt(specProjekt()).projekt;
   p.gruppen = Array.from({ length: MAX_GRUPPEN }, (_, i) => gruppe(i + 1));
-  p.spuren[0].ausgang = { art: 'gruppe', id: 'g8' };
+  p.spuren[0].ausgang = { art: 'gruppe', id: 'g16' };
   assert.equal(pruefeFehler(p), null);
 });
 
@@ -208,4 +211,30 @@ test('slice 3 view: returns:[{id,nr}] only when there are returns; sends and hal
   const ohne = kopie(m); delete ohne.returns; delete ohne.spuren[0].sends; delete ohne.gruppen[0].sends;
   assert.ok(!('returns' in wiedergabeSicht(ohne)), 'negative control: no returns, no key');
   assert.notEqual(kanonisch(wiedergabeSicht(ohne)), kanonisch(wiedergabeSicht(m)));
+});
+
+test('nested groups: a group target round-trips; a flat project stays byte-identical (file and both playback forms)', () => {
+  const flach = pruefeProjekt(specProjekt()).projekt;
+  const vorher = kanonisch(flach), sichtVorher = kanonisch(wiedergabeSicht(flach));
+  assert.ok(!vorher.includes('"ausgang"'), 'a flat project file has no ausgang');
+  const m = mitGruppe(); m.gruppen.push(gruppe(2));
+  const bytesFlach = kanonisch(m);
+  assert.ok(!bytesFlach.includes('"art":"master"'));
+  m.gruppen[0].ausgang = { art: 'gruppe', id: 'g2' };
+  assert.equal(pruefeFehler(m), null);
+  assert.deepEqual(wiedergabeSicht(m).gruppen.map((g) => g.ausgang ?? null), ['g2', null]);
+  assert.equal(kanonisch(pruefeProjekt(JSON.parse(kanonisch(m))).projekt), kanonisch(m), 'round trip');
+  assert.equal(kanonisch(wiedergabeSicht(pruefeProjekt(specProjekt()).projekt)), sichtVorher);
+});
+
+test('nested groups: a loaded file whose stage key is a cycle or too late for its group tree is reported', () => {
+  const baue = (ziel) => {
+    const p = mitGruppe(); p.gruppen.push(gruppe(2));
+    p.gruppen[0].inserts = [{ id: 'i1', art: 'komp', slot: 1, an: true, werte: insertVorgabe('komp'), key: { quelle: 'grp', nr: 2, punkt: 'pre' } }];
+    if (ziel) p.gruppen[0].ausgang = { art: 'gruppe', id: ziel };
+    return p;
+  };
+  const gut = pruefeProjekt(baue(null)); assert.equal(gut.fehler, undefined, JSON.stringify(gut));
+  const e = pruefeFehler(baue('g2'));
+  assert.match(e, /sidechain_zyklus/, e);
 });

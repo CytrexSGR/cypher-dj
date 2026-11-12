@@ -46,6 +46,11 @@ import { kollektionenBereich, type KollektionBereichOptionen } from './collectio
 import { ausgabeBereich } from './areas/proj/output.ts';   // Paket S3
 import { aufnahmeBereich } from './areas/proj/recording.ts';   // 1.8 Slice 1
 import { stemsBereich, type StemsOptionen } from './areas/proj/stems.ts';   // 1.13 Slice 6
+import { speichereModul, modulBasis } from './project/module_storage.ts';   // plan live-module task 3
+import { bibliothekBereich } from './areas/live/library.ts';   // plan live-module task 10
+import { liveBereich, type DeckLoopAusschnitt } from './areas/live/export.ts';
+import { tonartQuelle } from './areas/live/key.ts';
+import { renderPegelMesser } from './areas/live/level.ts';   // plan live-module task 2
 import { pluginsBereich } from './areas/plugins/area.ts';   // 1.11 task 10
 import { PluginIndex, type ScanBefehl } from './plugins/index.ts';
 import type { Dekodiert, Felder } from '../conductor/src/addresses.ts';
@@ -71,18 +76,20 @@ import { Sammlungen, SammlungFehler, uebersicht } from './collection.ts';
 import { MusterBibliothek, MusterFehler, type MusterEintrag } from './pattern_library.ts';
 import { suchTerme } from './search_text.ts';
 import { Katalog, KatalogFehler, KATALOG_TYPEN, SORT_VORGABE, SEITE_VORGABE, SEITE_MAX, katalogVorgabe, type Typ, type Zeile, type Filter } from './catalog.ts';
+import { vorbereitQuelle } from './vorbereit_source.ts';
 import { Vorhoeren, VorhoerFehler, kernNurCueVorgabe, vorhoeerKlientVorgabe } from './prelisten.ts';
 import { Mediathek, Vorbereiter, MediathekFehler, KLANG_TYPEN, type KlangTreffer, MEDIATHEK_VORGABE, bestandIds, parseBpm, parseLimit } from './media_library.ts';
 import { pruefeSpur, plane, oeffnetKanal, beatZuMono, wirtRuf, stromVonZiel, faelligeMuster, SPUR_NAME, type MusterPlan, type Fahrt } from './track.ts';
 import { planeDurchlauf, MAX_SCHLEIFE_TAKTE, type Spur } from './track.ts';   // 1.12 S7 (M13): track band loop
 import { leseAusgang } from './output.ts';
-import { OhrLeser, hoerAntwort, sync as ohrSync, K as OHR_K, type DeckLage, Hoerscheinstelle, type Hoerschein, type DeckStand as OhrDeckStand } from './ear.ts';
+import { OhrLeser, OSZI_KANAELE, oszi, hoerAntwort, sync as ohrSync, K as OHR_K, type DeckLage, Hoerscheinstelle, type Hoerschein, type DeckStand as OhrDeckStand } from './ear.ts';
 // @ts-expect-error reines .mjs ohne Typen (djk/generator); muster_stand lädt Strudel NICHT (Plan-Review M3)
 import { PegelPuffer } from './level_buffer.ts';
 import { leseMusterStand, setzeAutonom, leseLebt } from '../generator/src/pattern_state.mjs';
 import { ALLE_STROEME, istBkStrom, stromVonKanal } from '../contract/streams.ts';   // S18: stream <-> channel table
 import { geraetePanel, RB338_PARAM_NAMEN } from './devices_parameter.ts';
-import { listeGraphen, findeGraph, graphHash, ladePanel, reglerVonGraph, vorgabenVon, GRAPH_NAME, GRAPH_KANAELE, INSTRUMENT_KANAELE } from './graphs.ts';   // Baukasten S12
+import { listeGraphen, findeGraph, graphHash, ladePanel, reglerVonGraph, vorgabenVon, graphenNachNeustart, GRAPH_NAME, GRAPH_KANAELE, INSTRUMENT_KANAELE } from './graphs.ts';   // Baukasten S12
+import { bkDefVonId } from './project/modular.ts';   // t_e998388c: project channels are left to the project restore
 
 // The main checkout behind a git worktree (its `.git` is a file pointing at .git/worktrees/<n>, whose `commondir` leads
 // back to the shared .git). The main checkout itself resolves to itself; a folder without git to null.
@@ -110,7 +117,8 @@ export function pythonVorgabe(repo: string = REPO, env: NodeJS.ProcessEnv = proc
 // Mixer-Regler des Projekts (spur/*, grp/*, pm/fader) ändern sich nur über das Projekt (Spec 6.22), auf keinem Weg am Projekt vorbei
 // 1.10 slice 3: also the sends (spur|grp/<n>/send/<r>) and the return strips (ret/*, Hall values included)
 // 1.10 slice 4a/4b/4c: also the insert stages (ins/komp|eq|saett|lim|utility|bk/<n>/*) and the rack macros (rack/<k>/m1..m4)
-const ueberProjekt = (pfad: string): boolean => pfad.startsWith('spur/') || pfad.startsWith('grp/') || pfad.startsWith('ret/') || pfad.startsWith('ins/') || pfad.startsWith('rack/') || pfad === 'pm/fader';
+// The headphone cue of a group (grp/<n>/cue, live modules task 6) is no project value: it is a hand-only row like PFL and goes to the core (Cypher gets its nur_hand refusal)
+const ueberProjekt = (pfad: string): boolean => !/^grp\/\d+\/cue$/.test(pfad) && (pfad.startsWith('spur/') || pfad.startsWith('grp/') || pfad.startsWith('ret/') || pfad.startsWith('ins/') || pfad.startsWith('rack/') || pfad === 'pm/fader');
 const ueberProjektText = (pfad: string): string => (pfad.startsWith('rack/')
   ? 'rack macros are changed through the project (/proj/aendern: rack_makro for the value, rack_setzen for the mapping)'
   : pfad.startsWith('ins/')
@@ -119,6 +127,8 @@ const ueberProjektText = (pfad: string): string => (pfad.startsWith('rack/')
   ? 'sends, return strips and Hall values are changed through the project (/proj/aendern: send_setzen, return_aendern)'
   : pfad.startsWith('spur/') ? 'track faders are changed through the project (/proj/aendern, spur_aendern)'
     : 'group and master faders are changed through the project (/proj/aendern: gruppenspur_aendern, master_aendern)');
+// Plan live-module task 3: the module store folder; a test instance (a..i) keeps it in /dev/shm, never in the real config folder
+const modulBasisVon = (vorgabe: string | undefined, inst: string): string => vorgabe ?? (inst === '' ? modulBasis() : `/dev/shm/cypherdj-${inst}/module`);
 const STROM_MAX_BYTES = 4 * 1024 * 1024;   // unsent bytes per event stream before the stream is closed
 const STRUDEL_ZEITLIMIT_MS = 2000;   // Plan-Review M3
 
@@ -157,6 +167,7 @@ export interface ServerOptionen {
   sammlungen?: string;   // Sets: Ordner, Vorgabe <REPO>/bibliothek/sets
   musterBibliothek?: string;   // S2b: eigene Strudel-Muster, Vorgabe <REPO>/bibliothek/muster
   musterSets?: string;         // S2b: Muster-Quellen track.mjs und Dirigent-Blöcke, Vorgabe <REPO>/sets
+  musterStarter?: string;      // Starter patterns (read-only), default <REPO>/djk/starter/muster; '' = none (tests)
   loopWerkzeug?: ImportOptionen['werkzeug'];   // Tests: Attrappen vor ffmpeg/rubberband des Loop-Imports (S6)
   katalog?: string;      // Browser (Plan 2026-10-10): katalog.sqlite, Vorgabe $CYPHERDJ_KATALOG bzw. neben der Mediathek
   stems?: Partial<StemsOptionen>;   // 1.13 Slice 6: Tests biegen zusatzArgs (Prüftrenner, P3) und killMs um
@@ -167,6 +178,8 @@ export interface ServerOptionen {
   proj?: ProjOptionen;   // D1 S2: Projektwurzel, Arbeitsordner (Vorgaben je Instanz, areas/proj/session.ts)
   mediathek?: string;    // Mediathek T2: Vorgabe $CYPHERDJ_MEDIATHEK (nur lesen; fehlt sie: 503 mediathek_fehlt)
   korrekturen?: string;  // Slice 3b: Bestand des Decks für die Eins-Korrekturen; Vorgabe nur im Betrieb: bestand; eine Prüfinstanz (a..i) schreibt nur ausdrücklich
+  // plan live-module task 3: the module store; Vorgabe $CYPHERDJ_MODULE / ~/.config/cypherdj/module, a test instance (a..i) uses /dev/shm/cypherdj-<i>/module
+  modulOrdner?: string;
   analyse?: string;      // Slice 3a: Analyse-Ablage (Karten), Vorgabe nur im Betrieb: $CYPHERDJ_ANALYSE, sonst ~/werkstatt/cypher-dj-analyse
   einleserModul?: string;  // Mediathek T2: Python-Modul für POST /mediathek/vorbereiten (Vorgabe werkstatt.einzeln); Python selbst: `python`
   vorhoeren?: Vorhoeren;   // S7: Vorhören als Kern-Eingang (Tests: Attrappe statt Vorhörer-Prozess)
@@ -272,6 +285,10 @@ const kompAbweichend = (p: string, w: number): boolean => { const m = /^(?:deck\
 // 1.15 A2: the 345 mix-tool controls (gate, util, mb, lim, spektrum/kanal) show in lage only once they differ from their default, like komp.
 // The default comes from the contract table (controls_info.ts, compared with the C++ table by its test); the comparison runs in float32, because
 // the core reports floats and lim/decke -0.3 is not exact there. The path set itself is PFAD (hand_operation.ts), checked before the kern is called.
+// Decks the page server opens (plan live modules, task 0): 1 and 2 are the DJ pair, 3 serves Cypher's loop work. The core has four
+// decks; deck 4 stays closed here. The Ohr (hearing check) only knows decks 1 and 2, see hoerenAus and hoerscheinTakt.
+const OFFENE_DECKS = [1, 2, 3] as const;
+export function istOffenesDeck(d: unknown): d is 1 | 2 | 3 { return d === 1 || d === 2 || d === 3; }
 const WERKZEUG_PFAD = /^(?:(?:deck\/[1-4]|erz\/[1-7]|pad\/[12]|bus\/[1-4])\/(?:gate|util|mb|lim)\/|spektrum\/kanal$)/;
 const werkzeugAbweichend = (p: string, w: number): boolean => {
   if (!WERKZEUG_PFAD.test(p)) return false;
@@ -386,7 +403,7 @@ export class Oberflaeche {
   }
   // POST /deck/raster {deck, schritt_ms} (relativ, |schritt| ≤ 100 ms) oder {deck, versatz_frames} (absolut, ganzzahlig)
   private deckRaster(d: Record<string, unknown>, a: http.ServerResponse): void {
-    if (d.deck !== 1 && d.deck !== 2) return this.json(a, 400, { fehler: 'unbekanntes_deck' });
+    if (!istOffenesDeck(d.deck)) return this.json(a, 400, { fehler: 'unbekanntes_deck' });
     const st = this.deckStand(d.deck);
     if (!st) return this.json(a, 409, { fehler: 'kein_kernstand' });
     if (d.set === true) return this.deckRasterSet(st, a);
@@ -447,6 +464,21 @@ export class Oberflaeche {
     this.json(a, r.code, r.j);
   }
 
+  // GET /oszi?kanal=<name>&sek=1..15 (default 5): the last seconds of one ring channel as envelope plus measurements. The 100 ms reader keeps
+  // only deck/1, deck/2 and master; every other channel is read here, once per request, so the extra channels cost the tick nothing.
+  private osziAus(url: URL, a: http.ServerResponse): void {
+    const kanal = url.searchParams.get('kanal') ?? '';
+    if (!Object.hasOwn(OSZI_KANAELE, kanal)) return this.json(a, 400, { fehler: 'kanal' });
+    const sekRoh = url.searchParams.get('sek');
+    const sek = sekRoh === null ? 5 : Number(sekRoh);
+    if (sekRoh === '' || !Number.isInteger(sek) || sek < 1 || sek > 15) return this.json(a, 400, { fehler: 'sek' });
+    const ring = OSZI_KANAELE[kanal];
+    const leser = new OhrLeser(this.huellenPfad(), [ring], sek * 1000);
+    if (leser.lies(sek * 1000) === 0) return this.json(a, 409, { fehler: 'kein_ring' });
+    const bpm = this.kern.uhr && Number.isFinite(this.kern.uhr.bpm) && this.kern.uhr.bpm > 0 ? this.kern.uhr.bpm : null;
+    this.json(a, 200, { kanal, bpm, ...oszi(leser.alle(ring), { sek, bpm }) });
+  }
+
   // Ohr T10: je neuem Takt der Master-Uhr (Beat überschreitet ein Vielfaches von 4) Hörscheine ausstellen/zurückziehen.
   private hoerscheinTakt(): void {
     const u = this.kern.uhr;
@@ -498,7 +530,7 @@ export class Oberflaeche {
   }
   // POST /deck/raster/fix {deck}: der Live-Versatz wird der gespeicherte (D3)
   private deckRasterFix(d: Record<string, unknown>, a: http.ServerResponse): void {
-    if (d.deck !== 1 && d.deck !== 2) return this.json(a, 400, { fehler: 'unbekanntes_deck' });
+    if (!istOffenesDeck(d.deck)) return this.json(a, 400, { fehler: 'unbekanntes_deck' });
     const st = this.deckStand(d.deck);
     if (!st) return this.json(a, 409, { fehler: 'kein_kernstand' });
     const v = this.rasterWert(st.deck, st.f).versatz_frames;
@@ -541,7 +573,7 @@ export class Oberflaeche {
     this.vorhoeren = opt.vorhoeren ?? new Vorhoeren({ kopfhoererDa: () => Vorhoeren.kopfhoererDaVorgabe(inst), kernNurCue: () => kernNurCueVorgabe(shm),
       klient: () => vorhoeerKlientVorgabe(REPO, inst, opt.log), kantenDatei: path.join(shm, 'kanten'), instanz: inst });
     this.sammlungen = new Sammlungen(opt.sammlungen ?? REPO_PFADE.sammlungen);
-    this.muster = new MusterBibliothek({ eigen: opt.musterBibliothek ?? REPO_PFADE.musterBibliothek, sets: opt.musterSets ?? REPO_PFADE.musterSets });
+    this.muster = new MusterBibliothek({ eigen: opt.musterBibliothek ?? REPO_PFADE.musterBibliothek, sets: opt.musterSets ?? REPO_PFADE.musterSets, starter: opt.musterStarter ?? REPO_PFADE.musterStarter });
     this.vorbereiter = new Vorbereiter({ python: python,
       cwd: REPO_PFADE.werkstatt, bestand: opt.bestand, modul: opt.einleserModul, log: opt.log });
     this.ohr = new OhrLeser(this.huellenPfad(), [OHR_K.deck1, OHR_K.deck2, OHR_K.master]);
@@ -572,6 +604,17 @@ export class Oberflaeche {
     this.router.melde(this.aufnahme);
     this.stems = stemsBereich(this.bereichKontext(), this.proj.zugang, { python, cwd: REPO_PFADE.werkstatt, ...opt.stems });   // 1.13 S6
     this.router.melde(this.stems);
+    this.router.melde(liveBereich(this.bereichKontext(), this.proj.zugang, this.stems.stems, {   // plan live-module task 2: /modul/export, /modul/stems, /modul/stand
+      deckLoop: (deck) => this.deckLoopAusschnitt(deck), herkunft: (mid) => this.moduleHerkunft(mid), masterTonart: () => this.masterTonart(),
+      // task 3: every module is saved (at export, when the stems arrive, when the slot is cleared); the ramp of POST /modul/leeren reads the core clock
+      nachExport: (e) => { speichereModul(e.projekt, e.gruppeId, { basis: modulBasisVon(opt.modulOrdner, inst) }); },
+      nachStems: (e) => { speichereModul(e.projekt, e.gruppeId, { basis: modulBasisVon(opt.modulOrdner, inst) }); },
+      midi: { python, cwd: REPO_PFADE.werkstatt, pegel: renderPegelMesser(this.proj.zugang) },   // task 8: MIDI of Drums and Bass (werkstatt.midi_aus_stem) for the new instrument paths
+      leeren: { speichere: (p, gid) => speichereModul(p, gid, { basis: modulBasisVon(opt.modulOrdner, inst) }),
+        kern: { uhr: () => (this.kern.uhr as { beat: number; bpm: number } | null),
+          laeuft: () => { const st = this.proj.sitzung.lage.arr?.status; return st === 1 || st === 2; } } } }));
+    // plan live-module task 10: GET /module, POST /modul/einsetzen, POST /modul/speichern (the same store as above)
+    this.router.melde(bibliothekBereich(this.bereichKontext(), this.proj.zugang, { basis: () => modulBasisVon(opt.modulOrdner, inst) }));
     this.router.melde(pluginsBereich(this.bereichKontext(), pluginIndex, { insertParameter: (id) => this.proj.sitzung.insertParameter(id),
       insertFenster: (id, d, q) => this.proj.sitzung.insertFenster(id, d, q),
       geraetParameter: (id) => this.proj.sitzung.geraetParameter(id), geraetParam: (id, d, q) => this.proj.sitzung.geraetParam(id, d, q), geraetIst: (id, n) => this.proj.sitzung.geraetIst(id, n),
@@ -852,6 +895,7 @@ export class Oberflaeche {
     if (vorher === name) return;
     const neu = { ...this.stand.graphen_geladen };
     if (name === '') delete neu[kanal]; else neu[kanal] = name;
+    delete this.graphBesitzer[kanal];   // a graph this server did not load: the owner is unknown
     this.opt.log?.({ typ: 'graph_vom_kern', kanal, vorher, name });
     this.setzeGraphenGeladen(neu);
   }
@@ -872,7 +916,9 @@ export class Oberflaeche {
     this.json(a, r.code, r.j);
   }
   // S17: the body of POST /graph as a function with an explicit source, shared with the Bereich bridge (bereichKontext().baukasten)
-  private async graphSetzen(d: Record<string, unknown>, quelle: string): Promise<{ code: number; j: Record<string, unknown> }> {
+  // `wieder` (restore after a kern restart, graphWieder): the graph was sounding before the restart, so Cypher's pre-checks for a NEW load (kit mode, Stop
+  // Cypher, AUTO off) do not apply here; the caller decides about Stop Cypher. The channel is not marked as set again either.
+  private async graphSetzen(d: Record<string, unknown>, quelle: string, o: { wieder?: boolean } = {}): Promise<{ code: number; j: Record<string, unknown> }> {
     const kanal = d.kanal, name = d.name;
     if (typeof kanal !== 'string' || !GRAPH_KANAELE.includes(kanal)) return { code: 400, j: { fehler: 'ausserhalb_bereich' } };
     if (typeof name !== 'string' || (name !== '' && !GRAPH_NAME.test(name))) return { code: 400, j: { fehler: 'name' } };
@@ -891,10 +937,10 @@ export class Oberflaeche {
     let warnung: string | undefined;
     if (erz && name !== '' && leseMusterStand(this.musterOrdner(strom)).status?.noten === 'kit') {
       const text = `stream ${strom} runs in kit mode (notes are kit indices): load the instruments first (tool instrumente, or djk-instrumente --instanz <i>), then load the graph`;
-      if (quelle === 'cypher') return { code: 400, j: { fehler: 'kein_midi_strom', strom, text } };
+      if (quelle === 'cypher' && !o.wieder) return { code: 400, j: { fehler: 'kein_midi_strom', strom, text } };
       warnung = text;
     }
-    if (quelle === 'cypher') {
+    if (quelle === 'cypher' && !o.wieder) {
       if (this.kiGestoppt) return { code: 409, j: { fehler: 'ki_gestoppt' } };
       if (erz && !leseMusterStand(this.musterOrdner(strom)).autonom) return { code: 409, j: { fehler: 'auto_aus', strom, text: 'AUTO is off: Andreas holds this stream' } };
     }
@@ -910,6 +956,7 @@ export class Oberflaeche {
     let vorher: { pfad: string; wert: number }[] = [];
     if (name !== '' && d.vorgaben !== false && name !== this.stand.graphen_geladen[kanal] && this.kern.zustand === 'verbunden') vorher = await this.schiebeVorgaben(kanal, name, quelle);
     const id = Number(++this.id);
+    if (!o.wieder) this.angefasst.add(`graph:${kanal}`);   // set again since the last restore plan: a pending restore leaves this channel alone
     if (erz) this.kern.sende('/erz/strom', { id, quelle, strom, ziel: `bk:${name}`, kanal });
     else this.kern.sende('/k/kanal/graph', { id, quelle, kanal, name });
     this.gesendet++;
@@ -918,6 +965,7 @@ export class Oberflaeche {
       const neu = { ...this.stand.graphen_geladen };
       if (name === '') delete neu[kanal]; else neu[kanal] = name;
       this.setzeGraphenGeladen(neu);
+      if (name === '') delete this.graphBesitzer[kanal]; else this.graphBesitzer[kanal] = quelle;   // after the push: merkeGraph is not involved here
     } else if (quittung && GRAPH_ABGELEHNT.includes(quittung.status) && vorher.length) {
       // an explicit refusal: the running graph keeps its own values, not the defaults of the graph that was refused (no answer at all keeps the pushed rows:
       // the load may still happen, the page's graph list shows the truth)
@@ -1025,7 +1073,7 @@ export class Oberflaeche {
   }
 
   private rasterFassung(deck: number): Fassung | null {
-    if (deck !== 1 && deck !== 2) return null;
+    if (!istOffenesDeck(deck)) return null;
     const z = this.stand.decks[String(deck)] as Record<string, unknown> | undefined;
     const g = this.stand.geladen[String(deck)] as Record<string, unknown> | undefined;
     const fassung = (x: Record<string, unknown>): Fassung => ({ material_id: String(x.material_id), basis_bpm: Number(x.basis_bpm), fassung: Number(x.fassung) });
@@ -1035,7 +1083,7 @@ export class Oberflaeche {
 
   // Kern-Stand eines geladenen Decks (1, 2): /zustand/deck, /uhr, Fassung und ihre Takt-Eins. null: nicht bedienbar.
   private deckStand(deck: unknown): { deck: number; z: Record<string, unknown>; beat: number; bpm: number; f: Fassung; eins: number; erster: number } | null {
-    if (deck !== 1 && deck !== 2) return null;
+    if (!istOffenesDeck(deck)) return null;
     const z = this.stand.decks[String(deck)] as Record<string, unknown> | undefined;
     const u = this.kern.uhr;
     if (!z || !u || !(Number(z.status) >= 1)) return null;
@@ -1080,7 +1128,7 @@ export class Oberflaeche {
   private deckSprung(d: Record<string, unknown>, a: http.ServerResponse): void {
     const raster = this.rasterAus(d);
     if (raster === null) return this.json(a, 400, { fehler: 'raster' });
-    if (d.deck !== 1 && d.deck !== 2) return this.json(a, 400, { fehler: 'unbekanntes_deck' });
+    if (!istOffenesDeck(d.deck)) return this.json(a, 400, { fehler: 'unbekanntes_deck' });
     const st = this.deckStand(d.deck);
     if (!st) return this.json(a, 409, { fehler: 'kein_kernstand' });
     const ab = this.deckAb(st, raster);
@@ -1115,7 +1163,7 @@ export class Oberflaeche {
   // Hörbares Ziehen (2026-10-17): {deck, phase 0 los | 1 Griff | 2 Zug, delta (Quell-Beats seit dem Griff)}. Der Kern liest das Material
   // an der Handposition; der Strom (~60 Hz) wird nicht quittiert und nicht gezählt, nur gesendet.
   private deckScrub(d: Record<string, unknown>, a: http.ServerResponse): void {
-    if (d.deck !== 1 && d.deck !== 2) return this.json(a, 400, { fehler: 'unbekanntes_deck' });
+    if (!istOffenesDeck(d.deck)) return this.json(a, 400, { fehler: 'unbekanntes_deck' });
     if (d.phase !== 0 && d.phase !== 1 && d.phase !== 2) return this.json(a, 400, { fehler: 'phase' });
     if (typeof d.delta !== 'number' || !Number.isFinite(d.delta) || Math.abs(d.delta) > 100000) return this.json(a, 400, { fehler: 'delta' });
     const felder = { id: Number(++this.id), quelle: this.quelle(), deck: d.deck, phase: d.phase, delta_beats: d.delta };
@@ -1123,7 +1171,7 @@ export class Oberflaeche {
     this.json(a, 200, { ok: true });
   }
 
-  private static readonly LOOP_LAENGEN = [1, 2, 4, 8, 16];
+  private static readonly LOOP_LAENGEN = [1, 2, 4, 8, 16, 32, 64];   // beats; every length divides 64
   // Zuletzt an den Kern geschickter Deck-Loop je Deck (Quell-Beat des Starts, Länge), für „leeres Pad im Loop = Loop-Cue“.
   // Läuft das Deck, liegt der Start bei ab_beat: quell + (ab − beat) (Faktor 1 im Direktweg, wie sprungDelta).
   private aktiverLoop: Record<string, { schluessel: string; start: number; laenge: number }> = {};
@@ -1161,7 +1209,7 @@ export class Oberflaeche {
   private deckLoop(d: Record<string, unknown>, a: http.ServerResponse): void {
     const raster = this.rasterAus(d);
     if (raster === null) return this.json(a, 400, { fehler: 'raster' });
-    if (d.deck !== 1 && d.deck !== 2) return this.json(a, 400, { fehler: 'unbekanntes_deck' });
+    if (!istOffenesDeck(d.deck)) return this.json(a, 400, { fehler: 'unbekanntes_deck' });
     if (typeof d.laenge !== 'number' || !(d.laenge === 0 || Oberflaeche.LOOP_LAENGEN.includes(d.laenge))) return this.json(a, 400, { fehler: 'laenge' });
     const st = this.deckStand(d.deck);
     if (!st) return this.json(a, 409, { fehler: 'kein_kernstand' });
@@ -1200,10 +1248,53 @@ export class Oberflaeche {
     this.json(a, 200, { ok: true, felder: this.deckTeil('/k/deck/loop', st, ab, raster, { laenge_beats: d.laenge }) });
   }
 
+  // First frame of the deck loop in the rendering file (grid offset included); the cut of deck/loop/sichern and of the live module export
+  private loopStartFrame(st: { deck: number; f: Fassung; erster: number }, l: { start: number }): number {
+    return Math.round(st.erster + this.rasterWert(st.deck, st.f).versatz_frames + l.start * (48000 * 60 / st.f.basis_bpm));
+  }
+  // The deck's active loop as a cut of its rendering, for the live module export (areas/live/export.ts): the same frames deck/loop/sichern writes
+  deckLoopAusschnitt(deck: unknown): DeckLoopAusschnitt | { code: number; fehler: string } {
+    if (!istOffenesDeck(deck)) return { code: 400, fehler: 'unbekanntes_deck' };
+    const st = this.deckStand(deck);
+    if (!st) return { code: 409, fehler: 'kein_kernstand' };
+    const l = this.loopVon(st);
+    if (!l) return { code: 409, fehler: 'kein_loop' };
+    let basis: string;
+    try { basis = fassungQuelle(this.opt.bestand, st.f.material_id, st.f.basis_bpm, st.f.fassung).datei; } catch { return { code: 409, fehler: 'kein_bibliothekstrack' }; }
+    return { deck: st.deck, material_id: st.f.material_id, basis_bpm: st.f.basis_bpm, fassung: st.f.fassung, basisDatei: basis,
+      eins: st.eins, startFrame: this.loopStartFrame(st, l), frames: Math.round(l.laenge * 48000 * 60 / st.f.basis_bpm), laenge_beats: l.laenge, von_beat: l.start };
+  }
+
+  // Task 11 (decision 19): the key of the deck on the master. Candidates: the playing decks (status 2+) with an open channel. The loudest channel on the
+  // master wins (peak of the last 3 s in the unthrottled buffer, channel 'deck/<n>'); without a reading the lowest deck number. The key is the catalogue's
+  // Camelot value for the deck's material, the library's own analysis as a fallback.
+  masterTonart(): { deck: number; tonart: string | null } | { code: number; fehler: string } {
+    const pegel = this.pegelPuffer.lies(3);
+    let bester: { n: number; db: number } | null = null;
+    for (const n of OFFENE_DECKS) {
+      const z = this.stand.decks[String(n)] as Record<string, unknown> | undefined;
+      if (!z || !(Number(z.status) >= 2) || !kanalOffen(this.stand.regler, `deck/${n}`)) continue;
+      const db = pegel[`deck/${n}`]?.max_db ?? -200;
+      if (!bester || db > bester.db) bester = { n, db };
+    }
+    if (!bester) return { code: 409, fehler: 'kein_deck' };
+    const mid = String((this.stand.decks[String(bester.n)] as Record<string, unknown>).material_id);
+    return { deck: bester.n, tonart: this.tonartVon(mid) };
+  }
+  // One key source for the live modules (the module origin at export and the deck on the master): the library's own analysis of the track (what /lage
+  // shows) first, the catalogue's tag only as a fallback
+  tonartVon(mid: string): string | null {
+    return tonartQuelle(leseBestand(this.opt.bestand).find((x) => x.material_id === mid)?.camelot, this.katalogEintrag(mid)?.camelot);
+  }
+  private moduleHerkunft(mid: string): Zeile | null {
+    const z = this.katalogEintrag(mid);
+    return z ? { ...z, camelot: this.tonartVon(mid) } : null;
+  }
+
   // POST /deck/loop/sichern {deck, box?}: aktiver Deck-Loop → Loop der Bibliothek (Ausschnitt der Fassung wie der Kern ihn
   // spielt: schlag0 = erster_schlag_frame + Grid-Versatz), Name a|b-HHMMSS-<beats>b; mit box gleich /k/loop/laden
   private deckLoopSichern(d: Record<string, unknown>, a: http.ServerResponse): void {
-    if (d.deck !== 1 && d.deck !== 2) return this.json(a, 400, { fehler: 'unbekanntes_deck' });
+    if (!istOffenesDeck(d.deck)) return this.json(a, 400, { fehler: 'unbekanntes_deck' });
     if (d.box !== undefined && d.box !== 1 && d.box !== 2) return this.json(a, 400, { fehler: 'unbekannte_box' });
     // Plan Glanz 1.3 (Review B1): der Deck-Schnitt ist nie Cyphers Mitschnitt; in eine offene oder von Cyphers Rampe befahrene Box
     // tauscht der Kern ihn auch mitten im Lauf. Vor dem Schreiben der Datei sperren; Andreas nie.
@@ -1215,9 +1306,9 @@ export class Oberflaeche {
     const l = this.loopVon(st);
     if (!l) return this.json(a, 409, { fehler: 'kein_loop' });
     const fpb = 48000 * 60 / st.f.basis_bpm;
-    const start = Math.round(st.erster + this.rasterWert(st.deck, st.f).versatz_frames + l.start * fpb);
+    const start = this.loopStartFrame(st, l);
     const jetzt = new Date(), z = (n: number) => String(n).padStart(2, '0');
-    const name = `${d.deck === 1 ? 'a' : 'b'}-${z(jetzt.getHours())}${z(jetzt.getMinutes())}${z(jetzt.getSeconds())}-${l.laenge}b`;
+    const name = `${d.deck === 1 ? 'a' : d.deck === 2 ? 'b' : 'c'}-${z(jetzt.getHours())}${z(jetzt.getMinutes())}${z(jetzt.getSeconds())}-${l.laenge}b`;
     try {
       const q = fassungQuelle(this.opt.bestand, st.f.material_id, st.f.basis_bpm, st.f.fassung);
       schreibeLoopAusFassung({ basis: q.datei, dir: this.loopOrdner(), name, startFrame: start, frames: Math.round(l.laenge * fpb),
@@ -1244,7 +1335,7 @@ export class Oberflaeche {
   private deckHotcue(d: Record<string, unknown>, a: http.ServerResponse): void {
     const raster = this.rasterAus(d);
     if (raster === null) return this.json(a, 400, { fehler: 'raster' });
-    if (d.deck !== 1 && d.deck !== 2) return this.json(a, 400, { fehler: 'unbekanntes_deck' });
+    if (!istOffenesDeck(d.deck)) return this.json(a, 400, { fehler: 'unbekanntes_deck' });
     if (typeof d.nr !== 'number' || !Number.isInteger(d.nr) || d.nr < 1 || d.nr > 8) return this.json(a, 400, { fehler: 'nr' });
     const st = this.deckStand(d.deck);
     if (!st) return this.json(a, 409, { fehler: 'kein_kernstand' });
@@ -2067,7 +2158,7 @@ export class Oberflaeche {
   // POST /deck/start {deck, ab?='takt', quell_beat?} (Plan Hand T5): synchron zum Master auf den Takt, ab der Takt-Eins der
   // Fassung (oder quell_beat). Politik 0: zu spät heißt verworfen, nicht verschoben. Für cypher auf offenem Deck gesperrt.
   private async deckStartStopp(start: boolean, d: Record<string, unknown>, a: http.ServerResponse): Promise<void> {
-    if (d.deck !== 1 && d.deck !== 2) return this.json(a, 400, { fehler: 'unbekanntes_deck' });
+    if (!istOffenesDeck(d.deck)) return this.json(a, 400, { fehler: 'unbekanntes_deck' });
     const ab = d.ab ?? (start ? 'takt' : 'jetzt');
     if (typeof ab !== 'string' || !(ab in AB)) return this.json(a, 400, { fehler: 'ab' });
     const st = this.deckStand(d.deck);
@@ -2118,7 +2209,7 @@ export class Oberflaeche {
   private lage(): Record<string, unknown> {
     const u = this.kern.uhr as unknown as { beat: number; bpm: number } | null;
     const beat = u?.beat ?? 0, bestand = leseBestand(this.opt.bestand);
-    const decks = [1, 2].map((n) => {
+    const decks = OFFENE_DECKS.map((n) => {
       const z = this.stand.decks[String(n)] as Record<string, unknown> | undefined;
       if (!z) return { deck: n, status: 0 };
       const st = this.deckStand(n), e = bestand.find((x) => x.material_id === z.material_id);
@@ -2294,6 +2385,7 @@ export class Oberflaeche {
         return f ? this.json(a, 200, this.rasterWert(deck, f)) : this.json(a, 409, { fehler: 'kein_kernstand' });   // Form wie bisher (Route-Golden)
       } },
       { methode: 'GET', pfad: '/hoeren', schutz: O, handler: (_q, a, url) => this.hoerenAus(url, a) },
+      { methode: 'GET', pfad: '/oszi', schutz: O, handler: (_q, a, url) => this.osziAus(url, a) },
       { methode: 'GET', pfad: '/fx', schutz: O, handler: (_q, a) => this.json(a, 200, this.stand.fx) },   // [FX1, FX2] oder null je Einheit
       { methode: 'GET', pfad: '/fx/zuweisung', schutz: O, handler: (_q, a) => this.json(a, 200, this.stand.fxZuweisung) },
       { methode: 'GET', pfad: '/graphen', schutz: O, handler: (_q, a) => this.json(a, 200, { ...listeGraphen(), geladen: this.stand.graphen_geladen, geladen_geprueft_vor_ms: this.graphenVomKernMs === null ? null : Date.now() - this.graphenVomKernMs }) },   // Baukasten S12/S16
@@ -2330,7 +2422,7 @@ export class Oberflaeche {
         const d = await this.koerper(q);
         // Review Hand B1 / I3d: Sprung, Hotcue spielen auf einem OFFENEN Deck bringt ungehörten Inhalt; für cypher gesperrt,
         // bis das Ohr Hörscheine ausstellt. Loop ist frei (wiederholt Gehörtes). Andreas' Weg bleibt unberührt.
-        if (this.quelle() === 'cypher' && (d.deck === 1 || d.deck === 2) && kanalOffen(this.stand.regler, `deck/${d.deck}`)
+        if (this.quelle() === 'cypher' && istOffenesDeck(d.deck) && kanalOffen(this.stand.regler, `deck/${d.deck}`)
           && (url.pathname === '/deck/sprung' || (url.pathname === '/deck/scrub' && d.phase !== 0) || (url.pathname === '/deck/hotcue' && d.aktion === 'spielen'))) {
           return this.json(a, 409, { fehler: 'ziel_ungehoert', text: 'deck is open; jumping there plays unheard material' });
         }
@@ -2819,7 +2911,7 @@ export class Oberflaeche {
     while (this.warteschlange.length) {
       const mid = this.warteschlange[0];
       let q;
-      try { q = this.mediathek.quelle(mid, bestandIds(this.opt.bestand)); }
+      try { q = vorbereitQuelle(this.mediathek, this.katalog, mid, bestandIds(this.opt.bestand)); }
       catch (e) { this.opt.log?.({ typ: 'set_vorbereiten_uebersprungen', material_id: mid, fehler: (e as Error).message }); this.warteschlange.shift(); continue; }
       if (q.vorhanden !== undefined) { this.warteschlange.shift(); continue; }
       if (this.vorbereiter.starte(mid, q.pfad, q.titel) === 'ausgelastet') break;
@@ -2841,7 +2933,7 @@ export class Oberflaeche {
       const mid = typeof d.material_id === 'string' ? d.material_id : '';
       const imBestand = bestandIds(this.opt.bestand);
       if (imBestand.has(mid)) return this.json(a, 200, { material_id: mid, status: 'vorhanden' });
-      const q = this.mediathek.quelle(mid, imBestand);   // 400 / 404 / 409 datei_fehlt / 503 mediathek_fehlt
+      const q = vorbereitQuelle(this.mediathek, this.katalog, mid, imBestand);   // 400 / 404 / 409 datei_fehlt / 503 mediathek_fehlt; ohne Mediathek aus dem eigenen Katalog
       if (q.vorhanden !== undefined) return this.json(a, 200, { material_id: q.vorhanden, status: 'vorhanden' });   // anderes Objekt desselben Werks liegt schon im Bestand
       const r = this.vorbereiter.starte(mid, q.pfad, q.titel);
       if (r === 'ausgelastet') return this.json(a, 429, { fehler: 'ausgelastet' });
@@ -2859,7 +2951,7 @@ export class Oberflaeche {
       && e.fassung === (d.fassung ?? e.fassung) && e.basis_bpm === (d.basis_bpm ?? e.basis_bpm));
     const eintrag = passend.filter((e) => e.basis_bpm === passend[0].basis_bpm)
       .reduce<typeof passend[number] | undefined>((m, e) => (m === undefined || e.fassung > m.fassung ? e : m), undefined);
-    if (deck !== 1 && deck !== 2) return this.json(a, 400, { fehler: 'unbekanntes_deck', deck });
+    if (!istOffenesDeck(deck)) return this.json(a, 400, { fehler: 'unbekanntes_deck', deck });
     // Befund 4: nicht im Index ist ein anderer Fall als eine fehlende Datei der Fassung (material_fehlt aus der Kopie)
     if (!eintrag) return this.json(a, 400, { fehler: 'nicht_im_index', material_id: d.material_id });
     let kopie;
@@ -2888,6 +2980,8 @@ export class Oberflaeche {
   // Quelle der letzten Ladung bzw. Einstellung (B12). Bei Stop Cypher bleibt alles von Cypher weg (B12). Höchstens eine
   // Wiederherstellung je 30 s (B13): eine Absturzschleife soll nicht jedes Mal Ton in einen Kern pumpen, der gleich wieder fällt.
   private readonly loopBesitzer: Record<string, string> = {};
+  // Kanban t_e998388c: the kern keeps no Baukasten graph either. Source of the last load per channel; the graphs go into the same plan as boxes and FX.
+  private readonly graphBesitzer: Record<string, string> = {};
   private readonly loopLadung: Record<string, { name: string; quelle: string }> = {};   // Ladeversuch, bis der Kern ihn bestätigt
   private readonly angefasst = new Set<string>();   // seit dem letzten Plan neu gesetzt: box:N, raster:N, fx:E (F3)
   private letzteBoxFxWieder = 0;
@@ -2907,7 +3001,10 @@ export class Oberflaeche {
       if (!f || (f.an !== 1 && zu.length === 0)) continue;
       fx.push({ einheit: e, felder: f, zuweisung: zu, besitzer: this.fxVon(e) ?? 'cypher' });
     }
-    if (boxen.length === 0 && fx.length === 0) return;
+    // channels of the open project's sound snapshot belong to the project restore (session.ts nachNeustart sends its knobs and graphs itself)
+    const projektKanaele = (this.proj?.zugang.offen()?.projekt.baukasten ?? []).map((e) => bkDefVonId(e.id)?.kanal ?? '');
+    const graphen = graphenNachNeustart(this.stand.graphen_geladen, this.graphBesitzer, projektKanaele);
+    if (boxen.length === 0 && fx.length === 0 && graphen.length === 0) return;
     const jetzt = Date.now();
     if (jetzt - this.letzteBoxFxWieder < Oberflaeche.BOX_FX_SPERRE_MS) {
       this.opt.log?.({ typ: 'wiederherstellung_uebersprungen', grund: 'zu_schnell', seit_ms: jetzt - this.letzteBoxFxWieder });
@@ -2920,6 +3017,7 @@ export class Oberflaeche {
     setTimeout(() => {
       if (this.generation !== geplant) { this.opt.log?.({ typ: 'wiederherstellung_verworfen', geplant, jetzt: this.generation }); return; }
       this.boxFxWieder(boxen, fx);
+      this.graphWieder(graphen);
     }, 500);
   }
   private boxFxWieder(boxen: { box: number; name: string; status: number; besitzer: string; versatz?: number }[],
@@ -2962,6 +3060,21 @@ export class Oberflaeche {
       n++;
     }
     this.opt.log?.({ typ: 'wiederherstellung', stuecke: n });
+  }
+  // Kanban t_e998388c: load the graphs of the plan again. No default rows (vorgaben false): the knob rows are in the kern's restart state and the kern
+  // hands them to the graph when it attaches. Stop Cypher keeps Cypher's graphs away (B12, like boxes and FX); AUTO off does not, because a silent
+  // stream that Andreas holds would be worse than the graph he was hearing.
+  private graphWieder(graphen: { kanal: string; name: string; besitzer: string }[]): void {
+    for (const g of graphen) {
+      const aus = (grund: string) => this.opt.log?.({ typ: 'graph_wieder_ausgelassen', kanal: g.kanal, name: g.name, grund });
+      if (g.besitzer === 'cypher' && this.kiGestoppt) { aus('ki_gestoppt'); continue; }
+      if (this.angefasst.has(`graph:${g.kanal}`) || (this.stand.graphen_geladen[g.kanal] ?? '') !== '') { aus('neu_gesetzt'); continue; }
+      void this.graphSetzen({ kanal: g.kanal, name: g.name, vorgaben: false }, g.besitzer, { wieder: true }).then((r) => {
+        if (r.code !== 200) { aus(String(r.j.fehler ?? r.code)); return; }
+        const q = r.j.quittung as { status?: number } | null | undefined;
+        this.opt.log?.({ typ: 'graph_wieder', kanal: g.kanal, name: g.name, besitzer: g.besitzer, status: q?.status ?? null });
+      }).catch((e) => aus((e as Error).message));
+    }
   }
   private loopRasterWert(box: number): { name: string; frames: number; versatz_frames: number; gespeichert_frames: number } | null {
     const name = String((this.stand.loops[String(box)] as Record<string, unknown> | undefined)?.name ?? '');

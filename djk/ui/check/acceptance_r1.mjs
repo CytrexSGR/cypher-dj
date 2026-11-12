@@ -14,7 +14,7 @@
 //   AK22/Zug  sechs Anfragen an Gruppen-Fader, Master-Fader, Spur-Fader (Referenz) = je ein Verlaufseintrag und ein Undo; Negativ-Kontrolle: der Name zählt nicht als Mixer-Feld
 //   AK22/Rückweg  zwei Griffe an grp/1/fader landen im Projekt (+-0,5 dB), Quellen im Verlauf
 //   AK28      variante_waehlen neben einer Gruppen-Spur lässt gruppen[0].mute unberührt
-//   NK        /griff grp/9/fader -> 400, POST /regler grp/1/fader -> 409 ueber_projekt
+//   NK        /griff grp/17/fader -> 400, POST /regler grp/1/fader -> 409 ueber_projekt
 //   Umweg     POST /spur mit Ziel grp/1/fader und pm/fader -> 409 ueber_projekt, nichts ändert sich; Negativ-Kontrolle erz/2/filter
 //   I08       Regress: eine armierte Audio-Spur, die in eine Gruppe geht, nimmt einen Strudel-Strom auf: Take frames > 0, luecken 0, Spitze der Datei > -40 dBFS; Negativ-Kontrolle: Stille liefert Spitze 0 und gilt als nicht bestanden
 //
@@ -306,8 +306,8 @@ async function lauf() {
 
   // --- NK ---
   punkt = 'NK';
-  const gr = await ruf('POST', '/griff', { pfad: 'grp/9/fader', u: 0.5 });
-  notiere('NK /griff grp/9/fader abgelehnt', gr.code === 400, `${gr.code} ${gr.j?.fehler ?? ''}`);
+  const gr = await ruf('POST', '/griff', { pfad: 'grp/17/fader', u: 0.5 });
+  notiere('NK /griff grp/17/fader abgelehnt', gr.code === 400, `${gr.code} ${gr.j?.fehler ?? ''}`);
   const rg = await ruf('POST', '/regler', { pfad: 'grp/1/fader', nach: -3 }, CYPHER);
   const rp = await ruf('POST', '/regler', { pfad: 'pm/fader', nach: -3 }, CYPHER);
   notiere('NK POST /regler grp/1/fader und pm/fader → 409 ueber_projekt', rg.code === 409 && rg.j?.fehler === 'ueber_projekt' && rp.code === 409 && rp.j?.fehler === 'ueber_projekt', `grp ${grundVon(rg)}; pm ${grundVon(rp)}`);

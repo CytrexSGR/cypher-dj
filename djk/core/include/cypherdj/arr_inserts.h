@@ -48,6 +48,8 @@
 
 namespace cdj {
 
+static_assert(ARR_KETTEN <= 64, "strip masks (maske_loeschen, slot_eigen_ bits per strip) are uint64_t: one bit per strip");
+
 struct ArrArbeit;   // arr_arbeit.h: the per-lane work struct (includes this header)
 
 constexpr int INS_BLOCK = 1024;           // = ARR_BLOCK (arrangement.h), checked by a static_assert there

@@ -26,7 +26,7 @@ namespace cdj {
 // 1 585 064 kB. Darüber lehnt rendere() mit fehler "aufruf" ab (cypherdj-render: Rückgabe 2 mit Text).
 constexpr double RENDER_MAX_BEATS = 2048.0;
 
-// Spec 6.20/6.25: ein Mixer-Regler des Projekts, Pfad spur/<1..ARR_SPUREN = 32>/{fader,pan,mute,solo}, grp/<1..ARR_GRUPPEN = 8>/{fader,pan,mute,solo}
+// Spec 6.20/6.25: ein Mixer-Regler des Projekts, Pfad spur/<1..ARR_SPUREN = 32>/{fader,pan,mute,solo}, grp/<1..ARR_GRUPPEN = 16>/{fader,pan,mute,solo}
 // oder pm/fader (1.10), spur|grp/<n>/send/<1..4> und ret/<1..4>/{fader,pan,mute,solo,hall/…} (1.10 slice 3), Wert in Kern-Einheiten
 struct SpurRegler {
   std::string pfad;

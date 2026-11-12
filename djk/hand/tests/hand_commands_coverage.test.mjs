@@ -96,3 +96,43 @@ test('mutations: a verb missing from the description, an unnamed argument and a 
   assert.ok(m4 !== beschreibung);
   assert.ok(luecken(BEFEHL_NAMEN, QUELLE, m4).some((f) => /^clip_loeschen: no description text/.test(f)), 'a verb without text found');
 });
+
+// Plan live-module task 4: the hand tools of the live modules call the page server's routes with the arguments (recording stand-in server).
+// Cypher can never confirm opening the live container (no bestaetigt argument): live_oeffnen posts an empty body.
+test('live module hand tools: modul_export, modul_leeren, modul_stems, modul_stand and live_oeffnen call their routes with the arguments and source cypher', async (t) => {
+  const gesehen = [];
+  const s = http.createServer((q, a) => {
+    let b = ''; q.on('data', (c) => { b += c; }); q.on('end', () => {
+      gesehen.push({ methode: q.method, pfad: q.url, quelle: q.headers['x-djk-quelle'], koerper: b ? JSON.parse(b) : null });
+      a.writeHead(200, { 'content-type': 'application/json' }); a.end(JSON.stringify({ ok: true }));
+    });
+  });
+  await new Promise((ok) => s.listen(0, '127.0.0.1', ok));
+  const c = new Client({ name: 'test', version: '0' });
+  await c.connect(new StdioClientTransport({ command: process.execPath, args: [HAND, '--seite', `http://127.0.0.1:${s.address().port}`] }));
+  t.after(async () => { await c.close(); s.close(); });
+  const tools = (await c.listTools()).tools;
+  const namen = ['modul_export', 'modul_leeren', 'modul_stems', 'modul_stand', 'live_oeffnen'];
+  for (const n of namen) {
+    const x = tools.find((y) => y.name === n);
+    assert.ok(x, `the tool ${n} exists`);
+    assert.ok(x.description.length > 80, `${n} has a description text`);
+  }
+  assert.deepEqual(tools.find((y) => y.name === 'modul_export').inputSchema.required, ['deck']);
+  assert.deepEqual(tools.find((y) => y.name === 'modul_leeren').inputSchema.required.sort(), ['slot', 'takte']);
+  await c.callTool({ name: 'modul_export', arguments: { deck: 3, slot: 'B' } });
+  await c.callTool({ name: 'modul_export', arguments: { deck: 3 } });
+  await c.callTool({ name: 'modul_leeren', arguments: { slot: 'A', takte: 8 } });
+  await c.callTool({ name: 'modul_stems', arguments: { slot: 'B' } });
+  await c.callTool({ name: 'modul_stand', arguments: {} });
+  await c.callTool({ name: 'live_oeffnen', arguments: { bestaetigt: true } });
+  assert.deepEqual(gesehen.map((g) => [g.methode, g.pfad, g.koerper]), [
+    ['POST', '/modul/export', { deck: 3, slot: 'B' }],
+    ['POST', '/modul/export', { deck: 3 }],
+    ['POST', '/modul/leeren', { slot: 'A', takte: 8 }],
+    ['POST', '/modul/stems', { slot: 'B' }],
+    ['GET', '/modul/stand', null],
+    ['POST', '/live/oeffnen', {}],
+  ]);
+  assert.ok(gesehen.every((g) => g.quelle === 'cypher'));
+});

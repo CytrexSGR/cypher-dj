@@ -432,9 +432,7 @@ void Kern::pegel_melden(int64_t n0, int n) {
     Ereignis e{};
     e.art = Ereignis::PEGEL;
     e.sample = n0;
-    std::memcpy(e.pfad, "grp/", 4);
-    e.pfad[4] = static_cast<char>('1' + g);
-    e.pfad[5] = '\0';
+    std::snprintf(e.pfad, sizeof e.pfad, "grp/%d", g + 1);   // nested groups task 1: multi-digit group numbers (grp/10..grp/16)
     e.pegel[0] = sp > 1e-10f ? 20.0f * std::log10(sp) : -200.0f;
     for (int j = 1; j < 7; ++j) e.pegel[j] = -200.0f;
     melde(e);

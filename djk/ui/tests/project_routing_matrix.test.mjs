@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import { fuehreAus, fuehreListeAus, BefehlFehler } from '../project/commands.ts';
 import { neuesProjekt, alleInserts } from '../project/model.ts';
 import { routingMatrix } from '../project/routing_matrix.ts';
+import { schluesselErlaubt, vorfahren, nachkommen } from '../project/routing_rules.ts';
 import { stapel } from './support/media_library.mjs';
 import { ruf } from './support/proj_stack.mjs';
 
@@ -59,7 +60,7 @@ test('(a) every connection appears: targets, sends per return with the pre flag,
   assert.ok(s1.stufen.every((x) => typeof x.insert_id === 'string' && x.optionen === undefined), 'no options unless asked');
 });
 
-test('(b) target cells: a track has master plus one cell per group; a group has routing_grenze for another group and routing_zyklus for itself', () => {
+test('(b) target cells: a track has master plus one cell per group; a group may feed another group, never itself or a descendant', () => {
   let p = ok(ok(mit(3), { befehl: 'gruppenspur_neu', mitglieder: ['s2'] }), { befehl: 'gruppenspur_neu' });
   const m = routingMatrix(p);
   const t = strangVon(m, 's1').ziel_zellen;
@@ -67,9 +68,36 @@ test('(b) target cells: a track has master plus one cell per group; a group has 
   assert.deepEqual(strangVon(m, 's2').ziel_zellen.map((z) => [z.ziel, z.aktiv]), [['master', false], ['g1', true], ['g2', false]]);
   const g = strangVon(m, 'g1').ziel_zellen;
   assert.deepEqual(g.map((z) => [z.ziel, z.aktiv, z.erlaubt, z.grund]),
-    [['master', true, true, undefined], ['g1', false, false, 'routing_zyklus'], ['g2', false, false, 'routing_grenze']]);
+    [['master', true, true, undefined], ['g1', false, false, 'routing_zyklus'], ['g2', false, true, undefined]]);
   assert.match(g[1].text, /feed itself/);
-  assert.match(g[2].text, /do not nest/);
+  // g1 into g2: g2 offers g2 -> g1 no more (a cycle), group 2 offers group 1 before the move
+  assert.equal(strangVon(m, 'g2').ziel_zellen.find((z) => z.ziel === 'g1').erlaubt, true, 'the matrix offers group 1 to group 2 and vice versa');
+  p = ok(p, { befehl: 'ziel_setzen', strang_id: 'g1', ausgang: { art: 'gruppe', id: 'g2' } });
+  const m2 = routingMatrix(p);
+  assert.equal(strangVon(m2, 'g1').ausgang, 'g2');
+  const z = strangVon(m2, 'g2').ziel_zellen.find((c) => c.ziel === 'g1');
+  assert.deepEqual([z.erlaubt, z.grund], [false, 'routing_zyklus']);
+  assert.match(z.text, /plays into/);
+  assert.deepEqual(strangVon(m2, 'g1').ziel_zellen.map((c) => [c.ziel, c.aktiv, c.erlaubt]), [['master', false, true], ['g1', false, false], ['g2', true, true]]);
+});
+
+test('(b2) sidechain keys between nested groups follow the level rule (decision 6)', () => {
+  // g1 (level 0) in g2 (level 1) in g3 (level 2); g4 a sibling of g3 at the top, level 0
+  let p = mit(1);
+  for (let i = 0; i < 4; i++) p = ok(p, { befehl: 'gruppenspur_neu' });
+  p = ok(p, { befehl: 'ziel_setzen', strang_id: 'g1', ausgang: { art: 'gruppe', id: 'g2' } });
+  p = ok(p, { befehl: 'ziel_setzen', strang_id: 'g2', ausgang: { art: 'gruppe', id: 'g3' } });
+  const frage = (consumer, nr, punkt) => schluesselErlaubt(p, consumer, { quelle: 'grp', nr, punkt }, undefined)?.grund ?? null;
+  assert.equal(frage('g2', 1, 'pre'), null, 'pre: level 0 <= level 1');
+  assert.equal(frage('g2', 1, 'post'), null, 'post: level 0 < level 1');
+  assert.equal(frage('g1', 4, 'pre'), null, 'pre: equal levels');
+  assert.equal(frage('g1', 4, 'post'), 'sidechain_spaet', 'post: equal levels is too late');
+  assert.equal(frage('g1', 2, 'pre'), 'sidechain_zyklus', 'the source is an ancestor');
+  assert.equal(frage('g1', 3, 'post'), 'sidechain_zyklus', 'the source is an ancestor, two up');
+  assert.equal(frage('g1', 1, 'pre'), 'sidechain_zyklus', 'itself');
+  assert.equal(frage('g1', 3, 'pre'), 'sidechain_zyklus');
+  assert.equal(frage('g4', 3, 'pre'), 'sidechain_spaet', 'pre: level 2 > level 0, the source is computed later');
+  assert.equal(frage('g4', 3, 'post'), 'sidechain_spaet');
 });
 
 // ---- (c) equality with the commands ---------------------------------------------------------------------------------------------------------------

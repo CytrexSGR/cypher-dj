@@ -74,13 +74,13 @@ test('T3 review focus 1: a folded group shows armed, solo, muted and open lane o
   assert.equal(gruppenKopfZustand(p, 'g9').mitglieder, 0);
 });
 
-test('T3 review focus 2: gruppeAusWahl, one body, null for nothing, unknown ids and at 8 groups; a grouped track is included', () => {
+test('T3 review focus 2: gruppeAusWahl, one body, null for nothing, unknown ids and at 16 groups; a grouped track is included', () => {
   const p = { spuren: [sp('s1'), sp('s2', 'g1'), sp('s3')], gruppen: [gr('g1', 1)] };
   assert.deepEqual(gruppeAusWahl(p, ['s3', 's2', 's3']), { befehl: 'gruppenspur_neu', mitglieder: ['s2', 's3'] });
   assert.equal(gruppeAusWahl(p, []), null);
   assert.equal(gruppeAusWahl(p, ['zz']), null);
   assert.equal(gruppeAusWahl(null, ['s1']), null);
-  const acht = { ...p, gruppen: Array.from({ length: 8 }, (_, i) => gr(`g${i + 1}`, i + 1)) };
+  const acht = { ...p, gruppen: Array.from({ length: 16 }, (_, i) => gr(`g${i + 1}`, i + 1)) };
   assert.equal(gruppeAusWahl(acht, ['s1']), null);
   const viele = { spuren: Array.from({ length: 32 }, (_, i) => sp(`s${i + 1}`)), gruppen: [] };
   assert.equal(gruppeAusWahl(viele, viele.spuren.map((s) => s.id)).mitglieder.length, 32);

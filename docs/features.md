@@ -51,7 +51,8 @@ of the beta. The short version is the [README](../README.md).
 **Produce** (since October 2026)
 - A PRODUCTION view next to DJ and STUDIO: arrangement with a timeline, library browser, detail area for the selected
   clip, transport bar
-- Up to 32 tracks, 8 group tracks and 4 returns; every track goes to the production master or into a group
+- Up to 32 tracks, 16 group tracks and 4 returns; every track goes to the production master or into a group, and groups
+  can sit inside groups (a DRUMS group holding KICK, PERC and HATS groups, each with its own inserts, fader and sends)
 - Audio tracks: drag a sample from the library onto a track; clips snap to the grid and can be moved, trimmed, split,
   duplicated, faded and looped inside their length
 - **Warp**: an audio clip follows the project tempo. The warp markers come from the workshop's beat grid, a Traktor
@@ -207,7 +208,7 @@ The lists above are the headline. Also in there:
 - **Extra pattern streams**: five more channels (erz/5 to erz/7 and the two loop box pads) can each carry a Cypher
   Modular graph, started with `djk-start --strudel --bk-stroeme`; they can be recorded onto production tracks. The
   graph knobs can be learned onto a MIDI controller, and a project remembers which graph sits on which channel
-- **The agent's side**: 79 tools in the MCP server. Besides playing it can measure a deck behind its
+- **The agent's side**: 90 tools in the MCP server. Besides playing it can measure a deck behind its
   closed fader, read the levels of the last seconds, wait on the master clock for a number of bars, run
   automation tracks and ramps over bars, and cancel everything it started. When it has an idea while the
   human plays, it proposes; the human accepts or rejects with one key

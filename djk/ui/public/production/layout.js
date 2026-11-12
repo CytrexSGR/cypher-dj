@@ -3,6 +3,7 @@
 // Loop-Zone (Klammer ziehen) und unten die Positions-Zone (Startposition setzen).
 import { beatZuX, rasten } from './timeline.js';
 import { quellSekunde, warpAn } from './warp.js';
+import { gruppenEltern, gruppenSchluessel, spurGruppe } from './routing.js';
 
 export const SPUR_HOEHE = 64;
 export const LINEAL_HOEHE = 28;
@@ -30,7 +31,11 @@ export function zeilenTabelle(anzahl, offen = [], takeZeilen = new Map(), layout
   // 1.10 T3: with a layout (gruppenLayout) the order is the derived display order; without one it is the array order of today (byte-equal rows).
   const folge = layout ? layout.folge : Array.from({ length: anzahl }, (_, i) => ({ art: 'spur', spur: i }));
   for (const f of folge) {
-    if (f.art === 'gruppe') { z.push({ art: 'gruppe', gruppe: f.gruppe, y, h: GRUPPEN_HOEHE }); y += GRUPPEN_HOEHE; continue; }
+    if (f.art === 'gruppe') {   // nested groups: a child group of a folded group keeps a row of height 0 (its head element stays); depth only when > 0
+      const t = f.tiefe > 0 ? { tiefe: f.tiefe } : {};
+      if (f.verborgen) { z.push({ art: 'gruppe', gruppe: f.gruppe, y, h: 0, ...t, verborgen: true }); continue; }
+      z.push({ art: 'gruppe', gruppe: f.gruppe, y, h: GRUPPEN_HOEHE, ...t }); y += GRUPPEN_HOEHE; continue;
+    }
     const i = f.spur;
     if (f.verborgen) { z.push({ art: 'spur', spur: i, y, h: 0, tiefe: f.tiefe, verborgen: true }); continue; }   // folded member: no row, no take rows, no lane row
     z.push(layout ? { art: 'spur', spur: i, y, h: SPUR_HOEHE, tiefe: f.tiefe, verborgen: false } : { art: 'spur', spur: i, y, h: SPUR_HOEHE });
@@ -40,23 +45,27 @@ export function zeilenTabelle(anzahl, offen = [], takeZeilen = new Map(), layout
   }
   return z;
 }
-// 1.10 T3 (plan D3): the display order of tracks and group header rows, derived from the project. A group with at least one member gets ONE header row at
-// the array position of its first member; all its members follow it in array order (tiefe 1), other tracks keep array order (tiefe 0). A track whose
-// ausgang names an unknown group counts as ungrouped. A folded group marks its members verborgen. Array order and spur_verschieben are unchanged.
-// Indices point into projekt.gruppen and projekt.spuren.
+// 1.10 T3 (plan D3), nested groups (plan 2026-11-12): the display order of tracks and group header rows, derived from the project as a TREE. A group's
+// `ausgang` names its parent group. A group that has at least one track at or below it gets ONE header row; below it come its tracks and child groups
+// (each with its own subtree), siblings ordered by the array position of their first track (a group with only child groups sits at its first child).
+// `tiefe` counts the groups above: a loose track 0, a track in a top-level group 1, a child group of it 1, its tracks 2 (a group row carries `tiefe` only
+// when > 0, so a flat project gives the entries of before). A track whose ausgang names an unknown group counts as loose. A folded group marks everything
+// below it verborgen. Array order and spur_verschieben are unchanged. Indices point into projekt.gruppen and projekt.spuren.
 export function gruppenLayout(projekt) {
   const spuren = projekt?.spuren ?? [], gruppen = projekt?.gruppen ?? [], folge = [];
-  const gIndex = new Map(gruppen.map((g, i) => [g.id, i]));
-  const von = (s) => (s.ausgang?.art === 'gruppe' ? gIndex.get(s.ausgang.id) : undefined);
-  const gesetzt = new Set();
-  spuren.forEach((s, i) => {
-    const g = von(s);
-    if (g === undefined) { folge.push({ art: 'spur', spur: i, tiefe: 0, verborgen: false }); return; }
-    if (gesetzt.has(g)) return;
-    gesetzt.add(g);
-    folge.push({ art: 'gruppe', gruppe: g });
-    spuren.forEach((m, k) => { if (von(m) === g) folge.push({ art: 'spur', spur: k, tiefe: 1, verborgen: !!gruppen[g].gefaltet }); });
-  });
+  const eltern = gruppenEltern(projekt), schluessel = gruppenSchluessel(projekt);
+  const posten = (vater) => [
+    ...spuren.map((s, i) => ({ art: 'spur', i, pos: i, v: spurGruppe(projekt, s) })).filter((x) => x.v === vater),
+    ...gruppen.map((g, i) => ({ art: 'gruppe', i, pos: schluessel.get(g.id), v: eltern.get(g.id) })).filter((x) => x.v === vater && x.pos < Infinity),
+  ].sort((a, b) => a.pos - b.pos);
+  const lege = (vater, tiefe, verborgen) => {
+    for (const x of posten(vater)) {
+      if (x.art === 'spur') { folge.push({ art: 'spur', spur: x.i, tiefe, verborgen }); continue; }
+      folge.push({ art: 'gruppe', gruppe: x.i, ...(tiefe > 0 ? { tiefe } : {}), ...(verborgen ? { verborgen: true } : {}) });
+      lege(gruppen[x.i].id, tiefe + 1, verborgen || !!gruppen[x.i].gefaltet);
+    }
+  };
+  lege(null, 0, false);
   return { folge };
 }
 // The row table of a project as the page uses it: the layout only when at least one group has members (else exactly the old table)

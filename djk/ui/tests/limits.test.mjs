@@ -14,7 +14,7 @@ test('Seite und Server haben dieselbe Spurgrenze', () => {
 
 test('1.10 Seite und Server haben dieselbe Gruppengrenze', () => {
   assert.equal(SEITE_GRUPPEN, SERVER_GRUPPEN);
-  assert.equal(SERVER_GRUPPEN, 8, '1.10: MAX_GRUPPEN = 8 (F1: eigene Plätze neben den 32 Spuren)');
+  assert.equal(SERVER_GRUPPEN, 16, 'nested groups task 1: MAX_GRUPPEN = 16 (was 8 in 1.10, F1: eigene Plätze neben den 32 Spuren)');
 });
 
 test('Fehlertexte nennen die Grenze aus der Konstanten, nicht eine feste Zahl', () => {
