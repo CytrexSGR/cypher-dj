@@ -83,7 +83,9 @@ fn makro_pruefungen() {
 
 #[test]
 fn slice_1_format_geht_weiter() {
-    let alt = include_str!("../demos/saege-ladder.json");
+    // saege-ladder moved to baukasten/2 when it got knobs; the format 1 stays readable, shown with the old skeleton inline
+    let alt = r#"{"format": "baukasten/1", "name": "alt", "stimmen": 2, "knoten": [{"id": "note", "art": "note"}, {"id": "osz", "art": "saege"},
+        {"id": "aus", "art": "ausgang"}], "kanten": [{"von": "note.hz", "nach": "osz.hz"}, {"von": "osz.aus", "nach": "aus.x"}]}"#;
     assert!(alt.contains("baukasten/1"));
     assert!(uebersetze(alt, SR).is_ok());
 }

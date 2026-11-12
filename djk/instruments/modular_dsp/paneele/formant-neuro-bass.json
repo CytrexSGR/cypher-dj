@@ -1,0 +1,30 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "formant-neuro-bass"},
+  "title": "Formant Neuro Bass",
+  "akzent": "violett",
+  "layout": {"rows": [
+    ["osc", "lfo", "formant", "aenv"]
+  ]},
+  "sections": [
+    { "id": "osc", "title": "OSCILLATOR", "cols": 3, "controls": [
+      {"id": "o1", "type": "label", "span": 3, "text": "One saw, one octave below the note"},
+      {"id": "o2", "type": "label", "span": 3, "text": "4 voices"}
+    ]},
+    { "id": "lfo", "title": "VOWEL LFO", "cols": 3, "controls": [
+      {"id": "lf", "type": "lfoform", "span": 3, "label": "Vowel motion", "formen": ["sine"]},
+      {"id": "rate", "type": "knob", "label": "Rate", "span": 3, "bind": {"param": "k1"}, "format": "hz", "default": 0.5},
+      {"id": "ln", "type": "label", "span": 3, "text": "Sweeps the vowel 0 to 4"}
+    ]},
+    { "id": "formant", "title": "FORMANT FILTER", "cols": 3, "controls": [
+      {"id": "shift", "type": "knob", "label": "Shift", "bind": {"param": "k2"}, "format": "raw", "unit": "st", "default": 0.5},
+      {"id": "sharp", "type": "knob", "label": "Sharpness", "bind": {"param": "k3"}, "format": "percent", "default": 0.5},
+      {"id": "fn", "type": "label", "span": 3, "text": "Vowel filter, five vowels"}
+    ]},
+    { "id": "aenv", "title": "AMP ENV", "cols": 4, "controls": [
+      {"id": "ahue", "type": "huelle", "span": 4, "label": "Envelope", "of": {"a": 0.005, "d": 0.3, "s": 0.8, "r": 0.15}},
+      {"id": "an", "type": "label", "span": 4, "text": "A 5 ms, D 300 ms, S 80 %, R 150 ms"},
+      {"id": "an2", "type": "label", "span": 4, "text": "All four times fixed"}
+    ]}
+  ]
+}

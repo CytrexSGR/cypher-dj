@@ -1,0 +1,36 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "wavetable-chor"},
+  "title": "Wavetable Choir",
+  "akzent": "blau",
+  "layout": {"rows": [
+    ["table", "unison", "wenv", "aenv"]
+  ]},
+  "sections": [
+    { "id": "table", "title": "TABLE", "cols": 4, "controls": [
+      {"id": "lf", "type": "lfoform", "span": 4, "label": "Vowel motion", "formen": ["sine"]},
+      {"id": "vowel", "type": "knob", "label": "Vowel", "bind": {"param": "k1"}, "format": "percent", "default": 0.5},
+      {"id": "motion", "type": "knob", "label": "Motion", "bind": {"param": "k2"}, "format": "percent", "default": 0.5},
+      {"id": "t1", "type": "label", "span": 4, "text": "Table: vowels, position = Vowel"},
+      {"id": "t2", "type": "label", "span": 4, "text": "Motion LFO 0.15 Hz sine fixed"}
+    ]},
+    { "id": "unison", "title": "UNISON", "cols": 3, "controls": [
+      {"id": "detune", "type": "knob", "label": "Detune", "bind": {"param": "k3"}, "format": "raw", "unit": "ct", "default": 0.5},
+      {"id": "width", "type": "knob", "label": "Width", "bind": {"param": "k4"}, "format": "percent", "default": 0.5},
+      {"id": "u1", "type": "label", "span": 3, "text": "5 copies"}
+    ]},
+    { "id": "wenv", "title": "WAVE ENV", "cols": 3, "controls": [
+      {"id": "whue", "type": "huelle", "span": 3, "label": "Table position envelope", "of": {"a": "wattack", "d": "wdecay", "s": 0, "r": 0.3}},
+      {"id": "wamt", "type": "knob", "label": "Amount", "bind": {"param": "k7"}, "format": "percent", "default": 0.5},
+      {"id": "wattack", "type": "knob", "label": "Attack", "bind": {"param": "k8"}, "format": "raw", "unit": "s", "default": 0.5},
+      {"id": "wdecay", "type": "knob", "label": "Decay", "bind": {"param": "k9"}, "format": "raw", "unit": "s", "default": 0.5},
+      {"id": "wn", "type": "label", "span": 3, "text": "Sustain 0, release 300 ms fixed"}
+    ]},
+    { "id": "aenv", "title": "AMP ENV", "cols": 3, "controls": [
+      {"id": "ahue", "type": "huelle", "span": 3, "label": "Envelope", "of": {"a": "attack", "d": 0.5, "s": 0.9, "r": "release"}},
+      {"id": "attack", "type": "knob", "label": "Attack", "bind": {"param": "k5"}, "format": "raw", "unit": "s", "default": 0.5},
+      {"id": "release", "type": "knob", "label": "Release", "bind": {"param": "k6"}, "format": "raw", "unit": "s", "default": 0.5},
+      {"id": "an", "type": "label", "span": 3, "text": "Decay 500 ms, sustain 90 % fixed"}
+    ]}
+  ]
+}

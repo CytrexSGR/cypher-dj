@@ -10,6 +10,7 @@
 // Second kind of device (A8, ENTSCHEIDUNGEN D22): the mix tools of the kern. They have no plugin and no #[id]; their parameters are
 // rows of the controller table (djk/core/signalbox/include/cypherdj/signalbox/tool_controls.h, one `{...}` row per line), set
 // per channel through POST /regler <channel>/<pfad>. `pfad` is the table suffix, `kanalArten` the channel kinds that carry the rows.
+import { BK_REGLER_ZAHL } from '../project/modular.ts';
 export type GeraetHerkunft = 'plugin' | 'kern';
 export type KanalArt = 'quelle' | 'bus';
 export type GeraetTyp = 'effekt' | 'instrument';
@@ -114,7 +115,7 @@ export const GERAETE: readonly GeraetDef[] = [
   ] },
   { id: 'baukasten', typ: 'instrument', titel: 'Cypher Modular', quelle: 'djk/instruments/modular/src/lib.rs', parameter: [
     zahl('lautstaerke', 'Volume', GAIN_MIN, 1, 'gain'),
-    ...Array.from({ length: 8 }, (_, i) => zahl(`knob${i + 1}`, `Knob ${i + 1}`, 0, 1)),
+    ...Array.from({ length: BK_REGLER_ZAHL }, (_, i) => zahl(`knob${i + 1}`, `Knob ${i + 1}`, 0, 1)),
   ] },
   kern('gate', 'Channel Gate', ['quelle'], [
     ks('gate/an', 'On'), kz('gate/schwelle', 'Threshold', -90, 0, 'dB'), kz('gate/hysterese', 'Hysteresis', 0, 24, 'dB'),

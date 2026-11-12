@@ -1,0 +1,43 @@
+{
+ "schema": 1,
+ "name": "Long Sub G0",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "kick-synth",
+ "werte": {
+  "knob1": 0.10842,
+  "knob2": 0.924248,
+  "knob3": 0.5,
+  "knob4": 0.60206,
+  "knob5": 0.1,
+  "knob6": 0.15,
+  "knob7": 0.7,
+  "knob8": 0
+ },
+ "beschreibung": {
+  "art": "drums",
+  "unterart": "kick",
+  "charakter": [
+   "deep",
+   "smooth",
+   "thick"
+  ],
+  "genre": [
+   "techno",
+   "minimal"
+  ],
+  "einsatz": [
+   "drop",
+   "breakdown"
+  ],
+  "energie": 3,
+  "text": "Sub kick tuned to G0 (24.5 Hz) with a 2.2 s tail that carries the low end; barely any click."
+ },
+ "tags": [
+  "kick-synth",
+  "low-end"
+ ],
+ "notiz": "Measured by render (tuning, peak, first excursion), not heard yet (2026-11-12).",
+ "angelegt": "2026-11-12T00:00:00.000Z",
+ "geaendert": "2026-11-12T00:00:00.000Z"
+}

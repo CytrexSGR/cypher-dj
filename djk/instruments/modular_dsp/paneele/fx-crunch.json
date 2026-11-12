@@ -1,0 +1,29 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "fx-crunch"},
+  "title": "Crunch",
+  "akzent": "tuerkis",
+  "layout": {"rows": [
+    ["band", "stage1", "stage2", "out"]
+  ]},
+  "sections": [
+    { "id": "band", "title": "BAND LIMIT", "cols": 2, "controls": [
+      {"id": "hp", "type": "knob", "label": "HP freq", "bind": {"param": "k1"}, "format": "hz", "default": 0.5},
+      {"id": "hpq", "type": "knob", "label": "HP reso", "bind": {"param": "k2"}, "format": "percent", "default": 0.5},
+      {"id": "lp", "type": "knob", "label": "LP freq", "bind": {"param": "k3"}, "format": "hz", "default": 0.5, "span": 2}
+    ]},
+    { "id": "stage1", "title": "STAGE 1", "cols": 1, "controls": [
+      {"id": "d1", "type": "knob", "label": "Drive 1", "bind": {"param": "k4"}, "format": "db", "default": 0.5},
+      {"id": "o1", "type": "knob", "label": "Output 1", "bind": {"param": "k5"}, "format": "db", "default": 0.5},
+      {"id": "l1", "type": "label", "text": "Limiter -1 dBFS"}
+    ]},
+    { "id": "stage2", "title": "STAGE 2", "cols": 1, "controls": [
+      {"id": "d2", "type": "knob", "label": "Drive 2", "bind": {"param": "k6"}, "format": "db", "default": 0.5},
+      {"id": "o2", "type": "knob", "label": "Output 2", "bind": {"param": "k7"}, "format": "db", "default": 0.5},
+      {"id": "l2", "type": "label", "text": "Limiter -1 dBFS"}
+    ]},
+    { "id": "out", "title": "OUT", "cols": 1, "controls": [
+      {"id": "mix", "type": "knob", "label": "Mix", "bind": {"param": "k8"}, "format": "percent", "default": 1}
+    ]}
+  ]
+}

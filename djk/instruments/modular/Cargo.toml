@@ -14,3 +14,6 @@ pruef_alloc = ["nih_plug/assert_process_allocs"]
 [dependencies]
 nih_plug = { workspace = true }
 baukasten_dsp = { path = "../modular_dsp" }
+
+[dev-dependencies]
+serde_json = "1"

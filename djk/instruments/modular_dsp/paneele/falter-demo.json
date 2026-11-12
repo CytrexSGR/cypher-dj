@@ -1,0 +1,33 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "falter-demo"},
+  "title": "Wavefolder",
+  "akzent": "orange",
+  "layout": {"rows": [
+    ["osc", "fold", "tone", "env"]
+  ]},
+  "sections": [
+    { "id": "osc", "title": "OSCILLATOR", "cols": 2, "controls": [
+      {"id": "o1", "type": "label", "span": 2, "text": "Saw, level 80 %"},
+      {"id": "o2", "type": "label", "span": 2, "text": "Feeds the folder"},
+      {"id": "o3", "type": "label", "span": 2, "text": "2 voices"}
+    ]},
+    { "id": "fold", "title": "FOLD", "cols": 6, "controls": [
+      {"id": "fold", "type": "knob", "label": "Fold", "span": 2, "bind": {"param": "k1"}, "format": "db", "default": 0.5},
+      {"id": "sym", "type": "knob", "label": "Symmetry", "span": 2, "bind": {"param": "k2"}, "format": "percent", "default": 0.5},
+      {"id": "form", "type": "knob", "label": "Shape", "span": 2, "bind": {"param": "k3"}, "format": "percent", "default": 0.5},
+      {"id": "f1", "type": "label", "span": 6, "text": "Shape: triangle fold (0) to sine fold"},
+      {"id": "f2", "type": "label", "span": 6, "text": "Fold in dB; below 0 dB nothing folds"}
+    ]},
+    { "id": "tone", "title": "TONE", "cols": 3, "controls": [
+      {"id": "tone", "type": "knob", "label": "Tone", "span": 3, "bind": {"param": "k4"}, "format": "hz", "default": 0.5},
+      {"id": "t1", "type": "label", "span": 3, "text": "DC high-pass 30 Hz after the fold"},
+      {"id": "t2", "type": "label", "span": 3, "text": "Low-pass, resonance 20 %"}
+    ]},
+    { "id": "env", "title": "AMP ENV", "cols": 3, "controls": [
+      {"id": "hue", "type": "huelle", "span": 3, "label": "Envelope", "of": {"a": 0.004, "d": 0.3, "s": 0.8, "r": 0.2}},
+      {"id": "e1", "type": "label", "span": 3, "text": "A 4 ms, D 300 ms, S 80 %, R 200 ms"},
+      {"id": "e2", "type": "label", "span": 3, "text": "Level 35 %"}
+    ]}
+  ]
+}

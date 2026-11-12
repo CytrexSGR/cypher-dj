@@ -1,0 +1,36 @@
+{
+  "format": "baukasten/2",
+  "name": "fx-sh-filter",
+  "stimmen": 1,
+  "regler_namen": {"1": "Rate", "2": "Depth", "3": "Resonance", "4": "Slew"},
+  "knoten": [
+    {"id": "ein", "art": "eingang"},
+    {"id": "k_rate", "art": "regler", "nr": 1, "min": 0.5, "max": 16, "log": 1},
+    {"id": "k_tiefe", "art": "regler", "nr": 2, "min": 0, "max": 48},
+    {"id": "k_reso", "art": "regler", "nr": 3, "min": 0, "max": 0.7},
+    {"id": "k_glatt", "art": "regler", "nr": 4, "min": 0, "max": 100},
+    {"id": "zufall", "art": "sh"},
+    {"id": "tiefe", "art": "mul"},
+    {"id": "mitte", "art": "konst", "wert": 1000},
+    {"id": "schnitt", "art": "transponiere"},
+    {"id": "fl", "art": "svf", "pole": 4},
+    {"id": "fr", "art": "svf", "pole": 4},
+    {"id": "aus", "art": "ausgang"}
+  ],
+  "kanten": [
+    {"von": "k_rate.aus", "nach": "zufall.rate"},
+    {"von": "k_glatt.aus", "nach": "zufall.glatt"},
+    {"von": "zufall.aus", "nach": "tiefe.a"},
+    {"von": "k_tiefe.aus", "nach": "tiefe.b"},
+    {"von": "mitte.aus", "nach": "schnitt.hz"},
+    {"von": "tiefe.aus", "nach": "schnitt.st"},
+    {"von": "schnitt.aus", "nach": "fl.cutoff"},
+    {"von": "schnitt.aus", "nach": "fr.cutoff"},
+    {"von": "k_reso.aus", "nach": "fl.reso"},
+    {"von": "k_reso.aus", "nach": "fr.reso"},
+    {"von": "ein.l", "nach": "fl.x"},
+    {"von": "ein.r", "nach": "fr.x"},
+    {"von": "fl.tp", "nach": "aus.l"},
+    {"von": "fr.tp", "nach": "aus.r"}
+  ]
+}

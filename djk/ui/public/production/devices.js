@@ -32,11 +32,40 @@ export function zeileHtml(e, profile, erkennung = 'ok', quantum = 0) {
 </div>`;
 }
 
-export function midiZeileHtml(m, profile, erkennung = 'ok') {
+// Mirrors areas/devices/profile.ts: istSoftwarePort (Bluetooth MIDI server bluez_midi.*, Midi Through) never counts as a device;
+// 'midi-controller' fits every other source, 'xdj-xz' only the XDJ-XZ. Keep in sync with the predicates there.
+export const midiQuelleName = (q) => String(q.alias || '').split(':')[0].trim() || q.port;
+export function passendeMidiQuellen(profilId, quellen = []) {
+  const software = (q) => /^bluez_midi\./.test(q.port) || /Midi Through/i.test(q.port) || /Midi Through/i.test(q.alias || '');
+  const passt = profilId === 'midi-controller' ? () => true : profilId === 'xdj-xz' ? (q) => /XDJ-XZ/.test(`${q.port} ${q.alias || ''}`) : () => false;
+  return quellen.filter((q) => !software(q) && passt(q));
+}
+// Two ports of one device share a name: label them with the port suffix of the alias ("LPD8: MIDI 1" -> "LPD8 (MIDI 1)"), else of the port name.
+const portSuffix = (q) => (String(q.alias || '').includes(':') ? String(q.alias).split(':').slice(1).join(':') : String(q.port).split(':').pop()).trim();
+export function midiPortOptionen(m, fit) {
+  const namen = fit.map(midiQuelleName);
+  const mehrfach = (i) => namen.filter((n) => n === namen[i]).length > 1;
+  const opts = fit.map((q, i) => `<option value="${esc(q.port)}"${m.port === q.port ? ' selected' : ''}>${esc(mehrfach(i) && portSuffix(q) ? `${namen[i]} (${portSuffix(q)})` : namen[i])}</option>`);
+  // the configured port is not in the list (unplugged): keep it visible instead of silently showing another one
+  if (m.profil && m.port && !fit.some((q) => q.port === m.port)) {
+    const name = String(m.port).split(':').pop() ?? m.port;
+    opts.push(`<option value="${esc(m.port)}" selected>${esc(name)} (not connected)</option>`);
+  }
+  return opts;
+}
+function midiPortHtml(m, quellen) {
+  const fit = passendeMidiQuellen(m.profil, quellen);
+  const opts = midiPortOptionen(m, fit);
+  if (opts.length > 1 || (opts.length === 1 && fit.length === 0)) {
+    return `<select data-midi-port="1" aria-label="MIDI source for the MIDI input">${opts.join('')}</select>`;
+  }
+  return fit.length === 1 ? `<span class="p-gport">${esc(midiQuelleName(fit[0]))}</span>` : '';
+}
+export function midiZeileHtml(m, profile, erkennung = 'ok', quellen = []) {
   const opt = ['<option value="">(none)</option>', ...profile.filter((p) => p.midi).map((p) => `<option value="${esc(p.id)}"${m.profil === p.id ? ' selected' : ''}>${esc(p.name)}</option>`)].join('');
   const status = midiStatusText(m, erkennung);
   return `<div class="p-gzeile" data-midi="1"><span class="p-gname">MIDI input</span>
-<select data-midi-profil="1" aria-label="Device profile for the MIDI input">${opt}</select>
+<select data-midi-profil="1" aria-label="Device profile for the MIDI input">${opt}</select>${midiPortHtml(m, quellen)}
 <span class="p-gstatus" role="status">${status}</span>
 <span></span>
 <label><input type="checkbox" data-midi-frei="1" aria-label="Let Cypher use the MIDI input"${m.frei_fuer_cypher ? ' checked' : ''}${m.port ? '' : ' disabled'}> Cypher may use</label>
@@ -44,7 +73,7 @@ export function midiZeileHtml(m, profile, erkennung = 'ok') {
 }
 
 // Steuerelemente, deren Fokus ein Neuzeichnen übersteht: Attribut je dataset-Schlüssel.
-const STEUER = { profil: 'data-profil', frei: 'data-frei', midiProfil: 'data-midi-profil', midiFrei: 'data-midi-frei' };
+const STEUER = { profil: 'data-profil', frei: 'data-frei', midiProfil: 'data-midi-profil', midiPort: 'data-midi-port', midiFrei: 'data-midi-frei' };
 const fokusSelektor = (el) => { const k = el && el.dataset ? Object.keys(STEUER).find((n) => el.dataset[n] !== undefined) : undefined; return k ? `[${STEUER[k]}="${el.dataset[k]}"]` : null; };
 
 export function bindeGeraete(ctx) {
@@ -77,7 +106,7 @@ export function bindeGeraete(ctx) {
     if (drin && !erzwinge) { ausstehend = true; auffrischen(); return; }
     const sel = drin ? fokusSelektor(aktiv) : null;
     const erk = stand.erkennung ?? 'ok';
-    liste.innerHTML = stand.eingaenge.map((e) => zeileHtml(e, stand.profile, erk, quantum)).join('') + midiZeileHtml(stand.midi, stand.profile, erk);
+    liste.innerHTML = stand.eingaenge.map((e) => zeileHtml(e, stand.profile, erk, quantum)).join('') + midiZeileHtml(stand.midi, stand.profile, erk, stand.quellen?.midi ?? []);
     ausstehend = false;
     if (sel) { const n = liste.querySelector(sel); if (n) n.focus(); }
   };
@@ -91,9 +120,9 @@ export function bindeGeraete(ctx) {
   }
   liste.addEventListener('change', async (ev) => {
     const t = ev.target;
-    const midi = t.dataset.midiProfil !== undefined || t.dataset.midiFrei !== undefined;
+    const midi = t.dataset.midiProfil !== undefined || t.dataset.midiPort !== undefined || t.dataset.midiFrei !== undefined;
     const body = t.dataset.profil ? { k: Number(t.dataset.profil), profil: t.value || null } : t.dataset.frei ? { k: Number(t.dataset.frei), frei_fuer_cypher: t.checked }
-      : t.dataset.midiProfil !== undefined ? { profil: t.value || null } : t.dataset.midiFrei !== undefined ? { frei_fuer_cypher: t.checked } : null;
+      : t.dataset.midiProfil !== undefined ? { profil: t.value || null } : t.dataset.midiPort !== undefined ? { profil: stand.midi.profil, port: t.value } : t.dataset.midiFrei !== undefined ? { frei_fuer_cypher: t.checked } : null;
     if (!body) return;
     const r = await ctx.holeJson(midi ? '/geraete/midi' : '/geraete/eingang', body);
     if (r.status !== 200) ctx.melde(ctx.antwortText(r), true);

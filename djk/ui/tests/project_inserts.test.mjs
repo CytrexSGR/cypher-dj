@@ -680,20 +680,20 @@ test('utility: the playback chain entry is {art: utility, slot, an: true}; the p
   assert.deepEqual(w.spuren[0].chain, [{ art: 'utility', slot: 1, an: true }]);
 });
 
-// ---- bk kind (arr-bk slice 3): a Baukasten effect graph as a stage; pool 8, knobs k1..k8, the graph is part of the stage ------------------------------
+// ---- bk kind (arr-bk slice 3): a Baukasten effect graph as a stage; pool 8, knobs k1..k64, the graph is part of the stage ------------------------------
 // the graph lookup the server injects (findeGraph): an effect graph has an `eingang` node, an instrument graph does not, anything else is unknown
 const GRAPHEN = { 'fx-delay-sync': 'effekt', 'fx-echo-achtel': 'effekt', 'juno-pad': 'instrument' };
 const graphArt = (n) => GRAPHEN[n] ?? null;
 const mitGraph = (p, befehle) => fuehreListeAus(p, befehle, { graphArt });
 const BK = (strang, extra = {}) => ({ befehl: 'insert_setzen', strang_id: strang, pos: 0, art: 'bk', graph: 'fx-delay-sync', ...extra });
-const BK_DEF = { k1: 0.5, k2: 0.5, k3: 0.5, k4: 0.5, k5: 0.5, k6: 0.5, k7: 0.5, k8: 0.5 };
+const BK_DEF = Object.fromEntries(Array.from({ length: 64 }, (_, i) => [`k${i + 1}`, 0.5]));
 const abGraph = (p, befehle, grund, teil) => assert.throws(() => mitGraph(p, befehle), (e) => e instanceof BefehlFehler && e.grund === grund && (!teil || e.message.includes(teil)),
   `expected ${grund} (${teil}) for ${JSON.stringify(befehle).slice(0, 100)}`);
 
-test('bk: the pool is 8, the contract has an and k1..k8 and no fixed latency, the kind is accepted', () => {
+test('bk: the pool is 8, the contract has an and k1..k64 and no fixed latency, the kind is accepted', () => {
   assert.equal(MAX_INS_BK, 8);
   assert.equal(INSERT_ARTEN.bk.latenz, 0);
-  assert.deepEqual(INSERT_ARTEN.bk.parameter.map((q) => q.name), ['an', 'k1', 'k2', 'k3', 'k4', 'k5', 'k6', 'k7', 'k8']);
+  assert.deepEqual(INSERT_ARTEN.bk.parameter.map((q) => q.name), ['an', ...Array.from({ length: 64 }, (_, i) => `k${i + 1}`)]);
   assert.ok(INSERT_ARTEN.bk.parameter.slice(1).every((q) => q.min === 0 && q.max === 1 && q.vorgabe === 0.5));
 });
 
@@ -726,7 +726,11 @@ test('bk: the graph is checked with speaking reasons: missing, unknown, an instr
 test('bk: ranges (0..1), unknown names, no key; replace swaps the graph and keeps the slot; the pool of eight counts over the project', () => {
   const p = mit(3);
   lehntAb(p, BK('s1', { werte: { k1: 1.01 } }), 'argument_ungueltig');
-  lehntAb(p, BK('s1', { werte: { k9: 0.5 } }), 'argument_unbekannt');
+  lehntAb(p, BK('s1', { werte: { k65: 0.5 } }), 'argument_unbekannt');
+  lehntAb(p, BK('s1', { werte: { k0: 0.5 } }), 'argument_unbekannt');
+  lehntAb(p, BK('s1', { werte: { k32: 1.01 } }), 'argument_ungueltig');
+  assert.equal(mitGraph(p, [BK('s1', { werte: { k9: 0.2, k32: 0.9 } })]).projekt.spuren[0].inserts[0].werte.k32, 0.9, 'knobs 9 and 32 are accepted');
+  assert.equal(mitGraph(p, [BK('s1', { werte: { k33: 0.2, k64: 0.9 } })]).projekt.spuren[0].inserts[0].werte.k64, 0.9, 'knobs 33 and 64 are accepted');
   lehntAb(p, BK('s1', { sc: 2 }), 'argument_unbekannt');
   const a = mitGraph(p, [BK('s1', { werte: { k1: 0.9 } })]).projekt;
   const t = mitGraph(a, [BK('s1', { ersetzen: true, graph: 'fx-echo-achtel' })]).projekt;
@@ -739,7 +743,7 @@ test('bk: ranges (0..1), unknown names, no key; replace swaps the graph and keep
   assert.match(GRUND_TEXT.ins_voll, /eight Baukasten effects/);
 });
 
-test('bk: model validation - slot 8 passes, slot 9 is beyond the pool, a bk stage needs its graph, no other kind may carry one; a project without a bk stage sets its 72 rows', async () => {
+test('bk: model validation - slot 8 passes, slot 9 is beyond the pool, a bk stage needs its graph, no other kind may carry one; a project without a bk stage sets its 264 rows', async () => {
   const p = mitGraph(mit(1), [BK('s1')]).projekt;
   const c = JSON.parse(JSON.stringify(p)); c.spuren[0].inserts[0].slot = 8;
   assert.equal(pruefeProjekt(c).fehler, undefined);
@@ -751,8 +755,8 @@ test('bk: model validation - slot 8 passes, slot 9 is beyond the pool, a bk stag
   assert.ok(pruefeProjekt(e).fehler, 'a compressor with a graph');
   const { alleInsertRegler } = await import('../areas/proj/mapping.ts');
   const rows = alleInsertRegler(neuesProjekt('N')).filter((r) => r.pfad.startsWith('ins/bk/'));
-  assert.equal(rows.length, 8 * 9);
-  assert.deepEqual(rows.slice(0, 9).map((r) => r.pfad), ['ins/bk/1/k1', 'ins/bk/1/k2', 'ins/bk/1/k3', 'ins/bk/1/k4', 'ins/bk/1/k5', 'ins/bk/1/k6', 'ins/bk/1/k7', 'ins/bk/1/k8', 'ins/bk/1/an']);
+  assert.equal(rows.length, 8 * 65);
+  assert.deepEqual(rows.slice(0, 65).map((r) => r.pfad), [...Array.from({ length: 64 }, (_, i) => `ins/bk/1/k${i + 1}`), 'ins/bk/1/an']);
 });
 
 test('bk: the playback chain entry carries the graph; the stage with an off still goes into the chain; the graph is playback structure', () => {

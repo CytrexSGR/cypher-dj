@@ -2,18 +2,24 @@
 // Öffnen sendet nichts an den Kern: gesendet wird nur auf einen Griff (Zeiger, Rad, Klick) oder LOAD.
 // Lesen: /strom (Kern über den Seiten-Server), Leitstand-WS als Rolle "anzeige" (takt, ansage, ereignis).
 import { DECKS, ERZEUGER, LOOPBOXEN, GRIFF, art, griffZuMidi, formatiere, vorgabe, setzeZielKurve } from './curves.js';
-import { KOMP_PRESETS, KOMP_SCHLUESSEL, kennlinienPfad, AUTO_BEREICH, DURCHGAENGE, AUTO_VORLAGEN, vorlagePunkte, punktAusStelle, fxInhaltText, knobListe, KNOB_GRUPPE, htmlText, bkKnobListe, bkKnobHtml, graphWahlHtml, GRAPH_KANAL_ART, sendRueckHtml, lernKnopfHtml, lernStand, bkMarke, bkSpeichernHtml,
+import { KOMP_PRESETS, KOMP_SCHLUESSEL, kennlinienPfad, AUTO_BEREICH, DURCHGAENGE, AUTO_VORLAGEN, vorlagePunkte, punktAusStelle, fxInhaltText, knobListe, KNOB_GRUPPE, htmlText, bkKnobListe, bkKnobHtml, graphWahlHtml, instrumentWahlHtml, hostName, GRAPH_KANAL_ART, sendRueckHtml, lernKnopfHtml, lernStand, bkMarke, bkSpeichernHtml,
   werkFeld, werkText, werkzeugStreifenHtml, werkzeugKlickNach, setzeWerkzeug,
   BUS_KANAELE, MIX_FELDER, busPanelHtml, limiterZustand, mixAufnehmen, mixLesung, mixAblaufIn,
   GATE_KANAELE, GATE_FELDER, GATE_SKALA_DB, gateAufnehmen } from './effects.js';
 import { KOPIE_TEXT, HAND_PRUEFMODUS_TEXT, cypherStand, ausgangAnzeige, keylockStand, keylockAnfrage, keylockMeldung, variText, einsHinweis, EINS_HINWEIS_TEXT } from './messages.js';
 import { leseWelle, Kopf, Laufansicht, Uebersicht, SR, laengeFrames, ersteVolleEins } from './wave.js';
 import { bindeSpurbaender } from './track_tape_view.js';
+import { bindeInstrumente, lernPfadVon, geraeteseiteKlasse } from './instruments_view.js';
+import { bindeKopplung } from './coupling.js';   // task 10: pair a tablet (main page only)
+import { baueFrontplatte, vorgaben as panelVorgaben, steuerungen, parameterVon } from './panel.js';
+import { baueKopf, standardBeschreibung, tagVonGraph, geraeteknopfHtml, GERAETEKNOPF } from './panel_kopf.js';
 import { ScrubZieher } from './scrub.js';
 import { bindeProduktion } from './production/production.js';
-import { SpektrumAnsicht, SPEKTRUM_FRIST_MS } from './spectrum.js';   // 1.15 A7b: spectrum view
-import { bauePresetPanel, hostWechsel, kanalPlanHolen, presetAusKernKomp, kernGeraetAnfragen, kernGeraetWerte, istKernGeraet } from './presets.js';   // 1.16: preset browser
+import { SpektrumAnsicht, SpektrumLeihe, spektrumFlaeche, SPEKTRUM_FRIST_MS } from './spectrum.js';   // 1.15 A7b: spectrum view
+import { bauePresetPanel, hostWechsel, kanalPlanHolen, fehlerText, presetAusKernKomp, kernGeraetAnfragen, kernGeraetWerte, istKernGeraet } from './presets.js';   // 1.16: preset browser
 import { vorhoerFolgt, vorhoerCursor, SPALTEN, LISTEN_SPALTEN, LISTEN_TEXT, TYP_TEXT, stoebernUrl, zelle, baueBaum, listenArtFuer, ziehZiel, postenArtText, filterFuer, filterBereinigt, detailFakten, welleStatus, feldText, aktionenFuer, loopBoxStatus, IMPORT_FEHLER_TEXT, vorbereitText, statusText, setzeVorbereitLive, fehlerAnzeige } from './browse.js';
+import { surgeAdapter, vergesseGesendet, surgeFensterKnopf, surgeFensterSenden, SURGE_FENSTER } from './surge_adapter.js';
+import { hostAdapter, RB338_HOST_NAME, rb338HostZuPanel, hostKnobName, knobHostName, istVonHost, graphDesHosts, baukastenAutoPanel, hostLernStand, hostLernAnfrage } from './host_adapter.js';
 
 const $ = (s, w = document) => w.querySelector(s);
 const $$ = (s, w = document) => [...w.querySelectorAll(s)];
@@ -600,7 +606,66 @@ const KOMP_REGLER = [
 ];
 const kompGr = {};   // kanal -> { db, t }
 function kompWert(k, feld, vor) { const w = zustand.regler?.[`${k}/comp/${feld}`]; return typeof w === 'number' ? w : vor; }
+let instrumenteAnsicht = null;   // INSTRUMENTS area (instruments_view.js), bound in bindeEffekte
+function instrumenteSichtbar() { return !!instrumenteAnsicht && !$('#instrumente').hidden; }
+// Device page: the INSTRUMENTS element itself, enlarged as a fixed layer (panel.css body.geraeteseite). One host, no second plate; this function is the only way in and out.
+let geraeteseiteAn = false;
+// Tablet view (#tablet, task 10): the device page is the whole page and has no way out; bindeTablet() sets it, setzeGeraeteseite keeps the layer open.
+let tabletModus = false;
+// The spectrum views on the page: the EFFECTS one and, on the device page, the plate cell or the strip. All are fed by the same frames (one global source).
+const spektrumAnsichten = new Set();
+function spektrumAnmelden(a) {
+  for (const x of spektrumAnsichten) if (x.l && x.l.isConnected === false) spektrumAnsichten.delete(x);   // views of rebuilt plates
+  spektrumAnsichten.add(a);
+  a.setzeQuelle(zustand.regler?.['spektrum/kanal'] ?? 0);
+  spektrumNachsehen();
+}
+function spektrumAbmelden() {   // every view but the EFFECTS one: those of plates that are gone (rebuild, close)
+  for (const x of spektrumAnsichten) if (x !== spektrumAnsicht) spektrumAnsichten.delete(x);
+}
+function spektrumStreifen(liste) {
+  const { wurzel, ansicht } = spektrumFlaeche(document);
+  wurzel.classList.add('fp-spektrumstreifen');
+  liste.append(wurzel);
+  spektrumAnmelden(ansicht);
+}
+const spektrumLeihe = new SpektrumLeihe({ speicher: (() => { try { return window.sessionStorage; } catch { return null; } })(), kanaele: Object.keys(GRAPH_KANAL_ART).filter((k) => GRAPH_KANAL_ART[k] === 'instrument'),
+  aktuell: () => zustand.regler?.['spektrum/kanal'], sende: (p, n) => sendeWerkzeug(p, n),
+  beacon: (pfad, nach) => { const body = JSON.stringify({ pfad, nach, ab: 'jetzt' }); try { if (navigator.sendBeacon('/regler', new Blob([body], { type: 'application/json' }))) return; } catch { /* fetch below */ } try { fetch('/regler', { method: 'POST', headers: { 'content-type': 'application/json' }, body, keepalive: true }); } catch { /* page is gone */ } },
+  neuGeladen: (() => { try { return performance.getEntriesByType('navigation')[0]?.type === 'reload'; } catch { return false; } })() });   // a duplicated tab is not a reload: it must not undo the original's lease
+window.addEventListener('pagehide', () => spektrumLeihe.seiteVerlassen());
+function istGeraeteseite() { return geraeteseiteAn; }
+function setzeGeraeteseite(an, neuBauen = true) {
+  an = (!!an || tabletModus) && instrumenteSichtbar();
+  const war = geraeteseiteAn;
+  geraeteseiteAn = an;
+  const klassen = geraeteseiteKlasse(an, document.body.classList.contains('produktion'));
+  for (const k of ['geraeteseite', 'geraeteseite-produktion']) document.body.classList.toggle(k, klassen.includes(k));
+  if (an && tabletModus) document.body.style.setProperty('--geraete-oben', '0px');   // no page header on the tablet
+  else if (an) {   // the layer starts under the page header, whatever height the header has in this mode
+    const kopf = $('#kopf')?.getBoundingClientRect?.();
+    document.body.style.setProperty('--geraete-oben', `${Math.max(0, Math.round(kopf?.bottom ?? 64)) + 6}px`);
+  } else document.body.style.removeProperty('--geraete-oben');
+  if (an !== war) {   // transitions only (a resize call keeps the source); the spectrum row is borrowed while the page is open and restored on every way out
+    if (an) spektrumLeihe.oeffnen(instrumenteAnsicht.gewaehlt()); else { spektrumLeihe.schliessen(); spektrumAbmelden(); }
+  }
+  if (neuBauen && an !== war && instrumenteSichtbar()) instrumenteAnsicht.neuBauen();   // the plate is rebuilt wide (an) or narrow (closed); same host
+}
+/** Whether a plate in `liste` is built wide: only inside the INSTRUMENTS area while the device page is open (the EFFECTS plates never). */
+function breitFuer(liste) { return istGeraeteseite() && !!liste.closest('#instrumente'); }
+/** The one place that builds a front plate for the page: `breit` from the page state, the device page button in the title bar of every plate in INSTRUMENTS (bk, Surge, host). */
+function platteBauen(liste, opt) {
+  const breit = breitFuer(liste);
+  spektrumAbmelden();   // the views of the plates this build replaces
+  let spektren = 0;
+  const fp = baueFrontplatte(liste, { ...opt, breit, ...(breit ? { beiSpektrum: (a) => { spektren++; spektrumAnmelden(a); } } : {}) });
+  if (breit && !spektren) spektrumStreifen(liste);   // a panel without a spektrum control: the channel spectrum in a strip under the plate
+  if (liste.closest('#instrumente') && !istGeraeteseite()) liste.querySelector('.fp-kopf')?.insertAdjacentHTML('beforeend', geraeteknopfHtml(false));   // opens; the closer sits in the tab strip
+  return fp;
+}
 function setzeBereich(b) {
+  setzeGeraeteseite(false, false);   // another area (or a restore) never keeps the layer; the rebuild below (INSTRUMENTS) or later (reopen) builds narrow
+  if (b !== 'instrumente' && instrumenteSichtbar()) lernAbbrechenFuer(instrumenteAnsicht.gewaehlt());
   document.body.classList.toggle('bereich-effekte', b === 'effekte');
   for (const t of $$('[data-bereich]')) { const an = t.dataset.bereich === b; t.classList.toggle('an', an); t.setAttribute('aria-selected', String(an)); }
   $('#effekte').hidden = b !== 'effekte';
@@ -608,6 +673,9 @@ function setzeBereich(b) {
   document.body.classList.toggle('bereich-presets', b === 'presets');   // 1.16
   $('#presets').hidden = b !== 'presets';
   if (b === 'presets') zeigePresets();
+  document.body.classList.toggle('bereich-instrumente', b === 'instrumente');   // INSTRUMENTS area
+  $('#instrumente').hidden = b !== 'instrumente';
+  if (b === 'instrumente') instrumenteAnsicht?.baue();
   try { localStorage.setItem('djk-bereich', b); } catch { /* ohne Speicher: nur jetzt */ }
 }
 async function setzeKomp(pfad, nach) {
@@ -628,12 +696,272 @@ function graphVon(k) {
   const n = graphenGeladen[k];
   return n ? (graphenInfo.graphen.find((g) => g.name === n) ?? { name: n, regler_namen: {} }) : null;
 }
+// Front panels: GET /graphen/panel?name= answers the panel of a graph (sidecar file, else the automatic panel) with the graph's knob ranges; null = the graph
+// has no knobs at all, the slider field stays. Asked once per graph name and page load.
+const panelCache = new Map();   // name -> { panel, regler } | null
+const panelHol = new Map();     // name -> pending fetch
+const feldModus = new Set();    // channels whose panel was switched to the plain slider field (the MIDI learn buttons live there)
+const panelVon = (name) => (name ? panelCache.get(name) ?? null : null);
+/** The graph of a channel as the knob list wants it: its names plus, when the panel answer is cached, the knob ranges it defines (knob count 8..64). */
+function graphMitBereich(k) {
+  const g = graphVon(k);
+  const info = g ? panelVon(g.name) : null;
+  return g && info?.regler ? { ...g, regler: info.regler } : g;
+}
+function holePanel(name) {
+  if (!name || !graphenInfo.graphen.some((g) => g.name === name)) return Promise.resolve(null);   // unknown names would answer 404 (a console error)
+  if (panelCache.has(name)) return Promise.resolve(panelCache.get(name));
+  if (!panelHol.has(name)) {
+    panelHol.set(name, (async () => {
+      let aus = null;
+      try {
+        const r = await fetch(`/graphen/panel?name=${encodeURIComponent(name)}`);
+        if (r.ok) {
+          const j = await r.json();
+          aus = j.panel ? { panel: j.panel, regler: j.regler ?? {} } : null;
+          if (j.fehler?.length) melde(`Panel file of ${name} refused, showing the automatic panel: ${j.fehler[0]}${j.fehler.length > 1 ? ` (+${j.fehler.length - 1} more)` : ''}`, true);
+        }
+      } catch { /* the page server is gone: sliders */ }
+      panelCache.set(name, aus);
+      panelHol.delete(name);
+      return aus;
+    })());
+  }
+  return panelHol.get(name);
+}
+/** Fetch the panels of the graphs that sit on channels and rebuild the knob areas of those that have one. */
+function ladePaneele() {
+  for (const n of new Set(Object.values(graphenGeladen))) {
+    if (panelCache.has(n)) continue;
+    holePanel(n).then((p) => { if (p) baueKnobsNeu(); });
+  }
+}
+// Front panels task 11: erz/2 (bass) and erz/3 (melodie) play a host while no Baukasten graph is loaded there. GET /klang says which one (wirt-<gruppe>.json, `art`):
+// 'lv2' is Surge XT (the host started without --sfz/--vst3/--effekt/--instrument, instrument_host.py), 'vst3:*' is Cypher Modular (its own INSTRUMENT KNOBS), 'sfz:*' has
+// no controls. The Surge panel and its parameter table come from GET /geraete/panel?art=surge (once per page load); the actual values from POST /klang aktion 'ist'.
+const SURGE_GRUPPE = { 'erz/2': 'bass', 'erz/3': 'melodie' };
+let graphenErhalten = false;   // the first graphen_geladen state arrived (SSE stand or GET /graphen): before it a channel may look empty although it plays a graph
+let surgeInfo, surgeHol = null;   // undefined = loading or not asked yet; null = failed; else { panel, parameter }
+const surgeKlang = new Map();     // gruppe -> patch name of the host the last time the area was built
+function holeSurge() {
+  if (surgeInfo !== undefined) return Promise.resolve(surgeInfo);
+  surgeHol ??= (async () => {
+    let aus = null;
+    try { const r = await fetch('/geraete/panel?art=surge'); if (r.ok) { const j = await r.json(); if (j.panel) aus = { panel: j.panel, parameter: j.parameter ?? [] }; } } catch { /* the area shows a retry */ }
+    surgeInfo = aus;
+    return aus;
+  })();
+  return surgeHol;
+}
+/** One line in the knob area, optionally with a Retry button. */
+function hostZeile(liste, text, neuLaden) {
+  liste.innerHTML = `<div class="bkzeile">${htmlText(text)}${neuLaden ? ' <button type="button" data-host-neu>Retry</button>' : ''}</div>`;
+  if (neuLaden) liste.querySelector('[data-host-neu]').addEventListener('click', neuLaden);
+}
+async function baueHostBereich(liste, k) {
+  const gruppe = SURGE_GRUPPE[k];
+  const nr = (liste._hostNr = (liste._hostNr ?? 0) + 1);
+  const gueltig = () => liste.isConnected && liste._hostNr === nr;
+  const neuLaden = () => { surgeInfo = undefined; surgeHol = null; baueKnobsNeu(); };
+  if (!graphenErhalten) { liste.textContent = 'Loading…'; return; }   // setzeGraphenGeladen / holeGraphen rebuild the area once the state is known
+  liste.textContent = 'Loading…';
+  let wirt;
+  try { const r = await fetch('/klang'); if (!r.ok) throw new Error(`HTTP ${r.status}`); wirt = (await r.json())?.[gruppe] ?? null; }
+  catch (e) { if (gueltig()) hostZeile(liste, `The instrument host could not be read (${e.message}).`, neuLaden); return; }
+  if (!gueltig()) return;
+  const art = typeof wirt?.art === 'string' ? wirt.art : null;
+  if (art === null) { hostZeile(liste, 'No instrument host is running on this channel.', null); return; }
+  const meldeAbgelehnt = () => liste._fp?.aktualisiere(true);
+  const hostPlatte = (platte, adapter) => { liste.innerHTML = ''; liste.classList.add('mit-platte'); liste._fpHostKanal = k; liste._fp = platteBauen(liste, { ...platte, adapter, ...hostLernOpt(k) }); };   // no header presets; LEARN through the slot rows (host learn)
+  if (art === 'sfz:grand') { hostZeile(liste, 'Grand piano (samples), no controls', null); return; }
+  if (art === 'vst3:rb338') {   // RB-338 as host: its hand panel over the host's own parameters
+    const info = await holeRb338();
+    if (!gueltig()) return;
+    if (!info) { hostZeile(liste, 'The RB-338 panel could not be loaded.', () => { rb338Info = undefined; rb338Hol = null; baueKnobsNeu(); }); return; }
+    let ist = {};
+    try { const r = await postJson('/klang', { gruppe, aktion: 'params' }); if (r.ok) ist = istVonHost(r.j?.params, rb338HostZuPanel); else melde(`The RB-338 values could not be read: ${r.j?.text ?? r.code}`, true); } catch { melde('The RB-338 values could not be read; the knobs show defaults until moved', true); }
+    if (!gueltig()) return;
+    hostPlatte({ panel: info.panel, parameter: Object.fromEntries(info.parameter.map((p) => [p.name, p])) },
+      hostAdapter({ gruppe, kanal: k, hostName: (p) => RB338_HOST_NAME[p] ?? null, ist, post: postJson, melde, beiAbgelehnt: meldeAbgelehnt }));
+    return;
+  }
+  if (art === 'vst3:baukasten') {   // Cypher Modular in the host: the panel of the graph it plays (found by its knob names), else an automatic panel of the reported knobs
+    let r;
+    try { r = await postJson('/klang', { gruppe, aktion: 'params' }); } catch (e) { if (gueltig()) hostZeile(liste, `The instrument host could not be read (${e.message}).`, neuLaden); return; }
+    if (!gueltig()) return;
+    if (!r.ok) { hostZeile(liste, `The instrument host refused: ${r.j?.text ?? r.code}`, neuLaden); return; }
+    const graph = graphDesHosts(r.j?.namen, graphenInfo.graphen);
+    const gp = graph ? await holePanel(graph) : null;
+    if (!gueltig()) return;
+    const panel = gp?.panel ?? baukastenAutoPanel(r.j?.params, r.j?.namen);
+    if (panel) {
+      hostPlatte({ panel, regler: gp?.regler },
+        hostAdapter({ gruppe, kanal: k, hostName: knobHostName, ist: istVonHost(r.j?.params, hostKnobName), post: postJson, melde, beiAbgelehnt: meldeAbgelehnt }));
+      return;
+    }
+  }
+  if (art.startsWith('vst3:')) {   // Cypher Modular: the existing INSTRUMENT KNOBS
+    liste.innerHTML = '<div class="knobbereich"><span class="bildtitel">INSTRUMENT KNOBS <b class="knobstatus">…</b></span><div class="knobliste"></div></div>';
+    bindeKnobs(liste, gruppe);
+    return;
+  }
+  if (art !== 'lv2') { hostZeile(liste, 'This instrument has no controls here.', null); return; }
+  const info = await holeSurge();
+  if (!gueltig()) return;
+  if (!info) { hostZeile(liste, 'The Surge XT panel could not be loaded.', neuLaden); return; }
+  const lies = async (namen) => { const r = await postJson('/klang', { gruppe, aktion: 'ist', parameter: namen }); return r.ok ? r.j?.werte : null; };
+  const namen = [...new Set(steuerungen(info.panel).flatMap(parameterVon))];
+  let ist = null;
+  try { ist = await lies(namen); } catch { /* the defaults of the table are shown */ }
+  if (!gueltig()) return;
+  if (!ist) melde('The Surge XT values could not be read; the knobs show defaults until moved', true);
+  if (surgeKlang.has(gruppe) && surgeKlang.get(gruppe) !== (wirt.klang ?? null)) vergesseGesendet(gruppe);   // another patch: what was sent no longer holds
+  surgeKlang.set(gruppe, wirt.klang ?? null);
+  liste.innerHTML = '';
+  liste.classList.add('mit-platte');
+  const adapter = surgeAdapter(gruppe, { kanal: k, parameter: info.parameter, ist, post: postJson, melde, lies, beiAbgelehnt: () => liste._fp?.aktualisiere(true) });
+  liste._fpHostKanal = k;
+  liste._fp = platteBauen(liste, { panel: info.panel, parameter: Object.fromEntries(info.parameter.map((p) => [p.name, p])), adapter, ...hostLernOpt(k) });   // no header presets; LEARN through the slot rows (host learn)
+  surgeFensterAnbringen(liste, gruppe);
+}
+const surgeFensterAn = new Map();   // gruppe -> Surge's window shown (as asked by this page; the host keeps no other state)
+/** The "Open Surge window" button in the Surge plate's header and the line with the host's reason under it. */
+function surgeFensterAnbringen(liste, gruppe) {
+  const kopf = liste.querySelector('.fp-kopf');
+  if (!kopf) return;
+  kopf.insertAdjacentHTML('beforeend', surgeFensterKnopf(!!surgeFensterAn.get(gruppe)));
+  const hinweis = document.createElement('div');
+  hinweis.className = 'fp-fensterhinweis';
+  hinweis.hidden = true;
+  kopf.after(hinweis);
+  kopf.addEventListener('click', async (e) => {   // one listener on the header: the button is replaced after every answer
+    const knopf = e.target.closest(SURGE_FENSTER);
+    if (!knopf) return;
+    const soll = !surgeFensterAn.get(gruppe);
+    knopf.disabled = true;
+    const r = await surgeFensterSenden(postJson, gruppe, soll);
+    surgeFensterAn.set(gruppe, r.an);
+    knopf.outerHTML = surgeFensterKnopf(r.an);
+    hinweis.textContent = r.hinweis; hinweis.hidden = !r.hinweis;
+  });
+}
+let rb338Info, rb338Hol = null;   // undefined = not asked yet; null = failed; else { panel, parameter } of GET /geraete/panel?art=rb338
+function holeRb338() {
+  if (rb338Info !== undefined) return Promise.resolve(rb338Info);
+  rb338Hol ??= (async () => {
+    let aus = null;
+    try { const r = await fetch('/geraete/panel?art=rb338'); if (r.ok) { const j = await r.json(); if (j.panel) aus = { panel: j.panel, parameter: j.parameter ?? [] }; } } catch { /* the area shows a retry */ }
+    rb338Info = aus;
+    return aus;
+  })();
+  return rb338Hol;
+}
+function baueKnobsNeu() { baueSendKnobs(); if ($('#fxdetail')?.firstChild) baueFxDetail(); if (instrumenteSichtbar()) instrumenteAnsicht.neuBauen(); }
+/** Control path of a bk panel parameter k<n> on channel `k`: `<k>/bk/<n>`. */
+const bkPfad = (k, param) => `${k}/bk/${param.slice(1)}`;
+/** Adapter of the panel for a channel (contract: get(param), set(param, v), lernPfad(param)): bk parameter k<n> maps to `<kanal>/bk/<n>`;
+ *  values from the control state, writes over POST /regler (latest value per parameter, every 40 ms). */
+function kanalAdapter(k) {
+  const warte = new Map(), neu = new Map();
+  return {
+    get: (param) => { const w = zustand.regler?.[bkPfad(k, param)]; return typeof w === 'number' ? w : undefined; },
+    lernPfad: (param) => bkPfad(k, param),
+    set: (param, v) => {
+      neu.set(param, v);
+      if (warte.has(param)) return;
+      warte.set(param, setTimeout(async () => {
+        warte.delete(param);
+        let a;
+        try { a = await postJson('/regler', { pfad: bkPfad(k, param), nach: neu.get(param), ab: 'jetzt' }); } catch (e) { melde(`Knob not sent: ${e.message}`, true); return; }
+        if (!a.ok) melde(`Knob refused: ${a.j?.text ?? a.j?.fehler ?? a.code}`, true);
+      }, 40));
+    },
+  };
+}
+// Preset header of an instrument panel (panel_kopf.js): the register is read once (and again after a SAVE); `kopfPreset` remembers the last preset applied per channel and graph.
+let kopfRegister = null;
+const kopfPreset = new Map();   // `${kanal}|${graph}` -> { id, name }
+async function holeKopfRegister() {
+  try { const r = await fetch('/presets/register'); if (r.ok) kopfRegister = (await r.json()).register ?? null; } catch { /* the header stays as it was */ }
+}
+// A valid description for a preset saved from a panel that has no earlier preset to copy it from (standardBeschreibung in panel_kopf.js, words from GET /presets/vokabular).
+async function kopfStandardBeschreibung(kanal, graph) {
+  let inhalt = null;
+  try { const r = await fetch('/presets/vokabular'); if (r.ok) inhalt = (await r.json()).inhalt; } catch { /* fixed words */ }
+  return standardBeschreibung(graph, kanal, inhalt);
+}
+async function sichereKanalPreset(kanal, graph, name, adapter) {
+  const letzt = kopfPreset.get(`${kanal}|${graph}`);
+  let beschreibung = null;
+  if (letzt) {
+    const m = /^(werk|nutzer):([^/]+)\/(.+)$/.exec(letzt.id);
+    try { const r = m && await fetch(`/presets/${m[1]}/${m[2]}/${m[3]}`); if (r?.ok) beschreibung = (await r.json()).beschreibung ?? null; } catch { /* default below */ }
+  }
+  beschreibung ??= await kopfStandardBeschreibung(kanal, graph);
+  const werte = {};
+  for (let n = 1; n <= 64; n++) werte[`knob${n}`] = adapter.get(`k${n}`) ?? 0.5;
+  const r = await presetSenden('/presets', { name, geraet: 'baukasten', graph, werte, beschreibung, tags: tagVonGraph(graph) ? [tagVonGraph(graph)] : [] });
+  if (r.code !== 200 && r.code !== 201) return { ok: false, text: fehlerText(r) };
+  await holeKopfRegister();
+  return { ok: true, text: `Preset "${name}" saved` };
+}
+const kopfHandles = new Map();   // channel -> header handle: redrawn whenever the learn state changes from outside the header
+function panelKopf(k, graph, titel, adapter) {
+  return (host, info) => {
+    const schluessel = `${k}|${graph}`;
+    const kopf = baueKopf(host, { titel, geraet: { art: 'bk', graph }, register: () => kopfRegister, aktiv: () => kopfPreset.get(schluessel)?.id ?? '',
+      melde: (text, fehler) => melde(text, fehler),
+      anwenden: async (id) => {
+        const r = await wendeKanalPresetAn(id, k);
+        if (r.ok) { const e = kopfRegister?.eintraege?.find((x) => x.id === id); kopfPreset.set(schluessel, { id, name: e?.name ?? id }); }
+        return r;
+      },
+      sichern: (name) => sichereKanalPreset(k, graph, name, adapter),
+      lernen: info?.lernen ? { an: () => lernModus.has(k), umschalten: () => lernModusUmschalten(k) } : undefined });
+    kopfHandles.set(k, kopf);
+    if (!kopfRegister) holeKopfRegister().then(() => kopf.neu());
+  };
+}
+/** The panel's defaults ({param: k}) go out BEFORE the graph is loaded (knobs first, then graph, like the project restore): knobs live on the channel, a swapped graph inherits them. */
+async function schickeVorgaben(kanal, werte) {
+  for (const [param, nach] of Object.entries(werte)) {
+    let a;
+    try { a = await postJson('/regler', { pfad: bkPfad(kanal, param), nach, ab: 'jetzt' }); } catch (e) { melde(`Panel defaults not sent: ${e.message}`, true); return; }
+    if (!a.ok) { melde(`Panel defaults refused: ${a.j?.text ?? a.j?.fehler ?? a.code}`, true); return; }
+  }
+}
+// Instrument picker by category: the display name of the host of erz/2 (bass) and erz/3 (melodie), read from GET /klang; the category last chosen per channel
+// (localStorage, in try/catch) and the category browsed to for the graph that was loaded at that moment (it falls back to the loaded graph's own category).
+const hostNamen = {};
+const instrDurchsucht = {};
+let instrKat = {};
+try { const r = JSON.parse(localStorage.getItem('djk-instrument-kat') ?? '{}'); if (r && typeof r === 'object' && !Array.isArray(r)) instrKat = r; } catch { /* without storage: no memory */ }
+function merkeInstrKat(k, kat) {
+  instrKat[k] = kat;
+  try { localStorage.setItem('djk-instrument-kat', JSON.stringify(instrKat)); } catch { /* without storage: only now */ }
+}
+function katFuer(k) {
+  const geladen = graphenGeladen[k] ?? '';
+  const d = instrDurchsucht[k];
+  if (d && d.fuer === geladen) return d.kat;
+  return geladen === '' ? (instrKat[k] ?? null) : null;
+}
+async function holeHostNamen() {
+  try {
+    const r = await fetch('/klang');
+    if (!r.ok) return;
+    const j = await r.json();
+    let neu = false;
+    for (const [k, g] of Object.entries(SURGE_GRUPPE)) { const n = hostName(j?.[g]); if (hostNamen[k] !== n) { hostNamen[k] = n; neu = true; } }
+    if (neu) { zeigeGraphWahl(); if (instrumenteSichtbar()) instrumenteAnsicht.neuBauen(); }
+  } catch { /* the default name Surge XT stays */ }
+}
 function zeigeGraphWahl() {
   for (const platz of $$('[data-graphplatz]')) {
     const k = platz.dataset.graphplatz;
     if (platz.contains(document.activeElement)) continue;   // do not pull the list away while it is open
-    platz.innerHTML = graphWahlHtml(k, graphenInfo.graphen, graphenGeladen[k] ?? '')
-      + bkSpeichernHtml(k, bkMarke(k, bkGespeichert, graphenGeladen[k], zustand.regler), bkGespeichert !== null, graphenGeladen[k]);   // S17
+    platz.innerHTML = (platz.closest('#instrumente') ? instrumentWahlHtml(k, graphenInfo.graphen, graphenGeladen[k] ?? '', hostNamen[k], katFuer(k)) : graphWahlHtml(k, graphenInfo.graphen, graphenGeladen[k] ?? '', hostNamen[k]))
+      + bkSpeichernHtml(k, bkMarke(k, bkGespeichert, graphenGeladen[k], zustand.regler, panelVon(graphenGeladen[k])?.regler), bkGespeichert !== null, graphenGeladen[k]);   // S17
   }
 }
 // S17: sound snapshot of the open project. bkGespeichert = GET /proj/bk gespeichert, null without a project. Fetched on start, on SSE 'proj'
@@ -663,21 +991,34 @@ async function speichereSound(kanal) {
 async function holeGraphen() {
   try {
     const j = await (await fetch('/graphen')).json();
-    if (Array.isArray(j.graphen)) { graphenInfo = { graphen: j.graphen, uebersprungen: j.uebersprungen ?? [] }; graphenGeladen = j.geladen ?? graphenGeladen; }
+    if (Array.isArray(j.graphen)) { graphenInfo = { graphen: j.graphen, uebersprungen: j.uebersprungen ?? [] }; graphenGeladen = j.geladen ?? graphenGeladen; if (j.geladen) graphenErhalten = true; }
+    panelCache.clear();
     zeigeGraphWahl();
     baueSendKnobs();
     if (GRAPH_KANAL_ART[fxGewaehlt] || $('#fxdetail')?.firstChild) baueFxDetail();
+    if (instrumenteSichtbar()) instrumenteAnsicht.neuBauen();
+    ladePaneele();
   } catch { /* the page server is gone: the picker keeps what it had */ }
 }
 function setzeGraphenGeladen(neu) {
   const vorher = graphenGeladen[fxGewaehlt];
+  const alt = graphenGeladen;
   graphenGeladen = neu ?? {};
+  graphenErhalten = true;
+  const armiert = lernen.wartet?.pfad?.split('/bk/')[0];   // a graph change on the channel that waits for a controller drops the armed learn
+  if (armiert && alt[armiert] !== graphenGeladen[armiert]) lernSchicken('/lernen', { pfad: null });
   zeigeGraphWahl();
   baueSendKnobs();
   if (graphenGeladen[fxGewaehlt] !== vorher) baueFxDetail();   // knob names (and the Surge knobs of erz/2, erz/3) follow the graph
+  if (instrumenteSichtbar()) instrumenteAnsicht.neuBauen();   // deferred until pointerup while a panel control is held
+  ladePaneele();
 }
 async function waehleGraph(kanal, name) {
   let r;
+  const gewaehltKat = graphenInfo.graphen.find((g) => g.name === name)?.kategorie;
+  if (gewaehltKat) merkeInstrKat(kanal, gewaehltKat);
+  if (lernen.wartet?.pfad?.startsWith(`${kanal}/bk/`)) lernSchicken('/lernen', { pfad: null });   // the knob it waited for is about to change meaning
+  if (name) { const info = await holePanel(name); if (info) await schickeVorgaben(kanal, panelVorgaben(info.panel)); }   // every graph with knobs has a panel (file or automatic)
   try { r = await postJson('/graph', { kanal, name }); } catch (e) { melde(`Page server unreachable: ${e.message}`, true); zeigeGraphWahl(); return; }
   window.djkGesendet.push({ graph: { kanal, name }, code: r.code, antwort: r.j });
   if (!r.ok) melde(`Graph refused: ${r.j?.text ?? r.j?.fehler ?? r.code}`, true);
@@ -711,7 +1052,7 @@ function baueFxStreifen() {
     }
     reihe.append(s);
   }
-  const send = document.createElement('div');   // SEND RETURNS: graph picker and the eight knobs fx/<n>/bk/1..8 (S14)
+  const send = document.createElement('div');   // SEND RETURNS: graph picker and the knobs fx/<n>/bk/1..64 (S14)
   send.className = 'sendrueck';
   send.innerHTML = sendRueckHtml();
   reihe.append(send);
@@ -786,10 +1127,11 @@ function zeigeLimiter(z) {
 const busMix = {};
 // 1.15 A7b: the spectrum view in the EFFECTS panel. The selector is the kern's row spektrum/kanal (echo /e/regler, state snapshot); frames come as /zustand/spektrum.
 const spektrumAnsicht = new SpektrumAnsicht({ leinwand: $('#spektrum-leinwand'), wahl: $('#spektrum-quelle'), info: $('#spektrum-info'), sende: sendeWerkzeug });
+spektrumAnsichten.add(spektrumAnsicht);
 let spektrumTimer = null;
 function spektrumNachsehen() {   // after the last frame the plot must go empty by itself (no event arrives then)
   clearTimeout(spektrumTimer);
-  spektrumTimer = setTimeout(() => spektrumAnsicht.zeichne(), SPEKTRUM_FRIST_MS + 30);
+  spektrumTimer = setTimeout(() => { for (const a of spektrumAnsichten) a.zeichne(); }, SPEKTRUM_FRIST_MS + 30);
 }
 let busMesserTimer = null;
 function zeigeBusMesser() {
@@ -887,7 +1229,7 @@ function baueFxDetail() {
     ${GRAPH_KANAL_ART[k] ? `<div class="graphplatz graphdetail" data-graphplatz="${k}"></div>` : ''}
     <div class="regler-liste">${KOMP_DETAIL.map((r) => `<label>${r.name}<input type="range" data-komp-feld="${r.feld}" min="${r.min}" max="${r.max}" step="${r.schritt}"><output></output></label>`).join('')}
       ${KNOB_GRUPPE[k] && !graphVon(k) ? '<div class="knobbereich"><span class="bildtitel">INSTRUMENT KNOBS <b class="knobstatus">…</b></span><div class="knobliste"></div></div>' : ''}
-      ${bkKnobListe(k, {}, { graph: graphVon(k) }).length ? `<div class="knobbereich"><span class="bildtitel">GRAPH KNOBS <b>${graphVon(k) ? htmlText(graphVon(k).name) : 'Knob 1..8 of the loaded graph'}</b></span><div class="bkliste"></div></div>` : ''}</div>
+      ${bkKnobListe(k, {}, { graph: graphMitBereich(k) }).length ? `<div class="knobbereich"><span class="bildtitel">GRAPH KNOBS <b>${graphVon(k) ? htmlText(graphVon(k).name) : 'Knobs of the loaded graph'}</b></span><div class="bkliste"></div></div>` : ''}</div>
     <div class="bilder"><span class="bildtitel">TRANSFER CURVE (knee 6 dB)</span>
       <svg viewBox="0 0 240 168" aria-label="Transfer curve"><line class="achse" x1="0" y1="168" x2="240" y2="48"/><line class="schwelle"/><path class="kurve"/></svg>
       <span class="bildtitel">GAIN REDUCTION, LAST 10 S</span><canvas width="480" height="100" aria-label="Gain reduction history"></canvas></div>
@@ -949,6 +1291,40 @@ async function bindeKnobs(d, gruppe) {
 }
 // S19 (MIDI learn): the learn table as the page server reports it (GET /lernen); the buttons next to the graph knobs follow it
 let lernen = { zuordnungen: [], wartet: null, midi: { port: null }, datei: 'fehlt' };
+const lernModus = new Set();   // channels whose panel has the LEARN toggle on
+// Host learn: the host parameters mapped onto slot rows (GET /lernen/host ziele: {pfad, kanal, name, gelernt}). A host panel control has the key `<kanal>/host/<name>`
+// (adapter.lernPfad); the slot row `<kanal>/bk/<n>` is what the controller is learned onto.
+let hostLernen = [];
+const hostLernStandVon = (k) => hostLernStand(hostLernen, lernen.wartet?.pfad, k, lernModus.has(k));
+/** LEARN options of a host panel: a click on a control arms (again: cancels) host learn, a right click forgets it; the header only has the LEARN toggle. */
+function hostLernOpt(k) {
+  return {
+    lernen: hostLernStandVon(k),
+    beiLernen: (schluessel) => { const a = hostLernAnfrage(schluessel, hostLernen, lernen.wartet?.pfad); lernSchicken(a.pfad, a.daten); },
+    beiVergessen: (schluessel) => lernSchicken('/lernen/host/loeschen', hostZiel(schluessel)),
+    kopf: (kopfEl, info) => {
+      if (!info?.lernen) return;
+      const zeichne = () => {
+        const an = lernModus.has(k);
+        kopfEl.innerHTML = `<div class="fp-presetzeile"><button type="button" class="fp-knopf-klein${an ? ' an' : ''}" data-fp-lernen aria-pressed="${an}" title="MIDI learn: click a control, then move a knob on your controller (right click forgets)">LEARN</button></div>`;
+      };
+      kopfEl.addEventListener('click', (e) => { if (e.target?.closest?.('[data-fp-lernen]')) lernModusUmschalten(k); });
+      kopfHandles.set(k, { neu: zeichne });
+      zeichne();
+    },
+  };
+}
+/** What a panel needs to mark its controls: the mode of its channel, the armed path, every assigned path. */
+const panelLernStand = (k) => ({ an: lernModus.has(k), wartet: lernen.wartet?.pfad ?? null, gelernt: new Set(lernen.zuordnungen.map((z) => z.pfad)) });
+// An armed learn on a channel that is no longer in front is cancelled (tab switch, leaving INSTRUMENTS).
+function lernAbbrechenFuer(k) { if (k && lernPfadVon(lernen.wartet?.pfad, k)) lernSchicken('/lernen', { pfad: null }); }
+function lernModusUmschalten(k) {
+  if (lernModus.has(k)) {
+    lernModus.delete(k);
+    if (lernen.wartet?.pfad?.startsWith(`${k}/bk/`)) lernSchicken('/lernen', { pfad: null });
+  } else lernModus.add(k);
+  zeigeLernen();
+}
 function setzeLernen(neu) {
   if (!neu || !Array.isArray(neu.zuordnungen)) return;
   lernen = neu;
@@ -959,16 +1335,26 @@ function zeigeLernen() {
     const pfad = platz.dataset.lernPlatz;
     platz.innerHTML = lernKnopfHtml(pfad, lernStand(lernen.zuordnungen, pfad), { midi: !!lernen.midi?.port, wartet: lernen.wartet?.pfad ?? null });
   }
+  for (const liste of $$('.bkliste')) {   // front panels follow too
+    if (liste._fp && liste._fpHostKanal) liste._fp.setzeLernen(hostLernStandVon(liste._fpHostKanal));
+    else if (liste._fp && liste._fpKanal) liste._fp.setzeLernen(panelLernStand(liste._fpKanal));
+  }
+  for (const h of kopfHandles.values()) h.neu();   // the LEARN toggles (aria-pressed) follow lernModus, also when it changed outside the header
 }
 async function holeLernen() {
+  try { hostLernen = (await (await fetch('/lernen/host')).json())?.ziele ?? []; } catch { /* the host marks keep what they had */ }
   try { setzeLernen(await (await fetch('/lernen')).json()); } catch { /* the page server is gone: the buttons keep what they had */ }
 }
 async function lernSchicken(pfad, daten) {
   let r;
   try { r = await postJson(pfad, daten); } catch (e) { melde(`Learn not sent: ${e.message}`, true); return; }
   window.djkGesendet.push({ lernen: { pfad, daten }, code: r.code, antwort: r.j });
-  if (!r.ok) { melde(`Learn refused: ${r.j?.text ?? r.j?.fehler ?? r.code}`, true); holeLernen(); return; }
+  if (!r.ok) {
+    if (r.code === 409 && r.j?.fehler === 'kein_midi_eingang') { lernModus.clear(); zeigeLernen(); melde('No MIDI input is connected: plug in your controller, then try LEARN again', true); return; }
+    melde(`Learn refused: ${r.j?.text ?? r.j?.fehler ?? r.code}`, true); holeLernen(); return;
+  }
   setzeLernen(r.j);
+  if (pfad.startsWith('/lernen/host')) holeLernen();   // the host mappings changed (the answer is {pfad}, not the learn table)
 }
 const LERN_MELDUNG = {
   fertig: (f) => [`Learned: ${f.pfad} follows CC${f.nr} ch${f.kanal}`, false],
@@ -985,12 +1371,31 @@ function lernEreignis(f) {
   if (m) { const [text, fehler] = m(f); if (text) melde(text, fehler); }
   holeLernen();
 }
-// S5r: graph knobs <channel>/bk/1..8 over POST /regler (set at once, the engine smooths 20 ms); actual value from the control state
+// S5r: graph knobs <channel>/bk/1..64 over POST /regler (set at once, the engine smooths 20 ms); actual value from the control state
 function bindeBkKnobs(d, k) {
   const liste = d.querySelector('.bkliste');
   if (!liste) return;
-  liste.innerHTML = bkKnobListe(k, zustand.regler, { graph: graphVon(k) })
+  const info = panelVon(graphVon(k)?.name);
+  liste._fp = null;
+  liste._fpHostKanal = null;
+  liste.classList.remove('mit-platte');
+  if (!graphVon(k) && SURGE_GRUPPE[k]) { baueHostBereich(liste, k).catch((e) => { if (liste.isConnected) hostZeile(liste, `The instrument area failed: ${e.message}`, () => baueKnobsNeu()); }); return; }   // no graph here: the host on the channel decides what is shown
+  const umbauen = (aus) => { if (aus) feldModus.add(k); else feldModus.delete(k); baueKnobsNeu(); };
+  if (info && !feldModus.has(k)) {   // a front panel instead of the eight sliders
+    liste.classList.add('mit-platte');
+    const adapter = kanalAdapter(k);
+    liste._fpKanal = k;
+    liste._fp = platteBauen(liste, { panel: info.panel, regler: info.regler, adapter, lernen: panelLernStand(k),
+      beiLernen: (pfad) => lernSchicken('/lernen', { pfad: lernen.wartet?.pfad === pfad ? null : pfad }),   // a second click on the armed control cancels
+      beiVergessen: (pfad) => lernSchicken('/lernen/loeschen', { pfad }),
+      kopf: panelKopf(k, graphVon(k).name, info.panel.title ?? graphVon(k).name, adapter),
+      umschalter: { text: 'Sliders', beiKlick: (e) => { e.currentTarget.blur(); umbauen(true); } } });
+    return;
+  }
+  liste.innerHTML = (info ? '<div class="bkzeile"><button type="button" class="fp-umschalter" data-fp-panel>Panel</button></div>' : '')
+    + bkKnobListe(k, zustand.regler, { graph: graphMitBereich(k) })
     .map((x) => `<div class="bkzeile">${bkKnobHtml(x, k)}<span data-lern-platz="${htmlText(x.pfad)}"></span></div>`).join('');   // names from a graph file: escaped in bkKnobHtml
+  liste.querySelector('[data-fp-panel]')?.addEventListener('click', (e) => { e.currentTarget.blur(); umbauen(false); });
   zeigeLernen();
   for (const inp of liste.querySelectorAll('input[data-bk]')) {
     let warte = null;
@@ -1008,11 +1413,14 @@ function bindeBkKnobs(d, k) {
 }
 // S14: knobs of the send returns; rebuilt when the graph (and so the knob names) changes, values refreshed from /e/regler
 function baueSendKnobs() {
-  for (const z of $$('.sendzeile[data-kanal]')) if (!z.contains(document.activeElement)) bindeBkKnobs(z, z.dataset.kanal);
+  // the guard sits on the knob area, not on the whole row: the graph picker in the same row keeps focus after a pick and must not hold back the new panel
+  for (const z of $$('.sendzeile[data-kanal]')) if (!z.querySelector('.bkliste')?.contains(document.activeElement)) bindeBkKnobs(z, z.dataset.kanal);
 }
 function zeigeSendKnobs() { for (const z of $$('.sendzeile[data-kanal]')) zeigeBkKnobs(z, z.dataset.kanal); }
 function zeigeBkKnobs(d, k) {
-  for (const x of bkKnobListe(k, zustand.regler, { graph: graphVon(k) })) {
+  const fp = d.querySelector('.bkliste')?._fp;
+  if (fp) { fp.aktualisiere(); return; }   // the panel skips controls that are dragged or were just moved
+  for (const x of bkKnobListe(k, zustand.regler, { graph: graphMitBereich(k) })) {
     const inp = d.querySelector(`input[data-bk="${x.pfad}"]`);
     if (!inp || document.activeElement === inp) continue;
     inp.value = String(x.wert);
@@ -1153,6 +1561,16 @@ function zeichneVerlauf() {
 // what SAVE CURRENT and APPLY reach; the plugin devices are browsable, not applicable.
 let presetPanel = null;
 const presetSenden = async (pfad, daten) => { const r = await fetch(pfad, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(daten ?? {}) }); return { code: r.status, j: await r.json().catch(() => ({})) }; };
+// 1.16 U3b: apply a preset to a channel. The server computes the requests (POST /presets/anwenden, target kanal); the page sends them one by one and stops at the first refusal.
+// Used by the EFFECTS preset browser and by the preset header of an instrument panel. Returns {ok, text}.
+async function wendeKanalPresetAn(id, kanal) {
+  const name = FX_KANAELE.find(([p]) => p === kanal)?.[1] ?? kanal;
+  const plan = await kanalPlanHolen(presetSenden, id, kanal);
+  if (!plan.ok) return { ok: false, text: plan.text };
+  for (const a of plan.anfragen) { const r = await sendeWerkzeug(a.pfad, a.nach); if (!r.ok) return { ok: false, text: r.text }; }
+  const uebrig = plan.uebersprungen;
+  return { ok: true, text: `channel ${name}${uebrig.length ? `; not in the table: ${uebrig.join(', ')}` : ''}` };
+}
 const presetGeraet = (id) => presetPanel?.z.geraete.find((x) => x.id === id);
 function zeigePresets() {
   if (presetPanel) { presetPanel.lade(); return; }
@@ -1165,15 +1583,7 @@ function zeigePresets() {
       return g === 'komp' ? presetAusKernKomp((feld) => kompWert(fxGewaehlt, feld, undefined)) : null;
     },
     kannAnwenden: (g) => g === 'komp' || kernGeraetAnfragen(presetGeraet(g), {}, fxGewaehlt).fehler === undefined,
-    anwenden: async (preset, g, id) => {
-      // 1.16 U3b: the server computes the requests (POST /presets/anwenden, target kanal); the page sends them one by one and stops at the first refusal
-      const kanal = FX_KANAELE.find(([p]) => p === fxGewaehlt)?.[1] ?? fxGewaehlt;
-      const plan = await kanalPlanHolen(presetSenden, id, fxGewaehlt);
-      if (!plan.ok) return { ok: false, text: plan.text };
-      for (const a of plan.anfragen) { const r = await sendeWerkzeug(a.pfad, a.nach); if (!r.ok) return { ok: false, text: r.text }; }
-      const uebrig = plan.uebersprungen;
-      return { ok: true, text: `channel ${kanal}${uebrig.length ? `; not in the table: ${uebrig.join(', ')}` : ''}` };
-    },
+    anwenden: (preset, g, id) => wendeKanalPresetAn(id, fxGewaehlt),
   }, () => produktion?.presetHost, () => document.body.classList.contains('produktion')));
 }
 
@@ -1193,6 +1603,10 @@ async function holeFxInhalt() {
 
 function bindeEffekte() {
   for (const t of $$('[data-bereich]')) t.addEventListener('click', () => setzeBereich(t.dataset.bereich));
+  $('#instrumente').addEventListener('click', (e) => { if (e.target.closest(GERAETEKNOPF)) setzeGeraeteseite(!istGeraeteseite()); });   // the button in a plate's title bar (panel_kopf.js)
+  window.addEventListener('resize', () => { if (istGeraeteseite()) setzeGeraeteseite(true); });   // re-measure the header; no rebuild (an equals war)
+  instrumenteAnsicht = bindeInstrumente({ beiWechsel: (alt, neu) => { lernAbbrechenFuer(alt); if (istGeraeteseite()) spektrumLeihe.oeffnen(neu); }, kanaele: Object.keys(GRAPH_KANAL_ART).filter((k) => GRAPH_KANAL_ART[k] === 'instrument'), graphVon,
+    hostNameVon: (k) => (graphVon(k) ? null : hostNamen[k] ?? null), bindeKnobs: bindeBkKnobs, zeigeGraphWahl, geraeteseite: istGeraeteseite });
   baueFxStreifen();
   bindeWerkzeug($('#fxstreifen'));
   bindeBus($('#fxstreifen'));
@@ -1201,6 +1615,15 @@ function bindeEffekte() {
     if (s && !e.target.closest('button, input, select')) waehleFx(s.dataset.kanal);
   });
   document.addEventListener('change', (e) => {   // S12: graph pickers (strips, detail, send returns)
+    const kat = e.target.closest?.('select.graphkat');
+    if (kat) {   // category browsed to: remember it, show its instruments (the channel keeps what is loaded)
+      const k = kat.dataset.graphkat;
+      instrDurchsucht[k] = { kat: kat.value, fuer: graphenGeladen[k] ?? '' };
+      merkeInstrKat(k, kat.value);
+      kat.blur();
+      zeigeGraphWahl();
+      return;
+    }
     const sel = e.target.closest?.('select.graphwahl');
     if (sel) waehleGraph(sel.dataset.graphwahl, sel.value);
   });
@@ -1209,6 +1632,7 @@ function bindeEffekte() {
     if (b) { const k = b.dataset.bkmerken; b.blur(); speichereSound(k); }
   });
   holeBk();
+  holeHostNamen();
   holeGraphen();
   holeLernen();   // S19
   document.addEventListener('click', (e) => {   // S19: learn button (arm / cancel) and remove control of a learned knob
@@ -1224,7 +1648,7 @@ function bindeEffekte() {
   }, 100);
   let b = 'library';
   try { b = localStorage.getItem('djk-bereich') || 'library'; } catch { /* ohne Speicher: Library */ }
-  setzeBereich(b === 'effekte' || b === 'presets' ? b : 'library');
+  setzeBereich(b === 'effekte' || b === 'presets' || b === 'instrumente' ? b : 'library');
   setInterval(() => { if (!$('#effekte').hidden) zeigeKomp(); }, 250);   // GR fällt ohne Meldung auf 0
   setInterval(holeFxInhalt, 2000);
 }
@@ -2199,6 +2623,7 @@ function bindeSchublade() {
   document.addEventListener('keydown', (e) => {
     if (e.target.closest('input, textarea, [contenteditable]')) { if (e.key === 'Escape') e.target.blur(); return; }
     if (e.ctrlKey || e.metaKey || e.altKey) return;          // Review: Strg+L u. a. bleiben beim Browser
+    if (e.key === 'Escape' && istGeraeteseite()) { if (!lernen.wartet) { e.preventDefault(); setzeGeraeteseite(false); } return; }   // an armed learn: Escape only cancels that (listener in bindeEffekte); the production selection skips an Escape the page used   // the device page first, then the library branches below
     if (e.key === 'l' || e.key === 'L') schublade(document.body.classList.contains('lib-zu'));
     if (e.key === 'g' || e.key === 'G') gross(!document.body.classList.contains('lib-gross'));
     // Detail-Spalte (S5): ↑/↓ wählen die Zeile, S legt sie ins aktive Set. Nur bei sichtbarer Library (Reiter LIBRARY, oder PRODUCTION: dort zeigt sie
@@ -2271,7 +2696,7 @@ function strom() {
         for (const [n, g] of Object.entries(f.geladen)) zustand.geladen[n] = g.material_id;
         for (const p of Object.keys(f.regler)) zeigeWert(p);
         zeigeWerkzeug();   // A8: a state (load, reconnect) fills the Gate/Utility strips; they have no polling like the compressor
-        if ('spektrum/kanal' in f.regler) spektrumAnsicht.setzeQuelle(f.regler['spektrum/kanal']);   // A7b
+        if ('spektrum/kanal' in f.regler) { for (const a of spektrumAnsichten) a.setzeQuelle(f.regler['spektrum/kanal']); spektrumLeihe.beiStand(f.regler['spektrum/kanal']); }   // A7b; a key left by a reload while the device page was open
         zeigeKeylock();   // Keylock 3
         DECKS.forEach(zeigeDeck);
         for (const [n, l] of Object.entries(f.loops ?? {})) zustand.loops[n] = l;
@@ -2300,16 +2725,18 @@ function strom() {
         break;
       case '/e/regler':
         zustand.regler[f.pfad] = f.wert; zeigeWert(f.pfad);
-        if (/\/bk\/[1-8]$/.test(f.pfad)) bkMarkeSpaeter();   // S17: the saved/differs marker follows the graph knobs
+        if (/\/bk\/([1-9]|[1-5][0-9]|6[0-4])$/.test(f.pfad)) bkMarkeSpaeter();   // S17: the saved/differs marker follows the graph knobs
         if (f.pfad === 'keylock') { zeigeKeylock(); zeigeDeck(1); zeigeDeck(2); }   // Keylock 3: Taste und VARI
         if (f.pfad === 'color/art' || f.pfad === 'color/param') zeigeColor();
         { const m = /^(.+)\/komp\/\w+$/.exec(f.pfad); if (m) { zeigeKomp(m[1]); if (m[1] === fxGewaehlt) zeigeFxDetail(); } }
-        if (f.pfad === 'spektrum/kanal') spektrumAnsicht.setzeQuelle(f.wert);   // A7b
+        if (f.pfad === 'spektrum/kanal') for (const a of spektrumAnsichten) a.setzeQuelle(f.wert);   // A7b
         { const m = /^(.+?\/\d)\/(?:gate|util|mb|lim)\/[\w/]+$/.exec(f.pfad); if (m) zeigeWerkzeug(m[1]); }   // A8, A8b (bus multiband and limiter)
         if (/^fx\/[34]\/bk\//.test(f.pfad)) zeigeSendKnobs();   // S14: the send-return knobs follow the echo (also a move by Cypher)
+        { const m = /^(.+)\/bk\/([1-9]|[1-5][0-9]|6[0-4])$/.exec(f.pfad); const fp = m && m[1] === fxGewaehlt ? $('#fxdetail .bkliste')?._fp : null; if (fp) fp.aktualisiere(); }   // a panel in the detail view follows the echo too
+        { const m = /^(.+)\/bk\/([1-9]|[1-5][0-9]|6[0-4])$/.exec(f.pfad); if (m && instrumenteSichtbar() && m[1] === instrumenteAnsicht.gewaehlt()) instrumenteAnsicht.aktualisiere(); }   // ... and the panel in INSTRUMENTS
         break;
       case '/zustand/spektrum':   // A7b: 25 Hz while a source is selected
-        if (spektrumAnsicht.aufnehmen(f)) spektrumNachsehen();
+        { let neu = false; for (const a of spektrumAnsichten) if (a.aufnehmen(f)) neu = true; if (neu) spektrumNachsehen(); }
         break;
       case '/zustand/komp':
         kompGr[f.kanal] = { db: Number(f.gr_db), t: performance.now() };
@@ -2543,10 +2970,23 @@ function waehleRolle(strom) {
 const ANSICHTEN = ['dj', 'studio', 'produktion'];
 let produktion = null;
 function setzeAnsicht(a) {
+  setzeGeraeteseite(false);   // the layer sits on the page of one view; another view never keeps it
   for (const k of ['studio', 'produktion']) document.body.classList.toggle(k, a === k);
   for (const b of $$('[data-ansicht]')) { const an = b.dataset.ansicht === a; b.classList.toggle('an', an); b.setAttribute('aria-pressed', String(an)); }
   try { localStorage.setItem('djk-ansicht', a); } catch { /* ohne Speicher: DJ */ }
   if (a === 'produktion') produktion?.zeige(); else produktion?.verberge();
+}
+// #tablet: the device page only, channel tabs on top (panel.css body.tablet). Entered by the address, left by changing it; nothing of the page header is reachable.
+function bindeTablet() {
+  const pruefe = () => {
+    const an = location.hash === '#tablet';
+    if (an === tabletModus) return;
+    tabletModus = an;
+    document.body.classList.toggle('tablet', an);
+    if (an) { setzeBereich('instrumente'); setzeGeraeteseite(true); } else setzeGeraeteseite(false);
+  };
+  window.addEventListener('hashchange', pruefe);
+  pruefe();
 }
 function bindeAnsicht() {
   for (const b of $$('[data-ansicht]')) b.addEventListener('click', () => setzeAnsicht(b.dataset.ansicht));
@@ -2938,6 +3378,8 @@ bindeMusterFeld();
 try { bindeSpurbaender(jsonPost, () => letzterBeat); } catch (e) { console.error('Studio S7 lanes:', e); }   // Studio S7
 try { produktion = bindeProduktion({ presetsZeigen: () => zeigePresets(), presetsNeu: () => presetPanel?.aktualisiereZiele(), presetListe: () => presetPanel?.z.liste ?? [], post: jsonPost, bpm: () => zustand.bpm ?? 128, stoebern: () => zustand.stoebern, bibliothek: () => { if (!stz.treffer.length) { stoebernLaden(); ladeBaum(); } } }); } catch (e) { console.error('Production view:', e); }   // D1 V1
 bindeAnsicht();
+bindeTablet();
+{ const knopf = $('#kopplung-knopf'), dialog = $('#kopplung'); if (knopf && dialog) bindeKopplung({ knopf, dialog }); }   // task 10: the QR code of a one-time pairing link
 bindeFx();
 bindeFxZuweisung();
 bindeKnoepfe();

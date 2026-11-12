@@ -30,10 +30,21 @@ test('S17 T3.9 open restores the knobs, then the graph', async (t) => {
   const r = await s.oeffnen(slug, 'andreas');
   assert.equal(r.code, 200, JSON.stringify(r.j));
   const teile = bkTeile(k, 'erz/2');
-  assert.deepEqual(teile.map((x) => [x.felder.pfad, x.felder.nach]), K9.map((w, i) => [`erz/2/bk/${i + 1}`, w]));
+  assert.deepEqual(teile.map((x) => [x.felder.pfad, x.felder.nach]), [...K9, ...Array(56).fill(0.5)].map((w, i) => [`erz/2/bk/${i + 1}`, w]), 'an old 8-number snapshot sends 64 rows, 9..64 at 0.5');
   assert.deepEqual(k.bk.aufrufe.map(({ kanal, name, quelle }) => ({ kanal, name, quelle })), [{ kanal: 'erz/2', name: 'juno-pad-dyn', quelle: 'andreas' }]);
   assert.ok(teile.every((x) => x.id <= k.bk.aufrufe[0].nach_id), 'all knob parts left before the graph call');
-  assert.deepEqual(r.j.kern.baukasten[0], { kanal: 'erz/2', graph: 'juno-pad-dyn', ok: true, regler_gesendet: 8 });
+  assert.deepEqual(r.j.kern.baukasten[0], { kanal: 'erz/2', graph: 'juno-pad-dyn', ok: true, regler_gesendet: 64 });
+  assert.deepEqual(k.bk.aufrufe[0].opt, { vorgaben: false }, 'the restore sets the saved rows itself: the graph load must not push the graph defaults over them');
+});
+
+test('64 knobs: a 64-number snapshot restores knob 9, knob 32, knob 33 and knob 64', async (t) => {
+  const regler = Array(64).fill(0.5); regler[8] = 0.9; regler[31] = 0.1; regler[32] = 0.3; regler[63] = 0.7;
+  const { s, k, slug } = aufbau(t, [eintrag('erz2', 'juno-pad-dyn', { regler })]);
+  const r = await s.oeffnen(slug, 'andreas');
+  assert.equal(r.code, 200, JSON.stringify(r.j));
+  const w = Object.fromEntries(bkTeile(k, 'erz/2').map((x) => [x.felder.pfad, x.felder.nach]));
+  assert.equal(w['erz/2/bk/9'], 0.9); assert.equal(w['erz/2/bk/32'], 0.1); assert.equal(w['erz/2/bk/33'], 0.3); assert.equal(w['erz/2/bk/64'], 0.7); assert.equal(Object.keys(w).length, 64);
+  assert.equal(w['erz/2/bk/65'], undefined);
 });
 
 test('S17 T3.10 negative control: a project without a snapshot sends nothing; channels not in the project are untouched', async (t) => {
@@ -68,7 +79,7 @@ test('S17 T3.12 erz/5 entry: the kern refuses the graph channel, the knobs are s
   const r = await s.oeffnen(slug, 'andreas');
   assert.equal(r.code, 200);
   assert.equal(r.j.kern.baukasten[0].ok, false); assert.equal(r.j.kern.baukasten[0].grund, 'ausserhalb_bereich');
-  assert.equal(bkTeile(k, 'erz/5').length, 8);
+  assert.equal(bkTeile(k, 'erz/5').length, 64);
   await s.schliesse();
   // opening itself writes wiedergabe_rev (measured without any snapshot); the failed entry changes nothing else
   const nach = JSON.parse(fs.readFileSync(datei, 'utf8'));
@@ -111,7 +122,7 @@ test('S17 T3.15 a graph that is already loaded is not sent again on open (knobs 
   k.bk.geladen['erz/2'] = 'juno-pad-dyn';
   const r = await s.oeffnen(slug, 'andreas');
   assert.equal(k.bk.aufrufe.length, 0);
-  assert.equal(bkTeile(k, 'erz/2').length, 8);
+  assert.equal(bkTeile(k, 'erz/2').length, 64);
   assert.deepEqual([r.j.kern.baukasten[0].graph, r.j.kern.baukasten[0].schon_geladen, r.j.kern.baukasten[0].ok], ['juno-pad-dyn', true, true]);
   const l = await s.bkLaden({}, 'andreas');
   assert.equal(l.code, 200);

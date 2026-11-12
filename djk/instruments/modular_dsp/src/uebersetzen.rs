@@ -18,6 +18,9 @@ use crate::gate::Gate;
 use crate::krume::Krume;
 use crate::leitung::Leitung;
 use crate::lfo::Lfo;
+use crate::sh::Sh;
+use crate::mseg::{Mseg, MsegSatz};
+use crate::folger::Folger;
 use crate::limiter::{vorlauf, Limiter};
 use crate::osz::{Osz, Rauschen, Sinus};
 use crate::phaser::Phaser;
@@ -25,6 +28,8 @@ use crate::programm::{Programm, Quelle, Schritt, MAX_STIMMEN, REGLER};
 use crate::sampler::{lade_datei, Einstellung, Sampler};
 use crate::roehre::{Roehre, RoehrenSatz, BIAS_MAX, BIAS_MIN};
 use crate::svf::Svf;
+use crate::sem::Sem;
+use crate::diode::Diode;
 use crate::vocoder::Vocoder;
 use crate::wavetable::{Stimme as WtStimme, Tabelle, TABELLEN};
 use crate::resonator::{Satz, Stimme as RsStimme, SAETZE};
@@ -85,10 +90,12 @@ pub struct ArtDef {
     pub frei: &'static [(&'static str, f32)],
 }
 
-pub const ARTEN: [ArtDef; 38] = [
+pub const ARTEN: [ArtDef; 50] = [
     ArtDef { art: "note", ein: &[], aus: &["hz", "gate", "vel", "trig", "erste"], werte: &[], frei: &[] },
     ArtDef { art: "konst", ein: &[], aus: &["aus"], werte: &["wert"], frei: &[] },
-    ArtDef { art: "regler", ein: &[], aus: &["aus"], werte: &["nr", "min", "max"], frei: &[("log", 0.0)] },
+    // `vorgabe`: knob position the graph starts at (0..1). `mitte`: value at knob position 0.5; its default NaN is the "absent" marker
+    // (JSON cannot carry NaN, so a given value is never NaN), see `Schritt::Regler`.
+    ArtDef { art: "regler", ein: &[], aus: &["aus"], werte: &["nr", "min", "max"], frei: &[("log", 0.0), ("vorgabe", 0.5), ("mitte", f32::NAN)] },
     // `hart` (appended, hard sync slice): band-limited hard sync, input = a master's output `hart` (osz.rs)
     ArtDef { art: "saege", ein: &["hz", "sync", "hart"], aus: &["aus", "zyklus", "hart"], werte: &[], frei: &[] },
     ArtDef { art: "puls", ein: &["hz", "pwm", "sync", "hart"], aus: &["aus", "zyklus", "hart"], werte: &[], frei: &[] },
@@ -161,6 +168,43 @@ pub const ARTEN: [ArtDef; 38] = [
     // physical string model, digital waveguide (saite.rs); type 37 (appended in merge order after granular). `x` is an external excitation, added to the internal one.
     ArtDef { art: "saite", ein: &["x", "hz", "trig", "vel", "ausklang", "daempfung", "hell", "lage", "koerper_mix"], aus: &["aus"], werte: &[],
              frei: &[("anreger", 1.0), ("koerper", 0.0), ("saat", 0.0), ("vel", 1.0), ("ausklang", 2.0), ("daempfung", 0.5), ("hell", 0.5), ("lage", 0.13), ("koerper_mix", 0.5)] },
+    // sample and hold (sh.rs); `x` unconnected = own noise, `trig` connected = edge clock, else `takt` (beats) or `rate` (Hz)
+    ArtDef { art: "sh", ein: &["x", "trig", "rate", "glatt"], aus: &["aus"], werte: &[], frei: &[("rate", 8.0), ("glatt", 0.0), ("takt", 0.0)] },
+    // multi-stage envelope (mseg.rs): stages p1..p8 (level), t1..t8 (s), k1..k8 (curve); `halt` sustain stage, `von`..`bis` loop
+    ArtDef { art: "mseg", ein: &["gate", "trig"], aus: &["aus"], werte: &[],
+             frei: &[("stufen", 3.0), ("halt", 2.0), ("von", 0.0), ("bis", 0.0),
+                     ("p1", 1.0), ("p2", 0.5), ("p3", 0.0), ("p4", 0.0), ("p5", 0.0), ("p6", 0.0), ("p7", 0.0), ("p8", 0.0),
+                     ("t1", 0.01), ("t2", 0.1), ("t3", 0.3), ("t4", 0.1), ("t5", 0.1), ("t6", 0.1), ("t7", 0.1), ("t8", 0.1),
+                     ("k1", 0.0), ("k2", 0.0), ("k3", 0.0), ("k4", 0.0), ("k5", 0.0), ("k6", 0.0), ("k7", 0.0), ("k8", 0.0)] },
+    // envelope follower (folger.rs): peak detector, `an` / `ab` in ms
+    ArtDef { art: "folger", ein: &["x", "an", "ab"], aus: &["aus"], werte: &[], frei: &[("an", 5.0), ("ab", 120.0)] },
+    // tuned feedback comb filter (kamm.rs); type 38 (appended). `hz` is per-sample, fb < 0 gives odd harmonics at the played pitch.
+    ArtDef { art: "kamm", ein: &["x", "hz", "fb", "daempf", "mix"], aus: &["aus"], werte: &[],
+             frei: &[("hz", 440.0), ("fb", 0.7), ("daempf", 0.3), ("mix", 1.0)] },
+    // vowel filter, five parallel band-passes (formant.rs); type 39 (appended). `vokal` 0..4 = a e i o u.
+    ArtDef { art: "formant", ein: &["x", "vokal", "versatz", "q", "mix"], aus: &["aus"], werte: &[],
+             frei: &[("vokal", 0.0), ("versatz", 0.0), ("q", 0.5), ("mix", 1.0)] },
+    // MS-20 style filter, Korg-35 topology with saturating feedback (ms20.rs); appended at the end. `modus` 0 both outputs, 1 only tp, 2 only hp.
+    ArtDef { art: "ms20", ein: &["x", "cutoff", "reso", "antrieb"], aus: &["tp", "hp"], werte: &[],
+             frei: &[("cutoff", 1000.0), ("reso", 0.3), ("antrieb", 0.0), ("modus", 0.0)] },
+    // SEM-style 12 dB/oct state-variable filter, low-pass -> notch -> high-pass morph plus band-pass (sem.rs); type 38 (appended after saite)
+    ArtDef { art: "sem", ein: &["x", "cutoff", "reso", "form"], aus: &["aus", "bp"], werte: &[],
+             frei: &[("cutoff", 1000.0), ("reso", 0.0), ("form", 0.0)] },
+    // selector (multiplexer) over e1..e8, per voice (wahl.rs); type 38 (appended). `n` positions in use, `norm` 1 = wahl is a 0..1 knob split into n zones, 0 = index.
+    ArtDef { art: "wahl", ein: &["e1", "e2", "e3", "e4", "e5", "e6", "e7", "e8", "wahl"], aus: &["aus"], werte: &["n"],
+             frei: &[("norm", 1.0), ("blende", 5.0), ("modus", 0.0)] },
+    // TB-303 diode-ladder low-pass (diode.rs); appended in merge order. `antrieb` in dB, `bass` 0..1.
+    ArtDef { art: "diode", ein: &["x", "cutoff", "reso", "antrieb", "bass"], aus: &["aus"], werte: &[],
+             frei: &[("cutoff", 1000.0), ("reso", 0.0), ("antrieb", 0.0), ("bass", 0.0)] },
+    // drum kit, the note picks the drum (trommeln.rs); type 47 (appended). Sum point: result in voice 0. Inputs in the order of `trommeln::EIN`.
+    ArtDef { art: "trommeln", ein: &["trig", "vel", "hz", "pegel", "drive", "filter", "reso", "kick_tune", "kick_decay", "kick_punch", "kick_pdecay", "kick_click", "kick_drive", "snare_tune", "snare_decay", "snare_snappy", "snare_tone", "clap_decay", "clap_tone", "clap_spread", "rim_tune", "rim_decay", "tomlo_tune", "tommid_tune", "tomhi_tune", "tom_decay", "tom_punch", "hat_tune", "hat_tone", "hat_noise", "ch_decay", "oh_decay", "crash_tune", "crash_decay", "ride_tune", "ride_decay", "cow_tune", "cow_decay", "boom_tune", "boom_decay", "clave_tune"], aus: &["aus"], werte: &[],
+             frei: &[("pegel", 1.0), ("drive", 0.5), ("filter", 0.5), ("reso", 0.3), ("kick_tune", 54.0), ("kick_decay", 380.0), ("kick_punch", 24.0), ("kick_pdecay", 14.0), ("kick_click", 0.5), ("kick_drive", 0.5), ("snare_tune", 190.0), ("snare_decay", 220.0), ("snare_snappy", 0.5), ("snare_tone", 0.5), ("clap_decay", 280.0), ("clap_tone", 0.5), ("clap_spread", 0.5), ("rim_tune", 480.0), ("rim_decay", 50.0), ("tomlo_tune", 85.0), ("tommid_tune", 128.0), ("tomhi_tune", 190.0), ("tom_decay", 420.0), ("tom_punch", 14.0), ("hat_tune", 1.0), ("hat_tone", 0.5), ("hat_noise", 0.3), ("ch_decay", 55.0), ("oh_decay", 380.0), ("crash_tune", 1.0), ("crash_decay", 1800.0), ("ride_tune", 1.0), ("ride_decay", 1300.0), ("cow_tune", 1.0), ("cow_decay", 320.0), ("boom_tune", 41.0), ("boom_decay", 2200.0), ("clave_tune", 2500.0), ("modell", 0.0), ("schnitt", 8.0), ("saat", 0.0)] },
+    // wavefolder (falter.rs), per voice; type 48 (appended in merge order after trommeln). `antrieb` in dB, `symmetrie` -1..1, `form` 0 triangle .. 1 sine fold, `ueber` 1 = 2x oversampled (latency).
+    ArtDef { art: "falter", ein: &["x", "antrieb", "symmetrie", "form"], aus: &["aus"], werte: &[],
+             frei: &[("antrieb", 0.0), ("symmetrie", 0.0), ("form", 0.0), ("ueber", 1.0)] },
+    // per-voice analog drift (drift.rs); type 49 (appended after falter). Output -1..1: `fest` share of a constant per-voice offset,
+    // the rest a slow random wander at `rate` Hz; `saat` seeds both (same graph, same drift).
+    ArtDef { art: "drift", ein: &["rate", "fest"], aus: &["aus"], werte: &[], frei: &[("rate", 0.3), ("fest", 0.5), ("saat", 0.0)] },
 ];
 
 /// Arts whose node carries a `datei` (a file in the sample root, read at translation).
@@ -227,8 +271,13 @@ pub fn uebersetze_mit_wurzel(json: &str, sr: f32, wurzel: Option<&Path>) -> Resu
             "sampler" if !(20.0..=2000.0).contains(&w("grund")) => return falsch("grund", "20..2000 Hz"),
             "sampler" if !ganz(w("scheiben"), 1.0, 64.0) => return falsch("scheiben", "integer 1..64"),
             "sampler" if !ganz(w("schleife"), 0.0, 1.0) => return falsch("schleife", "0 or 1"),
-            "regler" if !ganz(w("nr"), 1.0, REGLER as f32) => return falsch("nr", "1..8"),
+            "regler" if !ganz(w("nr"), 1.0, REGLER as f32) => return falsch("nr", "1..64"),
             "regler" if !ganz(w("log"), 0.0, 1.0) => return falsch("log", "0 or 1"),
+            "regler" if !(0.0..=1.0).contains(&w("vorgabe")) => return falsch("vorgabe", "0..1"),
+            "regler" if !w("mitte").is_nan() && w("vorgabe") != 0.5 => return falsch("mitte", "needs vorgabe 0.5"),
+            "regler" if !w("mitte").is_nan() && w("log") == 1.0 && !(w("min") > 0.0) => return falsch("mitte", "with log needs min > 0"),
+            "regler" if !w("mitte").is_nan() && !((w("min") < w("mitte") && w("mitte") < w("max")) || (w("max") < w("mitte") && w("mitte") < w("min"))) =>
+                return falsch("mitte", "strictly between min and max"),
             "regler" if w("log") == 1.0 && !(w("min") > 0.0 && w("max") > 0.0) => return falsch("min", "log needs min > 0 and max > 0"),
             "lfo" if !ganz(w("form"), 0.0, 4.0) => return falsch("form", "0 sine, 1 triangle, 2 saw, 3 square, 4 random"),
             "lfo" if !ganz(w("neustart"), 0.0, 1.0) => return falsch("neustart", "0 or 1"),
@@ -237,6 +286,23 @@ pub fn uebersetze_mit_wurzel(json: &str, sr: f32, wurzel: Option<&Path>) -> Resu
             "lfo" if !ganz(w("einmal"), 0.0, 1.0) => return falsch("einmal", "0 or 1"),
             // offset and one-shot are defined against the host beat; a free-running lfo has none
             "lfo" if w("takt") == 0.0 && (w("versatz") != 0.0 || w("einmal") == 1.0) => return falsch("takt", "versatz and einmal need takt > 0"),
+            "sh" if !(0.0..=256.0).contains(&w("takt")) => return falsch("takt", "0..256 beats"),
+            "sh" if !(0.0..=crate::sh::GLATT_MAX_MS).contains(&w("glatt")) => return falsch("glatt", "0..10000 ms"),
+            "drift" if !(0.0..=crate::drift::MAX_RATE).contains(&w("rate")) => return falsch("rate", "0..20 Hz"),
+            "drift" if !(0.0..=1.0).contains(&w("fest")) => return falsch("fest", "0..1"),
+            "drift" if !ganz(w("saat"), 0.0, 65_535.0) => return falsch("saat", "integer 0..65535"),
+            "folger" if !(0.0..=10_000.0).contains(&w("an")) => return falsch("an", "0..10000 ms"),
+            "folger" if !(0.0..=10_000.0).contains(&w("ab")) => return falsch("ab", "0..10000 ms"),
+            "mseg" if !ganz(w("stufen"), 1.0, 8.0) => return falsch("stufen", "integer 1..8"),
+            "mseg" if !ganz(w("halt"), 0.0, w("stufen")) => return falsch("halt", "integer 0..stufen (0 = no sustain stage)"),
+            "mseg" if !ganz(w("von"), 0.0, w("stufen")) => return falsch("von", "integer 0..stufen (0 = no loop)"),
+            "mseg" if !ganz(w("bis"), 0.0, w("stufen")) => return falsch("bis", "integer 0..stufen"),
+            "mseg" if w("von") > 0.0 && w("bis") < w("von") => return falsch("bis", "a loop needs von <= bis"),
+            "mseg" if w("von") > 0.0 && w("halt") != 0.0 => return falsch("halt", "a loop replaces the sustain stage: halt must be 0 with von > 0"),
+            "mseg" if w("von") == 0.0 && w("bis") != 0.0 => return falsch("bis", "bis needs von > 0"),
+            "mseg" if (1..=8).any(|i| !(0.0..=1.0).contains(&w(&format!("p{i}")))) => return falsch("p1..p8", "level 0..1"),
+            "mseg" if (1..=8).any(|i| !(0.0..=60.0).contains(&w(&format!("t{i}")))) => return falsch("t1..t8", "time 0..60 s"),
+            "mseg" if (1..=8).any(|i| !(-1.0..=1.0).contains(&w(&format!("k{i}")))) => return falsch("k1..k8", "curve -1..1"),
             "delay" if !(0.0..=16.0).contains(&w("takt")) => return falsch("takt", "0..16 beats"),
             "hall" if !ganz(w("rahmen"), 0.0, 4.0) => return falsch("rahmen", "0..4 (512 .. 8192)"),
             "hall" if !(w("decay") > 0.0 && w("decay") <= 30.0) => return falsch("decay", "> 0 and <= 30 seconds"),
@@ -288,7 +354,11 @@ pub fn uebersetze_mit_wurzel(json: &str, sr: f32, wurzel: Option<&Path>) -> Resu
             "faltung" if sr != 48_000.0 => return falsch("sr", "faltung needs 48 kHz (IR files are 48 kHz frames)"),
             "roehre" if !ganz(w("stufen"), 1.0, 2.0) => return falsch("stufen", "1 or 2"),
             "roehre" if !(BIAS_MIN as f32..=BIAS_MAX as f32).contains(&w("bias")) => return falsch("bias", "-3..-0.5 volts"),
+            "diode" if !(-40.0..=60.0).contains(&w("antrieb")) => return falsch("antrieb", "-40..60 dB"),
+            "diode" if !(0.0..=1.0).contains(&w("bass")) => return falsch("bass", "0..1"),
             "svf" if w("pole") != 2.0 && w("pole") != 4.0 => return falsch("pole", "2 or 4"),
+            "sem" if !(0.0..=1.0).contains(&w("reso")) => return falsch("reso", "0..1"),
+            "sem" if !(0.0..=1.0).contains(&w("form")) => return falsch("form", "0 low-pass, 0.5 notch, 1 high-pass"),
             "wavetable" if !ganz(w("tabelle"), 0.0, (TABELLEN.len() - 1) as f32) => return falsch("tabelle", "0 saege, 1 rechteck, 2 dreieck, 3 sinus, 4 analog, 5 vokale, 6 orgel"),
             "wavetable" if !ganz(w("kopien"), 1.0, crate::wavetable::MAX_KOPIEN as f32) => return falsch("kopien", "integer 1..7"),
             "wavetable" if !(0.0..=1.0).contains(&w("pos")) => return falsch("pos", "0..1"),
@@ -341,8 +411,24 @@ pub fn uebersetze_mit_wurzel(json: &str, sr: f32, wurzel: Option<&Path>) -> Resu
             "saite" if !(0.0..=1.0).contains(&w("hell")) => return falsch("hell", "0..1"),
             "saite" if !(crate::saite::LAGE_MIN..=crate::saite::LAGE_MAX).contains(&w("lage")) => return falsch("lage", "0.02..0.5"),
             "saite" if !(0.0..=1.0).contains(&w("koerper_mix")) => return falsch("koerper_mix", "0..1"),
+            "ms20" if !ganz(w("modus"), 0.0, 2.0) => return falsch("modus", "0 both outputs, 1 only tp, 2 only hp"),
             "saite" if k.werte.contains_key("hz") && !(crate::saite::MIN_HZ as f32..=crate::saite::MAX_HZ_ANTEIL as f32 * sr).contains(&w("hz")) => return falsch("hz", "20 Hz ..= sr / 8"),
+            "kamm" if sr < 44_100.0 => return falsch("sr", "sample rate >= 44.1 kHz"),
+            "kamm" if !(crate::kamm::MIN_HZ as f32..=crate::kamm::MAX_HZ_ANTEIL as f32 * 2.0 * sr).contains(&w("hz")) => return falsch("hz", "20 Hz ..= 0.4 sr"),
+            "kamm" if !(-1.0..=1.0).contains(&w("fb")) => return falsch("fb", "-1..1"),
+            "kamm" if !(0.0..=1.0).contains(&w("daempf")) => return falsch("daempf", "0..1"),
+            "kamm" if !(0.0..=1.0).contains(&w("mix")) => return falsch("mix", "0..1"),
+            "formant" if !(0.0..=4.0).contains(&w("vokal")) => return falsch("vokal", "0..4 (a e i o u)"),
+            "formant" if !(-24.0..=24.0).contains(&w("versatz")) => return falsch("versatz", "-24..24 semitones"),
+            "formant" if !(0.0..=1.0).contains(&w("q")) => return falsch("q", "0..1"),
+            "formant" if !(0.0..=1.0).contains(&w("mix")) => return falsch("mix", "0..1"),
+            "wahl" if !ganz(w("n"), 2.0, crate::wahl::MAX_EIN as f32) => return falsch("n", "integer 2..8"),
+            "wahl" if !ganz(w("norm"), 0.0, 1.0) => return falsch("norm", "0 index, 1 normalised 0..1"),
+            "wahl" if !ganz(w("modus"), 0.0, 1.0) => return falsch("modus", "0 switch, 1 morph"),
+            "wahl" if !(0.0..=crate::wahl::BLENDE_MAX_MS).contains(&w("blende")) => return falsch("blende", "0..5000 ms (0 = hard switch)"),
+            "falter" if !(0.0..=1.0).contains(&w("ueber")) || w("ueber").fract() != 0.0 => return falsch("ueber", "0 base rate (no latency) or 1 oversampled 2x"),
             "glatt" if !(w("zeit") >= 0.0) => return falsch("zeit", ">= 0 seconds"),
+            "trommeln" => if let Some((wert, grund)) = crate::trommeln::pruefe(&w) { return falsch(&wert, grund); },
             "fm" => if let Some((wert, grund)) = crate::fm::pruefe(&w) { return falsch(&wert, grund); },
             // hard sync: a fixed value would reset the phase in every sample
             "saege" | "puls" | "dreieck" if k.werte.contains_key("hart") => return falsch("hart", "hart takes edges only (a master's hart output)"),
@@ -462,6 +548,7 @@ pub fn uebersetze_mit_wurzel(json: &str, sr: f32, wurzel: Option<&Path>) -> Resu
         let eigen = match def.art {
             "limiter" => vorlauf(w("vorlauf"), sr) - 1,
             "faltung" => crate::faltung::LATENZ,
+            "falter" if w("ueber") == 1.0 => crate::falter::LATENZ,
             _ => 0,
         };
         let vor = def.ein.iter()
@@ -475,15 +562,29 @@ pub fn uebersetze_mit_wurzel(json: &str, sr: f32, wurzel: Option<&Path>) -> Resu
         let s = match def.art {
             "note" => Schritt::Note { hz: aus(k, "hz"), gate: aus(k, "gate"), vel: aus(k, "vel"), trig: aus(k, "trig"), erste: aus(k, "erste") },
             "konst" => Schritt::Konst { aus: aus(k, "aus"), wert: w("wert") },
-            "regler" => Schritt::Regler { aus: aus(k, "aus"), nr: w("nr") as usize - 1, min: w("min"), max: w("max"), log: w("log") == 1.0 },
+            "regler" => Schritt::Regler { aus: aus(k, "aus"), nr: w("nr") as usize - 1, min: w("min"), max: w("max"), log: w("log") == 1.0, mitte: Some(w("mitte")).filter(|m| !m.is_nan()) },
             "saege" => Schritt::Saege { hz: q("hz"), sync: q("sync"), aus: aus(k, "aus"), zyklus: aus(k, "zyklus"), osz: [Osz::default(); MAX_STIMMEN], hart: hart_ein(k, &mut q)?, hart_aus: aus(k, "hart") },
             "puls" => Schritt::Puls { hz: q("hz"), pwm: q("pwm"), sync: q("sync"), aus: aus(k, "aus"), zyklus: aus(k, "zyklus"), osz: [Osz::default(); MAX_STIMMEN], hart: hart_ein(k, &mut q)?, hart_aus: aus(k, "hart") },
             "dreieck" => Schritt::Dreieck { hz: q("hz"), sync: q("sync"), aus: aus(k, "aus"), zyklus: aus(k, "zyklus"), osz: [Osz::default(); MAX_STIMMEN], hart: hart_ein(k, &mut q)?, hart_aus: aus(k, "hart") },
             "sinus" => Schritt::Sinus { hz: q("hz"), fm: q("fm"), sync: q("sync"), aus: aus(k, "aus"), zyklus: aus(k, "zyklus"), osz: [Sinus::default(); MAX_STIMMEN], hart_aus: aus(k, "hart") },
             "rauschen" => Schritt::Rauschen { aus: aus(k, "aus"), r: std::array::from_fn(Rauschen::neu) },
             "lfo" => Schritt::Lfo { rate: q("rate"), trig: q("trig"), aus: aus(k, "aus"), form: w("form") as u8, neustart: w("neustart") == 1.0, takt: w("takt"), versatz: w("versatz") as f64, einmal: w("einmal") == 1.0, l: std::array::from_fn(Lfo::neu) },
+            "sh" => Schritt::Sh { x: q("x"), trig: q("trig"), rate: q("rate"), glatt: q("glatt"), aus: aus(k, "aus"),
+                                 x_ext: eingang.contains_key(&(k.to_string(), "x".to_string())),
+                                 trig_ext: eingang.contains_key(&(k.to_string(), "trig".to_string())),
+                                 takt: w("takt"), s: std::array::from_fn(Sh::neu) },
+            "mseg" => {
+                let n = |i: usize, p: &str| w(&format!("{p}{i}"));
+                Schritt::Mseg { gate: q("gate"), trig: q("trig"), aus: aus(k, "aus"),
+                                c: MsegSatz { stufen: w("stufen") as u8, halt: w("halt") as u8, von: w("von") as u8, bis: w("bis") as u8,
+                                              p: std::array::from_fn(|i| n(i + 1, "p")), t: std::array::from_fn(|i| n(i + 1, "t")), k: std::array::from_fn(|i| n(i + 1, "k")) },
+                                e: [Mseg::default(); MAX_STIMMEN] }
+            }
+            "folger" => Schritt::Folger { x: q("x"), an: q("an"), ab: q("ab"), aus: aus(k, "aus"), f: [Folger::default(); MAX_STIMMEN] },
             "transponiere" => Schritt::Transponiere { hz: q("hz"), st: q("st"), cent: q("cent"), aus: aus(k, "aus") },
+            "diode" => Schritt::Diode { x: q("x"), cutoff: q("cutoff"), reso: q("reso"), antrieb: q("antrieb"), bass: q("bass"), aus: aus(k, "aus"), f: [Diode::default(); MAX_STIMMEN] },
             "svf" => Schritt::Svf { x: q("x"), cutoff: q("cutoff"), reso: q("reso"), tp: aus(k, "tp"), bp: aus(k, "bp"), hp: aus(k, "hp"), vier: w("pole") == 4.0, f: [Svf::default(); MAX_STIMMEN] },
+            "sem" => Schritt::Sem { x: q("x"), cutoff: q("cutoff"), reso: q("reso"), form: q("form"), aus: aus(k, "aus"), bp: aus(k, "bp"), f: [Sem::default(); MAX_STIMMEN] },
             "saett" => Schritt::Saett { x: q("x"), antrieb: q("antrieb"), aus: aus(k, "aus"), a: [Adaa1::default(); MAX_STIMMEN] },
             "glatt" => Schritt::Glatt { x: q("x"), setzen: q("setzen"), aus: aus(k, "aus"), zeit: w("zeit"), z: [0.0; MAX_STIMMEN] },
             "ladder" => Schritt::Ladder {
@@ -503,6 +604,16 @@ pub fn uebersetze_mit_wurzel(json: &str, sr: f32, wurzel: Option<&Path>) -> Resu
             },
             "mul" => Schritt::Mul { a: q("a"), b: q("b"), aus: aus(k, "aus") },
             "add" => Schritt::Add { a: q("a"), b: q("b"), c: q("c"), d: q("d"), aus: aus(k, "aus") },
+            "wahl" => {
+                let e = crate::wahl::Einstellung::neu(w("n") as usize, w("norm") == 1.0, w("modus") == 1.0, w("blende"), sr);
+                Schritt::Wahl {
+                    ein: [q("e1"), q("e2"), q("e3"), q("e4"), q("e5"), q("e6"), q("e7"), q("e8")],
+                    wahl: q("wahl"),
+                    aus: aus(k, "aus"),
+                    e,
+                    v: Box::new([crate::wahl::Stimme::default(); MAX_STIMMEN]),
+                }
+            }
             "leitung" => {
                 let max = ((w("max") * sr / 1000.0).ceil() as usize).max(1);
                 Schritt::Leitung { x: q("x"), zeit: q("zeit"), hz: q("hz"), aus: aus(k, "aus"), l: (0..g.stimmen).map(|_| Leitung::neu(max)).collect() }
@@ -723,6 +834,15 @@ pub fn uebersetze_mit_wurzel(json: &str, sr: f32, wurzel: Option<&Path>) -> Resu
                     s: Box::new(std::array::from_fn(|i| SaStimme::neu(i, &e, sr))),
                 }
             }
+            "kamm" => Schritt::Kamm { x: q("x"), hz: q("hz"), fb: q("fb"), daempf: q("daempf"), mix: q("mix"), aus: aus(k, "aus"), k: (0..g.stimmen).map(|_| crate::kamm::Kamm::neu(sr)).collect() },
+            "formant" => Schritt::Formant { x: q("x"), vokal: q("vokal"), versatz: q("versatz"), q: q("q"), mix: q("mix"), aus: aus(k, "aus"), f: Box::new([crate::formant::Stimme::neu(); MAX_STIMMEN]) },
+            "ms20" => Schritt::Ms20 { x: q("x"), cutoff: q("cutoff"), reso: q("reso"), antrieb: q("antrieb"), tp: aus(k, "tp"), hp: aus(k, "hp"), modus: w("modus") as u8, f: Box::new([crate::ms20::Ms20::default(); MAX_STIMMEN]) },
+            "trommeln" => {
+                let e = crate::trommeln::Einstellung::neu(w("modell") as u8, w("schnitt"), w("saat") as u32, sr);
+                Schritt::Trommeln { ein: crate::trommeln::EIN.map(|p| q(p)), aus: aus(k, "aus"), e, t: Box::new(crate::trommeln::Kit::neu(&e)) }
+            }
+            "falter" => Schritt::Falter { x: q("x"), antrieb: q("antrieb"), symmetrie: q("symmetrie"), form: q("form"), aus: aus(k, "aus"), ueber: w("ueber") == 1.0, f: Box::new(std::array::from_fn(|_| crate::falter::Falter::default())) },
+            "drift" => Schritt::Drift { rate: q("rate"), fest: q("fest"), aus: aus(k, "aus"), d: std::array::from_fn(|i| crate::drift::Drift::neu(i, w("saat") as u32)), saat: w("saat") as u32 },
             "eingang" => Schritt::Eingang { wl: aus(k, "l"), wr: aus(k, "r") },
             "ausgang" => Schritt::Ausgang { x: q("x"), l: q("l"), r: q("r") },
             andere => unreachable!("Art {andere} ist oben geprüft"),
@@ -730,5 +850,15 @@ pub fn uebersetze_mit_wurzel(json: &str, sr: f32, wurzel: Option<&Path>) -> Resu
         schritte.push(s);
     }
     let latenz = reihe.iter().filter(|k| art_von[**k].art == "ausgang").map(|k| lat[*k]).max().unwrap_or(0);
-    Ok(Programm::neu(g.name, g.stimmen, sr, schritte, slot.len(), verzoegert.into_iter().collect(), regler_namen, latenz))
+    // Start position per knob: `vorgabe` of the first `regler` node of a number in document order (as the page's `reglerBereiche` reads it)
+    let mut vorgaben = [0.5f32; REGLER];
+    let mut gesehen = [false; REGLER];
+    for k in g.knoten.iter().filter(|k| k.art == "regler") {
+        let nr = k.werte.get("nr").copied().unwrap_or(0.0) as usize;
+        if (1..=REGLER).contains(&nr) && !gesehen[nr - 1] {
+            gesehen[nr - 1] = true;
+            vorgaben[nr - 1] = k.werte.get("vorgabe").copied().unwrap_or(0.5);
+        }
+    }
+    Ok(Programm::neu(g.name, g.stimmen, sr, schritte, slot.len(), verzoegert.into_iter().collect(), regler_namen, latenz, vorgaben))
 }

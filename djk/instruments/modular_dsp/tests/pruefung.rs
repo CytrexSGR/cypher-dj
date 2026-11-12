@@ -14,7 +14,7 @@ fn beispiel_geht_durch() { assert!(uebersetze(BEISPIEL, SR).is_ok()); }
 
 #[test]
 fn falsches_format() {
-    let j = BEISPIEL.replace("baukasten/1", "baukasten/9");
+    let j = BEISPIEL.replace("baukasten/2", "baukasten/9");
     assert_eq!(fehler(&j), Fehler::FalschesFormat("baukasten/9".into()));
 }
 

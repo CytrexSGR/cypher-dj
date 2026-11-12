@@ -1,0 +1,57 @@
+{
+ "schema": 1,
+ "name": "Neuro Classic Reese",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "synth-neuro",
+ "werte": {
+  "knob1": 0.42,
+  "knob2": 0.3,
+  "knob3": 0.1667,
+  "knob4": 0.12,
+  "knob5": 0.35,
+  "knob6": 0.72,
+  "knob7": 0.5,
+  "knob8": 0.62,
+  "knob9": 0.35,
+  "knob10": 0.15,
+  "knob11": 0.45,
+  "knob12": 0.0,
+  "knob13": 1.0,
+  "knob14": 0.5,
+  "knob15": 0.0,
+  "knob16": 0.5,
+  "knob17": 0.0,
+  "knob18": 0.5,
+  "knob19": 0.5,
+  "knob20": 0.5,
+  "knob21": 0.65,
+  "knob22": 0.4,
+  "knob23": 0.5,
+  "knob24": 0.5
+ },
+ "beschreibung": {
+  "art": "bass",
+  "unterart": "reese",
+  "charakter": [
+   "dark",
+   "thick",
+   "wide"
+  ],
+  "genre": [
+   "dnb"
+  ],
+  "einsatz": [
+   "drop",
+   "breakdown"
+  ],
+  "energie": 4,
+  "text": "Three detuned saws through a slow low-pass, a touch of fold for edge and a round sub underneath."
+ },
+ "tags": [
+  "synth-neuro"
+ ],
+ "notiz": "Measured by level and pitch on render, not yet heard (2026-11-11).",
+ "angelegt": "2026-11-11T00:00:00.000Z",
+ "geaendert": "2026-11-11T00:00:00.000Z"
+}

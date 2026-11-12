@@ -1,0 +1,35 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "fm-glocke"},
+  "title": "FM Bell",
+  "akzent": "blau",
+  "layout": {"rows": [
+    ["ops", "sound", "env", "hall"]
+  ]},
+  "sections": [
+    { "id": "ops", "title": "OPERATORS", "cols": 4, "controls": [
+      {"id": "alg", "type": "label", "span": 4, "text": "Algorithm 10: 2>1, 4>3, 6>5, 6 operators"},
+      {"id": "op1", "type": "label", "span": 4, "text": "Op1 car x1  100%  D6s S0%"},
+      {"id": "op2", "type": "label", "span": 4, "text": "Op2 mod x3.5  16%  D4s S0%"},
+      {"id": "op3", "type": "label", "span": 4, "text": "Op3 car x2 +6ct  50%  D3s S0%"},
+      {"id": "op4", "type": "label", "span": 4, "text": "Op4 mod x5.19  8%  D1.5s S0%"},
+      {"id": "op5", "type": "label", "span": 4, "text": "Op5 car x0.5 -5ct  35%  D7s S0%"},
+      {"id": "op6", "type": "label", "span": 4, "text": "Op6 mod x1.41  6%  D5s S0%"},
+      {"id": "opn", "type": "label", "span": 4, "text": "Level, decay D and sustain S at Decay x1"}
+    ]},
+    { "id": "sound", "title": "SOUND", "cols": 3, "controls": [
+      {"id": "hell", "type": "knob", "label": "Brightness", "bind": {"param": "k1"}, "format": "raw", "unit": "x", "default": 0.5},
+      {"id": "rueck", "type": "knob", "label": "Feedback", "bind": {"param": "k3"}, "format": "percent", "default": 0.5},
+      {"id": "sn", "type": "label", "span": 3, "text": "Brightness scales modulation"}
+    ]},
+    { "id": "env", "title": "OP 1 ENVELOPE", "cols": 4, "controls": [
+      {"id": "hue", "type": "huelle", "span": 4, "label": "Operator 1 at Decay x1", "of": {"a": 0.001, "d": 6, "s": 0, "r": 1.5}},
+      {"id": "decay", "type": "knob", "label": "Decay", "span": 4, "bind": {"param": "k2"}, "format": "raw", "unit": "x", "default": 0.5},
+      {"id": "en", "type": "label", "span": 4, "text": "Decay scales D and R of every operator"}
+    ]},
+    { "id": "hall", "title": "HALL", "cols": 2, "controls": [
+      {"id": "hall", "type": "knob", "label": "Mix", "span": 2, "bind": {"param": "k4"}, "format": "percent", "default": 0.5},
+      {"id": "hn", "type": "label", "span": 2, "text": "Decay 3.5 s, size 90, pre 20 ms"}
+    ]}
+  ]
+}

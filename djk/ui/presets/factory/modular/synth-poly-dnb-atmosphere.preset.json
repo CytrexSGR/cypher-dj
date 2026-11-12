@@ -1,0 +1,62 @@
+{
+ "schema": 1,
+ "name": "Poly DnB Atmosphere",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "synth-poly",
+ "werte": {
+  "knob1": 0.7447,
+  "knob2": 0.3977,
+  "knob3": 0.1667,
+  "knob4": 0.7746,
+  "knob5": 0.8897,
+  "knob6": 0.8692,
+  "knob7": 0.6,
+  "knob8": 0.5,
+  "knob9": 1.0,
+  "knob10": 0.7,
+  "knob11": 1.0,
+  "knob12": 0.0,
+  "knob13": 0.5,
+  "knob14": 0.0,
+  "knob15": 0.6928,
+  "knob16": 0.7455,
+  "knob17": 0.64,
+  "knob18": 0.5,
+  "knob19": 0.801,
+  "knob20": 0.9,
+  "knob21": 0.8552,
+  "knob22": 0.6,
+  "knob23": 0.1834,
+  "knob24": 0.6455,
+  "knob25": 0.0,
+  "knob26": 0.0,
+  "knob27": 0.0,
+  "knob28": 0.25
+ },
+ "beschreibung": {
+  "art": "pad",
+  "unterart": "atmosphere",
+  "charakter": [
+   "dark",
+   "wide",
+   "evolving"
+  ],
+  "genre": [
+   "dnb",
+   "ambient"
+  ],
+  "einsatz": [
+   "breakdown",
+   "intro"
+  ],
+  "energie": 2,
+  "text": "Seven saws, 30 cent, full width; SEM drifting towards the notch with a very slow LFO on the cutoff; breath of noise."
+ },
+ "tags": [
+  "synth-poly"
+ ],
+ "notiz": "Measured by level and pitch on render, not yet heard (2026-11-11).",
+ "angelegt": "2026-11-11T00:00:00.000Z",
+ "geaendert": "2026-11-11T00:00:00.000Z"
+}

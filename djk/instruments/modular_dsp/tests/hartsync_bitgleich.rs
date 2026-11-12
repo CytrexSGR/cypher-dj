@@ -120,6 +120,11 @@ fn alle() -> Vec<(String, u64)> {
         for k in 1..=REGLER {
             p.setze_regler(k, 1.0);
         }
+        // the wave envelope (knob 7 of the wavetable graphs) is bipolar and +1 at "all knobs 1": keep it off (0.5), so the pin
+        // still means "bit-identical to the graph from before the envelope existed"
+        if name.starts_with("wavetable-") {
+            p.setze_regler(7, 0.5);
+        }
         v.push((format!("{name}@1"), fingerabdruck(&spiele(&mut p))));
     }
     for (name, json) in oszillator_graphen() {
@@ -174,7 +179,7 @@ const VORHER: &[(&str, u64)] = &[
     ("rueckkopplung@0.5", 0x6aebcef9a9b37151),
     ("rueckkopplung@1", 0xf3c74612a096aa01),
     ("saege-ladder@0.5", 0xbf099e32bf5443d5),
-    ("saege-ladder@1", 0xbf099e32bf5443d5),
+    ("saege-ladder@1", 0x34549db8262776e1),
     ("saite@0.5", 0x33dce3d9e7b02f59),
     ("saite@1", 0xf5a29cd4af341431),
     ("sampler-fairlight@0.5", 0x774b126e044daad8),

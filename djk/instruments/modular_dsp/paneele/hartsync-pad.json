@@ -1,0 +1,38 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "hartsync-pad"},
+  "title": "Hard Sync Pad",
+  "akzent": "blau",
+  "layout": {"rows": [
+    ["osc", "sweep", "filter", "env", "chorus"]
+  ]},
+  "sections": [
+    { "id": "osc", "title": "OSCILLATORS", "cols": 3, "controls": [
+      {"id": "pf", "type": "lfoform", "span": 3, "label": "PWM LFO", "formen": ["sine"]},
+      {"id": "sync", "type": "knob", "label": "Sync pitch", "bind": {"param": "k3"}, "format": "raw", "unit": "st", "default": 0.5},
+      {"id": "pwm", "type": "knob", "label": "PWM depth", "bind": {"param": "k5"}, "format": "percent", "default": 0.5},
+      {"id": "o1", "type": "label", "span": 3, "text": "Leader saw, follower pulse (sync)"},
+      {"id": "o2", "type": "label", "span": 3, "text": "PWM LFO 0.7 Hz fixed"}
+    ]},
+    { "id": "sweep", "title": "SYNC SWEEP", "cols": 2, "controls": [
+      {"id": "sf", "type": "lfoform", "span": 2, "label": "Sweep LFO", "formen": ["tri"]},
+      {"id": "sweep", "type": "knob", "label": "Sweep", "span": 2, "bind": {"param": "k4"}, "format": "raw", "unit": "st", "default": 0.5},
+      {"id": "sn", "type": "label", "span": 2, "text": "0.23 Hz triangle fixed"}
+    ]},
+    { "id": "filter", "title": "FILTER", "cols": 2, "controls": [
+      {"id": "fk", "type": "filterkurve", "span": 2, "of": {"cutoff": "cutoff", "reso": "reso"}, "typen": [{"art": "lp", "pole": 2}]},
+      {"id": "cutoff", "type": "knob", "label": "Cutoff", "bind": {"param": "k1"}, "format": "hz", "default": 0.5},
+      {"id": "reso", "type": "knob", "label": "Resonance", "bind": {"param": "k2"}, "format": "percent", "default": 0.5}
+    ]},
+    { "id": "env", "title": "AMP ENV", "cols": 3, "controls": [
+      {"id": "hue", "type": "huelle", "span": 3, "label": "Envelope", "of": {"a": "attack", "d": 0.6, "s": 0.8, "r": "release"}},
+      {"id": "attack", "type": "knob", "label": "Attack", "bind": {"param": "k6"}, "format": "raw", "unit": "s", "default": 0.5},
+      {"id": "release", "type": "knob", "label": "Release", "bind": {"param": "k7"}, "format": "raw", "unit": "s", "default": 0.5},
+      {"id": "en", "type": "label", "span": 3, "text": "Decay 600 ms, sustain 80 % fixed"}
+    ]},
+    { "id": "chorus", "title": "CHORUS", "cols": 2, "controls": [
+      {"id": "chorus", "type": "knob", "label": "Chorus", "span": 2, "bind": {"param": "k8"}, "format": "percent", "default": 0.5},
+      {"id": "cn", "type": "label", "span": 2, "text": "Mode III fixed"}
+    ]}
+  ]
+}

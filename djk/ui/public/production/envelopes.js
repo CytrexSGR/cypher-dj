@@ -23,6 +23,62 @@ export const HK_ANZEIGE = {
   'geraet.k6': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 6', einheit: '' },
   'geraet.k7': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 7', einheit: '' },
   'geraet.k8': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 8', einheit: '' },
+  'geraet.k9': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 9', einheit: '' },
+  'geraet.k10': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 10', einheit: '' },
+  'geraet.k11': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 11', einheit: '' },
+  'geraet.k12': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 12', einheit: '' },
+  'geraet.k13': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 13', einheit: '' },
+  'geraet.k14': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 14', einheit: '' },
+  'geraet.k15': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 15', einheit: '' },
+  'geraet.k16': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 16', einheit: '' },
+  'geraet.k17': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 17', einheit: '' },
+  'geraet.k18': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 18', einheit: '' },
+  'geraet.k19': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 19', einheit: '' },
+  'geraet.k20': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 20', einheit: '' },
+  'geraet.k21': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 21', einheit: '' },
+  'geraet.k22': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 22', einheit: '' },
+  'geraet.k23': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 23', einheit: '' },
+  'geraet.k24': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 24', einheit: '' },
+  'geraet.k25': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 25', einheit: '' },
+  'geraet.k26': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 26', einheit: '' },
+  'geraet.k27': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 27', einheit: '' },
+  'geraet.k28': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 28', einheit: '' },
+  'geraet.k29': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 29', einheit: '' },
+  'geraet.k30': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 30', einheit: '' },
+  'geraet.k31': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 31', einheit: '' },
+  'geraet.k32': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 32', einheit: '' },
+  'geraet.k33': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 33', einheit: '' },
+  'geraet.k34': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 34', einheit: '' },
+  'geraet.k35': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 35', einheit: '' },
+  'geraet.k36': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 36', einheit: '' },
+  'geraet.k37': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 37', einheit: '' },
+  'geraet.k38': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 38', einheit: '' },
+  'geraet.k39': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 39', einheit: '' },
+  'geraet.k40': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 40', einheit: '' },
+  'geraet.k41': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 41', einheit: '' },
+  'geraet.k42': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 42', einheit: '' },
+  'geraet.k43': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 43', einheit: '' },
+  'geraet.k44': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 44', einheit: '' },
+  'geraet.k45': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 45', einheit: '' },
+  'geraet.k46': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 46', einheit: '' },
+  'geraet.k47': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 47', einheit: '' },
+  'geraet.k48': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 48', einheit: '' },
+  'geraet.k49': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 49', einheit: '' },
+  'geraet.k50': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 50', einheit: '' },
+  'geraet.k51': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 51', einheit: '' },
+  'geraet.k52': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 52', einheit: '' },
+  'geraet.k53': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 53', einheit: '' },
+  'geraet.k54': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 54', einheit: '' },
+  'geraet.k55': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 55', einheit: '' },
+  'geraet.k56': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 56', einheit: '' },
+  'geraet.k57': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 57', einheit: '' },
+  'geraet.k58': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 58', einheit: '' },
+  'geraet.k59': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 59', einheit: '' },
+  'geraet.k60': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 60', einheit: '' },
+  'geraet.k61': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 61', einheit: '' },
+  'geraet.k62': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 62', einheit: '' },
+  'geraet.k63': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 63', einheit: '' },
+  'geraet.k64': { min: -1, max: 1, anzeigeMin: -1, label: 'Knob 64', einheit: '' },
 };
 export const HK_TEXT = {
   reiter_clip: 'CLIP',
@@ -46,10 +102,10 @@ export const HK_TEXT = {
 };
 const LANE_ZIEL = 'geraet.cutoff';                 // a plain 0..1 lane frame of lanes.js: the row of a normalised envelope
 const GERAET = ['geraet.cutoff', 'geraet.resonanz', 'geraet.env_mod', 'geraet.lautstaerke'];
-const BK_KNOEPFE = ['geraet.k1', 'geraet.k2', 'geraet.k3', 'geraet.k4', 'geraet.k5', 'geraet.k6', 'geraet.k7', 'geraet.k8'];   // 1.12 slice 7
+const BK_KNOEPFE = Array.from({ length: 64 }, (_, i) => `geraet.k${i + 1}`);   // 1.12 slice 7
 const istRb = (spur) => spur?.art === 'instrument' && spur.geraet?.art === 'intern' && spur.geraet.name === 'rb338';
 const istBk = (spur) => spur?.art === 'instrument' && spur.geraet?.art === 'intern' && spur.geraet.name === 'bk';
-// T10.1: the targets of a clip in menu order (gain on audio, transpose on MIDI, the device targets on MIDI clips of RB-338 tracks (four) and bk tracks (knobs 1 to 8))
+// T10.1: the targets of a clip in menu order (gain on audio, transpose on MIDI, the device targets on MIDI clips of RB-338 tracks (four) and bk tracks (knobs 1 to 64))
 export function hkZiele(clip, spur) {
   if (clip?.art === 'audio') return ['gain', 'spur_fader', 'spur_pan'];
   return ['transpose', 'spur_fader', 'spur_pan', ...(istRb(spur) ? GERAET : istBk(spur) ? BK_KNOEPFE : [])];

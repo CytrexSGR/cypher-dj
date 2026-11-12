@@ -1,0 +1,27 @@
+{
+  "format": "baukasten/2",
+  "name": "fx-sem-fahrt",
+  "stimmen": 1,
+  "regler_namen": {"1": "Cutoff", "2": "Resonance", "3": "Form"},
+  "knoten": [
+    {"id": "ein", "art": "eingang"},
+    {"id": "k_cutoff", "art": "regler", "nr": 1, "min": 60, "max": 16000, "log": 1},
+    {"id": "k_reso", "art": "regler", "nr": 2, "min": 0, "max": 0.85},
+    {"id": "k_form", "art": "regler", "nr": 3, "min": 0, "max": 1},
+    {"id": "fl", "art": "sem"},
+    {"id": "fr", "art": "sem"},
+    {"id": "aus", "art": "ausgang"}
+  ],
+  "kanten": [
+    {"von": "ein.l", "nach": "fl.x"},
+    {"von": "ein.r", "nach": "fr.x"},
+    {"von": "k_cutoff.aus", "nach": "fl.cutoff"},
+    {"von": "k_cutoff.aus", "nach": "fr.cutoff"},
+    {"von": "k_reso.aus", "nach": "fl.reso"},
+    {"von": "k_reso.aus", "nach": "fr.reso"},
+    {"von": "k_form.aus", "nach": "fl.form"},
+    {"von": "k_form.aus", "nach": "fr.form"},
+    {"von": "fl.aus", "nach": "aus.l"},
+    {"von": "fr.aus", "nach": "aus.r"}
+  ]
+}

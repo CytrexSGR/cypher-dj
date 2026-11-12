@@ -1,0 +1,16 @@
+{
+  "name": "djk device page",
+  "short_name": "djk",
+  "description": "The instrument device page of the studio, for the tablet at home.",
+  "start_url": "/#tablet",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#0e0f12",
+  "theme_color": "#0e0f12",
+  "icons": [
+    { "src": "tablet-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "tablet-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "tablet-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

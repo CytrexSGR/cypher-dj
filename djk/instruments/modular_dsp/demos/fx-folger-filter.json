@@ -1,0 +1,42 @@
+{
+  "format": "baukasten/2",
+  "name": "fx-folger-filter",
+  "stimmen": 1,
+  "regler_namen": {"1": "Sensitivity", "2": "Attack", "3": "Release", "4": "Resonance"},
+  "knoten": [
+    {"id": "ein", "art": "eingang"},
+    {"id": "k_empf", "art": "regler", "nr": 1, "min": 0, "max": 96},
+    {"id": "k_an", "art": "regler", "nr": 2, "min": 0.1, "max": 50, "log": 1},
+    {"id": "k_ab", "art": "regler", "nr": 3, "min": 10, "max": 500, "log": 1},
+    {"id": "k_reso", "art": "regler", "nr": 4, "min": 0, "max": 0.7},
+    {"id": "mono", "art": "add"},
+    {"id": "halb", "art": "mul", "b": 0.5},
+    {"id": "pegel", "art": "folger"},
+    {"id": "tiefe", "art": "mul"},
+    {"id": "boden", "art": "konst", "wert": 150},
+    {"id": "schnitt", "art": "transponiere"},
+    {"id": "fl", "art": "svf", "pole": 4},
+    {"id": "fr", "art": "svf", "pole": 4},
+    {"id": "aus", "art": "ausgang"}
+  ],
+  "kanten": [
+    {"von": "ein.l", "nach": "mono.a"},
+    {"von": "ein.r", "nach": "mono.b"},
+    {"von": "mono.aus", "nach": "halb.a"},
+    {"von": "halb.aus", "nach": "pegel.x"},
+    {"von": "k_an.aus", "nach": "pegel.an"},
+    {"von": "k_ab.aus", "nach": "pegel.ab"},
+    {"von": "pegel.aus", "nach": "tiefe.a"},
+    {"von": "k_empf.aus", "nach": "tiefe.b"},
+    {"von": "boden.aus", "nach": "schnitt.hz"},
+    {"von": "tiefe.aus", "nach": "schnitt.st"},
+    {"von": "schnitt.aus", "nach": "fl.cutoff"},
+    {"von": "schnitt.aus", "nach": "fr.cutoff"},
+    {"von": "k_reso.aus", "nach": "fl.reso"},
+    {"von": "k_reso.aus", "nach": "fr.reso"},
+    {"von": "ein.l", "nach": "fl.x"},
+    {"von": "ein.r", "nach": "fr.x"},
+    {"von": "fl.tp", "nach": "aus.l"},
+    {"von": "fr.tp", "nach": "aus.r"}
+  ]
+}

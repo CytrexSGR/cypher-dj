@@ -8,9 +8,9 @@ import { laneWert, type Punkt } from './lane.ts';
 import { AUTO_FORMEN, LOOP_MIN, MAX_BEAT, MAX_LANE_PUNKTE, istObjekt, passtGeraetZiel, type Clip } from './model.ts';
 
 export interface Huellkurve { ziel: string; verknuepft?: false; loop_beats?: number; punkte: Punkt[] }
-// 1.12 slice 7: the last eight are the bk knobs (BK_ZIELE of model.ts, which imports this file)
+// 1.12 slice 7: the last 64 are the bk knobs (BK_ZIELE of model.ts, which imports this file)
 export const HK_GERAET = ['geraet.lautstaerke', 'geraet.cutoff', 'geraet.resonanz', 'geraet.env_mod',
-  'geraet.k1', 'geraet.k2', 'geraet.k3', 'geraet.k4', 'geraet.k5', 'geraet.k6', 'geraet.k7', 'geraet.k8'];
+  ...Array.from({ length: 64 }, (_, i) => `geraet.k${i + 1}`)];
 export const HK_ZIELE = ['gain', 'transpose', 'spur_fader', 'spur_pan', ...HK_GERAET];
 export function HK_BEREICH(ziel: string): { min: number; max: number } {
   if (ziel === 'gain') return { min: -200, max: 0 };
@@ -24,7 +24,7 @@ export const istModulation = (ziel: string): boolean => ziel === 'spur_fader' ||
 type ClipArt = { art: string; laenge_beats: number };
 type SpurArt = { art: string; geraet?: unknown };
 // Which target a clip may carry: gain on audio, transpose on MIDI, geraet.* on MIDI clips of tracks whose device owns that parameter
-// (RB-338: four, bk: k1..k8); spur_* on every clip.
+// (RB-338: four, bk: k1..k64); spur_* on every clip.
 // spur null: the track is not known here (the model checks the RB rule in pruefeSpur).
 export function hkZielErlaubt(ziel: string, clip: ClipArt, spur: SpurArt | null): boolean {
   if (!HK_ZIELE.includes(ziel)) return false;

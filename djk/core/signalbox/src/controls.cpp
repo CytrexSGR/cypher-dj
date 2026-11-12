@@ -277,6 +277,36 @@ ReglerTabelle::ReglerTabelle() {
     const Kurve kv{z.kurve, z.min, mx, false};
     neu(z.pfad, -1, z.rolle, z.min, mx, z.vorgabe, z.ganz ? 0 : MS(z.rampe_ms), false, false, z.ganz, z.ganz, kv);
   }
+  // 32-knob widening (2026-11-11): the Baukasten knobs 9..32 of the channels and send returns. Appended after the insert block so that
+  // no index of the rows above moves (the rows 1..8 stay at their old index; ins/bk/<n>/k9..k32 come with the generated block above).
+  // Same channel lists as the two bk loops above (pinned against net_erz.cpp in test_net_erz.cpp), same role, range, default and ramp.
+  for (const char* kn_bk_hoch : {"deck/1", "deck/2", "deck/3", "deck/4", "erz/1", "erz/2", "erz/3", "erz/5", "erz/6", "erz/7", "pad/1", "pad/2"}) {
+    const int k = kanal_suche(kn_bk_hoch);
+    for (int nr = 9; nr <= 32; nr++) {
+      std::snprintf(p, sizeof p, "%s/bk/%d", kn_bk_hoch, nr);
+      neu(p, k, Rolle::bk_regler, 0, 1, 0.5f, 0, false, false, false, false, linear(0, 1));
+    }
+  }
+  for (const char* kn_bk_send_hoch : {"fx/3", "fx/4"}) {
+    for (int nr = 9; nr <= 32; nr++) {
+      std::snprintf(p, sizeof p, "%s/bk/%d", kn_bk_send_hoch, nr);
+      neu(p, -1, Rolle::bk_regler, 0, 1, 0.5f, 0, false, false, false, false, linear(0, 1));
+    }
+  }
+  // 64-knob widening (2026-11-11): the rows 33..64, appended behind the rows 9..32 (same two loops, same order), so that no index above moves.
+  for (const char* kn_bk_hoch2 : {"deck/1", "deck/2", "deck/3", "deck/4", "erz/1", "erz/2", "erz/3", "erz/5", "erz/6", "erz/7", "pad/1", "pad/2"}) {
+    const int k = kanal_suche(kn_bk_hoch2);
+    for (int nr = 33; nr <= BK_REGLER_N; nr++) {
+      std::snprintf(p, sizeof p, "%s/bk/%d", kn_bk_hoch2, nr);
+      neu(p, k, Rolle::bk_regler, 0, 1, 0.5f, 0, false, false, false, false, linear(0, 1));
+    }
+  }
+  for (const char* kn_bk_send_hoch2 : {"fx/3", "fx/4"}) {
+    for (int nr = 33; nr <= BK_REGLER_N; nr++) {
+      std::snprintf(p, sizeof p, "%s/bk/%d", kn_bk_send_hoch2, nr);
+      neu(p, -1, Rolle::bk_regler, 0, 1, 0.5f, 0, false, false, false, false, linear(0, 1));
+    }
+  }
   for (int i = 0; i < n_; i++) sortiert_[i] = static_cast<int16_t>(i);
   std::sort(sortiert_, sortiert_ + n_, [&](int16_t a, int16_t b) { return std::strcmp(def_[a].pfad, def_[b].pfad) < 0; });
 }

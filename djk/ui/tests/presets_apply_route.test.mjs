@@ -87,6 +87,19 @@ test('POST /presets/anwenden: a plan, never a change; refusals with reason; malf
   assert.equal((await ruf(s.url, 'POST', '/presets/anwenden', {}, { origin: 'http://evil.example' })).code, 403);
 });
 
+test('POST /presets/anwenden: a baukasten preset on a channel uses graphVon (loaded graph); graph_anders, kein_graph', async (t) => {
+  const geladen = { 'erz/6': 'synth-mono', 'erz/5': 'drums-909' };
+  const s = await stapel(t, 'andreas', { graphVon: (k) => geladen[k] });
+  const id = 'werk:baukasten/synth-mono-acid-303';
+  const ok = await ruf(s.url, 'POST', '/presets/anwenden', { id, ziel: { art: 'kanal', kanal: 'erz/6' } });
+  assert.deepEqual([ok.code, ok.j.weg, ok.j.anfragen.length, ok.j.anfragen[63].pfad], [200, 'regler', 64, 'erz/6/bk/64'], JSON.stringify(ok.j).slice(0, 200));
+  const an = await ruf(s.url, 'POST', '/presets/anwenden', { id, ziel: { art: 'kanal', kanal: 'erz/5' } });
+  assert.deepEqual([an.code, an.j.fehler, typeof an.j.text], [409, 'graph_anders', 'string']);
+  assert.match(an.j.text, /another graph/);
+  const leer = await ruf(s.url, 'POST', '/presets/anwenden', { id, ziel: { art: 'kanal', kanal: 'erz/7' } });
+  assert.deepEqual([leer.code, leer.j.fehler, typeof leer.j.text], [409, 'kein_graph', 'string']);
+});
+
 test('the server komp channel mapping equals the page copy (D9)', () => { assert.deepEqual(KERN_KOMP, KERN_KOMP_SEITE); });
 
 test('POST /presets/von_ziel: values read from the project (rb338 plain, bk knobs with graph, komp stage), saved with the source', async (t) => {
@@ -99,7 +112,7 @@ test('POST /presets/von_ziel: values read from the project (rb338 plain, bk knob
   const bk = await ruf(s.url, 'POST', '/presets/von_ziel', { ziel: { art: 'spur', spur_id: 's2' }, name: 'From Pad', beschreibung: PAD_B });
   assert.equal(bk.code, 201, JSON.stringify(bk.j));
   const g = JSON.parse(fs.readFileSync(path.join(s.nutzer, 'baukasten', 'from-pad.preset.json'), 'utf8'));
-  assert.equal(g.graph, 'pad'); assert.deepEqual(g.werte, { knob1: 0.2, knob2: 0.5, knob3: 0.5, knob4: 0.5, knob5: 0.5, knob6: 0.5, knob7: 0.5, knob8: 0.5 });
+  assert.equal(g.graph, 'pad'); assert.deepEqual(g.werte, { knob1: 0.2, ...Object.fromEntries(Array.from({ length: 63 }, (_, i) => [`knob${i + 2}`, 0.5])) }, 'a bk track reads all 64 knobs (unset ones at 0.5)');
   const k = await ruf(s.url, 'POST', '/presets/von_ziel', { ziel: { art: 'insert', insert_id: 'i1' }, name: 'From Stage', beschreibung: KOMP_B });
   assert.equal(k.code, 201, JSON.stringify(k.j));
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(s.nutzer, 'komp', 'from-stage.preset.json'), 'utf8')).werte,

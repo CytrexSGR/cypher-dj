@@ -9,7 +9,7 @@
 //!
 //! The probe is the one of the offline renderer (`examples/render.rs`): instruments play A2 C#3 E3 A3 at 0.5 s each, then
 //! the chord for 1.5 s, then 1.5 s of tail; effect graphs get a synthetic 120 BPM loop (kick, hats, saw bass, chord
-//! stab, peak -6 dBFS) of 6 s plus 1.5 s of tail. All knobs sit at the kern default 0.5.
+//! stab, peak -6 dBFS) of 6 s plus 1.5 s of tail. Every knob sits at the graph's `vorgabe` (0.5 where the graph names none), as the page loads it.
 //!
 //! `BEISPIELE_DIR=/path` points the lint at another directory (used to show the lint red on the old graphs). Without it the
 //! lint also covers the recipe patches in `demos/recipes/` (named `rezepte/<file>`).
@@ -91,11 +91,36 @@ fn kanten(j: &serde_json::Value) -> Vec<(String, String)> {
 
 struct Mass { spitze: f32, rms_db: f32, dc: f32 }
 
-/// Play the probe through `p` (knobs as set by the caller) and return the stereo output.
-fn spiele_probe(p: &mut Programm) -> Vec<(f32, f32)> {
+/// A drum kit graph (a `trommeln` node): its probe strikes the drums of the kit instead of A2 C#3 E3 A3.
+fn ist_kit(json: &str) -> bool {
+    let j: serde_json::Value = serde_json::from_str(json).unwrap();
+    knoten(&j).iter().any(|k| k["art"] == "trommeln")
+}
+
+/// Kit probe: every drum of the kit once, a quarter of a second apart (kick, snare, clap, rim, three toms, closed hat, open hat,
+/// pedal hat, crash, ride, cowbell, clave, plus note 35 = 808 Boom; velocity 0.8), then a stack of kick + snare + closed hat + clap struck together,
+/// then 1.5 s of tail. Notes the kit does not play (cowbell and clave on the 909) stay silent.
+fn spiele_kit_probe(p: &mut Programm, y: &mut Vec<(f32, f32)>) {
+    let mut spiele = |p: &mut Programm, s: f32| for _ in 0..(s * SR) as usize { y.push(p.sample_stereo()); };
+    for n in [36u8, 35, 38, 39, 37, 41, 45, 48, 42, 46, 44, 49, 51, 56, 75] {
+        p.note_an(n, 0.8);
+        spiele(p, 0.125);
+        p.note_aus(n);
+        spiele(p, 0.125);
+    }
+    for n in [36u8, 38, 42, 39] { p.note_an(n, 0.8); }
+    spiele(p, 0.125);
+    p.alle_aus();
+    spiele(p, 1.5);
+}
+
+/// Play the probe through `p` (knobs as set by the caller) and return the stereo output. `kit`: use the kit probe.
+fn spiele_probe(p: &mut Programm, kit: bool) -> Vec<(f32, f32)> {
     p.setze_takt(0.0, 2.0 / SR as f64);
     let mut y: Vec<(f32, f32)> = Vec::new();
-    if p.hat_eingang() {
+    if kit {
+        spiele_kit_probe(p, &mut y);
+    } else if p.hat_eingang() {
         for v in gemeinsam::musik_probe().into_iter().chain(std::iter::repeat(0.0).take(72_000)) {
             p.setze_eingang(v, v);
             y.push(p.sample_stereo());
@@ -114,7 +139,7 @@ fn spiele_probe(p: &mut Programm) -> Vec<(f32, f32)> {
 /// Render the probe at the default knobs and measure peak (pre-clamp), RMS over the active frames and DC (largest side).
 fn messe(name: &str, json: &str) -> Mass {
     let mut p = lade(name, json);
-    let y = spiele_probe(&mut p);
+    let y = spiele_probe(&mut p, ist_kit(json));
     assert!(y.iter().all(|(l, r)| l.is_finite() && r.is_finite()), "{name}: not finite");
     assert_eq!(p.rettungen, 0, "{name}: rescued");
     let spitze = y.iter().fold(0.0f32, |m, (l, r)| m.max(l.abs()).max(r.abs()));
@@ -155,7 +180,7 @@ fn pad_familie_haelt_die_knopfnummern_1_bis_5() {
         for (i, s) in soll.iter().enumerate() {
             assert_eq!(p.regler_namen.iter().find(|(n, _)| *n == i + 1).map(|(_, s)| s.as_str()), Some(*s), "{name}: knob {}", i + 1);
         }
-        assert_eq!(p.regler_namen.len(), REGLER, "{name}: all {REGLER} knobs named");
+        assert_eq!(p.regler_namen.len(), 8, "{name}: all 8 knobs of the pad family named");
     }
     assert_eq!(gesehen, 4, "juno-pad, -hall, -echo, -dyn");
 }
@@ -212,12 +237,63 @@ fn kein_gleichanteil_und_keine_uebersteuerung_auf_der_probe() {
 }
 
 /// Knobs that legitimately do nothing on the probe, each with its reason. Everything else must change the sound.
-const REGLER_OHNE_WIRKUNG_AUF_DER_PROBE: &[(&str, usize, &str)] = &[];
+const REGLER_OHNE_WIRKUNG_AUF_DER_PROBE: &[(&str, usize, &str)] = &[
+    ("drums-909", 27, "the filter resonance acts only while the DJ filter is engaged; the probe leaves the filter at its neutral position 0.5, where it is bypassed"),
+    ("drums-808", 29, "the filter resonance acts only while the DJ filter is engaged; the probe leaves the filter at its neutral position 0.5, where it is bypassed"),
+    ("wavetable-chor", 8, WAVE_HUELLE_AUS),
+    ("wavetable-chor", 9, WAVE_HUELLE_AUS),
+    ("wavetable-reese", 8, WAVE_HUELLE_AUS),
+    ("wavetable-reese", 9, WAVE_HUELLE_AUS),
+    ("wavetable-supersaw", 8, WAVE_HUELLE_AUS),
+    ("wavetable-supersaw", 9, WAVE_HUELLE_AUS),
+    ("saege-ladder", 9, SAEGE_FILTER_HUELLE_AUS),
+    ("saege-ladder", 10, SAEGE_FILTER_HUELLE_AUS),
+    ("synth-neuro", 29, NEURO_OSC2_AUS),
+    ("synth-neuro", 30, NEURO_OSC2_AUS),
+    ("synth-neuro", 31, NEURO_OSC2_AUS),
+    ("synth-neuro", 32, NEURO_LFO2_AUS),
+    ("synth-neuro", 33, NEURO_LFO2_AUS),
+    ("synth-neuro", 34, NEURO_LFO2_AUS),
+    ("synth-neuro", 35, NEURO_LFO2_AUS),
+    ("synth-neuro", 41, NEURO_DELAY_AUS),
+    ("synth-neuro", 42, NEURO_DELAY_AUS),
+    ("synth-mono", 36, MONO_NUR_UEBER_G),
+    ("synth-mono", 37, MONO_NUR_UEBER_G),
+    ("synth-mono", 38, MONO_NUR_UEBER_G),
+    ("synth-mono", 39, MONO_NUR_UEBER_G),
+    ("synth-mono", 43, MONO_NUR_UEBER_G),
+    ("synth-mono", 44, MONO_NUR_UEBER_G),
+    ("synth-mono", 45, MONO_NUR_UEBER_G),
+    ("synth-mono", 46, MONO_NUR_UEBER_G),
+    ("synth-mono", 54, MONO_NUR_UEBER_G),
+    ("synth-mono", 55, MONO_NUR_UEBER_G),
+    ("synth-mono", 56, MONO_NUR_UEBER_G),
+    ("synth-mono", 60, MONO_NUR_UEBER_G),
+    ("synth-poly", 31, POLY_MODENV_AUS), ("synth-poly", 32, POLY_MODENV_AUS), ("synth-poly", 33, POLY_MODENV_AUS), ("synth-poly", 34, POLY_MODENV_AUS),
+    ("synth-poly", 38, POLY_OSC2_AUS),
+    ("synth-poly", 39, POLY_LFO2_AUS), ("synth-poly", 40, POLY_LFO2_AUS), ("synth-poly", 41, POLY_LFO2_AUS), ("synth-poly", 42, POLY_LFO2_AUS),
+    ("synth-poly", 47, POLY_OSC2_AUS), ("synth-poly", 48, POLY_OSC2_AUS), ("synth-poly", 49, POLY_OSC2_AUS), ("synth-poly", 50, POLY_OSC2_AUS), ("synth-poly", 51, POLY_OSC2_AUS),
+    ("synth-poly", 54, "glide runs from the pitch a voice had last; the probe's notes all land on voices that have not played yet (the first note of a voice sets the glide to its pitch), so there is nothing to glide from. tests/synth_poly.rs `glide_auf_der_stimme` plays two chords on the same voices"),
+];
+
+const NEURO_OSC2_AUS: &str = "wave, octave and detune of oscillator 2 only act through Osc2 level (knob 28); the probe leaves it at 0 (off by design, so old presets keep their sound). `neuro_freie_regler_wirken_ueber_ihr_tor` sweeps them with the level open";
+const NEURO_LFO2_AUS: &str = "rate, shape, sync and target of LFO 2 only act through LFO2 amount (knob 36); the probe leaves it at 0.5 = 0 (off by design). `neuro_freie_regler_wirken_ueber_ihr_tor` sweeps them with the amount open";
+const NEURO_DELAY_AUS: &str = "delay time and feedback only act through Delay mix (knob 43); the probe leaves it at 0 (off by design). `neuro_freie_regler_wirken_ueber_ihr_tor` sweeps them with the mix open";
+const MONO_NUR_UEBER_G: &str = "a free (class F) knob of a new module: it is heard only through that module's gate knob (MOD ENV amounts, LFO 2 amount, chorus amount, delay mix), which sits at 0 by design so the default is the old sound. `mono_freie_regler_wirken_ueber_ihr_tor` (synth_mono.rs) sweeps them with the gate open";
+const POLY_MODENV_AUS: &str = "the MOD ENV shape (attack, decay, sustain, release) acts only while one of its amounts (knobs 35..38) is away from its centre; the probe leaves them at 0.5 = 0 (off by design). tests/synth_poly.rs `jeder_neue_regler_ist_hoerbar` opens the gate";
+
+const POLY_LFO2_AUS: &str = "LFO 2 (rate, shape, sync, target) acts only while its Amount (knob 43) is away from its centre; the probe leaves it at 0.5 = 0 (off by design). tests/synth_poly.rs `jeder_neue_regler_ist_hoerbar` opens the gate";
+
+const POLY_OSC2_AUS: &str = "oscillator 2 (wave, octave, semitone, detune, sync, and the MOD ENV amount onto its pitch) is heard only while Osc2 level (knob 46) is above 0; the probe leaves it at 0 (off by design). tests/synth_poly.rs `jeder_neue_regler_ist_hoerbar` opens the gate";
+
+const SAEGE_FILTER_HUELLE_AUS: &str = "the filter envelope shape (decay, sustain) only acts while Env amount (knob 3) is away from its centre; the probe leaves it at 0.5 = 0 st (off by design, so the default is the old static cutoff)";
+
+const WAVE_HUELLE_AUS: &str = "the wave envelope times only act while Wave env amount (knob 7) is away from its centre; the probe leaves it at 0.5 = amount 0 (off by design, so old presets keep their sound)";
 
 fn probe_mit_regler(name: &str, json: &str, nr: usize, wert: f32) -> Vec<(f32, f32)> {
     let mut p = lade(name, json);
     p.setze_regler(nr, wert);
-    spiele_probe(&mut p)
+    spiele_probe(&mut p, ist_kit(json))
 }
 
 #[test]
@@ -244,4 +320,30 @@ fn jeder_regler_aendert_den_klang_auf_der_probe() {
     }).into_iter().flatten().collect();
     assert!(gesehen >= 70, "positive control: expected at least 70 knobs in the sweep, saw {gesehen}");
     assert!(tot.is_empty(), "dead knobs:\n  {}", tot.join("\n  "));
+}
+
+/// synth-neuro: the class F knobs (free parameters of a new module) are only audible through their class G gate. Each is swept 0 against 1
+/// with its gate open and must change the sound; the default-probe allow-list entries above are the other half of the same fact.
+#[test]
+fn neuro_freie_regler_wirken_ueber_ihr_tor() {
+    let (name, json) = alle_graphen().into_iter().find(|(n, _)| n == "synth-neuro").expect("synth-neuro");
+    // (knob, gate knobs set open)
+    let faelle: [(usize, &[(usize, f32)]); 9] = [
+        (29, &[(28, 0.8)]), (30, &[(28, 0.8)]), (31, &[(28, 0.8)]),
+        (32, &[(36, 1.0), (35, 0.25)]), (33, &[(36, 1.0), (35, 0.25)]), (34, &[(36, 1.0), (35, 0.25)]), (35, &[(36, 1.0)]),
+        (41, &[(43, 0.5)]), (42, &[(43, 0.5)]),
+    ];
+    let aus: Vec<String> = parallel(&faelle, |(nr, tor)| {
+        let mit = |w: f32| {
+            let mut p = lade(&name, &json);
+            for &(n, v) in tor.iter() { p.setze_regler(n, v); }
+            p.setze_regler(*nr, w);
+            spiele_probe(&mut p, false)
+        };
+        let (a, b) = (mit(0.0), mit(1.0));
+        let diff = a.iter().zip(&b).fold(0.0f32, |m, (x, y)| m.max((x.0 - y.0).abs()).max((x.1 - y.1).abs()));
+        println!("MESS neuro free knob {nr} with its gate open: max |0 - 1| {diff:.5}");
+        if diff == 0.0 { Some(format!("knob {nr} is dead even with its gate open")) } else { None }
+    }).into_iter().flatten().collect();
+    assert!(aus.is_empty(), "{aus:?}");
 }

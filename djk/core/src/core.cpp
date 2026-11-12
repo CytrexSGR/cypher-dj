@@ -1,6 +1,7 @@
 #include "cypherdj/core.h"
 
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 
 #include "cypherdj/check_cue.h"
@@ -24,7 +25,8 @@ Kern::Kern(double start_bpm, cdj_ring_kopf* ring, Befehlsring* befehle, Ereignis
     erz_l_[k] = mixer_->eingang_l(k);
     erz_r_[k] = mixer_->eingang_r(k);
   }
-  {  // Baukasten S5r + S14: Graph-Regler <kanal>/bk/<1..8> and fx/3|4/bk/<1..8> -> (row of bk_wert_, nr); start from the control values (default 0.5)
+  static_assert(MIX_BK_ZEILEN * cypherdj::stellwerk::BK_REGLER_N <= INT16_MAX, "bk_ort_ packs row * BK_REGLER_N + nr - 1 into an int16 (19 * 64 + 63 = 1279 at 64 knobs)");
+  {  // Baukasten S5r + S14: Graph-Regler <kanal>/bk/<1..64> and fx/3|4/bk/<1..64> -> (row of bk_wert_, nr); start from the control values (default 0.5)
     const auto& tab = sw_->tabelle();
     for (int r = 0; r < cypherdj::stellwerk::MAX_REGLER; ++r) bk_ort_[r] = -1;
     for (int r = 0; r < tab.anzahl(); ++r) {
@@ -42,17 +44,18 @@ Kern::Kern(double start_bpm, cdj_ring_kopf* ring, Befehlsring* befehle, Ereignis
 #endif
 #endif
       }
-      const size_t len = std::strlen(d.pfad);
-      const int nr = d.pfad[len - 1] - '0';
-      if (k < 0 || nr < 1 || nr > 8) continue;
-      bk_ort_[r] = static_cast<int16_t>(k * 8 + nr - 1);
+      // the knob number is the number after the last '/', one or two digits (bk/1 is not bk/10..19)
+      const char* slash = std::strrchr(d.pfad, '/');
+      const int nr = slash ? std::atoi(slash + 1) : 0;
+      if (k < 0 || nr < 1 || nr > cypherdj::stellwerk::BK_REGLER_N) continue;
+      bk_ort_[r] = static_cast<int16_t>(k * cypherdj::stellwerk::BK_REGLER_N + nr - 1);
       bk_wert_[k][nr - 1] = sw_->wert(r);
     }
     mixer_->setze_bk_wert(bk_wert_);
     erz_->setze_bk_wert(bk_wert_);
   }
   loops_ = std::make_unique<LoopBoxen>();  // MVP 2: feste Puffer, darum hier und nicht im Callback
-  arr_ = std::make_unique<Arrangement>(sw_->tabelle());  // D1 K1: fixed buffers (sizeof(Arrangement) is 1,358,656 bytes with 32 tracks (1,327,296 before 1.10 slice 4a), of which 512 KiB lane buffers and 16 KiB event ring; measured 2026-11-04 with -O2 -std=gnu++20 -DCYPHERDJ_BUNGEE=1), not in the callback
+  arr_ = std::make_unique<Arrangement>(sw_->tabelle());  // D1 K1: fixed buffers (sizeof(Arrangement) is 1,925,440 bytes since the 64-knob widening (1,882,176 after the 32-knob one, ArrSnapshot 94,016 -> 134,976 bytes because ARR_PARAMETER went from 32 to 64), 1,882,176 bytes since the 32-knob widening (1,857,600 before it: the device-lane cursors auto_g_/auto_gr_ grew from 8 to 32 parameters; ArrSnapshot 63,296 -> 94,016 bytes because ARR_PARAMETER went from 8 to 32), 1,358,656 bytes with 32 tracks at the time of D1 K1 (1,327,296 before 1.10 slice 4a), of which 512 KiB lane buffers and 16 KiB event ring; measured 2026-11-04 with -O2 -std=gnu++20 -DCYPHERDJ_BUNGEE=1), not in the callback
   arr_pickup_.arr = arr_.get();   // 1.12 S3 (D2): the Stellwerk asks the Arrangement for the lane value at the first applied hand step
   arr_pickup_.sperre = &nachreichen_sperre_;
   sw_->setze_pickup(&arr_pickup_);

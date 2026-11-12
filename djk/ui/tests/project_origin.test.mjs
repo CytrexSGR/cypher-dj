@@ -46,7 +46,7 @@ test('refusals: each bad provenance is rejected and the project stays unchanged;
   const falle = [
     ['strom 1', mut((e) => { e.strom = 1; })], ['strom 4', mut((e) => { e.strom = 4; })],
     ['graph with blank and capital', mut((e) => { e.graph = 'Juno Pad'; })], ['graph of 33 chars', mut((e) => { e.graph = 'a'.repeat(33); })],
-    ['regler of 7 values', mut((e) => { e.regler = e.regler.slice(0, 7); })], ['regler of 9 values', mut((e) => { e.regler.push(0.5); })],
+    ['regler of 7 values', mut((e) => { e.regler = e.regler.slice(0, 7); })], ['regler of 65 values', mut((e) => { e.regler = Array(65).fill(0.5); })],
     ['a value 1.2', mut((e) => { e.regler[3] = 1.2; })], ['a value -0.1', mut((e) => { e.regler[3] = -0.1; })], ['a value "x"', mut((e) => { e.regler[3] = 'x'; })],
     ['code empty', mut((e) => { e.code = ''; })], ['code 20001 chars', mut((e) => { e.code = 'a'.repeat(20001); })], ['code a number', mut((e) => { e.code = 7; })],
     ['bpm 300', mut((e) => { e.bpm = 300; })], ['bpm 59', mut((e) => { e.bpm = 59; })],
@@ -60,6 +60,7 @@ test('refusals: each bad provenance is rejected and the project stays unchanged;
   assert.equal('entstehung' in audio(p), false, 'the input project is unchanged');
   // negative control: the boundary values pass (code of exactly 20000, graph of 32, regler 0 and 1, bpm 60 and 200)
   const grenze = mut((e) => { e.code = 'a'.repeat(ENTSTEHUNG_CODE_MAX); e.graph = 'a'.repeat(32); e.regler = [0, 1, 0, 1, 0, 1, 0, 1]; e.bpm = 60; });
+  assert.equal(audio(setze(p, mut((e) => { e.regler = Array(32).fill(0.5); }))).entstehung.regler.length, 32, 'knobs 1..32 are accepted');
   assert.equal(audio(setze(p, grenze)).entstehung.code.length, 20000);
   assert.equal(audio(setze(p, mut((e) => { e.bpm = 200; }))).entstehung.bpm, 200);
   assert.equal(grund(() => fuehreAus(p, { befehl: 'clip_aendern', clip_id: 'c2', entstehung: E() })), 'feld_nur_audio');

@@ -1,0 +1,27 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "sampler-fairlight"},
+  "title": "Sampler Fairlight",
+  "akzent": "blau",
+  "layout": {"rows": [
+    ["smp", "crush", "play"]
+  ]},
+  "sections": [
+    { "id": "smp", "title": "SAMPLE", "cols": 5, "controls": [
+      {"id": "det", "type": "knob", "label": "Detune", "span": 5, "bind": {"param": "k3"}, "format": "raw", "unit": "ct", "default": 0.5},
+      {"id": "s1", "type": "label", "span": 5, "text": "Orchestra hit, 3 layers: low, mid, high"},
+      {"id": "s2", "type": "label", "span": 5, "text": "Low and high layers detune from the mid"},
+      {"id": "s3", "type": "label", "span": 5, "text": "Root C4, one-shot, 4 voices"}
+    ]},
+    { "id": "crush", "title": "CRUSH", "cols": 4, "controls": [
+      {"id": "rate", "type": "knob", "label": "Rate", "span": 4, "bind": {"param": "k1"}, "format": "hz", "default": 0.5},
+      {"id": "c1", "type": "label", "span": 4, "text": "Bit crush 8 bit at this sample rate"},
+      {"id": "c2", "type": "label", "span": 4, "text": "Low-pass 4 poles at 40 % of the rate"}
+    ]},
+    { "id": "play", "title": "PLAY", "cols": 4, "controls": [
+      {"id": "rev", "type": "knob", "label": "Reverse", "span": 4, "bind": {"param": "k2"}, "format": "raw", "einheitlos": true, "default": 0.5},
+      {"id": "p1", "type": "label", "span": 4, "text": "Reverse above 0.5 (top third of dial)"},
+      {"id": "p2", "type": "label", "span": 4, "text": "Stereo, layers panned apart"}
+    ]}
+  ]
+}

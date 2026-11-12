@@ -241,7 +241,12 @@ fn regler_glaettet_20ms() {
 fn regler_klemmt_und_prueft() {
     let h = neu(RD);
     assert_eq!(cypher_bk_regler(h, 0, 0.7), -1);
-    assert_eq!(cypher_bk_regler(h, 9, 0.7), -1);
+    assert_eq!(cypher_bk_regler(h, 9, 0.7), 0);   // knobs 9..64 are valid since the widenings
+    assert_eq!(cypher_bk_regler(h, 32, 0.7), 0);
+    assert_eq!(cypher_bk_regler(h, 33, 0.7), 0);
+    assert_eq!(cypher_bk_regler(h, 64, 0.7), 0);
+    assert_eq!(cypher_bk_regler(h, 65, 0.7), -1);
+    assert_eq!(cypher_bk_regler(h, u32::MAX, 0.7), -1);
     assert_eq!(cypher_bk_regler(std::ptr::null_mut(), 1, 0.7), -1);
     cypher_bk_frei(h);
     let lauf = |wert: Option<f32>| {
@@ -492,10 +497,12 @@ fn regler_sofort_springt_ohne_rampe() {
     let geglaettet = lauf_noten(h);
     cypher_bk_frei(h);
     assert_ne!(geglaettet, soll, "the smoothed call ramps over 20 ms");
-    // bounds as regler: nr outside 1..8 and null are refused, NaN ignored, values clamped
+    // bounds as regler: nr outside 1..64 and null are refused, NaN ignored, values clamped
     let h = neu(G_KNOPF);
     assert_eq!(cypher_bk_regler_sofort(h, 0, 0.5), -1);
-    assert_eq!(cypher_bk_regler_sofort(h, 9, 0.5), -1);
+    assert_eq!(cypher_bk_regler_sofort(h, 64, 0.5), 0);
+    assert_eq!(cypher_bk_regler_sofort(h, 65, 0.5), -1);
+    assert_eq!(cypher_bk_regler_sofort(h, u32::MAX, 0.5), -1);
     assert_eq!(cypher_bk_regler_sofort(std::ptr::null_mut(), 1, 0.5), -1);
     assert_eq!(cypher_bk_regler_sofort(h, 1, f32::NAN), 0);
     assert_eq!(cypher_bk_regler_sofort(h, 1, 7.0), 0);   // clamped to 1.0
@@ -505,4 +512,53 @@ fn regler_sofort_springt_ohne_rampe() {
     assert_eq!(cypher_bk_regler_sofort(h, 1, 1.0), 0);
     assert_eq!(lauf_noten(h), eins, "7.0 is clamped to 1.0");
     cypher_bk_frei(h);
+}
+
+/// 32-knob widening: the knob sits on `regler` nr 32 and reaches the sound through the FFI, the immediate call equals
+/// the settled smoothed call, and a knob without a node in the graph (nr 31) changes nothing.
+#[test]
+fn knopf_32_wirkt_ueber_die_ffi() {
+    let g32 = G_KNOPF.replace("\"nr\":1,", "\"nr\":32,");
+    let spitze = |x: &[f32]| x.iter().fold(0.0f32, |m, v| m.max(v.abs()));
+    let lauf = |nr: u32, wert: f32| {
+        let h = neu(&g32);
+        assert_eq!(cypher_bk_regler(h, nr, wert), 0);
+        bloecke(h, 256, 40);
+        let x = lauf_noten(h);
+        cypher_bk_frei(h);
+        x
+    };
+    let hoch = lauf(32, 0.9);
+    let tief = lauf(32, 0.1);
+    assert!(spitze(&hoch) > spitze(&tief) * 3.0, "knob 32 moves the level: {} vs {}", spitze(&hoch), spitze(&tief));
+    assert_eq!(lauf(31, 0.9), lauf(31, 0.1), "knob 31 has no node in this graph: no effect");
+    let h = neu(&g32);
+    assert_eq!(cypher_bk_regler_sofort(h, 32, 0.9), 0);
+    let sofort = lauf_noten(h);
+    cypher_bk_frei(h);
+    assert_eq!(sofort, hoch, "the immediate call on knob 32 equals the settled smoothed call");
+}
+
+/// 64-knob widening: the same as `knopf_32_wirkt_ueber_die_ffi` on the top knob; knob 63 has no node here.
+#[test]
+fn knopf_64_wirkt_ueber_die_ffi() {
+    let g64 = G_KNOPF.replace("\"nr\":1,", "\"nr\":64,");
+    let spitze = |x: &[f32]| x.iter().fold(0.0f32, |m, v| m.max(v.abs()));
+    let lauf = |nr: u32, wert: f32| {
+        let h = neu(&g64);
+        assert_eq!(cypher_bk_regler(h, nr, wert), 0);
+        bloecke(h, 256, 40);
+        let x = lauf_noten(h);
+        cypher_bk_frei(h);
+        x
+    };
+    let hoch = lauf(64, 0.9);
+    let tief = lauf(64, 0.1);
+    assert!(spitze(&hoch) > spitze(&tief) * 3.0, "knob 64 moves the level: {} vs {}", spitze(&hoch), spitze(&tief));
+    assert_eq!(lauf(63, 0.9), lauf(63, 0.1), "knob 63 has no node in this graph: no effect");
+    let h = neu(&g64);
+    assert_eq!(cypher_bk_regler_sofort(h, 64, 0.9), 0);
+    let sofort = lauf_noten(h);
+    cypher_bk_frei(h);
+    assert_eq!(sofort, hoch, "the immediate call on knob 64 equals the settled smoothed call");
 }

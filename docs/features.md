@@ -77,7 +77,7 @@ of the beta. The short version is the [README](../README.md).
   for outputs, sends and sidechain keys, and resampling of any track, group, return or the master into a new audio
   track
 - **Automation**: lanes per track for fader, pan, mute, solo and four RB-338 parameters, and lanes on the parameters
-  of insert stages, on the four rack macros and on the eight knobs of a Cypher Modular track, drawn with points or recorded
+  of insert stages, on the four rack macros and on the knobs of a Cypher Modular track (up to 64), drawn with points or recorded
   from the hand (touch, latch or write). Grabbing a track's fader, pan, mute or solo by hand overrides its lane, which the
   page shows until the override is ended. Clips carry envelopes of their own (gain, transpose, relative track volume
   and pan)
@@ -105,7 +105,7 @@ of the beta. The short version is the [README](../README.md).
   hand edits unless asked to
 - **Merge and bounce**: merge two or more tracks into one new audio track, or bounce a track in place, to a new track
   or as a copy to paste, by an offline render of the same core. Tracks with insert stages are refused
-- **Presets**: a browser for presets of our own devices (48 factory presets, your own, collections) with names from
+- **Presets**: a browser for presets of our own devices (103 factory presets, your own, collections) with names from
   a closed vocabulary; drag one onto a track, a stage or a strip
 - Tempo, loop range and metronome; per track volume, pan, mute, solo and a meter
 - Projects are folders with a JSON file; every change is one undo step, and the undo history survives a restart
@@ -158,15 +158,38 @@ references before they went in:
   oversampling. Available as a plugin and as an insert stage in the production core
 - **Cypher Modular**: a modular synthesizer. A patch is a JSON graph of building blocks (oscillators, filters,
   envelopes, LFOs, chorus, reverb, delay, dynamics, free feedback paths and, among others, wavetable, FM, granular,
-  modal resonator, string and sampler blocks; 38 block types in all) with eight knobs that the human or the agent
-  can turn. It plays on the melody and bass channels, on extra pattern streams and on production instrument tracks, and it
+  modal resonator, string, sampler, filter, sample-and-hold, multi-stage envelope, wavefolder and drum kit blocks; 50 block types in all) with up to 64 knobs that the human or the agent
+  can turn; a knob can have a start value and a centre value of its own. It plays on the melody and bass channels, on extra pattern streams and on production instrument tracks, and it
   runs as an effect on DJ channels and send returns. Example patches: a Juno-style pad, a sync lead, a wobble bass, FM bells, a plucked string. See [docs/cypher-modular.md](cypher-modular.md)
 - **RB-338**: a 303-style bass voice with cutoff, resonance, envelope, decay, accent and slide, playable
   from the bass pattern channel instead of Surge XT
+- **Mono Synth, Poly Synth, Neuro Bass**: three synthesizers built as Cypher Modular graphs. Mono Synth has two
+  oscillators with hard sync, a sub, five switchable filters, a filter and an amplifier envelope, a modulation
+  envelope, two LFOs (the second with tempo sync and a choice of target), glide, velocity depth, tuning, drift, and
+  chorus, delay and reverb. Poly Synth has eight voices, a unison stack, a second oscillator, three filters, the same
+  modulation sources, glide, drift and a chorus. Neuro Bass has three detuned oscillator copies bent by FM, ring
+  modulation and a wavefolder, seven switchable filters, a tempo-synced second LFO, sample and hold, a second
+  oscillator, key follow, delay and reverb. Every knob added in the build-out of 12 November sits at "off" or at the
+  old value when a project loads, so the factory presets made before it render byte for byte as before (a null test
+  against the old graphs)
+- **Drums 909 and Drums 808**: two complete drum machines in one graph each. One MIDI channel plays the whole kit, the
+  note picks the drum, the knobs tune the kit, and one bus (drive and a DJ filter) closes it
+- **Filterbox**: an effect graph with six filter models (ladder, diode, comb, vowel and others), three modulation
+  sources (LFO, sample and hold, envelope follower) and a dry/wet mix
 
 ## More in the box
 
 The lists above are the headline. Also in there:
+
+- **Front panels**: every instrument channel has a plate on the page with knobs that show real units (seconds,
+  hertz, semitones, percent), envelope, LFO shape and filter curve displays, MIDI learn on each control, and on Cypher Modular
+  plates a preset picker and a save button in the header. Devices without a hand-made panel get an automatic one. Plates also sit on
+  instrument tracks and Cypher Modular insert stages in PRODUCTION, and automatically on host plugins. A Surge XT quick
+  panel (50 parameters) has a button that opens the real Surge window
+- **Device page**: the plate of an instrument enlarged over the page, with a live spectrum of the channel
+- **Tablet**: the device page as a touch view with large knobs and faders on a tablet in your home network. It is off
+  until switched on in a config file, each tablet is paired with a link that works for two minutes, paired devices expire
+  30 days after last use, and a tablet cannot start or stop playback, change projects or evaluate code
 
 - **Studio view**: the three Strudel channels side by side, each with an automation lane for fader,
   filter and cutoff over 4 to 32 bars
@@ -223,7 +246,8 @@ mostly against a silent test sink. Not benchmarks.
   the value was measured against the real instrument at one audio buffer size (256 frames); the offset scales
   with the buffer size and has been checked in software at 128 and 512.
 - Human and agent are told apart by a label on localhost. That is a convention, not a security boundary.
-  Do not expose the ports to a network.
+  Do not expose the ports to a network. The optional tablet access is the one exception: it listens on your
+  home-network address only when switched on, and every request except the one-time pairing link needs a pairing cookie.
 - The measurement rule covers decks; the pattern channels are deliberately exempt.
 - Stem separation needs an NVIDIA GPU with CUDA and about 4.5 GB of free video memory; there is no CPU path, and without
   a GPU the request is refused. Up to 600 s of source per run. The weights of the model are downloaded from their
@@ -236,13 +260,15 @@ mostly against a silent test sink. Not benchmarks.
   experimental cue-suggestion pipeline is included as a separate research tool.
 - Key detection is weak on major keys (the test library is almost all minor).
 - Learning from the human's judgement is planned, not built.
+- The build-out of the three synthesizers was measured on synthetic signals; its new controls have not been judged
+  by a listener yet. The Cypher Modular VST3 plug-in exposes all 64 knob parameters.
 - Production: two hosted instrument slots (Surge XT or a third-party plugin). The pools of our own insert devices are
-  small: 12 compressors, 2 EQs, 1 saturator and 1 limiter per project, at most four stages per strip. Third-party
+  small: 12 compressors, 8 EQs, 4 saturators, 2 limiters and 8 utilities per project, at most four stages per strip. Third-party
   plugins: at most four effect hosts at a time, no sidechain into a plugin, no automation or controller mapping of
   plugin parameters, no CLAP, a multi-plugin VST3 bundle loads only its first plugin (use the LV2 version), and a
   project with an active plugin stage takes as long to export as the song lasts. The limiter works
   on sample peaks, not true peaks, and on the master chain it sits before the production master fader. Automation lanes cover fader, pan, mute,
-  solo and four RB-338 parameters, not yet insert, send or Cypher Modular parameters. Takes and comping are for audio
+  solo, four RB-338 parameters, insert stage parameters, the rack macros and Cypher Modular knobs. Takes and comping are for audio
   tracks; bounce and merge refuse a track that has insert stages. Export
   is refused while the transport is running. The live track meters show sample peaks; loudness is measured offline (per
   track or in the export).

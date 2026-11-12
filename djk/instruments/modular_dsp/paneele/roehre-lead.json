@@ -1,0 +1,31 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "roehre-lead"},
+  "title": "Tube Lead",
+  "akzent": "orange",
+  "layout": {"rows": [
+    ["osc", "tube", "filter", "env"]
+  ]},
+  "sections": [
+    { "id": "osc", "title": "OSCILLATOR", "cols": 2, "controls": [
+      {"id": "o1", "type": "label", "span": 2, "text": "Saw"},
+      {"id": "o2", "type": "label", "span": 2, "text": "High-pass 300 Hz, 2 poles"},
+      {"id": "o3", "type": "label", "span": 2, "text": "4 voices"}
+    ]},
+    { "id": "tube", "title": "TUBE", "cols": 3, "controls": [
+      {"id": "drive", "type": "knob", "label": "Drive", "span": 3, "bind": {"param": "k1"}, "format": "db", "default": 0.5},
+      {"id": "t1", "type": "label", "span": 3, "text": "Tube stage, 2 stages in series"},
+      {"id": "t2", "type": "label", "span": 3, "text": "Set by the knob (graph default 18 dB)"}
+    ]},
+    { "id": "filter", "title": "FILTER", "cols": 3, "controls": [
+      {"id": "cutoff", "type": "knob", "label": "Cutoff", "span": 3, "bind": {"param": "k2"}, "format": "hz", "default": 0.5},
+      {"id": "f1", "type": "label", "span": 3, "text": "Ladder, 4 poles"},
+      {"id": "f2", "type": "label", "span": 3, "text": "Resonance 30 % fixed"}
+    ]},
+    { "id": "env", "title": "AMP ENV", "cols": 4, "controls": [
+      {"id": "hue", "type": "huelle", "span": 4, "label": "Envelope", "of": {"a": 0.005, "d": 0.3, "s": 0.7, "r": 0.25}},
+      {"id": "e1", "type": "label", "span": 4, "text": "A 5 ms, D 300 ms, S 70 %, R 250 ms"},
+      {"id": "e2", "type": "label", "span": 4, "text": "All four times fixed; level 25 %"}
+    ]}
+  ]
+}

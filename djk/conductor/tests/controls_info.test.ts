@@ -22,10 +22,10 @@ function universum(): string[] {
   u.push('duck/tiefe', 'duck/release', 'master/kleber', 'master/pfl');
   u.push('color/art', 'color/param');
   u.push('keylock', 'deck/1/keylock', 'pad/1/keylock');   // Keylock 3: nur der globale Knopf
-  // S5r: Graph-Regler <kanal>/bk/<n> auf jedem Kanal, dazu die Ränder 0 und 9 und Nicht-Kanäle (nur Kanäle mit Graph gelten)
-  u.push(...kanaele.flatMap((k) => [0, 1, 8, 9].map((n) => `${k}/bk/${n}`)), 'master/bk/1', 'cue/bk/1', 'pad/3/bk/1');
+  // S5r: Graph-Regler <kanal>/bk/<n> auf jedem Kanal, dazu die Ränder 0, 9, 32, 33, 64, 65 und Nicht-Kanäle (nur Kanäle mit Graph gelten)
+  u.push(...kanaele.flatMap((k) => [0, 1, 8, 9, 10, 32, 33, 63, 64, 65, 100].map((n) => `${k}/bk/${n}`)), 'master/bk/1', 'cue/bk/1', 'pad/3/bk/1');
   // S14: the same for the send returns fx/1..5 (only fx/3 and fx/4 have graph knobs)
-  u.push(...[1, 2, 3, 4, 5].flatMap((n) => [0, 1, 8, 9].map((m) => `fx/${n}/bk/${m}`)));
+  u.push(...[1, 2, 3, 4, 5].flatMap((n) => [0, 1, 8, 9, 10, 32, 33, 64, 65].map((m) => `fx/${n}/bk/${m}`)));
   // 1.15 A2: every mix-tool suffix on every channel kind (positives where the contract has a row, wrong-kind negatives everywhere
   // else), plus near misses that are deliberately not exposed (utility gain_db, per-band solo, limiter vorhalt_ms / echtspitze)
   u.push(...kanaele.flatMap((k) => WERKZEUG_SUFFIXE.map((s) => `${k}/${s}`)));
@@ -63,15 +63,15 @@ test('1.15 A2: the table holds exactly the 345 tool paths of section 3 and grows
   const werkzeug = [...REGLER.keys()].filter((p) => !p.startsWith('ins/') && /\/(gate|util|mb|lim)\/|^spektrum\//.test(p));
   assert.deepEqual(werkzeug.sort(), [...soll].sort());
   // 909 listed rows before A2 (measured at b257b17c; the controller table has 4 more unlisted ones), + 120 insert rows ins/komp/1..12/* (slice 4a T6) + 59 ins/eq/1/* + 4 ins/saett/1/* (slice 4b T12) + 59 ins/eq/2/* (eq pool 2, 2026-11-06) + 3 ins/lim/1/* (master limiter kind; the tool-row filter below skips ins/ because bus lim rows share the segment)
-  // 730 = 120 komp + 8 x 59 eq + 4 x 4 saett + 2 x 3 lim + 4 host + 8 x 5 utility (arr-fx) + 8 x 9 bk (arr-bk); the pin said 245 and ignored the 4 host rows, so it was already red on main (249 rows)
-  assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/')).length, 730);
+  // 730 = 120 komp + 8 x 59 eq + 4 x 4 saett + 2 x 3 lim + 4 host + 8 x 5 utility (arr-fx) + 8 x 65 bk (arr-bk, an + k1..k64 since the 64-knob widening; 8 x 33 at 32 knobs, 8 x 9 before); the pin said 245 and ignored the 4 host rows, so it was already red on main (249 rows)
+  assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/')).length, 1178);
   assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/eq/')).length, 8 * 59);
   assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/saett/')).length, 4 * 4);
   assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/lim/')).length, 2 * 3);
   assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/utility/')).length, 8 * 5);   // arr-fx slice 1
-  assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/bk/')).length, 8 * 9);   // arr-bk slice 3: an and k1..k8 per instance
+  assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/bk/')).length, 8 * 65);   // arr-bk slice 3 + 64-knob widening: an and k1..k64 per instance
   assert.equal([...REGLER.keys()].filter((p) => p.startsWith('rack/')).length, 48);   // slice 4c: 12 racks x 4 macro rows
-  assert.equal(REGLER.size, 909 + 345 + 730 + 48);   // 2032 = the 2036 table rows of the core less the 4 deck/<n>/transport rows the dump does not list
+  assert.equal(REGLER.size, 909 + 784 + 345 + 1178 + 48);   // 3264 = the 3268 table rows of the core (2036 + 192 + 256 ins/bk k9..k64 + 784 <kanal>/bk/9..64) less the 4 deck/<n>/transport rows the dump does not list
   for (const p of soll) assert.equal(muster.test(p), true, `schema takes ${p}`);
 });
 
@@ -136,27 +136,27 @@ test('1.15 A2: tool rows are never "leiser machen" for Cypher (D16, default deny
   assert.equal(imBereich(reglerInfo('bus/1/mb/tief/ratio')!, 20.5, 3), false);
 });
 
-test('S5r: <kanal>/bk/<1..8> nur auf Kanälen mit Graph, 0..1, Vorgabe 0,5, alle dürfen', () => {
+test('S5r: <kanal>/bk/<1..64> nur auf Kanälen mit Graph, 0..1, Vorgabe 0,5, alle dürfen', () => {
   const mit = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'erz/1', 'erz/2', 'erz/3', 'erz/5', 'erz/6', 'erz/7', 'pad/1', 'pad/2'];
-  const bk = [...REGLER.keys()].filter((p) => /\/bk\/\d$/.test(p));
-  assert.equal(bk.length, (mit.length + 2) * 8);   // S14: + fx/3, fx/4
+  const bk = [...REGLER.keys()].filter((p) => /\/bk\/\d+$/.test(p));
+  assert.equal(bk.length, (mit.length + 2) * 64);   // S14: + fx/3, fx/4
   for (const k of ['erz/4', 'erz/8', 'bus/1', 'master']) assert.equal(REGLER.has(`${k}/bk/1`), false, k);
   for (const k of mit) assert.equal(kanalVon(`${k}/bk/3`), k);
-  const i = reglerInfo('erz/5/bk/8')!;
+  const i = reglerInfo('erz/5/bk/64')!;
   assert.deepEqual([i.einheit, i.min, i.max, i.vorgabe, i.nurHand], ['linear', 0, 1, 0.5, false]);
   assert.equal(imBereich(i, 0.25, 0), true);
   assert.equal(imBereich(i, 1.01, 0), false);
   assert.equal(machtLeiser('deck/1/bk/1', 0.9, 0.1), false);   // ein Graph-Regler ist kein Fader: nie "leiser machen"
 });
 
-test('S14: fx/3/bk/<1..8> and fx/4/bk/<1..8> are global graph knobs of the send returns, 0..1, default 0.5, everybody may', () => {
-  for (const n of [3, 4]) for (let m = 1; m <= 8; m++) {
+test('S14: fx/3/bk/<1..64> and fx/4/bk/<1..64> are global graph knobs of the send returns, 0..1, default 0.5, everybody may', () => {
+  for (const n of [3, 4]) for (let m = 1; m <= 64; m++) {
     const i = reglerInfo(`fx/${n}/bk/${m}`)!;
     assert.deepEqual([i.einheit, i.min, i.max, i.vorgabe, i.nurHand], ['linear', 0, 1, 0.5, false], `fx/${n}/bk/${m}`);
     assert.equal(i.kanal, null);
   }
   assert.equal(kanalVon('fx/3/bk/1'), kanalVon('fx/3/rueckweg'));   // both global
-  for (const p of ['fx/1/bk/1', 'fx/2/bk/1', 'fx/5/bk/1', 'fx/3/bk/0', 'fx/3/bk/9']) assert.equal(REGLER.has(p), false, p);   // negative controls
+  for (const p of ['fx/1/bk/1', 'fx/2/bk/1', 'fx/5/bk/1', 'fx/3/bk/0', 'fx/3/bk/65', 'fx/4/bk/033', 'fx/4/bk/640', 'deck/1/bk/65']) assert.equal(REGLER.has(p), false, p);   // negative controls
   assert.equal(machtLeiser('fx/3/bk/1', 0.9, 0.1), false);
 });
 

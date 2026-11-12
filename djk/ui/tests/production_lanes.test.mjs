@@ -102,7 +102,7 @@ test('S2 T6 lanes.js: the page table ZIEL_ANZEIGE has the ranges of the server t
     assert.ok(ZIEL_ANZEIGE[z].anzeigeMin >= b.min && ZIEL_ANZEIGE[z].anzeigeMin < b.max, `${z} anzeigeMin inside the range`);
   }
   assert.deepEqual(Object.values(ZIEL_ANZEIGE).map((b) => b.label), ['Volume', 'Pan', 'Mute', 'Solo', 'Device Volume', 'Cutoff', 'Resonance', 'Env Mod',
-    'Knob 1', 'Knob 2', 'Knob 3', 'Knob 4', 'Knob 5', 'Knob 6', 'Knob 7', 'Knob 8']);
+    ...Array.from({ length: 64 }, (_, i) => `Knob ${i + 1}`)]);
 });
 
 test('S2 T6 lanes.js: negative control, a changed page table would be caught (a pan range of 0..1 differs from the server)', () => {
@@ -168,10 +168,11 @@ test('S2 T6 lanes.js: the free targets of a track: no geraet.* on host or audio 
   const rb = { id: 's3', art: 'instrument', geraet: { art: 'intern', name: 'rb338', parameter: {} } };
   assert.deepEqual(freieZiele(audio), ['fader', 'pan', 'mute', 'solo']);
   assert.deepEqual(freieZiele(wirt), ['fader', 'pan', 'mute', 'solo']);
-  assert.deepEqual(freieZiele(rb), ZIELE.filter((z) => !/^geraet\.k[1-8]$/.test(z)), 'an internal RB track offers its eight, not the bk knobs');
+  assert.deepEqual(freieZiele(rb), ZIELE.filter((z) => !/^geraet\.k\d+$/.test(z)), 'an internal RB track offers its eight, not the bk knobs');
   const bk = { id: 's4', art: 'instrument', geraet: { art: 'intern', name: 'bk', graph: 'juno-pad', parameter: {} } };
-  assert.deepEqual(freieZiele(bk), [...ZIELE.filter((z) => !z.startsWith('geraet.')), ...ZIELE.filter((z) => /^geraet\.k[1-8]$/.test(z))],
-    'a bk track offers its eight knobs, not the RB-338 parameters');
+  assert.deepEqual(freieZiele(bk), [...ZIELE.filter((z) => !z.startsWith('geraet.')), ...ZIELE.filter((z) => /^geraet\.k\d+$/.test(z))],
+    'a bk track offers its 64 knobs (9, 32 and 64 included), not the RB-338 parameters');
+  assert.ok(freieZiele(bk).includes('geraet.k9') && freieZiele(bk).includes('geraet.k32') && freieZiele(bk).includes('geraet.k33') && freieZiele(bk).includes('geraet.k64') && !freieZiele(bk).includes('geraet.k65'));
   const mit = { ...rb, automation: [{ id: 'a1', ziel: 'fader', punkte: [{ beat: 0, wert: 0 }] }, { id: 'a2', ziel: 'geraet.cutoff', punkte: [{ beat: 0, wert: 0.5 }] }] };
   assert.deepEqual(freieZiele(mit), ['pan', 'mute', 'solo', 'geraet.lautstaerke', 'geraet.resonanz', 'geraet.env_mod']);
   assert.deepEqual(freieZiele({ ...audio, automation: ZIELE.slice(0, 4).map((z, i) => ({ id: `a${i}`, ziel: z, punkte: [] })) }), [], 'all four used: nothing left');

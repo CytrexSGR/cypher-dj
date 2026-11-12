@@ -44,8 +44,8 @@ export function pruefKontext({ quittung = () => ({ status: 3, grund: '' }), teil
     k.bk = { geladen: {}, auto: {}, hash: {}, antwort: () => ({ code: 200, j: { ok: true, quittung: { status: 3, grund: '' } } }), aufrufe: [] };
     k.baukasten = {
       geladen: () => ({ ...k.bk.geladen }),
-      setzeGraph: async (kanal, name, quelle) => {
-        k.bk.aufrufe.push({ kanal, name, quelle, nach_id: k.id });
+      setzeGraph: async (kanal, name, quelle, opt) => {
+        k.bk.aufrufe.push({ kanal, name, quelle, opt, nach_id: k.id });
         const r = await k.bk.antwort(kanal, name, quelle);
         if (r.code === 200 && r.j.quittung?.status === 3) k.bk.geladen[kanal] = name;
         return r;

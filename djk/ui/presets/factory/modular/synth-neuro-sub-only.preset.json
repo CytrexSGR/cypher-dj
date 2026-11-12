@@ -1,0 +1,58 @@
+{
+ "schema": 1,
+ "name": "Neuro Sub only",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "synth-neuro",
+ "werte": {
+  "knob1": 0.0,
+  "knob2": 0.0,
+  "knob3": 0.5,
+  "knob4": 0.0,
+  "knob5": 0.25,
+  "knob6": 0.0,
+  "knob7": 0.5,
+  "knob8": 1.0,
+  "knob9": 0.0,
+  "knob10": 0.0,
+  "knob11": 0.0,
+  "knob12": 0.0,
+  "knob13": 0.5,
+  "knob14": 0.5,
+  "knob15": 0.0,
+  "knob16": 0.5,
+  "knob17": 0.0,
+  "knob18": 0.5,
+  "knob19": 0.5,
+  "knob20": 1.0,
+  "knob21": 0.0,
+  "knob22": 0.35,
+  "knob23": 0.5,
+  "knob24": 0.5
+ },
+ "beschreibung": {
+  "art": "bass",
+  "unterart": "sub",
+  "charakter": [
+   "deep",
+   "clean",
+   "mono"
+  ],
+  "genre": [
+   "dnb",
+   "techno",
+   "dubstep"
+  ],
+  "einsatz": [
+   "drop"
+  ],
+  "energie": 2,
+  "text": "Pure sub sine, mono, nothing above it: the foundation for layering."
+ },
+ "tags": [
+  "synth-neuro"
+ ],
+ "notiz": "Measured by level and pitch on render, not yet heard (2026-11-11).",
+ "angelegt": "2026-11-11T00:00:00.000Z",
+ "geaendert": "2026-11-11T00:00:00.000Z"
+}

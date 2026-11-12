@@ -22,8 +22,10 @@ body.produktion #produktion { grid-area: prod; display: grid; min-width: 0; min-
    body.bereich-effekte alle .tabelle mit !important ausblendet; eingeklappt (lib-zu) gilt die Regel nicht. */
 body.produktion #bestand .tabelle:not([data-tabelle="library"]) { display: none !important; }
 body.produktion:not(.lib-zu) #bestand .tabelle[data-tabelle="library"] { display: block !important; }
-body.produktion #bestand .reiter, body.produktion #bestand .bereich, body.produktion #gross, body.produktion #suche,
+body.produktion #bestand .reiter, body.produktion #gross, body.produktion #suche,
 body.produktion #bestand-info, body.produktion .st-detail, body.produktion #effekte { display: none; }   /* #effekte: .effekte {display:flex} in style.css überstimmt hidden, auch in DJ (Nebenbefund) */
+/* the area tabs stay, but only LIBRARY and INSTRUMENTS (the device page): EFFECTS and PRESETS have their own place here (b-* modes of the browser switch) */
+body.produktion #bestand .bereich button:not([data-bereich="library"]):not([data-bereich="instrumente"]) { display: none; }
 body.produktion #bestand .kopfzeile { flex-wrap: wrap; gap: 6px; }
 body.produktion .stoebern { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(60px, 28%) minmax(0, 1fr); gap: 6px; }
 body.produktion .st-baum { display: block; border-right: 0; border-bottom: 1px solid var(--line); padding: 0 0 4px; }
@@ -381,6 +383,7 @@ body.produktion .preset-kopf select { max-width: 14ch; }
 
 /* 1.9 U7 T5: the rack panel in the detail area */
 .p-irack { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 6px; font-size: 11px; }
+.p-gerpanel { flex: 1; min-height: 0; overflow: auto; }
 .p-irack-kopf { display: flex; align-items: center; gap: 12px; }
 .p-irack-kette, .p-irack-gain, .p-irack-kz { display: flex; align-items: center; gap: 6px; color: var(--dim); font-weight: 700; letter-spacing: .08em; }
 .p-irack-ketten-zahl, .p-irack-gainzahl, .p-irack-kette-lo, .p-irack-kette-hi { width: 4.2em; text-align: right; }
@@ -451,3 +454,10 @@ body.produktion .preset-kopf select { max-width: 14ch; }
 .p-midi-spuren label { display: flex; gap: 6px; align-items: center; white-space: nowrap; }
 .p-midi-hinweise li { color: var(--dim); padding-left: 10px; text-indent: -10px; }
 .p-midi-hinweise li::before { content: "· "; }
+.p-ins-popover .p-ins-liste { grid-column: 1 / -1; justify-self: end; font: inherit; font-size: 11px; padding: 1px 8px; }
+.p-ins-popover.p-ins-bk:has(.frontplatte) { display: block; }
+.p-ins-popover.p-ins-bk:has(.frontplatte) .p-ins-liste { float: right; margin-bottom: 4px; }
+
+/* INSTRUMENTS in the narrow production browser: nothing of the library modes shows beside it. Last, same strength as the b-* rules above. */
+body.produktion.bereich-instrumente #bestand .tabelle[data-tabelle], body.produktion.bereich-instrumente #geraete-browser, body.produktion.bereich-instrumente #presets,
+body.produktion.bereich-instrumente #kollektionen, body.produktion.bereich-instrumente #bestand .p-browserwahl { display: none !important; }

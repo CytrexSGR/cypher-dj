@@ -335,16 +335,21 @@ fn add_mit_vier_eingaengen() {
 #[test]
 fn neue_pruefungen() {
     let f = |k: &str| uebersetze(&graph(1, &format!(r#"{k},{{"id":"a","art":"ausgang"}}"#), ""), SR).err().expect(k);
-    assert!(matches!(f(r#"{"id":"r","art":"regler","nr":9,"min":0,"max":1}"#), Fehler::Wert { ref wert, .. } if wert == "nr"));
+    assert!(matches!(f(r#"{"id":"r","art":"regler","nr":65,"min":0,"max":1}"#), Fehler::Wert { ref wert, .. } if wert == "nr"));
+    assert!(uebersetze(&graph(1, r#"{"id":"r","art":"regler","nr":64,"min":0,"max":1},{"id":"a","art":"ausgang"}"#, ""), SR).is_ok(), "knob 64 is the highest allowed");
     assert!(matches!(f(r#"{"id":"r","art":"regler","nr":1.5,"min":0,"max":1}"#), Fehler::Wert { ref wert, .. } if wert == "nr"));
     assert!(matches!(f(r#"{"id":"r","art":"regler","nr":1,"min":0,"max":1,"log":1}"#), Fehler::Wert { ref wert, .. } if wert == "min"));
     assert!(matches!(f(r#"{"id":"r","art":"regler","nr":1,"min":0}"#), Fehler::FehlenderWert { ref wert, .. } if wert == "max"));
     assert!(matches!(f(r#"{"id":"l","art":"lfo","form":5}"#), Fehler::Wert { ref wert, .. } if wert == "form"));
+    for (k, w) in [(r#""rate":-1"#, "rate"), (r#""rate":21"#, "rate"), (r#""fest":1.5"#, "fest"), (r#""fest":-0.1"#, "fest"), (r#""saat":1.5"#, "saat"), (r#""saat":65536"#, "saat")] {
+        assert!(matches!(f(&format!(r#"{{"id":"d","art":"drift",{k}}}"#)), Fehler::Wert { wert, .. } if wert == w), "drift {k}");
+    }
+    assert!(uebersetze(&graph(1, r#"{"id":"d","art":"drift","rate":20,"fest":1,"saat":65535},{"id":"a","art":"ausgang"}"#, ""), SR).is_ok());
     assert!(matches!(f(r#"{"id":"s","art":"svf","pole":3}"#), Fehler::Wert { ref wert, .. } if wert == "pole"));
     assert!(matches!(f(r#"{"id":"p","art":"puls","breite":0.3}"#), Fehler::UnbekannterWert { ref wert, .. } if wert == "breite"));
     assert!(matches!(f(r#"{"id":"x.y","art":"rauschen"}"#), Fehler::Id(_)));
-    let namen = r#"{"format":"baukasten/2","name":"t","regler_namen":{"9":"zu viel"},"knoten":[{"id":"a","art":"ausgang"}]}"#;
-    assert!(matches!(uebersetze(namen, SR), Err(Fehler::ReglerName(n)) if n == "9"));
+    let namen = r#"{"format":"baukasten/2","name":"t","regler_namen":{"65":"zu viel"},"knoten":[{"id":"a","art":"ausgang"}]}"#;
+    assert!(matches!(uebersetze(namen, SR), Err(Fehler::ReglerName(n)) if n == "65"));
     let gut = r#"{"format":"baukasten/2","name":"t","regler_namen":{"1":"Cutoff","8":"Noise"},"knoten":[{"id":"a","art":"ausgang"}]}"#;
     assert_eq!(uebersetze(gut, SR).unwrap().regler_namen, vec![(1, "Cutoff".to_string()), (8, "Noise".to_string())]);
     // Gegenprobe: dieselben Knoten mit gültigen Werten gehen durch

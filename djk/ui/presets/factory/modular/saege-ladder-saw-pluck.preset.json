@@ -1,0 +1,44 @@
+{
+ "schema": 1,
+ "name": "Saw Pluck",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "saege-ladder",
+ "werte": {
+  "knob1": 0.324,
+  "knob2": 0.57,
+  "knob3": 0.812,
+  "knob4": 0.294,
+  "knob5": 0.438,
+  "knob6": 0,
+  "knob7": 0.349,
+  "knob8": 0.566,
+  "knob9": 0.335,
+  "knob10": 0
+ },
+ "beschreibung": {
+  "art": "pluck",
+  "unterart": "synth",
+  "charakter": [
+   "bright",
+   "tight",
+   "clean"
+  ],
+  "genre": [
+   "house",
+   "progressive"
+  ],
+  "einsatz": [
+   "drop",
+   "build"
+  ],
+  "energie": 3,
+  "text": "Short saw pluck: the filter envelope opens a low cutoff and closes again within 150 ms, no sustain."
+ },
+ "tags": [
+  "saege-ladder"
+ ],
+ "notiz": "Measured by level and pitch on render, not yet heard (2026-11-11).",
+ "angelegt": "2026-11-11T00:00:00.000Z",
+ "geaendert": "2026-11-11T00:00:00.000Z"
+}

@@ -56,6 +56,14 @@ const WAVETABLE_1: &str = r#"{"format":"baukasten/2","name":"wavetable-1","stimm
 
 /// Resonator: four voices, 32 bar modes struck by a noise burst while a saw drives the audio input; material,
 /// brightness, size, position and inharmonicity on knobs, so the coefficients are rebuilt while playing
+/// Comb: four voices, noise burst on x, tuning from the note with a vibrato (hz moves every sample), feedback through
+/// zero (both signs), damping and mix on knobs; the control step (exp, sin, cos) and the delay smoother run while playing
+const KAMM_1: &str = r#"{"format":"baukasten/2","name":"kamm-1","stimmen":4,"knoten":[{"id":"n","art":"note"},{"id":"r","art":"rauschen"},{"id":"rx","art":"mul","b":0.2},{"id":"v","art":"lfo","rate":7},{"id":"vc","art":"mul","b":30},{"id":"t","art":"transponiere"},{"id":"k","art":"kamm"},{"id":"k1","art":"regler","nr":1,"min":-0.95,"max":0.95},{"id":"k2","art":"regler","nr":2,"min":0,"max":1},{"id":"k3","art":"regler","nr":3,"min":0,"max":1},{"id":"o","art":"ausgang"}],"kanten":[{"von":"r.aus","nach":"rx.a"},{"von":"rx.aus","nach":"k.x"},{"von":"n.hz","nach":"t.hz"},{"von":"v.aus","nach":"vc.a"},{"von":"vc.aus","nach":"t.cent"},{"von":"t.aus","nach":"k.hz"},{"von":"k1.aus","nach":"k.fb"},{"von":"k2.aus","nach":"k.daempf"},{"von":"k3.aus","nach":"k.mix"},{"von":"k.aus","nach":"o.x"}]}"#;
+/// Vowel filter: four voices of saw, vowel on a knob and an LFO (moves every sample), shift and sharpness on knobs
+const FORMANT_1: &str = r#"{"format":"baukasten/2","name":"formant-1","stimmen":4,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"saege"},{"id":"v","art":"lfo","rate":3},{"id":"vc","art":"mul","b":1},{"id":"va","art":"add"},{"id":"f","art":"formant"},{"id":"k1","art":"regler","nr":1,"min":0,"max":4},{"id":"k2","art":"regler","nr":2,"min":-12,"max":12},{"id":"k3","art":"regler","nr":3,"min":0,"max":1},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"s.hz"},{"von":"s.aus","nach":"f.x"},{"von":"v.aus","nach":"vc.a"},{"von":"vc.aus","nach":"va.a"},{"von":"k1.aus","nach":"va.b"},{"von":"va.aus","nach":"f.vokal"},{"von":"k2.aus","nach":"f.versatz"},{"von":"k3.aus","nach":"f.q"},{"von":"f.aus","nach":"o.x"}]}"#;
+
+/// Four voices of saw through a diode ladder; cutoff from a regler and from an audio-rate sine (filter FM), reso, drive and bass on knobs
+const DIODE_1: &str = r#"{"format":"baukasten/2","name":"diode-1","stimmen":4,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"saege"},{"id":"m","art":"sinus"},{"id":"mm","art":"mul","b":300},{"id":"k1","art":"regler","nr":1,"min":100,"max":4000,"log":1},{"id":"c","art":"add"},{"id":"k2","art":"regler","nr":2,"min":0,"max":1},{"id":"k3","art":"regler","nr":3,"min":0,"max":24},{"id":"k4","art":"regler","nr":4,"min":0,"max":1},{"id":"d","art":"diode"},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"s.hz"},{"von":"n.hz","nach":"m.hz"},{"von":"m.aus","nach":"mm.a"},{"von":"mm.aus","nach":"c.a"},{"von":"k1.aus","nach":"c.b"},{"von":"s.aus","nach":"d.x"},{"von":"c.aus","nach":"d.cutoff"},{"von":"k2.aus","nach":"d.reso"},{"von":"k3.aus","nach":"d.antrieb"},{"von":"k4.aus","nach":"d.bass"},{"von":"d.aus","nach":"o.x"}]}"#;
 const RESONATOR_1: &str = r#"{"format":"baukasten/2","name":"resonator-1","stimmen":4,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"saege"},{"id":"r","art":"resonator","anregung":1},{"id":"k1","art":"regler","nr":1,"min":0,"max":1},{"id":"k2","art":"regler","nr":2,"min":0,"max":1},{"id":"k3","art":"regler","nr":3,"min":0.25,"max":4},{"id":"k4","art":"regler","nr":4,"min":0,"max":1},{"id":"k5","art":"regler","nr":5,"min":0,"max":2},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"r.hz"},{"von":"n.trig","nach":"r.trig"},{"von":"n.hz","nach":"s.hz"},{"von":"s.aus","nach":"r.x"},{"von":"k1.aus","nach":"r.material"},{"von":"k2.aus","nach":"r.helligkeit"},{"von":"k3.aus","nach":"r.groesse"},{"von":"k4.aus","nach":"r.position"},{"von":"k5.aus","nach":"r.inharmonie"},{"von":"r.aus","nach":"o.x"}]}"#;
 
 /// Metall: four voices, every input on a knob or the note (decay, tune, colour, noise, high-pass change while playing, so
@@ -74,11 +82,27 @@ const GRANULAR_1: &str = r#"{"format":"baukasten/2","name":"granular-1","stimmen
 /// again while playing; noise on x
 const SAITE_1: &str = r#"{"format":"baukasten/2","name":"saite-1","stimmen":4,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"saite","anreger":2,"koerper":3},{"id":"k1","art":"regler","nr":1,"min":0.05,"max":20,"log":1},{"id":"k2","art":"regler","nr":2,"min":0,"max":1},{"id":"k3","art":"regler","nr":3,"min":0,"max":1},{"id":"k4","art":"regler","nr":4,"min":0.02,"max":0.5},{"id":"k5","art":"regler","nr":5,"min":0,"max":1},{"id":"k6","art":"regler","nr":6,"min":0.5,"max":2},{"id":"t","art":"mul"},{"id":"r","art":"rauschen"},{"id":"rx","art":"mul","b":0.01},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"t.a"},{"von":"k6.aus","nach":"t.b"},{"von":"t.aus","nach":"s.hz"},{"von":"n.trig","nach":"s.trig"},{"von":"n.vel","nach":"s.vel"},{"von":"k1.aus","nach":"s.ausklang"},{"von":"k2.aus","nach":"s.daempfung"},{"von":"k3.aus","nach":"s.hell"},{"von":"k4.aus","nach":"s.lage"},{"von":"k5.aus","nach":"s.koerper_mix"},{"von":"r.aus","nach":"rx.a"},{"von":"rx.aus","nach":"s.x"},{"von":"s.aus","nach":"o.x"}]}"#;
 
+/// Sem: four voices, a saw through the SEM filter, cutoff, resonance and form on knobs plus a sine on the cutoff at audio
+/// rate (the coefficients and the form smoother run every sample)
+const SEM_1: &str = r#"{"format":"baukasten/2","name":"sem-1","stimmen":4,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"saege"},{"id":"m","art":"sinus","hz":2300},{"id":"mm","art":"mul","b":1500},{"id":"ma","art":"add","b":2000},{"id":"f","art":"sem"},{"id":"k1","art":"regler","nr":1,"min":0,"max":1},{"id":"k2","art":"regler","nr":2,"min":0,"max":1},{"id":"c","art":"add"},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"s.hz"},{"von":"s.aus","nach":"f.x"},{"von":"m.aus","nach":"mm.a"},{"von":"mm.aus","nach":"ma.a"},{"von":"ma.aus","nach":"f.cutoff"},{"von":"k1.aus","nach":"f.reso"},{"von":"k2.aus","nach":"f.form"},{"von":"f.aus","nach":"c.a"},{"von":"f.bp","nach":"c.b"},{"von":"c.aus","nach":"o.x"}]}"#;
+
 /// Hard sync: four voices, saw, pulse and triangle slaves on one saw master, slave pitch and pwm on knobs, so resets fall
 /// on every sub-sample position and the narrow pulse crosses its edge right after a reset
 const HARTSYNC_1: &str = r#"{"format":"baukasten/2","name":"hartsync-1","stimmen":4,"knoten":[{"id":"n","art":"note"},{"id":"m","art":"saege"},{"id":"k","art":"regler","nr":1,"min":0,"max":36},{"id":"w","art":"regler","nr":2,"min":-1,"max":1},{"id":"t","art":"transponiere"},{"id":"f1","art":"saege"},{"id":"f2","art":"puls"},{"id":"f3","art":"dreieck"},{"id":"a","art":"add"},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"m.hz"},{"von":"n.hz","nach":"t.hz"},{"von":"k.aus","nach":"t.st"},{"von":"t.aus","nach":"f1.hz"},{"von":"t.aus","nach":"f2.hz"},{"von":"t.aus","nach":"f3.hz"},{"von":"w.aus","nach":"f2.pwm"},{"von":"m.hart","nach":"f1.hart"},{"von":"m.hart","nach":"f2.hart"},{"von":"m.hart","nach":"f3.hart"},{"von":"f1.aus","nach":"a.a"},{"von":"f2.aus","nach":"a.b"},{"von":"f3.aus","nach":"a.c"},{"von":"a.aus","nach":"o.x"}]}"#;
 
-const GRAPHEN: [&str; 63] = [
+/// Modulators: four voices, S&H on its own noise (rate and slew on knobs) and on the edge clock of `note.trig`, an MSEG with a
+/// loop moving the cutoff of a filter, and a follower reading the saw; every input on a knob or an edge, so all paths run
+const MODULATOREN_1: &str = r#"{"format":"baukasten/2","name":"modulatoren-1","stimmen":4,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"saege"},{"id":"k1","art":"regler","nr":1,"min":0.5,"max":30,"log":1},{"id":"k2","art":"regler","nr":2,"min":0,"max":50},{"id":"k3","art":"regler","nr":3,"min":0.1,"max":50,"log":1},{"id":"h1","art":"sh"},{"id":"h2","art":"sh"},{"id":"m","art":"mseg","stufen":4,"halt":0,"von":2,"bis":3,"p1":1,"t1":0.01,"p2":0.1,"t2":0.05,"k2":-0.6,"p3":0.9,"t3":0.04,"k3":0.5,"p4":0,"t4":0.1},{"id":"f","art":"folger"},{"id":"a","art":"add"},{"id":"t","art":"mul","b":24},{"id":"c","art":"konst","wert":800},{"id":"u","art":"transponiere"},{"id":"v","art":"svf","pole":4},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"s.hz"},{"von":"k1.aus","nach":"h1.rate"},{"von":"k2.aus","nach":"h1.glatt"},{"von":"s.aus","nach":"h2.x"},{"von":"n.trig","nach":"h2.trig"},{"von":"n.gate","nach":"m.gate"},{"von":"n.trig","nach":"m.trig"},{"von":"s.aus","nach":"f.x"},{"von":"k3.aus","nach":"f.an"},{"von":"k1.aus","nach":"f.ab"},{"von":"h1.aus","nach":"a.a"},{"von":"m.aus","nach":"a.b"},{"von":"f.aus","nach":"a.c"},{"von":"h2.aus","nach":"a.d"},{"von":"a.aus","nach":"t.a"},{"von":"c.aus","nach":"u.hz"},{"von":"t.aus","nach":"u.st"},{"von":"s.aus","nach":"v.x"},{"von":"u.aus","nach":"v.cutoff"},{"von":"v.tp","nach":"o.x"}]}"#;
+
+/// MS-20 filter: four voices of saw, both outputs used; cutoff, resonance (through the self-oscillation threshold) and drive
+/// on knobs, cutoff also moved at audio rate by a sine (filter FM), so every path of the feedback solver runs
+const MS20_1: &str = r#"{"format":"baukasten/2","name":"ms20-1","stimmen":4,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"saege"},{"id":"f","art":"ms20"},{"id":"k1","art":"regler","nr":1,"min":100,"max":4000,"log":1},{"id":"k2","art":"regler","nr":2,"min":0,"max":1},{"id":"k3","art":"regler","nr":3,"min":0,"max":1},{"id":"m","art":"sinus","hz":1700},{"id":"md","art":"mul","b":600},{"id":"c","art":"add"},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"s.hz"},{"von":"s.aus","nach":"f.x"},{"von":"k1.aus","nach":"c.a"},{"von":"m.aus","nach":"md.a"},{"von":"md.aus","nach":"c.b"},{"von":"c.aus","nach":"f.cutoff"},{"von":"k2.aus","nach":"f.reso"},{"von":"k3.aus","nach":"f.antrieb"},{"von":"f.tp","nach":"o.l"},{"von":"f.hp","nach":"o.r"}]}"#;
+
+/// Selector: four voices, eight candidates (saw, svf outputs, noise, sines), the selection on a knob that sweeps through all
+/// eight zones and fades
+const WAHL_1: &str = r#"{"format":"baukasten/2","name":"wahl-1","stimmen":4,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"saege"},{"id":"f","art":"svf","cutoff":900,"reso":0.3},{"id":"r","art":"rauschen"},{"id":"a","art":"sinus"},{"id":"b","art":"sinus","hz":330},{"id":"w","art":"wahl","n":8,"blende":3},{"id":"k","art":"regler","nr":1,"min":0,"max":1},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"s.hz"},{"von":"n.hz","nach":"a.hz"},{"von":"s.aus","nach":"f.x"},{"von":"s.aus","nach":"w.e1"},{"von":"f.tp","nach":"w.e2"},{"von":"f.bp","nach":"w.e3"},{"von":"f.hp","nach":"w.e4"},{"von":"r.aus","nach":"w.e5"},{"von":"a.aus","nach":"w.e6"},{"von":"b.aus","nach":"w.e7"},{"von":"k.aus","nach":"w.wahl"},{"von":"w.aus","nach":"o.x"}]}"#;
+
+const GRAPHEN: &[&str] = &[
     include_str!("../demos/saege-ladder.json"),
     include_str!("../demos/juno-pad.json"),
     include_str!("../demos/lead.json"),
@@ -138,10 +162,40 @@ const GRAPHEN: [&str; 63] = [
     include_str!("../demos/saite-harfe.json"),
     include_str!("../demos/saite-klavier.json"),
     include_str!("../demos/saite-karplus.json"),
+    KAMM_1,
+    FORMANT_1,
+    include_str!("../demos/fx-kamm-metall.json"),
+    include_str!("../demos/kamm-goa-zupf.json"),
+    include_str!("../demos/fx-formant-sprech.json"),
+    include_str!("../demos/formant-neuro-bass.json"),
     HARTSYNC_1,
     include_str!("../demos/hartsync-lead.json"),
     include_str!("../demos/hartsync-pad.json"),
     include_str!("../demos/hartsync-bass.json"),
+    MODULATOREN_1,
+    include_str!("../demos/fx-sh-filter.json"),
+    include_str!("../demos/goa-blubber-lead.json"),
+    include_str!("../demos/mseg-neuro-bass.json"),
+    include_str!("../demos/fx-folger-filter.json"),
+    MS20_1,
+    include_str!("../demos/fx-ms20-schrei.json"),
+    include_str!("../demos/ms20-bass.json"),
+    include_str!("../demos/ms20-goa-lead.json"),
+    SEM_1,
+    include_str!("../demos/fx-sem-fahrt.json"),
+    include_str!("../demos/sem-house-akkord.json"),
+    include_str!("../demos/sem-pad.json"),
+    WAHL_1,
+    include_str!("../demos/fx-wahl-filter.json"),
+    DIODE_1,
+    include_str!("../demos/fx-diode-acid.json"),
+    include_str!("../demos/diode-acid-bass.json"),
+    include_str!("../demos/diode-goa-linie.json"),
+    include_str!("../demos/drums-909.json"),
+    include_str!("../demos/drums-808.json"),
+    // wavefolder (falter, oversampled) and the neuro bass built on it
+    include_str!("../demos/falter-demo.json"),
+    include_str!("../demos/synth-neuro.json"),
 ];
 
 #[test]

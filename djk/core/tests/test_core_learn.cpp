@@ -43,7 +43,7 @@ static void fall_bk_ziel_laedt() {
   PRUEF(!hand::lade_datei((djk() + "/" + LERN_KAPUTT).c_str(), t, &k, &f));
   PRUEF(f.art == hand::FehlerArt::unbekanntes_ziel);
   PRUEF(f.zeile == 2);
-  std::printf("bk_ziel_laedt: erz/5/bk/3 -> regler %d, without own curve; erz/5/bk/9 refused: %s\n",
+  std::printf("bk_ziel_laedt: erz/5/bk/3 -> regler %d, without own curve; erz/5/bk/65 refused: %s\n",
               m.n_eintraege == 1 ? m.eintrag[0].regler : -1, f.text);
 }
 

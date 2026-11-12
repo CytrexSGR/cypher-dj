@@ -33,7 +33,7 @@ test('S19 route: POST /lernen needs a MIDI input (409 kein_midi_eingang), arms w
   const cy = await ruf(url, 'POST', '/lernen', { pfad: 'erz/5/bk/3' }, CYPHER);
   assert.deepEqual([cy.code, cy.j.fehler], [403, 'nur_andreas']);
   assert.equal(anKern(log, '/k/lernen').length, 0, 'Cypher arms nothing');
-  for (const pfad of ['erz/4/bk/1', 'erz/5/fader', 'erz/5/bk/9', 7, undefined]) {
+  for (const pfad of ['erz/4/bk/1', 'erz/5/fader', 'erz/5/bk/65', 'erz/5/bk/0', 'erz/5/bk/1x', 7, undefined]) {
     const r = await ruf(url, 'POST', '/lernen', { pfad });
     assert.deepEqual([r.code, r.j.fehler], [400, 'argument_ungueltig'], String(pfad));
   }
@@ -46,6 +46,8 @@ test('S19 route: POST /lernen needs a MIDI input (409 kein_midi_eingang), arms w
   assert.equal(weg.code, 200);
   assert.equal(weg.j.wartet, null);
   assert.equal(anKern(log, '/k/lernen').filter((z) => z.felder.an === 0).length, 1, 'cancel disarms the kern');
+  // 64 knobs: knobs 9, 32, 33 and 64 can be armed
+  for (const pfad of ['erz/5/bk/9', 'deck/1/bk/32', 'erz/5/bk/33', 'erz/5/bk/64']) assert.equal((await ruf(url, 'POST', '/lernen', { pfad })).code, 200, pfad);
 });
 
 test('S19 route: POST /lernen/loeschen without an entry is 404 keine_zuordnung; Cypher is 403', async (t) => {

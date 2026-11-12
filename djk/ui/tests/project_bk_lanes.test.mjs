@@ -20,7 +20,8 @@ const pruefe = (p, r) => {
   assert.equal(ohneAbgeleitetes(wende(p, r.vor)), ohneAbgeleitetes(r.projekt), 'redo equal');
   assert.equal(ohneAbgeleitetes(wende(r.projekt, r.zurueck)), ohneAbgeleitetes(p), 'undo equal');
 };
-const KNOEPFE = ['geraet.k1', 'geraet.k2', 'geraet.k3', 'geraet.k4', 'geraet.k5', 'geraet.k6', 'geraet.k7', 'geraet.k8'];
+const KNOEPFE = Array.from({ length: 64 }, (_, i) => `geraet.k${i + 1}`);
+const KNOEPFE8 = KNOEPFE.slice(0, 8);
 const RB = ['geraet.lautstaerke', 'geraet.cutoff', 'geraet.resonanz', 'geraet.env_mod'];
 // s1 audio, s2 RB-338, s3 bk (graph pad, k2 set to 0.8), s4 bk (graph drone, no knobs set)
 function basis() {
@@ -49,7 +50,7 @@ test('A: the knobs are lane targets of a bk track only; the RB-338 names are ref
   for (const z of RB) lehntAb(p, { befehl: 'auto_neu', spur_id: 's3', ziel: z }, 'ziel_unbekannt');                  // RB-338 names on a bk track
   for (const z of KNOEPFE) lehntAb(p, { befehl: 'auto_neu', spur_id: 's2', ziel: z }, 'ziel_unbekannt');             // knobs on the RB-338 track
   lehntAb(p, { befehl: 'auto_neu', spur_id: 's1', ziel: 'geraet.k1' }, 'ziel_unbekannt');                            // ... on an audio track
-  lehntAb(p, { befehl: 'auto_neu', spur_id: 's3', ziel: 'geraet.k9' }, 'ziel_unbekannt');                            // there is no knob 9
+  lehntAb(p, { befehl: 'auto_neu', spur_id: 's3', ziel: 'geraet.k65' }, 'ziel_unbekannt');                           // there is no knob 65
   lehntAb(p, { befehl: 'auto_neu', spur_id: 's3', ziel: 'geraet.k0' }, 'ziel_unbekannt');
   const mit = ok(p, { befehl: 'auto_neu', spur_id: 's3', ziel: 'geraet.k1' }).projekt;
   lehntAb(mit, { befehl: 'auto_neu', spur_id: 's3', ziel: 'geraet.k1' }, 'lane_doppelt');                            // the same knob twice
@@ -134,9 +135,9 @@ test('E: clip envelopes on the knobs: MIDI clips of a bk track take geraet.k1..k
   assert.deepEqual(W(beide).spuren.find((s) => s.geraet === 'bk').auto.map((l) => [l.ziel, l.relativ ?? false]), [['geraet.k2', false], ['geraet.k2', true]]);
 });
 
-test('F: 12 lanes per track hold the 8 knobs and the four mixer lanes', () => {
+test('F: 12 lanes per track hold 8 of the 32 knobs and the four mixer lanes', () => {
   let p = basis();
-  for (const z of [...KNOEPFE, 'fader', 'pan', 'mute', 'solo']) p = ok(p, { befehl: 'auto_neu', spur_id: 's3', ziel: z }).projekt;
+  for (const z of [...KNOEPFE8, 'fader', 'pan', 'mute', 'solo']) p = ok(p, { befehl: 'auto_neu', spur_id: 's3', ziel: z }).projekt;
   assert.equal(p.spuren[2].automation.length, 12);
   assert.equal(MAX_LANES_PRO_SPUR, 12);
   assert.equal(pruefeProjekt(JSON.parse(JSON.stringify(p))).fehler, undefined);

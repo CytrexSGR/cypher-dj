@@ -1,0 +1,57 @@
+{
+ "schema": 1,
+ "name": "Neuro Fold Scream",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "synth-neuro",
+ "werte": {
+  "knob1": 0.55,
+  "knob2": 0.55,
+  "knob3": 0.6667,
+  "knob4": 1.0,
+  "knob5": 0.62,
+  "knob6": 0.55,
+  "knob7": 1.0,
+  "knob8": 0.4,
+  "knob9": 0.55,
+  "knob10": 0.85,
+  "knob11": 0.45,
+  "knob12": 0.15,
+  "knob13": 0.5,
+  "knob14": 0.3,
+  "knob15": 0.15,
+  "knob16": 0.6,
+  "knob17": 0.0,
+  "knob18": 0.72,
+  "knob19": 0.3,
+  "knob20": 0.5,
+  "knob21": 0.5,
+  "knob22": 0.3,
+  "knob23": 0.5,
+  "knob24": 0.6
+ },
+ "beschreibung": {
+  "art": "bass",
+  "unterart": "reese",
+  "charakter": [
+   "aggressive",
+   "bright",
+   "dirty"
+  ],
+  "genre": [
+   "dnb",
+   "dubstep"
+  ],
+  "einsatz": [
+   "drop"
+  ],
+  "energie": 5,
+  "text": "The wavefolder pushed hard and off centre, followed by a diode low-pass that is envelope-driven: screaming harmonics that decay each note."
+ },
+ "tags": [
+  "synth-neuro"
+ ],
+ "notiz": "Measured by level and pitch on render, not yet heard (2026-11-11).",
+ "angelegt": "2026-11-11T00:00:00.000Z",
+ "geaendert": "2026-11-11T00:00:00.000Z"
+}

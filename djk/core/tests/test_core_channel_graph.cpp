@@ -483,16 +483,43 @@ int main() {
   // regler_setzen (project values) and regler_uebernehmen (render) write the control without a command; the graph knob must
   // still carry the value. Two own runs: deck/2 at 0 dB on send/3 resp. send/4 and a knob graph on that return.
   {
-    for (const int teil : {0, 1}) {
+    // 32-knob widening: cases 2 and 3 take the two-digit knobs through the same two entries (regler_setzen: fx/3/bk/32, graph knob 32;
+    // regler_uebernehmen: fx/4/bk/17, graph knob 17). A parser reading one digit, or a 3-bit packing, would seed knob 1 / 2 / 8 instead.
+    // Cases 4 and 5: a state of the old format, fx/3/bk/1..8 all at 1.0 and nothing else (an old neustart state / project knows no knob above 8):
+    // it loads (8 rows taken), the graph on knob 8 follows its row, the graph on knob 9 stays at the default 0.5 (3.522 dB instead of 6.021 dB)
+    // 64-knob widening: case 6 (regler_setzen: fx/3/bk/64, graph knob 64) and case 7 (regler_uebernehmen: fx/4/bk/33, graph knob 33) take the
+    // knobs above 32 through the same entries. Cases 8 and 9: a state of the 32-knob format, fx/3/bk/1..32 all at 1.0 and nothing else: it
+    // loads (32 rows taken), the graph on knob 32 follows its row, the graph on knob 33 stays at the default 0.5 (3.522 dB). These graphs need an
+    // engine that knows knobs 33..64 (hall_ffi REGLER 64): cases 6, 7 and 8 fail on a library older than the widening.
+    for (const int teil : {0, 1, 2, 3, 4, 5, 6, 7, 8, 9}) {
       Lauf b;
-      const bool fx4 = teil == 1;
-      if (!fx4) {
-        PRUEF(b.kern->regler_setzen("fx/3/bk/1", 1.0f));
-        PRUEF(!b.kern->regler_setzen("fx/3/bk/9", 1.0f));   // negative control: no such knob
+      const bool fx4 = teil == 1 || teil == 3 || teil == 7;
+      const bool alt_zustand = teil == 4 || teil == 5 || teil == 8 || teil == 9;
+      const int knopf_nr = teil == 2 ? 32 : teil == 3 ? 17 : teil == 4 ? 9 : teil == 5 ? 8 : teil == 6 ? 64 : teil == 7 ? 33 : teil == 8 ? 33 : teil == 9 ? 32 : 1;
+      const double soll_db = (teil == 4 || teil == 8) ? 3.5218 : 6.0206;
+      const std::string knopf_pfad = std::string(fx4 ? "fx/4" : "fx/3") + "/bk/" + std::to_string(knopf_nr);
+      std::string knopf_json = REGLER_PEGEL;
+      if (knopf_nr != 1) {
+        const size_t pos = knopf_json.find("\"nr\":1,");
+        PRUEF(pos != std::string::npos);
+        knopf_json.replace(pos, 7, "\"nr\":" + std::to_string(knopf_nr) + ",");
+      }
+      if (alt_zustand) {
+        std::unique_ptr<cdj_z_echtzeit> f{new cdj_z_echtzeit()};
+        const int n_alt = teil >= 8 ? 32 : 8;   // the old state names knobs 1..8 (before the 32-knob widening) or 1..32
+        f->n_regler = n_alt;
+        for (int i = 0; i < n_alt; ++i) {
+          std::snprintf(f->regler[i].pfad, sizeof f->regler[i].pfad, "fx/3/bk/%d", i + 1);
+          f->regler[i].wert = 1.0f;
+        }
+        PRUEF(b.kern->regler_uebernehmen(*f) == n_alt);
+      } else if (!fx4) {
+        PRUEF(b.kern->regler_setzen(knopf_pfad.c_str(), 1.0f));
+        PRUEF(!b.kern->regler_setzen("fx/3/bk/65", 1.0f));   // negative control: no such knob (the knobs are 1..64)
       } else {
         std::unique_ptr<cdj_z_echtzeit> f{new cdj_z_echtzeit()};
         f->n_regler = 1;
-        std::snprintf(f->regler[0].pfad, sizeof f->regler[0].pfad, "%s", "fx/4/bk/1");
+        std::snprintf(f->regler[0].pfad, sizeof f->regler[0].pfad, "%s", knopf_pfad.c_str());
         f->regler[0].wert = 1.0f;
         PRUEF(b.kern->regler_uebernehmen(*f) == 1);
       }
@@ -522,13 +549,13 @@ int main() {
       b.zyklen(10 * SPB);
       const float voll = b.spitze(10 * SPB - 6000, 10 * SPB - 500);
       PRUEF(voll > 0.05f);
-      CypherBk* knopf = graph(REGLER_PEGEL);
+      CypherBk* knopf = graph(knopf_json.c_str());
       b.graph_setzen(fx4 ? "fx/4" : "fx/3", knopf);
       b.zyklen(10 * SPB + 40 * N);
       const double pegel = db(b.spitze(10 * SPB + 30 * N, 10 * SPB + 40 * N), voll);
-      std::printf("Fall 16: %s knob set by %s -> %.3f dB (soll 6,021; 3,522 would be the unseeded default)\n", fx4 ? "fx/4/bk/1" : "fx/3/bk/1",
-                  fx4 ? "regler_uebernehmen" : "regler_setzen", pegel);
-      PRUEF(std::fabs(pegel - 6.0206) < 0.1);
+      std::printf("Fall 16: %s knob set by %s -> %.3f dB (soll 6,021; 3,522 would be the unseeded default)\n", knopf_pfad.c_str(),
+                  (fx4 || alt_zustand) ? "regler_uebernehmen" : "regler_setzen", pegel);
+      PRUEF(std::fabs(pegel - soll_db) < 0.1);
     }
   }
 

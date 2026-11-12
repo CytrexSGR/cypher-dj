@@ -1,0 +1,27 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "resonator-conga"},
+  "title": "Resonator Conga",
+  "akzent": "rot",
+  "layout": {"rows": [
+    ["skin", "strike", "out"]
+  ]},
+  "sections": [
+    { "id": "skin", "title": "SKIN", "cols": 6, "controls": [
+      {"id": "mat", "type": "knob", "label": "Damping", "span": 2, "bind": {"param": "k1"}, "format": "raw", "einheitlos": true, "default": 0.5},
+      {"id": "hell", "type": "knob", "label": "Brightness", "span": 2, "bind": {"param": "k2"}, "format": "percent", "default": 0.5},
+      {"id": "size", "type": "knob", "label": "Tuning", "span": 2, "bind": {"param": "k4"}, "format": "raw", "unit": "x", "default": 0.5},
+      {"id": "k1", "type": "label", "span": 6, "text": "Mode set: membrane (Bessel zeros)"},
+      {"id": "k2", "type": "label", "span": 6, "text": "Damping dial shows material 0.3 to 0.05"}
+    ]},
+    { "id": "strike", "title": "STRIKE", "cols": 4, "controls": [
+      {"id": "pos", "type": "knob", "label": "Position", "span": 4, "bind": {"param": "k3"}, "format": "percent", "default": 0.5},
+      {"id": "s1", "type": "label", "span": 4, "text": "Noise burst 2 ms"},
+      {"id": "s2", "type": "label", "span": 4, "text": "0 edge, 90 % near the centre"}
+    ]},
+    { "id": "out", "title": "OUT", "cols": 3, "controls": [
+      {"id": "pegel", "type": "knob", "label": "Level", "span": 3, "bind": {"param": "k5"}, "format": "percent", "default": 0.5},
+      {"id": "o1", "type": "label", "span": 3, "text": "8 voices"}
+    ]}
+  ]
+}

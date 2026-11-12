@@ -664,7 +664,7 @@ void Kern::audio(int64_t n0, int n) {
 #ifdef CYPHERDJ_MUTATION_BK_RAMPE_TOTZONE   // failure case S23: a change smaller than 0.005 inside one block is dropped, so every slow ramp stands still and only jumps get through
         if (std::fabs(a[i].verlauf[m - 1] - a[i].verlauf[0]) < 0.005f) continue;
 #endif
-        bk_wert_[o >> 3][o & 7] = a[i].verlauf[m - 1];  // S5r K6: Endwert des Blocks (m wie keylock_verlauf), die FFI glättet
+        bk_wert_[o / cypherdj::stellwerk::BK_REGLER_N][o % cypherdj::stellwerk::BK_REGLER_N] = a[i].verlauf[m - 1];  // S5r K6: Endwert des Blocks (m wie keylock_verlauf), die FFI glättet
       }
     }
     arr_griffe_pruefen(s0, m);  // 1.12 S3 (D1): grips on spur/n/{fader,pan,mute,solo} override the lanes from their sample, before arr_->block

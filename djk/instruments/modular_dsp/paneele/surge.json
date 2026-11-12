@@ -1,0 +1,594 @@
+{
+ "format": "cypherdj-panel/2",
+ "geraet": {
+  "art": "surge"
+ },
+ "title": "Surge quick panel",
+ "akzent": "gruen",
+ "layout": {
+  "rows": [
+   [
+    "osc1",
+    "osc2",
+    "osc3",
+    "mix",
+    "filt1",
+    "filt2",
+    "feg",
+    "aeg"
+   ],
+   [
+    "lfo1",
+    "lfo2",
+    "fx",
+    "out"
+   ]
+  ]
+ },
+ "sections": [
+  {
+   "id": "osc1",
+   "title": "OSC 1",
+   "cols": 2,
+   "controls": [
+    {
+     "id": "o1pitch",
+     "type": "knob",
+     "label": "Pitch",
+     "bind": {
+      "param": "a_osc1_pitch"
+     },
+     "format": "raw"
+    },
+    {
+     "id": "o1shape",
+     "type": "knob",
+     "label": "Shape",
+     "bind": {
+      "param": "a_osc1_param0"
+     },
+     "format": "percent"
+    },
+    {
+     "id": "o1w1",
+     "type": "knob",
+     "label": "Width 1",
+     "bind": {
+      "param": "a_osc1_param1"
+     },
+     "format": "percent"
+    },
+    {
+     "id": "o1det",
+     "type": "knob",
+     "label": "Detune",
+     "bind": {
+      "param": "a_osc1_param5"
+     },
+     "format": "percent"
+    }
+   ]
+  },
+  {
+   "id": "osc2",
+   "title": "OSC 2",
+   "cols": 2,
+   "controls": [
+    {
+     "id": "o2pitch",
+     "type": "knob",
+     "label": "Pitch",
+     "bind": {
+      "param": "a_osc2_pitch"
+     },
+     "format": "raw"
+    },
+    {
+     "id": "o2shape",
+     "type": "knob",
+     "label": "Shape",
+     "bind": {
+      "param": "a_osc2_param0"
+     },
+     "format": "percent"
+    },
+    {
+     "id": "o2w1",
+     "type": "knob",
+     "label": "Width 1",
+     "bind": {
+      "param": "a_osc2_param1"
+     },
+     "format": "percent"
+    },
+    {
+     "id": "o2det",
+     "type": "knob",
+     "label": "Detune",
+     "bind": {
+      "param": "a_osc2_param5"
+     },
+     "format": "percent"
+    }
+   ]
+  },
+  {
+   "id": "osc3",
+   "title": "OSC 3",
+   "cols": 2,
+   "controls": [
+    {
+     "id": "o3pitch",
+     "type": "knob",
+     "label": "Pitch",
+     "bind": {
+      "param": "a_osc3_pitch"
+     },
+     "format": "raw"
+    },
+    {
+     "id": "o3shape",
+     "type": "knob",
+     "label": "Shape",
+     "bind": {
+      "param": "a_osc3_param0"
+     },
+     "format": "percent"
+    },
+    {
+     "id": "o3w1",
+     "type": "knob",
+     "label": "Width 1",
+     "bind": {
+      "param": "a_osc3_param1"
+     },
+     "format": "percent"
+    },
+    {
+     "id": "o3det",
+     "type": "knob",
+     "label": "Detune",
+     "bind": {
+      "param": "a_osc3_param5"
+     },
+     "format": "percent"
+    }
+   ]
+  },
+  {
+   "id": "mix",
+   "title": "MIXER",
+   "cols": 2,
+   "controls": [
+    {
+     "id": "mo1",
+     "type": "knob",
+     "label": "Osc 1",
+     "bind": {
+      "param": "a_level_o1"
+     },
+     "format": "percent"
+    },
+    {
+     "id": "mo2",
+     "type": "knob",
+     "label": "Osc 2",
+     "bind": {
+      "param": "a_level_o2"
+     },
+     "format": "percent"
+    },
+    {
+     "id": "mo3",
+     "type": "knob",
+     "label": "Osc 3",
+     "bind": {
+      "param": "a_level_o3"
+     },
+     "format": "percent"
+    },
+    {
+     "id": "mnoise",
+     "type": "knob",
+     "label": "Noise",
+     "bind": {
+      "param": "a_level_noise"
+     },
+     "format": "percent"
+    },
+    {
+     "id": "mr12",
+     "type": "knob",
+     "label": "Ring 1x2",
+     "bind": {
+      "param": "a_level_ring12"
+     },
+     "format": "percent"
+    },
+    {
+     "id": "mr23",
+     "type": "knob",
+     "label": "Ring 2x3",
+     "bind": {
+      "param": "a_level_ring23"
+     },
+     "format": "percent"
+    }
+   ]
+  },
+  {
+   "id": "filt1",
+   "title": "FILTER 1",
+   "cols": 2,
+   "controls": [
+    {
+     "id": "cutoff",
+     "type": "knob",
+     "label": "Cutoff",
+     "bind": {
+      "param": "a_filter1_cutoff"
+     },
+     "format": "raw"
+    },
+    {
+     "id": "reso",
+     "type": "knob",
+     "label": "Resonance",
+     "bind": {
+      "param": "a_filter1_resonance"
+     },
+     "format": "percent"
+    },
+    {
+     "id": "fenv",
+     "type": "knob",
+     "label": "Env amount",
+     "bind": {
+      "param": "a_filter1_envmod"
+     },
+     "format": "raw"
+    },
+    {
+     "id": "key",
+     "type": "knob",
+     "label": "Key track",
+     "bind": {
+      "param": "a_filter1_keytrack"
+     },
+     "format": "percent"
+    }
+   ]
+  },
+  {
+   "id": "filt2",
+   "title": "FILTER 2",
+   "cols": 2,
+   "controls": [
+    {
+     "id": "cutoff2",
+     "type": "knob",
+     "label": "Cutoff",
+     "bind": {
+      "param": "a_filter2_cutoff"
+     },
+     "format": "raw"
+    },
+    {
+     "id": "reso2",
+     "type": "knob",
+     "label": "Resonance",
+     "bind": {
+      "param": "a_filter2_resonance"
+     },
+     "format": "percent"
+    },
+    {
+     "id": "fenv2",
+     "type": "knob",
+     "label": "Env amount",
+     "bind": {
+      "param": "a_filter2_envmod"
+     },
+     "format": "raw"
+    },
+    {
+     "id": "bal",
+     "type": "knob",
+     "label": "Balance",
+     "bind": {
+      "param": "a_f_balance"
+     },
+     "format": "percent"
+    }
+   ]
+  },
+  {
+   "id": "feg",
+   "title": "FILTER EG",
+   "cols": 2,
+   "controls": [
+    {
+     "type": "huelle",
+     "id": "fh",
+     "label": "Envelope",
+     "span": 2,
+     "of": {
+      "a": "fa",
+      "d": "fd",
+      "s": "fs",
+      "r": "fr"
+     }
+    },
+    {
+     "id": "fa",
+     "type": "knob",
+     "label": "Attack",
+     "bind": {
+      "param": "a_env2_attack"
+     },
+     "format": "raw",
+     "unit": "log2 s"
+    },
+    {
+     "id": "fd",
+     "type": "knob",
+     "label": "Decay",
+     "bind": {
+      "param": "a_env2_decay"
+     },
+     "format": "raw",
+     "unit": "log2 s"
+    },
+    {
+     "id": "fs",
+     "type": "knob",
+     "label": "Sustain",
+     "bind": {
+      "param": "a_env2_sustain"
+     },
+     "format": "percent"
+    },
+    {
+     "id": "fr",
+     "type": "knob",
+     "label": "Release",
+     "bind": {
+      "param": "a_env2_release"
+     },
+     "format": "raw",
+     "unit": "log2 s"
+    }
+   ]
+  },
+  {
+   "id": "aeg",
+   "title": "AMP EG",
+   "cols": 2,
+   "controls": [
+    {
+     "type": "huelle",
+     "id": "ah",
+     "label": "Envelope",
+     "span": 2,
+     "of": {
+      "a": "aa",
+      "d": "ad",
+      "s": "as",
+      "r": "ar"
+     }
+    },
+    {
+     "id": "aa",
+     "type": "knob",
+     "label": "Attack",
+     "bind": {
+      "param": "a_env1_attack"
+     },
+     "format": "raw",
+     "unit": "log2 s"
+    },
+    {
+     "id": "ad",
+     "type": "knob",
+     "label": "Decay",
+     "bind": {
+      "param": "a_env1_decay"
+     },
+     "format": "raw",
+     "unit": "log2 s"
+    },
+    {
+     "id": "as",
+     "type": "knob",
+     "label": "Sustain",
+     "bind": {
+      "param": "a_env1_sustain"
+     },
+     "format": "percent"
+    },
+    {
+     "id": "ar",
+     "type": "knob",
+     "label": "Release",
+     "bind": {
+      "param": "a_env1_release"
+     },
+     "format": "raw",
+     "unit": "log2 s"
+    }
+   ]
+  },
+  {
+   "id": "lfo1",
+   "title": "LFO 1",
+   "cols": 2,
+   "controls": [
+    {
+     "id": "l1rate",
+     "type": "knob",
+     "label": "Rate",
+     "bind": {
+      "param": "a_lfo1_rate"
+     },
+     "format": "raw"
+    },
+    {
+     "id": "l1amt",
+     "type": "knob",
+     "label": "Amplitude",
+     "bind": {
+      "param": "a_lfo1_magnitude"
+     },
+     "format": "percent"
+    },
+    {
+     "id": "l1def",
+     "type": "knob",
+     "label": "Deform",
+     "bind": {
+      "param": "a_lfo1_deform"
+     },
+     "format": "percent"
+    },
+    {
+     "id": "l1ph",
+     "type": "knob",
+     "label": "Phase",
+     "bind": {
+      "param": "a_lfo1_phase"
+     },
+     "format": "percent"
+    }
+   ]
+  },
+  {
+   "id": "lfo2",
+   "title": "LFO 2",
+   "cols": 2,
+   "controls": [
+    {
+     "id": "l2rate",
+     "type": "knob",
+     "label": "Rate",
+     "bind": {
+      "param": "a_lfo2_rate"
+     },
+     "format": "raw"
+    },
+    {
+     "id": "l2amt",
+     "type": "knob",
+     "label": "Amplitude",
+     "bind": {
+      "param": "a_lfo2_magnitude"
+     },
+     "format": "percent"
+    },
+    {
+     "id": "l2def",
+     "type": "knob",
+     "label": "Deform",
+     "bind": {
+      "param": "a_lfo2_deform"
+     },
+     "format": "percent"
+    },
+    {
+     "id": "l2ph",
+     "type": "knob",
+     "label": "Phase",
+     "bind": {
+      "param": "a_lfo2_phase"
+     },
+     "format": "percent"
+    }
+   ]
+  },
+  {
+   "id": "fx",
+   "title": "FX SENDS",
+   "cols": 2,
+   "controls": [
+    {
+     "id": "fx1",
+     "type": "knob",
+     "label": "FX 1",
+     "bind": {
+      "param": "a_send_fx_1"
+     },
+     "format": "raw"
+    },
+    {
+     "id": "fx2",
+     "type": "knob",
+     "label": "FX 2",
+     "bind": {
+      "param": "a_send_fx_2"
+     },
+     "format": "raw"
+    },
+    {
+     "id": "fx3",
+     "type": "knob",
+     "label": "FX 3",
+     "bind": {
+      "param": "a_send_fx_3"
+     },
+     "format": "raw"
+    },
+    {
+     "id": "fx4",
+     "type": "knob",
+     "label": "FX 4",
+     "bind": {
+      "param": "a_send_fx_4"
+     },
+     "format": "raw"
+    }
+   ]
+  },
+  {
+   "id": "out",
+   "title": "OUTPUT",
+   "cols": 2,
+   "controls": [
+    {
+     "id": "vol",
+     "type": "knob",
+     "label": "Volume",
+     "bind": {
+      "param": "a_volume"
+     },
+     "format": "percent"
+    },
+    {
+     "id": "pan",
+     "type": "knob",
+     "label": "Pan",
+     "bind": {
+      "param": "a_pan"
+     },
+     "format": "percent"
+    },
+    {
+     "id": "glide",
+     "type": "knob",
+     "label": "Glide",
+     "bind": {
+      "param": "a_portamento"
+     },
+     "format": "raw"
+    },
+    {
+     "id": "fb",
+     "type": "knob",
+     "label": "Feedback",
+     "bind": {
+      "param": "a_feedback"
+     },
+     "format": "percent"
+    }
+   ]
+  }
+ ]
+}

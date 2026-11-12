@@ -67,7 +67,7 @@ export function fxInhaltText(k, lage) {
   return `${klang ? `${String(klang).replace(/^vst3:/, '')} · ` : ''}${muster}${st && !st.autonom ? ' · AUTO off' : ''}`;
 }
 
-// Baukasten S2: die acht Knobs eines Cypher-Modular-Wirts aus POST /klang params ({params: {"Knob 1": 0.5, …}, namen:
+// Baukasten S2: die Knobs (1..64) eines Cypher-Modular-Wirts aus POST /klang params ({params: {"Knob 1": 0.5, …}, namen:
 // {"Knob 1": "Cutoff"}}). Nur die Knobs, die der Wirt meldet (ein Surge-Wirt meldet keine → leere Liste); ohne Namen steht „Knob n“.
 export const KNOB_GRUPPE = { 'erz/2': 'bass', 'erz/3': 'melodie' };
 /** Text für innerHTML und Attribute: Knob-Namen stammen aus einer Graphdatei, nicht aus der Seite (Review F2). */
@@ -75,17 +75,28 @@ export function htmlText(s) {
   return String(s).replace(/[&<>"']/g, (z) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[z]);
 }
 
-/** S5r: the eight graph knobs <channel>/bk/1..8 of a channel that takes a graph (POST /regler). Channels with an instrument host
+/** S5r: the graph knobs <channel>/bk/1..64 (8 to 64 rows, see bkKnobZahl) of a channel that takes a graph (POST /regler). Channels with an instrument host
  *  block (KNOB_GRUPPE) get none here, they use their own knobs; channels without a graph neither. Value from the control state, default 0.5. */
 export const BK_KNOB_KANAELE = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'erz/1', 'erz/5', 'erz/6', 'erz/7', 'pad/1', 'pad/2', 'fx/3', 'fx/4'];
-/** S12: erz/2 and erz/3 show the eight graph knobs only while a graph sits on them (opt.graph = {name, regler_namen}); otherwise
- *  they keep the Surge/host knobs. S14: fx/3, fx/4 (send returns) have the knobs fx/<n>/bk/1..8 too. Knob names come from the graph's
+/** S12: erz/2 and erz/3 show the graph knobs only while a graph sits on them (opt.graph = {name, regler_namen}); otherwise
+ *  they keep the Surge/host knobs. S14: fx/3, fx/4 (send returns) have the knobs fx/<n>/bk/1..64 too. Knob names come from the graph's
  *  regler_namen, else "Knob n". */
 export const BK_KNOB_MIT_GRAPH = ['erz/2', 'erz/3'];
+export const BK_KNOB_MIN = 8, BK_KNOB_MAX = 64;
+/** How many knob rows the legacy slider field shows: as many as the graph defines (the highest number in its regler_namen or regler
+ *  ranges), at least the first eight, at most 64. No graph info: 8, as before the knob limit moved. */
+export function bkKnobZahl(graph) {
+  let n = BK_KNOB_MIN;
+  for (const t of [graph?.regler_namen, graph?.regler]) {
+    if (typeof t !== 'object' || t === null) continue;
+    for (const k of Object.keys(t)) { const nr = Number(k); if (Number.isInteger(nr) && nr > n && nr <= BK_KNOB_MAX) n = nr; }
+  }
+  return n;
+}
 export function bkKnobListe(kanal, reglerStand, opt) {
   const graph = opt?.graph ?? null;
   if (!(BK_KNOB_KANAELE.includes(kanal) || (graph && BK_KNOB_MIT_GRAPH.includes(kanal)))) return [];
-  return Array.from({ length: 8 }, (_, i) => {
+  return Array.from({ length: bkKnobZahl(graph) }, (_, i) => {
     const pfad = `${kanal}/bk/${i + 1}`, w = reglerStand?.[pfad], n = graph?.regler_namen?.[i + 1];
     return { nr: i + 1, pfad, name: typeof n === 'string' && n !== '' ? n : `Knob ${i + 1}`, wert: typeof w === 'number' && Number.isFinite(w) ? Math.min(1, Math.max(0, w)) : 0.5 };
   });
@@ -115,42 +126,99 @@ export function lernKnopfHtml(pfad, zuordnung, lage) {
   }
   return `<span class="lern-zeile">${h}</span>`;
 }
-/** S14: markup of the SEND RETURNS block (the effect graph pickers and the eight graph knobs of fx/3, fx/4); app.js only inserts it.
+/** S14: markup of the SEND RETURNS block (the effect graph pickers and the graph knobs of fx/3, fx/4); app.js only inserts it.
  *  Each row carries data-kanal for the knob binding, a picker place for graphWahlHtml and an empty .bkliste that bindeBkKnobs fills. */
 export function sendRueckHtml(kanaele = ['fx/3', 'fx/4']) {
-  return '<span class="bildtitel">SEND RETURNS <b>graph picker and eight knobs per return</b></span>'
+  return '<span class="bildtitel">SEND RETURNS <b>graph picker and knobs per return</b></span>'
     + kanaele.map((k) => `<div class="sendzeile" data-kanal="${htmlText(k)}"><span>${k === 'fx/3' ? 'RETURN 3' : 'RETURN 4'}</span>`
       + `<div class="graphplatz" data-graphplatz="${htmlText(k)}"></div><div class="bkliste"></div></div>`).join('');
 }
 /** S12/S18: graph picker. Instruments go on erz/2, erz/3, erz/5..7 and the pads (stream 1 is a drum kit, erz/4 the production, erz/8 unused),
  *  effects on decks and the send returns. The instrument keys are bound to contract/streams.ts by tests/effekte.test.mjs. */
 export const GRAPH_KANAL_ART = { 'erz/2': 'instrument', 'erz/3': 'instrument', 'erz/5': 'instrument', 'erz/6': 'instrument', 'erz/7': 'instrument', 'pad/1': 'instrument', 'pad/2': 'instrument', 'deck/1': 'effekt', 'deck/2': 'effekt', 'deck/3': 'effekt', 'deck/4': 'effekt', 'fx/3': 'effekt', 'fx/4': 'effekt' };
-export function graphWahlOptionen(kanal, graphen, geladenName) {
+/** Instrument categories of the picker (ids as in kategorien.json). `host` is the Surge/plugin entry of erz/2 and erz/3, `sonst` collects graphs without a category. */
+export const GRAPH_KATEGORIEN = [
+  { id: 'drums', name: 'Drums' }, { id: 'bass', name: 'Bass' }, { id: 'lead', name: 'Lead' }, { id: 'pad', name: 'Pad & Poly' },
+  { id: 'keys', name: 'Keys & Plucks' }, { id: 'textur', name: 'Texture & FX' }, { id: 'host', name: 'Host (Surge/plugins)' }, { id: 'sonst', name: 'Other' },
+];
+const kategorieName = (id) => GRAPH_KATEGORIEN.find((k) => k.id === id)?.name ?? 'Other';
+/** Channels on which a host (Surge XT or a plugin) plays while no graph is loaded; the empty picker value means "the host plays" there. */
+export const GRAPH_HOST_KANAELE = ['erz/2', 'erz/3'];
+/** Display name of the host of a GET /klang group ({art, plugin?}): the plugin name, else the part after vst3:/sfz:, else Surge XT (art lv2 or unknown); the grand piano (sfz:grand) is 'Grand piano'. */
+export function hostName(wirt) {
+  if (wirt?.art === 'sfz:grand') return 'Grand piano';
+  if (typeof wirt?.plugin === 'string' && wirt.plugin.trim()) return wirt.plugin.trim().slice(0, 40);
+  const m = typeof wirt?.art === 'string' ? /^(?:vst3|sfz):(.+)$/.exec(wirt.art) : null;
+  return m ? m[1].slice(0, 40) : 'Surge XT';
+}
+export function graphWahlOptionen(kanal, graphen, geladenName, host) {
   const art = GRAPH_KANAL_ART[kanal];
   if (!art) return [];
   const gewaehlt = geladenName ?? '';
-  const namen = (graphen ?? []).filter((g) => g.art === art).map((g) => g.name);
-  const aus = [{ wert: '', text: '—', gewaehlt: gewaehlt === '' }, ...namen.map((n) => ({ wert: n, text: n, gewaehlt: n === gewaehlt }))];
-  if (gewaehlt !== '' && !namen.includes(gewaehlt)) aus.push({ wert: gewaehlt, text: gewaehlt, gewaehlt: true });   // loaded but not in the list: do not lie
+  const eintraege = (graphen ?? []).filter((g) => g.art === art);
+  const namen = eintraege.map((g) => g.name);
+  const inst = art === 'instrument';
+  const leer = GRAPH_HOST_KANAELE.includes(kanal) ? { wert: '', text: host || 'Surge XT', gewaehlt: gewaehlt === '', kategorie: 'host' } : { wert: '', text: inst ? 'Off' : '—', gewaehlt: gewaehlt === '' };
+  const aus = [leer, ...eintraege.map((g) => ({ wert: g.name, text: g.name, gewaehlt: g.name === gewaehlt, ...(inst ? { kategorie: g.kategorie || 'sonst', ...(g.text ? { beschreibung: g.text } : {}) } : {}) }))];
+  if (gewaehlt !== '' && !namen.includes(gewaehlt)) aus.push({ wert: gewaehlt, text: gewaehlt, gewaehlt: true, ...(inst ? { kategorie: 'sonst' } : {}) });   // loaded but not in the list: do not lie
   return aus;
 }
-export function graphWahlHtml(kanal, graphen, geladenName) {
-  const o = graphWahlOptionen(kanal, graphen, geladenName);
+const optionHtml = (x) => `<option value="${htmlText(x.wert)}"${x.gewaehlt ? ' selected' : ''}>${htmlText(x.text)}</option>`;
+/** The single picker (effects, strips, send returns, detail): effects flat, instruments grouped by category with <optgroup>; the empty entry stays first and ungrouped. */
+export function graphWahlHtml(kanal, graphen, geladenName, host) {
+  const o = graphWahlOptionen(kanal, graphen, geladenName, host);
   if (!o.length) return '';
-  return `<select class="graphwahl" data-graphwahl="${htmlText(kanal)}" aria-label="Graph on ${htmlText(kanal)}" title="Baukasten graph on this channel">`
-    + o.map((x) => `<option value="${htmlText(x.wert)}"${x.gewaehlt ? ' selected' : ''}>${htmlText(x.text)}</option>`).join('') + '</select>';
+  let inhalt;
+  if (GRAPH_KANAL_ART[kanal] === 'instrument') {
+    inhalt = optionHtml(o[0]);
+    for (const k of GRAPH_KATEGORIEN) {
+      const rest = o.slice(1).filter((x) => x.kategorie === k.id);
+      if (rest.length) inhalt += `<optgroup label="${htmlText(k.name)}">${rest.map(optionHtml).join('')}</optgroup>`;
+    }
+  } else inhalt = o.map(optionHtml).join('');
+  return `<select class="graphwahl" data-graphwahl="${htmlText(kanal)}" aria-label="Graph on ${htmlText(kanal)}" title="Baukasten graph on this channel">${inhalt}</select>`;
+}
+/** The categories offered on a channel (those with a graph, plus host on erz/2 and erz/3) and the one shown: `kat` when valid, else the loaded graph's, else host
+ *  (erz/2, erz/3 with the host playing), else the first. */
+export function instrumentKategorien(kanal, graphen, geladenName, kat) {
+  const o = graphWahlOptionen(kanal, graphen, geladenName);
+  const ids = GRAPH_KATEGORIEN.map((k) => k.id).filter((id) => o.some((x) => x.kategorie === id));
+  const geladen = o.find((x) => x.gewaehlt && x.wert !== '');
+  const gew = ids.includes(kat) ? kat : geladen ? geladen.kategorie : ids.includes('host') && (geladenName ?? '') === '' ? 'host' : ids[0];
+  return { ids, gewaehlt: gew };
+}
+/** INSTRUMENTS area picker: CATEGORY select, INSTRUMENT select (filtered to the category) and one description line. `kat` is the category the person browsed to
+ *  (null = follow the loaded graph). A category that does not hold the loaded graph shows a disabled "Choose..." entry. */
+export function instrumentWahlHtml(kanal, graphen, geladenName, host, kat) {
+  const o = graphWahlOptionen(kanal, graphen, geladenName, host);
+  if (!o.length) return '';
+  const { ids, gewaehlt: gk } = instrumentKategorien(kanal, graphen, geladenName, kat);
+  const hostKanal = GRAPH_HOST_KANAELE.includes(kanal);
+  const inKat = o.filter((x) => (x.wert === '' ? (hostKanal ? gk === 'host' : true) : x.kategorie === gk));
+  const aktiv = inKat.find((x) => x.gewaehlt);
+  const katSel = `<select class="graphkat" data-graphkat="${htmlText(kanal)}" aria-label="Instrument category on ${htmlText(kanal)}" title="Category">`
+    + ids.map((id) => `<option value="${htmlText(id)}"${id === gk ? ' selected' : ''}>${htmlText(kategorieName(id))}</option>`).join('') + '</select>';
+  const instSel = `<select class="graphwahl" data-graphwahl="${htmlText(kanal)}" aria-label="Instrument on ${htmlText(kanal)}" title="Instrument">`
+    + (aktiv ? '' : '<option value="" disabled selected hidden>Choose…</option>')
+    + inKat.map(optionHtml).join('') + '</select>';
+  let text = '';
+  if (aktiv?.wert === '') text = hostKanal ? `${aktiv.text} plays this channel; no Baukasten graph is loaded.` : 'No instrument loaded on this channel.';
+  else if (aktiv) text = aktiv.beschreibung ?? '';
+  return `${katSel}${instSel}<span class="graphtext" data-graphtext="${htmlText(kanal)}">${htmlText(text)}</span>`;
 }
 
 /** S17: saved/differs marker of the sound snapshot for one channel. gespeichert = GET /proj/bk gespeichert ([{id, graph, regler}] or null without a
  *  project), geladenName = what is loaded now, regler = live values by path. '' = nothing saved for this channel. A live knob value the page does not
  *  know is no difference here (the hand tool proj_bk lage reports it as null). Pure, no polling. */
-export function bkMarke(kanal, gespeichert, geladenName, regler) {
+/** `bereiche`: the knob ranges of the loaded graph ({nr: {vorgabe}}, from GET /graphen/panel), for a knob the stored array does not carry (a stored array is
+ *  trimmed against the graph's `vorgabe`); without them 0.5. */
+export function bkMarke(kanal, gespeichert, geladenName, regler, bereiche) {
   const e = Array.isArray(gespeichert) ? gespeichert.find((x) => x.id === kanal.replace('/', '')) : undefined;
   if (!e) return '';
   if (!geladenName || geladenName !== e.graph) return 'abweichend';
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 64; i++) {   // a stored array of 8..64 numbers: the missing ones are the graph's vorgabe (0.5 where it has none)
     const w = regler?.[`${kanal}/bk/${i + 1}`];
-    if (typeof w === 'number' && Math.abs(w - e.regler[i]) > 0.0005) return 'abweichend';
+    if (typeof w === 'number' && Math.abs(w - (e.regler[i] ?? bereiche?.[i + 1]?.vorgabe ?? 0.5)) > 0.0005) return 'abweichend';
   }
   return 'gespeichert';
 }
@@ -159,13 +227,13 @@ export function bkSpeichernHtml(kanal, marke, projektOffen, geladenName) {
   if (!projektOffen || !geladenName) return '';
   const k = htmlText(kanal);
   const text = marke === 'gespeichert' ? 'saved' : marke === 'abweichend' ? 'differs from project' : '';
-  return `<button class="bkmerken" data-bkmerken="${k}" title="Save the graph on this channel and its eight knob values in the project">SAVE SOUND</button>`
+  return `<button class="bkmerken" data-bkmerken="${k}" title="Save the graph on this channel and its knob values in the project">SAVE SOUND</button>`
     + (text ? `<span class="bkmarke ${marke}">${text}</span>` : '');
 }
 
 export function knobListe(params, namen = {}) {
   const aus = [];
-  for (let nr = 1; nr <= 8; nr++) {
+  for (let nr = 1; nr <= 64; nr++) {
     const p = `Knob ${nr}`, w = params?.[p];
     if (typeof w === 'number' && Number.isFinite(w)) aus.push({ nr, param: p, name: namen?.[p] ?? p, wert: Math.min(1, Math.max(0, w)) });
   }

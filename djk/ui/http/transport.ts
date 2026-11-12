@@ -4,10 +4,10 @@ import { grundText } from './reasons.ts';
 
 // Plan-Review M3: jede Webseite im Browser kann an 127.0.0.1 POSTen. Nur json (erzwingt beim Browser einen Preflight, den
 // dieser Server nicht beantwortet → 415 sonst) und nur ohne Origin oder mit der eigenen (→ 403 sonst). Rangfolge: erst Content-Type.
-export function fremdePost(q: http.IncomingMessage, port: number): 403 | 415 | null {
+export function fremdePost(q: http.IncomingMessage, port: number, auch?: string): 403 | 415 | null {   // auch: one more own origin (the tablet listener's)
   if (!String(q.headers['content-type'] ?? '').toLowerCase().startsWith('application/json')) return 415;
   const herkunft = q.headers.origin;   // Review F2: die Seite darf auch unter localhost geöffnet sein
-  if (herkunft !== undefined && herkunft !== `http://127.0.0.1:${port}` && herkunft !== `http://localhost:${port}`) return 403;
+  if (herkunft !== undefined && herkunft !== `http://127.0.0.1:${port}` && herkunft !== `http://localhost:${port}` && herkunft !== auch) return 403;
   return null;
 }
 
@@ -17,8 +17,8 @@ export function json(a: http.ServerResponse, code: number, daten: unknown): void
 }
 
 // true: abgewiesen und beantwortet (415 nur_json bzw. 403 fremde_herkunft); false: weiter im Handler. Spec 6.34: mit englischem text.
-export function postAbgewiesen(q: http.IncomingMessage, a: http.ServerResponse, port: number): boolean {
-  const abweisung = fremdePost(q, port);
+export function postAbgewiesen(q: http.IncomingMessage, a: http.ServerResponse, port: number, auch?: string): boolean {
+  const abweisung = fremdePost(q, port, auch);
   if (abweisung === null) return false;
   const grund = { fehler: abweisung === 415 ? 'nur_json' : 'fremde_herkunft' };
   json(a, abweisung, { ...grund, text: grundText(grund.fehler) });

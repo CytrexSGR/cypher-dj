@@ -1,0 +1,29 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "resonator-glocke"},
+  "title": "Resonator Bell",
+  "akzent": "blau",
+  "layout": {"rows": [
+    ["mat", "strike", "out"]
+  ]},
+  "sections": [
+    { "id": "mat", "title": "MATERIAL", "cols": 6, "controls": [
+      {"id": "mat", "type": "knob", "label": "Material", "span": 2, "bind": {"param": "k1"}, "format": "percent", "default": 0.5},
+      {"id": "inh", "type": "knob", "label": "Inharmonicity", "span": 2, "bind": {"param": "k4"}, "format": "raw", "unit": "x", "default": 0.5},
+      {"id": "size", "type": "knob", "label": "Size", "span": 2, "bind": {"param": "k5"}, "format": "raw", "unit": "x", "default": 0.5},
+      {"id": "m1", "type": "label", "span": 6, "text": "Mode set: church bell, 12 partials"},
+      {"id": "m2", "type": "label", "span": 6, "text": "Material: felt (0) to bronze (100 %)"}
+    ]},
+    { "id": "strike", "title": "STRIKE", "cols": 4, "controls": [
+      {"id": "hell", "type": "knob", "label": "Brightness", "span": 2, "bind": {"param": "k2"}, "format": "percent", "default": 0.5},
+      {"id": "pos", "type": "knob", "label": "Position", "span": 2, "bind": {"param": "k3"}, "format": "percent", "default": 0.5},
+      {"id": "k1", "type": "label", "span": 4, "text": "Impulse strike"},
+      {"id": "k2", "type": "label", "span": 4, "text": "Position: edge (0) to centre (100 %)"}
+    ]},
+    { "id": "out", "title": "OUT", "cols": 3, "controls": [
+      {"id": "pegel", "type": "knob", "label": "Level", "span": 3, "bind": {"param": "k6"}, "format": "percent", "default": 0.5},
+      {"id": "o1", "type": "label", "span": 3, "text": "8 voices"},
+      {"id": "o2", "type": "label", "span": 3, "text": "Size divides every frequency"}
+    ]}
+  ]
+}

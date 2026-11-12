@@ -1,0 +1,117 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "synth-mono"},
+  "title": "Mono Synth",
+  "akzent": "orange",
+  "pages": [{"id": "main", "title": "Main"}, {"id": "mod", "title": "Mod"}, {"id": "fx", "title": "FX"}],
+  "layout": {"rows": [
+    ["osc", "mix", "filter", "tune"],
+    ["env1", "env2", "lfo", "voice", "amp"],
+    ["menv", "lfo2", "velocity"],
+    ["chorus", "delay", "reverb"]
+  ]},
+  "sections": [
+    { "id": "osc", "page": "main", "title": "OSCILLATORS", "cols": 6, "controls": [
+      {"id": "wave1", "type": "selector", "label": "Osc1 wave", "span": 3, "bind": {"param": "k14"}, "options": ["Tri", "Saw", "Pulse"], "glyphs": ["tri", "saw", "pulse"], "default": 1},
+      {"id": "wave2", "type": "selector", "label": "Osc2 wave", "span": 3, "bind": {"param": "k15"}, "options": ["Saw", "Pulse", "Tri"], "glyphs": ["saw", "pulse", "tri"], "default": 1},
+      {"id": "octave", "type": "selector", "label": "Osc2 octave", "span": 3, "bind": {"param": "k12"}, "options": ["-2", "-1", "0", "+1", "+2"], "default": 2},
+      {"id": "sync", "type": "selector", "label": "Sync", "span": 3, "bind": {"param": "k17"}, "options": ["Sync", "Off", "Sweep"], "default": 1},
+      {"id": "interval", "type": "knob", "label": "Interval", "span": 2, "bind": {"param": "k13"}, "format": "raw", "unit": "st", "default": 0.5},
+      {"id": "detune", "type": "knob", "label": "Detune", "span": 2, "bind": {"param": "k11"}, "format": "raw", "unit": "ct", "default": 0.5},
+      {"id": "pw", "type": "knob", "label": "Pulse width", "span": 2, "bind": {"param": "k16"}, "format": "percent", "default": 0.5}
+    ]},
+    { "id": "mix", "page": "main", "title": "MIXER", "cols": 3, "controls": [
+      {"id": "mix", "type": "knob", "label": "Osc1 / Osc2", "bind": {"param": "k8"}, "format": "percent", "default": 0.5},
+      {"id": "sub", "type": "knob", "label": "Sub", "bind": {"param": "k9"}, "format": "percent", "default": 0.5},
+      {"id": "noise", "type": "knob", "label": "Noise", "bind": {"param": "k10"}, "format": "percent", "default": 0.5},
+      {"id": "subwave", "type": "selector", "label": "Sub wave", "span": 3, "bind": {"param": "k31"}, "options": ["Sine", "Sq -1 oct", "Sq -2 oct"], "glyphs": ["sine", "square", "square"], "default": 1}
+    ]},
+    { "id": "filter", "page": "main", "title": "FILTER", "cols": 5, "controls": [
+      {"id": "type", "type": "selector", "label": "Type", "span": 5, "bind": {"param": "k5"}, "options": ["Diode", "SV 12", "Ladder", "Sallen-Key", "SV BP"], "default": 2},
+      {"id": "fk", "type": "filterkurve", "span": 5, "of": {"cutoff": "cutoff", "reso": "reso", "typ": "type"},
+        "typen": [{"art": "lp", "pole": 4}, {"art": "lp", "pole": 2}, {"art": "lp", "pole": 4}, {"art": "lp", "pole": 2}, {"art": "bp", "pole": 2}]},
+      {"id": "cutoff", "type": "knob", "label": "Cutoff", "bind": {"param": "k1"}, "format": "hz", "default": 0.5},
+      {"id": "reso", "type": "knob", "label": "Resonance", "bind": {"param": "k2"}, "format": "percent", "default": 0.5},
+      {"id": "env", "type": "knob", "label": "Env amount", "bind": {"param": "k3"}, "format": "raw", "unit": "st", "default": 0.5},
+      {"id": "keytrack", "type": "knob", "label": "Key track", "bind": {"param": "k18"}, "format": "percent", "default": 0.5},
+      {"id": "drive", "type": "knob", "label": "Drive", "bind": {"param": "k6"}, "format": "db", "default": 0.5}
+    ]},
+    { "id": "env1", "page": "main", "title": "FILTER ENV", "cols": 4, "controls": [
+      {"id": "fhue", "type": "huelle", "span": 4, "label": "Envelope", "of": {"a": "fattack", "d": "decay", "s": "fsus", "r": "release"}},
+      {"id": "fattack", "type": "knob", "label": "Attack", "bind": {"param": "k33"}, "format": "ms", "default": 0.5},
+      {"id": "decay", "type": "knob", "label": "Decay", "bind": {"param": "k4"}, "format": "raw", "unit": "s", "default": 0.5},
+      {"id": "fsus", "type": "knob", "label": "Sustain", "bind": {"param": "k23"}, "format": "percent", "default": 0.5},
+      {"id": "frel", "type": "knob", "label": "Release x", "bind": {"param": "k34"}, "format": "raw", "unit": "x", "default": 0.5},
+      {"id": "fnote", "type": "label", "span": 4, "text": "Release = AMP ENV release x this"}
+    ]},
+    { "id": "env2", "page": "main", "title": "AMP ENV", "cols": 4, "controls": [
+      {"id": "ahue", "type": "huelle", "span": 4, "label": "Envelope", "of": {"a": "aattack", "d": "adecay", "s": "asustain", "r": "release"}},
+      {"id": "aattack", "type": "knob", "label": "Attack", "bind": {"param": "k35"}, "format": "ms", "default": 0.5},
+      {"id": "adecay", "type": "knob", "label": "Decay", "bind": {"param": "k20"}, "format": "raw", "unit": "s", "default": 0.5},
+      {"id": "asustain", "type": "knob", "label": "Sustain", "bind": {"param": "k21"}, "format": "percent", "default": 0.5},
+      {"id": "release", "type": "knob", "label": "Release", "bind": {"param": "k22"}, "format": "raw", "unit": "s", "default": 0.5},
+      {"id": "anote", "type": "label", "span": 4, "text": "Release feeds FILTER ENV too"}
+    ]},
+    { "id": "lfo", "page": "main", "title": "LFO", "cols": 4, "controls": [
+      {"id": "lfoshape", "type": "selector", "label": "Shape", "span": 4, "bind": {"param": "k25"}, "options": ["Saw", "Tri", "Sine", "Square", "S&H"], "glyphs": ["saw", "tri", "sine", "square", "sh"], "default": 2},
+      {"id": "lfof", "type": "lfoform", "span": 4, "label": "LFO shape", "of": {"form": "lfoshape"}, "formen": ["saw", "tri", "sine", "square", "sh"]},
+      {"id": "lforate", "type": "knob", "label": "Rate", "bind": {"param": "k24"}, "format": "hz", "default": 0.5},
+      {"id": "lfocut", "type": "knob", "label": "To cutoff", "bind": {"param": "k26"}, "format": "raw", "unit": "st", "default": 0.5},
+      {"id": "lfopitch", "type": "knob", "label": "To pitch", "bind": {"param": "k27"}, "format": "raw", "unit": "st", "default": 0.5},
+      {"id": "lfopwm", "type": "knob", "label": "To PWM", "bind": {"param": "k28"}, "format": "percent", "default": 0.5}
+    ]},
+    { "id": "voice", "page": "main", "title": "VOICE", "cols": 2, "controls": [
+      {"id": "mode", "type": "selector", "label": "Mode", "span": 2, "bind": {"param": "k29"}, "options": ["Legato", "Retrig", "Glide all"], "default": 1},
+      {"id": "glide", "type": "knob", "label": "Glide", "bind": {"param": "k7"}, "format": "percent", "default": 0.5},
+      {"id": "accent", "type": "knob", "label": "Accent", "bind": {"param": "k19"}, "format": "percent", "default": 0.5},
+      {"id": "drift", "type": "knob", "label": "Drift", "span": 2, "bind": {"param": "k32"}, "format": "percent", "default": 0.25}
+    ]},
+    { "id": "amp", "page": "main", "title": "AMP", "cols": 2, "controls": [
+      {"id": "outdrive", "type": "knob", "label": "Out drive", "span": 2, "bind": {"param": "k30"}, "format": "db", "default": 0.5},
+      {"id": "onote", "type": "label", "span": 2, "text": "Saturation after the filter"}
+    ]},
+    { "id": "tune", "page": "main", "title": "TUNE", "cols": 2, "controls": [
+      {"id": "oct1", "type": "selector", "label": "Osc1 octave", "span": 2, "bind": {"param": "k51"}, "options": ["-2", "-1", "0", "+1", "+2"], "default": 2},
+      {"id": "mtune", "type": "knob", "label": "Master tune", "bind": {"param": "k50"}, "format": "raw", "unit": "ct", "default": 0.5, "scale": {"labels": ["-100", "off", "+100"]}},
+      {"id": "fine1", "type": "knob", "label": "Osc1 fine", "bind": {"param": "k52"}, "format": "raw", "unit": "ct", "default": 0.5, "scale": {"labels": ["-50", "off", "+50"]}}
+    ]},
+    { "id": "menv", "page": "mod", "title": "MOD ENV", "cols": 4, "controls": [
+      {"id": "mhue", "type": "huelle", "span": 4, "label": "Envelope", "of": {"a": "mattack", "d": "mdecay", "s": "msustain", "r": "mrelease"}},
+      {"id": "mattack", "type": "knob", "label": "Attack", "bind": {"param": "k36"}, "format": "raw", "unit": "s", "default": 0.27034552830322406},
+      {"id": "mdecay", "type": "knob", "label": "Decay", "bind": {"param": "k37"}, "format": "raw", "unit": "s", "default": 0.5088100132404755},
+      {"id": "msustain", "type": "knob", "label": "Sustain", "bind": {"param": "k38"}, "format": "percent", "default": 0.5},
+      {"id": "mrelease", "type": "knob", "label": "Release", "bind": {"param": "k39"}, "format": "raw", "unit": "s", "default": 0.5088100132404755},
+      {"id": "mpitch", "type": "knob", "label": "To pitch", "bind": {"param": "k40"}, "format": "raw", "unit": "st", "default": 0.5, "scale": {"labels": ["-24", "off", "+24"]}},
+      {"id": "mpwm", "type": "knob", "label": "To PWM", "bind": {"param": "k41"}, "format": "percent", "default": 0.5, "scale": {"labels": ["-60", "off", "+60"]}},
+      {"id": "mcut", "type": "knob", "label": "To cutoff", "bind": {"param": "k42"}, "format": "raw", "unit": "st", "default": 0.5, "scale": {"labels": ["-60", "off", "+60"]}}
+    ]},
+    { "id": "lfo2", "page": "mod", "title": "LFO 2", "cols": 4, "controls": [
+      {"id": "l2shape", "type": "selector", "label": "Shape", "span": 4, "bind": {"param": "k44"}, "options": ["Sine", "Tri", "Saw", "Square"], "glyphs": ["sine", "tri", "saw", "square"], "default": 0},
+      {"id": "l2f", "type": "lfoform", "span": 4, "label": "LFO 2 shape", "of": {"form": "l2shape"}, "formen": ["sine", "tri", "saw", "square"]},
+      {"id": "l2sync", "type": "selector", "label": "Sync", "span": 4, "bind": {"param": "k45"}, "options": ["Free", "1/16", "1/8", "1/4", "1/2", "1 bar", "2 bar"], "default": 0},
+      {"id": "l2target", "type": "selector", "label": "Target", "span": 4, "bind": {"param": "k46"}, "options": ["Cutoff", "Pitch", "PWM", "Reso", "Amp"], "default": 0},
+      {"id": "l2rate", "type": "knob", "label": "Rate", "span": 2, "bind": {"param": "k43"}, "format": "hz", "default": 0.5518464803042319},
+      {"id": "l2amt", "type": "knob", "label": "Amount", "span": 2, "bind": {"param": "k47"}, "format": "percent", "default": 0.5, "scale": {"labels": ["-100", "off", "+100"]}},
+      {"id": "l2note", "type": "label", "span": 4, "text": "Shape acts in Free mode only"}
+    ]},
+    { "id": "velocity", "page": "mod", "title": "VELOCITY", "cols": 2, "controls": [
+      {"id": "vdepth", "type": "knob", "label": "Depth", "bind": {"param": "k48"}, "format": "raw", "unit": "x", "default": 0.5},
+      {"id": "vcut", "type": "knob", "label": "To cutoff", "bind": {"param": "k49"}, "format": "raw", "unit": "st", "default": 0.5, "scale": {"labels": ["-48", "off", "+48"]}},
+      {"id": "vnote", "type": "label", "span": 2, "text": "Depth 1x = the Accent knob as is"}
+    ]},
+    { "id": "chorus", "page": "fx", "title": "CHORUS", "cols": 3, "controls": [
+      {"id": "chmode", "type": "selector", "label": "Mode", "span": 3, "bind": {"param": "k54"}, "options": ["I", "II", "I+II"], "default": 0},
+      {"id": "chamt", "type": "knob", "label": "Amount", "span": 3, "bind": {"param": "k53"}, "format": "percent", "default": 0, "scale": {"labels": ["off", "50", "100"]}}
+    ]},
+    { "id": "delay", "page": "fx", "title": "DELAY", "cols": 4, "controls": [
+      {"id": "dpp", "type": "selector", "label": "Ping-pong", "span": 4, "bind": {"param": "k60"}, "options": ["Off", "On"], "default": 0},
+      {"id": "dtime", "type": "knob", "label": "Time", "bind": {"param": "k55"}, "format": "ms", "default": 0.7492782502427077},
+      {"id": "dfb", "type": "knob", "label": "Feedback", "bind": {"param": "k56"}, "format": "percent", "default": 0.38888888888888884},
+      {"id": "dmix", "type": "knob", "label": "Mix", "bind": {"param": "k57"}, "format": "percent", "default": 0, "scale": {"labels": ["off", "50", "100"]}}
+    ]},
+    { "id": "reverb", "page": "fx", "title": "REVERB", "cols": 3, "controls": [
+      {"id": "rmix", "type": "knob", "label": "Mix", "span": 3, "bind": {"param": "k59"}, "format": "percent", "default": 0, "scale": {"labels": ["off", "50", "100"]}},
+      {"id": "rnote", "type": "label", "span": 3, "text": "Hall, decay 2.2 s fixed"}
+    ]}
+  ]
+}

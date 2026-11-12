@@ -130,7 +130,7 @@ test('read one preset; factory presets shipped in the repository are valid', (t)
   assert.equal(p.name, 'Test Glue'); assert.equal(p.herkunft, 'werk'); assert.deepEqual(p.verworfen, []);
   const echt = new PresetSpeicher({ werk: WERK_VORGABE, nutzer: tmp(t) });
   const werk = echt.liste();
-  assert.equal(werk.length, 48);
+  assert.equal(werk.length, 106);
   assert.ok(werk.every((e) => e.herkunft === 'werk' && !e.fehler && e.beschreibung));
   assert.ok(werk.filter((e) => e.geraet === 'komp').every((e) => e.beschreibung.art === 'compressor'));
   for (const g of fs.readdirSync(WERK_VORGABE)) {

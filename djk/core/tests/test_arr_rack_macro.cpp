@@ -294,15 +294,20 @@ int main() {
     (void)sk;
   }
 
-  {  // M3 knob: bk member k1, bit-equal to the rack that holds the value itself
+  for (const int gn : {1, 9, 32, 33, 64}) {  // M3 knob: bk member k1 (and, since the 32-knob widening, k9 and k32 through the numbers 17 and 40; since the 64-knob widening k33 and k64 through 41 and 72; those two need hall_ffi with REGLER 64), bit-equal to the rack that holds the value itself
+    const int glied_param = gn <= 8 ? cdj::ARR_GLIED_PARAM_BK0 + gn - 1 : gn <= 32 ? cdj::ARR_GLIED_PARAM_BK9 + gn - 9 : cdj::ARR_GLIED_PARAM_BK33 + gn - 33;
+    PRUEF(cdj::arr_glied_bk_knopf(glied_param) == gn - 1);
+    const std::string kname = "k" + std::to_string(gn);
+    std::string gj = bkt::G_T;
+    if (gn != 1) gj.replace(gj.find("\"nr\":1,"), 7, "\"nr\":" + std::to_string(gn) + ",");
     auto lauf = [&](float k1_snap, bool mit_ziel, float makro_wert) {
       TR(t)
       auto sk_p = std::make_unique<Sinken>(t.arr);
       Sinken& sk = *sk_p;
-      CypherBk* h = bkt::neu(bkt::G_T);
+      CypherBk* h = bkt::neu(gj);
       std::vector<float> bus;
       if (mit_ziel) makro(t, 3, makro_wert);
-      t.laden(rack_snap(1, {kit(k_klein.get()), bk(h, {{"k1", k1_snap}})}, mit_ziel ? std::vector<ArrGliedZiel>{zg(2, 1, cdj::ARR_GLIED_PARAM_BK0 + 0, 0.2f, 0.9f)} : std::vector<ArrGliedZiel>{}));
+      t.laden(rack_snap(1, {kit(k_klein.get()), bk(h, {{kname.c_str(), k1_snap}})}, mit_ziel ? std::vector<ArrGliedZiel>{zg(2, 1, glied_param, 0.2f, 0.9f)} : std::vector<ArrGliedZiel>{}));
       t.arr.start(0.0, 0, false, t.s, V, 256, t.k);
       bus_lauf(t, 6144, bus);
       (void)sk;
@@ -312,7 +317,7 @@ int main() {
     const std::vector<float> m1 = lauf(0.5f, true, 1.0f), r1 = lauf(0.9f, false, 0.0f);
     const std::vector<float> m0 = lauf(0.5f, true, 0.0f), r0 = lauf(0.2f, false, 0.0f);
     const double e1 = energie(m1), e0 = energie(m0);
-    std::printf("M3: bk k1: macro 1 vs own 0.9 bit-equal %d, macro 0 vs own 0.2 bit-equal %d; energy at macro 1 %.4f, at macro 0 %.4f (ratio %.3f, k1 ratio %.3f)\n", bitgleich(m1, r1) ? 1 : 0,
+    std::printf("M3: bk k%d: macro 1 vs own 0.9 bit-equal %d, macro 0 vs own 0.2 bit-equal %d; energy at macro 1 %.4f, at macro 0 %.4f (ratio %.3f, k1 ratio %.3f)\n", gn, bitgleich(m1, r1) ? 1 : 0,
                 bitgleich(m0, r0) ? 1 : 0, e1, e0, e0 / e1, (0.2 / 0.9) * (0.2 / 0.9));
     PRUEF(e1 > 1e-6 && e0 > 1e-6);   // the instance sounds (a silent pair is bit-equal for nothing)
     PRUEF(bitgleich(m1, r1));
@@ -527,7 +532,31 @@ int main() {
       std::printf("M8: bk member targets 8, 15, 16 load (ng %d)\n", r.ng);
       cdj::gib_wiedergabe(e.snap.release(), cache);
     }
-    for (int pa : {0, 3, 7, 17}) {   // an RB-338 parameter, and numbers nobody has, on a bk member
+    // 32-knob widening: 17..40 are the knobs k9..k32 of a bk member and load; 73 and the RB-338 numbers do not
+    o.wiedergabe2_warp(30, spur(ziel(17, 0.0, 1.0) + "," + ziel(40, 0.0, 1.0)));
+    {
+      cdj::ArrLadeErgebnis g = cdj::lade_wiedergabe(o.pfad, 30, cache);
+      PRUEF(g.snap && g.grund.empty());
+      if (g.snap) {
+        PRUEF(g.snap->rack[0].ng == 2 && g.snap->rack[0].g[0].param == 17 && g.snap->rack[0].g[1].param == 40);
+        cdj::gib_wiedergabe(g.snap.release(), cache);
+      }
+    }
+    // 64-knob widening: 41..72 are the knobs k33..k64 and load; 73 does not
+    o.wiedergabe2_warp(31, spur(ziel(41, 0.0, 1.0) + "," + ziel(72, 0.0, 1.0)));
+    {
+      cdj::ArrLadeErgebnis g = cdj::lade_wiedergabe(o.pfad, 31, cache);
+      PRUEF(g.snap && g.grund.empty());
+      if (g.snap) {
+        PRUEF(g.snap->rack[0].ng == 2 && g.snap->rack[0].g[0].param == 41 && g.snap->rack[0].g[1].param == 72);
+        cdj::gib_wiedergabe(g.snap.release(), cache);
+      }
+    }
+    static_assert(cdj::arr_glied_bk_knopf(40) == 31 && cdj::arr_glied_bk_knopf(41) == 32 && cdj::arr_glied_bk_knopf(72) == 63 && cdj::arr_glied_bk_knopf(73) == -1 && cdj::ARR_GLIED_PARAM_N == 73,
+                  "member parameter space of the translator, k33..k64");
+    static_assert(cdj::arr_glied_bk_knopf(7) == -1 && cdj::arr_glied_bk_knopf(8) == 0 && cdj::arr_glied_bk_knopf(15) == 7 && cdj::arr_glied_bk_knopf(16) == -1 &&
+                  cdj::arr_glied_bk_knopf(17) == 8 && cdj::arr_glied_bk_knopf(40) == 31, "member parameter space of the translator");
+    for (int pa : {0, 3, 7, 73, 74}) {   // an RB-338 parameter, and numbers nobody has, on a bk member
       o.wiedergabe2_warp(2 + pa, spur(ziel(pa, 0.0, 1.0)));
       cdj::ArrLadeErgebnis f = cdj::lade_wiedergabe(o.pfad, 2 + pa, cache);
       PRUEF(f.snap == nullptr && f.grund == "format" && f.meldung.find("not allowed for the Baukasten member") != std::string::npos);

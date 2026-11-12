@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { fuehreAus, fuehreListeAus, BefehlFehler } from '../project/commands.ts';
 import {
   neuesProjekt, pruefeProjekt, kanonisch, wiedergabeSicht, MAX_RACK, MAX_MAKROS, MAX_MAKRO_ZIELE, rackZeilen, alleRacks,
-  GLIED_RB_MAKRO_PARAMETER, GLIED_PARAM_BK0, GLIED_PARAM_GAIN_DB, BK_PARAMETER,
+  GLIED_RB_MAKRO_PARAMETER, GLIED_PARAM_BK0, GLIED_PARAM_BK9, GLIED_PARAM_GAIN_DB, BK_PARAMETER,
 } from '../project/model.ts';
 import { INSERT_ARTEN } from '../project/insert_key.ts';
 import { wende } from '../project/patch.ts';
@@ -473,7 +473,8 @@ test('T7 pin: the member parameter index space equals the core header (ARR_GERAE
   const konst = (n) => Number(new RegExp(`constexpr int ${n} = (\\d+);`).exec(h)?.[1]);
   assert.equal(konst('ARR_GLIED_PARAM_BK0'), GLIED_PARAM_BK0);
   assert.equal(konst('ARR_GLIED_PARAM_GAIN_DB'), GLIED_PARAM_GAIN_DB);
-  assert.equal(BK_PARAMETER.length, 8, 'bk knobs k1..k8 sit at 8..15');
+  assert.equal(BK_PARAMETER.length, 64, 'bk knobs k1..k64 (GLIED_PARAM_BK33 = 41 is pinned against the header with the core table, Task 6)');
+  assert.equal(konst('ARR_GLIED_PARAM_BK9'), GLIED_PARAM_BK9, 'k9..k32 sit at 17..40, after gain_db');
 });
 
 test('T7 review fix: a frozen rack track goes out as freeze audio without member targets; insert targets stay, a rack without any is dropped', () => {

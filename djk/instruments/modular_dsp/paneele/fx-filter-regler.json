@@ -1,0 +1,13 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "fx-filter-regler"},
+  "title": "Filter",
+  "akzent": "tuerkis",
+  "sections": [
+    { "id": "pad", "title": "FILTER", "cols": 2, "controls": [
+      { "id": "xy", "type": "xy", "label": "Cutoff / Resonance", "span": 2, "xformat": "hz", "yformat": "raw","bind": { "x": { "param": "k1" }, "y": { "param": "k2" } }, "default": { "x": 0.7, "y": 0.25 } },
+      { "id": "fc", "type": "value", "of": "xy.x", "label": "Cutoff", "format": "hz" },
+      { "id": "q", "type": "value", "of": "xy.y", "label": "Resonance", "format": "raw" }
+    ]}
+  ]
+}

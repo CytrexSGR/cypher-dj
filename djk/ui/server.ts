@@ -25,17 +25,22 @@ import fs from 'node:fs';
 import { spawn } from 'node:child_process';
 import http from 'node:http';
 import { AsyncLocalStorage } from 'node:async_hooks';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { DatabaseSync } from 'node:sqlite';
 import { KernAnbindung } from '../conductor/src/core.ts';
+import { KernWeg } from './areas/proj/core_path.ts';
+import type { KernLage } from './areas/proj/state.ts';
 import { reglerInfo } from '../conductor/src/controls_info.ts';
 import { json as sendeJson, koerper as leseKoerper, postAbgewiesen, quelleAusKopf } from './http/transport.ts';
+import { Kopplung, TABLET_PORT, baueTabletHandler, heimAdresse, type TabletHandler } from './http/coupling.ts';
 import { Router, type Route, type Bereich, type BereichKontext } from './http/router.ts';
 import { projBereich, type ProjOptionen } from './areas/proj/area.ts';
 import { geraeteBereich, type GeraeteOptionen } from './areas/devices/area.ts';
 import { lernenBereich, type LernenOptionen } from './areas/learn/area.ts';
+import { hostlernenBereich } from './areas/hostlernen/area.ts';
 import { presetInhaltVon, presetsBereich, type PresetOptionen } from './presets/area.ts';
 import { kollektionenBereich, type KollektionBereichOptionen } from './collections/area.ts';
 import { ausgabeBereich } from './areas/proj/output.ts';   // Paket S3
@@ -76,7 +81,8 @@ import { OhrLeser, hoerAntwort, sync as ohrSync, K as OHR_K, type DeckLage, Hoer
 import { PegelPuffer } from './level_buffer.ts';
 import { leseMusterStand, setzeAutonom, leseLebt } from '../generator/src/pattern_state.mjs';
 import { ALLE_STROEME, istBkStrom, stromVonKanal } from '../contract/streams.ts';   // S18: stream <-> channel table
-import { listeGraphen, findeGraph, graphHash, GRAPH_NAME, GRAPH_KANAELE, INSTRUMENT_KANAELE } from './graphs.ts';   // Baukasten S12
+import { geraetePanel, RB338_PARAM_NAMEN } from './devices_parameter.ts';
+import { listeGraphen, findeGraph, graphHash, ladePanel, reglerVonGraph, vorgabenVon, GRAPH_NAME, GRAPH_KANAELE, INSTRUMENT_KANAELE } from './graphs.ts';   // Baukasten S12
 
 // The main checkout behind a git worktree (its `.git` is a file pointing at .git/worktrees/<n>, whose `commondir` leads
 // back to the shared .git). The main checkout itself resolves to itself; a folder without git to null.
@@ -113,9 +119,19 @@ const ueberProjektText = (pfad: string): string => (pfad.startsWith('rack/')
   ? 'sends, return strips and Hall values are changed through the project (/proj/aendern: send_setzen, return_aendern)'
   : pfad.startsWith('spur/') ? 'track faders are changed through the project (/proj/aendern, spur_aendern)'
     : 'group and master faders are changed through the project (/proj/aendern: gruppenspur_aendern, master_aendern)');
+const STROM_MAX_BYTES = 4 * 1024 * 1024;   // unsent bytes per event stream before the stream is closed
 const STRUDEL_ZEITLIMIT_MS = 2000;   // Plan-Review M3
 
+// Tablet access (task 10). Off unless ~/.config/cypherdj/tablet.json says {"an": true}; a test instance (a..i) never reads it. Tests give their own paths.
+export interface TabletOptionen {
+  konfigPfad?: string; kopplungPfad?: string; port?: number;
+  schnittstellen?: () => NodeJS.Dict<os.NetworkInterfaceInfo[]>;   // default os.networkInterfaces
+  logMs?: number;   // tests: the window of the wrong-pairing-try summary line (default 60 s)
+  bindeAn?: string;   // tests only: bind here (127.0.0.1) while the pairing link still names the found address
+}
+
 export interface ServerOptionen {
+  tablet?: TabletOptionen;
   port: number; kernPort: number; aboPort: number; leitstandWs: number; bestand: string; arbeitsbestand: string;
   mutationen?: string[]; log?: (zeile: Record<string, unknown>) => void;
   // Läuft der Kern im Prüfmodus (§19.0)? true/false aus der Konfig (--kern-pruefmodus an|aus), sonst unbekannt:
@@ -167,6 +183,7 @@ export type Pruefmodus = 'an' | 'aus' | 'unbekannt';
 
 // Drosselung je Schlüssel: höchstens eine Meldung je Intervall, die letzte gewinnt (nachgereicht)
 // D1 S2: /zustand/arr 50 Hz beim Spielen, Drossel 50 ms (Spec 3.1)
+const GRAPH_ABGELEHNT = [4, 6, 7, 8];   // quittung states of a refused command (INTERFACES 5.1; 5 = executed late, a positive answer)
 const DROSSEL_MS: Record<string, number> = { '/uhr': 50, '/zustand/deck': 100, '/pegel': 100, '/zustand/komp': 100, '/zustand/arr': 50, '/zustand/ein': 250, '/zustand/rec': 100, '/zustand/mix': 100, '/e/ins_gr': 100,
   '/zustand/spektrum': 40 };   // 1.15 A7b: 25 Hz, keyed per source (kanal)
 export const INS_GR_FRIST_MS = 500;   // 1.10 slice 4a: as the page's meters (MIX_FRIST_MS); the kern sends 20 Hz while a stage runs
@@ -223,7 +240,7 @@ export function leseBestand(dir: string): Eintrag[] {
 
 const TYPEN: Record<string, string> = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
-  '.svg': 'image/svg+xml', '.png': 'image/png',
+  '.svg': 'image/svg+xml', '.png': 'image/png', '.webmanifest': 'application/manifest+json',
 };
 
 interface SpurLauf { quelle: string; anker: number; ende: number; fahrten: Fahrt[]; timer: NodeJS.Timeout[]; offen: MusterPlan[]; gruppen: Set<string>; ids: number[]; teile: { id: number; teil: number; pfad: string }[];
@@ -261,8 +278,16 @@ const werkzeugAbweichend = (p: string, w: number): boolean => {
   const vorgabe = reglerInfo(p)?.vorgabe;
   return vorgabe !== undefined && Math.fround(w) !== Math.fround(vorgabe);
 };
-// S5r: graph knobs <channel>/bk/1..8 (default 0.5) show in lage only once they differ, like komp; S14: fx/3, fx/4 /bk/1..8 too
-const bkAbweichend = (p: string, w: number): boolean => /^(?:deck\/[1-4]|erz\/[1-35-7]|pad\/[12]|fx\/[34])\/bk\/[1-8]$/.test(p) && w !== 0.5;
+// S5r: graph knobs <channel>/bk/1..64 (default 0.5) show in lage only once they differ, like komp; S14: fx/3, fx/4 /bk/1..64 too
+const BK_ZEILE = /^((?:deck\/[1-4]|erz\/[1-35-7]|pad\/[12]|fx\/[34]))\/bk\/([1-9]|[1-5][0-9]|6[0-4])$/;
+/** A graph knob row differs from where its graph starts it (the graph's `vorgabe`, 0.5 where it has none or no graph is known); `vorgabe` caches per graph name for one call. */
+const bkAbweichend = (p: string, w: number, geladen: Record<string, string> = {}, vorgabe: Map<string, number[] | null> = new Map()): boolean => {
+  const m = BK_ZEILE.exec(p);
+  if (!m) return false;
+  const name = geladen[m[1]];
+  if (name && !vorgabe.has(name)) vorgabe.set(name, vorgabenVon(name));
+  return w !== ((name ? vorgabe.get(name)?.[Number(m[2]) - 1] : undefined) ?? 0.5);
+};
 // Bug t_bffc3708: every channel whose mixer a player sets, not erz/1..3 only (a level helper took the missing erz/5..7 fader for 0 dB). erz/4 belongs to
 // the production, erz/8 is cue only: both stay out. Fader, trim, eq, kill and filter always show (a closed fader is a value); a send (1..4) only off its default.
 const LAGE_KANAL = '(?:deck\\/[12]|pad\\/[12]|erz\\/[1-35-7])';
@@ -274,6 +299,10 @@ export class Oberflaeche {
   readonly opt: ServerOptionen;
   readonly kern: KernAnbindung;
   private http: http.Server | null = null;
+  private tabletServer: http.Server | null = null;
+  private tabletHandler: TabletHandler | null = null;
+  private tablet: { adresse: string; port: number } | null = null;
+  private readonly kopplung: Kopplung;
   private readonly stroeme = new Set<http.ServerResponse>();
   private readonly letzte = new Map<string, number>();
   private readonly pegelPuffer = new PegelPuffer();   // ungedrosselt, vor der SSE-Drossel gefüttert (GET /pegel)
@@ -524,13 +553,15 @@ export class Oberflaeche {
       unlesbar: (grund) => opt.log?.({ typ: 'unlesbar', grund }),
     });
     this.router.melde({ name: 'oberflaeche', routen: () => this.routenOberflaeche() });
+    this.kopplung = new Kopplung(opt.tablet?.kopplungPfad ?? path.join(os.homedir(), '.config', 'cypherdj', 'kopplung.json'));
+    this.router.melde({ name: 'kopplung', routen: () => this.routenKopplung() });
     // D1 S2 (Spec 3.4): Audio-Quellen über denselben Katalog wie der Browser. Spec 6.30: die Meldung bleibt zweizeilig (erst this.proj, dann melden),
     // weil stoppe() den Bereich braucht; S3 zieht seinen Anker auf diese zwei Zeilen nach.
     // Slice 3a: die Analyse-Ablage (Karten) und der Auftragsgeber der Analyse auf Abruf. Betrieb: Vorgabe $CYPHERDJ_ANALYSE bzw. ~/werkstatt/cypher-dj-analyse; eine
     // Prüfinstanz (a..i) hat keine Vorgabe und liest/schreibt die Ablage nur mit ausdrücklichem --analyse (sie berührt nie die echte).
     const analyseOrdner = opt.analyse !== undefined ? opt.analyse : analyseVorgabe(inst);
     const analysierer = analyseOrdner ? new WerkstattAnalyse({ python, cwd: REPO_PFADE.werkstatt, ablage: analyseOrdner, modul: opt.einleserModul, log: opt.log }) : null;
-    const presets = presetsBereich(this.bereichKontext(), { ...(opt.presets ?? {}), projekt: () => this.proj.zugang.offen()?.projekt ?? null });   // 1.9 (O28): built first, the project command preset_anwenden reads its store
+    const presets = presetsBereich(this.bereichKontext(), { ...(opt.presets ?? {}), projekt: () => this.proj.zugang.offen()?.projekt ?? null, graphVon: (kanal) => this.stand.graphen_geladen[kanal] });   // 1.9 (O28): built first, the project command preset_anwenden reads its store
     const pluginIndex = new PluginIndex({ python, ...opt.plugins, log: opt.log, bei: (scan) => this.bereichKontext().verteile({ a: 'plugins', f: { scan } }) });
     this.proj = projBereich(this.bereichKontext(), { pluginIndex: (id) => pluginIndex.finde(id), presetLies: (id) => presetInhaltVon(presets.speicher, id), katalog: opt.katalog ?? katalogVorgabe(opt.mediathek ?? MEDIATHEK_VORGABE), mediathek: opt.mediathek ?? MEDIATHEK_VORGABE,
       wirtOrdner: () => this.wirtBasis(), analyse: analyseOrdner, analysierer, bestand: opt.korrekturen !== undefined ? opt.korrekturen : (inst === '' ? opt.bestand : null), ...opt.proj });
@@ -543,10 +574,12 @@ export class Oberflaeche {
     this.router.melde(this.stems);
     this.router.melde(pluginsBereich(this.bereichKontext(), pluginIndex, { insertParameter: (id) => this.proj.sitzung.insertParameter(id),
       insertFenster: (id, d, q) => this.proj.sitzung.insertFenster(id, d, q),
-      geraetParameter: (id) => this.proj.sitzung.geraetParameter(id), geraetParam: (id, d, q) => this.proj.sitzung.geraetParam(id, d, q),
+      geraetParameter: (id) => this.proj.sitzung.geraetParameter(id), geraetParam: (id, d, q) => this.proj.sitzung.geraetParam(id, d, q), geraetIst: (id, n) => this.proj.sitzung.geraetIst(id, n),
       geraetFenster: (id, d, q) => this.proj.sitzung.geraetFenster(id, d, q) }));   // 1.11 task 10: /plugins, the parameter list and the window
     this.router.melde(geraeteBereich(this.bereichKontext(), opt.geraete ?? {}));   // I08: /geraete
-    this.router.melde(lernenBereich(this.bereichKontext(), opt.lernen ?? {}));   // S19: /lernen
+    const lernBereich = lernenBereich(this.bereichKontext(), opt.lernen ?? {});
+    this.router.melde(lernBereich);   // S19: /lernen
+    this.router.melde(hostlernenBereich(this.bereichKontext(), lernBereich, { ordner: lernBereich.speicher.ordner }));   // host learn: /lernen/host, host_ziele.json next to lernen.json
     this.router.melde(presets);   // 1.16: /presets (presets/area.ts), built above so that the project command preset_anwenden reads its store
     this.router.melde(kollektionenBereich(this.bereichKontext(), opt.kollektionen ?? {}));   // 1.16 rest: /kollektionen (collections/area.ts)
   }
@@ -567,6 +600,61 @@ export class Oberflaeche {
       this.http!.once('error', fehler);
       this.http!.listen(this.opt.port, '127.0.0.1', () => ok());
     });
+    await this.starteTablet();
+  }
+
+  // The second listener (task 10): only when tablet.json says so, only on the home-network address found from the interfaces, only with a pairing cookie
+  // (http/coupling.ts). Any problem leaves it off and the loopback page running; it never falls back to another address.
+  private async starteTablet(): Promise<void> {
+    const t = this.opt.tablet;
+    if (!t && instanz() !== '') return;   // a test instance never reads the live config
+    const konfigPfad = t?.konfigPfad ?? path.join(os.homedir(), '.config', 'cypherdj', 'tablet.json');
+    let an = false;
+    try { an = (JSON.parse(fs.readFileSync(konfigPfad, 'utf8')) as { an?: unknown }).an === true; } catch { /* no file: off */ }
+    if (!an) return;
+    const adresse = heimAdresse((t?.schnittstellen ?? os.networkInterfaces)());
+    if (adresse === null) { this.opt.log?.({ typ: 'tablet_verweigert', grund: 'keine_heimnetz_adresse' }); return; }
+    const port = t?.port ?? TABLET_PORT;
+    const host = `${adresse}:${port}`;
+    this.tabletHandler = baueTabletHandler({ kopplung: this.kopplung, host, json: (a, c, d) => this.json(a, c, d), log: (z) => this.opt.log?.(z),
+      logMs: t?.logMs, weiter: (q, a) => this.qs.run('andreas', () => this.anfrageInnen(q, a, `http://${host}`)) });   // a paired tablet is Andreas, whatever x-djk-quelle says
+    const handler = this.tabletHandler;
+    const server = http.createServer((q, a) => { handler.anfrage(q, a).catch((e: Error) => this.json(a, 500, { fehler: e.message })); });
+    try {
+      await new Promise<void>((ok, fehler) => { server.once('error', fehler); server.listen(port, t?.bindeAn ?? adresse, () => ok()); });
+    } catch (e) { this.opt.log?.({ typ: 'tablet_verweigert', grund: 'bind', text: (e as Error).message }); this.tabletHandler = null; return; }
+    this.tabletServer = server;
+    this.tablet = { adresse, port };
+    this.opt.log?.({ typ: 'tablet_an', adresse, port });
+  }
+
+  // Pairing, from the loopback page only (the tablet handler also refuses /kopplung): a one-time link, the list of paired devices, revoking one.
+  private routenKopplung(): Route[] {
+    const F = 'fremdePost' as const, O = 'offen' as const;
+    const vomTablet = (q: http.IncomingMessage): boolean => this.tablet !== null && q.socket.localPort === this.tablet.port;
+    const nurAndreas = (q: http.IncomingMessage, a: http.ServerResponse): boolean => {
+      if (vomTablet(q)) { this.json(a, 403, { fehler: 'nicht_am_tablet' }); return false; }
+      const host = String(q.headers.host ?? '');   // only a loopback name: a page on another name that resolves to 127.0.0.1 (rebinding) must not read the device list
+      if (host !== `127.0.0.1:${this.opt.port}` && host !== `localhost:${this.opt.port}`) { this.json(a, 421, { fehler: 'falscher_host', text: 'open the page as http://127.0.0.1:<port>/ to manage pairing' }); return false; }
+      if (this.quelle() === 'cypher') { this.json(a, 403, { fehler: 'nur_andreas', text: 'pairing a device is Andreas\'s' }); return false; }
+      return true;
+    };
+    return [
+      { methode: 'GET', pfad: '/kopplung', schutz: O, handler: (q, a) => { if (nurAndreas(q, a)) this.json(a, 200, { an: this.tablet !== null, geraete: this.kopplung.liste() }); } },
+      { methode: 'POST', pfad: '/kopplung', schutz: F, handler: (q, a) => {
+        if (!nurAndreas(q, a)) return;
+        if (this.tablet === null) return this.json(a, 409, { fehler: 'tablet_aus', text: 'tablet access is off: set {"an": true} in ~/.config/cypherdj/tablet.json and restart the page server' });
+        const l = this.kopplung.neuerLink();
+        this.json(a, 200, { link: `http://${this.tablet.adresse}:${this.tablet.port}/koppeln?t=${l.token}`, bis: l.bis, sekunden: Math.round((l.bis - Date.now()) / 1000) });
+      } },
+      { methode: 'POST', pfad: '/kopplung/loeschen', schutz: F, handler: async (q, a) => {
+        if (!nurAndreas(q, a)) return;
+        const id = (await this.koerper(q)).id;
+        if (typeof id !== 'string' || !this.kopplung.widerrufe(id)) return this.json(a, 404, { fehler: 'unbekannt' });
+        this.tabletHandler?.kappe(id);
+        this.json(a, 200, { ok: true });
+      } },
+    ];
   }
 
   private gestoppt = false;
@@ -587,6 +675,7 @@ export class Oberflaeche {
     this.vorbereiter.stoppe();
     await this.vorhoeren.ende();
     await this.kern.stoppe();
+    if (this.tabletServer) { const t = this.tabletServer; t.closeAllConnections(); await new Promise<void>((ok) => t.close(() => ok())); }
     await new Promise<void>((ok) => (this.http ? this.http.close(() => ok()) : ok()));
   }
 
@@ -713,7 +802,12 @@ export class Oberflaeche {
 
   private verteile(n: Record<string, unknown>): void {
     const text = `data: ${JSON.stringify(n)}\n\n`;
-    for (const s of this.stroeme) s.write(text);
+    for (const s of this.stroeme) {
+      // a client that does not read (a stuck tab, a paired device gone to sleep) must not make this process buffer without bound: past the cap its stream is closed;
+      // EventSource reconnects on its own and starts again with the full state
+      if (s.writableLength > STROM_MAX_BYTES || s.destroyed) { this.stroeme.delete(s); s.destroy(); continue; }
+      s.write(text);
+    }
   }
 
   // Studio S1: ein Ordner je Strom (1 Drums, 2 Bass, 3 Melodie). Strom 1 behält den alten Ordner, 2 und 3 hängen die
@@ -770,7 +864,7 @@ export class Oberflaeche {
     this.stand.graphen_geladen = neu;
     this.verteile({ a: 'graphen', f: { geladen: neu } });
   }
-  // POST /graph {kanal, name}: put a Baukasten graph on a channel or take it off (name ""). Instruments: erz/2, erz/3 through
+  // POST /graph {kanal, name, vorgaben?}: put a Baukasten graph on a channel or take it off (name ""). Instruments: erz/2, erz/3 through
   // /erz/strom (bk:<name>, "bk:" removes: the kern replays the stream's last kit/midi target). Effects: deck/1..4, fx/3, fx/4
   // through /k/kanal/graph. A kern refusal answers 200 with the quittung (like /regler); 409 only for the Cypher pre-checks.
   private async graphLaden(d: Record<string, unknown>, a: http.ServerResponse): Promise<void> {
@@ -782,6 +876,7 @@ export class Oberflaeche {
     const kanal = d.kanal, name = d.name;
     if (typeof kanal !== 'string' || !GRAPH_KANAELE.includes(kanal)) return { code: 400, j: { fehler: 'ausserhalb_bereich' } };
     if (typeof name !== 'string' || (name !== '' && !GRAPH_NAME.test(name))) return { code: 400, j: { fehler: 'name' } };
+    if (d.vorgaben !== undefined && typeof d.vorgaben !== 'boolean') return { code: 400, j: { fehler: 'vorgaben' } };
     // S18: the instrument channels come from the stream table (erz/2, erz/3, erz/5..7, pad/1, pad/2); erz/1 is the kit stream
     const erz = INSTRUMENT_KANAELE.includes(kanal);
     if (kanal === 'erz/1') return { code: 400, j: { fehler: 'kein_midi_strom', text: 'stream 1 runs a drum kit: its notes are kit indices, an instrument graph would get them as MIDI notes' } };
@@ -808,6 +903,12 @@ export class Oberflaeche {
     if (erz && name !== '' && istBkStrom(strom) && !this.erzeugerLebt(strom)) {
       return { code: 409, j: { fehler: 'kein_erzeuger', strom, text: `no erzeuger process serves stream ${strom} (${kanal}); start it with djk/start/djk-stroeme${instanz() ? ` --instanz ${instanz()}` : ''}` } };
     }
+    // Graph defaults: the rows of the knobs the graph defines go to the kern, at their `vorgabe`, in ONE batch (KernWeg.setzeRegler, like the project restore) and
+    // the load message follows only after the end status of the last row: a part carries a start beat a few ms ahead, the load message none, so without the wait the
+    // kern would hand the old rows to the new graph at attach time. Only when the graph name changes (reloading the same graph or unloading leaves every
+    // knob alone) and not when the caller sets its own rows (project restore: vorgaben false). `vorher` = the channel's current values, for the rollback below.
+    let vorher: { pfad: string; wert: number }[] = [];
+    if (name !== '' && d.vorgaben !== false && name !== this.stand.graphen_geladen[kanal] && this.kern.zustand === 'verbunden') vorher = await this.schiebeVorgaben(kanal, name, quelle);
     const id = Number(++this.id);
     if (erz) this.kern.sende('/erz/strom', { id, quelle, strom, ziel: `bk:${name}`, kanal });
     else this.kern.sende('/k/kanal/graph', { id, quelle, kanal, name });
@@ -817,8 +918,30 @@ export class Oberflaeche {
       const neu = { ...this.stand.graphen_geladen };
       if (name === '') delete neu[kanal]; else neu[kanal] = name;
       this.setzeGraphenGeladen(neu);
+    } else if (quittung && GRAPH_ABGELEHNT.includes(quittung.status) && vorher.length) {
+      // an explicit refusal: the running graph keeps its own values, not the defaults of the graph that was refused (no answer at all keeps the pushed rows:
+      // the load may still happen, the page's graph list shows the truth)
+      await this.kernWeg().setzeRegler(vorher.map((z) => ({ pfad: z.pfad, wert: z.wert })), quelle === 'cypher' ? 'cypher' : 'andreas');   // waits for the end status as well
     }
     return { code: 200, j: { ok: true, kanal, name, quittung, ...(warnung ? { warnung } : {}) } };
+  }
+  // The `vorgabe` rows of graph `name` on `kanal` as one batch, waited for until the end status of every row; returns the channel's current values of these rows
+  // (0.5 = the kern's table default where the page has no report yet), empty when nothing was sent.
+  private async schiebeVorgaben(kanal: string, name: string, quelle: string): Promise<{ pfad: string; wert: number }[]> {
+    const b = reglerVonGraph(name);
+    if (!b) return [];
+    const neu = Object.entries(b).map(([nr, r]) => ({ pfad: `${kanal}/bk/${nr}`, wert: r.vorgabe })).filter((z) => PFAD.test(z.pfad));
+    if (!neu.length) return [];
+    const alt = neu.map((z) => ({ pfad: z.pfad, wert: this.stand.regler[z.pfad] ?? 0.5 }));
+    await this.kernWeg().setzeRegler(neu, quelle === 'cypher' ? 'cypher' : 'andreas');
+    return alt;
+  }
+  private kernWegInstanz: KernWeg | null = null;
+  private kernWeg(): KernWeg {
+    // KernWeg only reads the clock (beat, bpm) of its lage: this server keeps it in kern.uhr
+    const uhr = this;
+    this.kernWegInstanz ??= new KernWeg(this.bereichKontext(), { get uhr() { return (uhr.kern.uhr as { beat: number; bpm: number } | null) ?? null; } } as unknown as KernLage);
+    return this.kernWegInstanz;
   }
   // Plan Hand T7 (Review M3): Cyphers FX nur bei AUTO an und ohne Stop Cypher (der Kern nimmt /k/fx auch gestoppt an)
   private fxRiegel(a: http.ServerResponse): boolean {
@@ -1627,7 +1750,7 @@ export class Oberflaeche {
   private async klang(d: Record<string, unknown>, a: http.ServerResponse): Promise<void> {
     const aktion = d.aktion;
     const lesend = aktion === 'zeige' || aktion === 'liste';
-    if (typeof aktion !== 'string' || !['lade', 'setze', 'fahre', 'zeige', 'speichere', 'hoere', 'liste', 'param', 'params'].includes(aktion)) return this.json(a, 400, { fehler: 'aktion' });
+    if (typeof aktion !== 'string' || !['lade', 'setze', 'fahre', 'zeige', 'speichere', 'hoere', 'liste', 'param', 'params', 'ist', 'fenster'].includes(aktion)) return this.json(a, 400, { fehler: 'aktion' });
     const gruppe = d.gruppe;
     if (aktion !== 'liste' && (typeof gruppe !== 'string' || !KLANG_GRUPPEN.includes(gruppe))) return this.json(a, 400, { fehler: 'gruppe', text: 'gruppe must be bass or melodie' });
     // Werte mit - vorne läsen djk-klang als Schalter (argparse): abweisen, bevor sie in argv landen
@@ -1659,12 +1782,25 @@ export class Oberflaeche {
       } else if (d.dauer !== undefined) return this.json(a, 400, { fehler: 'dauer', text: 'dauer needs note' });
     } else if (aktion === 'param') {   // Baukasten S2: ein Regler eines VST3-Wirts (ParamSteuerung), normiert 0..1, direkt an den Socket wie fahre
       const n = text(d.name), w = zahl(d.wert);
-      // nur die acht Knobs von Cypher Modular, nicht Volume oder andere Plugin-Parameter (Review F3)
-      if (n === null || !/^Knob [1-8]$/.test(n)) return this.json(a, 400, { fehler: 'name', text: 'name: Knob 1..8' });
+      // die 32 Knobs von Cypher Modular, nicht Volume oder andere Plugin-Parameter (Review F3); die sieben RB-338-Namen nur, wenn der Wirt dieser Gruppe der RB-338 ist
+      const rbWirt = n !== null && RB338_PARAM_NAMEN.has(n) && (this.leseWirtMeldungen()[gruppe as string] as { art?: unknown } | null)?.art === 'vst3:rb338';
+      if (n === null || !(rbWirt || /^Knob ([1-9]|[1-5][0-9]|6[0-4])$/.test(n))) return this.json(a, 400, { fehler: 'name', text: 'name: Knob 1..64 (or an RB-338 parameter on an RB-338 host)' });
       if (w === null || w < 0 || w > 1) return this.json(a, 400, { fehler: 'wert', text: 'wert: number 0..1 (normalized)' });
       if (this.quelle() === 'cypher') { const sperre = this.klangSperre(gruppe as string); if (sperre) return this.json(a, 409, sperre); }
       const r = await wirtRuf(this.wirtSock(gruppe as string), { befehl: 'param', name: n, wert: w });
       return r.ok ? this.json(a, 200, { ok: true }) : this.json(a, 409, { fehler: 'wirt', gruppe, text: String(r.fehler ?? 'wirt refused') });
+    } else if (aktion === 'fenster') {   // plan 2026-11-11 task 9: show or hide the plug-in's own editor on the host's display (Andreas' button; not Cypher's)
+      if (this.quelle() === 'cypher') return this.json(a, 403, { fehler: 'nur_andreas', text: 'the Surge window is Andreas\'s' });
+      if (typeof d.an !== 'boolean') return this.json(a, 400, { fehler: 'an', text: 'an: true or false' });
+      const r = await wirtRuf(this.wirtSock(gruppe as string), { befehl: 'fenster', an: d.an });
+      return r.ok ? this.json(a, 200, { ok: true, fenster: r.fenster === true, ...(typeof r.grund === 'string' ? { grund: r.grund } : {}) }) : this.json(a, 409, { fehler: 'wirt', gruppe, text: String(r.fehler ?? 'wirt refused') });
+    } else if (aktion === 'ist') {   // front panels: the display values a Surge host plays now (read-only like params: no klangSperre); {parameter: [name, ...]} 1..64 fahrbar names
+      const namen = d.parameter;
+      if (!Array.isArray(namen) || namen.length < 1 || namen.length > 64 || !namen.every((n) => typeof n === 'string')) return this.json(a, 400, { fehler: 'parameter', text: 'parameter: a list of 1..64 Surge parameter names' });
+      const unbekannt = (namen as string[]).find((n) => !this.fahrbar.has(n));
+      if (unbekannt !== undefined) return this.json(a, 400, { fehler: 'nicht_fahrbar', parameter: unbekannt, text: `${unbekannt} is not a continuous Surge parameter` });
+      const r = await wirtRuf(this.wirtSock(gruppe as string), { befehl: 'ist', namen });
+      return r.ok ? this.json(a, 200, { ok: true, werte: r.werte ?? {} }) : this.json(a, 409, { fehler: 'wirt', gruppe, text: String(r.fehler ?? 'wirt refused') });
     } else if (aktion === 'params') {   // Baukasten S2: alle Regler mit Ist-Wert, dazu die Knob-Namen aus dem Graphen (lesend, ohne Riegel)
       const r = await wirtRuf(this.wirtSock(gruppe as string), { befehl: 'params' });
       if (!r.ok) return this.json(a, 409, { fehler: 'wirt', gruppe, text: String(r.fehler ?? 'wirt refused') });
@@ -1705,7 +1841,7 @@ export class Oberflaeche {
     try {
       const g = JSON.parse(fs.readFileSync(path.join(this.opt.baukastenOrdner ?? baukastenOrdnerVorgabe(), `baukasten-${gruppe}.json`), 'utf8'));
       for (const [nr, name] of Object.entries(g?.regler_namen ?? {})) {
-        if (/^[1-8]$/.test(nr) && typeof name === 'string' && name.length > 0 && name.length <= 40) namen[`Knob ${nr}`] = name;
+        if (/^([1-9]|[1-5][0-9]|6[0-4])$/.test(nr) && typeof name === 'string' && name.length > 0 && name.length <= 40) namen[`Knob ${nr}`] = name;
       }
     } catch { /* keine Datei oder kein JSON: keine Namen */ }
     return namen;
@@ -1995,8 +2131,9 @@ export class Oberflaeche {
         beats_bis_ende: z.beats_bis_ende === Infinity ? null : z.beats_bis_ende, loop: l, offen: kanalOffen(this.stand.regler, `deck/${n}`),
         hoerschein: hs ? { urteil: hs.urteil, gueltig_bis_takt: Math.floor(hs.gueltig_bis_beat / 4) + 1, gruende: hs.gruende } : null };
     });
+    const bkVorgabe = new Map<string, number[] | null>();
     const regler: Record<string, number | null> = Object.fromEntries(Object.entries(this.stand.regler)
-      .filter(([p, w]) => LAGE_KANALZUG.test(p) || /^(xfader|master\/pegel)$/.test(p) || (p in LAGE_ABWEICHEND && w !== LAGE_ABWEICHEND[p]) || (LAGE_SEND.test(p) && w !== -200) || kompAbweichend(p, w) || bkAbweichend(p, w) || werkzeugAbweichend(p, w))   // erst abweichend von der Vorgabe sichtbar (K2: Kleber, Duck, Hall-Rückweg und -Send)ar
+      .filter(([p, w]) => LAGE_KANALZUG.test(p) || /^(xfader|master\/pegel)$/.test(p) || (p in LAGE_ABWEICHEND && w !== LAGE_ABWEICHEND[p]) || (LAGE_SEND.test(p) && w !== -200) || kompAbweichend(p, w) || bkAbweichend(p, w, this.stand.graphen_geladen, bkVorgabe) || werkzeugAbweichend(p, w))   // erst abweichend von der Vorgabe sichtbar (K2: Kleber, Duck, Hall-Rückweg und -Send)ar
       .map(([p, w]) => [p, p === 'master/kleber' || p === 'color/param' || p.includes('/bk/') || WERKZEUG_PFAD.test(p) ? Math.round(w * 100) / 100 : Math.round(w * 10) / 10]));
     // Keylock 3b (Prüfung MINOR 4): der Knopf steht immer da, 1 an, 0 aus, null unbekannt (noch keine Meldung vom Kern; der Kern
     // schickt sie jedem neuen Abonnenten beim ersten /k/hallo)
@@ -2033,9 +2170,19 @@ export class Oberflaeche {
       kiGestoppt: () => this.kiGestoppt,
       verteile: (ereignis) => this.verteile(ereignis),
       log: (zeile) => { this.opt.log?.(zeile); },
+      host: {   // host learn: the wirt sockets of the instrument hosts and the control rows
+        art: (gruppe) => { const a = (this.leseWirtMeldungen()[gruppe] as { art?: unknown } | null)?.art; return typeof a === 'string' ? a : null; },
+        ruf: (gruppe, befehl) => wirtRuf(this.wirtSock(gruppe), befehl),
+        setzeRegler: async (pfad, nach) => {   // the path of POST /regler, in the running request (source andreas)
+          let code = 0;
+          const stub = { writeHead: (c: number) => { code = c; }, end: () => undefined } as unknown as http.ServerResponse;
+          await this.regler({ pfad, nach, ab: 'jetzt' }, stub);
+          return code === 200;
+        },
+      },
       baukasten: {   // S17: the proj Bereich restores and captures graphs through the same checks as POST /graph
         geladen: () => ({ ...this.stand.graphen_geladen }),
-        setzeGraph: (kanal, name, quelle) => this.graphSetzen({ kanal, name }, quelle),
+        setzeGraph: (kanal, name, quelle, opt) => this.graphSetzen({ kanal, name, ...(opt?.vorgaben === false ? { vorgaben: false } : {}) }, quelle),
         autoAus: (kanal) => { const st = stromVonKanal(kanal); return INSTRUMENT_KANAELE.includes(kanal) && typeof st === 'number' && !leseMusterStand(this.musterOrdner(st)).autonom; },   // S17+S18: stream from the shared table (pad/N is stream 8+N)
         graphHash: (name) => graphHash(name),
         kernDa: () => this.kern.zustand === 'verbunden',   // S17: without a kern the restore sends nothing and answers kein_kern at once
@@ -2046,11 +2193,11 @@ export class Oberflaeche {
   private anfrage(q: http.IncomingMessage, a: http.ServerResponse): Promise<void> {
     return this.qs.run(quelleAusKopf(q), () => this.anfrageInnen(q, a));
   }
-  private async anfrageInnen(q: http.IncomingMessage, a: http.ServerResponse): Promise<void> {
+  private async anfrageInnen(q: http.IncomingMessage, a: http.ServerResponse, herkunft?: string): Promise<void> {
     const url = new URL(q.url ?? '/', 'http://127.0.0.1');
     const r = this.router.finde(q.method ?? '', url.pathname);
     if (r) {
-      if (r.schutz === 'fremdePost' && q.method === 'POST' && postAbgewiesen(q, a, this.opt.port)) return;
+      if (r.schutz === 'fremdePost' && q.method === 'POST' && postAbgewiesen(q, a, this.opt.port, herkunft)) return;
       return await r.handler(q, a, url);
     }
     if (q.method === 'GET') return this.datei(url.pathname, a);
@@ -2150,6 +2297,20 @@ export class Oberflaeche {
       { methode: 'GET', pfad: '/fx', schutz: O, handler: (_q, a) => this.json(a, 200, this.stand.fx) },   // [FX1, FX2] oder null je Einheit
       { methode: 'GET', pfad: '/fx/zuweisung', schutz: O, handler: (_q, a) => this.json(a, 200, this.stand.fxZuweisung) },
       { methode: 'GET', pfad: '/graphen', schutz: O, handler: (_q, a) => this.json(a, 200, { ...listeGraphen(), geladen: this.stand.graphen_geladen, geladen_geprueft_vor_ms: this.graphenVomKernMs === null ? null : Date.now() - this.graphenVomKernMs }) },   // Baukasten S12/S16
+      { methode: 'GET', pfad: '/graphen/panel', schutz: O, handler: (_q, a, url) => {   // front panel of one graph (sidecar panels/<name>.json) plus its knob ranges
+        const r = ladePanel(url.searchParams.get('name') ?? '');
+        if (!r) return this.json(a, 404, { fehler: 'unbekannt' });
+        if (!r.panel) { const g = geraetePanel({ art: 'bk', graph: r.name }); if (g.panel) r.panel = g.panel; }   // no file or a refused one (fehler keeps its problems): the automatic panel
+        return this.json(a, 200, r);
+      } },
+      { methode: 'GET', pfad: '/geraete/panel', schutz: O, handler: (_q, a, url) => {   // panel and parameter table of a device: ?art=bk&graph=<name> | ?art=rb338 | ?art=surge
+        const art = url.searchParams.get('art') ?? '';
+        if (art !== 'bk' && art !== 'rb338' && art !== 'surge') return this.json(a, 400, { fehler: 'art' });
+        if (art !== 'bk') return this.json(a, 200, geraetePanel({ art }));
+        const graph = url.searchParams.get('graph') ?? '';
+        if (!findeGraph(graph)) return this.json(a, 404, { fehler: 'unbekannt' });
+        return this.json(a, 200, geraetePanel({ art: 'bk', graph }));
+      } },
       { methode: 'POST', pfad: '/graph', schutz: F, handler: async (q, a) => this.graphLaden(await this.koerper(q), a) },
       { methode: 'GET', pfad: '/fx/routing', schutz: O, handler: (_q, a) => this.json(a, 200, { routing: this.stand.fxRouting }) },
       { methode: 'POST', pfad: '/fx/routing', schutz: F, handler: async (q, a) => {   // Ohr T18: Andreas' Taste (Insert oder Post Fader), nie Cyphers
@@ -3005,7 +3166,8 @@ export class Oberflaeche {
   }
 
   private datei(pfad: string, a: http.ServerResponse): void {
-    const rel = pfad === '/' ? 'index.html' : decodeURIComponent(pfad).replace(/^\/+/, '');
+    let rel: string;
+    try { rel = pfad === '/' ? 'index.html' : decodeURIComponent(pfad).replace(/^\/+/, ''); } catch { return this.json(a, 400, { fehler: 'pfad', text: 'the path is not valid' }); }
     const voll = path.resolve(OEFFENTLICH, rel);
     if (!voll.startsWith(OEFFENTLICH + path.sep) || !fs.existsSync(voll) || !fs.statSync(voll).isFile()) {
       return this.json(a, 404, { fehler: 'nicht_gefunden' });

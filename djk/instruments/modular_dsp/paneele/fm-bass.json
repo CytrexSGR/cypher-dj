@@ -1,0 +1,33 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "fm-bass"},
+  "title": "FM Bass",
+  "akzent": "orange",
+  "layout": {"rows": [
+    ["ops", "sound", "env", "out"]
+  ]},
+  "sections": [
+    { "id": "ops", "title": "OPERATORS", "cols": 4, "controls": [
+      {"id": "alg", "type": "label", "span": 4, "text": "Algorithm 2: 4>3>1, 2>1, 4 operators"},
+      {"id": "op1", "type": "label", "span": 4, "text": "Op1 car x1  100%  D3s S50%"},
+      {"id": "op2", "type": "label", "span": 4, "text": "Op2 mod x1  22%  D0.35s S15%"},
+      {"id": "op3", "type": "label", "span": 4, "text": "Op3 mod x2  8%  D0.2s S0%"},
+      {"id": "op4", "type": "label", "span": 4, "text": "Op4 mod x1 +3ct  12%  D0.5s S30%"},
+      {"id": "opn", "type": "label", "span": 4, "text": "Level, decay D and sustain S at Decay x1"}
+    ]},
+    { "id": "sound", "title": "SOUND", "cols": 3, "controls": [
+      {"id": "hell", "type": "knob", "label": "Brightness", "bind": {"param": "k1"}, "format": "raw", "unit": "x", "default": 0.5},
+      {"id": "rueck", "type": "knob", "label": "Feedback", "bind": {"param": "k2"}, "format": "percent", "default": 0.5},
+      {"id": "sn", "type": "label", "span": 3, "text": "Brightness scales modulation"}
+    ]},
+    { "id": "env", "title": "OP 1 ENVELOPE", "cols": 3, "controls": [
+      {"id": "hue", "type": "huelle", "span": 3, "label": "Operator 1 at Decay x1", "of": {"a": 0.001, "d": 3, "s": 0.5, "r": 0.08}},
+      {"id": "decay", "type": "knob", "label": "Decay", "span": 3, "bind": {"param": "k3"}, "format": "raw", "unit": "x", "default": 0.5},
+      {"id": "en", "type": "label", "span": 3, "text": "Decay scales D and R of every operator"}
+    ]},
+    { "id": "out", "title": "OUT", "cols": 3, "controls": [
+      {"id": "drive", "type": "knob", "label": "Drive", "span": 3, "bind": {"param": "k4"}, "format": "db", "default": 0.5},
+      {"id": "on", "type": "label", "span": 3, "text": "Saturation after the FM, 2 voices"}
+    ]}
+  ]
+}

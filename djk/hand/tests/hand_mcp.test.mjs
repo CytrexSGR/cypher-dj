@@ -359,23 +359,27 @@ test('djk-hand Keylock 3: tempo nennt den globalen Knopf keylock, regler den Pfa
 });
 
 // S5r Task 4: the tool description names the graph knob paths and passes them through to POST /regler unchanged
-test('djk-hand S5r: regler names <kanal>/bk/1..8 and sends the path through to /regler', async (t) => {
+test('djk-hand S5r: regler names <kanal>/bk/1..64 and sends the path through to /regler', async (t) => {
   const { c, gesehen } = await aufbau(t, (m, u) => (u === '/regler' ? [200, { ok: true, felder: { id: 1 }, quittung: { status: 5, grund: '' } }] : undefined));
   const regler = (await c.listTools()).tools.find((x) => x.name === 'regler').description;
-  assert.match(regler, /<kanal>\/bk\/1\.\.8 \(deck\/1\.\.4, erz\/1\|2\|3\|5\|6\|7, pad\/1\|2; 0\.\.1, default 0\.5/);
+  assert.match(regler, /<kanal>\/bk\/1\.\.64 \(deck\/1\.\.4, erz\/1\|2\|3\|5\|6\|7, pad\/1\|2; 0\.\.1, start value: the graph's own default, 0\.5 where it has none/);
   await c.callTool({ name: 'regler', arguments: { pfad: 'deck/1/bk/3', nach: 0.8 } });
   assert.deepEqual(gesehen.filter((g) => g.pfad === '/regler').map((g) => [g.koerper.pfad, g.koerper.nach]), [['deck/1/bk/3', 0.8]]);
+  await c.callTool({ name: 'regler', arguments: { pfad: 'erz/5/bk/32', nach: 0.1 } });
+  await c.callTool({ name: 'regler', arguments: { pfad: 'deck/2/bk/9', nach: 0.9 } });
+  await c.callTool({ name: 'regler', arguments: { pfad: 'erz/6/bk/64', nach: 0.64 } });
+  assert.deepEqual(gesehen.filter((g) => g.pfad === '/regler').map((g) => [g.koerper.pfad, g.koerper.nach]).slice(1), [['erz/5/bk/32', 0.1], ['deck/2/bk/9', 0.9], ['erz/6/bk/64', 0.64]], 'knobs 9, 32 and 64 pass through unchanged');
 });
 
-// S14: the send-return knobs fx/3/bk/1..8, fx/4/bk/1..8 are named in the tool descriptions and pass through to /regler
-test('djk-hand S14: regler names fx/3/bk/1..8 and passes fx/4/bk/1 through; graph no longer says the knobs are fixed', async (t) => {
+// S14: the send-return knobs fx/3/bk/1..32, fx/4/bk/1..32 are named in the tool descriptions and pass through to /regler
+test('djk-hand S14: regler names fx/3/bk/1..64 and passes fx/4/bk/1 through; graph no longer says the knobs are fixed', async (t) => {
   const { c, gesehen } = await aufbau(t, (m, u) => (u === '/regler' ? [200, { ok: true, felder: { id: 1 }, quittung: { status: 5, grund: '' } }] : undefined));
   const tools = (await c.listTools()).tools;
   const regler = tools.find((x) => x.name === 'regler').description;
   const graph = tools.find((x) => x.name === 'graph').description;
-  assert.match(regler, /fx\/3\/bk\/1\.\.8, fx\/4\/bk\/1\.\.8/);
+  assert.match(regler, /fx\/3\/bk\/1\.\.64, fx\/4\/bk\/1\.\.64/);
   assert.doesNotMatch(graph, /fixed at 0\.5/);
-  assert.match(graph, /fx\/3\/bk\/1\.\.8/);
+  assert.match(graph, /fx\/3\/bk\/1\.\.64/);
   await c.callTool({ name: 'regler', arguments: { pfad: 'fx/4/bk/1', nach: 0.3 } });
   assert.deepEqual(gesehen.filter((g) => g.pfad === '/regler').map((g) => [g.koerper.pfad, g.koerper.nach]), [['fx/4/bk/1', 0.3]]);
 });

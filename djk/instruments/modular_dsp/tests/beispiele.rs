@@ -25,7 +25,7 @@ fn akkord(j: &str, regler: &[(usize, f32)]) -> Vec<f32> {
 fn beide_laden_mit_namen_fuer_alle_regler() {
     for j in [PAD, PAD_HALL, PAD_ECHO, PAD_DYN, LEAD] {
         let p = lade(j);
-        assert_eq!(p.regler_namen.iter().map(|(n, _)| *n).collect::<Vec<_>>(), (1..=REGLER).collect::<Vec<_>>(), "{}", p.name);
+        assert_eq!(p.regler_namen.iter().map(|(n, _)| *n).collect::<Vec<_>>(), (1..=8).collect::<Vec<_>>(), "{}", p.name);
     }
     assert_eq!(lade(PAD).stimmen, 8);
     assert_eq!(lade(LEAD).stimmen, 1);

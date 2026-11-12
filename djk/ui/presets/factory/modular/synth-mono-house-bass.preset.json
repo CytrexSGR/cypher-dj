@@ -1,0 +1,66 @@
+{
+ "schema": 1,
+ "name": "Mono House Bass",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "synth-mono",
+ "werte": {
+  "knob1": 0.307,
+  "knob2": 0.4,
+  "knob3": 0.548,
+  "knob4": 0.335,
+  "knob5": 0.5,
+  "knob6": 0.436,
+  "knob7": 0.333,
+  "knob8": 0.3,
+  "knob9": 0.5,
+  "knob10": 0.0,
+  "knob11": 0.54,
+  "knob12": 0.75,
+  "knob13": 0.5,
+  "knob14": 0.5,
+  "knob15": 0.5,
+  "knob16": 0.333,
+  "knob17": 0.5,
+  "knob18": 0.55,
+  "knob19": 0.5,
+  "knob20": 0.553,
+  "knob21": 0.45,
+  "knob22": 0.463,
+  "knob23": 0.12,
+  "knob24": 0.5,
+  "knob25": 0.5,
+  "knob26": 0.0,
+  "knob27": 0.0,
+  "knob28": 0.0,
+  "knob29": 0.5,
+  "knob30": 0.5,
+  "knob31": 0.5,
+  "knob32": 0.25
+ },
+ "beschreibung": {
+  "art": "bass",
+  "unterart": "analog",
+  "charakter": [
+   "warm",
+   "punchy",
+   "smooth"
+  ],
+  "genre": [
+   "house",
+   "deep_house"
+  ],
+  "einsatz": [
+   "drop",
+   "intro"
+  ],
+  "energie": 3,
+  "text": "Plucky off-beat house bass: ladder, saw plus pulse an octave up, square sub, fast filter pluck that falls to a dark sustain."
+ },
+ "tags": [
+  "synth-mono"
+ ],
+ "notiz": "Measured by level and pitch on render, not yet heard (2026-11-11).",
+ "angelegt": "2026-11-11T00:00:00.000Z",
+ "geaendert": "2026-11-11T00:00:00.000Z"
+}

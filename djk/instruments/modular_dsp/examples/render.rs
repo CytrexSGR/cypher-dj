@@ -1,6 +1,6 @@
 //! Hörprobe ohne Studio: `cargo run --release -p baukasten_dsp --example render -- GRAPH.json AUS.wav [N=WEG …] [~N …]`
 //! Spielt A2, C#3, E3, A3 nacheinander (je 0,5 s gehalten), dann den Akkord 1,5 s, dann 1,5 s Ausklang. 48 kHz, 16 bit, stereo.
-//! `N=WEG` stellt Regler N (1..8) fest auf WEG (0..1), `~N` fährt Regler N über die ganze Dauer von 0 nach 1.
+//! `N=WEG` stellt Regler N (1..32) fest auf WEG (0..1), `~N` fährt Regler N über die ganze Dauer von 0 nach 1.
 //! `--bpm N` (S9) sets the host tempo through `setze_takt` (default 120), so beat-synced `lfo`/`delay` blocks run at N BPM.
 //! `--eingang IN.wav` (S7) speist den Graphen mit einer Datei (48 kHz, 16 bit oder float, mono oder stereo; mono geht auf
 //! beide Seiten) über `setze_eingang`, spielt keine Noten und rendert Länge der Datei + 1,5 s Ausklang. Nur so rendern
@@ -75,7 +75,7 @@ fn main() {
                 .unwrap_or_else(|| { eprintln!("--bpm needs a positive number"); std::process::exit(2) });
             continue;
         }
-        let falsch = || -> ! { eprintln!("knob argument {r:?}: N=VALUE (N 1..8, VALUE 0..1) or ~N"); std::process::exit(2) };
+        let falsch = || -> ! { eprintln!("knob argument {r:?}: N=VALUE (N 1..32, VALUE 0..1) or ~N"); std::process::exit(2) };
         if let Some(n) = r.strip_prefix('~') {
             fahren.push(n.parse().unwrap_or_else(|_| falsch()));
         } else {

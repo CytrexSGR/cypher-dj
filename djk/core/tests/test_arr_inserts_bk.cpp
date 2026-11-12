@@ -196,11 +196,12 @@ int main() {
     PRUEF(cdj::ARR_INS_ALLE <= 64);
     PRUEF(cdj::ins_global(ArrInsArt::bk, 0) == cdj::INS_G_BK0 && cdj::ins_global(ArrInsArt::bk, 7) == cdj::INS_G_HOST0 - 1 && cdj::ins_global(ArrInsArt::bk, 8) == -1);
     PRUEF(cdj::ins_art(cdj::INS_G_BK0) == ArrInsArt::bk && cdj::ins_art(cdj::INS_G_HOST0 - 1) == ArrInsArt::bk && cdj::ins_art(cdj::INS_G_HOST0) == ArrInsArt::host);
-    PRUEF(cdj::INS_BK_PARAM == 9);
+    PRUEF(cdj::INS_BK_PARAM == 65);   // an, k1..k64
+    PRUEF(cdj::INS_PARAM_MAX >= cdj::INS_BK_PARAM);   // the stage arrays hold every parameter of the widest stage
     cypherdj::stellwerk::ReglerTabelle tab;
     int n = 0;
     for (int s = 1; s <= 8; ++s)
-      for (int k = 0; k <= 8; ++k) {
+      for (int k = 0; k <= 64; ++k) {
         char p[48];
         if (k == 0) std::snprintf(p, sizeof p, "ins/bk/%d/an", s);
         else std::snprintf(p, sizeof p, "ins/bk/%d/k%d", s, k);
@@ -212,8 +213,8 @@ int main() {
         PRUEF(tab.def(r).vorgabe == (k == 0 ? 0.0f : 0.5f));
         PRUEF(tab.def(r).min == 0.0f && tab.def(r).max == 1.0f);
       }
-    PRUEF(n == 72);
-    PRUEF(tab.suche("ins/bk/9/an") < 0 && tab.suche("ins/bk/1/k9") < 0);
+    PRUEF(n == 520);   // 8 stages x (an + k1..k64)
+    PRUEF(tab.suche("ins/bk/9/an") < 0 && tab.suche("ins/bk/1/k65") < 0 && tab.suche("ins/bk/1/k0") < 0 && tab.suche("ins/bk/1/k01") < 0 && tab.suche("ins/bk/1/k033") < 0 && tab.suche("ins/bk/1/k640") < 0);
     PRUEF(cdj::ins_latenz(ArrInsArt::bk) == 0);   // the kind has no fixed latency: the stage carries the graph's
     ArrStufe s;
     s.art = ArrInsArt::bk;
@@ -263,6 +264,77 @@ int main() {
         PRUEF_NAH(g, soll, 0.03);
       }
       PRUEF(t->pml[V + 2 * 22500] > t->pml[V + 22500] * 1.5f);   // it moves
+    }
+  }
+
+  {  // 3c bk_stufe_65_parameter: 64-knob widening. All 65 parameters of a stage (an, k1..k64) are set through the table rows and read back from the stage
+     // array sized by INS_PARAM_MAX; the neighbour stages (slot below and above) keep their defaults, so nothing overflows into them.
+    Graph k(G_KNOPF, 1);
+    auto t = std::make_unique<Treiber>();
+    setze(*t, "ins/bk/1/an", 1.0f);
+    for (int n = 1; n <= 64; ++n) setze(*t, "ins/bk/1/k" + std::to_string(n), 0.01f + 0.0125f * static_cast<float>(n));   // 0.0225 .. 0.81, every one distinct
+    setze(*t, "ins/bk/2/k64", 0.123f);   // the first row of the next stage after the last row of stage 1
+    spiele(*t, spur1(&gleich->a, {k.stufe(0)}), 30000);
+    int falsch = 0;
+    for (int n = 1; n <= 64; ++n) falsch += t->arr.inserts().wirksam(cdj::INS_G_BK0, n) != 0.01f + 0.0125f * static_cast<float>(n);
+    std::printf("3c: %d of 64 knobs of stage 1 read back wrong; stage 2 knob 64 = %.4f (stage 2 is not in a chain: not applied)\n", falsch, t->arr.inserts().wirksam(cdj::INS_G_BK0 + 1, 64));
+    PRUEF(falsch == 0);
+    PRUEF(t->arr.inserts().wirksam(cdj::INS_G_BK0, 65) == 0.0f);   // one past the last parameter: refused, not read from the next row
+    PRUEF(t->arr.inserts().wirksam(cdj::INS_G_BK0 - 1, 64) == 0.0f);   // the stage below (the last utility stage) is untouched
+  }
+
+  {  // 3b bk_knopf_32: 32-knob widening. A stage graph that reads knob 9, 17 or 32 follows the row ins/bk/1/k<n> and a chain lane on parameter n
+     // (index n of the stage kind, INS_BK_PARAM = 33); a project of the old format sets an, k1..k8 only: the other rows keep their table default 0.5
+    for (const int kn : {9, 17, 32, 33, 48, 64}) {   // 33..64: 64-knob widening, they need hall_ffi with REGLER 64
+      std::string js = G_KNOPF;
+      const size_t pos = js.find("\"nr\":1,");
+      PRUEF(pos != std::string::npos);
+      js.replace(pos, 7, "\"nr\":" + std::to_string(kn) + ",");
+      Graph k(js, 1);
+      const std::string zeile = "ins/bk/1/k" + std::to_string(kn);
+      const std::string nachbar = "ins/bk/1/k" + std::to_string((kn == 32 || kn == 64) ? kn - 1 : kn + 1);
+      double g_alt = 0.0, g_neu = 0.0, g_nachbar = 0.0;
+      {   // old project: an and k1..k8 only (here: an and k1)
+        auto t = std::make_unique<Treiber>();
+        setze(*t, "ins/bk/1/an", 1.0f);
+        setze(*t, "ins/bk/1/k1", 0.3f);
+        spiele(*t, spur1(&gleich->a, {k.stufe(0)}), 30000);
+        g_alt = t->pml[29000] / (0.5f * PAN);
+      }
+      {   // the row of the knob
+        auto t = std::make_unique<Treiber>();
+        setze(*t, "ins/bk/1/an", 1.0f);
+        setze(*t, zeile, 0.25f);
+        spiele(*t, spur1(&gleich->a, {k.stufe(0)}), 30000);
+        g_neu = t->pml[29000] / (0.5f * PAN);
+      }
+      {   // the neighbour row does not move the graph
+        auto t = std::make_unique<Treiber>();
+        setze(*t, "ins/bk/1/an", 1.0f);
+        setze(*t, nachbar, 0.0f);
+        spiele(*t, spur1(&gleich->a, {k.stufe(0)}), 30000);
+        g_nachbar = t->pml[29000] / (0.5f * PAN);
+      }
+      std::printf("3b: knob %d: old project (row at default 0.5) gain %.4f (expected 1.0), row 0.25 -> %.4f (expected 0.5), neighbour row 0 -> %.4f (expected 1.0)\n", kn, g_alt, g_neu, g_nachbar);
+      PRUEF_NAH(g_alt, 1.0, 0.005);
+      PRUEF_NAH(g_neu, 0.5, 0.005);
+      PRUEF_NAH(g_nachbar, 1.0, 0.005);
+      {   // a chain lane on parameter kn: from 0 to 1 over four beats
+        auto t = std::make_unique<Treiber>();
+        setze(*t, "ins/bk/1/an", 1.0f);
+        Bau b(1);
+        b.spur(1, ArrArt::audio).clip(1, "c1", 0.0, 16.0, &gleich->a);
+        b.s->kette[0].n = 1;
+        b.s->kette[0].st[0] = k.stufe(0);
+        b.kette_lane(0, 0, kn, {{0.0, 0.0f, 0}, {4.0, 1.0f, 0}});
+        spiele(*t, b.fertig(), 4 * 22500);
+        for (const double beat : {1.0, 3.0}) {
+          const int64_t sm = V + static_cast<int64_t>(beat * 22500.0);
+          const double g = t->pml[sm] / (0.5f * PAN), soll = 2.0 * beat / 4.0;
+          std::printf("3b: knob %d lane at beat %.1f: gain %.4f (expected %.4f)\n", kn, beat, g, soll);
+          PRUEF_NAH(g, soll, 0.03);
+        }
+      }
     }
   }
 

@@ -34,7 +34,7 @@ import { listeGraphen, type GraphEintrag } from '../graphs.ts';
 // register: the committed factory register checked by /presets/register/pruefen (default presets/register.json)
 // projekt: the open project (1.16 rest, apply plan and von_ziel; absent = no project); graphen: the Baukasten graphs (default graphs.ts)
 export interface PresetOptionen extends SpeicherOptionen {
-  speicher?: PresetSpeicher; register?: string; projekt?: () => Projekt | null; graphen?: () => readonly Pick<GraphEintrag, 'name' | 'art'>[];
+  speicher?: PresetSpeicher; register?: string; projekt?: () => Projekt | null; graphVon?: (kanal: string) => string | undefined; graphen?: () => readonly Pick<GraphEintrag, 'name' | 'art'>[];
 }
 
 // 1.16 rest (S3): the device catalogue of the PRODUCTION browser. Instruments always make a new track (spur_neu); effects become a
@@ -132,7 +132,7 @@ export function presetsBereich(ctx: Ctx, opt: PresetOptionen = {}): Bereich & { 
         if (typeof d.id !== 'string' || !PRESET_ID.test(d.id)) throw new PresetFehler(400, 'preset_id_ungueltig');
         const [, herkunft, geraet, slug] = /^(werk|nutzer):([^/]+)\/(.+)$/.exec(d.id)!;
         const preset = speicher.lies(pruefeHerkunft(herkunft), geraet, slug);
-        return json(a, 200, planeAnwendung({ ...preset, id: d.id }, d.ziel as Ziel, opt.projekt?.() ?? null));
+        return json(a, 200, planeAnwendung({ ...preset, id: d.id }, d.ziel as Ziel, opt.projekt?.() ?? null, typeof (d.ziel as Ziel & { kanal?: string })?.kanal === 'string' ? opt.graphVon?.((d.ziel as { kanal: string }).kanal) : undefined));
       }
       if (p === '/presets/von_ziel' && q.method === 'POST') {
         const d = await lesen(q);

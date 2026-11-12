@@ -2,7 +2,7 @@
 // The graph instance (CypherBk) is built by the loader thread and arrives inside the snapshot (ArrSpur::bk, bk_gen); this sink owns
 // none of them. Per track slot it keeps an event queue, the instance it plays (h_last, gen_last) and some state; notes arrive with their
 // target sample (lead 0) and go to the instance with an offset inside the block; the output is added to the track input.
-//   Knobs: k1..k8 of the track (absent = 0.5) are set on the instance in every block, also while the transport stands. When the sink takes
+//   Knobs: k1..k64 of the track (absent = the graph's `vorgabe` of the knob, 0.5 for a graph without one) are set on the instance in every block, also while the transport stands. When the sink takes
 //   over an instance and at a transport start they are set at once (cypher_bk_regler_sofort), so live and the offline render begin on the
 //   same values whatever the pre-roll; later changes are smoothed over 20 ms by the instance.
 //   Transport start: in the block that holds the start sample the instance is reset (cypher_bk_zuruecksetzen), all notes off at the start
@@ -41,7 +41,7 @@ class ArrBkSenke final : public ArrSenke, public ArrBkLeser {
   void block(int spur, int64_t s0, int m, float* l, float* r) noexcept override;   // = block_bahn on the own lane-0 struct
   void block_bahn(int spur, int64_t s0, int m, float* l, float* r, ArrArbeit& a) noexcept override;   // scratch from `a`; parallel_faehig stays false (bk runs serial in this plan)
   bool spur_weg(int spur, int64_t s, bool andere_spur) noexcept override;   // true: this track still has an instance to fade out
-  // 1.9 U8 T9 (E12): the value of knob `param` (0..7 = k1..k8) of the slot for the next block(): a value reported in a block wins over the knob of the snapshot in that block (also at a
+  // 1.9 U8 T9 (E12): the value of knob `param` (0..63 = k1..k64) of the slot for the next block(): a value reported in a block wins over the knob of the snapshot in that block (also at a
   // take-over and a transport start); no report in a block: the snapshot's knob is used again. Caller thread, before block() (the macro hook of the rack); never from a lane unit.
   void auto_parameter(int spur, int param, float wert) noexcept override;
   // 1.12 slice 7: a knob with a RELATIVE lane (a clip envelope) and no absolute one: `delta` is added to the knob of the snapshot (clamped 0..1) for the next block, under the same rules
@@ -78,14 +78,16 @@ class ArrBkSenke final : public ArrSenke, public ArrBkLeser {
     bool ruht = false;                  // reset after 1 s of silence, not computed until a note or a start
     int64_t still = 0;                  // samples of exact silence in a row
     bool neu = false;                   // an instance was just taken over: the knobs jump to their values
-    float knopf_wert[8] = {};           // knobs reported for the next block (auto_parameter)
-    bool knopf_da[8] = {};
-    float knopf_delta[8] = {};          // summands reported for the next block (auto_parameter_summand)
-    bool delta_da[8] = {};
+    float knopf_wert[BK_KNOEPFE] = {};           // knobs reported for the next block (auto_parameter)
+    bool knopf_da[BK_KNOEPFE] = {};
+    float knopf_delta[BK_KNOEPFE] = {};          // summands reported for the next block (auto_parameter_summand)
+    bool delta_da[BK_KNOEPFE] = {};
+    float knopf_vorgabe[BK_KNOEPFE];             // the start position of every knob in the graph the slot plays (`vorgabe`, 0.5 where the graph has none); read at the take-over (cypher_bk_regler_vorgabe)
     std::atomic<const CypherBk*> aktiv{nullptr};    // published with release order: the instance this slot plays
     std::atomic<const CypherBk*> blende{nullptr};   // the instance this slot fades out in the current block
   };
   void schiebe(Spur& p, const Ev& e) noexcept;
+  static void lade_vorgaben(Spur& p, const CypherBk* h) noexcept;   // knopf_vorgabe from the graph of the instance (take-over only)
 
   const Arrangement& arr_;
   const ArrBkLeser* zweiter_ = nullptr;

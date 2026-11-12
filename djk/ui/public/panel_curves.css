@@ -1,0 +1,9 @@
+/* Drawn displays of the front panel: envelope, LFO shape, filter response (panel.js, panel_curves.js). Replaces the empty dashed cell of panel.css. */
+.fp-zelle[data-typ="huelle"], .fp-zelle[data-typ="lfoform"], .fp-zelle[data-typ="filterkurve"] { display: flex; flex-direction: column; gap: 2px; }
+.frontplatte .fp-kurventitel { font-size: 9.5px; color: var(--dim); text-transform: uppercase; letter-spacing: .06em; }
+.frontplatte .fp-kurve { width: 100%; height: 56px; display: block; background: var(--bg, transparent); border: 1px solid var(--line); border-radius: 6px; }
+.frontplatte .fp-kurve path, .frontplatte .fp-kurve line { vector-effect: non-scaling-stroke; }
+.frontplatte .fp-kurve-linie { fill: none; stroke: var(--akzent, var(--accent, currentColor)); stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; }
+.frontplatte .fp-kurve-flaeche { fill: var(--akzent, var(--accent, currentColor)); fill-opacity: .14; stroke: none; }
+.frontplatte .fp-kurve-null { stroke: var(--line); stroke-width: 1; stroke-dasharray: 3 3; }
+.frontplatte .fp-kurve-marke { stroke: var(--dim); stroke-width: 1; stroke-dasharray: 2 2; }

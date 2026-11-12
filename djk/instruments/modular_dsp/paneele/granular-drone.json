@@ -1,0 +1,33 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "granular-drone"},
+  "title": "Granular Drone",
+  "akzent": "blau",
+  "layout": {"rows": [
+    ["src", "grain", "tone", "env"]
+  ]},
+  "sections": [
+    { "id": "src", "title": "SOURCE", "cols": 3, "controls": [
+      {"id": "frieren", "type": "switch", "label": "Freeze", "span": 2, "bind": {"param": "k4"}, "default": 0},
+      {"id": "s1", "type": "label", "span": 3, "text": "Two saws a fifth apart (7 st)"},
+      {"id": "s2", "type": "label", "span": 3, "text": "Live buffer 4 s; freeze stops writing"},
+      {"id": "s3", "type": "label", "span": 3, "text": "2 voices"}
+    ]},
+    { "id": "grain", "title": "GRAINS", "cols": 4, "controls": [
+      {"id": "pos", "type": "knob", "label": "Position", "span": 2, "bind": {"param": "k1"}, "format": "percent", "default": 0.5},
+      {"id": "dens", "type": "knob", "label": "Density", "span": 2, "bind": {"param": "k2"}, "format": "raw", "unit": "/s", "default": 0.5},
+      {"id": "pitch", "type": "knob", "label": "Pitch", "span": 2, "bind": {"param": "k3"}, "format": "raw", "unit": "st", "default": 0.5},
+      {"id": "size", "type": "knob", "label": "Grain size", "span": 2, "bind": {"param": "k6"}, "format": "ms", "default": 0.5}
+    ]},
+    { "id": "tone", "title": "TONE", "cols": 2, "controls": [
+      {"id": "tone", "type": "knob", "label": "Tone", "span": 2, "bind": {"param": "k5"}, "format": "hz", "default": 0.5},
+      {"id": "t1", "type": "label", "span": 2, "text": "Low-pass, resonance 20 %"},
+      {"id": "t2", "type": "label", "span": 2, "text": "One filter per channel"}
+    ]},
+    { "id": "env", "title": "AMP ENV", "cols": 4, "controls": [
+      {"id": "hue", "type": "huelle", "span": 4, "label": "Envelope", "of": {"a": 0.3, "d": 0.5, "s": 0.8, "r": 1.5}},
+      {"id": "e1", "type": "label", "span": 4, "text": "A 300 ms, D 500 ms, S 80 %, R 1.5 s"},
+      {"id": "e2", "type": "label", "span": 4, "text": "All four times fixed"}
+    ]}
+  ]
+}

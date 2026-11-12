@@ -23,7 +23,8 @@ test('S20 model: an instrument track with a bk device is valid', () => {
   assert.ok('projekt' in r, JSON.stringify(r));
   assert.deepEqual(r.projekt.spuren[1].geraet, bk('juno-pad', { k1: 0.2, k8: 1 }));
   assert.ok('projekt' in pruefeProjekt(mitBk(bk('a'.repeat(32)))), 'a 32 character name is the longest allowed');
-  assert.deepEqual(BK_PARAMETER, ['k1', 'k2', 'k3', 'k4', 'k5', 'k6', 'k7', 'k8']);
+  assert.deepEqual(BK_PARAMETER, Array.from({ length: 64 }, (_, i) => `k${i + 1}`));
+  assert.ok('projekt' in pruefeProjekt(mitBk(bk('juno-pad', { k9: 0.1, k32: 0.9, k33: 0.2, k64: 0.4 }))), 'knobs 9, 32, 33 and 64 are valid');
 });
 
 test('S20 model: refusals (graph missing or malformed, knobs, extra field, freeze, nine tracks)', () => {
@@ -34,7 +35,8 @@ test('S20 model: refusals (graph missing or malformed, knobs, extra field, freez
     ['graph of 33 characters', bk('a'.repeat(33)), /graph/],
     ['graph empty', bk(''), /graph/],
     ['graph not a string', { ...g, graph: 5 }, /graph/],
-    ['knob k9', bk('juno-pad', { k9: 0.5 }), /k9/],
+    ['knob k65', bk('juno-pad', { k65: 0.5 }), /k65/],
+    ['knob k0', bk('juno-pad', { k0: 0.5 }), /k0/],
     ['knob k1 above 1', bk('juno-pad', { k1: 1.5 }), /k1/],
     ['knob k1 below 0', bk('juno-pad', { k1: -0.1 }), /k1/],
     ['rb parameter name cutoff', bk('juno-pad', { cutoff: 0.5 }), /cutoff/],
@@ -69,7 +71,7 @@ test('S20 commands: spur_neu with a bk device stores it, the track is named afte
   for (const schlecht of [
     { art: 'intern', name: 'bk' },                                   // graph missing
     { art: 'intern', name: 'bk', graph: 'Juno' },
-    { art: 'intern', name: 'bk', graph: 'x', parameter: { k9: 0.5 } },
+    { art: 'intern', name: 'bk', graph: 'x', parameter: { k65: 0.5 } },
     { art: 'intern', name: 'bk', graph: 'x', parameter: { k1: 2 } },
     { art: 'intern', name: 'bk', graph: 'x', parameter: { cutoff: 0.5 } },
     { art: 'intern', name: 'bk', graph: 'x', extra: 1 },

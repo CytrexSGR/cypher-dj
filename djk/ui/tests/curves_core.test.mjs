@@ -97,7 +97,7 @@ test('Negativ-Kontrolle: harmlose Regler sind unter beiden Kurven gleich (Trim 0
   }
   assert.equal(griffZuMidi('deck/1/kill/tief', 1), 1);
   assert.equal(griffZuMidi('deck/1/pfl', 0), 0);
-  assert.equal(ZIELE.size, 87 + 128 + 33 + 12 * 8 + 204 + 2 * 8);  // S14: + fx/3, fx/4 x 8 graph knobs; 1.10 Slice 3: + 204 send/return/hall controls; S5r: + 12 Kanäle x bk/1..8; 1.10: + grp/1..8 je 4 + pm/fader; K2: + master/kleber; 28 + deck/1/xseite, deck/2/xseite (2026-09-27) + erz/1 11 (Strudel) + pad/1, pad/2 je 11 (MVP 2); D1 K1/E3: spur/1..32 je fader, pan, mute, solo
+  assert.equal(ZIELE.size, 87 + 128 + 33 + 12 * 64 + 204 + 2 * 64);  // 1348 (was 900 at 32 knobs); S14: + fx/3, fx/4 x 64 graph knobs; 1.10 Slice 3: + 204 send/return/hall controls; S5r: + 12 channels x bk/1..64; 1.10: + grp/1..8 je 4 + pm/fader; K2: + master/kleber; 28 + deck/1/xseite, deck/2/xseite (2026-09-27) + erz/1 11 (Strudel) + pad/1, pad/2 je 11 (MVP 2); D1 K1/E3: spur/1..32 je fader, pan, mute, solo
 });
 
 test('float32 wie der Kern: Schwelle 0,001 und Kill entscheiden auf fround(x)', () => {

@@ -1,0 +1,39 @@
+{
+  "format": "baukasten/2",
+  "name": "falter-demo",
+  "stimmen": 2,
+  "regler_namen": {"1": "Fold", "2": "Symmetry", "3": "Shape", "4": "Tone"},
+  "knoten": [
+    {"id": "note", "art": "note"},
+    {"id": "k_fold", "art": "regler", "nr": 1, "min": -6, "max": 30},
+    {"id": "k_sym", "art": "regler", "nr": 2, "min": -0.5, "max": 0.5},
+    {"id": "k_form", "art": "regler", "nr": 3, "min": 0, "max": 1},
+    {"id": "k_ton", "art": "regler", "nr": 4, "min": 400, "max": 12000, "log": 1},
+    {"id": "osz", "art": "saege"},
+    {"id": "vor", "art": "mul", "b": 0.8},
+    {"id": "falter", "art": "falter"},
+    {"id": "dc", "art": "svf", "cutoff": 30, "reso": 0},
+    {"id": "ton", "art": "svf", "reso": 0.2},
+    {"id": "env", "art": "adsr", "a": 0.004, "d": 0.3, "s": 0.8, "r": 0.2},
+    {"id": "vca", "art": "mul"},
+    {"id": "pegel", "art": "mul", "b": 0.35},
+    {"id": "aus", "art": "ausgang"}
+  ],
+  "kanten": [
+    {"von": "note.hz", "nach": "osz.hz"},
+    {"von": "osz.aus", "nach": "vor.a"},
+    {"von": "vor.aus", "nach": "falter.x"},
+    {"von": "k_fold.aus", "nach": "falter.antrieb"},
+    {"von": "k_sym.aus", "nach": "falter.symmetrie"},
+    {"von": "k_form.aus", "nach": "falter.form"},
+    {"von": "falter.aus", "nach": "dc.x"},
+    {"von": "dc.hp", "nach": "ton.x"},
+    {"von": "k_ton.aus", "nach": "ton.cutoff"},
+    {"von": "note.gate", "nach": "env.gate"},
+    {"von": "note.trig", "nach": "env.trig"},
+    {"von": "ton.tp", "nach": "vca.a"},
+    {"von": "env.aus", "nach": "vca.b"},
+    {"von": "vca.aus", "nach": "pegel.a"},
+    {"von": "pegel.aus", "nach": "aus.x"}
+  ]
+}

@@ -78,6 +78,66 @@ int main() {
     }
     PRUEF(cache.bk_eintraege() == 0 && cache.bk_aufgeschoben() == 0);
   }
+  {  // 1b: 32-knob widening. A track of the old format names k1..k8 only and loads unchanged (the missing knobs read 0.5 in the sink,
+     // see test_arr_bk_senke); a track names k9, k17 and k32 and keeps them with their values.
+    cdj::SpeicherKonto konto(100LL << 20);
+    cdj::ArrAudioCache cache(&konto, 50LL << 20, false);
+    cache.setze_bk_ordner(bk);
+    std::string alt = "{";
+    for (int k = 1; k <= 8; ++k) alt += (k > 1 ? ",\"k" : "\"k") + std::to_string(k) + "\":" + (k == 8 ? "0.75" : "0.5");
+    alt += "}";
+    o.wiedergabe(2, bk_spur(1, "t", alt));
+    cdj::ArrLadeErgebnis e = lade(cache, 2);
+    PRUEF(e.snap && e.grund.empty());
+    if (e.snap) {
+      const cdj::ArrSpur& s = e.snap->spur[0];
+      PRUEF(s.n_param == 8 && std::string(s.param[7].name) == "k8" && s.param[7].wert == 0.75f);
+      cdj::gib_wiedergabe(e.snap.release(), cache);
+    }
+    o.wiedergabe(3, bk_spur(1, "t", "{\"k1\":0.25,\"k9\":0.125,\"k17\":0.375,\"k32\":0.875}"));
+    e = lade(cache, 3);
+    PRUEF(e.snap && e.grund.empty());
+    if (e.snap) {
+      const cdj::ArrSpur& s = e.snap->spur[0];
+      const auto wert_von = [&](const char* name) {   // the loader keeps the order of the JSON object (sorted by key), so look the knob up by name
+        for (int i = 0; i < s.n_param; ++i)
+          if (std::string(s.param[i].name) == name) return s.param[i].wert;
+        return -1.0f;
+      };
+      PRUEF(s.n_param == 4 && wert_von("k1") == 0.25f && wert_von("k9") == 0.125f && wert_von("k17") == 0.375f && wert_von("k32") == 0.875f);
+      cdj::gib_wiedergabe(e.snap.release(), cache);
+    }
+    // 64-knob widening: a track of the 32-knob format (k1..k32) loads unchanged; a track names k33, k48 and k64 and keeps them
+    std::string mittel = "{";
+    for (int k = 1; k <= 32; ++k) mittel += (k > 1 ? ",\"k" : "\"k") + std::to_string(k) + "\":" + (k == 32 ? "0.625" : "0.5");
+    mittel += "}";
+    o.wiedergabe(5, bk_spur(1, "t", mittel));
+    e = lade(cache, 5);
+    PRUEF(e.snap && e.grund.empty() && e.snap->spur[0].n_param == 32);
+    if (e.snap) cdj::gib_wiedergabe(e.snap.release(), cache);
+    o.wiedergabe(6, bk_spur(1, "t", "{\"k1\":0.25,\"k33\":0.0625,\"k48\":0.4375,\"k64\":0.9375}"));
+    e = lade(cache, 6);
+    PRUEF(e.snap && e.grund.empty());
+    if (e.snap) {
+      const cdj::ArrSpur& s = e.snap->spur[0];
+      const auto wert_von = [&](const char* name) {
+        for (int i = 0; i < s.n_param; ++i)
+          if (std::string(s.param[i].name) == name) return s.param[i].wert;
+        return -1.0f;
+      };
+      PRUEF(s.n_param == 4 && wert_von("k1") == 0.25f && wert_von("k33") == 0.0625f && wert_von("k48") == 0.4375f && wert_von("k64") == 0.9375f);
+      cdj::gib_wiedergabe(e.snap.release(), cache);
+    }
+    // all 64 together (ARR_PARAMETER = 64); a 65th entry is refused (k65 is no knob, see the refusal table below)
+    std::string alle = "{";
+    for (int k = 1; k <= 64; ++k) alle += (k > 1 ? ",\"k" : "\"k") + std::to_string(k) + "\":0.5";
+    alle += "}";
+    o.wiedergabe(4, bk_spur(1, "t", alle));
+    e = lade(cache, 4);
+    PRUEF(e.snap && e.snap->spur[0].n_param == 64);
+    if (e.snap) cdj::gib_wiedergabe(e.snap.release(), cache);
+    PRUEF(cache.bk_eintraege() == 0 && cache.bk_aufgeschoben() == 0);
+  }
   {  // 2: refusals name track and graph; nothing leaks; the RB track loads as before (negative control)
     cdj::SpeicherKonto konto(100LL << 20);
     cdj::ArrAudioCache cache(&konto, 50LL << 20, false);
@@ -93,7 +153,12 @@ int main() {
     const Fall faelle[] = {
         {"file missing", bk_spur(1, "nix"), "format", "nix"},
         {"effect graph", bk_spur(1, "e"), "format", "effect"},
-        {"knob k9", bk_spur(1, "t", "{\"k9\":0.5}"), "format", "k9"},
+        {"knob k65", bk_spur(1, "t", "{\"k65\":0.5}"), "format", "k65"},   // 64-knob widening: k9..k64 are knobs, k65 is not
+        {"knob k033", bk_spur(1, "t", "{\"k033\":0.5}"), "format", "k033"},
+        {"knob k640", bk_spur(1, "t", "{\"k640\":0.5}"), "format", "k640"},
+        {"knob k0", bk_spur(1, "t", "{\"k0\":0.5}"), "format", "k0"},
+        {"knob k01", bk_spur(1, "t", "{\"k01\":0.5}"), "format", "k01"},
+        {"knob k100", bk_spur(1, "t", "{\"k100\":0.5}"), "format", "k100"},
         {"knob out of range", bk_spur(1, "t", "{\"k1\":1.5}"), "format", "k1"},
         {"capital letters", bk_spur(1, "T"), "format", "T"},
         {"path in the name", bk_spur(1, "../t"), "format", "../t"},

@@ -51,7 +51,7 @@ test('S1 T1.2 jede Ablehnung einzeln, jeweils aus dem gültigen Fall durch genau
   assert.notEqual(pruefeFehler(projekt([spur(1, { automation: [lane('a1')] }), spur(2, { automation: [lane('a1')] })])), null, 'Lane-ID doppelt');
   assert.equal(pruefeFehler(projekt([spur(1, { automation: [lane('a1')] }), spur(2, { automation: [lane('a2')] })])), null);
   assert.deepEqual([...AUTO_ZIELE], ['fader', 'pan', 'mute', 'solo', 'geraet.lautstaerke', 'geraet.cutoff', 'geraet.resonanz', 'geraet.env_mod',
-    'geraet.k1', 'geraet.k2', 'geraet.k3', 'geraet.k4', 'geraet.k5', 'geraet.k6', 'geraet.k7', 'geraet.k8']);   // 1.12 slice 7: the bk knobs
+    ...Array.from({ length: 64 }, (_, i) => `geraet.k${i + 1}`)]);   // 1.12 slice 7: the bk knobs, 64 since the synth build-out
   assert.equal(MAX_LANES_PRO_SPUR, 12);
 });
 
@@ -155,7 +155,7 @@ test('S2 T1.1 each of the 8 targets accepts a valid lane (negative control); ran
   assert.deepEqual(ZIEL_BEREICH.solo, { min: 0, max: 1, nurSprung: true });
   assert.deepEqual(ZIEL_BEREICH['geraet.cutoff'], { min: 0, max: 1, nurSprung: false });
   // eight lanes on one internal track are valid, the limit 12 stays
-  const alle = AUTO_ZIELE.filter((z) => !/^geraet\.k[1-8]$/.test(z)).map((z, i) => ({ ...ziellane(z, GUELTIG[z]), id: `a${i + 1}` }));   // the RB-338 track: the bk knobs are not its targets
+  const alle = AUTO_ZIELE.filter((z) => !/^geraet\.k\d+$/.test(z)).map((z, i) => ({ ...ziellane(z, GUELTIG[z]), id: `a${i + 1}` }));   // the RB-338 track: the bk knobs are not its targets
   assert.equal(pruefeFehler(projekt([rbSpur(1, { automation: alle })])), null, 'all 8 targets on one track');
   assert.equal(MAX_LANES_PRO_SPUR, 12);
 });

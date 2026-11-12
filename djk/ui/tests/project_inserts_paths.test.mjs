@@ -116,14 +116,14 @@ test('render.routing_inserts: a stage without a key has sc 0 in the file', () =>
 });
 
 // ---- opening a project -----------------------------------------------------------------------------------------------------------------------
-test('abbildung.alle_insert: all slots of all kinds (12 x 10 komp, 8 x 59 eq, 4 x 4 saett, 2 x 3 lim, 4 host, 8 x 5 utility, 8 x 9 bk; the used ones with their values, the free ones at the pool defaults), the switch last', () => {
+test('abbildung.alle_insert: all slots of all kinds (12 x 10 komp, 8 x 59 eq, 4 x 4 saett, 2 x 3 lim, 4 host, 8 x 5 utility, 8 x 33 bk; the used ones with their values, the free ones at the pool defaults), the switch last', () => {
   const p = mitKette(), r = alleInsertRegler(p);
-  assert.equal(r.length, 730);
+  assert.equal(r.length, 922);
   assert.deepEqual([...new Set(r.filter((x) => x.pfad.startsWith('ins/komp/')).map((x) => x.pfad.split('/')[2]))], ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12']);
   assert.equal(r.filter((x) => x.pfad.startsWith('ins/eq/')).length, 8 * 59);
   assert.equal(r.filter((x) => x.pfad.startsWith('ins/saett/')).length, 4 * 4);
   assert.equal(r.filter((x) => x.pfad.startsWith('ins/utility/')).length, 8 * 5);
-  assert.equal(r.filter((x) => x.pfad.startsWith('ins/bk/')).length, 8 * 9);
+  assert.equal(r.filter((x) => x.pfad.startsWith('ins/bk/')).length, 8 * 33);
   assert.equal(r.find((x) => x.pfad === 'ins/eq/1/b4/freq').wert, 800, 'an unused eq slot sits at the band default of the plugin');
   assert.equal(r.findLastIndex((x) => x.pfad.startsWith('ins/eq/1/')), r.findIndex((x) => x.pfad === 'ins/eq/1/an'), 'the eq switch is the last row of its slot');
   assert.equal(r.find((x) => x.pfad === 'ins/komp/5/an').wert, 0, 'a free slot is switched off');
@@ -133,10 +133,10 @@ test('abbildung.alle_insert: all slots of all kinds (12 x 10 komp, 8 x 59 eq, 4 
   assert.equal(r.findLastIndex((x) => x.pfad.startsWith('ins/komp/1/')), r.findIndex((x) => x.pfad === 'ins/komp/1/an'), 'the switch is the last row of its slot');
   assert.equal(alleRegler(p).length, alleRegler(neuesProjekt('N')).length, 'the number does not depend on the stages in use: all 12 slots are always set');
   assert.deepEqual(alleInsertRegler(neuesProjekt('N')).filter((x) => /\/an$/.test(x.pfad) && !/\/b\d\/an$/.test(x.pfad)).map((x) => x.wert), Array(46).fill(0), 'negative control: no stage, every stage switch off (12 komp, 8 eq, 4 saett, 2 lim, 4 host, 8 utility)');
-  assert.equal(alleRegler(neuesProjekt('N')).length, 365 + 730 + 48, 'the old 365 plus the 730 pooled insert rows plus the 48 rack macro rows (slice 4c)');
+  assert.equal(alleRegler(neuesProjekt('N')).length, 365 + 922 + 48, 'the old 365 plus the 922 pooled insert rows plus the 48 rack macro rows (slice 4c)');
 });
 
-test('sitzung.setzt_alle_ins: opening a project with two inserts sets both (and the free slots at the defaults, 730 rows) before the transport starts; the old controls are all there too', async (t) => {
+test('sitzung.setzt_alle_ins: opening a project with two inserts sets both (and the free slots at the defaults, 922 rows) before the transport starts; the old controls are all there too', async (t) => {
   const k = pruefKontext();
   const { s } = sitzung(t, {}, k);
   await s.neu('Ins', 'andreas');
@@ -148,7 +148,7 @@ test('sitzung.setzt_alle_ins: opening a project with two inserts sets both (and 
   const r = await s.oeffnen('ins', 'andreas');
   const soll = alleRegler(r.j.projekt).length;
   const insTeile = k.teile(/^ins\//);
-  assert.equal(insTeile.length, 730, 'all slots of all kinds');
+  assert.equal(insTeile.length, 922, 'all slots of all kinds');
   assert.equal(insTeile.find((x) => x.felder.pfad === 'ins/komp/1/schwelle').felder.nach, -33);
   assert.equal(insTeile.find((x) => x.felder.pfad === 'ins/komp/2/ratio').felder.nach, 12);
   assert.equal(k.teile(/^rack\//).length, 48, 'all 12 racks x 4 macro rows (slice 4c)');
@@ -162,17 +162,17 @@ test('sitzung.setzt_alle_ins: opening a project with two inserts sets both (and 
   for (const x of insTeile) assert.ok(k.gesendet.indexOf(x) < start, `${x.felder.pfad} was sent before /k/arr/start`);
 });
 
-test('sitzung.setzt_alle_ins negative control: opening a project without inserts sets every slot off at the defaults and the old 389 controls (730 insert rows)', async (t) => {
+test('sitzung.setzt_alle_ins negative control: opening a project without inserts sets every slot off at the defaults and the old 389 controls (922 insert rows)', async (t) => {
   const k = pruefKontext();
   const { s } = sitzung(t, {}, k);
   await s.neu('Leer', 'andreas');
   await s.aendern({ rev: s.aktuell().j.projekt.rev, label: 'a', befehle: [{ befehl: 'spur_neu', art: 'audio' }] }, 'andreas');
   k.leere();
   await s.oeffnen('leer', 'andreas');
-  assert.equal(k.teile(/^ins\//).length, 730);
+  assert.equal(k.teile(/^ins\//).length, 922);
   assert.ok(k.teile(/^ins\/(komp|eq|saett|lim)\/\d+\/an$/).every((x) => x.felder.nach === 0), 'every switch off');
   assert.equal(k.teile(/^ins\/(komp|eq|saett|lim)\/\d+\/an$/).length, 26);
-  assert.equal(k.teile().length, 389 + 730 + 48, 'the old 389, the 730 insert rows and the 48 rack macro rows');
+  assert.equal(k.teile().length, 389 + 922 + 48, 'the old 389, the 922 insert rows and the 48 rack macro rows');
 });
 
 test('sitzung.stale_slot: project A leaves ratio 12 / schwelle -40 on slot 1; opening B and adding a default stage there gives ratio 4 at the core (review IMPORTANT)', async (t) => {

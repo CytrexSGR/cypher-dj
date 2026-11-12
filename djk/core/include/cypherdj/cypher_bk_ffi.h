@@ -25,9 +25,10 @@ int32_t cypher_bk_alle_aus(CypherBk* h, uint32_t versatz);
 int32_t cypher_bk_block(CypherBk* h, float* aus_l, float* aus_r, size_t n);   // überschreibt; h null: Stille
 // Effekt (S3c): ein_* Host-Audio, aus_* überschrieben, Ein- und Ausgang getrennt; h null: Stille
 int32_t cypher_bk_effekt(CypherBk* h, const float* ein_l, const float* ein_r, float* aus_l, float* aus_r, size_t n);
-int32_t cypher_bk_regler(CypherBk* h, uint32_t nr, float wert);   // nr 1..8, 0..1 (geklemmt, NaN ignoriert), 20 ms geglättet; -1 h null oder nr falsch; nicht nebenläufig mit block
+int32_t cypher_bk_regler(CypherBk* h, uint32_t nr, float wert);   // nr 1..64, 0..1 (geklemmt, NaN ignoriert), 20 ms geglättet; -1 h null oder nr falsch; nicht nebenläufig mit block
 void cypher_bk_takt(CypherBk* h, double beat0, double bps);   // beat0 = erstes Sample des nächsten Blocks
 int32_t cypher_bk_regler_sofort(CypherBk* h, uint32_t nr, float wert);   // S20: like regler, the smoothed state jumps to the target at once; -1 h null or nr wrong; no allocation
+float cypher_bk_regler_vorgabe(CypherBk* h, uint32_t nr);   // the graph's start position (`vorgabe`) of knob nr 1..64, 0.5 where the graph defines none; -1.0 for h null or nr outside; a fresh instance starts every knob there; no allocation
 void cypher_bk_zuruecksetzen(CypherBk* h);   // S20: like after neu, knobs stay, queue emptied; h null: no effect; no allocation; not concurrent with block
 uint32_t cypher_bk_hat_eingang(const CypherBk* h);            // 1 Effekt-Graph, 0 Instrument oder null
 uint32_t cypher_bk_latenz(const CypherBk* h);

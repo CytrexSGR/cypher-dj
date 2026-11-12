@@ -1,0 +1,40 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "wavetable-supersaw"},
+  "title": "Wavetable Supersaw",
+  "akzent": "blau",
+  "layout": {"rows": [
+    ["table", "unison", "filter", "wenv", "aenv"]
+  ]},
+  "sections": [
+    { "id": "table", "title": "TABLE", "cols": 2, "controls": [
+      {"id": "t1", "type": "label", "span": 2, "text": "Table: analog"},
+      {"id": "t2", "type": "label", "span": 2, "text": "Position 67 % + wave env"},
+      {"id": "t3", "type": "label", "span": 2, "text": "16 voices"}
+    ]},
+    { "id": "unison", "title": "UNISON", "cols": 3, "controls": [
+      {"id": "detune", "type": "knob", "label": "Detune", "bind": {"param": "k3"}, "format": "raw", "unit": "ct", "default": 0.5},
+      {"id": "width", "type": "knob", "label": "Width", "bind": {"param": "k4"}, "format": "percent", "default": 0.5},
+      {"id": "u1", "type": "label", "span": 3, "text": "7 copies"}
+    ]},
+    { "id": "filter", "title": "FILTER", "cols": 3, "controls": [
+      {"id": "fk", "type": "filterkurve", "span": 3, "of": {"cutoff": "cutoff", "reso": "reso"}, "typen": [{"art": "lp", "pole": 2}]},
+      {"id": "cutoff", "type": "knob", "label": "Cutoff", "bind": {"param": "k1"}, "format": "hz", "default": 0.5},
+      {"id": "reso", "type": "knob", "label": "Resonance", "bind": {"param": "k2"}, "format": "percent", "default": 0.5},
+      {"id": "fn", "type": "label", "span": 3, "text": "Low-pass 12 dB, per side"}
+    ]},
+    { "id": "wenv", "title": "WAVE ENV", "cols": 3, "controls": [
+      {"id": "whue", "type": "huelle", "span": 3, "label": "Table position envelope", "of": {"a": "wattack", "d": "wdecay", "s": 0, "r": 0.3}},
+      {"id": "wamt", "type": "knob", "label": "Amount", "bind": {"param": "k7"}, "format": "percent", "default": 0.5},
+      {"id": "wattack", "type": "knob", "label": "Attack", "bind": {"param": "k8"}, "format": "raw", "unit": "s", "default": 0.5},
+      {"id": "wdecay", "type": "knob", "label": "Decay", "bind": {"param": "k9"}, "format": "raw", "unit": "s", "default": 0.5},
+      {"id": "wn", "type": "label", "span": 3, "text": "Sustain 0, release 300 ms fixed"}
+    ]},
+    { "id": "aenv", "title": "AMP ENV", "cols": 3, "controls": [
+      {"id": "ahue", "type": "huelle", "span": 3, "label": "Envelope", "of": {"a": "attack", "d": 0.4, "s": 0.85, "r": "release"}},
+      {"id": "attack", "type": "knob", "label": "Attack", "bind": {"param": "k5"}, "format": "raw", "unit": "s", "default": 0.5},
+      {"id": "release", "type": "knob", "label": "Release", "bind": {"param": "k6"}, "format": "raw", "unit": "s", "default": 0.5},
+      {"id": "an", "type": "label", "span": 3, "text": "Decay 400 ms, sustain 85 % fixed"}
+    ]}
+  ]
+}

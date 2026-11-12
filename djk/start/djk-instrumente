@@ -215,8 +215,10 @@ for g in $GRUPPEN; do
     # a plugin host runs with the real HOME (the plugin's own config, presets, licences) and the user's X session (D16); the unit's
     # environment is fixed at creation: DISPLAY and XAUTHORITY from here or the user manager
     HOME_ENV=(--setenv=HOME="$WH"); PLUG_ENV=()
-    if [ "$ART" = plugin ]; then
-      HOME_ENV=(--setenv=HOME="$HOME")
+    # Surge (lv2) keeps its private HOME but gets the same display: its own editor window (command `fenster`, plan 2026-11-11 task 9)
+    # needs the user's X session; without DISPLAY the host answers keine_anzeige and shows nothing
+    [ "$ART" = plugin ] && HOME_ENV=(--setenv=HOME="$HOME")
+    if [ "$ART" = plugin ] || [ "$ART" = lv2 ]; then
       for v in DISPLAY XAUTHORITY; do
         w=${!v:-}
         [ -n "$w" ] || w=$(systemctl --user show-environment 2>/dev/null | sed -n "s/^$v=//p" | head -1)

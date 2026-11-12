@@ -1,0 +1,33 @@
+{
+  "format": "baukasten/2",
+  "name": "kamm-goa-zupf",
+  "stimmen": 8,
+  "regler_namen": {"1": "Feedback", "2": "Damping", "3": "Burst", "4": "Level"},
+  "knoten": [
+    {"id": "note", "art": "note"},
+    {"id": "k_fb", "art": "regler", "nr": 1, "min": 0.85, "max": 0.995},
+    {"id": "k_daempf", "art": "regler", "nr": 2, "min": 0, "max": 1},
+    {"id": "k_burst", "art": "regler", "nr": 3, "min": 0.002, "max": 0.04, "log": 1},
+    {"id": "k_pegel", "art": "regler", "nr": 4, "min": 0, "max": 1.5},
+    {"id": "rauschen", "art": "rauschen"},
+    {"id": "huelle", "art": "adsr", "a": 0.0005, "d": 0.01, "s": 0, "r": 0.005},
+    {"id": "stoss", "art": "mul"},
+    {"id": "kamm", "art": "kamm", "mix": 1},
+    {"id": "pegel", "art": "mul"},
+    {"id": "aus", "art": "ausgang"}
+  ],
+  "kanten": [
+    {"von": "note.gate", "nach": "huelle.gate"},
+    {"von": "note.trig", "nach": "huelle.trig"},
+    {"von": "k_burst.aus", "nach": "huelle.d"},
+    {"von": "rauschen.aus", "nach": "stoss.a"},
+    {"von": "huelle.aus", "nach": "stoss.b"},
+    {"von": "stoss.aus", "nach": "kamm.x"},
+    {"von": "note.hz", "nach": "kamm.hz"},
+    {"von": "k_fb.aus", "nach": "kamm.fb"},
+    {"von": "k_daempf.aus", "nach": "kamm.daempf"},
+    {"von": "kamm.aus", "nach": "pegel.a"},
+    {"von": "k_pegel.aus", "nach": "pegel.b"},
+    {"von": "pegel.aus", "nach": "aus.x"}
+  ]
+}

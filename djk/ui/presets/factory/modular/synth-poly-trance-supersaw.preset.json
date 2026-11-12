@@ -1,0 +1,62 @@
+{
+ "schema": 1,
+ "name": "Poly Trance Supersaw",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "synth-poly",
+ "werte": {
+  "knob1": 0.7169,
+  "knob2": 0.1705,
+  "knob3": 0.4,
+  "knob4": 0.7071,
+  "knob5": 0.2746,
+  "knob6": 0.4889,
+  "knob7": 0.35,
+  "knob8": 0.5,
+  "knob9": 1.0,
+  "knob10": 0.65,
+  "knob11": 0.95,
+  "knob12": 0.0,
+  "knob13": 0.5,
+  "knob14": 0.4,
+  "knob15": 0.0,
+  "knob16": 0.5606,
+  "knob17": 0.5,
+  "knob18": 0.5,
+  "knob19": 0.5,
+  "knob20": 1.0,
+  "knob21": 0.481,
+  "knob22": 0.35,
+  "knob23": 0.5,
+  "knob24": 0.0,
+  "knob25": 0.0,
+  "knob26": 0.0,
+  "knob27": 0.5,
+  "knob28": 0.25
+ },
+ "beschreibung": {
+  "art": "lead",
+  "unterart": "supersaw",
+  "charakter": [
+   "wide",
+   "bright",
+   "thick"
+  ],
+  "genre": [
+   "trance",
+   "progressive"
+  ],
+  "einsatz": [
+   "drop",
+   "build"
+  ],
+  "energie": 4,
+  "text": "Seven saws, 25 cent, wide; SEM low-pass opens with a 0.5 s envelope; slow release, light chorus II."
+ },
+ "tags": [
+  "synth-poly"
+ ],
+ "notiz": "Measured by level and pitch on render, not yet heard (2026-11-11).",
+ "angelegt": "2026-11-11T00:00:00.000Z",
+ "geaendert": "2026-11-11T00:00:00.000Z"
+}

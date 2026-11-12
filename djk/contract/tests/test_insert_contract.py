@@ -33,13 +33,13 @@ def test_veraltete_datei_wird_erkannt():
 def test_zaehlung_und_tabellenzeilen():
     """The count follows the contract: rows per instance times instances. komp 12 x 10 = 120, eq 8 x 59 = 472 (pool 8 since arr-fx slice 2, 2 before),
     saett 4 x 4 = 16 (1 x 4 before), the rack 12 x 4 = 48 (slice 4c), the limiters 2 x 3 = 6 (1 x 3 before), the effect hosts 4 x 1 (plan 1.11 T4)
-    the utilities 8 x 5 = 40 (arr-fx slice 1) and the Baukasten effects bk 8 x 9 = 72 (arr-bk slice 3: an and k1..k8): 778 rows, every one a table row."""
+    the utilities 8 x 5 = 40 (arr-fx slice 1) and the Baukasten effects bk 8 x 65 = 520 (arr-bk slice 3: an and k1..k8, k9..k32 since the 32-knob widening, k33..k64 since the 64-knob widening): 1226 rows, every one a table row."""
     z = erzeuge_insert.ausfalten(vertrag())
-    soll = 120 + 8 * 59 + 4 * 4 + 48 + 2 * 3 + 4 + 8 * 5 + 8 * 9
-    assert len(z) == soll == 778
+    soll = 120 + 8 * 59 + 4 * 4 + 48 + 2 * 3 + 4 + 8 * 5 + 8 * 65
+    assert len(z) == soll == 1226
     assert sum(1 for r in z if r["tabelle"]) == soll
     assert all(r["tabelle"] for r in z if r["art"] == "rack"), "every macro row is a table row (slice 4c)"
-    assert {r["art"]: sum(1 for q in z if q["art"] == r["art"]) for r in z} == {"komp": 120, "eq": 472, "saett": 16, "rack": 48, "lim": 6, "host": 4, "utility": 40, "bk": 72}
+    assert {r["art"]: sum(1 for q in z if q["art"] == r["art"]) for r in z} == {"komp": 120, "eq": 472, "saett": 16, "rack": 48, "lim": 6, "host": 4, "utility": 40, "bk": 520}
     assert max(len(r["pfad"]) for r in z) == 24   # ins/utility/8/mono_unter (20 before the utility kind)
 
 

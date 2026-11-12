@@ -115,8 +115,8 @@ test('S17 K3 negative control: with a kern the restore still sends the knobs and
   k.bk.antwort = () => ({ code: 200, j: { ok: true, quittung: { status: 3, grund: '' } } });
   const r = await s.oeffnen(slug, 'andreas');
   assert.equal(r.code, 200, JSON.stringify(r.j));
-  assert.equal(k.teile(/^erz\/3\/bk\//).length, 8);
-  assert.equal(k.teile(/^deck\/1\/bk\//).length, 8);
+  assert.equal(k.teile(/^erz\/3\/bk\//).length, 64);
+  assert.equal(k.teile(/^deck\/1\/bk\//).length, 64);
   assert.deepEqual(k.bk.aufrufe.map((x) => x.kanal).sort(), ['deck/1', 'erz/3']);
   assert.deepEqual(r.j.kern.baukasten.map((x) => x.ok), [true, true]);
 });

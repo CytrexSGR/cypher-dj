@@ -37,6 +37,20 @@ std::string projekt(const char* graph, const char* k1) {
          "{\"id\":\"c2/n2\",\"beat\":2.0,\"laenge\":0.5,\"ton\":64,\"vel\":100}]}";
 }
 
+std::string projekt_p(const char* graph, const std::string& parameter) {
+  return std::string("{\"nr\":2,\"art\":\"intern\",\"geraet\":\"bk\",\"graph\":\"") + graph + "\",\"parameter\":{" + parameter +
+         "},\"noten\":[{\"id\":\"c2/n1\",\"beat\":0.5,\"laenge\":0.5,\"ton\":57,\"vel\":100},"
+         "{\"id\":\"c2/n2\",\"beat\":2.0,\"laenge\":0.5,\"ton\":64,\"vel\":100}]}";
+}
+
+// G_T with its regler node on knob `gn`, optionally with the start position `vorgabe` (the playback default of case 5)
+std::string graph_knopf(int gn, const char* vorgabe) {
+  std::string g = bkt::G_T;
+  g.replace(g.find("\"nr\":1,"), 7, "\"nr\":" + std::to_string(gn) + ",");
+  if (vorgabe) g.replace(g.find("\"max\":1}"), 8, std::string("\"max\":1,\"vorgabe\":") + vorgabe + "}");
+  return g;
+}
+
 cdj::RenderErgebnis render(const std::string& arr, int64_t nr, const std::string& bk, bool mute = false) {
   cdj::RenderAuftrag r;
   r.arr_ordner = arr;
@@ -93,6 +107,34 @@ int main() {
     const cdj::RenderErgebnis b = render(o.pfad, 1, "");
     PRUEF(b.fehler == "format");
     std::printf("case 4: missing graph -> '%s' (%s); no folder -> '%s' (%s)\n", a.fehler.c_str(), a.meldung.c_str(), b.fehler.c_str(), b.meldung.c_str());
+  }
+  {  // 5: playback default, offline: a knob the project does not name starts at the graph's `vorgabe` (0.2), so the render is the same bytes as a
+     // project that names the knob at 0.2, and differs from 0.5; a graph without `vorgabe` renders a missing knob as an explicit 0.5. Knob 9 runs
+     // on every engine of this branch; knob 40 needs hall_ffi with REGLER 64.
+    int nr = 10;
+    for (const int gn : {9, 40}) {
+      const std::string kn = "\"k" + std::to_string(gn) + "\":";
+      std::ofstream(bk + "/mit.json") << graph_knopf(gn, "0.2");
+      std::ofstream(bk + "/ohne.json") << graph_knopf(gn, nullptr);
+      o.wiedergabe(nr + 0, projekt_p("mit", "\"k1\":0.5"));             // names k1 only (an old project)
+      o.wiedergabe(nr + 1, projekt_p("mit", kn + "0.2"));
+      o.wiedergabe(nr + 2, projekt_p("mit", kn + "0.5"));
+      o.wiedergabe(nr + 3, projekt_p("mit", kn + "0.9"));
+      o.wiedergabe(nr + 4, projekt_p("ohne", "\"k1\":0.5"));
+      o.wiedergabe(nr + 5, projekt_p("ohne", kn + "0.5"));
+      o.wiedergabe(nr + 6, projekt_p("ohne", kn + "0.9"));
+      const cdj::RenderErgebnis fehlt = render(o.pfad, nr + 0, bk), g02 = render(o.pfad, nr + 1, bk), g05 = render(o.pfad, nr + 2, bk), g09 = render(o.pfad, nr + 3, bk);
+      const cdj::RenderErgebnis of = render(o.pfad, nr + 4, bk), o05 = render(o.pfad, nr + 5, bk), o09 = render(o.pfad, nr + 6, bk);
+      PRUEF(fehlt.fehler.empty() && g02.fehler.empty() && g05.fehler.empty() && g09.fehler.empty() && of.fehler.empty() && o05.fehler.empty() && o09.fehler.empty());
+      std::printf("case 5: knob %d vorgabe 0.2: missing peak %.5f, explicit 0.2 %.5f, explicit 0.5 %.5f; no vorgabe: missing %.5f, explicit 0.5 %.5f\n", gn,
+                  fehlt.spitze, g02.spitze, g05.spitze, of.spitze, o05.spitze);
+      PRUEF(g05.spitze > 0.0f);                                  // positive control
+      PRUEF(fehlt.l == g02.l && fehlt.r == g02.r);                // the missing knob starts at 0.2
+      PRUEF(fehlt.l != g05.l);                                    // ... and not at 0.5
+      PRUEF(of.l == o05.l && of.r == o05.r);                      // no vorgabe: 0.5 as before
+      PRUEF(g09.l == o09.l);                                      // a named knob wins over the default
+      nr += 10;
+    }
   }
   PRUEF_ENDE();
 }

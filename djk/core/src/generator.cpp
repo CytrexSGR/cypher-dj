@@ -41,7 +41,7 @@ void Erzeuger::bk_zur_freigabe(CypherBk* bk) {
   else ++bk_stand_.voll;  // darf nicht vorkommen (je Block geleert); lieber verlieren als im Callback freigeben
 }
 
-// S5r: die Regler <kanal>/bk/1..8 an den Graphen melden (die FFI glättet über 20 ms). Nur aufrufen, wo der Platz des Handles
+// S5r: die Regler <kanal>/bk/1..32 an den Graphen melden (die FFI glättet über 20 ms). Nur aufrufen, wo der Platz des Handles
 // nachweislich FREI ist (bk_vorlauf: nach dem Abholen, nicht bei VERSPAETET), oder ohne Werk im Callback. Ohne Werte-Zeiger
 // (Tests ohne Kern) keine Meldung: der Graph bleibt auf seinen Werten (K10).
 void Erzeuger::bk_regler_melden(CypherBk* bk, int kanal) {
@@ -53,9 +53,9 @@ void Erzeuger::bk_regler_melden(CypherBk* bk, int kanal) {
 #ifdef CYPHERDJ_MUTATION_BK_REGLER_FALSCHER_KANAL  // Fehlerfall S5r: die Zeile des Nachbarkanals
   kanal = (kanal + 1) % MIX_KANAELE;
 #endif
-  for (int nr = 1; nr <= 8; ++nr) {
+  for (int nr = 1; nr <= cypherdj::stellwerk::BK_REGLER_N; ++nr) {
 #ifdef CYPHERDJ_MUTATION_BK_REGLER_TAUSCH_05  // Fehlerfall S5r (D5): nur gemeldet, wenn sich der Wert ändert; ein getauschter Graph bleibt auf 0,5
-    static float zuletzt[MIX_KANAELE][8];
+    static float zuletzt[MIX_KANAELE][cypherdj::stellwerk::BK_REGLER_N];
     if (bk_wert_[kanal][nr - 1] == zuletzt[kanal][nr - 1]) continue;
     zuletzt[kanal][nr - 1] = bk_wert_[kanal][nr - 1];
 #endif

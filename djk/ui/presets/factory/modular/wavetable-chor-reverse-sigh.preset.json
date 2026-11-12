@@ -1,0 +1,44 @@
+{
+ "schema": 1,
+ "name": "Chor Reverse Sigh",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "wavetable-chor",
+ "werte": {
+  "knob1": 1.0,
+  "knob2": 0.05,
+  "knob3": 0.25,
+  "knob4": 0.9,
+  "knob5": 0.35,
+  "knob6": 0.7,
+  "knob7": 0.15,
+  "knob8": 0.3,
+  "knob9": 0.7
+ },
+ "beschreibung": {
+  "art": "pad",
+  "unterart": "choir",
+  "charakter": [
+   "evolving",
+   "soft",
+   "wide"
+  ],
+  "genre": [
+   "ambient",
+   "downtempo"
+  ],
+  "einsatz": [
+   "breakdown",
+   "transition"
+  ],
+  "energie": 2,
+  "text": "Choir that starts on the last vowel and sighs back toward the first as the wave envelope falls."
+ },
+ "tags": [
+  "wavetable-chor",
+  "wave-envelope"
+ ],
+ "notiz": "Measured by level on render, not yet heard (2026-11-11).",
+ "angelegt": "2026-11-11T00:00:00.000Z",
+ "geaendert": "2026-11-11T00:00:00.000Z"
+}

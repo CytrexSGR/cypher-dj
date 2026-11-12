@@ -9,6 +9,9 @@ use crate::gate::Gate;
 use crate::krume::Krume;
 use crate::leitung::Leitung;
 use crate::lfo::Lfo;
+use crate::sh::Sh;
+use crate::mseg::{Mseg, MsegSatz};
+use crate::folger::Folger;
 use crate::limiter::Limiter;
 use crate::osz::{Osz, Rauschen, Sinus};
 use crate::phaser::Phaser;
@@ -16,6 +19,8 @@ use crate::vocoder::Vocoder;
 use crate::sampler::{Eingabe, Einstellung, Sampler};
 use crate::roehre::{Roehre, RoehrenSatz};
 use crate::svf::Svf;
+use crate::sem::Sem;
+use crate::diode::Diode;
 use crate::wavetable::{Eingabe as WtEingabe, Einstellung as WtEinstellung, Stimme as WtStimme, Tabelle};
 use crate::resonator::{Eingabe as RsEingabe, Einstellung as RsEinstellung, Satz, Stimme as RsStimme};
 use crate::metall::{Einstellung as MtEinstellung, Stimme as MtStimme};
@@ -27,8 +32,9 @@ use saett_dsp::Adaa1;
 /// Höchstzahl der Stimmen eines Graphen; `stimmen` im JSON darf 1..=MAX_STIMMEN sein.
 pub const MAX_STIMMEN: usize = 16;
 pub type Spur = [f32; MAX_STIMMEN];
-/// Zahl der Regler („Knob 1..8“ im Plugin)
-pub const REGLER: usize = 8;
+/// Number of knobs a graph may define (`regler` nodes `nr` 1..=REGLER). Widened from 8 to 32 and then to 64 on 2026-11-11;
+/// the hosts (core tables, VST3 parameters, page) follow in their own sweep.
+pub const REGLER: usize = 64;
 
 /// Woher ein Eingang liest: aus einem Slot dieses Samples, aus einem Slot des vorigen Samples, oder fest 0.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -41,8 +47,9 @@ pub enum Quelle {
 pub enum Schritt {
     Note { hz: usize, gate: usize, vel: usize, trig: usize, erste: usize },
     Konst { aus: usize, wert: f32 },
-    /// `nr` 0-basiert; Wert min..max linear oder (log) exponentiell über den Reglerweg 0..1
-    Regler { aus: usize, nr: usize, min: f32, max: f32, log: bool },
+    /// `nr` 0-basiert; Wert min..max linear oder (log) exponentiell über den Reglerweg 0..1. Mit `mitte` liegt der Wert `mitte`
+    /// genau bei Reglerweg 0.5: 0..0.5 läuft min..mitte, 0.5..1 mitte..max (jede Hälfte linear oder log).
+    Regler { aus: usize, nr: usize, min: f32, max: f32, log: bool, mitte: Option<f32> },
     /// `hart`: the band-limited hard sync input, `Some` only with an edge (then `sync` has none); `hart_aus` its output slot
     Saege { hz: Quelle, sync: Quelle, aus: usize, zyklus: usize, osz: [Osz; MAX_STIMMEN], hart: Option<Quelle>, hart_aus: usize },
     Puls { hz: Quelle, pwm: Quelle, sync: Quelle, aus: usize, zyklus: usize, osz: [Osz; MAX_STIMMEN], hart: Option<Quelle>, hart_aus: usize },
@@ -51,9 +58,14 @@ pub enum Schritt {
     Rauschen { aus: usize, r: [Rauschen; MAX_STIMMEN] },
     /// `versatz` (beats) and `einmal` (ramp once, then hold) apply to the beat-synced mode (`takt` > 0) only (S21)
     Lfo { rate: Quelle, trig: Quelle, aus: usize, form: u8, neustart: bool, takt: f32, versatz: f64, einmal: bool, l: [Lfo; MAX_STIMMEN] },
+    /// sample and hold; `x_ext` / `trig_ext`: the input has an edge in the graph; `takt` > 0 = beat clock (S&H without `trig`)
+    Sh { x: Quelle, trig: Quelle, rate: Quelle, glatt: Quelle, aus: usize, x_ext: bool, trig_ext: bool, takt: f32, s: [Sh; MAX_STIMMEN] },
+    Mseg { gate: Quelle, trig: Quelle, aus: usize, c: MsegSatz, e: [Mseg; MAX_STIMMEN] },
+    Folger { x: Quelle, an: Quelle, ab: Quelle, aus: usize, f: [Folger; MAX_STIMMEN] },
     Transponiere { hz: Quelle, st: Quelle, cent: Quelle, aus: usize },
     Ladder { x: Quelle, cutoff: Quelle, reso: Quelle, aus: usize, f: [Ladder; MAX_STIMMEN], reso_glatt: Spur },
     Svf { x: Quelle, cutoff: Quelle, reso: Quelle, tp: usize, bp: usize, hp: usize, vier: bool, f: [Svf; MAX_STIMMEN] },
+    Sem { x: Quelle, cutoff: Quelle, reso: Quelle, form: Quelle, aus: usize, bp: usize, f: [Sem; MAX_STIMMEN] },
     /// tanh mit ADAA1 (saett_dsp::Adaa1, f64), `antrieb` in dB vor der Kennlinie
     Saett { x: Quelle, antrieb: Quelle, aus: usize, a: [Adaa1; MAX_STIMMEN] },
     Glatt { x: Quelle, setzen: Quelle, aus: usize, zeit: f32, z: Spur },
@@ -63,6 +75,8 @@ pub enum Schritt {
     Adsr { gate: Quelle, trig: Quelle, zeiten: [Quelle; 4], aus: usize, e: [Adsr; MAX_STIMMEN] },
     Mul { a: Quelle, b: Quelle, aus: usize },
     Add { a: Quelle, b: Quelle, c: Quelle, d: Quelle, aus: usize },
+    /// Per voice (type 38): selector over `ein` (e1..e8), position from `wahl` (wahl.rs); the voices are boxed so the step enum does not grow
+    Wahl { ein: [Quelle; 8], wahl: Quelle, aus: usize, e: crate::wahl::Einstellung, v: Box<[crate::wahl::Stimme; MAX_STIMMEN]> },
     /// Summenpunkt (Slice 2b, D1): rechnet auf der Summe aller Stimmen, Ergebnis in Stimme 0, die übrigen Stimmen 0
     Chorus { x: Quelle, mix: Quelle, l: usize, r: usize, c: Chorus },
     /// Summenpunkt (Slice 4a): Cypher Hall auf Σ(x + l) links und Σ(x + r) rechts, Ergebnis in Stimme 0. Nur `mix` ändert
@@ -111,6 +125,20 @@ pub enum Schritt {
     /// Per voice: physical string model (saite.rs). Each voice owns its delay lines (allocated at translation); the voices
     /// are boxed so the step enum does not grow by their size.
     Saite { x: Quelle, hz: Quelle, trig: Quelle, vel: Quelle, ausklang: Quelle, daempfung: Quelle, hell: Quelle, lage: Quelle, koerper_mix: Quelle, aus: usize, e: SaEinstellung, s: Box<[SaStimme; MAX_STIMMEN]> },
+    /// Per voice: tuned comb filter (kamm.rs, type 38); each voice owns its delay line (allocated at translation).
+    Kamm { x: Quelle, hz: Quelle, fb: Quelle, daempf: Quelle, mix: Quelle, aus: usize, k: Vec<crate::kamm::Kamm> },
+    /// Per voice: vowel filter (formant.rs, type 39).
+    Formant { x: Quelle, vokal: Quelle, versatz: Quelle, q: Quelle, mix: Quelle, aus: usize, f: Box<[crate::formant::Stimme; MAX_STIMMEN]> },
+    /// Per voice: MS-20 style filter (ms20.rs), outputs low-pass and high-pass, `modus` 0 both, 1 only tp, 2 only hp
+    Ms20 { x: Quelle, cutoff: Quelle, reso: Quelle, antrieb: Quelle, tp: usize, hp: usize, modus: u8, f: Box<[crate::ms20::Ms20; MAX_STIMMEN]> },
+    /// Per voice: TB-303 diode-ladder low-pass (diode.rs); cutoff is read per sample (audio-rate modulation).
+    Diode { x: Quelle, cutoff: Quelle, reso: Quelle, antrieb: Quelle, bass: Quelle, aus: usize, f: [Diode; MAX_STIMMEN] },
+    /// Sum point (type 47): drum kit, the note picks the drum per voice; result in voice 0 (trommeln.rs). Inputs in the order of `trommeln::EIN`.
+    Trommeln { ein: [Quelle; crate::trommeln::NEIN], aus: usize, e: crate::trommeln::Einstellung, t: Box<crate::trommeln::Kit> },
+    /// Per voice: wavefolder (falter.rs, type 48), ADAA1, optionally at 2x (`ueber`); boxed so the step enum does not grow
+    Falter { x: Quelle, antrieb: Quelle, symmetrie: Quelle, form: Quelle, aus: usize, ueber: bool, f: Box<[crate::falter::Falter; MAX_STIMMEN]> },
+    /// Per voice: slow random drift in -1..1 (drift.rs, type 49), seeded by `saat` and the voice number
+    Drift { rate: Quelle, fest: Quelle, aus: usize, d: [crate::drift::Drift; MAX_STIMMEN], saat: u32 },
     /// Host-Audio (S3c): nur Stimme 0, wie die Summenpunkte; der Ausgang summiert über alle Stimmen
     Eingang { wl: usize, wr: usize },
     /// links = x + l, rechts = x + r, je über alle Stimmen summiert
@@ -154,6 +182,8 @@ pub struct Programm {
     bps: f64,
     /// Reglerwege 0..1, gesetzt vom Plugin (`setze_regler`)
     regler: [f32; REGLER],
+    /// Startstellung je Regler aus dem Graphen (`vorgabe` des ersten `regler`-Knotens der Nummer; 0.5 sonst)
+    regler_vorgabe: [f32; REGLER],
     /// (nr 1..8, Name) aus `regler_namen`, nur zur Anzeige
     pub regler_namen: Vec<(usize, String)>,
 }
@@ -199,12 +229,34 @@ fn in_stimme0(slots: &mut [Spur], wl: usize, wr: usize, (a, b): (f32, f32)) {
     slots[wr] = or;
 }
 
+/// `regler` with a centre value: knob 0.5 returns `mitte` by branch (never by interpolation), the ends return `min` and `max`
+/// exactly, each half is linear or (log) geometric between its two ends.
+#[inline]
+fn regler_mit_mitte(min: f32, max: f32, log: bool, mitte: f32, k: f32) -> f32 {
+    if k == 0.5 {
+        return mitte;
+    }
+    if k <= 0.0 {
+        return min;
+    }
+    if k >= 1.0 {
+        return max;
+    }
+    let (von, bis, t) = if k < 0.5 { (min, mitte, k * 2.0) } else { (mitte, max, (k - 0.5) * 2.0) };
+    if log {
+        // pow can overshoot an end of the half by one ulp: keep the result inside it
+        (von * (bis / von).powf(t)).clamp(von.min(bis), von.max(bis))
+    } else {
+        von + (bis - von) * t
+    }
+}
+
 fn hz(note: u8) -> f32 { 440.0 * 2f32.powf((note as f32 - 69.0) / 12.0) }
 
 impl Programm {
     /// Nur für `uebersetzen`: Schritte und Slot-Zahl kommen fertig geprüft.
     pub(crate) fn neu(name: String, stimmen: usize, sr: f32, schritte: Vec<Schritt>, n_slots: usize, verzoegert: Vec<usize>,
-                      regler_namen: Vec<(usize, String)>, latenz: usize) -> Self {
+                      regler_namen: Vec<(usize, String)>, latenz: usize, regler_vorgabe: [f32; REGLER]) -> Self {
         let eingang = schritte.iter().any(|s| matches!(s, Schritt::Eingang { .. }));
         Self {
             name,
@@ -231,12 +283,17 @@ impl Programm {
             eingang,
             beat: 0.0,
             bps: 128.0 / 60.0 / sr as f64,
-            regler: [0.5; REGLER],
+            regler: regler_vorgabe,
+            regler_vorgabe,
             regler_namen,
         }
     }
 
-    /// Reglerweg `wert` (0..1) für Regler `nr` (1..8); andere Nummern werden ignoriert. Allokiert nicht.
+    /// Die Startstellung jedes Reglers (Index 0 = Regler 1): `vorgabe` des ersten `regler`-Knotens der Nummer im Graphen, 0.5 für
+    /// Regler ohne Knoten oder ohne `vorgabe`. Mit diesen Werten beginnt die Engine; wer Regler anlegt (FFI, Plugin), fragt hier.
+    pub fn regler_vorgaben(&self) -> [f32; REGLER] { self.regler_vorgabe }
+
+    /// Reglerweg `wert` (0..1) für Regler `nr` (1..=REGLER); andere Nummern werden ignoriert. Allokiert nicht.
     pub fn setze_regler(&mut self, nr: usize, wert: f32) {
         if (1..=REGLER).contains(&nr) {
             self.regler[nr - 1] = wert.clamp(0.0, 1.0);
@@ -344,7 +401,12 @@ impl Programm {
                 Schritt::Sinus { osz, .. } => *osz = [Sinus::default(); MAX_STIMMEN],
                 Schritt::Rauschen { r, .. } => *r = std::array::from_fn(Rauschen::neu),
                 Schritt::Lfo { l, .. } => *l = std::array::from_fn(Lfo::neu),
+                Schritt::Sh { s, .. } => *s = std::array::from_fn(Sh::neu),
+                Schritt::Mseg { e, .. } => *e = [Mseg::default(); MAX_STIMMEN],
+                Schritt::Folger { f, .. } => *f = [Folger::default(); MAX_STIMMEN],
                 Schritt::Svf { f, .. } => *f = [Svf::default(); MAX_STIMMEN],
+                Schritt::Sem { f, .. } => *f = [Sem::default(); MAX_STIMMEN],
+                Schritt::Wahl { v, .. } => **v = [crate::wahl::Stimme::default(); MAX_STIMMEN],
                 Schritt::Saett { a, .. } => *a = [Adaa1::default(); MAX_STIMMEN],
                 Schritt::Glatt { z, .. } => *z = [0.0; MAX_STIMMEN],
                 Schritt::Leitung { l, .. } => l.iter_mut().for_each(|v| v.zuruecksetzen()),
@@ -378,11 +440,18 @@ impl Programm {
                     m.zuruecksetzen();
                     **g = std::array::from_fn(|i| GrStimme::neu(i, e));
                 }
+                Schritt::Diode { f, .. } => *f = [Diode::default(); MAX_STIMMEN],
                 Schritt::Saite { s, e, .. } => s.iter_mut().enumerate().for_each(|(i, v)| v.zuruecksetzen(i, e)),
+                Schritt::Kamm { k, .. } => k.iter_mut().for_each(|v| v.zuruecksetzen()),
+                Schritt::Formant { f, .. } => **f = [crate::formant::Stimme::neu(); MAX_STIMMEN],
+                Schritt::Ms20 { f, .. } => **f = [crate::ms20::Ms20::default(); MAX_STIMMEN],
+                Schritt::Falter { f, .. } => f.iter_mut().for_each(|v| v.zuruecksetzen()),
+                Schritt::Drift { d, saat, .. } => *d = std::array::from_fn(|i| crate::drift::Drift::neu(i, *saat)),
                 Schritt::Roehre { r1, r2, .. } => {
                     *r1 = [Roehre::default(); MAX_STIMMEN];
                     *r2 = [Roehre::default(); MAX_STIMMEN];
                 }
+                Schritt::Trommeln { t, e, .. } => t.zuruecksetzen(e),
                 Schritt::Note { .. }
                 | Schritt::Konst { .. }
                 | Schritt::Regler { .. }
@@ -426,9 +495,12 @@ impl Programm {
                     slots[*e] = *erste;
                 }
                 Schritt::Konst { aus, wert } => slots[*aus] = [*wert; MAX_STIMMEN],
-                Schritt::Regler { aus, nr, min, max, log } => {
+                Schritt::Regler { aus, nr, min, max, log, mitte } => {
                     let k = regler[*nr];
-                    let w = if *log { *min * (*max / *min).powf(k) } else { *min + (*max - *min) * k };
+                    let w = match mitte {
+                        None => if *log { *min * (*max / *min).powf(k) } else { *min + (*max - *min) * k },
+                        Some(m) => regler_mit_mitte(*min, *max, *log, *m, k),
+                    };
                     slots[*aus] = [w; MAX_STIMMEN];
                 }
                 Schritt::Saege { hz: q, sync, aus, zyklus, osz, hart, hart_aus } => {
@@ -529,6 +601,33 @@ impl Programm {
                     }
                     slots[*aus] = o;
                 }
+                Schritt::Sh { x, trig: t, rate, glatt, aus, x_ext, trig_ext, takt, s } => {
+                    let (x, t, r, g) = (spur(*x, slots, vorher), spur(*t, slots, vorher), spur(*rate, slots, vorher), spur(*glatt, slots, vorher));
+                    let mut o = [0.0; MAX_STIMMEN];
+                    // beat clock: phase from the host beat, as in `lfo` with `takt`
+                    let ph = if *takt > 0.0 { (beat / *takt as f64).rem_euclid(1.0) as f32 } else { 0.0 };
+                    for i in 0..n {
+                        let tick = if *trig_ext { s[i].takt_flanke(t[i]) } else if *takt > 0.0 { s[i].takt_beat(ph) } else { s[i].takt_rate(r[i], sr) };
+                        o[i] = s[i].prozess(tick, x[i], *x_ext, g[i], sr);
+                    }
+                    slots[*aus] = o;
+                }
+                Schritt::Mseg { gate: g, trig: t, aus, c, e } => {
+                    let (g, t) = (spur(*g, slots, vorher), spur(*t, slots, vorher));
+                    let mut o = [0.0; MAX_STIMMEN];
+                    for i in 0..n {
+                        o[i] = e[i].prozess(g[i] > 0.5, t[i] > 0.5, c, sr);
+                    }
+                    slots[*aus] = o;
+                }
+                Schritt::Folger { x, an, ab, aus, f } => {
+                    let (x, a, b) = (spur(*x, slots, vorher), spur(*an, slots, vorher), spur(*ab, slots, vorher));
+                    let mut o = [0.0; MAX_STIMMEN];
+                    for i in 0..n {
+                        o[i] = f[i].prozess(x[i], a[i], b[i], sr);
+                    }
+                    slots[*aus] = o;
+                }
                 Schritt::Transponiere { hz: q, st, cent, aus } => {
                     let (f, s, c) = (spur(*q, slots, vorher), spur(*st, slots, vorher), spur(*cent, slots, vorher));
                     let mut o = [0.0; MAX_STIMMEN];
@@ -546,6 +645,24 @@ impl Programm {
                     slots[*tp] = t;
                     slots[*bp] = b;
                     slots[*hp] = h;
+                }
+                Schritt::Sem { x, cutoff, reso, form, aus, bp, f } => {
+                    let (x, c, r, fo) = (spur(*x, slots, vorher), spur(*cutoff, slots, vorher), spur(*reso, slots, vorher), spur(*form, slots, vorher));
+                    let (mut a, mut b) = ([0.0; MAX_STIMMEN], [0.0; MAX_STIMMEN]);
+                    for i in 0..n {
+                        (a[i], b[i]) = f[i].prozess(x[i], c[i], r[i], fo[i], sr);
+                    }
+                    slots[*aus] = a;
+                    slots[*bp] = b;
+                }
+                Schritt::Diode { x, cutoff, reso, antrieb, bass, aus, f } => {
+                    let (x, c, r) = (spur(*x, slots, vorher), spur(*cutoff, slots, vorher), spur(*reso, slots, vorher));
+                    let (a, b) = (spur(*antrieb, slots, vorher), spur(*bass, slots, vorher));
+                    let mut o = [0.0; MAX_STIMMEN];
+                    for i in 0..n {
+                        o[i] = f[i].prozess(x[i], c[i], r[i], a[i], b[i], sr);
+                    }
+                    slots[*aus] = o;
                 }
                 Schritt::Saett { x, antrieb, aus, a } => {
                     let (x, g) = (spur(*x, slots, vorher), spur(*antrieb, slots, vorher));
@@ -606,6 +723,16 @@ impl Programm {
                     let mut o = [0.0; MAX_STIMMEN];
                     for i in 0..n {
                         o[i] = a[i] + b[i] + c[i] + d[i];
+                    }
+                    slots[*aus] = o;
+                }
+                Schritt::Wahl { ein, wahl, aus, e, v } => {
+                    let sp: [Spur; 8] = std::array::from_fn(|k| spur(ein[k], slots, vorher));
+                    let w = spur(*wahl, slots, vorher);
+                    let mut o = [0.0; MAX_STIMMEN];
+                    for i in 0..n {
+                        let x: [f32; crate::wahl::MAX_EIN] = std::array::from_fn(|k| sp[k][i]);
+                        o[i] = v[i].prozess(e, &x, w[i]);
                     }
                     slots[*aus] = o;
                 }
@@ -801,6 +928,61 @@ impl Programm {
                     let mut o = [0.0; MAX_STIMMEN];
                     for i in 0..n {
                         o[i] = s[i].prozess(e, sr, SaEingabe { x: xi[i], hz: h[i], trig: tr[i], vel: ve[i], ausklang: au[i], daempfung: da[i], hell: he[i], lage: la[i], koerper_mix: km[i] });
+                    }
+                    slots[*aus] = o;
+                }
+                Schritt::Kamm { x, hz, fb, daempf, mix, aus, k } => {
+                    let (xi, h, f) = (spur(*x, slots, vorher), spur(*hz, slots, vorher), spur(*fb, slots, vorher));
+                    let (d, m) = (spur(*daempf, slots, vorher), spur(*mix, slots, vorher));
+                    let mut o = [0.0; MAX_STIMMEN];
+                    for i in 0..n {
+                        o[i] = k[i].prozess(xi[i], h[i], f[i], d[i], m[i]);
+                    }
+                    slots[*aus] = o;
+                }
+                Schritt::Formant { x, vokal, versatz, q, mix, aus, f } => {
+                    let (xi, v, s) = (spur(*x, slots, vorher), spur(*vokal, slots, vorher), spur(*versatz, slots, vorher));
+                    let (qq, m) = (spur(*q, slots, vorher), spur(*mix, slots, vorher));
+                    let mut o = [0.0; MAX_STIMMEN];
+                    for i in 0..n {
+                        o[i] = f[i].prozess(xi[i], v[i], s[i], qq[i], m[i], sr);
+                    }
+                    slots[*aus] = o;
+                }
+                Schritt::Ms20 { x, cutoff, reso, antrieb, tp, hp, modus, f } => {
+                    let (x, c, r, a) = (spur(*x, slots, vorher), spur(*cutoff, slots, vorher), spur(*reso, slots, vorher), spur(*antrieb, slots, vorher));
+                    let (mut t, mut h) = ([0.0; MAX_STIMMEN], [0.0; MAX_STIMMEN]);
+                    for i in 0..n {
+                        (t[i], h[i]) = f[i].prozess(x[i], c[i], r[i], a[i], *modus, sr);
+                    }
+                    slots[*tp] = t;
+                    slots[*hp] = h;
+                }
+                Schritt::Trommeln { ein: q, aus, e, t } => {
+                    let (tr, ve, h) = (spur(q[0], slots, vorher), spur(q[1], slots, vorher), spur(q[2], slots, vorher));
+                    let o = {
+                        let (sl, vo): (&[Spur], &[Spur]) = (slots, vorher);
+                        crate::trommeln::prozess_stimmen(t, e, sr, n, &tr, &ve, &h, &|k, i| match q[k] {
+                            Quelle::Slot(s) => sl[s][i],
+                            Quelle::Vorher(s) => vo[s][i],
+                            Quelle::Fest(w) => w,
+                        })
+                    };
+                    slots[*aus] = o;
+                }
+                Schritt::Falter { x, antrieb, symmetrie, form, aus, ueber, f } => {
+                    let (x, a, s, fo) = (spur(*x, slots, vorher), spur(*antrieb, slots, vorher), spur(*symmetrie, slots, vorher), spur(*form, slots, vorher));
+                    let mut o = [0.0; MAX_STIMMEN];
+                    for i in 0..n {
+                        o[i] = f[i].prozess(x[i], a[i], s[i], fo[i], *ueber);
+                    }
+                    slots[*aus] = o;
+                }
+                Schritt::Drift { rate, fest, aus, d, .. } => {
+                    let (r, f) = (spur(*rate, slots, vorher), spur(*fest, slots, vorher));
+                    let mut o = [0.0; MAX_STIMMEN];
+                    for i in 0..n {
+                        o[i] = d[i].prozess(r[i], f[i], sr);
                     }
                     slots[*aus] = o;
                 }

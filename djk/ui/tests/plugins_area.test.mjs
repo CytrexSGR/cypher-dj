@@ -18,7 +18,7 @@ const EINTRAEGE = [eintrag('a1', { name: 'Fake EQ' }), eintrag('b2', { name: 'Bi
   eintrag('c3', { name: 'Bad One', status: 'blockiert', grund: 'zeit' }), eintrag('d4', { name: 'Lv Comp', format: 'lv2', pfad: 'http://x.org/comp', uid: '' })];
 const SCAN = { befehl: process.execPath, args: ['-e', 'setTimeout(()=>console.log(JSON.stringify({neu:1,entfernt:0,geaendert:0,blockiert:1})),400)'] };
 
-async function stapel(t, { quelle = 'andreas', index = true, scan = SCAN } = {}) {
+async function stapel(t, { quelle = 'andreas', index = true, scan = SCAN, zugangExtra = {} } = {}) {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'plug-b-'));
   t.after(() => fs.rmSync(d, { recursive: true, force: true }));
   const datei = path.join(d, 'plugins', 'index.json');
@@ -28,7 +28,7 @@ async function stapel(t, { quelle = 'andreas', index = true, scan = SCAN } = {})
   const idx = new PluginIndex({ datei, scan, bei: (s) => ereignisse.push(s) });
   const router = new Router();
   const ctx = { quelle: () => q.wert, log: () => {}, kiGestoppt: () => false, sende: () => 0, warteQuittung: async () => null, verteile: () => {} };
-  router.melde(pluginsBereich(ctx, idx, { insertParameter: async () => ({ code: 200, j: {} }), insertFenster: async () => ({ code: 200, j: {} }) }));
+  router.melde(pluginsBereich(ctx, idx, { insertParameter: async () => ({ code: 200, j: {} }), insertFenster: async () => ({ code: 200, j: {} }), ...zugangExtra }));
   let port = 0;
   const server = http.createServer(async (rq, a) => {
     const url = new URL(rq.url ?? '/', 'http://127.0.0.1');
@@ -129,4 +129,15 @@ test('insert_setzen with plugin_id: resolves the index; blocked, instrument and 
   assert.equal(grund({ plugin_id: 'b2' }), 'kein_effekt');
   assert.equal(grund({ plugin_id: 'nope' }), 'plugin_unbekannt');
   assert.equal(grund({ plugin_id: 'a1', plugin: { format: 'vst3', pfad: '/x', uid: 'U' } }), 'argument_ungueltig');
+});
+
+test('GET /proj/spur/<id>/geraet/ist passes the names to the project session; without a session method it answers 404', async (t) => {
+  const gesehen = [];
+  const a = await stapel(t, { zugangExtra: { geraetIst: async (id, namen) => { gesehen.push([id, namen]); return { code: 200, j: { spur_id: id, werte: { a_x: 1 } } }; } } });
+  const r = await a.ruf('GET', '/proj/spur/s7/geraet/ist?namen=a_x,a_y');
+  assert.equal(r.code, 200);
+  assert.deepEqual(r.j.werte, { a_x: 1 });
+  assert.deepEqual(gesehen, [['s7', 'a_x,a_y']]);
+  const b = await stapel(t);
+  assert.equal((await b.ruf('GET', '/proj/spur/s7/geraet/ist?namen=a_x')).code, 404);
 });

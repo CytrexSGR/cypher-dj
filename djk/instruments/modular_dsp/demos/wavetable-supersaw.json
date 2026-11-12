@@ -2,7 +2,7 @@
   "format": "baukasten/2",
   "name": "wavetable-supersaw",
   "stimmen": 16,
-  "regler_namen": {"1": "Cutoff", "2": "Resonance", "3": "Detune", "4": "Width", "5": "Attack", "6": "Release"},
+  "regler_namen": {"1": "Cutoff", "2": "Resonance", "3": "Detune", "4": "Width", "5": "Attack", "6": "Release", "7": "Wave env amount", "8": "Wave env attack", "9": "Wave env decay"},
   "knoten": [
     {"id": "note", "art": "note"},
     {"id": "k_cutoff", "art": "regler", "nr": 1, "min": 400, "max": 16000, "log": 1},
@@ -11,7 +11,7 @@
     {"id": "k_breite", "art": "regler", "nr": 4, "min": 0, "max": 1},
     {"id": "k_att", "art": "regler", "nr": 5, "min": 0.002, "max": 1.5, "log": 1},
     {"id": "k_rel", "art": "regler", "nr": 6, "min": 0.05, "max": 3, "log": 1},
-    {"id": "osz", "art": "wavetable", "tabelle": 0, "kopien": 7},
+    {"id": "osz", "art": "wavetable", "tabelle": 4, "kopien": 7},
     {"id": "filter_l", "art": "svf"},
     {"id": "filter_r", "art": "svf"},
     {"id": "env", "art": "adsr", "a": 0.05, "d": 0.4, "s": 0.85, "r": 0.4},
@@ -19,7 +19,13 @@
     {"id": "vca_r", "art": "mul"},
     {"id": "pegel_l", "art": "mul", "b": 0.16},
     {"id": "pegel_r", "art": "mul", "b": 0.16},
-    {"id": "aus", "art": "ausgang"}
+    {"id": "aus", "art": "ausgang"},
+    {"id": "k_wamt", "art": "regler", "nr": 7, "min": -1, "max": 1},
+    {"id": "k_watt", "art": "regler", "nr": 8, "min": 0.005, "max": 4, "log": 1},
+    {"id": "k_wdec", "art": "regler", "nr": 9, "min": 0.05, "max": 6, "log": 1},
+    {"id": "wenv", "art": "adsr", "a": 0.01, "d": 0.5, "s": 0, "r": 0.3},
+    {"id": "wmod", "art": "mul"},
+    {"id": "pos", "art": "add", "a": 0.6666667}
   ],
   "kanten": [
     {"von": "note.hz", "nach": "osz.hz"},
@@ -43,6 +49,14 @@
     {"von": "vca_l.aus", "nach": "pegel_l.a"},
     {"von": "vca_r.aus", "nach": "pegel_r.a"},
     {"von": "pegel_l.aus", "nach": "aus.l"},
-    {"von": "pegel_r.aus", "nach": "aus.r"}
+    {"von": "pegel_r.aus", "nach": "aus.r"},
+    {"von": "note.gate", "nach": "wenv.gate"},
+    {"von": "note.trig", "nach": "wenv.trig"},
+    {"von": "k_watt.aus", "nach": "wenv.a"},
+    {"von": "k_wdec.aus", "nach": "wenv.d"},
+    {"von": "wenv.aus", "nach": "wmod.a"},
+    {"von": "k_wamt.aus", "nach": "wmod.b"},
+    {"von": "wmod.aus", "nach": "pos.b"},
+    {"von": "pos.aus", "nach": "osz.pos"}
   ]
 }

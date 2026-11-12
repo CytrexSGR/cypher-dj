@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Vertragstest L3: Namenslisten für Tasten, Deck-Aktionen und Regler-Pfade gegeneinander.
 1.10 Slice 1: dazu grp/<n>/* und pm/fader in denselben Fundorten.
-S5r: dazu die Graph-Regler <kanal>/bk/<1..8> (Kanalmenge aus controls.cpp, in alle Fundorte getragen).
+S5r: dazu die Graph-Regler <kanal>/bk/<1..64> (Kanalmenge aus controls.cpp, in alle Fundorte getragen).
 1.15 A2 (mix tools): dazu die 345 Werkzeug-Regler gate, util, mb, lim, spektrum/kanal (Quelle: tool_controls.h, strikt gelesen;
 dazu INTERFACES §1.5, Attrappe REGLER, controls_info.ts mit Bereich und Vorgabe, hand_bedienung.PFAD und defs.schema.json
 als Annahme-Menge gegen ein Universum aller Familien mal aller Kanäle; kein curves.js ZIELE, wie beim Kompressor).
@@ -733,7 +733,7 @@ def _pruefe_return_regler(q: Quelle, befunde: list[str]) -> None:
             befunde.append(f"Return-Regler: R07 defs.schema.json regler_pfad nimmt {falsch} an")
 
 
-# ---------------------------------------------------------------- S5r: Graph-Regler <kanal>/bk/<1..8> (A11)
+# ---------------------------------------------------------------- S5r: Graph-Regler <kanal>/bk/<1..64> (A11)
 def _bk_kanaele_aus_spec(zelle: str) -> list[str]:
     """'deck/1..4, erz/1, 2, 3, 5, 6, 7 und pad/1, 2' -> ['deck/1', ..., 'pad/2']"""
     ergebnis: list[str] = []
@@ -748,7 +748,7 @@ def _bk_kanaele_aus_spec(zelle: str) -> list[str]:
 
 
 def bk_regler_listen(q: Quelle) -> dict[str, list[str]]:
-    """<kanal>/bk/<1..8> and fx/3|4/bk/<1..8> (S14) per location. The channel set sits in the kern (controls.cpp, loop over
+    """<kanal>/bk/<1..64> and fx/3|4/bk/<1..64> (S14) per location. The channel set sits in the kern (controls.cpp, loop over
     kn_bk) and is pinned there against the real acceptance of net_erz.cpp (test_net_erz.cpp); the send-return set is the
     second loop (kn_bk_send). Both are carried into all other locations here. Working tree only (node)."""
     cpp = q.lies("djk/core/signalbox/src/controls.cpp")
@@ -760,13 +760,19 @@ def bk_regler_listen(q: Quelle) -> dict[str, list[str]]:
     senden = re.findall(r'"(fx/\d+)"', ms.group(1))
     if not senden:
         raise ParserFehler("controls.cpp: keine Send-Returns in der bk-Sendeschleife, Parser blind oder Quelle umgebaut")
+    # 32-knob widening: knobs 9..64 sit in two further loops at the table end (indices of the older rows do not move); their channel
+    # sets must equal the first two loops, else a channel would have 1..8 only
+    mh = _such(r"for \(const char\* kn_bk_hoch : \{([^}]*)\}\)", cpp, "controls.cpp bk-Kanalschleife 9..64")
+    msh = _such(r"for \(const char\* kn_bk_send_hoch : \{([^}]*)\}\)", cpp, "controls.cpp bk-Sendeschleife 9..64")
+    kanaele_hoch = re.findall(r'"([a-z]+/\d+)"', mh.group(1))
+    senden_hoch = re.findall(r'"(fx/\d+)"', msh.group(1))
     spec = q.lies("docs/architecture/INTERFACES.md")
     teil = spec[_index(spec, "### 1.5 Kanäle und Regler-Pfade", "§1.5"):_index(spec, "### 1.6", "§1.5")]
-    z = _such(r"^\| `<k>/bk/<n>` \(n = 1 bis 8\) \|.*\| alle; nur `<k>` = ([^|]*) \|$", teil,
+    z = _such(r"^\| `<k>/bk/<n>` \(n = 1 bis 64\) \|.*\| alle; nur `<k>` = ([^|]*) \|$", teil,
               "INTERFACES §1.5 bk-Zeile", re.M)
-    zf = _such(r"^\| `fx/<n>/bk/<m>` \(n = (\d+(?: and \d+)*), m = 1 to 8\) \|", teil, "INTERFACES §1.5 bk-Sendezeile", re.M)   # S14
+    zf = _such(r"^\| `fx/<n>/bk/<m>` \(n = (\d+(?: and \d+)*), m = 1 to 64\) \|", teil, "INTERFACES §1.5 bk-Sendezeile", re.M)   # S14
     spec_senden = [f"fx/{n}" for n in zf.group(1).split(" and ")]
-    alle = lambda ks: sorted(f"{k}/bk/{n}" for k in ks for n in range(1, 9))   # noqa: E731
+    alle = lambda ks: sorted(f"{k}/bk/{n}" for k in ks for n in range(1, 65))   # noqa: E731
     aus = q.node_json(
         "const v=await import('file://@@/djk/contract/mock_core/contract.mjs');"
         "const k=await import('file://@@/djk/ui/public/curves.js');"
@@ -774,6 +780,7 @@ def bk_regler_listen(q: Quelle) -> dict[str, list[str]]:
         "const s=(m)=>[...m].filter((p)=>/\\/bk\\/[0-9]+$/.test(p));"
         "console.log(JSON.stringify({a:s(v.REGLER.keys()),z:s(k.ZIELE),l:s(l.REGLER.keys())}))")
     return {"R01 Kern controls.cpp": alle(kanaele + senden),
+            "R01b Kern controls.cpp (9..64 loops)": alle(kanaele_hoch + senden_hoch),
             "R02 INTERFACES §1.5": alle(_bk_kanaele_aus_spec(z.group(1)) + spec_senden),
             "R03 Attrappe REGLER": sorted(aus["a"]), "R04 curves.js ZIELE": sorted(aus["z"]),
             "R05 controls_info.ts": sorted(aus["l"])}
@@ -801,8 +808,8 @@ def _pruefe_bk_regler(q: Quelle, befunde: list[str]) -> None:
     unbekannt = [f"{g}/{i}/bk/1" for g, n in (("deck", 4), ("erz", 8), ("pad", 2), ("bus", 4)) for i in range(1, n + 1)
                  if f"{g}/{i}" not in kanaele]
     # S14: only the send returns fx/3 and fx/4 have graph knobs
-    fx_falsch = ["fx/1/bk/1", "fx/2/bk/1", "fx/5/bk/1", "fx/3/bk/0", "fx/3/bk/9", "fx/4/bk/10"]
-    for falsch in unbekannt + fx_falsch + ["master/bk/1", "cue/bk/1", "deck/1/bk/9", "deck/1/bk/0", "pad/3/bk/1", "deck/1/bk/10"]:
+    fx_falsch = ["fx/1/bk/1", "fx/2/bk/1", "fx/5/bk/1", "fx/3/bk/0", "fx/3/bk/65", "fx/4/bk/70", "fx/4/bk/100"]
+    for falsch in unbekannt + fx_falsch + ["master/bk/1", "cue/bk/1", "deck/1/bk/65", "deck/1/bk/0", "pad/3/bk/1", "deck/1/bk/010", "deck/1/bk/033", "deck/1/bk/640", "deck/1/bk/9x"]:
         if pfad.search(falsch):
             befunde.append(f"bk-Regler: R06 hand_bedienung.PFAD nimmt {falsch} an")
         if re.fullmatch(schema, falsch):

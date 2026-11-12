@@ -5,6 +5,7 @@
 //   POST /plugins/entsperren {id}        Andreas only; a blocked entry is tried again by the next scan
 //   GET  /proj/insert/<insert_id>/parameter   the host's parameter list joined with the current values
 //   POST /proj/insert/<insert_id>/fenster {an}  Andreas only; opens or closes the plugin's own window
+//   GET /proj/spur/<spur_id>/geraet/ist?namen=a,b  the display values the host of a Surge track plays now (read-only)
 //   GET /proj/spur/<spur_id>/geraet/parameter, POST .../geraet/param {werte}, POST .../geraet/fenster {an}  the same for a plugin instrument track
 import type http from 'node:http';
 import type { Bereich, BereichKontext, Route } from '../../http/router.ts';
@@ -19,6 +20,7 @@ export interface PluginsZugang {
   insertFenster(insertId: string, d: Record<string, unknown>, quelle: Quelle): Promise<Antwort>;
   geraetParameter(spurId: string): Promise<Antwort>;                                                // plan 1.11 task 17: the plugin instrument of a track
   geraetParam(spurId: string, d: Record<string, unknown>, quelle: Quelle): Promise<Antwort>;
+  geraetIst?(spurId: string, namen: string): Promise<Antwort>;                                      // front panels: the host's display values of a Surge track
   geraetFenster(spurId: string, d: Record<string, unknown>, quelle: Quelle): Promise<Antwort>;
 }
 const GERAET_PFAD = (ende: string) => (pfad: string): boolean => new RegExp(`^/proj/spur/s[0-9]{1,6}/geraet/${ende}$`).test(pfad);
@@ -57,6 +59,8 @@ export function pluginsBereich(ctx: BereichKontext, index: PluginIndex, zugang: 
     // plan 1.11 task 17: the same three for the device of an instrument track (<spur_id> is in the path)
     { methode: 'GET', pfad: GERAET_PFAD('parameter'), schutz: 'offen',
       handler: (_q, a, url) => antworte(a, () => zugang.geraetParameter(url.pathname.split('/')[3])) },
+    { methode: 'GET', pfad: GERAET_PFAD('ist'), schutz: 'offen',
+      handler: (_q, a, url) => antworte(a, () => (zugang.geraetIst ?? (async () => { throw new ProjFehler(404, 'nicht_unterstuetzt'); }))(url.pathname.split('/')[3], url.searchParams.get('namen') ?? '')) },
     { methode: 'POST', pfad: GERAET_PFAD('param'), schutz: 'fremdePost',
       handler: async (q, a, url) => { const quelle = ctx.quelle(); await antworte(a, async () => zugang.geraetParam(url.pathname.split('/')[3], await leseKoerper(q), quelle)); } },
     { methode: 'POST', pfad: GERAET_PFAD('fenster'), schutz: 'fremdePost',

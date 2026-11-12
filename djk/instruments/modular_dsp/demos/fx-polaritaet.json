@@ -1,0 +1,25 @@
+{
+  "format": "baukasten/2",
+  "name": "fx-polaritaet",
+  "stimmen": 1,
+  "regler_namen": {"1": "Polarity"},
+  "knoten": [
+    {"id": "ein", "art": "eingang"},
+    {"id": "k_pol", "art": "regler", "nr": 1, "min": 0, "max": 1},
+    {"id": "w_l", "art": "wahl", "n": 4, "e1": -1, "e2": -1, "e3": 1, "e4": 1, "blende": 5},
+    {"id": "m_l", "art": "mul"},
+    {"id": "w_r", "art": "wahl", "n": 4, "e1": -1, "e2": 1, "e3": 1, "e4": -1, "blende": 5},
+    {"id": "m_r", "art": "mul"},
+    {"id": "aus", "art": "ausgang"}
+  ],
+  "kanten": [
+    {"von": "k_pol.aus", "nach": "w_l.wahl"},
+    {"von": "ein.l", "nach": "m_l.a"},
+    {"von": "w_l.aus", "nach": "m_l.b"},
+    {"von": "k_pol.aus", "nach": "w_r.wahl"},
+    {"von": "ein.r", "nach": "m_r.a"},
+    {"von": "w_r.aus", "nach": "m_r.b"},
+    {"von": "m_l.aus", "nach": "aus.l"},
+    {"von": "m_r.aus", "nach": "aus.r"}
+  ]
+}

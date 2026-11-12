@@ -1,0 +1,33 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "saite-gitarre"},
+  "title": "String Guitar",
+  "akzent": "blau",
+  "layout": {"rows": [
+    ["exc", "str", "body", "amp"]
+  ]},
+  "sections": [
+    { "id": "exc", "title": "EXCITER", "cols": 4, "controls": [
+      {"id": "hell", "type": "knob", "label": "Brightness", "span": 2, "bind": {"param": "k3"}, "format": "percent", "default": 0.5},
+      {"id": "lage", "type": "knob", "label": "Pick position", "span": 2, "bind": {"param": "k4"}, "format": "percent", "default": 0.5},
+      {"id": "e1", "type": "label", "span": 4, "text": "Plucked pulse, harder when bright"},
+      {"id": "e2", "type": "label", "span": 4, "text": "Pick position: share of string length"}
+    ]},
+    { "id": "str", "title": "STRING", "cols": 4, "controls": [
+      {"id": "decay", "type": "knob", "label": "Decay", "span": 2, "bind": {"param": "k1"}, "format": "raw", "unit": "s", "default": 0.5},
+      {"id": "damp", "type": "knob", "label": "Damping", "span": 2, "bind": {"param": "k2"}, "format": "percent", "default": 0.5},
+      {"id": "s1", "type": "label", "span": 4, "text": "Waveguide loop with loss filter"},
+      {"id": "s2", "type": "label", "span": 4, "text": "Damping: highs die faster"}
+    ]},
+    { "id": "body", "title": "BODY", "cols": 3, "controls": [
+      {"id": "body", "type": "knob", "label": "Body", "span": 3, "bind": {"param": "k5"}, "format": "percent", "default": 0.5},
+      {"id": "b1", "type": "label", "span": 3, "text": "Guitar body"},
+      {"id": "b2", "type": "label", "span": 3, "text": "Five resonances plus a direct share"}
+    ]},
+    { "id": "amp", "title": "RELEASE", "cols": 3, "controls": [
+      {"id": "rel", "type": "knob", "label": "Release", "span": 3, "bind": {"param": "k6"}, "format": "raw", "unit": "s", "default": 0.5},
+      {"id": "r1", "type": "label", "span": 3, "text": "Release time of the string"},
+      {"id": "r2", "type": "label", "span": 3, "text": "6 voices"}
+    ]}
+  ]
+}

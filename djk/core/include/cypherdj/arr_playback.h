@@ -18,6 +18,7 @@
 
 #include "cypherdj/kit.h"             // 1.9: the Kit struct (header-only destructor; kit.cpp stays out of the link of the standalone targets)
 #include "cypherdj/store_account.h"
+#include "cypherdj/signalbox/controls.h"   // BK_REGLER_N: the knob count of a Baukasten graph (header-only constants)
 #include "cypherdj/warp_mapping.h"
 
 struct CypherBk;   // cypher_bk_ffi.h (global, extern "C" functions): a Baukasten graph instance
@@ -51,11 +52,12 @@ constexpr int ARR_INS_LIM = 2;            // arr-fx slice 2: 1 -> 2 (the pool is
 // one global slot index: komp first, then eq, saett, lim, and since plan 1.11 the host stages ins/host/1..ARR_INS_HOST at the end (INS_G_HOST0 in arr_inserts.h)
 // arr-fx slice 1: the utility stages ins/utility/1..ARR_INS_UTIL (Utility of package 1.15: width, bass mono, gain, balance) sit between lim and host (INS_G_UTIL0), so host stays last.
 constexpr int ARR_INS_UTIL = 8;           // "instanzen" of the kind utility in docs/interfaces/insert_module.json (pinned by test_arr_inserts_util)
-// arr-bk slice 3: the Baukasten effect stages ins/bk/1..ARR_INS_BK (a Baukasten effect graph with the knobs k1..k8) sit between utility and host (INS_G_BK0), so host stays last.
-// Pool size: "instanzen" of the kind bk in docs/interfaces/insert_module.json (pinned by test_arr_inserts_bk); the row table (MAX_REGLER) was raised for the 9 rows per slot.
+// arr-bk slice 3: the Baukasten effect stages ins/bk/1..ARR_INS_BK (a Baukasten effect graph with the knobs k1..k64) sit between utility and host (INS_G_BK0), so host stays last.
+// Pool size: "instanzen" of the kind bk in docs/interfaces/insert_module.json (pinned by test_arr_inserts_bk); the row table (MAX_REGLER) was raised for the 9 rows per slot (33 since the 32-knob widening, 65 since the 64-knob widening).
 constexpr int ARR_INS_BK = 8;
 constexpr int ARR_INS_ALLE = ARR_INS_KOMP + ARR_INS_EQ + ARR_INS_SAETT + ARR_INS_LIM + ARR_INS_UTIL + ARR_INS_BK + ARR_INS_HOST;
-constexpr int ARR_PARAMETER = 8;        // RB-338-Parameter je interner Spur (K2 liest sie)
+constexpr int BK_KNOEPFE = cypherdj::stellwerk::BK_REGLER_N;   // knobs k1..k64 of a Baukasten graph (track device parameters, insert stages, channel rows)
+constexpr int ARR_PARAMETER = BK_KNOEPFE;   // device parameters per internal track: the four RB-338 ones and the Baukasten knobs k1..k64 (was 8 before the 32-knob widening, 32 before the 64-knob one)
 constexpr int ARR_BK_MAX = 8;           // S20: Baukasten tracks per playback; = MAX_BK_SPUREN in model.ts
 constexpr int ARR_BK_INSERT_NR = 1000;  // arr-bk slice 3: the track number an insert stage uses in the key of the graph store (tracks and members are below 100)
 constexpr int ARR_KIT_MAX = 8;          // 1.9: kit tracks per playback (spec E15); counted over tracks AND rack members
@@ -89,8 +91,8 @@ constexpr uint8_t ARR_AUTO_GERAET = 4;           // a parameter of the internal 
 // Device parameter names by ArrAutoLane::param: own 0..3 numbering, not the rb_dsp ID order; task 4 maps it to the ID string via this table.
 constexpr int ARR_GERAET_PARAMS = 4;             // device lane parameters; every table and array of them is sized by this
 constexpr const char* ARR_GERAET_PARAM_NAME[ARR_GERAET_PARAMS] = {"lautstaerke", "cutoff", "resonanz", "env_mod"};
-constexpr int ARR_GERAET_LANE_PARAMS = 8;        // 1.12 slice 7: device lane parameters of the largest device (the Baukasten knobs k1..k8); the RB-338 uses the first ARR_GERAET_PARAMS
-constexpr int ARR_AUTO_LANES_JE_SPUR = 32;       // at most one absolute and one relative lane per (ziel, param): 16 targets x 2 slots (an RB-338 track uses at most 14 of them, a bk track 22)
+constexpr int ARR_GERAET_LANE_PARAMS = BK_KNOEPFE;   // 1.12 slice 7: device lane parameters of the largest device (the Baukasten knobs k1..k64, 8 before the widening); the RB-338 uses the first ARR_GERAET_PARAMS
+constexpr int ARR_AUTO_LANES_JE_SPUR = 144;      // at most one absolute and one relative lane per (ziel, param): 72 targets x 2 slots (fader, pan, mute, solo, 4 RB-338 parameters, 64 Baukasten knobs)
 constexpr double ARR_BLENDE_TOLERANZ = 1e-9;  // ein_beats + aus_beats <= laenge_beats + Toleranz (wie S2, model.ts)
 
 // FNV-1a 64 über den ID-Text (Clip-ID, Noten-ID "<clip_id>/<noten_id>"); der Lader prüft Eindeutigkeit je Spur.
@@ -114,7 +116,7 @@ struct ArrAutoPunkt {
 };
 struct ArrAutoLane {
   uint8_t ziel;                     // ARR_AUTO_FADER, _PAN, _MUTE, _SOLO or _GERAET
-  uint8_t param;                    // ARR_AUTO_GERAET: RB-338: index into ARR_GERAET_PARAM_NAME (0..3); bk: knob index 0..7 (k1..k8); else 0
+  uint8_t param;                    // ARR_AUTO_GERAET: RB-338: index into ARR_GERAET_PARAM_NAME (0..3); bk: knob index 0..63 (k1..k64); else 0
   bool relativ;                     // 1.12 slice 5: a summand lane (modulation), added to the base value or the absolute lane of the same target, then clamped; fader (dB), pan, geraet.* only
   int n;                            // points, at least 1, beats not falling (two at one beat are a jump)
   const ArrAutoPunkt* p;            // into ArrSnapshot::auto_punkte
@@ -317,11 +319,22 @@ struct ArrMakroZiel {
   float von = 0.0f, bis = 0.0f;        // real units: the value at macro 0 and at macro 1
 };
 // 1.9 U8 T9 (spec E10 to E12): a macro target on a MEMBER of an instrument rack, only on a rack track strip. `glied` is the member index 0..ARR_RACK_GLIEDER - 1, `param` the index
-// space of the translator: 0..3 = the four RB-338 parameters (the order of ARR_GERAET_PARAM_NAME), ARR_GLIED_PARAM_BK0 + 0..7 = the Baukasten knobs k1..k8, ARR_GLIED_PARAM_GAIN_DB =
+// space of the translator: 0..3 = the four RB-338 parameters (the order of ARR_GERAET_PARAM_NAME), ARR_GLIED_PARAM_BK0 + 0..7 = the Baukasten knobs k1..k8, ARR_GLIED_PARAM_BK9 + 0..23 = k9..k32, ARR_GLIED_PARAM_BK33 + 0..31 = k33..k64 (both appended so no number moves), ARR_GLIED_PARAM_GAIN_DB =
 // the gain of any member. von/bis are 0..1 for an RB-338 parameter and a knob, dB (-60..+12) for the gain. The insert macro path (ArrMakroZiel, makros_planen) does not know this table:
 // a rack holds n insert targets and ng member targets, together at most ARR_MAKRO_ZIELE.
 constexpr int ARR_GLIED_PARAM_BK0 = 8;
 constexpr int ARR_GLIED_PARAM_GAIN_DB = 16;
+constexpr int ARR_GLIED_PARAM_BK9 = 17;   // 32-knob widening: 17..40 = the Baukasten knobs k9..k32
+constexpr int ARR_GLIED_PARAM_BK33 = 41;  // 64-knob widening: 41..72 = the Baukasten knobs k33..k64
+constexpr int ARR_GLIED_PARAM_N = ARR_GLIED_PARAM_BK33 + (BK_KNOEPFE - 32);   // size of the parameter space of the translator: 0..72
+static_assert(ARR_GLIED_PARAM_N == 73, "rack member target space: k1..k8 = 8..15, gain 16, k9..k32 = 17..40, k33..k64 = 41..72");
+// The knob index 0..63 (k1..k64) a member parameter number stands for, or -1 when it is no Baukasten knob (an RB-338 parameter or the gain).
+constexpr int arr_glied_bk_knopf(int param) {
+  if (param >= ARR_GLIED_PARAM_BK0 && param < ARR_GLIED_PARAM_BK0 + 8) return param - ARR_GLIED_PARAM_BK0;
+  if (param >= ARR_GLIED_PARAM_BK9 && param < ARR_GLIED_PARAM_BK33) return 8 + param - ARR_GLIED_PARAM_BK9;
+  if (param >= ARR_GLIED_PARAM_BK33 && param < ARR_GLIED_PARAM_N) return 32 + param - ARR_GLIED_PARAM_BK33;
+  return -1;
+}
 struct ArrGliedZiel {
   uint8_t makro = 0;                   // 0..3
   uint8_t glied = 0;                   // member index in the rack track

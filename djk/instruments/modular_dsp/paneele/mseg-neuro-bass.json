@@ -1,0 +1,33 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "mseg-neuro-bass"},
+  "title": "MSEG Neuro Bass",
+  "akzent": "violett",
+  "layout": {"rows": [
+    ["osc", "mseg", "filter", "aenv"]
+  ]},
+  "sections": [
+    { "id": "osc", "title": "OSCILLATORS", "cols": 3, "controls": [
+      {"id": "o1", "type": "label", "span": 3, "text": "Saw 50 %"},
+      {"id": "o2", "type": "label", "span": 3, "text": "Sine sub, one octave down, 50 %"}
+    ]},
+    { "id": "mseg", "title": "MSEG", "cols": 4, "controls": [
+      {"id": "depth", "type": "knob", "label": "Depth", "span": 4, "bind": {"param": "k2"}, "format": "raw", "unit": "st", "default": 0.5},
+      {"id": "m1", "type": "label", "span": 4, "text": "Stage 1: up to 100 % in 10 ms"},
+      {"id": "m2", "type": "label", "span": 4, "text": "Stage 2: down to 10 % in 140 ms"},
+      {"id": "m3", "type": "label", "span": 4, "text": "Stage 3: up to 85 % in 100 ms"},
+      {"id": "m4", "type": "label", "span": 4, "text": "Loop 2 to 3 while held, then 0 in 200 ms"}
+    ]},
+    { "id": "filter", "title": "FILTER", "cols": 3, "controls": [
+      {"id": "fk", "type": "filterkurve", "span": 3, "of": {"cutoff": "cutoff", "reso": "reso"}, "typen": [{"art": "lp", "pole": 4}]},
+      {"id": "cutoff", "type": "knob", "label": "Base cutoff", "bind": {"param": "k1"}, "format": "hz", "default": 0.5},
+      {"id": "reso", "type": "knob", "label": "Resonance", "bind": {"param": "k3"}, "format": "percent", "default": 0.5},
+      {"id": "fn", "type": "label", "span": 3, "text": "Ladder 24 dB, MSEG adds the depth"}
+    ]},
+    { "id": "aenv", "title": "AMP ENV", "cols": 3, "controls": [
+      {"id": "ahue", "type": "huelle", "span": 3, "label": "Envelope", "of": {"a": 0.003, "d": 0.3, "s": 0.8, "r": 0.12}},
+      {"id": "an", "type": "label", "span": 3, "text": "A 3 ms, D 300 ms, S 80 %, R 120 ms"},
+      {"id": "an2", "type": "label", "span": 3, "text": "All four times fixed"}
+    ]}
+  ]
+}

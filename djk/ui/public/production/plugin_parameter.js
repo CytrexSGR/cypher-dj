@@ -25,6 +25,8 @@ const zeileHtml = (q) => `<label class="p-hp-zeile" data-index="${q.index}"><spa
 export const paramListeHtml = (liste) => liste.map(zeileHtml).join('');
 
 // Builds the popover content into `el`. holeListe(): Promise<{status, j}> of GET .../parameter; sende(werte): Promise of the POST. Returns {zeige, neu}.
+/** The parameter routes answer {..., parameter: [...]}; a bare array is accepted too. Returns the answer with `j` as the array when it is one. */
+export const alsListe = (r) => (r && r.status === 200 && !Array.isArray(r.j) && Array.isArray(r.j?.parameter) ? { ...r, j: r.j.parameter } : r);
 export function baueParameterListe(el, { holeListe, sende, fehler }) {
   el.innerHTML = '<input type="search" class="p-hp-filter" placeholder="Filter parameters" aria-label="Filter parameters">'
     + '<span class="p-hp-zahl"></span><div class="p-hp-liste" role="group" aria-label="Plugin parameters"></div>';
@@ -55,7 +57,8 @@ export function baueParameterListe(el, { holeListe, sende, fehler }) {
   const neu = async () => {
     zahl.textContent = 'Loading…';
     const r = await holeListe();
-    if (r.status === 200 && Array.isArray(r.j)) { alle = r.j; zeige(); } else { alle = []; liste.textContent = ''; zahl.textContent = ''; fehler?.(r); }
+    const l = alsListe(r);
+    if (l.status === 200 && Array.isArray(l.j)) { alle = l.j; zeige(); } else { alle = []; liste.textContent = ''; zahl.textContent = ''; fehler?.(r); }
   };
   neu();
   return { zeige, neu, setze: (l) => { alle = l; zeige(); } };

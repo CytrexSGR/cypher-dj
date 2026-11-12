@@ -851,7 +851,7 @@ int Mixer::bk_frei(CypherBk** aus, int max) noexcept {
   return n;
 }
 
-// S5r: die Regler <kanal>/bk/1..8 an den Graphen des Kanals k melden (die FFI glättet). Nur der gehörte Graph bk_[k], nie bk_alt_.
+// S5r: die Regler <kanal>/bk/1..32 an den Graphen des Kanals k melden (die FFI glättet). Nur der gehörte Graph bk_[k], nie bk_alt_.
 // Ohne Werte-Zeiger (Tests ohne Kern) keine Meldung (K10).
 void Mixer::bk_regler_melden(CypherBk* g, int k) noexcept {
 #ifdef CYPHERDJ_MUTATION_BK_REGLER_NICHT_GEMELDET  // Fehlerfall S5r: der Kern meldet die Regler nie an den Graphen
@@ -866,9 +866,9 @@ void Mixer::bk_regler_melden(CypherBk* g, int k) noexcept {
 #ifdef CYPHERDJ_MUTATION_BK_REGLER_FALSCHER_KANAL  // Fehlerfall S5r: die Zeile des Nachbarkanals
   k = (k + 1) % MIX_BK_ZEILEN;
 #endif
-  for (int nr = 1; nr <= 8; ++nr) {
+  for (int nr = 1; nr <= cypherdj::stellwerk::BK_REGLER_N; ++nr) {
 #ifdef CYPHERDJ_MUTATION_BK_REGLER_TAUSCH_05  // Fehlerfall S5r (D5): nur gemeldet, wenn sich der Wert ändert; ein getauschter Graph bleibt auf 0,5
-    static float zuletzt[MIX_BK_ZEILEN][8];
+    static float zuletzt[MIX_BK_ZEILEN][cypherdj::stellwerk::BK_REGLER_N];
     if (bk_wert_[k][nr - 1] == zuletzt[k][nr - 1]) continue;
     zuletzt[k][nr - 1] = bk_wert_[k][nr - 1];
 #endif
@@ -936,7 +936,7 @@ void Mixer::graph_platz_block(GraphPlatz p, const float* in_l, const float* in_r
   }
 }
 
-// S6: return of the effect graph on send bus 2 + s (fx/3, fx/4). S14: it reports its own knob row (fx/<n>/bk/1..8). The graph processes the summed send bus, runs every
+// S6: return of the effect graph on send bus 2 + s (fx/3, fx/4). S14: it reports its own knob row (fx/<n>/bk/1..32). The graph processes the summed send bus, runs every
 // block while a graph is set or blending (no wake gate: an echo tail must survive a silent send, D5), and its output is
 // added to the master sum scaled by fx/<n>/rueckweg (same gain expression as the hall). The bus itself is never written.
 void Mixer::send_rueckweg(int s, int n) noexcept {

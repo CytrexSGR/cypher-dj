@@ -302,6 +302,6 @@ test('author mark in the register: entry carries autor only when present; factor
   const werk = new PresetSpeicher({ vok });
   const neu = bauen(werk, ['werk']).register;
   const alt = liesRegister(path.join(import.meta.dirname, '..', 'presets', 'register.json'));
-  assert.deepEqual(neu.eintraege, alt.eintraege, 'the 48 factory entries are unchanged');
-  assert.equal(alt.eintraege.length, 48);
+  assert.deepEqual(neu.eintraege, alt.eintraege, 'the 106 factory entries are unchanged');
+  assert.equal(alt.eintraege.length, 106);
 });

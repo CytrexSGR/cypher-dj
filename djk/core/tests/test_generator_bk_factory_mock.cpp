@@ -23,7 +23,8 @@ struct CypherBk {
   std::atomic<int> drin{0};
   std::atomic<int> aufrufe{0};
   std::atomic<int> regler_aufrufe{0};  // S5r: Aufrufe von cypher_bk_regler (Task 3 prüft sie auf besetztem Platz)
-  float regler_wert[8] = {0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f};
+  float regler_wert[64];   // knobs 1..64, every one 0.5 at the start (the stub of cypher_bk_regler takes nr 1..64 like the engine)
+  CypherBk() { for (float& v : regler_wert) v = 0.5f; }
   std::atomic<bool> halt{false};   // nächster block() wartet auf los
   struct Ev { uint32_t versatz; uint8_t ton; bool an; };
   Ev offen_ev[256];                // vorgemerkt für den nächsten block()
@@ -58,7 +59,7 @@ int32_t cypher_bk_note_an(CypherBk* h, uint32_t v, uint8_t ton, float) { Eintrit
 int32_t cypher_bk_note_aus(CypherBk* h, uint32_t v, uint8_t ton) { Eintritt e(h); merke(h, v, ton, false); return 0; }
 int32_t cypher_bk_alle_aus(CypherBk* h, uint32_t) { Eintritt e(h); return 0; }
 int32_t cypher_bk_regler(CypherBk* h, uint32_t nr, float wert) {
-  if (!h || nr < 1 || nr > 8) return -1;
+  if (!h || nr < 1 || nr > 64) return -1;
   Eintritt e(h);
   h->regler_aufrufe.fetch_add(1);
   h->regler_wert[nr - 1] = wert;
@@ -149,12 +150,12 @@ void neu_lauf() { g_los.store(false); g_im_rechnen.store(false); }
 }  // namespace
 
 // S5r: Reglerwerte je Mixer-Kanal, je Zeile und Regler verschieden, keiner gleich 0,5 (dem Vorgabewert der Attrappe)
-void regler_werte(float (*w)[8]) {
+void regler_werte(float (*w)[64]) {
   for (int k = 0; k < cdj::MIX_KANAELE; ++k)
-    for (int nr = 1; nr <= 8; ++nr) w[k][nr - 1] = 0.05f + 0.09f * (float)nr + 0.01f * (float)(k - 8) + 0.001f;
+    for (int nr = 1; nr <= 64; ++nr) w[k][nr - 1] = 0.05f + 0.0135f * (float)nr + 0.002f * (float)(k - 8) + 0.001f;
 }
 bool regler_gleich(const CypherBk* h, const float* soll) {
-  for (int i = 0; i < 8; ++i) if (h->regler_wert[i] != soll[i]) return false;
+  for (int i = 0; i < 64; ++i) if (h->regler_wert[i] != soll[i]) return false;   // all 64 knobs, so knob 9, 32, 33 and 64 are covered
   return true;
 }
 
@@ -162,7 +163,7 @@ int main() {
   for (int faeden : {0, 1}) {  // S5r 8) regler_werk: Werte kommen am Handle des Stroms an, Gegenprobe erz/6, Änderung, Tausch (D5)
     neu_lauf();
     const int ue0 = g_ueberlappt.load();
-    static float wert[cdj::MIX_KANAELE][8];
+    static float wert[cdj::MIX_KANAELE][64];
     regler_werte(wert);
     Welt w(faeden);
     w.erz.setze_bk_wert(wert);
@@ -202,7 +203,7 @@ int main() {
   {  // S5r 9) regler_nie_besetzt: solange der Platz nicht FREI ist (VERSPAETET), ruft der Erzeuger cypher_bk_regler nicht
     neu_lauf();
     const int ue0 = g_ueberlappt.load();
-    static float wert[cdj::MIX_KANAELE][8];
+    static float wert[cdj::MIX_KANAELE][64];
     regler_werte(wert);
     Welt w(1);
     w.erz.setze_bk_wert(wert);

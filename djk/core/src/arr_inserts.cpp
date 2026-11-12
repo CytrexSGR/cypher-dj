@@ -453,9 +453,9 @@ void ArrInserts::setze_dsp(int s, int m) {
 #endif
   } else if (s >= INS_G_HOST0) {
     // plan 1.11: a host stage has no setting to give (the row an is read by the chain); it must never fall into the limiter branch below
-  } else if (s >= INS_G_BK0) {   // arr-bk slice 3: the knobs k1..k8 (rows 1..8) go to the instance; the first application (also after a take-over) jumps, later changes are smoothed over 20 ms by the instance
+  } else if (s >= INS_G_BK0) {   // arr-bk slice 3: the knobs k1..k64 (rows 1..64) go to the instance; the first application (also after a take-over) jumps, later changes are smoothed over 20 ms by the instance
     if (CypherBk* h = bk_[s - INS_G_BK0].h)
-      for (int k = 1; k <= 8; ++k) {
+      for (int k = 1; k <= BK_KNOEPFE; ++k) {
         if (neu) cypher_bk_regler_sofort(h, static_cast<uint32_t>(k), e[k]);
         else if (e[k] != angewandt_[s][k]) cypher_bk_regler(h, static_cast<uint32_t>(k), e[k]);
       }

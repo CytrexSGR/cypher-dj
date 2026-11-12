@@ -226,7 +226,7 @@ test('gliedZiele: the member parameters a macro may drive, by device (E12); Surg
   assert.deepEqual(l.filter((x) => x.glied === 'g1').map((x) => x.param), ['lautstaerke', 'cutoff', 'resonanz', 'env_mod', 'gain_db']);
   assert.deepEqual(l.filter((x) => x.glied === 'g2').map((x) => x.param), ['gain_db']);
   assert.deepEqual(l.filter((x) => x.glied === 'g3'), [], 'a Surge member is refused by the project (makro_ziel_wirt): the page does not offer it');
-  assert.deepEqual(l.filter((x) => x.glied === 'g4').map((x) => x.param), ['k1', 'k2', 'k3', 'k4', 'k5', 'k6', 'k7', 'k8', 'gain_db']);
+  assert.deepEqual(l.filter((x) => x.glied === 'g4').map((x) => x.param), [...Array.from({ length: 64 }, (_, i) => `k${i + 1}`), 'gain_db']);
   assert.deepEqual(Object.keys(l[0]).sort(), ['glied', 'param', 'text']);
   assert.equal(l[1].text, 'G1 RB-338 · Cutoff');
   assert.deepEqual(gliedZiele({ id: 's2', inserts: [] }), [], 'a strip without a rack device');

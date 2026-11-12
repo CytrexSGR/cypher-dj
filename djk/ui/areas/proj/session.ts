@@ -12,9 +12,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { BereichKontext } from '../../http/router.ts';
 import { Katalog, type Zeile } from '../../catalog.ts';
-import { Projekte, projektWurzelVorgabe } from '../../project/storage.ts';
+import { Projekte, projektWurzelVorgabe, setzeVorgabenQuelle } from '../../project/storage.ts';
 import { alleAudioClips, fuehreListeAus, laneStart, setzeDekodiert, vergleiche, type PluginEintrag, type PresetInhalt } from '../../project/commands.ts';
-import { findeGraph } from '../../graphs.ts';
+import { findeGraph, vorgabenVon } from '../../graphs.ts';
 import { kitDa, kitKlaenge } from './kits.ts';
 import { uebersetzeAusCache, ausCache, vorlauf, type Anfrage } from './pattern_run.ts';
 import type { MusterMeldung } from '../../project/commands.ts';
@@ -308,6 +308,7 @@ export class ProjSitzung {
     }, opt.instrument?.zeiten);
     this.kern = new KernWeg(ctx, this.lage, opt.kernWeg);
     this.bk = new ProjBk(ctx, this.lage, this.kern, opt.bkFristMs ?? 5000);
+    setzeVorgabenQuelle((name) => vorgabenVon(name));   // the graph's `vorgabe` list: fill and trim of the knob rows of a project use the same one
     this.projekte = new Projekte(opt.wurzel ?? projektWurzelVorgabe(instanz));
     this.arbeitsordner = opt.arbeitsordner ?? arrOrdner(instanz);
     const zaehlerDatei = opt.zaehlerDatei
@@ -486,6 +487,18 @@ export class ProjSitzung {
       throw new ProjFehler(r.fehler === 'param_unbekannt' ? 404 : 409, r.fehler);
     }
     return { code: 200, j: { ok: true, werte: r.werte } };
+  }
+  // front panels: the display values the host of a Surge track plays now, for the names (comma separated) the track's map does not hold yet
+  async geraetIst(spurId: string, namenText: string): Promise<Antwort> {
+    const g = sucheSpur(this.brauchOffen().projekt, spurId)?.geraet;
+    if (!g || g.art !== 'wirt' || g.name !== 'surge') throw new ProjFehler(404, 'spur_unbekannt');
+    const namen = namenText.split(',').filter((n) => n !== '');
+    if (namen.length < 1 || namen.length > 64 || namen.some((n) => surgeBereich(n) === null)) {
+      throw new ProjFehler(400, 'argument_ungueltig', { text: 'namen: 1..64 comma separated Surge parameter names of surge_bereiche.json' });
+    }
+    const w = await this.surge.ist(g.slot, namen);
+    if (!w) throw new ProjFehler(409, 'wirt_antwortet_nicht');
+    return { code: 200, j: { spur_id: spurId, werte: w } };
   }
   async geraetParameter(spurId: string): Promise<Antwort> {
     this.pluginSpur(spurId);

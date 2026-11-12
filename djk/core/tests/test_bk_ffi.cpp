@@ -50,13 +50,22 @@ int main() {
     for (int i = 0; i < 64; ++i) PRUEF(l[i] == 0.0f && r[i] == 0.0f);
     cypher_bk_frei(nullptr);
   }
-  {  // 3 Regler (S5r): nr 1..8 ok, 0 und 9 und Zeiger null -1; Wirkung (Glättung, Klemmen) prüft reverb_ffi/tests/bk_ffi.rs
+  {  // 3 Regler (S5r): nr 1..64 ok, 0 und 65 und Zeiger null -1; Wirkung (Glättung, Klemmen) prüft reverb_ffi/tests/bk_ffi.rs
     char fehler[256] = {};
     CypherBk* h = cypher_bk_neu(G, 48000.0, fehler, sizeof fehler);
     PRUEF(h != nullptr);
     PRUEF(cypher_bk_regler(h, 1, 0.9f) == 0);
     PRUEF(cypher_bk_regler(h, 8, 0.1f) == 0);
-    PRUEF(cypher_bk_regler(h, 9, 0.5f) == -1);
+    PRUEF(cypher_bk_regler(h, 9, 0.5f) == 0);    // 32-knob widening: 9 and 32 are knobs, 33 is not
+    PRUEF(cypher_bk_regler(h, 32, 0.5f) == 0);
+    PRUEF(cypher_bk_regler(h, 33, 0.5f) == 0);   // 64-knob widening: 33 and 64 are knobs, 65 is not (needs hall_ffi with REGLER 64)
+    PRUEF(cypher_bk_regler(h, 64, 0.5f) == 0);
+    PRUEF(cypher_bk_regler(h, 65, 0.5f) == -1);
+    PRUEF(cypher_bk_regler_sofort(h, 32, 0.5f) == 0);
+    PRUEF(cypher_bk_regler_sofort(h, 64, 0.5f) == 0);
+    PRUEF(cypher_bk_regler_sofort(h, 65, 0.5f) == -1);
+    PRUEF(cypher_bk_regler_vorgabe(h, 64) == 0.5f);   // a graph without vorgabe: every knob starts at 0.5, also the last one
+    PRUEF(cypher_bk_regler_vorgabe(h, 65) == -1.0f && cypher_bk_regler_vorgabe(h, 0) == -1.0f && cypher_bk_regler_vorgabe(nullptr, 1) == -1.0f);
     PRUEF(cypher_bk_regler(h, 0, 0.5f) == -1);
     PRUEF(cypher_bk_regler(nullptr, 1, 0.5f) == -1);
     cypher_bk_frei(h);

@@ -1,4 +1,4 @@
-// 1.10 slice 3 (P11): opening a project sets up to 379 controls (before slice 4; 1143 with the 730 insert rows (arr-fx slices 1 and 2, arr-bk 72 more) and the 48 rack rows (slice 4c); 686 before arr-fx). The stellwerk holds at most MAX_TEILE = 256 open parts, so the controls go out in packets
+// 1.10 slice 3 (P11): opening a project sets up to 379 controls (before slice 4; 1591 with the 1178 insert rows (arr-fx slices 1 and 2, arr-bk 520) and the 48 rack rows (slice 4c); 686 before arr-fx). The stellwerk holds at most MAX_TEILE = 256 open parts, so the controls go out in packets
 // of at most 100 and each packet is waited for until its END status. The stub models the limit (tests/support/proj_context.mjs, teileMax).
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -39,9 +39,9 @@ async function oeffneMax(t, opt = {}, kont = {}) {
 test('slice 3 open at the maximum: all controls go out in packets, none meets a full stellwerk, every one ends with status 3', async (t) => {
   const { k, r } = await oeffneMax(t);
   const soll = alleRegler(r.j.projekt).length;
-  assert.equal(soll, 365 + 730 + 48, '365 mixer controls plus the 730 pooled insert rows (120 komp, 8 x 59 eq, 4 x 4 saett, 2 x 3 lim, 4 host, 8 x 5 utility, 8 x 9 bk) plus the 48 rack rows');
-  assert.equal(k.teile(/^(spur|grp|pm|ret)\//).length, soll - 730 - 48, 'every mixer control was sent');
-  assert.equal(k.teile(/^ins\//).length, 730, 'and every insert row');
+  assert.equal(soll, 365 + 1178 + 48, '365 mixer controls plus the 1178 pooled insert rows (120 komp, 8 x 59 eq, 4 x 4 saett, 2 x 3 lim, 4 host, 8 x 5 utility, 8 x 65 bk) plus the 48 rack rows');
+  assert.equal(k.teile(/^(spur|grp|pm|ret)\//).length, soll - 1178 - 48, 'every mixer control was sent');
+  assert.equal(k.teile(/^ins\//).length, 1178, 'and every insert row');
   assert.equal(k.teile(/^rack\//).length, 48, 'and every rack macro row');
   assert.equal(k.teileVoll, 0, 'the stellwerk never overflowed');
   assert.equal(r.j.kern.regler_fehler.length, 0);
@@ -89,11 +89,11 @@ test('slice 3 open abort: a rejected control in packet 2 stops the open, packets
   const gesendet = k.teile().length;
   assert.equal(gesendet, 200, `packets 1 and 2 only (${gesendet})`);
   assert.deepEqual(r.j.kern.regler_fehler.map((x) => x.pfad), [ziel]);
-  assert.equal(r.j.kern.regler_nicht_gesendet, 1167 - 200, 'the open names how many were not sent');
+  assert.equal(r.j.kern.regler_nicht_gesendet, 1615 - 200, 'the open names how many were not sent');
   ablehnen = false;
   k.leere(); k.offen.clear();
   const r2 = await s.oeffnen('ab', 'andreas');
-  assert.equal(k.teile().length, 1167, 'the second open sets all');
+  assert.equal(k.teile().length, 1615, 'the second open sets all');
   assert.equal(r2.j.kern.regler_nicht_gesendet, 0);
   assert.equal(r2.j.kern.regler_fehler.length, 0);
 });
@@ -109,6 +109,6 @@ test('slice 3 open without a core: the open ends within twice the time limit, no
   const ms = Date.now() - t0;
   assert.equal(r.j.kern.regler_fehler.length, 0);
   assert.equal(r.j.kern.regler_ohne_kern, 100, 'only packet 1 was tried');
-  assert.equal(r.j.kern.regler_nicht_gesendet, 1167 - 100);
+  assert.equal(r.j.kern.regler_nicht_gesendet, 1615 - 100);
   assert.ok(ms < 200, `the open took ${ms} ms`);
 });

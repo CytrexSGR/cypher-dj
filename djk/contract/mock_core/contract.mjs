@@ -228,13 +228,14 @@ for (let r = 1; r <= 4; r++) {
 // 1.10 Slice 4a/4b (§1.5): the insert controls ins/komp|eq|saett/<n>/* of the arrangement strips, global, project-only, everybody may. The rows are generated
 // from docs/interfaces/insert_module.json (insert_controls.mjs); the namenslisten checker compares them with insert_zeilen.inc.
 for (const [pfad, e, lo, hi, v] of INSERT_REGLER_ZEILEN) REGLER.set(pfad, { ...R(e === 'lin' ? LIN : e === 'stufe' ? STUFE : SCHALTER, lo, hi, v), kanal: null });
-// S5r (§1.5): acht Graph-Regler <kanal>/bk/<1..8> auf den Kanälen, auf denen der Kern einen Baukasten-Graphen annimmt
+// S5r (§1.5): 64 Graph-Regler <kanal>/bk/<1..64> auf den Kanälen, auf denen der Kern einen Baukasten-Graphen annimmt
 // (deck/1..4 als Effekt, erz/1,2,3,5,6,7 und pad/1,2 als Instrument; nicht erz/4 und erz/8), alle dürfen, 0..1, Vorgabe 0,5
+export const BK_REGLER_N = 64;   // knobs per channel: <kanal>/bk/1..64 (64-knob widening)
 export const BK_KANAELE = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'erz/1', 'erz/2', 'erz/3', 'erz/5', 'erz/6', 'erz/7', 'pad/1', 'pad/2'];
-for (const k of BK_KANAELE) for (let n = 1; n <= 8; n++) REGLER.set(`${k}/bk/${n}`, { ...R(LIN, 0, 1, 0.5), kanal: k });
-// S14 (§1.5): eight graph knobs fx/<n>/bk/<m> per send return fx/3, fx/4; global (no channel), alle dürfen, 0..1, default 0.5
+for (const k of BK_KANAELE) for (let n = 1; n <= BK_REGLER_N; n++) REGLER.set(`${k}/bk/${n}`, { ...R(LIN, 0, 1, 0.5), kanal: k });
+// S14 (§1.5): 64 graph knobs fx/<n>/bk/<m> per send return fx/3, fx/4; global (no channel), alle dürfen, 0..1, default 0.5
 export const BK_SEND_KANAELE = ['fx/3', 'fx/4'];
-for (const k of BK_SEND_KANAELE) for (let n = 1; n <= 8; n++) REGLER.set(`${k}/bk/${n}`, { ...R(LIN, 0, 1, 0.5), kanal: null });
+for (const k of BK_SEND_KANAELE) for (let n = 1; n <= BK_REGLER_N; n++) REGLER.set(`${k}/bk/${n}`, { ...R(LIN, 0, 1, 0.5), kanal: null });
 // 1.15 A2 (§1.5, the 345 mix-tool rows): gate on the 13 live source channels (erz/8 has none: cue only), utility on those plus bus/1..4,
 // multiband and channel limiter on bus/1..4, one global spectrum row. All rows: everybody may. Ranges and defaults as the C++ table
 // (core/signalbox/include/cypherdj/signalbox/tool_controls.h); check_name_lists.py compares the path sets.

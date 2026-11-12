@@ -1,0 +1,62 @@
+{
+ "schema": 1,
+ "name": "Poly Juno Pad",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "synth-poly",
+ "werte": {
+  "knob1": 0.548,
+  "knob2": 0.1364,
+  "knob3": 0.2333,
+  "knob4": 0.4,
+  "knob5": 0.7254,
+  "knob6": 0.6962,
+  "knob7": 0.9,
+  "knob8": 0.0,
+  "knob9": 0.5,
+  "knob10": 0.4,
+  "knob11": 0.6,
+  "knob12": 0.7143,
+  "knob13": 0.5,
+  "knob14": 0.8,
+  "knob15": 0.0,
+  "knob16": 0.585,
+  "knob17": 0.5,
+  "knob18": 0.5,
+  "knob19": 0.6505,
+  "knob20": 0.85,
+  "knob21": 0.7705,
+  "knob22": 0.6,
+  "knob23": 0.3471,
+  "knob24": 0.0,
+  "knob25": 0.8333,
+  "knob26": 0.0,
+  "knob27": 0.0,
+  "knob28": 0.25
+ },
+ "beschreibung": {
+  "art": "pad",
+  "unterart": "analog",
+  "charakter": [
+   "warm",
+   "wide",
+   "soft"
+  ],
+  "genre": [
+   "deep_house",
+   "ambient"
+  ],
+  "einsatz": [
+   "breakdown",
+   "intro"
+  ],
+  "energie": 1,
+  "text": "Three saws, a pulse with slow PWM and a sub through the 24 dB ladder, chorus I at full: the 106 recipe."
+ },
+ "tags": [
+  "synth-poly"
+ ],
+ "notiz": "Measured by level and pitch on render, not yet heard (2026-11-11).",
+ "angelegt": "2026-11-11T00:00:00.000Z",
+ "geaendert": "2026-11-11T00:00:00.000Z"
+}

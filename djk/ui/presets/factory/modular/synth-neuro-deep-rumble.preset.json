@@ -1,0 +1,77 @@
+{
+ "schema": 1,
+ "name": "Neuro Deep Rumble",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "synth-neuro",
+ "werte": {
+  "knob1": 0.3,
+  "knob2": 0.35,
+  "knob3": 0.8333,
+  "knob4": 0.25,
+  "knob5": 0.65,
+  "knob6": 0.3,
+  "knob7": 0.8333,
+  "knob8": 0.8,
+  "knob9": 0.55,
+  "knob10": 0.55,
+  "knob11": 0.4,
+  "knob12": 0.0,
+  "knob13": 1.0,
+  "knob14": 0.15,
+  "knob15": 0.0,
+  "knob16": 0.5,
+  "knob17": 0.0,
+  "knob18": 0.5,
+  "knob19": 0.5,
+  "knob20": 0.78,
+  "knob21": 0.15,
+  "knob22": 0.22,
+  "knob23": 0.5,
+  "knob24": 0.5,
+  "knob25": 0.5,
+  "knob26": 0.4,
+  "knob27": 0.4,
+  "knob28": 0.0,
+  "knob29": 0.6667,
+  "knob30": 0.5,
+  "knob31": 0.5,
+  "knob32": 0.6157,
+  "knob33": 0.0,
+  "knob34": 0.0,
+  "knob35": 0.0,
+  "knob36": 0.5,
+  "knob37": 0.3,
+  "knob38": 0.0,
+  "knob39": 0.5,
+  "knob40": 0.5,
+  "knob41": 0.7,
+  "knob42": 0.5,
+  "knob43": 0.2,
+  "knob45": 0.28
+ },
+ "beschreibung": {
+  "art": "bass",
+  "unterart": "rolling",
+  "charakter": [
+   "dark",
+   "deep",
+   "thick"
+  ],
+  "genre": [
+   "techno"
+  ],
+  "einsatz": [
+   "drop",
+   "intro"
+  ],
+  "energie": 3,
+  "text": "The dark rolling bass with a feedback delay and a long hall behind it, a shorter amp decay and some key follow: a rumble that echoes away."
+ },
+ "tags": [
+  "synth-neuro"
+ ],
+ "notiz": "Measured by level and pitch on render, not yet heard (2026-11-12).",
+ "angelegt": "2026-11-12T00:00:00.000Z",
+ "geaendert": "2026-11-12T00:00:00.000Z"
+}

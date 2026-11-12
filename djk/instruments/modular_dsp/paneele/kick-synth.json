@@ -1,0 +1,29 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "kick-synth"},
+  "title": "Kick Synth",
+  "akzent": "rot",
+  "layout": {"rows": [
+    ["osc", "amp", "tone", "out"]
+  ]},
+  "sections": [
+    { "id": "osc", "title": "PITCH", "cols": 2, "controls": [
+      {"id": "tune", "type": "knob", "label": "Tune", "bind": {"param": "k1"}, "format": "hz", "default": 0.47873, "span": 2},
+      {"id": "pamt", "type": "knob", "label": "Amount", "bind": {"param": "k3"}, "format": "raw", "unit": "st", "default": 0.375},
+      {"id": "pdec", "type": "knob", "label": "Decay", "bind": {"param": "k4"}, "format": "ms", "default": 0.5},
+      {"id": "osc-n", "type": "label", "span": 2, "text": "Tune sets pitch, note only triggers"}
+    ]},
+    { "id": "amp", "title": "AMP", "cols": 2, "controls": [
+      {"id": "decay", "type": "knob", "label": "Decay", "bind": {"param": "k2"}, "format": "ms", "default": 0.536649, "span": 2},
+      {"id": "hue", "type": "huelle", "span": 2, "label": "Envelope", "of": {"a": 0.0005, "d": "decay", "s": 0, "r": "decay"}}
+    ]},
+    { "id": "tone", "title": "TONE", "cols": 2, "controls": [
+      {"id": "click", "type": "knob", "label": "Click", "bind": {"param": "k5"}, "format": "percent", "default": 0.25},
+      {"id": "drive", "type": "knob", "label": "Drive", "bind": {"param": "k6"}, "format": "percent", "default": 0.3}
+    ]},
+    { "id": "out", "title": "OUT", "cols": 1, "controls": [
+      {"id": "level", "type": "knob", "label": "Level", "bind": {"param": "k7"}, "format": "db", "default": 0.7},
+      {"id": "pol", "type": "selector", "label": "Polarity", "bind": {"param": "k8"}, "options": ["Normal", "Inverted"], "default": 0}
+    ]}
+  ]
+}

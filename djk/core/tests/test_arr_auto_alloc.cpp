@@ -158,7 +158,7 @@ int main() {
   PRUEF(stapel_da && stapel_tief == 32);   // U9: the stacks were really loaded and play on all 32 tracks
   PRUEF(positiv >= 1);
   PRUEF(im_zyklus == 0);
-  PRUEF(tab.anzahl() == 693 + 204 + 16 + 345 + 120 + 8 * 59 + 4 * 4 + 48 + 2 * 3 + 4 + 8 * 5 + 8 * 9);   // arr-bk: + 8 bk instances x 9 rows; arr-fx: pools 8 eq, 4 saett, 2 lim (slice 2) and 8 utilities x 5 rows (slice 1); 2026-11-06: eq pool 2; master limiter: + 3 ins/lim rows   // 693 (before slice 3) + 204 send, return and hall controls + 16 send-return graph knobs (S14) + 345 mix-tool rows (1.15 A1b: gate 117, utility 119, multiband 96, limiter 12, spectrum 1) = 1258, + 120 ins/komp rows (1.10 slice 4a T1) = 1378, + 63 ins/eq and ins/saett rows (4b T12) = 1441, + 48 rack macro rows rack/<k>/m<n> (4c T15) = 1489
+  PRUEF(tab.anzahl() == 693 + 204 + 16 + 345 + 120 + 8 * 59 + 4 * 4 + 48 + 2 * 3 + 4 + 8 * 5 + 8 * 65 + 14 * 56);   // arr-bk: + 8 bk instances x 9 rows; arr-fx: pools 8 eq, 4 saett, 2 lim (slice 2) and 8 utilities x 5 rows (slice 1); 2026-11-06: eq pool 2; master limiter: + 3 ins/lim rows   // 693 (before slice 3) + 204 send, return and hall controls + 16 send-return graph knobs (S14) + 345 mix-tool rows (1.15 A1b: gate 117, utility 119, multiband 96, limiter 12, spectrum 1) = 1258, + 120 ins/komp rows (1.10 slice 4a T1) = 1378, + 63 ins/eq and ins/saett rows (4b T12) = 1441, + 48 rack macro rows rack/<k>/m<n> (4c T15) = 1489
   PRUEF(voll == 0);
   PRUEF_ENDE();
 }

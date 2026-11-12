@@ -11,15 +11,26 @@ namespace cdj {
 
 namespace {
 
-// k1..k8 of the playback (absent = 0.5, the default of an untouched knob)
-float knopf_wert(const ArrSpur& q, int k) {
-  const char name[3] = {'k', static_cast<char>('0' + k), 0};
+// k1..k64 of the playback. A knob the playback does not name starts at the graph's own default position (`vorgabe`: the array of the
+// slot, read when the instance was taken over; 0.5 for a graph without one): a playback written before the 32- or 64-knob widening names
+// fewer knobs, and the knobs it leaves out must sound as the graph starts, not at 0.5.
+float knopf_wert(const ArrSpur& q, int k, const float* vorgabe) {
+  char name[4] = {'k', 0, 0, 0};
+  if (k >= 10) { name[1] = static_cast<char>('0' + k / 10); name[2] = static_cast<char>('0' + k % 10); }
+  else name[1] = static_cast<char>('0' + k);
   for (int i = 0; i < q.n_param; ++i)
     if (std::strncmp(q.param[i].name, name, sizeof q.param[i].name) == 0) return q.param[i].wert;
-  return 0.5f;
+  return vorgabe[k - 1];
 }
 
 }  // namespace
+
+void ArrBkSenke::lade_vorgaben(Spur& p, const CypherBk* h) noexcept {
+  for (int k = 1; k <= BK_KNOEPFE; ++k) {
+    const float v = cypher_bk_regler_vorgabe(const_cast<CypherBk*>(h), static_cast<uint32_t>(k));
+    p.knopf_vorgabe[k - 1] = v >= 0.0f && v <= 1.0f ? v : 0.5f;   // -1: the engine knows no such knob (a library older than the widening)
+  }
+}
 
 int ArrBkSenke::ruhend() const {
   int n = 0;
@@ -70,7 +81,7 @@ bool ArrBkSenke::spur_weg(int spur, int64_t, bool) noexcept {
 }
 
 void ArrBkSenke::auto_parameter(int spur, int param, float wert) noexcept {
-  if (spur < 0 || spur >= ARR_SENKEN_PLAETZE || param < 0 || param >= 8 || !(wert == wert)) return;
+  if (spur < 0 || spur >= ARR_SENKEN_PLAETZE || param < 0 || param >= BK_KNOEPFE || !(wert == wert)) return;
   Spur& p = sp_[spur];
   p.knopf_wert[param] = wert < 0.0f ? 0.0f : (wert > 1.0f ? 1.0f : wert);
   p.knopf_da[param] = true;
@@ -81,7 +92,7 @@ void ArrBkSenke::auto_parameter_summand(int spur, int param, float delta) noexce
   (void)spur; (void)param; (void)delta;   // error case: the sink drops the summand of a relative lane
   return;
 #endif
-  if (spur < 0 || spur >= ARR_SENKEN_PLAETZE || param < 0 || param >= 8 || !(delta == delta)) return;
+  if (spur < 0 || spur >= ARR_SENKEN_PLAETZE || param < 0 || param >= BK_KNOEPFE || !(delta == delta)) return;
   Spur& p = sp_[spur];
   p.knopf_delta[param] = delta;
   p.delta_da[param] = true;
@@ -95,9 +106,9 @@ void ArrBkSenke::block_bahn(int spur, int64_t s0, int m, float* l, float* r, Arr
   ++a.einheiten;
   if (spur < 0 || spur >= ARR_SENKEN_PLAETZE || m <= 0 || m > ARR_BLOCK) return;
   Spur& p = sp_[spur];
-  float k_gemeldet[8], k_delta[8];   // the knobs and summands reported for this block (auto_parameter, auto_parameter_summand): taken and cleared at once, so a block that returns early leaves nothing for a later one
-  bool k_da[8], d_da[8];
-  for (int i = 0; i < 8; ++i) {
+  float k_gemeldet[BK_KNOEPFE], k_delta[BK_KNOEPFE];   // the knobs and summands reported for this block (auto_parameter, auto_parameter_summand): taken and cleared at once, so a block that returns early leaves nothing for a later one
+  bool k_da[BK_KNOEPFE], d_da[BK_KNOEPFE];
+  for (int i = 0; i < BK_KNOEPFE; ++i) {
     k_gemeldet[i] = p.knopf_wert[i];
     k_da[i] = p.knopf_da[i];
     p.knopf_da[i] = false;
@@ -121,6 +132,7 @@ void ArrBkSenke::block_bahn(int spur, int64_t s0, int m, float* l, float* r, Arr
     p.blende.store(alt, std::memory_order_release);
     p.h_last = h_neu;
     p.gen_last = gen_neu;
+    if (h_neu) lade_vorgaben(p, h_neu);
 #ifndef CYPHERDJ_MUTATION_ARR_BK_OHNE_AKTIV
     p.aktiv.store(h_neu, std::memory_order_release);
 #endif
@@ -152,6 +164,7 @@ void ArrBkSenke::block_bahn(int spur, int64_t s0, int m, float* l, float* r, Arr
   } else if (!p.h_last && h_neu) {   // first instance on this track
     p.h_last = h_neu;
     p.gen_last = gen_neu;
+    lade_vorgaben(p, h_neu);
 #ifndef CYPHERDJ_MUTATION_ARR_BK_OHNE_AKTIV
     p.aktiv.store(h_neu, std::memory_order_release);
 #endif
@@ -175,14 +188,14 @@ void ArrBkSenke::block_bahn(int spur, int64_t s0, int m, float* l, float* r, Arr
 #endif
   };
   const bool start_hier = p.start >= 0 && p.start < s0 + m;
-  // Knobs k1..k8 in every block (also while the transport stands). At a take-over and at a transport start they jump to their values,
+  // Knobs k1..k64 in every block (also while the transport stands). At a take-over and at a transport start they jump to their values,
   // otherwise the instance smooths over 20 ms.
   const bool sofort = p.neu || start_hier;
-  for (int k = 1; k <= 8; ++k) {
+  for (int k = 1; k <= BK_KNOEPFE; ++k) {
 #ifdef CYPHERDJ_MUTATION_ARR_BK_REGLER_NUR_START
     if (!sofort) continue;   // error case: knobs only at the start, a knob edited during playback never arrives
 #endif
-    float w = k_da[k - 1] ? k_gemeldet[k - 1] : knopf_wert(*q, k);   // a value reported for this block wins over the snapshot
+    float w = k_da[k - 1] ? k_gemeldet[k - 1] : knopf_wert(*q, k, p.knopf_vorgabe);   // a value reported for this block wins over the snapshot
     if (!k_da[k - 1] && d_da[k - 1]) {   // a relative lane only: the snapshot's knob plus the summand
       w += k_delta[k - 1];
       w = w < 0.0f ? 0.0f : (w > 1.0f ? 1.0f : w);

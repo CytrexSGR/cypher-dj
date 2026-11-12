@@ -1,0 +1,214 @@
+{
+ "bassmusik": {
+  "kategorie": "bass",
+  "text": "Dubstep-style wobble bass: saw and pulse into a ladder filter with LFO and growl."
+ },
+ "diode-acid-bass": {
+  "kategorie": "bass",
+  "text": "Acid bass with a diode ladder filter; squelchy and resonant."
+ },
+ "diode-goa-linie": {
+  "kategorie": "bass",
+  "text": "Rolling goa bass line: diode ladder filter, saw plus pulse; works for fast 16th lines."
+ },
+ "drums-808": {
+  "kategorie": "drums",
+  "text": "808-style drum kit: boomy kick, snappy snare, hats; MIDI notes pick the drums."
+ },
+ "drums-909": {
+  "kategorie": "drums",
+  "text": "909-style drum kit: punchy kick, clap and snare, crisp hats; MIDI notes pick the drums."
+ },
+ "falter-demo": {
+  "kategorie": "textur",
+  "text": "Wavefolder demo: saw folded into rich harmonics; fold and symmetry change the timbre."
+ },
+ "fm-bass": {
+  "kategorie": "bass",
+  "text": "FM bass: tight, bright and punchy, with fast decay and feedback bite."
+ },
+ "fm-epiano": {
+  "kategorie": "keys",
+  "text": "FM electric piano with tremolo and chorus; soft bell-like attack."
+ },
+ "fm-glocke": {
+  "kategorie": "keys",
+  "text": "FM bell with hall; clear, ringing and metallic."
+ },
+ "fm-lead": {
+  "kategorie": "lead",
+  "text": "FM lead with vibrato and echo; bright, glassy and cutting."
+ },
+ "formant-neuro-bass": {
+  "kategorie": "bass",
+  "text": "Neuro bass with a moving vowel filter; talks and growls in drum and bass style."
+ },
+ "gated-hall-snare": {
+  "kategorie": "drums",
+  "text": "Big gated-reverb snare in 80s style; one hit per key, tail length on a knob."
+ },
+ "goa-blubber-lead": {
+  "kategorie": "lead",
+  "text": "Goa lead with sample-and-hold bubbling on a ladder filter; trippy and rubbery."
+ },
+ "granular-drone": {
+  "kategorie": "textur",
+  "text": "Dark drone from grains of a saw wave; freeze it for endless texture."
+ },
+ "granular-pad": {
+  "kategorie": "pad",
+  "text": "Soft evolving pad built from sound grains; slow, wide and shimmering."
+ },
+ "granular-textur": {
+  "kategorie": "textur",
+  "text": "Grainy texture generator; density and grain size from clouds to crackle."
+ },
+ "hartsync-bass": {
+  "kategorie": "bass",
+  "text": "Hard-sync bass with a pitch zap on every note; aggressive, screaming low end."
+ },
+ "hartsync-lead": {
+  "kategorie": "lead",
+  "text": "Hard-sync lead with a pitch sweep; the classic screaming sync solo sound."
+ },
+ "hartsync-pad": {
+  "kategorie": "pad",
+  "text": "Hard-sync pad with a slow sweep, PWM and chorus; moving, edgy texture."
+ },
+ "juno-pad": {
+  "kategorie": "pad",
+  "text": "Chorus pad: PWM, sub and chorus; warm and lush for chords."
+ },
+ "juno-pad-dyn": {
+  "kategorie": "pad",
+  "text": "Chorus pad with echo, hall and compressor built in; ready-made wide chords."
+ },
+ "juno-pad-echo": {
+  "kategorie": "pad",
+  "text": "Chorus pad with a tempo-friendly echo and hall; spacious chords."
+ },
+ "juno-pad-hall": {
+  "kategorie": "pad",
+  "text": "Chorus pad with a big hall; long, airy chords."
+ },
+ "kamm-goa-zupf": {
+  "kategorie": "keys",
+  "text": "Plucked goa tone from a tuned comb filter; short, hollow and bubbly."
+ },
+ "kick-synth": {
+  "kategorie": "drums",
+  "text": "Synthesized sine kick tuned in Hz: pitch envelope, click, drive and a polarity switch."
+ },
+ "lead": {
+  "kategorie": "lead",
+  "text": "Sync lead: two saws, hard sync, filter envelope and vibrato; cuts through a mix."
+ },
+ "metall-crash": {
+  "kategorie": "drums",
+  "text": "Metallic crash cymbal with choke on release; for accents and fills."
+ },
+ "metall-hihat": {
+  "kategorie": "drums",
+  "text": "Closed and open hi-hat from metallic oscillators; for steady 8th and 16th patterns."
+ },
+ "metall-ride": {
+  "kategorie": "drums",
+  "text": "Ringing ride cymbal from metallic oscillators; for steady ride patterns."
+ },
+ "ms20-bass": {
+  "kategorie": "bass",
+  "text": "Twin-filter bass: raw, screaming filter with drive; gritty and edgy."
+ },
+ "ms20-goa-lead": {
+  "kategorie": "lead",
+  "text": "Twin-filter goa lead: biting filter, LFO and detune; psychedelic and sharp."
+ },
+ "mseg-neuro-bass": {
+  "kategorie": "bass",
+  "text": "Neuro bass whose cutoff follows a multi-segment envelope; deep, evolving movement."
+ },
+ "resonator-conga": {
+  "kategorie": "drums",
+  "text": "Struck conga from a resonator model; damping and strike position shape the hit."
+ },
+ "resonator-glocke": {
+  "kategorie": "keys",
+  "text": "Struck bell from a resonator model; material and size change the metal."
+ },
+ "resonator-marimba": {
+  "kategorie": "keys",
+  "text": "Marimba from a resonator model; mallet hardness and strike position shape the wood."
+ },
+ "resonator-metall": {
+  "kategorie": "keys",
+  "text": "Struck metal bar or plate from a resonator model; inharmonic and ringing."
+ },
+ "roehre-lead": {
+  "kategorie": "lead",
+  "text": "Warm saw lead through a tube stage; drive and cutoff for a singing, fat tone."
+ },
+ "rueckkopplung": {
+  "kategorie": "bass",
+  "text": "Feedback-string bass tone that sings and bites; tune, colour and feedback on knobs."
+ },
+ "saege-ladder": {
+  "kategorie": "lead",
+  "text": "Plain saw through a ladder filter; a bare starting point for leads and basses."
+ },
+ "saite": {
+  "kategorie": "keys",
+  "text": "Simple plucked string: a short delay loop with noise burst; Karplus-Strong style."
+ },
+ "saite-gitarre": {
+  "kategorie": "keys",
+  "text": "Plucked guitar string with body resonance; pick position and damping on knobs."
+ },
+ "saite-harfe": {
+  "kategorie": "keys",
+  "text": "Plucked harp string; bright attack and long ring."
+ },
+ "saite-karplus": {
+  "kategorie": "keys",
+  "text": "Bare Karplus-Strong pluck; plain string sound without body."
+ },
+ "saite-klavier": {
+  "kategorie": "keys",
+  "text": "Piano string model with hammer and soundboard; damper control on a knob."
+ },
+ "sampler-fairlight": {
+  "kategorie": "textur",
+  "text": "Fairlight-style orchestra hit sampler with slices and reverse; crunchy and retro."
+ },
+ "sem-house-akkord": {
+  "kategorie": "pad",
+  "text": "State-variable house chord stab: filter envelope with a morphing filter shape."
+ },
+ "sem-pad": {
+  "kategorie": "pad",
+  "text": "State-variable pad with a morphing filter that sweeps slowly; smooth and analog."
+ },
+ "synth-mono": {
+  "kategorie": "bass",
+  "text": "Full mono synth for bass and lead: two oscillators, sub, five switchable filters."
+ },
+ "synth-neuro": {
+  "kategorie": "bass",
+  "text": "Complete neuro and reese bass machine: detuned saws, FM, fold, formant and filter moves."
+ },
+ "synth-poly": {
+  "kategorie": "pad",
+  "text": "Polyphonic unison synth with ladder, SV and diode filters: stabs, supersaws, pads."
+ },
+ "wavetable-chor": {
+  "kategorie": "pad",
+  "text": "Choir-like pad from a vowel wavetable; the vowel moves slowly."
+ },
+ "wavetable-reese": {
+  "kategorie": "bass",
+  "text": "Reese bass from detuned wavetable oscillators; wide, dark and growling."
+ },
+ "wavetable-supersaw": {
+  "kategorie": "pad",
+  "text": "Wide supersaw from detuned wavetable oscillators; trance chords and big leads."
+ }
+}

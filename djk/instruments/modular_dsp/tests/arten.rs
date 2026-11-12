@@ -39,6 +39,11 @@ fn minimalgraph(art: &str) -> Option<String> {
         um(&format!(r#",{{"id":"p",{def}}}"#), &format!(r#",{{"von":"s.aus","nach":"p.{ein}"}},{{"von":"p.{aus}","nach":"o.x"}}"#))
     };
     Some(match art {
+        // type 38: negative feedback (the loop-delay-halving path) with the saw on x and the note on hz; a forgotten reset of
+        // the delay line, the damping state, the delay smoother or the control counter shows as a different second run
+        "kamm" => um(r#",{"id":"p","art":"kamm","fb":-0.8,"daempf":0.4}"#, r#",{"von":"s.aus","nach":"p.x"},{"von":"n.hz","nach":"p.hz"},{"von":"p.aus","nach":"o.x"}"#),
+        // type 39: vowel between e and i, shifted; a forgotten reset of the five filters or the smoothed targets shows
+        "formant" => durch(r#""art":"formant","vokal":1.5,"versatz":3,"q":0.7"#, "x", "aus"),
         "note" | "saege" | "ausgang" => um("", r#",{"von":"s.aus","nach":"o.x"}"#),
         "konst" => um(r#",{"id":"p","art":"konst","wert":0.25}"#, r#",{"von":"p.aus","nach":"o.x"},{"von":"s.aus","nach":"o.l"}"#),
         "regler" => um(r#",{"id":"p","art":"regler","nr":1,"min":0.5,"max":1},{"id":"m","art":"mul"}"#,
@@ -105,6 +110,35 @@ fn minimalgraph(art: &str) -> Option<String> {
         // delay lines, the comb, the filters or the generator shows as a different second run
         "saite" => um(r#",{"id":"p","art":"saite","anreger":0,"koerper":1,"ausklang":3}"#,
                       r#",{"von":"n.hz","nach":"p.hz"},{"von":"n.trig","nach":"p.trig"},{"von":"s.aus","nach":"p.x"},{"von":"p.aus","nach":"o.x"}"#),
+        // modulators (sh, mseg, folger): each modulates the amplitude of the saw, so the run is audible and a forgotten reset
+        // of the held value / slew ramp / stage state / follower level shows as a different second run
+        "sh" => um(r#",{"id":"p","art":"sh","rate":30,"glatt":3},{"id":"m","art":"mul"}"#,
+                   r#",{"von":"s.aus","nach":"m.a"},{"von":"p.aus","nach":"m.b"},{"von":"m.aus","nach":"o.x"}"#),
+        "mseg" => um(r#",{"id":"p","art":"mseg","stufen":4,"halt":0,"von":2,"bis":3,"p1":1,"t1":0.01,"p2":0.2,"t2":0.02,"k2":-0.5,"p3":0.8,"t3":0.03,"k3":0.5,"p4":0,"t4":0.05},{"id":"m","art":"mul"}"#,
+                      r#",{"von":"n.gate","nach":"p.gate"},{"von":"n.trig","nach":"p.trig"},{"von":"s.aus","nach":"m.a"},{"von":"p.aus","nach":"m.b"},{"von":"m.aus","nach":"o.x"}"#),
+        "folger" => um(r#",{"id":"p","art":"folger","an":2,"ab":40},{"id":"m","art":"mul"}"#,
+                       r#",{"von":"s.aus","nach":"p.x"},{"von":"s.aus","nach":"m.a"},{"von":"p.aus","nach":"m.b"},{"von":"m.aus","nach":"o.x"}"#),
+        // ms20: the saw through the filter above the self-oscillation threshold (the seed noise generator is state), antrieb on;
+        // a forgotten reset of the one-pole states or of the generator shows as a different second run
+        "ms20" => durch(r#""art":"ms20","cutoff":900,"reso":0.97,"antrieb":0.4"#, "x", "tp"),
+        // sem: a saw through the filter at an LFO-free but mid-morph setting (form 0.3, reso 0.8 so the loop damping state is in
+        // use); a forgotten reset of the stage state, the form smoother or the loop memory shows as a different second run
+        "sem" => durch(r#""art":"sem","cutoff":900,"reso":0.8,"form":0.3"#, "x", "aus"),
+        // type 38: a saw, its low-pass and an attenuated saw as candidates; an LFO moves the selection through the three zones
+        // during the run, so the fade state (weights, target) is part of what the reset must clear
+        "wahl" => um(r#",{"id":"p","art":"wahl","n":3,"blende":20},{"id":"l","art":"lfo","rate":9},{"id":"f","art":"svf","cutoff":600,"pole":2},{"id":"h","art":"mul","b":0.5},{"id":"m","art":"mul","b":0.5},{"id":"ad","art":"add","b":0.5}"#,
+                     r#",{"von":"s.aus","nach":"f.x"},{"von":"f.tp","nach":"p.e1"},{"von":"s.aus","nach":"p.e2"},{"von":"s.aus","nach":"h.a"},{"von":"h.aus","nach":"p.e3"},{"von":"l.aus","nach":"m.a"},{"von":"m.aus","nach":"ad.a"},{"von":"ad.aus","nach":"p.wahl"},{"von":"p.aus","nach":"o.x"}"#),
+        // diode: saw through the 303 diode ladder at high resonance and drive; a forgotten reset of the four stage states shows as a different second run
+        "diode" => durch(r#""art":"diode","cutoff":900,"reso":0.85,"antrieb":9,"bass":0.3"#, "x", "aus"),
+        // type 47: the drum kit; the two notes of the run (45 mid tom, 52 ride) strike two drums with noise and a bank, the bus
+        // drive and its smoothers run; a forgotten reset of a voice, the choke flag, the carried residual or the bus shows as a different second run
+        "trommeln" => um(r#",{"id":"p","art":"trommeln","modell":1}"#,
+                         r#",{"von":"n.trig","nach":"p.trig"},{"von":"n.vel","nach":"p.vel"},{"von":"n.hz","nach":"p.hz"},{"von":"p.aus","nach":"o.x"}"#),
+        // falter: the saw through the oversampled folder (half-band histories, ADAA state of both curves), drive, symmetry and form set
+        "falter" => durch(r#""art":"falter","antrieb":14,"symmetrie":0.3,"form":0.5"#, "x", "aus"),
+        // drift: the saw through a multiplier driven by the drift block, so the wander state and the per-voice offset are audible in the output
+        "drift" => um(r#",{"id":"p","art":"drift","rate":3,"fest":0.5,"saat":5},{"id":"m","art":"mul"},{"id":"k","art":"mul","b":0.5},{"id":"a","art":"add","b":1.0}"#,
+                      r#",{"von":"p.aus","nach":"k.a"},{"von":"k.aus","nach":"a.a"},{"von":"s.aus","nach":"m.a"},{"von":"a.aus","nach":"m.b"},{"von":"m.aus","nach":"o.x"}"#),
         _ => return None,
     })
 }
@@ -210,6 +244,40 @@ fn arten_nur_angehaengt_saite() {
     let p = ARTEN.iter().position(|a| a.art == "saite");
     assert_eq!(p, Some(37), "the string block is type 37 (merge order) and must not move");
 }
+/// Comb and vowel filter slice: types 38 and 39 when merged in this order; other slices may append before or after them,
+/// so the test accepts any position from 38 on and requires that nothing before 38 is one of them.
+#[test]
+fn arten_nur_angehaengt_kamm_formant() {
+    for name in ["kamm", "formant"] {
+        let i = ARTEN.iter().position(|a| a.art == name).unwrap_or_else(|| panic!("{name} missing"));
+        assert!(i >= 38, "{name} is at {i}, it must be appended after the first 38 types");
+    }
+}
+/// MS-20 filter slice: appended at the end of ARTEN; the index depends on how many parallel slices were merged before it,
+/// so it only has to be one of the last entries and to sit after the string block (type 37).
+#[test]
+fn arten_nur_angehaengt_ms20() {
+    let i = ARTEN.iter().position(|a| a.art == "ms20").expect("ms20 in ARTEN");
+    assert!(i >= 38, "ms20 must come after the string block (type 37), found at {i}");
+}
+/// Diode slice: appended after the entries merged so far (38 at the time of writing); the final number depends on the merge
+/// order, so the test accepts any position behind the 38 earlier entries.
+#[test]
+fn arten_nur_angehaengt_diode() {
+    let i = ARTEN.iter().position(|a| a.art == "diode").expect("diode in ARTEN");
+    assert!(i >= 38, "the diode block must sit behind the 38 entries that existed before it, found at {i}");
+}
+/// The wavefolder block was appended behind the entries that existed before it (type number 48, after trommeln).
+#[test]
+fn arten_nur_angehaengt_falter() {
+    let i = ARTEN.iter().position(|a| a.art == "falter").expect("falter in ARTEN");
+    assert!(i >= 47, "the falter block must sit behind the 47 entries that existed before it, found at {i}");
+}
+/// The drift block is type 49, appended after falter.
+#[test]
+fn arten_nur_angehaengt_drift() {
+    assert_eq!(ARTEN.iter().position(|a| a.art == "drift"), Some(49), "drift is type 49 and must not move");
+}
 /// Hard sync slice: the slaves keep state across samples (the post-halves of the reset). Saw, pulse and triangle slaves
 /// on a saw master, run, `zuruecksetzen`, run again = bit for bit a fresh program.
 #[test]
@@ -224,4 +292,30 @@ fn zuruecksetzen_gleich_frisch_hartsync() {
     let abweichend = soll.iter().zip(&ist).filter(|(s, i)| s.0.to_bits() != i.0.to_bits() || s.1.to_bits() != i.1.to_bits()).count();
     assert_eq!(abweichend, 0, "hard sync: {abweichend} samples differ after zuruecksetzen");
     assert!(soll.iter().any(|v| v.0 != 0.0), "the graph is silent, the comparison would be blind");
+}
+
+/// Modulator slice (sh, mseg, folger): appended at the end of ARTEN in this order. Other slices append their own blocks, so
+/// the three are only required to come after the string block (type 37), in this order.
+#[test]
+fn arten_nur_angehaengt_modulatoren() {
+    let pos = |n: &str| ARTEN.iter().position(|a| a.art == n).unwrap_or_else(|| panic!("{n} missing"));
+    let (sh, mseg, folger) = (pos("sh"), pos("mseg"), pos("folger"));
+    assert!(sh >= 38, "sh is at {sh}: it must come after the first 38 types");
+    assert!(sh < mseg && mseg < folger, "order sh < mseg < folger: {sh} {mseg} {folger}");
+}
+/// SEM filter slice: appended at the end of ARTEN (type 38 on this branch); other slices may be merged after it, so it only
+/// has to stay among the last entries and behind saite.
+#[test]
+fn arten_nur_angehaengt_sem() {
+    let i = ARTEN.iter().position(|a| a.art == "sem").expect("ARTEN has no sem");
+    let s = ARTEN.iter().position(|a| a.art == "saite").unwrap();
+    assert!(i > s, "sem (index {i}) is appended after saite (index {s})");
+    assert!(i == ARTEN.len() - 1 || i >= 38, "sem must be one of the last entries, found at {i} of {}", ARTEN.len());
+}
+/// Selector slice: appended after saite (type 38 on this branch); numbers follow merge order and never move. Accepts any
+/// of the last entries so the merge with parallel slices does not break it.
+#[test]
+fn arten_nur_angehaengt_wahl() {
+    let i = ARTEN.iter().position(|a| a.art == "wahl").expect("wahl is in ARTEN");
+    assert!(i >= 38 && i + 8 >= ARTEN.len(), "wahl is one of the last entries of ARTEN (index {i} of {})", ARTEN.len());
 }

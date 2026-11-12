@@ -3,6 +3,52 @@
 One entry per public update, newest first. Each entry names what changed for someone who plays, produces or
 builds cypher-dj.
 
+## 2026-11-12
+
+**Instruments**
+- Three Cypher Modular devices for a low-end-first way of producing: Kick Synth (a sine kick tuned in Hz from
+  20 to 130 Hz, with pitch envelope, click, drive and an exact polarity switch, three factory presets), Crunch (an
+  insert effect: band limit, two saturation stages each followed by its own limiter at -1 dBFS and output level, dry
+  path delay compensated) and Polarity (flips left, right or both channels exactly).
+- New Cypher Modular devices: Mono Synth, Poly Synth and Neuro Bass (three synthesizers), Drums 909 and Drums 808
+  (two drum machines, the MIDI note picks the drum) and Filterbox, an effect with six filter models and three
+  modulation sources. Saw Ladder, the built-in patch, now has ten knobs and three presets.
+- The three synthesizers got a build-out. Mono Synth and Poly Synth: a modulation envelope, a second LFO with tempo
+  sync and a choice of target, a velocity depth knob and tuning. Poly Synth also a second oscillator and glide. Mono
+  Synth also an effects section (chorus, delay, reverb), Neuro Bass a second oscillator, a second LFO, key follow,
+  velocity, delay and reverb. Every new amount starts at off and old values are kept, so the existing factory
+  presets render byte for byte as before (checked against the old graphs with a null test).
+- Per-voice analog drift: a new Drift knob on Mono Synth and Poly Synth. At zero the sound is exactly the old one.
+  The wavetable instruments got a wave envelope.
+- Cypher Modular has 12 new block types, 50 in all: sample and hold, a multi-stage envelope, an envelope follower, a
+  tuned comb filter, a vowel filter, three more filter models, a selector, a drum kit block, a wavefolder and the
+  drift block.
+- Knob rows per channel, track and stage widened from 8 to 32 and then to 64. A graph can give each knob a start
+  value and a centre value, so a knob can begin at "off".
+- 55 new factory presets: 40 for the drum machines and the three synthesizers, six more for the synthesizers from
+  today's build-out, six for the wavetable instruments and three for Saw Ladder. The preset browser now lists
+  103 factory presets.
+
+**Panels**
+- Every instrument channel has a front panel (a plate) with real units on the knobs, envelope, LFO shape and filter
+  curve displays and MIDI learn; Cypher Modular plates also have a preset picker and a save button in the header. A device without a hand-made panel gets an
+  automatic one.
+- A device page shows the plate enlarged over the page, with a live spectrum of the channel.
+- Plates in PRODUCTION: on instrument tracks, on Cypher Modular insert stages and, automatically, on host plugins.
+  Live panels for hosted instruments.
+- MIDI learn on plate controls, and for the parameters of hosted instruments on the bass and melody channels.
+- A Surge XT quick panel with 50 parameters and envelope drawings, and a button that opens the real Surge window.
+- With several MIDI controllers connected, you choose the port; software ports are skipped.
+
+**Tablet**
+- A tablet in the home network can show the device page as a touch view with large knobs and faders. It is off
+  until you switch it on in a config file, and every device is paired with a link that works for two minutes.
+  Paired devices expire 30 days after last use. A tablet cannot start or stop playback, change projects or evaluate code.
+
+**Agent**
+- The agent still has 79 tools. The new knobs, the 64 knob rows and the new presets are reached through the existing
+  tools.
+
 ## 2026-11-11
 
 **Production**

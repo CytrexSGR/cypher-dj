@@ -9,7 +9,7 @@ import { WERK_FELDER, WERK_STREIFEN, werkText, werkzeugStreifenHtml, werkzeugKli
 import { kanalArtVon, kernGeraetAnfragen, kernGeraetWerte } from '../public/presets.js';
 import { kennlinie, kennlinienPfad, KOMP_PRESETS, AUTO_BEREICH, punktAusStelle, fxInhaltText } from '../public/effects.js';
 import { AUTO_BEREICH as SERVER_AUTO, pruefeAutomation } from '../loop_automation.ts';
-import { AUTO_VORLAGEN, vorlagePunkte, knobListe, KNOB_GRUPPE, htmlText, bkKnobListe, bkKnobHtml, graphWahlOptionen, graphWahlHtml, sendRueckHtml, lernKnopfHtml, lernStand } from '../public/effects.js';
+import { AUTO_VORLAGEN, vorlagePunkte, knobListe, KNOB_GRUPPE, htmlText, bkKnobListe, bkKnobHtml, graphWahlOptionen, graphWahlHtml, instrumentWahlHtml, instrumentKategorien, hostName, GRAPH_KATEGORIEN, sendRueckHtml, lernKnopfHtml, lernStand } from '../public/effects.js';
 
 test('Baukasten S2 knobListe: nur gemeldete Knobs, Namen aus dem Graphen, sonst „Knob n“; Surge ohne Knobs → leer', () => {
   const l = knobListe({ Volume: 0.75, 'Knob 1': 0.25, 'Knob 2': 1.5, 'Knob 8': 0 }, { 'Knob 1': 'Cutoff' });
@@ -102,6 +102,26 @@ test('S5r bkKnobListe: eight graph knobs per channel with a graph, value from th
   for (const k of ['erz/2', 'erz/3', 'erz/4', 'bus/1', 'master']) assert.deepEqual(bkKnobListe(k, {}), [], k);
 });
 
+// 64 knobs: the legacy slider field shows as many rows as the graph defines, 8 to 64
+test('64 knobs bkKnobListe: row count follows the highest named knob (8 at least, 64 at most); knob 9, 32 and 64 have their paths', () => {
+  const n = (g) => bkKnobListe('deck/1', {}, { graph: g }).length;
+  assert.equal(n({ name: 'a', regler_namen: {} }), 8);
+  assert.equal(n({ name: 'a', regler_namen: { 1: 'x', 8: 'y' } }), 8);
+  assert.equal(n({ name: 'a', regler_namen: { 9: 'nine' } }), 9);
+  assert.equal(n({ name: 'a', regler_namen: { 1: 'x', 17: 'seventeen' } }), 17);
+  assert.equal(n({ name: 'a', regler_namen: { 32: 'last' } }), 32);
+  assert.equal(n({ name: 'a', regler_namen: { 33: 'first of the upper half', 48: 'x' } }), 48);
+  assert.equal(n({ name: 'a', regler_namen: { 64: 'last' } }), 64);
+  assert.equal(n({ name: 'a', regler_namen: { 65: 'over', 0: 'zero' } }), 8, 'outside 1..64 does not count');
+  assert.equal(n({ name: 'a', regler_namen: {}, regler: { 12: { min: 0, max: 1, log: false } } }), 12, 'the knob ranges of a panel answer count too');
+  assert.equal(bkKnobListe('deck/1', {}, { graph: null }).length, 8, 'no graph info: 1..8 as before');
+  const l = bkKnobListe('erz/5', { 'erz/5/bk/9': 0.2, 'erz/5/bk/32': 0.9, 'erz/5/bk/64': 0.4 }, { graph: { name: 'a', regler_namen: { 64: 'Last' } } });
+  assert.deepEqual([l[8].pfad, l[8].wert, l[8].name], ['erz/5/bk/9', 0.2, 'Knob 9']);
+  assert.deepEqual([l[31].pfad, l[31].wert, l[31].name], ['erz/5/bk/32', 0.9, 'Knob 32']);
+  assert.deepEqual([l[63].pfad, l[63].wert, l[63].name], ['erz/5/bk/64', 0.4, 'Last']);
+  assert.equal(new Set(l.map((k) => k.pfad)).size, 64);
+});
+
 // ---- Baukasten S12 task 3: graph picker and named graph knobs --------------------------------------------------------------
 const GRAPHEN = [
   { name: 'sampler-fairlight', art: 'instrument', regler_namen: { 1: 'Rate', 2: 'Reverse (top third)' } },
@@ -169,13 +189,14 @@ test('S12 graphWahlOptionen: first option "—", instruments only on erz/2, erz/
   assert.deepEqual(namen('fx/4'), ['', 'fx-bandecho', 'fx-takt-pump']);
   assert.deepEqual(namen('erz/1'), [], 'stream 1 is a drum kit: no instrument picker');
   assert.deepEqual(namen('master'), []);
-  assert.equal(graphWahlOptionen('erz/3', GRAPHEN)[0].text, '—');
+  assert.equal(graphWahlOptionen('erz/3', GRAPHEN)[0].text, 'Surge XT', 'the empty entry of erz/2, erz/3 is the host');
+  assert.equal(graphWahlOptionen('deck/1', GRAPHEN)[0].text, '—', 'effects keep the dash');
   const o = graphWahlOptionen('erz/3', GRAPHEN, 'saite');
   assert.deepEqual(o.map((x) => x.gewaehlt), [false, false, true]);
-  assert.equal(graphWahlOptionen('erz/3', GRAPHEN, '')[0].gewaehlt, true, 'nothing loaded: "—" is chosen');
+  assert.equal(graphWahlOptionen('erz/3', GRAPHEN, '')[0].gewaehlt, true, 'nothing loaded: the host entry is chosen');
   // a loaded graph that is not in the list (file gone) still shows up, so the picker does not lie
   const fremd = graphWahlOptionen('erz/3', GRAPHEN, 'weg');
-  assert.deepEqual(fremd.at(-1), { wert: 'weg', text: 'weg', gewaehlt: true });
+  assert.deepEqual(fremd.at(-1), { wert: 'weg', text: 'weg', gewaehlt: true, kategorie: 'sonst' });
 });
 
 test('S12 graphWahlHtml: option texts and values are escaped', () => {
@@ -250,6 +271,23 @@ test('S19 lernStand: the assignment of a path, or null', () => {
 // S17: the saved/differs marker of the graph picker and the SAVE SOUND button (pure functions, no polling)
 import { bkMarke, bkSpeichernHtml } from '../public/effects.js';
 
+test('64 knobs bkMarke: an old 8-number entry reads knobs 9..64 as 0.5 (or the graph vorgabe); a moved knob 9, 32 or 64 differs; a stored 64 array compares all', () => {
+  const live = (o = {}) => ({ ...Object.fromEntries(Array.from({ length: 64 }, (_, i) => [`erz/2/bk/${i + 1}`, 0.5])), ...o });
+  const alt = [{ id: 'erz2', graph: 'juno', regler: Array(8).fill(0.5) }];
+  assert.equal(bkMarke('erz/2', alt, 'juno', live()), 'gespeichert');
+  assert.equal(bkMarke('erz/2', alt, 'juno', live({ 'erz/2/bk/9': 0.7 })), 'abweichend', 'knob 9 moved against an old entry');
+  assert.equal(bkMarke('erz/2', alt, 'juno', live({ 'erz/2/bk/32': 0.1 })), 'abweichend', 'knob 32 moved against an old entry');
+  const voll = Array(32).fill(0.5); voll[31] = 0.1;
+  assert.equal(bkMarke('erz/2', [{ id: 'erz2', graph: 'juno', regler: voll }], 'juno', live({ 'erz/2/bk/32': 0.1 })), 'gespeichert');
+  assert.equal(bkMarke('erz/2', [{ id: 'erz2', graph: 'juno', regler: voll }], 'juno', live()), 'abweichend');
+  assert.equal(bkMarke('erz/2', alt, 'juno', live({ 'erz/2/bk/64': 0.1 })), 'abweichend', 'knob 64 moved against an old entry');
+  // a knob the stored array does not carry reads as the graph's vorgabe, not as 0.5
+  const bereiche = { 28: { vorgabe: 0.25 } };
+  assert.equal(bkMarke('erz/2', alt, 'juno', live({ 'erz/2/bk/28': 0.25 }), bereiche), 'gespeichert');
+  assert.equal(bkMarke('erz/2', alt, 'juno', live({ 'erz/2/bk/28': 0.25 })), 'abweichend', 'without the ranges the old 0.5 reading stays');
+  assert.equal(bkMarke('erz/2', alt, 'juno', live({ 'erz/2/bk/28': 0.5 }), bereiche), 'abweichend');
+});
+
 test('S17 T5.1 bkMarke: no entry gives nothing, equal gives saved, any difference gives abweichend', () => {
   const alle = (w) => Object.fromEntries(Array.from({ length: 8 }, (_, i) => [`erz/2/bk/${i + 1}`, w]));
   const gesp = [{ id: 'erz2', graph: 'juno', regler: Array(8).fill(0.5) }];
@@ -290,7 +328,7 @@ test('S18 graphWahlOptionen: erz/5..7 and pad/1..2 list instruments only with "�
   for (const k of ['erz/5', 'erz/6', 'erz/7', 'pad/1', 'pad/2']) {
     const o = graphWahlOptionen(k, GRAPHEN, '');
     assert.deepEqual(o.map((x) => x.wert), ['', 'sampler-fairlight', 'saite'], k);
-    assert.equal(o[0].text, '—', k);
+    assert.equal(o[0].text, 'Off', k);
   }
   for (const k of ['erz/4', 'erz/8', 'erz/1', 'master']) assert.deepEqual(graphWahlOptionen(k, GRAPHEN, ''), [], k);
   assert.deepEqual(graphWahlOptionen('deck/1', GRAPHEN, '').map((x) => x.wert), ['', 'fx-bandecho', 'fx-takt-pump'], 'effects stay on decks');
@@ -561,4 +599,67 @@ test('A8b the built controls carry exactly the ranges of the header rows (no nar
     for (const pfad of knoepfe) assert.equal(KOPF_ZEILEN.find((x) => x.suffix === pfad.slice(k.length + 1)).kurve, 'schalter', `${pfad} is a switch row`);
     assert.equal(knoepfe.length, 1 + 3 + 1 + 4, `${k}: mb/an, 3 band bypass, lim/an, 4 utility switches`);
   }
+});
+
+// ---- Instrument picker by category ------------------------------------------------------------------------------------------------
+const INST = [
+  { name: 'drums-909', art: 'instrument', regler_namen: {}, kategorie: 'drums', text: '909-style drum kit; MIDI notes pick the drums.' },
+  { name: 'diode-acid-bass', art: 'instrument', regler_namen: {}, kategorie: 'bass', text: 'Acid bass.' },
+  { name: 'ms20-bass', art: 'instrument', regler_namen: {}, kategorie: 'bass', text: 'Gritty "MS-20" <bass>.' },
+  { name: 'eigen', art: 'instrument', regler_namen: {} },
+  { name: 'fx-bandecho', art: 'effekt', regler_namen: {} },
+];
+const opts = (html, sel) => [...new RegExp(`<select[^>]*class="${sel}"[^>]*>(.*?)</select>`, 's').exec(html)[1].matchAll(/<option value="([^"]*)"([^>]*)>([^<]*)</g)].map((m) => ({ wert: m[1], text: m[3], an: / selected/.test(m[2]) }));
+
+test('category picker: two selects, the instrument list is filtered by the category of the loaded graph', () => {
+  const h = instrumentWahlHtml('erz/5', INST, 'ms20-bass');
+  assert.deepEqual(opts(h, 'graphkat').map((o) => o.text), ['Drums', 'Bass', 'Other'], 'only categories that hold a graph; no host on erz/5');
+  assert.deepEqual(opts(h, 'graphkat').filter((o) => o.an).map((o) => o.wert), ['bass']);
+  assert.deepEqual(opts(h, 'graphwahl'), [{ wert: '', text: 'Off', an: false }, { wert: 'diode-acid-bass', text: 'diode-acid-bass', an: false }, { wert: 'ms20-bass', text: 'ms20-bass', an: true }]);
+  assert.ok(!h.includes('fx-bandecho') && !h.includes('drums-909'), 'no effects, no other category');
+  assert.match(h, /data-graphkat="erz\/5"/);
+  assert.match(h, /data-graphwahl="erz\/5"/);
+});
+
+test('category picker: one description line for the chosen instrument, escaped; Off and Choose have their own lines', () => {
+  assert.match(instrumentWahlHtml('erz/5', INST, 'ms20-bass'), /<span class="graphtext" data-graphtext="erz\/5">Gritty &quot;MS-20&quot; &lt;bass&gt;\.<\/span>/);
+  assert.match(instrumentWahlHtml('erz/5', INST, ''), /graphtext[^>]*>No instrument loaded on this channel\.</);
+  const gewaehlt = instrumentWahlHtml('erz/5', INST, 'ms20-bass', undefined, 'drums');   // browsed to another category: nothing of it is chosen yet
+  assert.match(gewaehlt, /<option value="" disabled selected hidden>Choose/);
+  assert.deepEqual(opts(gewaehlt, 'graphwahl').map((o) => o.text), ['Choose…', 'Off', 'drums-909']);
+  assert.match(gewaehlt, /graphtext[^>]*><\/span>/, 'no description for "Choose"');
+});
+
+test('category picker: erz/2 and erz/3 offer the host as an instrument (Surge XT, or the real host), Off elsewhere; the host line says who plays', () => {
+  const h = instrumentWahlHtml('erz/3', INST, '');
+  assert.deepEqual(opts(h, 'graphkat').filter((o) => o.an).map((o) => o.wert), ['host'], 'nothing loaded: the host category');
+  assert.deepEqual(opts(h, 'graphkat').map((o) => o.text), ['Drums', 'Bass', 'Host (Surge/plugins)', 'Other']);
+  assert.deepEqual(opts(h, 'graphwahl'), [{ wert: '', text: 'Surge XT', an: true }]);
+  assert.match(h, /graphtext[^>]*>Surge XT plays this channel; no Baukasten graph is loaded\.</);
+  const m = instrumentWahlHtml('erz/2', INST, '', 'Cypher Modular');
+  assert.deepEqual(opts(m, 'graphwahl'), [{ wert: '', text: 'Cypher Modular', an: true }]);
+  const bass = instrumentWahlHtml('erz/2', INST, '', 'Surge XT', 'bass');   // in another category the host is not listed: no Off there
+  assert.deepEqual(opts(bass, 'graphwahl').map((o) => o.text), ['Choose…', 'diode-acid-bass', 'ms20-bass']);
+  assert.ok(!opts(instrumentWahlHtml('erz/5', INST, ''), 'graphwahl').some((o) => o.text === 'Surge XT'));
+  assert.deepEqual(opts(instrumentWahlHtml('erz/3', INST, 'ms20-bass'), 'graphkat').filter((o) => o.an).map((o) => o.wert), ['bass'], 'a loaded graph wins over host');
+});
+
+test('hostName: plugin name, vst3:/sfz: suffix, else Surge XT', () => {
+  assert.equal(hostName({ art: 'lv2' }), 'Surge XT');
+  assert.equal(hostName({ art: 'vst3:CypherModular' }), 'CypherModular');
+  assert.equal(hostName({ art: 'sfz:piano.sfz' }), 'piano.sfz');
+  assert.equal(hostName({ art: 'vst3:x', plugin: 'Cypher Modular' }), 'Cypher Modular');
+  assert.equal(hostName(null), 'Surge XT');
+  assert.equal(hostName({ art: 7 }), 'Surge XT');
+});
+
+test('single picker: instruments grouped by <optgroup> with the empty entry first, effects flat', () => {
+  const h = graphWahlHtml('erz/5', INST, 'ms20-bass');
+  assert.match(h, /<select class="graphwahl"[^>]*><option value="">Off<\/option><optgroup label="Drums">/);
+  assert.deepEqual([...h.matchAll(/<optgroup label="([^"]*)">/g)].map((m) => m[1]), ['Drums', 'Bass', 'Other']);
+  assert.match(h, /<optgroup label="Bass"><option value="diode-acid-bass">diode-acid-bass<\/option><option value="ms20-bass" selected>/);
+  assert.ok(!graphWahlHtml('deck/1', INST, '').includes('optgroup'));
+  assert.match(graphWahlHtml('erz/2', INST, '', 'Cypher Modular'), /<option value="" selected>Cypher Modular<\/option>/);
+  assert.deepEqual(GRAPH_KATEGORIEN.map((k) => k.id), ['drums', 'bass', 'lead', 'pad', 'keys', 'textur', 'host', 'sonst']);
+  assert.equal(instrumentKategorien('erz/5', INST, '').gewaehlt, 'drums');
 });

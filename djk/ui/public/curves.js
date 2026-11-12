@@ -23,9 +23,9 @@ const DECK_TASTEN = ['play', 'cue'];
 const DECK_ZUWEISUNG = ['xseite'];  // Crossfader-Seite A/THRU/B, §1.5 „nur Hand“ (2026-09-27)
 export const SPUREN = Array.from({ length: 32 }, (_, i) => i + 1);   // D1 K1: Spur-Regler des Arrangements (§1.5 spur/<n>/*)
 const SPUR_REGLER = ['fader', 'pan', 'mute', 'solo'];
-// S5r (§1.5): acht Graph-Regler <kanal>/bk/<1..8> auf den Kanälen, die einen Baukasten-Graphen annehmen (nicht erz/4, erz/8)
+// S5r (§1.5): graph knobs <kanal>/bk/<1..64> auf den Kanälen, die einen Baukasten-Graphen annehmen (nicht erz/4, erz/8)
 export const BK_KANAELE = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'erz/1', 'erz/2', 'erz/3', 'erz/5', 'erz/6', 'erz/7', 'pad/1', 'pad/2'];
-export const BK_SEND_KANAELE = ['fx/3', 'fx/4'];   // S14: graph knobs of the send returns (global controls fx/<n>/bk/1..8)
+export const BK_SEND_KANAELE = ['fx/3', 'fx/4'];   // S14: graph knobs of the send returns (global controls fx/<n>/bk/1..64)
 export const GRUPPEN = Array.from({ length: 8 }, (_, i) => i + 1);   // 1.10 Slice 1: Gruppen-Regler des Arrangements (§1.5 grp/<n>/*)
 export const RETURNS = [1, 2, 3, 4];   // 1.10 Slice 3: return strips with Cypher Hall (§1.5 ret/<r>/*, spur|grp/<n>/send/<r>)
 const RET_REGLER = ['fader', 'pan', 'mute', 'solo'];
@@ -46,8 +46,8 @@ export const ZIELE = new Set([
   ...GRUPPEN.flatMap((n) => RETURNS.map((r) => `grp/${n}/send/${r}`)),   // ... and of a group
   ...RETURNS.flatMap((r) => RET_REGLER.map((p) => `ret/${r}/${p}`)),     // return strip: fader, balance, mute, solo
   ...RETURNS.flatMap((r) => RET_HALL.map((p) => `ret/${r}/reverb/${p}`)),  // return hall: on switch and six normalised values
-  ...BK_KANAELE.flatMap((k) => Array.from({ length: 8 }, (_, i) => `${k}/bk/${i + 1}`)),   // S5r: Graph-Regler 1..8
-  ...BK_SEND_KANAELE.flatMap((k) => Array.from({ length: 8 }, (_, i) => `${k}/bk/${i + 1}`)),   // S14: graph knobs of fx/3, fx/4
+  ...BK_KANAELE.flatMap((k) => Array.from({ length: 64 }, (_, i) => `${k}/bk/${i + 1}`)),   // S5r: graph knobs 1..64
+  ...BK_SEND_KANAELE.flatMap((k) => Array.from({ length: 64 }, (_, i) => `${k}/bk/${i + 1}`)),   // S14: graph knobs 1..64 of fx/3, fx/4
 ]);
 
 // §1.5-Bereich je Regler-Art (Einheit wie im Vertrag)
@@ -72,7 +72,7 @@ export function art(pfad) {
   if (/^(?:spur\/(?:[1-9]|[12][0-9]|3[0-2])|grp\/[1-8])\/send\/[1-4]$/.test(pfad)) return 'send';   // 1.10 Slice 3
   const rt = /^ret\/[1-4]\/(fader|pan|mute|solo|hall\/(an|pre|decay|groesse|tief|highcut|fahne))$/.exec(pfad);   // 1.10 Slice 3
   if (rt) return rt[1] === 'fader' ? 'spur_fader' : rt[1] === 'pan' ? 'pan' : rt[1] === 'mute' || rt[1] === 'solo' || rt[2] === 'an' ? 'schalter' : 'hall';
-  if (/^(?:deck\/[1-4]|erz\/[1-35-7]|pad\/[12]|fx\/[34])\/bk\/[1-8]$/.test(pfad)) return 'bk';   // S5r: linear 0..1, Vorgabe 0,5
+  if (/^(?:deck\/[1-4]|erz\/[1-35-7]|pad\/[12]|fx\/[34])\/bk\/([1-9]|[1-5][0-9]|6[0-4])$/.test(pfad)) return 'bk';   // S5r: linear 0..1, Vorgabe 0,5
   const m = /^(?:deck\/[12]|erz\/[1-3]|pad\/[12])\/(fader|trim|eq|kill|filter|pfl|xseite|play|cue)(\/|$)/.exec(pfad);
   if (!m) return null;
   return m[1] === 'play' || m[1] === 'cue' ? 'taste' : m[1];

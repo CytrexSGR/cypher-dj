@@ -15,6 +15,7 @@ import { TAKE_TEXT, hatTakes, takeZeilenVon } from './takes.js';
 import { neueTakeKoepfe, vorhoerenSenden } from './takes_operation.js';
 import { oeffneMenue, kopfMenueAuf } from './context_menu.js';
 import { neueGesten, bindeAutoAufnahme, istArmiert, GESTE_RUHE_MS } from './auto_recording.js';
+import { geraetSchluessel } from './device_view.js';
 
 // S18: the inputs a track can record, a literal list on purpose (the page cannot import the .ts table); tests/proj_inputs_s18.test.mjs
 // binds it to INTERNE_EINGAENGE of vertrag/stroeme.ts. erz/4 and erz/8 are missing on purpose: the kern has no tap for them.
@@ -209,7 +210,7 @@ function zeigeArmKnopf(el, an) {
 }
 export function bindeKoepfe(behaelter, { aendere, aendereAus, offen = () => new Set(), umschalten = () => {}, takeOffen = () => new Set(), takeKoepfe = null, takesUmschalten = () => {}, wahl = () => undefined, waehle = () => {},
   spurWahl = () => new Set(), wahlUmschalten = () => {}, gruppeFalten = () => {},
-  ueber = () => [], uebersteuere = async () => true, kopfBeat = () => null, gesten = KEINE_GESTEN, armiere = async () => {}, armStandJetzt = () => null, marke = () => null, geraete = () => null, rackOeffnen = () => {}, instrumente = () => [] }) {
+  ueber = () => [], uebersteuere = async () => true, kopfBeat = () => null, gesten = KEINE_GESTEN, armiere = async () => {}, armStandJetzt = () => null, marke = () => null, geraete = () => null, rackOeffnen = () => {}, geraetOeffnen = () => {}, instrumente = () => [] }) {
   const frost = neuerFrost();
   const jetzt = () => performance.now();
   const stand = new Map();     // spur_id → Spur laut letztem Projekt
@@ -308,7 +309,8 @@ export function bindeKoepfe(behaelter, { aendere, aendereAus, offen = () => new 
       }));
     }
     // 1.9 U7: a click on the device label of a rack track opens the rack panel in the detail area (the right click menu is the shared KOPF_MENUE, bound once in production.js)
-    q('.p-geraet').addEventListener('click', () => { if (spur()?.geraet?.art === 'rack') rackOeffnen(id); });
+    // front panels task 8: the same click on a bk or RB-338 track opens its front panel (detail mode `geraet`)
+    q('.p-geraet').addEventListener('click', () => { const g = spur()?.geraet; if (g?.art === 'rack') rackOeffnen(id); else if (geraetSchluessel(g)) geraetOeffnen(id); });
     q('.p-loeschen').addEventListener('click', () => aendere(`Delete track ${spur().name}`, [{ befehl: 'spur_loeschen', spur_id: id }]));
     q('.p-ausgang').addEventListener('change', (e) => aendere(`Output ${spur().name}`, [ausgangBefehl(id, e.target.value)]));
     for (const [ziel, d] of ziele('regler')) {
@@ -598,7 +600,7 @@ export function bindeSpuren(ctx) {
     return true;
   };
   const koepfe = bindeKoepfe($('koepfe'), { instrumente: () => st?.instrumente ?? [], aendere: ctx.aendere, spurWahl: () => st.spurWahl, wahlUmschalten, gruppeFalten, aendereAus: ctx.aendereAus, offen: () => st?.laneOffen ?? new Set(),
-    takeOffen: () => st?.takeOffen ?? new Set(), takeKoepfe, rackOeffnen: (id) => ctx.rackOeffnen?.(id),
+    takeOffen: () => st?.takeOffen ?? new Set(), takeKoepfe, rackOeffnen: (id) => ctx.rackOeffnen?.(id), geraetOeffnen: (id) => ctx.geraetOeffnen?.(id),
     takesUmschalten: (id) => { if (st.takeOffen.has(id)) st.takeOffen.delete(id); else st.takeOffen.add(id); ctx.layoutNeu(); koepfe.zeige(st.projekt); },
     gesten, armiere: (id, an) => aufnahme.armiere(id, an), armStandJetzt: () => st?.autoArm,
     ueber: () => st?.autoUeber ?? [], kopfBeat: () => st?.kopfBeat, marke: (id) => ctx.presetMarke?.('spur', id) ?? null, geraete: () => st?.geraete ?? null,

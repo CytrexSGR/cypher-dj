@@ -1,0 +1,34 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "hartsync-bass"},
+  "title": "Hard Sync Bass",
+  "akzent": "orange",
+  "layout": {"rows": [
+    ["osc", "zap", "filter", "amp"]
+  ]},
+  "sections": [
+    { "id": "osc", "title": "OSCILLATORS", "cols": 3, "controls": [
+      {"id": "sync", "type": "knob", "label": "Sync pitch", "bind": {"param": "k3"}, "format": "raw", "unit": "st", "default": 0.5},
+      {"id": "sub", "type": "knob", "label": "Sub", "bind": {"param": "k6"}, "format": "percent", "default": 0.5},
+      {"id": "o1", "type": "label", "span": 3, "text": "Leader: sine, drives the sub"},
+      {"id": "o2", "type": "label", "span": 3, "text": "Follower: triangle, hard sync"}
+    ]},
+    { "id": "zap", "title": "PITCH ZAP", "cols": 4, "controls": [
+      {"id": "zhue", "type": "huelle", "span": 4, "label": "Pitch zap", "of": {"a": 0.001, "d": "zdecay", "s": 0.001, "r": 0.05}},
+      {"id": "zap", "type": "knob", "label": "Zap", "bind": {"param": "k4"}, "format": "raw", "unit": "st", "default": 0.5},
+      {"id": "zdecay", "type": "knob", "label": "Decay", "bind": {"param": "k5"}, "format": "raw", "unit": "s", "default": 0.5},
+      {"id": "zn", "type": "label", "span": 2, "text": "Attack 1 ms fixed"}
+    ]},
+    { "id": "filter", "title": "FILTER", "cols": 3, "controls": [
+      {"id": "fk", "type": "filterkurve", "span": 3, "of": {"cutoff": "cutoff", "reso": "reso"}, "typen": [{"art": "lp", "pole": 4}]},
+      {"id": "cutoff", "type": "knob", "label": "Cutoff", "bind": {"param": "k1"}, "format": "hz", "default": 0.5},
+      {"id": "reso", "type": "knob", "label": "Resonance", "bind": {"param": "k2"}, "format": "percent", "default": 0.5}
+    ]},
+    { "id": "amp", "title": "AMP", "cols": 3, "controls": [
+      {"id": "ahue", "type": "huelle", "span": 3, "label": "Amp envelope", "of": {"a": 0.002, "d": 0.25, "s": 0.7, "r": "release"}},
+      {"id": "release", "type": "knob", "label": "Release", "bind": {"param": "k8"}, "format": "raw", "unit": "s", "default": 0.5},
+      {"id": "drive", "type": "knob", "label": "Drive", "bind": {"param": "k7"}, "format": "db", "default": 0.5},
+      {"id": "an", "type": "label", "span": 3, "text": "A 2 ms, D 250 ms, S 70 % fixed"}
+    ]}
+  ]
+}

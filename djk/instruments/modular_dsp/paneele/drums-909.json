@@ -1,0 +1,64 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "drums-909"},
+  "title": "Drums 909",
+  "akzent": "rot",
+  "layout": {"rows": [
+    ["kick", "snare", "extras", "toms", "hats", "cym", "master"]
+  ]},
+  "sections": [
+    { "id": "kick", "title": "KICK", "cols": 2, "controls": [
+      {"id": "kick-tune", "type": "knob", "label": "Tune", "bind": {"param": "k1"}, "format": "hz", "default": 0.5},
+      {"id": "kick-decay", "type": "knob", "label": "Decay", "bind": {"param": "k2"}, "format": "ms", "default": 0.5},
+      {"id": "kick-punch", "type": "knob", "label": "Punch", "bind": {"param": "k3"}, "format": "raw", "default": 0.5, "unit": "st"},
+      {"id": "kick-pdecay", "type": "knob", "label": "Pitch time", "bind": {"param": "k9"}, "format": "ms", "default": 0.5},
+      {"id": "kick-click", "type": "knob", "label": "Click", "bind": {"param": "k10"}, "format": "percent", "default": 0.5},
+      {"id": "kick-drive", "type": "knob", "label": "Drive", "bind": {"param": "k32"}, "format": "percent", "default": 0.5},
+      {"id": "kick-n", "type": "label", "span": 2, "text": "MIDI 0 to 36"}
+    ]},
+    { "id": "snare", "title": "SNARE", "cols": 2, "controls": [
+      {"id": "snare-tune", "type": "knob", "label": "Tune", "bind": {"param": "k5"}, "format": "hz", "default": 0.5},
+      {"id": "snare-snappy", "type": "knob", "label": "Snappy", "bind": {"param": "k4"}, "format": "percent", "default": 0.5},
+      {"id": "snare-decay", "type": "knob", "label": "Decay", "bind": {"param": "k11"}, "format": "ms", "default": 0.5},
+      {"id": "snare-tone", "type": "knob", "label": "Tone", "bind": {"param": "k12"}, "format": "percent", "default": 0.5},
+      {"id": "snare-n", "type": "label", "span": 2, "text": "MIDI 38, 40"}
+    ]},
+    { "id": "extras", "title": "CLAP / RIM", "cols": 2, "controls": [
+      {"id": "clap-decay", "type": "knob", "label": "Clap decay", "bind": {"param": "k13"}, "format": "ms", "default": 0.5},
+      {"id": "clap-tone", "type": "knob", "label": "Clap tone", "bind": {"param": "k14"}, "format": "percent", "default": 0.5},
+      {"id": "clap-spread", "type": "knob", "label": "Clap spread", "bind": {"param": "k26"}, "format": "percent", "default": 0.5},
+      {"id": "rim-tune", "type": "knob", "label": "Rim tune", "bind": {"param": "k25"}, "format": "hz", "default": 0.5},
+      {"id": "extras-n", "type": "label", "span": 2, "text": "Clap 39, rim 37"}
+    ]},
+    { "id": "toms", "title": "TOMS", "cols": 2, "controls": [
+      {"id": "tomlo-tune", "type": "knob", "label": "Low tune", "bind": {"param": "k15"}, "format": "hz", "default": 0.5},
+      {"id": "tommid-tune", "type": "knob", "label": "Mid tune", "bind": {"param": "k16"}, "format": "hz", "default": 0.5},
+      {"id": "tomhi-tune", "type": "knob", "label": "High tune", "bind": {"param": "k17"}, "format": "hz", "default": 0.5},
+      {"id": "tom-decay", "type": "knob", "label": "Decay", "bind": {"param": "k18"}, "format": "ms", "default": 0.5},
+      {"id": "tom-punch", "type": "knob", "label": "Punch", "bind": {"param": "k19"}, "format": "raw", "default": 0.5, "unit": "st"},
+      {"id": "toms-n", "type": "label", "span": 2, "text": "MIDI 41 to 50"}
+    ]},
+    { "id": "hats", "title": "HATS", "cols": 2, "controls": [
+      {"id": "oh-decay", "type": "knob", "label": "Open decay", "bind": {"param": "k6"}, "format": "ms", "default": 0.5},
+      {"id": "ch-decay", "type": "knob", "label": "Closed decay", "bind": {"param": "k22"}, "format": "ms", "default": 0.5},
+      {"id": "hat-tone", "type": "knob", "label": "Tone", "bind": {"param": "k20"}, "format": "percent", "default": 0.5},
+      {"id": "hat-tune", "type": "knob", "label": "Tune", "bind": {"param": "k21"}, "format": "raw", "default": 0.5, "unit": "x"},
+      {"id": "hat-noise", "type": "knob", "label": "Noise", "bind": {"param": "k30"}, "format": "percent", "default": 0.5},
+      {"id": "hats-n", "type": "label", "span": 2, "text": "Closed 42, pedal 44, open 46"}
+    ]},
+    { "id": "cym", "title": "CYMBALS", "cols": 2, "controls": [
+      {"id": "crash-decay", "type": "knob", "label": "Crash decay", "bind": {"param": "k23"}, "format": "ms", "default": 0.5},
+      {"id": "crash-tune", "type": "knob", "label": "Crash tune", "bind": {"param": "k28"}, "format": "raw", "default": 0.5, "unit": "x"},
+      {"id": "ride-decay", "type": "knob", "label": "Ride decay", "bind": {"param": "k24"}, "format": "ms", "default": 0.5},
+      {"id": "ride-tune", "type": "knob", "label": "Ride tune", "bind": {"param": "k29"}, "format": "raw", "default": 0.5, "unit": "x"},
+      {"id": "cym-n", "type": "label", "span": 2, "text": "Crash 49,57,58 Ride 51-52,59-74"}
+    ]},
+    { "id": "master", "title": "MASTER", "cols": 2, "controls": [
+      {"id": "drive", "type": "knob", "label": "Drive", "bind": {"param": "k7"}, "format": "percent", "default": 0.5},
+      {"id": "filter", "type": "knob", "label": "Filter", "bind": {"param": "k8"}, "format": "percent", "default": 0.5},
+      {"id": "reso", "type": "knob", "label": "Resonance", "bind": {"param": "k27"}, "format": "percent", "default": 0.5},
+      {"id": "pegel", "type": "knob", "label": "Level", "bind": {"param": "k31"}, "format": "percent", "default": 0.5},
+      {"id": "master-n", "type": "label", "span": 2, "text": "Bus: drive, then DJ filter"}
+    ]}
+  ]
+}

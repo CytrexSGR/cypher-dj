@@ -314,6 +314,39 @@ for g in fx-delay-sync; do
     mkdir -p "$BK_ORDNER" && cp -- "$DJK/instruments/modular_dsp/demos/$g.json" "$BK_ORDNER/$g.json" && echo "djk-start: installed the shipped graph $g into $BK_ORDNER"
   fi
 done
+# 2b2 Every graph of the device register (geraete.json, entries of art bk; `device.ts neu` adds them): copied when absent or different (cmp -s), so a
+# new or changed device reaches the studio. Names that do not match the graph rule are skipped.
+REGISTER="$DJK/instruments/modular_dsp/geraete.json"
+if [ -f "$REGISTER" ]; then
+  while IFS= read -r g; do
+    [[ "$g" =~ ^[a-z0-9_-]{1,32}$ ]] || continue
+    quelle="$DJK/instruments/modular_dsp/demos/$g.json"
+    [ -f "$quelle" ] || continue
+    if [ ! -e "$BK_ORDNER/$g.json" ] || ! cmp -s -- "$quelle" "$BK_ORDNER/$g.json"; then
+      mkdir -p "$BK_ORDNER" && cp -- "$quelle" "$BK_ORDNER/$g.json" && echo "djk-start: installed the device graph $g into $BK_ORDNER"
+    fi
+  done < <(python3 -c 'import json,sys; [print(e["name"]) for e in json.load(open(sys.argv[1])) if e.get("art")=="bk"]' "$REGISTER" 2>/dev/null)
+fi
+
+# 2c Shipped front panels (sidecar files of the graphs, format cypherdj-panel/2): copied into <graph folder>/panels when missing or when the shipped
+# content differs (cmp -s), so an updated panel reaches the studio. The kern reads only top-level *.json of the graph folder, the subfolder is inert for it.
+for f in "$DJK"/instruments/modular_dsp/paneele/*.json; do
+  [ -f "$f" ] || continue
+  ziel="$BK_ORDNER/panels/$(basename "$f")"
+  if [ ! -e "$ziel" ] || ! cmp -s -- "$f" "$ziel"; then
+    mkdir -p "$BK_ORDNER/panels" && cp -- "$f" "$ziel" && echo "djk-start: installed the shipped panel $(basename "$f") into $BK_ORDNER/panels"
+  fi
+done
+
+# 2d Instrument categories and descriptions (kategorien.json, read by the page server for GET /graphen): copied next to the panels with the same cmp rule.
+# The kern reads only top-level *.json of the graph folder, so it goes into panels/ like the panel files.
+kat="$DJK/instruments/modular_dsp/kategorien.json"
+if [ -f "$kat" ]; then
+  ziel="$BK_ORDNER/panels/kategorien.json"
+  if [ ! -e "$ziel" ] || ! cmp -s -- "$kat" "$ziel"; then
+    mkdir -p "$BK_ORDNER/panels" && cp -- "$kat" "$ziel" && echo "djk-start: installed the instrument categories into $BK_ORDNER/panels"
+  fi
+fi
 
 # 3 Belegt: Units, Ports, Shared Memory. Alle Funde auf einmal melden.
 BELEGT=()

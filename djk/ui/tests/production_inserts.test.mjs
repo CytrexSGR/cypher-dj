@@ -23,7 +23,7 @@ function projekt(ketten = {}, art = 'komp') {
   p = lauf(p, ['Kick', 'Bass', 'Lead', 'Pad'].map((name) => ({ befehl: 'spur_neu', art: 'audio', name })));
   p = lauf(p, [{ befehl: 'gruppenspur_neu', name: 'Music', mitglieder: ['s2', 's3'] }, { befehl: 'return_neu', name: 'Hall' }, { befehl: 'return_neu', name: 'Plate' }]);
   for (const [strang, n] of Object.entries(ketten)) {
-    for (let pos = 0; pos < n; pos++) p = lauf(p, [{ befehl: 'insert_setzen', strang_id: strang, pos, art }]);
+    for (let pos = 0; pos < n; pos++) p = lauf(p, [{ befehl: 'insert_setzen', strang_id: strang, pos, art, ...(art === 'bk' ? { graph: BK_STANDARD_GRAPH } : {}) }]);
   }
   p.rev = 1; p.wiedergabe_rev = 1;
   return JSON.parse(JSON.stringify(p));
@@ -351,4 +351,33 @@ test('arr-bk: the Fx button places a Baukasten effect stage with the shipped del
   assert.equal(await zaehle(s, '.p-ins-popover .p-ins-param'), 8, 'k1 to k8');
   await s.w(`(() => { const e = document.querySelector('.p-ins-popover .p-ins-param[data-param="k2"]'); e.value = '0.8'; e.dispatchEvent(new Event('input', { bubbles: true })); })()`);
   assert.ok(await s.bis(async () => (await s.projekt()).spuren[0].inserts[0].werte.k2 === 0.8), 'the knob reached the project');
+});
+
+// a stub for GET /graphen/panel inside the page: `antwort` is the JSON body, or null for a 404
+const panelAttrappe = (s, antwort) => s.w(`(() => { const f = window.fetch.bind(window); window.fetch = (u, o) => String(u).startsWith('/graphen/panel') ? Promise.resolve(new Response(${JSON.stringify(JSON.stringify(antwort))}, { status: ${antwort ? 200 : 404} })) : f(u, o); })()`);
+const BK_PANEL = { name: BK_STANDARD_GRAPH, art: 'effekt', regler: {}, panel: { format: 'cypherdj-panel/2', geraet: { art: 'bk', graph: BK_STANDARD_GRAPH }, title: 'Test panel', sections: [{ id: 's', controls: [{ id: 'a', type: 'knob', label: 'Time', bind: { param: 'k1' } }] }] }, fehler: [] };
+
+test('bk insert stage: a graph with a panel shows the front panel, a knob move sends insert_param_setzen k1; List toggles the K rows', { skip: !CHROME && 'no google-chrome' }, async (t) => {
+  const s = await seite(t, projekt({ s1: 1 }, 'bk'));
+  await panelAttrappe(s, BK_PANEL);
+  await s.w(`document.querySelector('[data-p="inserts"]').open = true`);
+  await s.b.klick('.p-kette[data-strang="s1"] .p-stufe .p-ins-name');
+  assert.ok(await s.bis(() => s.w(`document.querySelectorAll('.p-ins-popover .frontplatte .fp-knopf').length === 1`)), 'the panel is shown');
+  assert.equal(await zaehle(s, '.p-ins-popover .p-ins-param'), 0, 'no K rows while the panel is shown');
+  await s.w(`(() => { const e = document.querySelector('.p-ins-popover .fp-knopf'); e.focus(); e.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true })); })()`);
+  assert.ok(await s.bis(async () => (await s.projekt()).spuren[0].inserts[0].werte.k1 === 1), 'the panel knob reached the project as k1 = 1');
+  await s.b.klick('.p-ins-popover .p-ins-liste');
+  assert.ok(await s.bis(async () => (await zaehle(s, '.p-ins-popover .p-ins-param')) >= 8), 'List shows the K rows');
+  assert.equal(await zaehle(s, '.p-ins-popover .frontplatte'), 0, 'and hides the panel');
+});
+
+test('bk insert stage: a graph that answers no panel shows the K rows and no List toggle', { skip: !CHROME && 'no google-chrome' }, async (t) => {
+  const s = await seite(t, projekt({ s1: 1 }, 'bk'));
+  await panelAttrappe(s, null);
+  await s.w(`document.querySelector('[data-p="inserts"]').open = true`);
+  await s.b.klick('.p-kette[data-strang="s1"] .p-stufe .p-ins-name');
+  assert.ok(await s.bis(async () => (await zaehle(s, '.p-ins-popover .p-ins-param')) >= 8), 'K rows');
+  await warte(300);
+  assert.equal(await zaehle(s, '.p-ins-popover .frontplatte'), 0);
+  assert.equal(await zaehle(s, '.p-ins-popover .p-ins-liste'), 0, 'no toggle without a panel');
 });

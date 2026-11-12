@@ -26,11 +26,19 @@ export interface Bereich { name: string; routen(): Route[]; ereignis?(adresse: s
 // S17: what the proj Bereich may do with Baukasten graphs: the same checks as POST /graph, without the HTTP response
 export interface BkBruecke {
   geladen(): Record<string, string>;
-  setzeGraph(kanal: string, name: string, quelle: 'andreas' | 'cypher'): Promise<{ code: number; j: Record<string, unknown> }>;
+  setzeGraph(kanal: string, name: string, quelle: 'andreas' | 'cypher', opt?: { vorgaben?: boolean }): Promise<{ code: number; j: Record<string, unknown> }>;
   autoAus(kanal: string): boolean;
   graphHash(name: string): string | null;
   // S17: false while the page server has no kern (KernAnbindung.zustand 'suche'); absent counts as true
   kernDa?(): boolean;
+}
+// Host learn: what the hostlernen Bereich may do with the instrument hosts (wirt sockets) and the control rows. art = the `art` of wirt-<gruppe>.json
+// ('lv2' Surge, 'vst3:rb338', 'vst3:baukasten', 'sfz:grand'), null without a host; ruf = one command over the wirt socket (like POST /klang);
+// setzeRegler = the path of POST /regler (set at once), true when the kern took it.
+export interface HostBruecke {
+  art(gruppe: string): string | null;
+  ruf(gruppe: string, befehl: Record<string, unknown>): Promise<{ ok: boolean; fehler?: string; [k: string]: unknown }>;
+  setzeRegler(pfad: string, nach: number): Promise<boolean>;
 }
 export interface BereichKontext {
   sende(adresse: string, felder: Record<string, unknown>): number;
@@ -42,6 +50,7 @@ export interface BereichKontext {
   kiGestoppt(): boolean;
   verteile(ereignis: { a: string; f: unknown }): void;
   log(zeile: Record<string, unknown>): void;
+  host?: HostBruecke;   // host learn: only the server provides it
   baukasten?: BkBruecke;   // S17: optional, only the server and test contexts that need graphs provide it
 }
 

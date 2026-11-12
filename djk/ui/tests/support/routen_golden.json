@@ -1,5 +1,5 @@
 {
- "n": 191,
+ "n": 198,
  "ergebnis": [
   {
    "m": "GET",
@@ -526,6 +526,17 @@
     },
     "wartet": "null",
     "zuordnungen": "[]"
+   }
+  },
+  {
+   "m": "GET",
+   "p": "/lernen/host",
+   "code": 200,
+   "art": "application/json; charset=utf-8",
+   "form": {
+    "datei": "string",
+    "wartet": "null",
+    "ziele": "[]"
    }
   },
   {
@@ -2158,6 +2169,78 @@
   {
    "m": "POST",
    "p": "/lernen/loeschen",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/lernen/host",
+   "kopf": "json",
+   "code": 400,
+   "art": "application/json; charset=utf-8",
+   "fehler": "argument_ungueltig",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/lernen/host",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/lernen/host",
+   "kopf": "fremd",
+   "code": 403,
+   "art": "application/json; charset=utf-8",
+   "fehler": "fremde_herkunft",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/lernen/host/loeschen",
+   "kopf": "json",
+   "code": 400,
+   "art": "application/json; charset=utf-8",
+   "fehler": "argument_ungueltig",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/lernen/host/loeschen",
+   "kopf": "text",
+   "code": 415,
+   "art": "application/json; charset=utf-8",
+   "fehler": "nur_json",
+   "form": {
+    "fehler": "string",
+    "text": "string"
+   }
+  },
+  {
+   "m": "POST",
+   "p": "/lernen/host/loeschen",
    "kopf": "fremd",
    "code": 403,
    "art": "application/json; charset=utf-8",

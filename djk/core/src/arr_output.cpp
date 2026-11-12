@@ -103,7 +103,7 @@ bool ins_zeile(const sw::ReglerDef& d, int* slot, int* param) {
     *param = static_cast<int>(r) - static_cast<int>(sw::Rolle::ins_util_an);
     return true;
   }
-  if (r >= sw::Rolle::ins_bk_an && r <= sw::Rolle::ins_bk_k8) {   // arr-bk slice 3: ins/bk/<n>/an and k1..k8 (parameter 0..8)
+  if (r >= sw::Rolle::ins_bk_an && r <= sw::Rolle::ins_bk_k64) {   // arr-bk slice 3: ins/bk/<n>/an and k1..k64 (parameter 0..64)
     const int n = ins_nr(d.pfad, "ins/bk/", ARR_INS_BK, &rest);
     if (n < 1) return false;
     *slot = ins_global(ArrInsArt::bk, n - 1);
@@ -145,7 +145,7 @@ void Arrangement::regler_binden(const sw::ReglerTabelle& tab) {
       continue;
     }
     if ((d.rolle >= sw::Rolle::ins_komp_an && d.rolle <= sw::Rolle::ins_saett_mix) ||
-        (d.rolle >= sw::Rolle::ins_lim_an && d.rolle <= sw::Rolle::ins_bk_k8)) {   // 1.10 slice 4a/4b + limiter + plan 1.11 host + arr-fx utility: the pooled insert rows (komp, eq, saett, lim, host, utility)
+        (d.rolle >= sw::Rolle::ins_lim_an && d.rolle <= sw::Rolle::ins_bk_k64)) {   // 1.10 slice 4a/4b + limiter + plan 1.11 host + arr-fx utility: the pooled insert rows (komp, eq, saett, lim, host, utility)
       int slot = 0, param = 0;
       if (ins_zeile(d, &slot, &param)) {
         regler_ins_[r] = static_cast<int16_t>(slot * INS_PARAM_MAX + param);

@@ -30,7 +30,7 @@ float d_max(const char* pfad) {
 
 FALL(pfade_des_vertrags_sind_hoechstens_31_zeichen_und_eindeutig) {
   const int n = insert_vertrag_anzahl();
-  PRUEFE_GLEICH(n, 12 * 10 + 8 * 59 + 4 * 4 + 12 * 4 + 2 * 3 + 4 * 1 + 8 * 5 + 8 * 9);   // 778 (arr-bk: + bk, 8 instances x 9 rows); 706 before: komp, eq (pool 8 since arr-fx slice 2), saett (4), rack, lim (2), host (plan 1.11 T4: 4 instances, one row `an`), utility (arr-fx slice 1: 8 x 5)
+  PRUEFE_GLEICH(n, 12 * 10 + 8 * 59 + 4 * 4 + 12 * 4 + 2 * 3 + 4 * 1 + 8 * 5 + 8 * 65);   // 778 (arr-bk: + bk, 8 instances x 9 rows); 706 before: komp, eq (pool 8 since arr-fx slice 2), saett (4), rack, lim (2), host (plan 1.11 T4: 4 instances, one row `an`), utility (arr-fx slice 1: 8 x 5)
   std::set<std::string> gesehen;
   int zu_lang = 0, doppelt = 0, laengster = 0;
   for (int i = 0; i < n; i++) {
@@ -90,7 +90,7 @@ FALL(komp_zeilen_neue_felder_und_form) {
     PRUEFE(!d.nur_hand);
     PRUEFE_GLEICH(d.keine_rampe, d.ganzzahlig);
   }
-  PRUEFE_GLEICH(ins, 120 + 8 * 59 + 4 * 4 + 2 * 3 + 4 + 8 * 5 + 8 * 9);   // arr-bk: + bk (8 x 9);   // slice 4b: komp, eq (8 instances since arr-fx slice 2) and saett (4) have table rows; lim (2 instances, 3 rows); plan 1.11 T4: host (4 instances, 1 row); arr-fx: utility (8 instances, 5 rows)
+  PRUEFE_GLEICH(ins, 120 + 8 * 59 + 4 * 4 + 2 * 3 + 4 + 8 * 5 + 8 * 65);   // arr-bk: + bk (8 x 9);   // slice 4b: komp, eq (8 instances since arr-fx slice 2) and saett (4) have table rows; lim (2 instances, 3 rows); plan 1.11 T4: host (4 instances, 1 row); arr-fx: utility (8 instances, 5 rows)
   PRUEFE_GLEICH(d_min("ins/komp/3/knie"), 0.0f);
   PRUEFE_GLEICH(d_max("ins/komp/3/knie"), 24.0f);
   PRUEFE_GLEICH(d_max("ins/komp/12/schp"), 300.0f);

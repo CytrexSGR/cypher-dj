@@ -160,3 +160,79 @@ export class SpektrumAnsicht {
     for (const m of markenLage(B, (t) => ctx.measureText(t)?.width ?? 0)) ctx.fillText(m.text, m.x, H - 3);
   }
 }
+
+// ---- Device page (Decision 7 of the surfaces plan): the spectrum source is one global core row, so the page only borrows it. ----
+export const SPEKTRUM_VORHER = 'djk-spektrum-vorher';   // sessionStorage: the value to put back (survives a reload of the page while it is open)
+/** The selector value of a channel name ('erz/5' -> 9); 0 (off) for a name that is no source. */
+export function spektrumIndex(kanal) { const i = SPEKTRUM_QUELLEN.indexOf(kanal); return i > 0 ? i : 0; }
+
+/** Borrows the row spektrum/kanal while the device page is open. speicher: sessionStorage (may throw or be absent), kanaele: the instrument channel names,
+ *  aktuell(): the row's value as the page knows it, sende(pfad, wert): writes the row, beacon(pfad, wert): the same for a page that is going away (sendBeacon),
+ *  id: this page life (the stored key reads "id|old value", so a duplicated tab, which inherits sessionStorage, can tell it is not the holder),
+ *  neuGeladen: this page life started by a reload (a duplicated tab does not). Every close path of the page goes through schliessen(). */
+export class SpektrumLeihe {
+  constructor({ speicher, kanaele, aktuell, sende, beacon, id = Math.random().toString(36).slice(2), neuGeladen = true }) {
+    Object.assign(this, { sp: speicher, kanaele, aktuell, sende, beacon, id, neuGeladen });
+    this.offen = false; this.speicherLos = null; this.index = 0;
+  }
+  lies() {
+    let t = null;
+    try { t = this.sp?.getItem(SPEKTRUM_VORHER); } catch { /* memory below */ }
+    if (t === null || t === undefined) t = this.speicherLos;
+    if (t === null || t === undefined) return null;
+    const m = /^(?:([a-z0-9]+)\|)?(-?\d+)$/.exec(String(t));
+    return m ? { id: m[1] ?? null, v: Number(m[2]) } : null;
+  }
+  merke(v) { this.speicherLos = `${this.id}|${v}`; try { this.sp?.setItem(SPEKTRUM_VORHER, this.speicherLos); } catch { /* memory only */ } }
+  vergiss() { this.speicherLos = null; try { this.sp?.removeItem(SPEKTRUM_VORHER); } catch { /* memory only */ } }
+  /** The device page is open for `kanal` (also a switch to another channel): select it; the first old value stays stored. */
+  oeffnen(kanal) {
+    const i = spektrumIndex(kanal);
+    if (!i) return;
+    if (!this.offen) { const alt = Number(this.aktuell?.() ?? 0); this.merke(Number.isFinite(alt) ? alt : 0); this.offen = true; }
+    this.index = i;
+    return this.sende('spektrum/kanal', i);
+  }
+  /** The page closes: put the first value back. Only when this page life opened it (a key of an earlier life is beimLaden's). */
+  schliessen() {
+    if (!this.offen) return;
+    this.offen = false; this.index = 0;
+    const k = this.lies();
+    this.vergiss();
+    if (k && k.id === this.id) return this.sende('spektrum/kanal', k.v);
+  }
+  /** pagehide (tab closed, reload, navigation): the page cannot await anything, so the restore goes out as a beacon. */
+  seiteVerlassen() {
+    if (!this.offen) return;
+    this.offen = false; this.index = 0;
+    const k = this.lies();
+    this.vergiss();
+    if (k && k.id === this.id) (this.beacon ?? this.sende)('spektrum/kanal', k.v);
+  }
+  /** Every state snapshot (page load, reconnect, core restart). Held lease: the row must still point at the open channel, else set it again.
+   *  No lease: a key of an earlier page life of this tab (a reload whose beacon was lost) is restored when the row still shows an instrument channel,
+   *  else only cleared; a key of a foreign id in a tab that was not reloaded (a duplicate) is left alone. */
+  beiStand(wert) {
+    const w = Number(wert);
+    if (this.offen) { if (this.index && w !== this.index) return this.sende('spektrum/kanal', this.index); return; }
+    const k = this.lies();
+    if (!k || !this.neuGeladen) return;
+    this.vergiss();
+    if (this.kanaele.some((x) => spektrumIndex(x) === w)) return this.sende('spektrum/kanal', k.v);
+  }
+}
+
+/** A view of the open channel's spectrum without a selector (used by a plate cell and by the strip under the plate). d: document.
+ *  Returns { wurzel, ansicht }; the caller registers `ansicht` for frames and sets its source. */
+export function spektrumFlaeche(d) {
+  const wurzel = d.createElement('div');
+  wurzel.setAttribute('class', 'fp-spektrum');
+  const leinwand = d.createElement('canvas');
+  leinwand.width = 1000; leinwand.height = 140;
+  leinwand.setAttribute('aria-label', 'Level per third octave of this channel, 25 Hz to 16 kHz');
+  const info = d.createElement('div');
+  info.setAttribute('class', 'fp-spektrum-info');
+  info.setAttribute('role', 'status');
+  wurzel.append(leinwand, info);
+  return { wurzel, ansicht: new SpektrumAnsicht({ leinwand, wahl: null, info, sende: null }) };
+}

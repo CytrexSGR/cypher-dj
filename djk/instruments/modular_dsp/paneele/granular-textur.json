@@ -1,0 +1,33 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "granular-textur"},
+  "title": "Granular Texture",
+  "akzent": "blau",
+  "layout": {"rows": [
+    ["src", "grain", "filt", "env"]
+  ]},
+  "sections": [
+    { "id": "src", "title": "SOURCE", "cols": 3, "controls": [
+      {"id": "s1", "type": "label", "span": 3, "text": "Noise buffer 1 s"},
+      {"id": "s2", "type": "label", "span": 3, "text": "Position random, full scatter"},
+      {"id": "s3", "type": "label", "span": 3, "text": "Pitch spread 200 cent"}
+    ]},
+    { "id": "grain", "title": "GRAINS", "cols": 4, "controls": [
+      {"id": "size", "type": "knob", "label": "Grain size", "span": 2, "bind": {"param": "k1"}, "format": "ms", "default": 0.5},
+      {"id": "dens", "type": "knob", "label": "Density", "span": 2, "bind": {"param": "k2"}, "format": "raw", "unit": "/s", "default": 0.5},
+      {"id": "pitch", "type": "knob", "label": "Pitch", "span": 2, "bind": {"param": "k3"}, "format": "raw", "unit": "st", "default": 0.5},
+      {"id": "width", "type": "knob", "label": "Width", "span": 2, "bind": {"param": "k5"}, "format": "percent", "default": 0.5}
+    ]},
+    { "id": "filt", "title": "FILTER", "cols": 2, "controls": [
+      {"id": "reso", "type": "knob", "label": "Resonance", "span": 2, "bind": {"param": "k4"}, "format": "percent", "default": 0.5},
+      {"id": "f1", "type": "label", "span": 2, "text": "Band-pass at the note pitch"},
+      {"id": "f2", "type": "label", "span": 2, "text": "Plays the note"}
+    ]},
+    { "id": "env", "title": "AMP ENV", "cols": 4, "controls": [
+      {"id": "hue", "type": "huelle", "span": 4, "label": "Envelope", "of": {"a": "att", "d": 0.3, "s": 0.8, "r": "rel"}},
+      {"id": "att", "type": "knob", "label": "Attack", "span": 2, "bind": {"param": "k6"}, "format": "raw", "unit": "s", "default": 0.5},
+      {"id": "rel", "type": "knob", "label": "Release", "span": 2, "bind": {"param": "k7"}, "format": "raw", "unit": "s", "default": 0.5},
+      {"id": "e1", "type": "label", "span": 4, "text": "D 300 ms, S 80 % fixed"}
+    ]}
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "fx-filterbox"},
+  "title": "Filterbox",
+  "akzent": "tuerkis",
+  "sections": [
+    { "id": "filter", "title": "FILTER", "cols": 4, "controls": [
+      { "id": "typ", "type": "selector", "label": "Type", "span": 4, "bind": { "param": "k1" }, "options": ["Ladder", "MS-20", "Diode", "SEM", "Comb", "Vowel"], "default": 0 },
+      { "id": "cutoff", "type": "knob", "label": "Cutoff", "bind": { "param": "k2" }, "format": "hz", "default": 0.75 },
+      { "id": "reso", "type": "knob", "label": "Resonance", "bind": { "param": "k3" }, "format": "percent", "default": 0.3 },
+      { "id": "farbe", "type": "knob", "label": "Colour", "bind": { "param": "k4" }, "format": "percent", "default": 0.5 }
+    ]},
+    { "id": "mod", "title": "MODULATION", "cols": 2, "controls": [
+      { "id": "quelle", "type": "selector", "label": "Source", "span": 2, "bind": { "param": "k5" }, "options": ["LFO", "S&H", "Follow"], "default": 0 },
+      { "id": "rate", "type": "knob", "label": "Rate", "bind": { "param": "k6" }, "format": "hz", "default": 0.5 },
+      { "id": "tiefe", "type": "knob", "label": "Depth", "bind": { "param": "k7" }, "format": "raw", "unit": "st", "default": 0 }
+    ]},
+    { "id": "aus", "title": "OUT", "cols": 1, "controls": [
+      { "id": "mix", "type": "knob", "label": "Mix", "bind": { "param": "k8" }, "format": "percent", "default": 1 }
+    ]}
+  ]
+}

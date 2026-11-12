@@ -41,8 +41,14 @@ export const GRUND_TEXT: Readonly<Record<string, string>> = {
   kein_midi_eingang: 'assign a MIDI input under Devices first (profile MIDI controller)',
   lernen_datei_kaputt: 'the learn file lernen.json is damaged; it was left untouched',
   keine_zuordnung: 'that knob has no learned assignment',
+  kein_wirt: 'no instrument host is running on that channel',
+  graph_geladen: 'a graph is loaded on that channel: its knobs are learned directly',
+  keine_slots: 'all 64 slots of that channel are in use',
+  kein_host: 'this server has no instrument host connection',
+  host_ziele_kaputt: 'the host learn file host_ziele.json is damaged; it was left untouched',
   konfig_defekt: 'the device file is damaged; it was left untouched',
   beschaeftigt: 'the server is busy; try again in a moment',
+  wirt_antwortet_nicht: 'the instrument host did not answer',
   wirt_fehlt: 'the Surge host for the production slot is not running; start it with djk-instrumente --arr1 or --arr2',
   wirt_fehler: 'the Surge host for the production slot stopped with an error; start it again with djk-instrumente --arr1 or --arr2',
   ueber_projekt: 'track mixer changes go through the project',
@@ -265,7 +271,7 @@ export const GRUND_TEXT: Readonly<Record<string, string>> = {
   midi_zu_lang: 'the MIDI file is longer than the project allows',
   midi_datei_zu_gross: 'the MIDI file is larger than 8 MiB',
   midi_datei_fehlt: 'there is no MIDI file at that path',
-  // S17: sound snapshot of the project (graph + eight knobs per channel)
+  // S17: sound snapshot of the project (graph + knob values per channel)
   bk_nicht_geladen: 'no Baukasten graph is loaded on that channel; load one before saving the sound',
   bk_nichts_geladen: 'no Baukasten graph is loaded on a default channel; load one or name the channels to save',
   kein_baukasten: 'this server has no Baukasten graph bridge; the sound snapshot is not available',

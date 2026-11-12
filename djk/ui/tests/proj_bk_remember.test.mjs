@@ -2,16 +2,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { pruefKontext, sitzung, ist } from './support/proj_context.mjs';
-import { BK_KANAELE } from '../project/modular.ts';
+import { BK_KANAELE, setzeVorgabenQuelle } from '../project/modular.ts';
 import { GRUND_TEXT } from '../http/reasons.ts';
 import { stapel } from './support/media_library.mjs';
 import { ruf, CYPHER } from './support/proj_stack.mjs';
 
 const HASH = 'b'.repeat(64);
 const acht = (x) => Array(8).fill(x);
+const alle = (x) => Array(64).fill(x);
 const werte = (s, kanal, w) => w.forEach((x, i) => ist(s, `${kanal}/bk/${i + 1}`, x));
 async function offenMit(t, opt = {}) {
   const e = sitzung(t, {}, pruefKontext({ baukasten: true, ...opt }));
+  setzeVorgabenQuelle(() => Array(64).fill(0.5));   // the session wires the real graph folder; these graph names are fixtures: known, without vorgabe
   await e.s.neu('P', 'andreas');
   return e;
 }
@@ -50,6 +52,7 @@ test('S17 T3.3 an unknown live value keeps the stored value (first capture 0.5) 
   const { s, k } = await offenMit(t);
   k.bk.geladen['erz/2'] = 'a';
   for (const n of [1, 2, 3, 4, 6, 7, 8]) ist(s, `erz/2/bk/${n}`, 0.3);   // knob 5 stays unknown
+  for (let n = 9; n <= 64; n++) ist(s, `erz/2/bk/${n}`, 0.5);   // knobs 9..64 are known and untouched: the stored array stays at 8 numbers
   const r = await antwort(s.bkMerken({}, 'andreas'));
   assert.deepEqual(baukasten({ s })[0].regler, [0.3, 0.3, 0.3, 0.3, 0.5, 0.3, 0.3, 0.3]);
   assert.deepEqual(r.j.bk.unbekannt, ['erz/2/bk/5']);
@@ -106,7 +109,7 @@ test('S17 T3.5 a plain merken never removes a saved entry', async (t) => {
 test('S17 T3.6 bkLage compares saved and live per channel', async (t) => {
   const { s, k } = await offenMit(t);
   k.bk.geladen['erz/2'] = 'juno-pad-dyn';
-  werte(s, 'erz/2', acht(0.5)); ist(s, 'erz/2/bk/3', 0.9);
+  werte(s, 'erz/2', alle(0.5)); ist(s, 'erz/2/bk/3', 0.9);
   await s.bkMerken({}, 'andreas');
   const zeile = (j, kanal) => j.kanaele.find((x) => x.kanal === kanal);
   let j = s.bkLage().j;
@@ -129,7 +132,7 @@ test('S17 T3.6 bkLage compares saved and live per channel', async (t) => {
 test('S17 T3.7 an unknown live value makes gleich null', async (t) => {
   const { s, k } = await offenMit(t);
   k.bk.geladen['erz/2'] = 'a';
-  werte(s, 'erz/2', acht(0.5));
+  werte(s, 'erz/2', alle(0.5));
   await s.bkMerken({}, 'andreas');
   assert.equal(s.bkLage().j.kanaele.find((x) => x.kanal === 'erz/2').gleich, true);
   s.lage.regler.delete('erz/2/bk/5');   // the live value of one knob is unknown again
@@ -154,4 +157,19 @@ test('S17 T3.8 routes answer like the session methods; a foreign origin is refus
   assert.deepEqual([ld.code, ld.j.baukasten], [200, []], 'nothing saved: nothing to apply');
   const fremd = await fetch(`${url}/proj/bk/merken`, { method: 'POST', headers: { 'content-type': 'application/json', origin: 'https://boese.example' }, body: '{}' });
   assert.equal(fremd.status, 403);
+});
+
+test('64 knobs: a touched knob 9 and 64 are captured, the array grows to 64; back to default shrinks it to 8', async (t) => {
+  const { s, k } = await offenMit(t);
+  k.bk.geladen['erz/2'] = 'a';
+  werte(s, 'erz/2', alle(0.5)); ist(s, 'erz/2/bk/9', 0.7); ist(s, 'erz/2/bk/64', 0.2);
+  await s.bkMerken({}, 'andreas');
+  const r = baukasten({ s })[0].regler;
+  assert.equal(r.length, 64); assert.equal(r[8], 0.7); assert.equal(r[63], 0.2);
+  assert.equal(s.bkLage().j.kanaele.find((x) => x.kanal === 'erz/2').gleich, true);
+  ist(s, 'erz/2/bk/64', 0.5);
+  assert.equal(s.bkLage().j.kanaele.find((x) => x.kanal === 'erz/2').gleich, false, 'knob 64 moved away from the stored value');
+  ist(s, 'erz/2/bk/9', 0.5);
+  await s.bkMerken({}, 'andreas');
+  assert.equal(baukasten({ s })[0].regler.length, 8);
 });

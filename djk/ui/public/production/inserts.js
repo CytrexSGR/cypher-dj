@@ -16,6 +16,7 @@ import { pdcRechnen, latenzZeile, streifenText, hostLatenzen, msText } from './p
 import { baueParameterListe } from './plugin_parameter.js';
 import { SC_EIGEN, schluesselGruppen, schluesselBefehl, schluesselWert, schluesselLabel, duckBefehl, duckKicks } from './key_choice.js';
 import { geraetName } from './rack_device.js';
+import { baueFrontplatte } from '../panel.js';
 
 export const MAX_PLAETZE = 4;      // equal to project/model.ts MAX_INSERTS_PRO_STRANG, checked by tests/production_inserts.test.mjs
 export const MAX_KOMP = 12;        // equal to MAX_INS_KOMP
@@ -90,8 +91,15 @@ export const UTIL_PARAMETER = [
   { name: 'gain', label: 'Gain', einheit: 'dB', min: -60, max: 24, vorgabe: 0, schritt: 0.1 },
   { name: 'balance', label: 'Balance', einheit: '', min: -1, max: 1, vorgabe: 0, schritt: 0.01 },
 ];
-// arr-bk: the eight knobs of a Baukasten effect stage (0..1, the graph maps them; the names come from the graph, the page shows K1..K8)
-export const BK_PARAMETER = Array.from({ length: 8 }, (_, i) => ({ name: `k${i + 1}`, label: `K${i + 1}`, einheit: '', min: 0, max: 1, vorgabe: 0.5, schritt: 0.01 }));
+// arr-bk: the 64 knobs of a Baukasten effect stage (0..1, the graph maps them; the names come from the graph, the page shows K1..K64).
+// The popover lists as many as the graph defines (bkZahl), at least the first eight.
+export const BK_ZAHL_MIN = 8;
+export const bkZahl = (reglerNamen) => {
+  let n = BK_ZAHL_MIN;
+  if (typeof reglerNamen === 'object' && reglerNamen !== null) for (const k of Object.keys(reglerNamen)) { const nr = Number(k); if (Number.isInteger(nr) && nr > n && nr <= 64) n = nr; }
+  return n;
+};
+export const BK_PARAMETER = Array.from({ length: 64 }, (_, i) => ({ name: `k${i + 1}`, label: `K${i + 1}`, einheit: '', min: 0, max: 1, vorgabe: 0.5, schritt: 0.01 }));
 export const EQ_KOPF_PARAMETER = [
   { name: 'out', label: 'Output', einheit: 'dB', min: -24, max: 24, vorgabe: 0, schritt: 0.1 },
   { name: 'propq', label: 'Proportional Q', einheit: '', min: 0, max: 1, vorgabe: 0, typ: 'schalter' },
@@ -269,10 +277,10 @@ export function freieZiele(strang) {
   });
   return aus;
 }
-// 1.9 U8 T11: the member parameters a macro may drive (E12; the twin of gliedMakroParam in project/model.ts): RB-338 four smoothed ones, bk k1..k8, gain_db of any
+// 1.9 U8 T11: the member parameters a macro may drive (E12; the twin of gliedMakroParam in project/model.ts): RB-338 four smoothed ones, bk k1..k64, gain_db of any
 // member but Surge. [{glied, param, text}] in member order; a strip without a rack device offers none.
 const GLIED_RB_PARAMETER = [['lautstaerke', 'Volume'], ['cutoff', 'Cutoff'], ['resonanz', 'Resonance'], ['env_mod', 'Env mod']];
-const GLIED_BK_PARAMETER = ['k1', 'k2', 'k3', 'k4', 'k5', 'k6', 'k7', 'k8'].map((k) => [k, k.toUpperCase()]);
+const GLIED_BK_PARAMETER = Array.from({ length: 64 }, (_, i) => [`k${i + 1}`, `K${i + 1}`]);
 const GLIED_GAIN = ['gain_db', 'Gain'];
 export function gliedParameter(g) {
   if (!g || g.art === 'wirt') return [];
@@ -356,12 +364,50 @@ const zeileHtml = (art, q, name, beschriftung) => {
   else steuer = `<input class="p-ins-param" data-param="${name}" type="range" min="${q.min}" max="${q.max}" step="${q.schritt}" title="${titel}">`;
   return `<label class="p-ins-zeile">${beschriftung}${steuer}<output class="p-ins-wert" data-param="${name}"></output></label>`;
 };
+/** Panel adapter of one bk stage: values from the stage in the project, writes as insert_param_setzen through the coalescing writer of the K rows. */
+export const baueInsertAdapter = (ctx, s, insertId) => ({
+  // a parameter a rack macro drives (slice 4c, like the K rows): its value is what the macro gives, and the control is blocked (no param_gemappt refusals)
+  get: (param) => {
+    const strang = straenge(ctx.st.projekt).find((t) => t.id === s.id);
+    const x = (strang?.inserts ?? []).find((y) => y.id === insertId);
+    const nr = strang && x ? gemapptVon(strang, insertId, param) : null;
+    if (nr !== null) { const z = strang.rack.makros[nr - 1].ziel.find((y) => y.insert === insertId && y.param === param); return makroWert(z, rackWerte(strang)[nr - 1]); }
+    return typeof x?.werte?.[param] === 'number' ? x.werte[param] : undefined;
+  },
+  gesperrt: (param) => { const strang = straenge(ctx.st.projekt).find((t) => t.id === s.id); return !!strang && gemapptVon(strang, insertId, param) !== null; },
+  set: (param, v) => ctx.aendere(`${param.toUpperCase()} ${ARTEN.bk.name} on ${s.name}`, [paramBefehl(insertId, param, v)], `${insertId}:${param}`),
+});
+
 export function bindeInserts(ctx) {
   const { $ } = ctx;
   const block = $('inserts'), liste = $('inserts-liste'), titel = $('inserts-titel');
   const offen = new Set();     // the stages whose popover is open
   const rackOffen = new Set(); // the strips whose rack panel is open
   const greift = new Set();    // `${insert}:${param}` while the hand is on a slider
+  const graphNamen = new Map(); // graph name -> regler_namen (GET /graphen): how many knob rows a bk popover shows
+  const ladeGraphNamen = async () => {
+    // a plain fetch: a missing list must neither throw nor change the connection state the project calls keep (holeGet does)
+    let j = null;
+    try { const r = await fetch('/graphen'); if (r.ok) j = await r.json(); } catch { /* no list: the popover shows k1..k8 */ }
+    for (const g of j?.graphen ?? []) if (g && typeof g.name === 'string') graphNamen.set(g.name, g.regler_namen);
+  };
+  const panelCache = new Map(); // graph name -> {panel, regler} or null (no panel / unreachable); a bk stage with a panel shows it instead of the K rows
+  const panelHol = new Set();
+  const listeOffen = new Set(); // the bk stages that show the K rows although their graph has a panel (the List toggle)
+  const holePanel = async (name) => {
+    if (typeof name !== 'string' || panelCache.has(name) || panelHol.has(name)) return;
+    panelHol.add(name);
+    let aus = null, antwort = false;   // antwort: the server answered; a network failure or an error status is not cached (the next open asks again)
+    try {
+      const r = await fetch(`/graphen/panel?name=${encodeURIComponent(name)}`);
+      if (r.ok) { const j = await r.json(); aus = j.panel ? { panel: j.panel, regler: j.regler ?? {} } : null; antwort = true; }
+    } catch { /* no panel for now: the K rows */ }
+    panelHol.delete(name);
+    if (antwort) panelCache.set(name, aus);
+    if (aus) zeige(ctx.st.projekt, true);
+  };
+  /** Panel adapter of one bk stage: values from the stage in the project, writes as insert_param_setzen through the coalescing writer of the K rows. */
+  const insertAdapter = (s, insertId) => baueInsertAdapter(ctx, s, insertId);
   const schl = new Map();      // insert id -> {gruppen} (the server's key options of the stage) or {fehler} (why they are not available)
   let schluessel = '';
   const lage = new Map();      // insert id -> HostLage {status, latenz, gemessen, grund?, fenster?} of the plugin stages (polled while the project has any)
@@ -413,7 +459,15 @@ export function bindeInserts(ctx) {
       const x = straenge(pr).flatMap((t) => t.inserts).find((y) => y.id === i.id);
       return x ? { label: `${x.an ? 'Bypass' : 'Enable'} ${A.name} on ${s.name}`, befehle: [anBefehl(i.id, !x.an)] } : null;
     }));
-    q('.p-ins-name').addEventListener('click', () => { if (offen.has(i.id)) offen.delete(i.id); else offen.add(i.id); zeige(ctx.st.projekt, true); });
+    q('.p-ins-name').addEventListener('click', () => {
+      if (offen.has(i.id)) offen.delete(i.id);
+      else {
+        offen.add(i.id);
+        // the popover opens at once with the knobs known so far; the graph list arrives later and rebuilds it with as many rows as the graph defines
+        if (i.art === 'bk' && !graphNamen.has(i.graph)) ladeGraphNamen().then(() => { if (graphNamen.has(i.graph) && offen.has(i.id)) zeige(ctx.st.projekt, true); });
+      }
+      zeige(ctx.st.projekt, true);
+    });
     for (const [k, schritt] of [['.p-ins-links', -1], ['.p-ins-rechts', 1]]) {
       q(k).addEventListener('click', () => ctx.aendereAus((pr) => {
         const t = straenge(pr).find((y) => y.id === s.id);
@@ -571,7 +625,28 @@ export function bindeInserts(ctx) {
       baueParameterListe(el, { holeListe: () => ctx.holeGet(`${weg}/parameter`), sende: (w) => ctx.holeJson(`${weg}/param`, { werte: w }), fehler: (r) => ctx.melde(ctx.antwortText(r), true) });
       return el;
     }
-    let html = KOPF[i.art].map((q) => zeileHtml(i.art, q, q.name, q.label)).join('');
+    let umschalter = null;
+    if (i.art === 'bk') {
+      holePanel(i.graph);
+      const info = panelCache.get(i.graph);
+      if (info) {   // the front panel in place of the K rows, with a List toggle for the rows
+        umschalter = document.createElement('button');
+        umschalter.type = 'button'; umschalter.className = 'p-ins-liste';
+        const liste = listeOffen.has(i.id);
+        umschalter.textContent = liste ? 'Panel' : 'List';
+        umschalter.setAttribute('aria-label', `${liste ? 'Show the front panel' : 'Show the parameter list'} of the effect on ${s.name}`);
+        umschalter.addEventListener('click', () => { if (listeOffen.has(i.id)) listeOffen.delete(i.id); else listeOffen.add(i.id); zeige(ctx.st.projekt, true); });
+        if (!liste) {
+          el.append(umschalter);
+          const host = document.createElement('div');
+          el.append(host);
+          el.panel = baueFrontplatte(host, { panel: info.panel, regler: info.regler, adapter: insertAdapter(s, i.id) });
+          return el;
+        }
+      }
+    }
+    const kopf = i.art === 'bk' ? BK_PARAMETER.slice(0, bkZahl(graphNamen.get(i.graph))) : KOPF[i.art];
+    let html = kopf.map((q) => zeileHtml(i.art, q, q.name, q.label)).join('');
     if (i.art === 'komp') html += `<label class="p-ins-zeile">Key<select class="p-ins-sc" aria-label="Sidechain key of the compressor on ${s.name}"></select><output></output></label>`;
     if (i.art === 'eq') {
       for (let m = 1; m <= EQ_BAENDER; m++) {
@@ -580,6 +655,7 @@ export function bindeInserts(ctx) {
       }
     }
     el.innerHTML = html;
+    if (umschalter) el.prepend(umschalter);   // the K rows of a graph that has a panel: back to the panel
     for (const r of el.querySelectorAll('.p-ins-param')) {
       const name = r.dataset.param, k = `${i.id}:${name}`, q = parameterVon(i.art, name);
       const m = /^b([1-8])\//.exec(name);
@@ -618,6 +694,7 @@ export function bindeInserts(ctx) {
   }
 
   function werte(el, s, i, p) {
+    el.panel?.aktualisiere();
     const strang = straenge(p).find((x) => x.id === s.id), mw = rackWerte(strang);
     for (const r of el.querySelectorAll('.p-ins-param')) {
       const name = r.dataset.param, q = parameterVon(i.art, name);

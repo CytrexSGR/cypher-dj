@@ -1,0 +1,29 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "kamm-goa-zupf"},
+  "title": "Comb Goa Pluck",
+  "akzent": "blau",
+  "layout": {"rows": [
+    ["burst", "comb", "out"]
+  ]},
+  "sections": [
+    { "id": "burst", "title": "BURST", "cols": 4, "controls": [
+      {"id": "burst", "type": "knob", "label": "Burst", "span": 4, "bind": {"param": "k3"}, "format": "raw", "unit": "s", "default": 0.5},
+      {"id": "b1", "type": "label", "span": 4, "text": "Noise through a 0.5 ms attack"},
+      {"id": "b2", "type": "label", "span": 4, "text": "Envelope: D is the Burst knob"},
+      {"id": "b3", "type": "label", "span": 4, "text": "S 0, R 5 ms"}
+    ]},
+    { "id": "comb", "title": "COMB", "cols": 5, "controls": [
+      {"id": "fb", "type": "knob", "label": "Feedback", "span": 2, "bind": {"param": "k1"}, "format": "percent", "default": 0.5},
+      {"id": "damp", "type": "knob", "label": "Damping", "span": 2, "bind": {"param": "k2"}, "format": "percent", "default": 0.5},
+      {"id": "c1", "type": "label", "span": 5, "text": "Comb tuned to the played note"},
+      {"id": "c2", "type": "label", "span": 5, "text": "Feedback: ring length"},
+      {"id": "c3", "type": "label", "span": 5, "text": "Damping: highs die faster"}
+    ]},
+    { "id": "out", "title": "OUT", "cols": 3, "controls": [
+      {"id": "pegel", "type": "knob", "label": "Level", "span": 3, "bind": {"param": "k4"}, "format": "percent", "default": 0.5},
+      {"id": "o1", "type": "label", "span": 3, "text": "8 voices"},
+      {"id": "o2", "type": "label", "span": 3, "text": "Comb mix 100 %"}
+    ]}
+  ]
+}

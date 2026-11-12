@@ -1,0 +1,17 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "fx-filter-wobble"},
+  "title": "Filter Wobble",
+  "akzent": "tuerkis",
+  "sections": [
+    { "id": "filter", "title": "FILTER", "cols": 3, "controls": [
+      { "id": "centre", "type": "knob", "label": "Centre", "bind": { "param": "k1" }, "format": "hz", "default": 0.5 },
+      { "id": "depth", "type": "knob", "label": "Depth", "bind": { "param": "k2" }, "format": "hz", "default": 0.5 },
+      { "id": "reso", "type": "knob", "label": "Resonance", "bind": { "param": "k3" }, "format": "percent", "default": 0.5 }
+    ]},
+    { "id": "sweep", "title": "SWEEP", "cols": 2, "controls": [
+      { "id": "wobble", "type": "label", "text": "LFO sweep, 1 beat" },
+      { "id": "reach", "type": "value", "of": "depth", "label": "Reach", "format": "hz" }
+    ]}
+  ]
+}

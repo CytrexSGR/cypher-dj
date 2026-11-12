@@ -1,0 +1,31 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "metall-crash"},
+  "title": "Metal Crash",
+  "akzent": "rot",
+  "layout": {"rows": [
+    ["decay", "tone", "grab", "src"]
+  ]},
+  "sections": [
+    { "id": "decay", "title": "DECAY", "cols": 3, "controls": [
+      {"id": "dc", "type": "knob", "label": "Decay", "span": 3, "bind": {"param": "k1"}, "format": "raw", "unit": "s", "default": 0.5},
+      {"id": "d1", "type": "label", "span": 3, "text": "Choke time 30 ms"}
+    ]},
+    { "id": "tone", "title": "TONE", "cols": 4, "controls": [
+      {"id": "tune", "type": "knob", "label": "Tune", "bind": {"param": "k2"}, "format": "raw", "unit": "x", "default": 0.5},
+      {"id": "farbe", "type": "knob", "label": "Colour", "bind": {"param": "k3"}, "format": "percent", "default": 0.5},
+      {"id": "rausch", "type": "knob", "label": "Noise", "bind": {"param": "k4"}, "format": "percent", "default": 0.5},
+      {"id": "hp", "type": "knob", "label": "Low cut", "bind": {"param": "k5"}, "format": "hz", "default": 0.5}
+    ]},
+    { "id": "grab", "title": "GRAB", "cols": 3, "controls": [
+      {"id": "grab", "type": "knob", "label": "Grab", "span": 3, "bind": {"param": "k6"}, "format": "percent", "default": 0.5},
+      {"id": "g1", "type": "label", "span": 3, "text": "Key release chokes the crash"}
+    ]},
+    { "id": "src", "title": "SOURCE", "cols": 3, "controls": [
+      {"id": "t1", "type": "label", "span": 3, "text": "Six metal oscillators"},
+      {"id": "t2", "type": "label", "span": 3, "text": "205 to 800 Hz times Tune"},
+      {"id": "t3", "type": "label", "span": 3, "text": "Three band-passes 3.5, 7, 10.5 kHz"},
+      {"id": "t4", "type": "label", "span": 3, "text": "4 voices"}
+    ]}
+  ]
+}

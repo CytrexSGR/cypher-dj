@@ -1,0 +1,28 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "saite"},
+  "title": "String",
+  "akzent": "blau",
+  "layout": {"rows": [
+    ["exc", "str", "out"]
+  ]},
+  "sections": [
+    { "id": "exc", "title": "EXCITER", "cols": 4, "controls": [
+      {"id": "e1", "type": "label", "span": 4, "text": "Noise burst, 4 ms"},
+      {"id": "e2", "type": "label", "span": 4, "text": "Low-pass at 10 times the pitch"},
+      {"id": "e3", "type": "label", "span": 4, "text": "High-pass 60 Hz removes DC"}
+    ]},
+    { "id": "str", "title": "STRING", "cols": 5, "controls": [
+      {"id": "hell", "type": "knob", "label": "Brightness", "span": 2, "bind": {"param": "k1"}, "format": "raw", "unit": "x", "default": 0.5},
+      {"id": "aus", "type": "knob", "label": "Decay", "span": 2, "bind": {"param": "k2"}, "format": "percent", "default": 0.5},
+      {"id": "s1", "type": "label", "span": 5, "text": "Delay line, pitch from the note"},
+      {"id": "s2", "type": "label", "span": 5, "text": "Loop low-pass at Brightness x pitch"},
+      {"id": "s3", "type": "label", "span": 5, "text": "Decay is the loop gain per pass"}
+    ]},
+    { "id": "out", "title": "OUT", "cols": 3, "controls": [
+      {"id": "o1", "type": "label", "span": 3, "text": "Limiter, ceiling -2 dB"},
+      {"id": "o2", "type": "label", "span": 3, "text": "Level 2"},
+      {"id": "o3", "type": "label", "span": 3, "text": "4 voices"}
+    ]}
+  ]
+}

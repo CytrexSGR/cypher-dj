@@ -1,0 +1,38 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "bassmusik"},
+  "title": "Wobble Bass",
+  "akzent": "violett",
+  "layout": {"rows": [
+    ["osc", "filter", "wobble", "growl", "aenv"]
+  ]},
+  "sections": [
+    { "id": "osc", "title": "OSCILLATORS", "cols": 3, "controls": [
+      {"id": "sub", "type": "knob", "label": "Sub", "bind": {"param": "k6"}, "format": "percent", "default": 0.5},
+      {"id": "drive", "type": "knob", "label": "Drive", "bind": {"param": "k7"}, "format": "db", "default": 0.5},
+      {"id": "o1", "type": "label", "span": 3, "text": "Saw 35 % + pulse 25 % (50 % width)"},
+      {"id": "o2", "type": "label", "span": 3, "text": "Sub: sine, one octave down"}
+    ]},
+    { "id": "filter", "title": "FILTER", "cols": 3, "controls": [
+      {"id": "fk", "type": "filterkurve", "span": 3, "of": {"cutoff": "cutoff", "reso": "reso"}, "typen": [{"art": "lp", "pole": 4}]},
+      {"id": "cutoff", "type": "knob", "label": "Cutoff", "bind": {"param": "k1"}, "format": "hz", "default": 0.5},
+      {"id": "reso", "type": "knob", "label": "Resonance", "bind": {"param": "k4"}, "format": "percent", "default": 0.5},
+      {"id": "fn", "type": "label", "span": 3, "text": "Ladder 24 dB, drive before it"}
+    ]},
+    { "id": "wobble", "title": "WOBBLE", "cols": 3, "controls": [
+      {"id": "lf", "type": "lfoform", "span": 3, "label": "Wobble shape", "formen": ["sine"]},
+      {"id": "rate", "type": "knob", "label": "Rate", "bind": {"param": "k3"}, "format": "hz", "default": 0.5},
+      {"id": "depth", "type": "knob", "label": "Depth", "bind": {"param": "k2"}, "format": "hz", "default": 0.5},
+      {"id": "wn", "type": "label", "span": 3, "text": "Restarts on every note"}
+    ]},
+    { "id": "growl", "title": "GROWL", "cols": 2, "controls": [
+      {"id": "growl", "type": "knob", "label": "Growl", "span": 2, "bind": {"param": "k5"}, "format": "percent", "default": 0.5},
+      {"id": "gn", "type": "label", "span": 2, "text": "Band-pass + ring (+7 st)"}
+    ]},
+    { "id": "aenv", "title": "AMP ENV", "cols": 3, "controls": [
+      {"id": "ahue", "type": "huelle", "span": 3, "label": "Envelope", "of": {"a": 0.003, "d": 0.2, "s": 0.9, "r": "release"}},
+      {"id": "release", "type": "knob", "label": "Release", "span": 3, "bind": {"param": "k8"}, "format": "raw", "unit": "s", "default": 0.5},
+      {"id": "an", "type": "label", "span": 3, "text": "A 3 ms, D 200 ms, S 90 % fixed"}
+    ]}
+  ]
+}

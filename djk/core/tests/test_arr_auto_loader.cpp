@@ -152,23 +152,35 @@ int main() {
     PRUEF(lade2(bkspur(o.auto_lane({{0.0, -1.0, 0}, {4.0, 1.0, 0}}, "pan"))).empty());   // a pan lane on a bk track loads
     for (const char* z : {"geraet.lautstaerke", "geraet.cutoff", "geraet.resonanz", "geraet.env_mod"})
       PRUEF(lade2(bkspur(o.auto_lane(norm, z))) == "format");           // an RB-338 target on a bk track is refused (rb338: line above loads)
-    // 1.12 slice 7: the Baukasten knobs k1..k8 are bk lane targets: they load on a bk track with the knob index in `param`, in order, all eight and a pan lane together
+    // 1.12 slice 7: the Baukasten knobs are bk lane targets: they load on a bk track with the knob index in `param`, in order; since the 64-knob widening k1..k64, all together with a pan and a fader lane
     std::string alle;
-    for (int k = 1; k <= 8; ++k) alle += (k > 1 ? "," : "") + o.auto_lane(norm, ("geraet.k" + std::to_string(k)).c_str());
+    for (int k = 1; k <= 64; ++k) alle += (k > 1 ? "," : "") + o.auto_lane(norm, ("geraet.k" + std::to_string(k)).c_str());
     PRUEF(lade2(bkspur(alle)).empty());
     PRUEF(lade2(bkspur(alle + "," + o.auto_lane({{0.0, -1.0, 0}, {4.0, 1.0, 0}}, "pan") + "," + o.auto_lane({{0.0, 0.0, 0}, {4.0, -3.0, 0}}, "fader"))).empty());
     PRUEF(lade2(bkspur(o.auto_lane(norm, "geraet.k1") + "," + o.auto_lane(norm, "geraet.k1"))) == "format");   // the same knob twice
     PRUEF(lade2(bkspur(o.auto_lane({{0.0, 0.0, 0}, {4.0, 1.5, 0}}, "geraet.k3"))) == "format");              // above 1
     PRUEF(lade2(bkspur(o.auto_lane({{0.0, -0.5, 0}, {4.0, 0.5, 0}}, "geraet.k3"))) == "format");             // below 0
-    PRUEF(lade2(bkspur(o.auto_lane(norm, "geraet.k9"))) == "format");                                         // there is no k9
+    PRUEF(lade2(bkspur(o.auto_lane(norm, "geraet.k9"))).empty());                                             // k9 is a knob since the 32-knob widening
+    PRUEF(lade2(bkspur(o.auto_lane(norm, "geraet.k32"))).empty());
+    PRUEF(lade2(bkspur(o.auto_lane(norm, "geraet.k33"))).empty());                                            // k33 and k64 are knobs since the 64-knob widening
+    PRUEF(lade2(bkspur(o.auto_lane(norm, "geraet.k64"))).empty());
+    PRUEF(lade2(bkspur(o.auto_lane(norm, "geraet.k65"))) == "format");                                        // there is no k65
+    PRUEF(lade2(bkspur(o.auto_lane(norm, "geraet.k033"))) == "format");
+    PRUEF(lade2(bkspur(o.auto_lane(norm, "geraet.k640"))) == "format");
+    PRUEF(lade2(bkspur(o.auto_lane(norm, "geraet.k0"))) == "format");
+    PRUEF(lade2(bkspur(o.auto_lane(norm, "geraet.k01"))) == "format");                                        // no leading zero
+    PRUEF(lade2(bkspur(o.auto_lane(norm, "geraet.k10") + "," + o.auto_lane(norm, "geraet.k10"))) == "format");   // the same two-digit knob twice
+    PRUEF(lade2(bkspur(o.auto_lane(norm, "geraet.k17"))).empty() && lade2(bkspur(o.auto_lane(norm, "geraet.k1") + "," + o.auto_lane(norm, "geraet.k17"))).empty());   // k1 and k17 are two knobs
     {
       ++nr;
-      o.wiedergabe2_auto(nr, bkspur(o.auto_lane(norm, "geraet.k3") + "," + o.auto_lane(norm, "geraet.k8")));
+      o.wiedergabe2_auto(nr, bkspur(o.auto_lane(norm, "geraet.k3") + "," + o.auto_lane(norm, "geraet.k8") + "," + o.auto_lane(norm, "geraet.k17") + "," + o.auto_lane(norm, "geraet.k32") + "," + o.auto_lane(norm, "geraet.k33") + "," + o.auto_lane(norm, "geraet.k64")));
       cdj::ArrLadeErgebnis e = cdj::lade_wiedergabe(o.pfad, nr, cache2);
-      PRUEF(e.snap && e.snap->spur[0].n_auto == 2);
-      if (e.snap && e.snap->spur[0].n_auto == 2) {   // ziel and the knob index come from the one table
+      PRUEF(e.snap && e.snap->spur[0].n_auto == 6);
+      if (e.snap && e.snap->spur[0].n_auto == 6) {   // ziel and the knob index come from the one table
         const cdj::ArrAutoLane* l = e.snap->spur[0].auto_lanes;
         PRUEF(l[0].ziel == cdj::ARR_AUTO_GERAET && l[0].param == 2 && l[1].ziel == cdj::ARR_AUTO_GERAET && l[1].param == 7);
+        PRUEF(l[2].ziel == cdj::ARR_AUTO_GERAET && l[2].param == 16 && l[3].ziel == cdj::ARR_AUTO_GERAET && l[3].param == 31);   // k17 -> 16, k32 -> 31
+        PRUEF(l[4].ziel == cdj::ARR_AUTO_GERAET && l[4].param == 32 && l[5].ziel == cdj::ARR_AUTO_GERAET && l[5].param == 63);   // k33 -> 32, k64 -> 63
       }
       cdj::gib_wiedergabe(e.snap.release(), cache2);
     }

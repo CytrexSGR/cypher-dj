@@ -12,7 +12,7 @@ und fx/4 gilt nur rueckweg).
 
 S14: the row `<k>/bk/<n>` does NOT expand over all channels: it expands over the channel list of its own "Wer darf" cell
 (deck/1..4, erz/1, 2, 3, 5, 6, 7 and pad/1, 2) with n = 1 to N read from the row. The row `fx/<n>/bk/<m>` (S14) expands over the
-n and m it names (fx/3, fx/4, m = 1 to 8). Both counts are asserted to be 8 (the Baukasten library has eight knobs). Before this
+n and m it names (fx/3, fx/4, m = 1 to 8). Both counts are asserted to be 64 (the Baukasten library has 64 knobs since the 64-knob widening of 2026-11-11; it had eight, then 32). Before this
 repair the checker expanded `<k>/bk/<n>` over all 18 channels with a literal `<n>` and was red (measured at origin/main aa95b5f9).
 
 1.15 A1b (mix tools): the rows `<k>/gate/*`, `<k>/util/*`, `bus/<n>/mb/*`, `bus/<n>/lim/*` do NOT expand over all channels: they expand over
@@ -30,7 +30,7 @@ GRUPPEN = [0]   # 1.10: Zahl der Gruppen-Slots, aus dem Vertragstext gelesen (`g
 RACKS = [0]   # 1.10 slice 4c: number of racks, read from the contract text (`rack/<k>/m<n>` (k = 1 to N; ...); 4 macro rows each
 INSERTS = {'komp': 0, 'eq': 0, 'saett': 0, 'lim': 0, 'host': 0, 'utility': 0, 'bk': 0}   # 1.10 slice 4a/4b: pool size per insert kind, read from the contract text (`ins/<art>/<n>/*` ... n = 1 to N)
 RETURNS = [0]   # 1.10 Slice 3: Zahl der Returns, aus dem Vertragstext gelesen (`ret/<r>/*` ... r = 1 to N)
-BK_KNOEPFE = 8  # S14: graph knobs per channel / per send return (`regler nr 1..8` of the Baukasten library)
+BK_KNOEPFE = 64  # S14: graph knobs per channel / per send return (`regler nr 1..64` of the Baukasten library; 1..8, then 1..32 before 2026-11-11)
 KANAELE = [f'deck/{i}' for i in range(1, 5)] + [f'erz/{i}' for i in range(1, 9)] + [f'pad/{i}' for i in (1, 2)] + \
           [f'bus/{i}' for i in range(1, 5)]
 FX_N = {'rueckkopplung': (1, 2), 'rueckweg': (1, 2, 3, 4), 'notenwert': (1, 2)}
@@ -125,12 +125,12 @@ def bk_pfade(p, z):
     """S14: the two graph-knob rows expand over what the row itself names; None for every other path."""
     if p == '<k>/bk/<n>':
         m = re.search(r'n = 1 bis (\d+)', z[0])
-        assert m and int(m.group(1)) == BK_KNOEPFE, 'Vertrag §1.5: Zeile `<k>/bk/<n>` ohne "n = 1 bis 8"'
+        assert m and int(m.group(1)) == BK_KNOEPFE, 'Vertrag §1.5: Zeile `<k>/bk/<n>` ohne "n = 1 bis 64"'
         return [f'{k}/bk/{n}' for k in bk_kanaele(z[5]) for n in range(1, BK_KNOEPFE + 1)]
     if p == 'fx/<n>/bk/<m>':
         mn = re.search(r'n = (\d+(?: and \d+)*)', z[0])
         mm = re.search(r'm = 1 to (\d+)', z[0])
-        assert mn and mm and int(mm.group(1)) == BK_KNOEPFE, 'Vertrag §1.5: Zeile `fx/<n>/bk/<m>` ohne "n = A and B, m = 1 to 8"'
+        assert mn and mm and int(mm.group(1)) == BK_KNOEPFE, 'Vertrag §1.5: Zeile `fx/<n>/bk/<m>` ohne "n = A and B, m = 1 to 64"'
         return [f'fx/{n}/bk/{m}' for n in mn.group(1).split(' and ') for m in range(1, BK_KNOEPFE + 1)]
     return None
 
@@ -270,8 +270,9 @@ def main():
         print('FEHLER: der Abgleich sieht den verfälschten Vertrag nicht wie erwartet', sorted(ist ^ soll)[:5])
         return 1
     # Selbsttest 2 (E3 Review-Nachzug): sagt der Vertragstext „n = 1 bis 8“, muss der Abgleich die Pfade der Slots 9 bis 32 melden (24 mal 4 Regler plus 24 mal 4 Sends)
-    acht = text.replace('n = 1 bis 32', 'n = 1 bis 8')
-    assert acht != text, 'Selbsttest: Satz "n = 1 bis 32" im Vertrag nicht gefunden'
+    spur_satz = '`spur/<n>/*` (D1, ADR 030, n = 1 bis 32)'   # only this sentence: the Baukasten row `<k>/bk/<n>` also says n = 1 bis 64 (since 2026-11-11) and is read by its own code
+    acht = text.replace(spur_satz, spur_satz.replace('n = 1 bis 32', 'n = 1 bis 8'))
+    assert acht != text, 'Selbsttest: Satz "n = 1 bis 32" der Spur-Regler im Vertrag nicht gefunden'
     f_acht = abgleich(bib, vertrag(acht))
     # slots 9..32 (24) x (fader, pan, mute, solo + one send per return); the sends of slice 3 are keyed to the same n, so 96 was stale
     erwartet_acht = 24 * (4 + RETURNS[0])
@@ -288,22 +289,22 @@ def main():
     if len(f_vier) != erwartet_vier:
         print('FEHLER: der Abgleich liest die Gruppenzahl nicht aus dem Vertragstext')
         return 1
-    # Selbsttest 4 (S14): the fx row names only fx/3 -> exactly the eight paths of fx/4 must be reported
-    zeile_fx = '(n = 3 and 4, m = 1 to 8)'
+    # Selbsttest 4 (S14): the fx row names only fx/3 -> exactly the 64 paths of fx/4 must be reported
+    zeile_fx = '(n = 3 and 4, m = 1 to 64)'
     assert zeile_fx in text, 'Selbsttest: Zeile `fx/<n>/bk/<m>` im Vertrag nicht gefunden'
-    f_fx = abgleich(bib, vertrag(text.replace(zeile_fx, '(n = 3, m = 1 to 8)')))
-    soll_fx = {f'fx/4/bk/{m}' for m in range(1, 9)}
-    print(f'Selbsttest fx-Zeile n = 3: {len(f_fx)} Abweichungen, erwartet 8 (fx/4/bk/1..8)')
-    if {f.split(':')[0] for f in f_fx} != soll_fx or len(f_fx) != 8 or any('im Stellwerk, nicht im Vertrag' not in f for f in f_fx):
+    f_fx = abgleich(bib, vertrag(text.replace(zeile_fx, '(n = 3, m = 1 to 64)')))
+    soll_fx = {f'fx/4/bk/{m}' for m in range(1, 65)}
+    print(f'Selbsttest fx-Zeile n = 3: {len(f_fx)} Abweichungen, erwartet 64 (fx/4/bk/1..64)')
+    if {f.split(':')[0] for f in f_fx} != soll_fx or len(f_fx) != 64 or any('im Stellwerk, nicht im Vertrag' not in f for f in f_fx):
         print('FEHLER: der Abgleich liest die fx-Knopfzeile nicht aus dem Vertragstext', f_fx[:3])
         return 1
-    # Selbsttest 5 (S14): the channel list of the `<k>/bk/<n>` row loses pad/2 -> exactly pad/2/bk/1..8
+    # Selbsttest 5 (S14): the channel list of the `<k>/bk/<n>` row loses pad/2 -> exactly pad/2/bk/1..64
     kanalsatz = 'erz/1, 2, 3, 5, 6, 7 und pad/1, 2'
     assert kanalsatz in text, 'Selbsttest: Kanalliste der Zeile `<k>/bk/<n>` im Vertrag nicht gefunden'
     f_pad = abgleich(bib, vertrag(text.replace(kanalsatz, 'erz/1, 2, 3, 5, 6, 7 und pad/1')))
-    soll_pad = {f'pad/2/bk/{n}' for n in range(1, 9)}
-    print(f'Selbsttest Kanalliste ohne pad/2: {len(f_pad)} Abweichungen, erwartet 8 (pad/2/bk/1..8)')
-    if {f.split(':')[0] for f in f_pad} != soll_pad or len(f_pad) != 8:
+    soll_pad = {f'pad/2/bk/{n}' for n in range(1, 65)}
+    print(f'Selbsttest Kanalliste ohne pad/2: {len(f_pad)} Abweichungen, erwartet 64 (pad/2/bk/1..64)')
+    if {f.split(':')[0] for f in f_pad} != soll_pad or len(f_pad) != 64:
         print('FEHLER: der Abgleich liest die Kanalliste der bk-Zeile nicht aus dem Vertragstext', f_pad[:3])
         return 1
     # Self-test 6 (A1b): the gate cell loses "ausser erz/8" -> exactly the nine gate paths of erz/8 are in the contract but not in the table

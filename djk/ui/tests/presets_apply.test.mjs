@@ -126,6 +126,16 @@ test('plan: baukasten preset on a bk track of the same graph → knobs k1..k8, l
   fehler(() => planeAnwendung(lies('rb338', 'dark-dub'), { art: 'spur', spur_id: 's3' }, p), 'geraet_passt_nicht');
 });
 
+test('64 knobs plan: a baukasten preset sets knob9, knob32, knob33, knob48 and knob64; knob65, knob0 and knob1x are skipped', () => {
+  const p = projekt();
+  const pre = { ...BK, werte: { lautstaerke: 0.5, knob9: 0.1, knob17: 0.4, knob32: 0.9, knob33: 0.2, knob48: 0.7, knob64: 0.8, knob65: 0.15, knob0: 0.3, knob1x: 0.6 } };
+  const plan = planeAnwendung(pre, { art: 'spur', spur_id: 's2' }, p);
+  const par = plan.befehle[0].geraet.parameter;
+  assert.deepEqual([par.k9, par.k17, par.k32, par.k33, par.k48, par.k64], [0.1, 0.4, 0.9, 0.2, 0.7, 0.8]);
+  assert.ok(!('k65' in par) && !('k0' in par) && !('k1x' in par), 'no out-of-range knob reaches the device');
+  assert.deepEqual(plan.uebersprungen.sort(), ['knob0', 'knob1x', 'knob65', 'lautstaerke']);
+});
+
 test('plan: freeze_geht when the target track has a freeze and the values change; no hinweise otherwise', () => {
   // the model allows a freeze only on host tracks (D26), so this state is synthetic: the plan is pure and guards it anyway
   const p = projekt();
@@ -180,6 +190,23 @@ test('plan: channel targets — komp on a source channel → /regler komp fields
   assert.deepEqual(planeAnwendung(lim, { art: 'kanal', kanal: 'bus/2' }, null).anfragen, [{ pfad: 'bus/2/lim/an', nach: 0 }, { pfad: 'bus/2/lim/decke', nach: -1 }]);
   fehler(() => planeAnwendung(lies('rb338', 'dark-dub'), { art: 'kanal', kanal: 'deck/1' }, null), 'geraet_passt_nicht');
   fehler(() => planeAnwendung(gate, { art: 'insert', insert_id: 'i1' }, projekt()), 'geraet_passt_nicht');
+});
+
+test('plan: a baukasten preset on an instrument channel goes over /regler <kanal>/bk/1..64 when its graph is loaded; graph_anders / kein_graph otherwise', () => {
+  const p = lies('baukasten', 'synth-mono-acid-303');
+  const plan = planeAnwendung(p, { art: 'kanal', kanal: 'erz/6' }, null, 'synth-mono');
+  assert.equal(plan.weg, 'regler');
+  assert.deepEqual(plan.anfragen.map((a) => a.pfad), Array.from({ length: 64 }, (_, i) => `erz/6/bk/${i + 1}`));
+  assert.ok(plan.anfragen.every((a) => typeof a.nach === 'number'));
+  assert.equal(plan.anfragen[0].nach, p.werte.knob1);
+  assert.deepEqual(plan.uebersprungen, []);
+  const halb = { ...p, werte: { knob2: 0.9 } };
+  const q = planeAnwendung(halb, { art: 'kanal', kanal: 'erz/6' }, null, 'synth-mono');
+  assert.equal(q.anfragen[0].nach, 0.5);
+  assert.equal(q.anfragen[1].nach, 0.9);
+  fehler(() => planeAnwendung(p, { art: 'kanal', kanal: 'erz/6' }, null, 'drums-909'), 'graph_anders');
+  fehler(() => planeAnwendung(p, { art: 'kanal', kanal: 'erz/6' }, null), 'kein_graph');
+  fehler(() => planeAnwendung(p, { art: 'kanal', kanal: 'erz/6' }, null, ''), 'kein_graph');
 });
 
 // ---- T3a.3 eq/saett mapping ready for 4b ----

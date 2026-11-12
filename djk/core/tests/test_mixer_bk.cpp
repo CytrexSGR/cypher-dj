@@ -552,14 +552,14 @@ int main() {
   //     w[MIX_BK_SEND_ZEILE][1], fx/4/bk/2 the next row, deck/3/bk/2 is w[2][1]. Gain of the graph = contribution of the send
   //     return to the master sum (graph master minus the reference master without graph) divided by the send bus.
   {
-    auto matrix = [](float (*w)[8]) {
-      for (int z = 0; z < cdj::MIX_BK_ZEILEN; ++z) for (int i = 0; i < 8; ++i) w[z][i] = 0.5f;
+    auto matrix = [](float (*w)[sw::BK_REGLER_N]) {
+      for (int z = 0; z < cdj::MIX_BK_ZEILEN; ++z) for (int i = 0; i < sw::BK_REGLER_N; ++i) w[z][i] = 0.5f;
     };
     auto gewinn = [](const SLauf& ref, const SLauf& mit, int bus) {
       return (mit.aus_l[N - 1] - ref.aus_l[N - 1]) / mit.bus_l(bus)[N - 1];
     };
     // 1 + 2: the knob moves the graph within one block (one-pole: not there yet) and settles on the target
-    float w[cdj::MIX_BK_ZEILEN][8];
+    float w[cdj::MIX_BK_ZEILEN][sw::BK_REGLER_N];
     matrix(w);
     SLauf a, b;
     b.m->setze_bk_wert(w);
@@ -579,7 +579,7 @@ int main() {
     // 3: negative controls on fresh pairs, master bit-identical to a pair whose matrix stays at 0.5:
     //    the deck/3 row (the old NUTZT_DECK_REGLER idea) and the other send's row
     for (const int zeile : {2, cdj::MIX_BK_SEND_ZEILE + 1}) {
-      float wr[cdj::MIX_BK_ZEILEN][8], wb[cdj::MIX_BK_ZEILEN][8];
+      float wr[cdj::MIX_BK_ZEILEN][sw::BK_REGLER_N], wb[cdj::MIX_BK_ZEILEN][sw::BK_REGLER_N];
       matrix(wr);
       matrix(wb);
       SLauf ruhig, bewegt;
@@ -599,7 +599,7 @@ int main() {
     }
     // 4: mirror, graph on slot 3 (fx/4), signal on send 4 only. Its row is MIX_BK_SEND_ZEILE + 1; the fx/3 row leaves it alone
     {
-      float wm[cdj::MIX_BK_ZEILEN][8], wr[cdj::MIX_BK_ZEILEN][8];
+      float wm[cdj::MIX_BK_ZEILEN][sw::BK_REGLER_N], wr[cdj::MIX_BK_ZEILEN][sw::BK_REGLER_N];
       matrix(wm);
       matrix(wr);
       SLauf ref, spiegel, ruhig;
@@ -623,6 +623,31 @@ int main() {
       PRUEF(std::fabs(gewinn(ref, ruhig, 3) - 0.5f) < 1e-4f);
       std::printf("(w) fx/4/bk/2: default %.5f, 41 blocks %.5f, fx/3 row moved: %.5f\n", m0, m41, gewinn(ref, ruhig, 3));
     }
+    // 4b: 32-knob widening: a regler node on knob 9 and one on knob 32 follow their own matrix column of the send row (fx/3 = MIX_BK_SEND_ZEILE);
+    //     the neighbour column leaves the graph at 0.5
+    for (const int knopf : {9, 32, 33, 64}) {   // 64-knob widening: 33 and 64 as well (an engine with REGLER 64 is needed: on an older library the node of knob 33 and 64 stays out of the path)
+      std::string js = REGLER2;
+      const size_t pos = js.find("\"nr\":2,");
+      PRUEF(pos != std::string::npos);
+      js.replace(pos, 7, "\"nr\":" + std::to_string(knopf) + ",");
+      float wn[cdj::MIX_BK_ZEILEN][sw::BK_REGLER_N], wd[cdj::MIX_BK_ZEILEN][sw::BK_REGLER_N];
+      matrix(wn);
+      matrix(wd);
+      SLauf ref, eigen, nachbar;
+      eigen.m->setze_bk_wert(wn);
+      nachbar.m->setze_bk_wert(wd);
+      eigen.m->setze_send_graph(2, graph(js.c_str()));
+      nachbar.m->setze_send_graph(2, graph(js.c_str()));
+      for (int k = 0; k < 6; ++k) { ref.block(0.25f); eigen.block(0.25f); nachbar.block(0.25f); }
+      PRUEF(std::fabs(gewinn(ref, eigen, 2) - 0.5f) < 1e-4f);   // positive control: the knob node is in the path
+      wn[cdj::MIX_BK_SEND_ZEILE][knopf - 1] = 1.0f;
+      wd[cdj::MIX_BK_SEND_ZEILE][(knopf == 32 || knopf == 64) ? knopf - 2 : knopf] = 1.0f;   // the neighbour column (knob 31, 10, 34, 63)
+      for (int k = 0; k < 41; ++k) { ref.block(0.25f); eigen.block(0.25f); nachbar.block(0.25f); }
+      const float ge = gewinn(ref, eigen, 2), gn = gewinn(ref, nachbar, 2);
+      std::printf("(w) fx/3/bk/%d: own column 41 blocks %.5f, neighbour column %.5f\n", knopf, ge, gn);
+      PRUEF(std::fabs(ge - 1.0f) < 1e-3f);
+      PRUEF(std::fabs(gn - 0.5f) < 1e-4f);
+    }
     // 5: without setze_bk_wert (K10) the graph stays at 0.5, whatever a matrix elsewhere holds
     {
       SLauf ref, ohne;
@@ -632,7 +657,7 @@ int main() {
     }
     // 6: allocation free while the knob changes every block
     {
-      float wa[cdj::MIX_BK_ZEILEN][8];
+      float wa[cdj::MIX_BK_ZEILEN][sw::BK_REGLER_N];
       matrix(wa);
       SLauf z;
       z.m->setze_bk_wert(wa);

@@ -1,0 +1,39 @@
+{
+  "format": "baukasten/2",
+  "name": "formant-neuro-bass",
+  "stimmen": 4,
+  "regler_namen": {"1": "Rate", "2": "Shift", "3": "Sharpness"},
+  "knoten": [
+    {"id": "note", "art": "note"},
+    {"id": "k_rate", "art": "regler", "nr": 1, "min": 0.25, "max": 8, "log": 1},
+    {"id": "k_versatz", "art": "regler", "nr": 2, "min": -12, "max": 12},
+    {"id": "k_q", "art": "regler", "nr": 3, "min": 0, "max": 1},
+    {"id": "tief", "art": "transponiere", "st": -12},
+    {"id": "osz", "art": "saege"},
+    {"id": "lfo", "art": "lfo", "form": 0},
+    {"id": "breit", "art": "mul", "b": 2},
+    {"id": "mitte", "art": "add", "b": 2},
+    {"id": "filter", "art": "formant"},
+    {"id": "env", "art": "adsr", "a": 0.005, "d": 0.3, "s": 0.8, "r": 0.15},
+    {"id": "vca", "art": "mul"},
+    {"id": "pegel", "art": "mul", "b": 0.25},
+    {"id": "aus", "art": "ausgang"}
+  ],
+  "kanten": [
+    {"von": "note.hz", "nach": "tief.hz"},
+    {"von": "tief.aus", "nach": "osz.hz"},
+    {"von": "osz.aus", "nach": "filter.x"},
+    {"von": "k_rate.aus", "nach": "lfo.rate"},
+    {"von": "lfo.aus", "nach": "breit.a"},
+    {"von": "breit.aus", "nach": "mitte.a"},
+    {"von": "mitte.aus", "nach": "filter.vokal"},
+    {"von": "k_versatz.aus", "nach": "filter.versatz"},
+    {"von": "k_q.aus", "nach": "filter.q"},
+    {"von": "note.gate", "nach": "env.gate"},
+    {"von": "note.trig", "nach": "env.trig"},
+    {"von": "filter.aus", "nach": "vca.a"},
+    {"von": "env.aus", "nach": "vca.b"},
+    {"von": "vca.aus", "nach": "pegel.a"},
+    {"von": "pegel.aus", "nach": "aus.x"}
+  ]
+}

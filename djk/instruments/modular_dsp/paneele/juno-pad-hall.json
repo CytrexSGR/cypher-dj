@@ -1,0 +1,36 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "juno-pad-hall"},
+  "title": "Chorus Pad Hall",
+  "akzent": "blau",
+  "layout": {"rows": [
+    ["osc", "filter", "env", "fx"]
+  ]},
+  "sections": [
+    { "id": "osc", "title": "OSCILLATORS", "cols": 3, "controls": [
+      {"id": "lf", "type": "lfoform", "span": 3, "label": "PWM LFO", "formen": ["tri"]},
+      {"id": "sub", "type": "knob", "label": "Sub", "bind": {"param": "k7"}, "format": "percent", "default": 0.5},
+      {"id": "o1", "type": "label", "span": 3, "text": "Saw 50 % + pulse 35 %, PWM 40 %"},
+      {"id": "o2", "type": "label", "span": 3, "text": "PWM LFO: 0.5 Hz triangle fixed"}
+    ]},
+    { "id": "filter", "title": "FILTER", "cols": 4, "controls": [
+      {"id": "fk", "type": "filterkurve", "span": 4, "of": {"cutoff": "cutoff", "reso": "reso"}, "typen": [{"art": "lp", "pole": 4}]},
+      {"id": "cutoff", "type": "knob", "label": "Cutoff", "bind": {"param": "k1"}, "format": "hz", "default": 0.5},
+      {"id": "reso", "type": "knob", "label": "Resonance", "bind": {"param": "k2"}, "format": "percent", "default": 0.5},
+      {"id": "env", "type": "knob", "label": "Env amount", "bind": {"param": "k3"}, "format": "hz", "default": 0.5},
+      {"id": "fnote", "type": "label", "span": 4, "text": "HP 40 Hz before the filter"}
+    ]},
+    { "id": "env", "title": "FILTER + AMP ENV", "cols": 3, "controls": [
+      {"id": "hue", "type": "huelle", "span": 3, "label": "One envelope for both", "of": {"a": "attack", "d": 2.0, "s": 0.8, "r": "release"}},
+      {"id": "attack", "type": "knob", "label": "Attack", "bind": {"param": "k4"}, "format": "raw", "unit": "s", "default": 0.5},
+      {"id": "release", "type": "knob", "label": "Release", "bind": {"param": "k5"}, "format": "raw", "unit": "s", "default": 0.5},
+      {"id": "en", "type": "label", "span": 3, "text": "Decay 2 s, sustain 80 % fixed"}
+    ]},
+    { "id": "fx", "title": "CHORUS + HALL", "cols": 2, "controls": [
+      {"id": "chorus", "type": "knob", "label": "Chorus", "bind": {"param": "k8"}, "format": "percent", "default": 0.5},
+      {"id": "hall", "type": "knob", "label": "Hall mix", "bind": {"param": "k6"}, "format": "percent", "default": 0.5},
+      {"id": "c1", "type": "label", "span": 2, "text": "Chorus mode II fixed"},
+      {"id": "c2", "type": "label", "span": 2, "text": "Hall 2.5 s fixed"}
+    ]}
+  ]
+}

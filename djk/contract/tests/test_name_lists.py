@@ -209,52 +209,55 @@ MUTATIONEN += [
 ]
 
 
-# ---- S5r: Graph-Regler <kanal>/bk/<1..8>, nur auf Kanälen mit Graph (deck/1..4, erz/1,2,3,5,6,7, pad/1,2)
+# ---- S5r: Graph-Regler <kanal>/bk/<1..64>, nur auf Kanälen mit Graph (deck/1..4, erz/1,2,3,5,6,7, pad/1,2)
 MUTATIONEN += [
-    (KURVEN_JS, "...BK_KANAELE.flatMap((k) => Array.from({ length: 8 }, (_, i) => `${k}/bk/${i + 1}`)),",
-     "...BK_KANAELE.filter((k) => !k.startsWith('pad/')).flatMap((k) => Array.from({ length: 8 }, (_, i) => `${k}/bk/${i + 1}`)),",
+    (KURVEN_JS, "...BK_KANAELE.flatMap((k) => Array.from({ length: 64 }, (_, i) => `${k}/bk/${i + 1}`)),",
+     "...BK_KANAELE.filter((k) => !k.startsWith('pad/')).flatMap((k) => Array.from({ length: 64 }, (_, i) => `${k}/bk/${i + 1}`)),",
      "bk-Regler=Kern: R04 curves.js ZIELE fehlt: pad/1/bk/1"),
-    (VERTRAG_MJS, "for (const k of BK_KANAELE) for (let n = 1; n <= 8; n++) REGLER.set(",
-     "for (const k of BK_KANAELE) for (let n = 1; n <= 7; n++) REGLER.set(", "bk-Regler=Kern: R03 Attrappe REGLER fehlt: deck/1/bk/8"),
-    ("djk/conductor/src/controls_info.ts", "for (let n = 1; n <= 8; n++) tabelle.set(`${k}/bk/${n}`",
-     "for (let n = 2; n <= 8; n++) tabelle.set(`${k}/bk/${n}`", "bk-Regler=Kern: R05 controls_info.ts fehlt: deck/1/bk/1"),
+    (VERTRAG_MJS, "for (const k of BK_KANAELE) for (let n = 1; n <= BK_REGLER_N; n++) REGLER.set(",
+     "for (const k of BK_KANAELE) for (let n = 1; n <= 63; n++) REGLER.set(", "bk-Regler=Kern: R03 Attrappe REGLER fehlt: deck/1/bk/64"),
+    ("djk/conductor/src/controls_info.ts", "for (let n = 1; n <= BK_REGLER_N; n++) tabelle.set(`${k}/bk/${n}`",
+     "for (let n = 2; n <= BK_REGLER_N; n++) tabelle.set(`${k}/bk/${n}`", "bk-Regler=Kern: R05 controls_info.ts fehlt: deck/1/bk/1"),
     ("djk/conductor/src/controls_info.ts", "'erz/3', 'erz/5', 'erz/6', 'erz/7', 'pad/1', 'pad/2'];\nfor (const k of BK_KANAELE)",
      "'erz/3', 'erz/4', 'erz/5', 'erz/6', 'erz/7', 'pad/1', 'pad/2'];\nfor (const k of BK_KANAELE)", "bk-Regler=Kern: R05 controls_info.ts steht ohne Vertrag: erz/4/bk/1"),
     ("docs/architecture/INTERFACES.md", "erz/1, 2, 3, 5, 6, 7 und pad/1, 2 (Instrument", "erz/1, 2, 3, 4, 5, 6, 7 und pad/1, 2 (Instrument",
      "bk-Regler=Kern: R02 INTERFACES §1.5 steht ohne Vertrag: erz/4/bk/1"),
-    ("djk/core/signalbox/src/controls.cpp", '"erz/3", "erz/5", "erz/6"', '"erz/3", "erz/4", "erz/5", "erz/6"',
+    ("djk/core/signalbox/src/controls.cpp", 'for (const char* kn_bk : {"deck/1", "deck/2", "deck/3", "deck/4", "erz/1", "erz/2", "erz/3", "erz/5"', 'for (const char* kn_bk : {"deck/1", "deck/2", "deck/3", "deck/4", "erz/1", "erz/2", "erz/3", "erz/4", "erz/5"',
      "bk-Regler=Kern: R03 Attrappe REGLER fehlt: erz/4/bk/1"),
-    ("djk/ui/hand_operation.ts", "|^(deck\\/[1-4]|erz\\/[1-35-7]|pad\\/[12]|fx\\/[34])\\/bk\\/[1-8]$/;", "|^(deck\\/[1-4]|erz\\/[1-8]|pad\\/[12]|fx\\/[34])\\/bk\\/[1-8]$/;",
+    ("djk/ui/hand_operation.ts", "|^(deck\\/[1-4]|erz\\/[1-35-7]|pad\\/[12]|fx\\/[34])\\/bk\\/([1-9]|[1-5][0-9]|6[0-4])$/;", "|^(deck\\/[1-4]|erz\\/[1-8]|pad\\/[12]|fx\\/[34])\\/bk\\/([1-9]|[1-5][0-9]|6[0-4])$/;",
      "bk-Regler: R06 hand_bedienung.PFAD nimmt erz/4/bk/1 an"),
-    ("djk/ui/hand_operation.ts", "|^(deck\\/[1-4]|erz\\/[1-35-7]|pad\\/[12]|fx\\/[34])\\/bk\\/[1-8]$/;", "/;",
+    ("djk/ui/hand_operation.ts", "|^(deck\\/[1-4]|erz\\/[1-35-7]|pad\\/[12]|fx\\/[34])\\/bk\\/([1-9]|[1-5][0-9]|6[0-4])$/;", "/;",
      "bk-Regler: R06 hand_bedienung.PFAD lehnt deck/1/bk/1 ab"),
-    ("djk/contract/schemas/defs.schema.json", "|(deck/[1-4]|erz/[1-35-7]|pad/[12]|fx/[34])/bk/[1-8])$\"", "|(deck/[1-4]|erz/[1-35-7]|pad/[12]|fx/[34])/bk/[1-9])$\"",
-     "bk-Regler: R07 defs.schema.json regler_pfad nimmt deck/1/bk/9 an"),
-    ("djk/contract/schemas/defs.schema.json", "|(deck/[1-4]|erz/[1-35-7]|pad/[12]|fx/[34])/bk/[1-8])$\"", "|(deck/[1-4]|erz/[1-8]|pad/[12]|fx/[34])/bk/[1-8])$\"",
+    ("djk/contract/schemas/defs.schema.json", "|(deck/[1-4]|erz/[1-35-7]|pad/[12]|fx/[34])/bk/([1-9]|[1-5][0-9]|6[0-4]))$\"", "|(deck/[1-4]|erz/[1-35-7]|pad/[12]|fx/[34])/bk/([1-9]|[1-5][0-9]|6[0-5]))$\"",
+     "bk-Regler: R07 defs.schema.json regler_pfad nimmt deck/1/bk/65 an"),
+    ("djk/contract/schemas/defs.schema.json", "|(deck/[1-4]|erz/[1-35-7]|pad/[12]|fx/[34])/bk/([1-9]|[1-5][0-9]|6[0-4]))$\"", "|(deck/[1-4]|erz/[1-8]|pad/[12]|fx/[34])/bk/([1-9]|[1-5][0-9]|6[0-4]))$\"",
      "bk-Regler: R07 defs.schema.json regler_pfad nimmt erz/4/bk/1 an"),
 ]
 
 
-# ---- S14: graph knobs of the send returns fx/3/bk/1..8, fx/4/bk/1..8 (global controls) in all locations
+# ---- S14: graph knobs of the send returns fx/3/bk/1..64, fx/4/bk/1..64 (global controls) in all locations
 MUTATIONEN += [
-    ("djk/contract/schemas/defs.schema.json", "|(deck/[1-4]|erz/[1-35-7]|pad/[12]|fx/[34])/bk/[1-8])$\"", "|(deck/[1-4]|erz/[1-35-7]|pad/[12])/bk/[1-8])$\"",
+    ("djk/contract/schemas/defs.schema.json", "|(deck/[1-4]|erz/[1-35-7]|pad/[12]|fx/[34])/bk/([1-9]|[1-5][0-9]|6[0-4]))$\"", "|(deck/[1-4]|erz/[1-35-7]|pad/[12])/bk/([1-9]|[1-5][0-9]|6[0-4]))$\"",
      "bk-Regler: R07 defs.schema.json regler_pfad lehnt fx/3/bk/1 ab"),
-    ("djk/contract/schemas/defs.schema.json", "|(deck/[1-4]|erz/[1-35-7]|pad/[12]|fx/[34])/bk/[1-8])$\"", "|(deck/[1-4]|erz/[1-35-7]|pad/[12]|fx/[1-4])/bk/[1-8])$\"",
+    ("djk/contract/schemas/defs.schema.json", "|(deck/[1-4]|erz/[1-35-7]|pad/[12]|fx/[34])/bk/([1-9]|[1-5][0-9]|6[0-4]))$\"", "|(deck/[1-4]|erz/[1-35-7]|pad/[12]|fx/[1-4])/bk/([1-9]|[1-5][0-9]|6[0-4]))$\"",
      "bk-Regler: R07 defs.schema.json regler_pfad nimmt fx/1/bk/1 an"),
-    ("djk/ui/hand_operation.ts", "|pad\\/[12]|fx\\/[34])\\/bk\\/[1-8]$/;", "|pad\\/[12])\\/bk\\/[1-8]$/;",
+    ("djk/ui/hand_operation.ts", "|pad\\/[12]|fx\\/[34])\\/bk\\/([1-9]|[1-5][0-9]|6[0-4])$/;", "|pad\\/[12])\\/bk\\/([1-9]|[1-5][0-9]|6[0-4])$/;",
      "bk-Regler: R06 hand_bedienung.PFAD lehnt fx/3/bk/1 ab"),
-    ("djk/ui/hand_operation.ts", "|pad\\/[12]|fx\\/[34])\\/bk\\/[1-8]$/;", "|pad\\/[12]|fx\\/[1-4])\\/bk\\/[1-8]$/;",
+    ("djk/ui/hand_operation.ts", "|pad\\/[12]|fx\\/[34])\\/bk\\/([1-9]|[1-5][0-9]|6[0-4])$/;", "|pad\\/[12]|fx\\/[1-4])\\/bk\\/([1-9]|[1-5][0-9]|6[0-4])$/;",
      "bk-Regler: R06 hand_bedienung.PFAD nimmt fx/1/bk/1 an"),
-    (KURVEN_JS, "  ...BK_SEND_KANAELE.flatMap((k) => Array.from({ length: 8 }, (_, i) => `${k}/bk/${i + 1}`)),   // S14: graph knobs of fx/3, fx/4\n", "",
+    (KURVEN_JS, "  ...BK_SEND_KANAELE.flatMap((k) => Array.from({ length: 64 }, (_, i) => `${k}/bk/${i + 1}`)),", "",
      "bk-Regler=Kern: R04 curves.js ZIELE fehlt: fx/3/bk/1"),
-    (VERTRAG_MJS, "for (const k of BK_SEND_KANAELE) for (let n = 1; n <= 8; n++) REGLER.set(",
-     "for (const k of BK_SEND_KANAELE) for (let n = 1; n <= 7; n++) REGLER.set(", "bk-Regler=Kern: R03 Attrappe REGLER fehlt: fx/3/bk/8"),
-    ("djk/conductor/src/controls_info.ts", "for (let m = 1; m <= 8; m++) tabelle.set(`${k}/bk/${m}`",
-     "for (let m = 2; m <= 8; m++) tabelle.set(`${k}/bk/${m}`", "bk-Regler=Kern: R05 controls_info.ts fehlt: fx/3/bk/1"),
-    ("docs/architecture/INTERFACES.md", "`fx/<n>/bk/<m>` (n = 3 and 4, m = 1 to 8)", "`fx/<n>/bk/<m>` (n = 3, m = 1 to 8)",
+    (VERTRAG_MJS, "for (const k of BK_SEND_KANAELE) for (let n = 1; n <= BK_REGLER_N; n++) REGLER.set(",
+     "for (const k of BK_SEND_KANAELE) for (let n = 1; n <= 63; n++) REGLER.set(", "bk-Regler=Kern: R03 Attrappe REGLER fehlt: fx/3/bk/64"),
+    ("djk/conductor/src/controls_info.ts", "for (let m = 1; m <= BK_REGLER_N; m++) tabelle.set(`${k}/bk/${m}`",
+     "for (let m = 2; m <= BK_REGLER_N; m++) tabelle.set(`${k}/bk/${m}`", "bk-Regler=Kern: R05 controls_info.ts fehlt: fx/3/bk/1"),
+    ("docs/architecture/INTERFACES.md", "`fx/<n>/bk/<m>` (n = 3 and 4, m = 1 to 64)", "`fx/<n>/bk/<m>` (n = 3, m = 1 to 64)",
      "bk-Regler=Kern: R02 INTERFACES §1.5 fehlt: fx/4/bk/1"),
     ("djk/core/signalbox/src/controls.cpp", 'for (const char* kn_bk_send : {"fx/3", "fx/4"})', 'for (const char* kn_bk_send : {"fx/3"})',
      "bk-Regler=Kern: R02 INTERFACES §1.5 steht ohne Vertrag: fx/4/bk/1"),
+    # 32-/64-knob widening: the tail loops for knobs 9..64 must carry the same channels as the loops for 1..8
+    ("djk/core/signalbox/src/controls.cpp", 'for (const char* kn_bk_send_hoch : {"fx/3", "fx/4"})', 'for (const char* kn_bk_send_hoch : {"fx/3"})',
+     "bk-Regler=Kern: R01b Kern controls.cpp (9..64 loops) fehlt: fx/4/bk/1"),
 ]
 
 
@@ -287,7 +290,7 @@ MUTATIONEN += [
 
 
 def test_bk_zeile_in_schnittstellen_weg_wirft_parserfehler(kopie):
-    mutiere(kopie, "docs/architecture/INTERFACES.md", "| `<k>/bk/<n>` (n = 1 bis 8)", "| `<k>/bx/<n>` (n = 1 bis 8)")
+    mutiere(kopie, "docs/architecture/INTERFACES.md", "| `<k>/bk/<n>` (n = 1 bis 64)", "| `<k>/bx/<n>` (n = 1 bis 64)")
     with pytest.raises(pn.ParserFehler, match="bk"):
         pn.pruefe(pn.Quelle(kopie))
 
@@ -383,6 +386,24 @@ MUTATIONEN += [
     (SPEC, "| `ins/eq/<n>/b1/freq` | Hz | 10 to 22000 | 30 |", "| `ins/eq/<n>/b1/freq` | Hz | 10 to 22000 | 31 |",
      "Insert-Regler: R02 INTERFACES §1.5 Bereich oder Vorgabe von ins/eq/1/b1/freq"),
 ]
+
+
+
+def _bk_knopfzahl_anpassen(m):
+    """The page files curves.js and hand_operation.ts get their knob range 1..64 in a separate change (page paths). A mutation of one of
+    their bk lines is written for 64; while such a file still carries the 32 spelling, the 32 spelling is mutated instead, so the
+    mutation always hits exactly the text that is there."""
+    datei, alt, neu, erwartet = m
+    if datei not in (KURVEN_JS, "djk/ui/hand_operation.ts") or "bk" not in alt:
+        return m
+    text = (WURZEL / datei).read_text(encoding="utf-8")
+    if text.count(alt) == 1:
+        return m
+    alt32 = lambda x: x.replace("length: 64", "length: 32").replace("[1-5][0-9]|6[0-4]", "[12][0-9]|3[0-2]")   # noqa: E731
+    return (datei, alt32(alt), alt32(neu), erwartet)
+
+
+MUTATIONEN = [_bk_knopfzahl_anpassen(m) for m in MUTATIONEN]
 
 MUTATION_IDS = [f"{m[0].split('/')[-1]}:{m[3][:40]}" for m in MUTATIONEN]
 

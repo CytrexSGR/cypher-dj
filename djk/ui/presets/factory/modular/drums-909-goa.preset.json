@@ -1,0 +1,66 @@
+{
+ "schema": 1,
+ "name": "909 Goa",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "drums-909",
+ "werte": {
+  "knob1": 0.52,
+  "knob2": 0.42,
+  "knob3": 0.78,
+  "knob4": 0.45,
+  "knob5": 0.5,
+  "knob6": 0.35,
+  "knob7": 0.25,
+  "knob8": 0.5,
+  "knob9": 0.55,
+  "knob10": 0.85,
+  "knob11": 0.5,
+  "knob12": 0.5,
+  "knob13": 0.4,
+  "knob14": 0.5,
+  "knob15": 0.5,
+  "knob16": 0.5,
+  "knob17": 0.5,
+  "knob18": 0.5,
+  "knob19": 0.5,
+  "knob20": 0.72,
+  "knob21": 0.5,
+  "knob22": 0.3,
+  "knob23": 0.5,
+  "knob24": 0.5,
+  "knob25": 0.5,
+  "knob26": 0.5,
+  "knob27": 0.5,
+  "knob28": 0.5,
+  "knob29": 0.5,
+  "knob30": 0.3,
+  "knob31": 0.5,
+  "knob32": 0.5
+ },
+ "beschreibung": {
+  "art": "drums",
+  "unterart": "kit",
+  "charakter": [
+   "punchy",
+   "bright",
+   "tight"
+  ],
+  "genre": [
+   "trance",
+   "progressive"
+  ],
+  "einsatz": [
+   "drop",
+   "build"
+  ],
+  "energie": 4,
+  "text": "Medium kick with a long pitch fall and a sharp click; bright hats with some noise; short clap."
+ },
+ "tags": [
+  "drums-909"
+ ],
+ "notiz": "Measured by level and pitch on render, not yet heard (2026-11-11).",
+ "angelegt": "2026-11-11T00:00:00.000Z",
+ "geaendert": "2026-11-11T00:00:00.000Z"
+}

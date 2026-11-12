@@ -1,0 +1,38 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "ms20-goa-lead"},
+  "title": "Twin-filter Goa Lead",
+  "akzent": "orange",
+  "layout": {"rows": [
+    ["osc", "filter", "fenv", "aenv", "lfo"]
+  ]},
+  "sections": [
+    { "id": "osc", "title": "OSCILLATORS", "cols": 2, "controls": [
+      {"id": "detune", "type": "knob", "label": "Detune", "span": 2, "bind": {"param": "k6"}, "format": "raw", "unit": "ct", "default": 0.5},
+      {"id": "o1", "type": "label", "span": 2, "text": "Two saws, 50 % each"},
+      {"id": "o2", "type": "label", "span": 2, "text": "Glide 50 ms fixed"}
+    ]},
+    { "id": "filter", "title": "FILTER", "cols": 4, "controls": [
+      {"id": "fk", "type": "filterkurve", "span": 4, "of": {"cutoff": "cutoff", "reso": "reso"}, "typen": [{"art": "lp", "pole": 2}]},
+      {"id": "cutoff", "type": "knob", "label": "Cutoff", "bind": {"param": "k1"}, "format": "hz", "default": 0.5},
+      {"id": "reso", "type": "knob", "label": "Resonance", "bind": {"param": "k2"}, "format": "percent", "default": 0.5},
+      {"id": "drive", "type": "knob", "label": "Drive", "bind": {"param": "k3"}, "format": "percent", "default": 0.5},
+      {"id": "env", "type": "knob", "label": "Env amount", "bind": {"param": "k5"}, "format": "hz", "default": 0.5}
+    ]},
+    { "id": "fenv", "title": "FILTER ENV", "cols": 2, "controls": [
+      {"id": "fhue", "type": "huelle", "span": 2, "label": "Envelope", "of": {"a": 0.002, "d": 0.5, "s": 0.2, "r": 0.3}},
+      {"id": "fn", "type": "label", "span": 2, "text": "A 2 ms, D 500 ms, S 20 %, R 300 ms"},
+      {"id": "fn2", "type": "label", "span": 2, "text": "All four times fixed"}
+    ]},
+    { "id": "aenv", "title": "AMP ENV", "cols": 2, "controls": [
+      {"id": "ahue", "type": "huelle", "span": 2, "label": "Envelope", "of": {"a": 0.004, "d": 0.3, "s": 0.85, "r": 0.25}},
+      {"id": "an", "type": "label", "span": 2, "text": "A 4 ms, D 300 ms, S 85 %, R 250 ms"},
+      {"id": "an2", "type": "label", "span": 2, "text": "All four times fixed"}
+    ]},
+    { "id": "lfo", "title": "LFO", "cols": 2, "controls": [
+      {"id": "lf", "type": "lfoform", "span": 2, "label": "LFO shape", "formen": ["tri"]},
+      {"id": "lfodepth", "type": "knob", "label": "To cutoff", "span": 2, "bind": {"param": "k4"}, "format": "hz", "default": 0.5},
+      {"id": "ln", "type": "label", "span": 2, "text": "0.35 Hz triangle fixed"}
+    ]}
+  ]
+}

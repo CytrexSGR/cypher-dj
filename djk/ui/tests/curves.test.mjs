@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { ZIELE, art, GRIFF, griffZuMidi, midiRoh, wertAusMidi, formatiere, vorgabe } from '../public/curves.js';
 
 test('Ziel-Liste: 41 Pfade, je Deck 13 (mit PFL und Crossfader-Zuweisung), erz/1 11, pad/1 und pad/2 je 11 (ohne Tasten) plus xfader, master/pegel, cue/mix, cue/pegel', () => {
-  assert.equal(ZIELE.size, 87 + 128 + 33 + 12 * 8 + 204 + 2 * 8);   // S14: + fx/3, fx/4 x 8 graph knobs; 1.10 Slice 3: + 128 + 32 sends, 16 return and 28 hall controls; S5r: + <kanal>/bk/1..8 auf 12 Kanälen; K2: plus master/kleber; D1 K1/E3: spur/1..32 je fader, pan, mute, solo; 1.10: grp/1..8 je 4 plus pm/fader
+  assert.equal(ZIELE.size, 87 + 128 + 33 + 12 * 64 + 204 + 2 * 64);   // 1348 (was 900 at 32 knobs); S14: + fx/3, fx/4 x 64 graph knobs; 1.10 Slice 3: + 128 + 32 sends, 16 return and 28 hall controls; S5r: + <kanal>/bk/1..64 on 12 channels; K2: plus master/kleber; D1 K1/E3: spur/1..32 je fader, pan, mute, solo; 1.10: grp/1..8 je 4 plus pm/fader
   for (const p of ['deck/1/fader', 'deck/2/eq/tief', 'deck/1/kill/hoch', 'deck/2/play', 'deck/1/cue', 'xfader',
     'deck/1/pfl', 'deck/2/pfl', 'master/pegel', 'master/kleber', 'cue/mix', 'cue/pegel', 'erz/1/fader']) assert.ok(ZIELE.has(p), p);
 });
@@ -161,9 +161,18 @@ test('D1 Spec 6.16: Spur-Fader −200..+6 dB wie der Kern (K_SPUR_FADER), Kanal-
   assert.ok(Math.abs(wertAusMidi('deck/1/fader', 1) - 0) < 1e-6);   // Negativ-Kontrolle
 });
 
-// S14: graph knobs of the send returns fx/3, fx/4 (global controls fx/<n>/bk/1..8)
-test('S14 ZIELE: fx/3/bk/1..8 and fx/4/bk/1..8 are targets, other fx numbers and knob numbers are not; art is bk', () => {
-  for (const p of ['fx/3/bk/1', 'fx/3/bk/8', 'fx/4/bk/1', 'fx/4/bk/8']) { assert.ok(ZIELE.has(p), p); assert.equal(art(p), 'bk', p); }
-  for (const p of ['fx/1/bk/1', 'fx/2/bk/1', 'fx/5/bk/1', 'fx/3/bk/0', 'fx/3/bk/9', 'fx/3/bk/10', 'fx/3/bk']) { assert.ok(!ZIELE.has(p), p); assert.notEqual(art(p), 'bk', p); }
+// S14: graph knobs of the send returns fx/3, fx/4 (global controls fx/<n>/bk/1..32)
+test('S14 ZIELE: fx/3/bk/1..64 and fx/4/bk/1..64 are targets, other fx numbers and knob numbers are not; art is bk', () => {
+  for (const p of ['fx/3/bk/1', 'fx/3/bk/8', 'fx/3/bk/9', 'fx/4/bk/1', 'fx/4/bk/8', 'fx/4/bk/32', 'fx/4/bk/33', 'fx/3/bk/64', 'fx/4/bk/64']) { assert.ok(ZIELE.has(p), p); assert.equal(art(p), 'bk', p); }
+  for (const p of ['fx/1/bk/1', 'fx/2/bk/1', 'fx/5/bk/1', 'fx/3/bk/0', 'fx/3/bk/65', 'fx/3/bk/00', 'fx/3/bk/01', 'fx/3/bk/100', 'fx/3/bk']) { assert.ok(!ZIELE.has(p), p); assert.notEqual(art(p), 'bk', p); }
   assert.equal(art('fx/3/bk/4'), 'bk');
+});
+
+// 64 knobs: two-digit knob numbers are anchored: bk/1 is not bk/10..19, bk/3 is not bk/33
+test('64 knobs ZIELE: <kanal>/bk/1..64 on every graph channel, nothing outside, bk/1 and bk/1x are separate paths', () => {
+  for (const k of ['deck/1', 'deck/4', 'erz/1', 'erz/2', 'erz/3', 'erz/5', 'erz/7', 'pad/2', 'fx/3', 'fx/4']) {
+    for (const n of [1, 9, 10, 19, 20, 31, 32, 33, 48, 63, 64]) { assert.ok(ZIELE.has(`${k}/bk/${n}`), `${k}/bk/${n}`); assert.equal(art(`${k}/bk/${n}`), 'bk', `${k}/bk/${n}`); }
+    for (const n of ['0', '65', '70', '100', '010', '1x', 'x1', '1.5', '-1', '']) { assert.ok(!ZIELE.has(`${k}/bk/${n}`), `${k}/bk/${n}`); assert.notEqual(art(`${k}/bk/${n}`), 'bk', `${k}/bk/${n}`); }
+  }
+  for (const p of ['erz/4/bk/9', 'erz/8/bk/9', 'deck/5/bk/9', 'bus/1/bk/9', 'erz/4/bk/32', 'erz/4/bk/64']) assert.ok(!ZIELE.has(p), p);
 });

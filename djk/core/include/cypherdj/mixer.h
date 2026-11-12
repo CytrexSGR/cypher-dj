@@ -100,9 +100,9 @@ class Mixer {
   // S6: effect graph on a send return. s = bus index (2 = fx/3, 3 = fx/4); any other s goes straight to the free list.
   void setze_send_graph(int s, CypherBk* g) noexcept;
   int bk_frei(CypherBk** aus, int max) noexcept;
-  // S5r: Werte der Graph-Regler <kanal>/bk/1..8 (Zeile = Mixer-Kanal), vom Kern geführt; nullptr: keine Meldung (K10).
+  // S5r: Werte der Graph-Regler <kanal>/bk/1..32 (Zeile = Mixer-Kanal), vom Kern geführt; nullptr: keine Meldung (K10).
   // S14: the matrix has MIX_BK_ZEILEN rows: 0..17 the mixer channels, MIX_BK_SEND_ZEILE + s the send returns (fx/3, fx/4).
-  void setze_bk_wert(const float (*w)[8]) noexcept { bk_wert_ = w; }
+  void setze_bk_wert(const float (*w)[cypherdj::stellwerk::BK_REGLER_N]) noexcept { bk_wert_ = w; }
   uint32_t bk_verloren() const noexcept { return bk_verloren_; }
   ~Mixer();
 
@@ -463,7 +463,7 @@ class Mixer {
   CypherBk* bk_alt_[MIX_GRAPH_KANAELE] = {};
   int bk_blende_[MIX_GRAPH_KANAELE] = {};        // verbleibende Samples der Blende, 0 = keine
   CypherBk* bk_frei_[MIX_BK_FREI] = {};
-  const float (*bk_wert_)[8] = nullptr;
+  const float (*bk_wert_)[cypherdj::stellwerk::BK_REGLER_N] = nullptr;
   void bk_regler_melden(CypherBk* g, int k) noexcept;
   int n_bk_frei_ = 0;
   uint32_t bk_verloren_ = 0;                     // Ablage voll: Graph verloren (Leck), darf nicht vorkommen
@@ -481,7 +481,7 @@ class Mixer {
   // after the blend, clamps out to +-8 (NaN -> 0). in and out must not overlap (FFI). Decks pass a copy of the tap as
   // in and fallback (the dry path) and the tap itself as out; sends pass the bus, their own out buffer and a zero
   // fallback (a send return has no dry path). regler_zeile >= 0 reports the knob row of bk_wert_ (decks: their channel row,
-  // send returns S14: MIX_BK_SEND_ZEILE + s = fx/3, fx/4 /bk/1..8), -1 none.
+  // send returns S14: MIX_BK_SEND_ZEILE + s = fx/3, fx/4 /bk/1..32), -1 none.
   struct GraphOptionen {
     bool takt = true;      // forward the clock to the graphs
     bool klemme = true;    // output clamp

@@ -94,3 +94,5 @@ project_recording18_session.test.mjs
 proj_recording_midi.test.mjs
 proj_recording_lock18.test.mjs
 project_routing_matrix.test.mjs
+coupling.test.mjs
+graph_vorgaben.test.mjs

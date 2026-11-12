@@ -1,0 +1,33 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "goa-blubber-lead"},
+  "title": "Goa Blubber Lead",
+  "akzent": "orange",
+  "layout": {"rows": [
+    ["osc", "bub", "filter", "env"]
+  ]},
+  "sections": [
+    { "id": "osc", "title": "OSCILLATORS", "cols": 2, "controls": [
+      {"id": "o1", "type": "label", "span": 2, "text": "Two saws, 12 ct apart"},
+      {"id": "o2", "type": "label", "span": 2, "text": "Mixed at 30 %"},
+      {"id": "o3", "type": "label", "span": 2, "text": "8 voices"}
+    ]},
+    { "id": "bub", "title": "BUBBLE", "cols": 3, "controls": [
+      {"id": "bf", "type": "lfoform", "span": 3, "label": "Bubble shape", "formen": ["sh"]},
+      {"id": "rate", "type": "knob", "label": "Rate", "span": 1, "bind": {"param": "k4"}, "format": "hz", "default": 0.5},
+      {"id": "tiefe", "type": "knob", "label": "Depth", "span": 1, "bind": {"param": "k2"}, "format": "raw", "unit": "st", "default": 0.5},
+      {"id": "b1", "type": "label", "span": 3, "text": "Sample and hold moves the cutoff"}
+    ]},
+    { "id": "filter", "title": "FILTER", "cols": 4, "controls": [
+      {"id": "fk", "type": "filterkurve", "span": 4, "of": {"cutoff": "cutoff", "reso": "reso"}, "typen": [{"art": "lp", "pole": 4}]},
+      {"id": "cutoff", "type": "knob", "label": "Cutoff", "span": 2, "bind": {"param": "k1"}, "format": "hz", "default": 0.5},
+      {"id": "reso", "type": "knob", "label": "Resonance", "span": 2, "bind": {"param": "k3"}, "format": "percent", "default": 0.5},
+      {"id": "f1", "type": "label", "span": 4, "text": "Ladder, 4 poles; cutoff is the centre"}
+    ]},
+    { "id": "env", "title": "AMP ENV", "cols": 3, "controls": [
+      {"id": "hue", "type": "huelle", "span": 3, "label": "Envelope", "of": {"a": 0.004, "d": 0.25, "s": 0.7, "r": 0.15}},
+      {"id": "e1", "type": "label", "span": 3, "text": "A 4 ms, D 250 ms, S 70 %, R 150 ms"},
+      {"id": "e2", "type": "label", "span": 3, "text": "All four times fixed; level 50 %"}
+    ]}
+  ]
+}

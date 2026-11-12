@@ -80,7 +80,7 @@ export interface Wiedergabe { format: typeof WIEDERGABE_FORMAT | typeof WIEDERGA
   returns?: WReturn[]; pm?: { chain: WInsert[]; rack?: WRack; chain_auto?: WKettenLane[] } }
 // slice 4c: the rack of a strip: its pooled slot and the mapping table (`stufe` = position in the chain, `param` = parameter index of the kind, `makro` 0..3)
 // 1.9 U8 T7 (E12): a member target has `glied` (the member's position 0..3 in the rack device) instead of `stufe`; its `param` is the core's member index space
-// (0..3 RB-338, 8..15 bk k1..k8, 16 gain_db)
+// (0..3 RB-338, 8..15 bk k1..k8, 16 gain_db, 17..40 bk k9..k32, 41..72 bk k33..k64)
 export interface WRack { slot: number; ziele: ({ makro: number; stufe: number; param: number; von: number; bis: number }
   | { makro: number; glied: number; param: number; von: number; bis: number })[] }
 // `eingefroren`: the track goes out as its freeze audio clip, so it has no members; member targets are left out and a rack without an insert target is dropped

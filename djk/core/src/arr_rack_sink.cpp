@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 
 namespace cdj {
@@ -425,7 +426,7 @@ void ArrRackSenke::glied_parameter(int spur, int glied, int param, float wert) n
     for (int i = 0; dev && !gain && i < dev->n_param; ++i) {
       const char* name = dev->param[i].name;
       if (rb && param >= 0 && param < ARR_GERAET_PARAMS && std::strncmp(name, ARR_GERAET_PARAM_NAME[param], sizeof dev->param[i].name) == 0) eigen = true;
-      if (bk && param >= ARR_GLIED_PARAM_BK0 && param < ARR_GLIED_PARAM_BK0 + 8 && name[0] == 'k' && name[1] == '1' + (param - ARR_GLIED_PARAM_BK0)) eigen = true;
+      if (const int kn = arr_glied_bk_knopf(param); bk && kn >= 0 && name[0] == 'k' && std::atoi(name + 1) == kn + 1) eigen = true;
     }
     if (eigen) return;
   }
@@ -442,8 +443,8 @@ void ArrRackSenke::glied_parameter(int spur, int glied, int param, float wert) n
   const float w = wert < 0.0f ? 0.0f : (wert > 1.0f ? 1.0f : wert);
   if (rb && param >= 0 && param < ARR_GERAET_PARAMS)
     intern_->auto_parameter(g.platz, param, w);
-  else if (bk && param >= ARR_GLIED_PARAM_BK0 && param < ARR_GLIED_PARAM_BK0 + 8)
-    intern_->auto_parameter(g.platz, param - ARR_GLIED_PARAM_BK0, w);
+  else if (bk && arr_glied_bk_knopf(param) >= 0)
+    intern_->auto_parameter(g.platz, arr_glied_bk_knopf(param), w);
 }
 
 bool ArrRackSenke::abgaenge_faellig_() const noexcept {

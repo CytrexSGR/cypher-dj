@@ -1,0 +1,43 @@
+{
+ "schema": 1,
+ "name": "Saw Bass",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "saege-ladder",
+ "werte": {
+  "knob1": 0.192,
+  "knob2": 0.631,
+  "knob3": 0.75,
+  "knob4": 0.383,
+  "knob5": 0.438,
+  "knob6": 0.833,
+  "knob7": 0.301,
+  "knob8": 0.566,
+  "knob9": 0.412,
+  "knob10": 0.1
+ },
+ "beschreibung": {
+  "art": "bass",
+  "unterart": "analog",
+  "charakter": [
+   "warm",
+   "punchy",
+   "tight"
+  ],
+  "genre": [
+   "techno",
+   "house"
+  ],
+  "einsatz": [
+   "drop"
+  ],
+  "energie": 3,
+  "text": "Plain saw bass: ladder at a low cutoff, a quick filter pluck on every note, full sustain, short release."
+ },
+ "tags": [
+  "saege-ladder"
+ ],
+ "notiz": "Measured by level and pitch on render, not yet heard (2026-11-11).",
+ "angelegt": "2026-11-11T00:00:00.000Z",
+ "geaendert": "2026-11-11T00:00:00.000Z"
+}

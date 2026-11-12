@@ -672,6 +672,8 @@ def _golden_szenarien(tmp_root, skript=SKRIPT):
         tmp = Path(tmp_root) / name
         tmp.mkdir()
         env, log, _home = _attrappen(tmp, aus_ports=aus, ein_ports=ein)
+        for v in ("DISPLAY", "XAUTHORITY"):   # the golden file was made without a display; the display case has its own test below
+            env.pop(v, None)
         shm = _shm()
         try:
             r = subprocess.run(["bash", str(skript), "--instanz", INST, *args], env=env, capture_output=True, text=True, timeout=30)
@@ -834,5 +836,37 @@ def test_start_plugin_lv2_reasonablesynth_startet_im_neuen_modus_nicht_in_surges
         assert r.returncode == 0, (r.stdout, r.stderr)
         a = (log / "systemd-run").read_text()
         assert f"--instrument {uri}" in a and "--lv2 " not in a and "--aktiv" not in a, a
+    finally:
+        shutil.rmtree(shm, ignore_errors=True)
+
+
+# ---------------------------------------------------------------- plan 2026-11-11 task 9: the Surge host gets the display for its own window
+
+def test_surge_wirt_bekommt_display_und_xauthority_aber_sein_privates_home(tmp_path):
+    env, log, home = _attrappen(tmp_path, aus_ports=_wirt_aus(2), ein_ports=_wirt_ein(2))
+    env.update(DISPLAY=":7", XAUTHORITY="/tmp/xauth-test")
+    shm = _shm()
+    try:
+        r = _lauf(env, "--arr2")
+        assert r.returncode == 0, (r.returncode, r.stdout[-300:], r.stderr[-300:])
+        a = (log / "systemd-run").read_text()
+        assert "--setenv=DISPLAY=:7" in a and "--setenv=XAUTHORITY=/tmp/xauth-test" in a, a
+        assert f"--setenv=HOME={home}/.local/state/cypherdj/wirt-arr2-{INST}" in a, a   # Surge keeps its sandbox HOME
+    finally:
+        shutil.rmtree(shm, ignore_errors=True)
+
+
+def test_surge_wirt_ohne_display_in_der_umgebung_liest_ihn_aus_dem_user_manager(tmp_path):
+    env, log, home = _attrappen(tmp_path, aus_ports=_wirt_aus(2), ein_ports=_wirt_ein(2))
+    for v in ("DISPLAY", "XAUTHORITY"):
+        env.pop(v, None)
+    (tmp_path / "bin" / "systemctl").write_text(
+        f'#!/bin/sh\ncase "$*" in\n  *is-active*cypherdj-kern-{INST}.service*) echo active;;\n  *is-active*) echo inactive;;\n'
+        '  *show-environment*) printf "DISPLAY=:3\\nXAUTHORITY=/tmp/xa-manager\\n";;\nesac\nexit 0\n')
+    shm = _shm()
+    try:
+        assert _lauf(env, "--arr2").returncode == 0
+        a = (log / "systemd-run").read_text()
+        assert "--setenv=DISPLAY=:3" in a and "--setenv=XAUTHORITY=/tmp/xa-manager" in a, a
     finally:
         shutil.rmtree(shm, ignore_errors=True)

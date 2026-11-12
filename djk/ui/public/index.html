@@ -5,11 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>djk</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Crect width=%2216%22 height=%2216%22 rx=%223%22 fill=%22%232fd6c3%22/%3E%3C/svg%3E">
+<link rel="manifest" href="manifest.webmanifest" crossorigin="use-credentials">   <!-- credentials: the tablet listener answers only with the pairing cookie, also for the manifest -->
+<meta name="theme-color" content="#0e0f12">
+<link rel="apple-touch-icon" href="tablet-icon-192.png">
 <link rel="stylesheet" href="style.css">
 <link rel="stylesheet" href="production/production.css">
 <link rel="stylesheet" href="routing.css">
 <link rel="stylesheet" href="presets.css">
 <link rel="stylesheet" href="collections.css">
+<link rel="stylesheet" href="panel.css">
+<link rel="stylesheet" href="panel_curves.css">
 <script type="module" src="app.js"></script>
 </head>
 <body>
@@ -26,6 +31,7 @@
     <div class="feld"><label>PHRASE</label><b id="phrase">–</b></div>
     <div class="feld tempo"><label for="bpm">BPM</label><button id="bpm-minus" title="1 BPM slower (Shift: 0.1)" aria-label="Master tempo down">−</button><input id="bpm" value="–" inputmode="decimal" autocomplete="off" spellcheck="false" title="Master tempo: type a value, Enter sets it from the next bar" aria-label="Master tempo in BPM"><button id="bpm-plus" title="1 BPM faster (Shift: 0.1)" aria-label="Master tempo up">+</button><button id="keylock" class="an" aria-pressed="true" title="Keylock for all sources (decks and loop boxes): pitch stays put at any tempo. Off: pitch follows the tempo (varispeed)" aria-label="Keylock for all sources">KEY</button></div>
   </div>
+  <button id="kopplung-knopf" class="kopplung-knopf" type="button" title="Pair a tablet in the home network: shows a QR code with a one-time link">PAIR TABLET</button>
   <div class="kopfmix">
     <label class="phones">PHONES</label>
       <div class="kopfhoerer">
@@ -207,7 +213,7 @@
   <div class="kopfzeile">
     <button id="schublade" title="Show or hide the library (L)">▾</button>
     <button id="gross" title="Big browser (G)" aria-pressed="false">⤢</button>
-    <div class="bereich" role="tablist" aria-label="Bottom panel"><button data-bereich="library" class="an" role="tab" title="Library: tracks, loops, sets">LIBRARY</button><button data-bereich="effekte" role="tab" title="Effects: compressor per channel">EFFECTS</button><button data-bereich="presets" role="tab" title="Presets: saved settings of instruments and effects">PRESETS</button></div>
+    <div class="bereich" role="tablist" aria-label="Bottom panel"><button data-bereich="library" class="an" role="tab" title="Library: tracks, loops, sets">LIBRARY</button><button data-bereich="effekte" role="tab" title="Effects: compressor per channel">EFFECTS</button><button data-bereich="instrumente" role="tab" title="Instruments: front panel of each instrument channel">INSTRUMENTS</button><button data-bereich="presets" role="tab" title="Presets: saved settings of instruments and effects">PRESETS</button></div>
     <div class="reiter"><button data-reiter="tracks" class="an">TRACKS</button><button data-reiter="loops">LOOPS</button><button data-reiter="library">LIBRARY</button><button data-reiter="sets">SETS</button></div>
     <input id="suche" type="search" placeholder="Search title or key" autocomplete="off">
     <span id="bestand-info"></span>
@@ -222,6 +228,7 @@
       <canvas id="spektrum-leinwand" width="600" height="160" aria-label="Level per third octave, 25 Hz to 16 kHz"></canvas>
     </div>
   </div>
+  <div class="instrumente" id="instrumente" hidden aria-label="Instruments"></div>
   <div class="presets" id="presets" hidden aria-label="Presets"></div>
   <div class="geraete-browser" id="geraete-browser" hidden aria-label="Devices"></div>
   <div class="kollektionen" id="kollektionen" hidden aria-label="Collections"></div>
@@ -342,5 +349,6 @@
     <button class="taste play boxplay" data-boxplay disabled title="Starts or stops on the next bar one">PLAY</button>
   </div>
 </template>
+<dialog id="kopplung" class="kopplung" aria-label="Pair tablet"><h2>Pair tablet</h2><div data-kopplung-inhalt></div></dialog>
 </body>
 </html>

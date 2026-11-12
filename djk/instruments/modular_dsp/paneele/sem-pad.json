@@ -1,0 +1,35 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "sem-pad"},
+  "title": "State-variable Pad",
+  "akzent": "blau",
+  "layout": {"rows": [
+    ["osc", "filter", "sweep", "env"]
+  ]},
+  "sections": [
+    { "id": "osc", "title": "OSCILLATORS", "cols": 3, "controls": [
+      {"id": "o1", "type": "label", "span": 3, "text": "Two saws, 7 ct apart, 40 % each"},
+      {"id": "o2", "type": "label", "span": 3, "text": "Sub: triangle, -1 oct, 30 %"},
+      {"id": "o3", "type": "label", "span": 3, "text": "8 voices"}
+    ]},
+    { "id": "filter", "title": "FILTER", "cols": 4, "controls": [
+      {"id": "fk", "type": "filterkurve", "span": 4, "of": {"cutoff": "cutoff", "reso": "reso"}, "typen": [{"art": "lp", "pole": 2}]},
+      {"id": "cutoff", "type": "knob", "label": "Cutoff", "bind": {"param": "k1"}, "format": "hz", "default": 0.5},
+      {"id": "reso", "type": "knob", "label": "Resonance", "bind": {"param": "k2"}, "format": "percent", "default": 0.5},
+      {"id": "form", "type": "knob", "label": "Form centre", "bind": {"param": "k3"}, "format": "percent", "default": 0.5},
+      {"id": "fnote", "type": "label", "span": 4, "text": "Form: low-pass, notch, high-pass"}
+    ]},
+    { "id": "sweep", "title": "FORM SWEEP", "cols": 3, "controls": [
+      {"id": "lf", "type": "lfoform", "span": 3, "label": "Sweep LFO", "formen": ["sine"]},
+      {"id": "depth", "type": "knob", "label": "Depth", "bind": {"param": "k4"}, "format": "percent", "default": 0.5},
+      {"id": "rate", "type": "knob", "label": "Rate", "bind": {"param": "k5"}, "format": "hz", "default": 0.5},
+      {"id": "sn", "type": "label", "span": 1, "text": "Moves Form centre"}
+    ]},
+    { "id": "env", "title": "AMP ENV", "cols": 3, "controls": [
+      {"id": "hue", "type": "huelle", "span": 3, "label": "Envelope", "of": {"a": "attack", "d": 1.5, "s": 0.8, "r": "release"}},
+      {"id": "attack", "type": "knob", "label": "Attack", "bind": {"param": "k6"}, "format": "raw", "unit": "s", "default": 0.5},
+      {"id": "release", "type": "knob", "label": "Release", "bind": {"param": "k7"}, "format": "raw", "unit": "s", "default": 0.5},
+      {"id": "en", "type": "label", "span": 3, "text": "Decay 1.5 s, sustain 80 % fixed"}
+    ]}
+  ]
+}

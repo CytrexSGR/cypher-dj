@@ -43,7 +43,8 @@ test('S17 T1.8 refusals', () => {
   lehntAb(p, b({ kanal: 'erz/9' }), 'argument_ungueltig');
   lehntAb(p, b({ kanal: 'deck/5' }), 'argument_ungueltig');
   lehntAb(p, b({ graph: '../x' }), 'argument_ungueltig');
-  lehntAb(p, b({ regler: Array(9).fill(0.5) }), 'argument_ungueltig');
+  lehntAb(p, b({ regler: Array(7).fill(0.5) }), 'argument_ungueltig');
+  lehntAb(p, b({ regler: Array(65).fill(0.5) }), 'argument_ungueltig');
   lehntAb(p, b({ regler: acht(2) }), 'argument_ungueltig');
   lehntAb(p, b({ sha256: 'zz' }), 'argument_ungueltig');
   lehntAb(p, b({ wert: 1 }), 'argument_unbekannt');

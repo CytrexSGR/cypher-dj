@@ -12,7 +12,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { nimmSperre, SperreBelegt } from '../lock.ts';
 import { SLUG, slugVon } from '../collection.ts';
-import { kanonisch, neuesProjekt, pruefeFehler, pruefeProjekt, sortiert, type Projekt } from './model.ts';
+import { bkInsertKanonisch, bkReglerKanonisch, setzeVorgabenQuelle, vorgabenVonGraph as vorgabenQuelle } from './modular.ts';
+export { setzeVorgabenQuelle };
+import { alleStraenge, kanonisch, neuesProjekt, pruefeFehler, pruefeProjekt, sortiert, type Projekt } from './model.ts';
 import { Verlauf, zieheNach, type VerlaufOptionen } from './history.ts';
 import { grundText } from '../http/reasons.ts';
 
@@ -34,7 +36,15 @@ export function projektSlug(name: string): string {
 }
 
 // Schlüssel tief sortiert, Zahlen wie JSON.stringify (Spec A8). Die Datei enthält genau diese Form.
-export const normalisiere = (p: Projekt): Projekt => sortiert(p);        // sortiert baut neue Objekte, die Eingabe bleibt unberührt
+// 64 knobs: k9..k64 of a bk insert stage at 0.5 and trailing `vorgabe` values of a snapshot `regler` are not written,
+// so a project without knob 9..32 stays readable by older builds
+export const normalisiere = (p: Projekt): Projekt => {
+  const n = sortiert(p) as Projekt;                                       // sortiert baut neue Objekte, die Eingabe bleibt unberührt
+  for (const { strang } of alleStraenge(n)) for (const i of strang.inserts ?? []) if (i.art === 'bk') bkInsertKanonisch(i.werte);
+  // the sound snapshot: pad to 64, cut trailing values equal to the graph's `vorgabe` down to 8
+  for (const e of n.baukasten ?? []) e.regler = bkReglerKanonisch(e.regler, vorgabenQuelle(e.graph));
+  return n;
+};
 
 // Wurzeln je Instanz. Betrieb: ''. Prüfinstanz: ein Buchstabe a bis z (die Pakete S1..S3 haben q..x, Spec 4). Projekte der Prüfinstanzen liegen
 // im flüchtigen /dev/shm (nie im Betriebsordner), der Arbeitsordner folgt Spec 2.9 (~/.cache/cypherdj[-<i>]/arr).

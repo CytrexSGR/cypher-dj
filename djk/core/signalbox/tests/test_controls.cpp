@@ -34,15 +34,15 @@ FALL(zahl_der_regler_und_kanaele) {
   // 1.10 slice 4b T12: plus the eq rows (59 per instance, 1 instance) and the saett rows (4 per instance, 1 instance): 1378 + 63 = 1441.
   // The pool sizes are the measured ones (T11): a change of either is a decision with a new measurement, and this pin goes red first.
   // 2026-11-06: the eq pool has 2 instances (Andreas' decision of 2026-11-05, lane measured quiet): 59 more rows.
-  PRUEFE_GLEICH(tab().anzahl(), 597 + 12 * 8 + 204 + 2 * 8 + WERKZEUG_REGLER + 120 + 8 * 59 + 4 * 4 + 48 + 2 * 3 + 4 + 8 * 5 + 8 * 9);   // + the 48 rack rows (slice 4c), + the 3 ins/lim rows per limiter, + the 4 ins/host rows (plan 1.11), + the 5 ins/utility rows per instance (arr-fx)
+  PRUEFE_GLEICH(tab().anzahl(), 597 + 12 * 8 + 204 + 2 * 8 + WERKZEUG_REGLER + 120 + 8 * 59 + 4 * 4 + 48 + 2 * 3 + 4 + 8 * 5 + 8 * 65 + 14 * 56);   // + the 48 rack rows (slice 4c), + the 3 ins/lim rows per limiter, + the 4 ins/host rows (plan 1.11), + the 5 ins/utility rows per instance (arr-fx)
   // 1.10 slice 4c T15: plus the 48 rack macro rows rack/<1..12>/m1..m4: 1500 + 48 = 1548.
   // Master limiter: plus the 3 rows ins/lim/1/{an,decke,abklingen}: 1548 + 3 = 1551.
   // Plan 1.11 T4: plus the 4 rows ins/host/1..4/an: 1551 + 4 = 1555.
   // arr-fx slice 1: plus the utility kind, 8 instances x 5 rows (an, breite, mono_unter, gain, balance), appended last: 1555 + 40 = 1595.
   // arr-fx slice 2: the pools grow to 8 EQs (+6 x 59), 4 saturators (+3 x 4) and 2 limiters (+3): 1595 + 354 + 12 + 3 = 1964; rack, lim, host and utility rows move up.
   // arr-bk slice 3: plus the bk kind, 8 instances x 9 rows (an, k1..k8), appended last: 1964 + 72 = 2036 of the ceiling 4096.
-  PRUEFE_GLEICH(tab().anzahl(), 913 + 345 + 120 + 8 * 59 + 4 * 4 + 48 + 2 * 3 + 4 + 8 * 5 + 8 * 9);
-  PRUEFE_GLEICH(tab().anzahl(), 2036);
+  PRUEFE_GLEICH(tab().anzahl(), 913 + 345 + 120 + 8 * 59 + 4 * 4 + 48 + 2 * 3 + 4 + 8 * 5 + 8 * 65 + 14 * 56);
+  PRUEFE_GLEICH(tab().anzahl(), 3268);   // 64-knob widening: 2564 + 8 x 32 (ins/bk/<n>/k33..k64) + 14 x 32 (<kanal>/bk/33..64 of 12 channels, fx/3, fx/4) of the ceiling 4096
   // the contract (INTERFACES 1.5) says indices 1258 to 1377: the table counts the 4 deck/<n>/transport rows, the dump of stellwerk_regler_liste does not (1374 lines)
   PRUEFE_GLEICH(tab().suche("ins/komp/1/an"), 1258);
   PRUEFE_GLEICH(tab().suche("ins/komp/12/sc"), 1377);
@@ -72,12 +72,29 @@ FALL(zahl_der_regler_und_kanaele) {
   PRUEFE_GLEICH(tab().suche("ins/utility/1/an"), 1924);
   PRUEFE_GLEICH(tab().suche("ins/utility/8/balance"), 1963);
   PRUEFE(tab().suche("ins/utility/9/an") < 0);   // pool 8
-  // arr-bk slice 3: the bk block follows the utility block (eight instances of 9: an, k1..k8), 1964 to 2035
+  // arr-bk slice 3: the bk block follows the utility block (eight instances, stage by stage: an, k1..k8 = 9 rows until the 32-knob widening, 1964 to 2035);
+  // 32-knob widening: an, k1..k32 = 33 rows per instance, 1964 to 2227; 64-knob widening: an, k1..k64 = 65 rows per instance, 1964 to 2483.
+  // Stage 1 keeps its rows k1..k8 at 1965..1972; the stages 2..8 start later (stage-major order, stage s starts at 1964 + 65 (s - 1)).
   PRUEFE_GLEICH(tab().suche("ins/bk/1/an"), 1964);
   PRUEFE_GLEICH(tab().suche("ins/bk/1/k1"), 1965);
-  PRUEFE_GLEICH(tab().suche("ins/bk/8/k8"), 2035);
+  PRUEFE_GLEICH(tab().suche("ins/bk/1/k8"), 1972);
+  PRUEFE_GLEICH(tab().suche("ins/bk/1/k9"), 1973);
+  PRUEFE_GLEICH(tab().suche("ins/bk/1/k32"), 1996);
+  PRUEFE_GLEICH(tab().suche("ins/bk/1/k33"), 1997);
+  PRUEFE_GLEICH(tab().suche("ins/bk/1/k64"), 2028);
+  PRUEFE_GLEICH(tab().suche("ins/bk/2/an"), 2029);
+  for (int st = 1; st <= 8; st++) {   // generated block, stage-major: an, k1..k64 per stage
+    char q[40];
+    std::snprintf(q, sizeof q, "ins/bk/%d/an", st);
+    PRUEFE_GLEICH(tab().suche(q), 1964 + 65 * (st - 1));
+    std::snprintf(q, sizeof q, "ins/bk/%d/k64", st);
+    PRUEFE_GLEICH(tab().suche(q), 1964 + 65 * (st - 1) + 64);
+  }
+  PRUEFE_GLEICH(tab().suche("ins/bk/8/k8"), 2427);
+  PRUEFE_GLEICH(tab().suche("ins/bk/8/k32"), 2451);
+  PRUEFE_GLEICH(tab().suche("ins/bk/8/k64"), 2483);
   PRUEFE(tab().suche("ins/bk/9/an") < 0);   // pool 8
-  PRUEFE(tab().suche("ins/bk/1/k9") < 0);
+  PRUEFE(tab().suche("ins/bk/1/k65") < 0 && tab().suche("ins/bk/1/k0") < 0 && tab().suche("ins/bk/1/k01") < 0 && tab().suche("ins/bk/1/k033") < 0 && tab().suche("ins/bk/1/k640") < 0);
   PRUEFE(tab().suche("ins/utility/1/decke") < 0);
   PRUEFE(tab().suche("ins/host/0/an") < 0);
   PRUEFE(tab().suche("ins/host/1/decke") < 0);   // one row per instance
@@ -486,7 +503,7 @@ FALL(werkzeug_zeilen_345_und_ihre_zaehlung) {
   PRUEFE_GLEICH(spektrum, 1);
   PRUEFE_GLEICH(gesamt, 345);
   PRUEFE_GLEICH(WERKZEUG_REGLER, 345);
-  PRUEFE_GLEICH(tab().anzahl(), 1258 + 120 + 8 * 59 + 4 * 4 + 48 + 2 * 3 + 4 + 8 * 5 + 8 * 9);   // arr-bk: + 8 x 9 bk rows;   // 1.10 slice 4a/4b/4c + limiter + arr-fx: the 706 insert rows (120 komp, 8 x 59 eq, 4 x 4 saett, 48 rack, 2 x 3 lim, 4 host, 8 x 5 utility) follow the tool block
+  PRUEFE_GLEICH(tab().anzahl(), 1258 + 120 + 8 * 59 + 4 * 4 + 48 + 2 * 3 + 4 + 8 * 5 + 8 * 65 + 14 * 56);   // arr-bk: + 8 x 9 bk rows;   // 1.10 slice 4a/4b/4c + limiter + arr-fx: the 706 insert rows (120 komp, 8 x 59 eq, 4 x 4 saett, 48 rack, 2 x 3 lim, 4 host, 8 x 5 utility) follow the tool block
   // and the table holds no other row of this kind: the count by role is 345 as well
   int rollen = 0;
   for (int r = 0; r < tab().anzahl(); r++)
@@ -558,7 +575,7 @@ FALL(werkzeug_negativkontrollen) {
 
 
 FALL(bk_regler_nur_fuer_kanaele_mit_graph) {
-  // S5r K2: <kanal>/bk/<1..8> gibt es genau für Kanäle, auf denen der Kern einen Baukasten-Graphen annimmt: deck/1..4
+  // S5r K2: <kanal>/bk/<1..64> gibt es genau für Kanäle, auf denen der Kern einen Baukasten-Graphen annimmt: deck/1..4
   // (Effekt, /k/kanal/graph) und die Instrument-Kanäle erz/1,2,3,5,6,7 und pad/1,2. Nicht erz/4 (reserviert für die
   // Produktion), nicht erz/8 (Nur-Cue-Vorhöreingang), nicht bus/*, master, cue. Gegen das echte Verhalten des Kerns
   // pinnt das test_netz_erz ("bk-Pfade genau auf den Kanälen, die einen Graphen annehmen").
@@ -566,7 +583,7 @@ FALL(bk_regler_nur_fuer_kanaele_mit_graph) {
   for (int k = 0; k < tab().kanaele(); k++) {
     bool soll = false;
     for (const char* m : mit) soll = soll || !std::strcmp(m, tab().kanal_name(k));
-    for (int nr = 1; nr <= 8; nr++) {
+    for (int nr = 1; nr <= 64; nr++) {
       char p[40];
       std::snprintf(p, sizeof p, "%s/bk/%d", tab().kanal_name(k), nr);
       PRUEFE_GLEICH(tab().suche(p) >= 0, soll);
@@ -575,8 +592,9 @@ FALL(bk_regler_nur_fuer_kanaele_mit_graph) {
   PRUEFE_GLEICH(tab().suche("erz/4/bk/1"), -1);
   PRUEFE_GLEICH(tab().suche("erz/8/bk/1"), -1);
   PRUEFE_GLEICH(tab().suche("bus/1/bk/1"), -1);
-  PRUEFE_GLEICH(tab().suche("deck/1/bk/9"), -1);
+  PRUEFE_GLEICH(tab().suche("deck/1/bk/65"), -1);   // the knobs are 1..64
   PRUEFE_GLEICH(tab().suche("deck/1/bk/0"), -1);
+  PRUEFE_GLEICH(tab().suche("deck/1/bk/01"), -1);
   // Definition: Rolle bk_regler, 0..1, Vorgabe 0,5, Schaltrampe 0 (K15: die FFI glättet), darf jeder, Kurve linear 0..1
   for (const char* p : {"deck/1/bk/1", "erz/3/bk/4", "erz/5/bk/8", "pad/2/bk/8"}) {
     const ReglerDef& x = d(p);
@@ -613,7 +631,7 @@ FALL(fx_send_bk_regler_global_hinter_dem_ret_block) {
   }
   PRUEFE_GLEICH(index, 913);
   // negative controls: other send buses and the channel namespace stay free, the n form is checked
-  for (const char* p : {"fx/1/bk/1", "fx/2/bk/1", "fx/5/bk/1", "fx/3/bk/0", "fx/3/bk/9", "fx/3/bk/01", "fx/3/bk/10", "fx/3/bk", "fx/4/bk/9", "fx/0/bk/1"})
+  for (const char* p : {"fx/1/bk/1", "fx/2/bk/1", "fx/5/bk/1", "fx/3/bk/0", "fx/3/bk/65", "fx/3/bk/01", "fx/3/bk/100", "fx/3/bk", "fx/4/bk/65", "fx/0/bk/1"})
     PRUEFE_GLEICH(tab().suche(p), -1);
 }
 
@@ -633,6 +651,58 @@ FALL(die_ersten_1258_zeilen_sind_unveraendert) {
   PRUEFE_GLEICH(std::strcmp(tab().def(1257).pfad, "spektrum/kanal"), 0);
   PRUEFE_GLEICH(std::strcmp(tab().def(1258).pfad, "ins/komp/1/an"), 0);   // the insert block starts right behind the tool block
   PRUEFE_GLEICH(std::strcmp(tab().def(1377).pfad, "ins/komp/12/sc"), 0);
+}
+
+// 32-knob widening: the knobs 9..32 of the 12 graph channels and of fx/3, fx/4 are appended behind the insert block (336 rows at 2484..2819);
+// 64-knob widening: the knobs 33..64 follow behind them (448 rows, 2820..3267, same channel order). The rows 1..8 keep their indices (897..912 for
+// the send returns), the rows 9..32 moved by 256 (2228 -> 2484) because the insert block before them grew to 65 rows per stage; the restart state is keyed by path, so nothing reads them by index; two-digit numbers are their own rows and never alias bk/1..bk/8.
+FALL(bk_regler_9_bis_64_haengen_am_tabellenende) {
+  const int n = tab().anzahl();
+  PRUEFE_GLEICH(n, 3268);
+  PRUEFE(n < cypherdj::stellwerk::MAX_REGLER);
+  PRUEFE_GLEICH(cypherdj::stellwerk::BK_REGLER_N, 64);
+  PRUEFE_GLEICH(cypherdj::stellwerk::MAX_REGLER - n, 828);   // "Regler 3268 von 4096, Reserve 828"
+  // rows 9..32: 12 channels x 24 knobs, then fx/3 and fx/4 x 24, at 2484..2819 (the block of the 32-knob widening, unmoved)
+  PRUEFE_GLEICH(tab().suche("deck/1/bk/9"), 2484);
+  PRUEFE_GLEICH(tab().suche("deck/1/bk/32"), 2484 + 23);
+  PRUEFE_GLEICH(tab().suche("deck/2/bk/9"), 2484 + 24);
+  PRUEFE_GLEICH(tab().suche("pad/2/bk/32"), 2484 + 12 * 24 - 1);
+  PRUEFE_GLEICH(tab().suche("fx/3/bk/9"), 2484 + 12 * 24);
+  PRUEFE_GLEICH(tab().suche("fx/4/bk/32"), 2819);
+  // rows 33..64: the same order, behind them: 12 channels x 32 knobs, then fx/3 and fx/4 x 32
+  PRUEFE_GLEICH(tab().suche("deck/1/bk/33"), 2820);
+  PRUEFE_GLEICH(tab().suche("deck/1/bk/64"), 2820 + 31);
+  PRUEFE_GLEICH(tab().suche("deck/2/bk/33"), 2820 + 32);
+  PRUEFE_GLEICH(tab().suche("pad/2/bk/64"), n - 2 * 32 - 1);
+  PRUEFE_GLEICH(tab().suche("fx/3/bk/33"), n - 2 * 32);
+  PRUEFE_GLEICH(tab().suche("fx/4/bk/64"), n - 1);
+  // the old rows did not move
+  PRUEFE_GLEICH(tab().suche("deck/1/bk/1"), 597);
+  PRUEFE_GLEICH(tab().suche("pad/2/bk/8"), 692);
+  PRUEFE_GLEICH(tab().suche("fx/3/bk/1"), 897);
+  PRUEFE_GLEICH(tab().suche("fx/4/bk/8"), 912);
+  // the insert rows come first, the new rows behind them
+  PRUEFE(tab().suche("ins/bk/8/k64") >= 0 && tab().suche("ins/bk/8/k64") < tab().suche("deck/1/bk/9"));
+  // definition of a two-digit row: role bk_regler, 0..1, default 0.5, ramp 0, linear, channel set like bk/1
+  for (const char* p : {"deck/1/bk/9", "deck/4/bk/17", "erz/3/bk/10", "erz/7/bk/32", "pad/2/bk/19", "fx/3/bk/10", "fx/4/bk/32",
+                        "deck/1/bk/33", "deck/4/bk/40", "erz/3/bk/50", "erz/7/bk/64", "pad/2/bk/59", "fx/3/bk/33", "fx/4/bk/64"}) {
+    const ReglerDef& x = d(p);
+    PRUEFE(x.rolle == Rolle::bk_regler && x.min == 0.0f && x.max == 1.0f && x.vorgabe == 0.5f);
+    PRUEFE(x.schalt_samples == 0 && !x.nur_hand && !x.db && !x.keine_rampe && !x.ganzzahlig && !x.transport);
+    PRUEFE(x.kurve.typ == KurvenTyp::linear && x.kurve.min == 0.0f && x.kurve.max == 1.0f);
+  }
+  PRUEFE_GLEICH(d("erz/3/bk/10").kanal, tab().kanal_suche("erz/3"));
+  PRUEFE_GLEICH(d("erz/3/bk/50").kanal, tab().kanal_suche("erz/3"));
+  PRUEFE_GLEICH(d("fx/3/bk/10").kanal, -1);
+  PRUEFE_GLEICH(d("fx/4/bk/64").kanal, -1);
+  // 14 x 64 rows of the role in all
+  int bk = 0;
+  for (int r = 0; r < n; r++) bk += tab().def(r).rolle == Rolle::bk_regler;
+  PRUEFE_GLEICH(bk, 14 * 64);
+  // the channel set is unchanged: erz/4, erz/8, bus/1 have no two-digit row either; the number forms are checked (no 0, no leading zero, no 65, no three digits)
+  for (const char* p : {"erz/4/bk/9", "erz/8/bk/9", "bus/1/bk/9", "master/bk/9", "erz/4/bk/33", "erz/8/bk/64", "deck/1/bk/65", "deck/1/bk/0", "deck/1/bk/033", "deck/1/bk/09", "deck/1/bk/640",
+                        "deck/1/bk/100", "fx/1/bk/9", "fx/5/bk/9", "fx/3/bk/65", "fx/4/bk/033", "ins/bk/1/k65", "ins/bk/1/k033", "ins/bk/1/k640"})
+    PRUEFE_GLEICH(tab().suche(p), -1);
 }
 
 PRUEF_MAIN

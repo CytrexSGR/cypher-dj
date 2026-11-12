@@ -1,0 +1,33 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "diode-goa-linie"},
+  "title": "Diode Goa Line",
+  "akzent": "orange",
+  "layout": {"rows": [
+    ["osc", "filter", "fenv", "aenv"]
+  ]},
+  "sections": [
+    { "id": "osc", "title": "OSCILLATORS", "cols": 3, "controls": [
+      {"id": "puls", "type": "knob", "label": "Pulse mix", "span": 3, "bind": {"param": "k6"}, "format": "percent", "default": 0.5},
+      {"id": "o1", "type": "label", "span": 3, "text": "Saw 50 % + pulse, +7 ct"},
+      {"id": "o2", "type": "label", "span": 3, "text": "Glide 20 ms fixed"}
+    ]},
+    { "id": "filter", "title": "FILTER", "cols": 4, "controls": [
+      {"id": "fk", "type": "filterkurve", "span": 4, "of": {"cutoff": "cutoff", "reso": "reso"}, "typen": [{"art": "lp", "pole": 4}]},
+      {"id": "cutoff", "type": "knob", "label": "Cutoff", "bind": {"param": "k1"}, "format": "hz", "default": 0.5},
+      {"id": "reso", "type": "knob", "label": "Resonance", "bind": {"param": "k2"}, "format": "percent", "default": 0.5},
+      {"id": "env", "type": "knob", "label": "Env amount", "bind": {"param": "k3"}, "format": "hz", "default": 0.5},
+      {"id": "drive", "type": "knob", "label": "Drive", "bind": {"param": "k5"}, "format": "db", "default": 0.5}
+    ]},
+    { "id": "fenv", "title": "FILTER ENV", "cols": 3, "controls": [
+      {"id": "fhue", "type": "huelle", "span": 3, "label": "Envelope", "of": {"a": 0.001, "d": "decay", "s": 0, "r": 0.05}},
+      {"id": "decay", "type": "knob", "label": "Decay", "span": 3, "bind": {"param": "k4"}, "format": "raw", "unit": "s", "default": 0.5},
+      {"id": "fn", "type": "label", "span": 3, "text": "A 1 ms, S 0, R 50 ms fixed"}
+    ]},
+    { "id": "aenv", "title": "AMP ENV", "cols": 3, "controls": [
+      {"id": "ahue", "type": "huelle", "span": 3, "label": "Envelope", "of": {"a": 0.001, "d": 0.12, "s": 0.7, "r": 0.04}},
+      {"id": "an", "type": "label", "span": 3, "text": "A 1 ms, D 120 ms, S 70 %, R 40 ms"},
+      {"id": "an2", "type": "label", "span": 3, "text": "All four times fixed"}
+    ]}
+  ]
+}

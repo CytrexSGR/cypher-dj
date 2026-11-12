@@ -206,12 +206,12 @@ test('Nachzug R2 (m2): eine Datei mit Latenz ohne Gerät ist defekt; mit Gerät 
   fs.rmSync(d, { recursive: true, force: true });
 });
 
-test('S19 generic MIDI profile: any MIDI source fits; without a detected source and without a port it is 409 geraet_nicht_da; setzeEingang refuses it (no audio)', () => {
+test('S19 generic MIDI profile: any hardware MIDI source fits (Midi Through does not); without a detected source and without a port it is 409 geraet_nicht_da; setzeEingang refuses it (no audio)', () => {
   const g = profil('midi-controller');
-  assert.ok(g.midi.passt(ERK.midi[1]) && g.midi.passt(ERK.midi[0]) && g.audio === null);
-  // a detected source: the first one is taken
+  assert.ok(g.midi.passt(ERK.midi[1]) && !g.midi.passt(ERK.midi[0]) && g.audio === null);
+  // a detected source: the first hardware one is taken (Midi Through at index 0 is skipped)
   const mk = setzeMidi(standard(), 'andreas', { profil: 'midi-controller' }, ERK);
-  assert.deepEqual([mk.midi.profil, mk.midi.port], ['midi-controller', ERK.midi[0].port]);
+  assert.deepEqual([mk.midi.profil, mk.midi.port], ['midi-controller', ERK.midi[1].port]);
   // an explicit port wins over detection
   assert.equal(setzeMidi(standard(), 'andreas', { profil: 'midi-controller', port: 'X:Y' }, ERK).midi.port, 'X:Y');
   // nothing detected and no port
@@ -270,4 +270,15 @@ test('T5a setzeEingang: unplugged (no USB node, no PCI-only fallback) is geraet_
   mit.eingaenge[0].frei_fuer_cypher = true;
   assert.equal(setzeEingang(mit, 'andreas', { k: 1, profil: 'usb-audio' }, ERK).eingaenge[0].frei_fuer_cypher, true, 'same node: release kept');
   assert.equal(setzeEingang(mit, 'andreas', { k: 1, profil: 'usb-audio', knoten: 'alsa_input.usb-K6' }, { audio: [ERK.audio[2], K6], midi: [] }).eingaenge[0].frei_fuer_cypher, false, 'other node: release falls back');
+});
+
+test('MIDI controller profile skips software ports and takes the USB controller (LPD8 after bluez and Midi Through)', async () => {
+  const { profil } = await import('../areas/devices/profile.ts');
+  const p = profil('midi-controller');
+  const quellen = [
+    { port: 'bluez_midi.server:out', alias: 'out' },
+    { port: 'Midi-Bridge:Midi Through: Port-0 (capture)', alias: 'Midi Through:Midi Through Port-0' },
+    { port: 'Midi-Bridge:LPD8: MIDI 1 (capture)', alias: 'LPD8:LPD8 MIDI 1' },
+  ];
+  assert.equal(quellen.find((q) => p.midi.passt(q)).port, 'Midi-Bridge:LPD8: MIDI 1 (capture)');
 });

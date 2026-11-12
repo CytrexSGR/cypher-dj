@@ -5,7 +5,7 @@
 // Paket 1.13: Audio-Clips dürfen in /2 einen Warp tragen (ein weiteres optionales Feld, keine neue Nummer); in /1 ist warp ein unbekanntes Feld.
 import { SEGMENT_BPM_MAX, SEGMENT_BPM_MIN } from './warp.ts';
 import type { Punkt } from './lane.ts';
-import { pruefeBkListe, type BkKanal } from './modular.ts';
+import { BK_INSERT_OPTIONAL, BK_REGLER_MIN, BK_REGLER_ZAHL, bkInsertAuffuellen, pruefeBkListe, type BkKanal } from './modular.ts';
 import { INSERT_ARTEN } from './insert_key.ts';
 import { SCHLUESSEL_DJ, SCHLUESSEL_NUR_ZEILE } from './key_table.ts';
 import { huellkurvenPruefung, type Huellkurve } from './envelope.ts';
@@ -63,7 +63,7 @@ export const ZIEL_BEREICH = {
   'geraet.cutoff': { min: 0, max: 1, nurSprung: false },
   'geraet.resonanz': { min: 0, max: 1, nurSprung: false },
   'geraet.env_mod': { min: 0, max: 1, nurSprung: false },
-  // 1.12 slice 7: the eight knobs of a Baukasten (bk) track
+  // 1.12 slice 7: the knobs of a Baukasten (bk) track (k1..k8 first, k9..k64 appended)
   'geraet.k1': { min: 0, max: 1, nurSprung: false },
   'geraet.k2': { min: 0, max: 1, nurSprung: false },
   'geraet.k3': { min: 0, max: 1, nurSprung: false },
@@ -72,13 +72,71 @@ export const ZIEL_BEREICH = {
   'geraet.k6': { min: 0, max: 1, nurSprung: false },
   'geraet.k7': { min: 0, max: 1, nurSprung: false },
   'geraet.k8': { min: 0, max: 1, nurSprung: false },
+  // knobs 9..32
+  'geraet.k9': { min: 0, max: 1, nurSprung: false },
+  'geraet.k10': { min: 0, max: 1, nurSprung: false },
+  'geraet.k11': { min: 0, max: 1, nurSprung: false },
+  'geraet.k12': { min: 0, max: 1, nurSprung: false },
+  'geraet.k13': { min: 0, max: 1, nurSprung: false },
+  'geraet.k14': { min: 0, max: 1, nurSprung: false },
+  'geraet.k15': { min: 0, max: 1, nurSprung: false },
+  'geraet.k16': { min: 0, max: 1, nurSprung: false },
+  'geraet.k17': { min: 0, max: 1, nurSprung: false },
+  'geraet.k18': { min: 0, max: 1, nurSprung: false },
+  'geraet.k19': { min: 0, max: 1, nurSprung: false },
+  'geraet.k20': { min: 0, max: 1, nurSprung: false },
+  'geraet.k21': { min: 0, max: 1, nurSprung: false },
+  'geraet.k22': { min: 0, max: 1, nurSprung: false },
+  'geraet.k23': { min: 0, max: 1, nurSprung: false },
+  'geraet.k24': { min: 0, max: 1, nurSprung: false },
+  'geraet.k25': { min: 0, max: 1, nurSprung: false },
+  'geraet.k26': { min: 0, max: 1, nurSprung: false },
+  'geraet.k27': { min: 0, max: 1, nurSprung: false },
+  'geraet.k28': { min: 0, max: 1, nurSprung: false },
+  'geraet.k29': { min: 0, max: 1, nurSprung: false },
+  'geraet.k30': { min: 0, max: 1, nurSprung: false },
+  'geraet.k31': { min: 0, max: 1, nurSprung: false },
+  'geraet.k32': { min: 0, max: 1, nurSprung: false },
+  // knobs 33..64 (appended, Task 4 of the synth build-out)
+  'geraet.k33': { min: 0, max: 1, nurSprung: false },
+  'geraet.k34': { min: 0, max: 1, nurSprung: false },
+  'geraet.k35': { min: 0, max: 1, nurSprung: false },
+  'geraet.k36': { min: 0, max: 1, nurSprung: false },
+  'geraet.k37': { min: 0, max: 1, nurSprung: false },
+  'geraet.k38': { min: 0, max: 1, nurSprung: false },
+  'geraet.k39': { min: 0, max: 1, nurSprung: false },
+  'geraet.k40': { min: 0, max: 1, nurSprung: false },
+  'geraet.k41': { min: 0, max: 1, nurSprung: false },
+  'geraet.k42': { min: 0, max: 1, nurSprung: false },
+  'geraet.k43': { min: 0, max: 1, nurSprung: false },
+  'geraet.k44': { min: 0, max: 1, nurSprung: false },
+  'geraet.k45': { min: 0, max: 1, nurSprung: false },
+  'geraet.k46': { min: 0, max: 1, nurSprung: false },
+  'geraet.k47': { min: 0, max: 1, nurSprung: false },
+  'geraet.k48': { min: 0, max: 1, nurSprung: false },
+  'geraet.k49': { min: 0, max: 1, nurSprung: false },
+  'geraet.k50': { min: 0, max: 1, nurSprung: false },
+  'geraet.k51': { min: 0, max: 1, nurSprung: false },
+  'geraet.k52': { min: 0, max: 1, nurSprung: false },
+  'geraet.k53': { min: 0, max: 1, nurSprung: false },
+  'geraet.k54': { min: 0, max: 1, nurSprung: false },
+  'geraet.k55': { min: 0, max: 1, nurSprung: false },
+  'geraet.k56': { min: 0, max: 1, nurSprung: false },
+  'geraet.k57': { min: 0, max: 1, nurSprung: false },
+  'geraet.k58': { min: 0, max: 1, nurSprung: false },
+  'geraet.k59': { min: 0, max: 1, nurSprung: false },
+  'geraet.k60': { min: 0, max: 1, nurSprung: false },
+  'geraet.k61': { min: 0, max: 1, nurSprung: false },
+  'geraet.k62': { min: 0, max: 1, nurSprung: false },
+  'geraet.k63': { min: 0, max: 1, nurSprung: false },
+  'geraet.k64': { min: 0, max: 1, nurSprung: false },
 } as const satisfies Record<string, { min: number; max: number; nurSprung: boolean }>;
 export type Ziel = keyof typeof ZIEL_BEREICH;
 // Slice 2 (E1): eight targets; of the RB-338 parameters only the four smoothed ones (rb_dsp/src/parameter.rs:74-87) are lane targets
 export const AUTO_ZIELE = Object.keys(ZIEL_BEREICH) as Ziel[];
 export const GERAET_PRAEFIX = 'geraet.';
 export const istGeraetZiel = (z: string): boolean => z.startsWith(GERAET_PRAEFIX);
-// geraet.* lanes address the parameters of the device of the track: the four RB-338 parameters on an RB-338 track, the knobs k1..k8 on a bk track
+// geraet.* lanes address the parameters of the device of the track: the four RB-338 parameters on an RB-338 track, the knobs k1..k64 on a bk track
 export const istRbGeraet = (g: unknown): boolean => {
   const d = g as { art?: unknown; name?: unknown } | null | undefined;
   return typeof d === 'object' && d !== null && d.art === 'intern' && d.name === 'rb338';
@@ -88,7 +146,7 @@ export const istBkGeraet = (g: unknown): boolean => {
   return typeof d === 'object' && d !== null && d.art === 'intern' && d.name === 'bk';
 };
 export const RB_ZIELE: readonly Ziel[] = ['geraet.lautstaerke', 'geraet.cutoff', 'geraet.resonanz', 'geraet.env_mod'];
-export const BK_ZIELE: readonly Ziel[] = ['geraet.k1', 'geraet.k2', 'geraet.k3', 'geraet.k4', 'geraet.k5', 'geraet.k6', 'geraet.k7', 'geraet.k8'];
+export const BK_ZIELE: readonly Ziel[] = Array.from({ length: 64 }, (_, i) => `geraet.k${i + 1}` as Ziel);
 // does the device lane `ziel` belong to the device of this track? (a track without lanes of that kind never asks)
 export const passtGeraetZiel = (ziel: string, geraet: unknown): boolean =>
   istRbGeraet(geraet) ? (RB_ZIELE as readonly string[]).includes(ziel) : istBkGeraet(geraet) ? (BK_ZIELE as readonly string[]).includes(ziel) : false;
@@ -208,7 +266,7 @@ export type Clip = AudioClip | MidiClip;
 export interface Take { id: string; name: string; art?: 'original'; clips: AudioClip[] }
 // preset (1.16 rest, F8): the register id of the preset last applied (presets/preset_id.ts); not playback (spurSicht strips it), absent in older files
 export interface InternGeraet { art: 'intern'; name: 'rb338'; parameter: Record<string, number>; preset?: string }
-// Baukasten S20: an instrument graph of the kern's graph folder as the device; parameter holds the knobs k1..k8 that were set (absent = 0.5)
+// Baukasten S20: an instrument graph of the kern's graph folder as the device; parameter holds the knobs k1..k64 that were set (absent = 0.5)
 export interface BkGeraet { art: 'intern'; name: 'bk'; graph: string; parameter: Record<string, number>; preset?: string }
 // 1.9 (L25): a core kit (ADR 024) as the device of an instrument track. One-shot, no device parameter: the kit is the whole device.
 export interface KitGeraet { art: 'intern'; name: 'kit'; kit: string }
@@ -238,16 +296,22 @@ export type Geraet = InternGeraet | BkGeraet | KitGeraet | WirtGeraet | RackGera
 export const istRack = (s: { geraet?: Geraet }): s is { geraet: RackGeraet } => s.geraet?.art === 'rack';
 export const glieder = (s: { geraet?: Geraet }): Glied[] => (s.geraet?.art === 'rack' ? s.geraet.glieder : []);
 // 1.9 U8 T7: the macro parameters of a member by device, with the parameter index the translator writes (the core's index space:
-// 0..3 = RB-338 in the order of the geraet.* rows of AUTO_ZIELE = ARR_GERAET_PARAM_NAME, 8..15 = bk k1..k8, 16 = gain_db)
+// 0..3 = RB-338 in the order of the geraet.* rows of AUTO_ZIELE = ARR_GERAET_PARAM_NAME, 8..15 = bk k1..k8, 16 = gain_db,
+// 17..40 = bk k9..k32, 41..72 = bk k33..k64, the same space as the kern)
 // and the range of von/bis. A Surge member takes none; a kit only gain_db.
 export const GLIED_PARAM_BK0 = 8;
 export const GLIED_PARAM_GAIN_DB = 16;
+export const GLIED_PARAM_BK9 = 17;   // k9..k32 = 17..40 (gain_db sits at 16 and keeps its index)
+export const GLIED_PARAM_BK33 = 41;  // k33..k64 = 41..72
 export const GLIED_RB_MAKRO_PARAMETER: readonly string[] = RB_ZIELE.map((z) => z.slice(GERAET_PRAEFIX.length));
 export function gliedMakroParam(g: GliedGeraet, name: string): { index: number; min: number; max: number } | undefined {
   if (g.art === 'wirt') return undefined;
   if (name === 'gain_db') return { index: GLIED_PARAM_GAIN_DB, min: -60, max: 12 };
   if (g.name === 'rb338') { const i = GLIED_RB_MAKRO_PARAMETER.indexOf(name); return i < 0 ? undefined : { index: i, min: 0, max: 1 }; }
-  if (g.name === 'bk') { const i = BK_PARAMETER.indexOf(name); return i < 0 ? undefined : { index: GLIED_PARAM_BK0 + i, min: 0, max: 1 }; }
+  if (g.name === 'bk') {
+    const i = BK_PARAMETER.indexOf(name);
+    return i < 0 ? undefined : { index: i < 8 ? GLIED_PARAM_BK0 + i : i < 32 ? GLIED_PARAM_BK9 + (i - 8) : GLIED_PARAM_BK33 + (i - 32), min: 0, max: 1 };
+  }
   return undefined;
 }
 // 1.9 U7 T4 (spec 4.4): the Surge production slots a track uses, its own or its members' (an instrument track only; a rack may hold two)
@@ -280,7 +344,7 @@ export const HALL_FELDER = ['pre', 'decay', 'groesse', 'tief', 'highcut', 'fahne
 // project (lowest free). `werte` holds every parameter of the kind except the stage switch `an` and `sc` (real units, plugin ranges; the EQ band parameters are
 // 'b1/freq' ... 'b8/platz', the band switch is 'b<m>/an'); `sc` (komp only): 0 or absent = own signal, n = input of track number n.
 // `bk` (arr-bk slice 3): a Baukasten effect graph as a stage; `graph` is its file name in the graph folder (an effect graph, one with an
-// `eingang` node), `werte` the knobs k1..k8 (0..1).
+// `eingang` node), `werte` the knobs k1..k64 (0..1).
 export type InsertSorte = 'komp' | 'eq' | 'saett' | 'lim' | 'utility' | 'bk' | 'host';
 // 1.10 slice 5 (plan E8): the sidechain key of a `komp` stage has two writers. A track `pre` key stays the field `sc` (4a, row `ins/komp/<slot>/sc`, a
 // control).
@@ -322,7 +386,7 @@ export const insertVorgabe = (art: InsertPoolArt = 'komp'): Record<string, numbe
 // (`von` may be above `bis`: an inverted knob). While a parameter is mapped its own row is ignored; the project refuses to set it (`param_gemappt`).
 // `werte` are the live macro values 0..1 (a control: it travels as rack/<slot>/m<n>, not as playback structure); `namen` are the page's labels ('' = default).
 // 1.9 U8 T7 (spec E12): a second target kind, a parameter of a MEMBER of the instrument rack of the same track (`glied` = a member id g1..g4). Only on a rack
-// track strip. Member params: RB-338 lautstaerke, cutoff, resonanz, env_mod and bk k1..k8 (von/bis 0..1), gain_db of any internal member (-60..+12 dB).
+// track strip. Member params: RB-338 lautstaerke, cutoff, resonanz, env_mod and bk k1..k64 (von/bis 0..1), gain_db of any internal member (-60..+12 dB).
 export interface InsertZiel { insert: string; param: string; von: number; bis: number }
 export interface GliedZiel { glied: string; param: string; von: number; bis: number }
 export type RackZiel = InsertZiel | GliedZiel
@@ -374,10 +438,10 @@ const FARBE = /^#[0-9a-fA-F]{6}$/;
 const SHA = /^[0-9a-f]{64}$/;
 // Parameter des RB-338 (Spec 2.4 und 6.4, aus rb_dsp::parameter::IDS). Alles andere lehnen Befehle als argument_unbekannt ab.
 export const RB_PARAMETER: readonly string[] = ['lautstaerke', 'wellenform', 'cutoff', 'resonanz', 'env_mod', 'decay', 'accent'];
-// Baukasten S20: a graph as the device of an instrument track. Knobs k1..k8 (0..1; absent = 0.5 in the kern). The graph name rule equals
+// Baukasten S20: a graph as the device of an instrument track. Knobs k1..k64 (0..1; absent = the graph's `vorgabe`). The graph name rule equals
 // GRAPH_NAME in graphs.ts and kit_name_ok in the kern (pinned by tests/project_bk_device.test.mjs). MAX_BK_SPUREN equals ARR_BK_MAX in
 // kern/include/cypherdj/arr_wiedergabe.h.
-export const BK_PARAMETER: readonly string[] = ['k1', 'k2', 'k3', 'k4', 'k5', 'k6', 'k7', 'k8'];
+export const BK_PARAMETER: readonly string[] = Array.from({ length: 64 }, (_, i) => `k${i + 1}`);
 export const BK_KNOPF_VORGABE = 0.5;   // an untouched knob (the core plays 0.5 for a knob the playback does not name)
 export const BK_GRAPH_NAME = /^[a-z0-9_-]{1,32}$/;
 export const MAX_BK_SPUREN = 8;
@@ -645,8 +709,8 @@ export function entstehungPruefung(x: unknown): { grund: string; text: string } 
   if (typeof x.graph !== 'string' || !ENTSTEHUNG_GRAPH.test(x.graph)) {
     return ab('argument_ungueltig', 'entstehung.graph: graph name expected (a-z 0-9 _ -, 1..32)');
   }
-  if (!Array.isArray(x.regler) || x.regler.length !== 8 || !x.regler.every((v) => zahl(v) && v >= 0 && v <= 1)) {
-    return ab('argument_ungueltig', 'entstehung.regler: 8 numbers 0..1 expected');
+  if (!Array.isArray(x.regler) || x.regler.length < BK_REGLER_MIN || x.regler.length > BK_REGLER_ZAHL || !x.regler.every((v) => zahl(v) && v >= 0 && v <= 1)) {
+    return ab('argument_ungueltig', `entstehung.regler: ${BK_REGLER_MIN}..${BK_REGLER_ZAHL} numbers 0..1 expected`);
   }
   if (typeof x.code !== 'string' || x.code.length < 1 || x.code.length > ENTSTEHUNG_CODE_MAX) {
     return ab('argument_ungueltig', `entstehung.code: text of 1..${ENTSTEHUNG_CODE_MAX} characters expected`);
@@ -1071,8 +1135,10 @@ function pruefeInserts(x: unknown, wo: string, erlaubt: boolean): Insert[] {
     } else if ('graph' in o) werfe(`${w}.graph`, 'unknown field (only a bk stage carries a graph)');
     const art = o.art as InsertPoolArt;
     if (art === 'host') { felder(o.werte, `${w}.werte`, []); return; }
-    const ws = felder(o.werte, `${w}.werte`, [...insertWertNamen(art)]);
-    for (const q of insertWertParameter(art)) zahlIn(ws[q.name], `${w}.werte.${q.name}`, q.min, q.max, q.ganz);
+    // a bk stage: k9..k64 are optional (an older project stores k1..k8 only, see modular.ts)
+    const opt = art === 'bk' ? BK_INSERT_OPTIONAL : [];
+    const ws = felder(o.werte, `${w}.werte`, insertWertNamen(art).filter((n) => !opt.includes(n)), [...opt]);
+    for (const q of insertWertParameter(art)) if (q.name in ws) zahlIn(ws[q.name], `${w}.werte.${q.name}`, q.min, q.max, q.ganz);
     if ('sc' in o) {
       if (art !== 'komp') werfe(`${w}.sc`, 'unbekanntes Feld (nur der Kompressor hat einen Schlüssel)');
       zahlIn(o.sc, `${w}.sc`, 1, MAX_SPUREN, true);   // 0 is stored as an absent key
@@ -1171,7 +1237,7 @@ function pruefeLanen(automation: unknown, wo: string, strang: { inserts?: Insert
       werfe(`${wo}.automation[${i}].ziel`, `${ziel}: a group, return or master takes insert and rack lanes only (ziel_unbekannt)`);
     }
     if (istGeraetZiel(ziel) && !passtGeraetZiel(ziel, geraet)) {
-      werfe(`${wo}.automation[${i}].ziel`, `${ziel}: only on a track with the device it belongs to (RB-338 parameters, bk k1 to k8)`);
+      werfe(`${wo}.automation[${i}].ziel`, `${ziel}: only on a track with the device it belongs to (RB-338 parameters, bk k1 to k64)`);
     }
     const k = zerlegeKettenZiel(ziel);
     if (k && 'insert' in k && makroVon(strang as InsertTraeger, k.insert, k.param)) {
@@ -1278,6 +1344,10 @@ export function pruefeFehler(x: unknown): string | null {
   }
 }
 
+// every insert stage of the project (tracks, groups, returns, master) that is a bk stage gets k9..k64 = 0.5 where the file had none
+function bkInsertWerteAuffuellen(p: Projekt): void {
+  for (const { strang } of alleStraenge(p)) for (const i of strang.inserts ?? []) if (i.art === 'bk') bkInsertAuffuellen(i.werte);
+}
 export function pruefeProjekt(x: unknown): { projekt: Projekt } | { fehler: string } {
   const fehler = pruefeFehler(x);
   if (fehler !== null) return { fehler };
@@ -1285,6 +1355,7 @@ export function pruefeProjekt(x: unknown): { projekt: Projekt } | { fehler: stri
   // 1.10 (P3): /1 → /2, kein rev-Schritt. Paket 1.13: ein /1-Projekt hat keinen Warp (die Prüfung lehnt ihn dort ab), die Hebung setzt keinen
   if ((p as { format: string }).format === FORMAT_ALT) { p.format = FORMAT; p.gruppen = []; p.master = { fader_db: 0 }; }
   for (const s of p.spuren) for (const l of s.automation ?? []) normalisiereLane(l);   // slice 2 (E2): mute/solo points without form are sprung
+  bkInsertWerteAuffuellen(p);                                                        // a bk stage of an older project: k9..k64 = 0.5
   for (const s of p.spuren) s.von = herkunft(s);                                     // Spec 6.22: fehlt von (älteres Projekt), gilt andreas
   uebernimmNotenZaehler(p);                                                          // Spec 6.28: alte Clip-Zähler ins Projekt
   entferneLeereTakes(p);                                                             // 1.14: an empty takes list is not written

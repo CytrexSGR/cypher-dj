@@ -18,12 +18,12 @@ const GOLDEN = path.join(import.meta.dirname, 'support', 'routen_golden.json');
 export const GET = ['/strom?x=1', '/bestand', '/mediathek/anschluss', '/mediathek', '/mediathek/vorbereiten', '/stoebern', '/stoebern?typ=strudel', '/stoebern/detail',
   '/stoebern/baum', '/stoebern/baum?typ=strudel', '/vorhoeren', '/klaenge/karte', '/klaenge', '/mediathek/listen', '/sammlungen', '/sammlungen/x', '/sammlungen/x/posten',
   '/konfig', '/lage', '/ausgang', '/pegel', '/spur', '/loops', '/loop/automation', '/loop/raster', '/deck/hotcues', '/deck/loop', '/deck/raster', '/hoeren', '/fx',
-  '/fx/zuweisung', '/fx/routing', '/graphen', '/strudel', '/klang', '/welle', '/fassung', '/geraete', '/lernen', '/', '/nicht-da', '/app.js'];
+  '/fx/zuweisung', '/fx/routing', '/graphen', '/strudel', '/klang', '/welle', '/fassung', '/geraete', '/lernen', '/lernen/host', '/', '/nicht-da', '/app.js'];
 export const POST = ['/mediathek/vorbereiten', '/mediathek', '/muster', '/vorhoeren', '/sammlungen', '/sammlungen/import', '/sammlungen/x/posten',
   '/sammlungen/x/posten/entfernen', '/sammlungen/x/posten/verschieben', '/sammlungen/x/umbenennen', '/sammlungen/x/vorbereiten', '/sammlungen/x/loeschen',
   '/sammlungen/x/unsinn', '/griff', '/deck/start', '/deck/stopp', '/abbruch', '/spur', '/spur/stopp', '/regler', '/taste', '/laden', '/tempo',
   '/loops/aus-katalog', '/loop', '/loop/automation', '/fx/routing', '/graph', '/fx', '/fx/zuweisung', '/deck/sprung', '/deck/scrub', '/deck/hotcue', '/deck/loop',
-  '/deck/loop/sichern', '/deck/raster', '/deck/raster/fix', '/strudel', '/strudel/autonom', '/klang', '/geraete/eingang', '/geraete/midi', '/geraete/latenz', '/lernen', '/lernen/loeschen', '/nicht-da', '/strom', '/lage'];
+  '/deck/loop/sichern', '/deck/raster', '/deck/raster/fix', '/strudel', '/strudel/autonom', '/klang', '/geraete/eingang', '/geraete/midi', '/geraete/latenz', '/lernen', '/lernen/loeschen', '/lernen/host', '/lernen/host/loeschen', '/nicht-da', '/strom', '/lage'];
 export const ANDERE = [['PUT', '/lage'], ['PUT', '/mediathek/vorbereiten'], ['DELETE', '/sammlungen/x'], ['HEAD', '/lage'], ['HEAD', '/']];
 
 // Form einer JSON-Antwort: Schlüssel sortiert, Werte durch ihren Typ ersetzt, Arrays durch die Form ihres ersten Elements, Tiefe 3

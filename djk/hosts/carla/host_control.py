@@ -10,6 +10,7 @@ import base64
 import html
 import json
 import math
+import ctypes
 import os
 import re
 import select
@@ -24,6 +25,42 @@ from carla_backend import BINARY_NATIVE, PLUGIN_HAS_CUSTOM_UI, PLUGIN_LV2, PLUGI
 
 
 SICHERN_NACH = 0.3  # s nach Rampen-Ende, bevor der Zustand gelesen und als Aktiv-Klang gesichert wird
+
+
+def anzeige_erreichbar() -> bool:
+    """Whether $DISPLAY can be opened (XOpenDisplay, a local socket: 0.1 ms measured). Carla's show_custom_ui does NOTHING on a dead display
+    (assertion lines on stderr, no event, returns at once; measured 2026-11-11 with DISPLAY=:99), so the host asks first."""
+    d = os.environ.get("DISPLAY")
+    if not d:
+        return False
+    try:
+        x = ctypes.CDLL("libX11.so.6")
+        x.XOpenDisplay.restype, x.XOpenDisplay.argtypes = ctypes.c_void_p, [ctypes.c_char_p]
+        x.XCloseDisplay.argtypes = [ctypes.c_void_p]
+        h = x.XOpenDisplay(d.encode())
+    except OSError:
+        return True   # no libX11 to ask with: leave it to Carla as before
+    if not h:
+        return False
+    x.XCloseDisplay(h)
+    return True
+
+
+def fenster_zeigen(host, an) -> dict:
+    """Show or hide the plugin's own editor window (Carla show_custom_ui); the main loop of instrument_host.py runs engine_idle(), which
+    maps and services the window. Answers {fenster, grund?}: `kein_fenster` (the plugin has no UI), `anzeige_unerreichbar` (DISPLAY set but not openable), `keine_anzeige` (no DISPLAY:
+    the host lives on, nothing is shown). Asking for `an` twice shows one window."""
+    if not isinstance(an, bool):
+        raise ValueError("an: true or false")
+    if an:
+        if not os.environ.get("DISPLAY"):
+            return {"ok": True, "fenster": False, "grund": "keine_anzeige"}
+        if not anzeige_erreichbar():
+            return {"ok": True, "fenster": False, "grund": "anzeige_unerreichbar"}
+        if not int(host.get_plugin_info(0).get("hints", 0)) & PLUGIN_HAS_CUSTOM_UI:
+            return {"ok": True, "fenster": False, "grund": "kein_fenster"}
+    host.show_custom_ui(0, an)
+    return {"ok": True, "fenster": an}
 
 
 class Steuerung:
@@ -116,6 +153,8 @@ class Steuerung:
                     if n not in self.bereiche:
                         raise ValueError(f"{n} nicht fahrbar (kein stufenloser Parameter in surge_bereiche.json)")
                 return {"ok": True, "werte": {n: self.istwert(n) for n in namen}}
+            if art == "fenster":  # plan 2026-11-11 task 9: Surge's own editor on the --lv2 path
+                return fenster_zeigen(self.host, befehl["an"])
             if art == "halte":
                 spur, gehalten = befehl.get("spur"), 0
                 for name in list(self.rampen):
@@ -371,18 +410,8 @@ class EffektSteuerung:
         return {"ok": True}
 
     def fenster(self, an) -> dict:
-        """Task 15: show or hide the plugin's own editor window (Carla show_custom_ui). The main loop of instrument_host.py runs
-        engine_idle(), which maps and services the window. Answers {fenster, grund?}: `kein_fenster` (the plugin has no
-        UI), `keine_anzeige` (no DISPLAY: the host lives on, nothing is shown). Asking for `an` twice shows one window."""
-        if not isinstance(an, bool):
-            raise ValueError("an: true or false")
-        if an:
-            if not os.environ.get("DISPLAY"):
-                return {"ok": True, "fenster": False, "grund": "keine_anzeige"}
-            if not int(self.host.get_plugin_info(0).get("hints", 0)) & PLUGIN_HAS_CUSTOM_UI:
-                return {"ok": True, "fenster": False, "grund": "kein_fenster"}
-        self.host.show_custom_ui(0, an)
-        return {"ok": True, "fenster": an}
+        """Task 15: see fenster_zeigen."""
+        return fenster_zeigen(self.host, an)
 
     def _aus_norm(self, i: int, x: float) -> float:
         x = min(max(float(x), 0.0), 1.0)

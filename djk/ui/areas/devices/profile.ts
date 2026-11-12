@@ -16,8 +16,12 @@ export const PROFILE: readonly Profil[] = [
   // 1.8 T5a: any USB audio interface (Seiren V3 Mini, K6, ...). The XDJ-XZ keeps its own profile (0x2b73), onboard PCI cards stay with pc-eingang (their usb is null).
   // Several matching nodes: setzeEingang takes the first, `knoten` or explicit ports pick another one.
   { name: 'USB audio interface', id: 'usb-audio', audio: { passt: (q) => q.usb !== null && q.usb !== undefined && q.usb.vendor !== '0x2b73', hinweis: '' }, midi: null },
-  // S19 (MIDI learn): any MIDI controller. No audio; every detected physical MIDI source fits, so setzeMidi takes the first detected one or the
-  // explicit port the caller gives. The controller is then wired to midi_ein_1 and drives graph knobs through the learn table.
-  { id: 'midi-controller', name: 'MIDI controller', audio: null, midi: { passt: () => true } },
+  // S19 (MIDI learn): any MIDI controller. No audio; every detected MIDI source fits except software ports (PipeWire's Bluetooth MIDI
+  // server, ALSA's Midi Through): those are listed first by pw-dump and were picked instead of a plugged-in USB controller (an LPD8, 2026-11-11).
+  // setzeMidi takes the first fitting one or the explicit port the caller gives. The controller is then wired to midi_ein_1 and drives graph
+  // knobs through the learn table.
+  { id: 'midi-controller', name: 'MIDI controller', audio: null, midi: { passt: (m) => !istSoftwarePort(m) } },
 ];
+/** Ports that no hardware stands behind: the Bluetooth MIDI server of PipeWire and ALSA's Midi Through loopback. */
+export const istSoftwarePort = (m: MidiQuelle): boolean => /^bluez_midi\./.test(m.port) || /Midi Through/i.test(m.port) || /Midi Through/i.test(m.alias);
 export const profil = (id: unknown): Profil | undefined => PROFILE.find((p) => p.id === id);

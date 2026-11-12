@@ -268,7 +268,7 @@ export function projBereich(ctx: BereichKontext, opt: ProjOptionen = {}): Bereic
       // 1.12 slice 3 (task 8): arm for recording (D11) and the mouse or keyboard value of a gesture (D12/D13); only Andreas
       schreib('/proj/auto/arm', (d, quelle) => s.autoArm(d, quelle)),
       schreib('/proj/auto/geste', async (d, quelle) => s.autoGeste(d, quelle)),
-      // S17: sound snapshot (graph + eight knobs per channel): compare, capture, apply
+      // S17: sound snapshot (graph + knob values per channel): compare, capture, apply
       lies('/proj/bk', () => s.bkLage()),
       schreib('/proj/bk/merken', (d, q) => s.bkMerken(d, q), kurzeBkAntwort),
       schreib('/proj/bk/laden', (d, q) => s.bkLaden(d, q)),

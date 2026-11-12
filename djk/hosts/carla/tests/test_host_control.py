@@ -4,6 +4,7 @@ from pathlib import Path
 
 import sound as klang
 from host_control import Steuerung
+from carla_backend import PLUGIN_HAS_CUSTOM_UI
 
 INIT = (Path(__file__).parent / "data" / "surge-init.carxs").read_text()
 
@@ -25,6 +26,15 @@ class FakeHost:
 
     def get_last_error(self):
         return "fake"
+
+    hints = PLUGIN_HAS_CUSTOM_UI
+    ui_aufrufe = None
+
+    def get_plugin_info(self, pid):
+        return {"hints": self.hints}
+
+    def show_custom_ui(self, pid, an):
+        self.ui_aufrufe = (self.ui_aufrufe or []) + [an]
 
 
 def fxp_mit_cutoff(tmp_path, wert):
@@ -397,3 +407,55 @@ def test_u5_ist_lehnt_unbekannte_und_falsche_namen_ab(tmp_path):
     assert s.bearbeite({"befehl": "ist"}, 0.0)["ok"] is False
     # negative control: a known name is answered right after the refusals
     assert s.bearbeite({"befehl": "ist", "namen": ["a_filter1_cutoff"]}, 0.0)["ok"] is True
+
+
+# ---------------------------------------------------------------- plan 2026-11-11 task 9: `fenster` on the --lv2 path (Surge's own editor)
+
+def test_fenster_zeigt_und_schliesst_den_editor_des_plugins(tmp_path, monkeypatch):
+    monkeypatch.setenv("DISPLAY", ":9")
+    h = FakeHost()
+    s = Steuerung(h, str(tmp_path), None)
+    assert s.bearbeite({"befehl": "fenster", "an": True}, 0.0) == {"ok": True, "fenster": True}
+    assert s.bearbeite({"befehl": "fenster", "an": False}, 0.0) == {"ok": True, "fenster": False}
+    assert h.ui_aufrufe == [True, False]
+
+
+def test_fenster_ohne_display_oder_editor_nennt_den_grund(tmp_path, monkeypatch):
+    h = FakeHost()
+    s = Steuerung(h, str(tmp_path), None)
+    monkeypatch.delenv("DISPLAY", raising=False)
+    assert s.bearbeite({"befehl": "fenster", "an": True}, 0.0) == {"ok": True, "fenster": False, "grund": "keine_anzeige"}
+    monkeypatch.setenv("DISPLAY", ":9")
+    h.hints = 0
+    assert s.bearbeite({"befehl": "fenster", "an": True}, 0.0) == {"ok": True, "fenster": False, "grund": "kein_fenster"}
+    assert h.ui_aufrufe is None
+
+
+def test_fenster_an_muss_bool_sein(tmp_path, monkeypatch):
+    monkeypatch.setenv("DISPLAY", ":9")
+    h = FakeHost()
+    r = Steuerung(h, str(tmp_path), None).bearbeite({"befehl": "fenster", "an": "ja"}, 0.0)
+    assert r["ok"] is False and h.ui_aufrufe is None
+
+
+# measured 2026-11-11: with an unreachable DISPLAY Carla's show_custom_ui does nothing (assertion lines on stderr, no event, returns at once),
+# so the host must not answer fenster:true there
+@pytest.mark.echte_anzeige
+def test_fenster_mit_unerreichbarer_anzeige_sagt_anzeige_unerreichbar_und_ruft_carla_nicht(tmp_path, monkeypatch):
+    monkeypatch.setenv("DISPLAY", ":99")
+    h = FakeHost()
+    s = Steuerung(h, str(tmp_path), None)
+    assert s.bearbeite({"befehl": "fenster", "an": True}, 0.0) == {"ok": True, "fenster": False, "grund": "anzeige_unerreichbar"}
+    assert h.ui_aufrufe is None
+    assert s.bearbeite({"befehl": "fenster", "an": False}, 0.0) == {"ok": True, "fenster": False}   # closing never asks the display
+
+
+def test_anzeige_erreichbar_ist_schnell_und_falsch_fuer_eine_tote_anzeige(monkeypatch):
+    import time, host_control as wirtsteuerung
+    monkeypatch.undo()   # the autouse stub off: the real check
+    monkeypatch.setenv("DISPLAY", ":99")
+    t = time.monotonic()
+    assert wirtsteuerung.anzeige_erreichbar() is False
+    assert time.monotonic() - t < 0.1
+    monkeypatch.delenv("DISPLAY")
+    assert wirtsteuerung.anzeige_erreichbar() is False

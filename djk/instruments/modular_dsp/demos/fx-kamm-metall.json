@@ -1,0 +1,32 @@
+{
+  "format": "baukasten/2",
+  "name": "fx-kamm-metall",
+  "stimmen": 1,
+  "regler_namen": {"1": "Tuning", "2": "Feedback", "3": "Damping", "4": "Mix"},
+  "knoten": [
+    {"id": "ein", "art": "eingang"},
+    {"id": "k_hz", "art": "regler", "nr": 1, "min": 55, "max": 1760, "log": 1},
+    {"id": "k_fb", "art": "regler", "nr": 2, "min": -0.5, "max": 0.99},
+    {"id": "k_daempf", "art": "regler", "nr": 3, "min": 0, "max": 1},
+    {"id": "k_mix", "art": "regler", "nr": 4, "min": 0, "max": 1},
+    {"id": "quarte", "art": "mul", "b": 1.41},
+    {"id": "kl", "art": "kamm"},
+    {"id": "kr", "art": "kamm"},
+    {"id": "aus", "art": "ausgang"}
+  ],
+  "kanten": [
+    {"von": "k_hz.aus", "nach": "kl.hz"},
+    {"von": "k_hz.aus", "nach": "quarte.a"},
+    {"von": "quarte.aus", "nach": "kr.hz"},
+    {"von": "k_fb.aus", "nach": "kl.fb"},
+    {"von": "k_fb.aus", "nach": "kr.fb"},
+    {"von": "k_daempf.aus", "nach": "kl.daempf"},
+    {"von": "k_daempf.aus", "nach": "kr.daempf"},
+    {"von": "k_mix.aus", "nach": "kl.mix"},
+    {"von": "k_mix.aus", "nach": "kr.mix"},
+    {"von": "ein.l", "nach": "kl.x"},
+    {"von": "ein.r", "nach": "kr.x"},
+    {"von": "kl.aus", "nach": "aus.l"},
+    {"von": "kr.aus", "nach": "aus.r"}
+  ]
+}

@@ -1,4 +1,4 @@
-// 1.12 slice 7: automation lanes on the Baukasten knobs of a bk track (`geraet.k1` .. `geraet.k8`, ARR_AUTO_GERAET with param 0..7), through Arrangement::auto_geraet and the bk sink
+// 1.12 slice 7: automation lanes on the Baukasten knobs of a bk track (`geraet.k1` .. `geraet.k64`, ARR_AUTO_GERAET with param 0..63), through Arrangement::auto_geraet and the bk sink
 // (ArrBkSenke::auto_parameter, auto_parameter_summand). The graph G_T plays a saw times the gate times knob 1, so the level of a held note is proportional to k1.
 //   B1 absolute lane   a lane on k1 (0.2 at beat 0, 1.0 at beat 8) drives the knob in the blocks of the playback: the RMS of the held note at beats 1, 2, 4, 6 follows the lane
 //                      within 4 % (ratio to the same note with the knob steady at 1.0); the same note without a lane stays flat at its knob (negative control: no lane, 0.2: flat);
@@ -13,6 +13,7 @@
 #include <cmath>
 #include <cstdio>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "arr_build.h"
@@ -62,16 +63,20 @@ struct Bahn {
   Punkte p;
   bool relativ = false;
 };
-Lauf spiele(float k1, const std::vector<Bahn>& lanen, double beats, double ab_beat = 0.0, double note_beat = 0.0) {
+// `gn` (32-knob widening): the knob the graph reads; `k1` is then the snapshot value of that knob (named k<gn>)
+Lauf spiele(float k1, const std::vector<Bahn>& lanen, double beats, double ab_beat = 0.0, double note_beat = 0.0, int gn = 1) {
   Lauf f;
   Treiber t;
   Sinken sk(t.arr);
-  CypherBk* h = bkt::neu(bkt::G_T);
+  std::string gj = bkt::G_T;
+  if (gn != 1) gj.replace(gj.find("\"nr\":1,"), 7, "\"nr\":" + std::to_string(gn) + ",");
+  CypherBk* h = bkt::neu(gj);
   Bau b;
   b.spur(1, ArrArt::intern).note(1, "v/n1", note_beat, 64.0, 45, 127);
   for (const Bahn& x : lanen) b.lane(1, x.p, GER, static_cast<uint8_t>(x.knopf), x.relativ);
   cdj::ArrSnapshot* s = b.fertig();
-  bkt::spur(s, 1, h, 1, {{"k1", k1}});
+  const std::string kname = "k" + std::to_string(gn);
+  bkt::spur(s, 1, h, 1, {{kname.c_str(), k1}});
   t.laden(s);
   t.arr.start(ab_beat, 0, false, t.s, 537, 256, t.k);
   t.lauf(static_cast<int64_t>(beats * static_cast<double>(SPB)) + 537 + 256);
@@ -212,6 +217,27 @@ int main() {
     { std::vector<int> v(100); }
     const long positiv = abfang_aus();
     if (ALLOC_ABFANG_VERFUEGBAR) PRUEF(positiv > 0);   // positive control: the watcher counts
+  }
+  {  // B6: 32-knob widening: a lane on the knobs k9, k17 and k32 (param 8, 16, 31) drives a graph that reads that knob, as the lane on k1 does;
+     // a lane on the neighbour knob leaves it alone (the lane reaches the right knob; param is a full 0..63 index, not three bits)
+    for (const int gn : {9, 17, 32, 33, 64}) {   // 33 and 64: 64-knob widening, they need hall_ffi with REGLER 64
+      const Lauf ref = spiele(1.0f, {}, 8.0, 0.0, 0.0, gn);                             // the steady note at the full knob
+      const Lauf mit = spiele(0.5f, {{gn - 1, steigend}}, 8.0, 0.0, 0.0, gn);           // the snapshot knob 0.5 is ignored while the lane plays
+      const Lauf nachbar = spiele(0.5f, {{(gn == 32 || gn == 64) ? gn - 2 : gn, steigend}}, 8.0, 0.0, 0.0, gn);   // negative control: the lane on the neighbour knob
+      PRUEF(mit.verloren == 0 && ref.verloren == 0);
+      PRUEF(rms(ref.l, 4096, 8192) > 1e-3);
+      double schlimmster = 0.0, nachbar_abw = 0.0;
+      for (double b : {1.0, 2.0, 4.0, 6.0}) {
+        const double r = pegel(ref, b);
+        const double soll = static_cast<double>(lane_wert(b));
+        schlimmster = std::max(schlimmster, std::fabs(pegel(mit, b) / r - soll) / soll);
+        nachbar_abw = std::max(nachbar_abw, std::fabs(pegel(nachbar, b) / r - 0.5) / 0.5);
+      }
+      std::printf("B6: knob %d: worst deviation of the level from the lane %.3f, neighbour lane %.3f from the snapshot knob\n", gn, schlimmster, nachbar_abw);
+      PRUEF(schlimmster < 0.04);
+      PRUEF(nachbar_abw < 0.04);
+      PRUEF(pegel(mit, 1.0) < pegel(mit, 6.0) * 0.5);
+    }
   }
   PRUEF_ENDE();
 }

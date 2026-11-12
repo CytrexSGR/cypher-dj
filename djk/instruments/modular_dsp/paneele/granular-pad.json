@@ -1,0 +1,30 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "granular-pad"},
+  "title": "Granular Pad",
+  "akzent": "blau",
+  "layout": {"rows": [
+    ["src", "grain", "env"]
+  ]},
+  "sections": [
+    { "id": "src", "title": "SOURCE", "cols": 3, "controls": [
+      {"id": "pos", "type": "knob", "label": "Position", "span": 3, "bind": {"param": "k1"}, "format": "percent", "default": 0.5},
+      {"id": "s1", "type": "label", "span": 3, "text": "Wavetable 5: vowels"},
+      {"id": "s2", "type": "label", "span": 3, "text": "Slow LFO 0.11 Hz moves the position"},
+      {"id": "s3", "type": "label", "span": 3, "text": "Grain window 0.2, position scatter 8 %"}
+    ]},
+    { "id": "grain", "title": "GRAINS", "cols": 4, "controls": [
+      {"id": "size", "type": "knob", "label": "Grain size", "span": 2, "bind": {"param": "k2"}, "format": "ms", "default": 0.5},
+      {"id": "dens", "type": "knob", "label": "Density", "span": 2, "bind": {"param": "k3"}, "format": "raw", "unit": "/s", "default": 0.5},
+      {"id": "jit", "type": "knob", "label": "Pitch jitter", "span": 2, "bind": {"param": "k4"}, "format": "raw", "unit": "ct", "default": 0.5},
+      {"id": "width", "type": "knob", "label": "Width", "span": 2, "bind": {"param": "k5"}, "format": "percent", "default": 0.5},
+      {"id": "g1", "type": "label", "span": 4, "text": "Random pitch and pan per grain"}
+    ]},
+    { "id": "env", "title": "AMP ENV", "cols": 5, "controls": [
+      {"id": "hue", "type": "huelle", "span": 5, "label": "Envelope", "of": {"a": "att", "d": 0.6, "s": 0.9, "r": "rel"}},
+      {"id": "att", "type": "knob", "label": "Attack", "span": 2, "bind": {"param": "k6"}, "format": "raw", "unit": "s", "default": 0.5},
+      {"id": "rel", "type": "knob", "label": "Release", "span": 2, "bind": {"param": "k7"}, "format": "raw", "unit": "s", "default": 0.5},
+      {"id": "e1", "type": "label", "span": 5, "text": "D 600 ms, S 90 % fixed"}
+    ]}
+  ]
+}

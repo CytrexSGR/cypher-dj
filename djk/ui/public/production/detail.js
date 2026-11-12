@@ -14,6 +14,8 @@ import { HkWahl, HK_TEXT } from './envelopes.js';
 import { bindeRackPanel } from './rack_device_operation.js';
 import { RACK_TEXT } from './rack_device.js';
 import { bindeMusterFeld } from './pattern_field.js';
+import { bindeGeraetAnsicht, kannGeraetAnsicht, GERAET_TEXT } from './device_view.js';
+import { geraetText } from './track_heads.js';
 
 // Gain-Regler: Bereich aus FELDER.gain_db (Spec 6.27, −96..+24 dB), sonst schnitte er Werte ab (V2 Fix F8: vorher −36..+12, +20 dB zeigte 12)
 const GERUEST = `<div class="p-detail-kopf"><span data-d="titel">CLIP</span><span class="p-detail-info" data-d="info"></span>
@@ -49,7 +51,8 @@ const GERUEST = `<div class="p-detail-kopf"><span data-d="titel">CLIP</span><spa
 <div class="p-clip-midi" data-d="midi" hidden></div>
 <div class="p-clip-muster" data-d="muster" hidden></div>
 <div class="p-clip-hk" data-d="hk" hidden></div>
-<div class="p-irack" data-d="rack" hidden></div>`;
+<div class="p-irack" data-d="rack" hidden></div>
+<div class="p-gerpanel" data-d="geraet" hidden></div>`;
 const LABEL = { name: 'Rename clip', start_beat: 'Move clip', laenge_beats: 'Clip length', gain_db: 'Clip gain', fade_ein_beats: 'Fade in', fade_aus_beats: 'Fade out', offset_s: 'Clip offset', versatz_beats: 'Clip offset' };
 
 export function bindeDetail(ctx) {
@@ -64,7 +67,12 @@ export function bindeDetail(ctx) {
   // 1.9 U7: mode `rack`: a click on the device label of a rack track (ctx.rackOeffnen, track_heads.js) replaces the clip detail with the rack panel;
   // selecting a clip goes back (st.rackSpur is the track id while the panel is open)
   st.rackSpur = null;
-  ctx.rackOeffnen = (id) => { st.rackSpur = id; zeige(); };
+  ctx.rackOeffnen = (id) => { st.rackSpur = id; st.geraetSpur = null; zeige(); };
+  // front panels task 8: mode `geraet`: a click on the device label of a bk or RB-338 track (ctx.geraetOeffnen, track_heads.js) shows the front panel of the device
+  // (device_view.js); selecting a clip goes back, and so does a device that no longer has a view (the track was switched to Surge)
+  const geraetTeil = bindeGeraetAnsicht(ctx, d('geraet'));
+  st.geraetSpur = null;
+  ctx.geraetOeffnen = (id) => { st.geraetSpur = id; st.rackSpur = null; geraetTeil.wiederhole(); zeige(); };
   const editor = bindeWarpEditor(ctx, d('editorcanvas'), d('segment'));
   // 1.12 slice 5 (U10): the tab row CLIP (NOTES on a MIDI clip) / ENVELOPES; the open tab and the target per clip are page state (HkWahl)
   const hkWahl = new HkWahl(), hkTeil = bindeHuellkurven(ctx, d('hk'), hkWahl);
@@ -162,12 +170,21 @@ export function bindeDetail(ctx) {
     const rs = st.rackSpur ? st.projekt?.spuren.find((x) => x.id === st.rackSpur) : null;
     if (rs?.geraet?.art === 'rack') {   // rack mode
       for (const k of ['loop', 'teilen', 'duplizieren', 'loeschen']) d(k).disabled = true;
-      for (const k of ['leer', 'audio', 'midi', 'reiter', 'hk', 'muster']) d(k).hidden = true;
-      d('rack').hidden = false; d('titel').textContent = RACK_TEXT.titel; d('info').textContent = `${rs.name} · ${RACK_TEXT.info}`;
+      for (const k of ['leer', 'audio', 'midi', 'reiter', 'hk', 'muster', 'geraet']) d(k).hidden = true;
+      geraetTeil.zeige(null); d('rack').hidden = false; d('titel').textContent = RACK_TEXT.titel; d('info').textContent = `${rs.name} · ${RACK_TEXT.info}`;
       rolle.zeige(null); editor.zeige(null); hkTeil.zeige(null); musterTeil.zeige(null); rackTeil.zeige(rs);
       return;
     }
     st.rackSpur = null; d('rack').hidden = true; rackTeil.zeige(null);
+    const gs = st.geraetSpur ? st.projekt?.spuren.find((x) => x.id === st.geraetSpur) : null;
+    if (gs && kannGeraetAnsicht(gs)) {   // device mode
+      for (const k of ['loop', 'teilen', 'duplizieren', 'loeschen']) d(k).disabled = true;
+      for (const k of ['leer', 'audio', 'midi', 'reiter', 'hk', 'muster']) d(k).hidden = true;
+      d('geraet').hidden = false; d('titel').textContent = GERAET_TEXT.titel; d('info').textContent = `${gs.name} · ${geraetText(gs)}`;
+      rolle.zeige(null); editor.zeige(null); hkTeil.zeige(null); musterTeil.zeige(null); geraetTeil.zeige(gs);
+      return;
+    }
+    st.geraetSpur = null; d('geraet').hidden = true; geraetTeil.zeige(null);
     const t = gezeigt();
     for (const k of ['loop', 'teilen', 'duplizieren', 'loeschen']) d(k).disabled = !t;
     const loop = t?.clip.loop_beats != null;
@@ -221,7 +238,7 @@ export function bindeDetail(ctx) {
     if (!bedient) regler.value = String(c.gain_db);                 // H6: nur während der Bedienung nicht
     d('startpos').textContent = `bar ${positionText(c.start_beat)}`;
   }
-  ctx.beimAuswahl.push(() => { if (st.auswahl.length) st.rackSpur = null; zeige(); });
+  ctx.beimAuswahl.push(() => { if (st.auswahl.length) { st.rackSpur = null; st.geraetSpur = null; } zeige(); });
   ctx.beimProjekt.push(() => zeige());
   zeige();
 }

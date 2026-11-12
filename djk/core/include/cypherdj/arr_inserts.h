@@ -57,9 +57,15 @@ constexpr int INS_EQ_BAND_PARAM = 7;      // per band: an, typ, freq, gain, q, s
 constexpr int INS_EQ_PARAM = 3 + 8 * INS_EQ_BAND_PARAM;   // an, out, propq, then b1..b8: 59 (ins/eq/<n>/b<m>/<parameter> is index 3 + (m - 1) * 7 + parameter)
 constexpr int INS_SAETT_PARAM = 4;        // an, drive, out, mix
 constexpr int INS_LIM_PARAM = 3;          // an, decke, abklingen (the order of the roles ins_lim_*)
-constexpr int INS_PARAM_MAX = INS_EQ_PARAM;
+constexpr int INS_PARAM_MAX_EQ = INS_EQ_PARAM;   // see INS_PARAM_MAX below (the maximum over all stage kinds, defined after INS_BK_PARAM)
 constexpr int INS_HOST_PARAM = 1;         // plan 1.11: an (host stages have no mapped parameter rows)
-constexpr int INS_BK_PARAM = 9;           // arr-bk slice 3: an, k1..k8 (the knobs of the Baukasten graph, 0..1; parameter index of kn = n)
+constexpr int INS_BK_PARAM = 65;          // arr-bk slice 3: an, k1..k64 (the knobs of the Baukasten graph, 0..1; parameter index of kn = n; 9 = an, k1..k8 before the 32-knob widening, 33 before the 64-knob widening)
+// The width of every per-stage parameter array: the maximum of all stage parameter counts (komp 10, eq 59, saett 4, lim 3, utility 5, bk 65, host 1). Since the 64-knob widening the Baukasten stage is the widest;
+// the static_asserts keep a later widening of any kind from overflowing the arrays silently.
+constexpr int INS_PARAM_MAX = INS_BK_PARAM > INS_PARAM_MAX_EQ ? INS_BK_PARAM : INS_PARAM_MAX_EQ;
+static_assert(INS_PARAM_MAX >= INS_BK_PARAM, "the stage arrays must hold every parameter of a Baukasten stage (an, k1..k64)");
+static_assert(INS_PARAM_MAX >= INS_EQ_PARAM && INS_PARAM_MAX >= INS_KOMP_PARAM && INS_PARAM_MAX >= INS_SAETT_PARAM && INS_PARAM_MAX >= INS_LIM_PARAM && INS_PARAM_MAX >= INS_HOST_PARAM,
+              "INS_PARAM_MAX is the maximum over all stage kinds");
 constexpr float INS_BK_AUS_MAX = 8.0f;    // |sample| guard of a Baukasten stage output (as the host return guard, HOST_RUECK_MAX)
 // first global slot index of each kind (the order of ins_global())
 constexpr int INS_G_EQ0 = ARR_INS_KOMP;
@@ -286,6 +292,7 @@ class ArrInserts final : public ArrBkLeser {
   std::unique_ptr<ArrArbeit> arbeit0_;      // lane 0 struct of the serial wrappers (built in the constructor)
 };
 
+static_assert(INS_PARAM_MAX >= INS_UTIL_PARAM, "INS_PARAM_MAX is the maximum over all stage kinds (utility)");
 static_assert(ARR_INS_ALLE <= 64, "slot_eigen_ is a 64-bit mask per strip (32 bits until arr-fx slice 2)");
 
 }  // namespace cdj

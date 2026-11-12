@@ -235,3 +235,35 @@ test('S2b.3 zeileHtml shows the outdated flag next to the latency of that input 
   assert.match(zeileHtml(e(1, 512), [], 'ok', 256), /outdated/);
   assert.doesNotMatch(zeileHtml(e(2, 256), [], 'ok', 256), /outdated/);
 });
+
+test('midiZeileHtml: several fitting MIDI sources give a port select with the current one selected; one source is text; software ports never listed', () => {
+  const profile = [{ id: 'midi-controller', name: 'MIDI controller', audio: false, midi: true }, { id: 'xdj-xz', name: 'Pioneer XDJ-XZ', audio: true, midi: true }];
+  const quellen = [{ port: 'Midi-Bridge:Komplete Audio 6 MIDI 1', alias: 'Komplete Audio 6: MIDI 1' }, { port: 'Midi-Bridge:LPD8 MIDI 1', alias: 'LPD8: MIDI 1' },
+    { port: 'bluez_midi.server:x', alias: 'bluez' }, { port: 'Midi-Bridge:Midi Through:Midi Through Port-0', alias: 'Midi Through: Port-0' }];
+  const m = { profil: 'midi-controller', port: 'Midi-Bridge:LPD8 MIDI 1', da: true, verbunden: true, frei_fuer_cypher: false };
+  const h = midiZeileHtml(m, profile, 'ok', quellen);
+  const sel = /<select data-midi-port="1"[^>]*>(.*?)<\/select>/s.exec(h);
+  assert.ok(sel, 'port select present');
+  assert.ok(sel[1].includes('>Komplete Audio 6</option>') && sel[1].includes('<option value="Midi-Bridge:LPD8 MIDI 1" selected>LPD8</option>'));
+  assert.ok(!/bluez|Midi Through/.test(h));
+  const eins = midiZeileHtml(m, profile, 'ok', quellen.slice(1, 2));
+  assert.ok(!eins.includes('data-midi-port') && eins.includes('>LPD8<'));
+  const xdj = midiZeileHtml({ ...m, profil: 'xdj-xz', port: 'Midi-Bridge:XDJ-XZ (1): x' }, profile, 'ok', [...quellen, { port: 'Midi-Bridge:XDJ-XZ (1): x', alias: 'XDJ-XZ' }]);
+  assert.ok(!xdj.includes('data-midi-port') && xdj.includes('>XDJ-XZ<'));
+  assert.ok(!midiZeileHtml({ ...m, profil: null }, profile, 'ok', quellen).includes('data-midi-port'));
+});
+
+test('midi port select: two ports of one device carry their port suffix; a configured port that is not listed is shown as "(not connected)"', () => {
+  const profile = [{ id: 'midi-controller', name: 'MIDI controller', audio: false, midi: true }];
+  const m = { profil: 'midi-controller', port: 'Midi-Bridge:LPD8 MIDI 1', da: true, verbunden: true, frei_fuer_cypher: false };
+  const zwei = [{ port: 'Midi-Bridge:LPD8 MIDI 1', alias: 'LPD8: MIDI 1' }, { port: 'Midi-Bridge:LPD8 MIDI 2', alias: 'LPD8: MIDI 2' }, { port: 'Midi-Bridge:Other MIDI 1', alias: 'Other: MIDI 1' }];
+  const h = midiZeileHtml(m, profile, 'ok', zwei);
+  assert.ok(h.includes('<option value="Midi-Bridge:LPD8 MIDI 1" selected>LPD8 (MIDI 1)</option>') && h.includes('>LPD8 (MIDI 2)</option>'));
+  assert.ok(h.includes('>Other</option>'), 'a single port of a device keeps the plain name');
+  const fehlt = midiZeileHtml({ ...m, port: 'Midi-Bridge:Gone MIDI 1' }, profile, 'ok', zwei);
+  assert.ok(fehlt.includes('<option value="Midi-Bridge:Gone MIDI 1" selected>Gone MIDI 1 (not connected)</option>'));
+  assert.ok(!/selected>LPD8/.test(fehlt), 'no other port is shown as the chosen one');
+  const einzeln = midiZeileHtml({ ...m, port: 'Midi-Bridge:Gone MIDI 1' }, profile, 'ok', zwei.slice(2));
+  assert.match(einzeln, /<select data-midi-port="1"[^>]*>.*\(not connected\)/s, 'one listed port plus a missing configured one still gives a select');
+  assert.ok(!midiZeileHtml({ ...m, port: null }, profile, 'ok', zwei.slice(2)).includes('data-midi-port'), 'nothing configured: a single source stays text');
+});

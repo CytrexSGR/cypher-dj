@@ -16,6 +16,7 @@
 #include <cerrno>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -51,7 +52,7 @@ struct AutoZiel {
   double min, max;
   bool nur_sprung;
   double rel_min, rel_max;
-  uint8_t geraet;   // ARR_AUTO_GERAET only: 1 = the RB-338 (param 0..3, ARR_GERAET_PARAM_NAME), 2 = the Baukasten device (param 0..7 = k1..k8)
+  uint8_t geraet;   // ARR_AUTO_GERAET only: 1 = the RB-338 (param 0..3, ARR_GERAET_PARAM_NAME), 2 = the Baukasten device (param 0..63 = k1..k64)
 };
 constexpr AutoZiel AUTO_ZIELE[] = {
     {"fader", ARR_AUTO_FADER, 0, -200.0, 6.0, false, -60.0, 6.0, 0},
@@ -62,7 +63,7 @@ constexpr AutoZiel AUTO_ZIELE[] = {
     {"geraet.cutoff", ARR_AUTO_GERAET, 1, 0.0, 1.0, false, -1.0, 1.0, 1},
     {"geraet.resonanz", ARR_AUTO_GERAET, 2, 0.0, 1.0, false, -1.0, 1.0, 1},
     {"geraet.env_mod", ARR_AUTO_GERAET, 3, 0.0, 1.0, false, -1.0, 1.0, 1},
-    // 1.12 slice 7: the eight Baukasten knobs of a bk track (param = knob index 0..7); the bk sink takes them through auto_parameter and smooths over 20 ms
+    // 1.12 slice 7: the Baukasten knobs of a bk track (param = knob index 0..63); the bk sink takes them through auto_parameter and smooths over 20 ms
     {"geraet.k1", ARR_AUTO_GERAET, 0, 0.0, 1.0, false, -1.0, 1.0, 2},
     {"geraet.k2", ARR_AUTO_GERAET, 1, 0.0, 1.0, false, -1.0, 1.0, 2},
     {"geraet.k3", ARR_AUTO_GERAET, 2, 0.0, 1.0, false, -1.0, 1.0, 2},
@@ -71,8 +72,66 @@ constexpr AutoZiel AUTO_ZIELE[] = {
     {"geraet.k6", ARR_AUTO_GERAET, 5, 0.0, 1.0, false, -1.0, 1.0, 2},
     {"geraet.k7", ARR_AUTO_GERAET, 6, 0.0, 1.0, false, -1.0, 1.0, 2},
     {"geraet.k8", ARR_AUTO_GERAET, 7, 0.0, 1.0, false, -1.0, 1.0, 2},
+    // 32-knob widening: k9..k32 appended (the order of the entries above does not change)
+    {"geraet.k9", ARR_AUTO_GERAET, 8, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k10", ARR_AUTO_GERAET, 9, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k11", ARR_AUTO_GERAET, 10, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k12", ARR_AUTO_GERAET, 11, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k13", ARR_AUTO_GERAET, 12, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k14", ARR_AUTO_GERAET, 13, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k15", ARR_AUTO_GERAET, 14, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k16", ARR_AUTO_GERAET, 15, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k17", ARR_AUTO_GERAET, 16, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k18", ARR_AUTO_GERAET, 17, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k19", ARR_AUTO_GERAET, 18, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k20", ARR_AUTO_GERAET, 19, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k21", ARR_AUTO_GERAET, 20, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k22", ARR_AUTO_GERAET, 21, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k23", ARR_AUTO_GERAET, 22, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k24", ARR_AUTO_GERAET, 23, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k25", ARR_AUTO_GERAET, 24, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k26", ARR_AUTO_GERAET, 25, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k27", ARR_AUTO_GERAET, 26, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k28", ARR_AUTO_GERAET, 27, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k29", ARR_AUTO_GERAET, 28, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k30", ARR_AUTO_GERAET, 29, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k31", ARR_AUTO_GERAET, 30, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k32", ARR_AUTO_GERAET, 31, 0.0, 1.0, false, -1.0, 1.0, 2},
+    // 64-knob widening: k33..k64 appended (the order of the entries above does not change)
+    {"geraet.k33", ARR_AUTO_GERAET, 32, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k34", ARR_AUTO_GERAET, 33, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k35", ARR_AUTO_GERAET, 34, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k36", ARR_AUTO_GERAET, 35, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k37", ARR_AUTO_GERAET, 36, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k38", ARR_AUTO_GERAET, 37, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k39", ARR_AUTO_GERAET, 38, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k40", ARR_AUTO_GERAET, 39, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k41", ARR_AUTO_GERAET, 40, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k42", ARR_AUTO_GERAET, 41, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k43", ARR_AUTO_GERAET, 42, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k44", ARR_AUTO_GERAET, 43, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k45", ARR_AUTO_GERAET, 44, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k46", ARR_AUTO_GERAET, 45, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k47", ARR_AUTO_GERAET, 46, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k48", ARR_AUTO_GERAET, 47, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k49", ARR_AUTO_GERAET, 48, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k50", ARR_AUTO_GERAET, 49, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k51", ARR_AUTO_GERAET, 50, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k52", ARR_AUTO_GERAET, 51, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k53", ARR_AUTO_GERAET, 52, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k54", ARR_AUTO_GERAET, 53, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k55", ARR_AUTO_GERAET, 54, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k56", ARR_AUTO_GERAET, 55, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k57", ARR_AUTO_GERAET, 56, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k58", ARR_AUTO_GERAET, 57, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k59", ARR_AUTO_GERAET, 58, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k60", ARR_AUTO_GERAET, 59, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k61", ARR_AUTO_GERAET, 60, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k62", ARR_AUTO_GERAET, 61, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k63", ARR_AUTO_GERAET, 62, 0.0, 1.0, false, -1.0, 1.0, 2},
+    {"geraet.k64", ARR_AUTO_GERAET, 63, 0.0, 1.0, false, -1.0, 1.0, 2},
 };
-static_assert(2 * sizeof(AUTO_ZIELE) / sizeof(AUTO_ZIELE[0]) == ARR_AUTO_LANES_JE_SPUR, "one absolute and one relative lane per target and track: 2 x 16");
+static_assert(2 * sizeof(AUTO_ZIELE) / sizeof(AUTO_ZIELE[0]) == ARR_AUTO_LANES_JE_SPUR, "one absolute and one relative lane per target and track: 2 x 72");
 
 constexpr bool gleich(const char* a, const char* b) {
   while (*a && *a == *b) ++a, ++b;
@@ -81,7 +140,11 @@ constexpr bool gleich(const char* a, const char* b) {
 constexpr bool geraet_namen_gebunden() {   // every RB-338 geraet.* entry carries the name ARR_GERAET_PARAM_NAME[param] after the prefix; every bk entry is "k" + (param + 1)
   for (const AutoZiel& z : AUTO_ZIELE) {
     if (z.ziel == ARR_AUTO_GERAET && z.geraet == 1 && !(z.param < ARR_GERAET_PARAMS && gleich(z.name + 7, ARR_GERAET_PARAM_NAME[z.param]))) return false;
-    if (z.ziel == ARR_AUTO_GERAET && z.geraet == 2 && !(z.param < ARR_GERAET_LANE_PARAMS && z.name[7] == 'k' && z.name[8] == '1' + z.param && z.name[9] == 0)) return false;
+    if (z.ziel == ARR_AUTO_GERAET && z.geraet == 2) {   // "k" + decimal (param + 1): one digit up to k9, two digits from k10
+      if (!(z.param < ARR_GERAET_LANE_PARAMS && z.name[7] == 'k')) return false;
+      const int n = z.param + 1;
+      if (n < 10 ? !(z.name[8] == '0' + n && z.name[9] == 0) : !(z.name[8] == '0' + n / 10 && z.name[9] == '0' + n % 10 && z.name[10] == 0)) return false;
+    }
     if (z.ziel == ARR_AUTO_GERAET && z.geraet == 0) return false;
   }
   return true;
@@ -305,14 +368,14 @@ void lese_rack(const json& o, const std::string& wo, const ArrKette& k, ArrRack&
 }
 
 // After the members of the rack track `sp` are parsed: the remembered member targets of `o.rack.ziele` become ArrRack::g. A target names a member index below n_glieder
-// (and so below ARR_RACK_GLIEDER); a Surge member takes none (makro_ziel_wirt); the parameter index must exist for the device of the member (0..3 RB-338, 8..15 a Baukasten
+// (and so below ARR_RACK_GLIEDER); a Surge member takes none (makro_ziel_wirt); the parameter index must exist for the device of the member (0..3 RB-338, 8..15 and 17..72 a Baukasten
 // graph, 16 the gain of any internal member; a kit takes only 16); von/bis are 0..1 for a device parameter and a knob, -60..+12 dB for the gain; one (member, parameter) has one
 // source. The count over n + ng is the limit of the whole table (checked on the list size before this runs).
 void lese_glied_ziele(const json& o, const std::string& wo, const ArrSnapshot& snap, const ArrSpur& sp, const GliedRoh& roh, ArrRack& r) {
   if (roh.n == 0) return;
   const json& zl = o.at("rack").at("ziele");
   const std::string wr = wo + "rack.";
-  bool belegt[ARR_RACK_GLIEDER][ARR_GLIED_PARAM_GAIN_DB + 1] = {};
+  bool belegt[ARR_RACK_GLIEDER][ARR_GLIED_PARAM_N] = {};
   r.ng = 0;
   for (int i = 0; i < roh.n; ++i) {
     const json& x = zl[roh.pos[i]];
@@ -326,10 +389,10 @@ void lese_glied_ziele(const json& o, const std::string& wo, const ArrSnapshot& s
     const ArrSpur& dev = snap.glied_spur[g.platz - ARR_SPUREN];
     const bool ist_rb = std::strcmp(dev.geraet, "rb338") == 0, ist_bk = std::strcmp(dev.geraet, "bk") == 0;
     const bool gain = pa == ARR_GLIED_PARAM_GAIN_DB;
-    const bool erlaubt = gain || (ist_rb && pa >= 0 && pa < ARR_GERAET_PARAMS) || (ist_bk && pa >= ARR_GLIED_PARAM_BK0 && pa < ARR_GLIED_PARAM_BK0 + 8);
+    const bool erlaubt = gain || (ist_rb && pa >= 0 && pa < ARR_GERAET_PARAMS) || (ist_bk && arr_glied_bk_knopf(static_cast<int>(pa)) >= 0);
     if (!erlaubt)
       format(wx + "param " + std::to_string(pa) + " is not allowed for the " + (ist_rb ? "RB-338" : ist_bk ? "Baukasten" : "kit") + " member " + std::to_string(gi) +
-             " (RB-338 0 to 3, Baukasten 8 to 15, gain 16)");
+             " (RB-338 0 to 3, Baukasten 8 to 15 and 17 to 72, gain 16)");
     if (belegt[gi][pa]) format(wx + "ziel (glied " + std::to_string(gi) + ", param " + std::to_string(pa) + ") doppelt (ein Parameter hat eine Quelle)");
     belegt[gi][pa] = true;
     ArrGliedZiel z;
@@ -426,7 +489,15 @@ bool bk_name_ok(const std::string& n) {
     if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '-')) return false;
   return true;
 }
-bool bk_knopf_ok(const std::string& k) { return k.size() == 2 && k[0] == 'k' && k[1] >= '1' && k[1] <= '8'; }
+// k1..k64, no leading zero (k01 is not a knob)
+bool bk_knopf_ok(const std::string& k) {
+  if (k.size() < 2 || k.size() > 3 || k[0] != 'k') return false;
+  for (size_t i = 1; i < k.size(); ++i)
+    if (k[i] < '0' || k[i] > '9') return false;
+  if (k[1] == '0') return false;
+  const int n = std::atoi(k.c_str() + 1);
+  return n >= 1 && n <= BK_KNOEPFE;
+}
 
 bool hex64(const std::string& s) {
   if (s.size() != 64) return false;
@@ -1113,7 +1184,7 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
           const json& p = s.at("parameter");
           if (!p.is_object()) format(wo + "parameter ist kein Objekt");
           for (auto it = p.begin(); it != p.end(); ++it) {
-            if (ist_bk && !bk_knopf_ok(it.key())) format(wo + "parameter." + it.key() + ": a bk track knows k1 to k8");
+            if (ist_bk && !bk_knopf_ok(it.key())) format(wo + "parameter." + it.key() + ": a bk track knows k1 to k64");
             if (sp.n_param >= ARR_PARAMETER) format(wo + "mehr als " + std::to_string(ARR_PARAMETER) + " parameter");
             if (it.key().empty() || it.key().size() >= sizeof sp.param[0].name) format(wo + "parameter-Name zu lang");
             if (!it.value().is_number()) format(wo + "parameter." + it.key() + " ist keine Zahl");

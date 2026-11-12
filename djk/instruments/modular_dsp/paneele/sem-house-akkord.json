@@ -1,0 +1,30 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "sem-house-akkord"},
+  "title": "State-variable Chord",
+  "akzent": "blau",
+  "layout": {"rows": [
+    ["osc", "filter", "env"]
+  ]},
+  "sections": [
+    { "id": "osc", "title": "OSCILLATORS", "cols": 4, "controls": [
+      {"id": "o1", "type": "label", "span": 4, "text": "Two saws, 9 ct apart, 50 % each"},
+      {"id": "o2", "type": "label", "span": 4, "text": "Pulse +1 oct, 25 %"},
+      {"id": "o3", "type": "label", "span": 4, "text": "6 voices"}
+    ]},
+    { "id": "filter", "title": "FILTER", "cols": 5, "controls": [
+      {"id": "fk", "type": "filterkurve", "span": 5, "of": {"cutoff": "cutoff", "reso": "reso"}, "typen": [{"art": "lp", "pole": 2}]},
+      {"id": "cutoff", "type": "knob", "label": "Cutoff", "bind": {"param": "k1"}, "format": "hz", "default": 0.5},
+      {"id": "reso", "type": "knob", "label": "Resonance", "bind": {"param": "k2"}, "format": "percent", "default": 0.5},
+      {"id": "form", "type": "knob", "label": "Form", "bind": {"param": "k3"}, "format": "percent", "default": 0.5},
+      {"id": "env", "type": "knob", "label": "Env amount", "bind": {"param": "k4"}, "format": "hz", "default": 0.5},
+      {"id": "fnote", "type": "label", "span": 5, "text": "Form: low-pass towards notch"}
+    ]},
+    { "id": "env", "title": "FILTER + AMP ENV", "cols": 4, "controls": [
+      {"id": "hue", "type": "huelle", "span": 4, "label": "One envelope for both", "of": {"a": 0.003, "d": "decay", "s": 0.2, "r": "release"}},
+      {"id": "decay", "type": "knob", "label": "Decay", "bind": {"param": "k5"}, "format": "raw", "unit": "s", "default": 0.5},
+      {"id": "release", "type": "knob", "label": "Release", "bind": {"param": "k6"}, "format": "raw", "unit": "s", "default": 0.5},
+      {"id": "en", "type": "label", "span": 4, "text": "Attack 3 ms, sustain 20 % fixed"}
+    ]}
+  ]
+}

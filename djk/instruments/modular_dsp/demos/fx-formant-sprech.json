@@ -1,0 +1,31 @@
+{
+  "format": "baukasten/2",
+  "name": "fx-formant-sprech",
+  "stimmen": 1,
+  "regler_namen": {"1": "Vowel", "2": "Shift", "3": "Sharpness"},
+  "knoten": [
+    {"id": "ein", "art": "eingang"},
+    {"id": "k_vokal", "art": "regler", "nr": 1, "min": 0, "max": 4},
+    {"id": "k_versatz", "art": "regler", "nr": 2, "min": -12, "max": 12},
+    {"id": "k_q", "art": "regler", "nr": 3, "min": 0, "max": 1},
+    {"id": "fl", "art": "formant"},
+    {"id": "fr", "art": "formant"},
+    {"id": "pl", "art": "mul", "b": 2},
+    {"id": "pr", "art": "mul", "b": 2},
+    {"id": "aus", "art": "ausgang"}
+  ],
+  "kanten": [
+    {"von": "k_vokal.aus", "nach": "fl.vokal"},
+    {"von": "k_vokal.aus", "nach": "fr.vokal"},
+    {"von": "k_versatz.aus", "nach": "fl.versatz"},
+    {"von": "k_versatz.aus", "nach": "fr.versatz"},
+    {"von": "k_q.aus", "nach": "fl.q"},
+    {"von": "k_q.aus", "nach": "fr.q"},
+    {"von": "ein.l", "nach": "fl.x"},
+    {"von": "ein.r", "nach": "fr.x"},
+    {"von": "fl.aus", "nach": "pl.a"},
+    {"von": "fr.aus", "nach": "pr.a"},
+    {"von": "pl.aus", "nach": "aus.l"},
+    {"von": "pr.aus", "nach": "aus.r"}
+  ]
+}

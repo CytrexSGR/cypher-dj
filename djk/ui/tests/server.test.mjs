@@ -495,7 +495,7 @@ test('1.15 A2 /regler + /lage: gate, util, mb, lim, spektrum show in lage only a
 });
 
 // S5r Task 4: graph knobs <channel>/bk/1..8 travel through /regler like every other control
-test('S5r /regler: deck/1/bk/3 reaches the kernel as /k/teil, lage shows it once it differs from 0.5, bk/9 and erz/4/bk/1 are 400', async (t) => {
+test('S5r /regler: deck/1/bk/3 reaches the kernel as /k/teil, lage shows it once it differs from 0.5, bk/65 and erz/4/bk/1 are 400, knobs 9..64 pass', async (t) => {
   const { url, log } = await stapel(t);
   const s = sse(url);
   await warte(100);
@@ -512,14 +512,24 @@ test('S5r /regler: deck/1/bk/3 reaches the kernel as /k/teil, lage shows it once
   assert.equal(l.regler['deck/1/bk/3'], 0.8, JSON.stringify(l.regler));
   assert.equal(l.regler['erz/1/bk/8'], 0.25);
   assert.ok(!('deck/1/bk/1' in l.regler), 'untouched knob stays invisible');
-  for (const pfad of ['deck/1/bk/9', 'deck/1/bk/0', 'erz/4/bk/1', 'erz/8/bk/1', 'bus/1/bk/1']) {   // negative controls
+  // 32 knobs: knobs 9, 17 and 32 pass; bk/17 is its own path (not bk/1 and not bk/7)
+  for (const [pfad, w] of [['deck/1/bk/9', 0.1], ['erz/5/bk/17', 0.6], ['erz/1/bk/32', 0.9], ['deck/2/bk/33', 0.33], ['erz/6/bk/48', 0.48], ['erz/7/bk/64', 0.64]]) {
+    assert.equal((await postJson(url, '/regler', { pfad, nach: w, ab: 'jetzt' }, CYPHER)).code, 200, pfad);
+  }
+  await warte(300);
+  const l2 = await (await fetch(`${url}/lage`)).json();
+  assert.equal(l2.regler['deck/1/bk/9'], 0.1); assert.equal(l2.regler['erz/5/bk/17'], 0.6); assert.equal(l2.regler['erz/1/bk/32'], 0.9);
+  assert.equal(l2.regler['deck/2/bk/33'], 0.33); assert.equal(l2.regler['erz/6/bk/48'], 0.48); assert.equal(l2.regler['erz/7/bk/64'], 0.64);
+  assert.ok(!('deck/2/bk/1' in l2.regler) && !('deck/2/bk/3' in l2.regler) && !('erz/6/bk/4' in l2.regler) && !('erz/7/bk/6' in l2.regler), 'bk/33 is not bk/1 or bk/3, bk/48 is not bk/4, bk/64 is not bk/6');
+  assert.ok(!('erz/5/bk/1' in l2.regler) && !('erz/5/bk/7' in l2.regler), 'bk/17 does not show as bk/1 or bk/7');
+  for (const pfad of ['deck/1/bk/65', 'deck/1/bk/0', 'deck/1/bk/00', 'deck/1/bk/01', 'deck/1/bk/033', 'deck/1/bk/100', 'erz/4/bk/1', 'erz/4/bk/9', 'erz/8/bk/1', 'bus/1/bk/1']) {   // negative controls
     assert.equal((await postJson(url, '/regler', { pfad, nach: 0.5 }, CYPHER)).code, 400, pfad);
   }
   s.zu();
 });
 
 // S14: graph knobs of the send returns fx/3, fx/4 travel through /regler as global controls
-test('S14 /regler: fx/3/bk/2 reaches the kernel as /k/teil, lage shows it once it differs from 0.5; fx/5, fx/2, bk/9 are 400', async (t) => {
+test('S14 /regler: fx/3/bk/2 reaches the kernel as /k/teil, lage shows it once it differs from 0.5; fx/5, fx/2, bk/65 are 400, bk/9, bk/32 and bk/64 pass', async (t) => {
   const { url, log } = await stapel(t);
   const s = sse(url);
   await warte(100);
@@ -532,7 +542,8 @@ test('S14 /regler: fx/3/bk/2 reaches the kernel as /k/teil, lage shows it once i
   const l = await (await fetch(`${url}/lage`)).json();
   assert.equal(l.regler['fx/3/bk/2'], 0.8, JSON.stringify(l.regler));
   assert.ok(!('fx/3/bk/1' in l.regler), 'untouched knob stays invisible');
-  for (const pfad of ['fx/5/bk/1', 'fx/2/bk/1', 'fx/1/bk/1', 'fx/3/bk/9', 'fx/3/bk/0']) {   // negative controls
+  for (const [pfad, w] of [['fx/3/bk/9', 0.2], ['fx/4/bk/32', 0.7], ['fx/3/bk/64', 0.4]]) assert.equal((await postJson(url, '/regler', { pfad, nach: w, ab: 'jetzt' }, CYPHER)).code, 200, pfad);
+  for (const pfad of ['fx/5/bk/1', 'fx/2/bk/1', 'fx/1/bk/1', 'fx/3/bk/65', 'fx/3/bk/0']) {   // negative controls
     assert.equal((await postJson(url, '/regler', { pfad, nach: 0.5 }, CYPHER)).code, 400, pfad);
   }
   s.zu();
@@ -2606,6 +2617,44 @@ test('T3 /klang fahre: geht als Wirt-Befehl an den Socket (spur klang-<gruppe>, 
   assert.equal((await postJson(url, '/klang', { gruppe: 'bass', aktion: 'fahre', parameter: 'volume', ziel: 0, sekunden: 2 })).code, 200);
 });
 
+test('front panels /klang ist: reads the host display values (read-only: no AUTO lock for Cypher), names against fahrbar, host missing is 409', async (t) => {
+  const { url, wo } = await klangStapel(t);
+  const bass = await fakeWirt(t, wo, 'bass', { ok: true, werte: { a_filter1_cutoff: 5 } });
+  const p = (d) => postJson(url, '/klang', d, CYPHER);
+  await postJson(url, '/strudel/autonom', { an: false, strom: 2 });   // locks fahre for Cypher; a read stays free
+  const r = await p({ gruppe: 'bass', aktion: 'ist', parameter: ['a_filter1_cutoff'] });
+  assert.equal(r.code, 200, JSON.stringify(r.j));
+  assert.deepEqual(r.j.werte, { a_filter1_cutoff: 5 });
+  assert.deepEqual(bass.at(-1), { befehl: 'ist', namen: ['a_filter1_cutoff'] });
+  const n = bass.length;
+  assert.equal((await p({ gruppe: 'bass', aktion: 'ist', parameter: ['a_filter1_type'] })).j.fehler, 'nicht_fahrbar');
+  assert.equal((await p({ gruppe: 'bass', aktion: 'ist', parameter: [] })).code, 400);
+  assert.equal((await p({ gruppe: 'bass', aktion: 'ist' })).code, 400);
+  assert.equal(bass.length, n, 'refused requests do not reach the host');
+  const m = await p({ gruppe: 'melodie', aktion: 'ist', parameter: ['a_filter1_cutoff'] });
+  assert.equal(m.code, 409); assert.equal(m.j.fehler, 'wirt');
+});
+
+test('Surge window /klang fenster: Andreas only (403 for Cypher), an must be boolean, goes to the host as `fenster`, the host reason comes back, no host is 409', async (t) => {
+  const { url, wo } = await klangStapel(t);
+  const bass = await fakeWirt(t, wo, 'bass', { ok: true, fenster: false, grund: 'keine_anzeige' });
+  const n = bass.length;
+  const c = await postJson(url, '/klang', { gruppe: 'bass', aktion: 'fenster', an: true }, CYPHER);
+  assert.equal(c.code, 403, JSON.stringify(c.j)); assert.equal(c.j.fehler, 'nur_andreas');
+  assert.equal((await postJson(url, '/klang', { gruppe: 'bass', aktion: 'fenster', an: 'ja' })).code, 400);
+  assert.equal((await postJson(url, '/klang', { gruppe: 'bass', aktion: 'fenster' })).code, 400);
+  assert.equal((await postJson(url, '/klang', { aktion: 'fenster', an: true })).code, 400);
+  assert.equal(bass.length, n, 'refused requests do not reach the host');
+  const r = await postJson(url, '/klang', { gruppe: 'bass', aktion: 'fenster', an: true });
+  assert.equal(r.code, 200, JSON.stringify(r.j));
+  assert.deepEqual(r.j, { ok: true, fenster: false, grund: 'keine_anzeige' });
+  assert.deepEqual(bass.at(-1), { befehl: 'fenster', an: true });
+  await postJson(url, '/strudel/autonom', { an: false, strom: 2 });   // AUTO off locks Cypher's writes; Andreas' window button is not one of them
+  assert.equal((await postJson(url, '/klang', { gruppe: 'bass', aktion: 'fenster', an: false })).code, 200);
+  const m = await postJson(url, '/klang', { gruppe: 'melodie', aktion: 'fenster', an: true });
+  assert.equal(m.code, 409); assert.equal(m.j.fehler, 'wirt');
+});
+
 test('Baukasten S2 /klang param: geht als Wirt-Befehl an den Socket, wert 0..1, AUTO-Riegel nur für Cypher, Wirt-Fehler → 409', async (t) => {
   const { url, wo } = await klangStapel(t);
   const mel = await fakeWirt(t, wo, 'melodie');
@@ -2614,7 +2663,7 @@ test('Baukasten S2 /klang param: geht als Wirt-Befehl an den Socket, wert 0..1, 
   assert.equal(r.code, 200, JSON.stringify(r.j));
   assert.deepEqual(mel.at(-1), { befehl: 'param', name: 'Knob 1', wert: 0.25 });
   const n = mel.length;
-  for (const falsch of [{ wert: 1.5 }, { wert: -0.1 }, { wert: '0.5' }, { name: '-x' }, { name: '' }, { name: 'Volume' }, { name: 'Knob 9' }, { name: 'Knob 0' }]) {
+  for (const falsch of [{ wert: 1.5 }, { wert: -0.1 }, { wert: '0.5' }, { name: '-x' }, { name: '' }, { name: 'Volume' }, { name: 'Knob 65' }, { name: 'Knob 0' }, { name: 'Knob 01' }, { name: 'Knob 100' }]) {
     const f = await p({ gruppe: 'melodie', aktion: 'param', name: 'Knob 1', wert: 0.5, ...falsch });
     assert.equal(f.code, 400, JSON.stringify(falsch));
   }
@@ -2627,6 +2676,33 @@ test('Baukasten S2 /klang param: geht als Wirt-Befehl an den Socket, wert 0..1, 
   assert.equal((await p({ gruppe: 'melodie', aktion: 'param', name: 'Knob 1', wert: 0.5 })).j.fehler, 'auto_aus');
   assert.equal((await postJson(url, '/klang', { gruppe: 'melodie', aktion: 'param', name: 'Knob 2', wert: 1 })).code, 200);
   assert.deepEqual(mel.at(-1), { befehl: 'param', name: 'Knob 2', wert: 1 });
+  for (const name of ['Knob 9', 'Knob 17', 'Knob 32', 'Knob 33', 'Knob 64']) assert.equal((await postJson(url, '/klang', { gruppe: 'melodie', aktion: 'param', name, wert: 0.5 })).code, 200, `${name} passes`);
+  assert.deepEqual(mel.at(-1), { befehl: 'param', name: 'Knob 64', wert: 0.5 });
+});
+
+test('live host panels /klang param: the seven RB-338 names only on a vst3:rb338 host, other names and other hosts stay refused', async (t) => {
+  const { url, wo } = await klangStapel(t);
+  const bass = await fakeWirt(t, wo, 'bass');
+  const mel = await fakeWirt(t, wo, 'melodie');
+  const p = (d) => postJson(url, '/klang', d, CYPHER);
+  const RB = ['Volume', 'Square', 'Cutoff', 'Resonance', 'Env Mod', 'Decay', 'Accent'];
+  // no status file: refused
+  assert.equal((await p({ gruppe: 'bass', aktion: 'param', name: 'Cutoff', wert: 0.5 })).code, 400);
+  fs.writeFileSync(path.join(wo, 'wirt-bass.json'), JSON.stringify({ art: 'vst3:rb338', plugin: 'RB-338' }));
+  fs.writeFileSync(path.join(wo, 'wirt-melodie.json'), JSON.stringify({ art: 'vst3:baukasten' }));
+  for (const name of RB) assert.equal((await p({ gruppe: 'bass', aktion: 'param', name, wert: 0.5 })).code, 200, name);
+  assert.deepEqual(bass.at(-1), { befehl: 'param', name: 'Accent', wert: 0.5 });
+  assert.equal((await p({ gruppe: 'bass', aktion: 'param', name: 'Knob 1', wert: 0.5 })).code, 200, 'Knob names stay allowed');
+  const n = bass.length;
+  for (const name of ['cutoff', 'Cutoff ', 'Master', 'Bypass', 'Env  Mod', 'lautstaerke', '']) assert.equal((await p({ gruppe: 'bass', aktion: 'param', name, wert: 0.5 })).code, 400, JSON.stringify(name));
+  assert.equal((await p({ gruppe: 'bass', aktion: 'param', name: 'Cutoff', wert: 1.5 })).code, 400);
+  assert.equal(bass.length, n, 'refused requests do not reach the host');
+  // a Baukasten host (or any other) does not take the RB names
+  const m = mel.length;
+  assert.equal((await p({ gruppe: 'melodie', aktion: 'param', name: 'Cutoff', wert: 0.5 })).code, 400);
+  assert.equal(mel.length, m);
+  fs.writeFileSync(path.join(wo, 'wirt-bass.json'), JSON.stringify({ art: 'lv2' }));
+  assert.equal((await p({ gruppe: 'bass', aktion: 'param', name: 'Cutoff', wert: 0.5 })).code, 400);
 });
 
 test('Baukasten S2 /klang param: lehnt der Wirt ab (Surge kennt param nicht), kommt sein Text als 409 zurück', async (t) => {
@@ -2646,9 +2722,9 @@ test('Baukasten S2 /klang params: Ist-Werte vom Wirt, Namen aus baukasten-<grupp
   assert.equal(r.code, 200, JSON.stringify(r.j));
   assert.deepEqual(r.j, { ok: true, params: { Volume: 0.75, 'Knob 1': 0.5 }, namen: {} });
   assert.deepEqual(mel.at(-1), { befehl: 'params' });
-  fs.writeFileSync(path.join(bk, 'baukasten-melodie.json'), JSON.stringify({ regler_namen: { 1: 'Cutoff', 8: 'Noise', 9: 'zu viel', 2: 'x'.repeat(41) } }));
+  fs.writeFileSync(path.join(bk, 'baukasten-melodie.json'), JSON.stringify({ regler_namen: { 1: 'Cutoff', 8: 'Noise', 9: 'Nine', 32: 'Last', 64: 'Top', 65: 'zu viel', 0: 'zero', 2: 'x'.repeat(41) } }));
   r = await p();
-  assert.deepEqual(r.j.namen, { 'Knob 1': 'Cutoff', 'Knob 8': 'Noise' });
+  assert.deepEqual(r.j.namen, { 'Knob 1': 'Cutoff', 'Knob 8': 'Noise', 'Knob 9': 'Nine', 'Knob 32': 'Last', 'Knob 64': 'Top' });
   fs.writeFileSync(path.join(bk, 'baukasten-melodie.json'), '{kaputt');
   assert.deepEqual((await p()).j.namen, {});
   await postJson(url, '/strudel/autonom', { an: false, strom: 3 });

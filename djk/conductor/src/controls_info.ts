@@ -90,16 +90,17 @@ for (let ret = 1; ret <= 4; ret++) {
   tabelle.set(`ret/${ret}/hall/an`, { pfad: `ret/${ret}/hall/an`, kanal: null, ...r('schalter', 0, 1, 1) });
   for (const [f, v] of Object.entries(HALL_VORGABE)) tabelle.set(`ret/${ret}/reverb/${f}`, { pfad: `ret/${ret}/reverb/${f}`, kanal: null, ...r('linear', 0, 1, v) });
 }
-// S5r (§1.5): acht Graph-Regler <kanal>/bk/<1..8> auf Kanälen, die einen Baukasten-Graphen annehmen (deck/1..4 Effekt,
+// S5r (§1.5): 64 Graph-Regler <kanal>/bk/<1..64> auf Kanälen, die einen Baukasten-Graphen annehmen (deck/1..4 Effekt,
 // erz/1,2,3,5,6,7 und pad/1,2 Instrument; nicht erz/4, erz/8), alle dürfen, 0..1, Vorgabe 0,5
+export const BK_REGLER_N = 64;   // knobs per channel: <kanal>/bk/1..64 (64-knob widening)
 export const BK_KANAELE: readonly string[] = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'erz/1', 'erz/2', 'erz/3', 'erz/5', 'erz/6', 'erz/7', 'pad/1', 'pad/2'];
 for (const k of BK_KANAELE) {
-  for (let n = 1; n <= 8; n++) tabelle.set(`${k}/bk/${n}`, { pfad: `${k}/bk/${n}`, kanal: k, ...r('linear', 0, 1, 0.5) });
+  for (let n = 1; n <= BK_REGLER_N; n++) tabelle.set(`${k}/bk/${n}`, { pfad: `${k}/bk/${n}`, kanal: k, ...r('linear', 0, 1, 0.5) });
 }
-// S14 (§1.5): eight graph knobs fx/<n>/bk/<m> per send return fx/3, fx/4; global (no channel), linear 0..1, default 0.5, everybody may
+// S14 (§1.5): 64 graph knobs fx/<n>/bk/<m> per send return fx/3, fx/4; global (no channel), linear 0..1, default 0.5, everybody may
 export const BK_SEND_KANAELE: readonly string[] = ['fx/3', 'fx/4'];
 for (const k of BK_SEND_KANAELE) {
-  for (let m = 1; m <= 8; m++) tabelle.set(`${k}/bk/${m}`, { pfad: `${k}/bk/${m}`, kanal: null, ...r('linear', 0, 1, 0.5) });
+  for (let m = 1; m <= BK_REGLER_N; m++) tabelle.set(`${k}/bk/${m}`, { pfad: `${k}/bk/${m}`, kanal: null, ...r('linear', 0, 1, 0.5) });
 }
 
 // 1.15 A2 (§1.5, the 345 mix-tool rows): gate on the 13 live source channels, utility on those plus bus/1..4, multiband and channel

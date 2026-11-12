@@ -682,10 +682,10 @@ class Kern {
   bool dj_laeuft() const noexcept;   // Deck, Loop-Box oder Erzeuger-Strom läuft (Spec 2.2: dann Quant 2)
   std::unique_ptr<Arrangement> arr_;
   int arr_kanal_ = -1;              // Mixer-Index von erz/4 (ARR_KANAL)
-  // Baukasten S5r: die Werte der Graph-Regler <kanal>/bk/1..8, Zeile = Mixer-Kanal. bk_ort_[regler] = kanal * 8 + nr - 1
+  // Baukasten S5r: die Werte der Graph-Regler <kanal>/bk/1..32, Zeile = Mixer-Kanal. bk_ort_[regler] = kanal * 32 + nr - 1
   // oder -1; einmal im Ctor gebaut, im Callback nur Indexzugriff. Mixer und Erzeuger lesen bk_wert_ über einen Zeiger.
   // S14: rows 0..17 are the mixer channels, row MIX_BK_SEND_ZEILE (18) is fx/3 and 19 is fx/4 (graph knobs of the send returns).
-  float bk_wert_[MIX_BK_ZEILEN][8] = {};
+  float bk_wert_[MIX_BK_ZEILEN][cypherdj::stellwerk::BK_REGLER_N] = {};   // 32 knobs per row (BK_REGLER_N, signalbox/controls.h)
   int16_t bk_ort_[cypherdj::stellwerk::MAX_REGLER];
   int zyklus_n_ = 256;              // Größe des laufenden Zyklus (Start-Regel: Vorhalt 2n und + 1 Zyklus)
   int64_t zyklus_ns_ = 0;           // mehrkern 3.2: Blockanfang des Zyklus (CLOCK_MONOTONIC, der Stempel von zyklus()); 0 = unbekannt. Basis der Zeit-Tore der Spur-Phase

@@ -1,0 +1,60 @@
+{
+ "schema": 1,
+ "name": "Poly Goa Lead Stack",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "synth-poly",
+ "werte": {
+  "knob1": 0.629,
+  "knob2": 0.7045,
+  "knob3": 0.6,
+  "knob4": 0.5292,
+  "knob5": 0.0,
+  "knob6": 0.3038,
+  "knob7": 0.2,
+  "knob8": 1.0,
+  "knob9": 1.0,
+  "knob10": 0.5,
+  "knob11": 0.45,
+  "knob12": 0.4286,
+  "knob13": 0.625,
+  "knob14": 0.4,
+  "knob15": 0.5,
+  "knob16": 0.4667,
+  "knob17": 0.55,
+  "knob18": 0.5,
+  "knob19": 0.301,
+  "knob20": 0.85,
+  "knob21": 0.2676,
+  "knob22": 0.2,
+  "knob23": 0.7845,
+  "knob24": 0.0,
+  "knob25": 0.4167,
+  "knob26": 0.5313,
+  "knob27": 1.0,
+  "knob28": 0.25
+ },
+ "beschreibung": {
+  "art": "lead",
+  "unterart": "supersaw",
+  "charakter": [
+   "bright",
+   "aggressive",
+   "wide"
+  ],
+  "genre": [
+   "trance"
+  ],
+  "einsatz": [
+   "drop"
+  ],
+  "energie": 5,
+  "text": "Seven saws at 14 cent plus a pulse; the diode ladder with high resonance and a fast filter decay; vibrato at 5.5 Hz, a little PWM on the pulse."
+ },
+ "tags": [
+  "synth-poly"
+ ],
+ "notiz": "Measured by level and pitch on render, not yet heard (2026-11-11).",
+ "angelegt": "2026-11-11T00:00:00.000Z",
+ "geaendert": "2026-11-11T00:00:00.000Z"
+}

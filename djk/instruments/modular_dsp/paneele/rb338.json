@@ -1,0 +1,23 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "rb338"},
+  "title": "RB-338",
+  "akzent": "gelb",
+  "sections": [
+    { "id": "osc", "title": "OSC", "cols": 1, "controls": [
+      {"id": "wave", "type": "selector", "label": "Wave", "bind": {"param": "wellenform"}, "options": ["Saw", "Square"], "default": 0}
+    ]},
+    { "id": "filter", "title": "FILTER", "cols": 2, "controls": [
+      {"id": "cutoff", "type": "knob", "label": "Cutoff", "bind": {"param": "cutoff"}, "format": "hz", "default": 0.6257},
+      {"id": "reso", "type": "knob", "label": "Resonance", "bind": {"param": "resonanz"}, "format": "percent", "default": 0.3}
+    ]},
+    { "id": "env", "title": "ENV", "cols": 3, "controls": [
+      {"id": "envmod", "type": "knob", "label": "Env Mod", "bind": {"param": "env_mod"}, "format": "percent", "default": 0.4},
+      {"id": "decay", "type": "knob", "label": "Decay", "bind": {"param": "decay"}, "format": "raw", "unit": "s", "default": 0.4714},
+      {"id": "accent", "type": "knob", "label": "Accent", "bind": {"param": "accent"}, "format": "percent", "default": 0.6}
+    ]},
+    { "id": "out", "title": "OUT", "cols": 1, "controls": [
+      {"id": "vol", "type": "knob", "label": "Volume", "bind": {"param": "lautstaerke"}, "format": "db", "default": 0.7103}
+    ]}
+  ]
+}

@@ -28,7 +28,7 @@ enum class Rolle : uint8_t {
   spur_fader, spur_pan, spur_mute, spur_solo,  // D1 K1: Spur-Regler des Arrangements, global (Kanal −1), spur/1..32
   grp_fader, grp_pan, grp_mute, grp_solo,      // 1.10 Slice 1: Gruppen-Regler des Arrangements, global (Kanal −1), grp/1..8
   pm_fader,                                    // 1.10 Slice 1: Fader des Produktions-Masters, pm/fader
-  bk_regler,                                   // S5r: Graph-Regler je Kanal, <kanal>/bk/<1..8>, am Ende angehängt
+  bk_regler,                                   // S5r: Graph-Regler je Kanal, <kanal>/bk/<1..64> (1..8 am Tabellenende, 9..32 hinter den Insert-Zeilen, 33..64 dahinter), am Ende angehängt
   // 1.10 Slice 3 (appended after bk_regler: the order of the roles stays). Sends are post fader, hall values are normalised 0..1.
   snd_spur, snd_grp,                           // spur/<n>/send/<r>, grp/<n>/send/<r>: send level in dB to return r
   ret_fader, ret_pan, ret_mute, ret_solo,      // ret/<r>/{fader,pan,mute,solo}
@@ -55,8 +55,13 @@ enum class Rolle : uint8_t {
   // arr-fx slice 1 (appended after ins_host_an: the order of the roles stays). The utility insert ins/utility/<n>/{an,breite,mono_unter,gain,balance}.
   ins_util_an, ins_util_breite, ins_util_mono_unter, ins_util_gain, ins_util_balance,
   // arr-bk slice 3 (appended after ins_util_balance). The Baukasten insert ins/bk/<n>/{an,k1..k8}.
-  ins_bk_an, ins_bk_k1, ins_bk_k2, ins_bk_k3, ins_bk_k4, ins_bk_k5, ins_bk_k6, ins_bk_k7, ins_bk_k8
+  ins_bk_an, ins_bk_k1, ins_bk_k2, ins_bk_k3, ins_bk_k4, ins_bk_k5, ins_bk_k6, ins_bk_k7, ins_bk_k8,
+  // 32-knob widening (appended after ins_bk_k8, still the last role: the order stays). ins/bk/<n>/k9..k32.
+  ins_bk_k9, ins_bk_k10, ins_bk_k11, ins_bk_k12, ins_bk_k13, ins_bk_k14, ins_bk_k15, ins_bk_k16, ins_bk_k17, ins_bk_k18, ins_bk_k19, ins_bk_k20, ins_bk_k21, ins_bk_k22, ins_bk_k23, ins_bk_k24, ins_bk_k25, ins_bk_k26, ins_bk_k27, ins_bk_k28, ins_bk_k29, ins_bk_k30, ins_bk_k31, ins_bk_k32,
+  // 64-knob widening (appended after ins_bk_k32, still the last role: the order stays). ins/bk/<n>/k33..k64.
+  ins_bk_k33, ins_bk_k34, ins_bk_k35, ins_bk_k36, ins_bk_k37, ins_bk_k38, ins_bk_k39, ins_bk_k40, ins_bk_k41, ins_bk_k42, ins_bk_k43, ins_bk_k44, ins_bk_k45, ins_bk_k46, ins_bk_k47, ins_bk_k48, ins_bk_k49, ins_bk_k50, ins_bk_k51, ins_bk_k52, ins_bk_k53, ins_bk_k54, ins_bk_k55, ins_bk_k56, ins_bk_k57, ins_bk_k58, ins_bk_k59, ins_bk_k60, ins_bk_k61, ins_bk_k62, ins_bk_k63, ins_bk_k64
 };
+constexpr int BK_REGLER_N = 64;   // knobs of a Baukasten graph reachable through the table: <kanal>/bk/1..64, ins/bk/<n>/k1..k64 (engine: baukasten_dsp::REGLER)
 constexpr int SPUR_REGLER_SPUREN = 32;   // D1 K1 (Spec 2.3): spur/<n>/{fader,pan,mute,solo}, n = 1..32 (E3)
 constexpr int GRP_REGLER_GRUPPEN = 8;    // 1.10 (F1: eigene Plätze neben den 32 Spuren): grp/<n>/{fader,pan,mute,solo}, n = 1..8
 // 1.10 slice 4a: the insert vocabulary of docs/interfaces/insert_module.json (all kinds, also those without table rows yet):

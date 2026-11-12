@@ -1,0 +1,38 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "fm-lead"},
+  "title": "FM Lead",
+  "akzent": "orange",
+  "layout": {"rows": [
+    ["ops", "sound", "env", "vib", "echo"]
+  ]},
+  "sections": [
+    { "id": "ops", "title": "OPERATORS", "cols": 4, "controls": [
+      {"id": "alg", "type": "label", "span": 4, "text": "Algorithm 0: 4>3>2>1, 4 operators"},
+      {"id": "op1", "type": "label", "span": 4, "text": "Op1 car x1  100%  D2s S80%"},
+      {"id": "op2", "type": "label", "span": 4, "text": "Op2 mod x1  16%  D1.2s S60%"},
+      {"id": "op3", "type": "label", "span": 4, "text": "Op3 mod x2  7%  D0.6s S40%"},
+      {"id": "op4", "type": "label", "span": 4, "text": "Op4 mod x1 +5ct  8%  D0.8s S50%"},
+      {"id": "opn", "type": "label", "span": 4, "text": "Level, decay D and sustain S at Decay x1"}
+    ]},
+    { "id": "sound", "title": "SOUND", "cols": 2, "controls": [
+      {"id": "hell", "type": "knob", "label": "Brightness", "bind": {"param": "k1"}, "format": "raw", "unit": "x", "default": 0.5},
+      {"id": "rueck", "type": "knob", "label": "Feedback", "bind": {"param": "k2"}, "format": "percent", "default": 0.5},
+      {"id": "sn", "type": "label", "span": 2, "text": "Brightness scales modulation"}
+    ]},
+    { "id": "env", "title": "OP 1 ENVELOPE", "cols": 3, "controls": [
+      {"id": "hue", "type": "huelle", "span": 3, "label": "Operator 1 at Decay x1", "of": {"a": 0.004, "d": 2, "s": 0.8, "r": 0.2}},
+      {"id": "decay", "type": "knob", "label": "Decay", "span": 3, "bind": {"param": "k4"}, "format": "raw", "unit": "x", "default": 0.5},
+      {"id": "en", "type": "label", "span": 3, "text": "Decay scales D and R of every operator"}
+    ]},
+    { "id": "vib", "title": "VIBRATO", "cols": 2, "controls": [
+      {"id": "vf", "type": "lfoform", "span": 2, "label": "Vibrato shape", "formen": ["sine"]},
+      {"id": "vib", "type": "knob", "label": "Depth", "span": 2, "bind": {"param": "k3"}, "format": "raw", "unit": "st", "default": 0.5},
+      {"id": "vn", "type": "label", "span": 2, "text": "5.5 Hz sine, glide 50 ms"}
+    ]},
+    { "id": "echo", "title": "ECHO", "cols": 2, "controls": [
+      {"id": "echo", "type": "knob", "label": "Mix", "span": 2, "bind": {"param": "k5"}, "format": "percent", "default": 0.5},
+      {"id": "e1", "type": "label", "span": 2, "text": "330 ms, feedback 35 %, ping-pong"}
+    ]}
+  ]
+}

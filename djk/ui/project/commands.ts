@@ -70,7 +70,7 @@ function laneRuhewerte(p: Projekt): Map<string, { wert: number | undefined; lane
         const z = zerlegeKettenZiel(l.ziel);
         if (z && 'makro' in z) wert = strang.rack?.werte[z.makro - 1];
         else if (z) wert = (strang.inserts ?? []).find((x) => x.id === z.insert)?.werte[z.param];
-      } else if (/^geraet\.k[1-8]$/.test(l.ziel)) {
+      } else if (/^geraet\.k([1-9]|[1-5][0-9]|6[0-4])$/.test(l.ziel)) {
         const g = (strang as Spur).geraet;
         if (g && g.art === 'intern' && g.name === 'bk') wert = g.parameter[l.ziel.slice(7)];
       } else continue;
@@ -80,7 +80,7 @@ function laneRuhewerte(p: Projekt): Map<string, { wert: number | undefined; lane
   return aus;
 }
 const hatLaneRuhewerte = (p: Projekt): boolean =>
-  alleStraenge(p).some(({ strang }) => (strang.automation ?? []).some((l) => istKettenZiel(l.ziel) || /^geraet\.k[1-8]$/.test(l.ziel)));
+  alleStraenge(p).some(({ strang }) => (strang.automation ?? []).some((l) => istKettenZiel(l.ziel) || /^geraet\.k([1-9]|[1-5][0-9]|6[0-4])$/.test(l.ziel)));
 /** the hints of one command: every lane-driven parameter whose stored value the command changed (a lane the command created or removed has none) */
 function laneHinweise(vorher: Map<string, { wert: number | undefined; lane: Lane; strangId: string }> | null, nachher: Projekt, index: number): LaneHinweis[] {
   if (!vorher || vorher.size === 0) return [];
@@ -1737,7 +1737,7 @@ const PRO_BEFEHL: Record<string, (p: Projekt, a: Args, ctx: Kontext) => void> = 
       ab('ziel_unbekannt', `${String(a.ziel)} (a device lane belongs to a track; ${kennung} is not one)`);
     }
     if (!kettig && istGeraetZiel(a.ziel as string) && !(s.art === 'instrument' && passtGeraetZiel(a.ziel as string, s.geraet))) {
-      ab('ziel_unbekannt', `${String(a.ziel)} (only on a track whose device has that parameter: RB-338 lautstaerke, cutoff, resonanz, env_mod; bk k1 to k8)`);
+      ab('ziel_unbekannt', `${String(a.ziel)} (only on a track whose device has that parameter: RB-338 lautstaerke, cutoff, resonanz, env_mod; bk k1 to k64)`);
     }
     if (kettig) {
       const k = zerlegeKettenZiel(a.ziel as string)!;

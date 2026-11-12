@@ -9,7 +9,7 @@ import { Oberflaeche } from '../server.ts';
 import { schreibeLeerenRing } from './support/ring.mjs';
 import { K, TEST_INSTANZ, belegeTestInstanz } from './support/instance.mjs';
 import { setzeAutonom, schreibeLebt, schreibeStatus } from '../../generator/src/pattern_state.mjs';
-import { listeGraphen, graphenOrdner } from '../graphs.ts';
+import { listeGraphen, graphenOrdner, normalisierePanel } from '../graphs.ts';
 import { stromVonZiel } from '../track.ts';
 
 belegeTestInstanz();
@@ -83,6 +83,12 @@ test('list: instruments and effects with regler_namen, file name counts, bad nam
   ]);
   assert.deepEqual([...r.uebersprungen].sort(), ['Lead', NAME_33, 'böse name', 'kaputt'].sort());
   assert.deepEqual(r.geladen, {});
+});
+
+test('64 knobs list: regler_namen keys 1..64 are kept (9, 32, 33 and 64 included), 0, 65 and 01 are dropped', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bk32-l-'));
+  graphDatei(dir, 'viele.json', { ...INST, regler_namen: { 1: 'a', 9: 'nine', 10: 'ten', 32: 'last', 33: 'upper', 64: 'top', 0: 'zero', 65: 'over', '01': 'padded', x: 'no' } });
+  assert.deepEqual(listeGraphen(dir).graphen, [{ name: 'viele', art: 'instrument', regler_namen: { 1: 'a', 9: 'nine', 10: 'ten', 32: 'last', 33: 'upper', 64: 'top' } }]);
 });
 
 test('list: pure function and folder override (positive control: a folder with one graph lists exactly it)', () => {
@@ -527,4 +533,52 @@ test('instrument on a kit-mode stream (andreas): loaded as before, with a warnun
   assert.equal(ok.code, 200);
   assert.equal(ok.j.warnung, undefined);
   assert.ok(sendungen().filter((z) => z.adresse === '/erz/strom').length >= 2);
+});
+
+test('GET /graphen/panel: ranges of the regler nodes and a valid sidecar; refused sidecar named; unknown graph 404; the list stays as before', async (t) => {
+  const dir = baueOrdner();
+  graphDatei(dir, 'filt.json', { ...EFF, name: 'filt', knoten: [...EFF.knoten, { id: 'k', art: 'regler', nr: 2, min: 200, max: 8000, log: 1 }] });
+  fs.mkdirSync(path.join(dir, 'panels'));
+  const panel = { format: 'baukasten-panel/1', graph: 'filt', sections: [{ id: 's', controls: [{ id: 'c', type: 'knob', bind: { regler: 2 }, format: 'hz' }] }] };
+  fs.writeFileSync(path.join(dir, 'panels', 'filt.json'), JSON.stringify(panel));
+  fs.writeFileSync(path.join(dir, 'panels', 'eff.json'), JSON.stringify({ ...panel, graph: 'eff' }));
+  const { url } = await stapel(t, { bkOrdner: dir });
+  const r = await hol(`${url}/graphen/panel?name=filt`);
+  assert.equal(r.status, 200);
+  assert.deepEqual(await r.json(), { name: 'filt', art: 'effekt', regler: { 2: { min: 200, max: 8000, log: true, vorgabe: 0.5 } }, panel: normalisierePanel(panel), fehler: [] });
+  assert.equal((await (await hol(`${url}/graphen/panel?name=filt`)).json()).panel.geraet.art, 'bk', 'the answer carries the panel read as v2');
+  const e = await (await hol(`${url}/graphen/panel?name=eff`)).json();
+  assert.equal(e.panel, null);
+  assert.match(e.fehler[0], /parameter k2 is not defined by the device/);
+  assert.deepEqual(await (await hol(`${url}/graphen/panel?name=inst`)).json(), { name: 'inst', art: 'instrument', regler: {}, panel: null, fehler: [] });
+  assert.equal((await hol(`${url}/graphen/panel?name=gibt-es-nicht`)).status, 404);
+  assert.equal((await hol(`${url}/graphen/panel`)).status, 404);
+  const liste = await (await hol(`${url}/graphen`)).json();
+  assert.ok(liste.graphen.every((g) => Object.keys(g).sort().join() === 'art,name,regler_namen'), 'the list entries keep their shape');
+});
+
+test('GET /geraete/panel and the automatic panel on /graphen/panel: auto without a file, auto with the problems of a broken file, rb338 and surge tables', async (t) => {
+  const dir = baueOrdner();
+  const knoten = (n) => Array.from({ length: n }, (_, i) => ({ id: `k${i + 1}`, art: 'regler', nr: i + 1, min: 0, max: 1 }));
+  graphDatei(dir, 'ohne.json', { ...INST, name: 'ohne', knoten: [...INST.knoten, ...knoten(10)] });
+  graphDatei(dir, 'kaputtp.json', { ...INST, name: 'kaputtp', knoten: [...INST.knoten, ...knoten(2)] });
+  fs.mkdirSync(path.join(dir, 'panels'));
+  fs.writeFileSync(path.join(dir, 'panels', 'kaputtp.json'), '{ kaputt');
+  const { url } = await stapel(t, { bkOrdner: dir });
+  const g = await (await hol(`${url}/geraete/panel?art=bk&graph=ohne`)).json();
+  assert.equal(g.quelle, 'auto');
+  assert.deepEqual(g.geraet, { art: 'bk', graph: 'ohne' });
+  assert.equal(g.parameter.length, 10);
+  assert.deepEqual(g.panel.sections.map((s) => s.controls.length), [8, 2]);
+  assert.deepEqual(g.fehler, []);
+  const k = await (await hol(`${url}/geraete/panel?art=bk&graph=kaputtp`)).json();
+  assert.equal(k.quelle, 'auto');
+  assert.match(k.fehler[0], /not valid JSON/);
+  const viaGraphen = await (await hol(`${url}/graphen/panel?name=kaputtp`)).json();
+  assert.equal(viaGraphen.panel.format, 'cypherdj-panel/2', '/graphen/panel answers the automatic panel');
+  assert.match(viaGraphen.fehler[0], /not valid JSON/);
+  assert.equal((await (await hol(`${url}/geraete/panel?art=rb338`)).json()).parameter.length, 7);
+  assert.equal((await (await hol(`${url}/geraete/panel?art=surge`)).json()).parameter.length, 359);
+  assert.equal((await hol(`${url}/geraete/panel?art=bk&graph=gibt-es-nicht`)).status, 404);
+  assert.equal((await hol(`${url}/geraete/panel?art=xx`)).status, 400);
 });

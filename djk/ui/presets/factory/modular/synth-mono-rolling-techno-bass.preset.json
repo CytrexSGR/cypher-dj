@@ -1,0 +1,65 @@
+{
+ "schema": 1,
+ "name": "Mono Rolling Techno Bass",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "synth-mono",
+ "werte": {
+  "knob1": 0.273,
+  "knob2": 0.32,
+  "knob3": 0.357,
+  "knob4": 0.363,
+  "knob5": 0.5,
+  "knob6": 0.506,
+  "knob7": 0.333,
+  "knob8": 0.35,
+  "knob9": 0.8,
+  "knob10": 0.0,
+  "knob11": 0.452,
+  "knob12": 0.5,
+  "knob13": 0.5,
+  "knob14": 0.5,
+  "knob15": 0.5,
+  "knob16": 0.5,
+  "knob17": 0.5,
+  "knob18": 0.6,
+  "knob19": 0.4,
+  "knob20": 0.575,
+  "knob21": 0.55,
+  "knob22": 0.341,
+  "knob23": 0.1,
+  "knob24": 0.5,
+  "knob25": 0.5,
+  "knob26": 0.373,
+  "knob27": 0.0,
+  "knob28": 0.0,
+  "knob29": 0.5,
+  "knob30": 0.5,
+  "knob31": 0.5,
+  "knob32": 0.25
+ },
+ "beschreibung": {
+  "art": "bass",
+  "unterart": "rolling",
+  "charakter": [
+   "dark",
+   "deep",
+   "punchy"
+  ],
+  "genre": [
+   "techno",
+   "minimal"
+  ],
+  "einsatz": [
+   "drop"
+  ],
+  "energie": 4,
+  "text": "Constant low rolling bass for off-beat 16ths: ladder, saw plus detuned pulse, square sub, small filter pluck, tight amp."
+ },
+ "tags": [
+  "synth-mono"
+ ],
+ "notiz": "Measured by level and pitch on render, not yet heard (2026-11-11).",
+ "angelegt": "2026-11-11T00:00:00.000Z",
+ "geaendert": "2026-11-11T00:00:00.000Z"
+}

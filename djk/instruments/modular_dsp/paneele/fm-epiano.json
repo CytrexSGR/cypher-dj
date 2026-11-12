@@ -1,0 +1,37 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "fm-epiano"},
+  "title": "FM E-Piano",
+  "akzent": "blau",
+  "layout": {"rows": [
+    ["ops", "sound", "env", "trem", "chorus"]
+  ]},
+  "sections": [
+    { "id": "ops", "title": "OPERATORS", "cols": 4, "controls": [
+      {"id": "alg", "type": "label", "span": 4, "text": "Algorithm 3: 2>1, 4>3, 4 operators"},
+      {"id": "op1", "type": "label", "span": 4, "text": "Op1 car x1  100%  D3.5s S0%"},
+      {"id": "op2", "type": "label", "span": 4, "text": "Op2 mod x1  11%  D2.5s S0%"},
+      {"id": "op3", "type": "label", "span": 4, "text": "Op3 car x1 +4ct  60%  D1.8s S0%"},
+      {"id": "op4", "type": "label", "span": 4, "text": "Op4 mod x14  3.5%  D0.25s S0%"},
+      {"id": "opn", "type": "label", "span": 4, "text": "Level, decay D and sustain S at Decay x1"}
+    ]},
+    { "id": "sound", "title": "SOUND", "cols": 2, "controls": [
+      {"id": "hell", "type": "knob", "label": "Brightness", "span": 2, "bind": {"param": "k1"}, "format": "raw", "unit": "x", "default": 0.5},
+      {"id": "sn", "type": "label", "span": 2, "text": "Brightness scales modulation"}
+    ]},
+    { "id": "env", "title": "OP 1 ENVELOPE", "cols": 3, "controls": [
+      {"id": "hue", "type": "huelle", "span": 3, "label": "Operator 1 at Decay x1", "of": {"a": 0.001, "d": 3.5, "s": 0, "r": 0.25}},
+      {"id": "decay", "type": "knob", "label": "Decay", "span": 3, "bind": {"param": "k2"}, "format": "raw", "unit": "x", "default": 0.5},
+      {"id": "en", "type": "label", "span": 3, "text": "Decay scales D and R of every operator"}
+    ]},
+    { "id": "trem", "title": "TREMOLO", "cols": 2, "controls": [
+      {"id": "tf", "type": "lfoform", "span": 2, "label": "Tremolo shape", "formen": ["sine"]},
+      {"id": "trem", "type": "knob", "label": "Depth", "span": 2, "bind": {"param": "k3"}, "format": "percent", "default": 0.5},
+      {"id": "tn", "type": "label", "span": 2, "text": "4.5 Hz sine fixed"}
+    ]},
+    { "id": "chorus", "title": "CHORUS", "cols": 2, "controls": [
+      {"id": "chorus", "type": "knob", "label": "Mix", "span": 2, "bind": {"param": "k4"}, "format": "percent", "default": 0.5},
+      {"id": "cn", "type": "label", "span": 2, "text": "Chorus mode I fixed"}
+    ]}
+  ]
+}

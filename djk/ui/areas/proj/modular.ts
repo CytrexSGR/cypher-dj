@@ -1,8 +1,10 @@
 // S17: the sound snapshot of the open project at the page server (capture on demand, restore on open and after a kern restart).
 // The Baukasten graphs themselves are loaded through the server's graph bridge (BereichKontext.baukasten, the same checks as POST /graph);
-// the eight graph knobs <kanal>/bk/1..8 go through KernWeg like every other control. Plan 2026-11-01-baukasten-s17.md.
+// the graph knobs <kanal>/bk/1..64 go through KernWeg like every other control. Plan 2026-11-01-baukasten-s17.md.
 import type { BereichKontext } from '../../http/router.ts';
-import { BK_KANAELE, BK_REGLER_ZAHL, BK_VORGABE_WERT, bkDefVonId, bkKanalVon, type BkKanalDef } from '../../project/modular.ts';
+import {
+  BK_KANAELE, BK_REGLER_ZAHL, BK_VORGABE_WERT, bkDefVonId, bkKanalVon, bkReglerAuffuellen, vorgabenVonGraph, type BkKanalDef,
+} from '../../project/modular.ts';
 import type { Befehl } from '../../project/commands.ts';
 import type { Projekt } from '../../project/model.ts';
 import type { Soll } from './mapping.ts';
@@ -66,8 +68,9 @@ export class ProjBk {
     for (const d of defs) {
       const name = geladen[d.kanal];
       const alt = p.baukasten?.find((e) => e.id === d.id);
+      const altRegler = alt ? bkReglerAuffuellen(alt.regler, vorgabenVonGraph(alt.graph)) : null;
       const regler = KNOPF.map((n) => {
-        const behalten = alt?.regler[n - 1] ?? BK_VORGABE_WERT;
+        const behalten = altRegler?.[n - 1] ?? vorgabenVonGraph(name)?.[n - 1] ?? BK_VORGABE_WERT;
         if (!d.regler) return behalten;   // the kern has no knobs here: nothing to read
         const live = this.lage.reglerWert(`${d.kanal}/bk/${n}`);
         if (live === null) { unbekannt.push(`${d.kanal}/bk/${n}`); return behalten; }
@@ -98,14 +101,15 @@ export class ProjBk {
         if (hash === null) { hinweisSetzen(slot, 'bk_graph_fehlt'); return; }
         if (e.sha256 && hash !== e.sha256) hinweisSetzen(slot, 'bk_graph_geaendert');
         if (def.regler) {
-          const soll: Soll[] = e.regler.map((w, k) => ({ pfad: `${def.kanal}/bk/${k + 1}`, wert: w }));
+          const soll: Soll[] = bkReglerAuffuellen(e.regler, vorgabenVonGraph(e.graph)).map((w, k) => ({ pfad: `${def.kanal}/bk/${k + 1}`, wert: w }));
           const r = await this.kern.setzeRegler(soll, quelle);
           slot.regler_gesendet = r.length;
           const abgelehnt = r.filter((x) => quittungAbgelehnt(x.quittung)).length;
           if (abgelehnt) slot.regler_fehler = abgelehnt;
         }
         if (o.schonGeladenUeberspringen && b.geladen()[def.kanal] === e.graph) { slot.ok = true; slot.schon_geladen = true; return; }
-        const g = await b.setzeGraph(def.kanal, e.graph, quelle);
+        // the saved rows went out first; a default push after the load would overwrite them
+        const g = await b.setzeGraph(def.kanal, e.graph, quelle, { vorgaben: false });
         const q = g.j.quittung as { status: number; grund: string } | null | undefined;
         if (g.code !== 200) grundSetzen(slot, String(g.j.fehler ?? 'bk_abgelehnt'));
         else if (!q) grundSetzen(slot, 'bk_keine_quittung');
@@ -130,16 +134,17 @@ export class ProjBk {
     const kanaele = BK_KANAELE.map((d) => {
       const e = p.baukasten?.find((x) => x.id === d.id) ?? null;
       const live = geladen[d.kanal] ?? null;
+      const gespeichert = e ? bkReglerAuffuellen(e.regler, vorgabenVonGraph(e.graph)) : null;
       const reglerLive = KNOPF.map((n) => (d.regler ? this.lage.reglerWert(`${d.kanal}/bk/${n}`) : null));
       let gleich: boolean | null = false;
       if (e && live === e.graph) {
         if (!d.regler) gleich = true;
         else {
-          const unterschied = reglerLive.some((w, i) => w !== null && Math.abs(w - e.regler[i]) > GLEICH_EPS);
+          const unterschied = reglerLive.some((w, i) => w !== null && Math.abs(w - gespeichert![i]) > GLEICH_EPS);
           gleich = unterschied ? false : reglerLive.some((w) => w === null) ? null : true;
         }
       }
-      return { kanal: d.kanal, gespeichert: e?.graph ?? null, live, regler_gespeichert: e?.regler ?? null, regler_live: reglerLive, gleich };
+      return { kanal: d.kanal, gespeichert: e?.graph ?? null, live, regler_gespeichert: gespeichert, regler_live: reglerLive, gleich };
     });
     return { slug, gespeichert: p.baukasten ?? [], kanaele };
   }

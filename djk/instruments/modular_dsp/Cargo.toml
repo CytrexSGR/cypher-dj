@@ -8,6 +8,7 @@ publish = false
 [dependencies]
 rb_dsp = { path = "../rb_dsp" }
 saett_dsp = { path = "../sat_dsp" }
+eq_dsp = { path = "../eq_dsp" }
 hall_dsp = { path = "../reverb_dsp" }
 komp_dsp = { path = "../comp_dsp" }
 serde = { version = "1", features = ["derive"] }

@@ -1,0 +1,44 @@
+{
+ "schema": 1,
+ "name": "Soft Pad",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "saege-ladder",
+ "werte": {
+  "knob1": 0.531,
+  "knob2": 0.315,
+  "knob3": 0.625,
+  "knob4": 0.971,
+  "knob5": 0.699,
+  "knob6": 0.708,
+  "knob7": 0.849,
+  "knob8": 0.5,
+  "knob9": 0.912,
+  "knob10": 0.5
+ },
+ "beschreibung": {
+  "art": "pad",
+  "unterart": "analog",
+  "charakter": [
+   "warm",
+   "soft",
+   "smooth"
+  ],
+  "genre": [
+   "ambient",
+   "deep_house"
+  ],
+  "einsatz": [
+   "breakdown",
+   "intro"
+  ],
+  "energie": 1,
+  "text": "Slow saw pad: 200 ms attack, long release, the filter breathes open and settles over two seconds."
+ },
+ "tags": [
+  "saege-ladder"
+ ],
+ "notiz": "Measured by level and pitch on render, not yet heard (2026-11-11).",
+ "angelegt": "2026-11-11T00:00:00.000Z",
+ "geaendert": "2026-11-11T00:00:00.000Z"
+}

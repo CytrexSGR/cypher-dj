@@ -17,6 +17,7 @@
 // ARR_BK_OHNE_AKTIV (4).
 #include <cmath>
 #include <cstdio>
+#include <string>
 #include <vector>
 
 #include "arr_build.h"
@@ -81,7 +82,7 @@ Fall1 fall1(float k1_start, float k1_spaeter) {
     f.senke.insert(f.senke.end(), l.begin(), l.end());
     // reference: the same FFI calls directly, in the same order
     const bool sofort = s0 == 0 || s0 == 768;
-    for (int k = 1; k <= 8; ++k) {
+    for (int k = 1; k <= 32; ++k) {   // the sink reports all 32 knobs since the 32-knob widening (the others read 0.5)
       const float w = k == 1 ? k1 : 0.5f;
       if (sofort) cypher_bk_regler_sofort(hr, static_cast<uint32_t>(k), w);
       else cypher_bk_regler(hr, static_cast<uint32_t>(k), w);
@@ -178,6 +179,41 @@ Fall4 fall4(int art) {
   cypher_bk_frei(ha);
   cypher_bk_frei(hb);
   return f;
+}
+
+// Case 7 (32-knob widening): graph G_T with its regler node on knob `gn`, the sink alone, one held note. `params` is the knob list of the
+// track (an old playback names k1..k8 only), `auto_param` >= 0 reports that knob index (0..31) at 1.0 before every block (a `geraet.k<n>` lane).
+// Returns the left output of 40 blocks of 256.
+// `vorgabe` >= 0 gives the regler node the start position `vorgabe` (case 8, the playback default).
+std::vector<float> fall7(int gn, std::initializer_list<std::pair<const char*, float>> params, int auto_param = -1, float vorgabe = -1.0f) {
+  std::string g = bkt::G_T;
+  const size_t pos = g.find("\"nr\":1,");
+  PRUEF(pos != std::string::npos);
+  g.replace(pos, 7, "\"nr\":" + std::to_string(gn) + ",");
+  if (vorgabe >= 0.0f) {
+    const size_t mx = g.find("\"max\":1}");
+    PRUEF(mx != std::string::npos);
+    g.replace(mx, 8, "\"max\":1,\"vorgabe\":" + std::to_string(vorgabe) + "}");
+  }
+  Treiber t;
+  CypherBk* h = bkt::neu(g);
+  cdj::ArrSnapshot* a = Bau().spur(2, ArrArt::intern).fertig();
+  bkt::spur(a, 2, h, 1, params);
+  t.laden(a);
+  cdj::ArrBkSenke se(t.arr);
+  se.transport_start(1, 0);
+  std::vector<float> aus;
+  for (int64_t s0 = 0; s0 < 256 * 40; s0 += 256) {
+    se.takt(static_cast<double>(s0) / SPB, 128.0 / 60.0 / 48000.0);
+    if (s0 == 0) se.note(1, 100, 57, 100, true);
+    if (auto_param >= 0) se.auto_parameter(1, auto_param, 1.0f);
+    std::vector<float> l(256, 0.0f), r(256, 0.0f);
+    se.block(1, s0, 256, l.data(), r.data());
+    aus.insert(aus.end(), l.begin(), l.end());
+  }
+  PRUEF(se.verloren() == 0);
+  cypher_bk_frei(h);
+  return aus;
 }
 
 }  // namespace
@@ -326,6 +362,53 @@ int main() {
     PRUEF(bk.ruhend() == 0);
     PRUEF(energie(t.l, neu + 537 + 256, neu + SPB) > 1e-3);
     cypher_bk_frei(h);
+  }
+  {  // 7: 32-knob widening: the knobs 9, 17 and 32 (64-knob widening: 33, 48 and 64 as well; those need hall_ffi with REGLER 64) of a track reach the graph (own snapshot value, and a lane value); a playback that names
+     // k1..k8 only gives knob 9..32 their 0.5, bit for bit what an explicit 0.5 gives
+    for (const int gn : {9, 17, 32, 33, 48, 64}) {
+      char kn[8];
+      std::snprintf(kn, sizeof kn, "k%d", gn);
+      const std::vector<float> fehlt = fall7(gn, {{"k1", 0.5f}});                               // an old playback: k1..k8 only
+      const std::vector<float> alt8 = fall7(gn, {{"k1", 0.5f}, {"k2", 0.5f}, {"k8", 0.5f}});    // old format with its eight knobs at 0.5
+      const std::vector<float> halb = fall7(gn, {{kn, 0.5f}});
+      const std::vector<float> voll = fall7(gn, {{kn, 1.0f}});
+      const std::vector<float> nachbar = fall7(gn, {{gn == 32 ? "k31" : gn == 64 ? "k63" : gn == 33 ? "k34" : gn == 48 ? "k47" : "k10", 1.0f}});          // the neighbour knob does not move the graph
+      const std::vector<float> lane = fall7(gn, {}, gn - 1);                                      // `geraet.k<n>` lane value 1.0 through auto_parameter
+      const std::vector<float> lane_aussen = fall7(gn, {}, 64);                                   // knob index 64 does not exist: ignored
+      const double e_fehlt = energie(fehlt, 4096, 10240), e_voll = energie(voll, 4096, 10240);
+      std::printf("7: knob %d: missing %.5f, snapshot 1.0 %.5f (x%.3f), neighbour %.5f, lane 1.0 %.5f\n", gn, e_fehlt, e_voll, e_voll / e_fehlt,
+                  energie(nachbar, 4096, 10240), energie(lane, 4096, 10240));
+      PRUEF(e_fehlt > 1e-3);                           // positive control: the graph sounds
+      PRUEF(fehlt == halb && fehlt == alt8);           // tolerant read: missing = 0.5, bit-identical
+      PRUEF(e_voll / e_fehlt > 3.8 && e_voll / e_fehlt < 4.2);   // knob 1.0 is twice the amplitude of 0.5
+      PRUEF(nachbar == fehlt);
+      PRUEF(lane == voll);                             // the lane value reaches the same knob as the snapshot value
+      PRUEF(lane_aussen == fehlt);
+    }
+  }
+  {  // 8: playback default. A graph whose knob has `vorgabe` 0.2 starts the knob there: a playback that does not name the knob renders bit-equal
+     // to one that names it at 0.2, and different from 0.5; a named knob always wins; a graph without `vorgabe` still gives a missing knob 0.5.
+     // Knob 9 runs on every engine of this branch (REGLER >= 32), knob 40 and 64 need hall_ffi with REGLER 64.
+    for (const int gn : {9, 40, 64}) {
+      char kn[8];
+      std::snprintf(kn, sizeof kn, "k%d", gn);
+      const std::vector<float> fehlt = fall7(gn, {{"k1", 0.5f}}, -1, 0.2f);      // the playback names k1 only (an old one: k1..k8)
+      const std::vector<float> leer = fall7(gn, {}, -1, 0.2f);                  // names nothing at all
+      const std::vector<float> ist02 = fall7(gn, {{kn, 0.2f}}, -1, 0.2f);
+      const std::vector<float> ist05 = fall7(gn, {{kn, 0.5f}}, -1, 0.2f);
+      const std::vector<float> ist09 = fall7(gn, {{kn, 0.9f}}, -1, 0.2f);
+      const std::vector<float> ohne09 = fall7(gn, {{kn, 0.9f}});                 // the same graph without `vorgabe`, knob named
+      const std::vector<float> ohne_fehlt = fall7(gn, {{"k1", 0.5f}});            // without `vorgabe`: a missing knob
+      const std::vector<float> ohne05 = fall7(gn, {{kn, 0.5f}});
+      const double e02 = energie(ist02, 4096, 10240), e05 = energie(ist05, 4096, 10240);
+      std::printf("8: knob %d vorgabe 0.2: missing = explicit 0.2 %s, energy %.5f (explicit 0.5: %.5f)\n", gn, fehlt == ist02 ? "yes" : "NO", e02, e05);
+      PRUEF(e05 > 1e-3);                 // positive control: the graph sounds
+      PRUEF(fehlt == ist02 && leer == ist02);   // the missing knob starts at the graph's default
+      PRUEF(fehlt != ist05);             // ... and not at 0.5
+      PRUEF(e05 / e02 > 5.8 && e05 / e02 < 6.8);   // amplitude 0.5 vs 0.2 = x2.5, energy x6.25
+      PRUEF(ist09 == ohne09);            // a named knob always wins over the graph's default
+      PRUEF(ohne_fehlt == ohne05);       // no `vorgabe`: missing = explicit 0.5 as before
+    }
   }
   PRUEF_ENDE();
 }

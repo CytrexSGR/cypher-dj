@@ -171,13 +171,14 @@ pub extern "C" fn cypher_bk_neu_wurzel(json: *const c_char, fs: f64, wurzel: *co
     });
     match r {
         Ok(Ok(p)) => Box::into_raw(Box::new(CypherBk {
+            // the knobs start at the graph's `vorgabe` (target and smoothed state alike: no 20 ms glide from 0.5)
+            ziel: p.regler_vorgaben(),
+            ist: p.regler_vorgaben(),
             p,
             warte: [Ev::AlleAus { t: 0 }; BK_MAX_EREIGNISSE],
             n_warte: 0,
             verloren: 0,
             panik: 0,
-            ziel: [0.5; REGLER],
-            ist: [0.5; REGLER],
             a: (1.0 - (-1.0 / (REGLER_GLATT_S * fs)).exp()) as f32,
         })),
         Ok(Err(e)) => {
@@ -228,7 +229,7 @@ pub extern "C" fn cypher_bk_alle_aus(h: *mut CypherBk, versatz: u32) -> i32 {
     bk.melde(Ev::AlleAus { t: versatz })
 }
 
-/// Reglerziel `nr` (1..8) auf `wert` (0..1, geklemmt; NaN wird ignoriert). Der Graph folgt in 20 ms einpolig (Zeit aus
+/// Reglerziel `nr` (1..64, `baukasten_dsp::REGLER`) auf `wert` (0..1, geklemmt; NaN wird ignoriert). Der Graph folgt in 20 ms einpolig (Zeit aus
 /// `fs`). Rückgabe 0, -1 bei h null oder nr außerhalb. Allokiert nicht; nicht nebenläufig mit block.
 #[no_mangle]
 pub extern "C" fn cypher_bk_regler(h: *mut CypherBk, nr: u32, wert: f32) -> i32 {
@@ -243,9 +244,21 @@ pub extern "C" fn cypher_bk_regler(h: *mut CypherBk, nr: u32, wert: f32) -> i32 
     0
 }
 
+/// The graph's start position (`vorgabe`, 0..1) of knob `nr` (1..`baukasten_dsp::REGLER`); 0.5 for a knob the graph does not
+/// define or gives no `vorgabe`. -1.0 for h null or nr outside. A fresh instance starts every knob there. Does not allocate.
+#[no_mangle]
+pub extern "C" fn cypher_bk_regler_vorgabe(h: *mut CypherBk, nr: u32) -> f32 {
+    // SAFETY: wie cypher_bk_note_an
+    let Some(bk) = (unsafe { h.as_ref() }) else { return -1.0 };
+    if !(1..=REGLER as u32).contains(&nr) {
+        return -1.0;
+    }
+    bk.p.regler_vorgaben()[nr as usize - 1]
+}
+
 /// S20: like `cypher_bk_regler`, but the smoothed state jumps to the target at once (no 20 ms ramp). The arrangement sink uses it when it
 /// takes over a new instance and at transport start, so that live and the offline render begin from the same knob values whatever
-/// the pre-roll (the offline render has only three blocks before the first note). Returns 0, -1 for h null or nr outside 1..8; NaN is
+/// the pre-roll (the offline render has only three blocks before the first note). Returns 0, -1 for h null or nr outside 1..64; NaN is
 /// ignored. Does not allocate; not concurrent with block.
 #[no_mangle]
 pub extern "C" fn cypher_bk_regler_sofort(h: *mut CypherBk, nr: u32, wert: f32) -> i32 {

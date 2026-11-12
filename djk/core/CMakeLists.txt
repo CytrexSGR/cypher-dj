@@ -96,7 +96,9 @@ else()
   set(GOLDEN_RUSTC_VERSION "unknown")
 endif()
 set(HALL_FFI_DIR ${DJK}/instruments)
-set(HALL_FFI_LIB ${HALL_FFI_DIR}/target/release/libhall_ffi.a)
+# HALL_FFI_TARGET_DIR: cargo target directory (default as before); a build that must not touch the shared one passes its own.
+set(HALL_FFI_TARGET_DIR ${HALL_FFI_DIR}/target CACHE PATH "cargo target directory of the Rust staticlib")
+set(HALL_FFI_LIB ${HALL_FFI_TARGET_DIR}/release/libhall_ffi.a)
 # Seit 2026-10-11 trägt dieselbe Bibliothek auch Cypher Komp (komp_dsp): zwei Rust-Staticlibs kollidieren im Binary
 # (und Baukasten-Graphen der Erzeuger-Ströme).
 # D1 K2a: dazu die RB-338 (rb_dsp, cypher_rb_* in reverb_ffi/src/rb.rs); ohne rb_dsp hier baute eine Änderung dort nicht neu.
@@ -109,7 +111,7 @@ file(GLOB HALL_FFI_QUELLEN CONFIGURE_DEPENDS ${HALL_FFI_DIR}/reverb_ffi/src/*.rs
 # touch danach: cargo schreibt die .a nicht neu, wenn sich nur die mtime einer Quelle ändert (gemessen 2026-10-15 an
 # rb_dsp/Cargo.toml); ohne touch liefe die Regel dann bei jedem Bau erneut.
 add_custom_command(OUTPUT ${HALL_FFI_LIB}
-  COMMAND ${CARGO} build --release --quiet -p hall_ffi --manifest-path ${HALL_FFI_DIR}/Cargo.toml
+  COMMAND ${CMAKE_COMMAND} -E env CARGO_TARGET_DIR=${HALL_FFI_TARGET_DIR} ${CARGO} build --release --quiet -p hall_ffi --manifest-path ${HALL_FFI_DIR}/Cargo.toml
   COMMAND ${CMAKE_COMMAND} -E touch ${HALL_FFI_LIB}
   DEPENDS ${HALL_FFI_QUELLEN} COMMENT "cargo: hall_ffi" VERBATIM)
 add_custom_target(cypherdj_hall_ffi_bau DEPENDS ${HALL_FFI_LIB})

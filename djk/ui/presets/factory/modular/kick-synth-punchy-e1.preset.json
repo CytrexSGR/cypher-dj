@@ -1,0 +1,43 @@
+{
+ "schema": 1,
+ "name": "Punchy E1",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "kick-synth",
+ "werte": {
+  "knob1": 0.386102,
+  "knob2": 0.495354,
+  "knob3": 0.625,
+  "knob4": 0.422549,
+  "knob5": 0.35,
+  "knob6": 0.3,
+  "knob7": 0.7,
+  "knob8": 0
+ },
+ "beschreibung": {
+  "art": "drums",
+  "unterart": "kick",
+  "charakter": [
+   "punchy",
+   "tight",
+   "dark"
+  ],
+  "genre": [
+   "techno",
+   "tech_house"
+  ],
+  "einsatz": [
+   "drop",
+   "build"
+  ],
+  "energie": 4,
+  "text": "Short punchy kick tuned to E1 (41.2 Hz) with a fast pitch drop and a clear click."
+ },
+ "tags": [
+  "kick-synth",
+  "low-end"
+ ],
+ "notiz": "Measured by render (tuning, peak, first excursion), not heard yet (2026-11-12).",
+ "angelegt": "2026-11-12T00:00:00.000Z",
+ "geaendert": "2026-11-12T00:00:00.000Z"
+}

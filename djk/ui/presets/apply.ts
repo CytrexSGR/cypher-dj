@@ -10,6 +10,8 @@ import { RB_PARAMETER, BK_PARAMETER } from '../project/model.ts';
 import { rbNorm, rbPlain, RB_DEFS } from '../project/rb_mapping.ts';
 import { geraetVon, paramVon, type GeraetDef } from './devices.ts';
 import { PresetFehler, type Wert } from './model.ts';
+import { vorgabenVon } from '../graphs.ts';
+import { BK_REGLER_ZAHL } from '../project/modular.ts';
 
 export type Ziel = { art: 'spur'; spur_id: string } | { art: 'insert'; insert_id: string } | { art: 'insert_neu'; strang_id: string } | { art: 'kanal'; kanal: string };
 export interface AnzuwendenPreset { id: string; name: string; geraet: string; graph?: string; werte: Record<string, Wert> }
@@ -44,14 +46,14 @@ export function insertWerteAusPreset(art: 'komp' | 'eq' | 'saett', werte: Record
 const gleich = (a: Record<string, number>, b: Record<string, number>): boolean =>
   Object.keys(a).length === Object.keys(b).length && Object.keys(a).every((k) => a[k] === b[k]);
 
-export function planeAnwendung(preset: AnzuwendenPreset, ziel: Ziel, projekt: Projekt | null): Plan {
+export function planeAnwendung(preset: AnzuwendenPreset, ziel: Ziel, projekt: Projekt | null, geladenerGraph?: string): Plan {
   const g = geraetVon(preset.geraet);
   if (!g) throw new PresetFehler(400, 'geraet_unbekannt');
   // hall: the plugin Cypher Hall has no running instance in PRODUCTION; the return hall is another device (spec finding 4)
   if (g.id === 'hall') throw new PresetFehler(409, 'kein_ziel');
   const z = ziel as Record<string, unknown>;
   const label = `Preset ${preset.name}`;
-  if (z?.art === 'kanal') return kanalPlan(preset, g, String(z.kanal ?? ''));
+  if (z?.art === 'kanal') return kanalPlan(preset, g, String(z.kanal ?? ''), geladenerGraph);
   if (z?.art !== 'spur' && z?.art !== 'insert' && z?.art !== 'insert_neu') throw new PresetFehler(404, 'ziel_unbekannt');
   if (!projekt) throw new PresetFehler(409, 'kein_projekt');
 
@@ -72,7 +74,7 @@ export function planeAnwendung(preset: AnzuwendenPreset, ziel: Ziel, projekt: Pr
       if (alt.graph !== preset.graph) throw new PresetFehler(409, 'graph_anders');
       const parameter = { ...alt.parameter };
       for (const [name, w] of Object.entries(preset.werte)) {
-        const m = /^knob([1-8])$/.exec(name);
+        const m = /^knob([1-9]|[1-5][0-9]|6[0-4])$/.exec(name);
         if (m && BK_PARAMETER.includes(`k${m[1]}`)) parameter[`k${m[1]}`] = w as number; else uebersprungen.push(name);   // lautstaerke: a bk track has none
       }
       geraet = { art: 'intern', name: 'bk', graph: alt.graph, parameter, preset: preset.id };
@@ -99,7 +101,7 @@ export function planeAnwendung(preset: AnzuwendenPreset, ziel: Ziel, projekt: Pr
   return { weg: 'proj', befehle: [{ befehl: 'insert_setzen', strang_id: z.strang_id, pos: (strang.inserts ?? []).length, art, werte, preset: preset.id }], label, uebersprungen };
 }
 
-function kanalPlan(preset: AnzuwendenPreset, g: GeraetDef, kanal: string): Plan {
+function kanalPlan(preset: AnzuwendenPreset, g: GeraetDef, kanal: string, geladenerGraph?: string): Plan {
   const kanalArt = kanalArtVon(kanal);
   if (!kanalArt) throw new PresetFehler(404, 'ziel_unbekannt');
   const anfragen: { pfad: string; nach: number }[] = [], uebersprungen: string[] = [];
@@ -108,6 +110,13 @@ function kanalPlan(preset: AnzuwendenPreset, g: GeraetDef, kanal: string): Plan 
     for (const [name, w] of Object.entries(preset.werte)) {
       if (KERN_KOMP[name]) anfragen.push({ pfad: `${kanal}/comp/${KERN_KOMP[name]}`, nach: zahlVon(paramVon(g, name), w) }); else uebersprungen.push(name);
     }
+    return { weg: 'regler', anfragen, uebersprungen };
+  }
+  if (g.id === 'baukasten') {                             // an instrument channel: the 64 graph knobs over /regler <kanal>/bk/<n>, in knob order
+    if (!geladenerGraph) throw new PresetFehler(409, 'kein_graph');
+    if (geladenerGraph !== preset.graph) throw new PresetFehler(409, 'graph_anders');
+    const vorgaben = vorgabenVon(geladenerGraph);   // the graph's start position for a knob the preset does not carry (0.5 where the graph defines none or the file is unknown)
+    for (let n = 1; n <= BK_REGLER_ZAHL; n++) { const w = preset.werte[`knob${n}`]; anfragen.push({ pfad: `${kanal}/bk/${n}`, nach: typeof w === 'number' ? w : (vorgaben?.[n - 1] ?? 0.5) }); }
     return { weg: 'regler', anfragen, uebersprungen };
   }
   if (g.herkunft !== 'kern') throw new PresetFehler(409, 'geraet_passt_nicht');
@@ -128,7 +137,7 @@ function kanalPlan(preset: AnzuwendenPreset, g: GeraetDef, kanal: string): Plan 
 
 // POST /presets/von_ziel (T3a.4): the current values of a project target as a preset's `werte`, the inverse of the plan above.
 // rb338: plain values through rbPlain (a parameter the track does not set gets the plugin default, the switch becomes a boolean);
-// bk: knob1..knob8 from k1..k8 (absent = 0.5 in the kern) and the graph name; komp stage: the mapped rows back to plugin ids.
+// bk: knob1..knob64 from k1..k64 (absent = the graph's `vorgabe`, 0.5 where it has none) and the graph name; komp stage: the mapped rows back to plugin ids.
 // A kern channel is saved through POST /presets with werte, as the page does today (D9, D22).
 export function werteVonZiel(ziel: Ziel, projekt: Projekt | null): { geraet: string; graph?: string; werte: Record<string, Wert> } {
   const z = ziel as Record<string, unknown>;
@@ -147,7 +156,8 @@ export function werteVonZiel(ziel: Ziel, projekt: Projekt | null): { geraet: str
       return { geraet: 'rb338', werte };
     }
     if (g?.art === 'intern' && g.name === 'bk') {
-      return { geraet: 'baukasten', graph: g.graph, werte: Object.fromEntries(BK_PARAMETER.map((k, i) => [`knob${i + 1}`, g.parameter[k] ?? 0.5])) };
+      const vorgaben = vorgabenVon(g.graph);
+      return { geraet: 'baukasten', graph: g.graph, werte: Object.fromEntries(BK_PARAMETER.map((k, i) => [`knob${i + 1}`, g.parameter[k] ?? vorgaben?.[i] ?? 0.5])) };
     }
     throw new PresetFehler(409, 'geraet_passt_nicht');
   }

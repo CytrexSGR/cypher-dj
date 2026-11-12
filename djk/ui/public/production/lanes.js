@@ -19,7 +19,7 @@ export const ZIEL_ANZEIGE = {
   'geraet.cutoff': { min: 0, max: 1, anzeigeMin: 0, label: 'Cutoff', nurSprung: false, mittellinie: null },
   'geraet.resonanz': { min: 0, max: 1, anzeigeMin: 0, label: 'Resonance', nurSprung: false, mittellinie: null },
   'geraet.env_mod': { min: 0, max: 1, anzeigeMin: 0, label: 'Env Mod', nurSprung: false, mittellinie: null },
-  // 1.12 slice 7: the eight knobs of a Baukasten (bk) track
+  // 1.12 slice 7: the knobs k1..k64 of a Baukasten (bk) track
   'geraet.k1': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 1', nurSprung: false, mittellinie: null },
   'geraet.k2': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 2', nurSprung: false, mittellinie: null },
   'geraet.k3': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 3', nurSprung: false, mittellinie: null },
@@ -28,6 +28,62 @@ export const ZIEL_ANZEIGE = {
   'geraet.k6': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 6', nurSprung: false, mittellinie: null },
   'geraet.k7': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 7', nurSprung: false, mittellinie: null },
   'geraet.k8': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 8', nurSprung: false, mittellinie: null },
+  'geraet.k9': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 9', nurSprung: false, mittellinie: null },
+  'geraet.k10': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 10', nurSprung: false, mittellinie: null },
+  'geraet.k11': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 11', nurSprung: false, mittellinie: null },
+  'geraet.k12': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 12', nurSprung: false, mittellinie: null },
+  'geraet.k13': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 13', nurSprung: false, mittellinie: null },
+  'geraet.k14': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 14', nurSprung: false, mittellinie: null },
+  'geraet.k15': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 15', nurSprung: false, mittellinie: null },
+  'geraet.k16': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 16', nurSprung: false, mittellinie: null },
+  'geraet.k17': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 17', nurSprung: false, mittellinie: null },
+  'geraet.k18': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 18', nurSprung: false, mittellinie: null },
+  'geraet.k19': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 19', nurSprung: false, mittellinie: null },
+  'geraet.k20': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 20', nurSprung: false, mittellinie: null },
+  'geraet.k21': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 21', nurSprung: false, mittellinie: null },
+  'geraet.k22': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 22', nurSprung: false, mittellinie: null },
+  'geraet.k23': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 23', nurSprung: false, mittellinie: null },
+  'geraet.k24': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 24', nurSprung: false, mittellinie: null },
+  'geraet.k25': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 25', nurSprung: false, mittellinie: null },
+  'geraet.k26': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 26', nurSprung: false, mittellinie: null },
+  'geraet.k27': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 27', nurSprung: false, mittellinie: null },
+  'geraet.k28': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 28', nurSprung: false, mittellinie: null },
+  'geraet.k29': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 29', nurSprung: false, mittellinie: null },
+  'geraet.k30': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 30', nurSprung: false, mittellinie: null },
+  'geraet.k31': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 31', nurSprung: false, mittellinie: null },
+  'geraet.k32': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 32', nurSprung: false, mittellinie: null },
+  'geraet.k33': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 33', nurSprung: false, mittellinie: null },
+  'geraet.k34': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 34', nurSprung: false, mittellinie: null },
+  'geraet.k35': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 35', nurSprung: false, mittellinie: null },
+  'geraet.k36': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 36', nurSprung: false, mittellinie: null },
+  'geraet.k37': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 37', nurSprung: false, mittellinie: null },
+  'geraet.k38': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 38', nurSprung: false, mittellinie: null },
+  'geraet.k39': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 39', nurSprung: false, mittellinie: null },
+  'geraet.k40': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 40', nurSprung: false, mittellinie: null },
+  'geraet.k41': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 41', nurSprung: false, mittellinie: null },
+  'geraet.k42': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 42', nurSprung: false, mittellinie: null },
+  'geraet.k43': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 43', nurSprung: false, mittellinie: null },
+  'geraet.k44': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 44', nurSprung: false, mittellinie: null },
+  'geraet.k45': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 45', nurSprung: false, mittellinie: null },
+  'geraet.k46': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 46', nurSprung: false, mittellinie: null },
+  'geraet.k47': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 47', nurSprung: false, mittellinie: null },
+  'geraet.k48': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 48', nurSprung: false, mittellinie: null },
+  'geraet.k49': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 49', nurSprung: false, mittellinie: null },
+  'geraet.k50': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 50', nurSprung: false, mittellinie: null },
+  'geraet.k51': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 51', nurSprung: false, mittellinie: null },
+  'geraet.k52': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 52', nurSprung: false, mittellinie: null },
+  'geraet.k53': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 53', nurSprung: false, mittellinie: null },
+  'geraet.k54': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 54', nurSprung: false, mittellinie: null },
+  'geraet.k55': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 55', nurSprung: false, mittellinie: null },
+  'geraet.k56': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 56', nurSprung: false, mittellinie: null },
+  'geraet.k57': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 57', nurSprung: false, mittellinie: null },
+  'geraet.k58': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 58', nurSprung: false, mittellinie: null },
+  'geraet.k59': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 59', nurSprung: false, mittellinie: null },
+  'geraet.k60': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 60', nurSprung: false, mittellinie: null },
+  'geraet.k61': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 61', nurSprung: false, mittellinie: null },
+  'geraet.k62': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 62', nurSprung: false, mittellinie: null },
+  'geraet.k63': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 63', nurSprung: false, mittellinie: null },
+  'geraet.k64': { min: 0, max: 1, anzeigeMin: 0, label: 'Knob 64', nurSprung: false, mittellinie: null },
 };
 export const ZIELE = Object.keys(ZIEL_ANZEIGE);
 // 1.12 slice 6: the targets of a lane on an insert stage (`insert.<stage id>.<param>`) or a rack macro (`rack.m1..m4`) of the strip. Their range comes from the
@@ -68,10 +124,10 @@ export const unbekanntesZiel = (lane) => !!lane && !(lane.ziel in ZIEL_ANZEIGE) 
 export const laneSchutz = (lane) => (lane?.gesperrt ? 'gesperrt' : unbekanntesZiel(lane) ? 'unbekannt' : null);
 export const zielLabel = (ziel) => ZIEL_ANZEIGE[ziel]?.label ?? kettenZiele.get(ziel)?.label ?? String(ziel);
 export const istGeraetZiel = (ziel) => typeof ziel === 'string' && ziel.startsWith('geraet.');
-// does the device of this track own the device target? (the rule of passtGeraetZiel in project/model.ts: RB-338 four parameters, bk the knobs k1..k8)
+// does the device of this track own the device target? (the rule of passtGeraetZiel in project/model.ts: RB-338 four parameters, bk the knobs k1..k64)
 export const passtGeraetZiel = (ziel, spur) => {
   const g = spur?.art === 'instrument' && spur.geraet?.art === 'intern' ? spur.geraet.name : null;
-  return g === 'rb338' ? /^geraet\.(lautstaerke|cutoff|resonanz|env_mod)$/.test(ziel) : g === 'bk' ? /^geraet\.k[1-8]$/.test(ziel) : false;
+  return g === 'rb338' ? /^geraet\.(lautstaerke|cutoff|resonanz|env_mod)$/.test(ziel) : g === 'bk' ? /^geraet\.k([1-9]|[1-5][0-9]|6[0-4])$/.test(ziel) : false;
 };
 export const MAX_BEAT = 100_000;                     // = project/model.ts MAX_BEAT
 export const MAX_PUNKTE = 8192;                      // per lane
@@ -212,7 +268,7 @@ export const hatLane = (spur) => faderLane(spur) !== null;
 // The lane the open row shows: the chosen target if the track has it, else the volume lane (as in slice 1), else the first lane, else null.
 // wahl: the target the user picked (page state, not in the project).
 export const gezeigteLane = (spur, wahl) => laneFuer(spur, wahl) ?? faderLane(spur) ?? (spur?.automation ?? [])[0] ?? null;
-// The targets a track can still get a lane for, in menu order: no target twice, `geraet.*` only on a track whose device owns the parameter (RB-338: four, bk: knobs 1 to 8)
+// The targets a track can still get a lane for, in menu order: no target twice, `geraet.*` only on a track whose device owns the parameter (RB-338: four, bk: knobs 1 to 64)
 // 1.12 slice 6: then the chain targets of the track's own stages and rack that have no lane and are not driven by a macro (one writer per parameter)
 export const freieZiele = (spur) => [
   ...ZIELE.filter((z) => !laneFuer(spur, z) && (!istGeraetZiel(z) || passtGeraetZiel(z, spur))),

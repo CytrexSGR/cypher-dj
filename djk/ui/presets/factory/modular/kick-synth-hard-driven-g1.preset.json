@@ -1,0 +1,43 @@
+{
+ "schema": 1,
+ "name": "Hard Driven G1",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "kick-synth",
+ "werte": {
+  "knob1": 0.47873,
+  "knob2": 0.571961,
+  "knob3": 0.5,
+  "knob4": 0.477121,
+  "knob5": 0.5,
+  "knob6": 0.7,
+  "knob7": 0.6,
+  "knob8": 0
+ },
+ "beschreibung": {
+  "art": "drums",
+  "unterart": "kick",
+  "charakter": [
+   "aggressive",
+   "dirty",
+   "punchy"
+  ],
+  "genre": [
+   "techno",
+   "hardstyle"
+  ],
+  "einsatz": [
+   "drop",
+   "mixdown"
+  ],
+  "energie": 5,
+  "text": "Hard driven kick tuned to G1 (49 Hz): heavy overdrive on the body, click on top, tail stays on the note."
+ },
+ "tags": [
+  "kick-synth",
+  "low-end"
+ ],
+ "notiz": "Measured by render (tuning, peak, first excursion), not heard yet (2026-11-12).",
+ "angelegt": "2026-11-12T00:00:00.000Z",
+ "geaendert": "2026-11-12T00:00:00.000Z"
+}

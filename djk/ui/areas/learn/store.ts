@@ -21,7 +21,7 @@ const istObjekt = (x: unknown): x is Record<string, unknown> => typeof x === 'ob
 // a CC entry as the learn flow writes it: absolute, on a graph knob
 function alsZuordnung(e: Eintrag): Zuordnung | null {
   const n = e.nachricht;
-  if (!istObjekt(n) || n.typ !== 'cc' || e.art !== 'absolut' || typeof e.ziel !== 'string' || !/\/bk\/[1-8]$/.test(e.ziel)) return null;
+  if (!istObjekt(n) || n.typ !== 'cc' || e.art !== 'absolut' || typeof e.ziel !== 'string' || !/\/bk\/([1-9]|[1-5][0-9]|6[0-4])$/.test(e.ziel)) return null;
   if (!Number.isInteger(n.kanal) || !Number.isInteger(n.nr)) return null;
   return { pfad: e.ziel, kanal: n.kanal as number, nr: n.nr as number };
 }

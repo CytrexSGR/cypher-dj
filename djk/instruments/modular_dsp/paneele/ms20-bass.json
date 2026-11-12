@@ -1,0 +1,33 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "ms20-bass"},
+  "title": "Twin-filter Bass",
+  "akzent": "orange",
+  "layout": {"rows": [
+    ["osc", "filter", "fenv", "aenv"]
+  ]},
+  "sections": [
+    { "id": "osc", "title": "OSCILLATORS", "cols": 3, "controls": [
+      {"id": "o1", "type": "label", "span": 3, "text": "Saw 50 % + pulse 40 %"},
+      {"id": "o2", "type": "label", "span": 3, "text": "Pulse width 50 % fixed"},
+      {"id": "o3", "type": "label", "span": 3, "text": "8 voices"}
+    ]},
+    { "id": "filter", "title": "FILTER", "cols": 4, "controls": [
+      {"id": "fk", "type": "filterkurve", "span": 4, "of": {"cutoff": "cutoff", "reso": "reso"}, "typen": [{"art": "lp", "pole": 2}]},
+      {"id": "cutoff", "type": "knob", "label": "Cutoff", "bind": {"param": "k1"}, "format": "hz", "default": 0.5},
+      {"id": "reso", "type": "knob", "label": "Resonance", "bind": {"param": "k2"}, "format": "percent", "default": 0.5},
+      {"id": "drive", "type": "knob", "label": "Drive", "bind": {"param": "k3"}, "format": "percent", "default": 0.5},
+      {"id": "env", "type": "knob", "label": "Env amount", "bind": {"param": "k4"}, "format": "hz", "default": 0.5}
+    ]},
+    { "id": "fenv", "title": "FILTER ENV", "cols": 3, "controls": [
+      {"id": "fhue", "type": "huelle", "span": 3, "label": "Envelope", "of": {"a": 0.002, "d": 0.25, "s": 0.1, "r": 0.2}},
+      {"id": "fn", "type": "label", "span": 3, "text": "A 2 ms, D 250 ms, S 10 %, R 200 ms"},
+      {"id": "fn2", "type": "label", "span": 3, "text": "All four times fixed"}
+    ]},
+    { "id": "aenv", "title": "AMP ENV", "cols": 3, "controls": [
+      {"id": "ahue", "type": "huelle", "span": 3, "label": "Envelope", "of": {"a": 0.003, "d": 0.3, "s": 0.8, "r": 0.15}},
+      {"id": "an", "type": "label", "span": 3, "text": "A 3 ms, D 300 ms, S 80 %, R 150 ms"},
+      {"id": "an2", "type": "label", "span": 3, "text": "All four times fixed"}
+    ]}
+  ]
+}

@@ -1,0 +1,43 @@
+{
+ "schema": 1,
+ "name": "Reese Square Punch",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "wavetable-reese",
+ "werte": {
+  "knob1": 0.55,
+  "knob2": 0.25,
+  "knob3": 0.2,
+  "knob4": 0.4,
+  "knob5": 0.35,
+  "knob6": 0.4,
+  "knob7": 0.75,
+  "knob8": 0.1,
+  "knob9": 0.45
+ },
+ "beschreibung": {
+  "art": "bass",
+  "unterart": "reese",
+  "charakter": [
+   "punchy",
+   "thick",
+   "dirty"
+  ],
+  "genre": [
+   "techno",
+   "dnb"
+  ],
+  "einsatz": [
+   "drop"
+  ],
+  "energie": 4,
+  "text": "Reese bass with a hollow square-wave punch on the attack that decays into the saw."
+ },
+ "tags": [
+  "wavetable-reese",
+  "wave-envelope"
+ ],
+ "notiz": "Measured by level on render, not yet heard (2026-11-11).",
+ "angelegt": "2026-11-11T00:00:00.000Z",
+ "geaendert": "2026-11-11T00:00:00.000Z"
+}

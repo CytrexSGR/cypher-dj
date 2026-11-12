@@ -1,0 +1,207 @@
+/* Accent tokens (panel `akzent`): header bar and knob arc. The page is dark only. */
+:root { --ak-rot: #ff6b6b; --ak-orange: #ff9a3c; --ak-gelb: #f2d04a; --ak-gruen: #5bd98a; --ak-tuerkis: #2fd6c3; --ak-blau: #5aa2ff; --ak-violett: #b48cff; }
+.frontplatte[data-akzent="rot"] { --fp-akzent: var(--ak-rot); }
+.frontplatte[data-akzent="orange"] { --fp-akzent: var(--ak-orange); }
+.frontplatte[data-akzent="gelb"] { --fp-akzent: var(--ak-gelb); }
+.frontplatte[data-akzent="gruen"] { --fp-akzent: var(--ak-gruen); }
+.frontplatte[data-akzent="tuerkis"] { --fp-akzent: var(--ak-tuerkis); }
+.frontplatte[data-akzent="blau"] { --fp-akzent: var(--ak-blau); }
+.frontplatte[data-akzent="violett"] { --fp-akzent: var(--ak-violett); }
+.frontplatte[data-akzent] .fp-kopf { border-top: 3px solid var(--fp-akzent); margin-top: -8px; padding-top: 5px; border-radius: 8px 8px 0 0; }
+.frontplatte[data-akzent] .fp-bogen { stroke: var(--fp-akzent); filter: none; }
+/* Front panel of a Baukasten graph (panel.js). One look for every cypher-dj panel: a dark instrument plate, small-caps labels,
+   teal value arcs. Colours and fonts come from style.css (:root). */
+.bkliste.mit-platte { display: block; }
+/* In a send-return row the knob list is a two-column grid inside a 300 px cell (style.css): a plate needs the whole row. */
+.sendrueck .sendzeile:has(> .bkliste.mit-platte) { grid-template-columns: 80px minmax(0, 1fr); }
+.sendrueck .sendzeile .bkliste.mit-platte { display: block; }
+.bkliste.mit-platte > .frontplatte { width: fit-content; max-width: 100%; }
+.frontplatte { background: linear-gradient(180deg, #1f232c 0%, #181b22 100%); border: 1px solid var(--line); border-radius: 10px;
+  padding: 8px 12px 12px; color: var(--text); font-size: 12px; text-transform: none; letter-spacing: 0; user-select: none;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .05), 0 1px 0 rgba(0, 0, 0, .45); }
+.fp-kopf { display: flex; align-items: center; gap: 10px; padding-bottom: 6px; margin-bottom: 10px; border-bottom: 1px solid var(--line); }
+.fp-titel { font-size: 11px; font-weight: 700; letter-spacing: .2em; text-transform: uppercase; }
+.fp-umschalter { margin-left: auto; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; padding: 3px 9px; border-radius: 6px; color: var(--dim); }
+.fp-koerper { display: flex; flex-wrap: wrap; gap: 12px 22px; align-items: flex-start; }
+.fp-sektion { min-width: 0; }
+.fp-sektionstitel { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 10px; font-weight: 700; letter-spacing: .2em; color: var(--dim); }
+.fp-sektionstitel::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.fp-gitter { display: grid; grid-template-columns: repeat(var(--spalten, 4), minmax(64px, 88px)); gap: 10px 8px; align-items: start; justify-items: center; }
+.fp-zelle { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 100%; min-width: 0; }
+.fp-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 9.5px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; color: var(--dim); }
+.fp-wert { min-width: 7ch; text-align: center; font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text); white-space: nowrap; }
+.fp-text { font-size: 11px; color: var(--dim); text-align: center; }
+.fp-zelle[data-typ="value"] .fp-wert { font-size: 15px; font-weight: 700; color: var(--a); }
+
+/* knob: SVG with a value arc; vertical drag */
+.fp-knopf { width: 56px; height: 56px; border-radius: 50%; cursor: ns-resize; }
+.fxdetail .frontplatte svg, .frontplatte svg { display: block; width: 100%; height: 100%; max-width: none; background: none; border: 0; border-radius: 0; }
+.fp-spur, .fp-bogen { fill: none; stroke-width: 4; stroke-linecap: round; }
+.fp-spur { stroke: var(--line); }
+.fp-bogen { stroke: var(--a); filter: drop-shadow(0 0 3px rgba(47, 214, 195, .45)); }
+.fp-kappe { fill: #0e0f12; stroke: #3c404c; stroke-width: 1.5; }
+.fp-knopf:hover .fp-kappe { stroke: #5a6070; }
+.fp-strich { stroke: var(--text); stroke-width: 2.5; stroke-linecap: round; }
+.fp-knopf:focus-visible, .fp-bahn:focus-visible, .fp-xy:focus-visible { outline: 2px solid var(--a); outline-offset: 2px; }
+
+/* fader */
+.fp-bahn { position: relative; width: 28px; height: 96px; cursor: ns-resize; }
+.fp-rille { position: absolute; left: 50%; top: 6px; bottom: 6px; width: 4px; transform: translateX(-50%); border-radius: 2px; background: #0e0f12; box-shadow: inset 0 0 0 1px var(--line); }
+.fp-rille::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: calc(var(--k, 0) * 100%); border-radius: 2px; background: var(--a); }
+.fp-griff { position: absolute; left: 50%; bottom: calc(var(--k, 0) * (100% - 12px)); width: 24px; height: 12px; transform: translateX(-50%);
+  border-radius: 3px; border: 1px solid #5a6070; background: linear-gradient(180deg, #3a3f4c, #262a33); }
+.fp-griff::after { content: ""; position: absolute; left: 3px; right: 3px; top: 50%; height: 1px; background: var(--text); opacity: .7; }
+.fp-zelle.waagrecht .fp-bahn { width: 96px; height: 28px; cursor: ew-resize; }
+.fp-zelle.waagrecht .fp-rille { left: 6px; right: 6px; top: 50%; bottom: auto; width: auto; height: 4px; transform: translateY(-50%); }
+.fp-zelle.waagrecht .fp-rille::after { right: auto; top: 0; height: auto; width: calc(var(--k, 0) * 100%); }
+.fp-zelle.waagrecht .fp-griff { left: calc(var(--k, 0) * (100% - 12px)); bottom: auto; top: 50%; width: 12px; height: 24px; transform: translateY(-50%); }
+.fp-zelle.waagrecht .fp-griff::after { left: 50%; right: auto; top: 3px; bottom: 3px; width: 1px; height: auto; }
+
+/* switch and selector */
+.fp-schalter { display: inline-flex; align-items: center; gap: 7px; padding: 5px 10px; border-radius: 6px; font-size: 10px; }
+.fp-schalter .fp-name { color: inherit; }
+.fp-led { width: 8px; height: 8px; border-radius: 50%; background: var(--line); }
+.fp-schalter.an .fp-led { background: var(--a); box-shadow: 0 0 6px var(--a); }
+.fp-wahl { display: inline-flex; max-width: 100%; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+.fp-option { border: 0; border-radius: 0; padding: 5px 9px; font-size: 10px; font-weight: 600; letter-spacing: .08em; background: transparent; color: var(--dim); }
+.fp-option + .fp-option { border-left: 1px solid var(--line); }
+.fp-option.an { background: var(--a); color: #0e0f12; font-weight: 700; }
+
+/* xy pad: grid, a crosshair that follows the puck */
+.fp-xy { position: relative; width: 100%; max-width: 190px; aspect-ratio: 1.35; min-height: 96px; cursor: crosshair; border: 1px solid var(--line); border-radius: 6px; background-color: #0e0f12;
+  background-image: linear-gradient(rgba(47, 214, 195, .4), rgba(47, 214, 195, .4)), linear-gradient(rgba(47, 214, 195, .4), rgba(47, 214, 195, .4)),
+    linear-gradient(to right, rgba(255, 255, 255, .05) 1px, transparent 1px), linear-gradient(to bottom, rgba(255, 255, 255, .05) 1px, transparent 1px);
+  background-size: 1px 100%, 100% 1px, 25% 25%, 25% 25%; background-repeat: no-repeat, no-repeat, repeat, repeat;
+  background-position: calc(var(--x, .5) * 100%) 0, 0 calc((1 - var(--y, .5)) * 100%), 0 0, 0 0; }
+.fp-puck { position: absolute; left: calc(var(--x, .5) * 100%); top: calc((1 - var(--y, .5)) * 100%); width: 14px; height: 14px; transform: translate(-50%, -50%);
+  border-radius: 50%; border: 2px solid var(--a); background: rgba(47, 214, 195, .25); box-shadow: 0 0 6px rgba(47, 214, 195, .5); pointer-events: none; }
+.fp-zelle[data-typ="xy"] .fp-wert { min-width: 0; }
+
+/* INSTRUMENTS area: the library chrome gives way, the plate of the chosen instrument gets the room. */
+body.bereich-instrumente #bestand .reiter, body.bereich-instrumente #bestand #suche, body.bereich-instrumente #bestand #bestand-info,
+body.bereich-instrumente #bestand .tabelle { display: none !important; }
+.instrumente { display: flex; flex-direction: column; gap: 10px; padding: 8px 12px; overflow: auto; min-height: 0; flex: 1; }
+.instrumente[hidden] { display: none; }   /* display:flex above beats the hidden attribute (see .effekte[hidden] in style.css) */
+.instrument-reiter { display: flex; flex-wrap: wrap; gap: 4px; }
+.instrument-reiter button { font-size: 12px; font-weight: 700; letter-spacing: .08em; padding: 4px 12px; border-radius: 6px; background: none; border: 1px solid var(--line); color: var(--dim); }
+.instrument-reiter button.an { color: var(--text, #e6e6e6); border-color: var(--text, #e6e6e6); }
+.instrument-koerper { display: flex; flex-direction: column; gap: 10px; }
+.instrument-koerper .graphplatz { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+/* The graph picker of the INSTRUMENTS area: like the page's other selects (dark, compact), as wide as its content. */
+#instrumente .graphplatz select.graphwahl, #instrumente .graphplatz select.graphkat { width: auto; max-width: 100%; background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 5px; padding: 3px 8px; font: inherit; font-size: 12px; }
+#instrumente .graphplatz .graphtext { flex: 1 0 100%; font-size: 12px; color: var(--dim); }   /* one description line under the two selects */
+.instrument-koerper .bkliste.mit-platte { display: block; }
+.instrument-koerper .bkliste.mit-platte > .frontplatte { width: fit-content; max-width: 100%; padding: 12px 18px 18px; }
+.instrument-koerper .fp-titel { font-size: 13px; }
+/* Preset header (panel_kopf.js): picker, step buttons, SAVE */
+.fp-presetzeile { display: flex; align-items: center; gap: 6px; margin: -2px 0 10px; }
+.fp-preset { flex: 1 1 auto; min-width: 0; max-width: 260px; font-size: 11px; padding: 3px 6px; }
+.fp-knopf-klein { font-size: 10px; letter-spacing: .12em; padding: 3px 8px; border-radius: 6px; color: var(--dim); }
+.fp-aktiv { display: none; }
+
+/* MIDI learn: LEARN toggle, learn mode, markers. Colours come from the page tokens (--a learned, --warn waiting). The marker is a small dot in the cell's corner. */
+.fp-knopf-klein.an[data-fp-lernen] { color: var(--bg); background: var(--warn); border-color: var(--warn); }
+.frontplatte.fp-lernmodus .fp-zelle:not([data-typ="value"]):not([data-typ="label"]):not([data-typ="spacer"]) { cursor: pointer; outline: 1px dashed var(--line); outline-offset: 2px; border-radius: 6px; }
+.frontplatte.fp-lernmodus .fp-knopf, .frontplatte.fp-lernmodus .fp-bahn, .frontplatte.fp-lernmodus .fp-xy { cursor: pointer; }
+.fp-zelle { position: relative; }
+.fp-zelle.fp-gelernt::after, .fp-zelle.fp-wartet::after { content: ""; position: absolute; top: -1px; right: 2px; width: 7px; height: 7px; border-radius: 50%; background: var(--a); box-shadow: 0 0 0 1px var(--bg); }
+.fp-zelle.fp-wartet { outline: 2px solid var(--warn) !important; outline-offset: 2px; border-radius: 6px; }
+.fp-zelle.fp-wartet::after { background: var(--warn); animation: fp-puls 1s ease-in-out infinite; }
+@keyframes fp-puls { 50% { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) { .fp-zelle.fp-wartet::after { animation: none; } }
+
+/* Layout: modules in rows (panel.js, `layout.rows`). A module is a framed box one step lighter than the plate with an accent strip
+   on its title bar; neighbours in a row are separated by a 1 px vertical divider. Narrow (no `fp-breit`): modules stack in one column. */
+.fp-aus { display: none !important; }
+.fp-mit-reihen .fp-koerper { display: flex; flex-direction: column; flex-wrap: nowrap; align-items: stretch; gap: 10px; }
+.fp-reihe { display: flex; flex-direction: column; gap: 10px; }
+.fp-modul { background: #232733; border: 1px solid var(--line); border-radius: 8px; padding: 0 10px 10px; min-width: 0; overflow: hidden; }
+.fp-modultitel { margin: 0 -10px 10px; padding: 5px 10px; background: rgba(0, 0, 0, .22); border-bottom: 1px solid var(--line); border-top: 2px solid var(--fp-akzent, var(--a)); }
+.fp-modultitel::after { display: none; }
+/* narrow: the grid wraps to the room it has (a 298 px column holds 3 columns); a cell asking for 3 or more columns takes a whole row, so nothing is clipped */
+.frontplatte:not(.fp-breit) .fp-modul .fp-gitter { grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); }
+.frontplatte:not(.fp-breit) .fp-modul .fp-zelle[style*="span 3"], .frontplatte:not(.fp-breit) .fp-modul .fp-zelle[style*="span 4"], .frontplatte:not(.fp-breit) .fp-modul .fp-zelle[style*="span 5"],
+.frontplatte:not(.fp-breit) .fp-modul .fp-zelle[style*="span 6"], .frontplatte:not(.fp-breit) .fp-modul .fp-zelle[style*="span 7"], .frontplatte:not(.fp-breit) .fp-modul .fp-zelle[style*="span 8"] { grid-column: 1 / -1 !important; }
+/* device page: rows side by side; a module takes room by its column count; the divider is the module's own left edge */
+.fp-breit.fp-mit-reihen .fp-reihe { flex-direction: row; flex-wrap: wrap; align-items: stretch; gap: 0; border-radius: 8px; }
+.fp-breit .fp-modul { flex: var(--spalten, 4) 1 calc(var(--spalten, 4) * 92px + 20px); max-width: calc(var(--spalten, 4) * 200px + 20px); border-radius: 0; border-width: 1px 0 1px 0; }
+.fp-breit .fp-modul:first-child { border-left-width: 1px; border-radius: 8px 0 0 8px; }
+.fp-breit .fp-modul:last-child { border-right-width: 1px; border-radius: 0 8px 8px 0; }
+.fp-breit .fp-modul.fp-teiler { border-left: 1px solid #5c6378; }
+.fp-breit .fp-modul:only-child { border-radius: 8px; }
+.fp-breit .fp-modul .fp-gitter { grid-template-columns: repeat(var(--spalten, 4), minmax(64px, 1fr)); }
+.fp-breit.frontplatte { width: 100%; box-sizing: border-box; }
+.instrument-koerper .bkliste.mit-platte > .frontplatte.fp-breit { width: 100%; }
+@media (max-width: 1199px) { .fp-breit .fp-modul { flex-basis: calc(var(--spalten, 4) * 92px + 20px); max-width: none; } .fp-breit .fp-reihe { gap: 8px; } .fp-breit .fp-modul, .fp-breit .fp-modul.fp-teiler { border-width: 1px; border-radius: 8px; } }
+/* pages: tab bar between header and body */
+.fp-seiten { display: flex; gap: 4px; margin: -2px 0 10px; }
+.fp-seite { font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; padding: 4px 12px; border-radius: 6px; background: none; border: 1px solid var(--line); color: var(--dim); }
+.fp-seite.an { color: var(--text); border-color: var(--fp-akzent, var(--text)); }
+/* knob scale (inside the knob SVG): ticks and range or step texts */
+.fp-knopf.fp-skaliert { width: 92px; height: 92px; margin: -10px 0; }
+.fp-tick { stroke: #8a90a2; stroke-width: 1.2; stroke-linecap: round; }
+.fp-tick-ende { stroke: var(--dim); stroke-width: 1.6; }
+.fp-skalatext { fill: var(--dim); font-size: 8.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
+/* glyph options: a selector option shows a small stroke drawing; the option text is its name for readers */
+.frontplatte .fp-glyphe { width: 24px; height: 12px; display: block; }
+.frontplatte .fp-glyphe { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.fp-option-glyphe { padding: 6px 7px; display: inline-flex; align-items: center; }
+.fp-glyphenplatz { display: inline-flex; margin-left: 4px; }
+/* display types not drawn yet: an empty framed cell */
+.fp-anzeige { min-height: 56px; width: 100%; border: 1px dashed var(--line); border-radius: 6px; }
+.fp-anzeige:has(.fp-spektrum) { border-style: solid; }
+/* channel spectrum on the device page (spectrum.js spektrumFlaeche): in a plate cell or as a strip under the plate */
+.fp-spektrum { width: 100%; }
+.fp-spektrum canvas { display: block; width: 100%; height: auto; border-radius: 6px; }
+.fp-spektrum-info { font-size: 11px; color: var(--muted, #8a8d98); padding: 3px 2px 0; min-height: 15px; }
+.fp-spektrumstreifen { max-width: 1000px; margin: 10px 0 0; }
+
+/* Device page (Task 3): the INSTRUMENTS element enlarged as a fixed layer under the page header, in every view. app.js setzeGeraeteseite sets the body class and
+   --geraete-oben (the header's bottom edge). The plate inside is rebuilt wide (fp-breit). #bestand is z-index 2, so the layer is above the mixer and the decks. */
+.fp-gross { margin-left: auto; font-size: 14px; line-height: 1; padding: 3px 8px; border-radius: 6px; color: var(--dim); }
+.fp-umschalter ~ .fp-gross { margin-left: 0; }
+.fp-gross[aria-pressed="true"] { color: var(--text, #e6e6e6); border-color: var(--text, #e6e6e6); }
+body.geraeteseite #bestand { z-index: 25; }   /* above .p-verlauf (20) and .p-midi (21) of the production view, below menus (30) */
+body.geraeteseite #instrumente { position: fixed; top: var(--geraete-oben, 72px); left: 0; right: 0; bottom: 0; z-index: 20; background: var(--bg, #0e0f12); padding: 12px 16px 16px; overflow: auto; box-sizing: border-box; }
+/* PRODUCTION: a collapsed (lib-zu) browser hides all its children but the title row; the open device page lives in one of them */
+body.produktion.lib-zu.geraeteseite-produktion #bestand > #instrumente:not([hidden]) { display: flex; }
+
+/* Surge plate: the button that opens Surge's own window, and the host's reason under the header */
+.fp-fenster { margin-left: auto; font-size: 12px; padding: 3px 10px; border-radius: 6px; color: var(--dim); }
+.fp-fenster[aria-pressed="true"] { color: var(--text, #e6e6e6); border-color: var(--text, #e6e6e6); }
+.fp-gross ~ .fp-fenster { margin-left: 0; }
+.fp-fensterhinweis { font-size: 12px; color: var(--dim); padding: 2px 12px 4px; }
+
+/* Tablet view (#tablet, task 10): the device page only, no page header, the channel tabs on top; sizes for fingers (knob cap 72 px, fader travel 160 px).
+   app.js sets body.tablet; the device page layer is then the whole window. */
+body.tablet { overscroll-behavior: none; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; }
+body.tablet #kopf, body.tablet .bereich, body.tablet #kopplung-knopf { display: none !important; }
+body.tablet.geraeteseite #instrumente { top: 0; padding: 8px 12px 14px; -webkit-overflow-scrolling: touch; }
+body.tablet .instrument-reiter { flex: 0 0 auto; position: sticky; top: -8px; z-index: 2; padding: 8px 0; margin-top: -8px; background: var(--bg, #0e0f12); flex-wrap: nowrap; overflow-x: auto; }
+body.tablet .instrument-reiter button { min-height: 48px; padding: 8px 16px; font-size: 14px; white-space: nowrap; }
+body.tablet .fp-gross, body.tablet .fp-fenster { display: none; }   /* no way out of the device page on the tablet: it is the page */
+body.tablet .fp-seite, body.tablet .fp-option, body.tablet .fp-schalter { min-height: 44px; font-size: 12px; padding-left: 14px; padding-right: 14px; }
+body.tablet .fp-knopf { width: 72px; height: 72px; }
+body.tablet .fp-knopf.fp-skaliert { width: 104px; height: 104px; margin: -16px 0; }   /* 72 px cap inside the scale ring (the svg viewBox is 92 units for a 64 unit knob) */
+body.tablet .fp-bahn { width: 48px; height: 160px; }
+body.tablet .fp-griff { bottom: calc(var(--k, 0) * (100% - 22px)); width: 44px; height: 22px; }
+body.tablet .fp-zelle.waagrecht .fp-bahn { width: 160px; height: 48px; }
+body.tablet .fp-zelle.waagrecht .fp-griff { left: calc(var(--k, 0) * (100% - 22px)); bottom: auto; width: 22px; height: 44px; }
+body.tablet .fp-xy { max-width: 260px; min-height: 160px; }
+
+/* Pair tablet (main page): the button in the header and the dialog with the QR code */
+.kopplung-knopf { font-size: 10px; letter-spacing: .12em; padding: 4px 9px; border-radius: 6px; color: var(--dim); background: none; border: 1px solid var(--line); align-self: center; }
+.kopplung { background: var(--bg, #0e0f12); color: var(--text, #e6e6e6); border: 1px solid var(--line); border-radius: 10px; padding: 16px 20px; max-width: 420px; }
+.kopplung::backdrop { background: rgba(0, 0, 0, .6); }
+.kopplung h2 { margin: 0 0 10px; font-size: 14px; letter-spacing: .12em; text-transform: uppercase; }
+.kopplung h3 { margin: 14px 0 6px; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--dim); }
+.kopplung-qr { background: #fff; border-radius: 8px; padding: 4px; width: max-content; margin: 0 auto 8px; }
+.kopplung-qr svg { display: block; width: 220px; height: 220px; }
+.kopplung-text, .kopplung-hinweis { font-size: 12px; color: var(--dim); margin: 6px 0; }
+.kopplung-link { width: 100%; box-sizing: border-box; font: 11px/1.3 ui-monospace, monospace; background: #0e0f12; color: var(--text, #e6e6e6); border: 1px solid var(--line); border-radius: 6px; padding: 6px; }
+.kopplung-reihe { display: flex; gap: 8px; margin-top: 10px; }
+.kopplung-reihe button, .kopplung-geraete button { font-size: 11px; letter-spacing: .1em; padding: 5px 12px; border-radius: 6px; background: none; border: 1px solid var(--line); color: var(--text, #e6e6e6); }
+.kopplung-geraete { list-style: none; margin: 0; padding: 0; font-size: 12px; }
+.kopplung-geraete li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 4px 0; border-top: 1px solid var(--line); }
+.kopplung-geraete small { color: var(--dim); display: block; }
+.kopplung-leer { color: var(--dim); }

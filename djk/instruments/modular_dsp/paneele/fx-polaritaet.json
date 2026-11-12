@@ -1,0 +1,11 @@
+{
+  "format": "cypherdj-panel/2",
+  "geraet": {"art": "bk", "graph": "fx-polaritaet"},
+  "title": "Polarity",
+  "akzent": "tuerkis",
+  "sections": [
+    { "id": "pol", "title": "POLARITY", "cols": 1, "controls": [
+      {"id": "pol", "type": "selector", "label": "Invert", "bind": {"param": "k1"}, "options": ["L + R", "Left", "Off", "Right"], "default": 2}
+    ]}
+  ]
+}

@@ -22,7 +22,7 @@ test('factory presets: all valid, all described, no duplicate sound', (t) => {
   assert.deepEqual(doppelt, []);
   const je = {};
   for (const e of register.eintraege) je[e.geraet] = (je[e.geraet] ?? 0) + 1;
-  assert.deepEqual(je, { komp: 6, eq: 11, hall: 11, saett: 10, rb338: 10 });
+  assert.deepEqual(je, { komp: 6, eq: 11, hall: 11, saett: 10, rb338: 10, baukasten: 58 });
 });
 
 test('factory register is up to date (after changing a factory preset: node presets/tool.ts bauen)', (t) => {

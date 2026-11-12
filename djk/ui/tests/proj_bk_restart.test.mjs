@@ -31,7 +31,7 @@ test('S17 T3.18 a kern restart re-sends the knobs and the graph with source andr
   await schlaf(30);
   assert.deepEqual(k.bk.aufrufe.map(({ kanal, name, quelle }) => ({ kanal, name, quelle })), [{ kanal: 'erz/3', name: 'sampler-fairlight', quelle: 'andreas' }]);
   const teile = k.teile(/^erz\/3\/bk\//);
-  assert.deepEqual(teile.map((x) => [x.felder.pfad, x.felder.nach]), K9.map((w, i) => [`erz/3/bk/${i + 1}`, w]));
+  assert.deepEqual(teile.map((x) => [x.felder.pfad, x.felder.nach]), [...K9, ...Array(56).fill(0.5)].map((w, i) => [`erz/3/bk/${i + 1}`, w]));
   assert.ok(teile.every((x) => x.felder.quelle === 'andreas'));
   assert.ok(k.protokoll.some((z) => z.typ === 'proj_neustart' && Array.isArray(z.baukasten) && z.baukasten[0].kanal === 'erz/3'), 'the log line carries baukasten');
   // negative control: the same generation again is no restart

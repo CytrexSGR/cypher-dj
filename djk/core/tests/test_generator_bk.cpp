@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <sstream>
+#include <string>
 #include <vector>
 
 #include "cypherdj/cypher_bk_ffi.h"
@@ -293,7 +294,7 @@ int main() {
     struct Aus { std::vector<float> k8, k9; };
     // wb: Wert von erz/5/bk/1 ab 20 N, wc: ab 40 N (dort Tausch auf einen neuen Graphen, wenn tausch)
     const auto lauf = [&](float wb, float wc, bool tausch) {
-      static float wert[cdj::MIX_KANAELE][8];
+      static float wert[cdj::MIX_KANAELE][cypherdj::stellwerk::BK_REGLER_N];
       for (auto& z : wert) for (float& v : z) v = 0.5f;
       Welt w;
       w.erz.setze_bk_wert(wert);
@@ -344,7 +345,7 @@ int main() {
     PRUEF(e.k9 == ruhe.k9);                      // Gegenprobe: erz/6 hört nichts von erz/5
     PRUEF(spitze(e.k9, 10 * N, 20 * N) > 0.05f); // und klingt
     {  // 7b) Allokationswächter über die Reglerfahrt
-      static float wert[cdj::MIX_KANAELE][8];
+      static float wert[cdj::MIX_KANAELE][cypherdj::stellwerk::BK_REGLER_N];
       for (auto& z : wert) for (float& v : z) v = 0.5f;
       Welt w;
       w.erz.setze_bk_wert(wert);
@@ -369,6 +370,61 @@ int main() {
       const int nf = w.erz.bk_frei(f, 4);
       PRUEF(nf == 1);
       for (int i = 0; i < nf; ++i) cypher_bk_frei(f[i]);
+    }
+    {  // 7d) 32-knob widening: the knobs 9 and 32 of erz/5 reach a graph that reads them; a neighbour knob does not move it
+      // graph = GR with its regler node on knob `gn`; row erz/5, knob `bewegt` goes 0.5 -> 1.0 at 20 N. Returns peak(1.0) / peak(0.5) of erz/5.
+      const auto knopf_lauf = [&](int gn, int bewegt) {
+        static float wert[cdj::MIX_KANAELE][cypherdj::stellwerk::BK_REGLER_N];
+        for (auto& z : wert) for (float& v : z) v = 0.5f;
+        std::string json = GR;
+        const size_t pos = json.find("\"nr\":1,");
+        PRUEF(pos != std::string::npos);
+        json.replace(pos, 7, "\"nr\":" + std::to_string(gn) + ",");
+        char f[256] = {};
+        CypherBk* h = cypher_bk_neu(json.c_str(), 48000.0, f, sizeof f);
+        PRUEF(h != nullptr);
+        Welt w;
+        w.erz.setze_bk_wert(wert);
+        w.erz.setze_bk(2, h, ERZ_5);
+        w.erz.fenster(fenster(2, {ev(0.0, 57, 1.0f, 8.0)}), 0.0);
+        std::vector<float> k;
+        const auto bis = [&](int64_t ende) {
+          while (w.s < ende) {
+            std::fill(w.pl.begin(), w.pl.end(), 0.0f);
+            std::fill(w.pr.begin(), w.pr.end(), 0.0f);
+            w.erz.block(w.karte, w.s, N, w.l, w.r, nullptr, w.s);
+            k.insert(k.end(), w.l[ERZ_5], w.l[ERZ_5] + N);
+            w.s += N;
+          }
+        };
+        bis(20 * N);
+        wert[ERZ_5][bewegt - 1] = 1.0f;
+        bis(40 * N);
+        w.erz.setze_bk(2, nullptr, ERZ_5);
+        bis(w.s + 3 * N);
+        CypherBk* fr[8];
+        for (int nf; (nf = w.erz.bk_frei(fr, 8)) > 0;) for (int i = 0; i < nf; ++i) cypher_bk_frei(fr[i]);
+        const float vorher = spitze(k, 10 * N, 20 * N), nachher = spitze(k, 30 * N, 40 * N);
+        PRUEF(vorher > 0.05f);   // positive control: the graph sounds
+        return nachher / vorher;
+      };
+      const float r9 = knopf_lauf(9, 9), r32 = knopf_lauf(32, 32), r17 = knopf_lauf(17, 17);
+      const float n32 = knopf_lauf(32, 31), n9 = knopf_lauf(9, 10);   // negative controls: the neighbour knob moves, the graph does not
+      // 64-knob widening: the knobs 33, 48 and 64 (needs hall_ffi with REGLER 64: on an older library the node of such a knob is not in the path)
+      const float r33 = knopf_lauf(33, 33), r48 = knopf_lauf(48, 48), r64 = knopf_lauf(64, 64);
+      const float n64 = knopf_lauf(64, 63), n33 = knopf_lauf(33, 34);
+      std::printf("bk regler 32: knob 9 x%.3f, knob 17 x%.3f, knob 32 x%.3f; neighbour knob: 32 -> x%.3f, 9 -> x%.3f\n", r9, r17, r32, n32, n9);
+      std::printf("bk regler 64: knob 33 x%.3f, knob 48 x%.3f, knob 64 x%.3f; neighbour knob: 64 -> x%.3f, 33 -> x%.3f\n", r33, r48, r64, n64, n33);
+      PRUEF(r33 > 1.95f && r33 < 2.05f);
+      PRUEF(r48 > 1.95f && r48 < 2.05f);
+      PRUEF(r64 > 1.95f && r64 < 2.05f);
+      PRUEF(n64 > 0.99f && n64 < 1.01f);
+      PRUEF(n33 > 0.99f && n33 < 1.01f);
+      PRUEF(r9 > 1.95f && r9 < 2.05f);
+      PRUEF(r17 > 1.95f && r17 < 2.05f);
+      PRUEF(r32 > 1.95f && r32 < 2.05f);
+      PRUEF(n32 > 0.99f && n32 < 1.01f);
+      PRUEF(n9 > 0.99f && n9 < 1.01f);
     }
     {  // 7c) K10: ohne Werte-Zeiger keine Meldung, der Graph bleibt auf seinen Werten (kein Absturz)
       Welt w;
