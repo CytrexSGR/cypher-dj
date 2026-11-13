@@ -62,7 +62,7 @@ test('oszi route: errors are clear (unknown channel, sek out of range, ring with
   assert.equal((await hol(url, '?kanal=master')).j.angefragt_ms, 5000);
 });
 
-test('oszi route: reading extra channels does not widen the 100 ms reader (only deck/1, deck/2, master are kept live)', async (t) => {
+test('oszi route: reading extra channels does not widen the 100 ms reader (only deck/1..4 and master are kept live)', async (t) => {
   const { o } = await stapel(t);
-  assert.deepEqual([...o.ohr.puffer.keys()], [0, 1, 14]);
+  assert.deepEqual([...o.ohr.puffer.keys()], [0, 1, 2, 3, 14]);
 });

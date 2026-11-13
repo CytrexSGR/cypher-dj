@@ -151,6 +151,8 @@ pub enum Schritt {
     /// Per voice: slow random drift in -1..1 (drift.rs, type 49), seeded by `saat` and the voice number
     Drift { rate: Quelle, fest: Quelle, aus: usize, d: [crate::drift::Drift; MAX_STIMMEN], saat: u32 },
     /// Host-Audio (S3c): nur Stimme 0, wie die Summenpunkte; der Ausgang summiert über alle Stimmen
+    /// Sum point: Cypher Labor (labor.rs, type 50) on the summed x + l and x + r, result in voice 0; the controls are read from voice 0
+    Labor { x: Quelle, l: Quelle, r: Quelle, st: [Quelle; crate::labor::STEUER_ZAHL], wl: usize, wr: usize, b: Box<crate::labor::Block> },
     Eingang { wl: usize, wr: usize },
     /// links = x + l, rechts = x + r, je über alle Stimmen summiert
     Ausgang { x: Quelle, l: Quelle, r: Quelle },
@@ -270,6 +272,7 @@ impl Schritt {
             Schritt::Formant { f, .. } => **f = [crate::formant::Stimme::neu(); MAX_STIMMEN],
             Schritt::Ms20 { f, .. } => **f = [crate::ms20::Ms20::default(); MAX_STIMMEN],
             Schritt::Falter { f, .. } => f.iter_mut().for_each(|v| v.zuruecksetzen()),
+            Schritt::Labor { b, .. } => b.zuruecksetzen(),
             Schritt::Drift { d, saat, .. } => *d = std::array::from_fn(|i| crate::drift::Drift::neu(i, *saat)),
             Schritt::Roehre { r1, r2, .. } => {
                 *r1 = [Roehre::default(); MAX_STIMMEN];
@@ -1155,6 +1158,15 @@ impl Programm {
                         o[i] = d[i].prozess(r[i], f[i], sr);
                     }
                     slots[*aus] = o;
+                }
+                Schritt::Labor { x, l, r, st, wl, wr, b } => {
+                    let (a, c) = summe_lr(&spur(*x, slots, vorher), &spur(*l, slots, vorher), &spur(*r, slots, vorher), n);
+                    let mut werte = [0.0f32; crate::labor::STEUER_ZAHL];
+                    for (w, q) in werte.iter_mut().zip(st.iter()) {
+                        *w = lese_spur(*q, slots, vorher).bei(0);
+                    }
+                    let o = b.prozess(a, c, &werte);
+                    in_stimme0(slots, *wl, *wr, o);
                 }
                 Schritt::Eingang { wl, wr } => in_stimme0(slots, *wl, *wr, *ein),
                 Schritt::Ausgang { x, l, r } => {

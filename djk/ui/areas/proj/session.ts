@@ -13,6 +13,7 @@ import path from 'node:path';
 import type { BereichKontext } from '../../http/router.ts';
 import { Katalog, type Zeile } from '../../catalog.ts';
 import { AblageFehler, Projekte, projektWurzelVorgabe, setzeVorgabenQuelle } from '../../project/storage.ts';
+import { kanalOffen } from '../../hand_operation.ts';
 import { liveSlots } from '../../project/live.ts';
 import { teileReglerLive } from '../../project/controls_order.ts';
 import { alleAudioClips, fuehreListeAus, laneStart, setzeDekodiert, vergleiche, type PluginEintrag, type PresetInhalt } from '../../project/commands.ts';
@@ -70,6 +71,7 @@ export class ProjFehler extends Error {
 }
 export interface Antwort { code: number; j: unknown }
 export interface ProjOptionen {
+  kanalOffen?: (kanal: string) => boolean;   // DJ view places: the server's view of an open channel pad/N, a planned or running ramp counts (server.ts)
   instanz?: string;            // Vorgabe CYPHERDJ_INSTANZ
   wurzel?: string;             // Projektordner-Wurzel (Vorgabe projektWurzelVorgabe(instanz))
   arbeitsordner?: string;      // Arbeitsordner der Wiedergaben (Vorgabe: kern.toml arr_ordner, sonst ~/.cache/cypherdj[-<i>]/arr)
@@ -270,6 +272,11 @@ export class ProjSitzung {
   private readonly presetLies: ProjOptionen['presetLies'];   // 1.9 (O28)
   private readonly surge: SurgeSpiegel;                        // 1.9 U5: the Surge parameter map of the project mirrored into the hosts
   private readonly pluginIndex: ProjOptionen['pluginIndex'];
+  private readonly kanalHaken: ProjOptionen['kanalOffen'];
+  private liveFaderKette: Promise<unknown> = Promise.resolve();   // the module fader migrations run one after the other
+  private readonly liveFaderWartend = new Set<string>();   // module groups at -200 that wait for a closed channel and a stopped live playback
+  private readonly liveFaderGemeldet = new Set<string>();   // groups whose refused raise was logged (one entry each)
+  private liveFaderLauf: Promise<{ angehoben: string[]; gemeldet: string[] }> | null = null;   // the run that the last open of the live project started
   readonly instrumente: InstrumentWirte;                         // plan 1.11 task 17: the foreign instrument hosts (plugin tracks)
   readonly hosts: HostVerwaltung;                                // plan 1.11 task 7: the foreign effect hosts
   // a host slot never changes strips inside one playback load (kern contract, task 4): what the last written playback holds per slot, when a slot was
@@ -285,6 +292,7 @@ export class ProjSitzung {
     this.ctx = ctx;
     this.presetLies = opt.presetLies;
     this.pluginIndex = opt.pluginIndex;
+    this.kanalHaken = opt.kanalOffen;
     this.surge = new SurgeSpiegel({ ordner: opt.wirtOrdner, log: (e) => ctx.log(e), slotBereit: (slot) => this.instrumente.slotFertig(slot) });
     this.hosts = new HostVerwaltung({
       insert: (a) => insertAusfuehren(a, instanz, opt.host?.befehl),
@@ -660,14 +668,100 @@ export class ProjSitzung {
     return this.seriell(async () => {
       this.riegel(quelle); this.sperreOeffnen(); this.sperreLiveLaeuft(quelle, bestaetigt); this.sperreFremderTransport(quelle);
       return this.oeffnetGerade(() => this.oeffneIntern(slug as string, quelle));
+    }).then(async (r) => {
+      if (r.code !== 200 || !this.liveFaderLauf) return r;
+      const fader = await this.liveFaderErgebnis();
+      if (fader.angehoben.length === 0 && fader.gemeldet.length === 0) return r;
+      return { code: 200, j: { ...r.j as object, ...(fader.angehoben.length ? { projekt: this.offen?.projekt } : {}), fader } };
     });
   }
   // POST /live/oeffnen (plan live-module task 1): open the live container (slug `live`), creating it on the first call (flag live, loop region on, 0..64).
   // Already open: nothing is reopened (a reopen would stop the set); the answer is the same. Opening it from another project is guarded like any open.
   async liveOeffnen(quelle: Quelle, bestaetigt = false): Promise<Antwort> {
     const r = await this.liveOeffnenOhneTempo(quelle, bestaetigt);
-    if (r.code === 200) await this.liveTempo(quelle);
+    if (r.code === 200) {
+      await this.liveTempo(quelle);
+      const fader = await this.liveFaderErgebnis();
+      if (fader.angehoben.length > 0 || fader.gemeldet.length > 0) return { code: 200, j: { ...r.j as object, fader } };
+    }
     return r;
+  }
+  // The result of the module fader migration for the open that just happened (started by oeffneIntern); a call on the open container runs it again,
+  // so a slot that was only reported (channel open, or unknown) is raised as soon as its channel is closed and known.
+  private async liveFaderErgebnis(): Promise<{ angehoben: string[]; gemeldet: string[] }> {
+    const lauf = this.liveFaderLauf;
+    this.liveFaderLauf = null;
+    return lauf ? lauf : this.liveModulFader();
+  }
+  // Is pad/<n> open as the server sees it: the rows of the core (kanalOffen) or a planned or running ramp of Cypher (hook of the server)
+  private kanalOffenGesehen(kanal: string): boolean {
+    const w = (n: string): number | undefined => this.lage.reglerWert(`${kanal}/${n}`) ?? undefined;
+    return kanalOffen({ [`${kanal}/fader`]: w('fader') as number, [`${kanal}/trim`]: w('trim') as number }, kanal) || (this.kanalHaken?.(kanal) ?? false);
+  }
+  // DJ view places, decision 9: the module group fader is 0 dB from now on, the channel fader of pad/N is the only gain. A live project from before has
+  // its module group at -200. The migration happens ONCE per open of the live project: on the open the group goes to 0 dB when pad/N is closed (kanalOffen
+  // false, no ramp planned) and its fader is known. Otherwise (channel open, ramping or unknown) the group is remembered as waiting and reported.
+  // A row of pad/N (or a call of /live/oeffnen on the open container) raises only waiting groups, only while the live playback is stopped and only when
+  // the channel is closed and known then; once raised a group is not waiting any more, so an undo or a deliberate -200 holds. A refused write (a freeze is
+  // running) leaves the group waiting, with one log entry per group. One undo step; never fails the open.
+  private liveModulFader(modus: 'oeffnen' | 'wartend' = 'wartend'): Promise<{ angehoben: string[]; gemeldet: string[] }> {
+    const lauf = this.liveFaderKette.then(() => this.liveModulFaderLauf(modus));
+    this.liveFaderKette = lauf.catch(() => undefined);
+    return lauf;
+  }
+  private liveSpielt(): boolean { const a = this.lage.arr; return !!a && (a.status === 1 || a.status === 2); }
+  private slotGruppe(p: Projekt, slot: 'A' | 'B'): Projekt['gruppen'][number] | undefined {
+    return p.gruppen.find((x) => x.ausgang === undefined && x.modul?.slot === slot);
+  }
+  private kanalZuUndBekannt(slot: 'A' | 'B'): boolean {
+    const kanal = `pad/${slot === 'A' ? 1 : 2}`;
+    return this.lage.reglerWert(`${kanal}/fader`) !== null && !this.kanalOffenGesehen(kanal);
+  }
+  private liveFaderFaellig(): boolean {
+    const o = this.offen;
+    if (!o?.projekt.live || this.liveFaderWartend.size === 0 || this.liveSpielt()) return false;
+    return (['A', 'B'] as const).some((slot) => {
+      const g = this.slotGruppe(o.projekt, slot);
+      return !!g && this.liveFaderWartend.has(g.id) && this.kanalZuUndBekannt(slot);
+    });
+  }
+  private async liveModulFaderLauf(modus: 'oeffnen' | 'wartend'): Promise<{ angehoben: string[]; gemeldet: string[] }> {
+    const aus = { angehoben: [] as string[], gemeldet: [] as string[] };
+    for (let versuch = 0; versuch < 2; versuch++) {
+      aus.angehoben.length = 0; aus.gemeldet.length = 0;
+      const o = this.offen;
+      if (!o?.projekt.live) return aus;
+      const befehle: unknown[] = [];
+      const hebt: string[] = [];
+      for (const slot of ['A', 'B'] as const) {
+        const g = this.slotGruppe(o.projekt, slot);
+        if (!g) continue;
+        if (modus === 'oeffnen' ? g.fader_db === -200 : this.liveFaderWartend.has(g.id)) {
+          if (g.fader_db !== -200) { this.liveFaderWartend.delete(g.id); continue; }   // moved by hand meanwhile: nothing to do
+          if (this.kanalZuUndBekannt(slot) && (modus === 'oeffnen' || !this.liveSpielt())) {
+            befehle.push({ befehl: 'gruppenspur_aendern', gruppe_id: g.id, fader_db: 0 });
+            aus.angehoben.push(slot); hebt.push(g.id);
+          } else { this.liveFaderWartend.add(g.id); aus.gemeldet.push(slot); }
+        }
+      }
+      if (befehle.length === 0) return aus;
+      try {
+        await this.aendern({ rev: o.projekt.rev, label: 'Live module fader 0 dB', befehle }, 'andreas');
+        for (const id of hebt) this.liveFaderWartend.delete(id);
+        return aus;
+      } catch (e) {
+        if (versuch === 1 || (e as { fehler?: string }).fehler === 'beschaeftigt') {
+          for (const id of hebt) {
+            this.liveFaderWartend.add(id);
+            if (this.liveFaderGemeldet.has(id)) continue;
+            this.liveFaderGemeldet.add(id);
+            this.ctx.log({ typ: 'live_modul_fader_fehler', gruppe: id, fehler: (e as Error).message });
+          }
+          return { angehoben: [], gemeldet: aus.gemeldet.concat(aus.angehoben) };
+        }
+      }
+    }
+    return aus;
   }
   // The live container follows the core tempo (display and render length only: the project says 120, the core plays 128). Only while no deck plays,
   // because tempo_setzen is refused then; with a playing deck it stays as it is. Never fails the open.
@@ -749,6 +843,9 @@ export class ProjSitzung {
     const projekt = structuredClone(o.projekt);
     this.gleicheDekodiertAb(projekt, true);
     this.offen = { slug, projekt, verlauf: o.verlauf, merk: { laden: false, loop: false, tempo: false, reglerNach: [] }, vorhoeren: new Map() };
+    this.liveFaderWartend.clear(); this.liveFaderGemeldet.clear();
+    // every open of the live project (queued behind this job)
+    this.liveFaderLauf = projekt.live ? Promise.resolve().then(() => this.liveModulFader('oeffnen')) : null;
     this.meldeStand(this.offen);               // 1.8 S3 (D13): the core follows the opened project (tracks of the one before are disarmed)
     this.hosts.abgleich(projekt);              // plan 1.11 task 7: the hosts start in the background; open never waits for one
     this.instrumente.abgleich(projekt);        // plan 1.11 task 17: the same for the plugin instrument hosts
@@ -1255,6 +1352,18 @@ export class ProjSitzung {
       }
       this.pruefeMarkerInQuelle(o.projekt, probe.projekt);
       this.pruefeSperre(o.projekt, probe.projekt, probe.betrifft_wiedergabe);
+      // DJ view places (decision 10): a command that puts a module into a live slot is refused while that channel is open, whoever sends it.
+      // Undo, redo and the open of a project are not gated (known limit, AUFRUF.md).
+      if (probe.projekt.live) {
+        const vor = liveSlots(o.projekt), nach = liveSlots(probe.projekt);
+        for (const slot of ['A', 'B'] as const) {
+          const kanal = `pad/${slot === 'A' ? 1 : 2}`;
+          if (nach[slot] !== undefined && nach[slot] !== vor[slot] && this.kanalOffenGesehen(kanal)) {
+            const text = `the channel ${kanal} of Loop ${slot === 'A' ? 1 : 2} is open; close it before a module is placed`;
+            throw new ProjFehler(409, 'kanal_offen', { slot, kanal, text });
+          }
+        }
+      }
       // Spec 6.31 (Leistung): die Probe IST die Ausführung; aendere rechnet sie nicht noch einmal. Gültig, weil vollziehe nach dem Warten auf die
       // Quittungen prüft, dass o.projekt noch genau der Stand ist, gegen den sie gerechnet wurde (sonst 409 rev_veraltet).
       const projekt = o.projekt;
@@ -2062,6 +2171,9 @@ export class ProjSitzung {
     // started ends any override of a core that kept running (AK34, own start). A re-hello of the same generation changes nothing.
     if (adresse === '/e/ins_mess' || adresse === '/zustand/arr') this.hosts.ereignis(adresse, f);   // plan 1.11 task 7
     if (adresse === '/e/auto') this.nimmAuto(f);
+    // a channel closed under a module at -200
+    const padRegler = adresse === '/e/regler' && /^pad\/[12]\/(fader|trim)$/.test(String(f.pfad));
+    if (padRegler && this.liveFaderFaellig()) void this.liveModulFader().catch(() => undefined);
     if (neustart || (adresse === '/k/willkommen' && vorherGeneration !== null && Number(f.generation) !== vorherGeneration)) {
       this.uebersteuert.clear();
       if (this.aufAuto.istArm()) this.ctx.verteile({ a: 'proj', f: { auto_arm: { modus: 'touch', spuren: [] } } });   // D11: the new core starts unarmed

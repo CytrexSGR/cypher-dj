@@ -30,7 +30,9 @@ async function mitModul(t) {
 const fehl = async (f) => { try { await f(); } catch (e) { return { code: e.code, fehler: e.fehler }; } assert.fail('no refusal'); };
 const spielt = (z, p, gid) => {                                                 // what the core would play for the module group: no ids, no paths
   const w = uebersetze(p, { nr: 1, audioOrdner: path.join(z.arbeitsordner, 'audio'), frames: () => FRAMES });
-  return JSON.parse(JSON.stringify({ spuren: w.spuren, gruppen: w.gruppen ?? [] }, (k, v) => (k === 'id' || k === 'clip_id' || k === 'datei' ? undefined : v)));
+  // DJ view places (decision 5, 8): a live slot group leads into the DJ channel, offline that is the master: compared as the same output
+  return JSON.parse(JSON.stringify({ spuren: w.spuren, gruppen: w.gruppen ?? [] },
+    (k, v) => (k === 'id' || k === 'clip_id' || k === 'datei' ? undefined : (k === 'ausgang' && v?.art === 'dj' ? { art: 'master' } : v))));
 };
 const baum = (p, gid) => {                                                      // the tree of a module group as a value without ids and audio paths
   const alle = [p.gruppen.find((g) => g.id === gid)];
@@ -136,13 +138,13 @@ test('placing into a project with too few free tracks or groups is refused routi
   assert.equal(n, 0);
 });
 
-test('live container: the module takes the first free slot with its fader closed; both taken is slot_belegt; unknown module and no project are refused', async (t) => {
+test('live container: the module takes the first free slot with group fader 0 dB; both taken is slot_belegt; unknown module and no project are refused', async (t) => {
   const z = await mitModul(t);
   const a = await z.bib.einsetzen({ modul_id: z.id }, 'andreas');
   assert.equal(a.code, 200, JSON.stringify(a.j));
   assert.equal(a.j.slot, 'B', 'slot A holds the exported module');
   const p = z.projekt();
-  assert.equal(p.gruppen.find((g) => g.id === a.j.gruppe_id).fader_db, -200);
+  assert.equal(p.gruppen.find((g) => g.id === a.j.gruppe_id).fader_db, 0);
   assert.deepEqual(Object.keys(liveSlots(p)).sort(), ['A', 'B']);
   const b = await z.bib.einsetzen({ modul_id: z.id }, 'andreas').catch((e) => ({ code: e.code, j: { fehler: e.fehler } }));
   assert.deepEqual([b.code, b.j.fehler], [409, 'slot_belegt']);
@@ -250,7 +252,7 @@ test('a module with instrument paths, blend 0.5 and a blend lane is saved and pl
   assert.ok(!live.gruppen.some((g) => g.id === bass.id), 'new id');
   assert.equal(p.spuren.filter((s) => s.geraet?.name === 'bk').length, 2);
   const mach = (q) => JSON.parse(JSON.stringify(uebersetze(q, { nr: 1, audioOrdner: path.join(basis, 'a'), frames: () => 16 * 24000 }),
-    (k, v) => (['id', 'clip_id', 'datei', 'nr'].includes(k) ? undefined : v)));
+    (k, v) => (['id', 'clip_id', 'datei', 'nr'].includes(k) ? undefined : (k === 'ausgang' && v?.art === 'dj' ? { art: 'master' } : v))));   // DJ output = master offline (decision 8)
   const a = mach(live), b = mach(p);
   const nach = (l) => [...l].map((x) => JSON.stringify(x)).sort();   // the saved file lists parents first, the live project children first
   assert.deepEqual({ s: nach(b.spuren), g: nach(b.gruppen) }, { s: nach(a.spuren), g: nach(a.gruppen) }, 'the translator writes the same playback');
@@ -274,4 +276,40 @@ test('instrument paths count against MAX_BK_SPUREN: 7 bk tracks in the project a
   assert.deepEqual(grenze(() => setzeModulEin(neuesProjekt('p'), wirt, opt)), [409, 'modul_nicht_einsetzbar']);
   const kette = mod(); kette.gruppen[0].automation = [{ id: 'a1', ziel: 'insert.i1.cutoff', punkte: [{ beat: 0, wert: 0 }] }];
   assert.deepEqual(grenze(() => setzeModulEin(neuesProjekt('p'), kette, opt)), [409, 'modul_nicht_einsetzbar']);
+});
+
+// DJ view places, plan task 7 (decision 10): placing into a live slot follows the same channel gate as the export; PFL is not a reason
+test('live container: placing a module into a slot whose channel pad/N is open is kanal_offen and changes nothing; closed (PFL or not) it is placed', async (t) => {
+  const z = await mitModul(t);
+  const gefragt = [];
+  const bib = bibliothekBereich(z.ctx, z.zugang, { basis: () => z.modulOrdner, kanalOffen: (k) => { gefragt.push(k); return k === 'pad/2'; } });
+  const rev = z.projekt().rev;
+  const e = await bib.einsetzen({ modul_id: z.id, slot: 'B' }, 'andreas').catch((x) => ({ code: x.code, j: { fehler: x.fehler, text: x.extra?.text } }));
+  assert.deepEqual([e.code, e.j.fehler], [409, 'kanal_offen']);
+  assert.match(e.j.text, /pad\/2/);
+  assert.deepEqual(gefragt, ['pad/2']);
+  assert.equal(z.projekt().rev, rev, 'nothing placed');
+  // without a slot the first free one is B (A is taken): its channel is open, so nothing fits: the same refusal
+  const kein = await bib.einsetzen({ modul_id: z.id }, 'andreas').catch((x) => ({ j: { fehler: x.fehler, text: x.extra?.text } }));
+  assert.equal(kein.j.fehler, 'kanal_offen');
+  assert.match(kein.j.text, /pad\/2/);
+  // an occupied slot stays slot_belegt (nothing to ask about)
+  assert.equal((await bib.einsetzen({ modul_id: z.id, slot: 'A' }, 'andreas').catch((x) => ({ j: { fehler: x.fehler } }))).j.fehler, 'slot_belegt');
+  // the channel closes: placed
+  const zu = bibliothekBereich(z.ctx, z.zugang, { basis: () => z.modulOrdner, kanalOffen: () => false });
+  const a = await zu.einsetzen({ modul_id: z.id, slot: 'B' }, 'andreas');
+  assert.equal(a.code, 200, JSON.stringify(a.j));
+  assert.equal(a.j.slot, 'B');
+});
+
+test('live container: placing without a slot takes the first free slot whose channel is closed (the chosen slot reaches the placement)', async (t) => {
+  const z = await mitModul(t);
+  assert.equal((await z.l.leere({ slot: 'A', takte: 0 }, 'andreas')).code, 200);   // both slots free now
+  const bib = bibliothekBereich(z.ctx, z.zugang, { basis: () => z.modulOrdner, kanalOffen: (k) => k === 'pad/1' });
+  const a = await bib.einsetzen({ modul_id: z.id }, 'andreas');
+  assert.deepEqual([a.code, a.j.slot], [200, 'B'], JSON.stringify(a.j));            // A is free but open: B
+  assert.equal(liveSlots(z.projekt()).A, undefined);
+  const b = await bib.einsetzen({ modul_id: z.id }, 'andreas').catch((x) => ({ j: { fehler: x.fehler, text: x.extra?.text } }));
+  assert.equal(b.j.fehler, 'kanal_offen', 'B is taken, A is free but open');
+  assert.match(b.j.text, /pad\/1/);
 });

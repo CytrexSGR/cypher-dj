@@ -3,7 +3,7 @@
 // undo step. The module is saved to the store first (spec: saved when it is cleared), so Clear is never the loss of a module.
 // takte 0 answers after the removal. takte > 0 answers at once with zustand 'rampe' (a 16 bar ramp outlasts any HTTP call); the end comes as the
 // event {a:'modul', f:{leeren}} and in GET /modul/stand under `leeren`. Editing the other slot goes on meanwhile (nothing here holds the project).
-import { liveSlots } from '../../project/live.ts';
+import { liveSlots, normiereSlot } from '../../project/live.ts';
 import { aendereStand } from '../../project/state.ts';
 import { fuehreListeAus } from '../../project/commands.ts';
 import { modulBaum } from '../../project/module_storage.ts';
@@ -44,11 +44,13 @@ export class ModulLeeren {
 
   async leere(d: Record<string, unknown>, quelle: 'andreas' | 'cypher'): Promise<Antwort> {
     for (const k of Object.keys(d)) if (k !== 'slot' && k !== 'takte') throw new ProjFehler(400, 'argument_unbekannt', { detail: k });
-    if (d.slot !== 'A' && d.slot !== 'B') throw new ProjFehler(400, 'argument_ungueltig', { detail: "slot: 'A' or 'B'" });
+    const s0 = normiereSlot(d.slot);                                           // 1/2 and A/B (decision 13)
+    if (s0 === undefined) throw new ProjFehler(400, 'argument_ungueltig', { detail: "slot: 1, 2, 'A' or 'B'" });
+    d = { ...d, slot: s0 };
     if (typeof d.takte !== 'number' || !LEEREN_TAKTE.includes(d.takte)) {
       throw new ProjFehler(400, 'argument_ungueltig', { detail: `takte: one of ${LEEREN_TAKTE.join(', ')}` });
     }
-    const slot: Slot = d.slot, takte = d.takte;
+    const slot: Slot = s0, takte = d.takte;
     if (quelle === 'cypher' && this.ctx.kiGestoppt()) throw new ProjFehler(409, 'ki_gestoppt');
     const o = this.zugang.offen();
     if (!o || !o.projekt.live) throw new ProjFehler(409, 'kein_liveprojekt');

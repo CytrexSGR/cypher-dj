@@ -1,6 +1,7 @@
 //! S13: the measured fixes of the sound audit of 2026-11-01, each shown on the same case against the OLD design.
 //! The old design is rebuilt from the shipped graph by string replacement ("alt" variants), so every test fails if the
 //! fix is taken out again, and the printed MESS lines give the before/after numbers.
+#[path = "common/mod.rs"]
 mod gemeinsam;
 use baukasten_dsp::{uebersetze_mit_wurzel, Programm};
 

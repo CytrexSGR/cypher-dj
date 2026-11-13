@@ -13,6 +13,7 @@
 //!
 //! `BEISPIELE_DIR=/path` points the lint at another directory (used to show the lint red on the old graphs). Without it the
 //! lint also covers the recipe patches in `demos/recipes/` (named `rezepte/<file>`).
+#[path = "common/mod.rs"]
 mod gemeinsam;
 use baukasten_dsp::{uebersetze_mit_wurzel, Programm, REGLER};
 use std::collections::BTreeSet;
@@ -248,6 +249,8 @@ const REGLER_OHNE_WIRKUNG_AUF_DER_PROBE: &[(&str, usize, &str)] = &[
     ("wavetable-supersaw", 9, WAVE_HUELLE_AUS),
     ("saege-ladder", 9, SAEGE_FILTER_HUELLE_AUS),
     ("saege-ladder", 10, SAEGE_FILTER_HUELLE_AUS),
+    ("labor", 8, LABOR_DELAY_1_AUS),
+    ("labor", 11, LABOR_DELAY_1_AUS),
     ("synth-neuro", 29, NEURO_OSC2_AUS),
     ("synth-neuro", 30, NEURO_OSC2_AUS),
     ("synth-neuro", 31, NEURO_OSC2_AUS),
@@ -275,6 +278,8 @@ const REGLER_OHNE_WIRKUNG_AUF_DER_PROBE: &[(&str, usize, &str)] = &[
     ("synth-poly", 47, POLY_OSC2_AUS), ("synth-poly", 48, POLY_OSC2_AUS), ("synth-poly", 49, POLY_OSC2_AUS), ("synth-poly", 50, POLY_OSC2_AUS), ("synth-poly", 51, POLY_OSC2_AUS),
     ("synth-poly", 54, "glide runs from the pitch a voice had last; the probe's notes all land on voices that have not played yet (the first note of a voice sets the glide to its pitch), so there is nothing to glide from. tests/synth_poly.rs `glide_auf_der_stimme` plays two chords on the same voices"),
 ];
+
+const LABOR_DELAY_1_AUS: &str = "delay time and its modulation depth of channel 1 only act while Delay 1 (knob 7) is on; the probe leaves it off by design, because channel 1 is the voice and a delay in front of its filter would delay the note. labor_dsp `delay_time_follows_the_setting` measures the time";
 
 const NEURO_OSC2_AUS: &str = "wave, octave and detune of oscillator 2 only act through Osc2 level (knob 28); the probe leaves it at 0 (off by design, so old presets keep their sound). `neuro_freie_regler_wirken_ueber_ihr_tor` sweeps them with the level open";
 const NEURO_LFO2_AUS: &str = "rate, shape, sync and target of LFO 2 only act through LFO2 amount (knob 36); the probe leaves it at 0.5 = 0 (off by design). `neuro_freie_regler_wirken_ueber_ihr_tor` sweeps them with the amount open";

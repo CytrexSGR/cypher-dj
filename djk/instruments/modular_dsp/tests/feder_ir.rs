@@ -1,5 +1,6 @@
 //! S21: the synthetic spring-tank impulse response `proben::feder_ir` (no third-party IR file): deterministic, level,
 //! the typical up-chirp of a dispersive spring, decay, and a full-length pass through the `faltung` block.
+#[path = "sampler_helpers/mod.rs"]
 mod sampler_hilfe;
 use baukasten_dsp::proben::feder_ir;
 use baukasten_dsp::uebersetze_mit_wurzel;

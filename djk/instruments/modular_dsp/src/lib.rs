@@ -41,6 +41,7 @@ pub mod wahl;
 pub mod zweige;
 pub mod trommeln;
 pub mod falter;
+pub mod labor;
 pub mod drift;
 
 pub use format::{Graph, Kante, Knoten, FORMAT, FORMATE};

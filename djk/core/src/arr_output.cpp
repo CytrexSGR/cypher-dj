@@ -306,6 +306,7 @@ void Arrangement::ziele_pruefen() {
 
 void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
   ziele_pruefen();
+  const bool dj_rest_gilt = dj_rest_n_ > 0;   // DJ view places: the held DJ channels of groups that just left (tausche); block() counts them down AFTER this pass, so the block that ends the hold still uses it
   // 1.10 slice 3: a return exists when the playback knows it (ret_da); an unloaded playback knows none (P15)
   const auto da = [&](int r) { return snap_ && snap_->ret_da[r]; };
   // 1.10 slice 4b T13: the delay of a place of the latency compensation in this playback (arr_pdc.h); 0 = no ring, the place is not touched
@@ -782,18 +783,28 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
       const float* bl = grp_l_[g];
       const float* br = grp_r_[g];
       const int zg = gziel_[g];   // the target: 0 = the PM sum, else the parent group (a higher level: its sum is open)
-      float* zl = zg == 0 ? gpm_l : grp_l_[zg - 1];
-      float* zr = zg == 0 ? gpm_r : grp_r_[zg - 1];
+      // DJ view places (decision 7): a top group with a DJ output adds into the DJ pair of its channel instead of the PM sum, unless the offline switch sends it to the master or the pair is not
+      // there (a caller without dj_ausgang): then it is a master group as before. The DJ pair is not the PM: no PM chain, no PM fader, no production master tap, no PM-group delay place.
+      const int dn = snap_ ? (snap_->gruppe_dj[g] ? snap_->gruppe_dj[g] : (dj_rest_gilt ? dj_rest_[g] : 0)) : 0;
+#ifdef CYPHERDJ_MUTATION_ARR_DJ_OFFLINE_AUS
+      const bool dj_ziel = dn > 0 && zg == 0 && dj_aus_l_[dn - 1] && dj_aus_r_[dn - 1];   // error case: the offline switch is ignored
+#else
+      const bool dj_ziel = dn > 0 && zg == 0 && !dj_master_ && dj_aus_l_[dn - 1] && dj_aus_r_[dn - 1];
+#endif
+      float* dpl = dj_ziel ? dj_aus_l_[dn - 1] : nullptr;
+      float* dpr = dj_ziel ? dj_aus_r_[dn - 1] : nullptr;
+      float* zl = dj_ziel ? dpl : zg == 0 ? gpm_l : grp_l_[zg - 1];
+      float* zr = dj_ziel ? dpr : zg == 0 ? gpm_r : grp_r_[zg - 1];
       float zw = gziel_w_[g];
       bool blende = zw < 1.0f;
       float* al = nullptr;
       float* ar = nullptr;
       const int za = gziel_alt_[g];
-      if (blende) {
-        al = za == 0 ? gpm_l : grp_l_[za - 1];
-        ar = za == 0 ? gpm_r : grp_r_[za - 1];
+      if (blende) {   // the old target of a blend: a DJ group's tail from the master (it was nested before) goes into the pair too, so nothing of it reaches the master
+        al = za == 0 ? (dj_ziel ? dpl : gpm_l) : grp_l_[za - 1];
+        ar = za == 0 ? (dj_ziel ? dpr : gpm_r) : grp_r_[za - 1];
       }
-      const bool z_pm = zg == 0, a_pm = blende && za == 0;   // the side sum of the PM place is fed by what goes into the PM sum only
+      const bool z_pm = zg == 0 && !dj_ziel, a_pm = blende && za == 0 && !dj_ziel;   // the side sum of the PM place is fed by what goes into the PM sum only
       // a group's sends: its own fade is in the signal already; the fades of its ancestors scale them on top (decision 2). A top-level group: nothing more (bit-equal to before nesting)
       const float* ganc = zg > 0 ? gsend[zg - 1] : nullptr;
       Send sd[ARR_RETURNS];
@@ -851,6 +862,12 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
         if (!blende) {
           zl[t] += lz;
           zr[t] += rz;
+#ifdef CYPHERDJ_MUTATION_ARR_DJ_INS_MASTER
+          if (dj_ziel) {   // error case: the DJ group is also in the production master
+            gpm_l[t] += lz;
+            gpm_r[t] += rz;
+          }
+#endif
           if (gfl && z_pm) {
             gfl[t] += lz;
             gfr[t] += rz;

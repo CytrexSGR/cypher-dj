@@ -34,7 +34,7 @@ Sources in `djk/core/gen/*.dsp`, rebuild with `djk/core/gen/generate.sh`.
 | Model Context Protocol SDK | | MIT | agent interface ("the hand") |
 | Node.js | 22 | MIT | web interface, generators, agent interface |
 | Python, NumPy, SciPy, scikit-learn, soundfile, jsonschema | 3.12 | various permissive | workshop and analysis |
-| nih-plug (Rust crate, with its VST3 bindings) | | ISC; the VST3 bindings are GPL-3.0 | VST3 wrappers of the own instruments in `djk/instruments/` (EQ, Hall, Komp, RB-338), which are GPL-3.0-or-later for that reason |
+| nih-plug (Rust crate, with its VST3 bindings) | | ISC; the VST3 bindings are GPL-3.0 | VST3 wrappers of the own instruments in `djk/instruments/` (EQ, Hall, Komp, RB-338, Labor), which are GPL-3.0-or-later for that reason |
 
 ## Separate programs (own processes, talked to over JACK, MIDI or OSC)
 

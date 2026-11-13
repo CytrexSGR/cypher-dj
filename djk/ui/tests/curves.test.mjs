@@ -1,16 +1,16 @@
 // Scheibe 60m, Task 1: Ziel-Liste und Kurven (Griff → Wert → midi_roh der Attrappe und zurück)
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ZIELE, art, GRIFF, griffZuMidi, midiRoh, wertAusMidi, formatiere, vorgabe } from '../public/curves.js';
+import { ZIELE, DECKS, art, GRIFF, griffZuMidi, midiRoh, wertAusMidi, formatiere, vorgabe } from '../public/curves.js';
 
 test('Ziel-Liste: 41 Pfade, je Deck 13 (mit PFL und Crossfader-Zuweisung), erz/1 11, pad/1 und pad/2 je 11 (ohne Tasten) plus xfader, master/pegel, cue/mix, cue/pegel', () => {
-  assert.equal(ZIELE.size, 87 + 128 + 33 + 12 * 64 + 204 + 2 * 64 + 64 + 16);   // 1428 (live modules task 6: + grp/1..16/cue, 16; 1412 (nested groups task 1: + groups 9..16, 64; before 1348; was 900 at 32 knobs); S14: + fx/3, fx/4 x 64 graph knobs; 1.10 Slice 3: + 128 + 32 sends, 16 return and 28 hall controls; S5r: + <kanal>/bk/1..64 on 12 channels; K2: plus master/kleber; D1 K1/E3: spur/1..32 je fader, pan, mute, solo; 1.10: grp/1..8 je 4 plus pm/fader
+  assert.equal(ZIELE.size, 87 + 128 + 33 + 12 * 64 + 204 + 2 * 64 + 64 + 16 + 2 * 13);   // 1454 (places slice 1 task 2: + deck/3 and deck/4, 2 x 13 = 26 (ten channel-strip rows, play, cue, crossfader side); 1428 (live modules task 6: + grp/1..16/cue, 16; 1412 (nested groups task 1: + groups 9..16, 64; before 1348; was 900 at 32 knobs); S14: + fx/3, fx/4 x 64 graph knobs; 1.10 Slice 3: + 128 + 32 sends, 16 return and 28 hall controls; S5r: + <kanal>/bk/1..64 on 12 channels; K2: plus master/kleber; D1 K1/E3: spur/1..32 je fader, pan, mute, solo; 1.10: grp/1..8 je 4 plus pm/fader
   for (const p of ['deck/1/fader', 'deck/2/eq/tief', 'deck/1/kill/hoch', 'deck/2/play', 'deck/1/cue', 'xfader',
     'deck/1/pfl', 'deck/2/pfl', 'master/pegel', 'master/kleber', 'cue/mix', 'cue/pegel', 'erz/1/fader']) assert.ok(ZIELE.has(p), p);
 });
 
 test('Fehlerfall: falsche Ziele nicht in der Liste', () => {
-  for (const p of ['deck/3/fader', 'deck/1/bogus', 'deck/3/pfl', 'deck/1/ziel', 'cue/split', 'master/fader', 'cue/pegel/x',
+  for (const p of ['deck/5/fader', 'deck/1/bogus', 'deck/5/pfl', 'deck/1/ziel', 'cue/split', 'master/fader', 'cue/pegel/x',
     'master/pegel/', 'deck/1/pfl/x', '', 'deck/1/fader/x']) {
     assert.ok(!ZIELE.has(p), p);
   }
@@ -92,8 +92,8 @@ test('Nachtrag: cue/mix −1 (nur Cue) bis +1 (nur Master), Vorgabe −1; PFL al
 });
 
 test('Crossfader-Zuweisung deck/<n>/xseite (2026-09-27): A 0, THRU 1, B 2 als midi_roh 0, 0,5, 1 (FORMAT 22 g)', () => {
-  assert.ok(ZIELE.has('deck/1/xseite') && ZIELE.has('deck/2/xseite'));
-  assert.ok(!ZIELE.has('deck/3/xseite'));
+  assert.ok(ZIELE.has('deck/1/xseite') && ZIELE.has('deck/2/xseite') && ZIELE.has('deck/3/xseite') && ZIELE.has('deck/4/xseite'));
+  assert.ok(!ZIELE.has('deck/5/xseite'));
   assert.equal(art('deck/1/xseite'), 'xseite');
   assert.deepEqual([0, 1, 2].map((w) => midiRoh('deck/2/xseite', w)), [0, 0.5, 1]);
   assert.deepEqual([0, 0.5, 1].map((u) => GRIFF.xseite.wert(u)), [0, 1, 2]);
@@ -175,4 +175,16 @@ test('64 knobs ZIELE: <kanal>/bk/1..64 on every graph channel, nothing outside, 
     for (const n of ['0', '65', '70', '100', '010', '1x', 'x1', '1.5', '-1', '']) { assert.ok(!ZIELE.has(`${k}/bk/${n}`), `${k}/bk/${n}`); assert.notEqual(art(`${k}/bk/${n}`), 'bk', `${k}/bk/${n}`); }
   }
   for (const p of ['erz/4/bk/9', 'erz/8/bk/9', 'deck/5/bk/9', 'bus/1/bk/9', 'erz/4/bk/32', 'erz/4/bk/64']) assert.ok(!ZIELE.has(p), p);
+});
+
+test('Places slice 1: DECKS is 1..4; deck 3 and 4 targets are in the list and classify like deck 1; deck 5 is neither', () => {
+  assert.deepEqual(DECKS, [1, 2, 3, 4]);
+  for (const n of [3, 4]) for (const p of ['fader', 'trim', 'eq/hoch', 'eq/mitte', 'eq/tief', 'kill/hoch', 'kill/mitte', 'kill/tief', 'filter', 'pfl', 'play', 'cue', 'xseite']) {
+    assert.ok(ZIELE.has(`deck/${n}/${p}`), `deck/${n}/${p}`);
+    assert.equal(art(`deck/${n}/${p}`), art(`deck/1/${p}`), `art deck/${n}/${p}`);
+  }
+  assert.equal(art('deck/4/fader'), 'fader');
+  assert.equal(art('deck/4/play'), 'taste');
+  assert.ok(!ZIELE.has('deck/5/fader'));
+  assert.equal(art('deck/5/fader'), null);
 });

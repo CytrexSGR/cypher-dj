@@ -78,6 +78,14 @@ const ArrSnapshot* Arrangement::tausche(const ArrSnapshot* neu, int64_t s, const
   noten_tauschen(neu, s);     // offene Noten ohne Gegenstück: Off sofort
   live_tauschen(neu, s);      // 1.8 T7b: held live keys of a track that changes its sink: Off to the sink that got the On
   senken_wechsel(neu, s);     // Spuren, die ihre Senke verlassen: Ausblende (RB), All Notes Off an den Slot (Wirt)
+  for (int g = 0; g < ARR_GRUPPEN; ++g) {   // DJ view places: a group that loses its DJ output keeps the channel for the fading tail (see dj_rest_)
+    const uint8_t vorher = alt ? alt->gruppe_dj[g] : 0, nachher = neu ? neu->gruppe_dj[g] : 0;
+    if (nachher) dj_rest_[g] = 0;
+    else if (vorher) {
+      dj_rest_[g] = vorher;
+      dj_rest_n_ = DJ_REST;
+    }
+  }
   snap_ = neu;
   ++snap_gen_;
   if (!alt)   // first snapshot: the pre/post flag of the returns stands at once, a later flip blends (review echtzeit-1)
@@ -539,6 +547,7 @@ void Arrangement::block(const Karte& k, int64_t s0, int m, float* aus_l, float* 
     monitor_loeschen();   // 1.8 S3: the sources are valid for one block only
     ruhe(m);                                                                      // DJ-Betrieb ohne Kosten (Slice 11)
     for (int i = 0; i < DJ_EINGAENGE; ++i) dj_l_[i] = dj_r_[i] = nullptr;         // slice 5 U2b: the pointers of dj_schluessel() are good for one block
+    dj_aus_l_[0] = dj_aus_l_[1] = dj_aus_r_[0] = dj_aus_r_[1] = nullptr;           // DJ view places: the pairs of dj_ausgang() likewise
     return;
   }
   if (spur_pool_) spur_pool_->block_anfang();   // mehrkern slice 3.1: once per block with work, after the quiet path (the lateness window counts blocks that did pool work); phases Q and H share this block clock
@@ -610,8 +619,16 @@ void Arrangement::block(const Karte& k, int64_t s0, int m, float* aus_l, float* 
   // arr-bk slice 3: beat and tempo for the Baukasten insert stages, once per block (the beat of the project while it plays, so a loop jump is followed; the tempo of the map at the block start)
   ins_.takt(status_ == ArrStatus::spielt ? projekt_beat(k, static_cast<double>(s0)) : k.beat_at(static_cast<double>(s0)), k.bpm_at(static_cast<double>(s0)) / 60.0 / 48000.0);
   mischen(m, aus_l, aus_r);
+  if (dj_rest_n_ > 0) {   // DJ view places: the hold of a cleared module's tail counts down by the block just mixed, and ends (rows cleared) only after that block used it
+    dj_rest_n_ -= m;
+    if (dj_rest_n_ <= 0) {
+      dj_rest_n_ = 0;
+      for (uint8_t& r : dj_rest_) r = 0;
+    }
+  }
   monitor_loeschen();   // 1.8 S3: the sources are valid for one block only
   for (int i = 0; i < DJ_EINGAENGE; ++i) dj_l_[i] = dj_r_[i] = nullptr;   // slice 5 U2b: the pointers of dj_schluessel() are good for one block; the next block without a call has a silent DJ key
+  dj_aus_l_[0] = dj_aus_l_[1] = dj_aus_r_[0] = dj_aus_r_[1] = nullptr;     // DJ view places: the pairs of dj_ausgang() are good for one block; a block without a call sends a DJ group to the master
   verlaeufe_nachfuehren(m);
   auto_ueber_abschluss(s0 + m);   // 1.12 S3: an override change inside this block has passed
   if (werk_) werk_->takt(s0 + m);   // Slice 2: Stand des Callbacks an das Warp-Werk (synchron: es füllt die Ringe jetzt)

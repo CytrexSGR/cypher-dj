@@ -1,5 +1,6 @@
 //! Klang-Leitplanken für den Pad mit Hall (Slice 4a). Dieselben Fehlerklassen wie leitplanken.rs (Pegel, Rauschen,
 //! Übersteuern an den Enden), dazu: der Hall wirkt (Nachklang), und mit mix 0 ist der Pad bitgleich mit Pad v2. Rauschen (Flachheit) siehe Kommentar unten.
+#[path = "common/mod.rs"]
 mod gemeinsam;
 use baukasten_dsp::{uebersetze, REGLER};
 use gemeinsam::*;

@@ -196,30 +196,53 @@
       <div class="zug" data-kanalzug="erz/2" style="--farbe:var(--c2)"><div class="zugname">BA</div></div>
       <div class="zug" data-kanalzug="erz/3" style="--farbe:var(--c3)"><div class="zugname">ME</div></div>
     </div>
+    <div class="zug" data-deck="3" style="--farbe:var(--d3)" hidden><div class="zugname">3</div></div>
+    <div class="zug" data-deck="4" style="--farbe:var(--d3)" hidden><div class="zugname">4</div></div>
     <div class="zug" data-boxzug="1" style="--farbe:var(--l1)"><div class="zugname">L1</div></div>
     <div class="zug" data-boxzug="2" style="--farbe:var(--l2)"><div class="zugname">L2</div></div>
   </section>
   <section class="deck" data-deck="2" style="--farbe:var(--b)"></section>
-  <section id="deck-d" class="deckflaeche" style="--farbe:var(--l1)">
-    <div class="deckkopf"><span class="buchstabe">D</span><span class="decktitel">LOOPS</span></div>
-    <div id="boxen">
-      <div class="box" data-box="1" style="--farbe:var(--l1)"></div>
-      <div class="box" data-box="2" style="--farbe:var(--l2)"></div>
+  <section class="deck" data-deck="3" style="--farbe:var(--d3)" hidden></section>
+  <section class="deck" data-deck="4" style="--farbe:var(--d3)" hidden></section>
+  <section id="platz-loops" class="deckflaeche" style="--farbe:var(--l1)" aria-label="Loops">
+    <div class="deckkopf"><span class="buchstabe">L</span><span class="decktitel">LOOPS</span>
+      <button class="livetaste" data-liveoeffnen title="Open the live container: the project that holds the live modules (EXPORT sends a deck loop there). A running production project is never replaced without asking.">LIVE</button>
     </div>
+    <div class="loops-leer" data-loops-leer>
+      <b>The live container is not open</b>
+      <span>The loop slots L1 and L2 live in it. Opening it asks first when it would replace a project that is running.</span>
+      <button class="livetaste gross" data-liveoeffnen title="Open the live container (asks first when something is running)">LIVE</button>
+    </div>
+    <section id="live-panel" hidden aria-label="Live container: modules A and B"></section>
   </section>
-  <section id="deck-3" class="deckstreifen" data-deck3 style="--farbe:var(--d3)" aria-label="Deck 3">
-    <span class="buchstabe">3</span>
-    <span class="streifenname">DECK 3</span>
-    <span class="status" data-status>EMPTY</span>
-    <div class="streifentitel"><b data-titel>No track loaded</b><span data-meta>Pick a track in the library and press LOAD 3</span></div>
-    <div class="streifenpos"><label>BAR</label><b data-bar>–</b><label>LEFT</label><b data-rest>–</b></div>
-    <button class="taste play" data-play title="Start or stop deck 3 now (Stop: now)">PLAY</button>
-    <button class="taste sync" data-sync title="Start deck 3 in phase with the master on the next bar, from the first downbeat">SYNC</button>
-    <div class="loopreihe" data-loops title="Deck 3 loop: length in beats, LOOP on/off at the snap grid (bar)"></div>
-    <button class="pfl" data-pfl title="Pre-fader listen: send deck 3 to the headphones">PFL</button>
-    <button class="livetaste" data-liveoeffnen title="Open the live container: the project that holds the live modules (EXPORT sends a deck loop there)">LIVE</button>
-  </section>
-  <section id="live-panel" hidden aria-label="Live container: modules A and B"></section>
+  <div class="platzkopf" data-platz-kopf="1">
+    <span class="platztext" data-platz-text></span>
+    <span class="platzhinweis" data-platz-hinweis role="status"></span>
+    <div class="platzwahl" role="group" aria-label="Type of place 1">
+      <button data-platz-typ="track" title="Track: deck 1">TRACK</button><button data-platz-typ="strudel" title="Strudel: the three generators">STRUDEL</button><button data-platz-typ="loops" title="Loops: the live container with the loop slots L1 and L2">LOOPS</button>
+    </div>
+  </div>
+  <div class="platzkopf" data-platz-kopf="2">
+    <span class="platztext" data-platz-text></span>
+    <span class="platzhinweis" data-platz-hinweis role="status"></span>
+    <div class="platzwahl" role="group" aria-label="Type of place 2">
+      <button data-platz-typ="track" title="Track: deck 2">TRACK</button><button data-platz-typ="strudel" title="Strudel: the three generators">STRUDEL</button><button data-platz-typ="loops" title="Loops: the live container with the loop slots L1 and L2">LOOPS</button>
+    </div>
+  </div>
+  <div class="platzkopf" data-platz-kopf="3">
+    <span class="platztext" data-platz-text></span>
+    <span class="platzhinweis" data-platz-hinweis role="status"></span>
+    <div class="platzwahl" role="group" aria-label="Type of place 3">
+      <button data-platz-typ="track" title="Track: deck 3">TRACK</button><button data-platz-typ="strudel" title="Strudel: the three generators">STRUDEL</button><button data-platz-typ="loops" title="Loops: the live container with the loop slots L1 and L2">LOOPS</button>
+    </div>
+  </div>
+  <div class="platzkopf" data-platz-kopf="4">
+    <span class="platztext" data-platz-text></span>
+    <span class="platzhinweis" data-platz-hinweis role="status"></span>
+    <div class="platzwahl" role="group" aria-label="Type of place 4">
+      <button data-platz-typ="track" title="Track: deck 4">TRACK</button><button data-platz-typ="strudel" title="Strudel: the three generators">STRUDEL</button><button data-platz-typ="loops" title="Loops: the live container with the loop slots L1 and L2">LOOPS</button>
+    </div>
+  </div>
 </main>
 
 <section id="bestand">
@@ -323,10 +346,11 @@
   <div class="tasten">
     <button class="taste cue" data-pfad data-taste="cue">CUE</button>
     <button class="taste play" data-pfad data-taste="play">PLAY</button>
+    <button class="taste sync" data-sync title="Start this deck in phase with the master on the next bar, from the first downbeat">SYNC</button>
     <div class="cuewahl" role="radiogroup" aria-label="Type of the next cue">
       <label>CUE</label><button data-cueart="shot" class="an" title="Next empty pad sets a jump cue">SHOT</button><button data-cueart="loop" title="Next empty pad sets a loop cue (length from 1 2 4 8 16 32 64; in a running loop: that loop)">LOOP</button>
       <button data-muell title="Delete: press, then the pad to delete">🗑</button>
-      <label class="nachbox">LOOP →</label><button data-nachbox="1" title="Save the running loop to the loop library and load it into L1">L1</button><button data-nachbox="2" title="Save the running loop to the loop library and load it into L2">L2</button>
+      <label class="nachbox">LOOP →</label><button data-nachbox="1" title="Export the running loop into the loop slot L1 (live module, plays on the channel L1)">L1</button><button data-nachbox="2" title="Export the running loop into the loop slot L2 (live module, plays on the channel L2)">L2</button>
     </div>
   </div>
 </template>
@@ -349,18 +373,6 @@
       <button data-fxzuweisung="2" title="Assign to Beat FX 2">2</button>
     </div>
     <div class="xzuweisung" data-teil="xseite" title="Crossfader assign: A side, through (not on the crossfader), B side"><button data-stufe="0">A</button><button data-stufe="1">THRU</button><button data-stufe="2">B</button></div>
-  </div>
-</template>
-<template id="box-vorlage">
-  <div class="steuer">
-    <div class="boxkopf"><span class="boxname"></span><span class="status" data-boxstatus>EMPTY</span></div>
-    <div class="looptitel" data-looptitel>No loop</div>
-    <div class="loopmeta" data-loopmeta>Pick one under LIBRARY › LOOPS</div>
-    <canvas class="loopwelle" data-loopwelle></canvas>
-    <div class="gridreihe" data-grid title="Loop grid: ◀ ▶ 5 ms (shift: 1 ms) · right click on the value = 0 · FIX = keep in the loop">
-      <button data-gridschritt="-1" title="Grid earlier (shift: fine)">◀</button><output data-gridwert>0.0 ms</output><button data-gridschritt="1" title="Grid later (shift: fine)">▶</button><button data-gridfix title="Keep this grid in the loop">FIX</button>
-    </div>
-    <button class="taste play boxplay" data-boxplay disabled title="Starts or stops on the next bar one">PLAY</button>
   </div>
 </template>
 <dialog id="kopplung" class="kopplung" aria-label="Pair tablet"><h2>Pair tablet</h2><div data-kopplung-inhalt></div></dialog>

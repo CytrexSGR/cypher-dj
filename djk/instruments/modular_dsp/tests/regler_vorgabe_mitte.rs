@@ -53,14 +53,15 @@ fn fehlertext(e: Fehler) -> String { format!("{e:?}") }
 #[test]
 fn a_alle_beispiele_unveraendert() {
     let graphen = beispiele();
-    assert_eq!(graphen.len(), 53, "kategorien.json lists 53 graphs");
+    assert_eq!(graphen.len(), 54, "kategorien.json lists 54 graphs");
     let mut bereiche: Vec<(u32, u32, bool)> = Vec::new();
     for (name, text) in &graphen {
         let p = uebersetze_mit_wurzel(text, SR, Some(&wurzel())).unwrap_or_else(|e| panic!("{name}: {e}"));
         // Drift (Task 8) and the synth build-out (Tasks 11-13) gave synth-mono, synth-poly and synth-neuro real vorgaben, and kick-synth
-        // carries its start sound (Tune 49 Hz, Level -3 dB, ...); every other graph still starts all knobs at 0.5.
-        if !["synth-mono", "synth-poly", "synth-neuro", "kick-synth"].contains(&name.as_str()) {
-            assert_eq!(p.regler_vorgaben(), [0.5f32; REGLER], "{name}: only the three synths and kick-synth carry a vorgabe");
+        // carries its start sound (Tune 49 Hz, Level -3 dB, ...); labor carries its start patch (switches, key track, feedback);
+        // every other graph still starts all knobs at 0.5.
+        if !["synth-mono", "synth-poly", "synth-neuro", "kick-synth", "labor"].contains(&name.as_str()) {
+            assert_eq!(p.regler_vorgaben(), [0.5f32; REGLER], "{name}: only the three synths, kick-synth and labor carry a vorgabe");
         }
         let g: serde_json::Value = serde_json::from_str(text).unwrap();
         for k in g["knoten"].as_array().unwrap() {

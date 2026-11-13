@@ -263,5 +263,72 @@ int main() {
     PRUEF(lader.einmal(*r));
     PRUEF(lader.cache().eintraege() == 0 && konto.gesperrt() == 0 && lader.aufgeschoben() == 0);   // jetzt ja
   }
+  {  // 7 (DJ view places, task 4, decision 5): the DJ-channel output of a group. A live snapshot with groups 1 and 2 on dj 1 and 2 loads; everything else named below is `format`.
+    cdj::SpeicherKonto konto(100LL << 20);
+    cdj::ArrAudioCache cache(&konto, 50LL << 20, false);
+    const std::string clip = o.clip("c1", 0.0, 1.0, a, F);
+    const std::string spur = "{\"nr\":1,\"art\":\"audio\",\"clips\":[" + clip + "]}";
+    const std::string spur_g1 = "{\"nr\":1,\"art\":\"audio\",\"ausgang\":{\"art\":\"gruppe\",\"nr\":1},\"clips\":[" + clip + "]}";
+    int64_t nr = 70;
+    // writes the playback file (format /2, optional `live` head flag) and loads it like the loader thread
+    auto lade = [&](const std::string& live, const std::string& spuren, const std::string& gruppen) {
+      const int64_t n = ++nr;
+      o.roh(n, "{\"format\":\"cypherdj-arr/2\",\"nr\":" + std::to_string(n) + ",\"spuren\":[" + spuren + "]" + live + ",\"gruppen\":[" + gruppen + "]}");
+      return cdj::lade_wiedergabe(o.pfad, n, cache);
+    };
+    auto dj = [](int n) { return "\"ausgang\":{\"art\":\"dj\",\"nr\":" + std::to_string(n) + "}"; };
+    const std::string live = ",\"live\":true", master = "\"ausgang\":{\"art\":\"master\"}";
+    {  // loads: groups 1 and 2 on the DJ channels 1 and 2, the snapshot carries live and gruppe_dj; the Arrangement answers dj_nr
+      cdj::ArrLadeErgebnis e = lade(live, spur, "{\"nr\":1," + dj(1) + "},{\"nr\":2," + dj(2) + "}");
+      PRUEF(e.snap != nullptr);
+      if (e.snap) {
+        PRUEF(e.snap->live && e.snap->gruppe_dj[0] == 1 && e.snap->gruppe_dj[1] == 2 && e.snap->gruppe_ausgang[0] == 0 && e.snap->gruppe_ausgang[1] == 0);
+        for (int g = 2; g < cdj::ARR_GRUPPEN; ++g) PRUEF(e.snap->gruppe_dj[g] == 0);
+        cdj::gib_wiedergabe(e.snap.release(), cache);
+      }
+      // the other way round (group 3 on channel 2 only): the numbers are the channel's, not the group's
+      e = lade(live, spur, "{\"nr\":3," + dj(2) + "}");
+      PRUEF(e.snap != nullptr && e.snap->gruppe_dj[2] == 2 && e.snap->gruppe_dj[0] == 0 && e.snap->gruppe_dj[1] == 0);
+      if (e.snap) cdj::gib_wiedergabe(e.snap.release(), cache);
+      // a child group of a DJ group (the module's stem groups) loads: group 2 inside group 1, group 1 on dj 1
+      e = lade(live, spur_g1, "{\"nr\":1," + dj(1) + "},{\"nr\":2,\"ausgang\":{\"art\":\"gruppe\",\"nr\":1}}");
+      PRUEF(e.snap != nullptr && e.snap->gruppe_dj[0] == 1 && e.snap->gruppe_dj[1] == 0 && e.snap->gruppe_ausgang[1] == 1);
+      if (e.snap) cdj::gib_wiedergabe(e.snap.release(), cache);
+    }
+    {  // the refusals, each with the reason `format` and a message that names the field
+      struct F { const char* was; std::string live, spuren, gruppen; const char* wort; };
+      const F faelle[] = {
+        {"dj without the live flag", "", spur, "{\"nr\":1," + dj(1) + "}", "live"},
+        {"live: false", ",\"live\":false", spur, "{\"nr\":1," + dj(1) + "}", "live"},
+        {"live is not a bool", ",\"live\":1", spur, "{\"nr\":1," + master + "}", "live"},
+        {"nr 0", live, spur, "{\"nr\":1," + dj(0) + "}", "nr"},
+        {"nr 3", live, spur, "{\"nr\":1," + dj(3) + "}", "nr"},
+        {"two groups on the same nr", live, spur, "{\"nr\":1," + dj(1) + "},{\"nr\":2," + dj(1) + "}", "doppelt"},
+        {"a track with dj", live, "{\"nr\":1,\"art\":\"audio\",\"ausgang\":{\"art\":\"dj\",\"nr\":1},\"clips\":[" + clip + "]}", "{\"nr\":1," + master + "}", "ausgang"},
+        {"dj without nr", live, spur, "{\"nr\":1,\"ausgang\":{\"art\":\"dj\"}}", "nr"},
+      };
+      for (const F& f : faelle) {
+        cdj::ArrLadeErgebnis e = lade(f.live, f.spuren, f.gruppen);
+        if (e.grund != "format" || e.meldung.find(f.wort) == std::string::npos)
+          std::printf("Fall 7 (%s): Grund '%s', Meldung '%s'\n", f.was, e.grund.c_str(), e.meldung.c_str());
+        PRUEF(!e.snap && e.grund == "format" && e.meldung.find(f.wort) != std::string::npos);
+        if (e.snap) cdj::gib_wiedergabe(e.snap.release(), cache);
+      }
+    }
+    {  // a snapshot without DJ outputs: not live, gruppe_dj all zero, whatever else the file holds (the old behaviour; the playback of the same file without the flag loads as before)
+      cdj::ArrLadeErgebnis e = lade("", spur_g1, "{\"nr\":1," + master + "},{\"nr\":2,\"ausgang\":{\"art\":\"gruppe\",\"nr\":1}}");
+      PRUEF(e.snap != nullptr);
+      if (e.snap) {
+        PRUEF(!e.snap->live);
+        for (int g = 0; g < cdj::ARR_GRUPPEN; ++g) PRUEF(e.snap->gruppe_dj[g] == 0);
+        cdj::gib_wiedergabe(e.snap.release(), cache);
+      }
+      // a live flag without any DJ output is fine and routes nothing
+      e = lade(live, spur, "{\"nr\":1," + master + "}");
+      PRUEF(e.snap != nullptr && e.snap->live && e.snap->gruppe_dj[0] == 0);
+      if (e.snap) cdj::gib_wiedergabe(e.snap.release(), cache);
+    }
+    PRUEF(cache.eintraege() == 0 && konto.gesperrt() == 0);
+  }
   PRUEF_ENDE();
 }

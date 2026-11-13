@@ -49,6 +49,7 @@ import { stemsBereich, type StemsOptionen } from './areas/proj/stems.ts';   // 1
 import { speichereModul, modulBasis } from './project/module_storage.ts';   // plan live-module task 3
 import { bibliothekBereich } from './areas/live/library.ts';   // plan live-module task 10
 import { liveBereich, type DeckLoopAusschnitt } from './areas/live/export.ts';
+import { liveSlots } from './project/live.ts';
 import { tonartQuelle } from './areas/live/key.ts';
 import { renderPegelMesser } from './areas/live/level.ts';   // plan live-module task 2
 import { pluginsBereich } from './areas/plugins/area.ts';   // 1.11 task 10
@@ -82,7 +83,7 @@ import { Mediathek, Vorbereiter, MediathekFehler, KLANG_TYPEN, type KlangTreffer
 import { pruefeSpur, plane, oeffnetKanal, beatZuMono, wirtRuf, stromVonZiel, faelligeMuster, SPUR_NAME, type MusterPlan, type Fahrt } from './track.ts';
 import { planeDurchlauf, MAX_SCHLEIFE_TAKTE, type Spur } from './track.ts';   // 1.12 S7 (M13): track band loop
 import { leseAusgang } from './output.ts';
-import { OhrLeser, OSZI_KANAELE, oszi, hoerAntwort, sync as ohrSync, K as OHR_K, type DeckLage, Hoerscheinstelle, type Hoerschein, type DeckStand as OhrDeckStand } from './ear.ts';
+import { OhrLeser, OSZI_KANAELE, oszi, hoerAntwort, partnerVon, sync as ohrSync, K as OHR_K, type DeckLage, Hoerscheinstelle, type Hoerschein, type DeckStand as OhrDeckStand } from './ear.ts';
 // @ts-expect-error reines .mjs ohne Typen (djk/generator); muster_stand lädt Strudel NICHT (Plan-Review M3)
 import { PegelPuffer } from './level_buffer.ts';
 import { leseMusterStand, setzeAutonom, leseLebt } from '../generator/src/pattern_state.mjs';
@@ -285,10 +286,10 @@ const kompAbweichend = (p: string, w: number): boolean => { const m = /^(?:deck\
 // 1.15 A2: the 345 mix-tool controls (gate, util, mb, lim, spektrum/kanal) show in lage only once they differ from their default, like komp.
 // The default comes from the contract table (controls_info.ts, compared with the C++ table by its test); the comparison runs in float32, because
 // the core reports floats and lim/decke -0.3 is not exact there. The path set itself is PFAD (hand_operation.ts), checked before the kern is called.
-// Decks the page server opens (plan live modules, task 0): 1 and 2 are the DJ pair, 3 serves Cypher's loop work. The core has four
-// decks; deck 4 stays closed here. The Ohr (hearing check) only knows decks 1 and 2, see hoerenAus and hoerscheinTakt.
-const OFFENE_DECKS = [1, 2, 3] as const;
-export function istOffenesDeck(d: unknown): d is 1 | 2 | 3 { return d === 1 || d === 2 || d === 3; }
+// Decks the page server opens: all four of the core (places plan 2026-11-13, decision 1: deck 4 opens like deck 3). The Ohr (hearing check)
+// covers all four as well, see hoerenAus, hoerscheinTakt and the ear reader's channel list.
+const OFFENE_DECKS = [1, 2, 3, 4] as const;
+export function istOffenesDeck(d: unknown): d is 1 | 2 | 3 | 4 { return d === 1 || d === 2 || d === 3 || d === 4; }
 const WERKZEUG_PFAD = /^(?:(?:deck\/[1-4]|erz\/[1-7]|pad\/[12]|bus\/[1-4])\/(?:gate|util|mb|lim)\/|spektrum\/kanal$)/;
 const werkzeugAbweichend = (p: string, w: number): boolean => {
   if (!WERKZEUG_PFAD.test(p)) return false;
@@ -307,7 +308,7 @@ const bkAbweichend = (p: string, w: number, geladen: Record<string, string> = {}
 };
 // Bug t_bffc3708: every channel whose mixer a player sets, not erz/1..3 only (a level helper took the missing erz/5..7 fader for 0 dB). erz/4 belongs to
 // the production, erz/8 is cue only: both stay out. Fader, trim, eq, kill and filter always show (a closed fader is a value); a send (1..4) only off its default.
-const LAGE_KANAL = '(?:deck\\/[12]|pad\\/[12]|erz\\/[1-35-7])';
+const LAGE_KANAL = '(?:deck\\/[1-4]|pad\\/[12]|erz\\/[1-35-7])';
 const LAGE_KANALZUG = new RegExp(`^${LAGE_KANAL}\\/(?:fader|trim|eq\\/|kill\\/|filter)`);
 const LAGE_SEND = new RegExp(`^${LAGE_KANAL}\\/send\\/[1-4]$`);
 const LAGE_ABWEICHEND: Record<string, number> = { 'master/kleber': 0, 'duck/tiefe': 0, 'duck/release': 200, 'fx/2/rueckweg': 0, 'color/art': 0, 'color/param': 0.5 };
@@ -419,10 +420,10 @@ export class Oberflaeche {
     this.json(a, 200, { ok: true, ...this.rasterWert(st.deck, st.f) });
   }
 
-  // GET /hoeren?deck=1|2&takte=1..16 (Vorgabe 4): Ohr T5, erlaubt für jede Quelle (lesend).
+  // GET /hoeren?deck=1..4&takte=1..16 (Vorgabe 4): Ohr T5, erlaubt für jede Quelle (lesend).
   private hoerenAus(url: URL, a: http.ServerResponse): void {
     const deck = Number(url.searchParams.get('deck'));
-    if (deck !== 1 && deck !== 2) return this.json(a, 400, { fehler: 'deck' });
+    if (!istOffenesDeck(deck)) return this.json(a, 400, { fehler: 'deck' });
     const takteRoh = url.searchParams.get('takte');
     const takte = takteRoh === null ? 4 : Number(takteRoh);
     if (!Number.isInteger(takte) || takte < 1 || takte > 16) return this.json(a, 400, { fehler: 'takte' });
@@ -437,11 +438,13 @@ export class Oberflaeche {
       // ~/messungen/2026-09-28-ohr-slice2/anschlag_echt.json) — geht NICHT ins Urteil (Task 9), nur mitgeliefert.
       const kanalDeck = deck - 1;
       const saetzeDeck = this.ohr.saetze(kanalDeck, r.j.gemessen_von_beat, r.j.gemessen_bis_beat);
-      const partnerDeck = deck === 1 ? 2 : 1;
-      const stPartner = this.deckStand(partnerDeck);
-      const partnerLaeuft = stPartner ? Number(stPartner.z.status) >= 2 : false;
-      const partnerOffen = kanalOffen(this.stand.regler, `deck/${partnerDeck}`);
-      const saetzePartner = partnerLaeuft && partnerOffen
+      // Decision 3 (places plan): the partner is the lowest other deck that runs with an open channel
+      const laufendOffen = OFFENE_DECKS.filter((n) => {
+        const stN = this.deckStand(n);
+        return stN !== null && Number(stN.z.status) >= 2 && kanalOffen(this.stand.regler, `deck/${n}`);
+      });
+      const partnerDeck = partnerVon(deck, laufendOffen);
+      const saetzePartner = partnerDeck !== null
         ? this.ohr.saetze(partnerDeck - 1, r.j.gemessen_von_beat, r.j.gemessen_bis_beat) : null;
       const s = ohrSync(saetzeDeck, saetzePartner, u.bpm);
       r.j.sync = { sync_ms: s.sync_ms, deck_gegen_deck_ms: s.deck_gegen_deck_ms, n: s.n, validiert: false };
@@ -486,7 +489,7 @@ export class Oberflaeche {
     const takt = Math.floor(u.beat / 4);
     if (takt === this.hoerscheinLetzterTakt) return;
     this.hoerscheinLetzterTakt = takt;
-    const decks: OhrDeckStand[] = [1, 2].map((n) => {
+    const decks: OhrDeckStand[] = OFFENE_DECKS.map((n) => {
       const st = this.deckStand(n);
       const laeuft = st !== null && Number(st.z.status) >= 2;
       const inhalt = st ? `${st.f.material_id}/${Math.round(st.f.basis_bpm * 1000)}_r${st.f.fassung}` : '';
@@ -576,7 +579,7 @@ export class Oberflaeche {
     this.muster = new MusterBibliothek({ eigen: opt.musterBibliothek ?? REPO_PFADE.musterBibliothek, sets: opt.musterSets ?? REPO_PFADE.musterSets, starter: opt.musterStarter ?? REPO_PFADE.musterStarter });
     this.vorbereiter = new Vorbereiter({ python: python,
       cwd: REPO_PFADE.werkstatt, bestand: opt.bestand, modul: opt.einleserModul, log: opt.log });
-    this.ohr = new OhrLeser(this.huellenPfad(), [OHR_K.deck1, OHR_K.deck2, OHR_K.master]);
+    this.ohr = new OhrLeser(this.huellenPfad(), [OHR_K.deck1, OHR_K.deck2, OHR_K.deck3, OHR_K.deck4, OHR_K.master]);
     this.pruefmodus = this.pruefmodusAusKonfig();
     this.kern = new KernAnbindung({ kernPort: opt.kernPort, aboPort: opt.aboPort, name: 'oberflaeche' }, {
       nachricht: (d) => this.vomKern(d),
@@ -596,7 +599,7 @@ export class Oberflaeche {
     const presets = presetsBereich(this.bereichKontext(), { ...(opt.presets ?? {}), projekt: () => this.proj.zugang.offen()?.projekt ?? null, graphVon: (kanal) => this.stand.graphen_geladen[kanal] });   // 1.9 (O28): built first, the project command preset_anwenden reads its store
     const pluginIndex = new PluginIndex({ python, ...opt.plugins, log: opt.log, bei: (scan) => this.bereichKontext().verteile({ a: 'plugins', f: { scan } }) });
     this.proj = projBereich(this.bereichKontext(), { pluginIndex: (id) => pluginIndex.finde(id), presetLies: (id) => presetInhaltVon(presets.speicher, id), katalog: opt.katalog ?? katalogVorgabe(opt.mediathek ?? MEDIATHEK_VORGABE), mediathek: opt.mediathek ?? MEDIATHEK_VORGABE,
-      wirtOrdner: () => this.wirtBasis(), analyse: analyseOrdner, analysierer, bestand: opt.korrekturen !== undefined ? opt.korrekturen : (inst === '' ? opt.bestand : null), ...opt.proj });
+      wirtOrdner: () => this.wirtBasis(), analyse: analyseOrdner, analysierer, bestand: opt.korrekturen !== undefined ? opt.korrekturen : (inst === '' ? opt.bestand : null), kanalOffen: (k) => this.kanalGeoeffnet(k), ...opt.proj });
     this.router.melde(this.proj);
     this.ausgabe = ausgabeBereich(this.bereichKontext(), this.proj.zugang, { wirtOrdner: () => this.wirtBasis() });   // Paket S3: /proj/freeze, /proj/export (Spec 3.4)
     this.router.melde(this.ausgabe);
@@ -605,6 +608,8 @@ export class Oberflaeche {
     this.stems = stemsBereich(this.bereichKontext(), this.proj.zugang, { python, cwd: REPO_PFADE.werkstatt, ...opt.stems });   // 1.13 S6
     this.router.melde(this.stems);
     this.router.melde(liveBereich(this.bereichKontext(), this.proj.zugang, this.stems.stems, {   // plan live-module task 2: /modul/export, /modul/stems, /modul/stand
+      loopOrdner: () => this.loopOrdner(),   // task 10: POST /modul/loop reads the loop library
+      kanalOffen: (k) => this.kanalGeoeffnet(k),   // DJ view places task 7: an open channel refuses the export (PFL is no reason; a planned or running ramp counts)
       deckLoop: (deck) => this.deckLoopAusschnitt(deck), herkunft: (mid) => this.moduleHerkunft(mid), masterTonart: () => this.masterTonart(),
       // task 3: every module is saved (at export, when the stems arrive, when the slot is cleared); the ramp of POST /modul/leeren reads the core clock
       nachExport: (e) => { speichereModul(e.projekt, e.gruppeId, { basis: modulBasisVon(opt.modulOrdner, inst) }); },
@@ -614,7 +619,7 @@ export class Oberflaeche {
         kern: { uhr: () => (this.kern.uhr as { beat: number; bpm: number } | null),
           laeuft: () => { const st = this.proj.sitzung.lage.arr?.status; return st === 1 || st === 2; } } } }));
     // plan live-module task 10: GET /module, POST /modul/einsetzen, POST /modul/speichern (the same store as above)
-    this.router.melde(bibliothekBereich(this.bereichKontext(), this.proj.zugang, { basis: () => modulBasisVon(opt.modulOrdner, inst) }));
+    this.router.melde(bibliothekBereich(this.bereichKontext(), this.proj.zugang, { basis: () => modulBasisVon(opt.modulOrdner, inst), kanalOffen: (k) => this.kanalGeoeffnet(k) }));
     this.router.melde(pluginsBereich(this.bereichKontext(), pluginIndex, { insertParameter: (id) => this.proj.sitzung.insertParameter(id),
       insertFenster: (id, d, q) => this.proj.sitzung.insertFenster(id, d, q),
       geraetParameter: (id) => this.proj.sitzung.geraetParameter(id), geraetParam: (id, d, q) => this.proj.sitzung.geraetParam(id, d, q), geraetIst: (id, n) => this.proj.sitzung.geraetIst(id, n),
@@ -1308,7 +1313,7 @@ export class Oberflaeche {
     const fpb = 48000 * 60 / st.f.basis_bpm;
     const start = this.loopStartFrame(st, l);
     const jetzt = new Date(), z = (n: number) => String(n).padStart(2, '0');
-    const name = `${d.deck === 1 ? 'a' : d.deck === 2 ? 'b' : 'c'}-${z(jetzt.getHours())}${z(jetzt.getMinutes())}${z(jetzt.getSeconds())}-${l.laenge}b`;
+    const name = `${'abcd'[d.deck - 1]}-${z(jetzt.getHours())}${z(jetzt.getMinutes())}${z(jetzt.getSeconds())}-${l.laenge}b`;
     try {
       const q = fassungQuelle(this.opt.bestand, st.f.material_id, st.f.basis_bpm, st.f.fassung);
       schreibeLoopAusFassung({ basis: q.datei, dir: this.loopOrdner(), name, startFrame: start, frames: Math.round(l.laenge * fpb),
@@ -1561,10 +1566,12 @@ export class Oberflaeche {
     let hoerscheinId = '';
     const padBox = /^pad\/([12])\//.exec(pfad)?.[1];
     // S18: a Baukasten instrument graph on an otherwise EMPTY box is Cypher's own sound like erz/* (no loop, nothing waiting); a foreign loop keeps the check
-    const eigenePad = padBox !== undefined && (this.boxEigen(Number(padBox)) || this.boxNurGraph(Number(padBox)));   // wie /loop: eigener Mitschnitt (laufend UND wartend)
+    // DJ view places (decision 10, spec correction c): the exception ends while a module occupies the slot of the channel, else Cypher could open a channel that carries a module
+    const eigenePad = padBox !== undefined && !this.slotBelegt(Number(padBox)) && (this.boxEigen(Number(padBox)) || this.boxNurGraph(Number(padBox)));   // wie /loop: eigener Mitschnitt (laufend UND wartend)
     if (this.quelle() === 'cypher' && !eigenePad && oeffnet(this.stand.regler, pfad, nach)) {
-      // Ohr T10: nur deck/1|2 kennt Hörscheine (§4.5); erz/* frei seit 2026-09-29, pad/* frei für Cyphers eigenen Mitschnitt (eigenePad, Glanz 1.3).
-      const m = /^(deck\/[12])\//.exec(pfad);
+      // Ohr T10: die Decks 1 bis 4 kennen Hörscheine (§4.5, seit Slice 1 auch 3 und 4); erz/* frei seit 2026-09-29, pad/* frei für Cyphers eigenen Mitschnitt
+      // (eigenePad, Glanz 1.3), aber nicht, solange ein Modul den Slot belegt (DJ view places decision 10).
+      const m = /^(deck\/[1-4])\//.exec(pfad);
       const kanal = m ? m[1] : null;
       const deckNr = kanal ? Number(kanal.split('/')[1]) : null;
       const st = deckNr ? this.deckStand(deckNr) : null;
@@ -3207,6 +3214,16 @@ export class Oberflaeche {
     const beat = this.kern.uhr?.beat ?? 0;
     for (const [pfad, l] of this.fahrtEnde) if ((pfad === `pad/${box}/fader` || pfad === `pad/${box}/trim`) && l.some((e) => e.ab + e.dauer >= beat)) return true;
     return false;
+  }
+  // a module in the live container's slot of pad/<box> (1 = A, 2 = B)
+  private slotBelegt(box: number): boolean {
+    const o = this.proj.zugang.offen();
+    return !!o?.projekt.live && liveSlots(o.projekt)[box === 1 ? 'A' : 'B'] !== undefined;
+  }
+  // pad/<n> as the module gate sees it (export, modul_einsetzen, modul_setzen): the rows say open, or a ramp of Cypher on trim or fader is planned or running
+  private kanalGeoeffnet(kanal: string): boolean {
+    const m = /^pad\/([12])$/.exec(kanal);
+    return kanalOffen(this.stand.regler, kanal) || (m !== null && this.boxFaehrt(Number(m[1])));
   }
   private boxBelegt(box: number): boolean { return kanalOffen(this.stand.regler, `pad/${box}`) || this.boxFaehrt(box); }
   private boxLoopName(box: unknown): string {

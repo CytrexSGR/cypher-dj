@@ -5,7 +5,7 @@ import fs from 'node:fs';
 
 export const BAENDER = ['sub', 'tief', 'tiefmitte', 'mitte', 'praesenz', 'hoch'] as const;
 export type Band = (typeof BAENDER)[number];
-export const K = { deck1: 0, deck2: 1, erz1: 4, pad1: 12, pad2: 13, master: 14, cue: 15 } as const;
+export const K = { deck1: 0, deck2: 1, deck3: 2, deck4: 3, erz1: 4, pad1: 12, pad2: 13, master: 14, cue: 15 } as const;
 
 export interface Satz {
   sample: number;
@@ -479,6 +479,13 @@ function laengsterLauf(saetze: Satz[], quellBpm: number, masterBpm: number): { v
   return { vonBeat: saetze[startIdx].beat, quellVon: saetze[startIdx].quell, quellBis: saetze[saetze.length - 1].quell };
 }
 
+// The partner of a deck for the sync check (decision 3, slice 1): the lowest other deck number of `laufende`, which the caller
+// has already reduced to the decks that run with an open channel. null when there is none. Decks 1 and 2 keep each other.
+export function partnerVon(deck: number, laufende: readonly number[]): number | null {
+  const andere = laufende.filter((n) => n !== deck);
+  return andere.length > 0 ? Math.min(...andere) : null;
+}
+
 // Je neuer Takt der Master-Uhr aufrufen (Beat überschreitet ein Vielfaches von 4). Reine Berechnung aus dem Ring
 // (kein cross-Takt-Gedächtnis für die Kontinuität nötig: das 4-Takt-Fenster selbst trägt den Beleg für
 // takte_am_stueck). Zustand hält nur, welcher Schein je Kanal zuletzt ausgestellt wurde (für gueltig()/letzter()
@@ -511,9 +518,8 @@ export class Hoerscheinstelle {
       const roh = lauf && saetzeDeck.length > 0 ? (saetzeDeck[saetzeDeck.length - 1].beat - lauf.vonBeat) / 4 : 0;
       const takteAmStueck = roh + TAKTE_TOLERANZ;
       const v = vergleiche(saetzeDeck, saetzeMaster);
-      const partnerNr = d.deck === 1 ? 2 : 1;
-      const partnerDeck = decks.find((x) => x.deck === partnerNr);
-      const saetzePartner = partnerDeck?.laeuft && partnerOffen(partnerNr) ? l.saetze(partnerNr - 1, von, bis) : null;
+      const partnerNr = partnerVon(d.deck, decks.filter((x) => x.laeuft && partnerOffen(x.deck)).map((x) => x.deck));
+      const saetzePartner = partnerNr !== null ? l.saetze(partnerNr - 1, von, bis) : null;
       const s = sync(saetzeDeck, saetzePartner, bpm);
       const { urteil, gruende } = urteile(v, s, takteAmStueck);
 

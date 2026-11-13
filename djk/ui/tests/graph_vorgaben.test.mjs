@@ -1,6 +1,6 @@
 // Graph defaults on every load path (plan 2026-11-11-synth-ausbau, task 8). A knob a graph defines starts at the graph's `vorgabe` (0.5 without one), whichever way
 // the graph arrives: project open (fill), preset apply (absent knobs), POST /graph (a batch of rows BEFORE the load message, only for a changed name), the
-// project restore (saved rows first, no push after the load), Cypher's hand load. 53 shipped graphs plus a fixture graph with `vorgabe` values.
+// project restore (saved rows first, no push after the load), Cypher's hand load. 54 shipped graphs plus a fixture graph with `vorgabe` values.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -25,7 +25,7 @@ const hol = (u, o = {}) => fetch(u, { ...o, headers: { connection: 'close', ...(
 const warte = (ms) => new Promise((r) => setTimeout(r, ms));
 const bis = async (f, ms = 3000) => { for (let i = 0; i < ms / 20 && !(await f()); i++) await warte(20); return f(); };
 
-// ---- the graph folder of this file: the 53 shipped graphs and fixtures ----
+// ---- the graph folder of this file: the 54 shipped graphs and fixtures ----
 const FIX_INST = { format: 'baukasten/2', name: 'fix-inst', stimmen: 1, regler_namen: { 1: 'A', 2: 'B', 40: 'C', 64: 'D' },
   knoten: [{ id: 'n', art: 'note' }, { id: 'o', art: 'ausgang' },
     { id: 'k1', art: 'regler', nr: 1, min: 0, max: 1, vorgabe: 0.2 }, { id: 'k2', art: 'regler', nr: 2, min: 0, max: 1 },
@@ -54,10 +54,10 @@ function erwartet(name) {
 }
 const art = (name) => (JSON.parse(fs.readFileSync(path.join(ORDNER, `${name}.json`), 'utf8')).knoten.some((k) => k.art === 'eingang') ? 'effekt' : 'instrument');
 
-test('the walk covers 53 shipped graphs and the three fixtures', () => {
-  assert.equal(NAMEN.length, 53);
+test('the walk covers 54 shipped graphs and the three fixtures', () => {
+  assert.equal(NAMEN.length, 54);
   assert.equal(BK_REGLER_ZAHL, 64);
-  assert.equal(listeGraphen(ORDNER).graphen.length, 57);
+  assert.equal(listeGraphen(ORDNER).graphen.length, 58);
 });
 
 // ---- (h) Drift ----
@@ -167,12 +167,14 @@ const PANEL_ERLAUBT = [
   ['fx-filterbox', 1], ['fx-filterbox', 2], ['fx-filterbox', 3], ['fx-filterbox', 5], ['fx-filterbox', 7], ['fx-filterbox', 8],
   ['granular-drone', 4],
   ['fx-crunch', 8], ['fx-polaritaet', 1],   // Mix 100 % on load; the polarity selector's Off stop (index 2 of 4 = 2/3) while the 0.5 fill is Off too (zone 2)
+  // fx-labor: the switches Delay 1, Delay 2 and Cycle start on and the filter selectors start on LP; the 0.5 fill reads the same (on, on, on, LP, LP)
+  ['fx-labor', 3], ['fx-labor', 7], ['fx-labor', 15], ['fx-labor', 19], ['fx-labor', 25],
 ];
 // where the plan's own knobs start: from this number on (and the Drift knob) the panel default must EQUAL the graph's vorgabe
 const ERWEITERT = { 'synth-mono': { ab: 33, extra: [32] }, 'synth-poly': { ab: 29, extra: [28] }, 'synth-neuro': { ab: 25, extra: [] } };
 
-test('panel defaults: every shipped panel control bound to a knob equals the graph vorgabe, except the 11 listed pairs of knobs that keep 0.5', () => {
-  assert.equal(PANEL_ERLAUBT.length, 11);
+test('panel defaults: every shipped panel control bound to a knob equals the graph vorgabe, except the 16 listed pairs of knobs that keep 0.5', () => {
+  assert.equal(PANEL_ERLAUBT.length, 16);
   const benutzt = new Set();
   let geprueft = 0;
   for (const f of fs.readdirSync(path.join(BK, 'paneele')).filter((x) => x.endsWith('.json'))) {

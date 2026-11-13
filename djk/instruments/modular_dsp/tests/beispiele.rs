@@ -1,4 +1,5 @@
 //! Die Beispielgraphen aus Slice 2: laden, klingen, still ohne Note, endlich an allen Reglerenden, Regler wirken.
+#[path = "sampler_helpers/mod.rs"]
 mod sampler_hilfe;
 use baukasten_dsp::{uebersetze, Programm, REGLER};
 

@@ -1,5 +1,6 @@
 //! Klang-Leitplanken für den Pad mit Komp und Limiter (Slice 4c): Pegel, Knob-Enden, ungünstigster Fall unter der Decke
 //! des Limiters (vor dem tanh-Begrenzer), gemeldete Latenz und stille erste Samples.
+#[path = "common/mod.rs"]
 mod gemeinsam;
 use baukasten_dsp::{uebersetze, REGLER};
 use gemeinsam::*;

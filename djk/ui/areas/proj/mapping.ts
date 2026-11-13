@@ -38,7 +38,8 @@ export const BEREICH_GRUENDE: readonly string[] = ['kein_projekt', 'rev_veraltet
   'kein_loop', 'kein_bibliothekstrack', 'kein_liveprojekt', 'slot_leer', 'modul_hat_stems',
   'rampe_laeuft', 'kein_neuer_pfad', 'kein_deck', 'tonart_unbekannt',   // plan live-module tasks 2, 3, 8 and 11
   'modul_unbekannt', 'modul_nicht_einsetzbar',   // task 10
-  'kein_liveprojekt_flag'];   // review fix
+  'kein_liveprojekt_flag',   // review fix
+  'kanal_offen'];   // DJ view places task 7
 
 // --- Regler -----------------------------------------------------------------------------------------------------------
 export interface Soll { pfad: string; wert: number }

@@ -219,7 +219,7 @@ export function setzeModulEin(p0: Projekt, j: ModulDateiInhalt, o: EinsetzOption
     const alt = top.modul ?? { quelle_sha256: '0'.repeat(64), titel: top.name, fassung: '0', basis_bpm: p0.tempo_bpm, von_beat: 0,
       laenge_beats: 64, bpm: p0.tempo_bpm, datum: jetzt.toISOString().slice(0, 10) };
     neuTop.modul = { ...structuredClone(alt), slot };
-    neuTop.fader_db = -200;
+    neuTop.fader_db = 0;                                                     // the channel pad/N is the only gain (DJ view places, decision 9)
   } else if (neuTop.modul) delete neuTop.modul.slot;
   // an inserted module is a new module: its own store id (the one of the file stays with the file)
   if (neuTop.modul) neuTop.modul.id = neueModulId(neuTop.modul, p.gruppen.length, jetzt);

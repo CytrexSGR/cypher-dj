@@ -698,6 +698,19 @@ void Kern::audio(int64_t n0, int n) {
       }
     }
     arr_bk_->takt(karte.beat_at((double)s0), karte.bpm_at((double)s0) / 60.0 / 48000.0);   // S20: beat and tempo for the graphs of the bk tracks
+    {   // DJ view places (decision 7): the pairs of the DJ channels that a group of the snapshot leads into, zeroed here and added into the channel input after the block (below). A channel nobody feeds is not touched.
+      float* dl[2] = {nullptr, nullptr};
+      float* dr[2] = {nullptr, nullptr};
+      for (int c = 0; c < 2; ++c) {
+        dj_gereicht_[c] = arr_->dj_kanal_aktiv(c + 1);   // asked once per sub-block, BEFORE block(): block() counts the held tail of a cleared module down and would answer false afterwards
+        if (!dj_gereicht_[c]) continue;
+        std::memset(dj_aus_l_[c], 0, sizeof(float) * static_cast<size_t>(m));
+        std::memset(dj_aus_r_[c], 0, sizeof(float) * static_cast<size_t>(m));
+        dl[c] = dj_aus_l_[c];
+        dr[c] = dj_aus_r_[c];
+      }
+      arr_->dj_ausgang(dl, dr);
+    }
     arr_->dj_schluessel(erz_l_, erz_r_);   // 1.10 slice 5 U2b (E6, E7): deck/1..4 and erz/1 (indices 0..4) for the sidechain keys; always handed, live and in a render (a render's inputs are silent)
     for (int h = 1; h <= ARR_INS_HOST; ++h)   // plan 1.11 T4: the effect-host ports of this cycle, offset to this sub-block (pointer stores; a port that is not there stays nullptr: the stage plays dry)
       arr_->host_stufe().setze_zeiger(h, ins_aus_[h - 1][0] ? ins_aus_[h - 1][0] + off : nullptr, ins_aus_[h - 1][1] ? ins_aus_[h - 1][1] + off : nullptr,
@@ -763,6 +776,22 @@ void Kern::audio(int64_t n0, int n) {
     loops_frei(s0);  // Keylock: Varianten, die eine Blende zu Ende gebracht hat, zurück an den Netz-Faden
     for (int i = 0; i < nb; ++i) loop_melden(bm[i].box, bm[i].sample, karte.beat_at((double)bm[i].sample));
     if (mt_fertig) mitschnitt_melden(mt_fertig, mt_fertig->abgebrochen ? 1 : 0);  // voll: das Netz schreibt und gibt frei; abgebrochen (Scheibe 3 E4): nur frei
+    // DJ view places (decision 7): the module of a loop slot into the input of its DJ channel, after the loop boxes and the streams (they are in erz_l_/erz_r_ already), before the recorder tap and the
+    // strip (trim, EQ, kill, filter, fader). A channel no group leads into was not handed a pair and is not touched.
+    for (int c = 0; c < 2; ++c) {
+      if (pad_kanal_[c] < 0 || !dj_gereicht_[c]) continue;   // exactly the channels whose pair was handed to this block
+#ifdef CYPHERDJ_MUTATION_ARR_DJ_NACH_STRIP
+      float* kl = mixer_->summe_eingang_l();   // error case: behind the strip, into the master sum in front of the limiter (the channel fader, trim and EQ do not act on the module)
+      float* kr = mixer_->summe_eingang_r();
+#else
+      float* kl = erz_l_[pad_kanal_[c]];
+      float* kr = erz_r_[pad_kanal_[c]];
+#endif
+      for (int i = 0; i < m; ++i) {
+        kl[i] += dj_aus_l_[c][i];
+        kr[i] += dj_aus_r_[c][i];
+      }
+    }
     // 1.8: Abgriff erz/1..3 (rec_tap) nach den Loop-Boxen, vor dem Mixer; Einsatz und Ende kommen aus dem Arrangement
     // S2a: the external pairs ein_1..4 of this sub-block (the JACK buffers of the cycle plus the sub-block offset); nullptr = the pair has no port
     const float* el[EIN_PAARE];

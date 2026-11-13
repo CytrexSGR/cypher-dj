@@ -351,3 +351,60 @@ test('Hoerscheinstelle: Ausstellung je Takt (§4.5 Feldreihenfolge), Rücknahme 
   assert.equal(hs2.letzter(2).urteil, 'unsicher');
   assert.ok(hs2.letzter(2).gruende.includes('zu_kurz'), JSON.stringify(hs2.letzter(2).gruende));
 });
+
+// Slice 1 task 1: the ear over four decks. Ring index = mixer order (deck 1..4 = 0..3).
+test('K: the ring indices of decks 3 and 4 follow deck 2 (mixer order)', () => {
+  assert.deepEqual([K.deck1, K.deck2, K.deck3, K.deck4, K.erz1, K.pad1, K.pad2, K.master, K.cue], [0, 1, 2, 3, 4, 12, 13, 14, 15]);
+});
+
+test('partnerVon: the lowest other deck of the running-and-open list, null without one', async () => {
+  const { partnerVon } = await import('../ear.ts');
+  assert.equal(partnerVon(1, [2, 3]), 2);
+  assert.equal(partnerVon(1, [3, 4]), 3, 'deck 2 not in the list (stopped or closed): the next one is chosen');
+  assert.equal(partnerVon(2, [1, 3, 4]), 1);
+  assert.equal(partnerVon(3, [1, 2]), 1);
+  assert.equal(partnerVon(4, [2, 3]), 2);
+  assert.equal(partnerVon(1, [1]), null, 'a deck is never its own partner');
+  assert.equal(partnerVon(4, []), null);
+});
+
+test('Hoerscheinstelle: deck 1 takes deck 3 as partner when deck 2 is stopped; a closed deck is never the partner; decks 3 and 4 get certificates', async () => {
+  const { Hoerscheinstelle } = await import('../ear.ts');
+  const pfad = tmpPfad('huellen_vier');
+  const eigen = genSaetze({ offsetMs: 5 }), fremd = genSaetze({ offsetMs: 11 });
+  const master = genSaetze({ offsetMs: 5 });
+  schreibeRing(pfad, { [K.deck1]: eigen, [K.deck2]: fremd, [K.deck3]: fremd, [K.deck4]: eigen, [K.master]: master });
+  const l = new OhrLeser(pfad, [K.deck1, K.deck2, K.deck3, K.deck4, K.master]);
+  l.lies();
+  const decks = (laeuft) => [1, 2, 3, 4].map((n) => ({ deck: n, laeuft: laeuft.includes(n), inhalt: laeuft.includes(n) ? `deadbeefdeadbee${n}/128000_r1` : '', bpm: 128 }));
+  // deck 2 stopped, deck 3 runs open: partner of deck 1 is 3 (offset 11 against 5 ms: about 6 ms apart)
+  const hs = new Hoerscheinstelle();
+  hs.takt(l, 16, 128, decks([1, 3]), (n) => n === 3);
+  assert.ok(Number.isFinite(hs.letzter(1).deck_gegen_deck_ms), `partner 3: ${hs.letzter(1).deck_gegen_deck_ms}`);
+  assert.ok(Math.abs(hs.letzter(1).deck_gegen_deck_ms) > 3, `measured against deck 3, not against itself: ${hs.letzter(1).deck_gegen_deck_ms}`);
+  // error case: deck 3 runs but its channel is closed: no partner (a rule that picks it fails here)
+  const hs2 = new Hoerscheinstelle();
+  hs2.takt(l, 16, 128, decks([1, 3]), () => false);
+  assert.ok(Number.isNaN(hs2.letzter(1).deck_gegen_deck_ms), 'a closed deck is never chosen as partner');
+  // deck 2 running and closed, deck 4 running and open: partner of deck 1 is 4 (same phase as deck 1)
+  const hs3 = new Hoerscheinstelle();
+  hs3.takt(l, 16, 128, decks([1, 2, 4]), (n) => n === 4);
+  assert.ok(Math.abs(hs3.letzter(1).deck_gegen_deck_ms) < 2, `deck 4 has deck 1's phase: ${hs3.letzter(1).deck_gegen_deck_ms}`);
+  // decks 3 and 4 are judged on ring index 2 and 3
+  const hs4 = new Hoerscheinstelle();
+  hs4.takt(l, 16, 128, decks([3, 4]), () => false);
+  assert.ok(hs4.letzter(3) && hs4.letzter(4), 'certificates for decks 3 and 4');
+  assert.ok(Math.abs(hs4.letzter(3).sync_ms - hs4.letzter(4).sync_ms) > 3, 'each from its own ring channel');
+});
+
+test('hoerAntwort: deck 3 and deck 4 read ring index 2 and 3', () => {
+  const pfad = tmpPfad('huellen_hoer_vier');
+  const laut = genSaetze({ offsetMs: 5, amplitude: 0.3 }), leise = genSaetze({ offsetMs: 5, amplitude: 0.03 });
+  schreibeRing(pfad, { [K.deck3]: laut, [K.deck4]: leise, [K.master]: laut });
+  const l = new OhrLeser(pfad, [K.deck3, K.deck4, K.master]);
+  l.lies();
+  const r3 = hoerAntwort(l, { deck: 3, geladen: true, laeuft: true, offen: false }, 16, 128, 1);
+  const r4 = hoerAntwort(l, { deck: 4, geladen: true, laeuft: true, offen: false }, 16, 128, 1);
+  assert.equal(r3.code, 200); assert.equal(r4.code, 200);
+  assert.ok(r3.j.vergleich.neu.baender_db[3] > r4.j.vergleich.neu.baender_db[3] + 10, `${r3.j.vergleich.neu.baender_db} vs ${r4.j.vergleich.neu.baender_db}`);
+});

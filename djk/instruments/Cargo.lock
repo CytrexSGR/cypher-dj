@@ -98,6 +98,7 @@ dependencies = [
  "eq_dsp",
  "hall_dsp",
  "komp_dsp",
+ "labor_dsp",
  "rb_dsp",
  "realfft",
  "saett_dsp",
@@ -258,6 +259,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "cypher_labor"
+version = "0.1.0"
+dependencies = [
+ "labor_dsp",
+ "nih_plug",
+]
+
+[[package]]
 name = "cypher_saett"
 version = "0.1.0"
 dependencies = [
@@ -354,6 +363,13 @@ checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 [[package]]
 name = "komp_dsp"
 version = "0.1.0"
+
+[[package]]
+name = "labor_dsp"
+version = "0.1.0"
+dependencies = [
+ "eq_dsp",
+]
 
 [[package]]
 name = "libc"

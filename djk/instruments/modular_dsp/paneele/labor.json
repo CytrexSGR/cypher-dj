@@ -1,0 +1,439 @@
+{
+ "format": "cypherdj-panel/2",
+ "geraet": {
+  "art": "bk",
+  "graph": "labor"
+ },
+ "title": "Labor",
+ "akzent": "orange",
+ "layout": {
+  "rows": [
+   [
+    "ch1",
+    "mod",
+    "ch2"
+   ],
+   [
+    "hinweis"
+   ]
+  ]
+ },
+ "sections": [
+  {
+   "id": "ch1",
+   "title": "CHANNEL 1",
+   "cols": 4,
+   "controls": [
+    {
+     "id": "fk1",
+     "type": "filterkurve",
+     "span": 4,
+     "of": {
+      "cutoff": "cut1",
+      "reso": "res1",
+      "typ": "typ1"
+     },
+     "typen": [
+      {
+       "art": "lp",
+       "pole": 2
+      },
+      {
+       "art": "hp",
+       "pole": 2
+      }
+     ]
+    },
+    {
+     "id": "cut1",
+     "type": "knob",
+     "label": "Cutoff",
+     "bind": {
+      "param": "k1"
+     },
+     "format": "hz",
+     "default": 0.5
+    },
+    {
+     "id": "res1",
+     "type": "knob",
+     "label": "Reso",
+     "bind": {
+      "param": "k2"
+     },
+     "format": "percent",
+     "default": 0.5
+    },
+    {
+     "id": "typ1",
+     "type": "selector",
+     "label": "Filter",
+     "bind": {
+      "param": "k3"
+     },
+     "options": [
+      "LP",
+      "HP"
+     ],
+     "default": 0
+    },
+    {
+     "id": "kt1",
+     "type": "knob",
+     "label": "Key track",
+     "bind": {
+      "param": "k4"
+     },
+     "format": "percent",
+     "default": 1
+    },
+    {
+     "id": "dly1",
+     "type": "switch",
+     "label": "Delay",
+     "bind": {
+      "param": "k7"
+     },
+     "default": 0
+    },
+    {
+     "id": "time1",
+     "type": "knob",
+     "label": "Time",
+     "bind": {
+      "param": "k8"
+     },
+     "format": "ms",
+     "default": 0.5
+    },
+    {
+     "id": "fb1",
+     "type": "knob",
+     "label": "Feedback",
+     "bind": {
+      "param": "k5"
+     },
+     "format": "percent",
+     "default": 0
+    },
+    {
+     "id": "x1",
+     "type": "knob",
+     "label": "Cross 2",
+     "bind": {
+      "param": "k6"
+     },
+     "format": "percent",
+     "default": 0.5
+    },
+    {
+     "id": "mix1",
+     "type": "knob",
+     "label": "Level",
+     "bind": {
+      "param": "k9"
+     },
+     "format": "percent",
+     "default": 1
+    },
+    {
+     "id": "mc1",
+     "type": "knob",
+     "label": "Mod cut",
+     "bind": {
+      "param": "k10"
+     },
+     "format": "percent",
+     "default": 0.575
+    },
+    {
+     "id": "mt1",
+     "type": "knob",
+     "label": "Mod time",
+     "bind": {
+      "param": "k11"
+     },
+     "format": "percent",
+     "default": 0.5
+    },
+    {
+     "id": "sp1",
+     "type": "spacer"
+    }
+   ]
+  },
+  {
+   "id": "mod",
+   "title": "MODULATOR",
+   "cols": 2,
+   "controls": [
+    {
+     "id": "hue",
+     "type": "huelle",
+     "span": 2,
+     "label": "Envelope",
+     "of": {
+      "a": "att",
+      "d": "dec",
+      "s": 0,
+      "r": 0
+     }
+    },
+    {
+     "id": "att",
+     "type": "knob",
+     "label": "Attack",
+     "bind": {
+      "param": "k24"
+     },
+     "format": "raw",
+     "unit": "s",
+     "default": 0
+    },
+    {
+     "id": "dec",
+     "type": "knob",
+     "label": "Decay",
+     "bind": {
+      "param": "k25"
+     },
+     "format": "raw",
+     "unit": "s",
+     "default": 0.5
+    },
+    {
+     "id": "cyc",
+     "type": "switch",
+     "label": "Cycle",
+     "bind": {
+      "param": "k23"
+     },
+     "default": 0
+    },
+    {
+     "id": "amt",
+     "type": "knob",
+     "label": "Amount",
+     "bind": {
+      "param": "k26"
+     },
+     "format": "percent",
+     "default": 1
+    },
+    {
+     "id": "ping",
+     "type": "knob",
+     "label": "Ping",
+     "bind": {
+      "param": "k27"
+     },
+     "format": "percent",
+     "default": 0.7
+    },
+    {
+     "id": "gate",
+     "type": "switch",
+     "label": "Note gate",
+     "bind": {
+      "param": "k28"
+     },
+     "default": 0
+    },
+    {
+     "id": "width",
+     "type": "knob",
+     "label": "Width",
+     "bind": {
+      "param": "k29"
+     },
+     "format": "percent",
+     "default": 0.4
+    },
+    {
+     "id": "vol",
+     "type": "knob",
+     "label": "Volume",
+     "bind": {
+      "param": "k30"
+     },
+     "format": "db",
+     "default": 0.5
+    }
+   ]
+  },
+  {
+   "id": "ch2",
+   "title": "CHANNEL 2",
+   "cols": 4,
+   "controls": [
+    {
+     "id": "fk2",
+     "type": "filterkurve",
+     "span": 4,
+     "of": {
+      "cutoff": "cut2",
+      "reso": "res2",
+      "typ": "typ2"
+     },
+     "typen": [
+      {
+       "art": "lp",
+       "pole": 2
+      },
+      {
+       "art": "hp",
+       "pole": 2
+      }
+     ]
+    },
+    {
+     "id": "cut2",
+     "type": "knob",
+     "label": "Cutoff",
+     "bind": {
+      "param": "k12"
+     },
+     "format": "hz",
+     "default": 0.5
+    },
+    {
+     "id": "res2",
+     "type": "knob",
+     "label": "Reso",
+     "bind": {
+      "param": "k13"
+     },
+     "format": "percent",
+     "default": 0.5
+    },
+    {
+     "id": "typ2",
+     "type": "selector",
+     "label": "Filter",
+     "bind": {
+      "param": "k14"
+     },
+     "options": [
+      "LP",
+      "HP"
+     ],
+     "default": 0
+    },
+    {
+     "id": "kt2",
+     "type": "knob",
+     "label": "Key track",
+     "bind": {
+      "param": "k15"
+     },
+     "format": "percent",
+     "default": 0
+    },
+    {
+     "id": "dly2",
+     "type": "switch",
+     "label": "Delay",
+     "bind": {
+      "param": "k18"
+     },
+     "default": 1
+    },
+    {
+     "id": "time2",
+     "type": "knob",
+     "label": "Time",
+     "bind": {
+      "param": "k19"
+     },
+     "format": "ms",
+     "default": 0.5
+    },
+    {
+     "id": "fb2",
+     "type": "knob",
+     "label": "Feedback",
+     "bind": {
+      "param": "k16"
+     },
+     "format": "percent",
+     "default": 0.3
+    },
+    {
+     "id": "x2",
+     "type": "knob",
+     "label": "Cross 1",
+     "bind": {
+      "param": "k17"
+     },
+     "format": "percent",
+     "default": 0
+    },
+    {
+     "id": "mix2",
+     "type": "knob",
+     "label": "Level",
+     "bind": {
+      "param": "k20"
+     },
+     "format": "percent",
+     "default": 0.5
+    },
+    {
+     "id": "mc2",
+     "type": "knob",
+     "label": "Mod cut",
+     "bind": {
+      "param": "k21"
+     },
+     "format": "percent",
+     "default": 0.5
+    },
+    {
+     "id": "mt2",
+     "type": "knob",
+     "label": "Mod time",
+     "bind": {
+      "param": "k22"
+     },
+     "format": "percent",
+     "default": 0.5
+    },
+    {
+     "id": "sp2",
+     "type": "spacer"
+    }
+   ]
+  },
+  {
+   "id": "hinweis",
+   "title": "HOW IT PLAYS",
+   "cols": 8,
+   "controls": [
+    {
+     "id": "h1",
+     "type": "label",
+     "span": 4,
+     "text": "A note pings both filters at its pitch."
+    },
+    {
+     "id": "h2",
+     "type": "label",
+     "span": 4,
+     "text": "Resonance above 80 %: the filter sings."
+    },
+    {
+     "id": "h3",
+     "type": "label",
+     "span": 4,
+     "text": "Cross sends a channel into the other."
+    },
+    {
+     "id": "h4",
+     "type": "label",
+     "span": 4,
+     "text": "Long delay times get grainy on purpose."
+    }
+   ]
+  }
+ ]
+}

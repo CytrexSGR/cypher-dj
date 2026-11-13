@@ -3,7 +3,7 @@
 // get warp.transpose_st; the total is stored on the module (`transponiert`), so a second call changes nothing. GET /modul/stand shows the distance
 // per slot (`tonart_abstand` = what adapting would still move, `transponiert`, `deck_tonart`).
 // The master key: the playing deck (status 2+, channel open) whose channel is the loudest on the master (the page server's peak buffer); see server.ts.
-import { liveSlots, passeModulAn, tonartAbstand, tonartRest } from '../../project/live.ts';
+import { liveSlots, normiereSlot, passeModulAn, tonartAbstand, tonartRest } from '../../project/live.ts';
 import { aendereStand } from '../../project/state.ts';
 import type { BereichKontext } from '../../http/router.ts';
 import type { ProjZugang } from '../proj/area.ts';
@@ -33,8 +33,10 @@ export class ModulTonart {
 
   async passeAn(d: Record<string, unknown>, quelle: 'andreas' | 'cypher'): Promise<Antwort> {
     for (const k of Object.keys(d)) if (k !== 'slot') throw new ProjFehler(400, 'argument_unbekannt', { detail: k });
-    if (d.slot !== 'A' && d.slot !== 'B') throw new ProjFehler(400, 'argument_ungueltig', { detail: "slot: 'A' or 'B'" });
-    const slot: Slot = d.slot;
+    const s0 = normiereSlot(d.slot);                                           // 1/2 and A/B (decision 13)
+    if (s0 === undefined) throw new ProjFehler(400, 'argument_ungueltig', { detail: "slot: 1, 2, 'A' or 'B'" });
+    d = { ...d, slot: s0 };
+    const slot: Slot = s0;
     if (quelle === 'cypher' && this.ctx.kiGestoppt()) throw new ProjFehler(409, 'ki_gestoppt');
     const o = this.zugang.offen();
     if (!o || !o.projekt.live) throw new ProjFehler(409, 'kein_liveprojekt');

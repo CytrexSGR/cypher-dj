@@ -461,3 +461,11 @@ body.produktion .preset-kopf select { max-width: 14ch; }
 /* INSTRUMENTS in the narrow production browser: nothing of the library modes shows beside it. Last, same strength as the b-* rules above. */
 body.produktion.bereich-instrumente #bestand .tabelle[data-tabelle], body.produktion.bereich-instrumente #geraete-browser, body.produktion.bereich-instrumente #presets,
 body.produktion.bereich-instrumente #kollektionen, body.produktion.bereich-instrumente #bestand .p-browserwahl { display: none !important; }
+
+/* Folding GROUPS, RETURNS and CLIP (einklappen.js): only the title row stays, the arrangement takes the height. */
+.p-klapptitel { cursor: pointer; user-select: none; }
+.p-klapptitel::before { content: '\25BE\00A0'; }
+.p-zu .p-klapptitel::before { content: '\25B8\00A0'; }
+.p-mixer.p-zu > :not(.p-mixer-kopf) { display: none; }
+.p-detail.p-zu > :not(.p-detail-kopf) { display: none; }
+body.produktion #produktion:has(> .p-detail.p-zu) { --detail: auto; }

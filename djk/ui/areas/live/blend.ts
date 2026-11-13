@@ -3,7 +3,7 @@
 // with a new path (Drums, Bass once their MIDI is in) can be blended, else 409 kein_neuer_pfad. takte 0 or absent: one undo step and the answer holds the
 // new state. takte > 0: both track fader rows move on the core clock (ramp.ts, about every 1/16), the model gets the end value once at the end (one undo
 // step); the answer comes at once with zustand 'rampe', the end as the event {a:'modul', f:{blend}} and in GET /modul/stand under `blend`.
-import { liveSlots } from '../../project/live.ts';
+import { liveSlots, normiereSlot } from '../../project/live.ts';
 import { aendereStand } from '../../project/state.ts';
 import { fuehreListeAus } from '../../project/commands.ts';
 import { blendFader, blendPfad, type Projekt } from '../../project/model.ts';
@@ -41,7 +41,9 @@ export class ModulBlend {
     for (const k of Object.keys(d)) {
       if (k !== 'slot' && k !== 'stem' && k !== 'wert' && k !== 'takte') throw new ProjFehler(400, 'argument_unbekannt', { detail: k });
     }
-    if (d.slot !== 'A' && d.slot !== 'B') throw new ProjFehler(400, 'argument_ungueltig', { detail: "slot: 'A' or 'B'" });
+    const s0 = normiereSlot(d.slot);                                           // 1/2 and A/B (decision 13)
+    if (s0 === undefined) throw new ProjFehler(400, 'argument_ungueltig', { detail: "slot: 1, 2, 'A' or 'B'" });
+    d = { ...d, slot: s0 };
     if (typeof d.stem !== 'string' || !(STEMS as readonly string[]).includes(d.stem)) {
       throw new ProjFehler(400, 'argument_ungueltig', { detail: `stem: one of ${STEMS.join(', ')}` });
     }
@@ -52,7 +54,7 @@ export class ModulBlend {
     if (typeof takte !== 'number' || !LEEREN_TAKTE.includes(takte)) {
       throw new ProjFehler(400, 'argument_ungueltig', { detail: `takte: one of ${LEEREN_TAKTE.join(', ')}` });
     }
-    const slot: Slot = d.slot, stem = d.stem as Stem, wert = d.wert;
+    const slot: Slot = s0, stem = d.stem as Stem, wert = d.wert;
     if (quelle === 'cypher' && this.ctx.kiGestoppt()) throw new ProjFehler(409, 'ki_gestoppt');
     const o = this.zugang.offen();
     if (!o || !o.projekt.live) throw new ProjFehler(409, 'kein_liveprojekt');

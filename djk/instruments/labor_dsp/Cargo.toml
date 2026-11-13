@@ -1,0 +1,9 @@
+[package]
+name = "labor_dsp"
+version = "0.1.0"
+edition = "2021"
+description = "Cypher Labor: dual-channel feedback processor (gain, one-bit delay, level-sensitive resonant filter, clipping, four feedback paths, modulator), pure DSP without a host"
+license = "GPL-3.0-or-later"
+
+[dependencies]
+eq_dsp = { path = "../eq_dsp" }

@@ -81,13 +81,38 @@ int main() {
   x.teil("grp/2/mute", 0.0f, 0.0, 0.0);
   x.teil("spur/1/solo", 0.0f, 0.0, 0.0);
   zyklen(500);
+  {  // DJ view places (decisions 5, 7): a live snapshot whose groups 1 and 3 lead into the DJ channels pad/1 and pad/2 (group 2 inside group 1, an eq on group 3). The pairs are zeroed, handed and added
+     // into the channel inputs inside the counted cycles; the channels are open, so the module sounds through the strip. The file is written here: the test builder knows no live flag.
+    const std::string gruppen_dj = "{\"nr\":1,\"ausgang\":{\"art\":\"dj\",\"nr\":1}},{\"nr\":2,\"ausgang\":{\"art\":\"gruppe\",\"nr\":1}" + saett_kette +
+                                   "},{\"nr\":3,\"ausgang\":{\"art\":\"dj\",\"nr\":2}" + eq_kette + "}";
+    x.ordner.roh(3, "{\"format\":\"cypherdj-arr/2\",\"nr\":3,\"live\":true,\"spuren\":[" + spuren(3, 3) + "],\"gruppen\":[" + gruppen_dj + "],\"returns\":[" + returns + "]}");
+    cdj::ArrLadeErgebnis e = cdj::lade_wiedergabe(x.ordner.pfad, 3, x.cache);
+    PRUEF(e.snap != nullptr);
+    if (e.snap) {
+      cdj::Befehl b = x.neu(cdj::Befehl::ARR_LADEN, "andreas");
+      b.zeiger = e.snap.release();
+      b.arr_nr = 3;
+      x.sende(b);
+    }
+    x.teil("pad/1/fader", 0.0f, 0.0, 0.0);
+    x.teil("pad/2/fader", 0.0f, 0.0, 0.0);
+    zyklen(300);   // the swap is taken in the first of these cycles
+    PRUEF(x.kern->arrangement().dj_kanal_aktiv(1) && x.kern->arrangement().dj_kanal_aktiv(2));   // the DJ path really runs in the counted cycles
+    zyklen(1200);
+    x.teil("grp/1/mute", 1.0f, 0.0, 0.0);
+    zyklen(300);
+    x.laden3(4, spuren(0, 0), gruppen_neu, returns);   // back to a snapshot without DJ outputs: the held tail, then the old path
+    zyklen(500);
+    PRUEF(!x.kern->arrangement().dj_kanal_aktiv(1) && !x.kern->arrangement().dj_kanal_aktiv(2));
+    x.teil("grp/1/mute", 0.0f, 0.0, 0.0);
+  }
   x.stopp(0);
   zyklen(200);
   abfang_an();
   void* p = std::malloc(16);
   const long positiv = abfang_aus();
   std::free(p);
-  std::printf("arr_gruppen_alloc: %ld Allokationen in %d Zyklen, Positiv-Kontrolle %ld\n", im_zyklus, 3700, positiv);
+  std::printf("arr_gruppen_alloc: %ld Allokationen in %d Zyklen, Positiv-Kontrolle %ld\n", im_zyklus, 6000, positiv);
   PRUEF(positiv >= 1);
   PRUEF(im_zyklus == 0);
   PRUEF(x.wert("grp/1/fader") < -5.0);     // die Rampe lief (liest das Stellwerk, nicht den Mischer: belegt nur, dass die Lage bewegt wurde)

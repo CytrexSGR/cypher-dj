@@ -196,6 +196,9 @@ const GRAPHEN: &[&str] = &[
     // wavefolder (falter, oversampled) and the neuro bass built on it
     include_str!("../demos/falter-demo.json"),
     include_str!("../demos/synth-neuro.json"),
+    // Cypher Labor: the feedback processor as instrument (pinged by the note) and as effect
+    include_str!("../demos/labor.json"),
+    include_str!("../demos/fx-labor.json"),
 ];
 
 #[test]

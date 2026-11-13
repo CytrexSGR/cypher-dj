@@ -218,6 +218,9 @@ class Arrangement {
     trocken_aus_ = true;
     nur_schl_ = true;
   }
+  // DJ view places (decision 8): offline, a group with a DJ output sums into the master like any top group (and so into the production master tap). Called by the render before block 0 and by
+  // nothing else: live (the switch off) such a group adds into the DJ pair of its channel (dj_ausgang) and the master tap does not carry it.
+  void setze_dj_als_master() { dj_master_ = true; }
   void setze_senke_intern(ArrSenke* s) { senke_intern_ = s; spur_plan_gueltig_ = false; }
   void setze_senke_wirt(int slot, ArrSenke* s) {
     if (slot >= 1 && slot <= ARR_WIRT_SLOTS) senke_wirt_[slot - 1] = s;
@@ -304,10 +307,29 @@ class Arrangement {
   // l = r = nullptr) is a silent input. The kernel hands them ALWAYS, live and in a render: a render has no deck playing and its inputs are silent by construction (E7).
   static constexpr int DJ_EINGAENGE = 5;
   void dj_schluessel(const float* const* l, const float* const* r);
+  // ---- DJ view places (decision 7): the DJ channel outputs. Before block() of the same cycle the kernel hands the two stereo pairs (index 0 = pad/1, 1 = pad/2, each of the block's length, zeroed by the
+  // kernel) that the groups with a DJ output add into instead of the production master. The pointers are good for this one block and are cleared at its end (like dj_schluessel). A channel without a
+  // pair (nullptr), or the offline switch, sends such a group to the master: nothing is lost and a caller without the pairs hears it on the master. No allocation, no lock: pointer stores.
+  void dj_ausgang(float* const* l, float* const* r) noexcept {
+    for (int i = 0; i < 2; ++i) {
+      dj_aus_l_[i] = l ? l[i] : nullptr;
+      dj_aus_r_[i] = r ? r[i] : nullptr;
+    }
+  }
+  // true when the snapshot has a group on DJ channel nr (1..2) that the live path routes to a pair: the kernel zeroes and hands the pair only then (the other channels stay untouched, bit for bit)
+  // (also while the tail of a group that just lost its DJ output is held, see dj_rest_)
+  bool dj_kanal_aktiv(int nr) const noexcept {
+    if (!snap_ || dj_master_ || nr < 1 || nr > 2) return false;
+    for (int g = 0; g < ARR_GRUPPEN; ++g)
+      if (snap_->gruppe_dj[g] == nr || (dj_rest_n_ > 0 && dj_rest_[g] == nr)) return true;
+    return false;
+  }
 
   // ---- Zustand (nur im Callback-Faden lesen)
   ArrZustand zustand(const Karte& k, int64_t s) const;
   const ArrSnapshot* snapshot() const { return snap_; }
+  // DJ view places (decision 5): the DJ channel the group `gruppe` (its number 1..ARR_GRUPPEN, as in the snapshot file) leads into: 0 none (master or a parent group), 1 = pad/1, 2 = pad/2
+  int dj_nr(int gruppe) const noexcept { return snap_ && gruppe >= 1 && gruppe <= ARR_GRUPPEN ? snap_->gruppe_dj[gruppe - 1] : 0; }
   // counts the swaps (tausche): a new value is a new snapshot, whatever its address (the loader frees and allocates, an address can come back); sinks that act once per snapshot compare this, not the pointer
   uint64_t snapshot_generation() const { return snap_gen_; }
   ArrStatus status() const { return status_; }
@@ -716,6 +738,14 @@ class Arrangement {
   ArrInserts ins_;                               // 1.10 slice 4a: pooled insert stages (built in the constructor)
   const float* dj_l_[DJ_EINGAENGE] = {};         // 1.10 slice 5 U2b: the DJ inputs of this block (dj_schluessel), reset at the end of block()
   const float* dj_r_[DJ_EINGAENGE] = {};
+  float* dj_aus_l_[2] = {};                      // DJ view places: the DJ pairs of this block (dj_ausgang), reset at the end of block()
+  float* dj_aus_r_[2] = {};
+  bool dj_master_ = false;                       // DJ view places: render only (setze_dj_als_master), never true in the live kern
+  // A swap that takes the DJ output from a group (the module is cleared, the group leaves the snapshot) lets the fading tail of its tracks (96 samples) run into the DJ pair for DJ_REST samples
+  // instead of the master: dj_rest_[g] is the channel the group had, dj_rest_n_ the samples left. Set in tausche(), counted down in mischen().
+  static constexpr int DJ_REST = 960;
+  uint8_t dj_rest_[ARR_GRUPPEN] = {};
+  int dj_rest_n_ = 0;
   ArrPdc pdc_;                                   // 1.10 slice 4b T13: delay rings of the compensation (exist after the constructor)
   float gsd_l_[ARR_BLOCK] = {}, gsd_r_[ARR_BLOCK] = {};     // nested groups: the pre signal (group sum times its mute/solo fade) of the group in the pass, delayed at its send place (PDC_GRPSEND0 + g)
   float pdcs_l_[ARR_BLOCK] = {}, pdcs_r_[ARR_BLOCK] = {};   // scratch for a sum that is delayed before it joins the PM sum (groups, one return at a time)

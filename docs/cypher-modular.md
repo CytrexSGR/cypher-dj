@@ -57,14 +57,14 @@ code: `knoten` are nodes, `kanten` are wires, `art` is the block type, `stimmen`
 | Notes and control | `note` (hz, gate, velocity, trigger), `konst`, `regler` (one of the knobs, mapped to a range, with an optional start value `vorgabe` and centre value `mitte`), `transponiere`, `glatt` (smoothing) |
 | Oscillators and noise | `saege`, `puls`, `dreieck`, `sinus`, `rauschen`; the saw, pulse and triangle also take a band-limited hard sync input and output (`hart`) |
 | Sound sources | `trommeln` (a drum kit in one block: the note picks the drum), `wavetable` (band-limited tables with up to seven detuned copies in one voice), `fm` (six operators, sixteen algorithms), `granular` (grains of a generated source), `resonator` (a modal bank of up to 32 modes per voice), `saite` (a digital waveguide string), `metall` (metallic oscillator bank for hi-hats and cymbals), `sampler` (plays a sample file) |
-| Filters and shaping | `ladder`, `svf`, `saett` (saturation), `roehre` (one triode stage), `krume` (bit and sample rate reduction), `ms20` (low-pass and high-pass with saturating feedback), `sem` (12 dB state-variable filter that morphs from low-pass through notch to high-pass, plus a band-pass output), `diode` (diode-ladder low-pass), `kamm` (tuned feedback comb filter), `formant` (vowel filter of five parallel band-passes), `falter` (wavefolder with antialiasing and 2x oversampling) |
+| Filters and shaping | `ladder`, `svf`, `saett` (saturation), `roehre` (one triode stage), `krume` (bit and sample rate reduction), `ms20` (low-pass and high-pass with saturating feedback), `sem` (12 dB state-variable filter that morphs from low-pass through notch to high-pass, plus a band-pass output), `diode` (diode-ladder low-pass), `kamm` (tuned feedback comb filter), `formant` (vowel filter of five parallel band-passes), `falter` (wavefolder with antialiasing and 2x oversampling), `labor` (Cypher Labor, see below) |
 | Modulation | `adsr`, `lfo`, `mseg` (multi-stage envelope, up to eight stages with curves, a sustain stage and a loop), `sh` (sample and hold, clocked by a trigger, in beats or in Hz), `folger` (envelope follower), `drift` (per-voice analog drift) |
 | Arithmetic | `mul`, `add` |
 | Effects | `chorus`, `phaser`, `hall` (reverb), `delay`, `faltung` (convolution with an impulse response file, no added latency), `vocoder` (11-band channel vocoder) |
 | Dynamics | `limiter`, `gate`, `komp` |
 | Wiring | `ausgang` (output), `eingang` (input, for effect graphs), `leitung` (a feedback path that can be wired freely), `wahl` (a selector over up to eight inputs, with a crossfade) |
 
-That makes 50 block types. The graph is checked when it loads and runs in a fixed order. Feedback is only allowed through
+That makes 51 block types. The graph is checked when it loads and runs in a fixed order. Feedback is only allowed through
 a wire marked `"verzoegerung": 1` or through `leitung`. Up to 16 voices run side by side; the audio callback does not
 allocate.
 
@@ -98,6 +98,11 @@ and a save button sit in its header.
   filters, a tempo-synced second LFO, sample and hold, a second oscillator, key follow, delay and reverb.
 - **Drums 909 and Drums 808** (`drums-909`, `drums-808`): two drum machines built on the `trommeln` block.
 - **Filterbox** (`fx-filterbox`): an effect with six filter models and three modulation sources.
+- **Cypher Labor** (`labor`, `fx-labor`): a two-channel feedback processor in one block: a model of a one-bit
+  delay chip, a resonant filter whose resonance depends on the level, clipping, channel and cross feedback and one
+  modulator, run sample by sample at twice the base rate. As an instrument a note pings both filters (key tracking,
+  note gate, width); as an effect the left side runs through channel 1 and the right through channel 2. It is new and
+  experimental: one listening session so far, no presets yet.
 
 The new controls of the three synthesizers were added without changing any old sound: with every new knob at its start
 value, the graphs render byte for byte as before. Their numbers were measured on synthetic signals; the new controls have not

@@ -1,0 +1,413 @@
+{
+ "format": "baukasten/2",
+ "name": "fx-labor",
+ "stimmen": 1,
+ "regler_namen": {
+  "1": "Gain 1",
+  "2": "Mix 1",
+  "3": "Delay 1",
+  "4": "Time 1",
+  "5": "Cutoff 1",
+  "6": "Resonance 1",
+  "7": "High-pass 1",
+  "8": "Feedback 1",
+  "9": "Cross 1 to 2",
+  "10": "Mod gain 1",
+  "11": "Mod time 1",
+  "12": "Mod cutoff 1",
+  "13": "Gain 2",
+  "14": "Mix 2",
+  "15": "Delay 2",
+  "16": "Time 2",
+  "17": "Cutoff 2",
+  "18": "Resonance 2",
+  "19": "High-pass 2",
+  "20": "Feedback 2",
+  "21": "Cross 2 to 1",
+  "22": "Mod gain 2",
+  "23": "Mod time 2",
+  "24": "Mod cutoff 2",
+  "25": "Cycle",
+  "26": "Attack",
+  "27": "Decay",
+  "28": "Mod amount",
+  "29": "Volume"
+ },
+ "knoten": [
+  {
+   "id": "ein",
+   "art": "eingang"
+  },
+  {
+   "id": "k1",
+   "art": "regler",
+   "nr": 1,
+   "min": -38,
+   "max": 40,
+   "mitte": 0
+  },
+  {
+   "id": "k2",
+   "art": "regler",
+   "nr": 2,
+   "min": 0,
+   "max": 1
+  },
+  {
+   "id": "k3",
+   "art": "regler",
+   "nr": 3,
+   "min": 0,
+   "max": 1,
+   "mitte": 0.99
+  },
+  {
+   "id": "k4",
+   "art": "regler",
+   "nr": 4,
+   "min": 46,
+   "max": 1500,
+   "log": 1,
+   "mitte": 250
+  },
+  {
+   "id": "k5",
+   "art": "regler",
+   "nr": 5,
+   "min": 60,
+   "max": 6000,
+   "log": 1,
+   "mitte": 2500
+  },
+  {
+   "id": "k6",
+   "art": "regler",
+   "nr": 6,
+   "min": 0,
+   "max": 1,
+   "mitte": 0.3
+  },
+  {
+   "id": "k7",
+   "art": "regler",
+   "nr": 7,
+   "min": 0,
+   "max": 1
+  },
+  {
+   "id": "k8",
+   "art": "regler",
+   "nr": 8,
+   "min": 0,
+   "max": 1,
+   "mitte": 0.4
+  },
+  {
+   "id": "k9",
+   "art": "regler",
+   "nr": 9,
+   "min": 0,
+   "max": 1,
+   "mitte": 0.2
+  },
+  {
+   "id": "k10",
+   "art": "regler",
+   "nr": 10,
+   "min": -1,
+   "max": 1
+  },
+  {
+   "id": "k11",
+   "art": "regler",
+   "nr": 11,
+   "min": -1,
+   "max": 1
+  },
+  {
+   "id": "k12",
+   "art": "regler",
+   "nr": 12,
+   "min": -1,
+   "max": 1,
+   "mitte": 0.4
+  },
+  {
+   "id": "k13",
+   "art": "regler",
+   "nr": 13,
+   "min": -38,
+   "max": 40,
+   "mitte": 0
+  },
+  {
+   "id": "k14",
+   "art": "regler",
+   "nr": 14,
+   "min": 0,
+   "max": 1
+  },
+  {
+   "id": "k15",
+   "art": "regler",
+   "nr": 15,
+   "min": 0,
+   "max": 1,
+   "mitte": 0.99
+  },
+  {
+   "id": "k16",
+   "art": "regler",
+   "nr": 16,
+   "min": 46,
+   "max": 1500,
+   "log": 1,
+   "mitte": 375
+  },
+  {
+   "id": "k17",
+   "art": "regler",
+   "nr": 17,
+   "min": 60,
+   "max": 6000,
+   "log": 1,
+   "mitte": 2500
+  },
+  {
+   "id": "k18",
+   "art": "regler",
+   "nr": 18,
+   "min": 0,
+   "max": 1,
+   "mitte": 0.3
+  },
+  {
+   "id": "k19",
+   "art": "regler",
+   "nr": 19,
+   "min": 0,
+   "max": 1
+  },
+  {
+   "id": "k20",
+   "art": "regler",
+   "nr": 20,
+   "min": 0,
+   "max": 1,
+   "mitte": 0.4
+  },
+  {
+   "id": "k21",
+   "art": "regler",
+   "nr": 21,
+   "min": 0,
+   "max": 1,
+   "mitte": 0.2
+  },
+  {
+   "id": "k22",
+   "art": "regler",
+   "nr": 22,
+   "min": -1,
+   "max": 1
+  },
+  {
+   "id": "k23",
+   "art": "regler",
+   "nr": 23,
+   "min": -1,
+   "max": 1
+  },
+  {
+   "id": "k24",
+   "art": "regler",
+   "nr": 24,
+   "min": -1,
+   "max": 1,
+   "mitte": -0.4
+  },
+  {
+   "id": "k25",
+   "art": "regler",
+   "nr": 25,
+   "min": 0,
+   "max": 1,
+   "mitte": 0.99
+  },
+  {
+   "id": "k26",
+   "art": "regler",
+   "nr": 26,
+   "min": 0.005,
+   "max": 5,
+   "log": 1,
+   "mitte": 0.5
+  },
+  {
+   "id": "k27",
+   "art": "regler",
+   "nr": 27,
+   "min": 0.005,
+   "max": 5,
+   "log": 1,
+   "mitte": 0.5
+  },
+  {
+   "id": "k28",
+   "art": "regler",
+   "nr": 28,
+   "min": 0,
+   "max": 1
+  },
+  {
+   "id": "k29",
+   "art": "regler",
+   "nr": 29,
+   "min": -40,
+   "max": 6,
+   "mitte": 0
+  },
+  {
+   "id": "lab",
+   "art": "labor"
+  },
+  {
+   "id": "aus",
+   "art": "ausgang"
+  }
+ ],
+ "kanten": [
+  {
+   "von": "ein.l",
+   "nach": "lab.l"
+  },
+  {
+   "von": "ein.r",
+   "nach": "lab.r"
+  },
+  {
+   "von": "k1.aus",
+   "nach": "lab.gain1"
+  },
+  {
+   "von": "k2.aus",
+   "nach": "lab.mix1"
+  },
+  {
+   "von": "k3.aus",
+   "nach": "lab.delay1"
+  },
+  {
+   "von": "k4.aus",
+   "nach": "lab.zeit1"
+  },
+  {
+   "von": "k5.aus",
+   "nach": "lab.cutoff1"
+  },
+  {
+   "von": "k6.aus",
+   "nach": "lab.reso1"
+  },
+  {
+   "von": "k7.aus",
+   "nach": "lab.hp1"
+  },
+  {
+   "von": "k8.aus",
+   "nach": "lab.fb1"
+  },
+  {
+   "von": "k9.aus",
+   "nach": "lab.kreuz1"
+  },
+  {
+   "von": "k10.aus",
+   "nach": "lab.modgain1"
+  },
+  {
+   "von": "k11.aus",
+   "nach": "lab.modzeit1"
+  },
+  {
+   "von": "k12.aus",
+   "nach": "lab.modcutoff1"
+  },
+  {
+   "von": "k13.aus",
+   "nach": "lab.gain2"
+  },
+  {
+   "von": "k14.aus",
+   "nach": "lab.mix2"
+  },
+  {
+   "von": "k15.aus",
+   "nach": "lab.delay2"
+  },
+  {
+   "von": "k16.aus",
+   "nach": "lab.zeit2"
+  },
+  {
+   "von": "k17.aus",
+   "nach": "lab.cutoff2"
+  },
+  {
+   "von": "k18.aus",
+   "nach": "lab.reso2"
+  },
+  {
+   "von": "k19.aus",
+   "nach": "lab.hp2"
+  },
+  {
+   "von": "k20.aus",
+   "nach": "lab.fb2"
+  },
+  {
+   "von": "k21.aus",
+   "nach": "lab.kreuz2"
+  },
+  {
+   "von": "k22.aus",
+   "nach": "lab.modgain2"
+  },
+  {
+   "von": "k23.aus",
+   "nach": "lab.modzeit2"
+  },
+  {
+   "von": "k24.aus",
+   "nach": "lab.modcutoff2"
+  },
+  {
+   "von": "k25.aus",
+   "nach": "lab.zyklus"
+  },
+  {
+   "von": "k26.aus",
+   "nach": "lab.attack"
+  },
+  {
+   "von": "k27.aus",
+   "nach": "lab.decay"
+  },
+  {
+   "von": "k28.aus",
+   "nach": "lab.amount"
+  },
+  {
+   "von": "k29.aus",
+   "nach": "lab.pegel"
+  },
+  {
+   "von": "lab.l",
+   "nach": "aus.l"
+  },
+  {
+   "von": "lab.r",
+   "nach": "aus.r"
+  }
+ ]
+}

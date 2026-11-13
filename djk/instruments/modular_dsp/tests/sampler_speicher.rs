@@ -1,5 +1,6 @@
 //! S10 task 1: memory at translation. One `Box<[f32]>` per sampler node, shared by all voices (D5). This binary has exactly
 //! one test: the counting allocator is global and parallel tests would disturb it.
+#[path = "sampler_helpers/mod.rs"]
 mod sampler_hilfe;
 use baukasten_dsp::uebersetze_mit_wurzel;
 use sampler_hilfe::*;

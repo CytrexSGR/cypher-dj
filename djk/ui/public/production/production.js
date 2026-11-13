@@ -16,6 +16,7 @@ import { armStand } from './auto_recording.js';
 import { bindeGruppen } from './groups.js';
 import { bindeReturns } from './returns.js';
 import { bindeInserts } from './inserts.js';
+import { bindeEinklappen } from './einklappen.js';   // folding GROUPS, RETURNS and CLIP like the <details> panels
 import { bindeMatrix } from './matrix.js';   // 1.10 slice 6: routing matrix view
 import { MAX_SPUREN } from './limits.js';
 import { bindeAblage } from './storage.js';
@@ -39,7 +40,7 @@ import { AUSGABE_FEHLER, mehrdeutigText } from './output.js';
 import { nachladenNoetig, stemsEreignis, stemsFuerProjekt } from './stems.js';
 
 const BINDER = [bindeZeitachse, bindeProjektwahl, bindeSpuren, bindeGruppen, bindeReturns, bindeMatrix, bindeInserts, bindeAblage, bindeTransport, bindeVerlauf, bindeLanen, bindeComp, bindeClips, bindeDetail, bindeAusgabe, bindeMidiImport, bindeVariantenReihen, bindeGeraete, bindeAufnahme,
-  bindeBrowserwahl, bindeGeraeteBrowser, bindePresetHost, bindePresetMarken, bindeKollektionen];
+  bindeBrowserwahl, bindeGeraeteBrowser, bindePresetHost, bindePresetMarken, bindeKollektionen, bindeEinklappen];
 
 const GERUEST = `
 <div class="p-transport" role="toolbar" aria-label="Transport">
@@ -181,6 +182,7 @@ export const FEHLER_TEXT = {
   rampe_laeuft: 'That live slot is already being cleared or blended', kein_neuer_pfad: 'That stem has no new instrument path to blend to',
   unbekanntes_deck: 'There is no such deck',
   kein_deck: 'No deck is playing on the master, so there is no key to adapt to', tonart_unbekannt: 'The key of the module or of the deck is unknown',
+  kanal_offen: 'The channel of that live slot is open: close its fader first (PFL does not matter)',   // DJ view places task 7
   zu_gross: AUSGABE_FEHLER.zu_gross, server_fehler: 'The project server did not answer: showing the last state', netz: 'Page server unreachable', keine_antwort: 'No answer from the core',
   routing_zyklus: 'A group cannot feed itself or one of its own members', routing_grenze: 'There are at most 16 groups and 4 returns',
   ziel_unbekannt: 'That output or target does not exist for this track', gruppe_unbekannt: 'That group no longer exists', return_unbekannt: 'That return no longer exists',

@@ -74,10 +74,13 @@ export type WGliedGeraet =
   | { art: 'wirt'; slot: number };
 export type WGlied = { id: string; ton: [number, number]; vel: [number, number]; kette: [number, number]; gain_db: number } & WGliedGeraet;
 // A group leads into the master or into another group (nested groups); returns always into the master
-export interface WGruppe { nr: number; ausgang: { art: 'master' } | { art: 'gruppe'; nr: number }; chain?: WInsert[]; rack?: WRack; chain_auto?: WKettenLane[] }
+// DJ view places (decision 5): a top group of a live project may lead into the DJ channel pad/<nr> (nr 1..2); the core refuses it elsewhere
+export interface WGruppe {
+  nr: number; ausgang: { art: 'master' } | { art: 'gruppe'; nr: number } | { art: 'dj'; nr: 1 | 2 }; chain?: WInsert[]; rack?: WRack; chain_auto?: WKettenLane[]
+}
 // slice 4: the send taps before the fader (absent = post)
 export interface WReturn extends Omit<WGruppe, 'ausgang'> { ausgang: { art: 'master' }; pre?: true }
-export interface Wiedergabe { format: typeof WIEDERGABE_FORMAT | typeof WIEDERGABE_FORMAT_2; nr: number; spuren: WSpur[]; gruppen?: WGruppe[];
+export interface Wiedergabe { format: typeof WIEDERGABE_FORMAT | typeof WIEDERGABE_FORMAT_2; nr: number; spuren: WSpur[]; live?: true; gruppen?: WGruppe[];
   // returns (slice 3) like the groups; pm = the production master's chain, the kern's key (slice 4)
   returns?: WReturn[]; pm?: { chain: WInsert[]; rack?: WRack; chain_auto?: WKettenLane[] } }
 // slice 4c: the rack of a strip: its pooled slot and the mapping table (`stufe` = position in the chain, `param` = parameter index of the kind, `makro` 0..3)
@@ -439,7 +442,11 @@ function uebersetzeIntern(p: Projekt, opt: UebersetzOptionen): Wiedergabe {
   const gruppenW = [...(p.gruppen ?? [])].sort((a, b) => a.nr - b.nr).map((g) => {
     const ziel = g.ausgang ? gruppenNr.get(g.ausgang.id) : undefined;
     if (g.ausgang && ziel === undefined) throw new WiedergabeFehler('ziel_unbekannt', `Gruppe ${g.id} zeigt auf ${g.ausgang.id}`);
-    return { nr: g.nr, ausgang: ziel === undefined ? { art: 'master' as const } : { art: 'gruppe' as const, nr: ziel }, ...kette(g.inserts, g) };
+    // DJ view places (decision 6): derived, not stored. The top group of a live project that holds the module of slot A or B plays into pad/1 or pad/2
+    const dj = p.live === true && ziel === undefined && g.modul?.slot ? (g.modul.slot === 'A' ? 1 : 2) : 0;
+    const ausgang = dj ? { art: 'dj' as const, nr: dj as 1 | 2 }
+      : ziel === undefined ? { art: 'master' as const } : { art: 'gruppe' as const, nr: ziel };
+    return { nr: g.nr, ausgang, ...kette(g.inserts, g) };
   });
   const returnsW = [...(p.returns ?? [])].sort((a, b) => a.nr - b.nr)
     .map((r) => ({ nr: r.nr, ausgang: { art: 'master' as const }, ...(r.pre ? { pre: true as const } : {}), ...kette(r.inserts, r) }));
@@ -464,6 +471,7 @@ function uebersetzeIntern(p: Projekt, opt: UebersetzOptionen): Wiedergabe {
   // ohne Routing, Warp und Lane byteweise die alte Datei (AK3)
   if (!routing && !gewarpt && !automatisiert && !hatReturns && !eingefuegt && !huellen && !hatRack) return { format: WIEDERGABE_FORMAT, nr: opt.nr, spuren };
   return { format: WIEDERGABE_FORMAT_2, nr: opt.nr, spuren,
+    ...(p.live === true ? { live: true as const } : {}),   // the head flag of the live container (decision 5); absent otherwise
     gruppen: gruppenW,
     ...(hatReturns ? { returns: returnsW } : {}),
     ...(pmW ? { pm: pmW } : {}) };

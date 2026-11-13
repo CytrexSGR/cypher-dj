@@ -108,3 +108,34 @@ test('/lage.regler: a new kern generation (/e/neustart or /k/willkommen with ano
   r = await regler();
   assert.equal('erz/5/fader' in r, false);
 });
+
+// Places plan, slice 1 task 2: decks 3 and 4 are channels of the same kind as decks 1 and 2 for /lage.regler and /griff.
+test('/lage.regler lists fader, trim, eq, kill, filter and non-default sends of deck/3 and deck/4 like deck/1', { timeout: 60000 }, async (t) => {
+  const { o, url } = await realerServer(t);
+  const regler = async () => (await (await hol(`${url}/lage`)).json()).regler;
+  const echo = (pfad, wert) => o.vomKern({ adresse: '/e/regler', felder: { pfad, wert } });
+  for (const k of ['deck/1', 'deck/3', 'deck/4']) {
+    echo(`${k}/fader`, -7); echo(`${k}/trim`, 2); echo(`${k}/eq/tief`, -3); echo(`${k}/kill/hoch`, 1); echo(`${k}/filter`, 0.25);
+    echo(`${k}/send/1`, -9); echo(`${k}/send/2`, -200);
+  }
+  const r = await regler();
+  for (const k of ['deck/1', 'deck/3', 'deck/4']) {
+    assert.equal(r[`${k}/fader`], -7, `${k}/fader`);
+    assert.equal(r[`${k}/trim`], 2, `${k}/trim`);
+    assert.equal(r[`${k}/eq/tief`], -3, `${k}/eq/tief`);
+    assert.equal(r[`${k}/kill/hoch`], 1, `${k}/kill/hoch`);
+    assert.ok(`${k}/filter` in r, `${k}/filter`);
+    assert.equal(r[`${k}/send/1`], -9, `${k}/send/1`);
+    assert.ok(!(`${k}/send/2` in r), `${k}/send/2 is off: out`);
+  }
+  // a deck that does not exist stays out
+  echo('deck/5/fader', -7);
+  assert.ok(!('deck/5/fader' in (await regler())));
+});
+
+test('/griff accepts the control targets of deck 3 and 4 and refuses deck 5', { timeout: 60000 }, async (t) => {
+  const { url } = await realerServer(t);
+  const griff = async (pfad) => (await hol(`${url}/griff`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pfad, u: 0.5 }) })).status;
+  for (const p of ['deck/3/fader', 'deck/4/fader', 'deck/4/eq/tief', 'deck/4/play', 'deck/3/cue', 'deck/4/pfl', 'deck/4/xseite']) assert.notEqual(await griff(p), 400, p);
+  for (const p of ['deck/5/fader', 'deck/0/fader']) assert.equal(await griff(p), 400, p);
+});

@@ -6,11 +6,12 @@ import type http from 'node:http';
 import type { Bereich, BereichKontext, Route } from '../../http/router.ts';
 import { json } from '../../http/transport.ts';
 import { aendereStand, StandFehler } from '../../project/state.ts';
+import { liveSlots, normiereSlot } from '../../project/live.ts';
 import { EinsetzFehler, liesModul, listeModule, setzeModulEin, speichereModul } from '../../project/module_storage.ts';
 import { alsAntwort, leseKoerper, type ProjZugang } from '../proj/area.ts';
 import { ProjFehler, type Antwort } from '../proj/session.ts';
 
-export interface BibliothekOptionen { basis: () => string; jetzt?: () => Date }
+export interface BibliothekOptionen { basis: () => string; jetzt?: () => Date; kanalOffen?: (kanal: string) => boolean }   // kanalOffen: DJ view places task 7
 type Quelle = 'andreas' | 'cypher';
 
 const nurSchluessel = (d: Record<string, unknown>, ...erlaubt: string[]): void => {
@@ -33,16 +34,39 @@ export function bibliothekBereich(ctx: BereichKontext, zugang: ProjZugang, o: Bi
   const einsetzen = async (d: Record<string, unknown>, quelle: Quelle): Promise<Antwort> => {
     nurSchluessel(d, 'modul_id', 'slot');
     if (typeof d.modul_id !== 'string') throw new ProjFehler(400, 'argument_ungueltig', { detail: 'modul_id: the id of a saved module' });
-    if (d.slot !== undefined && d.slot !== 'A' && d.slot !== 'B') throw new ProjFehler(400, 'argument_ungueltig', { detail: "slot: 'A' or 'B'" });
+    if (d.slot !== undefined) {                                                // 1/2 and A/B (decision 13)
+      const s0 = normiereSlot(d.slot);
+      if (s0 === undefined) throw new ProjFehler(400, 'argument_ungueltig', { detail: "slot: 1, 2, 'A' or 'B'" });
+      d = { ...d, slot: s0 };
+    }
     gesperrt(quelle);
     const basis = o.basis();
     const j = liesModul(d.modul_id, basis);
     if (!j) throw new ProjFehler(404, 'modul_unbekannt');
     const offen = zugang.offen();
     if (!offen) throw new ProjFehler(409, 'kein_projekt');
+    let slot = d.slot as 'A' | 'B' | undefined;
+    if (offen.projekt.live && o.kanalOffen) {                                   // decision 10: a live slot is placed like an export, only into a closed channel
+      const belegt = liveSlots(offen.projekt);
+      const name = (x: 'A' | 'B'): string => `pad/${x === 'A' ? 1 : 2}`;
+      if (slot !== undefined) {                                                  // an explicit slot stays strict; an occupied one is slot_belegt below
+        if (belegt[slot] === undefined && o.kanalOffen(name(slot))) {
+          const text = `the channel ${name(slot)} of Loop ${slot === 'A' ? 1 : 2} is open; close it before a module is placed`;
+          throw new ProjFehler(409, 'kanal_offen', { slot, kanal: name(slot), text });
+        }
+      } else {                                                                   // first free slot with a closed channel; refused only when none fits
+        const freie = (['A', 'B'] as const).filter((x) => belegt[x] === undefined);
+        if (freie.length > 0) {
+          slot = freie.find((x) => !o.kanalOffen!(name(x)));
+          if (slot === undefined) {
+            throw new ProjFehler(409, 'kanal_offen', { text: `the channel of every free loop slot is open (${freie.map(name).join(' and ')}); close one before a module is placed` });
+          }
+        }
+      }
+    }
     try {
       const r = setzeModulEin(offen.projekt, j, { modulOrdner: path.join(basis, j.id), audioZiel: path.join(offen.ordner, 'loops'), quelle,
-        slot: d.slot as 'A' | 'B' | undefined, ...(o.jetzt ? { jetzt: o.jetzt } : {}) });
+        slot, ...(o.jetzt ? { jetzt: o.jetzt } : {}) });
       const meta = { quelle, label: `Place module ${j.herkunft?.titel ?? j.gruppen[0].name}`.slice(0, 80) };
       const w = aendereStand(offen.verlauf, offen.projekt, r.projekt, meta, zugang.haken());
       await zugang.uebernimm(w, meta);

@@ -319,6 +319,7 @@ class Kern {
   void setze_arr_senke_intern(ArrSenke* s) { arr_->setze_senke_intern(s); }
   void setze_arr_nur_schluessel(int streifen, bool ziel_aus, bool sends_aus) { arr_->setze_nur_schluessel(streifen, ziel_aus, sends_aus); }   // 1.10 T9: render only
   void setze_arr_trocken_aus() { arr_->setze_trocken_aus(); }   // 1.10 T10: render only
+  void setze_arr_dj_als_master() { arr_->setze_dj_als_master(); }   // DJ view places (decision 8): render only, a DJ-channel output sums into the master offline
   // 1.10 slice 3 (P8 a): the Halls of the return strips take the base values of their controls now. Main thread, before the first cycle (the render
   // calls it after setting the project controls), so export and playback start with the same Hall settings.
   void hall_sofort() { arr_->hall_sofort(); }
@@ -816,6 +817,12 @@ class Kern {
   int nachreichen_in_ = 0;         // Neustart: im zweiten Zyklus der Generation Teile ins Stellwerk nachreichen
   float pm_abgriff_l_[MAX_BLOCK] = {};   // 1.10 Slice 2: Kopie des PM-Ausgangs je Zyklus (Export-Abgriff)
   float pm_abgriff_r_[MAX_BLOCK] = {};
+  // DJ view places (decision 7): the two DJ pairs of the arrangement exit (index 0 = pad/1, 1 = pad/2), sized at construction; zeroed and handed to Arrangement::dj_ausgang() per sub-block when a group
+  // of the snapshot leads into the channel, then added into the channel input (erz_l_/erz_r_ of pad/<n>) after the loop boxes and the streams, before the strip
+  float dj_aus_l_[2][MAX_BLOCK] = {};
+  float dj_aus_r_[2][MAX_BLOCK] = {};
+  int pad_kanal_[2] = {-1, -1};   // mixer index of pad/1 and pad/2
+  bool dj_gereicht_[2] = {};      // the pair of channel c was zeroed and handed to Arrangement::dj_ausgang() in this sub-block (the add after the loop boxes uses the same answer)
   float links_[MAX_BLOCK];
   float rechts_[MAX_BLOCK];
   float cue_l_[MAX_BLOCK];

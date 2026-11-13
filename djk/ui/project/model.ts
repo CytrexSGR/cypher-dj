@@ -353,6 +353,7 @@ export interface ModulHerkunft {
   kuenstler?: string; tonart?: string;   // absent when the track has no tag or analysis (never written empty)
   id?: string;   // the store id, given once at export (project/module_storage.ts); absent on a group without origin id: the content hash is used
   eins_beat?: number;   // first downbeat of the rendering on its beat axis (bar phase of the source = (von_beat - eins_beat) mod 4); absent = 0
+  quelle?: 'mitschnitt';   // DJ view places task 10: a recorded library loop (no catalogue origin; quelle_sha256 is the placeholder); absent otherwise
   transponiert?: number;   // task 11: semitones the module was adapted to the deck key (-12..12); absent = 0, never written at 0
 }
 // Hall of a return: all values normalised 0..1 (the mapping to units lives in the core and in the page); defaults = the stellwerk defaults
@@ -1364,7 +1365,8 @@ function pruefeSpur(s: unknown, wo: string, warpErlaubt: boolean): Spur {
 
 function pruefeModul(m: unknown, wo: string): void {
   const o = felder(m, wo, ['quelle_sha256', 'titel', 'fassung', 'basis_bpm', 'von_beat', 'laenge_beats', 'bpm', 'datum'],
-    ['set', 'eins_beat', 'transponiert', 'slot', 'kuenstler', 'tonart', 'id']);
+    ['set', 'eins_beat', 'transponiert', 'slot', 'kuenstler', 'tonart', 'id', 'quelle']);
+  if ('quelle' in o && o.quelle !== 'mitschnitt') werfe(`${wo}.quelle`, "'mitschnitt' expected");
   if ('id' in o && (typeof o.id !== 'string' || !/^[0-9a-f]{16}$/.test(o.id))) werfe(`${wo}.id`, '16 hex characters expected');
   if ('transponiert' in o && (!ganz(o.transponiert) || o.transponiert < -12 || o.transponiert > 12 || o.transponiert === 0)) {
     werfe(`${wo}.transponiert`, 'integer -12..12 except 0 expected');

@@ -283,7 +283,7 @@ export const GRUND_TEXT: Readonly<Record<string, string>> = {
   bk_graph_fehlt: 'the saved graph file is missing from the graph folder; the channel was left as it is',
   bk_graph_geaendert: 'the graph file changed since the sound was saved; it was loaded anyway',
   // live modules (plan live-module task 2); slot_belegt keeps its Surge text here, the module export gives its own text
-  unbekanntes_deck: 'there is no such deck (1 to 3)',
+  unbekanntes_deck: 'there is no such deck (1 to 4)',
   kein_loop: 'the deck has no active loop to export',
   kein_bibliothekstrack: 'the deck track is not a library track; only library tracks can become a module',
   kein_liveprojekt: 'the live container is not open; open it first',
@@ -296,6 +296,9 @@ export const GRUND_TEXT: Readonly<Record<string, string>> = {
   kein_neuer_pfad: 'that stem has no new instrument path to blend to (only Drums and Bass get one, once their MIDI is in)',   // task 8
   kein_deck: 'no deck is playing on the master, so there is no key to adapt to',   // task 11
   tonart_unbekannt: 'the key of the module or of the deck on the master is unknown',
+  slot_ungueltig: "slot is 1, 2, 'A' or 'B'",   // DJ view places task 10
+  loop_unbekannt: 'there is no loadable loop of that name in the loop library',   // DJ view places task 10
+  kanal_offen: 'the channel of that live slot is open (trim plus fader above -26 dB); close it first, a module is prepared on a closed channel (PFL does not matter)',   // DJ view places task 7
 };
 
 // Text zu einem Grund; ein Grund ohne Eintrag bekommt einen englischen Rückfall (der Test hält die Tabelle vollständig)

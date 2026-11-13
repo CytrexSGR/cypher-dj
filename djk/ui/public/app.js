@@ -18,7 +18,8 @@ import { ScrubZieher } from './scrub.js';
 import { bindeProduktion } from './production/production.js';
 import { faderWert, faderText } from './production/track_heads.js';
 import { reglerVonDb, tasteMerke, tasteWert } from './production/fader_curve.js';
-import { modulAnsicht, modulHtml, exportKnopf, faderBefehl, oeffneLive, exportiere, leere, trenneNeu, setzeBlend, passeTonartAn, cueAn, cueGriffe, blendText } from './live_module.js';   // live modules task 4
+import { LAYOUT_STANDARD, TYPEN, ladeLayout, speichereLayout, wechsel, still, wahl, kopf as platzKopf, wendeAn, wendeMixerAn } from './slots.js';
+import { modulAnsicht, modulHtml, exportKnopf, faderBefehl, oeffneLive, exportiere, exportiereInSlot, ladeLoopInSlot, leere, trenneNeu, setzeBlend, passeTonartAn, kanalAnsicht, blendText } from './live_module.js';   // live modules task 4
 import { SpektrumAnsicht, SpektrumLeihe, spektrumFlaeche, SPEKTRUM_FRIST_MS } from './spectrum.js';   // 1.15 A7b: spectrum view
 import { bauePresetPanel, hostWechsel, kanalPlanHolen, fehlerText, presetAusKernKomp, kernGeraetAnfragen, kernGeraetWerte, istKernGeraet } from './presets.js';   // 1.16: preset browser
 import { vorhoerFolgt, vorhoerCursor, SPALTEN, LISTEN_SPALTEN, LISTEN_TEXT, TYP_TEXT, stoebernUrl, zelle, baueBaum, listenArtFuer, ziehZiel, postenArtText, filterFuer, filterBereinigt, detailFakten, welleStatus, feldText, aktionenFuer, loopBoxStatus, IMPORT_FEHLER_TEXT, vorbereitText, statusText, setzeVorbereitLive, fehlerAnzeige } from './browse.js';
@@ -27,10 +28,12 @@ import { hostAdapter, RB338_HOST_NAME, rb338HostZuPanel, hostKnobName, knobHostN
 
 const $ = (s, w = document) => w.querySelector(s);
 const $$ = (s, w = document) => [...w.querySelectorAll(s)];
-const BUCHSTABE = { 1: 'A', 2: 'B', 3: '3' };
-const DECK3 = 3;                                            // compact third deck: a strip, no channel strip, no waveform
-const LADE_DECKS = [...DECKS, DECK3];   // LOAD buttons: A, B and the compact deck 3
-const klasseLaden = (n) => (n === DECK3 ? 'd3' : BUCHSTABE[n].toLowerCase());
+const BUCHSTABE = { 1: 'A', 2: 'B', 3: '3', 4: '4' };
+// The decks the page shows today (places plan, slice 1): the sections and strips of all DECKS exist, decks 3 and 4 stay hidden until slice 4 places them.
+// LADE_DECKS get a LOAD button in the library (places plan task 16: the deck 3 bar is gone, every deck is a Track place).
+const LADE_DECKS = [1, 2, 3, 4];
+const KLASSE_LADEN = { 1: 'a', 2: 'b', 3: 'd3', 4: 'd3' };
+const klasseLaden = (n) => KLASSE_LADEN[n];
 const STATUS_TEXT = ['LOADED', 'LOADED', 'PLAYING', 'LOOP', 'ROLL', 'FALLBACK'];
 const LOOP_LAENGEN = [1, 2, 4, 8, 16, 32, 64];                      // Plan E9: Loop-Reihe (Beats)
 // AUFTRAG 2026-09-28: zwei Beat-FX-Einheiten, drei Parameter je Einheit (S8-Layout). fxStand/fxZuweisung sind je
@@ -117,7 +120,7 @@ function baueDecks() {
   for (const n of DECKS) {
     const d = $(`.deck[data-deck="${n}"]`);
     d.append($('#deck-vorlage').content.cloneNode(true));
-    deckAnsicht[n] = { lauf: new Laufansicht($('[data-lauf]', d)), ueber: new Uebersicht($('[data-ueber]', d)), kopf: new Kopf(), id: null, raster: null };
+    deckAnsicht[n] = { sektion: d, lauf: new Laufansicht($('[data-lauf]', d)), ueber: new Uebersicht($('[data-ueber]', d)), kopf: new Kopf(), id: null, raster: null };
     $('[data-lauf]', d).addEventListener('wheel', (e) => {   // Mausrad zoomt 2 bis 64 Takte (Andreas 2026-09-27)
       e.preventDefault();
       if (deckAnsicht[n].zieh) return;   // Review E9 F10: während des Ziehens nicht zoomen, sonst ändert sich die Sprungweite
@@ -226,6 +229,7 @@ function zeichne(r) {
 
 // Ohne Meldung vom Kern steht die Vorgabe aus §1.5 grau da (der Kern schickt beim Abonnieren keinen Stand)
 function zeigeWert(pfad) {
+  zeigePlaetzeSpaeter();
   const bestaetigt = pfad in zustand.regler;
   const w = bestaetigt ? zustand.regler[pfad] : vorgabe(pfad);
   for (const o of $$(`[data-wert="${CSS.escape(pfad)}"]`)) {
@@ -351,6 +355,7 @@ async function ladeDeckWelle(n, f) {
 }
 
 function zeigeDeck(n) {
+  zeigePlaetzeSpaeter();
   const d = $(`.deck[data-deck="${n}"]`);
   const z = zustand.decks[n];
   const id = z?.material_id ?? zustand.geladen[n];
@@ -417,72 +422,20 @@ function zeigeSchlag(beat) {
 }
 
 // ---------- Strom vom Seiten-Server (Kern) ----------
-// ---------- Loop-Boxen (MVP 2, ADR 025) ----------
-const BOX_STATUS = ['EMPTY', 'READY', 'CUED', 'PLAYING', 'ENDING', 'TEMPO'];
+// ---------- Loop channel strips (MVP 2, ADR 025; places plan task 12: the loop fields are gone, the strips L1 and L2 stay) ----------
+// L1 and L2 are the channel strips of pad/1 and pad/2; the live modules play on them.
 const BOXEN = LOOPBOXEN.map((_, i) => i + 1);
-const FPB = SR * 60 / 128;                               // Loops sind immer 128 BPM (ADR 025)
-const loopAnsicht = {};                                   // box → { ansicht, name }
 const uhrKopf = new Kopf();                               // Master-Beat, hochgerechnet (Spec E4)
-async function ladeLoopWelle(n, name) {
-  const a = loopAnsicht[n];
-  a.name = name;
-  a.ansicht.setzeWelle(null, null);                        // Review F1: alte Loop-Welle sofort weg
-  if (!name) return;
-  try {
-    const r = await fetch(`/welle?loop=${encodeURIComponent(name)}`);
-    if (!r.ok || a.name !== name) return;
-    const buf = await r.arrayBuffer();
-    if (a.name !== name) return;                             // Review F2
-    a.raster = { ersterSchlagFrame: a.versatz ?? 0, framesProBeat: FPB, eins: 0 };
-    a.ansicht.setzeWelle(leseWelle(buf), a.raster);
-    holeLoopRaster(n);   // Plan Grid
-  } catch (err) { if (a.name === name) melde(`Waveform L${n}: ${err.message}`, true); }
-}
 
-// Plan Grid (D6): Loop-Versatz. Linien bei versatz + k·FPB, der Kopf ebenfalls um den Versatz gedreht (wie der Kern).
-async function holeLoopRaster(n) {
-  try {
-    const r = await fetch(`/loop/raster?box=${n}`);
-    if (r.ok) zeigeLoopRaster(n, await r.json());
-  } catch { /* nächster Anlass */ }
-}
-function zeigeLoopRaster(n, j) {
-  const a = loopAnsicht[n], b = $(`.box[data-box="${n}"]`);
-  a.versatz = j.versatz_frames;
-  if (a.raster) a.raster.ersterSchlagFrame = j.versatz_frames;
-  $('[data-gridwert]', b).textContent = msText(j.versatz_frames);
-  $('[data-gridfix]', b).classList.toggle('offen', j.versatz_frames !== j.gespeichert_frames);
-  window.djkLoopRaster = window.djkLoopRaster ?? {}; window.djkLoopRaster[n] = j.versatz_frames;
-}
-async function loopRasterPost(n, daten) {
-  try {
-    const r = await fetch('/loop', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ box: n, ...daten }) });
-    const j = await r.json();
-    if (!r.ok) { melde(`Loop grid: ${j.fehler}`, true); return; }
-    zeigeLoopRaster(n, j);
-  } catch { melde('Loop grid: page server unreachable', true); }
-}
-
-function baueBoxen() {
+function baueLoopZuege() {
   for (const n of BOXEN) {
-    const b = $(`.box[data-box="${n}"]`);
-    b.append($('#box-vorlage').content.cloneNode(true));
-    loopAnsicht[n] = { ansicht: new Laufansicht($('[data-loopwelle]', b)), name: null };
-    $('.boxname', b).textContent = `L${n} · LOOP`;
     const k = LOOPBOXEN[n - 1];
-    const z = $(`.zug[data-boxzug="${n}"]`);   // Traktor-Raster: der Zug der Zelle sitzt im Mixer unten
+    const z = $(`.zug[data-boxzug="${n}"]`);
     z.append($('#zug-vorlage').content.cloneNode(true));
     for (const e of $$('[data-teil]', z)) e.dataset.pfad = `${k}/${e.dataset.teil}`;
     for (const e of $$('[data-wert-teil]', z)) e.dataset.wert = `${k}/${e.dataset.wertTeil}`;
     $('[data-kanal]', z).dataset.kanal = k;
     for (const b of $$('[data-fxzuweisung]', z)) b.dataset.kanal = k;
-    $('[data-boxplay]', b).addEventListener('click', () => {
-      const s = zustand.loops[n]?.status ?? 0;
-      loopAktion({ aktion: s === 2 || s === 3 ? 'stopp' : 'start', box: n });
-    });
-    for (const g of $$('[data-gridschritt]', b)) g.addEventListener('click', (e) => loopRasterPost(n, { aktion: 'raster', schritt_ms: Number(g.dataset.gridschritt) * (e.shiftKey ? 1 : 5) }));
-    $('[data-gridwert]', b).addEventListener('contextmenu', (e) => { e.preventDefault(); loopRasterPost(n, { aktion: 'raster', versatz_frames: 0 }); });
-    $('[data-gridfix]', b).addEventListener('click', () => loopRasterPost(n, { aktion: 'raster_fix' }));
   }
 }
 
@@ -551,18 +504,12 @@ function baueRec() {
   });
 }
 
-const LOOP_GRUND = { pruefung: 'the core could not read the loop files', ki_gestoppt: 'Stop Cypher is set',
-  nicht_geladen: 'the box is empty', ausserhalb_bereich: 'out of range' };
-async function loopAktion(body) {
-  try {
-    const r = await fetch('/loop', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-    const j = await r.json();
-    window.djkGesendet.push({ loop: body, code: r.status, antwort: j });
-    if (!r.ok) melde(`Loop ${body.aktion} refused: ${j.grund ?? j.fehler}`, true);
-    else if (j.quittung?.status === 6) melde(`Loop ${body.aktion} refused: ${LOOP_GRUND[j.quittung.grund] ?? j.quittung.grund}`, true);
-    else return true;
-  } catch (e) { melde(`Page server unreachable: ${e.message}`, true); }
-  return false;
+// A library loop into the loop slot n (POST /modul/loop): the module is built from the loop, it plays on the channel pad/n
+async function ladeLoopSlot(name, n) {
+  const r = await ladeLoopInSlot(name, n, holeJson);
+  melde(r.text, !r.ok);
+  pruefeLiveSpaeter(0);
+  return r.ok;
 }
 
 // Plan Tempo-Folge: Master-Tempo. Enter im Feld oder − / + (Shift: 0,1); der Kern fährt es ab der nächsten Eins
@@ -1758,7 +1705,9 @@ async function ladeLoops() {
       b.className = `laden l${n}`;
       b.textContent = `LOAD L${n}`;
       if (l.ladbar === false) { b.disabled = true; b.title = `Cannot be loaded: ${l.grund}`; }
-      b.addEventListener('click', () => loopAktion({ aktion: 'laden', box: n, name: l.name }));
+      b.dataset.titel0 = b.title;
+      if (!loopsPlatzDa()) { b.disabled = true; b.title = HINWEIS_LOOPS; }
+      b.addEventListener('click', () => ladeLoopSlot(l.name, n));
       td.append(b);
     }
     td.append(strudelKnopf(l.name));
@@ -1852,8 +1801,9 @@ function loopBoxKnoepfe(td, t) {
   for (const n of BOXEN) {
     const b = el('button', `laden in-box l${n}`, `→ L${n}`);
     b.dataset.ok = s.aktiv ? '1' : '0';
-    b.disabled = !s.aktiv || loopImportLaeuft;
-    b.title = s.aktiv ? `${s.titel} L${n}` : s.titel;
+    b.disabled = !s.aktiv || loopImportLaeuft || !loopsPlatzDa();
+    b.dataset.titel0 = s.aktiv ? `${s.titel} L${n}` : s.titel;
+    b.title = loopsPlatzDa() ? b.dataset.titel0 : HINWEIS_LOOPS;
     b.addEventListener('click', (e) => { e.stopPropagation(); loopAusKatalog(t, n); });
     sp.append(b);
   }
@@ -1862,7 +1812,7 @@ function loopBoxKnoepfe(td, t) {
 }
 function setzeImportSperre(an) {
   loopImportLaeuft = an;
-  for (const b of $$('button.in-box')) b.disabled = an || b.dataset.ok !== '1';
+  for (const b of $$('button.in-box')) b.disabled = an || b.dataset.ok !== '1' || !loopsPlatzDa();
 }
 async function loopAusKatalog(t, n) {
   if (loopImportLaeuft) return;
@@ -1871,7 +1821,7 @@ async function loopAusKatalog(t, n) {
   try {
     const r = await postJson('/loops/aus-katalog', { sha: t.sha });
     if (!r.ok) return melde(`Loop import: ${IMPORT_FEHLER_TEXT[r.j.fehler] ?? r.j.fehler}`, true);
-    const geladen = await loopAktion({ aktion: 'laden', box: n, name: r.j.name });
+    const geladen = await ladeLoopSlot(r.j.name, n);
     ladeLoops();                                              // der neue Loop steht auch im Reiter LOOPS
     if (geladen) melde(r.j.schon_da ? `“${r.j.name}” was already imported — loaded into L${n}` : `“${r.j.name}” imported (${r.j.beats} beats at 128 BPM) and loaded into L${n}`);
   } catch (e) { melde(`Loop import: ${e.message}`, true); }
@@ -2652,24 +2602,6 @@ function bindeSchublade() {
   schublade(gespeichert !== 'zu');
 }
 
-function zeigeBox(n) {
-  const b = $(`.box[data-box="${n}"]`);
-  const z = zustand.loops[n];
-  const s = z?.status ?? 0;
-  const st = $('[data-boxstatus]', b);
-  st.textContent = BOX_STATUS[s] ?? String(s);
-  st.className = `status ${s === 3 || s === 4 ? 'laeuft' : s >= 1 ? 'geladen' : ''}`;
-  const p = $('[data-boxplay]', b);
-  p.disabled = s === 0;
-  p.textContent = s === 2 || s === 3 ? 'STOP' : 'PLAY';
-  p.classList.toggle('an', s === 3 || s === 4);
-  p.classList.toggle('blinkt', s === 2 || s === 4);
-  $('[data-looptitel]', b).textContent = z?.name || 'No loop';
-  $('[data-loopmeta]', b).textContent = z?.name ? `${taktText(z.beats)} · follows master tempo` : 'Pick one under LIBRARY › LOOPS';
-  if ((z?.name || null) !== loopAnsicht[n].name) ladeLoopWelle(n, z?.name || null);
-  loopAnsicht[n].ansicht.takte = Math.max(1, (z?.beats ?? 4) / 4);   // ganze Loop-Länge im Bild
-}
-
 // Demo overlay: the line "what Cypher is doing now" (POST /ansage). It stays while the text is new and fades after a
 // reading time (4 s plus 60 ms per character); an empty line (f null) hides it at once.
 let ansageFrist = null;
@@ -2706,13 +2638,12 @@ function strom() {
         zeigeWerkzeug();   // A8: a state (load, reconnect) fills the Gate/Utility strips; they have no polling like the compressor
         if ('spektrum/kanal' in f.regler) { for (const a of spektrumAnsichten) a.setzeQuelle(f.regler['spektrum/kanal']); spektrumLeihe.beiStand(f.regler['spektrum/kanal']); }   // A7b; a key left by a reload while the device page was open
         zeigeKeylock();   // Keylock 3
-        DECKS.forEach(zeigeDeck); zeigeStreifen(); pruefeLiveSpaeter(0);   // live modules: the stream (re)connects, read the live container again
+        DECKS.forEach(zeigeDeck); pruefeLiveSpaeter(0);   // live modules: the stream (re)connects, read the live container again
         for (const [n, l] of Object.entries(f.loops ?? {})) zustand.loops[n] = l;
         if (Array.isArray(f.fx)) f.fx.forEach((x, u) => { if (x) fxVomKern(u, x); });
         if (f.fxZuweisung) f.fxZuweisung.forEach((m, u) => { for (const [kanal, an] of Object.entries(m)) fxZuweisungVomKern(u, kanal, an ? 1 : 0); });
         if (f.fxRouting) fxRoutingVomKern(f.fxRouting === 'insert' ? 1 : 0);
         if (f.graphen_geladen) setzeGraphenGeladen(f.graphen_geladen);   // S12
-        BOXEN.forEach(zeigeBox);
         $('#v-kern').classList.toggle('an', f.kern === 'verbunden');
         zeigePruefmodus(f.pruefmodus);
         break;
@@ -2730,14 +2661,16 @@ function strom() {
         letzterBeat = f.beat; zeigeRec(f.beat);
         if (!taktVomLeitstand) { $('#takt').textContent = Math.floor(f.beat / 4) + 1; $('#phrase').textContent = Math.floor(f.beat / 32) + 1; }
         if (document.activeElement !== $('#bpm')) $('#bpm').value = f.bpm.toFixed(2);
-        if (zustand.bpm !== f.bpm) { zustand.bpm = f.bpm; zeigeDeck(1); zeigeDeck(2); }
+        if (zustand.bpm !== f.bpm) { zustand.bpm = f.bpm; DECKS.forEach(zeigeDeck); }
         break;
       case '/e/regler':
         zustand.regler[f.pfad] = f.wert; zeigeWert(f.pfad);
-        if (f.pfad === `deck/${DECK3}/pfl`) zeigeStreifen();
-        if (/^grp\/\d+\/cue$/.test(f.pfad) && liveOffen()) zeichneLive();   // task 6: the CUE button of a slot follows the core row
+        if (/^pad\/[12]\/(fader|trim)$/.test(f.pfad) && liveOffen()) {   // the channel state of a slot (Loop 1, Loop 2) follows the strip: redraw only when it flips
+          const k = `${kanalAnsicht('A', zustand.regler).offen}${kanalAnsicht('B', zustand.regler).offen}`;
+          if (k !== live.kanal) { live.kanal = k; zeichneLive(); }
+        }
         if (/\/bk\/([1-9]|[1-5][0-9]|6[0-4])$/.test(f.pfad)) bkMarkeSpaeter();   // S17: the saved/differs marker follows the graph knobs
-        if (f.pfad === 'keylock') { zeigeKeylock(); zeigeDeck(1); zeigeDeck(2); }   // Keylock 3: Taste und VARI
+        if (f.pfad === 'keylock') { zeigeKeylock(); DECKS.forEach(zeigeDeck); }   // Keylock 3: Taste und VARI
         if (f.pfad === 'color/art' || f.pfad === 'color/param') zeigeColor();
         { const m = /^(.+)\/komp\/\w+$/.exec(f.pfad); if (m) { zeigeKomp(m[1]); if (m[1] === fxGewaehlt) zeigeFxDetail(); } }
         if (f.pfad === 'spektrum/kanal') for (const a of spektrumAnsichten) a.setzeQuelle(f.wert);   // A7b
@@ -2760,10 +2693,10 @@ function strom() {
       case '/zustand/deck':
         zustand.decks[f.deck] = f;
         deckAnsicht[f.deck]?.kopf.melde(f.quell_beat, zustand.bpm ?? 128, performance.now(), f.status >= 2);
-        if (f.deck <= 2) zeigeDeck(f.deck); else if (f.deck === DECK3) zeigeStreifen();
+        if (deckAnsicht[f.deck]) zeigeDeck(f.deck);
         break;
-      case '/e/hotcue': if (f.deck <= 2) holeHotcues(f.deck); break;   // Plan E9
-      case '/e/raster': if (f.deck <= 2) holeRaster(f.deck); break;     // Plan Grid
+      case '/e/hotcue': if (deckAnsicht[f.deck]) holeHotcues(f.deck); break;   // Plan E9
+      case '/e/raster': if (deckAnsicht[f.deck]) holeRaster(f.deck); break;     // Plan Grid
       case '/e/fx': fxVomKern(Number(f.einheit) - 1, f); break;
       case '/e/fx/zuweisung': fxZuweisungVomKern(Number(f.einheit) - 1, String(f.kanal), Number(f.an)); break;
       case '/e/fx/routing': fxRoutingVomKern(Number(f.routing)); break;
@@ -2775,7 +2708,7 @@ function strom() {
         melde(`Deck ${BUCHSTABE[f.deck] ?? f.deck}: “${e?.titel ?? f.material_id}” loaded`);
         const d = $(`.deck[data-deck="${f.deck}"]`);
         if (deckAnsicht[f.deck]) deckAnsicht[f.deck].id = null;
-        if (f.deck <= 2) zeigeDeck(f.deck); else if (f.deck === DECK3) zeigeStreifen();
+        if (deckAnsicht[f.deck]) zeigeDeck(f.deck);
         break;
       }
       case '/q': {
@@ -2786,7 +2719,7 @@ function strom() {
       case '/pegel': zeigePegel(f.kanal, f.spitze_db); break;
       case '/e/loop': {
         const alt = zustand.loops[f.box]?.name;
-        zustand.loops[f.box] = f; zeigeBox(f.box);
+        zustand.loops[f.box] = f;
         if (fxGewaehlt === `pad/${f.box}` && alt !== f.name) baueFxDetail();   // anderer Loop: andere Automation
         break;
       }
@@ -2796,7 +2729,7 @@ function strom() {
           : `Recording “${f.name}” failed`, f.status !== 0);
         if (!$('[data-tabelle="loops"]').hidden) ladeLoops();
         break;
-      case '/e/neustart': zustand.loops = {}; BOXEN.forEach(zeigeBox); recEnde(); break;  // REC: Puffer starb mit dem Kern
+      case '/e/neustart': zustand.loops = {}; recEnde(); break;  // REC: Puffer starb mit dem Kern
       case '/e/protokollfehler': melde(`Core rejected ${f.adresse}: ${f.grund}`, true); break;
       default: break;
     }
@@ -3111,84 +3044,10 @@ function bindeFxZuweisung() {   // Tasten [1] [2] je Kanalzug (wie an der S8: li
   }
 }
 
-// ---------- Deck 3: compact strip (plan live modules, task 0): title, PLAY, SYNC, loop lengths, PFL ----------
-// The strip has no waveform and no cue pads: Cypher serves loops from deck 3 (load a track, set a loop), Andreas can load, start, loop and pre-listen.
-const streifen = { loopLaenge: 4, loop: null, loopWar: false };
-function streifenPost(pfad, daten, was) { return deckPost(pfad, { deck: DECK3, ...daten }, was); }
-function baueStreifen() {
-  const d = $('#deck-3');
-  $('[data-play]', d).addEventListener('click', async () => {
-    const laeuft = (zustand.decks[DECK3]?.status ?? 0) >= 2;
-    await streifenPost(laeuft ? '/deck/stopp' : '/deck/start', { ab: 'jetzt' }, laeuft ? 'Stop deck 3' : 'Play deck 3');
-  });
-  $('[data-sync]', d).addEventListener('click', () => streifenPost('/deck/start', { ab: 'takt' }, 'Sync deck 3'));
-  // PFL goes through /regler (the strip has no hand path: /griff only knows decks 1 and 2); a switch like the channel strips: 1 = on
-  $('[data-pfl]', d).addEventListener('click', async () => {
-    const an = (zustand.regler[`deck/${DECK3}/pfl`] ?? 0) >= 0.5;
-    await deckPost('/regler', { pfad: `deck/${DECK3}/pfl`, nach: an ? 0 : 1 }, 'PFL deck 3');
-  });
-  const loops = $('[data-loops]', d);
-  for (const l of LOOP_LAENGEN) {
-    const b = document.createElement('button');
-    b.textContent = String(l); b.dataset.loopl = String(l); b.title = `Loop length ${l} beat${l > 1 ? 's' : ''}`;
-    b.classList.toggle('an', l === streifen.loopLaenge);
-    b.addEventListener('click', async () => {
-      streifen.loopLaenge = l; for (const x of $$('[data-loopl]', d)) x.classList.toggle('an', x === b);
-      if (!loopAktiv(zustand.decks[DECK3])) return;   // no loop yet: only the preselection for the next loop
-      if (await streifenPost('/deck/loop', { laenge: l, raster: 0, behalte_start: true }, 'Loop length')) holeStreifenLoop();
-    });
-    loops.append(b);
-  }
-  const an = document.createElement('button');
-  an.textContent = 'LOOP'; an.dataset.loopan = ''; an.title = 'Loop on/off at the bar';
-  an.addEventListener('click', async () => {
-    await streifenPost('/deck/loop', { laenge: an.classList.contains('an') ? 0 : streifen.loopLaenge, raster: 4 }, 'Loop');
-    holeStreifenLoop();
-  });
-  loops.append(an);
-  loops.append(exportTaste(DECK3));
-  $('[data-liveoeffnen]', d).addEventListener('click', liveOeffnen);
-}
-async function holeStreifenLoop() {
-  try { streifen.loop = await (await fetch(`/deck/loop?deck=${DECK3}`)).json(); } catch { return; }
-  const l = streifen.loop?.laenge;
-  if (l && LOOP_LAENGEN.includes(l) && l !== streifen.loopLaenge) {
-    streifen.loopLaenge = l;
-    for (const x of $$('#deck-3 [data-loopl]')) x.classList.toggle('an', Number(x.dataset.loopl) === l);
-  }
-}
-function zeigeStreifen() {
-  const d = $('#deck-3');
-  if (!d) return;
-  const z = zustand.decks[DECK3];
-  const id = z?.material_id ?? zustand.geladen[DECK3];
-  const e = id ? eintragVon(id) : null;
-  const status = z ? z.status : (id ? 1 : 0);
-  const st = $('[data-status]', d);
-  st.textContent = status === 0 ? 'EMPTY' : STATUS_TEXT[status] ?? String(status);
-  st.className = `status ${status >= 2 ? 'laeuft' : status === 1 ? 'geladen' : ''}`;
-  for (const b of $$('button:not([data-pfl]):not([data-liveoeffnen])', d)) b.disabled = status === 0;
-  $('[data-pfl]', d).classList.toggle('an', (zustand.regler[`deck/${DECK3}/pfl`] ?? 0) >= 0.5);
-  const la = loopAktiv(z);
-  zeigeExport(DECK3);
-  $('[data-loopan]', d).classList.toggle('an', la);
-  if (streifen.loopWar !== la) { streifen.loopWar = la; if (la) holeStreifenLoop(); else streifen.loop = null; }
-  $('[data-play]', d).classList.toggle('an', status >= 2);
-  if (!id) return;
-  const g = z ?? zustand.geladenFelder?.[DECK3] ?? e;
-  $('[data-titel]', d).textContent = e?.titel ?? id;
-  $('[data-meta]', d).textContent = e ? `${e.camelot ?? '–'} · plays at ${Number(g?.basis_bpm ?? e.basis_bpm).toFixed(0)} · ${fmtZeit(e.dauer_s)}` : id;
-  if (!z) { $('[data-bar]', d).textContent = '–'; $('[data-rest]', d).textContent = '–'; return; }
-  const eg = g?.fassung ? zustand.bestand.find((x) => x.material_id === id && x.basis_bpm === g.basis_bpm && x.fassung === g.fassung) ?? e : e;
-  const rel = z.quell_beat - (eg?.erste_eins_quell_beat ?? 0);
-  $('[data-bar]', d).textContent = rel < 0 ? '–' : `${Math.floor(rel / 4) + 1}.${Math.floor(((rel % 4) + 4) % 4) + 1}`;
-  $('[data-rest]', d).textContent = Number.isFinite(z.beats_bis_ende) ? `${Math.max(0, Math.floor(z.beats_bis_ende / 4))} bars` : 'loop';
-}
-
 // ---------- Live modules (plan live-module task 4): EXPORT at the deck loop, the live container panel, LIVE ----------
 // The panel shows the open live container (project flag live): two slots, per module the module fader and one original fader per stem, CLEAR, and the
 // state of the stem separation. Faders write project commands over POST /proj/aendern (one at a time, the newest value of a fader replaces a waiting one).
-const live = { slug: null, projekt: null, rev: null, stand: {}, stems: null, greift: 0, neuZeichnen: false, pruefen: null, schreiben: new Map(), laeuft: false };
+const live = { kanal: '', slug: null, projekt: null, rev: null, stand: {}, stems: null, greift: 0, neuZeichnen: false, pruefen: null, schreiben: new Map(), laeuft: false };
 async function holeJson(weg, daten) {
   try {
     const r = await fetch(weg, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(daten) });
@@ -3212,10 +3071,9 @@ function exportTaste(n) {
 }
 function zeigeExport(n) {
   const z = zustand.decks[n];
-  const b = $(`[data-exportloop="${n}"]`);
-  if (!b) return;
-  const k = exportKnopf({ loop: loopAktiv(z), geladen: !!(z?.material_id ?? zustand.geladen[n]), live: liveOffen() });
-  b.disabled = k.aus; b.title = k.titel;
+  const k = exportKnopf({ loop: loopAktiv(z), geladen: !!(z?.material_id ?? zustand.geladen[n]), live: liveOffen(), loopsPlatz: loopsPlatzDa() });
+  for (const b of $$(`[data-exportloop="${n}"]`)) { b.disabled = k.aus; b.title = k.titel; }
+  for (const b of $$(`.deck[data-deck="${n}"] [data-nachbox]`)) { b.disabled = !loopsPlatzDa(); b.title = loopsPlatzDa() ? `Export the running loop into the loop slot L${b.dataset.nachbox} (live module, plays on the channel L${b.dataset.nachbox})` : HINWEIS_LOOPS; }   // per deck: the bar and the section hold one button each
 }
 async function liveOeffnen() {
   const r = await oeffneLive(holeJson, (t) => window.confirm(t));
@@ -3223,15 +3081,17 @@ async function liveOeffnen() {
   pruefeLiveSpaeter(0);
 }
 function zeichneLive() {
+  zeigePlaetzeSpaeter();
   const p = $('#live-panel');
   if (!p) return;
   if (live.greift > 0) { live.neuZeichnen = true; return; }   // a fader is under the hand: the markup stays until it is let go
   const a = modulAnsicht(live.projekt, live.stand, live.stems, zustand.regler);
+  live.kanal = `${kanalAnsicht('A', zustand.regler).offen}${kanalAnsicht('B', zustand.regler).offen}`;
   p.hidden = !a.offen;
-  document.body.classList.toggle('live-offen', a.offen);
   p.innerHTML = modulHtml(a);
-  $('[data-liveoeffnen]')?.classList.toggle('an', a.offen);
-  for (const n of [1, 2, DECK3]) zeigeExport(n);
+  for (const b of $$('[data-liveoeffnen]')) b.classList.toggle('an', a.offen);
+  const leer = $('[data-loops-leer]'); if (leer) leer.hidden = a.offen;
+  for (const n of DECKS) zeigeExport(n);
 }
 // What the server says now: the slug and rev first (cheap), the whole project only when the live container changed
 function pruefeLiveSpaeter(ms = 250) {
@@ -3289,10 +3149,8 @@ function bindeLive() {
   p.addEventListener('pointerdown', (e) => { if (e.target.closest('.live-regler, .live-blendregler')) live.greift = 1; });
   window.addEventListener('pointerup', loslassen);
   window.addEventListener('pointercancel', loslassen);
-  const ziel = (r) => (r.dataset.modulFader !== undefined
-    ? { art: 'modul', id: r.dataset.gruppeId, name: r.closest('.live-slot').dataset.slot, ausgabe: '[data-modul-wert]', label: 'Module volume' }
-    : { art: 'stem', id: r.dataset.spurId, name: r.closest('.live-stem').firstChild.textContent, ausgabe: '[data-stem-wert]',
-      label: r.dataset.neuFader !== undefined ? 'New volume' : 'Original volume' });
+  const ziel = (r) => ({ art: 'stem', id: r.dataset.spurId, name: r.closest('.live-stem').firstChild.textContent, ausgabe: '[data-stem-wert]',
+    label: r.dataset.neuFader !== undefined ? 'New volume' : 'Original volume' });
   const sendeFader = (r) => {
     const z = ziel(r), db = faderWert(tasteWert(r));
     r.parentElement.querySelector(z.ausgabe).textContent = faderText(db);
@@ -3319,10 +3177,10 @@ function bindeLive() {
   };
   p.addEventListener('keydown', (e) => { if (e.target.matches?.('.live-regler')) tasteMerke(e.target, e.key); });
   p.addEventListener('input', (e) => { if (e.target.matches?.('.live-regler')) sendeFader(e.target); else if (e.target.matches?.('.live-blendregler')) sendeBlend(e.target); });
-  p.addEventListener('dblclick', (e) => {   // a stem back to 0 dB, the module fader closed: the safe direction for a fader that may be live
+  p.addEventListener('dblclick', (e) => {   // a stem back to 0 dB
     const r = e.target.closest?.('.live-regler');
     if (!r) return;
-    r.value = String(reglerVonDb(r.dataset.modulFader !== undefined ? -200 : 0));
+    r.value = String(reglerVonDb(0));
     sendeFader(r); live.greift = 0;
   });
   p.addEventListener('dblclick', (e) => {   // the blend back to the original alone
@@ -3337,9 +3195,6 @@ function bindeLive() {
     if (e.target.closest('[data-leeren]')) {
       const r = await leere(slot, Number(p.querySelector(`[data-slot="${slot}"] [data-leeren-takte]`).value), holeJson);
       melde(r.text, !r.ok);
-    } else if (e.target.closest('[data-cue]')) {   // the hand path of the page (/griff, Andreas only), like the other switches
-      const nr = Number(e.target.closest('[data-cue]').dataset.nr);
-      for (const g of cueGriffe(nr, cueAn(zustand.regler, nr))) sende(g.pfad, g.u, true);   // priming value, then the target (see cueGriffe)
     } else if (e.target.closest('[data-key]')) {
       const r = await passeTonartAn(slot, holeJson);
       melde(r.text, !r.ok);
@@ -3437,11 +3292,14 @@ function bindeDeckBedienung(n, d) {
     for (const x of $$('[data-cueart]', d)) x.classList.toggle('an', x === b);
   });
   $('[data-muell]', d).addEventListener('click', () => setzeMuell(n, !a.muell));
-  // laufenden Deck-Loop sichern (Bibliothek › LOOPS) und gleich in L1/L2 laden
+  $('[data-sync]', d).addEventListener('click', () => deckPost('/deck/start', { deck: n, ab: 'takt' }, `Sync deck ${n}`));
+  // the running deck loop becomes a module of the loop slot L1 or L2 (POST /modul/export {deck, slot})
   for (const b of $$('[data-nachbox]', d)) b.addEventListener('click', async () => {
     if (!loopAktiv(zustand.decks[n])) { melde('Loop → L: no loop running on this deck', true); return; }
-    const j = await deckPost('/deck/loop/sichern', { deck: n, box: Number(b.dataset.nachbox) }, `Loop → L${b.dataset.nachbox}`);
-    if (j) { melde(`Loop saved as ${j.name}, loaded into L${b.dataset.nachbox}`); ladeLoops(); }
+    if (!liveOffen()) { melde('Open the live container first (LIVE), then export', true); return; }
+    const r = await exportiereInSlot(n, Number(b.dataset.nachbox), holeJson);
+    melde(r.text, !r.ok);
+    pruefeLiveSpaeter(0);
   });
   for (const b of $$('[data-raster]', d)) b.addEventListener('click', () => {
     a.rasterWahl = Number(b.dataset.raster);
@@ -3576,15 +3434,9 @@ function bindeDeckBedienung(n, d) {
 window.djkBild = [];       // Zeichendauer je Bild in ms, Ring 600 (Plan T8, Prüfung: lesen)
 function bild() {
   const jetzt = performance.now(), beat = uhrKopf.beat(jetzt);
-  for (const n of BOXEN) {
-    const z = zustand.loops[n], a = loopAnsicht[n];
-    const lang = z?.beats ?? 4, laeuft = z && (z.status === 3 || z.status === 4);
-    const pos = laeuft ? ((beat % lang) + lang) % lang : 0;
-    const kopf = (((pos * FPB + (a.versatz ?? 0)) % (lang * FPB)) + lang * FPB) % (lang * FPB);   // Plan Grid: gedreht wie im Kern
-    a.ansicht.zeichne((lang * FPB) / 2, kopf);        // ganze Loop steht, der Kopf wandert (wie Traktors Remix-Slots)
-  }
   for (const n of DECKS) {
     const a = deckAnsicht[n];
+    if (a.sektion.hidden) continue;   // a hidden place draws nothing
     if (!a.raster) { a.lauf.zeichne(0); a.ueber.zeichne(0, 0); continue; }
     const f = (a.ziehBasis ?? (a.raster.ersterSchlagFrame + a.kopf.beat(jetzt) * a.raster.framesProBeat)) + (a.zieh ?? 0);
     const marken = hotcueMarken(a);
@@ -3613,11 +3465,91 @@ async function ausgang() {
   }
   ausgangAlarm = z.klasse === 'alarm'; ausgangFaelle = a.faelle;
 }
+
+// ---------- DJ view places (plan 2026-11-13 tasks 13, 14): four cells, each shows Track (deck N), Strudel or Loops ----------
+// The layout lives in the browser (slots.js: key djk-plaetze, try/catch). A place switches only while silent (every channel of the place closed, PFL off);
+// the core is never touched by a switch: a hidden deck keeps playing and shows unchanged when its place returns.
+const speicherOderNull = () => { try { return localStorage; } catch { return null; } };
+let plaetzeLayout = ladeLayout(speicherOderNull());
+const PLATZ_KNOTEN = { strudel: '#deck-c', loops: '#platz-loops' };
+const platzKnoten = (key) => (key.startsWith('deck/') ? $(`.deck[data-deck="${key.slice(5)}"]`) : $(PLATZ_KNOTEN[key]));
+function zugKnoten(key) {
+  if (key === 'zug/erz') return $('.zugplatz');
+  const [, art, nr] = key.split('/');
+  return $(art === 'deck' ? `.zug[data-deck="${nr}"]` : `.zug[data-boxzug="${nr}"]`);
+}
+function wendePlaetzeAn() {
+  wendeAn(plaetzeLayout, platzKnoten);
+  wendeMixerAn(plaetzeLayout, zugKnoten);   // the mixer strips follow the places (only attributes change)
+  zeigeLoopsSperre();
+  zeigePlaetze();
+}
+function platzZustand(platz) {
+  const typ = plaetzeLayout[platz - 1];
+  if (typ === 'loops') {
+    const a = modulAnsicht(live.projekt, live.stand, live.stems, zustand.regler);
+    return { typ, slots: a.offen ? a.slots.filter((s) => !s.leer).map((s) => ({ nr: s.kanal.nr, titel: s.titel, tonart: s.tonart, takte: Number.isFinite(s.beats) ? Math.round(s.beats / 4 * 100) / 100 : undefined })) : [] };
+  }
+  if (typ !== 'track') return { typ };
+  const n = platz, z = zustand.decks[n], id = z?.material_id ?? zustand.geladen[n], e = id ? eintragVon(id) : null;
+  if (!id) return { typ };
+  const g = z ?? zustand.geladenFelder?.[n] ?? e;
+  return { typ, titel: e?.titel ?? id, tonart: e?.camelot, bpm: Number(g?.basis_bpm ?? e?.basis_bpm) };
+}
+function zeigePlaetze() {
+  for (const platz of [1, 2, 3, 4]) {
+    const k = $(`.platzkopf[data-platz-kopf="${platz}"]`);
+    if (!k) continue;
+    $('[data-platz-text]', k).textContent = platzKopf(platz, platzZustand(platz));
+    const s = still(plaetzeLayout, platz, zustand.regler);
+    $('[data-platz-hinweis]', k).textContent = s.still ? '' : `${s.text}: close it to switch`;
+    for (const w of wahl(plaetzeLayout, platz)) {
+      const b = $(`[data-platz-typ="${w.typ}"]`, k);
+      b.classList.toggle('an', w.aktuell);
+      b.setAttribute('aria-pressed', String(w.aktuell));
+      b.disabled = !w.aktuell && (!w.frei || !s.still);
+      b.title = w.aktuell ? `Place ${platz} shows ${w.typ}` : !w.frei ? `${w.typ} is already shown in another place` : !s.still ? `Not silent: ${s.text}` : `Show ${w.typ} here`;
+    }
+  }
+}
+// EXPORT and the library's load buttons need a Loops place; without one they are disabled with the hint (Cypher's tools export regardless of the layout)
+const HINWEIS_LOOPS = 'switch a place to LOOPS';
+const loopsPlatzDa = () => plaetzeLayout.includes('loops');
+function zeigeLoopsSperre() {
+  const da = loopsPlatzDa();
+  for (const b of $$('#loopliste button.laden')) {
+    b.disabled = !da || b.closest('tr')?.classList.contains('defekt') === true;
+    b.title = da ? (b.dataset.titel0 ?? '') : HINWEIS_LOOPS;
+  }
+  for (const b of $$('button.in-box')) {
+    b.disabled = !da || loopImportLaeuft || b.dataset.ok !== '1';
+    b.title = da ? (b.dataset.titel0 ?? '') : HINWEIS_LOOPS;
+  }
+  for (const n of DECKS) zeigeExport(n);
+}
+let plaetzeFrist = 0;
+function zeigePlaetzeSpaeter() { if (!plaetzeFrist) plaetzeFrist = requestAnimationFrame(() => { plaetzeFrist = 0; zeigePlaetze(); }); }
+function bindePlaetze() {
+  for (const k of $$('.platzkopf')) {
+    const platz = Number(k.dataset.platzKopf);
+    for (const b of $$('[data-platz-typ]', k)) b.addEventListener('click', () => {
+      const r = wechsel(plaetzeLayout, platz, b.dataset.platzTyp, still(plaetzeLayout, platz, zustand.regler));
+      if (!r.ok) { melde(`Place ${platz}: ${r.grund === 'offen' ? `not silent, ${r.text}` : r.grund === 'doppelt' ? `${b.dataset.platzTyp} is already shown` : r.grund}`, true); zeigePlaetze(); return; }
+      plaetzeLayout = r.layout;
+      speichereLayout(speicherOderNull(), plaetzeLayout);
+      wendePlaetzeAn();
+    });
+  }
+  wendePlaetzeAn();
+}
+
 // ---------- Aufbau: am Ende der Datei, nach allen Definitionen (dreimal am 2026-09-28 griff der Aufbau auf ein const,
 // das weiter unten stand: Temporal Dead Zone; hier unten gilt jedes const der Datei schon) ----------
 zeigeCypher();
 baueDecks();
-baueBoxen();
+baueLoopZuege();
+bindePlaetze();
+for (const b of $$('[data-liveoeffnen]')) b.addEventListener('click', liveOeffnen);   // the only way the page opens the live container: a click, with the confirmation
 baueRec();
 bindeReiter();
 bindeLibrary(); markiereTyp();
@@ -3640,12 +3572,9 @@ for (const o of $$('[data-wert]')) zeigeWert(o.dataset.wert);
 for (const k of $$('.schalter[data-pfad]')) zeigeWert(k.dataset.pfad);
 for (const g of $$('.xzuweisung[data-pfad]')) zeigeWert(g.dataset.pfad);  // Vorgabe THRU blass, bis der Kern meldet
 DECKS.forEach(zeigeDeck);
-baueStreifen();
 bindeLive();
 pruefeLive();
-zeigeStreifen();
-ladeBestand().then(() => { DECKS.forEach(zeigeDeck); zeigeStreifen(); });
-BOXEN.forEach(zeigeBox);
+ladeBestand().then(() => { DECKS.forEach(zeigeDeck); });
 ladeLoops();
 requestAnimationFrame(bild);
 strom();

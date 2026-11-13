@@ -136,6 +136,10 @@ fn minimalgraph(art: &str) -> Option<String> {
                          r#",{"von":"n.trig","nach":"p.trig"},{"von":"n.vel","nach":"p.vel"},{"von":"n.hz","nach":"p.hz"},{"von":"p.aus","nach":"o.x"}"#),
         // falter: the saw through the oversampled folder (half-band histories, ADAA state of both curves), drive, symmetry and form set
         "falter" => durch(r#""art":"falter","antrieb":14,"symmetrie":0.3,"form":0.5"#, "x", "aus"),
+        // labor: the saw into both channels, delay on with feedback and cross feedback, the modulator cycling onto the cutoff; a
+        // forgotten reset of the bit memory, the filters, the modulator or the noise seed shows as a different second run
+        "labor" => um(r#",{"id":"p","art":"labor","zeit1":60,"zeit2":90,"fb1":0.6,"kreuz1":0.4,"kreuz2":0.4,"reso1":0.85,"hp2":1,"zyklus":1,"decay":0.05,"modcutoff1":0.5}"#,
+                      r#",{"von":"s.aus","nach":"p.x"},{"von":"p.l","nach":"o.l"},{"von":"p.r","nach":"o.r"}"#),
         // drift: the saw through a multiplier driven by the drift block, so the wander state and the per-voice offset are audible in the output
         "drift" => um(r#",{"id":"p","art":"drift","rate":3,"fest":0.5,"saat":5},{"id":"m","art":"mul"},{"id":"k","art":"mul","b":0.5},{"id":"a","art":"add","b":1.0}"#,
                       r#",{"von":"p.aus","nach":"k.a"},{"von":"k.aus","nach":"a.a"},{"von":"s.aus","nach":"m.a"},{"von":"a.aus","nach":"m.b"},{"von":"m.aus","nach":"o.x"}"#),
@@ -272,6 +276,11 @@ fn arten_nur_angehaengt_diode() {
 fn arten_nur_angehaengt_falter() {
     let i = ARTEN.iter().position(|a| a.art == "falter").expect("falter in ARTEN");
     assert!(i >= 47, "the falter block must sit behind the 47 entries that existed before it, found at {i}");
+}
+/// The labor block is type 50, appended after drift.
+#[test]
+fn arten_nur_angehaengt_labor() {
+    assert_eq!(ARTEN.iter().position(|a| a.art == "labor"), Some(50), "labor is type 50 and must not move");
 }
 /// The drift block is type 49, appended after falter.
 #[test]

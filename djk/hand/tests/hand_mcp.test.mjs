@@ -2041,3 +2041,56 @@ test('djk-hand: oszilloskop asks /oszi and answers figures first, then an envelo
   assert.match(td.description, /1 ms/); assert.match(td.description, /not samples/i);
   assert.ok(td.inputSchema.properties.kanal.enum.includes('erz/4') && td.inputSchema.properties.kanal.enum.length === 12);
 });
+
+// Places plan, slice 1 task 1: the page server opens deck 4, so the hand names four decks everywhere a deck is asked for
+test('djk-hand: deck is 1 to 4 in every deck tool and in hoeren (the ear covers four decks); still 90 tools', async (t) => {
+  const { c } = await aufbau(t, () => null);
+  const werkzeuge = (await c.listTools()).tools;
+  assert.equal(werkzeuge.length, 90);
+  for (const name of ['laden', 'deck_start', 'deck_stopp', 'sprung', 'loop', 'pad', 'loop_nach_box', 'hoeren']) {
+    const w = werkzeuge.find((x) => x.name === name);
+    assert.deepEqual(w.inputSchema.properties.deck.enum, [1, 2, 3, 4], name);
+    assert.ok(!/deck 4 is closed|only these two/.test(w.inputSchema.properties.deck.description), `${name}: no stale text: ${w.inputSchema.properties.deck.description}`);
+  }
+  const hoeren = werkzeuge.find((x) => x.name === 'hoeren');
+  assert.ok(!/1 and 2 only|only decks 1/i.test(hoeren.description), hoeren.description);
+  assert.ok(werkzeuge.find((x) => x.name === 'modul_export').description.includes('(1, 2, 3 or 4;'), 'modul_export names deck 4');
+  const aufruf = fs.readFileSync(path.join(path.dirname(HAND), 'AUFRUF.md'), 'utf8');
+  assert.ok(!/deck 4 is refused/.test(aufruf) && !/still knows decks 1 and 2 only/.test(aufruf), 'AUFRUF.md no longer says deck 4 is closed');
+  assert.ok(/`deck` is 1, 2, 3 or 4/.test(aufruf));
+});
+
+// DJ view places task 11 (decision 13): the loop boxes are the live slots; slot arguments take 1/2 and A/B; the tool count stays 90
+test('djk-hand: loop_nach_box exports into the slot, box laden loads a library loop into it, box start/stopp answer box_ersetzt, slots take 1/2 and A/B; still 90 tools', async (t) => {
+  const { c, gesehen } = await aufbau(t, (m, u) => (u === '/modul/export' || u === '/modul/loop' || u === '/modul/leeren' ? [200, { ok: true }] : null));
+  const werkzeuge = (await c.listTools()).tools;
+  assert.equal(werkzeuge.length, 90);
+  for (const name of ['modul_export', 'modul_leeren', 'modul_stems', 'modul_tonart', 'modul_einsetzen', 'modul_blend']) {
+    assert.deepEqual(werkzeuge.find((x) => x.name === name).inputSchema.properties.slot.enum, ['A', 'B', 1, 2], name);
+  }
+  const letzte = () => gesehen.at(-1);
+  assert.ok(!(await c.callTool({ name: 'loop_nach_box', arguments: { deck: 3, box: 2 } })).isError);
+  assert.deepEqual([letzte().pfad, letzte().koerper], ['/modul/export', { deck: 3, slot: 'B' }]);
+  await c.callTool({ name: 'loop_nach_box', arguments: { deck: 1, box: 1 } });
+  assert.deepEqual(letzte().koerper, { deck: 1, slot: 'A' });
+  assert.ok(!(await c.callTool({ name: 'box', arguments: { box: 1, aktion: 'laden', name: 'kick-4' } })).isError);
+  assert.deepEqual([letzte().pfad, letzte().koerper], ['/modul/loop', { name: 'kick-4', slot: 'A' }]);
+  await c.callTool({ name: 'box', arguments: { box: 2, aktion: 'laden', name: 'x' } });
+  assert.deepEqual(letzte().koerper, { name: 'x', slot: 'B' });
+  const n = gesehen.length;
+  for (const aktion of ['start', 'stopp']) {
+    const r = await c.callTool({ name: 'box', arguments: { box: 1, aktion } });
+    assert.equal(r.isError, true);
+    assert.match(r.content[0].text, /box_ersetzt/);
+  }
+  assert.equal(gesehen.length, n, 'start and stopp ask the page nothing');
+  const bn = await c.callTool({ name: 'box', arguments: { box: 1, aktion: 'laden' } });
+  assert.equal(bn.isError, true);
+  assert.equal(gesehen.length, n);
+  // modul_export {slot: 1} reaches the page as 1 (the server maps 1 to A, like A)
+  assert.ok(!(await c.callTool({ name: 'modul_export', arguments: { deck: 1, slot: 1 } })).isError);
+  assert.deepEqual(letzte().koerper, { deck: 1, slot: 1 });
+  assert.ok(!(await c.callTool({ name: 'modul_leeren', arguments: { slot: 2, takte: 0 } })).isError);
+  const aufruf = fs.readFileSync(path.join(path.dirname(HAND), 'AUFRUF.md'), 'utf8');
+  assert.ok(/box_ersetzt/.test(aufruf), 'AUFRUF.md names box_ersetzt');
+});

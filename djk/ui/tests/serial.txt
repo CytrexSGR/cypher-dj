@@ -16,6 +16,7 @@ state_controls_generator.test.mjs
 learn_route.test.mjs
 loop_import.test.mjs
 live_container.test.mjs
+live_loop_library.test.mjs
 media_library.test.mjs
 pattern_library.test.mjs
 presets_apply_route.test.mjs
@@ -102,5 +103,6 @@ vorbereit_source.test.mjs
 graph_restart.test.mjs
 oszi_route.test.mjs
 deck3.test.mjs
+decks_vier.test.mjs
 midi_import_route.test.mjs
 project_surge_patch.test.mjs

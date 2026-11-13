@@ -1,5 +1,6 @@
 //! S21: the `faltung` block (type 31): zero-latency partitioned convolution with an impulse response file.
 //! Everything goes through the public JSON API and `ARTEN`, so this file compiles on the old code and fails at runtime.
+#[path = "sampler_helpers/mod.rs"]
 mod sampler_hilfe;
 use baukasten_dsp::limiter::vorlauf;
 use baukasten_dsp::{uebersetze_mit_wurzel, Fehler, Programm, ARTEN};

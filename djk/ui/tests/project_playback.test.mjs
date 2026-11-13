@@ -260,3 +260,49 @@ test('nested groups: the translator writes the parent number; flat projects keep
   const q = kopie(p); q.gruppen[0].ausgang = { art: 'gruppe', id: 'g9' };
   assert.throws(() => uebersetze(q, opt()), (e) => e instanceof WiedergabeFehler && e.grund === 'ziel_unbekannt');
 });
+
+// DJ view places, task 4 (decision 5, 6): the DJ-channel output of a live project's slot groups, derived from `modul.slot`
+const gMod = (id, nr, slot, extra = {}) => ({ id, nr, name: id, farbe: '#3b8de0', fader_db: 0, pan: 0, mute: false, solo: false, gefaltet: false,
+  ...(slot ? { modul: { slot } } : {}), ...extra });
+function mitModulen(live) {
+  const p = pruefeProjekt(specProjekt()).projekt;
+  p.gruppen.push(gMod('ga', 1, 'A'), gMod('gb', 2, 'B'));
+  if (live) p.live = true;
+  return p;
+}
+
+test('DJ output: a live project writes live:true and dj outputs for the slot groups (A = 1, B = 2)', () => {
+  const w = uebersetze(mitModulen(true), opt());
+  assert.equal(w.format, 'cypherdj-arr/2');
+  assert.equal(w.live, true);
+  assert.deepEqual(w.gruppen, [{ nr: 1, ausgang: { art: 'dj', nr: 1 } }, { nr: 2, ausgang: { art: 'dj', nr: 2 } }]);
+});
+
+test('DJ output: a production project with the same module groups writes no live flag and master (module without a live flag routes to the master)', () => {
+  const w = uebersetze(mitModulen(false), opt());
+  assert.ok(!('live' in w));
+  assert.deepEqual(w.gruppen, [{ nr: 1, ausgang: { art: 'master' } }, { nr: 2, ausgang: { art: 'master' } }]);
+  const p = mitModulen(true); for (const g of p.gruppen) delete g.modul;   // a live project, groups without a slot (a module placed without slot)
+  assert.deepEqual(uebersetze(p, opt()).gruppen, [{ nr: 1, ausgang: { art: 'master' } }, { nr: 2, ausgang: { art: 'master' } }]);
+});
+
+test('DJ output: only a top group takes the DJ output; a stem group inside the slot group stays a group', () => {
+  const p = mitModulen(true);
+  p.gruppen.push(gMod('s1', 3, undefined, { ausgang: { art: 'gruppe', id: 'ga' } }));
+  const g = uebersetze(p, opt()).gruppen;
+  assert.deepEqual(g.map((x) => x.ausgang), [{ art: 'dj', nr: 1 }, { art: 'dj', nr: 2 }, { art: 'gruppe', nr: 1 }]);
+  const q = mitModulen(true); q.gruppen[0].ausgang = { art: 'gruppe', id: 'gb' };   // a slot group that sits inside another group: no DJ output
+  assert.deepEqual(uebersetze(q, opt()).gruppen[0].ausgang, { art: 'gruppe', nr: 2 });
+});
+
+test('DJ output: a live project without any slot group keeps the bytes of a project without the flag (no live key written)', () => {
+  const p = pruefeProjekt(specProjekt()).projekt; p.live = true;
+  assert.equal(JSON.stringify(uebersetze(p, opt())), JSON.stringify(uebersetze(pruefeProjekt(specProjekt()).projekt, opt())));
+  assert.ok(!('live' in uebersetze(p, opt())));
+});
+
+test('DJ output: a production project with a module group is written byte for byte as before (stored string from before the change)', () => {
+  const p = pruefeProjekt(specProjekt()).projekt;
+  p.gruppen.push(gMod('ga', 1, 'A'));
+  assert.equal(JSON.stringify(uebersetze(p, opt())), '{"format":"cypherdj-arr/2","nr":1,"spuren":[{"nr":1,"art":"audio","clips":[{"id":"c1","start_beat":0,"laenge_beats":1,"sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","datei":"/arbeit/arr/audio/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.f32","frames":24000,"offset_frames":0,"gain_db":0,"ein_beats":0,"aus_beats":0}]},{"nr":2,"art":"intern","geraet":"rb338","parameter":{},"noten":[{"id":"c2/n1","beat":0,"laenge":0.5,"ton":36,"vel":100}]},{"nr":3,"art":"wirt","slot":1,"noten":[]}],"gruppen":[{"nr":1,"ausgang":{"art":"master"}}]}');
+});

@@ -210,5 +210,9 @@
  "wavetable-supersaw": {
   "kategorie": "pad",
   "text": "Wide supersaw from detuned wavetable oscillators; trance chords and big leads."
+ },
+ "labor": {
+  "kategorie": "textur",
+  "text": "Feedback synth: a note pings two resonant filters, one echoes the other."
  }
 }

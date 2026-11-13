@@ -1,5 +1,6 @@
 //! S10 task 1: the sample loader (D1-D4, C7, C9) and the graph format field `datei`.
 //! Step 0 (D1): serde accepts a named `datei` field next to the flattened value map.
+#[path = "sampler_helpers/mod.rs"]
 mod sampler_hilfe;
 use baukasten_dsp::sampler::lade_datei;
 use baukasten_dsp::{uebersetze, uebersetze_mit_wurzel, Fehler, Graph};

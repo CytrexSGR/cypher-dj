@@ -38,6 +38,21 @@ export function leseLoops(dir: string): LoopEintrag[] {
   return aus;
 }
 
+// Live places task 10: one ladbar loop with what the module needs from loop.json (null = not in the library or not loadable). `datei` is loop.f32.
+export interface LoopQuelle { name: string; beats: number; frames: number; datei: string; versatz_frames: number; quelle: string; herkunft: Record<string, unknown> | null }
+export function leseLoopQuelle(dir: string, name: string): LoopQuelle | null {
+  if (!LOOP_NAME.test(name)) return null;
+  const e = leseLoops(dir).find((l) => l.name === name);
+  if (!e || !e.ladbar) return null;
+  try {
+    const j = JSON.parse(fs.readFileSync(path.join(dir, name, 'loop.json'), 'utf8')) as Record<string, unknown>;
+    const v = leseLoopVersatz(dir, name);
+    const h = j.herkunft;
+    return { name, beats: e.beats, frames: e.beats * 22500, datei: path.join(dir, name, 'loop.f32'), versatz_frames: v?.versatz ?? 0, quelle: String(j.quelle ?? ''),
+      herkunft: h !== null && typeof h === 'object' && !Array.isArray(h) ? h as Record<string, unknown> : null };
+  } catch { return null; }
+}
+
 // Plan Grid (D6): Versatz des Rasters im Loop, aus und in loop.json (übrige Felder bleiben, atomar).
 export function leseLoopVersatz(dir: string, name: string): { versatz: number; frames: number } | null {
   try {

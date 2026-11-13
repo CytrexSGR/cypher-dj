@@ -58,5 +58,7 @@
   {"name": "saege-ladder", "art": "bk", "familie": "mono", "akzent": "orange", "doku": "docs/presets/devices/GERAET-saege-ladder.md"},
   {"name": "kick-synth", "art": "bk", "familie": "drums", "akzent": "rot", "doku": "docs/presets/devices/GERAET-kick-synth.md"},
   {"name": "fx-crunch", "art": "bk", "familie": "fx", "akzent": "tuerkis", "doku": "docs/presets/devices/GERAET-fx-crunch.md"},
-  {"name": "fx-polaritaet", "art": "bk", "familie": "fx", "akzent": "tuerkis", "doku": "docs/presets/devices/GERAET-fx-polaritaet.md"}
+  {"name": "fx-polaritaet", "art": "bk", "familie": "fx", "akzent": "tuerkis", "doku": "docs/presets/devices/GERAET-fx-polaritaet.md"},
+  {"name": "labor", "art": "bk", "familie": "mono", "akzent": "orange", "doku": "docs/presets/devices/GERAET-labor.md"},
+  {"name": "fx-labor", "art": "bk", "familie": "fx", "akzent": "tuerkis", "doku": "docs/presets/devices/GERAET-labor.md"}
 ]

@@ -8,7 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { neuesProjekt } from '../project/model.ts';
 import { baueModul, baueNeuePfade, liveSlots } from '../project/live.ts';
-import { modulAnsicht, modulHtml, exportKnopf, faderBefehl, oeffneLive, exportiere, leere, trenneNeu, LEER_TAKTE, setzeBlend, passeTonartAn, tonartAnsicht, cueGriff, cueGriffe, cueAn } from '../public/live_module.js';
+import { modulAnsicht, modulHtml, exportKnopf, faderBefehl, oeffneLive, exportiere, leere, trenneNeu, LEER_TAKTE, setzeBlend, passeTonartAn, tonartAnsicht, kanalAnsicht } from '../public/live_module.js';
 const importVon = (datei, vor = './') => new RegExp(`from '${(vor + datei).replace(/[.]/g, '\\.')}'`);   // the file name stays a plain literal so the export's file renaming rewrites it too (a regex literal escapes the dot and escapes the rewrite)
 
 const HIER = path.dirname(fileURLToPath(import.meta.url));
@@ -44,7 +44,7 @@ test('a module with four stems: title (escaped), origin, module fader, one origi
   const s = a.slots[0];
   assert.equal(s.zustand.art, 'bereit');
   assert.equal(s.titel, 'Night <Drive>');
-  assert.equal(s.faderDb, -200);
+  assert.equal(s.faderDb, 0);
   assert.deepEqual(s.stems.map((x) => [x.name, x.faderDb]), [['Drums', 0], ['Bass', 0], ['Other', 0], ['Vocals', 0]]);
   assert.ok(s.stems.every((x) => /^s\d+$/.test(x.spurId)), 'the original track of each stem is the fader target');
   assert.equal(a.slots[1].leer, true);
@@ -53,7 +53,7 @@ test('a module with four stems: title (escaped), origin, module fader, one origi
   assert.doesNotMatch(h, /Night <Drive>/);
   assert.match(h, /126 BPM/); assert.match(h, /8A/); assert.match(h, /Art/);
   assert.equal((h.match(/data-stem-fader/g) ?? []).length, 4);
-  assert.equal((h.match(/data-modul-fader/g) ?? []).length, 1);
+  assert.equal((h.match(/data-modul-fader/g) ?? []).length, 0, 'the module has no slider: the strip of its channel is the gain');
   assert.equal((h.match(/ data-leeren /g) ?? []).length, 1);
   assert.match(h, /READY/);
   for (const n of ['Drums', 'Bass', 'Other', 'Vocals']) assert.match(h, new RegExp(n));
@@ -90,11 +90,11 @@ test('export button: off without a running loop or a loaded track, on with both;
   assert.match(exportKnopf({ loop: true, geladen: true, live: false }).titel, /open the live container/i);
 });
 
-test('export posts deck only (the server takes A, else B); a refusal gives the text of the reason', async () => {
+test('export posts deck only (the server picks the slot); the messages say Loop 1 / Loop 2, a refusal gives the text of the reason', async () => {
   const ruf = [];
   const ok = await exportiere(3, async (w, k) => { ruf.push([w, k]); return { status: 200, j: { slot: 'B' } }; });
   assert.deepEqual(ruf, [['/modul/export', { deck: 3 }]]);
-  assert.deepEqual(ok, { ok: true, slot: 'B', text: 'Exported to slot B' });
+  assert.deepEqual(ok, { ok: true, slot: 'B', text: 'Exported to Loop 2' });
   const nein = await exportiere(1, async () => ({ status: 409, j: { fehler: 'slot_belegt', text: 'both live slots hold a module' } }));
   assert.deepEqual(nein, { ok: false, text: 'Export refused: both live slots hold a module' });
   const ohne = await exportiere(1, async () => ({ status: 409, j: { fehler: 'kein_loop' } }));
@@ -109,6 +109,10 @@ test('clear and separate post the slot (and the bars); LEER_TAKTE are the bars t
   assert.equal((await trenneNeu('B', h)).ok, true);
   assert.deepEqual(ruf, [['/modul/leeren', { slot: 'A', takte: 4 }], ['/modul/stems', { slot: 'B' }]]);
   assert.equal((await leere('A', 4, async () => ({ status: 409, j: { fehler: 'slot_leer', text: 'that live slot holds no module' } }))).text, 'Clear refused: that live slot holds no module');
+  assert.equal((await leere('B', 0, async () => ({ status: 200, j: {} }))).text, 'Loop 2 is clearing');
+  assert.equal((await trenneNeu('A', async () => ({ status: 200, j: {} }))).text, 'Separating Loop 1');
+  assert.match(modulHtml(modulAnsicht(mitPfad(), standA(mitPfad()), null)), /empty Loop 1"/);
+  assert.doesNotMatch(exportKnopf({ loop: true, geladen: true, live: true }).titel, /slot A/);
 });
 
 test('open the live container: a plain open, or the confirmation when the server says live_laeuft, and no second post when declined', async () => {
@@ -193,23 +197,34 @@ test('the new fader is a spur_aendern on the instrument track; blend posts /modu
   assert.equal((await setzeBlend('A', 'other', 1, async () => ({ status: 409, j: { fehler: 'kein_neuer_pfad', text: 'no new path' } }))).text, 'Blend refused: no new path');
 });
 
-test('CUE: one button per slot, the state follows the core row grp/<n>/cue of the top group, the click flips it on the hand path', () => {
+test('DJ view places: the slot row has no MODULE slider and no CUE button, shows its channel (Loop 1 on pad/1, Loop 2 on pad/2) open or closed', () => {
   const p = mitPfad();
   const g = p.gruppen.find((x) => x.id === liveSlots(p).A);
-  const aus = modulAnsicht(p, standA(p), null, {}).slots[0];
-  assert.deepEqual(aus.cue, { nr: g.nr, an: false });
-  const an = modulAnsicht(p, standA(p), null, { [`grp/${g.nr}/cue`]: 1 }).slots[0];
-  assert.equal(an.cue.an, true);
-  const h = modulHtml(modulAnsicht(p, standA(p), null, { [`grp/${g.nr}/cue`]: 1 }));
-  assert.equal((h.match(/data-cue /g) ?? []).length, 1);
-  assert.match(h, new RegExp(`data-cue data-nr="${g.nr}" aria-pressed="true"`));
-  assert.match(h, /live-cue an/);
-  assert.deepEqual(cueGriff(g.nr, false), { pfad: `grp/${g.nr}/cue`, u: 1 });
-  assert.deepEqual(cueGriff(g.nr, true), { pfad: `grp/${g.nr}/cue`, u: 0 });
-  assert.equal(cueAn({ 'grp/3/cue': 0.4 }, 3), false);
-  // one click = priming value, then the target (the core swallows the first absolute value of a row as its knob position)
-  assert.deepEqual(cueGriffe(g.nr, false).map((x) => x.u), [0, 1]);
-  assert.deepEqual(cueGriffe(g.nr, true).map((x) => x.u), [1, 0]);
+  const zu = modulAnsicht(p, standA(p), null, { 'pad/1/trim': 0, 'pad/1/fader': -200 }).slots[0];
+  assert.deepEqual(zu.kanal, kanalAnsicht('A', { 'pad/1/trim': 0, 'pad/1/fader': -200 }));
+  assert.deepEqual([zu.kanal.pfad, zu.kanal.name, zu.kanal.offen], ['pad/1', 'Loop 1', false]);
+  assert.equal('cue' in zu, false, 'no cue state in the slot model');
+  const offen = modulAnsicht(p, standA(p), null, { 'pad/1/trim': 0, 'pad/1/fader': -6 });
+  assert.equal(offen.slots[0].kanal.offen, true);
+  assert.equal(offen.slots[1].kanal.pfad, 'pad/2', 'slot B is Loop 2 on pad/2');
+  assert.equal(offen.slots[1].kanal.offen, false);
+  const h = modulHtml(offen);
+  assert.doesNotMatch(h, /data-cue|live-cue|data-modul-fader|data-modul-wert|live-modulfader|>MODULE</, 'neither the CUE button nor the MODULE slider');
+  assert.match(h, /data-kanal-zustand[^>]*>Loop 1 · open</);
+  assert.match(h, /data-kanal-zustand[^>]*>Loop 2 · closed</);
+  assert.ok(g.nr > 0);
+  // the rule is the one of kanalOffen (hand_operation.ts): -26 dB is still closed, an unknown fader is closed, an unknown trim is 0
+  assert.equal(kanalAnsicht('A', { 'pad/1/fader': -26 }).offen, false);
+  assert.equal(kanalAnsicht('A', { 'pad/1/fader': -25.5 }).offen, true);
+  assert.equal(kanalAnsicht('B', {}).offen, false);
+  assert.equal(kanalAnsicht('B', { 'pad/2/trim': 12, 'pad/2/fader': -30 }).offen, true);
+});
+
+test('the live module helpers of the cue are gone from the page code', () => {
+  for (const f of ['live_module.js', 'app.js']) {
+    const t = fs.readFileSync(path.join(HIER, '..', 'public', f), 'utf8');
+    assert.doesNotMatch(t, /cuePfad|cueAn|cueGriff|data-cue\b|closest\('\[data-cue\]'\)|data-modul-fader|modulFader/, f);
+  }
 });
 
 test('KEY: shows the distance from /modul/stand, off when 0 or unknown, posts the slot', async () => {
@@ -228,10 +243,12 @@ test('KEY: shows the distance from /modul/stand, off when 0 or unknown, posts th
   assert.equal((await passeTonartAn('A', async () => ({ status: 409, j: { fehler: 'kein_deck', text: 'no deck' } }))).text, 'Key refused: no deck');
 });
 
-test('wiring: blend, cue and key handlers in app.js (cue through /griff via sende, blend double click = 0)', () => {
+test('wiring: blend and key handlers in app.js (blend double click = 0); the L1/L2 strips write pad/N/fader; the channel state redraws on pad/N rows', () => {
   const app = fs.readFileSync(path.join(HIER, '..', 'public', 'app.js'), 'utf8');
-  assert.match(app, /closest\('\[data-cue\]'\)/); assert.match(app, /sende\(g\.pfad, g\.u, true\)/);
+  const kurven = fs.readFileSync(path.join(HIER, '..', 'public', 'curves.js'), 'utf8');
+  assert.match(kurven, /LOOPBOXEN = \['pad\/1', 'pad\/2'\]/, 'the loop strips L1, L2 are the channels pad/1, pad/2');
+  assert.match(app, /e\.dataset\.pfad = `\$\{k\}\/\$\{e\.dataset\.teil\}`/, 'every control of the L1/L2 strip (fader included) writes <channel>/<part>');
   assert.match(app, /live-blendregler/); assert.match(app, /r\.value = '0';\s+sendeBlend/);
   assert.match(app, /passeTonartAn\(slot, holeJson\)/);
-  assert.match(app, /zeichneLive\(\);\s*\/\/ task 6|grp\\\/\\d\+\\\/cue/);
+  assert.match(app, /pad\\\/\[12\]\\\/\(fader\|trim\)\$\/\.test\(f\.pfad\) && liveOffen\(\)/);
 });

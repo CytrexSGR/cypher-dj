@@ -13,6 +13,11 @@ export function liveSlots(p: Projekt): { A?: string; B?: string } {
   return aus;
 }
 
+// DJ view places task 13 (decision 13): a slot argument is 1/2 (number or string) or A/B (1 = A, 2 = B); anything else is undefined
+export function normiereSlot(v: unknown): 'A' | 'B' | undefined {
+  return v === 'A' || v === 1 || v === '1' ? 'A' : v === 'B' || v === 2 || v === '2' ? 'B' : undefined;
+}
+
 export const LIVE_LOOP_BEATS = 64;                                   // the live loop region: 16 bars
 const STEM_NAME: Record<Stem, string> = { drums: 'Drums', bass: 'Bass', other: 'Other', vocals: 'Vocals', guitar: 'Guitar', piano: 'Piano' };
 export const LOOP_SPUR = 'Loop';
@@ -46,7 +51,7 @@ function clipBefehle(spurId: string, d: ModulDatei, loop: ModulLoop, vonBeat: nu
 }
 
 // Builds decision 2's tree in one project value (the caller stores it as one undo step, like baueStemsProjekt):
-//   top group `A · <title>` (module fader closed at -200, modul = the origin)
+//   top group `A · <title>` (group fader 0 dB: the channel pad/N is the only gain, DJ view places decision 9; modul = the origin)
 //     track `Loop` (the exported loop; muted once the stems are in)
 //     group `Drums` / `Bass` / `Other` / `Vocals` (/ `Guitar` / `Piano`), each with the original track of that stem at 0 dB
 // Without stems the module is loop-only: the Loop track is audible. When the slot already holds a module, the stem groups are added to it and the
@@ -83,7 +88,6 @@ export function baueModul(p0: Projekt, slot: 'A' | 'B', loop: ModulLoop, stems: 
   if (vorhanden === undefined) {
     p = lauf(p, { befehl: 'gruppenspur_neu', name: `${slot} · ${titel}`.slice(0, 80), mitglieder: [loopId, ...kinder] });
     oben = p.gruppen.at(-1)!.id;
-    p = lauf(p, { befehl: 'gruppenspur_aendern', gruppe_id: oben, fader_db: -200 });
     p = lauf(p, { befehl: 'modul_setzen', gruppe_id: oben, modul: { ...herkunft, slot } });
   } else {
     oben = vorhanden;

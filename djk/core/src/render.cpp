@@ -205,6 +205,9 @@ RenderErgebnis rendere(const RenderAuftrag& a) {
     kern->setze_arr_nur_schluessel(streifen, suf != "ziel", suf != "sends");   // bare: both off; ":ziel" keeps the target; ":sends" keeps the sends
   }
   if (a.trocken_aus) kern->setze_arr_trocken_aus();   // 1.10 T10: the wet signal only (arr_output.cpp); the flag is the render's alone
+#ifndef CYPHERDJ_MUTATION_ARR_RENDER_OHNE_DJ_MASTER   // error case: the render does not set the switch (test_render_dj_kanal)
+  kern->setze_arr_dj_als_master();   // DJ view places (decision 8): a DJ-channel output of a live project sums into the master offline (export, loudness, merge, bounce, the level offset of level.ts)
+#endif
 #ifndef CYPHERDJ_MUTATION_ARR_RENDER_OHNE_HALL_SOFORT
   kern->hall_sofort();   // 1.10 slice 3 (P8 a): the return Halls start on the controls of the project, as playback does, before block 0
 #endif

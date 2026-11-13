@@ -2,6 +2,7 @@
 //! Ohr; sie fangen Pegel, Übersteuern an den Reglerenden, einen LFO, der nicht wirkt, und einen LFO, der beim Anschlag
 //! nicht neu startet (im VST3 gibt es keinen Host-Takt, der Wobble hängt am Anschlag).
 use baukasten_dsp::{uebersetze, REGLER};
+#[path = "common/mod.rs"]
 mod gemeinsam;
 use gemeinsam::*;
 

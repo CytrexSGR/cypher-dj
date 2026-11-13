@@ -1,4 +1,5 @@
 //! S10 task 1: the `sampler` block (type 30): io, value checks, block == DSP driven directly, several voices on one node.
+#[path = "sampler_helpers/mod.rs"]
 mod sampler_hilfe;
 use baukasten_dsp::sampler::{Eingabe, Einstellung, Sampler};
 use baukasten_dsp::{uebersetze_mit_wurzel, Fehler, ARTEN};

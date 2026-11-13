@@ -103,11 +103,13 @@ set(HALL_FFI_LIB ${HALL_FFI_TARGET_DIR}/release/libhall_ffi.a)
 # (und Baukasten-Graphen der Erzeuger-Ströme).
 # D1 K2a: dazu die RB-338 (rb_dsp, cypher_rb_* in reverb_ffi/src/rb.rs); ohne rb_dsp hier baute eine Änderung dort nicht neu.
 # Baukasten S3a: dazu baukasten_dsp mit saett_dsp und eq_dsp (cypher_bk_* in reverb_ffi/src/baukasten.rs).
+# Labor: baukasten_dsp carries the labor block, so labor_dsp belongs to the sources of the library too.
 file(GLOB HALL_FFI_QUELLEN CONFIGURE_DEPENDS ${HALL_FFI_DIR}/reverb_ffi/src/*.rs ${HALL_FFI_DIR}/reverb_dsp/src/*.rs
      ${HALL_FFI_DIR}/comp_dsp/src/*.rs ${HALL_FFI_DIR}/rb_dsp/src/*.rs ${HALL_FFI_DIR}/reverb_ffi/Cargo.toml
      ${HALL_FFI_DIR}/modular_dsp/src/*.rs ${HALL_FFI_DIR}/sat_dsp/src/*.rs ${HALL_FFI_DIR}/eq_dsp/src/*.rs
      ${HALL_FFI_DIR}/reverb_dsp/Cargo.toml ${HALL_FFI_DIR}/comp_dsp/Cargo.toml ${HALL_FFI_DIR}/rb_dsp/Cargo.toml
-     ${HALL_FFI_DIR}/modular_dsp/Cargo.toml ${HALL_FFI_DIR}/sat_dsp/Cargo.toml ${HALL_FFI_DIR}/eq_dsp/Cargo.toml)
+     ${HALL_FFI_DIR}/modular_dsp/Cargo.toml ${HALL_FFI_DIR}/sat_dsp/Cargo.toml ${HALL_FFI_DIR}/eq_dsp/Cargo.toml
+     ${HALL_FFI_DIR}/labor_dsp/src/*.rs ${HALL_FFI_DIR}/labor_dsp/Cargo.toml)
 # touch danach: cargo schreibt die .a nicht neu, wenn sich nur die mtime einer Quelle ändert (gemessen 2026-10-15 an
 # rb_dsp/Cargo.toml); ohne touch liefe die Regel dann bei jedem Bau erneut.
 add_custom_command(OUTPUT ${HALL_FFI_LIB}
@@ -1210,6 +1212,10 @@ test_mutation(test_arr_gruppen_mute_mutation test_arr_groups CYPHERDJ_MUTATION_A
 test_mutation(test_arr_gruppen_cue_aus_mutation test_arr_groups_cue CYPHERDJ_MUTATION_ARR_GRUPPE_CUE_AUS ${ARR_QUELLEN} src/clock.cpp)               # cases 1, 2, 3, 6: the tap is skipped
 test_mutation(test_arr_gruppen_cue_nach_fader_mutation test_arr_groups_cue CYPHERDJ_MUTATION_ARR_GRUPPE_CUE_NACH_FADER ${ARR_QUELLEN} src/clock.cpp) # case 4: the tap sits behind fader and mute
 test_mutation(test_arr_gruppen_cue_master_mutation test_arr_groups_cue CYPHERDJ_MUTATION_ARR_GRUPPE_CUE_MASTER ${ARR_QUELLEN} src/clock.cpp)         # case 1, 3, 6: the master moves
+# DJ view places task 5: DJ-channel outputs of the arrangement (test_arr_dj_channel; case 5 runs the real kernel, so the kernel sources are linked)
+test_mutation(test_arr_dj_kanal_ins_master_mutation test_arr_dj_channel CYPHERDJ_MUTATION_ARR_DJ_INS_MASTER ${KERN_QUELLEN35} src/recording_thread.cpp src/take_writer.cpp src/arr_playback.cpp)         # cases 1, 3: the DJ group is also in the master
+test_mutation(test_arr_dj_kanal_offline_aus_mutation test_arr_dj_channel CYPHERDJ_MUTATION_ARR_DJ_OFFLINE_AUS ${KERN_QUELLEN35} src/recording_thread.cpp src/take_writer.cpp src/arr_playback.cpp)     # cases 4, 10: the offline switch is ignored
+test_mutation(test_arr_dj_kanal_nach_strip_mutation test_arr_dj_channel CYPHERDJ_MUTATION_ARR_DJ_NACH_STRIP ${KERN_QUELLEN35} src/recording_thread.cpp src/take_writer.cpp src/arr_playback.cpp)       # case 5: the module is added behind the strip
 # 1.10 Slice 3 Task 5a: sends and return strips
 test_mutation(test_arr_returns_hall_tot_mutation test_arr_returns CYPHERDJ_MUTATION_ARR_HALL_TOT ${ARR_QUELLEN} src/clock.cpp)
 test_mutation(test_arr_returns_hall_ohne_ausklang_mutation test_arr_returns CYPHERDJ_MUTATION_ARR_HALL_OHNE_AUSKLANG ${ARR_QUELLEN} src/clock.cpp)
@@ -1612,6 +1618,13 @@ target_compile_definitions(test_arr_lader_werk_mutation PRIVATE CYPHERDJ_MUTATIO
 target_link_libraries(test_arr_lader_werk_mutation PRIVATE cypherdj_kernbib cypherdj::json cypherdj::toml)
 add_test(NAME test_arr_lader_werk_mutation COMMAND test_arr_lader_werk_mutation)
 set_tests_properties(test_arr_lader_werk_mutation PROPERTIES WILL_FAIL TRUE)
+# DJ view places task 4: the parser takes a DJ output without the live head flag (CYPHERDJ_MUTATION_ARR_DJ_OHNE_LIVE, own arr_playback.cpp object before the library); test_arr_loader case 7 must fail
+add_executable(test_arr_lader_dj_ohne_live_mutation tests/test_arr_loader.cpp src/arr_playback.cpp)
+target_include_directories(test_arr_lader_dj_ohne_live_mutation PRIVATE include tests)
+target_compile_definitions(test_arr_lader_dj_ohne_live_mutation PRIVATE CYPHERDJ_MUTATION_ARR_DJ_OHNE_LIVE=1 CYPHERDJ_DJK="${DJK}")
+target_link_libraries(test_arr_lader_dj_ohne_live_mutation PRIVATE cypherdj_kernbib cypherdj::json cypherdj::toml)
+add_test(NAME test_arr_lader_dj_ohne_live_mutation COMMAND test_arr_lader_dj_ohne_live_mutation)
+set_tests_properties(test_arr_lader_dj_ohne_live_mutation PROPERTIES WILL_FAIL TRUE)
 # D1 K1: /erz/strom auf erz/4 ohne Riegel; net_erz.cpp mutiert als eigenes Objekt, test_net_arr muss scheitern
 add_executable(test_netz_arr_erz4_mutation tests/test_net_arr.cpp src/net_erz.cpp)
 target_include_directories(test_netz_arr_erz4_mutation PRIVATE include tests)
@@ -1968,6 +1981,13 @@ foreach(m RENDER_OHNE_PDC_VORHALT:render RENDER_OHNE_EINSCHWINGEN:render PDC_BLO
   add_test(NAME test_render_pdc_${klein}_mutation COMMAND test_render_pdc_${klein}_mutation)
   set_tests_properties(test_render_pdc_${klein}_mutation PROPERTIES WILL_FAIL TRUE)
 endforeach()
+# DJ view places task 5: the render without the switch call leaves the module of a live project out of every offline file; test_render_dj_channel must go red
+add_executable(test_render_dj_kanal_ohne_schalter_mutation tests/test_render_dj_channel.cpp src/render.cpp)
+target_include_directories(test_render_dj_kanal_ohne_schalter_mutation PRIVATE include tests)
+target_compile_definitions(test_render_dj_kanal_ohne_schalter_mutation PRIVATE CYPHERDJ_MUTATION_ARR_RENDER_OHNE_DJ_MASTER=1 CYPHERDJ_DJK="${DJK}")
+target_link_libraries(test_render_dj_kanal_ohne_schalter_mutation PRIVATE cypherdj_kernbib cypherdj::json cypherdj::toml)
+add_test(NAME test_render_dj_kanal_ohne_schalter_mutation COMMAND test_render_dj_kanal_ohne_schalter_mutation)
+set_tests_properties(test_render_dj_kanal_ohne_schalter_mutation PROPERTIES WILL_FAIL TRUE)
 # Null-Test (A7) am Offline-Kern: render.cpp bzw. null_test.cpp mutiert als eigenes Objekt vor der Bibliothek; test_null_test
 # (Fall 1) muss gegen beide scheitern (Master ohne Limiter-Vorhalt ausgerichtet; Messfenster bis an die Naht)
 foreach(m RENDER_OHNE_VORHALT:render NULL_OHNE_NAHTRAND:null_test)

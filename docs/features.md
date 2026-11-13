@@ -6,7 +6,7 @@ of the beta. The short version is the [README](../README.md).
 ## What it does
 
 **Play**
-- Two decks with a beat grid, eight hot cues, loops, beat jump and quantized jumps (1/4 beat to 4 bars)
+- Up to four decks with a beat grid, eight hot cues, loops, beat jump and quantized jumps (1/4 beat to 4 bars)
 - 3-band EQ with kill, filter, channel faders, crossfader, master and headphone cue
 - Beat FX on any channel or the master, timed in beats: echo, flanger, phaser, filter, reverb, delay,
   ping pong, trans, roll, slip roll, vinyl brake and spiral
@@ -21,6 +21,12 @@ of the beta. The short version is the [README](../README.md).
   `kanal_limiter_vorhalt_ms` is set in `kern.toml`) and a spectrum analyser of 29 bands, three per octave, for one
   channel or the master
 - Two loop boxes that record, resample and play back in time
+- A DJ view with four places: each place shows a track deck, the Strudel channels or the loop slots, switched only
+  while that channel is silent (fader closed, no headphone cue); track place N is deck N. The layout is kept per
+  browser
+- Loop slots L1 and L2: a loop cut from a deck (or loaded by the agent) becomes a live module with its stems and MIDI
+  and plays on its own DJ channel with EQ, filter, fader and crossfader side. Placing a module into a slot whose
+  channel is open is refused, also for the agent, so nothing new starts audibly under your hands
 - Three [Strudel](https://strudel.cc) pattern channels (drums, bass, melody). Strudel runs as its own
   process; the core plays the resulting events at the sample
 - Real instruments: Surge XT hosted in Carla, played by the patterns
@@ -159,7 +165,7 @@ references before they went in:
   oversampling. Available as a plugin and as an insert stage in the production core
 - **Cypher Modular**: a modular synthesizer. A patch is a JSON graph of building blocks (oscillators, filters,
   envelopes, LFOs, chorus, reverb, delay, dynamics, free feedback paths and, among others, wavetable, FM, granular,
-  modal resonator, string, sampler, filter, sample-and-hold, multi-stage envelope, wavefolder and drum kit blocks; 50 block types in all) with up to 64 knobs that the human or the agent
+  modal resonator, string, sampler, filter, sample-and-hold, multi-stage envelope, wavefolder and drum kit blocks; 51 block types in all) with up to 64 knobs that the human or the agent
   can turn; a knob can have a start value and a centre value of its own. It plays on the melody and bass channels, on extra pattern streams and on production instrument tracks, and it
   runs as an effect on DJ channels and send returns. Example patches: a Juno-style pad, a sync lead, a wobble bass, FM bells, a plucked string. See [docs/cypher-modular.md](cypher-modular.md)
 - **RB-338**: a 303-style bass voice with cutoff, resonance, envelope, decay, accent and slide, playable

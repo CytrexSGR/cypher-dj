@@ -90,7 +90,7 @@ pub struct ArtDef {
     pub frei: &'static [(&'static str, f32)],
 }
 
-pub const ARTEN: [ArtDef; 50] = [
+pub const ARTEN: [ArtDef; 51] = [
     ArtDef { art: "note", ein: &[], aus: &["hz", "gate", "vel", "trig", "erste"], werte: &[], frei: &[] },
     ArtDef { art: "konst", ein: &[], aus: &["aus"], werte: &["wert"], frei: &[] },
     // `vorgabe`: knob position the graph starts at (0..1). `mitte`: value at knob position 0.5; its default NaN is the "absent" marker
@@ -205,6 +205,9 @@ pub const ARTEN: [ArtDef; 50] = [
     // per-voice analog drift (drift.rs); type 49 (appended after falter). Output -1..1: `fest` share of a constant per-voice offset,
     // the rest a slow random wander at `rate` Hz; `saat` seeds both (same graph, same drift).
     ArtDef { art: "drift", ein: &["rate", "fest"], aus: &["aus"], werte: &[], frei: &[("rate", 0.3), ("fest", 0.5), ("saat", 0.0)] },
+    // Cypher Labor (labor.rs), a dual-channel feedback processor as one stereo sum point; type 50 (appended after drift).
+    // Inputs and defaults in the order of `labor::EIN` and `labor::FREI`; `ueber` 0 base rate, 1 twice the rate with latency, 2 twice the rate without.
+    ArtDef { art: "labor", ein: &crate::labor::EIN, aus: &["l", "r"], werte: &[], frei: &crate::labor::FREI },
 ];
 
 /// Arts whose node carries a `datei` (a file in the sample root, read at translation).
@@ -427,6 +430,7 @@ pub fn uebersetze_mit_wurzel(json: &str, sr: f32, wurzel: Option<&Path>) -> Resu
             "wahl" if !ganz(w("modus"), 0.0, 1.0) => return falsch("modus", "0 switch, 1 morph"),
             "wahl" if !(0.0..=crate::wahl::BLENDE_MAX_MS).contains(&w("blende")) => return falsch("blende", "0..5000 ms (0 = hard switch)"),
             "falter" if !(0.0..=1.0).contains(&w("ueber")) || w("ueber").fract() != 0.0 => return falsch("ueber", "0 base rate (no latency) or 1 oversampled 2x"),
+            "labor" if !(0.0..=2.0).contains(&w("ueber")) || w("ueber").fract() != 0.0 => return falsch("ueber", "0 base rate, 1 oversampled 2x linear phase (latency) or 2 oversampled 2x without latency"),
             "glatt" if !(w("zeit") >= 0.0) => return falsch("zeit", ">= 0 seconds"),
             "trommeln" => if let Some((wert, grund)) = crate::trommeln::pruefe(&w) { return falsch(&wert, grund); },
             "fm" => if let Some((wert, grund)) = crate::fm::pruefe(&w) { return falsch(&wert, grund); },
@@ -549,6 +553,7 @@ pub fn uebersetze_mit_wurzel(json: &str, sr: f32, wurzel: Option<&Path>) -> Resu
             "limiter" => vorlauf(w("vorlauf"), sr) - 1,
             "faltung" => crate::faltung::LATENZ,
             "falter" if w("ueber") == 1.0 => crate::falter::LATENZ,
+            "labor" => crate::labor::latenz(sr, w("ueber")),
             _ => 0,
         };
         let vor = def.ein.iter()
@@ -843,6 +848,7 @@ pub fn uebersetze_mit_wurzel(json: &str, sr: f32, wurzel: Option<&Path>) -> Resu
             }
             "falter" => Schritt::Falter { x: q("x"), antrieb: q("antrieb"), symmetrie: q("symmetrie"), form: q("form"), aus: aus(k, "aus"), ueber: w("ueber") == 1.0, f: Box::new(std::array::from_fn(|_| crate::falter::Falter::default())) },
             "drift" => Schritt::Drift { rate: q("rate"), fest: q("fest"), aus: aus(k, "aus"), d: std::array::from_fn(|i| crate::drift::Drift::neu(i, w("saat") as u32)), saat: w("saat") as u32 },
+            "labor" => Schritt::Labor { x: q("x"), l: q("l"), r: q("r"), st: std::array::from_fn(|i| q(crate::labor::EIN[3 + i])), wl: aus(k, "l"), wr: aus(k, "r"), b: Box::new(crate::labor::Block::neu(sr, w("ueber"))) },
             "eingang" => Schritt::Eingang { wl: aus(k, "l"), wr: aus(k, "r") },
             "ausgang" => Schritt::Ausgang { x: q("x"), l: q("l"), r: q("r") },
             andere => unreachable!("Art {andere} ist oben geprüft"),

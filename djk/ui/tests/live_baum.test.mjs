@@ -20,7 +20,7 @@ test('baueModul with four stems: top group, Loop muted, four child groups in ord
   const id = liveSlots(p).A;
   const top = p.gruppen.find((g) => g.id === id);
   assert.equal(top.name, 'A · Song');
-  assert.equal(top.fader_db, -200);
+  assert.equal(top.fader_db, 0, 'the channel pad/N is the only gain (DJ view places decision 9)');
   assert.equal(top.modul.slot, 'A');
   assert.equal(top.modul.quelle_sha256, HASH);
   assert.equal(top.ausgang, undefined);
@@ -50,13 +50,13 @@ test('baueModul with guitar and piano gives six child groups; without them four'
   valide(sechsP);
 });
 
-test('baueModul without stems is a loop-only module: Loop unmuted, no child group, fader closed', () => {
+test('baueModul without stems is a loop-only module: Loop unmuted, no child group, group fader 0 dB', () => {
   const p = baueModul(live(), 'A', LOOP, {}, herkunft());
   const id = liveSlots(p).A;
   assert.equal(kinder(p, id).length, 0);
   assert.equal(p.spuren.length, 1);
   assert.equal(p.spuren[0].mute, false);
-  assert.equal(p.gruppen[0].fader_db, -200);
+  assert.equal(p.gruppen[0].fader_db, 0);
   valide(p);
 });
 

@@ -15,7 +15,7 @@ export function setzeZielKurve(k) {
   ZIEL_KURVE = k;
 }
 
-export const DECKS = [1, 2];
+export const DECKS = [1, 2, 3, 4];
 export const ERZEUGER = ['erz/1', 'erz/2', 'erz/3'];  // Strudel-Kanäle: Drums, Bass, Melodie (Studio S1)
 export const LOOPBOXEN = ['pad/1', 'pad/2'];  // Loop-Boxen L1, L2 (MVP 2, ADR 025)
 const KANALZUG = ['fader', 'trim', 'eq/hoch', 'eq/mitte', 'eq/tief', 'kill/hoch', 'kill/mitte', 'kill/tief', 'filter', 'pfl'];
@@ -74,7 +74,7 @@ export function art(pfad) {
   const rt = /^ret\/[1-4]\/(fader|pan|mute|solo|hall\/(an|pre|decay|groesse|tief|highcut|fahne))$/.exec(pfad);   // 1.10 Slice 3
   if (rt) return rt[1] === 'fader' ? 'spur_fader' : rt[1] === 'pan' ? 'pan' : rt[1] === 'mute' || rt[1] === 'solo' || rt[2] === 'an' ? 'schalter' : 'hall';
   if (/^(?:deck\/[1-4]|erz\/[1-35-7]|pad\/[12]|fx\/[34])\/bk\/([1-9]|[1-5][0-9]|6[0-4])$/.test(pfad)) return 'bk';   // S5r: linear 0..1, Vorgabe 0,5
-  const m = /^(?:deck\/[12]|erz\/[1-3]|pad\/[12])\/(fader|trim|eq|kill|filter|pfl|xseite|play|cue)(\/|$)/.exec(pfad);
+  const m = /^(?:deck\/[1-4]|erz\/[1-3]|pad\/[12])\/(fader|trim|eq|kill|filter|pfl|xseite|play|cue)(\/|$)/.exec(pfad);
   if (!m) return null;
   return m[1] === 'play' || m[1] === 'cue' ? 'taste' : m[1];
 }

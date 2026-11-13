@@ -3,6 +3,29 @@
 One entry per public update, newest first. Each entry names what changed for someone who plays, produces or
 builds cypher-dj.
 
+## 2026-11-13, evening
+
+**DJ**
+- Up to four decks. The DJ view has four places; each shows a track deck, the Strudel channels or the loop slots.
+  A place switches only while its channel is silent (fader closed, no headphone cue), and the layout is kept per
+  browser.
+- Loop slots L1 and L2 play on their own DJ channels (`pad/1`, `pad/2`) with EQ, filter, fader and crossfader side,
+  instead of on the master. A loop cut from a deck, or loaded by the agent with `box` or `loop_nach_box`, becomes a
+  live module with stems and MIDI in the first free slot whose channel is closed (`POST /modul/loop`).
+- A module is never placed into a slot whose channel is open, by the page or by the agent (`kanal_offen`); the
+  headphone cue does not count as open. The offline render treats the DJ channels as the master, so a live module
+  renders the same as in production.
+- The crossfader sits centred under the mixer again; disabled buttons look disabled; the channel faders use the free
+  height of the strip.
+
+**Instruments**
+- Cypher Labor, a new and experimental Cypher Modular block (`labor`) with an instrument and an effect device: a
+  two-channel feedback processor with a one-bit delay model, a level-dependent resonant filter and cross feedback.
+  Cypher Modular now has 51 block types.
+
+**Production**
+- GROUPS, RETURNS and CLIP fold like the other panels, and the arrangement takes the freed height.
+
 ## 2026-11-13 (v0.2.0-beta)
 
 **Production**

@@ -3,6 +3,7 @@
 //! (Spektral-Flachheit bei offenem Filter) und Übersteuern an den Reglerenden (jeder Knob an beiden Enden, die übrigen
 //! auf 0,5, dazu der ungünstigste Fall).
 use baukasten_dsp::{uebersetze, Programm, REGLER};
+#[path = "common/mod.rs"]
 mod gemeinsam;
 use gemeinsam::*;
 

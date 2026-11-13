@@ -154,16 +154,16 @@ test('deck 3: PFL goes through the mixer path like deck 2', async (t) => {
   assert.match(r, /deck\/3\/pfl/);
 });
 
-test('deck 4 stays closed: unbekanntes_deck on load, start, stop, loop, jump, hotcue', async (t) => {
+test('deck 5 does not exist: unbekanntes_deck on load, start, stop, loop, jump, hotcue', async (t) => {
   const { url, log } = await geladen(t, []);
   const n0 = log.filter((z) => z.typ === 'an_kern').length;
   const r = [
-    await postJson(url, '/laden', { deck: 4, material_id: NIGHTSHIFT }),
-    await postJson(url, '/deck/start', { deck: 4 }),
-    await postJson(url, '/deck/stopp', { deck: 4 }),
-    await postJson(url, '/deck/loop', { deck: 4, laenge: 4, raster: 1 }),
-    await postJson(url, '/deck/sprung', { deck: 4, delta: 4, raster: 1 }),
-    await postJson(url, '/deck/hotcue', { deck: 4, nr: 1, aktion: 'setzen', quell_beat: 1, raster: 1 }),
+    await postJson(url, '/laden', { deck: 5, material_id: NIGHTSHIFT }),
+    await postJson(url, '/deck/start', { deck: 5 }),
+    await postJson(url, '/deck/stopp', { deck: 5 }),
+    await postJson(url, '/deck/loop', { deck: 5, laenge: 4, raster: 1 }),
+    await postJson(url, '/deck/sprung', { deck: 5, delta: 4, raster: 1 }),
+    await postJson(url, '/deck/hotcue', { deck: 5, nr: 1, aktion: 'setzen', quell_beat: 1, raster: 1 }),
   ];
   for (const x of r) { assert.equal(x.code, 400, JSON.stringify(x.j)); assert.equal(x.j.fehler, 'unbekanntes_deck'); }
   assert.equal(log.filter((z) => z.typ === 'an_kern').length, n0, 'nothing reached the core');
@@ -203,11 +203,11 @@ test('deck 3 loop is cut with the deck letter c; hotcue loop of 64 beats is acce
   assert.equal((await postJson(url, '/deck/hotcue', { deck: 3, nr: 2, aktion: 'setzen', quell_beat: e + 8, art: 'loop', laenge: 64, raster: 1 })).code, 200);
 });
 
-test('the state carries deck 3: /lage lists three decks and the stream relays the deck 3 state', async (t) => {
+test('the state carries deck 3: /lage lists four decks and the stream relays the deck 3 state', async (t) => {
   const { o, url, s } = await geladen(t, [3]);
   await deckZustand(o, 3, (x) => x.status >= 1);
   const lage = await (await fetch(`${url}/lage`)).json();
-  assert.deepEqual(lage.decks.map((d) => d.deck), [1, 2, 3]);
+  assert.deepEqual(lage.decks.map((d) => d.deck), [1, 2, 3, 4]);
   const d3 = lage.decks.find((d) => d.deck === 3);
   assert.equal(d3.material_id, NIGHTSHIFT);
   assert.equal(typeof d3.offen, 'boolean');

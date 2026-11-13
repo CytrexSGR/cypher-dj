@@ -608,7 +608,7 @@ test('U8 wiring: COLLECTIONS enabled; #kollektionen in index.html with collectio
   assert.ok(fs.existsSync(new URL('../public/collections.css', import.meta.url)));
   const prod = fs.readFileSync(new URL('../public/production/production.js', import.meta.url), 'utf8');
   assert.match(prod, /import \{ bindeKollektionen \} /); assert.match(prod, importVon('collections.js', '../'));
-  assert.match(prod, /bindePresetHost, bindePresetMarken, bindeKollektionen\]/);
+  assert.match(prod, /bindePresetHost, bindePresetMarken, bindeKollektionen[,\]]/);
   assert.match(prod, /presetListe/);
   const app = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
   assert.match(app, /presetListe: \(\) => presetPanel\?\.z\.liste \?\? \[\]/);

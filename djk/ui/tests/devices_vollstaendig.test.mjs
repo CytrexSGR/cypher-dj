@@ -89,7 +89,7 @@ test('pruefen reports an instrument graph without a category; neu copies the cat
     const kat = JSON.parse(fs.readFileSync(k.P.kategorien, 'utf8'));
     assert.equal(kat['test-geraet'].kategorie, kat['synth-mono'].kategorie);
     assert.ok(kat['test-geraet'].text.startsWith('Copy of synth-mono: ') && kat['test-geraet'].text.length <= 90, kat['test-geraet'].text);
-    assert.equal(Object.keys(kat).length, 54);
+    assert.equal(Object.keys(kat).length, 55);
   } finally { fs.rmSync(k.dir, { recursive: true, force: true }); }
 });
 

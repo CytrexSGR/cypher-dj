@@ -28,7 +28,7 @@ function basisDatei(dir) {
   return f;
 }
 
-async function modulAufbau(t, { trenner = 'identitaet', loop = {}, katalog = {}, live = true } = {}) {
+async function modulAufbau(t, { trenner = 'identitaet', loop = {}, katalog = {}, live = true, kanalOffen = () => false } = {}) {
   const r = await aufbau(t, { mitKick: false });
   const dir = path.join(r.tmp, 'deckdaten');
   fs.mkdirSync(dir);
@@ -41,7 +41,8 @@ async function modulAufbau(t, { trenner = 'identitaet', loop = {}, katalog = {},
   const zeile = { sha: SHA, typ: 'track', titel: 'Song', kuenstler: 'Art', bpm: 120, camelot: '8A', ...katalog };
   const ruf = { deck: () => ({ ...deck }), herkunft: () => zeile };
   const nach = [];
-  const b = liveBereich(r.ctx, r.zugang, stems, { deckLoop: (d) => ruf.deck(d), herkunft: (m) => ruf.herkunft(m), nachExport: (e) => { nach.push(e); } });
+  const kanaele = { offen: kanalOffen };
+  const b = liveBereich(r.ctx, r.zugang, stems, { kanalOffen: (k) => kanaele.offen(k), deckLoop: (d) => ruf.deck(d), herkunft: (m) => ruf.herkunft(m), nachExport: (e) => { nach.push(e); } });
   if (live) assert.equal((await r.s.liveOeffnen('andreas')).code, 200);
   const projekt = () => r.s.aktuell().j.projekt;
   const fehl = async (f) => { try { await f(); } catch (e) { return { code: e.code, fehler: e.fehler, text: e.extra?.text }; } assert.fail('no refusal'); };
@@ -56,13 +57,13 @@ async function modulAufbau(t, { trenner = 'identitaet', loop = {}, katalog = {},
     stems.abbrechen({ auftrag_id: stand(s).stems.auftrag_id });
     await ende(s);
   };
-  return { ...r, abbruch, b, m: b.modul, opt, deck, ruf, nach, projekt, fehl, stand, ende, basis, stems,
+  return { ...r, abbruch, b, m: b.modul, opt, deck, ruf, nach, kanaele, projekt, fehl, stand, ende, basis, stems,
     export: (d = {}, q = 'andreas') => b.modul.exportiere({ deck: 1, ...d }, q), neu: (d, q = 'andreas') => b.modul.stemsNeu(d, q) };
 }
 const top = (p, slot = 'A') => p.gruppen.find((g) => g.ausgang === undefined && g.modul?.slot === slot);
 const kinder = (p, id) => p.gruppen.filter((g) => g.ausgang?.id === id);
 
-test('export answers with a loop-only module: top group with modul.slot, Loop unmuted, fader -200, warp markers and bar phase', async (t) => {
+test('export answers with a loop-only module: top group with modul.slot, Loop unmuted, module group fader 0 dB, warp markers and bar phase', async (t) => {
   const z = await modulAufbau(t, { trenner: 'langsam' });                       // slow separator: the loop-only state stays visible
   const a = await z.export();
   assert.equal(a.code, 200, JSON.stringify(a.j));
@@ -70,7 +71,7 @@ test('export answers with a loop-only module: top group with modul.slot, Loop un
   const p = z.projekt();
   const g = top(p);
   assert.equal(g.name, 'A · Song');
-  assert.equal(g.fader_db, -200);
+  assert.equal(g.fader_db, 0);
   assert.deepEqual([g.modul.titel, g.modul.kuenstler, g.modul.quelle_sha256, g.modul.basis_bpm, g.modul.fassung, g.modul.von_beat, g.modul.laenge_beats, g.modul.tonart, g.modul.bpm],
     ['Song', 'Art', SHA, 120, '1', 5, 4, '8A', 120]);
   assert.equal(kinder(p, g.id).length, 0);
@@ -123,7 +124,7 @@ test('stems follow: four stems give four child groups, Loop muted, module fader 
   const g = top(p);
   assert.deepEqual(kinder(p, g.id).map((x) => x.name), ['Drums', 'Bass', 'Other', 'Vocals']);
   assert.equal(p.spuren.find((s) => s.name === 'Loop').mute, true);
-  assert.equal(g.fader_db, -200);
+  assert.equal(g.fader_db, 0);
   for (const k of kinder(p, g.id)) {
     const o = p.spuren.find((s) => s.ausgang?.id === k.id);
     assert.deepEqual([o.name, o.fader_db, o.mute, o.clips.length], [`${k.name} original`, 0, false, 2], k.name);
@@ -158,7 +159,7 @@ test('slot rules: an occupied slot is slot_belegt, without a slot A then B, then
   const e = await z.fehl(() => z.export({ slot: 'A' }));
   assert.deepEqual([e.code, e.fehler], [409, 'slot_belegt']);
   assert.match(e.text, /^[\x20-\x7e]+$/);
-  assert.match(e.text, /live slot A/);
+  assert.match(e.text, /Loop 1/);
   assert.equal((await z.export()).j.slot, 'B');
   const e2 = await z.fehl(() => z.export());
   assert.deepEqual([e2.code, e2.fehler], [409, 'slot_belegt']);
@@ -174,7 +175,7 @@ test('refusals: no loop, no library track, no live container, bad arguments; not
   assert.deepEqual([e.code, e.fehler], [409, 'kein_loop']);
   assert.match(e.text, /no active loop/);
   z.ruf.deck = () => ({ code: 400, fehler: 'unbekanntes_deck' });
-  assert.deepEqual((await z.fehl(() => z.export({ deck: 4 }))).fehler, 'unbekanntes_deck');
+  assert.deepEqual((await z.fehl(() => z.export({ deck: 5 }))).fehler, 'unbekanntes_deck');
   z.ruf.deck = () => ({ ...z.deck });
   z.ruf.herkunft = () => null;
   e = await z.fehl(() => z.export());
@@ -299,4 +300,71 @@ test('review fix 6: a project switch while the loop decodes ends the slot state 
   const r = await z.neu({ slot: 'A' });                                        // not stuck on stems_laeuft
   assert.equal(r.code, 200, JSON.stringify(r.j));
   await z.abbruch('A');
+});
+
+// DJ view places, plan task 7 (decisions 9, 10): the channel pad/N is the only gain of a slot; an open channel refuses the export
+test('export into a slot whose channel pad/N is open is kanal_offen and creates nothing; the other slot and a closed channel go through', async (t) => {
+  const z = await modulAufbau(t, { trenner: 'langsam' });
+  const gefragt = [];
+  z.kanaele.offen = (k) => { gefragt.push(k); return k === 'pad/1'; };
+  const rev = z.projekt().rev, dateien = () => fs.existsSync(path.join(z.offen().ordner, 'loops')) ? fs.readdirSync(path.join(z.offen().ordner, 'loops')).length : 0;
+  const e = await z.fehl(() => z.export({ slot: 'A' }));
+  assert.deepEqual([e.code, e.fehler], [409, 'kanal_offen']);
+  assert.match(e.text, /^[\x20-\x7e]+$/);
+  assert.match(e.text, /pad\/1/);
+  assert.ok(gefragt.includes('pad/1'), 'slot A asks the channel pad/1');
+  assert.equal(z.projekt().rev, rev, 'the project is unchanged');
+  assert.equal(dateien(), 0, 'no WAV written');
+  assert.equal(z.nach.length, 0, 'no module store hook');
+  assert.equal(z.projekt().gruppen.filter((g) => g.modul).length, 0);
+  // an explicit slot stays strict; the other slot asks pad/2 and is accepted
+  const b = await z.export({ slot: 'B' });
+  assert.equal(b.code, 200, JSON.stringify(b.j));
+  assert.ok(gefragt.includes('pad/2'), 'slot B asks the channel pad/2');
+  await z.abbruch('B');
+});
+
+test('export without a slot takes the first free slot whose channel is closed; refused only when no free slot fits, naming both channels', async (t) => {
+  const z = await modulAufbau(t, { trenner: 'langsam' });
+  z.kanaele.offen = (k) => k === 'pad/1';                                      // A is open: the module goes to B
+  const a = await z.export();
+  assert.equal(a.code, 200, JSON.stringify(a.j));
+  assert.equal(a.j.slot, 'B');
+  await z.abbruch('B');
+  z.kanaele.offen = () => true;                                                 // slot A is free but open, B is taken: nothing fits
+  const e = await z.fehl(() => z.export());
+  assert.deepEqual([e.code, e.fehler], [409, 'kanal_offen']);
+  assert.match(e.text, /pad\/1/);
+});
+
+test('export without a slot, both channels open: kanal_offen names pad/1 and pad/2; both slots taken stays slot_belegt', async (t) => {
+  const z = await modulAufbau(t, { trenner: 'langsam' });
+  z.kanaele.offen = () => true;
+  const e = await z.fehl(() => z.export());
+  assert.deepEqual([e.code, e.fehler], [409, 'kanal_offen']);
+  assert.match(e.text, /pad\/1 and pad\/2/);
+  assert.equal(z.projekt().gruppen.filter((g) => g.modul).length, 0);
+});
+
+test('export with the channel closed builds the module with group fader 0 dB and the playback snapshot leads it into pad/1 (PFL is not a reason)', async (t) => {
+  const z = await modulAufbau(t, { trenner: 'langsam' });
+  z.kanaele.offen = () => false;                                               // a closed channel; whether PFL is on is not asked at all
+  const a = await z.export({ slot: 'A' });
+  assert.equal(a.code, 200, JSON.stringify(a.j));
+  const g = top(z.projekt());
+  assert.equal(g.fader_db, 0, 'the module group fader is 0 dB');
+  assert.ok(await warteBis(() => z.projekt().spuren.find((s) => s.name === 'Loop').clips.every((c) => c.dekodiert === 'fertig'), 20000), 'decoded');
+  const w = z.wiedergabe(z.projekt().wiedergabe_rev);
+  assert.equal(w.live, true);
+  assert.deepEqual(w.gruppen.find((x) => x.nr === g.nr).ausgang, { art: 'dj', nr: 1 });
+  await z.abbruch();
+});
+
+test('normiereSlot takes 1/2 as number or string and A/B; the refusal texts say Loop 1/2', async () => {
+  const { normiereSlot } = await import('../project/live.ts');
+  assert.deepEqual(['A', 'B', 1, 2, '1', '2'].map(normiereSlot), ['A', 'B', 'A', 'B', 'A', 'B']);
+  assert.equal(normiereSlot('3'), undefined); assert.equal(normiereSlot('a'), undefined);
+  const fs = await import('node:fs');
+  const q = fs.readFileSync(new URL('../areas/live/export.ts', import.meta.url), 'utf8');
+  assert.doesNotMatch(q, /of live slot \$\{slot\}|`live slot \$\{slot\} already/);
 });

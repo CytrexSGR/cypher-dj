@@ -1,5 +1,6 @@
 //! Klang-Leitplanken für den Pad mit Echo (Slice 4b): Pegel, Übersteuern an den Enden und im ungünstigsten Fall, dazu
 //! die Lage des Echos (bis zur Delay-Zeit bitgleich mit dem Pad mit Hall, danach verschieden) und die Breite.
+#[path = "common/mod.rs"]
 mod gemeinsam;
 use baukasten_dsp::{uebersetze, REGLER};
 use gemeinsam::*;

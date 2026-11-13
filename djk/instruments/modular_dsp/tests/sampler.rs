@@ -1,4 +1,5 @@
 //! S10 task 1: the sampler DSP (D6-D10, C4, C5). API: `Sampler::prozess(daten, &Einstellung, sr, Eingabe)` per sample.
+#[path = "sampler_helpers/mod.rs"]
 mod sampler_hilfe;
 use baukasten_dsp::sampler::{Eingabe, Einstellung, Sampler, FADE};
 use sampler_hilfe::*;

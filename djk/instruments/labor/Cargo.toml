@@ -1,0 +1,16 @@
+[package]
+name = "cypher_labor"
+version = "0.1.0"
+edition = "2021"
+description = "Cypher Labor as VST3 (nih-plug): thin shell around labor_dsp"
+license = "GPL-3.0-or-later"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+labor_dsp = { path = "../labor_dsp" }
+nih_plug = { workspace = true }
+
+[features]
+pruef_alloc = ["nih_plug/assert_process_allocs"]

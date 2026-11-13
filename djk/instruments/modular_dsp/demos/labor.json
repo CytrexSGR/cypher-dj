@@ -1,0 +1,685 @@
+{
+ "format": "baukasten/2",
+ "name": "labor",
+ "stimmen": 1,
+ "regler_namen": {
+  "1": "Cutoff 1",
+  "2": "Resonance 1",
+  "3": "High-pass 1",
+  "4": "Key track 1",
+  "5": "Feedback 1",
+  "6": "Cross 1 to 2",
+  "7": "Delay 1",
+  "8": "Time 1",
+  "9": "Mix 1",
+  "10": "Mod cutoff 1",
+  "11": "Mod time 1",
+  "12": "Cutoff 2",
+  "13": "Resonance 2",
+  "14": "High-pass 2",
+  "15": "Key track 2",
+  "16": "Feedback 2",
+  "17": "Cross 2 to 1",
+  "18": "Delay 2",
+  "19": "Time 2",
+  "20": "Mix 2",
+  "21": "Mod cutoff 2",
+  "22": "Mod time 2",
+  "23": "Cycle",
+  "24": "Attack",
+  "25": "Decay",
+  "26": "Mod amount",
+  "27": "Ping",
+  "28": "Gate",
+  "29": "Width",
+  "30": "Volume"
+ },
+ "knoten": [
+  {
+   "id": "note",
+   "art": "note"
+  },
+  {
+   "id": "k1",
+   "art": "regler",
+   "nr": 1,
+   "min": 60,
+   "max": 6000,
+   "log": 1,
+   "mitte": 261.6256
+  },
+  {
+   "id": "k2",
+   "art": "regler",
+   "nr": 2,
+   "min": 0,
+   "max": 1,
+   "mitte": 0.795
+  },
+  {
+   "id": "k3",
+   "art": "regler",
+   "nr": 3,
+   "min": 0,
+   "max": 1,
+   "vorgabe": 0
+  },
+  {
+   "id": "k4",
+   "art": "regler",
+   "nr": 4,
+   "min": 0,
+   "max": 1,
+   "vorgabe": 1
+  },
+  {
+   "id": "k5",
+   "art": "regler",
+   "nr": 5,
+   "min": 0,
+   "max": 1,
+   "vorgabe": 0
+  },
+  {
+   "id": "k6",
+   "art": "regler",
+   "nr": 6,
+   "min": 0,
+   "max": 1
+  },
+  {
+   "id": "k7",
+   "art": "regler",
+   "nr": 7,
+   "min": 0,
+   "max": 1,
+   "vorgabe": 0
+  },
+  {
+   "id": "k8",
+   "art": "regler",
+   "nr": 8,
+   "min": 46,
+   "max": 1500,
+   "log": 1,
+   "mitte": 250
+  },
+  {
+   "id": "k9",
+   "art": "regler",
+   "nr": 9,
+   "min": 0,
+   "max": 1,
+   "vorgabe": 1
+  },
+  {
+   "id": "k10",
+   "art": "regler",
+   "nr": 10,
+   "min": -1,
+   "max": 1,
+   "vorgabe": 0.575
+  },
+  {
+   "id": "k11",
+   "art": "regler",
+   "nr": 11,
+   "min": -1,
+   "max": 1
+  },
+  {
+   "id": "k12",
+   "art": "regler",
+   "nr": 12,
+   "min": 60,
+   "max": 6000,
+   "log": 1,
+   "mitte": 2000
+  },
+  {
+   "id": "k13",
+   "art": "regler",
+   "nr": 13,
+   "min": 0,
+   "max": 1,
+   "mitte": 0.3
+  },
+  {
+   "id": "k14",
+   "art": "regler",
+   "nr": 14,
+   "min": 0,
+   "max": 1,
+   "vorgabe": 0
+  },
+  {
+   "id": "k15",
+   "art": "regler",
+   "nr": 15,
+   "min": 0,
+   "max": 1,
+   "vorgabe": 0
+  },
+  {
+   "id": "k16",
+   "art": "regler",
+   "nr": 16,
+   "min": 0,
+   "max": 1,
+   "vorgabe": 0.3
+  },
+  {
+   "id": "k17",
+   "art": "regler",
+   "nr": 17,
+   "min": 0,
+   "max": 1,
+   "vorgabe": 0
+  },
+  {
+   "id": "k18",
+   "art": "regler",
+   "nr": 18,
+   "min": 0,
+   "max": 1,
+   "vorgabe": 1
+  },
+  {
+   "id": "k19",
+   "art": "regler",
+   "nr": 19,
+   "min": 46,
+   "max": 1500,
+   "log": 1,
+   "mitte": 280
+  },
+  {
+   "id": "k20",
+   "art": "regler",
+   "nr": 20,
+   "min": 0,
+   "max": 1
+  },
+  {
+   "id": "k21",
+   "art": "regler",
+   "nr": 21,
+   "min": -1,
+   "max": 1
+  },
+  {
+   "id": "k22",
+   "art": "regler",
+   "nr": 22,
+   "min": -1,
+   "max": 1
+  },
+  {
+   "id": "k23",
+   "art": "regler",
+   "nr": 23,
+   "min": 0,
+   "max": 1,
+   "vorgabe": 0
+  },
+  {
+   "id": "k24",
+   "art": "regler",
+   "nr": 24,
+   "min": 0.005,
+   "max": 5,
+   "log": 1,
+   "vorgabe": 0
+  },
+  {
+   "id": "k25",
+   "art": "regler",
+   "nr": 25,
+   "min": 0.005,
+   "max": 5,
+   "log": 1,
+   "mitte": 0.12
+  },
+  {
+   "id": "k26",
+   "art": "regler",
+   "nr": 26,
+   "min": 0,
+   "max": 1,
+   "vorgabe": 1
+  },
+  {
+   "id": "k27",
+   "art": "regler",
+   "nr": 27,
+   "min": 0,
+   "max": 1,
+   "vorgabe": 0.7
+  },
+  {
+   "id": "k28",
+   "art": "regler",
+   "nr": 28,
+   "min": 0,
+   "max": 1,
+   "vorgabe": 0
+  },
+  {
+   "id": "k29",
+   "art": "regler",
+   "nr": 29,
+   "min": 0,
+   "max": 1,
+   "vorgabe": 0.4
+  },
+  {
+   "id": "k30",
+   "art": "regler",
+   "nr": 30,
+   "min": -40,
+   "max": 6,
+   "mitte": -3
+  },
+  {
+   "id": "verh",
+   "art": "mul",
+   "b": 0.0038222559260255875
+  },
+  {
+   "id": "verh1",
+   "art": "add",
+   "b": -1
+  },
+  {
+   "id": "kt1",
+   "art": "mul"
+  },
+  {
+   "id": "ktb1",
+   "art": "add",
+   "b": 1
+  },
+  {
+   "id": "cut1",
+   "art": "mul"
+  },
+  {
+   "id": "kt2",
+   "art": "mul"
+  },
+  {
+   "id": "ktb2",
+   "art": "add",
+   "b": 1
+  },
+  {
+   "id": "cut2",
+   "art": "mul"
+  },
+  {
+   "id": "pingv",
+   "art": "mul"
+  },
+  {
+   "id": "lab",
+   "art": "labor",
+   "ueber": 2
+  },
+  {
+   "id": "env",
+   "art": "adsr",
+   "a": 0.002,
+   "d": 0.05,
+   "s": 1,
+   "r": 0.06
+  },
+  {
+   "id": "env1",
+   "art": "add",
+   "b": -1
+  },
+  {
+   "id": "tor",
+   "art": "mul"
+  },
+  {
+   "id": "torg",
+   "art": "add",
+   "b": 1
+  },
+  {
+   "id": "wa0",
+   "art": "mul",
+   "b": 0.5
+  },
+  {
+   "id": "wa",
+   "art": "add",
+   "b": 0.5
+  },
+  {
+   "id": "wb0",
+   "art": "mul",
+   "b": -0.5
+  },
+  {
+   "id": "wb",
+   "art": "add",
+   "b": 0.5
+  },
+  {
+   "id": "ll",
+   "art": "mul"
+  },
+  {
+   "id": "lr",
+   "art": "mul"
+  },
+  {
+   "id": "rr",
+   "art": "mul"
+  },
+  {
+   "id": "rl",
+   "art": "mul"
+  },
+  {
+   "id": "sl",
+   "art": "add"
+  },
+  {
+   "id": "sr",
+   "art": "add"
+  },
+  {
+   "id": "ol",
+   "art": "mul"
+  },
+  {
+   "id": "or",
+   "art": "mul"
+  },
+  {
+   "id": "aus",
+   "art": "ausgang"
+  }
+ ],
+ "kanten": [
+  {
+   "von": "k2.aus",
+   "nach": "lab.reso1"
+  },
+  {
+   "von": "k3.aus",
+   "nach": "lab.hp1"
+  },
+  {
+   "von": "k5.aus",
+   "nach": "lab.fb1"
+  },
+  {
+   "von": "k6.aus",
+   "nach": "lab.kreuz1"
+  },
+  {
+   "von": "k7.aus",
+   "nach": "lab.delay1"
+  },
+  {
+   "von": "k8.aus",
+   "nach": "lab.zeit1"
+  },
+  {
+   "von": "k9.aus",
+   "nach": "lab.mix1"
+  },
+  {
+   "von": "k10.aus",
+   "nach": "lab.modcutoff1"
+  },
+  {
+   "von": "k11.aus",
+   "nach": "lab.modzeit1"
+  },
+  {
+   "von": "k13.aus",
+   "nach": "lab.reso2"
+  },
+  {
+   "von": "k14.aus",
+   "nach": "lab.hp2"
+  },
+  {
+   "von": "k16.aus",
+   "nach": "lab.fb2"
+  },
+  {
+   "von": "k17.aus",
+   "nach": "lab.kreuz2"
+  },
+  {
+   "von": "k18.aus",
+   "nach": "lab.delay2"
+  },
+  {
+   "von": "k19.aus",
+   "nach": "lab.zeit2"
+  },
+  {
+   "von": "k20.aus",
+   "nach": "lab.mix2"
+  },
+  {
+   "von": "k21.aus",
+   "nach": "lab.modcutoff2"
+  },
+  {
+   "von": "k22.aus",
+   "nach": "lab.modzeit2"
+  },
+  {
+   "von": "k23.aus",
+   "nach": "lab.zyklus"
+  },
+  {
+   "von": "k24.aus",
+   "nach": "lab.attack"
+  },
+  {
+   "von": "k25.aus",
+   "nach": "lab.decay"
+  },
+  {
+   "von": "k26.aus",
+   "nach": "lab.amount"
+  },
+  {
+   "von": "k30.aus",
+   "nach": "lab.pegel"
+  },
+  {
+   "von": "note.hz",
+   "nach": "verh.a"
+  },
+  {
+   "von": "verh.aus",
+   "nach": "verh1.a"
+  },
+  {
+   "von": "verh1.aus",
+   "nach": "kt1.a"
+  },
+  {
+   "von": "k4.aus",
+   "nach": "kt1.b"
+  },
+  {
+   "von": "kt1.aus",
+   "nach": "ktb1.a"
+  },
+  {
+   "von": "k1.aus",
+   "nach": "cut1.a"
+  },
+  {
+   "von": "ktb1.aus",
+   "nach": "cut1.b"
+  },
+  {
+   "von": "cut1.aus",
+   "nach": "lab.cutoff1"
+  },
+  {
+   "von": "verh1.aus",
+   "nach": "kt2.a"
+  },
+  {
+   "von": "k15.aus",
+   "nach": "kt2.b"
+  },
+  {
+   "von": "kt2.aus",
+   "nach": "ktb2.a"
+  },
+  {
+   "von": "k12.aus",
+   "nach": "cut2.a"
+  },
+  {
+   "von": "ktb2.aus",
+   "nach": "cut2.b"
+  },
+  {
+   "von": "cut2.aus",
+   "nach": "lab.cutoff2"
+  },
+  {
+   "von": "k27.aus",
+   "nach": "pingv.a"
+  },
+  {
+   "von": "note.vel",
+   "nach": "pingv.b"
+  },
+  {
+   "von": "pingv.aus",
+   "nach": "lab.ping"
+  },
+  {
+   "von": "note.trig",
+   "nach": "lab.trig"
+  },
+  {
+   "von": "note.gate",
+   "nach": "env.gate"
+  },
+  {
+   "von": "note.trig",
+   "nach": "env.trig"
+  },
+  {
+   "von": "env.aus",
+   "nach": "env1.a"
+  },
+  {
+   "von": "env1.aus",
+   "nach": "tor.a"
+  },
+  {
+   "von": "k28.aus",
+   "nach": "tor.b"
+  },
+  {
+   "von": "tor.aus",
+   "nach": "torg.a"
+  },
+  {
+   "von": "k29.aus",
+   "nach": "wa0.a"
+  },
+  {
+   "von": "wa0.aus",
+   "nach": "wa.a"
+  },
+  {
+   "von": "k29.aus",
+   "nach": "wb0.a"
+  },
+  {
+   "von": "wb0.aus",
+   "nach": "wb.a"
+  },
+  {
+   "von": "lab.l",
+   "nach": "ll.a"
+  },
+  {
+   "von": "wa.aus",
+   "nach": "ll.b"
+  },
+  {
+   "von": "lab.r",
+   "nach": "lr.a"
+  },
+  {
+   "von": "wb.aus",
+   "nach": "lr.b"
+  },
+  {
+   "von": "lab.r",
+   "nach": "rr.a"
+  },
+  {
+   "von": "wa.aus",
+   "nach": "rr.b"
+  },
+  {
+   "von": "lab.l",
+   "nach": "rl.a"
+  },
+  {
+   "von": "wb.aus",
+   "nach": "rl.b"
+  },
+  {
+   "von": "ll.aus",
+   "nach": "sl.a"
+  },
+  {
+   "von": "lr.aus",
+   "nach": "sl.b"
+  },
+  {
+   "von": "rr.aus",
+   "nach": "sr.a"
+  },
+  {
+   "von": "rl.aus",
+   "nach": "sr.b"
+  },
+  {
+   "von": "sl.aus",
+   "nach": "ol.a"
+  },
+  {
+   "von": "torg.aus",
+   "nach": "ol.b"
+  },
+  {
+   "von": "sr.aus",
+   "nach": "or.a"
+  },
+  {
+   "von": "torg.aus",
+   "nach": "or.b"
+  },
+  {
+   "von": "ol.aus",
+   "nach": "aus.l"
+  },
+  {
+   "von": "or.aus",
+   "nach": "aus.r"
+  }
+ ]
+}
