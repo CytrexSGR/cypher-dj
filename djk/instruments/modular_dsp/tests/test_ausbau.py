@@ -11,6 +11,7 @@ import copy
 import json
 import pathlib
 import shutil
+import subprocess
 import sys
 
 import numpy as np
@@ -297,12 +298,22 @@ def test_knopfnummer_doppelt_wird_abgelehnt():
 
 # ---- the harness proves itself before it judges a graph ----------------------------------------------------------------------------------
 
+def _ref_da(ref):
+    return subprocess.run(["git", "-C", str(M.REPO), "rev-parse", "--verify", "-q", ref + "^{commit}"], capture_output=True).returncode == 0
+
+
+# the harness proof compares against the work repo's history; a copy without it (the public export) has no old side to compare with
+braucht_verlauf = pytest.mark.skipif(not _ref_da(M.DRIFT_VOR), reason="needs the git history of the work repo (the commit before the Drift knob)")
+
+
+@braucht_verlauf
 def test_harness_drift_aus_besteht(arbeit):
     ok, erg = M.laufen("poly-drift-aus", M.GRAPHEN["poly-drift-aus"], arbeit=arbeit / "h1")
     assert ok, json.dumps(erg)[:2000]
     assert len(erg["null"]) >= 10 and all(r["identisch"] for r in erg["null"].values())
 
 
+@braucht_verlauf
 def test_harness_faengt_einen_unterschied(arbeit):
     # positive control: Drift at 0.25 on the new side against the pre-drift graph must be reported as not equal
     cfg = M.Graph(neu=M.POLY, alt_ref=M.DRIFT_VOR, neue=(28,), null_zustand={28: 0.25})

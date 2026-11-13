@@ -26,7 +26,7 @@ list of vocabulary words that are proposals and need approval (F9).
 | `presets/register.ts` | Register over the store: rebuild, verify (drift), query, agent tool schema |
 | `presets/tool.ts` | Command line: `bauen`, `pruefen`, `frage`, `schema`, `pruefsumme` |
 | `presets/area.ts` | HTTP routes under `/presets` |
-| `presets/factory/<geraet>/<slug>.preset.json` | Factory presets (today: the six compressor presets) |
+| `presets/werk/<geraet>/<slug>.preset.json` | Factory presets (today: the six compressor presets) |
 | `presets/register.json` | Committed register of the factory presets |
 | `public/presets.js`, `public/presets.css` | Browser panel |
 | `tests/presets_*.test.mjs`, `tests/fixtures/presets/` | Tests and fixtures (`register/` holds a small store layout) |
@@ -80,7 +80,7 @@ copied file cannot claim to be a factory preset.
 - **D2 EQ band parameters** carry the suffix nih-plug gives a nested array: `freq_1` ... `freq_8`, `on_1`, `type_1`, ...
   plus `out` and `propq`. Band count is `eq_dsp::BAENDER` (8), checked by the test.
 - **D3 Where presets live.**
-  - Factory: `djk/ui/presets/factory/<geraet>/<slug>.preset.json`, in the repository, read-only for the server.
+  - Factory: `djk/ui/presets/werk/<geraet>/<slug>.preset.json`, in the repository, read-only for the server.
   - User: `~/.config/cypherdj/presets/<geraet>/<slug>.preset.json`; a test instance `a..i` uses
     `~/.config/cypherdj-<i>/presets` (same scheme as `geraeteDatei()` and `controllerOrdner()` in `paths.ts`). Both
     folders can be overridden through `ServerOptionen.presets` (`{ werk, nutzer }`).
@@ -336,7 +336,7 @@ sourced synthesis recipe cards (one per sub-kind) are kept outside the repositor
 
 - **D22 The kern mix tools are devices of their own kind.** `GeraetDef` gets `herkunft` (`'plugin'`, the default, or `'kern'`) and,
   for `'kern'`, `kanalArten` (`quelle`, `bus`); each parameter carries `pfad`, its suffix in the controller table. Device ids
-  `gate`, `utility`, `multiband`, `kanal-limiter` (the names of `docs/presets/geraete/GERAET-*.md`). The source of truth is not a Rust
+  `gate`, `utility`, `multiband`, `kanal-limiter` (the names of `docs/presets/devices/GERAET-*.md`). The source of truth is not a Rust
   file but the header `djk/core/signalbox/include/cypherdj/signalbox/tool_controls.h` (one `{...}` row per line); a parameter name is
   the suffix without the tool prefix and with `/` as `_` (`mb/tief/schwelle` is `tief_schwelle`, `util/phase_l` stays `phase_l`).
   `tests/presets_devices.test.mjs` parses the header with a strict parser (a line it does not understand throws; the real header gives

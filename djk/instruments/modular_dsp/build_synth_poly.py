@@ -4,7 +4,7 @@
     python3 build_synth_poly.py            # writes demos/synth-poly.json (the panel paneele/synth-poly.json is a hand file)
 
 Why a script: the graph has several hundred nodes; one table here keeps the knob numbers and names in one place.
-The device is described in docs/presets/geraete/GERAET-synth-poly.md.
+The device is described in docs/presets/devices/GERAET-synth-poly.md.
 
 Signal flow per voice (stereo from the oscillator on):
 

@@ -12,10 +12,12 @@
 //     flag does not cover ArrayBuffers: new Uint8Array(2e9).fill(7) takes 2 GB of RSS in 0.6 s); a kill by the watcher overshoots by what one tick
 //     allocates (about 100 MB measured). RLIMIT_AS cannot be used: node needs more than 8 GB of address space to start (wasm).
 //   - parallelism: at most MUSTER_KINDER_MAX children at a time, the rest waits; the same pattern asked twice at once runs once
-//   - NOT covered: the network. node --permission has no network switch in Node 22 and unprivileged network namespaces are not available here;
-//     the child deletes fetch/WebSocket/process.getBuiltinModule, but a pattern can still import("node:http").
-//     Known limit: the patterns come from the page and from the hand.
-import { spawn } from 'node:child_process';
+//   - network: the child runs in its own empty network namespace (`bwrap --unshare-net`, no route, its own loopback): a pattern that imports
+//     node:http or node:net reaches nothing, neither the studio API on 127.0.0.1 nor the internet. node --permission itself has no network switch in
+//     Node 22 and plain unshare is refused here, but bwrap is allowed by the AppArmor profile. The child also deletes fetch/WebSocket/process.getBuiltinModule.
+//     Without a usable bwrap (probe at the first use) the child runs as before WITHOUT the network lock; `netzsperre()` says which one it is and a
+//     line goes to stderr once. The watcher below reads the memory of the whole process tree, since bwrap is the parent of node.
+import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -47,6 +49,21 @@ const merke = (a: Anfrage, r: Antwort): void => {
   cache.set(schluessel(a), r);
 };
 process.once('exit', () => { for (const k of lebende) k.kill('SIGKILL'); });
+
+const BWRAP_PROG = '/usr/bin/bwrap';
+const BWRAP = ['--unshare-net', '--die-with-parent', '--ro-bind', '/', '/', '--dev', '/dev', '--proc', '/proc'];
+let sperreStand: boolean | null = null;
+/** true when the children run in an empty network namespace (probed once with bwrap; MUSTER_OHNE_NETZSPERRE=1 switches it off, tests only) */
+export function netzsperre(): boolean {
+  if (sperreStand !== null) return sperreStand;
+  let ok = false;
+  if (process.env.MUSTER_OHNE_NETZSPERRE !== '1') {
+    try { ok = spawnSync(BWRAP_PROG, [...BWRAP, 'true'], { timeout: 5000, stdio: 'ignore' }).status === 0; } catch { ok = false; }
+  }
+  if (!ok) process.stderr.write('muster_lauf: no network lock for the pattern child (bwrap unusable): a pattern could reach the network\n');
+  sperreStand = ok;
+  return ok;
+}
 
 const argumente = (): string[] => [
   `--max-old-space-size=${MUSTER_HEAP_MB}`, '--permission', `--allow-fs-read=${DJK}`, `--allow-fs-read=${path.dirname(strudelPakete())}`, SKRIPT,
@@ -106,16 +123,33 @@ const frei = (): void => {
   if (n) n(); else laufend -= 1;
 };
 
-function rssKB(pid: number): number | null {
+function rssEinzel(pid: number): number | null {
   try {
     const m = /^VmRSS:\s+(\d+) kB/m.exec(fs.readFileSync(`/proc/${pid}/status`, 'utf8'));
     return m ? Number(m[1]) : null;
   } catch { return null; }
 }
+// the process and its descendants (bwrap is the parent of node when the network lock is on)
+function rssKB(pid: number, tiefe = 0): number | null {
+  const selbst = rssEinzel(pid);
+  if (selbst === null) return null;
+  let summe = selbst;
+  if (tiefe < 3) {
+    try {
+      for (const t of fs.readdirSync(`/proc/${pid}/task`)) {
+        const kinder = fs.readFileSync(`/proc/${pid}/task/${t}/children`, 'utf8').split(/\s+/).filter(Boolean);
+        for (const kind of kinder) summe += rssKB(Number(kind), tiefe + 1) ?? 0;
+      }
+    } catch { /* the process ended */ }
+  }
+  return summe;
+}
 
 function wertung(a: Anfrage): Promise<Antwort> {
   return new Promise<Antwort>((fertig) => {
-    const k = spawn(process.execPath, argumente(), { stdio: ['pipe', 'pipe', 'pipe'], env: umgebung() });
+    const k = netzsperre()
+      ? spawn(BWRAP_PROG, [...BWRAP, process.execPath, ...argumente()], { stdio: ['pipe', 'pipe', 'pipe'], env: umgebung() })
+      : spawn(process.execPath, argumente(), { stdio: ['pipe', 'pipe', 'pipe'], env: umgebung() });
     lebende.add(k);
     let aus = '', fehler = '', abbruch: 'zeit' | 'speicher' | null = null, ende = false;
     const toete = (g: 'zeit' | 'speicher'): void => { if (abbruch === null) abbruch = g; k.kill('SIGKILL'); };

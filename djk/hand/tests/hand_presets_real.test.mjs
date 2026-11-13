@@ -20,7 +20,7 @@ const { ruf, CYPHER } = await import(path.join(OB, 'proj_stack.mjs'));
 async function aufbau(t) {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-hand-presets-'));
   t.after(() => fs.rmSync(d, { recursive: true, force: true }));
-  const { url, log } = await stapel(t, { presets: { nutzer: path.join(d, 'user') }, kollektionen: { ordner: path.join(d, 'koll') } });
+  const { url, log } = await stapel(t, { presets: { nutzer: path.join(d, 'nutzer') }, kollektionen: { ordner: path.join(d, 'koll') } });
   const c = new Client({ name: 'test', version: '0' });
   await c.connect(new StdioClientTransport({ command: process.execPath, args: [HAND, '--seite', url] }));
   t.after(() => c.close());

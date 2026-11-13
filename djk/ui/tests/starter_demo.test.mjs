@@ -22,7 +22,7 @@ test('real render of the demo: the mix and each track alone are audible, the mix
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const env = saubereUmgebung(dir);
   fs.mkdirSync(env.HOME, { recursive: true });
-  const kits = path.join(dir, 'kits'), bk = path.join(dir, 'modular');
+  const kits = path.join(dir, 'kits'), bk = path.join(dir, 'baukasten');
   const py = process.env.CYPHERDJ_PYTHON ?? 'python3';
   const e = { ...env, CYPHERDJ_PYTHON: py, CYPHERDJ_KIT_ORDNER: kits, CYPHERDJ_BK_ORDNER: bk };
   for (const stufe of ['graphen', 'kits', 'demo']) {

@@ -1,12 +1,12 @@
 // 1.8 T1a: the `--inserts` option of the recording proof scripts (acceptance_rec2.mjs, acceptance_rec3.mjs, later acceptance_rec4.mjs).
-//   --inserts eq,saett,lim   insert chain (names of the insert pool, in chain order, at most 4) put on ONE track after spur_neu
+//   --inserts eq,saett,lim   insert chain (names of the insert pool, in chain order, at most 5) put on ONE track after spur_neu
 //   --inserts-spur <n>       1-based track the chain goes on; default: the first track that is NOT the armed one (made if there is none).
 //                            The PDC aligns every track to the longest path, so the armed track gets a delay ring either way.
 // Without --inserts the scripts build their project as before (no chain). The PDC effect itself is not checked here.
 import { Fehl } from './w3a_target.mjs';
 
 export const INSERT_POOL = ['komp', 'eq', 'saett', 'lim', 'utility'];   // main:project/commands.ts INS_POOL without host (a host stage needs a plugin, not just a name)
-export const MAX_KETTE = 4;                                    // MAX_INSERTS_PRO_STRANG
+export const MAX_KETTE = 5;                                    // MAX_INSERTS_PRO_STRANG
 export const INSERT_OPTIONEN = { inserts: { type: 'string' }, 'inserts-spur': { type: 'string' } };
 export const INSERT_HILFE = '[--inserts eq,saett,lim [--inserts-spur <n>]]';
 

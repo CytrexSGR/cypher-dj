@@ -79,7 +79,7 @@ test('a broken panel file answers quelle auto with the file problems in fehler',
   });
 });
 
-test('every shipped graph with regler nodes gets an auto panel that passes pruefePanel (74)', () => {
+test('every shipped graph with regler nodes gets an auto panel that passes pruefePanel (77)', () => {
   mitOrdner(BEISPIELE, () => {
     let n = 0;
     for (const d of fs.readdirSync(BEISPIELE).filter((x) => x.endsWith('.json'))) {
@@ -91,7 +91,7 @@ test('every shipped graph with regler nodes gets an auto panel that passes pruef
       assert.deepEqual(pruefePanel(p, name, regler), [], name);
       n++;
     }
-    assert.equal(n, 74);
+    assert.equal(n, 77);
   });
 });
 

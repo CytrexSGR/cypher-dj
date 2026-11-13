@@ -68,11 +68,22 @@ def pruefe_kit(ordner: Path) -> str | None:
 def _pid_lebt(pid: int) -> bool:
     try:
         os.kill(pid, 0)
-    except ProcessLookupError:
+    except (ProcessLookupError, OverflowError):  # a number no process can have counts as gone
         return False
     except PermissionError:
         return True
     return True
+
+
+def raeume_tote(ordner: Path, muster: re.Pattern) -> None:
+    """Removes the folders in `ordner` whose name matches `muster` (group 1 = pid) when that process is gone.
+    Leftovers of a killed run (kill -9 skips every cleanup); names of other shapes and living processes stay."""
+    if not ordner.is_dir():
+        return
+    for p in ordner.iterdir():
+        m = muster.fullmatch(p.name)
+        if m and p.is_dir() and not p.is_symlink() and not _pid_lebt(int(m.group(1))):
+            shutil.rmtree(p, ignore_errors=True)
 
 
 def raeume_alte(wurzel: Path) -> None:
@@ -137,6 +148,25 @@ def kopiere_kit(wurzel: Path, quelle: str, ziel: str) -> str:
         j["name"] = ziel
         (tmp / "kit.json").write_text(json.dumps(j, indent=1) + "\n")
     return _veroeffentliche(wurzel, ziel, schreibe)
+
+
+def pruefe_loop(ordner: Path) -> str | None:
+    """None when the loop folder is whole (loop.json schema 1, the sample file there with the stated size), else the reason."""
+    try:
+        j = json.loads((ordner / "loop.json").read_text())
+    except (OSError, ValueError) as e:
+        return f"loop.json: {e}"
+    if not isinstance(j, dict) or j.get("schema") != 1:
+        return "loop.json: schema is not 1"
+    datei, frames = j.get("datei"), j.get("frames")
+    if not isinstance(datei, str) or "/" in datei or ".." in datei or type(frames) is not int or frames <= 0:
+        return "loop.json: file or frames not usable"
+    try:
+        if (ordner / datei).stat().st_size != frames * 8:
+            return f"{datei}: size does not match frames"
+    except OSError:
+        return f"{datei} missing"
+    return None
 
 
 LOOP_BEATS = (1, 2, 4, 8, 16, 32)

@@ -146,7 +146,7 @@ export class Annahme {
 
   // Vergleichswert für „leiser“ (§10 Stufe 1): das Leiseste aus Ist-Wert und den Zielen aller offenen Teile anderer
   // Pläne an diesem Regler. Gegen den Ist-Wert allein wäre „auf −3“ nach einem angenommenen „auf −20“ leiser gewesen
-  // (gefunden 2026-09-23 mit pruef/folgen/ki_spur_leiser.jsonl).
+  // (gefunden 2026-09-23 mit check/sequences/ki_spur_leiser.jsonl).
   private leisesterWert(pfad: string, ohnePlan: string): number {
     let w = this.spiegel.wert(pfad);
     for (const ps of this.plaene.values()) {

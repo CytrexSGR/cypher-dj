@@ -1,7 +1,7 @@
 // Browser probe returns (1.10 slice 3): add a return, drag a send (one history line), Hall slider, mute, undo, delete, console.
 // Prüfstapel auf einer Prüfinstanz (Kern-Attrappe, Zähl-Relais, Leitstand, echter Seiten-Server) mit der Projekt-Attrappe davor (rechnet
 // Gruppen- und Master-Befehle mit dem echten S2-Kern), kopfloser Chrome über cdp.mjs mit echten Mausereignissen. Kein Ton, kein Fenster, kein Betrieb.
-// Aufruf: node check/probe_returns.mjs [--instanz i]   Ergebnis: pruef/ergebnisse/<zeit>-routing/bericht.md; Exit 1 bei FEHL.
+// Aufruf: node check/probe_returns.mjs [--instanz i]   Ergebnis: check/ergebnisse/<zeit>-routing/bericht.md; Exit 1 bei FEHL.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';

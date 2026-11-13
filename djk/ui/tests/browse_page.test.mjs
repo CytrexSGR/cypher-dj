@@ -69,6 +69,12 @@ test('stoebernUrl: Key, Nachbarn, BPM, Energie', () => {
   assert.equal(stoebernUrl({ typ: 'track', camelot: '', bpm: '', energie: '' }), '/stoebern?typ=track');
 });
 
+// Kanban t_747a905b: the facet without a value ("(none)" node of the tree) travels as feld+wert="" and is not dropped
+test('stoebernUrl: leerer Facettenwert bleibt in der URL', () => {
+  assert.equal(stoebernUrl({ typ: 'track', feld: 'genre', wert: '' }), '/stoebern?typ=track&feld=genre&wert=');
+  assert.equal(stoebernUrl({ typ: 'track', feld: 'genre', wert: 'Techno' }), '/stoebern?typ=track&feld=genre&wert=Techno');
+});
+
 // Review B5: die Bedingung `x.eigen === 0` in baueBaum. Ein Ordner mit eigenen Dateien UND genau einem Unterordner darf nicht
 // mit ihm zusammengezogen werden, sonst wären seine eigenen Dateien über keinen Knoten erreichbar und der Zähler gehörte dem Kind.
 test('baueBaum: Ordner mit eigenen Dateien und genau einem Unterordner wird nicht zusammengezogen (Review B5)', () => {

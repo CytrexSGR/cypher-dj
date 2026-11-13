@@ -110,5 +110,25 @@ H="$O/k4"; mkdir -p "$H"; rm -rf "$O/v"
 "${ENVSAUBER[@]}" HOME="$H" "$START/djk-start" --instanz i --vorlagen-nach "$O/v" > "$O/a.txt" 2> "$O/e.txt"; R=$?
 pruef $([ "$R" = 0 ]; echo $?) "K4 no --strudel, no kit anywhere: return $R"
 
+# K5 --help documents the kit choice: the starter fallback, --strudel-kit* and return 2 in the template mode
+"$START/djk-start" --help > "$O/h.txt" 2>&1; R=$?
+[ "$R" = 0 ] && grep -q -- "^  --strudel-kit NAME" "$O/h.txt" && grep -q -- "--strudel-kit2 NAME" "$O/h.txt" && grep -q -- "--strudel-kit3 NAME" "$O/h.txt"
+pruef $? "K5 --help describes --strudel-kit, --strudel-kit2, --strudel-kit3"
+grep -q "starter kit" "$O/h.txt" && grep -q "djk-starter" "$O/h.txt"; pruef $? "K5 --help names the starter fallback and djk-starter"
+grep -q "In template mode (--vorlagen-nach) with --strudel a missing kit is return 2" "$O/h.txt"
+pruef $? "K5 --help documents return 2 in the template mode (kit missing)"
+
+# K6 the starter check does not need python3: a PATH without it gives the same answers
+NOPY="$O/nopy-bin"; mkdir -p "$NOPY"
+for t in bash cat grep wc tr sed; do ln -s "$(command -v $t)" "$NOPY/$t"; done
+D="$O/k6"; H="$O/k6h"; mkdir -p "$H"
+w6() { env -i PATH="$NOPY" HOME="$H" "$NOPY/bash" -c '. "$1/kit_wahl.sh"; kit_wahl "$2" 0 techno' _ "$START" "$D" 2> "$O/err.txt"; }
+rm -rf "$D"; mkdir -p "$D"; kit "$D" starter
+R=$(w6); RC=$?; [ "$RC" = 0 ] && [ "$R" = starter ]; pruef $? "K6 no python3: valid starter kit.json -> starter (rc $RC, out '$R')"
+for kaputt in '{kaputt' '' '{"schema": 2}' '[1]' '{}' '{"schema": 1' '"schema": 1}'; do
+  rm -rf "$D"; mkdir -p "$D/starter"; printf '%s' "$kaputt" > "$D/starter/kit.json"
+  R=$(w6); RC=$?; [ "$RC" = 2 ] && [ -z "$R" ]; pruef $? "K6 no python3: starter kit.json '$kaputt' -> not chosen (rc $RC)"
+done
+
 echo "ERGEBNIS $OK OK, $FEHL FEHL"
 [ "$FEHL" = 0 ]

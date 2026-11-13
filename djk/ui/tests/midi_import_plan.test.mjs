@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { leseSmf } from '../project/smf.ts';
-import { planeImport, MidiImportFehler, polyphonie, graphFuerProgramm } from '../project/midi_import.ts';
+import { planeImport, MidiImportFehler, polyphonie, graphFuerProgramm, GRAPH_FADER_DB } from '../project/midi_import.ts';
 import { fuehreListeAus } from '../project/commands.ts';
 import { neuesProjekt } from '../project/model.ts';
 import { smf, spur, nameMeta, tempoMeta, taktMeta, programm, an, aus, note } from './helpers/smf_build.mjs';
@@ -141,6 +141,18 @@ test('poly profile: chord parts get a Baukasten graph by GM family (only graphs 
   assert.deepEqual(einfach.spuren.map((s) => s.geraet_text), ['RB-338', 'RB-338']);
   assert.ok(einfach.spuren[0].hinweise.some((h) => h.code === 'midi_mono'));
   assert.equal(graphFuerProgramm(46), 'saite-harfe'); assert.equal(graphFuerProgramm(null), 'juno-pad');
+});
+
+test('poly profile: a track on a Baukasten graph starts 6 dB down, an RB-338 track stays at 0 dB (the sum reached +1 dBTP at 0 dB)', () => {
+  const akkord = [an(0, 60, 80), an(0, 64, 80), an(0, 67, 80), aus(0, 60, 96), aus(0, 64, 0), aus(0, 67, 0)];
+  const d = leseSmf(smf([spur([programm(0, 0), ...akkord]), spur([programm(1, 73), ...note(1, 72, 80, 48)])]));
+  const fader = (plan) => plan.befehle.filter((b) => b.befehl === 'spur_aendern' && b.fader_db !== undefined);
+  const poly = fader(planeImport(d, neuesProjekt('t'), { profil: 'poly' }, ctx));
+  assert.equal(GRAPH_FADER_DB, -6);
+  assert.deepEqual(poly.map((b) => [b.spur_id, b.fader_db]), [['s1', -6]], 'only the graph track (s1), not the RB-338 track');
+  assert.deepEqual(fader(planeImport(d, neuesProjekt('t'), {}, ctx)), [], 'profile einfach: no fader change');
+  const p2 = planeImport(d, neuesProjekt('t'), { profil: 'poly' }, ctx);
+  assert.equal(fuehreListeAus(neuesProjekt('t'), p2.befehle).projekt.spuren[0].fader_db, -6);
 });
 
 test('a note-heavy file stays under the project limits: over 65536 notes is refused in the plan', () => {

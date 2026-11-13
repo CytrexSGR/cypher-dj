@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Turn the agents' patch files into factory presets (factory/modular/<slug>.preset.json). Usage: build_factory_presets.py <werk dir> [patch dir]"""
+"""Turn the agents' patch files into factory presets (werk/baukasten/<slug>.preset.json). Usage: build_factory_presets.py <werk dir> [patch dir]"""
 import json, re, sys, os
 M = sys.argv[2] if len(sys.argv) > 2 else os.path.join(os.path.dirname(__file__), 'patches')
 # name -> (art, unterart, charakter, genre, einsatz, energie)
@@ -52,7 +52,7 @@ B = {
   'Goa Zap': ('fx','texture',['bright','aggressive','metallic'],['trance','progressive'],['build','transition'],4),
   'Sub only': ('bass','sub',['deep','clean','mono'],['dnb','techno','dubstep'],['drop'],2)},
 }
-ziel = os.path.join(sys.argv[1], 'modular'); os.makedirs(ziel, exist_ok=True)
+ziel = os.path.join(sys.argv[1], 'baukasten'); os.makedirs(ziel, exist_ok=True)
 n = 0
 for graph, tab in B.items():
     for p in json.load(open(f'{M}/{graph}-patches.json')):

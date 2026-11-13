@@ -21,12 +21,12 @@ function lade(): Map<string, [number, number]> {
 export const surgeBereich = (name: string): [number, number] | null => lade().get(name) ?? null;
 
 // --- the mirror -------------------------------------------------------------------------------------------------------------------------------
-// The project holds a sparse map per Surge track (geraet.parameter, display values); the host of the slot (wirt-arr<slot>.sock, instrument_host.py) plays what it
-// was told. The mirror sends `fahre` with dauer 0 for every entry whose value differs from what it sent last, and takes an entry that left the map
-// (undo, delete, project change) back to the value the host had before the mirror first touched it. All work runs one job after the other in a chain;
-// a job never throws: a missing host or an error answer is logged and the entry stays pending (it is sent again at the next sync, e.g. before a freeze).
-// slotBereit (plan 1.11 task 17): resolves when the host of a slot is not being swapped (a plugin instrument host going back to Surge); a job waits for it
-// in the background chain, so a patch or parameter never hits the plugin host or a vanishing socket
+// The project holds a sparse map per Surge track (geraet.parameter, display values); the host of the slot (wirt-arr<slot>.sock, instrument_host.py) plays what
+// it was told. The mirror sends `fahre` with dauer 0 for every entry whose value differs from what it sent last, and takes an entry that left the
+// map (undo, delete, project change) back to the value the host had before the mirror first touched it. All work runs one job after the other in a
+// chain; a job never throws: a missing host or an error answer is logged and the entry stays pending (it is sent again at the next sync, e.g.
+// before a freeze). slotBereit (plan 1.11 task 17): resolves when the host of a slot is not being swapped (a plugin instrument host going back to
+// Surge); a job waits for it in the background chain, so a patch or parameter never hits the plugin host or a vanishing socket
 export interface SpiegelOptionen {
   ordner: (() => string) | undefined; log: (e: Record<string, unknown>) => void; fristMs?: number; slotBereit?: (slot: number) => Promise<void>;
 }

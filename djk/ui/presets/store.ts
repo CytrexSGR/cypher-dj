@@ -1,5 +1,5 @@
 // Presets on disk (package 1.16): one JSON file per preset, <wurzel>/<geraet>/<slug>.preset.json, for two roots:
-//   werk   – factory presets, shipped read-only in the repository (djk/ui/presets/factory), never written here
+//   werk   – factory presets, shipped read-only in the repository (djk/ui/presets/werk), never written here
 //   nutzer – user presets, ~/.config/cypherdj[-<instanz>]/presets (paths.ts scheme), written only by this class
 // Writes follow collection.ts: complete temp file, then rename (overwrite) or link (create, refuses an existing name atomically).
 // Read-change-write runs under a lock per device folder (lock.ts) against FOREIGN processes; within one process every change is
@@ -18,7 +18,7 @@ import {
   sortiere, type Eintrag, type Filter, type Herkunft, type NeuEingabe, type Preset,
 } from './model.ts';
 
-export const WERK_VORGABE = path.join(path.dirname(fileURLToPath(import.meta.url)), 'factory');
+export const WERK_VORGABE = path.join(path.dirname(fileURLToPath(import.meta.url)), 'werk');
 export function nutzerVorgabe(i: string = instanz()): string { return path.join(os.homedir(), '.config', i ? `cypherdj-${i}` : 'cypherdj', 'presets'); }
 
 // vok: the vocabulary descriptions are checked against (default presets/vokabular.json, loaded once per store)
@@ -45,7 +45,8 @@ export class PresetSpeicher {
   // ever reaches path.join. Tests replace this method with a broken one to prove the traversal test has teeth.
   pfad(herkunft: Herkunft, geraet: string, slug: string): string {
     const h = pruefeHerkunft(herkunft), g = pruefeGeraet(geraet).id, s = pruefeSlug(slug);
-    return path.join(h === 'factory' ? this.werk : this.nutzer, g, `${s}${ENDUNG}`);
+    const basis = h === 'werk' ? this.werk : this.nutzer;   // not inside the join call: the export's folder renaming would rewrite the literal there
+    return path.join(basis, g, `${s}${ENDUNG}`);
   }
 
   liste(f: Filter = {}): (Eintrag & { notiz: string })[] {
@@ -54,7 +55,8 @@ export class PresetSpeicher {
       if (f.herkunft && f.herkunft !== herkunft) continue;
       for (const geraet of GERAET_IDS) {
         if (f.geraet && f.geraet !== geraet) continue;
-        const ordner = path.join(herkunft === 'factory' ? this.werk : this.nutzer, geraet);
+        const basis = herkunft === 'werk' ? this.werk : this.nutzer;
+        const ordner = path.join(basis, geraet);
         let namen: fs.Dirent[];
         try { namen = fs.readdirSync(ordner, { withFileTypes: true }); } catch { continue; }
         for (const d of namen) {

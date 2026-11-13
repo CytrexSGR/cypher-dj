@@ -10,8 +10,10 @@ machine. Please report what breaks.
 ```sh
 sudo apt install build-essential cmake ninja-build pkg-config \
   libjack-jackd2-dev librubberband-dev libssl-dev \
-  python3 python3-venv ffmpeg pipewire-jack
+  python3 python3-venv ffmpeg pipewire-jack rubberband-cli
 ```
+
+`rubberband-cli` is the `rubberband` program that the workshop's warp calls (the core links the library `librubberband-dev`).
 
 **Real-time limits.** The core locks its audio material in RAM (up to about 4 GiB) and runs with
 real-time priority. Ubuntu's PipeWire package ships the limits for the group `pipewire`

@@ -19,7 +19,7 @@ function kopie(t) {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'presets-r-'));
   t.after(() => fs.rmSync(d, { recursive: true, force: true }));
   fs.cpSync(FIX, d, { recursive: true });
-  const werk = path.join(d, 'factory'), nutzer = path.join(d, 'user');
+  const werk = path.join(d, 'werk'), nutzer = path.join(d, 'nutzer');
   return { d, werk, nutzer, s: new PresetSpeicher({ werk, nutzer, vok }) };
 }
 const aendere = (f, fn) => { const j = JSON.parse(fs.readFileSync(f, 'utf8')); fn(j); fs.writeFileSync(f, JSON.stringify(j)); };
@@ -33,14 +33,14 @@ test('rebuild: exactly what the store holds, stable ids from origin, device and 
   assert.deepEqual(register.vokabular, { version: vok.version, pruefsumme: vok.pruefsumme });
   const h = register.eintraege.find((e) => e.id === 'werk:hall/big-hall');
   assert.deepEqual({ ...h, hash: h.hash.length, klang: h.klang.length }, {
-    id: 'werk:hall/big-hall', herkunft: 'werk', geraet: 'hall', slug: 'big-hall', name: 'Big Hall', pfad: 'reverb/big-hall.preset.json', tags: [], familie: 'effekt',
+    id: 'werk:hall/big-hall', herkunft: 'werk', geraet: 'hall', slug: 'big-hall', name: 'Big Hall', pfad: 'hall/big-hall.preset.json', tags: [], familie: 'effekt',
     art: 'reverb', unterart: 'hall', charakter: ['wide', 'wet', 'airy'], genre: ['trance', 'ambient'], einsatz: ['breakdown', 'transition'],
     energie: 2, text: 'Long bright hall tail for washing out a lead before the next drop.', hash: 64, klang: 64,
   });
   // the user copy of the acid bass has the same sound: reported, both stay in the register
   assert.deepEqual(doppelt, [{ art: 'klang', ids: ['nutzer:rb338/acid-kopie', 'werk:rb338/acid-bass'] }]);
   // same content → same register (key order and whitespace do not matter)
-  const f = path.join(werk, 'modular', 'warm-pad.preset.json');
+  const f = path.join(werk, 'baukasten', 'warm-pad.preset.json');
   fs.writeFileSync(f, JSON.stringify(Object.fromEntries(Object.entries(JSON.parse(fs.readFileSync(f, 'utf8'))).reverse())));
   assert.deepEqual(bauen(s).register, register);
   // origins: only the ones asked for, each once
@@ -62,7 +62,7 @@ test('rebuild: a preset with an invented tag is left out and reported, with the 
 
 test('rebuild: damaged files are invalid with the store reason; names the store does not accept are not presets at all', (t) => {
   const { werk, s } = kopie(t);
-  const pad = path.join(werk, 'modular', 'warm-pad.preset.json');
+  const pad = path.join(werk, 'baukasten', 'warm-pad.preset.json');
   fs.copyFileSync(pad, path.join(werk, 'baukasten', 'Warm Pad.preset.json'));   // not a slug: not a preset
   fs.copyFileSync(pad, path.join(werk, 'lose.preset.json'));                       // not in a device folder
   fs.mkdirSync(path.join(werk, 'hall2'));
@@ -70,7 +70,7 @@ test('rebuild: damaged files are invalid with the store reason; names the store 
   fs.writeFileSync(path.join(werk, 'baukasten', 'notiz.json'), '{}');              // not a preset file
   fs.copyFileSync(pad, path.join(werk, 'hall', 'falscher-ordner.preset.json'));    // a modular preset in the hall folder
   fs.writeFileSync(path.join(werk, 'baukasten', 'kaputt.preset.json'), '{"schema": 1,');
-  aendere(path.join(werk, 'reverb', 'big-hall.preset.json'), (j) => { j.schema = 2; });
+  aendere(path.join(werk, 'hall', 'big-hall.preset.json'), (j) => { j.schema = 2; });
   aendere(path.join(werk, 'rb338', 'acid-bass.preset.json'), (j) => { j.beschreibung.art = 'compressor'; j.beschreibung.unterart = 'bus'; });
   const { ungueltig, register } = bauen(s, ['werk']);
   assert.deepEqual(ungueltig.map((u) => [u.id, u.fehler.map((e) => e.code).join()]), [
@@ -98,11 +98,11 @@ function driftSzenario(t, pruefeFn) {
   const { s, werk, nutzer } = kopie(t);
   fs.rmSync(path.join(nutzer, 'rb338', 'acid-kopie.preset.json'));
   const { register } = bauen(s);
-  fs.rmSync(path.join(werk, 'reverb', 'big-hall.preset.json'));                                                                  // missing
-  fs.copyFileSync(path.join(nutzer, 'modular', 'mein-lead.preset.json'), path.join(nutzer, 'baukasten', 'mein-lead-2.preset.json'));   // orphaned
+  fs.rmSync(path.join(werk, 'hall', 'big-hall.preset.json'));                                                                  // missing
+  fs.copyFileSync(path.join(nutzer, 'baukasten', 'mein-lead.preset.json'), path.join(nutzer, 'baukasten', 'mein-lead-2.preset.json'));   // orphaned
   aendere(path.join(werk, 'rb338', 'acid-bass.preset.json'), (j) => { j.werte.cutoff = 350; });                                // sound changed
-  aendere(path.join(werk, 'modular', 'warm-pad.preset.json'), (j) => { j.beschreibung.energie = 2; j.name = 'Warmer Pad'; });
-  aendere(path.join(nutzer, 'modular', 'mein-lead.preset.json'), (j) => { j.beschreibung.genre = ['schranz']; });            // now invalid
+  aendere(path.join(werk, 'baukasten', 'warm-pad.preset.json'), (j) => { j.beschreibung.energie = 2; j.name = 'Warmer Pad'; });
+  aendere(path.join(nutzer, 'baukasten', 'mein-lead.preset.json'), (j) => { j.beschreibung.genre = ['schranz']; });            // now invalid
   const d = pruefeFn(register, s);
   assert.equal(d.sauber, false);
   assert.deepEqual(d.fehlend, ['werk:hall/big-hall']);
@@ -245,7 +245,7 @@ test('command line: bauen writes, pruefen reports drift with exit 1, frage rejec
   assert.equal(hauptprogramm(['bauen', ...opt], (s) => aus.push(s)), 0);
   assert.match(aus[0], /^3 presets written/);
   assert.equal(hauptprogramm(['pruefen', ...opt], () => {}), 0);
-  fs.rmSync(path.join(werk, 'reverb', 'big-hall.preset.json'));
+  fs.rmSync(path.join(werk, 'hall', 'big-hall.preset.json'));
   const p = [];
   assert.equal(hauptprogramm(['pruefen', ...opt], (s) => p.push(s)), 1);
   assert.deepEqual(JSON.parse(p[0]).fehlend, ['werk:hall/big-hall']);
@@ -281,7 +281,7 @@ test('preset id: PRESET_ID (zero-import file, re-exported) matches every registe
 
 test('klang: two baukasten presets with equal values and different graphs are no duplicate; equal graph is', (t) => {
   const { s, nutzer } = kopie(t);
-  const f = path.join(nutzer, 'modular', 'mein-lead.preset.json');
+  const f = path.join(nutzer, 'baukasten', 'mein-lead.preset.json');
   const j = JSON.parse(fs.readFileSync(f, 'utf8'));
   fs.writeFileSync(path.join(nutzer, 'baukasten', 'anderer-graph.preset.json'), JSON.stringify({ ...j, name: 'Anderer Graph', graph: 'zweiter' }));
   assert.deepEqual(bauen(s).doppelt.filter((d) => d.ids.some((i) => i.includes('baukasten'))), []);

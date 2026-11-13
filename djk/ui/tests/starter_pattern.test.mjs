@@ -8,11 +8,14 @@ import path from 'node:path';
 import { MusterBibliothek } from '../pattern_library.ts';
 import { MUSTER_REF } from '../collection.ts';
 import { REPO_PFADE } from '../paths.ts';
-import { kompiliere } from '../../generator/src/compile.mjs';
 import { fuehreListeAus } from '../project/commands.ts';
-import { musterZuEreignissen } from '../../generator/src/pattern_ereignisse.mjs';
 import { specProjekt } from './support/project.mjs';
 import { stapel, hole, post } from './support/media_library.mjs';
+
+// The Strudel packages are optional (INSTALL section 5; STRUDEL_PAKETE redirects them), like in server.test.mjs: without them the one test that
+// compiles a pattern is skipped, and the compiler is imported only there (a static import would fail the whole file).
+const STRUDEL_PAKETE = process.env.STRUDEL_PAKETE ?? path.join(os.homedir(), 'strudel', 'packages');
+const OHNE_STRUDEL = fs.existsSync(path.join(STRUDEL_PAKETE, 'core')) ? false : `Strudel packages missing (${STRUDEL_PAKETE}/core; INSTALL section 5, optional)`;
 
 const NAMEN = ['starter-four', 'starter-break', 'starter-hats'];
 const STARTER = REPO_PFADE.musterStarter;
@@ -60,7 +63,9 @@ test('speichere() never writes into the starter folder', async (t) => {
   assert.ok(fs.existsSync(path.join(eigen, 'meins.js')));
 });
 
-test('every starter pattern passes the djk-muster check and every sample name resolves in kit starter', () => {
+test('every starter pattern passes the djk-muster check and every sample name resolves in kit starter', { skip: OHNE_STRUDEL }, async () => {
+  const { kompiliere } = await import('../../generator/src/compile.mjs');
+  const { musterZuEreignissen } = await import('../../generator/src/pattern_ereignisse.mjs');
   const kits = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', '..', 'starter', 'kits.json'), 'utf8'));
   const klaenge = kits.find((k) => k.name === 'starter').klaenge.map((k) => ({ name: k.name, note: k.note }));
   for (const n of NAMEN) {

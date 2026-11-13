@@ -6,7 +6,7 @@
 // Schritt-Arten: sende, hand, ws_sende, aktion, erwarte, erwarte_nicht, erlaube, wert, notiz (FORMAT.md 1 bis 16).
 // ws_sende darf verbindung tragen (Vorgabe "haupt"): je Name eine WS-Verbindung; ein typ hallo öffnet sie neu.
 // Eine notiz-Zeile mit leitstand_args (Liste) gibt dem Leitstand dieser Folge weitere Aufrufparameter (FORMAT.md Punkt 10).
-// aktion: kern_kill9 (FORMAT.md), dazu nur für Folgen unter djk/conductor/check/folgen/: leitstand_kill9
+// aktion: kern_kill9 (FORMAT.md), dazu nur für Folgen unter djk/conductor/check/sequences/: leitstand_kill9
 // (SIGKILL, alle WS-Verbindungen des Läufers sind danach zu) und leitstand_start (neuer Leitstand, gleiche set_id;
 // mit ohne_set_id: true ohne --set-id, wie ein Neustart durch systemd).
 // Ports: frei vom Betriebssystem vergeben; nichts unter /dev/shm (Arbeitsbestand und Zustand im eigenen tmp-Ordner).

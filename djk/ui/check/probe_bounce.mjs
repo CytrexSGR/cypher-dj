@@ -2,7 +2,7 @@
 // the expected body, Use Whole Lane sends ONE /proj/aendern with comp_waehlen, and the console stays clean. Test stack on a test instance (core
 // double, counting relay, leitstand, real page server) with the project double in front (proj_mock.mjs records /proj/bounce and answers it
 // without a change), headless Chrome through cdp.mjs with real mouse events at 1920x1080. No sound, no window, no operation.
-// Call: node check/probe_bounce.mjs [--instanz c]   Result: pruef/ergebnisse/<time>-bounce/bericht.md; exit 1 on FEHL.
+// Call: node check/probe_bounce.mjs [--instanz c]   Result: check/ergebnisse/<time>-bounce/bericht.md; exit 1 on FEHL.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

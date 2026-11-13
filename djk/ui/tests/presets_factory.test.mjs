@@ -13,7 +13,7 @@ import { kernKompAusPreset } from '../public/presets.js';
 function werkSpeicher(t) {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'presets-w-'));
   t.after(() => fs.rmSync(d, { recursive: true, force: true }));
-  return new PresetSpeicher({ werk: WERK_VORGABE, nutzer: path.join(d, 'user') });
+  return new PresetSpeicher({ werk: WERK_VORGABE, nutzer: path.join(d, 'nutzer') });
 }
 
 test('factory presets: all valid, all described, no duplicate sound', (t) => {

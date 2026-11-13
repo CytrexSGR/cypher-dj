@@ -8,7 +8,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from . import tools as werkzeuge
+from . import storage as ablage, tools as werkzeuge
 from .tools import WerkzeugFehlt
 
 GRAPH_NAME = re.compile(r"^[a-z0-9_-]{1,32}$")  # same rule as the page server (graphs.ts:18) and the core
@@ -22,7 +22,7 @@ def graphen_ordner() -> Path:
 
 
 def quellen_der_beispiele(djk: Path) -> list[Path]:
-    """Every beispiele/*.json and demos/recipes/*.json of baukasten_dsp except MANIFEST.json, sorted."""
+    """Every demos/*.json and demos/recipes/*.json of baukasten_dsp except MANIFEST.json, sorted."""
     wurzel = djk / "instruments" / "modular_dsp" / "demos"
     alle = sorted(wurzel.glob("*.json")) + sorted((wurzel / "recipes").glob("*.json"))
     return [p for p in alle if p.name != "MANIFEST.json"]
@@ -38,6 +38,9 @@ def schreibe_wenn_fehlt(daten: bytes, ziel: Path) -> bool:
     try:
         with os.fdopen(fd, "wb") as f:
             f.write(daten)
+        umask = os.umask(0)  # mkstemp makes 0600: a copy gets the mode any new file would get
+        os.umask(umask)
+        os.chmod(tmp, 0o666 & ~umask)
         try:
             os.link(tmp, ziel)
         except FileExistsError:
@@ -76,8 +79,9 @@ def installiere_proben(ziel: Path) -> list[str]:
         return []
     programm = werkzeuge.cargo_beispiel("erzeuge_probe")
     samples.mkdir(parents=True, exist_ok=True)
+    ablage.raeume_tote(samples, re.compile(r"\.proben-(\d+)-.*"))
     neu: list[str] = []
-    with tempfile.TemporaryDirectory(prefix=".proben-", dir=samples) as tmp:
+    with tempfile.TemporaryDirectory(prefix=f".proben-{os.getpid()}-", dir=samples) as tmp:
         r = subprocess.run(["nice", "-n", "10", str(programm), tmp], capture_output=True, text=True)
         if r.returncode != 0:
             raise WerkzeugFehlt("erzeuge_probe", "sample generator failed: " + (r.stderr.strip() or f"exit {r.returncode}"))

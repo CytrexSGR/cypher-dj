@@ -7,7 +7,7 @@ import path from 'node:path';
 import { liveAufbau } from './support/live_module.mjs';
 import { modulId, modulBasis, speichereModul } from '../project/module_storage.ts';
 
-const OHNE_GPU = !fs.existsSync('/dev/nvidia0') && 'no NVIDIA GPU: stems run on the GPU only';
+import { OHNE_GPU } from './support/stems_voraussetzung.mjs';   // no GPU, or a Python without the werkstatt: skipped, not hung
 
 test('export saves modul.json with the origin, the tree and a copy of the loop WAV under audio/<sha>.wav', async (t) => {
   const z = await liveAufbau(t);

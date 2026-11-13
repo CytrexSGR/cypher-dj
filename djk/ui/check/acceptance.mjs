@@ -1,6 +1,6 @@
 // Abnahme Scheibe 60m (Plan Task 4). Stapel: Kern-Attrappe + Zähl-Relais + Leitstand + Seiten-Server + Anzeige-Sonde;
 // Browser kopflos über CDP, echte Maus-Ereignisse. Kein Ton (Attrappe schreibt keinen, Chrome --mute-audio).
-// Aufruf: node check/acceptance.mjs --instanz <a..i> [--bild <png>]   → pruef/ergebnisse/<zeit>/bericht.md, ergebnis.json
+// Aufruf: node check/acceptance.mjs --instanz <a..i> [--bild <png>]   → check/ergebnisse/<zeit>/bericht.md, ergebnis.json
 // W0-Nachtrag 2026-10-15: --instanz ist Pflicht (Spec D1 §4: a/b Kern, c/d Server, e/f Seite, i Browser-Probe, g Abnahme, h Hand).
 // Ohne Angabe lief die Probe stillschweigend auf g und kollidierte mit der Abnahme-Instanz (gemessen 15.10., intern).
 import fs from 'node:fs';

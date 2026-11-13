@@ -9,7 +9,7 @@ import re
 import sys
 
 HIER = os.path.dirname(os.path.abspath(__file__))
-WERK = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HIER, "..", "..", "ui", "presets", "factory")
+WERK = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HIER, "..", "..", "ui", "presets", "werk")
 
 # the new knobs at their vorgabe (what every older preset gets), changed per preset below
 NEU = {25: 0.5, 26: 0.5, 27: 0.5, 28: 0.0, 29: 0.6667, 30: 0.5, 31: 0.5, 32: 0.6157, 33: 0.0, 34: 0.0, 35: 0.0, 36: 0.5, 37: 0.0,
@@ -35,7 +35,7 @@ PRESETS = [
                       "text": "The dark rolling bass with a feedback delay and a long hall behind it, a shorter amp decay and some key follow: a rumble that echoes away."}},
 ]
 
-os.makedirs(os.path.join(WERK, "modular"), exist_ok=True)
+os.makedirs(os.path.join(WERK, "baukasten"), exist_ok=True)
 for p in PRESETS:
     werte = {**p["alt"], **NEU, **p["neu"]}
     slug = "synth-neuro-" + re.sub(r"[^a-z0-9]+", "-", p["name"].lower()).strip("-")
@@ -44,6 +44,6 @@ for p in PRESETS:
            "beschreibung": p["beschreibung"], "tags": ["synth-neuro"],
            "notiz": "Measured by level and pitch on render, not yet heard (2026-11-12).",
            "angelegt": "2026-11-12T00:00:00.000Z", "geaendert": "2026-11-12T00:00:00.000Z"}
-    with open(os.path.join(WERK, "modular", slug + ".preset.json"), "w") as f:
+    with open(os.path.join(WERK, "baukasten", slug + ".preset.json"), "w") as f:
         f.write(json.dumps(doc, indent=1, ensure_ascii=False) + "\n")
     print(slug)

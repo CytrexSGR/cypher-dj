@@ -174,7 +174,7 @@ export interface ServerOptionen {
   geraete?: GeraeteOptionen;   // I08: Pfade und Erkennung (Tests geben eigene)
   lernen?: LernenOptionen;     // S19: controller folder (lernen.json) and the devices file (Tests give their own)
   kollektionen?: KollektionBereichOptionen;   // 1.16 rest: collections folder (default ~/.config/cypherdj[-<i>]/kollektionen); tests give their own
-  presets?: PresetOptionen;    // 1.16: preset folders (werk = factory presets/factory, nutzer = user ~/.config/cypherdj[-<i>]/presets), vocabulary and factory register; tests give their own
+  presets?: PresetOptionen;    // 1.16: preset folders (werk = factory presets/werk, nutzer = user ~/.config/cypherdj[-<i>]/presets), vocabulary and factory register; tests give their own
   proj?: ProjOptionen;   // D1 S2: Projektwurzel, Arbeitsordner (Vorgaben je Instanz, areas/proj/session.ts)
   mediathek?: string;    // Mediathek T2: Vorgabe $CYPHERDJ_MEDIATHEK (nur lesen; fehlt sie: 503 mediathek_fehlt)
   korrekturen?: string;  // Slice 3b: Bestand des Decks für die Eins-Korrekturen; Vorgabe nur im Betrieb: bestand; eine Prüfinstanz (a..i) schreibt nur ausdrücklich
@@ -2880,7 +2880,9 @@ export class Oberflaeche {
       const k = this.katalogEintrag(p.material_id as string);
       if (k && k.typ !== 'track') return { ...p, titel: k.name, kuenstler: null, mix: null, bpm: k.bpm, camelot: k.camelot, energie: null,
         genre: null, dauer_s: k.dauer_s, status: 'kein_track', laden_mid: null, eintrag: this.stoebernTreffer(k, new Set()) };
-      const f = felder.get(p.material_id as string);
+      // Without the media library (another machine) the own catalog tells what the track is: same fields, a track whose file is there is 'prepare'
+      const f = felder.get(p.material_id as string) ?? (k ? { titel: k.titel ?? k.name, kuenstler: k.kuenstler, mix: k.mix, bpm: k.bpm, camelot: k.camelot,
+        energie: k.energie, genre: k.genre, dauer_s: k.dauer_s, bestand_mid: null, pfad_da: !!k.pfad && fs.existsSync(k.pfad) } : undefined);
       const lauf = this.vorbereiter.stand(p.material_id);
       let status = 'unbekannt', laden: string | null = null, grund: string | undefined, grundStufe: string | undefined;
       if (f?.bestand_mid) { status = 'ready'; laden = f.bestand_mid; }

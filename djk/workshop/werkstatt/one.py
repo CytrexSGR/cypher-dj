@@ -14,6 +14,7 @@ Minderheit). Darum fuehrt die Entscheidung den Mehrheitsanteil mit und zieht, wo
 Kick-Kriterium (erster Kick im Kartenbereich = Takt-Eins) greift, bei Halbtakt-Abweichung die Kick-Lage vor."""
 import numpy as np
 from scipy import signal
+from scipy.fft import next_fast_len
 
 MEHRHEIT_SCHWELLE = 0.85     # Anteil der Mehrheits-Lage an allen Downbeats im Kartenbereich
 KICK_BESTAETIGT_MIN = 0.5     # darunter hat beat_this keine Meinung: ein Kick-Treffer ist kein zweiter Zeuge (Review B5)
@@ -58,7 +59,7 @@ def _kickstaerke(x, sr, karte):
     [-20 ms, +60 ms] um den Schlag. Detektor aus ~/messungen/2026-10-11-grid-phase/skripte/erstkick.py."""
     x = np.asarray(x, dtype=float)
     y = signal.sosfiltfilt(signal.butter(4, [40, 120], "bandpass", fs=sr, output="sos"), x)
-    env = signal.sosfiltfilt(signal.butter(2, 30, fs=sr, output="sos"), np.abs(signal.hilbert(y)))
+    env = signal.sosfiltfilt(signal.butter(2, 30, fs=sr, output="sos"), np.abs(signal.hilbert(y, N=next_fast_len(len(y)))[:len(y)]))
     n = int(np.floor(karte.beats[-1]))
     t = karte.sekunde_bei(np.arange(0, n))
     a = np.clip(np.rint((t - 0.02) * sr).astype(int), 0, len(env))

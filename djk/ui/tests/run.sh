@@ -16,7 +16,7 @@ case "$MODE" in
     node --test --test-concurrency=1 $SERIAL > /tmp/djk-test-serial.$$.log 2>&1 & Q=$!
     wait $P; RP=$?; wait $Q; RQ=$?
     for s in parallel serial; do echo "== $s"; grep -E '^# (tests|pass|fail)' /tmp/djk-test-$s.$$.log; grep -E '^not ok' /tmp/djk-test-$s.$$.log | head -20; done
-    rm -f /tmp/djk-test-parallel.$$.log /tmp/djk-test-serial.$$.log
-    [ $RP = 0 ] && [ $RQ = 0 ] ;;
+    if [ $RP = 0 ] && [ $RQ = 0 ]; then rm -f /tmp/djk-test-parallel.$$.log /tmp/djk-test-serial.$$.log; exit 0; fi
+    echo "failed: the full TAP logs stay in /tmp/djk-test-parallel.$$.log and /tmp/djk-test-serial.$$.log"; exit 1 ;;
   *) echo "usage: tests/run.sh fast|full"; exit 2 ;;
 esac

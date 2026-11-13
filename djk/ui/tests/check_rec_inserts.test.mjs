@@ -16,7 +16,7 @@ test('leseInserts: unknown name, empty entry, too long, bad track number all thr
   assert.throws(() => leseInserts({ inserts: 'eq,hall' }), /unknown insert hall/);
   assert.throws(() => leseInserts({ inserts: 'eq,,lim' }), /empty name/);
   assert.throws(() => leseInserts({ inserts: '' }), /empty name/);
-  assert.throws(() => leseInserts({ inserts: 'eq,eq,eq,eq,eq' }), /at most 4/);
+  assert.throws(() => leseInserts({ inserts: 'eq,eq,eq,eq,eq,eq' }), /at most 5/);
   for (const s of ['0', '-1', 'x', '1.5']) assert.throws(() => leseInserts({ inserts: 'eq', 'inserts-spur': s }), /track number/);
 });
 

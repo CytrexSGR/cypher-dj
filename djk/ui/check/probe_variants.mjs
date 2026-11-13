@@ -1,7 +1,7 @@
 // Browserprobe Varianten (Paket 1.18, E-c): Tastenreihe A, B, C je Gruppe in der Transportleiste, Klick schaltet über variante_waehlen (AK-c, Seite).
 // Prüfstapel auf einer Prüfinstanz (Kern-Attrappe, Zähl-Relais, Leitstand, echter Seiten-Server) mit der Projekt-Attrappe davor (rechnet
 // variante_waehlen mit dem echten S2-Kern), kopfloser Chrome über cdp.mjs mit echten Mausereignissen. Kein Ton, kein Fenster, kein Betrieb.
-// Aufruf: node check/probe_variants.mjs [--instanz i]   Ergebnis: pruef/ergebnisse/<zeit>-varianten/bericht.md; Exit 1 bei FEHL.
+// Aufruf: node check/probe_variants.mjs [--instanz i]   Ergebnis: check/ergebnisse/<zeit>-varianten/bericht.md; Exit 1 bei FEHL.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';

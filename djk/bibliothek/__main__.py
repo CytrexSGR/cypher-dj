@@ -7,7 +7,8 @@
 
 Return: 0 ok, 2 usage / config / no read tool, 3 foreign catalog at the target (left untouched), 4 a root is missing,
 5 the file system cannot take the finished catalog (no hard links, no permission),
-6 the scan found nothing but the existing catalog has rows (not emptied; --leer-erlaubt allows it).
+6 the scan found nothing, or lost the rows below a folder it could not read, but the existing catalog has rows
+(not replaced; --leer-erlaubt allows it).
 """
 from __future__ import annotations
 
@@ -19,7 +20,7 @@ import sys
 from pathlib import Path
 
 from . import catalog_build as katalog_bau
-from .catalog_build import FremderKatalog, LeererBau, WurzelFehlt, ZielNichtSchreibbar, eigener_katalog, kanonisch
+from .catalog_build import FremderKatalog, LeererBau, LueckenBau, WurzelFehlt, ZielNichtSchreibbar, eigener_katalog, kanonisch
 from .config import TYPEN, Konfig, KonfigFehler, Wurzel, katalog_ziel, konfig_pfad, lies_konfig, schreibe_konfig
 from .features import MerkmalCache
 from starter.tools import WerkzeugFehlt
@@ -160,6 +161,10 @@ def cmd_bauen(a: argparse.Namespace) -> int:
         fehler(f"library root is missing: {e.pfad} (drive unplugged? nothing was changed; "
                f"{NAME} weg <folder> removes it, bauen --ohne-fehlende builds without it)")
         return 4
+    except LueckenBau as e:
+        fehler(f"a folder could not be read (permissions? a share that dropped?): the scan found {e.neu} rows but {e.ziel} has {e.zeilen}. "
+               f"Nothing was changed. {NAME} bauen --leer-erlaubt replaces the catalog on purpose.")
+        return 6
     except LeererBau as e:
         fehler(f"the scan found no audio files but {e.ziel} has {e.zeilen} rows (drive unplugged? empty mount point?). "
                f"Nothing was changed. {NAME} bauen --leer-erlaubt empties the catalog on purpose.")

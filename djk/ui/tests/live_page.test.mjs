@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { neuesProjekt } from '../project/model.ts';
 import { baueModul, baueNeuePfade, liveSlots } from '../project/live.ts';
 import { modulAnsicht, modulHtml, exportKnopf, faderBefehl, oeffneLive, exportiere, leere, trenneNeu, LEER_TAKTE, setzeBlend, passeTonartAn, tonartAnsicht, cueGriff, cueGriffe, cueAn } from '../public/live_module.js';
+const importVon = (datei, vor = './') => new RegExp(`from '${(vor + datei).replace(/[.]/g, '\\.')}'`);   // the file name stays a plain literal so the export's file renaming rewrites it too (a regex literal escapes the dot and escapes the rewrite)
 
 const HIER = path.dirname(fileURLToPath(import.meta.url));
 const HASH = 'c'.repeat(64), D = (n) => ({ sha256: n.repeat(64), pfad: `/x/${n}.wav` });
@@ -130,7 +131,7 @@ test('wiring: EXPORT button on decks 1 to 3 in the loop row, LIVE button and the
   const app = fs.readFileSync(path.join(HIER, '..', 'public', 'app.js'), 'utf8');
   const html = fs.readFileSync(path.join(HIER, '..', 'public', 'index.html'), 'utf8');
   const css = fs.readFileSync(path.join(HIER, '..', 'public', 'style.css'), 'utf8');
-  assert.match(app, /from '\.\/live_modul\.js'/);
+  assert.match(app, importVon('live_module.js'));
   assert.match(app, /data-exportloop/);
   assert.match(html, /data-liveoeffnen/);
   assert.match(html, /id="live-panel"/);

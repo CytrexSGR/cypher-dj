@@ -15,6 +15,7 @@ import { aendere } from '../../project/history.ts';
 import { baueKatalog } from './catalog.mjs';
 import { wav, warteBis } from './proj_context.mjs';
 import { starteWirtProzess, schreibeWirtStatus } from './instrument_host_process.mjs';
+const DATEN = 'daten';   // plain literal on purpose: fixtures/proj_lage_vor_t7.json names <tmp>/daten/kick.wav, the export's folder renaming must not touch this one
 
 export const RENDER_ATTRAPPE = [process.execPath, path.join(import.meta.dirname, 'render_mock.mjs')];
 
@@ -50,7 +51,7 @@ export async function aufbau(t, { tempo = 120, kern = { art: 'ok' }, abgriff = {
   const wirtDir = path.join(tmp, 'wirt');
   fs.mkdirSync(wirtDir);
   if (mitWirt) schreibeWirtStatus(wirtDir, { pid: (await starteWirtProzess(t)).pid });   // S3-Fix W2: bereit:true und eine lebende pid namens instrument_host.py
-  const kick = wav(path.join(tmp, 'data'), 'kick.wav', 0.5);
+  const kick = wav(path.join(tmp, DATEN), 'kick.wav', 0.5);
   const katalog = baueKatalog(path.join(tmp, 'kat'), [{ n: 1, typ: 'oneshot', pfad: kick, dauer_s: 0.5, sha: 'a'.repeat(64) }]);
   const protokoll = { gesendet: [], reihenfolge: [], uebernommen: [], verteilt: [], log: [], wiedergaben: [] };
   const zustand = { quelle: 'andreas', ki: false, kern, abgriff, quittungen: new Map(), id: 0, zu: false, kernNr: -1, kernStatus: 0, verzoegerLaden: 0 };

@@ -121,8 +121,8 @@ test('panel html escapes names and shows edit buttons only for user presets', ()
 // ---------- the panel against the real routes ----------
 async function stapel(t) {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'presets-s-'));
-  const werk = path.join(d, 'factory'), nutzer = path.join(d, 'user');
-  fs.mkdirSync(path.join(werk, 'comp'), { recursive: true });
+  const werk = path.join(d, 'werk'), nutzer = path.join(d, 'nutzer');
+  fs.mkdirSync(path.join(werk, 'komp'), { recursive: true });
   fs.copyFileSync(path.join(import.meta.dirname, 'fixtures', 'presets', 'gueltig.json'), path.join(werk, 'komp', 'test-glue.preset.json'));
   const router = new Router();
   router.melde(presetsBereich({ log: () => {}, quelle: () => 'andreas' }, { werk, nutzer }));
@@ -304,7 +304,7 @@ import { planeAnwendung } from '../presets/apply.ts';
 test('page copy kernKompAusPreset equals the server plan for a channel, for every factory komp preset (T3b.1)', (t) => {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'presets-u3b-'));
   t.after(() => fs.rmSync(d, { recursive: true, force: true }));
-  const s = new PresetSpeicher({ werk: WERK_VORGABE, nutzer: path.join(d, 'user') });
+  const s = new PresetSpeicher({ werk: WERK_VORGABE, nutzer: path.join(d, 'nutzer') });
   const liste = s.liste({ herkunft: 'werk', geraet: 'komp' });
   assert.equal(liste.length, 6, 'a pin over an empty list proves nothing');
   for (const e of liste) {
@@ -513,8 +513,8 @@ import { neuesProjekt } from '../project/model.ts';
 import { fuehreListeAus } from '../project/commands.ts';
 async function stapelMitProjekt(t, projekt) {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'presets-u7-'));
-  const werk = path.join(d, 'factory'), nutzer = path.join(d, 'user');
-  fs.mkdirSync(path.join(werk, 'comp'), { recursive: true });
+  const werk = path.join(d, 'werk'), nutzer = path.join(d, 'nutzer');
+  fs.mkdirSync(path.join(werk, 'komp'), { recursive: true });
   fs.copyFileSync(path.join(import.meta.dirname, 'fixtures', 'presets', 'gueltig.json'), path.join(werk, 'komp', 'test-glue.preset.json'));
   const router = new Router();
   router.melde(presetsBereich({ log: () => {}, quelle: () => 'andreas' }, { werk, nutzer, projekt: () => projekt }));

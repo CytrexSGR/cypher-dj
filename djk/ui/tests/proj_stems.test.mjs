@@ -1,6 +1,6 @@
 // Paket 1.13 Slice 6: Bereich proj-stems mit dem echten werkstatt.stems (Prüftrenner identitaet, P3) am Kick-Clip des S3-Aufbaus. Eine Projektänderung,
 // ein Undo; die WAVs liegen im Projektordner, Temp im Arbeitsordner ist weg. Since 2026-11-06 six stems (four to six placed), GPU only.
-import test from 'node:test';
+import baseTest from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -12,7 +12,9 @@ import { pythonVorgabe } from '../server.ts';
 import { REPO_PFADE } from '../paths.ts';
 
 // These two load torch in the child and need CUDA; without an NVIDIA GPU they are skipped (stems run on the GPU only).
-const OHNE_GPU = !fs.existsSync('/dev/nvidia0') && 'no NVIDIA GPU: stems run on the GPU only';
+import { OHNE_GPU, OHNE_STEMS_PYTHON } from './support/stems_voraussetzung.mjs';   // no GPU, or a Python without the werkstatt: skipped, not hung
+// Every test of this file runs the real child (werkstatt.stems): with a Python that cannot import it none of them can run.
+const test = (name, a, b) => (typeof a === 'function' ? baseTest(name, { skip: OHNE_STEMS_PYTHON }, a) : baseTest(name, { ...a, skip: a.skip || OHNE_STEMS_PYTHON }, b));
 
 export async function mitStems(t, { trenner = 'identitaet', killMs = 2000, aufbauOpt = {}, extra = {}, mantel = (zg) => zg } = {}) {
   const r = await aufbau(t, aufbauOpt);

@@ -96,13 +96,13 @@ test('search by origin: the source title finds all modules of that track; set, d
   const z = await mitModul(t);
   const basis = z.modulOrdner;
   const sicher = (p, f) => { const k = structuredClone(p); const m = k.gruppen.find((x) => x.id === z.g.id).modul; f(m); delete m.id; return speichereModul(k, z.g.id, { basis }).id; };
-  const b2 = sicher(z.live, (m) => { m.von_beat = 9; m.set = 'Friday Set'; m.datum = '2026-11-13'; });
+  const b2 = sicher(z.live, (m) => { m.von_beat = 9; m.set = 'Friday Set'; m.datum = '2019-03-08'; });
   const b3 = sicher(z.live, (m) => { m.von_beat = 17; m.titel = 'Other Track'; m.quelle_sha256 = 'b'.repeat(64); m.tonart = '5A'; m.kuenstler = 'Someone'; });
   const ids = (o) => listeModule({ basis, ...o }).map((e) => e.id).sort();
   assert.deepEqual(ids({ q: 'song' }), [z.id, b2].sort(), 'all modules of the track');
   assert.deepEqual(ids({ q: 'SONG art' }), [z.id, b2].sort(), 'all words, any case, title and artist');
   assert.deepEqual(ids({ q: 'friday' }), [b2]);
-  assert.deepEqual(ids({ q: '2026-11-13' }), [b2]);
+  assert.deepEqual(ids({ q: '2019-03-08' }), [b2]);
   assert.deepEqual(ids({ q: '5a' }), [b3]);
   assert.deepEqual(ids({ sha: 'b'.repeat(64) }), [b3]);
   assert.deepEqual(ids({ q: 'song other' }), []);

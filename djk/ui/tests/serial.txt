@@ -101,3 +101,6 @@ starter_pattern.test.mjs
 vorbereit_source.test.mjs
 graph_restart.test.mjs
 oszi_route.test.mjs
+deck3.test.mjs
+midi_import_route.test.mjs
+project_surge_patch.test.mjs

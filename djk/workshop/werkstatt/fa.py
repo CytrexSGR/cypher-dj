@@ -14,6 +14,7 @@ from pathlib import Path
 import numpy as np
 import soundfile as sf
 from scipy import signal
+from scipy.fft import next_fast_len
 
 SR = 48000
 REPO = str(Path(__file__).resolve().parents[3])   # Repo-Wurzel; Pfade im Fingerabdruck sind relativ dazu
@@ -135,6 +136,11 @@ def band_energien(x, bpm, kgewichtet=False, filtfilt=True):
         E[i] = (c[gr[1:]] - c[gr[:-1]]) / np.diff(gr)
     return E
 
+def huellkurve(y):
+    """|hilbert(y)| with FFT length next_fast_len: unpadded, a 6-minute track (prime-heavy length) took ~5 s and
+    several GB per call, padded well under a second (same fix as phase.betrag_analytisch, 2026-10-09)."""
+    return np.abs(signal.hilbert(y, N=next_fast_len(len(y)))[:len(y)])
+
 # ---------------------------------------------------------------- Anschlaege
 def onsets_band(x_mono, lo, hi, min_abstand_s=0.05, delta=1.5, zyklisch=True, glatt_ms=2, mit_staerke=False):
     """Anschlaege in einem Band.
@@ -147,7 +153,7 @@ def onsets_band(x_mono, lo, hi, min_abstand_s=0.05, delta=1.5, zyklisch=True, gl
     vor = int(0.2 * SR) if zyklisch and len(x_mono) > int(0.4 * SR) else 0
     xx = np.concatenate([x_mono[-vor:], x_mono]) if vor else x_mono
     f = signal.sosfiltfilt(sos_band(lo, hi), xx)
-    env = np.abs(signal.hilbert(f))
+    env = huellkurve(f)
     w = max(1, int(glatt_ms / 1000 * SR))
     env = np.convolve(env, np.ones(w) / w, "same")
     e = env[:: SR // 1000]                                  # 1-kHz-Takt
@@ -185,7 +191,7 @@ def kick_phase(x, bpm, bins=256):
     klarheit = (max-min)/(max+min) des gefalteten Profils."""
     xm = x.mean(axis=1) if x.ndim == 2 else x
     f = signal.sosfiltfilt(sos_band(30, 250), xm)
-    env = np.abs(signal.hilbert(f))
+    env = huellkurve(f)
     beta = np.arange(len(env)) / SR * bpm / 60.0
     k = (np.mod(beta, 1.0) * bins).astype(int)
     prof = np.bincount(k, weights=env, minlength=bins) / np.maximum(1, np.bincount(k, minlength=bins))

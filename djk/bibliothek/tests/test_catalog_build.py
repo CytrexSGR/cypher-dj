@@ -554,3 +554,37 @@ def test_i4_huge_pid_in_the_name_raises_nothing_and_is_kept(tmp_path, wurzel, ca
     gross.write_bytes(b"x")
     bau(ordner / "katalog.sqlite", wurzel, cache)
     assert gross.read_bytes() == b"x"
+
+
+# Kanban t_747a905b: a partial build because of an unreadable sub folder must not replace the own catalog
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root reads every folder")
+def test_unreadable_subfolder_does_not_replace_a_fuller_own_catalog(tmp_path, wurzel, cache):
+    from bibliothek.catalog_build import LeererBau, LueckenBau
+    ziel = tmp_path / "ziel" / "katalog.sqlite"
+    assert sum(bau(ziel, wurzel, cache).zeilen.values()) == 3
+    vor = sha(ziel)
+    gesperrt = wurzel.pfad / "Drums"
+    gesperrt.chmod(0)
+    try:
+        with pytest.raises(LueckenBau) as e:
+            bau(ziel, wurzel, cache)
+        assert isinstance(e.value, LeererBau)  # same return code 6 everywhere
+        assert e.value.ziel == ziel and e.value.zeilen == 3 and e.value.neu == 1
+        assert sha(ziel) == vor and keine_teile(ziel.parent) == []
+        r = baue(ziel, Konfig(1, [wurzel]), cache, ohne_fehlende=False, fortschritt=lambda n: None, leer_erlaubt=True)
+        assert sum(r.zeilen.values()) == 1 and zeilen(ziel) == 1  # on purpose: allowed
+    finally:
+        gesperrt.chmod(0o755)
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root reads every folder")
+def test_unreadable_subfolder_is_fine_when_nothing_is_lost(tmp_path, wurzel, cache):
+    ziel = tmp_path / "ziel" / "katalog.sqlite"
+    gesperrt = wurzel.pfad / "Drums"
+    gesperrt.chmod(0)
+    try:
+        assert sum(bau(ziel, wurzel, cache).zeilen.values()) == 1  # no catalog yet
+        assert sum(bau(ziel, wurzel, cache).zeilen.values()) == 1  # same rows again
+    finally:
+        gesperrt.chmod(0o755)

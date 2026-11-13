@@ -12,7 +12,7 @@ const alle = [
   ...RETS.flatMap((r) => Array.from({ length: 32 }, (_, i) => `spur/${i + 1}/send/${r}`)),
   ...RETS.flatMap((r) => Array.from({ length: 16 }, (_, i) => `grp/${i + 1}/send/${r}`)),
   ...RETS.flatMap((r) => ['fader', 'pan', 'mute', 'solo'].map((f) => `ret/${r}/${f}`)),
-  ...RETS.flatMap((r) => HALL.map((f) => `ret/${r}/reverb/${f}`)),
+  ...RETS.flatMap((r) => HALL.map((f) => `ret/${r}/hall/${f}`)),
 ];
 
 test('236 Pfade: alle in ZIELE, mit Art, Vorgabe und Bereich gleich der Vertragstabelle', () => {

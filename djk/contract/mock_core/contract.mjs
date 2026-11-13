@@ -224,7 +224,7 @@ for (let r = 1; r <= 4; r++) {
   REGLER.set(`ret/${r}/mute`, { ...R(SCHALTER, 0, 1, 0), kanal: null });
   REGLER.set(`ret/${r}/solo`, { ...R(SCHALTER, 0, 1, 0), kanal: null });
   REGLER.set(`ret/${r}/hall/an`, { ...R(SCHALTER, 0, 1, 1), kanal: null });
-  for (const [f, v] of Object.entries(HALL_VORGABE)) REGLER.set(`ret/${r}/reverb/${f}`, { ...R(LIN, 0, 1, v), kanal: null });
+  for (const [f, v] of Object.entries(HALL_VORGABE)) REGLER.set(`ret/${r}/hall/${f}`, { ...R(LIN, 0, 1, v), kanal: null });
 }
 // 1.10 Slice 4a/4b (§1.5): the insert controls ins/komp|eq|saett/<n>/* of the arrangement strips, global, project-only, everybody may. The rows are generated
 // from docs/interfaces/insert_module.json (insert_controls.mjs); the namenslisten checker compares them with insert_zeilen.inc.

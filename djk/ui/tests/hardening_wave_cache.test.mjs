@@ -167,7 +167,7 @@ test('welle_cache hardening: different keys run in parallel; a failure rejects a
   w.setze('rc', 3);
   const q = { datei: quelle, schluessel: 'fassung-kaputt' };
   const fehl = await Promise.allSettled([c.hole(q), c.hole(q), c.hole(q)]);
-  for (const f of fehl) assert.ok(f.status === 'rejected' && f.reason.code === 500 && /^welle\.py rc 3: kaputt/.test(f.reason.message));
+  for (const f of fehl) assert.ok(f.status === 'rejected' && f.reason.code === 500 && /^\S+\.py rc 3: kaputt/.test(f.reason.message));
   assert.equal(w.aufrufe().length, 4, 'one failed run for three waiters');
   w.weg('rc');
   assert.match(await c.hole(q), /fassung-kaputt\.welle$/, 'the failure is not cached');

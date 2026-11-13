@@ -21,8 +21,8 @@ const KOMP_B = { art: 'compressor', unterart: 'peak', charakter: ['clean'], genr
 
 async function stapel(t, quelle = 'andreas', extra = {}) {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'presets-h-'));
-  const werk = path.join(d, 'factory'), nutzer = path.join(d, 'user');
-  fs.mkdirSync(path.join(werk, 'comp'), { recursive: true });
+  const werk = path.join(d, 'werk'), nutzer = path.join(d, 'nutzer');
+  fs.mkdirSync(path.join(werk, 'komp'), { recursive: true });
   fs.copyFileSync(path.join(FIX, 'gueltig.json'), path.join(werk, 'komp', 'test-glue.preset.json'));
   const log = [];
   const router = new Router();
@@ -130,7 +130,7 @@ test('failures: factory read-only, bad input, traversal, foreign origin, wrong c
 
 test('a corrupt file answers 409 json_kaputt and stays in the list', async (t) => {
   const s = await stapel(t);
-  fs.mkdirSync(path.join(s.nutzer, 'comp'), { recursive: true });
+  fs.mkdirSync(path.join(s.nutzer, 'komp'), { recursive: true });
   fs.copyFileSync(path.join(FIX, 'kaputt.json'), path.join(s.nutzer, 'komp', 'kaputt.preset.json'));
   fs.copyFileSync(path.join(FIX, 'schema2.json'), path.join(s.nutzer, 'komp', 'zukunft.preset.json'));
   assert.deepEqual((await hole(s.url, '/presets/nutzer/komp/kaputt')).j.fehler, 'json_kaputt');
@@ -143,7 +143,7 @@ test('concurrent saves of the same new name over HTTP: one 201, the rest 409 nam
   const s = await stapel(t);
   const r = await Promise.all([1, 2, 3, 4, 5].map((i) => post(s.url, '/presets', { name: 'Same', geraet: 'saett', werte: { drive: i }, beschreibung: SAETT })));
   assert.deepEqual(r.map((x) => x.code).sort(), [201, 409, 409, 409, 409]);
-  assert.deepEqual(fs.readdirSync(path.join(s.nutzer, 'sat')), ['same.preset.json']);
+  assert.deepEqual(fs.readdirSync(path.join(s.nutzer, 'saett')), ['same.preset.json']);
 });
 
 test('save refuses a missing or invalid description with every error and the allowed words; nothing written', async (t) => {
@@ -254,7 +254,7 @@ test('rights: Cypher overwriting, renaming or deleting an unmarked preset gets 4
 
 test('rights: a damaged unmarked file (bad JSON, word outside the vocabulary) is refused for Cypher on all three operations, untouched, no trash', async (t) => {
   const { an, cy } = await zwei(t);
-  fs.mkdirSync(path.join(an.nutzer, 'comp'), { recursive: true });
+  fs.mkdirSync(path.join(an.nutzer, 'komp'), { recursive: true });
   const kaputt = path.join(an.nutzer, 'komp', 'kaputt.preset.json'), wort = path.join(an.nutzer, 'komp', 'wort.preset.json');
   fs.copyFileSync(path.join(FIX, 'kaputt.json'), kaputt);
   const j = JSON.parse(fs.readFileSync(path.join(FIX, 'gueltig.json'), 'utf8'));

@@ -18,7 +18,7 @@ import numpy as np
 
 HIER = pathlib.Path(__file__).resolve().parent
 RENDER = HIER.parent / "target" / "release" / "examples" / "render"
-PRESETS = HIER.parents[1] / "ui" / "presets" / "factory" / "modular"
+PRESETS = HIER.parents[1] / "ui" / "presets" / "werk" / "baukasten"
 alt, aus = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
 aus.mkdir(parents=True, exist_ok=True)
 

@@ -10,6 +10,7 @@ import { Verlauf, aendere } from '../project/history.ts';
 import { kanonisch, neuesProjekt } from '../project/model.ts';
 import { startzeit } from '../lock.ts';
 import { tmpOrdner, specProjekt, kopie, mitVon } from './support/project.mjs';
+const KAPUTT = 'kaputt';   // a folder name on both sides of path.join: the export's folder renaming rewrites only some literals of a join call
 
 test('projektSlug: wie die Sammlungen (Umlaute, Sonderzeichen, 48 Zeichen), leerer Name → projekt', () => {
   assert.equal(projektSlug('First Track'), 'first-track'); assert.equal(projektSlug('Größe & Maß!'), 'groesse-mass');
@@ -32,13 +33,13 @@ test('liste: Slug, Name, geaendert (ISO aus der Änderungszeit); leere/fehlende 
   const w = tmpOrdner(t); const pr = new Projekte(path.join(w, 'gibtsnicht'));
   assert.deepEqual(pr.liste(), []);
   const q = new Projekte(w); q.lege('Beta'); q.lege('Alpha');
-  fs.mkdirSync(path.join(w, 'broken')); fs.writeFileSync(path.join(w, 'kaputt', 'project.json'), '{nein');
+  fs.mkdirSync(path.join(w, KAPUTT)); fs.writeFileSync(path.join(w, KAPUTT, 'project.json'), '{nein');
   fs.mkdirSync(path.join(w, 'leer-ohne-datei'));
   const l = q.liste();
   assert.deepEqual(l.map((x) => x.slug), ['alpha', 'beta', 'kaputt']);
   assert.deepEqual(l.map((x) => x.name), ['Alpha', 'Beta', 'kaputt']);
   assert.match(l[0].geaendert, /^\d{4}-\d\d-\d\dT/); assert.equal(l[2].fehler, 'json_kaputt');
-  assert.equal(fs.readFileSync(path.join(w, 'kaputt', 'project.json'), 'utf8'), '{nein', 'Datei unangetastet');
+  assert.equal(fs.readFileSync(path.join(w, KAPUTT, 'project.json'), 'utf8'), '{nein', 'Datei unangetastet');
 });
 
 test('speichere/lies: Rundlauf; geschrieben wird normalisiert (Schlüssel sortiert); kein Temp-Rest; ungültiges Projekt wird NICHT geschrieben', (t) => {

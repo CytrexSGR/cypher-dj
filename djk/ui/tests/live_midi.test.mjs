@@ -15,7 +15,7 @@ import { REPO_PFADE } from '../paths.ts';
 import { warteBis } from './support/proj_context.mjs';
 import { liveAufbau } from './support/live_module.mjs';
 
-const OHNE_GPU = !fs.existsSync('/dev/nvidia0') && 'no NVIDIA GPU: stems run on the GPU only';
+import { OHNE_GPU } from './support/stems_voraussetzung.mjs';   // no GPU, or a Python without the werkstatt: skipped, not hung
 const HASH = 'c'.repeat(64), D = (n) => ({ sha256: n.repeat(64), pfad: `/x/${n}.wav` });
 const herkunft = (extra = {}) => ({ quelle_sha256: HASH, titel: 'Song', kuenstler: 'Art', fassung: '1', basis_bpm: 120, von_beat: 4, laenge_beats: 16, bpm: 120,
   tonart: '8A', datum: '2026-11-12', ...extra });

@@ -1,4 +1,4 @@
-// Erzeugt die Folgen der Scheibe 21 unter pruef/folgen/ (Format djk/contract/sequences/FORMAT.md, dazu ws_sende mit
+// Erzeugt die Folgen der Scheibe 21 unter check/sequences/ (Format djk/contract/sequences/FORMAT.md, dazu ws_sende mit
 // verbindung und die aktion-Werte leitstand_kill9, leitstand_start des Läufers check/runner.ts). Samples werden aus
 // Beats gerechnet (128 BPM konstant: 22 500 Samples je Beat, §1.3), nie abgeschrieben.
 // Aufruf: node check/sequences_build.ts   (schreibt alle Dateien neu und nennt sie)

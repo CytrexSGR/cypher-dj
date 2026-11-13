@@ -613,7 +613,7 @@ const KOMP_REGLER = [
   { feld: 'mix', name: 'MIX', min: 0, max: 1, schritt: 0.01, vorgabe: 1, text: (w) => `${Math.round(w * 100)}%` },
 ];
 const kompGr = {};   // kanal -> { db, t }
-function kompWert(k, feld, vor) { const w = zustand.regler?.[`${k}/comp/${feld}`]; return typeof w === 'number' ? w : vor; }
+function kompWert(k, feld, vor) { const w = zustand.regler?.[`${k}/komp/${feld}`]; return typeof w === 'number' ? w : vor; }
 let instrumenteAnsicht = null;   // INSTRUMENTS area (instruments_view.js), bound in bindeEffekte
 function instrumenteSichtbar() { return !!instrumenteAnsicht && !$('#instrumente').hidden; }
 // Device page: the INSTRUMENTS element itself, enlarged as a fixed layer (panel.css body.geraeteseite). One host, no second plate; this function is the only way in and out.
@@ -1055,7 +1055,7 @@ function baueFxStreifen() {
       inp.addEventListener('input', () => {
         s.querySelector(`input[data-komp-feld="${inp.dataset.kompFeld}"] + output`).textContent = KOMP_REGLER.find((r) => r.feld === inp.dataset.kompFeld).text(Number(inp.value));
         if (warte) return;
-        warte = setTimeout(() => { warte = null; setzeKomp(`${k}/comp/${inp.dataset.kompFeld}`, Number(inp.value)); }, 40);
+        warte = setTimeout(() => { warte = null; setzeKomp(`${k}/komp/${inp.dataset.kompFeld}`, Number(inp.value)); }, 40);
       });
     }
     reihe.append(s);
@@ -1254,14 +1254,14 @@ function baueFxDetail() {
     const p = KOMP_PRESETS[e.target.value];
     e.target.value = '';
     if (!p) return;
-    for (const [feld, w] of Object.entries(p)) await setzeKomp(`${k}/comp/${feld}`, w);
+    for (const [feld, w] of Object.entries(p)) await setzeKomp(`${k}/komp/${feld}`, w);
   });
   for (const inp of d.querySelectorAll('input[data-komp-feld]')) {
     let warte = null;
     inp.addEventListener('input', () => {
       inp.nextElementSibling.textContent = KOMP_DETAIL.find((r) => r.feld === inp.dataset.kompFeld).text(Number(inp.value));
       if (warte) return;
-      warte = setTimeout(() => { warte = null; setzeKomp(`${k}/comp/${inp.dataset.kompFeld}`, Number(inp.value)); }, 40);
+      warte = setTimeout(() => { warte = null; setzeKomp(`${k}/komp/${inp.dataset.kompFeld}`, Number(inp.value)); }, 40);
     });
   }
   if (k.startsWith('pad/')) bindeAutomation(d, Number(k.slice(4)));

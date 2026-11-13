@@ -275,7 +275,7 @@ const insertVon = (p: Projekt, id: string): { strang: InsertTraeger; insert: Ins
   const t = alleInserts(p).find((x) => x.insert.id === id);
   return t ? { strang: t.strang, insert: t.insert } : ab('insert_unbekannt', id);
 };
-// 1.10 slice 5 (E12): the values of "Duck by Kick" = presets/factory/comp/kick-sidechain.preset.json by the plugin names of INSERT_ARTEN (no file I/O here);
+// 1.10 slice 5 (E12): the values of "Duck by Kick" = presets/werk/komp/kick-sidechain.preset.json by the plugin names of INSERT_ARTEN (no file I/O here);
 // tests/project_key.test.mjs pins this constant to the preset file
 export const DUCK_DURCH_KICK_WERTE: Readonly<Record<string, number>> =
   { schwelle: -30, ratio: 8, knie: 0, attack: 1, release: 150, makeup: 0, mix: 1, schp: 0 };
@@ -1445,7 +1445,7 @@ const PRO_BEFEHL: Record<string, (p: Projekt, a: Args, ctx: Kontext) => void> = 
   },
 
   // 1.10 slice 4: the insert chain of a strip (track, group, return, 'master'). Stages carry a pooled slot (lowest free of the kind, project-wide).
-  // Default `insert_setzen` INSERTS at `pos` (later stages move back; a chain of four refuses with kette_voll); `ersetzen: true` replaces the stage at `pos`.
+  // Default `insert_setzen` INSERTS at `pos` (later stages move back; a chain of five refuses with kette_voll); `ersetzen: true` replaces the stage at `pos`.
   insert_setzen(p, a, ctx) {
     if (a.art === 'host') return hostSetzen(p, a, ctx);
     erlaube(a, 'strang_id', 'pos', 'art', 'werte', 'sc', 'key', 'ersetzen', 'preset', 'graph');

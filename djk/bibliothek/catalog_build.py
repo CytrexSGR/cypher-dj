@@ -78,6 +78,17 @@ class LeererBau(Exception):
         self.zeilen = zeilen
 
 
+class LueckenBau(LeererBau):
+    """Some folder could not be listed and the scan found fewer rows than the own catalog has: replacing the catalog would
+    lose the rows below that folder (permissions, a share that dropped). Same return code as LeererBau."""
+
+    def __init__(self, ziel: Path, zeilen: int, neu: int):
+        Exception.__init__(self, f"a folder could not be read and the scan found {neu} rows but {ziel} has {zeilen}; not replaced")
+        self.ziel = ziel
+        self.zeilen = zeilen
+        self.neu = neu
+
+
 class ZielNichtSchreibbar(Exception):
     """The finished catalog could not be put at the target (no hard links on this file system, no permission, ...)."""
 
@@ -199,6 +210,7 @@ def _sammle(konfig: Konfig, cache: MerkmalCache, ohne_fehlende: bool, fortschrit
     zeilen: dict[str, dict[str, object]] = {}  # sha -> row of the first path in sorted order
     ausgelassen: dict[str, int] = {}
     fehlende: list[str] = []
+    luecken: list[str] = []  # folders that could not be listed: nothing below them was seen
     n = 0
 
     def aus(grund: str) -> None:
@@ -209,6 +221,8 @@ def _sammle(konfig: Konfig, cache: MerkmalCache, ohne_fehlende: bool, fortschrit
     def verarbeite(item: Datei | Auslassung, w) -> None:
         if isinstance(item, Auslassung):
             aus(item.grund)
+            if item.grund == "unlesbar" and os.path.isdir(item.pfad):
+                luecken.append(item.pfad)
             return
         m = merkmale(item, cache)
         if isinstance(m, Auslassung):
@@ -237,7 +251,7 @@ def _sammle(konfig: Konfig, cache: MerkmalCache, ohne_fehlende: bool, fortschrit
                     continue
                 raise WurzelFehlt(str(w.pfad)) from None
             raise
-    return zeilen, ausgelassen, fehlende
+    return zeilen, ausgelassen, fehlende, luecken
 
 
 def _schreibe(teil: Path, konfig: Konfig, zeilen: dict[str, dict[str, object]], ergebnis: Ergebnis) -> None:
@@ -277,7 +291,8 @@ def baue(ziel: Path, konfig: Konfig, cache: MerkmalCache, ohne_fehlende: bool,
 
     `_zwischen_pruefungen` is a test seam: called after the build and right before the second check.
     `zaehler`, when given, is filled while scanning (keys track, loop, oneshot, skipped) so a progress callback can read it.
-    Raises LeererBau when the scan finds nothing and the own catalog at the target has rows, unless `leer_erlaubt`.
+    Raises LeererBau when the scan finds nothing and the own catalog at the target has rows, unless `leer_erlaubt`;
+    LueckenBau (a LeererBau) when a folder could not be listed and the scan found fewer rows than the own catalog has.
     Raises ZielNichtSchreibbar when the file system cannot take the finished catalog (e.g. no hard links on exFAT).
     """
     ziel = kanonisch(Path(ziel))  # once; every later look at or write to the target uses this very path
@@ -291,11 +306,15 @@ def baue(ziel: Path, konfig: Konfig, cache: MerkmalCache, ohne_fehlende: bool,
     _entferne(teil)
     gehasht0 = cache.gehasht
     try:
-        zeilen, ausgelassen, fehlende = _sammle(konfig, cache, ohne_fehlende, fortschritt, zaehler)
+        zeilen, ausgelassen, fehlende, luecken = _sammle(konfig, cache, ohne_fehlende, fortschritt, zaehler)
         if not zeilen and eigen0 is True and not leer_erlaubt:
             alt = _zeilenzahl(ziel)
             if alt > 0:
                 raise LeererBau(ziel, alt)
+        if luecken and eigen0 is True and not leer_erlaubt:
+            alt = _zeilenzahl(ziel)
+            if len(zeilen) < alt:
+                raise LueckenBau(ziel, alt, len(zeilen))
         zaehlung = {t: 0 for t in TYPEN}
         for z in zeilen.values():
             zaehlung[str(z["typ"])] += 1

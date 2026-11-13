@@ -5,7 +5,7 @@ Then rebuild the register: node ../../ui/presets/tool.ts bauen"""
 import json
 import pathlib
 
-WERK = pathlib.Path(__file__).resolve().parents[2] / "ui" / "presets" / "factory" / "modular"
+WERK = pathlib.Path(__file__).resolve().parents[2] / "ui" / "presets" / "werk" / "baukasten"
 STAND = "2026-11-12T00:00:00.000Z"
 
 

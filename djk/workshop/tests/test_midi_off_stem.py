@@ -10,6 +10,7 @@ import pytest
 import soundfile as sf
 
 from werkstatt import midi_off_stem as midi_aus_stem
+from click_helper import braucht_essentia
 
 HIER = Path(__file__).resolve().parent.parent
 SR = 48000
@@ -107,6 +108,7 @@ def test_drums_pattern(tmp_path, bpm):
     assert len(noten) == len(ist)
 
 
+@braucht_essentia
 @pytest.mark.parametrize("bpm", [120, 128])
 def test_bass_line(tmp_path, bpm):
     x = render_bass(bpm)

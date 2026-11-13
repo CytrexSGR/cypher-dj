@@ -52,6 +52,9 @@ export interface ImportPlan { befehle: unknown[]; bericht: ImportBericht }
 export const teilSchluessel = (t: SmfTeil): string => `${t.spur}.${t.kanal + 1}`;
 const runde = (x: number, stellen: number): number => Math.round(x * 10 ** stellen) / 10 ** stellen;
 
+/** start level of a track on a Baukasten instrument graph (dB): graphs are far louder than the RB-338, which stays at 0 dB */
+export const GRAPH_FADER_DB = -6;
+
 // Baukasten graph per GM program family for the `poly` profile; used only when the graph exists on the instance
 const FAMILIE_GRAPH: readonly (string | ((p: number) => string))[] = [
   'saite-klavier', 'fm-glocke', 'juno-pad', 'saite-gitarre', 'fm-bass',                       // piano, chromatic percussion, organ, guitar, bass
@@ -277,7 +280,10 @@ export function planeImport(d: SmfDatei, projekt: Projekt | null, eingabe: Impor
     const spurId = simulation ? neueId(simulation, 'spur') : `s${spuren.length + 1}`;
     const geraetBefehl = geraet === null ? {} : { geraet };
     befehle.push({ befehl: 'spur_neu', art: 'instrument', name, ...geraetBefehl });
-    // faders stay at 0 dB: one RB-338 peaks near -28 dBFS, 26 of them stay below full scale (measured, stand file)
+    // faders stay at 0 dB: one RB-338 peaks near -28 dBFS, 26 of them stay below full scale (measured, stand file).
+    // A Baukasten instrument graph is about 12 dB louder than an RB-338 (Bolero: Flutes -22.5 LUFS against -34.7 for the RB-338), so the poly profile
+    // reached +1 dBTP in the last window of the sum (dress rehearsal 2): a track on a graph starts at GRAPH_FADER_DB.
+    if (geraet?.art === 'intern' && geraet.name === 'bk') befehle.push({ befehl: 'spur_aendern', spur_id: spurId, fader_db: GRAPH_FADER_DB });
     if (stumm) befehle.push({ befehl: 'spur_aendern', spur_id: spurId, mute: true });
     befehle.push({ befehl: 'clip_neu', spur_id: spurId, art: 'midi', name, start_beat: start, laenge_beats: laenge, noten });
     spuren.push({

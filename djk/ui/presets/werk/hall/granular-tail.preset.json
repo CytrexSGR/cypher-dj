@@ -45,7 +45,7 @@
   "granular",
   "lo-fi"
  ],
- "notiz": "diff and fft semantics from devices.ts and DEVICES.md 1.3; the character is read from the enum labels, not heard.",
+ "notiz": "diff and fft semantics from geraete.ts and GERAETE.md 1.3; the character is read from the enum labels, not heard.",
  "angelegt": "2026-11-02T00:00:00.000Z",
  "geaendert": "2026-11-02T00:00:00.000Z"
 }

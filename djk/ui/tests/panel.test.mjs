@@ -9,6 +9,7 @@ import { reglerBereiche, pruefePanel, normalisierePanel, ladePanel, panelOrdner,
 import { steuerungen, parameterVon, bereichVon, vorgaben, vorgabeK, wertText, tastenSchritt, bogenPfad, knobWinkel, baueFrontplatte } from '../public/panel.js';
 import { skaliere, formatiereWert } from '../public/panel_skala.js';
 import { parameterTabelle, pruefeGeraete, ladeRegister, pfadeVon } from '../devices_parameter.ts';
+import { OHNE_DOKU } from './support/devices_doku.mjs';
 
 const GRAPH = {
   format: 'baukasten/2', name: 'g', stimmen: 1, regler_namen: { 1: 'Cutoff' },
@@ -474,7 +475,7 @@ test('learn: the whole cell is the target: a click on the cell itself (label are
   assert.deepEqual(k.gelernt, ['erz/6/bk/1']);
 });
 
-test('device register: every shipped panel is v2, valid against the parameter table, its accent is the register accent; pruefeGeraete finds a missing panel', () => {
+test('device register: every shipped panel is v2, valid against the parameter table, its accent is the register accent; pruefeGeraete finds a missing panel', { skip: OHNE_DOKU }, () => {
   const P = pfadeVon();
   const reg = ladeRegister();
   assert.ok(reg.length >= 10, 'positive control: the register lists the devices');
@@ -497,7 +498,7 @@ test('device register: every shipped panel is v2, valid against the parameter ta
   const kopie = fs.mkdtempSync(path.join(os.tmpdir(), 'geraete-'));
   const Q = pfadeVon(kopie);
   fs.mkdirSync(Q.bk, { recursive: true });
-  for (const sub of ['beispiele', 'paneele']) fs.cpSync(path.join(P.bk, sub), path.join(Q.bk, sub), { recursive: true });
+  for (const sub of ['demos', 'paneele']) fs.cpSync(path.join(P.bk, sub), path.join(Q.bk, sub), { recursive: true });
   fs.copyFileSync(P.register, Q.register);
   fs.cpSync(P.doku, Q.doku, { recursive: true });
   fs.mkdirSync(path.dirname(Q.surge), { recursive: true }); fs.copyFileSync(P.surge, Q.surge);

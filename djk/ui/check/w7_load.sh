@@ -40,7 +40,7 @@ lauf() {   # lauf <fall> <n>
   local rc=$?
   stopp
   if pgrep -f "[w]7_last_treiber.mjs" > /dev/null; then echo "driver still alive after stopp: run invalid" >> "$d/meta.txt"; fi
-  local erg; erg=$(ls -dt "$DJK/kern/tests/deck/laeufe/w7last-$name-"* 2>/dev/null | head -1)
+  local erg; erg=$(ls -dt "$DJK/core/tests/deck/laeufe/w7last-$name-"* 2>/dev/null | head -1)
   if [ -n "$erg" ]; then cp "$erg/ergebnis.json" "$d/ergebnis.json"; cp "$erg/pwtop.txt" "$d/pwtop.txt" 2>/dev/null; echo "kern_lauf=$erg" >> "$d/meta.txt"; fi
   echo "rc_kern=$rc end=$(date -Is)" >> "$d/meta.txt"
   flock -u 9; exec 9>&-

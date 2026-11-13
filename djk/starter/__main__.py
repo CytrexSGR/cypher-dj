@@ -52,8 +52,9 @@ def stufe_loops(instanz: str = "") -> int:
         print(e.hinweis, file=sys.stderr)
         return 4
     for name, was in r.items():
-        print(f"{'installed' if was == 'neu' else 'kept'} loop {name}")
-    return 0
+        if was != "beschaedigt":  # the reason was printed on stderr by baue_loops
+            print(f"{'installed' if was == 'neu' else 'kept'} loop {name}")
+    return 4 if "beschaedigt" in r.values() else 0
 
 
 def stufe_demo(instanz: str = "") -> int:

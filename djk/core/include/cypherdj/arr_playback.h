@@ -33,7 +33,7 @@ constexpr int ARR_INS_HOST = 4;         // plan 1.11 (D1): effect hosts, one Car
 constexpr int ARR_WIRT_SLOTS = 2;       // arr_midi_<s>, s = 1..2 (Spec 2.4)
 constexpr int ARR_GRUPPEN = 16;         // Gruppen-Spuren grp/1..16 (1.10, F1; 16 since nested groups task 1: eigene Plätze neben den 32 Spuren); = GRP_REGLER_GRUPPEN_ALLE (static_assert in arr_output.cpp)
 constexpr int ARR_RETURNS = 4;          // 1.10 Slice 3: return strips ret/1..4 (own places next to the 32 tracks and 16 groups); = RET_REGLER_RETURNS (static_assert in arr_returns.cpp)
-constexpr int ARR_KETTE = 4;            // 1.10 slice 4a: stages per insert chain
+constexpr int ARR_KETTE = 5;            // 1.10 slice 4a: stages per insert chain (4 until the dress rehearsal 2: EQ, comp, sat, util, lim need five)
 constexpr int ARR_KETTE_PM = ARR_SPUREN + ARR_GRUPPEN;     // chain index of the PM (= ARR_PM, static_assert in arrangement.h)
 constexpr int ARR_KETTE_RET0 = ARR_KETTE_PM + 1;           // chain index of return 1 (= ARR_RET0)
 constexpr int ARR_KETTEN = ARR_KETTE_RET0 + ARR_RETURNS;   // strips with a chain, indexed like the strips: tracks 0..31, groups 32..47, PM 48, returns 49..52

@@ -32,7 +32,7 @@ function fakeProjekt() {
 
 async function stapel(t, quelle = 'andreas', extra = {}) {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'presets-an-'));
-  const nutzer = path.join(d, 'user');
+  const nutzer = path.join(d, 'nutzer');
   const router = new Router();
   const z = { projekt: fakeProjekt() };
   router.melde(presetsBereich({ log: () => {}, quelle: () => quelle }, { nutzer, projekt: () => z.projekt,

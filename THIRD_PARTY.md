@@ -66,4 +66,6 @@ Bring your own audio. Sample-kit paths are configured on your machine (`djk/conf
 
 ## Sounds you generate
 
-Surge XT factory sounds are not part of this repository; they come with your Surge XT installation.
+The kits, loops and the demo that `djk-starter` renders on your machine come from this project's own graphs and code.
+They are yours; the authors dedicate any rights they might hold in them to the public domain (CC0 1.0). Surge XT factory
+sounds are not part of this repository; they come with your Surge XT installation.

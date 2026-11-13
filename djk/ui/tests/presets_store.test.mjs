@@ -16,8 +16,8 @@ const FIX = path.join(import.meta.dirname, 'fixtures', 'presets');
 function tmp(t) { const d = fs.mkdtempSync(path.join(os.tmpdir(), 'presets-')); t.after(() => fs.rmSync(d, { recursive: true, force: true })); return d; }
 function speicher(t, jetzt) {
   const d = tmp(t);
-  const werk = path.join(d, 'factory'), nutzer = path.join(d, 'user');
-  fs.mkdirSync(path.join(werk, 'comp'), { recursive: true });
+  const werk = path.join(d, 'werk'), nutzer = path.join(d, 'nutzer');
+  fs.mkdirSync(path.join(werk, 'komp'), { recursive: true });
   fs.copyFileSync(path.join(FIX, 'gueltig.json'), path.join(werk, 'komp', 'test-glue.preset.json'));
   let n = 0;
   const s = new PresetSpeicher({ werk, nutzer, jetzt: jetzt ?? (() => new Date(Date.UTC(2026, 10, 2, 12, 0, n++))) });
@@ -42,7 +42,7 @@ test('save a user preset: file layout, schema, timestamps, values by parameter n
   assert.deepEqual(Object.keys(JSON.parse(datei)), ['schema', 'name', 'geraet_typ', 'geraet', 'werte', 'beschreibung', 'tags', 'notiz', 'angelegt', 'geaendert']);
   assert.deepEqual(JSON.parse(datei), { schema: 1, name: 'Kick Glue', geraet_typ: 'effekt', geraet: 'komp', werte: KOMP, beschreibung: BESCHR.effekt,
     tags: ['drums', 'bus'], notiz: 'n', angelegt: '2026-11-02T12:00:00.000Z', geaendert: '2026-11-02T12:00:00.000Z' });
-  assert.deepEqual(fs.readdirSync(path.join(nutzer, 'comp')), ['kick-glue.preset.json'], 'no temp file or lock left behind');
+  assert.deepEqual(fs.readdirSync(path.join(nutzer, 'komp')), ['kick-glue.preset.json'], 'no temp file or lock left behind');
 });
 
 test('list: user first, then factory; search by name, tag, device; filter by origin', (t) => {
@@ -169,7 +169,7 @@ test('same name twice: refused, unless overwriting; overwriting keeps angelegt a
   assert.deepEqual(p.werte, { thresh: -5 }); assert.equal(p.angelegt, a.preset.angelegt); assert.notEqual(p.geaendert, a.preset.geaendert);
   assert.throws(() => s.speichere({ name: 'Lead', geraet: 'komp', werte: { thresh: -1 } }, { ueberschreiben: true, erwartet: a.preset.geaendert }), fehlerIst(409, 'veraltet'));
   assert.deepEqual(s.lies('nutzer', 'komp', 'lead').werte, { thresh: -5 });
-  assert.deepEqual(fs.readdirSync(path.join(nutzer, 'comp')).sort(), ['lead.preset.json']);
+  assert.deepEqual(fs.readdirSync(path.join(nutzer, 'komp')).sort(), ['lead.preset.json']);
 });
 
 test('rename moves the file to the new slug, refuses a taken name, keeps values; factory presets are never touched', (t) => {
@@ -221,13 +221,13 @@ test('path traversal: no slug, device or origin from outside reaches the file sy
 test('the traversal test fails on a store that joins the slug without checking it (deliberately broken implementation)', (t) => {
   const { s, d } = speicher(t);
   // broken: herkunft and geraet still checked, the slug goes straight into path.join
-  s.pfad = (herkunft, geraet, slug) => path.join(herkunft === 'factory' ? s.werk : s.nutzer, geraet, `${slug}.preset.json`);
+  s.pfad = (herkunft, geraet, slug) => { const basis = herkunft === 'werk' ? s.werk : s.nutzer; return path.join(basis, geraet, `${slug}.preset.json`); };
   assert.throws(() => pruefeTraversal(s, d), assert.AssertionError);
 });
 
 test('symlinks in the store are not presets and are never followed', (t) => {
   const { s, nutzer, d } = speicher(t);
-  fs.mkdirSync(path.join(nutzer, 'comp'), { recursive: true });
+  fs.mkdirSync(path.join(nutzer, 'komp'), { recursive: true });
   fs.writeFileSync(path.join(d, 'draussen.json'), fs.readFileSync(path.join(FIX, 'gueltig.json')));
   fs.symlinkSync(path.join(d, 'draussen.json'), path.join(nutzer, 'komp', 'link.preset.json'));
   assert.throws(() => s.lies('nutzer', 'komp', 'link'), fehlerIst(404, 'unbekannt'));
@@ -322,7 +322,7 @@ test('concurrent create of the same name from 6 processes: exactly one wins, the
   assert.ok(r.filter((x) => !x.ok).every((x) => x.fehler === 'name_vergeben' || x.fehler === 'preset_busy'), JSON.stringify(r));
   const p = s.lies('nutzer', 'komp', 'race');
   assert.ok(p.werte.thresh <= -1 && p.werte.thresh >= -6);
-  assert.deepEqual(fs.readdirSync(path.join(nutzer, 'comp')).sort(), ['race.preset.json'], 'no temp file or lock left behind');
+  assert.deepEqual(fs.readdirSync(path.join(nutzer, 'komp')).sort(), ['race.preset.json'], 'no temp file or lock left behind');
 });
 
 test('concurrent overwrite from 6 processes: every result is ok or busy, the final file is one complete write', async (t) => {
@@ -333,7 +333,7 @@ test('concurrent overwrite from 6 processes: every result is ok or busy, the fin
   assert.ok(r.some((x) => x.ok));
   const p = s.lies('nutzer', 'komp', 'shared');
   assert.ok([-1, -2, -3, -4, -5, -6].includes(p.werte.thresh), `thresh ${p.werte.thresh}`);
-  assert.deepEqual(fs.readdirSync(path.join(nutzer, 'comp')).sort(), ['shared.preset.json']);
+  assert.deepEqual(fs.readdirSync(path.join(nutzer, 'komp')).sort(), ['shared.preset.json']);
 });
 
 // ---------- package 1.16 rest, U1: Baukasten graph (F2) and author mark (F4/F13) ----------
@@ -346,7 +346,7 @@ test('baukasten graph: required for baukasten, refused for every other device, s
   assert.throws(() => s.speichere({ ...bk, graph: 'Gross' }), fehlerIst(400, 'graph_ungueltig'));
   assert.throws(() => s.speichere({ ...bk, graph: 'a'.repeat(33) }), fehlerIst(400, 'graph_ungueltig'));
   assert.throws(() => s.speichere({ name: 'Komp', geraet: 'komp', werte: KOMP, graph: 'pad' }), fehlerIst(400, 'graph_verboten'));
-  assert.equal(fs.existsSync(path.join(nutzer, 'modular')), false, 'nothing written by a refused save');
+  assert.equal(fs.existsSync(path.join(nutzer, 'baukasten')), false, 'nothing written by a refused save');
   s.speichere({ ...bk, graph: 'warm_pad-2' });
   const datei = JSON.parse(fs.readFileSync(path.join(nutzer, 'baukasten', 'pad.preset.json'), 'utf8'));
   assert.equal(datei.graph, 'warm_pad-2');
@@ -370,7 +370,7 @@ test('baukasten graph: required for baukasten, refused for every other device, s
 
 test('author mark: a save by Cypher writes autor cypher, a save by Andreas never; an overwrite by Andreas removes it; the list carries it', (t) => {
   const { s, nutzer } = speicher(t);
-  const datei = (slug) => JSON.parse(fs.readFileSync(path.join(nutzer, 'comp', `${slug}.preset.json`), 'utf8'));
+  const datei = (slug) => JSON.parse(fs.readFileSync(path.join(nutzer, 'komp', `${slug}.preset.json`), 'utf8'));
   s.speichere({ name: 'Hers', geraet: 'komp', werte: KOMP }, { quelle: 'cypher' });
   s.speichere({ name: 'His', geraet: 'komp', werte: KOMP }, { quelle: 'andreas' });
   s.speichere({ name: 'Plain', geraet: 'komp', werte: KOMP });
@@ -390,7 +390,7 @@ test('author mark: a save by Cypher writes autor cypher, a save by Andreas never
 
 test('rights in the store: Cypher changes only readable presets marked as hers; damaged or unmarked files stay Andreas\' (nur_andreas_preset)', (t) => {
   const { s, nutzer } = speicher(t);
-  const p = (slug) => path.join(nutzer, 'comp', `${slug}.preset.json`);
+  const p = (slug) => path.join(nutzer, 'komp', `${slug}.preset.json`);
   s.speichere({ name: 'His', geraet: 'komp', werte: KOMP });
   legeDatei(nutzer, 'komp', 'kaputt', 'kaputt.json');
   const vorher = { his: fs.readFileSync(p('his')), kaputt: fs.readFileSync(p('kaputt')) };
@@ -415,7 +415,7 @@ test('rights in the store: Cypher changes only readable presets marked as hers; 
 
 test('rename by Andreas takes the Cypher mark (D27): the item becomes his; Cypher renaming her own keeps it and her delete right', (t) => {
   const { s, nutzer } = speicher(t);
-  const p = (slug) => path.join(nutzer, 'comp', `${slug}.preset.json`);
+  const p = (slug) => path.join(nutzer, 'komp', `${slug}.preset.json`);
   s.speichere({ name: 'Mine', geraet: 'komp', werte: KOMP }, { quelle: 'cypher' });
   assert.equal(s.lies('nutzer', 'komp', 'mine').autor, 'cypher');
   assert.deepEqual(s.benenne('komp', 'mine', 'Andreas Name', 'andreas'), { slug: 'andreas-name' });

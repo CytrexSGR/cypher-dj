@@ -7,6 +7,8 @@ import re
 import shutil
 from pathlib import Path
 
+from . import storage as ablage
+
 QUELLE = Path(__file__).resolve().parent / "demo" / "project.json"
 
 
@@ -23,6 +25,7 @@ def kopiere_demo(wurzel: Path) -> str:
     wurzel.mkdir(parents=True, exist_ok=True)
     if os.path.lexists(ziel):
         return "behalten"
+    ablage.raeume_tote(wurzel, re.compile(r"\.demo\.neu-(\d+)"))
     tmp = wurzel / f".demo.neu-{os.getpid()}"   # dot name: the project list ignores it (SLUG)
     shutil.rmtree(tmp, ignore_errors=True)
     tmp.mkdir()

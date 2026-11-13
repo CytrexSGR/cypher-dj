@@ -12,7 +12,7 @@
 //   (Negativ-Kontrolle: das Maß sieht einen Stopp).
 // Gegenprobe „Absenkung wieder an“ und „Transport endet wieder“: dieselbe Messung gegen Server und Kern aus einem frisch gebauten main-Baum (Plan Task 9a
 //   Step 12): FEHL 1.3, 3.3, 3.4 und 3.6 (gemessen 2026-10-20, Instanz b).
-// Rückgabe: 0 alle Punkte OK, 1 mindestens ein Punkt FEHL, 2 Aufruf. Ergebnis: pruef/ergebnisse/<zeit>-abnahme-ea/bericht.md
+// Rückgabe: 0 alle Punkte OK, 1 mindestens ein Punkt FEHL, 2 Aufruf. Ergebnis: check/ergebnisse/<zeit>-abnahme-ea/bericht.md
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

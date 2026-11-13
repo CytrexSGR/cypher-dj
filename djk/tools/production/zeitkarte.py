@@ -2,7 +2,7 @@
 """Time map and mix check of an audio file (thin first version, 2026-11-10).
 
 Measures a track over time instead of as one sum: per phrase (default 8 bars) loudness, band balance,
-onset density, stereo width, low-end correlation, kick presence and how much changed against the phrase
+onset density, stereo width, low-end correlation, kick share (0..1: beats with a low-band onset) and how much changed against the phrase
 before. A summary block carries the mix checks (true peak, PSR, crest, mono loss, DC, low-end mono).
 
 Needs python3 with numpy and scipy, and ffmpeg on the path. Decodes everything to 48 kHz stereo float.
@@ -60,6 +60,42 @@ def low_env(mono, hop=512):
     return np.log10(e[:n * hop].reshape(n, hop).mean(axis=1) + 1e-10)
 
 
+def low_power(mono, hop=64):
+    """Linear power of the low band (35 to 120 Hz) per hop; the basis of the kick measure."""
+    sos = signal.butter(4, [35, 120], btype="band", fs=SR, output="sos")
+    e = signal.sosfilt(sos, mono) ** 2
+    n = len(e) // hop
+    return e[:n * hop].reshape(n, hop).mean(axis=1)
+
+
+def kick_share(pw, beat_times, hop=64, vor_s=0.12, nach_s=0.12, such_s=0.03, schwelle_db=6.0, min_db=-60.0):
+    """Share (0..1) of the given beats that carry a kick: low-band power in the window after the beat is at least
+    `schwelle_db` above the window before it, the beat searched within +-`such_s` (so a beat grid that is a few
+    ms off or a hop rounding does not matter). Windows quieter than `min_db` (power, full scale) count as no kick.
+    Bounded and without a divisor that can go to zero: the earlier ratio of onset means jumped between 0.6 and 20."""
+    if len(beat_times) == 0:
+        return 0.0
+    vor, nach, such = int(vor_s * SR / hop), int(nach_s * SR / hop), int(such_s * SR / hop)
+    csum = np.concatenate([[0.0], np.cumsum(pw)])
+
+    def mean(a, b):
+        a, b = max(a, 0), min(b, len(pw))
+        return (csum[b] - csum[a]) / (b - a) if b > a else 0.0
+
+    treffer = 0
+    for t in beat_times:
+        c = int(round(t * SR / hop))
+        best = 0.0
+        for d in range(-such, such + 1, max(1, such // 6)):
+            p0, p1 = mean(c + d - vor, c + d), mean(c + d, c + d + nach)
+            if 10 * np.log10(p1 + 1e-20) < min_db:
+                continue
+            best = max(best, p1 / (p0 + 1e-12))
+        if best >= 10 ** (schwelle_db / 10):
+            treffer += 1
+    return treffer / len(beat_times)
+
+
 def flux(mono, hop=512):
     f, t, s = signal.stft(mono, SR, nperseg=1024, noverlap=1024 - hop, padded=False, boundary=None)
     m = np.log1p(100 * np.abs(s))
@@ -96,6 +132,7 @@ def main():
     seg_s = beat * 4 * a.takte
     hop = 512
     env = low_env(mono, hop)
+    pw = low_power(mono)
     fl = flux(mono, hop)
     thr = np.median(fl) + 1.5 * np.std(fl)
     peaks, _ = signal.find_peaks(fl, height=thr, distance=int(0.05 * SR / hop))
@@ -129,16 +166,14 @@ def main():
         b = band_db(mid)
         h0, h1 = i0 // hop, i1 // hop
         dichte = float(((peaks >= h0) & (peaks < h1)).sum()) / a.takte
-        # kick presence: low-band onset strength on the beats against everywhere else
-        on = np.maximum(np.diff(env[h0:h1]), 0)
-        per = beat * SR / hop
-        bi = np.round(((eins - start) % beat) * SR / hop + per * np.arange(4 * a.takte)).astype(int)
-        bi = bi[bi < len(on)]
-        kick = float(on[bi].mean() / (on.mean() + 1e-9)) if len(bi) and len(on) else 0.0
+        # kick presence: share of the beats of this phrase that carry a low-band onset (0..1)
+        bt = start + ((eins - start) % beat) + beat * np.arange(4 * a.takte)
+        bt = bt[bt < start + seg_s - 0.15]
+        kick = kick_share(pw, bt)
         cl = np.corrcoef(segl[:, 0], segl[:, 1])[0, 1] if segl[:, 0].std() > 1e-7 and segl[:, 1].std() > 1e-7 else 1.0
         row = {"nr": k + 1, "takt": int(round((start - eins) / (beat * 4))) + 1, "t_s": round(start, 2),
                "lufs": round(lufs(segk), 1), "spitze_db": round(db(np.abs(seg).max()), 1), **b,
-               "anschlaege_je_takt": round(dichte, 1), "kick": round(kick, 1),
+               "anschlaege_je_takt": round(dichte, 1), "kick": round(kick, 2),
                "breite_db": round(db(np.sqrt((side ** 2).mean())) - db(np.sqrt((mid ** 2).mean())), 1),
                "tief_korr": round(float(cl), 2)}
         vec = np.array([row["lufs"]] + [b[n] for n, _, _ in BANDS] + [dichte])

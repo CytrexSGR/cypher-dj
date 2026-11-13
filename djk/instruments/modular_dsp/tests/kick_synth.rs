@@ -203,7 +203,7 @@ fn echtzeitpfad_allokiert_nicht() {
 /// every factory preset of the graph renders a finite hit below 1.0 that starts positive and settles on its own Tune value
 #[test]
 fn werkspresets_sind_gestimmt_und_unter_1() {
-    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../ui/presets/factory/modular");
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../ui/presets/werk/baukasten");
     let mut n = 0;
     for e in std::fs::read_dir(&dir).unwrap().filter_map(|e| e.ok()) {
         let name = e.file_name().to_string_lossy().to_string();

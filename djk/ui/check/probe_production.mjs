@@ -2,7 +2,7 @@
 // echter Seiten-Server mit Test-Katalog), davor die Projekt-Attrappe (check/proj_mock.mjs, S2 entsteht parallel),
 // kopfloser Chrome über cdp.mjs mit echten Maus-, Rad- und Zieh-Ereignissen. Kein Ton, kein Fenster, kein Betrieb.
 // Aufruf: node check/probe_production.mjs [--instanz i] [--teil 6]   (Teil n prüft die Slices 1..n; Browser-Probe ist Instanz i, Spec §4)
-// Ergebnis: pruef/ergebnisse/<zeit>-produktion/bericht.md und ergebnis.json; Exit 1, wenn ein Punkt FEHL ist.
+// Ergebnis: check/ergebnisse/<zeit>-produktion/bericht.md und ergebnis.json; Exit 1, wenn ein Punkt FEHL ist.
 import { reglerVonDb, REGLER_MAX } from '../public/production/fader_curve.js';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -415,7 +415,7 @@ try {
         await b.klick('[data-p="loop"]'); await warte(800);                                     // ohne Haken: die Attrappe nimmt an (200)
         const erfolg = { off: await offline(), loop: (await projekt()).loop.an, anfragen: log().slice(n8).filter((e) => e.weg === '/proj/aendern').length };
         await b.klick('[data-p="loop"]'); await warte(600);                                     // zurück
-        notiere('3.8c 503 mit Grund ist kein Ausfall', !mitGrund.off && mitGrund.meldung === 'The sample catalogue is not available' && mitGrund.loop === loop0
+        notiere('3.8c 503 mit Grund ist kein Ausfall', !mitGrund.off && mitGrund.meldung === 'No library catalog found (is its drive mounted?). To build one from your own folders: djk/start/djk-bibliothek dazu <folder>, then bauen' && mitGrund.loop === loop0
           && ohneGrund.off && ohneGrund.meldung === 'The project server did not answer: showing the last state' && erfolg.off === false && erfolg.loop === !loop0 && erfolg.anfragen === 1,
           `503 katalog_fehlt: OFFLINE ${mitGrund.off}, Meldung „${mitGrund.meldung}“, Loop unverändert ${mitGrund.loop === loop0}; 503 ohne Grund (Negativ-Kontrolle): OFFLINE ${ohneGrund.off}, „${ohneGrund.meldung}“; danach erfolgreiche Änderung (${erfolg.anfragen} Anfrage): OFFLINE ${erfolg.off}, Loop ${erfolg.loop}`);
       }

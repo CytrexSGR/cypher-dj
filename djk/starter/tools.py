@@ -34,7 +34,8 @@ def cargo_beispiel(name: str) -> Path:
     except (FileNotFoundError, OSError) as e:
         raise WerkzeugFehlt("cargo", HINWEIS_CARGO) from e
     if r.returncode != 0:
-        raise WerkzeugFehlt("cargo", HINWEIS_CARGO)
+        ende = "\n".join((r.stderr or "").strip().splitlines()[-8:])  # cargo's own words, the end of them
+        raise WerkzeugFehlt("cargo", HINWEIS_CARGO + (f"\ncargo said:\n{ende}" if ende else ""))
     if not pfad.is_file():
         raise WerkzeugFehlt("cargo", HINWEIS_CARGO)
     return pfad

@@ -152,7 +152,7 @@ test('Warp From Here (Start): rechts vom Beat gilt der Auto-Warp der Karte, am A
 // Die Python-Seite liest, was TypeScript schrieb: Schema korrektur.schema.json und die Regel der Kette (kette.eins_und_hotcues)
 function pythonLiest(materialOrdner) {
   const py = pythonVorgabe();
-  const code = ['import json,sys', 'from pathlib import Path', 'from werkstatt import bestand, kette', 'o = Path(sys.argv[1])',
+  const code = ['import json,sys', 'from pathlib import Path', 'import importlib', 'bestand = importlib.import_module("werkstatt.inventory")', 'kette = importlib.import_module("werkstatt.chain")', 'o = Path(sys.argv[1])',
     'z = bestand.korrekturen_lesen(o)', '[bestand.pruefe("korrektur.schema.json", x) for x in z]',
     'm = bestand.lies_json(o / "material.json")', 'print(json.dumps({"zeilen": len(z), "eins": kette.eins_und_hotcues(m, z)[0]}))'].join('\n');
   const r = spawnSync(py, ['-c', code, materialOrdner], { cwd: REPO_PFADE.werkstatt, encoding: 'utf8' });

@@ -71,7 +71,7 @@ test('1.15 A2: the table holds exactly the 345 tool paths of section 3 and grows
   assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/utility/')).length, 8 * 5);   // arr-fx slice 1
   assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/bk/')).length, 8 * 65);   // arr-bk slice 3 + 64-knob widening: an and k1..k64 per instance
   assert.equal([...REGLER.keys()].filter((p) => p.startsWith('rack/')).length, 48);   // slice 4c: 12 racks x 4 macro rows
-  assert.equal(REGLER.size, 909 + 784 + 345 + 1178 + 48);   // 3264 = the 3268 table rows of the core (2036 + 192 + 256 ins/bk k9..k64 + 784 <kanal>/bk/9..64) less the 4 deck/<n>/transport rows the dump does not list
+  assert.equal(REGLER.size, 909 + 784 + 345 + 1178 + 48 + 80);   // 3344 = 3264 + 80: the mixer went from 8 groups x 8 rows to 16 groups x 9 rows (c3396e9a, 3db625e3); the sibling test below compares every row with the core table in both directions
   for (const p of soll) assert.equal(muster.test(p), true, `schema takes ${p}`);
 });
 

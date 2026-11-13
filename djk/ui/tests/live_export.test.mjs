@@ -1,6 +1,6 @@
 // Plan live-module task 2: the loop cue export. The deck side (active loop, rendering file, catalogue) is a double; everything else is real: the proj
 // session, the dekodier cache, the real stems child process with the test separators (identitaet, identitaet_vier, gpu_belegt) like proj_stems.test.mjs.
-import test from 'node:test';
+import baseTest from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -12,7 +12,9 @@ import { schneideAusFassung, schreibeLoopAusFassung } from '../loops.ts';
 import { pythonVorgabe } from '../server.ts';
 import { REPO_PFADE } from '../paths.ts';
 
-const OHNE_GPU = !fs.existsSync('/dev/nvidia0') && 'no NVIDIA GPU: stems run on the GPU only';
+import { OHNE_GPU, OHNE_STEMS_PYTHON } from './support/stems_voraussetzung.mjs';   // no GPU, or a Python without the werkstatt: skipped, not hung
+// The tests start the real stem child (werkstatt.stems); with a Python that cannot import it none of them can run.
+const test = (name, a, b) => (typeof a === 'function' ? baseTest(name, { skip: OHNE_STEMS_PYTHON }, a) : baseTest(name, { ...a, skip: a.skip || OHNE_STEMS_PYTHON }, b));
 const RATE = 24000;                                  // frames per beat at 120 bpm
 const SHA = 'a'.repeat(64), MID = SHA.slice(0, 16);
 const BASIS_FRAMES = 12 * RATE;

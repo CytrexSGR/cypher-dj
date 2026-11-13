@@ -2,7 +2,7 @@
 // Der Client cypherdj-pruef-ein sendet beides im selben Frame; 0 heißt: Zeitstempel und Audio fallen zusammen.
 import fs from 'node:fs';
 const [port, anzahl, aus] = [process.argv[2], Number(process.argv[3] ?? 20), process.argv[4]];
-const holen = async () => (await (await fetch(`http://127.0.0.1:${port}/devices`)).json()).kern?.ein ?? null;
+const holen = async () => (await (await fetch(`http://127.0.0.1:${port}/geraete`)).json()).kern?.ein ?? null;
 const spaet = (ms) => new Promise((r) => setTimeout(r, ms));
 const deltas = [];
 let letzteFlanke = -1;

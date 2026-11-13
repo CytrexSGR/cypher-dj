@@ -8,7 +8,7 @@ Knobs are normalised 0..1. Knob 7 (wave env amount) maps -1..1, so 0.5 = off; 8 
 import json
 import pathlib
 
-ZIEL = pathlib.Path(__file__).resolve().parents[2] / "ui" / "presets" / "factory" / "modular"
+ZIEL = pathlib.Path(__file__).resolve().parents[2] / "ui" / "presets" / "werk" / "baukasten"
 
 P = [
     ("wavetable-chor", "Vowel Bloom", {1: 0.0, 2: 0.1, 3: 0.35, 4: 0.8, 5: 0.5, 6: 0.6, 7: 0.8, 8: 0.55, 9: 0.6},

@@ -191,7 +191,7 @@ test('presets on the real server: x-djk-quelle cypher writes autor cypher, witho
     body: JSON.stringify({ name, geraet: 'komp', werte: { thresh: -10 }, beschreibung: B }) });
   assert.equal((await sende('Von Cypher', { 'x-djk-quelle': 'cypher' })).status, 201);
   assert.equal((await sende('Von Andreas')).status, 201);
-  const lies = (slug) => JSON.parse(fs.readFileSync(path.join(nutzer, 'comp', `${slug}.preset.json`), 'utf8'));
+  const lies = (slug) => JSON.parse(fs.readFileSync(path.join(nutzer, 'komp', `${slug}.preset.json`), 'utf8'));
   assert.equal(lies('von-cypher').autor, 'cypher');
   assert.equal('autor' in lies('von-andreas'), false);
 });

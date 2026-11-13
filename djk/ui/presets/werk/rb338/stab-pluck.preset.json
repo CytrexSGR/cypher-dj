@@ -36,7 +36,7 @@
   "stab",
   "pluck"
  ],
- "notiz": "Values are practice; decay 0.25 s sits at the low end of devices.ts (0.2-2 s).",
+ "notiz": "Values are practice; decay 0.25 s sits at the low end of geraete.ts (0.2-2 s).",
  "angelegt": "2026-11-02T00:00:00.000Z",
  "geaendert": "2026-11-02T00:00:00.000Z"
 }

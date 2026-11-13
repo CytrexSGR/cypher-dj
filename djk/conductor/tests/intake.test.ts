@@ -193,7 +193,7 @@ test('plan_abbrechen: eigener Plan per /k/abbruch mit Quelle cypher; fremder Pla
 });
 
 test('Positivliste: leiser zählt gegen das Leiseste, was angenommene Pläne am Regler schon vorhaben', () => {
-  // gefunden 2026-09-23 mit pruef/folgen/ki_spur_leiser.jsonl: nach „deck/3 auf −20“ ging „deck/3 auf −3“ direkt durch,
+  // gefunden 2026-09-23 mit check/sequences/ki_spur_leiser.jsonl: nach „deck/3 auf −20“ ging „deck/3 auf −3“ direkt durch,
   // weil −3 unter dem Ist-Wert 0 dB bei der Einreichung lag, aber über den −20, auf denen der Regler dann steht
   const w = welt(); const a = annahme(w);
   a.spiegel.aufnehmen({ adresse: '/e/regler', felder: { pfad: 'deck/3/fader', wert: 0, halter: 'frei', sample: 0, beat: 19 } });

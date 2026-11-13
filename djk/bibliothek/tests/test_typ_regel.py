@@ -25,3 +25,17 @@ def test_bestimme(rel, dauer, bpm, wtyp, erwartet):
 ])
 def test_bpm_aus_namen(name, erwartet):
     assert bpm_aus_namen(name) == erwartet
+
+
+@pytest.mark.parametrize("name,erwartet", [
+    ("Abnahme Eins 128", 128), ("Artist - Song (128)", 128), ("Artist - Song [126]", 126), ("Song 124 BPM", 124),
+    ("128 Song", None), ("Track 2019", None), ("Song 12", None), ("Song 200", None),
+])
+def test_bpm_aus_namen_lose_for_tracks(name, erwartet):
+    """Kanban t_747a905b: a track named 'Artist - Song 128' carries its BPM at the end or in brackets."""
+    assert bpm_aus_namen(name, lose=True) == erwartet
+
+
+@pytest.mark.parametrize("name", ["Kick 90", "Vocal 120", "Song (128)"])
+def test_the_strict_rule_is_unchanged(name):
+    assert bpm_aus_namen(name) is None

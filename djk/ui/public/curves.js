@@ -46,7 +46,7 @@ export const ZIELE = new Set([
   ...SPUREN.flatMap((n) => RETURNS.map((r) => `spur/${n}/send/${r}`)),   // 1.10 Slice 3: post-fader sends of a track
   ...GRUPPEN.flatMap((n) => RETURNS.map((r) => `grp/${n}/send/${r}`)),   // ... and of a group
   ...RETURNS.flatMap((r) => RET_REGLER.map((p) => `ret/${r}/${p}`)),     // return strip: fader, balance, mute, solo
-  ...RETURNS.flatMap((r) => RET_HALL.map((p) => `ret/${r}/reverb/${p}`)),  // return hall: on switch and six normalised values
+  ...RETURNS.flatMap((r) => RET_HALL.map((p) => `ret/${r}/hall/${p}`)),  // return hall: on switch and six normalised values
   ...BK_KANAELE.flatMap((k) => Array.from({ length: 64 }, (_, i) => `${k}/bk/${i + 1}`)),   // S5r: graph knobs 1..64
   ...BK_SEND_KANAELE.flatMap((k) => Array.from({ length: 64 }, (_, i) => `${k}/bk/${i + 1}`)),   // S14: graph knobs 1..64 of fx/3, fx/4
 ]);

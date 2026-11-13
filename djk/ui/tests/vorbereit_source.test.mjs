@@ -174,7 +174,7 @@ test('no media library: a sibling folder that shares the root name as prefix is 
   assert.deepEqual([e.code, e.fehler], [409, 'datei_ausserhalb']);
 });
 
-test('set queue without media library, with the own catalog: "prepare all" enqueues nothing, no crash, nothing hangs', { skip: SKIP }, async (t) => {
+test('set queue without media library, with the own catalog: the track is offered as prepare, "prepare all" starts the reader, nothing hangs', { skip: SKIP }, async (t) => {
   const w = baueWelt(t);
   const e = baueEinleser(w.dir);
   const sets = fs.mkdtempSync(path.join(w.dir, 'sets-'));
@@ -184,11 +184,11 @@ test('set queue without media library, with the own catalog: "prepare all" enque
   assert.equal(p.code, 201);
   const ansicht = await hole(s.url, '/sammlungen/d');
   assert.equal(ansicht.code, 200);
+  assert.equal(ansicht.j.posten[0].status, 'prepare', 'the set view takes the track from the own catalog (Kanban t_747a905b)');
+  assert.ok(ansicht.j.posten[0].titel, 'with its title');
   const r = await post(s.url, '/sammlungen/d/vorbereiten', {});
-  assert.deepEqual(r, { code: 202, j: { eingereiht: 0 } }, 'a set entry is not offered as prepare without the media library');
+  assert.deepEqual(r, { code: 202, j: { eingereiht: 1 } });
   await warte(2500);   // longer than the queue timer
-  assert.equal(e.laeufe().length, 0);
+  assert.equal(e.laeufe().length, 1, 'the reader ran once, on the path from the catalog');
   assert.equal((await hole(s.url, '/bestand')).code, 200, 'the server lives');
-  // the single prepare route of the same track still works
-  assert.equal((await post(s.url, '/mediathek/vorbereiten', { material_id: mid(w.track) })).code, 202);
 });

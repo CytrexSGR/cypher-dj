@@ -1801,8 +1801,8 @@ def main(argv=None) -> int:
     ap.add_argument("--bestand", default="", help="hoerprobe: bestand/ (Vorgabe DJK.parent/bestand)")
     ap.add_argument("--maschine", default="", choices=("", "r3", "bungee", "bungee_fein"),
                     help="Bungee S2: kern.toml keylock_maschine der Prüfinstanz (leer: wie die Vorlage config/kern.toml)")
-    ap.add_argument("--aufnehmer", default="", help="Pfad cypherdj-aufnehmer4 (Vorgabe DJK/kern/build)")
-    ap.add_argument("--notbahn", default="", help="Pfad cypherdj-notbahn (Vorgabe DJK/notbahn/build)")
+    ap.add_argument("--aufnehmer", default="", help="Pfad cypherdj-aufnehmer4 (Vorgabe DJK/core/build)")
+    ap.add_argument("--notbahn", default="", help="Pfad cypherdj-notbahn (Vorgabe DJK/fallback/build)")
     ap.add_argument("--s3-modus", default="normal", choices=("normal", "sturm"), help="s3: Normallauf oder Knopf-Sturm")
     ap.add_argument("--sturm-n", type=int, default=24, help="s3 sturm: Zahl der Stürme (Knopf aus/an)")
     ap.add_argument("--ereignisse-s", type=float, default=10.0, help="s3 normal: alle so viele Sekunden ein Box-Ereignis")

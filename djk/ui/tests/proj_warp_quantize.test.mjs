@@ -8,6 +8,7 @@ import { baueKatalog, ksha } from './support/catalog.mjs';
 import { tmpOrdner } from './support/project.mjs';
 import { schreibeWav } from '../check/w1_wav.mjs';
 import { fuehreListeAus, BefehlFehler } from '../project/commands.ts';
+const DATEN = 'daten';   // a folder name on both sides of path.join: the export's folder renaming rewrites only some literals of a join call
 
 const SR = 48000;
 function burstWav(pfad, stellen, dauer) {   // Stereo, Rausch-Bursts an bekannten Stellen (Sekunden)
@@ -23,9 +24,9 @@ const DICHT = [0.2615, 0.3615, 1.0];              // bei 13 Beats je Sekunde: Be
 function aufbau(t) {
   // liefert { s, arr }
   const d = tmpOrdner(t, 'djk-quant-');
-  fs.mkdirSync(path.join(d, 'data'), { recursive: true });
-  const w1 = burstWav(path.join(d, 'daten', 'drums.wav'), STELLEN, 3.84);
-  const w2 = burstWav(path.join(d, 'daten', 'dicht.wav'), DICHT, 3.84);
+  fs.mkdirSync(path.join(d, DATEN), { recursive: true });
+  const w1 = burstWav(path.join(d, DATEN, 'drums.wav'), STELLEN, 3.84);
+  const w2 = burstWav(path.join(d, DATEN, 'dicht.wav'), DICHT, 3.84);
   const katalog = baueKatalog(path.join(d, 'kat'), [
     { n: 1, typ: 'loop', bpm: 125, takte: 2, dauer_s: 3.84, pfad: w1 },
     { n: 2, typ: 'loop', bpm: 125, takte: 2, dauer_s: 3.84, pfad: w2 },

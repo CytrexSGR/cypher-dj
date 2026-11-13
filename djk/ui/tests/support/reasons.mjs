@@ -7,6 +7,9 @@ import { BEREICH_GRUENDE } from '../../areas/proj/mapping.ts';
 
 const W = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const lies = (d) => fs.readFileSync(path.join(W, d), 'utf8');
+// The folder name taken from a path that names an existing file, so the export's folder renaming rewrites it with the others (a lone 'projekt' literal escapes it).
+const PROJEKT = path.dirname('project/commands.ts');
+const BEREICHE = path.dirname(path.dirname('areas/proj/area.ts')) + '/';   // same for a folder prefix: a lone 'bereiche/' literal escapes the renaming
 const ts = (ordner) => fs.readdirSync(path.join(W, ordner)).filter((f) => f.endsWith('.ts')).map((f) => `${ordner}/${f}`);
 export const KLASSEN = 'BefehlFehler|AblageFehler|VerlaufFehler|DekodierFehler|PatchFehler|ProjFehler|KatalogFehler|WiedergabeFehler|WarpFehler|AusgabeFehler|FreezeFehler|StandFehler|GeraeteFehler|StemsFehler|MergeFehler|ResampleFehler';
 export const S3_QUELLE = /^(AusgabeFehler|FreezeFehler|StandFehler|fehl|grund-Feld) /;   // Fundstellen, die nur über /proj/freeze und /proj/export kommen
@@ -18,25 +21,25 @@ export function gruendeAusDatei(d, t, dazu) {
     || d === 'project/bounce.ts' || d === 'project/resample.ts') for (const m of t.matchAll(/\bab\(\s*'([a-z_]+)'/g)) dazu(m[1], `ab ${d}`);
   // Gründe-Literale {fehler|grund: '…'} in bereiche/ und (V2 Fix F9) http/, auch als Zweige eines Ternärs (http/transport.ts:
   // { fehler: abweisung === 415 ? 'nur_json' : 'fremde_herkunft' }); gezählt werden der ganze Wert und die Zweige nach ? und :
-  if (d.startsWith('bereiche/') || d.startsWith('http/')) {
+  if (d.startsWith(BEREICHE) || d.startsWith('http/')) {
     for (const m of t.matchAll(/\b(?:fehler|grund):\s*((?:'[^']*'|[^,}'\n])*)/g)) {
       for (const l of m[1].matchAll(/(?:^|[?:]\s*)'([a-z_]+)'/g)) dazu(l[1], `literal ${d}`);
     }
   }
-  if (d.startsWith('bereiche/')) for (const m of t.matchAll(/\bfehl\(\s*'([a-z_]+)'/g)) dazu(m[1], `fehl ${d}`);
+  if (d.startsWith(BEREICHE)) for (const m of t.matchAll(/\bfehl\(\s*'([a-z_]+)'/g)) dazu(m[1], `fehl ${d}`);
   // I08 Task 8: areas/devices wirft GeraeteFehler und reicht den Grund von nurAndreas(quelle[, 'grund']) durch (Vorgabe im Kopf: grund = 'nur_andreas')
   if (d.startsWith('areas/devices/')) {
     for (const m of t.matchAll(/\bnurAndreas\([^,)]*,\s*'([a-z_]+)'/g)) dazu(m[1], `nurAndreas ${d}`);
     for (const m of t.matchAll(/\bnurAndreas = \([^)]*\bgrund = '([a-z_]+)'/g)) dazu(m[1], `nurAndreas ${d}`);
   }
-  if (d.startsWith('projekt/')) for (const m of t.matchAll(/\breadonly grund = '([a-z_]+)'/g)) dazu(m[1], `grund-Feld ${d}`);
+  if (d.startsWith(PROJEKT + '/')) for (const m of t.matchAll(/\breadonly grund = '([a-z_]+)'/g)) dazu(m[1], `grund-Feld ${d}`);
 }
 
 // Grund → Menge der Fundstellen (Klasse bzw. Muster und Datei)
 export function gruendeAusDemCode() {
   const g = new Map();
   const dazu = (grund, wo) => { if (!g.has(grund)) g.set(grund, new Set()); g.get(grund).add(wo); };
-  for (const d of [...ts('projekt'), ...ts('areas/proj'), ...ts('http'), 'catalog.ts']) gruendeAusDatei(d, lies(d), dazu);
+  for (const d of [...ts(PROJEKT), ...ts('areas/proj'), ...ts('http'), 'catalog.ts']) gruendeAusDatei(d, lies(d), dazu);
   for (const x of BEREICH_GRUENDE) dazu(x, 'BEREICH_GRUENDE');
   // ausdrücklich genannt; jede nur, wenn sie im Code dieses Baums wirklich steht
   for (const [x, d] of [['intern', 'areas/proj/area.ts'], ['slot_belegt', 'project/commands.ts'], ['ueber_projekt', 'server.ts']]) {
@@ -61,7 +64,7 @@ export function gruendeGeraete() {
 const LIT = String.raw`('(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"|\`[^\`]*\`)`;
 const NUR_LIT = new RegExp(`^${LIT}$`);
 const ohneEinschub = (s) => s.slice(1, -1).replace(/\$\{[^}]*\}/g, 'x');   // ${…} in Vorlagen zählt als Platzhalter
-const ORTE = () => [...ts('projekt'), ...ts('areas/proj'), ...ts('http')];
+const ORTE = () => [...ts(PROJEKT), ...ts('areas/proj'), ...ts('http')];
 const zeile = (t, i) => t.slice(0, i).split('\n').length;
 // Fix-Runde 2 S3, F2: das text-Argument von fehl() und new AusgabeFehler|FreezeFehler|StandFehler('grund', …) als Ausdruck bis zum Komma oder
 // zur Klammer derselben Tiefe (Zeichenketten und Vorlagen übersprungen). Ein Literal ist ein Text; ein Ternär, dessen Zweige alle Literale (oder

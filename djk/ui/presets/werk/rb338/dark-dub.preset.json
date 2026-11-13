@@ -36,7 +36,7 @@
   "dub",
   "square"
  ],
- "notiz": "Square as the second waveform from devices.ts (wellenform bool); values are practice.",
+ "notiz": "Square as the second waveform from geraete.ts (wellenform bool); values are practice.",
  "angelegt": "2026-11-02T00:00:00.000Z",
  "geaendert": "2026-11-02T00:00:00.000Z"
 }

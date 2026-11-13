@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { Sammlungen, slugVon, SammlungFehler } from '../collection.ts';
+const KAPUTT = 'kaputt';   // a folder name on both sides of path.join: the export's folder renaming rewrites only some literals of a join call
 
 const tmp = (t) => { const d = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-sets-')); t.after(() => fs.rmSync(d, { recursive: true, force: true })); return d; };
 const M1 = '0021a3a9c077b9d5', M2 = '66d2f6fe1cb9e5f3';
@@ -34,10 +35,10 @@ test('Sammlung: Track hinzufügen, gleicher Track nochmal → schon_drin, falsch
 
 test('Sammlung: kaputte set.json wird gelistet, nicht verworfen, Datei bleibt unangetastet', (t) => {
   const d = tmp(t); const s = new Sammlungen(d);
-  fs.mkdirSync(path.join(d, 'broken')); fs.writeFileSync(path.join(d, 'kaputt', 'set.json'), '{nein');
+  fs.mkdirSync(path.join(d, KAPUTT)); fs.writeFileSync(path.join(d, KAPUTT, 'set.json'), '{nein');
   assert.deepEqual(s.liste(), [{ slug: 'kaputt', name: 'kaputt', art: 'set', posten: 0, fehler: 'json_kaputt' }]);
   assert.throws(() => s.lies('kaputt'), (e) => e.code === 409 && e.fehler === 'json_kaputt');
-  assert.equal(fs.readFileSync(path.join(d, 'kaputt', 'set.json'), 'utf8'), '{nein');
+  assert.equal(fs.readFileSync(path.join(d, KAPUTT, 'set.json'), 'utf8'), '{nein');
 });
 
 import { stapel, hole, post, tmpMt, mid } from './support/media_library.mjs';

@@ -7,6 +7,7 @@ import { sitzung, warteBis } from './support/proj_context.mjs';
 import { baueKatalog, ksha } from './support/catalog.mjs';
 import { tmpOrdner } from './support/project.mjs';
 import { schreibeWav } from '../check/w1_wav.mjs';
+const DATEN = 'daten';   // a folder name on both sides of path.join: the export's folder renaming rewrites only some literals of a join call
 
 const lies = (datei) => JSON.parse(fs.readFileSync(datei, 'utf8'));
 const SR = 48000, STELLEN_S = [0.5, 1.0, 2.0, 3.0];
@@ -20,8 +21,8 @@ function burstWav(pfad) {   // 3,84 s Stereo, Rausch-Bursts an bekannten Stellen
 }
 function aufbau(t) {
   const d = tmpOrdner(t, 'djk-trans-');
-  fs.mkdirSync(path.join(d, 'data'), { recursive: true });
-  const w = burstWav(path.join(d, 'daten', 'drums.wav'));
+  fs.mkdirSync(path.join(d, DATEN), { recursive: true });
+  const w = burstWav(path.join(d, DATEN, 'drums.wav'));
   const katalog = baueKatalog(path.join(d, 'kat'), [{ n: 1, typ: 'loop', bpm: 125, takte: 2, dauer_s: 3.84, pfad: w }]);
   return sitzung(t, { katalog });
 }

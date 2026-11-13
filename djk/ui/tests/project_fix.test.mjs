@@ -572,7 +572,7 @@ test('Leistung: Tempo bei eingefrorener Spur nimmt den vollen Weg (Freeze fällt
 test('Lesbarkeit: keine Zeile in projekt/*.ts und areas/proj/*.ts ist länger als 160 Zeichen', () => {
   const lang = [];
   let dateien = 0;
-  for (const d of ['projekt', 'areas/proj']) {
+  for (const d of ['project/storage.ts', 'areas/proj/area.ts'].map((f) => path.dirname(f))) {   // dirname of existing files: the export renames the folders in these paths
     for (const n of fs.readdirSync(d).filter((x) => x.endsWith('.ts'))) {
       dateien++;
       fs.readFileSync(path.join(d, n), 'utf8').split('\n').forEach((z, i) => { if ([...z].length > 160) lang.push(`${d}/${n}:${i + 1} (${[...z].length})`); });

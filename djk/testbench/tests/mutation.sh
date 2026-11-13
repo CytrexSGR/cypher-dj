@@ -9,7 +9,7 @@ HIER=$(cd "$(dirname "$0")/.." && pwd)
 T=$(mktemp -d "${TMPDIR:-/tmp}/pruefstand-mutation.XXXXXX")
 trap 'rm -rf "$T"' EXIT
 cp -r "$HIER" "$T/testbench"
-rm -rf "$T/pruefstand/laeufe" "$T/testbench/build"
+rm -rf "$T/testbench/laeufe" "$T/testbench/build"
 vorher=$(md5sum < "$T/testbench/$1")
 sed -i "$2" "$T/testbench/$1"
 [ "$vorher" != "$(md5sum < "$T/testbench/$1")" ] || { echo "Mutation greift nicht: $1 unverändert" >&2; exit 2; }

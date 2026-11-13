@@ -1,4 +1,4 @@
-# Package 1.15 "Mix tools", part A: Utility — report
+# Package 1.15 "Mix tools", part A: Utility: report
 
 Status 2026-11-02, cloud session, branch `claude/1-15-gate-utility-9kezow`. Work only inside `djk/core/dsp/`.
 

@@ -23,7 +23,7 @@ export const MAX_RETURNS = 4;
 // pinned by tests/projekt_inserts.test.mjs. `komp` (4a), `eq`, `saett` and `lim` (4b) and `utility` (arr-fx) are accepted
 // (INSERT_ARTEN_AKTIV); the sizes of eq and
 // saett were decided by the cost measurement (T11, docs/architecture/stand/routing-1-10.md) and live in the contract only: these constants are read from it.
-export const MAX_INSERTS_PRO_STRANG = 4;
+export const MAX_INSERTS_PRO_STRANG = 5;
 export const MAX_INS_KOMP = INSERT_ARTEN.komp.instanzen;
 export const MAX_INS_EQ = INSERT_ARTEN.eq.instanzen;
 export const MAX_INS_SAETT = INSERT_ARTEN.saett.instanzen;

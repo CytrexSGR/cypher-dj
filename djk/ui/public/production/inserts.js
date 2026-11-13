@@ -1,5 +1,5 @@
 // PRODUCTION (1.10 Slice 4a/4b): the insert chain of every strip (track, group, return, master). One row per strip in the INSERTS block under the returns:
-// four places, the stages in signal order from the left, the first free place offers a compressor, an EQ and a saturator (+ Comp, + EQ, + Sat, + Lim), each stage
+// five places, the stages in signal order from the left, the first free place offers a compressor, an EQ and a saturator (+ Comp, + EQ, + Sat, + Lim), each stage
 // has a bypass button, a name button that opens the parameter popover, arrows to reorder and a remove button. The compressor popover is a slider list with
 // the key; the EQ popover has the output gain, the proportional-Q switch and eight bands (switch, type, frequency, gain, Q, slope, placement); the saturator
 // has drive, output and mix. Each strip row says its chain latency and the delay the core adds to keep it in time (pdc.js, slice 4b T13), the header the largest path latency. Every operation goes through ctx.aendere to POST /proj/aendern
@@ -18,7 +18,7 @@ import { SC_EIGEN, schluesselGruppen, schluesselBefehl, schluesselWert, schluess
 import { geraetName } from './rack_device.js';
 import { baueFrontplatte } from '../panel.js';
 
-export const MAX_PLAETZE = 4;      // equal to project/model.ts MAX_INSERTS_PRO_STRANG, checked by tests/production_inserts.test.mjs
+export const MAX_PLAETZE = 5;      // equal to project/model.ts MAX_INSERTS_PRO_STRANG, checked by tests/production_inserts.test.mjs
 export const MAX_KOMP = 12;        // equal to MAX_INS_KOMP
 export const MAX_EQ = 8;           // equal to MAX_INS_EQ (pool 2 measured 2026-11-06, routing-1-10.md; 8 since arr-fx slice 2)
 export const MAX_SAETT = 4;        // equal to MAX_INS_SAETT (4 since arr-fx slice 2)
@@ -178,9 +178,9 @@ export const anzahl = (p, art) => straenge(p).reduce((n, s) => n + s.inserts.fil
 export const frei = (p, art) => MAX_ART[art] - anzahl(p, art);
 export const anzahlKomp = (p) => anzahl(p, 'komp');
 export const freieKomp = (p) => frei(p, 'komp');
-// the four places of a strip: the stages in order, then null for the free ones
+// the five places of a strip: the stages in order, then null for the free ones
 export const plaetze = (strang) => Array.from({ length: MAX_PLAETZE }, (_, i) => strang?.inserts?.[i] ?? null);
-// the command of the add button, or null when the chain has four stages or the pool of that kind is empty
+// the command of the add button, or null when the chain has five stages or the pool of that kind is empty
 export function neuerInsertBefehl(p, strangId, art = 'komp') {
   const s = straenge(p).find((x) => x.id === strangId);
   if (!s || !MAX_ART[art] || s.inserts.length >= MAX_PLAETZE || frei(p, art) <= 0) return null;

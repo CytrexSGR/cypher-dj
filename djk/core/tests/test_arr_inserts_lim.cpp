@@ -1,8 +1,8 @@
-// Master limiter insert kind `lim` of the arrangement mixer (pool 1, KanalLimiter in sample-peak mode, 74 samples of latency).
+// Master limiter insert kind `lim` of the arrangement mixer (KanalLimiter in true-peak mode, latency from ins_lim_latenz(): 86 samples at 48 kHz).
 // A 1 kHz sine on track 1 in the centre, the stage is slot 0 of its kind, start at bar 90000 (quant 2 from beat 0), blocks of 256.
 // Cases: 1 lim_haelt_decke (+6 dBFS sine: every output sample stays under the ceiling, at -1 dB and at -6 dB, and the stage reports more than 6 dB of reduction;
 // negative control: a -20 dBFS sine passes unchanged, delayed by the latency, with 0 dB reported), 2 lim_bypass (row an = 0: the input delayed by the latency, bit-equal),
-// 3 lim_pdc (the latency is the one of a KanalLimiter with the fixed settings, a master chain with one lim gives 74), 4 lim_lader (slot 1 loads, slot 2 is refused: pool 1),
+// 3 lim_pdc (the latency is the one of a KanalLimiter with the fixed settings, a master chain with one lim gives the latency), 4 lim_lader (slot 1 loads, slot 2 is refused: pool 1),
 // 5 lim_pool_pin (pool constant, table rows, global index).
 // Mutation (CMakeLists.txt): INS_LIM_DECKE_FEST (the stage ignores the decke row and stays at -1 dB: the -6 dB assertion of case 1 goes red).
 #include <algorithm>
@@ -15,6 +15,7 @@
 #include "arr_build.h"
 #include "arr_file.h"
 #include "cypherdj/arr_inserts.h"
+#include "cypherdj/ins_lim.h"
 #include "cypherdj/arr_pdc.h"
 #include "cypherdj/arr_playback.h"
 #include "check.h"
@@ -26,7 +27,7 @@ using cdj::ArrStufe;
 
 #define TR(x) auto x##_p = std::make_unique<Treiber>(); Treiber& x = *x##_p;
 static constexpr int64_t V = 537;
-static constexpr int L_LIM = 74;                       // measured: KanalLimiter(48000, {vorhalt 1.5 ms, sample peak}).latenz_samples()
+static const int L_LIM = cdj::ins_lim_latenz();         // KanalLimiter(48000, {vorhalt 1.5 ms, true peak}).latenz_samples() = 74 + 12
 static constexpr int64_t VON = 93000, BIS = 117000;    // well after the 480 sample blend and the latency
 
 static int reg(Treiber& t, const std::string& pfad) {
@@ -113,7 +114,7 @@ int main() {
   {  // 3 lim_pdc
     cypherdj::dsp::KanalLimiterEinstellung e;
     e.vorhalt_ms = 1.5f;
-    e.echtspitze = false;
+    e.echtspitze = true;
     const int soll = cypherdj::dsp::KanalLimiter(48000.0, e).latenz_samples();
     std::printf("3: KanalLimiter latency %d\n", soll);
     PRUEF((soll) == (L_LIM));
@@ -179,6 +180,37 @@ int main() {
     PRUEF((cdj::ARR_INS_ALLE) == (slot + cdj::ARR_INS_LIM + cdj::ARR_INS_UTIL + cdj::ARR_INS_BK + cdj::ARR_INS_HOST));   // plan 1.11 T4 / arr-fx / arr-bk: the utility, bk and host slots follow the limiter
     PRUEF((cdj::INS_G_HOST0) == (slot + cdj::ARR_INS_LIM + cdj::ARR_INS_UTIL + cdj::ARR_INS_BK));
     std::printf("5: pool lim %d, rows %d, global index %d, ARR_INS_ALLE %d\n", cdj::ARR_INS_LIM, n, slot, cdj::ARR_INS_ALLE);
+  }
+
+  {  // 6 lim_echte_spitze: a sine at fs/4 (phase 45 degrees) has inter-sample peaks 3 dB above its samples; with ceiling -1 the TRUE peak (4x, sinc) stays under it too
+    TR(ref) TR(a)
+    auto hoch = std::make_unique<Audio>();               // fs/4 sine, phase 45 degrees: every sample is +-0.707 of the true peak
+    hoch->d.resize(400000 * 2);
+    for (int64_t f = 0; f < 400000; ++f)
+      hoch->d[2 * f] = hoch->d[2 * f + 1] = 2.0f * static_cast<float>(std::sin(3.14159265358979323846 * (0.5 * static_cast<double>(f) + 0.25)));
+    hoch->fuellen(400000);
+    spiele(ref, spur1(&laut->a, false), 120000);
+    const double g = spitze(ref.pml, VON, BIS) / 2.0;      // gain of the path after the stage
+    setze(a, "ins/lim/1/an", 1.0f);
+    setze(a, "ins/lim/1/decke", -1.0f);
+    spiele(a, spur1(&hoch->a, true), 120000);
+    // true peak: Hann-windowed sinc, 4x, 129 taps per phase (error far below 0.05 dB at 12 kHz)
+    double tp = 0.0;
+    for (int64_t i = VON; i < BIS; ++i)
+      for (int ph = 1; ph < 4; ++ph) {
+        double acc = 0.0;
+        for (int k = -64; k <= 64; ++k) {
+          const double x = k - ph / 4.0, w = 0.5 + 0.5 * std::cos(3.14159265358979323846 * x / 65.0);
+          const double sn = std::fabs(x) < 1e-12 ? 1.0 : std::sin(3.14159265358979323846 * x) / (3.14159265358979323846 * x);
+          acc += static_cast<double>(a.pml[i - k]) * sn * w;
+        }
+        tp = std::max(tp, std::fabs(acc));
+      }
+    const double smp = spitze(a.pml, VON, BIS);
+    const double bound = std::pow(10.0, -1.0 / 20.0) * g * 1.006;   // +0.05 dB for the measuring interpolator
+    std::printf("6: 12 kHz sine +6 dBFS, ceiling -1: sample peak %.5f, true peak %.5f (bound %.5f, g %.4f)\n", smp, tp, bound, g);
+    PRUEF(tp <= bound);
+    PRUEF(tp > 0.97 * std::pow(10.0, -1.0 / 20.0) * g);     // positive control: limited to the ceiling, not muted
   }
   PRUEF_ENDE();
 }

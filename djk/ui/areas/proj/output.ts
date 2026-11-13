@@ -183,6 +183,7 @@ export async function spitzeDbVonF32(datei: string): Promise<number> {
 export { wirtLebt } from './instrument_host.ts';
 
 export const EXPORT_MAX_BEATS = 1024;
+export const EXPORT_AUSKLANG_MAX = 64;   // longest optional export tail in beats
 // plan 1.11 task 13: an active host stage (a foreign plugin in its own process) cannot be rendered offline: the export is captured in real time
 export const brauchtEchtzeit = (p: Projekt): boolean => alleInserts(p).some((x) => x.insert.art === 'host' && x.insert.an);
 const ECHTZEIT_ZUGABE_MS = 15_000;   // a real-time export may take its length plus this much before it counts as lost
@@ -537,10 +538,11 @@ export class Ausgabe {
     } catch (e) { throw this.nachFehler(e); } finally { this.gib(); }
   }
 
-  // Die Produktions-Wirte (djk-instrumente --arr1, --arr2) schreiben /dev/shm/cypherdj[-i]/wirt-arr<s>.json (instrument_host.py: name, pid, bereit, fehler, …). Fehlt der
-  // Wirt eines Slots, spielt im Kern keine Surge für diesen Slot, und der Freeze wäre eine leere Datei ohne Fehlermeldung (Erhebung 2026-10-20). Darum lehnt
-  // der Freeze vorher ab. Die Datei allein genügt nicht (S3-Fix W2): instrument_host.py und djk-stop löschen sie nie, sie bleibt mit bereit:true und toter pid
-  // liegen (wirtLebt()). 1.9 (E3): je Slot; lebt der Wirt, zählt kein fehler-Eintrag; ist er tot, nennt ein fataler Eintrag den Grund (wirt_fehler).
+  // The production hosts (djk-instrumente --arr1, --arr2) write /dev/shm/cypherdj[-i]/wirt-arr<s>.json
+  // (instrument_host.py: name, pid, bereit, fehler, …). When the host of a slot is missing, no Surge plays that slot in the core and the freeze
+  // would be an empty file without an error message (survey 2026-10-20), so the freeze refuses beforehand. The file alone is not
+  // enough (S3-Fix W2): instrument_host.py and djk-stop never delete it, it stays with bereit:true and a dead pid (wirtLebt()). 1.9 (E3):
+  // per slot; when the host lives, no fehler entry counts; when it is dead, a fatal entry names the reason (wirt_fehler).
   private pruefeWirt(slots: number[]): void {
     const ordner = (this.opt.wirtOrdner ?? (() => wirtOrdnerVorgabe()))();
     for (const slot of slots) {
@@ -745,7 +747,17 @@ export class Ausgabe {
 
   async exportiere(d: Record<string, unknown>): Promise<ExportAntwort> {
     await this.warteNachEigenemFreeze();                                 // 1.9 T12
-    const { von, bis } = this.pruefeBereich(d, ['von_beat', 'bis_beat', 'abgriff']);
+    // ausklang_beats: optional tail, the render range is extended at its end by this many beats so a reverb or delay tail is not cut at the range end
+    if (d.ausklang_beats !== undefined
+      && (typeof d.ausklang_beats !== 'number' || !Number.isFinite(d.ausklang_beats) || d.ausklang_beats < 0 || d.ausklang_beats > EXPORT_AUSKLANG_MAX)) {
+      fehl('argument_ungueltig', `ausklang_beats: a number from 0 to ${EXPORT_AUSKLANG_MAX} is required`);
+    }
+    const ausklang = (d.ausklang_beats as number | undefined) ?? 0;
+    const { von, bis: bisOhne } = this.pruefeBereich({ ...d, ausklang_beats: undefined }, ['von_beat', 'bis_beat', 'abgriff', 'ausklang_beats']);
+    const bis = bisOhne + ausklang;
+    if (bis - von > EXPORT_MAX_BEATS) {
+      fehl('export_bereich', `beat ${von} to ${bis} (with the tail of ${ausklang} beats): the export is 1 to ${EXPORT_MAX_BEATS} beats long`);
+    }
     if (d.abgriff !== undefined && d.abgriff !== 'produktion' && d.abgriff !== 'set') fehl('argument_ungueltig', 'abgriff: production or set expected');
     // 1.10: Vorgabe des Servers ist der Produktions-Abgriff (der Render selbst nimmt ohne Angabe den Ring, P11)
     const abgriff: Abgriff = d.abgriff === 'set' ? 'set' : 'produktion';

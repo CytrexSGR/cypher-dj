@@ -43,6 +43,7 @@ def _wav(p, s=6.0):
     sf.write(str(p), (np.random.default_rng(1).standard_normal((int(48000 * s), 2)) * 0.1).astype(np.float32), 48000, subtype="FLOAT")
 
 
+@pytest.mark.skipif(not __import__("shutil").which("rubberband"), reason="needs the rubberband program (apt: rubberband-cli)")
 def test_warp_meldet_echte_prozente_steigend_bis_100(tmp_path):
     ein, aus = tmp_path / "e.wav", tmp_path / "a.wav"
     _wav(ein)
@@ -54,6 +55,7 @@ def test_warp_meldet_echte_prozente_steigend_bis_100(tmp_path):
     assert aus.exists()
 
 
+@pytest.mark.skipif(not __import__("shutil").which("rubberband"), reason="needs the rubberband program (apt: rubberband-cli)")
 def test_warp_ohne_melde_bleibt_wie_vorher(tmp_path):
     ein, aus = tmp_path / "e.wav", tmp_path / "a.wav"
     _wav(ein, 2.0)
@@ -61,6 +63,7 @@ def test_warp_ohne_melde_bleibt_wie_vorher(tmp_path):
     assert "-q" in warp(ein, aus, tm)
 
 
+@pytest.mark.skipif(not __import__("shutil").which("rubberband"), reason="needs the rubberband program (apt: rubberband-cli)")
 def test_warp_fehler_bleibt_ein_fehler_mit_melde(tmp_path):
     """NEGATIV: eine kaputte Eingabe wirft weiter CalledProcessError, auch wenn gemeldet wird."""
     ein = tmp_path / "e.wav"

@@ -15,7 +15,7 @@ import { bestandVorgabe } from './stack.mjs';
 
 const REPO = path.resolve(new URL('.', import.meta.url).pathname, '..', '..', '..');
 const BESTAND = bestandVorgabe(REPO);
-const MESSER = path.join(REPO, 'djk/core/dsp/build-ohr-messer/messer/messer_baender_datei');
+const MESSER = path.join(REPO, 'djk/core/dsp/build-ohr-messer/meters/messer_baender_datei');
 const RASTER_ORDNER = path.join(os.homedir(), '.config', 'cypherdj', 'raster');
 const AUS_PFAD = path.join(os.homedir(), 'messungen', '2026-09-28-ohr-slice2', 'anschlag_echt.json');
 

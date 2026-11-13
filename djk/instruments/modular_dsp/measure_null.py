@@ -24,7 +24,7 @@ Probes (`render_kit` has no host tempo: a synced `lfo` stands at beat 0 there, a
 
 Adding a graph (Tasks 11-13): one entry in GRAPHEN. Fields of `Graph`: `neu` path of the new graph relative to the repo root,
 `alt_pfad` the path in the old ref (default `neu`), `alt_ref` the old ref (default eb4dc6e8, `--alt` overrides), `presets` the file
-prefix of its factory presets in ui/presets/factory/modular (`<prefix>-*.preset.json`, plus `presets_extra` names), `neue`
+prefix of its factory presets in ui/presets/werk/baukasten (`<prefix>-*.preset.json`, plus `presets_extra` names), `neue`
 the new knob numbers (default: every number in the new graph that the old one lacks), `null_zustand` {nr: value} forced on the new
 side in the null cases (for a knob whose vorgabe is not its "off"), `merkmale` the feature-on cases `(name, {nr: value})` or
 `(name, {nr: value}, probe)`, and the audit limits.
@@ -42,7 +42,7 @@ import numpy as np
 HIER = pathlib.Path(__file__).resolve().parent
 REPO = HIER.parents[2]
 WERKZEUG = HIER.parent / "target" / "release" / "examples" / "render_kit"
-PRESETS = REPO / "djk" / "ui" / "presets" / "factory" / "modular"
+PRESETS = REPO / "djk" / "ui" / "presets" / "werk" / "baukasten"
 MESSUNG = pathlib.Path.home() / "messungen" / "2026-11-11-synth-ausbau"
 SR = 48_000
 
@@ -193,8 +193,23 @@ def preset_dateien(cfg):
     return dateien
 
 
+def _deutscher_pfad(pfad):
+    """The path under the German folder names the repo had before 2026-11-13 (docs/veroeffentlichung/namen_ordner.tsv)."""
+    zurueck = {}
+    for z in (REPO / "docs/veroeffentlichung/namen_ordner.tsv").read_text().splitlines():
+        if "\t" in z and not z.startswith("#"):
+            de, en = z.split("\t")[:2]
+            zurueck.setdefault(en, de)
+    return "/".join(zurueck.get(t, t) for t in pfad.split("/"))
+
+
 def git_datei(ref, pfad):
-    return subprocess.run(["git", "-C", str(REPO), "show", f"{ref}:{pfad}"], capture_output=True, text=True, check=True).stdout
+    """File at an older commit; refs from before the folder rename find it under the German folder names."""
+    for p in (pfad, _deutscher_pfad(pfad)):
+        r = subprocess.run(["git", "-C", str(REPO), "show", f"{ref}:{p}"], capture_output=True, text=True)
+        if r.returncode == 0:
+            return r.stdout
+    raise FileNotFoundError(f"{pfad} not at {ref} (nor as {_deutscher_pfad(pfad)})")
 
 
 # ---- the three sets ----------------------------------------------------------------------------------------------------------------------

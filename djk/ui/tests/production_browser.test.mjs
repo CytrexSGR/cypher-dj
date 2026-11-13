@@ -10,6 +10,7 @@ import { GERAET_TYP, geraetNutzlast, instrumentBefehl, effektBefehl, geraetAblag
 import { katalog } from '../presets/area.ts';
 import { neuesProjekt } from '../project/model.ts';
 import { fuehreListeAus } from '../project/commands.ts';
+const importVon = (datei, vor = './') => new RegExp(`from '${(vor + datei).replace(/[.]/g, '\\.')}'`);   // the file name stays a plain literal so the export's file renaming rewrites it too (a regex literal escapes the dot and escapes the rewrite)
 
 const KATALOG = katalog([{ name: 'juno-pad', art: 'instrument' }, { name: 'fx', art: 'effekt' }]);
 const speicher = (start = {}) => { const m = new Map(Object.entries(start)); return { m, getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)) }; };
@@ -125,9 +126,9 @@ test('drop builders: instrument → spur_neu (rb338 as NEU, surge slot 1, bk gra
 
 test('drop builders: full chain and empty pool refuse with text; an instrument anywhere makes a new track, an effect needs a track row', () => {
   let p = projekt();
-  for (let i = 0; i < 4; i++) p = fuehreListeAus(p, [{ befehl: 'insert_setzen', strang_id: 's1', pos: i, art: 'komp' }]).projekt;
+  for (let i = 0; i < 5; i++) p = fuehreListeAus(p, [{ befehl: 'insert_setzen', strang_id: 's1', pos: i, art: 'komp' }]).projekt;
   assert.deepEqual(effektBefehl(p, 's1', geraetNutzlast(E('komp'))), { fehler: 'kette_voll', text: GERAET_TEXT.kette_voll });
-  for (const s of ['s2', 'master']) for (let i = 0; i < 4; i++) p = fuehreListeAus(p, [{ befehl: 'insert_setzen', strang_id: s, pos: i, art: 'komp' }]).projekt;
+  for (const [s, n] of [['s2', 5], ['master', 2]]) for (let i = 0; i < n; i++) p = fuehreListeAus(p, [{ befehl: 'insert_setzen', strang_id: s, pos: i, art: 'komp' }]).projekt;
   let q = fuehreListeAus(p, [{ befehl: 'spur_neu', art: 'audio' }]).projekt;
   assert.deepEqual(effektBefehl(q, 's3', geraetNutzlast(E('komp'))), { fehler: 'ins_voll', text: GERAET_TEXT.ins_voll });
   q = projekt();
@@ -235,9 +236,9 @@ test('T7.1 presetZiel: a full chain or an empty pool refuse a NEW stage with tex
   const n = presetNutzlast(eintragVon('komp'));
   let p = presetProjekt();
   p = JSON.parse(JSON.stringify(p));
-  p.spuren[1].inserts = [1, 2, 3, 4].map((i) => ({ id: `e${i}`, art: 'eq', an: true, werte: {} }));
+  p.spuren[1].inserts = [1, 2, 3, 4, 5].map((i) => ({ id: `e${i}`, art: 'eq', an: true, werte: {} }));
   assert.deepEqual(presetZiel(p, { spurIndex: 1 }, n), { fehler: 'kette_voll', text: PRESET_ZIEL_TEXT.kette_voll });
-  p.spuren[1].inserts = [1, 2, 3, 4].map((i) => ({ id: `k${i}`, art: 'komp', an: true, werte: {} }));
+  p.spuren[1].inserts = [1, 2, 3, 4, 5].map((i) => ({ id: `k${i}`, art: 'komp', an: true, werte: {} }));
   assert.deepEqual(presetZiel(p, { spurIndex: 1 }, n), { ziel: { art: 'insert', insert_id: 'k1' } }, 'four compressors: the preset goes to the first one');
   // 12 compressors in the project, none on the Lead track: no new one
   p.spuren[1].inserts = [1, 2, 3, 4].map((i) => ({ id: `a${i}`, art: 'komp', an: true, werte: {} }));
@@ -606,7 +607,7 @@ test('U8 wiring: COLLECTIONS enabled; #kollektionen in index.html with collectio
   assert.match(seite, /<link rel="stylesheet" href="collections.css">/);
   assert.ok(fs.existsSync(new URL('../public/collections.css', import.meta.url)));
   const prod = fs.readFileSync(new URL('../public/production/production.js', import.meta.url), 'utf8');
-  assert.match(prod, /import \{ bindeKollektionen \} from '\.\.\/kollektionen\.js'/);
+  assert.match(prod, /import \{ bindeKollektionen \} /); assert.match(prod, importVon('collections.js', '../'));
   assert.match(prod, /bindePresetHost, bindePresetMarken, bindeKollektionen\]/);
   assert.match(prod, /presetListe/);
   const app = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');

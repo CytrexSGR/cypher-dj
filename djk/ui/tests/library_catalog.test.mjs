@@ -80,3 +80,18 @@ test('djk-bibliothek: katalog_ziel equals katalogVorgabe(MEDIATHEK_VORGABE) in t
   }
   assert.equal(typeof katalogVorgabe, 'function');
 });
+
+// Kanban t_747a905b: '..' behind a symlinked folder is resolved by the kernel, as the builder does (kanonisch), not textually
+test('katalogVorgabe resolves a link before .. like the builder does', (t) => {
+  const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'katalogpfad-')));
+  t.after(() => fs.rmSync(tmp, { recursive: true }));
+  fs.mkdirSync(path.join(tmp, 'echt', 'sub'), { recursive: true });
+  fs.symlinkSync(path.join(tmp, 'echt', 'sub'), path.join(tmp, 'link'));
+  const alt = process.env.CYPHERDJ_KATALOG;
+  delete process.env.CYPHERDJ_KATALOG;
+  try {
+    assert.equal(katalogVorgabe(`${tmp}/link/../m.sqlite`)  /* a string, path.join would collapse the .. */, path.join(tmp, 'echt', 'katalog.sqlite'));
+    assert.equal(katalogVorgabe(path.join(tmp, 'echt', 'm.sqlite')), path.join(tmp, 'echt', 'katalog.sqlite'));
+    assert.equal(katalogVorgabe(path.join(tmp, 'gibt-es-nicht', 'm.sqlite')), path.join(tmp, 'gibt-es-nicht', 'katalog.sqlite'));
+  } finally { if (alt !== undefined) process.env.CYPHERDJ_KATALOG = alt; }
+});

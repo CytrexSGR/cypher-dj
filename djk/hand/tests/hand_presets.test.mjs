@@ -45,7 +45,7 @@ async function echterStapel(t, rest, { projekt = null, quelle = 'andreas' } = {}
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'hand-presets-'));
   const router = new Router();
   const ctx = { log: () => {}, quelle: () => quelle };
-  router.melde(presetsBereich(ctx, { nutzer: path.join(d, 'user'), projekt: () => projekt, graphen: () => [] }));
+  router.melde(presetsBereich(ctx, { nutzer: path.join(d, 'nutzer'), projekt: () => projekt, graphen: () => [] }));
   router.melde(kollektionenBereich(ctx, { ordner: path.join(d, 'koll') }));
   const gesehen = [];
   let port = 0;
@@ -140,7 +140,7 @@ test('presets_lesen: a register id becomes GET /presets/<herkunft>/<geraet>/<slu
 
 test('presets_lesen: a hyphenated device id (kanal-limiter style) and a user preset are read; an unknown preset is the server refusal as a tool error', async (t) => {
   const { c, gesehen } = await aufbau(t, (m, u) => (u === '/presets/nutzer/kanal-limiter/mein-x' ? [200, { name: 'Mein X' }]
-    : u.startsWith('/presets/factory/comp/') ? [404, { fehler: 'preset_unbekannt', text: 'no such preset' }] : null));
+    : u.startsWith('/presets/werk/komp/') ? [404, { fehler: 'preset_unbekannt', text: 'no such preset' }] : null));
   const ok = await c.callTool({ name: 'presets_lesen', arguments: { id: 'nutzer:kanal-limiter/mein-x' } });
   assert.ok(!ok.isError, text(ok));
   const nein = await c.callTool({ name: 'presets_lesen', arguments: { id: 'werk:komp/gibt-es-nicht' } });

@@ -6,7 +6,7 @@
 # juno-pad.json dort nur an, wenn sie fehlt, und entfernt beim Räumen nur, was es selbst angelegt hat (Review M5).
 # Aufruf: CYPHERDJ_INSTANZ=d cost_bk.sh --lauf NAME --stroeme N [--faeden F] [--kern PROGRAMM] [--sekunden 60]
 # Ergebnis: eine Zeile je Lauf auf stdout (p50, p99,9, Maximum, gehalten, Zählerzeile Graph-Werk, loadavg vorher);
-# Rohdaten in tests/ziel/laeufe/<NAME>-<datum>/. Rückgabe wie cost25.sh (0 gehalten, 1 gerissen oder Positivprobe gerissen,
+# Rohdaten in tests/target/laeufe/<NAME>-<datum>/. Rückgabe wie cost25.sh (0 gehalten, 1 gerissen oder Positivprobe gerissen,
 # 3 Schloss, 4 Aufbau). Ströme: höchstens 6, auf erz/1, 2, 3, 5, 6, 7 (erz/4 reserviert, erz/8 Vorhöreingang).
 . "$(dirname "$0")/../../../config/realtime_lock.sh"
 set -uo pipefail

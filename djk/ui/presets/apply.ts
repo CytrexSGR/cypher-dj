@@ -108,7 +108,7 @@ function kanalPlan(preset: AnzuwendenPreset, g: GeraetDef, kanal: string, gelade
   if (g.id === 'komp') {                                  // D9: the kern channel compressor sits on source channels only
     if (kanalArt !== 'quelle') throw new PresetFehler(409, 'kanal_art');
     for (const [name, w] of Object.entries(preset.werte)) {
-      if (KERN_KOMP[name]) anfragen.push({ pfad: `${kanal}/comp/${KERN_KOMP[name]}`, nach: zahlVon(paramVon(g, name), w) }); else uebersprungen.push(name);
+      if (KERN_KOMP[name]) anfragen.push({ pfad: `${kanal}/komp/${KERN_KOMP[name]}`, nach: zahlVon(paramVon(g, name), w) }); else uebersprungen.push(name);
     }
     return { weg: 'regler', anfragen, uebersprungen };
   }

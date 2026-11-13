@@ -6,7 +6,7 @@
 // a group's output is delayed to what its target expects (ein of the parent group, T_G = the longest top-level aus for the master) and the direct-track sum of a parent waits for its latest child (ein - T_trk).
 // The returns take every source at T_G: the track part waits T_G - T_trk, the sends of group g wait T_G - (arrival of g's output); the PM sum waits for the longest of tracks, groups and returns.
 // Every path is delayed exactly once. A bypassed stage counts.
-export const LATENZ = { komp: 0, eq: 69, saett: 69, lim: 74, utility: 0, bk: 0 };   // bk: the real latency is the graph's (measured by the core, at most 128 samples) and the page does not get it: it counts 0 and says so (bk below)   // samples at 48 kHz, equal to INSERT_ARTEN[art].latenz
+export const LATENZ = { komp: 0, eq: 69, saett: 69, lim: 86, utility: 0, bk: 0 };   // bk: the real latency is the graph's (measured by the core, at most 128 samples) and the page does not get it: it counts 0 and says so (bk below)   // samples at 48 kHz, equal to INSERT_ARTEN[art].latenz
 export const SAMPLERATE = 48000;
 
 // Plan 1.11 task 11: a plugin (host) stage has no constant: its latency is what the host reported (HostLage.latenz in samples, keyed by insert id; `hosten`

@@ -1,6 +1,6 @@
 // Device tool: `node tool/device.ts neu <name> --von <existing graph> [--familie drums|mono|poly|neuro|fx] [--wurzel DIR]` starts a device as a copy
 // of a working one (graph, panel, doc, register entry); `node tool/device.ts pruefen [--wurzel DIR]` checks that every device is complete and exits 1 with
-// one line per problem. --wurzel points both at another repo root (tests use a temp copy). See docs/geraete/VORLAGE.md.
+// one line per problem. --wurzel points both at another repo root (tests use a temp copy). See docs/devices/VORLAGE.md.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -46,7 +46,7 @@ TODO: which notes or MIDI channels play it, useful ranges, what to avoid.
 
 ## 4. Presets
 
-TODO: factory presets in \`djk/ui/presets/factory/modular\` (graph \`${name}\`), one line each.
+TODO: factory presets in \`djk/ui/presets/werk/baukasten\` (graph \`${name}\`), one line each.
 `;
 
 /** Write through a temp file in the same folder and rename it, so a reader never sees half a file and a failed write leaves the old file. */

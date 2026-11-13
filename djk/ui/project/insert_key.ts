@@ -100,7 +100,7 @@ export const INSERT_ARTEN = {
     { name: 'm3', einheit: '', min: 0, max: 1, vorgabe: 0, kurve: 'linear', ganz: false, rampeMs: 10, geraet: null },
     { name: 'm4', einheit: '', min: 0, max: 1, vorgabe: 0, kurve: 'linear', ganz: false, rampeMs: 10, geraet: null },
   ] },
-  lim: { praefix: 'ins/lim', instanzen: 2, latenz: 74, tabelle: true, parameter: [
+  lim: { praefix: 'ins/lim', instanzen: 2, latenz: 86, tabelle: true, parameter: [
     { name: 'an', einheit: '', min: 0, max: 1, vorgabe: 0, kurve: 'schalter', ganz: true, rampeMs: 0, geraet: null },
     { name: 'decke', einheit: 'dB', min: -60, max: 0, vorgabe: -1, kurve: 'linear', ganz: false, rampeMs: 10, geraet: null },
     { name: 'abklingen', einheit: 'ms', min: 1, max: 2000, vorgabe: 80, kurve: 'linear', ganz: false, rampeMs: 0, geraet: null },

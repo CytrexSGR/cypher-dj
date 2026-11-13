@@ -312,7 +312,7 @@ fn tiefster_ton_passt_in_den_speicher() {
 }
 
 fn lade(pfad: &str, sr: f32) -> baukasten_dsp::Programm {
-    uebersetze(&std::fs::read_to_string(format!("{}/beispiele/{pfad}", env!("CARGO_MANIFEST_DIR"))).unwrap(), sr).unwrap()
+    uebersetze(&std::fs::read_to_string(format!("{}/demos/{pfad}", env!("CARGO_MANIFEST_DIR"))).unwrap(), sr).unwrap()
 }
 
 /// Graph path: the pluck example follows the note; the fundamental of the output sits on the note frequency.

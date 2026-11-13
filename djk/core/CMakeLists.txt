@@ -1710,44 +1710,46 @@ target_link_libraries(kern_kosten_rec PRIVATE cypherdj_kernbib)
 # Re-measured 2026-11-10 (wirt-timing): the lead of a host slot is 2n instead of 2n + 25, so the start of the arrangement moves 25 samples earlier and every pinned hash below changed; the
 # variants (pool, serial, unused, no fifo, at 256 and 128) still agree with each other, which is what these tests pin. The previous values (main bccde012 and later): arr32ins 256 pm=dc9cc27c4c3f4649
 # out=dc14fb5e7fa2cd46, 128 pm=e1912e21c15a1803 out=aff09e7d1d21b7ea; arr32rack 256 pm=dc46d62c4d78220f out=c6368275c50516af, 128 pm=6eadcb3158850ccf out=fbfb37bf1999fc47.
+# Re-measured 2026-11-13 (production small fixes): the lim insert detects TRUE peaks (4x oversampling, 86 samples of latency instead of 74), so the limited output of arr32ins changed: 256 pm=a4932c21b9166147
+# out=15ef6c8c7ce0120b, 128 pm=711a7411b09348ec out=61506b058f4a4833 (the previous values, 256 e134482f0c43ea8b / 8962e4bdef0c6d5b and 128 002a476ac0d1b78f / 139fbb6f629b78eb, were those of the sample-peak limiter).
 # Output hash of the arrangement lane (KOSTEN_HASH=1): FNV-1a over the production master and the master out, 2000 warm-up + 3000 measured cycles (blocks=5000). The reference values
 # are those of the probe of 2026-11-06 on main bccde012 (Hall fork-join probe, unchanged Hall path). The control mutes track 3: it passes only if a hash line was printed (the lane
 # self-check may exit 2, ctest ignores the exit code with PASS_REGULAR_EXPRESSION) AND neither reference value appears, so a crash or a missing line cannot pass it.
 add_test(NAME kosten_arr_hash COMMAND ${CMAKE_COMMAND} -E env KOSTEN_HASH=1 $<TARGET_FILE:kern_kosten_arr> 3000 arr32ins)
-set_tests_properties(kosten_arr_hash PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32ins pm=e134482f0c43ea8b out=8962e4bdef0c6d5b blocks=5000" TIMEOUT 120)
+set_tests_properties(kosten_arr_hash PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32ins pm=a4932c21b9166147 out=15ef6c8c7ce0120b blocks=5000" TIMEOUT 120)
 # mehrkern task 4: the same lane with the Halls on a HallPool of 3 workers must give exactly the same hash.
 # The deadline is 1 s: no take-back, no self switch-off from wake jitter (SCHED_OTHER). The single HASH line (stdout) carries everything, so no ordering of stdout and stderr is relied on:
 # the reference hash, pool_jobs > 0 (Hall blocks computed ON a worker: a pool that is merely attached cannot pass), no late and no taken-back job, the pool still on.
 add_test(NAME kosten_arr_hash_pool COMMAND ${CMAKE_COMMAND} -E env KOSTEN_HASH=1 KOSTEN_HALL_FAEDEN=3 KOSTEN_HALL_FRIST_US=1000000 $<TARGET_FILE:kern_kosten_arr> 3000 arr32ins)
-set_tests_properties(kosten_arr_hash_pool PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32ins pm=e134482f0c43ea8b out=8962e4bdef0c6d5b blocks=5000 pool_jobs=[1-9][0-9]* hall_jobs=[1-9][0-9]* pool_spaet=0 pool_zurueck=0 pool_an=1" TIMEOUT 120)
+set_tests_properties(kosten_arr_hash_pool PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32ins pm=a4932c21b9166147 out=15ef6c8c7ce0120b blocks=5000 pool_jobs=[1-9][0-9]* hall_jobs=[1-9][0-9]* pool_spaet=0 pool_zurueck=0 pool_an=1" TIMEOUT 120)
 # Control of the line above: the pool is built but never attached (KOSTEN_HALL_POOL_UNBENUTZT). The hash is the same and pool_jobs is 0, so kosten_arr_hash_pool would be red on it.
 add_test(NAME kosten_arr_hash_pool_unbenutzt COMMAND ${CMAKE_COMMAND} -E env KOSTEN_HASH=1 KOSTEN_HALL_FAEDEN=3 KOSTEN_HALL_FRIST_US=1000000 KOSTEN_HALL_POOL_UNBENUTZT=1 $<TARGET_FILE:kern_kosten_arr> 3000 arr32ins)
-set_tests_properties(kosten_arr_hash_pool_unbenutzt PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32ins pm=e134482f0c43ea8b out=8962e4bdef0c6d5b blocks=5000 pool_jobs=0 hall_jobs=[1-9][0-9]*" TIMEOUT 120)
+set_tests_properties(kosten_arr_hash_pool_unbenutzt PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32ins pm=a4932c21b9166147 out=15ef6c8c7ce0120b blocks=5000 pool_jobs=0 hall_jobs=[1-9][0-9]*" TIMEOUT 120)
 add_test(NAME kosten_arr_hash_kontrolle COMMAND ${CMAKE_COMMAND} -E env KOSTEN_HASH=1 KOSTEN_ARR32_STUMM=3 $<TARGET_FILE:kern_kosten_arr> 3000 arr32ins)
 set_tests_properties(kosten_arr_hash_kontrolle PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32ins pm=[0-9a-f]+ out=[0-9a-f]+ blocks=5000"
-                     FAIL_REGULAR_EXPRESSION "pm=e134482f0c43ea8b;out=8962e4bdef0c6d5b" TIMEOUT 120)
+                     FAIL_REGULAR_EXPRESSION "pm=a4932c21b9166147;out=15ef6c8c7ce0120b" TIMEOUT 120)
 target_compile_definitions(kern_kosten_arr PRIVATE CYPHERDJ_DJK="${DJK}")   # 1.9: the lane arr32kit reads the repo test kits
 # mehrkern-s3 task 0: the same lane at 128 samples per block (KOSTEN_BLOCK=128), serial (no pool). blocks=5000 is still one hash step per cycle.
 # The reference pair was measured on f5db257d with the lane switch of this commit; it is not the 256 pair (a run that ignored KOSTEN_BLOCK would print that one).
 add_test(NAME kosten_arr_hash_128 COMMAND ${CMAKE_COMMAND} -E env KOSTEN_HASH=1 KOSTEN_BLOCK=128 $<TARGET_FILE:kern_kosten_arr> 3000 arr32ins)
-set_tests_properties(kosten_arr_hash_128 PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32ins pm=002a476ac0d1b78f out=139fbb6f629b78eb blocks=5000" TIMEOUT 120)
+set_tests_properties(kosten_arr_hash_128 PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32ins pm=711a7411b09348ec out=61506b058f4a4833 blocks=5000" TIMEOUT 120)
 # Negative control of the line above: track 3 muted at 128. A hash line must be printed and neither reference value may appear.
 add_test(NAME kosten_arr_hash_128_kontrolle COMMAND ${CMAKE_COMMAND} -E env KOSTEN_HASH=1 KOSTEN_BLOCK=128 KOSTEN_ARR32_STUMM=3 $<TARGET_FILE:kern_kosten_arr> 3000 arr32ins)
 set_tests_properties(kosten_arr_hash_128_kontrolle PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32ins pm=[0-9a-f]+ out=[0-9a-f]+ blocks=5000"
-                     FAIL_REGULAR_EXPRESSION "pm=002a476ac0d1b78f;out=139fbb6f629b78eb" TIMEOUT 120)
+                     FAIL_REGULAR_EXPRESSION "pm=711a7411b09348ec;out=61506b058f4a4833" TIMEOUT 120)
 # mehrkern slice 3.2 task 5: phase Q (the track sources) on the Hall pool, the same hashes. The positive counters are in the regex: a run that stayed serial cannot pass
 # (spur_blocks_parallel and spur_einheiten_worker > 0). FIFO_TEST lets the SCHED_OTHER test pool count as FIFO; without it the phase stays serial (the control below).
 # The existing four hash ctests above are unchanged.
 add_test(NAME kosten_arr_hash_spur COMMAND ${CMAKE_COMMAND} -E env KOSTEN_HASH=1 KOSTEN_SPUR_POOL=1 KOSTEN_SPUR_FIFO_TEST=1 KOSTEN_HALL_FAEDEN=3 KOSTEN_HALL_FRIST_US=1000000 $<TARGET_FILE:kern_kosten_arr> 3000 arr32ins)
-set_tests_properties(kosten_arr_hash_spur PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32ins pm=e134482f0c43ea8b out=8962e4bdef0c6d5b blocks=5000 [^\n]*spur_blocks_parallel=[1-9][0-9]* spur_einheiten_worker=[1-9][0-9]*" TIMEOUT 120)
+set_tests_properties(kosten_arr_hash_spur PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32ins pm=a4932c21b9166147 out=15ef6c8c7ce0120b blocks=5000 [^\n]*spur_blocks_parallel=[1-9][0-9]* spur_einheiten_worker=[1-9][0-9]*" TIMEOUT 120)
 add_test(NAME kosten_arr_hash_spur_128 COMMAND ${CMAKE_COMMAND} -E env KOSTEN_HASH=1 KOSTEN_BLOCK=128 KOSTEN_SPUR_POOL=1 KOSTEN_SPUR_FIFO_TEST=1 KOSTEN_HALL_FAEDEN=3 KOSTEN_HALL_FRIST_US=1000000 $<TARGET_FILE:kern_kosten_arr> 3000 arr32ins)
-set_tests_properties(kosten_arr_hash_spur_128 PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32ins pm=002a476ac0d1b78f out=139fbb6f629b78eb blocks=5000 [^\n]*spur_blocks_parallel=[1-9][0-9]* spur_einheiten_worker=[1-9][0-9]*" TIMEOUT 120)
+set_tests_properties(kosten_arr_hash_spur_128 PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32ins pm=711a7411b09348ec out=61506b058f4a4833 blocks=5000 [^\n]*spur_blocks_parallel=[1-9][0-9]* spur_einheiten_worker=[1-9][0-9]*" TIMEOUT 120)
 # control: the load threshold above the live load (24 live units x 256 samples = 6144): the pool exists, nothing forks, the hash is the same
 add_test(NAME kosten_arr_hash_spur_unbenutzt COMMAND ${CMAKE_COMMAND} -E env KOSTEN_HASH=1 KOSTEN_SPUR_POOL=1 KOSTEN_SPUR_FIFO_TEST=1 KOSTEN_SPUR_MIN_LAST=1000000 KOSTEN_HALL_FAEDEN=3 KOSTEN_HALL_FRIST_US=1000000 $<TARGET_FILE:kern_kosten_arr> 3000 arr32ins)
-set_tests_properties(kosten_arr_hash_spur_unbenutzt PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32ins pm=e134482f0c43ea8b out=8962e4bdef0c6d5b blocks=5000 [^\n]*spur_blocks_parallel=0 spur_einheiten_worker=0 spur_einheiten_caller=0 spur_seriell_weg=[0-9]+ spur_seriell_wenig=[1-9][0-9]*" TIMEOUT 120)
+set_tests_properties(kosten_arr_hash_spur_unbenutzt PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32ins pm=a4932c21b9166147 out=15ef6c8c7ce0120b blocks=5000 [^\n]*spur_blocks_parallel=0 spur_einheiten_worker=0 spur_einheiten_caller=0 spur_seriell_weg=[0-9]+ spur_seriell_wenig=[1-9][0-9]*" TIMEOUT 120)
 # control: SPUR_POOL=1 without FIFO_TEST, SCHED_OTHER workers: the phase stays serial, the hash is the same (shows that the positive regex discriminates)
 add_test(NAME kosten_arr_hash_spur_ohne_fifo COMMAND ${CMAKE_COMMAND} -E env KOSTEN_HASH=1 KOSTEN_SPUR_POOL=1 KOSTEN_HALL_FAEDEN=3 KOSTEN_HALL_FRIST_US=1000000 $<TARGET_FILE:kern_kosten_arr> 3000 arr32ins)
-set_tests_properties(kosten_arr_hash_spur_ohne_fifo PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32ins pm=e134482f0c43ea8b out=8962e4bdef0c6d5b blocks=5000 [^\n]*spur_blocks_parallel=0 spur_einheiten_worker=0 spur_einheiten_caller=0 spur_seriell_weg=[0-9]+ spur_seriell_wenig=0 spur_seriell_fifo=[1-9][0-9]*" TIMEOUT 120)
+set_tests_properties(kosten_arr_hash_spur_ohne_fifo PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32ins pm=a4932c21b9166147 out=15ef6c8c7ce0120b blocks=5000 [^\n]*spur_blocks_parallel=0 spur_einheiten_worker=0 spur_einheiten_caller=0 spur_seriell_weg=[0-9]+ spur_seriell_wenig=0 spur_seriell_fifo=[1-9][0-9]*" TIMEOUT 120)
 # mehrkern slice 3 task 6b: the arr32rack lane (8 racks of 3 RB-338 and a Kit) equals itself serial against the pool; the pool run must compute rack units on workers
 add_test(NAME kosten_arr_hash_rack COMMAND ${CMAKE_COMMAND} -E env KOSTEN_HASH=1 $<TARGET_FILE:kern_kosten_arr> 3000 arr32rack)
 set_tests_properties(kosten_arr_hash_rack PROPERTIES PASS_REGULAR_EXPRESSION "HASH lane=arr32rack pm=0b489968030f994f out=0808091c3dfefaab blocks=5000" TIMEOUT 120)

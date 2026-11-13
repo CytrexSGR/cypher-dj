@@ -2542,9 +2542,9 @@ test('T3 /klang: AUTO des Stroms aus sperrt Cypher (409 auto_aus), Andreas nicht
 
 test('T3 /klang: fremde Herkunft und falscher content-type wie bei /strudel (403, 415)', async (t) => {
   const { url } = await klangStapel(t);
-  const f = await fetch(`${url}/sound`, { method: 'POST', headers: { 'content-type': 'application/json', origin: 'http://boese.example' }, body: JSON.stringify({ gruppe: 'bass', aktion: 'zeige' }) });
+  const f = await fetch(`${url}/klang`, { method: 'POST', headers: { 'content-type': 'application/json', origin: 'http://boese.example' }, body: JSON.stringify({ gruppe: 'bass', aktion: 'zeige' }) });
   assert.equal(f.status, 403);
-  const g = await fetch(`${url}/sound`, { method: 'POST', body: JSON.stringify({ gruppe: 'bass', aktion: 'zeige' }) });
+  const g = await fetch(`${url}/klang`, { method: 'POST', body: JSON.stringify({ gruppe: 'bass', aktion: 'zeige' }) });
   assert.equal(g.status, 415);
 });
 
@@ -2752,7 +2752,7 @@ test('T3 /abbruch als cypher und Stop Cypher schicken halte klang-bass / klang-m
 test('T3 GET /klang: liest wirt-<gruppe>.json aus dem Wirt-Ordner, fehlende Datei → null', async (t) => {
   const { url, wo } = await klangStapel(t);
   fs.writeFileSync(path.join(wo, 'wirt-bass.json'), JSON.stringify({ klang: 'Leads/X', pid: 1 }));
-  const r = await (await fetch(`${url}/sound`)).json();
+  const r = await (await fetch(`${url}/klang`)).json();
   assert.deepEqual(r, { bass: { klang: 'Leads/X', pid: 1 }, melodie: null });
 });
 
@@ -3532,7 +3532,7 @@ test('demo overlay: POST /ansage reaches the stream, a late page gets the curren
   const { url } = await stapel(t);
   const s = sse(url);
   await warte(100);
-  assert.deepEqual((await (await fetch(`${url}/announcement`)).json()), { ansage: null });
+  assert.deepEqual((await (await fetch(`${url}/ansage`)).json()), { ansage: null });
   const r = await postJson(url, '/ansage', { text: '  Ich  bringe gleich die Bassline rein  ' }, CYPHER);
   assert.equal(r.code, 200, JSON.stringify(r.j));
   assert.equal(r.j.ansage.text, 'Ich bringe gleich die Bassline rein');

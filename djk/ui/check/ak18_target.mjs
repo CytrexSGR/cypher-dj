@@ -3,7 +3,7 @@
 // Kreuzkorrelation der Hochpass-Hüllkurven): p90 ≤ 8 ms bei ≥ 64 Paaren. Negativ-Kontrolle je Track: derselbe Karten-Warp, Marker 20 ms versetzt, reißt und
 // wird als −20 ± 3 ms gemessen (bei ≥ 64 Paaren, sonst wäre das Reißen ein Blindwert). Bis 29.10. war sie ein konstanter Warp aus Mediathek-BPM, der bei geradem Tempo nicht riss.
 // Warum Vergleich: das Tor raster (Tief-Band, alle Anschläge) lag schon an der Quelle 26 und 52 ms neben der Karte (~/messungen/2026-10-29-s3a-ziel/bericht.md).
-//   node pruef/ak18_aufbau.mjs --ziel /tmp/ak18-ziel > /tmp/ak18-ziel/aufbau.json
+//   node check/ak18_aufbau.mjs --ziel /tmp/ak18-ziel > /tmp/ak18-ziel/aufbau.json
 //   CYPHERDJ_PYTHON=$HOME/cypher-dj/djk/workshop/.venv/bin/python CYPHERDJ_ANALYSE=/tmp/ak18-ziel/analyse CYPHERDJ_MEDIATHEK=/tmp/ak18-ziel/mediathek.sqlite \
 //     CYPHERDJ_KATALOG=/tmp/ak18-ziel/katalog.sqlite DJK=<worktree>/djk djk/start/djk-start --instanz a --arr1
 //   node check/ak18_target.mjs --url http://127.0.0.1:48300 --aufbau /tmp/ak18-ziel/aufbau.json --werkstatt <worktree>/djk/workshop --python $HOME/cypher-dj/djk/workshop/.venv/bin/python

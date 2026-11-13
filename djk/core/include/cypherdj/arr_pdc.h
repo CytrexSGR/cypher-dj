@@ -1,6 +1,6 @@
 // 1.10 slice 4b T13: latency compensation (PDC) of the arrangement mixer (spec 2.4, D9, D10).
 //
-// Model (worst case, fixed per snapshot). A stage reports a constant latency (komp 0, eq and saett 69 samples at 48 kHz, from cypher_*_latenz(), lim 74 from the KanalLimiter, never hard-coded here).
+// Model (worst case, fixed per snapshot). A stage reports a constant latency (komp 0, eq and saett 69 samples at 48 kHz, from cypher_*_latenz(), lim 86 from the KanalLimiter, never hard-coded here).
 // A chain adds the sum of its stages, a bypassed stage counts like a running one (D10). The mixer has three sums above the tracks and the arrival times are aligned at
 // every sum by delaying the earlier inputs, so each path is delayed exactly once:
 //   tracks:   A_i = latency of the chain of track i; all existing tracks are aligned at the output of their chain to T_trk = max A_i (in place, key PDC_SPUR0 + i). The
@@ -71,7 +71,7 @@ inline int ins_latenz(ArrInsArt art) {
   switch (art) {
     case ArrInsArt::eq: return eq;
     case ArrInsArt::saett: return saett;
-    case ArrInsArt::lim: return ins_lim_latenz();   // from a KanalLimiter with the fixed settings of ins_lim.h (74 samples)
+    case ArrInsArt::lim: return ins_lim_latenz();   // from a KanalLimiter with the fixed settings of ins_lim.h (86 samples, true-peak mode)
     case ArrInsArt::utility: return 0;              // arr-fx: the Utility module is IIR only, the impulse comes out at sample 0 (dsp/tests/test_utility.cpp, pinned in test_arr_inserts_util)
     default: return 0;
   }

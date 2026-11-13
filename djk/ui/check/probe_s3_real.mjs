@@ -6,7 +6,7 @@
 //   P6.x wie probe_production.mjs Teil 6 (Undo/Redo per Taste und Knopf, Verlauf mit Quelle Cypher, Undo-Titel),
 //   C6.x wie probe_clips.mjs Teil 6 (FREEZE nur an der Wirt-Spur, Freeze mit Fortschritt, Unfreeze, Export mit Phasen und Ergebnis samt Lautheit,
 //   Grund bei laufendem Transport, Reload während eines Freeze), dazu die Konsole.
-// Aufruf: node check/probe_s3_real.mjs [--instanz i]   Ergebnis: pruef/ergebnisse/<zeit>-echt/bericht.md und ergebnis.json; Exit 1 bei FEHL.
+// Aufruf: node check/probe_s3_real.mjs [--instanz i]   Ergebnis: check/ergebnisse/<zeit>-echt/bericht.md und ergebnis.json; Exit 1 bei FEHL.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';

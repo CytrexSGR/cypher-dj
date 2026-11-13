@@ -118,7 +118,7 @@ export async function starteStapel(ordner, instanz = 'g', env = {}, { bestand = 
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const ordner = path.resolve(process.argv[2] ?? path.join(OB, 'pruef', 'ergebnisse', 'stapel'));
+  const ordner = path.resolve(process.argv[2] ?? path.join(OB, 'check', 'ergebnisse', 'stapel'));
   const s = await starteStapel(ordner, process.argv[3] ?? 'g');
   process.stdout.write(`stapel: ${s.url} leitstand ws ${s.ports.ls_ws} relais ${s.ports.relais} → kern ${s.ports.kern} ordner ${ordner}\n`);
   const ende = async () => { await s.stoppe(); process.exit(0); };

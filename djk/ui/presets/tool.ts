@@ -4,7 +4,7 @@
 //   node presets/tool.ts frage '<json query>' [...]                               query, prints JSON
 //   node presets/tool.ts schema                                                    tool definition for agents
 //   node presets/tool.ts pruefsumme                                                checksum of vokabular.json content
-// Without options only the factory presets (presets/factory) and presets/register.json are used; --nutzer adds a user folder
+// Without options only the factory presets (presets/werk) and presets/register.json are used; --nutzer adds a user folder
 // (the store's folder layout, store.ts), so the register then covers both origins.
 import fs from 'node:fs';
 import path from 'node:path';

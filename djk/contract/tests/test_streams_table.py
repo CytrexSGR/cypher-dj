@@ -187,7 +187,9 @@ def test_negative_control_whitespace_and_comment_only_change_stays_green(kopie):
 MUTATIONEN = [
     (STROEME_TS, "9: 'pad/1'", "9: 'pad/2'", "violates stream == mixer index - 3"),
     (NETZ_ERZ_CPP, "k <= 13", "k <= 12", "kern rule (net_erz.cpp k >= 4 && k <= 12) refuses pad/2"),
-    (REGLER_CPP, '"erz/7", ', "", "controls.cpp kn_bk list lacks erz/7"),
+    # anchored on the loop head: since the knob widening the same list stands three times (kn_bk, kn_bk_hoch, kn_bk_hoch2)
+    (REGLER_CPP, 'kn_bk : {"deck/1", "deck/2", "deck/3", "deck/4", "erz/1", "erz/2", "erz/3", "erz/5", "erz/6", "erz/7", ',
+     'kn_bk : {"deck/1", "deck/2", "deck/3", "deck/4", "erz/1", "erz/2", "erz/3", "erz/5", "erz/6", ', "controls.cpp kn_bk list lacks erz/7"),
     (STROEME_TS, "10: 'midi:4:2'", "10: 'midi:4:1'", "duplicate targets"),
     (AUFNAHME_H, "{4, 5, 6, 8, 9, 10, 12, 13}", "{4, 5, 6, 8, 9, 9, 12, 13}", "REC_MIXER"),   # code 17 would record the tap of erz/6
     (AUFNAHME_H, "{4, 5, 6, 8, 9, 10, 12, 13}", "{4, 5, 6, 8, 9, 10, 13, 12}", "REC_MIXER"),   # pad taps swapped

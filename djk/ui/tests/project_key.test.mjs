@@ -352,7 +352,7 @@ test('Duck by Kick: one command, one undo step, a komp stage with the preset val
   lehntAb(p, { befehl: 'duck_durch_kick', spur_id: 's9', kick_id: 's1' }, 'spur_unbekannt');
   lehntAb(p, { befehl: 'duck_durch_kick', spur_id: 's2', kick_id: 's1', extra: 1 }, 'argument_unbekannt');
   let voll = p;
-  for (let k = 0; k < 4; k++) voll = ok(voll, { befehl: 'duck_durch_kick', spur_id: 's2', kick_id: 's1' }).projekt;
+  for (let k = 0; k < 5; k++) voll = ok(voll, { befehl: 'duck_durch_kick', spur_id: 's2', kick_id: 's1' }).projekt;
   lehntAb(voll, { befehl: 'duck_durch_kick', spur_id: 's2', kick_id: 's1' }, 'kette_voll');
 });
 
@@ -368,8 +368,8 @@ test('Duck by Kick is one undo step in the history (one undo gives the project b
   assert.ok(u.regler_aenderungen.every((c) => c.wert === 0 || c.pfad.startsWith('ins/komp/1/')), 'the pool rows go back to their defaults');
 });
 
-test('parity: DUCK_DURCH_KICK_WERTE equals presets/factory/comp/kick-sidechain.preset.json through INSERT_ARTEN.komp[*].geraet', () => {
-  const preset = JSON.parse(fs.readFileSync(path.join(W, 'presets', 'factory', 'comp', 'kick-sidechain.preset.json'), 'utf8'));
+test('parity: DUCK_DURCH_KICK_WERTE equals presets/werk/komp/kick-sidechain.preset.json through INSERT_ARTEN.komp[*].geraet', () => {
+  const preset = JSON.parse(fs.readFileSync(path.join(W, 'presets', 'werk', 'komp', 'kick-sidechain.preset.json'), 'utf8'));
   const nachGeraet = new Map(INSERT_ARTEN.komp.parameter.filter((q) => q.geraet).map((q) => [q.geraet, q.name]));
   const aus = {};
   for (const [k, v] of Object.entries(preset.werte)) {

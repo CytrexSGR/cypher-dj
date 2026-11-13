@@ -23,7 +23,7 @@
 // Punkte (die Nummern folgen dem Plan, Task 18; ein 3.3 gibt es nicht): 3.1 je Spur lufs_i (Abnahmetrack: alle drei Spuren, keine null), 3.2 Summe gegen
 // proj_export ≤ 0,1 LU, 3.4 Fader der ersten Spur −6 dB: sie −6 LU (±0,3), die anderen unverändert (±0,1), 3.5 gemutete Spur: stumm, lufs_i null (nicht −70).
 // Annahme (ungeprüft bis zum Lauf): der Master des Kerns steht auf den Vorgaben; sonst weicht der Export (Regler des Kerns) von der Summe (Vorgaben) ab.
-// Rückgabe: 0 alle Punkte OK, 1 mindestens ein Punkt FEHL, 2 Aufruf. Ergebnis: pruef/ergebnisse/<zeit>-abnahme-eb/bericht.md
+// Rückgabe: 0 alle Punkte OK, 1 mindestens ein Punkt FEHL, 2 Aufruf. Ergebnis: check/ergebnisse/<zeit>-abnahme-eb/bericht.md
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';

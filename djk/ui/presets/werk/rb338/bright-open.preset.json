@@ -36,7 +36,7 @@
   "bright",
   "open"
  ],
- "notiz": "Values are practice; 3 kHz is inside devices.ts cutoff range 40-5000 Hz.",
+ "notiz": "Values are practice; 3 kHz is inside geraete.ts cutoff range 40-5000 Hz.",
  "angelegt": "2026-11-02T00:00:00.000Z",
  "geaendert": "2026-11-02T00:00:00.000Z"
 }

@@ -4,14 +4,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { WIRT_SLOTS } from '../../project/model.ts';
 
-// instrument_host.py writes these entries right before it exits 2 (engine_init, add_plugin, vst3, sfz, steuerung); the others (wache, bereiche, aktiv-klang) are
-// written while it keeps playing. Only a fatal entry of a host that is not alive turns wirt_fehlt into wirt_fehler.
+// instrument_host.py writes these entries right before it exits 2 (engine_init, add_plugin, vst3, sfz, steuerung); the others
+// (wache, bereiche, aktiv-klang) are written while it keeps playing. Only a fatal entry of a host that is not alive turns wirt_fehlt into wirt_fehler.
 export const WIRT_FATAL = ['engine_init', 'add_plugin', 'vst3', 'sfz', 'steuerung'];
 
 export const wirtDatei = (ordner: string, slot: number): string => path.join(ordner, `wirt-arr${slot}.json`);
 
-// S3-Fix W2: gilt die Status-Datei eines Wirts noch? Ja nur, wenn bereit true ist, pid eine ganze Zahl > 0 ist, /proc/<pid> lebt und der Prozess instrument_host.py
-// ausführt (ein Argument der Befehlszeile heißt instrument_host.py: so fängt es eine wiederverwendete pid ab). Jeder Lese- oder Formatfehler heißt: nein.
+// S3-Fix W2: gilt die Status-Datei eines Wirts noch? Ja nur, wenn bereit true ist, pid eine ganze Zahl > 0 ist, /proc/<pid> lebt und der
+// Prozess instrument_host.py ausführt (ein Argument der Befehlszeile heißt instrument_host.py: so fängt es eine wiederverwendete pid ab).
+// Jeder Lese- oder Formatfehler heißt: nein.
 export function wirtLebt(datei: string): boolean {
   try {
     const st = JSON.parse(fs.readFileSync(datei, 'utf8')) as { bereit?: unknown; pid?: unknown } | null;

@@ -89,7 +89,7 @@ for (let ret = 1; ret <= 4; ret++) {
   tabelle.set(`ret/${ret}/mute`, { pfad: `ret/${ret}/mute`, kanal: null, ...r('schalter', 0, 1, 0) });
   tabelle.set(`ret/${ret}/solo`, { pfad: `ret/${ret}/solo`, kanal: null, ...r('schalter', 0, 1, 0) });
   tabelle.set(`ret/${ret}/hall/an`, { pfad: `ret/${ret}/hall/an`, kanal: null, ...r('schalter', 0, 1, 1) });
-  for (const [f, v] of Object.entries(HALL_VORGABE)) tabelle.set(`ret/${ret}/reverb/${f}`, { pfad: `ret/${ret}/reverb/${f}`, kanal: null, ...r('linear', 0, 1, v) });
+  for (const [f, v] of Object.entries(HALL_VORGABE)) tabelle.set(`ret/${ret}/hall/${f}`, { pfad: `ret/${ret}/hall/${f}`, kanal: null, ...r('linear', 0, 1, v) });
 }
 // S5r (§1.5): 64 Graph-Regler <kanal>/bk/<1..64> auf Kanälen, die einen Baukasten-Graphen annehmen (deck/1..4 Effekt,
 // erz/1,2,3,5,6,7 und pad/1,2 Instrument; nicht erz/4, erz/8), alle dürfen, 0..1, Vorgabe 0,5

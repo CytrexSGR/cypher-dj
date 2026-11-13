@@ -18,7 +18,7 @@ import { vorgaben as panelVorgaben } from '../public/panel.js';
 belegeTestInstanz();
 const HIER = path.dirname(fileURLToPath(import.meta.url));
 const BK = path.resolve(HIER, '..', '..', 'instruments', 'modular_dsp');
-const WERK = path.resolve(HIER, '..', 'presets', 'factory', 'modular');
+const WERK = path.resolve(HIER, '..', 'presets', 'werk', 'baukasten');
 const KATEGORIEN = JSON.parse(fs.readFileSync(path.join(BK, 'kategorien.json'), 'utf8'));
 const NAMEN = Object.keys(KATEGORIEN);
 const hol = (u, o = {}) => fetch(u, { ...o, headers: { connection: 'close', ...(o.headers ?? {}) } });

@@ -22,7 +22,7 @@ Why the null is exact (the harness `measure_null.py` checks it bit for bit):
   * `hall` nodes get `"mix": 0` (their smoother starts at the node's own value, see kosten-gate.md), chorus and delay take their
     input at once.
 
-The semantic constants and the node set of the existing graphs are described in docs/presets/geraete/ and bestand.md; the engine
+The semantic constants and the node set of the existing graphs are described in docs/presets/devices/ and bestand.md; the engine
 side of `vorgabe` and `mitte` is `Schritt::Regler` in src/programm.rs.
 """
 import math

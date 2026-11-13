@@ -176,7 +176,7 @@ test('A8 a user preset for gate is accepted by pruefeWerte, an unknown field, a 
 test('A8 GET /presets/geraete serves herkunft, kanalArten and the path of every parameter of the kern devices', async (t) => {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'presets-g8-'));
   const router = new Router();
-  router.melde(presetsBereich({ log: () => {}, quelle: () => 'andreas' }, { werk: path.join(d, 'factory'), nutzer: path.join(d, 'user') }));
+  router.melde(presetsBereich({ log: () => {}, quelle: () => 'andreas' }, { werk: path.join(d, 'werk'), nutzer: path.join(d, 'nutzer') }));
   const server = http.createServer(async (q, a) => {
     const r = router.finde(q.method ?? '', new URL(q.url ?? '/', 'http://127.0.0.1').pathname);
     if (!r) return json(a, 404, { fehler: 'keine_route' });

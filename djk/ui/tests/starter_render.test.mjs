@@ -63,7 +63,7 @@ function wavRms(datei) {
 function mitStarter(t) {
   const dir = tmp(t);
   const env = saubereUmgebung(dir);
-  const kits = path.join(dir, 'kits'), bk = path.join(dir, 'modular');
+  const kits = path.join(dir, 'kits'), bk = path.join(dir, 'baukasten');
   fs.mkdirSync(env.HOME, { recursive: true });
   const py = process.env.CYPHERDJ_PYTHON ?? 'python3';
   const r = spawnSync('bash', [path.join(DJK, 'start', 'djk-starter'), '--nur', 'kits'],

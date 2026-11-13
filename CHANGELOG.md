@@ -3,6 +3,37 @@
 One entry per public update, newest first. Each entry names what changed for someone who plays, produces or
 builds cypher-dj.
 
+## 2026-11-13 (v0.2.0-beta)
+
+**Production**
+- The master limiter now catches true peaks between samples. A test tone at +6 dBFS against a -1 dB ceiling came
+  out 3 dB over the ceiling before and stays under it now. The limiter stage has 12 samples more latency; the
+  delay compensation takes care of it.
+- Export with a tail: `ausklang_beats` (0 to 64) on `POST /proj/export` and the `proj_export` tool renders that many
+  beats past the end, so a reverb tail is no longer cut off.
+- Insert chains hold five stages instead of four.
+- MIDI import: tracks on a Cypher Modular graph start at -6 dB, because these graphs play about 12 dB louder than the
+  RB-338. Import to Surge XT checked end to end.
+- Strudel patterns are compiled in a child process without network access (bubblewrap); without a usable
+  bubblewrap the child runs as before and says so once.
+
+**First start**
+- The starter sounds rendered by `djk-starter` are dedicated to the public domain (CC0); see THIRD_PARTY.md.
+- The example `umgebung.env` sets no paths any more: every line is commented out, so a copy used unedited keeps the
+  defaults (before, the library step tried to build its catalog under `/path/to`).
+- `djk-starter` repairs half-finished runs: leftovers of an aborted run are cleaned up, a missing loop WAV is
+  rendered again, a damaged loop file is reported as `damaged` (return 4) instead of kept.
+- `djk-bibliothek` never replaces a catalog with a partial scan when a subfolder cannot be read (return 6); track BPM is
+  also read from a plain number at the end of a file name ("Song 128", "Song (128)").
+- Sets prepared on another machine: "prepare all" takes the tracks from your own catalog.
+- `djk-start --help` names the starter fallback and the kit options; kit choice works without python3.
+
+**Under the hood**
+- The working repository now uses the English folder names of this export, so paths in documents and tools are the
+  same on both sides.
+- A fresh build of this export in a clean Ubuntu 24.04 container followed INSTALL.md from top to bottom; the three
+  findings of that run are fixed (the example environment file above, two tests).
+
 ## 2026-11-12
 
 **Instruments**

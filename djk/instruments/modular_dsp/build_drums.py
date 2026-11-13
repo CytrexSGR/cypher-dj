@@ -160,6 +160,6 @@ if __name__ == "__main__":
                                                   (1, KNOBS_808, FIX_808, "drums-808", SEC_808, "Drums 808")]:
         used = sorted(n for s in sec for n in s[3])
         assert used == sorted(knobs), (name, set(knobs) ^ set(used))
-        open("beispiele/%s.json" % name, "w").write(fmt_json(graph(modell, knobs, fix, name)))
+        open("demos/%s.json" % name, "w").write(fmt_json(graph(modell, knobs, fix, name)))
         open("paneele/%s.json" % name, "w").write(fmt_panel(name, title, knobs, sec))
         print("wrote", name)

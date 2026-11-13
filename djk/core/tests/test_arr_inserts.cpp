@@ -316,7 +316,8 @@ int main() {
     };
     PRUEF(v1(67, ",\"chain\":[" + st + "1}]") == "format");
     PRUEF(v1(68, "") == "+snap");
-    PRUEF(grund(61, ",\"chain\":[" + st + "1}," + st + "2}," + st + "3}," + st + "4}," + st + "5}]") == "format");   // the 5th stage: kette_voll
+    PRUEF(grund(60, ",\"chain\":[" + st + "1}," + st + "2}," + st + "3}," + st + "4}," + st + "5}]") == "+snap");    // five stages are the end of a chain (ARR_KETTE 5)
+    PRUEF(grund(61, ",\"chain\":[" + st + "1}," + st + "2}," + st + "3}," + st + "4}," + st + "5}," + st + "6}]") == "format");   // the 6th stage: kette_voll
     PRUEF(grund(62, ",\"chain\":[{\"art\":\"bk\",\"slot\":1}]") == "format");                                   // art_unbekannt: bk is slice 4d
     // slice 4b T12: eq and saett are stage kinds with pools of ARR_INS_EQ and ARR_INS_SAETT; the global slot numbering must not collide across kinds
     PRUEF(grund(69, ",\"chain\":[{\"art\":\"eq\",\"slot\":1}]") == "+snap");
@@ -640,7 +641,7 @@ int main() {
     };
     PRUEF(grund(71, "", "") == "+snap");                                                                       // neither: loads
     PRUEF(grund(72, ",\"chain\":[" + st + "2}]", ",\"pm\":{\"chain\":[" + st + "2}]}") == "format");         // one slot on two strips
-    PRUEF(grund(73, "", ",\"pm\":{\"chain\":[" + st + "1}," + st + "2}," + st + "3}," + st + "4}," + st + "5}]}") == "format");   // kette_voll on the PM
+    PRUEF(grund(73, "", ",\"pm\":{\"chain\":[" + st + "1}," + st + "2}," + st + "3}," + st + "4}," + st + "5}," + st + "6}]}") == "format");   // kette_voll on the PM
     PRUEF(grund(74, "", ",\"pm\":{\"chain\":[{\"art\":\"bk\",\"slot\":1}]}") == "format");                               // bk is slice 4d
     PRUEF(grund(78, "", ",\"pm\":{\"chain\":[{\"art\":\"eq\",\"slot\":1}]}") == "+snap");                                // slice 4b: eq on the PM
     PRUEF(grund(75, "", ",\"pm\":[]") == "format");

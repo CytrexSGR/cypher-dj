@@ -2,7 +2,8 @@
 // a pattern that crashes the child, runs out of memory or never ends is a cached refusal with a plain text, and the event loop keeps beating.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { vorlauf, ausCache, uebersetzeAusCache, pruefeAntwort, vergiss, messung, MUSTER_KINDER_MAX, MUSTER_RSS_MAX_KB, MUSTER_ZEITLIMIT_MS } from '../areas/proj/pattern_run.ts';
+import net from 'node:net';
+import { vorlauf, ausCache, uebersetzeAusCache, pruefeAntwort, vergiss, messung, netzsperre, MUSTER_KINDER_MAX, MUSTER_RSS_MAX_KB, MUSTER_ZEITLIMIT_MS } from '../areas/proj/pattern_run.ts';
 import { sitzung } from './support/proj_context.mjs';
 
 // longest gap between two beats of a 5 ms timer while f runs, in ms: how long the event loop stood still
@@ -12,6 +13,9 @@ async function stillstand(f) {
   try { await f(); } finally { clearInterval(uhr); }
   return Math.max(max, performance.now() - letzter);
 }
+// The event loop may pause briefly under a loaded test machine (the fresh container build saw 53 ms while a 3 GB
+// child was killed); compiling a pattern in the server itself would stall it for seconds, which this bound still catches.
+const STILL_MAX_MS = 100;
 const frage = (code, takte = null) => ({ code, takte });
 const kein_v8 = (text) => assert.ok(!/node::|v8::|0x[0-9a-f]{6}|Native stack|\[node\]/.test(text), `no V8 crash line in: ${text}`);
 
@@ -21,7 +25,7 @@ test('crash by memory (a density spike in the third bar, past the cheap pre-chec
   const still = await stillstand(() => vorlauf([a]));
   const r = uebersetzeAusCache(a);
   assert.equal(r.ok, false); assert.equal(r.grund, 'muster_zu_gross'); kein_v8(r.fehler);
-  assert.ok(still < 50, `event loop stood still for ${still.toFixed(1)} ms`);
+  assert.ok(still < STILL_MAX_MS, `event loop stood still for ${still.toFixed(1)} ms`);
   const t0 = performance.now();
   assert.deepEqual(uebersetzeAusCache(a), r, 'the second ask is the cached answer');
   assert.ok(performance.now() - t0 < 5);
@@ -33,7 +37,7 @@ test('crash without an answer (process.exit): cached, plain text, loop free', as
   const still = await stillstand(() => vorlauf([a]));
   const r = uebersetzeAusCache(a);
   assert.equal(r.grund, 'muster_fehler'); assert.match(r.fehler, /stopped without an answer/); kein_v8(r.fehler);
-  assert.ok(still < 50, `${still} ms`);
+  assert.ok(still < STILL_MAX_MS, `${still} ms`);
   assert.deepEqual(ausCache(a), r);
 });
 
@@ -43,7 +47,7 @@ test('a pattern that never ends: time limit after 5 s, cached, loop free', { tim
   const still = await stillstand(() => vorlauf([a]));
   const r = uebersetzeAusCache(a);
   assert.equal(r.grund, 'muster_zeitlimit'); assert.match(r.fehler, new RegExp(`${MUSTER_ZEITLIMIT_MS / 1000} s`));
-  assert.ok(still < 50, `${still} ms`);
+  assert.ok(still < STILL_MAX_MS, `${still} ms`);
 });
 
 test('memory outside the heap (a 3 GB buffer) is killed by the RSS watcher far below 3 GB', { timeout: 20000 }, async () => {
@@ -55,7 +59,7 @@ test('memory outside the heap (a 3 GB buffer) is killed by the RSS watcher far b
   assert.equal(r.grund, 'muster_zu_gross'); assert.match(r.fehler, /memory/);
   assert.ok(messung.spitzeKB > MUSTER_RSS_MAX_KB * 0.5, `the watcher saw ${messung.spitzeKB} kB`);
   assert.ok(messung.spitzeKB < 1.3 * 1024 * 1024, `peak RSS seen ${Math.round(messung.spitzeKB / 1024)} MB (limit ${Math.round(MUSTER_RSS_MAX_KB / 1024)} MB)`);
-  assert.ok(performance.now() - t0 < 4000 && still < 50, `${performance.now() - t0} ms, loop ${still} ms`);
+  assert.ok(performance.now() - t0 < 4000 && still < STILL_MAX_MS, `${performance.now() - t0} ms, loop ${still} ms`);
 });
 
 test('the pre-check refuses a dense pattern in the child at once, without the heap running full', async () => {
@@ -127,7 +131,7 @@ test('session: a crashing pattern is a 400 muster_zu_gross, the loop stays free 
   let e;
   const still = await stillstand(async () => { e = await fehlerVon(s.aendern({ rev: 1, label: 'p', befehle: [befehl] }, 'andreas')); });
   assert.equal(e?.grund ?? e?.fehler, 'muster_zu_gross', String(e)); kein_v8(String(e?.detail ?? e?.extra?.detail ?? ''));
-  assert.ok(still < 50, `the event loop stood still for ${still.toFixed(1)} ms`);
+  assert.ok(still < STILL_MAX_MS, `the event loop stood still for ${still.toFixed(1)} ms`);
   const t0 = performance.now();
   const e2 = await fehlerVon(s.aendern({ rev: 1, label: 'p', befehle: [befehl] }, 'andreas'));
   assert.equal(e2?.grund ?? e2?.fehler, 'muster_zu_gross');
@@ -154,4 +158,32 @@ test('session: more than 8 clip_aus_muster in one call are refused before any ch
   const e = await fehlerVon(s.aendern({ rev: 1, label: 'viele', befehle }, 'andreas'));
   assert.deepEqual([e?.code, e?.fehler], [400, 'argument_ungueltig']);
   assert.equal(messung.kinderMax, 0, 'no child was started');
+});
+
+test('the child has no network: a pattern that imports node:net and connects to the studio side reaches nothing', { timeout: 20000 }, async (t) => {
+  if (!netzsperre()) return t.skip('no usable bwrap on this machine (the child runs without the network lock)');
+  vergiss();
+  let gesehen = 0;
+  const srv = net.createServer((c) => { gesehen += 1; c.destroy(); });
+  await new Promise((f) => srv.listen(0, '127.0.0.1', f));
+  try {
+    const a = frage(`(import("node:net").then((n) => { const c = n.connect(${srv.address().port}, "127.0.0.1"); c.on("error", () => {}); }), s("bd"))`);
+    await vorlauf([a]);
+    await new Promise((f) => setTimeout(f, 300));
+    const r = uebersetzeAusCache(a);
+    assert.equal(r.ok, true, JSON.stringify(r));
+    assert.equal(gesehen, 0, 'the listener on 127.0.0.1 of the server side must not see the child');
+  } finally { srv.close(); }
+});
+
+test('negative control of the network test: a child WITHOUT the lock does reach the listener (so the test can see a leak)', { timeout: 20000 }, async () => {
+  const { spawn } = await import('node:child_process');
+  let gesehen = 0;
+  const srv = net.createServer((c) => { gesehen += 1; c.destroy(); });
+  await new Promise((f) => srv.listen(0, '127.0.0.1', f));
+  try {
+    const k = spawn(process.execPath, ['--input-type=module', '-e', `const n = await import("node:net"); const c = n.connect(${srv.address().port}, "127.0.0.1"); c.on("error", () => {}); await new Promise((f) => c.on("close", f));`], { stdio: 'ignore' });
+    await new Promise((f) => k.on('close', f));
+    assert.ok(gesehen >= 1);
+  } finally { srv.close(); }
 });

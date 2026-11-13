@@ -308,7 +308,8 @@ def felder(d: Datei, typ: str, m: Merkmale) -> dict[str, object]:
     if "bpm" in tags and _bpm_ok(tags["bpm"]):  # old cache entries may hold values that are no longer accepted
         bpm = float(tags["bpm"])
     else:
-        bpm = bpm_aus_namen(stamm) or (bpm_aus_namen(ordner_rel[-1]) if ordner_rel else None)
+        lose = typ == "track"  # tracks also carry the BPM bare at the end of the name; samples keep the strict rule
+        bpm = bpm_aus_namen(stamm, lose) or (bpm_aus_namen(ordner_rel[-1]) if ordner_rel else None)
     nur_sample = typ in ("loop", "oneshot")
     z: dict[str, object] = {
         "typ": typ,

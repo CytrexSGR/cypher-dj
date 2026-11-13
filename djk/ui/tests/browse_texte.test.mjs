@@ -5,6 +5,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { IMPORT_FEHLER_TEXT, SPALTEN } from '../public/browse.js';
 
 const wurzel = new URL('..', import.meta.url);
+const OEFFENTLICH = 'public/app.js'.replace(/[^/]+$/, '');   // the folder named through an existing file: the export's folder renaming rewrites that path, not a lone 'oeffentlich/'
 const lies = (p) => readFileSync(new URL(p, wurzel), 'utf8');
 function quellen(dir, endung) {
   return readdirSync(new URL(dir, wurzel), { withFileTypes: true }).flatMap((d) =>
@@ -18,7 +19,7 @@ const WEG = 'this entry is not in the library catalog anymore (the catalog may h
 const WEG_GROSS = WEG[0].toUpperCase() + WEG.slice(1);
 
 test('no text under oeffentlich/ and http/ names "mediathek katalog"', () => {
-  for (const f of [...quellen('oeffentlich/', '.js'), ...quellen('http/', '.ts')]) {
+  for (const f of [...quellen(OEFFENTLICH, '.js'), ...quellen('http/', '.ts')]) {
     assert.ok(!/mediathek katalog/i.test(lies(f)), `${f} still names "mediathek katalog"`);
   }
 });
@@ -56,4 +57,10 @@ test('pattern source starter has a name in the Source column', () => {
   const quelle = SPALTEN.strudel.find((x) => x.titel === 'Source');
   assert.equal(quelle.wert({ quelle: 'starter' }), 'Starter');
   assert.equal(quelle.wert({ quelle: 'eigen' }), 'mine');
+});
+
+test('production page: katalog_fehlt carries the neutral wording, not the old "not available" text', () => {
+  const p = lies('public/production/production.js');
+  assert.ok(p.includes(`katalog_fehlt: '${FEHLT_GROSS}'`));
+  assert.ok(!p.includes('The sample catalogue is not available'));
 });

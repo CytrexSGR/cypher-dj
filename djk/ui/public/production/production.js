@@ -188,7 +188,7 @@ export const FEHLER_TEXT = {
   sidechain_spaet: 'That key source is computed after this stage: tracks can listen to tracks and DJ inputs, groups also to the pre of other groups',
   sidechain_zyklus: 'That key would depend on the stage itself: its own strip, its own group, the master, or two tracks keying each other',
   sidechain_quelle: 'That key source is not available in the arrangement (erz/2, erz/3, erz/5 to erz/8 and pad/1, pad/2 come after the mixer)',
-  kette_voll: 'The insert chain of that strip is full (four stages at most)', ins_voll: 'All stages of that kind are in use (twelve compressors, eight EQs, four saturators, two limiters, eight utilities and eight effect graphs at most)',
+  kette_voll: 'The insert chain of that strip is full (five stages at most)', ins_voll: 'All stages of that kind are in use (twelve compressors, eight EQs, four saturators, two limiters, eight utilities and eight effect graphs at most)',
   host_grenze: 'All four plugin hosts are in use: remove a plugin stage before adding another', host_fehlt: 'The plugin host is not running or not ready yet',
   plugin_nicht_ladbar: 'That plugin cannot be loaded', zustand_passt_nicht: 'The saved plugin state belongs to another plugin and was not applied',
   param_unbekannt: 'That plugin has no such parameter',
@@ -247,7 +247,7 @@ export const FEHLER_TEXT = {
   // areas/proj (ProjFehler, BEREICH_GRUENDE, Tempo-Weg)
   koerper_zu_gross: 'The change is too big (more than 1 MiB)', json: 'The server could not read the request', koerper_kein_objekt: 'The server could not read the request',
   intern: 'The project server hit an internal error: nothing was changed', beschaeftigt: AUSGABE_FEHLER.beschaeftigt,
-  katalog_fehlt: 'The sample catalogue is not available', sha_unbekannt: 'That sample is not in the catalogue', nur_live: 'That sample is protected (Ableton Live only)',
+  katalog_fehlt: 'No library catalog found (is its drive mounted?). To build one from your own folders: djk/start/djk-bibliothek dazu <folder>, then bauen', sha_unbekannt: 'That sample is not in the catalogue', nur_live: 'That sample is protected (Ableton Live only)',
   quelle_fehlt: 'The sample file is missing', aktion_unbekannt: 'The server does not know that transport action', beat_ungueltig: 'That start position is not allowed',
   tempo_abgelehnt: 'The core refused the tempo', kein_kern: 'The core is not running', rampe_haengt: 'The tempo change did not finish in the core',
   transport_laeuft: 'Your transport is running: Cypher switches the project only after it stops',

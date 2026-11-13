@@ -39,7 +39,7 @@ TAKT = 8000           # Hüllkurve im 8-kHz-Takt (0,125 ms)
 
 def huelle(x_mono):
     f = signal.sosfiltfilt(fa.sos_band(*BAND, ordnung=ORDNUNG), np.asarray(x_mono, dtype=float))
-    env = np.abs(signal.hilbert(f))
+    env = fa.huellkurve(f)
     w = max(1, int(0.002 * fa.SR))
     env = np.convolve(env, np.ones(w) / w, "same")
     return env[:: fa.SR // TAKT]

@@ -56,7 +56,13 @@ export class KatalogFehler extends Error {
 
 // Vorgabe: neben der Mediathek (so baut cypher-mediathek); CYPHERDJ_KATALOG überschreibt
 export function katalogVorgabe(mediathek: string): string {
-  return process.env.CYPHERDJ_KATALOG || path.join(path.dirname(mediathek), 'katalog.sqlite');
+  if (process.env.CYPHERDJ_KATALOG) return process.env.CYPHERDJ_KATALOG;
+  // The folder as the kernel sees it (realpath(3), '..' behind a link is resolved by the file system), like the builder's
+  // kanonisch(); path.join would collapse '..' textually and name another folder. A folder that does not exist stays as written.
+  const ordner = path.dirname(mediathek);
+  let echt = ordner;
+  try { echt = fs.realpathSync.native(ordner); } catch { /* absent: the written path */ }
+  return path.join(echt, 'katalog.sqlite');
 }
 
 const SHA = /^[0-9a-f]{64}$/;

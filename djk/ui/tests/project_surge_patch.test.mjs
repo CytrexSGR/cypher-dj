@@ -18,7 +18,7 @@ import { stapel, hole, post } from './support/media_library.mjs';
 
 // the library: a factory folder and an own folder in a temp dir (the server reads CYPHERDJ_SURGE_PATCHES and CYPHERDJ_KLAENGE at every call)
 const bib = fs.mkdtempSync(path.join(os.tmpdir(), 'sp-bib-'));
-const WERK = path.join(bib, 'factory'), EIGENE = path.join(bib, 'eigene');
+const WERK = path.join(bib, 'werk'), EIGENE = path.join(bib, 'eigene');
 for (const f of ['Pads/Warm Pad', 'Leads/Acid', 'Init']) { fs.mkdirSync(path.dirname(path.join(WERK, `${f}.fxp`)), { recursive: true }); fs.writeFileSync(path.join(WERK, `${f}.fxp`), 'x'); }
 fs.mkdirSync(EIGENE, { recursive: true }); fs.writeFileSync(path.join(EIGENE, 'mein-bass.fxp'), 'x'); fs.writeFileSync(path.join(EIGENE, 'Init.fxp'), 'own');
 process.env.CYPHERDJ_SURGE_PATCHES = WERK; process.env.CYPHERDJ_KLAENGE = EIGENE;

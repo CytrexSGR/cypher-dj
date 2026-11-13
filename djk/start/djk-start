@@ -34,6 +34,11 @@
 #   --kit-ordner DIR  Kit folder of the instance (kit tracks of the production arrangement): sets CYPHERDJ_KIT_ORDNER on the units of this start, so
 #                   core, server and cypherdj-render read DIR instead of ~/.config/cypherdj/kits. Must be an existing directory (else return 2).
 #                   Without it every program reads the default kit folder as before. Meant for test instances.
+#   --strudel-kit NAME, --strudel-kit2 NAME, --strudel-kit3 NAME  (with --strudel) kit of Strudel stream 1, 2, 3 (defaults techno, battery, battery), read from
+#                   the kit folder (--kit-ordner, else ~/.config/cypherdj/kits). A kit named with one of these options that is missing is an error (return 2).
+#   Kit fallback    Without these options a missing default kit is replaced by the starter kit (made by djk/start/djk-starter), with a note on stderr;
+#                   the starter kit only counts when its kit.json is valid (schema 1). No default kit and no starter kit: return 2 with the hint.
+#                   In template mode (--vorlagen-nach) with --strudel a missing kit is return 2, nothing is written.
 #   --ohne-cue      Kein Cue-Ziel. Bei einem echten Master (--ton-frei) ist das die einzige Form ohne Cue-Senke:
 #                   Zwischenstufe Digital-Out allein, kein Profilwechsel (Plan M-1 Entscheidung 7).
 #                   Grenze Pro Audio: der Kern baut das Ziel als Präfix + "L"/"R" (kern main.cpp: snprintf "%s%s").

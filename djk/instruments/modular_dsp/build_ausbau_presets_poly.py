@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Writes the two factory presets that show the synth-poly build-out (second oscillator, MOD ENV, LFO 2, glide).
 
-    python3 build_ausbau_presets_poly.py [werk dir]      # default: djk/ui/presets/factory/modular
+    python3 build_ausbau_presets_poly.py [werk dir]      # default: djk/ui/presets/werk/baukasten
     node djk/ui/presets/tool.ts bauen      # then rebuild the register
 
 Every knob is written (1..57 of the graph; knobs the preset does not name stay at the graph's `vorgabe`). Values are plain numbers
@@ -14,7 +14,7 @@ import sys
 
 HIER = pathlib.Path(__file__).resolve().parent
 GRAPH = json.loads((HIER / "demos" / "synth-poly.json").read_text())
-ZIEL = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else HIER.parents[1] / "ui" / "presets" / "factory" / "modular"
+ZIEL = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else HIER.parents[1] / "ui" / "presets" / "werk" / "baukasten"
 
 # first regler node of every number: range, log flag, vorgabe
 REGLER = {}

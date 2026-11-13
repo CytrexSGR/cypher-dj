@@ -620,7 +620,7 @@ test('djk-hand proj_freeze und proj_export (Paket S3): Körper, Quelle cypher, s
   const werkzeuge = (await c.listTools()).tools;
   const fz = werkzeuge.find((x) => x.name === 'proj_freeze'), ex = werkzeuge.find((x) => x.name === 'proj_export');
   assert.deepEqual(fz.inputSchema.required, ['spur_id', 'an']);
-  assert.deepEqual(Object.keys(ex.inputSchema.properties).sort(), ['abgriff', 'bis_beat', 'von_beat']);   // 1.10 Slice 2: abgriff neu
+  assert.deepEqual(Object.keys(ex.inputSchema.properties).sort(), ['abgriff', 'ausklang_beats', 'bis_beat', 'von_beat']);   // 1.10 Slice 2: abgriff neu
   for (const g of ['real time', 'ki_gestoppt', 'transport_laeuft', 'beschaeftigt', 'spur_leer', 'freeze_fehler']) assert.ok(fz.description.includes(g), `proj_freeze nennt ${g}`);
   for (const g of ['real time', 'ki_gestoppt', 'export_bereich', 'audio_fehlt', 'render_fehler', 'regler_quelle', 'lufs_i']) assert.ok(ex.description.includes(g), `proj_export nennt ${g}`);
 });

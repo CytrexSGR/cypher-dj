@@ -1,5 +1,5 @@
 // Devices task 7: `device.ts pruefen` and `device.ts neu`, run as the real command on the repo and on temp copies (--wurzel).
-import test from 'node:test';
+import baseTest from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -7,6 +7,9 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { REPO, HIER } from '../paths.ts';
 import { pfadeVon } from '../devices_parameter.ts';
+import { OHNE_DOKU } from './support/devices_doku.mjs';
+
+const test = (name, fn) => baseTest(name, { skip: OHNE_DOKU }, fn);   // the tool checks the register against the device documents
 
 const TOOL = path.join(HIER, 'tool', 'device.ts');
 const lauf = (...args) => spawnSync(process.execPath, [TOOL, ...args], { encoding: 'utf8', cwd: HIER });
@@ -16,7 +19,7 @@ function kopie() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'geraet-'));
   const von = pfadeVon(REPO), nach = pfadeVon(dir);
   fs.mkdirSync(nach.bk, { recursive: true });
-  for (const sub of ['beispiele', 'paneele']) fs.cpSync(path.join(von.bk, sub), path.join(nach.bk, sub), { recursive: true });
+  for (const sub of ['demos', 'paneele']) fs.cpSync(path.join(von.bk, sub), path.join(nach.bk, sub), { recursive: true });
   fs.copyFileSync(von.register, nach.register);
   fs.copyFileSync(von.kategorien, nach.kategorien);
   fs.cpSync(von.doku, nach.doku, { recursive: true });
@@ -107,7 +110,7 @@ test('neu test-geraet --von synth-mono writes graph, panel, doc and register ent
     assert.match(doc, /^# GERAET-test-geraet/);
     assert.match(doc, /\| Cutoff \| `k1` \|/, 'the knob map is generated from the panel');
     const reg = JSON.parse(fs.readFileSync(P.register, 'utf8'));
-    assert.deepEqual(reg.at(-1), { name: 'test-geraet', art: 'bk', familie: 'mono', akzent: 'orange', doku: 'docs/presets/geraete/GERAET-test-geraet.md' });
+    assert.deepEqual(reg.at(-1), { name: 'test-geraet', art: 'bk', familie: 'mono', akzent: 'orange', doku: 'docs/presets/devices/GERAET-test-geraet.md' });
     const p = lauf('pruefen', '--wurzel', dir);
     assert.equal(p.status, 0, p.stdout);
     // --familie overrides family and accent

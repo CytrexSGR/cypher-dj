@@ -3,7 +3,7 @@
 // über den echten S2-Kern, Freeze/Export simuliert), kopfloser Chrome über cdp.mjs mit echten Maus- und Tastenereignissen.
 // Kein Ton, kein Fenster, kein Betrieb. Jede Teilprobe sät ihr eigenes Projekt.
 // Aufruf: node check/probe_clips.mjs [--instanz i] [--teil 6]   (Teil n prüft die Slices 1..n)
-// Ergebnis: pruef/ergebnisse/<zeit>-clips/bericht.md und ergebnis.json; Exit 1, wenn ein Punkt FEHL ist.
+// Ergebnis: check/ergebnisse/<zeit>-clips/bericht.md und ergebnis.json; Exit 1, wenn ein Punkt FEHL ist.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';

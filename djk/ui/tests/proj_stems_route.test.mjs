@@ -9,10 +9,11 @@ import { stapel } from './support/media_library.mjs';
 import { baueKatalog } from './support/catalog.mjs';
 import { wav } from './support/proj_context.mjs';
 import { ruf, warte } from './support/proj_stack.mjs';
+import { OHNE_STEMS_PYTHON } from './support/stems_voraussetzung.mjs';   // the real stem child needs torch
 
 const SHA = 'e'.repeat(64);
 
-test('S6 HTTP: POST /proj/stems → 200 {auftrag_id}, Ende fertig, sechs Stem-Spuren, ein Undo', async (t) => {
+test('S6 HTTP: POST /proj/stems → 200 {auftrag_id}, Ende fertig, sechs Stem-Spuren, ein Undo', { skip: OHNE_STEMS_PYTHON }, async (t) => {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-stems-')); t.after(() => fs.rmSync(d, { recursive: true, force: true }));
   const katalog = baueKatalog(path.join(d, 'kat'), [{ n: 1, typ: 'oneshot', pfad: wav(path.join(d, 'data'), 'ton.wav', 2.0), dauer_s: 2.0, sha: SHA }]);
   const { url } = await stapel(t, { katalog, stems: { zusatzArgs: ['--trenner', 'identitaet'] } });

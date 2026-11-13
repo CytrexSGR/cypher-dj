@@ -86,7 +86,7 @@
   "notch",
   "resonance"
  ],
- "notiz": "Notch practice from Senior p.213 (find with high Q, then remove); Q 12 is inside devices.ts (0.1-18).",
+ "notiz": "Notch practice from Senior p.213 (find with high Q, then remove); Q 12 is inside geraete.ts (0.1-18).",
  "angelegt": "2026-11-02T00:00:00.000Z",
  "geaendert": "2026-11-02T00:00:00.000Z"
 }

@@ -74,15 +74,26 @@ def _rendere(loop: dict) -> np.ndarray:
 
 def baue_loops(wurzel: Path | None = None, instanz: str = "") -> dict[str, str]:
     """Writes the loops that are absent; returns {loop: "neu" | "behalten"}. Rendering (cargo) only happens for a loop
-    that has to be written. Each new loop also lands as a WAV in the starter sound folder (library root, task 13)."""
+    that has to be written. Each new loop also lands as a WAV in the starter sound folder (library root, task 13).
+    A kept loop whose WAV is missing (the run was aborted between the two writes) gets the WAV from its loop.f32;
+    "beschaedigt": the folder exists but the core would refuse it; it is kept as it is."""
+    from . import render
     wurzel = wurzel or loop_ordner(instanz)
     ergebnis: dict[str, str] = {}
     for loop in beschreibung():
         if os.path.lexists(wurzel / loop["name"]):
+            grund = ablage.pruefe_loop(wurzel / loop["name"])
+            if grund:
+                print(f"kept loop {loop['name']} (damaged: {grund}); delete the folder to have it rebuilt", file=sys.stderr)
+                ergebnis[loop["name"]] = "beschaedigt"
+                continue
+            wav = _wav_ordner() / f"{loop['name']}_{BPM}bpm.wav"
+            if not os.path.lexists(wav):
+                x = np.fromfile(wurzel / loop["name"] / "loop.f32", dtype="<f4").reshape(-1, 2)
+                graphen.schreibe_wenn_fehlt(render.schreibe_wav_f32(x, RATE), wav)
             ergebnis[loop["name"]] = "behalten"
             continue
         x = _rendere(loop)
         ergebnis[loop["name"]] = ablage.schreibe_loop(wurzel, loop["name"], loop["beats"], x, f"starter:{loop['graph']}")
-        from . import render
         graphen.schreibe_wenn_fehlt(render.schreibe_wav_f32(x, RATE), _wav_ordner() / f"{loop['name']}_{BPM}bpm.wav")
     return ergebnis

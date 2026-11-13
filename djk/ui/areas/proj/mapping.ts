@@ -109,7 +109,7 @@ export function alleRetRegler(p: Projekt): Soll[] {
     aus.push({ pfad: `ret/${n}/fader`, wert: r ? r.fader_db : 0 }, { pfad: `ret/${n}/pan`, wert: r ? r.pan : 0 },
       { pfad: `ret/${n}/mute`, wert: r?.mute ? 1 : 0 }, { pfad: `ret/${n}/solo`, wert: r?.solo ? 1 : 0 });
     aus.push({ pfad: `ret/${n}/hall/an`, wert: (r?.hall ?? HALL_VORGABE).an ? 1 : 0 });
-    for (const k of HALL_FELDER) aus.push({ pfad: `ret/${n}/reverb/${k}`, wert: (r?.hall ?? HALL_VORGABE)[k] });
+    for (const k of HALL_FELDER) aus.push({ pfad: `ret/${n}/hall/${k}`, wert: (r?.hall ?? HALL_VORGABE)[k] });
   }
   return aus;
 }
@@ -147,7 +147,7 @@ const REGLER_PFAD = /^spur\/([1-9][0-9]?)\/(fader|pan|mute|solo)$/;
 const GRUPPEN_PFAD = /^grp\/([1-9]|1[0-6])\/(fader|pan|mute|solo)$/;
 const SEND_PFAD = /^(?:(spur)\/([1-9]|[12][0-9]|3[0-2])|(grp)\/([1-9]|1[0-6]))\/send\/([1-4])$/;
 const RET_PFAD = /^ret\/([1-4])\/(fader|pan|mute|solo)$/;
-const HALL_PFAD = new RegExp(`^ret/([1-4])/reverb/(an|${HALL_FELDER.join('|')})$`);
+const HALL_PFAD = new RegExp(`^ret/([1-4])/hall/(an|${HALL_FELDER.join('|')})$`);
 const klemme = (k: keyof typeof FELD, wert: number): number | boolean => (k === 'mute' || k === 'solo' ? wert >= 0.5
   : k === 'fader' ? Math.min(FADER_MAX, Math.max(FADER_MIN, wert)) : Math.min(1, Math.max(-1, wert)));
 export function reglerZuBefehl(p: Projekt, pfad: string, wert: number): { befehl: Record<string, unknown>; label: string } | null {

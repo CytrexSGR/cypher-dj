@@ -80,7 +80,7 @@ the module folder, all 14 todo tests pass (see "Verification of the proposed fix
 Every bug has a test marked `{ todo: 'bug: …' }`, so the suite stays green. Diffs are against the current files and were
 verified (see below). Severity is my estimate.
 
-### 1. media_library.ts — case-insensitive search folds ASCII only (medium)
+### 1. media_library.ts: case-insensitive search folds ASCII only (medium)
 
 - Input: title `Über Haus`, `suche({ text: 'über' })`; sound with pack `Übersteuert`, `klaenge({ text: 'über' })` or `'Über'`.
 - Expected: the track and the sound are found (ASCII letters already match in any case: `tech` finds `Tech Wolf`).
@@ -92,28 +92,28 @@ verified (see below). Severity is my estimate.
 - Note: `klein()` is a JS function per row on a `NOT INDEXED` scan; the 300 ms budget of `suche()` should be re-measured on
   the real mediathek before taking this fix.
 
-### 2. catalog.ts — damage behind the stand table surfaces as a raw SQLite error (low)
+### 2. catalog.ts: damage behind the stand table surfaces as a raw SQLite error (low)
 
 - Input: a valid catalog with one 4 KiB page at 30 % overwritten; `seite('track', …)` and `baum('track')`.
 - Expected: `KatalogFehler(503, 'katalog_kaputt')`, as for an empty, random or truncated file.
 - Actual: `Error: database disk image is malformed` → server answers 500 `katalog_abfrage`.
 - Test: `katalog hardening: a catalog with an overwritten page in the middle → 503 katalog_kaputt`.
 
-### 3. catalog.ts — a directory at the catalog path is a raw error (low)
+### 3. catalog.ts: a directory at the catalog path is a raw error (low)
 
 - Input: `CYPHERDJ_KATALOG` (or the default path) is a directory.
 - Expected: 503 `katalog_kaputt`. Actual: `oeffne()` only checks `existsSync`; `new DatabaseSync()` throws
   `ERR_SQLITE_ERROR disk I/O error` → 500.
 - Test: `katalog hardening: a directory at the catalog path → 503, not a raw SQLite error`.
 
-### 4. catalog.ts — facet whitespace other than U+0020 is not "empty" (low)
+### 4. catalog.ts: facet whitespace other than U+0020 is not "empty" (low)
 
 - Input: `genre` values `"\t"`, `"\n"`, `" "` and `NULL`.
 - Expected (comment above `facetteWert`: "NULL, '' und Leerraum → NULL"): one facet value `''` with n = 4.
 - Actual: SQLite `trim(x)` strips spaces only; three extra facet values that render as blanks.
 - Test: `katalog hardening: a facet value of only tabs, newlines or no-break spaces is the empty value like "   "`.
 
-### 5. collection.ts — a set.json that parses but has the wrong shape crashes changes (medium)
+### 5. collection.ts: a set.json that parses but has the wrong shape crashes changes (medium)
 
 - Input: `set.json` with `"art": "mixtape"` (for example written by a newer version), `"art": "constructor"`, or
   `"posten": "p1,p2"`; then `legeHinzu(slug, 'track', mid)`.
@@ -122,33 +122,33 @@ verified (see below). Severity is my estimate.
   `posten: 5` for the posten string (its length).
 - Test: `sammlung hardening: a set.json that parses but has an unknown art or no posten array is refused with a SammlungFehler`.
 
-### 6. collection.ts — deleting the same slug twice within one millisecond fails (low)
+### 6. collection.ts: deleting the same slug twice within one millisecond fails (low)
 
 - Input: `lege('Wieder'); loesche('wieder')` repeated quickly (50 times in the test).
 - Expected: every copy lands in `.papierkorb`. Actual: the second rename to `.papierkorb/wieder-<same ms>` fails with a raw
   `ENOTEMPTY`; the list stays. Reproduced 111 of 200 times in a loop.
 - Test: `sammlung hardening: deleting a recreated list twice within one millisecond keeps both in the trash`.
 
-### 7. collection.ts — NFD names lose their umlauts in the slug (low)
+### 7. collection.ts: NFD names lose their umlauts in the slug (low)
 
 - Input: `slugVon('Bär')` (macOS input method, NFD). Expected: `baer` like NFC `Bär`. Actual: `bar`: the ä/ö/ü
   replacement runs before normalisation, NFKD then strips the combining mark.
 - Test: `sammlung hardening: a name in NFD (macOS input) gives the same slug as in NFC`.
 
-### 8. collection.ts — the 1000th equally named list with a long name fails (low)
+### 8. collection.ts: the 1000th equally named list with a long name fails (low)
 
 - Input: a 48-character name whose slugs `<basis>`, `<44 chars>-2` … `-999` exist; `lege(name)`.
 - Expected: a valid slug. Actual: `<44 chars>-1000` has 49 characters, `schreibe()` throws 400 `slug_ungueltig` after the
   directory was created; an empty directory is left behind.
 - Test: `sammlung hardening: the 1000th list with the same 48-character name still gets a valid slug`.
 
-### 9. collection.ts — a note cut at 200 can split an emoji (low)
+### 9. collection.ts: a note cut at 200 can split an emoji (low)
 
 - Input: `legeHinzu(slug, 'track', mid, 'a'.repeat(199) + '😀')`. Expected: a well-formed string. Actual: the stored note
   ends in a lone `\ud83d` (`String.slice` counts UTF-16 units).
 - Test: `sammlung hardening: a note cut at 200 does not split an emoji into a lone surrogate`.
 
-### 10. wave_cache.ts — absurd durations time out at once (medium)
+### 10. wave_cache.ts: absurd durations time out at once (medium)
 
 - Input: `dauerS = 1e8` (a corrupt duration tag; the catalog value goes straight into `dateiQuelle`).
 - Expected: a long time limit; the waveform is computed. Actual: `zeitlimitVorgabe(1e8)` = 10 000 030 000 ms, above the
@@ -156,7 +156,7 @@ verified (see below). Severity is my estimate.
   504 and negative-caches the key for 10 minutes. Any `dauerS` above about 21 474 536 s (≈ 248 days) triggers it.
 - Test: `welle_cache hardening: an absurd duration (corrupt tag: 1e8 s) gives a long time limit, not an immediate timeout`.
 
-### 11. wave_cache.ts — fassungQuelle trusts fassung.json (low, defence in depth)
+### 11. wave_cache.ts: fassungQuelle trusts fassung.json (low, defence in depth)
 
 - Input: `fassung.json` = `null`; = `{"sha256": "<64 hex>", "datei": "../../../fremd.f32"}`; = `{"sha256": "/../../../../tmp/entwischt"}`.
 - Expected: 404 `fassung_fehlt` for all three.
@@ -167,20 +167,20 @@ verified (see below). Severity is my estimate.
   64 lower-case hex characters, as its name says; please confirm against the writer in the workshop before applying.
 - Test: `welle_cache hardening: fassung.json cannot point outside the version folder or the cache, and "null" is 404`.
 
-### 12. wave_cache.ts — an empty file in the cache is served forever (low)
+### 12. wave_cache.ts: an empty file in the cache is served forever (low)
 
 - Input: a 0-byte `<key>.welle` in the cache folder (possible after a power cut: `renameSync` without `fsync` on ext4).
 - Expected: recomputed. Actual: `hole()` checks only `existsSync`, returns the empty file on every request; the page can
   never draw that waveform until someone deletes the file.
 - Test: `welle_cache hardening: an empty file in the cache (crash after rename without fsync) is recalculated, not served forever`.
 
-### 13. search_text.ts — NFC and NFD spellings count as two terms (low)
+### 13. search_text.ts: NFC and NFD spellings count as two terms (low)
 
 - Input: `suchTerme('Über Über')`. Expected: one term. Actual: two; duplicate detection uses `toLowerCase()`
   without NFC, so each spelling uses up the `MAX_TERME` budget (FTS itself already matches both).
 - Test: `suchtext hardening: NFC and NFD spellings of the same word count as one term`.
 
-### 14. media_library.ts — a whitespace-only limit gives one result (low)
+### 14. media_library.ts: a whitespace-only limit gives one result (low)
 
 - Input: `parseLimit(' ')` (for example `?limit=%20`). Expected: the default 50 like `parseLimit('')`.
   Actual: `Number(' ')` is 0 → clamped to 1.

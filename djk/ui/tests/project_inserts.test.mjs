@@ -45,7 +45,7 @@ const mitAllem = () => {   // 3 tracks, group g1 (s2, s3), return r1, r2
 const DEF = { schwelle: -18, ratio: 4, knie: 6, attack: 10, release: 120, makeup: 0, mix: 1, schp: 0 };
 
 test('limits equal the generated contract (pool sizes and chain length)', () => {
-  assert.equal(MAX_INSERTS_PRO_STRANG, 4);
+  assert.equal(MAX_INSERTS_PRO_STRANG, 5);
   assert.equal(MAX_INS_KOMP, INSERT_ARTEN.komp.instanzen);
   assert.equal(MAX_INS_EQ, INSERT_ARTEN.eq.instanzen);
   assert.equal(MAX_INS_SAETT, INSERT_ARTEN.saett.instanzen);
@@ -78,18 +78,18 @@ test('insert_setzen: refusals (AK-S4-11) and the negative controls next to each'
   lehntAb(p, { befehl: 'insert_setzen', strang_id: 's1', pos: 0 }, 'art_unbekannt');
   lehntAb(p, { befehl: 'insert_setzen', strang_id: 's9', pos: 0, art: 'komp' }, 'spur_unbekannt');
   lehntAb(p, { befehl: 'insert_setzen', strang_id: 's1', pos: 1, art: 'komp' }, 'argument_ungueltig');   // gap
-  lehntAb(p, { befehl: 'insert_setzen', strang_id: 's1', pos: 4, art: 'komp' }, 'argument_ungueltig');
+  lehntAb(p, { befehl: 'insert_setzen', strang_id: 's1', pos: 5, art: 'komp' }, 'argument_ungueltig');
   lehntAb(p, { befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'komp', werte: { schwelle: 3 } }, 'argument_ungueltig');
   lehntAb(p, { befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'komp', werte: { gain: 3 } }, 'argument_unbekannt');
   lehntAb(p, { befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'komp', sc: 33 }, 'argument_ungueltig');
   lehntAb(p, { befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'komp', sc: 9 }, 'spur_unbekannt');
   lehntAb(p, { befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'komp', farbe: 'x' }, 'argument_unbekannt');
-  // the 5th stage on one strand: kette_voll; the fourth is fine
+  // the 6th stage on one strand: kette_voll; the fifth is fine
   let q = p;
   for (let i = 0; i < MAX_INSERTS_PRO_STRANG; i++) q = ok(q, { befehl: 'insert_setzen', strang_id: 's1', pos: i, art: 'komp' }).projekt;
-  assert.equal(q.spuren[0].inserts.length, 4, 'negative control: four stages are accepted');
+  assert.equal(q.spuren[0].inserts.length, 5, 'negative control: five stages are accepted');
   lehntAb(q, { befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'komp' }, 'kette_voll');
-  lehntAb(q, { befehl: 'insert_setzen', strang_id: 's1', pos: 3, art: 'komp' }, 'kette_voll');
+  lehntAb(q, { befehl: 'insert_setzen', strang_id: 's1', pos: 4, art: 'komp' }, 'kette_voll');
   // the 13th komp: ins_voll; the twelfth is fine
   let r = mit(12);
   for (let i = 1; i <= MAX_INS_KOMP; i++) r = ok(r, { befehl: 'insert_setzen', strang_id: `s${i}`, pos: 0, art: 'komp' }).projekt;
@@ -247,7 +247,7 @@ test('AK-S4-17 (1.12 slice 6): insert and rack targets are lane targets now (rea
   assert.equal(GRUND_TEXT.lane_ziel_spaeter, undefined, 'the reason text is gone with the reason');
 });
 
-test('model validation is closed: unknown field, duplicate slot or id, range, 5 stages, bad pre, /1 project', () => {
+test('model validation is closed: unknown field, duplicate slot or id, range, 6 stages, bad pre, /1 project', () => {
   const base = setze(setze(mitAllem(), 's1'), 's2');
   const fehler = (mut) => { const x = structuredClone(base); mut(x); return pruefeProjekt(x).fehler; };
   assert.equal(pruefeProjekt(base).fehler, undefined);
@@ -264,8 +264,8 @@ test('model validation is closed: unknown field, duplicate slot or id, range, 5 
   assert.match(fehler((x) => { x.spuren[0].inserts = []; }), /inserts/);
   assert.match(fehler((x) => { x.returns[0].pre = false; }), /pre/);
   assert.match(fehler((x) => {
-    x.spuren[0].inserts = [1, 2, 3, 4, 5].map((n) => ({ id: `z${n}`, art: 'komp', slot: n + 2, an: true, werte: { ...DEF } }));
-  }), /höchstens 4/);
+    x.spuren[0].inserts = [1, 2, 3, 4, 5, 6].map((n) => ({ id: `z${n}`, art: 'komp', slot: n + 2, an: true, werte: { ...DEF } }));
+  }), /höchstens 5/);
   assert.match(fehler((x) => { x.format = 'cypherdj-projekt/1'; delete x.gruppen; delete x.master; delete x.returns; delete x.naechste_id.return; delete x.spuren[1].inserts; }), /inserts/);
 });
 

@@ -36,7 +36,7 @@
     "self-oscillation",
     "sine"
   ],
-  "notiz": "Welsh p.21: a self-resonating filter becomes a sine-wave oscillator. devices.ts allows resonanz 1.",
+  "notiz": "Welsh p.21: a self-resonating filter becomes a sine-wave oscillator. geraete.ts allows resonanz 1.",
   "angelegt": "2026-11-02T00:00:00.000Z",
   "geaendert": "2026-11-02T00:00:00.000Z"
 }

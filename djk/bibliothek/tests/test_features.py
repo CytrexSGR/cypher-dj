@@ -103,6 +103,17 @@ def test_felder_loop(tmp_path):
     assert d["titel"] == "Kick_Loop 126bpm" and "Pack" in d["alle"].split(" ")
 
 
+def test_felder_track_takes_a_bare_bpm_at_the_end_of_the_name(tmp_path):
+    """Kanban t_747a905b: 'Abnahme Eins 128.wav' is a track with BPM 128; a one-shot named 'Kick 90' stays without."""
+    from bibliothek.features import Merkmale
+    p = tmp_path / "Musik" / "Abnahme Eins 128.wav"
+    p.parent.mkdir(parents=True)
+    p.write_bytes(b"x")
+    assert felder(_datei(p, tmp_path), "track", Merkmale("a" * 64, 75.0, {}))["bpm"] == 128.0
+    assert felder(_datei(p, tmp_path), "oneshot", Merkmale("a" * 64, 0.4, {}))["bpm"] is None
+    assert felder(_datei(p, tmp_path), "track", Merkmale("a" * 64, 75.0, {"bpm": "126"}))["bpm"] == 126.0, "tag wins"
+
+
 # ---- review fixes (round 1) -----------------------------------------------------------------------------------------
 
 def test_i2_tags_are_read_later_when_mutagen_appears_without_rehashing(tmp_path, monkeypatch):

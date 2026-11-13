@@ -40,28 +40,28 @@ const zaehle = (s, sel) => s.w(`document.querySelectorAll(${JSON.stringify(sel)}
 test('inserts.js: the literal komp table equals the generated contract, the limits equal the model', () => {
   const vertrag = INSERT_ARTEN.komp.parameter.filter((q) => q.name !== 'an' && q.name !== 'sc');
   assert.deepEqual(KOMP_PARAMETER.map((q) => [q.name, q.min, q.max, q.vorgabe, q.einheit]), vertrag.map((q) => [q.name, q.min, q.max, q.vorgabe, q.einheit]));
-  assert.equal(MAX_PLAETZE, 4); assert.equal(MAX_KOMP, INSERT_ARTEN.komp.instanzen);
+  assert.equal(MAX_PLAETZE, 5); assert.equal(MAX_KOMP, INSERT_ARTEN.komp.instanzen);
 });
 
-test('inserts.js: four places per strip, no gaps; commands; the pool message', () => {
+test('inserts.js: five places per strip, no gaps; commands; the pool message', () => {
   const p = projekt({ s1: 2 });
   const pl = plaetze(p.spuren[0]);
-  assert.equal(pl.length, 4); assert.deepEqual(pl.map((x) => x?.id ?? null), ['i1', 'i2', null, null]);
+  assert.equal(pl.length, 5); assert.deepEqual(pl.map((x) => x?.id ?? null), ['i1', 'i2', null, null, null]);
   assert.deepEqual(neuerInsertBefehl(p, 's1'), { befehl: 'insert_setzen', strang_id: 's1', pos: 2, art: 'komp' });
-  assert.equal(neuerInsertBefehl(projekt({ s1: 4 }), 's1'), null, 'four stages are the end of a chain');
+  assert.equal(neuerInsertBefehl(projekt({ s1: 5 }), 's1'), null, 'five stages are the end of a chain');
   assert.equal(neuerInsertBefehl(projekt({ s1: 4, s2: 4, s3: 4 }), 's4'), null, 'twelve compressors are the end of the pool');
   assert.equal(KOMP_VOLL_TEXT, 'No free compressor');
   assert.deepEqual(paramBefehl('i1', 'schwelle', -20), { befehl: 'insert_param_setzen', insert_id: 'i1', param: 'schwelle', wert: -20 });
   assert.deepEqual(preBefehl('r1', true), { befehl: 'return_aendern', return_id: 'r1', pre: true });
 });
 
-test('kette_zeigt_vier_plaetze', { skip: !CHROME && 'no google-chrome' }, async (t) => {
+test('kette_zeigt_fuenf_plaetze', { skip: !CHROME && 'no google-chrome' }, async (t) => {
   const s = await seite(t, projekt({ s1: 2, g1: 1 }));
-  assert.equal(await zaehle(s, '.p-kette[data-strang="s1"] .p-platz'), 4, 'four places on the track');
+  assert.equal(await zaehle(s, '.p-kette[data-strang="s1"] .p-platz'), 5, 'five places on the track');
   assert.equal(await zaehle(s, '.p-kette[data-strang="s1"] .p-stufe'), 2);
-  assert.deepEqual(await s.w(`[...document.querySelectorAll('.p-kette[data-strang="s1"] .p-platz')].map((e) => e.dataset.insert ?? '')`), ['i1', 'i2', '', '']);
+  assert.deepEqual(await s.w(`[...document.querySelectorAll('.p-kette[data-strang="s1"] .p-platz')].map((e) => e.dataset.insert ?? '')`), ['i1', 'i2', '', '', '']);
   assert.equal(await zaehle(s, '.p-kette[data-strang="g1"] .p-stufe'), 1, 'a group has a chain too');
-  for (const id of ['s2', 'r1', 'master']) assert.equal(await zaehle(s, `.p-kette[data-strang="${id}"] .p-platz`), 4, `${id} shows four places`);
+  for (const id of ['s2', 'r1', 'master']) assert.equal(await zaehle(s, `.p-kette[data-strang="${id}"] .p-platz`), 5, `${id} shows five places`);
   assert.equal(await zaehle(s, '.p-kette[data-strang="s2"] .p-stufe'), 0);
   // the add button of the first free place makes insert_setzen at the end of the chain
   await s.b.klick('.p-kette[data-strang="s2"] .p-ins-neu');
