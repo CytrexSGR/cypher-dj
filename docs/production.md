@@ -118,7 +118,7 @@ state of a target as a new preset.
 
 ## Arrangement, piano roll, export
 
-![PRODUCTION view: three tracks (audio kick, RB-338 bass, frozen Surge XT lead), 8-bar loop, piano roll of the bass line](screens/production-view.png)
+![PRODUCTION view: an arrangement with MIDI clips, a resampled audio track, DRUMS and MUSIC groups and a return; the bass clip open in the piano roll](screens/production-view.png)
 
 Notes are drawn in a piano roll with velocity and 1/16 quantize. Tracks can share a variant group (bass A, B, C) where
 one click makes one of them audible. Recording takes one of the studio's own channels, including the extra pattern

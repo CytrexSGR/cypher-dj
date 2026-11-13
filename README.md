@@ -9,7 +9,9 @@ Built in Germany by Andreas, a DJ, and Cypher, an AI agent (Claude models), sinc
 > **Status: public beta, looking for testers.** It runs on Linux and has been tested on one machine so far, see
 > [Try it](#try-it-we-are-looking-for-testers).
 
-![Overview: DJ view, studio, warp and stems, arrangement with piano roll, Cypher Modular, media library, cue tool, compressor](docs/screens/overview.png)
+![Overview: DJ view with four places, studio, warp and stems, arrangement with piano roll, a Cypher Modular device page, media library, cue tool, loop slots with live modules](docs/screens/overview.png)
+
+![Instruments and plug-ins: Mono Synth, Poly Synth, Neuro Bass, Drums 909, Kick Synth, Cypher Labor, the plug-in browser with search and a third-party plug-in as an instrument track](docs/screens/instruments.png)
 
 ## What it is
 

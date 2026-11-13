@@ -783,6 +783,17 @@ body:not(.studio) #pult .xfader { grid-area: xf; padding: 4px 8px;   /* grid-col
 #platz-loops .loops-leer b { color: var(--text); font-size: 15px; }
 #platz-loops .livetaste.gross { margin: 0; height: 56px; padding: 0 44px; font-size: 20px; background: var(--farbe); border-color: var(--farbe); color: #0e0f12; }
 body:not(.studio) .deck .lauf { min-height: 24px; }
+/* DJ view, short places (1920x1080: a top place is 219 px, the deck needs about 270): the rows of a deck never shrink below their text (they
+   overlapped the BAR row and the next place head), only the waveform gives room. Below 290 px the deck drops its title and meta lines, which the
+   place head already shows (title, key, tempo), and its head row, and closes its gaps; what still does not fit is clipped inside the deck, not drawn over its neighbour. */
+body:not(.studio) #pult > .deck { container: deckplatz / size; overflow: hidden; }
+body:not(.studio) #pult > .deck > * { flex-shrink: 0; }
+body:not(.studio) #pult > .deck > .lauf { flex: 1 1 24px; min-height: 16px; }
+@container deckplatz (max-height: 290px) {
+  .deck > .titel, .deck > .meta, .deck > .deckkopf { display: none; }   /* deck letter, status and title are in the place head and the strip */
+  .deck > .deckkopf, .deck > .position, .deck > .bedienreihe, .deck > .tasten { margin-top: -2px; }
+  .deck > .ueber { height: 16px; }   /* the overview gives its height to the waveform */
+}
 .deck .taste.sync { letter-spacing: .12em; }
 body:not(.studio) .zug[hidden][data-mix-zeile] { display: grid !important; }   /* decks 3 and 4 keep hidden in the HTML (Studio view); a place shows them */
 
@@ -808,3 +819,22 @@ body:not(.studio) #pult .zug .faderwert { grid-row: 6; grid-column: 1 / -1; }
 body:not(.studio) #pult .zug .xzuweisung { grid-row: 7; grid-column: 1 / -1; }
 body:not(.studio) #pult .zug .regler.senkrecht .bahn { height: calc(100% - 18px); margin: 9px 0; }
 body:not(.studio) #pult .zug .regler.senkrecht .kappe { height: 18px; margin-bottom: -9px; }
+
+/* Header, 2026-11-13 (Andreas: "die obere box ist undurchsichtig"): two rows of framed groups instead of one wrapping flow.
+   Row 1: brand, view, clock and tempo, messages, tablet, Stop Cypher, connections. Row 2: beat FX routing, FX1, FX2, COLOR, headphones.
+   An empty ::before with order 9 and full width forces the break; a row that does not fit wraps whole groups, it never overlaps them.
+   P2 and P3 of the beat FX are reserved and reach no DSP (mixer.cpp fx_einheit_setze), so the header does not show them. */
+#kopf { display: flex; flex-wrap: wrap; align-items: center; column-gap: 12px; row-gap: 6px; padding: 6px 10px; }
+#kopf::before { content: ''; order: 9; flex: 0 0 100%; height: 0; }
+#kopf > .marke { order: 1; } #kopf > .ansicht { order: 2; } #kopf > .uhr { order: 3; } #kopf > .ansage { order: 4; flex: 1 1 0; text-align: center; }
+#kopf > #kopplung-knopf { order: 5; } #kopf > .cypher { order: 6; } #kopf > .verbindungen { order: 7; }
+#kopf > #fx { order: 10; } #kopf > .kopfmix { order: 11; margin-left: auto; }
+#kopf > .uhr, #kopf > .kopfmix, #fx > .fxrouting, #fx > .fxeinheit { background: var(--panel2); border: 1px solid var(--line); border-radius: 6px;
+  padding: 3px 10px; min-height: 34px; box-sizing: border-box; }
+#fx { display: flex; gap: 8px; flex-wrap: wrap; row-gap: 6px; min-width: 0; }
+#fx > .fxrouting { display: flex; align-items: center; gap: 6px; font-size: 11px; }
+#fx > .fxrouting > label, #kopf > .kopfmix > .phones { color: var(--dim); font-weight: 700; letter-spacing: .1em; font-size: 11px; }
+.fxeinheit .summe.klein:has([data-fx="param2"]), .fxeinheit .summe.klein:has([data-fx="param3"]) { display: none; }
+.fxeinheit .summe.klein > span { min-width: 0; }
+.colorfx button { white-space: nowrap; }
+@media (max-width: 2200px) { .colorfx .colorparam > span { display: none; } .colorfx #colorparam { width: 80px; } #fx > .fxeinheit, #fx > .fxrouting { padding: 3px 7px; } }

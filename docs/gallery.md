@@ -3,13 +3,13 @@
 Taken on the development machine with our own songs and the factory sample packs; the folder tree of the library is
 scrolled away or collapsed.
 
-![DJ view: two decks with 3-band waveforms, mixer, Strudel channel and loop boxes](screens/dj-view.png)
+![DJ view with four places: two track decks, a Strudel place and the Loops place with two live modules, around one mixer](screens/dj-view.png)
 
-![Studio view: three Strudel channels with automation lanes](screens/studio-view.png)
+![Studio view: three Strudel channels with multi-line patterns, the channel strips and the master meter](screens/studio-view.png)
 
 ![PRODUCTION view: four stems under the muted original, the warp editor in COMPLEX mode](screens/production-warp-stems.png)
 
-![PRODUCTION view: audio kick, RB-338 bass, frozen Surge XT lead, piano roll of the bass line](screens/production-view.png)
+![PRODUCTION view: an arrangement with MIDI clips, a resampled audio track, DRUMS and MUSIC groups and a return; the bass clip open in the piano roll](screens/production-view.png)
 
 ![Cypher Modular: the eight instrument knobs of a patch in the expanded EFFECTS view](screens/instrument-knobs.png)
 
@@ -19,8 +19,8 @@ scrolled away or collapsed.
 
 ![Device page of Poly Synth: oscillator, second oscillator, unison, filter, envelopes, LFO, chorus, voice and tuning](screens/device-page-poly-synth.png)
 
-![Media library browser: one-shot samples filtered by instrument, with pack and length](screens/library-browser.png)
+![Media library: tracks filtered by a search word, with key, tempo, length, loudness and a load button per deck](screens/library-browser.png)
 
-![Effects strip: a compressor on every source channel](screens/effects.png)
+![Effects strip: a compressor and a gate on every source channel](screens/effects.png)
 
 ![Cue tool: whole-track overview, 3-band waveform and eight cue pads](screens/cue-tool.png)
