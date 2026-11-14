@@ -59,7 +59,9 @@ test('every plate in #instrumente gets breit from the state and the header butto
   assert.match(platte, /geraeteknopfHtml\(false\)/);   // the plate button opens; while open the tab strip carries the closer
   assert.match(platte, /!istGeraeteseite\(\)/);
   assert.match(platte, /closest\('#instrumente'\)/);
-  assert.equal((app.match(/baueFrontplatte\(/g) ?? []).length, 1, 'only platteBauen calls the renderer');
+  // two callers: platteBauen (all device plates) and the REMIX place of the DJ view, which is always wide and scaled into its place
+  assert.equal((app.match(/baueFrontplatte\(/g) ?? []).length, 2, 'only platteBauen and the remix place call the renderer');
+  assert.match(app, /remixFp = baueFrontplatte\(feld, \{ panel: info\.panel, regler: info\.regler, adapter: remixAdapter, breit: true \}\)/);
   const aufrufe = app.match(/_fp = platteBauen\(liste, /g) ?? [];
   assert.equal(aufrufe.length, 3, 'host plate (RB-338, Cypher Modular), Surge plate and bk plate');
   assert.match(funktion('baueHostBereich'), /platteBauen\(liste, \{ \.\.\.platte/);

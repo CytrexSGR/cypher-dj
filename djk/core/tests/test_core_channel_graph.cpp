@@ -3,7 +3,7 @@
 //  1. Setzen von andreas: Quittungen 1, 2, 3; nach der Blende hat deck/2 (Träger 200 Hz) im Master die halbe Spitze (−6,02 dB ±0,05).
 //  2. Entfernen (zeiger null): Quittungen 1, 2, 3, danach wieder volle Spitze; genau ein ERZ_BK_ALT mit dem gesetzten Zeiger.
 //  3. Quelle cypher darf setzen (D11).
-//  4. Kanal außerhalb (erz/1): Quittung 6 ausserhalb_bereich, der Zeiger kommt als ERZ_BK_ALT zurück.
+//  4. Kanal außerhalb (bus/1; a source like erz/1 or pad/1 has an insert slot since the remix targets): Quittung 6 ausserhalb_bereich, der Zeiger kommt als ERZ_BK_ALT zurück.
 //  5. KI-Stopp, Quelle cypher: Quittung 6 ki_gestoppt, der Zeiger kommt als ERZ_BK_ALT zurück; andreas darf weiter.
 //  6. Allokationsfrei: Blöcke mit gesetztem Graphen, Wechsel und Blende allokieren nicht.
 //  9. (S5r) Graph-Regler <kanal>/bk/1: deck/2/bk/1 setzt den Pegel des Graphen auf deck/2 (Eingang x Regler -> Ausgang), deck/3/bk/1
@@ -259,7 +259,7 @@ int main() {
     PRUEF(a.zurueck(g3) == 0);
 
     CypherBk* g4 = graph(HALB);
-    const int64_t i4 = a.graph_setzen("erz/1", g4);
+    const int64_t i4 = a.graph_setzen("bus/1", g4);
     a.zyklen(30 * N);
     PRUEF(a.abgelehnt(i4) == "ausserhalb_bereich");
     PRUEF(a.zurueck(g4) == 1);

@@ -18,7 +18,10 @@ import { ScrubZieher } from './scrub.js';
 import { bindeProduktion } from './production/production.js';
 import { faderWert, faderText } from './production/track_heads.js';
 import { reglerVonDb, tasteMerke, tasteWert } from './production/fader_curve.js';
+import { aktuellesZiel, zielWahl, typSperre, zielKlick, hinweis as remixHinweis, ablehnung as remixAblehnung, GERAET as REMIX_GERAET } from './remix_platz.js';
 import { LAYOUT_STANDARD, TYPEN, ladeLayout, speichereLayout, wechsel, still, wahl, kopf as platzKopf, wendeAn, wendeMixerAn } from './slots.js';
+import { loopPosition, zeichneGrund, zeichneKopf } from './loop_wave.js';   // loop slots: waveform, grid, playhead
+import { kopfImLoop } from './production/timeline.js';
 import { modulAnsicht, modulHtml, exportKnopf, faderBefehl, oeffneLive, exportiere, exportiereInSlot, ladeLoopInSlot, leere, trenneNeu, setzeBlend, passeTonartAn, kanalAnsicht, blendText } from './live_module.js';   // live modules task 4
 import { SpektrumAnsicht, SpektrumLeihe, spektrumFlaeche, SPEKTRUM_FRIST_MS } from './spectrum.js';   // 1.15 A7b: spectrum view
 import { bauePresetPanel, hostWechsel, kanalPlanHolen, fehlerText, presetAusKernKomp, kernGeraetAnfragen, kernGeraetWerte, istKernGeraet } from './presets.js';   // 1.16: preset browser
@@ -949,6 +952,7 @@ async function holeGraphen() {
     if (Array.isArray(j.graphen)) { graphenInfo = { graphen: j.graphen, uebersprungen: j.uebersprungen ?? [] }; graphenGeladen = j.geladen ?? graphenGeladen; if (j.geladen) graphenErhalten = true; }
     panelCache.clear();
     zeigeGraphWahl();
+    zeigeRemix();
     baueSendKnobs();
     if (GRAPH_KANAL_ART[fxGewaehlt] || $('#fxdetail')?.firstChild) baueFxDetail();
     if (instrumenteSichtbar()) instrumenteAnsicht.neuBauen();
@@ -964,6 +968,7 @@ function setzeGraphenGeladen(neu) {
   if (armiert && alt[armiert] !== graphenGeladen[armiert]) lernSchicken('/lernen', { pfad: null });
   zeigeGraphWahl();
   baueSendKnobs();
+  zeigeRemix(); zeigePlaetze();   // the REMIX place follows the core state (target, lock of the place switch)
   if (graphenGeladen[fxGewaehlt] !== vorher) baueFxDetail();   // knob names (and the Surge knobs of erz/2, erz/3) follow the graph
   if (instrumenteSichtbar()) instrumenteAnsicht.neuBauen();   // deferred until pointerup while a panel control is held
   ladePaneele();
@@ -2629,6 +2634,7 @@ function strom() {
   q.onmessage = (m) => {
     const { a, f } = JSON.parse(m.data);
     try { produktion?.ereignis(a, f); } catch (e) { console.error('Production view:', e); }   // D1 V1: proj, /zustand/arr; ein Fehler dort hält die DJ-Anzeige nicht an
+    if (a === '/zustand/arr') merkeArr(f);   // the loop slots follow the transport of the live container
     switch (a) {
       case 'stand':
         Object.assign(zustand.regler, f.regler);
@@ -2678,6 +2684,7 @@ function strom() {
         if (/^fx\/[34]\/bk\//.test(f.pfad)) zeigeSendKnobs();   // S14: the send-return knobs follow the echo (also a move by Cypher)
         { const m = /^(.+)\/bk\/([1-9]|[1-5][0-9]|6[0-4])$/.exec(f.pfad); const fp = m && m[1] === fxGewaehlt ? $('#fxdetail .bkliste')?._fp : null; if (fp) fp.aktualisiere(); }   // a panel in the detail view follows the echo too
         { const m = /^(.+)\/bk\/([1-9]|[1-5][0-9]|6[0-4])$/.exec(f.pfad); if (m && instrumenteSichtbar() && m[1] === instrumenteAnsicht.gewaehlt()) instrumenteAnsicht.aktualisiere(); }   // ... and the panel in INSTRUMENTS
+        if (remixFp && /\/bk\/\d+$/.test(f.pfad)) remixFp.aktualisiere();   // the REMIX panel follows the knob echo of its target
         break;
       case '/zustand/spektrum':   // A7b: 25 Hz while a source is selected
         { let neu = false; for (const a of spektrumAnsichten) if (a.aufnehmen(f)) neu = true; if (neu) spektrumNachsehen(); }
@@ -3080,6 +3087,61 @@ async function liveOeffnen() {
   if (!r.abgelehnt) melde(r.text, !r.ok);
   pruefeLiveSpaeter(0);
 }
+// ---------- Loop slots: waveform, beat grid and playhead (the module's loop clip, the transport of the live container) ----------
+const loopWellen = new Map();   // sha -> DJKW wave, or null while it loads or when it failed
+let loopFelder = [];            // [{ canvas, loop, grund: offscreen canvas | null, mass: 'w x h', pos }]
+const arrKopf = new Kopf();
+let arr = null, arrZeit = 0;
+function merkeArr(f) {
+  arr = f; arrZeit = performance.now();
+  arrKopf.melde(Number(f.projekt_beat), (uhrKopf.rate * 60000) || live.projekt?.tempo_bpm || 128, arrZeit, f.status === 2);
+}
+function arrBeat(t) {
+  if (!arr || arr.status !== 2 || t - arrZeit > 1000) return null;   // stale: no playhead rather than a guessed one
+  return kopfImLoop(arrKopf.beat(t), live.projekt?.loop, Number(arr.projekt_beat));
+}
+async function holeLoopWelle(sha) {
+  if (loopWellen.has(sha)) return;
+  loopWellen.set(sha, null);
+  try {
+    const r = await fetch(`/welle?sha=${encodeURIComponent(sha)}`);
+    if (!r.ok) return;
+    loopWellen.set(sha, leseWelle(await r.arrayBuffer()));
+    for (const f of loopFelder) if (f.loop.sha === sha) f.grund = null;   // redraw with the wave
+  } catch { /* no wave: the grid still shows */ }
+}
+function bindeLoopWellen(ansicht) {
+  loopFelder = [];
+  for (const s of ansicht.slots ?? []) {
+    if (!s.loop) continue;
+    const canvas = $(`[data-welle-slot="${s.slot}"] canvas`, $('#live-panel'));
+    if (!canvas) continue;
+    loopFelder.push({ canvas, loop: s.loop, grund: null, mass: '', pos: undefined });
+    holeLoopWelle(s.loop.sha);
+  }
+}
+function zeichneLoopWellen(jetzt) {
+  if (!loopFelder.length) return;
+  const beat = arrBeat(jetzt), dpr = window.devicePixelRatio || 1;
+  for (const f of loopFelder) {
+    const b = Math.round(f.canvas.clientWidth * dpr), h = Math.round(f.canvas.clientHeight * dpr);
+    if (!b || !h) continue;   // hidden place
+    const mass = `${b}x${h}`;
+    if (mass !== f.mass) { f.canvas.width = b; f.canvas.height = h; f.mass = mass; f.grund = null; }
+    if (!f.grund) {
+      f.grund = document.createElement('canvas'); f.grund.width = b; f.grund.height = h;
+      zeichneGrund(f.grund.getContext('2d'), loopWellen.get(f.loop.sha) ?? null, f.loop.beats, b, h, dpr);
+      f.pos = undefined;
+    }
+    const pos = loopPosition(beat, f.loop);
+    const px = pos === null ? null : Math.round((pos / f.loop.beats) * b);
+    if (px === f.pos) continue;
+    f.pos = px;
+    const g = f.canvas.getContext('2d');
+    g.clearRect(0, 0, b, h); g.drawImage(f.grund, 0, 0);
+    zeichneKopf(g, pos, f.loop.beats, b, h, dpr);
+  }
+}
 function zeichneLive() {
   zeigePlaetzeSpaeter();
   const p = $('#live-panel');
@@ -3089,6 +3151,7 @@ function zeichneLive() {
   live.kanal = `${kanalAnsicht('A', zustand.regler).offen}${kanalAnsicht('B', zustand.regler).offen}`;
   p.hidden = !a.offen;
   p.innerHTML = modulHtml(a);
+  bindeLoopWellen(a);
   for (const b of $$('[data-liveoeffnen]')) b.classList.toggle('an', a.offen);
   const leer = $('[data-loops-leer]'); if (leer) leer.hidden = a.offen;
   for (const n of DECKS) zeigeExport(n);
@@ -3442,6 +3505,7 @@ function bild() {
     const marken = hotcueMarken(a);
     a.lauf.zeichne(f, null, marken); a.ueber.zeichne(f, a.lauf.takte * 4 * a.raster.framesProBeat, marken);
   }
+  zeichneLoopWellen(jetzt);
   window.djkBild.push(performance.now() - jetzt); if (window.djkBild.length > 600) window.djkBild.shift();
   requestAnimationFrame(bild);
 }
@@ -3471,7 +3535,7 @@ async function ausgang() {
 // the core is never touched by a switch: a hidden deck keeps playing and shows unchanged when its place returns.
 const speicherOderNull = () => { try { return localStorage; } catch { return null; } };
 let plaetzeLayout = ladeLayout(speicherOderNull());
-const PLATZ_KNOTEN = { strudel: '#deck-c', loops: '#platz-loops' };
+const PLATZ_KNOTEN = { strudel: '#deck-c', loops: '#platz-loops', remix: '#platz-remix' };
 const platzKnoten = (key) => (key.startsWith('deck/') ? $(`.deck[data-deck="${key.slice(5)}"]`) : $(PLATZ_KNOTEN[key]));
 function zugKnoten(key) {
   if (key === 'zug/erz') return $('.zugplatz');
@@ -3483,6 +3547,7 @@ function wendePlaetzeAn() {
   wendeMixerAn(plaetzeLayout, zugKnoten);   // the mixer strips follow the places (only attributes change)
   zeigeLoopsSperre();
   zeigePlaetze();
+  zeigeRemix();
 }
 function platzZustand(platz) {
   const typ = plaetzeLayout[platz - 1];
@@ -3490,6 +3555,7 @@ function platzZustand(platz) {
     const a = modulAnsicht(live.projekt, live.stand, live.stems, zustand.regler);
     return { typ, slots: a.offen ? a.slots.filter((s) => !s.leer).map((s) => ({ nr: s.kanal.nr, titel: s.titel, tonart: s.tonart, takte: Number.isFinite(s.beats) ? Math.round(s.beats / 4 * 100) / 100 : undefined })) : [] };
   }
+  if (typ === 'remix') return { typ, ziel: aktuellesZiel(graphenGeladen) };
   if (typ !== 'track') return { typ };
   const n = platz, z = zustand.decks[n], id = z?.material_id ?? zustand.geladen[n], e = id ? eintragVon(id) : null;
   if (!id) return { typ };
@@ -3502,13 +3568,14 @@ function zeigePlaetze() {
     if (!k) continue;
     $('[data-platz-text]', k).textContent = platzKopf(platz, platzZustand(platz));
     const s = still(plaetzeLayout, platz, zustand.regler);
-    $('[data-platz-hinweis]', k).textContent = s.still ? '' : `${s.text}: close it to switch`;
+    const sp = plaetzeLayout[platz - 1] === 'remix' ? typSperre(graphenGeladen) : { gesperrt: false, text: '' };   // the device on a target pins the place to REMIX
+    $('[data-platz-hinweis]', k).textContent = sp.gesperrt ? sp.text : s.still ? '' : `${s.text}: close it to switch`;
     for (const w of wahl(plaetzeLayout, platz)) {
       const b = $(`[data-platz-typ="${w.typ}"]`, k);
       b.classList.toggle('an', w.aktuell);
       b.setAttribute('aria-pressed', String(w.aktuell));
-      b.disabled = !w.aktuell && (!w.frei || !s.still);
-      b.title = w.aktuell ? `Place ${platz} shows ${w.typ}` : !w.frei ? `${w.typ} is already shown in another place` : !s.still ? `Not silent: ${s.text}` : `Show ${w.typ} here`;
+      b.disabled = !w.aktuell && (!w.frei || !s.still || sp.gesperrt);
+      b.title = w.aktuell ? `Place ${platz} shows ${w.typ}` : sp.gesperrt ? sp.text : !w.frei ? `${w.typ} is already shown in another place` : !s.still ? `Not silent: ${s.text}` : `Show ${w.typ} here`;
     }
   }
 }
@@ -3527,12 +3594,107 @@ function zeigeLoopsSperre() {
   }
   for (const n of DECKS) zeigeExport(n);
 }
+// ---------- REMIX place: the fx-remix device on the DJ master or a deck ----------
+// The target is read off graphenGeladen (the core state), never remembered here (remix_platz.js). The panel is built once, from the device's panel file
+// (wide and scaled into the place, see remixEinpassen); its adapter follows the target (`<target>/bk/<n>`) and is greyed while there is none.
+let remixFp = null, remixBaut = false, remixBestaetigt = null, remixFehler = '', remixBusy = false;
+const remixAdapterVon = new Map();
+const remixAdapter = {
+  get: (param) => { const k = aktuellesZiel(graphenGeladen); return k ? remixAdapterFuer(k).get(param) : undefined; },
+  set: (param, v) => { const k = aktuellesZiel(graphenGeladen); if (k) remixAdapterFuer(k).set(param, v); },
+  gesperrt: () => !aktuellesZiel(graphenGeladen),
+};
+function remixAdapterFuer(k) { if (!remixAdapterVon.has(k)) remixAdapterVon.set(k, kanalAdapter(k)); return remixAdapterVon.get(k); }
+async function remixPanelBauen() {
+  if (remixFp || remixBaut) return;
+  remixBaut = true;
+  const feld = $('#platz-remix .remix-feld');
+  const info = await holePanel(REMIX_GERAET);
+  remixBaut = false;
+  if (!info) { if (graphenInfo.graphen.length) feld.textContent = `${REMIX_GERAET} is not available on this core`; return; }
+  feld.replaceChildren();
+  remixFp = baueFrontplatte(feld, { panel: info.panel, regler: info.regler, adapter: remixAdapter, breit: true });
+  remixFp.aktualisiere();
+  for (const b of document.querySelectorAll('#platz-remix [data-remix-seite]')) b.addEventListener('click', () => { remixSeite = Number(b.dataset.remixSeite); remixEinpassen(); });
+  remixEinpassen();
+  new ResizeObserver(remixEinpassen).observe(feld);
+}
+// The plate is laid out wide (modules side by side, as on the device page) and scaled as a whole into the place, so nothing scrolls. Its two rows (the effect
+// sections with the lever, and the pad) fit together only in a tall place; below REMIX_ZOOM_MIN the place shows one row at a time, chosen with FX / PAD.
+const REMIX_ZOOM_MIN = 0.7;
+let remixSeite = 0;
+function remixEinpassen() {
+  const wurzel = $('#platz-remix'), feld = $('.remix-feld', wurzel), platte = feld?.firstElementChild;
+  if (!platte || !feld.clientWidth || !feld.clientHeight) return;
+  const reihen = [...platte.querySelectorAll('.fp-reihe')];
+  const mass = () => { platte.style.zoom = '1'; return Math.min(1, feld.clientWidth / platte.scrollWidth, feld.clientHeight / platte.scrollHeight); };
+  for (const r of reihen) r.style.display = '';
+  let z = mass();
+  const geteilt = reihen.length > 1 && z < REMIX_ZOOM_MIN;
+  if (geteilt) { reihen.forEach((r, i) => { r.style.display = i === remixSeite ? '' : 'none'; }); z = mass(); }
+  platte.style.zoom = String(Math.max(0.3, z));
+  const seiten = $('.remix-seiten', wurzel);
+  seiten.hidden = !geteilt;
+  seiten.querySelectorAll('button').forEach((b, i) => { b.classList.toggle('an', i === remixSeite); b.setAttribute('aria-pressed', String(i === remixSeite)); });
+}
+function zeigeRemix() {
+  if (!plaetzeLayout.includes('remix')) return;
+  const wurzel = $('#platz-remix');
+  const ziele = $('.remix-ziele', wurzel);
+  ziele.replaceChildren();
+  const etikett = document.createElement('span');
+  etikett.className = 'remix-etikett';
+  etikett.textContent = 'INSERT ON';
+  ziele.append(etikett);
+  for (const w of zielWahl(graphenGeladen)) {
+    const b = document.createElement('button');
+    const ersetzen = w.ziel && remixBestaetigt === w.ziel && w.fremd;
+    b.textContent = ersetzen ? `REPLACE ${w.fremd}` : w.name;
+    b.classList.toggle('an', w.aktuell);
+    b.classList.toggle('warn', !!ersetzen);
+    b.setAttribute('aria-pressed', String(w.aktuell));
+    b.disabled = remixBusy;
+    b.title = w.aktuell ? `fx-remix is on ${w.name}` : w.fremd ? `${w.name} carries ${w.fremd}: click twice to replace it` : w.ziel ? `Put fx-remix on ${w.name}` : 'Take fx-remix off';
+    b.addEventListener('click', () => remixKlick(w.ziel));
+    ziele.append(b);
+  }
+  $('.remix-zeile', wurzel).textContent = remixFehler || remixHinweis(graphenGeladen);
+  $('.remix-zeile', wurzel).classList.toggle('ruhig', !remixFehler && !!aktuellesZiel(graphenGeladen));
+  $('.remix-feld', wurzel).classList.toggle('remix-aus', !aktuellesZiel(graphenGeladen));
+  if (remixFp) remixFp.aktualisiere(); else remixPanelBauen();
+}
+async function remixKlick(ziel) {
+  if (remixBusy) return;
+  const a = zielKlick(graphenGeladen, ziel, remixBestaetigt);
+  if (a.art === 'nichts') { remixBestaetigt = null; zeigeRemix(); return; }
+  if (a.art === 'bestaetigen') { remixBestaetigt = a.ziel; remixFehler = ''; zeigeRemix(); return; }
+  remixBestaetigt = null; remixFehler = ''; remixBusy = true; zeigeRemix();
+  const alt = aktuellesZiel(graphenGeladen);
+  for (const sch of a.schritte) {
+    let grund;
+    try {
+      // the panel's start values first, then the graph (as the effects view does): the switches of the device start off, and a knob at the 0.5 fill would show them on
+      if (sch.name) { const info = await holePanel(sch.name); if (info) await schickeVorgaben(sch.kanal, panelVorgaben(info.panel)); }
+      const r = await postJson('/graph', { kanal: sch.kanal, name: sch.name }); window.djkGesendet.push({ graph: sch, code: r.code, antwort: r.j }); grund = remixAblehnung(r);
+    }
+    catch (e) { grund = `page server unreachable: ${e.message}`; }
+    if (grund) {
+      remixFehler = `${sch.name ? zielNameVon(sch.kanal) : 'OFF'} refused: ${grund}`;
+      if (sch.name && alt) { try { await postJson('/graph', { kanal: alt, name: REMIX_GERAET }); } catch { /* the state message shows what is really loaded */ } }   // back to the old target
+      break;
+    }
+  }
+  remixBusy = false;
+  zeigeRemix(); zeigePlaetze();
+}
+const zielNameVon = (k) => (k === 'master' ? 'MASTER' : `DECK ${k.slice(5)}`);
 let plaetzeFrist = 0;
 function zeigePlaetzeSpaeter() { if (!plaetzeFrist) plaetzeFrist = requestAnimationFrame(() => { plaetzeFrist = 0; zeigePlaetze(); }); }
 function bindePlaetze() {
   for (const k of $$('.platzkopf')) {
     const platz = Number(k.dataset.platzKopf);
     for (const b of $$('[data-platz-typ]', k)) b.addEventListener('click', () => {
+      if (plaetzeLayout[platz - 1] === 'remix' && b.dataset.platzTyp !== 'remix' && typSperre(graphenGeladen).gesperrt) { melde(`Place ${platz}: ${typSperre(graphenGeladen).text}`, true); zeigePlaetze(); return; }
       const r = wechsel(plaetzeLayout, platz, b.dataset.platzTyp, still(plaetzeLayout, platz, zustand.regler));
       if (!r.ok) { melde(`Place ${platz}: ${r.grund === 'offen' ? `not silent, ${r.text}` : r.grund === 'doppelt' ? `${b.dataset.platzTyp} is already shown` : r.grund}`, true); zeigePlaetze(); return; }
       plaetzeLayout = r.layout;

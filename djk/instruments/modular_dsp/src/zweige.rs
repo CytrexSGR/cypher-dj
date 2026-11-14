@@ -70,7 +70,7 @@ pub fn wirkung(s: &Schritt) -> Option<Wirkung> {
         | Schritt::Sh { .. } | Schritt::Drift { .. } | Schritt::Glatt { .. }
         // tails and recorded material
         | Schritt::Chorus { .. } | Schritt::Hall { .. } | Schritt::Delay { .. } | Schritt::Limiter { .. } | Schritt::Gate { .. }
-        | Schritt::Labor { .. } | Schritt::Komp { .. } | Schritt::Phaser { .. } | Schritt::Vocoder { .. } | Schritt::Faltung { .. } | Schritt::Granular { .. }
+        | Schritt::Labor { .. } | Schritt::Remix { .. } | Schritt::Komp { .. } | Schritt::Phaser { .. } | Schritt::Vocoder { .. } | Schritt::Faltung { .. } | Schritt::Granular { .. }
         // triggered voices
         | Schritt::Sampler { .. } | Schritt::Wavetable { .. } | Schritt::Resonator { .. } | Schritt::Metall { .. }
         | Schritt::Saite { .. } | Schritt::Trommeln { .. }
@@ -112,6 +112,7 @@ pub fn eingaenge(s: &Schritt) -> Vec<Quelle> {
         Schritt::Chorus { x, mix, .. } => vec![*x, *mix],
         Schritt::Hall { x, l, r, mix, .. } => vec![*x, *l, *r, *mix],
         Schritt::Labor { x, l, r, st, .. } => [*x, *l, *r].into_iter().chain(st.iter().copied()).collect(),
+        Schritt::Remix { x, l, r, st, .. } => [*x, *l, *r].into_iter().chain(st.iter().copied()).collect(),
         Schritt::Delay { x, l, r, zeit, fb, mix, .. } => vec![*x, *l, *r, *zeit, *fb, *mix],
         Schritt::Limiter { x, l, r, .. } | Schritt::Ausgang { x, l, r } => vec![*x, *l, *r],
         Schritt::Gate { x, l, r, kl, kr, .. } | Schritt::Komp { x, l, r, kl, kr, .. } => vec![*x, *l, *r, *kl, *kr],
@@ -156,7 +157,7 @@ pub fn ausgaenge(s: &Schritt) -> Vec<usize> {
         Schritt::Sem { aus, bp, .. } => vec![*aus, *bp],
         Schritt::Chorus { l, r, .. } => vec![*l, *r],
         Schritt::Hall { wl, wr, .. } | Schritt::Delay { wl, wr, .. } | Schritt::Limiter { wl, wr, .. } | Schritt::Gate { wl, wr, .. }
-        | Schritt::Labor { wl, wr, .. } | Schritt::Komp { wl, wr, .. } | Schritt::Phaser { wl, wr, .. } | Schritt::Sampler { wl, wr, .. } | Schritt::Vocoder { wl, wr, .. }
+        | Schritt::Labor { wl, wr, .. } | Schritt::Remix { wl, wr, .. } | Schritt::Komp { wl, wr, .. } | Schritt::Phaser { wl, wr, .. } | Schritt::Sampler { wl, wr, .. } | Schritt::Vocoder { wl, wr, .. }
         | Schritt::Faltung { wl, wr, .. } | Schritt::Granular { wl, wr, .. } | Schritt::Eingang { wl, wr } => vec![*wl, *wr],
         Schritt::Wavetable { wl, wr, aus, .. } => vec![*wl, *wr, *aus],
         Schritt::Metall { aus, huelle, .. } => vec![*aus, *huelle],

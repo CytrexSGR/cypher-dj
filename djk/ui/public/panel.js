@@ -21,8 +21,13 @@ export function steuerungen(panel) {
 export function parameterVon(c) {
   const ok = (p) => typeof p === 'string' && p !== '';
   if (c.type === 'xy') return [c.bind?.x?.param, c.bind?.y?.param].filter(ok);
-  return ['knob', 'fader', 'switch', 'selector'].includes(c.type) && ok(c.bind?.param) ? [c.bind.param] : [];
+  if (c.type === 'touchpad') return [c.bind?.x?.param, c.bind?.touch?.param].filter(ok);
+  return ['knob', 'fader', 'switch', 'selector', 'lever'].includes(c.type) && ok(c.bind?.param) ? [c.bind.param] : [];
 }
+
+/** Whether a switch reads on at knob position k. A switch is on from 0.5 up; one with `mitte_aus` is on only above 0.5, for engines that read the 0.5 fill
+ *  of a fresh insert stage as off. */
+export function schalterAn(c, k) { return c.mitte_aus ? k > 0.5 : k >= 0.5; }
 
 /** Range {min, max, log} of a parameter from the graph's `regler` answer ({"<knob nr>": range}): bk parameter k<n> looks up "<n>". */
 export function bereichVon(regler, param) {
@@ -33,6 +38,7 @@ export function bereichVon(regler, param) {
 /** Normalised start value of a control (its own `default`, else the table's 0.5). Selector defaults are option indices. */
 export function vorgabeK(c) {
   if (c.type === 'selector') return diskretWert(typeof c.default === 'number' ? c.default : 0, (c.options ?? []).length);
+  if (c.type === 'lever') return WIE_BEI_REGLERN;   // the spring returns it to the middle
   if (c.type === 'switch') return c.default === 1 ? 1 : typeof c.default === 'number' ? 0 : WIE_BEI_REGLERN;
   return typeof c.default === 'number' ? klemme01(c.default) : WIE_BEI_REGLERN;
 }
@@ -40,6 +46,18 @@ function vorgabeXY(c) {
   const d = typeof c.default === 'object' && c.default ? c.default : {};
   return { x: typeof d.x === 'number' ? klemme01(d.x) : WIE_BEI_REGLERN, y: typeof d.y === 'number' ? klemme01(d.y) : WIE_BEI_REGLERN };
 }
+
+function vorgabeX(c) { return typeof c.default?.x === 'number' ? klemme01(c.default.x) : WIE_BEI_REGLERN; }   // touchpad: x start; touch always starts at 0
+
+// Lever geometry: the travel from rest (k 0.5) to fully pulled (k 1) has three sections; the sound core reads them with these limits
+// (below 5 % of the travel: rest, then section 1, 2, 3).
+export const HEBEL_GRENZEN = [0.05, 0.37, 0.68];
+/** Travel 0..1 of a lever at k. */
+export const hebelWeg = (k) => klemme01((k - WIE_BEI_REGLERN) / (1 - WIE_BEI_REGLERN));
+/** Section of a travel: -1 at rest, else 0, 1 or 2. */
+export function hebelBereich(w) { return w < HEBEL_GRENZEN[0] ? -1 : w < HEBEL_GRENZEN[1] ? 0 : w < HEBEL_GRENZEN[2] ? 1 : 2; }
+/** Zone index (0..n-1) of a touchpad position x; n zones of equal width. */
+export const feldZone = (x, n) => Math.min(n - 1, Math.max(0, Math.floor(klemme01(x) * n)));
 
 /** {param: k} of the controls that state a default: what the page pushes after it loads the graph (knobs first, then the graph). */
 export function vorgaben(panel) {
@@ -51,6 +69,10 @@ export function vorgaben(panel) {
       const [px, py] = [c.bind?.x?.param, c.bind?.y?.param];
       if (px) aus[px] = v.x;
       if (py) aus[py] = v.y;
+    } else if (c.type === 'touchpad') {
+      const [px, pt] = parameterVon(c);
+      if (px !== undefined) aus[px] = vorgabeX(c);
+      if (pt !== undefined) aus[pt] = 0;
     } else if (c.default !== undefined && parameterVon(c).length) aus[parameterVon(c)[0]] = vorgabeK(c);
   }
   return aus;
@@ -59,7 +81,7 @@ export function vorgaben(panel) {
 /** Readout of one parameter value k (0..1) for a control; `regler` = {"<knob nr>": {min, max, log}} from the graph. Without a range: percent of travel. */
 export function wertText(c, param, k, regler, parameter) {
   if (c.type === 'selector') return c.options?.[diskretIndex(k, c.options.length)] ?? '-';
-  if (c.type === 'switch') return k >= 0.5 ? 'ON' : 'OFF';
+  if (c.type === 'switch') return schalterAn(c, k) ? 'ON' : 'OFF';
   const p = parameter?.[param];   // a device parameter (RB-338, Surge): the units come from its table entry
   if (p) return anzeigeText(p, k);
   const b = bereichVon(regler, param);
@@ -131,7 +153,7 @@ export function baueFrontplatte(host, opt) {
   const lernAn = () => kannLernen && lern.an;
   const markiert = [];          // [{ zelle, nr }]: the cells that carry learn markers
   const alle = steuerungen(panel);
-  for (const c of alle) for (const n of parameterVon(c)) k[n] = adapter.get(n) ?? (c.type === 'xy' ? vorgabeXY(c)[n === c.bind.x.param ? 'x' : 'y'] : vorgabeK(c));
+  for (const c of alle) for (const n of parameterVon(c)) k[n] = adapter.get(n) ?? (c.type === 'xy' ? vorgabeXY(c)[n === c.bind.x.param ? 'x' : 'y'] : c.type === 'touchpad' ? (n === c.bind.x.param ? vorgabeX(c) : 0) : vorgabeK(c));
   for (const n of Object.keys(k)) k[n] = klemme01(k[n]);
 
   const zeige = () => {
@@ -404,13 +426,13 @@ export function baueFrontplatte(host, opt) {
       if (c.glyphs) { gl = el('span', 'fp-glyphenplatz'); b.append(gl); }
       zelle.append(b);
       zeiger.push(() => {
-        const an = k[nr] >= 0.5;
+        const an = schalterAn(c, k[nr]);
         b.setAttribute('aria-checked', String(an)); b.classList.toggle('an', an);
         const id = c.glyphs?.[an ? 1 : 0];
         if (gl) gl.replaceChildren(...(id ? [glyphe(id, an ? 'ON' : 'OFF')] : []));
       });
       lernHaken(zelle, c);
-      b.addEventListener('click', () => { setze(nr, k[nr] >= 0.5 ? 0 : 1); fertig(); });
+      b.addEventListener('click', () => { setze(nr, schalterAn(c, k[nr]) ? 0 : 1); fertig(); });
     },
     selector(c, zelle) {
       const nr = parameterVon(c)[0], n = c.options.length;
@@ -501,6 +523,150 @@ export function baueFrontplatte(host, opt) {
         const nr = waagrecht ? nx : ny;
         setze(nr, t.auf ?? k[nr] + t.schritt);
       });
+    },
+    lever(c, zelle) {
+      const nr = parameterVon(c)[0], zonen = c.zones ?? [];
+      zelle.classList.add('fp-hebelzelle');
+      beschrifte(zelle, c);
+      const bahn = el('div', 'fp-hebel');
+      bahn.tabIndex = 0;
+      bahn.setAttribute('role', 'slider');
+      bahn.setAttribute('aria-orientation', 'vertical');
+      bahn.setAttribute('aria-keyshortcuts', 'Space');
+      bahn.style.touchAction = 'none';
+      const weg = el('div', 'fp-hebelweg');
+      const marken = HEBEL_GRENZEN.slice(1).map((g) => { const m = el('i', 'fp-hebelmarke'); m.style.top = `${g * 100}%`; return m; });
+      const griff = el('i', 'fp-hebelgriff');
+      const texte = zonen.map((t, i) => {
+        const x = el('span', 'fp-hebelzone', t);
+        const b = Math.min(i, 2);
+        x.style.top = `${(b === 0 ? HEBEL_GRENZEN[0] : HEBEL_GRENZEN[b]) * 100 + (i > 2 ? (i - 2) * 11 : 0)}%`;
+        return { x, b };
+      });
+      weg.append(el('i', 'fp-hebelrille'), ...marken, ...texte.map((t) => t.x), griff);
+      bahn.append(weg);
+      const anzeige = el('output', 'fp-wert');
+      zelle.append(bahn, anzeige);
+      zeiger.push(() => {
+        const w = hebelWeg(k[nr]), b = hebelBereich(w);
+        bahn.style.setProperty('--w', String(w));
+        bahn.classList.toggle('gezogen', b >= 0);
+        for (const t of texte) t.x.classList.toggle('an', t.b === b);
+        marken.forEach((m, i) => m.classList.toggle('an', b > i));
+        anzeige.textContent = b < 0 ? 'rest' : zonen.length ? (zonen[Math.min(b, zonen.length - 1)] ?? '') : `${Math.round(w * 100)}%`;
+        bahn.setAttribute('aria-valuenow', k[nr].toFixed(3));
+        bahn.setAttribute('aria-valuetext', anzeige.textContent);
+      });
+      bahn.setAttribute('aria-label', c.label ?? c.id);
+      bahn.setAttribute('aria-valuemin', '0.5');
+      bahn.setAttribute('aria-valuemax', '1');
+      lernHaken(zelle, c);
+      let st = null;
+      const laenge = () => weg.getBoundingClientRect().height || 100;
+      bahn.addEventListener('pointerdown', (e) => {
+        if (lernAn() || gesperrtP(nr)) return;
+        if (e.button !== undefined && e.button !== 0) return;
+        e.preventDefault();
+        bahn.focus?.();
+        if (st && jetzt() - st.t < STEHEN_MS) return;   // a second finger on a lever in use
+        try { bahn.setPointerCapture(e.pointerId); } catch { /* see ziehbar */ }
+        besetzt.add(e.pointerId);
+        st = { id: e.pointerId, y: e.clientY, t: jetzt() };
+        halte(nr, true);
+      });
+      bahn.addEventListener('pointermove', (e) => {
+        if (!st || fremder(st, e)) return;
+        st.t = jetzt();
+        setze(nr, WIE_BEI_REGLERN + WIE_BEI_REGLERN * Math.max(0, (e.clientY - st.y) / laenge()));   // pulling down: proportional to the travel
+      });
+      const los = (e) => {   // pointerup, pointercancel, lostpointercapture: the spring
+        if (!st || fremder(st, e)) return;
+        const hin = st;
+        st = null; besetzt.delete(hin.id); halte(nr, false);
+        setze(nr, WIE_BEI_REGLERN);
+        fertig();
+      };
+      bahn.addEventListener('pointerup', los);
+      bahn.addEventListener('pointercancel', los);
+      bahn.addEventListener('lostpointercapture', los);
+      let taste = false;
+      bahn.addEventListener('keydown', (e) => {
+        if (e.key !== ' ') return;
+        e.preventDefault();
+        if (taste || st) return;
+        taste = true;
+        setze(nr, 1);
+      });
+      const losTaste = () => { if (!taste) return; taste = false; setze(nr, WIE_BEI_REGLERN); fertig(); };
+      bahn.addEventListener('keyup', (e) => { if (e.key === ' ') losTaste(); });
+      bahn.addEventListener('blur', losTaste);
+    },
+    touchpad(c, zelle) {
+      const [nx, nt] = parameterVon(c), zonen = c.zones ?? [], n = zonen.length;
+      zelle.classList.add('fp-feldzelle');
+      beschrifte(zelle, c);
+      const feld = el('div', 'fp-feld');
+      feld.tabIndex = 0;
+      feld.setAttribute('role', 'group');
+      feld.setAttribute('aria-label', c.label ?? c.id);
+      feld.setAttribute('aria-keyshortcuts', 'ArrowLeft ArrowRight Space');
+      feld.style.touchAction = 'none';
+      const teile = zonen.map((t) => { const z = el('span', 'fp-feldzone'); z.append(el('b', null, t)); return z; });
+      feld.append(...teile);
+      const marke = el('i', 'fp-feldmarke');
+      feld.append(marke);
+      const anzeige = el('output', 'fp-wert');
+      zelle.append(feld, anzeige);
+      zeiger.push(() => {
+        const an = k[nt] > 0.5, z = n ? feldZone(k[nx], n) : -1;   // the 0.5 fill of a fresh stage is not a touch
+        feld.style.setProperty('--x', String(k[nx]));
+        feld.classList.toggle('beruehrt', an);
+        teile.forEach((t, i) => t.classList.toggle('an', an && i === z));
+        anzeige.textContent = n ? zonen[z] : wertText(c, nx, k[nx], regler, parameter);
+        feld.setAttribute('aria-valuetext', `${anzeige.textContent}${an ? ' (touched)' : ''}`);
+      });
+      lernHaken(zelle, c);   // learns the x parameter
+      let st = null, taste = false;
+      const lage = (e) => { const r = feld.getBoundingClientRect(); return (e.clientX - r.left) / (r.width || 1); };
+      feld.addEventListener('pointerdown', (e) => {
+        if (lernAn() || gesperrtP(nx) || gesperrtP(nt)) return;
+        if (e.button !== undefined && e.button !== 0) return;
+        e.preventDefault();
+        feld.focus?.();
+        if (st && jetzt() - st.t < STEHEN_MS) return;   // a second finger on the field in use
+        try { feld.setPointerCapture(e.pointerId); } catch { /* see ziehbar */ }
+        besetzt.add(e.pointerId);
+        st = { id: e.pointerId, t: jetzt() };
+        halte(nx, true); halte(nt, true);
+        setze(nx, lage(e));   // position first, then the touch
+        setze(nt, 1);
+      });
+      feld.addEventListener('pointermove', (e) => {
+        if (!st || fremder(st, e)) return;
+        st.t = jetzt();
+        setze(nx, lage(e));
+      });
+      const los = (e) => {
+        if (!st || fremder(st, e)) return;
+        const hin = st;
+        st = null; besetzt.delete(hin.id); halte(nx, false); halte(nt, false);
+        setze(nt, 0);   // x stays where it was
+        fertig();
+      };
+      feld.addEventListener('pointerup', los);
+      feld.addEventListener('pointercancel', los);
+      feld.addEventListener('lostpointercapture', los);
+      const losTaste = () => { if (!taste) return; taste = false; setze(nt, 0); fertig(); };
+      feld.addEventListener('keydown', (e) => {
+        if (e.key === ' ') { e.preventDefault(); if (!taste && !st) { taste = true; setze(nt, 1); } return; }
+        if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+        e.preventDefault();
+        const r = e.key === 'ArrowRight' ? 1 : -1;
+        if (n) setze(nx, (Math.min(n - 1, Math.max(0, feldZone(k[nx], n) + r)) + 0.5) / n);   // zone by zone, to the middle of the zone
+        else setze(nx, k[nx] + r * 0.1);
+      });
+      feld.addEventListener('keyup', (e) => { if (e.key === ' ') losTaste(); else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') fertig(); });
+      feld.addEventListener('blur', losTaste);
     },
     value(c, zelle) {
       const [basis, achse] = c.of.split('.');

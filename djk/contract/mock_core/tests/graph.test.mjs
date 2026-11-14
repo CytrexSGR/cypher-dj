@@ -20,7 +20,7 @@ test('graph: /k/graph/frage from andreas answers one /e/graph per slot, all empt
   ], { cfg });
   gruen(r);
   const g = r.log.filter((m) => m.adresse === '/e/graph');
-  assert.equal(g.length, 14);
+  assert.equal(g.length, 15);   // 14 + master
   assert.deepEqual(g.map((m) => m.werte[0]), osc.werte.graph_platz.liste);
   assert.ok(g.every((m) => m.werte[1] === ''));
 });
@@ -36,5 +36,5 @@ test('graph: a bad quelle gets 6 ausserhalb_bereich and no /e/graph', () => {
 
 test('graph: the slot list equals osc.json graph_platz', () => {
   assert.deepEqual(SLOTS, osc.werte.graph_platz.liste);
-  assert.equal(SLOTS.length, 14);
+  assert.equal(SLOTS.length, 15);   // 14 + master, the graph place on the DJ master
 });

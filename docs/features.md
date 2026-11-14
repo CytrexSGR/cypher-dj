@@ -26,7 +26,11 @@ of the beta. The short version is the [README](../README.md).
   browser
 - Loop slots L1 and L2: a loop cut from a deck (or loaded by the agent) becomes a live module with its stems and MIDI
   and plays on its own DJ channel with EQ, filter, fader and crossfader side. Placing a module into a slot whose
-  channel is open is refused, also for the agent, so nothing new starts audibly under your hands
+  channel is open is refused, also for the agent, so nothing new starts audibly under your hands. Each slot shows the
+  waveform of its loop with a beat grid, bar numbers and the playhead of the live transport
+- Cypher Remix as a fourth kind of place: a beat-synchronous remix station (build-up and break-down effects, a
+  three-band isolator, a pad with roll and drum voices, a release lever) put as an insert on the master, a deck, a
+  loop slot or one Strudel channel, chosen in the place; the agent drives the same knobs
 - Three [Strudel](https://strudel.cc) pattern channels (drums, bass, melody). Strudel runs as its own
   process; the core plays the resulting events at the sample
 - Real instruments: Surge XT hosted in Carla, played by the patterns
@@ -165,9 +169,9 @@ references before they went in:
   oversampling. Available as a plugin and as an insert stage in the production core
 - **Cypher Modular**: a modular synthesizer. A patch is a JSON graph of building blocks (oscillators, filters,
   envelopes, LFOs, chorus, reverb, delay, dynamics, free feedback paths and, among others, wavetable, FM, granular,
-  modal resonator, string, sampler, filter, sample-and-hold, multi-stage envelope, wavefolder and drum kit blocks; 51 block types in all) with up to 64 knobs that the human or the agent
+  modal resonator, string, sampler, filter, sample-and-hold, multi-stage envelope, wavefolder, drum kit and remix blocks; 52 block types in all) with up to 64 knobs that the human or the agent
   can turn; a knob can have a start value and a centre value of its own. It plays on the melody and bass channels, on extra pattern streams and on production instrument tracks, and it
-  runs as an effect on DJ channels and send returns. Example patches: a Juno-style pad, a sync lead, a wobble bass, FM bells, a plucked string. See [docs/cypher-modular.md](cypher-modular.md)
+  runs as an effect on DJ channels, the DJ master, the loop slots and send returns. Example patches: a Juno-style pad, a sync lead, a wobble bass, FM bells, a plucked string. See [docs/cypher-modular.md](cypher-modular.md)
 - **RB-338**: a 303-style bass voice with cutoff, resonance, envelope, decay, accent and slide, playable
   from the bass pattern channel instead of Surge XT
 - **Mono Synth, Poly Synth, Neuro Bass**: three synthesizers built as Cypher Modular graphs. Mono Synth has two

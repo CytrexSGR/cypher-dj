@@ -5,6 +5,7 @@
 // strip of its channel (pad/1, pad/2).
 import { REGLER_MAX, REGLER_SCHRITT, reglerVonDb } from './production/fader_curve.js';
 import { faderText } from './production/track_heads.js';
+import { loopVonGruppe } from './loop_wave.js';
 
 export const SLOTS = ['A', 'B'];
 export const LEER_TAKTE = [0, 1, 2, 4, 8, 16];   // the bars modul_leeren accepts
@@ -60,7 +61,7 @@ export function modulAnsicht(projekt, stand, stems, regler = {}) {
         ...(n ? { neu: { spurId: n.id, faderDb: n.fader_db }, blend: k.blend ?? 0 } : {}) } : null;
     }).filter(Boolean);
     const m = g.modul;
-    return { slot, kanal, leer: false, gruppeId: g.id, titel: m.titel, kuenstler: m.kuenstler, bpm: m.bpm, tonart: m.tonart, beats: m.laenge_beats,
+    return { slot, kanal, leer: false, gruppeId: g.id, loop: loopVonGruppe(projekt, g.id), titel: m.titel, kuenstler: m.kuenstler, bpm: m.bpm, tonart: m.tonart, beats: m.laenge_beats,
       faderDb: g.fader_db, zustand: zustandVon(stemsListe.length > 0, stand?.[slot]?.stems, stems), stems: stemsListe,
       tonartStand: tonartAnsicht(stand?.[slot]) };
   });
@@ -99,6 +100,7 @@ function slotHtml(s) {
     + `<button class="live-knopf live-key" data-key${s.tonartStand.aus ? ' disabled' : ''} title="${esc(s.tonartStand.titel)}">${esc(s.tonartStand.text)}</button>`
     + `<div class="live-leeren"><select data-leeren-takte title="Fade out over this many bars, then empty the slot">${takte}</select>`
     + `<button class="live-knopf live-loeschen" data-leeren title="Fade the module out and empty ${loopName(s.slot)}">CLEAR</button></div></div>`
+    + (s.loop ? `<div class="live-welle" data-welle-slot="${esc(s.slot)}" title="${esc(loopName(s.slot))}: waveform, beat grid and playhead of the loop"><canvas></canvas></div>` : '')
     + (s.stems.length ? `<div class="live-stems">${stems}</div>` : '') + `</section>`;
 }
 export function modulHtml(ansicht) { return ansicht.offen ? ansicht.slots.map(slotHtml).join('') : ''; }

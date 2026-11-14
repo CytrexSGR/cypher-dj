@@ -101,6 +101,7 @@ dependencies = [
  "labor_dsp",
  "rb_dsp",
  "realfft",
+ "remix_dsp",
  "saett_dsp",
  "serde",
  "serde_json",
@@ -662,6 +663,10 @@ dependencies = [
  "libc",
  "winapi",
 ]
+
+[[package]]
+name = "remix_dsp"
+version = "0.1.0"
 
 [[package]]
 name = "rustc-demangle"

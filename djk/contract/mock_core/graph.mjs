@@ -2,7 +2,7 @@
 // takes only midi:/pad: targets and it has no /k/kanal/graph handler), so it reports every graph-capable slot as empty.
 import { QUELLEN } from './contract.mjs';
 
-export const SLOTS = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'fx/3', 'fx/4', 'erz/1', 'erz/2', 'erz/3', 'erz/5', 'erz/6', 'erz/7', 'pad/1', 'pad/2'];
+export const SLOTS = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'fx/3', 'fx/4', 'master', 'erz/1', 'erz/2', 'erz/3', 'erz/5', 'erz/6', 'erz/7', 'pad/1', 'pad/2'];
 
 export default {
   name: 'graph',

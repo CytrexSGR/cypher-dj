@@ -804,6 +804,8 @@ Mixer::~Mixer() {
     cypher_bk_frei(send_bk_[s]);
     cypher_bk_frei(send_bk_alt_[s]);
   }
+  cypher_bk_frei(master_bk_);
+  cypher_bk_frei(master_bk_alt_);
   for (int i = 0; i < n_bk_frei_; ++i) cypher_bk_frei(bk_frei_[i]);
 }
 
@@ -822,6 +824,10 @@ void Mixer::setze_send_graph(int s, CypherBk* g) noexcept {
   if (s < 2 || s >= 2 + MIX_SENDS_GRAPH) { bk_zur_freigabe(g); return; }
   const int i = s - 2;
   graph_platz_setze({send_bk_[i], send_bk_alt_[i], send_blende_[i]}, g);
+}
+
+void Mixer::setze_master_graph(CypherBk* g) noexcept {
+  graph_platz_setze({master_bk_, master_bk_alt_, master_blende_}, g);
 }
 
 // Switch logic of one graph slot, shared by the deck insert and the send returns (D9).
@@ -934,6 +940,18 @@ void Mixer::graph_platz_block(GraphPlatz p, const float* in_l, const float* in_r
       out_r[i] = std::isfinite(out_r[i]) ? std::clamp(out_r[i], -8.0f, 8.0f) : 0.0f;
     }
   }
+}
+
+// Master insert on the sum l/r (in place): like the deck insert (dry copy as input and fallback), reports the knob row master/bk/*.
+// Nothing runs while no graph is set and no blend is pending, so the sum stays untouched bit for bit.
+void Mixer::master_graph(float* l, float* r, int n) noexcept {
+  if (!master_bk_ && master_blende_ == 0) return;
+  std::memcpy(master_bk_ein_l_, l, sizeof(float) * n);
+  std::memcpy(master_bk_ein_r_, r, sizeof(float) * n);
+  cypherdj::dsp::DenormalSchutz ds;
+  GraphOptionen opt;
+  graph_platz_block({master_bk_, master_bk_alt_, master_blende_}, master_bk_ein_l_, master_bk_ein_r_, l, r, master_bk_ein_l_, master_bk_ein_r_,
+                    MIX_BK_MASTER_ZEILE, n, opt);
 }
 
 // S6: return of the effect graph on send bus 2 + s (fx/3, fx/4). S14: it reports its own knob row (fx/<n>/bk/1..32). The graph processes the summed send bus, runs every
@@ -1456,6 +1474,7 @@ void Mixer::verarbeite(int n, float* ml, float* mr, float* cl, float* cr) {
 #ifdef CYPHERDJ_MUTATION_LATENZ_SEND_NACH_MERGE
   for (int s = 0; s < MIX_SENDS_GRAPH; ++s) send_rueckweg(s, n);
 #endif
+  master_graph(sum_l_, sum_r_, n);   // master insert graph: on the sum, after the latency merge, before the master FX
 #ifdef CYPHERDJ_MUTATION_FX_EINHEITEN_VERTAUSCHT
   for (int u = FX_EINHEITEN - 1; u >= 0; --u)
 #else

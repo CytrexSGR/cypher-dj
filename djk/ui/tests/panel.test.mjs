@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { reglerBereiche, pruefePanel, normalisierePanel, ladePanel, panelOrdner, listeGraphen } from '../graphs.ts';
-import { steuerungen, parameterVon, bereichVon, vorgaben, vorgabeK, wertText, tastenSchritt, bogenPfad, knobWinkel, baueFrontplatte } from '../public/panel.js';
+import { hebelWeg, hebelBereich, feldZone, steuerungen, parameterVon, bereichVon, vorgaben, vorgabeK, wertText, tastenSchritt, bogenPfad, knobWinkel, baueFrontplatte } from '../public/panel.js';
 import { skaliere, formatiereWert } from '../public/panel_skala.js';
 import { parameterTabelle, pruefeGeraete, ladeRegister, pfadeVon } from '../devices_parameter.ts';
 import { OHNE_DOKU } from './support/devices_doku.mjs';
@@ -350,6 +350,142 @@ test('xy: a press sets both axes from the pointer position, shift moves relative
   feld.feuere('dblclick');
   nah(fp.werte().k1, 0.7); nah(fp.werte().k2, 0.25);
   assert.ok(gesetzt.some(([nr]) => nr === 'k2'));
+});
+
+// ---- lever and touchpad ----
+const HEBEL = { id: 'lv', type: 'lever', label: 'Gate', bind: { param: 'k1' }, zones: ['long', 'mid', 'short'] };
+const FELD = { id: 'tp', type: 'touchpad', label: 'Pad', bind: { x: { param: 'k2' }, touch: { param: 'k3' } }, zones: ['1/8', '1/4', '1/2', '1/1', '2/1'] };
+
+test('lever and touchpad validation: good ones pass; missing bind, equal parameters and bad zones are refused', () => {
+  const einzel = (c) => fehler(mitControls([c])).join('|');
+  assert.deepEqual(fehler(mitControls([HEBEL, FELD])), []);
+  assert.deepEqual(fehler(mitControls([{ ...HEBEL, zones: undefined }, { ...FELD, zones: undefined }])), [], 'zones are optional');
+  assert.match(einzel({ id: 'a', type: 'lever' }), /bind is missing/);
+  assert.match(einzel({ id: 'a', type: 'lever', bind: {} }), /bind\.param must be a parameter name/);
+  assert.match(einzel({ id: 'a', type: 'touchpad', bind: { x: { param: 'k1' } } }), /needs x and touch/);
+  assert.match(einzel({ id: 'a', type: 'touchpad', bind: { x: { param: 'k1' }, touch: { param: 'k1' } } }), /already bound/);
+  assert.match(einzel({ ...HEBEL, zones: [] }), /zones must be 1\.\.8 texts/);
+  assert.match(einzel({ ...HEBEL, zones: ['much too long'] }), /zones must be 1\.\.8 texts of 1\.\.8/);
+  assert.match(einzel({ ...FELD, zones: [1, 2] }), /zones must be/);
+  assert.match(einzel({ ...FELD, zones: Array(9).fill('a') }), /zones must be/);
+  assert.match(einzel({ id: 'a', type: 'knob', bind: { param: 'k1' }, zones: ['a'] }), /zones is only for lever and touchpad/);
+  assert.match(einzel({ ...HEBEL, default: 0.5 }), /takes no default/);
+  assert.match(fehler(mitControls([HEBEL, { id: 'b', type: 'knob', bind: { param: 'k1' } }])).join(), /already bound/, 'a lever parameter counts as bound');
+  assert.match(fehler(mitControls([FELD, { id: 'v', type: 'value', of: 'tp.y' }])).join(), /may only name \.x/);
+});
+
+test('lever and touchpad: parameterVon, vorgabeK and vorgaben', () => {
+  assert.deepEqual(parameterVon(HEBEL), ['k1']);
+  assert.deepEqual(parameterVon(FELD), ['k2', 'k3'], '[x, touch]');
+  assert.equal(vorgabeK(HEBEL), 0.5);
+  assert.equal(vorgabeK({ ...HEBEL, default: 0.9 }), 0.5, 'a lever always rests in the middle');
+  assert.deepEqual(vorgaben({ sections: [{ controls: [HEBEL] }] }), {}, 'a lever states no default');
+  assert.deepEqual(vorgaben({ sections: [{ controls: [FELD] }] }), { k2: 0.5, k3: 0 });
+  assert.deepEqual(vorgaben({ sections: [{ controls: [{ ...FELD, default: { x: 0.9 } }] }] }), { k2: 0.9, k3: 0 });
+  assert.deepEqual(normalisierePanel({ ...PANEL, sections: [{ id: 's', controls: [FELD] }] }).sections[0].controls[0].bind, FELD.bind, 'v2 panels pass unchanged');
+});
+
+test('lever geometry: the limits are 5 %, 37 % and 68 % of the travel', () => {
+  assert.equal(hebelWeg(0.5), 0); assert.equal(hebelWeg(1), 1); assert.equal(hebelWeg(0.2), 0);
+  assert.deepEqual([0, 0.049, 0.05, 0.369, 0.37, 0.679, 0.68, 1].map(hebelBereich), [-1, -1, 0, 0, 1, 1, 2, 2]);
+  assert.deepEqual([0, 0.19, 0.2, 0.99, 1].map((x) => feldZone(x, 5)), [0, 0, 1, 4, 4]);
+});
+
+test('lever: pulling is proportional to the travel, release springs back to 0.5 and ends the gesture, the zone lights while pulled', () => {
+  const panel = { ...PANEL, sections: mitControls([HEBEL]) };
+  const { gesetzt, zelle, fp } = baue(panel);
+  const bahn = zelle('lv').finde('fp-hebel')[0];
+  assert.equal(zelle('lv').finde('fp-wert')[0].textContent, 'rest');
+  bahn.feuere('pointerdown', { clientX: 10, clientY: 10 });
+  bahn.feuere('pointermove', { clientX: 10, clientY: 10 + 50 });         // the fake travel is 100 px high: half the way
+  assert.deepEqual(gesetzt.at(-1), ['k1', 0.75]);
+  assert.equal(zelle('lv').finde('fp-hebelzone').filter((x) => x.klassen.has('an')).map((x) => x.textContent).join(), 'mid');   // 50 % is in section 2
+  assert.equal(zelle('lv').finde('fp-wert')[0].textContent, 'mid');
+  bahn.feuere('pointermove', { clientX: 10, clientY: 500 });
+  assert.deepEqual(gesetzt.at(-1), ['k1', 1], 'clamped at the full travel');
+  assert.equal(zelle('lv').finde('fp-hebelzone').filter((x) => x.klassen.has('an')).map((x) => x.textContent).join(), 'short');
+  bahn.feuere('pointermove', { clientX: 10, clientY: 10 - 40 });
+  assert.deepEqual(gesetzt.at(-1), ['k1', 0.5], 'above the grab point: rest');
+  bahn.feuere('pointermove', { clientX: 10, clientY: 10 + 20 });
+  bahn.feuere('pointerup');
+  assert.deepEqual(gesetzt.at(-1), ['k1', 0.5]);
+  nah(fp.werte().k1, 0.5);
+  assert.equal(zelle('lv').finde('fp-hebelzone').filter((x) => x.klassen.has('an')).length, 0);
+});
+
+test('lever: pointercancel and lostpointercapture spring back too; space holds it fully pulled; learn mode and a block do not move it', () => {
+  const panel = { ...PANEL, sections: mitControls([HEBEL]) };
+  const enden = [], host = new K('div'), gesetzt = [];
+  let gesperrt = false;
+  const adapter = { get: () => undefined, set: (nr, v) => gesetzt.push([nr, v]), ende: () => enden.push(gesetzt.length), gesperrt: () => gesperrt };
+  baueFrontplatte(host, { panel: normalisierePanel(panel), regler: BEREICHE, adapter, dokument: DOK });
+  const bahn = host.finde('fp-hebel')[0];
+  for (const t of ['pointercancel', 'lostpointercapture']) {
+    bahn.feuere('pointerdown', { clientY: 0 }); bahn.feuere('pointermove', { clientY: 80 });
+    assert.deepEqual(gesetzt.at(-1), ['k1', 0.9]);
+    bahn.feuere(t);
+    assert.deepEqual(gesetzt.at(-1), ['k1', 0.5], t);
+  }
+  assert.equal(enden.length, 2, 'each release ends the gesture once (the second event of a pair finds no gesture)');
+  bahn.feuere('keydown', { key: ' ' });
+  assert.deepEqual(gesetzt.at(-1), ['k1', 1]);
+  bahn.feuere('keydown', { key: ' ' });   // key repeat: nothing new
+  const n = gesetzt.length;
+  bahn.feuere('keydown', { key: ' ' });
+  assert.equal(gesetzt.length, n);
+  bahn.feuere('keyup', { key: ' ' });
+  assert.deepEqual(gesetzt.at(-1), ['k1', 0.5]);
+  assert.equal(enden.length, 3);
+  gesperrt = true;
+  const m = gesetzt.length;
+  bahn.feuere('pointerdown', { clientY: 0 }); bahn.feuere('pointermove', { clientY: 80 });
+  assert.equal(gesetzt.length, m, 'a blocked parameter does not move');
+});
+
+test('touchpad: a press sets x first, then touch; moving follows x; release clears touch and keeps x', () => {
+  const panel = { ...PANEL, sections: mitControls([FELD]) };
+  const { gesetzt, zelle, fp } = baue(panel);
+  const feld = zelle('tp').finde('fp-feld')[0];
+  assert.equal(zelle('tp').finde('fp-feldzone').length, 5);
+  assert.equal(zelle('tp').finde('fp-feldzone').filter((x) => x.klassen.has('an')).length, 0, 'nothing lights untouched');
+  nah(fp.werte().k2, 0.5); nah(fp.werte().k3, 0);
+  feld.feuere('pointerdown', { clientX: 30, clientY: 5 });          // 200 px wide: x 0.15, zone 0
+  assert.deepEqual(gesetzt.slice(0, 2), [['k2', 0.15], ['k3', 1]], 'x first, then touch');
+  assert.equal(zelle('tp').finde('fp-feldzone')[0].klassen.has('an'), true);
+  feld.feuere('pointermove', { clientX: 190, clientY: 5 });
+  nah(fp.werte().k2, 0.95);
+  assert.equal(zelle('tp').finde('fp-feldzone')[4].klassen.has('an'), true);
+  assert.equal(zelle('tp').finde('fp-feldzone')[0].klassen.has('an'), false);
+  feld.feuere('pointerup');
+  assert.deepEqual(gesetzt.at(-1), ['k3', 0]);
+  nah(fp.werte().k2, 0.95); nah(fp.werte().k3, 0);
+  assert.equal(zelle('tp').finde('fp-feldzone').filter((x) => x.klassen.has('an')).length, 0);
+  feld.feuere('pointerdown', { clientX: 100 }); feld.feuere('pointercancel');
+  nah(fp.werte().k3, 0);
+});
+
+test('touchpad: arrows step by zone, space holds touch, a touchpad without zones is one field; learn takes x', () => {
+  const panel = { ...PANEL, sections: mitControls([FELD, { id: 'ganz', type: 'touchpad', bind: { x: { param: 'k1' }, touch: { param: 'k4' } } }]) };
+  const { gesetzt, zelle, fp } = baue(panel, { k2: 0.1 });
+  const feld = zelle('tp').finde('fp-feld')[0];
+  feld.feuere('keydown', { key: 'ArrowRight' });
+  nah(fp.werte().k2, 0.3);
+  feld.feuere('keydown', { key: 'ArrowLeft' }); feld.feuere('keydown', { key: 'ArrowLeft' });
+  nah(fp.werte().k2, 0.1);
+  feld.feuere('keydown', { key: ' ' });
+  assert.deepEqual(gesetzt.at(-1), ['k3', 1]);
+  feld.feuere('keyup', { key: ' ' });
+  assert.deepEqual(gesetzt.at(-1), ['k3', 0]);
+  const ganz = zelle('ganz');
+  assert.equal(ganz.finde('fp-feldzone').length, 0);
+  ganz.finde('fp-feld')[0].feuere('pointerdown', { clientX: 150 });
+  assert.deepEqual(gesetzt.slice(-2), [['k1', 0.75], ['k4', 1]]);
+  const g = [];
+  const host = new K('div');
+  baueFrontplatte(host, { panel: normalisierePanel({ ...PANEL, sections: mitControls([FELD]) }), regler: BEREICHE, adapter: { get: () => undefined, set() {}, lernPfad: (p) => `x/${p}` }, dokument: DOK, lernen: { an: true }, beiLernen: (p) => g.push(p) });
+  const f2 = host.finde('fp-zelle')[0];
+  f2.feuere('pointerdown', { clientX: 1, clientY: 1 }); f2.feuere('pointerup');
+  assert.deepEqual(g, ['x/k2']);
 });
 
 // ---- MIDI learn on panel controls (Task 4) ----

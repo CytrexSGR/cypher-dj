@@ -60,5 +60,6 @@
   {"name": "fx-crunch", "art": "bk", "familie": "fx", "akzent": "tuerkis", "doku": "docs/presets/devices/GERAET-fx-crunch.md"},
   {"name": "fx-polaritaet", "art": "bk", "familie": "fx", "akzent": "tuerkis", "doku": "docs/presets/devices/GERAET-fx-polaritaet.md"},
   {"name": "labor", "art": "bk", "familie": "mono", "akzent": "orange", "doku": "docs/presets/devices/GERAET-labor.md"},
-  {"name": "fx-labor", "art": "bk", "familie": "fx", "akzent": "tuerkis", "doku": "docs/presets/devices/GERAET-labor.md"}
+  {"name": "fx-labor", "art": "bk", "familie": "fx", "akzent": "tuerkis", "doku": "docs/presets/devices/GERAET-labor.md"},
+  {"name": "fx-remix", "art": "bk", "familie": "fx", "akzent": "tuerkis", "doku": "docs/presets/devices/GERAET-remix.md"}
 ]

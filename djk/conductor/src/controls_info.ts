@@ -103,6 +103,8 @@ export const BK_SEND_KANAELE: readonly string[] = ['fx/3', 'fx/4'];
 for (const k of BK_SEND_KANAELE) {
   for (let m = 1; m <= BK_REGLER_N; m++) tabelle.set(`${k}/bk/${m}`, { pfad: `${k}/bk/${m}`, kanal: null, ...r('linear', 0, 1, 0.5) });
 }
+// §1.5: 64 graph knobs master/bk/<m> of the effect graph on the DJ master sum; global (no channel), linear 0..1, default 0.5, everybody may
+for (let m = 1; m <= BK_REGLER_N; m++) tabelle.set(`master/bk/${m}`, { pfad: `master/bk/${m}`, kanal: null, ...r('linear', 0, 1, 0.5) });
 
 // 1.15 A2 (§1.5, the 345 mix-tool rows): gate on the 13 live source channels, utility on those plus bus/1..4, multiband and channel
 // limiter on bus/1..4, one global spectrum row. erz/8 has no tool rows (cue only). All rows: everybody may, no "leiser machen"

@@ -169,12 +169,15 @@ const PANEL_ERLAUBT = [
   ['fx-crunch', 8], ['fx-polaritaet', 1],   // Mix 100 % on load; the polarity selector's Off stop (index 2 of 4 = 2/3) while the 0.5 fill is Off too (zone 2)
   // fx-labor: the switches Delay 1, Delay 2 and Cycle start on and the filter selectors start on LP; the 0.5 fill reads the same (on, on, on, LP, LP)
   ['fx-labor', 3], ['fx-labor', 7], ['fx-labor', 15], ['fx-labor', 19], ['fx-labor', 25],
+  // fx-remix: the switches 12..18 and 23 start off (default 0) and 24, 25 start on (default 1; the graph reads 0.5 as on through `mitte` 0.99); the Isolate type
+  // selector 6 starts on index 2 of 4 (2/3; the graph reads 0.5 as the same type through `mitte` 2.6); the pad's touch parameter 11 starts at 0 (not touched)
+  ...[12, 13, 14, 15, 16, 17, 18, 23, 24, 25, 6, 11].map((k) => ['fx-remix', k]),
 ];
 // where the plan's own knobs start: from this number on (and the Drift knob) the panel default must EQUAL the graph's vorgabe
 const ERWEITERT = { 'synth-mono': { ab: 33, extra: [32] }, 'synth-poly': { ab: 29, extra: [28] }, 'synth-neuro': { ab: 25, extra: [] } };
 
-test('panel defaults: every shipped panel control bound to a knob equals the graph vorgabe, except the 16 listed pairs of knobs that keep 0.5', () => {
-  assert.equal(PANEL_ERLAUBT.length, 16);
+test('panel defaults: every shipped panel control bound to a knob equals the graph vorgabe, except the 28 listed pairs of knobs that keep 0.5', () => {
+  assert.equal(PANEL_ERLAUBT.length, 28);
   const benutzt = new Set();
   let geprueft = 0;
   for (const f of fs.readdirSync(path.join(BK, 'paneele')).filter((x) => x.endsWith('.json'))) {

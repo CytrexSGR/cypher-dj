@@ -49,6 +49,7 @@ export const ZIELE = new Set([
   ...RETURNS.flatMap((r) => RET_HALL.map((p) => `ret/${r}/hall/${p}`)),  // return hall: on switch and six normalised values
   ...BK_KANAELE.flatMap((k) => Array.from({ length: 64 }, (_, i) => `${k}/bk/${i + 1}`)),   // S5r: graph knobs 1..64
   ...BK_SEND_KANAELE.flatMap((k) => Array.from({ length: 64 }, (_, i) => `${k}/bk/${i + 1}`)),   // S14: graph knobs 1..64 of fx/3, fx/4
+  ...Array.from({ length: 64 }, (_, i) => `master/bk/${i + 1}`),   // graph knobs 1..64 of the effect graph on the DJ master sum
 ]);
 
 // §1.5-Bereich je Regler-Art (Einheit wie im Vertrag)

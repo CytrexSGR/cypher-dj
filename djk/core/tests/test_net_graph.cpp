@@ -160,7 +160,7 @@ int main() {
       frage(netz, 7, "andreas");
       const auto l = lies(g);
       const Liste gr = graphen_aus(l);
-      PRUEF(gr.size() == 14);
+      PRUEF(gr.size() == 15);
       for (size_t i = 0; i < gr.size() && i < v::werte::graph_platz.size(); ++i)
         PRUEF(gr[i].first == v::werte::graph_platz[i] && gr[i].second.empty());
       int q1 = 0, q3 = 0;
@@ -169,7 +169,7 @@ int main() {
       for (const auto& m : l) {
         if (m.adr == "/e/graph") ++graphen_gesehen;
         if (m.adr == "/q" && m.id == 7 && m.s0 == "andreas") {
-          graph_vor_q = graph_vor_q && graphen_gesehen == 14;
+          graph_vor_q = graph_vor_q && graphen_gesehen == 15;
           if (m.status == 1) ++q1;
           if (m.status == 3) { ++q3; q1_vor_q3 = q1 == 1; }
         }
@@ -311,7 +311,7 @@ int main() {
           if (p == k) return true;
         return false;
       };
-      PRUEF(v::werte::graph_platz.size() == 14);
+      PRUEF(v::werte::graph_platz.size() == 15);
       for (int k = 0; k < 18; ++k) {
         const bool soll = (k >= 0 && k <= 3) ||
                           (k >= 4 && k <= 13 && k != cdj::Mixer::kanal_index(cdj::VORHOER_KANAL) &&

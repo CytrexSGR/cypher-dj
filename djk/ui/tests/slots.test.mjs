@@ -107,7 +107,7 @@ const knoten = () => Object.fromEntries(KNOTEN.map((k) => [k, { dataset: {}, hid
 test('the node plan of the default layout: decks 1 and 2, Strudel, Loops; decks 3 and 4 are out', () => {
   const p = knotenPlan([...LAYOUT_STANDARD]);
   assert.deepEqual(p.platz, { 'deck/1': 1, 'deck/2': 2, strudel: 3, loops: 4 });
-  assert.deepEqual(p.aus, ['deck/3', 'deck/4']);
+  assert.deepEqual(p.aus, ['deck/3', 'deck/4', 'remix']);
 });
 
 test('applying a layout only sets attributes: the same node objects both ways, place 3 Strudel -> deck 3 -> Strudel', () => {
@@ -146,4 +146,43 @@ test('the strips follow Track, Track, Track, Loops and Loops, Track, Strudel, Tr
   wendeMixerAn(['loops', 'track', 'strudel', 'track'], (k) => z[k]);
   assert.deepEqual(lage(z), { 'zug/pad/1': '1/1', 'zug/pad/2': '1/2', 'zug/deck/2': '1/3', 'zug/erz': '2/1', 'zug/deck/4': '2/3' });
   assert.ok(z['zug/deck/1'].classList.s.has('platz-aus')); assert.ok(z['zug/deck/3'].classList.s.has('platz-aus')); assert.ok(!z['zug/deck/2'].classList.s.has('platz-aus'));
+});
+
+// ---------- REMIX place type ----------
+import { TYPEN, streifen } from '../public/slots.js';
+
+test('remix is a fourth type, allowed at most once, owns no channel and no mixer strip', () => {
+  assert.ok(TYPEN.includes('remix'));
+  assert.equal(erlaubt(2, 'remix'), true);
+  const l = ['track', 'remix', 'strudel', 'loops'];
+  assert.deepEqual(kanaele(l, 2), []);
+  assert.deepEqual(streifen(l, 2), []);
+  assert.equal(still(l, 2, { 'deck/2/fader': 0, 'deck/2/trim': 0 }).still, true, 'a place without channels is always silent');
+  assert.equal(wechsel(l, 4, 'remix', true).grund, 'doppelt');
+  assert.equal(wechsel(['track', 'track', 'strudel', 'loops'], 2, 'remix', true).ok, true);
+  assert.deepEqual(wahl(l, 4).find((w) => w.typ === 'remix'), { typ: 'remix', aktuell: false, frei: false });
+  assert.equal(wahl(l, 2).find((w) => w.typ === 'remix').frei, true);
+});
+
+test('the mixer plan with a remix place shows only the strips of the other place in that row', () => {
+  const plan = mixerPlan(['remix', 'track', 'strudel', 'loops']);
+  assert.deepEqual(plan.reihen[0].map((s) => s?.kanal ?? null), [null, null, 'deck/2']);
+  assert.equal(plan.reihen[1].filter(Boolean).length, 3);
+  assert.deepEqual(mixerPlan(['track', 'remix', 'strudel', 'loops']).reihen[0].map((s) => s?.kanal ?? null), ['deck/1', null, null]);
+  // two strips next to a place without strips take the outer columns, in line with a row of two decks
+  assert.deepEqual(mixerPlan(['track', 'track', 'remix', 'loops']).reihen[1].map((s) => s?.kanal ?? null), ['pad/1', null, 'pad/2']);
+  assert.deepEqual(mixerPlan(['track', 'track', 'loops', 'remix']).reihen[1].map((s) => s?.kanal ?? null), ['pad/1', null, 'pad/2']);
+});
+
+test('a saved layout without remix stays valid, one with remix twice does not, one with it once does', () => {
+  assert.deepEqual(ladeLayout(speicher('["track","track","strudel","loops"]')), ['track', 'track', 'strudel', 'loops']);
+  assert.deepEqual(ladeLayout(speicher('["remix","track","strudel","loops"]')), ['remix', 'track', 'strudel', 'loops']);
+  assert.deepEqual(ladeLayout(speicher('["remix","remix","strudel","loops"]')), [...LAYOUT_STANDARD]);
+});
+
+test('the head of a remix place names the target', () => {
+  assert.equal(kopf(1, { typ: 'remix', ziel: 'master' }), 'REMIX · MASTER');
+  assert.equal(kopf(1, { typ: 'remix', ziel: 'deck/2' }), 'REMIX · DECK 2');
+  assert.equal(kopf(1, { typ: 'remix', ziel: null }), 'REMIX · no target');
+  assert.equal(kopf(1, { typ: 'remix' }), 'REMIX · no target');
 });

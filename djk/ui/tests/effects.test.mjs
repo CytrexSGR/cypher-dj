@@ -180,7 +180,7 @@ test('S12 bkKnobHtml: a hostile knob name arrives escaped in the label text and 
   assert.ok(bkKnobHtml({ nr: 2, pfad: 'deck/1/bk/2', name: 'Cutoff', wert: 1 }, 'deck/1').includes('>Cutoff<input'), 'harmless name unchanged');
 });
 
-test('S12 graphWahlOptionen: first option "—", instruments only on erz/2, erz/3, effects only on deck and fx returns, none on erz/1', () => {
+test('S12 graphWahlOptionen: first option "—", instruments only on erz/2, erz/3, effects only on deck, master and fx returns, none on erz/1', () => {
   const namen = (k, geladen) => graphWahlOptionen(k, GRAPHEN, geladen).map((o) => o.wert);
   assert.deepEqual(namen('erz/3'), ['', 'sampler-fairlight', 'saite']);
   assert.deepEqual(namen('erz/2'), ['', 'sampler-fairlight', 'saite']);
@@ -188,7 +188,7 @@ test('S12 graphWahlOptionen: first option "—", instruments only on erz/2, erz/
   assert.deepEqual(namen('fx/3'), ['', 'fx-bandecho', 'fx-takt-pump']);
   assert.deepEqual(namen('fx/4'), ['', 'fx-bandecho', 'fx-takt-pump']);
   assert.deepEqual(namen('erz/1'), [], 'stream 1 is a drum kit: no instrument picker');
-  assert.deepEqual(namen('master'), []);
+  assert.deepEqual(namen('master'), ['', 'fx-bandecho', 'fx-takt-pump'], 'the DJ master sum takes effects');
   assert.equal(graphWahlOptionen('erz/3', GRAPHEN)[0].text, 'Surge XT', 'the empty entry of erz/2, erz/3 is the host');
   assert.equal(graphWahlOptionen('deck/1', GRAPHEN)[0].text, '—', 'effects keep the dash');
   const o = graphWahlOptionen('erz/3', GRAPHEN, 'saite');
@@ -324,13 +324,13 @@ test('S17 T5.2 bkSpeichernHtml: button only with a project and a loaded graph; m
 // ---- Baukasten S18 task 7: erz/5..7 and the pads take instruments; the page strips follow the stream table -----------------------
 import { INSTRUMENT_STROEME, kanalVonStrom, BK_STROEME } from '../../contract/streams.ts';
 
-test('S18 graphWahlOptionen: erz/5..7 and pad/1..2 list instruments only with "—" first; erz/4, erz/8, erz/1 and master list nothing', () => {
+test('S18 graphWahlOptionen: erz/5..7 and pad/1..2 list instruments only with "—" first; erz/4, erz/8, erz/1 list nothing', () => {
   for (const k of ['erz/5', 'erz/6', 'erz/7', 'pad/1', 'pad/2']) {
     const o = graphWahlOptionen(k, GRAPHEN, '');
     assert.deepEqual(o.map((x) => x.wert), ['', 'sampler-fairlight', 'saite'], k);
     assert.equal(o[0].text, 'Off', k);
   }
-  for (const k of ['erz/4', 'erz/8', 'erz/1', 'master']) assert.deepEqual(graphWahlOptionen(k, GRAPHEN, ''), [], k);
+  for (const k of ['erz/4', 'erz/8', 'erz/1']) assert.deepEqual(graphWahlOptionen(k, GRAPHEN, ''), [], k);
   assert.deepEqual(graphWahlOptionen('deck/1', GRAPHEN, '').map((x) => x.wert), ['', 'fx-bandecho', 'fx-takt-pump'], 'effects stay on decks');
 });
 

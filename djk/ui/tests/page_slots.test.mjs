@@ -16,6 +16,8 @@ test('the page has four place heads with a type switch each, and a Loops node th
   assert.equal((html.match(/data-platz-typ="track"/g) ?? []).length, 4);
   assert.equal((html.match(/data-platz-typ="strudel"/g) ?? []).length, 4);
   assert.equal((html.match(/data-platz-typ="loops"/g) ?? []).length, 4);
+  assert.equal((html.match(/data-platz-typ="remix"/g) ?? []).length, 4);
+  assert.match(html, /<section id="platz-remix"[^>]*>[\s\S]*?class="remix-ziele"[\s\S]*?class="remix-feld"/);
   assert.match(html, /<section id="platz-loops"[\s\S]*?<section id="live-panel"/);
 });
 
@@ -48,7 +50,7 @@ test('a switch asks the silence rule first and a refusal keeps the layout, says 
   assert.match(f, /if \(!r\.ok\) \{ melde\(.*zeigePlaetze\(\); return; \}/);
   assert.ok(f.indexOf('if (!r.ok)') < f.indexOf('speichereLayout('), 'saved only after the accepted switch');
   const z = funktion('zeigePlaetze');
-  assert.match(z, /b\.disabled = !w\.aktuell && \(!w\.frei \|\| !s\.still\)/, 'the buttons are disabled while the place is not silent');
+  assert.match(z, /b\.disabled = !w\.aktuell && \(!w\.frei \|\| !s\.still \|\| sp\.gesperrt\)/, 'the buttons are disabled while the place is not silent');
   assert.match(z, /close it to switch/);
 });
 
@@ -62,4 +64,14 @@ test('the layout is stored and read in try/catch under djk-plaetze, and the page
 
 test('the places follow the state: the heads refresh on every row, deck and live change', () => {
   for (const name of ['zeigeWert', 'zeigeDeck', 'zeichneLive']) assert.match(funktion(name), /zeigePlaetzeSpaeter\(\);/, name);
+});
+
+test('the REMIX place: node, lock of the type switch and the panel through the shared adapter path', () => {
+  assert.match(app, /remix: '#platz-remix'/);
+  assert.match(funktion('bindePlaetze'), /typSperre\(graphenGeladen\)\.gesperrt\) \{ melde/, 'the click handler refuses too');
+  assert.match(funktion('remixPanelBauen'), /baueFrontplatte\(feld, \{ panel: info\.panel, regler: info\.regler, adapter: remixAdapter, breit: true \}\)/);
+  assert.match(app, /remixAdapterVon\.set\(k, kanalAdapter\(k\)\)/);
+  assert.match(css, /#platz-remix \.remix-feld \{[^}]*overflow: hidden/);   // nothing scrolls: the plate is scaled into the place
+  assert.match(funktion('remixEinpassen'), /platte\.style\.zoom = String\(Math\.max\(0\.3, z\)\)/);
+  assert.match(css, /body\.studio #platz-remix \{ display: none; \}/);
 });

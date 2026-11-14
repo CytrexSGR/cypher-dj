@@ -137,7 +137,6 @@ test('remove: erz/3 "" sends ziel bk:, deck/2 "" sends name ""; geladen entries 
 test('refusals before the kern: falsche_art, kein_midi_strom, unbekannt, ausserhalb_bereich, name rule; nothing is sent', async (t) => {
   const { post, sendungen } = await stapel(t);
   const falle = [
-    [{ kanal: 'erz/2', name: 'eff' }, 400, 'falsche_art'],
     [{ kanal: 'deck/1', name: 'inst' }, 400, 'falsche_art'],
     [{ kanal: 'fx/4', name: 'inst' }, 400, 'falsche_art'],
     [{ kanal: 'erz/1', name: 'inst' }, 400, 'kein_midi_strom'],   // stream 1 runs in kit mode: notes are kit indices (C10)
@@ -145,7 +144,7 @@ test('refusals before the kern: falsche_art, kein_midi_strom, unbekannt, ausserh
     [{ kanal: 'erz/4', name: 'inst' }, 400, 'ausserhalb_bereich'],   // S18: erz/4 is the production, erz/8 the cue input; erz/5..7 are instrument channels now
     [{ kanal: 'erz/8', name: 'inst' }, 400, 'ausserhalb_bereich'],
     [{ kanal: 'erz/6', name: 'eff' }, 400, 'falsche_art'],
-    [{ kanal: 'pad/1', name: 'eff' }, 400, 'falsche_art'],
+    [{ kanal: 'erz/7', name: 'eff' }, 400, 'falsche_art'],   // erz/2, erz/3, erz/1 and pad/1, pad/2 take effects since the remix targets (graph_source_effect.test.mjs); erz/5..7 do not
     [{ kanal: 'deck/5', name: 'eff' }, 400, 'ausserhalb_bereich'],
     [{ kanal: 'erz/3', name: '../x' }, 400, 'name'],
     [{ kanal: 'erz/3', name: 'Lead' }, 400, 'name'],

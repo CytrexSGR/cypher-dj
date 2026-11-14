@@ -329,6 +329,13 @@ ReglerTabelle::ReglerTabelle() {
     std::snprintf(p, sizeof p, "grp/%d/cue", n);
     neu(p, -1, Rolle::grp_cue, 0, 1, 0, 0, true, false, true, true, K_SCHALTER);
   }
+  // Master insert graph (effect graph on the DJ master sum): 64 knobs master/bk/1..64, global (channel -1), everybody may (not nur_hand,
+  // Cypher drives them like the deck knobs; ki_gestoppt applies as everywhere). Appended at the very end: no index moves.
+  // The kern maps them to the row MIX_BK_MASTER_ZEILE of its knob matrix (core.cpp). Ramp 0: the FFI smooths 20 ms.
+  for (int nr = 1; nr <= BK_REGLER_N; nr++) {
+    std::snprintf(p, sizeof p, "master/bk/%d", nr);
+    neu(p, -1, Rolle::bk_regler, 0, 1, 0.5f, 0, false, false, false, false, linear(0, 1));
+  }
   for (int i = 0; i < n_; i++) sortiert_[i] = static_cast<int16_t>(i);
   std::sort(sortiert_, sortiert_ + n_, [&](int16_t a, int16_t b) { return std::strcmp(def_[a].pfad, def_[b].pfad) < 0; });
 }

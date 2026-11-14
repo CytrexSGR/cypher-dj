@@ -153,6 +153,7 @@ void Kern::einsortieren25(const Befehl& c) {
       int send = -1;
       if (std::strcmp(c.pfad, "fx/3") == 0) send = 2;
       else if (std::strcmp(c.pfad, "fx/4") == 0) send = 3;
+      const bool master = std::strcmp(c.pfad, "master") == 0;   // master insert graph (own slot, not a mixer channel)
 #ifdef CYPHERDJ_MUTATION_FX_GRAPH_FALSCHER_BUS
       if (send >= 0) send = 5 - send;   // fx/3 <-> fx/4
 #endif
@@ -168,8 +169,8 @@ void Kern::einsortieren25(const Befehl& c) {
         break;
       }
 #endif
-      const int k = send >= 0 ? -1 : Mixer::kanal_index(c.pfad);
-      if (send < 0 && (k < 0 || k >= Mixer::MIX_GRAPH_KANAELE)) {  // am Netz vorbei: der Graph gehört uns noch, zurück in die Freigabe
+      const int k = (send >= 0 || master) ? -1 : Mixer::kanal_index(c.pfad);
+      if (send < 0 && !master && (k < 0 || k >= Mixer::MIX_GRAPH_KANAELE)) {  // am Netz vorbei: der Graph gehört uns noch, zurück in die Freigabe
 #ifndef CYPHERDJ_MUTATION_KANAL_GRAPH_BEREICH_LECK
 #ifdef CYPHERDJ_MUTATION_FX_GRAPH_BEREICH_LECK
         if (std::strncmp(c.pfad, "fx/", 3) != 0)   // mutation: only fx/<n> paths leak
@@ -184,7 +185,8 @@ void Kern::einsortieren25(const Befehl& c) {
       if (send < 0)   // mutation: the send path never sets
 #endif
       {
-        if (send >= 0) mixer_->setze_send_graph(send, g);
+        if (master) mixer_->setze_master_graph(g);
+        else if (send >= 0) mixer_->setze_send_graph(send, g);
         else mixer_->setze_kanal_graph(k, g);
       }
 #endif

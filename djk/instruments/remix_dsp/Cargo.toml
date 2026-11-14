@@ -1,0 +1,8 @@
+[package]
+name = "remix_dsp"
+version = "0.1.0"
+edition = "2021"
+description = "Cypher Remix: beat-synchronous remix station (scene FX, isolate FX, pad roll and drum voices, release FX), pure DSP without a host"
+license = "GPL-3.0-or-later"
+
+[dependencies]

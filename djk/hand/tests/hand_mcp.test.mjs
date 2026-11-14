@@ -388,6 +388,22 @@ test('djk-hand S14: regler names fx/3/bk/1..64 and passes fx/4/bk/1 through; gra
   assert.deepEqual(gesehen.filter((g) => g.pfad === '/regler').map((g) => [g.koerper.pfad, g.koerper.nach]), [['fx/4/bk/1', 0.3]]);
 });
 
+// Master insert graph: the graph tool takes kanal master, regler names and passes master/bk/1..64 through
+test('djk-hand master insert: graph accepts kanal master (schema enum + POST /graph), regler passes master/bk/64 through', async (t) => {
+  const { c, gesehen } = await aufbau(t, (m, u) => (u === '/regler' ? [200, { ok: true, felder: { id: 1 }, quittung: { status: 5, grund: '' } }]
+    : u === '/graph' ? [200, { ok: true, kanal: 'master', name: 'fx-remix', quittung: { status: 3 } }] : undefined));
+  const tools = (await c.listTools()).tools;
+  const graph = tools.find((x) => x.name === 'graph');
+  assert.ok(graph.inputSchema.properties.kanal.enum.includes('master'));
+  assert.match(graph.description, /master\/bk\/1\.\.64/);
+  assert.match(tools.find((x) => x.name === 'regler').description, /master\/bk\/1\.\.64/);
+  const r = await c.callTool({ name: 'graph', arguments: { kanal: 'master', name: 'fx-remix' } });
+  assert.ok(!r.isError, r.content[0].text);
+  assert.deepEqual(gesehen.filter((g) => g.pfad === '/graph').map((g) => g.koerper), [{ kanal: 'master', name: 'fx-remix' }]);
+  await c.callTool({ name: 'regler', arguments: { pfad: 'master/bk/64', nach: 0.64 } });
+  assert.deepEqual(gesehen.filter((g) => g.pfad === '/regler').map((g) => [g.koerper.pfad, g.koerper.nach]), [['master/bk/64', 0.64]]);
+});
+
 test('djk-hand anschluss: deck oder material_id, energie, max als Query an GET /mediathek/anschluss', async (t) => {
   const antwort = { lauf: { material_id: 'aa', camelot: '8A' }, treffer: [{ titel: 'X', punkte: 0.9 }], bewertet: 1 };
   const { c, gesehen } = await aufbau(t, (m, u) => (u.startsWith('/mediathek/anschluss?deck=1') ? [200, antwort] : u.startsWith('/mediathek/anschluss?deck=2') ? [409, { fehler: 'deck_leer' }] : undefined));

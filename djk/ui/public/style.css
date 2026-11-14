@@ -725,6 +725,8 @@ body.studio #live-panel { display: none; }
 .live-leeren select { height: 38px; font: inherit; font-size: 12px; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
 .live-regler { height: 34px; margin: 0; accent-color: var(--farbe); cursor: pointer; touch-action: none; }
 .live-stem output { width: 3.6em; text-align: right; font-size: 11px; color: var(--text); font-variant-numeric: tabular-nums; }
+.live-welle { height: 46px; border-radius: 4px; overflow: hidden; background: #0c0d10; border: 1px solid var(--line); }
+.live-welle canvas { display: block; width: 100%; height: 100%; }
 .live-stems { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 4px 14px; }
 .live-stem { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .live-stemname { width: 4.2em; font-size: 11px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -838,3 +840,21 @@ body:not(.studio) #pult .zug .regler.senkrecht .kappe { height: 18px; margin-bot
 .fxeinheit .summe.klein > span { min-width: 0; }
 .colorfx button { white-space: nowrap; }
 @media (max-width: 2200px) { .colorfx .colorparam > span { display: none; } .colorfx #colorparam { width: 80px; } #fx > .fxeinheit, #fx > .fxrouting { padding: 3px 7px; } }
+
+/* DJ view places: the REMIX place (fx-remix on the master or a deck). The panel field scrolls vertically inside the place and never wider than it. */
+#platz-remix { overflow: hidden; padding: 8px 10px; gap: 6px; }
+#platz-remix .remix-kopf { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+#platz-remix .remix-ziele, #platz-remix .remix-seiten { display: flex; flex-wrap: wrap; gap: 3px; }
+#platz-remix .remix-seiten[hidden] { display: none; }
+#platz-remix .remix-ziele { align-items: center; }
+#platz-remix .remix-etikett { font-size: 10px; font-weight: 800; letter-spacing: .08em; color: var(--dim); margin-right: 4px; }
+#platz-remix .remix-zeile.ruhig { color: var(--dim); }
+#platz-remix .remix-ziele button, #platz-remix .remix-seiten button { font-size: 10px; font-weight: 800; letter-spacing: .08em; padding: 3px 9px; border-radius: 5px; color: var(--dim); border: 1px solid var(--line); }
+#platz-remix .remix-ziele button.an, #platz-remix .remix-seiten button.an { background: var(--text); border-color: var(--text); color: #0e0f12; }
+#platz-remix .remix-ziele button.warn { border-color: var(--warn, #e0a040); color: var(--warn, #e0a040); }
+#platz-remix .remix-ziele button:disabled { opacity: .4; cursor: not-allowed; }
+#platz-remix .remix-zeile { min-height: 14px; font-size: 11px; color: var(--warn, #e0a040); }
+#platz-remix .remix-feld { flex: 1 1 0; min-height: 0; min-width: 0; overflow: hidden; }
+#platz-remix .remix-feld > * { width: max-content; box-sizing: border-box; }
+#platz-remix .remix-feld.remix-aus { opacity: .4; pointer-events: none; }
+body.studio #platz-remix { display: none; }

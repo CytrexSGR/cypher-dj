@@ -181,6 +181,18 @@ int main() {
       graph(91, "andreas", "fx/4", "juno-pad");           // an instrument on a send: kein_eingang
       PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 91 && g.m.werte[2].i == 6 && !std::strcmp(g.s(5), "kein_eingang"));
       PRUEF(!bef->hole(kb));
+      // remix targets: the loop slots and the three Strudel streams take an effect insert; erz/4 and the buses do not
+      for (const char* k : {"pad/1", "pad/2", "erz/1", "erz/2", "erz/3"}) {
+        kb = cdj::Befehl{};
+        graph(92, "andreas", k, "fx-echo-achtel");
+        PRUEF(bef->hole(kb) && kb.art == cdj::Befehl::KANAL_GRAPH && kb.id == 92 && kb.zeiger != nullptr && !std::strcmp(kb.pfad, k));
+        if (kb.zeiger) cypher_bk_frei(static_cast<CypherBk*>(const_cast<void*>(kb.zeiger)));
+      }
+      graph(93, "andreas", "erz/4", "fx-echo-achtel");
+      PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 93 && g.m.werte[2].i == 6 && !std::strcmp(g.s(5), "ausserhalb_bereich"));
+      graph(94, "andreas", "bus/1", "fx-echo-achtel");
+      PRUEF(g.warte("/q", 200) && g.m.werte[0].h == 94 && g.m.werte[2].i == 6 && !std::strcmp(g.s(5), "ausserhalb_bereich"));
+      PRUEF(!bef->hole(kb));
     }
 
     // S10 (C8, D13): a sampler graph plays as an instrument stream (bk:<name> on an erz channel). lade_bk passes the
@@ -256,8 +268,8 @@ int main() {
         angenommen += nimmt;
         mit_pfad += hat_pfad;
       }
-      PRUEF(angenommen == 12 && mit_pfad == 12);   // Positivkontrolle: es gibt Kanäle, die treffen (deck/1..4, 6 x erz, pad/1..2)
-      PRUEF(angenommen < tab.kanaele());           // und Kanäle, die nicht treffen (erz/4, erz/8, bus, master, cue)
+      PRUEF(angenommen == 13 && mit_pfad == 13);   // positive control: channels that hit (deck/1..4, 6 x erz, pad/1..2, master insert graph)
+      PRUEF(angenommen < tab.kanaele());           // and channels that do not (erz/4, erz/8, bus, cue)
     }
 
     // MVP 2 Scheibe 3 (E2): kit:<a>+<b> verschmilzt; b fehlt → nur a; zwei '+' oder leerer Teil → ausserhalb_bereich

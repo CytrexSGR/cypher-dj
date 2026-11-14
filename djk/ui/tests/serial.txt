@@ -106,3 +106,5 @@ deck3.test.mjs
 decks_vier.test.mjs
 midi_import_route.test.mjs
 project_surge_patch.test.mjs
+graph_master.test.mjs
+graph_source_effect.test.mjs

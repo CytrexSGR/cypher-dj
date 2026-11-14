@@ -77,6 +77,34 @@
   border-radius: 50%; border: 2px solid var(--a); background: rgba(47, 214, 195, .25); box-shadow: 0 0 6px rgba(47, 214, 195, .5); pointer-events: none; }
 .fp-zelle[data-typ="xy"] .fp-wert { min-width: 0; }
 
+/* lever (spring return): slot with the handle at the top at rest, marks at the section limits, texts beside the sections */
+.fp-hebel { position: relative; width: 100%; max-width: 150px; min-width: 96px; height: 132px; padding: 12px 0; box-sizing: border-box; cursor: ns-resize; touch-action: none; border-radius: 6px; }
+.fp-hebelweg { position: relative; height: 100%; margin-left: 14px; width: 28px; }
+.fp-hebelrille { position: absolute; left: 50%; top: 0; bottom: 0; width: 8px; transform: translateX(-50%); border-radius: 4px; background: #0e0f12; box-shadow: inset 0 0 0 1px var(--line); }
+.fp-hebelmarke { position: absolute; left: 4px; right: 4px; height: 1px; background: #3c404c; pointer-events: none; }
+.fp-hebelmarke.an { background: var(--a); }
+.fp-hebelgriff { position: absolute; left: 50%; top: calc(var(--w, 0) * 100%); width: 26px; height: 14px; transform: translate(-50%, -50%); border-radius: 4px;
+  border: 2px solid #3c404c; background: #1b1d23; pointer-events: none; transition: border-color .08s; }
+.fp-hebel.gezogen .fp-hebelgriff { border-color: var(--a); box-shadow: 0 0 6px rgba(47, 214, 195, .5); }
+.fp-hebelzone { position: absolute; left: 38px; transform: translateY(2px); font-size: 10px; font-weight: 600; letter-spacing: .06em; color: var(--dim); white-space: nowrap; pointer-events: none; }
+.fp-hebelzone.an { color: var(--a); text-shadow: 0 0 6px rgba(47, 214, 195, .5); }
+.fp-hebel:focus-visible, .fp-feld:focus-visible { outline: 2px solid var(--a); outline-offset: 2px; }
+.fp-zelle[data-typ="lever"] .fp-wert, .fp-zelle[data-typ="touchpad"] .fp-wert { min-width: 0; }
+
+/* touchpad: a wide field of equal zones, the touched zone lights */
+.fp-feld { position: relative; display: flex; width: 100%; min-width: 160px; height: 92px; box-sizing: border-box; cursor: pointer; touch-action: none; overflow: hidden;
+  border: 1px solid var(--line); border-radius: 6px; background-color: #0e0f12; }
+.fp-feldzone { flex: 1 1 0; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 6px; font-size: 10px; font-weight: 600; letter-spacing: .06em; color: var(--dim); pointer-events: none; transition: background-color .06s; }
+.fp-feldzone + .fp-feldzone { border-left: 1px solid var(--line); }
+.fp-feldzone.an { background: rgba(47, 214, 195, .22); color: var(--a); }
+.fp-feldzone b { font-weight: inherit; }
+.fp-feldmarke { position: absolute; top: 0; bottom: 0; left: calc(var(--x, .5) * 100%); width: 2px; transform: translateX(-50%); background: #3c404c; pointer-events: none; }
+.fp-feld.beruehrt .fp-feldmarke { background: var(--a); box-shadow: 0 0 6px rgba(47, 214, 195, .6); }
+.fp-zelle[data-typ="touchpad"] { min-width: 0; }
+.frontplatte.fp-lernmodus .fp-hebel, .frontplatte.fp-lernmodus .fp-feld { cursor: pointer; }
+body.tablet .fp-hebel { height: 168px; }
+body.tablet .fp-feld { height: 120px; }
+
 /* INSTRUMENTS area: the library chrome gives way, the plate of the chosen instrument gets the room. */
 body.bereich-instrumente #bestand .reiter, body.bereich-instrumente #bestand #suche, body.bereich-instrumente #bestand #bestand-info,
 body.bereich-instrumente #bestand .tabelle { display: none !important; }

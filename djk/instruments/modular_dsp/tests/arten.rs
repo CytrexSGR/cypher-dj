@@ -140,6 +140,11 @@ fn minimalgraph(art: &str) -> Option<String> {
         // forgotten reset of the bit memory, the filters, the modulator or the noise seed shows as a different second run
         "labor" => um(r#",{"id":"p","art":"labor","zeit1":60,"zeit2":90,"fb1":0.6,"kreuz1":0.4,"kreuz2":0.4,"reso1":0.85,"hp2":1,"zyklus":1,"decay":0.05,"modcutoff1":0.5}"#,
                       r#",{"von":"s.aus","nach":"p.x"},{"von":"p.l","nach":"o.l"},{"von":"p.r","nach":"o.r"}"#),
+        // remix: the saw through the station with a scene echo, the isolator off centre and two voices struck once; a forgotten reset
+        // of the echo memory, the crossover, the voices, the noise seeds or the selectors shows as a different second run. Nothing here
+        // reads the beat phase (no pad grid, no pump, no beat triangle): a reset does not rewind the beat of the graph.
+        "remix" => um(r#",{"id":"p","art":"remix","szene":0.8,"bau_typ":2,"sub1":0.1,"sub2":0.5,"low":-0.6,"hi":0.7,"hat":1,"snare":1}"#,
+                      r#",{"von":"s.aus","nach":"p.x"},{"von":"p.l","nach":"o.l"},{"von":"p.r","nach":"o.r"}"#),
         // drift: the saw through a multiplier driven by the drift block, so the wander state and the per-voice offset are audible in the output
         "drift" => um(r#",{"id":"p","art":"drift","rate":3,"fest":0.5,"saat":5},{"id":"m","art":"mul"},{"id":"k","art":"mul","b":0.5},{"id":"a","art":"add","b":1.0}"#,
                       r#",{"von":"p.aus","nach":"k.a"},{"von":"k.aus","nach":"a.a"},{"von":"s.aus","nach":"m.a"},{"von":"a.aus","nach":"m.b"},{"von":"m.aus","nach":"o.x"}"#),
@@ -276,6 +281,11 @@ fn arten_nur_angehaengt_diode() {
 fn arten_nur_angehaengt_falter() {
     let i = ARTEN.iter().position(|a| a.art == "falter").expect("falter in ARTEN");
     assert!(i >= 47, "the falter block must sit behind the 47 entries that existed before it, found at {i}");
+}
+/// The remix block is type 51, appended after labor.
+#[test]
+fn arten_nur_angehaengt_remix() {
+    assert_eq!(ARTEN.iter().position(|a| a.art == "remix"), Some(51), "remix is type 51 and must not move");
 }
 /// The labor block is type 50, appended after drift.
 #[test]

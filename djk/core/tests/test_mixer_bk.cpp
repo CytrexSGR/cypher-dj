@@ -200,10 +200,10 @@ int main() {
     PRUEF(b.frei(f) == 1);
     cypher_bk_frei(f[0]); f[0] = nullptr;
   }
-  // (f) Kanal außerhalb deck/1..4
+  // (f) channel without an insert slot: bus/1 (index MIX_QUELLEN; every source channel deck, erz, pad has one since the remix targets)
   {
     Lauf b;
-    b.m->setze_kanal_graph(4, graph(DURCH));
+    b.m->setze_kanal_graph(cdj::MIX_QUELLEN, graph(DURCH));
     CypherBk* f[8] = {};
     PRUEF(b.frei(f) == 1);
     cypher_bk_frei(f[0]); f[0] = nullptr;
@@ -297,7 +297,7 @@ int main() {
   {
     Lauf b;
     CypherBk* g[9];
-    for (int i = 0; i < 9; ++i) { g[i] = graph(DURCH); b.m->setze_kanal_graph(4, g[i]); }
+    for (int i = 0; i < 9; ++i) { g[i] = graph(DURCH); b.m->setze_kanal_graph(cdj::MIX_QUELLEN, g[i]); }   // bus/1: no slot, straight to the free list
     CypherBk* f[8] = {};
     PRUEF(b.frei(f) == 8);
     PRUEF(b.m->bk_verloren() == 1);

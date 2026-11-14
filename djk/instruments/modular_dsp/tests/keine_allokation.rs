@@ -199,6 +199,8 @@ const GRAPHEN: &[&str] = &[
     // Cypher Labor: the feedback processor as instrument (pinged by the note) and as effect
     include_str!("../demos/labor.json"),
     include_str!("../demos/fx-labor.json"),
+    // Cypher Remix: the remix station as effect
+    include_str!("../demos/fx-remix.json"),
 ];
 
 #[test]

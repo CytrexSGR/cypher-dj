@@ -12,6 +12,7 @@ eq_dsp = { path = "../eq_dsp" }
 hall_dsp = { path = "../reverb_dsp" }
 komp_dsp = { path = "../comp_dsp" }
 labor_dsp = { path = "../labor_dsp" }
+remix_dsp = { path = "../remix_dsp" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 realfft = "3.4"

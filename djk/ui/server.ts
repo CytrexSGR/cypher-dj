@@ -89,7 +89,7 @@ import { PegelPuffer } from './level_buffer.ts';
 import { leseMusterStand, setzeAutonom, leseLebt } from '../generator/src/pattern_state.mjs';
 import { ALLE_STROEME, istBkStrom, stromVonKanal } from '../contract/streams.ts';   // S18: stream <-> channel table
 import { geraetePanel, RB338_PARAM_NAMEN } from './devices_parameter.ts';
-import { listeGraphen, findeGraph, graphHash, ladePanel, reglerVonGraph, vorgabenVon, graphenNachNeustart, GRAPH_NAME, GRAPH_KANAELE, INSTRUMENT_KANAELE } from './graphs.ts';   // Baukasten S12
+import { listeGraphen, findeGraph, graphHash, ladePanel, reglerVonGraph, vorgabenVon, graphenNachNeustart, GRAPH_NAME, GRAPH_KANAELE, INSTRUMENT_KANAELE, EFFEKT_KANAELE } from './graphs.ts';   // Baukasten S12
 import { bkDefVonId } from './project/modular.ts';   // t_e998388c: project channels are left to the project restore
 
 // The main checkout behind a git worktree (its `.git` is a file pointing at .git/worktrees/<n>, whose `commondir` leads
@@ -296,8 +296,8 @@ const werkzeugAbweichend = (p: string, w: number): boolean => {
   const vorgabe = reglerInfo(p)?.vorgabe;
   return vorgabe !== undefined && Math.fround(w) !== Math.fround(vorgabe);
 };
-// S5r: graph knobs <channel>/bk/1..64 (default 0.5) show in lage only once they differ, like komp; S14: fx/3, fx/4 /bk/1..64 too
-const BK_ZEILE = /^((?:deck\/[1-4]|erz\/[1-35-7]|pad\/[12]|fx\/[34]))\/bk\/([1-9]|[1-5][0-9]|6[0-4])$/;
+// S5r: graph knobs <channel>/bk/1..64 (default 0.5) show in lage only once they differ, like komp; S14: fx/3, fx/4 /bk/1..64 too; master/bk/1..64 (master insert graph)
+const BK_ZEILE = /^((?:deck\/[1-4]|erz\/[1-35-7]|pad\/[12]|fx\/[34]|master))\/bk\/([1-9]|[1-5][0-9]|6[0-4])$/;
 /** A graph knob row differs from where its graph starts it (the graph's `vorgabe`, 0.5 where it has none or no graph is known); `vorgabe` caches per graph name for one call. */
 const bkAbweichend = (p: string, w: number, geladen: Record<string, string> = {}, vorgabe: Map<string, number[] | null> = new Map()): boolean => {
   const m = BK_ZEILE.exec(p);
@@ -914,8 +914,8 @@ export class Oberflaeche {
     this.verteile({ a: 'graphen', f: { geladen: neu } });
   }
   // POST /graph {kanal, name, vorgaben?}: put a Baukasten graph on a channel or take it off (name ""). Instruments: erz/2, erz/3 through
-  // /erz/strom (bk:<name>, "bk:" removes: the kern replays the stream's last kit/midi target). Effects: deck/1..4, fx/3, fx/4
-  // through /k/kanal/graph. A kern refusal answers 200 with the quittung (like /regler); 409 only for the Cypher pre-checks.
+  // /erz/strom (bk:<name>, "bk:" removes: the kern replays the stream's last kit/midi target). Effects: deck/1..4, fx/3, fx/4, master,
+  // erz/1..3 and pad/1, pad/2 through /k/kanal/graph. A kern refusal answers 200 with the quittung (like /regler); 409 only for the Cypher pre-checks.
   private async graphLaden(d: Record<string, unknown>, a: http.ServerResponse): Promise<void> {
     const r = await this.graphSetzen(d, this.quelle());
     this.json(a, r.code, r.j);
@@ -928,13 +928,19 @@ export class Oberflaeche {
     if (typeof kanal !== 'string' || !GRAPH_KANAELE.includes(kanal)) return { code: 400, j: { fehler: 'ausserhalb_bereich' } };
     if (typeof name !== 'string' || (name !== '' && !GRAPH_NAME.test(name))) return { code: 400, j: { fehler: 'name' } };
     if (d.vorgaben !== undefined && typeof d.vorgaben !== 'boolean') return { code: 400, j: { fehler: 'vorgaben' } };
-    // S18: the instrument channels come from the stream table (erz/2, erz/3, erz/5..7, pad/1, pad/2); erz/1 is the kit stream
-    const erz = INSTRUMENT_KANAELE.includes(kanal);
-    if (kanal === 'erz/1') return { code: 400, j: { fehler: 'kein_midi_strom', text: 'stream 1 runs a drum kit: its notes are kit indices, an instrument graph would get them as MIDI notes' } };
-    if (name !== '') {
-      const g = findeGraph(name);
-      if (!g) return { code: 404, j: { fehler: 'unbekannt' } };
-      if ((g.art === 'instrument') !== erz) return { code: 400, j: { fehler: 'falsche_art', art: g.art } };
+    // S18: the instrument channels come from the stream table (erz/2, erz/3, erz/5..7, pad/1, pad/2); erz/1 is the kit stream. Since the remix targets
+    // erz/1..3 and pad/1, pad/2 also take an effect insert (/k/kanal/graph). The kind decides the way: the graph being loaded, on removal the one loaded now.
+    const jetzt = this.stand.graphen_geladen[kanal] ?? '';
+    const istInstrument = (n: string): boolean => findeGraph(n)?.art === 'instrument';
+    const neuG = name !== '' ? findeGraph(name) : null;
+    if (name !== '' && !neuG) return { code: 404, j: { fehler: 'unbekannt' } };
+    const instrument = neuG ? neuG.art === 'instrument' : jetzt !== '' ? istInstrument(jetzt) : !EFFEKT_KANAELE.includes(kanal);
+    const erz = instrument && INSTRUMENT_KANAELE.includes(kanal);
+    if (instrument && kanal === 'erz/1') return { code: 400, j: { fehler: 'kein_midi_strom', text: 'stream 1 runs a drum kit: its notes are kit indices, an instrument graph would get them as MIDI notes' } };
+    if (neuG && !(instrument ? INSTRUMENT_KANAELE : EFFEKT_KANAELE).includes(kanal)) return { code: 400, j: { fehler: 'falsche_art', art: neuG.art } };
+    // one graph per channel: an effect does not go onto a channel whose stream plays an instrument graph, nor the other way round
+    if (neuG && jetzt !== '' && jetzt !== name && istInstrument(jetzt) !== instrument) {
+      return { code: 409, j: { fehler: 'belegt', kanal, graph: jetzt, text: `${kanal} carries the ${instrument ? 'effect' : 'instrument'} graph ${jetzt}: take it off first` } };
     }
     const strom = erz ? (stromVonKanal(kanal) as number) : 0;
     // S15 (break 7): a stream whose erzeuger runs in kit mode sends kit indices, a graph would get wrong or no notes. Unknown mode passes.

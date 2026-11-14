@@ -71,7 +71,7 @@ test('1.15 A2: the table holds exactly the 345 tool paths of section 3 and grows
   assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/utility/')).length, 8 * 5);   // arr-fx slice 1
   assert.equal([...REGLER.keys()].filter((p) => p.startsWith('ins/bk/')).length, 8 * 65);   // arr-bk slice 3 + 64-knob widening: an and k1..k64 per instance
   assert.equal([...REGLER.keys()].filter((p) => p.startsWith('rack/')).length, 48);   // slice 4c: 12 racks x 4 macro rows
-  assert.equal(REGLER.size, 909 + 784 + 345 + 1178 + 48 + 80);   // 3344 = 3264 + 80: the mixer went from 8 groups x 8 rows to 16 groups x 9 rows (c3396e9a, 3db625e3); the sibling test below compares every row with the core table in both directions
+  assert.equal(REGLER.size, 909 + 784 + 345 + 1178 + 48 + 80 + 64);   // 3408 = 3344 + 64 (master/bk/1..64, the graph place on the DJ master); 3344 = 3264 + 80: the mixer went from 8 groups x 8 rows to 16 groups x 9 rows (c3396e9a, 3db625e3); the sibling test below compares every row with the core table in both directions
   for (const p of soll) assert.equal(muster.test(p), true, `schema takes ${p}`);
 });
 
@@ -139,8 +139,9 @@ test('1.15 A2: tool rows are never "leiser machen" for Cypher (D16, default deny
 test('S5r: <kanal>/bk/<1..64> nur auf Kanälen mit Graph, 0..1, Vorgabe 0,5, alle dürfen', () => {
   const mit = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'erz/1', 'erz/2', 'erz/3', 'erz/5', 'erz/6', 'erz/7', 'pad/1', 'pad/2'];
   const bk = [...REGLER.keys()].filter((p) => /\/bk\/\d+$/.test(p));
-  assert.equal(bk.length, (mit.length + 2) * 64);   // S14: + fx/3, fx/4
-  for (const k of ['erz/4', 'erz/8', 'bus/1', 'master']) assert.equal(REGLER.has(`${k}/bk/1`), false, k);
+  assert.equal(bk.length, (mit.length + 3) * 64);   // S14: + fx/3, fx/4; + master (graph place on the DJ master)
+  for (const k of ['erz/4', 'erz/8', 'bus/1']) assert.equal(REGLER.has(`${k}/bk/1`), false, k);
+  assert.equal(kanalVon('master/bk/3'), null);   // the master sum is no channel
   for (const k of mit) assert.equal(kanalVon(`${k}/bk/3`), k);
   const i = reglerInfo('erz/5/bk/64')!;
   assert.deepEqual([i.einheit, i.min, i.max, i.vorgabe, i.nurHand], ['linear', 0, 1, 0.5, false]);

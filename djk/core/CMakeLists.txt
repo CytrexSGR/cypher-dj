@@ -109,7 +109,8 @@ file(GLOB HALL_FFI_QUELLEN CONFIGURE_DEPENDS ${HALL_FFI_DIR}/reverb_ffi/src/*.rs
      ${HALL_FFI_DIR}/modular_dsp/src/*.rs ${HALL_FFI_DIR}/sat_dsp/src/*.rs ${HALL_FFI_DIR}/eq_dsp/src/*.rs
      ${HALL_FFI_DIR}/reverb_dsp/Cargo.toml ${HALL_FFI_DIR}/comp_dsp/Cargo.toml ${HALL_FFI_DIR}/rb_dsp/Cargo.toml
      ${HALL_FFI_DIR}/modular_dsp/Cargo.toml ${HALL_FFI_DIR}/sat_dsp/Cargo.toml ${HALL_FFI_DIR}/eq_dsp/Cargo.toml
-     ${HALL_FFI_DIR}/labor_dsp/src/*.rs ${HALL_FFI_DIR}/labor_dsp/Cargo.toml)
+     ${HALL_FFI_DIR}/labor_dsp/src/*.rs ${HALL_FFI_DIR}/labor_dsp/Cargo.toml
+     ${HALL_FFI_DIR}/remix_dsp/src/*.rs ${HALL_FFI_DIR}/remix_dsp/Cargo.toml)
 # touch danach: cargo schreibt die .a nicht neu, wenn sich nur die mtime einer Quelle ändert (gemessen 2026-10-15 an
 # rb_dsp/Cargo.toml); ohne touch liefe die Regel dann bei jedem Bau erneut.
 add_custom_command(OUTPUT ${HALL_FFI_LIB}

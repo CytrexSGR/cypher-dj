@@ -25,7 +25,7 @@ Kern::Kern(double start_bpm, cdj_ring_kopf* ring, Befehlsring* befehle, Ereignis
     erz_l_[k] = mixer_->eingang_l(k);
     erz_r_[k] = mixer_->eingang_r(k);
   }
-  static_assert(MIX_BK_ZEILEN * cypherdj::stellwerk::BK_REGLER_N <= INT16_MAX, "bk_ort_ packs row * BK_REGLER_N + nr - 1 into an int16 (19 * 64 + 63 = 1279 at 64 knobs)");
+  static_assert(MIX_BK_ZEILEN * cypherdj::stellwerk::BK_REGLER_N <= INT16_MAX, "bk_ort_ packs row * BK_REGLER_N + nr - 1 into an int16 (20 * 64 + 63 = 1343 at 64 knobs)");
   {  // Baukasten S5r + S14: Graph-Regler <kanal>/bk/<1..64> and fx/3|4/bk/<1..64> -> (row of bk_wert_, nr); start from the control values (default 0.5)
     const auto& tab = sw_->tabelle();
     for (int r = 0; r < cypherdj::stellwerk::MAX_REGLER; ++r) bk_ort_[r] = -1;
@@ -43,6 +43,8 @@ Kern::Kern(double start_bpm, cdj_ring_kopf* ring, Befehlsring* befehle, Ereignis
         k = MIX_BK_SEND_ZEILE + (d.pfad[3] - '3');   // S14: fx/3/bk/<n> -> row 18, fx/4/bk/<n> -> row 19
 #endif
 #endif
+      } else if (!std::strncmp(d.pfad, "master/bk/", 10)) {
+        k = MIX_BK_MASTER_ZEILE;   // master insert graph: master/bk/<n> -> row 20
       }
       // the knob number is the number after the last '/', one or two digits (bk/1 is not bk/10..19)
       const char* slash = std::strrchr(d.pfad, '/');

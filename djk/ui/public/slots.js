@@ -1,13 +1,13 @@
 // DJ view places (plan 2026-11-13, task 13): the pure model of the four places of the DJ view. No DOM here, so it runs in node tests.
-// A place shows one of three types: TRACK (deck N for place N, there is no deck choice), STRUDEL (the generator strips erz/1..3) or LOOPS (the two
+// A place shows one of four types (REMIX is the fourth: the fx-remix device on the DJ master or a deck, no DJ channel; remix_platz.js): TRACK (deck N for place N, there is no deck choice), STRUDEL (the generator strips erz/1..3) or LOOPS (the two
 // loop slots on pad/1 and pad/2). Strudel and Loops may appear once; a place changes type only while it is silent. The layout is kept in the
 // browser (localStorage key djk-plaetze); every access is in try/catch.
 
 export const SCHLUESSEL = 'djk-plaetze';
 export const PLAETZE = [1, 2, 3, 4];
-export const TYPEN = ['track', 'strudel', 'loops'];
+export const TYPEN = ['track', 'strudel', 'loops', 'remix'];
 export const LAYOUT_STANDARD = Object.freeze(['track', 'track', 'strudel', 'loops']);
-const EINMALIG = ['strudel', 'loops'];
+const EINMALIG = ['strudel', 'loops', 'remix'];
 export const KANAL_OFFEN_DB = -26;
 
 // Which types a place may show. Any place may show any type; the "at most once" rule is a property of the layout, not of the place.
@@ -78,11 +78,15 @@ export function wahl(layout, platz) {
     frei: !(EINMALIG.includes(typ) && layout.some((t, i) => t === typ && i !== platz - 1)) }));
 }
 
-// Header text of a place. zustand: { titel, tonart, bpm } of the deck for a track place; { slots: [{ nr, titel, tonart, takte }] } for loops (key and bars are left out when unknown).
-const TYP_NAME = { track: 'TRACK', strudel: 'STRUDEL', loops: 'LOOPS' };
+// Header text of a place. zustand: { titel, tonart, bpm } of the deck for a track place; { ziel } (channel id or null) for remix; { slots: [{ nr, titel, tonart, takte }] } for loops (key and bars are left out when unknown).
+const TYP_NAME = { track: 'TRACK', strudel: 'STRUDEL', loops: 'LOOPS', remix: 'REMIX' };
+// Display name of a remix target channel: 'master' -> MASTER, 'deck/2' -> DECK 2.
+const ZIEL_NAMEN = { master: 'MASTER', 'pad/1': 'L1', 'pad/2': 'L2', 'erz/1': 'DRUMS', 'erz/2': 'BASS', 'erz/3': 'MELODY' };
+export const zielName = (kanal) => ZIEL_NAMEN[kanal] ?? (/^deck\/[1-4]$/.test(kanal ?? '') ? `DECK ${kanal.slice(5)}` : '');
 export function kopf(platz, zustand = {}) {
   const typ = zustand.typ ?? 'track';
   if (typ === 'strudel') return 'STRUDEL';
+  if (typ === 'remix') return `REMIX · ${zielName(zustand.ziel) || 'no target'}`;
   if (typ === 'loops') {
     const belegt = (zustand.slots ?? []).filter((s) => s?.titel);
     return belegt.length ? `LOOPS · ${belegt.map((s) => ['LOOP ' + s.nr, s.titel, s.tonart, Number.isFinite(s.takte) && s.takte > 0 ? `${s.takte} bar${s.takte === 1 ? '' : 's'}` : null].filter(Boolean).join(' · ')).join(' · ')}` : 'LOOPS · both slots empty';
@@ -104,11 +108,14 @@ export function streifen(layout, platz) {
 }
 
 // The mixer: two rows of three columns. Row 1 holds the strips of places 1 and 2, row 2 of places 3 and 4; the left place's strips sit left, the right
-// place's strips right, a row with two strips leaves the middle column empty. The master goes into the crossfader row below.
+// place's strips right, a row with two strips leaves the middle column empty. A place without strips (Remix) leaves its side to the other place: two
+// strips then take the outer columns, so they line up with a row of two decks. The master goes into the crossfader row below.
 export function mixerPlan(layout) {
   const reihe = (links, rechts) => {
     const l = streifen(layout, links), r = streifen(layout, rechts);
     const zeile = [null, null, null];
+    const allein = l.length === 0 ? r : r.length === 0 ? l : null;
+    if (allein && allein.length === 2) return [allein[0], null, allein[1]];
     l.forEach((s, i) => { zeile[i] = s; });
     r.forEach((s, i) => { zeile[3 - r.length + i] = s; });
     return zeile;
@@ -118,7 +125,7 @@ export function mixerPlan(layout) {
 
 // ---------- Applying a layout to the page nodes (task 14: grid cells over the existing nodes, no rebuild) ----------
 // The nodes the places can show. A Track place N always shows deck N; Strudel and Loops are single nodes.
-export const KNOTEN = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'strudel', 'loops'];
+export const KNOTEN = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'strudel', 'loops', 'remix'];
 export function knotenPlan(layout) {
   const platz = {};   // node key -> the place (1..4) that shows it
   layout.forEach((t, i) => { platz[t === 'track' ? `deck/${i + 1}` : t] = i + 1; });

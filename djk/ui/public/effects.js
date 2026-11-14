@@ -135,7 +135,7 @@ export function sendRueckHtml(kanaele = ['fx/3', 'fx/4']) {
 }
 /** S12/S18: graph picker. Instruments go on erz/2, erz/3, erz/5..7 and the pads (stream 1 is a drum kit, erz/4 the production, erz/8 unused),
  *  effects on decks and the send returns. The instrument keys are bound to contract/streams.ts by tests/effekte.test.mjs. */
-export const GRAPH_KANAL_ART = { 'erz/2': 'instrument', 'erz/3': 'instrument', 'erz/5': 'instrument', 'erz/6': 'instrument', 'erz/7': 'instrument', 'pad/1': 'instrument', 'pad/2': 'instrument', 'deck/1': 'effekt', 'deck/2': 'effekt', 'deck/3': 'effekt', 'deck/4': 'effekt', 'fx/3': 'effekt', 'fx/4': 'effekt' };
+export const GRAPH_KANAL_ART = { 'erz/2': 'instrument', 'erz/3': 'instrument', 'erz/5': 'instrument', 'erz/6': 'instrument', 'erz/7': 'instrument', 'pad/1': 'instrument', 'pad/2': 'instrument', 'deck/1': 'effekt', 'deck/2': 'effekt', 'deck/3': 'effekt', 'deck/4': 'effekt', 'fx/3': 'effekt', 'fx/4': 'effekt', 'master': 'effekt' };
 /** Instrument categories of the picker (ids as in kategorien.json). `host` is the Surge/plugin entry of erz/2 and erz/3, `sonst` collects graphs without a category. */
 export const GRAPH_KATEGORIEN = [
   { id: 'drums', name: 'Drums' }, { id: 'bass', name: 'Bass' }, { id: 'lead', name: 'Lead' }, { id: 'pad', name: 'Pad & Poly' },

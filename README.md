@@ -32,7 +32,7 @@ automation lanes, freeze, export and loudness per track. Stems of an audio clip 
 and out, overdub for MIDI, takes with comping for audio, latency compensated. Measured with a software loop and a
 test client, not yet with a real audio interface and keyboard.
 
-**Instruments.** A 303-style bass (RB-338), Cypher Modular (a modular synthesizer with 51 block types, with a mono
+**Instruments.** A 303-style bass (RB-338), Cypher Modular (a modular synthesizer with 52 block types, with a mono
 synth, a poly synth, a neuro bass, two drum machines and a filter effect built from it), one-shot drum
 kits and two slots of Surge XT whose patch choice is saved with the project. Every instrument has a front panel with
 real units and MIDI learn (Cypher Modular plates also pick and save presets), which opens enlarged on a device page; a tablet in your home network can show it as a
@@ -47,8 +47,10 @@ return or the master into a new audio track.
 
 **DJ.** Up to four decks with beat grid, hot cues, loops and key lock at any tempo, beat FX and color FX, three live-coded
 pattern channels ([Strudel](https://strudel.cc)) and two loop slots, all on the same clock. The DJ view has four
-places, each showing a track deck, the Strudel channels or the loop slots; a loop cut from a deck becomes a live
-module with its stems and plays on its own mixer channel.
+places, each showing a track deck, the Strudel channels, the loop slots or Cypher Remix; a loop cut from a deck becomes a
+live module with its stems and plays on its own mixer channel, with its waveform, beat grid and playhead in the slot.
+Cypher Remix, a beat-synchronous remix station (build-up and break-down effects, a three-band isolator, a pad with roll
+and drum voices, a release lever), sits as an insert on the master, a deck, a loop slot or a Strudel channel.
 
 **The agent's side.** Besides playing, the agent can measure: levels of the last seconds, a 29-band spectrum,
 loudness per track, group and return, and how a closed deck sits against the running master per frequency band. It can wait on the master clock,

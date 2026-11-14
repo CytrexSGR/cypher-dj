@@ -16,7 +16,7 @@ export function knobTabelle(panel: Record<string, unknown>, geraet: Geraet, ordn
   for (const s of (panel.sections ?? []) as { title?: string; id: string; controls: Record<string, unknown>[] }[]) {
     for (const c of s.controls) {
       const b = (c.bind ?? {}) as Record<string, unknown>;
-      const namen = c.type === 'xy' ? [(b.x as { param?: string })?.param, (b.y as { param?: string })?.param] : [b.param as string | undefined];
+      const namen = c.type === 'xy' ? [(b.x as { param?: string })?.param, (b.y as { param?: string })?.param] : c.type === 'touchpad' ? [(b.x as { param?: string })?.param, (b.touch as { param?: string })?.param] : [b.param as string | undefined];
       const ps = namen.filter((x): x is string => typeof x === 'string');
       if (!ps.length) continue;
       const bereich = ps.map((n) => { const p = par.get(n); return !p ? '?' : p.stufen ? p.stufen.join(' / ') : `${p.min} .. ${p.max}${p.einheit ? ` ${p.einheit}` : ''}${p.log ? ' log' : ''}`; }).join(', ');

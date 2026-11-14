@@ -251,6 +251,23 @@ const REGLER_OHNE_WIRKUNG_AUF_DER_PROBE: &[(&str, usize, &str)] = &[
     ("saege-ladder", 10, SAEGE_FILTER_HUELLE_AUS),
     ("labor", 8, LABOR_DELAY_1_AUS),
     ("labor", 11, LABOR_DELAY_1_AUS),
+    ("fx-remix", 2, REMIX_SZENE_RUHT),
+    ("fx-remix", 3, REMIX_SZENE_RUHT),
+    ("fx-remix", 4, REMIX_SZENE_RUHT),
+    ("fx-remix", 5, REMIX_SZENE_RUHT),
+    ("fx-remix", 26, REMIX_SZENE_RUHT),
+    ("fx-remix", 6, REMIX_ISO_RUHT),
+    ("fx-remix", 10, REMIX_PAD_RUHT),
+    ("fx-remix", 11, REMIX_PAD_RUHT),
+    ("fx-remix", 12, REMIX_PAD_RUHT),
+    ("fx-remix", 13, REMIX_PAD_RUHT),
+    ("fx-remix", 18, REMIX_PAD_RUHT),
+    ("fx-remix", 19, REMIX_PAD_RUHT),
+    ("fx-remix", 20, REMIX_PAD_RUHT),
+    ("fx-remix", 21, REMIX_HEBEL_RUHT),
+    ("fx-remix", 23, REMIX_HEBEL_RUHT),
+    ("fx-remix", 24, REMIX_WEGE_GLEICH),
+    ("fx-remix", 25, REMIX_WEGE_GLEICH),
     ("synth-neuro", 29, NEURO_OSC2_AUS),
     ("synth-neuro", 30, NEURO_OSC2_AUS),
     ("synth-neuro", 31, NEURO_OSC2_AUS),
@@ -278,6 +295,12 @@ const REGLER_OHNE_WIRKUNG_AUF_DER_PROBE: &[(&str, usize, &str)] = &[
     ("synth-poly", 47, POLY_OSC2_AUS), ("synth-poly", 48, POLY_OSC2_AUS), ("synth-poly", 49, POLY_OSC2_AUS), ("synth-poly", 50, POLY_OSC2_AUS), ("synth-poly", 51, POLY_OSC2_AUS),
     ("synth-poly", 54, "glide runs from the pitch a voice had last; the probe's notes all land on voices that have not played yet (the first note of a voice sets the glide to its pitch), so there is nothing to glide from. tests/synth_poly.rs `glide_auf_der_stimme` plays two chords on the same voices"),
 ];
+
+const REMIX_SZENE_RUHT: &str = "the scene types, both sub parameters and the pump only act while Scene (knob 1) is away from its centre; the probe leaves it at 0.5 = original sound (the neutral start of the device). remix_dsp tests/verhalten.rs `every_scene_effect_changes_the_sound_and_stays_bounded` and `echo_repeats_at_the_selected_beat_fraction` drive them";
+const REMIX_ISO_RUHT: &str = "the isolate type only acts while Low, Mid or High (knobs 7 to 9) is away from its centre; the probe leaves them at 0.5 = neutral. remix_dsp `every_isolate_effect_stays_bounded_at_both_ends` and `isolator_kills_one_band_and_leaves_the_others` drive it";
+const REMIX_PAD_RUHT: &str = "pad position, touch, hold, roll, overdub, pitch and pad level need a selected voice or a roll together with a touch; the probe moves one knob at a time, so a touch has nothing selected and a selection has no touch. remix_dsp `pad_plays_the_selected_voice_on_the_grid`, `pad_roll_loops_the_input_from_the_touch` and `overdub_replays_a_recorded_hit_four_beats_later` drive them";
+const REMIX_HEBEL_RUHT: &str = "release type and release hold only act while the lever (knob 22) is pulled; the probe leaves it at 0.5 = at rest. remix_dsp `brake_stops_and_the_lever_brings_the_sound_back`, `release_echo_repeats_the_last_beat_and_fades` and `a_release_without_hold_leaves_the_scene_off_until_its_control_is_reset` drive them";
+const REMIX_WEGE_GLEICH: &str = "the source switches route the input and the pad voices through the effect sections or around them; with every section at rest (the probe) both ways are the same signal";
 
 const LABOR_DELAY_1_AUS: &str = "delay time and its modulation depth of channel 1 only act while Delay 1 (knob 7) is on; the probe leaves it off by design, because channel 1 is the voice and a delay in front of its filter would delay the note. labor_dsp `delay_time_follows_the_setting` measures the time";
 

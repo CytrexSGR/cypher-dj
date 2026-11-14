@@ -774,6 +774,7 @@ def bk_regler_listen(q: Quelle) -> dict[str, list[str]]:
               "INTERFACES §1.5 bk-Zeile", re.M)
     zf = _such(r"^\| `fx/<n>/bk/<m>` \(n = (\d+(?: and \d+)*), m = 1 to 64\) \|", teil, "INTERFACES §1.5 bk-Sendezeile", re.M)   # S14
     spec_senden = [f"fx/{n}" for n in zf.group(1).split(" and ")]
+    _such(r"^\| `master/bk/<m>` \(m = 1 to 64\) \|", teil, "INTERFACES §1.5 bk master row", re.M)   # the row must exist, it names no list
     alle = lambda ks: sorted(f"{k}/bk/{n}" for k in ks for n in range(1, 65))   # noqa: E731
     aus = q.node_json(
         "const v=await import('file://@@/djk/contract/mock_core/contract.mjs');"
@@ -781,9 +782,13 @@ def bk_regler_listen(q: Quelle) -> dict[str, list[str]]:
         "const l=await import('file://@@/djk/conductor/src/controls_info.ts');"
         "const s=(m)=>[...m].filter((p)=>/\\/bk\\/[0-9]+$/.test(p));"
         "console.log(JSON.stringify({a:s(v.REGLER.keys()),z:s(k.ZIELE),l:s(l.REGLER.keys())}))")
-    return {"R01 Kern controls.cpp": alle(kanaele + senden),
-            "R01b Kern controls.cpp (9..64 loops)": alle(kanaele_hoch + senden_hoch),
-            "R02 INTERFACES §1.5": alle(_bk_kanaele_aus_spec(z.group(1)) + spec_senden),
+    # master insert graph: master/bk/1..64, the last loop of the table (global like the send returns); every location must carry it
+    if 'std::snprintf(p, sizeof p, "master/bk/%d", nr)' not in cpp:
+        raise ParserFehler("controls.cpp: no master/bk/%d loop, parser blind or source rebuilt")
+    master = ["master"]
+    return {"R01 Kern controls.cpp": alle(kanaele + senden + master),
+            "R01b Kern controls.cpp (9..64 loops)": alle(kanaele_hoch + senden_hoch + master),
+            "R02 INTERFACES §1.5": alle(_bk_kanaele_aus_spec(z.group(1)) + spec_senden + master),
             "R03 Attrappe REGLER": sorted(aus["a"]), "R04 curves.js ZIELE": sorted(aus["z"]),
             "R05 controls_info.ts": sorted(aus["l"])}
 
@@ -807,11 +812,12 @@ def _pruefe_bk_regler(q: Quelle, befunde: list[str]) -> None:
             befunde.append(f"bk-Regler: R07 defs.schema.json regler_pfad lehnt {name} ab")
     # Gegenprobe: kein Muster zu weit. Jeder Kanal der Spielkanäle und Busse, der nicht in der Menge steht, muss abgelehnt werden
     kanaele = {n.rsplit("/bk/", 1)[0] for n in soll}
+    assert "master" in kanaele
     unbekannt = [f"{g}/{i}/bk/1" for g, n in (("deck", 4), ("erz", 8), ("pad", 2), ("bus", 4)) for i in range(1, n + 1)
                  if f"{g}/{i}" not in kanaele]
     # S14: only the send returns fx/3 and fx/4 have graph knobs
     fx_falsch = ["fx/1/bk/1", "fx/2/bk/1", "fx/5/bk/1", "fx/3/bk/0", "fx/3/bk/65", "fx/4/bk/70", "fx/4/bk/100"]
-    for falsch in unbekannt + fx_falsch + ["master/bk/1", "cue/bk/1", "deck/1/bk/65", "deck/1/bk/0", "pad/3/bk/1", "deck/1/bk/010", "deck/1/bk/033", "deck/1/bk/640", "deck/1/bk/9x"]:
+    for falsch in unbekannt + fx_falsch + ["master/bk/0", "master/bk/65", "cue/bk/1", "deck/1/bk/65", "deck/1/bk/0", "pad/3/bk/1", "deck/1/bk/010", "deck/1/bk/033", "deck/1/bk/640", "deck/1/bk/9x"]:
         if pfad.search(falsch):
             befunde.append(f"bk-Regler: R06 hand_bedienung.PFAD nimmt {falsch} an")
         if re.fullmatch(schema, falsch):

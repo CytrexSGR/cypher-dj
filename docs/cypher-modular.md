@@ -60,11 +60,11 @@ code: `knoten` are nodes, `kanten` are wires, `art` is the block type, `stimmen`
 | Filters and shaping | `ladder`, `svf`, `saett` (saturation), `roehre` (one triode stage), `krume` (bit and sample rate reduction), `ms20` (low-pass and high-pass with saturating feedback), `sem` (12 dB state-variable filter that morphs from low-pass through notch to high-pass, plus a band-pass output), `diode` (diode-ladder low-pass), `kamm` (tuned feedback comb filter), `formant` (vowel filter of five parallel band-passes), `falter` (wavefolder with antialiasing and 2x oversampling), `labor` (Cypher Labor, see below) |
 | Modulation | `adsr`, `lfo`, `mseg` (multi-stage envelope, up to eight stages with curves, a sustain stage and a loop), `sh` (sample and hold, clocked by a trigger, in beats or in Hz), `folger` (envelope follower), `drift` (per-voice analog drift) |
 | Arithmetic | `mul`, `add` |
-| Effects | `chorus`, `phaser`, `hall` (reverb), `delay`, `faltung` (convolution with an impulse response file, no added latency), `vocoder` (11-band channel vocoder) |
+| Effects | `chorus`, `phaser`, `hall` (reverb), `delay`, `faltung` (convolution with an impulse response file, no added latency), `vocoder` (11-band channel vocoder), `remix` (beat-synchronous remix station, see Cypher Remix below) |
 | Dynamics | `limiter`, `gate`, `komp` |
 | Wiring | `ausgang` (output), `eingang` (input, for effect graphs), `leitung` (a feedback path that can be wired freely), `wahl` (a selector over up to eight inputs, with a crossfade) |
 
-That makes 51 block types. The graph is checked when it loads and runs in a fixed order. Feedback is only allowed through
+That makes 52 block types. The graph is checked when it loads and runs in a fixed order. Feedback is only allowed through
 a wire marked `"verzoegerung": 1` or through `leitung`. Up to 16 voices run side by side; the audio callback does not
 allocate.
 
@@ -103,6 +103,16 @@ and a save button sit in its header.
   modulator, run sample by sample at twice the base rate. As an instrument a note pings both filters (key tracking,
   note gate, width); as an effect the left side runs through channel 1 and the right through channel 2. It is new and
   experimental: one listening session so far, no presets yet.
+- **Cypher Remix** (`remix`, `fx-remix`): a beat-synchronous remix station in one block, after the public signal flow
+  of a class of DJ remix hardware (no code, samples or presets of any device). Four sections: SCENE (one bipolar
+  control: to the right five build-up effects, BPF echo, echo, noise, spiral up, reverb up; to the left five
+  break-down effects, HPF echo, crush echo, LPF echo, spiral down, reverb down; a pump that ducks the effect on the
+  beat), ISOLATE (three bands with cut/add, trans/roll, isolator and gate), PAD (a touch field in the beat grid that
+  rolls the input or plays four synthesized drum voices, with an overdub pattern) and RELEASE (a lever that ends the
+  sound with a brake, an echo or a back spin and returns to the original when let go). It loads neutral: with every
+  section off it passes its input bit for bit, adds no latency and costs about 38 microseconds per block of 128
+  samples. The DJ view has a REMIX place for it with a lever and a touch field. New: tested on synthetic signals and
+  in one demonstration session, the curves are the model's own choices.
 
 The new controls of the three synthesizers were added without changing any old sound: with every new knob at its start
 value, the graphs render byte for byte as before. Their numbers were measured on synthetic signals; the new controls have not
@@ -116,8 +126,9 @@ been judged by a listener yet.
   `djk/start/djk-start --strudel --bk-stroeme`); these streams can be recorded onto production tracks;
 - a production instrument track (the device is the graph and its eight knob values; up to 8 such tracks), played from the
   project's notes live and in the offline render;
-- an effect graph on a deck channel or on one of two send returns (the examples `fx-*`: echo, spring reverb, filter ride,
-  phaser, flanger, tube, vocoder and others).
+- an effect graph as an insert on a deck channel, on the DJ master sum, on a loop slot channel or on one of the three
+  Strudel channels, or on one of two send returns (the examples `fx-*`: echo, spring reverb, filter ride, phaser,
+  flanger, tube, vocoder, remix and others). A pattern channel holds one graph: an instrument or an effect.
 
 The knobs of a graph on a channel can be learned onto a MIDI controller, and a project remembers which graph sits
 on which channel with its knob values.

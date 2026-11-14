@@ -3,6 +3,31 @@
 One entry per public update, newest first. Each entry names what changed for someone who plays, produces or
 builds cypher-dj.
 
+## 2026-11-14
+
+**DJ**
+- Cypher Remix, a beat-synchronous remix station, as a fourth kind of DJ place. SCENE has one bipolar control: to the
+  right five build-up effects, to the left five break-down effects, and a pump that ducks the effect on the beat.
+  ISOLATE cuts or adds three bands (cut/add, trans/roll, isolator, gate). PAD rolls the input or plays four drum voices
+  in the beat grid from a touch field. RELEASE is a lever that ends the sound with a brake, an echo or a back spin
+  and brings the original back when let go. The place picks where the device sits: the master, deck 1 to 4, the loop
+  slots L1 and L2, or the Strudel drums, bass or melody. It loads neutral and passes the signal bit for bit until a
+  control moves.
+- The DJ master has an insert place for an effect graph, in front of the master beat FX (`master/bk/1..64`).
+- The loop slots and the three Strudel channels take an effect graph as an insert before their fader. A channel holds
+  one graph: where an instrument graph plays, an effect is refused with `belegt`, and the other way round.
+- The loop slots show the waveform of their loop with a beat grid, bar numbers and the playhead of the live
+  transport.
+- Beside a Remix place the two loop strips line up under the deck strips.
+
+**Instruments**
+- Cypher Modular has a `remix` block and the device `fx-remix` (52 block types). Its panel brings two new controls, a
+  spring-back lever and a touch field in the beat grid, and switches that read the centre as off.
+
+**Agent**
+- The `graph` tool takes `master` and effects on `erz/1..3`, `pad/1`, `pad/2`; `regler` moves their knobs
+  (`master/bk/<n>`, `<channel>/bk/<n>`).
+
 ## 2026-11-13, evening
 
 **DJ**

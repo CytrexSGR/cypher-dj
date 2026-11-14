@@ -1,0 +1,368 @@
+{
+ "format": "baukasten/2",
+ "name": "fx-remix",
+ "stimmen": 1,
+ "regler_namen": {
+  "1": "Scene",
+  "2": "Build-up type",
+  "3": "Break-down type",
+  "4": "Sub 1",
+  "5": "Sub 2",
+  "6": "Isolate type",
+  "7": "Low",
+  "8": "Mid",
+  "9": "High",
+  "10": "Pad position",
+  "11": "Pad touch",
+  "12": "Pad hold",
+  "13": "Roll",
+  "14": "Kick",
+  "15": "Snare",
+  "16": "Clap",
+  "17": "Hi-hat",
+  "18": "Overdub",
+  "19": "Pitch",
+  "20": "Pad level",
+  "21": "Release type",
+  "22": "Release lever",
+  "23": "Release hold",
+  "24": "Input to FX",
+  "25": "Pad to FX",
+  "26": "Pump",
+  "27": "Volume"
+ },
+ "knoten": [
+  {
+   "id": "ein",
+   "art": "eingang"
+  },
+  {
+   "id": "k1",
+   "art": "regler",
+   "nr": 1,
+   "min": -1,
+   "max": 1
+  },
+  {
+   "id": "k2",
+   "art": "regler",
+   "nr": 2,
+   "min": 1,
+   "max": 5
+  },
+  {
+   "id": "k3",
+   "art": "regler",
+   "nr": 3,
+   "min": 6,
+   "max": 10
+  },
+  {
+   "id": "k4",
+   "art": "regler",
+   "nr": 4,
+   "min": 0,
+   "max": 1
+  },
+  {
+   "id": "k5",
+   "art": "regler",
+   "nr": 5,
+   "min": 0,
+   "max": 1
+  },
+  {
+   "id": "k6",
+   "art": "regler",
+   "nr": 6,
+   "min": 1,
+   "max": 4,
+   "mitte": 2.6
+  },
+  {
+   "id": "k7",
+   "art": "regler",
+   "nr": 7,
+   "min": -1,
+   "max": 1
+  },
+  {
+   "id": "k8",
+   "art": "regler",
+   "nr": 8,
+   "min": -1,
+   "max": 1
+  },
+  {
+   "id": "k9",
+   "art": "regler",
+   "nr": 9,
+   "min": -1,
+   "max": 1
+  },
+  {
+   "id": "k10",
+   "art": "regler",
+   "nr": 10,
+   "min": 0,
+   "max": 1
+  },
+  {
+   "id": "k11",
+   "art": "regler",
+   "nr": 11,
+   "min": 0,
+   "max": 1
+  },
+  {
+   "id": "k12",
+   "art": "regler",
+   "nr": 12,
+   "min": 0,
+   "max": 1
+  },
+  {
+   "id": "k13",
+   "art": "regler",
+   "nr": 13,
+   "min": 0,
+   "max": 1
+  },
+  {
+   "id": "k14",
+   "art": "regler",
+   "nr": 14,
+   "min": 0,
+   "max": 1
+  },
+  {
+   "id": "k15",
+   "art": "regler",
+   "nr": 15,
+   "min": 0,
+   "max": 1
+  },
+  {
+   "id": "k16",
+   "art": "regler",
+   "nr": 16,
+   "min": 0,
+   "max": 1
+  },
+  {
+   "id": "k17",
+   "art": "regler",
+   "nr": 17,
+   "min": 0,
+   "max": 1
+  },
+  {
+   "id": "k18",
+   "art": "regler",
+   "nr": 18,
+   "min": 0,
+   "max": 1
+  },
+  {
+   "id": "k19",
+   "art": "regler",
+   "nr": 19,
+   "min": -12,
+   "max": 12
+  },
+  {
+   "id": "k20",
+   "art": "regler",
+   "nr": 20,
+   "min": 0,
+   "max": 1,
+   "mitte": 0.7
+  },
+  {
+   "id": "k21",
+   "art": "regler",
+   "nr": 21,
+   "min": 0,
+   "max": 2
+  },
+  {
+   "id": "k22",
+   "art": "regler",
+   "nr": 22,
+   "min": -1,
+   "max": 1
+  },
+  {
+   "id": "k23",
+   "art": "regler",
+   "nr": 23,
+   "min": 0,
+   "max": 1
+  },
+  {
+   "id": "k24",
+   "art": "regler",
+   "nr": 24,
+   "min": 0,
+   "max": 1,
+   "mitte": 0.99
+  },
+  {
+   "id": "k25",
+   "art": "regler",
+   "nr": 25,
+   "min": 0,
+   "max": 1,
+   "mitte": 0.99
+  },
+  {
+   "id": "k26",
+   "art": "regler",
+   "nr": 26,
+   "min": 0,
+   "max": 1
+  },
+  {
+   "id": "k27",
+   "art": "regler",
+   "nr": 27,
+   "min": -40,
+   "max": 6,
+   "mitte": 0
+  },
+  {
+   "id": "rmx",
+   "art": "remix"
+  },
+  {
+   "id": "aus",
+   "art": "ausgang"
+  }
+ ],
+ "kanten": [
+  {
+   "von": "ein.l",
+   "nach": "rmx.l"
+  },
+  {
+   "von": "ein.r",
+   "nach": "rmx.r"
+  },
+  {
+   "von": "k1.aus",
+   "nach": "rmx.szene"
+  },
+  {
+   "von": "k2.aus",
+   "nach": "rmx.bau_typ"
+  },
+  {
+   "von": "k3.aus",
+   "nach": "rmx.ab_typ"
+  },
+  {
+   "von": "k4.aus",
+   "nach": "rmx.sub1"
+  },
+  {
+   "von": "k5.aus",
+   "nach": "rmx.sub2"
+  },
+  {
+   "von": "k6.aus",
+   "nach": "rmx.iso_typ"
+  },
+  {
+   "von": "k7.aus",
+   "nach": "rmx.low"
+  },
+  {
+   "von": "k8.aus",
+   "nach": "rmx.mid"
+  },
+  {
+   "von": "k9.aus",
+   "nach": "rmx.hi"
+  },
+  {
+   "von": "k10.aus",
+   "nach": "rmx.pad"
+  },
+  {
+   "von": "k11.aus",
+   "nach": "rmx.touch"
+  },
+  {
+   "von": "k12.aus",
+   "nach": "rmx.halten"
+  },
+  {
+   "von": "k13.aus",
+   "nach": "rmx.roll"
+  },
+  {
+   "von": "k14.aus",
+   "nach": "rmx.kick"
+  },
+  {
+   "von": "k15.aus",
+   "nach": "rmx.snare"
+  },
+  {
+   "von": "k16.aus",
+   "nach": "rmx.clap"
+  },
+  {
+   "von": "k17.aus",
+   "nach": "rmx.hat"
+  },
+  {
+   "von": "k18.aus",
+   "nach": "rmx.overdub"
+  },
+  {
+   "von": "k19.aus",
+   "nach": "rmx.pitch"
+  },
+  {
+   "von": "k20.aus",
+   "nach": "rmx.padpegel"
+  },
+  {
+   "von": "k21.aus",
+   "nach": "rmx.rel_typ"
+  },
+  {
+   "von": "k22.aus",
+   "nach": "rmx.hebel"
+  },
+  {
+   "von": "k23.aus",
+   "nach": "rmx.rel_halten"
+  },
+  {
+   "von": "k24.aus",
+   "nach": "rmx.ein_fx"
+  },
+  {
+   "von": "k25.aus",
+   "nach": "rmx.pad_fx"
+  },
+  {
+   "von": "k26.aus",
+   "nach": "rmx.pumpen"
+  },
+  {
+   "von": "k27.aus",
+   "nach": "rmx.pegel"
+  },
+  {
+   "von": "rmx.l",
+   "nach": "aus.l"
+  },
+  {
+   "von": "rmx.r",
+   "nach": "aus.r"
+  }
+ ]
+}

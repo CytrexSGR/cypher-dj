@@ -1,0 +1,370 @@
+{
+ "format": "cypherdj-panel/2",
+ "geraet": {
+  "art": "bk",
+  "graph": "fx-remix"
+ },
+ "title": "Remix",
+ "akzent": "tuerkis",
+ "layout": {
+  "rows": [
+   [
+    "scene",
+    "iso",
+    "rel"
+   ],
+   [
+    "pad",
+    "out"
+   ]
+  ]
+ },
+ "sections": [
+  {
+   "id": "scene",
+   "title": "SCENE",
+   "cols": 5,
+   "controls": [
+    {
+     "id": "ab",
+     "type": "selector",
+     "label": "Break down (left)",
+     "bind": {
+      "param": "k3"
+     },
+     "options": [
+      "HPF ECHO",
+      "CRUSH",
+      "LPF ECHO",
+      "SPIRAL DN",
+      "REVERB DN"
+     ],
+     "default": 2,
+     "span": 5
+    },
+    {
+     "id": "szene",
+     "type": "knob",
+     "label": "Scene",
+     "bind": {
+      "param": "k1"
+     },
+     "format": "percent",
+     "default": 0.5,
+     "span": 2
+    },
+    {
+     "id": "sub1",
+     "type": "knob",
+     "label": "Sub 1",
+     "bind": {
+      "param": "k4"
+     },
+     "format": "percent",
+     "default": 0.5
+    },
+    {
+     "id": "sub2",
+     "type": "knob",
+     "label": "Sub 2",
+     "bind": {
+      "param": "k5"
+     },
+     "format": "percent",
+     "default": 0.5
+    },
+    {
+     "id": "pump",
+     "type": "knob",
+     "label": "Pump",
+     "bind": {
+      "param": "k26"
+     },
+     "format": "percent",
+     "default": 0.5
+    },
+    {
+     "id": "bau",
+     "type": "selector",
+     "label": "Build up (right)",
+     "bind": {
+      "param": "k2"
+     },
+     "options": [
+      "BPF ECHO",
+      "ECHO",
+      "NOISE",
+      "SPIRAL UP",
+      "REVERB UP"
+     ],
+     "default": 2,
+     "span": 5
+    }
+   ]
+  },
+  {
+   "id": "iso",
+   "title": "ISOLATE",
+   "cols": 3,
+   "controls": [
+    {
+     "id": "isotyp",
+     "type": "selector",
+     "label": "Effect",
+     "bind": {
+      "param": "k6"
+     },
+     "options": [
+      "CUT/ADD",
+      "TRANS/ROLL",
+      "ISOLATOR",
+      "GATE"
+     ],
+     "default": 2,
+     "span": 3
+    },
+    {
+     "id": "low",
+     "type": "knob",
+     "label": "Low",
+     "bind": {
+      "param": "k7"
+     },
+     "format": "percent",
+     "default": 0.5
+    },
+    {
+     "id": "mid",
+     "type": "knob",
+     "label": "Mid",
+     "bind": {
+      "param": "k8"
+     },
+     "format": "percent",
+     "default": 0.5
+    },
+    {
+     "id": "hi",
+     "type": "knob",
+     "label": "High",
+     "bind": {
+      "param": "k9"
+     },
+     "format": "percent",
+     "default": 0.5
+    },
+    {
+     "id": "isohin",
+     "type": "label",
+     "span": 3,
+     "text": "Centre neutral. Left cuts, right adds."
+    }
+   ]
+  },
+  {
+   "id": "pad",
+   "title": "PAD",
+   "cols": 5,
+   "controls": [
+    {
+     "id": "xpad",
+     "type": "touchpad",
+     "label": "Touch",
+     "span": 5,
+     "zones": [
+      "1/8",
+      "1/4",
+      "1/2",
+      "1/1",
+      "2/1"
+     ],
+     "bind": {
+      "x": {
+       "param": "k10"
+      },
+      "touch": {
+       "param": "k11"
+      }
+     }
+    },
+    {
+     "id": "roll",
+     "type": "switch",
+     "label": "Roll",
+     "bind": {
+      "param": "k13"
+     },
+     "default": 0,
+     "mitte_aus": true
+    },
+    {
+     "id": "kick",
+     "type": "switch",
+     "label": "Kick",
+     "bind": {
+      "param": "k14"
+     },
+     "default": 0,
+     "mitte_aus": true
+    },
+    {
+     "id": "snare",
+     "type": "switch",
+     "label": "Snare",
+     "bind": {
+      "param": "k15"
+     },
+     "default": 0,
+     "mitte_aus": true
+    },
+    {
+     "id": "clap",
+     "type": "switch",
+     "label": "Clap",
+     "bind": {
+      "param": "k16"
+     },
+     "default": 0,
+     "mitte_aus": true
+    },
+    {
+     "id": "hat",
+     "type": "switch",
+     "label": "Hi-hat",
+     "bind": {
+      "param": "k17"
+     },
+     "default": 0,
+     "mitte_aus": true
+    },
+    {
+     "id": "hold",
+     "type": "switch",
+     "label": "Hold",
+     "bind": {
+      "param": "k12"
+     },
+     "default": 0,
+     "mitte_aus": true
+    },
+    {
+     "id": "overdub",
+     "type": "switch",
+     "label": "Overdub",
+     "bind": {
+      "param": "k18"
+     },
+     "default": 0,
+     "mitte_aus": true
+    },
+    {
+     "id": "pitch",
+     "type": "knob",
+     "label": "Pitch",
+     "bind": {
+      "param": "k19"
+     },
+     "format": "raw",
+     "default": 0.5,
+     "unit": "st"
+    },
+    {
+     "id": "padlevel",
+     "type": "knob",
+     "label": "Level",
+     "bind": {
+      "param": "k20"
+     },
+     "format": "percent",
+     "default": 0.5
+    },
+    {
+     "id": "padsp",
+     "type": "spacer"
+    }
+   ]
+  },
+  {
+   "id": "rel",
+   "title": "RELEASE",
+   "cols": 2,
+   "controls": [
+    {
+     "id": "reltyp",
+     "type": "selector",
+     "label": "Effect",
+     "bind": {
+      "param": "k21"
+     },
+     "options": [
+      "BRAKE",
+      "ECHO",
+      "BACK SPIN"
+     ],
+     "default": 1,
+     "span": 2
+    },
+    {
+     "id": "hebel",
+     "type": "lever",
+     "label": "Lever",
+     "span": 2,
+     "zones": [
+      "long",
+      "mid",
+      "short"
+     ],
+     "bind": {
+      "param": "k22"
+     }
+    },
+    {
+     "id": "relhold",
+     "type": "switch",
+     "label": "FX hold",
+     "bind": {
+      "param": "k23"
+     },
+     "default": 0,
+     "mitte_aus": true,
+     "span": 2
+    }
+   ]
+  },
+  {
+   "id": "out",
+   "title": "SOURCE / OUT",
+   "cols": 1,
+   "controls": [
+    {
+     "id": "einfx",
+     "type": "switch",
+     "label": "Input > FX",
+     "bind": {
+      "param": "k24"
+     },
+     "default": 1
+    },
+    {
+     "id": "padfx",
+     "type": "switch",
+     "label": "Pad > FX",
+     "bind": {
+      "param": "k25"
+     },
+     "default": 1
+    },
+    {
+     "id": "vol",
+     "type": "knob",
+     "label": "Volume",
+     "bind": {
+      "param": "k27"
+     },
+     "format": "db",
+     "default": 0.5
+    }
+   ]
+  }
+ ]
+}

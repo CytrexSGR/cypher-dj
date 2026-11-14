@@ -132,6 +132,10 @@ def bk_pfade(p, z):
         mm = re.search(r'm = 1 to (\d+)', z[0])
         assert mn and mm and int(mm.group(1)) == BK_KNOEPFE, 'Vertrag §1.5: Zeile `fx/<n>/bk/<m>` ohne "n = A and B, m = 1 to 64"'
         return [f'fx/{n}/bk/{m}' for n in mn.group(1).split(' and ') for m in range(1, BK_KNOEPFE + 1)]
+    if p == 'master/bk/<m>':
+        mm = re.search(r'm = 1 to (\d+)', z[0])
+        assert mm and int(mm.group(1)) == BK_KNOEPFE, 'contract §1.5: row `master/bk/<m>` without "m = 1 to 64"'
+        return [f'master/bk/{m}' for m in range(1, BK_KNOEPFE + 1)]
     return None
 
 

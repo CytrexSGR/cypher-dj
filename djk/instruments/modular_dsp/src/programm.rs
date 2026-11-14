@@ -153,6 +153,8 @@ pub enum Schritt {
     /// Host-Audio (S3c): nur Stimme 0, wie die Summenpunkte; der Ausgang summiert über alle Stimmen
     /// Sum point: Cypher Labor (labor.rs, type 50) on the summed x + l and x + r, result in voice 0; the controls are read from voice 0
     Labor { x: Quelle, l: Quelle, r: Quelle, st: [Quelle; crate::labor::STEUER_ZAHL], wl: usize, wr: usize, b: Box<crate::labor::Block> },
+    /// Sum point: Cypher Remix (remix.rs, type 51) on the summed x + l and x + r, result in voice 0; the controls are read from voice 0, the beat is the graph's
+    Remix { x: Quelle, l: Quelle, r: Quelle, st: [Quelle; crate::remix::STEUER_ZAHL], wl: usize, wr: usize, b: Box<crate::remix::Block> },
     Eingang { wl: usize, wr: usize },
     /// links = x + l, rechts = x + r, je über alle Stimmen summiert
     Ausgang { x: Quelle, l: Quelle, r: Quelle },
@@ -273,6 +275,7 @@ impl Schritt {
             Schritt::Ms20 { f, .. } => **f = [crate::ms20::Ms20::default(); MAX_STIMMEN],
             Schritt::Falter { f, .. } => f.iter_mut().for_each(|v| v.zuruecksetzen()),
             Schritt::Labor { b, .. } => b.zuruecksetzen(),
+            Schritt::Remix { b, .. } => b.zuruecksetzen(),
             Schritt::Drift { d, saat, .. } => *d = std::array::from_fn(|i| crate::drift::Drift::neu(i, *saat)),
             Schritt::Roehre { r1, r2, .. } => {
                 *r1 = [Roehre::default(); MAX_STIMMEN];
@@ -1166,6 +1169,15 @@ impl Programm {
                         *w = lese_spur(*q, slots, vorher).bei(0);
                     }
                     let o = b.prozess(a, c, &werte);
+                    in_stimme0(slots, *wl, *wr, o);
+                }
+                Schritt::Remix { x, l, r, st, wl, wr, b } => {
+                    let (a, c) = summe_lr(&spur(*x, slots, vorher), &spur(*l, slots, vorher), &spur(*r, slots, vorher), n);
+                    let mut werte = [0.0f32; crate::remix::STEUER_ZAHL];
+                    for (w, q) in werte.iter_mut().zip(st.iter()) {
+                        *w = lese_spur(*q, slots, vorher).bei(0);
+                    }
+                    let o = b.prozess(a, c, &werte, beat, bps);
                     in_stimme0(slots, *wl, *wr, o);
                 }
                 Schritt::Eingang { wl, wr } => in_stimme0(slots, *wl, *wr, *ein),

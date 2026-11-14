@@ -237,6 +237,8 @@ for (const k of BK_KANAELE) for (let n = 1; n <= BK_REGLER_N; n++) REGLER.set(`$
 // S14 (§1.5): 64 graph knobs fx/<n>/bk/<m> per send return fx/3, fx/4; global (no channel), alle dürfen, 0..1, default 0.5
 export const BK_SEND_KANAELE = ['fx/3', 'fx/4'];
 for (const k of BK_SEND_KANAELE) for (let n = 1; n <= BK_REGLER_N; n++) REGLER.set(`${k}/bk/${n}`, { ...R(LIN, 0, 1, 0.5), kanal: null });
+// Master insert graph (effect graph on the DJ master sum): 64 global knobs master/bk/<m>, everybody may, 0..1, default 0.5
+for (let n = 1; n <= BK_REGLER_N; n++) REGLER.set(`master/bk/${n}`, { ...R(LIN, 0, 1, 0.5), kanal: null });
 // 1.15 A2 (§1.5, the 345 mix-tool rows): gate on the 13 live source channels (erz/8 has none: cue only), utility on those plus bus/1..4,
 // multiband and channel limiter on bus/1..4, one global spectrum row. All rows: everybody may. Ranges and defaults as the C++ table
 // (core/signalbox/include/cypherdj/signalbox/tool_controls.h); check_name_lists.py compares the path sets.

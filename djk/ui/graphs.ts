@@ -90,10 +90,11 @@ export function graphHash(name: string, ordner: string = graphenOrdner()): strin
 // Where a graph can go. Instruments: the channels of the instrument streams of the shared table (djk/contract/streams.ts):
 // erz/2, erz/3 (studio streams), erz/5..7 and pad/1, pad/2 (Baukasten streams 5, 6, 7, 9, 10, served by generator_bk.mjs).
 // Stream 1 runs in kit mode, its notes are kit indices. A graph on pad/N is summed with the loop of box N.
-// Effects: the decks and the send returns fx/3, fx/4.
+// Effects: the decks, the send returns fx/3, fx/4, the DJ master sum (`master`) and, as an insert on the channel, the three Strudel streams erz/1..3 and
+// the loop slots pad/1, pad/2. A channel holds one graph: on erz/2, erz/3, pad/1, pad/2 an instrument or an effect, not both (POST /graph says `belegt`).
 export const INSTRUMENT_KANAELE: string[] = INSTRUMENT_STROEME.map((s) => kanalVonStrom(s) as string);
-export const EFFEKT_KANAELE = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'fx/3', 'fx/4'];
-export const GRAPH_KANAELE = ['erz/1', ...INSTRUMENT_KANAELE, ...EFFEKT_KANAELE];
+export const EFFEKT_KANAELE = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'fx/3', 'fx/4', 'master', 'erz/1', 'erz/2', 'erz/3', 'pad/1', 'pad/2'];
+export const GRAPH_KANAELE = [...new Set(['erz/1', ...INSTRUMENT_KANAELE, ...EFFEKT_KANAELE])];
 
 // Kern restart (Kanban t_e998388c): the kern keeps no graph over a restart, the page server loads again what was loaded. `vorher` is the server's map
 // before it clears it, `besitzer` the source of the last load per channel (unknown counts as andreas: a graph that was sounding comes back), and
@@ -123,9 +124,10 @@ export const GERAET_ARTEN = ['bk', 'rb338', 'surge', 'plugin'];
 export const PANEL_FORMATE = ['baukasten-panel/1', 'cypherdj-panel/2'];
 const PANEL_V1 = 'baukasten-panel/1', PANEL_V2 = 'cypherdj-panel/2';
 const PANEL_ID = /^[a-z0-9_-]{1,24}$/;
-const TYPEN = ['knob', 'fader', 'switch', 'selector', 'xy', 'value', 'label', 'spacer', 'huelle', 'lfoform', 'filterkurve', 'spektrum'];
+const TYPEN = ['knob', 'fader', 'switch', 'selector', 'xy', 'value', 'label', 'spacer', 'huelle', 'lfoform', 'filterkurve', 'spektrum', 'lever', 'touchpad'];
 const ANZEIGEN = ['huelle', 'lfoform', 'filterkurve', 'spektrum'];   // displays: bind nothing, never sent to the engine
-const MIT_BIND = ['knob', 'fader', 'switch', 'selector'];
+const MIT_BIND = ['knob', 'fader', 'switch', 'selector', 'lever'];
+const MIT_ZONEN = ['lever', 'touchpad'];   // `zones`: 1..8 short texts beside the sections of the travel / the field
 
 export function panelOrdner(ordner: string = graphenOrdner()): string { return path.join(ordner, 'panels'); }
 
@@ -186,7 +188,7 @@ export function normalisierePanel(p: unknown): Record<string, unknown> {
   const steuer = (c: unknown): unknown => {
     if (!istObjekt(c) || !istObjekt(c.bind)) return c;
     const b = c.bind;
-    return { ...c, bind: c.type === 'xy' ? { ...b, x: bind(b.x), y: bind(b.y) } : bind(b) };
+    return { ...c, bind: c.type === 'xy' ? { ...b, x: bind(b.x), y: bind(b.y) } : c.type === 'touchpad' ? { ...b, x: bind(b.x), touch: bind(b.touch) } : bind(b) };
   };
   const sektion = (s: unknown): unknown => (istObjekt(s) && Array.isArray(s.controls) ? { ...s, controls: s.controls.map(steuer) } : s);
   return { format: PANEL_V2, geraet: { art: 'bk', graph }, ...rest, ...(Array.isArray(rest.sections) ? { sections: rest.sections.map(sektion) } : {}) };
@@ -261,8 +263,9 @@ export function pruefePanel(roh: unknown, graphName: string, regler: ReglerBerei
       const bind = istObjekt(c.bind) ? c.bind : null;
       if (MIT_BIND.includes(typ)) {
         if (!bind) f.push(`${wo}: bind is missing`); else binde(bind.param, wo);
-        if (c.default !== undefined && !(typeof c.default === 'number' && Number.isFinite(c.default))) f.push(`${wo}: default must be a number`);
-        if (typ !== 'selector' && typeof c.default === 'number' && !(c.default >= 0 && c.default <= 1)) f.push(`${wo}: default is normalised and must be within 0..1`);
+        if (typ === 'lever') { if (c.default !== undefined) f.push(`${wo}: a lever rests at 0.5 and takes no default`); }
+        else if (c.default !== undefined && !(typeof c.default === 'number' && Number.isFinite(c.default))) f.push(`${wo}: default must be a number`);
+        if (typ !== 'selector' && typ !== 'lever' && typeof c.default === 'number' && !(c.default >= 0 && c.default <= 1)) f.push(`${wo}: default is normalised and must be within 0..1`);
       }
       if (c.einheitlos !== undefined && c.einheitlos !== true) f.push(`${wo}: einheitlos must be true`);
       if (c.scale !== undefined) {
@@ -280,6 +283,7 @@ export function pruefePanel(roh: unknown, graphName: string, regler: ReglerBerei
         else if (c.default !== undefined && !(Number.isInteger(c.default) && (c.default as number) >= 0 && (c.default as number) < o.length)) f.push(`${wo}: default must be an option index 0..${o.length - 1}`);
       }
       if (typ === 'selector' && Array.isArray(c.options)) optionen.set(id, c.options.length);
+      if (c.mitte_aus !== undefined && (typ !== 'switch' || typeof c.mitte_aus !== 'boolean')) f.push(`${wo}: mitte_aus is only for switch and must be true or false`);
       if (c.glyphs !== undefined) {
         const n = typ === 'switch' ? 2 : Array.isArray(c.options) ? c.options.length : -1;
         if (typ !== 'selector' && typ !== 'switch') f.push(`${wo}: glyphs is only for selector and switch`);
@@ -295,6 +299,15 @@ export function pruefePanel(roh: unknown, graphName: string, regler: ReglerBerei
           const d = c.default[a];
           if (d !== undefined && !(typeof d === 'number' && d >= 0 && d <= 1)) f.push(`${wo}: default.${a} must be within 0..1`);
         }
+      }
+      if (typ === 'touchpad') {
+        const bx = istObjekt(bind?.x) ? bind.x : null, bt = istObjekt(bind?.touch) ? bind.touch : null;
+        if (!bx || !bt) f.push(`${wo}: bind needs x and touch`); else { binde(bx.param, `${wo} x`); binde(bt.param, `${wo} touch`); }
+        if (c.default !== undefined && !(istObjekt(c.default) && (c.default.x === undefined || (typeof c.default.x === 'number' && c.default.x >= 0 && c.default.x <= 1)))) f.push(`${wo}: default must be {x} within 0..1`);
+      }
+      if (c.zones !== undefined) {
+        if (!MIT_ZONEN.includes(typ)) f.push(`${wo}: zones is only for lever and touchpad`);
+        else if (!(Array.isArray(c.zones) && c.zones.length >= 1 && c.zones.length <= 8 && c.zones.every((x) => text(x, 8)))) f.push(`${wo}: zones must be 1..8 texts of 1..8 characters`);
       }
       if (typ === 'value') {
         if (typeof c.of !== 'string') f.push(`${wo}: of must name another control`); else werte.push({ id: wo, of: c.of });
@@ -352,7 +365,7 @@ export function pruefePanel(roh: unknown, graphName: string, regler: ReglerBerei
     const [basis, achse] = w.of.split('.');
     const t = eigene.get(basis ?? '');
     if (!t || t === 'value' || t === 'label' || t === 'spacer') f.push(`${w.id}: of "${w.of}" does not name a control with a value`);
-    else if (t === 'xy' ? !(achse === 'x' || achse === 'y') : achse !== undefined) f.push(`${w.id}: of "${w.of}" ${t === 'xy' ? 'needs .x or .y' : 'takes no axis'}`);
+    else if (t === 'xy' ? !(achse === 'x' || achse === 'y') : t === 'touchpad' ? !(achse === undefined || achse === 'x') : achse !== undefined) f.push(`${w.id}: of "${w.of}" ${t === 'xy' ? 'needs .x or .y' : t === 'touchpad' ? 'may only name .x' : 'takes no axis'}`);
   }
   return f;
 }

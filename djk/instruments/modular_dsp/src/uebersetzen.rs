@@ -90,7 +90,7 @@ pub struct ArtDef {
     pub frei: &'static [(&'static str, f32)],
 }
 
-pub const ARTEN: [ArtDef; 51] = [
+pub const ARTEN: [ArtDef; 52] = [
     ArtDef { art: "note", ein: &[], aus: &["hz", "gate", "vel", "trig", "erste"], werte: &[], frei: &[] },
     ArtDef { art: "konst", ein: &[], aus: &["aus"], werte: &["wert"], frei: &[] },
     // `vorgabe`: knob position the graph starts at (0..1). `mitte`: value at knob position 0.5; its default NaN is the "absent" marker
@@ -208,6 +208,9 @@ pub const ARTEN: [ArtDef; 51] = [
     // Cypher Labor (labor.rs), a dual-channel feedback processor as one stereo sum point; type 50 (appended after drift).
     // Inputs and defaults in the order of `labor::EIN` and `labor::FREI`; `ueber` 0 base rate, 1 twice the rate with latency, 2 twice the rate without.
     ArtDef { art: "labor", ein: &crate::labor::EIN, aus: &["l", "r"], werte: &[], frei: &crate::labor::FREI },
+    // Cypher Remix (remix.rs), a beat-synchronous remix station as one stereo sum point; type 51 (appended after labor).
+    // Inputs and defaults in the order of `remix::EIN` and `remix::FREI`. No latency.
+    ArtDef { art: "remix", ein: &crate::remix::EIN, aus: &["l", "r"], werte: &[], frei: &crate::remix::FREI },
 ];
 
 /// Arts whose node carries a `datei` (a file in the sample root, read at translation).
@@ -849,6 +852,7 @@ pub fn uebersetze_mit_wurzel(json: &str, sr: f32, wurzel: Option<&Path>) -> Resu
             "falter" => Schritt::Falter { x: q("x"), antrieb: q("antrieb"), symmetrie: q("symmetrie"), form: q("form"), aus: aus(k, "aus"), ueber: w("ueber") == 1.0, f: Box::new(std::array::from_fn(|_| crate::falter::Falter::default())) },
             "drift" => Schritt::Drift { rate: q("rate"), fest: q("fest"), aus: aus(k, "aus"), d: std::array::from_fn(|i| crate::drift::Drift::neu(i, w("saat") as u32)), saat: w("saat") as u32 },
             "labor" => Schritt::Labor { x: q("x"), l: q("l"), r: q("r"), st: std::array::from_fn(|i| q(crate::labor::EIN[3 + i])), wl: aus(k, "l"), wr: aus(k, "r"), b: Box::new(crate::labor::Block::neu(sr, w("ueber"))) },
+            "remix" => Schritt::Remix { x: q("x"), l: q("l"), r: q("r"), st: std::array::from_fn(|i| q(crate::remix::EIN[3 + i])), wl: aus(k, "l"), wr: aus(k, "r"), b: Box::new(crate::remix::Block::neu(sr)) },
             "eingang" => Schritt::Eingang { wl: aus(k, "l"), wr: aus(k, "r") },
             "ausgang" => Schritt::Ausgang { x: q("x"), l: q("l"), r: q("r") },
             andere => unreachable!("Art {andere} ist oben geprüft"),

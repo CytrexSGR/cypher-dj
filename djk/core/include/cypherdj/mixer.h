@@ -52,7 +52,8 @@ constexpr int MIX_QUELLEN = 14;                    // deck/1..4 (0..3), erz/1..8
 constexpr int MIX_BUSSE = 4;                       // bus/1..4 (14..17)
 constexpr int MIX_KANAELE = MIX_QUELLEN + MIX_BUSSE;
 constexpr int MIX_BK_SEND_ZEILE = MIX_KANAELE;       // S14: knob matrix row of fx/3 (fx/4 = +1), after the 18 mixer channels
-constexpr int MIX_BK_ZEILEN = MIX_KANAELE + 2;       // S14: rows of the knob matrix bk_wert_ (core.h): 18 channels + fx/3 + fx/4
+constexpr int MIX_BK_MASTER_ZEILE = MIX_KANAELE + 2;  // knob matrix row of the master insert graph (master/bk/1..64), after fx/3 and fx/4
+constexpr int MIX_BK_ZEILEN = MIX_KANAELE + 3;       // S14: rows of the knob matrix bk_wert_ (core.h): 18 channels + fx/3 + fx/4 + master
 constexpr int MIX_BLOCK = cypherdj::dsp::kMaxFrames;  // größter Block je verarbeite() (1024)
 constexpr int HALL_RUHE_MAX = 1 << 20;             // Sättigung des Stillezählers im Hall (mixer.cpp)
 constexpr float KLEBER_AUS_DB = 60.0f;                   // master/kleber = 0: Schwelle des Summen-Kompressors unerreichbar hoch
@@ -95,10 +96,15 @@ class Mixer {
   // Beat-FX-Insert. Nur im Callback (Stellwerk) setzen. g null entfernt. Jeder Wechsel blendet MIX_GRAPH_BLENDE Samples
   // linear vom alten Weg (alter Graph oder trocken) auf den neuen; ein Wechsel in der Blende gibt den ältesten sofort
   // frei. Ein k außerhalb geht sofort in die Freigabe. Abgelöste Graphen holt der Kern mit bk_frei ab (Netz-Faden gibt frei).
-  static constexpr int MIX_GRAPH_KANAELE = 4, MIX_GRAPH_BLENDE = 480, MIX_BK_FREI = 8;
+  // Insert graph slots: every source channel (deck/1..4, erz/1..8, pad/1..2) has one; the network admits only the channels of osc.json graph_kanal
+  // (an instrument graph on erz/pad runs in the stream, not here, and the page server keeps one graph per channel).
+  static constexpr int MIX_GRAPH_KANAELE = MIX_QUELLEN, MIX_GRAPH_BLENDE = 480, MIX_BK_FREI = 8;
   void setze_kanal_graph(int k, CypherBk* g) noexcept;
   // S6: effect graph on a send return. s = bus index (2 = fx/3, 3 = fx/4); any other s goes straight to the free list.
   void setze_send_graph(int s, CypherBk* g) noexcept;
+  // Master insert: an effect graph that REPLACES the master sum (like a deck insert, unlike the additive send return). Runs just
+  // before the master beat FX. Same blend and free logic as the other slots; null removes (no cost, sum untouched bit for bit).
+  void setze_master_graph(CypherBk* g) noexcept;
   int bk_frei(CypherBk** aus, int max) noexcept;
   // S5r: Werte der Graph-Regler <kanal>/bk/1..32 (Zeile = Mixer-Kanal), vom Kern geführt; nullptr: keine Meldung (K10).
   // S14: the matrix has MIX_BK_ZEILEN rows: 0..17 the mixer channels, MIX_BK_SEND_ZEILE + s the send returns (fx/3, fx/4).
@@ -496,6 +502,12 @@ class Mixer {
   float send_aus_l_[MIX_SENDS_GRAPH][MIX_BLOCK] = {}, send_aus_r_[MIX_SENDS_GRAPH][MIX_BLOCK] = {};
   float send_null_[MIX_BLOCK] = {};   // zero fallback: the dry path of a send return is silence
   void send_rueckweg(int s, int n) noexcept;
+  // Master insert slot (see setze_master_graph). master_bk_ein_* is the dry copy of the sum: input and dry fallback of the slot.
+  CypherBk* master_bk_ = nullptr;
+  CypherBk* master_bk_alt_ = nullptr;
+  int master_blende_ = 0;
+  float master_bk_ein_l_[MIX_BLOCK] = {}, master_bk_ein_r_[MIX_BLOCK] = {};
+  void master_graph(float* l, float* r, int n) noexcept;
   int routing_ = ROUTING_POST_FADER, routing_ziel_ = ROUTING_POST_FADER;   // Ohr T17
   bool routing_wechsel_ = false;                                            // Blende läuft (Einheiten pausiert)
 
