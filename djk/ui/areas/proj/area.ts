@@ -37,6 +37,8 @@ export interface ProjZugang {
   sperreLaden(fuer?: 'aufnahme'): () => void;   // 1.8: 'aufnahme' darf den eigenen Transport starten (Nachbesserung 1, B1)
   ausgabeLauf(l: AusgabeLauf | null): void;                                              // Spec 6.34 (Paket S3): laufender Freeze/Export für GET /proj/aktuell
   transport(d: Record<string, unknown>, quelle: 'andreas' | 'cypher'): Promise<Antwort>;                  // 1.8: der gewöhnliche Transport (Start/Stopp)
+  // SEQ deck: the session's own POST /proj/aendern ({rev, label, befehle}); gates, lock, undo and core load apply
+  aendern(d: Record<string, unknown>, quelle: 'andreas' | 'cypher'): Promise<Antwort>;
   stemsStand(s: Record<string, unknown> | null): void;   // Slice 6 (P6): letzter Stems-Stand
   beiSchliessen(f: (slug: string) => void): void;        // Slice 6 (T7): ruft f, sobald das offene Projekt geschlossen wird (Wechsel, Neuöffnen)
   beendeVorhoeren(): Promise<void>;   // 1.14: ends the audition and loads the main playback; called by a lock holder (recording, freeze) before it starts
@@ -127,7 +129,8 @@ export function projBereich(ctx: BereichKontext, opt: ProjOptionen = {}): Bereic
     offen: () => s.zugangOffen(), arbeitsordner: () => s.arbeitsordner, haken: () => s.zugangHaken(), uebernimm: (w, meta) => s.uebernimm(w, meta),
     schreibeWiedergabe: (p) => s.schreibeWiedergabeFuer(p), naechsteNummer: () => s.naechsteNummer(), tempoAnMaster: () => s.tempoAnMaster(),
     sperreLaden: (fuer) => s.sperreLaden(fuer), ausgabeLauf: (l) => s.setzeAusgabeLauf(l),
-    transport: (d, quelle) => s.transport(d, quelle), aufnahmeLauf: (l) => s.setzeAufnahmeLauf(l), aufnahmeAktiv: () => s.aufnahmeAktiv(),
+    transport: (d, quelle) => s.transport(d, quelle),
+    aendern: (d, quelle) => s.aendern(d, quelle), aufnahmeLauf: (l) => s.setzeAufnahmeLauf(l), aufnahmeAktiv: () => s.aufnahmeAktiv(),
     stemsStand: (x) => s.setzeStemsStand(x), beiSchliessen: (f) => s.beiSchliessen(f), beendeVorhoeren: () => s.beendeVorhoeren(),
     beiStand: (f) => s.beiStand(f),
     wirtSpiegel: () => s.wirtSpiegel(),

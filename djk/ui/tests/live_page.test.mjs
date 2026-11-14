@@ -1,6 +1,7 @@
 // Plan live-module task 4: the page side of the live modules. Pure parts of public/live_module.js: the export button state, the model and markup of
 // the live container panel (two slots: empty, separating, ready, failed), the fader commands, the open-with-confirmation flow and the export calls.
 // The wiring in app.js and index.html is checked by reading both files (the screenshots of the task cover the rest).
+import { liesApp, APP_DATEIEN } from './helpers/app_source.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -132,7 +133,7 @@ test('open the live container: a plain open, or the confirmation when the server
 });
 
 test('wiring: EXPORT button on decks 1 to 3 in the loop row, LIVE button and the panel in the DJ view, SSE and styles', () => {
-  const app = fs.readFileSync(path.join(HIER, '..', 'public', 'app.js'), 'utf8');
+  const app = liesApp();
   const html = fs.readFileSync(path.join(HIER, '..', 'public', 'index.html'), 'utf8');
   const css = fs.readFileSync(path.join(HIER, '..', 'public', 'style.css'), 'utf8');
   assert.match(app, importVon('live_module.js'));
@@ -221,7 +222,7 @@ test('DJ view places: the slot row has no MODULE slider and no CUE button, shows
 });
 
 test('the live module helpers of the cue are gone from the page code', () => {
-  for (const f of ['live_module.js', 'app.js']) {
+  for (const f of ['live_module.js', ...APP_DATEIEN]) {
     const t = fs.readFileSync(path.join(HIER, '..', 'public', f), 'utf8');
     assert.doesNotMatch(t, /cuePfad|cueAn|cueGriff|data-cue\b|closest\('\[data-cue\]'\)|data-modul-fader|modulFader/, f);
   }
@@ -244,7 +245,7 @@ test('KEY: shows the distance from /modul/stand, off when 0 or unknown, posts th
 });
 
 test('wiring: blend and key handlers in app.js (blend double click = 0); the L1/L2 strips write pad/N/fader; the channel state redraws on pad/N rows', () => {
-  const app = fs.readFileSync(path.join(HIER, '..', 'public', 'app.js'), 'utf8');
+  const app = liesApp();
   const kurven = fs.readFileSync(path.join(HIER, '..', 'public', 'curves.js'), 'utf8');
   assert.match(kurven, /LOOPBOXEN = \['pad\/1', 'pad\/2'\]/, 'the loop strips L1, L2 are the channels pad/1, pad/2');
   assert.match(app, /e\.dataset\.pfad = `\$\{k\}\/\$\{e\.dataset\.teil\}`/, 'every control of the L1/L2 strip (fader included) writes <channel>/<part>');

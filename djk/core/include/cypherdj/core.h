@@ -73,7 +73,7 @@ struct Befehl {
     FX = 27,           // AUFTRAG 2026-09-28 (§4.10): deck = einheit (1,2), nr = art, dauer_beats = beats, wert = wet,
                        // wert_beats = param1 (DSP-wirksam), raster_beats = param2, quell_beat = param3 (beide
                        // reserviert; FX nutzt sonst weder Sprung-/Loop-Raster noch Start-Quellbeat), an = Einheit ON
-    FX_ZUWEISUNG = 28,  // deck = einheit (1,2), pfad = kanal, an = zugewiesen (0/1)
+    FX_ZUWEISUNG = 28,  // deck = einheit (1, 2, 3; 3 = FX3, insert on fx/3), pfad = kanal, an = zugewiesen (0/1)
     DECK_RASTER = 29,   // Plan Grid (§4.4 /k/deck/raster): deck, material_id, bpm = basis_bpm, fassung, versatz_f
     LOOP_RASTER = 30,   // Plan Grid (§4.9 /k/loop/raster): deck = box, versatz_f
     HOERSCHEIN = 31, HOERSCHEIN_WEG = 32,  // Ohr T12 (§4.5 /k/hoerschein, /k/hoerschein/weg)
@@ -95,7 +95,8 @@ struct Befehl {
     ARR_ABGRIFF = 53,  // 1.10 slice 7 (§4.11 /k/arr/abgriff): zeiger = ArrAbgriff* (job with buffer, allocated in the load thread), nr = the strip number
     ARR_INS_HOST = 54, // plan 1.11 T5 (§4.11 /k/arr/ins_host): nr = host h (1..4), an = the server's health flag (0/1); applied at once, answered by event INS_HOST
     ARR_INS_MESS = 55, // plan 1.11 T5 (§4.11 /k/arr/ins_mess): nr = host h (1..4); starts the round-trip measurement, answered by event INS_MESS
-    ARR_EXPORT_LAUF = 56  // plan 1.11 T12 (§4.11 /k/arr/export_lauf): zeiger = ArrExportLauf* (job with its ring, owned by a writer thread of the net layer); von/bis in the job; no event comes back, the job reports through its own phase
+    LED = 57,          // slice 35 B3 (§4.7 /k/led): pfad = led name, an = state 0 to 3; stored for hand_led (not derived by the kern)
+    ARR_EXPORT_LAUF = 56,  // plan 1.11 T12 (§4.11 /k/arr/export_lauf): zeiger = ArrExportLauf* (job with its ring, owned by a writer thread of the net layer); von/bis in the job; no event comes back, the job reports through its own phase
   };
   int32_t art;
   int32_t an;          // KLICK: 0 oder 1; KI_STUFE: Stufe 0 bis 3
@@ -160,7 +161,7 @@ struct Ereignis {
     HOTCUE = 24,        // Plan E9, §5.9 /e/hotcue: deck, material_id, status = nr, quell_beat, sample
     FX = 25,            // AUFTRAG 2026-09-28, §5.12 /e/fx: deck = einheit (1,2), fx_art, fx_beats, fx_wet,
                         // fx_param = param1, beats_bis_ende = param2, faktor = param3 (reserviert), status = an
-    FX_ZUWEISUNG = 26,  // §5.12 /e/fx/zuweisung: deck = einheit (1,2), pfad = kanal, status = zugewiesen (0/1)
+    FX_ZUWEISUNG = 26,  // §5.12 /e/fx/zuweisung: deck = einheit (1, 2, 3), pfad = kanal, status = zugewiesen (0/1)
     RASTER = 27,        // Plan Grid, §5.9 /e/raster: deck, material_id, quell_beat, wert = Änderung in ms, sample
     FX_ROUTING = 28,    // Ohr T17, §5.12 /e/fx/routing: status = routing (0 Post Fader, 1 Insert)
     BOX = 29,           // Keylock 7b.3, §5.5b /zustand/box: deck = box, status, keylock_unterlauf, keylock_aufgegeben,
@@ -532,7 +533,17 @@ class Kern {
   const hand::Mapping* lern_mapping() const noexcept { return lern_mapping_; }
   uint64_t lern_ereignisse() const noexcept { return lern_ereignisse_; }      // midi_ein_1 events translated with effect
   uint64_t lern_ohne_wirkung() const noexcept { return lern_ohne_wirkung_; }  // midi_ein_1 events with a table but no effect
-  void hand_neu_verbunden() noexcept { neu_verbunden_.store(true, std::memory_order_release); }
+  void hand_neu_verbunden() noexcept {
+    neu_verbunden_.store(true, std::memory_order_release);
+    led_neu_.store(true, std::memory_order_release);
+  }
+  // Slice 35 B3: LED output (hand_led). Call once per cycle after zyklus(): writes the MIDI messages (3 bytes each) of the LEDs whose
+  // state changed since the last call into aus[0..max), at most min(max, LED_MAX_JE_ZYKLUS); returns their count. A (re)connection of
+  // hand_led (led_neu_verbunden()) or a mapping swap resends every LED once. Real-time safe: no allocation, no lock.
+  static constexpr int LED_MAX_JE_ZYKLUS = 16;
+  int hand_led_hole(uint8_t (*aus)[3], int max) noexcept;
+  void led_neu_verbunden() noexcept { led_neu_.store(true, std::memory_order_release); }  // hand_led got a new connection (any thread)
+
   uint64_t hand_ohne_wirkung() const noexcept { return hand_ohne_wirkung_; }  // Ereignisse ohne Wirkung im MVP
   uint64_t hand_ueberlauf() const noexcept { return hand_ueberlauf_; }        // über MAX_MIDI je Zyklus verworfen
   uint64_t hand_ereignisse() const noexcept { return hand_ereignisse_; }      // übersetzte Ereignisse mit Wirkung
@@ -809,6 +820,13 @@ class Kern {
   TeilSchatten schatten_;
   HandSchlange hand_;
   int ki_stufe_ = 0;
+  // Slice 35 B3: LED state. led_gesendet_[i] = last state sent for LED i of the mapping (-1: nothing sent yet)
+  std::atomic<bool> led_neu_{true};
+  int8_t led_gesendet_[hand::MAX_LEDS];
+  struct LedExtern { char name[hand::TEXT]; int8_t zustand; };
+  LedExtern led_ext_[hand::MAX_LEDS];
+  int n_led_ext_ = 0;
+  int led_zustand(const char* name) const noexcept;
   char ki_spur_[128] = {0};        // KI-Spur nach der letzten Quittung fertig, Kanal-Liste in Normalform (ki_spur_text)
   int64_t ki_spur_id_ = 0;
   bool ki_stopp_wieder_ = false;   // Neustart: KI-Stopp nachreichen
@@ -817,12 +835,12 @@ class Kern {
   int nachreichen_in_ = 0;         // Neustart: im zweiten Zyklus der Generation Teile ins Stellwerk nachreichen
   float pm_abgriff_l_[MAX_BLOCK] = {};   // 1.10 Slice 2: Kopie des PM-Ausgangs je Zyklus (Export-Abgriff)
   float pm_abgriff_r_[MAX_BLOCK] = {};
-  // DJ view places (decision 7): the two DJ pairs of the arrangement exit (index 0 = pad/1, 1 = pad/2), sized at construction; zeroed and handed to Arrangement::dj_ausgang() per sub-block when a group
-  // of the snapshot leads into the channel, then added into the channel input (erz_l_/erz_r_ of pad/<n>) after the loop boxes and the streams, before the strip
-  float dj_aus_l_[2][MAX_BLOCK] = {};
-  float dj_aus_r_[2][MAX_BLOCK] = {};
-  int pad_kanal_[2] = {-1, -1};   // mixer index of pad/1 and pad/2
-  bool dj_gereicht_[2] = {};      // the pair of channel c was zeroed and handed to Arrangement::dj_ausgang() in this sub-block (the add after the loop boxes uses the same answer)
+  // DJ view places (decision 7, ADR 038): the six DJ pairs of the arrangement exit (index 0 = pad/1, 1 = pad/2, 2..5 = deck/1..deck/4), sized at construction; zeroed and handed to Arrangement::dj_ausgang()
+  // per sub-block when a group of the snapshot leads into the channel, then added into the channel input (erz_l_/erz_r_ of that channel) after the loop boxes, the streams and the decks, before the strip
+  float dj_aus_l_[Arrangement::DJ_KANAELE][MAX_BLOCK] = {};
+  float dj_aus_r_[Arrangement::DJ_KANAELE][MAX_BLOCK] = {};
+  int dj_kanal_[Arrangement::DJ_KANAELE];   // mixer index of the DJ channel nr = c + 1: pad/1, pad/2, deck/1..deck/4; every entry is set in the constructor (core.cpp), -1 = none
+  bool dj_gereicht_[Arrangement::DJ_KANAELE] = {};      // the pair of channel c was zeroed and handed to Arrangement::dj_ausgang() in this sub-block (the add after the loop boxes uses the same answer)
   float links_[MAX_BLOCK];
   float rechts_[MAX_BLOCK];
   float cue_l_[MAX_BLOCK];

@@ -295,6 +295,17 @@ int main() {
       PRUEF(e.snap != nullptr && e.snap->gruppe_dj[0] == 1 && e.snap->gruppe_dj[1] == 0 && e.snap->gruppe_ausgang[1] == 1);
       if (e.snap) cdj::gib_wiedergabe(e.snap.release(), cache);
     }
+    {  // ADR 038: the DJ channels grow to 6 (3..6 = deck/1..deck/4): nr 3 and nr 6 load, the snapshot carries them; a group on every channel loads
+      cdj::ArrLadeErgebnis e = lade(live, spur, "{\"nr\":1," + dj(3) + "},{\"nr\":2," + dj(6) + "}");
+      PRUEF(e.snap != nullptr && e.snap->live && e.snap->gruppe_dj[0] == 3 && e.snap->gruppe_dj[1] == 6);
+      if (e.snap) cdj::gib_wiedergabe(e.snap.release(), cache);
+      e = lade(live, spur, "{\"nr\":1," + dj(1) + "},{\"nr\":2," + dj(2) + "},{\"nr\":3," + dj(3) + "},{\"nr\":4," + dj(4) + "},{\"nr\":5," + dj(5) + "},{\"nr\":6," + dj(6) + "}");
+      PRUEF(e.snap != nullptr);
+      if (e.snap) {
+        for (int g = 0; g < 6; ++g) PRUEF(e.snap->gruppe_dj[g] == g + 1);
+        cdj::gib_wiedergabe(e.snap.release(), cache);
+      }
+    }
     {  // the refusals, each with the reason `format` and a message that names the field
       struct F { const char* was; std::string live, spuren, gruppen; const char* wort; };
       const F faelle[] = {
@@ -302,7 +313,9 @@ int main() {
         {"live: false", ",\"live\":false", spur, "{\"nr\":1," + dj(1) + "}", "live"},
         {"live is not a bool", ",\"live\":1", spur, "{\"nr\":1," + master + "}", "live"},
         {"nr 0", live, spur, "{\"nr\":1," + dj(0) + "}", "nr"},
-        {"nr 3", live, spur, "{\"nr\":1," + dj(3) + "}", "nr"},
+        {"nr 7", live, spur, "{\"nr\":1," + dj(7) + "}", "nr"},
+        {"nr 3 without the live flag", "", spur, "{\"nr\":1," + dj(3) + "}", "live"},
+        {"two groups on nr 3", live, spur, "{\"nr\":1," + dj(3) + "},{\"nr\":2," + dj(3) + "}", "doppelt"},
         {"two groups on the same nr", live, spur, "{\"nr\":1," + dj(1) + "},{\"nr\":2," + dj(1) + "}", "doppelt"},
         {"a track with dj", live, "{\"nr\":1,\"art\":\"audio\",\"ausgang\":{\"art\":\"dj\",\"nr\":1},\"clips\":[" + clip + "]}", "{\"nr\":1," + master + "}", "ausgang"},
         {"dj without nr", live, spur, "{\"nr\":1,\"ausgang\":{\"art\":\"dj\"}}", "nr"},

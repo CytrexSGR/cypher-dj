@@ -1,5 +1,6 @@
 // DJ view places, task 16: the Loops place carries the live container. The page never opens it by itself and never closes it; EXPORT and the library
 // load buttons need a Loops place. Like page_decks.test.mjs this reads app.js, index.html and style.css and runs the pure parts.
+import { liesApp } from './helpers/app_source.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -9,7 +10,7 @@ import { exportKnopf, modulAnsicht, modulHtml } from '../public/live_module.js';
 
 const PUBLIC = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
 const lies = (n) => fs.readFileSync(path.join(PUBLIC, n), 'utf8');
-const app = lies('app.js'), html = lies('index.html'), css = lies('style.css'), modul = lies('live_module.js');
+const app = liesApp(), html = lies('index.html'), css = lies('style.css'), modul = lies('live_module.js');
 const funktion = (name) => { const a = app.indexOf(`function ${name}(`); assert.ok(a >= 0, name); return app.slice(a, app.indexOf('\n}\n', a) + 3); };
 
 test('without a Loops place EXPORT is off with the hint; with one it is as before', () => {
@@ -53,7 +54,8 @@ test('the LIVE button sits in the Loops place head; a closed container shows it 
 test('the page never opens the live container by itself and never closes it', () => {
   // the only caller of the opening is the click handler of the LIVE buttons; a page start (pruefeLive) only reads
   assert.equal((app.match(/oeffneLive\(/g) ?? []).length, 1, 'one call');
-  assert.equal((app.match(/liveOeffnen/g) ?? []).length, 2, 'the definition and the binding, nothing else');
+  const ohneImport = app.replace(/^import .*$/gm, '');   // since the module split a use is also imported once; the import lines are not uses
+  assert.equal((ohneImport.match(/liveOeffnen/g) ?? []).length, 2, 'the definition and the binding, nothing else');
   assert.match(app, /for \(const b of \$\$\('\[data-liveoeffnen\]'\)\) b\.addEventListener\('click', liveOeffnen\);/);
   const lesen = funktion('pruefeLive');
   assert.doesNotMatch(lesen, /oeffneLive|liveOeffnen|\/live\/oeffnen|confirm/);

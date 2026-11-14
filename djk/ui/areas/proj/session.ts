@@ -15,6 +15,7 @@ import { Katalog, type Zeile } from '../../catalog.ts';
 import { AblageFehler, Projekte, projektWurzelVorgabe, setzeVorgabenQuelle } from '../../project/storage.ts';
 import { kanalOffen } from '../../hand_operation.ts';
 import { liveSlots } from '../../project/live.ts';
+import { seqGruppe } from '../../project/seq.ts';
 import { teileReglerLive } from '../../project/controls_order.ts';
 import { alleAudioClips, fuehreListeAus, laneStart, setzeDekodiert, vergleiche, type PluginEintrag, type PresetInhalt } from '../../project/commands.ts';
 import { findeGraph, vorgabenVon } from '../../graphs.ts';
@@ -1363,6 +1364,21 @@ export class ProjSitzung {
             throw new ProjFehler(409, 'kanal_offen', { slot, kanal, text });
           }
         }
+        // SEQ deck: a new deck on a place whose channel deck/N is open is refused for every source; a deck removed while its channel is open only for
+        // Cypher (Andreas' hand is not restricted). Step edits are not gated. Undo, redo and the open of a project are not gated (as above).
+        // So a redo can put a deck back on an open channel. The channel is open by trim and fader; a ramp counts only for pad/1 and pad/2.
+        for (const platz of [1, 2, 3, 4]) {
+          const vorG = seqGruppe(o.projekt, platz), nachG = seqGruppe(probe.projekt, platz);
+          const kanal = `deck/${platz}`;
+          if (nachG && !vorG && this.kanalOffenGesehen(kanal)) {
+            const text = `the channel ${kanal} of place ${platz} is open; close it before a SEQ deck is created there`;
+            throw new ProjFehler(409, 'kanal_offen', { platz, kanal, text });
+          }
+          if (vorG && !nachG && quelle === 'cypher' && this.kanalOffenGesehen(kanal)) {
+            const text = `the channel ${kanal} of place ${platz} is open; Cypher does not remove a SEQ deck that is playing`;
+            throw new ProjFehler(409, 'kanal_offen', { platz, kanal, text });
+          }
+        }
       }
       // Spec 6.31 (Leistung): die Probe IST die Ausführung; aendere rechnet sie nicht noch einmal. Gültig, weil vollziehe nach dem Warten auf die
       // Quittungen prüft, dass o.projekt noch genau der Stand ist, gegen den sie gerechnet wurde (sonst 409 rev_veraltet).
@@ -1631,7 +1647,9 @@ export class ProjSitzung {
       }
       this.sperreFremderStart(quelle);
       this.sperreTransport();                                            // und unmittelbar vor /k/arr/start (die Sperre kann während der Rampe kommen)
-      const quant = this.lage.djLaeuft() ? 2 : 0;
+      // Always the next master bar, also when nothing else plays: the master clock runs on and an immediate start put the project bar one off the
+      // master bar one (SEQ deck 0.59 beats behind, 2026-11-14). The core has no way to re-anchor the clock, so the start waits for the one.
+      const quant = 2;
       const vorzaehl = d.vorzaehl_beats ?? 0;                            // 1.8 S4b.1a: only the recording area sets it (the HTTP route refuses the key)
       if (!VORZAEHL_BEATS.includes(vorzaehl as number)) throw new ProjFehler(400, 'argument_ungueltig', { text: 'vorzaehl_beats: 0, 4, 8 or 16 expected' });
       // Spec 6.37 (D1 S3 Auftrag 17 b, Re-Review Fix8 Probe K, am Stapel gemessen: mit quant 2 kam die Quittung erst 1,87 s nach dem Absenden, bis

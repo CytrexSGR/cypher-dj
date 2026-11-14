@@ -1,4 +1,5 @@
 // Page and reason texts name the public builder (djk/start/djk-bibliothek), not the private "mediathek katalog".
+import { liesApp } from './helpers/app_source.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
@@ -25,13 +26,13 @@ test('no text under oeffentlich/ and http/ names "mediathek katalog"', () => {
 });
 
 test('missing catalog: app.js names djk-bibliothek bauen', () => {
-  const app = lies('public/app.js');
+  const app = liesApp();
   assert.ok(app.includes(`'${FEHLT_GROSS}'`));
   assert.ok(app.includes(`'${WEG_GROSS}'`));
 });
 
 test('foreign or damaged catalog: the app.js reason line does not name the builder', () => {
-  const app = lies('public/app.js');
+  const app = liesApp();
   const zeile = app.split('\n').find((z) => z.includes("j.fehler === 'katalog_fehlt'"));
   assert.ok(zeile);
   const rest = app.slice(app.indexOf(zeile) + zeile.length).split('\n')[1];

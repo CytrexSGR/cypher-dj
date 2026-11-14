@@ -1,5 +1,6 @@
 // Host learn, page side: LEARN on the Surge panel and the host panels. The real panel renderer over a tiny fake DOM; the keys `<kanal>/host/<name>`
 // (adapter.lernPfad), the request a click makes and the markers from the host mappings (public/host_adapter.js hostLern*).
+import { liesApp } from './helpers/app_source.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -97,7 +98,7 @@ test('host adapters (RB-338, Cypher Modular knobs): lernPfad is the host name ke
 });
 
 test('app.js wiring: the three host panels get the channel and the host learn options; the production views offer no LEARN', () => {
-  const app = fs.readFileSync(path.join(import.meta.dirname, '..', 'public', 'app.js'), 'utf8');
+  const app = liesApp();
   assert.match(app, /surgeAdapter\(gruppe, \{ kanal: k,/);
   assert.equal([...app.matchAll(/hostAdapter\(\{ gruppe, kanal: k,/g)].length, 2);
   assert.match(app, /\.\.\.hostLernOpt\(k\) \}\);/);

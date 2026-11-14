@@ -54,7 +54,7 @@ export const ADRESSEN = {
   '/k/loop/raster': { typen: ',hsii', abschnitt: '4.9', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'box', 'versatz_frames'], bereiche: { box: [1, 2] } },
   '/k/loop/rec': { typen: ',hsis', abschnitt: '4.9', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'beats', 'name'], bereiche: {} },
   '/k/fx': { typen: ',hsiidddddi', abschnitt: '4.10', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'einheit', 'art', 'beats', 'wet', 'param1', 'param2', 'param3', 'an'], bereiche: { einheit: [1, 2], art: [1, 12], wet: [0, 1], param1: [0, 1], param2: [0, 1], param3: [0, 1], an: [0, 1] } },
-  '/k/fx/zuweisung': { typen: ',hsisi', abschnitt: '4.10', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'einheit', 'kanal', 'an'], bereiche: { einheit: [1, 2], an: [0, 1] } },
+  '/k/fx/zuweisung': { typen: ',hsisi', abschnitt: '4.10', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'einheit', 'kanal', 'an'], bereiche: { einheit: [1, 3], an: [0, 1] } },
   '/k/fx/routing': { typen: ',hsi', abschnitt: '4.10', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'routing'], bereiche: { routing: [0, 1] } },
   '/k/kanal/graph': { typen: ',hsss', abschnitt: '4.10', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'kanal', 'name'], bereiche: {} },
   '/k/graph/frage': { typen: ',hs', abschnitt: '4.10', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle'], bereiche: {} },
@@ -107,7 +107,7 @@ export const ADRESSEN = {
   '/nb': { typen: ',iiih', abschnitt: '5.10', richtung: 'von_notbahn', nurPruefmodus: false, felder: ['zustand', 'takte_in_schleife', 'generation_gesehen', 'w'], bereiche: {} },
   '/e/loop': { typen: ',iisiidf', abschnitt: '5.11', richtung: 'vom_kern', nurPruefmodus: false, felder: ['box', 'status', 'name', 'beats', 'fx_art', 'fx_beats', 'fx_wet'], bereiche: { box: [1, 2], status: [0, 5], fx_art: [0, 4] } },
   '/e/fx': { typen: ',iidddddi', abschnitt: '5.12', richtung: 'vom_kern', nurPruefmodus: false, felder: ['einheit', 'art', 'beats', 'wet', 'param1', 'param2', 'param3', 'an'], bereiche: { einheit: [1, 2], art: [0, 12], an: [0, 1] } },
-  '/e/fx/zuweisung': { typen: ',isi', abschnitt: '5.12', richtung: 'vom_kern', nurPruefmodus: false, felder: ['einheit', 'kanal', 'an'], bereiche: { einheit: [1, 2], an: [0, 1] } },
+  '/e/fx/zuweisung': { typen: ',isi', abschnitt: '5.12', richtung: 'vom_kern', nurPruefmodus: false, felder: ['einheit', 'kanal', 'an'], bereiche: { einheit: [1, 3], an: [0, 1] } },
   '/e/kanal_limiter': { typen: ',ii', abschnitt: '5.12', richtung: 'vom_kern', nurPruefmodus: false, felder: ['gebaut', 'latenz_samples'], bereiche: {} },
   '/e/fx/routing': { typen: ',i', abschnitt: '5.12', richtung: 'vom_kern', nurPruefmodus: false, felder: ['routing'], bereiche: { routing: [0, 1] } },
   '/e/graph': { typen: ',ss', abschnitt: '5.12', richtung: 'vom_kern', nurPruefmodus: false, felder: ['kanal', 'name'], bereiche: {} },
@@ -264,7 +264,9 @@ export const POLITIK_TEIL = { musik: 0, zustand: 1 } as const;
 export const FORM = { linear: 0, s_kurve: 1 } as const;
 export const RASTER_BEATS = [0.25, 1, 4, 16, 32] as const;
 export const FX_BEATS = [0.25, 0.5, 1, 2, 4, 8, 16] as const;
-export const FX_KANAL = ['deck/1', 'deck/2', 'erz/1', 'erz/2', 'erz/3', 'pad/1', 'pad/2', 'master'] as const;
+export const FX_KANAL = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'erz/1', 'erz/2', 'erz/3', 'erz/4', 'erz/5', 'erz/6', 'erz/7', 'erz/8', 'pad/1', 'pad/2', 'master'] as const;
+export const FX_KANAL_12 = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'erz/1', 'erz/2', 'erz/3', 'pad/1', 'pad/2', 'master'] as const;
+export const FX_KANAL_3 = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'erz/1', 'erz/2', 'erz/3', 'erz/4', 'erz/5', 'erz/6', 'erz/7', 'erz/8', 'pad/1', 'pad/2'] as const;
 export const GRAPH_KANAL = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'fx/3', 'fx/4', 'master', 'erz/1', 'erz/2', 'erz/3', 'pad/1', 'pad/2'] as const;
 export const GRAPH_PLATZ = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'fx/3', 'fx/4', 'master', 'erz/1', 'erz/2', 'erz/3', 'erz/5', 'erz/6', 'erz/7', 'pad/1', 'pad/2'] as const;
 export const ROLL_ART = { band_schatten: 0, puffer_keylock: 1 } as const;

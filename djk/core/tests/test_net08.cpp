@@ -85,10 +85,18 @@ int main() {
   { cdj::osc::Schreiber s(v::uhr); s.h(0).h(0).d(0).d(0).d(0); g.sende(s); }
   PRUEF(g.warte("/e/protokollfehler", 500));
   PRUEF(!std::strcmp(g.s(0), "/uhr") && !std::strcmp(g.s(1), "unbekannte_adresse"));
-  // noch nicht gebaut (seit Scheibe 25 ist /k/ki/stopp gebaut; /k/led kommt mit Scheibe 35)
+  // /k/led (slice 35 B3) is built: a valid LED is queued; the kern's own names and bad states are refused with receipt 6
   { cdj::osc::Schreiber s(v::k_led); s.h(29).s("leitstand").s("vorschlag").i(1); g.sende(s); }
-  PRUEF(g.warte("/e/protokollfehler", 500));
-  PRUEF(!std::strcmp(g.s(0), "/k/led") && !std::strcmp(g.s(1), "unbekannte_adresse"));
+  { cdj::osc::Schreiber s(v::k_led); s.h(31).s("leitstand").s("deck1_loop").i(1); g.sende(s); }
+  PRUEF(g.warte("/q", 500));
+  PRUEF(g.h(0) == 31 && g.i(2) == 6 && !std::strcmp(g.s(5), "ausserhalb_bereich"));
+  { cdj::osc::Schreiber s(v::k_led); s.h(32).s("leitstand").s("vorschlag").i(4); g.sende(s); }
+  PRUEF(g.warte("/q", 500));
+  PRUEF(g.h(0) == 32 && g.i(2) == 6 && !std::strcmp(g.s(5), "ausserhalb_bereich"));
+  { cdj::osc::Schreiber s(v::k_led); s.h(33).s("leitstand").s("kein_name").i(1); g.sende(s); }
+  PRUEF(g.warte("/q", 500));
+  PRUEF(g.h(0) == 33 && g.i(2) == 6);
+  PRUEF(bef->hole(b) && b.art == cdj::Befehl::LED && b.id == 29 && !std::strcmp(b.pfad, "vorschlag") && b.an == 1);
   PRUEF(!bef->hole(b));
   // 5) Ereignisse aus dem Callback: Quittung mit Grund, /e/luecke, /e/quantum
   cdj::Ereignis e{};

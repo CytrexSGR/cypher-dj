@@ -48,7 +48,9 @@
     "form": {"abschnitt": "4.3", "codes": {"0": "linear", "1": "s_kurve"}},
     "raster_beats": {"abschnitt": "4.4", "zahlen": [0.25, 1, 4, 16, 32]},
     "fx_beats": {"abschnitt": "4.10", "zahlen": [0.25, 0.5, 1, 2, 4, 8, 16]},
-    "fx_kanal": {"abschnitt": "4.10", "liste": ["deck/1", "deck/2", "erz/1", "erz/2", "erz/3", "pad/1", "pad/2", "master"]},
+    "fx_kanal": {"abschnitt": "4.10", "liste": ["deck/1", "deck/2", "deck/3", "deck/4", "erz/1", "erz/2", "erz/3", "erz/4", "erz/5", "erz/6", "erz/7", "erz/8", "pad/1", "pad/2", "master"], "notiz": "union of fx_kanal_12 and fx_kanal_3; which channel a unit takes is in the two lists below"},
+    "fx_kanal_12": {"abschnitt": "4.10", "liste": ["deck/1", "deck/2", "deck/3", "deck/4", "erz/1", "erz/2", "erz/3", "pad/1", "pad/2", "master"], "notiz": "channels of Beat FX units 1 and 2"},
+    "fx_kanal_3": {"abschnitt": "4.10", "liste": ["deck/1", "deck/2", "deck/3", "deck/4", "erz/1", "erz/2", "erz/3", "erz/4", "erz/5", "erz/6", "erz/7", "erz/8", "pad/1", "pad/2"], "notiz": "channels of unit 3 (insert on fx/3): every source channel, never master"},
     "graph_kanal": {"abschnitt": "4.10", "liste": ["deck/1", "deck/2", "deck/3", "deck/4", "fx/3", "fx/4", "master", "erz/1", "erz/2", "erz/3", "pad/1", "pad/2"]},
     "graph_platz": {"abschnitt": "5.12", "liste": ["deck/1", "deck/2", "deck/3", "deck/4", "fx/3", "fx/4", "master", "erz/1", "erz/2", "erz/3", "erz/5", "erz/6", "erz/7", "pad/1", "pad/2"]},
     "roll_art": {"abschnitt": "4.4", "codes": {"0": "band_schatten", "1": "puffer_keylock"}},
@@ -369,7 +371,7 @@
     {"adresse": "/k/fx/zuweisung", "typen": ",hsisi", "abschnitt": "4.10", "richtung": "an_kern", "felder": [
       {"name": "id", "typ": "h", "einheit": "kennung"},
       {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle"},
-      {"name": "einheit", "typ": "i", "einheit": "nummer", "bereich": [1, 2]},
+      {"name": "einheit", "typ": "i", "einheit": "nummer", "bereich": [1, 3]},
       {"name": "kanal", "typ": "s", "einheit": "pfad", "werte": "fx_kanal"},
       {"name": "an", "typ": "i", "einheit": "code", "bereich": [0, 1]}]},
     {"adresse": "/k/fx/routing", "typen": ",hsi", "abschnitt": "4.10", "richtung": "an_kern", "felder": [
@@ -680,7 +682,7 @@
       {"name": "param3", "typ": "d", "einheit": "anteil"},
       {"name": "an", "typ": "i", "einheit": "code", "bereich": [0, 1]}]},
     {"adresse": "/e/fx/zuweisung", "typen": ",isi", "abschnitt": "5.12", "richtung": "vom_kern", "felder": [
-      {"name": "einheit", "typ": "i", "einheit": "nummer", "bereich": [1, 2]},
+      {"name": "einheit", "typ": "i", "einheit": "nummer", "bereich": [1, 3]},
       {"name": "kanal", "typ": "s", "einheit": "pfad", "werte": "fx_kanal"},
       {"name": "an", "typ": "i", "einheit": "code", "bereich": [0, 1]}]},
     {"adresse": "/e/kanal_limiter", "typen": ",ii", "abschnitt": "5.12", "richtung": "vom_kern", "felder": [

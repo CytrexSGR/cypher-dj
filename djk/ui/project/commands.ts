@@ -29,6 +29,7 @@ import {
   wirtSlots, AUFNAHME_VORGABE, EXTERN_MODI, VORZAEHLER_WERTE, type EingangExtern, type EingangIntern, type EingangMidi, type ProjektAufnahme, type SpurAufnahme,
 } from './model.ts';
 import { INSERT_ARTEN } from './insert_key.ts';
+import { SEQ_BEATS, seqGruppe, seqSichtPruefung, type SeqSicht } from './seq.ts';
 import { wendeMusterAn, musterAbdruck, type KitKlang, type MusterErgebnis, type MusterFehlschlag } from './pattern_clip.ts';
 import { nachkommen, pruefeAlleSchluessel, pruefeSchluessel, vorfahren, type SchluesselFrage } from './routing_rules.ts';
 import { PRESET_ID } from '../presets/preset_id.ts';
@@ -681,6 +682,16 @@ export interface MusterMeldung {
 export interface PluginEintrag { format: 'vst3' | 'lv2'; pfad: string; uid: string; name: string; art: string; status: string; grund?: string }
 // preset ids of the RB-338 as the register prints them: <herkunft>:rb338/<slug> (presets/model.ts SLUG)
 const RB_PRESET_ID = /^(?:werk|nutzer):rb338\/[a-z0-9][a-z0-9-]{0,47}$/;
+// The view descriptor of a pattern clip (field `seq` of clip_neu and clip_aendern): checked, copied.
+function seqSichtArg(x: unknown): SeqSicht {
+  const f = seqSichtPruefung(x);
+  if (f) ab(f.grund, f.text);
+  return structuredClone(x) as SeqSicht;
+}
+// --- SEQ deck v2 (spec 2026-11-14-seq-deck-design, sections 4 and 5) ------------------------------------------------------
+// A pattern clip: loop_beats is the pattern length, the clip covers the whole live region
+const SEQ_LOOP_VORGABE = 4;
+
 const PRO_BEFEHL: Record<string, (p: Projekt, a: Args, ctx: Kontext) => void> = {
   spur_neu(p, a, ctx) {
     erlaube(a, 'art', 'name', 'geraet', 'gruppe');
@@ -891,7 +902,7 @@ const PRO_BEFEHL: Record<string, (p: Projekt, a: Args, ctx: Kontext) => void> = 
   },
 
   clip_neu(p, a) {
-    erlaube(a, 'spur_id', 'art', 'start_beat', 'laenge_beats', 'loop_beats', 'sha256', 'name', 'pfad_hinweis', 'noten', 'warp');
+    erlaube(a, 'spur_id', 'art', 'start_beat', 'laenge_beats', 'loop_beats', 'sha256', 'name', 'pfad_hinweis', 'noten', 'warp', 'seq');
     const s = spurVon(p, idArg(a, 'spur_id'));
     if (a.art !== 'audio' && a.art !== 'midi') ab('argument_ungueltig', 'art: audio oder midi erwartet');
     if (a.art !== (s.art === 'audio' ? 'audio' : 'midi')) ab('art_passt_nicht', `${a.art}-Clip auf ${s.art}-Spur`);
@@ -902,6 +913,7 @@ const PRO_BEFEHL: Record<string, (p: Projekt, a: Args, ctx: Kontext) => void> = 
     const id = neueId(p, 'clip');
     if (a.art === 'audio') {
       if (a.noten !== undefined) ab('argument_ungueltig', 'noten: nur für MIDI-Clips');
+      if (a.seq !== undefined) ab('argument_ungueltig', 'seq: only for MIDI clips');
       const warp = warpArg(a.warp);
       if (typeof a.sha256 !== 'string' || !SHA.test(a.sha256)) ab('sha_ungueltig', 'sha256: 64 Hex-Zeichen (klein) aus dem Katalog erwartet');
       const hinweis = a.pfad_hinweis === undefined ? ''
@@ -913,8 +925,9 @@ const PRO_BEFEHL: Record<string, (p: Projekt, a: Args, ctx: Kontext) => void> = 
     } else {
       if (a.warp !== undefined) ab('feld_nur_audio', 'warp');
       if (a.sha256 !== undefined || a.pfad_hinweis !== undefined) ab('argument_ungueltig', 'sha256/pfad_hinweis: nur für Audio-Clips');
+      const sicht = a.seq === undefined ? null : seqSichtArg(a.seq);
       const clip: MidiClip = { id, art: 'midi', name: text(a, 'name', 80) ?? 'MIDI', start_beat: start, laenge_beats: laenge,
-        ...(loop === null ? {} : { loop_beats: loop }), noten: [] };
+        ...(loop === null ? {} : { loop_beats: loop }), noten: [], ...(sicht === null ? {} : { seq: sicht }) };
       if (a.noten !== undefined) fuegeNotenEin(p, clip, listeArg(a, 'noten'));
       s.clips.push(clip);
     }
@@ -983,10 +996,12 @@ const PRO_BEFEHL: Record<string, (p: Projekt, a: Args, ctx: Kontext) => void> = 
 
   clip_aendern(p, a) {
     erlaube(a, 'clip_id', 'start_beat', 'laenge_beats', 'loop_beats', 'offset_s', 'gain_db', 'fade_ein_beats', 'fade_aus_beats', 'spur_id', 'name',
-      'versatz_beats', 'stumm', 'entstehung');
+      'versatz_beats', 'stumm', 'entstehung', 'seq');
     const { spur, clip } = clipVon(p, idArg(a, 'clip_id'));
     const felder = ['start_beat', 'laenge_beats', 'loop_beats', 'offset_s', 'gain_db', 'fade_ein_beats', 'fade_aus_beats', 'spur_id', 'name',
-      'versatz_beats', 'stumm', 'entstehung'];
+      'versatz_beats', 'stumm', 'entstehung', 'seq'];
+    if (a.seq !== undefined && clip.art !== 'midi') ab('argument_ungueltig', 'seq: only for MIDI clips');
+    const sicht = a.seq === undefined || a.seq === null ? null : seqSichtArg(a.seq);   // checked before anything changes
     if (felder.every((k) => a[k] === undefined)) ab('argument_ungueltig', 'keine Änderung angegeben');
     for (const k of ['offset_s', 'gain_db', 'fade_ein_beats', 'fade_aus_beats', 'versatz_beats', 'stumm', 'entstehung']) {
       if (a[k] !== undefined && clip.art !== 'audio') ab('feld_nur_audio', k);
@@ -1016,6 +1031,7 @@ const PRO_BEFEHL: Record<string, (p: Projekt, a: Args, ctx: Kontext) => void> = 
     // 1.12 slice 5: an envelope loop longer than the clip is clamped like the clip loop; its points stay (silent beyond the clip)
     for (const h of clip.huellkurven ?? []) if (h.loop_beats !== undefined && h.loop_beats > clip.laenge_beats) h.loop_beats = clip.laenge_beats;
     if (name !== undefined) clip.name = name;
+    if (clip.art === 'midi' && a.seq !== undefined) { if (sicht === null) delete clip.seq; else clip.seq = sicht; }   // null removes the descriptor
     if (clip.art === 'audio') {
       // Paket 1.13: bei Warp an liest der Clip nicht über offset_s, sondern über versatz_beats (Beats, tempounabhängig)
       if (offset !== undefined && clip.warp?.an) ab('offset_bei_warp', 'der Clip ist gewarpt: den Inhalt verschiebt versatz_beats');
@@ -1325,6 +1341,61 @@ const PRO_BEFEHL: Record<string, (p: Projekt, a: Args, ctx: Kontext) => void> = 
     const belegt = (p.gruppen ?? []).some((x) => x.id !== g.id && x.ausgang === undefined && x.modul?.slot === slot);
     if (slot !== undefined && belegt) ab('slot_belegt', `live slot ${slot} is taken`);
     g.modul = structuredClone(a.modul) as NonNullable<Gruppe['modul']>;
+  },
+
+  // SEQ deck: the empty top group `SEQ <platz>` at 0 dB with the marker {schema: 2, platz} in the live container. The patterns come with
+  // seq_folge_neu. The group limit is the model's own: it refuses the step.
+  seq_anlegen(p, a, ctx) {
+    erlaube(a, 'platz');
+    if (!p.live) ab('kein_liveprojekt', 'a SEQ deck sits in the live container');
+    const platz = a.platz;
+    if (platz !== 1 && platz !== 2 && platz !== 3 && platz !== 4) ab('argument_ungueltig', 'platz: integer 1..4 expected');
+    if (seqGruppe(p, platz as number)) ab('seq_belegt', `place ${platz} already holds a SEQ deck`);
+    PRO_BEFEHL.gruppenspur_neu(p, { befehl: 'gruppenspur_neu', name: `SEQ ${platz}` }, ctx);
+    p.gruppen![p.gruppen!.length - 1].seq = { schema: 2, platz: platz as 1 | 2 | 3 | 4 };
+  },
+
+  // SEQ deck: one pattern = an instrument track that plays into the deck group, with its one MIDI clip (name = track name, beat 0, 64 beats,
+  // loop_beats = pattern length, 4 unless given). One command, because a list cannot name the ids of what it creates. `geraet` is what spur_neu
+  // takes; `stumm: true` mutes the track (a pattern Cypher creates starts muted). The track limits are the model's own. The name is unique in the
+  // deck, ignoring case. A pattern written as text arrives complete in this one command: `noten` (as clip_neu takes them, no ids), `seq` (the view
+  // descriptor) and `huellkurven` (a list of {ziel, punkte, verknuepft?, loop_beats?} as huellkurve_setzen takes them); the command is refused as a
+  // whole, so a text never leaves half a pattern.
+  seq_folge_neu(p, a, ctx) {
+    erlaube(a, 'gruppe_id', 'name', 'geraet', 'loop_beats', 'stumm', 'noten', 'seq', 'huellkurven');
+    const g = gruppeVon(p, idArg(a, 'gruppe_id'));
+    if (!g.seq) ab('seq_fehlt', `${g.id} holds no SEQ deck`);
+    const name = text(a, 'name', 80, false)!;
+    if (p.spuren.some((s) => s.ausgang?.id === g.id && s.name.toLowerCase() === name.toLowerCase())) {
+      ab('argument_ungueltig', `name: the deck already has a pattern called ${name} (names are unique, ignoring case)`);
+    }
+    if (a.geraet === undefined) ab('argument_ungueltig', 'geraet: the instrument of the pattern expected');
+    const loop = a.loop_beats === undefined ? SEQ_LOOP_VORGABE : zahl(a, 'loop_beats', 0.125, SEQ_BEATS)!;
+    if (Math.abs(loop * 8 - Math.round(loop * 8)) > 1e-9) ab('argument_ungueltig', 'loop_beats: a multiple of 0.125 beat expected');
+    const stumm = flagge(a, 'stumm', true) ?? false;
+    const huell = a.huellkurven === undefined ? [] : listeArg(a, 'huellkurven');
+    PRO_BEFEHL.spur_neu(p, { befehl: 'spur_neu', art: 'instrument', name, geraet: a.geraet }, ctx);
+    const spur = p.spuren[p.spuren.length - 1];
+    spur.fader_db = -6;   // a start level with headroom: two new patterns at 0 dB would reach 0 dBFS in the sum
+    PRO_BEFEHL.ziel_setzen(p, { befehl: 'ziel_setzen', strang_id: spur.id, ausgang: { art: 'gruppe', id: g.id } }, ctx);
+    PRO_BEFEHL.clip_neu(p, { befehl: 'clip_neu', spur_id: spur.id, art: 'midi', start_beat: 0, laenge_beats: SEQ_BEATS, loop_beats: loop, name,
+      ...(a.noten !== undefined ? { noten: a.noten } : {}), ...(a.seq !== undefined ? { seq: a.seq } : {}) }, ctx);
+    const clip = spur.clips[0];
+    for (const h of huell) {
+      if (!istObjekt(h)) ab('argument_ungueltig', 'huellkurven: a list of objects expected');
+      PRO_BEFEHL.huellkurve_setzen(p, { ...h, befehl: 'huellkurve_setzen', clip_id: clip.id }, ctx);
+    }
+    if (stumm) spur.mute = true;
+  },
+
+  // SEQ deck: removes the group and every track that plays into it, with their clips, in one step. A sub-group that plays into the group
+  // is not part of the deck: it moves to the group's own target (the master), as gruppenspur_loeschen does.
+  seq_leeren(p, a, ctx) {
+    erlaube(a, 'gruppe_id');
+    const g = gruppeVon(p, idArg(a, 'gruppe_id'));
+    if (!g.seq) ab('seq_fehlt', `${g.id} holds no SEQ deck`);
+    for (const s of p.spuren.filter((x) => x.ausgang?.id === g.id)) PRO_BEFEHL.spur_loeschen(p, { befehl: 'spur_loeschen', spur_id: s.id }, ctx);
+    PRO_BEFEHL.gruppenspur_loeschen(p, { befehl: 'gruppenspur_loeschen', gruppe_id: g.id }, ctx);
   },
 
   gruppenspur_loeschen(p, a) {   // tracks and child groups move to the deleted group's own target (its parent or master, same step), never orphaned targets

@@ -1,5 +1,6 @@
 // DJ view places, task 14: the page grid cells and the place switch. The page is not run here (the browser check covers it); like page_decks.test.mjs
 // this reads app.js, index.html and style.css. The node handling itself is pure and tested in slots.test.mjs (wendeAn).
+import { liesApp } from './helpers/app_source.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -8,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 const PUBLIC = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
 const lies = (n) => fs.readFileSync(path.join(PUBLIC, n), 'utf8');
-const app = lies('app.js'), html = lies('index.html'), css = lies('style.css');
+const app = liesApp(), html = lies('index.html'), css = lies('style.css');
 const funktion = (name) => { const a = app.indexOf(`function ${name}(`); assert.ok(a >= 0, name); return app.slice(a, app.indexOf('\n}\n', a) + 3); };
 
 test('the page has four place heads with a type switch each, and a Loops node that holds the live panel', () => {
@@ -16,7 +17,9 @@ test('the page has four place heads with a type switch each, and a Loops node th
   assert.equal((html.match(/data-platz-typ="track"/g) ?? []).length, 4);
   assert.equal((html.match(/data-platz-typ="strudel"/g) ?? []).length, 4);
   assert.equal((html.match(/data-platz-typ="loops"/g) ?? []).length, 4);
-  assert.equal((html.match(/data-platz-typ="remix"/g) ?? []).length, 4);
+  assert.equal((html.match(/data-platz-typ="seq"/g) ?? []).length, 4, 'SEQ is the fourth type of every place (task 7)');
+  assert.equal((html.match(/data-platz-typ="remix"/g) ?? []).length, 0, 'Remix is an effect with its own window, not a place type');
+  assert.match(html, /data-remix-oeffnen/);
   assert.match(html, /<section id="platz-remix"[^>]*>[\s\S]*?class="remix-ziele"[\s\S]*?class="remix-feld"/);
   assert.match(html, /<section id="platz-loops"[\s\S]*?<section id="live-panel"/);
 });
@@ -46,7 +49,7 @@ test('a Track place N plays deck N: the node of place N is the section of deck N
 
 test('a switch asks the silence rule first and a refusal keeps the layout, says why and saves nothing', () => {
   const f = funktion('bindePlaetze');
-  assert.match(f, /wechsel\(plaetzeLayout, platz, b\.dataset\.platzTyp, still\(plaetzeLayout, platz, zustand\.regler\)\)/);
+  assert.match(f, /wechsel\(plaetzeLayout, platz, b\.dataset\.platzTyp, still\(plaetzeLayout, platz, zustand\.regler\), seqAnsicht\(live\.projekt, platz\)\.vorhanden\)/);   // the fifth argument: the place holds a SEQ deck (task 7)
   assert.match(f, /if \(!r\.ok\) \{ melde\(.*zeigePlaetze\(\); return; \}/);
   assert.ok(f.indexOf('if (!r.ok)') < f.indexOf('speichereLayout('), 'saved only after the accepted switch');
   const z = funktion('zeigePlaetze');
@@ -66,11 +69,11 @@ test('the places follow the state: the heads refresh on every row, deck and live
   for (const name of ['zeigeWert', 'zeigeDeck', 'zeichneLive']) assert.match(funktion(name), /zeigePlaetzeSpaeter\(\);/, name);
 });
 
-test('the REMIX place: node, lock of the type switch and the panel through the shared adapter path', () => {
+test('the Remix plate: node, lock of the type switch and the panel through the knob rows of fx/3 (FX3)', () => {
   assert.match(app, /remix: '#platz-remix'/);
   assert.match(funktion('bindePlaetze'), /typSperre\(graphenGeladen\)\.gesperrt\) \{ melde/, 'the click handler refuses too');
   assert.match(funktion('remixPanelBauen'), /baueFrontplatte\(feld, \{ panel: info\.panel, regler: info\.regler, adapter: remixAdapter, breit: true \}\)/);
-  assert.match(app, /remixAdapterVon\.set\(k, kanalAdapter\(k\)\)/);
+  assert.match(app, /const fx3Adapter = kanalAdapter\(FX3_PLATZ\)/);
   assert.match(css, /#platz-remix \.remix-feld \{[^}]*overflow: hidden/);   // nothing scrolls: the plate is scaled into the place
   assert.match(funktion('remixEinpassen'), /platte\.style\.zoom = String\(Math\.max\(0\.3, z\)\)/);
   assert.match(css, /body\.studio #platz-remix \{ display: none; \}/);

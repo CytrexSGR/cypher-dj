@@ -1,0 +1,10 @@
+{"version":1,"geraet":"lernen","quelle_port":"midi_ein_1","eintraege":[
+ {"nachricht": {"typ": "cc", "kanal": 1, "nr": 1}, "ziel": "fx/3/bk/1", "art": "absolut"},
+ {"nachricht": {"typ": "cc", "kanal": 1, "nr": 2}, "ziel": "fx/3/bk/4", "art": "absolut"},
+ {"nachricht": {"typ": "cc", "kanal": 1, "nr": 3}, "ziel": "fx/3/bk/5", "art": "absolut"},
+ {"nachricht": {"typ": "cc", "kanal": 1, "nr": 4}, "ziel": "fx/3/bk/26", "art": "absolut"},
+ {"nachricht": {"typ": "cc", "kanal": 1, "nr": 5}, "ziel": "fx/3/bk/7", "art": "absolut"},
+ {"nachricht": {"typ": "cc", "kanal": 1, "nr": 6}, "ziel": "fx/3/bk/8", "art": "absolut"},
+ {"nachricht": {"typ": "cc", "kanal": 1, "nr": 7}, "ziel": "fx/3/bk/9", "art": "absolut"},
+ {"nachricht": {"typ": "cc", "kanal": 1, "nr": 8}, "ziel": "fx/3/bk/27", "art": "absolut"}
+]}

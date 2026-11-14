@@ -1,12 +1,13 @@
 // Device page (Task 3 of the surfaces plan): the INSTRUMENTS element enlarged as a fixed layer. Pure helpers plus source checks of app.js and the CSS
 // (app.js cannot be imported without a DOM; the same approach as the other page source tests).
+import { liesApp } from './helpers/app_source.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { geraeteseiteKlasse, instrumentReiterHtml } from '../public/instruments_view.js';
 import { geraeteknopfHtml, GERAETEKNOPF } from '../public/panel_kopf.js';
 
-const app = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
+const app = liesApp();
 const css = fs.readFileSync(new URL('../public/panel.css', import.meta.url), 'utf8');
 const funktion = (name) => {   // the text of a top-level function of app.js, up to the next line that starts a top-level statement
   const i = app.search(new RegExp(`^(async )?function ${name}\\(`, 'm'));

@@ -38,6 +38,7 @@ import { bindeGeraete } from './devices.js';
 import { bindeAufnahme } from './recording.js';
 import { AUSGABE_FEHLER, mehrdeutigText } from './output.js';
 import { nachladenNoetig, stemsEreignis, stemsFuerProjekt } from './stems.js';
+import { neuerClipWaehler } from './clip_waehlen.js';
 
 const BINDER = [bindeZeitachse, bindeProjektwahl, bindeSpuren, bindeGruppen, bindeReturns, bindeMatrix, bindeInserts, bindeAblage, bindeTransport, bindeVerlauf, bindeLanen, bindeComp, bindeClips, bindeDetail, bindeAusgabe, bindeMidiImport, bindeVariantenReihen, bindeGeraete, bindeAufnahme,
   bindeBrowserwahl, bindeGeraeteBrowser, bindePresetHost, bindePresetMarken, bindeKollektionen, bindeEinklappen];
@@ -178,6 +179,7 @@ export const FEHLER_TEXT = {
   kein_loop: 'The deck has no active loop to export', kein_bibliothekstrack: 'The deck track is not a library track', kein_liveprojekt: 'The live container is not open',
   kein_liveprojekt_flag: 'A project named live exists without the live flag: rename it',
   slot_leer: 'That live slot holds no module', modul_hat_stems: 'That module already has its stems',
+  seq_fehlt: 'That group holds no SEQ deck', seq_belegt: 'That place already holds a SEQ deck',
   modul_unbekannt: 'No module with that id is saved', modul_nicht_einsetzbar: 'This module holds something the project cannot take',   // task 10
   rampe_laeuft: 'That live slot is already being cleared or blended', kein_neuer_pfad: 'That stem has no new instrument path to blend to',
   unbekanntes_deck: 'There is no such deck',
@@ -499,5 +501,7 @@ export function bindeProduktion({ post, bpm, stoebern, bibliothek = null, preset
     for (const h of ctx.beimEreignis) h(a, f);
   }
   setzeProjekt(null, null);
-  return { zeige, verberge, ereignis, presetHost: ctx.presetHost };
+  // The jump of the SEQ place: unfolds the group of the clip and selects it once the project is loaded (clip_waehlen.js). Called after zeige().
+  const waehleClip = neuerClipWaehler({ st, geladen: () => nachlader.fertig(), aendere: (l, b) => ctx.aendere(l, b), setzeAuswahl: (ids) => ctx.setzeAuswahl(ids), melde });
+  return { zeige, verberge, ereignis, waehleClip, presetHost: ctx.presetHost };
 }

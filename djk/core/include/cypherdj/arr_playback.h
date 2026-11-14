@@ -380,8 +380,8 @@ struct ArrSnapshot {
   uint8_t spur_ordnung[ARR_SPUREN];  // 1.10 slice 5 U1: the order the tracks run in (chain, then fader loop): a stable topological order over the track-post key edges, the identity without such edges (arr_key.h). A fixed array in the head, so inside the first locked region.
   // Nested groups (computed once by arr_gruppen_rechnen() below, in the loader and in the test builder; the callback only reads them). Fixed arrays in the head.
   int8_t gruppe_ausgang[ARR_GRUPPEN];   // output of group g+1: 0 = master, 1..ARR_GRUPPEN = the parent group
-  // DJ view places (decision 5): the live container. `live` is the head flag (written only by a live project); gruppe_dj[g] = 1..2: the group g+1 (a top group, gruppe_ausgang = 0) leads into the DJ
-  // channel pad/<nr> instead of the production master; 0 = no DJ output. Read by Arrangement::dj_nr(). A snapshot without DJ outputs has all zeros: the old behaviour bit for bit.
+  // DJ view places (decision 5): the live container. `live` is the head flag (written only by a live project); gruppe_dj[g] = 1..6: the group g+1 (a top group, gruppe_ausgang = 0) leads into the DJ
+  // channel instead of the production master (ADR 037, ADR 038: 1 = pad/1, 2 = pad/2, 3..6 = deck/1..deck/4); 0 = no DJ output. Read by Arrangement::dj_nr(). A snapshot without DJ outputs has all zeros: the old behaviour bit for bit.
   bool live = false;
   uint8_t gruppe_dj[ARR_GRUPPEN] = {};
   uint8_t gruppen_ebene[ARR_GRUPPEN];   // height: a group with no child group 0, a parent 1 + its highest child; the mixer runs the levels lowest first

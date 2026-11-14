@@ -23,19 +23,19 @@ test('Tempo (Spec 2.7): tempo_setzen bei laufendem Deck 409 deck_laeuft; sonst R
   assert.deepEqual(k.an('/k/tempo/rampe').map((x) => x.felder), [{ quelle: 'andreas', ab_beat: 8, ziel_bpm: 124, dauer_beats: 4 }]);
 });
 
-test('Transport (Spec 2.2): quant 0 ohne DJ-Teil, 2 bei laufendem Deck, Box oder offenem Strom; Startbeat; stopp', async (t) => {
+test('Transport (Spec 2.2): quant is always 2 (next master bar, also with nothing playing: the project bar one lands on a master bar one); Startbeat; stopp', async (t) => {
   const { s, k } = sitzung(t);
   await s.neu('P', 'andreas');
   s.ereignis('/uhr', { beat: 1, bpm: 120 }); k.leere();
   const a = await s.transport({ aktion: 'start', beat: 8 }, 'andreas');
-  assert.deepEqual([a.code, a.j.ok, a.j.quant, a.j.start_beat], [200, true, 0, 8]);
-  assert.deepEqual(k.an('/k/arr/start')[0].felder, { quelle: 'andreas', start_beat: 8, quant: 0 });
+  assert.deepEqual([a.code, a.j.ok, a.j.quant, a.j.start_beat], [200, true, 2, 8]);
+  assert.deepEqual(k.an('/k/arr/start')[0].felder, { quelle: 'andreas', start_beat: 8, quant: 2 });
   s.ereignis('/e/loop', { box: 1, status: 3 });
   assert.equal((await s.transport({ aktion: 'start' }, 'andreas')).j.quant, 2);
   s.ereignis('/e/loop', { box: 1, status: 0 }); s.ereignis('/e/regler', { pfad: 'erz/1/fader', wert: -3, halter: 'frei' });
   assert.equal((await s.transport({ aktion: 'start' }, 'andreas')).j.quant, 2);
   s.ereignis('/e/regler', { pfad: 'erz/1/fader', wert: -200, halter: 'frei' });
-  assert.equal((await s.transport({ aktion: 'start' }, 'andreas')).j.quant, 0);
+  assert.equal((await s.transport({ aktion: 'start' }, 'andreas')).j.quant, 2, 'nothing plays: still on the master bar');
   assert.deepEqual((await s.transport({ aktion: 'stopp' }, 'andreas')).j, { ok: true, quittung: { status: 3, grund: '' } });
   assert.equal((await fehlerVon(s.transport({ aktion: 'start', beat: -1 }, 'andreas'))).fehler, 'beat_ungueltig');
   assert.equal((await fehlerVon(s.transport({ aktion: 'pause' }, 'andreas'))).fehler, 'aktion_unbekannt');

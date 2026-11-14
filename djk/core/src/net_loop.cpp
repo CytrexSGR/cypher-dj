@@ -75,9 +75,13 @@ bool Netz::loop_paket(const v::Adresse* a, const osc::Nachricht& m) {
     b.deck = m.werte[f::einheit].i;
     kopiere(b.pfad, m.werte[f::kanal].s, sizeof b.pfad);
     b.an = m.werte[f::an].i;
-    bool kanal_ok = false;
-    for (const auto& k : v::werte::fx_kanal) kanal_ok = kanal_ok || k == m.werte[f::kanal].s;
-    if (!quelle_ok(b.quelle) || b.deck < 1 || b.deck > 2 || !kanal_ok || (b.an != 0 && b.an != 1)) {
+    bool kanal_ok = false;   // units 1 and 2: fx_kanal_12 (with master); unit 3 (FX3, insert on fx/3): fx_kanal_3 (every source, no master)
+    if (b.deck == 3) {
+      for (const auto& k : v::werte::fx_kanal_3) kanal_ok = kanal_ok || k == m.werte[f::kanal].s;
+    } else {
+      for (const auto& k : v::werte::fx_kanal_12) kanal_ok = kanal_ok || k == m.werte[f::kanal].s;
+    }
+    if (!quelle_ok(b.quelle) || b.deck < 1 || b.deck > 3 || !kanal_ok || (b.an != 0 && b.an != 1)) {
       quittung(b.id, b.quelle, 6, stand_sample_, stand_beat_, "ausserhalb_bereich");
       return true;
     }

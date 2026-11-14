@@ -1,0 +1,15 @@
+# cypherdj-pult: controller bridge. Forwards the Akai APC20 and turns the Traktor Kontrol S8 (HID over usbfs) into MIDI
+# for the kern's hand_in; LEDs from hand_led go back to the APC20. Mapping djk/config/controller/pult.json.
+# Not a real-time process; links itself to cypherdj-kern:hand_in, so it may start before or after the kern.
+[Unit]
+Description=cypherdj-pult (controller bridge APC20 + S8 -> kern hand_in)
+Documentation=file:%h/cypher-dj/docs/controller/pult.md
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 -u %h/cypher-dj/djk/hand_bruecke/pult_bridge.py
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=default.target

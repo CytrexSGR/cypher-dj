@@ -456,6 +456,11 @@ endforeach()
 test_mutation(test_mixer_golden_duck_aus_mutation test_mixer_golden CYPHERDJ_MUTATION_DUCK_AUS src/mixer.cpp src/beatfx.cpp)
 test_mutation(test_mixer_golden_nur_cue_aus_mutation test_mixer_golden CYPHERDJ_MUTATION_NUR_CUE_AUS src/mixer.cpp src/beatfx.cpp)
 test_mutation(test_mixer_golden_fx_einheiten_mutation test_mixer_golden CYPHERDJ_MUTATION_FX_EINHEITEN_VERTAUSCHT src/mixer.cpp src/beatfx.cpp)
+# FX3 (insert on fx/3): each failure case below must turn test_mixer_fx3 red.
+foreach(mut OHNE_BLENDE OHNE_RUECKFALL KOPIE OHNE_XFADER SCHLAF_BLENDE_UEBERSEHEN)
+  string(TOLOWER ${mut} mut_klein)
+  test_mutation(test_mixer_fx3_${mut_klein}_mutation test_mixer_fx3 CYPHERDJ_MUTATION_FX3_${mut} src/mixer.cpp src/beatfx.cpp)
+endforeach()
 # On another toolchain string these cannot tell a mutation from compiler noise: the test then exits 77 (SKIP) instead of falling
 # back to a tolerance. On the recorded toolchain they stay WILL_FAIL (digest differs, exit 1).
 foreach(g test_mixer_golden test_mixer_golden_duck_aus_mutation test_mixer_golden_nur_cue_aus_mutation
@@ -900,6 +905,9 @@ test_mutation(test_kern_stopp_mutation test_core_stop CYPHERDJ_MUTATION_HAND_STO
 kern_mutation(cypherdj-kern-mutation-mapping CYPHERDJ_MUTATION_MAPPING_NICHT_TAUSCHEN)  # der Kern für den Fehlerfall am Ziel
 test_mutation(test_kern_mapping_mutation test_core_mapping CYPHERDJ_MUTATION_MAPPING_NICHT_TAUSCHEN ${KERN_QUELLEN35})
 
+# Slice 35 B3, failure case: hand_led_hole sends every LED in every cycle (LED flood). test_core_led must fail.
+test_mutation(test_kern_led_mutation test_core_led CYPHERDJ_MUTATION_LED_FLUT ${KERN_QUELLEN35})
+
 # S19 (MIDI learn): failure cases of the learn table; every one of these tests must fail (WILL_FAIL).
 # slot 1 is acknowledged but not swapped (test_core_learn case 5)
 test_mutation(test_kern_lernen_tausch_mutation test_core_learn CYPHERDJ_MUTATION_LERN_NICHT_TAUSCHEN ${KERN_QUELLEN35})
@@ -1217,6 +1225,8 @@ test_mutation(test_arr_gruppen_cue_master_mutation test_arr_groups_cue CYPHERDJ_
 test_mutation(test_arr_dj_kanal_ins_master_mutation test_arr_dj_channel CYPHERDJ_MUTATION_ARR_DJ_INS_MASTER ${KERN_QUELLEN35} src/recording_thread.cpp src/take_writer.cpp src/arr_playback.cpp)         # cases 1, 3: the DJ group is also in the master
 test_mutation(test_arr_dj_kanal_offline_aus_mutation test_arr_dj_channel CYPHERDJ_MUTATION_ARR_DJ_OFFLINE_AUS ${KERN_QUELLEN35} src/recording_thread.cpp src/take_writer.cpp src/arr_playback.cpp)     # cases 4, 10: the offline switch is ignored
 test_mutation(test_arr_dj_kanal_nach_strip_mutation test_arr_dj_channel CYPHERDJ_MUTATION_ARR_DJ_NACH_STRIP ${KERN_QUELLEN35} src/recording_thread.cpp src/take_writer.cpp src/arr_playback.cpp)       # case 5: the module is added behind the strip
+# ADR 038: the DJ channels grow from 2 to 6 (deck/1..deck/4 = nr 3..6); a nr above 2 falls to the master
+test_mutation(test_arr_dj_kanal_nur_pad_mutation test_arr_dj_channel CYPHERDJ_MUTATION_ARR_DJ_NUR_PAD ${KERN_QUELLEN35} src/recording_thread.cpp src/take_writer.cpp src/arr_playback.cpp)                # cases 13, 14, 15: a nr above 2 is not a DJ channel
 # 1.10 Slice 3 Task 5a: sends and return strips
 test_mutation(test_arr_returns_hall_tot_mutation test_arr_returns CYPHERDJ_MUTATION_ARR_HALL_TOT ${ARR_QUELLEN} src/clock.cpp)
 test_mutation(test_arr_returns_hall_ohne_ausklang_mutation test_arr_returns CYPHERDJ_MUTATION_ARR_HALL_OHNE_AUSKLANG ${ARR_QUELLEN} src/clock.cpp)

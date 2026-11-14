@@ -289,6 +289,8 @@ export const GRUND_TEXT: Readonly<Record<string, string>> = {
   kein_liveprojekt: 'the live container is not open; open it first',
   kein_liveprojekt_flag: 'a project named live exists without the live flag; rename it',
   slot_leer: 'that live slot holds no module',
+  seq_fehlt: 'that group holds no SEQ deck',
+  seq_belegt: 'that place already holds a SEQ deck; clear it first',
   modul_hat_stems: 'that module already has its stems',
   modul_unbekannt: 'no module with that id is saved in the library',   // task 10
   modul_nicht_einsetzbar: 'this module holds something the target project cannot take (sends, inserts, takes, freezes or host instruments)',

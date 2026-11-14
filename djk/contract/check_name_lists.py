@@ -260,9 +260,10 @@ def tasten_listen(q: Quelle) -> dict[str, list[str]]:
         _such(r"const TASTEN = new Set\(\[([^\]]*)\]", hand_mjs, "hand.mjs").group(1))
     server_ts = q.lies("djk/ui/server.ts")
     listen["T09 server.ts TASTEN"] = _namen(_such(r"const TASTEN = \[([^\]]*)\]", server_ts, "server.ts").group(1))
-    app_js = q.lies("djk/ui/public/app.js")
+    # the page keys moved from app.js to stream.js (1868940b); the list keeps its name, the other checks refer to it
+    strom_js = q.lies("djk/ui/public/stream.js")
     listen["T10 app.js Tasten"] = _namen(
-        _such(r"for \(const n of \[([^\]]*)\]\) \$\(`#t-", app_js, "app.js").group(1))
+        _such(r"for \(const n of \[([^\]]*)\]\) \$\(`#t-", strom_js, "stream.js").group(1))
     tastatur_h = q.lies("djk/tools/softcontroller/keyboard.h")
     listen["T11 keyboard.h"] = sorted(set(re.findall(r'"taste/([a-z_]+)"', tastatur_h)))
     soft = _mapping_json(q, "djk/config/controller/softcontroller.json")
@@ -455,7 +456,7 @@ def _pruefe_regler(q: Quelle, befunde: list[str]) -> None:
         if not pfad.search(name):
             befunde.append(f"Regler: attrappe REGLER kennt {name}, hand_bedienung.PFAD lehnt es ab")
     for name in sorted(ziele - regler):
-        if not re.fullmatch(r"deck/[12]/(play|cue)", name):
+        if not re.fullmatch(r"deck/[1-4]/(play|cue)", name):   # deck keys of all four decks (80c70be7) are not controls
             befunde.append(f"Regler: curves.js ZIELE enthält {name}, attrappe REGLER nicht")
     for rel in q.mappings():
         for eintrag in _mapping_json(q, rel):

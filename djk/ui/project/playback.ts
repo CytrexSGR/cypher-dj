@@ -74,9 +74,12 @@ export type WGliedGeraet =
   | { art: 'wirt'; slot: number };
 export type WGlied = { id: string; ton: [number, number]; vel: [number, number]; kette: [number, number]; gain_db: number } & WGliedGeraet;
 // A group leads into the master or into another group (nested groups); returns always into the master
-// DJ view places (decision 5): a top group of a live project may lead into the DJ channel pad/<nr> (nr 1..2); the core refuses it elsewhere
+// DJ view places (decision 5, ADR 038): a top group of a live project may lead into a DJ channel (nr 1..2 = pad/1, pad/2;
+// nr 3..6 = deck/1..deck/4); the core refuses it elsewhere
+export type WDjNr = 1 | 2 | 3 | 4 | 5 | 6;
 export interface WGruppe {
-  nr: number; ausgang: { art: 'master' } | { art: 'gruppe'; nr: number } | { art: 'dj'; nr: 1 | 2 }; chain?: WInsert[]; rack?: WRack; chain_auto?: WKettenLane[]
+  nr: number; ausgang: { art: 'master' } | { art: 'gruppe'; nr: number } | { art: 'dj'; nr: WDjNr };
+  chain?: WInsert[]; rack?: WRack; chain_auto?: WKettenLane[]
 }
 // slice 4: the send taps before the fader (absent = post)
 export interface WReturn extends Omit<WGruppe, 'ausgang'> { ausgang: { art: 'master' }; pre?: true }
@@ -442,9 +445,11 @@ function uebersetzeIntern(p: Projekt, opt: UebersetzOptionen): Wiedergabe {
   const gruppenW = [...(p.gruppen ?? [])].sort((a, b) => a.nr - b.nr).map((g) => {
     const ziel = g.ausgang ? gruppenNr.get(g.ausgang.id) : undefined;
     if (g.ausgang && ziel === undefined) throw new WiedergabeFehler('ziel_unbekannt', `Gruppe ${g.id} zeigt auf ${g.ausgang.id}`);
-    // DJ view places (decision 6): derived, not stored. The top group of a live project that holds the module of slot A or B plays into pad/1 or pad/2
-    const dj = p.live === true && ziel === undefined && g.modul?.slot ? (g.modul.slot === 'A' ? 1 : 2) : 0;
-    const ausgang = dj ? { art: 'dj' as const, nr: dj as 1 | 2 }
+    // DJ view places (decision 6, ADR 038): derived, not stored. The top group of a live project that holds the module of slot A or B
+    // plays into pad/1 or pad/2, and one that holds a SEQ document in place N (Gruppe.seq.platz) plays into deck/N, DJ channel N + 2
+    const slotNr = g.modul?.slot ? (g.modul.slot === 'A' ? 1 : 2) : g.seq ? g.seq.platz + 2 : 0;
+    const dj = p.live === true && ziel === undefined ? slotNr : 0;
+    const ausgang = dj ? { art: 'dj' as const, nr: dj as WDjNr }
       : ziel === undefined ? { art: 'master' as const } : { art: 'gruppe' as const, nr: ziel };
     return { nr: g.nr, ausgang, ...kette(g.inserts, g) };
   });

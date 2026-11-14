@@ -14,6 +14,7 @@ import { nimmSperre, SperreBelegt } from '../lock.ts';
 import { SLUG, slugVon } from '../collection.ts';
 import { bkInsertKanonisch, bkReglerKanonisch, setzeVorgabenQuelle, vorgabenVonGraph as vorgabenQuelle } from './modular.ts';
 export { setzeVorgabenQuelle };
+import { seqV1Wandeln } from './seq.ts';
 import { alleStraenge, kanonisch, neuesProjekt, pruefeFehler, pruefeProjekt, sortiert, type Projekt } from './model.ts';
 import { Verlauf, zieheNach, type VerlaufOptionen } from './history.ts';
 import { grundText } from '../http/reasons.ts';
@@ -130,6 +131,7 @@ export class Projekte {
     if (!fs.existsSync(p)) throw new AblageFehler(404, 'unbekannt');
     let j: unknown;
     try { j = JSON.parse(fs.readFileSync(p, 'utf8')); } catch { throw new AblageFehler(409, 'json_kaputt'); }
+    seqV1Wandeln(j);   // SEQ deck v2: a stored v1 step document becomes the plain marker before the check (it is written on the next save)
     const g = pruefeProjekt(j);
     if ('fehler' in g) throw new AblageFehler(409, 'projekt_ungueltig', g.fehler);
     return g.projekt;

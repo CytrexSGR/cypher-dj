@@ -124,11 +124,18 @@ void Kern::einsortieren25(const Befehl& c) {
     }
     case Befehl::FX_ZUWEISUNG: {  // §4.10: Kanal an/ab einer Einheit, am Blockanfang; das Netz hat schon geprüft
       const int einheit = c.deck;
-      bool erlaubt = false;  // auch am Netz vorbei geprüft (fünf Kanäle und master)
-      for (const auto& n : cypherdj::osc::werte::fx_kanal) erlaubt = erlaubt || n == c.pfad;
+      // Units 1 and 2 (Beat FX) take the channels of fx_kanal_12 (decks, erz/1..3, pads, master), unit 3 (FX3, insert on fx/3) every source
+      // channel of fx_kanal_3 and never the master. Checked here as well, past the network layer.
+      const bool fx3 = einheit == Mixer::FX3_EINHEIT + 1;
+      bool erlaubt = false;
+      if (fx3) {
+        for (const auto& n : cypherdj::osc::werte::fx_kanal_3) erlaubt = erlaubt || n == c.pfad;
+      } else {
+        for (const auto& n : cypherdj::osc::werte::fx_kanal_12) erlaubt = erlaubt || n == c.pfad;
+      }
       const bool master = !std::strcmp(c.pfad, "master");   // Mixer::kanal_index kennt "master" nicht (-1)
       const int k = master ? Mixer::FX_MASTER : Mixer::kanal_index(c.pfad);
-      if (einheit < 1 || einheit > Mixer::FX_EINHEITEN || !erlaubt || k == Mixer::FX_KEIN) {
+      if (einheit < 1 || einheit > Mixer::FX3_EINHEIT + 1 || !erlaubt || k == Mixer::FX_KEIN) {
         quittung(c.id, c.quelle, 6, sample_, beat0, "ausserhalb_bereich");
         break;
       }
@@ -282,6 +289,19 @@ void Kern::einsortieren25(const Befehl& c) {
       quittung(c.id, c.quelle, 1, sample_, beat0);
       quittung(c.id, c.quelle, 3, sample_, beat0);
       break;
+    case Befehl::LED: {  // slice 35 B3 (§4.7 /k/led): a fixed table by name, sent by hand_led_hole() when it changes
+      int i = 0;
+      while (i < n_led_ext_ && std::strcmp(led_ext_[i].name, c.pfad) != 0) ++i;
+      if (i == n_led_ext_ && n_led_ext_ < hand::MAX_LEDS) {
+        std::strncpy(led_ext_[i].name, c.pfad, sizeof led_ext_[i].name - 1);
+        led_ext_[i].name[sizeof led_ext_[i].name - 1] = '\0';
+        ++n_led_ext_;
+      }
+      if (i < n_led_ext_) led_ext_[i].zustand = static_cast<int8_t>(c.an);
+      quittung(c.id, c.quelle, 1, sample_, beat0);
+      quittung(c.id, c.quelle, 3, sample_, beat0);
+      break;
+    }
     case Befehl::MAPPING: {  // Scheibe 35, §4.7 /k/mapping: das Netz hat geladen und geprüft, der Tausch gilt ab diesem Zyklus
       const bool lern = c.nr == 1;  // S19: slot 1 is the learn table on midi_ein_1, slot 0 the base mapping on hand_in
       const hand::Mapping* alt = lern ? lern_mapping_ : mapping_;
@@ -403,8 +423,11 @@ void Kern::pegel_melden(int64_t n0, int n) {
     for (int i = 1; i < 7; ++i) e.pegel[i] = -200.0f;
     melde(e);
   };
+  // ADR 038: a deck channel reports while a track is loaded OR a group of the playback leads into it (a SEQ deck on an empty deck). dj_gereicht_[2 + d] is the answer of the last sub-block of this
+  // cycle (dj_kanal_aktiv before block(), the held tail of a cleared group included); pegel_melden runs in the same callback right after audio(), so it is a plain member read of the audio thread.
+  static_assert(DECKS == 4 && Arrangement::DJ_KANAELE == 2 + DECKS, "DJ channels 3..6 are deck/1..deck/4");
   for (int d = 0; d < DECKS; ++d) {
-    if (decks_->deck[d].geladen()) melden(Mixer::kanal_name(d), d);
+    if (decks_->deck[d].geladen() || dj_gereicht_[2 + d]) melden(Mixer::kanal_name(d), d);
     else mixer_->spitze_lesen(d);
   }
   melden("erz/1", 4);  // Plan 2026-09-27: Strudel-Kanal, immer (auch ohne Strom: −200)
@@ -701,9 +724,9 @@ void Kern::audio(int64_t n0, int n) {
     }
     arr_bk_->takt(karte.beat_at((double)s0), karte.bpm_at((double)s0) / 60.0 / 48000.0);   // S20: beat and tempo for the graphs of the bk tracks
     {   // DJ view places (decision 7): the pairs of the DJ channels that a group of the snapshot leads into, zeroed here and added into the channel input after the block (below). A channel nobody feeds is not touched.
-      float* dl[2] = {nullptr, nullptr};
-      float* dr[2] = {nullptr, nullptr};
-      for (int c = 0; c < 2; ++c) {
+      float* dl[Arrangement::DJ_KANAELE] = {};
+      float* dr[Arrangement::DJ_KANAELE] = {};
+      for (int c = 0; c < Arrangement::DJ_KANAELE; ++c) {
         dj_gereicht_[c] = arr_->dj_kanal_aktiv(c + 1);   // asked once per sub-block, BEFORE block(): block() counts the held tail of a cleared module down and would answer false afterwards
         if (!dj_gereicht_[c]) continue;
         std::memset(dj_aus_l_[c], 0, sizeof(float) * static_cast<size_t>(m));
@@ -779,15 +802,16 @@ void Kern::audio(int64_t n0, int n) {
     for (int i = 0; i < nb; ++i) loop_melden(bm[i].box, bm[i].sample, karte.beat_at((double)bm[i].sample));
     if (mt_fertig) mitschnitt_melden(mt_fertig, mt_fertig->abgebrochen ? 1 : 0);  // voll: das Netz schreibt und gibt frei; abgebrochen (Scheibe 3 E4): nur frei
     // DJ view places (decision 7): the module of a loop slot into the input of its DJ channel, after the loop boxes and the streams (they are in erz_l_/erz_r_ already), before the recorder tap and the
-    // strip (trim, EQ, kill, filter, fader). A channel no group leads into was not handed a pair and is not touched.
-    for (int c = 0; c < 2; ++c) {
-      if (pad_kanal_[c] < 0 || !dj_gereicht_[c]) continue;   // exactly the channels whose pair was handed to this block
+    // strip (trim, EQ, kill, filter, fader). A channel no group leads into was not handed a pair and is not touched. ADR 038: the channels deck/1..deck/4 take a group the same way; decks_block ran
+    // above, so the deck's own block is in the input of deck/N already and the pair is added to it, never overwritten.
+    for (int c = 0; c < Arrangement::DJ_KANAELE; ++c) {
+      if (dj_kanal_[c] < 0 || !dj_gereicht_[c]) continue;   // exactly the channels whose pair was handed to this block
 #ifdef CYPHERDJ_MUTATION_ARR_DJ_NACH_STRIP
       float* kl = mixer_->summe_eingang_l();   // error case: behind the strip, into the master sum in front of the limiter (the channel fader, trim and EQ do not act on the module)
       float* kr = mixer_->summe_eingang_r();
 #else
-      float* kl = erz_l_[pad_kanal_[c]];
-      float* kr = erz_r_[pad_kanal_[c]];
+      float* kl = erz_l_[dj_kanal_[c]];
+      float* kr = erz_r_[dj_kanal_[c]];
 #endif
       for (int i = 0; i < m; ++i) {
         kl[i] += dj_aus_l_[c][i];

@@ -263,10 +263,11 @@ body.lib-zu { grid-template-rows: var(--kopf) minmax(0, 1fr) var(--lib-zu); }
 .zug .kill { grid-area: x; height: 22px; padding: 0; font-size: 8px; border-radius: 5px; }
 .zug .faderspalte { flex: 1; display: grid; grid-template-columns: 1fr 8px; grid-template-rows: auto auto minmax(60px, 1fr) auto auto; gap: 3px 3px; min-height: 0; }
 .zug .pfl { grid-row: 1; height: 22px; font-size: 9px; border-radius: 5px; }
-.zug .fxzuweisung { grid-row: 2; grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, 1fr); gap: 2px; }
+.zug .fxzuweisung { grid-row: 2; grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; }
 .zug .fxzuweisung button { font-family: inherit; font-weight: 800; font-size: 8px; padding: 3px 0; border-radius: 5px; border: 1px solid var(--line); color: var(--dim); }
 .zug .fxzuweisung button[data-fxzuweisung="1"].an { background: var(--text); border-color: var(--text); color: #0e0f12; }
 .zug .fxzuweisung button[data-fxzuweisung="2"].an { background: var(--warn); border-color: var(--warn); color: #0e0f12; }
+.zug .fxzuweisung button[data-fxzuweisung="3"].an, .mitte .fxzuweisung button[data-fx3-alle].an { background: var(--l2); border-color: var(--l2); color: #0e0f12; }   /* FX3 = Remix, its colour */
 .zug .regler.senkrecht { grid-row: 3; min-height: 0; }
 .zug .regler.senkrecht .bahn { width: 6px; height: calc(100% - 20px); margin: 10px 0; }
 .zug .regler.senkrecht .kappe { width: 36px; height: 20px; margin-left: -18px; margin-bottom: -10px; }
@@ -279,7 +280,7 @@ body.lib-zu { grid-template-rows: var(--kopf) minmax(0, 1fr) var(--lib-zu); }
 .mitte .summe.glue { flex-direction: row; gap: 6px; align-items: center; }   /* K2: eine Zeile, der Meter darunter behält seine Höhe */
 .mitte .summe.glue .knopf { width: 30px; height: 30px; }
 .glutext { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.15; }
-.mitte .fxzuweisung { display: grid; grid-template-columns: repeat(2, 1fr); gap: 2px; width: 60px; }
+.mitte .fxzuweisung { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; width: 84px; }
 .mitte .fxzuweisung button { font-family: inherit; font-weight: 800; font-size: 8px; padding: 3px 0; border-radius: 5px; border: 1px solid var(--line); color: var(--dim); }
 .mitte .fxzuweisung button[data-fxzuweisung="1"].an { background: var(--text); border-color: var(--text); color: #0e0f12; }
 .mitte .fxzuweisung button[data-fxzuweisung="2"].an { background: var(--warn); border-color: var(--warn); color: #0e0f12; }
@@ -568,7 +569,7 @@ body.studio .spurbaender { display: flex; flex-direction: column; gap: 4px; marg
    Keine Regel für .tabelle: display:block hob das hidden der Reiter auf (Plan-Review 2, 7 → 4 statt 7 → 26 Zeilen). */
 body.lib-gross { grid-template-rows: var(--kopf) 112px minmax(0, 1fr); }
 body.lib-gross #pult { overflow: hidden; }
-body.lib-gross #pult > * { overflow: hidden; }
+body.lib-gross #pult > *, body.lib-gross #pult > .seitenspalte > * { overflow: hidden; }
 
 /* Listen (S2b): Lists-Ast im Baum, Menü „+ LIST ▾“, Zeilen der gezeigten Liste, SAVE am Strudel-Deck */
 .st-seiten[hidden], .listen-menue[hidden], .muster-name[hidden] { display: none; }
@@ -758,24 +759,81 @@ body.studio .platzkopf, body.studio #platz-loops { display: none; }
 /* DJ view places, task 15: the mixer follows the places. In the DJ view the two mixer panels dissolve (display: contents) and their strips become
    cells of the page grid: two rows of three columns in the middle, slots.js (wendeMixerAn) sets data-mix-zeile and data-mix-spalte. The master
    and the crossfader sit under the second row. The Studio view keeps both panels as they were. */
-body:not(.studio) #pult { grid-template-columns: minmax(0, 1fr) var(--zug) var(--zug) var(--zug) minmax(0, 1fr);
-  grid-template-rows: auto minmax(0, 1fr) auto minmax(0, 1fr) auto auto;
-  grid-template-areas: "h1 . . . h2" "p1 . . . p2" "h3 . . . h4" "p3 . . . p4" "p3 ms ms ms p4" "p3 xf xf xf p4"; }
+body:not(.studio) #pult { grid-template-columns: minmax(0, 1fr) var(--zug) var(--mitte) var(--zug) minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto minmax(0, 1fr) auto; grid-template-areas: none; }
+/* 2026-11-14: the middle column (master, beat FX, COLOR) is fixed; an outer strip column exists only while a Loops place needs it (plan.spalten.aussen).
+   The places take the first and the last column by line numbers, so they hold for every column count. */
+:root { --mitte: 150px; }
+body:not(.studio) #pult[data-mix-aussen="l"] { grid-template-columns: minmax(0, 1fr) var(--zug) var(--zug) var(--mitte) var(--zug) minmax(0, 1fr); }
+body:not(.studio) #pult[data-mix-aussen="r"] { grid-template-columns: minmax(0, 1fr) var(--zug) var(--mitte) var(--zug) var(--zug) minmax(0, 1fr); }
+body:not(.studio) #pult[data-mix-aussen="lr"] { grid-template-columns: minmax(0, 1fr) var(--zug) var(--zug) var(--mitte) var(--zug) var(--zug) minmax(0, 1fr); }
+/* 2026-11-14: each side column is a flex column of its own (platz_mini.js moves head and node of the top and the bottom place into it), so a place
+   can shrink (mini view) without moving the mixer strips beside it. The Studio view dissolves the columns (display: contents). */
+.seitenspalte { display: contents; }
+body:not(.studio) #pult > .seitenspalte { display: flex; flex-direction: column; gap: 4px; min-height: 0; min-width: 0; }
+body:not(.studio) #pult > .seitenspalte[data-seite="l"] { grid-area: 1 / 1 / 6 / 2; } body:not(.studio) #pult > .seitenspalte[data-seite="r"] { grid-area: 1 / -2 / 6 / -1; }
+body:not(.studio) .seitenspalte > .platzkopf { flex: 0 0 auto; }
+body:not(.studio) .seitenspalte > [data-platz] { flex: 1 1 0; min-height: 0; }
+body:not(.studio) .seitenspalte > [data-platz].mini { flex: 0 0 auto; }
 body:not(.studio) #mischer, body:not(.studio) #mischer-unten { display: contents; }
 body:not(.studio) #pult .zug, body:not(.studio) #pult .mitte, body:not(.studio) #pult .xfader { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
 body:not(.studio) #pult .zug { border-top: 2px solid var(--farbe); padding: 4px 4px 6px; }
 body:not(.studio) #pult [data-mix-zeile="1"] { grid-row: 1 / 3; } body:not(.studio) #pult [data-mix-zeile="2"] { grid-row: 3 / 5; }
-body:not(.studio) #pult [data-mix-spalte="1"] { grid-column: 2; } body:not(.studio) #pult [data-mix-spalte="2"] { grid-column: 3; }
-body:not(.studio) #pult [data-mix-spalte="3"] { grid-column: 4; }
+body:not(.studio) #pult [data-mix-spalte="2"] { grid-column: 2; } body:not(.studio) #pult [data-mix-spalte="3"] { grid-column: 3; }
+body:not(.studio) #pult [data-mix-spalte="4"] { grid-column: 4; } body:not(.studio) #pult [data-mix-spalte="5"] { grid-column: 5; }
+body:not(.studio) #pult [data-mix-spalte="6"] { grid-column: 6; }
 body:not(.studio) #pult .zugplatz { min-height: 0; }
 body:not(.studio) #pult .zugplatz > .zug { background: var(--panel); }
-body:not(.studio) #pult .mitte { grid-area: ms; flex-direction: row; flex-wrap: nowrap; justify-content: center; align-items: center; gap: 6px; padding: 2px 6px; }
-body:not(.studio) #pult .mitte > label { flex: 0 0 auto; font-size: 9px; letter-spacing: .1em; color: var(--dim); writing-mode: vertical-rl; transform: rotate(180deg); }
-body:not(.studio) #pult .mitte .knopf { width: 30px; height: 30px; }
-body:not(.studio) #pult .mitte .meterzeile { flex: 0 0 10px; min-height: 0; height: 32px; }
-body:not(.studio) #pult .mitte .pegelzahl { display: none; }
-body:not(.studio) #pult .mitte .pfl { height: 26px; padding: 0 8px; font-size: 10px; }
-body:not(.studio) #pult .xfader { grid-area: xf; padding: 4px 8px;   /* grid-column after grid-area reset the column and squeezed the crossfader into one strip column */ }
+/* The master strip (2026-11-14, back in the middle column): level and glue, a tall meter, PFL, FX 1/2, then the headphones (moved here by ordneMitte). */
+body:not(.studio) #pult .mitte { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto auto auto minmax(40px, 1fr) auto auto auto;
+  align-items: center; justify-items: center; gap: 4px 6px; padding: 4px 8px 8px; border-top: 2px solid #c9ccd6; min-height: 0; }
+body:not(.studio) #pult .mitte > label { grid-column: 1 / -1; font-size: 10px; letter-spacing: .14em; font-weight: 700; color: var(--text); }
+body:not(.studio) #pult .mitte .summe { display: flex; flex-direction: column; align-items: center; gap: 1px; }
+body:not(.studio) #pult .mitte > .summe:not(.glue) { grid-column: 1; grid-row: 2; }
+body:not(.studio) #pult .mitte > .summe:not(.glue)::before { content: 'LEVEL'; font-size: 9px; letter-spacing: .1em; color: var(--dim); }
+body:not(.studio) #pult .mitte .summe.glue { grid-column: 2; grid-row: 2; flex-direction: column; }
+body:not(.studio) #pult .mitte .summe.glue .glutext { order: -1; }
+body:not(.studio) #pult .mitte .summe.glue .glutext > * { font-size: 9px; letter-spacing: .1em; color: var(--dim); }
+body:not(.studio) #pult .mitte .summe.glue .glutext { display: flex; flex-direction: column; align-items: center; font-size: 9px; letter-spacing: .1em; color: var(--dim); }
+body:not(.studio) #pult .mitte .knopf, body:not(.studio) #pult .mitte .summe.glue .knopf { width: 40px; height: 40px; }
+body:not(.studio) #pult .mitte .summe output { font-size: 10px; }
+body:not(.studio) #pult .mitte .meterzeile { grid-column: 1 / -1; grid-row: 4; align-self: stretch; height: auto; min-height: 0; display: flex; justify-content: center; }
+body:not(.studio) #pult .mitte .meterzeile .meter { width: 14px; height: auto; align-self: stretch; }
+body:not(.studio) #pult .mitte .pegelzahl { display: block; grid-column: 1 / -1; grid-row: 5; font-size: 11px; font-weight: 600; }
+body:not(.studio) #pult .mitte .pfl { grid-column: 1; grid-row: 6; height: 22px; width: 100%; padding: 0; font-size: 10px; }
+body:not(.studio) #pult .mitte .fxzuweisung { grid-column: 2; grid-row: 6; width: 100%; }
+body:not(.studio) #pult .mitte .kopfmix { grid-column: 1 / -1; grid-row: 7; width: 100%; border-top: 1px solid var(--line); padding-top: 4px; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+body:not(.studio) #pult .mitte .kopfmix .phones { font-size: 9px; letter-spacing: .14em; font-weight: 700; color: var(--dim); }
+body:not(.studio) #pult .mitte .kopfhoerer { display: flex; justify-content: space-around; width: 100%; }
+body:not(.studio) #pult .mitte .kopfhoerer .summe { flex-direction: column; }
+body:not(.studio) #pult .mitte .kopfhoerer .summe > span { font-size: 9px; letter-spacing: .1em; color: var(--dim); }
+body:not(.studio) #pult .mitte .kopfhoerer .knopf { width: 32px; height: 32px; }
+/* Beat FX 1, 2 and COLOR under the master (moved here by ordneMitte); the Studio view keeps them in the header. */
+body.studio .fxmitte { display: none; }
+body:not(.studio) #pult .fxmitte { display: flex; flex-direction: column; gap: 4px; min-height: 0; overflow-y: auto; overflow-x: hidden; background: none; border: 0; }
+body:not(.studio) #pult .fxmitte > .fxeinheit { display: grid; grid-template-columns: 1fr 1fr; align-items: center; justify-items: center; gap: 4px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 5px 6px 6px; row-gap: 3px; }
+body:not(.studio) #pult .fxmitte > .fxeinheit > label { grid-column: 1; justify-self: start; font-size: 10px; font-weight: 700; letter-spacing: .12em; color: var(--text); }
+body:not(.studio) #pult .fxmitte > .fxeinheit > [data-fx-art] { grid-column: 2; width: 100%; font-size: 10px; padding: 3px 0; }
+body:not(.studio) #pult .fxmitte .fxbeat { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; width: 100%; }
+body:not(.studio) #pult .fxmitte .fxbeat button { padding: 2px 10px; }
+body:not(.studio) #pult .fxmitte .fxeinheit .summe.klein:not(:has([data-fx="param2"], [data-fx="param3"])) { display: flex; flex-direction: column; align-items: center; gap: 1px; }
+body:not(.studio) #pult .fxmitte .fxeinheit .summe.klein > span { font-size: 9px; letter-spacing: .08em; color: var(--dim); max-width: 64px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body:not(.studio) #pult .fxmitte .fxeinheit .summe.klein .knopf { width: 36px; height: 36px; }
+body:not(.studio) #pult .fxmitte .fxeinheit > [data-fx-an], body:not(.studio) #pult .fxmitte .fxeinheit > [data-fx-reset] { width: 100%; font-size: 10px; padding: 3px 0; }
+body:not(.studio) #pult .fxmitte .colorfx { grid-template-columns: 1fr 1fr; }
+body:not(.studio) #pult .fxmitte .colorfx > label { grid-column: 1 / -1; }
+body:not(.studio) #pult .fxmitte .colorfx button { width: 100%; font-size: 9px; padding: 3px 0; }
+body:not(.studio) #pult .fxmitte .colorfx .colorhinweis { display: block; grid-column: 1 / -1; justify-self: start; font-size: 9px; line-height: 1.25; color: var(--dim); }
+body:not(.studio) #pult .fxmitte .colorfx .colorparam { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; justify-items: center; width: 100%; gap: 2px; }
+body:not(.studio) #pult .fxmitte .colorfx .colorparam > span { justify-self: start; }
+body:not(.studio) #pult .fxmitte .colorfx .colorparam output { font-size: 10px; justify-self: end; }
+body:not(.studio) #pult .fxmitte .colorfx .colorknopf { width: 36px; height: 36px; }
+body:not(.studio) #pult .fxmitte .colorfx.filter-art .colorparam::after { content: 'no effect on FILTER'; grid-column: 1 / -1; font-size: 9px; color: var(--dim); }
+body:not(.studio) #pult .fxmitte .colorfx .colorparam > span { display: block; font-size: 9px; letter-spacing: .1em; color: var(--dim); }
+.colorhinweis { display: none; }
+.zug .beschrift label.color-an { color: var(--warn); }   /* the COLOR knob of a channel names the chosen COLOR type in its colour */
+body:not(.studio) #pult .xfader { grid-area: 5 / 2 / 6 / -2; padding: 4px 8px;   /* grid-column after grid-area reset the column and squeezed the crossfader into one strip column */ }
 
 /* DJ view places, task 16: the Loops place carries the live container (LIVE button in its head, a prominent one while the container is closed). */
 #platz-loops .livetaste { margin-left: auto; height: 26px; padding: 0 14px; font-weight: 700; letter-spacing: .12em; }
@@ -788,16 +846,16 @@ body:not(.studio) .deck .lauf { min-height: 24px; }
 /* DJ view, short places (1920x1080: a top place is 219 px, the deck needs about 270): the rows of a deck never shrink below their text (they
    overlapped the BAR row and the next place head), only the waveform gives room. Below 290 px the deck drops its title and meta lines, which the
    place head already shows (title, key, tempo), and its head row, and closes its gaps; what still does not fit is clipped inside the deck, not drawn over its neighbour. */
-body:not(.studio) #pult > .deck { container: deckplatz / size; overflow: hidden; }
-body:not(.studio) #pult > .deck > * { flex-shrink: 0; }
-body:not(.studio) #pult > .deck > .lauf { flex: 1 1 24px; min-height: 16px; }
+body:not(.studio) #pult .deck:not(.mini) { container: deckplatz / size; }
+body:not(.studio) #pult .deck { overflow: hidden; }
+body:not(.studio) #pult .deck > * { flex-shrink: 0; }
+body:not(.studio) #pult .deck > .lauf { flex: .84 1 24px; min-height: 16px; }   /* 2026-11-14: about 85 % of the former height (Andreas: 15 % lower) */
 @container deckplatz (max-height: 290px) {
   .deck > .titel, .deck > .meta, .deck > .deckkopf { display: none; }   /* deck letter, status and title are in the place head and the strip */
   .deck > .deckkopf, .deck > .position, .deck > .bedienreihe, .deck > .tasten { margin-top: -2px; }
   .deck > .ueber { height: 16px; }   /* the overview gives its height to the waveform */
 }
 .deck .taste.sync { letter-spacing: .12em; }
-body:not(.studio) .zug[hidden][data-mix-zeile] { display: grid !important; }   /* decks 3 and 4 keep hidden in the HTML (Studio view); a place shows them */
 
 /* DJ view, final review: the fader gets the free room of the strip. The strip becomes one grid (.knoepfe and .faderspalte dissolve): the empty cell
    left of LO takes PFL and the FX 1/2 buttons, so they no longer cost two rows above the fader; the knobs are 28 px, the fader cap 18 px. The Studio view keeps its strip. */
@@ -805,8 +863,8 @@ body:not(.studio) #pult .zug:not(.zugplatz > .zug:not(.an)) { display: grid; gri
   grid-template-rows: auto repeat(3, auto) minmax(60px, 1fr) auto auto; align-content: stretch; }
 body:not(.studio) #pult .zug .knoepfe, body:not(.studio) #pult .zug .faderspalte { display: contents; }
 body:not(.studio) #pult .zug .zugname { grid-row: 1; grid-column: 1 / -1; }
-body:not(.studio) #pult .zug .knopfzeile { grid-template-columns: 28px; grid-template-rows: 10px 28px; }
-body:not(.studio) #pult .zug .knopfzeile > .knopf { width: 28px; height: 28px; }
+body:not(.studio) #pult .zug .knopfzeile { grid-template-columns: 38px; grid-template-rows: 11px 38px; }
+body:not(.studio) #pult .zug .knopfzeile > .knopf { width: 38px; height: 38px; }   /* 2026-11-14: 28 px was too small (Andreas) */
 body:not(.studio) #pult .zug .knopfzeile:nth-child(1) { grid-column: 1; grid-row: 2; }   /* GAIN */
 body:not(.studio) #pult .zug .knopfzeile:nth-child(5) { grid-column: 1; grid-row: 3; }   /* FILTER */
 body:not(.studio) #pult .zug .knopfzeile:nth-child(2) { grid-column: 2; grid-row: 2; }   /* HI */
@@ -819,8 +877,22 @@ body:not(.studio) #pult .zug .regler.senkrecht { grid-row: 5; grid-column: 1 / -
 body:not(.studio) #pult .zug .meter.senkrecht { grid-row: 5; grid-column: 2; justify-self: end; }
 body:not(.studio) #pult .zug .faderwert { grid-row: 6; grid-column: 1 / -1; }
 body:not(.studio) #pult .zug .xzuweisung { grid-row: 7; grid-column: 1 / -1; }
-body:not(.studio) #pult .zug .regler.senkrecht .bahn { height: calc(100% - 18px); margin: 9px 0; }
-body:not(.studio) #pult .zug .regler.senkrecht .kappe { height: 18px; margin-bottom: -9px; }
+body:not(.studio) #pult .zug .regler.senkrecht .bahn { height: calc(100% - 14px); margin: 7px 0; }
+body:not(.studio) #pult .zug .regler.senkrecht .kappe { height: 14px; margin-bottom: -7px; }
+body:not(.studio) #pult .zug .regler.senkrecht { max-height: 260px; align-self: end; height: 100%; }
+body:not(.studio) #pult .zug .meter.senkrecht { max-height: 260px; align-self: end; height: 100%; }   /* 2026-11-14: a little shorter (Andreas) */
+
+/* 2026-11-14, the look of the device panels (panel.css .fp-knopf, .fp-rille, .fp-griff) for the mixer: a knob is a dark cap with a short pointer over
+   a dark track and the value arc (veredleKnopf in app.js adds the track); a fader is a thin groove that fills up to a slim grip. */
+.knopf .spur { fill: none; stroke: var(--line); stroke-width: 4; stroke-linecap: round; }
+.knopf .bogen { stroke-width: 4; filter: drop-shadow(0 0 3px color-mix(in srgb, var(--farbe) 45%, transparent)); }
+.knopf .ring { fill: #0e0f12; stroke: #3c404c; stroke-width: 1.5; }
+.knopf:hover .ring { stroke: #5a6070; }
+.knopf .zeiger { stroke-width: 3; }
+.knopf.gegriffen .ring { stroke: var(--farbe); }
+.regler.senkrecht .bahn { width: 6px !important; border: 0; border-radius: 3px; background: linear-gradient(to top, var(--farbe) calc(var(--k, 0) * 100%), #0e0f12 calc(var(--k, 0) * 100%)); box-shadow: inset 0 0 0 1px var(--line); }
+.regler.senkrecht .kappe { width: 30px !important; margin-left: -15px !important; border-radius: 3px; border: 1px solid #5a6070; background: linear-gradient(180deg, #3a3f4c, #262a33); box-shadow: 0 1px 3px rgba(0, 0, 0, .5); }
+.regler.senkrecht .kappe::after { content: ""; position: absolute; left: 4px; right: 4px; top: 50%; height: 2px; margin-top: -1px; background: var(--farbe); }
 
 /* Header, 2026-11-13 (Andreas: "die obere box ist undurchsichtig"): two rows of framed groups instead of one wrapping flow.
    Row 1: brand, view, clock and tempo, messages, tablet, Stop Cypher, connections. Row 2: beat FX routing, FX1, FX2, COLOR, headphones.
@@ -831,6 +903,7 @@ body:not(.studio) #pult .zug .regler.senkrecht .kappe { height: 18px; margin-bot
 #kopf > .marke { order: 1; } #kopf > .ansicht { order: 2; } #kopf > .uhr { order: 3; } #kopf > .ansage { order: 4; flex: 1 1 0; text-align: center; }
 #kopf > #kopplung-knopf { order: 5; } #kopf > .cypher { order: 6; } #kopf > .verbindungen { order: 7; }
 #kopf > #fx { order: 10; } #kopf > .kopfmix { order: 11; margin-left: auto; }
+body:not(.studio):not(.produktion) #kopf > #fx { order: 4; }   /* DJ view: only ROUTING stays in the header (FX1, FX2, COLOR sit under the master), it joins row 1 */
 #kopf > .uhr, #kopf > .kopfmix, #fx > .fxrouting, #fx > .fxeinheit { background: var(--panel2); border: 1px solid var(--line); border-radius: 6px;
   padding: 3px 10px; min-height: 34px; box-sizing: border-box; }
 #fx { display: flex; gap: 8px; flex-wrap: wrap; row-gap: 6px; min-width: 0; }
@@ -858,3 +931,169 @@ body:not(.studio) #pult .zug .regler.senkrecht .kappe { height: 18px; margin-bot
 #platz-remix .remix-feld > * { width: max-content; box-sizing: border-box; }
 #platz-remix .remix-feld.remix-aus { opacity: .4; pointer-events: none; }
 body.studio #platz-remix { display: none; }
+
+/* COLOR PARAMETER knob (mischer_mitte.js colorKnopf): the range input only carries the value. On FILTER the parameter does nothing (colorfx.cpp), so it is dimmed. */
+.colorfx .colorknopf { width: 30px; height: 30px; --farbe: var(--warn); }
+.colorfx #colorparam[hidden] { display: none; }
+.colorfx.filter-art .colorparam > span, .colorfx.filter-art .colorparam > output, .colorfx.filter-art .colorknopf { opacity: .4; }
+
+/* REMIX unit in the mixer middle column (or the header in other views): the target and OPEN for the Remix window. */
+.remixeinheit .remixziel { font-size: 10px; font-weight: 800; letter-spacing: .08em; color: var(--dim); }
+.remixeinheit .remixziel.an { color: var(--l2); }
+body:not(.studio) #pult .fxmitte > .remixeinheit { grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; }   /* one row: REMIX, target, OPEN */
+body:not(.studio) #pult .fxmitte > .remixeinheit .remixziel { grid-column: 2; justify-self: end; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+body:not(.studio) #pult .fxmitte > .remixeinheit [data-remix-oeffnen] { grid-column: 3; font-size: 10px; padding: 3px 8px; }
+/* short screens (1920x1080): the COLOR hint line goes, the FX column fits without scrolling */
+@media (max-height: 1150px) { body:not(.studio) #pult .fxmitte .colorfx .colorhinweis { display: none; }
+  body:not(.studio) #pult .fxmitte > .fxeinheit { padding-top: 3px; padding-bottom: 3px; row-gap: 2px; } }
+
+/* The Remix window (#remix): only the Remix plate, filling the window. */
+body.remix-fenster { grid-template-rows: minmax(0, 1fr); }
+body.remix-fenster > #kopf, body.remix-fenster > #bestand, body.remix-fenster #pult > :not(#platz-remix) { display: none !important; }
+body.remix-fenster #pult { display: flex; }
+body.remix-fenster #platz-remix { display: flex !important; flex-direction: column; flex: 1; min-width: 0; }
+
+/* DJ view, 2026-11-14: the Strudel place carries its own three channel strips (DRUMS, BASS, MELODY) right of the pattern editor; the mixer has none for it. */
+body:not(.studio) #deck-c { display: grid; grid-template-columns: minmax(0, 1fr) 190px auto; grid-template-rows: auto minmax(0, 1fr); column-gap: 10px; }
+body:not(.studio) #deck-c > .deckkopf { grid-column: 1 / -1; }
+body:not(.studio) #deck-c > .instanzen { grid-column: 1; grid-row: 2; }
+body:not(.studio) #deck-c > .zugplatz { grid-column: 3; grid-row: 2; display: grid; grid-template-columns: repeat(3, var(--zug)); gap: 4px; min-height: 0; }
+body:not(.studio) #deck-c .zugplatz > .zug { grid-area: auto; display: grid; grid-template-columns: 1fr 1fr; column-gap: 4px; row-gap: 1px; padding: 4px 4px 4px;
+  grid-template-rows: auto repeat(3, auto) minmax(60px, 1fr) auto auto; align-content: stretch; background: var(--panel2); border: 1px solid var(--line); border-top: 2px solid var(--farbe); border-radius: 8px; }
+
+/* 2026-11-14: mini view of a Track place (platz_mini.js): the running waveform, low, with bar and time left beside it. Everything else (title, cue pads,
+   snap, loop and grid rows, transport keys) is folded away; the title is in the place head. The fold key sits first in the head, in the deck colour. */
+.platzmini { flex: 0 0 auto; font-size: 11px; font-weight: 800; letter-spacing: .06em; padding: 3px 10px; border-radius: 5px; color: var(--text); background: #262a33; border: 1px solid #5a6170; }
+.platzmini:hover { border-color: var(--text); }
+.platzmini.an { background: var(--text); color: #0e0f12; border-color: var(--text); }
+.platzmini[hidden] { display: none; }
+.platzkopf [data-platz-text] { cursor: default; user-select: none; }
+body:not(.studio) #pult .deck.mini { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: 46px; gap: 0 14px; align-items: stretch; padding: 6px 10px; }
+body:not(.studio) #pult .deck.mini > :not(.position, .lauf) { display: none; }
+body:not(.studio) #pult .deck.mini > .position { grid-area: 1 / 1; flex-direction: column; justify-content: center; align-items: flex-start; gap: 4px; }
+body:not(.studio) #pult .deck.mini > .lauf { grid-area: 1 / 2; height: 46px; min-height: 0; }
+
+/* 2026-11-14 (Andreas): the full deck of the DJ view as a grid. Key, tempo and length sit right of the title on its line, the bar and time-left
+   display in the top right corner beside the deck head; the waveform is about 28 % lower than before 2026-11-14 (Andreas: twice 15 %; .63 of the free height). */
+body:not(.studio) #pult .deck:not(.mini) { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto minmax(16px, .63fr) auto auto auto auto; gap: 6px 12px; align-content: start; }
+body:not(.studio) #pult .deck:not(.mini) > .deckkopf { grid-area: 1 / 1 / 2 / 4; }
+body:not(.studio) #pult .deck:not(.mini) > .position { grid-area: 1 / 4 / 2 / 5; gap: 18px; align-self: center; }
+body:not(.studio) #pult .deck:not(.mini) > .titel { grid-area: 2 / 1 / 3 / 2; min-width: 0; }
+body:not(.studio) #pult .deck:not(.mini) > .meta { grid-area: 2 / 2 / 3 / 4; align-self: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body:not(.studio) #pult .deck:not(.mini) > :is(.lauf, .ueber, .bedienreihe, .meter, .tasten) { grid-column: 1 / -1; }
+body:not(.studio) #pult .deck:not(.mini) > .lauf { grid-row: 3; height: 100%; }
+
+/* 2026-11-14: SOUND column of the Strudel place (strudel_sound.js): per stream the instrument picker and its first four knobs. */
+.soundspalte { display: none; }
+body:not(.studio) #deck-c > .soundspalte { grid-column: 2; grid-row: 2; display: flex; flex-direction: column; gap: 6px; min-height: 0; overflow-y: auto; }
+.sound-stimme { border: 1px solid var(--line); border-top: 2px solid var(--farbe); border-radius: 8px; background: var(--panel); padding: 5px 6px 6px; display: flex; flex-direction: column; gap: 4px; }
+.sound-kopf { display: flex; align-items: center; justify-content: space-between; font-size: 10px; font-weight: 800; letter-spacing: .12em; color: var(--farbe); }
+.sound-kopf [data-synth-oeffnen] { font-size: 9px; font-weight: 800; letter-spacing: .06em; padding: 2px 7px; border-radius: 4px; border: 1px solid var(--line); color: var(--text); }
+.sound-stimme .graphplatz select.graphwahl { width: 100%; font-size: 11px; background: #0e0f12; color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 2px 4px; }
+.sound-stimme [data-bkmerken] { display: none; }
+.sound-knoepfe { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px; }
+.sound-knopf { display: flex; flex-direction: column; align-items: center; gap: 1px; min-width: 0; }
+.sound-knopf .knopf { width: 32px; height: 32px; }
+.sound-knopf span { font-size: 8px; letter-spacing: .04em; color: var(--dim); text-align: center; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sound-hinweis { grid-column: 1 / -1; font-size: 10px; color: var(--dim); line-height: 1.3; }
+
+/* SEQ place v2 (seq-deck v2 task 4): the patterns of one deck, a block each: head, ruler, lanes on one shared time axis. The node follows #platz-loops (panel,
+   border, head); its colour is the colour of the deck strip it plays on (--farbe), a pattern block has its own colour (--col). --sq-beat is the width of one beat
+   in pixels (seq_view.js sets it from the width selector); a cell is --w beats wide, so a 1/32 cell is half as wide as a 1/16 cell. The field scrolls both ways.
+   Placed like every place node in the DJ view (data-platz); the Studio view places the nodes of SEQ places itself, below the Strudel instances. */
+.seqplatz { --sq-kopf: 230px; overflow: hidden; padding: 8px 10px; gap: 8px; }
+.seqplatz[hidden] { display: none; }
+/* The large view (the button [data-sq-gross] in the deck head): the place fixed under the page header to the bottom edge, the full width inside the page margin,
+   above the mixer and the library (#bestand is 2) and below the menus and the device page (20 to 30 and up). seq_view.js measures --sq-oben (bottom edge of #kopf plus the
+   gap below it) and --sq-rand (the page padding); the field fills the height and scrolls. In the Studio view it covers the FX row below the header. */
+.seqplatz.gross { position: fixed; top: var(--sq-oben, 72px); left: var(--sq-rand, 8px); right: var(--sq-rand, 8px); bottom: 0; z-index: 24; background: var(--panel); border-radius: 8px 8px 0 0; box-shadow: 0 0 0 1px var(--line), 0 8px 40px rgba(0, 0, 0, .6); }
+.sq-gross { font-size: 15px; line-height: 1; padding: 0 9px; }
+.sq-gross[aria-pressed="true"] { border-color: var(--text); }
+.seqplatz .sq-stand, .seqplatz .sq-zahl, .seqplatz .sq-baukasten { color: var(--dim); font-size: 12px; letter-spacing: .06em; font-variant-numeric: tabular-nums; }
+body:not(.studio) .seqplatz .sq-zahl { display: none; }   /* the DJ view has the pattern count in the place head */
+.sq-rechts { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.sq-breite { display: flex; gap: 2px; }
+.sq-chip { height: 22px; padding: 0 8px; border-radius: 5px; font-size: 11px; font-weight: 600; letter-spacing: .04em; white-space: nowrap; color: var(--text); }
+span.sq-chip { display: inline-flex; align-items: center; background: var(--panel2); border: 1px solid var(--line); color: var(--dim); }
+.sq-chip.an { border-color: var(--text); }
+.seqplatz .sq-leeren { font-weight: 700; letter-spacing: .12em; color: var(--dim); }
+.seqplatz .sq-leeren[hidden], .seqplatz .sq-neu[hidden], .seqplatz .sq-produktion[hidden], .seqplatz .sq-breite[hidden], .seqplatz .sq-leer[hidden], .seqplatz .sq-feld[hidden] { display: none; }
+.sq-leer { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; text-align: center; color: var(--dim); padding: 0 24px; }
+.sq-leer b { color: var(--text); font-size: 15px; }
+.sq-leerhinweis { color: var(--warn); font-size: 13px; min-height: 1.3em; }
+.sq-beschreibung { font-size: 12px; max-width: 52ch; }
+.sq-anlegen { margin: 0; height: 56px; padding: 0 44px; font-size: 20px; font-weight: 700; letter-spacing: .12em; background: var(--farbe); border-color: var(--farbe); color: #0e0f12; }
+.sq-feld { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 8px; user-select: none; align-items: flex-start; }
+.sq-keine { color: var(--dim); font-size: 13px; padding: 12px 4px; }
+.sq-folge { --col: var(--farbe); width: max-content; min-width: 100%; flex: none; border: 1px solid var(--line); border-left: 4px solid var(--col); border-radius: 6px; background: #15181d; }
+.sq-folge.stumm .sq-zeile { opacity: .45; }
+.sq-folge.fremd { display: flex; align-items: center; gap: 12px; padding: 8px 12px; min-width: 0; width: 100%; }
+.sq-fremdname { font-weight: 700; color: var(--col); letter-spacing: .04em; }
+.sq-geraet-text { color: var(--dim); font-size: 12px; }
+.sq-fremd { margin-left: auto; color: var(--dim); font-size: 12px; font-style: italic; }
+.sq-folgenkopf { position: sticky; left: 0; width: max-content; display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: var(--panel2); border-bottom: 1px solid var(--line); }
+.sq-folgenkopf .sq-grow { flex: 1; min-width: 12px; }
+.sq-folgenname { width: 130px; height: 24px; padding: 0 6px; background: transparent; border: 1px solid transparent; border-radius: 4px; color: var(--col); font: inherit; font-weight: 700; letter-spacing: .04em; user-select: text; }
+.sq-folgenname:hover, .sq-folgenname:focus { border-color: var(--line); outline: none; }
+.sq-geraet { border-color: var(--col); color: var(--col); }
+.sq-hinter { color: var(--warn); font-size: 11px; }
+.sq-zeile, .sq-lineal { display: flex; align-items: stretch; width: max-content; border-bottom: 1px solid #23272f; }
+.sq-zeilenkopf { position: sticky; left: 0; z-index: 2; flex: 0 0 var(--sq-kopf); width: var(--sq-kopf); min-width: 0; padding: 3px 8px; background: var(--panel); border-right: 1px solid var(--line);
+  display: flex; flex-direction: column; justify-content: center; gap: 3px; }
+.sq-zeilenname { font-size: 12px; font-weight: 700; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sq-zeilenmeta { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.sq-zeilenmeta .sq-chip { height: 18px; padding: 0 6px; font-size: 10px; }
+.sq-zeilenmeta .sq-weg { margin-left: auto; }
+.sq-zellen { display: flex; align-items: center; padding: 3px 0; flex: none; }
+.sq-lineal .sq-zellen { padding: 0; }
+.sq-lineal .sq-zeilenkopf { padding: 0; height: 16px; }
+.sq-nr { flex: none; box-sizing: border-box; width: calc(var(--sq-beat, 96) * var(--w, 1) * 1px); height: 16px; padding-left: 3px; font-size: 10px; line-height: 16px; color: var(--dim);
+  border-left: 1px solid var(--line); overflow: hidden; }
+.sq-nr.takt { color: var(--text); font-weight: 700; border-left-color: var(--dim); }
+.sq-zelle { position: relative; box-sizing: border-box; flex: none; width: calc(var(--sq-beat, 96) * var(--w, .25) * 1px); height: 26px; padding: 0; border: 1px solid var(--panel);
+  border-radius: 4px; background: var(--panel2); background-clip: padding-box; color: #0e0f12; font-size: 10px; font-weight: 800; line-height: 1; touch-action: none; overflow: hidden; }
+.sq-zelle.q:not(.an) { background-color: color-mix(in srgb, var(--panel2) 88%, var(--text)); }   /* every second beat a little lighter: the bar reads in beats */
+.sq-zelle.takt { border-left-color: var(--dim); }
+button.sq-zelle:hover { border-color: var(--text); }
+.sq-zelle.an { background-color: color-mix(in srgb, var(--col) calc(30% + var(--vel, 100) * .5%), var(--panel2)); }
+.sq-zelle.akzent { background-color: var(--col); box-shadow: inset 0 0 0 2px var(--text); }
+.sq-zelle.gebunden { background-color: color-mix(in srgb, var(--col) 38%, var(--panel2)); border-radius: 0; }   /* a cell the note before it still sounds in */
+.sq-zelle.versatz::after { content: ''; position: absolute; top: 2px; right: 2px; width: 5px; height: 5px; border-radius: 50%; background: var(--text); }   /* a start off the cell start */
+.sq-zelle.wartet { opacity: .6; }
+.sq-zelle.kopf { outline: 2px solid var(--text); outline-offset: -1px; z-index: 1; }
+.sq-zelle.kopf:not(.an) { background-color: color-mix(in srgb, var(--panel2) 76%, var(--text)); }
+/* value cells: a bar from the bottom, the pointer sets it (dragged: drawn, sent on release) */
+.sq-zelle.wert { height: 40px; display: flex; align-items: flex-end; cursor: ns-resize; touch-action: none; background-color: #1b1f26; }
+.sq-zelle.wert::before { content: ''; display: block; width: 100%; height: calc(var(--wert, 0) * 100%); background: color-mix(in srgb, var(--col) 45%, var(--panel2)); }
+.sq-zelle.wert.an::before { background: var(--col); }
+.sq-zelle.wert.gesperrt { opacity: .35; cursor: default; filter: grayscale(1); }   /* a velocity or length cell without a note: no pointer */
+.sq-zelle.wert.wiederholt { opacity: .3; cursor: default; pointer-events: none; }   /* the pale repeat of a lane shorter than its pattern */
+.sq-zelle.wiederholung { opacity: .3; cursor: default; pointer-events: none; }   /* the pale repeat of a note lane up to the visible width: no control */
+.sq-nr.wiederholung { opacity: .4; }
+.sq-zelle.wert.wartet::before { background: color-mix(in srgb, var(--col) 80%, var(--text)); }
+.sq-zelle.wert.geklemmt::after { content: '!'; position: absolute; top: 0; right: 2px; color: var(--warn); font-size: 10px; }
+.sq-kurve { padding: 3px 0; }
+.sq-svg { display: block; background: #1b1f26; border-radius: 3px; cursor: crosshair; touch-action: none; }
+.sq-pfad { fill: none; stroke: var(--col); stroke-width: 2; }
+.sq-pfad.spaeter { opacity: .4; }
+.sq-kopflinie { stroke: var(--text); stroke-width: 1; }
+.sq-marke { stroke: var(--col); stroke-width: 1; stroke-dasharray: 3 3; opacity: .6; }   /* where a lane of its own length starts again */
+.sq-punkt { fill: var(--col); stroke: var(--panel); stroke-width: 1.5; cursor: grab; }
+.sq-punkt:hover { stroke: var(--text); }
+.sq-punkt.geklemmt { stroke: var(--warn); stroke-width: 2; }   /* base plus offset leaves 0..1 */
+body.studio .seqplatz[data-seq-sp="1"] { grid-area: d; }
+body.studio .seqplatz[data-seq-sp="2"] { grid-area: q2; } body.studio .seqplatz[data-seq-sp="3"] { grid-area: q3; } body.studio .seqplatz[data-seq-sp="4"] { grid-area: q4; }
+/* Studio view: the SEQ nodes sit in the lower row next to the strips, below the Strudel instances; a second node takes a column beside the first, a third and fourth a second row */
+body.studio #pult[data-seq-n="2"] { grid-template-columns: var(--mu-breite) minmax(0, 1fr) minmax(0, 1fr) calc(var(--zug) + 10px); grid-template-areas: "c c c mo" "mu d q2 mo"; }
+body.studio #pult[data-seq-n="3"], body.studio #pult[data-seq-n="4"] { grid-template-columns: var(--mu-breite) minmax(0, 1fr) minmax(0, 1fr) calc(var(--zug) + 10px);
+  grid-template-rows: minmax(0, 1.1fr) minmax(0, .9fr) minmax(0, .9fr); }   /* three or four SEQ nodes: two rows of two beside the strips, so a cell stays readable */
+body.studio #pult[data-seq-n="3"] { grid-template-areas: "c c c mo" "mu d q2 mo" "mu q3 q3 mo"; }
+body.studio #pult[data-seq-n="4"] { grid-template-areas: "c c c mo" "mu d q2 mo" "mu q3 q4 mo"; }
+/* Studio view: the deck strip of a SEQ place (the node of the DJ view, moved after L2 by slots_view.js) is shown with the other strips; the strip column
+   grows by one strip per SEQ place up to 42vw, beyond that the row scrolls sideways. The other deck strips stay out of the Studio view as before. */
+body.studio #pult { --mu-breite: min(calc((5 + var(--seq-n, 0)) * var(--zug) + 36px), 42vw); }
+body.studio #pult[data-seq-n="1"] { grid-template-columns: var(--mu-breite) minmax(0, 1fr) calc(var(--zug) + 10px); }
+body.studio .zug[data-deck]:not([data-studio-zug]) { display: none !important; }
+body.studio .zug[data-studio-zug] { display: flex !important; }
+body.studio #pult:not([data-seq-n="0"]) #mischer-unten { grid-auto-flow: column; grid-template-columns: none; grid-auto-columns: var(--zug); overflow-x: auto; }

@@ -62,8 +62,11 @@ Kern::Kern(double start_bpm, cdj_ring_kopf* ring, Befehlsring* befehle, Ereignis
   arr_pickup_.sperre = &nachreichen_sperre_;
   sw_->setze_pickup(&arr_pickup_);
   arr_kanal_ = Mixer::kanal_index(ARR_KANAL);
-  pad_kanal_[0] = Mixer::kanal_index("pad/1");   // DJ view places: the DJ channels the loop slots play into
-  pad_kanal_[1] = Mixer::kanal_index("pad/2");
+  {   // DJ view places, ADR 038: the DJ channels a group of the live container plays into, indexed by the DJ nr - 1: the loop slots A and B on pad/1, pad/2, the SEQ decks on deck/1..deck/4
+    static const char* const dj_namen[] = {"pad/1", "pad/2", "deck/1", "deck/2", "deck/3", "deck/4"};
+    static_assert(sizeof dj_namen / sizeof dj_namen[0] == Arrangement::DJ_KANAELE, "one mixer channel name per DJ channel");
+    for (int c = 0; c < Arrangement::DJ_KANAELE; ++c) dj_kanal_[c] = Mixer::kanal_index(dj_namen[c]);
+  }
   // D1 K2b (Spec 2.4): die RB-338 spielt alle internen Spuren (je Spur-Slot eine Instanz)
   arr_rb_ = std::make_unique<ArrRbSenke>(*arr_);
   arr_bk_ = std::make_unique<ArrBkSenke>(*arr_);   // S20: a Baukasten graph per internal track with device bk

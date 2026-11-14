@@ -10,6 +10,7 @@ import { INSERT_ARTEN } from './insert_key.ts';
 import { SCHLUESSEL_DJ, SCHLUESSEL_NUR_ZEILE } from './key_table.ts';
 import { ersterUngueltigerSchluessel } from './routing_verdict.ts';
 import { huellkurvenPruefung, type Huellkurve } from './envelope.ts';
+import { seqPruefung, seqSichtPruefung, type SeqDeck, type SeqSicht } from './seq.ts';   // seq.ts imports only types from this file: no runtime cycle
 import { PRESET_ID } from '../presets/preset_id.ts';   // 1.16 rest: zero-import file, keeps this module free of file access
 export type { Punkt, LaneForm } from './lane.ts';
 
@@ -241,6 +242,7 @@ export interface MidiClip {
   id: string; art: 'midi'; name: string; start_beat: number; laenge_beats: number; loop_beats?: number | null; naechste_noten_id?: number; noten: Note[];
   huellkurven?: Huellkurve[];                                  // 1.12 slice 5 (/2 only, D7): clip envelopes, absent when none
   muster?: MusterHerkunft;                                     // strudel-clip (/2 only): the Strudel pattern the notes were generated from; absent when none
+  seq?: SeqSicht;                                              // SEQ deck v2 (/2 only): view of the lanes in the SEQ place, no music, absent when none
 }
 // strudel-clip: where the notes of a generated clip came from. code is the pattern text; ohne_ziel the Strudel fields that
 // have no target here (reported, not applied).
@@ -345,6 +347,9 @@ export interface Gruppe {
   modul?: ModulHerkunft & { slot?: 'A' | 'B' };   // slot: absent once the module sits in a production project (task 10)
   blend?: number;   // 0..1 blend position of a module group; absent = not set, never written then
   neu_trim_db?: number;   // level offset of the new path against the original (dB, measured by the render after the MIDI); absent = 0
+  // SEQ deck (spec 2026-11-14-seq-deck-design, project/seq.ts): the step document of a top group of the live container; absent on every other group,
+  // never written then. Not playback: playback.ts does not read it. A group has this or `modul`, never both.
+  seq?: SeqDeck;
 }
 // Where a live module comes from: one loop of a deck rendering, split into stems. von_beat is on the beat axis of the rendering.
 export interface ModulHerkunft {
@@ -1069,7 +1074,12 @@ function pruefeClip(c: unknown, wo: string, spurArt: string, warpErlaubt: boolea
     pruefeHuellkurven(o, wo, warpErlaubt, spur);
     return o as unknown as Clip;
   }
-  const o = felder(c, wo, [...basis, 'noten'], ['loop_beats', 'naechste_noten_id', 'huellkurven', 'muster']);
+  const o = felder(c, wo, [...basis, 'noten'], ['loop_beats', 'naechste_noten_id', 'huellkurven', 'muster', 'seq']);
+  if ('seq' in o) {                                             // SEQ view descriptor: like muster, /2 only
+    if (!warpErlaubt) werfe(`${wo}.seq`, `unknown field (seq exists only from ${FORMAT} on)`);
+    const f = seqSichtPruefung(o.seq);
+    if (f) werfe(`${wo}.seq`, f.text);
+  }
   if ('muster' in o) {                                          // strudel-clip: like huellkurven, /2 only
     if (!warpErlaubt) werfe(`${wo}.muster`, `unknown field (muster exists only from ${FORMAT} on)`);
     const f = musterPruefung(o.muster);
@@ -1391,8 +1401,14 @@ export function pruefeModulFehler(m: unknown): string | null {
 
 function pruefeGruppe(g: unknown, wo: string): Gruppe {
   const o = felder(g, wo, ['id', 'nr', 'name', 'farbe', 'fader_db', 'pan', 'mute', 'solo', 'gefaltet'],
-    ['sends', 'inserts', 'rack', 'automation', 'ausgang', 'modul', 'blend', 'neu_trim_db']);
+    ['sends', 'inserts', 'rack', 'automation', 'ausgang', 'modul', 'blend', 'neu_trim_db', 'seq']);
   if ('modul' in o) pruefeModul(o.modul, `${wo}.modul`);
+  if ('seq' in o) {
+    const f = seqPruefung(o.seq);
+    if (f) werfe(`${wo}.seq`, f.text);
+    if ('modul' in o) werfe(`${wo}.seq`, 'a group holds a SEQ deck or a module, not both');
+    if ('ausgang' in o) werfe(`${wo}.seq`, 'a SEQ deck sits on a top group, not on a nested one');
+  }
   if ('blend' in o) zahlIn(o.blend, `${wo}.blend`, 0, 1);
   if ('neu_trim_db' in o) zahlIn(o.neu_trim_db, `${wo}.neu_trim_db`, NEU_TRIM_MIN, NEU_TRIM_MAX);
   if ('ausgang' in o) {   // master is never stored
@@ -1525,7 +1541,7 @@ function pruefeAlles(x: unknown): void {
       });
     });
   });
-  const gruppenIds = new Set<string>(), gruppenNrs = new Set<number>();
+  const gruppenIds = new Set<string>(), gruppenNrs = new Set<number>(), seqPlaetze = new Set<number>();
   if (neu2) {
     if (!Array.isArray(o.gruppen)) werfe('gruppen', 'Liste erwartet');
     if ((o.gruppen as unknown[]).length > MAX_GRUPPEN) werfe('gruppen', `höchstens ${MAX_GRUPPEN}`);
@@ -1535,6 +1551,11 @@ function pruefeAlles(x: unknown): void {
       if (gruppenNrs.has(g.nr)) werfe(`gruppen[${i}].nr`, `doppelt (${g.nr})`);
       gruppenIds.add(g.id); gruppenNrs.add(g.nr);
       laneZaehle(g, `gruppen[${i}]`);
+      if (g.seq) {   // SEQ deck: live container only, one deck per place (the patterns are the tracks that output into the group, found by routing)
+        if (o.live !== true) werfe(`gruppen[${i}].seq`, 'a SEQ deck exists only in the live container');
+        if (seqPlaetze.has(g.seq.platz)) werfe(`gruppen[${i}].seq.platz`, `duplicate (${g.seq.platz}): the place already holds a SEQ deck`);
+        seqPlaetze.add(g.seq.platz);
+      }
     });
     // group targets: a known group, not itself, and the tree has no cycle
     const ziel = new Map<string, string>();

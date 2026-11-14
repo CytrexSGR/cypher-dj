@@ -6,7 +6,12 @@ const VOID = new Set(['input', 'br', 'img', 'hr', 'line', 'path', 'rect', 'circl
 const camel = (k) => k.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
 
 export class El {
-  constructor(tag = 'div') { this.tagName = tag.toUpperCase(); this.attrs = {}; this.children = []; this.parent = null; this.listeners = {}; this.klassen = new Set(); this.eigen = {}; }
+  constructor(tag = 'div') {
+    this.tagName = tag.toUpperCase(); this.attrs = {}; this.children = []; this.listeners = {}; this.klassen = new Set(); this.eigen = {};
+    // `parent` is not enumerable: a failed assert on an element prints the element and what is below it, not the whole document through
+    // the way up (node:assert inspects 1000 levels deep and ignores a custom inspect; on 2026-11-14 one such message took 52 GB twice)
+    Object.defineProperty(this, 'parent', { value: null, writable: true, enumerable: false, configurable: true });
+  }
   get id() { return this.attrs.id ?? ''; }
   get dataset() {
     const a = this.attrs, attr = (k) => `data-${k.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}`;

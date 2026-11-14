@@ -66,15 +66,21 @@
       <button data-fx-an title="Beat FX 2 on/off">ON</button>
       <button data-fx-reset title="Reset FX2 parameters to default">RESET</button>
     </div>
+    <div class="fxeinheit remixeinheit" id="remix-einheit" role="group" aria-label="FX3 Remix">
+      <label title="FX3: the Remix as an insert on every channel with key 3 lit">FX3</label>
+      <span class="remixziel" data-remix-ziel title="Channels on FX3 (key 3 on their strip)">–</span>
+      <button data-remix-oeffnen title="Open the Remix in its own small window: LOAD, channels, scene, isolate, release, pad">OPEN ↗</button>
+    </div>
     <div class="fxeinheit colorfx" id="colorfx" role="radiogroup" aria-label="Sound color FX (all channels, the FILTER knob of each channel is its COLOR knob)">
       <label>COLOR</label>
+      <span class="colorhinweis">picks what the COLOR knob of every channel does</span>
       <button data-colorart="1" role="radio" title="SPACE: reverb · left: mids and lows · right: mids and highs · PARAMETER: feedback">SPACE</button>
       <button data-colorart="2" role="radio" title="DUB ECHO: echo 3/4 beat · left: mids only · right: highs only · PARAMETER: feedback">DUB ECHO</button>
       <button data-colorart="3" role="radio" title="SWEEP · left: gate, tighter · right: band pass, narrower · PARAMETER: gate / center frequency">SWEEP</button>
       <button data-colorart="4" role="radio" title="NOISE: white noise through a filter · left: low pass falls · right: high pass rises · PARAMETER: noise level">NOISE</button>
       <button data-colorart="5" role="radio" title="CRUSH · left: distortion · right: crushed through a rising high pass · PARAMETER: strength">CRUSH</button>
       <button data-colorart="0" role="radio" title="FILTER · left: low pass · right: high pass (pressing the lit type again also returns here)">FILTER</button>
-      <span class="colorparam"><span>PARAMETER</span><input type="range" id="colorparam" min="0" max="1" step="0.01" value="0.5" aria-label="Sound color FX parameter"><output data-colorparam>–</output></span>
+      <span class="colorparam" title="PARAMETER: strength of SPACE, DUB ECHO, SWEEP, NOISE and CRUSH; it does nothing on FILTER"><span>PARAMETER</span><input type="range" id="colorparam" min="0" max="1" step="0.01" value="0.5" aria-label="Sound color FX parameter"><output data-colorparam>–</output></span>
     </div>
   </div>
   <div class="ansage" id="ansage" title="Events reported by the control centre"></div>
@@ -178,6 +184,7 @@
       <div class="fxzuweisung mfx">
         <button data-fxzuweisung="1" data-kanal="master" title="Assign master to Beat FX 1">1</button>
         <button data-fxzuweisung="2" data-kanal="master" title="Assign master to Beat FX 2">2</button>
+        <button data-fx3-alle title="FX3 (Remix) on everything: puts every channel on 3, or takes them all off">3</button>
       </div>
     </div>
     <div class="zug" data-deck="2" style="--farbe:var(--b)"><div class="zugname">B</div></div>
@@ -192,12 +199,11 @@
   </section>
   <section id="mischer-unten" class="mix-unten">
     <div class="zugplatz">
-      <div class="zug an" data-kanalzug="erz/1" style="--farbe:var(--c)"><div class="zugname">DR</div></div>
-      <div class="zug" data-kanalzug="erz/2" style="--farbe:var(--c2)"><div class="zugname">BA</div></div>
-      <div class="zug" data-kanalzug="erz/3" style="--farbe:var(--c3)"><div class="zugname">ME</div></div>
+      <div class="zug an" data-kanalzug="erz/1" style="--farbe:var(--c)"><div class="zugname" title="Strudel DRUMS (switch with the DRUMS/BASS/MELODY tabs of the Strudel place)">DRUMS</div></div>
+      <div class="zug" data-kanalzug="erz/2" style="--farbe:var(--c2)"><div class="zugname" title="Strudel BASS">BASS</div></div>
+      <div class="zug" data-kanalzug="erz/3" style="--farbe:var(--c3)"><div class="zugname" title="Strudel MELODY">MELODY</div></div>
     </div>
-    <div class="zug" data-deck="3" style="--farbe:var(--d3)" hidden><div class="zugname">3</div></div>
-    <div class="zug" data-deck="4" style="--farbe:var(--d3)" hidden><div class="zugname">4</div></div>
+    <div class="fxmitte" id="fxmitte" aria-label="Beat FX, COLOR and Remix (DJ view)"></div>
     <div class="zug" data-boxzug="1" style="--farbe:var(--l1)"><div class="zugname">L1</div></div>
     <div class="zug" data-boxzug="2" style="--farbe:var(--l2)"><div class="zugname">L2</div></div>
   </section>
@@ -223,32 +229,38 @@
     <div class="remix-zeile" role="status"></div>
     <div class="remix-feld"></div>
   </section>
+  <div class="seitenspalte" data-seite="l"></div>
+  <div class="seitenspalte" data-seite="r"></div>
   <div class="platzkopf" data-platz-kopf="1">
+    <button class="platzmini" data-platz-mini hidden>MINI</button>
     <span class="platztext" data-platz-text></span>
     <span class="platzhinweis" data-platz-hinweis role="status"></span>
     <div class="platzwahl" role="group" aria-label="Type of place 1">
-      <button data-platz-typ="track" title="Track: deck 1">TRACK</button><button data-platz-typ="strudel" title="Strudel: the three generators">STRUDEL</button><button data-platz-typ="loops" title="Loops: the live container with the loop slots L1 and L2">LOOPS</button><button data-platz-typ="remix" title="Remix: the fx-remix device on the DJ master or a deck">REMIX</button>
+      <button data-platz-typ="track" title="Track: deck 1">TRACK</button><button data-platz-typ="strudel" title="Strudel: the three generators">STRUDEL</button><button data-platz-typ="loops" title="Loops: the live container with the loop slots L1 and L2">LOOPS</button><button data-platz-typ="seq" title="SEQ: patterns of notes, values and curves, plays on the strip of this place">SEQ</button>
     </div>
   </div>
   <div class="platzkopf" data-platz-kopf="2">
+    <button class="platzmini" data-platz-mini hidden>MINI</button>
     <span class="platztext" data-platz-text></span>
     <span class="platzhinweis" data-platz-hinweis role="status"></span>
     <div class="platzwahl" role="group" aria-label="Type of place 2">
-      <button data-platz-typ="track" title="Track: deck 2">TRACK</button><button data-platz-typ="strudel" title="Strudel: the three generators">STRUDEL</button><button data-platz-typ="loops" title="Loops: the live container with the loop slots L1 and L2">LOOPS</button><button data-platz-typ="remix" title="Remix: the fx-remix device on the DJ master or a deck">REMIX</button>
+      <button data-platz-typ="track" title="Track: deck 2">TRACK</button><button data-platz-typ="strudel" title="Strudel: the three generators">STRUDEL</button><button data-platz-typ="loops" title="Loops: the live container with the loop slots L1 and L2">LOOPS</button><button data-platz-typ="seq" title="SEQ: patterns of notes, values and curves, plays on the strip of this place">SEQ</button>
     </div>
   </div>
   <div class="platzkopf" data-platz-kopf="3">
+    <button class="platzmini" data-platz-mini hidden>MINI</button>
     <span class="platztext" data-platz-text></span>
     <span class="platzhinweis" data-platz-hinweis role="status"></span>
     <div class="platzwahl" role="group" aria-label="Type of place 3">
-      <button data-platz-typ="track" title="Track: deck 3">TRACK</button><button data-platz-typ="strudel" title="Strudel: the three generators">STRUDEL</button><button data-platz-typ="loops" title="Loops: the live container with the loop slots L1 and L2">LOOPS</button><button data-platz-typ="remix" title="Remix: the fx-remix device on the DJ master or a deck">REMIX</button>
+      <button data-platz-typ="track" title="Track: deck 3">TRACK</button><button data-platz-typ="strudel" title="Strudel: the three generators">STRUDEL</button><button data-platz-typ="loops" title="Loops: the live container with the loop slots L1 and L2">LOOPS</button><button data-platz-typ="seq" title="SEQ: patterns of notes, values and curves, plays on the strip of this place">SEQ</button>
     </div>
   </div>
   <div class="platzkopf" data-platz-kopf="4">
+    <button class="platzmini" data-platz-mini hidden>MINI</button>
     <span class="platztext" data-platz-text></span>
     <span class="platzhinweis" data-platz-hinweis role="status"></span>
     <div class="platzwahl" role="group" aria-label="Type of place 4">
-      <button data-platz-typ="track" title="Track: deck 4">TRACK</button><button data-platz-typ="strudel" title="Strudel: the three generators">STRUDEL</button><button data-platz-typ="loops" title="Loops: the live container with the loop slots L1 and L2">LOOPS</button><button data-platz-typ="remix" title="Remix: the fx-remix device on the DJ master or a deck">REMIX</button>
+      <button data-platz-typ="track" title="Track: deck 4">TRACK</button><button data-platz-typ="strudel" title="Strudel: the three generators">STRUDEL</button><button data-platz-typ="loops" title="Loops: the live container with the loop slots L1 and L2">LOOPS</button><button data-platz-typ="seq" title="SEQ: patterns of notes, values and curves, plays on the strip of this place">SEQ</button>
     </div>
   </div>
 </main>
@@ -379,6 +391,7 @@
     <div class="fxzuweisung">
       <button data-fxzuweisung="1" title="Assign to Beat FX 1">1</button>
       <button data-fxzuweisung="2" title="Assign to Beat FX 2">2</button>
+      <button data-fxzuweisung="3" title="Assign to FX3 (Remix): this channel passes the Remix together with the other channels on 3">3</button>
     </div>
     <div class="xzuweisung" data-teil="xseite" title="Crossfader assign: A side, through (not on the crossfader), B side"><button data-stufe="0">A</button><button data-stufe="1">THRU</button><button data-stufe="2">B</button></div>
   </div>

@@ -226,10 +226,21 @@ class Mixer {
   // FX2 (seriell, wie an der S8). Nur param1 wirkt im DSP (an BeatFx::setze weitergereicht); param2/param3 werden
   // gespeichert und gemeldet, aber nicht verarbeitet (S8-Vertragskompatibilität).
   static constexpr int FX_EINHEITEN = 2;
-  static constexpr int FX_ZIELE = 7;   // deck/1, deck/2, erz/1, erz/2, erz/3, pad/1, pad/2 (Studio S1)
-  static constexpr int FX_ZIEL_KANAL[FX_ZIELE] = {0, 1, 4, 5, 6, 12, 13};
+  static constexpr int FX_ZIELE = 9;   // deck/1..4, erz/1, erz/2, erz/3, pad/1, pad/2 (Studio S1; deck/3 and deck/4 since FX3)
+  static constexpr int FX_ZIEL_KANAL[FX_ZIELE] = {0, 1, 2, 3, 4, 5, 6, 12, 13};
   static constexpr int FX_MASTER = -2, FX_KEIN = -1;
-  static int fx_ziel_index(int kanal) noexcept;   // Mixer-Kanalindex -> 0..6, sonst -1
+  static int fx_ziel_index(int kanal) noexcept;   // Mixer-Kanalindex -> 0..8, sonst -1
+  // FX3 (unit index 2, page unit 3): an insert on the GROUP of assigned source channels, carrying the effect graph of fx/3. It is not a
+  // BeatFx. fx_zuweisung_setze(FX3_EINHEIT, k, an) takes every source channel k (0..MIX_QUELLEN-1; master and buses are ignored). What an
+  // assigned channel k adds to the master sum (after its fader AND its crossfader weight, only while its target <k>/ziel is the master)
+  // goes into the input of the fx/3 bus INSTEAD of the master sum; the graph of fx/3 processes that bus (together with the post-fader sends
+  // 3 of all channels) and its return joins the master sum scaled by fx/3/rueckweg, exactly as without FX3. Idle graph (passes dry) = not
+  // assigned, within float rounding; no graph on fx/3 = the master path (never silent). Assigning or releasing a channel blends over
+  // MIX_ZIEL_BLENDE samples (S-curve, like a <k>/ziel change), continuing from the weight reached when a blend is interrupted. A channel
+  // that leaves FX3 stops feeding the bus; the graph keeps running on the bus, so its tail rings out.
+  static constexpr int FX3_EINHEIT = 2;
+  void fx3_zuweisung_setze(int kanal, bool an) noexcept;
+  bool fx3_zugewiesen(int kanal) const noexcept { return kanal >= 0 && kanal < MIX_QUELLEN && fx3_zuw_[kanal]; }
   void fx_einheit_setze(int einheit, int art, double beats, float wet, float param1, double param2, double param3,
                         bool an) noexcept;
   void fx_zuweisung_setze(int einheit, int kanal, bool an) noexcept;
@@ -455,6 +466,11 @@ class Mixer {
   static bool vor_leitung_endlich(float* l, float* r, int n) noexcept;
   float spitze_[MIX_KANAELE + 2] = {};
   BeatFx fx_kanal_[FX_EINHEITEN][FX_ZIELE];       // Leitungen im BeatFx-Konstruktor, nie im Callback angelegt
+  // FX3 state per source channel: wanted assignment, the weight of the share that goes into the fx/3 bus (0..1) and its blend. The blend
+  // runs fx3_von_ -> fx3_zuw_ over fx3_rest_ samples (S-curve); fx3_gew_ is the weight at the end of the last block.
+  bool fx3_zuw_[MIX_QUELLEN] = {};
+  float fx3_gew_[MIX_QUELLEN] = {}, fx3_von_[MIX_QUELLEN] = {};
+  int fx3_rest_[MIX_QUELLEN] = {};
   BeatFx fx_master_[FX_EINHEITEN];                // die Summe vor master/pegel
   bool fx_zuw_[FX_EINHEITEN][FX_ZIELE] = {};
   bool fx_master_zuw_[FX_EINHEITEN] = {};

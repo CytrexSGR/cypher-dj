@@ -3,6 +3,27 @@
 One entry per public update, newest first. Each entry names what changed for someone who plays, produces or
 builds cypher-dj.
 
+## 2026-11-15
+
+**DJ**
+- SEQ, a pattern sequencer place. A pattern plays one instrument and holds the lanes you add: notes, one value per
+  step, or a curve drawn or shaped onto any knob of the instrument. Each lane has its own grid, from 1/4 to 1/32, and
+  may run shorter than the notes. The data is an ordinary MIDI clip with envelopes, so PRODUCTION shows the same
+  pattern in its piano roll. The agent writes and reads a whole pattern as text (`seq`).
+- Cypher Remix moved from a place to FX3, a third FX unit in its own window. Every channel strip has a key 3 that
+  sends the channel through it; key 3 on the master sends all channels.
+- The main mixer has four channel strips: deck A, deck B, L1 and L2. The Strudel channels have their strips inside the
+  Strudel place, with a SOUND column that picks the instrument of bass and melody and shows its first four knobs.
+- A track place folds to a mini view and gives its height to the other place of its column.
+- The project transport starts on the next bar of the master clock, also when nothing else plays, so a SEQ deck and
+  synced decks stay on the same beat.
+
+**Controllers**
+- Akai APC20 as main console for the four DJ channels and the master, Traktor Kontrol S8 with its two screens
+  (scrolling waveform, hot cue marks, whole-track overview, Strudel, loop and SEQ views), hot cue pads, loop and browse
+  encoders and touch strips (tempo bend while playing, scratch when stopped, SHIFT seeks in whole beats), Maschine MK2
+  as a desk for Cypher Modular knobs with their names on its displays, LPD8 knobs on the remix.
+
 ## 2026-11-14
 
 **DJ**

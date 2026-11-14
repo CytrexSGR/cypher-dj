@@ -788,6 +788,8 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
       const int dn = snap_ ? (snap_->gruppe_dj[g] ? snap_->gruppe_dj[g] : (dj_rest_gilt ? dj_rest_[g] : 0)) : 0;
 #ifdef CYPHERDJ_MUTATION_ARR_DJ_OFFLINE_AUS
       const bool dj_ziel = dn > 0 && zg == 0 && dj_aus_l_[dn - 1] && dj_aus_r_[dn - 1];   // error case: the offline switch is ignored
+#elif defined(CYPHERDJ_MUTATION_ARR_DJ_NUR_PAD)
+      const bool dj_ziel = dn > 0 && dn <= 2 && zg == 0 && !dj_master_ && dj_aus_l_[dn - 1] && dj_aus_r_[dn - 1];   // error case: only pad/1 and pad/2 are DJ channels, a nr above 2 falls to the master (ADR 038)
 #else
       const bool dj_ziel = dn > 0 && zg == 0 && !dj_master_ && dj_aus_l_[dn - 1] && dj_aus_r_[dn - 1];
 #endif

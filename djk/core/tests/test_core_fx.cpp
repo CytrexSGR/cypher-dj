@@ -284,15 +284,31 @@ int main() {
   PRUEF(a.kern->mixer().fx_zugewiesen(0, cdj::Mixer::kanal_index("erz/1")));
   PRUEF(!a.kern->mixer().fx_zugewiesen(1, cdj::Mixer::kanal_index("deck/1")));
 
-  // 6) unbekannter Kanal bei Zuweisung: Quittung 6
-  const int64_t z6 = a.fxZuweisung(1, "deck/3", 1);
+  // 6) a channel the unit does not take: receipt 6. Units 1 and 2 take deck/3 and deck/4 now, but not erz/5; unit 3 (FX3) takes erz/5, never master.
+  const int64_t z6 = a.fxZuweisung(1, "erz/5", 1);
   a.zyklen(40 * SPB);
   PRUEF(a.quittung(z6, 6));
+  PRUEF(!a.kern->mixer().fx_zugewiesen(0, cdj::Mixer::kanal_index("erz/5")));
+  const int64_t z6b = a.fxZuweisung(1, "deck/3", 1);
+  a.zyklen(a.kern->sample() + 1024);
+  PRUEF(a.quittung(z6b, 2) && a.kern->mixer().fx_zugewiesen(0, cdj::Mixer::kanal_index("deck/3")));
+  const int64_t z6c = a.fxZuweisung(3, "erz/5", 1);
+  a.zyklen(a.kern->sample() + 1024);
+  PRUEF(a.quittung(z6c, 2) && a.kern->mixer().fx_zugewiesen(2, cdj::Mixer::kanal_index("erz/5")));
+  PRUEF(a.fxz.back().deck == 3 && !std::strcmp(a.fxz.back().pfad, "erz/5") && a.fxz.back().status == 1);   // reported like FX1 and FX2
+  PRUEF(!a.kern->mixer().fx_zugewiesen(0, cdj::Mixer::kanal_index("erz/5")) && !a.kern->mixer().fx_zugewiesen(1, cdj::Mixer::kanal_index("erz/5")));
+  const int64_t z6d = a.fxZuweisung(3, "master", 1);
+  a.zyklen(a.kern->sample() + 1024);
+  PRUEF(a.quittung(z6d, 6));
+  PRUEF(!a.kern->mixer().fx_zugewiesen(2, cdj::Mixer::FX_MASTER));
 
-  // 7) unbekannte Einheit: Quittung 6, bei Zuweisung und bei den Einheits-Parametern
-  const int64_t z7 = a.fxZuweisung(3, "deck/1", 1);
-  a.zyklen(41 * SPB);
+  // 7) unknown unit: receipt 6, for assignment and for the unit parameters (unit 3 has no /k/fx parameters, it is no Beat FX)
+  const int64_t z7 = a.fxZuweisung(4, "deck/1", 1);
+  a.zyklen(a.kern->sample() + 1024);
   PRUEF(a.quittung(z7, 6));
+  const int64_t p3 = a.fx(3, 1, 0.5, 1.0f, 0.0f, 0.5, 0.5, 1);
+  a.zyklen(a.kern->sample() + 1024);
+  PRUEF(a.quittung(p3, 6));
   const int64_t p7 = a.fx(0, 1, 0.5, 1.0f, 0.0f, 0.5, 0.5, 1);
   a.zyklen(42 * SPB);
   PRUEF(a.quittung(p7, 6));

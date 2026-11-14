@@ -328,7 +328,7 @@ export class Oberflaeche {
   private spektrumLetzt: { kanal: string; rahmen: number; pegel: string; zeit: number } | null = null;   // 1.15 A7b: last /zustand/spektrum frame
   private insGr: Record<string, { db: number; t: number }> = {};   // 1.10 slice 4a: last /e/ins_gr reading per stage (ins/komp/<n>) for /lage, not part of the SSE start picture
   private readonly stand = { regler: {} as Record<string, number>, decks: {} as Record<string, Felder>, geladen: {} as Record<string, Felder>, loops: {} as Record<string, Felder>,
-    fx: [null, null] as (Felder | null)[], fxZuweisung: [{}, {}] as Record<string, boolean>[],   // Index 0 = FX1, 1 = FX2
+    fx: [null, null] as (Felder | null)[], fxZuweisung: [{}, {}, {}] as Record<string, boolean>[],   // index 0 = FX1, 1 = FX2, 2 = FX3 (the remix insert on fx/3: any source channel, never master)
     hallPool: null as { an: boolean; faeden: number; spaet: number; zurueck: number } | null,   // mehrkern Task 5: the kern's /zustand/hall_pool (2 Hz and on change); null until it came, i.e. an old kern only: a kern without a pool sends nine zeros, which become {an: false, modus: 'aus', ...}
     spurPool: null as { an: boolean; modus: 'aus' | 'an' | 'auto'; blocks_parallel: number; einheiten_worker: number; einheiten_caller: number; seriell: number; haengt: number; spaet: number; zurueck: number } | null,   // mehrkern slice 3.2 Task 8: the kern's /zustand/spur_pool (2 Hz and on change); null until it came, i.e. no pool or an old kern
     kanalLimiter: null as { gebaut: boolean; latenz_samples: number } | null,   // 1.15 A5c: the kern's own word (/e/kanal_limiter); null until it came, a new kern says it again on its first hallo
@@ -611,6 +611,7 @@ export class Oberflaeche {
       loopOrdner: () => this.loopOrdner(),   // task 10: POST /modul/loop reads the loop library
       kanalOffen: (k) => this.kanalGeoeffnet(k),   // DJ view places task 7: an open channel refuses the export (PFL is no reason; a planned or running ramp counts)
       deckLoop: (deck) => this.deckLoopAusschnitt(deck), herkunft: (mid) => this.moduleHerkunft(mid), masterTonart: () => this.masterTonart(),
+      deckLaeuft: (n) => { const st = this.deckStand(n); return st !== null && Number(st.z.status) >= 2; },   // SEQ deck: POST /seq/anlegen refuses deck_laeuft
       // task 3: every module is saved (at export, when the stems arrive, when the slot is cleared); the ramp of POST /modul/leeren reads the core clock
       nachExport: (e) => { speichereModul(e.projekt, e.gruppeId, { basis: modulBasisVon(opt.modulOrdner, inst) }); },
       nachStems: (e) => { speichereModul(e.projekt, e.gruppeId, { basis: modulBasisVon(opt.modulOrdner, inst) }); },
@@ -787,7 +788,7 @@ export class Oberflaeche {
     if (d.adresse === '/e/fx') { const e = Number(f.einheit); if (e === 1 || e === 2) { this.stand.fx[e - 1] = f; this.angefasst.add(`fx:${e}`); } }
     if (d.adresse === '/e/fx/zuweisung') {
       const e = Number(f.einheit);
-      if (e === 1 || e === 2) this.stand.fxZuweisung[e - 1][String(f.kanal)] = f.an === 1;
+      if (e === 1 || e === 2 || e === 3) this.stand.fxZuweisung[e - 1][String(f.kanal)] = f.an === 1;
     }
     // Gleiche Generation (ein Abonnent hat sich nur neu gemeldet, der Kern lief weiter): der Stand des Kerns ist unverändert,
     // der Server leert nichts und sendet nichts erneut. Nur ein neuer Kern (andere Generation) beginnt leer.
@@ -802,7 +803,7 @@ export class Oberflaeche {
     }
     if (neuerKern) this.boxFxPlanen();   // Paket 2 Slice 5 (F07): Schnappschuss VOR dem Leeren (B15)
     if (neuerKern || gebremst) this.spektrumLetzt = null;   // 1.15 A7b: the new kern starts with the selector at 0
-    if (neuerKern || gebremst) { this.stand.fx = [null, null]; this.stand.fxZuweisung = [{}, {}]; }  // nach einem Neustart sind beide Einheiten aus
+    if (neuerKern || gebremst) { this.stand.fx = [null, null]; this.stand.fxZuweisung = [{}, {}, {}]; }  // after a restart all units are off
     if (neuerKern || gebremst) this.stand.hallPool = null;   // mehrkern Task 5: a new kern says it again within 0.5 s, or has no pool
     if (neuerKern || gebremst) this.stand.spurPool = null;   // mehrkern slice 3.2 Task 8: a new kern says it again within 0.5 s, or has no pool
     if (d.adresse === '/zustand/spur_pool') this.stand.spurPool = { an: Number(f.an) === 1, modus: (['aus', 'an', 'auto'] as const)[Number(f.modus)] ?? 'aus', blocks_parallel: Number(f.blocks_parallel),
@@ -876,8 +877,10 @@ export class Oberflaeche {
     return (ALLE_STROEME as readonly number[]).includes(n) ? n : null;   // S18: the stream table (1, 2, 3, 5, 6, 7, 9, 10)
   }
 
-  // AUFTRAG 2026-09-28: zwei Beat-FX-Einheiten, drei Parameter; zuweisbar sind die fünf Kanäle und der Master.
-  private static readonly FX_ZUWEISUNG_KANAL = ['deck/1', 'deck/2', 'erz/1', 'erz/2', 'erz/3', 'pad/1', 'pad/2', 'master'];
+  // AUFTRAG 2026-09-28: zwei Beat-FX-Einheiten, drei Parameter; assignable are the decks, erz/1..3, the pads and the master.
+  // FX3 (the remix insert on fx/3) takes every source channel of the mixer and never the master.
+  private static readonly FX_ZUWEISUNG_KANAL = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'erz/1', 'erz/2', 'erz/3', 'pad/1', 'pad/2', 'master'];
+  private static readonly FX3_ZUWEISUNG_KANAL = ['deck/1', 'deck/2', 'deck/3', 'deck/4', 'erz/1', 'erz/2', 'erz/3', 'erz/4', 'erz/5', 'erz/6', 'erz/7', 'erz/8', 'pad/1', 'pad/2'];
   private static readonly FX_BEATS = [0.25, 0.5, 1, 2, 4, 8, 16];
   private fx(d: Record<string, unknown>, a: http.ServerResponse): void {
     const anteil = (x: unknown) => typeof x === 'number' && x >= 0 && x <= 1;
@@ -1017,20 +1020,21 @@ export class Oberflaeche {
     return felder;
   }
   private fxZuweisung(d: Record<string, unknown>, a: http.ServerResponse): void {
-    if (d.einheit !== 1 && d.einheit !== 2) return this.json(a, 400, { fehler: 'einheit' });
-    if (typeof d.kanal !== 'string' || !Oberflaeche.FX_ZUWEISUNG_KANAL.includes(d.kanal)) return this.json(a, 400, { fehler: 'kanal' });
+    if (d.einheit !== 1 && d.einheit !== 2 && d.einheit !== 3) return this.json(a, 400, { fehler: 'einheit' });
+    const erlaubt = d.einheit === 3 ? Oberflaeche.FX3_ZUWEISUNG_KANAL : Oberflaeche.FX_ZUWEISUNG_KANAL;
+    if (typeof d.kanal !== 'string' || !erlaubt.includes(d.kanal)) return this.json(a, 400, { fehler: 'kanal' });
     if (typeof d.an !== 'boolean') return this.json(a, 400, { fehler: 'an' });
     const felder = { id: Number(++this.id), quelle: this.quelle(), einheit: d.einheit, kanal: d.kanal, an: d.an ? 1 : 0 };
     this.kern.sende('/k/fx/zuweisung', felder);
     this.angefasst.add(`fx:${d.einheit}`);
-    this.fxVon(d.einheit as 1 | 2, this.quelle() as 'andreas' | 'cypher');
+    this.fxVon(d.einheit as 1 | 2 | 3, this.quelle() as 'andreas' | 'cypher');
     this.gesendet++;
     this.json(a, 200, { ok: true, felder });
   }
 
   // Wer eine Einheit zuletzt gesetzt hat (fx_von.json im Muster-Ordner, je Einheit ein Schlüssel "1"/"2"): die
   // Seite schreibt andreas, djk-fx (Slice 4) cypher.
-  private fxVon(einheit: 1 | 2, von?: 'andreas' | 'cypher'): string | null {
+  private fxVon(einheit: 1 | 2 | 3, von?: 'andreas' | 'cypher'): string | null {
     const datei = path.join(this.musterOrdner(), 'fx_von.json');
     let stand: Record<string, { von: string; zeit: number }> = {};
     try { stand = JSON.parse(fs.readFileSync(datei, 'utf8')); } catch { /* noch keine Datei */ }

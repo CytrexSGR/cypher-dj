@@ -1,0 +1,118 @@
+// Studio instances (neueInstanz) and the role choice.
+import { $, $$, jsonPost } from './page_state.js';
+import { stoebernLaden, stz } from './browse_table.js';
+import { ladeBaum } from './browse_detail.js';
+
+// ---------- Strudel-Instanzen (Plan 2 Spec E5/E6; Studio S1: drei Instanzen, je Strom ein Zustand) ----------
+// AUTO-Schalter je Instanz (Andreas 2026-09-28): an = Cypher spielt selbst, das Feld folgt. Aus = das laufende Muster
+// spielt weiter, bis Andreas eins schickt. Tippt er bei AUTO an, legt die Seite AUTO dieser Instanz selbst aus.
+export const instanzen = new Map();   // strom → { strom, w (Wurzel), server, schmutzig, fremd, frage, angewandt, statusFehler }
+function musterStandText(s) {
+  if (!s.text) return 'no pattern yet';
+  const wer = s.von === 'andreas' ? 'you' : (s.von ?? '?');
+  const ab = s.status?.ab_beat != null && Number.isFinite(s.status.ab_beat) ? ` · since bar ${Math.floor(s.status.ab_beat / 4) + 1}` : '';
+  return `pattern ${s.status?.nr ?? '–'} by ${wer}${ab}`;
+}
+export function neueInstanz(w) {
+  const i = { strom: Number(w.dataset.strom), w, server: null, schmutzig: false, fremd: null, frage: 0, angewandt: 0, statusFehler: false };
+  const q = (s) => $(s, w);
+  const zeigeAuto = (an) => { const k = q('.muster-auto'); k.classList.toggle('an', an); k.setAttribute('aria-pressed', String(an)); };
+  const zeigeFehler = (t) => { q('.muster-fehler').textContent = t; q('.muster-fehler').className = 'muster-fehler fehler'; };
+  const zeigeOk = (t) => { q('.muster-fehler').textContent = t; q('.muster-fehler').className = 'muster-fehler ok'; };
+  i.hole = async () => {
+    const n = ++i.frage;
+    let s;
+    try { s = await (await fetch(`/strudel?strom=${i.strom}`)).json(); } catch { return; }
+    if (n < i.angewandt) return;   // Review m2: eine ältere Antwort kam nach einer neueren
+    i.angewandt = n;
+    const neu = !i.server || s.text !== i.server.text;
+    i.server = s;
+    zeigeAuto(s.autonom !== false);
+    q('.muster-stand').textContent = musterStandText(s);
+    if (s.status?.fehler && !i.schmutzig) { zeigeFehler(s.status.fehler); i.statusFehler = true; }
+    else if (i.statusFehler && !s.status?.fehler) { q('.muster-fehler').textContent = ''; i.statusFehler = false; }
+    if (!neu) return;
+    if (!i.schmutzig) { q('.muster-feld').value = s.text; i.fremd = null; q('.muster-uebernehmen').hidden = true; }
+    else { i.fremd = s.text; q('.muster-uebernehmen').hidden = false; q('.muster-uebernehmen').textContent = `${s.von ?? '?'} changed it · take over`; }
+  };
+  i.setzeAuto = async (an) => {
+    zeigeAuto(an);
+    try { await jsonPost('/strudel/autonom', { an, strom: i.strom }); } catch { zeigeFehler('page server unreachable, AUTO unchanged'); }
+    await i.hole();
+  };
+  i.sende = async () => {
+    const text = q('.muster-feld').value;
+    let r, j;
+    try { r = await jsonPost('/strudel', { text, strom: i.strom }); j = await r.json(); }
+    catch { return zeigeFehler('page server unreachable, nothing sent'); }   // Review F10
+    if (!r.ok) return zeigeFehler(j.fehler);
+    zeigeOk('from the next bar');
+    if (q('.muster-feld').value === text) { i.schmutzig = false; q('.muster-uebernehmen').hidden = true; }   // Review m1
+    await i.hole();
+  };
+  // STOP (Andreas 2026-09-28): Stille ab dem nächsten Takt, AUTO dieser Instanz aus, der Text bleibt im Feld
+  i.stoppe = async () => {
+    const f = q('.muster-feld');
+    const text = f.value;
+    if (i.server?.autonom !== false) { i.server = { ...i.server, autonom: false }; await i.setzeAuto(false); }
+    let r, j;
+    try { r = await jsonPost('/strudel', { text: 'silence', strom: i.strom }); j = await r.json(); }
+    catch { return zeigeFehler('page server unreachable, not stopped'); }
+    if (!r.ok) return zeigeFehler(j.fehler);
+    f.value = text; i.schmutzig = text !== 'silence';
+    zeigeOk('stopped from the next bar');
+    await i.hole();
+    f.value = text;
+    q('.muster-uebernehmen').hidden = true; i.fremd = null;
+  };
+  const f = q('.muster-feld');
+  f.addEventListener('input', () => {
+    i.schmutzig = f.value !== (i.server?.text ?? '');
+    q('.muster-fehler').textContent = '';
+    if (i.schmutzig && i.server?.autonom !== false) { i.server = { ...i.server, autonom: false }; i.setzeAuto(false); }
+  });
+  f.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); i.sende(); }
+    if (e.key === 'Backspace' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); i.stoppe(); }
+    if (e.key === '.' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); f.value = i.server?.text ?? ''; i.schmutzig = false; }
+    if (e.key === 'Tab') { e.preventDefault(); f.setRangeText('  ', f.selectionStart, f.selectionEnd, 'end'); f.dispatchEvent(new Event('input')); }
+  });
+  q('.muster-auto').addEventListener('click', () => i.setzeAuto(!q('.muster-auto').classList.contains('an')));
+  q('.muster-senden').addEventListener('click', i.sende);
+  q('.muster-stopp').addEventListener('click', i.stoppe);
+  q('.muster-zurueck').addEventListener('click', () => { f.value = i.server?.text ?? ''; i.schmutzig = false; q('.muster-uebernehmen').hidden = true; });
+  // SAVE: speichert, was die Instanz SPIELT (nicht den Text im Feld) als eigenes Muster in die Bibliothek
+  const nameFeld = q('.muster-name');
+  const speichere = async (ueberschreiben = false) => {
+    const name = nameFeld.value.trim().toLowerCase().replace(/\s+/g, '-');
+    let r, j;
+    try { r = await jsonPost('/muster', { name, strom: i.strom, ...(ueberschreiben ? { ueberschreiben: true } : {}) }); j = await r.json(); }
+    catch { return zeigeFehler('page server unreachable, not saved'); }
+    if (r.ok) {
+      nameFeld.hidden = true; zeigeOk(`saved as “${j.name}”`);
+      if (stz.typ === 'strudel' && !stz.liste) { stoebernLaden(); ladeBaum(); }
+      return;
+    }
+    if (j.fehler === 'name_vergeben') { if (confirm(`“${name}” already exists. Overwrite?`)) return speichere(true); return; }
+    if (j.fehler === 'kein_muster') return zeigeFehler('Nothing is playing on this instance');
+    if (j.fehler === 'name_ungueltig') return zeigeFehler('Name: a-z, 0-9, - and _ only, up to 48 characters');
+    zeigeFehler(j.fehler ?? `save failed (${r.status})`);
+  };
+  q('.muster-sichern').addEventListener('click', () => {
+    if (!nameFeld.hidden) { nameFeld.hidden = true; return; }
+    const jetzt = new Date();
+    nameFeld.hidden = false;
+    nameFeld.value = nameFeld.value || `${['drums', 'bass', 'melody'][i.strom - 1]}-${String(jetzt.getHours()).padStart(2, '0')}${String(jetzt.getMinutes()).padStart(2, '0')}`;
+    nameFeld.focus(); nameFeld.select();
+  });
+  nameFeld.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); speichere(); } if (e.key === 'Escape') nameFeld.hidden = true; });
+  q('.muster-uebernehmen').addEventListener('click', () => { f.value = i.fremd ?? f.value; i.schmutzig = false; i.fremd = null; q('.muster-uebernehmen').hidden = true; });
+  return i;
+}
+// Rollenwahl in der DJ-Ansicht: zeigt eine Instanz und ihren Kanalzug; gemerkt pro Browser (nur Bequemlichkeit)
+export function waehleRolle(strom) {
+  for (const b of $$('.rollen [data-rolle]')) { const an = Number(b.dataset.rolle) === strom; b.classList.toggle('an', an); b.setAttribute('aria-selected', String(an)); }
+  for (const w of $$('#deck-c .instanz')) w.classList.toggle('an', Number(w.dataset.strom) === strom);
+  for (const z of $$('.zugplatz > .zug')) z.classList.toggle('an', z.dataset.kanalzug === `erz/${strom}`);
+  try { localStorage.setItem('djk-rolle', String(strom)); } catch { /* ohne Speicher: Vorgabe DRUMS */ }
+}

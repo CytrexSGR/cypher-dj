@@ -1,5 +1,6 @@
 // Places plan, slice 1 task 3: the page deck code works over a list of N decks. The page is not run here (the browser check of the task covers
 // the running page); like live_page.test.mjs this reads app.js, index.html and style.css, and runs the pure parts.
+import { liesApp } from './helpers/app_source.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -10,7 +11,7 @@ import { exportKnopf } from '../public/live_module.js';
 
 const PUBLIC = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
 const lies = (n) => fs.readFileSync(path.join(PUBLIC, n), 'utf8');
-const app = lies('app.js'), html = lies('index.html'), css = lies('style.css');
+const app = liesApp(), html = lies('index.html'), css = lies('style.css');
 const funktion = (name) => {   // body of a top-level function of app.js, up to the next top-level line that is not part of it
   const a = app.indexOf(`function ${name}(`);
   assert.ok(a >= 0, `function ${name}`);
@@ -18,11 +19,12 @@ const funktion = (name) => {   // body of a top-level function of app.js, up to 
   return app.slice(a, b + 3);
 };
 
-test('the page builds a section and a strip for every deck of DECKS (1 to 4)', () => {
+test('the page builds a section for every deck of DECKS (1 to 4) and a channel strip for decks 1 and 2 only', () => {
   assert.deepEqual(DECKS, [1, 2, 3, 4]);
   for (const n of DECKS) {
     assert.match(html, new RegExp(`<section class="deck" data-deck="${n}"`), `section ${n}`);
-    assert.match(html, new RegExp(`<div class="zug" data-deck="${n}"`), `strip ${n}`);
+    if (n <= 2) assert.match(html, new RegExp(`<div class="zug" data-deck="${n}"`), `strip ${n}`);
+    else assert.doesNotMatch(html, new RegExp(`class="zug" data-deck="${n}"`), `no strip ${n}: the main mixer has four channels (A, B, L1, L2)`);
   }
   assert.match(funktion('baueDecks'), /for \(const n of DECKS\)/);
   assert.match(funktion('baueDecks'), /\.deck\[data-deck="\$\{n\}"\]/);
@@ -32,15 +34,15 @@ test('the page builds a section and a strip for every deck of DECKS (1 to 4)', (
 test('decks 3 and 4 are hidden in the old layout, decks 1 and 2 are not; the hidden rule beats the layout rules', () => {
   for (const n of [3, 4]) {
     assert.match(html, new RegExp(`<section class="deck" data-deck="${n}"[^>]*\\bhidden>`), `section ${n} hidden`);
-    assert.match(html, new RegExp(`<div class="zug" data-deck="${n}"[^>]*\\bhidden>`), `strip ${n} hidden`);
   }
   for (const n of [1, 2]) {
     assert.doesNotMatch(html, new RegExp(`<section class="deck" data-deck="${n}"[^>]*\\bhidden>`), `section ${n} shown`);
     assert.doesNotMatch(html, new RegExp(`<div class="zug" data-deck="${n}"[^>]*\\bhidden>`), `strip ${n} shown`);
   }
   assert.match(css, /\.deck\[hidden\], \.zug\[hidden\] \{ display: none !important; \}/);
-  // the Studio view still owns #deck-c and #mischer-unten: the new strips sit inside the latter, hidden, and add no row
-  assert.match(html, /id="mischer-unten"[\s\S]*?data-deck="3"[\s\S]*?data-deck="4"[\s\S]*?data-boxzug="1"/);
+  // decks 3 and 4 have no channel strip anywhere on the page (Andreas 2026-11-15); #mischer-unten keeps the loop strips
+  assert.doesNotMatch(html, /class="zug" data-deck="[34]"/);
+  assert.match(html, /id="mischer-unten"[\s\S]*?data-boxzug="1"/);
 });
 
 test('nothing in app.js compares a deck number against 2, and DECK3 is not a special case any more', () => {

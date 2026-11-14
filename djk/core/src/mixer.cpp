@@ -446,7 +446,10 @@ void Mixer::route(int k, int n, const float* l, const float* r) {
   float* const bsr = in_bus_sum ? bus_sum_r_ : sum_r_;
   auto ziel_l = [&](int z) { return z == 0 ? bsl : ein_l_[MIX_QUELLEN + z - 1]; };
   auto ziel_r = [&](int z) { return z == 0 ? bsr : ein_r_[MIX_QUELLEN + z - 1]; };
-  if (!zvl && !xsvl && !xfvl && blende_rest_[k] == 0) {   // ruhig: ein Ziel, ein Gewicht für den ganzen Block
+  // FX3 (see mixer.h): a source channel that is assigned, blending or still carrying a weight splits its master share between the master
+  // sum and the fx/3 bus input. Every other channel takes the code below bit for bit as before.
+  const bool fx3 = !bus && (fx3_zuw_[k] || fx3_gew_[k] > 0.0f || fx3_rest_[k] > 0);
+  if (!zvl && !xsvl && !xfvl && blende_rest_[k] == 0 && !fx3) {   // ruhig: ein Ziel, ein Gewicht für den ganzen Block
     const int z = bus ? 0 : ziel_ist_[k];
     const float g = z == 0 ? seitengewicht(ganz(xseite_[k].w), xfader_.w) : 1.0f;
     addiere(ziel_l(z), l, n, g);
@@ -473,15 +476,84 @@ void Mixer::route(int k, int n, const float* l, const float* r) {
     const float gs = seitengewicht(xs, xfvl ? xfvl[i] : xfader_.w);
     const int z = bus ? 0 : ziel_ist_[k];
     const float gn = w_neu * (z == 0 ? gs : 1.0f);
-    ziel_l(z)[i] += l[i] * gn;
-    ziel_r(z)[i] += r[i] * gn;
+    if (!fx3) {
+      ziel_l(z)[i] += l[i] * gn;
+      ziel_r(z)[i] += r[i] * gn;
+      if (w_alt > 0.0f) {
+        const int za = blende_von_[k];
+        const float ga = w_alt * (za == 0 ? gs : 1.0f);
+        ziel_l(za)[i] += l[i] * ga;
+        ziel_r(za)[i] += r[i] * ga;
+      }
+      continue;
+    }
+    // FX3: fa = share of a master contribution that enters the fx/3 bus, fd = share that stays on the master sum. fa + fd = 1 whenever the
+    // slot has no graph (never silent); with a graph, fd = 1 - a. While the slot blends (graph set or removed) the not-yet-heard part of the
+    // assigned share also stays on the master, with the weight the slot's own blend gives the dry path, so the sum has no hole.
+    float a = fx3_zuw_[k] ? 1.0f : 0.0f;
+    if (fx3_rest_[k] > 0) {
+#ifdef CYPHERDJ_MUTATION_FX3_OHNE_BLENDE   // error case: the assignment jumps, no blend
+      fx3_rest_[k] = 0;
+#else
+      const float u = s_kurve(1.0f - static_cast<float>(fx3_rest_[k]) / MIX_ZIEL_BLENDE);
+      a = fx3_von_[k] + (a - fx3_von_[k]) * u;
+      --fx3_rest_[k];
+#endif
+    }
+    fx3_gew_[k] = a;
+    const bool slot = send_bk_[0] != nullptr || send_blende_[0] > 0;
+    float wd = 1.0f;   // weight of the dry (master) path of the assigned share
+    if (slot) {
+      float wa = 0.0f;   // weight of the old path of the slot blend, as graph_platz_block computes it
+      if (send_blende_[0] > 0) {
+        const int rest = send_blende_[0] - i;
+        wa = rest > 0 ? static_cast<float>(rest) / MIX_GRAPH_BLENDE : 0.0f;
+      }
+      wd = (send_bk_[0] ? 0.0f : 1.0f) * (1.0f - wa) + (send_bk_alt_[0] ? 0.0f : 1.0f) * wa;
+    }
+#ifdef CYPHERDJ_MUTATION_FX3_OHNE_RUECKFALL   // error case: no fallback, assigned channels go silent while fx/3 has no graph
+    const float fa = a;
+    const float fd = 1.0f - a;
+    (void)wd; (void)slot;
+#elif defined(CYPHERDJ_MUTATION_FX3_KOPIE)    // error case: assigned channels stay on the master as well (copy, not insert)
+    const float fa = slot ? a : 0.0f;
+    const float fd = 1.0f;
+    (void)wd;
+#else
+    const float fa = slot ? a : 0.0f;
+    const float fd = (1.0f - a) + a * wd;
+#endif
+    auto an_summe = [&](int ziel, float g) {
+      if (ziel != 0) {   // the input of a group bus: FX3 does not touch it
+        ziel_l(ziel)[i] += l[i] * g;
+        ziel_r(ziel)[i] += r[i] * g;
+        return;
+      }
+      bsl[i] += l[i] * g * fd;
+      bsr[i] += r[i] * g * fd;
+      if (fa > 0.0f) {
+#ifdef CYPHERDJ_MUTATION_FX3_OHNE_XFADER   // error case: the share of the bus ignores the crossfader weight
+        const float gb = g / (gs > 0.0f ? gs : 1.0f);
+#else
+        const float gb = g;
+#endif
+        fx_l_[2][i] += l[i] * gb * fa;
+        fx_r_[2][i] += r[i] * gb * fa;
+      }
+    };
+    an_summe(z, gn);
     if (w_alt > 0.0f) {
       const int za = blende_von_[k];
-      const float ga = w_alt * (za == 0 ? gs : 1.0f);
-      ziel_l(za)[i] += l[i] * ga;
-      ziel_r(za)[i] += r[i] * ga;
+      an_summe(za, w_alt * (za == 0 ? gs : 1.0f));
     }
   }
+}
+
+void Mixer::fx3_zuweisung_setze(int kanal, bool an) noexcept {
+  if (kanal < 0 || kanal >= MIX_QUELLEN || fx3_zuw_[kanal] == an) return;
+  fx3_von_[kanal] = fx3_gew_[kanal];   // continue from the weight reached, also when a blend is interrupted
+  fx3_zuw_[kanal] = an;
+  fx3_rest_[kanal] = MIX_ZIEL_BLENDE;
 }
 
 // Kompressor des Quellkanals k auf dem Abgriff (nach EQ/Filter, vor dem Fader); Werte am Blockende wie duck/*, das Knie
@@ -1101,6 +1173,9 @@ bool Mixer::schlaf_schritt(int k, int n, bool komp_an, bool gate_an, bool util_a
   // komp_lief_, gate_lief_ and util_lief_ need no check of their own: kanal() has just reset compressor and gate when they are off
   // (their *_lief_ is false then), and util_an already contains util_lief_.
   if (blende_rest_[k] != 0) return false;
+#ifndef CYPHERDJ_MUTATION_FX3_SCHLAF_BLENDE_UEBERSEHEN   // error case: a sleeping strip holds an open FX3 blend still
+  if (k < MIX_QUELLEN && fx3_rest_[k] != 0) return false;   // an FX3 blend only advances while route() runs
+#endif
   if (k < MIX_QUELLEN && ziel_[k].vl) return false;
   if (fzi >= 0)
     for (int u = 0; u < FX_EINHEITEN; ++u)
@@ -1363,6 +1438,11 @@ void Mixer::fx_einheit_setze(int einheit, int art, double beats, float wet, floa
 
 // Zuweisung ab schließt nur den Eingang der Instanz: die Fahne klingt aus (Andreas 2026-09-28).
 void Mixer::fx_zuweisung_setze(int einheit, int kanal, bool an) noexcept {
+  if (einheit == FX3_EINHEIT) {   // FX3 is the insert on fx/3, not a BeatFx unit
+    fx3_zuweisung_setze(kanal, an);
+    return;
+  }
+  if (einheit < 0 || einheit >= FX_EINHEITEN) return;
   if (kanal == FX_MASTER) {
     fx_master_zuw_[einheit] = an;
     fx_master_[einheit].setze(fx_art_[einheit], fx_beats_[einheit], fx_wet_[einheit], fx_param1_[einheit],
@@ -1377,6 +1457,8 @@ void Mixer::fx_zuweisung_setze(int einheit, int kanal, bool an) noexcept {
 }
 
 bool Mixer::fx_zugewiesen(int einheit, int kanal) const noexcept {
+  if (einheit == FX3_EINHEIT) return fx3_zugewiesen(kanal);
+  if (einheit < 0 || einheit >= FX_EINHEITEN) return false;
   if (kanal == FX_MASTER) return fx_master_zuw_[einheit];
   const int i = fx_ziel_index(kanal);
   return i >= 0 && fx_zuw_[einheit][i];

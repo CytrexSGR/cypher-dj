@@ -547,7 +547,7 @@ void Arrangement::block(const Karte& k, int64_t s0, int m, float* aus_l, float* 
     monitor_loeschen();   // 1.8 S3: the sources are valid for one block only
     ruhe(m);                                                                      // DJ-Betrieb ohne Kosten (Slice 11)
     for (int i = 0; i < DJ_EINGAENGE; ++i) dj_l_[i] = dj_r_[i] = nullptr;         // slice 5 U2b: the pointers of dj_schluessel() are good for one block
-    dj_aus_l_[0] = dj_aus_l_[1] = dj_aus_r_[0] = dj_aus_r_[1] = nullptr;           // DJ view places: the pairs of dj_ausgang() likewise
+    for (int i = 0; i < DJ_KANAELE; ++i) dj_aus_l_[i] = dj_aus_r_[i] = nullptr;           // DJ view places: the pairs of dj_ausgang() likewise
     return;
   }
   if (spur_pool_) spur_pool_->block_anfang();   // mehrkern slice 3.1: once per block with work, after the quiet path (the lateness window counts blocks that did pool work); phases Q and H share this block clock
@@ -628,7 +628,7 @@ void Arrangement::block(const Karte& k, int64_t s0, int m, float* aus_l, float* 
   }
   monitor_loeschen();   // 1.8 S3: the sources are valid for one block only
   for (int i = 0; i < DJ_EINGAENGE; ++i) dj_l_[i] = dj_r_[i] = nullptr;   // slice 5 U2b: the pointers of dj_schluessel() are good for one block; the next block without a call has a silent DJ key
-  dj_aus_l_[0] = dj_aus_l_[1] = dj_aus_r_[0] = dj_aus_r_[1] = nullptr;     // DJ view places: the pairs of dj_ausgang() are good for one block; a block without a call sends a DJ group to the master
+  for (int i = 0; i < DJ_KANAELE; ++i) dj_aus_l_[i] = dj_aus_r_[i] = nullptr;     // DJ view places: the pairs of dj_ausgang() are good for one block; a block without a call sends a DJ group to the master
   verlaeufe_nachfuehren(m);
   auto_ueber_abschluss(s0 + m);   // 1.12 S3: an override change inside this block has passed
   if (werk_) werk_->takt(s0 + m);   // Slice 2: Stand des Callbacks an das Warp-Werk (synchron: es füllt die Ringe jetzt)

@@ -1,5 +1,6 @@
 // Places plan, slice 3 task 12: loop field D leaves the DJ view. The L1 and L2 strips stay (they are the pad/1 and pad/2 channel strips), the loop
 // boxes (fields, waveform, grid) go, and the live panel takes the grid cell. Like page_decks.test.mjs this reads app.js, index.html and style.css.
+import { liesApp } from './helpers/app_source.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -9,7 +10,7 @@ import { LOOPBOXEN } from '../public/curves.js';
 
 const PUBLIC = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
 const lies = (n) => fs.readFileSync(path.join(PUBLIC, n), 'utf8');
-const app = lies('app.js'), html = lies('index.html'), css = lies('style.css');
+const app = liesApp(), html = lies('index.html'), css = lies('style.css');
 
 test('the page has no loop field D and no loop boxes', () => {
   assert.doesNotMatch(html, /id="deck-d"/);

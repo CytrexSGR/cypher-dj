@@ -21,16 +21,28 @@ of the beta. The short version is the [README](../README.md).
   `kanal_limiter_vorhalt_ms` is set in `kern.toml`) and a spectrum analyser of 29 bands, three per octave, for one
   channel or the master
 - Two loop boxes that record, resample and play back in time
-- A DJ view with four places: each place shows a track deck, the Strudel channels or the loop slots, switched only
-  while that channel is silent (fader closed, no headphone cue); track place N is deck N. The layout is kept per
-  browser
+- A DJ view with four places: each place shows a track deck, the Strudel channels, the loop slots or a SEQ deck,
+  switched only while that channel is silent (fader closed, no headphone cue); track place N is deck N. The layout is
+  kept per browser. A track place folds to a mini view (position, overview, loop lengths, transport) and leaves its
+  height to the other place of its column
+- The main mixer has four channel strips, deck A, deck B, L1 and L2, around a middle column with the master, the
+  headphones, beat FX 1 and 2 and COLOR. The Strudel channels have their strips inside the Strudel place, next to a
+  SOUND column that picks the instrument of bass and melody (Surge XT or any Cypher Modular instrument) and shows its
+  first four knobs; OPEN shows the full panel of that instrument in its own window
 - Loop slots L1 and L2: a loop cut from a deck (or loaded by the agent) becomes a live module with its stems and MIDI
   and plays on its own DJ channel with EQ, filter, fader and crossfader side. Placing a module into a slot whose
   channel is open is refused, also for the agent, so nothing new starts audibly under your hands. Each slot shows the
   waveform of its loop with a beat grid, bar numbers and the playhead of the live transport
-- Cypher Remix as a fourth kind of place: a beat-synchronous remix station (build-up and break-down effects, a
-  three-band isolator, a pad with roll and drum voices, a release lever) put as an insert on the master, a deck, a
-  loop slot or one Strudel channel, chosen in the place; the agent drives the same knobs
+- Cypher Remix as FX3: a beat-synchronous remix station (build-up and break-down effects, a three-band isolator, a
+  pad with roll and drum voices, a release lever) in its own window. Key 3 on a channel strip sends that channel
+  through it, key 3 on the master sends all of them; the agent drives the same knobs
+- SEQ, a pattern sequencer as a kind of place. A deck holds several patterns that play together; a pattern plays one
+  instrument (a Cypher Modular instrument, a drum kit or the RB-338) and holds the lanes you add: note lanes (click a
+  step, drag for velocity or length, wheel for pitch), value lanes (one knob value per step) and curve lanes (draw
+  points or pick a shape such as sine, ramp or seeded random steps) on any knob of the instrument. Each lane has its
+  own grid (4, 8, 16 or 32 per bar) and may have a shorter length, so it shifts against the notes. Two quick presses
+  remove a value or a point. A pattern is an ordinary MIDI clip with envelopes, so PRODUCTION opens the same data in
+  its piano roll. The agent writes a whole pattern in one call as text with the `seq` tool and reads the same text back
 - Three [Strudel](https://strudel.cc) pattern channels (drums, bass, melody). Strudel runs as its own
   process; the core plays the resulting events at the sample
 - Real instruments: Surge XT hosted in Carla, played by the patterns
@@ -218,7 +230,7 @@ The lists above are the headline. Also in there:
 - **Extra pattern streams**: five more channels (erz/5 to erz/7 and the two loop box pads) can each carry a Cypher
   Modular graph, started with `djk-start --strudel --bk-stroeme`; they can be recorded onto production tracks. The
   graph knobs can be learned onto a MIDI controller, and a project remembers which graph sits on which channel
-- **The agent's side**: 90 tools in the MCP server. Besides playing it can measure a deck behind its
+- **The agent's side**: 91 tools in the MCP server. Besides playing it can measure a deck behind its
   closed fader, read the levels of the last seconds, wait on the master clock for a number of bars, run
   automation tracks and ramps over bars, and cancel everything it started. When it has an idea while the
   human plays, it proposes; the human accepts or rejects with one key

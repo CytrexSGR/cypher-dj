@@ -55,6 +55,14 @@ class HandEin {
   hand::Uebersetzer ueb_ein_{nullptr};
 };
 
+// Slice 35 part B3: LED names the kern derives from its own state (INTERFACES 7.4: loop, KI stop). /k/led refuses them.
+// Returns the deck 1 to 4 for deck<n>_loop, 0 for ki_gestoppt, -1 for every other name.
+inline int led_kern_eigen(const char* n) {
+  if (std::strcmp(n, "ki_gestoppt") == 0) return 0;
+  if (std::strncmp(n, "deck", 4) == 0 && n[4] >= '1' && n[4] <= '4' && std::strcmp(n + 5, "_loop") == 0) return n[4] - '0';
+  return -1;
+}
+
 // /test/hand deck/<n>/play und deck/<n>/cue (Plan 35 E5 a): dieselbe Deck-Taste wie aus MIDI. true mit deck 1 bis 4 und
 // play (true) oder cue (false), wenn der Pfad genau so lautet.
 inline bool deck_taste_pfad(const char* p, int* deck, bool* play) {

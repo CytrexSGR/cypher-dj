@@ -17,7 +17,7 @@ Built in Germany by Andreas, a DJ, and Cypher, an AI agent (Claude models), sinc
 
 One real-time core in C++ and Rust keeps a single sample clock for everything: the decks, the pattern channels and
 the arrangement. The browser page and the agent sit on the same functions. The agent reaches them through an MCP
-server with 90 tools, so nearly everything you can click, it can do too (a few controls such as the crossfader stay
+server with 91 tools, so nearly everything you can click, it can do too (a few controls such as the crossfader stay
 in your hand), and anything it does shows up on your page. When it
 cannot do something it answers with a reason (for example `sidechain_zyklus` for a sidechain that would depend on
 itself) instead of guessing. When you grab a fader, your
@@ -47,10 +47,13 @@ return or the master into a new audio track.
 
 **DJ.** Up to four decks with beat grid, hot cues, loops and key lock at any tempo, beat FX and color FX, three live-coded
 pattern channels ([Strudel](https://strudel.cc)) and two loop slots, all on the same clock. The DJ view has four
-places, each showing a track deck, the Strudel channels, the loop slots or Cypher Remix; a loop cut from a deck becomes a
-live module with its stems and plays on its own mixer channel, with its waveform, beat grid and playhead in the slot.
-Cypher Remix, a beat-synchronous remix station (build-up and break-down effects, a three-band isolator, a pad with roll
-and drum voices, a release lever), sits as an insert on the master, a deck, a loop slot or a Strudel channel.
+places, each showing a track deck, the Strudel channels, the loop slots or a SEQ deck; the main mixer has four
+channels: deck A, deck B and the two loop slots. A loop cut from a deck becomes a live module with its stems and plays
+on its own mixer channel, with its waveform, beat grid and playhead in the slot. The SEQ deck is a pattern sequencer:
+a pattern plays one instrument, you add lanes of notes, of values per step or of drawn curves on any knob of that
+instrument, in 1/4 to 1/32 per lane. Cypher Remix, a beat-synchronous remix station (build-up and break-down effects,
+a three-band isolator, a pad with roll and drum voices, a release lever), is the third FX unit: every channel strip
+has a key 3 that sends it through the Remix.
 
 **The agent's side.** Besides playing, the agent can measure: levels of the last seconds, a 29-band spectrum,
 loudness per track, group and return, and how a closed deck sits against the running master per frequency band. It can wait on the master clock,
@@ -69,8 +72,9 @@ In this order, without dates:
 1. **Listening over time.** A map of each track per bar and per stem: loudness, brightness, bass, density of hits,
    pumping. From it the agent reads where the breaks and phrases are and whether the beat grid sits on the first
    hit, the way a DJ reads the waveform of a whole track.
-2. **Hardware controllers.** A DJ controller to play cypher-dj with your hands, a Traktor Kontrol S8 or a Pioneer
-   XDJ; which one is not decided yet.
+2. **Hardware controllers.** First controllers work: an Akai APC20 as main console, a Traktor Kontrol S8 with its
+   screens, touch strips and hot cue pads, a Maschine MK2 as a desk for Cypher Modular knobs and an LPD8 for
+   the remix. Next: the S8 button lights and finer touch strip feel.
 3. **Live.** A session view with a clip launcher and scenes, follow actions, recording into slots,
    swapping motifs live, MIDI effects.
 

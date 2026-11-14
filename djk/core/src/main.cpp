@@ -90,6 +90,7 @@ static void jack_faden_init(void*) {
 }
 static std::atomic<uint64_t> g_graph_ereignisse{0};  // Fixup M1: Zähler für die Diagnosezeile im Verbinder
 static cdj::WaechterSeite* g_ws = nullptr;  // Scheibe 18: Selbst-Wächter, nullptr wenn aus
+static jack_port_t* g_hand_led = nullptr;   // slice 35 B3: LED feedback to the controller (§7.1)
 static jack_port_t* g_hand_in = nullptr;    // Scheibe 35: JACK-MIDI vom Controller (§7.1)
 static jack_port_t* g_ein[cdj::EIN_PAARE][2] = {};  // I08: ein_<k>_L/R
 static jack_port_t* g_midi_ein = nullptr;           // I08: midi_ein_1
@@ -214,6 +215,13 @@ static int process(jack_nframes_t n, void*) {
                       g_ins_rueck[h][1] ? (const float*)jack_port_get_buffer(g_ins_rueck[h][1], n) : nullptr);
   }
   g_kern->zyklus((int)n, (int64_t)cu * 1000);                // cu: Blockanfang in µs (CLOCK_MONOTONIC)
+  if (g_hand_led) {  // slice 35 B3: only changed LEDs (and a full refresh after a new connection), at most 16 per cycle
+    void* lb = jack_port_get_buffer(g_hand_led, n);
+    jack_midi_clear_buffer(lb);
+    uint8_t led[cdj::Kern::LED_MAX_JE_ZYKLUS][3];
+    const int nl = g_kern->hand_led_hole(led, cdj::Kern::LED_MAX_JE_ZYKLUS);
+    for (int i = 0; i < nl; ++i) jack_midi_event_write(lb, 0, led[i], 3);
+  }
   if (g_stolper_an) st_vor = mono_ns();
   for (int p = 0; p < cdj::ERZ_MIDI_PORTS; ++p) {  // Studio S5: MIDI dieses Zyklus, nach Versatz sortiert
     if (!g_midi_aus[p]) continue;
@@ -513,6 +521,7 @@ int main(int argc, char** argv) {
   const std::string controller_ordner = std_pfad.substr(0, std_pfad.rfind('/')) + "/controller";
   std::unique_ptr<hand::Mapping> mapping;  // bis zur Übergabe an den Kern (Besitz danach dort, /k/mapping gibt es frei)
   char hand_quelle[hand::PORT_TEXT + 16] = "";
+  char hand_ziel[hand::PORT_TEXT + 16] = "";  // slice 35 B3: ziel_port of the mapping (LED sink)
   if (!konf.controller_geraet.empty()) {
     const std::string mpfad = controller_ordner + "/" + konf.controller_geraet + ".json";
     auto m = std::make_unique<hand::Mapping>();
@@ -527,6 +536,8 @@ int main(int argc, char** argv) {
     } else if (!cdj::hand_port_name(m->quelle_port, inst, hand_quelle, sizeof hand_quelle)) {
       std::fprintf(stderr, "Mapping %s: quelle_port zu lang (Kern ohne Controller)\n", mpfad.c_str());
     } else {
+      if (m->ziel_port[0] && !cdj::hand_port_name(m->ziel_port, inst, hand_ziel, sizeof hand_ziel))
+        std::fprintf(stderr, "Mapping %s: ziel_port too long (kern without LEDs)\n", mpfad.c_str());
       mapping = std::move(m);
       std::fprintf(stderr, "Mapping %s: Gerät %s, %d Einträge, Quelle %s\n", mpfad.c_str(), mapping->geraet,
                    mapping->n_eintraege, hand_quelle);
@@ -728,7 +739,9 @@ int main(int argc, char** argv) {
   g_notbahn_vor = jack_port_register(g_client, "notbahn_vor", JACK_DEFAULT_AUDIO_TYPE, JackPortIsInput, 0);
   if (!g_notbahn_vor)
     std::fprintf(stderr, "Port notbahn_vor nicht angelegt: die Notbahn braucht zwei stehende Zyklen\n");
-  // Scheibe 35: Eingang der Hand (§7.1); hand_led bleibt in Teil A unregistriert (LEDs kommen mit Teil B)
+  // Scheibe 35: Eingang der Hand (§7.1); Teil B3: hand_led, Ausgang der LEDs
+  g_hand_led = jack_port_register(g_client, "hand_led", JACK_DEFAULT_MIDI_TYPE, JackPortIsOutput, 0);
+  if (!g_hand_led) std::fprintf(stderr, "Port hand_led not created: kern without LED feedback\n");
   g_hand_in = jack_port_register(g_client, "hand_in", JACK_DEFAULT_MIDI_TYPE, JackPortIsInput, 0);
   if (!g_hand_in) std::fprintf(stderr, "Port hand_in nicht angelegt: Kern ohne Controller\n");
   for (int k = 0; k < cdj::EIN_PAARE; ++k)  // I08: Audio-Eingänge; unverbunden liefert JACK Nullen
@@ -1101,6 +1114,16 @@ int main(int argc, char** argv) {
       if (g_ein[k][0] && g_ein[k][1] && jack_port_connected(g_ein[k][0]) > 0 && jack_port_connected(g_ein[k][1]) > 0) maske |= 1u << k;
     if (g_midi_ein && jack_port_connected(g_midi_ein) > 0) maske |= 1u << 8;
     g_kern->ein_verbunden(maske);
+    if (g_hand_led && hand_ziel[0] && jack_port_by_name(g_client, hand_ziel) &&
+        !jack_port_connected_to(g_hand_led, hand_ziel)) {  // slice 35 B3: LEDs to the device; a new connection resends every LED
+      const cdj::KarenzMarke kl = karenz();
+      if (jack_connect(g_client, jack_port_name(g_hand_led), hand_ziel) != 0) {
+        karenz_zurueck(kl);
+      } else {
+        g_kern->led_neu_verbunden();
+        std::fprintf(stderr, "Hand: %s -> %s verbunden (LEDs)\n", jack_port_name(g_hand_led), hand_ziel);
+      }
+    }
     if (!g_hand_in || !hand_quelle[0]) return;
     if (!jack_port_by_name(g_client, hand_quelle)) return;
     if (jack_port_connected_to(g_hand_in, hand_quelle)) return;

@@ -1041,7 +1041,7 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
       live = j.at("live").get<bool>();
     }
     snap->live = live;
-    bool dj_da[3] = {};   // the DJ channel numbers 1..2 given to a group, each at most once
+    bool dj_da[7] = {};   // the DJ channel numbers 1..6 given to a group (ADR 038: pad/1, pad/2, deck/1..deck/4), each at most once
     bool gruppe_da[ARR_GRUPPEN + 1] = {};
     bool rack_belegt[ARR_RACKS] = {};      // 1.10 slice 4c: rack pool slots used by a strip
     bool ins_belegt[ARR_INS_ALLE] = {};   // 1.10 slice 4a/4b: pool slots (global index) used by a stage
@@ -1068,7 +1068,7 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
           if (!live) format(wg + "ausgang.art dj nur im Live-Projekt (Kopf live fehlt)");
 #endif
           const int64_t dn = ganz(ag, "nr", wg + "ausgang.");
-          if (dn < 1 || dn > 2) format(wg + "ausgang.nr außerhalb 1 bis 2 (DJ-Kanal)");
+          if (dn < 1 || dn > 6) format(wg + "ausgang.nr außerhalb 1 bis 6 (DJ-Kanal)");
           if (dj_da[dn]) format(wg + "ausgang: DJ-Kanal " + std::to_string(dn) + " doppelt");
           dj_da[dn] = true;
           snap->gruppe_dj[gn - 1] = static_cast<uint8_t>(dn);

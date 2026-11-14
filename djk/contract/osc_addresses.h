@@ -677,7 +677,7 @@ namespace k_loop_start { inline constexpr double box_min = 1; inline constexpr d
 namespace k_loop_stopp { inline constexpr double box_min = 1; inline constexpr double box_max = 2; }
 namespace k_loop_raster { inline constexpr double box_min = 1; inline constexpr double box_max = 2; }
 namespace k_fx { inline constexpr double einheit_min = 1; inline constexpr double einheit_max = 2; inline constexpr double art_min = 1; inline constexpr double art_max = 12; inline constexpr double wet_min = 0; inline constexpr double wet_max = 1; inline constexpr double param1_min = 0; inline constexpr double param1_max = 1; inline constexpr double param2_min = 0; inline constexpr double param2_max = 1; inline constexpr double param3_min = 0; inline constexpr double param3_max = 1; inline constexpr double an_min = 0; inline constexpr double an_max = 1; }
-namespace k_fx_zuweisung { inline constexpr double einheit_min = 1; inline constexpr double einheit_max = 2; inline constexpr double an_min = 0; inline constexpr double an_max = 1; }
+namespace k_fx_zuweisung { inline constexpr double einheit_min = 1; inline constexpr double einheit_max = 3; inline constexpr double an_min = 0; inline constexpr double an_max = 1; }
 namespace k_fx_routing { inline constexpr double routing_min = 0; inline constexpr double routing_max = 1; }
 namespace k_arr_laden { inline constexpr double nr_min = 0; }
 namespace k_arr_start { inline constexpr double start_beat_min = 0.0; inline constexpr double quant_min = 0; inline constexpr double quant_max = 2; }
@@ -705,7 +705,7 @@ namespace e_raster { inline constexpr double deck_min = 1; inline constexpr doub
 namespace e_hotcue { inline constexpr double deck_min = 1; inline constexpr double deck_max = 4; inline constexpr double nr_min = 1; inline constexpr double nr_max = 8; }
 namespace e_loop { inline constexpr double box_min = 1; inline constexpr double box_max = 2; inline constexpr double status_min = 0; inline constexpr double status_max = 5; inline constexpr double fx_art_min = 0; inline constexpr double fx_art_max = 4; }
 namespace e_fx { inline constexpr double einheit_min = 1; inline constexpr double einheit_max = 2; inline constexpr double art_min = 0; inline constexpr double art_max = 12; inline constexpr double an_min = 0; inline constexpr double an_max = 1; }
-namespace e_fx_zuweisung { inline constexpr double einheit_min = 1; inline constexpr double einheit_max = 2; inline constexpr double an_min = 0; inline constexpr double an_max = 1; }
+namespace e_fx_zuweisung { inline constexpr double einheit_min = 1; inline constexpr double einheit_max = 3; inline constexpr double an_min = 0; inline constexpr double an_max = 1; }
 namespace e_fx_routing { inline constexpr double routing_min = 0; inline constexpr double routing_max = 1; }
 namespace zustand_arr { inline constexpr double status_min = 0; inline constexpr double status_max = 3; inline constexpr double loop_an_min = 0; inline constexpr double loop_an_max = 1; inline constexpr double metronom_an_min = 0; inline constexpr double metronom_an_max = 1; inline constexpr double limiter_db_min = -200; inline constexpr double limiter_db_max = 0; }
 namespace zustand_ins_host { inline constexpr double h_1_min = 1; inline constexpr double h_1_max = 1; inline constexpr double gesund_1_min = 0; inline constexpr double gesund_1_max = 1; inline constexpr double rundweg_1_min = -1; inline constexpr double rundweg_1_max = 16383; inline constexpr double h_2_min = 2; inline constexpr double h_2_max = 2; inline constexpr double gesund_2_min = 0; inline constexpr double gesund_2_max = 1; inline constexpr double rundweg_2_min = -1; inline constexpr double rundweg_2_max = 16383; inline constexpr double h_3_min = 3; inline constexpr double h_3_max = 3; inline constexpr double gesund_3_min = 0; inline constexpr double gesund_3_max = 1; inline constexpr double rundweg_3_min = -1; inline constexpr double rundweg_3_max = 16383; inline constexpr double h_4_min = 4; inline constexpr double h_4_max = 4; inline constexpr double gesund_4_min = 0; inline constexpr double gesund_4_max = 1; inline constexpr double rundweg_4_min = -1; inline constexpr double rundweg_4_max = 16383; }
@@ -729,7 +729,9 @@ enum class PolitikTeil : std::int32_t { musik = 0, zustand = 1 };
 enum class Form : std::int32_t { linear = 0, s_kurve = 1 };
 inline constexpr std::array<double, 5> raster_beats{0.25, 1.0, 4.0, 16.0, 32.0};
 inline constexpr std::array<double, 7> fx_beats{0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0};
-inline constexpr std::array<std::string_view, 8> fx_kanal{"deck/1", "deck/2", "erz/1", "erz/2", "erz/3", "pad/1", "pad/2", "master"};
+inline constexpr std::array<std::string_view, 15> fx_kanal{"deck/1", "deck/2", "deck/3", "deck/4", "erz/1", "erz/2", "erz/3", "erz/4", "erz/5", "erz/6", "erz/7", "erz/8", "pad/1", "pad/2", "master"};
+inline constexpr std::array<std::string_view, 10> fx_kanal_12{"deck/1", "deck/2", "deck/3", "deck/4", "erz/1", "erz/2", "erz/3", "pad/1", "pad/2", "master"};
+inline constexpr std::array<std::string_view, 14> fx_kanal_3{"deck/1", "deck/2", "deck/3", "deck/4", "erz/1", "erz/2", "erz/3", "erz/4", "erz/5", "erz/6", "erz/7", "erz/8", "pad/1", "pad/2"};
 inline constexpr std::array<std::string_view, 12> graph_kanal{"deck/1", "deck/2", "deck/3", "deck/4", "fx/3", "fx/4", "master", "erz/1", "erz/2", "erz/3", "pad/1", "pad/2"};
 inline constexpr std::array<std::string_view, 15> graph_platz{"deck/1", "deck/2", "deck/3", "deck/4", "fx/3", "fx/4", "master", "erz/1", "erz/2", "erz/3", "erz/5", "erz/6", "erz/7", "pad/1", "pad/2"};
 enum class RollArt : std::int32_t { band_schatten = 0, puffer_keylock = 1 };

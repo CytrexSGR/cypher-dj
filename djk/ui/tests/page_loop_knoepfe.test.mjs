@@ -1,5 +1,6 @@
 // Places plan, slice 3 task 11 (page part): the deck buttons LOOP -> L1/L2 export into the loop slot (POST /modul/export {deck, slot}), and the
 // library's load buttons put a library loop into a slot (POST /modul/loop {name, slot}, task 10). The calls run against a stub of holeJson.
+import { liesApp } from './helpers/app_source.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -8,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { exportiereInSlot, ladeLoopInSlot, slotBuchstabe } from '../public/live_module.js';
 
 const PUBLIC = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
-const app = fs.readFileSync(path.join(PUBLIC, 'app.js'), 'utf8');
+const app = liesApp();
 const html = fs.readFileSync(path.join(PUBLIC, 'index.html'), 'utf8');
 const stub = (status, j) => { const calls = []; const f = async (weg, daten) => { calls.push([weg, daten]); return { status, j }; }; f.calls = calls; return f; };
 

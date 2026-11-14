@@ -29,7 +29,7 @@ const ERLAUBT = [
   { datei: 'ui/check/acceptance_r3.mjs', fragment: 'i <= 32', grund: 'probe: one command per track' },
   { datei: 'ui/check/acceptance_r8.mjs', fragment: 'i <= 32', grund: 'probe: one command per track' },
   { datei: 'ui/check/acceptance_e3.mjs', fragment: '<1..32,', grund: 'probe usage text: number of tracks' },
-  { datei: 'ui/public/app.js', fragment: 'b > 32 ?', grund: 'bars of a long track: grid lines every 4 bars above 32' },
+  { datei: 'ui/public/effects_bindung.js', fragment: 'b > 32 ?', grund: 'bars of a long track: grid lines every 4 bars above 32' },
   // name lengths: graph, kit and group names are 1..32 characters
   { datei: '', fragment: '1..32 characters', grund: 'name length of a graph, kit or group' },
   { datei: '', fragment: '_ -, 1..32)', grund: 'graph name length' },

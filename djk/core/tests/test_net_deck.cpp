@@ -152,7 +152,15 @@ int main() {
   { cdj::osc::Schreiber s(v::k_fx_zuweisung); s.h(45).s("andreas").i(2).s("pad/2").i(1); g.sende(s); }
   PRUEF(hole(bef, b) && b.art == cdj::Befehl::FX_ZUWEISUNG && b.deck == 2 && !std::strcmp(b.pfad, "pad/2") && b.an == 1);
   { cdj::osc::Schreiber s(v::k_fx_zuweisung); s.h(46).s("andreas").i(1).s("deck/3").i(1); g.sende(s); }
-  abgelehnt(46, "ausserhalb_bereich");  // deck/3 hat keine FX-Zuweisung (§4.10)
+  PRUEF(hole(bef, b) && b.art == cdj::Befehl::FX_ZUWEISUNG && b.deck == 1 && !std::strcmp(b.pfad, "deck/3") && b.an == 1);   // deck/3, deck/4 take FX1 and FX2
+  { cdj::osc::Schreiber s(v::k_fx_zuweisung); s.h(260).s("andreas").i(1).s("erz/5").i(1); g.sende(s); }
+  abgelehnt(260, "ausserhalb_bereich");  // erz/5 is no Beat FX target (only unit 3 takes every source channel)
+  { cdj::osc::Schreiber s(v::k_fx_zuweisung); s.h(261).s("andreas").i(3).s("erz/5").i(1); g.sende(s); }
+  PRUEF(hole(bef, b) && b.art == cdj::Befehl::FX_ZUWEISUNG && b.deck == 3 && !std::strcmp(b.pfad, "erz/5") && b.an == 1);   // FX3: every source channel
+  { cdj::osc::Schreiber s(v::k_fx_zuweisung); s.h(262).s("andreas").i(3).s("master").i(1); g.sende(s); }
+  abgelehnt(262, "ausserhalb_bereich");  // FX3 has no master assignment
+  { cdj::osc::Schreiber s(v::k_fx_zuweisung); s.h(263).s("andreas").i(4).s("deck/1").i(1); g.sende(s); }
+  abgelehnt(263, "ausserhalb_bereich");  // unit 4 does not exist
   { cdj::osc::Schreiber s(v::k_fx_zuweisung); s.h(47).s("andreas").i(1).s("master").i(0); g.sende(s); }
   PRUEF(hole(bef, b) && b.art == cdj::Befehl::FX_ZUWEISUNG && b.deck == 1 && !std::strcmp(b.pfad, "master") && b.an == 0);
   { cdj::osc::Schreiber s(v::k_fx_zuweisung); s.h(48).s("andreas").i(0).s("deck/1").i(1); g.sende(s); }
@@ -203,6 +211,10 @@ int main() {
   ere->schiebe(fxz);
   PRUEF(g.warte("/e/fx/zuweisung", 500) && !std::strcmp(g.m.typen, "isi") && g.i(0) == 1 &&
         !std::strcmp(g.s(1), "erz/1") && g.i(2) == 1);
+  fxz.deck = 3; std::strcpy(fxz.pfad, "erz/6"); fxz.status = 0;   // FX3 reaches the page the same way
+  ere->schiebe(fxz);
+  PRUEF(g.warte("/e/fx/zuweisung", 500) && !std::strcmp(g.m.typen, "isi") && g.i(0) == 3 &&
+        !std::strcmp(g.s(1), "erz/6") && g.i(2) == 0);
   cdj::Ereignis fxr{};   // Ohr T17: /e/fx/routing ,i
   fxr.art = cdj::Ereignis::FX_ROUTING;
   fxr.status = 1;

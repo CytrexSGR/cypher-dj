@@ -21,7 +21,7 @@ const NAMEN = ['lage', 'bestand', 'laden', 'deck_start', 'deck_stopp', 'sprung',
   'presets_suchen', 'presets_lesen', 'presets_speichern', 'presets_anwenden', 'kollektionen', 'kollektion_aendern', 'plugins',
   'live_oeffnen', 'modul_export', 'modul_leeren', 'modul_stems', 'modul_stand', 'modul_tonart', 'modul_blend',
   'module_suchen', 'modul_einsetzen', 'modul_speichern',
-  'oszilloskop'];   // live-module task 10
+  'oszilloskop', 'seq'];   // live-module task 10; SEQ deck slice 1 task 6: seq
   //   // 1.16 rest U5; 1.9 T2.5 proj_kits; 1.14 comping S1 T9; D1 S2 (Spec 3.5), Paket 1.18 E-b, Paket 1.13 Warp, Slice 6 Stems
 
 async function aufbau(t, antworten, env) {
@@ -1053,7 +1053,7 @@ test('djk-hand proj_auto (Automation Slice 1): GET with query, source cypher, re
   assert.ok(werkzeuge.find((x) => x.name === 'proj_lage').description.includes('lanes [{id, ziel, punkte_zahl, gesperrt?'));
   assert.ok(werkzeuge.find((x) => x.name === 'spur').description.includes('is a lane, not a spur'));
   // count: base (57 tools, 17 of them proj_*) plus one
-  assert.equal(werkzeuge.length, 57 + 1 + 2 /* S12: graphen, graph */ + 1 /* S17: proj_bk */ + 1 /* S15: proj_strom_aufnehmen */ + 1 /* Automation Slice 3: proj_auto_zustand */ + 1 /* 1.14 T9: take_vorhoeren */ + 1 /* 1.15 A9: spektrum */ + 1 /* 1.14 slice 4: proj_bounce */ + 6 /* 1.16 rest U5: presets and collections */ + 1 /* demo overlay: ansage */ + 1 /* 1.9 T2.5: proj_kits */ + 1 /* 1.10 T1: proj_routing */ + 1 /* 1.10 T6: proj_resample */ + 1 /* 1.11 T8: plugins */ + 1 /* MIDI import: proj_midi_import */ + 1 /* strudel-clip: proj_muster */ + 5 /* live-module task 4 */ + 1 /* live-module task 11: modul_tonart */ + 1 /* live-module task 8: modul_blend */ + 3 /* live-module task 10 */ + 1 /* oszilloskop */);
+  assert.equal(werkzeuge.length, 57 + 1 + 2 /* S12: graphen, graph */ + 1 /* S17: proj_bk */ + 1 /* S15: proj_strom_aufnehmen */ + 1 /* Automation Slice 3: proj_auto_zustand */ + 1 /* 1.14 T9: take_vorhoeren */ + 1 /* 1.15 A9: spektrum */ + 1 /* 1.14 slice 4: proj_bounce */ + 6 /* 1.16 rest U5: presets and collections */ + 1 /* demo overlay: ansage */ + 1 /* 1.9 T2.5: proj_kits */ + 1 /* 1.10 T1: proj_routing */ + 1 /* 1.10 T6: proj_resample */ + 1 /* 1.11 T8: plugins */ + 1 /* MIDI import: proj_midi_import */ + 1 /* strudel-clip: proj_muster */ + 5 /* live-module task 4 */ + 1 /* live-module task 11: modul_tonart */ + 1 /* live-module task 8: modul_blend */ + 3 /* live-module task 10 */ + 1 /* oszilloskop */ + 1 /* SEQ deck slice 1 task 6: seq */);
   assert.equal(werkzeuge.filter((x) => x.name.startsWith('proj_')).length, 17 + 1 + 1 + 1 + 1 + 1 /* 1.14 slice 4: proj_bounce */ + 1 /* 1.9 T2.5: proj_kits */ + 1 /* 1.10 T1: proj_routing */ + 1 /* 1.10 T6: proj_resample */ + 1 /* MIDI import: proj_midi_import */ + 1 /* strudel-clip: proj_muster */);
 });
 
@@ -1101,7 +1101,7 @@ test('djk-hand proj_aendern/proj_auto (Automation Slice 2): auto_neu pan and aut
   assert.ok(werkzeuge.find((x) => x.name === 'proj_auto').inputSchema.properties.bei_beat.description.includes('lane value'));
   assert.ok(!werkzeuge.find((x) => x.name === 'proj_auto').inputSchema.properties.bei_beat.description.includes('(dB)'));
   assert.ok(werkzeuge.find((x) => x.name === 'proj_zusammenfuehren').description.includes('lanes_verworfen'));
-  assert.equal(werkzeuge.length, 66 + 6 + 1 + 1 + 1 + 1 + 1 + 1 /* MIDI import: proj_midi_import */ + 1 /* strudel-clip: proj_muster */ + 5 /* live-module task 4 */ + 1 /* live-module task 11: modul_tonart */ + 1 /* live-module task 8: modul_blend */ + 3 /* live-module task 10 */ + 1 /* oszilloskop */);   // + proj_resample (1.10 T6); + proj_routing (1.10 T1); + proj_kits (1.9 T2.5); + ansage (demo overlay); 62 + proj_auto_zustand (Automation Slice 3) + spektrum (1.15 A9) + take_vorhoeren (1.14 T9) + proj_bounce (1.14 slice 4) + 6 presets and collections tools (1.16 rest U5)
+  assert.equal(werkzeuge.length, 66 + 6 + 1 + 1 + 1 + 1 + 1 + 1 /* MIDI import: proj_midi_import */ + 1 /* strudel-clip: proj_muster */ + 5 /* live-module task 4 */ + 1 /* live-module task 11: modul_tonart */ + 1 /* live-module task 8: modul_blend */ + 3 /* live-module task 10 */ + 1 /* oszilloskop */ + 1 /* SEQ deck slice 1 task 6: seq */);   // + proj_resample (1.10 T6); + proj_routing (1.10 T1); + proj_kits (1.9 T2.5); + ansage (demo overlay); 62 + proj_auto_zustand (Automation Slice 3) + spektrum (1.15 A9) + take_vorhoeren (1.14 T9) + proj_bounce (1.14 slice 4) + 6 presets and collections tools (1.16 rest U5)
 });
 
 test('djk-hand proj_aendern (Automation Slice 2): a locked lane answers lane_gesperrt as a tool error with the reason; negative control: an unlocked change succeeds', async (t) => {
@@ -1291,7 +1291,7 @@ test('djk-hand proj_auto_zustand (Automation Slice 3): re_enable all and one, ki
   const pl = werkzeuge.find((x) => x.name === 'proj_lage').description;
   assert.ok(pl.includes('uebersteuert: true'), 'proj_lage names uebersteuert');
   assert.ok(!pl.includes('auto_uebersteuert'), 'proj_lage promises no list that its view does not carry');
-  assert.equal(werkzeuge.length, 66 + 6 + 1 + 1 + 1 + 1 + 1 + 1 /* MIDI import: proj_midi_import */ + 1 /* strudel-clip: proj_muster */ + 5 /* live-module task 4 */ + 1 /* live-module task 11: modul_tonart */ + 1 /* live-module task 8: modul_blend */ + 3 /* live-module task 10 */ + 1 /* oszilloskop */);   // + proj_resample (1.10 T6); + proj_routing (1.10 T1); + proj_kits (1.9 T2.5); + ansage (demo overlay); + take_vorhoeren (1.14 T9); + spektrum (1.15 A9); + proj_bounce (1.14 slice 4); + 6 (1.16 rest U5)
+  assert.equal(werkzeuge.length, 66 + 6 + 1 + 1 + 1 + 1 + 1 + 1 /* MIDI import: proj_midi_import */ + 1 /* strudel-clip: proj_muster */ + 5 /* live-module task 4 */ + 1 /* live-module task 11: modul_tonart */ + 1 /* live-module task 8: modul_blend */ + 3 /* live-module task 10 */ + 1 /* oszilloskop */ + 1 /* SEQ deck slice 1 task 6: seq */);   // + proj_resample (1.10 T6); + proj_routing (1.10 T1); + proj_kits (1.9 T2.5); + ansage (demo overlay); + take_vorhoeren (1.14 T9); + spektrum (1.15 A9); + proj_bounce (1.14 slice 4); + 6 (1.16 rest U5)
 });
 
 // Automation Slice 3 (task 6, fixup 2): exactly one of two shapes; every half call, a numeric spur_id and an unknown ziel are refused locally with the real problem; nothing is sent.
@@ -1558,11 +1558,11 @@ test('djk-hand 1.8 S2b: proj_aendern and proj_aufnahme describe external inputs,
     assert.ok(pau.includes(wort), `proj_aufnahme names ${wort}`);
   }
   assert.ok(!pau.includes('External inputs (microphone, XDJ-XZ) are not part of this'), 'the slice 1 sentence is gone');
-  assert.equal(werkzeuge.length, 90, 'no new tool (D5; 89 before oszilloskop); 79 with proj_midi_import and proj_muster, plus the five live module tools of task 4 and modul_tonart');
+  assert.equal(werkzeuge.length, 91, 'no new tool (D5; 89 before oszilloskop); 79 with proj_midi_import and proj_muster, plus the five live module tools of task 4 and modul_tonart; 91 with seq (SEQ deck slice 1 task 6)');
 });
 
 // 1.12 S7 (M13) U13 T13.4: spur with schleife_takte loops until spur_stopp; aendern: true changes a running loop of mine from its next pass
-test('djk-hand spur: schleife_takte goes into the body, aendern posts /spur/aendern, the description names the loop rules; still 90 tools', async (t) => {
+test('djk-hand spur: schleife_takte goes into the body, aendern posts /spur/aendern, the description names the loop rules; still 91 tools', async (t) => {
   const { c, gesehen } = await aufbau(t, (m, u) => {
     if (u === '/spur') return [200, { ok: true, anker_beat: 16 }];
     if (u === '/spur/aendern') return [409, { fehler: 'nur_andreas', text: 'this loop is Andreas\'s' }];
@@ -1579,7 +1579,7 @@ test('djk-hand spur: schleife_takte goes into the body, aendern posts /spur/aend
   await c.callTool({ name: 'spur', arguments: { name: 'x', fahrten } });
   assert.deepEqual(gesehen[2].koerper, { spur: { name: 'x', fahrten }, ab: 'takt' });
   const werkzeuge = (await c.listTools()).tools;
-  assert.equal(werkzeuge.length, 66 + 6 + 1 + 1 + 1 + 1 + 1 + 1 /* MIDI import: proj_midi_import */ + 1 /* strudel-clip: proj_muster */ + 5 /* live-module task 4 */ + 1 /* live-module task 11: modul_tonart */ + 1 /* live-module task 8: modul_blend */ + 3 /* live-module task 10 */ + 1 /* oszilloskop */);   // 77 = 66 + the 6 presets and collections tools (1.16 rest U5) + ansage (demo overlay) + proj_kits (1.9 T2.5) + proj_routing (1.10 T1) + proj_resample (1.10 T6) + plugins (1.11 T8)
+  assert.equal(werkzeuge.length, 66 + 6 + 1 + 1 + 1 + 1 + 1 + 1 /* MIDI import: proj_midi_import */ + 1 /* strudel-clip: proj_muster */ + 5 /* live-module task 4 */ + 1 /* live-module task 11: modul_tonart */ + 1 /* live-module task 8: modul_blend */ + 3 /* live-module task 10 */ + 1 /* oszilloskop */ + 1 /* SEQ deck slice 1 task 6: seq */);   // 77 = 66 + the 6 presets and collections tools (1.16 rest U5) + ansage (demo overlay) + proj_kits (1.9 T2.5) + proj_routing (1.10 T1) + proj_resample (1.10 T6) + plugins (1.11 T8)
   const w = werkzeuge.find((x) => x.name === 'spur');
   for (const wort of ['schleife_takte', 'aendern', 'keine_schleife', 'nur_andreas', 'next pass']) assert.ok(w.description.includes(wort), `spur names ${wort}`);
   assert.equal(w.inputSchema.properties.schleife_takte.maximum, 64);
@@ -1786,7 +1786,7 @@ test('djk-hand (1.8 T5): proj_aendern names aufnahme_setzen with its fields; pro
   for (const g of ['count-in', 'vorzaehler_takte', 'laufend', 'transport_laeuft', 'punch_leer', 'einsatz_ausgeblieben', 'punch {von_beat, bis_beat}', 'punch.ein']) {
     assert.ok(text('proj_aufnahme').includes(g), `proj_aufnahme nennt ${g}`);
   }
-  assert.equal(werkzeuge.length, 79 + 7 + 3 + 1 /* oszilloskop */, 'tool count unchanged since the live module tools');
+  assert.equal(werkzeuge.length, 79 + 7 + 3 + 1 /* oszilloskop */ + 1 /* SEQ deck slice 1 task 6: seq */, 'tool count unchanged since the live module tools');
 });
 
 // 1.8 T8: MIDI recording in the descriptions (the instrument track input in proj_aendern; the MIDI run, release, offset, overdub and reasons in proj_aufnahme)
@@ -1799,7 +1799,7 @@ test('djk-hand (1.8 T8): proj_aendern offers {art: midi} for an instrument track
     assert.ok(text('proj_aufnahme').includes(g), `proj_aufnahme nennt ${g}`);
   }
   assert.ok(!text('proj_aufnahme').startsWith('Record onto the armed audio tracks'), 'the first sentence is no longer audio only');
-  assert.equal(werkzeuge.length, 79 + 7 + 3 + 1 /* oszilloskop */, 'tool count unchanged since the live module tools');
+  assert.equal(werkzeuge.length, 79 + 7 + 3 + 1 /* oszilloskop */ + 1 /* SEQ deck slice 1 task 6: seq */, 'tool count unchanged since the live module tools');
 });
 
 // 1.8 T10: ONE scripted session of the real hand (stdio) against the real page server and the stand-in core (the stand-in writes the take files). Cypher sets up a
@@ -1995,7 +1995,7 @@ test('djk-hand proj_aendern names member macro targets and the three variation c
       assert.ok(md.includes(b), `${datei} ${b}`);
     }
   }
-  assert.equal(werkzeuge.length, 66 + 6 + 1 + 1 + 1 + 1 + 1 + 1 /* MIDI import: proj_midi_import */ + 1 /* strudel-clip: proj_muster */ + 5 /* live-module task 4 */ + 1 /* live-module task 11: modul_tonart */ + 1 /* live-module task 8: modul_blend */ + 3 /* live-module task 10 */ + 1 /* oszilloskop */, 'no tool was added by this slice');
+  assert.equal(werkzeuge.length, 66 + 6 + 1 + 1 + 1 + 1 + 1 + 1 /* MIDI import: proj_midi_import */ + 1 /* strudel-clip: proj_muster */ + 5 /* live-module task 4 */ + 1 /* live-module task 11: modul_tonart */ + 1 /* live-module task 8: modul_blend */ + 3 /* live-module task 10 */ + 1 /* oszilloskop */ + 1 /* SEQ deck slice 1 task 6: seq */, 'no tool was added by this slice');
   // negative control: a tool that has nothing to do with it does not carry the words
   assert.doesNotMatch(werkzeuge.find((x) => x.name === 'proj_lage').description, /makro_variation/);
 });
@@ -2059,10 +2059,10 @@ test('djk-hand: oszilloskop asks /oszi and answers figures first, then an envelo
 });
 
 // Places plan, slice 1 task 1: the page server opens deck 4, so the hand names four decks everywhere a deck is asked for
-test('djk-hand: deck is 1 to 4 in every deck tool and in hoeren (the ear covers four decks); still 90 tools', async (t) => {
+test('djk-hand: deck is 1 to 4 in every deck tool and in hoeren (the ear covers four decks); still 91 tools', async (t) => {
   const { c } = await aufbau(t, () => null);
   const werkzeuge = (await c.listTools()).tools;
-  assert.equal(werkzeuge.length, 90);
+  assert.equal(werkzeuge.length, 91);
   for (const name of ['laden', 'deck_start', 'deck_stopp', 'sprung', 'loop', 'pad', 'loop_nach_box', 'hoeren']) {
     const w = werkzeuge.find((x) => x.name === name);
     assert.deepEqual(w.inputSchema.properties.deck.enum, [1, 2, 3, 4], name);
@@ -2076,11 +2076,11 @@ test('djk-hand: deck is 1 to 4 in every deck tool and in hoeren (the ear covers 
   assert.ok(/`deck` is 1, 2, 3 or 4/.test(aufruf));
 });
 
-// DJ view places task 11 (decision 13): the loop boxes are the live slots; slot arguments take 1/2 and A/B; the tool count stays 90
-test('djk-hand: loop_nach_box exports into the slot, box laden loads a library loop into it, box start/stopp answer box_ersetzt, slots take 1/2 and A/B; still 90 tools', async (t) => {
+// DJ view places task 11 (decision 13): the loop boxes are the live slots; slot arguments take 1/2 and A/B; the tool count stays 91 (90 before the SEQ tool)
+test('djk-hand: loop_nach_box exports into the slot, box laden loads a library loop into it, box start/stopp answer box_ersetzt, slots take 1/2 and A/B; still 91 tools', async (t) => {
   const { c, gesehen } = await aufbau(t, (m, u) => (u === '/modul/export' || u === '/modul/loop' || u === '/modul/leeren' ? [200, { ok: true }] : null));
   const werkzeuge = (await c.listTools()).tools;
-  assert.equal(werkzeuge.length, 90);
+  assert.equal(werkzeuge.length, 91);
   for (const name of ['modul_export', 'modul_leeren', 'modul_stems', 'modul_tonart', 'modul_einsetzen', 'modul_blend']) {
     assert.deepEqual(werkzeuge.find((x) => x.name === name).inputSchema.properties.slot.enum, ['A', 'B', 1, 2], name);
   }
@@ -2109,4 +2109,54 @@ test('djk-hand: loop_nach_box exports into the slot, box laden loads a library l
   assert.ok(!(await c.callTool({ name: 'modul_leeren', arguments: { slot: 2, takte: 0 } })).isError);
   const aufruf = fs.readFileSync(path.join(path.dirname(HAND), 'AUFRUF.md'), 'utf8');
   assert.ok(/box_ersetzt/.test(aufruf), 'AUFRUF.md names box_ersetzt');
+});
+
+// SEQ deck v2 task 3: the tool seq posts to the /seq routes; one tool, four actions; a pattern is read back from the stand by name.
+test('djk-hand seq: stand, anlegen, folge (text and name) and leeren use the /seq routes with the arguments; the schema and the description carry notation and gates; 91 tools', async (t) => {
+  const stand = { 1: null, 2: { gruppe_id: 'g1', folgen: [
+    { spur_id: 's1', clip_id: 'c1', name: 'Drums', geraet: 'kit:909', stumm: true, editierbar: true, laenge_beats: 4, zeilen: [], text: 'folge Drums  kit:909  1bar\nnoten kick 36  1/16  x...' },
+    { spur_id: 's2', clip_id: null, name: 'Arr', geraet: 'kit:909', stumm: false, editierbar: false, laenge_beats: null, zeilen: [], text: null }] }, 3: null, 4: null };
+  const { c, gesehen } = await aufbau(t, (m, u) => (u === '/seq/stand' ? [200, stand] : u.startsWith('/seq/') ? [200, { rev: 7, projekt: { rev: 7 }, gruppe_id: 'g1' }] : null));
+  const werkzeuge = (await c.listTools()).tools;
+  assert.equal(werkzeuge.length, 91);
+  const w = werkzeuge.find((x) => x.name === 'seq');
+  assert.deepEqual(w.inputSchema.required, ['aktion']);
+  assert.deepEqual(w.inputSchema.properties.aktion.enum, ['stand', 'anlegen', 'leeren', 'folge']);
+  assert.deepEqual(w.inputSchema.properties.platz.enum, [1, 2, 3, 4]);
+  for (const k of ['text', 'name']) assert.ok(w.inputSchema.properties[k], `property ${k}`);
+  for (const k of ['zeile', 'schritt', 'an', 'vel', 'ton', 'laenge']) assert.ok(!w.inputSchema.properties[k], `property ${k} is gone`);
+  for (const wort of ['folge <name> <instrument> <length>', 'noten <lane id>', 'werte <target>', 'kurve <target>', 'bk:<graph>', 'kit:<kit>', 'rb338', '1/16', 'c1+g1', 'je <length>', 'stumm', 'kanal_offen', 'deck_laeuft', 'ki_gestoppt', 'deck/<platz>', 'argument_ungueltig', 'seq_fehlt', 'huellkurve_ziel', 'ohne_aenderung', 'editierbar', 'ONE write']) {
+    assert.ok(w.description.includes(wort), `the description names ${wort}`);
+  }
+  const text = 'folge Drums  kit:909  1bar\nnoten kick 36  1/16  x...x...x...x...';
+  const r = await c.callTool({ name: 'seq', arguments: { aktion: 'folge', platz: 2, text } });
+  assert.ok(!r.isError, JSON.stringify(r));
+  await c.callTool({ name: 'seq', arguments: { aktion: 'stand' } });
+  await c.callTool({ name: 'seq', arguments: { aktion: 'anlegen', platz: 1 } });
+  const lesen = await c.callTool({ name: 'seq', arguments: { aktion: 'folge', platz: 2, name: 'drums' } });
+  assert.deepEqual(JSON.parse(lesen.content[0].text), { platz: 2, name: 'Drums', text: stand[2].folgen[0].text });
+  await c.callTool({ name: 'seq', arguments: { aktion: 'leeren', platz: 1 } });
+  assert.deepEqual(gesehen.map((g) => [g.methode, g.pfad, g.koerper]), [
+    ['POST', '/seq/text', { platz: 2, text }],
+    ['GET', '/seq/stand', null],
+    ['POST', '/seq/anlegen', { platz: 1 }],
+    ['GET', '/seq/stand', null],
+    ['POST', '/seq/leeren', { platz: 1 }],
+  ]);
+  assert.ok(gesehen.every((g) => g.quelle === 'cypher'));
+  // reading a pattern that is not editable, an unknown one and a place without a deck
+  const nicht = await c.callTool({ name: 'seq', arguments: { aktion: 'folge', platz: 2, name: 'Arr' } });
+  assert.deepEqual([nicht.isError, JSON.parse(nicht.content[0].text).fehler], [true, 'folge_nicht_editierbar']);
+  const unbekannt = await c.callTool({ name: 'seq', arguments: { aktion: 'folge', platz: 2, name: 'Nope' } });
+  assert.deepEqual([unbekannt.isError, JSON.parse(unbekannt.content[0].text).fehler], [true, 'folge_unbekannt']);
+  const leer = await c.callTool({ name: 'seq', arguments: { aktion: 'folge', platz: 3, name: 'Drums' } });
+  assert.deepEqual([leer.isError, JSON.parse(leer.content[0].text).fehler], [true, 'seq_fehlt']);
+  const n = gesehen.length;
+  for (const a of [{ aktion: 'folge', platz: 2 }, { aktion: 'folge', platz: 2, text, name: 'Drums' }, { aktion: 'folge', text }, { aktion: 'anlegen' }, { aktion: 'leeren' },
+    { aktion: 'text', platz: 2, text }, { aktion: 'schritt', platz: 1, zeile: 'kick', schritt: 4 }, { aktion: 'tanzen', platz: 1 }, { aktion: 'anlegen', platz: 5 }]) {
+    const x = await c.callTool({ name: 'seq', arguments: a });
+    assert.ok(x.isError, JSON.stringify(a));
+    assert.equal(JSON.parse(x.content[0].text).fehler, 'argument_ungueltig', JSON.stringify(a));
+  }
+  assert.equal(gesehen.length, n + 0, 'a call with a missing argument never reaches the server');
 });

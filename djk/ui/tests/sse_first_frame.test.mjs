@@ -38,7 +38,7 @@ test('SSE Anfangsbild: erstes Ereignis stand mit genau den Schlüsseln decks, fx
   assert.ok(e.f.spurPool === null || typeof e.f.spurPool.an === 'boolean', `spurPool ${JSON.stringify(e.f.spurPool)}`);   // mehrkern slice 3.2 Task 8: null until /zustand/spur_pool came
   assert.equal(e.f.kern, 'verbunden');
   assert.equal(e.f.pruefmodus, 'an', 'stapel startet mit kernPruefmodus true');
-  assert.deepEqual([e.f.fx, e.f.fxZuweisung, e.f.fxRouting], [[null, null], [{}, {}], 'post_fader']);
+  assert.deepEqual([e.f.fx, e.f.fxZuweisung, e.f.fxRouting], [[null, null], [{}, {}, {}], 'post_fader']);
   for (const k of ['decks', 'geladen', 'graphen_geladen', 'loops', 'regler']) assert.equal(Object.prototype.toString.call(e.f[k]), '[object Object]', `${k} ist ein einfaches Objekt`);
 });
 

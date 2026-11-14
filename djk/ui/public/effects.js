@@ -490,3 +490,12 @@ export function gateAufnehmen(stand, f, jetzt) {
   if (typeof w === 'number' && Number.isFinite(w)) (stand[k] ??= {}).gate_db = { db: Math.max(0, w), t: jetzt };
   return true;
 }
+
+// SOUND column of the Strudel place (strudel_sound.js): the names of the first four knobs of instrument geladenName, [[nr, name]], or null without a graph.
+export function knopfNamen(graphen, geladenName) {
+  if (!geladenName) return null;
+  const g = graphen.find((x) => x.name === geladenName);
+  const n = g?.regler_namen ?? {};
+  return Array.from({ length: 4 }, (_, i) => [i + 1, n[String(i + 1)]]).filter(([, name]) => name);
+}
+

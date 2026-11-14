@@ -7,6 +7,7 @@
 #include <cstring>
 
 #include "cypherdj/core.h"
+#include "hand/led.h"
 
 namespace cdj {
 
@@ -23,6 +24,7 @@ void kopiere_text(char* ziel, size_t n, const char* q) {
 void Kern::setze_mapping(const hand::Mapping* m) noexcept {
   mapping_ = m;
   hand_ein_.mapping(m);
+  led_neu_.store(true, std::memory_order_release);  // B3: the new mapping's LEDs are all unknown to the device
 }
 
 void Kern::hand_midi(const uint8_t* daten, size_t groesse, uint32_t versatz) noexcept {
@@ -38,6 +40,35 @@ void Kern::hand_midi(const uint8_t* daten, size_t groesse, uint32_t versatz) noe
   std::memcpy(m.d, daten, groesse);
   m.groesse = static_cast<uint8_t>(groesse);
   m.versatz = versatz;
+}
+
+int Kern::led_zustand(const char* name) const noexcept {
+  const int e = led_kern_eigen(name);
+  if (e == 0) return sw_->ki_gestoppt() ? 1 : 0;
+  if (e > 0) return decks_ && decks_->deck[e - 1].loop_aktiv() ? 1 : 0;
+  for (int i = 0; i < n_led_ext_; ++i)
+    if (std::strcmp(led_ext_[i].name, name) == 0) return led_ext_[i].zustand;
+  return 0;
+}
+
+int Kern::hand_led_hole(uint8_t (*aus)[3], int max) noexcept {
+  const bool alle = led_neu_.exchange(false, std::memory_order_acq_rel);
+  const hand::Mapping* m = mapping_;
+  if (!m) return 0;
+  if (alle)
+    for (int i = 0; i < hand::MAX_LEDS; ++i) led_gesendet_[i] = -1;
+  if (max > LED_MAX_JE_ZYKLUS) max = LED_MAX_JE_ZYKLUS;
+  int n = 0;
+  for (int i = 0; i < m->n_leds && n < max; ++i) {
+    const int z = led_zustand(m->led[i].name);
+#ifndef CYPHERDJ_MUTATION_LED_FLUT  // failure case B3: every LED goes out in every cycle
+    if (z == led_gesendet_[i]) continue;
+#endif
+    if (hand::led_nachricht(*m, m->led[i].name, z, aus[n]) != 3) continue;
+    led_gesendet_[i] = static_cast<int8_t>(z);
+    ++n;
+  }
+  return n;
 }
 
 void Kern::setze_lern_mapping(const hand::Mapping* m) noexcept {

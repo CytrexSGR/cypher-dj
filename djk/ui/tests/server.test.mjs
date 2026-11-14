@@ -1039,11 +1039,40 @@ test('/fx/zuweisung: gültig → /k/fx/zuweisung, falsche Werte 400', async (t) 
   assert.equal(r.code, 200, JSON.stringify(r.j));
   const f = log.filter((z) => z.typ === 'an_kern' && z.adresse === '/k/fx/zuweisung').slice(n0);
   assert.deepEqual({ ...f[0].felder, id: 0 }, { id: 0, quelle: 'andreas', einheit: 1, kanal: 'deck/1', an: 1 });
-  for (const falsch of [{ einheit: 0 }, { kanal: 'deck/3' }, { an: 1 }]) {
+  for (const falsch of [{ einheit: 0 }, { einheit: 4 }, { kanal: 'erz/5' }, { kanal: 'bus/1' }, { an: 1 }]) {
     const x = await postJson(url, '/fx/zuweisung', { einheit: 2, kanal: 'pad/1', an: false, ...falsch });
     assert.equal(x.code, 400, JSON.stringify(falsch));
   }
   assert.equal((await postJson(url, '/fx/zuweisung', { einheit: 2, kanal: 'master', an: true })).code, 200);   // Master hat eigene Tasten
+  assert.equal((await postJson(url, '/fx/zuweisung', { einheit: 2, kanal: 'deck/3', an: true })).code, 200);   // deck/3 and deck/4 take FX1 and FX2
+  assert.equal((await postJson(url, '/fx/zuweisung', { einheit: 1, kanal: 'deck/4', an: true })).code, 200);
+});
+
+test('/fx/zuweisung unit 3 (FX3, insert on fx/3): every source channel, never master; the core report lands in the third slot of the state', async (t) => {
+  const { o, url, log } = await stapel(t);
+  const n0 = log.filter((z) => z.typ === 'an_kern' && z.adresse === '/k/fx/zuweisung').length;
+  for (const kanal of ['deck/1', 'deck/4', 'erz/1', 'erz/8', 'pad/2']) {
+    const r = await postJson(url, '/fx/zuweisung', { einheit: 3, kanal, an: true });
+    assert.equal(r.code, 200, `${kanal} ${JSON.stringify(r.j)}`);
+  }
+  const f = log.filter((z) => z.typ === 'an_kern' && z.adresse === '/k/fx/zuweisung').slice(n0);
+  assert.deepEqual({ ...f[1].felder, id: 0 }, { id: 0, quelle: 'andreas', einheit: 3, kanal: 'deck/4', an: 1 });
+  for (const falsch of [{ kanal: 'master' }, { kanal: 'bus/1' }, { kanal: 'erz/9' }, { an: 1 }]) {
+    const x = await postJson(url, '/fx/zuweisung', { einheit: 3, kanal: 'deck/1', an: false, ...falsch });
+    assert.equal(x.code, 400, JSON.stringify(falsch));
+  }
+  assert.equal(log.filter((z) => z.typ === 'an_kern' && z.adresse === '/k/fx/zuweisung').length, n0 + 5, 'rejections send nothing');
+  const lies = async () => (await fetch(`${url}/fx/zuweisung`)).json();
+  let g = await lies();
+  for (let i = 0; i < 60 && g[2]['pad/2'] !== true; i++) { await warte(20); g = await lies(); }   // the fake core reports each assignment back
+  assert.equal(g.length, 3);
+  assert.deepEqual(g[2], { 'deck/1': true, 'deck/4': true, 'erz/1': true, 'erz/8': true, 'pad/2': true });
+  assert.deepEqual([g[0], g[1]], [{}, {}], 'FX1 and FX2 untouched');
+  o.vomKern({ adresse: '/e/fx/zuweisung', felder: { einheit: 3, kanal: 'deck/4', an: 0 } });
+  g = await lies();
+  assert.equal(g[2]['deck/4'], false);
+  o.vomKern({ adresse: '/e/neustart', felder: { generation: 99, sample: 0 } });
+  assert.deepEqual(await (await fetch(`${url}/fx/zuweisung`)).json(), [{}, {}, {}], 'a new kern starts with every unit off');
 });
 
 test('Review E9 F1/F9: stehendes Deck springt sofort (Politik 1, kein Warten aufs Raster), Hotcues nach /e/neustart wieder da', async (t) => {
@@ -3122,7 +3151,7 @@ test('Slice 5 F4: gleiche Generation leert den Stand nicht und sendet nichts; ne
   assert.equal(o.stand.fxRouting, 'insert');
   // neue Generation: wie bisher (Stand leer, Routing zurück auf Post Fader und Wunsch erneut gesendet)
   o.vomKern({ adresse: '/e/neustart', felder: { generation: g + 1, sample: 0 } });
-  assert.deepEqual([o.stand.loops, o.stand.fx, o.stand.fxZuweisung, o.loopRasterLive], [{}, [null, null], [{}, {}], {}]);
+  assert.deepEqual([o.stand.loops, o.stand.fx, o.stand.fxZuweisung, o.loopRasterLive], [{}, [null, null], [{}, {}, {}], {}]);
   assert.equal(o.stand.fxRouting, 'post_fader');
   assert.ok(log.some((z, i) => z.typ === 'an_kern' && z.adresse === '/k/fx/routing' && z.felder.routing === 1 && i > 0 && log.slice(0, i).filter((y) => y.typ === 'an_kern').length >= a0), 'Routing-Wunsch geht erneut hin');
   await warte(900);   // die Wiederherstellung (500 ms) soll vor dem Ende des Tests laufen, nicht in den abgebauten Server
@@ -3154,7 +3183,7 @@ test('Final-Review FR1: /k/willkommen mit KLEINERER Generation (gebremster Kern)
   const b = kernBefehle(log, a0);
   assert.deepEqual(ohneRouting(b), [], 'nichts wiederhergestellt (kein laden, kein start, kein fx)');
   assert.deepEqual(b.map((z) => [z.adresse, z.felder.routing, z.felder.quelle]), [['/k/fx/routing', 1, 'andreas']], 'Routing-Wunsch geht erneut hin');
-  assert.deepEqual([o.stand.loops, o.stand.fx, o.stand.fxZuweisung, o.loopRasterLive], [{}, [null, null], [{}, {}], {}]);
+  assert.deepEqual([o.stand.loops, o.stand.fx, o.stand.fxZuweisung, o.loopRasterLive], [{}, [null, null], [{}, {}, {}], {}]);
   assert.equal(o.generation, 0, 'gemerkte Generation ist die neue');
   assert.ok(log.some((z) => z.typ === 'wiederherstellung_uebersprungen' && z.grund === 'gebremster_start'));
   // der folgende gewöhnliche Neustart (Generation 0 → 1) stellt nichts Veraltetes her

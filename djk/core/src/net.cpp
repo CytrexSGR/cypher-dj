@@ -1,4 +1,6 @@
 #include "cypherdj/net.h"
+#include "cypherdj/hand_in.h"
+#include "hand/led.h"
 #include "hand/mapping.h"
 
 #include <arpa/inet.h>
@@ -465,6 +467,20 @@ void Netz::paket(const char* p, size_t n, int64_t jetzt_ns) {
     const bool stufe_ok = b.art != Befehl::KI_STUFE || (b.an >= v::bereich::k_ki_stufe::stufe_min &&
                                                         b.an <= v::bereich::k_ki_stufe::stufe_max);
     if (!quelle_bekannt(b.quelle) || !stufe_ok) {
+      quittung(b.id, b.quelle, 6, stand_sample_, stand_beat_, "ausserhalb_bereich");
+      return;
+    }
+    einreihen(b);
+  } else if (a->pfad == v::k_led.pfad) {  // slice 35 B3, §4.7: LED of the Leitstand (proposal, plan, listening certificate, autonomy, ...)
+    namespace f = v::feld::k_led;
+    Befehl b{};
+    b.art = Befehl::LED;
+    b.id = m.werte[f::id].h;
+    kopiere(b.quelle, m.werte[f::quelle].s, sizeof b.quelle);
+    kopiere(b.pfad, m.werte[f::name].s, sizeof b.pfad);
+    b.an = m.werte[f::zustand].i;
+    // the kern derives deck<n>_loop and ki_gestoppt itself (§7.4): a foreign value would fight its own
+    if (!quelle_bekannt(b.quelle) || !hand::led_name_gueltig(b.pfad) || cdj::led_kern_eigen(b.pfad) >= 0 || b.an < 0 || b.an > 3) {
       quittung(b.id, b.quelle, 6, stand_sample_, stand_beat_, "ausserhalb_bereich");
       return;
     }

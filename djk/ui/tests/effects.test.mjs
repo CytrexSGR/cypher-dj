@@ -1,4 +1,5 @@
 // Effekt-Sektion: Kennlinie wie komp_dsp (Gl. 4), Presets der Seite gleich denen des VST3.
+import { liesApp } from './helpers/app_source.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -210,7 +211,7 @@ test('S12 graphWahlHtml: option texts and values are escaped', () => {
 // S14: the wiring in app.js is DOM code that no unit test runs; this pins by text that the pieces are connected (the live
 // behaviour was not measured in a browser in this slice, see docs/architecture/stand/baukasten-s14.md)
 test('S14 app.js wiring (text check): the block comes from sendRueckHtml, the knobs are bound after every graph refresh and follow /e/regler', () => {
-  const app = readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
+  const app = liesApp();
   assert.ok(/send\.innerHTML = sendRueckHtml\(\);/.test(app));
   assert.ok(!/fixed at 0\.5/.test(app));
   const rumpf = (name) => { const i = app.indexOf(`function ${name}(`); assert.ok(i >= 0, name); return app.slice(i, app.indexOf('\n}\n', i)); };
@@ -352,7 +353,7 @@ test('S18 bkKnobListe: erz/6 and pad/2 name their eight knobs from the loaded gr
 });
 
 test('S18 app.js: the strip list and the mixer index of every Baukasten channel follow the stream table (mixer index = stream + 3, pads 12, 13)', () => {
-  const app = readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
+  const app = liesApp();
   const kanaele = [...app.match(/const FX_KANAELE = \[(.*)\];/)[1].matchAll(/\['([a-z]+\/\d)', '([^']+)'\]/g)].map((m) => m[1]);
   const index = Object.fromEntries([...app.match(/const FX_INDEX = \{(.*?)\};/)[1].matchAll(/'([a-z]+\/\d)': (\d+)/g)].map((m) => [m[1], Number(m[2])]));
   for (const s of [...INSTRUMENT_STROEME, 1]) {
@@ -366,7 +367,7 @@ test('S18 app.js: the strip list and the mixer index of every Baukasten channel 
 });
 
 // ---- A8: Gate and Utility strips on the FX page, and kern device presets ---------------------------------------------------------
-const APP = readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
+const APP = liesApp();
 const KOPF_ZEILEN = [...readFileSync(new URL('../../core/signalbox/include/cypherdj/signalbox/tool_controls.h', import.meta.url), 'utf8')
   .matchAll(/^\s*\{WzTool::(\w+), "([a-z_/]+)", (-?[\d.]+)f?, (-?[\d.]+)f?, (-?[\d.]+)f?, KurvenTyp::(\w+), \d+, (true|false), WzKanalart::(\w+)\},$/gm)]
   .map((m) => ({ tool: m[1], suffix: m[2], min: Number(m[3]), max: Number(m[4]), vorgabe: Number(m[5]), kurve: m[6], ganz: m[7] === 'true', kanalart: m[8] }));
