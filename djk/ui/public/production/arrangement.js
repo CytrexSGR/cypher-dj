@@ -2,11 +2,11 @@
 // (statisch: Raster, Loop-Bereich, Clips mit Welle oder Notenvorschau; nur neu bei Änderung von Projekt, Ansicht,
 // Größe oder einer angekommenen Welle) und Überlagerung (jedes Bild: Abspielkopf, Startmarke, Ablage-Geist).
 // Zeichenvokabular und Wellendaten aus wave.js (spalten, zeichneSpalte), kein WebGL.
-import { linien, beatZuX } from './timeline.js';
-import { SPUR_HOEHE, LOOP_ZONE, CLIP_KOPF, clipKasten, sichtbar, welleSpalteFuer, notenKaesten, zeilenFuer, spurZeile } from './layout.js';
+import { linien, beatZuX, beatsProTakt } from './timeline.js';
+import { SPUR_HOEHE, LOOP_ZONE, CLIP_KOPF, clipKasten, sichtbar, welleSpalteFuer, notenKaesten, zeilenFuer, spurZeile, loopText } from './layout.js';
 import { genutzteBereiche } from './takes.js';
 import { gruppenEltern, gruppenKette, spurGruppe } from './routing.js';
-import { lanePfad, wertZuY, gezeigteLane, bereich, laneSchutz, laneLinienFarbe } from './lanes.js';
+import { lanePfad, wertZuY, gezeigteLane, bereich, laneSchutz, laneLinienFarbe, laneStrang } from './lanes.js';
 import { stemsBalkenListe, stummDecke } from './stems.js';
 import { punchBand } from './recording.js';
 import { spalten, zeichneSpalte } from '../wave.js';
@@ -14,6 +14,8 @@ import { spalten, zeichneSpalte } from '../wave.js';
 const HEX = /^#[0-9a-f]{6}$/i;
 const alpha = (f, a) => (HEX.test(f) ? f + a : `rgba(140,140,150,0.25)`);
 
+// Part of the redraw key: the groups whose lane row is open and the target each one shows (a group row has no index in `lanen`)
+const laneGruppenKey = (p, straenge, laneZiel) => (p?.gruppen ?? []).filter((g) => straenge.has(g.id)).map((g) => `${g.id}=${laneZiel?.get(g.id) ?? ''}`).join(',');
 export class Arrangement {
   constructor({ lineal, spuren, ueber, wellen }) {
     this.l = lineal; this.s = spuren; this.u = ueber; this.wellen = wellen;
@@ -37,9 +39,9 @@ export class Arrangement {
     return true;
   }
   // loop: die gezeigte Klammer (beim Ziehen der Entwurf, sonst projekt.loop)
-  bild({ ansicht, projekt, loop, kopfBeat, startBeat, geist, stems = null, lanen = [], laneZiel = null, ueber = [], takeZeilen = new Map() }) {
+  bild({ ansicht, projekt, loop, kopfBeat, startBeat, geist, stems = null, lanen = [], laneZiel = null, ueber = [], takeZeilen = new Map(), loopZug = false, straenge = new Set() }) {
     // the key holds the target each open row shows, so that a new choice redraws
-    const tab = zeilenFuer(projekt, lanen, takeZeilen), schluessel = lanen.join(',') + '#' + [...takeZeilen].join(';') + (laneZiel ? '|' + lanen.map((i) => laneZiel.get(projekt?.spuren?.[i]?.id) ?? '').join(',') : '') + '|' + ueber.map((x) => `${x.spur_id}:${x.ziel}`).join(',');   // open lane rows (Automation S1); none = the old fixed grid
+    const tab = zeilenFuer(projekt, lanen, takeZeilen, straenge), schluessel = lanen.join(',') + '&' + laneGruppenKey(projekt, straenge, laneZiel) + '#' + [...takeZeilen].join(';') + (laneZiel ? '|' + lanen.map((i) => laneZiel.get(projekt?.spuren?.[i]?.id) ?? '').join(',') : '') + '|' + ueber.map((x) => `${x.spur_id}:${x.ziel}`).join(',');   // open lane rows (Automation S1); none = the old fixed grid
     this.laneZiel = laneZiel; this.ueber = ueber;
     if (this.passe(this.s) | this.passe(this.u)) this.schmutzig = true;
     this.passe(this.l);
@@ -47,7 +49,7 @@ export class Arrangement {
       this.schmutzig = false; this.letzte = { ansicht, projekt, lanen: schluessel };
       this.zeichneSpuren(ansicht, projekt, tab);
     }
-    this.zeichneLineal(ansicht, loop, kopfBeat, startBeat, projekt);
+    this.zeichneLineal(ansicht, loop, kopfBeat, startBeat, projekt, loopZug);
     this.zeichneUeber(ansicht, kopfBeat, startBeat, geist, projekt, stems, tab);
   }
   zeichneSpuren(a, p, tab = zeilenFuer(p)) {
@@ -71,7 +73,7 @@ export class Arrangement {
       const x0 = beatZuX(a, p.loop.von_beat), x1 = beatZuX(a, p.loop.bis_beat);
       g.fillStyle = p.loop.an ? 'rgba(47,214,195,0.07)' : 'rgba(255,255,255,0.025)'; g.fillRect(x0, 0, x1 - x0, h);
     }
-    for (const l of linien(a, w)) {
+    for (const l of linien(a, w, beatsProTakt(p?.taktart))) {
       g.strokeStyle = l.takt ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.05)';
       g.beginPath(); g.moveTo(Math.round(l.x) + 0.5, 0); g.lineTo(Math.round(l.x) + 0.5, h); g.stroke();
     }
@@ -116,7 +118,9 @@ export class Arrangement {
   zeichneLanen(g, a, p, tab, w, laneZiel = null) {
     for (const z of tab) {
       if (z.art !== 'lane') continue;
-      const spur = p.spuren[z.spur], lane = gezeigteLane(spur, laneZiel?.get(spur.id)), ziel = lane?.ziel ?? 'fader', b = bereich(ziel);   // an empty row frames like the fader (slice 1)
+      const ls = laneStrang(p, z);
+      if (!ls) continue;   // the strand of the row is gone (a group deleted while its row was open)
+      const spur = ls.strang, lane = gezeigteLane(spur, laneZiel?.get(ls.id)), ziel = lane?.ziel ?? 'fader', b = bereich(ziel);   // an empty row frames like the fader (slice 1)
       g.strokeStyle = 'rgba(255,255,255,0.10)';
       const leitlinien = b.nurSprung ? [0, 1] : b.mittellinie === null ? [] : [b.mittellinie];
       for (const v of leitlinien) { g.beginPath(); const y0 = Math.round(wertZuY(z, v, ziel)) + 0.5; g.moveTo(0, y0); g.lineTo(w, y0); g.stroke(); }
@@ -167,7 +171,7 @@ export class Arrangement {
     const decke = stummDecke(k, c);
     if (decke) { g.fillStyle = decke.farbe; g.fillRect(decke.x, decke.y, decke.w, decke.h); }
   }
-  zeichneLineal(a, loop, kopfBeat, startBeat, projekt = null) {
+  zeichneLineal(a, loop, kopfBeat, startBeat, projekt = null, loopZug = false) {
     const g = this.gl, w = this.l.width, h = this.l.height;
     g.fillStyle = '#14161c'; g.fillRect(0, 0, w, h);
     const pb = punchBand(a, projekt);   // 1.8 T5: the punch range, read-only, in the position zone under the loop brace (red like the record button)
@@ -181,9 +185,10 @@ export class Arrangement {
       const x0 = beatZuX(a, loop.von_beat), x1 = beatZuX(a, loop.bis_beat);
       g.fillStyle = loop.an ? '#2fd6c3' : '#4a4e5a'; g.fillRect(x0, 1, x1 - x0, LOOP_ZONE - 2);
       g.fillStyle = '#e8e8ec'; g.fillRect(x0, 0, 2, LOOP_ZONE); g.fillRect(x1 - 2, 0, 2, LOOP_ZONE);
+      if (loopZug) { g.font = '10px ui-monospace, monospace'; g.fillStyle = '#e8e8ec'; g.fillText(loopText(loop, beatsProTakt(projekt?.taktart)), x1 + 6, LOOP_ZONE - 2); }   // the range being dragged, in bars
     }
     g.font = '11px ui-monospace, monospace';
-    for (const l of linien(a, w)) {
+    for (const l of linien(a, w, beatsProTakt(projekt?.taktart))) {
       const x = Math.round(l.x) + 0.5;
       g.strokeStyle = l.haupt ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.2)';
       g.beginPath(); g.moveTo(x, l.haupt ? LOOP_ZONE : h - 5); g.lineTo(x, h); g.stroke();

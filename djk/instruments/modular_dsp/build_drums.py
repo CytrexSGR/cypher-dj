@@ -2,9 +2,11 @@
 """Generates demos/drums-909.json, demos/drums-808.json and their front plates paneele/*.json.
 
 The two graphs are one `trommeln` node (the kit) fed by a `note` node, with `regler` nodes on the parameters that have a knob;
-every other parameter is a fixed value on the node. Run from the baukasten_dsp folder: python3 build_drums.py
+every other parameter is a fixed value on the node. Run from the baukasten_dsp folder: python3 build_drums.py [--panels]
+(the panels are hand-edited since their first generation: without --panels only the graphs are written)
 """
 import json
+import sys
 
 
 def L(lo, hi): return (lo, hi, 1)
@@ -45,6 +47,13 @@ KNOBS_909 = {
     30: ("Hat Noise", "hat_noise", N(0, 1), "percent", ""),
     31: ("Level", "pegel", N(0, 2), "percent", ""),
     32: ("Kick Drive", "kick_drive", N(0, 1), "percent", ""),
+    33: ("Kick Level", "lv_kick", N(-12, 12), "db", ""),
+    34: ("Snare Level", "lv_snare", N(-12, 12), "db", ""),
+    35: ("Clap Level", "lv_clap", N(-12, 12), "db", ""),
+    36: ("Tom Level", "lv_tom", N(-12, 12), "db", ""),
+    37: ("Hat Level", "lv_hat", N(-12, 12), "db", ""),
+    38: ("Cymbal Level", "lv_cym", N(-12, 12), "db", ""),
+    39: ("Perc Level", "lv_perc", N(-12, 12), "db", ""),
 }
 KNOBS_808 = {
     1: ("Kick Tune", "kick_tune", L(34, 74), "hz", ""),
@@ -79,10 +88,20 @@ KNOBS_808 = {
     30: ("Level", "pegel", N(0, 2), "percent", ""),
     31: ("Hat Tune", "hat_tune", L(0.7, 1.43), "raw", "x"),
     32: ("Clap Spread", "clap_spread", N(0, 1), "percent", ""),
+    33: ("Kick Level", "lv_kick", N(-12, 12), "db", ""),
+    34: ("Snare Level", "lv_snare", N(-12, 12), "db", ""),
+    35: ("Clap Level", "lv_clap", N(-12, 12), "db", ""),
+    36: ("Tom Level", "lv_tom", N(-12, 12), "db", ""),
+    37: ("Hat Level", "lv_hat", N(-12, 12), "db", ""),
+    38: ("Cymbal Level", "lv_cym", N(-12, 12), "db", ""),
+    39: ("Perc Level", "lv_perc", N(-12, 12), "db", ""),
 }
 # fixed values of the parameters that have no knob (the model's own character)
 FIX_909 = {"ride_tune": 1.0, "crash_tune": 1.0, "cow_tune": 1.0, "cow_decay": 320, "boom_tune": 41, "boom_decay": 2200, "clave_tune": 2500}
 FIX_808 = {"kick_drive": 0.35, "crash_tune": 1.0, "ride_tune": 1.0, "ride_decay": 1300}
+# start position (0..1) of the level knobs; 0.5 is exactly 0 dB (-12 + 24 * 0.5). Knobs that are not listed start in the middle.
+VORGABE = {"drums-909": {}, "drums-808": {}}
+LEVEL_KNOBS = range(33, 40)
 # the Level knob runs 0..2 * PEGEL, so knob 0.5 gives PEGEL
 PEGEL = {"drums-909": 1.0, "drums-808": 1.0}
 
@@ -100,6 +119,8 @@ def graph(modell, knobs, fix, name):
         r = {"id": "k_" + inp, "art": "regler", "nr": nr, "min": lo, "max": round(hi, 6)}
         if log:
             r["log"] = 1
+        if nr in LEVEL_KNOBS:
+            r["vorgabe"] = VORGABE[name].get(nr, 0.5)
         kn.append(r)
         ka.append({"von": "k_%s.aus" % inp, "nach": "kit." + inp})
         names[str(nr)] = label
@@ -118,9 +139,9 @@ def fmt_json(g):
     return "\n".join(out) + "\n"
 
 
-def ctrl(nr, knobs):
+def ctrl(nr, knobs, name):
     lab, inp, rng, fmt, unit = knobs[nr]
-    c = {"id": inp.replace("_", "-"), "type": "knob", "label": lab, "bind": {"param": "k%d" % nr}, "format": fmt, "default": 0.5}
+    c = {"id": inp.replace("_", "-"), "type": "knob", "label": lab, "bind": {"param": "k%d" % nr}, "format": fmt, "default": VORGABE[name].get(nr, 0.5) if nr in LEVEL_KNOBS else 0.5}
     if fmt == "raw" and unit:
         c["unit"] = unit
     return c
@@ -130,7 +151,7 @@ def fmt_panel(name, title, knobs, sections):
     out = ['{', '  "format": "cypherdj-panel/2",', '  "geraet": {"art": "bk", "graph": "%s"},' % name, '  "title": "%s",' % title, '  "akzent": "rot",', '  "sections": [']
     for i, (sid, st, cols, nrs) in enumerate(sections):
         out.append('    { "id": "%s", "title": "%s", "cols": %d, "controls": [' % (sid, st, cols))
-        out += ['      ' + json.dumps(ctrl(n, knobs)) + (',' if j < len(nrs) - 1 else '') for j, n in enumerate(nrs)]
+        out += ['      ' + json.dumps(ctrl(n, knobs, name)) + (',' if j < len(nrs) - 1 else '') for j, n in enumerate(nrs)]
         out.append('    ]}' + (',' if i < len(sections) - 1 else ''))
     out += ['  ]', '}']
     return "\n".join(out) + "\n"
@@ -144,6 +165,7 @@ SEC_909 = [
     ("hats", "HATS", 5, [6, 22, 20, 21, 30]),
     ("cym", "CYMBALS", 4, [23, 28, 24, 29]),
     ("out", "OUT", 4, [7, 8, 27, 31]),
+    ("levels", "LEVELS", 4, [33, 34, 35, 36, 37, 38, 39]),
 ]
 SEC_808 = [
     ("kick", "KICK / BOOM", 4, [1, 2, 3, 9, 10, 25, 26]),
@@ -153,6 +175,7 @@ SEC_808 = [
     ("hats", "HATS", 4, [6, 21, 20, 31]),
     ("perc", "CYMBAL / PERC", 4, [22, 23, 24, 27]),
     ("out", "OUT", 4, [7, 8, 29, 30]),
+    ("levels", "LEVELS", 4, [33, 34, 35, 36, 37, 38, 39]),
 ]
 
 if __name__ == "__main__":
@@ -161,5 +184,8 @@ if __name__ == "__main__":
         used = sorted(n for s in sec for n in s[3])
         assert used == sorted(knobs), (name, set(knobs) ^ set(used))
         open("demos/%s.json" % name, "w").write(fmt_json(graph(modell, knobs, fix, name)))
-        open("paneele/%s.json" % name, "w").write(fmt_panel(name, title, knobs, sec))
+        # The committed panels were edited by hand after the first generation (layout rows, notes, short labels); the generated
+        # panel is only written on request, so a plain run never replaces them.
+        if "--panels" in sys.argv:
+            open("paneele/%s.json" % name, "w").write(fmt_panel(name, title, knobs, sec))
         print("wrote", name)

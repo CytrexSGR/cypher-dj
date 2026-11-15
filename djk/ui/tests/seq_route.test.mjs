@@ -112,6 +112,23 @@ test('GET /seq/geraet gives the info of a track; a stand with a pattern arranged
   assert.match(r.text, /Arr.*PRODUCTION/);
 });
 
+test('stand({ zellen: true }) adds one character per cell to the note rows; the default answer is unchanged and a non-editable pattern keeps no rows', async (t) => {
+  const z = await aufbau(t);
+  await z.seq.anlege({ platz: 2 }, 'andreas');
+  await z.seq.folge({ platz: 2, name: 'Drums', geraet: 'kit:909', loop_beats: 4 }, 'andreas');
+  await z.seq.folge({ platz: 2, name: 'Arr', geraet: 'kit:909' }, 'andreas');
+  const x = await z.seq.text({ platz: 2, text: 'folge Drums\nnoten kick 36 1/16 x...x...x...x...' }, 'andreas');
+  assert.equal(x.code, 200, JSON.stringify(x.j));
+  await z.aendern([{ befehl: 'clip_neu', spur_id: z.spur('Arr').id, art: 'midi', name: 'Two', start_beat: 64, laenge_beats: 4 }]);
+  const ohne = z.seq.stand().j['2'].folgen;
+  const mit = z.seq.stand({ zellen: true }).j['2'].folgen;
+  assert.equal(mit[0].zeilen[0].zellen, 'x...x...x...x...');
+  assert.deepEqual(ohne[0].zeilen, [{ id: 'kick', art: 'noten', name: 'kick', teiler: 0.25, ton: 36, abgeleitet: false }]);
+  assert.deepEqual(mit[0].zeilen.map(({ zellen, ...rest }) => rest), ohne[0].zeilen);
+  assert.equal(JSON.stringify(z.seq.stand().j), JSON.stringify(z.seq.stand({ zellen: false }).j), 'no param, no cells');
+  assert.deepEqual([mit[1].editierbar, mit[1].zeilen], [false, []]);
+});
+
 test('befehle: only the listed commands on tracks and clips of the deck; a clip or track outside the deck, a foreign field, a wrong clip_neu are refused and nothing is written', async (t) => {
   const z = await aufbau(t);
   await z.seq.anlege({ platz: 2 }, 'andreas');

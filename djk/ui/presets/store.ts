@@ -1,5 +1,5 @@
 // Presets on disk (package 1.16): one JSON file per preset, <wurzel>/<geraet>/<slug>.preset.json, for two roots:
-//   werk   – factory presets, shipped read-only in the repository (djk/ui/presets/werk), never written here
+//   werk   – factory presets, shipped read-only in the repository (djk/ui/presets/factory, folder names per werkOrdner), never written here
 //   nutzer – user presets, ~/.config/cypherdj[-<instanz>]/presets (paths.ts scheme), written only by this class
 // Writes follow collection.ts: complete temp file, then rename (overwrite) or link (create, refuses an existing name atomically).
 // Read-change-write runs under a lock per device folder (lock.ts) against FOREIGN processes; within one process every change is
@@ -18,7 +18,11 @@ import {
   sortiere, type Eintrag, type Filter, type Herkunft, type NeuEingabe, type Preset,
 } from './model.ts';
 
-export const WERK_VORGABE = path.join(path.dirname(fileURLToPath(import.meta.url)), 'werk');
+export const WERK_VORGABE = path.join(path.dirname(fileURLToPath(import.meta.url)), 'factory');
+// The factory folder of a device carries an English name; the device id (data: JSON files, register, routes) stays German. User presets keep the
+// device id as folder name. This mapping is the only place that joins a factory folder.
+export const WERK_ORDNER: Readonly<Record<string, string>> = { baukasten: 'modular', hall: 'reverb', komp: 'comp', saett: 'sat' };
+export function werkOrdner(geraet: string): string { return WERK_ORDNER[geraet] ?? geraet; }
 export function nutzerVorgabe(i: string = instanz()): string { return path.join(os.homedir(), '.config', i ? `cypherdj-${i}` : 'cypherdj', 'presets'); }
 
 // vok: the vocabulary descriptions are checked against (default presets/vokabular.json, loaded once per store)
@@ -45,8 +49,8 @@ export class PresetSpeicher {
   // ever reaches path.join. Tests replace this method with a broken one to prove the traversal test has teeth.
   pfad(herkunft: Herkunft, geraet: string, slug: string): string {
     const h = pruefeHerkunft(herkunft), g = pruefeGeraet(geraet).id, s = pruefeSlug(slug);
-    const basis = h === 'werk' ? this.werk : this.nutzer;   // not inside the join call: the export's folder renaming would rewrite the literal there
-    return path.join(basis, g, `${s}${ENDUNG}`);
+    const basis = h === 'werk' ? this.werk : this.nutzer;
+    return path.join(basis, h === 'werk' ? werkOrdner(g) : g, `${s}${ENDUNG}`);
   }
 
   liste(f: Filter = {}): (Eintrag & { notiz: string })[] {
@@ -56,7 +60,7 @@ export class PresetSpeicher {
       for (const geraet of GERAET_IDS) {
         if (f.geraet && f.geraet !== geraet) continue;
         const basis = herkunft === 'werk' ? this.werk : this.nutzer;
-        const ordner = path.join(basis, geraet);
+        const ordner = path.join(basis, herkunft === 'werk' ? werkOrdner(geraet) : geraet);
         let namen: fs.Dirent[];
         try { namen = fs.readdirSync(ordner, { withFileTypes: true }); } catch { continue; }
         for (const d of namen) {

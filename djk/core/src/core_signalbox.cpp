@@ -487,22 +487,54 @@ void Kern::pegel_melden(int64_t n0, int n) {
       melde(e);
     }
   }
-  for (int k = 0; k < ARR_INS_KOMP; ++k) {  // 1.10 slice 4a: ins/komp/<n>, the gain reduction of every pooled insert stage that computed in the last block
-    if (!arr_->inserts().lief(k)) continue;
+  // 1.10 slice 4a: ins/komp/<n>, the gain reduction of every pooled insert stage that computed in the last block; T8 (device faces): the same for the limiter stages, ins/lim/<n>.
+  // The path is written by hand: no snprintf in the callback (like the neighbours).
+  auto ins_gr_melden = [&](ArrInsArt art, int k, const char* kopf, size_t kopf_n) {
+    const int g = ins_global(art, k);
+    if (g < 0) return;
+    if (!arr_->inserts().lief(g)) {   // T9: a stage that did not run reports nothing, and its peaks are dropped so that no stale one waits for its return
+      arr_->inserts_pegel().pegel_ein_db(g);
+      arr_->inserts_pegel().pegel_aus_db(g);
+      return;
+    }
     Ereignis e{};
     e.art = Ereignis::INS_GR;
     e.sample = n0;
-    {  // "ins/komp/<n>", n = 1..12, written by hand: no snprintf in the callback (like the neighbours)
-      const char kopf[] = "ins/komp/";
-      std::memcpy(e.pfad, kopf, sizeof kopf - 1);
-      char* z = e.pfad + sizeof kopf - 1;
-      const int n = k + 1;
-      if (n >= 10) *z++ = static_cast<char>('0' + n / 10);
-      *z++ = static_cast<char>('0' + n % 10);
-      *z = '\0';
-    }
-    e.wert = arr_->inserts().gr_db(k);
+    std::memcpy(e.pfad, kopf, kopf_n);
+    char* z = e.pfad + kopf_n;
+    const int n = k + 1;
+    if (n >= 10) *z++ = static_cast<char>('0' + n / 10);
+    *z++ = static_cast<char>('0' + n % 10);
+    *z = '\0';
+    e.wert = arr_->inserts().gr_db(g);
     melde(e);
+    Ereignis p{};   // T9: the input and output peak of the stage since the last report, same path, same 20 Hz (a plain struct fill and one more ring slot: no allocation, no lock, no log)
+    p.art = Ereignis::STUFE_PEGEL;
+    p.sample = n0;
+    std::memcpy(p.pfad, e.pfad, sizeof p.pfad);
+    p.pegel[0] = arr_->inserts_pegel().pegel_ein_db(g);
+    p.pegel[1] = arr_->inserts_pegel().pegel_aus_db(g);
+    melde(p);
+  };
+  for (int k = 0; k < ARR_INS_KOMP; ++k) ins_gr_melden(ArrInsArt::komp, k, "ins/komp/", sizeof "ins/komp/" - 1);
+  for (int k = 0; k < ARR_INS_LIM; ++k) ins_gr_melden(ArrInsArt::lim, k, "ins/lim/", sizeof "ins/lim/" - 1);
+  for (int k = 0; k < MIX_QUELLEN; ++k) {   // T9: komp/<channel>, the input and output peak of the channel compressor of every source channel that ran it in the last block
+    if (!mixer_->komp_aktiv(k)) {           // not running: drop the peaks (the stage clears them itself when switched off)
+      mixer_->komp_ein_db(k);
+      mixer_->komp_aus_db(k);
+      continue;
+    }
+    Ereignis p{};
+    p.art = Ereignis::STUFE_PEGEL;
+    p.sample = n0;
+    std::memcpy(p.pfad, "komp/", 5);
+    const char* name = Mixer::kanal_name(k);
+    size_t i = 0;
+    for (; i + 6 < sizeof p.pfad && name[i]; ++i) p.pfad[5 + i] = name[i];   // by hand, no snprintf in the callback
+    p.pfad[5 + i] = '\0';
+    p.pegel[0] = mixer_->komp_ein_db(k);
+    p.pegel[1] = mixer_->komp_aus_db(k);
+    melde(p);
   }
   melden("master", Mixer::PEGEL_MASTER);
   melden("cue", Mixer::PEGEL_CUE);
@@ -914,7 +946,8 @@ void Kern::huellen_block(int64_t s0, int m, const float* cue_l, const float* cue
   const float* l[HK];
   const float* r[HK];
   for (int c = 0; c < HK; ++c) {
-    if (c < 4) belegt[c] = decks_->deck[c].geladen();
+    // ADR 038: a deck channel is also occupied while a group of the playback leads into it (a SEQ deck on an empty deck): the ear reads it behind /hoeren. dj_gereicht_[2 + c] is the answer of this cycle's last sub-block
+    if (c < 4) belegt[c] = decks_->deck[c].geladen() || dj_gereicht_[2 + c];
     else if (c <= 6) belegt[c] = true;    // erz/1..3 (Studio S1)
     else if (c == arr_kanal_) belegt[c] = true;  // D1 K1 (Spec 2.3): erz/4 = Summe der Produktion
     else if (c <= 11) belegt[c] = false;  // erz/5..8: nie
@@ -947,7 +980,7 @@ void Kern::huellen_block(int64_t s0, int m, const float* cue_l, const float* cue
       satz->beat = beat;
       satz->reserve[0] = satz->reserve[1] = 0.0f;
       if (belegt[c] && i < n[c]) {
-        satz->quell_beat = (c < 4) ? decks_->deck[c].quell_beat_bei(sample) : std::numeric_limits<double>::quiet_NaN();
+        satz->quell_beat = (c < 4 && decks_->deck[c].geladen()) ? decks_->deck[c].quell_beat_bei(sample) : std::numeric_limits<double>::quiet_NaN();
         std::memcpy(satz->band, hw[c][i].band, sizeof(satz->band));
         satz->k_leistung = hw[c][i].k_leistung;
         satz->spitze = hw[c][i].spitze;

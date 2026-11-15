@@ -76,7 +76,7 @@ export function laengeText(beats: number): string {
   }
   return `${zahlText(beats, 4).replace(/^(-?)\./, '$10.')}b`;
 }
-const bandVon = (vel: number): 'o' | 'x' | 'X' => (vel <= 79 ? 'o' : vel <= 110 ? 'x' : 'X');
+export const bandVon = (vel: number): 'o' | 'x' | 'X' => (vel <= 79 ? 'o' : vel <= 110 ? 'x' : 'X');
 const notenName = (ton: number): string => String(tonName(ton)).toLowerCase();
 const namenText = (n: string): string => (/[\s";]/.test(n) ? `"${n.replace(/"/g, "'")}"` : n);
 const gitterText = (t: number): string => GITTER_TEXT.get(t) ?? '1/16';

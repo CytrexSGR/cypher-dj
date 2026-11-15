@@ -1,9 +1,9 @@
 // PRODUCTION (Automation Slice 1 + 2, AK28): the gestures on a lane row. A pure gesture object (LaneGeste, node-testable) and the wiring to the page
 // (bindeLanen). One gesture is ONE command auto_punkte (D9): nothing is sent while the pointer moves (the page shows a draft), exactly one command goes
 // out on pointerup. A twitch below ZUG_SCHWELLE px changes nothing (lesson S7 R2).
-import { rasterBeats, xZuBeat, beatZuX } from './timeline.js';
+import { rasterBeats, beatsProTakt, xZuBeat, beatZuX } from './timeline.js';
 import { laneZeile, zeileBei } from './layout.js';
-import { trefferPunkt, ziehePunkt, setzePunkt, ZUG_SCHWELLE, gezeigteLane, laneMitId, yZuWert, wertZuY, laneWert, bereich, laneSchutz, MAX_PUNKTE } from './lanes.js';
+import { trefferPunkt, ziehePunkt, setzePunkt, ZUG_SCHWELLE, gezeigteLane, laneMitId, yZuWert, wertZuY, laneWert, bereich, laneSchutz, MAX_PUNKTE, laneStrang } from './lanes.js';
 import { bereichGriff, freihandPunkte, MAX_BEAT, NACHBAR_ABSTAND } from './lanes.js';
 import { oeffneMenue } from './context_menu.js';
 import { istTextFeld } from './history_display.js';
@@ -15,6 +15,7 @@ export const LANEN_TEXT = {
   weg_titel: 'Delete the shown lane of this track',
   wahl_titel: 'Target of the shown lane',
   knopf_titel: 'Show automation lanes of this track',
+  keine_ziele: 'This group has no insert yet: add an effect in INSERTS first',
   auto: 'AUTO',
   auto_titel: 'A volume line controls this fader while the project plays',
   voll: 'The line is full: delete a point first',
@@ -243,10 +244,12 @@ export function bindeLanen(ctx) {
     if (!st.projekt || e.target !== ueber) return null;
     const z = zeileBei(tabelle(), e.offsetY);
     if (!z || z.art !== 'lane') return null;
-    const spur = (st.projektEntwurf ?? st.projekt).spuren[z.spur], lane = gezeigteLane(spur, st.laneZiel?.get(spur.id));
+    const ls = laneStrang(st.projektEntwurf ?? st.projekt, z);   // a track or a group; null when the strand is gone (the row is then not ours)
+    if (!ls) return null;
+    const spur = ls.strang, lane = gezeigteLane(spur, st.laneZiel?.get(ls.id));
     return lane ? { z, spur, lane } : { z, spur, lane: null };
   };
-  const geste = (t) => new LaneGeste({ lane: t.lane, zeile: t.z, beatZuX: (b) => beatZuX(st.ansicht, b), xZuBeat: (x) => xZuBeat(st.ansicht, x), raster: rasterBeats(st.raster),
+  const geste = (t) => new LaneGeste({ lane: t.lane, zeile: t.z, beatZuX: (b) => beatZuX(st.ansicht, b), xZuBeat: (x) => xZuBeat(st.ansicht, x), raster: rasterBeats(st.raster, beatsProTakt(st.projekt?.taktart)),
     bereich: wahl.fuer(t.lane.id), zeichnen: zeichenModus.an });
   flaeche.addEventListener('pointerdown', (e) => {
     const t = laneAn(e);

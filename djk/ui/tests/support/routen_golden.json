@@ -1,5 +1,5 @@
 {
- "n": 198,
+ "n": 200,
  "ergebnis": [
   {
    "m": "GET",
@@ -537,6 +537,38 @@
     "datei": "string",
     "wartet": "null",
     "ziele": "[]"
+   }
+  },
+  {
+   "m": "GET",
+   "p": "/register",
+   "code": 200,
+   "art": "application/json; charset=utf-8",
+   "form": {
+    "aktiv": "null",
+    "geraete": "[]",
+    "host": {},
+    "kanten": "[]",
+    "leds": "[]",
+    "midi_port": "null",
+    "ziele_gesamt": "number"
+   }
+  },
+  {
+   "m": "GET",
+   "p": "/register/ziele?q=fader",
+   "code": 200,
+   "art": "application/json; charset=utf-8",
+   "form": {
+    "gesamt": "number",
+    "ziele": [
+     {
+      "einheit": "string",
+      "max": "number",
+      "min": "number",
+      "pfad": "string"
+     }
+    ]
    }
   },
   {

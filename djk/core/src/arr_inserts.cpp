@@ -150,6 +150,16 @@ void ArrInserts::makros_planen(const ArrKette* ketten, const ArrRack* racks, int
 }
 
 // a key the stage can listen to (the loader has checked the table; a snapshot built by hand with something else simply has no structural key)
+// T9: the larger of the running peak p and the peak of max(|l|, |r|) over m samples; a non-finite sample is ignored (the NaN guard of stufe() handles it afterwards)
+static float spitze_stereo(float p, const float* l, const float* r, int m) {
+  for (int t = 0; t < m; ++t) {
+    const float a = std::fabs(l[t]), b = std::fabs(r[t]);
+    const float v = a > b ? a : b;
+    if (v > p && v < 1e9f) p = v;
+  }
+  return p;
+}
+
 static bool struktureller_schluessel(const ArrSchluessel& k) {
   switch (k.quelle) {
     case ARR_SCHL_SPUR: return k.punkt == ARR_SCHL_POST && k.nr >= 1 && k.nr <= ARR_SPUREN;
@@ -634,6 +644,8 @@ void ArrInserts::stufe(int s, bool ziel_an, float* l, float* r, int m, ArrArbeit
   if (in_kette_[s]) pos_[s] = ziel;   // error case: no blend on the bypass of a stage in the chain, the weight jumps (the tail of a removed stage still fades)
 #endif
   const bool fest = pos_[s] == INS_BLENDE && ziel == INS_BLENDE;
+  const bool pegelt = s < ARR_INS_KOMP || (s >= INS_G_LIM0 && s < INS_G_UTIL0);   // T9: the kinds with a level reading, komp and lim
+  if (pegelt) pk_ein_[s] = spitze_stereo(pk_ein_[s], l, r, m);   // the input of the stage, before it computes
   {
     if (lat) {
       // dry_ = the input delayed by the latency of the stage (the ring is fed with the input, also when the stage is fully on and the dry signal is not read)
@@ -677,6 +689,7 @@ void ArrInserts::stufe(int s, bool ziel_an, float* l, float* r, int m, ArrArbeit
   }
 #endif
   lief_[s] = true;
+  if (pegelt) pk_aus_[s] = spitze_stereo(pk_aus_[s], l, r, m);   // the output after the bypass blend, as the next stage hears it
   if (s < ARR_INS_KOMP) {
 #ifdef CYPHERDJ_MUTATION_INS_MIX0_GR_STEHT
     gr_[s] = komp_[s]->gr_db();   // error case: Komp returns early at mix 0, its last reduction stays on the display

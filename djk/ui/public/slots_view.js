@@ -1,5 +1,5 @@
 // Places and mixer wiring: layout, places, loops lock.
-import { ladeLayout, wendeAn, wendeMixerAn, wendeStudioZuegeAn, kopf as platzKopf, still, wahl, zielName, wechsel, speichereLayout, folgeServer, PLAETZE } from './slots.js';
+import { ladeLayout, ladeDeckDa, wendeAn, wendeMixerAn, wendeStudioZuegeAn, kopf as platzKopf, still, wahl, zielName, wechsel, speichereLayout, folgeServer, PLAETZE } from './slots.js';
 import { aktuellesZiel, typSperre } from './remix_platz.js';
 import { modulAnsicht } from './live_module.js';   // live modules task 4
 import { DECKS } from './curves.js';
@@ -80,6 +80,7 @@ function folgeDemServer() {
 }
 export function zeigePlaetze() {
   if (folgeDemServer()) return;   // the layout changed: wendePlaetzeAn has shown the places already
+  zeigeLadeSperre();
   for (const platz of PLAETZE) {
     const k = $(`.platzkopf[data-platz-kopf="${platz}"]`);
     if (!k) continue;
@@ -113,6 +114,15 @@ function zeigeLoopsSperre() {
     b.title = da ? (b.dataset.titel0 ?? '') : HINWEIS_LOOPS;
   }
   for (const n of DECKS) zeigeExport(n);
+}
+// The LOAD buttons exist for four decks (every creation site sets data-deck); a deck whose place is not a Track place cannot be loaded: disabled with a hint, not hidden
+export const hinweisTrack = (deck) => `LOAD is off: switch place ${deck} to TRACK`;
+function zeigeLadeSperre() {
+  for (const b of $$('button.laden[data-deck]')) {
+    const n = Number(b.dataset.deck), da = ladeDeckDa(plaetzeLayout, n);
+    b.disabled = !da;
+    b.title = da ? '' : hinweisTrack(n);
+  }
 }
 export const zielNameVon = (k) => zielName(k);
 let plaetzeFrist = 0;

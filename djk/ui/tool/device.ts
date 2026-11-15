@@ -46,7 +46,7 @@ TODO: which notes or MIDI channels play it, useful ranges, what to avoid.
 
 ## 4. Presets
 
-TODO: factory presets in \`djk/ui/presets/werk/baukasten\` (graph \`${name}\`), one line each.
+TODO: factory presets in \`djk/ui/presets/factory/modular\` (graph \`${name}\`), one line each.
 `;
 
 /** Write through a temp file in the same folder and rename it, so a reader never sees half a file and a failed write leaves the old file. */
@@ -123,7 +123,9 @@ export function pruefen(wurzel: string = REPO): string[] {
     } catch (e) { f.push(`${name}: panel unreadable (${(e as Error).message})`); }
   }
   // every instrument graph needs a valid category and description in kategorien.json
-  const graphen = listeGraphen(P.beispiele).graphen;
+  // graphs live in demos/ and, as the recipe graphs, in demos/recipes/ (djk-start installs both under their own names); demos/ wins on a clash
+  const graphen = [...listeGraphen(P.beispiele).graphen, ...listeGraphen(P.rezepte).graphen.filter((g) => !findeGraph(g.name, P.beispiele))];
+  const ordnerVon = (name: string): string => (findeGraph(name, P.beispiele) || !findeGraph(name, P.rezepte) ? P.beispiele : P.rezepte);
   let katRoh: unknown = null;
   try { katRoh = JSON.parse(fs.readFileSync(P.kategorien, 'utf8')); } catch { f.push(`kategorien.json is missing or not valid JSON (${path.relative(wurzel, P.kategorien)})`); }
   if (katRoh !== null) {
@@ -135,19 +137,19 @@ export function pruefen(wurzel: string = REPO): string[] {
   const knobs = new Map<string, Set<number>>();
   for (const g of graphen) {
     let regler = {};
-    try { regler = reglerBereiche(JSON.parse(fs.readFileSync(path.join(P.beispiele, `${g.name}.json`), 'utf8'))); } catch { /* listed, so readable */ }
+    try { regler = reglerBereiche(JSON.parse(fs.readFileSync(path.join(ordnerVon(g.name), `${g.name}.json`), 'utf8'))); } catch { /* listed, so readable */ }
     const nrs = Object.keys(regler).map(Number);
     knobs.set(g.name, new Set(nrs));
     if (!nrs.length) continue;
     const geraet: Geraet = { art: 'bk', graph: g.name };
-    for (const m of pruefePanel(autoPanel(geraet, parameterTabelle(geraet, P.beispiele), g.name), g.name, regler)) f.push(`${g.name}: auto panel: ${m}`);
+    for (const m of pruefePanel(autoPanel(geraet, parameterTabelle(geraet, ordnerVon(g.name)), g.name), g.name, regler)) f.push(`${g.name}: auto panel: ${m}`);
   }
   // factory presets
   for (const d of fs.existsSync(P.werkPresets) ? fs.readdirSync(P.werkPresets).filter((x) => x.endsWith('.json')).sort() : []) {
     let p: { graph?: unknown; werte?: Record<string, unknown> };
     try { p = JSON.parse(fs.readFileSync(path.join(P.werkPresets, d), 'utf8')); } catch { f.push(`preset ${d}: not valid JSON`); continue; }
     const graph = String(p.graph ?? '');
-    if (!findeGraph(graph, P.beispiele)) { f.push(`preset ${d}: graph "${graph}" does not exist`); continue; }
+    if (!findeGraph(graph, ordnerVon(graph))) { f.push(`preset ${d}: graph "${graph}" does not exist`); continue; }
     const vorhanden = knobs.get(graph) ?? new Set<number>();
     const zu = Object.keys(p.werte ?? {}).map((k) => /^knob(\d+)$/.exec(k)).filter((m): m is RegExpExecArray => !!m).map((m) => Number(m[1])).filter((n) => !vorhanden.has(n));
     if (zu.length) f.push(`preset ${d}: knob${Math.min(...zu)} is no knob of graph ${graph} (it has ${[...vorhanden].sort((a, b) => a - b).join(',') || 'none'})`);

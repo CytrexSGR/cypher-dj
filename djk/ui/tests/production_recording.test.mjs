@@ -265,6 +265,13 @@ test('T5 aufnahmeStand: defaults without the key, bars one-based and inclusive, 
   const q = { aufnahme: { vorzaehler_takte: 0, punch: { ein: false, aus: true, von_beat: 6, bis_beat: 10 }, overdub: false } };
   assert.deepEqual([aufnahmeStand(q).vonTakt, aufnahmeStand(q).bisTakt], [2, 3]);
 });
+test('T5 meter 3/4: punch bars count 3 beats, calls without the argument stay 4/4', () => {
+  assert.deepEqual(punchBefehl('2', '3', 3), { befehl: 'aufnahme_setzen', punch: { von_beat: 3, bis_beat: 9 } });
+  assert.deepEqual(punchBefehl('2', '3'), { befehl: 'aufnahme_setzen', punch: { von_beat: 4, bis_beat: 12 } });
+  const p = { taktart: [3, 4], aufnahme: { vorzaehler_takte: 0, overdub: false, punch: { ein: true, aus: false, von_beat: 3, bis_beat: 9 } } };
+  assert.deepEqual([aufnahmeStand(p).vonTakt, aufnahmeStand(p).bisTakt], [2, 3], 'the project meter is read from the project');
+  assert.deepEqual([aufnahmeStand({ ...p, taktart: [4, 4] }).vonTakt, aufnahmeStand({ ...p, taktart: [4, 4] }).bisTakt], [1, 3]);
+});
 test('T5 punchBefehl: both bar fields go into ONE command (bar 5 to 8 = beats 16 to 32), also when only one field changed', () => {
   assert.deepEqual(punchBefehl('5', '8'), { befehl: 'aufnahme_setzen', punch: { von_beat: 16, bis_beat: 32 } });
   assert.deepEqual(punchBefehl('1', '1'), { befehl: 'aufnahme_setzen', punch: { von_beat: 0, bis_beat: 4 } });

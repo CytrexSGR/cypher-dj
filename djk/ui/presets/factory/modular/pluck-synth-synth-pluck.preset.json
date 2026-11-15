@@ -1,0 +1,38 @@
+{
+ "schema": 1,
+ "name": "Synth pluck",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "pluck-synth",
+ "werte": {
+  "knob1": 0.5,
+  "knob2": 0.5,
+  "knob3": 0.5,
+  "knob4": 0.5,
+  "knob5": 0.5,
+  "knob6": 0.5
+ },
+ "beschreibung": {
+  "art": "pluck",
+  "unterart": "synth",
+  "charakter": [
+   "thin",
+   "bright",
+   "punchy",
+   "tight"
+  ],
+  "genre": [],
+  "einsatz": [
+   "drop",
+   "build"
+  ],
+  "energie": 4,
+  "text": "Thin synth pluck: a combed pulse through a resonant 2 kHz band-pass with a fast envelope, velocity on the cutoff, gated verb."
+ },
+ "tags": [
+  "pluck-synth"
+ ],
+ "notiz": "Source rule: recipe card `pluck.synth`, Cann [B4] p. 217, patch Thin. Measured by `tests/rezepte.rs`, not yet heard. Manifest character words outside the vocabulary: nasal (as thin). Manifest use words outside the vocabulary: groove (as drop).",
+ "angelegt": "2026-11-15T00:00:00.000Z",
+ "geaendert": "2026-11-15T00:00:00.000Z"
+}

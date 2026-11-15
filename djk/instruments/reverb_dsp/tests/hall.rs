@@ -316,3 +316,47 @@ fn nur_rechts_gespeist_hallt_beidseitig() {
     assert!(er > 0.1, "Positivkontrolle: rechts hallt");
     assert!(db.abs() < 1.0, "links {db:.2} dB gegen rechts");
 }
+
+// ---- golden table of the decay and tone curves (page: djk/ui/tests/face_reverb.test.mjs reads the same CSV) -------------------------------------------
+// Columns: decay_s,tief,hoch,lowcut_hz,highcut_hz,fahne_db,f_hz,t60_s,fahne_db_out. t60_s is t60_kurve, fahne_db_out is 20 log10 of fahnen_pegel.
+const KURVEN_CSV: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/hall_kurven.csv");
+const KURVEN_KOPF: &str = "decay_s,tief,hoch,lowcut_hz,highcut_hz,fahne_db,f_hz,t60_s,fahne_db_out";
+
+#[test]
+fn kurven_golden_tabelle() {
+    let text = std::fs::read_to_string(KURVEN_CSV).expect("tests/data/hall_kurven.csv not found: run kurven_golden_schreiben");
+    let mut zeilen = text.lines();
+    assert_eq!(zeilen.next(), Some(KURVEN_KOPF));
+    let mut n = 0;
+    for z in zeilen {
+        let v: Vec<f64> = z.split(',').map(|s| s.parse().expect("number")).collect();
+        assert_eq!(v.len(), 9, "{z}");
+        let e = HallEinstellung { decay_s: v[0], tief_faktor: v[1], hoch_faktor: v[2], lowcut_hz: v[3], highcut_hz: v[4], fahne_db: v[5], ..Default::default() };
+        assert!((t60_kurve(&e, v[6]) - v[7]).abs() < 1e-9, "t60 row {z}");
+        assert!((20.0 * fahnen_pegel(&e, v[6]).log10() - v[8]).abs() < 1e-9, "tone row {z}");
+        n += 1;
+    }
+    assert!(n >= 30, "only {n} rows");
+}
+
+/// Writes the table from the DSP functions: `cargo test -p hall_dsp --test hall kurven_golden_schreiben -- --ignored`. Never edited by hand.
+#[test]
+#[ignore]
+fn kurven_golden_schreiben() {
+    let mut aus = format!("{KURVEN_KOPF}\n");
+    let mut i = 0usize;
+    for decay in [0.1, 2.0, 30.0] {
+        for tief in [0.25, 1.2, 4.0] {
+            for hoch in [0.1, 0.6, 2.0] {
+                let (lowcut, highcut, fahne) = ([80.0, 40.0, 200.0][i % 3], [12000.0, 3000.0, 20000.0][(i / 3) % 3], [0.0, -12.0, 6.0][(i / 9) % 3]);
+                let e = HallEinstellung { decay_s: decay, tief_faktor: tief, hoch_faktor: hoch, lowcut_hz: lowcut, highcut_hz: highcut, fahne_db: fahne, ..Default::default() };
+                for f in [40.0, 150.0, 400.0, 1000.0, 3000.0, 8000.0, 16000.0] {
+                    aus += &format!("{decay},{tief},{hoch},{lowcut},{highcut},{fahne},{f},{:.12},{:.12}\n", t60_kurve(&e, f), 20.0 * fahnen_pegel(&e, f).log10());
+                }
+                i += 1;
+            }
+        }
+    }
+    std::fs::create_dir_all(std::path::Path::new(KURVEN_CSV).parent().unwrap()).unwrap();
+    std::fs::write(KURVEN_CSV, aus).unwrap();
+}

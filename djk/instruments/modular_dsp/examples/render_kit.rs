@@ -2,7 +2,7 @@
 //! --hits "36@0,38@0.5:0.8,42@0.75" [--dauer 3] [--off 0.125] [N=VALUE ...]`
 //! Each hit is `NOTE@SECONDS[:VELOCITY]` (velocity default 0.9, like the Strudel erzeuger); the note is released `--off` seconds
 //! later (default 0.125 s, one 16th at 120 BPM). Renders `--dauer` seconds (default: last hit + 3 s) at 48 kHz, stereo,
-//! 32-bit float WAV (no clipping, so peaks above 1 can be measured). Knobs `N=VALUE` (N 1..32, VALUE 0..1) are set before playing.
+//! 32-bit float WAV (no clipping, so peaks above 1 can be measured). Knobs `N=VALUE` (N 1..64, VALUE 0..1) are set before playing.
 use baukasten_dsp::uebersetze;
 use std::io::Write;
 

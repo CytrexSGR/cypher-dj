@@ -1,0 +1,64 @@
+{
+ "schema": 1,
+ "name": "Labor Spring Reverb",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "fx-labor",
+ "werte": {
+  "knob1": 0.7,
+  "knob2": 0.5,
+  "knob3": 0.5,
+  "knob4": 0.0,
+  "knob5": 0.76,
+  "knob6": 0.5,
+  "knob7": 0.5,
+  "knob8": 0.46,
+  "knob9": 0.53,
+  "knob10": 0.5,
+  "knob11": 0.5,
+  "knob12": 0.5,
+  "knob13": 0.7,
+  "knob14": 0.5,
+  "knob15": 0.5,
+  "knob16": 0.0,
+  "knob17": 0.76,
+  "knob18": 0.5,
+  "knob19": 0.5,
+  "knob20": 0.46,
+  "knob21": 0.53,
+  "knob22": 0.5,
+  "knob23": 0.5,
+  "knob24": 0.5,
+  "knob25": 0.5,
+  "knob26": 0.5,
+  "knob27": 0.5,
+  "knob28": 0.5,
+  "knob29": 0.5
+ },
+ "beschreibung": {
+  "art": "reverb",
+  "unterart": "spring",
+  "charakter": [
+   "metallic",
+   "wet",
+   "airy"
+  ],
+  "genre": [
+   "dubstep",
+   "downtempo",
+   "idm"
+  ],
+  "einsatz": [
+   "breakdown",
+   "transition"
+  ],
+  "energie": 2,
+  "text": "Both times at the minimum and all four feedback paths raised until the loop builds a short metallic tail, low-passed around 2 kHz."
+ },
+ "tags": [
+  "fx-labor"
+ ],
+ "notiz": "Measured by render, not yet heard (2026-11-15). Recipe: GERAET-labor.md section 4, spring-like reverb.",
+ "angelegt": "2026-11-15T00:00:00.000Z",
+ "geaendert": "2026-11-15T00:00:00.000Z"
+}

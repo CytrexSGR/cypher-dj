@@ -85,3 +85,11 @@ test('S19 speicher: loesche removes the entry of a knob; without an entry it is 
   assert.deepEqual(s.lies().zuordnungen, []);
   assert.equal(JSON.parse(lies(d)).eintraege.length, 0);
 });
+
+test('S19 speicher: lies() lists an absolute CC entry on any continuous target (not only bk) as an assignment', (t) => {
+  const d = ordner(t);
+  const s = new LernSpeicher(d);
+  s.zuordne({ pfad: 'deck/1/fader', kanal: 2, nr: 21 });
+  s.zuordne({ pfad: 'erz/5/bk/3', kanal: 1, nr: 74 });
+  assert.deepEqual(s.lies().zuordnungen, [{ pfad: 'deck/1/fader', kanal: 2, nr: 21 }, { pfad: 'erz/5/bk/3', kanal: 1, nr: 74 }]);
+});

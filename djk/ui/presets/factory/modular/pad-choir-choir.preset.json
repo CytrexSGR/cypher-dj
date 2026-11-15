@@ -1,0 +1,39 @@
+{
+ "schema": 1,
+ "name": "Choir",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "pad-choir",
+ "werte": {
+  "knob1": 0.5,
+  "knob2": 0.5,
+  "knob3": 0.5,
+  "knob4": 0.5,
+  "knob5": 0.5
+ },
+ "beschreibung": {
+  "art": "pad",
+  "unterart": "choir",
+  "charakter": [
+   "warm",
+   "soft",
+   "wide",
+   "smooth",
+   "airy",
+   "thin"
+  ],
+  "genre": [],
+  "einsatz": [
+   "breakdown",
+   "intro"
+  ],
+  "energie": 2,
+  "text": "Synth choir: two scattered pulse layers with slow vibrato and swell, a formant band-pass bank, strong chorus and long hall."
+ },
+ "tags": [
+  "pad-choir"
+ ],
+ "notiz": "Source rule: recipe card `pad.choir`, Welsh [B1] p. 77, patch Choir, table transcribed. Formant numbers: Reid [B2] part 23. Measured by `tests/rezepte.rs`, not yet heard. Manifest character words outside the vocabulary: nasal (as thin).",
+ "angelegt": "2026-11-15T00:00:00.000Z",
+ "geaendert": "2026-11-15T00:00:00.000Z"
+}

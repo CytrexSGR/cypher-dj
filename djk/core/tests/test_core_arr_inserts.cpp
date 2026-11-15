@@ -50,6 +50,109 @@ int main() {
     PRUEF(n >= 5 && w > 3.0f);
   }
 
+  // ---- T8 (device faces): the limiter stage reports on ins/lim/<n>, next to a compressor with the same number
+  {
+    auto lim_lauf = [&](bool lim_an, bool komp_dazu, std::vector<std::string>& pfade, float& lim_gr) {
+      arr35::Lauf x(ab.pfad, "test_kern_arr_inserts_lim");
+      const std::string a = x.ordner.audio('a', 400000, 1.0f);   // 0 dBFS against a ceiling of -6 dB
+      x.teil("ins/lim/1/decke", -6.0f, 0.0, 0.0);
+      x.teil("ins/lim/1/an", lim_an ? 1.0f : 0.0f, 0.0, 0.0);
+      std::string kette = "{\"art\":\"lim\",\"slot\":1}";
+      if (komp_dazu) {
+        x.teil("ins/komp/1/schwelle", -30.0f, 0.0, 0.0);
+        x.teil("ins/komp/1/ratio", 8.0f, 0.0, 0.0);
+        x.teil("ins/komp/1/mix", 1.0f, 0.0, 0.0);
+        x.teil("ins/komp/1/an", 1.0f, 0.0, 0.0);
+        kette += ",{\"art\":\"komp\",\"slot\":1}";
+      }
+      x.laden(1, "{\"nr\":1,\"art\":\"audio\",\"chain\":[" + kette + "],\"clips\":[" + x.ordner.clip("c1", 0.0, 8.0, a, 400000) + "]}", "andreas", true);
+      x.start(0.0, 0);
+      x.lauf(300 * N);
+      pfade.clear();
+      lim_gr = 0.0f;
+      for (const cdj::Ereignis& e : x.ev)
+        if (e.art == cdj::Ereignis::INS_GR) {
+          pfade.push_back(e.pfad);
+          if (std::string(e.pfad) == "ins/lim/1") lim_gr = std::max(lim_gr, e.wert);
+        }
+    };
+    std::vector<std::string> pf;
+    float g = 0.0f;
+    lim_lauf(true, false, pf, g);
+    std::printf("limiter INS_GR events %zu, largest reduction %.2f dB\n", pf.size(), static_cast<double>(g));
+    PRUEF(pf.size() >= 5);
+    for (const auto& p : pf) PRUEF(p == "ins/lim/1");
+    PRUEF(g > 3.0f);
+    lim_lauf(false, false, pf, g);   // negative control: a bypassed limiter reports nothing
+    PRUEF(pf.empty());
+    lim_lauf(true, true, pf, g);     // limiter 1 and compressor 1: two different paths
+    int nl = 0, nk = 0;
+    for (const auto& p : pf) {
+      if (p == "ins/lim/1") ++nl;
+      else if (p == "ins/komp/1") ++nk;
+      else PRUEF(false);
+    }
+    PRUEF(nl >= 5 && nk >= 5);
+  }
+
+  // ---- T9 (device faces): STUFE_PEGEL, the input and output peak of a stage, through the whole kernel
+  {
+    struct Pegel { std::string pfad; float ein, aus; };
+    // kind: "komp" or "lim"; clips: [(audio file, beat from, beat length)]; an: the stage runs
+    auto pegel_lauf = [&](const std::string& kind, const std::vector<std::pair<std::string, std::pair<double, double>>>& clips, bool an, std::vector<Pegel>& aus) {
+      arr35::Lauf x(ab.pfad, "test_kern_arr_inserts_pegel");
+      std::string cl;
+      char z = 'a';
+      for (const auto& c : clips) {
+        const std::string f = c.first == "sin12" ? x.ordner.sinus(z, 400000, 1000.0, 0.25119f) : c.first == "dc05" ? x.ordner.audio(z, 400000, 0.05f) : x.ordner.audio(z, 400000, 0.0f);
+        if (!cl.empty()) cl += ",";
+        cl += x.ordner.clip((std::string("c") + z).c_str(), c.second.first, c.second.second, f, 400000);
+        ++z;
+      }
+      if (kind == "komp") {   // hard knee, no makeup, fast attack: the static reduction of a -12 dBFS peak against -30 dB, ratio 8 is 18 - 18/8 = 15.75 dB
+        x.teil("ins/komp/1/schwelle", -30.0f, 0.0, 0.0);
+        x.teil("ins/komp/1/ratio", 8.0f, 0.0, 0.0);
+        x.teil("ins/komp/1/knie", 0.0f, 0.0, 0.0);
+        x.teil("ins/komp/1/makeup", 0.0f, 0.0, 0.0);
+        x.teil("ins/komp/1/attack", 1.0f, 0.0, 0.0);
+        x.teil("ins/komp/1/release", 50.0f, 0.0, 0.0);
+        x.teil("ins/komp/1/mix", 1.0f, 0.0, 0.0);
+      }
+      x.teil(("ins/" + kind + "/1/an").c_str(), an ? 1.0f : 0.0f, 0.0, 0.0);
+      x.laden(1, "{\"nr\":1,\"art\":\"audio\",\"chain\":[{\"art\":\"" + kind + "\",\"slot\":1}],\"clips\":[" + cl + "]}", "andreas", true);
+      x.start(0.0, 0);
+      x.lauf(300 * N);
+      aus.clear();
+      for (const cdj::Ereignis& e : x.ev)
+        if (e.art == cdj::Ereignis::STUFE_PEGEL) aus.push_back({e.pfad, e.pegel[0], e.pegel[1]});
+    };
+    std::vector<Pegel> p;
+    pegel_lauf("komp", {{"sin12", {0.0, 8.0}}}, true, p);
+    PRUEF(p.size() >= 5);
+    for (const auto& q : p) PRUEF(q.pfad == "ins/komp/1");
+    const Pegel& l = p.back();   // after the compressor has settled
+    std::printf("STUFE_PEGEL reports %zu, last: in %.3f dBFS, out %.3f dBFS (static reduction 15.75 dB)\n", p.size(), static_cast<double>(l.ein), static_cast<double>(l.aus));
+    PRUEF_NAH(l.ein, -12.0, 0.1);
+    PRUEF_NAH(l.ein - l.aus, 15.75, 0.3);
+    pegel_lauf("komp", {{"sil", {0.0, 8.0}}}, true, p);   // silence: -200 for both, never NaN or -inf
+    PRUEF(p.size() >= 5);
+    for (const auto& q : p) PRUEF(q.ein == -200.0f && q.aus == -200.0f);
+    pegel_lauf("komp", {{"sin12", {0.0, 8.0}}}, false, p);   // negative control: a bypassed stage reports nothing
+    PRUEF(p.empty());
+    // read and reset: a loud first second, then a quiet one; reports from the quiet part do not carry the loud peak
+    pegel_lauf("komp", {{"sin12", {0.0, 2.0}}, {"dc05", {2.0, 6.0}}}, true, p);
+    PRUEF(p.size() >= 5);
+    float lauteste = -200.0f;
+    for (const auto& q : p) lauteste = std::max(lauteste, q.ein);
+    PRUEF_NAH(lauteste, -12.0, 0.1);   // the loud part is there (positive control)
+    PRUEF_NAH(p.back().ein, 20.0 * std::log10(0.05), 0.1);   // the last report holds the quiet part only
+    pegel_lauf("lim", {{"sin12", {0.0, 8.0}}}, true, p);     // the limiter reports as well, on ins/lim/1
+    PRUEF(p.size() >= 5);
+    for (const auto& q : p) PRUEF(q.pfad == "ins/lim/1");
+    PRUEF_NAH(p.back().ein, -12.0, 0.1);
+    PRUEF(p.back().aus <= p.back().ein + 0.01f);   // a limiter never raises the peak (default ceiling is above -12 dBFS: it passes it)
+  }
+
   // ---- slice 5 U2b: erz/1 as a key through the kernel
   {
     const double BEAT = 8.5;   // the click: beat 8.5 of the arrangement and of the erz/1 event (the same kernel sample is measured, see ct)

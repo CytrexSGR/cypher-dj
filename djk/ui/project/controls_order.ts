@@ -28,3 +28,17 @@ function spaeter(alt: Projekt, z: ReglerAenderung): boolean {
   if (k === 'solo') return z.wert <= alter;
   return false;
 }
+
+// The mute of a track that already sounds in the old playback (the Loop track when the stems arrive) does not wait for the receipt any more: it travels in
+// the load itself as the
+// playback field `stumm_start`, which the core applies in the block of the swap (no block in which loop and stems play together). Returns the track numbers
+// and the rows left over.
+export function teileStummStart(alt: Projekt, nachher: readonly ReglerAenderung[]): { stummStart: number[]; rest: ReglerAenderung[] } {
+  const stummStart: number[] = [], rest: ReglerAenderung[] = [];
+  for (const z of nachher) {
+    const m = /^spur\/(\d+)\/mute$/.exec(z.pfad);
+    if (m && z.wert === 1 && altWert(alt, 'spur', Number(m[1]), 'mute') === 0) stummStart.push(Number(m[1]));
+    else rest.push(z);
+  }
+  return { stummStart, rest };
+}

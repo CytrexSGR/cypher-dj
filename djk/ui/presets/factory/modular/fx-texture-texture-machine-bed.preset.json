@@ -1,0 +1,40 @@
+{
+ "schema": 1,
+ "name": "Texture / machine bed",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "fx-texture",
+ "werte": {
+  "knob1": 0.5,
+  "knob2": 0.5,
+  "knob3": 0.5,
+  "knob4": 0.5,
+  "knob5": 0.5,
+  "knob6": 0.5
+ },
+ "beschreibung": {
+  "art": "fx",
+  "unterart": "texture",
+  "charakter": [
+   "evolving",
+   "dark",
+   "thick",
+   "metallic",
+   "wide",
+   "airy"
+  ],
+  "genre": [],
+  "einsatz": [
+   "intro",
+   "breakdown"
+  ],
+  "energie": 2,
+  "text": "Machine texture bed: saw and square two octaves apart, a resonant filter wandering at random, phaser, delay and spring."
+ },
+ "tags": [
+  "fx-texture"
+ ],
+ "notiz": "Source rule: recipe card `fx.texture`, Welsh [B1] p. 108, patch Nerd-O-Tron 2000, table transcribed.. Measured by `tests/rezepte.rs`, not yet heard.",
+ "angelegt": "2026-11-15T00:00:00.000Z",
+ "geaendert": "2026-11-15T00:00:00.000Z"
+}

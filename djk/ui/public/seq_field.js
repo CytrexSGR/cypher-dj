@@ -286,10 +286,11 @@ export async function ladeInfos(projekt, platz, holeGet, jetzt = Date.now()) {
 }
 
 // The entries of the instrument picker: the Baukasten instruments (`graphen` of GET /graphen), the kits (`kits` of GET /proj/kits) and the RB-338. `geraet` is
-// what seq_folge_neu and spur_aendern take.
-export function geraetWahl(graphen, kits) {
+// what seq_folge_neu and spur_aendern take. A graph that reports latency (`latenz` samples, GET /graphen) does not fit a live-played pattern and is left out,
+// except the graph the pattern already plays (`behalte`, its name): that one stays in its own exchange menu. A missing `latenz` counts as 0.
+export function geraetWahl(graphen, kits, behalte) {
   const nach = (a, b) => a.text.localeCompare(b.text);
-  const bk = (graphen ?? []).filter((g) => g && g.art === 'instrument' && typeof g.name === 'string')
+  const bk = (graphen ?? []).filter((g) => g && g.art === 'instrument' && typeof g.name === 'string' && (!(g.latenz > 0) || g.name === behalte))
     .map((g) => ({ gruppe: 'Baukasten', text: g.name, name: g.name, geraet: { art: 'intern', name: 'bk', graph: g.name } })).sort(nach);
   const kit = (kits ?? []).filter((k) => k && typeof k.name === 'string')
     .map((k) => ({ gruppe: 'Kit', text: `${k.name} (${k.klaenge})`, name: k.name, geraet: { art: 'intern', name: 'kit', kit: k.name } })).sort(nach);

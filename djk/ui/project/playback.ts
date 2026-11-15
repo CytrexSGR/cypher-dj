@@ -57,7 +57,10 @@ export interface WInsert {
 }
 /** what the translator asks the host manager for one host stage: ready (the stage may play wet) and the latency to write */
 export type HostStufe = { an: boolean; latenz: number };
-export type WSpur =
+// `stumm_start` (live containers): the track starts this playback muted, the core applies it in the block of the swap (INTERFACES 4.11); written only for
+// the load that brings the stems of a module
+export type WSpur = WSpurKern & { stumm_start?: true };
+type WSpurKern =
   | { nr: number; art: 'audio'; clips: WAudioClip[]; ausgang?: WZiel; auto?: WAuto[]; chain?: WInsert[]; rack?: WRack; chain_auto?: WKettenLane[] }
   | { nr: number; art: 'intern'; geraet: 'rb338' | 'bk'; graph?: string; parameter: Record<string, number>; noten: WNote[]; ausgang?: WZiel;
     auto?: WAuto[]; chain?: WInsert[]; rack?: WRack; chain_auto?: WKettenLane[] }
@@ -166,6 +169,7 @@ export interface UebersetzOptionen {
   vorhoeren?: ReadonlyMap<string, string>;
   // plan 1.11 T7: the host manager's answer per host stage (slot = host number h). Absent = no host is ready (the export path): every host stage `an: false`.
   host?: (slot: number) => HostStufe;
+  stummStart?: ReadonlySet<number>;   // track numbers that start this playback muted (`stumm_start`, live containers: the loop track when the stems arrive)
   ohneHost?: ReadonlySet<number>;   // host slots left out of this playback (the split of a slot that would change strips inside one load)
 }
 
@@ -406,10 +410,11 @@ function uebersetzeIntern(p: Projekt, opt: UebersetzOptionen): Wiedergabe {
   const spuren: WSpur[] = [...p.spuren].sort((a, b) => a.nr - b.nr).map((s): WSpur => {
     const w0 = ohneZiel(s);
     let w: WSpur = w0;
+    if (opt.stummStart?.has(s.nr)) w = { ...w0, stumm_start: true };
     if (s.ausgang) {
       const nr = nrVon.get(s.ausgang.id);
       if (nr === undefined) throw new WiedergabeFehler('ziel_unbekannt', `Spur ${s.id} zeigt auf ${s.ausgang.id}`);
-      w = { ...w0, ausgang: { art: 'gruppe' as const, nr } };
+      w = { ...w, ausgang: { art: 'gruppe' as const, nr } };
     }
     const lanes = (s.automation ?? []).filter((l) => !istKettenZiel(l.ziel));
     const gr = s.ausgang ? (p.gruppen ?? []).find((g) => g.id === s.ausgang!.id) : undefined;
@@ -472,9 +477,12 @@ function uebersetzeIntern(p: Projekt, opt: UebersetzOptionen): Wiedergabe {
     || (p.returns ?? []).some((r) => r.inserts?.length || r.pre) || !!p.master?.inserts?.length);   // slice 4: a chain or pre needs /2
   const automatisiert = spuren.some((sp) => sp.auto !== undefined);       // Automation braucht /2 (der Kern lehnt auto in /1 ab)
   const hatRack = spuren.some((sp) => sp.art === 'intern' && sp.geraet === 'rack');   // 1.9 U7: the core refuses geraet rack in /1
+  const stummig = spuren.some((sp) => (sp as { stumm_start?: true }).stumm_start === true);   // the core knows stumm_start from /2 only
   const huellen = spuren.some((sp) => sp.art === 'audio' && sp.clips.some((c) => c.gain_hk !== undefined));   // 1.12 slice 5: gain_hk is /2 only
   // ohne Routing, Warp und Lane byteweise die alte Datei (AK3)
-  if (!routing && !gewarpt && !automatisiert && !hatReturns && !eingefuegt && !huellen && !hatRack) return { format: WIEDERGABE_FORMAT, nr: opt.nr, spuren };
+  if (!routing && !gewarpt && !automatisiert && !hatReturns && !eingefuegt && !huellen && !hatRack && !stummig) {
+    return { format: WIEDERGABE_FORMAT, nr: opt.nr, spuren };
+  }
   return { format: WIEDERGABE_FORMAT_2, nr: opt.nr, spuren,
     ...(p.live === true ? { live: true as const } : {}),   // the head flag of the live container (decision 5); absent otherwise
     gruppen: gruppenW,

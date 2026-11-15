@@ -2,7 +2,7 @@
   "format": "baukasten/2",
   "name": "drums-808",
   "stimmen": 16,
-  "regler_namen": {"1": "Kick Tune", "2": "Kick Decay", "3": "Kick Punch", "4": "Snare Snappy", "5": "Snare Tune", "6": "Hat Decay", "7": "Drive", "8": "Filter", "9": "Kick Pitch Time", "10": "Kick Click", "11": "Snare Decay", "12": "Snare Tone", "13": "Clap Decay", "14": "Clap Tone", "15": "Tom Low Tune", "16": "Tom Mid Tune", "17": "Tom High Tune", "18": "Tom Decay", "19": "Tom Punch", "20": "Hat Tone", "21": "Closed Hat Decay", "22": "Cymbal Decay", "23": "Cowbell Tune", "24": "Cowbell Decay", "25": "Boom Decay", "26": "Boom Tune", "27": "Clave Tune", "28": "Rim Tune", "29": "Filter Resonance", "30": "Level", "31": "Hat Tune", "32": "Clap Spread"},
+  "regler_namen": {"1": "Kick Tune", "2": "Kick Decay", "3": "Kick Punch", "4": "Snare Snappy", "5": "Snare Tune", "6": "Hat Decay", "7": "Drive", "8": "Filter", "9": "Kick Pitch Time", "10": "Kick Click", "11": "Snare Decay", "12": "Snare Tone", "13": "Clap Decay", "14": "Clap Tone", "15": "Tom Low Tune", "16": "Tom Mid Tune", "17": "Tom High Tune", "18": "Tom Decay", "19": "Tom Punch", "20": "Hat Tone", "21": "Closed Hat Decay", "22": "Cymbal Decay", "23": "Cowbell Tune", "24": "Cowbell Decay", "25": "Boom Decay", "26": "Boom Tune", "27": "Clave Tune", "28": "Rim Tune", "29": "Filter Resonance", "30": "Level", "31": "Hat Tune", "32": "Clap Spread", "33": "Kick Level", "34": "Snare Level", "35": "Clap Level", "36": "Tom Level", "37": "Hat Level", "38": "Cymbal Level", "39": "Perc Level"},
   "knoten": [
     {"id": "note", "art": "note"},
     {"id": "kit", "art": "trommeln", "modell": 1, "schnitt": 8, "kick_drive": 0.35, "crash_tune": 1.0, "ride_tune": 1.0, "ride_decay": 1300},
@@ -38,6 +38,13 @@
     {"id": "k_pegel", "art": "regler", "nr": 30, "min": 0, "max": 2.0},
     {"id": "k_hat_tune", "art": "regler", "nr": 31, "min": 0.7, "max": 1.43, "log": 1},
     {"id": "k_clap_spread", "art": "regler", "nr": 32, "min": 0, "max": 1},
+    {"id": "k_lv_kick", "art": "regler", "nr": 33, "min": -12, "max": 12, "vorgabe": 0.5},
+    {"id": "k_lv_snare", "art": "regler", "nr": 34, "min": -12, "max": 12, "vorgabe": 0.5},
+    {"id": "k_lv_clap", "art": "regler", "nr": 35, "min": -12, "max": 12, "vorgabe": 0.5},
+    {"id": "k_lv_tom", "art": "regler", "nr": 36, "min": -12, "max": 12, "vorgabe": 0.5},
+    {"id": "k_lv_hat", "art": "regler", "nr": 37, "min": -12, "max": 12, "vorgabe": 0.5},
+    {"id": "k_lv_cym", "art": "regler", "nr": 38, "min": -12, "max": 12, "vorgabe": 0.5},
+    {"id": "k_lv_perc", "art": "regler", "nr": 39, "min": -12, "max": 12, "vorgabe": 0.5},
     {"id": "aus", "art": "ausgang"}
   ],
   "kanten": [
@@ -76,6 +83,13 @@
     {"von": "k_pegel.aus", "nach": "kit.pegel"},
     {"von": "k_hat_tune.aus", "nach": "kit.hat_tune"},
     {"von": "k_clap_spread.aus", "nach": "kit.clap_spread"},
+    {"von": "k_lv_kick.aus", "nach": "kit.lv_kick"},
+    {"von": "k_lv_snare.aus", "nach": "kit.lv_snare"},
+    {"von": "k_lv_clap.aus", "nach": "kit.lv_clap"},
+    {"von": "k_lv_tom.aus", "nach": "kit.lv_tom"},
+    {"von": "k_lv_hat.aus", "nach": "kit.lv_hat"},
+    {"von": "k_lv_cym.aus", "nach": "kit.lv_cym"},
+    {"von": "k_lv_perc.aus", "nach": "kit.lv_perc"},
     {"von": "kit.aus", "nach": "aus.x"}
   ]
 }

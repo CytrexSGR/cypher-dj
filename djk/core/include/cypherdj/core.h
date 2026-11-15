@@ -186,7 +186,8 @@ struct Ereignis {
     INS_HOST = 47,                   // plan 1.11 T5 (/e/ins_host): deck = h, status = the stage's health after the command (edge check AND server flag, 0/1)
     INS_MESS = 48,                   // plan 1.11 T5 (/e/ins_mess): deck = h, status = round trip in samples or -1, grund = "" or laeuft, host_fehlt, kein_rueckweg
     INS_HOST_ZUSTAND = 49,           // plan 1.11 T5 (/zustand/ins_host): host_gesund[h-1], host_rundweg[h-1]; on change and at 2 Hz while the host ports exist
-    INS_GR = 43,                     // 1.10 S4a (/e/ins_gr): pfad = ins/komp/<n>, wert = gain reduction of the pooled compressor stage in dB (>= 0), 20 Hz with the levels, only stages that ran in the last block; netz_loop sends it as /e/ins_gr ,sf (§5.5f)
+    STUFE_PEGEL = 50,                // device faces T9 (/e/stufe_pegel): pfad = ins/komp/<n>, ins/lim/<n> or komp/<channel>, pegel[0] = input peak, pegel[1] = output peak in dBFS since the last report (-200 for none), 20 Hz with the levels, only stages that ran in the last block; netz_loop sends it as /e/stufe_pegel ,sff (§5.5g)
+    INS_GR = 43,                    // 1.10 S4a (/e/ins_gr): pfad = ins/komp/<n> or ins/lim/<n> (T8: the pooled limiter stages), wert = gain reduction of the pooled stage in dB (>= 0), 20 Hz with the levels, only stages that ran in the last block; netz_loop sends it as /e/ins_gr ,sf (§5.5f)
   };
   int32_t art;
   int32_t status;   // QUITTUNG: §5.1; KI: gestoppt 0/1

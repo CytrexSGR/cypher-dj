@@ -565,10 +565,21 @@ void Mixer::komp_block(int k, int n) {
   // Sidechain (komp/sc): Schlüssel ist der Eingang des Quellkanals (vor Trim und EQ); er liegt für alle Kanäle schon vor,
   // ehe die Kanalschleife läuft, also ohne Verzug, gleich in welcher Reihenfolge die Kanäle gerechnet werden
   const int sc = ganz(w[7].w) - 1;
+  // T9: the peak of max(|l|, |r|) of the tap before and after the compressor, folded into the peak since the last reading (a non-finite sample is ignored)
+  auto spitze = [n](const float* l, const float* r, float p) {
+    for (int t = 0; t < n; ++t) {
+      const float a = std::fabs(l[t]), b = std::fabs(r[t]);
+      const float v = a > b ? a : b;
+      if (v > p && v < 1e9f) p = v;
+    }
+    return p;
+  };
+  komp_ein_[k].store(spitze(kz_[k]->abgriff_schreibbar(0), kz_[k]->abgriff_schreibbar(1), komp_ein_[k].load(std::memory_order_relaxed)), std::memory_order_relaxed);
   if (sc >= 0 && sc < MIX_QUELLEN && sc != k)
     komp_[k]->block_sc(kz_[k]->abgriff_schreibbar(0), kz_[k]->abgriff_schreibbar(1), ein_l_[sc], ein_r_[sc], n);
   else
     komp_[k]->block(kz_[k]->abgriff_schreibbar(0), kz_[k]->abgriff_schreibbar(1), n);
+  komp_aus_[k].store(spitze(kz_[k]->abgriff_schreibbar(0), kz_[k]->abgriff_schreibbar(1), komp_aus_[k].load(std::memory_order_relaxed)), std::memory_order_relaxed);
   komp_lief_[k] = true;
   komp_gr_[k].store(komp_[k]->gr_db(), std::memory_order_relaxed);
 }
@@ -1251,6 +1262,8 @@ void Mixer::kanal(int k, int n) {
     komp_[k]->leeren();
     komp_lief_[k] = false;
     komp_gr_[k].store(0.0f, std::memory_order_relaxed);
+    komp_ein_[k].store(0.0f, std::memory_order_relaxed);   // T9: no stale peak when the stage comes back
+    komp_aus_[k].store(0.0f, std::memory_order_relaxed);
   }
   const bool bk_an = k < MIX_GRAPH_KANAELE && (bk_[k] || bk_blende_[k] > 0);
   // 1.15 A3: gate (sources) and utility (sources and buses). Bypass = the object is not called, and it is reset on the way back (D6):

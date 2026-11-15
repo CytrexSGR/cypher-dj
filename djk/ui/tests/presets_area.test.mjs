@@ -10,7 +10,7 @@ import http from 'node:http';
 import crypto from 'node:crypto';
 import { Router } from '../http/router.ts';
 import { json, postAbgewiesen } from '../http/transport.ts';
-import { presetsBereich, istPresetPfad, beschreibungsFilter } from '../presets/area.ts';
+import { presetsBereich, istPresetPfad, beschreibungsFilter, katalog } from '../presets/area.ts';
 import { liesRegister, schreibeRegister, bauen } from '../presets/register.ts';
 import { PresetSpeicher } from '../presets/store.ts';
 
@@ -22,8 +22,8 @@ const KOMP_B = { art: 'compressor', unterart: 'peak', charakter: ['clean'], genr
 async function stapel(t, quelle = 'andreas', extra = {}) {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'presets-h-'));
   const werk = path.join(d, 'werk'), nutzer = path.join(d, 'nutzer');
-  fs.mkdirSync(path.join(werk, 'komp'), { recursive: true });
-  fs.copyFileSync(path.join(FIX, 'gueltig.json'), path.join(werk, 'komp', 'test-glue.preset.json'));
+  fs.mkdirSync(path.join(werk, 'comp'), { recursive: true });
+  fs.copyFileSync(path.join(FIX, 'gueltig.json'), path.join(werk, 'comp', 'test-glue.preset.json'));
   const log = [];
   const router = new Router();
   const b = presetsBereich({ log: (z) => log.push(z), quelle: () => quelle }, { werk, nutzer, ...extra });
@@ -104,7 +104,7 @@ test('failures: factory read-only, bad input, traversal, foreign origin, wrong c
     const r = await post(s.url, `/presets/werk/komp/test-glue/${was}`, { name: 'X' });
     assert.deepEqual([r.code, r.j.fehler], [403, 'werk_schreibgeschuetzt'], was);
   }
-  assert.ok(fs.existsSync(path.join(s.werk, 'komp', 'test-glue.preset.json')));
+  assert.ok(fs.existsSync(path.join(s.werk, 'comp', 'test-glue.preset.json')));
   const r1 = await post(s.url, '/presets', { name: 'X', geraet: 'komp', werte: { thresh: 99 }, beschreibung: KOMP_B });
   assert.deepEqual([r1.code, r1.j.fehler], [400, 'wert_ungueltig']); assert.match(r1.j.text, /Threshold \(thresh\) must be a number from -60 to 0/);
   assert.equal((await post(s.url, '/presets', { name: '', geraet: 'komp', werte: { thresh: 0 }, beschreibung: KOMP_B })).j.fehler, 'name_ungueltig');
@@ -224,7 +224,7 @@ test('drift of the committed factory register over HTTP', async (t) => {
   assert.equal((await hole(s.url, '/presets/register/pruefen')).j.sauber, true);
   await post(s.url, '/presets', { name: 'Mine', geraet: 'saett', werte: { drive: 1 }, beschreibung: SAETT });
   assert.equal((await hole(s.url, '/presets/register/pruefen')).j.sauber, true, 'user presets are not part of the factory register');
-  fs.rmSync(path.join(s.werk, 'komp', 'test-glue.preset.json'));
+  fs.rmSync(path.join(s.werk, 'comp', 'test-glue.preset.json'));
   const r = (await hole(s.url, '/presets/register/pruefen')).j;
   assert.deepEqual([r.sauber, r.fehlend], [false, ['werk:komp/test-glue']]);
   assert.equal(liesRegister(datei).eintraege.length, 1, 'checking never rewrites the register');
@@ -297,4 +297,13 @@ test('save over HTTP carries graph for baukasten', async (t) => {
   assert.deepEqual([ohne.code, ohne.j.fehler], [400, 'graph_fehlt']);
   assert.equal((await post(s.url, '/presets', { name: 'Pad', geraet: 'baukasten', graph: 'pad', werte: { knob1: 0.2 }, beschreibung: PAD })).code, 201);
   assert.equal((await hole(s.url, '/presets/nutzer/baukasten/pad')).j.graph, 'pad');
+});
+
+test('katalog: effect graphs are listed under effekte as bk stages, instrument graphs only under instrumente', () => {
+  const k = katalog([{ name: 'fx-labor', art: 'effekt' }, { name: 'labor', art: 'instrument' }, { name: 'fx-filterbox', art: 'effekt' }]);
+  assert.deepEqual(k.effekte.filter((e) => e.geraet === 'bk'), [
+    { geraet: 'bk', titel: 'fx-labor', ziel: 'insert', graph: 'fx-labor', aktiv: true },
+    { geraet: 'bk', titel: 'fx-filterbox', ziel: 'insert', graph: 'fx-filterbox', aktiv: true }]);
+  assert.deepEqual(k.instrumente.filter((e) => e.geraet === 'bk').map((e) => e.graph), ['labor']);
+  assert.ok(k.effekte.every((e) => e.graph === undefined || e.geraet === 'bk'));
 });

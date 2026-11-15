@@ -93,13 +93,13 @@ class Patch:
                     return
             raise KeyError(knoten)
 
-    def knob(self, nr, name, mn, mx, log=False, id=None):
-        """a knob; midpoint 0.5 = sqrt(mn * mx) for log, (mn + mx) / 2 for linear"""
+    def knob(self, nr, name, mn, mx, log=False, id=None, mitte=None):
+        """a knob; midpoint 0.5 = sqrt(mn * mx) for log, (mn + mx) / 2 for linear, or `mitte` (the engine's regler `mitte`)"""
         id = id or f"k_{re.sub('[^a-z0-9]+', '_', name.lower()).strip('_')}"
         if nr in self.regler:
             assert self.regler[nr] == name, f"{self.name}: knob {nr} named twice"
         self.regler[nr] = name
-        self.node(id, "regler", nr=nr, min=mn, max=mx, log=1 if log else None)
+        self.node(id, "regler", nr=nr, min=mn, max=mx, log=1 if log else None, mitte=mitte)
         return f"{id}.aus"
 
     def knob_log(self, nr, name, mitte, faktor, id=None):
@@ -1138,13 +1138,15 @@ def pluck_stab(p):
          "The card's multiband EQ is not built (no EQ block)."],
         DRUM, ["drop", "groove"], 5, "Punchy kick: a sine with a fast exponential pitch drop, short body, noise click, saturation and compression.")
 def drums_kick(p):
-    tune = p.knob_log(1, "Tune", 87.3, 1.6)
+    # Tune reaches down to 36 Hz; `mitte` keeps knob position 0.5 at the value the old range (54.5625 .. 139.68, log) gave: 87.3
+    tune = p.knob(1, "Tune", 36, 139.68, log=True, mitte=87.3)
     drop = p.knob_lin(2, "Pitch drop", 24, 24)
     dec = p.knob_log(3, "Decay", 0.12, 2.5)
     klick = p.knob_lin(4, "Click", 0.3, 0.3)
     drive = p.knob_lin(5, "Drive", 4, 4)
     room = p.knob_lin(6, "Room mix", 0.08, 0.08)
-    penv = p.env(0.0005, 0.05, 0, 0.05, id="pitch_env")
+    pdec = p.knob(7, "Pitch decay", 0.010, 0.120, log=True, mitte=0.05)   # 10 to 120 ms, the old fixed 50 ms in the middle
+    penv = p.env(0.0005, pdec, 0, 0.05, id="pitch_env")
     x = p.osc("sinus", p.tr(tune, st=p.mul(penv, drop, id="pitch_st"), id="pitch"), id="body")
     x = p.vca(x, p.env(0.0005, dec, 0, 0.12, id="env"))
     k = p.mul(p.mul(p.rauschen(id="noise"), p.env(0.0002, 0.004, 0, 0.004, id="click_env"), id="click_roh"), klick, id="click")

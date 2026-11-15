@@ -351,3 +351,101 @@ fn svf_realisiert_das_biquad_exakt() {
     }
     let _ = Biquad { b: [0.0; 3], a: [0.0; 2] };
 }
+
+// ---- golden table of the target response (the page draws it: djk/ui/public/face/eq.js; tests/face_eq.test.mjs reads the same CSV) ----
+
+const SOLL_CSV: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/eq_soll.csv");
+
+fn art_von(typ: usize) -> BandArt {
+    [BandArt::Glocke, BandArt::LowShelf, BandArt::HighShelf, BandArt::LowCut, BandArt::HighCut, BandArt::Kerbe, BandArt::Bandpass][typ]
+}
+fn steil_von(s: usize) -> Steilheit {
+    [Steilheit::Db12, Steilheit::Db24, Steilheit::Db36, Steilheit::Db48][s]
+}
+
+/// The setting whose target a table row holds: a bell in proportional-Q mode gets the real `proportional_q(q, gain)` before the target is evaluated.
+fn soll_einstellung(typ: usize, freq: f64, gain: f64, q: f64, steil: usize, prop_q: bool) -> BandEinstellung {
+    let q_wirksam = if typ == 0 && prop_q { eq_dsp::band::proportional_q(q, gain) } else { q };
+    BandEinstellung { an: true, art: art_von(typ), freq, gain_db: gain, q: q_wirksam, steilheit: steil_von(steil), ..Default::default() }
+}
+
+/// (typ, freq, gain, q, steil, prop_q)
+fn soll_faelle() -> Vec<(usize, f64, f64, f64, usize, bool)> {
+    let w = std::f64::consts::FRAC_1_SQRT_2;
+    let mut f = Vec::new();
+    for (g, q) in [(12.0, 1.0), (-6.0, 2.0), (6.0, 0.5), (-18.0, 4.0), (18.0, 1.0), (0.0, 1.0)] { f.push((0, 1000.0, g, q, 0, false)); }
+    for (g, q) in [(12.0, 1.0), (-6.0, 2.0), (3.0, 1.0), (24.0, 4.0)] { f.push((0, 1000.0, g, q, 0, true)); }
+    f.push((1, 200.0, 9.0, w, 0, false)); f.push((1, 200.0, -9.0, 1.5, 0, false)); f.push((1, 80.0, 12.0, 0.5, 0, false));
+    f.push((2, 5000.0, 9.0, w, 0, false)); f.push((2, 1000.0, -12.0, 2.0, 0, false)); f.push((2, 8000.0, 6.0, 1.0, 0, false));
+    for s in 0..4 { f.push((3, 80.0, 0.0, w, s, false)); f.push((4, 8000.0, 0.0, w, s, false)); }
+    f.push((3, 250.0, 0.0, 2.0, 1, false)); f.push((3, 120.0, 0.0, 1.0, 3, false)); f.push((4, 12000.0, 0.0, 2.0, 1, false));
+    f.push((5, 1000.0, 0.0, 1.0, 0, false)); f.push((5, 2000.0, 0.0, 4.0, 0, false));
+    f.push((6, 1000.0, 0.0, 1.0, 0, false)); f.push((6, 300.0, 0.0, 4.0, 0, false));
+    f
+}
+const SOLL_FAKTOREN: [f64; 4] = [0.25, 0.8, 1.3, 3.0];   // none of them is 1: no row sits at a notch centre
+
+#[test]
+fn soll_tabelle_golden() {
+    let text = std::fs::read_to_string(SOLL_CSV).expect("tests/data/eq_soll.csv not found: run soll_tabelle_schreiben");
+    let mut zeilen = text.lines();
+    assert_eq!(zeilen.next(), Some("typ,freq,gain,q,steil,prop_q,f_hz,db"));
+    let fs = 48000.0;
+    let mut cache: Vec<((usize, u64, u64, u64, usize, bool), Vec<f64>)> = Vec::new();
+    let mut n = 0;
+    for z in zeilen {
+        let v: Vec<f64> = z.split(',').map(|s| s.parse().expect("number")).collect();
+        assert_eq!(v.len(), 8, "{z}");
+        let (typ, freq, gain, q, steil, prop, f_hz, db) = (v[0] as usize, v[1], v[2], v[3], v[4] as usize, v[5] == 1.0, v[6], v[7]);
+        let e = soll_einstellung(typ, freq, gain, q, steil, prop);
+        // (a) the table equals soll_db of the setting (the bell's Q through the real proportional_q)
+        assert!((soll_db(&e, f_hz) - db).abs() < 1e-9, "row {z}");
+        // the page mirrors the DSP's clamp of a cut section's Q; it must not change the target for any row of the table
+        if (typ == 3 || typ == 4) && steil > 0 {
+            let nn = steil + 1;
+            let th = PI * (2 * (nn - 1) + 1) as f64 / (4 * nn) as f64;
+            let qi = 1.0 / (2.0 * th.cos()) * q / std::f64::consts::FRAC_1_SQRT_2;
+            assert!((0.1..=18.0).contains(&qi), "row {z}: the last section Q {qi} would be clamped");
+        }
+        // (b) the real DSP (2x oversampled) follows the target within 0.5 dB where the target is above -24 dB
+        if db > -24.0 {
+            let k = (typ, freq.to_bits(), gain.to_bits(), q.to_bits(), steil, prop);
+            if !cache.iter().any(|(c, _)| *c == k) {
+                let mut eq = Eq::neu(fs);
+                eq.setze_prop_q(prop);
+                eq.setze_band(0, BandEinstellung { q, ..e });   // the DSP gets the user's Q and applies proportional_q itself
+                eq.reset();   // the first setting glides in from neutral; the measurement starts at the target
+                let mut l = vec![0.0f32; n_ir(&[e])];
+                let mut r = l.clone();
+                l[0] = 1.0;
+                r[0] = 1.0;
+                eq.verarbeite_stereo(&mut l, &mut r);
+                cache.push((k, l.iter().map(|&x| x as f64).collect()));
+            }
+            let h = &cache.iter().find(|(c, _)| *c == k).unwrap().1;
+            let ist = betrag_db(h, f_hz, fs);
+            assert!((ist - db).abs() < 0.5, "row {z}: DSP {ist} against target {db}");
+        }
+        n += 1;
+    }
+    assert!(n >= 60, "only {n} rows");
+}
+
+/// Writes the table from the DSP functions: `cargo test -p eq_dsp --test eq soll_tabelle_schreiben -- --ignored`. Never edited by hand.
+#[test]
+#[ignore]
+fn soll_tabelle_schreiben() {
+    let mut s = String::from("typ,freq,gain,q,steil,prop_q,f_hz,db\n");
+    for (typ, freq, gain, q, steil, prop) in soll_faelle() {
+        let e = soll_einstellung(typ, freq, gain, q, steil, prop);
+        for fk in SOLL_FAKTOREN {
+            let f_hz = freq * fk;
+            if !(10.0..=22000.0).contains(&f_hz) {
+                continue;
+            }
+            s += &format!("{typ},{freq},{gain},{q},{steil},{},{f_hz},{}\n", prop as u8, soll_db(&e, f_hz));
+        }
+    }
+    std::fs::create_dir_all(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data")).unwrap();
+    std::fs::write(SOLL_CSV, s).unwrap();
+}

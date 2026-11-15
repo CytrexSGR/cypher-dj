@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { PresetSpeicher, WERK_VORGABE } from '../presets/store.ts';
+import { PresetSpeicher, WERK_VORGABE, WERK_ORDNER, werkOrdner } from '../presets/store.ts';
 import { PresetFehler, pruefeDatei } from '../presets/model.ts';
 import { geraetVon } from '../presets/devices.ts';
 import { ladeVokabular } from '../presets/vocabulary.ts';
@@ -17,8 +17,8 @@ function tmp(t) { const d = fs.mkdtempSync(path.join(os.tmpdir(), 'presets-')); 
 function speicher(t, jetzt) {
   const d = tmp(t);
   const werk = path.join(d, 'werk'), nutzer = path.join(d, 'nutzer');
-  fs.mkdirSync(path.join(werk, 'komp'), { recursive: true });
-  fs.copyFileSync(path.join(FIX, 'gueltig.json'), path.join(werk, 'komp', 'test-glue.preset.json'));
+  fs.mkdirSync(path.join(werk, 'comp'), { recursive: true });   // factory folders carry the English names (werkOrdner)
+  fs.copyFileSync(path.join(FIX, 'gueltig.json'), path.join(werk, 'comp', 'test-glue.preset.json'));
   let n = 0;
   const s = new PresetSpeicher({ werk, nutzer, jetzt: jetzt ?? (() => new Date(Date.UTC(2026, 10, 2, 12, 0, n++))) });
   // Most tests are about storage, not descriptions: a save without beschreibung gets a valid one for the device type. The tests
@@ -130,7 +130,7 @@ test('read one preset; factory presets shipped in the repository are valid', (t)
   assert.equal(p.name, 'Test Glue'); assert.equal(p.herkunft, 'werk'); assert.deepEqual(p.verworfen, []);
   const echt = new PresetSpeicher({ werk: WERK_VORGABE, nutzer: tmp(t) });
   const werk = echt.liste();
-  assert.equal(werk.length, 106);
+  assert.ok(werk.length >= 106, `${werk.length} factory presets`);   // new factory presets only add
   assert.ok(werk.every((e) => e.herkunft === 'werk' && !e.fehler && e.beschreibung));
   assert.ok(werk.filter((e) => e.geraet === 'komp').every((e) => e.beschreibung.art === 'compressor'));
   for (const g of fs.readdirSync(WERK_VORGABE)) {
@@ -185,7 +185,7 @@ test('rename moves the file to the new slug, refuses a taken name, keeps values;
   assert.equal(s.lies('nutzer', 'komp', 'three').name, 'THREE');
   assert.throws(() => s.benenne('komp', 'nix', 'Four'), fehlerIst(404, 'unbekannt'));
   assert.throws(() => s.benenne('komp', 'test-glue', 'Mine'), fehlerIst(404, 'unbekannt'), 'rename only looks at user presets');
-  assert.ok(fs.existsSync(path.join(werk, 'komp', 'test-glue.preset.json')));
+  assert.ok(fs.existsSync(path.join(werk, 'comp', 'test-glue.preset.json')));
 });
 
 test('delete moves the preset into the trash folder', (t) => {
@@ -437,4 +437,55 @@ test('rename by Andreas takes the Cypher mark (D27): the item becomes his; Cyphe
   s.speichere({ name: 'His', geraet: 'komp', werte: KOMP });
   s.benenne('komp', 'his', 'His Two', 'andreas');
   assert.equal(s.lies('nutzer', 'komp', 'his-two').autor, undefined);
+});
+
+test('werkOrdner: the factory folder of a device (English names for four devices, the device id otherwise)', () => {
+  assert.deepEqual(WERK_ORDNER, { baukasten: 'modular', hall: 'reverb', komp: 'comp', saett: 'sat' });
+  for (const [g, o] of [['komp', 'comp'], ['baukasten', 'modular'], ['hall', 'reverb'], ['saett', 'sat'], ['eq', 'eq'], ['rb338', 'rb338']]) assert.equal(werkOrdner(g), o, g);
+});
+
+test('pfad: factory joins the mapped folder, user presets keep the device id as folder (review focus 3)', (t) => {
+  const { s, werk, nutzer } = speicher(t);
+  assert.equal(s.pfad('werk', 'komp', 'drum-bus'), path.join(werk, 'comp', 'drum-bus.preset.json'));
+  assert.ok(s.pfad('werk', 'komp', 'drum-bus').endsWith(`factory${path.sep}comp${path.sep}drum-bus.preset.json`) || s.pfad('werk', 'komp', 'drum-bus').endsWith(`${path.sep}comp${path.sep}drum-bus.preset.json`));
+  assert.equal(s.pfad('nutzer', 'komp', 'drum-bus'), path.join(nutzer, 'komp', 'drum-bus.preset.json'));
+  assert.equal(s.pfad('werk', 'rb338', 'x'), path.join(werk, 'rb338', 'x.preset.json'));
+});
+
+test('default store lists every factory file of djk/ui/presets/factory/*/ and every device has at least one', (t) => {
+  const d = tmp(t);
+  const s = new PresetSpeicher({ nutzer: path.join(d, 'nutzer') });
+  assert.equal(path.basename(WERK_VORGABE), 'factory');
+  let dateien = 0;
+  for (const ordner of fs.readdirSync(WERK_VORGABE, { withFileTypes: true })) if (ordner.isDirectory()) dateien += fs.readdirSync(path.join(WERK_VORGABE, ordner.name)).filter((n) => n.endsWith('.preset.json')).length;
+  const liste = s.liste({ herkunft: 'werk' });
+  assert.equal(liste.length, dateien);
+  assert.ok(dateien >= 106, `${dateien} factory files`);
+  for (const g of ['baukasten', 'eq', 'hall', 'komp', 'rb338', 'saett']) assert.ok(liste.some((e) => e.geraet === g), `${g} lists no factory preset`);
+  assert.ok(liste.every((e) => !e.fehler));
+});
+
+test('lies: the factory compressor preset keeps device id komp and origin werk', (t) => {
+  const d = tmp(t);
+  const s = new PresetSpeicher({ nutzer: path.join(d, 'nutzer') });
+  const p = s.lies('werk', 'komp', 'drum-bus');
+  assert.equal(p.herkunft, 'werk'); assert.equal(p.geraet, 'komp');
+});
+
+test('a factory folder that still has the old German names lists nothing and does not throw', (t) => {
+  const d = tmp(t);
+  fs.mkdirSync(path.join(d, 'werk', 'komp'), { recursive: true });
+  fs.copyFileSync(path.join(FIX, 'gueltig.json'), path.join(d, 'werk', 'komp', 'x.preset.json'));
+  const s = new PresetSpeicher({ werk: path.join(d, 'werk'), nutzer: path.join(d, 'nutzer') });
+  assert.deepEqual(s.liste({ herkunft: 'werk' }), []);
+});
+
+test('description family: a baukasten preset may describe an effect graph (effect kind), other devices keep the family of their type', (t) => {
+  const { s } = speicher(t);
+  const delay = { art: 'delay', unterart: 'ping_pong', charakter: ['wet'], genre: [], einsatz: ['build'], energie: 3, text: 'Effect graph on the Baukasten device.' };
+  assert.equal(s.speichere({ name: 'Echo Graph', geraet: 'baukasten', graph: 'fx-labor', werte: { knob1: 0.5 }, beschreibung: delay }).neu, true);
+  assert.equal(s.lies('nutzer', 'baukasten', 'echo-graph').beschreibung.art, 'delay');
+  assert.equal(s.liste({ geraet: 'baukasten' }).find((e) => e.slug === 'echo-graph').familie, 'effekt');
+  assert.throws(() => s.speichere({ name: 'Wrong', geraet: 'komp', werte: KOMP, beschreibung: BESCHR.instrument }), fehlerIst(400, 'beschreibung_ungueltig'));
+  assert.throws(() => s.speichere({ name: 'Wrong Too', geraet: 'rb338', werte: { cutoff: 200 }, beschreibung: delay }), fehlerIst(400, 'beschreibung_ungueltig'));
 });

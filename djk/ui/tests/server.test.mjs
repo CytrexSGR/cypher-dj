@@ -1893,6 +1893,7 @@ test('Ohr T8: GET /hoeren?deck=1 trägt sync mit validiert:false, ohne Partner d
   assert.ok(!Number.isNaN(j.sync.sync_ms) && j.sync.sync_ms !== null, `sync_ms=${j.sync.sync_ms}`);
   assert.equal(typeof j.sync.n, 'number');
   assert.equal(j.sync.deck_gegen_deck_ms, null, 'kein Partner (Deck 2 nicht offen) -> NaN -> null im JSON');
+  assert.equal(j.sync.partner, null);
 });
 
 test('Ohr T8: mit laufendem, offenem Partner (Deck 2) ist deck_gegen_deck_ms eine endliche Zahl', async (t) => {
@@ -1920,6 +1921,7 @@ test('Ohr T8: mit laufendem, offenem Partner (Deck 2) ist deck_gegen_deck_ms ein
   const j = await r.json();
   assert.equal(j.sync.validiert, false);
   assert.ok(Number.isFinite(j.sync.deck_gegen_deck_ms), `deck_gegen_deck_ms=${j.sync.deck_gegen_deck_ms}, sync=${JSON.stringify(j.sync)}`);
+  assert.equal(j.sync.partner, 2);
 });
 
 // Task 1.5: Trim-Vorschlag relativ zum aktuellen Trim (der Mess-Abgriff liegt NACH dem Trim, live.md Posten 5)
@@ -2997,16 +2999,17 @@ test('Slice 5 F07: FX-Einheiten und Zuweisungen kommen mit Werten und Besitzer z
   const von = JSON.stringify({ '1': { von: 'cypher', zeit: 1 }, '2': { von: 'andreas', zeit: 2 } });
   fs.writeFileSync(path.join(d, 'fx_von.json'), von);
   o.vomKern({ adresse: '/e/fx', felder: { einheit: 1, art: 2, beats: 1, wet: 0.6, param1: 0.4, param2: 0.5, param3: 0.5, an: 1 } });
-  o.vomKern({ adresse: '/e/fx', felder: { einheit: 2, art: 3, beats: 4, wet: 0.3, param1: 0.1, param2: 0.2, param3: 0.9, an: 0 } });   // aus, ohne Zuweisung: nichts
+  o.vomKern({ adresse: '/e/fx', felder: { einheit: 2, art: 3, beats: 4, wet: 0.3, param1: 0.1, param2: 0.2, param3: 0.9, an: 0 } });   // off, no assignment: its kind comes back, the unit stays off (t_7f487235)
   o.vomKern({ adresse: '/e/fx/zuweisung', felder: { einheit: 1, kanal: 'deck/1', an: 1 } });
   o.vomKern({ adresse: '/e/fx/zuweisung', felder: { einheit: 1, kanal: 'master', an: 1 } });
   o.vomKern({ adresse: '/e/fx/zuweisung', felder: { einheit: 1, kanal: 'deck/2', an: 0 } });
   const n0 = kernBefehle(log).length;
-  const b = await nachNeustart(o, log, 51, n0, 3);
+  const b = await nachNeustart(o, log, 51, n0, 4);
   assert.deepEqual(b.map((z) => ({ ...z.felder, id: 0 })), [
     { id: 0, quelle: 'cypher', einheit: 1, art: 2, beats: 1, wet: 0.6, param1: 0.4, param2: 0.5, param3: 0.5, an: 1 },
     { id: 0, quelle: 'cypher', einheit: 1, kanal: 'deck/1', an: 1 },
-    { id: 0, quelle: 'cypher', einheit: 1, kanal: 'master', an: 1 }]);
+    { id: 0, quelle: 'cypher', einheit: 1, kanal: 'master', an: 1 },
+    { id: 0, quelle: 'andreas', einheit: 2, art: 3, beats: 4, wet: 0.3, param1: 0.1, param2: 0.2, param3: 0.9, an: 0 }]);
   assert.equal(fs.readFileSync(path.join(d, 'fx_von.json'), 'utf8'), von, 'fx_von.json unverändert (Besitzer bleibt)');
 });
 

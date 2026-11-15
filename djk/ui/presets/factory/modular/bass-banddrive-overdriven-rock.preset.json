@@ -1,0 +1,59 @@
+{
+ "schema": 1,
+ "name": "Overdriven Rock",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "bass-banddrive",
+ "werte": {
+  "knob1": 0.67,
+  "knob2": 0.5,
+  "knob3": 0.42013,
+  "knob4": 0.0,
+  "knob5": 0.075,
+  "knob6": 0.1,
+  "knob7": 0.2,
+  "knob8": 0.75,
+  "knob9": 0.0,
+  "knob10": 0.67609,
+  "knob11": 0.17647,
+  "knob12": 0.23333,
+  "knob13": 0.54199,
+  "knob14": 0.4857,
+  "knob15": 0.39058,
+  "knob16": 0.85,
+  "knob17": 0.375,
+  "knob18": 0.0,
+  "knob19": 0.6,
+  "knob20": 0.46667,
+  "knob21": 0.20735,
+  "knob22": 0.9,
+  "knob23": 0.37277,
+  "knob24": 0.7
+ },
+ "beschreibung": {
+  "art": "bass",
+  "unterart": "analog",
+  "charakter": [
+   "dirty",
+   "thick",
+   "punchy"
+  ],
+  "genre": [
+   "techno",
+   "electro"
+  ],
+  "einsatz": [
+   "drop",
+   "mixdown"
+  ],
+  "energie": 4,
+  "text": "Close to an overdriven bass guitar: a static saw, a hard folded mid band with a fixed vowel and a grainy top, no movement."
+ },
+ "tags": [
+  "bass-banddrive",
+  "band-split"
+ ],
+ "notiz": "Measured by render, not heard yet (2026-11-15).",
+ "angelegt": "2026-11-15T00:00:00.000Z",
+ "geaendert": "2026-11-15T00:00:00.000Z"
+}

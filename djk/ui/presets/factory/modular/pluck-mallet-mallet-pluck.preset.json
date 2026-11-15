@@ -1,0 +1,39 @@
+{
+ "schema": 1,
+ "name": "Mallet pluck (xylophone / marimba)",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "pluck-mallet",
+ "werte": {
+  "knob1": 0.5,
+  "knob2": 0.5,
+  "knob3": 0.5,
+  "knob4": 0.5,
+  "knob5": 0.5,
+  "knob6": 0.5
+ },
+ "beschreibung": {
+  "art": "pluck",
+  "unterart": "mallet",
+  "charakter": [
+   "bright",
+   "punchy",
+   "clean",
+   "thin",
+   "metallic",
+   "smooth"
+  ],
+  "genre": [],
+  "einsatz": [
+   "drop"
+  ],
+  "energie": 3,
+  "text": "Wooden xylophone: two triangles at +1 oct +10 st, a filter envelope for the strike, 1.9 s decay with light tremolo."
+ },
+ "tags": [
+  "pluck-mallet"
+ ],
+ "notiz": "Source rule: recipe card `pluck.mallet`, Welsh [B1] pp. 83–84, patches Marimba and Xylophone, tables transcribed.. Measured by `tests/rezepte.rs`, not yet heard. Manifest use words outside the vocabulary: melody (as drop), groove (as drop).",
+ "angelegt": "2026-11-15T00:00:00.000Z",
+ "geaendert": "2026-11-15T00:00:00.000Z"
+}

@@ -70,7 +70,8 @@ test('Rechtsklick-Menü: fünf Punkte mit fertigen Befehlen; auf einem Marker mi
 test('Beschriftung: Segment-Tempo unter dem Zeiger, Marker-Text (Taktnummern, 1.1.1)', () => {
   const c = clip(warp([[0, 0], [2, 4], [3, 5]]));                // 120 BPM, dann 60 BPM
   assert.equal(segmentText(c, A, 100), '120.0 BPM'); assert.equal(segmentText(c, A, 250), '60.0 BPM'); assert.equal(segmentText(c, A, 900), '60.0 BPM', 'Randsegment');
-  assert.deepEqual([0, 4, 8, 2, -4, 0.5].map(markerText), ['1.1.1', '2', '3', '', '-1', ''], 'vor der Eins negative Takte ohne Takt 0');
+  assert.deepEqual([0, 4, 8, 2, -4, 0.5].map((b) => markerText(b)), ['1.1.1', '2', '3', '', '-1', ''], 'vor der Eins negative Takte ohne Takt 0');
+  assert.deepEqual([0, 3, 6, 4, -3, 1.5].map((b) => markerText(b, 3)), ['1.1.1', '2', '3', '', '-1', ''], 'meter 3/4: a bar start is a multiple of 3 beats');
 });
 
 // --- gegen die Projekt-Attrappe -----------------------------------------------------------------------------------------------------------------------------------

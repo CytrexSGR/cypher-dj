@@ -102,6 +102,12 @@ const MS20_1: &str = r#"{"format":"baukasten/2","name":"ms20-1","stimmen":4,"kno
 /// eight zones and fades
 const WAHL_1: &str = r#"{"format":"baukasten/2","name":"wahl-1","stimmen":4,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"saege"},{"id":"f","art":"svf","cutoff":900,"reso":0.3},{"id":"r","art":"rauschen"},{"id":"a","art":"sinus"},{"id":"b","art":"sinus","hz":330},{"id":"w","art":"wahl","n":8,"blende":3},{"id":"k","art":"regler","nr":1,"min":0,"max":1},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"s.hz"},{"von":"n.hz","nach":"a.hz"},{"von":"s.aus","nach":"f.x"},{"von":"s.aus","nach":"w.e1"},{"von":"f.tp","nach":"w.e2"},{"von":"f.bp","nach":"w.e3"},{"von":"f.hp","nach":"w.e4"},{"von":"r.aus","nach":"w.e5"},{"von":"a.aus","nach":"w.e6"},{"von":"b.aus","nach":"w.e7"},{"von":"k.aus","nach":"w.wahl"},{"von":"w.aus","nach":"o.x"}]}"#;
 
+/// Four voices of saw through a second order all-pass, the corner on a knob (type 52)
+const ALLPASS_1: &str = r#"{"format":"baukasten/2","name":"allpass-1","stimmen":4,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"saege"},{"id":"k","art":"regler","nr":1,"min":20,"max":8000,"log":1},{"id":"a","art":"allpass","ordnung":2,"fc2":400},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"s.hz"},{"von":"s.aus","nach":"a.x"},{"von":"k.aus","nach":"a.fc"},{"von":"a.aus","nach":"o.x"}]}"#;
+
+/// Four voices of saw through the three band crossover, both corners on knobs, the bands summed back (type 53)
+const KREUZ_1: &str = r#"{"format":"baukasten/2","name":"kreuz-1","stimmen":4,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"saege"},{"id":"k1","art":"regler","nr":1,"min":60,"max":400,"log":1},{"id":"k2","art":"regler","nr":2,"min":300,"max":8000,"log":1},{"id":"c","art":"kreuz","baender":3},{"id":"a","art":"add"},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"s.hz"},{"von":"s.aus","nach":"c.x"},{"von":"k1.aus","nach":"c.fc1"},{"von":"k2.aus","nach":"c.fc2"},{"von":"c.lo","nach":"a.a"},{"von":"c.mid","nach":"a.b"},{"von":"c.hi","nach":"a.c"},{"von":"a.aus","nach":"o.x"}]}"#;
+
 const GRAPHEN: &[&str] = &[
     include_str!("../demos/saege-ladder.json"),
     include_str!("../demos/juno-pad.json"),
@@ -201,6 +207,10 @@ const GRAPHEN: &[&str] = &[
     include_str!("../demos/fx-labor.json"),
     // Cypher Remix: the remix station as effect
     include_str!("../demos/fx-remix.json"),
+    ALLPASS_1,
+    KREUZ_1,
+    // Band Drive Bass: wavetable stack, hard sync, kreuz bands, falter, formant, saett, wahl morph for the glide
+    include_str!("../demos/bass-banddrive.json"),
 ];
 
 #[test]

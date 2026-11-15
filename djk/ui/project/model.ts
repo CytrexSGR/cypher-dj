@@ -42,6 +42,10 @@ export const MAX_CLIPS = 4096;          // Grenzen des Kerns (Spec 3.2)
 export const MAX_NOTEN = 65536;
 export const TEMPO_MIN = 60;
 export const TEMPO_MAX = 200;
+export const TAKTART_ZAEHLER_MIN = 2;   // meter [n, 4]: beats per bar (plan production, Task 13); the denominator is always 4
+export const TAKTART_ZAEHLER_MAX = 12;
+export const taktartOk = (t: unknown): boolean => Array.isArray(t) && t.length === 2 && Number.isInteger(t[0]) && t[0] >= TAKTART_ZAEHLER_MIN
+  && t[0] <= TAKTART_ZAEHLER_MAX && t[1] === 4;
 export const MAX_BEAT = 100_000;        // Obergrenze für Lagen und Längen: schützt vor Unsinn, ~25 000 Takte
 export const FADER_MIN = -200;          // −200 heißt im Stellwerk „aus"
 export const GAIN_MIN = -96;           // Spec 6.27: Clip-Gain −96..+24 dB, derselbe Bereich nimmt der Kern an
@@ -471,6 +475,15 @@ export const BK_PARAMETER: readonly string[] = Array.from({ length: 64 }, (_, i)
 export const BK_KNOPF_VORGABE = 0.5;   // an untouched knob (the core plays 0.5 for a knob the playback does not name)
 export const BK_GRAPH_NAME = /^[a-z0-9_-]{1,32}$/;
 export const MAX_BK_SPUREN = 8;
+// Production plan task 9 (D10): the slot of a Baukasten track in the core rows spur/<slot>/bk/<k> is its running number among the tracks with the device bk,
+// in ascending track
+// number (nr), counted from 1, tracks only (a rack member does not count), by device name. The core derives the same number from the playback snapshot
+// (Arrangement::tausche, bk_slot_; djk/core/tests/test_arr_bk_controls.cpp case 10 pins the same example). null: not a bk track or unknown id.
+export function bkSlot(projekt: Projekt, spurId: string): number | null {
+  const bk = projekt.spuren.filter((s) => s.geraet?.art === 'intern' && s.geraet.name === 'bk').sort((a, b) => a.nr - b.nr);
+  const i = bk.findIndex((s) => s.id === spurId);
+  return i < 0 ? null : i + 1;
+}
 // 1.9 (L25): the kit folder name rule = BK_GRAPH_NAME = kit_name_ok in the kern; at most 8 kit devices (spec E15, the kern's ARR_KIT_MAX)
 export const KIT_NAME = /^[a-z0-9_-]{1,32}$/;
 export const MAX_KIT_GERAETE = 8;
@@ -1480,7 +1493,7 @@ function pruefeAlles(x: unknown): void {
   text(o.name, 'name', 80);
   zahlIn(o.rev, 'rev', 0, Number.MAX_SAFE_INTEGER, true); zahlIn(o.wiedergabe_rev, 'wiedergabe_rev', 0, Number.MAX_SAFE_INTEGER, true);
   zahlIn(o.tempo_bpm, 'tempo_bpm', TEMPO_MIN, TEMPO_MAX);
-  if (!Array.isArray(o.taktart) || o.taktart.length !== 2 || o.taktart[0] !== 4 || o.taktart[1] !== 4) werfe('taktart', 'nur [4,4] (Spec 2.7)');
+  if (!taktartOk(o.taktart)) werfe('taktart', `[n, 4] with n = ${TAKTART_ZAEHLER_MIN}..${TAKTART_ZAEHLER_MAX} expected`);
   const l = felder(o.loop, 'loop', ['an', 'von_beat', 'bis_beat']);
   boolean(l.an, 'loop.an'); zahlIn(l.von_beat, 'loop.von_beat', 0, MAX_BEAT); zahlIn(l.bis_beat, 'loop.bis_beat', 0, MAX_BEAT);
   if ((l.bis_beat as number) - (l.von_beat as number) < 1) werfe('loop', 'bis_beat − von_beat muss mindestens 1 sein');

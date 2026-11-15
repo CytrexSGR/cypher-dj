@@ -110,7 +110,9 @@ def sammle(cfg):
         filt = [s.lower() for s in d.get("name_enthaelt", [])]
         ohne = [s.lower() for s in d.get("name_ohne", [])]
         max_dauer = d.get("max_dauer_s")
-        max_spitze = d.get("max_spitze_ms")   # Spitze nach mehr ms klingt neben dem Raster (bd:0 161 ms, bd:4 101 ms)
+        regel = cfg.get("spitze_regel") or {}
+        # Spitze nach mehr ms klingt neben dem Raster (bd:0 161 ms, bd:4 101 ms); a role without its own limit takes the global rule
+        max_spitze = d.get("max_spitze_ms", regel.get("ausnahmen", {}).get(rolle, regel.get("max_ms")))
         gesehen = unlesbar = 0
         for quelle, wurzel in cfg["quellen"].items():
             for ordner in d["ordner"].get(quelle, []):

@@ -96,8 +96,8 @@ export type RegisterEintrag = { name: string; art: 'bk' | 'rb338' | 'surge'; fam
 /** The directories of a repo copy (`wurzel`, default the repo this file lives in). Tests and `device.ts --wurzel` point it at a temp copy. */
 export function pfadeVon(wurzel: string = REPO) {
   const bk = path.join(wurzel, 'djk', 'instruments', 'modular_dsp');
-  return { wurzel, bk, surge: path.join(wurzel, 'djk', 'hosts', 'carla', 'surge_bereiche.json'), register: path.join(bk, 'geraete.json'), beispiele: path.join(bk, 'demos'), paneele: path.join(bk, 'paneele'), kategorien: path.join(bk, 'kategorien.json'),
-    doku: path.join(wurzel, 'docs', 'presets', 'devices'), werkPresets: path.join(wurzel, 'djk', 'ui', 'presets', 'werk', 'baukasten') };
+  return { wurzel, bk, surge: path.join(wurzel, 'djk', 'hosts', 'carla', 'surge_bereiche.json'), register: path.join(bk, 'geraete.json'), beispiele: path.join(bk, 'demos'), rezepte: path.join(bk, 'demos', 'recipes'), paneele: path.join(bk, 'paneele'), kategorien: path.join(bk, 'kategorien.json'),
+    doku: path.join(wurzel, 'docs', 'presets', 'devices'), werkPresets: path.join(wurzel, 'djk', 'ui', 'presets', 'factory', 'modular') };
 }
 export function ladeRegister(wurzel: string = REPO): RegisterEintrag[] {
   try { const r = JSON.parse(fs.readFileSync(pfadeVon(wurzel).register, 'utf8')); return Array.isArray(r) ? r : []; } catch { return []; }

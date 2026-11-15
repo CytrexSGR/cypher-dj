@@ -1,5 +1,5 @@
 // 1.8 Slice 1: REC-Knopf und Aufnahmestatus (Oberfläche englisch). Reine Funktionen getestet; bindeAufnahme hängt sie an Transportleiste und Kern-Ereignisse.
-import { beatZuX } from './timeline.js';
+import { beatZuX, beatsProTakt } from './timeline.js';
 export const recText = (z) => (z.status === 1 ? 'Counting in' : z.status === 2 ? 'Waiting for the start' : z.status === 3 ? `Recording${z.luecken > 0 ? ` · ${z.luecken} gaps` : ''}` : z.status === 4 ? 'Finishing' : '');
 // M2: der Kern meldet /zustand/rec mit Status 0, nachdem er 1 bis 4 gemeldet hat: der Take ist zu Ende, auch wenn niemand STOP REC gedrückt hat.
 // 1.8 T5: status 1 (count-in) counts as a run, so an aborted count-in (1 to 0) resets the button and one started elsewhere is picked up at once.
@@ -49,9 +49,9 @@ export const VORZAEHLER_OPTIONEN = [{ wert: 0, text: 'Off' }, { wert: 1, text: '
 const VORGABE = { vorzaehler_takte: 0, punch: { ein: false, aus: false, von_beat: 0, bis_beat: 4 }, overdub: false };   // = AUFNAHME_VORGABE (project/model.ts), the key is absent until the first command
 const aufnahmeVon = (p) => p?.aufnahme ?? VORGABE;
 export function aufnahmeStand(p) {
-  const a = aufnahmeVon(p);
+  const a = aufnahmeVon(p), bpt = beatsProTakt(p?.taktart);   // the bars of the project meter (4/4 without the field)
   return { vorzaehler: a.vorzaehler_takte, punchEin: a.punch.ein, punchAus: a.punch.aus, overdub: a.overdub,
-    vonTakt: Math.floor(a.punch.von_beat / 4) + 1, bisTakt: Math.ceil(a.punch.bis_beat / 4) };
+    vonTakt: Math.floor(a.punch.von_beat / bpt) + 1, bisTakt: Math.ceil(a.punch.bis_beat / bpt) };
 }
 export function vorzaehlerBefehl(wert) {
   const o = VORZAEHLER_OPTIONEN.find((x) => String(x.wert) === String(wert).trim());
@@ -59,10 +59,10 @@ export function vorzaehlerBefehl(wert) {
 }
 // Both bar fields always go into ONE command: the server checks bis_beat > von_beat against the STORED other value, so a single changed field (say from bar 5)
 // would be refused. The order of the two bars is the server's rule (argument_ungueltig); an entry that is no whole bar number >= 1 gives null.
-export function punchBefehl(von, bis) {
+export function punchBefehl(von, bis, beatsProTakt = 4) {
   const takt = (t) => (/^\s*[0-9]+\s*$/.test(String(t)) && Number(t) >= 1 ? Number(t) : null);
   const a = takt(von), b = takt(bis);
-  return a === null || b === null ? null : { befehl: 'aufnahme_setzen', punch: { von_beat: (a - 1) * 4, bis_beat: b * 4 } };
+  return a === null || b === null ? null : { befehl: 'aufnahme_setzen', punch: { von_beat: (a - 1) * beatsProTakt, bis_beat: b * beatsProTakt } };
 }
 export function schalterBefehl(p, was) {
   const a = aufnahmeVon(p);
@@ -151,7 +151,7 @@ export function bindeAufnahme(ctx) {
     $(n).addEventListener('click', () => ctx.aendereAus((p) => ({ label, befehle: [schalterBefehl(p, was)] })));
   }
   async function sendePunch() {
-    const k = punchBefehl($('punch-von').value, $('punch-bis').value);
+    const k = punchBefehl($('punch-von').value, $('punch-bis').value, beatsProTakt(st.projekt?.taktart));
     if (!k) { ctx.melde(ctx.fehlerText({ j: { fehler: 'argument_ungueltig' } }), true); zeigeRegler(); return; }
     // a refused range (bis <= von: argument_ungueltig) is reported by the write path; the fields then show the stored range again
     try { await ctx.aendereAus(() => ({ label: 'Punch range', befehle: [k] })); } finally { zeigeRegler(); }

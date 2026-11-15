@@ -1,0 +1,350 @@
+{
+ "format": "cypherdj-panel/2",
+ "geraet": {
+  "art": "bk",
+  "graph": "bass-banddrive"
+ },
+ "title": "Band Drive Bass",
+ "akzent": "violett",
+ "layout": {
+  "rows": [
+   [
+    "source",
+    "filter",
+    "bands"
+   ],
+   [
+    "amp",
+    "out"
+   ]
+  ]
+ },
+ "sections": [
+  {
+   "id": "source",
+   "title": "SOURCE",
+   "cols": 3,
+   "controls": [
+    {
+     "id": "c1",
+     "type": "knob",
+     "label": "Wave position",
+     "bind": {
+      "param": "k1"
+     },
+     "format": "percent",
+     "default": 0.6
+    },
+    {
+     "id": "c2",
+     "type": "knob",
+     "label": "Wave env amount",
+     "bind": {
+      "param": "k2"
+     },
+     "format": "percent",
+     "default": 0.675
+    },
+    {
+     "id": "c3",
+     "type": "knob",
+     "label": "Wave LFO rate",
+     "bind": {
+      "param": "k3"
+     },
+     "format": "hz",
+     "default": 0.673075
+    },
+    {
+     "id": "c4",
+     "type": "knob",
+     "label": "Wave LFO depth",
+     "bind": {
+      "param": "k4"
+     },
+     "format": "percent",
+     "default": 0.85
+    },
+    {
+     "id": "c5",
+     "type": "knob",
+     "label": "Detune",
+     "bind": {
+      "param": "k5"
+     },
+     "format": "raw",
+     "default": 0.175,
+     "unit": "ct"
+    },
+    {
+     "id": "c6",
+     "type": "knob",
+     "label": "Width",
+     "bind": {
+      "param": "k6"
+     },
+     "format": "percent",
+     "default": 0.5
+    },
+    {
+     "id": "c7",
+     "type": "knob",
+     "label": "Bite",
+     "bind": {
+      "param": "k7"
+     },
+     "format": "percent",
+     "default": 0.35
+    },
+    {
+     "id": "c8",
+     "type": "knob",
+     "label": "Sub level",
+     "bind": {
+      "param": "k8"
+     },
+     "format": "percent",
+     "default": 0.7
+    },
+    {
+     "id": "c9",
+     "type": "knob",
+     "label": "Glide",
+     "bind": {
+      "param": "k9"
+     },
+     "format": "percent",
+     "default": 0.0
+    },
+    {
+     "id": "s1",
+     "type": "label",
+     "span": 3,
+     "text": "Wavetable stack, synced saw, clean sub."
+    }
+   ]
+  },
+  {
+   "id": "filter",
+   "title": "FILTER",
+   "cols": 2,
+   "controls": [
+    {
+     "id": "fk",
+     "type": "filterkurve",
+     "span": 2,
+     "of": {
+      "cutoff": "c10",
+      "reso": "c11"
+     },
+     "typen": [
+      {
+       "art": "lp",
+       "pole": 4
+      }
+     ]
+    },
+    {
+     "id": "c10",
+     "type": "knob",
+     "label": "Cutoff",
+     "bind": {
+      "param": "k10"
+     },
+     "format": "hz",
+     "default": 0.80103
+    },
+    {
+     "id": "c11",
+     "type": "knob",
+     "label": "Resonance",
+     "bind": {
+      "param": "k11"
+     },
+     "format": "percent",
+     "default": 0.294118
+    },
+    {
+     "id": "c12",
+     "type": "knob",
+     "label": "Env amount",
+     "bind": {
+      "param": "k12"
+     },
+     "format": "raw",
+     "default": 0.433333,
+     "unit": "st"
+    },
+    {
+     "id": "c13",
+     "type": "knob",
+     "label": "Env decay",
+     "bind": {
+      "param": "k13"
+     },
+     "format": "raw",
+     "default": 0.458014,
+     "unit": "s"
+    },
+    {
+     "id": "f1",
+     "type": "label",
+     "span": 2,
+     "text": "On the sources, not the sub."
+    }
+   ]
+  },
+  {
+   "id": "bands",
+   "title": "BANDS",
+   "cols": 4,
+   "controls": [
+    {
+     "id": "c14",
+     "type": "knob",
+     "label": "Low split",
+     "bind": {
+      "param": "k14"
+     },
+     "format": "hz",
+     "default": 0.485698
+    },
+    {
+     "id": "c15",
+     "type": "knob",
+     "label": "High split",
+     "bind": {
+      "param": "k15"
+     },
+     "format": "hz",
+     "default": 0.390577
+    },
+    {
+     "id": "c16",
+     "type": "knob",
+     "label": "Mid drive",
+     "bind": {
+      "param": "k16"
+     },
+     "format": "percent",
+     "default": 0.6
+    },
+    {
+     "id": "c17",
+     "type": "knob",
+     "label": "Vowel",
+     "bind": {
+      "param": "k17"
+     },
+     "format": "raw",
+     "default": 0.3,
+     "unit": "a-u"
+    },
+    {
+     "id": "c18",
+     "type": "knob",
+     "label": "Vowel move",
+     "bind": {
+      "param": "k18"
+     },
+     "format": "percent",
+     "default": 0.9
+    },
+    {
+     "id": "c19",
+     "type": "knob",
+     "label": "High drive",
+     "bind": {
+      "param": "k19"
+     },
+     "format": "percent",
+     "default": 0.55
+    },
+    {
+     "id": "c20",
+     "type": "knob",
+     "label": "Air",
+     "bind": {
+      "param": "k20"
+     },
+     "format": "percent",
+     "default": 0.666667
+    },
+    {
+     "id": "b1",
+     "type": "label",
+     "span": 4,
+     "text": "Low clean, mid folds, high tanh."
+    }
+   ]
+  },
+  {
+   "id": "amp",
+   "title": "AMP",
+   "cols": 3,
+   "controls": [
+    {
+     "id": "ahue",
+     "type": "huelle",
+     "span": 3,
+     "label": "Amp envelope",
+     "of": {
+      "a": "c21",
+      "d": 0.4,
+      "s": "c22",
+      "r": "c23"
+     }
+    },
+    {
+     "id": "c21",
+     "type": "knob",
+     "label": "Attack",
+     "bind": {
+      "param": "k21"
+     },
+     "format": "raw",
+     "default": 0.261648,
+     "unit": "s"
+    },
+    {
+     "id": "c22",
+     "type": "knob",
+     "label": "Decay/Sustain",
+     "bind": {
+      "param": "k22"
+     },
+     "format": "percent",
+     "default": 0.8
+    },
+    {
+     "id": "c23",
+     "type": "knob",
+     "label": "Release",
+     "bind": {
+      "param": "k23"
+     },
+     "format": "raw",
+     "default": 0.415,
+     "unit": "s"
+    }
+   ]
+  },
+  {
+   "id": "out",
+   "title": "OUTPUT",
+   "cols": 1,
+   "controls": [
+    {
+     "id": "c24",
+     "type": "knob",
+     "label": "Output",
+     "bind": {
+      "param": "k24"
+     },
+     "format": "db",
+     "default": 0.75
+    }
+   ]
+  }
+ ]
+}

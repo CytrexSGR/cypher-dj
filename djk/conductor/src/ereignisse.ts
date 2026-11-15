@@ -27,6 +27,7 @@ export const ART_JE_ADRESSE: Record<string, string> = {
 export const NICHT_INS_JOURNAL = new Set([
   '/uhr', '/zustand/kern', '/zustand/deck', '/zustand/box', '/zustand/komp', '/zustand/ein', '/pegel', '/zustand/mix', '/zustand/spektrum',
   '/e/ins_gr',   // 1.10 slice 4a: gain reduction of up to 12 insert stages at 20 Hz = 240 lines per second, a meter, no decision
+  '/e/stufe_pegel',   // device faces T9: input and output peak of up to 14 compressor and limiter stages plus the channel compressors at 20 Hz, a meter, no decision
 ]);
 
 // Jede Adresse, die dieser Leitstand liest oder schreibt; tests/addresses.test.ts prüft, dass der Vertrag
@@ -42,6 +43,7 @@ export const GENUTZT = [
   '/zustand/komp',  // Effekt-Sektion 2026-10-11: ebenso
   '/zustand/mix', '/zustand/spektrum',  // A6: ebenso
   '/e/ins_gr',  // 1.10 slice 4a: read only to keep it out of the journal
+  '/e/stufe_pegel',  // device faces T9: ebenso
 ];
 
 export type AnsageArt = 'vorschlag' | 'plan' | 'rueckfall' | 'warnung' | 'info';

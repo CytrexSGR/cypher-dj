@@ -76,3 +76,60 @@ fn gr_anzeige_zeigt_die_absenkung() {
     k.block(&mut l, &mut r, None);
     assert!((k.gr_db() - 15.0).abs() < 0.3, "gr {}", k.gr_db()); // 0 dB → −15 dB: 15 dB Absenkung
 }
+
+// ---- golden table of the transfer curve (page: djk/ui/tests/face_comp.test.mjs reads the same CSV) ----------------------------------------------
+// Columns: x_db,schwelle_db,ratio,knie_db,makeup_db,mix,y_db. y_db is the steady-state output level for an input level x_db:
+// x + 20 log10(mix 10^((makeup - (x - gain_computer)) / 20) + 1 - mix), the block of Komp::block at rest.
+const KENNLINIE_CSV: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/kennlinie.csv");
+
+fn ausgang_db(x: f64, t: f64, r: f64, w: f64, makeup: f64, mix: f64) -> f64 {
+    let abs = x - gain_computer(x, t, r, w);
+    x + 20.0 * (mix * 10f64.powf((makeup - abs) / 20.0) + 1.0 - mix).log10()
+}
+
+#[test]
+fn kennlinie_golden_tabelle() {
+    let text = std::fs::read_to_string(KENNLINIE_CSV).expect("tests/data/kennlinie.csv not found: run kennlinie_golden_schreiben");
+    let mut zeilen = text.lines();
+    assert_eq!(zeilen.next(), Some("x_db,schwelle_db,ratio,knie_db,makeup_db,mix,y_db"));
+    let mut n = 0;
+    for z in zeilen {
+        let v: Vec<f64> = z.split(',').map(|s| s.parse().expect("number")).collect();
+        assert_eq!(v.len(), 7, "{z}");
+        let (x, t, r, w, mk, mix, y) = (v[0], v[1], v[2], v[3], v[4], v[5], v[6]);
+        // (a) the table equals the DSP's gain computer plus the mix formula
+        assert!((ausgang_db(x, t, r, w, mk, mix) - y).abs() < 1e-9, "row {z}");
+        // (b) the block itself reaches the same level on a sine (attack 1 ms, release 200 ms, 1 s, peak of the last 0.1 s)
+        if x >= -50.0 {
+            let e = Einstellung { schwelle_db: t, ratio: r, knie_db: w, attack_ms: 1.0, release_ms: 200.0, makeup_db: mk, mix, sc_hochpass_hz: 0.0 };
+            let mut k = Komp::neu(48000.0);
+            k.setze(&e);
+            let mut l = sinus(x, 48000);
+            let mut rr = l.clone();
+            k.block(&mut l, &mut rr, None);
+            let ist = spitze_db(&l[43200..]);
+            assert!((ist - y).abs() < 0.3, "row {z}: block {ist} instead of {y}");
+        }
+        n += 1;
+    }
+    assert!(n >= 24, "only {n} rows");
+}
+
+/// Writes the table from the DSP functions: `cargo test -p komp_dsp --test komp kennlinie_golden_schreiben -- --ignored`. Never edited by hand.
+#[test]
+#[ignore]
+fn kennlinie_golden_schreiben() {
+    // (x, threshold, ratio, knee, makeup, mix)
+    let mut fall: Vec<(f64, f64, f64, f64, f64, f64)> = Vec::new();
+    for x in [-40.0, -26.0, -25.0, -20.0, -15.0, -14.0, -10.0, 0.0] { fall.push((x, -20.0, 4.0, 10.0, 0.0, 1.0)); }   // below, at t-w/2, centre, t+w/2, above
+    for x in [-30.0, -20.0, -10.0, 0.0] { fall.push((x, -20.0, 4.0, 0.0, 0.0, 1.0)); }                               // hard knee
+    for x in [-30.0, -10.0] { fall.push((x, -20.0, 1.0, 6.0, 0.0, 1.0)); }                                           // ratio 1
+    for x in [-17.0, -10.0, 0.0] { fall.push((x, -20.0, 20.0, 6.0, 0.0, 1.0)); }                                     // ratio 20
+    for x in [-30.0, -10.0] { fall.push((x, -30.0, 10.0, 6.0, 6.0, 0.0)); }                                          // mix 0: y = x
+    for x in [-40.0, -10.0, -60.0] { fall.push((x, -30.0, 10.0, 0.0, 12.0, 0.4)); }                                   // makeup 12 with mix 0.4
+    for x in [-60.0, -21.0, -18.0, -15.0, 0.0] { fall.push((x, -18.0, 4.0, 6.0, 0.0, 1.0)); }                         // defaults, both ends
+    let mut s = String::from("x_db,schwelle_db,ratio,knie_db,makeup_db,mix,y_db\n");
+    for (x, t, r, w, mk, mix) in fall { s += &format!("{x},{t},{r},{w},{mk},{mix},{}\n", ausgang_db(x, t, r, w, mk, mix)); }
+    std::fs::create_dir_all(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data")).unwrap();
+    std::fs::write(KENNLINIE_CSV, s).unwrap();
+}

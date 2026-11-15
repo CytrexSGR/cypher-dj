@@ -39,7 +39,14 @@ class ArrBkSenke final : public ArrSenke, public ArrBkLeser {
   void alle_aus(int spur, int64_t ziel) noexcept override;
   void transport_start(int spur, int64_t ziel) noexcept override;
   void block(int spur, int64_t s0, int m, float* l, float* r) noexcept override;   // = block_bahn on the own lane-0 struct
-  void block_bahn(int spur, int64_t s0, int m, float* l, float* r, ArrArbeit& a) noexcept override;   // scratch from `a`; parallel_faehig stays false (bk runs serial in this plan)
+  // Track phase on the pool lanes: touches only the track's own slot sp_[spur], the relaxed counter verloren_ and the scratch of `a`; another bk track may run on another lane meanwhile.
+  void block_bahn(int spur, int64_t s0, int m, float* l, float* r, ArrArbeit& a) noexcept override;
+  // A lane unit only when the track plays an instance (aktiv) and no change of instance is due or in flight: the snapshot holds that very instance in that generation, the track is
+  // not told to leave (spur_weg) and no fade is running (blende). Until the first block took the instance over, and in the block of a swap, the track runs in the serial remainder;
+  // after that block the Arrangement asks again (spur_nach_join) and the track joins a lane list. Caller thread only, while no lane unit runs (plan builder, after the join).
+  bool parallel_faehig(int spur) const noexcept override;
+  // No work at all in the next block: no instance in use, or an instance at rest (reset after 1 s of silence) with no event and no start pending. A woken or fading track counts as load.
+  bool leer(int spur) const noexcept override;
   bool spur_weg(int spur, int64_t s, bool andere_spur) noexcept override;   // true: this track still has an instance to fade out
   // 1.9 U8 T9 (E12): the value of knob `param` (0..63 = k1..k64) of the slot for the next block(): a value reported in a block wins over the knob of the snapshot in that block (also at a
   // take-over and a transport start); no report in a block: the snapshot's knob is used again. Caller thread, before block() (the macro hook of the rack); never from a lane unit.

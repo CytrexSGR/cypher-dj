@@ -52,7 +52,8 @@ test('je Takt eine takt-Nachricht, seq lückenlos, Kern-Ereignisse als ereignis 
   const s5 = baue('/zustand/mix', { kanal: 'bus/1', gate_db: 0, mb_tief_db: 1, mb_mitte_db: 2, mb_hoch_db: 3, lim_db: 0 });
   const s6 = baue('/zustand/spektrum', { kanal: 'master', rahmen: 7, pegel: '-300,-290,-280' });
   const s7 = baue('/e/ins_gr', { kanal: 'ins/komp/3', gr_db: 4.5 });   // 4a: the insert gain reduction stream
-  for (const s of [s1, s2, s3, s4, s4, s4, s5, s5, s5, s6, s6, s6, s7, s7, s7]) await new Promise((ok) => u.send(s, aboL, '127.0.0.1', ok));
+  const s8 = baue('/e/stufe_pegel', { kanal: 'ins/komp/3', ein_db: -12, aus_db: -15.2 });   // device faces T9: the stage level stream
+  for (const s of [s1, s2, s3, s4, s4, s4, s5, s5, s5, s6, s6, s6, s7, s7, s7, s8, s8, s8]) await new Promise((ok) => u.send(s, aboL, '127.0.0.1', ok));
   u.close();
   const e = await ps.warteAuf((n) => n.typ === 'ereignis' && n.daten.art === 'invariante', 3000, abPs);
   assert.equal(e.daten.invariante, 'sub_doppelt');
@@ -84,6 +85,7 @@ test('je Takt eine takt-Nachricht, seq lückenlos, Kern-Ereignisse als ereignis 
   assert.equal(j.filter((z) => z.typ === '/zustand/mix').length, 0); // A6: 3 sent, 0 journaled; /e/luecke above is the positive control (1)
   assert.equal(j.filter((z) => z.typ === '/zustand/spektrum').length, 0);
   assert.equal(j.filter((z) => z.typ === '/e/ins_gr').length, 0); // 4a: 3 sent, 0 journaled
+  assert.equal(j.filter((z) => z.typ === '/e/stufe_pegel').length, 0); // T9: 3 sent, 0 journaled
   const vj = pruefer(SCHEMA_JOURNAL);
   assert.deepEqual(j.map((z) => vj(z)).filter((p) => !p.ok), []);
   ps.schliesse(); an.schliesse();

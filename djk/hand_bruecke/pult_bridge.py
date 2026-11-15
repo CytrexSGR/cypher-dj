@@ -6,7 +6,7 @@
   (layout in s8_map.py).
 - Maschine MK2 (HID) is the Baukasten desk: group buttons pick a channel, encoders turn its graph knobs (mk2.py, via the
   page server like the tablet).
-- LED messages from the kern (port "led") on channels 1..8 go back to the APC20; S8 LEDs are not solved yet.
+- LED messages from the kern (port "led") on channels 1..8 go back to the APC20; S8 pad LEDs follow the hot cues (see s8_leds); button LEDs are probed with --led-probe.
 
 ALSA client "cypherdj-pult": port "hand" (out, -> kern hand_in), "led" (in, <- kern hand_led), "apc_ein", "apc_aus".
 The bridge links its own "hand" port to cypherdj-kern:hand_in every few seconds (the kern only links the quelle_port it read
@@ -14,6 +14,7 @@ at start). Mapping in djk/config/controller/pult.json.
 
   pult_bridge.py            run (service)
   pult_bridge.py --monitor  also print every S8 event with its name (for checking the map by hand)
+  pult_bridge.py --led-probe 0x80 --offsets 44-72 [--wert 127] [--sekunden 2.0]  light one LED byte at a time (service stopped)
 """
 import argparse
 import os
@@ -27,6 +28,7 @@ import alsa_seq  # noqa: E402
 import nidrv  # noqa: E402
 import s8_map as K  # noqa: E402
 import s8_usb  # noqa: E402
+import assignment as belegung  # noqa: E402
 import deck_page as deck_seite  # noqa: E402
 
 try:
@@ -115,18 +117,20 @@ class Bruecke:
             time.sleep(1)
 
     def s8_leds(self, usb, ende, hz=10.0):
-        """Pads of each deck section: set hot cues in the deck colour, empty pads dim (as on the screen's cue row)."""
-        farbe = {0x80: (0, 190, 220), 0x81: (240, 150, 30)}  # left = deck A, right = deck B (as on the screens)
+        """Per deck section one frame: pads (set hot cues in the deck colour, empty pads dim) and, with the card
+        s8_leds.json, the PLAY and LOOP LEDs from deck state. Frames go out only on change."""
+        import s8_led
+        try:
+            karte = s8_led.lade_karte(os.path.join(os.path.dirname(os.path.abspath(__file__)), "s8_leds.json"))
+        except (OSError, ValueError) as e:
+            log("S8 button LEDs off:", e)
+            karte = None
         alt = {}
         while not ende.is_set() and not self.stop.is_set():
             cues = self.stand.get("cues") or {}
+            lage = self.stand.get("lage")
             for rid, deck in ((0x80, 1), (0x81, 2)):
-                gesetzt = cues.get(deck) or {}
-                frame = bytearray(119)
-                frame[0] = rid
-                for p in range(8):
-                    hell = 1.0 if (p + 1) in gesetzt else 0.06
-                    frame[1 + 3 * p:4 + 3 * p] = bytes(int(c * hell) for c in farbe[rid])
+                frame = s8_led.rahmen_fuer_seite(rid, deck, set(cues.get(deck) or {}), lage, karte)
                 if alt.get(rid) != frame:
                     usb.senden(frame)
                     alt[rid] = frame
@@ -140,7 +144,7 @@ class Bruecke:
                 continue
             if alt is None and not jetzt:
                 continue  # first report: only report what is held
-            if kanal in shift and (20 <= note <= 27 or note in (15, 40)):
+            if belegung.faengt_ab(kanal, note):
                 d = kanal - 12  # deck A left, B right
                 if jetzt:  # pads = hot cues 1..8 (SHIFT deletes; empty pad during a loop stores the loop), LOOP = loop on/off
                     if note == 15:
@@ -396,7 +400,22 @@ class Bruecke:
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--monitor", action="store_true", help="print every S8 event with its name")
+    ap.add_argument("--led-probe", metavar="REPORT", help="light one LED report byte at a time (0x80, 0x81 or 0x82) and exit; "
+                    "stop the cypherdj-pult unit first, it owns the S8")
+    ap.add_argument("--offsets", help="with --led-probe: offsets such as 58,59,60,65-68 (default 44-72, or 44-56 for 0x82)")
+    ap.add_argument("--wert", type=int, default=127, help="with --led-probe: byte value (default 127)")
+    ap.add_argument("--sekunden", type=float, default=2.0, help="with --led-probe: seconds per offset (default 2.0)")
     a = ap.parse_args()
+    if a.led_probe is not None:
+        import s8_led
+        try:
+            bericht = int(a.led_probe, 0)
+            offsets = s8_led.probe_offsets(a.offsets or ("44-56" if bericht == 0x82 else "44-72"))
+            s8_led.einzel_bericht(bericht, offsets[0], a.wert)
+        except ValueError as e:
+            ap.error(str(e))
+        sys.exit(s8_led.probe_lauf(log, bericht, offsets, a.wert, a.sekunden))
+    belegung.schreibe(belegung.DATEI)  # the register lists these controls (they are in no mapping file)
     b = Bruecke(monitor=a.monitor)
     log("cypherdj-pult up, ALSA client", b.seq.id)
     try:

@@ -7,6 +7,7 @@ import { REGLER_MAX, REGLER_SCHRITT, reglerVonDb, dbVonRegler, tasteMerke, taste
 import { HALL_FELDER_ANZEIGE, hallText, neuerReturnBefehl, returnLabels, returnListe, sendBefehl, sendLabel, sendWert } from './routing.js';
 import { MAX_RETURNS } from './limits.js';
 import { kopfMenueAuf } from './context_menu.js';
+import { bindeReturnFace } from './return_face.js';
 
 export const RETURN_VOLL_TEXT = `All ${MAX_RETURNS} returns are used`;
 const HALL_ZEILEN = HALL_FELDER_ANZEIGE.map(([feld, text]) => `<label class="p-hallzeile">${text}<input class="p-hall" data-feld="${feld}" type="range" min="0" max="1" step="0.001">`
@@ -21,12 +22,13 @@ const KOPF = `<button class="p-farbe" title="Return colour: click for the next o
 <input class="p-pan" type="range" min="-1" max="1" step="0.01" title="Balance (double click: centre)">
 <output class="p-panwert"></output>
 <div class="meter waagrecht p-pegel"><i></i></div>
-<details class="p-hallblock" open><summary>Hall <button class="p-hallan" aria-pressed="true" title="Hall on or off">ON</button></summary>${HALL_ZEILEN}</details>`;
+<details class="p-hallblock" open><summary>Hall <button class="p-hallan" aria-pressed="true" title="Hall on or off">ON</button><button class="p-hall-face" title="Open the Hall face: decay over time and frequency, and the knobs">FACE</button></summary>${HALL_ZEILEN}</details>`;
 
 export function bindeReturns(ctx) {
   const { $ } = ctx;
   const reihe = $('mixer-returns'), sendBlock = $('mixer-sends');
   const stand = new Map(), els = new Map(), greift = new Set();
+  bindeReturnFace(ctx);
   const returnAus = (id, rechne) => ctx.aendereAus((p) => {
     const r = p.returns?.find((x) => x.id === id), z = r ? rechne(r) : null;
     return z ? { label: z.label, befehle: [{ befehl: 'return_aendern', return_id: id, ...z.felder }] } : null;
@@ -44,6 +46,7 @@ export function bindeReturns(ctx) {
     q('.p-solo').addEventListener('click', () => returnAus(id, (r) => ({ label: `${r.solo ? 'Unsolo' : 'Solo'} return ${r.name}`, felder: { solo: !r.solo } })));
     q('.p-farbe').addEventListener('click', () => returnAus(id, (r) => ({ label: `Colour return ${r.name}`, felder: { farbe: naechsteFarbe(r.farbe) } })));
     q('.p-hallan').addEventListener('click', () => returnAus(id, (r) => ({ label: `Hall ${r.hall.an ? 'off' : 'on'} return ${r.name}`, felder: { hall: { an: !r.hall.an } } })));
+    q('.p-hall-face').addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); ctx.returnFaceOeffnen?.(id); });   // inside <summary>: must not fold the block
     q('.p-prepost').addEventListener('click', () => returnAus(id, (r) => ({ label: `Sends ${r.pre ? 'post' : 'pre'} fader, return ${r.name}`, felder: { pre: !r.pre } })));
     q('.p-loeschen').addEventListener('click', () => ctx.aendere(`Delete return ${ret().name}`, [{ befehl: 'return_loeschen', return_id: id }]));
     const regler = (r, k, vorgabe, wert, sende) => {

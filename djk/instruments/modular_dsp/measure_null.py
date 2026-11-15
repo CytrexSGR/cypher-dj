@@ -24,7 +24,7 @@ Probes (`render_kit` has no host tempo: a synced `lfo` stands at beat 0 there, a
 
 Adding a graph (Tasks 11-13): one entry in GRAPHEN. Fields of `Graph`: `neu` path of the new graph relative to the repo root,
 `alt_pfad` the path in the old ref (default `neu`), `alt_ref` the old ref (default eb4dc6e8, `--alt` overrides), `presets` the file
-prefix of its factory presets in ui/presets/werk/baukasten (`<prefix>-*.preset.json`, plus `presets_extra` names), `neue`
+prefix of its factory presets in ui/presets/factory/modular (`<prefix>-*.preset.json`, plus `presets_extra` names), `neue`
 the new knob numbers (default: every number in the new graph that the old one lacks), `null_zustand` {nr: value} forced on the new
 side in the null cases (for a knob whose vorgabe is not its "off"), `merkmale` the feature-on cases `(name, {nr: value})` or
 `(name, {nr: value}, probe)`, and the audit limits.
@@ -33,6 +33,7 @@ import concurrent.futures
 import dataclasses
 import json
 import math
+import os
 import pathlib
 import subprocess
 import sys
@@ -41,14 +42,22 @@ import numpy as np
 
 HIER = pathlib.Path(__file__).resolve().parent
 REPO = HIER.parents[2]
-WERKZEUG = HIER.parent / "target" / "release" / "examples" / "render_kit"
-PRESETS = REPO / "djk" / "ui" / "presets" / "werk" / "baukasten"
-MESSUNG = pathlib.Path.home() / "messungen" / "2026-11-11-synth-ausbau"
+# CARGO_TARGET_DIR (as cargo reads it) moves the build folder out of the tree, so a worktree never touches the shared target folder;
+# MESSE_NULL_AUS (or MESSUNG_DIR) moves the raw output
+WERKZEUG = pathlib.Path(os.environ.get("CARGO_TARGET_DIR") or HIER.parent / "target") / "release" / "examples" / "render_kit"
+PRESETS = REPO / "djk" / "ui" / "presets" / "factory" / "modular"
+MESSUNG = pathlib.Path(os.environ.get("MESSE_NULL_AUS") or os.environ.get("MESSUNG_DIR") or pathlib.Path.home() / "messungen" / "2026-11-11-synth-ausbau")
 SR = 48_000
 
 PROBEN = {
     "linie": ["--hits", "45@0:0.8,49@0.5:0.8,52@1:0.8,57@1.5:0.8,47@2:0.8,51@2:0.8,54@2:0.8,59@2:0.8", "--off", "0.45", "--dauer", "4.5"],
     "rampe": ["--hits", "45@0:0.25,49@0:0.5,52@0:0.75,57@0:1.0", "--off", "1.5", "--dauer", "3.5"],
+    # the drum kits: the two probes above play only notes 45 to 59 and never kick, snare, clap or closed hat, so the per-group level
+    # knobs of drums-909 / drums-808 need their own. `kit` = every 909 drum, `kit808` = the same plus Boom, Cowbell and Clave.
+    "kit": ["--hits", "36@0:0.9,38@0.75:0.9,39@1.5:0.9,37@2.25:0.9,42@3:0.9,44@3.5:0.9,46@4:0.9,41@5:0.9,45@5.5:0.9,48@6:0.9,49@6.5:0.9,51@9:0.9",
+            "--off", "0.2", "--dauer", "12"],
+    "kit808": ["--hits", "36@0:0.9,38@0.75:0.9,39@1.5:0.9,37@2.25:0.9,42@3:0.9,44@3.5:0.9,46@4:0.9,41@5:0.9,45@5.5:0.9,48@6:0.9,49@6.5:0.9,51@9:0.9,"
+               "35@12:0.9,56@13:0.9,75@14:0.9", "--off", "0.2", "--dauer", "16"],
 }
 DRIFT_VOR = "62dac099^"      # the commit before the Drift knob: the old side of the harness proof
 
@@ -63,6 +72,8 @@ class Graph:
     neue: tuple = ()
     null_zustand: dict = dataclasses.field(default_factory=dict)
     merkmale: list = dataclasses.field(default_factory=list)
+    null_proben: tuple = ()         # extra probes: one more null case each for the standard state and for every factory preset
+    gleich_faelle: list = dataclasses.field(default_factory=list)   # `(name, {nr: value}, probe)` that must stay byte equal to the null state
     peak_max: float = 1.0           # clip bound of tests/synth_*.rs (extreme positions must stay below 1.0)
     rms_min_db: float = -60.0       # audit range of the feature-on cases: not silent ...
     rms_max_db: float = -3.0        # ... and not a wall
@@ -107,6 +118,17 @@ GRAPHEN = {
         ("key follow", {37: 1.0}), ("velocity depth", {38: 1.0}), ("velocity to cutoff +1", {39: 1.0}),
         ("master tune +1", {40: 1.0}), ("delay mix", {43: 0.5}), ("reverb mix", {45: 0.5}),
     ]),
+    # drums (backlog sound, task 1): the seven per-group level knobs 33..39 (dB, vorgabe 0.5 = 0 dB). The factory presets carry knobs 1..32 only.
+    # On the 909 knob 39 has no drum (note 56 is a crash there, note 75 silent): its case must be byte equal, on the probe that plays both.
+    "drums-909": Graph(neu="djk/instruments/modular_dsp/demos/drums-909.json", alt_ref="b69e82be", presets="drums-909", neue=tuple(range(33, 40)),
+                       null_proben=("kit",),
+                       merkmale=[(n, {k: 1.0}, "kit") for n, k in (("kick level", 33), ("snare level", 34), ("clap level", 35), ("tom level", 36),
+                                                                    ("hat level", 37), ("cymbal level", 38))],
+                       gleich_faelle=[("perc level has no 909 drum", {39: 1.0}, "kit808")]),
+    "drums-808": Graph(neu="djk/instruments/modular_dsp/demos/drums-808.json", alt_ref="b69e82be", presets="drums-808", neue=tuple(range(33, 40)),
+                       null_proben=("kit808",),
+                       merkmale=[(n, {k: 1.0}, "kit808") for n, k in (("kick level", 33), ("snare level", 34), ("clap level", 35), ("tom level", 36),
+                                                                       ("hat level", 37), ("cymbal level", 38), ("perc level", 39))]),
     "poly-drift-gleich": Graph(neu=POLY, alt_ref="HEAD", **POLY_ALTE, neue=(28,), merkmale=[("drift 1", {28: 1.0})]),
     # synth-poly build-out (Task 12): knob 28 stays as it is (0.25 both sides); the eight old factory presets are the null cases, the
     # presets of the build-out use new knobs and are no null cases
@@ -119,6 +141,11 @@ GRAPHEN = {
             ("velocity to cutoff", {56: 1.0}), ("master tune", {57: 1.0}),
             ("filter attack", {29: 1.0}), ("filter release", {30: 0.0}), ("velocity depth", {55: 1.0}, "rampe"), ("lfo shape saw", {44: 0.0, 24: 1.0}),
         ]),
+    # recipe graph drums-kick (backlog sound, task 7): knob 7 Pitch decay is new, the Tune range grows downwards to 36 Hz and `mitte`
+    # keeps knob position 0.5 at the old value; the base is the commit before the change
+    "drums-kick-rezept": Graph(
+        neu="djk/instruments/modular_dsp/demos/recipes/drums-kick.json", alt_ref="ae343277d", presets="drums-kick", neue=(7,),
+        merkmale=[("pitch decay 0", {7: 0.0}), ("pitch decay 1", {7: 1.0})]),
 }
 
 
@@ -235,12 +262,15 @@ def laufen(name, cfg, alt_ref=None, arbeit=None):
         s.update(extra or {})
         return s
 
-    ergebnis = {"graph": name, "alt_ref": ref, "neue_knoepfe": neue, "null": {}, "merkmale": {}, "extreme": {}}
+    ergebnis = {"graph": name, "alt_ref": ref, "neue_knoepfe": neue, "null": {}, "merkmale": {}, "gleich": {}, "extreme": {}}
     ok = True
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
         # set 1: null
         nullfaelle = [("standard", "linie", {}), ("standard-rampe", "rampe", {})]
         nullfaelle += [(p.name.replace(".preset.json", ""), "linie", preset_knoepfe(p)) for p in preset_dateien(cfg)]
+        for extra in cfg.null_proben:
+            nullfaelle += [(f"standard-{extra}", extra, {})]
+            nullfaelle += [(p.name.replace(".preset.json", "") + f"-{extra}", extra, preset_knoepfe(p)) for p in preset_dateien(cfg)]
 
         def null(fall):
             n, probe, praeset = fall
@@ -277,6 +307,23 @@ def laufen(name, cfg, alt_ref=None, arbeit=None):
             if not (r["an_ungleich_aus"] and r["pegel_ok"]):
                 print("FEATURE CASE FAILED", n, r)
 
+        # set 2b: cases that must stay byte equal to the null state (a knob without a drum behind it)
+        def gleichfall(m):
+            n, knoepfe, probe = m
+            a, b = arbeit / f"g-{n}.aus.wav", arbeit / f"g-{n}.an.wav"
+            render(neu_pfad, a, zustand(), probe)
+            render(neu_pfad, b, zustand(knoepfe), probe)
+            g = gleich(a, b)
+            if g:
+                a.unlink(), b.unlink()
+            return n, {"identisch": g}
+
+        for n, r in pool.map(gleichfall, cfg.gleich_faelle):
+            ergebnis["gleich"][n] = r
+            ok &= r["identisch"]
+            if not r["identisch"]:
+                print("EQUAL CASE FAILED", n)
+
         # set 3: every new knob alone at 0 and 1
         def extrem(fall):
             nr, w = fall
@@ -312,6 +359,8 @@ def main(argv):
         print(f"null     {n:44s} identical={r['identisch']}")
     for n, r in erg["merkmale"].items():
         print(f"feature  {n:44s} differs={r['an_ungleich_aus']} peak={r['peak']} rms={r['rms_db']} ok={r['pegel_ok']}")
+    for n, r in erg["gleich"].items():
+        print(f"equal    {n:44s} identical={r['identisch']}")
     print(f"extremes {sum(r['ok'] for r in erg['extreme'].values())}/{len(erg['extreme'])} ok")
     print("ALL OK" if ok else "FAILURES")
     return 0 if ok else 1

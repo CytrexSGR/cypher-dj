@@ -5,7 +5,7 @@ import { HK_ANZEIGE, HK_TEXT, hkZiele, hkGeste, hkBefehl, hkPfad, normiert, verk
 import { trefferPunkt, wertZuY } from './lanes.js';
 import { loeschBefehl, punktMenue } from './lanes_operation.js';
 import { oeffneMenue } from './context_menu.js';
-import { rasterBeats } from './timeline.js';
+import { rasterBeats, beatsProTakt } from './timeline.js';
 
 const GERUEST = `<div class="p-hk-leiste">
   <select data-h="ziel" title="${HK_TEXT.ziel_titel}" aria-label="${HK_TEXT.ziel_titel}"></select>
@@ -84,7 +84,7 @@ export function bindeHuellkurven(ctx, behaelter, wahl) {
   canvas.addEventListener('pointerdown', (e) => {
     if (!gezeigt || e.button !== 0) return;
     const r = rahmen(), t = gezeigt;
-    const g = hkGeste({ clip: t.clip, hk: hk(), ziel: ziel(), zeile: r.zeile, beatZuX: r.beatZuX, xZuBeat: r.xZuBeat, raster: rasterBeats(st.raster) });
+    const g = hkGeste({ clip: t.clip, hk: hk(), ziel: ziel(), zeile: r.zeile, beatZuX: r.beatZuX, xZuBeat: r.xZuBeat, raster: rasterBeats(st.raster, beatsProTakt(st.projekt?.taktart)) });
     g.down(e.offsetX, e.offsetY);
     canvas.setPointerCapture(e.pointerId);
     const bewege = (m) => { const b = g.move(m.offsetX, m.offsetY); entwurf = b ? b.punkte : null; zeichne(); };

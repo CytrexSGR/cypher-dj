@@ -8,7 +8,7 @@ import { MAX_RACK_GERAETE, RB_GLIED_GERAET, wirtBelegt, kitBelegt, rackBelegt } 
 import { armZustand, eingangVonWert, eingangsOptionen, MODUS_OPTIONEN, MONITOR_OPTIONEN } from './recording.js';
 import { ausgangOptionen, ausgangWert, ausgangBefehl, gruppenKopfZustand, gruppeAusWahl, gruppenEltern, gruppenKette, spurGruppe } from './routing.js';
 import { baueGruppenKopf, zeigeGruppenKopf, foldLabel, balkenVerlauf } from './groups_kopf.js';
-import { faderLane, laneWert, laneFuer, gezeigteLane, freieZiele, zielLabel, offeneIndizes } from './lanes.js';
+import { faderLane, laneWert, laneFuer, gezeigteLane, freieZiele, freieZieleGruppe, zielLabel, offeneIndizes } from './lanes.js';
 import { REGLER_MAX, REGLER_SCHRITT, reglerVonDb, dbVonRegler, tasteMerke, tasteWert } from './fader_curve.js';
 import { LANEN_TEXT, sperrBefehl, zeichenModus } from './lanes_operation.js';
 import { TAKE_TEXT, hatTakes, takeZeilenVon } from './takes.js';
@@ -52,12 +52,12 @@ export function zielIndex(anzahl, index, richtung) {
 // 1.10 T3: the heads in display order, written by the SAME table the arrangement draws (layout.js zeilenFuer): a group header, a track head (a folded
 // member keeps its head element, hidden), the take heads of a track (one entry for all its take rows), the lane head. One function writes the order.
 export function kopfFolge(projekt, offen = new Set(), takeOffen = new Set()) {
-  const tab = zeilenFuer(projekt, offeneIndizes(projekt, offen), takeZeilenVon({ takeOffen }, projekt)), aus = [], takes = new Set();
+  const tab = zeilenFuer(projekt, offeneIndizes(projekt, offen), takeZeilenVon({ takeOffen }, projekt), offen), aus = [], takes = new Set();
   for (const z of tab) {
     if (z.art === 'gruppe') aus.push({ art: 'gruppe', id: projekt.gruppen[z.gruppe].id, tiefe: z.tiefe ?? 0, verborgen: !!z.verborgen });
     else if (z.art === 'spur') aus.push({ art: 'spur', id: projekt.spuren[z.spur].id, tiefe: z.tiefe ?? 0, verborgen: !!z.verborgen });
     else if (z.art === 'take') { const id = projekt.spuren[z.spur].id; if (!takes.has(id)) { takes.add(id); aus.push({ art: 'take', id }); } }
-    else if (z.art === 'lane') aus.push({ art: 'lane', id: projekt.spuren[z.spur].id });
+    else if (z.art === 'lane') aus.push({ art: 'lane', id: z.gruppe !== undefined ? projekt.gruppen[z.gruppe].id : projekt.spuren[z.spur].id });   // a group's lane row carries `gruppe`
   }
   return aus;
 }
@@ -185,8 +185,9 @@ export function ueberAnfrage(s, feld, liste) {
 
 // "+ Lane" (pure, tested): the lane is created by the server, so the page switches to its target only when the request was accepted; a refusal keeps
 // the old choice. aendere returns a promise of true (accepted) or false.
-export async function laneAnlegen(aendere, waehle, spurId, ziel) {
-  const ok = await aendere(LANEN_TEXT.neu_label, [{ befehl: 'auto_neu', spur_id: spurId, ziel }]);
+// art 'gruppe' addresses a group by strang_id (the server accepts both, commands.ts auto_neu); the default is the track as before
+export async function laneAnlegen(aendere, waehle, spurId, ziel, art = 'spur') {
+  const ok = await aendere(LANEN_TEXT.neu_label, [{ befehl: 'auto_neu', ...(art === 'gruppe' ? { strang_id: spurId } : { spur_id: spurId }), ziel }]);
   if (ok) waehle(spurId, ziel);
   return ok;
 }
@@ -194,7 +195,7 @@ export async function laneAnlegen(aendere, waehle, spurId, ziel) {
 // therefore lock and then unlock instead of sending `gesperrt: true` twice. The lane is the one the row shows at that moment.
 export function sperreUmschalten(aendereAus, spurId, wahl) {
   return aendereAus((p) => {
-    const s = p.spuren.find((x) => x.id === spurId), l = s ? gezeigteLane(s, wahl(spurId)) : null;
+    const s = p.spuren.find((x) => x.id === spurId) ?? (p.gruppen ?? []).find((x) => x.id === spurId), l = s ? gezeigteLane(s, wahl(spurId)) : null;   // a track or a group
     return l ? { label: l.gesperrt ? LANEN_TEXT.entsperre_label : LANEN_TEXT.sperre_label, befehle: [sperrBefehl(l)] } : null;
   });
 }
@@ -210,7 +211,7 @@ function zeigeArmKnopf(el, an) {
 }
 export function bindeKoepfe(behaelter, { aendere, aendereAus, offen = () => new Set(), umschalten = () => {}, takeOffen = () => new Set(), takeKoepfe = null, takesUmschalten = () => {}, wahl = () => undefined, waehle = () => {},
   spurWahl = () => new Set(), wahlUmschalten = () => {}, gruppeFalten = () => {},
-  ueber = () => [], uebersteuere = async () => true, kopfBeat = () => null, gesten = KEINE_GESTEN, armiere = async () => {}, armStandJetzt = () => null, marke = () => null, geraete = () => null, rackOeffnen = () => {}, geraetOeffnen = () => {}, instrumente = () => [] }) {
+  ueber = () => [], uebersteuere = async () => true, kopfBeat = () => null, gesten = KEINE_GESTEN, armiere = async () => {}, armStandJetzt = () => null, marke = () => null, geraete = () => null, rackOeffnen = () => {}, geraetOeffnen = () => {}, instrumente = () => [], faceOeffnen = () => {}, faceVerfuegbar = () => false }) {
   const frost = neuerFrost();
   const jetzt = () => performance.now();
   const stand = new Map();     // spur_id → Spur laut letztem Projekt
@@ -224,6 +225,7 @@ export function bindeKoepfe(behaelter, { aendere, aendereAus, offen = () => new 
   const gruppeGewaehlt = (id) => spurWahl().has(id);   // nested groups: the selection holds the head id itself
   const gruppenHandler = { falten: (id) => { const g = gruppenStand.find((x) => x.id === id); if (g) gruppeFalten(g); },
     waehle: (id, e) => wahlUmschalten([id], e, !(e.ctrlKey || e.shiftKey || e.metaKey)),
+    lane: (id) => umschalten(id),   // the A button of a group head: the same page state as a track's (st.laneOffen, strand ids)
     ziel: (id, wert) => aendere(`Output group ${gruppenStand.find((x) => x.id === id)?.name ?? id}`, [ausgangBefehl(id, wert)]) };
   zeichenModus.hoerer.add((an) => {                 // 1.12 slice 4 (D1): every open lane head shows the draw mode
     for (const le of laneEls.values()) { const b = le.querySelector('.p-lane-zeichnen'); b.classList.toggle('an', an); b.setAttribute('aria-pressed', String(an)); }
@@ -360,7 +362,9 @@ export function bindeKoepfe(behaelter, { aendere, aendereAus, offen = () => new 
     return el;
   }
 
-  function baueLane(id) {
+  // art 'gruppe': the head of a group's lane row (same elements, keyed by the group id; the targets are the chain targets only)
+  const strangVon = (id) => stand.get(id) ?? gruppenStand.find((g) => g.id === id);
+  function baueLane(id, art = 'spur') {
     const el = document.createElement('div');
     el.className = 'p-lanenkopf';
     el.dataset.lanenSpur = id;
@@ -370,13 +374,13 @@ export function bindeKoepfe(behaelter, { aendere, aendereAus, offen = () => new 
       const ziel = e.target.value;
       e.target.value = '';
       if (!ziel) return;
-      laneAnlegen(aendere, waehle, id, ziel);
+      laneAnlegen(aendere, waehle, id, ziel, art);
     });
     el.querySelector('.p-lanenwahl').addEventListener('change', (e) => waehle(id, e.target.value));
     el.querySelector('.p-lane-sperre').addEventListener('click', () => sperreUmschalten(aendereAus, id, wahl));
     el.querySelector('.p-lane-zeichnen').addEventListener('click', () => zeichenModus.umschalten());   // 1.12 slice 4 (D1)
     el.querySelector('.p-lane-weg').addEventListener('click', () => {
-      const l = gezeigteLane(stand.get(id), wahl(id));
+      const l = gezeigteLane(strangVon(id), wahl(id));
       if (l && !l.gesperrt) aendere(LANEN_TEXT.weg_label, [{ befehl: 'auto_loeschen', lane_id: l.id }]);
     });
     return el;
@@ -387,14 +391,18 @@ export function bindeKoepfe(behaelter, { aendere, aendereAus, offen = () => new 
     sel.dataset.optionen = schluessel;
     sel.replaceChildren(...opts.map(([wert, text]) => { const o = document.createElement('option'); o.value = wert; o.textContent = text; return o; }));
   };
-  function zeigeLane(el, s) {
+  function zeigeLane(el, s, art = 'spur') {
     const q = (x) => el.querySelector(x), gezeigt = gezeigteLane(s, wahl(s.id)), lanen = s.automation ?? [];
     q('.p-lanentitel').hidden = lanen.length > 0;
+    if (art === 'gruppe') {   // a group without an insert has nothing to automate: the head says what to do
+      const leer = freieZieleGruppe(s).length === 0 && lanen.length === 0, t = leer ? LANEN_TEXT.keine_ziele : LANEN_TEXT.titel;
+      if (q('.p-lanentitel').textContent !== t) q('.p-lanentitel').textContent = t;
+    }
     const sel = q('.p-lanenwahl');
     sel.hidden = lanen.length === 0;
     setzeOptionen(sel, lanen.map((l) => [l.ziel, `${zielLabel(l.ziel)}${l.gesperrt ? ' 🔒' : ''}`]));
     if (gezeigt) sel.value = gezeigt.ziel;
-    const frei = freieZiele(s), neu = q('.p-lane-neu');
+    const frei = art === 'gruppe' ? freieZieleGruppe(s) : freieZiele(s), neu = q('.p-lane-neu');
     setzeOptionen(neu, [['', LANEN_TEXT.neu], ...frei.map((z) => [z, zielLabel(z)])]);
     neu.value = '';
     neu.hidden = frei.length === 0;
@@ -421,6 +429,17 @@ export function bindeKoepfe(behaelter, { aendere, aendereAus, offen = () => new 
     q('.p-geraet').textContent = geraetText(s) + (pm ? ` · ${pm.text}` : '') + (s.freeze ? ' · FROZEN' : '') + (fehlt ? ' · MISSING' : '');
     const ge = q('.p-geraet');
     el.classList.toggle('fehlt', !!fehlt);
+    // device faces: a FACE button after the device label while the track carries a stage that has a face; created on demand, so a head without one stays as it was
+    const fb = q('.p-face-auf');
+    if (faceVerfuegbar(s)) {
+      if (!fb) {
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = 'p-face-auf'; b.textContent = 'FACE';
+        b.title = "Open the device face of this track's compressor"; b.setAttribute('aria-label', `Open the device face of ${s.name}`);
+        b.addEventListener('click', (e) => faceOeffnen(s.id, e.clientX, e.clientY));
+        ge.after(b);
+      }
+    } else fb?.remove();
     if (fehlt) ge.title = `The plugin cannot be used: ${ih.grund ?? 'not loadable'}`;
     else if (pm) ge.title = pm.titel; else if (ge.title) ge.removeAttribute('title');   // only touch the attribute when a mark put it there (golden: no title attribute appears)
     el.classList.toggle('auto', faderLane(s) !== null);          // AUTO in front of the fader value (CSS): a volume line controls this fader
@@ -522,7 +541,7 @@ export function bindeKoepfe(behaelter, { aendere, aendereAus, offen = () => new 
           let ge = gruppenEls.get(f.id);
           if (!ge) { ge = baueGruppenKopf(f.id, gruppenHandler); gruppenEls.set(f.id, ge); }
           zeigeGruppenKopf(ge, g, gruppenKopfZustand(projekt, f.id, offen()), gruppeGewaehlt(f.id),
-            { tiefe: f.tiefe, verborgen: f.verborgen, balken: gruppenKette(projekt, f.id, eltern).slice(0, -1).map(gruppeFarbe), optionen: ausgangOptionen(projekt, f.id) });
+            { tiefe: f.tiefe, verborgen: f.verborgen, laneOffen: offen().has(f.id), balken: gruppenKette(projekt, f.id, eltern).slice(0, -1).map(gruppeFarbe), optionen: ausgangOptionen(projekt, f.id) });
           gebraucht.add(f.id); soll.push(ge);
         } else if (f.art === 'spur') {
           const el = els.get(f.id);
@@ -536,10 +555,16 @@ export function bindeKoepfe(behaelter, { aendere, aendereAus, offen = () => new 
           el.classList.toggle('gewaehlt', spurWahl().has(f.id));
           soll.push(el);
         } else if (f.art === 'take') soll.push(...takeKoepfe.fuer(stand.get(f.id)));
-        else soll.push(laneEls.get(f.id));
+        else {   // a lane head: of a track (made in the loop above) or of a group (made here, keyed by the group id)
+          let le = laneEls.get(f.id);
+          if (!le) { le = baueLane(f.id, 'gruppe'); laneEls.set(f.id, le); }
+          const g = gruppenStand.find((x) => x.id === f.id);
+          if (g) zeigeLane(le, g, 'gruppe');
+          soll.push(le);
+        }
       }
       for (const [id, ge] of gruppenEls) if (!gebraucht.has(id)) { ge.remove(); gruppenEls.delete(id); }
-      for (const [id, le] of laneEls) if (!stand.has(id)) { le.remove(); laneEls.delete(id); }
+      for (const [id, le] of laneEls) if (!stand.has(id) && !mitLane.has(id)) { le.remove(); laneEls.delete(id); }   // a group's head leaves with its row
       takeKoepfe?.ende();
       soll.forEach((el, i) => { if (behaelter.children[i] !== el) behaelter.insertBefore(el, behaelter.children[i] ?? null); });
     },
@@ -611,6 +636,7 @@ export function bindeSpuren(ctx) {
   };
   const koepfe = bindeKoepfe($('koepfe'), { instrumente: () => st?.instrumente ?? [], aendere: ctx.aendere, spurWahl: () => st.spurWahl, wahlUmschalten, gruppeFalten, aendereAus: ctx.aendereAus, offen: () => st?.laneOffen ?? new Set(),
     takeOffen: () => st?.takeOffen ?? new Set(), takeKoepfe, rackOeffnen: (id) => ctx.rackOeffnen?.(id), geraetOeffnen: (id) => ctx.geraetOeffnen?.(id),
+    faceOeffnen: (id, x, y) => ctx.faceOeffnen?.(id, x, y), faceVerfuegbar: (s) => ctx.faceVerfuegbar?.(s) ?? false,
     takesUmschalten: (id) => { if (st.takeOffen.has(id)) st.takeOffen.delete(id); else st.takeOffen.add(id); ctx.layoutNeu(); koepfe.zeige(st.projekt); },
     gesten, armiere: (id, an) => aufnahme.armiere(id, an), armStandJetzt: () => st?.autoArm,
     ueber: () => st?.autoUeber ?? [], kopfBeat: () => st?.kopfBeat, marke: (id) => ctx.presetMarke?.('spur', id) ?? null, geraete: () => st?.geraete ?? null,

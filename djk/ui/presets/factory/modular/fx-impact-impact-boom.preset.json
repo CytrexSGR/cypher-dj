@@ -1,0 +1,39 @@
+{
+ "schema": 1,
+ "name": "Impact / boom",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "fx-impact",
+ "werte": {
+  "knob1": 0.5,
+  "knob2": 0.5,
+  "knob3": 0.5,
+  "knob4": 0.5,
+  "knob5": 0.5,
+  "knob6": 0.5
+ },
+ "beschreibung": {
+  "art": "fx",
+  "unterart": "impact",
+  "charakter": [
+   "deep",
+   "punchy",
+   "thick",
+   "dark",
+   "aggressive"
+  ],
+  "genre": [],
+  "einsatz": [
+   "drop",
+   "transition"
+  ],
+  "energie": 5,
+  "text": "Cinematic impact: a sine boom falling an octave and a half, noise debris, heavy saturation and a long hall."
+ },
+ "tags": [
+  "fx-impact"
+ ],
+ "notiz": "Source rule: recipe card `fx.impact`, derived, the source set has no impact patch. Building blocks: Snoman [B3] p. 299 (“[quote omitted]”) names the category; the pitch-fall method is the one given for the kick (p. 441) and the pitched riser (p. 302); the body is Welsh's Bass Drum [B1] p. 85.. Measured by `tests/rezepte.rs`, not yet heard. Manifest character words outside the vocabulary: heavy (as thick), sub (as deep).",
+ "angelegt": "2026-11-15T00:00:00.000Z",
+ "geaendert": "2026-11-15T00:00:00.000Z"
+}

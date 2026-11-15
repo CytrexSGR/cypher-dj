@@ -23,7 +23,7 @@ export interface Eintrag extends Beschreibung {
   geraet: string;
   slug: string;
   name: string;
-  pfad: string;           // posix, relative to the origin's root: <geraet>/<slug>.preset.json
+  pfad: string;           // posix, logical path <geraet>/<slug>.preset.json (device id, not a folder name: the factory folder is werkOrdner(geraet))
   tags: string[];
   familie: Familie;
   hash: string;           // sha256 of the canonical file content: any change shows

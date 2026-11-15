@@ -1,14 +1,18 @@
 // PRODUCTION (front panels, task 8): the device view on an instrument track (bk graph, RB-338). A click on the device label of the track head opens the
 // front panel of the device in the detail area (detail.js mode `geraet`, like the rack panel). The panel comes from GET /geraete/panel; its values live in
 // spur.geraet.parameter (normalised 0..1, an absent one is the `vorgabe` of the parameter table).
-// A drag moves a control at once (the panel keeps the value) but sends nothing; at the end of the gesture (panel.js calls adapter.ende) ONE spur_aendern goes out
-// with the whole device and the new values: one write, one undo step, and the graph instance of the track stays (the general path of spur_aendern).
+// Knobs k1..k32 of a Baukasten track move the sound while they are dragged (production plan task 10): set() sends the light command geraet_param_setzen at most
+// once per 30 ms with the latest value (the core row spur/<slot>/bk/<k> carries it to the instance), ende() sends the last value at once; one undo step per drag.
+// Every other control (RB-338, Surge, knobs k33..k64) moves the display at once and sends nothing until the end of the gesture (panel.js calls adapter.ende): ONE
+// spur_aendern goes out with the whole device and the new values: one write, one undo step, and the graph instance of the track stays (the general path of spur_aendern).
 import { baueFrontplatte, steuerungen, parameterVon } from '../panel.js';
 import { baueKopf, spurBeschreibung, tagVonGraph } from '../panel_kopf.js';
 import { parameterNachName } from '../panel_display.js';
 import { wendePresetAn } from './preset_apply.js';
 import { surgeAnzeige, surgeNorm } from '../surge_adapter.js';
 
+export const BK_LIVE_MAX = 32;   // knobs k1..k32 have a core row spur/<slot>/bk/<k> (SPUR_BK_KNOEPFE); a page file cannot import the .ts, tests/production_device_view.test.mjs pins it
+export const BK_LIVE_MS = 30;    // the throttle of a live drag, like pluginAdapter (plugin_panel.js)
 export const SURGE_MAX = 32;   // = SURGE_PARAMETER_MAX of project/model.ts (a page file cannot import the .ts; tests/production_device_view.test.mjs pins them equal)
 
 export const GERAET_TEXT = {
@@ -38,7 +42,9 @@ const anfrage = (g) => (istSurge(g) ? '/geraete/panel?art=surge' : g.name === 'b
  * is still on its way is already in it, so two quick gestures never roll each other back. A shown value stays until its own write was answered
  * (accepted: the project has it; refused: the display goes back to the project value, `beiFertig(ok)` lets the view redraw).
  * It sends only while the track still carries the device the view was built for: a track switched to Surge meanwhile gets nothing.
- * opt: { label(param) -> control label (undo step "<track>: <label>"), beiFertig(ok) }.
+ * opt: { label(param) -> control label (undo step "<track>: <label>"), beiFertig(ok), melde, zeitgeber? ({setTimeout, clearTimeout}, default globalThis), entprellMs? (default 30) }.
+ * A Baukasten knob k1..k32 is live: see the header; its sends are separate commands geraet_param_setzen, a refusal stops the live sends of the running gesture (the
+ * writer reported it once) and the display goes back to the stored value.
  */
 export function spurAdapter(ctx, spur, parameter = [], opt = {}) {
   const schluessel = geraetSchluessel(spur.geraet);
@@ -47,13 +53,50 @@ export function spurAdapter(ctx, spur, parameter = [], opt = {}) {
   const surge = schluessel === 'surge';   // the project holds DISPLAY values of Surge (surge_bereiche.json ranges); the panel works in travel 0..1
   let abgelehnt = false;                  // a 33rd name was refused during the running gesture
   const angezeigt = new Map();   // param -> value shown until the server answered
-  const offen = new Set();       // params set by the running gesture, not sent yet
+  const offen = new Set();       // params set by the running gesture, not sent yet (the release path)
+  const bk = typeof schluessel === 'string' && schluessel.startsWith('bk:');
+  const istLive = (p) => bk && /^k[1-9][0-9]?$/.test(p) && Number(p.slice(1)) <= BK_LIVE_MAX;
+  const zeitgeber = opt.zeitgeber ?? globalThis, entprellMs = opt.entprellMs ?? BK_LIVE_MS;
+  const lebend = new Map();      // live param -> latest value, not sent yet
+  let timer = null;
+  let gesperrt = false;          // a live send was refused during this gesture: no more live sends until its end
   const live = () => (ctx.st?.projekt?.spuren ?? [spur]).find((s) => s.id === spur.id) ?? null;
   const befehlAus = (p, neu) => {
     const s = (p?.spuren ?? []).find((x) => x.id === spur.id);
     if (!s || geraetSchluessel(s.geraet) !== schluessel) return null;   // the device changed or the track is gone: send nothing
     const werte = surge ? Object.fromEntries(Object.entries(neu).map(([n, v]) => [n, surgeAnzeige(tabelle[n], v)])) : neu;
     return { befehl: 'spur_aendern', spur_id: spur.id, geraet: { ...s.geraet, parameter: { ...(s.geraet.parameter ?? {}), ...werte } } };
+  };
+  const fertigLive = (param, wert, ok) => {
+    if (ok === true) {
+      const aktuell = angezeigt.get(param) === wert && !lebend.has(param);   // no newer move of this knob: the project has the value now, the display may follow it
+      if (aktuell) { angezeigt.delete(param); opt.beiFertig?.(true); }
+      return true;
+    }
+    gesperrt = true;             // refused (the writer reported it): stop sending, show the stored value again
+    if (timer !== null) { zeitgeber.clearTimeout(timer); timer = null; }
+    lebend.clear();
+    angezeigt.delete(param);
+    opt.beiFertig?.(false);
+    return false;
+  };
+  const schickeLive = (param, wert) => {
+    const rechne = (p) => {
+      const s = (p?.spuren ?? []).find((x) => x.id === spur.id);
+      if (!s || geraetSchluessel(s.geraet) !== schluessel) return null;   // the device changed or the track is gone: send nothing
+      return { label: `${spur.name}: ${opt.label?.(param) ?? param}`, befehle: [{ befehl: 'geraet_param_setzen', spur_id: spur.id, param, wert }] };
+    };
+    if (!live()) { angezeigt.delete(param); return undefined; }
+    const antwort = typeof ctx.aendereAus === 'function'
+      ? ctx.aendereAus(rechne)
+      : Promise.resolve().then(() => { const x = rechne(ctx.st?.projekt); return x ? ctx.aendere(x.label, x.befehle) : false; });
+    return Promise.resolve(antwort).then((ok) => fertigLive(param, wert, ok), () => fertigLive(param, wert, false));
+  };
+  const leereLebend = () => {
+    if (timer !== null) { zeitgeber.clearTimeout(timer); timer = null; }
+    const jobs = [...lebend];
+    lebend.clear();
+    return jobs.map(([param, wert]) => schickeLive(param, wert)).filter((x) => x !== undefined);
   };
   return {
     get(param) {
@@ -70,10 +113,22 @@ export function spurAdapter(ctx, spur, parameter = [], opt = {}) {
           return;
         }
       }
+      if (istLive(param)) {
+        angezeigt.set(param, v);
+        if (gesperrt) return;   // refused earlier in this gesture: the knob only previews, nothing goes out
+        lebend.set(param, v);
+        if (timer === null) timer = zeitgeber.setTimeout(() => { timer = null; leereLebend(); }, entprellMs);   // a fixed interval: a further set() does not restart it
+        return;
+      }
       angezeigt.set(param, v); offen.add(param);
     },
     ende() {
-      if (!offen.size) { if (abgelehnt) { abgelehnt = false; opt.beiFertig?.(false); } return undefined; }
+      const liveAntworten = leereLebend();   // the last live value goes out at once (nothing when it was sent already)
+      if (gesperrt) { gesperrt = false; for (const n of [...angezeigt.keys()]) if (istLive(n)) angezeigt.delete(n); }
+      if (!offen.size) {
+        if (abgelehnt) { abgelehnt = false; opt.beiFertig?.(false); }
+        return liveAntworten.length ? Promise.all(liveAntworten).then((r) => r.every((x) => x === true)) : undefined;
+      }
       abgelehnt = false;
       const namen = [...offen], neu = Object.fromEntries(namen.map((n) => [n, angezeigt.get(n)]));
       offen.clear();

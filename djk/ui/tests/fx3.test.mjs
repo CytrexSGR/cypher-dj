@@ -24,7 +24,8 @@ test('loading takes old-style Remix inserts off first, then loads fx/3', () => {
 
 test('the channels offered follow the places', () => {
   assert.deepEqual(kanaele(['track', 'track', 'strudel', 'loops']), ['deck/1', 'deck/2', 'pad/1', 'pad/2', 'erz/1', 'erz/2', 'erz/3']);
-  assert.deepEqual(kanaele(['track', 'track', 'track', 'track']), ['deck/1', 'deck/2', 'deck/3', 'deck/4']);
+  // decks 3 and 4 have no channel strip on the page (d3268f8b, deleted on purpose), so a Track place 3 or 4 offers no channel
+  assert.deepEqual(kanaele(['track', 'track', 'track', 'track']), ['deck/1', 'deck/2']);
 });
 
 test('the FX3 unit names the channels on 3 in mixer order', () => {

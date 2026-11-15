@@ -141,7 +141,7 @@ inline bool arr_schluessel_rechnen(ArrSnapshot& s, std::string* meldung = nullpt
 
 // Arrival (samples after the raw input of a track) of the input of the strip `streifen` (tracks 0..31, groups 32..47, PM 48, returns 49..52) in front of its chain.
 inline int arr_schluessel_streifen_ankunft(const ArrSnapshot& s, int streifen) {
-  if (streifen < ARR_SPUREN) return 0;
+  if (streifen < ARR_SPUREN) return s.spur[streifen].bk_latenz;   // a track: the latency of its instrument graph (0 for every other device)
   if (streifen < ARR_KETTE_PM) return s.pdc.ein_g[streifen - ARR_SPUREN];   // a group: its sum waits for the direct tracks and the child outputs (ein(g), arr_pdc.h)
   if (streifen == ARR_KETTE_PM) return s.pdc.p_in;
   return s.pdc.in_r;
@@ -157,7 +157,9 @@ inline int arr_schluessel_stufe_ankunft(const ArrSnapshot& s, int streifen, int 
 // sum (track post: t_trk, group pre: ein(g), group post: the arrival its target expects (ank(g)), return pre: in_r, return post: in_r plus the latency of the return chain).
 inline int arr_schluessel_quelle_ankunft(const ArrSnapshot& s, const ArrSchluessel& k) {
   switch (k.quelle) {
-    case ARR_SCHL_SPUR: return k.punkt == ARR_SCHL_POST ? s.pdc.t_trk : 0;
+    case ARR_SCHL_SPUR:
+      if (k.punkt == ARR_SCHL_POST) return s.pdc.t_trk;
+      return k.nr >= 1 && k.nr <= ARR_SPUREN ? s.spur[k.nr - 1].bk_latenz : 0;   // pre: the track's instrument output, delayed by its graph latency
     case ARR_SCHL_GRP:
       if (k.nr < 1 || k.nr > ARR_GRUPPEN) return k.punkt == ARR_SCHL_PRE ? s.pdc.t_trk : s.pdc.t_g;
       return k.punkt == ARR_SCHL_PRE ? s.pdc.ein_g[k.nr - 1] : s.pdc.ank_g[k.nr - 1];

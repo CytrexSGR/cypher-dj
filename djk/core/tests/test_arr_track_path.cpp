@@ -6,10 +6,15 @@
 //   3 bahn_zaehler_atomar:    verloren_ and abgelehnt_ after two threads with injected errors equal the serial sum
 //   4 bahn_protokoll_parallel: two threads start the parameters of different tracks at the same time: every entry exactly once, the order
 //                             inside one track is kept, the count and the multiset equal the serial run
-//   5 bahn_parallel_faehig:   loaded rb338 true, empty / bk / Wirt false, a real device transition false (bk->rb338 discriminates;
-//                             rb338->bk is covered by bk being not parallel-capable), a swap that only changes a parameter stays
+//   5 bahn_parallel_faehig:   loaded rb338 true, empty / Wirt false, a bk track true once its instance plays (false before the first block took
+//                             it over), a real device transition false (bk->rb338 and rb338->bk), a swap that only changes a parameter stays
 //                             true (fails with a "zuletzt_ non-empty" predicate)
-// Mutation: SPUR_SCRATCH_GEMEINSAM (the RB scratch ignores the lane) must turn case 2 red.
+//   6 bk_zwei_faeden:         two Baukasten tracks (a plain graph and an example synth) on two real threads at once on lanes 1 and 2 (a barrier per block),
+//                             3 runs: bit-equal to the serial run of each track over a transport start, notes with a sample offset, an absolute and a
+//                             relative knob report, and an instance swap in the middle. The track is not lane-capable in the swap block and is again
+//                             after it (the plan builder's view). Counters: verloren equal to serial.
+// Mutations: SPUR_SCRATCH_GEMEINSAM (the RB scratch ignores the lane) must turn case 2 red; BK_BAHN_IM_TAUSCH (the bk sink says parallel
+// during a swap) must turn case 6 red. The table of ArrBkSenke::parallel_faehig and leer is case 7 of test_arr_bk_senke.
 #include <algorithm>
 #include <atomic>
 #include <barrier>
@@ -325,8 +330,14 @@ void fall5() {
     w.laden(s, 0);
     PRUEF(w.rb.parallel_faehig(0));
     PRUEF(w.intern.parallel_faehig(0));       // loaded rb338
-    PRUEF(!w.intern.parallel_faehig(1));      // bk
+    PRUEF(!w.intern.parallel_faehig(1));      // bk, but no block took the instance over yet: no instance in use
     PRUEF(!w.bk.parallel_faehig(1));
+    for (int blk = 0; blk < 4; ++blk) {       // the first blocks of the bk track (serial), as the remainder of the plan runs them
+      float l[M] = {}, r[M] = {};
+      w.intern.block(1, blk * M, M, l, r);
+    }
+    PRUEF(w.intern.parallel_faehig(1));       // bk with an instance in use
+    PRUEF(w.bk.parallel_faehig(1));
     PRUEF(!w.intern.parallel_faehig(2));      // empty
     PRUEF(!w.rb.parallel_faehig(2));
     PRUEF(!w.intern.parallel_faehig(7));      // never set up
@@ -349,13 +360,15 @@ void fall5() {
     bkt::spur(t, 1, h, 1, {{"k1", 0.7f}});
     bkt::spur(t, 2, h2, 1, {{"k1", 0.6f}});   // track index 1 plays bk as well (its own instance)
     w.laden(t, 20 * M);
-    PRUEF(!w.intern.parallel_faehig(0));      // (bk is false anyway for the inner sink; the transition is covered by the reverse below)
+    PRUEF(!w.intern.parallel_faehig(0));      // transition rb338 -> bk: zuletzt_ = RB sink, innen = bk sink (the bk sink alone has no instance in use for the track either)
+    PRUEF(!w.intern.parallel_faehig(1));      // bk -> bk, another instance (h -> h2): a swap is pending
+    PRUEF(!w.bk.parallel_faehig(1));
     // transition bk -> rb338 on track index 1: play it on bk first, then swap it to rb338
     for (int blk = 20; blk < 24; ++blk) {
       float l[M] = {}, r[M] = {};
       w.intern.block(1, blk * M, M, l, r);
     }
-    PRUEF(!w.intern.parallel_faehig(1));      // bk, no transition
+    PRUEF(w.intern.parallel_faehig(1));       // bk, no transition, the swap to h2 ran
     w.laden(snap(4, 3, 1), 24 * M);
     PRUEF(!w.intern.parallel_faehig(1));      // transition bk -> rb338: zuletzt_ = bk sink, innen = RB sink; the inner sink alone would say true
     PRUEF(w.rb.parallel_faehig(1));
@@ -370,6 +383,128 @@ void fall5() {
   std::printf("case 5 bahn_parallel_faehig done\n");
 }
 
+// ---- 6: two Baukasten tracks on two real threads ---------------------------------------------------------------------------------------------
+// Track A plays a plain graph, track B an example synth: two instances, no state in common. The instances are made per run (a run owns its instances).
+struct BkSatz {
+  CypherBk* a[2];   // [0] plays from the start, [1] takes over in the swap block
+  CypherBk* b[2];
+  BkSatz() {
+    const std::string synth = bkt::beispiel("synth-mono");
+    for (int i = 0; i < 2; ++i) {
+      a[i] = bkt::neu(bkt::G_T);
+      b[i] = bkt::neu(synth);
+    }
+  }
+  ~BkSatz() {
+    for (int i = 0; i < 2; ++i) {
+      cypher_bk_frei(a[i]);
+      cypher_bk_frei(b[i]);
+    }
+  }
+};
+
+constexpr int BK_SPUR[2] = {1, 4};   // track indexes of the two Baukasten tracks (the others are empty)
+
+cdj::ArrSnapshot* bk_snap(int64_t nr, const BkSatz& x, int satz, uint64_t gen) {
+  Bau b(nr);
+  for (int i = 0; i < 2; ++i) b.spur(BK_SPUR[i] + 1, ArrArt::intern);
+  cdj::ArrSnapshot* s = b.fertig();
+  bkt::spur(s, BK_SPUR[0] + 1, x.a[satz], gen, {{"k1", 0.7f}});
+  bkt::spur(s, BK_SPUR[1] + 1, x.b[satz], gen, {{"k1", 0.6f}, {"k2", 0.4f}});
+  return s;
+}
+
+// the notes, knob reports and the start of track `spur` in block `blk`: a note on with a sample offset every 6th block, its note off 3 blocks later, a second note in
+// between, an absolute knob (k2) and a relative knob lane (k1, summand) from block 5 on; at block 200 track A gets a burst over ARR_BK_WARTE (events lost, counted)
+void speise_bk(cdj::ArrSenke& s, int spur, int blk, int64_t s0) {
+  if (blk == 0) s.transport_start(spur, s0);
+  const int ph = blk % 6;
+  const uint8_t ton = static_cast<uint8_t>(45 + spur * 2 + (blk / 6) % 7);
+  if (ph == 0) s.note(spur, s0 + (blk * 7 + spur * 13) % M, ton, static_cast<uint8_t>(90 + spur), true);
+  if (ph == 1) s.note(spur, s0 + (blk * 5 + spur * 11) % M, static_cast<uint8_t>(ton + 7), 100, true);
+  if (ph == 3) s.note(spur, s0 + (blk * 3 + spur * 17) % M, ton, 0, false);
+  if (ph == 4) s.note(spur, s0 + (blk * 9 + spur) % M, static_cast<uint8_t>(ton + 7), 0, false);
+  if (blk >= 5) {
+    s.auto_parameter(spur, 1, 0.25f + 0.5f * static_cast<float>((blk / 7) % 3) / 2.0f);
+    s.auto_parameter_summand(spur, 0, ((blk / 11) % 2) ? -0.25f : 0.2f);
+  }
+  if (blk == 200 && spur == BK_SPUR[0])
+    for (int i = 0; i < 280; ++i) s.note(spur, s0 + i % M, static_cast<uint8_t>(40 + i % 30), 80, true);
+}
+
+void fall6() {
+  constexpr int BL = 600, TAUSCH = 300, WIEDER = 3;
+  // serial reference: each track alone through block(), the swap at block TAUSCH
+  std::vector<float> ref[2];
+  uint64_t ref_verloren = 0;
+  {
+    BkSatz x;
+    Welt w;
+    w.laden(bk_snap(1, x, 0, 1), 0);
+    for (int blk = 0; blk < BL; ++blk) {
+      const int64_t s0 = static_cast<int64_t>(blk) * M;
+      if (blk == TAUSCH) {
+        w.laden(bk_snap(2, x, 1, 2), s0);
+        for (int k = 0; k < 2; ++k) PRUEF(!w.intern.parallel_faehig(BK_SPUR[k]));   // a swap is pending: not a lane unit in this block
+      }
+      for (int k = 0; k < 2; ++k) {
+        speise_bk(w.intern, BK_SPUR[k], blk, s0);
+        float l[M] = {}, r[M] = {};
+        w.intern.block(BK_SPUR[k], s0, M, l, r);
+        ref[k].insert(ref[k].end(), l, l + M);
+      }
+      if (blk == 0 || blk == TAUSCH)
+        for (int k = 0; k < 2; ++k) PRUEF(w.intern.parallel_faehig(BK_SPUR[k]));    // the block took the instance over: lane-capable from the next block on
+    }
+    ref_verloren = w.bk.verloren();
+    PRUEF(w.bk.spielend() == 2);
+  }
+  PRUEF(energie(ref[0]) > 1e-3 && energie(ref[1]) > 1e-3 && !gleich(ref[0], ref[1]));
+  PRUEF(ref_verloren > 0);   // the burst was counted
+  int rot = 0;
+  for (int w_nr = 0; w_nr < WIEDER; ++w_nr) {
+    BkSatz x;
+    Welt w;
+    w.laden(bk_snap(1, x, 0, 1), 0);
+    auto lanes = std::make_unique<cdj::ArrArbeit[]>(4);
+    for (int i = 0; i < 4; ++i) lanes[i].bahn = i;
+    std::vector<float> aus[2];
+    std::barrier bar(3);   // the two lane threads and this one (it feeds the sinks and swaps the snapshot, as the callback does before the fork)
+    auto lauf = [&](int k) {
+      for (int blk = 0; blk < BL; ++blk) {
+        const int64_t s0 = static_cast<int64_t>(blk) * M;
+        float l[M] = {}, r[M] = {};
+        bar.arrive_and_wait();   // both start the unit together
+        w.intern.block_bahn(BK_SPUR[k], s0, M, l, r, lanes[1 + k]);
+        aus[k].insert(aus[k].end(), l, l + M);
+        bar.arrive_and_wait();   // both units are done
+      }
+    };
+    std::thread t0(lauf, 0), t1(lauf, 1);
+    for (int blk = 0; blk < BL; ++blk) {
+      const int64_t s0 = static_cast<int64_t>(blk) * M;
+      if (blk == TAUSCH) {
+        w.laden(bk_snap(2, x, 1, 2), s0);
+        for (int k = 0; k < 2; ++k) PRUEF(!w.intern.parallel_faehig(BK_SPUR[k]));
+      }
+      for (int k = 0; k < 2; ++k) speise_bk(w.intern, BK_SPUR[k], blk, s0);
+      if (blk == 0)   // the first block of a track runs where the plan puts a track without an instance in use: the caller (serial remainder). Here: the sink on lane 0, then the threads
+        for (int k = 0; k < 2; ++k) PRUEF(!w.intern.parallel_faehig(BK_SPUR[k]));
+      bar.arrive_and_wait();
+      bar.arrive_and_wait();
+      if (blk == 0 || blk == TAUSCH)
+        for (int k = 0; k < 2; ++k) PRUEF(w.intern.parallel_faehig(BK_SPUR[k]));
+    }
+    t0.join();
+    t1.join();
+    for (int k = 0; k < 2; ++k) PRUEF(gleich(aus[k], ref[k]));
+    PRUEF(lanes[1].einheiten == BL && lanes[2].einheiten == BL && lanes[0].einheiten == 0);
+    PRUEF(w.bk.verloren() == ref_verloren);
+    rot += lanes[1].einheiten + lanes[2].einheiten;
+  }
+  std::printf("case 6 bk_zwei_faeden: %d runs x %d blocks, %d bk units on lanes 1 and 2, lost events %llu\n", WIEDER, BL, rot, static_cast<unsigned long long>(ref_verloren));
+}
+
 }  // namespace
 
 int main() {
@@ -378,5 +513,6 @@ int main() {
   fall3();
   fall4();
   fall5();
+  fall6();
   PRUEF_ENDE();
 }

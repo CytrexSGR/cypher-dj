@@ -7,6 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { stapel } from './support/media_library.mjs';
 import { ruf, CYPHER, anKern } from './support/proj_stack.mjs';
+import { innen } from './support/inside.mjs';
 
 async function aufbau(t) {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'djk-lernen-route-'));
@@ -33,7 +34,7 @@ test('S19 route: POST /lernen needs a MIDI input (409 kein_midi_eingang), arms w
   const cy = await ruf(url, 'POST', '/lernen', { pfad: 'erz/5/bk/3' }, CYPHER);
   assert.deepEqual([cy.code, cy.j.fehler], [403, 'nur_andreas']);
   assert.equal(anKern(log, '/k/lernen').length, 0, 'Cypher arms nothing');
-  for (const pfad of ['erz/4/bk/1', 'erz/5/fader', 'erz/5/bk/65', 'erz/5/bk/0', 'erz/5/bk/1x', 7, undefined]) {
+  for (const pfad of ['erz/4/bk/1', 'erz/5/bk/65', 'erz/5/bk/0', 'erz/5/bk/1x', 7, undefined]) {
     const r = await ruf(url, 'POST', '/lernen', { pfad });
     assert.deepEqual([r.code, r.j.fehler], [400, 'argument_ungueltig'], String(pfad));
   }
@@ -46,6 +47,18 @@ test('S19 route: POST /lernen needs a MIDI input (409 kein_midi_eingang), arms w
   assert.equal(weg.code, 200);
   assert.equal(weg.j.wartet, null);
   assert.equal(anKern(log, '/k/lernen').filter((z) => z.felder.an === 0).length, 1, 'cancel disarms the kern');
+  // any continuous target of the control table can be armed
+  for (const pfad of ['deck/1/fader', 'master/pegel', 'deck/1/eq/tief', 'xfader', 'erz/5/fader']) assert.equal((await ruf(url, 'POST', '/lernen', { pfad })).code, 200, pfad);
+  // switches and paths that are no knob are refused with a reason, nothing is armed
+  const vorher = anKern(log, '/k/lernen').filter((z) => z.felder.an === 1).length;
+  for (const pfad of ['deck/1/kill/tief', 'deck/1/pfl', 'deck/1/hotcue/1', 'deck/9/fader']) {
+    const r = await ruf(url, 'POST', '/lernen', { pfad });
+    assert.deepEqual([r.code, r.j.fehler], [400, 'argument_ungueltig'], pfad);
+    const l = await ruf(url, 'POST', '/lernen/loeschen', { pfad });
+    assert.deepEqual([l.code, l.j.fehler], [400, 'argument_ungueltig'], `delete ${pfad}`);
+  }
+  assert.equal((await ruf(url, 'POST', '/lernen', { pfad: 'deck/1/kill/tief' })).j.text, 'pfad: a switch needs a button; only knobs can be learned (notes are not learnable yet)');
+  assert.equal(anKern(log, '/k/lernen').filter((z) => z.felder.an === 1).length, vorher, 'nothing was armed by the refused paths');
   // 64 knobs: knobs 9, 32, 33 and 64 can be armed
   for (const pfad of ['erz/5/bk/9', 'deck/1/bk/32', 'erz/5/bk/33', 'erz/5/bk/64']) assert.equal((await ruf(url, 'POST', '/lernen', { pfad })).code, 200, pfad);
 });
@@ -71,4 +84,17 @@ test('S19 route: an existing file shows in GET; a broken file is reported (datei
   const r = await ruf(url, 'POST', '/lernen', { pfad: 'erz/5/bk/3' });
   assert.deepEqual([r.code, r.j.fehler], [409, 'lernen_datei_kaputt']);
   assert.equal(fs.readFileSync(path.join(ordner, 'lernen.json'), 'utf8'), '{"version":1,', 'untouched');
+});
+
+test('learn any target: after the kern reports the captured CC the entry is stored and GET /lernen lists it', async (t) => {
+  const { o, url, log, ordner } = await aufbau(t);
+  await ruf(url, 'POST', '/geraete/midi', { profil: 'midi-controller', port: 'X:Y' });
+  assert.equal((await ruf(url, 'POST', '/lernen', { pfad: 'deck/1/fader' })).code, 200);
+  const arm = anKern(log, '/k/lernen').filter((z) => z.felder.an === 1).at(-1);
+  innen(o).vomKern('/e/gelernt', { id: arm.felder.id, quelle: 1, kanal: 2, nr: 21, wert: 64, belegt: 0 });
+  let g;
+  for (let i = 0; i < 100; i++) { g = (await ruf(url, 'GET', '/lernen')).j; if (g.zuordnungen.length) break; await new Promise((r) => setTimeout(r, 20)); }
+  assert.deepEqual(g.zuordnungen, [{ pfad: 'deck/1/fader', kanal: 2, nr: 21 }]);
+  const datei = JSON.parse(fs.readFileSync(path.join(ordner, 'lernen.json'), 'utf8'));
+  assert.deepEqual(datei.eintraege, [{ nachricht: { typ: 'cc', kanal: 2, nr: 21 }, ziel: 'deck/1/fader', art: 'absolut' }]);
 });

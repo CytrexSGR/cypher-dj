@@ -1,0 +1,39 @@
+{
+ "schema": 1,
+ "name": "Strings",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "pad-strings",
+ "werte": {
+  "knob1": 0.5,
+  "knob2": 0.5,
+  "knob3": 0.5,
+  "knob4": 0.5,
+  "knob5": 0.5
+ },
+ "beschreibung": {
+  "art": "pad",
+  "unterart": "strings",
+  "charakter": [
+   "warm",
+   "wide",
+   "smooth",
+   "thick",
+   "soft",
+   "evolving"
+  ],
+  "genre": [],
+  "einsatz": [
+   "breakdown",
+   "intro"
+  ],
+  "energie": 2,
+  "text": "String section: triangle and detuned squares under a mid-resonance ladder that opens slowly after the bow, chorus, phaser, hall."
+ },
+ "tags": [
+  "pad-strings"
+ ],
+ "notiz": "Source rule: recipe card `pad.strings`, Snoman [B3] p. 437–438. Measured by `tests/rezepte.rs`, not yet heard.",
+ "angelegt": "2026-11-15T00:00:00.000Z",
+ "geaendert": "2026-11-15T00:00:00.000Z"
+}

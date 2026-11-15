@@ -1,0 +1,38 @@
+{
+ "schema": 1,
+ "name": "Organ",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "keys-organ",
+ "werte": {
+  "knob1": 0.5,
+  "knob2": 0.5,
+  "knob3": 0.5,
+  "knob4": 0.5,
+  "knob5": 0.5
+ },
+ "beschreibung": {
+  "art": "keys",
+  "unterart": "organ",
+  "charakter": [
+   "warm",
+   "bright",
+   "thick",
+   "smooth",
+   "clean"
+  ],
+  "genre": [],
+  "einsatz": [
+   "drop",
+   "breakdown"
+  ],
+  "energie": 3,
+  "text": "Two-triangle organ: 8' and 16' with a slow click-free attack, rotary-style chorus and tremolo, tube warmth, short room."
+ },
+ "tags": [
+  "keys-organ"
+ ],
+ "notiz": "Source rule: recipe card `keys.organ`, Welsh [B1] p. 75, patch Organ, table transcribed.. Measured by `tests/rezepte.rs`, not yet heard. Manifest use words outside the vocabulary: groove (as drop).",
+ "angelegt": "2026-11-15T00:00:00.000Z",
+ "geaendert": "2026-11-15T00:00:00.000Z"
+}

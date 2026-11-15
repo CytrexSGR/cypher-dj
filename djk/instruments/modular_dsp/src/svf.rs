@@ -11,6 +11,16 @@ pub struct Stufe {
 }
 
 impl Stufe {
+    /// Flushes states below 1e-20 (about -400 dB) to exactly 0 so that silence never ends in subnormal floats (used by `kreuz`).
+    #[inline]
+    pub fn flush(&mut self) {
+        if self.ic1.abs() < 1e-20 { self.ic1 = 0.0; }
+        if self.ic2.abs() < 1e-20 { self.ic2 = 0.0; }
+    }
+
+    /// The two integrator states (for the silence test of `kreuz`).
+    pub fn zustand(&self) -> [f64; 2] { [self.ic1, self.ic2] }
+
     /// (tp, bp, hp) für Eingang `x`, Vorverzerrung `g` = tan(π·fc/sr), Dämpfung `k` = 1/Q.
     #[inline]
     pub fn prozess(&mut self, x: f64, g: f64, k: f64) -> (f64, f64, f64) {

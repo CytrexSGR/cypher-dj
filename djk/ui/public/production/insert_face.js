@@ -1,0 +1,185 @@
+// PRODUCTION: the device faces of the insert stages. The opener (a button on the stage row of the INSERTS panel and a button in the track head), the source object a
+// face reads and writes through, and the refresh when the project changes under an open face. A face reads the stage from the project and writes through
+// ctx.aendere with the same coalescing key and undo label as the parameter rows of the INSERTS panel: no second path to the project.
+import { straenge, ARTEN, KOMP_PARAMETER, SAETT_PARAMETER, LIM_PARAMETER, parameterVon, paramBefehl, anBefehl, gemapptVon, makroWert, rackWerte, insGrLesung, insGrLesungArt, insPegelLesung } from './inserts.js';
+import { schluesselWert, schluesselLabel } from './key_choice.js';
+import { oeffneFace, offenesFace, schliesseFace } from '../face/frame.js';
+import { baueKompFace, kompParameterTabelle } from '../face/comp.js';
+import { baueSaettFace, saettParameterTabelle } from '../face/sat.js';
+import { baueLimiterFace, limParameterTabelle } from '../face/limiter.js';
+import { baueEqFace } from '../face/eq.js';
+import { oeffneMenue } from './context_menu.js';
+
+/** The insert kinds that have a face; later faces add their kind name here. */
+export const FACE_ARTEN = [
+  'komp',
+  'saett',
+  'lim',
+  'eq',
+];
+
+const finde = (ctx, strangId, insertId) => {
+  const strang = straenge(ctx.st.projekt).find((t) => t.id === strangId);
+  const insert = strang?.inserts.find((i) => i.id === insertId) ?? null;
+  return { strang, insert };
+};
+
+/** The KompQuelle of a compressor stage: values from the stage in the project (a macro-driven parameter gives the macro's value and is blocked), writes through
+ *  ctx.aendere with the key `${insert.id}:${param}` and the label of the INSERTS rows. A stage that is gone gets no command. */
+export function insertQuelleKomp(ctx, strang, insert, grStand = () => ({}), pegelStand = () => ({})) {
+  const jetzt = () => finde(ctx, strang.id, insert.id);
+  const name = ARTEN.komp.name;
+  return {
+    parameter: kompParameterTabelle(KOMP_PARAMETER),
+    knie: 'regler',
+    get(param) {
+      const { strang: s, insert: i } = jetzt();
+      if (!s || !i) return undefined;
+      const nr = gemapptVon(s, i.id, param);
+      if (nr !== null) { const z = s.rack.makros[nr - 1].ziel.find((y) => y.insert === i.id && y.param === param); return makroWert(z, rackWerte(s)[nr - 1]); }
+      return typeof i.werte?.[param] === 'number' ? i.werte[param] : undefined;
+    },
+    gesperrt(param) { const { strang: s, insert: i } = jetzt(); return !!s && !!i && gemapptVon(s, i.id, param) !== null; },
+    set(param, v) {
+      const { insert: i } = jetzt();
+      if (!i) return;   // the stage was removed under the open face: nothing goes out
+      const q = KOMP_PARAMETER.find((x) => x.name === param);
+      ctx.aendere(`${q?.label ?? param} ${name} on ${strang.name}`, [paramBefehl(i.id, param, v)], `${i.id}:${param}`);
+    },
+    an: {
+      get: () => jetzt().insert?.an !== false,
+      set: (b) => { const { insert: i } = jetzt(); if (i) ctx.aendere(`${b ? 'Enable' : 'Bypass'} ${name} on ${strang.name}`, [anBefehl(i.id, b)]); },
+    },
+    // the key chip: the stage's source as the INSERTS list names it
+    schluessel: { text: () => { const { insert: i } = jetzt(); return i ? `KEY: ${schluesselLabel(schluesselWert(i), ctx.st.projekt)}` : ''; } },
+    // the gain reduction the INSERTS row shows (the same store, the same 500 ms rule)
+    gr: (zeit) => { const { insert: i } = jetzt(); return i ? insGrLesung(grStand(), i.slot, zeit) : null; },
+    // T9: the input and output peak of the stage ({ein, aus} in dBFS), the same store and 500 ms rule
+    pegel: (zeit) => { const { insert: i } = jetzt(); return i ? insPegelLesung(pegelStand(), `ins/komp/${i.slot}`, zeit) : null; },
+  };
+}
+
+/** The faces of the stages whose face is a curve plus a plain knob plate (no key, no meter): per kind the title, accent, parameter list and builder. */
+const faceGeraet = (art) => ({   // a function, not a constant: inserts.js imports this file, the parameter lists are not initialised yet at load time
+  saett: { titel: 'SATURATOR', akzent: 'rot', liste: SAETT_PARAMETER, tabelle: saettParameterTabelle, bauen: baueSaettFace },
+  lim: { titel: 'LIMITER', akzent: 'tuerkis', liste: LIM_PARAMETER, tabelle: limParameterTabelle, bauen: baueLimiterFace },
+})[art];
+
+/** The source object of such a stage: values from the stage in the project (a macro-driven parameter gives the macro's value and is blocked), writes through
+ *  ctx.aendere with the key `${insert.id}:${param}` and the label of the INSERTS rows; a write resolves true when accepted. A stage that is gone gets no command. */
+export function insertQuelleGeraet(ctx, strang, insert, liste, tabelle, grStand = () => ({}), pegelStand = () => ({})) {
+  const jetzt = () => finde(ctx, strang.id, insert.id);
+  const name = ARTEN[insert.art].name;
+  return {
+    // T8: the limiter's gain reduction (/e/ins_gr `ins/lim/<n>`, the same store and 500 ms rule as the compressor's); the other kinds have none
+    ...(insert.art === 'lim' ? {
+      gr: (zeit) => { const { insert: i } = jetzt(); return i ? insGrLesungArt(grStand(), 'lim', i.slot, zeit) : null; },
+      pegel: (zeit) => { const { insert: i } = jetzt(); return i ? insPegelLesung(pegelStand(), `ins/lim/${i.slot}`, zeit) : null; },   // T9
+    } : {}),
+    parameter: tabelle(liste),
+    get(param) {
+      const { strang: s, insert: i } = jetzt();
+      if (!s || !i) return undefined;
+      const nr = gemapptVon(s, i.id, param);
+      if (nr !== null) { const z = s.rack.makros[nr - 1].ziel.find((y) => y.insert === i.id && y.param === param); return makroWert(z, rackWerte(s)[nr - 1]); }
+      return typeof i.werte?.[param] === 'number' ? i.werte[param] : undefined;
+    },
+    gesperrt(param) { const { strang: s, insert: i } = jetzt(); return !!s && !!i && gemapptVon(s, i.id, param) !== null; },
+    set(param, v) {
+      const { insert: i } = jetzt();
+      if (!i) return undefined;   // the stage was removed under the open face: nothing goes out
+      const q = liste.find((x) => x.name === param);
+      return ctx.aendere(`${q?.label ?? param} ${name} on ${strang.name}`, [paramBefehl(i.id, param, v)], `${i.id}:${param}`);
+    },
+    an: {
+      get: () => jetzt().insert?.an !== false,
+      set: (b) => { const { insert: i } = jetzt(); if (i) ctx.aendere(`${b ? 'Enable' : 'Bypass'} ${name} on ${strang.name}`, [anBefehl(i.id, b)]); },
+    },
+  };
+}
+
+/** The source of an EQ stage: the same reading and writing rules as the compressor's (a macro-driven parameter gives the macro's value and is blocked; writes carry the
+ *  key `${insert.id}:${param}` and the label of the INSERTS rows). griff(m, werte, einschalten) is one handle move: ONE batch of the same insert_param_setzen
+ *  commands (plus the band's switch when the band was off), key `${insert.id}:b${m}:griff`, label `Band ${m} EQ on ${strip}`; it returns the writer's promise
+ *  (true: accepted). A stage that is gone gets no command. */
+export function insertQuelleEq(ctx, strang, insert, stand = { band: 1 }) {
+  const jetzt = () => finde(ctx, strang.id, insert.id);
+  const name = ARTEN.eq.name;
+  const wertVon = (param) => {
+    const { strang: s, insert: i } = jetzt();
+    if (!s || !i) return undefined;
+    const nr = gemapptVon(s, i.id, param);
+    if (nr !== null) { const z = s.rack.makros[nr - 1].ziel.find((y) => y.insert === i.id && y.param === param); return makroWert(z, rackWerte(s)[nr - 1]); }
+    return typeof i.werte?.[param] === 'number' ? i.werte[param] : undefined;
+  };
+  return {
+    get: wertVon,
+    gesperrt(param) { const { strang: s, insert: i } = jetzt(); return !!s && !!i && gemapptVon(s, i.id, param) !== null; },
+    set(param, v) {
+      const { insert: i } = jetzt();
+      if (!i) return Promise.resolve(false);   // the stage was removed under the open face: nothing goes out
+      const q = parameterVon('eq', param), m = /^b([1-8])\//.exec(param);
+      return ctx.aendere(`${m ? `Band ${m[1]} ` : ''}${q?.label ?? param} ${name} on ${strang.name}`, [paramBefehl(i.id, param, v)], `${i.id}:${param}`);
+    },
+    griff(m, werte, einschalten) {
+      const { insert: i } = jetzt();
+      if (!i) return Promise.resolve(false);
+      const batch = [...(einschalten ? [paramBefehl(i.id, `b${m}/an`, 1)] : []), ...Object.entries(werte).map(([param, v]) => paramBefehl(i.id, param, v))];
+      return ctx.aendere(`Band ${m} ${name} on ${strang.name}`, batch, `${i.id}:b${m}:griff`);
+    },
+    waehleBand(m) { stand.band = m; },
+    band: () => stand.band,
+    an: {
+      get: () => jetzt().insert?.an !== false,
+      set: (b) => { const { insert: i } = jetzt(); if (i) ctx.aendere(`${b ? 'Enable' : 'Bypass'} ${name} on ${strang.name}`, [anBefehl(i.id, b)]); },
+    },
+  };
+}
+
+/** Registers the project listener and the two hooks of the track head. oeffne(strang, insert) opens (or closes) the face of a stage, verfuegbar(art) says whether
+ *  a kind has one. grStand() is the store of /e/ins_gr readings of the INSERTS panel. */
+export function bindeInsertFace(ctx, grStand, pegelStand = () => ({})) {
+  let aktuell = null;   // {strangId, insertId} of the open face
+  const oeffne = (strang, insert) => {
+    if (!FACE_ARTEN.includes(insert.art)) return null;
+    if (insert.art === 'eq') return oeffneEq(strang, insert);
+    const geraet = faceGeraet(insert.art);
+    const quelle = geraet ? insertQuelleGeraet(ctx, strang, insert, geraet.liste, geraet.tabelle, grStand, pegelStand) : insertQuelleKomp(ctx, strang, insert, grStand, pegelStand);
+    const pos = strang.inserts.findIndex((i) => i.id === insert.id);
+    let bau = null;
+    const f = oeffneFace({
+      id: `face:${insert.id}`, titel: geraet?.titel ?? 'COMPRESSOR', untertitel: `${strang.name} · stage ${pos + 1}`, akzent: geraet?.akzent ?? 'orange', an: quelle.an,
+      bauen: (inhalt) => { bau = geraet ? geraet.bauen(inhalt, quelle) : baueKompFace(inhalt, quelle); return bau; },
+      live: geraet && insert.art !== 'lim' ? undefined : (zeit) => bau?.live(zeit) ?? false,   // the frame loop runs while this face is open and nowhere else; a face without a live value has none
+    });
+    aktuell = f ? { strangId: strang.id, insertId: insert.id, face: f } : null;
+    return f;
+  };
+  const oeffneEq = (strang, insert) => {
+    const quelle = insertQuelleEq(ctx, strang, insert);
+    const pos = strang.inserts.findIndex((i) => i.id === insert.id);
+    const f = oeffneFace({
+      id: `face:${insert.id}`, titel: 'EQ', untertitel: `${strang.name} · stage ${pos + 1}`, akzent: 'orange', an: quelle.an,
+      bauen: (inhalt) => baueEqFace(inhalt, quelle),   // no frame loop: the EQ has no live reading
+    });
+    aktuell = f ? { strangId: strang.id, insertId: insert.id, face: f } : null;
+    return f;
+  };
+  // the project changed under an open face: it follows, and it closes when its stage or strip is gone
+  ctx.beimProjekt.push((p) => {
+    const o = offenesFace();
+    if (!o || !aktuell || o.id !== `face:${aktuell.insertId}`) return;
+    const { insert } = p ? finde(ctx, aktuell.strangId, aktuell.insertId) : { insert: null };
+    if (!insert) { schliesseFace(); aktuell = null; return; }
+    aktuell.face.aktualisiere();
+  });
+  ctx.faceVerfuegbar = (spur) => (spur?.inserts ?? []).some((i) => FACE_ARTEN.includes(i.art));
+  ctx.faceOeffnen = (spurId, x, y) => {
+    const strang = straenge(ctx.st.projekt).find((t) => t.id === spurId);
+    const dienend = (strang?.inserts ?? []).filter((i) => FACE_ARTEN.includes(i.art));
+    if (!dienend.length) return;
+    if (dienend.length === 1) { oeffne(strang, dienend[0]); return; }
+    oeffneMenue(dienend.map((i) => ({ text: `Stage ${strang.inserts.indexOf(i) + 1} ${ARTEN[i.art].name}`, aktion: () => oeffne(strang, i) })), x, y);
+  };
+  return { oeffne, verfuegbar: (art) => FACE_ARTEN.includes(art) };
+}

@@ -51,6 +51,12 @@ test('A6: /zustand/mix (10 Hz x channels) and /zustand/spektrum (25 Hz) are in t
   assert.ok(GENUTZT.includes('/zustand/mix') && GENUTZT.includes('/zustand/spektrum'));
 });
 
+test('device faces T9: /e/stufe_pegel (stage levels, 20 Hz) is in the table and stays out of the journal', () => {
+  assert.deepEqual(ADRESSEN['/e/stufe_pegel'], { typen: 'sff', felder: ['kanal', 'ein_db', 'aus_db'] });
+  assert.ok(NICHT_INS_JOURNAL.has('/e/stufe_pegel'));
+  assert.ok(GENUTZT.includes('/e/stufe_pegel'));
+});
+
 test('4a: /e/ins_gr (up to 12 stages x 20 Hz) is in the table and stays out of the journal; a decision event next to it does not', () => {
   assert.deepEqual(ADRESSEN['/e/ins_gr'], { typen: 'sf', felder: ['kanal', 'gr_db'] });
   assert.ok(NICHT_INS_JOURNAL.has('/e/ins_gr'));

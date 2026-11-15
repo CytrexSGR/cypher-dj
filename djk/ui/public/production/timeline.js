@@ -1,6 +1,6 @@
 // PRODUCTION (D1 V1): Zeitachse des Arrangements in Projekt-Beats (L2: alles spricht in Beats). Reine Funktionen,
 // laufen im Browser und in node (Tests, Muster track_tape.js). Ansicht = { beat0, pxProBeat }: beat0 ist der Beat am
-// linken Rand der Spurfläche, pxProBeat der Zoom. Taktart fest 4/4 (Spec 2.7).
+// linken Rand der Spurfläche, pxProBeat der Zoom. Taktart: [n, 4] per project (beatsProTakt), default 4/4.
 
 export const PX_PRO_BEAT_MIN = 0.5;
 export const PX_PRO_BEAT_MAX = 400;
@@ -15,7 +15,9 @@ export const RASTER = [
   { wert: 'aus', text: 'OFF', beats: 0 },
 ];
 export const RASTER_VORGABE = 'beat';
-export const rasterBeats = (wert) => RASTER.find((r) => r.wert === wert)?.beats ?? 1;
+// Beats per bar of a project meter [n, 4]; a project without the field (or nonsense) is 4/4. The BAR step of the raster is one bar.
+export const beatsProTakt = (taktart) => (Array.isArray(taktart) && Number.isInteger(taktart[0]) && taktart[0] >= 2 && taktart[0] <= 12 ? taktart[0] : 4);
+export const rasterBeats = (wert, beatsProTakt = 4) => (wert === 'takt' ? beatsProTakt : RASTER.find((r) => r.wert === wert)?.beats ?? 1);
 
 export const neueAnsicht = () => ({ beat0: 0, pxProBeat: PX_PRO_BEAT_VORGABE });
 export const beatZuX = (a, beat) => (beat - a.beat0) * a.pxProBeat;
@@ -49,33 +51,39 @@ export const ausLeiste = (a, links) => ({ ...a, beat0: Math.max(0, links / a.pxP
 
 // Lineal: Hauptlinien (beschriftet) mindestens 60 px auseinander, Nebenlinien mindestens 8 px
 const STUFEN = [0.25, 0.5, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512];
-export function linealStufen(pxProBeat) {
-  const haupt = STUFEN.find((s) => s * pxProBeat >= 60) ?? STUFEN.at(-1);
-  const neben = STUFEN.find((s) => s * pxProBeat >= 8) ?? haupt;
-  return { haupt, neben };
+// beatsProTakt other than 4: a step of one bar or more becomes a whole number of bars (1, 2, 4, 8 ... bars), so the labelled lines are bar starts
+export function linealStufen(pxProBeat, beatsProTakt = 4) {
+  const stufe = (px) => {
+    const s = STUFEN.find((x) => x * pxProBeat >= px) ?? STUFEN.at(-1);
+    if (beatsProTakt === 4) return s;
+    if (s < beatsProTakt) return beatsProTakt % s === 0 ? s : 1;   // a step must divide the bar, or the bar lines fall between the grid lines
+    return beatsProTakt * (STUFEN.find((k) => k >= 1 && k * beatsProTakt * pxProBeat >= px) ?? STUFEN.at(-1));
+  };
+  const haupt = stufe(60);
+  return { haupt, neben: Math.min(stufe(8), haupt) };
 }
 const vielfaches = (x, s) => Math.abs(x / s - Math.round(x / s)) < 1e-9;
 
 // Position Takt.Schlag.Sechzehntel, 1-basiert: Beat 0 = 1.1.1, Beat 5.25 = 2.2.2
-export function positionText(beat) {
+export function positionText(beat, beatsProTakt = 4) {
   const b = Math.max(0, beat);
-  const takt = Math.floor(b / 4) + 1, schlag = Math.floor(b % 4) + 1, sech = Math.floor((b % 1) * 4 + 1e-9) + 1;
+  const takt = Math.floor(b / beatsProTakt) + 1, schlag = Math.floor(b % beatsProTakt) + 1, sech = Math.floor((b % 1) * 4 + 1e-9) + 1;
   return `${takt}.${schlag}.${sech}`;
 }
 // Lineal-Beschriftung: ab Hauptstufe 4 nur der Takt, ab 1 Takt.Schlag, darunter voll
-export function linealText(beat, haupt) {
-  const p = positionText(beat).split('.');
-  return haupt >= 4 ? p[0] : haupt >= 1 ? `${p[0]}.${p[1]}` : p.join('.');
+export function linealText(beat, haupt, beatsProTakt = 4) {
+  const p = positionText(beat, beatsProTakt).split('.');
+  return haupt >= beatsProTakt ? p[0] : haupt >= 1 ? `${p[0]}.${p[1]}` : p.join('.');
 }
 
 // Linien im sichtbaren Bereich [0, breite): { beat, x, haupt, takt, text }
-export function linien(a, breite) {
-  const { haupt, neben } = linealStufen(a.pxProBeat);
+export function linien(a, breite, beatsProTakt = 4) {
+  const { haupt, neben } = linealStufen(a.pxProBeat, beatsProTakt);
   const ende = xZuBeat(a, breite);
   const aus = [];
   for (let k = Math.max(0, Math.ceil(a.beat0 / neben - 1e-9)); k * neben <= ende; k++) {   // max: nie -0 (Test 5)
     const beat = k * neben, h = vielfaches(beat, haupt);
-    aus.push({ beat, x: beatZuX(a, beat), haupt: h, takt: vielfaches(beat, 4), text: h ? linealText(beat, haupt) : null });
+    aus.push({ beat, x: beatZuX(a, beat), haupt: h, takt: vielfaches(beat, beatsProTakt), text: h ? linealText(beat, haupt, beatsProTakt) : null });
   }
   return aus;
 }

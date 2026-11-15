@@ -1,0 +1,64 @@
+{
+ "schema": 1,
+ "name": "Labor Ping-Pong",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "fx-labor",
+ "werte": {
+  "knob1": 0.5,
+  "knob2": 0.5,
+  "knob3": 1.0,
+  "knob4": 0.45,
+  "knob5": 0.5,
+  "knob6": 0.5,
+  "knob7": 0.5,
+  "knob8": 0.0,
+  "knob9": 0.69,
+  "knob10": 0.5,
+  "knob11": 0.5,
+  "knob12": 0.5,
+  "knob13": 0.0,
+  "knob14": 0.5,
+  "knob15": 1.0,
+  "knob16": 0.5,
+  "knob17": 0.5,
+  "knob18": 0.5,
+  "knob19": 0.5,
+  "knob20": 0.0,
+  "knob21": 0.69,
+  "knob22": 0.5,
+  "knob23": 0.5,
+  "knob24": 0.5,
+  "knob25": 0.5,
+  "knob26": 0.5,
+  "knob27": 0.5,
+  "knob28": 0.5,
+  "knob29": 0.5
+ },
+ "beschreibung": {
+  "art": "delay",
+  "unterart": "ping_pong",
+  "charakter": [
+   "wide",
+   "wet",
+   "clean"
+  ],
+  "genre": [
+   "dnb",
+   "breaks",
+   "electro"
+  ],
+  "einsatz": [
+   "build",
+   "transition"
+  ],
+  "energie": 3,
+  "text": "Both feedbacks off and both cross paths up: the repeat jumps from the left channel to the right and back with the channel times."
+ },
+ "tags": [
+  "fx-labor"
+ ],
+ "notiz": "Measured by render, not yet heard (2026-11-15). Recipe: GERAET-labor.md section 4, ping-pong.",
+ "angelegt": "2026-11-15T00:00:00.000Z",
+ "geaendert": "2026-11-15T00:00:00.000Z"
+}

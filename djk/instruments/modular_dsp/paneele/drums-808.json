@@ -4,7 +4,8 @@
   "title": "Drums 808",
   "akzent": "rot",
   "layout": {"rows": [
-    ["kick", "snare", "extras", "toms", "hats", "perc", "master"]
+    ["kick", "snare", "extras", "toms", "hats", "perc", "master"],
+    ["levels"]
   ]},
   "sections": [
     { "id": "kick", "title": "KICK / BOOM", "cols": 2, "controls": [
@@ -59,6 +60,16 @@
       {"id": "reso", "type": "knob", "label": "Resonance", "bind": {"param": "k29"}, "format": "percent", "default": 0.5},
       {"id": "pegel", "type": "knob", "label": "Level", "bind": {"param": "k30"}, "format": "percent", "default": 0.5},
       {"id": "master-n", "type": "label", "span": 2, "text": "Bus: drive, then DJ filter"}
+    ]},
+    { "id": "levels", "title": "LEVELS", "cols": 4, "controls": [
+      {"id": "lv-kick", "type": "knob", "label": "Kick", "bind": {"param": "k33"}, "format": "db", "default": 0.5},
+      {"id": "lv-snare", "type": "knob", "label": "Snare", "bind": {"param": "k34"}, "format": "db", "default": 0.5},
+      {"id": "lv-clap", "type": "knob", "label": "Clap / Rim", "bind": {"param": "k35"}, "format": "db", "default": 0.5},
+      {"id": "lv-tom", "type": "knob", "label": "Toms", "bind": {"param": "k36"}, "format": "db", "default": 0.5},
+      {"id": "lv-hat", "type": "knob", "label": "Hats", "bind": {"param": "k37"}, "format": "db", "default": 0.5},
+      {"id": "lv-cym", "type": "knob", "label": "Cymbals", "bind": {"param": "k38"}, "format": "db", "default": 0.5},
+      {"id": "lv-perc", "type": "knob", "label": "Perc", "bind": {"param": "k39"}, "format": "db", "default": 0.5},
+      {"id": "levels-n", "type": "label", "span": 4, "text": "Level per group, 0 dB = unchanged"}
     ]}
   ]
 }

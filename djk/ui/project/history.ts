@@ -53,10 +53,20 @@ function pruefeZeile(z: unknown, nr: number): Eintrag {
   return e as unknown as Eintrag;
 }
 
-const nurReplace = (...ps: Patch[]): boolean => ps.every((p) => p.every((o) => o.op === 'replace'));
+// production plan task 9: the first move of a Baukasten knob that the project does not hold yet is an add (its back patch a remove) on geraet/parameter/<k>;
+// it merges with the
+// replace moves that follow, so a whole drag is one entry
+const KNOPF_PFAD = /\/geraet\/parameter\/[^/]+$/;
+const nurReplace = (...ps: Patch[]): boolean =>
+  ps.every((p) => p.every((o) => o.op === 'replace' || ((o.op === 'add' || o.op === 'remove') && KNOPF_PFAD.test(o.pfad))));
 // Zwei replace-Patches zu einem, je Pfad eine Operation: 'spaeter' nimmt bei gleichem Pfad die aus `neu`, 'frueher' die aus `alt`
+// (a knob that was added stays an add with the latest value)
 function vereine(alt: Patch, neu: Patch, wer: 'spaeter' | 'frueher'): Patch {
-  if (wer === 'spaeter') { const n = new Set(neu.map((o) => o.pfad)); return [...alt.filter((o) => !n.has(o.pfad)), ...neu]; }
+  if (wer === 'spaeter') {
+    const n = new Set(neu.map((o) => o.pfad));
+    const wasAdd = new Set(alt.filter((o) => o.op === 'add').map((o) => o.pfad));
+    return [...alt.filter((o) => !n.has(o.pfad)), ...neu.map((o) => (o.op === 'replace' && wasAdd.has(o.pfad) ? { ...o, op: 'add' as const } : o))];
+  }
   const a = new Set(alt.map((o) => o.pfad));
   return [...alt, ...neu.filter((o) => !a.has(o.pfad))];
 }
@@ -270,6 +280,8 @@ function mixerSchluessel(befehle: unknown[]): string | null {
   if (b.befehl === 'send_setzen' && typeof b.strang_id === 'string' && typeof b.return_id === 'string') return `${b.strang_id}:send:${b.return_id}`;
   // 1.10 slice 4a: a knob sweep on an insert stage is one move per stage and parameter (a drag sends one command per step)
   if (b.befehl === 'insert_param_setzen' && typeof b.insert_id === 'string' && typeof b.param === 'string') return `${b.insert_id}:insert:${b.param}`;
+  // production plan task 9: a knob drag on a Baukasten track is one move per track and knob
+  if (b.befehl === 'geraet_param_setzen' && typeof b.spur_id === 'string' && typeof b.param === 'string') return `${b.spur_id}:geraet:${b.param}`;
   // 1.10 slice 4c: a macro sweep is one move per strip and macro
   if (b.befehl === 'rack_makro' && typeof b.strang_id === 'string' && typeof b.nr === 'number') return `${b.strang_id}:rack:${b.nr}`;
   const idFeld = b.befehl === 'return_aendern' ? 'return_id' : b.befehl === 'spur_aendern' ? 'spur_id'

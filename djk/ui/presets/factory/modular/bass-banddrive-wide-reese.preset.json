@@ -1,0 +1,59 @@
+{
+ "schema": 1,
+ "name": "Wide Reese",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "bass-banddrive",
+ "werte": {
+  "knob1": 0.6,
+  "knob2": 0.6,
+  "knob3": 0.29366,
+  "knob4": 0.5,
+  "knob5": 0.55,
+  "knob6": 0.9,
+  "knob7": 0.15,
+  "knob8": 0.7,
+  "knob9": 0.0,
+  "knob10": 0.62152,
+  "knob11": 0.23529,
+  "knob12": 0.1,
+  "knob13": 0.83931,
+  "knob14": 0.4857,
+  "knob15": 0.39058,
+  "knob16": 0.4,
+  "knob17": 0.125,
+  "knob18": 0.25,
+  "knob19": 0.25,
+  "knob20": 0.53333,
+  "knob21": 0.43459,
+  "knob22": 0.9,
+  "knob23": 0.62723,
+  "knob24": 0.7
+ },
+ "beschreibung": {
+  "art": "bass",
+  "unterart": "reese",
+  "charakter": [
+   "wide",
+   "dark",
+   "evolving"
+  ],
+  "genre": [
+   "dnb",
+   "dubstep"
+  ],
+  "einsatz": [
+   "drop",
+   "breakdown"
+  ],
+  "energie": 4,
+  "text": "Reese with a wide, slowly breathing mid band: three copies detuned far apart, a slow swing in the cutoff and the wave position, sub and low end stay mono."
+ },
+ "tags": [
+  "bass-banddrive",
+  "band-split"
+ ],
+ "notiz": "Measured by render, not heard yet (2026-11-15).",
+ "angelegt": "2026-11-15T00:00:00.000Z",
+ "geaendert": "2026-11-15T00:00:00.000Z"
+}

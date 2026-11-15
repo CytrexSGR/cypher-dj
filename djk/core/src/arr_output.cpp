@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <cstdio>
 
 #include "arr_gain_intern.h"
 #include "cypherdj/arrangement.h"
@@ -128,7 +129,11 @@ void Arrangement::regler_binden(const sw::ReglerTabelle& tab) {
     regler_feld_[r] = -1;
     regler_ins_[r] = -1;
     regler_rack_[r] = -1;
+    regler_bkz_[r] = -1;
   }
+  for (auto& je_slot : bk_ueber_)
+    for (BkUeber& u : je_slot) u = BkUeber{};
+  for (int8_t& s : bk_slot_) s = -1;
   for (auto& je_spur : spur_regler_)
     for (int16_t& x : je_spur) x = -1;
   for (int r = 0; r < tab.anzahl(); ++r) {
@@ -142,6 +147,12 @@ void Arrangement::regler_binden(const sw::ReglerTabelle& tab) {
         regler_rack_[r] = static_cast<int16_t>((k - 1) * ARR_MAKROS + nr);
         ins_.makro_binde(k - 1, nr, d.vorgabe);
       }
+      continue;
+    }
+    if (d.rolle == sw::Rolle::spur_bk) {   // production plan task 8: spur/<slot>/bk/<k>
+      int slot = 0, knopf = 0;
+      if (std::sscanf(d.pfad, "spur/%d/bk/%d", &slot, &knopf) == 2 && slot >= 1 && slot <= BK_UEBER_SLOTS && knopf >= 1 && knopf <= BK_UEBER_KNOEPFE)
+        regler_bkz_[r] = static_cast<int16_t>((slot - 1) * BK_UEBER_KNOEPFE + (knopf - 1));
       continue;
     }
     if ((d.rolle >= sw::Rolle::ins_komp_an && d.rolle <= sw::Rolle::ins_saett_mix) ||
@@ -209,6 +220,13 @@ void Arrangement::regler_binden(const sw::ReglerTabelle& tab) {
 }
 
 void Arrangement::setze_sofort(int regler, float wert) {
+  if (regler >= 0 && regler < sw::MAX_REGLER && regler_bkz_[regler] >= 0) {   // production plan task 8: before the track branch, like the rack and insert rows
+    BkUeber& u = bk_ueber_[regler_bkz_[regler] / BK_UEBER_KNOEPFE][regler_bkz_[regler] % BK_UEBER_KNOEPFE];
+    u.wert = wert;
+    u.vl = nullptr;
+    u.da = true;
+    return;
+  }
   if (regler >= 0 && regler < sw::MAX_REGLER && regler_rack_[regler] >= 0) {
     ins_.makro_sofort(regler_rack_[regler] / ARR_MAKROS, regler_rack_[regler] % ARR_MAKROS, wert);
     return;
@@ -225,6 +243,10 @@ void Arrangement::setze_sofort(int regler, float wert) {
 }
 
 void Arrangement::verlauf(int regler, const float* werte) {
+  if (regler >= 0 && regler < sw::MAX_REGLER && regler_bkz_[regler] >= 0) {   // production plan task 8: the block takes the last sample (bk_ueber_nehmen), as ArrInserts::nachfuehren does
+    if (werte) bk_ueber_[regler_bkz_[regler] / BK_UEBER_KNOEPFE][regler_bkz_[regler] % BK_UEBER_KNOEPFE].vl = werte;
+    return;
+  }
   if (regler >= 0 && regler < sw::MAX_REGLER && regler_rack_[regler] >= 0) {
     ins_.makro_verlauf(regler_rack_[regler] / ARR_MAKROS, regler_rack_[regler] % ARR_MAKROS, werte);
     return;
@@ -1183,7 +1205,42 @@ void Arrangement::mischen(int m, float* aus_l, float* aus_r) {
 #endif
 }
 
+// Production plan task 8: a pointer course becomes the written value; the pointer is good for one block (bk_ueber_melden takes it first, this catches the quiet path and a block without a sink).
+void Arrangement::bk_ueber_nehmen(int m) {
+  for (auto& je_slot : bk_ueber_)
+    for (BkUeber& u : je_slot)
+      if (u.vl) {
+        u.wert = u.vl[m - 1];
+        u.da = true;
+        u.vl = nullptr;
+      }
+}
+
+// Every block, before auto_geraet(): the written override of a knob goes to the sink of the bk track in that slot. The sink clears its report flag per block, so one report would last one
+// block. A lane reported later in the same block overwrites it (the later auto_parameter wins). A slot without a bk instance in the snapshot does nothing.
+void Arrangement::bk_ueber_melden(int m) {
+  bk_ueber_nehmen(m);
+  if (!snap_) return;
+  for (int i = 0; i < ARR_SPUREN; ++i) {
+    const int slot = bk_slot_[i];
+    if (slot < 0 || !snap_->spur[i].bk) continue;
+    ArrSenke* se = senke_fuer(snap_, i);
+    if (!se) continue;
+    for (int k = 0; k < BK_UEBER_KNOEPFE; ++k) {
+      const BkUeber& u = bk_ueber_[slot][k];
+      if (u.da) se->auto_parameter(i, k, u.wert);
+    }
+  }
+}
+
+// In tausche(): every playback build ends the override (the project value is authoritative again, D11) and numbers the bk tracks of the snapshot being installed (D10).
+void Arrangement::bk_ueber_loeschen() {
+  for (auto& je_slot : bk_ueber_)
+    for (BkUeber& u : je_slot) u = BkUeber{};
+}
+
 void Arrangement::verlaeufe_nachfuehren(int m) {
+  bk_ueber_nehmen(m);
   ins_.nachfuehren(m);
   for (int s = 0; s < ARR_STREIFEN; ++s)
     for (int f = 0; f < ARR_FELDER; ++f) {

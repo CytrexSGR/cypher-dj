@@ -61,8 +61,13 @@ enum class Rolle : uint8_t {
   // 64-knob widening (appended after ins_bk_k32, still the last role: the order stays). ins/bk/<n>/k33..k64.
   ins_bk_k33, ins_bk_k34, ins_bk_k35, ins_bk_k36, ins_bk_k37, ins_bk_k38, ins_bk_k39, ins_bk_k40, ins_bk_k41, ins_bk_k42, ins_bk_k43, ins_bk_k44, ins_bk_k45, ins_bk_k46, ins_bk_k47, ins_bk_k48, ins_bk_k49, ins_bk_k50, ins_bk_k51, ins_bk_k52, ins_bk_k53, ins_bk_k54, ins_bk_k55, ins_bk_k56, ins_bk_k57, ins_bk_k58, ins_bk_k59, ins_bk_k60, ins_bk_k61, ins_bk_k62, ins_bk_k63, ins_bk_k64,
   // Live modules task 6 (appended after ins_bk_k64, now the last role: the order stays). grp/<n>/cue, n = 1..16: headphone cue of a group of the arrangement.
-  grp_cue
+  grp_cue,
+  // Production plan task 8 (appended after grp_cue, now the last role: the order stays). spur/<slot>/bk/<k>, slot 1..8, k 1..32: a TRANSIENT override of knob k of the Baukasten instance
+  // in that slot (slot = running number among the tracks with the device bk). Not saved in the state file and not restored (see Kern::abbild, regler_uebernehmen, wiederherstellen).
+  spur_bk
 };
+constexpr int SPUR_BK_SLOTS = 8;      // production plan task 8: Baukasten slots of spur/<slot>/bk/<k>; = ARR_BK_MAX (static_assert in arr_playback.h's users)
+constexpr int SPUR_BK_KNOEPFE = 32;   // production plan task 8: knobs of a slot reachable as a live override (k33..k64 stay on the release path)
 constexpr int BK_REGLER_N = 64;   // knobs of a Baukasten graph reachable through the table: <kanal>/bk/1..64, ins/bk/<n>/k1..k64 (engine: baukasten_dsp::REGLER)
 constexpr int SPUR_REGLER_SPUREN = 32;   // D1 K1 (Spec 2.3): spur/<n>/{fader,pan,mute,solo}, n = 1..32 (E3)
 constexpr int GRP_REGLER_GRUPPEN = 8;    // 1.10 (F1: eigene Plätze neben den 32 Spuren): grp/<n>/{fader,pan,mute,solo}, n = 1..8 (the rows inside the first 1258 hashed rows: this stays 8)

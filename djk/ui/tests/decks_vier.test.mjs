@@ -233,9 +233,11 @@ test('/hoeren?deck=1: the partner is deck 3 while deck 2 is stopped and deck 3 r
   await warte(250);
   const zu = await (await fetch(url + '/hoeren?deck=1&takte=1')).json();
   assert.equal(zu.sync.deck_gegen_deck_ms, null, JSON.stringify(zu.sync));
+  assert.equal(zu.sync.partner, null, JSON.stringify(zu.sync));
   await offenMachen(o, url, 3);
   const auf = await (await fetch(url + '/hoeren?deck=1&takte=1')).json();
   assert.ok(Number.isFinite(auf.sync.deck_gegen_deck_ms), JSON.stringify(auf.sync));
+  assert.equal(auf.sync.partner, 3, JSON.stringify(auf.sync));
   assert.ok(Math.abs(auf.sync.deck_gegen_deck_ms) > 3, `measured against deck 3: ${auf.sync.deck_gegen_deck_ms}`);
 });
 

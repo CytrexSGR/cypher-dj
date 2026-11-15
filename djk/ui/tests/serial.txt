@@ -8,6 +8,7 @@ devices_route.test.mjs
 graphs.test.mjs
 reverb_pool_state.test.mjs
 ins_gr_stream.test.mjs
+ins_level_stream.test.mjs
 instance.test.mjs
 channel_limiter_state.test.mjs
 catalog.test.mjs
@@ -108,3 +109,4 @@ midi_import_route.test.mjs
 project_surge_patch.test.mjs
 graph_master.test.mjs
 graph_source_effect.test.mjs
+hand_channel_offen.test.mjs

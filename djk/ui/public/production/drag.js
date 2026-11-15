@@ -48,7 +48,8 @@ export function geraetNutzlast(e) {
   if (!e || typeof e !== 'object' || typeof e.titel !== 'string') return null;
   if (e.ziel === 'spur_neu' && (e.geraet === 'rb338' || e.geraet === 'surge')) return { geraet: e.geraet, titel: e.titel, ziel: e.ziel };
   if (e.ziel === 'spur_neu' && e.geraet === 'bk' && typeof e.graph === 'string' && GRAPH.test(e.graph)) return { geraet: 'bk', titel: e.titel, ziel: e.ziel, graph: e.graph };
-  if (e.ziel === 'insert' && typeof e.geraet === 'string') return { geraet: e.geraet, titel: e.titel, ziel: e.ziel, aktiv: e.aktiv === true, ...(e.grund ? { grund: e.grund } : {}) };
+  if (e.ziel === 'insert' && typeof e.geraet === 'string') return { geraet: e.geraet, titel: e.titel, ziel: e.ziel, aktiv: e.aktiv === true, ...(e.grund ? { grund: e.grund } : {}),
+    ...(e.geraet === 'bk' && typeof e.graph === 'string' && GRAPH.test(e.graph) ? { graph: e.graph } : {}) };   // an effect graph is a bk stage and carries its graph
   return null;
 }
 // rb338 as track_heads.js NEU['neu-rb'], surge as NEU['neu-surge'] (one host slot), a graph as a bk device
@@ -63,7 +64,7 @@ export function effektBefehl(projekt, strangId, n) {
   if (!s) return { fehler: 'keine_spur', text: GERAET_TEXT.keine_spur };
   if (s.inserts.length >= MAX_PLAETZE) return { fehler: 'kette_voll', text: GERAET_TEXT.kette_voll };
   if (n.geraet === 'komp' && freieKomp(projekt) <= 0) return { fehler: 'ins_voll', text: GERAET_TEXT.ins_voll };
-  return { label: `Add ${n.titel} to ${s.name}`, befehl: { befehl: 'insert_setzen', strang_id: strangId, pos: s.inserts.length, art: n.geraet } };
+  return { label: `Add ${n.titel} to ${s.name}`, befehl: { befehl: 'insert_setzen', strang_id: strangId, pos: s.inserts.length, art: n.geraet, ...(n.graph ? { graph: n.graph } : {}) } };
 }
 // A drop on the arrangement: spurIndex is the track row under the pointer (-1 or past the end: none)
 export function geraetAblage(projekt, n, spurIndex) {

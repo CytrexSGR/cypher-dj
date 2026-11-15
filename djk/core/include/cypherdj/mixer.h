@@ -24,6 +24,7 @@
 #pragma once
 
 #include "cypherdj/comp.h"
+#include <cmath>
 #include <cstdint>
 #include <memory>
 #include <atomic>
@@ -135,6 +136,10 @@ class Mixer {
   // Läuft der Kompressor von Quellkanal k (komp/an 1 im letzten Block)? Nur im Callback-Faden lesen.
   bool komp_aktiv(int k) const { return k >= 0 && k < MIX_QUELLEN && komp_lief_[k]; }
   float komp_gr_db(int k) const { return (k >= 0 && k < MIX_QUELLEN) ? komp_gr_[k].load(std::memory_order_relaxed) : 0.0f; }
+  // T9 (device faces): input and output peak of the channel compressor of source k since the last reading, dBFS (-200 for silence), read AND RESET. The callback thread writes (komp_block)
+  // and reads; the atomics keep a reading from another thread well defined, a lost reset would only repeat a peak once.
+  float komp_ein_db(int k) { return (k >= 0 && k < MIX_QUELLEN) ? spitze_db(komp_ein_[k]) : -200.0f; }
+  float komp_aus_db(int k) { return (k >= 0 && k < MIX_QUELLEN) ? spitze_db(komp_aus_[k]) : -200.0f; }
   // 1.15 A3: is the gate / utility object of channel k in use (called in the last block)? Callback thread only. False means the
   // channel runs the old path and the object is reset.
   bool gate_aktiv(int k) const { return k >= 0 && k < MIX_QUELLEN && gate_lief_[k]; }
@@ -411,6 +416,12 @@ class Mixer {
   bool stumm_[MIX_KANAELE] = {};
   std::atomic<uint64_t> schlaf_bloecke_{0};
   std::atomic<float> komp_gr_[MIX_QUELLEN] = {};        // Absenkung in dB nach dem letzten Block (Anzeige)
+  std::atomic<float> komp_ein_[MIX_QUELLEN] = {};       // T9: linear peak at the input of the channel compressor since the last reading
+  std::atomic<float> komp_aus_[MIX_QUELLEN] = {};       // T9: the same at its output
+  static float spitze_db(std::atomic<float>& a) {
+    const float v = a.exchange(0.0f, std::memory_order_relaxed);
+    return v > 1e-10f ? 20.0f * std::log10(v) : -200.0f;
+  }
   void komp_block(int k, int n);
   float hall_l_[MIX_BLOCK] = {}, hall_r_[MIX_BLOCK] = {};
   int hall_ruhe_ = 0;                                    // Samples seit dem letzten Block mit Send-Signal

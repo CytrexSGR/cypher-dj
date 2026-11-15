@@ -28,6 +28,7 @@ namespace cdj {
 constexpr int ARR_SPUREN = 32;           // Spur-Slots spur/1..32 (Spec 2.3, E3); = SPUR_REGLER_SPUREN (static_assert)
 constexpr int ARR_CLIPS_MAX = 4096;     // je Wiedergabe (Spec 3.2)
 constexpr int ARR_NOTEN_MAX = 65536;    // je Wiedergabe (Spec 3.2)
+constexpr int ARR_BK_INSTR_LAT_MAX = 4096;  // longest latency of an instrument graph on a project track in samples; more is refused by the loader (format)
 constexpr int ARR_HOST_LAT_MAX = 8192;  // plan 1.11 (D5): longest host-stage latency in samples (the dry ring of a host stage and, with the PDC ring, the bound of the loader): a latency of this value or more is refused (pdc_zu_lang)
 constexpr int ARR_INS_HOST = 4;         // plan 1.11 (D1): effect hosts, one Carla process per plugin; host h = pool instance ins/host/<h> = playback slot h - 1; ports arr_ins_<h>_L/R out, arr_insret_<h>_L/R in
 constexpr int ARR_WIRT_SLOTS = 2;       // arr_midi_<s>, s = 1..2 (Spec 2.4)
@@ -185,6 +186,7 @@ struct ArrSpur {
   int nr = 0;                        // 1..ARR_SPUREN (32); 0 = leer
   ArrArt art = ArrArt::leer;
   int8_t ausgang = 0;                // 1.10: 0 master, 1..ARR_GRUPPEN Gruppe (Wiedergabe /2)
+  bool stumm_start = false;          // initial state: the track starts this playback muted (mute row 1, mute fade at 0 in the block of the swap; Wiedergabe /2 `stumm_start`)
   int slot = 0;                      // wirt: 1..2
   char geraet[16] = {};              // intern: "rb338" or "bk"
   // S20, device bk: graph name (the file stem in the graph folder) and the instance. The instance belongs to the graph store of the
@@ -193,6 +195,7 @@ struct ArrSpur {
   char graph[33] = {};
   CypherBk* bk = nullptr;
   uint64_t bk_gen = 0;
+  int bk_latenz = 0;   // latency of the instrument graph in samples (loader, cypher_bk_latenz); the delay compensation counts it at the head of the strip's chain (arr_pdc.h)
   // 1.9, device kit: the kit name (folder name in the kit folder) and the shared Kit of the cache's kit store (reference counted by the
   // snapshots, ArrSnapshot::kit_refs); the callback reads it only. kit_gen is unique per loaded Kit (never reused).
   char kit[33] = {};

@@ -1,0 +1,37 @@
+{
+ "schema": 1,
+ "name": "Clap",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "drums-clap",
+ "werte": {
+  "knob1": 0.5,
+  "knob2": 0.5,
+  "knob3": 0.5,
+  "knob4": 0.5,
+  "knob5": 0.5
+ },
+ "beschreibung": {
+  "art": "drums",
+  "unterart": "clap",
+  "charakter": [
+   "bright",
+   "aggressive",
+   "punchy",
+   "thin",
+   "wide"
+  ],
+  "genre": [],
+  "einsatz": [
+   "drop"
+  ],
+  "energie": 4,
+  "text": "Analog clap: filtered noise chopped by a retriggered 32 Hz square, short decay, high-passed plate."
+ },
+ "tags": [
+  "drums-clap"
+ ],
+ "notiz": "Source rule: recipe card `drums.clap`, Welsh [B1] p. 86, patch Clap. Measured by `tests/rezepte.rs`, not yet heard. Manifest character words outside the vocabulary: harsh (as aggressive). Manifest use words outside the vocabulary: groove (as drop).",
+ "angelegt": "2026-11-15T00:00:00.000Z",
+ "geaendert": "2026-11-15T00:00:00.000Z"
+}

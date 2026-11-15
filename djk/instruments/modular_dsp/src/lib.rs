@@ -21,6 +21,8 @@ pub mod proben;
 pub mod roehre;
 pub mod sampler;
 pub mod svf;
+pub mod allpass;
+pub mod kreuz;
 pub mod sem;
 pub mod diode;
 pub mod uebersetzen;

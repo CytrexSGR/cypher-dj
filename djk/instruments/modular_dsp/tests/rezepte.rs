@@ -778,3 +778,67 @@ fn manifest_ist_vollstaendig() {
     }
     assert_eq!(m["patches"].as_array().unwrap().len(), 46);
 }
+
+// ---------------------------------------------------------------------------------------------------- drums.kick tuning
+
+/// The graph with its output replaced by a node port: a control value then renders as audio (l = r = the value, one voice).
+fn mit_ausgang_von(json: &str, port: &str) -> String {
+    let mut g: Value = serde_json::from_str(json).unwrap();
+    let k = g["kanten"].as_array_mut().unwrap();
+    k.retain(|e| !e["nach"].as_str().unwrap().starts_with("aus."));
+    for ziel in ["aus.l", "aus.r"] { k.push(serde_json::json!({"von": port, "nach": ziel})); }
+    g.to_string()
+}
+
+fn kurve(json: &str, port: &str, regler: &[(usize, f32)], sekunden: f32) -> Vec<f32> {
+    spiele(&mit_ausgang_von(json, port), &Spiel { regler: regler.to_vec(), ..eine_note(60, sekunden) })
+}
+
+/// frequency of the strongest peak between `lo` and `hi` Hz, parabolic interpolation on the log power of the three bins
+fn spitze_hz(x: &[f32], lo: f64, hi: f64) -> f64 {
+    let (p, df) = spektrum(x);
+    let (a, b) = ((lo / df) as usize, (hi / df) as usize);
+    let k = (a..b).max_by(|i, j| p[*i].total_cmp(&p[*j])).unwrap();
+    let (l, m, r) = (p[k - 1].max(1e-30).ln(), p[k].max(1e-30).ln(), p[k + 1].max(1e-30).ln());
+    (k as f64 + 0.5 * (l - r) / (l - 2.0 * m + r)) * df
+}
+
+/// The engine's value of knob position 0.5 for the old Tune range (log 54.5625 .. 139.68), in f32 exactly as `Schritt::Regler` computes it.
+fn tune_mitte_alt() -> f32 { 54.5625f32 * (139.68f32 / 54.5625f32).powf(0.5) }
+
+#[test]
+fn kick_tune_mitte_wie_alt() {
+    // knob 1 at 0.5 gives the old start pitch to the last f32 bit, although the range now reaches down to 36 Hz
+    let j = json_von("drums.kick");
+    let t = kurve(&j, "k_tune.aus", &[], 0.01);
+    println!("MESS kick tune at 0.5: {:?} Hz (old graph {:?})", t[100], tune_mitte_alt());
+    assert_eq!(t[100].to_bits(), tune_mitte_alt().to_bits());
+    let (unten, oben) = (kurve(&j, "k_tune.aus", &[(1, 0.0)], 0.01)[100], kurve(&j, "k_tune.aus", &[(1, 1.0)], 0.01)[100]);
+    println!("MESS kick tune range {unten} .. {oben} Hz");
+    assert!((unten - 36.0).abs() < 1e-3 && (oben - 139.68).abs() < 1e-3, "{unten} .. {oben}");
+}
+
+#[test]
+fn kick_tune_36_hz() {
+    let j = json_von("drums.kick");
+    // tail fundamental at the lowest Tune: FFT of 200 to 500 ms, click and room off, long decay so the tail is there
+    let x = spiele(&j, &Spiel { regler: mit(&j, &[("k_tune", 0.0), ("k_decay", 1.0), ("k_click", 0.0), ("k_room_mix", 0.0)]), ..eine_note(60, 0.6) });
+    let f = spitze_hz(stueck(&x, 0.2, 0.5), 20.0, 100.0);
+    println!("MESS kick tail fundamental at Tune 0: {f:.2} Hz");
+    assert!((f - 36.0).abs() <= 0.5, "tail fundamental {f} Hz");
+    // pitch drop time at the two ends of the Pitch decay knob: the time the pitch needs to settle within 1 cent, minus the 0.5 ms attack
+    let nr = knopf(&j, "k_pitch_decay");
+    assert_eq!(nr, 7);
+    let zeit = |w: f32| {
+        let y = kurve(&j, "pitch.aus", &[(nr, w)], 0.8);
+        let ziel = y[sek(0.7)] as f64;   // the settled value (Tune at its middle)
+        let cent = |v: f32| 1200.0 * (v as f64 / ziel).log2().abs();
+        let letzter = y.iter().rposition(|v| cent(*v) > 1.0).unwrap();
+        (letzter as f64 + 1.0) / SR as f64 * 1000.0 - 0.5
+    };
+    let (kurz, lang) = (zeit(0.0), zeit(1.0));
+    println!("MESS kick pitch drop time at knob 7 = 0: {kurz:.2} ms, at 1: {lang:.2} ms");
+    assert!((kurz - 10.0).abs() <= 2.0, "short end {kurz} ms");
+    // plan: 120 +- 15; the envelope time is the time to -60 dB, so 24 st fall to 1 cent in 1.127 D = 135.2 ms for D = 120 ms (bound widened to 16)
+    assert!((lang - 120.0).abs() <= 16.0, "long end {lang} ms");
+}

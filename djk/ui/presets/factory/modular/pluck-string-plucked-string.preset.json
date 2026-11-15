@@ -1,0 +1,37 @@
+{
+ "schema": 1,
+ "name": "Plucked string (guitar / harp)",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "pluck-string",
+ "werte": {
+  "knob1": 0.5,
+  "knob2": 0.5,
+  "knob3": 0.5,
+  "knob4": 0.5,
+  "knob5": 0.5
+ },
+ "beschreibung": {
+  "art": "pluck",
+  "unterart": "string",
+  "charakter": [
+   "bright",
+   "thin",
+   "punchy",
+   "metallic",
+   "smooth"
+  ],
+  "genre": [],
+  "einsatz": [
+   "drop"
+  ],
+  "energie": 3,
+  "text": "Plucked string: synced pulse pair with a noise pick and a falling filter, 1.7 s decay, light chorus and room."
+ },
+ "tags": [
+  "pluck-string"
+ ],
+ "notiz": "Source rule: recipe card `pluck.string`, Welsh [B1] p. 55, patch Guitar Acoustic, table transcribed; harp variant p. 56.. Measured by `tests/rezepte.rs`, not yet heard. Manifest use words outside the vocabulary: melody (as drop), groove (as drop).",
+ "angelegt": "2026-11-15T00:00:00.000Z",
+ "geaendert": "2026-11-15T00:00:00.000Z"
+}

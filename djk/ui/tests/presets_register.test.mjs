@@ -40,7 +40,7 @@ test('rebuild: exactly what the store holds, stable ids from origin, device and 
   // the user copy of the acid bass has the same sound: reported, both stay in the register
   assert.deepEqual(doppelt, [{ art: 'klang', ids: ['nutzer:rb338/acid-kopie', 'werk:rb338/acid-bass'] }]);
   // same content → same register (key order and whitespace do not matter)
-  const f = path.join(werk, 'baukasten', 'warm-pad.preset.json');
+  const f = path.join(werk, 'modular', 'warm-pad.preset.json');
   fs.writeFileSync(f, JSON.stringify(Object.fromEntries(Object.entries(JSON.parse(fs.readFileSync(f, 'utf8'))).reverse())));
   assert.deepEqual(bauen(s).register, register);
   // origins: only the ones asked for, each once
@@ -62,15 +62,15 @@ test('rebuild: a preset with an invented tag is left out and reported, with the 
 
 test('rebuild: damaged files are invalid with the store reason; names the store does not accept are not presets at all', (t) => {
   const { werk, s } = kopie(t);
-  const pad = path.join(werk, 'baukasten', 'warm-pad.preset.json');
-  fs.copyFileSync(pad, path.join(werk, 'baukasten', 'Warm Pad.preset.json'));   // not a slug: not a preset
+  const pad = path.join(werk, 'modular', 'warm-pad.preset.json');
+  fs.copyFileSync(pad, path.join(werk, 'modular', 'Warm Pad.preset.json'));   // not a slug: not a preset
   fs.copyFileSync(pad, path.join(werk, 'lose.preset.json'));                       // not in a device folder
   fs.mkdirSync(path.join(werk, 'hall2'));
   fs.copyFileSync(pad, path.join(werk, 'hall2', 'falsch.preset.json'));            // unknown device folder
-  fs.writeFileSync(path.join(werk, 'baukasten', 'notiz.json'), '{}');              // not a preset file
-  fs.copyFileSync(pad, path.join(werk, 'hall', 'falscher-ordner.preset.json'));    // a modular preset in the hall folder
-  fs.writeFileSync(path.join(werk, 'baukasten', 'kaputt.preset.json'), '{"schema": 1,');
-  aendere(path.join(werk, 'hall', 'big-hall.preset.json'), (j) => { j.schema = 2; });
+  fs.writeFileSync(path.join(werk, 'modular', 'notiz.json'), '{}');              // not a preset file
+  fs.copyFileSync(pad, path.join(werk, 'reverb', 'falscher-ordner.preset.json'));    // a modular preset in the hall folder
+  fs.writeFileSync(path.join(werk, 'modular', 'kaputt.preset.json'), '{"schema": 1,');
+  aendere(path.join(werk, 'reverb', 'big-hall.preset.json'), (j) => { j.schema = 2; });
   aendere(path.join(werk, 'rb338', 'acid-bass.preset.json'), (j) => { j.beschreibung.art = 'compressor'; j.beschreibung.unterart = 'bus'; });
   const { ungueltig, register } = bauen(s, ['werk']);
   assert.deepEqual(ungueltig.map((u) => [u.id, u.fehler.map((e) => e.code).join()]), [
@@ -98,10 +98,10 @@ function driftSzenario(t, pruefeFn) {
   const { s, werk, nutzer } = kopie(t);
   fs.rmSync(path.join(nutzer, 'rb338', 'acid-kopie.preset.json'));
   const { register } = bauen(s);
-  fs.rmSync(path.join(werk, 'hall', 'big-hall.preset.json'));                                                                  // missing
+  fs.rmSync(path.join(werk, 'reverb', 'big-hall.preset.json'));                                                                  // missing
   fs.copyFileSync(path.join(nutzer, 'baukasten', 'mein-lead.preset.json'), path.join(nutzer, 'baukasten', 'mein-lead-2.preset.json'));   // orphaned
   aendere(path.join(werk, 'rb338', 'acid-bass.preset.json'), (j) => { j.werte.cutoff = 350; });                                // sound changed
-  aendere(path.join(werk, 'baukasten', 'warm-pad.preset.json'), (j) => { j.beschreibung.energie = 2; j.name = 'Warmer Pad'; });
+  aendere(path.join(werk, 'modular', 'warm-pad.preset.json'), (j) => { j.beschreibung.energie = 2; j.name = 'Warmer Pad'; });
   aendere(path.join(nutzer, 'baukasten', 'mein-lead.preset.json'), (j) => { j.beschreibung.genre = ['schranz']; });            // now invalid
   const d = pruefeFn(register, s);
   assert.equal(d.sauber, false);
@@ -245,7 +245,7 @@ test('command line: bauen writes, pruefen reports drift with exit 1, frage rejec
   assert.equal(hauptprogramm(['bauen', ...opt], (s) => aus.push(s)), 0);
   assert.match(aus[0], /^3 presets written/);
   assert.equal(hauptprogramm(['pruefen', ...opt], () => {}), 0);
-  fs.rmSync(path.join(werk, 'hall', 'big-hall.preset.json'));
+  fs.rmSync(path.join(werk, 'reverb', 'big-hall.preset.json'));
   const p = [];
   assert.equal(hauptprogramm(['pruefen', ...opt], (s) => p.push(s)), 1);
   assert.deepEqual(JSON.parse(p[0]).fehlend, ['werk:hall/big-hall']);
@@ -302,6 +302,6 @@ test('author mark in the register: entry carries autor only when present; factor
   const werk = new PresetSpeicher({ vok });
   const neu = bauen(werk, ['werk']).register;
   const alt = liesRegister(path.join(import.meta.dirname, '..', 'presets', 'register.json'));
-  assert.deepEqual(neu.eintraege, alt.eintraege, 'the 106 factory entries are unchanged');
-  assert.equal(alt.eintraege.length, 106);
+  assert.deepEqual(neu.eintraege, alt.eintraege, 'the factory entries are unchanged');
+  assert.ok(alt.eintraege.length >= 106, 'the 106 first factory entries are still there, new presets only add');
 });

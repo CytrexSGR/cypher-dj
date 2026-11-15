@@ -1,0 +1,38 @@
+{
+ "schema": 1,
+ "name": "Chord / stacked keys",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "keys-chord",
+ "werte": {
+  "knob1": 0.5,
+  "knob2": 0.5,
+  "knob3": 0.5,
+  "knob4": 0.5,
+  "knob5": 0.5
+ },
+ "beschreibung": {
+  "art": "keys",
+  "unterart": "chord",
+  "charakter": [
+   "bright",
+   "wide",
+   "thick",
+   "punchy",
+   "aggressive"
+  ],
+  "genre": [],
+  "einsatz": [
+   "build",
+   "drop"
+  ],
+  "energie": 4,
+  "text": "Stacked fifth chord: two PWM squares a fifth apart with unison, hard gate envelope, chorus, eighth delay and short hall."
+ },
+ "tags": [
+  "keys-chord"
+ ],
+ "notiz": "Source rule: recipe card `keys.chord`, Welsh [B1] p. 94, patch Trance 5th, table transcribed; interval logic: Cann [B4] p. 55. Measured by `tests/rezepte.rs`, not yet heard.",
+ "angelegt": "2026-11-15T00:00:00.000Z",
+ "geaendert": "2026-11-15T00:00:00.000Z"
+}

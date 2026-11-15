@@ -241,6 +241,7 @@ fn kein_gleichanteil_und_keine_uebersteuerung_auf_der_probe() {
 const REGLER_OHNE_WIRKUNG_AUF_DER_PROBE: &[(&str, usize, &str)] = &[
     ("drums-909", 27, "the filter resonance acts only while the DJ filter is engaged; the probe leaves the filter at its neutral position 0.5, where it is bypassed"),
     ("drums-808", 29, "the filter resonance acts only while the DJ filter is engaged; the probe leaves the filter at its neutral position 0.5, where it is bypassed"),
+    ("drums-909", 39, "Perc Level (lv_perc) scales the cowbell and the clave, which the 909 does not have: note 56 is a crash there and note 75 is silent, so no drum of the 909 belongs to this group. tests/trommeln_pegel.rs `gruppe_ist_isoliert` and measure_null.py (`drums-909`, case 'perc level has no 909 drum') pin that it changes nothing"),
     ("wavetable-chor", 8, WAVE_HUELLE_AUS),
     ("wavetable-chor", 9, WAVE_HUELLE_AUS),
     ("wavetable-reese", 8, WAVE_HUELLE_AUS),

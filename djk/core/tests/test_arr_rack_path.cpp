@@ -5,7 +5,7 @@
 //                             rotation: bit-equal to block() for every rack, also over a parameter and gain swap in the middle; every lane counted rack units
 //   2 rack_zwei_faeden:       two real threads run two racks at once on lanes 1 and 2 (a barrier per block), 5 runs: bit-equal to the serial run of each
 //                             rack, and the Kit counters equal the serial ones. The real proof against shared rack and Kit scratch.
-//   3 rack_parallel_faehig:   table: clean rack true; Surge member, bk member, no members, empty track, out of range false; a device change of a member false
+//   3 rack_parallel_faehig:   table: clean rack true; Surge member, bk member without an instance, no members, empty track, out of range false; a device change of a member false
 //                             until its block ran; a stale record, an event for a slot of another rack (record already freed), a stale Surge record and a track
 //                             that left false, AND a clean neighbour rack false while the dirt lasts (the cleanliness is global), true again after the blocks
 //   4 kit_bahn_bitgleich:     8 Kit tracks with dense notes (steals, cut fading voices, lost events), block_bahn on lanes in rotation: bit-equal to block(),
@@ -38,6 +38,10 @@
 //                             equal to serial; afterwards all nine are. The TSan gate of SPUR_RACK_OHNE_SAUBER runs this case alone (race in ArrRbSenke::note).
 //  15 glied_makros_bahn (1.9 U8 T9): 8 rack tracks with 4 member macro targets each (RB-338 cutoff and resonance, member gains incl. a kit) on the Hall pool lanes, macro rows moving every block,
 //                             two swaps (the second drops a member: its targets are ignored), pool against the serial reference bit for bit; control: the same run without targets differs. TSan: the hook writes on the caller only.
+//  16 rack_bk_bahn:           racks with Baukasten members (member slots beyond ARR_SPUREN, three instances) are lane units: not lane-capable while a bk member has no
+//                             instance in use or a swap of its instance is pending, lane-capable after the block that took it over; two real threads run the two racks at
+//                             once on lanes 1 and 2 (a barrier per block) over a transport start, notes with offsets and an instance swap in the middle of each bk member:
+//                             bit-equal to the serial run of each rack. The TSan build runs this case with the others.
 // With an argument (a case number) the program runs that case only.
 // Mutations (WILL_FAIL): SPUR_RACK_SCRATCH_GEMEINSAM (the rack lane unit renders into the sink's own scratch) must turn case 2 red; SPUR_KIT_PUF_GEMEINSAM (the Kit
 // uses its own mix buffer) cases 2, 5; SPUR_RACK_OHNE_SAUBER (the cleanliness scan says true) cases 3 and 14; SPUR_RACK_REST_EINZELN (the plan check after each rest
@@ -67,6 +71,7 @@
 #include "cypherdj/arr_rack_sink.h"
 #include "cypherdj/arr_rb_sink.h"
 #include "cypherdj/reverb_pool.h"
+#include "bk_help.h"
 #include "cypherdj/kit.h"
 #include "check.h"
 
@@ -121,6 +126,7 @@ struct Mem {
   int lo, hi;           // key zone
   double gain_db = 0.0;
   float cutoff = 0.4f;
+  CypherBk* bk = nullptr;   // BK members: the instance the member plays (null: a member without an instance, the sink never plays it)
 };
 struct RackDef {
   int track;            // 0-based track index
@@ -165,7 +171,14 @@ cdj::ArrSnapshot* snap_bau(int64_t nr, const std::vector<RackDef>& racks, const 
         dev.art = ArrArt::intern;
         gd.art = ArrArt::intern;
         if (g.art == KIT) geraet_kit(dev, kit);
-        else if (g.art == BK) std::snprintf(dev.geraet, sizeof dev.geraet, "bk");   // no handle: the sink never plays it, the predicate must still say no
+        else if (g.art == BK) {
+          std::snprintf(dev.geraet, sizeof dev.geraet, "bk");   // without an instance (g.bk null) the sink never plays it, the predicate must still say no
+          if (g.bk) {
+            std::snprintf(dev.graph, sizeof dev.graph, "t");
+            dev.bk = g.bk;
+            dev.bk_gen = 1;
+          }
+        }
         else geraet_rb(dev, g.cutoff + 0.03f * static_cast<float>(variante), 0.2f, 0.3f);
       }
     }
@@ -364,7 +377,7 @@ void fall3(const cdj::Kit* kit) {
     PRUEF(!w->rack.parallel_faehig(-1));
     PRUEF(!w->rack.parallel_faehig(cdj::ARR_SPUREN));
   }
-  {  // Surge member, bk member, no members: the rack stays serial, its clean neighbour does not
+  {  // Surge member, bk member without an instance, no members: the rack stays serial, its clean neighbour does not
     auto w = neu({{0, {{RB, 36, 47}, {SURGE, 72, 83}}}, {1, {{RB, 36, 47}, {BK, 60, 71}}}, {2, {}}, {3, {{KIT, 0, 1}}}});
     PRUEF(!w->rack.parallel_faehig(0));
     PRUEF(!w->rack.parallel_faehig(1));
@@ -1309,6 +1322,100 @@ void fall_t9(const cdj::Kit* kit) {
   PRUEF(alle);
 }
 
+// 16: racks with Baukasten members
+struct BkInst {
+  CypherBk* h[6];   // [0..2] play from the start (rack 0 member 1, rack 1 members 0 and 2), [3..5] take over in the swap
+  BkInst() {
+    const std::string synth = bkt::beispiel("synth-mono");
+    for (int i = 0; i < 6; ++i) h[i] = bkt::neu(i % 2 ? synth : std::string(bkt::G_T));
+  }
+  ~BkInst() {
+    for (CypherBk* x : h) cypher_bk_frei(x);
+  }
+};
+
+void fall16(const cdj::Kit* kit) {
+  constexpr int BL = 600, TAUSCH = 300, WIEDER = 3;
+  const int spur[2] = {0, 1};
+  // the instances are made per run: a run that swaps in instances another run has played would start on that run's state
+  const auto racks = [](const BkInst& x, int satz) {
+    return std::vector<RackDef>{{0, {{RB, 36, 47}, {BK, 60, 71, 0.0, 0.0f, x.h[3 * satz + 0]}}},
+                                {1, {{BK, 36, 47, -3.0, 0.0f, x.h[3 * satz + 1]}, {KIT, 0, 1}, {BK, 48, 59, -6.0, 0.0f, x.h[3 * satz + 2]}}}};
+  };
+  std::vector<float> ref[2];
+  uint64_t ref_einsaetze = 0;
+  {  // serial reference: every rack through block(), the predicate along the way
+    BkInst x;
+    auto w = std::make_unique<Welt>();
+    w->laden(snap_bau(1, racks(x, 0), {}, {}, kit, 0), 0);
+    w->rack.vor_phase(0);
+    PRUEF(!w->rack.parallel_faehig(0) && !w->rack.parallel_faehig(1));   // the bk members have no instance in use yet
+    for (int blk = 0; blk < BL; ++blk) {
+      const int64_t s0 = static_cast<int64_t>(blk) * M;
+      if (blk == TAUSCH) {   // every bk member gets another instance
+        w->laden(snap_bau(2, racks(x, 1), {}, {}, kit, 0), s0);
+        w->rack.vor_phase(s0);
+        PRUEF(!w->rack.parallel_faehig(0) && !w->rack.parallel_faehig(1));
+      }
+      for (int k = 0; k < 2; ++k) speise_rack(w->rack, spur[k], blk, s0);
+      for (int k = 0; k < 2; ++k) {
+        float l[M] = {}, r[M] = {};
+        w->rack.block(spur[k], s0, M, l, r);
+        ref[k].insert(ref[k].end(), l, l + M);
+      }
+      if (blk == 0 || blk == TAUSCH) PRUEF(w->rack.parallel_faehig(0) && w->rack.parallel_faehig(1));   // the block took the instances over
+    }
+    ref_einsaetze = w->kit.einsaetze();
+    PRUEF(w->bk.spielend() == 3);
+    PRUEF(w->rack.verloren() == 0);
+  }
+  PRUEF(energie(ref[0]) > 1e-3 && energie(ref[1]) > 1e-3 && !gleich(ref[0], ref[1]));
+  PRUEF(ref_einsaetze > 0);
+  int rot = 0;
+  for (int w_nr = 0; w_nr < WIEDER; ++w_nr) {
+    BkInst x;
+    auto w = std::make_unique<Welt>();
+    w->laden(snap_bau(1, racks(x, 0), {}, {}, kit, 0), 0);
+    w->rack.vor_phase(0);
+    auto lanes = std::make_unique<cdj::ArrArbeit[]>(4);
+    for (int i = 0; i < 4; ++i) lanes[i].bahn = i;
+    std::vector<float> aus[2];
+    std::barrier bar(3);   // two lane threads and this one (it feeds the sinks and swaps the snapshot on the caller, as the callback does before the fork)
+    auto lauf = [&](int k) {
+      for (int blk = 0; blk < BL; ++blk) {
+        const int64_t s0 = static_cast<int64_t>(blk) * M;
+        float l[M] = {}, r[M] = {};
+        bar.arrive_and_wait();
+        w->rack.block_bahn(spur[k], s0, M, l, r, lanes[1 + k]);
+        aus[k].insert(aus[k].end(), l, l + M);
+        bar.arrive_and_wait();
+      }
+    };
+    std::thread t0(lauf, 0), t1(lauf, 1);
+    for (int blk = 0; blk < BL; ++blk) {
+      const int64_t s0 = static_cast<int64_t>(blk) * M;
+      if (blk == TAUSCH) {
+        w->laden(snap_bau(2, racks(x, 1), {}, {}, kit, 0), s0);
+        w->rack.vor_phase(s0);
+        PRUEF(!w->rack.parallel_faehig(0) && !w->rack.parallel_faehig(1));
+      }
+      for (int k = 0; k < 2; ++k) speise_rack(w->rack, spur[k], blk, s0);
+      bar.arrive_and_wait();
+      bar.arrive_and_wait();
+      if (blk == 0 || blk == TAUSCH) PRUEF(w->rack.parallel_faehig(0) && w->rack.parallel_faehig(1));
+    }
+    t0.join();
+    t1.join();
+    for (int k = 0; k < 2; ++k) PRUEF(gleich(aus[k], ref[k]));
+    PRUEF(lanes[1].rack_einheiten == BL && lanes[2].rack_einheiten == BL && lanes[0].rack_einheiten == 0);
+    PRUEF(lanes[1].einheiten >= static_cast<uint32_t>(BL) && lanes[2].einheiten >= static_cast<uint32_t>(BL));   // the bk member units counted on the lane that ran the rack
+    PRUEF(w->kit.einsaetze() == ref_einsaetze);
+    PRUEF(w->rack.verloren() == 0 && w->bk.verloren() == 0 && w->bk.spielend() == 3);
+    rot += lanes[1].rack_einheiten + lanes[2].rack_einheiten;
+  }
+  std::printf("case 16 rack_bk_bahn: %d runs x %d blocks, %d rack units on lanes 1 and 2, kit voices %llu\n", WIEDER, BL, rot, static_cast<unsigned long long>(ref_einsaetze));
+}
+
 int main(int argc, char** argv) {
   const int nur = argc > 1 ? std::atoi(argv[1]) : 0;   // a case number: run that case only (the TSan gate of SPUR_RACK_OHNE_SAUBER runs case 11 alone)
   auto an = [&](int n) { return nur == 0 || nur == n; };
@@ -1332,5 +1439,6 @@ int main(int argc, char** argv) {
   if (an(13)) fall13(kit.get());
   if (an(14)) fall14(kit.get());
   if (an(15)) fall_t9(kit.get());
+  if (an(16)) fall16(kit.get());
   PRUEF_ENDE();
 }

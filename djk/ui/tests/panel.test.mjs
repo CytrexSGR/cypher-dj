@@ -109,7 +109,8 @@ test('sidecar loading: panels/<name>.json next to the graph, refused ones are na
   fs.writeFileSync(path.join(panelOrdner(dir), 'g.json'), JSON.stringify(PANEL));
   assert.deepEqual(ladePanel('g', dir).panel, normalisierePanel(PANEL), 'the answer carries the panel read as v2');
   assert.equal(ladePanel('g', dir).panel.format, 'cypherdj-panel/2');
-  assert.deepEqual(listeGraphen(dir), { graphen: [{ name: 'g', art: 'effekt', regler_namen: { 1: 'Cutoff' } }], uebersprungen: [] }, 'the folder scan does not see panels/');
+  assert.deepEqual(listeGraphen(dir), { graphen: [{ name: 'g', art: 'effekt', latenz: 0, regler_namen: { 1: 'Cutoff' } }], uebersprungen: [] },
+    'the folder scan does not see panels/');
   fs.writeFileSync(path.join(panelOrdner(dir), 'g.json'), JSON.stringify({ ...PANEL, sections: mitControls([{ id: 'x', type: 'knob', bind: { regler: 5 } }]) }));
   const r = ladePanel('g', dir);
   assert.equal(r.panel, null);

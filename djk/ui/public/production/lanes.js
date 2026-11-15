@@ -270,10 +270,14 @@ export const hatLane = (spur) => faderLane(spur) !== null;
 export const gezeigteLane = (spur, wahl) => laneFuer(spur, wahl) ?? faderLane(spur) ?? (spur?.automation ?? [])[0] ?? null;
 // The targets a track can still get a lane for, in menu order: no target twice, `geraet.*` only on a track whose device owns the parameter (RB-338: four, bk: knobs 1 to 64)
 // 1.12 slice 6: then the chain targets of the track's own stages and rack that have no lane and are not driven by a macro (one writer per parameter)
+// the chain part alone: the targets of the strand's own stages and rack that have no lane and are not driven by a macro
+const freieKettenZiele = (strang) => [...kettenZieleVon(strang)].filter(([z, d]) => !laneFuer(strang, z) && (d.insert === undefined || gemapptVon(strang, d.insert, d.param) === null)).map(([z]) => z);
 export const freieZiele = (spur) => [
   ...ZIELE.filter((z) => !laneFuer(spur, z) && (!istGeraetZiel(z) || passtGeraetZiel(z, spur))),
-  ...[...kettenZieleVon(spur)].filter(([z, d]) => !laneFuer(spur, z) && (d.insert === undefined || gemapptVon(spur, d.insert, d.param) === null)).map(([z]) => z),
+  ...freieKettenZiele(spur),
 ];
+// Task 7 (D4): a group offers only the chain targets (the model refuses fader, pan, mute and solo lanes on a group)
+export const freieZieleGruppe = (gruppe) => (gruppe ? freieKettenZiele(gruppe) : []);
 // the lane with this id in the project, with its track, or null
 export function laneMitId(projekt, id) {
   for (const spur of projekt?.spuren ?? []) { const lane = (spur.automation ?? []).find((l) => l.id === id); if (lane) return { spur, lane }; }
@@ -292,6 +296,17 @@ export function punkteNach(punkte, befehl) {
 // Indices of the tracks whose lane row is open. offen: a Set of track ids kept in the page state (not in the project: it survives a reload of the
 // project from the server, and a track that is gone simply drops out).
 export const offeneIndizes = (projekt, offen) => (projekt && offen && offen.size ? projekt.spuren.flatMap((s, i) => (offen.has(s.id) ? [i] : [])) : []);
+
+// Task 6 (backlog production): the open lane rows of GROUPS. The page state laneOffen holds strand ids (s<n> and g<n> never collide); this gives the groups
+// among them that still exist, in project order.
+export const offeneStraenge = (projekt, ids) => (projekt && ids && ids.size ? (projekt.gruppen ?? []).filter((g) => ids.has(g.id)).map((g) => ({ art: 'gruppe', id: g.id })) : []);
+// The strand a lane row belongs to: {art:'gruppe'|'spur', id, strang} or null when the row's strand no longer exists (a group deleted while its row was open)
+export function laneStrang(projekt, zeile) {
+  if (!projekt || !zeile) return null;
+  if (zeile.gruppe !== undefined) { const g = (projekt.gruppen ?? [])[zeile.gruppe]; return g ? { art: 'gruppe', id: g.id, strang: g } : null; }
+  const s = (projekt.spuren ?? [])[zeile.spur];
+  return s ? { art: 'spur', id: s.id, strang: s } : null;
+}
 
 // 1.12 slice 4 (D2): the handles of a selected range {von, bis} on a lane row. A strip of GRIFF_BREITE px around either edge in the top band of the row
 // (GRIFF_OBEN px) is the skew handle; the same strip at the right edge below that band is the stretch handle. null: no handle under (x, y).

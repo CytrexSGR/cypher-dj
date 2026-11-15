@@ -93,6 +93,7 @@ export const AUSGABEN = {
   '/zustand/komp': f('sf', 'kanal gr_db'),   // Effekt-Sektion Schritt 2 (§5.5c), osc.json: /zustand/komp
   '/zustand/mix': f('sfffff', 'kanal gate_db mb_tief_db mb_mitte_db mb_hoch_db lim_db'),   // 1.15 A6 (§5.5d), type entry only: the Attrappe never sends it
   '/e/ins_gr': f('sf', 'kanal gr_db'),   // 1.10 slice 4a (§5.5f), type entry only: the Attrappe never sends it
+  '/e/stufe_pegel': f('sff', 'kanal ein_db aus_db'),   // device faces T9 (§5.5g), type entry only: the Attrappe never sends it
   '/zustand/spektrum': f('sis', 'kanal rahmen pegel'),   // 1.15 A6 (§5.5e), type entry only: the sender is the real core (A7b)
   '/pegel': f('sfffffff', 'kanal spitze_db echtspitze_dbtp lufs_m lufs_s band_tief_db band_mitte_db band_hoch_db'),
   '/e/regler': f('sfshd', 'pfad wert halter sample beat'),

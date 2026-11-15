@@ -1,0 +1,38 @@
+{
+ "schema": 1,
+ "name": "Analog pad",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "pad-analog",
+ "werte": {
+  "knob1": 0.5,
+  "knob2": 0.5,
+  "knob3": 0.5,
+  "knob4": 0.5,
+  "knob5": 0.5
+ },
+ "beschreibung": {
+  "art": "pad",
+  "unterart": "analog",
+  "charakter": [
+   "warm",
+   "soft",
+   "wide",
+   "evolving",
+   "smooth"
+  ],
+  "genre": [],
+  "einsatz": [
+   "breakdown",
+   "intro"
+  ],
+  "energie": 2,
+  "text": "Analog pad: two squares two octaves apart under a resonant ladder that breathes at 0.3 Hz, long release, chorus, phaser, hall."
+ },
+ "tags": [
+  "pad-analog"
+ ],
+ "notiz": "Source rule: recipe card `pad.analog`, Welsh [B1] p. 101, patches Galactic Cathedral and Galactic Chapel, tables transcribed.. Measured by `tests/rezepte.rs`, not yet heard. Manifest character words outside the vocabulary: analog (as warm).",
+ "angelegt": "2026-11-15T00:00:00.000Z",
+ "geaendert": "2026-11-15T00:00:00.000Z"
+}

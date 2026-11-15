@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { liveAufbau } from './support/live_module.mjs';
 import { baueModul } from '../project/live.ts';
 import { aendereStand } from '../project/state.ts';
-import { teileReglerLive } from '../project/controls_order.ts';
+import { teileReglerLive, teileStummStart } from '../project/controls_order.ts';
 
 const aus = (z) => z.protokoll.gesendet.filter((g) => g.adresse === '/k/arr/laden' || (g.adresse === '/k/teil' && /^(spur|grp)\//.test(g.felder.pfad)))
   .map((g) => g.adresse === '/k/arr/laden' ? 'LADEN' : `${g.felder.pfad}=${g.felder.nach}`);
@@ -25,7 +25,7 @@ test('clear: the reset rows of the freed numbers follow /k/arr/laden', async (t)
   assert.ok(f.slice(0, laden).includes(`grp/${nrG}/fader=-200`), 'the ramp row (quieter) is before the load');
 });
 
-test('stems arrive: Loop mute goes out after /k/arr/laden', async (t) => {
+test('stems arrive: the Loop mute travels in the load (stumm_start) and no mute row follows the receipt', async (t) => {
   const z = await liveAufbau(t);
   await z.exportiere('A');
   const p = z.projekt(), top = z.gruppeVon(p, 'A'), loopSpur = p.spuren.find((s) => s.ausgang?.id === top.id);
@@ -38,7 +38,14 @@ test('stems arrive: Loop mute goes out after /k/arr/laden', async (t) => {
   await z.zugang.uebernimm(aendereStand(z.offen().verlauf, p, neu, meta, z.zugang.haken()), meta);
   const f = aus(z), laden = f.indexOf('LADEN');
   assert.ok(laden >= 0, f.join(' '));
-  assert.ok(f.lastIndexOf(`spur/${loopSpur.nr}/mute=1`) > laden, `Loop mute after LADEN: ${f.join(' ')}`);
+  assert.ok(!f.some((x) => x.startsWith(`spur/${loopSpur.nr}/mute=`)), `no Loop mute row in the command stream (the core takes it from the playback): ${f.join(' ')}`);
+  const nr = z.protokoll.gesendet.find((g) => g.adresse === '/k/arr/laden').felder.nr;
+  const w = z.wiedergabe(nr);
+  assert.deepEqual(w.spuren.filter((x) => x.stumm_start === true).map((x) => x.nr), [loopSpur.nr], 'only the Loop track starts muted');
+  // negative control: a later load (the next change) does not carry the field
+  z.protokoll.gesendet.length = 0;
+  await z.aendern([{ befehl: 'gruppenspur_aendern', gruppe_id: top.id, fader_db: -3 }]);
+  for (const g of z.protokoll.gesendet.filter((x) => x.adresse === '/k/arr/laden')) assert.ok(!z.wiedergabe(g.felder.nr).spuren.some((x) => x.stumm_start), 'a later load has no stumm_start');
 });
 
 test('teileReglerLive: lower rows first, louder and mute of a sounding track after', () => {
@@ -63,4 +70,11 @@ test('flat project: the order stays as it was, the reset rows of a removed track
   const laden = f.indexOf('LADEN');
   assert.ok(laden > 0, f.join(' '));
   assert.ok(f.slice(0, laden).includes(`spur/${nr}/fader=0`), `reset before LADEN as before: ${f.join(' ')}`);
+});
+
+test('teileStummStart: only the mute (1) of a track that is unmuted in the old playback leaves the later rows; everything else stays', () => {
+  const alt = { spuren: [{ nr: 1, fader_db: 0, pan: 0, mute: false, solo: false }, { nr: 2, fader_db: 0, pan: 0, mute: true, solo: false }], gruppen: [] };
+  const r = teileStummStart(alt, [{ pfad: 'spur/1/mute', wert: 1 }, { pfad: 'spur/2/mute', wert: 1 }, { pfad: 'spur/1/mute', wert: 0 }, { pfad: 'spur/9/mute', wert: 1 }, { pfad: 'spur/1/fader', wert: 0 }]);
+  assert.deepEqual(r.stummStart, [1]);
+  assert.deepEqual(r.rest.map((x) => `${x.pfad}=${x.wert}`), ['spur/2/mute=1', 'spur/1/mute=0', 'spur/9/mute=1', 'spur/1/fader=0']);
 });

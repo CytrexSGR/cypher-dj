@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Two factory presets that use the synth build-out knobs of synth-neuro (25..45; 44 is free): a talking bass with LFO 2 on the fold and a
-rumble with delay and reverb. Writes werk/baukasten/synth-neuro-<slug>.preset.json. Usage: build_ausbau_presets_neuro.py [werk dir]
+rumble with delay and reverb. Writes factory/modular/synth-neuro-<slug>.preset.json. Usage: build_ausbau_presets_neuro.py [factory dir]
 Every preset lists all knobs of the graph (1..43, 45); 1..24 are the values of the existing preset the new one grows from.
 Run `node djk/ui/presets/tool.ts bauen` afterwards to refresh presets/register.json."""
 import json
@@ -9,7 +9,7 @@ import re
 import sys
 
 HIER = os.path.dirname(os.path.abspath(__file__))
-WERK = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HIER, "..", "..", "ui", "presets", "werk")
+WERK = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HIER, "..", "..", "ui", "presets", "factory")
 
 # the new knobs at their vorgabe (what every older preset gets), changed per preset below
 NEU = {25: 0.5, 26: 0.5, 27: 0.5, 28: 0.0, 29: 0.6667, 30: 0.5, 31: 0.5, 32: 0.6157, 33: 0.0, 34: 0.0, 35: 0.0, 36: 0.5, 37: 0.0,
@@ -35,7 +35,7 @@ PRESETS = [
                       "text": "The dark rolling bass with a feedback delay and a long hall behind it, a shorter amp decay and some key follow: a rumble that echoes away."}},
 ]
 
-os.makedirs(os.path.join(WERK, "baukasten"), exist_ok=True)
+os.makedirs(os.path.join(WERK, "modular"), exist_ok=True)
 for p in PRESETS:
     werte = {**p["alt"], **NEU, **p["neu"]}
     slug = "synth-neuro-" + re.sub(r"[^a-z0-9]+", "-", p["name"].lower()).strip("-")
@@ -44,6 +44,6 @@ for p in PRESETS:
            "beschreibung": p["beschreibung"], "tags": ["synth-neuro"],
            "notiz": "Measured by level and pitch on render, not yet heard (2026-11-12).",
            "angelegt": "2026-11-12T00:00:00.000Z", "geaendert": "2026-11-12T00:00:00.000Z"}
-    with open(os.path.join(WERK, "baukasten", slug + ".preset.json"), "w") as f:
+    with open(os.path.join(WERK, "modular", slug + ".preset.json"), "w") as f:
         f.write(json.dumps(doc, indent=1, ensure_ascii=False) + "\n")
     print(slug)

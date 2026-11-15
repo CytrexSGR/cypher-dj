@@ -166,6 +166,8 @@ export function teile(projekt, ids, beat) {
   }
   return aus;
 }
+// Split at the pointer: the beat snaps to the grid, then the rules of teile() apply (selected clips containing it, no loop clips)
+export const teileBei = (projekt, ids, beat, raster) => teile(projekt, ids, runde(rasten(beat, raster)));
 export const loopImWeg = (projekt, ids, beat) => (projekt?.spuren ?? []).some((s) => s.clips.some((c) => ids.includes(c.id) && istLoop(c) && innen(c, beat)));
 
 // Clip-Loop (Spec 6.17): Schalter setzt loop_beats auf die aktuelle Länge bzw. null; Kacheln = Durchläufe [start, laenge] im Projekt
@@ -192,6 +194,74 @@ export function dupliziere(projekt, ids) {
 }
 export const loesche = (ids) => ids.map((id) => ({ befehl: 'clip_loeschen', clip_id: id }));
 
+// Clipboard (COPY, CUT, PASTE; page state only, nothing leaves the page). kopiere keeps, per chosen clip, a snapshot of the clip, its track and its
+// start relative to the first chosen start: what a paste needs even when the source is gone (cut) or was edited since.
+export function kopiere(projekt, ids) {
+  const clips = [];
+  (projekt?.spuren ?? []).forEach((s, i) => { for (const c of s.clips) if (ids.includes(c.id)) clips.push({ id: c.id, spurId: s.id, spurIndex: i, rel: 0, clip: structuredClone(c) }); });
+  if (clips.length === 0) return null;
+  const von = Math.min(...clips.map((e) => e.clip.start_beat));
+  for (const e of clips) e.rel = runde(e.clip.start_beat - von);
+  return { clips, einSpur: new Set(clips.map((e) => e.spurId)).size === 1 };
+}
+const inhalt = (c) => { const { start_beat, dekodiert, ...rest } = c; return JSON.stringify(rest); };
+const clipNr = (id) => (/^c\d+$/.test(id) ? Number(id.slice(1)) : 0);
+// the id the next clip of the project gets: the counter, or one above the highest live id (project/model.ts neueId); takes count
+const naechsteClipNr = (projekt) => {
+  const ids = (projekt?.spuren ?? []).flatMap((s) => [...s.clips, ...(s.takes ?? []).flatMap((t) => t.clips)].map((c) => c.id));
+  return Math.max(projekt?.naechste_id?.clip ?? 1, Math.max(0, ...ids.map(clipNr)) + 1);
+};
+// Commands that make a clip from its snapshot (clip_neu takes the content; fields it does not take follow as clip_aendern and huellkurve_setzen on
+// the predicted id). Not carried over: the strudel origin (muster) and the stream origin (entstehung).
+function neuAusAbzug(clip, spurId, start, id) {
+  const b = { befehl: 'clip_neu', spur_id: spurId, art: clip.art, start_beat: start, laenge_beats: clip.laenge_beats, name: clip.name };
+  if (clip.loop_beats != null) b.loop_beats = clip.loop_beats;
+  const aus = [b];
+  if (clip.art === 'audio') {
+    b.sha256 = clip.quelle.sha256; b.pfad_hinweis = clip.quelle.pfad_hinweis ?? '';
+    if (clip.warp) b.warp = clip.warp;
+    const extra = {};
+    if (clip.offset_s) extra.offset_s = clip.offset_s;
+    if (clip.gain_db) extra.gain_db = clip.gain_db;
+    if (clip.fade_ein_beats) extra.fade_ein_beats = clip.fade_ein_beats;
+    if (clip.fade_aus_beats) extra.fade_aus_beats = clip.fade_aus_beats;
+    if (clip.stumm) extra.stumm = true;
+    if (Object.keys(extra).length) aus.push({ befehl: 'clip_aendern', clip_id: id, ...extra });
+  } else {
+    b.noten = clip.noten.map(({ beat, laenge, ton, vel }) => ({ beat, laenge, ton, vel }));
+    if (clip.seq) b.seq = clip.seq;
+  }
+  for (const h of clip.huellkurven ?? []) aus.push({ befehl: 'huellkurve_setzen', clip_id: id, ...h });
+  return aus;
+}
+// Paste: the copied clips at beat (the first one there, the others at their offsets). zielSpurIndex: the lane under the pointer; it counts only when the
+// copy came from ONE track, else every clip goes back to its own track. A clip whose track is gone or cannot carry it is skipped (uebersprungen).
+// A source that still exists unchanged is duplicated (clip_duplizieren with spur_id); otherwise the clip is made from the snapshot.
+export function fuegeEin(projekt, ablage, beat, zielSpurIndex = null) {
+  const befehle = [];
+  let uebersprungen = 0, nr = naechsteClipNr(projekt);
+  for (const e of ablage?.clips ?? []) {
+    const spur = ablage.einSpur && zielSpurIndex != null ? projekt?.spuren?.[zielSpurIndex] : projekt?.spuren?.find((s) => s.id === e.spurId);
+    if (!spur || !artPasst(e.clip, spur)) { uebersprungen++; continue; }
+    const start = runde(Math.max(0, beat) + e.rel), lebend = (projekt.spuren.flatMap((s) => s.clips)).find((c) => c.id === e.id);
+    if (lebend && inhalt(lebend) === inhalt(e.clip)) befehle.push({ befehl: 'clip_duplizieren', clip_id: e.id, ziel_beat: start, spur_id: spur.id });
+    else befehle.push(...neuAusAbzug(e.clip, spur.id, start, `c${nr}`));
+    nr++;
+  }
+  return { befehle, uebersprungen };
+}
+// Glue: one clips_verbinden for the chosen clips, ordered by start so the first (earliest) one is the clip that stays. Tracks, loops and audio rules are
+// the server's: it refuses with verbinden_spur, verbinden_loop or verbinden_audio and the page shows its text.
+export function verbinde(projekt, ids) {
+  const cs = (projekt?.spuren ?? []).flatMap((s) => s.clips).filter((c) => ids.includes(c.id));
+  if (cs.length < 2 || cs.length !== new Set(ids).size) return [];
+  return [{ befehl: 'clips_verbinden', clip_ids: cs.sort((a, b) => a.start_beat - b.start_beat).map((c) => c.id) }];
+}
+export const einfuegeLabel = (befehle) => {
+  const n = befehle.filter((b) => b.befehl === 'clip_duplizieren' || b.befehl === 'clip_neu').length;
+  return n === 1 ? 'Paste clip' : `Paste ${n} clips`;
+};
+
 // Doppelklick ins Leere einer Instrument-Spur: neuer MIDI-Clip, ein Takt, Anfang auf den Rasterschritt davor gerastet
 export function neuerMidiClip(projekt, spurIndex, beat, raster) {
   const spur = projekt?.spuren?.[spurIndex];
@@ -205,6 +275,9 @@ export const CLIP_TEXT = {
   keine_instrumentspur: 'Double click makes MIDI clips on instrument tracks; samples are dragged from LIBRARY',
   nichts_zu_teilen: 'Select a clip and click inside it to set the split point',
   loop_teilen: 'Loop clip: turn the loop off before splitting',
+  einfuegen_nichts: 'Nothing to paste: the track of the copied clips is gone or cannot carry them',
+  verbinden_wenige: 'Select two or more clips to glue',
+  einfuegen_spur: 'Right click on a track to paste there',
   loop_links: 'Loop clip: the loop starts at the clip start; turn the loop off to trim the start',
 };
 

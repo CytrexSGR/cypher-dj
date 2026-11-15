@@ -88,6 +88,22 @@ const ArrSnapshot* Arrangement::tausche(const ArrSnapshot* neu, int64_t s, const
   }
   snap_ = neu;
   ++snap_gen_;
+  if (neu)   // initial mute (playback field stumm_start): the track starts muted in this very block, no fade from the old state; the kern sets the rows beside it (Kern ARR_LADEN)
+    for (int i = 0; i < ARR_SPUREN; ++i)
+      if (neu->spur[i].nr > 0 && neu->spur[i].stumm_start) {
+        Wert& mu = w_[i][2];
+        mu.w = 1.0f;
+        mu.vl = nullptr;
+        mu.sw_vl = nullptr;
+        ms_gain_[i] = 0.0f;
+      }
+  bk_ueber_loeschen();   // production plan task 8 (D11): a build clears every written spur/<slot>/bk/<k>; the slot numbers are those of the new snapshot (D10)
+  for (int8_t& s : bk_slot_) s = -1;
+  if (neu) {
+    int slot = 0;   // the running number among the tracks with the device bk (instance or not, tracks only: a rack member is not counted), ascending track index
+    for (int i = 0; i < ARR_SPUREN && slot < BK_UEBER_SLOTS; ++i)
+      if (neu->spur[i].art == ArrArt::intern && std::strcmp(neu->spur[i].geraet, "bk") == 0) bk_slot_[i] = static_cast<int8_t>(slot++);
+  }
   if (!alt)   // first snapshot: the pre/post flag of the returns stands at once, a later flip blends (review echtzeit-1)
     for (int r = 0; r < ARR_RETURNS; ++r) ret_pre_w_[r] = (neu && neu->ret_pre[r]) ? 1.0f : 0.0f;
   ins_.tausche(neu ? neu->kette : nullptr);   // 1.10 slice 4a: the stages keep, enter or leave by slot identity
@@ -602,6 +618,7 @@ void Arrangement::block(const Karte& k, int64_t s0, int m, float* aus_l, float* 
     segment(k, a, b, s0);
     a = b;
   }
+  bk_ueber_melden(m);   // production plan task 8: the written spur/<slot>/bk/<k> go to the bk sinks in every block, also with the transport stopped; a lane (auto_geraet, next) wins
   auto_geraet();   // Automation slice 2 (E9): the `geraet` lane values go to the sinks before their block()
   auto_kette();    // 1.12 slice 6: the insert-parameter and rack-macro lane values go to ArrInserts, read by makros_planen() and the chains in mischen()
   glied_makros_(s0, m);   // 1.9 U8 T9 (E12): the macro values of the member targets of the rack tracks, on the caller before phase Q (stopped transport included)

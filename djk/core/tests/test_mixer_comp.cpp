@@ -114,6 +114,30 @@ int main() {
     PRUEF(spitze_db(ca.data(), static_cast<int>(ca.size())) > -60.0);   // Positivkontrolle: der Cue hört überhaupt
     PRUEF_NAH(d, -15.0, 0.3);
   }
+  // (f) T9 (device faces): the input and output peak of the channel compressor, read and reset (komp_ein_db / komp_aus_db)
+  {
+    Lauf a;
+    a.setze("erz/1/komp/an", 1.0f);
+    a.setze("erz/1/komp/schwelle", -20.0f);
+    a.setze("erz/1/komp/ratio", 4.0f);
+    for (int k = 0; k < 400; ++k) {
+      a.block(1, 1.0f);
+      if (k < 399) { a.m->komp_ein_db(4); a.m->komp_aus_db(4); }   // reading in between resets: only the last block counts below
+    }
+    const float ein = a.m->komp_ein_db(4), aus = a.m->komp_aus_db(4);
+    std::printf("(f) channel compressor erz/1: in %.3f dBFS, out %.3f dBFS\n", static_cast<double>(ein), static_cast<double>(aus));
+    PRUEF_NAH(ein, 0.0, 0.2);
+    PRUEF_NAH(ein - aus, 15.0, 0.3);   // the static reduction of (b)
+    PRUEF(a.m->komp_ein_db(4) == -200.0f && a.m->komp_aus_db(4) == -200.0f);   // read and reset: nothing ran since, so the second reading is silence
+    PRUEF(a.m->komp_ein_db(5) == -200.0f);   // erz/2 never ran a compressor: -200, no NaN or -inf
+    PRUEF(a.m->komp_ein_db(-1) == -200.0f && a.m->komp_aus_db(99) == -200.0f);   // out of range: -200
+    for (int k = 0; k < 40; ++k) { a.block(1, 0.0f); if (k < 39) { a.m->komp_ein_db(4); a.m->komp_aus_db(4); } }   // silence into the running compressor (its output may still carry the tail in the first blocks)
+    PRUEF(a.m->komp_ein_db(4) == -200.0f && a.m->komp_aus_db(4) == -200.0f);
+    a.setze("erz/1/komp/an", 0.0f);   // bypass: the stage no longer runs, so nothing is reported for it and no stale peak waits
+    a.block(1, 1.0f);
+    PRUEF(!a.m->komp_aktiv(4));
+    PRUEF(a.m->komp_ein_db(4) == -200.0f && a.m->komp_aus_db(4) == -200.0f);
+  }
   // (e) Sidechain: erz/2 hört mit komp/sc 5 auf den Eingang von erz/1 (Kick-Stöße, erz/1 zugezogen). Unter der Kick taucht
   // erz/2 ab, dazwischen nicht; mit komp/sc 0 (eigenes Signal, Dauerton unter der Schwelle) pumpt nichts.
   for (int sc : {5, 0}) {

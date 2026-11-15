@@ -1,0 +1,38 @@
+{
+ "schema": 1,
+ "name": "Poly lead",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "lead-poly",
+ "werte": {
+  "knob1": 0.5,
+  "knob2": 0.5,
+  "knob3": 0.5,
+  "knob4": 0.5,
+  "knob5": 0.5
+ },
+ "beschreibung": {
+  "art": "lead",
+  "unterart": "poly",
+  "charakter": [
+   "warm",
+   "wide",
+   "thick",
+   "smooth",
+   "bright"
+  ],
+  "genre": [],
+  "einsatz": [
+   "drop",
+   "breakdown"
+  ],
+  "energie": 3,
+  "text": "Brassy poly lead: two pulse waves with 5.5 Hz PWM, a fast-opening ladder, chorus, eighth delay and hall."
+ },
+ "tags": [
+  "lead-poly"
+ ],
+ "notiz": "Source rule: recipe card `lead.poly`, Welsh [B1] p. 91, patch Brass Section, table transcribed; polyphony note: Reid [B2] part 20. Measured by `tests/rezepte.rs`, not yet heard. Manifest use words outside the vocabulary: melody (as drop).",
+ "angelegt": "2026-11-15T00:00:00.000Z",
+ "geaendert": "2026-11-15T00:00:00.000Z"
+}

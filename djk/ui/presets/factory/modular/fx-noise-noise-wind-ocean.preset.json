@@ -1,0 +1,39 @@
+{
+ "schema": 1,
+ "name": "Noise / wind / ocean",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "fx-noise",
+ "werte": {
+  "knob1": 0.5,
+  "knob2": 0.5,
+  "knob3": 0.5,
+  "knob4": 0.5,
+  "knob5": 0.5
+ },
+ "beschreibung": {
+  "art": "fx",
+  "unterart": "noise",
+  "charakter": [
+   "airy",
+   "wide",
+   "soft",
+   "wet",
+   "smooth",
+   "evolving"
+  ],
+  "genre": [],
+  "einsatz": [
+   "intro",
+   "breakdown"
+  ],
+  "energie": 1,
+  "text": "Ocean wind: filtered noise swelling slowly at 0.2 Hz, long hall, high- and low-passed."
+ },
+ "tags": [
+  "fx-noise"
+ ],
+ "notiz": "Source rule: recipe card `fx.noise`, Welsh [B1] p. 108, patch Ocean Waves, table transcribed.. Measured by `tests/rezepte.rs`, not yet heard.",
+ "angelegt": "2026-11-15T00:00:00.000Z",
+ "geaendert": "2026-11-15T00:00:00.000Z"
+}

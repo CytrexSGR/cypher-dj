@@ -282,6 +282,8 @@ class Arrangement {
   // ---- Spur-Regler spur/<n>/{fader,pan,mute,solo}, Werte je Sample aus dem Stellwerk
   void setze_sofort(int regler, float wert);                 // Start, Neustart-Zustand (nicht während eines Blocks)
   void verlauf(int regler, const float* werte);              // gültig bis zum Ende des nächsten block()
+  // Production plan task 8 (tests, diagnostics): is the transient override of knob k (0-based, 0..31) of Baukasten slot `slot` (0-based, 0..7) written? A playback build clears it.
+  bool bk_ueber_da(int slot, int k) const { return slot >= 0 && slot < BK_UEBER_SLOTS && k >= 0 && k < BK_UEBER_KNOEPFE && bk_ueber_[slot][k].da; }
 
   // ---- ein Teilblock [s0, s0 + m), m <= ARR_BLOCK. Addiert die Summe in aus_l/aus_r (Eingang erz/4, ab Slice 5),
   // das Metronom in metro_master_* (Master-Summe vor dem Limiter) oder metro_cue_* (PFL-Summe, ab Slice 7).
@@ -346,7 +348,8 @@ class Arrangement {
   bool ret_belegt(int r) const { return snap_ && snap_->ret_da[r]; }         // the playback knows return r (0-based)
   bool ret_blendet() const { return ret_.blendet(); }                        // a return strip still fades (P15)
   void hall_sofort();                                                        // main thread before block 0 (render) and in the constructor: Halls take the base values of their controls now
-  const ArrInserts& inserts() const { return ins_; }                         // 1.10 slice 4a: readings of the insert pool
+  ArrInserts& inserts_pegel() { return ins_; }                                // T9: the read-and-reset level readings (pegel_ein_db, pegel_aus_db); callback thread only
+  const ArrInserts& inserts() const { return ins_; }                       // 1.10 slice 4a: readings of the insert pool
   ArrHostStufe& host_stufe() { return ins_.host(); }                          // plan 1.11 T4: the host stages (the core hands the port buffers per block, T5 the health)
   int pdc_latenz() const { return snap_ ? snap_->pdc.gesamt : 0; }           // 1.10 slice 4b T13: the largest path latency of the playback in force, samples
   int pdc_historie(int key) const { return pdc_.historie(key); }             // test seam: samples a delay place holds (0: no ring in use)
@@ -767,6 +770,21 @@ class Arrangement {
   // group faders into the master. A group nobody feeds takes the target of the snapshot at once: the order of the group passes (parents first) comes from the snapshot. `ziel_ok_` / `gziel_ok_`: the strip's target in ziel_ / gziel_ was taken while the strip was held; set and read in ziele_pruefen only.
   bool ziel_ok_[ARR_SPUREN] = {};
   bool gziel_ok_[ARR_GRUPPEN] = {};
+  // Production plan task 8 (D10, D11): the rows spur/<slot>/bk/<k> as a transient override of the Baukasten knobs. regler_bkz_: row -> slot * 32 + (k - 1), -1: none (regler_binden).
+  // bk_ueber_[slot][k]: the written value and flag; the flag is cleared by every tausche(). bk_slot_[i]: slot (0..7) of track index i in the CURRENT snapshot (the running number among
+  // the tracks with the device bk, ascending track number), -1: not a bk track. bk_ueber_melden() reports every written value to the bk sink in every block, before auto_geraet().
+  static constexpr int BK_UEBER_SLOTS = cypherdj::stellwerk::SPUR_BK_SLOTS, BK_UEBER_KNOEPFE = cypherdj::stellwerk::SPUR_BK_KNOEPFE;
+  struct BkUeber {
+    float wert = 0.0f;
+    bool da = false;
+    const float* vl = nullptr;   // verlauf(): the course of this block, the last sample is taken (bk_ueber_nehmen)
+  };
+  int16_t regler_bkz_[cypherdj::stellwerk::MAX_REGLER];
+  BkUeber bk_ueber_[BK_UEBER_SLOTS][BK_UEBER_KNOEPFE];
+  int8_t bk_slot_[ARR_SPUREN];
+  void bk_ueber_nehmen(int m);    // a pointer course of the block becomes the written value (also on the quiet path: the pointer is good for one block)
+  void bk_ueber_melden(int m);    // before auto_geraet(): every written value goes to the bk sink of its track, every block
+  void bk_ueber_loeschen();       // tausche(): the new snapshot is the project value again; also computes bk_slot_ for the snapshot installed
   int16_t regler_ins_[cypherdj::stellwerk::MAX_REGLER];   // 1.10 slice 4a: controller -> global slot * INS_PARAM_MAX + parameter of ins/<art>/<n>/*, -1: none
   int16_t regler_rack_[cypherdj::stellwerk::MAX_REGLER];   // 1.10 slice 4c: controller -> rack slot * ARR_MAKROS + macro of rack/<k>/m<n>, -1: none
   float ziel_w_[ARR_SPUREN];                    // Anteil des neuen Ziels 0..1, 1 = Blende fertig (regler_binden setzt 1)

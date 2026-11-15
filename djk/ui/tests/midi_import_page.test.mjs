@@ -2,11 +2,12 @@
 // probe pruef/probe_midi_import.mjs. Fixtures are built from bytes; the report comes from the real planner, not from a hand-written object.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { base64Von, vorschauModell, importFehlerText, importKoerper, MIDI_FEHLER } from '../public/production/midi_import.js';
+import { base64Von, vorschauModell, importFehlerText, importKoerper, vorschauKoerper, MIDI_FEHLER } from '../public/production/midi_import.js';
 import { FEHLER_TEXT, fehlerText } from '../public/production/production.js';
 import { leseSmf } from '../project/smf.ts';
 import { planeImport } from '../project/midi_import.ts';
 import { neuesProjekt } from '../project/model.ts';
+import { fuehreListeAus } from '../project/commands.ts';
 import { smf, spur, nameMeta, tempoMeta, taktMeta, programm, note, an, aus } from './helpers/smf_build.mjs';
 
 const GM = { name: 'gm', noten: new Set([36, 38, 42]) };
@@ -16,6 +17,7 @@ const datei = () => leseSmf(smf([
   spur([nameMeta('Lead'), programm(0, 80), an(0, 60, 100), an(0, 64, 100), aus(0, 60, 96), aus(0, 64, 0), ...note(0, 67, 100, 96, 96)]),   // a two-note chord, then one note
   spur([nameMeta('Kit'), ...note(9, 36, 110, 48)]),
 ]));
+const mitSpur = () => fuehreListeAus(neuesProjekt('t'), [{ befehl: 'spur_neu', art: 'instrument', name: 'Existing' }], {}).projekt;
 const antwort = (p = neuesProjekt('t')) => ({ vorschau: true, offen: true, bericht: { ...planeImport(datei(), p, {}, ctx).bericht, datei_name: 'song' } });
 
 test('base64Von matches Buffer for sizes around the chunk limit', () => {
@@ -30,11 +32,17 @@ test('the preview model names tracks, notes, tempo and the 3/4 hint, and one row
   assert.equal(m.name, 'song');
   assert.match(m.kopf.join(' | '), /2 of 3 MIDI tracks have notes/);
   assert.match(m.kopf.join(' | '), /96 BPM \(taken over\)/);
-  assert.match(m.kopf.join(' | '), /time signature 3\/4 in the file, the project is 4\/4/);
+  assert.match(m.kopf.join(' | '), /time signature 3\/4 \(the project takes it\)/);
   assert.deepEqual(m.zeilen.map((z) => [z.schluessel, z.name, z.noten, z.schlagzeug]), [['1.1', 'Lead', 3, false], ['2.10', 'Kit', 1, true]]);
   assert.match(m.zeilen[0].text, /RB-338/); assert.match(m.zeilen[1].text, /kit gm/);
   assert.equal(m.zeilen[0].mono, true, 'a chord part on the monophonic RB-338 is marked');
   assert.equal(m.anlegbar, true);
+});
+
+test('a project that holds a track keeps its 4/4 and the preview says so', () => {
+  const m = vorschauModell(antwort(mitSpur()), true);
+  assert.match(m.kopf.join(' | '), /time signature 3\/4 in the file, the project is 4\/4/);
+  assert.doesNotMatch(m.kopf.join(' | '), /takes it/);
 });
 
 test('no open project: the model says so and the import stays off; a non-empty project keeps its tempo and says so', () => {
@@ -74,6 +82,7 @@ test('importFehlerText adds the server detail to a known reason and falls back t
 });
 
 test('importKoerper sends the selection only when a part is unticked; extra fields (rev) are kept', () => {
-  assert.deepEqual(importKoerper('QQ==', 'song', ['1.1', '2.10'], ['a', 'b'], { rev: 4 }), { daten_b64: 'QQ==', name: 'song', rev: 4 });
-  assert.deepEqual(importKoerper('QQ==', 'song', ['2.10'], ['a', 'b']), { daten_b64: 'QQ==', name: 'song', auswahl: ['2.10'] });
+  assert.deepEqual(importKoerper('QQ==', 'song', ['1.1', '2.10'], ['a', 'b'], { rev: 4 }), { daten_b64: 'QQ==', name: 'song', profil: 'poly', rev: 4 });
+  assert.deepEqual(importKoerper('QQ==', 'song', ['2.10'], ['a', 'b']), { daten_b64: 'QQ==', name: 'song', profil: 'poly', auswahl: ['2.10'] });
+  assert.equal(vorschauKoerper('QQ==', 'song').profil, 'poly', 'the preview plans with the same profile as the import');
 });

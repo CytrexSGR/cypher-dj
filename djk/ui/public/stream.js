@@ -16,7 +16,8 @@ import { ladeLoops, recAktiv, recEnde, setzeLetzterBeat, taktText, uhrKopf, zeig
 import { zeigeWert } from './controls_view.js';
 import { zeigeColor } from './color_view.js';
 import { remixFp } from './remix_window.js';
-import { instrumenteSichtbar, kompGr, spektrumAnsichten, spektrumLeihe, spektrumNachsehen } from './effects_gemeinsam.js';
+import { kompPegelAufnehmen } from './face/comp.js';
+import { instrumenteSichtbar, kompGr, kompPegel, spektrumAnsichten, spektrumLeihe, spektrumNachsehen } from './effects_gemeinsam.js';
 import { holeHotcues, holeRaster } from './deck_griffe.js';
 import { instrumenteAnsicht } from './effects_bindung.js';
 
@@ -106,6 +107,9 @@ export function strom() {
       case '/zustand/komp':
         kompGr[f.kanal] = { db: Number(f.gr_db), t: performance.now() };
         zeigeKomp(f.kanal);
+        break;
+      case '/e/stufe_pegel':   // device faces T9: the channel compressor's input and output peak (the insert stages' reports are taken in production/inserts.js)
+        kompPegelAufnehmen(kompPegel, f, performance.now());
         break;
       case '/zustand/mix':   // A8b (D10): gain reduction of the bus tools; A6: the server passes the address on, the kern sends it, gate_db feeds the source strips
         if (mixAufnehmen(busMix, f, performance.now())) zeigeBusMesser();

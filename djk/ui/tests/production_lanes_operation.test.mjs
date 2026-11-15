@@ -455,3 +455,11 @@ test('S4 T5.3 a 400 px freehand stroke (grid off) over a fader lane is one chang
   assert.ok(nach.length > 3 && nach.length < 201, `simplified on the server: ${nach.length} points from 201 samples`);
   assert.equal(ohneAbgeleitetes(wende(r.projekt, r.zurueck)), ohneAbgeleitetes(p), 'one undo step restores the lane');
 });
+
+// Task 7 (backlog production): a point drag on a group lane is the same command as on a track, addressed by lane_id only
+test('Task 7 zugBefehl on a group lane: auto_punkte with lane_id, no spur_id and no strang_id', () => {
+  const lane = { id: 'l1', ziel: 'insert.i1.b1/freq', punkte: [{ beat: 0, wert: 100 }, { beat: 8, wert: 400 }] };
+  const b = zugBefehl(lane, 1, { beat: 12, wert: 500 });
+  assert.deepEqual(b, { befehl: 'auto_punkte', lane_id: 'l1', loesche_von: 8, loesche_bis: 8, setze: [{ beat: 12, wert: 500 }] });
+  assert.ok(!('spur_id' in b) && !('strang_id' in b));
+});

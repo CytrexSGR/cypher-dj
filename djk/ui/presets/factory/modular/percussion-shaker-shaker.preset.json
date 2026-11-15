@@ -1,0 +1,35 @@
+{
+ "schema": 1,
+ "name": "Shaker",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "percussion-shaker",
+ "werte": {
+  "knob1": 0.5,
+  "knob2": 0.5,
+  "knob3": 0.5
+ },
+ "beschreibung": {
+  "art": "percussion",
+  "unterart": "shaker",
+  "charakter": [
+   "bright",
+   "thin",
+   "tight",
+   "aggressive",
+   "airy"
+  ],
+  "genre": [],
+  "einsatz": [
+   "drop"
+  ],
+  "energie": 3,
+  "text": "Shaker: a 40 ms grain of noise ringing a resonant 7.6 kHz filter, high-passed, velocity-sensitive, tiny room."
+ },
+ "tags": [
+  "percussion-shaker"
+ ],
+ "notiz": "Source rule: recipe card `percussion.shaker`, Welsh [B1] p. 85, patch Castanets, table transcribed (derived for shaker, same noise-plus-resonance structure, 40 ms decay). Role in the arrangement: Snoman [B3] p. 427. Measured by `tests/rezepte.rs`, not yet heard. Manifest character words outside the vocabulary: harsh (as aggressive). Manifest use words outside the vocabulary: groove (as drop).",
+ "angelegt": "2026-11-15T00:00:00.000Z",
+ "geaendert": "2026-11-15T00:00:00.000Z"
+}

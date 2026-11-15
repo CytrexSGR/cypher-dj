@@ -79,7 +79,7 @@ test('a broken panel file answers quelle auto with the file problems in fehler',
   });
 });
 
-test('every shipped graph with regler nodes gets an auto panel that passes pruefePanel (80)', () => {
+test('every shipped graph with regler nodes gets an auto panel that passes pruefePanel (81)', () => {
   mitOrdner(BEISPIELE, () => {
     let n = 0;
     for (const d of fs.readdirSync(BEISPIELE).filter((x) => x.endsWith('.json'))) {
@@ -91,7 +91,24 @@ test('every shipped graph with regler nodes gets an auto panel that passes pruef
       assert.deepEqual(pruefePanel(p, name, regler), [], name);
       n++;
     }
-    assert.equal(n, 80);
+    assert.equal(n, 81);
+  });
+});
+
+test('every recipe graph (demos/recipes) opens with an automatic panel that passes pruefePanel (46)', () => {
+  const dir = path.join(BEISPIELE, 'recipes');
+  mitOrdner(dir, () => {
+    let n = 0;
+    for (const d of fs.readdirSync(dir).filter((x) => x.endsWith('.json') && x !== 'MANIFEST.json')) {
+      const name = d.slice(0, -5);
+      const regler = reglerBereiche(JSON.parse(fs.readFileSync(path.join(dir, d), 'utf8')));
+      assert.ok(Object.keys(regler).length > 0, `${name} has knobs`);
+      const g = { art: 'bk', graph: name };
+      const p = autoPanel(g, parameterTabelle(g), name);
+      assert.deepEqual(pruefePanel(p, name, regler), [], name);
+      n++;
+    }
+    assert.equal(n, 46);
   });
 });
 

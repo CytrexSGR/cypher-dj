@@ -16,6 +16,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 import nidrv
+from seq_view import seq_sicht
 
 W, H = 480, 272
 SEITE = os.environ.get("CYPHERDJ_SEITE", "http://127.0.0.1:47300")
@@ -274,19 +275,18 @@ class Stand:
         if time.monotonic() - self.seq_alt > 1.0:
             self.seq_alt = time.monotonic()
             try:
-                self.seq = holen("/seq/stand") or {}
+                self.seq = holen("/seq/stand?zellen=1") or {}
             except Exception:
                 pass
         return self.seq.get(str(nr))
 
-    def seq_schritt(self, bpm):
-        """Current SEQ step 0..15 (spec: floor(projekt_beat / 0.25) mod 16), None when the container stands."""
+    def projekt_beat(self, bpm):
+        """Current project beat extrapolated between the 10 Hz messages, None when the container stands."""
         with self.lock:
             e = self.arr
         if not e or int(e[0].get("status") or 0) < 2:
             return None
-        beat = float(e[0].get("projekt_beat") or 0) + (time.monotonic() - e[1]) * (bpm or 0) / 60.0
-        return int(beat / 0.25) % 16
+        return float(e[0].get("projekt_beat") or 0) + (time.monotonic() - e[1]) * (bpm or 0) / 60.0
 
     def hotcues(self, nr):
         if time.monotonic() - self.cues_alt.get(nr, 0.0) > 1.0:
@@ -384,34 +384,32 @@ def studio_bild(lage, pegel, nr, stroeme):
 
 
 def seq_bild(stand, nr, bpm):
-    """Third view: the step sequencer place of this side (place 1 left, 2 right): rows x 16 steps, playhead column."""
+    """Third view: the SEQ deck place of this side (place 1 left, 2 right): the first audible pattern, rows x 16 cells, playhead per row."""
     img = Image.new("RGB", (W, H), HG)
     d = ImageDraw.Draw(img)
     ak = AKZENT[nr]
     d.rectangle([0, 0, 34, 34], fill=ak)
     d.text((17, 17), "AB"[nr - 1], font=FONT["titel"], fill=HG, anchor="mm")
-    p = stand.seq_platz(nr)
-    if not p or not p.get("seq"):
+    sicht = seq_sicht(stand.seq_platz(nr), stand.projekt_beat(bpm))
+    if sicht["leer"]:
         d.text((44, 6), f"SEQ {nr}  (empty place)", font=FONT["titel"], fill=GRAU)
         return np.asarray(img).copy()
-    seq = p["seq"]
-    folgen = seq.get("folgen") or []
-    akt = seq.get("aktiv", 0)
-    folge = folgen[akt] if isinstance(folgen, list) and akt < len(folgen) else {}
-    zeilen = (folge.get("zeilen") or [])[:8]
-    d.text((44, 6), f"SEQ {nr}  pattern {akt + 1}/{len(folgen)}", font=FONT["titel"], fill=TEXT)
-    schritt = stand.seq_schritt(bpm)
+    zeilen = sicht["zeilen"]
+    d.text((44, 6), f"SEQ {nr}  " + _kuerzen(d, sicht["kopf"], FONT["titel"], W - 100), font=FONT["titel"], fill=TEXT)
     x0, bx = 92, (W - 96) / 16
     zh = (H - 44) / max(1, len(zeilen))
+    gedimmt = tuple(int(HG[i] + (ak[i] - HG[i]) * 0.45) for i in range(3))
+    hell = tuple(min(255, int(c * 0.6 + 255 * 0.4)) for c in ak)
     for i, z in enumerate(zeilen):
         y = 42 + i * zh
-        d.text((6, y + zh / 2), _kuerzen(d, z.get("name") or z.get("id") or "", FONT["mono"], 82), font=FONT["mono"],
-               fill=TEXT, anchor="lm")
-        for k, st in enumerate((z.get("schritte") or [])[:16]):
+        d.text((6, y + zh / 2), _kuerzen(d, z["name"], FONT["mono"], 82), font=FONT["mono"], fill=TEXT, anchor="lm")
+        for k, c in enumerate(z["zellen"]):
+            if c == " ":
+                continue
             x = x0 + k * bx
-            an = bool(st.get("an"))
-            farbe = ak if an else ((34, 37, 45) if k % 4 else (48, 52, 62))
-            if k == schritt:
+            an = c in "oxX"
+            farbe = {"o": gedimmt, "x": ak, "X": hell}.get(c) or ((34, 37, 45) if k % 4 else (48, 52, 62))
+            if k == z["kopf_index"]:
                 farbe = (255, 255, 255) if an else (90, 94, 104)
             d.rectangle([x + 1, y + 2, x + bx - 2, y + zh - 3], fill=farbe)
     return np.asarray(img).copy()

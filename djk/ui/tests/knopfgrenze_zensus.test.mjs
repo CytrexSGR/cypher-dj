@@ -41,6 +41,12 @@ const ERLAUBT = [
   { datei: 'ui/project/model.ts', fragment: "'geraet.k32'", grund: 'row of the knob table k1..k64' },
   { datei: 'ui/project/insert_key.ts', fragment: "name: 'k32'", grund: 'generated key list k1..k64' },
   { datei: 'conductor/src/insert_controls.ts', fragment: "/k32'", grund: 'generated rows ins/bk/<n>/k1..k64' },
+  // the live knob override: k1..k32 have a core row spur/<slot>/bk/<k> (SPUR_BK_KNOEPFE = 32), k33..k64 stay on the release path
+  { datei: 'ui/project/commands.ts', fragment: 'k1..k32', grund: 'live knob rows spur/<slot>/bk/1..32 (SPUR_BK_KNOEPFE), not the knob limit' },
+  { datei: 'ui/project/commands.ts', fragment: 'BK_LIVE_KNOEPFE = 32', grund: 'live knob rows spur/<slot>/bk/1..32 (SPUR_BK_KNOEPFE)' },
+  { datei: 'ui/public/production/device_view.js', fragment: 'k1..k32', grund: 'live knob rows spur/<slot>/bk/1..32 (SPUR_BK_KNOEPFE)' },
+  { datei: 'ui/public/production/device_view.js', fragment: 'BK_LIVE_MAX = 32', grund: 'live knob rows spur/<slot>/bk/1..32 (SPUR_BK_KNOEPFE)' },
+  { datei: 'hand/hand.ts', fragment: 'param (k1..k32', grund: 'tool text of geraet_param_setzen: the live knob rows spur/<slot>/bk/1..32' },
   // comments that describe the 8 -> 32 -> 64 history
   { datei: 'ui/project/model.ts', fragment: 'bk k9..k32', grund: 'comment: the index space of the rack members, k33..k64 follow' },
   { datei: 'ui/project/model.ts', fragment: 'k9..k32 = 17..40', grund: 'comment: GLIED_PARAM_BK9 range, GLIED_PARAM_BK33 follows' },

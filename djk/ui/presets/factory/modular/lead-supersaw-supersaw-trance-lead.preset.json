@@ -1,0 +1,39 @@
+{
+ "schema": 1,
+ "name": "Supersaw / trance lead",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "lead-supersaw",
+ "werte": {
+  "knob1": 0.5,
+  "knob2": 0.5,
+  "knob3": 0.5,
+  "knob4": 0.5,
+  "knob5": 0.5
+ },
+ "beschreibung": {
+  "art": "lead",
+  "unterart": "supersaw",
+  "charakter": [
+   "bright",
+   "wide",
+   "thick",
+   "airy",
+   "aggressive",
+   "evolving"
+  ],
+  "genre": [],
+  "einsatz": [
+   "drop",
+   "build"
+  ],
+  "energie": 5,
+  "text": "Trance supersaw: seven detuned saws in one voice, spread wide, hall with pre-delay, gated tail and a short delay."
+ },
+ "tags": [
+  "lead-supersaw"
+ ],
+ "notiz": "Source rule: recipe card `lead.supersaw`, Snoman [B3] p. 447. Measured by `tests/rezepte.rs`, not yet heard.",
+ "angelegt": "2026-11-15T00:00:00.000Z",
+ "geaendert": "2026-11-15T00:00:00.000Z"
+}

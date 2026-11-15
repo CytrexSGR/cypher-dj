@@ -22,7 +22,7 @@ test('factory presets: all valid, all described, no duplicate sound', (t) => {
   assert.deepEqual(doppelt, []);
   const je = {};
   for (const e of register.eintraege) je[e.geraet] = (je[e.geraet] ?? 0) + 1;
-  assert.deepEqual(je, { komp: 6, eq: 11, hall: 11, saett: 10, rb338: 10, baukasten: 58 });
+  assert.deepEqual(je, { komp: 6, eq: 11, hall: 11, saett: 10, rb338: 10, baukasten: 115 });
 });
 
 test('factory register is up to date (after changing a factory preset: node presets/tool.ts bauen)', (t) => {
@@ -52,4 +52,12 @@ test('compressor factory presets are described as compressors with the matching 
     Bass: 'compressor/channel', 'Bus Glue': 'compressor/glue', 'Drum Bus': 'compressor/bus',
     'Kick Sidechain': 'compressor/sidechain', Lead: 'compressor/channel', Parallel: 'compressor/parallel',
   });
+});
+
+test('factory register ids stay werk:<device>/<slug> while the folders are English', (t) => {
+  const { register } = bauen(werkSpeicher(t), ['werk']);
+  assert.ok(register.eintraege.some((e) => e.id === 'werk:komp/drum-bus' && e.pfad === 'komp/drum-bus.preset.json'));
+  assert.ok(fs.existsSync(path.join(WERK_VORGABE, 'comp', 'drum-bus.preset.json')));
+  assert.equal(fs.existsSync(path.join(WERK_VORGABE, 'komp')), false);
+  assert.ok(fs.readdirSync(WERK_VORGABE).includes('modular'));
 });

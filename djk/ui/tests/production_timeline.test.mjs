@@ -4,6 +4,20 @@ import assert from 'node:assert/strict';
 import { RASTER, rasterBeats, neueAnsicht, beatZuX, xZuBeat, rasten, zoomUm, scrolle, linealStufen, positionText, linealText,
   linien, kopfImLoop, folgeSeite, PX_PRO_BEAT_MAX, PX_PRO_BEAT_MIN } from '../public/production/timeline.js';
 
+// Task 13: the meter n/4 (the default 4/4 keeps every older call as it was)
+test('meter n/4: position, ruler text, bar lines and the BAR raster follow beatsProTakt', async () => {
+  const z = await import('../public/production/timeline.js');
+  assert.equal(z.beatsProTakt([3, 4]), 3); assert.equal(z.beatsProTakt([4, 4]), 4);
+  assert.equal(z.beatsProTakt(undefined), 4, 'a project without the field is 4/4');
+  assert.equal(z.positionText(5.25, 3), '2.3.2');
+  assert.equal(z.positionText(5.25), '2.2.2');
+  assert.equal(z.positionText(3, 3), '2.1.1');
+  assert.equal(z.rasterBeats('takt', 3), 3); assert.equal(z.rasterBeats('takt'), 4); assert.equal(z.rasterBeats('beat', 3), 1);
+  const l3 = z.linien({ beat0: 0, pxProBeat: 100 }, 800, 3).filter((l) => l.takt).map((l) => l.beat);
+  assert.deepEqual(l3, [0, 3, 6]);
+  assert.deepEqual(z.linien({ beat0: 0, pxProBeat: 100 }, 800).filter((l) => l.takt).map((l) => l.beat), [0, 4, 8]);
+});
+
 test('V1 Zeitachse: Beat ↔ Pixel hin und zurück', () => {
   const a = { beat0: 8, pxProBeat: 20 };
   assert.equal(beatZuX(a, 8), 0);

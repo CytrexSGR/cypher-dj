@@ -18,8 +18,8 @@ import {
   alleRacks, gliedMakroParam, glieder, istGliedZiel, istInsertZiel, makroFaehig, makroVon, MAKRO_NAME_MAX, MAX_MAKROS, MAX_MAKRO_ZIELE, MAX_RACK,
   MAX_VARIATIONEN, VARIATION_NAME_MAX, MUSTER_CODE_MAX,
   type Rack, type RackZiel,
-  BK_GRAPH_NAME, BK_PARAMETER, KIT_NAME, RB_PARAMETER, SPUR_FARBEN,
-  TEMPO_MAX, TEMPO_MIN, WIRT_SLOTS, SURGE_NAME, SURGE_PARAMETER_MAX, istPatchName,
+  BK_GRAPH_NAME, BK_PARAMETER, bkSlot, KIT_NAME, RB_PARAMETER, SPUR_FARBEN,
+  TEMPO_MAX, TEMPO_MIN, TAKTART_ZAEHLER_MAX, TAKTART_ZAEHLER_MIN, taktartOk, WIRT_SLOTS, SURGE_NAME, SURGE_PARAMETER_MAX, istPatchName,
   MAX_TAKES_PRO_SPUR, TAKE_NAME_MAX, entferneLeereTakes, type Take,
   istObjekt, kanonisch, neueId, neueNotenId, notenNummer, notenZaehler,
   pruefeFehler, pruefeModulFehler, spurSicht, sucheClip, sucheSpur, wiedergabeSicht, warpPruefung, entstehungPruefung, type Entstehung,
@@ -276,7 +276,7 @@ const insertVon = (p: Projekt, id: string): { strang: InsertTraeger; insert: Ins
   const t = alleInserts(p).find((x) => x.insert.id === id);
   return t ? { strang: t.strang, insert: t.insert } : ab('insert_unbekannt', id);
 };
-// 1.10 slice 5 (E12): the values of "Duck by Kick" = presets/werk/komp/kick-sidechain.preset.json by the plugin names of INSERT_ARTEN (no file I/O here);
+// 1.10 slice 5 (E12): the values of "Duck by Kick" = presets/factory/comp/kick-sidechain.preset.json by the plugin names of INSERT_ARTEN (no file I/O here);
 // tests/project_key.test.mjs pins this constant to the preset file
 export const DUCK_DURCH_KICK_WERTE: Readonly<Record<string, number>> =
   { schwelle: -30, ratio: 8, knie: 0, attack: 1, release: 150, makeup: 0, mix: 1, schp: 0 };
@@ -692,6 +692,7 @@ function seqSichtArg(x: unknown): SeqSicht {
 // A pattern clip: loop_beats is the pattern length, the clip covers the whole live region
 const SEQ_LOOP_VORGABE = 4;
 
+const BK_LIVE_KNOEPFE = 32;   // production plan task 9: k1..k32 have a core row spur/<slot>/bk/<k> (SPUR_BK_KNOEPFE), k33..k64 stay on the release path
 const PRO_BEFEHL: Record<string, (p: Projekt, a: Args, ctx: Kontext) => void> = {
   spur_neu(p, a, ctx) {
     erlaube(a, 'art', 'name', 'geraet', 'gruppe');
@@ -1202,12 +1203,87 @@ const PRO_BEFEHL: Record<string, (p: Projekt, a: Args, ctx: Kontext) => void> = 
     warpClip(p, a);
     ab('argument_ungueltig', 'tempo_vom_clip braucht den Server (er setzt das Projekttempo über tempo_setzen)');
   },
+  // spur_id (optional): the track the copy goes to (at ziel_beat); without it, or with the clip's own track, the copy sits right behind the original.
+  // A track that cannot carry the clip (audio clip on an instrument track or the reverse) is spur_art; an unknown track spur_unbekannt.
   clip_duplizieren(p, a) {
-    erlaube(a, 'clip_id', 'ziel_beat');
+    erlaube(a, 'clip_id', 'ziel_beat', 'spur_id');
     const { spur, clip } = clipVon(p, idArg(a, 'clip_id'));
     const ziel = zahl(a, 'ziel_beat', 0, MAX_BEAT, { opt: true }) ?? clip.start_beat + clip.laenge_beats;
+    const zielSpur = a.spur_id === undefined ? spur : spurVon(p, idArg(a, 'spur_id'));
+    if (clip.art !== (zielSpur.art === 'audio' ? 'audio' : 'midi')) ab('spur_art', `${clip.art} clip cannot go to ${zielSpur.art} track ${zielSpur.id}`);
+    for (const h of clip.huellkurven ?? []) {     // the envelopes must fit the other track, as for clip_aendern
+      const f = zielSpur === spur ? null : huellkurvePruefung(h, clip, zielSpur);
+      if (f) ab(f.grund, f.text);
+    }
     const kopie = { ...structuredClone(clip), id: neueId(p, 'clip'), start_beat: ziel };
-    spur.clips.splice(spur.clips.indexOf(clip) + 1, 0, kopie);
+    if (zielSpur === spur) spur.clips.splice(spur.clips.indexOf(clip) + 1, 0, kopie); else zielSpur.clips.push(kopie);
+  },
+
+  // Glue: clip_ids (two or more clips of ONE track, any order, no repeats) become one clip from the first start to the last end, on the place and with
+  // the id of the first (earliest) clip; the others are removed. One command = one undo step. Reasons: verbinden_spur (clips of different tracks),
+  // verbinden_loop (a clip with an active loop, loop_beats shorter than its length: unroll it first), verbinden_audio (see below).
+  // MIDI: the notes keep their absolute beats (gaps stay silent, overlapping clips keep all notes, a note that would end after the new end is cut to it;
+  // a note id that is already taken gets a new one). The result is the FIRST clip in everything else: its envelopes (huellkurven) and its seq descriptor stay,
+  // nothing is merged from the others (their envelopes and seq are lost). The strudel origin (muster) is dropped, as clip_teilen does: glued notes are no
+  // longer what the pattern makes. An inactive loop (loop_beats = length) is dropped so the longer clip does not start to loop.
+  // Audio: only the inverse of clip_teilen, i.e. consecutive pieces of one source: same source, name, gain, mute, envelopes and warp settings, each piece
+  // touches the previous one on the timeline and continues where the previous one ends in the source (offset_s, and warp.versatz_beats when warped),
+  // and no fade sits at a join. The result is the first clip, longer, with the fade-out of the last piece. Different audio cannot be glued: it needs a
+  // bounce of the track. Take lanes are not touched (their clip ids answer clip_unbekannt).
+  clips_verbinden(p, a) {
+    erlaube(a, 'clip_ids');
+    const ids = listeArg(a, 'clip_ids');
+    if (ids.length < 2 || !ids.every((x) => typeof x === 'string' && x) || new Set(ids).size !== ids.length) {
+      ab('argument_ungueltig', 'clip_ids: two or more different clip IDs expected');
+    }
+    const gefunden = (ids as string[]).map((id) => clipVon(p, id));
+    const spur = gefunden[0].spur;
+    if (gefunden.some((g) => g.spur !== spur)) ab('verbinden_spur', 'the clips lie on different tracks');
+    const clips = gefunden.map((g) => g.clip).sort((x, y) => x.start_beat - y.start_beat);
+    for (const c of clips) {
+      if (c.loop_beats != null && c.loop_beats < c.laenge_beats - 1e-9) ab('verbinden_loop', `${c.id}: turn the loop off (unroll it) before gluing`);
+    }
+    const erste = clips[0], ende = runde9(Math.max(...clips.map((c) => c.start_beat + c.laenge_beats)));
+    const laenge = runde9(ende - erste.start_beat);
+    if (erste.art === 'audio') {
+      const nenner = (c: AudioClip) => JSON.stringify({ ...c, id: 0, start_beat: 0, laenge_beats: 0, offset_s: 0, fade_ein_beats: 0, fade_aus_beats: 0,
+        dekodiert: 0, loop_beats: 0,
+        warp: c.warp ? { ...c.warp, versatz_beats: 0 } : c.warp });
+      const nein = (grund: string): never => ab('verbinden_audio', `${clips.map((c) => c.id).join(', ')}: ${grund}`);
+      clips.forEach((c, i) => {
+        if (c.art !== 'audio') return nein('not an audio clip');
+        if (i === 0) return;
+        const v = clips[i - 1] as AudioClip, n = c as AudioClip;
+        if (nenner(v) !== nenner(n)) nein('different source or settings: glue of different audio needs a bounce of the track');
+        if (Math.abs(n.start_beat - (v.start_beat + v.laenge_beats)) > 1e-9) {
+          nein('the clips do not touch: glue of different audio needs a bounce of the track');
+        }
+        const weiter = Math.abs(n.offset_s - (v.offset_s + v.laenge_beats * 60 / p.tempo_bpm)) < 1e-6
+          && (!v.warp || Math.abs(n.warp!.versatz_beats - (v.warp.versatz_beats + v.laenge_beats)) < 1e-9);
+        if (!weiter) nein('the source does not continue where the previous clip ends: glue of different audio needs a bounce of the track');
+        if (v.fade_aus_beats > 0 || n.fade_ein_beats > 0) nein('a fade at the join would be lost');
+      });
+      const letzte = clips[clips.length - 1] as AudioClip;
+      (erste as AudioClip).fade_aus_beats = letzte.fade_aus_beats;
+    } else {
+      const belegt = new Set<string>(), noten: Note[] = [];
+      for (const c of clips) {
+        if (c.art !== 'midi') ab('verbinden_audio', `${c.id}: not a MIDI clip`);
+        const versatz = runde9(c.start_beat - erste.start_beat);
+        for (const n of (c as MidiClip).noten) {
+          const beat = runde9(n.beat + versatz);
+          if (beat >= laenge - 1e-9) continue;
+          const id = belegt.has(n.id) ? neueNotenId(p) : n.id;
+          belegt.add(id);
+          noten.push({ ...n, id, beat, laenge: Math.min(n.laenge, runde9(laenge - beat)) });
+        }
+      }
+      (erste as MidiClip).noten = noten;
+      delete (erste as MidiClip).muster;
+    }
+    delete erste.loop_beats;
+    erste.laenge_beats = laenge;
+    for (const c of clips.slice(1)) spur.clips.splice(spur.clips.indexOf(c), 1);
   },
 
   clip_loeschen(p, a) {
@@ -1594,6 +1670,21 @@ const PRO_BEFEHL: Record<string, (p: Projekt, a: Args, ctx: Kontext) => void> = 
     insert.werte[q.name] = insertZahl(insert.art as InsertPoolArt, q, a, 'wert');
   },
 
+  // Production plan task 9: one knob k1..k32 of a Baukasten track, live (no new playback). The core row spur/<slot>/bk/<k> that carries the value
+  // to the instance while the knob is dragged is added by fuehreLeichtAus (the only producer of such a row); k33..k64 stay on the release path (spur_aendern).
+  geraet_param_setzen(p, a) {
+    erlaube(a, 'spur_id', 'param', 'wert');
+    const spur = spurVon(p, idArg(a, 'spur_id'));
+    const param = a.param;
+    if (typeof param !== 'string' || !BK_PARAMETER.includes(param)) ab('argument_unbekannt', `param: ${String(param)} (k1..k32)`);
+    if (!(spur.geraet?.art === 'intern' && spur.geraet.name === 'bk')) ab('geraet_falsch', `${spur.id} is not a Baukasten track`);
+    if (Number((param as string).slice(1)) > BK_LIVE_KNOEPFE) {
+      ab('param_nicht_live', `${String(param)}: only k1..k${BK_LIVE_KNOEPFE} are live, change k33..k64 with spur_aendern`);
+    }
+    if (!zahlOk(a.wert) || a.wert < 0 || a.wert > 1) ab('argument_ungueltig', 'wert: Zahl 0..1 erwartet');
+    (spur.geraet as { parameter: Record<string, number> }).parameter[param as string] = a.wert;
+  },
+
   // plan 1.11 T7 (D4): the user's addition to the latency of a host stage, 0..MAX_LATENZ_EXTRA samples (0 = the field is absent)
   insert_latenz_extra(p, a) {
     erlaube(a, 'insert_id', 'samples');
@@ -1791,6 +1882,14 @@ const PRO_BEFEHL: Record<string, (p: Projekt, a: Args, ctx: Kontext) => void> = 
     if (!zahlOk(a.bpm)) ab('argument_ungueltig', 'bpm: Zahl erwartet');
     if (a.bpm < TEMPO_MIN || a.bpm > TEMPO_MAX) ab('tempo_bereich', `${a.bpm} (${TEMPO_MIN}..${TEMPO_MAX})`);
     p.tempo_bpm = a.bpm;
+  },
+
+  // Meter n/4 (plan production, Task 13): one per project, denominator 4. Not a playback change: the core still counts bars of 4 beats.
+  taktart_setzen(p, a) {
+    erlaube(a, 'taktart');
+    if (!taktartOk(a.taktart)) ab('argument_ungueltig', `taktart: [n, 4] with n = ${TAKTART_ZAEHLER_MIN}..${TAKTART_ZAEHLER_MAX} expected`);
+    const t = a.taktart as number[];
+    p.taktart = [t[0], t[1]];
   },
 
   loop_setzen(p, a) {
@@ -2266,6 +2365,7 @@ function istLeicht(projekt: Projekt, b: unknown): boolean {
     // slice 4: knob and bypass of a stage are live only (the key `sc` may add or remove a field, and `key` is structure, so both take the general path)
     case 'insert_param_setzen': return b.param !== 'sc' && b.param !== 'key';
     case 'insert_an': return true;
+    case 'geraet_param_setzen': return true;   // production plan task 9: a knob of a Baukasten track, live
     case 'rack_makro': case 'makro_variation_laden': return true;   // slice 4c: the live macro value is a control change
     case 'tempo_setzen': return !projekt.spuren.some((s) => s.freeze);        // Tempo verwirft Freezes und ändert deren Länge in Beats
     default: return false;
@@ -2296,6 +2396,17 @@ function leichterUnterschied(von: Projekt, nach: Projekt): Patch {
     // slice 4c: the live macro values of the rack (the general path replaces the whole array)
     if (a.rack && b.rack && a.rack !== b.rack) flach(a.rack, b.rack, `${pfad}/rack`, ['werte']);
   };
+  // production plan task 9: the knob values of a Baukasten device (geraet_param_setzen): a knob that is new is added, one that changed is replaced,
+  // one that is gone is removed
+  const bkKnoepfe = (a: Spur, b: Spur, pfad: string): void => {
+    if (a.geraet === b.geraet || a.geraet?.art !== 'intern' || a.geraet.name !== 'bk' || b.geraet?.art !== 'intern' || b.geraet.name !== 'bk') return;
+    const x = a.geraet.parameter, y = b.geraet.parameter;
+    for (const k of Object.keys(y)) {
+      if (!(k in x)) aus.push({ op: 'add', pfad: `${pfad}/geraet/parameter/${pfadSegment(k)}`, wert: y[k] });
+      else if (x[k] !== y[k]) aus.push({ op: 'replace', pfad: `${pfad}/geraet/parameter/${pfadSegment(k)}`, wert: y[k] });
+    }
+    for (const k of Object.keys(x)) if (!(k in y)) aus.push({ op: 'remove', pfad: `${pfad}/geraet/parameter/${pfadSegment(k)}` });
+  };
   for (const k of Object.keys(von)) {
     if (k === 'tempo_bpm') flach({ tempo_bpm: von.tempo_bpm }, { tempo_bpm: nach.tempo_bpm }, '');
     else if (k === 'loop' || k === 'metronom') flach(von[k], nach[k], `/${k}`);
@@ -2303,6 +2414,7 @@ function leichterUnterschied(von: Projekt, nach: Projekt): Patch {
       von.spuren.forEach((s, i) => {
         if (s === nach.spuren[i]) return;
         flach(s, nach.spuren[i], `/spuren/${s.id}`, SPUR_LEICHT); stufen(s, nach.spuren[i], `/spuren/${s.id}`);
+        bkKnoepfe(s, nach.spuren[i], `/spuren/${s.id}`);
       });
     } else if (k === 'gruppen') {
       von.gruppen.forEach((g, i) => {
@@ -2351,6 +2463,8 @@ function fuehreLeichtAus(projekt: Projekt, befehle: unknown[]): BefehlErgebnis {
     kopiert.add(key);
   };
   const hinweise: LaneHinweis[] = [];
+  // production plan task 9: spur/<slot>/bk/<k> -> value, the last write of a knob wins; this is the only producer of such a row
+  const bkZeilen = new Map<string, number>();
   befehle.forEach((b, i) => {
     const vorher = hatLaneRuhewerte(entwurf) ? laneRuhewerte(entwurf) : null;
     try {
@@ -2361,16 +2475,29 @@ function fuehreLeichtAus(projekt: Projekt, befehle: unknown[]): BefehlErgebnis {
         const k = entwurf.spuren.findIndex((s) => s.id === a.spur_id);
         if (k >= 0) { entwurf.spuren[k] = { ...entwurf.spuren[k] }; kopiert.add(a.spur_id); }
       }
+      // task 9: the track, its device and the knob map are written
+      if (a.befehl === 'geraet_param_setzen' && typeof a.spur_id === 'string' && !kopiert.has(`geraet:${a.spur_id}`)) {
+        const k = entwurf.spuren.findIndex((s) => s.id === a.spur_id);
+        const g = k >= 0 ? entwurf.spuren[k].geraet : undefined;
+        if (k >= 0) {
+          entwurf.spuren[k] = { ...entwurf.spuren[k], ...(g?.art === 'intern' && g.name === 'bk' ? { geraet: { ...g, parameter: { ...g.parameter } } } : {}) };
+          kopiert.add(`geraet:${a.spur_id}`);
+        }
+      }
       if (a.befehl === 'gruppenspur_aendern' && typeof a.gruppe_id === 'string' && !kopiert.has(a.gruppe_id)) {
         const k = (entwurf.gruppen ?? []).findIndex((g) => g.id === a.gruppe_id);
         if (k >= 0) { entwurf.gruppen[k] = { ...entwurf.gruppen[k] }; kopiert.add(a.gruppe_id); }
       }
       PRO_BEFEHL[a.befehl](entwurf, a, { quelle: 'andreas' });          // nur Befehle ohne Herkunft (istLeicht)
+      if (a.befehl === 'geraet_param_setzen') {   // task 9: the handler accepted it, so the track is a bk track and the knob is k1..k32
+        bkZeilen.set(`spur/${bkSlot(entwurf, a.spur_id)}/bk/${Number(a.param.slice(1))}`, a.wert);
+      }
     } catch (e) { if (e instanceof BefehlFehler) e.index = i; throw e; }
     hinweise.push(...laneHinweise(vorher, entwurf, i));
   });
   return { projekt: entwurf, vor: leichterUnterschied(projekt, entwurf), zurueck: leichterUnterschied(entwurf, projekt),
-    betrifft_wiedergabe: false, regler_aenderungen: reglerAenderungen(projekt, entwurf), ...(hinweise.length ? { hinweise } : {}) };
+    betrifft_wiedergabe: false, regler_aenderungen: [...reglerAenderungen(projekt, entwurf), ...[...bkZeilen].map(([pfad, wert]) => ({ pfad, wert }))],
+    ...(hinweise.length ? { hinweise } : {}) };
 }
 
 // --- Notenweg (Spec 6.31, Leistung) ----------------------------------------------------------------------------------

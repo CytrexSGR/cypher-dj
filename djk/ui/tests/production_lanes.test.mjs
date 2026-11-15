@@ -243,3 +243,49 @@ test('S2 T6 fix 4: an unknown target is not editable (dimmed like a locked lane)
   assert.equal(bereich('fader').unbekannt, undefined);
   assert.equal(wertZuY(zeile, 0.5, 'geraet.zukunft'), wertZuY(zeile, 0.5, 'geraet.cutoff'));
 });
+
+// Task 6 (backlog production): the strand of a lane row is a track or a group
+import { laneStrang, offeneStraenge } from '../public/production/lanes.js';
+const P6 = () => ({ spuren: [{ id: 's1', automation: [] }, { id: 's2' }], gruppen: [{ id: 'g1', nr: 1, name: 'G1', automation: [] }] });
+test('Task 6 laneStrang: a group row gives the group, a track row the track, a row out of range null', () => {
+  const p = P6();
+  assert.deepEqual(laneStrang(p, { art: 'lane', gruppe: 0 }), { art: 'gruppe', id: 'g1', strang: p.gruppen[0] });
+  assert.deepEqual(laneStrang(p, { art: 'lane', spur: 1 }), { art: 'spur', id: 's2', strang: p.spuren[1] });
+  assert.equal(laneStrang(p, { art: 'lane', gruppe: 3 }), null);
+  assert.equal(laneStrang(p, { art: 'lane', spur: 9 }), null);
+  assert.equal(laneStrang(null, { art: 'lane', gruppe: 0 }), null);
+});
+test('Task 6 offeneStraenge: the open groups of a project, ids of deleted groups drop out', () => {
+  assert.deepEqual(offeneStraenge(P6(), new Set(['g1', 'g7', 's1'])), [{ art: 'gruppe', id: 'g1' }]);
+  assert.deepEqual(offeneStraenge(P6(), new Set()), []);
+  assert.deepEqual(offeneStraenge(null, new Set(['g1'])), []);
+});
+
+// Task 7 (backlog production): lanes on groups (chain targets only, D4)
+import { freieZieleGruppe, kettenZieleVon } from '../public/production/lanes.js';
+import { laneAnlegen } from '../public/production/track_heads.js';
+import { LANEN_TEXT } from '../public/production/lanes_operation.js';
+const gEq = (extra = {}) => ({ id: 'g1', nr: 1, name: 'G1', inserts: [{ id: 'i1', art: 'eq' }], automation: [], ...extra });
+test('Task 7 laneAnlegen: art gruppe sends strang_id, a track keeps spur_id, waehle only after an accepted command', async () => {
+  const aufrufe = [], gewaehlt = [];
+  const aendere = (ok) => async (label, befehle) => { aufrufe.push([label, befehle]); return ok; };
+  assert.equal(await laneAnlegen(aendere(true), (id, z) => gewaehlt.push([id, z]), 'g1', 'insert.i1.out', 'gruppe'), true);
+  assert.deepEqual(aufrufe[0], [LANEN_TEXT.neu_label, [{ befehl: 'auto_neu', strang_id: 'g1', ziel: 'insert.i1.out' }]]);
+  assert.deepEqual(gewaehlt, [['g1', 'insert.i1.out']]);
+  assert.equal(await laneAnlegen(aendere(true), () => {}, 's1', 'pan'), true);
+  assert.deepEqual(aufrufe[1][1], [{ befehl: 'auto_neu', spur_id: 's1', ziel: 'pan' }], 'art omitted: unchanged');
+  assert.equal(await laneAnlegen(aendere(false), (id, z) => gewaehlt.push([id, z]), 'g1', 'rack.m1', 'gruppe'), false);
+  assert.equal(gewaehlt.length, 1, 'a refusal does not switch the shown target');
+});
+test('Task 7 targets of a group: none without inserts, the chain targets of an EQ insert, no target twice', () => {
+  assert.deepEqual(freieZieleGruppe({ id: 'g1', inserts: [], automation: [] }), []);
+  assert.deepEqual(freieZieleGruppe(gEq()), [...kettenZieleVon(gEq()).keys()]);
+  assert.ok(freieZieleGruppe(gEq()).includes('insert.i1.b1/freq'));
+  assert.ok(!freieZieleGruppe(gEq()).includes('fader'), 'no fader, pan, mute or solo on a group (D4)');
+  const mit = gEq({ automation: [{ id: 'l1', ziel: 'insert.i1.b1/freq', punkte: [{ beat: 0, wert: 100 }] }] });
+  assert.ok(!freieZieleGruppe(mit).includes('insert.i1.b1/freq'), 'a target that has a lane is not offered again');
+  assert.deepEqual(freieZieleGruppe(null), []);
+});
+test('Task 7 text: a group without an insert says what to do', () => {
+  assert.equal(LANEN_TEXT.keine_ziele, 'This group has no insert yet: add an effect in INSERTS first');
+});

@@ -83,6 +83,7 @@ export async function ladeBestand() {
     tr.append(td);
     tb.append(tr);
   }
+  zeigePlaetzeSpaeter();   // the LOAD buttons of the stock list follow the places
   zeigeReiterInfo();
   filtere();
 }

@@ -1,0 +1,39 @@
+{
+ "schema": 1,
+ "name": "Drone",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "pad-drone",
+ "werte": {
+  "knob1": 0.5,
+  "knob2": 0.5,
+  "knob3": 0.5,
+  "knob4": 0.5,
+  "knob5": 0.5
+ },
+ "beschreibung": {
+  "art": "pad",
+  "unterart": "drone",
+  "charakter": [
+   "deep",
+   "dark",
+   "warm",
+   "smooth",
+   "evolving",
+   "thick"
+  ],
+  "genre": [],
+  "einsatz": [
+   "intro",
+   "breakdown"
+  ],
+  "energie": 1,
+  "text": "Dark drone bed: two triangles an octave apart under a resonant ladder that opens over two seconds, long glide and hall."
+ },
+ "tags": [
+  "pad-drone"
+ ],
+ "notiz": "Source rule: recipe card `pad.drone`, Welsh [B1] p. 102, patch Portus, table transcribed.. Measured by `tests/rezepte.rs`, not yet heard.",
+ "angelegt": "2026-11-15T00:00:00.000Z",
+ "geaendert": "2026-11-15T00:00:00.000Z"
+}

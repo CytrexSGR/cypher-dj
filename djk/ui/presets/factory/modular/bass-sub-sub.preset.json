@@ -1,0 +1,37 @@
+{
+ "schema": 1,
+ "name": "Sub",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "bass-sub",
+ "werte": {
+  "knob1": 0.5,
+  "knob2": 0.5,
+  "knob3": 0.5,
+  "knob4": 0.5,
+  "knob5": 0.5
+ },
+ "beschreibung": {
+  "art": "bass",
+  "unterart": "sub",
+  "charakter": [
+   "deep",
+   "tight",
+   "mono",
+   "clean"
+  ],
+  "genre": [],
+  "einsatz": [
+   "drop",
+   "breakdown"
+  ],
+  "energie": 4,
+  "text": "Clean mono sub: sine plus a quiet triangle an octave up under a 12 dB low-pass that tracks the note."
+ },
+ "tags": [
+  "bass-sub"
+ ],
+ "notiz": "Source rule: recipe card `bass.sub`, Snoman [B3] p. 443. Measured by `tests/rezepte.rs`, not yet heard. Manifest character words outside the vocabulary: sub (as deep).",
+ "angelegt": "2026-11-15T00:00:00.000Z",
+ "geaendert": "2026-11-15T00:00:00.000Z"
+}

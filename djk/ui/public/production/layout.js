@@ -25,7 +25,9 @@ export function spurIndexBei(y, anzahl) {
 // offen: indices of the tracks with an open lane (array or Set). takeZeilen: Map track index -> number of visible take rows (takes.js takeZeilenVon).
 // Without open lanes and take rows the table is the old fixed grid: row i starts at i * SPUR_HOEHE. The ORDER (track, takes, lane) is written once, here;
 // the heads (track_heads.js zeige) follow it.
-export function zeilenTabelle(anzahl, offen = [], takeZeilen = new Map(), layout = null) {
+// offeneGruppen: indices of the groups with an open lane row (a Set, only read together with a layout); the lane row of a group sits directly under its header
+// row, also when the group is folded (it belongs to the group, not to its members): {art:'lane', gruppe, y, h}.
+export function zeilenTabelle(anzahl, offen = [], takeZeilen = new Map(), layout = null, offeneGruppen = new Set()) {
   const o = offen instanceof Set ? offen : new Set(offen), z = [];
   let y = 0;
   // 1.10 T3: with a layout (gruppenLayout) the order is the derived display order; without one it is the array order of today (byte-equal rows).
@@ -34,7 +36,9 @@ export function zeilenTabelle(anzahl, offen = [], takeZeilen = new Map(), layout
     if (f.art === 'gruppe') {   // nested groups: a child group of a folded group keeps a row of height 0 (its head element stays); depth only when > 0
       const t = f.tiefe > 0 ? { tiefe: f.tiefe } : {};
       if (f.verborgen) { z.push({ art: 'gruppe', gruppe: f.gruppe, y, h: 0, ...t, verborgen: true }); continue; }
-      z.push({ art: 'gruppe', gruppe: f.gruppe, y, h: GRUPPEN_HOEHE, ...t }); y += GRUPPEN_HOEHE; continue;
+      z.push({ art: 'gruppe', gruppe: f.gruppe, y, h: GRUPPEN_HOEHE, ...t }); y += GRUPPEN_HOEHE;
+      if (offeneGruppen.has(f.gruppe)) { z.push({ art: 'lane', gruppe: f.gruppe, y, h: LANE_HOEHE }); y += LANE_HOEHE; }
+      continue;
     }
     const i = f.spur;
     if (f.verborgen) { z.push({ art: 'spur', spur: i, y, h: 0, tiefe: f.tiefe, verborgen: true }); continue; }   // folded member: no row, no take rows, no lane row
@@ -69,9 +73,11 @@ export function gruppenLayout(projekt) {
   return { folge };
 }
 // The row table of a project as the page uses it: the layout only when at least one group has members (else exactly the old table)
-export function zeilenFuer(projekt, offen = [], takeZeilen = new Map()) {
+// offeneStraenge: the ids (a Set) of the groups whose lane row is open; an id that matches no group (deleted group, a track id) adds no row
+export function zeilenFuer(projekt, offen = [], takeZeilen = new Map(), offeneStraenge = new Set()) {
   const n = projekt?.spuren?.length ?? 0, l = gruppenLayout(projekt);
-  return zeilenTabelle(n, offen, takeZeilen, l.folge.some((f) => f.art === 'gruppe') ? l : null);
+  const gruppen = (projekt?.gruppen ?? []).flatMap((g, i) => (offeneStraenge.has(g.id) ? [i] : []));
+  return zeilenTabelle(n, offen, takeZeilen, l.folge.some((f) => f.art === 'gruppe') ? l : null, new Set(gruppen));
 }
 export const zeilenHoehe = (tabelle) => (tabelle.length ? tabelle[tabelle.length - 1].y + tabelle[tabelle.length - 1].h : 0);
 // The row at height y, or null (above the first row, below the last one, or y is not a number)
@@ -146,6 +152,23 @@ export function klammerGriff(a, loop, x, toleranz = 5) {
   return null;
 }
 
+// Ruler drag (Task 2): the grip under x. A bracket that is OFF is grabbed only at its two edges (D2: the default bracket is OFF and grey over the first
+// 32 beats; a drag inside it must make a new range), an ON bracket is also grabbed in its middle. 'von' | 'bis' | 'mitte' | 'neu'
+export const GRIFF_TOLERANZ = 8;   // px
+export const LINEAL_ZUG_PX = 4;    // px a press in the position zone must move before it is a loop drag instead of a start marker click
+export function zugGriff(a, loop, x, toleranz = GRIFF_TOLERANZ) {
+  const g = klammerGriff(a, loop, x, toleranz);
+  if (g === 'mitte' && !loop.an) return 'neu';
+  return g ?? 'neu';
+}
+// Press in the position zone: 'start' (set the start marker) when it did not move LINEAL_ZUG_PX, else 'loop'; the loop zone is always 'loop'
+export const linealAbsicht = (zone, bewegtPx) => (zone === 'loop' || bewegtPx >= LINEAL_ZUG_PX ? 'loop' : 'start');
+// Label while a range is dragged: 'Bar 141 to 148 · 8 bars'
+export function loopText(loop, beatsProTakt = 4) {
+  const von = Math.floor(loop.von_beat / beatsProTakt) + 1, bis = Math.ceil(loop.bis_beat / beatsProTakt), n = bis - von + 1;
+  return `Bar ${von} to ${bis} · ${n} bar${n === 1 ? '' : 's'}`;
+}
+
 // Ziehen an der Klammer: start = Loop bei Zugbeginn, griff wie klammerGriff oder 'neu' (Zug im Leeren).
 // Ergebnis immer bis − von ≥ 1 (Spec 3.1 /k/arr/loop), von ≥ 0, gerastet.
 export function zieheKlammer(start, griff, beatStart, beatJetzt, raster) {
@@ -159,6 +182,17 @@ export function zieheKlammer(start, griff, beatStart, beatJetzt, raster) {
   const p = Math.max(0, rasten(beatStart, raster)), q = Math.max(0, rasten(beatJetzt, raster));
   const von = Math.min(p, q);
   return { von_beat: von, bis_beat: Math.max(Math.max(p, q), von + Math.max(1, raster)) };
+}
+
+// BAR / TO fields next to LOOP: the loop range in bars (one-based, partial bars round outward, like aufnahmeStand does for the punch range)
+export function loopTakte(loop, beatsProTakt = 4) {
+  return { vonTakt: Math.floor(loop.von_beat / beatsProTakt) + 1, bisTakt: Math.ceil(loop.bis_beat / beatsProTakt) };
+}
+// Typed bars to the command; typing a range switches the loop on (D1). Anything but whole bars >= 1 with bis >= von gives null.
+export function loopBefehl(von, bis, beatsProTakt = 4) {
+  const takt = (t) => (/^\s*[0-9]+\s*$/.test(String(t)) && Number(t) >= 1 ? Number(t) : null);
+  const a = takt(von), b = takt(bis);
+  return a === null || b === null || b < a ? null : { befehl: 'loop_setzen', an: true, von_beat: (a - 1) * beatsProTakt, bis_beat: b * beatsProTakt };
 }
 
 // Ein Zug (Loop-Klammer ziehen): Bewegungen melden, bis pointerup, pointercancel oder lostpointercapture kommt; dann einmal beiEnde und

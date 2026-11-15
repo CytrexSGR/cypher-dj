@@ -4,7 +4,7 @@
 import { ZIEH_TYP, nutzlast, ablageBefehl, ABLAGE_TEXT, GERAET_TYP, geraetAblage, effektBefehl } from './drag.js';
 import { pluginSpurBefehl } from './devices_browser.js';
 import { MAX_PLAETZE, straenge } from './inserts.js';
-import { xZuBeat, rasterBeats } from './timeline.js';
+import { xZuBeat, rasterBeats, beatsProTakt } from './timeline.js';
 import { spurIndexBeiTabelle } from './layout.js';
 import { PRESET_TYP, presetZiel } from './preset_target.js';
 import { wendePresetAn } from './preset_apply.js';   // 1.16 rest U7
@@ -44,7 +44,7 @@ export function bindeAblage(ctx) {
     if (!st.projekt || !e.dataTransfer.types.includes(ZIEH_TYP)) return;
     e.preventDefault();
     let n = null; try { n = JSON.parse(e.dataTransfer.getData(ZIEH_TYP)); } catch { return; }
-    const i = spurIndexBeiTabelle(ctx.zeilen(), e.offsetY), beat = xZuBeat(st.ansicht, e.offsetX), raster = rasterBeats(st.raster);
+    const i = spurIndexBeiTabelle(ctx.zeilen(), e.offsetY), beat = xZuBeat(st.ansicht, e.offsetX), raster = rasterBeats(st.raster, beatsProTakt(st.projekt?.taktart));
     const r = ablageBefehl(st.projekt, n, i, beat, raster);
     if (r.fehler) { ctx.melde(ABLAGE_TEXT[r.fehler], true); return; }
     // V2 Fix-Runde 2 H1 (Spec 6.34): die Spur, auf die die Person gezeigt hat, bleibt fest; die Länge in Beats folgt aus dem Tempo im Stand beim

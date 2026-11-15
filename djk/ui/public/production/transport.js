@@ -5,8 +5,8 @@
 // Die Startmarke ist Bequemlichkeit je Browser und Projekt (localStorage); Spec 3.3 kennt kein Feld dafür.
 // Gefaltet wird nur, wenn das letzte gemeldete projekt_beat unter bis lag (Spec 2.2: der Kern springt „beim Erreichen von
 // bis“; wer dahinter startet, läuft ungefaltet weiter). Antwortet der Kern nicht (quittung null), ist das ein Fehler.
-import { xZuBeat, rasten, rasterBeats, positionText, kopfImLoop, folgeSeite } from './timeline.js';
-import { linealZone, klammerGriff, zieheKlammer, zugVerfolgen, setzeText } from './layout.js';
+import { xZuBeat, rasten, rasterBeats, beatsProTakt, positionText, kopfImLoop, folgeSeite } from './timeline.js';
+import { linealZone, zugGriff, linealAbsicht, zieheKlammer, zugVerfolgen, setzeText, loopTakte, loopBefehl } from './layout.js';
 import { Kopf } from '../wave.js';
 
 const STATUS_TEXT = ['stopped', 'waiting', 'playing', 'freeze'];
@@ -35,7 +35,7 @@ export const springtImLauf = (arr, unbekannt) => !unbekannt && (arr?.status === 
 export function bindeTransport(ctx) {
   const { st, $ } = ctx;
   const kopf = new Kopf();
-  const setzeStart = (beat) => { st.start = Math.max(0, rasten(beat, rasterBeats(st.raster))); if (st.slug) ctx.merke(`djk-prod-start-${st.slug}`, String(st.start)); };
+  const setzeStart = (beat) => { st.start = Math.max(0, rasten(beat, rasterBeats(st.raster, beatsProTakt(st.projekt?.taktart)))); if (st.slug) ctx.merke(`djk-prod-start-${st.slug}`, String(st.start)); };
   async function transport(aktion) {
     const r = await ctx.holeJson('/proj/transport', aktion === 'start' ? { aktion, beat: st.start } : { aktion });
     const q = r.j?.quittung;
@@ -63,34 +63,65 @@ export function bindeTransport(ctx) {
     const l = p.loop;
     return { label: l.an ? 'Loop off' : 'Loop on', befehle: [{ befehl: 'loop_setzen', an: !l.an, von_beat: l.von_beat, bis_beat: l.bis_beat }] };
   }));
+  // BAR / TO: a field being typed in keeps its text until the change is sent; nonsense or a refused range ends with the stored range shown again
+  const zeigeLoopFelder = () => {
+    const l = st.projekt?.loop, frei = (n) => typeof document === 'undefined' || document.activeElement !== $(n);
+    const t = l ? loopTakte(l, beatsProTakt(st.projekt?.taktart)) : null;
+    if (frei('loop-von')) $('loop-von').value = t ? String(t.vonTakt) : '';
+    if (frei('loop-bis')) $('loop-bis').value = t ? String(t.bisTakt) : '';
+    for (const n of ['loop-von', 'loop-bis']) $(n).disabled = !st.projekt;
+  };
+  async function sendeLoopFelder() {
+    const k = loopBefehl($('loop-von').value, $('loop-bis').value, beatsProTakt(st.projekt?.taktart));
+    if (!k) { ctx.melde(ctx.fehlerText({ j: { fehler: 'argument_ungueltig' } }), true); zeigeLoopFelder(); return; }
+    try { await ctx.aendereAus(() => ({ label: 'Loop range', befehle: [k] })); } finally { zeigeLoopFelder(); }
+  }
+  $('loop-von').addEventListener('change', sendeLoopFelder);
+  $('loop-bis').addEventListener('change', sendeLoopFelder);
   $('metronom').addEventListener('click', () => ctx.aendereAus((p) => ({ label: p.metronom.an ? 'Metronome off' : 'Metronome on', befehle: [{ befehl: 'metronom_setzen', an: !p.metronom.an }] })));
   const klickStart = (x) => { setzeStart(xZuBeat(st.ansicht, x)); if (springtImLauf(st.arr, st.arrUnbekannt)) transport('start'); };
   $('ueber').addEventListener('pointerdown', (e) => { if (e.button === 0 && st.projekt && !e.defaultPrevented) klickStart(e.offsetX); });
   const lineal = $('lineal');
   lineal.addEventListener('pointerdown', (e) => {
     if (e.button !== 0 || !st.projekt) return;
-    if (linealZone(e.offsetY) === 'position') { klickStart(e.offsetX); return; }
-    const alt = st.projekt.loop, griff = klammerGriff(st.ansicht, alt, e.offsetX) ?? 'neu', b0 = xZuBeat(st.ansicht, e.offsetX);
     lineal.setPointerCapture(e.pointerId);
-    let b1 = b0;
-    const klammer = (l) => ({ an: griff === 'neu' ? true : l.an, ...zieheKlammer(l, griff, b0, b1, rasterBeats(st.raster)) });
-    const zug = (m) => { b1 = xZuBeat(st.ansicht, m.offsetX); st.loopEntwurf = klammer(alt); };
-    zug(e);
-    zugVerfolgen(lineal, zug, () => {
-      const n = st.loopEntwurf; st.loopEntwurf = null;
-      if (!n) return;
-      // H1: dieselbe Bewegung der Maus auf die Klammer im Stand beim Senden (ein LOOP-Klick davor, der noch unterwegs ist, bleibt erhalten)
-      ctx.aendereAus((p) => {
-        const l = p.loop, k = klammer(l);
-        return k.an !== l.an || k.von_beat !== l.von_beat || k.bis_beat !== l.bis_beat ? { label: 'Loop', befehle: [{ befehl: 'loop_setzen', ...k }] } : null;
-      });
-    });
+    // One loop drag: grip from zugGriff ('neu' makes a new range, also inside a bracket that is OFF), b0 = beat where the press began
+    const loopZug = (griff, b0) => {
+      const alt = st.projekt.loop;
+      let b1 = b0;
+      const klammer = (l) => ({ an: griff === 'neu' ? true : l.an, ...zieheKlammer(l, griff, b0, b1, rasterBeats(st.raster, beatsProTakt(st.projekt?.taktart))) });
+      const bewege = (m) => { b1 = xZuBeat(st.ansicht, m.offsetX); st.loopEntwurf = klammer(alt); };
+      const ende = () => {
+        const n = st.loopEntwurf; st.loopEntwurf = null;
+        if (!n) return;
+        // H1: dieselbe Bewegung der Maus auf die Klammer im Stand beim Senden (ein LOOP-Klick davor, der noch unterwegs ist, bleibt erhalten)
+        ctx.aendereAus((p) => {
+          const l = p.loop, k = klammer(l);
+          return k.an !== l.an || k.von_beat !== l.von_beat || k.bis_beat !== l.bis_beat ? { label: 'Loop', befehle: [{ befehl: 'loop_setzen', ...k }] } : null;
+        });
+      };
+      return { bewege, ende };
+    };
+    if (linealZone(e.offsetY) === 'loop') {
+      const z = loopZug(zugGriff(st.ansicht, st.projekt.loop, e.offsetX), xZuBeat(st.ansicht, e.offsetX));
+      z.bewege(e);
+      zugVerfolgen(lineal, z.bewege, z.ende);
+      return;
+    }
+    // Position zone: a click sets the start marker when the button comes up; a press that moves LINEAL_ZUG_PX becomes a new loop range
+    const x0 = e.offsetX;
+    let z = null;
+    zugVerfolgen(lineal, (m) => {
+      if (!z && linealAbsicht('position', Math.abs(m.offsetX - x0)) === 'loop') z = loopZug('neu', xZuBeat(st.ansicht, x0));
+      if (z) z.bewege(m);
+    }, () => { if (z) z.ende(); else klickStart(x0); });
   });
   ctx.beimProjekt.push((p, wechsel) => {
     if (wechsel) st.start = Number(ctx.lies(`djk-prod-start-${st.slug}`, 0)) || 0;
     if (document.activeElement !== $('tempo')) $('tempo').value = p ? String(p.tempo_bpm) : '';
     for (const [n, an] of [['loop', !!p?.loop?.an], ['metronom', !!p?.metronom?.an]]) { $(n).classList.toggle('an', an); $(n).setAttribute('aria-pressed', String(an)); }
     for (const n of ['play', 'stopp', 'loop', 'metronom', 'tempo']) $(n).disabled = !p;
+    zeigeLoopFelder();
     const ueber = reEnableAn(st.autoUeber);   // orange and active only from the server list (D5, D8)
     $('re-enable').disabled = !ueber; $('re-enable').classList.toggle('ueber', ueber);
   });
@@ -112,6 +143,6 @@ export function bindeTransport(ctx) {
       else if (st.arr) setzeText($('kern'), kernText(st.arr));
     }
     if (st.kopfBeat !== null && st.follow) { const b0 = folgeSeite(st.ansicht, st.kopfBeat, ctx.breite()); if (b0 !== null) st.ansicht = { ...st.ansicht, beat0: b0 }; }
-    setzeText($('position'), positionText(st.kopfBeat ?? st.start));
+    setzeText($('position'), positionText(st.kopfBeat ?? st.start, beatsProTakt(st.projekt?.taktart)));
   });
 }

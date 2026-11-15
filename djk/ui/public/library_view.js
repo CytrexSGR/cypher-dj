@@ -4,6 +4,7 @@ import { $, $$, BUCHSTABE, LADE_DECKS, klasseLaden, melde, postJson, zustand } f
 import { stoebernLaden, stz } from './browse_table.js';
 import { ladeBaum, markiereTyp, schliesseListenMenue, zeigeDetail } from './browse_detail.js';
 import { fmtZeit, ladeBestand, laden } from './deck_view.js';
+import { zeigePlaetzeSpaeter } from './slots_view.js';
 export function bindeLibrary() {
   for (const b of $$('[data-typ]')) b.addEventListener('click', () => {
     for (const x of $$('[data-typ]')) x.classList.toggle('an', x === b);
@@ -44,16 +45,20 @@ export function bindeLibrary() {
     stz.seite++; stoebernLaden();
   });
 }
+// One LOAD button; data-deck lets zeigePlaetze grey it when its place is not a Track place
+export function ladeKnopf(n, e) {
+  const b = document.createElement('button');
+  b.className = `laden ${klasseLaden(n)}`; b.textContent = `LOAD ${BUCHSTABE[n]}`;
+  b.dataset.deck = String(n);
+  b.addEventListener('click', () => laden(n, e));
+  return b;
+}
 export function libKnoepfe(td, t) {
   td.textContent = '';
   const e = zustand.bestand.find((x) => x.material_id === t.material_id);
   if (e) {
-    for (const n of LADE_DECKS) {
-      const b = document.createElement('button');
-      b.className = `laden ${klasseLaden(n)}`; b.textContent = `LOAD ${BUCHSTABE[n]}`;
-      b.addEventListener('click', () => laden(n, e));
-      td.append(b);
-    }
+    for (const n of LADE_DECKS) td.append(ladeKnopf(n, e));
+    zeigePlaetzeSpaeter();
     return;
   }
   const b = document.createElement('button');
@@ -199,12 +204,7 @@ function setZeile(p) {
     td.append(hinweis);
   }
   const e = p.laden_mid ? zustand.bestand.find((x) => x.material_id === p.laden_mid) : null;
-  if (e) for (const n of LADE_DECKS) {
-    const b = document.createElement('button');
-    b.className = `laden ${klasseLaden(n)}`; b.textContent = `LOAD ${BUCHSTABE[n]}`;
-    b.addEventListener('click', () => laden(n, e));
-    td.append(b);
-  }
+  if (e) { for (const n of LADE_DECKS) td.append(ladeKnopf(n, e)); zeigePlaetzeSpaeter(); }
   const weg = document.createElement('button');
   weg.className = 'laden weg'; weg.textContent = '✕'; weg.title = 'Remove from set';
   weg.addEventListener('click', async () => {

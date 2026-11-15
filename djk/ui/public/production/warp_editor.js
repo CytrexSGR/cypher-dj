@@ -62,10 +62,10 @@ export function segmentText(clip, a, x) {
 }
 // Beschriftung eines Markers: ein Taktanfang (Beat durch 4) trägt die Taktnummer, die Eins ist „1.1.1“. Vor der Eins zählen die Takte negativ ohne Takt 0
 // (wie Live: ein Vorspann von 16 Takten beginnt bei −16.1.1, Margulies, Live 10 Power, Kapitel 12).
-export function markerText(beat) {
+export function markerText(beat, beatsProTakt = 4) {
   if (Math.abs(beat) < 1e-9) return '1.1.1';
-  if (!Number.isInteger(beat) || beat % 4 !== 0) return '';
-  return String(beat > 0 ? beat / 4 + 1 : beat / 4);
+  if (!Number.isInteger(beat) || beat % beatsProTakt !== 0) return '';
+  return String(beat > 0 ? beat / beatsProTakt + 1 : beat / beatsProTakt);
 }
 
 export function doppelklick(clip, a, x) {

@@ -136,6 +136,10 @@ def bk_pfade(p, z):
         mm = re.search(r'm = 1 to (\d+)', z[0])
         assert mm and int(mm.group(1)) == BK_KNOEPFE, 'contract §1.5: row `master/bk/<m>` without "m = 1 to 64"'
         return [f'master/bk/{m}' for m in range(1, BK_KNOEPFE + 1)]
+    if p == 'spur/<s>/bk/<k>':   # production plan task 8: slot s = 1 to 8, knob k = 1 to 32 (the transient override rows)
+        ms_ = re.search(r's = 1 to (\d+), k = 1 to (\d+)', z[0])
+        assert ms_ and int(ms_.group(1)) == 8 and int(ms_.group(2)) == 32, 'contract §1.5: row `spur/<s>/bk/<k>` without "s = 1 to 8, k = 1 to 32"'
+        return [f'spur/{s}/bk/{k}' for s in range(1, int(ms_.group(1)) + 1) for k in range(1, int(ms_.group(2)) + 1)]
     return None
 
 

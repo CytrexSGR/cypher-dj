@@ -106,3 +106,60 @@ test('V1 Layout: setzeText schreibt nur, wenn sich der Text ändert', () => {
   assert.equal(el.textContent, '1.1.1');
   assert.equal(el.schreibungen, 4, 'der Knoten zeigte etwas anderes: nachgezogen');
 });
+
+// Task 2 (backlog production): drag in the ruler sets the loop
+import { zugGriff, linealAbsicht, loopText, GRIFF_TOLERANZ, LINEAL_ZUG_PX } from '../public/production/layout.js';
+
+test('Task 2 zugGriff: an OFF bracket is grabbed only at its edges, a drag inside it makes a new range', () => {
+  const L = { von_beat: 8, bis_beat: 16 };   // x 40 .. 120
+  assert.equal(GRIFF_TOLERANZ, 8);
+  assert.equal(LINEAL_ZUG_PX, 4);
+  assert.equal(zugGriff(A, { ...L, an: true }, 80), 'mitte');
+  assert.equal(zugGriff(A, { ...L, an: false }, 80), 'neu');
+  for (const an of [true, false]) {
+    assert.equal(zugGriff(A, { ...L, an }, 42), 'von');
+    assert.equal(zugGriff(A, { ...L, an }, 118), 'bis');
+    assert.equal(zugGriff(A, { ...L, an }, 47), 'von', '7 px from the left edge');
+    assert.equal(zugGriff(A, { ...L, an }, 33), 'von', '7 px outside the left edge');
+    assert.equal(zugGriff(A, { ...L, an }, 31), 'neu', '9 px outside the left edge');
+    assert.equal(zugGriff(A, { ...L, an }, 200), 'neu');
+  }
+  assert.equal(zugGriff(A, { ...L, an: true }, 49), 'mitte', '9 px inside, bracket ON');
+  assert.equal(zugGriff(A, { ...L, an: false }, 49), 'neu', '9 px inside, bracket OFF');
+  assert.equal(zugGriff(A, null, 80), 'neu');
+});
+test('Task 2 linealAbsicht: a click in the position zone sets the start, a drag of 4 px or more becomes a loop drag', () => {
+  assert.equal(linealAbsicht('position', 3), 'start');
+  assert.equal(linealAbsicht('position', 4), 'loop');
+  assert.equal(linealAbsicht('loop', 0), 'loop');
+});
+// Task 6 (backlog production): a group gets a lane row directly under its header row
+import { zeilenFuer, zeilenTabelle } from '../public/production/layout.js';
+const spT6 = (id, g) => ({ id, name: id, clips: [], ...(g ? { ausgang: { art: 'gruppe', id: g } } : {}) });
+const P6 = () => ({ spuren: [spT6('s1', 'g1'), spT6('s2', 'g1'), spT6('s3')], gruppen: [{ id: 'g1', nr: 1, name: 'G1', gefaltet: false }] });
+test('Task 6 layout: the lane row of an open group sits under its header row, the members move down by 48', () => {
+  const ohne = zeilenFuer(P6());
+  const mit = zeilenFuer(P6(), [], new Map(), new Set(['g1']));
+  assert.deepEqual(ohne.map((z) => z.art), ['gruppe', 'spur', 'spur', 'spur']);
+  assert.deepEqual(mit.map((z) => z.art), ['gruppe', 'lane', 'spur', 'spur', 'spur']);
+  assert.deepEqual(mit[1], { art: 'lane', gruppe: 0, y: ohne[0].y + 28, h: 48 });
+  assert.equal(mit[2].y, ohne[1].y + 48);
+  assert.equal(mit[4].y, ohne[3].y + 48);
+  assert.deepEqual(zeilenFuer(P6(), [], new Map(), new Set()), ohne, 'an empty set: byte-equal to today');
+  assert.deepEqual(zeilenFuer(P6(), [], new Map()), ohne);
+});
+test('Task 6 layout: a folded group keeps its lane row, an id that matches no group adds no row', () => {
+  const p = P6(); p.gruppen[0].gefaltet = true;
+  const mit = zeilenFuer(p, [], new Map(), new Set(['g1']));
+  assert.deepEqual(mit.map((z) => z.art), ['gruppe', 'lane', 'spur', 'spur', 'spur']);
+  assert.deepEqual(mit.slice(2, 4).map((z) => z.h), [0, 0], 'the folded members stay hidden');
+  assert.deepEqual(zeilenFuer(P6(), [], new Map(), new Set(['g9', 's1'])), zeilenFuer(P6()), 'an unknown id adds no row (the track id s1 is no group)');
+  assert.deepEqual(zeilenFuer(null, [], new Map(), new Set(['g1'])), []);
+});
+test('Task 6 layout: zeilenTabelle takes the open groups as its last parameter; without a layout they are ignored', () => {
+  assert.deepEqual(zeilenTabelle(2, [], new Map(), null, new Set([0])), zeilenTabelle(2));
+});
+test('Task 2 loopText: bars and length', () => {
+  assert.equal(loopText({ von_beat: 560, bis_beat: 592 }), 'Bar 141 to 148 · 8 bars');
+  assert.equal(loopText({ von_beat: 0, bis_beat: 4 }), 'Bar 1 to 1 · 1 bar');
+});

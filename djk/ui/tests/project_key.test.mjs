@@ -368,8 +368,8 @@ test('Duck by Kick is one undo step in the history (one undo gives the project b
   assert.ok(u.regler_aenderungen.every((c) => c.wert === 0 || c.pfad.startsWith('ins/komp/1/')), 'the pool rows go back to their defaults');
 });
 
-test('parity: DUCK_DURCH_KICK_WERTE equals presets/werk/komp/kick-sidechain.preset.json through INSERT_ARTEN.komp[*].geraet', () => {
-  const preset = JSON.parse(fs.readFileSync(path.join(W, 'presets', 'werk', 'komp', 'kick-sidechain.preset.json'), 'utf8'));
+test('parity: DUCK_DURCH_KICK_WERTE equals presets/factory/comp/kick-sidechain.preset.json through INSERT_ARTEN.komp[*].geraet', () => {
+  const preset = JSON.parse(fs.readFileSync(path.join(W, 'presets', 'factory', 'comp', 'kick-sidechain.preset.json'), 'utf8'));
   const nachGeraet = new Map(INSERT_ARTEN.komp.parameter.filter((q) => q.geraet).map((q) => [q.geraet, q.name]));
   const aus = {};
   for (const [k, v] of Object.entries(preset.werte)) {

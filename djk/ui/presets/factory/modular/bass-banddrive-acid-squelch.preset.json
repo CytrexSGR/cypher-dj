@@ -1,0 +1,59 @@
+{
+ "schema": 1,
+ "name": "Acid Squelch",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "bass-banddrive",
+ "werte": {
+  "knob1": 0.67,
+  "knob2": 0.5,
+  "knob3": 0.42013,
+  "knob4": 0.05,
+  "knob5": 0.05,
+  "knob6": 0.1,
+  "knob7": 0.2,
+  "knob8": 0.6,
+  "knob9": 0.35,
+  "knob10": 0.43753,
+  "knob11": 0.94118,
+  "knob12": 0.8,
+  "knob13": 0.50931,
+  "knob14": 0.4857,
+  "knob15": 0.39058,
+  "knob16": 0.5,
+  "knob17": 0.125,
+  "knob18": 0.2,
+  "knob19": 0.4,
+  "knob20": 0.53333,
+  "knob21": 0.13082,
+  "knob22": 0.6,
+  "knob23": 0.32109,
+  "knob24": 0.66667
+ },
+ "beschreibung": {
+  "art": "bass",
+  "unterart": "acid",
+  "charakter": [
+   "aggressive",
+   "evolving",
+   "tight"
+  ],
+  "genre": [
+   "acid",
+   "techno"
+  ],
+  "einsatz": [
+   "drop",
+   "build"
+  ],
+  "energie": 5,
+  "text": "Acid-like squelch: high resonance and a strong, fast filter envelope with a short slide between notes."
+ },
+ "tags": [
+  "bass-banddrive",
+  "band-split"
+ ],
+ "notiz": "Measured by render, not heard yet (2026-11-15).",
+ "angelegt": "2026-11-15T00:00:00.000Z",
+ "geaendert": "2026-11-15T00:00:00.000Z"
+}

@@ -1,0 +1,37 @@
+{
+ "schema": 1,
+ "name": "Rolling",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "bass-rolling",
+ "werte": {
+  "knob1": 0.5,
+  "knob2": 0.5,
+  "knob3": 0.5,
+  "knob4": 0.5,
+  "knob5": 0.5
+ },
+ "beschreibung": {
+  "art": "bass",
+  "unterart": "rolling",
+  "charakter": [
+   "punchy",
+   "tight",
+   "warm",
+   "thick",
+   "smooth"
+  ],
+  "genre": [],
+  "einsatz": [
+   "drop"
+  ],
+  "energie": 4,
+  "text": "Rolling 16th-note bass: detuned saws an octave over a sine sub, plucked by a fast filter envelope, ends before the next 16th."
+ },
+ "tags": [
+  "bass-rolling"
+ ],
+ "notiz": "Source rule: recipe card `bass.rolling`, Snoman [B3] p. 443. Measured by `tests/rezepte.rs`, not yet heard. Manifest use words outside the vocabulary: groove (as drop).",
+ "angelegt": "2026-11-15T00:00:00.000Z",
+ "geaendert": "2026-11-15T00:00:00.000Z"
+}

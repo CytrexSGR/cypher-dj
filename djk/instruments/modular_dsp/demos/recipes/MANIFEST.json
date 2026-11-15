@@ -1540,7 +1540,8 @@
         "3": "Decay",
         "4": "Click",
         "5": "Drive",
-        "6": "Room mix"
+        "6": "Room mix",
+        "7": "Pitch decay"
       },
       "naeherung": [
         "Drum pitch is fixed (tune knob, F2 87 Hz at the midpoint), not the played note. Pitch envelope: +24 st falling exponentially (D 50 ms).",

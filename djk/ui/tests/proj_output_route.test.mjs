@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { stapel, post, warte, startArr1 } from './support/media_library.mjs';
 import { innen } from './support/inside.mjs';
-import { ruf, CYPHER } from './support/proj_stack.mjs';
+import { ruf, CYPHER, bis } from './support/proj_stack.mjs';
 
 const kopfJson = { 'content-type': 'application/json' };
 
@@ -31,13 +31,18 @@ test('proj-ausgabe: Routen nach proj gemeldet, Schutz fremdePost, Körper unlesb
   assert.match(kj.text, /^unreadable request body/, 'englischer text (Spec 6.34)');
   const ohne = await post(url, '/proj/freeze', { spur_id: 's1', an: true });
   assert.deepEqual([ohne.code, ohne.j.fehler, ohne.j.text], [409, 'kein_projekt', 'no project is open']);
-  i.vomKern('/e/ki', { gestoppt: 1, grund: 'hand', sample: 0 });
+  // Stop Cypher is set in the kern stand-in itself, not only in the server: the stand-in reports ki_gestoppt in every /zustand/kern tick (50 ms) and the
+  // server takes that as the truth, so an injected /e/ki alone was reset by the next tick (flaky under load, 3 of 10 runs on 2026-11-15)
+  const ctx = o.bereichKontext();
+  await ctx.warteQuittung(ctx.sende('/k/ki/stopp', { quelle: 'andreas' }));
+  assert.ok(await bis(() => i.kiGestoppt === true, 3000), 'Stop Cypher arrived in the server');
   const ki = await post(url, '/proj/freeze', { spur_id: 's1', an: true }, { 'x-djk-quelle': 'cypher' });
   assert.deepEqual([ki.code, ki.j.fehler], [409, 'ki_gestoppt']);
   const hand = await post(url, '/proj/freeze', { spur_id: 's1', an: true });
   assert.deepEqual([hand.code, hand.j.fehler], [409, 'kein_projekt'], 'Negativ-Kontrolle: Andreas sperrt der KI-Stopp nicht');
-  i.vomKern('/e/ki', { gestoppt: 0, grund: '', sample: 0 });
-  assert.equal(i.gesendet, n0, 'nichts an den Kern');
+  await ctx.warteQuittung(ctx.sende('/k/ki/frei', { quelle: 'andreas' }));
+  assert.ok(await bis(() => i.kiGestoppt === false, 3000), 'Stop Cypher released in the server');
+  assert.equal(i.gesendet, n0 + 2, 'nothing but the two Stop Cypher commands went to the kern');
 });
 
 test('Strom: /e/freeze geht an /strom (Spec 3.4 DURCHREICHEN), /zustand/box weiter nicht', async (t) => {

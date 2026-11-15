@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
-"""Turn the agents' patch files into factory presets (werk/baukasten/<slug>.preset.json). Usage: build_factory_presets.py <werk dir> [patch dir]"""
+"""Turn the agents' patch files into factory presets (factory/modular/<slug>.preset.json). Usage: build_factory_presets.py <factory dir> [patch dir]"""
 import json, re, sys, os
 M = sys.argv[2] if len(sys.argv) > 2 else os.path.join(os.path.dirname(__file__), 'patches')
+# a patch entry may carry its own `notiz` and `datum` (default: the 2026-11-11 wording)
+# Only presets this script owns are listed: 'Evolving Lead' and 'Dub Bass' of synth-mono come from build_ausbau_presets_mono.py
+# (this script used to regenerate them differently from the committed files).
 # name -> (art, unterart, charakter, genre, einsatz, energie)
 B = {
  'drums-909': {
@@ -30,9 +33,7 @@ B = {
   'DnB Sub': ('bass','sub',['deep','clean','mono'],['dnb','dubstep'],['drop'],3),
   'House Bass': ('bass','analog',['warm','punchy','smooth'],['house','deep_house'],['drop','intro'],3),
   'Sync Lead': ('lead','sync',['bright','aggressive','thin'],['electro','trance'],['drop','build'],4),
-  'Hoover Growl': ('bass','reese',['aggressive','thick','dirty'],['techno','hardstyle','dnb'],['drop'],5),
-  'Evolving Lead': ('lead','mono',['evolving','bright','wide'],['trance','progressive'],['build','drop'],4),
-  'Dub Bass': ('bass','analog',['warm','deep','wide'],['house','deep_house'],['drop','intro'],3)},
+  'Hoover Growl': ('bass','reese',['aggressive','thick','dirty'],['techno','hardstyle','dnb'],['drop'],5)},
  'synth-poly': {
   'Trance Supersaw': ('lead','supersaw',['wide','bright','thick'],['trance','progressive'],['drop','build'],4),
   'Goa Lead Stack': ('lead','supersaw',['bright','aggressive','wide'],['trance'],['drop'],5),
@@ -51,8 +52,15 @@ B = {
   'Techno Rumble Bass': ('bass','rolling',['dark','deep','thick'],['techno'],['drop','intro'],3),
   'Goa Zap': ('fx','texture',['bright','aggressive','metallic'],['trance','progressive'],['build','transition'],4),
   'Sub only': ('bass','sub',['deep','clean','mono'],['dnb','techno','dubstep'],['drop'],2)},
+ 'labor': {
+  'Kick': ('drums','kick',['deep','punchy','dark'],['techno','electro'],['drop','mixdown'],4),
+  'Drone': ('pad','drone',['dark','evolving','wide'],['ambient','idm'],['intro','breakdown'],2),
+  'Howl': ('fx','texture',['evolving','metallic','thin'],['ambient','idm'],['build','transition'],3)},
+ 'fx-labor': {
+  'Ping-Pong': ('delay','ping_pong',['wide','wet','clean'],['dnb','breaks','electro'],['build','transition'],3),
+  'Spring Reverb': ('reverb','spring',['metallic','wet','airy'],['dubstep','downtempo','idm'],['breakdown','transition'],2)},
 }
-ziel = os.path.join(sys.argv[1], 'baukasten'); os.makedirs(ziel, exist_ok=True)
+ziel = os.path.join(sys.argv[1], 'modular'); os.makedirs(ziel, exist_ok=True)
 n = 0
 for graph, tab in B.items():
     for p in json.load(open(f'{M}/{graph}-patches.json')):
@@ -64,11 +72,23 @@ for graph, tab in B.items():
             cut = max(text.rfind(';', 0, 158), text.rfind(',', 0, 158))
             text = text[:cut] if cut > 20 else text[:158].rsplit(' ', 1)[0]
         text = text.rstrip(' ,;:') + '.'
-        doc = {'schema': 1, 'name': f"{graph.split('-',1)[1].upper() if graph.startswith('drums') else graph.split('-')[1].capitalize()} {p['name']}",
+        doc = {'schema': 1, 'name': f"{graph.split('-',1)[1].upper() if graph.startswith('drums') else graph.split('-')[-1].capitalize()} {p['name']}",
                'geraet_typ': 'instrument', 'geraet': 'baukasten', 'graph': graph,
                'werte': {f'knob{int(k)}': round(float(v), 4) for k, v in sorted(p['knobs'].items(), key=lambda kv: int(kv[0]))},
                'beschreibung': {'art': art, 'unterart': unter, 'charakter': char, 'genre': genre, 'einsatz': eins, 'energie': en, 'text': text},
-               'tags': [graph], 'notiz': 'Measured by level and pitch on render, not yet heard (2026-11-11).',
-               'angelegt': '2026-11-11T00:00:00.000Z', 'geaendert': '2026-11-11T00:00:00.000Z'}
+               'tags': [graph], 'notiz': p.get('notiz', 'Measured by level and pitch on render, not yet heard (2026-11-11).'),
+               'angelegt': p.get('datum', '2026-11-11') + 'T00:00:00.000Z', 'geaendert': p.get('datum', '2026-11-11') + 'T00:00:00.000Z'}
+        open(os.path.join(ziel, slug + '.preset.json'), 'w').write(json.dumps(doc, indent=1, ensure_ascii=False) + '\n'); n += 1
+# recipe presets: patches/recipes-patches.json (build_rezept_presets.py), every entry carries its own graph and description
+rez = os.path.join(M, 'recipes-patches.json')
+if os.path.exists(rez):
+    for p in json.load(open(rez)):
+        graph = p['graph']
+        # the store allows 48 characters of slug; the name's parenthesis (cowbell / claves ...) is not part of it
+        slug = (f"{graph}-" + re.sub(r'[^a-z0-9]+', '-', re.sub(r'\(.*', '', p['name']).lower()).strip('-'))[:48].strip('-')
+        doc = {'schema': 1, 'name': p['name'], 'geraet_typ': 'instrument', 'geraet': 'baukasten', 'graph': graph,
+               'werte': {f'knob{int(k)}': round(float(v), 4) for k, v in sorted(p['knobs'].items(), key=lambda kv: int(kv[0]))},
+               'beschreibung': p['beschreibung'], 'tags': [graph], 'notiz': p['notiz'],
+               'angelegt': p['datum'] + 'T00:00:00.000Z', 'geaendert': p['datum'] + 'T00:00:00.000Z'}
         open(os.path.join(ziel, slug + '.preset.json'), 'w').write(json.dumps(doc, indent=1, ensure_ascii=False) + '\n'); n += 1
 print(n, 'presets in', ziel)

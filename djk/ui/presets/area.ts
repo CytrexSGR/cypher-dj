@@ -47,7 +47,9 @@ export function katalog(graphen: readonly Pick<GraphEintrag, 'name' | 'art'>[]):
     instrumente: [{ geraet: 'rb338', titel: 'RB-338', ziel: 'spur_neu' }, { geraet: 'surge', titel: 'Surge', ziel: 'spur_neu' },
       ...graphen.filter((g) => g.art === 'instrument').map((g) => ({ geraet: 'bk', titel: g.name, ziel: 'spur_neu', graph: g.name }))],
     effekte: [effekt('komp', 'Compressor', 'not active yet'), effekt('eq', 'EQ', 'comes with slice 4b'), effekt('saett', 'Saett', 'comes with slice 4b'),
-      { geraet: 'hall', titel: 'Hall', ziel: 'insert', aktiv: false, grund: 'the return hall lives on returns' }],
+      { geraet: 'hall', titel: 'Hall', ziel: 'insert', aktiv: false, grund: 'the return hall lives on returns' },
+      // an effect graph is a bk stage (art bk in INSERT_ARTEN_AKTIV); its presets apply to such a stage (apply.ts bkStufenPlan)
+      ...graphen.filter((g) => g.art === 'effekt').map((g) => ({ geraet: 'bk', titel: g.name, ziel: 'insert', graph: g.name, aktiv: aktiv('bk') }))],
   };
 }
 type Ctx = Pick<BereichKontext, 'log' | 'quelle'>;

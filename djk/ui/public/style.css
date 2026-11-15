@@ -1097,3 +1097,39 @@ body.studio #pult[data-seq-n="1"] { grid-template-columns: var(--mu-breite) minm
 body.studio .zug[data-deck]:not([data-studio-zug]) { display: none !important; }
 body.studio .zug[data-studio-zug] { display: flex !important; }
 body.studio #pult:not([data-seq-n="0"]) #mischer-unten { grid-auto-flow: column; grid-template-columns: none; grid-auto-columns: var(--zug); overflow-x: auto; }
+/* EFFECTS channel tabs: one channel strip at a time */
+.fxstreifen-reihe > .fx-aus { display: none; }
+.fxreiter { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px; }
+.fxreiter-tab { display: flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 800; letter-spacing: 0.08em; padding: 3px 8px; border-radius: 6px; background: none; border: 1px solid var(--line); color: var(--dim); }
+.fxreiter-tab.an { color: var(--text, #e6e6e6); border-color: var(--warn); }
+.fxreiter-tab .licht { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,0.15); display: inline-block; }
+.fxreiter-tab .licht.an { background: var(--warn); }
+/* EFFECTS chain: INSERT, GATE, COMP, UTIL in signal order, one row (wraps when narrow) */
+.fxstreifen-reihe > .fxstreifen:not(.fx-aus) { grid-column: 1 / -1; }
+.fxstreifen .fxkette { display: flex; flex-wrap: wrap; align-items: stretch; gap: 6px; }
+.fxstreifen .fx-glied { flex: 1 1 150px; min-width: 0; display: flex; flex-direction: column; gap: 4px; border-top: 1px solid var(--line); padding-top: 4px; }
+.fxstreifen .fx-glied-titel { font-weight: 800; letter-spacing: 0.08em; color: var(--dim); font-size: 10px; }
+.fxstreifen .fx-glied .fxwerk { border-top: 0; padding-top: 0; }
+.fxstreifen .fx-glied .fxwerk .werk-titel { display: none; }
+.fxstreifen .fx-glied button.komp-an { align-self: flex-start; }
+.fxstreifen .fx-pfeil { align-self: center; color: var(--dim); font-style: normal; font-size: 16px; }
+
+/* CONTROLLERS tab: the read-only controller register (register_view.js) */
+body.bereich-controller #bestand .reiter, body.bereich-controller #bestand #suche, body.bereich-controller #bestand #bestand-info,
+body.bereich-controller #bestand .tabelle { display: none !important; }
+body.lib-zu #bestand .register { display: none; }
+.register[hidden] { display: none; }
+.register { padding-top: 8px; display: flex; flex-direction: column; gap: 8px; min-height: 0; flex: 1; font-size: 12px; overflow: hidden; }
+.register .reg-filter { font: inherit; color: var(--text); background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; min-width: 12ch; }
+.register .reg-inhalt { display: flex; flex-direction: column; gap: 8px; min-height: 0; overflow: auto; }
+.register .reg-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.register .reg-chip { border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; background: var(--panel2); }
+.register .reg-chip.reg-inaktiv, .register .reg-zeile.reg-inaktiv { opacity: 0.5; }
+.register .reg-chip.reg-fehler { border-color: #c0392b; color: #e74c3c; opacity: 1; }
+.register .reg-tabelle { border-collapse: collapse; width: 100%; }
+.register .reg-tabelle th, .register .reg-tabelle td { text-align: left; padding: 2px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.register .reg-lernzeile { display: flex; flex-direction: column; gap: 6px; }
+.register .reg-lernen { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.register .reg-ziel { font: inherit; color: var(--text); background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; min-width: 24ch; }
+.register .reg-gelernt { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.register .reg-gelernt-zeile { display: flex; gap: 6px; align-items: center; }

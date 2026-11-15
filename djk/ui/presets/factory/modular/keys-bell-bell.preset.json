@@ -1,0 +1,38 @@
+{
+ "schema": 1,
+ "name": "Bell",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "keys-bell",
+ "werte": {
+  "knob1": 0.5,
+  "knob2": 0.5,
+  "knob3": 0.5,
+  "knob4": 0.5
+ },
+ "beschreibung": {
+  "art": "keys",
+  "unterart": "bell",
+  "charakter": [
+   "metallic",
+   "bright",
+   "thin",
+   "airy",
+   "aggressive",
+   "smooth"
+  ],
+  "genre": [],
+  "einsatz": [
+   "breakdown",
+   "intro"
+  ],
+  "energie": 2,
+  "text": "FM bell: four sine carriers, three rung by one 1:7 modulator that dies in a second, detuned for beating, long ring."
+ },
+ "tags": [
+  "keys-bell"
+ ],
+ "notiz": "Source rule: recipe card `keys.bell`, Cann [B4] p. 135, patch Another Bell. Measured by `tests/rezepte.rs`, not yet heard. Manifest character words outside the vocabulary: harsh (as aggressive).",
+ "angelegt": "2026-11-15T00:00:00.000Z",
+ "geaendert": "2026-11-15T00:00:00.000Z"
+}

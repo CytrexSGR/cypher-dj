@@ -14,6 +14,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # djk/, für klang.probe und klang.lautheit
 from sound import loudness as lautheit, probe  # noqa: E402
+from sound.peak_pool import ONSET_DB, spitze_ab_onset_ms  # noqa: E402
 
 class FachlicherAbbruch(ValueError):
     """Das Kit ist fachlich nicht baubar (zu viele Klänge, Übersteuerung): Exit 1. Alles andere ist Exit 2."""
@@ -24,6 +25,28 @@ BPM, TAKTE = 130.0, 2  # Rollenmuster wie sound/probe.py
 MAX_SPITZE_DB = -1.0  # mit --rollen darf kein Klang lauter sein
 MAX_KLAENGE = 112  # historisch; seit F08 (Glanz 2.4.2) liegt das Zusatz-Kit auf 128 + note
 AUSBLENDE = 240  # 5 ms, damit ein gekürzter Klang nicht knackt
+
+
+def spitze_ms(x: np.ndarray, rate: int = RATE) -> float:
+    """Milliseconds from the first sample within ONSET_DB (30 dB) of the peak to the peak sample (max over both channels).
+    `x` is interleaved stereo or (n, 2). After `schneide_anlauf` the onset sits 0.5 ms from the file start."""
+    return spitze_ab_onset_ms(np.asarray(x).reshape(-1, 2), rate)
+
+
+def schneide_anlauf(x: np.ndarray, rate: int = RATE, vorlauf_ms: float = 0.5):
+    """Removes the leading samples that are more than ONSET_DB under the peak, keeps `vorlauf_ms` before the first loud sample.
+    Returns (trimmed array of the same shape rule, milliseconds removed); silence and a start without lead-in stay as they are."""
+    x = np.asarray(x)
+    st = x.reshape(-1, 2)
+    a = np.abs(st).max(axis=1)
+    if a.size == 0 or float(a.max()) <= 0.0:
+        return x, 0.0
+    onset = int(np.argmax(a >= a.max() * 10 ** (-ONSET_DB / 20)))
+    weg = max(0, onset - int(round(vorlauf_ms * rate / 1000)))
+    if weg == 0:
+        return x, 0.0
+    y = st[weg:]
+    return (y.reshape(-1) if x.ndim == 1 else y).copy(), weg / rate * 1000.0
 
 
 def wandle(quelle: Path, max_sek: float) -> np.ndarray:
@@ -59,12 +82,22 @@ def baue(liste: dict, quelle: Path, ziel: Path, name: str, max_sek: float,
     rd = cfg.get("rollen", {})
     pegel = {r: float(v) for r, v in cfg.get("pegel_zusatz", {}).items()}
     pegel.update({r: float(d["spitze_db"]) for r, d in rd.items() if "spitze_db" in d})
+    regel = cfg.get("spitze_regel")      # the peak rule of rollen.json applies to every role; without --rollen or the key nothing changes
     klaenge, daten, note = [], [], 0
     quellen = {}
     for s in sorted(plan):
         for n, rel in enumerate(plan[s]):
             x = wandle(quelle / urllib.parse.unquote(rel), max_sek)
-            klaenge.append({"note": note, "name": f"{s}:{n}", "datei": f"{s}_{n}.f32", "frames": x.size // 2})
+            extra = {}
+            if regel:
+                x, anlauf = schneide_anlauf(x)
+                grenze = float(regel.get("ausnahmen", {}).get(s, regel["max_ms"]))
+                sp = spitze_ms(x)
+                if sp > grenze:
+                    raise FachlicherAbbruch(f"{s}:{n} ({rel}): peak {sp:.1f} ms after the onset, the rule allows {grenze:g} ms, "
+                                            f"role '{s}' needs another sample or an entry in rollen.json spitze_regel.ausnahmen")
+                extra = {"spitze_ms": round(sp, 1), "anlauf_ms": round(anlauf, 1)}
+            klaenge.append({"note": note, "name": f"{s}:{n}", "datei": f"{s}_{n}.f32", "frames": x.size // 2, **extra})
             daten.append(x)
             quellen[note] = (s, rel)
             note += 1

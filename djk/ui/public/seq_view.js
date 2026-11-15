@@ -579,7 +579,8 @@ function knopfGedrueckt(n, b) {
   } else if ('sqGeraet' in d) {
     holeGet('/graphen').then(async (g) => {
       const kits = await holeGet('/proj/kits');
-      const wahl = geraetWahl(g.j?.graphen, kits.j?.kits);
+      const aktuell = ansicht(n, live.projekt).folgen.find((x) => x.spur_id === folgeId)?.spur?.geraet;
+      const wahl = geraetWahl(g.j?.graphen, kits.j?.kits, aktuell?.art === 'intern' && aktuell.name === 'bk' ? aktuell.graph : undefined);
       oeffneMenue(menuePunkte(wahl, (e) => schreibe((p) => {
         const f = seqFolge(n, p, folgeId), w = wechselBefehle(f.spur, f.clip, e.geraet, infosAusCache(p, n)[folgeId]);
         if (w.meldung) { melde(w.meldung, true); return { ok: false, projekt: p, neuLesen: false, text: '' }; }

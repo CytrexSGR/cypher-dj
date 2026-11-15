@@ -59,7 +59,7 @@ pub fn wirkung(s: &Schritt) -> Option<Wirkung> {
     use Wirkung::*;
     match s {
         Schritt::Konst { .. } | Schritt::Regler { .. } | Schritt::Transponiere { .. } | Schritt::Mul { .. } | Schritt::Add { .. } => Some(Exakt),
-        Schritt::Ladder { .. } | Schritt::Svf { .. } | Schritt::Sem { .. } | Schritt::Diode { .. } | Schritt::Ms20 { .. }
+        Schritt::Ladder { .. } | Schritt::Svf { .. } | Schritt::Allpass { .. } | Schritt::Kreuz { .. } | Schritt::Sem { .. } | Schritt::Diode { .. } | Schritt::Ms20 { .. }
         | Schritt::Saett { .. } | Schritt::Krume { .. } | Schritt::Roehre { .. } | Schritt::Falter { .. } | Schritt::Formant { .. }
         | Schritt::Kamm { .. } | Schritt::Folger { .. } | Schritt::Leitung { .. } | Schritt::Wahl { .. } => Some(Vergessend),
         Schritt::Saege { .. } | Schritt::Puls { .. } | Schritt::Dreieck { .. } | Schritt::Sinus { .. } | Schritt::Lfo { .. }
@@ -98,6 +98,8 @@ pub fn eingaenge(s: &Schritt) -> Vec<Quelle> {
         Schritt::Folger { x, an, ab, .. } => vec![*x, *an, *ab],
         Schritt::Transponiere { hz, st, cent, .. } => vec![*hz, *st, *cent],
         Schritt::Ladder { x, cutoff, reso, .. } | Schritt::Svf { x, cutoff, reso, .. } => vec![*x, *cutoff, *reso],
+        Schritt::Allpass { x, fc, fc2, .. } => vec![*x, *fc, *fc2],
+        Schritt::Kreuz { x, fc1, fc2, .. } => vec![*x, *fc1, *fc2],
         Schritt::Sem { x, cutoff, reso, form, .. } => vec![*x, *cutoff, *reso, *form],
         Schritt::Saett { x, antrieb, .. } => vec![*x, *antrieb],
         Schritt::Glatt { x, setzen, .. } => vec![*x, *setzen],
@@ -150,10 +152,11 @@ pub fn ausgaenge(s: &Schritt) -> Vec<usize> {
         | Schritt::Adsr { aus, .. } | Schritt::Mul { aus, .. } | Schritt::Add { aus, .. } | Schritt::Wahl { aus, .. }
         | Schritt::WahlMisch { aus, .. } | Schritt::Krume { aus, .. } | Schritt::Roehre { aus, .. } | Schritt::Resonator { aus, .. }
         | Schritt::Fm { aus, .. } | Schritt::Saite { aus, .. } | Schritt::Kamm { aus, .. } | Schritt::Formant { aus, .. }
-        | Schritt::Diode { aus, .. } | Schritt::Trommeln { aus, .. } | Schritt::Falter { aus, .. } | Schritt::Drift { aus, .. } => vec![*aus],
+        | Schritt::Allpass { aus, .. } | Schritt::Diode { aus, .. } | Schritt::Trommeln { aus, .. } | Schritt::Falter { aus, .. } | Schritt::Drift { aus, .. } => vec![*aus],
         Schritt::Saege { aus, zyklus, hart_aus, .. } | Schritt::Puls { aus, zyklus, hart_aus, .. }
         | Schritt::Dreieck { aus, zyklus, hart_aus, .. } | Schritt::Sinus { aus, zyklus, hart_aus, .. } => vec![*aus, *zyklus, *hart_aus],
         Schritt::Svf { tp, bp, hp, .. } => vec![*tp, *bp, *hp],
+        Schritt::Kreuz { lo, mid, hi, .. } => vec![*lo, *mid, *hi],
         Schritt::Sem { aus, bp, .. } => vec![*aus, *bp],
         Schritt::Chorus { l, r, .. } => vec![*l, *r],
         Schritt::Hall { wl, wr, .. } | Schritt::Delay { wl, wr, .. } | Schritt::Limiter { wl, wr, .. } | Schritt::Gate { wl, wr, .. }

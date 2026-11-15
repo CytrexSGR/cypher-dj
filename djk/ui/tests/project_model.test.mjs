@@ -31,7 +31,7 @@ const ABLEHNUNGEN = [
   ['tempo 201', (p) => { p.tempo_bpm = 201; }, /tempo_bpm/],
   ['tempo NaN', (p) => { p.tempo_bpm = NaN; }, /tempo_bpm/],
   ['tempo als Text', (p) => { p.tempo_bpm = '120'; }, /tempo_bpm/],
-  ['taktart 3/4', (p) => { p.taktart = [3, 4]; }, /taktart/],
+  ['taktart 3/3', (p) => { p.taktart = [3, 3]; }, /taktart/],
   ['taktart 4/8', (p) => { p.taktart = [4, 8]; }, /taktart/],
   ['loop kürzer als 1 Beat', (p) => { p.loop.bis_beat = 0.5; }, /loop/],
   ['loop von negativ', (p) => { p.loop.von_beat = -1; }, /loop/],

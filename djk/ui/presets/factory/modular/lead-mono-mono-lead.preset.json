@@ -1,0 +1,37 @@
+{
+ "schema": 1,
+ "name": "Mono lead",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "lead-mono",
+ "werte": {
+  "knob1": 0.5,
+  "knob2": 0.5,
+  "knob3": 0.5,
+  "knob4": 0.5,
+  "knob5": 0.5
+ },
+ "beschreibung": {
+  "art": "lead",
+  "unterart": "mono",
+  "charakter": [
+   "warm",
+   "smooth",
+   "bright",
+   "clean",
+   "mono"
+  ],
+  "genre": [],
+  "einsatz": [
+   "drop"
+  ],
+  "energie": 3,
+  "text": "Mellow 70s mono lead: two squares 10 cent apart, open filter, fast 20 ms glide, overdrive, eighth delay and short hall."
+ },
+ "tags": [
+  "lead-mono"
+ ],
+ "notiz": "Source rule: recipe card `lead.mono`, Welsh [B1] p. 91, patch Mellow 70's Lead, table transcribed. Glide rationale: Reid [B2] part 18. Measured by `tests/rezepte.rs`, not yet heard. Manifest use words outside the vocabulary: melody (as drop).",
+ "angelegt": "2026-11-15T00:00:00.000Z",
+ "geaendert": "2026-11-15T00:00:00.000Z"
+}

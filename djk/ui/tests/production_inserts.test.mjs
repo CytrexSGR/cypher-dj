@@ -11,7 +11,7 @@ import { starteSeite, warte } from '../check/page_mock.mjs';
 import { KOMP_PARAMETER, KOMP_VOLL_TEXT, MAX_PLAETZE, MAX_KOMP, MAX_EQ, MAX_SAETT, MAX_LIM, LIM_PARAMETER, MAX_UTIL, UTIL_PARAMETER, MAX_BK, BK_PARAMETER, BK_STANDARD_GRAPH, plaetze, neuerInsertBefehl, paramBefehl, preBefehl,
   SAETT_PARAMETER, EQ_KOPF_PARAMETER, EQ_BAND_PARAMETER, EQ_BAENDER, EQ_BAND_TYP_VORGABE, EQ_BAND_FREQ_VORGABE, EQ_TYPEN, EQ_STEIL, EQ_PLATZ, parameterVon, wertText,
   freqVonPos, posVonFreq, POS_MAX, anzahl, frei, ARTEN,
-  INS_GR_FRIST_MS, insGrAufnehmen, insGrLesung, insGrAblaufIn, insGrText } from '../public/production/inserts.js';
+  INS_GR_FRIST_MS, insGrAufnehmen, insGrLesung, insGrLesungArt, insPegelAufnehmen, insPegelLesung, insGrAblaufIn, insGrText } from '../public/production/inserts.js';
 
 const CHROME = fs.existsSync('/usr/bin/google-chrome');
 const GOLDEN = new URL('./support/seite_ohne_inserts_golden.json', import.meta.url);
@@ -29,7 +29,9 @@ function projekt(ketten = {}, art = 'komp') {
   return JSON.parse(JSON.stringify(p));
 }
 async function seite(t, p) {
-  const s = await starteSeite();
+  // 1080 high: since the two-row header (95799f2a) the production view starts 106 px lower, and at the former 900 px the INSERTS panel sits below the fold,
+  // where the test's mouse cannot reach a button.
+  const s = await starteSeite({ hoehe: 1080 });
   t.after(() => s.stoppe());
   await s.oeffne();
   await s.saat(p);
@@ -142,6 +144,42 @@ test('inserts.js: gain-reduction readings (/e/ins_gr): taken per slot, clamped, 
     { kanal: 'ins/komp/2', gr_db: '3' }, { gr_db: 1 }, null]) assert.equal(insGrAufnehmen(g, f, 1000), false, JSON.stringify(f));
   assert.equal(g[2], undefined, 'nothing was taken for slot 2');
   assert.equal(insGrText(null), '–'); assert.equal(insGrText(4.46), '4.5 dB');
+});
+
+test('inserts.js T8: limiter readings (ins/lim/1..2) are taken apart from the compressor readings, ins/lim/3, ins/lim/0 and ins/komp/13 are refused, the 500 ms rule holds', () => {
+  const g = {};
+  assert.equal(insGrAufnehmen(g, { kanal: 'ins/lim/2', gr_db: 3 }, 1000), true);
+  assert.equal(insGrLesungArt(g, 'lim', 2, 1100), 3);
+  assert.equal(insGrLesungArt(g, 'komp', 2, 1100), null, 'a limiter reading is not the compressor reading of the same number');
+  assert.equal(insGrAufnehmen(g, { kanal: 'ins/komp/2', gr_db: 7 }, 1000), true);
+  assert.equal(insGrAufnehmen(g, { kanal: 'ins/lim/2', gr_db: 4 }, 1050), true);
+  assert.equal(insGrLesungArt(g, 'komp', 2, 1100), 7, 'the limiter reading did not overwrite the compressor reading');
+  assert.equal(insGrLesungArt(g, 'lim', 2, 1100), 4);
+  assert.equal(insGrLesungArt(g, 'lim', 2, 1549), 4);
+  assert.equal(insGrLesungArt(g, 'lim', 2, 1550), null, '500 ms after the reading: none');
+  assert.equal(insGrAufnehmen(g, { kanal: 'ins/lim/1', gr_db: -1 }, 1000), true);
+  assert.equal(insGrLesungArt(g, 'lim', 1, 1100), 0, 'clamped to 0');
+  for (const f of [{ kanal: 'ins/lim/3', gr_db: 1 }, { kanal: 'ins/lim/0', gr_db: 1 }, { kanal: 'ins/komp/13', gr_db: 1 }, { kanal: 'ins/lim/1', gr_db: NaN }, { kanal: 'ins/eq/1', gr_db: 1 }]) {
+    assert.equal(insGrAufnehmen(g, f, 1000), false, JSON.stringify(f));
+  }
+  assert.equal(g.lim3, undefined);
+});
+
+test('inserts.js T9: level readings (/e/stufe_pegel) are taken for ins/komp/1..12 and ins/lim/1..2, refused for everything else and for non-finite values, 500 ms rule', () => {
+  const g = {};
+  assert.equal(insPegelAufnehmen(g, { kanal: 'ins/komp/3', ein_db: -12, aus_db: -15.2 }, 1000), true);
+  assert.equal(insPegelAufnehmen(g, { kanal: 'ins/lim/2', ein_db: -3, aus_db: -6 }, 1000), true);
+  assert.equal(insPegelAufnehmen(g, { kanal: 'ins/komp/12', ein_db: -200, aus_db: -200 }, 1000), true, 'silence is a report');
+  assert.deepEqual(insPegelLesung(g, 'ins/komp/3', 1100), { ein: -12, aus: -15.2 });
+  assert.deepEqual(insPegelLesung(g, 'ins/lim/2', 1100), { ein: -3, aus: -6 });
+  assert.deepEqual(insPegelLesung(g, 'ins/komp/12', 1100), { ein: -200, aus: -200 }, 'the -200 is kept, the face turns it into a dash');
+  assert.equal(insPegelLesung(g, 'ins/komp/3', 1500), null, '500 ms after the report: none');
+  assert.equal(insPegelLesung(g, 'ins/komp/4', 1100), null, 'never reported');
+  assert.equal(insPegelLesung(g, 'ins/lim/3', 1100), null);
+  for (const f of [{ kanal: 'ins/komp/13', ein_db: -1, aus_db: -1 }, { kanal: 'ins/komp/0', ein_db: -1, aus_db: -1 }, { kanal: 'ins/lim/3', ein_db: -1, aus_db: -1 }, { kanal: 'bus/1', ein_db: -1, aus_db: -1 },
+    { kanal: 'komp/erz/1', ein_db: -1, aus_db: -1 }, { kanal: 'ins/eq/1', ein_db: -1, aus_db: -1 }, { kanal: 'ins/komp/2', ein_db: NaN, aus_db: -1 }, { kanal: 'ins/komp/2', ein_db: -1, aus_db: Infinity },
+    { kanal: 'ins/komp/2', ein_db: '-1', aus_db: -1 }, { kanal: 'ins/komp/2', ein_db: -1 }, { ein_db: -1, aus_db: -1 }, null]) assert.equal(insPegelAufnehmen(g, f, 1000), false, JSON.stringify(f));
+  assert.equal(g['ins/komp/2'], undefined, 'nothing was taken for slot 2');
 });
 
 test('gr_zeigt_absenkung_je_stufe: /e/ins_gr shows on the stage with that slot, falls back to "-" without a message, other stages stay "-"', { skip: !CHROME && 'no google-chrome' }, async (t) => {

@@ -77,6 +77,9 @@ of the beta. The short version is the [README](../README.md).
   can sit inside groups (a DRUMS group holding KICK, PERC and HATS groups, each with its own inserts, fader and sends)
 - Audio tracks: drag a sample from the library onto a track; clips snap to the grid and can be moved, trimmed, split,
   duplicated, faded and looped inside their length
+- **Edit tools**: an EDIT toolbar and a context menu split, glue, duplicate, copy, cut, paste and delete audio and MIDI
+  clips, with the usual shortcuts (Ctrl+E, Ctrl+J, Ctrl+D, Ctrl+C, Ctrl+X, Ctrl+V, Del); paste also lands on another
+  track
 - **Warp**: an audio clip follows the project tempo. The warp markers come from the workshop's beat grid, a Traktor
   grid or the library BPM, and can be set, moved and deleted by hand in a sample editor (double or halve the tempo, set
   bar one here, warp from here, take the project tempo from the clip). Four modes: RE-PITCH (varispeed), COMPLEX and
@@ -195,6 +198,9 @@ references before they went in:
   oscillator, key follow, delay and reverb. Every knob added in the build-out of 12 November sits at "off" or at the
   old value when a project loads, so the factory presets made before it render byte for byte as before (a null test
   against the old graphs)
+- **Band Drive Bass** (`bass-banddrive`): a bass for electro, neuro and reese. A wavetable and a bite voice run into a
+  band split; the mids are folded and driven into a moving vowel filter, the sub stays clean and mono. 24 knobs, six
+  factory presets (electro growl, neuro stab, wide reese, acid squelch, overdriven rock, clean sub grit)
 - **Drums 909 and Drums 808**: two complete drum machines in one graph each. One MIDI channel plays the whole kit, the
   note picks the drum, the knobs tune the kit, and one bus (drive and a DJ filter) closes it
 - **Filterbox**: an effect graph with six filter models (ladder, diode, comb, vowel and others), three modulation

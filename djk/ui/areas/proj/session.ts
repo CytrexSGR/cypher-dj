@@ -16,7 +16,7 @@ import { AblageFehler, Projekte, projektWurzelVorgabe, setzeVorgabenQuelle } fro
 import { kanalOffen } from '../../hand_operation.ts';
 import { liveSlots } from '../../project/live.ts';
 import { seqGruppe } from '../../project/seq.ts';
-import { teileReglerLive } from '../../project/controls_order.ts';
+import { teileReglerLive, teileStummStart } from '../../project/controls_order.ts';
 import { alleAudioClips, fuehreListeAus, laneStart, setzeDekodiert, vergleiche, type PluginEintrag, type PresetInhalt } from '../../project/commands.ts';
 import { findeGraph, vorgabenVon } from '../../graphs.ts';
 import { kitDa, kitKlaenge } from './kits.ts';
@@ -103,7 +103,7 @@ export interface ProjOptionen {
 }
 // merk (Spec 6.30, 6.31): was die Freeze-Sperre aufgeschoben hat und nach der letzten Freigabe nachgeholt wird. Es gehört zum offenen Projekt und
 // verfällt mit ihm: ein anderes Projekt lädt beim Öffnen ohnehin seine eigene Wiedergabe.
-interface Merk { laden: boolean; loop: boolean; tempo: boolean; reglerNach: Soll[] }   // reglerNach: live rows that wait for the load
+interface Merk { laden: boolean; loop: boolean; tempo: boolean; reglerNach: Soll[]; stummStart: number[] }   // reglerNach: live rows that wait for the load
 // Spec 6.34: was GET /proj/aktuell als ausgabe_lauf zeigt, solange S3 einen Freeze oder Export fährt (Spur nur beim Freeze)
 export type AusgabeLauf = { art: 'freeze'; spur_id: string }
   | { art: 'export'; echtzeit?: true; start_ms?: number; dauer_s?: number } | { art: 'lautheit' } | { art: 'merge' }
@@ -843,7 +843,7 @@ export class ProjSitzung {
     }
     const projekt = structuredClone(o.projekt);
     this.gleicheDekodiertAb(projekt, true);
-    this.offen = { slug, projekt, verlauf: o.verlauf, merk: { laden: false, loop: false, tempo: false, reglerNach: [] }, vorhoeren: new Map() };
+    this.offen = { slug, projekt, verlauf: o.verlauf, merk: { laden: false, loop: false, tempo: false, reglerNach: [], stummStart: [] }, vorhoeren: new Map() };
     this.liveFaderWartend.clear(); this.liveFaderGemeldet.clear();
     // every open of the live project (queued behind this job)
     this.liveFaderLauf = projekt.live ? Promise.resolve().then(() => this.liveModulFader('oeffnen')) : null;
@@ -980,11 +980,15 @@ export class ProjSitzung {
   // Spec 6.1: neue Wiedergabe-Nummer, Datei schreiben, /k/arr/laden; project.json führt die Nummer als wiedergabe_rev (ohne neue rev)
   private async ladeWiedergabe(quelle: Quelle, vorhoeren?: ReadonlyMap<string, string>): Promise<Record<string, unknown>> {
     const o = this.brauchOffen();
-    const nr = this.schreibeNeueWiedergabe(o.projekt);
-    if (typeof nr !== 'number') return nr;
-    this.speichereStand(o);
-    const ladeNr = this.schreibeVorhoerWiedergabe(o.projekt, vorhoeren ?? o.vorhoeren) ?? nr;
-    return { nr: ladeNr, quittung: await this.ladeNr(ladeNr, quelle, nr) };
+    try {
+      const nr = this.schreibeNeueWiedergabe(o.projekt);
+      if (typeof nr !== 'number') return nr;
+      this.speichereStand(o);
+      const ladeNr = this.schreibeVorhoerWiedergabe(o.projekt, vorhoeren ?? o.vorhoeren) ?? nr;
+      return { nr: ladeNr, quittung: await this.ladeNr(ladeNr, quelle, nr) };
+    } finally {
+      o.merk.stummStart = [];   // the initial mute belongs to this one load (uebernimm); later loads leave the rows as they are
+    }
   }
   // 1.14 comping (R8): while an audition is on, the core plays a second file next to the main playback. The main playback is written as always and is
   // the only one that becomes p.wiedergabe_rev (restart guard: a core restart and a page-server restart both fall back to it). The audition file
@@ -1010,6 +1014,7 @@ export class ProjSitzung {
     const ohne = new Set([...(ohneHost ?? []), ...this.hosts.ausgelassen()]);   // plus the stages whose latency the core would refuse (latenz_zu_gross)
     return uebersetze(p, { nr, audioOrdner: path.join(this.arbeitsordner, 'audio'), frames: (sha) => this.cache.frames(sha), transienten: this.transienten,
       arbeitsordner: this.arbeitsordner, ...(vorhoeren ? { vorhoeren } : {}),
+      ...(live && this.offen?.merk.stummStart.length ? { stummStart: new Set(this.offen.merk.stummStart) } : {}),
       ...(live ? { host: (slot: number) => this.hosts.stufe(slot), ...(ohne.size ? { ohneHost: ohne } : {}) } : {}) });
   }
   // plan 1.11 task 7: the host manager asks for a new playback (a host became ready, failed or changed its latency)
@@ -1360,8 +1365,8 @@ export class ProjSitzung {
         for (const slot of ['A', 'B'] as const) {
           const kanal = `pad/${slot === 'A' ? 1 : 2}`;
           if (nach[slot] !== undefined && nach[slot] !== vor[slot] && this.kanalOffenGesehen(kanal)) {
-            const text = `the channel ${kanal} of Loop ${slot === 'A' ? 1 : 2} is open; close it before a module is placed`;
-            throw new ProjFehler(409, 'kanal_offen', { slot, kanal, text });
+            throw new ProjFehler(409, 'kanal_offen', { slot, kanal,
+              text: `the channel ${kanal} of Loop ${slot === 'A' ? 1 : 2} is open; close it before a module is placed` });
           }
         }
         // SEQ deck: a new deck on a place whose channel deck/N is open is refused for every source; a deck removed while its channel is open only for
@@ -1371,12 +1376,12 @@ export class ProjSitzung {
           const vorG = seqGruppe(o.projekt, platz), nachG = seqGruppe(probe.projekt, platz);
           const kanal = `deck/${platz}`;
           if (nachG && !vorG && this.kanalOffenGesehen(kanal)) {
-            const text = `the channel ${kanal} of place ${platz} is open; close it before a SEQ deck is created there`;
-            throw new ProjFehler(409, 'kanal_offen', { platz, kanal, text });
+            throw new ProjFehler(409, 'kanal_offen', { platz, kanal,
+              text: `the channel ${kanal} of place ${platz} is open; close it before a SEQ deck is created there` });
           }
           if (vorG && !nachG && quelle === 'cypher' && this.kanalOffenGesehen(kanal)) {
-            const text = `the channel ${kanal} of place ${platz} is open; Cypher does not remove a SEQ deck that is playing`;
-            throw new ProjFehler(409, 'kanal_offen', { platz, kanal, text });
+            throw new ProjFehler(409, 'kanal_offen', { platz, kanal,
+              text: `the channel ${kanal} of place ${platz} is open; Cypher does not remove a SEQ deck that is playing` });
           }
         }
       }
@@ -1934,7 +1939,12 @@ export class ProjSitzung {
       // Live container: rows that make something louder wait for the core's receipt of the playback load (project/controls_order.ts)
       const dekodiert = neu.live ? this.betrifftWiedergabe(neu, this.gleicheDekodiertAb(neu, false)) : false;
       const teilen = neu.live === true && (w.betrifft_wiedergabe || dekodiert);
-      const { vorher, nachher } = teilen ? teileReglerLive(alt, w.regler_aenderungen) : { vorher: w.regler_aenderungen, nachher: [] };
+      const geteilt = teilen ? teileReglerLive(alt, w.regler_aenderungen) : { vorher: w.regler_aenderungen, nachher: [] };
+      const { vorher } = geteilt;
+      // the mute of a track that sounds in the old playback goes into the load (stumm_start), not after its receipt: the stems and the silence of the loop
+      // start in one block
+      const { stummStart, rest: nachher } = teileStummStart(alt, geteilt.nachher);
+      if (stummStart.length) o.merk.stummStart = stummStart;
       this.meldeRegler(o, await this.kern.setzeRegler(vorher, quelle));
       const dekodiertAnders = neu.live ? dekodiert : this.betrifftWiedergabe(neu, this.gleicheDekodiertAb(neu, false));
       if (w.betrifft_wiedergabe || dekodiertAnders) {

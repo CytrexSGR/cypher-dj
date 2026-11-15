@@ -1,0 +1,36 @@
+{
+ "schema": 1,
+ "name": "Hi-hat",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "drums-hihat",
+ "werte": {
+  "knob1": 0.5,
+  "knob2": 0.5,
+  "knob3": 0.5,
+  "knob4": 0.5
+ },
+ "beschreibung": {
+  "art": "drums",
+  "unterart": "hihat",
+  "charakter": [
+   "bright",
+   "metallic",
+   "thin",
+   "aggressive",
+   "tight"
+  ],
+  "genre": [],
+  "einsatz": [
+   "drop"
+  ],
+  "energie": 4,
+  "text": "Closed hi-hat: six inharmonic squares through three band-passes with their own short envelopes, high-passed, gated, small room."
+ },
+ "tags": [
+  "drums-hihat"
+ ],
+ "notiz": "Source rule: recipe card `drums.hihat`, Welsh [B1] p. 88, patch Cymbal note. Measured by `tests/rezepte.rs`, not yet heard. Manifest character words outside the vocabulary: harsh (as aggressive). Manifest use words outside the vocabulary: groove (as drop).",
+ "angelegt": "2026-11-15T00:00:00.000Z",
+ "geaendert": "2026-11-15T00:00:00.000Z"
+}

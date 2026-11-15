@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "hell": 127,
+  "gedimmt": 20,
+  "links": {"play": 60, "cue": 59, "loop": [65, 66, 67, 68]},
+  "rechts": {"play": 60, "cue": 59, "loop": [65, 66, 67, 68]}
+}

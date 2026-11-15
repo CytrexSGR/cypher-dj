@@ -5,11 +5,12 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Oberflaeche } from '../server.ts';
 import { schreibeLeerenRing } from './support/ring.mjs';
 import { K, TEST_INSTANZ, belegeTestInstanz } from './support/instance.mjs';
 import { setzeAutonom, schreibeLebt, schreibeStatus } from '../../generator/src/pattern_state.mjs';
-import { listeGraphen, graphenOrdner, normalisierePanel } from '../graphs.ts';
+import { listeGraphen, graphenOrdner, normalisierePanel, graphLatenz } from '../graphs.ts';
 import { stromVonZiel } from '../track.ts';
 
 belegeTestInstanz();
@@ -77,9 +78,9 @@ test('list: instruments and effects with regler_namen, file name counts, bad nam
   const { url } = await stapel(t);
   const r = await (await hol(`${url}/graphen`)).json();
   assert.deepEqual(r.graphen, [
-    { name: 'eff', art: 'effekt', regler_namen: {} },
-    { name: 'inst', art: 'instrument', regler_namen: { 1: 'Rate' } },
-    { name: 'lead', art: 'instrument', regler_namen: { 1: 'Rate' } },
+    { name: 'eff', art: 'effekt', regler_namen: {}, latenz: 0 },
+    { name: 'inst', art: 'instrument', regler_namen: { 1: 'Rate' }, latenz: 0 },
+    { name: 'lead', art: 'instrument', regler_namen: { 1: 'Rate' }, latenz: 0 },
   ]);
   assert.deepEqual([...r.uebersprungen].sort(), ['Lead', NAME_33, 'böse name', 'kaputt'].sort());
   assert.deepEqual(r.geladen, {});
@@ -88,7 +89,7 @@ test('list: instruments and effects with regler_namen, file name counts, bad nam
 test('64 knobs list: regler_namen keys 1..64 are kept (9, 32, 33 and 64 included), 0, 65 and 01 are dropped', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bk32-l-'));
   graphDatei(dir, 'viele.json', { ...INST, regler_namen: { 1: 'a', 9: 'nine', 10: 'ten', 32: 'last', 33: 'upper', 64: 'top', 0: 'zero', 65: 'over', '01': 'padded', x: 'no' } });
-  assert.deepEqual(listeGraphen(dir).graphen, [{ name: 'viele', art: 'instrument', regler_namen: { 1: 'a', 9: 'nine', 10: 'ten', 32: 'last', 33: 'upper', 64: 'top' } }]);
+  assert.deepEqual(listeGraphen(dir).graphen, [{ name: 'viele', art: 'instrument', regler_namen: { 1: 'a', 9: 'nine', 10: 'ten', 32: 'last', 33: 'upper', 64: 'top' }, latenz: 0 }]);
 });
 
 test('list: pure function and folder override (positive control: a folder with one graph lists exactly it)', () => {
@@ -98,6 +99,76 @@ test('list: pure function and folder override (positive control: a folder with o
   assert.deepEqual(listeGraphen(path.join(dir, 'gibt-es-nicht')), { graphen: [], uebersprungen: [] });
   process.env.CYPHERDJ_BK_ORDNER = dir;
   try { assert.equal(graphenOrdner(), dir); } finally { delete process.env.CYPHERDJ_BK_ORDNER; }
+});
+
+// ---- SEQ finding 8: latency per graph (samples at 48 kHz), the same rule as the engine's translation (instruments/modular_dsp uebersetzen.rs, D4) ----
+const lat = (knoten, kanten = []) => graphLatenz({ format: 'baukasten/2', name: 'x', stimmen: 1, knoten: [...knoten, { id: 'o', art: 'ausgang' }], kanten });
+test('graphLatenz: limiter is round(vorlauf*48) - 1, falter and labor 69 only when oversampled linear, faltung and the rest 0', () => {
+  const kette = (art, werte = {}) => lat([{ id: 'ein', art: 'eingang' }, { id: 'n', art, ...werte }], [{ von: 'ein.l', nach: 'n.x' }, { von: 'n.aus', nach: 'o.x' }]);
+  assert.equal(kette('limiter', { vorlauf: 0.5 }), 23);
+  assert.equal(kette('limiter', { vorlauf: 2 }), 95);
+  assert.equal(kette('limiter'), 95, 'default vorlauf 2 ms');
+  assert.equal(kette('limiter', { vorlauf: 0.001 }), 0, 'at least one sample, minus one');
+  assert.equal(kette('falter'), 69, 'ueber defaults to 1');
+  assert.equal(kette('falter', { ueber: 0 }), 0);
+  assert.equal(kette('labor'), 69, 'ueber defaults to 1: linear phase');
+  assert.equal(kette('labor', { ueber: 0 }), 0);
+  assert.equal(kette('labor', { ueber: 2 }), 0, 'ueber 2 is oversampled without latency');
+  assert.equal(kette('faltung'), 0);
+  assert.equal(kette('svf'), 0);
+  assert.equal(lat([{ id: 'n', art: 'note' }]), 0);
+});
+test('graphLatenz: a graph with an allpass node reports latenz 0', () => {
+  const g = (ordnung) => lat([{ id: 'ein', art: 'eingang' }, { id: 'n', art: 'allpass', fc: 300, ordnung, fc2: 2000 }], [{ von: 'ein.l', nach: 'n.x' }, { von: 'n.aus', nach: 'o.x' }]);
+  assert.equal(g(1), 0);
+  assert.equal(g(2), 0);
+});
+test('graphLatenz: a graph with a kreuz node reports latenz 0', () => {
+  const g = (baender) => lat([{ id: 'ein', art: 'eingang' }, { id: 'n', art: 'kreuz', fc1: 120, fc2: 2500, baender }], [{ von: 'ein.l', nach: 'n.x' }, { von: 'n.lo', nach: 'o.l' }, { von: 'n.mid', nach: 'o.x' }, { von: 'n.hi', nach: 'o.r' }]);
+  assert.equal(g(2), 0);
+  assert.equal(g(3), 0);
+});
+test('graphLatenz: the shipped graph bass-banddrive reports latenz 0 (falter ueber 0), and 69 with the default falter', () => {
+  const datei = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'instruments', 'modular_dsp', 'demos', 'bass-banddrive.json');
+  const g = JSON.parse(fs.readFileSync(datei, 'utf8'));
+  const falter = g.knoten.filter((k) => k.art === 'falter');
+  assert.equal(falter.length, 2);
+  assert.ok(falter.every((k) => k.ueber === 0));
+  assert.equal(graphLatenz(g), 0);
+  const mit = { ...g, knoten: g.knoten.map((k) => (k.art === 'falter' ? { ...k, ueber: 1 } : k)) };
+  assert.equal(graphLatenz(mit), 69, 'positive control: the rule sees the oversampled falter on the path');
+});
+test('graphLatenz: summed along a chain, the largest path wins, delayed edges and blocks that do not reach the output count nothing', () => {
+  const k = [{ id: 'ein', art: 'eingang' }, { id: 'a', art: 'falter' }, { id: 'b', art: 'limiter', vorlauf: 0.5 }, { id: 'c', art: 'labor', ueber: 0 }];
+  assert.equal(lat(k, [{ von: 'ein.l', nach: 'a.x' }, { von: 'a.aus', nach: 'b.x' }, { von: 'b.l', nach: 'o.x' }]), 69 + 23, 'chain');
+  assert.equal(lat(k, [{ von: 'ein.l', nach: 'a.x' }, { von: 'a.aus', nach: 'o.x' }, { von: 'ein.l', nach: 'b.x' }, { von: 'b.l', nach: 'o.l' }]), 69, 'parallel: the larger');
+  assert.equal(lat(k, [{ von: 'ein.l', nach: 'a.x' }, { von: 'a.aus', nach: 'o.x', verzoegerung: 1 }]), 0, 'a delayed edge is not on the path');
+  assert.equal(lat(k, [{ von: 'ein.l', nach: 'a.x' }]), 0, 'a falter that feeds nothing');
+  assert.equal(graphLatenz({ knoten: 'kaputt' }), 0);
+  assert.equal(graphLatenz(null), 0);
+});
+test('list: every graph carries latenz in samples, 0 when none (and a graph with a limiter or a linear-phase block reports it)', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bk-lat-'));
+  graphDatei(dir, 'plain.json', INST);
+  graphDatei(dir, 'mitlim.json', { ...INST, knoten: [{ id: 'n', art: 'note' }, { id: 'l', art: 'limiter', vorlauf: 0.5 }, { id: 'o', art: 'ausgang' }], kanten: [{ von: 'n.hz', nach: 'l.x' }, { von: 'l.l', nach: 'o.x' }] });
+  graphDatei(dir, 'fx.json', { ...EFF, knoten: [{ id: 'e', art: 'eingang' }, { id: 'f', art: 'labor' }, { id: 'o', art: 'ausgang' }], kanten: [{ von: 'e.l', nach: 'f.x' }, { von: 'f.l', nach: 'o.x' }] });
+  const l = Object.fromEntries(listeGraphen(dir).graphen.map((g) => [g.name, g.latenz]));
+  assert.deepEqual(l, { fx: 69, mitlim: 23, plain: 0 });
+});
+test('latency of the 46 recipe graphs: only bass-sub and fx-impact report any (95 samples, a limiter), the other 44 report 0', () => {
+  const rezepte = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'instruments', 'modular_dsp', 'demos', 'recipes');
+  const g = listeGraphen(rezepte).graphen;
+  assert.equal(g.length, 46);
+  assert.deepEqual(g.filter((e) => e.latenz > 0).map((e) => [e.name, e.latenz]), [['bass-sub', 95], ['fx-impact', 95]]);
+});
+
+test('GET /graphen carries latenz per graph', async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bk-lat-'));
+  graphDatei(dir, 'plain.json', INST);
+  graphDatei(dir, 'mitlim.json', { ...INST, knoten: [{ id: 'n', art: 'note' }, { id: 'l', art: 'limiter', vorlauf: 2 }, { id: 'o', art: 'ausgang' }], kanten: [{ von: 'n.hz', nach: 'l.x' }, { von: 'l.l', nach: 'o.x' }] });
+  const { url } = await stapel(t, { bkOrdner: dir });
+  const j = await (await hol(`${url}/graphen`)).json();
+  assert.deepEqual(j.graphen.map((g) => [g.name, g.latenz]), [['mitlim', 95], ['plain', 0]]);
 });
 
 test('load on erz/3: /erz/strom strom 3, ziel bk:inst, kanal erz/3; geladen set on quittung 3', async (t) => {
@@ -553,7 +624,7 @@ test('GET /graphen/panel: ranges of the regler nodes and a valid sidecar; refuse
   assert.equal((await hol(`${url}/graphen/panel?name=gibt-es-nicht`)).status, 404);
   assert.equal((await hol(`${url}/graphen/panel`)).status, 404);
   const liste = await (await hol(`${url}/graphen`)).json();
-  assert.ok(liste.graphen.every((g) => Object.keys(g).sort().join() === 'art,name,regler_namen'), 'the list entries keep their shape');
+  assert.ok(liste.graphen.every((g) => Object.keys(g).sort().join() === 'art,latenz,name,regler_namen'), 'the list entries keep their shape plus latenz');
 });
 
 test('GET /geraete/panel and the automatic panel on /graphen/panel: auto without a file, auto with the problems of a broken file, rb338 and surge tables', async (t) => {

@@ -2,7 +2,8 @@
 // Every test that expects a fork builds its pool with setze_fifo_test(true) and asserts the positive counters, so a run that stayed serial fails
 // instead of passing empty. The first unit of lane 0 waits (SpurHaken) until every worker computed a unit, so no assertion depends on a race.
 //   1 q_bitgleich:           24 rb + 2 bk + 1 host track, 3 workers, 5000 blocks: every bus and the master equal the serial arrangement; every lane 1..3 computed
-//                            units (a worker that always used lane 1 fails: the probe bug as a test)
+//                            units (a worker that always used lane 1 fails: the probe bug as a test); the two bk tracks are lane units too (slice K), only the host is
+//                            in the serial remainder
 //   2 q_nie_gestartet:       all workers held before they wake: the caller takes every job back and computes every unit; equal; zurueck(SPUR) counts, spaet(SPUR) 0
 //   3 q_subnormal:           the units run under the caller's MXCSR (scalar part after the FFI block of the real sink): a subnormal result survives on a worker
 //   4 q_n_weg:               a block with a fading sink runs serial (seriell_weg), equal; the next block forks again
@@ -284,6 +285,11 @@ void fall1() {
     }
     PRUEF(sl.z.unfertig == 0);
     PRUEF(pool.p.an(cdj::HallPool::SPUR));
+    {   // slice K: the bk tracks (24, 25) are in lane lists once their instances play, the remainder holds the host track (26) only
+      const cdj::ArrSpurPlan& p = a.t.arr.spur_plan();
+      PRUEF(p.in_liste(24) && p.in_liste(25));
+      PRUEF(p.n_rest() == 1 && p.rest(0) == 26);
+    }
     std::printf("case 1 q_bitgleich: ungleich=%d parallel=%llu worker=%llu caller=%llu lanes=%llu,%llu,%llu,%llu\n", ungleich, (unsigned long long)sl.z.blocks_parallel,
                 (unsigned long long)sl.einheiten_worker(), (unsigned long long)sl.z.einheiten_caller, (unsigned long long)sl.einheiten_bahn(0),
                 (unsigned long long)sl.einheiten_bahn(1), (unsigned long long)sl.einheiten_bahn(2), (unsigned long long)sl.einheiten_bahn(3));
@@ -606,6 +612,7 @@ void fall7() {
       ref.laden(s_r, static_cast<int64_t>(b) * M);
       lauf(10, 9, 9);
       PRUEF(a.t.arr.spur_plan_gueltig());
+      PRUEF(a.t.arr.spur_plan().in_liste(0));   // slice K: track 0 plays bk now and is a lane unit again once its first block took the instance over
     }
     PRUEF(ungleich == 0);
     PRUEF(doppelt == 0);

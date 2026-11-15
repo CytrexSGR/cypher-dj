@@ -10,7 +10,7 @@ export const geraetWeg = (spurId) => `/proj/spur/${encodeURIComponent(spurId)}/g
 // the "List" toggle shows the searchable list (and "Panel" brings the panel back). `bau` lets a test replace the two builders.
 export function oeffnePluginGeraet(ctx, s, wurzel = document, bau = { liste: baueParameterListe, platte: baueFrontplatte }) {
   const alt = wurzel.querySelector('.p-ins-popover.p-geraet-plugin');
-  if (alt) { const gleich = alt.dataset.spur === s.id; alt.remove(); if (gleich) return null; }
+  if (alt) { const gleich = alt.dataset.spur === s.id; (alt.schliesse ?? (() => alt.remove()))(); if (gleich) return null; }
   const el = wurzel.createElement ? wurzel.createElement('div') : document.createElement('div');
   el.className = 'p-ins-popover p-geraet-plugin'; el.dataset.spur = s.id;
   const weg = geraetWeg(s.id);
@@ -45,7 +45,14 @@ export function oeffnePluginGeraet(ctx, s, wurzel = document, bau = { liste: bau
     platte = bau.platte(inhalt, { panel: autoPanelAusListe(r.j, titel), parameter: parameterAusListe(r.j), adapter: pluginAdapter(r.j, { sende, fehler }) });
   };
   umschalter.addEventListener('click', () => { listeAn = !listeAn; zeige(); });
-  el.append(umschalter, inhalt);
+  // a fixed overlay: a close button as first child and Esc close it; the Esc listener leaves together with the element
+  const zu = d.createElement('button');
+  zu.type = 'button'; zu.className = 'p-geraet-zu'; zu.textContent = '✕'; zu.setAttribute('aria-label', 'Close the plugin panel');
+  const taste = (e) => { if (e.key === 'Escape') el.schliesse(); };
+  el.schliesse = () => { platte?.zerstoere?.(); platte = null; stand++; el.remove(); d.removeEventListener?.('keydown', taste); };
+  zu.addEventListener('click', () => el.schliesse());
+  d.addEventListener?.('keydown', taste);
+  el.append(zu, umschalter, inhalt);
   zeige();
   (wurzel.body ?? document.body).append(el);
   return el;

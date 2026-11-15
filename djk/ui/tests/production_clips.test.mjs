@@ -2,7 +2,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { trefferClip, verschiebe, kuerzeRechts, kuerzeLinks, zieheFade, zugBefehle, zugLabel, teile, dupliziere, loesche, neuerMidiClip, feldBefehl, istZug,
-  schalteLoop, loopLabel, loopImWeg, kacheln, CLIP_TEXT } from '../public/production/clips.js';
+  schalteLoop, loopLabel, loopImWeg, kacheln, CLIP_TEXT, kopiere, fuegeEin, einfuegeLabel, verbinde } from '../public/production/clips.js';
+import { fuehreListeAus } from '../project/commands.ts';
+import { neuesProjekt } from '../project/model.ts';
 import { entwurf, findeClip, neueClipIds, neuerZugLauf } from '../public/production/draft.js';
 
 const A = { beat0: 0, pxProBeat: 10 };
@@ -230,4 +232,95 @@ test('V2 Zug-Lauf F2: Rechenregel, gerechnet aus dem Stand beim Senden, mit dess
   assert.equal(c.start_beat + c.noten.find((n) => n.id === 'n3').beat, 7, 'Negativ-Kontrolle: n3 bleibt an Projekt-Beat 7');
   const alt = entwurf(p1, kuerzeLinks(c0, 2, 1, 120)), ca = findeClip(alt, c0.id).clip;
   assert.equal(ca.start_beat + ca.noten.find((n) => n.id === 'n9').beat, 8.5, 'Gegenprobe: aus p0 gerechnet wanderte n9 auf 8,5');
+});
+
+
+// ---------- clipboard: kopiere / fuegeEin ----------
+test('kopiere: the chosen clips with track and start relative to the first; one track is einSpur; nothing chosen is null; the copy is a snapshot', () => {
+  const p = projekt();
+  const a = kopiere(p, ['c3', 'c2', 'c1']);
+  assert.deepEqual(a.clips.map((e) => [e.id, e.spurId, e.spurIndex, e.rel]), [['c1', 's1', 0, 0], ['c2', 's1', 0, 8], ['c3', 's3', 2, 4]], 'project order, rel from the first start (0)');
+  assert.equal(a.einSpur, false);
+  const b = kopiere(p, ['c2', 'c1']);
+  assert.equal(b.einSpur, true); assert.deepEqual(b.clips.map((e) => e.rel), [0, 8]);
+  const c = kopiere(p, ['c2']);
+  assert.deepEqual(c.clips.map((e) => e.rel), [0], 'rel counts from the first CHOSEN clip');
+  assert.equal(kopiere(p, []), null); assert.equal(kopiere(p, ['gone']), null);
+  p.spuren[0].clips[0].name = 'changed'; assert.equal(a.clips[0].clip.name, 'c1', 'a snapshot, not a reference');
+});
+
+test('fuegeEin: clip_duplizieren with spur_id and ziel_beat while the source is unchanged; the pointer lane for one track; art mismatch is skipped; several tracks keep tracks and offsets', () => {
+  const p = projekt();
+  const eins = kopiere(p, ['c1', 'c2']);
+  assert.deepEqual(fuegeEin(p, eins, 20, null).befehle, [
+    { befehl: 'clip_duplizieren', clip_id: 'c1', ziel_beat: 20, spur_id: 's1' }, { befehl: 'clip_duplizieren', clip_id: 'c2', ziel_beat: 28, spur_id: 's1' }], 'back onto the own track');
+  assert.deepEqual(fuegeEin(p, eins, 20, 1).befehle.map((b) => [b.clip_id, b.spur_id, b.ziel_beat]), [['c1', 's2', 20], ['c2', 's2', 28]], 'one track: onto the lane under the pointer');
+  const r = fuegeEin(p, eins, 20, 2);
+  assert.deepEqual([r.befehle, r.uebersprungen], [[], 2], 'audio clips cannot go to an instrument lane: nothing to send, both counted');
+  const viele = kopiere(p, ['c1', 'c3']);
+  assert.deepEqual(fuegeEin(p, viele, 16, 1).befehle.map((b) => [b.clip_id, b.spur_id, b.ziel_beat]), [['c1', 's1', 16], ['c3', 's3', 20]], 'several tracks: the lane under the pointer is ignored, offsets kept');
+  assert.deepEqual(fuegeEin(p, eins, 3.25, null).befehle.map((b) => b.ziel_beat), [3.25, 11.25]);
+  const weg = JSON.parse(JSON.stringify(p)); weg.spuren[0].id = 'sX';
+  assert.deepEqual([fuegeEin(weg, eins, 0, null).befehle.length, fuegeEin(weg, eins, 0, null).uebersprungen], [0, 2], 'the original track is gone');
+});
+
+// the real S2 core: what a paste from a snapshot makes when the source is gone (cut) or has changed since the copy
+const sha = 'a'.repeat(64);
+function kernProjekt() {
+  const lauf = (q, b) => fuehreListeAus(q, b, { quelle: 'andreas' }).projekt;
+  let q = lauf(neuesProjekt('Paste'), [{ befehl: 'spur_neu', art: 'audio' }, { befehl: 'spur_neu', art: 'audio' }, { befehl: 'spur_neu', art: 'instrument' }]);
+  q = lauf(q, [{ befehl: 'clip_neu', spur_id: 's1', art: 'audio', start_beat: 4, laenge_beats: 8, sha256: sha, name: 'Voc' },
+    { befehl: 'clip_neu', spur_id: 's3', art: 'midi', start_beat: 8, laenge_beats: 8, noten: [{ beat: 0, laenge: 1, ton: 36, vel: 100 }, { beat: 3, laenge: 2, ton: 40, vel: 80 }], name: 'Bass' }]);
+  q = lauf(q, [{ befehl: 'clip_aendern', clip_id: 'c1', offset_s: 1.5, gain_db: -3, fade_ein_beats: 1, fade_aus_beats: 2, stumm: true }, { befehl: 'clip_aendern', clip_id: 'c2', loop_beats: 4 },
+    { befehl: 'huellkurve_setzen', clip_id: 'c1', ziel: 'gain', punkte: [{ beat: 0, wert: -6 }, { beat: 4, wert: 0 }] }]);
+  return q;
+}
+const alleClips = (q) => q.spuren.flatMap((s) => s.clips);
+const ohneIdUndLage = (c) => { const { id, start_beat, dekodiert, ...r } = JSON.parse(JSON.stringify(c)); if (r.noten) r.noten = r.noten.map(({ id: _i, ...n }) => n); return r; };
+
+test('fuegeEin from a snapshot: a cut audio clip and a cut MIDI clip come back field for field on any fitting track, in one command list with predicted ids', () => {
+  const q = kernProjekt();
+  const a = kopiere(q, ['c1', 'c2']);
+  const nachSchnitt = fuehreListeAus(q, loesche(['c1', 'c2']), { quelle: 'andreas' }).projekt;
+  assert.equal(alleClips(nachSchnitt).length, 0);
+  const r = fuegeEin(nachSchnitt, a, 16, null);
+  assert.ok(r.befehle.some((b) => b.befehl === 'clip_neu'), 'the source ids are gone: clips are created from the snapshot');
+  const neu = fuehreListeAus(nachSchnitt, r.befehle, { quelle: 'andreas' }).projekt;
+  const [audioNeu, midiNeu] = [neu.spuren[0].clips[0], neu.spuren[2].clips[0]];
+  assert.deepEqual([audioNeu.start_beat, midiNeu.start_beat], [16, 20], 'relative offsets 0 and 4 from the first start');
+  assert.deepEqual(ohneIdUndLage(audioNeu), ohneIdUndLage(a.clips[0].clip), 'audio: source, offset, gain, fades, mute, envelopes');
+  assert.deepEqual(ohneIdUndLage(midiNeu), ohneIdUndLage(a.clips[1].clip), 'MIDI: notes, loop');
+  assert.notEqual(audioNeu.id, 'c1', 'new ids (counters only go up)');
+  const zweite = fuegeEin(neu, kopiere(q, ['c1']), 40, 1);
+  const neu2 = fuehreListeAus(neu, zweite.befehle, { quelle: 'andreas' }).projekt;
+  assert.deepEqual(ohneIdUndLage(neu2.spuren[1].clips[0]), ohneIdUndLage(a.clips[0].clip), 'onto another audio track, still equal');
+});
+
+test('fuegeEin: a source that was edited since the copy is recreated from the snapshot, an untouched one is duplicated; two recreations plus a duplicate keep their ids straight', () => {
+  const q = kernProjekt();
+  const a = kopiere(q, ['c1']);
+  const bearbeitet = fuehreListeAus(q, [{ befehl: 'clip_aendern', clip_id: 'c1', gain_db: 0 }], { quelle: 'andreas' }).projekt;
+  const r = fuegeEin(bearbeitet, a, 30, null);
+  assert.equal(r.befehle[0].befehl, 'clip_neu', 'the live clip differs from the snapshot: the snapshot wins');
+  const neu = fuehreListeAus(bearbeitet, r.befehle, { quelle: 'andreas' }).projekt;
+  assert.deepEqual(ohneIdUndLage(neu.spuren[0].clips.at(-1)), ohneIdUndLage(a.clips[0].clip));
+  assert.equal(fuegeEin(q, a, 30, null).befehle[0].befehl, 'clip_duplizieren', 'untouched source: the plain duplicate');
+  const g = kopiere(q, ['c1', 'c2']), danach = fuehreListeAus(q, loesche(['c1']), { quelle: 'andreas' }).projekt;
+  const gemischt = fuegeEin(danach, g, 50, null);
+  assert.deepEqual(gemischt.befehle.map((b) => b.befehl).filter((x) => x === 'clip_neu' || x === 'clip_duplizieren'), ['clip_neu', 'clip_duplizieren']);
+  const fertig = fuehreListeAus(danach, gemischt.befehle, { quelle: 'andreas' }).projekt;
+  assert.deepEqual(ohneIdUndLage(fertig.spuren[0].clips.at(-1)), ohneIdUndLage(g.clips[0].clip), 'the recreated audio clip got its extras on the right clip');
+  assert.deepEqual(ohneIdUndLage(fertig.spuren[2].clips.at(-1)), ohneIdUndLage(g.clips[1].clip));
+});
+
+test('einfuegeLabel: Paste clip for one, Paste N clips for several (a recreation counts once, not per helper command)', () => {
+  assert.equal(einfuegeLabel([{ befehl: 'clip_duplizieren' }]), 'Paste clip');
+  assert.equal(einfuegeLabel([{ befehl: 'clip_neu' }, { befehl: 'clip_aendern' }, { befehl: 'clip_duplizieren' }]), 'Paste 2 clips');
+});
+
+test('verbinde: one clips_verbinden with the chosen ids ordered by start (the first one stays); fewer than two existing clips give nothing', () => {
+  const p = projekt();
+  assert.deepEqual(verbinde(p, ['c2', 'c1']), [{ befehl: 'clips_verbinden', clip_ids: ['c1', 'c2'] }]);
+  assert.deepEqual(verbinde(p, ['c3', 'c2', 'c1']), [{ befehl: 'clips_verbinden', clip_ids: ['c1', 'c3', 'c2'] }], 'tracks are the server business: it refuses with verbinden_spur');
+  assert.deepEqual(verbinde(p, ['c1']), []); assert.deepEqual(verbinde(p, ['c1', 'gone']), []); assert.deepEqual(verbinde(p, []), []);
 });

@@ -56,4 +56,4 @@ a member without a second macro model.
   (`richtung_unbekannt`): direction words work on plain RB-338 and Surge tracks.
 - Overlapping zones sound all members that match; a gap in the zones sounds nothing for that note (an accepted musical choice, not an error).
 - The bit-equality of the render at quantum 128 and 1024 and of the null test live against offline holds for racks (evidence file).
-- Open: AK-R8 (lane `arr32rack`) ran on a quiet machine and is not met on p99.9 by up to 4 % (1009 to 1106 us against 1067 us); accepted for Welle 1 (decision in the strand ledger), follow-up t_8cb0a5b9 (a rack with its members as one unit on one lane). Evidence: `docs/architecture/stand/produktion-instrumente.md`.
+- AK-R8 (lane `arr32rack`) is met with the track pool on: median p99.9 559.4 us over 6 runs against 1067 us, largest max 647.5 us against 2667 us (block 256, 20000 cycles, ABBA, 2026-11-15); the earlier figures (1009 to 1106 us) were taken with the pool off. Evidence: `docs/architecture/stand/produktion-instrumente.md`.

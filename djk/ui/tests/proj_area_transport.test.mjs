@@ -22,14 +22,14 @@ test('Routes: exactly the nine of spec 3.4 plus GET /proj/kits (1.9 T2.3), GET /
   assert.equal(proj.find((e) => e.methode === 'POST' && e.pfad === '/proj/take_vorhoeren')?.schutz, 'fremdePost', 'the audition POST is guarded like the others');
 });
 
-test('Transport mit der Kern-Attrappe: Start (quant 0, Quittung 2 am Einsatz), /zustand/arr mit nr und Status über /strom, Stopp', async (t) => {
+test('Transport mit der Kern-Attrappe: Start (quant 2 always, f1f99347; Quittung 2 am Einsatz), /zustand/arr mit nr und Status über /strom, Stopp', async (t) => {
   const { url } = await stapel(t);
   const s = sse(url); t.after(s.zu);
   const n = await ruf(url, 'POST', '/proj/neu', { name: 'Lauf' });
   const bpm = (await ruf(url, 'GET', '/lage')).j.uhr.bpm;
   await ruf(url, 'POST', '/proj/aendern', { rev: 0, label: 'Tempo', befehle: [{ befehl: 'tempo_setzen', bpm }] });
   const st = await ruf(url, 'POST', '/proj/transport', { aktion: 'start', beat: 0 });
-  assert.deepEqual([st.code, st.j.ok, st.j.quant, st.j.quittung.status, st.j.tempo.gesetzt], [200, true, 0, 2, false], JSON.stringify(st.j));
+  assert.deepEqual([st.code, st.j.ok, st.j.quant, st.j.quittung.status, st.j.tempo.gesetzt], [200, true, 2, 2, false], JSON.stringify(st.j));
   assert.ok(await bis(() => s.ereignisse.some((e) => e.a === '/zustand/arr' && e.f.status === 2 && e.f.nr >= n.j.projekt.wiedergabe_rev)), 'durchgereicht');
   assert.equal((await ruf(url, 'GET', '/proj/aktuell')).j.kern.status, 2);
   assert.equal((await ruf(url, 'POST', '/proj/transport', { aktion: 'stopp' })).j.ok, true);

@@ -15,6 +15,7 @@
 <link rel="stylesheet" href="collections.css">
 <link rel="stylesheet" href="panel.css">
 <link rel="stylesheet" href="panel_curves.css">
+<link rel="stylesheet" href="face/face.css">
 <script type="module" src="app.js"></script>
 </head>
 <body>
@@ -269,7 +270,7 @@
   <div class="kopfzeile">
     <button id="schublade" title="Show or hide the library (L)">▾</button>
     <button id="gross" title="Big browser (G)" aria-pressed="false">⤢</button>
-    <div class="bereich" role="tablist" aria-label="Bottom panel"><button data-bereich="library" class="an" role="tab" title="Library: tracks, loops, sets">LIBRARY</button><button data-bereich="effekte" role="tab" title="Effects: compressor per channel">EFFECTS</button><button data-bereich="instrumente" role="tab" title="Instruments: front panel of each instrument channel">INSTRUMENTS</button><button data-bereich="presets" role="tab" title="Presets: saved settings of instruments and effects">PRESETS</button></div>
+    <div class="bereich" role="tablist" aria-label="Bottom panel"><button data-bereich="library" class="an" role="tab" title="Library: tracks, loops, sets">LIBRARY</button><button data-bereich="effekte" role="tab" title="Effects: compressor per channel">EFFECTS</button><button data-bereich="instrumente" role="tab" title="Instruments: front panel of each instrument channel">INSTRUMENTS</button><button data-bereich="presets" role="tab" title="Presets: saved settings of instruments and effects">PRESETS</button><button data-bereich="controller" role="tab" title="Controllers: every controller assignment in one list">CONTROLLERS</button></div>
     <div class="reiter"><button data-reiter="tracks" class="an">TRACKS</button><button data-reiter="loops">LOOPS</button><button data-reiter="library">LIBRARY</button><button data-reiter="sets">SETS</button><button data-reiter="module" title="Saved live modules: place one into the open project">MODULES</button></div>
     <input id="suche" type="search" placeholder="Search title or key" autocomplete="off">
     <span id="bestand-info"></span>
@@ -286,6 +287,7 @@
   </div>
   <div class="instrumente" id="instrumente" hidden aria-label="Instruments"></div>
   <div class="presets" id="presets" hidden aria-label="Presets"></div>
+  <div class="register" id="register" hidden aria-label="Controllers"></div>
   <div class="geraete-browser" id="geraete-browser" hidden aria-label="Devices"></div>
   <div class="kollektionen" id="kollektionen" hidden aria-label="Collections"></div>
   <div class="tabelle" data-tabelle="tracks">

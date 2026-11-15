@@ -28,6 +28,7 @@ import { bindeKollektionen } from '../collections.js';   // 1.16 rest U8: the CO
 import { bindeTransport } from './transport.js';
 import { bindeVerlauf } from './history_display.js';
 import { bindeClips } from './clip_operation.js';
+import { bindeEditWerkzeuge } from './edit_tools.js';
 import { bindeLanen } from './lanes_operation.js';
 import { bindeComp } from './takes_operation.js';
 import { bindeDetail } from './detail.js';
@@ -40,7 +41,7 @@ import { AUSGABE_FEHLER, mehrdeutigText } from './output.js';
 import { nachladenNoetig, stemsEreignis, stemsFuerProjekt } from './stems.js';
 import { neuerClipWaehler } from './clip_waehlen.js';
 
-const BINDER = [bindeZeitachse, bindeProjektwahl, bindeSpuren, bindeGruppen, bindeReturns, bindeMatrix, bindeInserts, bindeAblage, bindeTransport, bindeVerlauf, bindeLanen, bindeComp, bindeClips, bindeDetail, bindeAusgabe, bindeMidiImport, bindeVariantenReihen, bindeGeraete, bindeAufnahme,
+const BINDER = [bindeZeitachse, bindeProjektwahl, bindeSpuren, bindeGruppen, bindeReturns, bindeMatrix, bindeInserts, bindeAblage, bindeTransport, bindeVerlauf, bindeLanen, bindeComp, bindeClips, bindeEditWerkzeuge, bindeDetail, bindeAusgabe, bindeMidiImport, bindeVariantenReihen, bindeGeraete, bindeAufnahme,
   bindeBrowserwahl, bindeGeraeteBrowser, bindePresetHost, bindePresetMarken, bindeKollektionen, bindeEinklappen];
 
 const GERUEST = `
@@ -68,6 +69,8 @@ const GERUEST = `
   <div class="p-gruppe">
     <label for="p-tempo">TEMPO</label><input id="p-tempo" data-p="tempo" inputmode="decimal" size="6" autocomplete="off" title="Project tempo, 60 to 200 BPM: Enter sets it" disabled>
     <button data-p="loop" aria-pressed="false" title="Loop the bracket in the ruler" disabled>LOOP</button>
+    <label for="p-loop-von">BAR</label><input id="p-loop-von" data-p="loop-von" class="p-takt" inputmode="numeric" size="3" autocomplete="off" title="Loop range: first bar (typing a range switches the loop on)" aria-label="Loop from bar" disabled>
+    <label for="p-loop-bis">TO</label><input id="p-loop-bis" data-p="loop-bis" class="p-takt" inputmode="numeric" size="3" autocomplete="off" title="Loop range: last bar (it is included)" aria-label="Loop to bar" disabled>
     <button data-p="metronom" aria-pressed="false" title="Metronome" disabled>METRO</button>
     <span class="p-autotitel" title="Automation recording: arm tracks with AUTO ● in the track head, play, and move a fader, pan, M or S">AUTO</span><button data-p="auto-touch" class="p-automodus" aria-pressed="true">TOUCH</button><button data-p="auto-latch" class="p-automodus" aria-pressed="false">LATCH</button><button data-p="auto-write" class="p-automodus" aria-pressed="false">WRITE</button>
     <button data-p="re-enable" class="p-reenable" title="Give every lane that you took over by hand back to its automation" disabled>RE-ENABLE AUTOMATION</button>
@@ -76,6 +79,10 @@ const GERUEST = `
     <label for="p-raster">GRID</label><select id="p-raster" data-p="raster" title="Snap grid"></select>
     <button data-p="follow" aria-pressed="true" title="Follow the playhead (scrolling by hand turns it off)">FOLLOW</button>
     <button data-p="zoom-aus" title="Zoom out (Ctrl+wheel)" aria-label="Zoom out">−</button><button data-p="zoom-ein" title="Zoom in (Ctrl+wheel)" aria-label="Zoom in">+</button>
+  </div>
+  <div class="p-gruppe p-edit" role="group" aria-label="Edit clips">
+    <span class="p-autotitel" title="Edit tools for the selected clips; right click a clip for the same tools at the pointer">EDIT</span>
+    <button data-p="edit-teilen" disabled aria-disabled="true">SPLIT</button><button data-p="edit-verbinden" disabled aria-disabled="true">GLUE</button><button data-p="edit-duplizieren" disabled aria-disabled="true">DUPLICATE</button><button data-p="edit-kopieren" disabled aria-disabled="true">COPY</button><button data-p="edit-ausschneiden" disabled aria-disabled="true">CUT</button><button data-p="edit-einfuegen" disabled aria-disabled="true">PASTE</button><button data-p="edit-loeschen" disabled aria-disabled="true">DELETE</button>
   </div>
   <div class="p-gruppe">
     <button data-p="undo" title="Undo (Ctrl+Z)" disabled>↶ UNDO</button><button data-p="redo" title="Redo (Ctrl+Shift+Z)" disabled>↷ REDO</button>
@@ -216,10 +223,14 @@ export const FEHLER_TEXT = {
   richtung_wirkungslos: 'That word moves filter 1, and filter 1 is off in the patch the Surge host plays: load a patch with filter 1 on, or use another word',
   preset_unbekannt: 'That preset does not exist',
   wirt_wert_unbekannt: 'The current value of that Surge parameter is not known: start the Surge host or set the parameter first',
-  spur_bereich: `At most ${MAX_SPUREN} tracks`, slot_belegt: 'Both Surge slots are in use (1, 2)', wirt_antwortet_nicht: 'The instrument host did not answer', spur_unbekannt: 'That track no longer exists', clip_unbekannt: 'That clip no longer exists',
+  spur_bereich: `At most ${MAX_SPUREN} tracks`, slot_belegt: 'Both Surge slots are in use (1, 2)', wirt_antwortet_nicht: 'The instrument host did not answer', spur_unbekannt: 'That track no longer exists', geraet_falsch: 'This track does not carry a Cypher Modular instrument', param_nicht_live: 'Only the first 32 knobs change while dragged; the others change on release', clip_unbekannt: 'That clip no longer exists',
   kein_eingang: 'A track can only be armed with a recording input', eingang_nicht_frei: 'This input is not released for Cypher: release it in the device settings (Cypher may use)', latenz_ungueltig: 'The latency profile of this input is not plausible: measure it again', eingang_fehlt: 'That recording input does not exist', zu_viele_scharf: 'At most 8 audio tracks can be armed at once', aufnahme_laeuft: 'A recording is running', nichts_scharf: 'No track is armed', keine_aufnahme: 'No recording is running', kein_platz: 'Not enough free disk space to record', ersetzen_loop: 'A looped clip is in the way; split or move it first (a recorded take is kept as a file)', veraltet_spur: 'The armed track no longer exists', ueberlappung: 'A transport is already running; stop it before recording', transport_abgelehnt: 'The transport did not start; nothing was recorded', einsatz_ausgeblieben: 'The take did not begin within the expected time (count-in or next bar); nothing was recorded', punch_leer: 'The punch range does not touch the take; nothing was placed (the take is kept as a file)', aufnahme_abgelehnt: 'The core refused the recording', aufnahme_abgebrochen: 'The core dropped the recording before it began; nothing was recorded', leer: 'The take contains no audio', keine_noten: 'The MIDI take holds no complete note inside the recorded range; nothing was placed (the take is kept as a file)', take_zu_lang: 'The take is longer than a WAV file can hold (about 3 hours); the raw file is kept', uebernahme_fehler: 'The take could not be placed on the track; the raw file is kept',
   index_bereich: 'No such track position', tempo_bereich: 'Tempo: 60 to 200 BPM', loop_bereich: 'The loop needs at least 1 beat',
   argument_ungueltig: 'That value is not allowed', argument_unbekannt: 'The core does not know that setting', befehl_unbekannt: 'The server does not know that command',
+  verbinden_spur: 'Clips on different tracks cannot be glued',
+  verbinden_loop: 'A clip with an active loop cannot be glued: switch the loop off first',
+  verbinden_audio: 'Glue of different audio needs a bounce of the track: only consecutive pieces of one source (as a split makes them) can be glued',
+  spur_art: 'That track cannot carry this clip: audio clips go to audio tracks, MIDI clips to instrument tracks',
   art_passt_nicht: 'That clip does not fit this track', sha_ungueltig: 'That sample is not in the catalogue', clip_nicht_midi: 'That is not a MIDI clip',
   muster_fehler: 'The pattern does not run', muster_zeitlimit: 'The pattern took too long to evaluate: make it smaller',
   muster_ziel_passt_nicht: 'The pattern does not fit this track: s(...) belongs on a kit track, note(...) on an instrument track', muster_fehlt: 'That clip has no stored pattern',

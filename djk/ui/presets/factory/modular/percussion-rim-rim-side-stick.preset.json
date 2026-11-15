@@ -1,0 +1,35 @@
+{
+ "schema": 1,
+ "name": "Rim / side stick",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "percussion-rim",
+ "werte": {
+  "knob1": 0.5,
+  "knob2": 0.5,
+  "knob3": 0.5,
+  "knob4": 0.5
+ },
+ "beschreibung": {
+  "art": "percussion",
+  "unterart": "rim",
+  "charakter": [
+   "thin",
+   "bright",
+   "tight",
+   "metallic"
+  ],
+  "genre": [],
+  "einsatz": [
+   "drop"
+  ],
+  "energie": 3,
+  "text": "Rim shot: a 90 ms click of noise ringing a self-oscillating 2.7 kHz filter, very short room."
+ },
+ "tags": [
+  "percussion-rim"
+ ],
+ "notiz": "Source rule: recipe card `percussion.rim`, Welsh [B1] p. 88, patch Side Stick, table transcribed; architecture: Reid [B2] part 41. Measured by `tests/rezepte.rs`, not yet heard. Manifest character words outside the vocabulary: nasal (as thin). Manifest use words outside the vocabulary: groove (as drop).",
+ "angelegt": "2026-11-15T00:00:00.000Z",
+ "geaendert": "2026-11-15T00:00:00.000Z"
+}

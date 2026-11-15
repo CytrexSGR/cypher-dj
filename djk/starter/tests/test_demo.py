@@ -27,21 +27,22 @@ def test_pruefe_projekt_accepts_the_file():
 
 
 def test_shape_follows_the_plan():
+    """The 32-bar demo (card t_f24db11f): four tracks, two returns (Hall, Echo), one group; the arrangement itself is pinned in test_demo_build.py."""
     p = _lies()
     assert p["format"] == "cypherdj-projekt/2" and p["name"] == "Demo"
     assert p["tempo_bpm"] == 128 and p["taktart"] == [4, 4]
-    assert p["loop"] == {"an": True, "von_beat": 0, "bis_beat": 64}
-    assert p["master"] == {"fader_db": 0}
-    assert [(s["name"], s["fader_db"]) for s in p["spuren"]] == [("Drums", -4.5), ("Bass", 1.5), ("Acid", -1.5), ("Chords", -6)]
+    assert p["loop"] == {"an": True, "von_beat": 0, "bis_beat": 128}
+    assert [s["name"] for s in p["spuren"]] == ["Drums", "Bass", "Acid", "Pad"]
+    assert [r["name"] for r in p["returns"]] == ["Hall", "Echo"] and [g["name"] for g in p["gruppen"]] == ["Music"]
     geraete = [s["geraet"] for s in p["spuren"]]
     assert geraete[0] == {"art": "intern", "name": "kit", "kit": "starter"}
-    assert [(g["name"], g.get("graph")) for g in geraete[1:]] == [("bk", "synth-mono"), ("rb338", None), ("bk", "synth-poly")]
+    assert [(g["name"], g.get("graph")) for g in geraete[1:]] == [("bk", "bassmusik"), ("rb338", None), ("bk", "synth-poly")]
     for s in p["spuren"]:
         assert s["art"] == "instrument"
         assert [c["art"] for c in s["clips"]] == ["midi"], "one MIDI clip, no audio clip"
         c = s["clips"][0]
-        assert (c["start_beat"], c["laenge_beats"], c["loop_beats"]) == (0, 64, 16)
-        assert c["noten"] and all(0 <= n["beat"] and n["beat"] + n["laenge"] <= 16 for n in c["noten"]), "notes inside the 16-beat loop"
+        assert (c["start_beat"], c["laenge_beats"]) == (0, 128) and not c.get("loop_beats")
+        assert c["noten"] and all(0 <= n["beat"] and n["beat"] + n["laenge"] <= 128 for n in c["noten"])
     assert not [k for k in json.dumps(p).split('"') if k == "audio"]
 
 
@@ -56,7 +57,8 @@ def test_every_graph_is_a_shipped_example_and_the_kit_is_in_kits_json():
     for s in p["spuren"]:
         g = s["geraet"]
         if g["name"] == "bk":
-            assert (DJK / "instruments" / "modular_dsp" / "demos" / f"{g['graph']}.json").is_file()
+            demos = DJK / "instruments" / "modular_dsp" / "demos"
+            assert (demos / f"{g['graph']}.json").is_file() or (demos / "recipes" / f"{g['graph']}.json").is_file()
         if g["name"] == "kit":
             kits = json.loads((DJK / "starter" / "kits.json").read_text())
             assert g["kit"] in {k["name"] for k in kits}

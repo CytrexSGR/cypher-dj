@@ -1,0 +1,39 @@
+{
+ "schema": 1,
+ "name": "FM lead",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "lead-fm",
+ "werte": {
+  "knob1": 0.5,
+  "knob2": 0.5,
+  "knob3": 0.5,
+  "knob4": 0.5,
+  "knob5": 0.5
+ },
+ "beschreibung": {
+  "art": "lead",
+  "unterart": "fm",
+  "charakter": [
+   "bright",
+   "metallic",
+   "clean",
+   "thin",
+   "aggressive",
+   "smooth"
+  ],
+  "genre": [],
+  "einsatz": [
+   "drop",
+   "breakdown"
+  ],
+  "energie": 3,
+  "text": "Digital FM lead: sine carrier with a 1:2 modulator whose index jumps at the attack and settles, velocity sets the bite."
+ },
+ "tags": [
+  "lead-fm"
+ ],
+ "notiz": "Source rule: recipe card `lead.fm`, Reid [B2] part 13. Measured by `tests/rezepte.rs`, not yet heard. Manifest character words outside the vocabulary: digital (as clean), harsh (as aggressive). Manifest use words outside the vocabulary: melody (as drop).",
+ "angelegt": "2026-11-15T00:00:00.000Z",
+ "geaendert": "2026-11-15T00:00:00.000Z"
+}

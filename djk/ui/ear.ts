@@ -229,6 +229,18 @@ export interface DeckLage {
   laeuft: boolean;
   offen: boolean;
 }
+// What the page server knows about the place N of a /hoeren request. A place that carries a SEQ deck (a top group of the live container with
+// seq.platz N, ADR 038) has no track on the deck player, yet the group plays into the channel strip deck/N: the ear reads that channel as well.
+export interface HoerQuelle {
+  geladen: boolean;     // a track sits on deck N
+  laeuft: boolean;      // deck N plays
+  seqDeck: boolean;     // the open project is the live container and holds a SEQ deck in place N
+  seqLaeuft: boolean;   // the project transport runs
+  offen: boolean;       // the channel deck/N is open
+}
+export function hoerLage(deck: number, q: HoerQuelle): DeckLage {
+  return { deck, geladen: q.geladen || q.seqDeck, laeuft: q.laeuft || (q.seqDeck && q.seqLaeuft), offen: q.offen };
+}
 export type HoerAntwort =
   | {
       code: 200;

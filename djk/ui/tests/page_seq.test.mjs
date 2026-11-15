@@ -328,6 +328,14 @@ test('the instrument picker offers the Baukasten instruments, the kits and the R
   assert.deepEqual(geraetWahl(undefined, undefined).map((e) => e.text), ['RB-338']);
 });
 
+test('the instrument picker leaves out graphs with latency; a pattern that has one keeps it in its own exchange menu', () => {
+  const g = [{ name: 'bass', art: 'instrument', latenz: 0 }, { name: 'limited', art: 'instrument', latenz: 23 }, { name: 'old', art: 'instrument' }, { name: 'fx', art: 'effekt', latenz: 69 }];
+  assert.deepEqual(geraetWahl(g, []).map((e) => e.text), ['bass', 'old', 'RB-338'], 'latency > 0 is out; a missing value counts as 0');
+  assert.deepEqual(geraetWahl(g, [], 'limited').map((e) => e.text), ['bass', 'limited', 'old', 'RB-338'], 'the graph the pattern already plays stays');
+  assert.deepEqual(geraetWahl(g, [], 'bass').map((e) => e.text), ['bass', 'old', 'RB-338']);
+  assert.deepEqual(geraetWahl(g, [], 'limited').find((e) => e.text === 'limited').geraet, { art: 'intern', name: 'bk', graph: 'limited' });
+});
+
 // ---------- instrument exchange (review focus 4) ----------
 test('wechselBefehle: Baukasten to another Baukasten graph keeps the knob lanes: the plain spur_aendern, no question', () => {
   const bk = bkSpur(), neu = { art: 'intern', name: 'bk', graph: 'lead' };

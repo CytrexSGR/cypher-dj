@@ -1,0 +1,38 @@
+{
+ "schema": 1,
+ "name": "Acid",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "bass-acid",
+ "werte": {
+  "knob1": 0.5,
+  "knob2": 0.5,
+  "knob3": 0.5,
+  "knob4": 0.5,
+  "knob5": 0.5,
+  "knob6": 0.5
+ },
+ "beschreibung": {
+  "art": "bass",
+  "unterart": "acid",
+  "charakter": [
+   "bright",
+   "aggressive",
+   "dirty",
+   "thin"
+  ],
+  "genre": [],
+  "einsatz": [
+   "drop",
+   "build"
+  ],
+  "energie": 5,
+  "text": "Squelchy acid bass: square plus 25 % pulse into a 24 dB ladder at 450 Hz with 60 % resonance, drive and slide."
+ },
+ "tags": [
+  "bass-acid"
+ ],
+ "notiz": "Source rule: recipe card `bass.acid`, Welsh [B1] p. 95, patch Acid Bass, table transcribed.. Measured by `tests/rezepte.rs`, not yet heard. Manifest character words outside the vocabulary: harsh (as aggressive), nasal (as thin).",
+ "angelegt": "2026-11-15T00:00:00.000Z",
+ "geaendert": "2026-11-15T00:00:00.000Z"
+}

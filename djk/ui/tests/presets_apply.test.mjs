@@ -4,6 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import { rbNorm, rbPlain, RB_DEFS } from '../project/rb_mapping.ts';
 import { RB_VORGABE_NORM, RB_PARAMETER, neuesProjekt } from '../project/model.ts';
 import { INSERT_ARTEN } from '../project/insert_key.ts';
@@ -245,4 +246,55 @@ test('integration with 1.10 slice 4b: an eq preset on an eq stage and a saett pr
   assert.equal(zurueck.werte[name], wert, `${name} round-trips`);
   // negative control: the compressor stage still reads back as komp
   assert.equal(werteVonZiel({ art: 'insert', insert_id: 'i1' }, q).geraet, 'komp');
+});
+
+// ---- Baukasten effect graphs: a preset of an effect graph applies to a bk insert stage ----
+const FX = { id: 'nutzer:baukasten/fx-x', name: 'Fx X', geraet: 'baukasten', graph: 'fx-labor', werte: { knob1: 0.7, knob13: 0.7, knob29: 0.4 } };
+function projektMitBk() {
+  let p = projekt();
+  p = fuehreListeAus(p, [{ befehl: 'insert_setzen', strang_id: 's3', pos: 1, art: 'bk', graph: 'fx-labor' }], { quelle: 'andreas' }).projekt;
+  return p;
+}
+const bkInsertId = (p) => p.spuren[2].inserts.find((i) => i.art === 'bk').id;
+
+test('bk stage: an effect preset of the stage graph → insert_werte_setzen with k1..k64, only the knobs the preset carries', () => {
+  const p = projektMitBk(), id = bkInsertId(p);
+  const plan = planeAnwendung(FX, { art: 'insert', insert_id: id }, p);
+  assert.deepEqual(plan.befehle, [{ befehl: 'insert_werte_setzen', insert_id: id, werte: { k1: 0.7, k13: 0.7, k29: 0.4 }, preset: 'nutzer:baukasten/fx-x' }]);
+  assert.equal(plan.weg, 'proj'); assert.deepEqual(plan.uebersprungen, []); assert.match(plan.label, /Fx X/);
+  const nach = fuehreListeAus(p, plan.befehle).projekt.spuren[2].inserts.find((i) => i.id === id);
+  assert.deepEqual([nach.werte.k1, nach.werte.k13, nach.werte.k29, nach.preset], [0.7, 0.7, 0.4, 'nutzer:baukasten/fx-x']);
+  assert.equal(nach.werte.k2, p.spuren[2].inserts.find((i) => i.id === id).werte.k2, 'a knob the preset does not carry stays untouched');
+});
+
+test('bk stage: a preset of another graph is refused graph_anders and writes nothing; a non-bk stage stays geraet_passt_nicht', () => {
+  const p = projektMitBk(), id = bkInsertId(p), vorher = JSON.stringify(p);
+  fehler(() => planeAnwendung({ ...FX, graph: 'fx-filterbox' }, { art: 'insert', insert_id: id }, p), 'graph_anders');
+  fehler(() => planeAnwendung(FX, { art: 'insert', insert_id: 'i1' }, p), 'geraet_passt_nicht');   // i1 is the compressor stage
+  fehler(() => planeAnwendung(lies('komp', 'drum-bus'), { art: 'insert', insert_id: id }, p), 'geraet_passt_nicht');   // a komp preset on the bk stage
+  fehler(() => planeAnwendung(FX, { art: 'insert', insert_id: 'i99' }, p), 'ziel_unbekannt');
+  assert.equal(JSON.stringify(p), vorher);
+});
+
+test('bk stage: insert_neu creates the stage with the graph and the values at the chain end', () => {
+  const p = projektMitBk();
+  const neu = planeAnwendung(FX, { art: 'insert_neu', strang_id: 's3' }, p);
+  assert.deepEqual(neu.befehle, [{ befehl: 'insert_setzen', strang_id: 's3', pos: 2, art: 'bk', graph: 'fx-labor', werte: { k1: 0.7, k13: 0.7, k29: 0.4 }, preset: 'nutzer:baukasten/fx-x' }]);
+  const nach = fuehreListeAus(p, neu.befehle).projekt.spuren[2].inserts.at(-1);
+  assert.deepEqual([nach.art, nach.graph, nach.werte.k1, nach.werte.k29, nach.preset], ['bk', 'fx-labor', 0.7, 0.4, 'nutzer:baukasten/fx-x']);
+});
+
+test('bk stage: a knob above 64 or the volume are skipped by name in the plan, and a preset with knob65 cannot even be saved', () => {
+  const p = projektMitBk(), id = bkInsertId(p);
+  const plan = planeAnwendung({ ...FX, werte: { lautstaerke: 0.5, knob2: 0.3, knob65: 0.9, knob0: 0.1 } }, { art: 'insert', insert_id: id }, p);
+  assert.deepEqual(plan.befehle[0].werte, { k2: 0.3 });
+  assert.deepEqual(plan.uebersprungen.sort(), ['knob0', 'knob65', 'lautstaerke']);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'presets-fxk-'));
+  try {
+    const s = new PresetSpeicher({ nutzer: dir });
+    const beschreibung = { art: 'delay', unterart: 'ping_pong', charakter: ['wet'], genre: [], einsatz: ['build'], energie: 3, text: 'For the knob range test.' };
+    assert.throws(() => s.speichere({ name: 'Too High', geraet: 'baukasten', graph: 'fx-labor', werte: { knob65: 0.5 }, beschreibung }), (e) => e instanceof PresetFehler && e.code === 400);
+    // an effect preset on the Baukasten device: the description may name an effect kind (it describes the graph, the device type is the instrument shell)
+    assert.equal(s.speichere({ name: 'Delay Ok', geraet: 'baukasten', graph: 'fx-labor', werte: { knob1: 0.5 }, beschreibung }).neu, true);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });

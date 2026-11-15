@@ -73,7 +73,8 @@ test('every visible string is English', () => {
 
 const wahl = (s, wert) => s.w(`(() => { const e = document.querySelector('.p-ins-popover[data-insert="i1"] .p-ins-sc'); e.value = ${JSON.stringify(wert)}; e.dispatchEvent(new Event('change', { bubbles: true })); })()`);
 async function seite(t, p) {
-  const s = await starteSeite();
+  // 1080 high: since the two-row header (95799f2a) the INSERTS panel sits below the fold at 900 px, out of the test mouse's reach.
+  const s = await starteSeite({ hoehe: 1080 });
   t.after(() => s.stoppe());
   await s.oeffne(); await s.saat(p);
   return s;

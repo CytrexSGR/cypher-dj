@@ -1,7 +1,7 @@
 // DJ view places, task 13: the pure places model (layout, storage, silence rule, header text, mixer plan).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { LAYOUT_STANDARD, SCHLUESSEL, ladeLayout, speichereLayout, erlaubt, wechsel, still, wahl, kopf, mixerPlan, kanaele, folgeServer } from '../public/slots.js';
+import { LAYOUT_STANDARD, SCHLUESSEL, ladeLayout, speichereLayout, erlaubt, wechsel, still, wahl, kopf, mixerPlan, kanaele, folgeServer, ladeDeckDa } from '../public/slots.js';
 
 const speicher = (init) => { const m = new Map(init ? [[SCHLUESSEL, init]] : []); return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, v), m }; };
 const wirft = { getItem() { throw new Error('blocked'); }, setItem() { throw new Error('blocked'); } };
@@ -320,4 +320,13 @@ test('folgeServer: an unknown project (null or absent) changes nothing; an unkno
 test('wechsel stays: a SEQ place that holds a deck cannot switch away (belegt), also after folgeServer made it SEQ', () => {
   const l = folgeServer([...LAYOUT_STANDARD], [3], stillAlle).layout;
   assert.deepEqual(wechsel(l, 3, 'strudel', true, true), { ok: false, grund: 'belegt' });
+});
+
+test('LOAD is offered only for decks that sit on a Track place', () => {
+  assert.equal(ladeDeckDa(LAYOUT_STANDARD, 1), true);
+  assert.equal(ladeDeckDa(LAYOUT_STANDARD, 2), true);
+  assert.equal(ladeDeckDa(LAYOUT_STANDARD, 3), false);
+  assert.equal(ladeDeckDa(LAYOUT_STANDARD, 4), false);
+  assert.equal(ladeDeckDa(['seq', 'track', 'strudel', 'loops'], 1), false);
+  assert.equal(ladeDeckDa(['track', 'track', 'track', 'loops'], 3), true);
 });

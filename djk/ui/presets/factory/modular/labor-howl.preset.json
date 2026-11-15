@@ -1,0 +1,64 @@
+{
+ "schema": 1,
+ "name": "Labor Howl",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "labor",
+ "werte": {
+  "knob1": 0.55,
+  "knob2": 0.5,
+  "knob3": 0.0,
+  "knob4": 1.0,
+  "knob5": 0.6,
+  "knob6": 0.5,
+  "knob7": 0.0,
+  "knob8": 0.5,
+  "knob9": 1.0,
+  "knob10": 0.575,
+  "knob11": 0.5,
+  "knob12": 0.5,
+  "knob13": 0.5,
+  "knob14": 0.0,
+  "knob15": 0.0,
+  "knob16": 0.3,
+  "knob17": 0.0,
+  "knob18": 1.0,
+  "knob19": 0.5,
+  "knob20": 0.5,
+  "knob21": 0.5,
+  "knob22": 0.5,
+  "knob23": 0.0,
+  "knob24": 0.0,
+  "knob25": 0.5,
+  "knob26": 1.0,
+  "knob27": 0.7,
+  "knob28": 0.0,
+  "knob29": 0.4,
+  "knob30": 0.5
+ },
+ "beschreibung": {
+  "art": "fx",
+  "unterart": "texture",
+  "charakter": [
+   "evolving",
+   "metallic",
+   "thin"
+  ],
+  "genre": [
+   "ambient",
+   "idm"
+  ],
+  "einsatz": [
+   "build",
+   "transition"
+  ],
+  "energie": 3,
+  "text": "Delay 1 off and Feedback 1 above the middle turn channel 1 into an oscillator that holds its pitch after the note ends."
+ },
+ "tags": [
+  "labor"
+ ],
+ "notiz": "Measured by render, not yet heard (2026-11-15). Andreas, 2026-11-13, live test; pattern note('c3 ~ ~ ~ ~ ~ g2 ~').slow(2).",
+ "angelegt": "2026-11-15T00:00:00.000Z",
+ "geaendert": "2026-11-15T00:00:00.000Z"
+}

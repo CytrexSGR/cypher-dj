@@ -84,6 +84,7 @@ export function planeAnwendung(preset: AnzuwendenPreset, ziel: Ziel, projekt: Pr
     return { weg: 'proj', befehle: [{ befehl: 'spur_aendern', spur_id: s.id, geraet }], label, uebersprungen, ...(hinweise ? { hinweise } : {}) };
   }
 
+  if (g.id === 'baukasten') return bkStufenPlan(preset, z, projekt, label);
   if (!(INSERT_GERAETE as readonly string[]).includes(g.id)) throw new PresetFehler(409, 'geraet_passt_nicht');
   const art = g.id as (typeof INSERT_GERAETE)[number];
   if (z.art === 'insert') {
@@ -99,6 +100,27 @@ export function planeAnwendung(preset: AnzuwendenPreset, ziel: Ziel, projekt: Pr
   if (!(INSERT_ARTEN_AKTIV as readonly string[]).includes(art)) throw new PresetFehler(409, 'art_nicht_aktiv');
   const { werte, uebersprungen } = insertWerteAusPreset(art, preset.werte);
   return { weg: 'proj', befehle: [{ befehl: 'insert_setzen', strang_id: z.strang_id, pos: (strang.inserts ?? []).length, art, werte, preset: preset.id }], label, uebersprungen };
+}
+
+// A preset of a Baukasten EFFECT graph on a bk insert stage (spur targets are the instrument case above). The stage runs one graph: a preset of another graph
+// is refused graph_anders and nothing is written. Knob n becomes row k<n>; a name that is no knob 1..64 (the volume) is named in `uebersprungen`.
+// A knob the preset does not carry stays untouched on an existing stage (insert_werte_setzen merges) and starts at the graph's vorgabe on a new one.
+function bkStufenPlan(preset: AnzuwendenPreset, z: Record<string, unknown>, projekt: Projekt, label: string): Plan {
+  const werte: Record<string, number> = {}, uebersprungen: string[] = [];
+  for (const [name, w] of Object.entries(preset.werte)) {
+    const m = /^knob([1-9]|[1-5][0-9]|6[0-4])$/.exec(name);
+    if (m && BK_PARAMETER.includes(`k${m[1]}`) && typeof w === 'number') werte[`k${m[1]}`] = w; else uebersprungen.push(name);
+  }
+  if (z.art === 'insert') {
+    const t = alleInserts(projekt).find((x) => x.insert.id === z.insert_id);
+    if (!t) throw new PresetFehler(404, 'ziel_unbekannt');
+    if (t.insert.art !== 'bk') throw new PresetFehler(409, 'geraet_passt_nicht');
+    if (t.insert.graph !== preset.graph) throw new PresetFehler(409, 'graph_anders');
+    return { weg: 'proj', befehle: [{ befehl: 'insert_werte_setzen', insert_id: t.insert.id, werte, preset: preset.id }], label, uebersprungen };
+  }
+  const strang = typeof z.strang_id === 'string' ? sucheStrang(projekt, z.strang_id) : undefined;
+  if (!strang) throw new PresetFehler(404, 'ziel_unbekannt');
+  return { weg: 'proj', befehle: [{ befehl: 'insert_setzen', strang_id: z.strang_id, pos: (strang.inserts ?? []).length, art: 'bk', graph: preset.graph, werte, preset: preset.id }], label, uebersprungen };
 }
 
 function kanalPlan(preset: AnzuwendenPreset, g: GeraetDef, kanal: string, geladenerGraph?: string): Plan {

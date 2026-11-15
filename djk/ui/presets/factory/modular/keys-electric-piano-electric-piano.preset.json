@@ -1,0 +1,38 @@
+{
+ "schema": 1,
+ "name": "Electric piano",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "keys-electric-piano",
+ "werte": {
+  "knob1": 0.5,
+  "knob2": 0.5,
+  "knob3": 0.5,
+  "knob4": 0.5
+ },
+ "beschreibung": {
+  "art": "keys",
+  "unterart": "electric_piano",
+  "charakter": [
+   "warm",
+   "bright",
+   "soft",
+   "smooth",
+   "metallic",
+   "wide"
+  ],
+  "genre": [],
+  "einsatz": [
+   "breakdown",
+   "drop"
+  ],
+  "energie": 2,
+  "text": "Electric piano: saw and synced thin pulse for the tine, velocity bark, long decay to silence, chorus, phaser, room."
+ },
+ "tags": [
+  "keys-electric-piano"
+ ],
+ "notiz": "Source rule: recipe card `keys.electric_piano`, Welsh [B1] p. 74, patch Electric Piano, table transcribed.. Measured by `tests/rezepte.rs`, not yet heard. Manifest use words outside the vocabulary: groove (as drop).",
+ "angelegt": "2026-11-15T00:00:00.000Z",
+ "geaendert": "2026-11-15T00:00:00.000Z"
+}

@@ -3,6 +3,8 @@
 #   fast: every file not in tests/serial.txt, in parallel (about 5 min). Use this while building.
 #   full: the fast stage and the serial stage (tests/serial.txt, one file at a time) side by side (about 18 min). Use before a merge.
 # The old runner ran all 360 files one at a time (about 60 min).
+# Do not run `node --test tests/*.test.mjs` directly: the files in tests/serial.txt share one test instance lock and fail with "Testinstanz h
+# belegt" when they run side by side (about 90 false reds). The page-server stand-ins also need djk/conductor/node_modules and djk/core/build.
 set -u
 cd "$(dirname "$0")/.." || exit 2
 MODE=${1:-full}

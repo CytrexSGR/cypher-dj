@@ -22,12 +22,14 @@ export function baueGruppenKopf(id, handler, doc = document) {
   el.innerHTML = '<button class="p-arr-falte" type="button" aria-expanded="true">▾</button><span class="p-arr-farbe"></span>'
     + '<span class="p-arr-name" role="button" tabindex="0" title="Click selects the group (Ctrl or Shift+click adds it to the selection)"></span><span class="p-arr-zahl"></span>'
     + `<span class="p-arr-punkte">${PUNKTE.map(([, k, t]) => `<i class="p-punkt p-punkt--${k}" title="${t}" hidden></i>`).join('')}</span>`
-    + '<select class="p-ausgang" title="Output: Master or another group"></select>';
+    + '<select class="p-ausgang" title="Output: Master or another group"></select>'
+    + '<button class="p-lane" type="button" aria-pressed="false" title="Automation lanes of this group">A</button>';
   el.querySelector('.p-arr-falte').addEventListener('click', () => handler.falten(id));
   const name = el.querySelector('.p-arr-name');
   // Changed with nested groups: a (Ctrl/Shift+)click selects the group HEAD (Ctrl+G nests it), no longer all the tracks of the group (see the ADR)
   name.addEventListener('click', (e) => { e.preventDefault(); handler.waehle(id, e); });
   el.querySelector('.p-ausgang').addEventListener('change', (e) => handler.ziel(id, e.target.value));
+  el.querySelector('.p-lane').addEventListener('click', () => handler.lane?.(id));
   return el;
 }
 
@@ -48,6 +50,8 @@ export function zeigeGruppenKopf(el, gruppe, z, gewaehlt = false, extra = {}) {
   sel.value = ausgangWert(gruppe); sel.setAttribute('aria-label', `Output of group ${gruppe.name}`);
   const falte = el.querySelector('.p-arr-falte'), l = foldLabel(gruppe.name, z.gefaltet);
   falte.textContent = z.gefaltet ? '▸' : '▾'; falte.setAttribute('aria-expanded', String(!z.gefaltet)); falte.setAttribute('aria-label', l); falte.title = l;
+  const la = el.querySelector('.p-lane'), laneAn = !!extra.laneOffen;
+  la.classList.toggle('an', laneAn); la.setAttribute('aria-pressed', String(laneAn)); la.setAttribute('aria-label', `Automation lanes of group ${gruppe.name}`);
   const name = el.querySelector('.p-arr-name');
   if (name.textContent !== gruppe.name) name.textContent = gruppe.name;
   name.setAttribute('aria-label', `Select group ${gruppe.name}`);

@@ -1,0 +1,38 @@
+{
+ "schema": 1,
+ "name": "Cymbal",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "drums-cymbal",
+ "werte": {
+  "knob1": 0.5,
+  "knob2": 0.5,
+  "knob3": 0.5,
+  "knob4": 0.5,
+  "knob5": 0.5
+ },
+ "beschreibung": {
+  "art": "drums",
+  "unterart": "cymbal",
+  "charakter": [
+   "bright",
+   "metallic",
+   "aggressive",
+   "airy",
+   "thin"
+  ],
+  "genre": [],
+  "einsatz": [
+   "build",
+   "drop"
+  ],
+  "energie": 4,
+  "text": "Crash-like cymbal: noise and a six-square metal layer, resonant filter, high-pass, distortion and a long hall."
+ },
+ "tags": [
+  "drums-cymbal"
+ ],
+ "notiz": "Source rule: recipe card `drums.cymbal`, Welsh [B1] p. 88, patch Cymbal, table transcribed; the author's own note calls it the least realistic patch in the book.. Measured by `tests/rezepte.rs`, not yet heard. Manifest character words outside the vocabulary: harsh (as aggressive).",
+ "angelegt": "2026-11-15T00:00:00.000Z",
+ "geaendert": "2026-11-15T00:00:00.000Z"
+}

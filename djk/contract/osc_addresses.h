@@ -249,6 +249,9 @@ static_assert(zustand_mix.typen.size() - 1 == zustand_mix.felder);
 // §5.5f /e/ins_gr ,sf
 inline constexpr Adresse e_ins_gr{"/e/ins_gr", ",sf", Richtung::vom_kern, false, 2};
 static_assert(e_ins_gr.typen.size() - 1 == e_ins_gr.felder);
+// §5.5g /e/stufe_pegel ,sff
+inline constexpr Adresse e_stufe_pegel{"/e/stufe_pegel", ",sff", Richtung::vom_kern, false, 3};
+static_assert(e_stufe_pegel.typen.size() - 1 == e_stufe_pegel.felder);
 // §5.5e /zustand/spektrum ,sis
 inline constexpr Adresse zustand_spektrum{"/zustand/spektrum", ",sis", Richtung::vom_kern, false, 3};
 static_assert(zustand_spektrum.typen.size() - 1 == zustand_spektrum.felder);
@@ -385,7 +388,7 @@ static_assert(test_hand.typen.size() - 1 == test_hand.felder);
 inline constexpr Adresse test_klick{"/test/klick", ",hssi", Richtung::an_kern, true, 4};
 static_assert(test_klick.typen.size() - 1 == test_klick.felder);
 
-inline constexpr std::array<Adresse, 121> alle{
+inline constexpr std::array<Adresse, 122> alle{
     k_hallo,
     k_tschuess,
     k_willkommen,
@@ -462,6 +465,7 @@ inline constexpr std::array<Adresse, 121> alle{
     zustand_komp,
     zustand_mix,
     e_ins_gr,
+    e_stufe_pegel,
     zustand_spektrum,
     pegel,
     e_regler,
@@ -594,6 +598,7 @@ namespace zustand_box { enum : std::size_t { box = 0, status = 1, keylock_unterl
 namespace zustand_komp { enum : std::size_t { kanal = 0, gr_db = 1 }; }
 namespace zustand_mix { enum : std::size_t { kanal = 0, gate_db = 1, mb_tief_db = 2, mb_mitte_db = 3, mb_hoch_db = 4, lim_db = 5 }; }
 namespace e_ins_gr { enum : std::size_t { kanal = 0, gr_db = 1 }; }
+namespace e_stufe_pegel { enum : std::size_t { kanal = 0, ein_db = 1, aus_db = 2 }; }
 namespace zustand_spektrum { enum : std::size_t { kanal = 0, rahmen = 1, pegel = 2 }; }
 namespace pegel { enum : std::size_t { kanal = 0, spitze_db = 1, echtspitze_dbtp = 2, lufs_m = 3, lufs_s = 4, band_tief_db = 5, band_mitte_db = 6, band_hoch_db = 7 }; }
 namespace e_regler { enum : std::size_t { pfad = 0, wert = 1, halter = 2, sample = 3, beat = 4 }; }

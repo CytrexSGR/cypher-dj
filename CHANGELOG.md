@@ -3,6 +3,47 @@
 One entry per public update, newest first. Each entry names what changed for someone who plays, produces or
 builds cypher-dj.
 
+## 2026-11-15, second update
+
+**Production**
+- Edit tools for audio and MIDI clips: an EDIT toolbar above the arrangement (SPLIT, GLUE, DUPLICATE, COPY, CUT,
+  PASTE, DELETE) and a context menu with split at the pointer. GLUE joins the selected clips of one track into one
+  clip, PASTE also works on another track. Shortcuts: Ctrl+E, Ctrl+J, Ctrl+D, Ctrl+C, Ctrl+X, Ctrl+V, Del. A clip
+  edge shows a resize cursor and a grip.
+- Device faces: the compressor (insert stage and channel compressor) with its curve, live gain reduction, key and
+  bypass; the EQ with its response curve and draggable band handles; the saturator with its transfer curve; the
+  limiter with ceiling, static curve and gain reduction; the Hall of a return. Compressor and limiter show their input
+  and output peaks.
+- A knob of a Cypher Modular instrument changes the sound while it is dragged, with one undo step per drag.
+- Projects take the meters 2/4 to 12/4. Ruler, position, bar fields, punch bars and the MIDI import follow it.
+- The loop range is set by dragging in the ruler or with the BAR and TO fields next to LOOP.
+- Automation lanes on groups (insert parameters and rack macros); a group header opens its own automation row.
+- Instrument graphs with latency (for example `synth-neuro`) play on project tracks; their latency joins the delay
+  compensation of the strip.
+- MIDI import: strings, brass and winds go to pad and keys graphs, melodic RB-338 parts start soft.
+- The plug-in panel is a fixed overlay with a close button.
+
+**Instruments and effects**
+- `bass-banddrive`, a bass for electro, neuro and reese: wavetable and bite voice, a band split, folded mids into a
+  moving vowel filter and a clean mono sub, 24 knobs and six factory presets.
+- Two new Cypher Modular blocks: `allpass` (first and second order phase rotator) and `kreuz` (Linkwitz-Riley
+  crossover with 2 or 3 bands and a compensated sum).
+- `drums-909` and `drums-808` have seven per-group level knobs in dB; 0 dB is the old sound byte for byte. The
+  `drums-kick` recipe tunes down to 36 Hz and has a pitch decay knob.
+- The recipe graphs join the installed graph set, each with one factory preset. Factory presets of effect graphs
+  also apply to Cypher Modular insert stages. The factory preset folders carry English names.
+
+**DJ**
+- Stems that arrive in an open module no longer sound together with the loop for about 65 ms (a jump of about +6 dB).
+- A kern restart brings back the FX3 assignments and the kind of a switched-off FX unit, also when it comes right
+  after another restart.
+- A CONTROLLERS tab lists every controller assignment, and any continuous target can be learned from it.
+- EFFECTS shows one channel at a time, chosen by tabs with lights. LOAD is offered only for decks on a Track place.
+- Traktor Kontrol S8: the PLAY and LOOP LEDs follow the deck; the SEQ screen shows the cells of the pattern.
+
+**Getting started**
+- A 32-bar demo project for new users with intro, build, break and drop.
+
 ## 2026-11-15
 
 **DJ**

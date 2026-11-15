@@ -1,7 +1,7 @@
 // 1.14 Comping, slice 1, task 7: the heads of the take rows (name, speaker, context menu). One head per take, built once and reused; the head column
 // (track_heads.js zeige) asks for the heads of a track in take order and places them directly under the track head, above an open automation head.
 import { TAKE_TEXT, vorhoerenKoerper } from './takes.js';
-import { rasterBeats, rasten, xZuBeat, beatZuX } from './timeline.js';
+import { rasterBeats, beatsProTakt, rasten, xZuBeat, beatZuX } from './timeline.js';
 import { zeileBei } from './layout.js';
 import { ZUG_SCHWELLE } from './lanes.js';
 import { istTextFeld } from './history_display.js';
@@ -154,7 +154,7 @@ export function bindeComp(ctx) {
     if (!t) return;
     e.stopImmediatePropagation();
     ueber.focus?.({ preventScroll: true });
-    const g = new CompGeste({ xZuBeat: (x) => xZuBeat(st.ansicht, x), raster: rasterBeats(st.raster) });
+    const g = new CompGeste({ xZuBeat: (x) => xZuBeat(st.ansicht, x), raster: rasterBeats(st.raster, beatsProTakt(st.projekt?.taktart)) });
     g.down(e.offsetX);
     const mein = { g, z: t.z, spur: t.spur.id, take: t.take.id, entwurf: null };
     zug = mein;

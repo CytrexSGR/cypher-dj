@@ -6,6 +6,7 @@ import { spalten, zeichneSpalte, SR } from '../wave.js';
 import { findeClip } from './draft.js';
 import { quellSekunde } from './warp.js';
 import { neueAnsicht, zoomAnsicht, scrolleAnsicht, markerBei, doppelklick, ziehen, menuPunkte, segmentText, markerText, sZuX, xZuS, transientenPixel, transientenImClip } from './warp_editor.js';
+import { beatsProTakt } from './timeline.js';
 import { oeffneMenue, schliesseMenue } from './context_menu.js';
 
 export const LEISTE_HOEHE = 22;
@@ -107,7 +108,7 @@ export function bindeWarpEditor(ctx, canvas, infoElement, { menue = oeffneMenue,
       g.beginPath(); g.moveTo(px, 0); g.lineTo(px, h); g.stroke(); g.globalAlpha = 1;
       g.fillStyle = gezogen ? '#fff' : GELB;
       g.beginPath(); g.moveTo(px - 4, 0); g.lineTo(px + 4, 0); g.lineTo(px, 8); g.closePath(); g.fill();
-      const text = gezogen && zug.umschalt ? String(Math.round(zug.beatNeu * 100) / 100) : markerText(beat);
+      const text = gezogen && zug.umschalt ? String(Math.round(zug.beatNeu * 100) / 100) : markerText(beat, beatsProTakt(st.projekt?.taktart));
       if (text) g.fillText(text, px + 5, 17);
     });
     if (zeiger !== null && !zug) { g.fillStyle = 'rgba(255,255,255,0.25)'; g.fillRect(Math.round(zeiger), LEISTE_HOEHE, 1, hoeheWelle); }

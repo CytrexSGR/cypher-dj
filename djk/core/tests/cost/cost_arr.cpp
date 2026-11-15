@@ -16,6 +16,7 @@
 //          (arr_output.cpp, solo_vl) läuft in etwa 114 von 20 000 Zyklen. Der Median enthält ihn nicht; die Lage meldet die
 //          Schalt-Blöcke getrennt (Zeile „arr32: Solo-Schaltblöcke“).
 //   arr32rack  1.9 U6 (AK-R8): arr32 with the tracks 1..8 as racks of four internal members (three RB-338 and one kit; 8 x 4 = 32 member slots), one note per member and sixteenth. Self-check: 8 racks with 4 members, every member got its note ons, kit voices started, nothing lost (exit 2 otherwise). Gate AK-R8: p99,9 < 1067 us and max < 2667 us in 5 of 5 runs under the U1b T1.8 conditions.
+//   arr32bk  SEQ deck v2 slice K: arr32 with the tracks 1..4 as Baukasten tracks (odd: the graph drums-909, even: synth-mono, both from instruments/modular_dsp/demos), a note on every sixteenth over the 32 beats, one lane on the knob k1 (a triangle over the loop). About 1 ms per track on the lane thread. Self-check (exit 2 otherwise): 4 bk tracks sound, the bk sink holds 4 instances, nothing lost, no other lane touches the bk sink. The HASH line proves the serial and the pool run give the same bits (ctest kosten_arr_hash_bk_spur).
 //   arr32g 1.10 Task 15: wie arr32 (32 klingende Spuren, Spur-Rampen, Solo auf Spur 3), aber mit Wiedergabe /2: die 32 Spuren
 //          laufen in 8 Gruppen zu je 4 Spuren (Spur sp in Gruppe (sp-1)%8+1), alle Gruppen in den PM. Dazu Rampen an den 8
 //          Gruppen-Fadern (Ziel −1 − g%3 dB) und am PM-Fader (−2 dB), Beat 24 über 240 Beats. Selbstprüfung wie arr32, dazu
@@ -106,7 +107,7 @@
 // KOSTEN_HAND_RUECK=1: Kontrolllauf der Lage hand ohne neue Griffe, die Rückgabe nach 32 Beats muss als Halter „frei“
 // kommen (zeigt, dass die Rückgabe-Schleife eine Rückgabe findet).
 // KOSTEN_BLOCK=<128|256>: samples per kern cycle of the whole lane (default 256); pacing stays KOSTEN_PACE_US (5333 for 256, 2667 for 128), and the Hall pool deadline follows the block.
-// KOSTEN_SPUR_POOL=1|0, KOSTEN_SPUR_FIFO_TEST=1, KOSTEN_SPUR_MIN_LAST=<n>, KOSTEN_ARR32_LIVE=<n> (mehrkern slice 3.2; only MUTES the other tracks: the work stays the same, so it is NOT a load knob for the track phase), KOSTEN_ARR32_LEER=<n> (the RB tracks above n are unloaded: the load knob of the sweep): phase Q (track sources) on the Hall pool; see the block that attaches the pool. The HASH line ends with the spur_* counters.
+// KOSTEN_SPUR_POOL=1|0, KOSTEN_SPUR_FIFO_TEST=1, KOSTEN_SPUR_MIN_LAST=<n>, KOSTEN_SPUR_WARTE_US=<us>, KOSTEN_SPUR_GRENZE_US=<us> (override the late-join threshold and the hard limit of the track phase), KOSTEN_ARR32_LIVE=<n> (mehrkern slice 3.2; only MUTES the other tracks: the work stays the same, so it is NOT a load knob for the track phase), KOSTEN_ARR32_LEER=<n> (the RB tracks above n are unloaded: the load knob of the sweep): phase Q (track sources) on the Hall pool; see the block that attaches the pool. The HASH line ends with the spur_* counters.
 // KOSTEN_HASH=1: prints "HASH lane=<name> pm=<16 hex> out=<16 hex> blocks=<n> pool_jobs=<n> hall_jobs=<n> pool_spaet=<n> pool_zurueck=<n> pool_an=<0|1> block=<n>" (the pool_* fields are 0 without KOSTEN_HALL_FAEDEN; block is KOSTEN_BLOCK), FNV-1a over the production master and the master out of the warm-up and measured cycles (ctest: kosten_arr_hash).
 // KOSTEN_SCHLAF=0: setze_schlaf(false) on the lane's mixer before the warm-up (the reference arm: silent strips are computed instead of skipped; the output is bit-equal either way). Any other value or unset:
 // the default (sleep on). The lines of arr32r and of the ins lanes report schlaf_bloecke=<n>, the strip-blocks the mixer skipped.
@@ -505,7 +506,7 @@ int main(int argc, char** argv) {
     const std::string eine = lagen.substr(a + 1, b - a - 1);
     if (!eine.empty() && eine != "ohne" && eine != "arr3" && eine != "arr3rb" && eine != "hand" && eine != "arr32" && eine != "arr32g" && eine != "arr32au" && eine != "arr32warp" &&
         eine != "arr32fest" && eine != "arr32lane" && eine != "arr32lanet" && eine != "arr32auto" && eine != "arr32ueber" && eine != "arr32arm" && eine != "arr32armgriff" && eine != "arr32solo" && eine != "arr32pan" && eine != "arr32cut" && eine != "arr32rb" && eine != "arr32steil" && eine != "arr32hk" && eine != "arr32hk32" && eine != "arr32fest32" && eine != "arr32mod" &&
-        eine != "arr32r" && eine != "arr32r_setze" && eine != "arr32r_oeffnen" && eine != "arr32ins" && eine != "arr32ins_aus" && eine != "arr32ins_k" && eine != "arr32ins_ke" && eine != "arr32ins_ks" && eine != "arr32ins_ol" && eine != "arr32voll" && eine != "arr32grp3" && eine != "arr32kit" && eine != "arr32rack") {
+        eine != "arr32r" && eine != "arr32r_setze" && eine != "arr32r_oeffnen" && eine != "arr32ins" && eine != "arr32ins_aus" && eine != "arr32ins_k" && eine != "arr32ins_ke" && eine != "arr32ins_ks" && eine != "arr32ins_ol" && eine != "arr32voll" && eine != "arr32grp3" && eine != "arr32kit" && eine != "arr32rack" && eine != "arr32bk") {
       std::fprintf(stderr, "kosten_arr: unbekannte Lage \"%s\"\n", eine.c_str());
       return 3;
     }
@@ -566,7 +567,7 @@ int main(int argc, char** argv) {
                       lagen.find(",arr32r_oeffnen,") != std::string::npos || lagen.find(",arr32ins,") != std::string::npos || lagen.find(",arr32ins_aus,") != std::string::npos ||
                       lagen.find(",arr32ins_k,") != std::string::npos || lagen.find(",arr32ins_ke,") != std::string::npos || lagen.find(",arr32ins_ks,") != std::string::npos || lagen.find(",arr32ins_ol,") != std::string::npos ||
                       lagen.find(",arr32voll,") != std::string::npos || lagen.find(",arr32grp3,") != std::string::npos ||
-                      lagen.find(",arr32kit,") != std::string::npos || lagen.find(",arr32rack,") != std::string::npos;
+                      lagen.find(",arr32kit,") != std::string::npos || lagen.find(",arr32rack,") != std::string::npos || lagen.find(",arr32bk,") != std::string::npos;
   struct Aufraeumen {   // Ende 1, 2 oder 3 und Normalende räumen gleich auf (arr32 legt 8 x 5,8 MB in /dev/shm ab)
     std::string d;
     ~Aufraeumen() { std::error_code ec; std::filesystem::remove_all(d, ec); }
@@ -698,8 +699,8 @@ int main(int argc, char** argv) {
       }
       return c;
     };
-    const auto bau32 = [&](int nr, bool mit_gruppen, bool mit_lane = false, int mit_ret = 0, int mit_auto = 0, bool mit_ins = false, bool voll = false, bool mit_kit = false, bool mit_rack = false, bool grp3 = false) {   // mit_kit / mit_rack: 1.9 arr32kit / U6 arr32rack (merge 2026-11-07: numbers 19 and 20)   // mit_auto: 9 = arr32mod (arr32auto plus a relative fader lane on all 32 tracks), 6 = arr32hk (gain envelope on the 8 audio clips), 7 = arr32hk32 (32 audio tracks with the envelope), 8 = arr32fest32 (32 audio tracks, no envelope), 1 = slice 2 lanes (fader, pan, cutoff), 2 = plus solo lane, 3 = pan lane only, 4 = cutoff lane on tracks 1..8 only, 5 = steep fader and pan lanes on all tracks   // mit_ret: number of returns (1.10 slice 3, format /2)   // 1.10: nr 2 ohne Gruppen (/1), nr 3 mit 8 Gruppen zu je 4 Spuren (/2)
-    std::string j = std::string("{\"format\":\"") + (mit_gruppen || mit_lane || mit_ret || mit_auto || mit_ins || mit_rack || grp3 ? "cypherdj-arr/2" : "cypherdj-arr/1") + "\",\"nr\":" + std::to_string(nr) + ",\"spuren\":[";
+    const auto bau32 = [&](int nr, bool mit_gruppen, bool mit_lane = false, int mit_ret = 0, int mit_auto = 0, bool mit_ins = false, bool voll = false, bool mit_kit = false, bool mit_rack = false, bool grp3 = false, bool mit_bk = false) {   // mit_kit / mit_rack: 1.9 arr32kit / U6 arr32rack (merge 2026-11-07: numbers 19 and 20)   // mit_auto: 9 = arr32mod (arr32auto plus a relative fader lane on all 32 tracks), 6 = arr32hk (gain envelope on the 8 audio clips), 7 = arr32hk32 (32 audio tracks with the envelope), 8 = arr32fest32 (32 audio tracks, no envelope), 1 = slice 2 lanes (fader, pan, cutoff), 2 = plus solo lane, 3 = pan lane only, 4 = cutoff lane on tracks 1..8 only, 5 = steep fader and pan lanes on all tracks   // mit_ret: number of returns (1.10 slice 3, format /2)   // 1.10: nr 2 ohne Gruppen (/1), nr 3 mit 8 Gruppen zu je 4 Spuren (/2)
+    std::string j = std::string("{\"format\":\"") + (mit_gruppen || mit_lane || mit_ret || mit_auto || mit_ins || mit_rack || grp3 || mit_bk ? "cypherdj-arr/2" : "cypherdj-arr/1") + "\",\"nr\":" + std::to_string(nr) + ",\"spuren\":[";
     const int leer_ab = std::getenv("KOSTEN_ARR32_LEER") ? std::atoi(std::getenv("KOSTEN_ARR32_LEER")) : 0;   // KOSTEN_ARR32_LEER=<n>: the RB tracks above n are not in the playback at all (unloaded: no work), unlike KOSTEN_ARR32_LIVE, which only mutes
     for (int sp = 1; sp <= 32; ++sp) {
       if (leer_ab >= 1 && sp > leer_ab && sp <= 24) continue;
@@ -721,6 +722,14 @@ int main(int argc, char** argv) {
             j += ((i || m) ? "," : "") + std::string("{\"id\":\"n/") + std::to_string(i) + "/" + std::to_string(m) + "\",\"beat\":" + std::to_string(i * 0.25) +
                  ",\"laenge\":0.2,\"ton\":" + std::to_string(t[m]) + ",\"vel\":100}";
         }
+        j += "]";
+      } else if (mit_bk && sp <= 4) {   // SEQ deck v2 slice K, arr32bk: tracks 1..4 are Baukasten tracks (odd: drums-909, even: synth-mono), one note per sixteenth, one lane on k1
+        static const int TROMMEL[8] = {36, 38, 42, 46, 39, 41, 43, 45};
+        j += std::string(",\"art\":\"intern\",\"geraet\":\"bk\",\"graph\":\"") + (sp % 2 ? "drums-909" : "synth-mono") + "\",\"noten\":[";
+        for (int i = 0; i < 128; ++i)
+          j += (i ? "," : "") + std::string("{\"id\":\"n/") + std::to_string(i) + "\",\"beat\":" + std::to_string(i * 0.25) + ",\"laenge\":0.2,\"ton\":" +
+               std::to_string(sp % 2 ? TROMMEL[(i + sp) % 8] : 36 + (i + sp) % 24) + ",\"vel\":100}";
+        j += "],\"auto\":[{\"ziel\":\"geraet.k1\",\"punkte\":[[0.0,0.3,0],[16.0,0.7,0],[32.0,0.3,0]]}";
         j += "]";
       } else if (mit_kit && sp <= 8) {   // 1.9 arr32kit: tracks 1..8 play the test kit kit_zwei, 16 notes per bar (four sixteenths per beat, 32 beats), notes 0 and 1 alternate
         j += ",\"art\":\"intern\",\"geraet\":\"kit\",\"kit\":\"kit_zwei\",\"noten\":[";
@@ -852,6 +861,7 @@ int main(int argc, char** argv) {
       std::ofstream(ordner + "/wiedergabe-17.json") << bau32(17, false, false, 0, 9);  // arr32mod (U9; numbers 14..17: 13 is the arr32ins file of slice 4)
       std::ofstream(ordner + "/wiedergabe-19.json") << bau32(19, false, false, 0, 0, false, false, true);          // 1.9 arr32kit: arr32 with the tracks 1..8 on a kit
       std::ofstream(ordner + "/wiedergabe-20.json") << bau32(20, false, false, 0, 0, false, false, false, true);   // 1.9 U6 arr32rack: arr32 with the tracks 1..8 as racks of 4 members
+      std::ofstream(ordner + "/wiedergabe-22.json") << bau32(22, false, false, 0, 0, false, false, false, false, false, true);   // SEQ deck v2 slice K, arr32bk: arr32 with the tracks 1..4 as Baukasten tracks
       std::ofstream(ordner + "/wiedergabe-6.json") << bau32(6, false, false, 2);   // the swap partner of arr32r_oeffnen: returns 3 and 4 are dropped
     }
   }
@@ -886,7 +896,7 @@ int main(int argc, char** argv) {
     }
     if (rc) return rc;
   }
-  for (const char* lage : {"ohne", "arr3", "arr3rb", "hand", "arr32", "arr32g", "arr32fest", "arr32lane", "arr32lanet", "arr32auto", "arr32ueber", "arr32arm", "arr32armgriff", "arr32solo", "arr32pan", "arr32cut", "arr32rb", "arr32steil", "arr32hk", "arr32hk32", "arr32fest32", "arr32mod", "arr32r", "arr32r_setze", "arr32r_oeffnen", "arr32ins", "arr32ins_aus", "arr32ins_k", "arr32ins_ke", "arr32ins_ks", "arr32ins_ol", "arr32voll", "arr32grp3", "arr32kit", "arr32rack"}) {
+  for (const char* lage : {"ohne", "arr3", "arr3rb", "hand", "arr32", "arr32g", "arr32fest", "arr32lane", "arr32lanet", "arr32auto", "arr32ueber", "arr32arm", "arr32armgriff", "arr32solo", "arr32pan", "arr32cut", "arr32rb", "arr32steil", "arr32hk", "arr32hk32", "arr32fest32", "arr32mod", "arr32r", "arr32r_setze", "arr32r_oeffnen", "arr32ins", "arr32ins_aus", "arr32ins_k", "arr32ins_ke", "arr32ins_ks", "arr32ins_ol", "arr32voll", "arr32grp3", "arr32kit", "arr32rack", "arr32bk"}) {
     if (!lagen.empty() && lagen.find(std::string(",") + lage + ",") == std::string::npos) continue;
     Lauf l;
     if (const char* sc = std::getenv("KOSTEN_SCHLAF"); sc && std::string(sc) == "0") {   // reference arm: sleep off, right after the kern is built, so schlaf_bloecke counts nothing
@@ -914,9 +924,17 @@ int main(int argc, char** argv) {
         cdj::Arrangement& arr_m = const_cast<cdj::Arrangement&>(l.kern->arrangement());
         if (const char* sp = std::getenv("KOSTEN_SPUR_POOL")) arr_m.setze_spur_pool(std::atoi(sp) > 0 ? 1 : 0);
         if (std::getenv("KOSTEN_SPUR_FIFO_TEST")) hall_pool->setze_fifo_test(true);
-        if (const char* ml = std::getenv("KOSTEN_SPUR_MIN_LAST")) {
+        // KOSTEN_SPUR_WARTE_US / KOSTEN_SPUR_GRENZE_US (SEQ deck v2 slice K): the late-join threshold (product: 100 us, SpurTest::warte_spaet_ns) and the hard limit (product: 75 percent of the
+        // period, SpurTest::grenze_ns) of the track phase. The product values are tuned for units of about 14 us; with Baukasten units of about 1 ms the track account switches the phase off after a few
+        // late joins, and a hash run would then prove the bits over a handful of parallel blocks only. ctest kosten_arr_hash_bk_spur sets both high so the pool stays on for all 5000 blocks.
+        const char* ml = std::getenv("KOSTEN_SPUR_MIN_LAST");
+        const char* wu = std::getenv("KOSTEN_SPUR_WARTE_US");
+        const char* gu = std::getenv("KOSTEN_SPUR_GRENZE_US");
+        if (ml || wu || gu) {
           cdj::SpurTest st;
-          st.min_last = std::atoi(ml);
+          if (ml) st.min_last = std::atoi(ml);
+          if (wu) st.warte_spaet_ns = std::atoll(wu) * 1000;
+          if (gu) st.grenze_ns = std::atoll(gu) * 1000;
           arr_m.setze_spur_test(st);
         }
       }
@@ -939,6 +957,7 @@ int main(int argc, char** argv) {
     const bool ohne_rampen = fest || lane || lanet || aut || aut_solo || aut_pan || aut_cut || aut_rb || aut_steil || hk || hk32 || fest32 || mod || r32o_;   // Automation Slice 1: no stellwerk fader ramps; fixed fader (fest) or one lane per track (lane, lanet)
     const bool kitl = std::string(lage) == "arr32kit";   // 1.9: arr32 with tracks 1..8 switched to the kit device
     const bool rackl = std::string(lage) == "arr32rack";   // 1.9 U6: arr32 with tracks 1..8 as racks of four internal members (8 x 4 = 32 member slots)
+    const bool bkl = std::string(lage) == "arr32bk";   // SEQ deck v2 slice K: arr32 with tracks 1..4 as Baukasten tracks
     const bool r32 = std::string(lage) == "arr32r", r32s = std::string(lage) == "arr32r_setze", r32o = std::string(lage) == "arr32r_oeffnen";
     // slice 4b T12 variants for the pool decision: _k = the 12 komp stages only (the slice 4a lane shape: eq and saett present but off), _ke = plus the eq, _ks = plus the saett
     const std::string lage_s = lage;
@@ -1013,8 +1032,8 @@ int main(int argc, char** argv) {
     const int ins_erwartet = ins_an ? 12 + (eq_an ? lane_eq_n(voll) : 0) + (saett_an ? lane_saett_n(voll) : 0) + (lim_an ? lane_lim_n(voll) : 0) + lane_util_n(voll) : 0;
     const int stufen_basis = grp3 ? 12 + lane_lim_n(voll) : 12 + lane_eq_n(voll) + lane_saett_n(voll) + lane_lim_n(voll) + lane_util_n(voll);   // the stages of the file in the snapshot chains (without the host stages)   // 1.10 slice 4a (T8)
     const bool ret_lage = r32 || r32s || r32o || ins_lage;   // 1.10 slice 3: 32 tracks, 4 returns with a Hall each, 128 sends; _setze moves a Hall control every block, _oeffnen swaps the playback every 500 blocks
-    const bool a32 = std::string(lage) == "arr32" || g32 || ohne_rampen || ret_lage || kitl || rackl;
-    const int arr_nr32 = rackl ? 20 : kitl ? 19 : voll ? 18 : grp3 ? 21 : ins_lage ? 13 : ret_lage ? 5 : g32 ? 3 : (lane || lanet) ? 4 : aut ? 7 : aut_solo ? 8 : aut_pan ? 9 : aut_cut ? 10 : aut_rb ? 11 : aut_steil ? 12 : hk ? 14 : hk32 ? 15 : fest32 ? 16 : mod ? 17 : 2;
+    const bool a32 = std::string(lage) == "arr32" || g32 || ohne_rampen || ret_lage || kitl || rackl || bkl;
+    const int arr_nr32 = bkl ? 22 : rackl ? 20 : kitl ? 19 : voll ? 18 : grp3 ? 21 : ins_lage ? 13 : ret_lage ? 5 : g32 ? 3 : (lane || lanet) ? 4 : aut ? 7 : aut_solo ? 8 : aut_pan ? 9 : aut_cut ? 10 : aut_rb ? 11 : aut_steil ? 12 : hk ? 14 : hk32 ? 15 : fest32 ? 16 : mod ? 17 : 2;
     const int stumm_nr = std::getenv("KOSTEN_ARR32_STUMM") ? std::atoi(std::getenv("KOSTEN_ARR32_STUMM")) : 0;
     const int live_n = std::getenv("KOSTEN_ARR32_LIVE") ? std::atoi(std::getenv("KOSTEN_ARR32_LIVE")) : 0;   // 0: all tracks live
     float spitze_db[33], zuletzt_db[33];   // arr32: höchste Spur-Spitze seit Zyklus 100 je Spur (dB)
@@ -1077,6 +1096,10 @@ int main(int argc, char** argv) {
       cache.setze_kit_lader(&cdj::lade_kit);
     }
     cache.setze_kit_leser(l.kern->arr_kit_leser());
+    if (bkl) {   // the graphs of the lane are the repo examples; the reader is the bk sink of this run's core
+      cache.setze_bk_ordner(std::string(CYPHERDJ_DJK) + "/instruments/modular_dsp/demos");
+      cache.setze_bk_leser(l.kern->arr_bk_leser());
+    }
     if (host_n > 0) cache.setze_host_da(true);   // plan 1.11 T18: the loader takes the host stages (the ports are the synthetic ones bound above)
     if (std::string(lage) != "ohne") {
       cdj::ArrLadeErgebnis e = cdj::lade_wiedergabe(ordner, a32 ? arr_nr32 : 1, cache);
@@ -1603,6 +1626,10 @@ int main(int argc, char** argv) {
       int anteil_spur = 0;
       int kit_klingen = 0;
       for (int sp = 1; sp <= 32; ++sp) {
+        if (bkl && sp <= 4) {   // drum hits and short synth notes: no dense level, but every bk track must sound in some level messages
+          kit_klingen += klang_n[sp] > 0;
+          continue;
+        }
         if ((kitl || rackl) && sp <= 8) {   // one-shots of 2 to 10 ms every sixteenth: no dense level, but every kit track must sound in some level messages
           kit_klingen += klang_n[sp] > 0;
           continue;
@@ -1651,8 +1678,19 @@ int main(int argc, char** argv) {
           std::fprintf(stderr, "kosten_arr: Lage arr32rack: the racks do not play, it does not measure what it should\n");
           return 2;
         }
+      } else if (bkl) {   // self-check of arr32bk: 4 bk tracks sound, the bk sink holds 4 instances, nothing lost
+        std::fprintf(stderr, "arr32bk: bk tracks sounding %d of 4, bk sink: instances %d, resting %d, lost %llu\n", kit_klingen, l.kern->arr_bk().spielend(), l.kern->arr_bk().ruhend(),
+                     (unsigned long long)l.kern->arr_bk().verloren());
+        if (kit_klingen != 4 || l.kern->arr_bk().spielend() != 4 || l.kern->arr_bk().verloren() != 0) {
+          std::fprintf(stderr, "kosten_arr: Lage arr32bk: the Baukasten tracks do not play, it does not measure what it should\n");
+          return 2;
+        }
       } else if (l.kern->arr_kit().einsaetze() != 0) {   // negative control: no other lane starts a kit voice
         std::fprintf(stderr, "kosten_arr: Lage %s: the kit sink started %llu voices without a kit track\n", lage, (unsigned long long)l.kern->arr_kit().einsaetze());
+        return 2;
+      }
+      if (!bkl && l.kern->arr_bk().spielend() != 0) {   // negative control: no other lane has a Baukasten instance in the bk sink
+        std::fprintf(stderr, "kosten_arr: Lage %s: the bk sink holds %d instances without a bk track\n", lage, l.kern->arr_bk().spielend());
         return 2;
       }
       if (!rackl) {   // negative control: no other lane routes a note to a rack member

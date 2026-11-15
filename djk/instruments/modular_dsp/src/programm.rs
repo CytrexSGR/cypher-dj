@@ -19,6 +19,8 @@ use crate::vocoder::Vocoder;
 use crate::sampler::{Eingabe, Einstellung, Sampler};
 use crate::roehre::{Roehre, RoehrenSatz};
 use crate::svf::Svf;
+use crate::allpass::Allpass;
+use crate::kreuz::Kreuz;
 use crate::sem::Sem;
 use crate::diode::Diode;
 use crate::wavetable::{Eingabe as WtEingabe, Einstellung as WtEinstellung, Stimme as WtStimme, Tabelle};
@@ -64,6 +66,8 @@ pub enum Schritt {
     Folger { x: Quelle, an: Quelle, ab: Quelle, aus: usize, f: [Folger; MAX_STIMMEN] },
     Transponiere { hz: Quelle, st: Quelle, cent: Quelle, aus: usize },
     Ladder { x: Quelle, cutoff: Quelle, reso: Quelle, aus: usize, f: [Ladder; MAX_STIMMEN], reso_glatt: Spur },
+    Allpass { x: Quelle, fc: Quelle, fc2: Quelle, aus: usize, ordnung: u8, f: [Allpass; MAX_STIMMEN] },
+    Kreuz { x: Quelle, fc1: Quelle, fc2: Quelle, lo: usize, mid: usize, hi: usize, baender: u8, f: [Kreuz; MAX_STIMMEN] },
     Svf { x: Quelle, cutoff: Quelle, reso: Quelle, tp: usize, bp: usize, hp: usize, vier: bool, f: [Svf; MAX_STIMMEN] },
     Sem { x: Quelle, cutoff: Quelle, reso: Quelle, form: Quelle, aus: usize, bp: usize, f: [Sem; MAX_STIMMEN] },
     /// tanh mit ADAA1 (saett_dsp::Adaa1, f64), `antrieb` in dB vor der Kennlinie
@@ -233,6 +237,8 @@ impl Schritt {
             Schritt::Mseg { e, .. } => *e = [Mseg::default(); MAX_STIMMEN],
             Schritt::Folger { f, .. } => *f = [Folger::default(); MAX_STIMMEN],
             Schritt::Svf { f, .. } => *f = [Svf::default(); MAX_STIMMEN],
+            Schritt::Allpass { f, .. } => *f = [Allpass::default(); MAX_STIMMEN],
+            Schritt::Kreuz { f, .. } => *f = [Kreuz::default(); MAX_STIMMEN],
             Schritt::Sem { f, .. } => *f = [Sem::default(); MAX_STIMMEN],
             Schritt::Wahl { v, .. } => **v = [crate::wahl::Stimme::default(); MAX_STIMMEN],
             Schritt::Saett { a, .. } => *a = [Adaa1::default(); MAX_STIMMEN],
@@ -821,6 +827,24 @@ impl Programm {
                     slots[*tp] = t;
                     slots[*bp] = b;
                     slots[*hp] = h;
+                }
+                Schritt::Allpass { x, fc, fc2, aus, ordnung, f } => {
+                    let (x, c, c2) = (spur(*x, slots, vorher), spur(*fc, slots, vorher), spur(*fc2, slots, vorher));
+                    let mut o = [0.0; MAX_STIMMEN];
+                    for i in 0..n {
+                        o[i] = f[i].prozess(x[i], c[i], c2[i], *ordnung, sr);
+                    }
+                    slots[*aus] = o;
+                }
+                Schritt::Kreuz { x, fc1, fc2, lo, mid, hi, baender, f } => {
+                    let (x, c1, c2) = (spur(*x, slots, vorher), spur(*fc1, slots, vorher), spur(*fc2, slots, vorher));
+                    let (mut l, mut m, mut h) = ([0.0; MAX_STIMMEN], [0.0; MAX_STIMMEN], [0.0; MAX_STIMMEN]);
+                    for i in 0..n {
+                        (l[i], m[i], h[i]) = f[i].prozess(x[i], c1[i], c2[i], *baender, sr);
+                    }
+                    slots[*lo] = l;
+                    slots[*mid] = m;
+                    slots[*hi] = h;
                 }
                 Schritt::Sem { x, cutoff, reso, form, aus, bp, f } => {
                     let (x, c, r, fo) = (spur(*x, slots, vorher), spur(*cutoff, slots, vorher), spur(*reso, slots, vorher), spur(*form, slots, vorher));

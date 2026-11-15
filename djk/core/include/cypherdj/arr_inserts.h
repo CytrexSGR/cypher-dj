@@ -33,6 +33,7 @@
 #pragma once
 
 #include <atomic>
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <memory>
@@ -193,6 +194,10 @@ class ArrInserts final : public ArrBkLeser {
   // ---- readings
   float gr_db(int slot) const { return gr_[slot]; }              // gain reduction >= 0 of the last block the stage ran in
   bool lief(int slot) const { return lief_[slot]; }              // the stage computed in the last block it was asked for
+  // T9 (device faces): the input and output peak of a komp or lim stage since the last reading, in dBFS (-200 for silence), read AND RESET. Same lane discipline as gr_: the stage
+  // writes its own slot while it runs, the callback reads after the lanes joined. A stage of another kind never accumulates, so it reads -200.
+  float pegel_ein_db(int slot) { return spitze_db(pk_ein_, slot); }
+  float pegel_aus_db(int slot) { return spitze_db(pk_aus_, slot); }
   uint64_t nan_zaehler() const { return nan_; }
   int latenz(int slot) const { return slot >= 0 && slot < ARR_INS_ALLE ? lat_[slot] : 0; }   // the latency of the stage kind in the slot, samples (a host slot: the latenz of the stage of the last swap)
   // plan 1.11 T12: the row ins/host/<h>/an of host h (1..ARR_INS_HOST) is on; the stage runs when this AND the project flag are on (the export counts blocks with such a stage on the dry path)
@@ -271,6 +276,14 @@ class ArrInserts final : public ArrBkLeser {
   bool in_kette_[ARR_INS_ALLE] = {};        // the owner's chain in the current snapshot lists the slot
   int pos_[ARR_INS_ALLE] = {};              // blend position 0..INS_BLENDE (weight = pos / INS_BLENDE)
   bool lief_[ARR_INS_ALLE] = {};
+  static float spitze_db(float* feld, int slot) {   // linear peak -> dBFS and back to 0; no allocation, no lock
+    if (slot < 0 || slot >= ARR_INS_ALLE) return -200.0f;
+    const float v = feld[slot];
+    feld[slot] = 0.0f;
+    return v > 1e-10f ? 20.0f * std::log10(v) : -200.0f;
+  }
+  float pk_ein_[ARR_INS_ALLE] = {};         // T9: linear input peak of a komp/lim stage since the last reading (max of |l|, |r|)
+  float pk_aus_[ARR_INS_ALLE] = {};         // T9: the same for the output after the bypass blend
   float gr_[ARR_INS_ALLE] = {};             // gain reduction (komp and lim; eq and saett report 0)
   int sc_[ARR_INS_KOMP] = {};               // key track of the stage in this block, 1..32, 0 = own signal
   int lat_[ARR_INS_ALLE] = {};              // latency of each slot, samples: the kind's for the native kinds (constructor), the stage's for a host slot (tausche)

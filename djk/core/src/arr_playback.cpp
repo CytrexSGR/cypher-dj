@@ -784,11 +784,13 @@ int32_t ArrAudioCache::bk_hole(int nr, const std::string& graph, CypherBk** h, u
       return -1;
     }
 #endif
-    if (const uint32_t l = cypher_bk_latenz(b); l > 0) {
+    const uint32_t l = cypher_bk_latenz(b);   // the latency joins the delay compensation of the strip (arr_pdc.h), like a stage at the head of the chain
+    if (l > static_cast<uint32_t>(ARR_BK_INSTR_LAT_MAX)) {
       cypher_bk_frei(b);
-      meldung = "graph " + graph + " has a latency of " + std::to_string(l) + " samples (not supported on a project track)";
+      meldung = "graph " + graph + " has a latency of " + std::to_string(l) + " samples (an instrument graph on a project track takes at most " + std::to_string(ARR_BK_INSTR_LAT_MAX) + ")";
       return -1;
     }
+    if (lat) *lat = static_cast<int>(l);
   }
   size_t slot = 0;
   while (slot < bk_.size() && !bk_[slot].schluessel.empty()) ++slot;
@@ -797,7 +799,7 @@ int32_t ArrAudioCache::bk_hole(int nr, const std::string& graph, CypherBk** h, u
   bk_[slot].h = b;
   bk_[slot].gen = ++bk_zaehler_;
   bk_[slot].ref = 1;
-  bk_[slot].lat = effekt && lat ? *lat : 0;
+  bk_[slot].lat = lat ? *lat : 0;
   *h = b;
   *gen = bk_[slot].gen;
   return static_cast<int32_t>(slot);
@@ -1224,7 +1226,7 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
         }
         if (ist_bk) {   // all of the track's checks passed up to here: only now build or share the instance
           std::string grund, meldung;
-          const int32_t slot = cache.bk_hole(bk_nr, sp.graph, &sp.bk, &sp.bk_gen, grund, meldung);
+          const int32_t slot = cache.bk_hole(bk_nr, sp.graph, &sp.bk, &sp.bk_gen, grund, meldung, false, 0, &sp.bk_latenz);
           if (slot < 0) throw Abbruch(grund, wo + meldung);
           snap->bk_refs.push_back(slot);
         }
@@ -1268,6 +1270,11 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
       const bool ist_rack_spur = s.contains("art") && s.at("art").is_string() && s.at("art").get<std::string>() == "intern" && s.contains("geraet") &&
                                  s.at("geraet").is_string() && s.at("geraet").get<std::string>() == "rack";
       lese_rack(s, wo, snap->kette[nr - 1], snap->rack[nr - 1], rack_belegt, ist_rack_spur ? &glied_roh : nullptr, ist_rack_spur);   // 1.10 slice 4c T15
+      if (s.contains("stumm_start")) {   // initial mute: the swap starts the track muted (Arrangement::tausche, Kern ARR_LADEN)
+        if (!v2) format(wo + "stumm_start gibt es erst in cypherdj-arr/2");
+        if (!s.at("stumm_start").is_boolean()) format(wo + "stumm_start is not a boolean");
+        sp.stumm_start = s.at("stumm_start").get<bool>();
+      }
       if (s.contains("ausgang")) {   // 1.10: master (Vorgabe) oder eine Gruppe aus der Liste; nur in /2
         if (!v2) format(wo + "ausgang gibt es erst in cypherdj-arr/2");
         const json& ag = s.at("ausgang");

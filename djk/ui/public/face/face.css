@@ -1,0 +1,185 @@
+/* Device faces: the floating overlay of a device (curve display plus knob plate), in the look of the front plates (panel.css). All face styles live here.
+   Colours come from style.css (:root) and the accent tokens of panel.css. */
+
+/* ---- the frame (face/frame.js) */
+.p-face { --fa: var(--a); position: fixed; z-index: 1001; right: 16px; bottom: 16px; width: min(520px, calc(100vw - 32px)); max-height: calc(100vh - 32px);
+  overflow: auto; box-sizing: border-box; color: var(--text); font-size: 12px; user-select: none;
+  background: linear-gradient(180deg, #1f232c 0%, #181b22 100%); border: 1px solid var(--line); border-top: 3px solid var(--fa); border-radius: 10px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .05), 0 14px 44px rgba(0, 0, 0, .6); }
+.p-face[data-akzent="rot"] { --fa: var(--ak-rot); }
+.p-face[data-akzent="orange"] { --fa: var(--ak-orange); }
+.p-face[data-akzent="gelb"] { --fa: var(--ak-gelb); }
+.p-face[data-akzent="gruen"] { --fa: var(--ak-gruen); }
+.p-face[data-akzent="tuerkis"] { --fa: var(--ak-tuerkis); }
+.p-face[data-akzent="blau"] { --fa: var(--ak-blau); }
+.p-face[data-akzent="violett"] { --fa: var(--ak-violett); }
+/* the close button is the first child and stays reachable when the face scrolls inside itself: sticky, taking no room of its own */
+.p-face-zu { position: sticky; top: 4px; z-index: 2; display: block; width: 26px; height: 26px; margin: 4px 6px -30px auto; padding: 0; font-size: 12px; line-height: 1; border-radius: 6px; }
+.p-face-kopf { display: flex; align-items: center; gap: 10px; padding: 9px 44px 7px 14px; border-bottom: 1px solid var(--line); min-width: 0; }
+.p-face-titel { font-size: 11px; font-weight: 700; letter-spacing: .2em; text-transform: uppercase; white-space: nowrap; }
+.p-face-ort { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; letter-spacing: .08em; color: var(--dim); }
+.p-face-steuer { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; flex: none; }
+.p-face-an { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 6px; font-size: 10px; font-weight: 700; letter-spacing: .12em; color: var(--dim); }
+.p-face-an::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--line); }
+.p-face-an.an { color: var(--text); }
+.p-face-an.an::before { background: var(--fa); box-shadow: 0 0 6px var(--fa); }
+.p-face-inhalt { padding: 12px 14px 14px; }
+
+/* the knob plate inside a face: the frame provides the title bar and the background, the plate only the knobs */
+.p-face .frontplatte { background: none; border: 0; box-shadow: none; padding: 0; width: auto; }
+.p-face .frontplatte .fp-kopf { display: none; }
+.p-face .frontplatte .fp-koerper { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.p-face .frontplatte .fp-bogen { stroke: var(--fa); filter: none; }
+.p-face .fp-name { letter-spacing: .06em; }
+
+/* ---- the display (face/display.js) */
+.fa-anzeige { display: block; width: 100%; height: auto; }
+.fa-flaeche { fill: #0e0f12; stroke: var(--line); stroke-width: 1; }
+.fa-gitter { stroke: #242730; stroke-width: 1; }
+.fa-skala { fill: var(--dim); font-size: 8.5px; font-variant-numeric: tabular-nums; }
+.fa-titel { fill: var(--dim); font-size: 8.5px; font-weight: 600; letter-spacing: .18em; }
+.fa-meter { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 52px; min-height: 0; }
+.fa-meter-bahn { position: relative; flex: 1 1 auto; width: 16px; min-height: 60px; background: #0e0f12; border: 1px solid var(--line); border-radius: 3px; }
+.fa-meter-balken { position: absolute; left: 0; right: 0; top: 0; height: 0; background: var(--fa); border-radius: 2px; }
+.fa-meter-unten .fa-meter-balken { top: auto; bottom: 0; }
+.fa-meter-halt { position: absolute; left: -3px; right: -3px; height: 2px; top: calc(var(--b, 0) * 100%); background: var(--text); }
+.fa-meter-halt[hidden] { display: none; }
+.fa-meter-unten .fa-meter-halt { top: auto; bottom: calc(var(--b, 0) * 100%); }
+.fa-meter-text { font-size: 10px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--dim); white-space: nowrap; }
+.fa-meter-an .fa-meter-text { color: var(--text); }
+
+/* ---- the compressor face (face/comp.js) */
+.fa-komp { display: flex; flex-direction: column; gap: 12px; }
+.fa-komp-oben { display: flex; align-items: stretch; justify-content: center; gap: 10px; }
+.fa-komp-kurve { position: relative; flex: 0 1 400px; min-width: 0; }
+.fa-komp-fest { position: absolute; right: 18px; bottom: 36px; font-size: 9px; letter-spacing: .1em; color: var(--dim); }
+.fa-diagonale { fill: none; stroke: #566; stroke-width: 1; stroke-dasharray: 4 4; }
+.fa-kurve { fill: none; stroke: var(--fa); stroke-width: 2.4; stroke-linejoin: round; stroke-linecap: round; filter: drop-shadow(0 0 3px rgba(255, 154, 60, .35)); }
+.fa-knie { fill: var(--fa); fill-opacity: .13; stroke: none; }
+.fa-schwelle { stroke: var(--fa); stroke-opacity: .55; stroke-width: 1; stroke-dasharray: 2 3; }
+.fa-knick { fill: var(--fa); stroke: #0e0f12; stroke-width: 1.5; }
+.fa-marke { fill: var(--fa); fill-opacity: .8; font-size: 8px; font-weight: 700; letter-spacing: .14em; }
+
+/* the key chip above the display, the gain-reduction meter beside it, the dimmed state of a bypassed stage */
+.fa-komp-schluessel { display: flex; justify-content: flex-end; min-height: 0; }
+.fa-komp-schluessel[hidden] { display: none; }
+.fa-komp-schluessel-chip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 3px 10px; border: 1px solid var(--line); border-radius: 12px; background: #0e0f12;
+  font-size: 10px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); }
+.fa-komp-schluessel-wahl { max-width: 100%; font-size: 11px; }
+.fa-komp-meter { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 0 0; }
+.fa-komp-meter-titel { font-size: 8.5px; font-weight: 600; letter-spacing: .18em; color: var(--dim); }
+.fa-komp-meter .fa-meter { flex: 1 1 auto; min-height: 0; }
+.fa-meter-bahn { background-image: repeating-linear-gradient(to bottom, transparent 0, transparent calc(25% - 1px), #2a2d36 calc(25% - 1px), #2a2d36 25%); }
+.fa-komp .fa-kurve, .fa-komp .fa-knie, .fa-komp .fa-schwelle, .fa-komp .fa-knick, .fa-komp .fa-marke { transition: opacity .15s; }
+.fa-komp.fa-aus .fa-kurve { stroke: #6b6f7c; filter: none; opacity: .7; }
+.fa-komp.fa-aus .fa-knie { fill-opacity: .05; }
+.fa-komp.fa-aus .fa-schwelle, .fa-komp.fa-aus .fa-marke { opacity: .35; }
+.fa-komp.fa-aus .fa-knick { fill: #6b6f7c; }
+
+/* ---- the openers */
+.p-ins-face { letter-spacing: .08em; }
+/* the free column 8 of the track head (18 px) is too narrow for the word: a head that carries the button gets 30 px there */
+.p-kopf:has(> .p-face-auf) { grid-template-columns: 10px minmax(0, 1fr) auto 18px 18px 22px 22px 30px 36px; }
+.p-face-auf { grid-column: 8; grid-row: 1; font-size: 8px; font-weight: 800; letter-spacing: .04em; padding: 0; border-radius: 4px; color: var(--dim); }
+.p-face-auf:hover { color: var(--text); }
+
+/* the channel compressor: the COMP and FACE buttons of the EFFECTS strip side by side, FACE in the look of COMP */
+.fxstreifen .komp-knoepfe { display: flex; gap: 6px; align-self: flex-start; }
+.fxstreifen button.komp-face, .fxkopf button.komp-face { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px; }
+/* ---- the Hall face (face/reverb.js) */
+.p-face[data-face^="hall:"] { width: min(900px, calc(100vw - 32px)); }
+.p-hall-face { font-size: 9px; font-weight: 700; letter-spacing: .08em; padding: 1px 5px; border-radius: 4px; margin-left: 6px; }
+.fa-hall { display: flex; flex-direction: column; gap: 10px; }
+.fa-hall-oben { display: flex; gap: 12px; align-items: flex-start; }
+.fa-hall-zelle { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.fa-hall-titel { font-size: 9px; font-weight: 700; letter-spacing: .16em; color: var(--dim); }
+.fa-hall-hinweis { font-size: 9.5px; letter-spacing: .04em; color: var(--dim); display: flex; gap: 14px; flex-wrap: wrap; }
+.fa-hall-schl-t60::before, .fa-hall-schl-ton::before { content: ""; display: inline-block; width: 18px; height: 0; margin-right: 6px; vertical-align: middle; border-top: 2px solid var(--fa); }
+.fa-hall-schl-ton::before { border-top: 2px dashed var(--ak-gelb); }
+.fa-hall-marken { gap: 4px 12px; }
+.fa-hall-marken > span::before { content: ""; display: inline-block; width: 12px; height: 8px; margin-right: 5px; vertical-align: middle; }
+.fa-hall-marke-pre::before { border-top: 2px solid var(--text); height: 0 !important; opacity: .7; }
+.fa-hall-marke-er::before { background: var(--fa); opacity: .4; }
+.fa-hall-marke-start::before { height: 0 !important; border-top: 2px dotted var(--fa); }
+.fa-hall-fest { font-size: 10px; letter-spacing: .05em; color: var(--dim); text-align: center; }
+.fa-hall-platte { min-width: 0; }
+.fa-hall-frueh { fill: var(--fa); fill-opacity: .16; stroke: none; }
+.fa-hall-pre { fill: none; stroke: var(--text); stroke-width: 2; stroke-opacity: .7; }
+.fa-hall-prelinie { stroke: var(--text); stroke-opacity: .35; stroke-dasharray: 2 3; }
+.fa-hall-start { stroke: var(--fa); stroke-opacity: .5; stroke-dasharray: 2 3; }
+.fa-hall-l0, .fa-hall-l1, .fa-hall-l2 { fill: none; stroke-width: 2; stroke-linecap: round; }
+.fa-hall-l0 { stroke: var(--ak-blau); } .fa-hall-l1 { stroke: var(--fa); } .fa-hall-l2 { stroke: var(--ak-orange); }
+.fa-hall-text { fill: var(--dim); font-size: 8px; font-weight: 700; letter-spacing: .1em; }
+.fa-hall-text-er { fill: var(--fa); }
+text.fa-hall-t0 { fill: var(--ak-blau); } text.fa-hall-t1 { fill: var(--fa); } text.fa-hall-t2 { fill: var(--ak-orange); }
+.fa-hall-t60 { fill: none; stroke: var(--fa); stroke-width: 2.4; stroke-linejoin: round; filter: drop-shadow(0 0 3px rgba(47, 214, 195, .35)); }
+.fa-hall-ton { fill: none; stroke: var(--ak-gelb); stroke-width: 1.8; stroke-dasharray: 5 3; }
+.fa-hall-ankerlinie { stroke: #3a3e4a; stroke-width: 1; stroke-dasharray: 2 3; }
+circle.fa-hall-anker { stroke: #0e0f12; stroke-width: 1.5; }
+circle.fa-hall-t0 { fill: var(--ak-blau); } circle.fa-hall-t1 { fill: var(--fa); } circle.fa-hall-t2 { fill: var(--ak-orange); }
+.fa-hall-skala-r { fill: var(--ak-gelb); fill-opacity: .8; }
+.fa-hall.fa-aus .fa-hall-t60, .fa-hall.fa-aus .fa-hall-l0, .fa-hall.fa-aus .fa-hall-l1, .fa-hall.fa-aus .fa-hall-l2 { stroke: #6b6f7c; filter: none; opacity: .6; }
+/* ---- the saturator face (face/sat.js) and the limiter face (face/limiter.js) */
+.fa-saett, .fa-lim { display: flex; flex-direction: column; gap: 12px; }
+.fa-saett-kurve, .fa-lim-kurve { align-self: center; width: min(100%, 340px); min-width: 0; }
+.fa-saett .fa-kurve, .fa-lim .fa-kurve { filter: drop-shadow(0 0 3px color-mix(in srgb, var(--fa) 45%, transparent)); transition: opacity .15s; }
+.fa-vollaussteuerung { stroke: var(--fa); stroke-opacity: .5; stroke-width: 1; stroke-dasharray: 2 3; }
+.fa-decke { stroke: var(--fa); stroke-opacity: .8; stroke-width: 1.2; }
+.fa-unterschrift { fill: var(--dim); font-size: 8px; font-weight: 600; letter-spacing: .14em; }
+.fa-saett .fa-marke, .fa-lim .fa-marke { transition: opacity .15s; }
+.fa-saett.fa-aus .fa-kurve, .fa-lim.fa-aus .fa-kurve { stroke: #6b6f7c; filter: none; opacity: .7; }
+.fa-saett.fa-aus .fa-vollaussteuerung, .fa-saett.fa-aus .fa-marke, .fa-lim.fa-aus .fa-decke, .fa-lim.fa-aus .fa-marke { opacity: .35; }
+.fa-lim-oben { display: flex; align-items: stretch; justify-content: center; gap: 10px; }
+.fa-lim-gr-platz[hidden] { display: none; }   /* the place of the gain-reduction meter (T8) */
+.fa-lim-fest { text-align: center; font-size: 10px; letter-spacing: .08em; color: var(--dim); }
+/* ---- the EQ face (face/eq.js): wider than the compressor face (D11: at most 760 x 620) */
+.p-face:has(.fa-eq) { width: min(760px, calc(100vw - 32px)); max-height: min(620px, calc(100vh - 32px)); }
+.fa-eq { display: flex; flex-direction: column; gap: 8px; }
+.fa-eq-anzeige { position: relative; }
+.fa-eq-null { stroke: #566; stroke-width: 1; stroke-dasharray: 4 4; }
+.fa-eq-kurve { fill: none; stroke: var(--fa); stroke-width: 2.4; stroke-linejoin: round; stroke-linecap: round; filter: drop-shadow(0 0 3px rgba(255, 154, 60, .35)); }
+.fa-eq-seite { fill: none; stroke: var(--text); stroke-opacity: .55; stroke-width: 1; stroke-dasharray: 3 3; }
+.fa-eq-seite.fa-eq-leer { display: none; }
+.fa-eq-hinweis { pointer-events: none; }
+.fa-griff { fill: #181b22; stroke: var(--fa); stroke-width: 2; cursor: grab; touch-action: none; pointer-events: all; }   /* all: the hollow ring of a band that is off is hit in its middle too */
+.fa-griff:active { cursor: grabbing; }
+.fa-griff.aus { fill: none; stroke: #6b6f7c; stroke-dasharray: 3 2; }
+.fa-griff.sel { fill: var(--fa); stroke: var(--text); }
+.fa-griff-nr { fill: var(--text); font-size: 9px; font-weight: 700; pointer-events: none; }
+.fa-griff-nr.sel { fill: #0e0f12; }
+.fa-griff-nr.aus { fill: var(--dim); }
+.fa-eq-reiter { display: flex; gap: 6px; justify-content: center; }
+.fa-eq-tab { min-width: 40px; padding: 3px 0; font-size: 11px; font-weight: 700; border-radius: 6px; color: var(--dim); }
+.fa-eq-tab.sel { color: #0e0f12; background: var(--fa); border-color: var(--fa); }
+.fa-eq-tab.aus:not(.sel) { opacity: .55; }
+.fa-eq-platten { display: flex; gap: 14px; align-items: flex-start; justify-content: center; }
+.fa-eq-band { flex: none; }
+.fa-eq-wahl { flex: 1 1 auto; min-width: 0; }
+.fa-eq-stufe { flex: none; padding-left: 14px; border-left: 1px solid var(--line); }
+/* the option buttons of a selector wrap into a grid of four columns (the type has seven) */
+.fa-eq .fp-wahl { display: grid; grid-template-columns: repeat(4, auto); gap: 1px; background: var(--line); }
+.fa-eq .fp-option { background: #181b22; padding: 4px 8px; white-space: nowrap; }
+.fa-eq .fp-option + .fp-option { border-left: 0; }
+.fa-eq .fp-option.an { background: var(--a); }
+.fa-eq .fp-wahl { max-width: none; }
+.fa-eq-wahl .fp-sektion { width: 100%; }
+.fa-eq-wahl .fp-gitter { display: flex; gap: 14px; justify-content: center; align-items: flex-start; }
+.fa-eq-wahl .fp-zelle { width: auto; flex: none; }
+.fa-eq.fa-eq-aus .fa-eq-kurve, .fa-eq.fa-aus .fa-eq-kurve { stroke: #6b6f7c; filter: none; opacity: .7; }
+.fa-eq.fa-aus .fa-eq-seite { opacity: .4; }
+
+/* T8: the gain-reduction meter of the limiter face, the look of the compressor meter */
+.fa-lim-gr-platz { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 0 0; }
+.fa-lim-gr-platz .fa-meter { flex: 1 1 auto; min-height: 0; }
+.fa-lim.fa-aus .fa-meter { opacity: .5; }
+
+/* T9: the input and output peak bars beside the gain-reduction meter, and the operating point NOW on the curve of the compressor face */
+.fa-komp-pegel, .fa-lim-pegel { display: flex; gap: 2px; padding: 10px 0 0; }
+.fa-pegel-spalte { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.fa-pegel-spalte .fa-meter { flex: 1 1 auto; min-height: 0; width: 46px; }
+.fa-jetzt { fill: #fff; stroke: var(--fa); stroke-width: 2; filter: drop-shadow(0 0 3px var(--fa)); }
+.fa-jetzt-text { fill: var(--text); font-size: 8px; font-weight: 700; letter-spacing: .14em; paint-order: stroke; stroke: #0e0f12; stroke-width: 3px; }
+.fa-komp.fa-aus .fa-jetzt, .fa-komp.fa-aus .fa-jetzt-text { opacity: .35; }
+.fa-komp.fa-aus .fa-pegel-spalte .fa-meter, .fa-lim.fa-aus .fa-pegel-spalte .fa-meter { opacity: .5; }
+/* with the peak bars the compressor and limiter faces are a little wider than the 520 px of the frame */
+.p-face:has(.fa-komp-pegel), .p-face:has(.fa-lim-pegel) { width: min(620px, calc(100vw - 32px)); }

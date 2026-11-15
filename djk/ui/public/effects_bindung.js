@@ -208,7 +208,7 @@ export function bindeEffekte() {
   }, 100);
   let b = 'library';
   try { b = localStorage.getItem('djk-bereich') || 'library'; } catch { /* ohne Speicher: Library */ }
-  setzeBereich(b === 'effekte' || b === 'presets' || b === 'instrumente' ? b : 'library');
+  setzeBereich(b === 'effekte' || b === 'presets' || b === 'instrumente' || b === 'controller' ? b : 'library');
   setInterval(() => { if (!$('#effekte').hidden) zeigeKomp(); }, 250);   // GR fällt ohne Meldung auf 0
   setInterval(holeFxInhalt, 2000);
 }

@@ -1,0 +1,39 @@
+{
+ "schema": 1,
+ "name": "Stab",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "pluck-stab",
+ "werte": {
+  "knob1": 0.5,
+  "knob2": 0.5,
+  "knob3": 0.5,
+  "knob4": 0.5,
+  "knob5": 0.5,
+  "knob6": 0.5
+ },
+ "beschreibung": {
+  "art": "pluck",
+  "unterart": "stab",
+  "charakter": [
+   "punchy",
+   "bright",
+   "tight",
+   "thin",
+   "aggressive"
+  ],
+  "genre": [],
+  "einsatz": [
+   "drop",
+   "build"
+  ],
+  "energie": 4,
+  "text": "House stab: two detuned saws with a snappy filter, velocity brightness, resonance blip on the attack, short room."
+ },
+ "tags": [
+  "pluck-stab"
+ ],
+ "notiz": "Source rule: recipe card `pluck.stab`, Cann [B4] p. 44, patches Bass + Stab and Gentle Stab. Measured by `tests/rezepte.rs`, not yet heard.",
+ "angelegt": "2026-11-15T00:00:00.000Z",
+ "geaendert": "2026-11-15T00:00:00.000Z"
+}

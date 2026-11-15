@@ -4,8 +4,9 @@
 // Pure: no file, no server, no core. What the environment knows (which kit and which Baukasten graphs exist) comes in through `ctx`.
 import { GM_PROGRAMME, gmProgrammName, type SmfDatei, type SmfTeil } from './smf.ts';
 import {
-  MAX_BEAT, MAX_BK_SPUREN, MAX_CLIPS, MAX_NOTEN, MAX_SPUREN, TEMPO_MAX, TEMPO_MIN, neueId, type Projekt,
+  MAX_BEAT, MAX_BK_SPUREN, MAX_CLIPS, MAX_NOTEN, MAX_SPUREN, TEMPO_MAX, TEMPO_MIN, taktartOk, neueId, type Projekt,
 } from './model.ts';
+import { rbNorm } from './rb_mapping.ts';
 
 export class MidiImportFehler extends Error {
   grund: string; code: number; extra: Record<string, unknown>;
@@ -55,6 +56,13 @@ const runde = (x: number, stellen: number): number => Math.round(x * 10 ** stell
 /** start level of a track on a Baukasten instrument graph (dB): graphs are far louder than the RB-338, which stays at 0 dB */
 export const GRAPH_FADER_DB = -6;
 
+/** soft start of an imported melodic RB-338 part (plain values): low cutoff, no resonance, little envelope and accent */
+export const RB_WEICH_PLAIN = { cutoff: 500, resonanz: 0, env_mod: 0.1, accent: 0.2 };
+const rbWeich = (): Record<string, unknown> => ({
+  art: 'intern', name: 'rb338',
+  parameter: Object.fromEntries(Object.entries(RB_WEICH_PLAIN).map(([k, v]) => [k, rbNorm(k, v)])),
+});
+
 // Baukasten graph per GM program family for the `poly` profile; used only when the graph exists on the instance
 const FAMILIE_GRAPH: readonly (string | ((p: number) => string))[] = [
   'saite-klavier', 'fm-glocke', 'juno-pad', 'saite-gitarre', 'fm-bass',                       // piano, chromatic percussion, organ, guitar, bass
@@ -68,6 +76,9 @@ export const graphFuerProgramm = (p: number | null): string => {
   const f = FAMILIE_GRAPH[p >> 3] ?? 'juno-pad';
   return typeof f === 'function' ? f(p) : f;
 };
+
+/** GM programs of the orchestral families: strings, ensemble, brass, reed, pipe (40..79) and synth pad (88..95) */
+export const orchesterProgramm = (p: number | null): boolean => p !== null && ((p >= 40 && p <= 79) || (p >= 88 && p <= 95));
 
 /** the highest number of notes sounding at once in a part */
 export function polyphonie(t: SmfTeil): number {
@@ -86,7 +97,7 @@ function wunschZuGeraet(w: GeraetWunsch, schluessel: string): Record<string, unk
     throw new MidiImportFehler(400, 'argument_ungueltig', `zuordnung[${schluessel}]: a device word, null or a geraet object expected`);
   }
   const s = w.trim();
-  if (s === 'rb338') return { art: 'intern', name: 'rb338' };
+  if (s === 'rb338') return rbWeich();
   if (s === 'keins' || s === 'none') return null;
   let m = /^kit:([a-z0-9_-]{1,32})$/.exec(s);
   if (m) return { art: 'intern', name: 'kit', kit: m[1] };
@@ -174,12 +185,16 @@ export function planeImport(d: SmfDatei, projekt: Projekt | null, eingabe: Impor
   }
   const takt0 = d.taktarten[0] ? ([d.taktarten[0].zaehler, d.taktarten[0].nenner] as [number, number]) : null;
   const taktWechsel = d.taktarten.filter((t) => takt0 && (t.zaehler !== takt0[0] || t.nenner !== takt0[1])).length;
-  const abweichend = (takt0 !== null && (takt0[0] !== 4 || takt0[1] !== 4)) || taktWechsel > 0;
+  // An empty project takes the first meter of the file when it is n/4 (plan production, Task 14); otherwise the project meter stays.
+  const nimmtTaktart = leer && takt0 !== null && taktartOk(takt0);
+  const projektTakt: [number, number] = nimmtTaktart ? [takt0![0], takt0![1]] : projekt?.taktart ?? [4, 4];
+  const abweichend = takt0 !== null && !nimmtTaktart && (takt0[0] !== projektTakt[0] || takt0[1] !== projektTakt[1]) || taktWechsel > 0;
   if (abweichend) {
     hinweise.push({ code: 'midi_taktart',
       text: `the file is in ${takt0 ? `${takt0[0]}/${takt0[1]}` : '?'}`
         + `${taktWechsel ? ` with ${taktWechsel} later change${taktWechsel === 1 ? '' : 's'}` : ''}; `
-        + 'projects are 4/4 only, so the beat positions are kept and the bar lines will not line up with the source bars' });
+        + `the project meter is ${projektTakt[0]}/${projektTakt[1]} (one per project, n/4 only), so the beat positions are kept`
+        + ' and the bar lines will not line up with the source bars' });
   }
 
   // --- limits ---
@@ -205,7 +220,8 @@ export function planeImport(d: SmfDatei, projekt: Projekt | null, eingabe: Impor
   let bkFrei = MAX_BK_SPUREN - bkVorhanden;
   const polyAuto = new Set<string>();
   if (eingabe.profil === 'poly') {
-    const kandidaten = gewaehlt.filter((t) => t.kanal !== 9 && eingabe.zuordnung?.[teilSchluessel(t)] === undefined && polyphonie(t) >= 2)
+    const kandidaten = gewaehlt.filter((t) => t.kanal !== 9 && eingabe.zuordnung?.[teilSchluessel(t)] === undefined
+      && (polyphonie(t) >= 2 || orchesterProgramm(t.programm)))
       .sort((a, b) => polyphonie(b) - polyphonie(a) || b.noten.length - a.noten.length);
     for (const t of kandidaten) {
       if (bkFrei <= 0) break;
@@ -217,6 +233,9 @@ export function planeImport(d: SmfDatei, projekt: Projekt | null, eingabe: Impor
 
   // --- the commands ---
   const befehle: unknown[] = [];
+  if (nimmtTaktart && (projekt === null || projekt.taktart[0] !== takt0![0] || projekt.taktart[1] !== takt0![1])) {
+    befehle.push({ befehl: 'taktart_setzen', taktart: takt0 });
+  }
   if (gesetzt !== null) befehle.push({ befehl: 'tempo_setzen', bpm: gesetzt });
   const simulation = projekt ? structuredClone(projekt) : null;     // spur_neu takes its id from neueId; predicting it needs the same counter
   const spuren: BerichtSpur[] = [];
@@ -242,7 +261,7 @@ export function planeImport(d: SmfDatei, projekt: Projekt | null, eingabe: Impor
       } else { geraet = null; h.push({ code: 'midi_kein_gm_kit',
         text: 'no GM drum kit is available (the kit folder holds neither "gm" nor "techno"); the drum track has no sound until you assign a kit' }); }
     } else if (polyAuto.has(k)) geraet = { art: 'intern', name: 'bk', graph: graphFuerProgramm(t.programm), parameter: {} };
-    else geraet = { art: 'intern', name: 'rb338' };
+    else geraet = rbWeich();
     // the GM kit may still be built by the import
     if (geraet?.art === 'intern' && geraet.name === 'kit' && ctx.kitDa && geraet.kit !== ctx.gmKit?.name && !ctx.kitDa(String(geraet.kit))) {
       h.push({ code: 'midi_kit_unbekannt', text: `kit ${geraet.kit} is not in the kit folder; the track gets no sound` }); geraet = null;
@@ -314,7 +333,7 @@ export function planeImport(d: SmfDatei, projekt: Projekt | null, eingabe: Impor
         laenge_beats: runde(endeNoten / tpq, 3), dauer_s: dauerSekunden(d, endeNoten) },
       tempo: { quelle_bpm: quelleBpm, gesetzt_bpm: gesetzt, aenderungen: wiederholt.length,
         aenderungen_liste: wiederholt.slice(0, 5).map((t) => ({ beat: runde(t.tick / tpq, 3), bpm: runde(t.bpm, 2) })) },
-      taktart: { quelle: takt0, projekt: [4, 4], abweichend, wechsel: taktWechsel },
+      taktart: { quelle: takt0, projekt: projektTakt, abweichend, wechsel: taktWechsel },
       spuren, nicht_angelegt: nichtAngelegt,
       summe: { spuren: spuren.length, clips: spuren.length, noten: notenNeu, ohne_klang: ohneKlang },
       ignoriert: d.ignoriert, hinweise, anlegbar, ...(grund ? { grund, grund_text: grundText } : {}),

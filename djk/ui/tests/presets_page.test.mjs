@@ -122,8 +122,8 @@ test('panel html escapes names and shows edit buttons only for user presets', ()
 async function stapel(t) {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'presets-s-'));
   const werk = path.join(d, 'werk'), nutzer = path.join(d, 'nutzer');
-  fs.mkdirSync(path.join(werk, 'komp'), { recursive: true });
-  fs.copyFileSync(path.join(import.meta.dirname, 'fixtures', 'presets', 'gueltig.json'), path.join(werk, 'komp', 'test-glue.preset.json'));
+  fs.mkdirSync(path.join(werk, 'comp'), { recursive: true });
+  fs.copyFileSync(path.join(import.meta.dirname, 'fixtures', 'presets', 'gueltig.json'), path.join(werk, 'comp', 'test-glue.preset.json'));
   const router = new Router();
   router.melde(presetsBereich({ log: () => {}, quelle: () => 'andreas' }, { werk, nutzer }));
   let port = 0;
@@ -514,8 +514,8 @@ import { fuehreListeAus } from '../project/commands.ts';
 async function stapelMitProjekt(t, projekt) {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'presets-u7-'));
   const werk = path.join(d, 'werk'), nutzer = path.join(d, 'nutzer');
-  fs.mkdirSync(path.join(werk, 'komp'), { recursive: true });
-  fs.copyFileSync(path.join(import.meta.dirname, 'fixtures', 'presets', 'gueltig.json'), path.join(werk, 'komp', 'test-glue.preset.json'));
+  fs.mkdirSync(path.join(werk, 'comp'), { recursive: true });
+  fs.copyFileSync(path.join(import.meta.dirname, 'fixtures', 'presets', 'gueltig.json'), path.join(werk, 'comp', 'test-glue.preset.json'));
   const router = new Router();
   router.melde(presetsBereich({ log: () => {}, quelle: () => 'andreas' }, { werk, nutzer, projekt: () => projekt }));
   let port = 0;

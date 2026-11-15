@@ -83,13 +83,14 @@ test('CSS: the mode rules come after the PRODUCTION library block, with !importa
 test('DEVICES list: two groups from GET /presets/katalog; disabled entries are greyed with their reason (a drop shows it, T6.5)', () => {
   const h = geraeteHtml(KATALOG);
   assert.match(h, /INSTRUMENTS[\s\S]*RB-338[\s\S]*Surge[\s\S]*juno-pad[\s\S]*EFFECTS[\s\S]*Compressor[\s\S]*EQ[\s\S]*Saett[\s\S]*Hall/);
-  assert.equal((h.match(/draggable="true"/g) ?? []).length, 7);
+  assert.equal((h.match(/draggable="true"/g) ?? []).length, 8, 'RB-338, Surge, juno-pad, Compressor, EQ, Saett, Hall and the effect graph fx');
   // integration with 1.10 slice 4b: eq and saett are active kinds (INSERT_ARTEN_AKTIV), only the return hall stays greyed
   assert.equal((h.match(/class="geraete-zeile aus"/g) ?? []).length, 1, 'only Hall greyed');
   assert.doesNotMatch(h, /data-geraet-i="5"[^>]*class="[^"]*aus[^"]*"/, 'EQ is draggable');
   assert.doesNotMatch(h, /comes with slice 4b/);
   assert.match(h, /title="the return hall lives on returns"/);
-  assert.doesNotMatch(h, /fx<\/|>fx</, 'effect graphs are not instruments');
+  assert.doesNotMatch(h.split('<h4>EFFECTS</h4>')[0], /fx<\/|>fx</, 'effect graphs are not instruments');
+  assert.match(h.split('<h4>EFFECTS</h4>')[1], /Hall[\s\S]*>fx</, 'an effect graph is listed under EFFECTS (a bk stage)');
   assert.match(geraeteHtml(null), /Loading/);
   assert.match(geraeteHtml({ instrumente: [{ geraet: 'bk', titel: '<b>', ziel: 'spur_neu', graph: 'x' }], effekte: [] }), /&lt;b&gt;/);
 });
@@ -115,6 +116,8 @@ test('drop builders: instrument → spur_neu (rb338 as NEU, surge slot 1, bk gra
   // eq and saett became active kinds with 1.10 slice 4b: a stage at the end of the chain, like the compressor
   assert.deepEqual(effektBefehl(p, 's1', geraetNutzlast(E('eq'))), { label: 'Add EQ to Drums', befehl: { befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'eq' } });
   assert.equal(effektBefehl(p, 's1', geraetNutzlast(E('saett'))).befehl.art, 'saett');
+  // an effect graph drops as a bk stage with its graph
+  assert.deepEqual(effektBefehl(p, 's1', geraetNutzlast(E('bk', { graph: 'fx' }))), { label: 'Add fx to Drums', befehl: { befehl: 'insert_setzen', strang_id: 's1', pos: 0, art: 'bk', graph: 'fx' } });
   assert.equal(effektBefehl(p, 's1', geraetNutzlast(E('hall'))).text, 'the return hall lives on returns');
   assert.equal(effektBefehl(p, 'x9', geraetNutzlast(E('komp'))).fehler, 'keine_spur');
   // the commands run on the project

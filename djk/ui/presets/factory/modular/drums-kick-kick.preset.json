@@ -1,0 +1,39 @@
+{
+ "schema": 1,
+ "name": "Kick",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "drums-kick",
+ "werte": {
+  "knob1": 0.5,
+  "knob2": 0.5,
+  "knob3": 0.5,
+  "knob4": 0.5,
+  "knob5": 0.5,
+  "knob6": 0.5,
+  "knob7": 0.5
+ },
+ "beschreibung": {
+  "art": "drums",
+  "unterart": "kick",
+  "charakter": [
+   "punchy",
+   "tight",
+   "deep",
+   "clean",
+   "thick"
+  ],
+  "genre": [],
+  "einsatz": [
+   "drop"
+  ],
+  "energie": 5,
+  "text": "Punchy kick: a sine with a fast exponential pitch drop, short body, noise click, saturation and compression."
+ },
+ "tags": [
+  "drums-kick"
+ ],
+ "notiz": "Source rule: recipe card `drums.kick`, Snoman [B3] p. 440–441. Measured by `tests/rezepte.rs`, not yet heard. Manifest character words outside the vocabulary: sub (as deep), boomy (as thick). Manifest use words outside the vocabulary: groove (as drop).",
+ "angelegt": "2026-11-15T00:00:00.000Z",
+ "geaendert": "2026-11-15T00:00:00.000Z"
+}

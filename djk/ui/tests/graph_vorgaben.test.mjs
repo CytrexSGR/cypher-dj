@@ -1,6 +1,6 @@
 // Graph defaults on every load path (plan 2026-11-11-synth-ausbau, task 8). A knob a graph defines starts at the graph's `vorgabe` (0.5 without one), whichever way
 // the graph arrives: project open (fill), preset apply (absent knobs), POST /graph (a batch of rows BEFORE the load message, only for a changed name), the
-// project restore (saved rows first, no push after the load), Cypher's hand load. 54 shipped graphs plus a fixture graph with `vorgabe` values.
+// project restore (saved rows first, no push after the load), Cypher's hand load. 55 shipped graphs, 46 recipe graphs plus a fixture graph with `vorgabe` values.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -18,14 +18,14 @@ import { vorgaben as panelVorgaben } from '../public/panel.js';
 belegeTestInstanz();
 const HIER = path.dirname(fileURLToPath(import.meta.url));
 const BK = path.resolve(HIER, '..', '..', 'instruments', 'modular_dsp');
-const WERK = path.resolve(HIER, '..', 'presets', 'werk', 'baukasten');
+const WERK = path.resolve(HIER, '..', 'presets', 'factory', 'modular');
 const KATEGORIEN = JSON.parse(fs.readFileSync(path.join(BK, 'kategorien.json'), 'utf8'));
 const NAMEN = Object.keys(KATEGORIEN);
 const hol = (u, o = {}) => fetch(u, { ...o, headers: { connection: 'close', ...(o.headers ?? {}) } });
 const warte = (ms) => new Promise((r) => setTimeout(r, ms));
 const bis = async (f, ms = 3000) => { for (let i = 0; i < ms / 20 && !(await f()); i++) await warte(20); return f(); };
 
-// ---- the graph folder of this file: the 54 shipped graphs and fixtures ----
+// ---- the graph folder of this file: the 55 shipped graphs, the 46 recipe graphs and fixtures ----
 const FIX_INST = { format: 'baukasten/2', name: 'fix-inst', stimmen: 1, regler_namen: { 1: 'A', 2: 'B', 40: 'C', 64: 'D' },
   knoten: [{ id: 'n', art: 'note' }, { id: 'o', art: 'ausgang' },
     { id: 'k1', art: 'regler', nr: 1, min: 0, max: 1, vorgabe: 0.2 }, { id: 'k2', art: 'regler', nr: 2, min: 0, max: 1 },
@@ -34,7 +34,8 @@ const FIX_INST = { format: 'baukasten/2', name: 'fix-inst', stimmen: 1, regler_n
 const FIX_INST2 = { ...FIX_INST, name: 'fix-inst2', regler_namen: { 3: 'E' }, knoten: [{ id: 'n', art: 'note' }, { id: 'o', art: 'ausgang' }, { id: 'k3', art: 'regler', nr: 3, min: 0, max: 1, vorgabe: 0.6 }] };
 const FIX_EFF = { format: 'baukasten/2', name: 'fix-eff', stimmen: 1, regler_namen: { 1: 'A' }, knoten: [{ id: 'e', art: 'eingang' }, { id: 'o', art: 'ausgang' }, { id: 'k1', art: 'regler', nr: 1, min: 0, max: 1, vorgabe: 0.35 }], kanten: [] };
 const ORDNER = fs.mkdtempSync(path.join(os.tmpdir(), 'bkvg-'));
-for (const n of NAMEN) fs.copyFileSync(path.join(BK, 'demos', `${n}.json`), path.join(ORDNER, `${n}.json`));
+// as djk-start installs them: the demo graphs and the recipe graphs (demos/recipes/) side by side under their own names
+for (const n of NAMEN) fs.copyFileSync(path.join(BK, 'demos', fs.existsSync(path.join(BK, 'demos', `${n}.json`)) ? '' : 'recipes', `${n}.json`), path.join(ORDNER, `${n}.json`));
 for (const g of [FIX_INST, FIX_INST2, FIX_EFF]) fs.writeFileSync(path.join(ORDNER, `${g.name}.json`), JSON.stringify(g));
 fs.mkdirSync(path.join(ORDNER, 'samples'), { recursive: true });
 process.env.CYPHERDJ_BK_ORDNER = ORDNER;   // vorgabenVon, findeGraph and the preset plan read this folder
@@ -54,10 +55,10 @@ function erwartet(name) {
 }
 const art = (name) => (JSON.parse(fs.readFileSync(path.join(ORDNER, `${name}.json`), 'utf8')).knoten.some((k) => k.art === 'eingang') ? 'effekt' : 'instrument');
 
-test('the walk covers 54 shipped graphs and the three fixtures', () => {
-  assert.equal(NAMEN.length, 54);
+test('the walk covers 55 shipped graphs, the 46 recipe graphs and the four fixtures', () => {
+  assert.equal(NAMEN.length, 101);
   assert.equal(BK_REGLER_ZAHL, 64);
-  assert.equal(listeGraphen(ORDNER).graphen.length, 58);
+  assert.equal(listeGraphen(ORDNER).graphen.length, 105);
 });
 
 // ---- (h) Drift ----

@@ -240,6 +240,12 @@ bool Netz::loop_ereignis(const Ereignis& e) {
 #endif  // error case: the event is dropped as before the route existed
     return true;
   }
+  if (e.art == Ereignis::STUFE_PEGEL) {  // device faces T9, §5.5g /e/stufe_pegel ,sff: pfad = ins/komp/<n>, ins/lim/<n> or komp/<channel>, input and output peak in dBFS (-200 for none)
+    osc::Schreiber s(v::e_stufe_pegel);
+    s.s(e.pfad).f(e.pegel[0]).f(e.pegel[1]);
+    an_alle(s);
+    return true;
+  }
   if (e.art == Ereignis::BOX) {  // Keylock 7b.3, §5.5b /zustand/box ,iiiiii (7c.3: kein_platz)
     osc::Schreiber s(v::zustand_box);
     s.i(e.deck).i(e.status).i(e.keylock_unterlauf).i(e.keylock_aufgegeben).i(e.keylock_ring_voll).i(e.keylock_kein_platz);

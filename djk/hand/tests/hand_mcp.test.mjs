@@ -149,6 +149,15 @@ test('djk-hand loop_klang: POST /loop aktion kit mit name und klang', async (t) 
   assert.match(w.description, /may cut sounding voices/);
 });
 
+test('djk-hand lage tool text names decks 1 to 4', async (t) => {
+  const { c } = await aufbau(t, () => null);
+  const w = (await c.listTools()).tools.find((x) => x.name === 'lage');
+  assert.doesNotMatch(w.description, /both decks/);
+  assert.doesNotMatch(w.description, /deck 1-2/);
+  assert.match(w.description, /decks 1-4/);
+  assert.match(w.description, /deck 1-4, pad\/1-2/);
+});
+
 test('djk-hand stille: Negativ-Kontrolle, alle drei Ströme 200 → kein Fehler, drei POSTs', async (t) => {
   const { c, gesehen } = await aufbau(t, (m, u) => (u === '/strudel' ? [200, { ok: true, code: 'silence', j: 1 }] : null));
   const ok = await c.callTool({ name: 'stille', arguments: {} });
@@ -2022,7 +2031,7 @@ test('djk-hand proj_midi_import (MIDI import): the preview posts vorschau withou
   assert.equal(e.isError, true); assert.match(e.content[0].text, /midi_zu_viele_spuren/); assert.match(e.content[0].text, /33 tracks needed/);
   assert.equal(gesehen.at(-1).koerper.rev, 3);
   const w = (await c.listTools()).tools.find((x) => x.name === 'proj_midi_import');
-  for (const wort of ['ONE undo step', 'midi_zu_viele_spuren', 'RB-338', 'ONE note at a time', 'taktart', 'zuordnung', 'vorschau', '4/4']) assert.ok(w.description.includes(wort), `description names ${wort}`);
+  for (const wort of ['ONE undo step', 'midi_zu_viele_spuren', 'RB-338', 'ONE note at a time', 'taktart', 'zuordnung', 'vorschau', 'n/4']) assert.ok(w.description.includes(wort), `description names ${wort}`);
   assert.deepEqual(w.inputSchema.required, ['pfad']);
 });
 

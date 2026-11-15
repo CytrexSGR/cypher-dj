@@ -407,7 +407,8 @@ test('A8 the page builds a Gate and a Utility strip for each of the FX_KANAELE c
   } finally { globalThis.fetch = echt; }
   assert.deepEqual(gesendet, [], 'building the strips sends nothing');
   // the page wires the strips into the same loop that builds the compressor strips, and sends through the shared helper
-  assert.match(APP, /\+ werkzeugStreifenHtml\(k, name\)/);
+  assert.match(APP, /werkzeugStreifenHtml\(k, name, \['gate'\]\)/);   // Task 5: gate and util sit in their own sections of the chain
+  assert.match(APP, /werkzeugStreifenHtml\(k, name, \['util'\]\)/);
   assert.match(APP, /setzeWerkzeug\(fetch, /);
   assert.ok(!/gate\/an.*FX_KANAELE|FX_KANAELE.*deck\/3/.test(APP), 'no channel outside FX_KANAELE is added by hand');
   // negative control: a harmless name goes through, a hostile one is escaped

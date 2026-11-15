@@ -4,10 +4,11 @@
 //                              block by block, bit for bit.
 //   2 plan_klebrig:            the lane of every track stays over 100 blocks and over a swap that only changes a parameter; adding or
 //                              removing a track changes the lists, the other tracks keep their lane.
-//   3 plan_verteilung:         24 RB tracks on 4 lanes: 6 per lane; every track exactly once in the lanes and the remainder; bk and host
-//                              only in the remainder.
+//   3 plan_verteilung:         24 RB tracks and a bk track on 4 lanes: the bk track joins lane 0 once its instance plays (the first block runs it in
+//                              the remainder: no instance in use yet); every track exactly once in the lanes and the remainder; only the host track
+//                              stays in the remainder.
 //   4 plan_uebergang:          (a) a device change puts the track in the remainder for that block, the flag rebuilds the plan after the
-//                              block and the track is in a lane list again (bk -> rb338); (b) a block with a fading sink (n_weg_ > 0) runs
+//                              block and the track is in a lane list again (bk -> rb338, and rb338 -> bk once its instance plays); (b) a block with a fading sink (n_weg_ > 0) runs
 //                              serial and rebuilds afterwards; (c) a parameter-only swap leaves every RB track in a lane list (the
 //                              regression of a "zuletzt_ non-empty" predicate).
 //   5 plan_setter:            setze_spur_bahnen / setze_hall_pool / setze_senke_intern / setze_senke_wirt after the load drop the plan-valid
@@ -210,16 +211,16 @@ void fall3() {
     }
     const cdj::ArrSpurPlan& p = w.t.arr.spur_plan();
     PRUEF(p.bahnen() == 4);
-    for (int b = 0; b < 4; ++b) PRUEF(p.n(b) == 6);
     int vorkommen[cdj::ARR_SPUREN] = {};
     for (int b = 0; b < 4; ++b)
       for (int k = 0; k < p.n(b); ++k) ++vorkommen[p.spur(b, k)];
     for (int k = 0; k < p.n_rest(); ++k) ++vorkommen[p.rest(k)];
     for (int i = 0; i < 26; ++i) PRUEF(vorkommen[i] == 1);
     for (int i = 26; i < cdj::ARR_SPUREN; ++i) PRUEF(vorkommen[i] == 0);
-    PRUEF(p.n_rest() == 2 && im_rest(p, 24) && im_rest(p, 25));
+    PRUEF(p.n_rest() == 1 && im_rest(p, 25));   // the host track only
     const std::vector<int> v = bahnen_von(p);
-    PRUEF(v[24] == -1 && v[25] == -1);
+    PRUEF(v[24] == 0 && v[25] == -1);           // the bk track plays its instance since block 0 (the first block ran it in the remainder): lane 0 (all lanes held 6)
+    PRUEF(p.n(0) == 7 && p.n(1) == 6 && p.n(2) == 6 && p.n(3) == 6);
   }
   cypher_bk_frei(h);
   std::printf("case 3 plan_verteilung done\n");
@@ -259,7 +260,7 @@ void fall4() {
     lauf(6);
     {
       const cdj::ArrSpurPlan& p = w.t.arr.spur_plan();
-      PRUEF(im_rest(p, 1));                        // bk
+      PRUEF(p.in_liste(1));                        // bk with an instance in use (its first block ran in the remainder)
       PRUEF(p.in_liste(0) && p.in_liste(2) && p.in_liste(3));
     }
     // (a) track 0: rb338 -> bk, track 1: bk -> rb338, in one swap
@@ -275,13 +276,13 @@ void fall4() {
     lauf(1);
     PRUEF(w.t.arr.spur_plan_gueltig());
     PRUEF(w.t.arr.spur_plan().in_liste(1));        // back in a lane list
-    PRUEF(im_rest(w.t.arr.spur_plan(), 0));        // track 0 plays bk now: stays serial
+    PRUEF(w.t.arr.spur_plan().in_liste(0));        // track 0 plays bk now: a lane unit as soon as its instance is in use
     // (c) a parameter-only swap: every RB track stays in a lane list
     w.laden(drei(3, 3, true, false), static_cast<int64_t>(b) * M);
     {
       const cdj::ArrSpurPlan& p = w.t.arr.spur_plan();
       PRUEF(p.in_liste(1) && p.in_liste(2) && p.in_liste(3));
-      PRUEF(im_rest(p, 0));
+      PRUEF(p.in_liste(0));                        // bk: same instance, other knobs: no swap
     }
     lauf(3);
     {

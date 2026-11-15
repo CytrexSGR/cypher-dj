@@ -1,0 +1,35 @@
+{
+ "schema": 1,
+ "name": "Conga",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "percussion-conga",
+ "werte": {
+  "knob1": 0.5,
+  "knob2": 0.5,
+  "knob3": 0.5,
+  "knob4": 0.5
+ },
+ "beschreibung": {
+  "art": "percussion",
+  "unterart": "conga",
+  "charakter": [
+   "punchy",
+   "warm",
+   "tight",
+   "dark"
+  ],
+  "genre": [],
+  "einsatz": [
+   "drop"
+  ],
+  "energie": 3,
+  "text": "Conga: two squares a ninth apart with a quick filter slap and a 150 ms decay, short room and compressor."
+ },
+ "tags": [
+  "percussion-conga"
+ ],
+ "notiz": "Source rule: recipe card `percussion.conga`, Welsh [B1] p. 82, patch Conga, table transcribed; single-membrane acoustics: Reid [B2] part 31. Measured by `tests/rezepte.rs`, not yet heard. Manifest character words outside the vocabulary: boxy (as dark). Manifest use words outside the vocabulary: groove (as drop).",
+ "angelegt": "2026-11-15T00:00:00.000Z",
+ "geaendert": "2026-11-15T00:00:00.000Z"
+}

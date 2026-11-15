@@ -1,0 +1,38 @@
+{
+ "schema": 1,
+ "name": "Wobble",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "bass-wobble",
+ "werte": {
+  "knob1": 0.5,
+  "knob2": 0.5,
+  "knob3": 0.5,
+  "knob4": 0.5,
+  "knob5": 0.5,
+  "knob6": 0.5
+ },
+ "beschreibung": {
+  "art": "bass",
+  "unterart": "wobble",
+  "charakter": [
+   "thick",
+   "dirty",
+   "aggressive",
+   "punchy",
+   "evolving"
+  ],
+  "genre": [],
+  "einsatz": [
+   "drop"
+  ],
+  "energie": 5,
+  "text": "Dubstep wobble: detuned saws under a resonant ladder swept by a tempo-synced LFO, with a clean sine sub."
+ },
+ "tags": [
+  "bass-wobble"
+ ],
+ "notiz": "Source rule: recipe card `bass.wobble`, KAN Samples [W], “[quote omitted]”, 22 May 2026. Measured by `tests/rezepte.rs`, not yet heard.",
+ "angelegt": "2026-11-15T00:00:00.000Z",
+ "geaendert": "2026-11-15T00:00:00.000Z"
+}

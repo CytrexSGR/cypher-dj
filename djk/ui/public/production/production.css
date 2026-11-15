@@ -214,7 +214,7 @@ body.produktion .preset-kopf select { max-width: 14ch; }
 .p-recstatus { font-size: 11px; color: var(--dim); min-width: 14ch; }
 .p-aufnahme { gap: 4px; }   /* 1.8 T5: count-in, punch, overdub */
 .p-aufnahme label { font-size: 11px; color: var(--dim); }
-.p-aufnahme .p-takt { width: 4ch; text-align: center; }
+.p-takt { width: 4ch; text-align: center; }
 .p-aufnahme button.an { background: #e5484d; color: #0e0f12; border-color: #e5484d; }
 
 /* 1.10 Slice 1: Gruppen und Master unter dem Arrangement (P1) */
@@ -469,3 +469,9 @@ body.produktion.bereich-instrumente #kollektionen, body.produktion.bereich-instr
 .p-mixer.p-zu > :not(.p-mixer-kopf) { display: none; }
 .p-detail.p-zu > :not(.p-detail-kopf) { display: none; }
 body.produktion #produktion:has(> .p-detail.p-zu) { --detail: auto; }
+.p-ins-popover.p-geraet-plugin { position: fixed; z-index: 1000; right: 16px; bottom: 16px; left: auto; margin: 0; display: block; width: min(760px, calc(100vw - 32px)); max-height: 70vh; overflow: auto; }
+.p-geraet-zu { float: right; margin-left: 6px; }
+
+/* edit tools: the EDIT group in the head row, grey buttons stay readable */
+.p-edit { gap: 3px; }
+.p-edit button[aria-disabled="true"] { cursor: default; }

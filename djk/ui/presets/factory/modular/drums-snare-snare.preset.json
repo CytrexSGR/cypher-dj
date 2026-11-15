@@ -1,0 +1,37 @@
+{
+ "schema": 1,
+ "name": "Snare",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "drums-snare",
+ "werte": {
+  "knob1": 0.5,
+  "knob2": 0.5,
+  "knob3": 0.5,
+  "knob4": 0.5,
+  "knob5": 0.5
+ },
+ "beschreibung": {
+  "art": "drums",
+  "unterart": "snare",
+  "charakter": [
+   "punchy",
+   "bright",
+   "tight",
+   "aggressive",
+   "thick"
+  ],
+  "genre": [],
+  "einsatz": [
+   "drop"
+  ],
+  "energie": 5,
+  "text": "Snare: noise-dominated rattle with a short triangle body and a small pitch drop, light saturation, room and compressor."
+ },
+ "tags": [
+  "drums-snare"
+ ],
+ "notiz": "Source rule: recipe card `drums.snare`, Welsh [B1] p. 89, patch Snare Drum, table transcribed; layering practice: Snoman [B3] p. 441. Measured by `tests/rezepte.rs`, not yet heard. Manifest character words outside the vocabulary: harsh (as aggressive). Manifest use words outside the vocabulary: groove (as drop).",
+ "angelegt": "2026-11-15T00:00:00.000Z",
+ "geaendert": "2026-11-15T00:00:00.000Z"
+}

@@ -17,6 +17,7 @@ import { baueParameterListe } from './plugin_parameter.js';
 import { SC_EIGEN, schluesselGruppen, schluesselBefehl, schluesselWert, schluesselLabel, duckBefehl, duckKicks } from './key_choice.js';
 import { geraetName } from './rack_device.js';
 import { baueFrontplatte } from '../panel.js';
+import { bindeInsertFace } from './insert_face.js';
 
 export const MAX_PLAETZE = 5;      // equal to project/model.ts MAX_INSERTS_PRO_STRANG, checked by tests/production_inserts.test.mjs
 export const MAX_KOMP = 12;        // equal to MAX_INS_KOMP
@@ -203,22 +204,38 @@ export function verschoben(ids, von, schritt) {
 // A reading counts for 500 ms (the same rule as the meters of the mix tools in effects.js), then the stage shows "-". stand: {slot: {db, t}}.
 export const INS_GR_FRIST_MS = 500;
 export function insGrAufnehmen(stand, f, jetzt) {
-  const m = /^ins\/komp\/([0-9]+)$/.exec(typeof f?.kanal === 'string' ? f.kanal : '');
-  const n = m ? Number(m[1]) : 0;
+  const m = /^ins\/(komp|lim)\/([0-9]+)$/.exec(typeof f?.kanal === 'string' ? f.kanal : '');
+  const n = m ? Number(m[2]) : 0;
   const w = f?.gr_db;
-  if (n < 1 || n > MAX_KOMP || typeof w !== 'number' || !Number.isFinite(w)) return false;
-  stand[n] = { db: Math.max(0, w), t: jetzt };
+  if (n < 1 || n > (m?.[1] === 'lim' ? MAX_LIM : MAX_KOMP) || typeof w !== 'number' || !Number.isFinite(w)) return false;
+  stand[m[1] === 'lim' ? `lim${n}` : n] = { db: Math.max(0, w), t: jetzt };   // T8: the limiter stages report on ins/lim/<n>, stored as `lim<n>` (the compressor keeps its plain number)
   return true;
 }
 export function insGrLesung(stand, slot, jetzt) {
   const g = stand?.[slot];
   return g && jetzt - g.t < INS_GR_FRIST_MS ? g.db : null;
 }
+/** The reading of a stage of kind `art` ('komp' or 'lim') and slot, or null (the 500 ms rule). */
+export const insGrLesungArt = (stand, art, slot, jetzt) => insGrLesung(stand, art === 'lim' ? `lim${slot}` : slot, jetzt);
 // milliseconds until the next fresh reading expires, or null when none is fresh (the page schedules its reset with it)
 export function insGrAblaufIn(stand, jetzt) {
   let m = null;
   for (const g of Object.values(stand ?? {})) if (jetzt - g.t < INS_GR_FRIST_MS) m = m === null ? g.t + INS_GR_FRIST_MS - jetzt : Math.min(m, g.t + INS_GR_FRIST_MS - jetzt);
   return m;
+}
+// ---- the input and output level readings (pure; device faces T9) ----------------------------------------------------------------------------------
+// /e/stufe_pegel ,sff (kanal `ins/komp/<n>` or `ins/lim/<n>`, ein_db, aus_db: peak in dBFS since the previous report, -200 for silence) comes at 20 Hz for every compressor or limiter stage
+// that computed in the last block. The same 500 ms freshness rule as the gain reduction. stand: {kanal: {ein, aus, t}}. The channel compressor's reports (`komp/<channel>`) are refused here.
+export function insPegelAufnehmen(stand, f, jetzt) {
+  const m = /^ins\/(komp|lim)\/([0-9]+)$/.exec(typeof f?.kanal === 'string' ? f.kanal : '');
+  const n = m ? Number(m[2]) : 0;
+  if (n < 1 || n > (m?.[1] === 'lim' ? MAX_LIM : MAX_KOMP) || typeof f.ein_db !== 'number' || typeof f.aus_db !== 'number' || !Number.isFinite(f.ein_db) || !Number.isFinite(f.aus_db)) return false;
+  stand[f.kanal] = { ein: f.ein_db, aus: f.aus_db, t: jetzt };
+  return true;
+}
+export function insPegelLesung(stand, kanal, jetzt) {
+  const g = stand?.[kanal];
+  return g && jetzt - g.t < INS_GR_FRIST_MS ? { ein: g.ein, aus: g.aus } : null;
 }
 export const insGrText = (db) => (db === null ? '–' : `${db.toFixed(1)} dB`);
 export const insertLabels = (strang, nr, art = 'komp') => {
@@ -385,11 +402,13 @@ export function bindeInserts(ctx) {
   const rackOffen = new Set(); // the strips whose rack panel is open
   const greift = new Set();    // `${insert}:${param}` while the hand is on a slider
   const graphNamen = new Map(); // graph name -> regler_namen (GET /graphen): how many knob rows a bk popover shows
+  const graphLatenzen = {};     // graph name -> latency in samples (GET /graphen): counted in the strip latency (pdc.js)
+  let graphenGeholt = false;    // the list is fetched once for the latency line when a project uses a Baukasten graph
   const ladeGraphNamen = async () => {
     // a plain fetch: a missing list must neither throw nor change the connection state the project calls keep (holeGet does)
     let j = null;
     try { const r = await fetch('/graphen'); if (r.ok) j = await r.json(); } catch { /* no list: the popover shows k1..k8 */ }
-    for (const g of j?.graphen ?? []) if (g && typeof g.name === 'string') graphNamen.set(g.name, g.regler_namen);
+    for (const g of j?.graphen ?? []) if (g && typeof g.name === 'string') { graphNamen.set(g.name, g.regler_namen); if (Number.isFinite(g.latenz)) graphLatenzen[g.name] = g.latenz; }
   };
   const panelCache = new Map(); // graph name -> {panel, regler} or null (no panel / unreachable); a bk stage with a panel shows it instead of the K rows
   const panelHol = new Set();
@@ -412,8 +431,10 @@ export function bindeInserts(ctx) {
   let schluessel = '';
   const lage = new Map();      // insert id -> HostLage {status, latenz, gemessen, grund?, fenster?} of the plugin stages (polled while the project has any)
   let lageTimer = null;
-  const gr = {};               // {slot: {db, t}} the readings of /e/ins_gr (compressor slots only: the EQ and the saturator report none)
+  const pegel = {};            // {kanal: {ein, aus, t}} the readings of /e/stufe_pegel (compressor and limiter stages), read by the device faces
+  const gr = {};               // {slot: {db, t}} the readings of /e/ins_gr (compressor slots as numbers, limiter slots as `lim<n>`: the EQ and the saturator report none)
   let grTimer = null;
+  const faces = bindeInsertFace(ctx, () => gr, () => pegel);   // the device faces (insert_face.js): the opener below, the project listener and the head hooks live there
 
   // the gain reduction on every compressor stage: a fresh reading shows its dB, a stage that sent nothing for 500 ms goes back to "–"
   function zeigeGr() {
@@ -439,6 +460,7 @@ export function bindeInserts(ctx) {
       + `<button class="p-ins-name" aria-expanded="false"${host ? ` title="${hostName(i).replace(/"/g, '&quot;')}"` : ''}></button>`
       + (host ? '<span class="p-host-latenz"></span><button class="p-host-fenster" aria-label="Open plugin window" title="Open plugin window">UI</button>' : '')
       + (i.art === 'komp' ? '<span class="p-ins-gr" title="Gain reduction of this compressor right now">–</span>' : '')
+      + (faces.verfuegbar(i.art) ? '<button class="p-ins-face" title="Open the device face of this stage">FACE</button>' : '')
       + '<button class="p-ins-links" title="Move earlier in the chain">◀</button><button class="p-ins-rechts" title="Move later in the chain">▶</button>'
       + `<button class="p-ins-weg" title="Remove the ${A.name} (Undo brings it back)">✕</button>`;
     const q = (x) => el.querySelector(x);
@@ -453,6 +475,8 @@ export function bindeInserts(ctx) {
         if (r.j && typeof r.j.fenster === 'boolean') { lage.set(i.id, { ...(h ?? {}), fenster: r.j.fenster }); zeige(ctx.st.projekt); }
       });
     }
+    q('.p-ins-face')?.addEventListener('click', () => faces.oeffne(s, i));
+    q('.p-ins-face')?.setAttribute('aria-label', `Open the device face of ${A.name} ${pos + 1} on ${s.name}`);
     q('.p-ins-an').setAttribute('aria-label', L.an); q('.p-ins-name').setAttribute('aria-label', L.name);
     q('.p-ins-links').setAttribute('aria-label', L.links); q('.p-ins-rechts').setAttribute('aria-label', L.rechts); q('.p-ins-weg').setAttribute('aria-label', L.weg);
     q('.p-ins-an').addEventListener('click', () => ctx.aendereAus((pr) => {
@@ -762,6 +786,10 @@ export function bindeInserts(ctx) {
   function zeige(p, neuBauen = false) {
     block.hidden = !p;
     if (!p) { liste.textContent = ''; schluessel = ''; return; }
+    if (!graphenGeholt && [...(p.spuren ?? []), ...(p.gruppen ?? []), ...(p.returns ?? []), p.master].some((x) => x?.geraet?.name === 'bk' || (x?.inserts ?? []).some((i) => i.art === 'bk'))) {
+      graphenGeholt = true;
+      ladeGraphNamen().then(() => zeige(ctx.st.projekt, true));
+    }
     const str = straenge(p), f = Object.fromEntries(Object.keys(MAX_ART).map((a) => [a, frei(p, a)]));
     const ids = new Set(str.flatMap((s) => s.inserts.map((i) => i.id)));
     for (const id of [...offen]) if (!ids.has(id)) offen.delete(id);
@@ -769,8 +797,8 @@ export function bindeInserts(ctx) {
     // the header: the compressor count as in 4a, then the EQ, the saturator, the limiter and the utility; every full pool is said in words too (a tooltip does not exist on a phone)
     titel.textContent = `INSERTS (${anzahl(p, 'komp')}/${MAX_KOMP})` + ` · EQ ${anzahl(p, 'eq')}/${MAX_EQ} · Sat ${anzahl(p, 'saett')}/${MAX_SAETT}` + ` · Lim ${anzahl(p, 'lim')}/${MAX_LIM}` + ` · Util ${anzahl(p, 'utility')}/${MAX_UTIL}` + ` · Fx ${anzahl(p, 'bk')}/${MAX_BK}`
       + Object.keys(MAX_ART).filter((a) => f[a] <= 0).map((a) => ` · ${ARTEN[a].voll}`).join('')
-      + (latenzZeile(p, hostLatenzen([...lage.values()])) ? ` · ${latenzZeile(p, hostLatenzen([...lage.values()]))}` : '');
-    const pdc = pdcRechnen(p, hostLatenzen([...lage.values()]));
+      + (latenzZeile(p, hostLatenzen([...lage.values()]), graphLatenzen) ? ` · ${latenzZeile(p, hostLatenzen([...lage.values()]), graphLatenzen)}` : '');
+    const pdc = pdcRechnen(p, hostLatenzen([...lage.values()]), graphLatenzen);
     const neu = JSON.stringify([str.map((s) => [s.id, s.name, s.inserts.map((i) => [i.id, i.an]), s.rack ? [s.rack.slot, s.rack.namen, s.rack.makros, s.rack.variationen] : null, s.geraet?.art === 'rack' ? s.geraet.glieder : null]), f, [...offen].sort(), [...rackOffen].sort(), (p.spuren ?? []).map((s) => [s.nr, s.name]), (p.gruppen ?? []).map((g) => [g.nr, g.name]), (p.returns ?? []).map((r) => [r.nr, r.name]), pdc.streifen, pdc.gesamt]);
     if (neu !== schluessel || neuBauen) {
       schluessel = neu;
@@ -851,6 +879,7 @@ export function bindeInserts(ctx) {
   }
   ctx.beimMarken?.push(() => zeige(ctx.st.projekt));   // a preset mark arrived or changed (preset_marker.js)
   ctx.beimEreignis.push((a, f) => { if (a === '/e/ins_gr' && insGrAufnehmen(gr, f, performance.now())) zeigeGr(); });
+  ctx.beimEreignis.push((a, f) => { if (a === '/e/stufe_pegel') insPegelAufnehmen(pegel, f, performance.now()); });   // T9: no row shows it, only an open face reads the store
   // a project that has inserts opens the block; an empty one keeps it closed (the arrangement needs the height)
   ctx.beimProjekt.push((p, wechsel) => {
     if (wechsel && p) block.open = straenge(p).some((s) => s.inserts.length > 0);

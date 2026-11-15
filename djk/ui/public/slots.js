@@ -43,6 +43,9 @@ export function kanaele(layout, platz) {
   return [];
 }
 
+// LOAD needs a deck on a Track place: place N plays deck N (ADR 038), a SEQ place has no track deck.
+export const ladeDeckDa = (layout, deck) => layout[deck - 1] === 'track';
+
 // Page copy of kanalOffen (hand_operation.ts): open when trim plus fader is above -26 dB; an unknown fader counts -200, an unknown trim 0.
 // slots_paritaet.test.mjs runs both over the same table of values.
 export function kanalOffen(regler, k) {

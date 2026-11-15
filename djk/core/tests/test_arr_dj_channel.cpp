@@ -11,6 +11,7 @@
 // master tap), groups on 1, 2 and 5 each give their own pair; case 14 (kernel): a group on nr 3 is measured behind the strip of deck/1 and follows its fader, and a playing deck on deck/1 plus the group give
 // the sum of both; case 15 (kernel): the module groups of slot A and B and a group on every deck channel play together, each on its own strip.
 // case 16 (kernel): /pegel carries deck/N while a group leads into it on an empty deck, and nothing otherwise.
+// case 17 (kernel): the envelope ring (the ear behind /hoeren) carries the channel deck/N while a group leads into it on an empty deck, at the measuring tap before the fader, and nothing otherwise.
 // Mutation ARR_DJ_NUR_PAD (13, 14, 15: a nr above 2 falls to the master).
 // Case 5 (kernel, real mixer): the channel input sums the module with a source that is already there (a test click on pad/1), and the strip acts on the module (fader).
 // Mutations (CMakeLists.txt): ARR_DJ_INS_MASTER (1, 3: the DJ group is also in the master), ARR_DJ_OFFLINE_AUS (4, 10: the switch is ignored), ARR_DJ_NACH_STRIP (5: added behind the strip).
@@ -25,6 +26,7 @@
 #include "arr_build.h"
 #include "arr_run.h"
 #include "cypherdj/arr_playback.h"
+#include "cypherdj/hulls.h"
 #include "check.h"
 
 bool g_waechter = false;
@@ -197,8 +199,9 @@ struct Lauf6 {
   int pegel_n[KAN] = {};                   // /pegel events of the channel KANAL_PFAD[c] over the run
   float pegel_max[KAN] = {-1000, -1000, -1000, -1000, -1000, -1000};   // the largest value (dB) of those events
 };
-static Lauf6 kern_lauf6(const std::string& ab, const double (&fader)[KAN], const std::vector<int>& kan, bool deck = false) {
+static Lauf6 kern_lauf6(const std::string& ab, const double (&fader)[KAN], const std::vector<int>& kan, bool deck = false, cdj_huellen_kopf* huellen = nullptr) {
   arr35::Lauf x(ab, "test_arr_dj_kanal_kern6");
+  if (huellen) x.kern->verbinde_huellen(huellen);   // case 17: the envelope ring of the ear
   const int64_t FR = 400000;
   const std::string a = x.ordner.audio('a', FR, 0.25f);
   for (int c = 0; c < KAN; ++c) x.teil((std::string(KANAL_PFAD[c]) + "/fader").c_str(), static_cast<float>(fader[c]), 0.0, 0.0);
@@ -497,6 +500,35 @@ int main() {
     PRUEF(mit.pegel_n[3] == 0 && mit.pegel_n[4] == 0 && mit.pegel_n[5] == 0);   // the other deck channels are still silent without a deck
     PRUEF(ohne.pegel_n[2] == 0 && ohne.pegel_n[3] == 0);              // an unloaded deck without a group reports nothing, as before
     PRUEF(geladen.pegel_n[2] > 10);                                   // a loaded deck reports as before
+  }
+  {  // 17 the ear (envelope ring, /hoeren): a group on nr 4 plays on deck/2 while no track is loaded. The ring channel 1 (deck/2) carries it, behind a closed fader too (the tap sits before the fader);
+     // deck/1 stays silent, an unloaded deck without a group stays silent, and a loaded deck still fills its channel
+    k35::Arbeitsbestand ab("test_arr_dj_kanal_ab17");
+    k35::traeger(ab.pfad, "a2a0000000000e01", "--ohne-klick --traeger 0.1");
+    const double zu = -200.0;
+    const double f0[KAN] = {zu, zu, zu, zu, zu, zu};   // every channel closed
+    auto ring = [&](const std::vector<int>& kan, bool deck, double (&spitze_kanal)[2]) {
+      auto* h = static_cast<cdj_huellen_kopf*>(std::aligned_alloc(64, CDJ_HUELLEN_BYTES));
+      cdj_huellen_init(h);
+      kern_lauf6(ab.pfad, f0, kan, deck, h);
+      const uint64_t w = cdj_lade(&h->w);
+      spitze_kanal[0] = spitze_kanal[1] = 0.0;
+      for (uint64_t r = (w > 2000 ? w - 2000 : 0); r < w; ++r)
+        for (int c = 0; c < 2; ++c) spitze_kanal[c] = std::max(spitze_kanal[c], static_cast<double>(cdj_huellen_ort(h, r, static_cast<unsigned>(c))->spitze));
+      std::free(h);
+      return w;
+    };
+    double mit[2], ohne[2], geladen[2];
+    const uint64_t wm = ring({4}, false, mit);     // group on deck/2, no deck loaded
+    ring({}, false, ohne);                         // nothing at all
+    ring({}, true, geladen);                       // a loaded, playing deck 1, no group
+    std::printf("17: ring over %llu records; group on deck/2: deck/1 %.4f deck/2 %.4f; nothing: %.4f %.4f; loaded deck 1: %.4f %.4f\n", static_cast<unsigned long long>(wm), mit[0], mit[1], ohne[0], ohne[1],
+                geladen[0], geladen[1]);
+    PRUEF(wm > 1000);
+    PRUEF(mit[1] > 0.05);                           // the group's 0.18 peak at the tap, fader closed
+    PRUEF(mit[0] == 0.0);                           // deck/1 has neither a track nor a group
+    PRUEF(ohne[0] == 0.0 && ohne[1] == 0.0);        // as before: an unbelegt deck channel stays at zero
+    PRUEF(geladen[0] > 0.01 && geladen[1] == 0.0);  // a loaded deck still fills its channel, as before
   }
   {  // 12 the swap that clears the module, at three quanta
     k35::Arbeitsbestand ab("test_arr_dj_kanal_ab12");

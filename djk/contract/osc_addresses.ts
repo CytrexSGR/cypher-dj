@@ -84,6 +84,7 @@ export const ADRESSEN = {
   '/zustand/komp': { typen: ',sf', abschnitt: '5.5c', richtung: 'vom_kern', nurPruefmodus: false, felder: ['kanal', 'gr_db'], bereiche: {} },
   '/zustand/mix': { typen: ',sfffff', abschnitt: '5.5d', richtung: 'vom_kern', nurPruefmodus: false, felder: ['kanal', 'gate_db', 'mb_tief_db', 'mb_mitte_db', 'mb_hoch_db', 'lim_db'], bereiche: {} },
   '/e/ins_gr': { typen: ',sf', abschnitt: '5.5f', richtung: 'vom_kern', nurPruefmodus: false, felder: ['kanal', 'gr_db'], bereiche: {} },
+  '/e/stufe_pegel': { typen: ',sff', abschnitt: '5.5g', richtung: 'vom_kern', nurPruefmodus: false, felder: ['kanal', 'ein_db', 'aus_db'], bereiche: {} },
   '/zustand/spektrum': { typen: ',sis', abschnitt: '5.5e', richtung: 'vom_kern', nurPruefmodus: false, felder: ['kanal', 'rahmen', 'pegel'], bereiche: {} },
   '/pegel': { typen: ',sfffffff', abschnitt: '5.6', richtung: 'vom_kern', nurPruefmodus: false, felder: ['kanal', 'spitze_db', 'echtspitze_dbtp', 'lufs_m', 'lufs_s', 'band_tief_db', 'band_mitte_db', 'band_hoch_db'], bereiche: {} },
   '/e/regler': { typen: ',sfshd', abschnitt: '5.7', richtung: 'vom_kern', nurPruefmodus: false, felder: ['pfad', 'wert', 'halter', 'sample', 'beat'], bereiche: {} },
@@ -211,6 +212,7 @@ export interface Werte {
   '/zustand/komp': [kanal: string, gr_db: number];
   '/zustand/mix': [kanal: string, gate_db: number, mb_tief_db: number, mb_mitte_db: number, mb_hoch_db: number, lim_db: number];
   '/e/ins_gr': [kanal: string, gr_db: number];
+  '/e/stufe_pegel': [kanal: string, ein_db: number, aus_db: number];
   '/zustand/spektrum': [kanal: string, rahmen: number, pegel: string];
   '/pegel': [kanal: string, spitze_db: number, echtspitze_dbtp: number, lufs_m: number, lufs_s: number, band_tief_db: number, band_mitte_db: number, band_hoch_db: number];
   '/e/regler': [pfad: string, wert: number, halter: string, sample: bigint, beat: number];

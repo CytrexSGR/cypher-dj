@@ -310,3 +310,72 @@ def test_exit_codes_fachlich_1_bedienfehler_2(tmp_path, capsys):
     (tmp_path / "kaputt.json").write_text("{nicht json")
     rc = kit_bauen.main(["--liste", str(tmp_path / "kaputt.json"), "--quelle", str(q), "--ziel", str(tmp_path / "z")])
     assert rc == 2 and "Traceback" not in capsys.readouterr().err
+
+
+# ---- peak rule (backlog sound, task 3): every role, trimmed lead-in, refusal with role and sample ----
+def _klick(stille_ms: float, klick_nach_ms: float, laenge_ms: float = 400.0, rate=48000) -> np.ndarray:
+    """Stereo (n, 2): `stille_ms` of silence, then a soft lead-in of 0.025 (-26 dB, already the onset) and a click of 0.5
+    `klick_nach_ms` after the onset."""
+    n = int(rate * laenge_ms / 1000)
+    x = np.zeros((n, 2), dtype=np.float32)
+    a = int(rate * stille_ms / 1000)
+    x[a:a + int(rate * klick_nach_ms / 1000)] = 0.025
+    x[a + int(rate * klick_nach_ms / 1000)] = 0.5
+    return x
+
+
+def test_spitze_ms_misst_vom_onset_zur_spitze():
+    x = _klick(0.0, 5.0)
+    assert abs(kit_bauen.spitze_ms(x) - 5.0) < 0.1
+    assert abs(kit_bauen.spitze_ms(x.reshape(-1)) - 5.0) < 0.1          # interleaved works as well
+    assert kit_bauen.spitze_ms(np.zeros((100, 2), dtype=np.float32)) == 0.0
+
+
+def test_schneide_anlauf_entfernt_die_stille_und_laesst_einen_vorlauf():
+    x = _klick(30.0, 2.0)
+    y, entfernt = kit_bauen.schneide_anlauf(x)
+    assert abs(entfernt - 29.5) < 0.1
+    assert y.shape[1] == 2 and len(y) == len(x) - int(round(entfernt * 48))
+    assert abs(kit_bauen.spitze_ms(y) - 2.0) < 0.1                       # onset to peak is unchanged by the trim
+    assert abs(int(np.abs(y).max(axis=1).argmax()) / 48.0 - 2.5) < 0.1   # position from the file start: 0.5 ms lead-in + 2.0
+    z, null = kit_bauen.schneide_anlauf(_klick(0.0, 5.0))
+    assert null == 0.0 and len(z) == len(_klick(0.0, 5.0))
+
+
+def _kit_aus(tmp_path, signale: dict, rollen_cfg):
+    from sound import wav as w
+    q = tmp_path / "q"
+    for n, x in signale.items():
+        w.schreibe(q / f"{n}.wav", x, 48000)
+    liste = {n[:-1]: [f"{n}.wav"] for n in signale}
+    return kit_bauen.baue(liste, q, tmp_path / "k", "t", 4.0, rollen=rollen_cfg)
+
+
+def test_zu_spaete_spitze_bricht_mit_rolle_und_wert_ab_und_schreibt_nichts(tmp_path):
+    cfg = {"rollen": {}, "spitze_regel": {"max_ms": 20, "ausnahmen": {}}}
+    try:
+        _kit_aus(tmp_path, {"cr1": _klick(0.0, 30.0)}, cfg)
+    except kit_bauen.FachlicherAbbruch as e:
+        assert "cr:0" in str(e) and "cr1.wav" in str(e) and "30." in str(e) and "'cr'" in str(e)
+    else:
+        raise AssertionError("late peak not refused")
+    assert not (tmp_path / "k").exists()
+
+
+def test_rolle_in_den_ausnahmen_darf_spaet_sein(tmp_path):
+    cfg = {"rollen": {}, "spitze_regel": {"max_ms": 20, "ausnahmen": {"cr": 40}}}
+    kit = _kit_aus(tmp_path, {"cr1": _klick(0.0, 30.0)}, cfg)
+    assert abs(kit["klaenge"][0]["spitze_ms"] - 30.0) < 0.2
+
+
+def test_anlauf_wird_geschnitten_und_in_kit_json_geschrieben(tmp_path):
+    cfg = {"rollen": {}, "spitze_regel": {"max_ms": 20, "ausnahmen": {}}}
+    kit = _kit_aus(tmp_path, {"rim1": _klick(54.5, 2.0)}, cfg)
+    k = kit["klaenge"][0]
+    assert abs(k["anlauf_ms"] - 54.0) < 0.2 and abs(k["spitze_ms"] - 2.0) < 0.2
+    assert k["frames"] < 0.4 * 48000 - 54 * 48 + 50
+
+
+def test_ohne_spitzen_regel_aendert_sich_nichts(tmp_path):
+    kit = _kit_aus(tmp_path, {"cr1": _klick(50.0, 30.0)}, {"rollen": {}})
+    assert kit["klaenge"][0]["frames"] == int(0.4 * 48000) and "spitze_ms" not in kit["klaenge"][0]

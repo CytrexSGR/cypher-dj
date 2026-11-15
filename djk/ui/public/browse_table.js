@@ -4,9 +4,9 @@ import { $, $$, BUCHSTABE, LADE_DECKS, el, klasseLaden, melde, postJson, zustand
 import { TYP_ART, behalteWahl, ladeListe, leereDetail, oeffneListenMenue, postenKoerper } from './browse_detail.js';
 import { zeigeReiterInfo } from './seitenrahmen.js';
 import { BOXEN, ladeLoopSlot, ladeLoops } from './loop_rec_view.js';
-import { HINWEIS_LOOPS, loopsPlatzDa } from './slots_view.js';
+import { HINWEIS_LOOPS, loopsPlatzDa, zeigePlaetzeSpaeter } from './slots_view.js';
 import { instanzen, waehleRolle } from './instanzen.js';
-import { aktivesSet, libKnoepfe } from './library_view.js';
+import { aktivesSet, libKnoepfe, ladeKnopf } from './library_view.js';
 import { laden } from './deck_view.js';
 
 // ---------- Library: Browser über die Mediathek (Plan 2026-10-10-mediathek-browser) ----------
@@ -153,12 +153,8 @@ function trackKnoepfe(td, t) {
   td.textContent = '';
   const e = t.laden_mid ? zustand.bestand.find((x) => x.material_id === t.laden_mid) : null;
   if (e) {
-    for (const n of LADE_DECKS) {
-      const b = document.createElement('button');
-      b.className = `laden ${klasseLaden(n)}`; b.textContent = `LOAD ${BUCHSTABE[n]}`;
-      b.addEventListener('click', () => laden(n, e));
-      td.append(b);
-    }
+    for (const n of LADE_DECKS) td.append(ladeKnopf(n, e));
+    zeigePlaetzeSpaeter();
     return;
   }
   t.vorbereitung = t.status === 'laeuft' ? 'laeuft' : null;   // libKnoepfe liest das alte Feld (Review m3): PREPARING… statt klickbarem PREPARE

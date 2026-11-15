@@ -5,21 +5,32 @@ import { graphMitBereich, graphVon, zeigeGraphWahl } from './graphs_view.js';
 import { baueSendKnobs, bindeBkKnobs, zeigeFxDetail } from './learn_view.js';
 import { FX_INDEX, FX_KANAELE, KOMP_REGLER, kompGr, kompWert, setzeKomp } from './effects_gemeinsam.js';
 import { bindeAutomation } from './effects_bindung.js';
+import { oeffneKanalFace } from './effects_face.js';
+import { FX_REITER, baueFxReiterZeile, bindeFxReiter, fxGlieder, fxReiterAktiv, waehleFxReiter, zeigeFxReiter } from './effects_reiter.js';
 export function baueFxStreifen() {
   const reihe = $('#fxstreifen');
   reihe.replaceChildren();
+  bindeFxReiter({ regler: () => zustand.regler, graph: graphVon });
   for (const [k, name] of FX_KANAELE) {
     const s = document.createElement('div');
     s.className = 'fxstreifen';
     s.dataset.kanal = k;
-    s.innerHTML = `<div class="fxname"><span>${name}</span><button class="komp-an" title="Compressor on/off (${k})">COMP</button></div>`
+    const glied = (n, titel, inhalt) => `<div class="fx-glied fx-glied-${n}"><span class="fx-glied-titel">${titel}</span>${inhalt}</div>`;
+    const inhaltVon = {
+      insert: () => `<div class="graphplatz" data-graphplatz="${k}"></div>`,
+      gate: () => werkzeugStreifenHtml(k, name, ['gate']),   // A8: <k>/gate/*; nothing is sent while building
+      comp: () => `<div class="komp-knoepfe"><button class="komp-an" title="Compressor on/off (${k})">COMP</button><button class="komp-face" title="Open the compressor face (${k})">FACE</button></div>`
+        + KOMP_REGLER.map((r) => `<label>${r.name}<input type="range" data-komp-feld="${r.feld}" min="${r.min}" max="${r.max}" step="${r.schritt}" aria-label="${name} compressor ${r.name}"><output></output></label>`).join('')
+        + '<div class="gr" title="Gain reduction"><i></i></div><div class="grzahl">GR –</div>',
+      util: () => werkzeugStreifenHtml(k, name, ['util']),   // A8: <k>/util/*
+    };
+    const titelVon = { insert: 'INSERT', gate: 'GATE', comp: 'COMP', util: 'UTIL' };
+    s.innerHTML = `<div class="fxname"><span>${name}</span></div>`
       + `<div class="fxinhalt" data-fxinhalt="${k}" title="What plays on this channel">–</div>`
-      + (GRAPH_KANAL_ART[k] ? `<div class="graphplatz" data-graphplatz="${k}"></div>` : '')
       + `<div class="fxpegel"><div class="meter waagrecht" data-kanal="${k}"><i></i></div><span data-fxpegel="${k}">−∞</span></div>`
-      + KOMP_REGLER.map((r) => `<label>${r.name}<input type="range" data-komp-feld="${r.feld}" min="${r.min}" max="${r.max}" step="${r.schritt}" aria-label="${name} compressor ${r.name}"><output></output></label>`).join('')
-      + '<div class="gr" title="Gain reduction"><i></i></div><div class="grzahl">GR –</div>'
-      + werkzeugStreifenHtml(k, name);   // A8: GATE and UTIL strips (<k>/gate/*, <k>/util/*); nothing is sent while building
+      + `<div class="fxkette">${fxGlieder(k).map((n) => glied(n, titelVon[n], inhaltVon[n]())).join('<i class="fx-pfeil" aria-hidden="true">›</i>')}</div>`;
     s.querySelector('.komp-an').addEventListener('click', () => setzeKomp(`${k}/komp/an`, kompWert(k, 'an', 0) >= 0.5 ? 0 : 1));
+    s.querySelector('.komp-face').addEventListener('click', () => oeffneKanalFace(k, name));
     for (const inp of s.querySelectorAll('input[data-komp-feld]')) {
       let warte = null;
       inp.addEventListener('input', () => {
@@ -38,6 +49,7 @@ export function baueFxStreifen() {
   bus.className = 'buspanel';
   bus.innerHTML = busPanelHtml();
   reihe.append(bus);
+  baueFxReiterZeile(reihe, waehleFx);   // channel tabs first in the row; the strips stay, a class hides the ones not chosen
   zeigeGraphWahl();
   baueSendKnobs();
   zeigeKomp();
@@ -150,6 +162,7 @@ export function zeigeWerkzeug(nur) {
       inp.nextElementSibling.textContent = werkText(feld, v);
     }
   }
+  zeigeFxReiter();
 }
 export function zeigeKomp(nur) {
   for (const s of $$('.fxstreifen')) {
@@ -171,6 +184,7 @@ export function zeigeKomp(nur) {
     const sc = kompWert(k, 'sc', 0), scName = KOMP_SCHLUESSEL.find(([w]) => w === sc)?.[1];
     s.querySelector('.grzahl').textContent = an ? `GR ${db.toFixed(1)} dB${sc ? ` · KEY ${scName ?? sc}` : ''}` : 'GR –';
   }
+  zeigeFxReiter();
 }
 // Schritt 3: aufgeklappt (⤢) das Detail des gewählten Kanals: alle Regler, Presets, Kennlinie, Verlauf der Absenkung (10 s)
 export const KOMP_DETAIL = [
@@ -181,11 +195,14 @@ export const KOMP_DETAIL = [
   { feld: 'makeup', name: 'MAKEUP', min: 0, max: 24, schritt: 0.1, vorgabe: 0, text: (w) => `+${w.toFixed(1)} dB` },
   { feld: 'mix', name: 'MIX', min: 0, max: 1, schritt: 0.01, vorgabe: 1, text: (w) => `${Math.round(w * 100)}%` },
 ];
-export let fxGewaehlt = 'erz/1';
+// the stored tab, when it is a channel. FX_REITER (same ids, pinned by a test), not FX_KANAELE: this module and effects_gemeinsam.js import each other, and FX_KANAELE is not initialised yet when this line runs
+export let fxGewaehlt = (() => { const a = fxReiterAktiv(); return FX_REITER.some((r) => r.id === a && a !== 'sends' && a !== 'bus') ? a : 'erz/1'; })();
 export const kompVerlauf = {};   // kanal -> letzte 100 Absenkungen (10 Hz)
 export function grJetzt(k) { const g = kompGr[k]; return kompWert(k, 'an', 0) >= 0.5 && g && performance.now() - g.t < 400 ? g.db : 0; }
 export function waehleFx(k) {
+  const neu = k !== fxGewaehlt;
   fxGewaehlt = k;
+  if (neu) waehleFxReiter(k); else zeigeFxReiter();
   for (const s of $$('.fxstreifen')) s.classList.toggle('gewaehlt', s.dataset.kanal === k);
   baueFxDetail();
 }
@@ -195,7 +212,8 @@ export function baueFxDetail() {
   const name = FX_KANAELE.find(([p]) => p === k)?.[1] ?? k;
   d.innerHTML = `<div class="fxkopf"><b>${name}</b><span class="klein">${k}</span><button class="komp-an" title="Compressor on/off">COMP</button>
       <select class="preset" aria-label="Preset"><option value="">Preset…</option>${Object.keys(KOMP_PRESETS).map((n) => `<option>${n}</option>`).join('')}</select>
-      <label class="klein">KEY <select class="schluessel" title="Sidechain: the detector listens to this channel's input (Kick Sidechain: DRUMS)">${KOMP_SCHLUESSEL.filter(([w]) => w === 0 || w !== FX_INDEX[k] + 1).map(([w, n]) => `<option value="${w}">${n}</option>`).join('')}</select></label></div>
+      <label class="klein">KEY <select class="schluessel" title="Sidechain: the detector listens to this channel's input (Kick Sidechain: DRUMS)">${KOMP_SCHLUESSEL.filter(([w]) => w === 0 || w !== FX_INDEX[k] + 1).map(([w, n]) => `<option value="${w}">${n}</option>`).join('')}</select></label>
+      <button class="komp-face" title="Open the compressor face">FACE</button></div>
     ${GRAPH_KANAL_ART[k] ? `<div class="graphplatz graphdetail" data-graphplatz="${k}"></div>` : ''}
     <div class="regler-liste">${KOMP_DETAIL.map((r) => `<label>${r.name}<input type="range" data-komp-feld="${r.feld}" min="${r.min}" max="${r.max}" step="${r.schritt}"><output></output></label>`).join('')}
       ${KNOB_GRUPPE[k] && !graphVon(k) ? '<div class="knobbereich"><span class="bildtitel">INSTRUMENT KNOBS <b class="knobstatus">…</b></span><div class="knobliste"></div></div>' : ''}
@@ -212,6 +230,7 @@ export function baueFxDetail() {
       <svg class="autospur" viewBox="0 0 480 120" aria-label="Automation lane"></svg></div>` : ''}`;
   d.querySelector('.komp-an').addEventListener('click', () => setzeKomp(`${k}/komp/an`, kompWert(k, 'an', 0) >= 0.5 ? 0 : 1));
   d.querySelector('.schluessel').addEventListener('change', (e) => setzeKomp(`${k}/komp/sc`, Number(e.target.value)));
+  d.querySelector('.komp-face').addEventListener('click', () => oeffneKanalFace(k, name));
   d.querySelector('.preset').addEventListener('change', async (e) => {
     const p = KOMP_PRESETS[e.target.value];
     e.target.value = '';

@@ -17,7 +17,7 @@
 //! **Inputs.** `trig`, `vel`, `hz` come from a `note` node (the note number is read back from `hz`). Everything else is a
 //! parameter, in plain units (Hz, ms to -60 dB, semitones, 0..1), read **at the strike** and kept for that hit, so a knob
 //! changes the next hit, not the one ringing. Exceptions, read every sample (smoothed over 8 ms): `pegel`, `drive`,
-//! `filter`, `reso` of the bus. Fixed values `modell` (0 = TR-909, 1 = TR-808), `schnitt` (choke time, ms) and `saat` (noise seed).
+//! `filter`, `reso` of the bus. Seven group levels `lv_kick`, `lv_snare`, `lv_clap` (clap, rim), `lv_tom`, `lv_hat`, `lv_cym` (crash, ride), `lv_perc` (cowbell, clave) in dB (-24..24, default 0 = unchanged), read at the strike like every drum parameter. Fixed values `modell` (0 = TR-909, 1 = TR-808), `schnitt` (choke time, ms) and `saat` (noise seed).
 //!
 //! **Drums** (see `GERAET-trommeln.md` for the measured values): kick = sine with an exponential pitch glide in semitones
 //! (`kick_punch` up, time constant `kick_pdecay`; a big punch with a long time is a zap or a laser), amplitude decay to -60 dB in
@@ -47,7 +47,7 @@ use saett_dsp::Adaa1;
 pub const KOPF: usize = 3;
 
 /// Parameter table: name, default, min, max. Order = the inputs after `trig`, `vel`, `hz` (`EIN`).
-pub const PARAMETER: [(&str, f32, f32, f32); 38] = [
+pub const PARAMETER: [(&str, f32, f32, f32); 45] = [
     // bus
     ("pegel", 1.0, 0.0, 2.0),
     ("drive", 0.5, 0.0, 1.0),
@@ -95,6 +95,14 @@ pub const PARAMETER: [(&str, f32, f32, f32); 38] = [
     ("boom_tune", 41.0, 25.0, 80.0),
     ("boom_decay", 2200.0, 300.0, 6000.0),
     ("clave_tune", 2500.0, 1200.0, 5000.0),
+    // per-group output levels in dB, read at the strike; 0 dB is exactly the unscaled drum
+    ("lv_kick", 0.0, -24.0, 24.0),
+    ("lv_snare", 0.0, -24.0, 24.0),
+    ("lv_clap", 0.0, -24.0, 24.0),
+    ("lv_tom", 0.0, -24.0, 24.0),
+    ("lv_hat", 0.0, -24.0, 24.0),
+    ("lv_cym", 0.0, -24.0, 24.0),
+    ("lv_perc", 0.0, -24.0, 24.0),
 ];
 
 /// Number of inputs (`trig`, `vel`, `hz` and the parameters).
@@ -106,6 +114,7 @@ pub const EIN: [&str; NEIN] = [
     "snare_tune", "snare_decay", "snare_snappy", "snare_tone", "clap_decay", "clap_tone", "clap_spread", "rim_tune", "rim_decay", "tomlo_tune",
     "tommid_tune", "tomhi_tune", "tom_decay", "tom_punch", "hat_tune", "hat_tone", "hat_noise", "ch_decay", "oh_decay", "crash_tune", "crash_decay",
     "ride_tune", "ride_decay", "cow_tune", "cow_decay", "boom_tune", "boom_decay", "clave_tune",
+    "lv_kick", "lv_snare", "lv_clap", "lv_tom", "lv_hat", "lv_cym", "lv_perc",
 ];
 
 // indices into the input list
@@ -147,6 +156,13 @@ const I_COW_DECAY: usize = 37;
 const I_BOOM_TUNE: usize = 38;
 const I_BOOM_DECAY: usize = 39;
 const I_CLAVE_TUNE: usize = 40;
+const I_LV_KICK: usize = 41;
+const I_LV_SNARE: usize = 42;
+const I_LV_CLAP: usize = 43;
+const I_LV_TOM: usize = 44;
+const I_LV_HAT: usize = 45;
+const I_LV_CYM: usize = 46;
+const I_LV_PERC: usize = 47;
 
 /// Choke time bounds in ms.
 pub const SCHNITT_MIN: f32 = 1.0;
@@ -291,6 +307,22 @@ fn par(p: &dyn Fn(usize) -> f32, i: usize) -> f32 {
     endlich(p(i), vorgabe).clamp(lo, hi)
 }
 
+/// Linear gain of the level group a drum belongs to (`lv_*` in dB). 0 dB is the literal 1.0, so the old sound stays bit for bit.
+fn gruppen_gain(art: Art, p: &dyn Fn(usize) -> f32) -> f32 {
+    let i = match art {
+        Art::Kick | Art::Boom => I_LV_KICK,
+        Art::Snare => I_LV_SNARE,
+        Art::Clap | Art::Rim => I_LV_CLAP,
+        Art::Tom => I_LV_TOM,
+        Art::HatZu | Art::HatPedal | Art::HatOffen => I_LV_HAT,
+        Art::Crash | Art::Ride => I_LV_CYM,
+        Art::Cow | Art::Clave => I_LV_PERC,
+        Art::Still => return 1.0,
+    };
+    let db = par(p, i);
+    if db == 0.0 { 1.0 } else { 10f32.powf(db * 0.05) }
+}
+
 fn blep(t: f64, dt: f64) -> f64 {
     if t < dt {
         let x = t / dt;
@@ -316,6 +348,8 @@ pub struct Stimme {
     /// samples since the strike
     n: u32,
     lvl: f32,
+    /// group level (linear), fixed at the strike; exactly 1.0 at 0 dB
+    gain: f32,
     zufall: u32,
     ph: [f64; 3],
     fq: [f64; 3],
@@ -347,6 +381,7 @@ impl Stimme {
             art: Art::Still,
             n: 0,
             lvl: 0.0,
+            gain: 1.0,
             zufall: if s == 0 { 0x2545_F491 } else { s },
             ph: [0.0; 3],
             fq: [0.0; 3],
@@ -412,6 +447,7 @@ impl Stimme {
         self.art = w.art;
         self.n = 0;
         self.lvl = endlich(vel, 0.0).clamp(0.0, 1.0);
+        self.gain = gruppen_gain(w.art, p);
         self.ph = [0.0; 3];
         self.env = [0.0; 5];
         self.par = [0.0; 6];
@@ -620,7 +656,7 @@ impl Stimme {
             Art::Still => 0.0,
         };
         self.n = self.n.saturating_add(1);
-        let o = roh * self.lvl + self.rest;
+        let o = roh * self.lvl * self.gain + self.rest;
         self.rest = if self.rest.abs() < 1e-7 { 0.0 } else { self.rest * e.a_rest };
         if !o.is_finite() {
             self.leeren();
@@ -1013,7 +1049,9 @@ mod tests {
                        (I_KICK_PDECAY, "kick_pdecay"), (I_KICK_PUNCH, "kick_punch"), (I_KICK_DECAY, "kick_decay"), (I_SNARE_TUNE, "snare_tune"),
                        (I_SNARE_DECAY, "snare_decay"), (I_CLAP_DECAY, "clap_decay"), (I_CLAP_TONE, "clap_tone"), (I_RIM_TUNE, "rim_tune"),
                        (I_TOM_DECAY, "tom_decay"), (I_HAT_TUNE, "hat_tune"), (I_HAT_TONE, "hat_tone"), (I_CRASH_DECAY, "crash_decay"),
-                       (I_RIDE_TUNE, "ride_tune"), (I_COW_TUNE, "cow_tune"), (I_BOOM_TUNE, "boom_tune")] {
+                       (I_RIDE_TUNE, "ride_tune"), (I_COW_TUNE, "cow_tune"), (I_BOOM_TUNE, "boom_tune"),
+                       (I_LV_KICK, "lv_kick"), (I_LV_SNARE, "lv_snare"), (I_LV_CLAP, "lv_clap"), (I_LV_TOM, "lv_tom"), (I_LV_HAT, "lv_hat"),
+                       (I_LV_CYM, "lv_cym"), (I_LV_PERC, "lv_perc")] {
             assert_eq!(EIN[i], n);
         }
     }

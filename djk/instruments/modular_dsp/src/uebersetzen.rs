@@ -28,6 +28,8 @@ use crate::programm::{Programm, Quelle, Schritt, MAX_STIMMEN, REGLER};
 use crate::sampler::{lade_datei, Einstellung, Sampler};
 use crate::roehre::{Roehre, RoehrenSatz, BIAS_MAX, BIAS_MIN};
 use crate::svf::Svf;
+use crate::allpass::Allpass;
+use crate::kreuz::Kreuz;
 use crate::sem::Sem;
 use crate::diode::Diode;
 use crate::vocoder::Vocoder;
@@ -90,7 +92,7 @@ pub struct ArtDef {
     pub frei: &'static [(&'static str, f32)],
 }
 
-pub const ARTEN: [ArtDef; 52] = [
+pub const ARTEN: [ArtDef; 54] = [
     ArtDef { art: "note", ein: &[], aus: &["hz", "gate", "vel", "trig", "erste"], werte: &[], frei: &[] },
     ArtDef { art: "konst", ein: &[], aus: &["aus"], werte: &["wert"], frei: &[] },
     // `vorgabe`: knob position the graph starts at (0..1). `mitte`: value at knob position 0.5; its default NaN is the "absent" marker
@@ -197,8 +199,8 @@ pub const ARTEN: [ArtDef; 52] = [
     ArtDef { art: "diode", ein: &["x", "cutoff", "reso", "antrieb", "bass"], aus: &["aus"], werte: &[],
              frei: &[("cutoff", 1000.0), ("reso", 0.0), ("antrieb", 0.0), ("bass", 0.0)] },
     // drum kit, the note picks the drum (trommeln.rs); type 47 (appended). Sum point: result in voice 0. Inputs in the order of `trommeln::EIN`.
-    ArtDef { art: "trommeln", ein: &["trig", "vel", "hz", "pegel", "drive", "filter", "reso", "kick_tune", "kick_decay", "kick_punch", "kick_pdecay", "kick_click", "kick_drive", "snare_tune", "snare_decay", "snare_snappy", "snare_tone", "clap_decay", "clap_tone", "clap_spread", "rim_tune", "rim_decay", "tomlo_tune", "tommid_tune", "tomhi_tune", "tom_decay", "tom_punch", "hat_tune", "hat_tone", "hat_noise", "ch_decay", "oh_decay", "crash_tune", "crash_decay", "ride_tune", "ride_decay", "cow_tune", "cow_decay", "boom_tune", "boom_decay", "clave_tune"], aus: &["aus"], werte: &[],
-             frei: &[("pegel", 1.0), ("drive", 0.5), ("filter", 0.5), ("reso", 0.3), ("kick_tune", 54.0), ("kick_decay", 380.0), ("kick_punch", 24.0), ("kick_pdecay", 14.0), ("kick_click", 0.5), ("kick_drive", 0.5), ("snare_tune", 190.0), ("snare_decay", 220.0), ("snare_snappy", 0.5), ("snare_tone", 0.5), ("clap_decay", 280.0), ("clap_tone", 0.5), ("clap_spread", 0.5), ("rim_tune", 480.0), ("rim_decay", 50.0), ("tomlo_tune", 85.0), ("tommid_tune", 128.0), ("tomhi_tune", 190.0), ("tom_decay", 420.0), ("tom_punch", 14.0), ("hat_tune", 1.0), ("hat_tone", 0.5), ("hat_noise", 0.3), ("ch_decay", 55.0), ("oh_decay", 380.0), ("crash_tune", 1.0), ("crash_decay", 1800.0), ("ride_tune", 1.0), ("ride_decay", 1300.0), ("cow_tune", 1.0), ("cow_decay", 320.0), ("boom_tune", 41.0), ("boom_decay", 2200.0), ("clave_tune", 2500.0), ("modell", 0.0), ("schnitt", 8.0), ("saat", 0.0)] },
+    ArtDef { art: "trommeln", ein: &["trig", "vel", "hz", "pegel", "drive", "filter", "reso", "kick_tune", "kick_decay", "kick_punch", "kick_pdecay", "kick_click", "kick_drive", "snare_tune", "snare_decay", "snare_snappy", "snare_tone", "clap_decay", "clap_tone", "clap_spread", "rim_tune", "rim_decay", "tomlo_tune", "tommid_tune", "tomhi_tune", "tom_decay", "tom_punch", "hat_tune", "hat_tone", "hat_noise", "ch_decay", "oh_decay", "crash_tune", "crash_decay", "ride_tune", "ride_decay", "cow_tune", "cow_decay", "boom_tune", "boom_decay", "clave_tune", "lv_kick", "lv_snare", "lv_clap", "lv_tom", "lv_hat", "lv_cym", "lv_perc"], aus: &["aus"], werte: &[],
+             frei: &[("pegel", 1.0), ("drive", 0.5), ("filter", 0.5), ("reso", 0.3), ("kick_tune", 54.0), ("kick_decay", 380.0), ("kick_punch", 24.0), ("kick_pdecay", 14.0), ("kick_click", 0.5), ("kick_drive", 0.5), ("snare_tune", 190.0), ("snare_decay", 220.0), ("snare_snappy", 0.5), ("snare_tone", 0.5), ("clap_decay", 280.0), ("clap_tone", 0.5), ("clap_spread", 0.5), ("rim_tune", 480.0), ("rim_decay", 50.0), ("tomlo_tune", 85.0), ("tommid_tune", 128.0), ("tomhi_tune", 190.0), ("tom_decay", 420.0), ("tom_punch", 14.0), ("hat_tune", 1.0), ("hat_tone", 0.5), ("hat_noise", 0.3), ("ch_decay", 55.0), ("oh_decay", 380.0), ("crash_tune", 1.0), ("crash_decay", 1800.0), ("ride_tune", 1.0), ("ride_decay", 1300.0), ("cow_tune", 1.0), ("cow_decay", 320.0), ("boom_tune", 41.0), ("boom_decay", 2200.0), ("clave_tune", 2500.0), ("lv_kick", 0.0), ("lv_snare", 0.0), ("lv_clap", 0.0), ("lv_tom", 0.0), ("lv_hat", 0.0), ("lv_cym", 0.0), ("lv_perc", 0.0), ("modell", 0.0), ("schnitt", 8.0), ("saat", 0.0)] },
     // wavefolder (falter.rs), per voice; type 48 (appended in merge order after trommeln). `antrieb` in dB, `symmetrie` -1..1, `form` 0 triangle .. 1 sine fold, `ueber` 1 = 2x oversampled (latency).
     ArtDef { art: "falter", ein: &["x", "antrieb", "symmetrie", "form"], aus: &["aus"], werte: &[],
              frei: &[("antrieb", 0.0), ("symmetrie", 0.0), ("form", 0.0), ("ueber", 1.0)] },
@@ -211,6 +213,10 @@ pub const ARTEN: [ArtDef; 52] = [
     // Cypher Remix (remix.rs), a beat-synchronous remix station as one stereo sum point; type 51 (appended after labor).
     // Inputs and defaults in the order of `remix::EIN` and `remix::FREI`. No latency.
     ArtDef { art: "remix", ein: &crate::remix::EIN, aus: &["l", "r"], werte: &[], frei: &crate::remix::FREI },
+    // Phase rotator (allpass.rs), first or second order all-pass; type 52 (appended after remix). `fc`, `fc2` in Hz; order 1 ignores `fc2`. No latency.
+    ArtDef { art: "allpass", ein: &["x", "fc", "fc2"], aus: &["aus"], werte: &[], frei: &[("ordnung", 1.0)] },
+    // Linkwitz-Riley crossover (kreuz.rs), 2 or 3 bands with a compensated sum; type 53 (appended after allpass). `fc1`, `fc2` in Hz; `baender` 2 leaves `mid` at 0 and ignores `fc2`. No latency.
+    ArtDef { art: "kreuz", ein: &["x", "fc1", "fc2"], aus: &["lo", "mid", "hi"], werte: &[], frei: &[("baender", 2.0)] },
 ];
 
 /// Arts whose node carries a `datei` (a file in the sample root, read at translation).
@@ -363,6 +369,8 @@ pub fn uebersetze_mit_wurzel(json: &str, sr: f32, wurzel: Option<&Path>) -> Resu
             "diode" if !(-40.0..=60.0).contains(&w("antrieb")) => return falsch("antrieb", "-40..60 dB"),
             "diode" if !(0.0..=1.0).contains(&w("bass")) => return falsch("bass", "0..1"),
             "svf" if w("pole") != 2.0 && w("pole") != 4.0 => return falsch("pole", "2 or 4"),
+            "allpass" if w("ordnung") != 1.0 && w("ordnung") != 2.0 => return falsch("ordnung", "1 or 2"),
+            "kreuz" if w("baender") != 2.0 && w("baender") != 3.0 => return falsch("baender", "2 or 3"),
             "sem" if !(0.0..=1.0).contains(&w("reso")) => return falsch("reso", "0..1"),
             "sem" if !(0.0..=1.0).contains(&w("form")) => return falsch("form", "0 low-pass, 0.5 notch, 1 high-pass"),
             "wavetable" if !ganz(w("tabelle"), 0.0, (TABELLEN.len() - 1) as f32) => return falsch("tabelle", "0 saege, 1 rechteck, 2 dreieck, 3 sinus, 4 analog, 5 vokale, 6 orgel"),
@@ -592,6 +600,8 @@ pub fn uebersetze_mit_wurzel(json: &str, sr: f32, wurzel: Option<&Path>) -> Resu
             "transponiere" => Schritt::Transponiere { hz: q("hz"), st: q("st"), cent: q("cent"), aus: aus(k, "aus") },
             "diode" => Schritt::Diode { x: q("x"), cutoff: q("cutoff"), reso: q("reso"), antrieb: q("antrieb"), bass: q("bass"), aus: aus(k, "aus"), f: [Diode::default(); MAX_STIMMEN] },
             "svf" => Schritt::Svf { x: q("x"), cutoff: q("cutoff"), reso: q("reso"), tp: aus(k, "tp"), bp: aus(k, "bp"), hp: aus(k, "hp"), vier: w("pole") == 4.0, f: [Svf::default(); MAX_STIMMEN] },
+            "allpass" => Schritt::Allpass { x: q("x"), fc: q("fc"), fc2: q("fc2"), aus: aus(k, "aus"), ordnung: w("ordnung") as u8, f: [Allpass::default(); MAX_STIMMEN] },
+            "kreuz" => Schritt::Kreuz { x: q("x"), fc1: q("fc1"), fc2: q("fc2"), lo: aus(k, "lo"), mid: aus(k, "mid"), hi: aus(k, "hi"), baender: w("baender") as u8, f: [Kreuz::default(); MAX_STIMMEN] },
             "sem" => Schritt::Sem { x: q("x"), cutoff: q("cutoff"), reso: q("reso"), form: q("form"), aus: aus(k, "aus"), bp: aus(k, "bp"), f: [Sem::default(); MAX_STIMMEN] },
             "saett" => Schritt::Saett { x: q("x"), antrieb: q("antrieb"), aus: aus(k, "aus"), a: [Adaa1::default(); MAX_STIMMEN] },
             "glatt" => Schritt::Glatt { x: q("x"), setzen: q("setzen"), aus: aus(k, "aus"), zeit: w("zeit"), z: [0.0; MAX_STIMMEN] },

@@ -1,4 +1,8 @@
 {
+ "bass-banddrive": {
+  "kategorie": "bass",
+  "text": "Band-split bass: wavetable stack, folded mids with a moving vowel, clean mono sub."
+ },
  "bassmusik": {
   "kategorie": "bass",
   "text": "Dubstep-style wobble bass: saw and pulse into a ladder filter with LFO and growl."
@@ -214,5 +218,189 @@
  "labor": {
   "kategorie": "textur",
   "text": "Feedback synth: a note pings two resonant filters, one echoes the other."
+ },
+ "bass-sub": {
+  "kategorie": "bass",
+  "text": "Clean mono sub: sine plus a quiet triangle an octave up under a 12 dB low-pass."
+ },
+ "bass-reese": {
+  "kategorie": "bass",
+  "text": "Dark DnB reese: two saws detuned +-38 cent, tube drive and a slowly moving notch, legato."
+ },
+ "bass-acid": {
+  "kategorie": "bass",
+  "text": "Squelchy acid bass: square plus 25 % pulse into a 24 dB ladder at 450 Hz."
+ },
+ "bass-fm": {
+  "kategorie": "bass",
+  "text": "Punchy FM bass: three sine operators sharing one 2 s exponential decay."
+ },
+ "bass-wobble": {
+  "kategorie": "bass",
+  "text": "Dubstep wobble: detuned saws under a resonant ladder swept by a tempo-synced LFO."
+ },
+ "bass-analog": {
+  "kategorie": "bass",
+  "text": "Warm analog bass: saw and square an octave apart, open ladder, AR envelope, drive."
+ },
+ "bass-rolling": {
+  "kategorie": "bass",
+  "text": "Rolling 16th-note bass: detuned saws an octave over a sine sub, plucked."
+ },
+ "bass-pluck": {
+  "kategorie": "bass",
+  "text": "Tight plucked bass: unison saws through a ladder opened by a short, deep filter envelope."
+ },
+ "lead-mono": {
+  "kategorie": "lead",
+  "text": "Mellow 70s mono lead: two squares 10 cent apart, open filter, fast 20 ms glide, overdrive."
+ },
+ "lead-poly": {
+  "kategorie": "lead",
+  "text": "Brassy poly lead: two pulse waves with 5.5 Hz PWM, a fast-opening ladder, chorus."
+ },
+ "lead-supersaw": {
+  "kategorie": "lead",
+  "text": "Trance supersaw: seven detuned saws in one voice, spread wide, hall with pre-delay."
+ },
+ "lead-acid": {
+  "kategorie": "lead",
+  "text": "Acid lead: the 303-style acid bass lifted an octave, 60 % resonance, tube drive."
+ },
+ "lead-sync": {
+  "kategorie": "lead",
+  "text": "Screaming sync lead: a square hard-synced to a silent master, tuned up."
+ },
+ "lead-fm": {
+  "kategorie": "lead",
+  "text": "Digital FM lead: sine carrier with a 1:2 modulator whose index jumps at the attack."
+ },
+ "lead-arp": {
+  "kategorie": "lead",
+  "text": "Bright arp lead: saw and pulse with a short filter blip, high-passed off the bass."
+ },
+ "pad-strings": {
+  "kategorie": "pad",
+  "text": "String section: triangle and detuned squares under a mid-resonance ladder."
+ },
+ "pad-choir": {
+  "kategorie": "pad",
+  "text": "Synth choir: two scattered pulse layers with slow vibrato and swell."
+ },
+ "pad-atmosphere": {
+  "kategorie": "pad",
+  "text": "Celestial wash: noise rings a self-oscillating, key-tracked ladder pulsed at 5.5 Hz."
+ },
+ "pad-analog": {
+  "kategorie": "pad",
+  "text": "Analog pad: two squares two octaves apart under a resonant ladder that breathes at 0.3 Hz."
+ },
+ "pad-granular": {
+  "kategorie": "pad",
+  "text": "Stand-in for a granular pad: a slowly scanned, randomly jittered wavetable cloud."
+ },
+ "pad-drone": {
+  "kategorie": "pad",
+  "text": "Dark drone bed: two triangles an octave apart under a resonant ladder that opens."
+ },
+ "keys-piano": {
+  "kategorie": "keys",
+  "text": "Synth piano: saw and synced pulse whose filter brightness decays with the note."
+ },
+ "keys-electric-piano": {
+  "kategorie": "keys",
+  "text": "Electric piano: saw and synced thin pulse for the tine, velocity bark."
+ },
+ "keys-organ": {
+  "kategorie": "keys",
+  "text": "Two-triangle organ: 8' and 16' with a slow click-free attack, rotary-style chorus."
+ },
+ "keys-mallet": {
+  "kategorie": "keys",
+  "text": "Glockenspiel: two triangles at an inharmonic +2 oct +6 st, a bright filter tick."
+ },
+ "keys-chord": {
+  "kategorie": "keys",
+  "text": "Stacked fifth chord: two PWM squares a fifth apart with unison, hard gate envelope."
+ },
+ "keys-bell": {
+  "kategorie": "keys",
+  "text": "FM bell: four sine carriers, three rung by one 1:7 modulator that dies in a second."
+ },
+ "pluck-synth": {
+  "kategorie": "keys",
+  "text": "Thin synth pluck: a combed pulse through a resonant 2 kHz band-pass with a fast envelope."
+ },
+ "pluck-mallet": {
+  "kategorie": "keys",
+  "text": "Wooden xylophone: two triangles at +1 oct +10 st, a filter envelope for the strike."
+ },
+ "pluck-string": {
+  "kategorie": "keys",
+  "text": "Plucked string: synced pulse pair with a noise pick and a falling filter, 1.7 s decay."
+ },
+ "pluck-stab": {
+  "kategorie": "keys",
+  "text": "House stab: two detuned saws with a snappy filter, velocity brightness."
+ },
+ "drums-kick": {
+  "kategorie": "drums",
+  "text": "Punchy kick: a sine with a fast exponential pitch drop, short body, noise click."
+ },
+ "drums-snare": {
+  "kategorie": "drums",
+  "text": "Snare: noise-dominated rattle with a short triangle body and a small pitch drop."
+ },
+ "drums-clap": {
+  "kategorie": "drums",
+  "text": "Analog clap: filtered noise chopped by a retriggered 32 Hz square, short decay."
+ },
+ "drums-hihat": {
+  "kategorie": "drums",
+  "text": "Closed hi-hat: six inharmonic squares through three band-passes."
+ },
+ "drums-cymbal": {
+  "kategorie": "drums",
+  "text": "Crash-like cymbal: noise and a six-square metal layer, resonant filter, high-pass."
+ },
+ "percussion-tom": {
+  "kategorie": "drums",
+  "text": "Analog tom: two squares a minor seventh apart with a quick pitch drop."
+ },
+ "percussion-shaker": {
+  "kategorie": "drums",
+  "text": "Shaker: a 40 ms grain of noise ringing a resonant 7.6 kHz filter, high-passed."
+ },
+ "percussion-conga": {
+  "kategorie": "drums",
+  "text": "Conga: two squares a ninth apart with a quick filter slap and a 150 ms decay, short room."
+ },
+ "percussion-rim": {
+  "kategorie": "drums",
+  "text": "Rim shot: a 90 ms click of noise ringing a self-oscillating 2.7 kHz filter."
+ },
+ "percussion-metallic": {
+  "kategorie": "drums",
+  "text": "Analog cowbell: two narrow pulses at 587 and 845 Hz, a bright filter snap, 150 ms decay."
+ },
+ "fx-riser": {
+  "kategorie": "textur",
+  "text": "Noise riser: white noise through a band-pass that sweeps up over four seconds."
+ },
+ "fx-downlifter": {
+  "kategorie": "textur",
+  "text": "Noise downlifter: a band-passed noise wash that falls from bright to dark."
+ },
+ "fx-impact": {
+  "kategorie": "textur",
+  "text": "Cinematic impact: a sine boom falling an octave and a half, noise debris."
+ },
+ "fx-noise": {
+  "kategorie": "textur",
+  "text": "Ocean wind: filtered noise swelling slowly at 0.2 Hz, long hall, high- and low-passed."
+ },
+ "fx-texture": {
+  "kategorie": "textur",
+  "text": "Machine texture bed: saw and square two octaves apart, a resonant filter wandering."
  }
 }

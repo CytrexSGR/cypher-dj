@@ -26,7 +26,7 @@ list of vocabulary words that are proposals and need approval (F9).
 | `presets/register.ts` | Register over the store: rebuild, verify (drift), query, agent tool schema |
 | `presets/tool.ts` | Command line: `bauen`, `pruefen`, `frage`, `schema`, `pruefsumme` |
 | `presets/area.ts` | HTTP routes under `/presets` |
-| `presets/werk/<geraet>/<slug>.preset.json` | Factory presets (today: the six compressor presets) |
+| `presets/factory/<folder>/<slug>.preset.json` (folder per `werkOrdner`: `modular`, `reverb`, `comp`, `sat`, else the device id) | Factory presets (today: the six compressor presets) |
 | `presets/register.json` | Committed register of the factory presets |
 | `public/presets.js`, `public/presets.css` | Browser panel |
 | `tests/presets_*.test.mjs`, `tests/fixtures/presets/` | Tests and fixtures (`register/` holds a small store layout) |
@@ -80,7 +80,7 @@ copied file cannot claim to be a factory preset.
 - **D2 EQ band parameters** carry the suffix nih-plug gives a nested array: `freq_1` ... `freq_8`, `on_1`, `type_1`, ...
   plus `out` and `propq`. Band count is `eq_dsp::BAENDER` (8), checked by the test.
 - **D3 Where presets live.**
-  - Factory: `djk/ui/presets/werk/<geraet>/<slug>.preset.json`, in the repository, read-only for the server.
+  - Factory: `djk/ui/presets/factory/<folder>/<slug>.preset.json` (folder = `werkOrdner(geraet)`: baukasten→modular, hall→reverb, komp→comp, saett→sat, others unchanged; the device id stays the data), in the repository, read-only for the server.
   - User: `~/.config/cypherdj/presets/<geraet>/<slug>.preset.json`; a test instance `a..i` uses
     `~/.config/cypherdj-<i>/presets` (same scheme as `geraeteDatei()` and `controllerOrdner()` in `paths.ts`). Both
     folders can be overridden through `ServerOptionen.presets` (`{ werk, nutzer }`).

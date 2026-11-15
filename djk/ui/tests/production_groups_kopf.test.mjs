@@ -84,3 +84,42 @@ test('group head: a click on its output select keeps the selection (error case: 
   await s.w(`document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }))`);
   assert.deepEqual(await wahl(s), [], 'negative control: a plain click elsewhere clears it');
 });
+
+test('group head (real page): A opens an empty lane head under the header, a second A closes it', opt, async (t) => {
+  const s = await seite(t, flach());
+  const n = () => s.w(`document.querySelectorAll('.p-lanenkopf').length`);
+  assert.equal(await n(), 0);
+  await klickMit(s, `${kopf('g1')} .p-lane`);
+  assert.equal(await n(), 1, 'one lane head for the group');
+  assert.equal(await s.w(`document.querySelector(${JSON.stringify(kopf('g1') + ' .p-lane')}).getAttribute('aria-pressed')`), 'true');
+  await klickMit(s, `${kopf('g1')} .p-lane`);
+  assert.equal(await n(), 0, 'closed again');
+});
+
+
+test('group lane (real page): no insert says what to do; with an EQ insert "+ Lane" creates a lane on the group (strang_id)', opt, async (t) => {
+  const s = await seite(t, flach());
+  await klickMit(s, `${kopf('g1')} .p-lane`);
+  assert.equal(await s.w(`document.querySelector('.p-lanenkopf .p-lanentitel').textContent`), 'This group has no insert yet: add an effect in INSERTS first');
+  const mitEq = fertig(lauf(JSON.parse(JSON.stringify(flach())), [{ befehl: 'insert_setzen', strang_id: 'g1', pos: 0, art: 'eq' }]));
+  await s.saat(mitEq);
+  const optionen = await s.w(`[...document.querySelector('.p-lanenkopf .p-lane-neu').options].map((o) => o.value)`);
+  assert.ok(optionen.includes('insert.i1.b1/freq'), `targets of the EQ: ${optionen.slice(0, 4)}`);
+  assert.ok(!optionen.includes('fader'), 'no fader lane on a group');
+  await s.w(`(() => { const e = document.querySelector('.p-lanenkopf .p-lane-neu'); e.value = 'insert.i1.b1/freq'; e.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+  assert.ok(await s.bis(async () => ((await s.projekt()).gruppen[0].automation ?? []).length === 1), 'the group has one lane');
+});
+
+// Task 6 (backlog production): the A button of a group head opens its lane row (node, no browser; LAST in the file: installiere() replaces globals that the browser tests above need)
+test('group head: an A button .p-lane calls handler.lane(id)', async () => {
+  const { installiere } = await import('./helpers/pages_mock.mjs');
+  const { baueGruppenKopf } = await import('../public/production/groups_kopf.js');
+  installiere();
+  const aufrufe = [];
+  const el = baueGruppenKopf('g4', { falten() {}, waehle() {}, ziel() {}, lane: (id) => aufrufe.push(id) });
+  const knopf = el.querySelector('.p-lane');
+  assert.ok(knopf, 'the head has an A button');
+  assert.equal(knopf.textContent, 'A');
+  knopf.dispatch('click');
+  assert.deepEqual(aufrufe, ['g4']);
+});

@@ -41,6 +41,8 @@ import { projBereich, type ProjOptionen } from './areas/proj/area.ts';
 import { geraeteBereich, type GeraeteOptionen } from './areas/devices/area.ts';
 import { lernenBereich, type LernenOptionen } from './areas/learn/area.ts';
 import { hostlernenBereich } from './areas/hostlernen/area.ts';
+import { HostSpeicher } from './areas/hostlernen/store.ts';
+import { registerBereich, aktivesPult } from './areas/controller/register.ts';
 import { presetInhaltVon, presetsBereich, type PresetOptionen } from './presets/area.ts';
 import { kollektionenBereich, type KollektionBereichOptionen } from './collections/area.ts';
 import { ausgabeBereich } from './areas/proj/output.ts';   // Paket S3
@@ -83,7 +85,8 @@ import { Mediathek, Vorbereiter, MediathekFehler, KLANG_TYPEN, type KlangTreffer
 import { pruefeSpur, plane, oeffnetKanal, beatZuMono, wirtRuf, stromVonZiel, faelligeMuster, SPUR_NAME, type MusterPlan, type Fahrt } from './track.ts';
 import { planeDurchlauf, MAX_SCHLEIFE_TAKTE, type Spur } from './track.ts';   // 1.12 S7 (M13): track band loop
 import { leseAusgang } from './output.ts';
-import { OhrLeser, OSZI_KANAELE, oszi, hoerAntwort, partnerVon, sync as ohrSync, K as OHR_K, type DeckLage, Hoerscheinstelle, type Hoerschein, type DeckStand as OhrDeckStand } from './ear.ts';
+import { OhrLeser, OSZI_KANAELE, oszi, hoerAntwort, hoerLage, partnerVon, sync as ohrSync, K as OHR_K, type DeckLage, Hoerscheinstelle, type Hoerschein, type DeckStand as OhrDeckStand } from './ear.ts';
+import { seqGruppe } from './project/seq.ts';
 // @ts-expect-error reines .mjs ohne Typen (djk/generator); muster_stand lädt Strudel NICHT (Plan-Review M3)
 import { PegelPuffer } from './level_buffer.ts';
 import { leseMusterStand, setzeAutonom, leseLebt } from '../generator/src/pattern_state.mjs';
@@ -175,7 +178,7 @@ export interface ServerOptionen {
   geraete?: GeraeteOptionen;   // I08: Pfade und Erkennung (Tests geben eigene)
   lernen?: LernenOptionen;     // S19: controller folder (lernen.json) and the devices file (Tests give their own)
   kollektionen?: KollektionBereichOptionen;   // 1.16 rest: collections folder (default ~/.config/cypherdj[-<i>]/kollektionen); tests give their own
-  presets?: PresetOptionen;    // 1.16: preset folders (werk = factory presets/werk, nutzer = user ~/.config/cypherdj[-<i>]/presets), vocabulary and factory register; tests give their own
+  presets?: PresetOptionen;    // 1.16: preset folders (werk = factory presets/factory, nutzer = user ~/.config/cypherdj[-<i>]/presets), vocabulary and factory register; tests give their own
   proj?: ProjOptionen;   // D1 S2: Projektwurzel, Arbeitsordner (Vorgaben je Instanz, areas/proj/session.ts)
   mediathek?: string;    // Mediathek T2: Vorgabe $CYPHERDJ_MEDIATHEK (nur lesen; fehlt sie: 503 mediathek_fehlt)
   korrekturen?: string;  // Slice 3b: Bestand des Decks für die Eins-Korrekturen; Vorgabe nur im Betrieb: bestand; eine Prüfinstanz (a..i) schreibt nur ausdrücklich
@@ -198,7 +201,7 @@ export type Pruefmodus = 'an' | 'aus' | 'unbekannt';
 // Drosselung je Schlüssel: höchstens eine Meldung je Intervall, die letzte gewinnt (nachgereicht)
 // D1 S2: /zustand/arr 50 Hz beim Spielen, Drossel 50 ms (Spec 3.1)
 const GRAPH_ABGELEHNT = [4, 6, 7, 8];   // quittung states of a refused command (INTERFACES 5.1; 5 = executed late, a positive answer)
-const DROSSEL_MS: Record<string, number> = { '/uhr': 50, '/zustand/deck': 100, '/pegel': 100, '/zustand/komp': 100, '/zustand/arr': 50, '/zustand/ein': 250, '/zustand/rec': 100, '/zustand/mix': 100, '/e/ins_gr': 100,
+const DROSSEL_MS: Record<string, number> = { '/uhr': 50, '/zustand/deck': 100, '/pegel': 100, '/zustand/komp': 100, '/zustand/arr': 50, '/zustand/ein': 250, '/zustand/rec': 100, '/zustand/mix': 100, '/e/ins_gr': 100, '/e/stufe_pegel': 100,
   '/zustand/spektrum': 40 };   // 1.15 A7b: 25 Hz, keyed per source (kanal)
 export const INS_GR_FRIST_MS = 500;   // 1.10 slice 4a: as the page's meters (MIX_FRIST_MS); the kern sends 20 Hz while a stage runs
 const DURCHREICHEN = new Set(['/uhr', '/zustand/deck', '/pegel', '/e/regler', '/e/hand', '/e/geladen', '/e/hotcue', '/e/fx',
@@ -206,6 +209,7 @@ const DURCHREICHEN = new Set(['/uhr', '/zustand/deck', '/pegel', '/e/regler', '/
   '/zustand/komp',   // Effekt-Sektion 2026-10-11: Absenkung je aktivem Kompressor (10 Hz)
   '/zustand/arr', '/e/freeze', '/zustand/ein', '/zustand/rec', '/e/aufnahme',   // D1 S2 (Spec 3.4); I08 (§5.14)
   '/e/ins_gr',   // 1.10 slice 4a (§5.5f): gain reduction per running insert stage, 20 Hz from the kern, throttled per kanal
+  '/e/stufe_pegel',   // device faces T9 (§5.5g): input and output peak per running compressor or limiter stage, 20 Hz from the kern, throttled per kanal
   '/zustand/mix', '/zustand/spektrum',   // 1.15 A6: gain-reduction meters (10 Hz per channel, throttled per kanal); A7b: the spectrum (25 Hz, 40 ms throttle per kanal)
   '/e/auto']);   // 1.12 S3 (D8, §5.13): the override state of a lane field, every change at once
 
@@ -430,8 +434,12 @@ export class Oberflaeche {
     const u = this.kern.uhr;
     if (!u) return this.json(a, 409, { fehler: 'kein_kernstand' });
     const st = this.deckStand(deck);
-    const lage: DeckLage = { deck, geladen: st !== null, laeuft: st ? Number(st.z.status) >= 2 : false,
-      offen: kanalOffen(this.stand.regler, `deck/${deck}`) };
+    // A place with a SEQ deck has no track on its deck player but a group that plays into deck/N (ADR 038): the ear reads that channel too
+    const op = this.proj.zugang.offen();
+    const arr = this.proj.sitzung.lage.arr;
+    const lage: DeckLage = hoerLage(deck, { geladen: st !== null, laeuft: st ? Number(st.z.status) >= 2 : false,
+      seqDeck: !!op?.projekt.live && seqGruppe(op.projekt, deck) !== undefined, seqLaeuft: !!arr && (arr.status === 1 || arr.status === 2),
+      offen: kanalOffen(this.stand.regler, `deck/${deck}`) });
     const r = hoerAntwort(this.ohr, lage, u.beat, u.bpm, takte);
     if (r.code === 200) {
       // Ohr T8 (Plan Rev. 4): Sync unvalidiert (Befund Slice 2, anschlagPhase instabil an Mischungen,
@@ -447,7 +455,7 @@ export class Oberflaeche {
       const saetzePartner = partnerDeck !== null
         ? this.ohr.saetze(partnerDeck - 1, r.j.gemessen_von_beat, r.j.gemessen_bis_beat) : null;
       const s = ohrSync(saetzeDeck, saetzePartner, u.bpm);
-      r.j.sync = { sync_ms: s.sync_ms, deck_gegen_deck_ms: s.deck_gegen_deck_ms, n: s.n, validiert: false };
+      r.j.sync = { sync_ms: s.sync_ms, deck_gegen_deck_ms: s.deck_gegen_deck_ms, n: s.n, partner: partnerDeck, validiert: false };
       r.j.hoerschein = this.hoerscheinstelle.letzter(deck);   // Ohr T10
       // Task 1.5: der Mess-Abgriff liegt NACH dem Trim (adr/008), also relativ korrigieren, nicht absolut.
       // Einheit dB; absoluter Soll für deck/N/trim (derselbe Pfad wie /regler), geklemmt auf die Reglertabelle ±24.
@@ -629,6 +637,7 @@ export class Oberflaeche {
     const lernBereich = lernenBereich(this.bereichKontext(), opt.lernen ?? {});
     this.router.melde(lernBereich);   // S19: /lernen
     this.router.melde(hostlernenBereich(this.bereichKontext(), lernBereich, { ordner: lernBereich.speicher.ordner }));   // host learn: /lernen/host, host_ziele.json next to lernen.json
+    this.router.melde(registerBereich(this.bereichKontext(), { ordner: lernBereich.speicher.ordner, aktiv: () => aktivesPult(inst), midiPort: () => lernBereich.midiPort(), host: () => new HostSpeicher(lernBereich.speicher.ordner).lies().ziele }));   // controller register: /register
     this.router.melde(presets);   // 1.16: /presets (presets/area.ts), built above so that the project command preset_anwenden reads its store
     this.router.melde(kollektionenBereich(this.bereichKontext(), opt.kollektionen ?? {}));   // 1.16 rest: /kollektionen (collections/area.ts)
   }
@@ -721,6 +730,8 @@ export class Oberflaeche {
     if (this.ohrTakt) { clearInterval(this.ohrTakt); this.ohrTakt = null; }
     if (this.graphTakt) { clearInterval(this.graphTakt); this.graphTakt = null; }
     if (this.pumpeTimer) clearTimeout(this.pumpeTimer);
+    if (this.offenerPlanTimer) { clearTimeout(this.offenerPlanTimer); this.offenerPlanTimer = null; }   // the restore that waits for the guard time
+    if (this.wiederTimer) { clearTimeout(this.wiederTimer); this.wiederTimer = null; }
     this.vorbereiter.stoppe();
     await this.vorhoeren.ende();
     await this.kern.stoppe();
@@ -3017,30 +3028,63 @@ export class Oberflaeche {
     for (const e of [1, 2] as const) {
       const f = this.stand.fx[e - 1];
       const zu = Object.entries(this.stand.fxZuweisung[e - 1]).filter(([, an]) => an).map(([kanal]) => kanal);
-      if (!f || (f.an !== 1 && zu.length === 0)) continue;
+      if (!f) continue;   // never set: nothing to bring back (a unit that is off keeps its kind, beats and parameters)
       fx.push({ einheit: e, felder: f, zuweisung: zu, besitzer: this.fxVon(e) ?? 'cypher' });
     }
+    // FX3 (the remix insert on fx/3): only its assignments live in the page server's state; the graph on fx/3 is in the graph plan below
+    const zu3 = Object.entries(this.stand.fxZuweisung[2]).filter(([, an]) => an).map(([kanal]) => kanal);
+    const fx3 = zu3.length > 0 ? { zuweisung: zu3, besitzer: this.fxVon(3) ?? 'cypher' } : null;
     // channels of the open project's sound snapshot belong to the project restore (session.ts nachNeustart sends its knobs and graphs itself)
     const projektKanaele = (this.proj?.zugang.offen()?.projekt.baukasten ?? []).map((e) => bkDefVonId(e.id)?.kanal ?? '');
     const graphen = graphenNachNeustart(this.stand.graphen_geladen, this.graphBesitzer, projektKanaele);
-    if (boxen.length === 0 && fx.length === 0 && graphen.length === 0) return;
+    // t_7f487235: an empty snapshot (the stand was cleared by a restart that was too fast) falls back to the plan that is still waiting
+    const leer = boxen.length === 0 && fx.length === 0 && fx3 === null && graphen.length === 0;
+    if (leer && !this.offenerPlan) return;
+    const plan = leer ? this.offenerPlan! : { boxen, fx, fx3, graphen };
     const jetzt = Date.now();
     if (jetzt - this.letzteBoxFxWieder < Oberflaeche.BOX_FX_SPERRE_MS) {
+      // Keep the plan and restore it once when the guard time is over (a later restart replaces the wait, so one accepted restart sends once)
+      this.offenerPlan = plan;
+      const warteMs = Oberflaeche.BOX_FX_SPERRE_MS - (jetzt - this.letzteBoxFxWieder) + 500;
+      if (this.offenerPlanTimer) clearTimeout(this.offenerPlanTimer);
+      const gen = this.generation;
+      this.offenerPlanTimer = setTimeout(() => {
+        this.offenerPlanTimer = null;
+        if (this.generation !== gen || !this.offenerPlan) return;   // another restart took over: its own pass decides
+        const p = this.offenerPlan;
+        this.offenerPlan = null;
+        this.letzteBoxFxWieder = Date.now();
+        this.angefasst.clear();
+        this.opt.log?.({ typ: 'wiederherstellung_nachgeholt' });
+        this.boxFxWieder(p.boxen, p.fx, p.fx3);
+        this.graphWieder(p.graphen);
+      }, warteMs);
+      this.offenerPlanTimer.unref?.();
       this.opt.log?.({ typ: 'wiederherstellung_uebersprungen', grund: 'zu_schnell', seit_ms: jetzt - this.letzteBoxFxWieder });
       this.verteile({ a: 'wiederherstellung', f: { uebersprungen: true, grund: 'zu_schnell' } });
       return;
     }
+    if (this.offenerPlanTimer) { clearTimeout(this.offenerPlanTimer); this.offenerPlanTimer = null; }
+    this.offenerPlan = null;
     this.letzteBoxFxWieder = jetzt;
     this.angefasst.clear();
     const geplant = this.generation;   // MINOR-2: ist der Kern bis zum Auslösen ein anderer geworden, verpufft der Plan
-    setTimeout(() => {
-      if (this.generation !== geplant) { this.opt.log?.({ typ: 'wiederherstellung_verworfen', geplant, jetzt: this.generation }); return; }
-      this.boxFxWieder(boxen, fx);
-      this.graphWieder(graphen);
+    if (this.wiederTimer) clearTimeout(this.wiederTimer);
+    this.wiederTimer = setTimeout(() => {
+      this.wiederTimer = null;
+      if (this.generation !== geplant) { this.offenerPlan = plan; this.opt.log?.({ typ: 'wiederherstellung_verworfen', geplant, jetzt: this.generation }); return; }   // kept for the next restart
+      this.boxFxWieder(plan.boxen, plan.fx, plan.fx3);
+      this.graphWieder(plan.graphen);
     }, 500);
   }
+  private wiederTimer: ReturnType<typeof setTimeout> | null = null;   // the restore 500 ms after an accepted restart (cleared by stoppe)
+  private offenerPlan: { boxen: { box: number; name: string; status: number; besitzer: string; versatz?: number }[];
+    fx: { einheit: 1 | 2; felder: Felder; zuweisung: string[]; besitzer: string }[]; fx3: { zuweisung: string[]; besitzer: string } | null;
+    graphen: ReturnType<typeof graphenNachNeustart> } | null = null;   // t_7f487235: plan held back by the guard
+  private offenerPlanTimer: ReturnType<typeof setTimeout> | null = null;
   private boxFxWieder(boxen: { box: number; name: string; status: number; besitzer: string; versatz?: number }[],
-    fx: { einheit: 1 | 2; felder: Felder; zuweisung: string[]; besitzer: string }[]): void {
+    fx: { einheit: 1 | 2; felder: Felder; zuweisung: string[]; besitzer: string }[],
+    fx3: { zuweisung: string[]; besitzer: string } | null): void {
     const nichtCypher = (besitzer: string) => !(besitzer === 'cypher' && this.kiGestoppt);   // Stop Cypher: Cyphers Teile bleiben weg
     const autoAus = !leseMusterStand(this.musterOrdner()).autonom;   // F7: wie fxRiegel, zum Zeitpunkt des Auslösens
     const ladbar = new Map(leseLoops(this.loopOrdner()).map((l) => [l.name, l.ladbar]));
@@ -3075,8 +3119,20 @@ export class Oberflaeche {
         this.kern.sende('/k/fx/zuweisung', { id: Number(++this.id), quelle: u.besitzer, einheit: u.einheit, kanal, an: 1 });
         this.gesendet++;
       }
-      this.opt.log?.({ typ: 'fx_wieder', einheit: u.einheit, besitzer: u.besitzer, zuweisungen: u.zuweisung.length });   // fx_von.json bleibt: hier wird nicht fxVon(…, von) gerufen
+      this.opt.log?.({ typ: 'fx_wieder', einheit: u.einheit, besitzer: u.besitzer, an: f.an === 1 ? 1 : 0, zuweisungen: u.zuweisung.length });   // fx_von.json bleibt: hier wird nicht fxVon(…, von) gerufen
       n++;
+    }
+    if (fx3 !== null) {   // AUTO off does not hold FX3 back: an assignment sounds only with a graph on fx/3, nothing runs out by itself
+      if (!nichtCypher(fx3.besitzer)) this.opt.log?.({ typ: 'fx_wieder_ausgelassen', einheit: 3, grund: 'ki_gestoppt' });
+      else if (this.angefasst.has('fx:3')) this.opt.log?.({ typ: 'fx_wieder_ausgelassen', einheit: 3, grund: 'neu_gesetzt' });
+      else {
+        for (const kanal of fx3.zuweisung) {
+          this.kern.sende('/k/fx/zuweisung', { id: Number(++this.id), quelle: fx3.besitzer, einheit: 3, kanal, an: 1 });
+          this.gesendet++;
+        }
+        this.opt.log?.({ typ: 'fx_wieder', einheit: 3, besitzer: fx3.besitzer, zuweisungen: fx3.zuweisung.length });
+        n++;
+      }
     }
     this.opt.log?.({ typ: 'wiederherstellung', stuecke: n });
   }

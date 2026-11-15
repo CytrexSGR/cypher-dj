@@ -7,7 +7,7 @@
 //   POST /seq/befehle {platz, label?, befehle}         a command list of the page, one gesture = one undo step; only the commands below, each on a track of the
 //                                                      deck or a clip of such a track, only the fields below
 //   POST /seq/text {platz, text}                       one or several patterns as text (seq_text.ts); one write, one undo step, all or nothing
-//   GET  /seq/stand                                    {"1": null | {gruppe_id, folgen: [{spur_id, clip_id, name, geraet, stumm, editierbar, laenge_beats, zeilen, text}]}, ...}
+//   GET  /seq/stand[?zellen=1]                         (`zellen=1` adds `zellen`, one char per cell, to the note rows) {"1": null | {gruppe_id, folgen: [{spur_id, clip_id, name, geraet, stumm, editierbar, laenge_beats, zeilen, text}]}, ...}
 //   GET  /seq/geraet?spur_id=<id>                      the `info` of a track's instrument: {art, regler: [{nr, name, vorgabe}], klaenge: [{ton, name}]}
 // Every POST answers what the session answers to POST /proj/aendern, {rev, projekt, kern, hinweise?}, plus `gruppe_id` (and `ohne_aenderung: true` when the list
 // came out empty and nothing was written). The page needs `projekt` and `kern` (the message "Saved, but the core did not load"). Each write sends the event
@@ -21,7 +21,7 @@ import type { BereichKontext, Route } from '../../http/router.ts';
 import { json } from '../../http/transport.ts';
 import { seqFolgen, seqGruppe } from '../../project/seq.ts';
 import type { Geraet, Gruppe, Projekt, Spur } from '../../project/model.ts';
-import { folgeBefehle, geraetText, geraetVonText, leseFolgeText, schreibeFolgeText, type Befehl, type FolgeInfo } from '../../project/seq_text.ts';
+import { bandVon, folgeBefehle, geraetText, geraetVonText, leseFolgeText, schreibeFolgeText, type Befehl, type FolgeInfo } from '../../project/seq_text.ts';
 import { SeqFehler, folgeSicht, musterLaenge, reglerSchluessel } from '../../public/seq_logic.js';
 import { parameterTabelle } from '../../devices_parameter.ts';
 import { kitKlaenge } from '../proj/kits.ts';
@@ -86,6 +86,11 @@ export function geraetInfo(g: Geraet | undefined): FolgeInfo {
   return { art: 'anderes', regler: [], klaenge: [] };
 }
 
+// one character per cell of a note lane: '.' empty; trigger lane o/x/X by velocity band (the characters of the text notation); pitched lane x where a note starts
+function zellenText(z: Record<string, unknown>): string {
+  return (z.zellen as { an: boolean; vel: number }[]).map((c) => (!c.an ? '.' : z.ton !== undefined ? bandVon(c.vel) : 'x')).join('');
+}
+
 export class SeqBereich {
   private readonly ctx: BereichKontext;
   private readonly zugang: ProjZugang;
@@ -95,7 +100,7 @@ export class SeqBereich {
 
   private info(g: Geraet | undefined): FolgeInfo { return (this.o.geraetInfo ?? geraetInfo)(g); }
 
-  private eintrag(p: Projekt, platz: number): SeqEintrag | null {
+  private eintrag(p: Projekt, platz: number, zellen = false): SeqEintrag | null {
     const g = seqGruppe(p, platz);
     if (!g?.seq) return null;
     const folgen = seqFolgen(p, g).map(({ spur, clip, editierbar }): Folge => {
@@ -104,16 +109,17 @@ export class SeqBereich {
       if (!editierbar) return { ...kopf, clip_id: null, laenge_beats: null, zeilen: [], text: null };
       const zeilen = clip ? folgeSicht(spur, clip, info).zeilen.map((z: Record<string, unknown>) => ({
         id: z.id, art: z.art, name: z.name, teiler: z.teiler, ziel: z.ziel, ton: z.ton, von: z.von, abgeleitet: z.abgeleitet,
+        zellen: zellen && z.art === 'noten' ? zellenText(z) : undefined,
       })).map((z: Record<string, unknown>) => Object.fromEntries(Object.entries(z).filter(([, v]) => v !== undefined))) : [];
       return { ...kopf, clip_id: clip?.id ?? null, laenge_beats: musterLaenge(clip), zeilen, text: schreibeFolgeText(spur, clip, info) };
     });
     return { gruppe_id: g.id, folgen };
   }
 
-  stand(): Antwort {
+  stand(opt?: { zellen?: boolean }): Antwort {
     const o = this.zugang.offen();
     const j = {} as SeqStand;
-    for (const n of PLAETZE) j[String(n) as keyof SeqStand] = o?.projekt.live ? this.eintrag(o.projekt, n) : null;
+    for (const n of PLAETZE) j[String(n) as keyof SeqStand] = o?.projekt.live ? this.eintrag(o.projekt, n, opt?.zellen === true) : null;
     return { code: 200, j };
   }
 
@@ -285,7 +291,7 @@ export function seqRouten(ctx: BereichKontext, s: SeqBereich): Route[] {
     post('/seq/folge', (d, q) => s.folge(d, q)),
     post('/seq/befehle', (d, q) => s.befehle(d, q)),
     post('/seq/text', (d, q) => s.text(d, q)),
-    { methode: 'GET', pfad: '/seq/stand', schutz: 'offen', handler: async (_q, r) => antworte(r, () => s.stand()) },
+    { methode: 'GET', pfad: '/seq/stand', schutz: 'offen', handler: async (_q, r, url) => antworte(r, () => s.stand({ zellen: url.searchParams.get('zellen') === '1' })) },
     { methode: 'GET', pfad: '/seq/geraet', schutz: 'offen', handler: async (_q, r, url) => antworte(r, () => s.geraet(url.searchParams.get('spur_id'))) },
   ];
 }

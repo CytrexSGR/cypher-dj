@@ -1,0 +1,37 @@
+{
+ "schema": 1,
+ "name": "Granular pad",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "pad-granular",
+ "werte": {
+  "knob1": 0.5,
+  "knob2": 0.5,
+  "knob3": 0.5,
+  "knob4": 0.5
+ },
+ "beschreibung": {
+  "art": "pad",
+  "unterart": "granular",
+  "charakter": [
+   "evolving",
+   "airy",
+   "wide",
+   "smooth",
+   "thick"
+  ],
+  "genre": [],
+  "einsatz": [
+   "intro",
+   "breakdown"
+  ],
+  "energie": 1,
+  "text": "Stand-in for a granular pad: a slowly scanned, randomly jittered wavetable cloud with long hall and chorus."
+ },
+ "tags": [
+  "pad-granular"
+ ],
+ "notiz": "Source rule: recipe card `pad.granular`, Snoman [B3] p. 138. Measured by `tests/rezepte.rs`, not yet heard.",
+ "angelegt": "2026-11-15T00:00:00.000Z",
+ "geaendert": "2026-11-15T00:00:00.000Z"
+}

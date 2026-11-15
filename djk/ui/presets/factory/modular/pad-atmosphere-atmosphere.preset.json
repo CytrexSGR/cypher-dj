@@ -1,0 +1,39 @@
+{
+ "schema": 1,
+ "name": "Atmosphere",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "pad-atmosphere",
+ "werte": {
+  "knob1": 0.5,
+  "knob2": 0.5,
+  "knob3": 0.5,
+  "knob4": 0.5,
+  "knob5": 0.5
+ },
+ "beschreibung": {
+  "art": "pad",
+  "unterart": "atmosphere",
+  "charakter": [
+   "airy",
+   "wide",
+   "wet",
+   "evolving",
+   "metallic",
+   "thin"
+  ],
+  "genre": [],
+  "einsatz": [
+   "intro",
+   "breakdown"
+  ],
+  "energie": 1,
+  "text": "Celestial wash: noise rings a self-oscillating, key-tracked ladder pulsed at 5.5 Hz, slow swell, very long hall."
+ },
+ "tags": [
+  "pad-atmosphere"
+ ],
+ "notiz": "Source rule: recipe card `pad.atmosphere`, Welsh [B1] p. 99, patch Celestial Wash. Measured by `tests/rezepte.rs`, not yet heard.",
+ "angelegt": "2026-11-15T00:00:00.000Z",
+ "geaendert": "2026-11-15T00:00:00.000Z"
+}

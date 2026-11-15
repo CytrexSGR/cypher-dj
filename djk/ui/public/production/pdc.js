@@ -12,17 +12,23 @@ export const SAMPLERATE = 48000;
 // Plan 1.11 task 11: a plugin (host) stage has no constant: its latency is what the host reported (HostLage.latenz in samples, keyed by insert id; `hosten`
 // is {insert_id: samples}); before the host reports, the user's extra latency is all the page knows.
 let hosten = {};
-const stufeLatenz = (i) => (i.art === 'host' ? (hosten[i.id] ?? i.latenz_extra ?? 0) : (LATENZ[i.art] ?? 0));
+// Baukasten graphs: `graphLat` is {graph name: samples} (GET /graphen, `latenz` of each graph, the page's rule graphLatenz in graphs.ts, equal to the core's measurement). The latency of an instrument
+// graph on a track joins the chain of its strip as if it were a stage at the head (the core delays every other strip to match); a bk insert stage carries the latency of its graph.
+let graphLat = {};
+const graphBekannt = (name) => Number.isFinite(graphLat[name]);
+const stufeLatenz = (i) => (i.art === 'host' ? (hosten[i.id] ?? i.latenz_extra ?? 0) : i.art === 'bk' ? (graphBekannt(i.graph) ? graphLat[i.graph] : 0) : (LATENZ[i.art] ?? 0));
+const geraetLatenz = (st) => (st?.geraet?.name === 'bk' && graphBekannt(st.geraet.graph) ? graphLat[st.geraet.graph] : 0);
 // arr-bk: the number of Baukasten stages on a strip; their latency is unknown to the page (counted as 0 in `kette`), so the read-out says "unknown" instead of showing a sum that looks complete
-const bkZahl = (st) => (st?.inserts ?? []).filter((i) => i.art === 'bk').length;
-const kette = (st) => (st?.inserts ?? []).reduce((n, i) => n + stufeLatenz(i), 0);
+const bkZahl = (st) => (st?.inserts ?? []).filter((i) => i.art === 'bk' && !graphBekannt(i.graph)).length;
+const kette = (st) => geraetLatenz(st) + (st?.inserts ?? []).reduce((n, i) => n + stufeLatenz(i), 0);
 export const hostLatenzen = (lage) => Object.fromEntries((lage ?? []).filter((h) => Number.isFinite(h.latenz)).map((h) => [h.insert_id, h.latenz]));
 
 // -> { gesamt, streifen: { [id]: { kette, versatz, bk } }, ringe, bk }
-//    bk: the number of Baukasten stages (strip) or of all of them (total), whose latency is not in the numbers; kette: the latency of the stages on that strip; versatz: the delay the core adds on that strip so that it stays in time with the longest path (tracks, groups, returns:
+//    bk: the number of Baukasten stages (strip) or of all of them (total) whose graph latency the page does not know (not in the numbers); kette: the latency of the stages on that strip; versatz: the delay the core adds on that strip so that it stays in time with the longest path (tracks, groups, returns:
 //    the delay of the strip's own output; the master has none); gesamt: the largest path latency (what the music is late against the transport); ringe: places with a delay
-export function pdcRechnen(p, hostLage = null) {
+export function pdcRechnen(p, hostLage = null, graphen = null) {
   hosten = hostLage && !Array.isArray(hostLage) ? hostLage : hostLatenzen(hostLage);
+  graphLat = graphen ?? {};
   const aus = { gesamt: 0, streifen: {}, ringe: 0, bk: 0 };
   if (!p) return aus;
   const spuren = p.spuren ?? [], gruppen = p.gruppen ?? [], returns = p.returns ?? [];
@@ -61,8 +67,8 @@ export function pdcRechnen(p, hostLage = null) {
 
 export const msText = (samples) => `${((samples / SAMPLERATE) * 1000).toFixed(1)} ms`;
 // the line under the INSERTS header: empty when nothing in the project has a latency
-export const latenzZeile = (p, hostLage = null) => {
-  const r = pdcRechnen(p, hostLage);
+export const latenzZeile = (p, hostLage = null, graphen = null) => {
+  const r = pdcRechnen(p, hostLage, graphen);
   const g = r.gesamt;
   return [g > 0 ? `Latency ${msText(g)} (${g} samples): the strips are delayed to stay in time; the export skips it` : '',
     r.bk > 0 ? `latency of ${r.bk} Baukasten stage${r.bk > 1 ? 's' : ''} unknown here (the core delays for it; not in this sum)` : ''].filter(Boolean).join(' · ');

@@ -1,11 +1,12 @@
 // S19 (MIDI learn): bereich lernen. GET /lernen (assignments, what is waiting, the assigned MIDI port, state of the file), POST /lernen (arm a graph
 // knob, pfad null cancels), POST /lernen/loeschen (remove an assignment). Learning needs a hand on the hardware: only Andreas arms or deletes
-// (Cypher gets 403 nur_andreas). The target rule is the one of the hand routes (PFAD from hand_operation.ts) narrowed to graph knobs bk/1..64.
+// (Cypher gets 403 nur_andreas). The target is a graph knob bk/1..64 or any continuous control of the table (controls_info.ts, unit not a switch).
 import type http from 'node:http';
 import type { Bereich, BereichKontext, Route } from '../../http/router.ts';
 import { grundText } from '../../http/reasons.ts';
 import { json } from '../../http/transport.ts';
 import { PFAD } from '../../hand_operation.ts';
+import { reglerInfo } from '../../../conductor/src/controls_info.ts';
 import { controllerOrdner, geraeteDatei } from '../../paths.ts';
 import { leseKoerper } from '../proj/area.ts';
 import { ProjFehler } from '../proj/session.ts';
@@ -15,7 +16,11 @@ import { LernFehler, LernSpeicher } from './store.ts';
 
 export interface LernenOptionen { ordner?: string; geraeteKonfig?: string; fristMs?: number; zeit?: Zeit }
 
-const gueltigesZiel = (p: unknown): p is string => typeof p === 'string' && PFAD.test(p) && /\/bk\/([1-9]|[1-5][0-9]|6[0-4])$/.test(p);
+// A learnable target: a graph knob bk/1..64 or any control of the table whose unit is not a switch (a switch needs a button; notes are not learnable yet).
+const gueltigesZiel = (p: unknown): p is string => typeof p === 'string' && ((PFAD.test(p) && /\/bk\/([1-9]|[1-5][0-9]|6[0-4])$/.test(p)) || (reglerInfo(p) !== null && reglerInfo(p)?.einheit !== 'schalter'));
+const zielFehler = (p: unknown, mitNull: boolean): LernFehler => typeof p === 'string' && reglerInfo(p)?.einheit === 'schalter'
+  ? new LernFehler('argument_ungueltig', 400, 'pfad: a switch needs a button; only knobs can be learned (notes are not learnable yet)')
+  : new LernFehler('argument_ungueltig', 400, `pfad: a continuous target such as deck/1/fader or erz/5/bk/3${mitNull ? ', or null to cancel' : ''}`);
 
 // What the host learn Bereich (areas/hostlernen) borrows: the same checks and the same arming as POST /lernen, without the HTTP layer.
 export interface LernenBereich extends Bereich {
@@ -24,6 +29,7 @@ export interface LernenBereich extends Bereich {
   arme(pfad: string): void;                 // pruefeBereit + arm the kern for this knob
   wartet(): string | null;                  // the armed path
   abbrechen(): void;
+  midiPort(): string | null;                // the MIDI input assigned to learning (null without one or with a damaged devices file)
   loesche(pfad: string): Promise<void>;     // remove the learn assignment (keine_zuordnung 404 when there is none)
 }
 
@@ -69,6 +75,7 @@ export function lernenBereich(ctx: BereichKontext, opt: LernenOptionen = {}): Le
     arme(pfad: string): void { pruefeBereit(); ablauf.scharf(pfad); },
     wartet: () => ablauf.lage()?.pfad ?? null,
     abbrechen: () => ablauf.abbrechen(),
+    midiPort,
     loesche: (pfad: string) => ablauf.loesche(pfad),
     routen: () => [
       { methode: 'GET', pfad: '/lernen', schutz: 'offen', handler: (_q: http.IncomingMessage, a: http.ServerResponse) => {
@@ -76,12 +83,12 @@ export function lernenBereich(ctx: BereichKontext, opt: LernenOptionen = {}): Le
       } },
       schreib('/lernen', (d) => {
         if (d.pfad === null) { ablauf.abbrechen(); return; }
-        if (!gueltigesZiel(d.pfad)) throw new LernFehler('argument_ungueltig', 400, 'pfad: a graph knob such as erz/5/bk/3, or null to cancel');
+        if (!gueltigesZiel(d.pfad)) throw zielFehler(d.pfad, true);
         pruefeBereit();
         ablauf.scharf(d.pfad);
       }),
       schreib('/lernen/loeschen', async (d) => {
-        if (!gueltigesZiel(d.pfad)) throw new LernFehler('argument_ungueltig', 400, 'pfad: a graph knob such as erz/5/bk/3');
+        if (!gueltigesZiel(d.pfad)) throw zielFehler(d.pfad, false);
         await ablauf.loesche(d.pfad);
       }),
     ],

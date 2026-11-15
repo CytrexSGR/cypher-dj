@@ -554,6 +554,10 @@
     {"adresse": "/e/ins_gr", "typen": ",sf", "abschnitt": "5.5f", "richtung": "vom_kern", "felder": [
       {"name": "kanal", "typ": "s", "einheit": "pfad", "notiz": "pooled compressor insert stage, ins/komp/<n> with n = 1 to 12 (the project's insert slot)"},
       {"name": "gr_db", "typ": "f", "einheit": "db", "notiz": "gain reduction (>= 0) at the end of the last block; 20 Hz with the levels, only for stages that ran in the last block"}]},
+    {"adresse": "/e/stufe_pegel", "typen": ",sff", "abschnitt": "5.5g", "richtung": "vom_kern", "felder": [
+      {"name": "kanal", "typ": "s", "einheit": "pfad", "notiz": "compressor or limiter stage: ins/komp/<n> (n = 1 to 12), ins/lim/<n> (n = 1 to 2) or komp/<channel> (the channel compressor of deck/<n>, erz/<n>, pad/<n>)"},
+      {"name": "ein_db", "typ": "f", "einheit": "db", "notiz": "peak of max(|l|, |r|) at the input of the stage since the last report, dBFS; -200 for silence"},
+      {"name": "aus_db", "typ": "f", "einheit": "db", "notiz": "the same at the output of the stage (after its bypass blend); -200 for silence"}]},
     {"adresse": "/zustand/spektrum", "typen": ",sis", "abschnitt": "5.5e", "richtung": "vom_kern", "felder": [
       {"name": "kanal", "typ": "s", "einheit": "pfad", "notiz": "selected source of the spectrum (mixer channel or master); sent by the net thread at 25 Hz, only while spektrum/kanal > 0"},
       {"name": "rahmen", "typ": "i", "einheit": "nummer", "notiz": "laufende Nummer des Rahmens seit der letzten Quellenwahl"},

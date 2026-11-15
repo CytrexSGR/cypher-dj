@@ -40,7 +40,8 @@ export function vorschauModell(antwort, offen) {
     : t.gesetzt_bpm === null ? `${rund(t.quelle_bpm)} BPM in the file (project tempo kept)` : `${rund(t.quelle_bpm)} BPM (taken over)`;
   const kopf = [`${d.spuren_mit_noten} of ${d.midi_spuren} MIDI tracks have notes`, `${d.noten} notes`, `${dauer(d.dauer_s)}`, tempo,
     ...(t.aenderungen > 0 ? [`${t.aenderungen} tempo change${t.aenderungen === 1 ? '' : 's'} not carried over`] : []),
-    ...(k.abweichend ? [`time signature ${k.quelle[0]}/${k.quelle[1]} in the file, the project is 4/4`] : [])];
+    ...(k.abweichend ? [`time signature ${k.quelle[0]}/${k.quelle[1]} in the file, the project is ${(k.projekt ?? [4, 4])[0]}/${(k.projekt ?? [4, 4])[1]}`]
+      : k.quelle && (k.projekt ?? [4, 4])[0] !== 4 ? [`time signature ${k.quelle[0]}/${k.quelle[1]} (the project takes it)`] : [])];
   const zeilen = b.spuren.map((x) => ({
     schluessel: x.schluessel, name: x.name, noten: x.noten, schlagzeug: !!x.schlagzeug,
     klang: x.stumm && !x.geraet ? 'no sound' : x.geraet_text ?? (x.geraet ? 'instrument' : 'no sound'),
@@ -64,8 +65,10 @@ export function importFehlerText(r, fehlerText) {
 }
 
 // the request body: the file, its name, the parts left ticked (only sent when some part is unticked, so "all" stays the server default)
+// the page always plans with the poly profile: strings, brass and winds go to Baukasten pad and keys graphs (the API default stays einfach)
+export const vorschauKoerper = (daten, name) => ({ daten_b64: daten, name, profil: 'poly', vorschau: true });
 export function importKoerper(daten, name, gewaehlt, alle, extra = {}) {
-  const k = { daten_b64: daten, name, ...extra };
+  const k = { daten_b64: daten, name, profil: 'poly', ...extra };
   if (gewaehlt.length < alle.length) k.auswahl = gewaehlt;
   return k;
 }
@@ -136,7 +139,7 @@ export function bindeMidiImport(ctx) {
     try {
       const daten = base64Von(new Uint8Array(await f.arrayBuffer()));
       const name = f.name.replace(/\.(mid|midi|rmi)$/i, '');
-      const r = await ctx.holeJson('/proj/midi_import', { daten_b64: daten, name, vorschau: true });
+      const r = await ctx.holeJson('/proj/midi_import', vorschauKoerper(daten, name));
       if (r.status !== 200) { ctx.melde(importFehlerText(r, ctx.antwortText), true); datei.value = ''; return; }
       const modell = vorschauModell(r.j, r.j.offen === true && !!st.projekt);
       if (!modell) { ctx.melde('The server sent no preview', true); return; }

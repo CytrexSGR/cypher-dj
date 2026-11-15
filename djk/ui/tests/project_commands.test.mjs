@@ -254,6 +254,147 @@ test('clip_duplizieren: Kopie hinter dem Original (Vorgabe) oder am Ziel-Beat; n
   lehntAb(p, { befehl: 'clip_duplizieren', clip_id: 'cX' }, 'clip_unbekannt');
 });
 
+test('clip_duplizieren with spur_id: the copy goes to that track at ziel_beat (one undo step); same track = as without; art mismatch spur_art; unknown track spur_unbekannt', () => {
+  const p0 = specProjekt();
+  const p = ok(p0, { befehl: 'spur_neu', art: 'audio' }).projekt;   // s4: a second audio track
+  const m = ok(p, { befehl: 'clip_duplizieren', clip_id: 'c2', spur_id: 's3', ziel_beat: 4 });
+  pruefeErgebnis(p, m);
+  const k = m.projekt.spuren[2].clips[0];
+  assert.deepEqual([k.id, k.art, k.start_beat, k.laenge_beats, k.noten.map((n) => n.id)], ['c3', 'midi', 4, 16, ['n1']]);
+  assert.equal(m.projekt.spuren[1].clips.length, 1, 'the original stays where it is');
+  k.noten[0].ton = 1; assert.equal(m.projekt.spuren[1].clips[0].noten[0].ton, 36, 'a deep copy');
+  const a = ok(p, { befehl: 'clip_duplizieren', clip_id: 'c1', spur_id: 's4', ziel_beat: 8 });
+  pruefeErgebnis(p, a);
+  assert.deepEqual([a.projekt.spuren[3].clips[0].start_beat, a.projekt.spuren[3].clips[0].quelle.sha256], [8, SHA_A]);
+  const ohne = ok(p, { befehl: 'clip_duplizieren', clip_id: 'c2', spur_id: 's2' });
+  assert.deepEqual(ohne.projekt.spuren[1].clips.map((c) => [c.id, c.start_beat]), [['c2', 0], ['c3', 16]], 'the own track: right behind the original, as today');
+  lehntAb(p, { befehl: 'clip_duplizieren', clip_id: 'c1', spur_id: 's2' }, 'spur_art');
+  lehntAb(p, { befehl: 'clip_duplizieren', clip_id: 'c2', spur_id: 's1' }, 'spur_art');
+  lehntAb(p, { befehl: 'clip_duplizieren', clip_id: 'c2', spur_id: 'sX' }, 'spur_unbekannt');
+  lehntAb(p, { befehl: 'clip_duplizieren', clip_id: 'c2', spur_id: 7 }, 'argument_ungueltig');
+});
+
+// ---- clips_verbinden (glue) ----
+const nur = (p, id) => p.spuren.flatMap((x) => x.clips).find((c) => c.id === id);
+const lehntAbMit = (p, b, grund, text) => assert.throws(() => fuehreAus(p, b), (e) => e instanceof BefehlFehler && e.grund === grund && (!text || text.test(e.message)), `expected ${grund}`);
+// an instrument track with MIDI clips c1 (0..4), c2 (8..12), c3 (2..6, overlaps c1) and a second instrument track
+function midiAufbau() {
+  let p = fuehreListeAus(leer(), [{ befehl: 'spur_neu', art: 'instrument' }, { befehl: 'spur_neu', art: 'instrument' }, { befehl: 'spur_neu', art: 'audio' }]).projekt;
+  return fuehreListeAus(p, [
+    { befehl: 'clip_neu', spur_id: 's1', art: 'midi', start_beat: 0, laenge_beats: 4, name: 'A', noten: [{ beat: 0, laenge: 1, ton: 36, vel: 100 }, { beat: 3, laenge: 1, ton: 38, vel: 90 }] },
+    { befehl: 'clip_neu', spur_id: 's1', art: 'midi', start_beat: 8, laenge_beats: 4, name: 'B', noten: [{ beat: 1, laenge: 2, ton: 40, vel: 80 }] },
+    { befehl: 'clip_neu', spur_id: 's1', art: 'midi', start_beat: 2, laenge_beats: 4, name: 'C', noten: [{ beat: 0, laenge: 1, ton: 41, vel: 70 }] },
+    { befehl: 'clip_neu', spur_id: 's2', art: 'midi', start_beat: 0, laenge_beats: 4 },
+  ]).projekt;
+}
+
+test('clips_verbinden MIDI: one clip from the first start to the last end on the first one, notes keep their absolute beats, gaps stay silent, one undo step', () => {
+  const p = midiAufbau();
+  for (const ids of [['c1', 'c2'], ['c2', 'c1']]) {   // any order
+    const r = ok(p, { befehl: 'clips_verbinden', clip_ids: ids });
+    pruefeErgebnis(p, r);
+    const s1 = r.projekt.spuren[0].clips;
+    assert.deepEqual(s1.map((c) => c.id), ['c1', 'c3'], 'c2 is removed, the first keeps id and place, c3 untouched');
+    const g = nur(r.projekt, 'c1');
+    assert.deepEqual([g.start_beat, g.laenge_beats, g.name], [0, 12, 'A']);
+    assert.deepEqual(g.noten.map((n) => [n.beat, n.laenge, n.ton]), [[0, 1, 36], [3, 1, 38], [9, 2, 40]], 'c2 starts at 8: its note at 1 sits at 9; 4..8 stays empty');
+    assert.equal(new Set(g.noten.map((n) => n.id)).size, 3, 'note ids unique');
+    assert.equal(r.betrifft_wiedergabe, true);
+  }
+  const drei = ok(p, { befehl: 'clips_verbinden', clip_ids: ['c2', 'c3', 'c1'] });
+  pruefeErgebnis(p, drei);
+  const g = nur(drei.projekt, 'c1');
+  assert.deepEqual([g.start_beat, g.laenge_beats], [0, 12]);
+  assert.deepEqual(g.noten.map((n) => [n.beat, n.ton]).sort((x, y) => x[0] - y[0]), [[0, 36], [2, 41], [3, 38], [9, 40]], 'overlapping clips keep ALL notes');
+  assert.equal(new Set(g.noten.map((n) => n.id)).size, 4, 'ids that clash get new ones');
+  assert.equal(drei.projekt.spuren[0].clips.length, 1);
+});
+
+test('clips_verbinden MIDI: the first clip wins for loop-less fields (seq, envelopes), a pattern origin is dropped, a note past the new end is cut, an inactive loop (loop_beats = length) is allowed', () => {
+  let p = midiAufbau();
+  p = fuehreListeAus(p, [{ befehl: 'clip_aendern', clip_id: 'c1', loop_beats: 4 }, { befehl: 'huellkurve_setzen', clip_id: 'c1', ziel: 'geraet.lautstaerke', punkte: [{ beat: 0, wert: 0.5 }, { beat: 2, wert: 1 }] }]).projekt;
+  const r = ok(p, { befehl: 'clips_verbinden', clip_ids: ['c1', 'c2'] });
+  pruefeErgebnis(p, r);
+  const g = nur(r.projekt, 'c1');
+  assert.equal(g.loop_beats, undefined, 'loop_beats = length meant "no loop yet": the longer clip must not start looping');
+  assert.deepEqual(g.huellkurven, nur(p, 'c1').huellkurven, 'the envelopes of the first clip win, nothing is merged from the others');
+  const q = structuredClone(p); nur(q, 'c2').noten.push({ id: 'n99', beat: 3.5, laenge: 3, ton: 50, vel: 60 });   // runs 0.5 past its clip end
+  const r2 = fuehreAus(q, { befehl: 'clips_verbinden', clip_ids: ['c1', 'c2'] });
+  const ende = nur(r2.projekt, 'c1').noten.find((n) => n.ton === 50);
+  assert.deepEqual([ende.beat, ende.laenge], [11.5, 0.5], 'cut to the new clip end (12)');
+});
+
+test('clips_verbinden: refusals, one failing case each', () => {
+  const p = midiAufbau();
+  lehntAb(p, { befehl: 'clips_verbinden', clip_ids: ['c1'] }, 'argument_ungueltig');
+  lehntAb(p, { befehl: 'clips_verbinden', clip_ids: ['c1', 'c1'] }, 'argument_ungueltig');
+  lehntAb(p, { befehl: 'clips_verbinden', clip_ids: ['c1', 7] }, 'argument_ungueltig');
+  lehntAb(p, { befehl: 'clips_verbinden', clip_ids: 'c1' }, 'argument_ungueltig');
+  lehntAb(p, { befehl: 'clips_verbinden', clip_ids: ['c1', 'cX'] }, 'clip_unbekannt');
+  lehntAb(p, { befehl: 'clips_verbinden', clip_ids: ['c1', 'c4'] }, 'verbinden_spur');
+  lehntAb(p, { befehl: 'clips_verbinden', clip_ids: ['c1', 'c2'], extra: 1 }, 'argument_unbekannt');
+  const loop = fuehreListeAus(p, [{ befehl: 'clip_aendern', clip_id: 'c2', loop_beats: 2 }]).projekt;
+  lehntAb(loop, { befehl: 'clips_verbinden', clip_ids: ['c1', 'c2'] }, 'verbinden_loop');
+  lehntAb(loop, { befehl: 'clips_verbinden', clip_ids: ['c2', 'c1'] }, 'verbinden_loop');
+  assert.equal(nur(p, 'c2').loop_beats, undefined, 'the refused project is untouched');
+});
+
+// audio: pieces of one source. aufbauAudio(opts) makes a 16 beat clip with fades/warp, optionally split at 8
+const bpm = 124;
+function aufbauAudio(extra = {}, warp = null) {
+  let p = fuehreListeAus(leer(), [{ befehl: 'spur_neu', art: 'audio' }, { befehl: 'tempo_setzen', bpm }, { befehl: 'clip_neu', spur_id: 's1', art: 'audio', start_beat: 4, laenge_beats: 16, sha256: SHA_A, pfad_hinweis: '/x/a.wav', name: 'long', ...(warp ? { warp } : {}) }]).projekt;
+  if (Object.keys(extra).length) p = fuehreAus(p, { befehl: 'clip_aendern', clip_id: 'c1', ...extra }).projekt;
+  return p;
+}
+const wp = { an: true, modus: 'repitch', marker: [[0, 0], [3.84, 8]], versatz_beats: 1.5, quelle: 'takte', transpose_st: 0, detune_ct: 0 };
+
+test('clips_verbinden is the exact inverse of clip_teilen: split then glue gives the original clip back (MIDI, warped audio, audio with fades), field for field', () => {
+  const faelle = [
+    ['MIDI', (() => { let p = midiAufbau(); p = fuehreAus(p, { befehl: 'clip_loeschen', clip_id: 'c3' }).projekt; return [p, 'c1', 2]; })()],
+    ['warped audio', [aufbauAudio({}, wp), 'c1', 12]],
+    ['audio with fades and gain', [aufbauAudio({ fade_ein_beats: 1, fade_aus_beats: 2, gain_db: -3, offset_s: 0.75, stumm: true }), 'c1', 12]],
+  ];
+  for (const [name, [p, id, beat]] of faelle) {
+    const geteilt = ok(p, { befehl: 'clip_teilen', clip_id: id, beat }).projekt;
+    const neueId = geteilt.spuren[0].clips.map((c) => c.id).find((x) => x !== id && !p.spuren[0].clips.some((c) => c.id === x));
+    for (const ids of [[id, neueId], [neueId, id]]) {
+      const r = ok(geteilt, { befehl: 'clips_verbinden', clip_ids: ids });
+      pruefeErgebnis(geteilt, r);
+      assert.equal(ohneAbgeleitetes(r.projekt), ohneAbgeleitetes(p), `${name}: the glued project equals the project before the split`);
+      assert.deepEqual(nur(r.projekt, id), nur(p, id), `${name}: the clip, field for field`);
+    }
+  }
+});
+
+test('clips_verbinden audio: consecutive pieces of one source only; anything else is verbinden_audio; the three pieces of two splits glue in one step', () => {
+  const p = aufbauAudio({ fade_ein_beats: 1, fade_aus_beats: 2 });
+  const zwei = ok(ok(p, { befehl: 'clip_teilen', clip_id: 'c1', beat: 8 }).projekt, { befehl: 'clip_teilen', clip_id: 'c2', beat: 14 }).projekt;   // c1 4..8, c3 8..14?, order by position
+  const ids = zwei.spuren[0].clips.map((c) => c.id);
+  assert.equal(ids.length, 3);
+  const r = ok(zwei, { befehl: 'clips_verbinden', clip_ids: ids });
+  pruefeErgebnis(zwei, r);
+  assert.deepEqual(nur(r.projekt, 'c1'), nur(p, 'c1'), 'three pieces back to the original');
+  const getrennt = ok(p, { befehl: 'clip_teilen', clip_id: 'c1', beat: 12 }).projekt;
+  const verbieten = (q, text) => lehntAbMit(q, { befehl: 'clips_verbinden', clip_ids: ['c1', 'c2'] }, 'verbinden_audio', text);
+  const mod = (fn) => { const q = structuredClone(getrennt); fn(nur(q, 'c2'), nur(q, 'c1')); return q; };
+  assert.equal(ok(getrennt, { befehl: 'clips_verbinden', clip_ids: ['c1', 'c2'] }).projekt.spuren[0].clips.length, 1, 'positive control: the untouched split glues');
+  verbieten(mod((b) => { b.quelle = { sha256: SHA_B, pfad_hinweis: '' }; }), /bounce/i);
+  verbieten(mod((b) => { b.start_beat += 1; }));            // a gap on the timeline
+  verbieten(mod((b) => { b.start_beat -= 1; }));            // an overlap
+  verbieten(mod((b) => { b.offset_s += 0.5; }));            // the source does not continue
+  verbieten(mod((b) => { b.gain_db = -6; }));               // other settings
+  verbieten(mod((b) => { b.name = 'other'; }));
+  verbieten(mod((b, a) => { a.fade_aus_beats = 1; }));      // a fade at the join would be lost
+  const gew = aufbauAudio({}, wp), gt = ok(gew, { befehl: 'clip_teilen', clip_id: 'c1', beat: 12 }).projekt;
+  assert.equal(ok(gt, { befehl: 'clips_verbinden', clip_ids: ['c1', 'c2'] }).projekt.spuren[0].clips.length, 1, 'positive control: warped pieces glue');
+  const falsch = structuredClone(gt); nur(falsch, 'c2').warp.versatz_beats += 1;
+  verbieten(falsch);
+  const anders = structuredClone(gt); nur(anders, 'c2').warp.modus = 'complex';
+  verbieten(anders);
+  const einsGewarpt = structuredClone(gt); delete nur(einsGewarpt, 'c2').warp;
+  verbieten(einsGewarpt);
+});
+
 test('clip_loeschen: Clip weg, Rückweg bringt ihn samt Noten an die alte Stelle', () => {
   const p = specProjekt();
   const r = ok(p, { befehl: 'clip_loeschen', clip_id: 'c2' });

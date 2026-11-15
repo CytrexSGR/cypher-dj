@@ -100,6 +100,32 @@ void ArrBkSenke::auto_parameter_summand(int spur, int param, float delta) noexce
 
 void ArrBkSenke::block(int spur, int64_t s0, int m, float* l, float* r) noexcept { block_bahn(spur, s0, m, l, r, arbeit0_); }
 
+// What the plan builder reads is the published instance (aktiv, blende: acquire) and the plain fields weg and gen_last. The plain fields are written only by block_bahn() and spur_weg()
+// of this very track, which run before the join of the previous block or on the caller itself: the join (or the caller's own order) is what orders them before this read, as for every
+// other state of the sinks the plan builder looks at (ArrRbSenke::parallel_faehig reads sp_[spur].h the same way). A lock is not needed.
+bool ArrBkSenke::parallel_faehig(int spur) const noexcept {
+  if (spur < 0 || spur >= ARR_SENKEN_PLAETZE) return false;
+  const Spur& p = sp_[spur];
+  const CypherBk* in_use = p.aktiv.load(std::memory_order_acquire);
+  if (!in_use) return false;   // no instance taken over yet (its first block runs in the remainder), or the track has none
+  const ArrSnapshot* snap = arr_.snapshot();
+  if (!snap) return false;
+  const ArrSpur& x = snap->platz(spur);
+  if (x.art != ArrArt::intern || std::strcmp(x.geraet, "bk") != 0 || !x.bk) return false;
+#ifndef CYPHERDJ_MUTATION_BK_BAHN_IM_TAUSCH
+  if (p.blende.load(std::memory_order_acquire)) return false;   // a fade is in flight (never seen between blocks, but the answer must not depend on it)
+  if (p.weg || x.bk != in_use || x.bk_gen != p.gen_last) return false;   // a change of instance is due in the next block: it runs in the serial remainder
+#endif   // error case: the sink says yes during a swap, the plan puts the swap block on a lane
+  return true;
+}
+
+bool ArrBkSenke::leer(int spur) const noexcept {
+  if (spur < 0 || spur >= ARR_SENKEN_PLAETZE) return true;
+  const Spur& p = sp_[spur];
+  if (!p.aktiv.load(std::memory_order_acquire)) return true;
+  return p.ruht && p.n == 0 && p.start < 0;
+}
+
 void ArrBkSenke::block_bahn(int spur, int64_t s0, int m, float* l, float* r, ArrArbeit& a) noexcept {
   float* const puf_l = a.bk_l;
   float* const puf_r = a.bk_r;

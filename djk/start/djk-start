@@ -342,6 +342,20 @@ if [ -f "$REGISTER" ]; then
   done < <(python3 -c 'import json,sys; [print(e["name"]) for e in json.load(open(sys.argv[1])) if e.get("art")=="bk"]' "$REGISTER" 2>/dev/null)
 fi
 
+# 2b3 The recipe graphs (demos/recipes/, listed in its MANIFEST.json): installed under their own names, same cmp rule as 2b2. The files stay in
+# demos/recipes/ in the repo; the kern reads them as top-level graphs of the graph folder. They have no hand panel (the page shows the knob field).
+REZEPTE="$DJK/instruments/modular_dsp/demos/recipes"
+if [ -f "$REZEPTE/MANIFEST.json" ]; then
+  while IFS= read -r g; do
+    [[ "$g" =~ ^[a-z0-9_-]{1,32}$ ]] || continue
+    quelle="$REZEPTE/$g.json"
+    [ -f "$quelle" ] || continue
+    if [ ! -e "$BK_ORDNER/$g.json" ] || ! cmp -s -- "$quelle" "$BK_ORDNER/$g.json"; then
+      mkdir -p "$BK_ORDNER" && cp -- "$quelle" "$BK_ORDNER/$g.json" && echo "djk-start: installed the recipe graph $g into $BK_ORDNER"
+    fi
+  done < <(python3 -c 'import json,sys; [print(p["datei"][:-5]) for p in json.load(open(sys.argv[1]))["patches"]]' "$REZEPTE/MANIFEST.json" 2>/dev/null)
+fi
+
 # 2c Shipped front panels (sidecar files of the graphs, format cypherdj-panel/2): copied into <graph folder>/panels when missing or when the shipped
 # content differs (cmp -s), so an updated panel reaches the studio. The kern reads only top-level *.json of the graph folder, the subfolder is inert for it.
 for f in "$DJK"/instruments/modular_dsp/paneele/*.json; do

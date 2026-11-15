@@ -176,8 +176,11 @@ export function pruefeWerte(g: GeraetDef, roh: unknown, streng: boolean): { wert
 export function pruefeBeschreibungFuer(g: GeraetDef, roh: unknown, vok: Vokabular, code: number): Beschreibung {
   const f = pruefeBeschreibung(roh, vok);
   const o = roh as Record<string, unknown>;
-  if (!f.length && vok.familieVon.get(o.art as string) !== g.typ) {
-    f.push({ feld: 'art', code: 'familie', wert: o.art, erlaubt: Object.keys(vok.inhalt.familien[g.typ]) });
+  // The Baukasten device carries instrument graphs and effect graphs under one device id (typ instrument), so its description may name a kind of
+  // either family; every other device keeps the family of its type.
+  const familien = g.id === 'baukasten' ? (['instrument', 'effekt'] as const) : ([g.typ] as const);
+  if (!f.length && !familien.some((fam) => vok.familieVon.get(o.art as string) === fam)) {
+    f.push({ feld: 'art', code: 'familie', wert: o.art, erlaubt: familien.flatMap((fam) => Object.keys(vok.inhalt.familien[fam])) });
   }
   if (f.length) throw new PresetFehler(code, 'beschreibung_ungueltig', `${PRESET_TEXT.beschreibung_ungueltig}; ${f.map(fehlerText).join('; ')}`, f);
   // stored in the fixed field order of FELDER, lists copied

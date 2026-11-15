@@ -32,12 +32,14 @@ test('review F1: a Copy for Bounced Paste does not survive a project switch (tra
   const p = seite([{ id: 's1', art: 'audio', name: 'A', clips: [au('c1', 0, 8)] }, { id: 's2', art: 'audio', name: 'B', clips: [] }]);
   const { ctx, wechsle, rechtsklick } = bindeSeite(p);
   ctx.setzeBounceAblage({ spur_ids: ['s1'], von_beat: 0, bis_beat: 8 });
-  assert.equal(rechtsklick(1), true, 'control: in the same project the paste item opens on the empty track s2');
+  // the context menu opens on every right click since the edit tools (EDIT entries); the bounce paste item hangs on the copy
+  assert.equal(rechtsklick(1), true, 'control: the menu opens on the empty track s2');
+  assert.ok(ctx.st.bounceAblage, 'control: in the same project the copy for the paste item is there'); 
   wechsle('a', structuredClone(p));
-  assert.equal(rechtsklick(1), true, 'control: a new state of the same project keeps the copy');
+  assert.ok(ctx.st.bounceAblage, 'control: a new state of the same project keeps the copy');
   // another project that also has tracks s1 and s2: the old copy would bounce its s1, a different track
   wechsle('b', seite([{ id: 's1', art: 'audio', name: 'Other', clips: [au('c9', 0, 4)] }, { id: 's2', art: 'audio', name: 'Z', clips: [] }]));
-  assert.equal(rechtsklick(1), false, 'after a project switch there is no paste item');
+  assert.equal(ctx.st.bounceAblage, null, 'after a project switch there is no paste item');
 });
 
 test('review F2: Bounce to New Track tells when the source has content outside the range (hinweis quellen_laenger), like Merge Tracks', async () => {

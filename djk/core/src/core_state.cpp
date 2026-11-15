@@ -124,6 +124,7 @@ void Kern::abbild(cdj_z_echtzeit& f) const noexcept {
   int nr = 0;
   for (int r = 0; r < tab.anzahl() && nr < CDJ_Z_REGLER; ++r) {
     const sw::ReglerDef& d = tab.def(r);
+    if (d.rolle == sw::Rolle::spur_bk) continue;   // production plan task 8 (D12): a transient override is never stored, a restart would hide the project value
     const sw::Halter& h = sw_->halter(r);
     const float w = sw_->wert_fest(r);  // F18: nie ein Zwischenwert einer Hand-Rampe in den Neustart-Zustand
     if (h.art == sw::HalterArt::frei && (d.transport || w == d.vorgabe)) continue;
@@ -150,6 +151,7 @@ int Kern::regler_uebernehmen(const cdj_z_echtzeit& f) noexcept {
     std::memcpy(pfad, z.pfad, sizeof z.pfad);
     const int r = tab.suche(pfad);
     if (r < 0 || tab.def(r).transport || !std::isfinite(z.wert)) continue;
+    if (tab.def(r).rolle == sw::Rolle::spur_bk) continue;   // production plan task 8 (D12): not restored
 #ifdef CYPHERDJ_MUTATION_BK_ZUSTAND_OHNE_WERT   // failure case S14 (task 3 pin): restored graph knob values never reach the knob matrix
     if (tab.def(r).rolle == sw::Rolle::bk_regler) continue;
 #endif
@@ -239,6 +241,7 @@ bool Kern::wiederherstellen(const cdj_z_echtzeit& f) noexcept {
     std::memcpy(halter, z.halter, sizeof z.halter);
     const int r = tab.suche(pfad);
     if (r < 0) continue;
+    if (tab.def(r).rolle == sw::Rolle::spur_bk) continue;   // production plan task 8 (D12): not restored
     if (!tab.def(r).transport && std::isfinite(z.wert)) {
       sw_->setze_direkt(r, z.wert);
       mixer_->setze_sofort(r, z.wert);

@@ -18,10 +18,10 @@ export interface Stand { datei: 'fehlt' | 'ok' | 'kaputt'; eintraege: Eintrag[];
 
 const istObjekt = (x: unknown): x is Record<string, unknown> => typeof x === 'object' && x !== null && !Array.isArray(x);
 
-// a CC entry as the learn flow writes it: absolute, on a graph knob
+// a CC entry as the learn flow writes it: absolute, on any target (graph knob or continuous control)
 function alsZuordnung(e: Eintrag): Zuordnung | null {
   const n = e.nachricht;
-  if (!istObjekt(n) || n.typ !== 'cc' || e.art !== 'absolut' || typeof e.ziel !== 'string' || !/\/bk\/([1-9]|[1-5][0-9]|6[0-4])$/.test(e.ziel)) return null;
+  if (!istObjekt(n) || n.typ !== 'cc' || e.art !== 'absolut' || typeof e.ziel !== 'string') return null;
   if (!Number.isInteger(n.kanal) || !Number.isInteger(n.nr)) return null;
   return { pfad: e.ziel, kanal: n.kanal as number, nr: n.nr as number };
 }

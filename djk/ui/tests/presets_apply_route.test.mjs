@@ -57,7 +57,8 @@ test('GET /presets/katalog: instruments (RB-338, Surge, one entry per instrument
   assert.deepEqual(k.instrumente, [
     { geraet: 'rb338', titel: 'RB-338', ziel: 'spur_neu' }, { geraet: 'surge', titel: 'Surge', ziel: 'spur_neu' },
     { geraet: 'bk', titel: 'lead', ziel: 'spur_neu', graph: 'lead' }, { geraet: 'bk', titel: 'pad', ziel: 'spur_neu', graph: 'pad' }]);
-  assert.deepEqual(k.effekte.map((e) => [e.geraet, e.aktiv, typeof e.grund]), [['komp', true, 'undefined'], ['eq', true, 'undefined'], ['saett', true, 'undefined'], ['hall', false, 'string']]);
+  assert.deepEqual(k.effekte.map((e) => [e.geraet, e.aktiv, typeof e.grund]), [['komp', true, 'undefined'], ['eq', true, 'undefined'], ['saett', true, 'undefined'], ['hall', false, 'string'], ['bk', true, 'undefined']]);
+  assert.deepEqual(k.effekte.at(-1), { geraet: 'bk', titel: 'fx', ziel: 'insert', graph: 'fx', aktiv: true }, 'an effect graph is a bk stage, never an instrument entry');
   assert.match(k.effekte.find((e) => e.geraet === 'hall').grund, /return hall lives on returns/);
 });
 
@@ -145,4 +146,21 @@ test('one apply on a project target = one history entry; undo restores the value
   const u = await ruf(url, 'POST', '/proj/undo', { rev: 2 });
   assert.equal(u.code, 200, JSON.stringify(u.j));
   assert.deepEqual(u.j.projekt.spuren[0].inserts[0], vorher, 'undo restores values and removes the preset field');
+});
+
+test('POST /presets/anwenden: a stored effect preset on a bk stage (agent path), graph_anders for another stage graph', async (t) => {
+  const s = await stapel(t);
+  const beschr = { art: 'delay', unterart: 'ping_pong', charakter: ['wet'], genre: [], einsatz: ['build'], energie: 3, text: 'Effect preset for the apply route.' };
+  const ok = await ruf(s.url, 'POST', '/presets', { name: 'Fx Route', geraet: 'baukasten', graph: 'fx', werte: { knob3: 0.25, knob9: 0.75 }, beschreibung: beschr });
+  assert.equal(ok.code, 201, JSON.stringify(ok.j));
+  s.z.projekt = fuehreListeAus(s.z.projekt, [{ befehl: 'insert_setzen', strang_id: 's3', pos: 1, art: 'bk', graph: 'fx' }], { quelle: 'andreas' }).projekt;
+  const id = s.z.projekt.spuren[2].inserts.find((i) => i.art === 'bk').id;
+  const a = await ruf(s.url, 'POST', '/presets/anwenden', { id: 'nutzer:baukasten/fx-route', ziel: { art: 'insert', insert_id: id } });
+  assert.equal(a.code, 200, JSON.stringify(a.j));
+  assert.deepEqual(a.j, { weg: 'proj', befehle: [{ befehl: 'insert_werte_setzen', insert_id: id, werte: { k3: 0.25, k9: 0.75 }, preset: 'nutzer:baukasten/fx-route' }], label: 'Preset Fx Route', uebersprungen: [] });
+  const vorher = JSON.stringify(s.z.projekt);
+  s.z.projekt.spuren[2].inserts.find((i) => i.id === id).graph = 'other';
+  const an = await ruf(s.url, 'POST', '/presets/anwenden', { id: 'nutzer:baukasten/fx-route', ziel: { art: 'insert', insert_id: id } });
+  assert.deepEqual([an.code, an.j.fehler], [409, 'graph_anders']);
+  assert.notEqual(JSON.stringify(s.z.projekt), vorher, 'only the test edit above, the route wrote nothing');
 });

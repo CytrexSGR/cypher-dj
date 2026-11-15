@@ -1,0 +1,38 @@
+{
+ "schema": 1,
+ "name": "Arp lead",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "lead-arp",
+ "werte": {
+  "knob1": 0.5,
+  "knob2": 0.5,
+  "knob3": 0.5,
+  "knob4": 0.5,
+  "knob5": 0.5
+ },
+ "beschreibung": {
+  "art": "lead",
+  "unterart": "arp",
+  "charakter": [
+   "bright",
+   "tight",
+   "clean",
+   "punchy",
+   "smooth"
+  ],
+  "genre": [],
+  "einsatz": [
+   "build",
+   "drop"
+  ],
+  "energie": 4,
+  "text": "Bright arp lead: saw and pulse with a short filter blip, high-passed off the bass, tempo-synced 16th delay."
+ },
+ "tags": [
+  "lead-arp"
+ ],
+ "notiz": "Source rule: recipe card `lead.arp`, Snoman [B3] p. 438. Measured by `tests/rezepte.rs`, not yet heard. Manifest use words outside the vocabulary: groove (as drop).",
+ "angelegt": "2026-11-15T00:00:00.000Z",
+ "geaendert": "2026-11-15T00:00:00.000Z"
+}

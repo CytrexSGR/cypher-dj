@@ -217,3 +217,22 @@ def test_max_spitze_ms_verwirft_spaete_spitze(tmp_path):
     assert sorted(o["kuenstler"] for o in out) == ["Slam", "Tracid"]
     # ohne Schwelle bleibt alles (Rollen ohne Taktbezug, z. B. Crash, sollen nicht verlieren)
     assert len(kandidaten.sammle(rollen(tmp_path))["r"]) == 3
+
+
+def test_rolle_ohne_eigene_grenze_nimmt_die_spitzen_regel(tmp_path):
+    def klick(ms):
+        x = np.full((int(SR * 0.3), 1), 0.01, dtype=np.float32)
+        i = int(SR * ms / 1000)
+        x[i:] += np.exp(-np.arange(len(x) - i) / 2000.0).astype(np.float32)[:, None] * 0.4
+        x[i] = 0.9
+        return x
+    bestand(tmp_path, {"Kick Liebing 1.wav": klick(5), "Kick Slam 1.wav": klick(60)})
+    r = rollen(tmp_path)
+    assert sorted(k["kuenstler"] for k in kandidaten.sammle(r)["r"]) == ["Liebing", "Slam"]   # no rule: both
+    r["spitze_regel"] = {"max_ms": 20, "ausnahmen": {}}
+    assert [k["kuenstler"] for k in kandidaten.sammle(r)["r"]] == ["Liebing"]
+    r["rollen"]["r"]["max_spitze_ms"] = 100                                                     # an own limit wins
+    assert len(kandidaten.sammle(r)["r"]) == 2
+    r["rollen"]["r"].pop("max_spitze_ms")
+    r["spitze_regel"]["ausnahmen"] = {"r": 100}
+    assert len(kandidaten.sammle(r)["r"]) == 2

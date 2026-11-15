@@ -1,0 +1,64 @@
+{
+ "schema": 1,
+ "name": "Labor Kick",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "labor",
+ "werte": {
+  "knob1": 0.06,
+  "knob2": 0.495,
+  "knob3": 0.0,
+  "knob4": 0.0,
+  "knob5": 0.0,
+  "knob6": 0.5,
+  "knob7": 0.0,
+  "knob8": 0.5,
+  "knob9": 1.0,
+  "knob10": 0.8,
+  "knob11": 0.5,
+  "knob12": 0.5,
+  "knob13": 0.5,
+  "knob14": 0.0,
+  "knob15": 0.0,
+  "knob16": 0.3,
+  "knob17": 0.0,
+  "knob18": 1.0,
+  "knob19": 0.5,
+  "knob20": 0.5,
+  "knob21": 0.5,
+  "knob22": 0.5,
+  "knob23": 0.0,
+  "knob24": 0.0,
+  "knob25": 0.3,
+  "knob26": 1.0,
+  "knob27": 0.7,
+  "knob28": 0.0,
+  "knob29": 0.4,
+  "knob30": 0.8
+ },
+ "beschreibung": {
+  "art": "drums",
+  "unterart": "kick",
+  "charakter": [
+   "deep",
+   "punchy",
+   "dark"
+  ],
+  "genre": [
+   "techno",
+   "electro"
+  ],
+  "einsatz": [
+   "drop",
+   "mixdown"
+  ],
+  "energie": 4,
+  "text": "A pinged low filter as a kick: Key track off, so every note is the same drum, and the modulator sweeps the pitch down."
+ },
+ "tags": [
+  "labor"
+ ],
+ "notiz": "Measured by render, not yet heard (2026-11-15). Recipe: GERAET-labor.md section 4, kick or tom.",
+ "angelegt": "2026-11-15T00:00:00.000Z",
+ "geaendert": "2026-11-15T00:00:00.000Z"
+}

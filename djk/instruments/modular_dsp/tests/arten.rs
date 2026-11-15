@@ -145,6 +145,12 @@ fn minimalgraph(art: &str) -> Option<String> {
         // reads the beat phase (no pad grid, no pump, no beat triangle): a reset does not rewind the beat of the graph.
         "remix" => um(r#",{"id":"p","art":"remix","szene":0.8,"bau_typ":2,"sub1":0.1,"sub2":0.5,"low":-0.6,"hi":0.7,"hat":1,"snare":1}"#,
                       r#",{"von":"s.aus","nach":"p.x"},{"von":"p.l","nach":"o.l"},{"von":"p.r","nach":"o.r"}"#),
+        // type 52: the saw through a second order phase rotator with two different corners; a forgotten reset of either section shows
+        "allpass" => durch(r#""art":"allpass","fc":300,"fc2":2500,"ordnung":2"#, "x", "aus"),
+        // type 53: the saw through the three band split with the compensated low band, summed back; a forgotten reset of any of the
+        // nine stages shows as a different second run
+        "kreuz" => um(r#",{"id":"p","art":"kreuz","fc1":300,"fc2":2500,"baender":3},{"id":"a","art":"add"}"#,
+                      r#",{"von":"s.aus","nach":"p.x"},{"von":"p.lo","nach":"a.a"},{"von":"p.mid","nach":"a.b"},{"von":"p.hi","nach":"a.c"},{"von":"a.aus","nach":"o.x"}"#),
         // drift: the saw through a multiplier driven by the drift block, so the wander state and the per-voice offset are audible in the output
         "drift" => um(r#",{"id":"p","art":"drift","rate":3,"fest":0.5,"saat":5},{"id":"m","art":"mul"},{"id":"k","art":"mul","b":0.5},{"id":"a","art":"add","b":1.0}"#,
                       r#",{"von":"p.aus","nach":"k.a"},{"von":"k.aus","nach":"a.a"},{"von":"s.aus","nach":"m.a"},{"von":"a.aus","nach":"m.b"},{"von":"m.aus","nach":"o.x"}"#),
@@ -282,6 +288,16 @@ fn arten_nur_angehaengt_falter() {
     let i = ARTEN.iter().position(|a| a.art == "falter").expect("falter in ARTEN");
     assert!(i >= 47, "the falter block must sit behind the 47 entries that existed before it, found at {i}");
 }
+/// The kreuz block is type 53, appended after allpass.
+#[test]
+fn arten_nur_angehaengt_kreuz() {
+    assert_eq!(ARTEN.iter().position(|a| a.art == "kreuz"), Some(53), "kreuz is type 53 and must not move");
+}
+/// The allpass block is type 52, appended after remix.
+#[test]
+fn arten_nur_angehaengt_allpass() {
+    assert_eq!(ARTEN.iter().position(|a| a.art == "allpass"), Some(52), "allpass is type 52 and must not move");
+}
 /// The remix block is type 51, appended after labor.
 #[test]
 fn arten_nur_angehaengt_remix() {
@@ -336,5 +352,5 @@ fn arten_nur_angehaengt_sem() {
 #[test]
 fn arten_nur_angehaengt_wahl() {
     let i = ARTEN.iter().position(|a| a.art == "wahl").expect("wahl is in ARTEN");
-    assert!(i >= 38 && i + 8 >= ARTEN.len(), "wahl is one of the last entries of ARTEN (index {i} of {})", ARTEN.len());
+    assert!(i >= 38 && i + 10 >= ARTEN.len(), "wahl is one of the last entries of ARTEN (index {i} of {})", ARTEN.len());
 }

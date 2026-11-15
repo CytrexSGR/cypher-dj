@@ -178,3 +178,103 @@ test('graphenNachNeustart: project channels belong to the project restore, empty
     [{ kanal: 'erz/3', name: 'inst', besitzer: 'cypher' }, { kanal: 'pad/1', name: 'inst2', besitzer: 'andreas' }]);
   assert.deepEqual(graphenNachNeustart({}, {}, []), []);
 });
+
+// Kanban t_7f487235: the kern keeps no FX3 assignments and no kind of a switched-off FX unit over a restart either.
+const fxEinheit = (z) => z.typ === 'an_kern' && z.adresse === '/k/fx';
+const fx3Zuweisung = (z) => z.typ === 'an_kern' && z.adresse === '/k/fx/zuweisung' && z.felder.einheit === 3;
+
+test('kern restart: FX3 assignments come back', async (t) => {
+  const { o, log, muster, neustart } = await stapel(t);
+  fs.writeFileSync(path.join(muster, 'fx_von.json'), JSON.stringify({ '3': { von: 'andreas', zeit: 1 } }));
+  neustart(1);
+  o.vomKern({ adresse: '/e/fx/zuweisung', felder: { einheit: 3, kanal: 'deck/1', an: 1 } });
+  o.vomKern({ adresse: '/e/fx/zuweisung', felder: { einheit: 3, kanal: 'pad/2', an: 1 } });
+  neustart(2);
+  assert.ok(await bis(() => log.filter(fx3Zuweisung).length >= 2), 'both assignments are sent again');
+  await warte(200);
+  const neu = log.filter(fx3Zuweisung);
+  assert.deepEqual(neu.map((z) => [z.felder.kanal, z.felder.an, z.felder.quelle]), [['deck/1', 1, 'andreas'], ['pad/2', 1, 'andreas']]);
+  assert.deepEqual(log.filter((z) => z.typ === 'fx_wieder').map((z) => [z.einheit, z.zuweisungen]), [[3, 2]]);
+  // negative control: the same generation again sends nothing more
+  neustart(2);
+  await warte(700);
+  assert.equal(log.filter(fx3Zuweisung).length, 2);
+  // Stop Cypher: what Cypher set stays away (review focus 2)
+  o.letzteBoxFxWieder = 0;
+  fs.writeFileSync(path.join(muster, 'fx_von.json'), JSON.stringify({ '3': { von: 'cypher', zeit: 1 } }));
+  neustart(3);
+  o.vomKern({ adresse: '/e/fx/zuweisung', felder: { einheit: 3, kanal: 'deck/1', an: 1 } });
+  o.vomKern({ adresse: '/e/ki', felder: { gestoppt: 1 } });
+  neustart(4);
+  assert.ok(await bis(() => log.some((z) => z.typ === 'fx_wieder_ausgelassen' && z.einheit === 3)), 'the skip is logged');
+  await warte(200);
+  assert.equal(log.filter(fx3Zuweisung).length, 2, 'nothing of Cypher is sent while Cypher is stopped');
+  assert.ok(log.some((z) => z.typ === 'fx_wieder_ausgelassen' && z.einheit === 3 && z.grund === 'ki_gestoppt'));
+});
+
+test('kern restart: an FX unit that is off keeps its kind', async (t) => {
+  const { o, log, neustart } = await stapel(t);
+  neustart(1);
+  o.vomKern({ adresse: '/e/fx', felder: { einheit: 1, art: 5, beats: 2, wet: 0.3, param1: 0.1, param2: 0.2, param3: 0.3, an: 0 } });
+  neustart(2);
+  assert.ok(await bis(() => log.filter(fxEinheit).length >= 1), 'the unit is sent again');
+  await warte(200);
+  const neu = log.filter(fxEinheit);
+  assert.equal(neu.length, 1);
+  assert.deepEqual([neu[0].felder.einheit, neu[0].felder.art, neu[0].felder.beats, neu[0].felder.an], [1, 5, 2, 0]);
+  assert.deepEqual(log.filter((z) => z.typ === 'fx_wieder').map((z) => [z.einheit, z.an]), [[1, 0]]);
+});
+
+test('kern restart: with no FX state ever set nothing is sent and no 30 s lock starts', async (t) => {
+  const { o, log, neustart } = await stapel(t);
+  neustart(1);
+  neustart(2);
+  await warte(700);
+  assert.equal(log.filter(fxEinheit).length, 0);
+  assert.equal(log.filter(fx3Zuweisung).length, 0);
+  assert.equal(o.letzteBoxFxWieder, 0, 'no plan, no lock');
+  assert.ok(!log.some((z) => z.typ === 'wiederherstellung_uebersprungen'));
+  neustart(3);
+  await warte(300);
+  assert.ok(!log.some((z) => z.typ === 'wiederherstellung_uebersprungen'));
+});
+
+test('kern restart: a graph on fx/3 comes back', async (t) => {
+  const { lade, sendungen, quittiere, neustart } = await stapel(t);
+  neustart(1);
+  await lade({ kanal: 'fx/3', name: 'eff' });
+  const n0 = sendungen().length;
+  neustart(2);
+  assert.ok(await bis(() => sendungen().length === n0 + 1), 'the graph is loaded again');
+  assert.deepEqual(kurz(sendungen().slice(n0)), [['/k/kanal/graph', 'fx/3', 'eff', 'andreas']]);
+  quittiere(sendungen().at(-1));
+});
+
+// Kanban t_7f487235: a restart inside the 30 s guard must not lose the plan. The plan is kept and restored once, when the guard time has passed.
+test('kern restart: restarts inside the guard keep the plan and restore it once after the guard time', async (t) => {
+  const { o, log, neustart } = await stapel(t);
+  const sperre0 = Oberflaeche.BOX_FX_SPERRE_MS;
+  Oberflaeche.BOX_FX_SPERRE_MS = 2500;   // the 30 s of production, shortened for the test
+  t.after(() => { Oberflaeche.BOX_FX_SPERRE_MS = sperre0; });
+  const kernEcho = () => {   // what the real kern says after it took the restored state
+    o.vomKern({ adresse: '/e/fx', felder: { einheit: 1, art: 5, beats: 2, wet: 0.3, param1: 0.1, param2: 0.2, param3: 0.3, an: 0 } });
+    o.vomKern({ adresse: '/e/fx/zuweisung', felder: { einheit: 3, kanal: 'deck/1', an: 1 } });
+  };
+  neustart(1);
+  kernEcho();
+  neustart(2);   // accepted: restores after 500 ms
+  assert.ok(await bis(() => log.filter(fxEinheit).length === 1), 'first restore');
+  kernEcho();
+  const t0 = Date.now();
+  await warte(600); neustart(3);   // too fast
+  await warte(600); neustart(4);   // too fast
+  await warte(800);
+  assert.equal(log.filter(fxEinheit).length, 1, 'nothing is sent while the guard holds');
+  assert.equal(log.filter((z) => z.typ === 'wiederherstellung_uebersprungen' && z.grund === 'zu_schnell').length, 2);
+  assert.ok(await bis(() => log.filter(fxEinheit).length === 2, 5000), 'the plan is restored after the guard time');
+  assert.ok(Date.now() - t0 >= 2400, 'not before the guard time is over');
+  await warte(1000);
+  assert.equal(log.filter(fxEinheit).length, 2, 'once per accepted restart, not more');
+  assert.equal(log.filter(fx3Zuweisung).length, 2);
+  assert.equal(log.filter(fxEinheit).at(-1).felder.art, 5);
+});

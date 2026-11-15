@@ -8,7 +8,8 @@ import os from 'node:os';
 import path from 'node:path';
 
 export type GraphArt = 'instrument' | 'effekt';
-export type GraphEintrag = { name: string; art: GraphArt; regler_namen: Record<string, string>; kategorie?: string; text?: string };
+/** `latenz`: samples the graph delays its signal at 48 kHz (0 = none), see graphLatenz. */
+export type GraphEintrag = { name: string; art: GraphArt; regler_namen: Record<string, string>; latenz: number; kategorie?: string; text?: string };
 /** Instrument categories (ids of kategorien.json). `host` is the Surge/plugin entry the page adds itself, so no graph carries it by default, but it is valid. */
 export const KATEGORIE_IDS = ['drums', 'bass', 'lead', 'pad', 'keys', 'textur', 'host'];
 export const KATEGORIE_TEXT_MAX = 90;
@@ -36,7 +37,59 @@ function eintrag(name: string, text: string): GraphEintrag | null {
   if (typeof roh === 'object' && roh !== null && !Array.isArray(roh)) {
     for (const [n, v] of Object.entries(roh)) if (/^([1-9]|[1-5][0-9]|6[0-4])$/.test(n) && typeof v === 'string' && v.length > 0) regler_namen[n] = v.slice(0, 40);
   }
-  return { name, art: effekt ? 'effekt' : 'instrument', regler_namen };
+  return { name, art: effekt ? 'effekt' : 'instrument', regler_namen, latenz: graphLatenz(g) };
+}
+
+// Latency of a graph in samples at 48 kHz, 0 when it adds none. The engine knows this only after translating the graph (instruments/modular_dsp
+// uebersetzen.rs, Programm::latenz, D4); the page server does not link the engine, so this repeats the rule on the file: a limiter delays by
+// round(vorlauf * 48) - 1 (vorlauf in ms, default 2), a falter or a labor with ueber = 1 (their default) by the half-band filter, 69 samples (eq_dsp
+// ueberabtastung MITTE), and a node's latency is its own plus the largest latency of its inputs; edges with a delay (verzoegerung 1, or into a
+// leitung's x) do not count; the graph's latency is the largest at an `ausgang`. Macros are not expanded: a macro node counts the sum of the latency
+// blocks inside it, an upper bound (a graph may be left out of a choice too early, never offered with latency). Keep in step with the engine.
+const LATENZ_SR = 48000, LATENZ_HALBBAND = 69;
+const LATENZ_FREI: Record<string, Record<string, number>> = { limiter: { vorlauf: 2 }, falter: { ueber: 1 }, labor: { ueber: 1 } };
+type RohKnoten = { art?: unknown; [w: string]: unknown };
+function knotenLatenz(k: RohKnoten): number {
+  const art = typeof k.art === 'string' ? k.art : '';
+  const w = (n: string): number => (typeof k[n] === 'number' ? (k[n] as number) : (LATENZ_FREI[art]?.[n] ?? 0));
+  if (art === 'limiter') return Math.max(Math.round(Math.fround(w('vorlauf') * LATENZ_SR / 1000)), 1) - 1;
+  if (art === 'falter') return w('ueber') === 1 ? LATENZ_HALBBAND : 0;
+  if (art === 'labor') return Math.trunc(w('ueber')) === 0 || Math.trunc(w('ueber')) === 2 ? 0 : LATENZ_HALBBAND;
+  return 0;
+}
+export function graphLatenz(graph: unknown): number {
+  const g = graph as { knoten?: unknown; kanten?: unknown; makros?: unknown } | null;
+  if (typeof g !== 'object' || g === null || !Array.isArray(g.knoten)) return 0;
+  const knoten = new Map<string, RohKnoten>();
+  for (const k of g.knoten) if (typeof k === 'object' && k !== null && typeof (k as { id?: unknown }).id === 'string') knoten.set((k as { id: string }).id, k as RohKnoten);
+  const makroLatenz = (name: string): number => {
+    const m = (g.makros as Record<string, { knoten?: unknown }> | undefined)?.[name];
+    return Array.isArray(m?.knoten) ? m.knoten.reduce((s: number, k: unknown) => s + (typeof k === 'object' && k !== null ? knotenLatenz(k as RohKnoten) : 0), 0) : 0;
+  };
+  const ein = new Map<string, string[]>();   // node -> sources over edges without delay
+  for (const e of Array.isArray(g.kanten) ? g.kanten : []) {
+    const { von, nach, verzoegerung } = (e ?? {}) as { von?: unknown; nach?: unknown; verzoegerung?: unknown };
+    if (typeof von !== 'string' || typeof nach !== 'string') continue;
+    const [vk] = von.split('.'), [nk, np] = nach.split('.');
+    if (!knoten.has(vk) || !knoten.has(nk) || verzoegerung === 1 || (knoten.get(nk)?.art === 'leitung' && np === 'x')) continue;
+    (ein.get(nk) ?? ein.set(nk, []).get(nk)!).push(vk);
+  }
+  const memo = new Map<string, number>(), offen = new Set<string>();
+  const lat = (id: string): number => {
+    const m = memo.get(id);
+    if (m !== undefined) return m;
+    if (offen.has(id)) return 0;   // a loop without delay: the engine refuses the graph
+    offen.add(id);
+    const k = knoten.get(id)!;
+    const eigen = typeof k.art === 'string' && k.art.startsWith('makro:') ? makroLatenz(k.art.slice(6)) : knotenLatenz(k);
+    const r = eigen + Math.max(0, ...(ein.get(id) ?? []).map(lat));
+    offen.delete(id);
+    memo.set(id, r);
+    return r;
+  };
+  let aus = 0;
+  for (const [id, k] of knoten) if (k.art === 'ausgang') aus = Math.max(aus, lat(id));
+  return aus;
 }
 
 /** kategorien.json ({graph: {kategorie, text}}) as installed next to the panels (<graph folder>/panels/kategorien.json, copied by djk-start). Entries that are not

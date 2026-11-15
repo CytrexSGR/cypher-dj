@@ -170,3 +170,27 @@ test('a failed read leaves one line and a Retry in the area (409 host_fehlt, a t
   await warte();
   assert.equal(gebaut.length, 1, 'the panel is built after the third read');
 });
+
+test('plugin panel: fixed overlay rule, close button and Esc', async () => {
+  const { readFileSync } = await import('node:fs');
+  const css = readFileSync(new URL('../public/production/production.css', import.meta.url), 'utf8');
+  assert.match(css, /\.p-ins-popover\.p-geraet-plugin\s*\{[^}]*position:\s*fixed/);
+  assert.match(css, /max-height:\s*70vh/);
+  assert.match(css, /width:\s*min\(760px/);
+  const alle = new Set(); const tasten = [];
+  const w = { querySelector: () => [...alle][0] ?? null, body: { append: (e) => alle.add(e) },
+    addEventListener: (t, f) => { if (t === 'keydown') tasten.push(f); }, removeEventListener: (t, f) => { const i = tasten.indexOf(f); if (i >= 0) tasten.splice(i, 1); },
+    createElement: (t) => { const k = new K(t); k.remove = () => alle.delete(k); return k; } };
+  const ctx = { holeGet: async () => ({ status: 200, j: liste100 }), holeJson: async () => ({ status: 200, j: {} }), melde() {}, antwortText: () => '' };
+  const bau = { liste() {}, platte: () => ({}) };
+  const s = { id: 'sp1', name: 'Surge' };
+  const el = oeffnePluginGeraet(ctx, s, w, bau);
+  assert.ok(el.kinder[0].klassen.has('p-geraet-zu'));
+  el.kinder[0].feuere('click');
+  assert.equal(alle.size, 0);
+  assert.equal(tasten.length, 0);
+  const el2 = oeffnePluginGeraet(ctx, s, w, bau);
+  assert.notEqual(el2, el); assert.equal(alle.size, 1);
+  tasten[0]({ key: 'Escape' });
+  assert.equal(alle.size, 0);
+});

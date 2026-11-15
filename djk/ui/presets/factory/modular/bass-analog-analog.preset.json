@@ -1,0 +1,36 @@
+{
+ "schema": 1,
+ "name": "Analog",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "bass-analog",
+ "werte": {
+  "knob1": 0.5,
+  "knob2": 0.5,
+  "knob3": 0.5,
+  "knob4": 0.5
+ },
+ "beschreibung": {
+  "art": "bass",
+  "unterart": "analog",
+  "charakter": [
+   "warm",
+   "deep",
+   "thick",
+   "smooth",
+   "punchy"
+  ],
+  "genre": [],
+  "einsatz": [
+   "drop"
+  ],
+  "energie": 4,
+  "text": "Warm analog bass: saw and square an octave apart, open ladder, AR envelope, drive, compression and a light chorus."
+ },
+ "tags": [
+  "bass-analog"
+ ],
+ "notiz": "Source rule: recipe card `bass.analog`, Snoman [B3] p. 294. Measured by `tests/rezepte.rs`, not yet heard. Manifest character words outside the vocabulary: analog (as warm). Manifest use words outside the vocabulary: groove (as drop).",
+ "angelegt": "2026-11-15T00:00:00.000Z",
+ "geaendert": "2026-11-15T00:00:00.000Z"
+}

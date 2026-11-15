@@ -9,7 +9,7 @@ import { neueWellen } from './waves.js';
 import { Arrangement } from './arrangement.js';
 
 // Argumente für das Bild des Arrangements aus dem Seitenstand (rein, getestet: stems geht mit)
-export const arrBild = (st) => ({ takeZeilen: takeZeilenVon(st, st.projektEntwurf ?? st.projekt), lanen: offeneIndizes(st.projektEntwurf ?? st.projekt, st.laneOffen), ansicht: st.ansicht, laneZiel: st.laneZiel, projekt: st.projektEntwurf ?? st.projekt, loop: st.loopEntwurf ?? st.projekt?.loop ?? null,
+export const arrBild = (st) => ({ takeZeilen: takeZeilenVon(st, st.projektEntwurf ?? st.projekt), lanen: offeneIndizes(st.projektEntwurf ?? st.projekt, st.laneOffen), ansicht: st.ansicht, laneZiel: st.laneZiel, projekt: st.projektEntwurf ?? st.projekt, loop: st.loopEntwurf ?? st.projekt?.loop ?? null, loopZug: (st.loopEntwurf ?? null) !== null, straenge: st.laneOffen,
   kopfBeat: st.kopfBeat, startBeat: st.start, geist: st.geist, stems: st.stems, ueber: st.autoUeber ?? [] });
 // Another project: the chosen lane targets belong to the old one (track ids can repeat), so they are dropped. The open rows (laneOffen) stay: a known
 // leftover of slice 1, not changed here.
@@ -49,7 +49,7 @@ export function bindeZeitachse(ctx) {
   ctx.offeneLanen = () => offeneIndizes(st.projekt, st.laneOffen);
   st.takeOffen = new Set();  // 1.14: the T buttons, spur ids whose take rows are shown (page state like laneOffen)
   st.vorhoeren = {};         // 1.14: {spur_id: take_id} audition map of the last /proj/aktuell (server state, shown by the speaker buttons)
-  ctx.zeilen = () => zeilenFuer(st.projekt, ctx.offeneLanen(), takeZeilenVon(st));   // 1.10 T3: with the group header rows
+  ctx.zeilen = () => zeilenFuer(st.projekt, ctx.offeneLanen(), takeZeilenVon(st), st.laneOffen);   // 1.10 T3: with the group header rows
   ctx.layoutNeu = () => { $('flaeche').style.height = `${zeilenHoehe(ctx.zeilen())}px`; };
   ctx.beimProjekt.push((p, wechsel) => { laneZustandBeiProjekt(st, wechsel); if (wechsel) st.takeOffen.clear(); ctx.layoutNeu(); });   // spur ids repeat between projects
   // Sichtbare Scrollleiste: folgt der Ansicht in jedem Bild; ein Zug an ihr setzt beat0 (und schaltet FOLLOW aus wie das Rad).

@@ -2,7 +2,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { leseSmf } from '../project/smf.ts';
-import { planeImport, MidiImportFehler, polyphonie, graphFuerProgramm, GRAPH_FADER_DB } from '../project/midi_import.ts';
+import { planeImport, MidiImportFehler, polyphonie, graphFuerProgramm, orchesterProgramm, GRAPH_FADER_DB } from '../project/midi_import.ts';
+import { graphLatenz, graphenOrdner } from '../graphs.ts';
+import fs from 'node:fs';
+import path from 'node:path';
+import { rbNorm, rbPlain } from '../project/rb_mapping.ts';
 import { fuehreListeAus } from '../project/commands.ts';
 import { neuesProjekt } from '../project/model.ts';
 import { smf, spur, nameMeta, tempoMeta, taktMeta, programm, an, aus, note } from './helpers/smf_build.mjs';
@@ -35,11 +39,39 @@ test('thin slice: notes land on exact beats (tick / 192), tempo and clip start f
 test('report: tempo, source time signature as a hint, parts, counts', () => {
   const b = planeImport(leseSmf(datei()), neuesProjekt('t'), {}, ctx).bericht;
   assert.equal(b.tempo.quelle_bpm, 90); assert.equal(b.tempo.gesetzt_bpm, 90);
-  assert.deepEqual(b.taktart.quelle, [3, 4]); assert.equal(b.taktart.abweichend, true);
-  assert.ok(b.hinweise.some((h) => h.code === 'midi_taktart' && /3\/4/.test(h.text)));
+  assert.deepEqual(b.taktart.quelle, [3, 4]); assert.deepEqual(b.taktart.projekt, [3, 4]); assert.equal(b.taktart.abweichend, false);
+  assert.ok(!b.hinweise.some((h) => h.code === 'midi_taktart'));
   assert.equal(b.datei.midi_spuren, 3); assert.equal(b.datei.spuren_mit_noten, 2); assert.equal(b.datei.noten, 5);
   assert.deepEqual(b.spuren.map((s) => [s.schluessel, s.noten, s.schlagzeug]), [['1.1', 2, false], ['2.10', 3, true]]);
   assert.ok(b.hinweise.some((h) => h.code === 'midi_leere_spuren'));
+});
+
+const mitSpur = () => fuehreListeAus(neuesProjekt('t'), [{ befehl: 'spur_neu', art: 'instrument', name: 'Existing' }], {}).projekt;
+
+test('meter: a 3/4 file into an empty project starts with taktart_setzen and the project takes the meter', () => {
+  const plan = planeImport(leseSmf(datei()), neuesProjekt('t'), {}, ctx);
+  assert.deepEqual(plan.befehle[0], { befehl: 'taktart_setzen', taktart: [3, 4] });
+  assert.deepEqual(plan.bericht.taktart, { quelle: [3, 4], projekt: [3, 4], abweichend: false, wechsel: 0 });
+  assert.equal(lauf(neuesProjekt('t'), plan).taktart[0], 3);
+  assert.deepEqual(lauf(neuesProjekt('t'), plan).taktart, [3, 4]);
+});
+
+test('meter: the same file into a project that has a track keeps the project meter and says so', () => {
+  const p = mitSpur();
+  const plan = planeImport(leseSmf(datei()), p, {}, ctx);
+  assert.ok(!plan.befehle.some((b) => b.befehl === 'taktart_setzen'));
+  assert.deepEqual(plan.bericht.taktart, { quelle: [3, 4], projekt: [4, 4], abweichend: true, wechsel: 0 });
+  assert.ok(plan.bericht.hinweise.some((h) => h.code === 'midi_taktart' && /3\/4/.test(h.text)));
+  assert.deepEqual(lauf(p, plan).taktart, [4, 4]);
+});
+
+test('meter: 6/8 is not taken over (failure case): no taktart_setzen, project 4/4, hint', () => {
+  const d6 = smf([spur([nameMeta('conductor'), taktMeta(6, 3)]), spur([nameMeta('Flute'), programm(0, 73), ...note(0, 72, 100, 96, 0)])]);
+  const plan = planeImport(leseSmf(d6), neuesProjekt('t'), {}, ctx);
+  assert.ok(!plan.befehle.some((b) => b.befehl === 'taktart_setzen'));
+  assert.deepEqual(plan.bericht.taktart, { quelle: [6, 8], projekt: [4, 4], abweichend: true, wechsel: 0 });
+  assert.ok(plan.bericht.hinweise.some((h) => h.code === 'midi_taktart'));
+  assert.deepEqual(lauf(neuesProjekt('t'), plan).taktart, [4, 4]);
 });
 
 test('drums go to the GM kit; notes the kit has no sound for are counted', () => {
@@ -132,7 +164,7 @@ test('duplicate names get a counter, several channels of one MIDI track get the 
 
 test('poly profile: chord parts get a Baukasten graph by GM family (only graphs that exist), mono parts stay on the RB-338', () => {
   const akkord = [an(0, 60, 80), an(0, 64, 80), an(0, 67, 80), aus(0, 60, 96), aus(0, 64, 0), aus(0, 67, 0)];
-  const f = smf([spur([programm(0, 0), ...akkord]), spur([programm(1, 73), ...note(1, 72, 80, 48)])]);
+  const f = smf([spur([programm(0, 0), ...akkord]), spur([programm(1, 24), ...note(1, 72, 80, 48)])]);
   const d = leseSmf(f);
   assert.equal(polyphonie(d.teile[0]), 3);
   const p = planeImport(d, neuesProjekt('t'), { profil: 'poly' }, ctx);
@@ -145,7 +177,7 @@ test('poly profile: chord parts get a Baukasten graph by GM family (only graphs 
 
 test('poly profile: a track on a Baukasten graph starts 6 dB down, an RB-338 track stays at 0 dB (the sum reached +1 dBTP at 0 dB)', () => {
   const akkord = [an(0, 60, 80), an(0, 64, 80), an(0, 67, 80), aus(0, 60, 96), aus(0, 64, 0), aus(0, 67, 0)];
-  const d = leseSmf(smf([spur([programm(0, 0), ...akkord]), spur([programm(1, 73), ...note(1, 72, 80, 48)])]));
+  const d = leseSmf(smf([spur([programm(0, 0), ...akkord]), spur([programm(1, 24), ...note(1, 72, 80, 48)])]));
   const fader = (plan) => plan.befehle.filter((b) => b.befehl === 'spur_aendern' && b.fader_db !== undefined);
   const poly = fader(planeImport(d, neuesProjekt('t'), { profil: 'poly' }, ctx));
   assert.equal(GRAPH_FADER_DB, -6);
@@ -207,5 +239,75 @@ test('zuordnung values other than a word, null or a device object are refused wi
   for (const falsch of [true, 5, ['rb338']]) {
     assert.throws(() => planeImport(leseSmf(datei()), neuesProjekt('t'), { zuordnung: { '1.1': falsch } }, ctx),
       (e) => e instanceof MidiImportFehler && e.grund === 'argument_ungueltig' && /zuordnung\[1\.1\]/.test(e.message), JSON.stringify(falsch));
+  }
+});
+
+test('melodic RB-338 parts start soft: low cutoff, no resonance (plain 500 Hz / 0 / 0.1 / 0.2 stored normalised)', () => {
+  const plan = planeImport(leseSmf(datei()), neuesProjekt('t'), {}, ctx);
+  const soll = { cutoff: rbNorm('cutoff', 500), resonanz: rbNorm('resonanz', 0), env_mod: rbNorm('env_mod', 0.1), accent: rbNorm('accent', 0.2) };
+  const p = lauf(neuesProjekt('t'), plan);                                  // the model check accepts the parameter keys
+  const fl = p.spuren[0], schlag = p.spuren[1];
+  assert.equal(fl.geraet.name, 'rb338');
+  assert.deepEqual(fl.geraet.parameter, soll);
+  assert.ok(Math.abs(rbPlain('cutoff', fl.geraet.parameter.cutoff) - 500) / 500 < 1e-6);
+  assert.equal(schlag.geraet.name, 'kit');
+  assert.equal(schlag.geraet.parameter, undefined);
+  // the word rb338 means the RB-338 as the import sets it up; a caller's object is used as given
+  const w = lauf(neuesProjekt('t'), planeImport(leseSmf(datei()), neuesProjekt('t'), { zuordnung: { '1.1': 'rb338' } }, ctx));
+  assert.deepEqual(w.spuren[0].geraet.parameter, soll);
+  const eigen = { art: 'intern', name: 'rb338' };
+  const kopie = structuredClone(eigen);
+  const e = lauf(neuesProjekt('t'), planeImport(leseSmf(datei()), neuesProjekt('t'), { zuordnung: { '1.1': eigen } }, ctx));
+  assert.deepEqual(eigen, kopie);
+  assert.notDeepEqual(e.spuren[0].geraet.parameter, soll);
+});
+
+// ---- orchestral families go to pad and keys graphs in the poly profile ----
+const ctxOrch = { ...ctx, graphArt: (n) => (['juno-pad-hall', 'saite-klavier', 'wavetable-chor', 'hartsync-pad', 'fm-epiano'].includes(n) ? 'instrument' : null) };
+
+test('orchesterProgramm: GM 40..79 and 88..95', () => {
+  for (const [p, soll] of [[39, false], [40, true], [79, true], [80, false], [87, false], [88, true], [95, true], [96, false], [null, false]]) {
+    assert.equal(orchesterProgramm(p), soll, String(p));
+  }
+});
+
+test('poly profile: monophonic orchestral parts take the free Baukasten slots (ranked by notes), the rest stays on the soft RB-338', () => {
+  // ten mono parts, programs 40 48 56 65 73 twice; the last two have one note, the others three
+  const progs = [40, 48, 56, 65, 73, 40, 48, 56, 65, 73];
+  const teile = progs.map((pr, i) => {
+    const k = i % 8, n = i >= 8 ? 1 : 3;
+    return spur([programm(k, pr), ...Array.from({ length: n }, (_, j) => note(k, 60 + j, 80, 48, j === 0 ? 0 : 1)).flat()]);
+  });
+  const d = leseSmf(smf(teile));
+  const plan = planeImport(d, neuesProjekt('t'), { profil: 'poly' }, ctxOrch);
+  const p = fuehreListeAus(neuesProjekt('t'), plan.befehle, { kitDa: ctxOrch.kitDa, graphArt: ctxOrch.graphArt }).projekt;
+  const bk =p.spuren.filter((s) => s.geraet.name === 'bk');
+  assert.equal(bk.length, 8);
+  assert.deepEqual(p.spuren.slice(0, 8).map((s) => s.geraet.graph), progs.slice(0, 8).map(graphFuerProgramm));
+  for (const s of p.spuren.slice(8)) { assert.equal(s.geraet.name, 'rb338'); assert.ok(s.geraet.parameter.cutoff !== undefined); }
+  for (const s of bk) assert.equal(s.fader_db, GRAPH_FADER_DB);
+  // a monophonic piano stays on the RB-338, a chord part of program 0 still gets the piano graph
+  const klav = leseSmf(smf([spur([programm(0, 0), ...note(0, 60, 80, 48)])]));
+  assert.deepEqual(planeImport(klav, neuesProjekt('t'), { profil: 'poly' }, ctxOrch).bericht.spuren.map((s) => s.geraet_text), ['RB-338']);
+});
+
+test('poly profile: no graph on the instance means every part stays on the soft RB-338 and nothing is refused', () => {
+  const d = leseSmf(smf([spur([programm(0, 48), ...note(0, 60, 80, 48)]), spur([programm(1, 56), ...note(1, 62, 80, 48)])]));
+  const c = { ...ctx, graphArt: () => null };
+  const plan = planeImport(d, neuesProjekt('t'), { profil: 'poly' }, c);
+  assert.equal(plan.bericht.anlegbar, true);
+  const p = fuehreListeAus(neuesProjekt('t'), plan.befehle, { kitDa: c.kitDa, graphArt: c.graphArt }).projekt;
+  assert.deepEqual(p.spuren.map((s) => s.geraet.name), ['rb338', 'rb338']);
+});
+
+test('the graphs of the orchestral families exist on this instance, are instruments and have latency 0 (a graph with latency is refused on a project track)', (t) => {
+  const ordner = graphenOrdner();
+  if (!fs.existsSync(ordner)) { t.skip('no Baukasten folder'); return; }
+  const namen = new Set();
+  for (let p = 40; p <= 95; p++) if (orchesterProgramm(p)) namen.add(graphFuerProgramm(p));
+  for (const n of namen) {
+    const g = JSON.parse(fs.readFileSync(path.join(ordner, `${n}.json`), 'utf8'));
+    assert.ok(!g.knoten.some((k) => k.art === 'eingang'), `${n} is an effect graph`);
+    assert.equal(graphLatenz(g), 0, `${n} has latency`);
   }
 });

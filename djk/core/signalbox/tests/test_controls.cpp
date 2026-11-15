@@ -13,6 +13,7 @@ namespace {
 // nested groups task 1: groups 9..16 are appended at the end of the table: 8 x 4 controls (fader, pan, mute, solo) + 4 returns x 8 sends
 constexpr int GRUPPEN_NEU_ZEILEN = GRP_REGLER_GRUPPEN_NEU * 4 + RET_REGLER_RETURNS * GRP_REGLER_GRUPPEN_NEU;
 constexpr int GRUPPEN_CUE_ZEILEN = GRP_REGLER_GRUPPEN_ALLE;   // live modules task 6: grp/1..16/cue at the very end
+constexpr int SPUR_BK_ZEILEN = SPUR_BK_SLOTS * SPUR_BK_KNOEPFE;   // production plan task 8: spur/<slot>/bk/<k> at the very end (behind master/bk/*), 8 x 32
 constexpr int MASTER_BK_ZEILEN = BK_REGLER_N;   // master insert graph: master/bk/1..64 at the very end (behind grp/<n>/cue)
 const ReglerTabelle& tab() {
   static ReglerTabelle t;
@@ -38,15 +39,15 @@ FALL(zahl_der_regler_und_kanaele) {
   // 1.10 slice 4b T12: plus the eq rows (59 per instance, 1 instance) and the saett rows (4 per instance, 1 instance): 1378 + 63 = 1441.
   // The pool sizes are the measured ones (T11): a change of either is a decision with a new measurement, and this pin goes red first.
   // 2026-11-06: the eq pool has 2 instances (Andreas' decision of 2026-11-05, lane measured quiet): 59 more rows.
-  PRUEFE_GLEICH(tab().anzahl(), 597 + 12 * 8 + 204 + 2 * 8 + WERKZEUG_REGLER + 120 + 8 * 59 + 4 * 4 + 48 + 2 * 3 + 4 + 8 * 5 + 8 * 65 + 14 * 56 + GRUPPEN_NEU_ZEILEN + GRUPPEN_CUE_ZEILEN + MASTER_BK_ZEILEN);   // + the 48 rack rows (slice 4c), + the 3 ins/lim rows per limiter, + the 4 ins/host rows (plan 1.11), + the 5 ins/utility rows per instance (arr-fx)
+  PRUEFE_GLEICH(tab().anzahl(), 597 + 12 * 8 + 204 + 2 * 8 + WERKZEUG_REGLER + 120 + 8 * 59 + 4 * 4 + 48 + 2 * 3 + 4 + 8 * 5 + 8 * 65 + 14 * 56 + GRUPPEN_NEU_ZEILEN + GRUPPEN_CUE_ZEILEN + MASTER_BK_ZEILEN + SPUR_BK_ZEILEN);   // + the 48 rack rows (slice 4c), + the 3 ins/lim rows per limiter, + the 4 ins/host rows (plan 1.11), + the 5 ins/utility rows per instance (arr-fx)
   // 1.10 slice 4c T15: plus the 48 rack macro rows rack/<1..12>/m1..m4: 1500 + 48 = 1548.
   // Master limiter: plus the 3 rows ins/lim/1/{an,decke,abklingen}: 1548 + 3 = 1551.
   // Plan 1.11 T4: plus the 4 rows ins/host/1..4/an: 1551 + 4 = 1555.
   // arr-fx slice 1: plus the utility kind, 8 instances x 5 rows (an, breite, mono_unter, gain, balance), appended last: 1555 + 40 = 1595.
   // arr-fx slice 2: the pools grow to 8 EQs (+6 x 59), 4 saturators (+3 x 4) and 2 limiters (+3): 1595 + 354 + 12 + 3 = 1964; rack, lim, host and utility rows move up.
   // arr-bk slice 3: plus the bk kind, 8 instances x 9 rows (an, k1..k8), appended last: 1964 + 72 = 2036 of the ceiling 4096.
-  PRUEFE_GLEICH(tab().anzahl(), 913 + 345 + 120 + 8 * 59 + 4 * 4 + 48 + 2 * 3 + 4 + 8 * 5 + 8 * 65 + 14 * 56 + GRUPPEN_NEU_ZEILEN + GRUPPEN_CUE_ZEILEN + MASTER_BK_ZEILEN);
-  PRUEFE_GLEICH(tab().anzahl(), 3268 + GRUPPEN_NEU_ZEILEN + GRUPPEN_CUE_ZEILEN + MASTER_BK_ZEILEN);   // nested groups task 1: + 64 rows of groups 9..16 at the end; 64-knob widening: 2564 + 8 x 32 (ins/bk/<n>/k33..k64) + 14 x 32 (<kanal>/bk/33..64 of 12 channels, fx/3, fx/4) of the ceiling 4096
+  PRUEFE_GLEICH(tab().anzahl(), 913 + 345 + 120 + 8 * 59 + 4 * 4 + 48 + 2 * 3 + 4 + 8 * 5 + 8 * 65 + 14 * 56 + GRUPPEN_NEU_ZEILEN + GRUPPEN_CUE_ZEILEN + MASTER_BK_ZEILEN + SPUR_BK_ZEILEN);
+  PRUEFE_GLEICH(tab().anzahl(), 3268 + GRUPPEN_NEU_ZEILEN + GRUPPEN_CUE_ZEILEN + MASTER_BK_ZEILEN + SPUR_BK_ZEILEN);   // nested groups task 1: + 64 rows of groups 9..16 at the end; 64-knob widening: 2564 + 8 x 32 (ins/bk/<n>/k33..k64) + 14 x 32 (<kanal>/bk/33..64 of 12 channels, fx/3, fx/4) of the ceiling 4096
   // the contract (INTERFACES 1.5) says indices 1258 to 1377: the table counts the 4 deck/<n>/transport rows, the dump of stellwerk_regler_liste does not (1374 lines)
   PRUEFE_GLEICH(tab().suche("ins/komp/1/an"), 1258);
   PRUEFE_GLEICH(tab().suche("ins/komp/12/sc"), 1377);
@@ -507,7 +508,7 @@ FALL(werkzeug_zeilen_345_und_ihre_zaehlung) {
   PRUEFE_GLEICH(spektrum, 1);
   PRUEFE_GLEICH(gesamt, 345);
   PRUEFE_GLEICH(WERKZEUG_REGLER, 345);
-  PRUEFE_GLEICH(tab().anzahl(), 1258 + 120 + 8 * 59 + 4 * 4 + 48 + 2 * 3 + 4 + 8 * 5 + 8 * 65 + 14 * 56 + GRUPPEN_NEU_ZEILEN + GRUPPEN_CUE_ZEILEN + MASTER_BK_ZEILEN);   // arr-bk: + 8 x 9 bk rows;   // 1.10 slice 4a/4b/4c + limiter + arr-fx: the 706 insert rows (120 komp, 8 x 59 eq, 4 x 4 saett, 48 rack, 2 x 3 lim, 4 host, 8 x 5 utility) follow the tool block
+  PRUEFE_GLEICH(tab().anzahl(), 1258 + 120 + 8 * 59 + 4 * 4 + 48 + 2 * 3 + 4 + 8 * 5 + 8 * 65 + 14 * 56 + GRUPPEN_NEU_ZEILEN + GRUPPEN_CUE_ZEILEN + MASTER_BK_ZEILEN + SPUR_BK_ZEILEN);   // arr-bk: + 8 x 9 bk rows;   // 1.10 slice 4a/4b/4c + limiter + arr-fx: the 706 insert rows (120 komp, 8 x 59 eq, 4 x 4 saett, 48 rack, 2 x 3 lim, 4 host, 8 x 5 utility) follow the tool block
   // and the table holds no other row of this kind: the count by role is 345 as well
   int rollen = 0;
   for (int r = 0; r < tab().anzahl(); r++)
@@ -662,10 +663,10 @@ FALL(die_ersten_1258_zeilen_sind_unveraendert) {
 // the send returns), the rows 9..32 moved by 256 (2228 -> 2484) because the insert block before them grew to 65 rows per stage; the restart state is keyed by path, so nothing reads them by index; two-digit numbers are their own rows and never alias bk/1..bk/8.
 FALL(bk_regler_9_bis_64_haengen_am_tabellenende) {
   const int n = tab().anzahl();
-  PRUEFE_GLEICH(n, 3268 + GRUPPEN_NEU_ZEILEN + GRUPPEN_CUE_ZEILEN + MASTER_BK_ZEILEN);
+  PRUEFE_GLEICH(n, 3268 + GRUPPEN_NEU_ZEILEN + GRUPPEN_CUE_ZEILEN + MASTER_BK_ZEILEN + SPUR_BK_ZEILEN);
   PRUEFE(n < cypherdj::stellwerk::MAX_REGLER);
   PRUEFE_GLEICH(cypherdj::stellwerk::BK_REGLER_N, 64);
-  PRUEFE_GLEICH(cypherdj::stellwerk::MAX_REGLER - n, 684);   // "Regler 3412 von 4096, Reserve 684" (master insert graph: 64 master/bk rows; 748 and 3348 before) (live modules task 6: 16 grp/<n>/cue rows; 764 before, 3268 and 828 before nested groups task 1)
+  PRUEFE_GLEICH(cypherdj::stellwerk::MAX_REGLER - n, 428);   // production plan task 8: 256 spur/<slot>/bk/<k> rows, 684 before ("Regler 3412 von 4096, Reserve 684")   // "Regler 3412 von 4096, Reserve 684" (master insert graph: 64 master/bk rows; 748 and 3348 before) (live modules task 6: 16 grp/<n>/cue rows; 764 before, 3268 and 828 before nested groups task 1)
   // rows 9..32: 12 channels x 24 knobs, then fx/3 and fx/4 x 24, at 2484..2819 (the block of the 32-knob widening, unmoved)
   PRUEFE_GLEICH(tab().suche("deck/1/bk/9"), 2484);
   PRUEFE_GLEICH(tab().suche("deck/1/bk/32"), 2484 + 23);
@@ -681,8 +682,16 @@ FALL(bk_regler_9_bis_64_haengen_am_tabellenende) {
   PRUEFE_GLEICH(tab().suche("fx/3/bk/33"), 3268 - 2 * 32);
   PRUEFE_GLEICH(tab().suche("fx/4/bk/64"), 3268 - 1);
   // master insert graph: master/bk/1..64 are the very last rows (behind grp/16/cue), global, everybody may (not nur_hand)
-  PRUEFE_GLEICH(tab().suche("master/bk/1"), tab().anzahl() - 64);
-  PRUEFE_GLEICH(tab().suche("master/bk/64"), tab().anzahl() - 1);
+  PRUEFE_GLEICH(tab().suche("master/bk/1"), tab().anzahl() - 64 - SPUR_BK_ZEILEN);   // production plan task 8: the 256 spur/<slot>/bk/<k> rows follow them
+  PRUEFE_GLEICH(tab().suche("master/bk/64"), tab().anzahl() - 1 - SPUR_BK_ZEILEN);
+  PRUEFE_GLEICH(tab().suche("spur/1/bk/1"), tab().anzahl() - SPUR_BK_ZEILEN);   // the very last rows, slot-major
+  PRUEFE_GLEICH(tab().suche("spur/8/bk/32"), tab().anzahl() - 1);
+  PRUEFE_GLEICH(tab().suche("spur/2/bk/1"), tab().anzahl() - SPUR_BK_ZEILEN + 32);
+  PRUEFE(tab().suche("spur/9/bk/1") < 0 && tab().suche("spur/1/bk/33") < 0 && tab().suche("spur/1/bk/0") < 0 && tab().suche("spur/0/bk/1") < 0);
+  {
+    const ReglerDef& x = d("spur/3/bk/17");
+    PRUEFE(x.rolle == Rolle::spur_bk && x.min == 0.0f && x.max == 1.0f && x.vorgabe == 0.5f && x.kanal == -1 && !x.nur_hand && !x.transport);
+  }
   PRUEFE(tab().suche("master/bk/0") < 0 && tab().suche("master/bk/65") < 0);
   for (const char* p : {"master/bk/1", "master/bk/10", "master/bk/64"}) {
     const ReglerDef& x = d(p);

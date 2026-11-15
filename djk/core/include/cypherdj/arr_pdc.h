@@ -112,7 +112,7 @@ inline bool arr_pdc_rechnen(ArrSnapshot& s) {
   bool grp_benutzt[ARR_GRUPPEN] = {};
   for (int i = 0; i < ARR_SPUREN; ++i) {
     if (s.spur[i].nr <= 0) continue;
-    a_spur[i] = arr_kette_latenz(s.kette[i]);
+    a_spur[i] = s.spur[i].bk_latenz + arr_kette_latenz(s.kette[i]);   // an instrument graph's latency sits in front of the chain
     t_trk = std::max(t_trk, a_spur[i]);
     if (s.spur[i].ausgang > 0 && s.spur[i].ausgang <= ARR_GRUPPEN) grp_benutzt[s.spur[i].ausgang - 1] = true;
   }

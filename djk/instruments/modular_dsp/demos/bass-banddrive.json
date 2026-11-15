@@ -1,0 +1,1534 @@
+{
+ "format": "baukasten/2",
+ "name": "bass-banddrive",
+ "stimmen": 1,
+ "regler_namen": {
+  "1": "Wave position",
+  "2": "Wave env amount",
+  "3": "Wave LFO rate",
+  "4": "Wave LFO depth",
+  "5": "Detune",
+  "6": "Width",
+  "7": "Bite",
+  "8": "Sub level",
+  "9": "Glide",
+  "10": "Cutoff",
+  "11": "Resonance",
+  "12": "Env amount",
+  "13": "Env decay",
+  "14": "Low split",
+  "15": "High split",
+  "16": "Mid drive",
+  "17": "Vowel",
+  "18": "Vowel move",
+  "19": "High drive",
+  "20": "Air",
+  "21": "Attack",
+  "22": "Decay/Sustain",
+  "23": "Release",
+  "24": "Output"
+ },
+ "knoten": [
+  {
+   "id": "note",
+   "art": "note"
+  },
+  {
+   "id": "k_pos",
+   "art": "regler",
+   "nr": 1,
+   "min": 0,
+   "max": 1,
+   "vorgabe": 0.6
+  },
+  {
+   "id": "k_wamt",
+   "art": "regler",
+   "nr": 2,
+   "min": -1,
+   "max": 1,
+   "vorgabe": 0.675
+  },
+  {
+   "id": "k_lrate",
+   "art": "regler",
+   "nr": 3,
+   "min": 0.05,
+   "max": 12,
+   "log": 1,
+   "vorgabe": 0.673075
+  },
+  {
+   "id": "k_ldepth",
+   "art": "regler",
+   "nr": 4,
+   "min": 0,
+   "max": 1,
+   "vorgabe": 0.85
+  },
+  {
+   "id": "k_det",
+   "art": "regler",
+   "nr": 5,
+   "min": 0,
+   "max": 40,
+   "vorgabe": 0.175
+  },
+  {
+   "id": "k_breite",
+   "art": "regler",
+   "nr": 6,
+   "min": 0,
+   "max": 1
+  },
+  {
+   "id": "k_bite",
+   "art": "regler",
+   "nr": 7,
+   "min": 0,
+   "max": 1,
+   "vorgabe": 0.35
+  },
+  {
+   "id": "k_sub",
+   "art": "regler",
+   "nr": 8,
+   "min": 0,
+   "max": 1,
+   "vorgabe": 0.7
+  },
+  {
+   "id": "k_glide",
+   "art": "regler",
+   "nr": 9,
+   "min": 0,
+   "max": 1,
+   "vorgabe": 0.0
+  },
+  {
+   "id": "k_cut",
+   "art": "regler",
+   "nr": 10,
+   "min": 80,
+   "max": 8000,
+   "log": 1,
+   "vorgabe": 0.80103
+  },
+  {
+   "id": "k_reso",
+   "art": "regler",
+   "nr": 11,
+   "min": 0,
+   "max": 0.85,
+   "vorgabe": 0.294118
+  },
+  {
+   "id": "k_fenv",
+   "art": "regler",
+   "nr": 12,
+   "min": 0,
+   "max": 60,
+   "vorgabe": 0.433333
+  },
+  {
+   "id": "k_fdec",
+   "art": "regler",
+   "nr": 13,
+   "min": 0.03,
+   "max": 1.5,
+   "log": 1,
+   "vorgabe": 0.458014
+  },
+  {
+   "id": "k_low",
+   "art": "regler",
+   "nr": 14,
+   "min": 60,
+   "max": 250,
+   "log": 1,
+   "vorgabe": 0.485698
+  },
+  {
+   "id": "k_high",
+   "art": "regler",
+   "nr": 15,
+   "min": 800,
+   "max": 4000,
+   "log": 1,
+   "vorgabe": 0.390577
+  },
+  {
+   "id": "k_mdrive",
+   "art": "regler",
+   "nr": 16,
+   "min": 0,
+   "max": 1,
+   "vorgabe": 0.6
+  },
+  {
+   "id": "k_vowel",
+   "art": "regler",
+   "nr": 17,
+   "min": 0,
+   "max": 4,
+   "vorgabe": 0.3
+  },
+  {
+   "id": "k_vmove",
+   "art": "regler",
+   "nr": 18,
+   "min": 0,
+   "max": 1,
+   "vorgabe": 0.9
+  },
+  {
+   "id": "k_hdrive",
+   "art": "regler",
+   "nr": 19,
+   "min": 0,
+   "max": 1,
+   "vorgabe": 0.55
+  },
+  {
+   "id": "k_air",
+   "art": "regler",
+   "nr": 20,
+   "min": 0,
+   "max": 1.5,
+   "vorgabe": 0.666667
+  },
+  {
+   "id": "k_att",
+   "art": "regler",
+   "nr": 21,
+   "min": 0.001,
+   "max": 0.2,
+   "log": 1,
+   "vorgabe": 0.261648
+  },
+  {
+   "id": "k_ds",
+   "art": "regler",
+   "nr": 22,
+   "min": 0,
+   "max": 1,
+   "vorgabe": 0.8
+  },
+  {
+   "id": "k_rel",
+   "art": "regler",
+   "nr": 23,
+   "min": 0.02,
+   "max": 1.5,
+   "log": 1,
+   "vorgabe": 0.415
+  },
+  {
+   "id": "k_out",
+   "art": "regler",
+   "nr": 24,
+   "min": -24,
+   "max": 6,
+   "vorgabe": 0.75
+  },
+  {
+   "id": "gl_sel",
+   "art": "wahl",
+   "n": 5,
+   "modus": 1,
+   "norm": 1
+  },
+  {
+   "id": "gl1",
+   "art": "glatt",
+   "zeit": 0.015
+  },
+  {
+   "id": "gl2",
+   "art": "glatt",
+   "zeit": 0.04
+  },
+  {
+   "id": "gl3",
+   "art": "glatt",
+   "zeit": 0.1
+  },
+  {
+   "id": "gl4",
+   "art": "glatt",
+   "zeit": 0.25
+  },
+  {
+   "id": "wenv",
+   "art": "adsr",
+   "a": 0.004,
+   "d": 0.45,
+   "s": 0,
+   "r": 0.3
+  },
+  {
+   "id": "lfo",
+   "art": "lfo",
+   "form": 0,
+   "neustart": 1
+  },
+  {
+   "id": "wmod",
+   "art": "mul"
+  },
+  {
+   "id": "lmod0",
+   "art": "mul"
+  },
+  {
+   "id": "lmod",
+   "art": "mul",
+   "b": 0.5
+  },
+  {
+   "id": "pos",
+   "art": "add"
+  },
+  {
+   "id": "sub",
+   "art": "sinus"
+  },
+  {
+   "id": "sub_g",
+   "art": "mul",
+   "b": 0.4
+  },
+  {
+   "id": "sub_p",
+   "art": "mul"
+  },
+  {
+   "id": "wt",
+   "art": "wavetable",
+   "tabelle": 4,
+   "kopien": 3,
+   "saat": 7
+  },
+  {
+   "id": "bite_w1",
+   "art": "mul",
+   "b": 14
+  },
+  {
+   "id": "bite_w2",
+   "art": "mul",
+   "b": 5
+  },
+  {
+   "id": "bite_st",
+   "art": "add",
+   "c": 7
+  },
+  {
+   "id": "bite_hz",
+   "art": "transponiere"
+  },
+  {
+   "id": "bite_osc",
+   "art": "saege"
+  },
+  {
+   "id": "bite_dc",
+   "art": "svf",
+   "cutoff": 30,
+   "reso": 0
+  },
+  {
+   "id": "bite_g",
+   "art": "mul",
+   "b": 0.35
+  },
+  {
+   "id": "bite_p",
+   "art": "mul"
+  },
+  {
+   "id": "fenv",
+   "art": "adsr",
+   "a": 0.001,
+   "d": 0.18,
+   "s": 0,
+   "r": 0.08
+  },
+  {
+   "id": "fenv_st",
+   "art": "mul"
+  },
+  {
+   "id": "vel_m1",
+   "art": "add",
+   "b": -1
+  },
+  {
+   "id": "vel_st",
+   "art": "mul",
+   "b": 18
+  },
+  {
+   "id": "cut_lfo",
+   "art": "mul",
+   "b": 60
+  },
+  {
+   "id": "cut_st",
+   "art": "add"
+  },
+  {
+   "id": "cut",
+   "art": "transponiere"
+  },
+  {
+   "id": "vowel_l",
+   "art": "mul",
+   "b": 4
+  },
+  {
+   "id": "vowel_l2",
+   "art": "mul"
+  },
+  {
+   "id": "vowel_e",
+   "art": "mul",
+   "b": 4
+  },
+  {
+   "id": "vowel_e2",
+   "art": "mul"
+  },
+  {
+   "id": "vowel",
+   "art": "add"
+  },
+  {
+   "id": "mid_db",
+   "art": "mul",
+   "b": 30.0
+  },
+  {
+   "id": "mid_c1",
+   "art": "mul",
+   "b": -2.6323622609506434
+  },
+  {
+   "id": "mid_sq",
+   "art": "mul"
+  },
+  {
+   "id": "mid_c2",
+   "art": "mul",
+   "b": 10.792745064603347
+  },
+  {
+   "id": "mid_cst",
+   "art": "add"
+  },
+  {
+   "id": "mid_g",
+   "art": "transponiere",
+   "hz": 0.25
+  },
+  {
+   "id": "hi_db",
+   "art": "mul",
+   "b": 30.0
+  },
+  {
+   "id": "hi_c1",
+   "art": "mul",
+   "b": -5.834169435926879
+  },
+  {
+   "id": "hi_sq",
+   "art": "mul"
+  },
+  {
+   "id": "hi_c2",
+   "art": "mul",
+   "b": -1.2839916472358632
+  },
+  {
+   "id": "hi_cst",
+   "art": "add"
+  },
+  {
+   "id": "hi_g",
+   "art": "transponiere",
+   "hz": 0.25
+  },
+  {
+   "id": "fold_form",
+   "art": "konst",
+   "wert": 0.4
+  },
+  {
+   "id": "src0_l",
+   "art": "add"
+  },
+  {
+   "id": "src_l",
+   "art": "mul",
+   "b": 0.4
+  },
+  {
+   "id": "flt_l",
+   "art": "svf",
+   "pole": 4
+  },
+  {
+   "id": "kr_l",
+   "art": "kreuz",
+   "baender": 3
+  },
+  {
+   "id": "fpre_l",
+   "art": "mul",
+   "b": 4.0
+  },
+  {
+   "id": "fold_l",
+   "art": "falter",
+   "ueber": 0
+  },
+  {
+   "id": "foldg_l",
+   "art": "mul"
+  },
+  {
+   "id": "fmt_l",
+   "art": "formant"
+  },
+  {
+   "id": "midhp_l",
+   "art": "svf",
+   "pole": 4,
+   "reso": 0
+  },
+  {
+   "id": "spre_l",
+   "art": "mul",
+   "b": 4.0
+  },
+  {
+   "id": "sat_l",
+   "art": "saett"
+  },
+  {
+   "id": "satg_l",
+   "art": "mul"
+  },
+  {
+   "id": "air_l",
+   "art": "mul"
+  },
+  {
+   "id": "mh_l",
+   "art": "add"
+  },
+  {
+   "id": "cl_in_l",
+   "art": "mul",
+   "b": 1.4285714285714286
+  },
+  {
+   "id": "cl_l",
+   "art": "saett",
+   "antrieb": 0
+  },
+  {
+   "id": "cl_out_l",
+   "art": "mul",
+   "b": 0.7
+  },
+  {
+   "id": "src0_r",
+   "art": "add"
+  },
+  {
+   "id": "src_r",
+   "art": "mul",
+   "b": 0.4
+  },
+  {
+   "id": "flt_r",
+   "art": "svf",
+   "pole": 4
+  },
+  {
+   "id": "kr_r",
+   "art": "kreuz",
+   "baender": 3
+  },
+  {
+   "id": "fpre_r",
+   "art": "mul",
+   "b": 4.0
+  },
+  {
+   "id": "fold_r",
+   "art": "falter",
+   "ueber": 0
+  },
+  {
+   "id": "foldg_r",
+   "art": "mul"
+  },
+  {
+   "id": "fmt_r",
+   "art": "formant"
+  },
+  {
+   "id": "midhp_r",
+   "art": "svf",
+   "pole": 4,
+   "reso": 0
+  },
+  {
+   "id": "spre_r",
+   "art": "mul",
+   "b": 4.0
+  },
+  {
+   "id": "sat_r",
+   "art": "saett"
+  },
+  {
+   "id": "satg_r",
+   "art": "mul"
+  },
+  {
+   "id": "air_r",
+   "art": "mul"
+  },
+  {
+   "id": "mh_r",
+   "art": "add"
+  },
+  {
+   "id": "cl_in_r",
+   "art": "mul",
+   "b": 1.4285714285714286
+  },
+  {
+   "id": "cl_r",
+   "art": "saett",
+   "antrieb": 0
+  },
+  {
+   "id": "cl_out_r",
+   "art": "mul",
+   "b": 0.7
+  },
+  {
+   "id": "ms_m0",
+   "art": "add"
+  },
+  {
+   "id": "ms_m",
+   "art": "mul",
+   "b": 0.5
+  },
+  {
+   "id": "ms_s0",
+   "art": "mul",
+   "b": -1
+  },
+  {
+   "id": "ms_s1",
+   "art": "add"
+  },
+  {
+   "id": "ms_s2",
+   "art": "mul",
+   "b": 0.5
+  },
+  {
+   "id": "ms_fc",
+   "art": "mul",
+   "b": 2
+  },
+  {
+   "id": "ms_hp",
+   "art": "svf",
+   "pole": 4,
+   "reso": 0
+  },
+  {
+   "id": "ms_neg",
+   "art": "mul",
+   "b": -1
+  },
+  {
+   "id": "st_l",
+   "art": "add"
+  },
+  {
+   "id": "st_r",
+   "art": "add"
+  },
+  {
+   "id": "sub2_hz",
+   "art": "transponiere",
+   "st": 12
+  },
+  {
+   "id": "sub2",
+   "art": "sinus"
+  },
+  {
+   "id": "sub2_g",
+   "art": "mul",
+   "b": 0.13999999999999999
+  },
+  {
+   "id": "sub2_p",
+   "art": "mul"
+  },
+  {
+   "id": "tief",
+   "art": "add"
+  },
+  {
+   "id": "env",
+   "art": "adsr",
+   "a": 0.004,
+   "d": 0.4,
+   "s": 0.8,
+   "r": 0.12
+  },
+  {
+   "id": "env_d0",
+   "art": "mul",
+   "b": 0.5
+  },
+  {
+   "id": "env_d",
+   "art": "add",
+   "b": 0.08
+  },
+  {
+   "id": "out_st",
+   "art": "mul",
+   "b": 1.9931568569324174
+  },
+  {
+   "id": "out_g",
+   "art": "transponiere",
+   "hz": 1.0
+  },
+  {
+   "id": "vca_g",
+   "art": "mul"
+  },
+  {
+   "id": "aus",
+   "art": "ausgang"
+  },
+  {
+   "id": "sum_l",
+   "art": "add"
+  },
+  {
+   "id": "vca_l",
+   "art": "mul"
+  },
+  {
+   "id": "dcout_l",
+   "art": "kreuz",
+   "baender": 2,
+   "fc1": 12
+  },
+  {
+   "id": "sum_r",
+   "art": "add"
+  },
+  {
+   "id": "vca_r",
+   "art": "mul"
+  },
+  {
+   "id": "dcout_r",
+   "art": "kreuz",
+   "baender": 2,
+   "fc1": 12
+  }
+ ],
+ "kanten": [
+  {
+   "von": "note.hz",
+   "nach": "gl_sel.e1"
+  },
+  {
+   "von": "note.hz",
+   "nach": "gl1.x"
+  },
+  {
+   "von": "note.erste",
+   "nach": "gl1.setzen"
+  },
+  {
+   "von": "gl1.aus",
+   "nach": "gl_sel.e2"
+  },
+  {
+   "von": "note.hz",
+   "nach": "gl2.x"
+  },
+  {
+   "von": "note.erste",
+   "nach": "gl2.setzen"
+  },
+  {
+   "von": "gl2.aus",
+   "nach": "gl_sel.e3"
+  },
+  {
+   "von": "note.hz",
+   "nach": "gl3.x"
+  },
+  {
+   "von": "note.erste",
+   "nach": "gl3.setzen"
+  },
+  {
+   "von": "gl3.aus",
+   "nach": "gl_sel.e4"
+  },
+  {
+   "von": "note.hz",
+   "nach": "gl4.x"
+  },
+  {
+   "von": "note.erste",
+   "nach": "gl4.setzen"
+  },
+  {
+   "von": "gl4.aus",
+   "nach": "gl_sel.e5"
+  },
+  {
+   "von": "k_glide.aus",
+   "nach": "gl_sel.wahl"
+  },
+  {
+   "von": "note.gate",
+   "nach": "wenv.gate"
+  },
+  {
+   "von": "note.trig",
+   "nach": "wenv.trig"
+  },
+  {
+   "von": "k_lrate.aus",
+   "nach": "lfo.rate"
+  },
+  {
+   "von": "note.trig",
+   "nach": "lfo.trig"
+  },
+  {
+   "von": "wenv.aus",
+   "nach": "wmod.a"
+  },
+  {
+   "von": "k_wamt.aus",
+   "nach": "wmod.b"
+  },
+  {
+   "von": "lfo.aus",
+   "nach": "lmod0.a"
+  },
+  {
+   "von": "k_ldepth.aus",
+   "nach": "lmod0.b"
+  },
+  {
+   "von": "lmod0.aus",
+   "nach": "lmod.a"
+  },
+  {
+   "von": "k_pos.aus",
+   "nach": "pos.a"
+  },
+  {
+   "von": "wmod.aus",
+   "nach": "pos.b"
+  },
+  {
+   "von": "lmod.aus",
+   "nach": "pos.c"
+  },
+  {
+   "von": "gl_sel.aus",
+   "nach": "sub.hz"
+  },
+  {
+   "von": "sub.aus",
+   "nach": "sub_g.a"
+  },
+  {
+   "von": "sub_g.aus",
+   "nach": "sub_p.a"
+  },
+  {
+   "von": "k_sub.aus",
+   "nach": "sub_p.b"
+  },
+  {
+   "von": "gl_sel.aus",
+   "nach": "wt.hz"
+  },
+  {
+   "von": "note.trig",
+   "nach": "wt.trig"
+  },
+  {
+   "von": "pos.aus",
+   "nach": "wt.pos"
+  },
+  {
+   "von": "k_det.aus",
+   "nach": "wt.verstimmung"
+  },
+  {
+   "von": "k_breite.aus",
+   "nach": "wt.breite"
+  },
+  {
+   "von": "wenv.aus",
+   "nach": "bite_w1.a"
+  },
+  {
+   "von": "lfo.aus",
+   "nach": "bite_w2.a"
+  },
+  {
+   "von": "bite_w1.aus",
+   "nach": "bite_st.a"
+  },
+  {
+   "von": "bite_w2.aus",
+   "nach": "bite_st.b"
+  },
+  {
+   "von": "gl_sel.aus",
+   "nach": "bite_hz.hz"
+  },
+  {
+   "von": "bite_st.aus",
+   "nach": "bite_hz.st"
+  },
+  {
+   "von": "bite_hz.aus",
+   "nach": "bite_osc.hz"
+  },
+  {
+   "von": "sub.hart",
+   "nach": "bite_osc.hart"
+  },
+  {
+   "von": "bite_osc.aus",
+   "nach": "bite_dc.x"
+  },
+  {
+   "von": "bite_dc.hp",
+   "nach": "bite_g.a"
+  },
+  {
+   "von": "bite_g.aus",
+   "nach": "bite_p.a"
+  },
+  {
+   "von": "k_bite.aus",
+   "nach": "bite_p.b"
+  },
+  {
+   "von": "note.gate",
+   "nach": "fenv.gate"
+  },
+  {
+   "von": "note.trig",
+   "nach": "fenv.trig"
+  },
+  {
+   "von": "k_fdec.aus",
+   "nach": "fenv.d"
+  },
+  {
+   "von": "fenv.aus",
+   "nach": "fenv_st.a"
+  },
+  {
+   "von": "k_fenv.aus",
+   "nach": "fenv_st.b"
+  },
+  {
+   "von": "note.vel",
+   "nach": "vel_m1.a"
+  },
+  {
+   "von": "vel_m1.aus",
+   "nach": "vel_st.a"
+  },
+  {
+   "von": "lmod0.aus",
+   "nach": "cut_lfo.a"
+  },
+  {
+   "von": "fenv_st.aus",
+   "nach": "cut_st.a"
+  },
+  {
+   "von": "vel_st.aus",
+   "nach": "cut_st.b"
+  },
+  {
+   "von": "cut_lfo.aus",
+   "nach": "cut_st.c"
+  },
+  {
+   "von": "k_cut.aus",
+   "nach": "cut.hz"
+  },
+  {
+   "von": "cut_st.aus",
+   "nach": "cut.st"
+  },
+  {
+   "von": "lfo.aus",
+   "nach": "vowel_l.a"
+  },
+  {
+   "von": "vowel_l.aus",
+   "nach": "vowel_l2.a"
+  },
+  {
+   "von": "k_vmove.aus",
+   "nach": "vowel_l2.b"
+  },
+  {
+   "von": "wenv.aus",
+   "nach": "vowel_e.a"
+  },
+  {
+   "von": "vowel_e.aus",
+   "nach": "vowel_e2.a"
+  },
+  {
+   "von": "k_vmove.aus",
+   "nach": "vowel_e2.b"
+  },
+  {
+   "von": "k_vowel.aus",
+   "nach": "vowel.a"
+  },
+  {
+   "von": "vowel_l2.aus",
+   "nach": "vowel.b"
+  },
+  {
+   "von": "vowel_e2.aus",
+   "nach": "vowel.c"
+  },
+  {
+   "von": "k_mdrive.aus",
+   "nach": "mid_db.a"
+  },
+  {
+   "von": "k_mdrive.aus",
+   "nach": "mid_c1.a"
+  },
+  {
+   "von": "k_mdrive.aus",
+   "nach": "mid_sq.a"
+  },
+  {
+   "von": "k_mdrive.aus",
+   "nach": "mid_sq.b"
+  },
+  {
+   "von": "mid_sq.aus",
+   "nach": "mid_c2.a"
+  },
+  {
+   "von": "mid_c1.aus",
+   "nach": "mid_cst.a"
+  },
+  {
+   "von": "mid_c2.aus",
+   "nach": "mid_cst.b"
+  },
+  {
+   "von": "mid_cst.aus",
+   "nach": "mid_g.st"
+  },
+  {
+   "von": "k_hdrive.aus",
+   "nach": "hi_db.a"
+  },
+  {
+   "von": "k_hdrive.aus",
+   "nach": "hi_c1.a"
+  },
+  {
+   "von": "k_hdrive.aus",
+   "nach": "hi_sq.a"
+  },
+  {
+   "von": "k_hdrive.aus",
+   "nach": "hi_sq.b"
+  },
+  {
+   "von": "hi_sq.aus",
+   "nach": "hi_c2.a"
+  },
+  {
+   "von": "hi_c1.aus",
+   "nach": "hi_cst.a"
+  },
+  {
+   "von": "hi_c2.aus",
+   "nach": "hi_cst.b"
+  },
+  {
+   "von": "hi_cst.aus",
+   "nach": "hi_g.st"
+  },
+  {
+   "von": "wt.l",
+   "nach": "src0_l.a"
+  },
+  {
+   "von": "bite_p.aus",
+   "nach": "src0_l.b"
+  },
+  {
+   "von": "src0_l.aus",
+   "nach": "src_l.a"
+  },
+  {
+   "von": "src_l.aus",
+   "nach": "flt_l.x"
+  },
+  {
+   "von": "cut.aus",
+   "nach": "flt_l.cutoff"
+  },
+  {
+   "von": "k_reso.aus",
+   "nach": "flt_l.reso"
+  },
+  {
+   "von": "flt_l.tp",
+   "nach": "kr_l.x"
+  },
+  {
+   "von": "k_low.aus",
+   "nach": "kr_l.fc1"
+  },
+  {
+   "von": "k_high.aus",
+   "nach": "kr_l.fc2"
+  },
+  {
+   "von": "kr_l.mid",
+   "nach": "fpre_l.a"
+  },
+  {
+   "von": "fpre_l.aus",
+   "nach": "fold_l.x"
+  },
+  {
+   "von": "mid_db.aus",
+   "nach": "fold_l.antrieb"
+  },
+  {
+   "von": "fold_form.aus",
+   "nach": "fold_l.form"
+  },
+  {
+   "von": "fold_l.aus",
+   "nach": "foldg_l.a"
+  },
+  {
+   "von": "mid_g.aus",
+   "nach": "foldg_l.b"
+  },
+  {
+   "von": "foldg_l.aus",
+   "nach": "fmt_l.x"
+  },
+  {
+   "von": "vowel.aus",
+   "nach": "fmt_l.vokal"
+  },
+  {
+   "von": "fmt_l.aus",
+   "nach": "midhp_l.x"
+  },
+  {
+   "von": "k_low.aus",
+   "nach": "midhp_l.cutoff"
+  },
+  {
+   "von": "kr_l.hi",
+   "nach": "spre_l.a"
+  },
+  {
+   "von": "spre_l.aus",
+   "nach": "sat_l.x"
+  },
+  {
+   "von": "hi_db.aus",
+   "nach": "sat_l.antrieb"
+  },
+  {
+   "von": "sat_l.aus",
+   "nach": "satg_l.a"
+  },
+  {
+   "von": "hi_g.aus",
+   "nach": "satg_l.b"
+  },
+  {
+   "von": "satg_l.aus",
+   "nach": "air_l.a"
+  },
+  {
+   "von": "k_air.aus",
+   "nach": "air_l.b"
+  },
+  {
+   "von": "midhp_l.hp",
+   "nach": "mh_l.a"
+  },
+  {
+   "von": "air_l.aus",
+   "nach": "mh_l.b"
+  },
+  {
+   "von": "mh_l.aus",
+   "nach": "cl_in_l.a"
+  },
+  {
+   "von": "cl_in_l.aus",
+   "nach": "cl_l.x"
+  },
+  {
+   "von": "cl_l.aus",
+   "nach": "cl_out_l.a"
+  },
+  {
+   "von": "wt.r",
+   "nach": "src0_r.a"
+  },
+  {
+   "von": "bite_p.aus",
+   "nach": "src0_r.b"
+  },
+  {
+   "von": "src0_r.aus",
+   "nach": "src_r.a"
+  },
+  {
+   "von": "src_r.aus",
+   "nach": "flt_r.x"
+  },
+  {
+   "von": "cut.aus",
+   "nach": "flt_r.cutoff"
+  },
+  {
+   "von": "k_reso.aus",
+   "nach": "flt_r.reso"
+  },
+  {
+   "von": "flt_r.tp",
+   "nach": "kr_r.x"
+  },
+  {
+   "von": "k_low.aus",
+   "nach": "kr_r.fc1"
+  },
+  {
+   "von": "k_high.aus",
+   "nach": "kr_r.fc2"
+  },
+  {
+   "von": "kr_r.mid",
+   "nach": "fpre_r.a"
+  },
+  {
+   "von": "fpre_r.aus",
+   "nach": "fold_r.x"
+  },
+  {
+   "von": "mid_db.aus",
+   "nach": "fold_r.antrieb"
+  },
+  {
+   "von": "fold_form.aus",
+   "nach": "fold_r.form"
+  },
+  {
+   "von": "fold_r.aus",
+   "nach": "foldg_r.a"
+  },
+  {
+   "von": "mid_g.aus",
+   "nach": "foldg_r.b"
+  },
+  {
+   "von": "foldg_r.aus",
+   "nach": "fmt_r.x"
+  },
+  {
+   "von": "vowel.aus",
+   "nach": "fmt_r.vokal"
+  },
+  {
+   "von": "fmt_r.aus",
+   "nach": "midhp_r.x"
+  },
+  {
+   "von": "k_low.aus",
+   "nach": "midhp_r.cutoff"
+  },
+  {
+   "von": "kr_r.hi",
+   "nach": "spre_r.a"
+  },
+  {
+   "von": "spre_r.aus",
+   "nach": "sat_r.x"
+  },
+  {
+   "von": "hi_db.aus",
+   "nach": "sat_r.antrieb"
+  },
+  {
+   "von": "sat_r.aus",
+   "nach": "satg_r.a"
+  },
+  {
+   "von": "hi_g.aus",
+   "nach": "satg_r.b"
+  },
+  {
+   "von": "satg_r.aus",
+   "nach": "air_r.a"
+  },
+  {
+   "von": "k_air.aus",
+   "nach": "air_r.b"
+  },
+  {
+   "von": "midhp_r.hp",
+   "nach": "mh_r.a"
+  },
+  {
+   "von": "air_r.aus",
+   "nach": "mh_r.b"
+  },
+  {
+   "von": "mh_r.aus",
+   "nach": "cl_in_r.a"
+  },
+  {
+   "von": "cl_in_r.aus",
+   "nach": "cl_r.x"
+  },
+  {
+   "von": "cl_r.aus",
+   "nach": "cl_out_r.a"
+  },
+  {
+   "von": "cl_out_l.aus",
+   "nach": "ms_m0.a"
+  },
+  {
+   "von": "cl_out_r.aus",
+   "nach": "ms_m0.b"
+  },
+  {
+   "von": "ms_m0.aus",
+   "nach": "ms_m.a"
+  },
+  {
+   "von": "cl_out_r.aus",
+   "nach": "ms_s0.a"
+  },
+  {
+   "von": "cl_out_l.aus",
+   "nach": "ms_s1.a"
+  },
+  {
+   "von": "ms_s0.aus",
+   "nach": "ms_s1.b"
+  },
+  {
+   "von": "ms_s1.aus",
+   "nach": "ms_s2.a"
+  },
+  {
+   "von": "k_low.aus",
+   "nach": "ms_fc.a"
+  },
+  {
+   "von": "ms_s2.aus",
+   "nach": "ms_hp.x"
+  },
+  {
+   "von": "ms_fc.aus",
+   "nach": "ms_hp.cutoff"
+  },
+  {
+   "von": "ms_hp.hp",
+   "nach": "ms_neg.a"
+  },
+  {
+   "von": "ms_m.aus",
+   "nach": "st_l.a"
+  },
+  {
+   "von": "ms_hp.hp",
+   "nach": "st_l.b"
+  },
+  {
+   "von": "ms_m.aus",
+   "nach": "st_r.a"
+  },
+  {
+   "von": "ms_neg.aus",
+   "nach": "st_r.b"
+  },
+  {
+   "von": "gl_sel.aus",
+   "nach": "sub2_hz.hz"
+  },
+  {
+   "von": "sub2_hz.aus",
+   "nach": "sub2.hz"
+  },
+  {
+   "von": "sub2.aus",
+   "nach": "sub2_g.a"
+  },
+  {
+   "von": "sub2_g.aus",
+   "nach": "sub2_p.a"
+  },
+  {
+   "von": "k_sub.aus",
+   "nach": "sub2_p.b"
+  },
+  {
+   "von": "sub_p.aus",
+   "nach": "tief.a"
+  },
+  {
+   "von": "sub2_p.aus",
+   "nach": "tief.b"
+  },
+  {
+   "von": "note.gate",
+   "nach": "env.gate"
+  },
+  {
+   "von": "note.trig",
+   "nach": "env.trig"
+  },
+  {
+   "von": "k_att.aus",
+   "nach": "env.a"
+  },
+  {
+   "von": "k_ds.aus",
+   "nach": "env.s"
+  },
+  {
+   "von": "k_rel.aus",
+   "nach": "env.r"
+  },
+  {
+   "von": "k_ds.aus",
+   "nach": "env_d0.a"
+  },
+  {
+   "von": "env_d0.aus",
+   "nach": "env_d.a"
+  },
+  {
+   "von": "env_d.aus",
+   "nach": "env.d"
+  },
+  {
+   "von": "k_out.aus",
+   "nach": "out_st.a"
+  },
+  {
+   "von": "out_st.aus",
+   "nach": "out_g.st"
+  },
+  {
+   "von": "env.aus",
+   "nach": "vca_g.a"
+  },
+  {
+   "von": "out_g.aus",
+   "nach": "vca_g.b"
+  },
+  {
+   "von": "tief.aus",
+   "nach": "sum_l.a"
+  },
+  {
+   "von": "st_l.aus",
+   "nach": "sum_l.b"
+  },
+  {
+   "von": "sum_l.aus",
+   "nach": "vca_l.a"
+  },
+  {
+   "von": "vca_g.aus",
+   "nach": "vca_l.b"
+  },
+  {
+   "von": "vca_l.aus",
+   "nach": "dcout_l.x"
+  },
+  {
+   "von": "dcout_l.hi",
+   "nach": "aus.l"
+  },
+  {
+   "von": "tief.aus",
+   "nach": "sum_r.a"
+  },
+  {
+   "von": "st_r.aus",
+   "nach": "sum_r.b"
+  },
+  {
+   "von": "sum_r.aus",
+   "nach": "vca_r.a"
+  },
+  {
+   "von": "vca_g.aus",
+   "nach": "vca_r.b"
+  },
+  {
+   "von": "vca_r.aus",
+   "nach": "dcout_r.x"
+  },
+  {
+   "von": "dcout_r.hi",
+   "nach": "aus.r"
+  }
+ ]
+}

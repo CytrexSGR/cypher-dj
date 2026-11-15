@@ -8,7 +8,8 @@ import { $, $$, melde, zustand } from './page_state.js';
 import { holeFxInhalt, instrumenteAnsicht, zeigePresets } from './effects_bindung.js';
 import { sendeWerkzeug } from './effects_view.js';
 import { tabletModus } from './seitenrahmen.js';
-import { lernAbbrechenFuer } from './learn_view.js';
+import { holeLernen, lernAbbrechenFuer, lernSchicken, lernen } from './learn_view.js';
+import { zeigeRegister } from './register_view.js';
 
 // Effekt-Sektion (Plan 2026-10-11-effekt-sektion.md, Andreas: „tauschoberfläche gegen die libary unten“): unten LIBRARY |
 // EFFECTS; EFFECTS zeigt je Quellkanal einen Streifen mit dem Kompressor (<k>/komp/*), Bedienung über /regler (sofort),
@@ -21,6 +22,7 @@ export const KOMP_REGLER = [
   { feld: 'mix', name: 'MIX', min: 0, max: 1, schritt: 0.01, vorgabe: 1, text: (w) => `${Math.round(w * 100)}%` },
 ];
 export const kompGr = {};   // kanal -> { db, t }
+export const kompPegel = {};   // kanal -> { ein, aus, t }: the input and output peak of the channel compressor (/e/stufe_pegel, T9), read by the face
 export function kompWert(k, feld, vor) { const w = zustand.regler?.[`${k}/komp/${feld}`]; return typeof w === 'number' ? w : vor; }
 export function instrumenteSichtbar() { return !!instrumenteAnsicht && !$('#instrumente').hidden; }
 // Device page: the INSTRUMENTS element itself, enlarged as a fixed layer (panel.css body.geraeteseite). One host, no second plate; this function is the only way in and out.
@@ -90,6 +92,9 @@ export function setzeBereich(b) {
   document.body.classList.toggle('bereich-instrumente', b === 'instrumente');   // INSTRUMENTS area
   $('#instrumente').hidden = b !== 'instrumente';
   if (b === 'instrumente') instrumenteAnsicht?.baue();
+  document.body.classList.toggle('bereich-controller', b === 'controller');   // CONTROLLERS area (read-only register)
+  $('#register').hidden = b !== 'controller';
+  if (b === 'controller') zeigeRegister($('#register'), { stand: () => lernen, schicken: lernSchicken, hole: holeLernen });
   try { localStorage.setItem('djk-bereich', b); } catch { /* ohne Speicher: nur jetzt */ }
 }
 export async function setzeKomp(pfad, nach) {

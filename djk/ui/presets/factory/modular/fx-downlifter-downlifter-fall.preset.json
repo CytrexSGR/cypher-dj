@@ -1,0 +1,38 @@
+{
+ "schema": 1,
+ "name": "Downlifter / fall",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "fx-downlifter",
+ "werte": {
+  "knob1": 0.5,
+  "knob2": 0.5,
+  "knob3": 0.5,
+  "knob4": 0.5,
+  "knob5": 0.5
+ },
+ "beschreibung": {
+  "art": "fx",
+  "unterart": "downlifter",
+  "charakter": [
+   "dark",
+   "wet",
+   "evolving",
+   "soft",
+   "deep"
+  ],
+  "genre": [],
+  "einsatz": [
+   "breakdown",
+   "outro"
+  ],
+  "energie": 2,
+  "text": "Noise downlifter: a band-passed noise wash that falls from bright to dark over four seconds into hall and delay."
+ },
+ "tags": [
+  "fx-downlifter"
+ ],
+ "notiz": "Source rule: recipe card `fx.downlifter`, Snoman [B3] p. 301. Measured by `tests/rezepte.rs`, not yet heard.",
+ "angelegt": "2026-11-15T00:00:00.000Z",
+ "geaendert": "2026-11-15T00:00:00.000Z"
+}

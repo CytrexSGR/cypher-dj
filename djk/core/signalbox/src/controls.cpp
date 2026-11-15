@@ -336,6 +336,13 @@ ReglerTabelle::ReglerTabelle() {
     std::snprintf(p, sizeof p, "master/bk/%d", nr);
     neu(p, -1, Rolle::bk_regler, 0, 1, 0.5f, 0, false, false, false, false, linear(0, 1));
   }
+  // Production plan task 8: spur/<slot>/bk/<k>, slot 1..8, k 1..32, a transient override of a Baukasten knob (the Arrangement holds the written flag and clears it with every playback build, D11).
+  // Appended at the very end, slot-major: no index moves. Everybody may write (like the other graph knobs). Not stored in the state file (core_state.cpp).
+  for (int slot = 1; slot <= SPUR_BK_SLOTS; slot++)
+    for (int nr = 1; nr <= SPUR_BK_KNOEPFE; nr++) {
+      std::snprintf(p, sizeof p, "spur/%d/bk/%d", slot, nr);
+      neu(p, -1, Rolle::spur_bk, 0, 1, 0.5f, 0, false, false, false, false, linear(0, 1));
+    }
   for (int i = 0; i < n_; i++) sortiert_[i] = static_cast<int16_t>(i);
   std::sort(sortiert_, sortiert_ + n_, [&](int16_t a, int16_t b) { return std::strcmp(def_[a].pfad, def_[b].pfad) < 0; });
 }

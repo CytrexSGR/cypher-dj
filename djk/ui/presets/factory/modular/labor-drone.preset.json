@@ -1,0 +1,64 @@
+{
+ "schema": 1,
+ "name": "Labor Drone",
+ "geraet_typ": "instrument",
+ "geraet": "baukasten",
+ "graph": "labor",
+ "werte": {
+  "knob1": 0.5,
+  "knob2": 0.85,
+  "knob3": 0.0,
+  "knob4": 1.0,
+  "knob5": 0.0,
+  "knob6": 0.6,
+  "knob7": 0.0,
+  "knob8": 0.5,
+  "knob9": 1.0,
+  "knob10": 0.575,
+  "knob11": 0.5,
+  "knob12": 0.5,
+  "knob13": 0.85,
+  "knob14": 0.0,
+  "knob15": 0.0,
+  "knob16": 0.3,
+  "knob17": 0.6,
+  "knob18": 1.0,
+  "knob19": 0.5,
+  "knob20": 0.5,
+  "knob21": 0.5,
+  "knob22": 0.65,
+  "knob23": 1.0,
+  "knob24": 0.0,
+  "knob25": 0.5,
+  "knob26": 1.0,
+  "knob27": 0.7,
+  "knob28": 0.0,
+  "knob29": 0.4,
+  "knob30": 0.5
+ },
+ "beschreibung": {
+  "art": "pad",
+  "unterart": "drone",
+  "charakter": [
+   "dark",
+   "evolving",
+   "wide"
+  ],
+  "genre": [
+   "ambient",
+   "idm"
+  ],
+  "einsatz": [
+   "intro",
+   "breakdown"
+  ],
+  "energie": 2,
+  "text": "Both filters ring for ever and feed each other through the cross paths while the delay time of channel 2 drifts."
+ },
+ "tags": [
+  "labor"
+ ],
+ "notiz": "Measured by render, not yet heard (2026-11-15). Recipe: GERAET-labor.md section 4, drone.",
+ "angelegt": "2026-11-15T00:00:00.000Z",
+ "geaendert": "2026-11-15T00:00:00.000Z"
+}

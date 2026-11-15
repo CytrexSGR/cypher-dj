@@ -66,6 +66,21 @@ test('pruefen reports a doc missing, a panel binding an unknown parameter, a pre
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('pruefen finds the recipe graphs of demos/recipes/: a preset of a removed one and a recipe graph without a category are reported', () => {
+  const { dir, P } = kopie();
+  try {
+    assert.ok(fs.existsSync(path.join(P.rezepte, 'bass-sub.json')), 'the copy carries the recipe graphs');
+    assert.ok(fs.readdirSync(P.werkPresets).includes('bass-sub-sub.preset.json'), 'and the recipe preset of bass-sub');
+    assert.equal(lauf('pruefen', '--wurzel', dir).status, 0, 'positive control');
+    const kat = JSON.parse(fs.readFileSync(P.kategorien, 'utf8'));
+    delete kat['bass-sub'];
+    fs.writeFileSync(P.kategorien, JSON.stringify(kat));
+    assert.match(lauf('pruefen', '--wurzel', dir).stdout, /^bass-sub: instrument graph without a category in kategorien\.json$/m);
+    fs.rmSync(path.join(P.rezepte, 'bass-sub.json'));
+    assert.match(lauf('pruefen', '--wurzel', dir).stdout, /^preset bass-sub-sub\.preset\.json: graph "bass-sub" does not exist$/m);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
 test('pruefen reports an instrument graph without a category; neu copies the category with "Copy of" and fails clean', () => {
   const { dir, P } = kopie();
   try {
@@ -89,7 +104,7 @@ test('pruefen reports an instrument graph without a category; neu copies the cat
     const kat = JSON.parse(fs.readFileSync(k.P.kategorien, 'utf8'));
     assert.equal(kat['test-geraet'].kategorie, kat['synth-mono'].kategorie);
     assert.ok(kat['test-geraet'].text.startsWith('Copy of synth-mono: ') && kat['test-geraet'].text.length <= 90, kat['test-geraet'].text);
-    assert.equal(Object.keys(kat).length, 55);
+    assert.equal(Object.keys(kat).length, 56 + 46, '55 demo instruments, the 46 recipe graphs and the new one');
   } finally { fs.rmSync(k.dir, { recursive: true, force: true }); }
 });
 
@@ -202,8 +217,10 @@ test('unit rule negative control: a raw knob without unit in a temporary copy fa
 
 // Task 8 of the surfaces plan: every instrument graph listed in kategorien.json has a hand panel in paneele/ (auto panels stay for effects and new
 // graphs). OHNE_PANEL lists the graphs that are exempt, each with the reason; the list must only name graphs that really have no panel.
-// It is empty since saege-ladder got knobs and a plate (the last graph without regler nodes).
-const OHNE_PANEL = {};
+// It was empty from the time saege-ladder got knobs and a plate until the 46 recipe graphs (demos/recipes/) joined the picker: they have no hand
+// panel and open with the automatic one (pinned by devices_parameter.test.mjs), so each is exempt here with that reason.
+const REZEPT_NAMEN = JSON.parse(fs.readFileSync(path.join(pfadeVon(REPO).rezepte, 'MANIFEST.json'), 'utf8')).patches.map((p) => p.datei.slice(0, -5));
+const OHNE_PANEL = Object.fromEntries(REZEPT_NAMEN.map((n) => [n, 'recipe graph: automatic panel']));
 
 test('coverage: every graph in kategorien.json has a hand panel in paneele/ (exemptions are explicit and still true)', () => {
   const P = pfadeVon(REPO);

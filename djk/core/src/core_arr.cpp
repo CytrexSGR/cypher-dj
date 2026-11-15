@@ -95,6 +95,15 @@ void Kern::einsortieren_arr(const Befehl& c, double beat0) {
         return ab("ki_gestoppt");
       }
       arr_alt_melden(arr_->tausche(neu, sample_, k));
+      if (neu)   // initial mute of the playback (stumm_start): the mixer row of the track shows it, beside the fade the swap set to 0 (the page and the row must not disagree)
+        for (int i = 0; i < ARR_SPUREN; ++i)
+          if (neu->spur[i].nr > 0 && neu->spur[i].stumm_start) {
+            char pfad[24];
+            std::snprintf(pfad, sizeof pfad, "spur/%d/mute", i + 1);
+            // the same three writes as Kern::regler_setzen, inline: core_state.cpp is not in every target that links this file
+            const int r = sw_->tabelle().suche(pfad);
+            if (r >= 0) { sw_->setze_direkt(r, 1.0f); mixer_->setze_sofort(r, 1.0f); arr_->setze_sofort(r, 1.0f); }
+          }
       quittung(c.id, c.quelle, 1, sample_, beat0);
       quittung(c.id, c.quelle, 3, sample_, beat0);
       return;

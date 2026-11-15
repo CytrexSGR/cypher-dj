@@ -13,10 +13,15 @@
 //     in the same cycle (two swaps before one block): the old tail fades, the new note plays.
 //   6 rest: with the transport standing and 1 s of exact silence the instance is reset and not computed (ruhend()); a running
 //     transport never rests (long pause between two notes); a new start wakes it.
+//   9 lane membership (parallel_faehig, leer; 7 and 8 are the knob cases below): a track whose instance no block has taken over, a bk track without an
+//     instance, an empty slot and out-of-range tracks are not lane-capable; a track with an instance in use is, and stops being it while a swap is
+//     pending (another instance, another generation, spur_weg, the track left the playback) until the block ran; leer: true without an instance in use and
+//     for a rested instance with no event or start pending, false while anything is queued, in use or fading.
 // Mutations: ARR_BK_VERSATZ_NULL (1), ARR_BK_OHNE_ZURUECKSETZEN (2), ARR_BK_REGLER_NUR_START (3), ARR_BK_WECHSEL_HART (4),
-// ARR_BK_OHNE_AKTIV (4).
+// ARR_BK_OHNE_AKTIV (4), BK_BAHN_IM_TAUSCH (9: the sink says lane-capable during a swap).
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -409,6 +414,90 @@ int main() {
       PRUEF(ist09 == ohne09);            // a named knob always wins over the graph's default
       PRUEF(ohne_fehlt == ohne05);       // no `vorgabe`: missing = explicit 0.5 as before
     }
+  }
+  {  // 9: lane membership
+    Treiber t;
+    CypherBk* h = bkt::neu(bkt::G_T);
+    CypherBk* h2 = bkt::neu(bkt::G_T);
+    cdj::ArrBkSenke bk(t.arr);
+    t.arr.setze_senke_intern(&bk);
+    int64_t s0 = 0;
+    const auto blocke = [&](int spur) {
+      std::vector<float> l(256, 0.0f), r(256, 0.0f);
+      bk.takt(static_cast<double>(s0) / SPB, 128.0 / 60.0 / 48000.0);
+      bk.block(spur, s0, 256, l.data(), r.data());
+    };
+    const auto lade = [&](int64_t nr, CypherBk* inst, uint64_t gen, bool mit_spur) {
+      cdj::ArrSnapshot* sn = Bau(nr).spur(1, ArrArt::intern).spur(2, ArrArt::intern).fertig();
+      bkt::spur(sn, 1, mit_spur ? inst : nullptr, gen, {{"k1", 0.8f}});
+      if (!mit_spur) std::memset(&sn->spur[0], 0, sizeof sn->spur[0]);   // the track is gone
+      bkt::spur(sn, 2, nullptr, 1);                                       // track index 1: a bk track without an instance
+      t.s = s0;
+      t.laden(sn);
+    };
+    lade(1, h, 1, true);
+    PRUEF(!bk.parallel_faehig(0) && bk.leer(0));      // an instance in the snapshot, but no block took it over: not in use
+    PRUEF(!bk.parallel_faehig(1) && bk.leer(1));      // bk track without an instance
+    PRUEF(!bk.parallel_faehig(2) && bk.leer(2));      // no such track in the snapshot
+    PRUEF(!bk.parallel_faehig(-1) && bk.leer(-1));
+    PRUEF(!bk.parallel_faehig(cdj::ARR_SENKEN_PLAETZE) && bk.leer(cdj::ARR_SENKEN_PLAETZE));
+    bk.transport_start(0, s0);
+    bk.note(0, s0 + 10, 57, 100, true);
+    PRUEF(bk.leer(0) && !bk.parallel_faehig(0));      // still no instance in use (the events wait for the take-over)
+    blocke(0);
+    blocke(1);
+    s0 += 256;
+    PRUEF(bk.parallel_faehig(0) && !bk.leer(0));      // in use and sounding
+    PRUEF(!bk.parallel_faehig(1) && bk.leer(1));      // still no instance
+    lade(2, h2, 1, true);                             // another instance: the swap is pending
+    PRUEF(!bk.parallel_faehig(0));
+    PRUEF(!bk.leer(0));                               // the old instance still has a fade to render
+    blocke(0);
+    s0 += 256;
+    PRUEF(bk.parallel_faehig(0) && !bk.leer(0));
+    lade(3, h2, 2, true);                             // the same instance, another generation: the block swaps (fade and reset)
+    PRUEF(!bk.parallel_faehig(0));
+    blocke(0);
+    s0 += 256;
+    PRUEF(bk.parallel_faehig(0));
+    PRUEF(bk.spur_weg(0, s0, false));                 // the track is told to leave while the snapshot still holds it (it comes back within the cycle)
+    PRUEF(!bk.parallel_faehig(0));
+    blocke(0);
+    s0 += 256;
+    PRUEF(bk.parallel_faehig(0));
+    lade(4, h2, 2, false);                            // the track leaves the playback
+    PRUEF(!bk.parallel_faehig(0));
+    PRUEF(!bk.leer(0) && bk.spielend() == 1);         // the old instance fades in the next block
+    PRUEF(bk.spur_weg(0, s0, false));
+    blocke(0);
+    s0 += 256;
+    PRUEF(!bk.parallel_faehig(0) && bk.leer(0) && bk.spielend() == 0);
+    // rest: the instance of a track that plays again rests after 1 s of silence with the transport standing; leer then, but not while an event or a start waits
+    lade(5, h, 1, true);
+    blocke(0);
+    s0 += 256;
+    PRUEF(bk.parallel_faehig(0));
+    for (int i = 0; i < 2 + static_cast<int>(cdj::ARR_BK_RUHE / 256); ++i) {
+      blocke(0);
+      s0 += 256;
+    }
+    PRUEF(bk.ruhend() == 1);
+    PRUEF(bk.parallel_faehig(0) && bk.leer(0));       // at rest, nothing queued: no load
+    bk.note(0, s0 + 5, 60, 100, true);
+    PRUEF(!bk.leer(0));                               // an event wakes it in the next block: that block does work
+    blocke(0);
+    s0 += 256;
+    PRUEF(bk.ruhend() == 0 && !bk.leer(0));
+    for (int i = 0; i < 2 + static_cast<int>(cdj::ARR_BK_RUHE / 256) + 400; ++i) {   // the note is held: it never rests; release it, then rest again
+      if (i == 3) bk.note(0, s0 + 5, 60, 0, false);
+      blocke(0);
+      s0 += 256;
+    }
+    PRUEF(bk.ruhend() == 1 && bk.leer(0));
+    bk.transport_start(0, s0 + 100);
+    PRUEF(!bk.leer(0));                               // a pending start wakes it too
+    cypher_bk_frei(h);
+    cypher_bk_frei(h2);
   }
   PRUEF_ENDE();
 }

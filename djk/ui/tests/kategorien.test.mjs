@@ -11,9 +11,9 @@ import { REPO } from '../paths.ts';
 const P = pfadeVon(REPO);
 const kat = JSON.parse(fs.readFileSync(P.kategorien, 'utf8'));
 
-test('kategorien.json covers every instrument graph of beispiele/ with a valid category and a text of at most 90 characters', () => {
-  const inst = listeGraphen(P.beispiele).graphen.filter((g) => g.art === 'instrument').map((g) => g.name);
-  assert.ok(inst.length >= 50, `${inst.length} instrument graphs`);
+test('kategorien.json covers every instrument graph of beispiele/ and of beispiele/recipes/ with a valid category and a text of at most 90 characters', () => {
+  const inst = [...listeGraphen(P.beispiele).graphen, ...listeGraphen(P.rezepte).graphen].filter((g) => g.art === 'instrument').map((g) => g.name);
+  assert.ok(inst.length >= 100, `${inst.length} instrument graphs`);
   for (const n of inst) {
     assert.ok(kat[n], `${n} has no entry`);
     assert.ok(KATEGORIE_IDS.includes(kat[n].kategorie), `${n}: ${kat[n].kategorie}`);
@@ -31,7 +31,7 @@ test('GET /graphen entries carry kategorie and text for instruments from <graph 
     fs.writeFileSync(path.join(dir, 'x-inst.json'), JSON.stringify(inst));
     fs.writeFileSync(path.join(dir, 'x-fx.json'), JSON.stringify(fx));
     fs.writeFileSync(path.join(dir, 'y-inst.json'), JSON.stringify(inst));
-    assert.deepEqual(listeGraphen(dir).graphen.map((g) => Object.keys(g)), [['name', 'art', 'regler_namen'], ['name', 'art', 'regler_namen'], ['name', 'art', 'regler_namen']]);
+    assert.deepEqual(listeGraphen(dir).graphen.map((g) => Object.keys(g)), [['name', 'art', 'regler_namen', 'latenz'], ['name', 'art', 'regler_namen', 'latenz'], ['name', 'art', 'regler_namen', 'latenz']]);
     fs.mkdirSync(path.join(dir, 'panels'));
     fs.writeFileSync(path.join(dir, 'panels', 'kategorien.json'), JSON.stringify({ 'x-inst': { kategorie: 'bass', text: 'A bass.' }, 'x-fx': { kategorie: 'bass', text: 'ignored for effects' }, 'y-inst': { kategorie: 'nope', text: 'bad category' } }));
     const g = Object.fromEntries(listeGraphen(dir).graphen.map((e) => [e.name, e]));
@@ -49,4 +49,18 @@ test('djk-start installs kategorien.json into the panels folder with the cmp rul
   const sh = fs.readFileSync(path.join(REPO, 'djk', 'start', 'djk-start'), 'utf8');
   assert.match(sh, /kategorien\.json/);
   assert.match(sh, /cmp -s -- "\$kat" "\$ziel"/);
+});
+
+test('recipe graphs: the category follows the name prefix (bass, lead, pad, keys; pluck is keys; drums and percussion are drums; fx is textur)', () => {
+  const soll = { bass: 'bass', lead: 'lead', pad: 'pad', keys: 'keys', pluck: 'keys', drums: 'drums', percussion: 'drums', fx: 'textur' };
+  const namen = listeGraphen(P.rezepte).graphen.map((g) => g.name);
+  assert.equal(namen.length, 46);
+  for (const n of namen) assert.equal(kat[n].kategorie, soll[n.split('-')[0]], n);
+});
+
+test('djk-start installs the recipe graphs of demos/recipes/ (MANIFEST.json) under their own names with the cmp rule', () => {
+  const sh = fs.readFileSync(path.join(REPO, 'djk', 'start', 'djk-start'), 'utf8');
+  assert.match(sh, /demos\/recipes/);
+  assert.match(sh, /MANIFEST\.json/);
+  assert.match(sh, /cmp -s -- "\$quelle" "\$BK_ORDNER\/\$g\.json"/);
 });
