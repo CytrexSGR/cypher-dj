@@ -1,5 +1,5 @@
 // Workbench: the instrument info cache (plan task 4). GET /seq/geraet?spur_id=<id> answers {art, regler: [{nr, name, vorgabe}], klaenge: [{ton, name}]} for
-// the device of a track. The info belongs to the device, not to the track: one request per device key at a time ('bk:<graph>', 'kit:<kit>', 'rb338',
+// the device of a track (a sampler cut adds `schnitt: {id, scheiben, laengen_beats}`). The info belongs to the device, not to the track: one request per device key at a time ('bk:<graph>', 'kit:<kit>', 'rb338',
 // 'anderes:<track id>'). info(spur) never waits: it returns the known info, or null while the first answer is on its way (and starts the request).
 // A failed answer is kept as an empty info for INFO_WARTEN_MS, then asked again (the stale empty info stays visible meanwhile).
 import { geraetArt } from '../seq_logic.js';
@@ -30,7 +30,8 @@ export function neuerInfoSpeicher(holeGet, beiNeu, jetzt = Date.now) {
       e.laeuft = false;
       const j = r?.j;
       if (r?.status === 200 && j && typeof j.art === 'string') {
-        e.info = { art: j.art, regler: Array.isArray(j.regler) ? j.regler : [], klaenge: Array.isArray(j.klaenge) ? j.klaenge : [] };
+        e.info = { art: j.art, regler: Array.isArray(j.regler) ? j.regler : [], klaenge: Array.isArray(j.klaenge) ? j.klaenge : [],
+          ...(j.schnitt && typeof j.schnitt === 'object' ? { schnitt: j.schnitt } : {}) };
         e.bis = 0;
       } else {
         e.info = { art: geraetArt(spur, null), regler: [], klaenge: [] };

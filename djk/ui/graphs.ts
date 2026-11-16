@@ -6,12 +6,14 @@ import { INSTRUMENT_STROEME, kanalVonStrom } from '../contract/streams.ts';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { liesSchnitt } from './sampler/schnitt.ts';
+import { tonKategorieText } from './sampler/tone.ts';
 
 export type GraphArt = 'instrument' | 'effekt';
 /** `latenz`: samples the graph delays its signal at 48 kHz (0 = none), see graphLatenz. */
 export type GraphEintrag = { name: string; art: GraphArt; regler_namen: Record<string, string>; latenz: number; kategorie?: string; text?: string };
 /** Instrument categories (ids of kategorien.json). `host` is the Surge/plugin entry the page adds itself, so no graph carries it by default, but it is valid. */
-export const KATEGORIE_IDS = ['drums', 'bass', 'lead', 'pad', 'keys', 'textur', 'host'];
+export const KATEGORIE_IDS = ['drums', 'bass', 'lead', 'pad', 'keys', 'textur', 'host', 'sampler'];
 export const KATEGORIE_TEXT_MAX = 90;
 export type KategorieEintrag = { kategorie: string; text: string };
 export type GraphListe = { graphen: GraphEintrag[]; uebersprungen: string[] };
@@ -126,6 +128,19 @@ export function listeGraphen(ordner: string = graphenOrdner()): GraphListe {
   graphen.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
   const kat = ladeKategorien(ordner);   // instruments only; entries without one carry no fields (the page files them under "Other")
   for (const g of graphen) if (g.art === 'instrument' && kat[g.name]) { g.kategorie = kat[g.name].kategorie; g.text = kat[g.name].text; }
+  // Sampler A1 D10: the generated devices of the cut store (smp-<id>) belong to the category `sampler`, named after their cut; no entry of kategorien.json
+  for (const g of graphen) {
+    if (g.art !== 'instrument' || !g.name.startsWith('smp-')) continue;
+    g.kategorie = 'sampler';
+    const schnitt = liesSchnitt(g.name.slice(4));
+    g.text = schnitt ? `Slices of ${schnitt.name}`.slice(0, KATEGORIE_TEXT_MAX) : 'Sliced sample';
+  }
+  // Sampler C: the generated tones (ton-<cut>-<n>) are filed under `sampler` as well; the text names the tone and its root
+  for (const g of graphen) {
+    if (g.art !== 'instrument' || !g.name.startsWith('ton-')) continue;
+    g.kategorie = 'sampler';
+    g.text = tonKategorieText(g.name);
+  }
   return { graphen, uebersprungen };
 }
 

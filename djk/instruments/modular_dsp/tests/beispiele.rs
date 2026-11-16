@@ -521,7 +521,7 @@ fn s10_sampler_fairlight_reset_sounds_like_fresh() {
 const C6_HZ: f64 = 1046.502_261_202_394_8;
 
 /// Sample root for the detune measurement: a constant-level sine at the sampler's root frequency in three slices of 10 s
-/// (30 s = `MAX_FRAMEN`), written under the old and the new file name so that one test runs against both graphs.
+/// (30 s, half of `MAX_FRAMEN` = 60 s), written under the old and the new file name so that one test runs against both graphs.
 fn detune_wurzel() -> std::path::PathBuf {
     static W: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
     W.get_or_init(|| {

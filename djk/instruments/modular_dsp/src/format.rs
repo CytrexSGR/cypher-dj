@@ -46,6 +46,10 @@ pub struct Knoten {
     /// phase, sign = polarity). Not a scalar, so it is a named field like `datei`; checked in `uebersetzen`.
     #[serde(default)]
     pub spektren: Option<Vec<Vec<f32>>>,
+    /// Slice table of a `sampler` node: frame bounds, 2..=65 entries, strictly rising, so 1..=64 slices of any length
+    /// (sampler A1). Not a scalar, so it is a named field like `datei`; checked in `uebersetzen`.
+    #[serde(default)]
+    pub grenzen: Option<Vec<u64>>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

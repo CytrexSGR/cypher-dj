@@ -10,6 +10,7 @@ import { ist } from './support/proj_context.mjs';
 import { alsAntwort } from '../areas/proj/area.ts';
 import { SeqBereich, geraetInfo } from '../areas/live/seq.ts';
 import { seqGruppe } from '../project/seq.ts';
+import { legeSchnitt } from '../sampler/schnitt.ts';
 
 const INFO_BK = { art: 'bk', regler: [{ nr: 3, name: 'Cutoff', vorgabe: 0.5 }, { nr: 4, name: 'Resonance', vorgabe: 0.3 }], klaenge: [] };
 const INFO_KIT = { art: 'kit', regler: [], klaenge: [{ ton: 36, name: 'kick' }, { ton: 38, name: 'snare' }, { ton: 42, name: 'hat' }] };
@@ -406,4 +407,27 @@ test('geraetInfo from the real sources: knobs of a graph with their names and st
   assert.deepEqual(geraetInfo({ art: 'intern', name: 'kit', kit: 'missing' }), { art: 'kit', regler: [], klaenge: [] });
   assert.deepEqual(geraetInfo({ art: 'intern', name: 'bk', graph: 'missing', parameter: {} }).regler, []);
   assert.equal(geraetInfo({ art: 'wirt', name: 'surge', slot: 1 }).art, 'anderes');
+});
+
+test('geraetInfo of a smp graph names the slices and carries the cut', (t) => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'smp-t6-seq-'));
+  const vorher = { s: process.env.CYPHERDJ_SAMPLER, b: process.env.CYPHERDJ_BK_ORDNER };
+  process.env.CYPHERDJ_SAMPLER = path.join(tmp, 'sampler'); process.env.CYPHERDJ_BK_ORDNER = path.join(tmp, 'bk');
+  t.after(() => {
+    for (const [k, v] of [['CYPHERDJ_SAMPLER', vorher.s], ['CYPHERDJ_BK_ORDNER', vorher.b]]) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+    fs.rmSync(tmp, { recursive: true, force: true });
+  });
+  // a loop of 4 beats: the grid cut makes 16 slices of 0.25 beat
+  const loops = path.join(tmp, 'loops');
+  fs.mkdirSync(path.join(loops, 'l1'), { recursive: true });
+  fs.writeFileSync(path.join(loops, 'l1', 'loop.f32'), Buffer.alloc(4 * 22500 * 8));
+  fs.writeFileSync(path.join(loops, 'l1', 'loop.json'), JSON.stringify({ schema: 1, bpm: 128, beats: 4, frames: 4 * 22500, datei: 'loop.f32', quelle: 'test', erstellt: '2026-11-16T10:00:00Z' }));
+  const s = legeSchnitt({ quelle: { art: 'loop', ref: 'l1' } }, { loops });
+  const i = geraetInfo({ art: 'intern', name: 'bk', graph: `smp-${s.id}` });
+  assert.deepEqual([i.klaenge.length, i.klaenge[0], i.schnitt.scheiben, i.schnitt.laengen_beats[0]], [16, { ton: 0, name: '1' }, 16, 0.25]);
+  assert.deepEqual([i.art, i.schnitt.id, i.klaenge[15], i.schnitt.laengen_beats.length], ['bk', s.id, { ton: 15, name: '16' }, 16]);
+  assert.ok(i.regler.length >= 8, 'the knobs of the generated device are listed like those of any Baukasten graph');
+  // an unknown cut and a plain graph carry no cut
+  assert.equal(geraetInfo({ art: 'intern', name: 'bk', graph: 'smp-nope-0000' }).schnitt, undefined);
+  assert.equal(geraetInfo({ art: 'intern', name: 'bk', graph: 'bass-banddrive' }).schnitt, undefined);
 });

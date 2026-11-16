@@ -64,6 +64,17 @@ code: `knoten` are nodes, `kanten` are wires, `art` is the block type, `stimmen`
 | Dynamics | `limiter`, `gate`, `komp` |
 | Wiring | `ausgang` (output), `eingang` (input, for effect graphs), `leitung` (a feedback path that can be wired freely), `wahl` (a selector over up to eight inputs, with a crossfade) |
 
+The `sampler` block plays a sample file of up to 60 seconds. Its slice mode, used by the Sampler of the STUDIO view, takes
+a slice table `grenzen` (2 to 65 frame positions, so 1 to 64 slices of any length) and `noten_wahl` 1, in which the note
+picks the slice: notes 0 to 63 play slices 0 to 63 forward, notes 64 to 127 play the same slice reversed, exact to the
+sample. The read speed is `tempo` times two to the power of `halb` over twelve; both are inputs (`tempo` a factor, default
+1; `halb` in semitones, default 0) and are taken at the start of each hit. A third input, `ausklang` (milliseconds,
+default 5), is the release when the key goes up before the slice ends. Without these keys the block behaves as before.
+
+A `regler` node can also carry `rastet` 1. That knob does not glide: it takes its value at once, and for an instrument
+track a lane or envelope on it is read at the beat of each note, so every hit gets the value of its own step. The slice
+device uses it for SPEED and PITCH.
+
 That makes 56 block types. The graph is checked when it loads and runs in a fixed order. Feedback is only allowed through
 a wire marked `"verzoegerung": 1` or through `leitung`. Up to 16 voices run side by side; the audio callback does not
 allocate.

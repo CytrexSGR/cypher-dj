@@ -562,3 +562,180 @@ fn knopf_64_wirkt_ueber_die_ffi() {
     cypher_bk_frei(h);
     assert_eq!(sofort, hoch, "the immediate call on knob 64 equals the settled smoothed call");
 }
+
+// ---- sampler A2 task 5: latched knobs (`rastet`) and knob events at a sample ----
+
+/// FNV-1a 64 over the bit patterns of an interleaved output.
+fn fnv_bits(d: &[f32]) -> u64 {
+    let mut h = 0xcbf2_9ce4_8422_2325u64;
+    for v in d {
+        for b in v.to_bits().to_le_bytes() {
+            h = (h ^ b as u64).wrapping_mul(0x0100_0000_01b3);
+        }
+    }
+    h
+}
+
+/// Fingerprint of a graph without `rastet` (saw x knob 1), recorded on the tree before this task: notes, a `cypher_bk_regler`
+/// jump in the middle of a block, a second jump, `regler_sofort`. The glide of every knob stays as it was.
+#[test]
+fn glide_unchanged_without_rastet() {
+    let h = neu(GR);
+    assert!(!h.is_null());
+    let mut aus = Vec::new();
+    let bl = |h: *mut CypherBk, n: usize| bloecke(h, n, 1);
+    cypher_bk_note_an(h, 10, 57, 0.8);
+    aus.extend(bl(h, 256));
+    assert_eq!(cypher_bk_regler(h, 1, 0.2), 0); // jump mid-run, the block starts at once
+    cypher_bk_note_an(h, 100, 64, 0.9);
+    aus.extend(bl(h, 256));
+    cypher_bk_note_aus(h, 50, 57);
+    aus.extend(bl(h, 300));
+    assert_eq!(cypher_bk_regler(h, 1, 0.9), 0);
+    cypher_bk_note_an(h, 0, 60, 0.7);
+    aus.extend(bl(h, 512));
+    assert_eq!(cypher_bk_regler_sofort(h, 1, 0.4), 0);
+    aus.extend(bl(h, 256));
+    cypher_bk_frei(h);
+    assert!(aus.iter().any(|v| v.abs() > 0.05), "silent fingerprint is blind");
+    let f = fnv_bits(&aus);
+    println!("FINGERPRINT {f:#018x}");
+    assert_eq!(f, 0xdc5c_c1ea_ab96_9be1, "fingerprint");
+}
+
+/// A 480 Hz sine of 90 000 frames (stereo, 16 slices of 5625 frames) read as note-chosen slices; knob 3 (-12..12 semitones,
+/// latched when `rastet` is 1) drives `halb`, knob 1 (0..1, glides) is a level on the output.
+fn pitch_graph(rastet: &str) -> String {
+    format!(r#"{{"format":"baukasten/2","name":"p","stimmen":2,"knoten":[{{"id":"n","art":"note"}},{{"id":"k","art":"regler","nr":3,"min":-12,"max":12{rastet}}},{{"id":"l","art":"regler","nr":1,"min":0,"max":1,"vorgabe":1}},{{"id":"s","art":"sampler","datei":"sinus.f32","noten_wahl":1,"grenzen":[{g}]}},{{"id":"ml","art":"mul"}},{{"id":"mr","art":"mul"}},{{"id":"o","art":"ausgang"}}],"kanten":[{{"von":"n.hz","nach":"s.hz"}},{{"von":"n.trig","nach":"s.trig"}},{{"von":"n.gate","nach":"s.gate"}},{{"von":"k.aus","nach":"s.halb"}},{{"von":"s.l","nach":"ml.a"}},{{"von":"l.aus","nach":"ml.b"}},{{"von":"s.r","nach":"mr.a"}},{{"von":"l.aus","nach":"mr.b"}},{{"von":"ml.aus","nach":"o.l"}},{{"von":"mr.aus","nach":"o.r"}}]}}"#,
+            g = (0..=16).map(|k| (k * 5625).to_string()).collect::<Vec<_>>().join(","))
+}
+
+fn sinus_wurzel(name: &str) -> std::path::PathBuf {
+    let w = std::env::temp_dir().join(format!("bk-a2t5-{}-{name}", std::process::id()));
+    std::fs::create_dir_all(&w).unwrap();
+    let d: Vec<f32> = (0..90_000).flat_map(|i| { let v = (0.5 * (2.0 * std::f64::consts::PI * 480.0 * i as f64 / 48_000.0).sin()) as f32; [v, v] }).collect();
+    std::fs::write(w.join("sinus.f32"), d.iter().flat_map(|v| v.to_le_bytes()).collect::<Vec<u8>>()).unwrap();
+    w
+}
+
+/// Frequency from the first and the last rising zero crossing of `x` (linear interpolation).
+fn nulldurchgang_hz(x: &[f32]) -> f64 {
+    let mut z = Vec::new();
+    for i in 1..x.len() {
+        if x[i - 1] < 0.0 && x[i] >= 0.0 {
+            z.push(i as f64 - 1.0 + (-x[i - 1] as f64) / (x[i] as f64 - x[i - 1] as f64));
+        }
+    }
+    assert!(z.len() > 3, "too few zero crossings: {}", z.len());
+    (z.len() - 1) as f64 * 48_000.0 / (z[z.len() - 1] - z[0])
+}
+
+fn links(x: &[f32]) -> Vec<f32> { x.chunks(2).map(|c| c[0]).collect() }
+
+fn pitch_neu(rastet: &str, name: &str) -> *mut CypherBk {
+    let w = sinus_wurzel(name);
+    let (h, f) = neu_wurzel(&pitch_graph(rastet), Some(&w));
+    assert!(!h.is_null(), "{f}");
+    h
+}
+
+fn nahe(hz: f64, soll: f64, was: &str) { assert!((hz - soll).abs() <= 0.02 * soll, "{was}: {hz} Hz, expected {soll} Hz +-2 %"); }
+
+#[test]
+fn regler_bei_sets_pitch_on_its_own_hit() {
+    let h = pitch_neu(r#","rastet":1"#, "bei");
+    // block 1: the note is reported first, its knob event after it (both are applied before the sample is computed)
+    assert_eq!(cypher_bk_note_an(h, 10, 4, 1.0), 0);
+    assert_eq!(cypher_bk_regler_bei(h, 10, 3, 1.0), 0);
+    let mut x = links(&bloecke(h, 256, 22)); // blocks 1..22
+    // block 23 (frame 5632): the next hit gets its own value
+    assert_eq!(cypher_bk_note_an(h, 0, 5, 1.0), 0);
+    assert_eq!(cypher_bk_regler_bei(h, 0, 3, 0.0), 0);
+    x.extend(links(&bloecke(h, 256, 12)));
+    cypher_bk_frei(h);
+    nahe(nulldurchgang_hz(&x[10 + 960..10 + 2400]), 960.0, "hit 4");
+    nahe(nulldurchgang_hz(&x[5632 + 960..5632 + 2400]), 240.0, "hit 5");
+}
+
+#[test]
+fn regler_bei_refuses_a_knob_that_glides() {
+    // knob 1 of GR has no `rastet`: refused with -2 and the output is the one of the run without the call
+    let lauf = |mit_aufruf: bool| {
+        let h = neu(GR);
+        cypher_bk_note_an(h, 10, 57, 0.8);
+        if mit_aufruf {
+            assert_eq!(cypher_bk_regler_bei(h, 20, 1, 0.1), -2);
+        }
+        let x = bloecke(h, 256, 4);
+        assert_eq!(cypher_bk_verloren(h), 0);
+        cypher_bk_frei(h);
+        x
+    };
+    assert!(lauf(true).iter().any(|v| v.abs() > 0.05), "silent comparison is blind");
+    assert_eq!(lauf(true), lauf(false));
+    // a knob the graph does not define is not latched either
+    let h = neu(GR);
+    assert_eq!(cypher_bk_regler_bei(h, 0, 7, 0.5), -2);
+    // outside 1..64, null handle
+    assert_eq!(cypher_bk_regler_bei(h, 0, 0, 0.5), -1);
+    assert_eq!(cypher_bk_regler_bei(h, 0, 65, 0.5), -1);
+    assert_eq!(cypher_bk_regler_bei(std::ptr::null_mut(), 0, 3, 0.5), -1);
+    cypher_bk_frei(h);
+}
+
+#[test]
+fn regler_bei_ignores_nan_and_counts_a_full_queue() {
+    let h = pitch_neu(r#","rastet":1"#, "voll");
+    assert_eq!(cypher_bk_regler_bei(h, 0, 3, f32::NAN), 0, "NaN is ignored, as for cypher_bk_regler");
+    cypher_bk_note_an(h, 0, 4, 1.0);
+    let a = links(&bloecke(h, 256, 12));
+    nahe(nulldurchgang_hz(&a[960..2400]), 480.0, "NaN left the knob at its default (0 semitones)");
+    for i in 0..BK_MAX_EREIGNISSE as u32 { assert_eq!(cypher_bk_regler_bei(h, i, 3, 0.5), 0); }
+    assert_eq!(cypher_bk_regler_bei(h, 0, 3, 0.5), -1);
+    assert_eq!(cypher_bk_verloren(h), 1);
+    cypher_bk_frei(h);
+}
+
+#[test]
+fn a_latched_knob_does_not_glide() {
+    let h = pitch_neu(r#","rastet":1"#, "glatt");
+    assert_eq!(cypher_bk_regler(h, 3, 1.0), 0);
+    assert_eq!(cypher_bk_note_an(h, 0, 4, 1.0), 0);
+    let x = links(&bloecke(h, 256, 12));
+    cypher_bk_frei(h);
+    nahe(nulldurchgang_hz(&x[960..2400]), 960.0, "latched knob, same block");
+    // the same without `rastet` glides: the hit latches the value of its first sample (still 0 semitones)
+    let h = pitch_neu("", "glatt2");
+    assert_eq!(cypher_bk_regler(h, 3, 1.0), 0);
+    assert_eq!(cypher_bk_note_an(h, 0, 4, 1.0), 0);
+    let y = links(&bloecke(h, 256, 12));
+    cypher_bk_frei(h);
+    let hz = nulldurchgang_hz(&y[960..2400]);
+    assert!((hz - 960.0).abs() > 0.1 * 960.0, "Counter-check: without rastet the hit is not at 960 Hz: {hz}");
+}
+
+#[test]
+fn rastende_reports_the_mask() {
+    let h = pitch_neu(r#","rastet":1"#, "maske");
+    assert_eq!(cypher_bk_rastende(h), 0b100, "knob 3 only");
+    cypher_bk_frei(h);
+    let h = pitch_neu("", "maske0");
+    assert_eq!(cypher_bk_rastende(h), 0);
+    cypher_bk_frei(h);
+    // knobs 2 and 3
+    let g = pitch_graph(r#","rastet":1"#).replace(r#"{"id":"l","art":"regler","nr":1,"min":0,"max":1,"vorgabe":1}"#,
+                                                  r#"{"id":"l","art":"regler","nr":2,"min":0,"max":1,"vorgabe":1,"rastet":1}"#);
+    let (h, f) = neu_wurzel(&g, Some(&sinus_wurzel("maske23")));
+    assert!(!h.is_null(), "{f}");
+    assert_eq!(cypher_bk_rastende(h), 0b110);
+    cypher_bk_frei(h);
+    // the old Fairlight graph and null
+    let w = wurzel_mit_probe("rastende");
+    std::fs::write(w.join("orchester-schlag.f32"), std::fs::read(w.join("d.f32")).unwrap()).unwrap();
+    std::fs::write(w.join("orchester-schlag-schichten.f32"), std::fs::read(w.join("d.f32")).unwrap()).unwrap();
+    let (h, f) = neu_wurzel(include_str!("../../modular_dsp/demos/sampler-fairlight.json"), Some(&w));
+    assert!(!h.is_null(), "{f}");
+    assert_eq!(cypher_bk_rastende(h), 0);
+    cypher_bk_frei(h);
+    assert_eq!(cypher_bk_rastende(std::ptr::null()), 0);
+}

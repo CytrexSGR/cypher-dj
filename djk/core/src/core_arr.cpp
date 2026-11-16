@@ -213,6 +213,17 @@ void Kern::einsortieren_arr(const Befehl& c, double beat0) {
       quittung(c.id, c.quelle, 3, sample_, beat0);
       return;
     }
+    case Befehl::ARR_NOTE: {   // sampler plan A1 task 7 (§4.11 /k/arr/note); the net thread checks the same, this is the backstop
+      if (ist_cypher(c.quelle) && sw_->ki_gestoppt()) return ab("ki_gestoppt");
+      if (c.nr < 1 || c.nr > ARR_SPUREN) return ab("spur_bereich");
+      if (c.politik < 0 || c.politik > 127 || c.fassung < 0 || c.fassung > 127) return ab("ausserhalb_bereich");
+      quittung(c.id, c.quelle, 1, sample_, beat0);
+      // The same call as a held MIDI key (core_hand.cpp midi_ein_stempeln): the callback thread, before arr_->block of this cycle, the stamp clamped into the first sub-block.
+      // No arm and no transport needed: a sink sounds while a playback is loaded. An empty track or none loaded: live_note returns without a note (like a live key).
+      arr_->live_note(c.nr - 1, Arrangement::live_ziel(sample_, 0, zyklus_n_), static_cast<uint8_t>(c.politik), static_cast<uint8_t>(c.fassung), c.fassung > 0);
+      quittung(c.id, c.quelle, 3, sample_, beat0);
+      return;
+    }
     default:
       return;
   }

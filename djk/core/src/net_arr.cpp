@@ -49,7 +49,8 @@ bool Netz::arr_paket(const v::Adresse* a, const osc::Nachricht& m) {
   if (a->pfad == v::k_arr_export_lauf.pfad) return arr_export_paket(m);   // plan 1.11 T12
   if (a->pfad == v::k_arr_ins_host.pfad) return arr_host_paket(m, false);   // plan 1.11 T5
   if (a->pfad == v::k_arr_ins_mess.pfad) return arr_host_paket(m, true);
-  if (!laden && !start && !stopp && !loop && !metronom && !auto_ && !arm) return false;
+  const bool note = a->pfad == v::k_arr_note.pfad;   // sampler plan A1 task 7
+  if (!laden && !start && !stopp && !loop && !metronom && !auto_ && !arm && !note) return false;
   Befehl b{};
   b.id = m.werte[0].h;
   kopiere(b.quelle, m.werte[1].s, sizeof b.quelle);
@@ -127,6 +128,14 @@ bool Netz::arr_paket(const v::Adresse* a, const osc::Nachricht& m) {
 #ifndef CYPHERDJ_MUTATION_ARR_ARM_CYPHER   // error case: any source may arm
     if (std::strcmp(b.quelle, "andreas")) return ab("nur_andreas");   // D11
 #endif
+  } else if (note) {   // sampler plan A1 task 7 (§4.11 /k/arr/note). Order of the refusals: ki_gestoppt (above), spur_bereich, ausserhalb_bereich. Plain integers in the command, no pointer, nothing allocated
+    namespace f = v::feld::k_arr_note;
+    b.art = Befehl::ARR_NOTE;
+    b.nr = m.werte[f::spur].i;
+    b.politik = m.werte[f::ton].i;
+    b.fassung = m.werte[f::vel].i;
+    if (b.nr < 1 || b.nr > ARR_SPUREN) return ab("spur_bereich");
+    if (b.politik < 0 || b.politik > 127 || b.fassung < 0 || b.fassung > 127) return ab("ausserhalb_bereich");
   } else {
     namespace f = v::feld::k_arr_metronom;
     b.art = Befehl::ARR_METRONOM;

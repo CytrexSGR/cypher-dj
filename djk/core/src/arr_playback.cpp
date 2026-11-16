@@ -1229,6 +1229,7 @@ ArrLadeErgebnis lade_wiedergabe(const std::string& ordner, int64_t nummer, ArrAu
           const int32_t slot = cache.bk_hole(bk_nr, sp.graph, &sp.bk, &sp.bk_gen, grund, meldung, false, 0, &sp.bk_latenz);
           if (slot < 0) throw Abbruch(grund, wo + meldung);
           snap->bk_refs.push_back(slot);
+          sp.bk_rastet = cypher_bk_rastende(sp.bk);   // sampler A2: the knobs the core evaluates at each note's own beat
         }
         if (ist_kit) {   // same rule as bk: only now take (or load) the shared Kit
           std::string grund, meldung;

@@ -1,0 +1,24 @@
+/* Workbench SOUND region, sampler B task 3: the TO KIT dialog. A panel over the SOUND column; the buttons are the .w-effekt-knopf of sound.css. */
+#werkbank .w-klang { position: relative; }
+#werkbank .w-kit {
+  position: absolute; top: 34px; left: 6px; right: 6px; z-index: 6; max-height: calc(100% - 44px); overflow: auto; display: flex; flex-direction: column; gap: 8px;
+  padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); box-shadow: 0 6px 22px rgba(0, 0, 0, .5);
+}
+#werkbank .w-kit[hidden] { display: none; }
+#werkbank .w-kit-kopf { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+#werkbank .w-kit-titel { font-size: 10px; letter-spacing: .14em; font-weight: 700; color: var(--dim); }
+#werkbank .w-kit-name, #werkbank .w-kit-bank {
+  padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--panel2); color: var(--text); font: inherit; font-size: 12px;
+}
+#werkbank .w-kit-name { width: 170px; }
+#werkbank .w-kit-bank { width: 92px; }
+#werkbank .w-kit-name.falsch, #werkbank .w-kit-bank.falsch { border-color: #e5484d; }
+#werkbank .w-kit-name[readonly], #werkbank .w-kit-bank[readonly] { opacity: .65; }
+#werkbank .w-kit-liste { display: flex; flex-direction: column; gap: 4px; }
+#werkbank .w-kit-klang { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+#werkbank .w-kit-nr { min-width: 22px; text-align: right; font-weight: 700; font-size: 11px; color: var(--dim); }
+#werkbank .w-kit-voll { min-width: 110px; font-size: 11px; color: var(--dim); font-variant-numeric: tabular-nums; }
+#werkbank .w-kit-lang { font-size: 11px; color: #e5484d; font-weight: 700; }
+#werkbank .w-kit-text { margin: 0; font-size: 11px; color: var(--dim); }
+#werkbank .w-kit-text.fehler { color: #e5484d; }
+#werkbank .w-kit-knoepfe { display: flex; gap: 6px; justify-content: flex-end; }

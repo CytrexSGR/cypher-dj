@@ -139,7 +139,7 @@ export const GRAPH_KANAL_ART = { 'erz/2': 'instrument', 'erz/3': 'instrument', '
 /** Instrument categories of the picker (ids as in kategorien.json). `host` is the Surge/plugin entry of erz/2 and erz/3, `sonst` collects graphs without a category. */
 export const GRAPH_KATEGORIEN = [
   { id: 'drums', name: 'Drums' }, { id: 'bass', name: 'Bass' }, { id: 'lead', name: 'Lead' }, { id: 'pad', name: 'Pad & Poly' },
-  { id: 'keys', name: 'Keys & Plucks' }, { id: 'textur', name: 'Texture & FX' }, { id: 'host', name: 'Host (Surge/plugins)' }, { id: 'sonst', name: 'Other' },
+  { id: 'keys', name: 'Keys & Plucks' }, { id: 'textur', name: 'Texture & FX' }, { id: 'sampler', name: 'Sampler' }, { id: 'host', name: 'Host (Surge/plugins)' }, { id: 'sonst', name: 'Other' },
 ];
 const kategorieName = (id) => GRAPH_KATEGORIEN.find((k) => k.id === id)?.name ?? 'Other';
 /** Channels on which a host (Surge XT or a plugin) plays while no graph is loaded; the empty picker value means "the host plays" there. */

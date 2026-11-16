@@ -96,8 +96,9 @@ pub const ARTEN: [ArtDef; 56] = [
     ArtDef { art: "note", ein: &[], aus: &["hz", "gate", "vel", "trig", "erste"], werte: &[], frei: &[] },
     ArtDef { art: "konst", ein: &[], aus: &["aus"], werte: &["wert"], frei: &[] },
     // `vorgabe`: knob position the graph starts at (0..1). `mitte`: value at knob position 0.5; its default NaN is the "absent" marker
-    // (JSON cannot carry NaN, so a given value is never NaN), see `Schritt::Regler`.
-    ArtDef { art: "regler", ein: &[], aus: &["aus"], werte: &["nr", "min", "max"], frei: &[("log", 0.0), ("vorgabe", 0.5), ("mitte", f32::NAN)] },
+    // (JSON cannot carry NaN, so a given value is never NaN), see `Schritt::Regler`. `rastet` (0/1, default 0): the host applies this knob
+    // latched, without glide, and may set it per note (`Programm::rastende`); knobs with the same `nr` must agree.
+    ArtDef { art: "regler", ein: &[], aus: &["aus"], werte: &["nr", "min", "max"], frei: &[("log", 0.0), ("vorgabe", 0.5), ("mitte", f32::NAN), ("rastet", 0.0)] },
     // `hart` (appended, hard sync slice): band-limited hard sync, input = a master's output `hart` (osz.rs)
     ArtDef { art: "saege", ein: &["hz", "sync", "hart"], aus: &["aus", "zyklus", "hart"], werte: &[], frei: &[] },
     ArtDef { art: "puls", ein: &["hz", "pwm", "sync", "hart"], aus: &["aus", "zyklus", "hart"], werte: &[], frei: &[] },
@@ -137,8 +138,10 @@ pub const ARTEN: [ArtDef; 56] = [
              frei: &[("attack", 5.0), ("release", 30.0), ("pole", 4.0), ("zisch", 0.3), ("mix", 1.0)] },
     // S10: sample playback, per voice; type 30. `datei` is a named field of the node, not a value. gate defaults to 1 so a
     // loop without a gate edge keeps looping (C10).
-    ArtDef { art: "sampler", ein: &["hz", "trig", "gate", "scheibe", "rueck"], aus: &["l", "r"], werte: &[],
-             frei: &[("grund", 261.6256), ("scheiben", 1.0), ("schleife", 0.0), ("gate", 1.0)] },
+    // Sampler A1: `grenzen` (named field) is a slice table; `noten_wahl` 1 lets the played note choose the slice, `tempo`
+    // and `halb` set the read speed, `ausklang` (ms) is the release when the gate falls. The new inputs sit at the end.
+    ArtDef { art: "sampler", ein: &["hz", "trig", "gate", "scheibe", "rueck", "tempo", "halb", "ausklang"], aus: &["l", "r"], werte: &[],
+             frei: &[("grund", 261.6256), ("scheiben", 1.0), ("schleife", 0.0), ("gate", 1.0), ("noten_wahl", 0.0), ("tempo", 1.0), ("halb", 0.0), ("ausklang", 5.0)] },
     // S21: convolution with an IR file (sum point, zero latency); type 31. `datei` is a named field like sampler's.
     ArtDef { art: "faltung", ein: &["x", "l", "r", "mix"], aus: &["l", "r"], werte: &[], frei: &[("mix", 1.0), ("pre", 0.0), ("laenge_max", 1000.0)] },
     // wavetable oscillator with unison inside the voice (wavetable.rs); type 32. `aus` is the sum without pan.
@@ -236,6 +239,26 @@ pub fn hall_vorgabe() -> hall_dsp::HallEinstellung {
 
 fn ganz(w: f32, von: f32, bis: f32) -> bool { w.fract() == 0.0 && (von..=bis).contains(&w) }
 
+/// Slice table of a `sampler` node (sampler A1, D1): 2..=65 entries, strictly rising, every slice at least 4 frames (the
+/// Catmull-Rom read needs 4 points); with `frames` also the last entry at most `frames`.
+fn pruefe_grenzen(g: &[u64], frames: Option<u64>) -> Result<(), &'static str> {
+    if !(2..=65).contains(&g.len()) {
+        return Err("2..65 entries (1..64 slices)");
+    }
+    if g.windows(2).any(|p| p[1] <= p[0]) {
+        return Err("entries must rise strictly");
+    }
+    if g.windows(2).any(|p| p[1] - p[0] < 4) {
+        return Err("a slice must have at least 4 frames");
+    }
+    if let Some(f) = frames {
+        if g[g.len() - 1] > f {
+            return Err("the last entry must not exceed the number of frames of the file");
+        }
+    }
+    Ok(())
+}
+
 fn teile(adr: &str) -> Result<(&str, &str), Fehler> { adr.split_once('.').ok_or_else(|| Fehler::Adresse(adr.to_string())) }
 
 pub fn uebersetze(json: &str, sr: f32) -> Result<Programm, Fehler> { uebersetze_mit_wurzel(json, sr, None) }
@@ -295,12 +318,26 @@ pub fn uebersetze_mit_wurzel(json: &str, sr: f32, wurzel: Option<&Path>) -> Resu
                 return falsch("spektren", "spektren replaces tabelle: tabelle must be absent or 0");
             }
         }
+        if k.grenzen.is_some() && def.art != "sampler" {
+            return falsch("grenzen", "grenzen is only allowed on sampler");
+        }
+        if k.grenzen.is_some() && k.werte.contains_key("scheiben") {
+            return falsch("scheiben", "grenzen replaces scheiben: scheiben must be absent");
+        }
+        if let Some(g) = &k.grenzen {
+            if let Err(grund) = pruefe_grenzen(g, None) {
+                return falsch("grenzen", grund);
+            }
+        }
         match def.art {
             "sampler" if !(20.0..=2000.0).contains(&w("grund")) => return falsch("grund", "20..2000 Hz"),
             "sampler" if !ganz(w("scheiben"), 1.0, 64.0) => return falsch("scheiben", "integer 1..64"),
             "sampler" if !ganz(w("schleife"), 0.0, 1.0) => return falsch("schleife", "0 or 1"),
+            "sampler" if !ganz(w("noten_wahl"), 0.0, 1.0) => return falsch("noten_wahl", "0 or 1"),
+            "sampler" if w("noten_wahl") == 1.0 && w("schleife") == 1.0 => return falsch("schleife", "noten_wahl 1 needs schleife 0"),
             "regler" if !ganz(w("nr"), 1.0, REGLER as f32) => return falsch("nr", "1..64"),
             "regler" if !ganz(w("log"), 0.0, 1.0) => return falsch("log", "0 or 1"),
+            "regler" if !ganz(w("rastet"), 0.0, 1.0) => return falsch("rastet", "0 or 1"),
             "regler" if !(0.0..=1.0).contains(&w("vorgabe")) => return falsch("vorgabe", "0..1"),
             "regler" if !w("mitte").is_nan() && w("vorgabe") != 0.5 => return falsch("mitte", "needs vorgabe 0.5"),
             "regler" if !w("mitte").is_nan() && w("log") == 1.0 && !(w("min") > 0.0) => return falsch("mitte", "with log needs min > 0"),
@@ -754,10 +791,25 @@ pub fn uebersetze_mit_wurzel(json: &str, sr: f32, wurzel: Option<&Path>) -> Resu
                 let wz = wurzel.ok_or_else(|| Fehler::Datei { knoten: k.to_string(), grund: "no sample root".to_string() })?;
                 let d = lade_datei(wz, name, k, &mut geladen)?;
                 let scheiben = w("scheiben") as usize;
-                if d.len() / 2 / scheiben < 4 {
-                    return Err(Fehler::Wert { knoten: k.to_string(), wert: "scheiben".to_string(), grund: "a slice must have at least 4 frames" });
-                }
+                let g: Option<Box<[usize]>> = match &knoten[k].grenzen {
+                    Some(g) => {
+                        pruefe_grenzen(g, Some((d.len() / 2) as u64))
+                            .map_err(|grund| Fehler::Wert { knoten: k.to_string(), wert: "grenzen".to_string(), grund })?;
+                        Some(g.iter().map(|v| *v as usize).collect())
+                    }
+                    None => {
+                        if d.len() / 2 / scheiben < 4 {
+                            return Err(Fehler::Wert { knoten: k.to_string(), wert: "scheiben".to_string(), grund: "a slice must have at least 4 frames" });
+                        }
+                        None
+                    }
+                };
                 Schritt::Sampler {
+                    tempo: q("tempo"),
+                    halb: q("halb"),
+                    ausklang: q("ausklang"),
+                    g,
+                    wahl: w("noten_wahl") == 1.0,
                     hz: q("hz"),
                     trig: q("trig"),
                     gate: q("gate"),
@@ -903,12 +955,18 @@ pub fn uebersetze_mit_wurzel(json: &str, sr: f32, wurzel: Option<&Path>) -> Resu
     // Start position per knob: `vorgabe` of the first `regler` node of a number in document order (as the page's `reglerBereiche` reads it)
     let mut vorgaben = [0.5f32; REGLER];
     let mut gesehen = [false; REGLER];
+    // Latched knobs: bit nr-1 is set when the `regler` nodes of that number say `rastet` 1. Equal numbers must agree.
+    let mut rastend = 0u64;
     for k in g.knoten.iter().filter(|k| k.art == "regler") {
         let nr = k.werte.get("nr").copied().unwrap_or(0.0) as usize;
+        let rastet = k.werte.get("rastet").copied().unwrap_or(0.0) == 1.0;
         if (1..=REGLER).contains(&nr) && !gesehen[nr - 1] {
             gesehen[nr - 1] = true;
             vorgaben[nr - 1] = k.werte.get("vorgabe").copied().unwrap_or(0.5);
+            rastend |= (rastet as u64) << (nr - 1);
+        } else if (1..=REGLER).contains(&nr) && ((rastend >> (nr - 1)) & 1 == 1) != rastet {
+            return Err(Fehler::Wert { knoten: k.id.clone(), wert: "rastet".to_string(), grund: "knobs with the same nr must agree on rastet" });
         }
     }
-    Ok(Programm::neu(g.name, g.stimmen, sr, schritte, slot.len(), verzoegert.into_iter().collect(), regler_namen, latenz, vorgaben))
+    Ok(Programm::neu(g.name, g.stimmen, sr, schritte, slot.len(), verzoegert.into_iter().collect(), regler_namen, latenz, vorgaben, rastend))
 }

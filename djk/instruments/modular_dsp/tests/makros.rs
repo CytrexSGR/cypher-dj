@@ -66,6 +66,11 @@ fn makro_pruefungen() {
     assert!(matches!(fehler(&eingang_innen), Fehler::MakroInhalt { ref art, .. } if art == "eingang"));
     let id_innen = MIT_MAKRO.replace(r#"{"id":"o1","art":"saege"}"#, r#"{"id":"o/1","art":"saege"}"#);
     assert!(matches!(fehler(&id_innen), Fehler::Id(ref i) if i.contains("o/1")));
+    // a slice table would be dropped silently when the instance is resolved: refused like `datei` and `spektren`
+    let grenzen_instanz = MIT_MAKRO.replace(r#""art":"makro:paar","verstimmung":9"#, r#""art":"makro:paar","grenzen":[0,100],"verstimmung":9"#);
+    assert!(matches!(fehler(&grenzen_instanz), Fehler::Wert { ref wert, .. } if wert == "grenzen"));
+    let grenzen_innen = MIT_MAKRO.replace(r#"{"id":"o1","art":"saege"}"#, r#"{"id":"o1","art":"saege","grenzen":[0,100]}"#);
+    assert!(matches!(fehler(&grenzen_innen), Fehler::Wert { ref wert, .. } if wert == "grenzen"));
     // ein- und aus-Ports, die keine Kante benutzt, werden trotzdem geprüft
     let ein_leer = MIT_MAKRO.replace(r#""verstimmung":"t.cent"}"#, r#""verstimmung":"t.cent","leer":"nix.hz"}"#);
     assert!(matches!(fehler(&ein_leer), Fehler::UnbekannterKnoten(ref k) if k.contains("nix")));

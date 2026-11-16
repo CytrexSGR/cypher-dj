@@ -43,7 +43,7 @@ export function neueSpurBefehl(p, eintrag) {
 
 // The instrument menu of the workbench (new track and CHANGE): geraetWahl, with the Baukasten entries grouped by their category (bass, drums, keys,
 // lead, pad, textur; graphs without one under "other") instead of one alphabetical list of over a hundred names. `aktion(eintrag)` runs on a click.
-const KATEGORIEN = ['bass', 'drums', 'keys', 'lead', 'pad', 'textur'];
+const KATEGORIEN = ['bass', 'drums', 'keys', 'lead', 'pad', 'textur', 'sampler'];
 export function instrumentMenue(graphen, kits, behalte, aktion) {
   const kat = new Map((graphen ?? []).map((g) => [g?.name, KATEGORIEN.includes(g?.kategorie) ? g.kategorie : 'other']));
   const rang = (e) => (e.gruppe === 'Baukasten' ? KATEGORIEN.indexOf(kat.get(e.name)) + 1 || KATEGORIEN.length + 1 : e.gruppe === 'Kit' ? 100 : 101);
@@ -59,8 +59,10 @@ export function instrumentMenue(graphen, kits, behalte, aktion) {
   return punkte;
 }
 
-// D8: a kit, or an instrument whose info lists sounds, is a drum grid; anything else a note grid.
+// D8: a kit, or an instrument whose info lists sounds, is a drum grid; anything else a note grid. A sampler cut (info.schnitt, D11) is a slice grid,
+// checked before any other rule.
 export function rasterArt(spur, info) {
+  if (info?.schnitt) return 'slice';
   if (geraetArt(spur, info) === 'kit') return 'drum';
   return (info?.klaenge?.length ?? 0) > 0 ? 'drum' : 'note';
 }
@@ -86,6 +88,8 @@ export function bindeSpuren(ctx) {
   ctx.spurZeile = [];
   const speicher = neuerInfoSpeicher((weg) => ctx.holeGet(weg), () => zeichne());
   ctx.info = (spur) => speicher.info(spur);
+  // sampler A2: a cut changed in place keeps its id, so the device key of the info stays: the cut strip calls this after every change
+  ctx.vergissInfo = () => { speicher.vergiss(); zeichne(); };
   const reihen = new Map();   // track id -> row element
 
   const teil = (name, klasse) => { const e = document.createElement('span'); e.className = klasse; e.setAttribute('data-w', name); return e; };
@@ -162,7 +166,7 @@ export function bindeSpuren(ctx) {
       const b = feld(r, 'spur-buchstabe');
       b.textContent = x.buchstabe; b.style.background = spur.farbe ?? '';
       feld(r, 'spur-name').textContent = x.name;
-      feld(r, 'spur-art').textContent = x.art === 'drum' ? 'DRUM' : x.art === 'note' ? 'NOTE' : '';
+      feld(r, 'spur-art').textContent = x.art === 'drum' ? 'DRUM' : x.art === 'note' ? 'NOTE' : x.art === 'slice' ? 'SLICE' : '';
       feld(r, 'spur-geraet').textContent = x.geraet;
       r.classList.toggle('aktiv', x.id === st.wahl);
       baueSteuerung(r, x.id); zeigeSteuerung(r, spur);

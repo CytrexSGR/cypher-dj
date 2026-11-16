@@ -229,6 +229,16 @@ The lists above are the headline. Also in there:
   notes grid (drum rows or pitch rows), velocity and length per step, level, mute, solo and meters per track, an
   insert chain of up to four effects per track, the large front panel of the instrument, an instrument swap that keeps
   the notes, and a shelf of saved modules
+- **Sampler (STUDIO)**: cut a library loop, or the loop or a stem of a module, into up to 64 slices, by grid or at the
+  hits found in the audio, and play them from a new instrument track in their original order. The SLICE grid has one
+  row per slice, so reordering, repeating, shortening, reversing and pitching single steps are ordinary note edits. A
+  strip shows the waveform with numbered slices, how strong each hit is and how far it sits from the grid; markers can be
+  dragged (they snap to a hit or the grid), added and removed, and CUT AGAIN keeps your patterns. Selected slices become
+  a drum kit (TO KIT, then KIT TO TRACK) or a tone that plays at the pitch of the keys, with a proposed root note (TO
+  TONE). The shelf tab CUTS lists the cuts to reuse or delete. The agent does the same through its `sampler` tool. A kit
+  made from hits plays on its own track at once but reaches the live drum stream only after a restart
+- **Step lanes for knobs (STUDIO)**: `+ lane` under the grid adds a step lane for any knob of a Cypher Modular
+  instrument; clicking a key or a drum row plays it
 - **Live view (LIVE)**: the three Strudel channels side by side, each with an automation lane for fader,
   filter and cutoff over 4 to 32 bars
 - **Effects section**: one strip per channel showing what plays and how much the compressor pulls, an
@@ -245,7 +255,7 @@ The lists above are the headline. Also in there:
 - **Extra pattern streams**: five more channels (erz/5 to erz/7 and the two loop box pads) can each carry a Cypher
   Modular graph, started with `djk-start --strudel --bk-stroeme`; they can be recorded onto production tracks. The
   graph knobs can be learned onto a MIDI controller, and a project remembers which graph sits on which channel
-- **The agent's side**: 91 tools in the MCP server. Besides playing it can measure a deck behind its
+- **The agent's side**: 92 tools in the MCP server. Besides playing it can measure a deck behind its
   closed fader, read the levels of the last seconds, wait on the master clock for a number of bars, run
   automation tracks and ramps over bars, and cancel everything it started. When it has an idea while the
   human plays, it proposes; the human accepts or rejects with one key

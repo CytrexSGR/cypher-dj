@@ -45,6 +45,7 @@ inline void spur(cdj::ArrSnapshot* s, int nr, CypherBk* h, uint64_t gen, std::in
   std::snprintf(sp.graph, sizeof sp.graph, "t");
   sp.bk = h;
   sp.bk_gen = gen;
+  sp.bk_rastet = cypher_bk_rastende(h);   // sampler A2: as the loader does beside sp.bk
   sp.n_param = 0;
   for (const auto& k : knoepfe) {
     std::snprintf(sp.param[sp.n_param].name, sizeof sp.param[0].name, "%s", k.first);

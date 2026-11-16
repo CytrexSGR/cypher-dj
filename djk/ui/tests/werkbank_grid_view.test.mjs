@@ -26,13 +26,13 @@ const ruhe = async () => { for (let i = 0; i < 12; i++) await new Promise((ok) =
 let wurzel, w, projekt;
 const $w = (n) => wurzel.querySelector(`[data-w="${n}"]`);
 const alle = (n) => wurzel.querySelectorAll(`[data-w="${n}"]`);
-function aufbau(p, { klaenge = [], art = 'bk', frage = () => true, wahl } = {}) {
+function aufbau(p, { klaenge = [], art = 'bk', frage = () => true, wahl, schnitt } = {}) {
   projekt = p;
   installiere({
     speicher: wahl ? { 'djk-wb-wahl-m1': wahl } : {},
     antworten: {
       'GET /proj/aktuell': { j: { slug: 'm1', projekt: p } }, 'GET /proj/liste': { j: [] }, 'GET /proj/werkbank/vorlagen': { j: { vorlagen: [] } },
-      'GET /seq/geraet': { j: { art, regler: [], klaenge } }, 'GET /geraete/panel': { j: {} },
+      'GET /seq/geraet': { j: { art, regler: [], klaenge, ...(schnitt ? { schnitt } : {}) } }, 'GET /geraete/panel': { j: {} },
       'POST /proj/aendern': (k) => ({ j: { rev: k.rev + 1, projekt: { ...p, rev: k.rev + 1 } } }),
     },
   });
@@ -278,4 +278,207 @@ test('the view is redrawn after a project change and shows the new notes', async
   neu.clips[0].noten.push({ id: 'x1', beat: 1, laenge: 0.125, ton: 38, vel: 100 });
   w.ctx.uebernimm('m1', projektMit([neu], { rev: 2 })); await ruhe();
   assert.ok(zelle(38, 4).classList.contains('an'));
+});
+
+// ---- SLICE grid (sampler A1 task 6): a cut of 4 slices (0.5, 0.5, 1, 2 beats), pattern 4 beats ----
+const SLICE_KLAENGE = [0, 1, 2, 3].map((ton) => ({ ton, name: String(ton + 1) }));
+const SCHNITT = { id: 'x', scheiben: 4, laengen_beats: [0.5, 0.5, 1, 2] };
+function sliceSpur(noten) {
+  return { id: 's1', nr: 1, name: 'Slices', farbe: '#2fd6c3', art: 'instrument', geraet: { art: 'intern', name: 'bk', graph: 'smp-x', parameter: {} },
+    clips: [{ id: 'c_s', art: 'midi', name: 's', start_beat: 0, laenge_beats: 64, loop_beats: 4, noten }] };
+}
+const sliceAufbau = (noten) => aufbau(projektMit([sliceSpur(noten)], { takte: 1 }), { klaenge: SLICE_KLAENGE, schnitt: SCHNITT });
+
+test('the view offers VELOCITY, LENGTH, REVERSE, PITCH for a slice track and marks reversed cells', async () => {
+  sliceAufbau([{ id: 'n1', beat: 0, laenge: 0.5, ton: 0, vel: 100 }, { id: 'n2', beat: 0.5, laenge: 0.5, ton: 64 + 1, vel: 100 }]);
+  await zeigen();
+  assert.ok($w('r-art').textContent.includes('SLICE GRID · one row per slice'));
+  assert.deepEqual(alle('zeilenname').map((z) => z.textContent), ['1', '2', '3', '4']);
+  assert.deepEqual(alle('r-feld').map((b) => b.textContent), ['VELOCITY', 'LENGTH', 'REVERSE', 'PITCH']);
+  assert.ok(zelle(0, 0).classList.contains('an') && !zelle(0, 0).classList.contains('w-rueck'));
+  assert.ok(zelle(1, 2).classList.contains('an') && zelle(1, 2).classList.contains('w-rueck'), 'the reversed hit is on row 2 with its mark');
+  assert.ok(!zelle(1, 0).classList.contains('an'));
+  assert.ok($w('r-hinweis').textContent.includes('of the selected row'));
+  // the track list chip
+  assert.equal(alle('spur-art')[0].textContent, 'SLICE');
+});
+
+test('slice grid: a click on an empty cell adds the slice length, on a hit removes it; a reversed hit is removed and nothing is added', async () => {
+  sliceAufbau([{ id: 'n2', beat: 0.5, laenge: 0.5, ton: 64 + 1, vel: 100 }]);
+  await zeigen();
+  zelle(3, 4).dispatch('click'); await ruhe();   // slice 4 is 2 beats = 8 steps
+  assert.equal(schreibt().length, 1);
+  assert.equal(schreibt()[0].koerper.label, 'Slices: notes');
+  assert.deepEqual(schreibt()[0].koerper.befehle, [{ befehl: 'noten_neu', clip_id: 'c_s', noten: [{ beat: 1, laenge: 2, ton: 3, vel: 100 }] }]);
+  zelle(1, 2).dispatch('click'); await ruhe();   // the reversed hit
+  assert.equal(schreibt().length, 2);
+  assert.deepEqual(schreibt()[1].koerper.befehle, [{ befehl: 'noten_loeschen', clip_id: 'c_s', ids: ['n2'] }]);
+});
+
+test('slice grid: a REVERSE click on a hit sends noten_aendern, on a step without a hit nothing and says why', async () => {
+  sliceAufbau([{ id: 'n1', beat: 0, laenge: 0.5, ton: 0, vel: 100 }, { id: 'n2', beat: 0.5, laenge: 0.5, ton: 64 + 1, vel: 100 }]);
+  await zeigen();
+  alle('r-feld').find((b) => b.dataset.feld === 'rueck').dispatch('click');
+  assert.ok($w('r-hinweis').textContent.includes('of the selected row'));
+  assert.equal(alle('wert').length, 16, 'one value cell per step of the bar');
+  wertZelle(0).dispatch('pointerdown', { clientY: 10 }); await ruhe();   // the selected row is slice 1
+  assert.equal(schreibt().length, 1);
+  assert.equal(schreibt()[0].koerper.label, 'Slices: reverse');
+  assert.deepEqual(schreibt()[0].koerper.befehle, [{ befehl: 'noten_aendern', clip_id: 'c_s', noten: [{ id: 'n1', ton: 64 }] }]);
+  wertZelle(0).dispatch('pointermove', { clientY: 10 }); await ruhe();
+  assert.equal(schreibt().length, 1, 'a move does not toggle again');
+  const n = schreibt().length;
+  wertZelle(5).dispatch('pointerdown', { clientY: 10 }); await ruhe();   // no hit in step 6
+  assert.equal(schreibt().length, n);
+  assert.ok($w('meldung').textContent.includes('no note starts'));
+  // row 2 holds the reversed hit: REVERSE goes back to forward
+  alle('zeilenname').find((z) => z.textContent === '2').dispatch('click');
+  assert.ok(wertZelle(2).classList.contains('anders'), 'a reversed hit is amber in the lane');
+  wertZelle(2).dispatch('pointerdown', { clientY: 10 }); await ruhe();
+  assert.deepEqual(schreibt().at(-1).koerper.befehle, [{ befehl: 'noten_aendern', clip_id: 'c_s', noten: [{ id: 'n2', ton: 1 }] }]);
+});
+
+test('slice grid: the value lanes VELOCITY and LENGTH follow the selected row and see reversed hits', async () => {
+  sliceAufbau([{ id: 'n2', beat: 0.5, laenge: 0.5, ton: 64 + 1, vel: 100 }]);
+  await zeigen();
+  alle('zeilenname').find((z) => z.textContent === '2').dispatch('click');
+  wertZelle(2).dispatch('pointerdown', { clientY: 10 }); await ruhe();
+  assert.deepEqual(schreibt().at(-1).koerper.befehle, [{ befehl: 'noten_aendern', clip_id: 'c_s', noten: [{ id: 'n2', vel: 64 }] }]);
+  alle('r-feld').find((b) => b.dataset.feld === 'laenge').dispatch('click');
+  wertZelle(2).dispatch('pointerdown', { clientY: 10 }); await ruhe();
+  assert.equal(schreibt().at(-1).koerper.label, 'Slices: length');
+  assert.deepEqual(schreibt().at(-1).koerper.befehle[0].noten, [{ id: 'n2', laenge: 2 }], 'mid height = 8 steps = 2 beats');
+});
+
+test('the other grids keep their tabs next to the slice grid', async () => {
+  const sp = spuren();
+  aufbau(projektMit([sp.drums]), { klaenge: KLAENGE });
+  await zeigen();
+  assert.deepEqual(alle('r-feld').map((b) => b.dataset.feld), ['vel']);
+  aufbau(projektMit([spuren().bass]), { klaenge: [] });
+  await zeigen();
+  assert.deepEqual(alle('r-feld').map((b) => b.dataset.feld), ['vel', 'laenge']);
+});
+
+// ---- PITCH lane of the slice grid (sampler A2 task 7) ----
+const pitchTab = () => alle('r-feld').find((b) => b.dataset.feld === 'pitch');
+test('the slice view offers PITCH and a click on a value posts the envelope', async () => {
+  sliceAufbau([{ id: 'n1', beat: 0, laenge: 0.5, ton: 0, vel: 100 }]);
+  await zeigen();
+  assert.deepEqual(alle('r-feld').map((b) => b.textContent), ['VELOCITY', 'LENGTH', 'REVERSE', 'PITCH']);
+  pitchTab().dispatch('click');
+  assert.ok(pitchTab().classList.contains('an'));
+  assert.equal(alle('wert').length, 16, 'one value cell per step of the bar, over all rows');
+  assert.ok($w('r-hinweis').textContent.includes('all rows'), 'the lane is not one row');
+  assert.ok(alle('wert').every((z) => z.dataset.halb === '0' && !z.classList.contains('eigen')), 'no lane: the track knob, 0 semitones');
+  wertZelle(4).dispatch('pointerdown', { clientY: 0 }); await ruhe();   // the top of the cell: +12
+  assert.equal(schreibt().length, 1);
+  assert.equal(schreibt()[0].koerper.label, 'Slices: pitch');
+  assert.deepEqual(schreibt()[0].koerper.befehle, [{ befehl: 'huellkurve_setzen', clip_id: 'c_s', ziel: 'geraet.k3', punkte: [{ beat: 0, wert: 0 }, { beat: 0.875, wert: 0.5, form: 'sprung' }, { beat: 1.125, wert: 0, form: 'sprung' }] }]);
+  // the same step with no hit in it: PITCH is a lane of its own, it does not need a hit
+  assert.ok(!zelle(0, 4).classList.contains('an'));
+});
+test('PITCH: the lane shows what the project holds, marks a step with its own point; shift-click removes it; a drag writes each step it enters', async () => {
+  const sp = sliceSpur([{ id: 'n1', beat: 0, laenge: 0.5, ton: 0, vel: 100 }]);
+  sp.clips[0].huellkurven = [{ ziel: 'geraet.k3', punkte: [{ beat: 0, wert: 0 }, { beat: 0.875, wert: 0.25, form: 'sprung' }, { beat: 1.125, wert: 0, form: 'sprung' }] }];   // +6 on step 5 only, knob at 0.5
+  aufbau(projektMit([sp], { takte: 1 }), { klaenge: SLICE_KLAENGE, schnitt: SCHNITT });
+  await zeigen();
+  pitchTab().dispatch('click');
+  assert.deepEqual([3, 4, 5].map((i) => wertZelle(i).dataset.halb), ['0', '6', '0']);
+  assert.deepEqual([3, 4, 5].map((i) => wertZelle(i).classList.contains('eigen')), [false, true, false]);
+  wertZelle(5).dispatch('pointerdown', { clientY: 0, shiftKey: true }); await ruhe();
+  assert.equal(schreibt().length, 0, 'shift-click on a step without a point of its own sends nothing');
+  wertZelle(4).dispatch('pointerdown', { clientY: 0, shiftKey: true }); await ruhe();
+  assert.equal(schreibt().length, 1);
+  assert.deepEqual(schreibt()[0].koerper.befehle, [{ befehl: 'huellkurve_loeschen', clip_id: 'c_s', ziel: 'geraet.k3' }], 'the only value of the lane: the envelope is removed');
+  wertZelle(7).dispatch('pointerdown', { clientY: 0 }); await ruhe();
+  const n = schreibt().length;
+  wertZelle(8).dispatch('pointermove', { clientY: 0 }); await ruhe();
+  assert.equal(schreibt().length, n + 1, 'a drag over an empty step writes it');
+  assert.equal(schreibt().at(-1).koerper.label, 'Slices: pitch');
+});
+test('the PITCH tab exists in the slice grid only', async () => {
+  aufbau(projektMit([spuren().drums]), { klaenge: KLAENGE });
+  await zeigen();
+  assert.ok(!alle('r-feld').some((b) => b.dataset.feld === 'pitch'));
+  aufbau(projektMit([spuren().bass]), { klaenge: [] });
+  await zeigen();
+  assert.ok(!alle('r-feld').some((b) => b.dataset.feld === 'pitch'));
+});
+
+test('the slice view puts a hit just before its step into that step and the bar strip marks the bar of the step', async () => {
+  const sp = sliceSpur([{ id: 'n1', beat: 0.994, laenge: 0.25, ton: 3, vel: 100 }, { id: 'n2', beat: 3.99, laenge: 0.25, ton: 0, vel: 100 }]);
+  aufbau(projektMit([{ ...sp, clips: [{ ...sp.clips[0], loop_beats: 4 }] }], { takte: 2 }), { klaenge: SLICE_KLAENGE, schnitt: SCHNITT });
+  await zeigen();
+  assert.ok(zelle(3, 4).classList.contains('an') && !zelle(3, 3).classList.contains('an'));
+  assert.ok(zelle(0, 0).classList.contains('an') && !zelle(0, 15).classList.contains('an'), 'the upbeat of the pattern is on step 1');
+  zelle(3, 4).dispatch('click'); await ruhe();
+  assert.deepEqual(schreibt().at(-1).koerper.befehle, [{ befehl: 'noten_loeschen', clip_id: 'c_s', ids: ['n1'] }]);
+});
+test('the bar strip of a slice grid marks the bar of the step a hit belongs to', async () => {
+  // pattern of 8 beats (2 bars) in a module of 2 bars: a hit at beat 7.99 is the upbeat of the next pass, so it marks bar 1, not bar 2
+  const sp = sliceSpur([{ id: 'n1', beat: 7.99, laenge: 0.25, ton: 0, vel: 100 }]);
+  aufbau(projektMit([{ ...sp, clips: [{ ...sp.clips[0], loop_beats: 8 }] }], { takte: 2 }), { klaenge: SLICE_KLAENGE, schnitt: SCHNITT });
+  await zeigen();
+  const markiert = alle('r-takt').map((t) => t.children.some((c) => typeof c !== 'string' && c.tagName === 'I'));
+  assert.deepEqual(markiert, [true, false], 'beat 7.99 is step 1 of the next pass: bar 1 is marked, not bar 2');
+});
+
+// 2026-11-16: a click on a row name plays it through the track (POST /sampler/hoeren with `ton`; a slice row sends `scheibe`)
+test('a click on a drum row or a piano key sends the note to hear; a refusal is told', async () => {
+  const hoert = () => attrappe.anrufe.filter((a) => a.methode === 'POST' && a.url === '/sampler/hoeren');
+  const sp = spuren();
+  aufbau(projektMit([sp.drums, sp.bass]), { klaenge: KLAENGE });
+  attrappe.antworten['POST /sampler/hoeren'] = { j: { ok: true, dauer_ms: 400 } };
+  await zeigen();
+  alle('zeilenname').find((z) => z.textContent === 'Snare').dispatch('click'); await ruhe();
+  assert.deepEqual(hoert().at(-1).koerper, { spur_id: 's1', ton: 38 });
+  assert.ok(alle('zeilenname').find((z) => z.textContent === 'Snare').classList.contains('gewaehlt'), 'the row is selected as before');
+  assert.equal(schreibt().length, 0, 'hearing writes nothing');
+  // the piano of a note track
+  aufbau(projektMit([sp.bass]), { klaenge: [] });
+  attrappe.antworten['POST /sampler/hoeren'] = { code: 409, j: { fehler: 'kein_kern', text: 'the core did not answer' } };
+  await zeigen();
+  const taste = alle('zeilenname')[0];
+  taste.dispatch('click'); await ruhe();
+  assert.deepEqual(hoert().at(-1).koerper, { spur_id: 's2', ton: Number(taste.dataset.ton) });
+  assert.equal($w('meldung').textContent, 'The core did not answer');
+});
+
+// 2026-11-16: "+ lane" adds a step lane for a knob of a Baukasten instrument
+test('+ lane adds a knob lane; a press writes the step value, shift removes it, × removes the lane', async () => {
+  const REGLER = [{ nr: 1, name: 'Cutoff', vorgabe: 0.5 }, { nr: 2, name: 'Reso', vorgabe: 0.25 }];
+  const sp = spuren();
+  const mit = (p) => { aufbau(p, { klaenge: [] }); attrappe.antworten['GET /seq/geraet'] = { j: { art: 'bk', regler: REGLER, klaenge: [] } }; };
+  mit(projektMit([sp.bass]));
+  await zeigen();
+  const wahl = $w('r-lane-neu');
+  assert.deepEqual(wahl.querySelectorAll('option').map((o) => o.textContent), ['+ lane ▾', 'Cutoff', 'Reso']);
+  wahl.value = '2'; wahl.dispatch('change'); await ruhe();
+  assert.deepEqual(alle('r-feld').map((b) => b.textContent), ['VELOCITY', 'LENGTH', 'RESO']);
+  assert.ok(alle('r-feld').find((b) => b.textContent === 'RESO').classList.contains('an'));
+  assert.deepEqual($w('r-lane-neu').querySelectorAll('option').map((o) => o.textContent), ['+ lane ▾', 'Cutoff']);
+  assert.equal(schreibt().length, 0, 'adding a lane writes nothing');
+  assert.equal(wertZelle(0).dataset.wert, '0.25', 'every step shows the knob');
+  // a press at the top of step 4 (the stand-in has no layout: the middle) writes an offset from the knob at the beat of the step
+  wertZelle(4).dispatch('pointerdown', {}); await ruhe();
+  assert.deepEqual(schreibt().at(-1).koerper.befehle, [{ befehl: 'huellkurve_setzen', clip_id: 'c_Bass', ziel: 'geraet.k2',
+    punkte: [{ beat: 0, wert: 0 }, { beat: 1, wert: 0.25, form: 'sprung' }, { beat: 1.25, wert: 0, form: 'sprung' }] }]);
+  // a project that holds the lane shows it without "+ lane"; shift removes the only value and with it the envelope
+  const mitHk = structuredClone(sp.bass);
+  mitHk.clips[0].huellkurven = [{ ziel: 'geraet.k2', punkte: [{ beat: 0, wert: 0 }, { beat: 1, wert: 0.25, form: 'sprung' }, { beat: 1.25, wert: 0, form: 'sprung' }] }];
+  mit(projektMit([mitHk]));
+  await zeigen();
+  alle('r-feld').find((b) => b.textContent === 'RESO').dispatch('click'); await ruhe();
+  assert.deepEqual([wertZelle(3).dataset.wert, wertZelle(4).dataset.wert, wertZelle(5).dataset.wert], ['0.25', '0.5', '0.25']);
+  assert.ok(wertZelle(4).classList.contains('eigen') && !wertZelle(3).classList.contains('eigen'));
+  wertZelle(4).dispatch('pointerdown', { shiftKey: true }); await ruhe();
+  assert.deepEqual(schreibt().at(-1).koerper.befehle, [{ befehl: 'huellkurve_loeschen', clip_id: 'c_Bass', ziel: 'geraet.k2' }]);
+  // × deletes the lane's envelope and goes back to VELOCITY
+  mit(projektMit([mitHk]));
+  await zeigen();
+  alle('r-feld').find((b) => b.textContent === 'RESO').dispatch('click'); await ruhe();
+  $w('r-lane-weg').dispatch('click'); await ruhe();
+  assert.deepEqual(schreibt().at(-1).koerper.befehle, [{ befehl: 'huellkurve_loeschen', clip_id: 'c_Bass', ziel: 'geraet.k2' }]);
+  assert.ok(alle('r-feld').find((b) => b.textContent === 'VELOCITY').classList.contains('an'));
 });

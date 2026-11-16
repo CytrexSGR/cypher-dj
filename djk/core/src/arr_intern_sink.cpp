@@ -53,6 +53,10 @@ void ArrInternSenke::auto_parameter_summand(int spur, int param, float delta) no
   if (ArrSenke* s = innen(spur)) s->auto_parameter_summand(spur, param, delta);
 }
 
+void ArrInternSenke::note_regler(int spur, int64_t z, int param, float wert, bool relativ) noexcept {
+  if (ArrSenke* s = ziel(spur)) s->note_regler(spur, z, param, wert, relativ);   // the same sink as the note that follows
+}
+
 void ArrInternSenke::block(int spur, int64_t s0, int m, float* l, float* r) noexcept { block_(spur, s0, m, l, r, nullptr); }
 
 void ArrInternSenke::block_bahn(int spur, int64_t s0, int m, float* l, float* r, ArrArbeit& a) noexcept {

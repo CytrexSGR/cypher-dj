@@ -98,6 +98,16 @@ void ArrBkSenke::auto_parameter_summand(int spur, int param, float delta) noexce
   p.delta_da[param] = true;
 }
 
+void ArrBkSenke::note_regler(int spur, int64_t ziel, int param, float wert, bool relativ) noexcept {
+  if (spur < 0 || spur >= ARR_SENKEN_PLAETZE || param < 0 || param >= BK_KNOEPFE || !(wert == wert)) return;
+  Spur& p = sp_[spur];
+  if (p.n_rev >= ARR_BK_WARTE) {   // its own queue is full: this value is lost, the note is not
+    verloren_.fetch_add(1, std::memory_order_relaxed);
+    return;
+  }
+  p.rev[p.n_rev++] = Rev{ziel, wert, static_cast<uint8_t>(param), relativ};
+}
+
 void ArrBkSenke::block(int spur, int64_t s0, int m, float* l, float* r) noexcept { block_bahn(spur, s0, m, l, r, arbeit0_); }
 
 // What the plan builder reads is the published instance (aktiv, blende: acquire) and the plain fields weg and gen_last. The plain fields are written only by block_bahn() and spur_weg()
@@ -184,6 +194,7 @@ void ArrBkSenke::block_bahn(int spur, int64_t s0, int m, float* l, float* r, Arr
     p.neu = h_neu != nullptr;
     if (!h_neu) {   // the track is gone: nothing pending applies any more
       p.n = 0;
+      p.n_rev = 0;
       p.start = -1;
       return;
     }
@@ -202,6 +213,7 @@ void ArrBkSenke::block_bahn(int spur, int64_t s0, int m, float* l, float* r, Arr
   p.weg = false;
   if (!p.h_last || !q) {   // not a bk track: notes for it (an old queue) are dropped
     p.n = 0;
+    p.n_rev = 0;
     return;
   }
   CypherBk* h = p.h_last;
@@ -256,6 +268,24 @@ void ArrBkSenke::block_bahn(int spur, int64_t s0, int m, float* l, float* r, Arr
     if (rc != 0) verloren_.fetch_add(1, std::memory_order_relaxed);
   }
   p.n = 0;
+  // sampler A2: the per-note knob values go in AFTER every note of the block, so the FFI queue (256 events together) is full of notes first and a surplus costs knob values, never notes.
+  // At one sample the instance puts the value before the note-on whatever the order of the reports. -2: the instance of the block has no latched knob there (a swap between the report and
+  // this block): nothing to say. -1: queue full, counted.
+  for (int i = 0; i < p.n_rev; ++i) {
+    const Rev& e = p.rev[i];
+    const int k = e.param + 1;
+    float w = e.wert;
+    if (e.relativ) {   // a relative lane only: the same rule as the knob loop above
+      if (k_da[k - 1]) {   // a value reported for this block (the live override spur/<slot>/bk/<k>) wins and the summand drops
+        w = k_gemeldet[k - 1];
+      } else {   // the snapshot's knob plus the summand
+        w += knopf_wert(*q, k, p.knopf_vorgabe);
+        w = w < 0.0f ? 0.0f : (w > 1.0f ? 1.0f : w);
+      }
+    }
+    if (cypher_bk_regler_bei(h, versatz(e.ziel), static_cast<uint32_t>(k), w) == -1) verloren_.fetch_add(1, std::memory_order_relaxed);
+  }
+  p.n_rev = 0;
   if (ereignis) {
     p.ruht = false;
     p.still = 0;

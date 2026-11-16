@@ -76,6 +76,7 @@ export const BEFEHLE = {
   '/k/hand/frei': f('hss', 'id quelle pfade'),                                      // §4.3: a project switch releases the human holder
   '/k/arr/auto': f('hsisi', 'id quelle spur ziel an'),                              // 1.12 Slice 3 (§4.11)
   '/k/arr/arm': f('hsiii', 'id quelle spur an modus'),                              // 1.12 Slice 3 (§4.11)
+  '/k/arr/note': f('hsiii', 'id quelle spur ton vel'),                              // sampler plan A1 task 7 (§4.11)
   '/test/hand': f('sfh', 'pfad midi_roh sample'),
   '/test/klick': f('hssi', 'id quelle kanal an'),
 };

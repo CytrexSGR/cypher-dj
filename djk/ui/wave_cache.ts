@@ -4,6 +4,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { LOOP_NAME } from './loops.ts';
+import { SCHNITT_ID } from './sampler/schnitt.ts';
 
 export interface WelleQuelle { datei: string; schluessel: string; dekodieren?: boolean; dauerS?: number }
 // Keine Parameter-Properties: Node 22.23 strippt nur Typen (ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX, Review 2026-09-27);
@@ -19,6 +20,16 @@ export function loopQuelle(loopOrdner: string, name: string): WelleQuelle {
   if (!fs.existsSync(datei)) throw new WelleFehler(404, 'loop_fehlt');
   const s = fs.statSync(datei);
   return { datei, schluessel: `loop-${name}-${Math.round(s.mtimeMs)}-${s.size}` };
+}
+
+// Sampler A1: the audio of a cut (<graph folder>/samples/smp-<id>.f32, stereo float32 like loop.f32). The file of a cut never changes; mtime and size
+// are in the key anyway, so a cut that was removed and made again under the same id cannot show an old waveform.
+export function schnittQuelle(bk: string, id: string): WelleQuelle {
+  if (typeof id !== 'string' || !SCHNITT_ID.test(id)) throw new WelleFehler(400, 'unbekannter_schnitt');
+  const datei = path.join(bk, 'samples', `smp-${id}.f32`);
+  if (!fs.existsSync(datei)) throw new WelleFehler(404, 'schnitt_fehlt');
+  const s = fs.statSync(datei);
+  return { datei, schluessel: `schnitt-${id}-${Math.round(s.mtimeMs)}-${s.size}` };
 }
 
 export function fassungQuelle(bestand: string, material: string, basisBpm: number, fassung: number): WelleQuelle {

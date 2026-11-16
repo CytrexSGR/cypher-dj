@@ -120,6 +120,7 @@ export default {
       auto: new Set(),     // 1.12 Slice 3: overridden fields "spur/feld" (spur 1..32, feld 0..3)
       export: { ungesund: 0, luecken: 0 },   // plan 1.11 T12: the numbers the stand-in reports for /k/arr/export_lauf
       host: { gesund: [0, 0, 0, 0] },   // plan 1.11 T5: the server's health flag per effect host (the stand-in has no edge check: health = the flag)
+      noten: [],           // sampler plan A1 task 7: the notes /k/arr/note was asked to play, [{ spur, ton, vel }] in order (the stand-in has no sink, nothing sounds)
       arm: new Map(),      // 1.12 Slice 3 (D11): armed tracks, spur 1..32 -> mode (0 touch, 1 latch, 2 write); a new core generation (a new stand-in) starts empty
       punkte: new Map(),   // 1.12 Slice 3 (D12): "spur/ziel" -> { gemeldet: sample of the block end that sent the last point, halt: the held point or null }
       lanen: new Set() };  // the fields that have a lane in the loaded playback, same keys
@@ -263,6 +264,14 @@ export default {
         }
         K.q(b, 3);
       });
+    },
+    // sampler plan A1 task 7 (§4.11): one note on a project track. Like the core: the range of the track, then of ton and vel; acknowledged 1 then 3; no arm and no transport needed.
+    // (cypher in the AI stop is refused by core.mjs before any handler, like the net thread.) The stand-in has no sink: it only records the note in K.arr.noten.
+    '/k/arr/note': (K, a, b) => {
+      if (!(a.spur >= 1 && a.spur <= 32)) return K.q(b, 6, 'spur_bereich');
+      if (!(a.ton >= 0 && a.ton <= 127) || !(a.vel >= 0 && a.vel <= 127)) return K.q(b, 6, 'ausserhalb_bereich');
+      K.q(b, 1);
+      K.sofortQ.push(() => { K.arr.noten.push({ spur: a.spur, ton: a.ton, vel: a.vel }); K.q(b, 3); });
     },
     // plan 1.11 T5 (§4.11): the server's health flag of an effect host. Answered by /e/ins_host (h, health). The stand-in has no JACK edges, so health is the flag alone.
     '/k/arr/ins_host': (K, a, b) => {

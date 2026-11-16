@@ -3,7 +3,7 @@
 // Faden) und setzt zurück (Seiten vorgewärmt); alles andere allokiert nicht. block im Callback unter
 // cypherdj::dsp::DenormalSchutz aufrufen. Noten: Versatz in Samples ab dem Anfang des nächsten block (dahinter: wandert
 // in den Folgeblock), höchstens 256 gemeldete Ereignisse bis zum nächsten block; am selben Sample alle_aus vor aus vor
-// an. Rückgabe 0, -1 voll oder Zeiger null, -2 Ton über 127. vel 0..1. Kein Aufruf nebenläufig mit block. Ein Panic im
+// an (zwischen aus und an: cypher_bk_regler_bei). Rückgabe 0, -1 voll oder Zeiger null, -2 Ton über 127. vel 0..1. Kein Aufruf nebenläufig mit block. Ein Panic im
 // Rust-Teil kommt nicht über die Grenze: block liefert dann Stille, setzt zurück und gibt -1.
 // Effekt-Graphen (S3c, Knoten `eingang`) rechnen mit `cypher_bk_effekt` im Kanalzug; `cypher_bk_takt` setzt Beat und Tempo je Block.
 #pragma once
@@ -25,10 +25,14 @@ int32_t cypher_bk_alle_aus(CypherBk* h, uint32_t versatz);
 int32_t cypher_bk_block(CypherBk* h, float* aus_l, float* aus_r, size_t n);   // überschreibt; h null: Stille
 // Effekt (S3c): ein_* Host-Audio, aus_* überschrieben, Ein- und Ausgang getrennt; h null: Stille
 int32_t cypher_bk_effekt(CypherBk* h, const float* ein_l, const float* ein_r, float* aus_l, float* aus_r, size_t n);
-int32_t cypher_bk_regler(CypherBk* h, uint32_t nr, float wert);   // nr 1..64, 0..1 (geklemmt, NaN ignoriert), 20 ms geglättet; -1 h null oder nr falsch; nicht nebenläufig mit block
+int32_t cypher_bk_regler(CypherBk* h, uint32_t nr, float wert);   // nr 1..64, 0..1 (geklemmt, NaN ignoriert), 20 ms geglättet, a latched knob (see cypher_bk_rastende) sets target and applied value at once; -1 h null oder nr falsch; nicht nebenläufig mit block
 void cypher_bk_takt(CypherBk* h, double beat0, double bps);   // beat0 = erstes Sample des nächsten Blocks
 int32_t cypher_bk_regler_sofort(CypherBk* h, uint32_t nr, float wert);   // S20: like regler, the smoothed state jumps to the target at once; -1 h null or nr wrong; no allocation
 float cypher_bk_regler_vorgabe(CypherBk* h, uint32_t nr);   // the graph's start position (`vorgabe`) of knob nr 1..64, 0.5 where the graph defines none; -1.0 for h null or nr outside; a fresh instance starts every knob there; no allocation
+uint64_t cypher_bk_rastende(const CypherBk* h);   // sampler A2: latched knobs of the graph (`rastet` 1 on its `regler` nodes), bit nr-1; 0 for a graph without and for h null; no allocation
+// sampler A2: set the latched knob nr 1..64 to wert (0..1, clamped, NaN ignored) at sample `versatz` of the next block, no glide. Same queue and offset rule
+// as the notes (max 256 events together); at one sample after alle_aus and aus, before an. 0; -1 h null, nr outside, queue full (counted in verloren); -2 knob not latched. No allocation; not concurrent with block.
+int32_t cypher_bk_regler_bei(CypherBk* h, uint32_t versatz, uint32_t nr, float wert);
 void cypher_bk_zuruecksetzen(CypherBk* h);   // S20: like after neu, knobs stay, queue emptied; h null: no effect; no allocation; not concurrent with block
 uint32_t cypher_bk_hat_eingang(const CypherBk* h);            // 1 Effekt-Graph, 0 Instrument oder null
 uint32_t cypher_bk_latenz(const CypherBk* h);

@@ -26,6 +26,7 @@ import { SeqFehler, folgeSicht, musterLaenge, reglerSchluessel } from '../../pub
 import { parameterTabelle } from '../../devices_parameter.ts';
 import { TROMMEL_KARTEN } from '../../project/trommel_map.ts';
 import { kitKlaenge } from '../proj/kits.ts';
+import { liesSchnitt } from '../../sampler/schnitt.ts';
 import { alsAntwort, leseKoerper, type ProjZugang } from '../proj/area.ts';
 import { ProjFehler, type Antwort } from '../proj/session.ts';
 
@@ -69,12 +70,26 @@ function platzVon(d: Record<string, unknown>): number {
 }
 const ungueltig = (text: string): never => { throw new ProjFehler(400, 'argument_ungueltig', { text }); };
 
+// The generated sampler device `smp-<id>` (D11): slice i is note i and is named i + 1 (people count from 1); `schnitt` carries what the grid needs of the cut.
+// Anything that is not a readable cut of that name is an ordinary graph.
+function schnittVon(graph: string): { klaenge: { ton: number; name: string }[]; schnitt: NonNullable<FolgeInfo['schnitt']> } | null {
+  if (!graph.startsWith('smp-')) return null;
+  const s = liesSchnitt(graph.slice(4));
+  if (!s || s.grenzen.length < 2) return null;
+  const n = s.grenzen.length - 1;
+  return {
+    klaenge: Array.from({ length: n }, (_, i) => ({ ton: i, name: String(i + 1) })),
+    schnitt: { id: s.id, scheiben: n, laengen_beats: Array.from({ length: n }, (_, i) => (s.grenzen[i + 1] - s.grenzen[i]) * s.beats / s.frames) },
+  };
+}
+
 // What the text and the page need to know about an instrument: the knobs with names and start positions, the sounds of a kit. Sources without HTTP: the
 // parameter table of the device (the one GET /graphen/panel and the device panels are built from; names are the `label`s) and the kit file (as GET /proj/kits
 // reads it; it lists only the number of sounds, the names come from kit.json). bk knobs carry their number as `nr`, the RB-338 targets their name.
 export function geraetInfo(g: Geraet | undefined): FolgeInfo {
   if (g?.art === 'intern' && g.name === 'bk') {
-    return { art: 'bk', klaenge: [...(TROMMEL_KARTEN[g.graph] ?? [])], regler: parameterTabelle({ art: 'bk', graph: g.graph })
+    const schnitt = schnittVon(g.graph);
+    return { art: 'bk', klaenge: schnitt ? schnitt.klaenge : [...(TROMMEL_KARTEN[g.graph] ?? [])], ...(schnitt ? { schnitt: schnitt.schnitt } : {}), regler: parameterTabelle({ art: 'bk', graph: g.graph })
       .map((p) => ({ nr: Number(p.name.slice(1)), name: p.label, vorgabe: p.vorgabe })).filter((r) => Number.isInteger(r.nr)) };
   }
   if (g?.art === 'intern' && g.name === 'rb338') {

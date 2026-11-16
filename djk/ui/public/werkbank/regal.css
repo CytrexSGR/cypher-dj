@@ -5,10 +5,10 @@
 #werkbank .w-vorlagen, #werkbank .w-leer-zeile { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 #werkbank .w-vorlage { font-weight: 700; }
 
-/* Shelf strip (task 10): header row and a row of cards, like the mockup (.shelf, .cards, .card). Only the tab MODULES exists in stage 1. */
+/* Shelf strip (task 10): header row and a row of cards, like the mockup (.shelf, .cards, .card). Tabs MODULES and LOOPS (sampler A1 task 5). */
 #werkbank .w-regal-kopf { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 #werkbank .w-regal .w-lbl { font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
-#werkbank .w-regal .w-tab { padding: 2px 8px; border: 1px solid var(--line); border-radius: 4px; font-weight: 700; font-size: 11px; }
+#werkbank .w-regal .w-tab { background: none; color: inherit; font-family: inherit; cursor: pointer; padding: 2px 8px; border: 1px solid var(--line); border-radius: 4px; font-weight: 700; font-size: 11px; }
 #werkbank .w-regal .w-tab.on { border-color: var(--accent, currentColor); }
 #werkbank .w-regal .w-hinweis { color: var(--dim); margin-left: 10px; font-size: 11px; }
 #werkbank .w-karten { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; max-height: 120px; overflow: auto; }
@@ -23,3 +23,14 @@
 #werkbank .w-karte.neu { color: var(--dim); cursor: pointer; }
 #werkbank .w-karte-name { display: block; margin-top: 4px; width: 100%; box-sizing: border-box; }
 #werkbank .w-karte-name[hidden] { display: none; }
+
+/* Tab LOOPS: a card is a div with a button, the SLICES choice sits at the end of the header. */
+#werkbank .w-regal .w-tab:not(.on) { color: var(--dim); }
+#werkbank .w-regal .w-lbl-klein { margin-left: auto; font-size: 11px; font-weight: 700; letter-spacing: .06em; color: var(--dim); }
+#werkbank .w-regal .w-lbl-klein[hidden], #werkbank .w-regal .w-scheiben[hidden] { display: none; }
+#werkbank .w-karte.schnitt { cursor: default; }
+#werkbank .w-schnitt-knopf { display: block; margin-top: 6px; font-size: 11px; font-weight: 700; }
+#werkbank .w-schnitt-knopf:disabled { cursor: not-allowed; }
+#werkbank .w-karten-leer { color: var(--dim); font-size: 11px; }
+#werkbank .w-karte.schnitt.stumm b, #werkbank .w-karte.schnitt.stumm span { opacity: .55; }
+#werkbank .w-schnitt-zeile { display: flex; gap: 6px; }

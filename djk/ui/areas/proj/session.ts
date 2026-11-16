@@ -405,6 +405,16 @@ export class ProjSitzung {
 
   // --- lesen ----------------------------------------------------------------------------------------------------------
   liste(): Antwort { return { code: 200, j: this.projekte.liste() }; }
+  /** Every stored project that can be read, one at a time (sampler delete: which project still plays a graph). A project file that is broken, invalid or
+   *  gone is skipped; the open project is read from its file like the others (the caller decides what counts). */
+  *gespeicherte(): Generator<{ slug: string; projekt: Projekt }> {
+    for (const e of this.projekte.liste()) {
+      if (e.fehler !== undefined) continue;
+      let projekt: Projekt;
+      try { projekt = this.projekte.lies(e.slug); } catch { continue; }
+      yield { slug: e.slug, projekt };
+    }
+  }
   // ansicht (Spec 6.30, Leistung): 'voll' (die Seite), 'noten_zahl' (Werkzeug proj_lage: je MIDI-Clip noten_zahl statt noten), 'rev' ({slug, rev}
   // für das Werkzeug, bevor es schreibt)
   aktuell(ansicht: 'voll' | 'noten_zahl' | 'rev' = 'voll'): Antwort {
@@ -548,6 +558,17 @@ export class ProjSitzung {
   // the live view again (what the core played before the real-time export)
   ladeLiveNeu(): Promise<void> {
     return this.seriell(async () => { if (this.offen) await this.ladeWiedergabe('andreas'); });
+  }
+  // The same load for callers that do not hold the lock themselves (the sampler routes after they rewrote a graph): like every other loader it respects
+  // sperreLaden. While a freeze, export, recording or resample holds the lock the load would cut it off in the core, so only the wish is kept (merk.laden)
+  // and the release loads. true: loaded now (or no project is open); false: deferred. ladeLiveNeu stays unchecked for the real-time export, which
+  // holds the lock.
+  ladeLiveNeuFrei(): Promise<boolean> {
+    return this.seriell(async () => {
+      if (!this.offen) return true;
+      const r = await this.ladeOderMerke('andreas');
+      return r.aufgeschoben !== true;
+    });
   }
   // zeit in Millisekunden seit 1970 (Festlegung V1, Seite rechnet damit), volle Liste
   verlaufListe(): Antwort {

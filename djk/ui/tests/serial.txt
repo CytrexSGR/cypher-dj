@@ -72,6 +72,7 @@ proj_merge_route.test.mjs
 routes_golden.test.mjs
 collection_listen.test.mjs
 collection.test.mjs
+sampler_render.test.mjs
 safety_net.test.mjs
 server.test.mjs
 spectrum_stream.test.mjs
@@ -111,3 +112,7 @@ graph_master.test.mjs
 graph_source_effect.test.mjs
 hand_channel_offen.test.mjs
 werkbank_route.test.mjs
+sampler_marken.test.mjs
+sampler_route.test.mjs
+sampler_kit_route.test.mjs
+sampler_tone_route.test.mjs

@@ -4,7 +4,7 @@
 //! `cypher_bk_neu` übersetzt und allokiert (Netz-Faden) und setzt danach zurück: das schreibt jeden Puffer einmal, die
 //! Seiten liegen vor dem ersten Callback im Speicher. Alle anderen Aufrufe allokieren nicht. Noten kommen mit
 //! Sample-Versatz relativ zum Anfang des nächsten `cypher_bk_block` in eine Warteschlange fester Größe; ein Versatz hinter
-//! dem Block wandert in den Folgeblock. Am selben Sample: alle_aus vor aus vor an, sonst in Meldereihenfolge. Ein Panic
+//! dem Block wandert in den Folgeblock. Am selben Sample: alle_aus vor aus vor regler_bei vor an, sonst in Meldereihenfolge. Ein Panic
 //! im Block kommt nicht über die Grenze: Stille, Zurücksetzen, Warteschlange leer, `panik` zählt.
 use baukasten_dsp::{uebersetze_mit_wurzel, Programm, REGLER};
 use std::ffi::{c_char, CStr};
@@ -19,25 +19,28 @@ enum Ev {
     AlleAus { t: u32 },
     Aus { t: u32, ton: u8 },
     An { t: u32, ton: u8, vel: f32 },
+    /// value of a latched knob at this sample (sampler A2), `nr` 0-based
+    Regler { t: u32, nr: u8, wert: f32 },
 }
 
 impl Ev {
     fn t(&self) -> u32 {
         match *self {
-            Ev::AlleAus { t } | Ev::Aus { t, .. } | Ev::An { t, .. } => t,
+            Ev::AlleAus { t } | Ev::Aus { t, .. } | Ev::An { t, .. } | Ev::Regler { t, .. } => t,
         }
     }
-    /// am selben Sample: alle_aus (0) vor aus (1) vor an (2)
+    /// am selben Sample: alle_aus (0) vor aus (1) vor regler (2) vor an (3): a knob value runs before the note of its sample
     fn rang(&self) -> u8 {
         match self {
             Ev::AlleAus { .. } => 0,
             Ev::Aus { .. } => 1,
-            Ev::An { .. } => 2,
+            Ev::Regler { .. } => 2,
+            Ev::An { .. } => 3,
         }
     }
     fn verschiebe(&mut self, n: u32) {
         match self {
-            Ev::AlleAus { t } | Ev::Aus { t, .. } | Ev::An { t, .. } => *t -= n,
+            Ev::AlleAus { t } | Ev::Aus { t, .. } | Ev::An { t, .. } | Ev::Regler { t, .. } => *t -= n,
         }
     }
 }
@@ -54,6 +57,8 @@ pub struct CypherBk {
     ist: [f32; REGLER],
     /// Einpol-Koeffizient für 20 ms: 1 - exp(-1 / (0,020 · fs))
     a: f32,
+    /// latched knobs (`Programm::rastende`): no glide, settable at a sample
+    rastet: u64,
 }
 
 /// Reglerzeit wie im Plugin (`modular/src/lib.rs`: „20 ms geglättet“)
@@ -78,6 +83,14 @@ impl CypherBk {
             self.ist[i] = if d.abs() < REGLER_EINRASTEN || schritt == self.ist[i] { self.ziel[i] } else { schritt };
             self.p.setze_regler(i + 1, self.ist[i]);
         }
+    }
+
+    /// Target and applied value of knob `i` (0-based) jump to `w` at once.
+    #[inline]
+    fn setze_sofort(&mut self, i: usize, w: f32) {
+        self.ziel[i] = w;
+        self.ist[i] = w;
+        self.p.setze_regler(i + 1, w);
     }
 
     fn melde(&mut self, e: Ev) -> i32 {
@@ -107,6 +120,7 @@ impl CypherBk {
                     Ev::AlleAus { .. } => self.p.alle_aus(),
                     Ev::Aus { ton, .. } => self.p.note_aus(ton),
                     Ev::An { ton, vel, .. } => self.p.note_an(ton, vel),
+                    Ev::Regler { nr, wert, .. } => self.setze_sofort(nr as usize, wert),
                 }
                 k += 1;
             }
@@ -171,6 +185,7 @@ pub extern "C" fn cypher_bk_neu_wurzel(json: *const c_char, fs: f64, wurzel: *co
     });
     match r {
         Ok(Ok(p)) => Box::into_raw(Box::new(CypherBk {
+            rastet: p.rastende(),
             // the knobs start at the graph's `vorgabe` (target and smoothed state alike: no 20 ms glide from 0.5)
             ziel: p.regler_vorgaben(),
             ist: p.regler_vorgaben(),
@@ -230,7 +245,8 @@ pub extern "C" fn cypher_bk_alle_aus(h: *mut CypherBk, versatz: u32) -> i32 {
 }
 
 /// Reglerziel `nr` (1..64, `baukasten_dsp::REGLER`) auf `wert` (0..1, geklemmt; NaN wird ignoriert). Der Graph folgt in 20 ms einpolig (Zeit aus
-/// `fs`). Rückgabe 0, -1 bei h null oder nr außerhalb. Allokiert nicht; nicht nebenläufig mit block.
+/// `fs`); ein einrastender Regler (`rastet` 1 im Graphen, `cypher_bk_rastende`) springt dagegen sofort, wie `cypher_bk_regler_sofort`.
+/// Rückgabe 0, -1 bei h null oder nr außerhalb. Allokiert nicht; nicht nebenläufig mit block.
 #[no_mangle]
 pub extern "C" fn cypher_bk_regler(h: *mut CypherBk, nr: u32, wert: f32) -> i32 {
     // SAFETY: wie cypher_bk_note_an
@@ -239,9 +255,45 @@ pub extern "C" fn cypher_bk_regler(h: *mut CypherBk, nr: u32, wert: f32) -> i32 
         return -1;
     }
     if !wert.is_nan() {
-        bk.ziel[nr as usize - 1] = wert.clamp(0.0, 1.0);
+        let i = nr as usize - 1;
+        let w = wert.clamp(0.0, 1.0);
+        if (bk.rastet >> i) & 1 == 1 {
+            bk.setze_sofort(i, w);
+        } else {
+            bk.ziel[i] = w;
+        }
     }
     0
+}
+
+/// Sampler A2: sets the latched knob `nr` (1..64) to `wert` (0..1, geklemmt; NaN wird ignoriert) at sample `versatz` of the next
+/// `cypher_bk_block`, with no glide: target and applied value jump together. Same queue, same offset rule as the notes (an offset
+/// behind the block moves into the following block); at the same sample after `alle_aus` and `aus`, before `an`, so a note
+/// sees the value reported for its own sample whatever the order of reporting. Return 0; -1 for h null, nr outside 1..64 or a full
+/// queue (counted in `verloren`); -2 when the knob is not latched (the glide of such a knob stays as it is). Allokiert nicht;
+/// nicht nebenläufig mit block.
+#[no_mangle]
+pub extern "C" fn cypher_bk_regler_bei(h: *mut CypherBk, versatz: u32, nr: u32, wert: f32) -> i32 {
+    // SAFETY: wie cypher_bk_note_an
+    let Some(bk) = (unsafe { h.as_mut() }) else { return -1 };
+    if !(1..=REGLER as u32).contains(&nr) {
+        return -1;
+    }
+    if (bk.rastet >> (nr - 1)) & 1 == 0 {
+        return -2;
+    }
+    if wert.is_nan() {
+        return 0;
+    }
+    bk.melde(Ev::Regler { t: versatz, nr: (nr - 1) as u8, wert: wert.clamp(0.0, 1.0) })
+}
+
+/// Sampler A2: the latched knobs of the graph, bit nr-1 set when the graph's `regler` nodes of knob nr say `rastet` 1; 0 for a graph
+/// without and for h null. Does not allocate.
+#[no_mangle]
+pub extern "C" fn cypher_bk_rastende(h: *const CypherBk) -> u64 {
+    // SAFETY: wie cypher_bk_latenz
+    unsafe { h.as_ref() }.map_or(0, |b| b.rastet)
 }
 
 /// The graph's start position (`vorgabe`, 0..1) of knob `nr` (1..`baukasten_dsp::REGLER`); 0.5 for a knob the graph does not
@@ -386,4 +438,20 @@ pub extern "C" fn cypher_bk_verloren(h: *const CypherBk) -> u32 {
 pub extern "C" fn cypher_bk_panik(h: *const CypherBk) -> u32 {
     // SAFETY: wie cypher_bk_latenz
     unsafe { h.as_ref() }.map_or(0, |b| b.panik)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The ranks at one sample: alle_aus 0, aus 1, regler 2, an 3 (a knob value runs before the note of its sample).
+    #[test]
+    fn ranks_at_one_sample() {
+        let r = [Ev::AlleAus { t: 5 }, Ev::Aus { t: 5, ton: 1 }, Ev::Regler { t: 5, nr: 2, wert: 0.5 }, Ev::An { t: 5, ton: 1, vel: 1.0 }];
+        assert_eq!(r.map(|e| e.rang()), [0, 1, 2, 3]);
+        assert!(r.iter().all(|e| e.t() == 5));
+        let mut e = r[2];
+        e.verschiebe(3);
+        assert_eq!(e.t(), 2);
+    }
 }

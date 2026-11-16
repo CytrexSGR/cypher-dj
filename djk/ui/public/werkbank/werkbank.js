@@ -16,6 +16,7 @@ import { bindeRegal } from './regal.js';
 import { bindeSpuren } from './tracks.js';
 import { bindeRaster } from './grid_view.js';
 import { bindeKlang } from './sound.js';
+import { bindeSchnittKit } from './schnitt_kit.js';
 
 export const WERKBANK_TEXT = {
   keinModul: 'No module is open.',
@@ -29,7 +30,7 @@ export const WERKBANK_TEXT = {
 export const istModul = (p) => p?.werkbank?.schema === 1;
 
 // The order is the contract (D15): top bar, shelf, tracks, notes, sound.
-const BINDER = [bindeKopf, bindeRegal, bindeSpuren, bindeRaster, bindeKlang];
+const BINDER = [bindeKopf, bindeRegal, bindeSpuren, bindeRaster, bindeKlang, bindeSchnittKit];
 
 const GERUEST = `
 <div class="w-kopf" data-w="kopf" role="toolbar" aria-label="Workbench"></div>

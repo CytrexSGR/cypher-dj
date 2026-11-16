@@ -113,6 +113,18 @@ class ArrSenke {
     (void)param;
     (void)delta;
   }
+  // sampler A2 (E8.3): the value of a LATCHED device knob (ArrSpur::bk_rastet) at the project beat of the note-on that is sent with it, evaluated by the core from the device lane
+  // at that beat. `param` is 0..63 (k1..k64), `ziel` the target sample of the note-on (same sample, same offset rule), `relativ` true: `wert` is a summand (-1..1) the sink adds
+  // to its base value of the knob (a relative lane without an absolute one); false: `wert` is the final value (0..1, absolute lane, clamped sum with a relative one). Called by the
+  // Arrangement on the caller thread right BEFORE note() of the same note-on; never for a live note, never for a track without a latched knob. Default: ignored (a sink that
+  // does not latch knobs keeps the block value of auto_parameter).
+  virtual void note_regler(int spur, int64_t ziel, int param, float wert, bool relativ) noexcept {
+    (void)spur;
+    (void)ziel;
+    (void)param;
+    (void)wert;
+    (void)relativ;
+  }
   // 1.9 U8 T9 (E12): a rack macro drives a parameter of member `glied` (0-based index) of the rack track `spur`. `param` is the index space of ArrGliedZiel (0..3 RB-338, 8..15 knobs,
   // 16 gain in dB), `wert` the real value (0..1, or dB). Called by the Arrangement on the caller thread once per block and target, before phase Q and before any block() of the
   // block, whether the transport runs or not; never from a lane unit. A sink that is no rack sink ignores it. Default: ignored.

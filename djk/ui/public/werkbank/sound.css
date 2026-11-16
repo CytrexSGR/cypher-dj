@@ -29,3 +29,50 @@
   border: 1px solid var(--line); border-radius: 6px; background: var(--panel);
 }
 #werkbank .w-plus-eintrag { text-align: left; }
+
+/* sampler A1 task 8: the cut strip (waveform, numbered slices, selection) */
+#werkbank .w-schnitt { display: flex; flex-direction: column; gap: 5px; }
+#werkbank .w-schnitt[hidden] { display: none; }
+#werkbank .w-schnitt-kopf { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+#werkbank .w-schnitt-titel { font-size: 11px; font-weight: 700; color: var(--dim); }
+#werkbank .w-schnitt-knoepfe { display: flex; gap: 6px; align-items: center; }
+#werkbank .w-schnitt-text { margin: 0; color: var(--dim); font-size: 11px; }
+#werkbank .w-schnitt-text[hidden] { display: none; }
+#werkbank .w-schnitt-feld { position: relative; height: 76px; border: 1px solid var(--line); border-radius: 6px; background: #0b0d11; overflow: hidden; user-select: none; }
+#werkbank .w-schnitt-welle { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+#werkbank .w-scheibe {
+  position: absolute; top: 0; bottom: 0; padding: 0; border: 0; border-left: 1px solid rgba(255,255,255,.28); border-radius: 0;
+  background: transparent; color: var(--text); cursor: pointer; text-align: left;
+}
+#werkbank .w-scheibe:hover { background: rgba(255,255,255,.08); }
+#werkbank .w-scheibe.gewaehlt { background: color-mix(in srgb, var(--d3) 28%, transparent); box-shadow: inset 0 0 0 1px var(--d3); }
+#werkbank .w-scheibe-nr { position: absolute; top: 2px; left: 3px; font: 700 10px ui-monospace, monospace; color: rgba(255,255,255,.7); pointer-events: none; }
+#werkbank .w-scheibe.gewaehlt .w-scheibe-nr { color: #fff; }
+/* quality bar of a measured marker (A2 fills `staerke`; none in A1) */
+#werkbank .w-guete { position: absolute; left: 0; bottom: 0; width: 3px; background: var(--d3); pointer-events: none; }
+
+/* Sampler C: tone */
+#werkbank .w-ton { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 11px; }
+#werkbank .w-ton[hidden] { display: none; }
+#werkbank .w-ton-name { font-weight: 700; color: var(--dim); }
+#werkbank .w-ton-grund { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 2px 4px; font: inherit; }
+#werkbank .w-ton-erkannt { color: var(--dim); }
+
+/* sampler A2 task 4: editing the cut. Controls in the head; a handle per interior bound (amber = moved, dashed = no hit within reach); ticks at the stored hits */
+#werkbank .w-schnitt-steuer { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+#werkbank .w-schnitt-steuer[hidden] { display: none; }
+#werkbank .w-schnitt-wahl { font-size: 11px; background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 2px 4px; }
+#werkbank .w-schnitt-wahl:disabled, #werkbank .w-schnitt-empf:disabled { opacity: .4; }
+#werkbank .w-schnitt-empf { width: 80px; accent-color: var(--d3); }
+#werkbank .w-schnitt-empfwert { font: 10px ui-monospace, monospace; color: var(--dim); min-width: 28px; }
+#werkbank .w-schnitt-text .w-effekt-knopf { margin-left: 6px; }
+#werkbank .w-treffer { position: absolute; bottom: 0; width: 1px; height: 9px; background: var(--d3); opacity: .8; pointer-events: none; }
+#werkbank .w-marke {
+  position: absolute; top: 0; bottom: 0; width: 11px; margin-left: -5px; padding: 0; border: 0; border-radius: 0;
+  background: transparent; cursor: ew-resize; touch-action: none;
+}
+#werkbank .w-marke::after { content: ''; position: absolute; top: 0; bottom: 0; left: 5px; width: 2px; background: rgba(255,255,255,.55); }
+#werkbank .w-marke:hover::after { background: #fff; }
+#werkbank .w-marke.ohne-treffer::after { background: repeating-linear-gradient(to bottom, rgba(255,255,255,.4) 0 4px, transparent 4px 7px); }
+#werkbank .w-marke.bewegt::after { background: var(--warn); }
+#werkbank .w-marke.bewegt.ohne-treffer::after { background: repeating-linear-gradient(to bottom, var(--warn) 0 4px, transparent 4px 7px); }

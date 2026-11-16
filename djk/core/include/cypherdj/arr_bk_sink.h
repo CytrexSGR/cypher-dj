@@ -54,6 +54,10 @@ class ArrBkSenke final : public ArrSenke, public ArrBkLeser {
   // 1.12 slice 7: a knob with a RELATIVE lane (a clip envelope) and no absolute one: `delta` is added to the knob of the snapshot (clamped 0..1) for the next block, under the same rules
   // as auto_parameter (a value reported in a block wins; no report: the snapshot knob alone).
   void auto_parameter_summand(int spur, int param, float delta) noexcept override;
+  // sampler A2: the value of a latched knob (param 0..63) for the note-on at sample `ziel`, handed by the core right before that note. Kept in a queue of its own, separate from the notes: the
+  // notes go to the instance first, the knob values after them, so a block with more events than the FFI takes loses knob values and never a note (a lost value counts in verloren()).
+  // `relativ`: wert is a summand on the knob of the snapshot (clamped 0..1), as in the block loop; otherwise the final value. The instance sets it at the offset of the note, before the note.
+  void note_regler(int spur, int64_t ziel, int param, float wert, bool relativ) noexcept override;
 
   // ArrBkLeser: does the callback still use this instance (play it or fade it)? Called from the loader thread.
   bool nutzt(const CypherBk* h) const noexcept override;   // true also when the second reader (the insert stages, arr-bk slice 3) uses it
@@ -74,9 +78,17 @@ class ArrBkSenke final : public ArrSenke, public ArrBkLeser {
     uint8_t art;   // 0 note on, 1 note off, 2 all off
     uint8_t ton, vel;
   };
+  struct Rev {   // a per-note knob value (note_regler)
+    int64_t ziel;
+    float wert;
+    uint8_t param;   // 0..63
+    bool relativ;
+  };
   struct Spur {
     Ev ev[ARR_BK_WARTE];
     int n = 0;
+    Rev rev[ARR_BK_WARTE];   // per-note knob values until the next block, applied after all notes of the block
+    int n_rev = 0;
     int64_t start = -1;                 // start sample of a pending transport start, -1: none
     CypherBk* h_last = nullptr;         // the instance this slot plays (owned by the cache of the loader)
     uint64_t gen_last = 0;

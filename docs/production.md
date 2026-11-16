@@ -116,6 +116,16 @@ your own, and collections of samples, presets and devices. Presets are described
 and the agent can search them by those words. Drag a preset onto a track, a stage or a strip row, or save the current
 state of a target as a new preset.
 
+## Slices
+
+The slice devices of the STUDIO view are Cypher Modular instruments, so a PRODUCTION instrument track can play one like any
+other Cypher Modular graph, and the same core renders it. A loop is cut in the workbench (SLICE TO TRACK on the LOOPS tab of
+the shelf): by grid, or at the hits found in the audio. The track starts with one note per slice in the order of the loop.
+Reorder, repeat, shorten and reverse the hits in the SLICE grid, and pitch single steps in its PITCH lane. Moving a marker
+changes what a slice sounds like and leaves the notes alone; adding or removing a marker renumbers the notes of the open
+module in one undo step. Selected slices can become a drum kit for a drum track (a Strudel text can play it) or a tone for
+a note track. The generated track starts at 0 dB; its pan law leaves it about 3 dB below the loop.
+
 ## Arrangement, piano roll, export
 
 ![PRODUCTION view: an arrangement with MIDI clips, a resampled audio track, DRUMS and MUSIC groups and a return; the bass clip open in the piano roll](screens/production-view.png)

@@ -50,6 +50,8 @@ import { aufnahmeBereich } from './areas/proj/recording.ts';   // 1.8 Slice 1
 import { stemsBereich, type StemsOptionen } from './areas/proj/stems.ts';   // 1.13 Slice 6
 import { speichereModul, modulBasis } from './project/module_storage.ts';   // plan live-module task 3
 import { bibliothekBereich } from './areas/live/library.ts';   // plan live-module task 10
+import { samplerBereich } from './areas/sampler/area.ts';   // sampler A1 task 4
+import { samplerKitBereich } from './areas/sampler/kit_routes.ts';   // sampler B task 2
 import { liveBereich, type DeckLoopAusschnitt } from './areas/live/export.ts';
 import { liveSlots } from './project/live.ts';
 import { tonartQuelle } from './areas/live/key.ts';
@@ -65,7 +67,7 @@ import { HAND_PRUEFMODUS_TEXT } from './public/messages.js';
 import { leseLoops, LOOP_NAME, leseLoopVersatz, schreibeLoopVersatz, schreibeLoopAusFassung } from './loops.ts';
 import { pruefeAutomation, planeSpur, spurLaenge, naechsterDurchgang, leseLoopAutomation, schreibeLoopAutomation, type AutoSpur } from './loop_automation.ts';
 import { beatsVon, importiereLoop, loopNameVon, findeImport, raeumeImportReste, LoopImportFehler, type ImportOptionen } from './loop_import.ts';
-import { WelleCache, WelleFehler, loopQuelle, fassungQuelle, dateiQuelle } from './wave_cache.ts';
+import { WelleCache, WelleFehler, loopQuelle, schnittQuelle, fassungQuelle, dateiQuelle } from './wave_cache.ts';
 import { OEFFENTLICH, REPO, REPO_PFADE, instanz, ports, shmOrdner, rasterOrdnerVorgabe, hotcueOrdnerVorgabe, huellenVorgabe, musterOrdnerVorgabe,
   wirtOrdnerVorgabe, baukastenOrdnerVorgabe, kitsOrdnerVorgabe, zusatzKit, strudelPakete, loopOrdnerVorgabe, welleCacheVorgabe, arbeitsbestandVorgabe,
   analyseVorgabe } from './paths.ts';
@@ -92,7 +94,7 @@ import { PegelPuffer } from './level_buffer.ts';
 import { leseMusterStand, setzeAutonom, leseLebt } from '../generator/src/pattern_state.mjs';
 import { ALLE_STROEME, istBkStrom, stromVonKanal } from '../contract/streams.ts';   // S18: stream <-> channel table
 import { geraetePanel, RB338_PARAM_NAMEN } from './devices_parameter.ts';
-import { listeGraphen, findeGraph, graphHash, ladePanel, reglerVonGraph, vorgabenVon, graphenNachNeustart, GRAPH_NAME, GRAPH_KANAELE, INSTRUMENT_KANAELE, EFFEKT_KANAELE } from './graphs.ts';   // Baukasten S12
+import { listeGraphen, graphenOrdner, findeGraph, graphHash, ladePanel, reglerVonGraph, vorgabenVon, graphenNachNeustart, GRAPH_NAME, GRAPH_KANAELE, INSTRUMENT_KANAELE, EFFEKT_KANAELE } from './graphs.ts';   // Baukasten S12
 import { bkDefVonId } from './project/modular.ts';   // t_e998388c: project channels are left to the project restore
 
 // The main checkout behind a git worktree (its `.git` is a file pointing at .git/worktrees/<n>, whose `commondir` leads
@@ -184,6 +186,7 @@ export interface ServerOptionen {
   korrekturen?: string;  // Slice 3b: Bestand des Decks für die Eins-Korrekturen; Vorgabe nur im Betrieb: bestand; eine Prüfinstanz (a..i) schreibt nur ausdrücklich
   // plan live-module task 3: the module store; Vorgabe $CYPHERDJ_MODULE / ~/.config/cypherdj/module, a test instance (a..i) uses /dev/shm/cypherdj-<i>/module
   modulOrdner?: string;
+  samplerOrdner?: string;   // sampler A1: the cut store (Vorgabe $CYPHERDJ_SAMPLER / ~/.config/cypherdj/sampler); tests give their own
   analyse?: string;      // Slice 3a: Analyse-Ablage (Karten), Vorgabe nur im Betrieb: $CYPHERDJ_ANALYSE, sonst ~/werkstatt/cypher-dj-analyse
   einleserModul?: string;  // Mediathek T2: Python-Modul für POST /mediathek/vorbereiten (Vorgabe werkstatt.einzeln); Python selbst: `python`
   vorhoeren?: Vorhoeren;   // S7: Vorhören als Kern-Eingang (Tests: Attrappe statt Vorhörer-Prozess)
@@ -629,6 +632,10 @@ export class Oberflaeche {
           laeuft: () => { const st = this.proj.sitzung.lage.arr?.status; return st === 1 || st === 2; } } } }));
     // plan live-module task 10: GET /module, POST /modul/einsetzen, POST /modul/speichern (the same store as above)
     this.router.melde(bibliothekBereich(this.bereichKontext(), this.proj.zugang, { basis: () => modulBasisVon(opt.modulOrdner, inst), kanalOffen: (k) => this.kanalGeoeffnet(k) }));
+    // sampler A1 task 4: /sampler/*; loops and module folder of this instance, read at every request (the getters follow the options)
+    this.router.melde(samplerBereich(this.bereichKontext(), { sitzung: this.proj.sitzung, zugang: this.proj.zugang,
+      get ordner() { return opt.samplerOrdner; }, get loops() { return opt.loops ?? loopOrdnerVorgabe(inst); }, get module() { return modulBasisVon(opt.modulOrdner, inst); } }));
+    this.router.melde(samplerKitBereich(this.bereichKontext(), { get ordner() { return opt.samplerOrdner; } }));   // sampler B task 2: /sampler/kit/vorschlag, /sampler/kit
     this.router.melde(pluginsBereich(this.bereichKontext(), pluginIndex, { insertParameter: (id) => this.proj.sitzung.insertParameter(id),
       insertFenster: (id, d, q) => this.proj.sitzung.insertFenster(id, d, q),
       geraetParameter: (id) => this.proj.sitzung.geraetParameter(id), geraetParam: (id, d, q) => this.proj.sitzung.geraetParam(id, d, q), geraetIst: (id, n) => this.proj.sitzung.geraetIst(id, n),
@@ -3323,7 +3330,9 @@ export class Oberflaeche {
   private async welleAus(url: URL, a: http.ServerResponse): Promise<void> {
     try {
       const loop = url.searchParams.get('loop'), material = url.searchParams.get('material'), sha = url.searchParams.get('sha');
+      const schnitt = url.searchParams.get('schnitt');
       const q = loop !== null ? loopQuelle(this.loopOrdner(), loop)
+        : schnitt !== null ? schnittQuelle(graphenOrdner(), schnitt)   // sampler A1: the cut audio
         // Browser (S5): der Pfad kommt aus dem Katalog, nie aus der Anfrage. Ableton-geschützte Dateien sind für ffmpeg nicht lesbar (422).
         : sha !== null ? (() => {
           // S6 Task 14: Stems und Takes liegen im Projektordner, nicht im Katalog; deren Pfad kommt aus dem offenen Projekt

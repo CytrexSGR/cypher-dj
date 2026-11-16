@@ -70,6 +70,7 @@ export const ADRESSEN = {
   '/k/arr/ins_mess': { typen: ',hsi', abschnitt: '4.11', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'h'], bereiche: { h: [1, 4] } },
   '/k/arr/auto': { typen: ',hsisi', abschnitt: '4.11', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'spur', 'ziel', 'an'], bereiche: { spur: [0, 32], an: [0, 1] } },
   '/k/arr/arm': { typen: ',hsiii', abschnitt: '4.11', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'spur', 'an', 'modus'], bereiche: { spur: [0, 32], an: [0, 1], modus: [0, 2] } },
+  '/k/arr/note': { typen: ',hsiii', abschnitt: '4.11', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'spur', 'ton', 'vel'], bereiche: { spur: [1, 32], ton: [0, 127], vel: [0, 127] } },
   '/k/rec/spur': { typen: ',hsiiiii', abschnitt: '4.12', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'spur', 'scharf', 'eingang', 'modus', 'monitor'], bereiche: { spur: [1, 32], scharf: [0, 1], eingang: [0, 30], modus: [0, 3], monitor: [0, 2] } },
   '/k/rec/start': { typen: ',hsiiii', abschnitt: '4.12', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle', 'kennung', 'nachlauf_samples', 'frist_samples', 'vorzaehler_takte'], bereiche: { kennung: [0, null], nachlauf_samples: [0, 480000], frist_samples: [0, 1440000], vorzaehler_takte: [0, 4] } },
   '/k/rec/stopp': { typen: ',hs', abschnitt: '4.12', richtung: 'an_kern', nurPruefmodus: false, felder: ['id', 'quelle'], bereiche: {} },
@@ -198,6 +199,7 @@ export interface Werte {
   '/k/arr/ins_mess': [id: bigint, quelle: string, h: number];
   '/k/arr/auto': [id: bigint, quelle: string, spur: number, ziel: string, an: number];
   '/k/arr/arm': [id: bigint, quelle: string, spur: number, an: number, modus: number];
+  '/k/arr/note': [id: bigint, quelle: string, spur: number, ton: number, vel: number];
   '/k/rec/spur': [id: bigint, quelle: string, spur: number, scharf: number, eingang: number, modus: number, monitor: number];
   '/k/rec/start': [id: bigint, quelle: string, kennung: number, nachlauf_samples: number, frist_samples: number, vorzaehler_takte: number];
   '/k/rec/stopp': [id: bigint, quelle: string];

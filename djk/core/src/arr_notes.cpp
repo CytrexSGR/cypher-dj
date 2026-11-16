@@ -90,6 +90,14 @@ void Arrangement::noten_fenster(const Karte& k, int spur, ArrSenke* se, int64_t 
         continue;
       }
       offen_[n_offen_++] = Offen{n.id, spur, n.ton, an, aus, n.beat + n.laenge, se};
+      // sampler A2 (E8.3): a latched device knob takes the lane value of THIS note's beat, not the value of the block's last sample: the sink puts it at the note's sample, before the note.
+      // Only tracks with a mask pay for it (ctz over the set bits, one stateless lane read each); a track without a latched knob takes no step here.
+      for (uint64_t m = sp.bk_rastet; m != 0 && sp.n_auto > 0; m &= m - 1) {
+        const int param = __builtin_ctzll(m);
+        float wert = 0.0f;
+        bool relativ = false;
+        if (arr_geraet_lane_wert(sp, param, n.beat, &wert, &relativ)) se->note_regler(spur, an, param, wert, relativ);
+      }
       se->note(spur, an, n.ton, n.vel, true);
     }
     if (!klammer || p_b <= bis_) break;

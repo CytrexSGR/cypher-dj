@@ -37,6 +37,14 @@ test('rasterArt: kit and drum graph are drum, a synth is note', () => {
   assert.equal(rasterArt(bk(2, 'bass-banddrive'), { klaenge: [] }), 'note');
 });
 
+test('rasterArt: a cut is slice before any other rule', () => {
+  assert.equal(rasterArt(bk(1, 'smp-x'), { klaenge: [{ ton: 0, name: '1' }], schnitt: { id: 'x', scheiben: 1, laengen_beats: [4] } }), 'slice');
+  assert.equal(rasterArt(bk(1, 'drums-909'), { klaenge: [{ ton: 36, name: 'Kick' }], schnitt: { id: 'x', scheiben: 1, laengen_beats: [4] } }), 'slice');
+  assert.equal(rasterArt(bk(1, 'smp-x'), { klaenge: [{ ton: 0, name: '1' }] }), 'drum', 'without the cut it stays a drum grid');
+  const z = spurZeilen(projektMit([bk(1, 'smp-x')]), () => ({ art: 'bk', regler: [], klaenge: [{ ton: 0, name: '1' }], schnitt: { id: 'x', scheiben: 1, laengen_beats: [4] } }));
+  assert.equal(z.zeilen[0].art, 'slice');
+});
+
 test('geraetSchluessel names the device, not the track', () => {
   assert.equal(geraetSchluessel(bk(1, 'drums-909')), 'bk:drums-909');
   assert.equal(geraetSchluessel(kit(1)), 'kit:k1');
@@ -67,6 +75,15 @@ test('the info store asks once per device and again after INFO_WARTEN_MS when it
   speicher.vergiss();
   speicher.info(a);
   assert.equal(gefragt.length, 3, 'vergiss() drops the cache');
+});
+
+test('the info store keeps the cut of a sampler device', async () => {
+  const schnitt = { id: 'x', scheiben: 2, laengen_beats: [2, 2] };
+  const speicher = neuerInfoSpeicher(async () => ({ status: 200, j: { art: 'bk', regler: [], klaenge: [{ ton: 0, name: '1' }, { ton: 1, name: '2' }], schnitt } }), () => {});
+  const a = bk(1, 'smp-x');
+  speicher.info(a);
+  await new Promise((ok) => setImmediate(ok));
+  assert.deepEqual(speicher.info(a).schnitt, schnitt);
 });
 
 // ---- the region ----

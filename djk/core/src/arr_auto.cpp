@@ -72,6 +72,31 @@ inline float stapel_klemme_geraet(float v) {
   return std::clamp(v, 0.0f, 1.0f);
 #endif
 }
+
+// The value stack of one device parameter at project beat p: the absolute lane (`ab`, cursor `al`), the relative lane (`rel`, cursor `rl`), either may be nullptr. Cursors are searched anew
+// (once per call: a start in the middle, a loop seam or a swap needs no special case). false: no lane at all. *nur_summand true: a relative lane alone, *wert is its summand; otherwise *wert
+// is the (clamped, when both lanes are there) value. Used by auto_geraet (once per block, on the cursors of the Arrangement) and arr_geraet_lane_wert (per note, on fresh cursors).
+inline bool geraet_stapel(const ArrAutoLane* ab, AutoLane* al, const ArrAutoLane* rel, AutoLane* rl, double p, float* wert, bool* nur_summand) noexcept {
+  if (!ab && !rel) return false;
+  float v = 0.0f;
+  if (ab) {
+    al->neu_suchen(p);
+    v = al->wert_bei(p);
+  }
+  *nur_summand = false;
+  if (rel) {
+    rl->neu_suchen(p);
+    const float summand = rl->wert_bei(p);
+    if (!ab) {
+      *wert = summand;
+      *nur_summand = true;
+      return true;
+    }
+    v = stapel_klemme_geraet(v + summand);
+  }
+  *wert = v;
+  return true;
+}
 }  // namespace
 
 void Arrangement::auto_segment(const Karte& k, int64_t a, int64_t b, int64_t s0) {
@@ -152,27 +177,26 @@ void Arrangement::auto_geraet() {
     ArrSenke* se = senke_fuer(snap_, i);
     if (!se) continue;
     for (int g = 0; g < ARR_GERAET_LANE_PARAMS; ++g) {
-      const bool absolut = geraet_lane(sp, g) != nullptr, relativ = geraet_rel(sp, g) != nullptr;
-      if (!absolut && !relativ) continue;
       float v = 0.0f;
-      if (absolut) {
-        AutoLane& al = auto_g_[i][g];
-        al.neu_suchen(p);   // once per block: a start in the middle, a loop seam or a swap needs no special case
-        v = al.wert_bei(p);
-      }
-      if (relativ) {
-        AutoLane& rl = auto_gr_[i][g];
-        rl.neu_suchen(p);
-        const float summand = rl.wert_bei(p);
-        if (!absolut) {   // the sink owns the base value of the parameter: it adds the summand itself
-          se->auto_parameter_summand(i, g, summand);
-          continue;
-        }
-        v = stapel_klemme_geraet(v + summand);
+      bool nur_summand = false;
+      if (!geraet_stapel(geraet_lane(sp, g), &auto_g_[i][g], geraet_rel(sp, g), &auto_gr_[i][g], p, &v, &nur_summand)) continue;
+      if (nur_summand) {   // the sink owns the base value of the parameter: it adds the summand itself
+        se->auto_parameter_summand(i, g, v);
+        continue;
       }
       se->auto_parameter(i, g, v);
     }
   }
+}
+
+// sampler A2: one device lane value at an arbitrary project beat, on fresh cursors (the Arrangement's own cursors keep their place).
+bool arr_geraet_lane_wert(const ArrSpur& sp, int param, double beat, float* wert, bool* relativ) noexcept {
+  const ArrAutoLane* a = geraet_lane(sp, param);
+  const ArrAutoLane* r = geraet_rel(sp, param);
+  if (!a && !r) return false;
+  AutoLane al = a ? AutoLane(a->p, a->n) : AutoLane();
+  AutoLane rl = r ? AutoLane(r->p, r->n) : AutoLane();
+  return geraet_stapel(a, &al, r, &rl, beat, wert, relativ);
 }
 
 // 1.12 slice 6: the insert-parameter and rack-macro lanes. Per block ONE value per lane, the lane at the project beat of the last running sample (like auto_geraet), handed to ArrInserts, which

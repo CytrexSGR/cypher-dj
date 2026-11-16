@@ -97,4 +97,9 @@ class AutoLane {
   int i_ = 0;
 };
 
+// sampler A2 (E8.3): the value of the `geraet` lane of device parameter `param` (0..63) of a track at the project beat `beat`, on a fresh cursor (stateless: it never touches the
+// cursors of the Arrangement). false: the track has no lane on that parameter. Absolute lane, with a relative one: the clamped sum 0..1, `*relativ` false. A relative lane alone: its
+// summand (-1..1), `*relativ` true (the sink owns the base value). No allocation, no lock.
+bool arr_geraet_lane_wert(const ArrSpur& sp, int param, double beat, float* wert, bool* relativ) noexcept;
+
 }  // namespace cdj

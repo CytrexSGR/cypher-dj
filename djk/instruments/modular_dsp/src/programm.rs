@@ -16,7 +16,7 @@ use crate::limiter::Limiter;
 use crate::osz::{Osz, Rauschen, Sinus};
 use crate::phaser::Phaser;
 use crate::vocoder::Vocoder;
-use crate::sampler::{Eingabe, Einstellung, Sampler};
+use crate::sampler::{Eingabe, Einstellung, NotenWahl, Sampler};
 use crate::roehre::{Roehre, RoehrenSatz};
 use crate::svf::Svf;
 use crate::allpass::Allpass;
@@ -121,7 +121,7 @@ pub enum Schritt {
     /// C7), result in voice 0 on both sides. `zisch` and `mix` are read from voice 0; a non-finite value reads the node's own
     /// value (`voreinstellung`, same order).
     /// per voice; `d` is the node's sample data, shared read-only by all voices (S10, D5)
-    Sampler { hz: Quelle, trig: Quelle, gate: Quelle, scheibe: Quelle, rueck: Quelle, wl: usize, wr: usize, e: Einstellung, d: Box<[f32]>, s: [Sampler; MAX_STIMMEN] },
+    Sampler { hz: Quelle, trig: Quelle, gate: Quelle, scheibe: Quelle, rueck: Quelle, tempo: Quelle, halb: Quelle, ausklang: Quelle, wl: usize, wr: usize, e: Einstellung, g: Option<Box<[usize]>>, wahl: bool, d: Box<[f32]>, s: [Sampler; MAX_STIMMEN] },
     Vocoder { x: Quelle, l: Quelle, r: Quelle, zisch: Quelle, mix: Quelle, wl: usize, wr: usize, voreinstellung: [f32; 2], v: Vocoder },
     /// Sum point (S21): convolution on Σ(x + l) left and Σ(x + r) right, result in voice 0; mix from voice 0
     Faltung { x: Quelle, l: Quelle, r: Quelle, mix: Quelle, wl: usize, wr: usize, f: Box<Faltung> },
@@ -207,6 +207,8 @@ pub struct Programm {
     regler: [f32; REGLER],
     /// Startstellung je Regler aus dem Graphen (`vorgabe` des ersten `regler`-Knotens der Nummer; 0.5 sonst)
     regler_vorgabe: [f32; REGLER],
+    /// Bit nr-1: the `regler` nodes of knob nr say `rastet` 1 (latched knob)
+    regler_rastet: u64,
     /// (nr 1..8, Name) aus `regler_namen`, nur zur Anzeige
     pub regler_namen: Vec<(usize, String)>,
     /// false: every branch of a split `wahl` runs in every sample (the engine as it was before zweige.rs); reference for tests
@@ -468,7 +470,7 @@ fn hz(note: u8) -> f32 { 440.0 * 2f32.powf((note as f32 - 69.0) / 12.0) }
 impl Programm {
     /// Nur für `uebersetzen`: Schritte und Slot-Zahl kommen fertig geprüft.
     pub(crate) fn neu(name: String, stimmen: usize, sr: f32, schritte: Vec<Schritt>, n_slots: usize, verzoegert: Vec<usize>,
-                      regler_namen: Vec<(usize, String)>, latenz: usize, regler_vorgabe: [f32; REGLER]) -> Self {
+                      regler_namen: Vec<(usize, String)>, latenz: usize, regler_vorgabe: [f32; REGLER], regler_rastet: u64) -> Self {
         let schritte = crate::zweige::zerlege(schritte);
         let eingang = schritte.iter().any(|s| matches!(s, Schritt::Eingang { .. }));
         Self {
@@ -498,6 +500,7 @@ impl Programm {
             bps: 128.0 / 60.0 / sr as f64,
             regler: regler_vorgabe,
             regler_vorgabe,
+            regler_rastet,
             regler_namen,
             zweige: true,
             uebersprungen: 0,
@@ -538,6 +541,10 @@ impl Programm {
     /// Die Startstellung jedes Reglers (Index 0 = Regler 1): `vorgabe` des ersten `regler`-Knotens der Nummer im Graphen, 0.5 für
     /// Regler ohne Knoten oder ohne `vorgabe`. Mit diesen Werten beginnt die Engine; wer Regler anlegt (FFI, Plugin), fragt hier.
     pub fn regler_vorgaben(&self) -> [f32; REGLER] { self.regler_vorgabe }
+
+    /// The latched knobs (sampler A2): bit nr-1 is set when the graph's `regler` nodes of knob nr say `rastet` 1, 0 for a graph
+    /// without. The host applies such a knob without glide and may set it at a sample (`cypher_bk_regler_bei`).
+    pub fn rastende(&self) -> u64 { self.regler_rastet }
 
     /// Reglerweg `wert` (0..1) für Regler `nr` (1..=REGLER); andere Nummern werden ignoriert. Allokiert nicht.
     pub fn setze_regler(&mut self, nr: usize, wert: f32) {
@@ -1052,12 +1059,15 @@ impl Programm {
                     let (ra, ti, f, mi) = (m(rate, 0), m(tiefe, 1), m(fb, 2), m(mix, 3));
                     in_stimme0(slots, *wl, *wr, p.prozess(s.0, s.1, ra, ti, f, mi));
                 }
-                Schritt::Sampler { hz, trig, gate, scheibe, rueck, wl, wr, e, d, s } => {
+                Schritt::Sampler { hz, trig, gate, scheibe, rueck, tempo, halb, ausklang, wl, wr, e, g: tabelle, wahl, d, s } => {
                     let (h, t, g) = (spur(*hz, slots, vorher), spur(*trig, slots, vorher), spur(*gate, slots, vorher));
                     let (sc, ru) = (spur(*scheibe, slots, vorher), spur(*rueck, slots, vorher));
+                    let (te, ha, au) = (spur(*tempo, slots, vorher), spur(*halb, slots, vorher), spur(*ausklang, slots, vorher));
                     let (mut ol, mut or) = ([0.0; MAX_STIMMEN], [0.0; MAX_STIMMEN]);
                     for i in 0..n {
-                        (ol[i], or[i]) = s[i].prozess(d, e, sr, Eingabe { hz: h[i], trig: t[i], gate: g[i], scheibe: sc[i], rueck: ru[i] });
+                        let x = Eingabe { hz: h[i], trig: t[i], gate: g[i], scheibe: sc[i], rueck: ru[i] };
+                        let w = if *wahl { Some(NotenWahl { tempo: te[i], halb: ha[i], ausklang_ms: au[i] }) } else { None };
+                        (ol[i], or[i]) = s[i].prozess_mit(d, e, tabelle.as_deref(), w, sr, x);
                     }
                     slots[*wl] = ol;
                     slots[*wr] = or;

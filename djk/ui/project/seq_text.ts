@@ -32,7 +32,12 @@ import { tonName } from '../public/production/pianoroll.js';
 
 export type Urteil = { grund: string; text: string };
 export type Befehl = Record<string, unknown>;
-export interface FolgeInfo { art: string; regler: { nr: number | string; name: string; vorgabe: number }[]; klaenge: { ton: number; name: string }[] }
+export interface FolgeInfo {
+  art: string; regler: { nr: number | string; name: string; vorgabe: number }[]; klaenge: { ton: number; name: string }[];
+  /** Set for the generated sampler device `smp-<id>` (D11): the cut it plays; the workbench draws it as a SLICE grid.
+   *  `laengen_beats[i]` = length of slice i. */
+  schnitt?: { id: string; scheiben: number; laengen_beats: number[] };
+}
 
 const GITTER: Record<string, number> = { '1/4': 1, '1/8': 0.5, '1/16': 0.25, '1/32': 0.125 };
 const GITTER_TEXT = new Map<number, string>(Object.entries(GITTER).map(([t, v]) => [v, t]));

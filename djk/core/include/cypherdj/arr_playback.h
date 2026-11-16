@@ -196,6 +196,7 @@ struct ArrSpur {
   CypherBk* bk = nullptr;
   uint64_t bk_gen = 0;
   int bk_latenz = 0;   // latency of the instrument graph in samples (loader, cypher_bk_latenz); the delay compensation counts it at the head of the strip's chain (arr_pdc.h)
+  uint64_t bk_rastet = 0;   // sampler A2: the latched knobs of the graph (cypher_bk_rastende, bit nr-1), set beside bk by the loader; 0 = no latched knob, the notes of the track take no per-note knob values
   // 1.9, device kit: the kit name (folder name in the kit folder) and the shared Kit of the cache's kit store (reference counted by the
   // snapshots, ArrSnapshot::kit_refs); the callback reads it only. kit_gen is unique per loaded Kit (never reused).
   char kit[33] = {};

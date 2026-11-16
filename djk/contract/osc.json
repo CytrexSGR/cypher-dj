@@ -454,6 +454,12 @@
       {"name": "spur", "typ": "i", "einheit": "nummer", "bereich": [0, 32], "notiz": "1 to 32 one track, 0 = all tracks (only with an 0: disarms everything)"},
       {"name": "an", "typ": "i", "einheit": "schalter", "bereich": [0, 1], "notiz": "1 = the track is armed for automation recording, 0 = disarmed. Separate from the audio arm (/k/rec/spur). Only from andreas, any other source gets nur_andreas"},
       {"name": "modus", "typ": "i", "einheit": "code", "bereich": [0, 2], "notiz": "0 touch, 1 latch, 2 write. Kept with the arm; the core reports points the same way in every mode, the server writes the take"}]},
+    {"adresse": "/k/arr/note", "typen": ",hsiii", "abschnitt": "4.11", "richtung": "an_kern", "felder": [
+      {"name": "id", "typ": "h", "einheit": "kennung"},
+      {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle"},
+      {"name": "spur", "typ": "i", "einheit": "nummer", "bereich": [1, 32], "notiz": "the project track (its nr) that plays the note"},
+      {"name": "ton", "typ": "i", "einheit": "note", "bereich": [0, 127], "notiz": "MIDI note number; a sampler cut plays slice i on note i"},
+      {"name": "vel", "typ": "i", "einheit": "code", "bereich": [0, 127], "notiz": "velocity; 0 is the off of that note"}]},
     {"adresse": "/k/rec/spur", "typen": ",hsiiiii", "abschnitt": "4.12", "richtung": "an_kern", "felder": [
       {"name": "id", "typ": "h", "einheit": "kennung"},
       {"name": "quelle", "typ": "s", "einheit": "text", "werte": "quelle"},

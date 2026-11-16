@@ -85,8 +85,8 @@ fn size_rules() {
     std::fs::write(w.join("viertel.f32"), vec![0u8; 4 * 101]).unwrap(); // 4-byte multiple, not 8
     schreibe(&w, "sieben.f32", &ok_datei(7));
     schreibe(&w, "acht.f32", &ok_datei(8));
-    schreibe(&w, "voll.f32", &vec![0.1f32; 2 * 1_440_000]);
-    schreibe(&w, "zuviel.f32", &vec![0.1f32; 2 * 1_440_001]);
+    schreibe(&w, "voll.f32", &vec![0.1f32; 2 * 2_880_000]);
+    schreibe(&w, "zuviel.f32", &vec![0.1f32; 2 * 2_880_001]);
     std::fs::write(w.join("leer.f32"), b"").unwrap();
     for n in ["krumm.f32", "viertel.f32", "sieben.f32", "zuviel.f32", "leer.f32"] {
         assert!(ist_datei(mit(&w, n)), "{n}: {:?}", mit(&w, n).err());
@@ -104,10 +104,10 @@ fn viele(n: usize, datei: &str) -> String {
 #[test]
 fn graph_cap_64_mib() {
     let w = wurzel();
-    schreibe(&w, "voll.f32", &vec![0.1f32; 2 * 1_440_000]); // 11.52 MB
-    assert!(uebersetze_mit_wurzel(&viele(5, "voll.f32"), SR, Some(&w)).is_ok());
-    let r = uebersetze_mit_wurzel(&viele(6, "voll.f32"), SR, Some(&w));
-    assert!(ist_datei(r), "six files at the per-file cap exceed 64 MiB");
+    schreibe(&w, "voll.f32", &vec![0.1f32; 2 * 2_880_000]); // 23.04 MB
+    assert!(uebersetze_mit_wurzel(&viele(2, "voll.f32"), SR, Some(&w)).is_ok());
+    let r = uebersetze_mit_wurzel(&viele(3, "voll.f32"), SR, Some(&w));
+    assert!(ist_datei(r), "three files at the per-file cap exceed 64 MiB");
 }
 
 #[test]

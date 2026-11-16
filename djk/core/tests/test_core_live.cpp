@@ -6,6 +6,8 @@
 //   K3 disarm  K4 end of the run (the transport keeps playing; a key played after it sounds again)  K5 transport stop  K6 swap (two variants)  K7 midi_ein disconnect
 //   K9 planned (quantized) transport stop inside a cycle, the live On stamped after the stop sample in the same cycle: the note sounds from its onset, stays held, the player's off ends it
 //   K8 quantum 2048: a note at offset 1500 (second sub-block) is not lost (the stamp is clamped into the first sub-block), and the sink counts nothing lost
+//   K10 /k/arr/note (sampler plan A1 task 7): one note on a project track with the transport standing and no arm: on, off (vel 0), spur 0 and 33 refused spur_bereich with
+//       nothing reaching the sink, cypher after the AI stop refused ki_gestoppt (andreas still plays)
 // Mutations built against this test: LIVE_AUS_BEI_DISARM_FEHLT (K3). LIVE_NOTE_VERWORFEN and LIVE_ALLE_AUS_LEER have targets only against test_arr_live; here K1 and K4, K5, K7
 // pin the same properties through the live table and the bus level, but no mutation binary of this test exists for them.
 #include <algorithm>
@@ -249,6 +251,68 @@ int main() {
     PRUEF(r.live() == 0);
     still(r, t, "K9 planned stop");
     r.ende();
+  }
+  {  // K10: /k/arr/note plays one note on a project track while the transport stands, with no MIDI arm (the click-to-hear path of the sampler)
+    const char* RB1 = "{\"nr\":1,\"art\":\"intern\",\"geraet\":\"rb338\",\"parameter\":{\"cutoff\":0.6,\"resonanz\":0.3},\"noten\":[]}";
+    arr35::Lauf x(ab.pfad, "test_kern_live_k10");
+    x.laden(5, RB1);
+    x.lauf(12 * N);
+    PRUEF(x.kern->arrangement().status() == cdj::ArrStatus::steht && x.kern->aufnahme().midi_maske() == 0u);   // transport stands, nothing armed
+    const auto live = [&] { return x.kern->arrangement().live_offene_noten(); };
+    const auto note = [&](int spur, int ton, int vel, const char* quelle) {   // /k/arr/note: nr = spur, politik = ton, fassung = vel
+      cdj::Befehl b = x.neu(cdj::Befehl::ARR_NOTE, quelle);
+      b.nr = spur; b.politik = ton; b.fassung = vel;
+      return x.sende(b);
+    };
+    // on: the track sounds at the PM tap within the next cycles
+    const int64_t t0 = x.kern->sample();
+    const int64_t id1 = note(1, 60, 100, "andreas");
+    x.lauf(t0 + 8 * N);
+    const float an = spitze(x.pm_l, t0, t0 + 8 * N);
+    std::printf("K10 on: ack 1 %d ack 3 %d, live table %d, peak in 8 cycles %.4f\n", x.quittung(id1, 1) != nullptr, x.quittung(id1, 3) != nullptr, live(), an);
+    PRUEF(x.quittung(id1, 1) != nullptr && x.quittung(id1, 3) != nullptr);
+    PRUEF(live() == 1 && an > 0.001f);
+    PRUEF(x.kern->arrangement().status() == cdj::ArrStatus::steht && x.kern->arrangement().offene_noten() == 0);
+    // off (vel 0): silent from 100 ms on, live table empty
+    const int64_t t1 = x.kern->sample();
+    const int64_t id2 = note(1, 60, 0, "andreas");
+    x.lauf(t1 + 4800 + 2400 + N);
+    const float aus = spitze(x.pm_l, t1 + 4800, t1 + 4800 + 2400);
+    std::printf("K10 off: ack 3 %d, live table %d, peak in [t + 100 ms, t + 150 ms) %.3g\n", x.quittung(id2, 3) != nullptr, live(), aus);
+    PRUEF(x.quittung(id2, 3) != nullptr && live() == 0 && aus < 1e-4f);
+    // spur outside 1..32: refused spur_bereich, no note reaches the sink (silent bus, empty table, nothing lost)
+    const int64_t t2 = x.kern->sample();
+    const int64_t id0 = note(0, 60, 100, "andreas"), id33 = note(33, 60, 100, "andreas");
+    x.lauf(t2 + 8 * N);
+    const float still_ = spitze(x.pm_l, t2, t2 + 8 * N);
+    std::printf("K10 spur 0 / 33: refused %d / %d, live table %d, peak %.3g\n", x.quittung(id0, 6) != nullptr, x.quittung(id33, 6) != nullptr, live(), still_);
+    PRUEF(x.quittung(id0, 6) && x.quittung(id0, 6)->grund == "spur_bereich");
+    PRUEF(x.quittung(id33, 6) && x.quittung(id33, 6)->grund == "spur_bereich");
+    PRUEF(!x.quittung(id0, 1) && !x.quittung(id33, 1) && live() == 0 && still_ < 1e-4f && x.kern->arr_rb().verloren() == 0);
+    // cypher: plays before the AI stop (negative control), refused ki_gestoppt after it, andreas still plays
+    const int64_t t3 = x.kern->sample();
+    const int64_t idc = note(1, 62, 100, "cypher");
+    x.lauf(t3 + 4 * N);
+    PRUEF(x.quittung(idc, 3) != nullptr && live() == 1);
+    note(1, 62, 0, "cypher");
+    x.lauf(x.kern->sample() + 4800 + 2400 + N);
+    PRUEF(live() == 0);
+    x.sende(x.neu(cdj::Befehl::KI_STOPP, "andreas"));
+    x.lauf(x.kern->sample() + 4 * N);
+    const int64_t t4 = x.kern->sample();
+    const int64_t idk = note(1, 64, 100, "cypher");
+    x.lauf(t4 + 8 * N);
+    const float ki = spitze(x.pm_l, t4 + N, t4 + 8 * N);
+    std::printf("K10 cypher after the AI stop: refused %d, live table %d, peak %.3g\n", x.quittung(idk, 6) != nullptr, live(), ki);
+    PRUEF(x.quittung(idk, 6) && x.quittung(idk, 6)->grund == "ki_gestoppt" && !x.quittung(idk, 1));
+    PRUEF(live() == 0 && ki < 1e-4f);
+    const int64_t t5 = x.kern->sample();
+    const int64_t ida = note(1, 64, 100, "andreas");   // Stop Cypher blocks cypher only
+    x.lauf(t5 + 4 * N);
+    PRUEF(x.quittung(ida, 3) != nullptr && live() == 1);
+    note(1, 64, 0, "andreas");
+    x.lauf(x.kern->sample() + 4 * N);
+    PRUEF(live() == 0);
   }
   PRUEF_ENDE();
 }

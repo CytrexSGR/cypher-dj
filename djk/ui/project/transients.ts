@@ -14,15 +14,25 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 export const TRANSIENTEN_VERSION = 3;
-const BLOCK = 64, VORLAUF = 8, SPRUNG_DB = 5, BODEN_DB = -60, ABSTAND_S = 0.02;
+const BLOCK = 64, VORLAUF = 8, SPRUNG_DB = 5, BODEN_DB = -60, ABSTAND_S = 0.02, STAERKE_DB = 48;
 const FUSS_SUCHE_S = 0.005, FUSS_HUELLE = 12, FUSS_ANTEIL = 0.1, FUSS_VORAUS_S = 0.005;   // D14, siehe unten
 
 const endlich = (x: number): number => (Number.isFinite(x) ? x : 0);
 
+export type Anschlag = { frame: number; staerke: number };
+export function findeTransienten(d: Float32Array, sr = 48000): number[] {
+  return erkenne(d, sr, SPRUNG_DB).map((a) => a.frame);
+}
+// Sampler A2 (E1): the same detector, each hit with its strength. `staerke` = clamp((e_hit - max(hintergrund, -60)) / 48, 0, 1) in diff-energy dB of the
+// block that fires, rounded to 3 decimals: level and contrast together, a hit 48 dB over silence is 1. `sprungDb` is the jump threshold (default 5 dB, the
+// production value); the frames equal findeTransienten(d, sr) for the default.
+export function findeAnschlaege(d: Float32Array, sr = 48000, o: { sprungDb?: number } = {}): Anschlag[] {
+  return erkenne(d, sr, o.sprungDb ?? SPRUNG_DB);
+}
 // Fix-Runde Slice 4 (Punkt 1): kein diff-Array in Länge der Quelle mehr (bei 15 min Stereo 173 MB zusätzlich zur Quelle). Die Differenz entsteht im
 // Lauf, Block für Block, und für die Verfeinerung je Treffer neu in einem Fenster von 256 Frames. Math.fround an jeder Differenz hält das Ergebnis
 // bitgleich zur Fassung mit Float32Array (tests/support/transients_reference.mjs, Gleichheitstest an den Testsignalen und an echten Loops).
-export function findeTransienten(d: Float32Array, sr = 48000): number[] {
+function erkenne(d: Float32Array, sr: number, sprungDb: number): Anschlag[] {
   const n = Math.floor(d.length / 2);
   const diff = (i: number): number => (i < 1 ? 0
     : Math.fround((endlich(d[2 * i]) + endlich(d[2 * i + 1]) - endlich(d[2 * i - 2]) - endlich(d[2 * i - 1])) * 0.5));
@@ -51,19 +61,22 @@ export function findeTransienten(d: Float32Array, sr = 48000): number[] {
     for (let i = treffer; i >= lo; i--) if (huelle(i) < schwelle) return Math.min(treffer, i + 1);
     return lo;
   };
-  const aus: number[] = [];
+  const aus: Anschlag[] = [];
   const abstand = Math.round(ABSTAND_S * sr);
   let roh = -Infinity;
   for (let j = VORLAUF; j < nb; j++) {
     let hintergrund = -Infinity;
     for (let k = j - VORLAUF; k < j; k++) if (e[k] > hintergrund) hintergrund = e[k];
-    if (e[j] >= BODEN_DB && e[j] - hintergrund >= SPRUNG_DB) {
+    if (e[j] >= BODEN_DB && e[j] - hintergrund >= sprungDb) {
       const a = Math.max(1, (j - 1) * BLOCK), b = Math.min(n, (j + 3) * BLOCK);
       let hoch = 0;
       for (let i = a; i < b; i++) hoch = Math.max(hoch, Math.abs(diff(i)));
       let f = a;
       while (f < b && Math.abs(diff(f)) < hoch * 0.5) f++;
-      if (!aus.length || f - roh >= abstand) { aus.push(fuss(f, roh)); roh = f; }
+      if (!aus.length || f - roh >= abstand) {
+        const staerke = Math.min(1, Math.max(0, (e[j] - Math.max(hintergrund, BODEN_DB)) / STAERKE_DB));
+        aus.push({ frame: fuss(f, roh), staerke: Math.round(staerke * 1000) / 1000 }); roh = f;
+      }
     }
   }
   return aus;

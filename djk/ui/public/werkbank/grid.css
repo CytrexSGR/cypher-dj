@@ -37,6 +37,8 @@
 #werkbank .w-st.betont { background: #222a3f; }
 #werkbank .w-st.an { background: var(--spurfarbe, var(--d3)); border-color: transparent; }
 #werkbank .w-st.fort { background: color-mix(in srgb, var(--spurfarbe, var(--d3)) 45%, #10131b); border-color: transparent; }
+/* slice grid: a reversed hit is striped and carries an amber edge on its left (the mark of REVERSE) */
+#werkbank .w-st.an.w-rueck { background: repeating-linear-gradient(135deg, var(--spurfarbe, var(--d3)) 0 3px, color-mix(in srgb, var(--spurfarbe, var(--d3)) 40%, #10131b) 3px 6px); box-shadow: inset 3px 0 0 var(--warn); }
 #werkbank .w-st.wiederholung { opacity: .4; }
 #werkbank .w-st.kopf, #werkbank .w-val.kopf { outline: 1px solid var(--warn); outline-offset: -1px; filter: brightness(1.5); }
 #werkbank .w-ru { height: 18px; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; white-space: nowrap; color: var(--dim); }
@@ -74,3 +76,14 @@
 #werkbank .w-val i { display: block; width: 100%; background: color-mix(in srgb, var(--spurfarbe, var(--d3)) 55%, #10131b); pointer-events: none; }
 #werkbank .w-val.anders i { background: var(--warn); }
 #werkbank .w-val.wiederholung { opacity: .4; }
+
+/* slice grid, PITCH lane: bars from the middle line, up = raised, down = lowered; amber = a value of its own, dim = the track knob */
+#werkbank .w-val.w-pitch { position: relative; background-image: linear-gradient(var(--line), var(--line)); background-size: 100% 1px; background-position: 0 50%; background-repeat: no-repeat; }
+#werkbank .w-val.w-pitch.betont { background-color: #222a3f; }
+#werkbank .w-val.w-pitch i { position: absolute; left: 0; width: 100%; }
+#werkbank .w-val.w-pitch i.null { top: 50%; height: 2px; margin-top: -1px; }
+#werkbank .w-val.w-pitch.eigen i { background: var(--warn); }
+#werkbank .w-ln-taste { cursor: pointer; }
+#werkbank .w-val.w-kn-lane i { opacity: .45; }
+#werkbank .w-val.w-kn-lane.eigen i { opacity: 1; background: var(--warn); }
+#werkbank select.w-lane-neu { max-width: 110px; background: none; color: var(--dim); border: 1px dashed var(--line); border-radius: 4px; font-family: inherit; cursor: pointer; }

@@ -662,6 +662,6 @@ test('single picker: instruments grouped by <optgroup> with the empty entry firs
   assert.match(h, /<optgroup label="Bass"><option value="diode-acid-bass">diode-acid-bass<\/option><option value="ms20-bass" selected>/);
   assert.ok(!graphWahlHtml('deck/1', INST, '').includes('optgroup'));
   assert.match(graphWahlHtml('erz/2', INST, '', 'Cypher Modular'), /<option value="" selected>Cypher Modular<\/option>/);
-  assert.deepEqual(GRAPH_KATEGORIEN.map((k) => k.id), ['drums', 'bass', 'lead', 'pad', 'keys', 'textur', 'host', 'sonst']);
+  assert.deepEqual(GRAPH_KATEGORIEN.map((k) => k.id), ['drums', 'bass', 'lead', 'pad', 'keys', 'textur', 'sampler', 'host', 'sonst']);
   assert.equal(instrumentKategorien('erz/5', INST, '').gewaehlt, 'drums');
 });

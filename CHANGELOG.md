@@ -3,6 +3,49 @@
 One entry per public update, newest first. Each entry names what changed for someone who plays, produces or
 builds cypher-dj.
 
+## 2026-11-16, third update
+
+**Studio**
+- Slice a loop: SLICE TO TRACK on a library loop or on the audio of a module (the loop or one of its stems) cuts it into
+  slices and makes an instrument track that plays them in their original order, so it sounds like the loop first. The
+  project tempo is fitted on the SPEED knob when it is within a factor of four of the loop's tempo. Cut by grid (4, 8,
+  16, 32 or 64 equal slices) or at the hits found in the audio (the sensitivity sets how many).
+- The notes grid has a new kind, SLICE: one row per slice, so you reorder, repeat, shorten and reverse hits as steps.
+  REVERSE turns a step around, and a PITCH lane sets the pitch of one step only, exact to its own hit.
+- A strip above the sound panel shows the waveform with the numbered slices and, per marker, how strong the hit is and
+  how far it sits from the grid. Click a slice to hear it, shift-click to select. Drag a marker (it snaps to a hit or
+  the grid, Alt turns that off), double-click a slice to add a marker, double-click a handle to remove it. CUT AGAIN cuts
+  the same audio by another method or count and the patterns keep their slice numbers; WRITE ORIGINAL ORDER puts the
+  slices back in the order of the loop.
+- TO KIT turns the selected slices into a drum kit (names like bd, sd, hh are proposed from the sound and can be
+  changed). KIT TO TRACK puts it on a drum track, and the kit plays from the drum grid and from a Strudel text on that
+  track.
+- TO TONE turns one slice, or a run of slices, into an instrument that plays at the pitch of the note you play. The root
+  note is proposed by a pitch detection and can be changed with ROOT.
+- The shelf has a third tab, CUTS: every cut you made, with TO TRACK and DELETE (a cut that a track still plays is not
+  deleted, and the page says where it is used). Silent loops of the library are marked and cannot be sliced.
+- A loop longer than the module makes the module longer in the same step, so the whole loop plays.
+- Click a key of the piano, a drum row (kick, rim, snare …) or a slice row in the grid to hear it through the track.
+- STEP VALUES has `+ lane`: any knob of a Cypher Modular instrument becomes a step lane next to VELOCITY and LENGTH. A
+  step holds its own knob value, the other steps play the knob; shift-click removes a value, `×` the lane.
+
+**Instruments and effects**
+- Cypher Modular: the `sampler` block takes a slice table (up to 64 slices of any length) and a note mode in which the
+  note picks the slice (notes 0 to 63 forward, 64 to 127 the same slice reversed). New inputs `tempo`, `halb` and
+  `ausklang` set speed, pitch in semitones and the release of a hit. Files may be 60 seconds long (was 30).
+- A knob in a graph can be marked `rastet`: it jumps to its value at each note instead of gliding, and a lane on it is
+  read at the beat of each note. The slice device uses this for SPEED and PITCH.
+
+**For the agent**
+- A new tool `sampler` (92 tools now): list what can be cut, cut, read a cut as text, put it on a track, cut again, move,
+  add and remove markers, make a kit or a tone from slices, delete a cut or a tone.
+- A new core command plays one note on a project track while the transport stands; clicking a slice in the strip uses it.
+
+**Limits to know**
+- The track made from a loop starts at 0 dB; the pan law of the track makes it about 3 dB quieter than the loop.
+- A kit made from hits reaches the live drum stream only after a restart; on its own track it plays at once.
+- A knob lane changes its value in steps; there is no glide between two steps.
+
 ## 2026-11-16, second update
 
 **Instruments and effects**

@@ -6,6 +6,7 @@
 @import url('tracks.css');
 @import url('grid.css');
 @import url('sound.css');
+@import url('schnitt_kit.css');
 
 #werkbank { display: none; }
 body.werkbank, body.werkbank.lib-zu, body.werkbank.lib-gross {

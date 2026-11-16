@@ -55,6 +55,7 @@ export class El {
   append(...k) { for (const c of k) { if (typeof c !== 'string') { c.parent?.entferne(c); c.parent = this; } this.children.push(c); } }
   appendChild(c) { this.append(c); return c; }
   prepend(c) { c.parent = this; this.children.unshift(c); }
+  after(c) { const p = this.parent; if (p) p.insertBefore(c, this.nextElementSibling); }   // sampler C: the ROOT box sits after the strip
   insertBefore(c, ref) { c.parent = this; const i = this.children.indexOf(ref); this.children.splice(i < 0 ? this.children.length : i, 0, c); return c; }
   replaceChildren(...k) { this.children = []; this.append(...k); }
   entferne(c) { this.children = this.children.filter((x) => x !== c); }

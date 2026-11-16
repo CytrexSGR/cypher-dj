@@ -123,7 +123,10 @@ pub fn eingaenge(s: &Schritt) -> Vec<Quelle> {
         Schritt::Krume { x, bits, rate, .. } => vec![*x, *bits, *rate],
         Schritt::Phaser { x, l, r, rate, tiefe, fb, mix, .. } => vec![*x, *l, *r, *rate, *tiefe, *fb, *mix],
         Schritt::Roehre { x, antrieb, bias, .. } => vec![*x, *antrieb, *bias],
-        Schritt::Sampler { hz, trig, gate, scheibe, rueck, .. } => vec![*hz, *trig, *gate, *scheibe, *rueck],
+        // every field is named: a new field of the step must be decided here (an input is listed, anything else is `_`)
+        Schritt::Sampler { hz, trig, gate, scheibe, rueck, tempo, halb, ausklang, wl: _, wr: _, e: _, g: _, wahl: _, d: _, s: _ } => {
+            vec![*hz, *trig, *gate, *scheibe, *rueck, *tempo, *halb, *ausklang]
+        }
         Schritt::Vocoder { x, l, r, zisch, mix, .. } => vec![*x, *l, *r, *zisch, *mix],
         Schritt::Faltung { x, l, r, mix, .. } => vec![*x, *l, *r, *mix],
         Schritt::Wavetable { hz, trig, pos, verstimmung, breite, pm, warp, tiefe, stapel, .. } => vec![*hz, *trig, *pos, *verstimmung, *breite, *pm, *warp, *tiefe, *stapel],

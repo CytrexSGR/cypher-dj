@@ -23,6 +23,8 @@ import {
   ARTEN, MAX_PLAETZE, straenge, neuerInsertBefehl, anBefehl, entfernenBefehl, ordnungBefehl, verschoben, bkZahl, baueInsertAdapter, insGrAufnehmen, insPegelAufnehmen, insertLabels,
 } from '../production/inserts.js';
 import { bindeInsertFace, FACE_ARTEN } from '../production/insert_face.js';
+import { bindeSchnittStreifen } from './schnitt_streifen.js';
+import { bindeSchnittTon } from './schnitt_tone.js';
 
 export const KLANG_TEXT = { titel: 'SOUND', instrument: 'INSTRUMENT', keinPanel: 'This instrument has no front panel in the workbench.', wechsel: '\u21c4 CHANGE', wechselTitel: 'Change the instrument of this track; the notes stay' };
 
@@ -31,6 +33,7 @@ export function bindeKlang(ctx) {
   const host = $('klang');
   host.innerHTML = `<h3 class="w-titel" data-w="klang-titel"></h3>
 <div class="w-kacheln" data-w="kacheln"></div>
+<div class="w-schnitt" data-w="schnitt" hidden></div>
 <div class="w-effekt-leiste" data-w="effekt-leiste" hidden></div>
 <div class="w-geraet" data-w="geraet"><div class="w-geraet-instrument" data-w="geraet-instrument"></div><div class="w-geraet-weiter" data-w="geraet-weiter" hidden></div></div>`;
   const titel = $('klang-titel'), leiste = $('kacheln'), instrumentHost = $('geraet-instrument'), weiterHost = $('geraet-weiter');
@@ -103,6 +106,8 @@ export function bindeKlang(ctx) {
     if (spur) { const p = document.createElement('p'); p.textContent = KLANG_TEXT.keinPanel; instrumentHost.replaceChildren(p); }
   }
   bindeKette(ctx, klang, $('effekt-leiste'), weiterHost, spurJetzt);
+  bindeSchnittStreifen(ctx, $('schnitt'));   // sampler A1 task 8: the strip of a sampler cut (shown for a slice track only)
+  bindeSchnittTon(ctx, $('schnitt'));        // sampler C task 5: TO TONE on the strip, the ROOT box of a tone track (after the strip: it resets schnittAktionen)
   ctx.beimProjekt.push(() => zeige());
   ctx.beiWahl.push(() => zeige());
   zeige();

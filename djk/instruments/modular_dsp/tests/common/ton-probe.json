@@ -1,0 +1,294 @@
+{
+  "format": "baukasten/2",
+  "name": "ton-probe-0000-1",
+  "stimmen": 8,
+  "regler_namen": {
+    "1": "Tune",
+    "2": "Attack",
+    "3": "Decay",
+    "4": "Sustain",
+    "5": "Release",
+    "6": "Cutoff",
+    "7": "Reso",
+    "8": "Level"
+  },
+  "knoten": [
+    {
+      "id": "note",
+      "art": "note"
+    },
+    {
+      "id": "tr",
+      "art": "transponiere"
+    },
+    {
+      "id": "smp",
+      "art": "sampler",
+      "datei": "smp-probe-0000.f32",
+      "grund": 220,
+      "grenzen": [
+        4800,
+        52800
+      ],
+      "noten_wahl": 0,
+      "schleife": 0
+    },
+    {
+      "id": "tun",
+      "art": "regler",
+      "nr": 1,
+      "min": -1,
+      "max": 1,
+      "log": 0,
+      "vorgabe": 0.5
+    },
+    {
+      "id": "atk",
+      "art": "regler",
+      "nr": 2,
+      "min": 0.5,
+      "max": 2000,
+      "log": 1,
+      "vorgabe": 0.0836
+    },
+    {
+      "id": "dec",
+      "art": "regler",
+      "nr": 3,
+      "min": 1,
+      "max": 4000,
+      "log": 1,
+      "vorgabe": 0.5
+    },
+    {
+      "id": "sus",
+      "art": "regler",
+      "nr": 4,
+      "min": 0,
+      "max": 1,
+      "log": 0,
+      "vorgabe": 1
+    },
+    {
+      "id": "rel",
+      "art": "regler",
+      "nr": 5,
+      "min": 1,
+      "max": 8000,
+      "log": 1,
+      "vorgabe": 0.6347
+    },
+    {
+      "id": "cut",
+      "art": "regler",
+      "nr": 6,
+      "min": 40,
+      "max": 20000,
+      "log": 1,
+      "vorgabe": 1
+    },
+    {
+      "id": "res",
+      "art": "regler",
+      "nr": 7,
+      "min": 0,
+      "max": 1,
+      "log": 0,
+      "vorgabe": 0
+    },
+    {
+      "id": "lvl",
+      "art": "regler",
+      "nr": 8,
+      "min": 0,
+      "max": 2,
+      "log": 0,
+      "vorgabe": 0.5,
+      "mitte": 1
+    },
+    {
+      "id": "env",
+      "art": "adsr",
+      "a": 0.001,
+      "d": 0.063,
+      "s": 1,
+      "r": 0.3
+    },
+    {
+      "id": "a_s",
+      "art": "mul",
+      "b": 0.001
+    },
+    {
+      "id": "d_s",
+      "art": "mul",
+      "b": 0.001
+    },
+    {
+      "id": "r_s",
+      "art": "mul",
+      "b": 0.001
+    },
+    {
+      "id": "vel",
+      "art": "mul",
+      "b": 1.27
+    },
+    {
+      "id": "g1",
+      "art": "mul"
+    },
+    {
+      "id": "gain",
+      "art": "mul"
+    },
+    {
+      "id": "lp_l",
+      "art": "svf",
+      "pole": 2
+    },
+    {
+      "id": "amp_l",
+      "art": "mul"
+    },
+    {
+      "id": "lp_r",
+      "art": "svf",
+      "pole": 2
+    },
+    {
+      "id": "amp_r",
+      "art": "mul"
+    },
+    {
+      "id": "aus",
+      "art": "ausgang"
+    }
+  ],
+  "kanten": [
+    {
+      "von": "note.hz",
+      "nach": "tr.hz"
+    },
+    {
+      "von": "tun.aus",
+      "nach": "tr.st"
+    },
+    {
+      "von": "tr.aus",
+      "nach": "smp.hz"
+    },
+    {
+      "von": "note.trig",
+      "nach": "smp.trig"
+    },
+    {
+      "von": "note.gate",
+      "nach": "smp.gate"
+    },
+    {
+      "von": "note.gate",
+      "nach": "env.gate"
+    },
+    {
+      "von": "note.trig",
+      "nach": "env.trig"
+    },
+    {
+      "von": "atk.aus",
+      "nach": "a_s.a"
+    },
+    {
+      "von": "a_s.aus",
+      "nach": "env.a"
+    },
+    {
+      "von": "dec.aus",
+      "nach": "d_s.a"
+    },
+    {
+      "von": "d_s.aus",
+      "nach": "env.d"
+    },
+    {
+      "von": "rel.aus",
+      "nach": "r_s.a"
+    },
+    {
+      "von": "r_s.aus",
+      "nach": "env.r"
+    },
+    {
+      "von": "sus.aus",
+      "nach": "env.s"
+    },
+    {
+      "von": "note.vel",
+      "nach": "vel.a"
+    },
+    {
+      "von": "vel.aus",
+      "nach": "g1.a"
+    },
+    {
+      "von": "lvl.aus",
+      "nach": "g1.b"
+    },
+    {
+      "von": "g1.aus",
+      "nach": "gain.a"
+    },
+    {
+      "von": "env.aus",
+      "nach": "gain.b"
+    },
+    {
+      "von": "smp.l",
+      "nach": "lp_l.x"
+    },
+    {
+      "von": "cut.aus",
+      "nach": "lp_l.cutoff"
+    },
+    {
+      "von": "res.aus",
+      "nach": "lp_l.reso"
+    },
+    {
+      "von": "lp_l.tp",
+      "nach": "amp_l.a"
+    },
+    {
+      "von": "gain.aus",
+      "nach": "amp_l.b"
+    },
+    {
+      "von": "amp_l.aus",
+      "nach": "aus.l"
+    },
+    {
+      "von": "smp.r",
+      "nach": "lp_r.x"
+    },
+    {
+      "von": "cut.aus",
+      "nach": "lp_r.cutoff"
+    },
+    {
+      "von": "res.aus",
+      "nach": "lp_r.reso"
+    },
+    {
+      "von": "lp_r.tp",
+      "nach": "amp_r.a"
+    },
+    {
+      "von": "gain.aus",
+      "nach": "amp_r.b"
+    },
+    {
+      "von": "amp_r.aus",
+      "nach": "aus.r"
+    }
+  ]
+}

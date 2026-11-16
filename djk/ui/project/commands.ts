@@ -712,7 +712,8 @@ function musterSpurNeu(p: Projekt, a: Args, ctx: Kontext, g: Gruppe | null): voi
   const huell = a.huellkurven === undefined ? [] : listeArg(a, 'huellkurven');
   PRO_BEFEHL.spur_neu(p, { befehl: 'spur_neu', art: 'instrument', name, geraet: a.geraet }, ctx);
   const spur = p.spuren[p.spuren.length - 1];
-  spur.fader_db = -6;   // a start level with headroom: two new patterns at 0 dB would reach 0 dBFS in the sum
+  // a start level with headroom: two new patterns at 0 dB would reach 0 dBFS in the sum. A workbench track may name its own (a sliced loop is mixed material)
+  spur.fader_db = (g ? undefined : zahl(a, 'fader_db', FADER_MIN, FADER_MAX, { opt: true })) ?? -6;
   if (g) PRO_BEFEHL.ziel_setzen(p, { befehl: 'ziel_setzen', strang_id: spur.id, ausgang: { art: 'gruppe', id: g.id } }, ctx);
   PRO_BEFEHL.clip_neu(p, { befehl: 'clip_neu', spur_id: spur.id, art: 'midi', start_beat: 0, laenge_beats: SEQ_BEATS, loop_beats: loop, name,
     ...(a.noten !== undefined ? { noten: a.noten } : {}), ...(a.seq !== undefined ? { seq: a.seq } : {}) }, ctx);
@@ -1478,7 +1479,7 @@ const PRO_BEFEHL: Record<string, (p: Projekt, a: Args, ctx: Kontext) => void> = 
   // Workbench module: one instrument track to the master with its pattern clip (same body as seq_folge_neu, no group). Refused outside a module
   // (kein_werkbank) and beyond MAX_WERKBANK_SPUREN instrument tracks (werkbank_voll).
   werkbank_spur_neu(p, a, ctx) {
-    erlaube(a, 'name', 'geraet', 'loop_beats', 'stumm', 'noten', 'seq', 'huellkurven');
+    erlaube(a, 'name', 'geraet', 'loop_beats', 'stumm', 'noten', 'seq', 'huellkurven', 'fader_db');
     if (!p.werkbank) ab('kein_werkbank', 'the open project is not a workbench module');
     if (p.spuren.filter((s) => s.art === 'instrument').length >= MAX_WERKBANK_SPUREN) {
       ab('werkbank_voll', `a module holds at most ${MAX_WERKBANK_SPUREN} instrument tracks`);

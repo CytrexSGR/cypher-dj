@@ -76,4 +76,42 @@ fn bk_block_allokiert_nicht() {
         assert!(klang, "Positivkontrolle: der Effekt gibt Signal");
     }
 }
+    // sampler A2 task 5: latched knobs, `regler_bei` and notes for 2000 blocks allocate nothing (same process-wide counter)
+    {
+        let w = std::env::temp_dir().join(format!("bk-a2t5-alloc-{}", std::process::id()));
+        std::fs::create_dir_all(&w).unwrap();
+        let d: Vec<f32> = (0..90_000).flat_map(|i| { let v = (0.5 * (2.0 * std::f32::consts::PI * 480.0 * i as f32 / 48_000.0).sin()) as f32; [v, v] }).collect();
+        std::fs::write(w.join("sinus.f32"), d.iter().flat_map(|v| v.to_le_bytes()).collect::<Vec<u8>>()).unwrap();
+        let g = format!(r#"{{"format":"baukasten/2","name":"p","stimmen":4,"knoten":[{{"id":"n","art":"note"}},{{"id":"k","art":"regler","nr":3,"min":-12,"max":12,"rastet":1}},{{"id":"l","art":"regler","nr":1,"min":0,"max":1}},{{"id":"s","art":"sampler","datei":"sinus.f32","noten_wahl":1,"grenzen":[{}]}},{{"id":"m","art":"mul"}},{{"id":"o","art":"ausgang"}}],"kanten":[{{"von":"n.hz","nach":"s.hz"}},{{"von":"n.trig","nach":"s.trig"}},{{"von":"n.gate","nach":"s.gate"}},{{"von":"k.aus","nach":"s.halb"}},{{"von":"s.l","nach":"m.a"}},{{"von":"l.aus","nach":"m.b"}},{{"von":"m.aus","nach":"o.l"}},{{"von":"m.aus","nach":"o.r"}}]}}"#,
+                        (0..=16).map(|k| (k * 5625).to_string()).collect::<Vec<_>>().join(","));
+        let json = CString::new(g).unwrap();
+        let wc = CString::new(w.to_str().unwrap()).unwrap();
+        let mut fehler = [0 as std::ffi::c_char; 256];
+        let h = cypher_bk_neu_wurzel(json.as_ptr(), 48_000.0, wc.as_ptr(), fehler.as_mut_ptr(), fehler.len());
+        assert!(!h.is_null());
+        assert_ne!(cypher_bk_rastende(h), 0);
+        let (mut l, mut r) = (vec![0f32; 256], vec![0f32; 256]);
+        let mut klang = false;
+        let (mut abgewiesen, mut verloren_vorher) = (0, 0);
+        let start = ANFORDERUNGEN.load(Ordering::SeqCst);
+        for b in 0..2000u32 {
+            assert_eq!(cypher_bk_regler_bei(h, (b * 11) % 256, 3, ((b * 37) % 100) as f32 / 100.0), 0);
+            cypher_bk_note_an(h, (b * 11) % 256, (b % 16) as u8, 0.8);
+            if b % 3 == 0 { cypher_bk_note_aus(h, (b * 29) % 256, (b % 16) as u8); }
+            assert_eq!(cypher_bk_regler_bei(h, 5, 1, 0.5), -2); // a gliding knob is refused without allocating
+            abgewiesen += 1;
+            if b % 7 == 0 { assert_eq!(cypher_bk_regler(h, 3, ((b * 13) % 100) as f32 / 100.0), 0); }
+            if b == 1000 { for i in 0..300 { cypher_bk_regler_bei(h, i, 3, 0.5); } } // over the queue
+            if b % 500 == 499 { cypher_bk_zuruecksetzen(h); }
+            assert!(cypher_bk_block(h, l.as_mut_ptr(), r.as_mut_ptr(), 256) == 0);
+            klang |= l.iter().any(|v| *v != 0.0);
+            if b == 1000 { verloren_vorher = cypher_bk_verloren(h); }
+        }
+        let danach = ANFORDERUNGEN.load(Ordering::SeqCst);
+        let verloren = cypher_bk_verloren(h);
+        cypher_bk_frei(h);
+        assert_eq!(danach - start, 0, "Allokationen im Echtzeitpfad mit regler_bei: {}", danach - start);
+        assert!(klang, "Positivkontrolle: der Sampler klingt");
+        assert!(abgewiesen > 0 && verloren > 0 && verloren_vorher > 0, "Positivkontrolle: die volle Warteschlange wurde erreicht");
+    }
 }
