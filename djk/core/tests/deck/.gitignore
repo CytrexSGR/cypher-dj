@@ -3,4 +3,6 @@
 laeufe/*/ziel.f32
 laeufe/*/abonnent.jsonl
 laeufe/*/aufnahme.bereit
+# Rohaufnahme der Box-Läufe (box.npy, 56 MB über 51 Läufe): nur lokal; ergebnis.json bleibt versioniert
+laeufe/*/box.npy
 __pycache__/

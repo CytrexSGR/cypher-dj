@@ -254,7 +254,8 @@ body.produktion .preset-kopf select { max-width: 14ch; }
 .p-warp-canvas { width: 100%; height: 10vh; min-height: 72px; display: block; border-radius: 4px; touch-action: none; }
 .p-warp-canvas:focus { outline: 1px solid rgba(224, 168, 59, .5); outline-offset: -1px; }
 .p-menue { position: fixed; z-index: 1000; margin: 0; padding: 4px; list-style: none; min-width: 220px; background: var(--panel2); color: var(--text);
-  border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 6px 18px rgba(0, 0, 0, .5); font-size: 12px; }
+  border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 6px 18px rgba(0, 0, 0, .5); font-size: 12px;
+  max-height: calc(100vh - 8px); overflow-y: auto; overscroll-behavior: contain; }
 .p-menue button { display: block; width: 100%; text-align: left; padding: 5px 8px; border: 0; border-radius: 4px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
 .p-menue button:hover:not(:disabled), .p-menue button:focus-visible { background: #e0a83b; color: #0e0f12; outline: 0; }
 .p-menue button:disabled { opacity: .35; cursor: default; }

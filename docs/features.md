@@ -184,7 +184,7 @@ references before they went in:
   oversampling. Available as a plugin and as an insert stage in the production core
 - **Cypher Modular**: a modular synthesizer. A patch is a JSON graph of building blocks (oscillators, filters,
   envelopes, LFOs, chorus, reverb, delay, dynamics, free feedback paths and, among others, wavetable, FM, granular,
-  modal resonator, string, sampler, filter, sample-and-hold, multi-stage envelope, wavefolder, drum kit and remix blocks; 52 block types in all) with up to 64 knobs that the human or the agent
+  modal resonator, string, sampler, filter, sample-and-hold, multi-stage envelope, wavefolder, drum kit and remix blocks; 56 block types in all) with up to 64 knobs that the human or the agent
   can turn; a knob can have a start value and a centre value of its own. It plays on the melody and bass channels, on extra pattern streams and on production instrument tracks, and it
   runs as an effect on DJ channels, the DJ master, the loop slots and send returns. Example patches: a Juno-style pad, a sync lead, a wobble bass, FM bells, a plucked string. See [docs/cypher-modular.md](cypher-modular.md)
 - **RB-338**: a 303-style bass voice with cutoff, resonance, envelope, decay, accent and slide, playable
@@ -201,6 +201,9 @@ references before they went in:
 - **Band Drive Bass** (`bass-banddrive`): a bass for electro, neuro and reese. A wavetable and a bite voice run into a
   band split; the mids are folded and driven into a moving vowel filter, the sub stays clean and mono. 24 knobs, six
   factory presets (electro growl, neuro stab, wide reese, acid squelch, overdriven rock, clean sub grit)
+- **Greif** (`synth-greif`): a hybrid wavetable synth. Three wavetable oscillators with their own spectra, phase
+  modulation between them, warp, an octave stack, a chaos modulator, a frequency shifter and a clean sub. 63 knobs,
+  eight voices, twelve factory presets
 - **Drums 909 and Drums 808**: two complete drum machines in one graph each. One MIDI channel plays the whole kit, the
   note picks the drum, the knobs tune the kit, and one bus (drive and a DJ filter) closes it
 - **Filterbox**: an effect graph with six filter models (ladder, diode, comb, vowel and others), three modulation
@@ -220,7 +223,11 @@ The lists above are the headline. Also in there:
   until switched on in a config file, each tablet is paired with a link that works for two minutes, paired devices expire
   30 days after last use, and a tablet cannot start or stop playback, change projects or evaluate code
 
-- **Studio view**: the three Strudel channels side by side, each with an automation lane for fader,
+- **Loop workbench (STUDIO)**: modules of up to eight instrument tracks that loop together over 1 to 16 bars, with a
+  notes grid (drum rows or pitch rows), velocity and length per step, level, mute, solo and meters per track, an
+  insert chain of up to four effects per track, the large front panel of the instrument, an instrument swap that keeps
+  the notes, and a shelf of saved modules
+- **Live view (LIVE)**: the three Strudel channels side by side, each with an automation lane for fader,
   filter and cutoff over 4 to 32 bars
 - **Effects section**: one strip per channel showing what plays and how much the compressor pulls, an
   expanded view with every control, and automation per loop for compressor, filter, hall send and EQ

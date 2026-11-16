@@ -158,7 +158,7 @@ Summary (type number, art, number of settable names, ports):
 | 29 | `vocoder` | 5 | x, l, r, zisch, mix | l, r |
 | 30 | `sampler` | 9 | hz, trig, gate, scheibe, rueck | l, r |
 | 31 | `faltung` | 4 | x, l, r, mix | l, r |
-| 32 | `wavetable` | 10 | hz, trig, pos, verstimmung, breite | l, r, aus |
+| 32 | `wavetable` | 11 | hz, trig, pos, verstimmung, breite, pm, warp, tiefe, stapel | l, r, aus |
 | 33 | `metall` | 11 | trig, vel, decay, tune, farbe, rauschen, hp, choke | aus, huelle |
 | 34 | `resonator` | 13 | hz, trig, staerke, x, material, helligkeit, groesse, position, inharmonie | aus |
 | 35 | `fm` | 52 | hz, gate, trig, vel, index, rueck, zeit | aus |
@@ -726,7 +726,7 @@ Wavetable oscillator with 1..7 unison copies, band-limited mip maps; `aus` is th
 
 Definition: `djk/instruments/modular_dsp/src/uebersetzen.rs:134` (ARTEN entry); validation: uebersetzen.rs:281-288; meaning/DSP: modular_dsp/src/wavetable.rs:1-25,236-260; programm.rs:698-708.
 
-Inputs (`ein`): hz, trig, pos, verstimmung, breite. Outputs (`aus`): l, r, aus.
+Inputs (`ein`): hz, trig, pos, verstimmung, breite, pm, warp, tiefe, stapel. Outputs (`aus`): l, r, aus. Node field `spektren` (custom harmonic spectra, see below).
 
 | parameter id | meaning | unit | range | default | notes |
 |---|---|---|---|---|---|
@@ -738,6 +738,12 @@ Inputs (`ein`): hz, trig, pos, verstimmung, breite. Outputs (`aus`): l, r, aus.
 | `zufall` | how far apart the random start phases are | factor | 0..1 (reject) | 1 | 0 = all at phase 0 |
 | `saat` | seed of the start phases | integer | integer 0..65535 (reject) | 0 | - |
 | `glatt` | smoothing time of pos | ms | 0..1000 (reject) | 10 | 0 = none |
+| `pm` | phase offset added to the read phase of every copy | cycles | any finite | 0 | input port, audio rate |
+| `warp` | warp mode, rounded | enum | 0 off, 1 bend, 2 asym, 3 sync | 0 | input port |
+| `tiefe` | warp depth | factor | bend and asym -1..1, sync 0..1 (clamped) | 0 | input port; 0 is neutral |
+| `stapel` | octave stack, rounded, read at trig | enum | 0 off, 1 copy c plays 12 (c mod 2) semitones up, 2 offsets 0, 12, 19 | 0 | input port |
+| `reserve` | mip level chosen for the phase step times 2^reserve | octaves | integer 0..3 (reject) | 0 | fixed value only |
+| `spektren` | custom harmonic spectra instead of `tabelle` | node field | 1..32 frames of 1..256 amplitudes, finite, magnitude at most 4 (reject); `tabelle` absent or 0; not in makros | absent | named field like `datei` |
 | `hz` | frequency | Hz | - | 0 (no default; unconnected input reads 0) | input port (edge or fixed value) |
 | `trig` | restarts copies at random phases | dimensionless | rising >0.5 | 0 (no default; unconnected input reads 0) | input port (edge or fixed value) |
 | `l (output)` | out left | - | - | - | output port |

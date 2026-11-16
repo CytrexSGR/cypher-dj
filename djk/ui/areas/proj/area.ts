@@ -9,6 +9,7 @@ import { AblageFehler } from '../../project/storage.ts';
 import { BefehlFehler } from '../../project/commands.ts';
 import { KatalogFehler } from '../../catalog.ts';
 import { istObjekt } from '../../project/model.ts';
+import { vorlagenListe } from '../../project/werkbank.ts';
 import { PatchFehler } from '../../project/patch.ts';
 import type { Haken, Meta, Verlauf, Wirkung } from '../../project/history.ts';
 import type { Projekt } from '../../project/model.ts';
@@ -160,6 +161,8 @@ export function projBereich(ctx: BereichKontext, opt: ProjOptionen = {}): Bereic
     zugang,
     routen: () => [
       lies('/proj/liste', () => s.liste()),
+      // workbench stage 1: the templates a module can be created from
+      lies('/proj/werkbank/vorlagen', () => ({ code: 200, j: { vorlagen: vorlagenListe() } })),
       // Spec 6.30: ?noten=zahl (proj_lage: Noten nur als Zahl je Clip), ?nur=rev (schmale rev-Abfrage des Werkzeugs); ohne Abfrage alles (die Seite)
       lies('/proj/aktuell', (url) => {
         const zahl = url.searchParams.get('noten') === 'zahl';
@@ -228,7 +231,7 @@ export function projBereich(ctx: BereichKontext, opt: ProjOptionen = {}): Bereic
       }),
       // Spec 6.32: ?antwort=kurz (Werkzeuge proj_neu, proj_oeffnen) liefert slug, rev, Spuren ohne Noten, noten_zahl und kern statt des Projekts
       // plan live-module task 1: bestaetigt = Andreas's confirm of a switch away from a running live container (the session ignores it for Cypher)
-      schreib('/proj/neu', (d, quelle) => s.neu(d.name, quelle, d.bestaetigt === true), kurzeOeffnenAntwort),
+      schreib('/proj/neu', (d, quelle) => s.neu(d.name, quelle, d.bestaetigt === true, { werkbank: d.werkbank, vorlage: d.vorlage }), kurzeOeffnenAntwort),
       schreib('/proj/oeffnen', (d, quelle) => s.oeffnen(d.slug, quelle, d.bestaetigt === true), kurzeOeffnenAntwort),
       schreib('/live/oeffnen', (d, quelle) => s.liveOeffnen(quelle, d.bestaetigt === true)),
       // Spec 6.31: ?antwort=kurz (Werkzeuge) liefert rev, kern und noten_zahl je Clip statt des Projekts

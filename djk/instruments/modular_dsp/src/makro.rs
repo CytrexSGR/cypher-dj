@@ -16,6 +16,9 @@ pub fn aufloesen(g: Graph) -> Result<Graph, Fehler> {
         if k.art.starts_with(PRAEFIX) && k.datei.is_some() {
             return Err(Fehler::Wert { knoten: k.id.clone(), wert: "datei".to_string(), grund: "datei not supported in makros" });
         }
+        if k.art.starts_with(PRAEFIX) && k.spektren.is_some() {
+            return Err(Fehler::Wert { knoten: k.id.clone(), wert: "spektren".to_string(), grund: "spektren not supported in makros" });
+        }
     }
     for (name, m) in &g.makros {
         for k in &m.knoten {
@@ -24,6 +27,9 @@ pub fn aufloesen(g: Graph) -> Result<Graph, Fehler> {
             }
             if k.datei.is_some() {
                 return Err(Fehler::Wert { knoten: format!("{name}/{}", k.id), wert: "datei".to_string(), grund: "datei not supported in makros" });
+            }
+            if k.spektren.is_some() {
+                return Err(Fehler::Wert { knoten: format!("{name}/{}", k.id), wert: "spektren".to_string(), grund: "spektren not supported in makros" });
             }
             if k.art.starts_with(PRAEFIX) || k.art == "note" || k.art == "ausgang" || k.art == "eingang" {
                 return Err(Fehler::MakroInhalt { makro: name.clone(), knoten: k.id.clone(), art: k.art.clone() });

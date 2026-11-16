@@ -8,7 +8,7 @@
 //                                                      deck or a clip of such a track, only the fields below
 //   POST /seq/text {platz, text}                       one or several patterns as text (seq_text.ts); one write, one undo step, all or nothing
 //   GET  /seq/stand[?zellen=1]                         (`zellen=1` adds `zellen`, one char per cell, to the note rows) {"1": null | {gruppe_id, folgen: [{spur_id, clip_id, name, geraet, stumm, editierbar, laenge_beats, zeilen, text}]}, ...}
-//   GET  /seq/geraet?spur_id=<id>                      the `info` of a track's instrument: {art, regler: [{nr, name, vorgabe}], klaenge: [{ton, name}]}
+//   GET  /seq/geraet?spur_id=<id>                      (any open project, not only the live container) the `info` of a track's instrument: {art, regler: [{nr, name, vorgabe}], klaenge: [{ton, name}]}
 // Every POST answers what the session answers to POST /proj/aendern, {rev, projekt, kern, hinweise?}, plus `gruppe_id` (and `ohne_aenderung: true` when the list
 // came out empty and nothing was written). The page needs `projekt` and `kern` (the message "Saved, but the core did not load"). Each write sends the event
 // {a: 'seq', f: {platz, rev}}.
@@ -24,6 +24,7 @@ import type { Geraet, Gruppe, Projekt, Spur } from '../../project/model.ts';
 import { bandVon, folgeBefehle, geraetText, geraetVonText, leseFolgeText, schreibeFolgeText, type Befehl, type FolgeInfo } from '../../project/seq_text.ts';
 import { SeqFehler, folgeSicht, musterLaenge, reglerSchluessel } from '../../public/seq_logic.js';
 import { parameterTabelle } from '../../devices_parameter.ts';
+import { TROMMEL_KARTEN } from '../../project/trommel_map.ts';
 import { kitKlaenge } from '../proj/kits.ts';
 import { alsAntwort, leseKoerper, type ProjZugang } from '../proj/area.ts';
 import { ProjFehler, type Antwort } from '../proj/session.ts';
@@ -73,7 +74,7 @@ const ungueltig = (text: string): never => { throw new ProjFehler(400, 'argument
 // reads it; it lists only the number of sounds, the names come from kit.json). bk knobs carry their number as `nr`, the RB-338 targets their name.
 export function geraetInfo(g: Geraet | undefined): FolgeInfo {
   if (g?.art === 'intern' && g.name === 'bk') {
-    return { art: 'bk', klaenge: [], regler: parameterTabelle({ art: 'bk', graph: g.graph })
+    return { art: 'bk', klaenge: [...(TROMMEL_KARTEN[g.graph] ?? [])], regler: parameterTabelle({ art: 'bk', graph: g.graph })
       .map((p) => ({ nr: Number(p.name.slice(1)), name: p.label, vorgabe: p.vorgabe })).filter((r) => Number.isInteger(r.nr)) };
   }
   if (g?.art === 'intern' && g.name === 'rb338') {
@@ -124,7 +125,8 @@ export class SeqBereich {
   }
 
   geraet(spurId: string | null): Antwort {
-    const o = this.brauchLive();
+    const o = this.zugang.offen();   // any open project: the workbench asks for the info outside the live container
+    if (!o) throw new ProjFehler(409, 'kein_projekt');
     const s = o.projekt.spuren.find((x) => x.id === spurId);
     if (!s) throw new ProjFehler(404, 'spur_unbekannt', { text: `no track ${String(spurId)}` });
     return { code: 200, j: this.info(s.geraet) };

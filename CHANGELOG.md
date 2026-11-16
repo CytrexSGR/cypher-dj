@@ -3,6 +3,32 @@
 One entry per public update, newest first. Each entry names what changed for someone who plays, produces or
 builds cypher-dj.
 
+## 2026-11-16
+
+**Studio**
+- The STUDIO view is now a loop workbench: build a module of up to eight instrument tracks that play together with
+  one transport, one tempo and one length (1, 2, 4, 8 or 16 bars), independent of the DJ decks. Start from a template
+  or an empty module; every change is saved as you make it, and the shelf at the bottom lists your modules.
+- Track list with level, mute, solo, meters, add and delete. A CHANGE button next to the instrument swaps a track's
+  instrument and keeps its notes. The instrument menu is grouped by category (bass, drums, keys, lead, pad, textur).
+- Notes grid: one row per sound for drum instruments, one row per pitch for synths (two octaves visible, scroll over
+  the whole range, an octave bar to jump), steps 1, 5, 9 and 13 marked, velocity and length per step, paging over
+  long loops.
+- SOUND area: the large front panel of the selected instrument and an insert chain of up to four effects per track,
+  with the device faces of the PRODUCTION view.
+- The previous Studio layout (three Strudel channels for playing live) stays under the new LIVE button.
+
+**Instruments and effects**
+- `synth-greif` (Greif), a hybrid wavetable synth: three wavetable oscillators with their own spectra, phase
+  modulation between them, warp, an octave stack, a chaos modulator, a frequency shifter and a clean sub. 63 knobs,
+  eight voices, twelve factory presets.
+- Two new Cypher Modular blocks: `chaos` (a Lorenz or Roessler attractor as a never-repeating LFO) and `schieber`
+  (frequency shifter). The `wavetable` block gains phase modulation, warp, an octave stack and custom spectra.
+- Live knob control of Cypher Modular graphs now reaches knobs 1 to 64 (was 32).
+
+**General**
+- Long menus scroll inside the window; the mouse wheel over a menu scrolls it instead of closing it.
+
 ## 2026-11-15, second update
 
 **Production**

@@ -26,10 +26,10 @@ fn lauf(p: &mut Programm, n: usize) -> Vec<(f32, f32)> { (0..n).map(|_| p.sample
 fn wavetable_ist_art_32_mit_ein_und_ausgaengen() {
     let a = ARTEN.get(32).expect("ARTEN has no entry 32 (wavetable)");
     assert_eq!(a.art, "wavetable");
-    assert_eq!(a.ein, &["hz", "trig", "pos", "verstimmung", "breite"]);
+    assert_eq!(a.ein, &["hz", "trig", "pos", "verstimmung", "breite", "pm", "warp", "tiefe", "stapel"]);
     assert_eq!(a.aus, &["l", "r", "aus"]);
     assert!(a.werte.is_empty());
-    for f in [("tabelle", 0.0), ("kopien", 1.0), ("pos", 0.0), ("verstimmung", 0.0), ("breite", 0.0), ("zufall", 1.0), ("saat", 0.0), ("glatt", 10.0)] {
+    for f in [("tabelle", 0.0), ("kopien", 1.0), ("pos", 0.0), ("verstimmung", 0.0), ("breite", 0.0), ("zufall", 1.0), ("saat", 0.0), ("glatt", 10.0), ("reserve", 0.0)] {
         assert!(a.frei.contains(&f), "{f:?}");
     }
     assert_eq!(ARTEN[31].art, "faltung", "existing type numbers must not move");
@@ -40,11 +40,11 @@ fn werte_werden_geprueft() {
     let ok = |v: &str| uebersetze(&mit_note(v, 1), SR);
     for v in [r#","tabelle":7"#, r#","tabelle":1.5"#, r#","tabelle":-1"#, r#","kopien":0"#, r#","kopien":8"#, r#","kopien":2.5"#,
               r#","pos":1.1"#, r#","pos":-0.1"#, r#","verstimmung":50.5"#, r#","verstimmung":-1"#, r#","breite":1.01"#,
-              r#","zufall":2"#, r#","saat":-1"#, r#","saat":0.5"#, r#","saat":70000"#, r#","glatt":-1"#, r#","glatt":1001"#] {
+              r#","zufall":2"#, r#","saat":-1"#, r#","saat":0.5"#, r#","saat":70000"#, r#","glatt":-1"#, r#","glatt":1001"#, r#","reserve":4"#, r#","reserve":-1"#, r#","reserve":0.5"#] {
         assert!(matches!(ok(v), Err(Fehler::Wert { .. })), "{v}: {:?}", ok(v).err());
     }
     for v in ["", r#","tabelle":6"#, r#","kopien":7"#, r#","kopien":1"#, r#","pos":1"#, r#","verstimmung":50"#, r#","breite":1"#,
-              r#","zufall":0"#, r#","saat":65535"#, r#","glatt":0"#, r#","glatt":1000"#] {
+              r#","zufall":0"#, r#","saat":65535"#, r#","glatt":0"#, r#","glatt":1000"#, r#","reserve":0"#, r#","reserve":3"#] {
         assert!(ok(v).is_ok(), "{v}: {:?}", ok(v).err());
     }
     assert!(matches!(ok(r#","fremd":1"#), Err(Fehler::UnbekannterWert { .. })));

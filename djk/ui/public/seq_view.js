@@ -701,7 +701,7 @@ function wendeGross() {
 function grossTaste(e) {
   if (e.key !== 'Escape' || e.ctrlKey || e.metaKey || e.altKey) return;
   const b = document.body.classList;
-  const gross = grossJetzt().platz !== null && !b.contains('produktion') && !b.contains('geraeteseite');
+  const gross = grossJetzt().platz !== null && !b.contains('produktion') && !b.contains('werkbank') && !b.contains('geraeteseite');
   const eingabe = !!e.target?.closest?.('input, textarea, select, [contenteditable]'), menue = menueOffen() || $('#listen-menue')?.hidden === false;
   if (!grossEscape({ gross, menue, eingabe })) return;
   e.preventDefault(); e.stopPropagation();   // the Escape of the page (library drawer) does not also fire

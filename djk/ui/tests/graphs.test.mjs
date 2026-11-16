@@ -138,6 +138,17 @@ test('graphLatenz: the shipped graph bass-banddrive reports latenz 0 (falter ueb
   const mit = { ...g, knoten: g.knoten.map((k) => (k.art === 'falter' ? { ...k, ueber: 1 } : k)) };
   assert.equal(graphLatenz(mit), 69, 'positive control: the rule sees the oversampled falter on the path');
 });
+test('graphLatenz: the shipped graph synth-greif reports latenz 0 and is listed as an instrument with 8 voices', () => {
+  const datei = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'instruments', 'modular_dsp', 'demos', 'synth-greif.json');
+  const g = JSON.parse(fs.readFileSync(datei, 'utf8'));
+  assert.equal(g.stimmen, 8);
+  assert.ok(g.knoten.some((k) => k.art === 'chaos') && g.knoten.some((k) => k.art === 'schieber') && g.knoten.some((k) => k.art === 'delay'));
+  assert.equal(graphLatenz(g), 0);
+});
+test('graphLatenz: graphs with a chaos or a schieber node report latenz 0', () => {
+  assert.equal(lat([{ id: 'ein', art: 'eingang' }, { id: 'n', art: 'schieber', hz: 100 }], [{ von: 'ein.l', nach: 'n.x' }, { von: 'n.auf', nach: 'o.x' }]), 0);
+  assert.equal(lat([{ id: 'n', art: 'chaos', rate: 3 }], [{ von: 'n.aus', nach: 'o.x' }]), 0);
+});
 test('graphLatenz: summed along a chain, the largest path wins, delayed edges and blocks that do not reach the output count nothing', () => {
   const k = [{ id: 'ein', art: 'eingang' }, { id: 'a', art: 'falter' }, { id: 'b', art: 'limiter', vorlauf: 0.5 }, { id: 'c', art: 'labor', ueber: 0 }];
   assert.equal(lat(k, [{ von: 'ein.l', nach: 'a.x' }, { von: 'a.aus', nach: 'b.x' }, { von: 'b.l', nach: 'o.x' }]), 69 + 23, 'chain');

@@ -1,0 +1,9 @@
+/* Workbench top bar. */
+#werkbank .w-kopf { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 7px 12px; }
+#werkbank .w-name { font-size: 17px; font-weight: 700; min-width: 8ch; }
+#werkbank .w-etikett { font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); font-weight: 700; white-space: nowrap; }
+#werkbank .w-bpm { width: 8ch; text-align: center; font-weight: 700; }
+#werkbank .w-kopf button { white-space: nowrap; }
+#werkbank .w-play.an { background: var(--gut); color: #06130e; border-color: var(--gut); }
+#werkbank .w-play.wartet:not(.an) { border-color: var(--warn); color: var(--warn); }
+#werkbank .w-laenge.an { background: var(--d3); color: #0b0d12; border-color: var(--d3); }

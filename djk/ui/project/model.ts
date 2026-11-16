@@ -11,6 +11,7 @@ import { SCHLUESSEL_DJ, SCHLUESSEL_NUR_ZEILE } from './key_table.ts';
 import { ersterUngueltigerSchluessel } from './routing_verdict.ts';
 import { huellkurvenPruefung, type Huellkurve } from './envelope.ts';
 import { seqPruefung, seqSichtPruefung, type SeqDeck, type SeqSicht } from './seq.ts';   // seq.ts imports only types from this file: no runtime cycle
+import { werkbankPruefung, type WerkbankMarke } from './werkbank.ts';   // werkbank.ts imports only a type from this file: no runtime cycle
 import { PRESET_ID } from '../presets/preset_id.ts';   // 1.16 rest: zero-import file, keeps this module free of file access
 export type { Punkt, LaneForm } from './lane.ts';
 
@@ -458,6 +459,7 @@ export interface Projekt {
   returns?: Return[];
   baukasten?: BkKanal[];   // S17: sound snapshot (project/modular.ts), only in /2, absent when empty
   live?: true;             // the live container (plan live-module): the one project that runs during a DJ set; never written when absent
+  werkbank?: WerkbankMarke;   // loop workbench module (project/werkbank.ts): only in /2, never together with live; never written when absent
 }
 
 export const aufnahmeVon = (p: Projekt): ProjektAufnahme => p.aufnahme ?? structuredClone(AUFNAHME_VORGABE);
@@ -1481,8 +1483,13 @@ function pruefeAlles(x: unknown): void {
   const neu2 = istObjekt(x) && x.format === FORMAT;   // /2 verlangt gruppen und master, /1 hat sie nicht
   const pflicht = ['format', 'name', 'rev', 'wiedergabe_rev', 'tempo_bpm', 'taktart', 'loop', 'metronom', 'spuren', ...(neu2 ? ['gruppen', 'master'] : [])];
   // returns, baukasten in /1: unknown field
-  const o = felder(x, 'projekt', pflicht, ['naechste_id', 'naechste_noten_id', ...(neu2 ? ['returns', 'baukasten', 'aufnahme', 'live'] : [])]);
+  const o = felder(x, 'projekt', pflicht, ['naechste_id', 'naechste_noten_id', ...(neu2 ? ['returns', 'baukasten', 'aufnahme', 'live', 'werkbank'] : [])]);
   if ('live' in o && o.live !== true) werfe('live', 'true expected (absent when not a live container)');
+  if ('werkbank' in o) {
+    const w = werkbankPruefung(o.werkbank);
+    if (w) werfe('werkbank', w.text);
+    if ('live' in o) werfe('werkbank', 'a workbench module is never the live container');
+  }
   if ('naechste_noten_id' in o) zahlIn(o.naechste_noten_id, 'naechste_noten_id', 1, Number.MAX_SAFE_INTEGER, true);
   if ('naechste_id' in o) {
     const z = felder(o.naechste_id, 'naechste_id', [], ['spur', 'clip', 'gruppe', 'lane', 'return', 'insert', 'take']);

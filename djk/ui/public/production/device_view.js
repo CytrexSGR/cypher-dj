@@ -1,9 +1,9 @@
 // PRODUCTION (front panels, task 8): the device view on an instrument track (bk graph, RB-338). A click on the device label of the track head opens the
 // front panel of the device in the detail area (detail.js mode `geraet`, like the rack panel). The panel comes from GET /geraete/panel; its values live in
 // spur.geraet.parameter (normalised 0..1, an absent one is the `vorgabe` of the parameter table).
-// Knobs k1..k32 of a Baukasten track move the sound while they are dragged (production plan task 10): set() sends the light command geraet_param_setzen at most
+// Knobs k1..k64 of a Baukasten track move the sound while they are dragged (production plan task 10): set() sends the light command geraet_param_setzen at most
 // once per 30 ms with the latest value (the core row spur/<slot>/bk/<k> carries it to the instance), ende() sends the last value at once; one undo step per drag.
-// Every other control (RB-338, Surge, knobs k33..k64) moves the display at once and sends nothing until the end of the gesture (panel.js calls adapter.ende): ONE
+// Every other control (RB-338, Surge) moves the display at once and sends nothing until the end of the gesture (panel.js calls adapter.ende): ONE
 // spur_aendern goes out with the whole device and the new values: one write, one undo step, and the graph instance of the track stays (the general path of spur_aendern).
 import { baueFrontplatte, steuerungen, parameterVon } from '../panel.js';
 import { baueKopf, spurBeschreibung, tagVonGraph } from '../panel_kopf.js';
@@ -11,7 +11,7 @@ import { parameterNachName } from '../panel_display.js';
 import { wendePresetAn } from './preset_apply.js';
 import { surgeAnzeige, surgeNorm } from '../surge_adapter.js';
 
-export const BK_LIVE_MAX = 32;   // knobs k1..k32 have a core row spur/<slot>/bk/<k> (SPUR_BK_KNOEPFE); a page file cannot import the .ts, tests/production_device_view.test.mjs pins it
+export const BK_LIVE_MAX = 64;   // knobs k1..k64 have a core row spur/<slot>/bk/<k> (SPUR_BK_KNOEPFE; 32 until 2026-11-16); a page file cannot import the .ts, tests/production_device_view.test.mjs pins it
 export const BK_LIVE_MS = 30;    // the throttle of a live drag, like pluginAdapter (plugin_panel.js)
 export const SURGE_MAX = 32;   // = SURGE_PARAMETER_MAX of project/model.ts (a page file cannot import the .ts; tests/production_device_view.test.mjs pins them equal)
 
@@ -43,7 +43,7 @@ const anfrage = (g) => (istSurge(g) ? '/geraete/panel?art=surge' : g.name === 'b
  * (accepted: the project has it; refused: the display goes back to the project value, `beiFertig(ok)` lets the view redraw).
  * It sends only while the track still carries the device the view was built for: a track switched to Surge meanwhile gets nothing.
  * opt: { label(param) -> control label (undo step "<track>: <label>"), beiFertig(ok), melde, zeitgeber? ({setTimeout, clearTimeout}, default globalThis), entprellMs? (default 30) }.
- * A Baukasten knob k1..k32 is live: see the header; its sends are separate commands geraet_param_setzen, a refusal stops the live sends of the running gesture (the
+ * A Baukasten knob k1..k64 is live: see the header; its sends are separate commands geraet_param_setzen, a refusal stops the live sends of the running gesture (the
  * writer reported it once) and the display goes back to the stored value.
  */
 export function spurAdapter(ctx, spur, parameter = [], opt = {}) {
@@ -169,7 +169,7 @@ export function reglerBereiche(parameter) {
 
 /**
  * The view in `wurzel`. zeige(spur) shows the panel of a track (spur null or without a view: removes it) and returns whether a panel is shown/loading.
- * The same track with the same device is not rebuilt, only refreshed from the project. opt: { dokument?, kopfBauer? (default baueKopf) }.
+ * The same track with the same device is not rebuilt, only refreshed from the project. opt: { dokument?, kopfBauer? (default baueKopf), bestaetige?, breit? (the wide plate, `fp-breit`: the workbench) }.
  */
 export function bindeGeraetAnsicht(ctx, wurzel, opt = {}) {
   const d = opt.dokument ?? globalThis.document;
@@ -236,7 +236,7 @@ export function bindeGeraetAnsicht(ctx, wurzel, opt = {}) {
       if (!register) holeRegister().then(() => kopfHandle?.neu());
     };
     jetzt.adapter = adapter;
-    jetzt.fp = baueFrontplatte(wurzel, { panel: j.panel, regler: reglerBereiche(j.parameter), parameter: g.name === 'bk' ? undefined : parameterNachName(j.parameter), adapter, dokument: d, kopf: istSurge(g) ? undefined : kopf });   // Surge has no preset header
+    jetzt.fp = baueFrontplatte(wurzel, { panel: j.panel, regler: reglerBereiche(j.parameter), parameter: g.name === 'bk' ? undefined : parameterNachName(j.parameter), adapter, dokument: d, kopf: istSurge(g) ? undefined : kopf, breit: opt.breit === true });   // Surge has no preset header
   }
 
   return {

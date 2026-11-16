@@ -3,6 +3,7 @@
 // Lesen: /strom (Kern über den Seiten-Server), Leitstand-WS als Rolle "anzeige" (takt, ansage, ereignis).
 import { bindeSpurbaender } from './track_tape_view.js';
 import { bindeProduktion } from './production/production.js';
+import { bindeWerkbank } from './werkbank/werkbank.js';
 import { bindeModule } from './module_library.js';   // plan live-module task 10: the MODULES tab
 import { bindeKopplung } from './coupling.js';   // task 10: pair a tablet (main page only)
 import { DECKS } from './curves.js';
@@ -13,7 +14,7 @@ import { bindePlaetze } from './slots_view.js';
 import { baueSeqPlaetze } from './seq_view.js';
 import { $, $$, jsonPost, melde, zustand } from './page_state.js';
 import { bindeLive, liveOeffnen, pruefeLive } from './live_view.js';
-import { bindeAnsicht, bindeMusterFeld, bindeReiter, bindeSchublade, bindeTablet, setzeProduktion } from './seitenrahmen.js';
+import { bindeAnsicht, bindeMusterFeld, bindeReiter, bindeSchublade, bindeTablet, setzeProduktion, setzeWerkbank } from './seitenrahmen.js';
 import { bindeLibrary, bindeSets } from './library_view.js';
 import { ladeBaum, markiereTyp } from './browse_detail.js';
 import { bindeTempo } from './tempo_view.js';
@@ -47,6 +48,7 @@ bindeEffekte();
 bindeMusterFeld();
 try { bindeSpurbaender(jsonPost, () => letzterBeat); } catch (e) { console.error('Studio S7 lanes:', e); }   // Studio S7
 try { setzeProduktion(bindeProduktion({ presetsZeigen: () => zeigePresets(), presetsNeu: () => presetPanel?.aktualisiereZiele(), presetListe: () => presetPanel?.z.liste ?? [], post: jsonPost, bpm: () => zustand.bpm ?? 128, stoebern: () => zustand.stoebern, bibliothek: () => { if (!stz.treffer.length) { stoebernLaden(); ladeBaum(); } } })); } catch (e) { console.error('Production view:', e); }   // D1 V1
+try { setzeWerkbank(bindeWerkbank({ post: jsonPost })); } catch (e) { console.error('Workbench view:', e); }   // the fourth view, STUDIO
 bindeAnsicht();
 bindeTablet();
 bindeRemixFenster();

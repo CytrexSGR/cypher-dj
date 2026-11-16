@@ -54,6 +54,10 @@ const FALTUNG_1: &str = r#"{"format":"baukasten/2","name":"faltung-1","stimmen":
 /// (detune ratios, pan gains, smoother, mip level) changes while playing
 const WAVETABLE_1: &str = r#"{"format":"baukasten/2","name":"wavetable-1","stimmen":4,"knoten":[{"id":"n","art":"note"},{"id":"w","art":"wavetable","tabelle":5,"kopien":7},{"id":"kp","art":"regler","nr":1,"min":0,"max":1},{"id":"kd","art":"regler","nr":2,"min":0,"max":50},{"id":"kb","art":"regler","nr":3,"min":0,"max":1},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"w.hz"},{"von":"n.trig","nach":"w.trig"},{"von":"kp.aus","nach":"w.pos"},{"von":"kd.aus","nach":"w.verstimmung"},{"von":"kb.aus","nach":"w.breite"},{"von":"w.l","nach":"o.l"},{"von":"w.r","nach":"o.r"}]}"#;
 
+/// Wavetable with the Greif extensions: custom spectra (three frames), five copies, a sine on `pm` scaled by a knob, warp
+/// mode, depth and stack on knobs (so the warp constants, the stack factors and the mip level change while playing), reserve 2
+const WAVETABLE_2: &str = r#"{"format":"baukasten/2","name":"wavetable-2","stimmen":4,"knoten":[{"id":"n","art":"note"},{"id":"w","art":"wavetable","spektren":[[1,0.5,0.25],[0.3,-0.6,0.4,0.2],[1,0,0,0,0.8]],"kopien":5,"verstimmung":14,"reserve":2},{"id":"m","art":"sinus","hz":220},{"id":"mm","art":"mul"},{"id":"kpm","art":"regler","nr":1,"min":0,"max":0.5},{"id":"kw","art":"regler","nr":2,"min":0,"max":3},{"id":"kt","art":"regler","nr":3,"min":-1,"max":1},{"id":"ks","art":"regler","nr":4,"min":0,"max":2},{"id":"kp","art":"regler","nr":5,"min":0,"max":1},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"w.hz"},{"von":"n.trig","nach":"w.trig"},{"von":"m.aus","nach":"mm.a"},{"von":"kpm.aus","nach":"mm.b"},{"von":"mm.aus","nach":"w.pm"},{"von":"kw.aus","nach":"w.warp"},{"von":"kt.aus","nach":"w.tiefe"},{"von":"ks.aus","nach":"w.stapel"},{"von":"kp.aus","nach":"w.pos"},{"von":"w.l","nach":"o.l"},{"von":"w.r","nach":"o.r"}]}"#;
+
 /// Resonator: four voices, 32 bar modes struck by a noise burst while a saw drives the audio input; material,
 /// brightness, size, position and inharmonicity on knobs, so the coefficients are rebuilt while playing
 /// Comb: four voices, noise burst on x, tuning from the note with a vibrato (hz moves every sample), feedback through
@@ -108,6 +112,12 @@ const ALLPASS_1: &str = r#"{"format":"baukasten/2","name":"allpass-1","stimmen":
 /// Four voices of saw through the three band crossover, both corners on knobs, the bands summed back (type 53)
 const KREUZ_1: &str = r#"{"format":"baukasten/2","name":"kreuz-1","stimmen":4,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"saege"},{"id":"k1","art":"regler","nr":1,"min":60,"max":400,"log":1},{"id":"k2","art":"regler","nr":2,"min":300,"max":8000,"log":1},{"id":"c","art":"kreuz","baender":3},{"id":"a","art":"add"},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"s.hz"},{"von":"s.aus","nach":"c.x"},{"von":"k1.aus","nach":"c.fc1"},{"von":"k2.aus","nach":"c.fc2"},{"von":"c.lo","nach":"a.a"},{"von":"c.mid","nach":"a.b"},{"von":"c.hi","nach":"a.c"},{"von":"a.aus","nach":"o.x"}]}"#;
 
+/// Four voices of the Lorenz chaos LFO retriggered by the note, modulating a saw's amplitude (type 54)
+const CHAOS_1: &str = r#"{"format":"baukasten/2","name":"chaos-1","stimmen":4,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"saege"},{"id":"k","art":"regler","nr":1,"min":0.01,"max":50,"log":1},{"id":"c","art":"chaos","saat":7},{"id":"m","art":"mul"},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"s.hz"},{"von":"n.trig","nach":"c.trig"},{"von":"k.aus","nach":"c.rate"},{"von":"s.aus","nach":"m.a"},{"von":"c.aus","nach":"m.b"},{"von":"m.aus","nach":"o.x"}]}"#;
+
+/// Four voices of saw through the frequency shifter, the shift on a knob, both sidebands summed (type 55)
+const SCHIEBER_1: &str = r#"{"format":"baukasten/2","name":"schieber-1","stimmen":4,"knoten":[{"id":"n","art":"note"},{"id":"s","art":"saege"},{"id":"k","art":"regler","nr":1,"min":-2000,"max":2000},{"id":"f","art":"schieber"},{"id":"a","art":"add"},{"id":"o","art":"ausgang"}],"kanten":[{"von":"n.hz","nach":"s.hz"},{"von":"s.aus","nach":"f.x"},{"von":"k.aus","nach":"f.hz"},{"von":"f.auf","nach":"a.a"},{"von":"f.ab","nach":"a.b"},{"von":"a.aus","nach":"o.x"}]}"#;
+
 const GRAPHEN: &[&str] = &[
     include_str!("../demos/saege-ladder.json"),
     include_str!("../demos/juno-pad.json"),
@@ -141,6 +151,7 @@ const GRAPHEN: &[&str] = &[
     include_str!("../demos/fx-federhall.json"),
     include_str!("../demos/fx-filter-fahrt.json"),
     WAVETABLE_1,
+    WAVETABLE_2,
     include_str!("../demos/wavetable-supersaw.json"),
     include_str!("../demos/wavetable-reese.json"),
     include_str!("../demos/wavetable-chor.json"),
@@ -209,8 +220,12 @@ const GRAPHEN: &[&str] = &[
     include_str!("../demos/fx-remix.json"),
     ALLPASS_1,
     KREUZ_1,
+    CHAOS_1,
+    SCHIEBER_1,
     // Band Drive Bass: wavetable stack, hard sync, kreuz bands, falter, formant, saett, wahl morph for the glide
     include_str!("../demos/bass-banddrive.json"),
+    // Greif: three wavetables with custom spectra, phase modulation and warp, chaos, shift, chorus, delay
+    include_str!("../demos/synth-greif.json"),
 ];
 
 #[test]

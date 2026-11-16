@@ -87,7 +87,7 @@ fn minimalgraph(art: &str) -> Option<String> {
         "faltung" => um(r#",{"id":"p","art":"faltung","datei":"ir.f32","mix":0.7}"#, r#",{"von":"s.aus","nach":"p.x"},{"von":"p.l","nach":"o.l"},{"von":"p.r","nach":"o.r"}"#),
         // type 32: three detuned copies on the morph table, start phases from a trig; a forgotten reset of the random
         // generator or of the phases shows as a different second run
-        "wavetable" => um(r#",{"id":"p","art":"wavetable","tabelle":4,"pos":0.4,"kopien":3,"verstimmung":12,"breite":0.8}"#,
+        "wavetable" => um(r#",{"id":"p","art":"wavetable","tabelle":4,"pos":0.4,"kopien":3,"verstimmung":12,"breite":0.8,"pm":0.07,"warp":3,"tiefe":0.6,"stapel":2,"reserve":1}"#,
                           r#",{"von":"n.hz","nach":"p.hz"},{"von":"n.trig","nach":"p.trig"},{"von":"p.l","nach":"o.l"},{"von":"p.r","nach":"o.r"}"#),
         // type 34: a membrane struck by a noise burst (random generator state) with the saw on the audio input; a forgotten
         // reset of the mode states, the burst or the trig edge shows as a different second run
@@ -151,6 +151,13 @@ fn minimalgraph(art: &str) -> Option<String> {
         // nine stages shows as a different second run
         "kreuz" => um(r#",{"id":"p","art":"kreuz","fc1":300,"fc2":2500,"baender":3},{"id":"a","art":"add"}"#,
                       r#",{"von":"s.aus","nach":"p.x"},{"von":"p.lo","nach":"a.a"},{"von":"p.mid","nach":"a.b"},{"von":"p.hi","nach":"a.c"},{"von":"a.aus","nach":"o.x"}"#),
+        // type 54: Lorenz attractor with a seed, both outputs summed into an amplitude on the saw; a forgotten reset of the state or the
+        // trigger memory shows as a different second run (`n.trig` retriggers the attractor on every note)
+        "chaos" => um(r#",{"id":"p","art":"chaos","rate":20,"saat":3},{"id":"m","art":"mul"},{"id":"a","art":"add","b":1.5},{"id":"k","art":"mul","b":0.5}"#,
+                      r#",{"von":"n.trig","nach":"p.trig"},{"von":"p.aus","nach":"a.a"},{"von":"a.aus","nach":"k.a"},{"von":"p.aus2","nach":"k.b"},{"von":"s.aus","nach":"m.a"},{"von":"k.aus","nach":"m.b"},{"von":"m.aus","nach":"o.x"}"#),
+        // type 55: both shifted signals of the saw summed, the shift on a constant; a forgotten reset of the all-pass memory or the phase shows
+        "schieber" => um(r#",{"id":"p","art":"schieber","hz":170},{"id":"a","art":"add"}"#,
+                         r#",{"von":"s.aus","nach":"p.x"},{"von":"p.auf","nach":"a.a"},{"von":"p.ab","nach":"a.b"},{"von":"a.aus","nach":"o.x"}"#),
         // drift: the saw through a multiplier driven by the drift block, so the wander state and the per-voice offset are audible in the output
         "drift" => um(r#",{"id":"p","art":"drift","rate":3,"fest":0.5,"saat":5},{"id":"m","art":"mul"},{"id":"k","art":"mul","b":0.5},{"id":"a","art":"add","b":1.0}"#,
                       r#",{"von":"p.aus","nach":"k.a"},{"von":"k.aus","nach":"a.a"},{"von":"s.aus","nach":"m.a"},{"von":"a.aus","nach":"m.b"},{"von":"m.aus","nach":"o.x"}"#),
@@ -288,6 +295,12 @@ fn arten_nur_angehaengt_falter() {
     let i = ARTEN.iter().position(|a| a.art == "falter").expect("falter in ARTEN");
     assert!(i >= 47, "the falter block must sit behind the 47 entries that existed before it, found at {i}");
 }
+/// The chaos block is type 54 and the schieber block type 55, appended after kreuz.
+#[test]
+fn arten_nur_angehaengt_chaos_schieber() {
+    assert_eq!(ARTEN.iter().position(|a| a.art == "chaos"), Some(54), "chaos is type 54 and must not move");
+    assert_eq!(ARTEN.iter().position(|a| a.art == "schieber"), Some(55), "schieber is type 55 and must not move");
+}
 /// The kreuz block is type 53, appended after allpass.
 #[test]
 fn arten_nur_angehaengt_kreuz() {
@@ -352,5 +365,5 @@ fn arten_nur_angehaengt_sem() {
 #[test]
 fn arten_nur_angehaengt_wahl() {
     let i = ARTEN.iter().position(|a| a.art == "wahl").expect("wahl is in ARTEN");
-    assert!(i >= 38 && i + 10 >= ARTEN.len(), "wahl is one of the last entries of ARTEN (index {i} of {})", ARTEN.len());
+    assert!(i >= 38 && i + 11 >= ARTEN.len(), "wahl is one of the last entries of ARTEN (index {i} of {})", ARTEN.len());
 }

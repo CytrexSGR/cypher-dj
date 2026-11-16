@@ -29,6 +29,7 @@ import {
   wirtSlots, AUFNAHME_VORGABE, EXTERN_MODI, VORZAEHLER_WERTE, type EingangExtern, type EingangIntern, type EingangMidi, type ProjektAufnahme, type SpurAufnahme,
 } from './model.ts';
 import { INSERT_ARTEN } from './insert_key.ts';
+import { MAX_WERKBANK_SPUREN } from './werkbank.ts';
 import { SEQ_BEATS, seqGruppe, seqSichtPruefung, type SeqSicht } from './seq.ts';
 import { wendeMusterAn, musterAbdruck, type KitKlang, type MusterErgebnis, type MusterFehlschlag } from './pattern_clip.ts';
 import { nachkommen, pruefeAlleSchluessel, pruefeSchluessel, vorfahren, type SchluesselFrage } from './routing_rules.ts';
@@ -691,8 +692,38 @@ function seqSichtArg(x: unknown): SeqSicht {
 // --- SEQ deck v2 (spec 2026-11-14-seq-deck-design, sections 4 and 5) ------------------------------------------------------
 // A pattern clip: loop_beats is the pattern length, the clip covers the whole live region
 const SEQ_LOOP_VORGABE = 4;
+const WERKBANK_LOOP_VORGABE = 16;   // default pattern length of a workbench track (beats)
 
-const BK_LIVE_KNOEPFE = 32;   // production plan task 9: k1..k32 have a core row spur/<slot>/bk/<k> (SPUR_BK_KNOEPFE), k33..k64 stay on the release path
+const BK_LIVE_KNOEPFE = 64;   // k1..k64 have a core row spur/<slot>/bk/<k> (SPUR_BK_KNOEPFE; 32 until 2026-11-16, production plan task 9)
+
+// Shared body of seq_folge_neu (g = its deck group) and werkbank_spur_neu (g = null: the track plays into the master): the instrument track,
+// -6 dB, its one MIDI clip of SEQ_BEATS beats, envelopes, `stumm`. The name is unique among the tracks of the group, or among all instrument tracks.
+function musterSpurNeu(p: Projekt, a: Args, ctx: Kontext, g: Gruppe | null): void {
+  const name = text(a, 'name', 80, false)!;
+  if (p.spuren.some((s) => (g ? s.ausgang?.id === g.id : s.art === 'instrument') && s.name.toLowerCase() === name.toLowerCase())) {
+    ab('argument_ungueltig', g
+      ? `name: the deck already has a pattern called ${name} (names are unique, ignoring case)`
+      : `name: the module already has a track called ${name} (names are unique, ignoring case)`);
+  }
+  if (a.geraet === undefined) ab('argument_ungueltig', 'geraet: the instrument of the pattern expected');
+  const loop = a.loop_beats === undefined ? (g ? SEQ_LOOP_VORGABE : WERKBANK_LOOP_VORGABE) : zahl(a, 'loop_beats', 0.125, SEQ_BEATS)!;
+  if (Math.abs(loop * 8 - Math.round(loop * 8)) > 1e-9) ab('argument_ungueltig', 'loop_beats: a multiple of 0.125 beat expected');
+  const stumm = flagge(a, 'stumm', true) ?? false;
+  const huell = a.huellkurven === undefined ? [] : listeArg(a, 'huellkurven');
+  PRO_BEFEHL.spur_neu(p, { befehl: 'spur_neu', art: 'instrument', name, geraet: a.geraet }, ctx);
+  const spur = p.spuren[p.spuren.length - 1];
+  spur.fader_db = -6;   // a start level with headroom: two new patterns at 0 dB would reach 0 dBFS in the sum
+  if (g) PRO_BEFEHL.ziel_setzen(p, { befehl: 'ziel_setzen', strang_id: spur.id, ausgang: { art: 'gruppe', id: g.id } }, ctx);
+  PRO_BEFEHL.clip_neu(p, { befehl: 'clip_neu', spur_id: spur.id, art: 'midi', start_beat: 0, laenge_beats: SEQ_BEATS, loop_beats: loop, name,
+    ...(a.noten !== undefined ? { noten: a.noten } : {}), ...(a.seq !== undefined ? { seq: a.seq } : {}) }, ctx);
+  const clip = spur.clips[0];
+  for (const h of huell) {
+    if (!istObjekt(h)) ab('argument_ungueltig', 'huellkurven: a list of objects expected');
+    PRO_BEFEHL.huellkurve_setzen(p, { ...h, befehl: 'huellkurve_setzen', clip_id: clip.id }, ctx);
+  }
+  if (stumm) spur.mute = true;
+}
+
 const PRO_BEFEHL: Record<string, (p: Projekt, a: Args, ctx: Kontext) => void> = {
   spur_neu(p, a, ctx) {
     erlaube(a, 'art', 'name', 'geraet', 'gruppe');
@@ -1441,27 +1472,18 @@ const PRO_BEFEHL: Record<string, (p: Projekt, a: Args, ctx: Kontext) => void> = 
     erlaube(a, 'gruppe_id', 'name', 'geraet', 'loop_beats', 'stumm', 'noten', 'seq', 'huellkurven');
     const g = gruppeVon(p, idArg(a, 'gruppe_id'));
     if (!g.seq) ab('seq_fehlt', `${g.id} holds no SEQ deck`);
-    const name = text(a, 'name', 80, false)!;
-    if (p.spuren.some((s) => s.ausgang?.id === g.id && s.name.toLowerCase() === name.toLowerCase())) {
-      ab('argument_ungueltig', `name: the deck already has a pattern called ${name} (names are unique, ignoring case)`);
+    musterSpurNeu(p, a, ctx, g);
+  },
+
+  // Workbench module: one instrument track to the master with its pattern clip (same body as seq_folge_neu, no group). Refused outside a module
+  // (kein_werkbank) and beyond MAX_WERKBANK_SPUREN instrument tracks (werkbank_voll).
+  werkbank_spur_neu(p, a, ctx) {
+    erlaube(a, 'name', 'geraet', 'loop_beats', 'stumm', 'noten', 'seq', 'huellkurven');
+    if (!p.werkbank) ab('kein_werkbank', 'the open project is not a workbench module');
+    if (p.spuren.filter((s) => s.art === 'instrument').length >= MAX_WERKBANK_SPUREN) {
+      ab('werkbank_voll', `a module holds at most ${MAX_WERKBANK_SPUREN} instrument tracks`);
     }
-    if (a.geraet === undefined) ab('argument_ungueltig', 'geraet: the instrument of the pattern expected');
-    const loop = a.loop_beats === undefined ? SEQ_LOOP_VORGABE : zahl(a, 'loop_beats', 0.125, SEQ_BEATS)!;
-    if (Math.abs(loop * 8 - Math.round(loop * 8)) > 1e-9) ab('argument_ungueltig', 'loop_beats: a multiple of 0.125 beat expected');
-    const stumm = flagge(a, 'stumm', true) ?? false;
-    const huell = a.huellkurven === undefined ? [] : listeArg(a, 'huellkurven');
-    PRO_BEFEHL.spur_neu(p, { befehl: 'spur_neu', art: 'instrument', name, geraet: a.geraet }, ctx);
-    const spur = p.spuren[p.spuren.length - 1];
-    spur.fader_db = -6;   // a start level with headroom: two new patterns at 0 dB would reach 0 dBFS in the sum
-    PRO_BEFEHL.ziel_setzen(p, { befehl: 'ziel_setzen', strang_id: spur.id, ausgang: { art: 'gruppe', id: g.id } }, ctx);
-    PRO_BEFEHL.clip_neu(p, { befehl: 'clip_neu', spur_id: spur.id, art: 'midi', start_beat: 0, laenge_beats: SEQ_BEATS, loop_beats: loop, name,
-      ...(a.noten !== undefined ? { noten: a.noten } : {}), ...(a.seq !== undefined ? { seq: a.seq } : {}) }, ctx);
-    const clip = spur.clips[0];
-    for (const h of huell) {
-      if (!istObjekt(h)) ab('argument_ungueltig', 'huellkurven: a list of objects expected');
-      PRO_BEFEHL.huellkurve_setzen(p, { ...h, befehl: 'huellkurve_setzen', clip_id: clip.id }, ctx);
-    }
-    if (stumm) spur.mute = true;
+    musterSpurNeu(p, a, ctx, null);
   },
 
   // SEQ deck: removes the group and every track that plays into it, with their clips, in one step. A sub-group that plays into the group
@@ -1670,16 +1692,17 @@ const PRO_BEFEHL: Record<string, (p: Projekt, a: Args, ctx: Kontext) => void> = 
     insert.werte[q.name] = insertZahl(insert.art as InsertPoolArt, q, a, 'wert');
   },
 
-  // Production plan task 9: one knob k1..k32 of a Baukasten track, live (no new playback). The core row spur/<slot>/bk/<k> that carries the value
-  // to the instance while the knob is dragged is added by fuehreLeichtAus (the only producer of such a row); k33..k64 stay on the release path (spur_aendern).
+  // Production plan task 9: one knob k1..k64 of a Baukasten track, live (no new playback). The core row spur/<slot>/bk/<k> that carries the value
+  // to the instance while the knob is dragged is added by fuehreLeichtAus (the only producer of such a row); a knob beyond the live range
+  // would stay on the release path (spur_aendern).
   geraet_param_setzen(p, a) {
     erlaube(a, 'spur_id', 'param', 'wert');
     const spur = spurVon(p, idArg(a, 'spur_id'));
     const param = a.param;
-    if (typeof param !== 'string' || !BK_PARAMETER.includes(param)) ab('argument_unbekannt', `param: ${String(param)} (k1..k32)`);
+    if (typeof param !== 'string' || !BK_PARAMETER.includes(param)) ab('argument_unbekannt', `param: ${String(param)} (k1..k${BK_LIVE_KNOEPFE})`);
     if (!(spur.geraet?.art === 'intern' && spur.geraet.name === 'bk')) ab('geraet_falsch', `${spur.id} is not a Baukasten track`);
     if (Number((param as string).slice(1)) > BK_LIVE_KNOEPFE) {
-      ab('param_nicht_live', `${String(param)}: only k1..k${BK_LIVE_KNOEPFE} are live, change k33..k64 with spur_aendern`);
+      ab('param_nicht_live', `${String(param)}: only k1..k${BK_LIVE_KNOEPFE} are live, change the others with spur_aendern`);
     }
     if (!zahlOk(a.wert) || a.wert < 0 || a.wert > 1) ab('argument_ungueltig', 'wert: Zahl 0..1 erwartet');
     (spur.geraet as { parameter: Record<string, number> }).parameter[param as string] = a.wert;
@@ -2489,7 +2512,7 @@ function fuehreLeichtAus(projekt: Projekt, befehle: unknown[]): BefehlErgebnis {
         if (k >= 0) { entwurf.gruppen[k] = { ...entwurf.gruppen[k] }; kopiert.add(a.gruppe_id); }
       }
       PRO_BEFEHL[a.befehl](entwurf, a, { quelle: 'andreas' });          // nur Befehle ohne Herkunft (istLeicht)
-      if (a.befehl === 'geraet_param_setzen') {   // task 9: the handler accepted it, so the track is a bk track and the knob is k1..k32
+      if (a.befehl === 'geraet_param_setzen') {   // task 9: the handler accepted it, so the track is a bk track and the knob is k1..k64
         bkZeilen.set(`spur/${bkSlot(entwurf, a.spur_id)}/bk/${Number(a.param.slice(1))}`, a.wert);
       }
     } catch (e) { if (e instanceof BefehlFehler) e.index = i; throw e; }

@@ -46,6 +46,8 @@ test('geraet_param_setzen is light, writes the knob and names exactly one row', 
   assert.deepEqual(r.regler_aenderungen, [{ pfad: 'spur/2/bk/5', wert: 0.8 }]);
   const r1 = fuehreListeAus(p, [setze('s3', 'k32', 0.1)]);
   assert.deepEqual(r1.regler_aenderungen, [{ pfad: 'spur/1/bk/32', wert: 0.1 }]);
+  const r64 = fuehreListeAus(p, [setze('s7', 'k64', 0.2)]);
+  assert.deepEqual(r64.regler_aenderungen, [{ pfad: 'spur/2/bk/64', wert: 0.2 }], 'k64 names its core row');
   assert.equal(spurVon(p, 's7').geraet.parameter.k5, undefined, 'the project the command started from is not mutated');
   assert.equal(spurVon(p, 's3').geraet.parameter.k32, undefined);
 });
@@ -127,12 +129,11 @@ test('two moves of the same knob within the window are one history entry; anothe
   assert.equal(spurVon(u3.projekt, 's7').geraet.parameter.k5, undefined, 'one undo takes the whole sweep back to where it began');
 });
 
-test('refusals: spur_unbekannt, geraet_falsch (RB-338), param_nicht_live (k33..k64), argument_ungueltig, argument_unbekannt; a lane on the knob answers lane_treibt and the write is kept', () => {
+test('refusals: spur_unbekannt, geraet_falsch (RB-338), argument_ungueltig, argument_unbekannt; a lane on the knob answers lane_treibt and the write is kept', () => {
   const p = projekt();
   lehntAb(p, setze('nope', 'k5', 0.5), 'spur_unbekannt');
   lehntAb(p, setze('s5', 'k5', 0.5), 'geraet_falsch');
-  lehntAb(p, setze('s7', 'k33', 0.5), 'param_nicht_live');
-  lehntAb(p, setze('s7', 'k64', 0.5), 'param_nicht_live');
+  for (const k of ['k33', 'k64']) assert.doesNotThrow(() => fuehreListeAus(p, [setze('s7', k, 0.5)]), `${k} is live`);
   for (const wert of [1.5, -0.1, '0.5', NaN, null, undefined]) lehntAb(p, setze('s7', 'k5', wert), 'argument_ungueltig');
   lehntAb(p, setze('s7', 'k65', 0.5), 'argument_unbekannt');
   lehntAb(p, setze('s7', 'cutoff', 0.5), 'argument_unbekannt');

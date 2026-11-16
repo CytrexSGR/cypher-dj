@@ -1,0 +1,76 @@
+/* Workbench NOTES region (task 7). Like the mockup: header, bar strip, BAR and STEP rows, rows with a lighter column on steps 1 5 9 13 through all rows,
+   piano keys with the octave bar beside them, the step value lane. Colours are the dark ones of the surface; amber (--warn) marks what differs. */
+#werkbank .w-noten { --lnbreit: 78px; --abstand: 3px; }
+#werkbank .w-rkopf { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+#werkbank .w-rkopf .w-titel { margin: 0 6px 0 0; }
+#werkbank .w-rspur { font-weight: 700; font-size: 14px; margin-right: 4px; }
+#werkbank .w-rabstand { flex: 1; }
+#werkbank .w-rfenster { min-width: 86px; text-align: center; }
+#werkbank .w-rknopf { padding: 2px 8px; font-size: 10px; font-weight: 700; letter-spacing: .08em; white-space: nowrap; }
+#werkbank .w-rknopf.an { background: var(--d3); color: #0b0d12; border-color: var(--d3); }
+#werkbank .w-rknopf.zulang { background: var(--warn); border-color: var(--warn); color: #0b0d12; }
+#werkbank .w-rtext { margin: 10px 0; color: var(--dim); font-size: 12px; }
+#werkbank .w-raster.gesperrt { opacity: .55; }
+#werkbank .w-raster.gesperrt [data-a], #werkbank .w-raster.gesperrt .w-val { cursor: default; }
+
+/* bar strip over the grid: every bar of the module, the visible window framed */
+#werkbank .w-rleiste { display: flex; gap: 3px; margin: 0 0 8px var(--lnbreit); padding-left: 6px; }
+#werkbank .w-rtakt { flex: 1 1 0; min-width: 0; height: 26px; border-radius: 3px; background: var(--panel2); border: 1px solid var(--line); font-size: 10px; font-weight: 800; color: var(--dim); padding: 2px 4px; position: relative; cursor: pointer; }
+#werkbank .w-rtakt.betont { color: var(--text); background: color-mix(in srgb, var(--d3) 10%, var(--panel2)); }
+#werkbank .w-rtakt.sichtbar { border-top-color: var(--d3); border-bottom-color: var(--d3); color: var(--text); }
+#werkbank .w-rtakt.sichtbar.von { border-left-color: var(--d3); }
+#werkbank .w-rtakt.sichtbar.bis { border-right-color: var(--d3); }
+#werkbank .w-rtakt i { position: absolute; left: 4px; right: 4px; bottom: 3px; height: 4px; border-radius: 2px; background: var(--spurfarbe, var(--d3)); opacity: .7; }
+
+/* lanes */
+#werkbank .w-lane { display: grid; grid-template-columns: var(--lnbreit) minmax(0, 1fr); gap: 6px; align-items: stretch; margin-bottom: 2px; }
+#werkbank .w-ln { font-size: 10px; font-weight: 700; letter-spacing: .06em; display: flex; align-items: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#werkbank .w-ln-zaehlung { color: var(--dim); }
+#werkbank .w-ln-drum { cursor: pointer; }
+#werkbank .w-ln-drum.gewaehlt { color: var(--warn); }
+#werkbank .w-steps { display: grid; gap: 1px; }
+/* a little air between the beats, more between the bars, like the mockup */
+#werkbank .w-steps > *:nth-child(4n+1) { margin-left: 3px; }
+#werkbank .w-steps > *:nth-child(16n+1) { margin-left: 9px; }
+#werkbank .w-steps > *:first-child { margin-left: 0; }
+#werkbank .w-st { height: 17px; border-radius: 2px; background: #10131b; border: 1px solid #1b202d; cursor: pointer; }
+#werkbank .w-st.betont { background: #222a3f; }
+#werkbank .w-st.an { background: var(--spurfarbe, var(--d3)); border-color: transparent; }
+#werkbank .w-st.fort { background: color-mix(in srgb, var(--spurfarbe, var(--d3)) 45%, #10131b); border-color: transparent; }
+#werkbank .w-st.wiederholung { opacity: .4; }
+#werkbank .w-st.kopf, #werkbank .w-val.kopf { outline: 1px solid var(--warn); outline-offset: -1px; filter: brightness(1.5); }
+#werkbank .w-ru { height: 18px; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; white-space: nowrap; color: var(--dim); }
+#werkbank .w-ru.betont { color: #fff; font-size: 13px; font-weight: 800; }
+#werkbank .w-ru.bar { justify-content: flex-start; color: var(--warn); font-size: 12px; font-weight: 800; }
+#werkbank .w-ru.kopf { color: var(--warn); }
+#werkbank .w-sicht-1 .w-ru { font-size: 12px; }
+#werkbank .w-sicht-1 .w-ru.betont { font-size: 16px; }
+#werkbank .w-sicht-1 .w-st { height: 22px; }
+#werkbank .w-sicht-4 .w-st { height: 17px; }
+#werkbank .w-sicht-4 .w-ru { font-size: 9px; }
+#werkbank .w-sicht-4 .w-ru.betont { font-size: 12px; }
+
+/* pitch rows: keyboard keys, octave bar beside them (the dark colours of the surface) */
+#werkbank .w-tonblock { position: relative; display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 6px; }
+#werkbank .w-okt { display: flex; flex-direction: column; border-radius: 4px; overflow: hidden; background: var(--panel2); border: 1px solid var(--line); cursor: pointer; user-select: none; }
+#werkbank .w-o { flex: 1; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 800; color: var(--dim); border-bottom: 1px solid var(--line); position: relative; }
+#werkbank .w-o.sichtbar { background: color-mix(in srgb, var(--spurfarbe, var(--d3)) 22%, var(--panel2)); color: var(--text); border-left: 2px solid var(--warn); border-right: 2px solid var(--warn); }
+#werkbank .w-o.sichtbar.von { border-top: 2px solid var(--warn); }
+#werkbank .w-o.sichtbar.bis { border-bottom: 2px solid var(--warn); }
+#werkbank .w-o.hat::after { content: ""; position: absolute; right: 2px; top: 50%; width: 4px; height: 4px; margin-top: -2px; border-radius: 50%; background: var(--spurfarbe, var(--d3)); }
+#werkbank .w-tonzeilen .w-lane { margin-bottom: 1px; grid-template-columns: calc(var(--lnbreit) - 28px) minmax(0, 1fr); }
+#werkbank .w-tonzeilen .w-st { height: 11px; }
+#werkbank .w-sicht-1 .w-tonzeilen .w-st { height: 14px; }
+#werkbank .w-ln-taste { font-size: 9px; padding: 0 6px; border-radius: 2px; }
+#werkbank .w-ln-taste.weiss { background: #e9ecf3; color: #111; }
+#werkbank .w-ln-taste.schwarz { background: #1c1f29; color: var(--dim); }
+#werkbank .w-ln-taste.c { background: var(--warn); color: #111; }
+
+/* step values */
+#werkbank .w-werte { display: flex; align-items: center; gap: 4px; margin: 10px 0 4px; padding-top: 8px; border-top: 1px solid var(--line); }
+#werkbank .w-hinweis { color: var(--dim); font-size: 11px; margin-left: 6px; }
+#werkbank .w-val { height: 38px; background: #10131b; border: 1px solid #1b202d; border-radius: 2px; display: flex; align-items: flex-end; cursor: ns-resize; user-select: none; touch-action: none; }
+#werkbank .w-val.betont { background: #222a3f; }
+#werkbank .w-val i { display: block; width: 100%; background: color-mix(in srgb, var(--spurfarbe, var(--d3)) 55%, #10131b); pointer-events: none; }
+#werkbank .w-val.anders i { background: var(--warn); }
+#werkbank .w-val.wiederholung { opacity: .4; }

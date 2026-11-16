@@ -68,6 +68,10 @@ pub enum Schritt {
     Ladder { x: Quelle, cutoff: Quelle, reso: Quelle, aus: usize, f: [Ladder; MAX_STIMMEN], reso_glatt: Spur },
     Allpass { x: Quelle, fc: Quelle, fc2: Quelle, aus: usize, ordnung: u8, f: [Allpass; MAX_STIMMEN] },
     Kreuz { x: Quelle, fc1: Quelle, fc2: Quelle, lo: usize, mid: usize, hi: usize, baender: u8, f: [Kreuz; MAX_STIMMEN] },
+    /// chaos LFO (chaos.rs, type 54): two coordinates of a Lorenz or Roessler attractor per voice, `saat`-seeded, reset by `trig`
+    Chaos { rate: Quelle, trig: Quelle, aus: usize, aus2: usize, form: u8, saat: u32, c: [crate::chaos::Chaos; MAX_STIMMEN] },
+    /// frequency shifter (schieber.rs, type 55): `auf` shifted up and `ab` down by `hz`
+    Schieber { x: Quelle, hz: Quelle, auf: usize, ab: usize, f: Box<[crate::schieber::Schieber; MAX_STIMMEN]> },
     Svf { x: Quelle, cutoff: Quelle, reso: Quelle, tp: usize, bp: usize, hp: usize, vier: bool, f: [Svf; MAX_STIMMEN] },
     Sem { x: Quelle, cutoff: Quelle, reso: Quelle, form: Quelle, aus: usize, bp: usize, f: [Sem; MAX_STIMMEN] },
     /// tanh mit ADAA1 (saett_dsp::Adaa1, f64), `antrieb` in dB vor der Kennlinie
@@ -123,7 +127,7 @@ pub enum Schritt {
     Faltung { x: Quelle, l: Quelle, r: Quelle, mix: Quelle, wl: usize, wr: usize, f: Box<Faltung> },
     /// Per voice: wavetable oscillator with up to 7 unison copies (wavetable.rs). `t` is the node's table, shared read-only by
     /// all voices; the voices are boxed so the step enum does not grow by their size. `aus` is the sum without pan.
-    Wavetable { hz: Quelle, trig: Quelle, pos: Quelle, verstimmung: Quelle, breite: Quelle, wl: usize, wr: usize, aus: usize, e: WtEinstellung, t: Box<Tabelle>, w: Box<[WtStimme; MAX_STIMMEN]> },
+    Wavetable { hz: Quelle, trig: Quelle, pos: Quelle, verstimmung: Quelle, breite: Quelle, pm: Quelle, warp: Quelle, tiefe: Quelle, stapel: Quelle, wl: usize, wr: usize, aus: usize, e: WtEinstellung, t: Box<Tabelle>, w: Box<[WtStimme; MAX_STIMMEN]> },
     /// Per voice: modal resonator bank, up to 32 modes (resonator.rs). `satz` is the node's mode set, shared read-only by
     /// all voices; the voices are boxed so the step enum does not grow by their size. `ein` in the order of `RsEingabe`.
     Resonator { ein: [Quelle; 9], aus: usize, e: RsEinstellung, satz: Box<Satz>, v: Box<[RsStimme; MAX_STIMMEN]> },
@@ -239,6 +243,8 @@ impl Schritt {
             Schritt::Svf { f, .. } => *f = [Svf::default(); MAX_STIMMEN],
             Schritt::Allpass { f, .. } => *f = [Allpass::default(); MAX_STIMMEN],
             Schritt::Kreuz { f, .. } => *f = [Kreuz::default(); MAX_STIMMEN],
+            Schritt::Chaos { c, saat, form, .. } => *c = std::array::from_fn(|i| crate::chaos::Chaos::neu(i, *saat, *form)),
+            Schritt::Schieber { f, .. } => **f = [crate::schieber::Schieber::default(); MAX_STIMMEN],
             Schritt::Sem { f, .. } => *f = [Sem::default(); MAX_STIMMEN],
             Schritt::Wahl { v, .. } => **v = [crate::wahl::Stimme::default(); MAX_STIMMEN],
             Schritt::Saett { a, .. } => *a = [Adaa1::default(); MAX_STIMMEN],
@@ -846,6 +852,24 @@ impl Programm {
                     slots[*mid] = m;
                     slots[*hi] = h;
                 }
+                Schritt::Chaos { rate, trig: t, aus, aus2, form, c, .. } => {
+                    let (r, t) = (spur(*rate, slots, vorher), spur(*t, slots, vorher));
+                    let (mut a, mut b) = ([0.0; MAX_STIMMEN], [0.0; MAX_STIMMEN]);
+                    for i in 0..n {
+                        (a[i], b[i]) = c[i].prozess(r[i], t[i], *form, sr);
+                    }
+                    slots[*aus] = a;
+                    slots[*aus2] = b;
+                }
+                Schritt::Schieber { x, hz, auf, ab, f } => {
+                    let (x, h) = (spur(*x, slots, vorher), spur(*hz, slots, vorher));
+                    let (mut u, mut d) = ([0.0; MAX_STIMMEN], [0.0; MAX_STIMMEN]);
+                    for i in 0..n {
+                        (u[i], d[i]) = f[i].prozess(x[i], h[i], sr);
+                    }
+                    slots[*auf] = u;
+                    slots[*ab] = d;
+                }
                 Schritt::Sem { x, cutoff, reso, form, aus, bp, f } => {
                     let (x, c, r, fo) = (spur(*x, slots, vorher), spur(*cutoff, slots, vorher), spur(*reso, slots, vorher), spur(*form, slots, vorher));
                     let (mut a, mut b) = ([0.0; MAX_STIMMEN], [0.0; MAX_STIMMEN]);
@@ -1073,12 +1097,13 @@ impl Programm {
                     }
                     slots[*aus] = o;
                 }
-                Schritt::Wavetable { hz, trig, pos, verstimmung, breite, wl, wr, aus, e, t, w } => {
+                Schritt::Wavetable { hz, trig, pos, verstimmung, breite, pm, warp, tiefe, stapel, wl, wr, aus, e, t, w } => {
                     let (h, tr, p) = (spur(*hz, slots, vorher), spur(*trig, slots, vorher), spur(*pos, slots, vorher));
                     let (d, b) = (spur(*verstimmung, slots, vorher), spur(*breite, slots, vorher));
+                    let (pm, wa, ti, st) = (spur(*pm, slots, vorher), spur(*warp, slots, vorher), spur(*tiefe, slots, vorher), spur(*stapel, slots, vorher));
                     let (mut ol, mut or, mut om) = ([0.0; MAX_STIMMEN], [0.0; MAX_STIMMEN], [0.0; MAX_STIMMEN]);
                     for i in 0..n {
-                        (ol[i], or[i], om[i]) = w[i].prozess(t, e, sr, WtEingabe { hz: h[i], trig: tr[i], pos: p[i], verstimmung: d[i], breite: b[i] });
+                        (ol[i], or[i], om[i]) = w[i].prozess(t, e, sr, WtEingabe { hz: h[i], trig: tr[i], pos: p[i], verstimmung: d[i], breite: b[i], pm: pm[i], warp: wa[i], tiefe: ti[i], stapel: st[i] });
                     }
                     slots[*wl] = ol;
                     slots[*wr] = or;

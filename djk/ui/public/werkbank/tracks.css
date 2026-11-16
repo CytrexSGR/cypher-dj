@@ -1,0 +1,26 @@
+/* Workbench TRACKS region (task 4). Rows like the mockup: letter badge in the track colour, name, chip, instrument text. */
+#werkbank .w-titel { margin: 0 0 8px; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); font-weight: 700; }
+#werkbank .w-spurliste { display: flex; flex-direction: column; gap: 6px; }
+#werkbank .w-spur {
+  display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; grid-template-areas: "b n c" "b g g" "b r r"; column-gap: 8px; row-gap: 2px; align-items: center;
+  padding: 7px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel2); cursor: pointer;
+}
+#werkbank .w-spur.aktiv { border-color: var(--d3); background: color-mix(in srgb, var(--d3) 12%, var(--panel2)); }
+#werkbank .w-buchstabe { grid-area: b; width: 26px; height: 26px; border-radius: 5px; display: flex; align-items: center; justify-content: center; font-weight: 800; color: #0b0d12; background: var(--dim); }
+#werkbank .w-spurname { grid-area: n; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#werkbank .w-chip { grid-area: c; font-size: 9px; letter-spacing: .12em; font-weight: 700; color: var(--dim); }
+#werkbank .w-chip:empty { display: none; }
+#werkbank .w-spurgeraet { grid-area: g; font-size: 11px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#werkbank .w-spurrechts { grid-area: r; display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; }
+#werkbank .w-fader { flex: 1 1 80px; min-width: 60px; margin: 0; }
+#werkbank .w-faderwert { font-size: 10px; color: var(--dim); min-width: 50px; text-align: right; font-variant-numeric: tabular-nums; }
+#werkbank .w-knopf { min-width: 24px; height: 22px; padding: 0 6px; font-size: 10px; font-weight: 800; border: 1px solid var(--line); border-radius: 4px; background: var(--panel); color: var(--dim); cursor: pointer; }
+#werkbank .w-knopf[aria-pressed="true"] { color: #0b0d12; background: var(--warn); border-color: var(--warn); }
+#werkbank .w-knopf[data-w="spur-loeschen"]:hover { color: var(--kill); border-color: var(--kill); }
+#werkbank .w-spurrechts .meter { flex: 1 0 100%; }
+#werkbank .w-spurneu { margin-top: 8px; width: 100%; padding: 7px 8px; font-size: 10px; font-weight: 700; letter-spacing: .12em; border: 1px dashed var(--line); border-radius: 6px; background: transparent; color: var(--dim); cursor: pointer; }
+#werkbank .w-spurneu:hover:not(:disabled) { color: var(--d3); border-color: var(--d3); }
+#werkbank .w-spurneu:disabled { opacity: .5; cursor: not-allowed; }
+#werkbank .w-spurrechts:empty { display: none; }
+#werkbank .w-andere { margin: 8px 0 0; font-size: 11px; color: var(--dim); }
+#werkbank .w-andere:empty { display: none; }

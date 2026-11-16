@@ -13,7 +13,7 @@ namespace {
 // nested groups task 1: groups 9..16 are appended at the end of the table: 8 x 4 controls (fader, pan, mute, solo) + 4 returns x 8 sends
 constexpr int GRUPPEN_NEU_ZEILEN = GRP_REGLER_GRUPPEN_NEU * 4 + RET_REGLER_RETURNS * GRP_REGLER_GRUPPEN_NEU;
 constexpr int GRUPPEN_CUE_ZEILEN = GRP_REGLER_GRUPPEN_ALLE;   // live modules task 6: grp/1..16/cue at the very end
-constexpr int SPUR_BK_ZEILEN = SPUR_BK_SLOTS * SPUR_BK_KNOEPFE;   // production plan task 8: spur/<slot>/bk/<k> at the very end (behind master/bk/*), 8 x 32
+constexpr int SPUR_BK_ZEILEN = SPUR_BK_SLOTS * SPUR_BK_KNOEPFE;   // production plan task 8: spur/<slot>/bk/<k> at the very end (behind master/bk/*), 8 x 64
 constexpr int MASTER_BK_ZEILEN = BK_REGLER_N;   // master insert graph: master/bk/1..64 at the very end (behind grp/<n>/cue)
 const ReglerTabelle& tab() {
   static ReglerTabelle t;
@@ -666,7 +666,7 @@ FALL(bk_regler_9_bis_64_haengen_am_tabellenende) {
   PRUEFE_GLEICH(n, 3268 + GRUPPEN_NEU_ZEILEN + GRUPPEN_CUE_ZEILEN + MASTER_BK_ZEILEN + SPUR_BK_ZEILEN);
   PRUEFE(n < cypherdj::stellwerk::MAX_REGLER);
   PRUEFE_GLEICH(cypherdj::stellwerk::BK_REGLER_N, 64);
-  PRUEFE_GLEICH(cypherdj::stellwerk::MAX_REGLER - n, 428);   // production plan task 8: 256 spur/<slot>/bk/<k> rows, 684 before ("Regler 3412 von 4096, Reserve 684")   // "Regler 3412 von 4096, Reserve 684" (master insert graph: 64 master/bk rows; 748 and 3348 before) (live modules task 6: 16 grp/<n>/cue rows; 764 before, 3268 and 828 before nested groups task 1)
+  PRUEFE_GLEICH(cypherdj::stellwerk::MAX_REGLER - n, 172);   // 64-knob live override: 512 spur/<slot>/bk/<k> rows (3924 of 4096), 428 with 32 knobs; production plan task 8: 256 rows, 684 before ("Regler 3412 von 4096, Reserve 684")   // "Regler 3412 von 4096, Reserve 684" (master insert graph: 64 master/bk rows; 748 and 3348 before) (live modules task 6: 16 grp/<n>/cue rows; 764 before, 3268 and 828 before nested groups task 1)
   // rows 9..32: 12 channels x 24 knobs, then fx/3 and fx/4 x 24, at 2484..2819 (the block of the 32-knob widening, unmoved)
   PRUEFE_GLEICH(tab().suche("deck/1/bk/9"), 2484);
   PRUEFE_GLEICH(tab().suche("deck/1/bk/32"), 2484 + 23);
@@ -682,12 +682,12 @@ FALL(bk_regler_9_bis_64_haengen_am_tabellenende) {
   PRUEFE_GLEICH(tab().suche("fx/3/bk/33"), 3268 - 2 * 32);
   PRUEFE_GLEICH(tab().suche("fx/4/bk/64"), 3268 - 1);
   // master insert graph: master/bk/1..64 are the very last rows (behind grp/16/cue), global, everybody may (not nur_hand)
-  PRUEFE_GLEICH(tab().suche("master/bk/1"), tab().anzahl() - 64 - SPUR_BK_ZEILEN);   // production plan task 8: the 256 spur/<slot>/bk/<k> rows follow them
+  PRUEFE_GLEICH(tab().suche("master/bk/1"), tab().anzahl() - 64 - SPUR_BK_ZEILEN);   // production plan task 8: the 512 spur/<slot>/bk/<k> rows follow them
   PRUEFE_GLEICH(tab().suche("master/bk/64"), tab().anzahl() - 1 - SPUR_BK_ZEILEN);
   PRUEFE_GLEICH(tab().suche("spur/1/bk/1"), tab().anzahl() - SPUR_BK_ZEILEN);   // the very last rows, slot-major
-  PRUEFE_GLEICH(tab().suche("spur/8/bk/32"), tab().anzahl() - 1);
-  PRUEFE_GLEICH(tab().suche("spur/2/bk/1"), tab().anzahl() - SPUR_BK_ZEILEN + 32);
-  PRUEFE(tab().suche("spur/9/bk/1") < 0 && tab().suche("spur/1/bk/33") < 0 && tab().suche("spur/1/bk/0") < 0 && tab().suche("spur/0/bk/1") < 0);
+  PRUEFE_GLEICH(tab().suche("spur/8/bk/64"), tab().anzahl() - 1);
+  PRUEFE_GLEICH(tab().suche("spur/2/bk/1"), tab().anzahl() - SPUR_BK_ZEILEN + 64);
+  PRUEFE(tab().suche("spur/9/bk/1") < 0 && tab().suche("spur/1/bk/65") < 0 && tab().suche("spur/8/bk/65") < 0 && tab().suche("spur/1/bk/0") < 0 && tab().suche("spur/0/bk/1") < 0);
   {
     const ReglerDef& x = d("spur/3/bk/17");
     PRUEFE(x.rolle == Rolle::spur_bk && x.min == 0.0f && x.max == 1.0f && x.vorgabe == 0.5f && x.kanal == -1 && !x.nur_hand && !x.transport);

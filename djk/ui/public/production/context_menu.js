@@ -27,7 +27,7 @@ export function oeffneMenue(punkte, x, y, doc = document, fenster = window) {
   const r = ul.getBoundingClientRect();
   if (r.right > fenster.innerWidth) ul.style.left = `${Math.max(0, fenster.innerWidth - r.width - 4)}px`;
   if (r.bottom > fenster.innerHeight) ul.style.top = `${Math.max(0, fenster.innerHeight - r.height - 4)}px`;
-  const zu = (e) => { if (e.type === 'keydown' && e.key !== 'Escape') return; if (e.type === 'blur' && e.target !== fenster) return; if (e.type === 'pointerdown' && ul.contains(e.target)) return; schliesseMenue(); };
+  const zu = (e) => { if (e.type === 'keydown' && e.key !== 'Escape') return; if (e.type === 'blur' && e.target !== fenster) return; if ((e.type === 'pointerdown' || e.type === 'wheel') && ul.contains(e.target)) return; schliesseMenue(); };
   const ereignisse = ['pointerdown', 'keydown', 'wheel', 'blur'];
   for (const n of ereignisse) fenster.addEventListener(n, zu, true);
   schliesser = () => { for (const n of ereignisse) fenster.removeEventListener(n, zu, true); ul.remove(); };

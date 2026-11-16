@@ -43,7 +43,10 @@ fn beispiele() -> Vec<(String, String)> {
     let mut namen: Vec<String> = kat.as_object().unwrap().keys().cloned().collect();
     namen.sort();
     namen.into_iter().map(|n| {
-        let t = std::fs::read_to_string(dir.join("demos").join(format!("{n}.json"))).unwrap_or_else(|e| panic!("{n}: {e}"));
+        // Recipe graphs live in `demos/recipes/`, every other graph in `demos/`.
+        let t = std::fs::read_to_string(dir.join("demos").join(format!("{n}.json")))
+            .or_else(|_| std::fs::read_to_string(dir.join("demos/recipes").join(format!("{n}.json"))))
+            .unwrap_or_else(|e| panic!("{n}: {e}"));
         (n, t)
     }).collect()
 }
@@ -53,15 +56,15 @@ fn fehlertext(e: Fehler) -> String { format!("{e:?}") }
 #[test]
 fn a_alle_beispiele_unveraendert() {
     let graphen = beispiele();
-    assert_eq!(graphen.len(), 54, "kategorien.json lists 54 graphs");
+    assert!(graphen.len() >= 54, "kategorien.json lists at least the 54 graphs of the synth build-out: {}", graphen.len());
     let mut bereiche: Vec<(u32, u32, bool)> = Vec::new();
     for (name, text) in &graphen {
         let p = uebersetze_mit_wurzel(text, SR, Some(&wurzel())).unwrap_or_else(|e| panic!("{name}: {e}"));
-        // Drift (Task 8) and the synth build-out (Tasks 11-13) gave synth-mono, synth-poly and synth-neuro real vorgaben, and kick-synth
-        // carries its start sound (Tune 49 Hz, Level -3 dB, ...); labor carries its start patch (switches, key track, feedback);
-        // every other graph still starts all knobs at 0.5.
-        if !["synth-mono", "synth-poly", "synth-neuro", "kick-synth", "labor"].contains(&name.as_str()) {
-            assert_eq!(p.regler_vorgaben(), [0.5f32; REGLER], "{name}: only the three synths, kick-synth and labor carry a vorgabe");
+        // A graph whose `regler` nodes carry no `vorgabe` still starts every knob at 0.5.
+        let hat_vorgabe = serde_json::from_str::<serde_json::Value>(text).unwrap()["knoten"]
+            .as_array().unwrap().iter().any(|k| k["art"] == "regler" && !k["vorgabe"].is_null());
+        if !hat_vorgabe {
+            assert_eq!(p.regler_vorgaben(), [0.5f32; REGLER], "{name}: no regler node carries a vorgabe");
         }
         let g: serde_json::Value = serde_json::from_str(text).unwrap();
         for k in g["knoten"].as_array().unwrap() {

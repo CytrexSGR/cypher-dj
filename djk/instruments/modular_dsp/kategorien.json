@@ -191,6 +191,10 @@
   "kategorie": "pad",
   "text": "State-variable pad with a morphing filter that sweeps slowly; smooth and analog."
  },
+ "synth-greif": {
+  "kategorie": "lead",
+  "text": "Hybrid wavetable synth: three tables, phase mod, warp, chaos, shifter, clean sub."
+ },
  "synth-mono": {
   "kategorie": "bass",
   "text": "Full mono synth for bass and lead: two oscillators, sub, five switchable filters."

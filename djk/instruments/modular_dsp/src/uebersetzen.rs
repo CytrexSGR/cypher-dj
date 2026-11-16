@@ -92,7 +92,7 @@ pub struct ArtDef {
     pub frei: &'static [(&'static str, f32)],
 }
 
-pub const ARTEN: [ArtDef; 54] = [
+pub const ARTEN: [ArtDef; 56] = [
     ArtDef { art: "note", ein: &[], aus: &["hz", "gate", "vel", "trig", "erste"], werte: &[], frei: &[] },
     ArtDef { art: "konst", ein: &[], aus: &["aus"], werte: &["wert"], frei: &[] },
     // `vorgabe`: knob position the graph starts at (0..1). `mitte`: value at knob position 0.5; its default NaN is the "absent" marker
@@ -142,8 +142,8 @@ pub const ARTEN: [ArtDef; 54] = [
     // S21: convolution with an IR file (sum point, zero latency); type 31. `datei` is a named field like sampler's.
     ArtDef { art: "faltung", ein: &["x", "l", "r", "mix"], aus: &["l", "r"], werte: &[], frei: &[("mix", 1.0), ("pre", 0.0), ("laenge_max", 1000.0)] },
     // wavetable oscillator with unison inside the voice (wavetable.rs); type 32. `aus` is the sum without pan.
-    ArtDef { art: "wavetable", ein: &["hz", "trig", "pos", "verstimmung", "breite"], aus: &["l", "r", "aus"], werte: &[],
-             frei: &[("tabelle", 0.0), ("kopien", 1.0), ("pos", 0.0), ("verstimmung", 0.0), ("breite", 0.0), ("zufall", 1.0), ("saat", 0.0), ("glatt", 10.0)] },
+    ArtDef { art: "wavetable", ein: &["hz", "trig", "pos", "verstimmung", "breite", "pm", "warp", "tiefe", "stapel"], aus: &["l", "r", "aus"], werte: &[],
+             frei: &[("tabelle", 0.0), ("kopien", 1.0), ("pos", 0.0), ("verstimmung", 0.0), ("breite", 0.0), ("zufall", 1.0), ("saat", 0.0), ("glatt", 10.0), ("reserve", 0.0)] },
     // metallic oscillator bank for hats and cymbals (metall.rs); type 33 (appended in merge order after wavetable). Inputs in the order of `metall::EIN`.
     ArtDef { art: "metall", ein: &["trig", "vel", "decay", "tune", "farbe", "rauschen", "hp", "choke"], aus: &["aus", "huelle"], werte: &[],
              frei: &[("vel", 1.0), ("decay", 0.3), ("tune", 1.0), ("farbe", 0.5), ("rauschen", 0.2), ("hp", 6000.0), ("schnitt", 8.0), ("gruppe", 1.0), ("saat", 0.0)] },
@@ -217,6 +217,11 @@ pub const ARTEN: [ArtDef; 54] = [
     ArtDef { art: "allpass", ein: &["x", "fc", "fc2"], aus: &["aus"], werte: &[], frei: &[("ordnung", 1.0)] },
     // Linkwitz-Riley crossover (kreuz.rs), 2 or 3 bands with a compensated sum; type 53 (appended after allpass). `fc1`, `fc2` in Hz; `baender` 2 leaves `mid` at 0 and ignores `fc2`. No latency.
     ArtDef { art: "kreuz", ein: &["x", "fc1", "fc2"], aus: &["lo", "mid", "hi"], werte: &[], frei: &[("baender", 2.0)] },
+    // Chaos LFO (chaos.rs); type 54 (appended after kreuz). Lorenz (`form` 0) or Roessler (1) attractor per voice, `aus` and `aus2` in -1..1;
+    // `rate` 0.01..50 is a speed (about swings per second), a rising edge on `trig` returns to the start state seeded by `saat`. No latency.
+    ArtDef { art: "chaos", ein: &["rate", "trig"], aus: &["aus", "aus2"], werte: &[], frei: &[("rate", 1.0), ("form", 0.0), ("saat", 0.0)] },
+    // Frequency shifter (schieber.rs); type 55 (appended after chaos). Hilbert pair plus quadrature oscillator: `auf` up and `ab` down by `hz` (-2000..2000 Hz). No latency.
+    ArtDef { art: "schieber", ein: &["x", "hz"], aus: &["auf", "ab"], werte: &[], frei: &[("hz", 0.0)] },
 ];
 
 /// Arts whose node carries a `datei` (a file in the sample root, read at translation).
@@ -278,6 +283,17 @@ pub fn uebersetze_mit_wurzel(json: &str, sr: f32, wurzel: Option<&Path>) -> Resu
         }
         if MIT_DATEI.contains(&def.art) && k.datei.is_none() {
             return Err(Fehler::FehlenderWert { knoten: k.id.clone(), wert: "datei".to_string() });
+        }
+        if let Some(sp) = &k.spektren {
+            if def.art != "wavetable" {
+                return falsch("spektren", "spektren is only allowed on wavetable");
+            }
+            if let Err(grund) = crate::wavetable::pruefe_spektren(sp) {
+                return falsch("spektren", grund);
+            }
+            if w("tabelle") != 0.0 {
+                return falsch("spektren", "spektren replaces tabelle: tabelle must be absent or 0");
+            }
         }
         match def.art {
             "sampler" if !(20.0..=2000.0).contains(&w("grund")) => return falsch("grund", "20..2000 Hz"),
@@ -369,6 +385,10 @@ pub fn uebersetze_mit_wurzel(json: &str, sr: f32, wurzel: Option<&Path>) -> Resu
             "diode" if !(-40.0..=60.0).contains(&w("antrieb")) => return falsch("antrieb", "-40..60 dB"),
             "diode" if !(0.0..=1.0).contains(&w("bass")) => return falsch("bass", "0..1"),
             "svf" if w("pole") != 2.0 && w("pole") != 4.0 => return falsch("pole", "2 or 4"),
+            "chaos" if !(crate::chaos::MIN_RATE..=crate::chaos::MAX_RATE).contains(&w("rate")) => return falsch("rate", "0.01..50"),
+            "chaos" if !ganz(w("form"), 0.0, 1.0) => return falsch("form", "0 Lorenz, 1 Roessler"),
+            "chaos" if !ganz(w("saat"), 0.0, 65_535.0) => return falsch("saat", "integer 0..65535"),
+            "schieber" if !(-crate::schieber::MAX_HZ..=crate::schieber::MAX_HZ).contains(&w("hz")) => return falsch("hz", "-2000..2000 Hz"),
             "allpass" if w("ordnung") != 1.0 && w("ordnung") != 2.0 => return falsch("ordnung", "1 or 2"),
             "kreuz" if w("baender") != 2.0 && w("baender") != 3.0 => return falsch("baender", "2 or 3"),
             "sem" if !(0.0..=1.0).contains(&w("reso")) => return falsch("reso", "0..1"),
@@ -379,6 +399,7 @@ pub fn uebersetze_mit_wurzel(json: &str, sr: f32, wurzel: Option<&Path>) -> Resu
             "wavetable" if !(0.0..=crate::wavetable::MAX_VERSTIMMUNG).contains(&w("verstimmung")) => return falsch("verstimmung", "0..50 cent"),
             "wavetable" if !(0.0..=1.0).contains(&w("breite")) => return falsch("breite", "0..1"),
             "wavetable" if !(0.0..=1.0).contains(&w("zufall")) => return falsch("zufall", "0..1"),
+            "wavetable" if !ganz(w("reserve"), 0.0, 3.0) => return falsch("reserve", "integer 0..3"),
             "wavetable" if !ganz(w("saat"), 0.0, 65_535.0) => return falsch("saat", "integer 0..65535"),
             "wavetable" if !(0.0..=1000.0).contains(&w("glatt")) => return falsch("glatt", "0..1000 ms"),
             "resonator" if !ganz(w("satz"), 0.0, (SAETZE.len() - 1) as f32) => return falsch("satz", "0 stab, 1 marimba, 2 glocke, 3 glas, 4 holzblock, 5 membran, 6 platte"),
@@ -602,6 +623,8 @@ pub fn uebersetze_mit_wurzel(json: &str, sr: f32, wurzel: Option<&Path>) -> Resu
             "svf" => Schritt::Svf { x: q("x"), cutoff: q("cutoff"), reso: q("reso"), tp: aus(k, "tp"), bp: aus(k, "bp"), hp: aus(k, "hp"), vier: w("pole") == 4.0, f: [Svf::default(); MAX_STIMMEN] },
             "allpass" => Schritt::Allpass { x: q("x"), fc: q("fc"), fc2: q("fc2"), aus: aus(k, "aus"), ordnung: w("ordnung") as u8, f: [Allpass::default(); MAX_STIMMEN] },
             "kreuz" => Schritt::Kreuz { x: q("x"), fc1: q("fc1"), fc2: q("fc2"), lo: aus(k, "lo"), mid: aus(k, "mid"), hi: aus(k, "hi"), baender: w("baender") as u8, f: [Kreuz::default(); MAX_STIMMEN] },
+            "chaos" => Schritt::Chaos { rate: q("rate"), trig: q("trig"), aus: aus(k, "aus"), aus2: aus(k, "aus2"), form: w("form") as u8, saat: w("saat") as u32, c: std::array::from_fn(|i| crate::chaos::Chaos::neu(i, w("saat") as u32, w("form") as u8)) },
+            "schieber" => Schritt::Schieber { x: q("x"), hz: q("hz"), auf: aus(k, "auf"), ab: aus(k, "ab"), f: Box::new([crate::schieber::Schieber::default(); MAX_STIMMEN]) },
             "sem" => Schritt::Sem { x: q("x"), cutoff: q("cutoff"), reso: q("reso"), form: q("form"), aus: aus(k, "aus"), bp: aus(k, "bp"), f: [Sem::default(); MAX_STIMMEN] },
             "saett" => Schritt::Saett { x: q("x"), antrieb: q("antrieb"), aus: aus(k, "aus"), a: [Adaa1::default(); MAX_STIMMEN] },
             "glatt" => Schritt::Glatt { x: q("x"), setzen: q("setzen"), aus: aus(k, "aus"), zeit: w("zeit"), z: [0.0; MAX_STIMMEN] },
@@ -764,18 +787,25 @@ pub fn uebersetze_mit_wurzel(json: &str, sr: f32, wurzel: Option<&Path>) -> Resu
                 Schritt::Faltung { x: q("x"), l: q("l"), r: q("r"), mix: q("mix"), wl: aus(k, "l"), wr: aus(k, "r"), f: Box::new(Faltung::neu(&d, pre, w("mix"), sr)) }
             }
             "wavetable" => {
-                let e = crate::wavetable::Einstellung { kopien: w("kopien") as usize, zufall: w("zufall"), glatt_ms: w("glatt"), saat: w("saat") as u32 };
+                let e = crate::wavetable::Einstellung { kopien: w("kopien") as usize, zufall: w("zufall"), glatt_ms: w("glatt"), saat: w("saat") as u32, reserve: w("reserve") as u8 };
                 Schritt::Wavetable {
                     hz: q("hz"),
                     trig: q("trig"),
                     pos: q("pos"),
                     verstimmung: q("verstimmung"),
                     breite: q("breite"),
+                    pm: q("pm"),
+                    warp: q("warp"),
+                    tiefe: q("tiefe"),
+                    stapel: q("stapel"),
                     wl: aus(k, "l"),
                     wr: aus(k, "r"),
                     aus: aus(k, "aus"),
                     e,
-                    t: Box::new(Tabelle::neu(w("tabelle") as usize)),
+                    t: Box::new(match &knoten[k].spektren {
+                        Some(sp) => Tabelle::aus_spektren(sp),
+                        None => Tabelle::neu(w("tabelle") as usize),
+                    }),
                     w: Box::new(std::array::from_fn(|i| WtStimme::neu(i, &e))),
                 }
             }

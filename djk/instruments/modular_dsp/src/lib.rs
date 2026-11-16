@@ -46,6 +46,8 @@ pub mod falter;
 pub mod labor;
 pub mod remix;
 pub mod drift;
+pub mod chaos;
+pub mod schieber;
 
 pub use format::{Graph, Kante, Knoten, FORMAT, FORMATE};
 pub use kosten::Kosten;

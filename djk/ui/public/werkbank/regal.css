@@ -1,0 +1,25 @@
+/* Workbench empty state (task 3); the shelf strip arrives with task 10. */
+#werkbank .w-leer { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
+#werkbank .w-leer[hidden] { display: none; }
+#werkbank .w-leer-text { margin: 0; color: var(--dim); max-width: 60ch; }
+#werkbank .w-vorlagen, #werkbank .w-leer-zeile { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+#werkbank .w-vorlage { font-weight: 700; }
+
+/* Shelf strip (task 10): header row and a row of cards, like the mockup (.shelf, .cards, .card). Only the tab MODULES exists in stage 1. */
+#werkbank .w-regal-kopf { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+#werkbank .w-regal .w-lbl { font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+#werkbank .w-regal .w-tab { padding: 2px 8px; border: 1px solid var(--line); border-radius: 4px; font-weight: 700; font-size: 11px; }
+#werkbank .w-regal .w-tab.on { border-color: var(--accent, currentColor); }
+#werkbank .w-regal .w-hinweis { color: var(--dim); margin-left: 10px; font-size: 11px; }
+#werkbank .w-karten { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; max-height: 120px; overflow: auto; }
+#werkbank .w-karte { position: relative; text-align: left; border: 1px solid var(--line); background: var(--panel2); border-radius: 6px; padding: 8px; min-width: 0; }
+#werkbank .w-karte b { display: block; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#werkbank .w-karte span { display: block; color: var(--dim); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#werkbank .w-karte .w-marke { position: absolute; top: 6px; right: 8px; font-style: normal; font-size: 10px; font-weight: 700; color: var(--dim); text-transform: uppercase; }
+#werkbank .w-karte.offen { border-color: var(--accent, currentColor); cursor: default; }
+#werkbank .w-karte.offen .w-marke { color: var(--accent, currentColor); }
+#werkbank .w-karte.kaputt { opacity: .55; cursor: not-allowed; border-style: dashed; }
+#werkbank .w-karte.vorlage { border-style: dashed; }
+#werkbank .w-karte.neu { color: var(--dim); cursor: pointer; }
+#werkbank .w-karte-name { display: block; margin-top: 4px; width: 100%; box-sizing: border-box; }
+#werkbank .w-karte-name[hidden] { display: none; }

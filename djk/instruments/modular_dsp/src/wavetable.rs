@@ -2,13 +2,19 @@
 //!
 //! **Tables.** Every table is computed from its harmonic spectrum when a graph is translated (no files, no samples):
 //! `saege`, `rechteck` (pulse width morph), `dreieck`, `sinus`, `analog` (sine, triangle, saw, square), `vokale` (sung a e i o
-//! u, formant envelopes) and `orgel` (drawbars added one by one). A table holds 1 to 8 frames; `pos` morphs between
+//! u, formant envelopes) and `orgel` (drawbars added one by one); a node may bring its own table as `spektren` instead. A
+//! table holds 1 to 32 frames (the built-in ones up to 8); `pos` morphs between
 //! neighbouring frames by linear interpolation of the two frames at the same phase.
 //!
 //! **Band limit.** Each frame is stored as a mip map with one level per third of an octave: level `k` keeps the harmonics
 //! `1..=H_k`, `H_k = floor(1024 * 2^(-k/3))`. A copy at frequency `f` plays the richest level with `H_k * f <= sr - 20 kHz`,
 //! so every partial above Nyquist folds back above 20 kHz, and the partials dropped by a level switch all lie above
 //! `(sr - 20 kHz) / 2^(1/3)` (22.2 kHz at 48 kHz): switching levels is inaudible and needs no crossfade.
+//!
+//! **Phase modulation and warp.** `pm` offsets the read phase, `warp` bends it (bend, asym, sync). Both read the table
+//! faster than the copy's own step, so the level is chosen for more than that step: times the steepest slope of the warp
+//! map and up to one octave on top, plus the largest recent step of `pm`; `reserve` adds whole octaves by hand. With `pm`
+//! and `warp` at 0 the level choice and the read are the plain ones.
 //!
 //! **Interpolation.** A level of `H` harmonics is stored with `L = clamp(next_pow2(16 H), 128, 8192)` samples (at least 8
 //! times oversampled, 16 times below 512 harmonics) and read with a cubic B-spline (four taps). The B-spline's passband droop `sinc^4(h / L)` is divided out
@@ -39,7 +45,11 @@ pub const STUFEN: usize = 29;
 /// Highest frequency that must stay free of aliases.
 pub const ALIAS_FREI_HZ: f32 = 20_000.0;
 /// Most frames per table.
-pub const MAX_FRAMES: usize = 8;
+pub const MAX_FRAMES: usize = 32;
+/// Most harmonics of a custom spectrum frame (`spektren`).
+pub const MAX_SPEKTREN_HARMONISCHE: usize = 256;
+/// Largest absolute amplitude of one custom harmonic.
+pub const MAX_SPEKTREN_AMPLITUDE: f32 = 4.0;
 /// Names of the tables, index = value `tabelle`.
 pub const TABELLEN: [&str; 7] = ["saege", "rechteck", "dreieck", "sinus", "analog", "vokale", "orgel"];
 
@@ -135,6 +145,23 @@ fn spektrum(nr: usize) -> (usize, bool, Box<dyn Fn(usize, usize) -> Teilton>) {
     }
 }
 
+/// Checks the custom spectra of a node: 1..=`MAX_FRAMES` frames, each 1..=`MAX_SPEKTREN_HARMONISCHE` harmonics, every value
+/// finite with `|a| <= MAX_SPEKTREN_AMPLITUDE`. The error is the reason, ready for the refusal text.
+pub fn pruefe_spektren(spek: &[Vec<f32>]) -> Result<(), &'static str> {
+    if spek.is_empty() || spek.len() > MAX_FRAMES {
+        return Err("1..32 frames");
+    }
+    for f in spek {
+        if f.is_empty() || f.len() > MAX_SPEKTREN_HARMONISCHE {
+            return Err("each frame needs 1..256 harmonics");
+        }
+        if f.iter().any(|a| !a.is_finite() || a.abs() > MAX_SPEKTREN_AMPLITUDE) {
+            return Err("harmonic amplitudes must be finite with |a| <= 4");
+        }
+    }
+    Ok(())
+}
+
 #[inline]
 fn sinc(x: f64) -> f64 { if x == 0.0 { 1.0 } else { (std::f64::consts::PI * x).sin() / (std::f64::consts::PI * x) } }
 
@@ -143,6 +170,24 @@ impl Tabelle {
     pub fn neu(nr: usize) -> Tabelle {
         let nr = nr.min(TABELLEN.len() - 1);
         let (frames, additiv, sp) = spektrum(nr);
+        Self::bauen(TABELLEN[nr], frames, additiv, &*sp)
+    }
+
+    /// Builds a table from custom harmonic spectra (node field `spektren`): frame `i` holds the amplitudes of harmonics
+    /// `1..` as `a * sin(2 pi h t)`, the sign is the polarity. The frames are scaled to the RMS of the saw like the other
+    /// additive tables; an all-zero frame stays silent. The caller has checked the data with `pruefe_spektren`; anything
+    /// beyond the limits is cut off and a non-finite value counts as 0, so the build cannot fail. Allocates (translation only).
+    pub fn aus_spektren(spek: &[Vec<f32>]) -> Tabelle {
+        let frames = spek.len().clamp(1, MAX_FRAMES);
+        let leer = Vec::new();
+        let sp = move |i: usize, h: usize| -> Teilton {
+            let a = spek.get(i).unwrap_or(&leer).get(h - 1).copied().filter(|a| a.is_finite() && h <= MAX_SPEKTREN_HARMONISCHE).unwrap_or(0.0);
+            (a as f64, 0.0)
+        };
+        Self::bauen("spektren", frames, true, &sp)
+    }
+
+    fn bauen(name: &'static str, frames: usize, additiv: bool, sp: &dyn Fn(usize, usize) -> Teilton) -> Tabelle {
         let mut stufen = [Stufe { start: 0, bits: 0 }; STUFEN];
         let mut summe = 0usize;
         for (k, s) in stufen.iter_mut().enumerate() {
@@ -181,7 +226,7 @@ impl Tabelle {
                 }
             }
         }
-        Tabelle { name: TABELLEN[nr], frames, stufen, harm: std::array::from_fn(|k| harmonische(k) as f32), daten }
+        Tabelle { name, frames, stufen, harm: std::array::from_fn(|k| harmonische(k) as f32), daten }
     }
 
     /// Level for a phase increment `inc` (fraction of a period per sample, 0..0.5) at sample rate `sr`: the richest level
@@ -244,6 +289,8 @@ pub struct Einstellung {
     pub glatt_ms: f32,
     /// seed of the start phases
     pub saat: u32,
+    /// 0..=3: the mip level is chosen for a phase step times `2^reserve` (head room for `pm` and `warp`)
+    pub reserve: u8,
 }
 
 /// Inputs of one sample.
@@ -257,6 +304,89 @@ pub struct Eingabe {
     pub verstimmung: f32,
     /// stereo spread 0..1
     pub breite: f32,
+    /// phase offset in cycles, added to the read phase of every copy (audio rate)
+    pub pm: f32,
+    /// warp mode, rounded: 0 off, 1 bend, 2 asym, 3 sync
+    pub warp: f32,
+    /// warp depth: bend and asym -1..1, sync 0..1
+    pub tiefe: f32,
+    /// octave stack, rounded, read at `trig`: 0 off, 1 alternate unison, 2 octave and fifth
+    pub stapel: f32,
+}
+
+/// Warp of the read phase for one sample of one voice; all copies share it. The map runs in f64 on the full 32 bit phase:
+/// with f32 the phase would be cut to 24 bits, which near the edge of a saw is an audible error (and bend and asym at
+/// depth 0 would not be the identity).
+#[derive(Clone, Copy)]
+struct Warp {
+    modus: u8,
+    /// bend: `s = 4^tiefe`; asym: `1 / (2 a)`; sync: the frequency ratio `1 + 7 tiefe`
+    k1: f64,
+    /// asym: knee `a`
+    knie: f64,
+    /// asym: `1 / (2 (1 - a))`
+    k2: f64,
+    /// largest slope of the phase map, 1..=8: the mip level is chosen for the step times this
+    steil: f32,
+}
+
+impl Warp {
+    const AUS: Warp = Warp { modus: 0, k1: 1.0, knie: 0.5, k2: 1.0, steil: 1.0 };
+
+    fn neu(modus: u8, tiefe: f32) -> Warp {
+        let t = tiefe as f64;
+        match modus {
+            1 => {
+                let s = (2.0 * t.clamp(-1.0, 1.0)).exp2();
+                Warp { modus, k1: s, knie: 0.5, k2: 1.0, steil: (s.max(1.0 / s) as f32).clamp(1.0, 8.0) }
+            }
+            2 => {
+                let a = 0.5 + 0.45 * t.clamp(-1.0, 1.0);
+                let (k1, k2) = (1.0 / (2.0 * a), 1.0 / (2.0 * (1.0 - a)));
+                Warp { modus, k1, knie: a, k2, steil: (k1.max(k2) as f32).clamp(1.0, 8.0) }
+            }
+            3 => {
+                let m = 1.0 + 7.0 * t.clamp(0.0, 1.0);
+                Warp { modus, k1: m, knie: 0.5, k2: 1.0, steil: m as f32 }
+            }
+            _ => Warp::AUS,
+        }
+    }
+
+    /// Mapped phase as a u32 phase and the gain of the soft edge, for the read phase `ph` (u32, one period = 2^32).
+    #[inline]
+    fn abbilden(&self, ph: u32) -> (u32, f32) {
+        let p = ph as f64 * (1.0 / 4_294_967_296.0);
+        let (q, g) = match self.modus {
+            // one division: p / (p + s (1 - p)); the denominator is at least min(1, s) > 0
+            1 => (p / (p + self.k1 * (1.0 - p)), 1.0),
+            2 => (if p < self.knie { p * self.k1 } else { 0.5 + (p - self.knie) * self.k2 }, 1.0),
+            // the ratio m is not an integer in general: the last 1/16 of the master cycle fades to zero (smoothstep, so
+            // neither the level nor the slope has a step: a linear fade would put its kinks 40 dB above the alias limit)
+            _ => {
+                let m = p * self.k1;
+                let u = ((1.0 - p) * 16.0) as f32;
+                (m - m.floor(), if u < 1.0 { u * u * (3.0 - 2.0 * u) } else { 1.0 })
+            }
+        };
+        ((q * 4_294_967_296.0) as u32, g)
+    }
+}
+
+/// How long the rounded `warp` input must ask for a new mode before a sounding note takes it (the live knob smoothing
+/// of 20 ms passes through the modes in between for up to about 22 ms each).
+pub const MODUS_HALT_S: f32 = 0.06;
+/// Decay per sample of the pm step follower (about 20 ms at 48 kHz).
+const PM_ABKLING: f32 = 0.999;
+
+/// Stack offset in semitones of copy `c` for stack mode `stapel`.
+#[inline]
+fn stapel_halbtoene(stapel: u8, c: usize) -> f32 {
+    match stapel {
+        1 => 12.0 * (c % 2) as f32,
+        2 => [0.0, 12.0, 19.0][c % 3],
+        _ => 0.0,
+    }
 }
 
 /// State of one voice: all its copies.
@@ -276,6 +406,16 @@ pub struct Stimme {
     pos: f32,
     frisch: bool,
     zufall: u32,
+    /// stack mode latched at the last trig (and at the first sample), and the one `faktor` was computed for
+    stapel: u8,
+    stapel_alt: u8,
+    /// warp mode in use, the mode the rounded input asks for, and for how many samples it has asked for it
+    modus: u8,
+    modus_wunsch: u8,
+    modus_halt: u32,
+    /// last phase offset from `pm`, and the largest recent step of it in cycles per sample (decays by `PM_ABKLING`)
+    pm_alt: u32,
+    pm_schritt: f32,
 }
 
 /// Spread of copy `c` of `n` over -1..=1 (0 for a single copy).
@@ -301,6 +441,13 @@ impl Stimme {
             pos: 0.0,
             frisch: true,
             zufall: if s == 0 { 0x2545_F491 } else { s },
+            stapel: 0,
+            stapel_alt: 0,
+            modus: 0,
+            modus_wunsch: 0,
+            modus_halt: 0,
+            pm_alt: 0,
+            pm_schritt: 0.0,
         };
         v.neue_phasen(e);
         v
@@ -330,10 +477,19 @@ impl Stimme {
     pub fn prozess(&mut self, t: &Tabelle, e: &Einstellung, sr: f32, x: Eingabe) -> (f32, f32, f32) {
         let n = e.kopien.clamp(1, MAX_KOPIEN);
         let verst = endlich(x.verstimmung, 0.0).clamp(0.0, MAX_VERSTIMMUNG);
-        if verst != self.verst_alt {
+        // the stack is read at a trig (and once at the very start, so a node without a trig has it too)
+        let sofort = x.trig > 0.5 || self.frisch;
+        let stapel = if sofort { endlich(x.stapel, 0.0).round().clamp(0.0, 2.0) as u8 } else { self.stapel };
+        self.stapel = stapel;
+        if verst != self.verst_alt || stapel != self.stapel_alt {
             self.verst_alt = verst;
+            self.stapel_alt = stapel;
             for c in 0..n {
-                self.faktor[c] = (lage(c, n) * verst / 1200.0).exp2();
+                self.faktor[c] = if stapel == 0 {
+                    (lage(c, n) * verst / 1200.0).exp2()
+                } else {
+                    (lage(c, n) * verst / 1200.0 + stapel_halbtoene(stapel, c) / 12.0).exp2()
+                };
             }
         }
         let breite = endlich(x.breite, 0.0).clamp(0.0, 1.0);
@@ -363,14 +519,70 @@ impl Stimme {
             self.pos = if neu == self.pos || (ziel - neu).abs() < 1e-6 { ziel } else { neu };
         }
         let grund = (endlich(x.hz, 0.0) / sr).clamp(0.0, 0.5);
+        // phase modulation and warp; with both off every copy takes the plain read below
+        let pm = if x.pm == 0.0 { 0 } else { ((endlich(x.pm, 0.0) as f64).rem_euclid(1.0) * 4_294_967_296.0) as u32 };
+        // The warp mode is a switch. A smoothed knob travels through the modes in between, so a sounding note takes a new
+        // mode only after the rounded input has asked for it for `MODUS_HALT_S`; a trig and the first sample take it at once.
+        let modus = if x.warp == 0.0 && self.modus == 0 && self.modus_halt == 0 {
+            0
+        } else {
+            let wunsch = endlich(x.warp, 0.0).round().clamp(0.0, 3.0) as u8;
+            if sofort || wunsch == self.modus {
+                self.modus = wunsch;
+                self.modus_wunsch = wunsch;
+                self.modus_halt = 0;
+            } else {
+                if wunsch != self.modus_wunsch {
+                    self.modus_wunsch = wunsch;
+                    self.modus_halt = 0;
+                }
+                self.modus_halt += 1;
+                if self.modus_halt as f32 >= MODUS_HALT_S * sr {
+                    self.modus = wunsch;
+                    self.modus_halt = 0;
+                }
+            }
+            self.modus
+        };
+        let einfach = pm == 0 && modus == 0;
+        let warp = if modus == 0 { Warp::AUS } else { Warp::neu(modus, endlich(x.tiefe, 0.0)) };
+        // level choice: head room `reserve` (octaves) and the steepest part of the warp map (a factor of exactly 1 leaves
+        // the step as it was)
+        // A warp map gets up to one more octave on top of its slope (measured: with the slope alone a saw through bend 1 at
+        // C4 folds at -35 dB, the map itself on a sine at -62 dB). The extra grows with the slope, so depth 0 stays neutral.
+        let mehr = (1u32 << e.reserve.min(3)) as f32 * warp.steil * warp.steil.min(2.0);
+        // Phase modulation moves the read phase by its own step. The level is chosen for the copy's step plus the largest
+        // recent pm step (peak follower, coarse so the level is not chosen again every sample). Without pm it stays 0.
+        if pm != 0 || self.pm_schritt != 0.0 {
+            if sofort {
+                self.pm_alt = pm;
+            }
+            let d = (pm.wrapping_sub(self.pm_alt) as i32).unsigned_abs() as f32 / 4_294_967_296.0;
+            self.pm_alt = pm;
+            let s = d.max(self.pm_schritt * PM_ABKLING);
+            self.pm_schritt = if s < 1e-7 { 0.0 } else { s };
+        }
+        // rounded up to the next of 1, 1.5 times a power of two
+        let pm_mehr = if self.pm_schritt == 0.0 { 0.0 } else { f32::from_bits(self.pm_schritt.to_bits() & 0xFFC0_0000) * 1.5 };
         let (mut l, mut r, mut m) = (0.0f32, 0.0f32, 0.0f32);
         for c in 0..n {
             let inc = (grund * self.faktor[c]).min(0.5);
-            if inc != self.inc_alt[c] {
-                self.inc_alt[c] = inc;
-                self.stufe[c] = t.stufe(inc, sr);
+            let inc_stufe = inc * mehr + pm_mehr;
+            if inc_stufe != self.inc_alt[c] {
+                self.inc_alt[c] = inc_stufe;
+                self.stufe[c] = t.stufe(inc_stufe, sr);
             }
-            let y = t.lese(self.stufe[c], self.phase[c], self.pos);
+            let y = if einfach {
+                t.lese(self.stufe[c], self.phase[c], self.pos)
+            } else {
+                let ph = self.phase[c].wrapping_add(pm);
+                if modus == 0 {
+                    t.lese(self.stufe[c], ph, self.pos)
+                } else {
+                    let (p, g) = warp.abbilden(ph);
+                    t.lese(self.stufe[c], p, self.pos) * g
+                }
+            };
             self.phase[c] = self.phase[c].wrapping_add((inc as f64 * 4_294_967_296.0) as u32);
             l += y * self.gl[c];
             r += y * self.gr[c];
@@ -432,9 +644,9 @@ mod tests {
     #[test]
     fn positionsglaettung_rastet_ein_ohne_subnormale() {
         let t = Tabelle::neu(4);
-        let e = Einstellung { kopien: 1, zufall: 1.0, glatt_ms: 10.0, saat: 0 };
+        let e = Einstellung { kopien: 1, zufall: 1.0, glatt_ms: 10.0, saat: 0, reserve: 0 };
         let mut v = Stimme::neu(0, &e);
-        let mut x = Eingabe { hz: 100.0, trig: 0.0, pos: 1.0, verstimmung: 0.0, breite: 0.0 };
+        let mut x = Eingabe { hz: 100.0, trig: 0.0, pos: 1.0, verstimmung: 0.0, breite: 0.0, pm: 0.0, warp: 0.0, tiefe: 0.0, stapel: 0.0 };
         v.prozess(&t, &e, 48_000.0, x);
         x.pos = 0.0;
         for _ in 0..48_000 {
@@ -447,9 +659,9 @@ mod tests {
     fn nan_position_haengt_den_glaetter_nicht_auf() {
         // a NaN on `pos` must not poison the smoother: once the input is finite again, the position follows it
         let t = Tabelle::neu(4);
-        let e = Einstellung { kopien: 1, zufall: 1.0, glatt_ms: 10.0, saat: 0 };
+        let e = Einstellung { kopien: 1, zufall: 1.0, glatt_ms: 10.0, saat: 0, reserve: 0 };
         let mut v = Stimme::neu(0, &e);
-        let mut x = Eingabe { hz: 100.0, trig: 0.0, pos: f32::NAN, verstimmung: f32::NAN, breite: f32::NAN };
+        let mut x = Eingabe { hz: 100.0, trig: 0.0, pos: f32::NAN, verstimmung: f32::NAN, breite: f32::NAN, pm: f32::NAN, warp: f32::NAN, tiefe: f32::NAN, stapel: f32::NAN };
         for _ in 0..100 {
             assert!(v.prozess(&t, &e, 48_000.0, x).0.is_finite());
         }

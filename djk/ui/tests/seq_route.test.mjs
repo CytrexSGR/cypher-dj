@@ -314,11 +314,39 @@ test('the gates: seq_fehlt without a deck, seq_belegt, kein_liveprojekt, ki_gest
   assert.equal((await z.seq.text({ platz: 1, text }, 'andreas')).code, 200, 'Andreas still writes');
   z.zustand.zu = true;
   for (const f of [() => z.seq.anlege({ platz: 1 }, 'andreas'), () => z.seq.folge({ platz: 1, name: 'B', geraet: 'kit:909' }, 'andreas'), () => z.seq.text({ platz: 1, text }, 'andreas'),
-    () => z.seq.befehle({ platz: 1, befehle: [{ befehl: 'spur_loeschen', spur_id: 's1' }] }, 'andreas'), () => z.seq.leere({ platz: 1 }, 'andreas'), () => z.seq.geraet('s1')]) {
+    () => z.seq.befehle({ platz: 1, befehle: [{ befehl: 'spur_loeschen', spur_id: 's1' }] }, 'andreas'), () => z.seq.leere({ platz: 1 }, 'andreas')]) {
     const e = await z.fehl(f);
     assert.deepEqual([e.code, e.fehler], [409, 'kein_liveprojekt']);
   }
   assert.deepEqual(z.seq.stand().j, { 1: null, 2: null, 3: null, 4: null });
+  const g = await z.fehl(() => z.seq.geraet('s1'));
+  assert.deepEqual([g.code, g.fehler], [409, 'kein_projekt'], 'the instrument info needs an open project, not a live one');
+});
+
+test('geraetInfo names the sounds of the drum graphs, a synth graph has none', () => {
+  assert.deepEqual(geraetInfo({ art: 'intern', name: 'bk', graph: 'drums-909' }).klaenge.slice(0, 4).map((k) => [k.ton, k.name]), [[36, 'Kick'], [37, 'Rim'], [38, 'Snare'], [39, 'Clap']]);
+  assert.deepEqual(geraetInfo({ art: 'intern', name: 'bk', graph: 'drums-808' }).klaenge.slice(0, 2).map((k) => [k.ton, k.name]), [[35, 'Boom Kick'], [36, 'Kick']]);
+  assert.deepEqual(geraetInfo({ art: 'intern', name: 'bk', graph: 'bass-banddrive' }).klaenge, []);
+  assert.equal(geraetInfo({ art: 'intern', name: 'bk', graph: 'drums-909' }).art, 'bk', 'the art stays bk, so SEQ v2 lanes do not change');
+});
+
+test('GET /seq/geraet answers in a project that is not the live container; none open is kein_projekt', async (t) => {
+  const z = await aufbau(t);
+  const spur = { id: 's1', geraet: { art: 'intern', name: 'bk', graph: 'drums-909' } };
+  let offen = { slug: 'x', ordner: '/x', projekt: { spuren: [spur, { id: 's2', geraet: { art: 'intern', name: 'bk', graph: 'bass-banddrive' } }] }, verlauf: null };
+  const seq = new SeqBereich(z.ctx, { offen: () => offen });
+  const a = seq.geraet('s1');
+  assert.equal(a.code, 200);
+  assert.equal(a.j.art, 'bk');
+  assert.equal(a.j.klaenge.length, 13);
+  assert.deepEqual(a.j.klaenge[0], { ton: 36, name: 'Kick' });
+  assert.ok(Array.isArray(a.j.regler));
+  assert.deepEqual(seq.geraet('s2').j.klaenge, []);
+  const u = await z.fehl(async () => seq.geraet('nope'));
+  assert.deepEqual([u.code, u.fehler], [404, 'spur_unbekannt']);
+  offen = null;
+  const k = await z.fehl(async () => seq.geraet('s1'));
+  assert.deepEqual([k.code, k.fehler], [409, 'kein_projekt']);
 });
 
 test('anlegen while deck/2 is open is kanal_offen, also through POST /proj/aendern with the raw command; while deck 2 plays it is deck_laeuft; leeren on an open channel is refused for cypher only; pattern writes are not gated', async (t) => {

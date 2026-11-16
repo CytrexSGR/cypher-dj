@@ -77,14 +77,16 @@ export function bindeSchublade() {
 }
 // Studio S1: Ansicht DJ | STUDIO; wechselt nur die Sicht, nie den Klang. Gemerkt pro Browser (nur Bequemlichkeit).
 // D1 V1: dritter Wert PRODUCTION (Modul production/production.js, gekapselt wie die Spurbänder)
-const ANSICHTEN = ['dj', 'studio', 'produktion'];
+const ANSICHTEN = ['dj', 'studio', 'produktion', 'werkbank'];
 export let produktion = null;
+export let werkbank = null;   // the workbench view (werkbank/werkbank.js), the fourth value: label STUDIO, value werkbank
 export function setzeAnsicht(a) {
   setzeGeraeteseite(false);   // the layer sits on the page of one view; another view never keeps it
-  for (const k of ['studio', 'produktion']) document.body.classList.toggle(k, a === k);
+  for (const k of ['studio', 'produktion', 'werkbank']) document.body.classList.toggle(k, a === k);
   for (const b of $$('[data-ansicht]')) { const an = b.dataset.ansicht === a; b.classList.toggle('an', an); b.setAttribute('aria-pressed', String(an)); }
   try { localStorage.setItem('djk-ansicht', a); } catch { /* ohne Speicher: DJ */ }
   if (a === 'produktion') produktion?.zeige(); else produktion?.verberge();
+  if (a === 'werkbank') werkbank?.zeige(); else werkbank?.verberge();
   ordneMitte(a);
 }
 export function bindeTablet() {
@@ -115,3 +117,4 @@ export function bindeMusterFeld() {
   alle();
 }
 export function setzeProduktion(p) { produktion = p; }
+export function setzeWerkbank(w) { werkbank = w; }

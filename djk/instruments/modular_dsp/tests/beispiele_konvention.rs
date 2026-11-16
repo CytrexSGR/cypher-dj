@@ -294,8 +294,11 @@ const REGLER_OHNE_WIRKUNG_AUF_DER_PROBE: &[(&str, usize, &str)] = &[
     ("synth-poly", 38, POLY_OSC2_AUS),
     ("synth-poly", 39, POLY_LFO2_AUS), ("synth-poly", 40, POLY_LFO2_AUS), ("synth-poly", 41, POLY_LFO2_AUS), ("synth-poly", 42, POLY_LFO2_AUS),
     ("synth-poly", 47, POLY_OSC2_AUS), ("synth-poly", 48, POLY_OSC2_AUS), ("synth-poly", 49, POLY_OSC2_AUS), ("synth-poly", 50, POLY_OSC2_AUS), ("synth-poly", 51, POLY_OSC2_AUS),
+    ("synth-greif", 62, GREIF_GLIDE),
     ("synth-poly", 54, "glide runs from the pitch a voice had last; the probe's notes all land on voices that have not played yet (the first note of a voice sets the glide to its pitch), so there is nothing to glide from. tests/synth_poly.rs `glide_auf_der_stimme` plays two chords on the same voices"),
 ];
+
+const GREIF_GLIDE: &str = "glide runs from the pitch a voice had last; the probe's four notes land on voices that have not played yet (the first note of a voice sets the glide to its pitch), and the chord that follows plays the same four notes on the same voices, so there is nothing to glide from. tests/greif.rs `glide_gleitet_auf_der_stimme` plays three chords with other pitches on the voices of the first";
 
 const REMIX_SZENE_RUHT: &str = "the scene types, both sub parameters and the pump only act while Scene (knob 1) is away from its centre; the probe leaves it at 0.5 = original sound (the neutral start of the device). remix_dsp tests/verhalten.rs `every_scene_effect_changes_the_sound_and_stays_bounded` and `echo_repeats_at_the_selected_beat_fraction` drive them";
 const REMIX_ISO_RUHT: &str = "the isolate type only acts while Low, Mid or High (knobs 7 to 9) is away from its centre; the probe leaves them at 0.5 = neutral. remix_dsp `every_isolate_effect_stays_bounded_at_both_ends` and `isolator_kills_one_band_and_leaves_the_others` drive it";

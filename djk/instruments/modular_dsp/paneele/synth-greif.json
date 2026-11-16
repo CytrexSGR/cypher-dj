@@ -1,0 +1,954 @@
+{
+ "format": "cypherdj-panel/2",
+ "geraet": {
+  "art": "bk",
+  "graph": "synth-greif"
+ },
+ "title": "Greif",
+ "akzent": "violett",
+ "pages": [
+  {
+   "id": "main",
+   "title": "Main"
+  },
+  {
+   "id": "mod",
+   "title": "Mod"
+  }
+ ],
+ "layout": {
+  "rows": [
+   [
+    "osc_a",
+    "osc_b",
+    "osc_c"
+   ],
+   [
+    "pm",
+    "unison",
+    "sub"
+   ],
+   [
+    "f1",
+    "f2",
+    "aenv"
+   ],
+   [
+    "master"
+   ],
+   [
+    "fenv",
+    "env3",
+    "lfo1"
+   ],
+   [
+    "lfo2",
+    "chaos",
+    "fx"
+   ]
+  ]
+ },
+ "sections": [
+  {
+   "id": "osc_a",
+   "title": "OSC A",
+   "cols": 3,
+   "page": "main",
+   "controls": [
+    {
+     "id": "c1",
+     "type": "knob",
+     "label": "A Position",
+     "bind": {
+      "param": "k1"
+     },
+     "format": "percent",
+     "default": 0.29
+    },
+    {
+     "id": "c3",
+     "type": "knob",
+     "label": "A Depth",
+     "bind": {
+      "param": "k3"
+     },
+     "format": "percent",
+     "default": 0.575
+    },
+    {
+     "id": "c4",
+     "type": "knob",
+     "label": "A Pitch",
+     "bind": {
+      "param": "k4"
+     },
+     "format": "raw",
+     "default": 0.5,
+     "unit": "st"
+    },
+    {
+     "id": "c5",
+     "type": "knob",
+     "label": "A Fine",
+     "bind": {
+      "param": "k5"
+     },
+     "format": "raw",
+     "default": 0.5,
+     "unit": "ct"
+    },
+    {
+     "id": "c6",
+     "type": "knob",
+     "label": "A Level",
+     "bind": {
+      "param": "k6"
+     },
+     "format": "percent",
+     "default": 0.7
+    },
+    {
+     "id": "c2",
+     "type": "selector",
+     "label": "A Warp",
+     "bind": {
+      "param": "k2"
+     },
+     "options": [
+      "Off",
+      "Bend",
+      "Asym",
+      "Sync"
+     ],
+     "default": 1,
+     "span": 3
+    },
+    {
+     "id": "t_osc_a",
+     "type": "label",
+     "span": 3,
+     "text": "Analog to digital, 5 copies."
+    }
+   ]
+  },
+  {
+   "id": "osc_b",
+   "title": "OSC B",
+   "cols": 3,
+   "page": "main",
+   "controls": [
+    {
+     "id": "c7",
+     "type": "knob",
+     "label": "B Position",
+     "bind": {
+      "param": "k7"
+     },
+     "format": "percent",
+     "default": 0.6
+    },
+    {
+     "id": "c9",
+     "type": "knob",
+     "label": "B Depth",
+     "bind": {
+      "param": "k9"
+     },
+     "format": "percent",
+     "default": 0.56
+    },
+    {
+     "id": "c10",
+     "type": "knob",
+     "label": "B Pitch",
+     "bind": {
+      "param": "k10"
+     },
+     "format": "raw",
+     "default": 0.5,
+     "unit": "st"
+    },
+    {
+     "id": "c11",
+     "type": "knob",
+     "label": "B Fine",
+     "bind": {
+      "param": "k11"
+     },
+     "format": "raw",
+     "default": 0.56,
+     "unit": "ct"
+    },
+    {
+     "id": "c12",
+     "type": "knob",
+     "label": "B Level",
+     "bind": {
+      "param": "k12"
+     },
+     "format": "percent",
+     "default": 0.35
+    },
+    {
+     "id": "c8",
+     "type": "selector",
+     "label": "B Warp",
+     "bind": {
+      "param": "k8"
+     },
+     "options": [
+      "Off",
+      "Bend",
+      "Asym",
+      "Sync"
+     ],
+     "default": 2,
+     "span": 3
+    },
+    {
+     "id": "t_osc_b",
+     "type": "label",
+     "span": 3,
+     "text": "Vocal, 3 copies."
+    }
+   ]
+  },
+  {
+   "id": "osc_c",
+   "title": "OSC C",
+   "cols": 3,
+   "page": "main",
+   "controls": [
+    {
+     "id": "c13",
+     "type": "knob",
+     "label": "C Position",
+     "bind": {
+      "param": "k13"
+     },
+     "format": "percent",
+     "default": 0.1
+    },
+    {
+     "id": "c15",
+     "type": "knob",
+     "label": "C Depth",
+     "bind": {
+      "param": "k15"
+     },
+     "format": "percent",
+     "default": 0.55
+    },
+    {
+     "id": "c16",
+     "type": "knob",
+     "label": "C Pitch",
+     "bind": {
+      "param": "k16"
+     },
+     "format": "raw",
+     "default": 0.75,
+     "unit": "st"
+    },
+    {
+     "id": "c17",
+     "type": "knob",
+     "label": "C Level",
+     "bind": {
+      "param": "k17"
+     },
+     "format": "percent",
+     "default": 0.15
+    },
+    {
+     "id": "c14",
+     "type": "selector",
+     "label": "C Warp",
+     "bind": {
+      "param": "k14"
+     },
+     "options": [
+      "Off",
+      "Bend",
+      "Asym",
+      "Sync"
+     ],
+     "default": 1,
+     "span": 3
+    },
+    {
+     "id": "t_osc_c",
+     "type": "label",
+     "span": 3,
+     "text": "Bell and organ, 1 copy."
+    }
+   ]
+  },
+  {
+   "id": "pm",
+   "title": "PHASE MOD",
+   "cols": 3,
+   "page": "main",
+   "controls": [
+    {
+     "id": "c18",
+     "type": "knob",
+     "label": "PM B>A",
+     "bind": {
+      "param": "k18"
+     },
+     "format": "percent",
+     "default": 0.05
+    },
+    {
+     "id": "c19",
+     "type": "knob",
+     "label": "PM C>B",
+     "bind": {
+      "param": "k19"
+     },
+     "format": "percent",
+     "default": 0.04
+    },
+    {
+     "id": "c20",
+     "type": "knob",
+     "label": "PM C>A",
+     "bind": {
+      "param": "k20"
+     },
+     "format": "percent",
+     "default": 0.04
+    },
+    {
+     "id": "t_pm",
+     "type": "label",
+     "span": 3,
+     "text": "In cycles: C into B, B and C into A."
+    }
+   ]
+  },
+  {
+   "id": "unison",
+   "title": "UNISON",
+   "cols": 3,
+   "page": "main",
+   "controls": [
+    {
+     "id": "c21",
+     "type": "knob",
+     "label": "Detune",
+     "bind": {
+      "param": "k21"
+     },
+     "format": "raw",
+     "default": 0.28,
+     "unit": "ct"
+    },
+    {
+     "id": "c22",
+     "type": "knob",
+     "label": "Width",
+     "bind": {
+      "param": "k22"
+     },
+     "format": "percent",
+     "default": 0.6
+    },
+    {
+     "id": "c23",
+     "type": "selector",
+     "label": "Stack",
+     "bind": {
+      "param": "k23"
+     },
+     "options": [
+      "Off",
+      "Oct",
+      "Cycle"
+     ],
+     "default": 0
+    },
+    {
+     "id": "t_un",
+     "type": "label",
+     "span": 3,
+     "text": "Acts on A and B."
+    }
+   ]
+  },
+  {
+   "id": "sub",
+   "title": "SUB / NOISE",
+   "cols": 4,
+   "page": "main",
+   "controls": [
+    {
+     "id": "c24",
+     "type": "knob",
+     "label": "Sub Shape",
+     "bind": {
+      "param": "k24"
+     },
+     "format": "percent",
+     "default": 0.15
+    },
+    {
+     "id": "c25",
+     "type": "selector",
+     "label": "Sub Octave",
+     "bind": {
+      "param": "k25"
+     },
+     "options": [
+      "-1",
+      "-2"
+     ],
+     "default": 0
+    },
+    {
+     "id": "c26",
+     "type": "knob",
+     "label": "Sub Level",
+     "bind": {
+      "param": "k26"
+     },
+     "format": "percent",
+     "default": 0.25
+    },
+    {
+     "id": "c27",
+     "type": "knob",
+     "label": "Noise Level",
+     "bind": {
+      "param": "k27"
+     },
+     "format": "percent",
+     "default": 0.05
+    },
+    {
+     "id": "t_sub",
+     "type": "label",
+     "span": 4,
+     "text": "The sub passes no filter and no effect."
+    }
+   ]
+  },
+  {
+   "id": "f1",
+   "title": "FILTER 1",
+   "cols": 5,
+   "page": "main",
+   "controls": [
+    {
+     "id": "fk",
+     "type": "filterkurve",
+     "span": 5,
+     "of": {
+      "cutoff": "c29",
+      "reso": "c30"
+     },
+     "typen": [
+      {
+       "art": "lp",
+       "pole": 2
+      }
+     ]
+    },
+    {
+     "id": "c28",
+     "type": "knob",
+     "label": "F1 Type",
+     "bind": {
+      "param": "k28"
+     },
+     "format": "percent",
+     "default": 0.0
+    },
+    {
+     "id": "c29",
+     "type": "knob",
+     "label": "F1 Cutoff",
+     "bind": {
+      "param": "k29"
+     },
+     "format": "hz",
+     "default": 0.798795
+    },
+    {
+     "id": "c30",
+     "type": "knob",
+     "label": "F1 Resonance",
+     "bind": {
+      "param": "k30"
+     },
+     "format": "percent",
+     "default": 0.222222
+    },
+    {
+     "id": "c31",
+     "type": "knob",
+     "label": "F1 Env",
+     "bind": {
+      "param": "k31"
+     },
+     "format": "raw",
+     "default": 0.65,
+     "unit": "st"
+    },
+    {
+     "id": "c32",
+     "type": "knob",
+     "label": "F1 Key",
+     "bind": {
+      "param": "k32"
+     },
+     "format": "raw",
+     "default": 0.266667,
+     "unit": "x"
+    }
+   ]
+  },
+  {
+   "id": "f2",
+   "title": "DRIVE / FILTER 2",
+   "cols": 4,
+   "page": "main",
+   "controls": [
+    {
+     "id": "c33",
+     "type": "knob",
+     "label": "Drive",
+     "bind": {
+      "param": "k33"
+     },
+     "format": "percent",
+     "default": 0.15
+    },
+    {
+     "id": "c34",
+     "type": "knob",
+     "label": "F2 Cutoff",
+     "bind": {
+      "param": "k34"
+     },
+     "format": "hz",
+     "default": 0.896999
+    },
+    {
+     "id": "c35",
+     "type": "knob",
+     "label": "F2 Resonance",
+     "bind": {
+      "param": "k35"
+     },
+     "format": "percent",
+     "default": 0.117647
+    },
+    {
+     "id": "c36",
+     "type": "knob",
+     "label": "F2 Routing",
+     "bind": {
+      "param": "k36"
+     },
+     "format": "percent",
+     "default": 0.2
+    }
+   ]
+  },
+  {
+   "id": "aenv",
+   "title": "AMP ENV",
+   "cols": 4,
+   "page": "main",
+   "controls": [
+    {
+     "id": "ahue",
+     "type": "huelle",
+     "span": 4,
+     "label": "Amp envelope",
+     "of": {
+      "a": "c41",
+      "d": "c42",
+      "s": "c43",
+      "r": "c44"
+     }
+    },
+    {
+     "id": "c41",
+     "type": "knob",
+     "label": "Amp Attack",
+     "bind": {
+      "param": "k41"
+     },
+     "format": "raw",
+     "default": 0.162764,
+     "unit": "s"
+    },
+    {
+     "id": "c42",
+     "type": "knob",
+     "label": "Amp Decay",
+     "bind": {
+      "param": "k42"
+     },
+     "format": "raw",
+     "default": 0.652933,
+     "unit": "s"
+    },
+    {
+     "id": "c43",
+     "type": "knob",
+     "label": "Amp Sustain",
+     "bind": {
+      "param": "k43"
+     },
+     "format": "percent",
+     "default": 0.8
+    },
+    {
+     "id": "c44",
+     "type": "knob",
+     "label": "Amp Release",
+     "bind": {
+      "param": "k44"
+     },
+     "format": "raw",
+     "default": 0.451985,
+     "unit": "s"
+    }
+   ]
+  },
+  {
+   "id": "master",
+   "title": "MASTER",
+   "cols": 2,
+   "page": "main",
+   "controls": [
+    {
+     "id": "c62",
+     "type": "knob",
+     "label": "Glide",
+     "bind": {
+      "param": "k62"
+     },
+     "format": "percent",
+     "default": 0.0
+    },
+    {
+     "id": "c63",
+     "type": "knob",
+     "label": "Volume",
+     "bind": {
+      "param": "k63"
+     },
+     "format": "db",
+     "default": 0.666667
+    }
+   ]
+  },
+  {
+   "id": "fenv",
+   "title": "FILTER ENV",
+   "cols": 4,
+   "page": "mod",
+   "controls": [
+    {
+     "id": "fhue",
+     "type": "huelle",
+     "span": 4,
+     "label": "Filter envelope",
+     "of": {
+      "a": "c37",
+      "d": "c38",
+      "s": "c39",
+      "r": "c40"
+     }
+    },
+    {
+     "id": "c37",
+     "type": "knob",
+     "label": "Filter Attack",
+     "bind": {
+      "param": "k37"
+     },
+     "format": "raw",
+     "default": 0.188963,
+     "unit": "s"
+    },
+    {
+     "id": "c38",
+     "type": "knob",
+     "label": "Filter Decay",
+     "bind": {
+      "param": "k38"
+     },
+     "format": "raw",
+     "default": 0.519658,
+     "unit": "s"
+    },
+    {
+     "id": "c39",
+     "type": "knob",
+     "label": "Filter Sustain",
+     "bind": {
+      "param": "k39"
+     },
+     "format": "percent",
+     "default": 0.3
+    },
+    {
+     "id": "c40",
+     "type": "knob",
+     "label": "Filter Release",
+     "bind": {
+      "param": "k40"
+     },
+     "format": "raw",
+     "default": 0.477713,
+     "unit": "s"
+    }
+   ]
+  },
+  {
+   "id": "env3",
+   "title": "ENV 3",
+   "cols": 3,
+   "page": "mod",
+   "controls": [
+    {
+     "id": "c45",
+     "type": "knob",
+     "label": "Env3 Attack",
+     "bind": {
+      "param": "k45"
+     },
+     "format": "raw",
+     "default": 0.270346,
+     "unit": "s"
+    },
+    {
+     "id": "c46",
+     "type": "knob",
+     "label": "Env3 Decay",
+     "bind": {
+      "param": "k46"
+     },
+     "format": "raw",
+     "default": 0.567674,
+     "unit": "s"
+    },
+    {
+     "id": "c47",
+     "type": "knob",
+     "label": "Env3 >Position",
+     "bind": {
+      "param": "k47"
+     },
+     "format": "percent",
+     "default": 0.56
+    }
+   ]
+  },
+  {
+   "id": "lfo1",
+   "title": "LFO 1",
+   "cols": 3,
+   "page": "mod",
+   "controls": [
+    {
+     "id": "c48",
+     "type": "knob",
+     "label": "LFO1 Rate",
+     "bind": {
+      "param": "k48"
+     },
+     "format": "hz",
+     "default": 0.412551
+    },
+    {
+     "id": "c49",
+     "type": "knob",
+     "label": "LFO1 >Position",
+     "bind": {
+      "param": "k49"
+     },
+     "format": "percent",
+     "default": 0.1
+    },
+    {
+     "id": "c50",
+     "type": "knob",
+     "label": "LFO1 >Cutoff",
+     "bind": {
+      "param": "k50"
+     },
+     "format": "raw",
+     "default": 0.083333,
+     "unit": "st"
+    },
+    {
+     "id": "t_l1",
+     "type": "label",
+     "span": 3,
+     "text": "Triangle."
+    }
+   ]
+  },
+  {
+   "id": "lfo2",
+   "title": "LFO 2",
+   "cols": 3,
+   "page": "mod",
+   "controls": [
+    {
+     "id": "c51",
+     "type": "knob",
+     "label": "LFO2 Rate",
+     "bind": {
+      "param": "k51"
+     },
+     "format": "hz",
+     "default": 0.702575
+    },
+    {
+     "id": "c52",
+     "type": "knob",
+     "label": "LFO2 >Pitch",
+     "bind": {
+      "param": "k52"
+     },
+     "format": "raw",
+     "default": 0.06,
+     "unit": "ct"
+    },
+    {
+     "id": "c53",
+     "type": "knob",
+     "label": "LFO2 >Depth",
+     "bind": {
+      "param": "k53"
+     },
+     "format": "percent",
+     "default": 0.1
+    },
+    {
+     "id": "t_l2",
+     "type": "label",
+     "span": 3,
+     "text": "Sine: vibrato and warp depth."
+    }
+   ]
+  },
+  {
+   "id": "chaos",
+   "title": "CHAOS",
+   "cols": 3,
+   "page": "mod",
+   "controls": [
+    {
+     "id": "c54",
+     "type": "knob",
+     "label": "Chaos Rate",
+     "bind": {
+      "param": "k54"
+     },
+     "format": "hz",
+     "default": 0.480715
+    },
+    {
+     "id": "c55",
+     "type": "knob",
+     "label": "Chaos >Cutoff",
+     "bind": {
+      "param": "k55"
+     },
+     "format": "raw",
+     "default": 0.083333,
+     "unit": "st"
+    },
+    {
+     "id": "c56",
+     "type": "knob",
+     "label": "Chaos >Position",
+     "bind": {
+      "param": "k56"
+     },
+     "format": "percent",
+     "default": 0.1
+    },
+    {
+     "id": "t_ch",
+     "type": "label",
+     "span": 3,
+     "text": "Lorenz: never repeats."
+    }
+   ]
+  },
+  {
+   "id": "fx",
+   "title": "FX",
+   "cols": 5,
+   "page": "mod",
+   "controls": [
+    {
+     "id": "c57",
+     "type": "knob",
+     "label": "Shift Hz",
+     "bind": {
+      "param": "k57"
+     },
+     "format": "hz",
+     "default": 0.503125
+    },
+    {
+     "id": "c58",
+     "type": "knob",
+     "label": "Shift Mix",
+     "bind": {
+      "param": "k58"
+     },
+     "format": "percent",
+     "default": 0.15
+    },
+    {
+     "id": "c59",
+     "type": "knob",
+     "label": "Chorus Mix",
+     "bind": {
+      "param": "k59"
+     },
+     "format": "percent",
+     "default": 0.3
+    },
+    {
+     "id": "c60",
+     "type": "knob",
+     "label": "Delay Time",
+     "bind": {
+      "param": "k60"
+     },
+     "format": "ms",
+     "default": 0.744278
+    },
+    {
+     "id": "c61",
+     "type": "knob",
+     "label": "Delay Mix",
+     "bind": {
+      "param": "k61"
+     },
+     "format": "percent",
+     "default": 0.15
+    },
+    {
+     "id": "t_fx",
+     "type": "label",
+     "span": 5,
+     "text": "Chorus, then shift, then delay."
+    }
+   ]
+  }
+ ]
+}

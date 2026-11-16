@@ -10,7 +10,7 @@
 //   5 slot mapping follows the snapshot: with the bk track on number 3 removed, the former slot 2 is slot 1; a row of slot 2 reaches nothing
 //   6 a row of a slot whose track holds an RB-338 (not bk) does nothing
 //   7 not persisted: the state of a core does not list the row, a state file that holds it does not set it (restart state and render take-over), a neighbour row is stored and restored
-//   8 table: the 256 rows exist and nothing around them; the reserve of the table stays 44 or more
+//   8 table: the 512 rows exist and nothing around them; the reserve of the table stays 44 or more
 //   9 verlauf(): the pointer form reports the last sample of the block
 //  10 slot numbering pinned with the same example as the page (djk/ui/tests/project_commands_device_param.test.mjs): bk on the numbers 3, 7 and 9, an RB-338 on number 5: the slots are 1, 2, 3 in
 //     ascending track number, counted by device name (a bk track without an instance counts, too); nr 9 is slot 3
@@ -115,6 +115,19 @@ int main() {
     PRUEF(g.rec.block_aufrufe >= 3 * 2);   // the sink's block() runs while the transport stands (the knob is applied there): both bk tracks, every block
     PRUEF(g.t.arr.bk_ueber_da(1, 4));      // a block does not clear the flag (only a build does)
   }
+  {  // 1b: 64-knob live override: k33 and k64 of slot 2 reach param 32 and 63 of the sink, slot 1 stays untouched
+    Rig g;
+    g.t.laden(zwei_bk(0.25f));
+    const int r33 = g.zeile("spur/2/bk/33"), r64 = g.zeile("spur/2/bk/64");
+    PRUEF(r33 >= 0 && r64 >= 0);
+    g.t.arr.setze_sofort(r33, 0.7f);
+    g.t.arr.setze_sofort(r64, 0.3f);
+    PRUEF(g.t.arr.bk_ueber_da(1, 32) && g.t.arr.bk_ueber_da(1, 63));
+    g.blocks(2);
+    PRUEF(std::fabs(g.rec.letzter(g.rec.cur, TRACK7, 32) - 0.7f) < 1e-6f);
+    PRUEF(std::fabs(g.rec.letzter(g.rec.cur, TRACK7, 63) - 0.3f) < 1e-6f);
+    for (const auto& c : g.rec.calls) PRUEF(c.spur != TRACK3);
+  }
   {  // 2: a lane wins while playing, the override returns after the stop
     Rig g;
     Bau b;
@@ -144,7 +157,7 @@ int main() {
     PRUEF(g.rec.n_in(g.rec.cur) > 0);
     g.t.laden(zwei_bk(0.9f));
     for (int slot = 0; slot < 8; ++slot)
-      for (int k = 0; k < 32; ++k) PRUEF(!g.t.arr.bk_ueber_da(slot, k));
+      for (int k = 0; k < 64; ++k) PRUEF(!g.t.arr.bk_ueber_da(slot, k));
     g.blocks(2);
     PRUEF(g.rec.n_in(g.rec.cur) == 0 && g.rec.n_in(g.rec.cur - 1) == 0);
   }
@@ -237,13 +250,13 @@ int main() {
   }
   {  // 8: the table
     cypherdj::stellwerk::ReglerTabelle tab;
-    PRUEF(tab.suche("spur/1/bk/1") >= 0 && tab.suche("spur/8/bk/32") >= 0 && tab.suche("spur/5/bk/17") >= 0);
-    for (const char* p : {"spur/9/bk/1", "spur/1/bk/33", "spur/1/bk/0", "spur/0/bk/1", "spur/1/bk/01", "spur/10/bk/1", "spur/1/bk/", "spur/1/bk/64"})
+    PRUEF(tab.suche("spur/1/bk/1") >= 0 && tab.suche("spur/8/bk/64") >= 0 && tab.suche("spur/8/bk/33") >= 0 && tab.suche("spur/5/bk/17") >= 0);
+    for (const char* p : {"spur/9/bk/1", "spur/1/bk/65", "spur/1/bk/0", "spur/0/bk/1", "spur/1/bk/01", "spur/10/bk/1", "spur/1/bk/", "spur/1/bk/100"})
       PRUEF(tab.suche(p) < 0);
     const int r = tab.suche("spur/2/bk/5");
     PRUEF(tab.def(r).rolle == cypherdj::stellwerk::Rolle::spur_bk && tab.def(r).min == 0.0f && tab.def(r).max == 1.0f && tab.def(r).vorgabe == 0.5f);
-    PRUEF(tab.anzahl() == 3412 + 256);
-    PRUEF(cypherdj::stellwerk::MAX_REGLER - tab.anzahl() >= 44);
+    PRUEF(tab.anzahl() == 3412 + 512);   // 64 live knobs per slot: 3924 of 4096
+    PRUEF(cypherdj::stellwerk::MAX_REGLER - tab.anzahl() >= 44);   // reserve 172
     PRUEF(tab.suche("spur/1/bk/1") == 3412);   // appended behind master/bk/64, slot-major
   }
   {  // 9: the pointer form takes the last sample of the block

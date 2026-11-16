@@ -1,0 +1,38 @@
+/* Workbench view (STUDIO, plan task 3). Applies only under body.werkbank; the other views stay untouched. Frame like the mockup: top bar over the width,
+   tracks (340 px), notes (1.25 fr), sound (1 fr), shelf strip below. Without a module the empty state replaces the three columns (D5).
+   The region files are pulled in below in the order of the binders (D15). */
+@import url('kopf.css');
+@import url('regal.css');
+@import url('tracks.css');
+@import url('grid.css');
+@import url('sound.css');
+
+#werkbank { display: none; }
+body.werkbank, body.werkbank.lib-zu, body.werkbank.lib-gross {
+  grid-template-rows: var(--kopf) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "kopf" "wb";
+}
+body.werkbank #kopf { grid-area: kopf; }
+body.werkbank #pult, body.werkbank #bestand { display: none; }
+body.werkbank #werkbank {
+  grid-area: wb; display: grid; position: relative; min-width: 0; min-height: 0; gap: 8px;
+  grid-template-columns: 340px minmax(0, 1.25fr) minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-areas: "top top top" "sp no kl" "rg rg rg";
+}
+#werkbank .w-kopf { grid-area: top; }
+#werkbank .w-spuren { grid-area: sp; }
+#werkbank .w-noten { grid-area: no; }
+#werkbank .w-klang { grid-area: kl; }
+#werkbank .w-leer { grid-column: 1 / 4; grid-row: 2; }
+#werkbank .w-regal { grid-area: rg; min-height: 0; }
+#werkbank .w-regal:empty { display: none; }
+#werkbank .w-pan { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 10px; min-width: 0; min-height: 0; overflow: auto; }
+#werkbank .w-pan[hidden] { display: none; }
+#werkbank .w-meldung {
+  position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); max-width: 70%; padding: 6px 12px; border-radius: 6px;
+  background: var(--panel2); border: 1px solid var(--line); color: var(--text); z-index: 5;
+}
+#werkbank .w-meldung:empty { display: none; }
+#werkbank .w-meldung.fehler { border-color: var(--warn); color: var(--warn); }

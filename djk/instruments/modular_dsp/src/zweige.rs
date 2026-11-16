@@ -68,6 +68,8 @@ pub fn wirkung(s: &Schritt) -> Option<Wirkung> {
         Schritt::Adsr { .. } | Schritt::Mseg { .. } | Schritt::Fm { .. }
         // random or held values that outlive a fade, a glide that would start from 0 Hz
         | Schritt::Sh { .. } | Schritt::Drift { .. } | Schritt::Glatt { .. }
+        // own state that must keep running: the chaos path and the shifter's oscillator phase and all-pass memory
+        | Schritt::Chaos { .. } | Schritt::Schieber { .. }
         // tails and recorded material
         | Schritt::Chorus { .. } | Schritt::Hall { .. } | Schritt::Delay { .. } | Schritt::Limiter { .. } | Schritt::Gate { .. }
         | Schritt::Labor { .. } | Schritt::Remix { .. } | Schritt::Komp { .. } | Schritt::Phaser { .. } | Schritt::Vocoder { .. } | Schritt::Faltung { .. } | Schritt::Granular { .. }
@@ -124,7 +126,7 @@ pub fn eingaenge(s: &Schritt) -> Vec<Quelle> {
         Schritt::Sampler { hz, trig, gate, scheibe, rueck, .. } => vec![*hz, *trig, *gate, *scheibe, *rueck],
         Schritt::Vocoder { x, l, r, zisch, mix, .. } => vec![*x, *l, *r, *zisch, *mix],
         Schritt::Faltung { x, l, r, mix, .. } => vec![*x, *l, *r, *mix],
-        Schritt::Wavetable { hz, trig, pos, verstimmung, breite, .. } => vec![*hz, *trig, *pos, *verstimmung, *breite],
+        Schritt::Wavetable { hz, trig, pos, verstimmung, breite, pm, warp, tiefe, stapel, .. } => vec![*hz, *trig, *pos, *verstimmung, *breite, *pm, *warp, *tiefe, *stapel],
         Schritt::Resonator { ein, .. } => ein.to_vec(),
         Schritt::Metall { ein, .. } => ein.to_vec(),
         Schritt::Fm { hz, gate, trig, vel, index, rueck, zeit, .. } => vec![*hz, *gate, *trig, *vel, *index, *rueck, *zeit],
@@ -139,6 +141,8 @@ pub fn eingaenge(s: &Schritt) -> Vec<Quelle> {
         Schritt::Trommeln { ein, .. } => ein.to_vec(),
         Schritt::Falter { x, antrieb, symmetrie, form, .. } => vec![*x, *antrieb, *symmetrie, *form],
         Schritt::Drift { rate, fest, .. } => vec![*rate, *fest],
+        Schritt::Chaos { rate, trig, .. } => vec![*rate, *trig],
+        Schritt::Schieber { x, hz, .. } => vec![*x, *hz],
     }
 }
 
@@ -157,6 +161,8 @@ pub fn ausgaenge(s: &Schritt) -> Vec<usize> {
         | Schritt::Dreieck { aus, zyklus, hart_aus, .. } | Schritt::Sinus { aus, zyklus, hart_aus, .. } => vec![*aus, *zyklus, *hart_aus],
         Schritt::Svf { tp, bp, hp, .. } => vec![*tp, *bp, *hp],
         Schritt::Kreuz { lo, mid, hi, .. } => vec![*lo, *mid, *hi],
+        Schritt::Chaos { aus, aus2, .. } => vec![*aus, *aus2],
+        Schritt::Schieber { auf, ab, .. } => vec![*auf, *ab],
         Schritt::Sem { aus, bp, .. } => vec![*aus, *bp],
         Schritt::Chorus { l, r, .. } => vec![*l, *r],
         Schritt::Hall { wl, wr, .. } | Schritt::Delay { wl, wr, .. } | Schritt::Limiter { wl, wr, .. } | Schritt::Gate { wl, wr, .. }

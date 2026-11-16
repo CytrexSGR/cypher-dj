@@ -15,6 +15,7 @@ import { Katalog, type Zeile } from '../../catalog.ts';
 import { AblageFehler, Projekte, projektWurzelVorgabe, setzeVorgabenQuelle } from '../../project/storage.ts';
 import { kanalOffen } from '../../hand_operation.ts';
 import { liveSlots } from '../../project/live.ts';
+import { vorlageBefehle, vorlageVon, vorlagenListe } from '../../project/werkbank.ts';
 import { seqGruppe } from '../../project/seq.ts';
 import { teileReglerLive, teileStummStart } from '../../project/controls_order.ts';
 import { alleAudioClips, fuehreListeAus, laneStart, setzeDekodiert, vergleiche, type PluginEintrag, type PresetInhalt } from '../../project/commands.ts';
@@ -653,17 +654,33 @@ export class ProjSitzung {
   }
 
   // --- öffnen ---------------------------------------------------------------------------------------------------------
-  neu(name: unknown, quelle: Quelle, bestaetigt = false): Promise<Antwort> {
-    return this.seriell(async () => {
+  // opt.werkbank / opt.vorlage (workbench stage 1): a module is a project with the marker; a template is applied after the open, as ONE history step
+  // through aendern (not inside the serial open: it would wait on itself). Everything is checked before anything is created or opened.
+  async neu(name: unknown, quelle: Quelle, bestaetigt = false, opt: { werkbank?: unknown; vorlage?: unknown } = {}): Promise<Antwort> {
+    const vorlage = opt.vorlage === undefined ? null : vorlageVon(opt.vorlage);
+    const r = await this.seriell(async () => {
+      if (opt.werkbank !== undefined && opt.werkbank !== true) throw new ProjFehler(400, 'argument_ungueltig', { text: 'werkbank: true or absent expected' });
+      if (opt.vorlage !== undefined && opt.werkbank !== true) throw new ProjFehler(400, 'argument_ungueltig', { text: 'vorlage needs werkbank: true' });
+      if (opt.vorlage !== undefined && vorlage === null) {
+        throw new ProjFehler(400, 'vorlage_unbekannt', { text: `vorlage: one of ${vorlagenListe().map((v) => v.id).join(' | ')}` });
+      }
       this.riegel(quelle);
       this.sperreOeffnen();
       this.sperreLiveLaeuft(quelle, bestaetigt);
       this.sperreFremderTransport(quelle);
+      // a template sets the tempo, which is refused while a deck plays; the open must not leave an empty module behind
+      if (vorlage !== null && this.lage.deckLaeuft()) {
+        throw new ProjFehler(409, 'deck_laeuft', { text: 'Stop the decks first: a module sets its own tempo.' });
+      }
       return this.oeffnetGerade(() => {
-        const { slug } = this.projekte.lege(name as string);
+        const { slug } = this.projekte.lege(name as string, opt.werkbank === true ? { werkbank: true } : {});
         return this.oeffneIntern(slug, quelle);
       });
     });
+    if (vorlage === null || r.code !== 200) return r;
+    const o = r.j as { projekt: Projekt };
+    const a = await this.aendern({ rev: o.projekt.rev, label: `Template ${vorlage.name}`, befehle: vorlageBefehle(vorlage) }, quelle);
+    return a.code === 200 ? { code: 200, j: { ...(r.j as object), projekt: (a.j as { projekt: Projekt }).projekt } } : a;
   }
   oeffnen(slug: unknown, quelle: Quelle, bestaetigt = false): Promise<Antwort> {
     return this.seriell(async () => {

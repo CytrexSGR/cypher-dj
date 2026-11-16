@@ -92,11 +92,17 @@ for being finite (NaN and inf read as 0) and clamped. The only state that decays
 | in | `pos` | 0..1 | 0 | morph position over the frames |
 | in | `verstimmung` | 0..50 cent | 0 | detune of the outermost copy |
 | in | `breite` | 0..1 | 0 | stereo spread of the copies |
+| in | `pm` | cycles | 0 | phase offset added to the read phase of every copy (audio rate) |
+| in | `warp` | 0..3, rounded | 0 | 0 off, 1 bend, 2 asym, 3 sync |
+| in | `tiefe` | bend/asym -1..1, sync 0..1 | 0 | warp depth |
+| in | `stapel` | 0..2, rounded, read at `trig` | 0 | 0 off, 1 copy `c` plays `12 (c mod 2)` semitones up, 2 offsets `0, 12, 19` |
 | value | `tabelle` | integer 0..6 | 0 | table (above) |
 | value | `kopien` | integer 1..7 | 1 | unison copies |
 | value | `zufall` | 0..1 | 1 | spread of the random start phases |
 | value | `saat` | integer 0..65535 | 0 | seed |
 | value | `glatt` | 0..1000 ms | 10 | smoothing of `pos` |
+| value | `reserve` | integer 0..3 | 0 | mip level chosen for the phase step times `2^reserve` |
+| field | `spektren` | 1..32 frames x 1..256 harmonics | absent | custom harmonic spectra instead of `tabelle` |
 | out | `l`, `r` | | | stereo, panned copies |
 | out | `aus` | | | sum without pan (for one per-voice mono chain); equals `l` and `r` at width 0 |
 
@@ -247,6 +253,44 @@ convention lint (`beispiele_konvention.rs`) now covers the three new graphs; in 
 7. More tables (user spectra in the JSON, more vowels or registers) and a `pos` per copy (spread over frames) are not
    in this slice.
 8. The C++ side, the page and the kern were not built or run; no code there names arts.
+
+## Greif extensions (2026-11-16): `pm`, `warp`, `stapel`, `reserve`, `spektren`
+
+Tests: `tests/wavetable_warp.rs` (ten tests), the pinned ports in `tests/wavetable.rs`, the reset check in `tests/arten.rs`,
+the real-time check in `tests/keine_allokation.rs` (`WAVETABLE_2`).
+
+- **Bit rule.** With `pm` 0, `warp` 0, `stapel` 0, `reserve` 0 and no `spektren` every sample takes the old read
+  (`t.lese(level, phase, pos)`, no added zero): `tests/hartsync_bitgleich.rs` stays green with its hashes untouched.
+  The branch is per voice and sample (`pm == 0.0` and warp mode 0), so a constant 0 on `pm` is the same branch as no
+  connection and gives the same bits (measured difference 0).
+- **`pm`** is added to the u32 phase of every copy after the copy's own phase (offset in cycles, wrapped with `rem_euclid`).
+  Non-finite values count as 0. The mip level does not see `pm`: a loud audio-rate `pm` raises the instantaneous frequency
+  by `index * f_mod * 2 pi` and needs `reserve`.
+- **`warp`** maps the read phase `p` of every copy (f64 on the full 32 bit phase; 24 bits of f32 would be audible at the
+  edge of a saw, and bend and asym at depth 0 would not be the identity): bend `p / (p + s (1 - p))`, `s = 4^tiefe`; asym
+  with knee `a = 0.5 + 0.45 tiefe`; sync `frac(p (1 + 7 tiefe))` with the output faded to zero over the last 1/16 of the
+  master cycle by a smoothstep. A linear fade has slope steps at both ends; the smoothstep keeps the slope continuous.
+  Constants (`4^tiefe`, the asym slopes, the sync ratio) are computed once per voice and sample, one division per copy.
+- **Level choice.** The level is chosen for `inc * 2^reserve * slope`; `slope` is the steepest part of the warp map clamped
+  to 1..8 (bend `max(s, 1/s)`, asym `max(1/2a, 1/2(1-a))`, sync `1 + 7 tiefe`). Asym at `|tiefe|` above 0.89 has a slope
+  above 8 (10 at 1), so the clamp of the plan leaves 25 % less head room there; `reserve` makes up for it.
+- **Alias limit of warp.** Not the -60 dB of the plan: a warp map has a slope step where the master phase wraps (bend: `s`
+  before, `1/s` after), and the folded energy of that kink does not depend on the table. A sine through the bend map in f64
+  without any table has -44 dB of alias at C6 (tiefe 1). Measured with the node: C6, sync 1, reserve 1: -38.0 dB (saw and
+  pulse); the test limit is -35 dB. What the level choice can do is checked: saw, bend 1, C6: reserve 0 -28.6 dB, reserve 3
+  -44.2 dB (6 to 8 dB per octave of reserve down to the floor of the map).
+- **`stapel`** is read at `trig` and at the first sample; the detune spread still applies. Copy `c` plays
+  `12 (c mod 2)` (mode 1) or `[0, 12, 19][c mod 3]` (mode 2) semitones up, folded into the detune ratio, so the mip level
+  follows each copy's own frequency. Measured on a sine, two copies, mode 1: partials at f0 and 2 f0 are equal (-3.01 dB).
+- **`spektren`** is a named node field like `datei` (`Knoten.spektren: Option<Vec<Vec<f32>>>`), refused in makros and on
+  other blocks, only allowed with `tabelle` absent or 0. Frame `i`, harmonic `h`: `a * sin(2 pi h t)`, sign = polarity;
+  frames are scaled to the RMS of the saw like the vowels and the organ; an all-zero frame is silent. The same mip chain as
+  the built-in tables (29 levels); 296 KB per frame, 9.5 MB for 32 frames. A spectrum `1/h`, h = 1..64, matches the saw
+  table within 0.039 dB per harmonic.
+- **Cost** of `wavetable-supersaw` (16 voices x 7 copies, block 256, `tests/kosten_graph.rs`, host under other load,
+  four alternating runs of the binary before and after): p50 550.4 / 548.6 / 552.0 / 549.9 us before, 563.5 / 563.8 /
+  562.3 / 562.5 us after (+2.4 %), p99 about 815 us before and about 830 us after. The warp and `pm` paths cost more only
+  when they are on.
 
 ## Review on the receiving side (2026-11-02)
 

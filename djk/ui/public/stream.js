@@ -4,7 +4,7 @@ import { mixAufnehmen, gateAufnehmen } from './effects.js';
 import { kanalAnsicht } from './live_module.js';   // live modules task 4
 import { cypherStand } from './messages.js';
 import { live, liveEreignis, liveOffen, merkeArr, pruefeLiveSpaeter, zeichneLive } from './live_view.js';
-import { produktion } from './seitenrahmen.js';
+import { produktion, werkbank } from './seitenrahmen.js';
 import { $, BUCHSTABE, deckAnsicht, melde, zeigePruefmodus, zustand } from './page_state.js';
 import { baueFxDetail, busMix, fxGewaehlt, gateMix, zeigeBusMesser, zeigeGateMesser, zeigeKomp, zeigeWerkzeug } from './effects_view.js';
 import { zeigeKeylock } from './tempo_view.js';
@@ -48,6 +48,7 @@ export function strom() {
   q.onmessage = (m) => {
     const { a, f } = JSON.parse(m.data);
     try { produktion?.ereignis(a, f); } catch (e) { console.error('Production view:', e); }   // D1 V1: proj, /zustand/arr; ein Fehler dort hält die DJ-Anzeige nicht an
+    try { werkbank?.ereignis(a, f); } catch (e) { console.error('Workbench view:', e); }   // like the line above: an error there does not stop the DJ display
     if (a === '/zustand/arr') merkeArr(f);   // the loop slots follow the transport of the live container
     switch (a) {
       case 'stand':

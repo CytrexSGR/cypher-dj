@@ -37,8 +37,8 @@ const knob = (id, param) => ({ id, type: 'knob', label: id, bind: { param } });
 const panelV2 = (art, controls) => ({ format: 'cypherdj-panel/2', geraet: art === 'bk' ? { art: 'bk', graph: 'synth-mono' } : { art }, title: 'T', sections: [{ id: 's', title: 'S', cols: 3, controls }] });
 const BK_PANEL = panelV2('bk', [knob('c5', 'k5'), knob('c6', 'k6')]);
 const BK_TABELLE = [{ name: 'k5', min: 20, max: 2000, log: true, vorgabe: 0.5 }, { name: 'k6', min: 0, max: 1, log: false, vorgabe: 0.5 }];
-const BK_PANEL_HOCH = panelV2('bk', [knob('c40', 'k40'), knob('c41', 'k41')]);   // knobs above 32: the release path
-const BK_TABELLE_HOCH = [{ name: 'k40', min: 20, max: 2000, log: true, vorgabe: 0.5 }, { name: 'k41', min: 0, max: 1, log: false, vorgabe: 0.5 }];
+const BK_PANEL_HOCH = panelV2('bk', [knob('c65', 'k65'), knob('c66', 'k66')]);   // beyond the live range k1..k64 (no real knob: the page keeps the release path for any name above BK_LIVE_MAX)
+const BK_TABELLE_HOCH = [{ name: 'k65', min: 20, max: 2000, log: true, vorgabe: 0.5 }, { name: 'k66', min: 0, max: 1, log: false, vorgabe: 0.5 }];
 const RB_PANEL = panelV2('rb338', [knob('cut', 'cutoff'), knob('res', 'resonance')]);
 const RB_TABELLE = [{ name: 'cutoff', min: 0, max: 1, log: false, vorgabe: 0.3 }, { name: 'resonance', min: 0, max: 1, log: false, vorgabe: 0.1 }];
 const BK = (parameter = {}) => ({ art: 'intern', name: 'bk', graph: 'synth-mono', parameter });
@@ -90,11 +90,11 @@ const ziehe = (k, schritte, dy = 4) => {
   for (let i = 1; i <= schritte; i++) k.feuere('pointermove', { clientX: 10, clientY: 100 - i * dy });
 };
 
-test('a drag of 10 moves on a knob above 32 sends exactly one spur_aendern at pointerup, with the last value and every existing parameter (the release path)', async () => {
-  const a = aufbau(BK({ k1: 0.25, k41: 0.75 }), { panel: BK_PANEL_HOCH, tabelle: BK_TABELLE_HOCH });
+test('a drag of 10 moves on a knob beyond the live range (k65) sends exactly one spur_aendern at pointerup, with the last value and every existing parameter (the release path)', async () => {
+  const a = aufbau(BK({ k1: 0.25, k66: 0.75 }), { panel: BK_PANEL_HOCH, tabelle: BK_TABELLE_HOCH });
   a.ansicht.zeige(a.spur);
   await warte();
-  const k = knopfVon(a.wurzel, 'c40');
+  const k = knopfVon(a.wurzel, 'c65');
   ziehe(k, 10);
   assert.equal(a.gesendet.length, 0, 'moving only previews');
   k.feuere('pointerup');
@@ -102,15 +102,15 @@ test('a drag of 10 moves on a knob above 32 sends exactly one spur_aendern at po
   await warte();
   assert.equal(a.gesendet.length, 1);
   const { label, befehle } = a.gesendet[0];
-  assert.equal(label, 'Lead: c40', 'the undo step names the track and the control label');
+  assert.equal(label, 'Lead: c65', 'the undo step names the track and the control label');
   assert.equal(befehle.length, 1);
   const b = befehle[0];
   assert.equal(b.befehl, 'spur_aendern');
   assert.equal(b.spur_id, 's1');
-  assert.deepEqual(Object.keys(b.geraet.parameter).sort(), ['k1', 'k40', 'k41']);
+  assert.deepEqual(Object.keys(b.geraet.parameter).sort(), ['k1', 'k65', 'k66']);
   assert.equal(b.geraet.parameter.k1, 0.25);
-  assert.equal(b.geraet.parameter.k41, 0.75);
-  assert.ok(Math.abs(b.geraet.parameter.k40 - 0.75) < 1e-9, `k40 = ${b.geraet.parameter.k40}`);   // 10 moves x 4 px / 160 px from the default 0.5 ... plus 0.25
+  assert.equal(b.geraet.parameter.k66, 0.75);
+  assert.ok(Math.abs(b.geraet.parameter.k65 - 0.75) < 1e-9, `k65 = ${b.geraet.parameter.k65}`);   // 10 moves x 4 px / 160 px from the default 0.5 ... plus 0.25
   assert.equal(b.geraet.art, 'intern');
   assert.equal(b.geraet.graph, 'synth-mono');
 });
@@ -353,32 +353,32 @@ test('two quick gestures before the first answer: the second command is built wh
   const a = aufbau(BK({ k1: 0.25 }), { manuell: true, panel: BK_PANEL_HOCH, tabelle: BK_TABELLE_HOCH });
   a.ansicht.zeige(a.spur);
   await warte();
-  const k5 = knopfVon(a.wurzel, 'c40'), k6 = knopfVon(a.wurzel, 'c41');
+  const k5 = knopfVon(a.wurzel, 'c65'), k6 = knopfVon(a.wurzel, 'c66');
   ziehe(k5, 4); k5.feuere('pointerup');            // gesture A, answer not here yet
-  const werteA = a.ansicht.handle().werte().k40;
+  const werteA = a.ansicht.handle().werte().k65;
   ziehe(k6, 2); k6.feuere('pointerup');            // gesture B
   assert.equal(a.warteschlange.length, 2);
   assert.equal(a.gesendet.length, 0);
   await a.lauf();                                   // A answered: it is in the project now
-  assert.deepEqual(a.gesendet[0].befehle[0].geraet.parameter.k40, werteA);
+  assert.deepEqual(a.gesendet[0].befehle[0].geraet.parameter.k65, werteA);
   await a.lauf();
   const zweite = a.gesendet[1].befehle[0].geraet.parameter;
-  assert.equal(zweite.k40, werteA, 'A is not rolled back');
+  assert.equal(zweite.k65, werteA, 'A is not rolled back');
   assert.equal(zweite.k1, 0.25);
-  assert.ok(zweite.k41 > 0.5);
-  assert.equal(a.ansicht.handle().werte().k40, werteA);
+  assert.ok(zweite.k66 > 0.5);
+  assert.equal(a.ansicht.handle().werte().k65, werteA);
 });
 
 test('a refused write: the shown value goes back to the project value at once', async () => {
-  const a = aufbau(BK({ k40: 0.5 }), { ablehnen: true, panel: BK_PANEL_HOCH, tabelle: BK_TABELLE_HOCH });
+  const a = aufbau(BK({ k65: 0.5 }), { ablehnen: true, panel: BK_PANEL_HOCH, tabelle: BK_TABELLE_HOCH });
   a.ansicht.zeige(a.spur);
   await warte();
-  const k = knopfVon(a.wurzel, 'c40');
+  const k = knopfVon(a.wurzel, 'c65');
   ziehe(k, 4);
-  assert.ok(a.ansicht.handle().werte().k40 > 0.5);
+  assert.ok(a.ansicht.handle().werte().k65 > 0.5);
   k.feuere('pointerup');
   await warte();
-  assert.equal(a.ansicht.handle().werte().k40, 0.5);
+  assert.equal(a.ansicht.handle().werte().k65, 0.5);
   assert.equal(a.gesendet.length, 0);
 });
 
@@ -551,7 +551,7 @@ test('Surge track view: untouched parameters get the host value as vorgabe (GET 
   assert.equal(gemeldet.length, 1);
 });
 
-// ---- production plan task 10: knobs k1..k32 of a Baukasten track are live ------------------------------------------------------------------------------
+// ---- production plan task 10: knobs k1..k64 of a Baukasten track are live ------------------------------------------------------------------------------
 // an injectable clock: a timer fires when `vor` passes its time (the adapter takes {setTimeout, clearTimeout} like pluginAdapter)
 function uhr() {
   let t = 0;
@@ -620,8 +620,8 @@ test('task 10: a drag of ten set() calls within 100 ms sends at most four geraet
   assert.equal(sp.geraet.parameter.k6, 0.3, 'the project holds it');
 });
 
-test('task 10: knobs above 32, an RB-338 track and a Surge track keep the single spur_aendern at the end of the gesture (no live send)', async () => {
-  for (const [geraet, param, tabelle] of [[BK({ k1: 0.25 }), 'k40', BK_TABELLE_HOCH], [RB({ cutoff: 0.6 }), 'cutoff', RB_TABELLE]]) {
+test('task 10: knobs beyond k64, an RB-338 track and a Surge track keep the single spur_aendern at the end of the gesture (no live send)', async () => {
+  for (const [geraet, param, tabelle] of [[BK({ k1: 0.25 }), 'k65', BK_TABELLE_HOCH], [RB({ cutoff: 0.6 }), 'cutoff', RB_TABELLE]]) {
     const sp = spurMit(geraet), u = uhr();
     const { ctx, gesendet } = liveKontext(sp);
     const ad = spurAdapter(ctx, sp, tabelle, { zeitgeber: u });
@@ -634,12 +634,15 @@ test('task 10: knobs above 32, an RB-338 track and a Surge track keep the single
     assert.equal(gesendet.length, 1);
     assert.equal(gesendet[0].befehle[0].befehl, 'spur_aendern');
   }
-  const sp = spurMit(BK()), { ctx, gesendet } = liveKontext(sp), u = uhr();   // the border: k32 is live, k33 is not
-  const ad = spurAdapter(ctx, sp, [{ name: 'k32', vorgabe: 0.5 }, { name: 'k33', vorgabe: 0.5 }], { zeitgeber: u });
-  ad.set('k33', 0.9); u.vor(100); await warte();
+  const sp = spurMit(BK()), { ctx, gesendet } = liveKontext(sp), u = uhr();   // the border: k64 is live (k33 too), k65 is not
+  const ad = spurAdapter(ctx, sp, [{ name: 'k64', vorgabe: 0.5 }, { name: 'k65', vorgabe: 0.5 }], { zeitgeber: u });
+  ad.set('k65', 0.9); u.vor(100); await warte();
   assert.equal(gesendet.length, 0);
-  ad.set('k32', 0.9); u.vor(30); await warte();
+  ad.set('k64', 0.9); u.vor(30); await warte();
   assert.equal(gesendet.at(-1).befehle[0].befehl, 'geraet_param_setzen');
+  ad.set('k33', 0.9); u.vor(30); await warte();
+  assert.equal(gesendet.at(-1).befehle[0].befehl, 'geraet_param_setzen');
+  assert.equal(gesendet.at(-1).befehle[0].param, 'k33');
 });
 
 test('task 10 (failure case): a refused live send reports once, the display returns to the stored value, the rest of the gesture sends nothing', async () => {
@@ -679,4 +682,18 @@ test('task 10: a drag on the panel knob of a bk track sends geraet_param_setzen,
   assert.ok(Math.abs(b.wert - 0.75) < 1e-9, `wert ${b.wert}`);
   assert.equal(a.spur.geraet.parameter.k1, 0.25, 'the other knobs are untouched');
   assert.ok(Math.abs(a.ansicht.handle().werte().k5 - 0.75) < 1e-9, 'the panel shows the stored value after the answer');
+});
+
+// Workbench task 4: option `breit` builds the wide plate (fp-breit); PRODUCTION's call without it is unchanged.
+test('bindeGeraetAnsicht with breit builds the wide plate; without it the small one', async () => {
+  for (const [opt, breit] of [[{ breit: true }, true], [{}, false]]) {
+    const a = aufbau(BK());
+    const wurzel = new K('div');
+    const v = bindeGeraetAnsicht(a.ctx, wurzel, { dokument: DOK, kopfBauer: () => ({ neu() {} }), ...opt });
+    v.zeige(a.spur);
+    await warte();
+    const platten = wurzel.alles().filter((e) => e.klassen.has('frontplatte'));
+    assert.ok(platten.length > 0, 'a plate was built');
+    assert.ok(platten[0].classList.contains('fp-breit') === breit, `breit=${breit}`);
+  }
 });

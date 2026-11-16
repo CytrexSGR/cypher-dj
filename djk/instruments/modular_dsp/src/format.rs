@@ -42,6 +42,10 @@ pub struct Knoten {
     /// `deny_unknown_fields` (serde does not combine it with `flatten`).
     #[serde(default)]
     pub datei: Option<String>,
+    /// Custom harmonic spectra of a `wavetable` node: frames of harmonic amplitudes (1..=32 frames, 1..=256 harmonics, sine
+    /// phase, sign = polarity). Not a scalar, so it is a named field like `datei`; checked in `uebersetzen`.
+    #[serde(default)]
+    pub spektren: Option<Vec<Vec<f32>>>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
