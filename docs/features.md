@@ -225,10 +225,18 @@ The lists above are the headline. Also in there:
   until switched on in a config file, each tablet is paired with a link that works for two minutes, paired devices expire
   30 days after last use, and a tablet cannot start or stop playback, change projects or evaluate code
 
-- **Loop workbench (STUDIO)**: modules of up to eight instrument tracks that loop together over 1 to 16 bars, with a
-  notes grid (drum rows or pitch rows), velocity and length per step, level, mute, solo and meters per track, an
-  insert chain of up to four effects per track, the large front panel of the instrument, an instrument swap that keeps
-  the notes, and a shelf of saved modules (SAVE AS keeps a copy, DELETE moves a module to a bin folder)
+- **Loop workbench (STUDIO)**: modules of up to eight instrument tracks that loop together over 1 to 128 bars. The
+  tracks sit on the left (level, mute, solo, meter and one send knob per loaded effect), the sequencer takes the rest,
+  and a dock below shows one card per instrument track and one per effect with a few knobs of the device; OPEN shows
+  the whole device in a floating window. Up to four effects are loaded into the dock and fed by the sends, each track
+  has an insert chain of up to four effects, an instrument can be swapped while its notes stay, and a shelf drawer
+  holds the saved modules (SAVE AS keeps a copy, DELETE moves a module to a bin folder). EXPORT WAV and EXPORT MIDI
+  write the module as a sum and per track
+- **Step sequencer (STUDIO)**: on a drum track every row has its own length, so rows of different length drift
+  against each other, its own swing, a direction (forward, or forward and back) and SHIFT buttons that move its hits
+  by a step. Per step: velocity, chance, offset and roll (several hits inside one step), shown in the step and
+  changed by dragging. Tools DRAW, ERASE and FILL, Shift draws a line, Ctrl selects a range, the arrow keys move a
+  cursor; 4, 8 or 16 steps per bar, pages of 1, 2 or 4 bars, and a loop range dragged above the steps
 - **Sampler (STUDIO)**: cut a library loop, or the loop or a stem of a module, into up to 64 slices, by grid or at the
   hits found in the audio, and play them from a new instrument track in their original order. The SLICE grid has one
   row per slice, so reordering, repeating, shortening, reversing and pitching single steps are ordinary note edits. A
@@ -237,6 +245,16 @@ The lists above are the headline. Also in there:
   a drum kit (TO KIT, then KIT TO TRACK) or a tone that plays at the pitch of the keys, with a proposed root note (TO
   TONE). The shelf tab CUTS lists the cuts to reuse or delete. The agent does the same through its `sampler` tool. A kit
   made from hits plays on its own track at once but reaches the live drum stream only after a restart
+- **Sample player (STUDIO)**: the shelf tab SAMPLES browses your own sample folders (listed in
+  `~/.config/cypherdj/sampler/wurzeln.json`) with a search over folder and file names; a click plays a file, TO TRACK
+  puts it on a new instrument track that plays it across the keys, with the root note from pitch detection and the
+  file name. Folders without samples are hidden and every folder shows how many it holds
+- **Multisample instruments (STUDIO)**: a folder of note samples becomes one instrument (INSTRUMENT TO TRACK): note,
+  velocity layer and take are read from the file names, so every key gets the nearest sample, the velocity picks the
+  layer and takes alternate (round robin). Loop points stored in WAV or AIFF files become sustain loops with a
+  cross-fade, and a sibling folder of release samples plays when a key is let go, with its own level knob. Built
+  instruments are kept on the shelf tab INSTRUMENTS. The sample data of an instrument is one memory-mapped pack of up
+  to 2 GiB
 - **Step lanes for knobs (STUDIO)**: `+ lane` under the grid adds a step lane for any knob of a Cypher Modular
   instrument; clicking a key or a drum row plays it
 - **Live view (LIVE)**: the three Strudel channels side by side, each with an automation lane for fader,
@@ -326,6 +344,11 @@ mostly against a silent test sink. Not benchmarks.
 - The multi-core paths were measured on one 8-core machine. The channel limiters on the DJ buses are off by default.
 - Sounds saved from a loop into the pattern channels play at their recorded speed, and parameter rides on the
   hosted instrument keep their duration in seconds; neither follows tempo changes yet.
+- Sample instruments: 16 voices per instrument, no streaming from disk (a pack is memory-mapped, so the first notes
+  after a reboot may read from disk), no sustain pedal, no cross-fades between velocity layers or keys, and instruments
+  are not levelled against each other. Instrument definitions of other products (SFZ, sampler patches) are not read,
+  and samples in a protected vendor format are not listed. Built and measured on 16 November, not yet judged by a
+  listener.
 - Many moving parts: Rubber Band, JACK/PipeWire, ffmpeg, Node.js 22.18+, Python, and optionally
   Strudel, Carla and Surge XT. See [INSTALL.md](../INSTALL.md).
 - The library search expects a catalog database that is not part of this repository.

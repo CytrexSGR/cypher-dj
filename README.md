@@ -40,6 +40,14 @@ touch view. Instrument racks put several of them on one track
 with key zones, a chain selector, four macros and stored variations. A word such as `dark` or `tight` moves a sound
 by a bounded step.
 
+**Build loops.** The STUDIO view is a loop workbench: up to eight instrument tracks over 1 to 128 bars, a dock of
+device cards with the effects you load and a send knob per track, and a step sequencer in which every drum row has
+its own length, swing and direction, with velocity, chance, offset and roll per step. Loops are cut into slices that
+play as an instrument, and your own samples become instruments too: one file across the keys, or a folder of note
+samples as a multisample instrument with velocity layers, round robin, sustain loops and release samples.
+
+![STUDIO: the step sequencer with rows of different length, the tracks with their sends and the dock of instruments and effects](docs/screens/studio-workbench.png)
+
 **Mix and route.** Inserts of our own (compressor, EQ, saturator, limiter), up to 8 group tracks and 4 returns with
 our own reverb, sends before or after the fader, sidechain from other tracks (and on group, return and master stages
 also from groups and returns), Duck by Kick in one step, a routing matrix, and resampling of any track, group,

@@ -5,7 +5,9 @@ scrolled away or collapsed.
 
 ![DJ view with four places: two track decks, a Strudel place and the Loops place with two live modules, around one mixer](screens/dj-view.png)
 
-![Studio view: three Strudel channels with multi-line patterns, the channel strips and the master meter](screens/studio-view.png)
+![STUDIO, the loop workbench: a drum pattern whose rows have their own length, swing and direction, four tracks with send knobs, and the dock with one card per instrument and per effect](screens/studio-workbench.png)
+
+![LIVE view: three Strudel channels with multi-line patterns, the channel strips and the master meter](screens/studio-view.png)
 
 ![PRODUCTION view: four stems under the muted original, the warp editor in COMPLEX mode](screens/production-warp-stems.png)
 

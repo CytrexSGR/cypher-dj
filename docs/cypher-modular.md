@@ -64,6 +64,11 @@ code: `knoten` are nodes, `kanten` are wires, `art` is the block type, `stimmen`
 | Dynamics | `limiter`, `gate`, `komp` |
 | Wiring | `ausgang` (output), `eingang` (input, for effect graphs), `leitung` (a feedback path that can be wired freely), `wahl` (a selector over up to eight inputs, with a crossfade) |
 
+The `sampler` block also has a zone mode, used by the multisample instruments of the STUDIO view: a table of up to 1024
+zones over one memory-mapped sample pack of up to 2 GiB. A zone has a key range, a velocity range, a root note, gain
+and pan, an optional sustain loop with a cross-faded wrap, and may be a release sample that plays on two outputs of its
+own when the key is let go. Several zones for the same key and velocity alternate (round robin).
+
 The `sampler` block plays a sample file of up to 60 seconds. Its slice mode, used by the Sampler of the STUDIO view, takes
 a slice table `grenzen` (2 to 65 frame positions, so 1 to 64 slices of any length) and `noten_wahl` 1, in which the note
 picks the slice: notes 0 to 63 play slices 0 to 63 forward, notes 64 to 127 play the same slice reversed, exact to the
