@@ -1,6 +1,6 @@
 // Graph defaults on every load path (plan 2026-11-11-synth-ausbau, task 8). A knob a graph defines starts at the graph's `vorgabe` (0.5 without one), whichever way
 // the graph arrives: project open (fill), preset apply (absent knobs), POST /graph (a batch of rows BEFORE the load message, only for a changed name), the
-// project restore (saved rows first, no push after the load), Cypher's hand load. 56 shipped graphs, 46 recipe graphs plus a fixture graph with `vorgabe` values.
+// project restore (saved rows first, no push after the load), Cypher's hand load. 57 shipped graphs, 46 recipe graphs plus a fixture graph with `vorgabe` values.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -25,7 +25,7 @@ const hol = (u, o = {}) => fetch(u, { ...o, headers: { connection: 'close', ...(
 const warte = (ms) => new Promise((r) => setTimeout(r, ms));
 const bis = async (f, ms = 3000) => { for (let i = 0; i < ms / 20 && !(await f()); i++) await warte(20); return f(); };
 
-// ---- the graph folder of this file: the 56 shipped graphs, the 46 recipe graphs and fixtures ----
+// ---- the graph folder of this file: the 57 shipped graphs, the 46 recipe graphs and fixtures ----
 const FIX_INST = { format: 'baukasten/2', name: 'fix-inst', stimmen: 1, regler_namen: { 1: 'A', 2: 'B', 40: 'C', 64: 'D' },
   knoten: [{ id: 'n', art: 'note' }, { id: 'o', art: 'ausgang' },
     { id: 'k1', art: 'regler', nr: 1, min: 0, max: 1, vorgabe: 0.2 }, { id: 'k2', art: 'regler', nr: 2, min: 0, max: 1 },
@@ -55,10 +55,10 @@ function erwartet(name) {
 }
 const art = (name) => (JSON.parse(fs.readFileSync(path.join(ORDNER, `${name}.json`), 'utf8')).knoten.some((k) => k.art === 'eingang') ? 'effekt' : 'instrument');
 
-test('the walk covers 56 shipped graphs, the 46 recipe graphs and the four fixtures', () => {
-  assert.equal(NAMEN.length, 102);
+test('the walk covers 57 shipped graphs, the 46 recipe graphs and the four fixtures', () => {
+  assert.equal(NAMEN.length, 103);
   assert.equal(BK_REGLER_ZAHL, 64);
-  assert.equal(listeGraphen(ORDNER).graphen.length, 106);
+  assert.equal(listeGraphen(ORDNER).graphen.length, 107);
 });
 
 // ---- (h) Drift ----

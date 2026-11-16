@@ -204,6 +204,8 @@ references before they went in:
 - **Greif** (`synth-greif`): a hybrid wavetable synth. Three wavetable oscillators with their own spectra, phase
   modulation between them, warp, an octave stack, a chaos modulator, a frequency shifter and a clean sub. 63 knobs,
   eight voices, twelve factory presets
+- **Greif 2** (`synth-greif2`): Greif with tables built for a strong Position (basic to buzz, formant growl, hard sync),
+  phase modulation off at the start, the same twelve presets for an A/B
 - **Drums 909 and Drums 808**: two complete drum machines in one graph each. One MIDI channel plays the whole kit, the
   note picks the drum, the knobs tune the kit, and one bus (drive and a DJ filter) closes it
 - **Filterbox**: an effect graph with six filter models (ladder, diode, comb, vowel and others), three modulation

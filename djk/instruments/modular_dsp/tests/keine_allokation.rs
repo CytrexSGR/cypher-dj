@@ -226,6 +226,7 @@ const GRAPHEN: &[&str] = &[
     include_str!("../demos/bass-banddrive.json"),
     // Greif: three wavetables with custom spectra, phase modulation and warp, chaos, shift, chorus, delay
     include_str!("../demos/synth-greif.json"),
+    include_str!("../demos/synth-greif2.json"),
 ];
 
 #[test]

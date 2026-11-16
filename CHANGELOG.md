@@ -3,6 +3,21 @@
 One entry per public update, newest first. Each entry names what changed for someone who plays, produces or
 builds cypher-dj.
 
+## 2026-11-16, second update
+
+**Instruments and effects**
+- `synth-greif2` (Greif 2): Greif's graph and knobs with tables built for a strong Position, the main tone knob of a
+  wavetable synth: A "basic to buzz" (sine to an impulse train), B "formant growl" (a resonant peak sweeping over 24
+  harmonics), C "hard sync" (slave ratio 1 to 9). Position moves the spectral centroid of A from 137 to 5546 Hz (Greif:
+  177 to 486 Hz). Phase modulation starts at 0, because any phase modulation makes the wavetable block choose a duller
+  table level for head room. Twelve factory presets with Greif's knob values, for an A/B.
+
+**Device panels**
+- A new display type `wavetable`: the table of an oscillator as stacked frames in pseudo-3D, the frame at Position
+  highlighted and drawn through the Warp map, following the knobs live.
+- Greif and Greif 2 show it on all three oscillators, plus a response curve for both filters, the shape of all three
+  envelopes and the waveform of both LFOs.
+
 ## 2026-11-16
 
 **Studio**

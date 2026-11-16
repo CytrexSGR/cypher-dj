@@ -6,7 +6,7 @@
 import { AKZENTE } from './panel_kopf.js';
 import { spektrumFlaeche } from './spectrum.js';
 import { anzeigeText, anzeigeWert, zeitInSekunden } from './panel_display.js';
-import { huellPunkte, lfoPunkte, filterPunkte, cutoffX, nullDbY } from './panel_curves.js';
+import { huellPunkte, lfoPunkte, filterPunkte, cutoffX, nullDbY, wtRahmen, wtGewarpt, wtLage, wtLinie, wtNull, wtTiefe } from './panel_curves.js';
 import { GLYPHEN_PFAD } from './panel_glyphen.js';
 import { skaliere, diskretWert, diskretIndex, formatiereWert, klemme01 } from './panel_skala.js';
 
@@ -344,10 +344,10 @@ export function baueFrontplatte(host, opt) {
     if (rolle === 'zeit') w = zeitInSekunden(w, q?.unit ?? parameter?.[nr]?.einheit);   // Surge's EG times are log2 seconds
     return w;
   };
-  const kurve = (zelle, titel, label) => {
+  const kurve = (zelle, titel, label, hoehe = K_H) => {
     zelle.append(el('span', 'fp-name fp-kurventitel', label ?? titel));
-    const svg = el('svg', 'fp-kurve', undefined, true);
-    svg.setAttribute('viewBox', `0 0 ${K_B} ${K_H}`);
+    const svg = el('svg', hoehe === K_H ? 'fp-kurve' : 'fp-kurve fp-kurve-hoch', undefined, true);
+    svg.setAttribute('viewBox', `0 0 ${K_B} ${hoehe}`);
     svg.setAttribute('preserveAspectRatio', 'none');
     svg.setAttribute('role', 'img');
     svg.setAttribute('aria-label', titel);
@@ -711,6 +711,34 @@ export function baueFrontplatte(host, opt) {
         const y0 = (K_RAND + nullDbY(h)).toFixed(1), x = (K_RAND + cutoffX(cutoff, b)).toFixed(1);
         nullLinie.setAttribute('x1', K_RAND); nullLinie.setAttribute('x2', K_RAND + b); nullLinie.setAttribute('y1', y0); nullLinie.setAttribute('y2', y0);
         marke.setAttribute('x1', x); marke.setAttribute('x2', x); marke.setAttribute('y1', K_RAND); marke.setAttribute('y2', K_RAND + h);
+      });
+    },
+    wavetable(c, zelle) {   // stacked frames, the frame at pos highlighted and read through the warp map
+      const WT_H = 90, b = K_B - 2 * K_RAND, h = WT_H - 2 * K_RAND;
+      const frames = (c.frames ?? []).filter((f) => Array.isArray(f) && f.length >= 2);
+      const { svg, linie, flaeche } = kurve(zelle, 'Wavetable', c.label, WT_H);
+      const lage = wtLage(frames.length, b, h);
+      const pfad = (p) => p.map(([x, y], i) => `${i ? 'L' : 'M'}${(x + K_RAND).toFixed(1)} ${(y + K_RAND).toFixed(1)}`).join('');
+      const alt = el('g', 'fp-wt-stapel', undefined, true);
+      for (let i = frames.length - 1; i >= 0; i--) {   // back to front: the last frame is the top right one
+        const p = el('path', 'fp-wt-rahmen', undefined, true);
+        p.setAttribute('d', pfad(wtLinie(frames[i], i, lage, h)));
+        alt.append(p);
+      }
+      const nullLinie = el('line', 'fp-kurve-null', undefined, true);
+      svg.replaceChildren(); svg.append(alt, flaeche, nullLinie, linie);   // dim stack at the back, the bold line on top of the zero line
+      const posKnob = c.of?.pos, wahl = alle.find((x) => x.id === c.of?.warp);
+      zeiger.push(() => {
+        const pos = posKnob === undefined ? 0 : klemme01(echterWert(posKnob, 'anteil'));
+        const modus = wahl ? Math.min(3, diskretIndex(k[parameterVon(wahl)[0]], wahl.options.length)) : 0;
+        const tiefe = modus && c.of?.tiefe !== undefined ? wtTiefe(modus, echterWert(c.of.tiefe, 'anteil')) : 0;
+        const tiefeIdx = frames.length > 1 ? pos * (frames.length - 1) : 0;
+        const p = wtLinie(wtGewarpt(wtRahmen(frames, pos), modus, tiefe), tiefeIdx, lage, h);
+        const nl = wtNull(tiefeIdx, lage, h);
+        linie.setAttribute('d', pfad(p));
+        flaeche.setAttribute('d', `${pfad(p)}L${(p[p.length - 1][0] + K_RAND).toFixed(1)} ${(nl.y + K_RAND).toFixed(1)}L${(p[0][0] + K_RAND).toFixed(1)} ${(nl.y + K_RAND).toFixed(1)}Z`);
+        nullLinie.setAttribute('x1', nl.x1 + K_RAND); nullLinie.setAttribute('x2', nl.x2 + K_RAND);
+        nullLinie.setAttribute('y1', nl.y + K_RAND); nullLinie.setAttribute('y2', nl.y + K_RAND);
       });
     },
     spektrum(c, zelle) {   // the channel spectrum while the device page is open (opt.beiSpektrum registers the view); in the small area only a note

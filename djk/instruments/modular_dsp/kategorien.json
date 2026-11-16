@@ -195,6 +195,10 @@
   "kategorie": "lead",
   "text": "Hybrid wavetable synth: three tables, phase mod, warp, chaos, shifter, clean sub."
  },
+  "synth-greif2": {
+    "kategorie": "lead",
+    "text": "Greif with tables built for a strong Position: basic to buzz, formant growl, hard sync."
+  },
  "synth-mono": {
   "kategorie": "bass",
   "text": "Full mono synth for bass and lead: two oscillators, sub, five switchable filters."

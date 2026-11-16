@@ -177,8 +177,8 @@ export const GERAET_ARTEN = ['bk', 'rb338', 'surge', 'plugin'];
 export const PANEL_FORMATE = ['baukasten-panel/1', 'cypherdj-panel/2'];
 const PANEL_V1 = 'baukasten-panel/1', PANEL_V2 = 'cypherdj-panel/2';
 const PANEL_ID = /^[a-z0-9_-]{1,24}$/;
-const TYPEN = ['knob', 'fader', 'switch', 'selector', 'xy', 'value', 'label', 'spacer', 'huelle', 'lfoform', 'filterkurve', 'spektrum', 'lever', 'touchpad'];
-const ANZEIGEN = ['huelle', 'lfoform', 'filterkurve', 'spektrum'];   // displays: bind nothing, never sent to the engine
+const TYPEN = ['knob', 'fader', 'switch', 'selector', 'xy', 'value', 'label', 'spacer', 'huelle', 'lfoform', 'filterkurve', 'wavetable', 'spektrum', 'lever', 'touchpad'];
+const ANZEIGEN = ['huelle', 'lfoform', 'filterkurve', 'wavetable', 'spektrum'];   // displays: bind nothing, never sent to the engine
 const MIT_BIND = ['knob', 'fader', 'switch', 'selector', 'lever'];
 const MIT_ZONEN = ['lever', 'touchpad'];   // `zones`: 1..8 short texts beside the sections of the travel / the field
 

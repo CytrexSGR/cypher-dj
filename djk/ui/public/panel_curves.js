@@ -89,3 +89,56 @@ export function filterPunkte(p, breite, hoehe, n = 96) {
 export const cutoffX = (cutoff, breite) => breite * Math.log(Math.min(F_MAX, Math.max(F_MIN, Number.isFinite(cutoff) ? cutoff : F_MIN)) / F_MIN) / Math.log(F_MAX / F_MIN);   // NaN draws at the left edge, never NaN
 /** y of 0 dB on the same axis. */
 export const nullDbY = (hoehe) => hoehe * DB_OBEN / (DB_OBEN - DB_UNTEN);
+
+// ---- wavetable display (stacked frames in pseudo-3D, like a wavetable oscillator view) ----
+// The warp phase maps repeat modular_dsp/src/wavetable.rs (Warp::neu / abbilden): 0 off, 1 bend, 2 asym, 3 sync.
+// No anti-aliasing here: this is a picture of the shape, not the signal path.
+const klemme = (x, a, b) => Math.min(b, Math.max(a, x));
+/** Warp depth as the DSP takes it: bend and asym -1..1, sync 0..1, off ignores it. */
+export const wtTiefe = (modus, tiefe) => (modus === 3 ? klemme(num(tiefe), 0, 1) : klemme(num(tiefe), -1, 1));
+/** Phase map: read phase p (0..1) to { q: table phase 0..1, g: gain of the soft edge (sync only) }. modus 0 off, 1 bend, 2 asym, 3 sync. */
+export function wtWarp(modus, tiefe, p) {
+  const t = wtTiefe(modus, tiefe);
+  if (modus === 1) { const s = 2 ** (2 * t); return { q: p / (p + s * (1 - p)), g: 1 }; }
+  if (modus === 2) {
+    const a = 0.5 + 0.45 * t;
+    return { q: p < a ? p / (2 * a) : 0.5 + (p - a) / (2 * (1 - a)), g: 1 };
+  }
+  if (modus === 3) {
+    const m = p * (1 + 7 * t), u = (1 - p) * 16;
+    return { q: m - Math.floor(m), g: u < 1 ? u * u * (3 - 2 * u) : 1 };
+  }
+  return { q: p, g: 1 };
+}
+/** Frame at position pos (0..1 over the table) as 64 values: linear mix of the two neighbouring frames. */
+export function wtRahmen(frames, pos) {
+  const n = frames.length;
+  if (!n) return new Array(64).fill(0);
+  const x = klemme(num(pos), 0, 1) * (n - 1), i = Math.min(n - 2, Math.floor(x)), f = n > 1 ? x - Math.max(0, i) : 0;
+  const a = frames[Math.max(0, i)], b = frames[Math.min(n - 1, Math.max(0, i) + 1)];
+  return a.map((v, j) => num(v) * (1 - f) + num(b[j]) * f);
+}
+/** One cycle read at n points through the warp map (linear interpolation inside the cycle, wrapping). Values -1..1. */
+export function wtGewarpt(werte, modus, tiefe, n = 128) {
+  const m = werte.length;
+  return Array.from({ length: n }, (_, i) => {
+    const { q, g } = wtWarp(modus, tiefe, i / (n - 1));
+    const x = q * m, j = Math.floor(x) % m, f = x - Math.floor(x);
+    return klemme((num(werte[j]) * (1 - f) + num(werte[(j + 1) % m]) * f) * g, -1, 1);
+  });
+}
+/** Stack layout in a breite x hoehe box: frame i is shifted up-right by i steps, frame 0 sits in front (bottom left). */
+export function wtLage(anzahl, breite, hoehe) {
+  const schritte = Math.max(1, anzahl - 1), dx = Math.min(2.2, (breite * 0.18) / schritte), dy = Math.min(3.2, (hoehe * 0.4) / schritte);
+  return { dx, dy, w: breite - dx * (anzahl - 1), h: hoehe - dy * (anzahl - 1) };
+}
+/** Polyline of values at depth `tiefeIdx` (0 = front frame, may be fractional) inside the stack layout. y 0 is the top of the box. */
+export function wtLinie(werte, tiefeIdx, lage, hoehe) {
+  const n = werte.length, y0 = hoehe - lage.h / 2 - tiefeIdx * lage.dy;
+  return werte.map((v, i) => [tiefeIdx * lage.dx + (lage.w * i) / (n - 1), y0 - (lage.h / 2) * v]);
+}
+/** y of the zero line and its x span for the highlighted wave at depth `tiefeIdx`. */
+export function wtNull(tiefeIdx, lage, hoehe) {
+  const y = hoehe - lage.h / 2 - tiefeIdx * lage.dy, x = tiefeIdx * lage.dx;
+  return { y, x1: x, x2: x + lage.w };
+}

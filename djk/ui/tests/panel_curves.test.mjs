@@ -1,7 +1,7 @@
 // Geometry of the envelope, LFO and filter drawings (Task 4 of the surfaces plan) and their rendering in the panel.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { huellPunkte, lfoPunkte, filterPunkte, filterDb, cutoffX } from '../public/panel_curves.js';
+import { huellPunkte, lfoPunkte, filterPunkte, filterDb, cutoffX, wtWarp, wtRahmen, wtGewarpt, wtLage, wtLinie, wtNull } from '../public/panel_curves.js';
 import { normalisierePanel, reglerBereiche } from '../graphs.ts';
 import { baueFrontplatte } from '../public/panel.js';
 
@@ -117,4 +117,78 @@ test('cutoffX: NaN and out-of-range cutoffs clamp to the axis, never NaN', () =>
   assert.equal(cutoffX(undefined, 100), 0);
   assert.equal(cutoffX(1e9, 100), 100);
   assert.equal(cutoffX(0, 100), 0);
+});
+
+// ---- wavetable display ----
+const WT_FRAMES = Array.from({ length: 8 }, (_, f) => Array.from({ length: 64 }, (_, i) => Math.sin((2 * Math.PI * i * (f + 1)) / 64)));
+test('wtRahmen: interpolates the two neighbouring frames', () => {
+  assert.deepEqual(wtRahmen(WT_FRAMES, 0), WT_FRAMES[0]);
+  assert.deepEqual(wtRahmen(WT_FRAMES, 1), WT_FRAMES[7]);
+  const m = wtRahmen(WT_FRAMES, 0.5 / 7);   // halfway between frame 0 and 1
+  nah(m[5], (WT_FRAMES[0][5] + WT_FRAMES[1][5]) / 2, 1e-9);
+  assert.equal(wtRahmen(WT_FRAMES, NaN).length, 64);
+  assert.equal(wtRahmen([], 0.5).length, 64);
+});
+test('wtWarp: identities and shapes', () => {
+  for (const p of [0, 0.1, 0.5, 0.9, 1]) {
+    assert.equal(wtWarp(0, 0.7, p).q, p, 'off');
+    nah(wtWarp(1, 0, p).q, p, 1e-12, 'bend 0');
+    nah(wtWarp(2, 0, p).q, p, 1e-12, 'asym 0');
+    nah(wtWarp(3, 0, p).q, p === 1 ? 0 : p, 1e-12, 'sync ratio 1');   // p = 1 wraps to the start of the cycle
+  }
+  assert.ok(wtWarp(1, 1, 0.5).q < 0.5 && wtWarp(1, -1, 0.5).q > 0.5, 'bend bends both ways');
+  nah(wtWarp(2, 1, 0.95).q, 0.5, 1e-9, 'asym knee at 0.95 maps to the middle');
+  assert.equal(wtWarp(3, 1, 0.5).g, 1);
+  assert.equal(wtWarp(3, 1, 1).g, 0, 'sync fades out at the end of the cycle');
+  assert.equal(wtWarp(3, 5, 0.3).q, wtWarp(3, 1, 0.3).q, 'sync depth clamps to 0..1');
+});
+test('wtGewarpt: off follows the frame, outputs stay in -1..1', () => {
+  const f = WT_FRAMES[2];
+  const g = wtGewarpt(f, 0, 0, 65);
+  assert.equal(g.length, 65);
+  nah(g[10], f[10] * 1 + 0, 0.2);   // 65 points over 64 intervals: nearly the table points
+  for (const modus of [0, 1, 2, 3]) for (const t of [-2, -1, 0, 0.5, 1, 3, NaN])
+    assert.ok(wtGewarpt(WT_FRAMES[7], modus, t).every((v) => Number.isFinite(v) && v >= -1 && v <= 1), `modus ${modus} tiefe ${t}`);
+});
+test('wtLage / wtLinie: every frame stays inside the box, later frames sit up-right', () => {
+  const B = 154, H = 84, lage = wtLage(32, B, H);
+  for (const i of [0, 15, 31]) {
+    const p = wtLinie(WT_FRAMES[0].map((_, j) => (j % 2 ? 1 : -1)), i, lage, H);
+    assert.ok(p.every(([x, y]) => x >= -1e-9 && x <= B + 1e-9 && y >= -1e-9 && y <= H + 1e-9), `frame ${i} in box`);
+  }
+  const a = wtLinie(WT_FRAMES[0], 0, lage, H)[0], b = wtLinie(WT_FRAMES[0], 5, lage, H)[0];
+  assert.ok(b[0] > a[0] && b[1] < a[1]);
+  const nl = wtNull(5, lage, H);
+  assert.ok(nl.y > 0 && nl.y < H && nl.x2 > nl.x1);
+  const klein = wtLage(8, B, H);
+  assert.ok(klein.w > 0 && klein.h > 0);
+});
+
+test('wavetable control renders an svg and redraws with position and warp', () => {
+  const rahmen = (f) => Array.from({ length: 64 }, (_, i) => Math.sin((2 * Math.PI * i * (f + 1)) / 64));
+  const frames = Array.from({ length: 8 }, (_, f) => rahmen(f));
+  const pn = {
+    format: 'cypherdj-panel/2', geraet: { art: 'bk', graph: 'g' }, title: 'G',
+    sections: [{ id: 's', title: 'S', controls: [
+      kn('pos', 4), kn('tf', 2),
+      { id: 'wp', type: 'selector', label: 'Warp', bind: { param: 'k6' }, options: ['Off', 'Bend', 'Asym', 'Sync'], default: 0 },
+      { id: 'wt', type: 'wavetable', span: 3, label: 'OSC A', of: { pos: 'pos', warp: 'wp', tiefe: 'tf' }, frames },
+      { id: 'wt0', type: 'wavetable', label: 'bare', frames },
+    ] }],
+  };
+  const host = new K('div'), stand = {};
+  const fp = baueFrontplatte(host, { panel: normalisierePanel(pn), regler: reglerBereiche(GRAPH), adapter: { get: (n) => stand[n], set: (n, v) => { stand[n] = v; } }, dokument: DOK });
+  const z = host.alles().find((e) => e.dataset?.id === 'wt');
+  assert.ok(z.alles().some((e) => e.tag === 'svg'), 'svg');
+  assert.ok(z.alles().filter((e) => e.tag === 'path' && e.attr.d).length >= 9, 'frame stack plus highlighted wave');
+  const hell = () => z.alles().filter((e) => e.tag === 'path' && e.attr.d && e.attr.d.length > 0).map((e) => e.attr.d).join('|');
+  const v0 = hell();
+  assert.match(v0, /^M/);
+  stand.k4 = 0.8; fp.aktualisiere();
+  const v1 = hell();
+  assert.notEqual(v1, v0, 'position redraws');
+  stand.k6 = 1; stand.k2 = 1; fp.aktualisiere();
+  assert.notEqual(hell(), v1, 'warp redraws');
+  const z0 = host.alles().find((e) => e.dataset?.id === 'wt0');
+  assert.match(z0.alles().filter((e) => e.tag === 'path' && e.attr.d).map((e) => e.attr.d).join('|'), /M/, 'without of: position 0, warp off');
 });

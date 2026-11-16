@@ -7,3 +7,5 @@
 .frontplatte .fp-kurve-flaeche { fill: var(--akzent, var(--accent, currentColor)); fill-opacity: .14; stroke: none; }
 .frontplatte .fp-kurve-null { stroke: var(--line); stroke-width: 1; stroke-dasharray: 3 3; }
 .frontplatte .fp-kurve-marke { stroke: var(--dim); stroke-width: 1; stroke-dasharray: 2 2; }
+.frontplatte .fp-kurve.fp-kurve-hoch { height: 90px; }
+.frontplatte .fp-wt-rahmen { fill: none; stroke: var(--dim); stroke-opacity: .45; stroke-width: 1; stroke-linejoin: round; }

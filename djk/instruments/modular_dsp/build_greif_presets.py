@@ -2,6 +2,7 @@
 """Writes the twelve factory presets of `synth-greif` (Greif).
 
     python3 build_greif_presets.py     # writes ../../ui/presets/factory/modular/synth-greif-*.preset.json
+    python3 build_greif_presets.py --greif2   # the same twelve on synth-greif2 (Greif 2): same knob values, other tables, for an A/B
 
 Each preset gives its knobs in the units of the knob table of build_greif.py (names as in the table; selectors by option index); the
 file holds all 63 knobs normalised 0..1, so a later change of a default cannot change a preset.
@@ -9,11 +10,15 @@ file holds all 63 knobs normalised 0..1, so a later change of a default cannot c
 import json
 import math
 import pathlib
+import sys
 
 from build_greif import K
 
 ZIEL = pathlib.Path(__file__).resolve().parents[2] / "ui" / "presets" / "factory" / "modular"
 NAMEN = {k[2]: k for k in K}
+GRAPH = "synth-greif2" if "--greif2" in sys.argv else "synth-greif"
+NOTIZ = ("Greif's knob values on the tables of Greif 2, for an A/B with Greif; measured by render, not heard yet (2026-11-16)."
+         if GRAPH == "synth-greif2" else "Measured by render, not heard yet (2026-11-16).")
 OFF, BEND, ASYM, SYNC = 0, 1, 2, 3
 
 # table positions (see tabelle_a): sine 0, triangle 0.143, saw 0.286, square 0.429, pulse 0.571, hollow 0.857, digital 1
@@ -127,11 +132,11 @@ P = [
 ZIEL.mkdir(parents=True, exist_ok=True)
 for name, ue, (art, unter, char, genre, eins, en), text in P:
     assert set(ue) <= set(NAMEN), set(ue) - set(NAMEN)
-    slug = "synth-greif-" + name.lower().replace(" ", "-")
+    slug = f"{GRAPH}-" + name.lower().replace(" ", "-")
     werte = {f"knob{k[0]}": round(norm(k[2], ue[k[2]]) if k[2] in ue else vorgabe(k[2]), 5) for k in K}
-    doc = {"schema": 1, "name": name, "geraet_typ": "instrument", "geraet": "baukasten", "graph": "synth-greif", "werte": werte,
+    doc = {"schema": 1, "name": name, "geraet_typ": "instrument", "geraet": "baukasten", "graph": GRAPH, "werte": werte,
            "beschreibung": {"art": art, "unterart": unter, "charakter": char, "genre": genre, "einsatz": eins, "energie": en, "text": text},
-           "tags": ["synth-greif", "wavetable"], "notiz": "Measured by render, not heard yet (2026-11-16).",
+           "tags": [GRAPH, "wavetable"], "notiz": NOTIZ,
            "angelegt": "2026-11-16T00:00:00.000Z", "geaendert": "2026-11-16T00:00:00.000Z"}
     (ZIEL / f"{slug}.preset.json").write_text(json.dumps(doc, indent=1, ensure_ascii=False) + "\n")
 print(len(P), "presets in", ZIEL)

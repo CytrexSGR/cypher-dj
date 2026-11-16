@@ -295,6 +295,7 @@ const REGLER_OHNE_WIRKUNG_AUF_DER_PROBE: &[(&str, usize, &str)] = &[
     ("synth-poly", 39, POLY_LFO2_AUS), ("synth-poly", 40, POLY_LFO2_AUS), ("synth-poly", 41, POLY_LFO2_AUS), ("synth-poly", 42, POLY_LFO2_AUS),
     ("synth-poly", 47, POLY_OSC2_AUS), ("synth-poly", 48, POLY_OSC2_AUS), ("synth-poly", 49, POLY_OSC2_AUS), ("synth-poly", 50, POLY_OSC2_AUS), ("synth-poly", 51, POLY_OSC2_AUS),
     ("synth-greif", 62, GREIF_GLIDE),
+    ("synth-greif2", 62, GREIF_GLIDE),
     ("synth-poly", 54, "glide runs from the pitch a voice had last; the probe's notes all land on voices that have not played yet (the first note of a voice sets the glide to its pitch), so there is nothing to glide from. tests/synth_poly.rs `glide_auf_der_stimme` plays two chords on the same voices"),
 ];
 

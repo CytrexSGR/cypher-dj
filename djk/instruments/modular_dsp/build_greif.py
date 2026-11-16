@@ -2,6 +2,7 @@
 """Builds the Baukasten instrument `synth-greif` ("Greif"): graph (demos/) and front panel (paneele/).
 
     python3 build_greif.py            # writes demos/synth-greif.json and paneele/synth-greif.json
+    python3 build_greif.py --greif2   # the variant synth-greif2 ("Greif 2"): the same graph, tables built for a strong Position
     python3 build_greif.py --tabelle  # prints the knob map as a Markdown table (for the device document)
 
 The knob table K below is the single source of the knob numbers, ranges and defaults (63 knobs; 64 is free).
@@ -28,6 +29,10 @@ import pathlib
 import sys
 
 HIER = pathlib.Path(__file__).resolve().parent
+# Variant: "greif" (synth-greif) or "greif2" (synth-greif2, `--greif2`): the same graph and knobs, other tables (see tabellen_greif2)
+VARIANTE = "greif2" if "--greif2" in sys.argv else "greif"
+NAME = {"greif": "synth-greif", "greif2": "synth-greif2"}[VARIANTE]
+TITEL = {"greif": "Greif", "greif2": "Greif 2"}[VARIANTE]
 
 # ---- knob table: (nr, id, name, min, max, log, default (in knob units), panel format, unit) ---------------------------------
 # selectors have min 0 and max n-1 (the default is the option index): the panel sends index / (n - 1)
@@ -97,6 +102,10 @@ K = [
     (62, "k_glide", "Glide", 0, 1, 0, 0, "percent", None),
     (63, "k_vol", "Volume", -30, 6, 0, -6, "db", None),
 ]
+if VARIANTE == "greif2":
+    # Phase modulation makes the block choose a duller mip level for head room (a modulator at 0.04 cycles took B at position 1
+    # from a 6 kHz to a 660 Hz centroid, 16 dB down): Greif 2 starts with PM off, so Position shows its whole table.
+    K = [(nr, i, n, lo, hi, log, 0.0 if nr in (18, 19, 20) else d, f, u) for nr, i, n, lo, hi, log, d, f, u in K]
 KK = {k[0]: k for k in K}
 OPTIONEN = {2: WARP, 8: WARP, 14: WARP, 23: ["Off", "Oct", "Cycle"], 25: ["-1", "-2"]}
 
@@ -206,6 +215,98 @@ def tabelle_c(n=HARMONISCHE["c"], frames=FRAMES["c"]):
     return runde(morph(anker, frames))
 
 
+# ---- Greif 2 tables: built for a strong Position, like the classic tables of a modern wavetable synth --------------------------
+# Greif's tables morph between neighbours that sound alike (A ends in a dull "digital" frame, B gets darker), so Position moves
+# the centroid of A only from 177 to 486 Hz. Greif 2 keeps every frame at the same loudness (the block scales each frame to the
+# RMS of the saw) and lets the spectrum travel from one harmonic to the full band, so Position is the main tone knob.
+H2 = 256      # harmonics per frame (the block's limit for custom spectra)
+F2 = 32       # frames per table (the block's limit)
+
+
+def sinus_koeff(welle, n):
+    """Sine coefficients b_k of one cycle given as a function of t in [0, 1) (numeric, 4096 points). The block reads harmonic
+    amplitudes as sine partials with a sign, so the cosine part is folded into the magnitude with the sign of the sine part."""
+    m = 4096
+    xs = [welle(i / m) for i in range(m)]
+    aus = []
+    for k in range(1, n + 1):
+        a = sum(x * math.cos(2 * math.pi * k * i / m) for i, x in enumerate(xs)) * 2 / m
+        b = sum(x * math.sin(2 * math.pi * k * i / m) for i, x in enumerate(xs)) * 2 / m
+        betrag = math.hypot(a, b)
+        aus.append(betrag if b >= 0 else -betrag)
+    return aus
+
+
+def begrenze(frame):
+    """Scales a frame so its largest harmonic is at most 1 (the block allows |a| <= 4 and rescales to the saw RMS anyway)."""
+    g = max(abs(a) for a in frame) or 1.0
+    return [a / g for a in frame]
+
+
+def tabelle_a2(n=H2, frames=F2):
+    """"basic to buzz": sine, triangle, saw, square, then the pulse narrows to 4 %, then the spectrum flattens to an impulse
+    train (all harmonics equal): from the purest to the brightest frame."""
+    h = range(1, n + 1)
+    sinus = [1.0] + [0.0] * (n - 1)
+    dreieck = [(1.0 / k ** 2) * (1 if (k // 2) % 2 == 0 else -1) if k % 2 else 0.0 for k in h]
+    saege = [1.0 / k for k in h]
+    rechteck = [1.0 / k if k % 2 else 0.0 for k in h]
+
+    def puls(d):
+        return begrenze([math.sin(math.pi * k * d) / k for k in h])
+
+    def flach(e):   # 1 / k^e: e 1 = saw, e 0 = impulse train
+        return [1.0 / k ** e for k in h]
+    anker = [sinus, dreieck, saege, rechteck, puls(0.25), puls(0.1), puls(0.04), flach(0.5), flach(0.0)]
+    return runde(morph([begrenze(a) for a in anker], frames))
+
+
+def tabelle_b2(n=H2, frames=F2):
+    """"formant growl": a saw with one strong resonant peak that sweeps from the 2nd to the 48th harmonic (exponentially) and a
+    weaker second peak an octave and a fifth above it: the talking, growling sweep of a bass or lead table."""
+    aus = []
+    for i in range(frames):
+        t = i / (frames - 1)
+        c1 = 2.0 * 24.0 ** t
+        c2 = c1 * 3.0
+        frame = []
+        for k in range(1, n + 1):
+            g = 3.0 * math.exp(-0.5 * ((k - c1) / (0.18 * c1 + 0.6)) ** 2) + 1.2 * math.exp(-0.5 * ((k - c2) / (0.18 * c2 + 0.6)) ** 2)
+            frame.append((0.08 + g) / k ** 0.6)
+        aus.append(begrenze(frame))
+    return runde(aus)
+
+
+def tabelle_c2(n=H2, frames=F2):
+    """"hard sync": a saw hard-synced to the fundamental, the slave ratio rising from 1 to 9 (exponentially): the bright, tearing
+    sync sweep, computed from the waveform."""
+    aus = []
+    for i in range(frames):
+        r = 9.0 ** (i / (frames - 1))
+        aus.append(begrenze(sinus_koeff(lambda t: 2.0 * ((r * t) % 1.0) - 1.0, n)))
+    return runde(aus)
+
+
+def tabellen():
+    """The three tables of the variant (A, B, C)."""
+    if VARIANTE == "greif2":
+        return tabelle_a2(), tabelle_b2(), tabelle_c2()
+    return tabelle_a()[0], tabelle_b(), tabelle_c()
+
+
+def frame_kurve(spektrum, punkte=64):
+    """One cycle of a frame for the panel display: `punkte` samples of sum a_k sin(2 pi k t), peak scaled to 1."""
+    x = [sum(a * math.sin(2 * math.pi * (k + 1) * j / punkte) for k, a in enumerate(spektrum) if a) for j in range(punkte)]
+    g = max(abs(v) for v in x) or 1.0
+    return [round(v / g, 3) for v in x]
+
+
+OSC_TEXT = {
+    "greif": ("Analog to digital, 5 copies.", "Vocal, 3 copies.", "Bell and organ, 1 copy."),
+    "greif2": ("Basic to buzz, 5 copies.", "Formant growl, 3 copies.", "Hard sync, 1 copy."),
+}[VARIANTE]
+
+
 # ---- graph -----------------------------------------------------------------------------------------------------------------
 def vorgabe(k):
     _, _, _, lo, hi, log, d, *_ = k
@@ -213,9 +314,7 @@ def vorgabe(k):
 
 
 def graph():
-    TAB_A, POS_A = tabelle_a()
-    TAB_B = tabelle_b()
-    TAB_C = tabelle_c()
+    TAB_A, TAB_B, TAB_C = tabellen()
     knoten, kanten = [], []
 
     def n(id, art, **w):
@@ -386,7 +485,7 @@ def graph():
     for c in "lr":
         mul(f"master_{c}", add(f"mix_{c}", f"delay.{c}", sub), vol)
         e(f"master_{c}.aus", f"aus.{c}")
-    return {"format": "baukasten/2", "name": "synth-greif", "stimmen": STIMMEN,
+    return {"format": "baukasten/2", "name": NAME, "stimmen": STIMMEN,
             "regler_namen": {str(x[0]): x[2] for x in K}, "knoten": knoten, "kanten": kanten}
 
 
@@ -412,22 +511,30 @@ def panel():
         return selector(f"c{nr}", KK[nr], **w) if nr in OPTIONEN else knob(f"c{nr}", KK[nr], **w)
     text = lambda cid, t, span: {"id": cid, "type": "label", "span": span, "text": t}
 
-    def osc(titel, sid, nrs, hinweis):
-        # the warp selector has four options: it gets a row of its own below the knobs
+    tabs = tabellen()
+
+    def osc(titel, sid, nrs, hinweis, tab):
+        # a wavetable display on top (stacked frames, Position and Warp drawn live), the knobs, then the warp selector in a row of
+        # its own (four options)
+        pos, warp, tiefe = nrs[0], nrs[1], nrs[2]
+        anzeige = {"id": f"wt_{sid}", "type": "wavetable", "span": 3, "label": titel,
+                   "of": {"pos": f"c{pos}", "warp": f"c{warp}", "tiefe": f"c{tiefe}"}, "frames": [frame_kurve(f) for f in tab]}
         knoepfe = [c(nr) for nr in nrs if nr not in OPTIONEN]
         wahl = [c(nr, span=3) for nr in nrs if nr in OPTIONEN]
-        return {"id": sid, "title": titel, "cols": 3, "page": "main", "controls": knoepfe + wahl + [text(f"t_{sid}", hinweis, 3)]}
+        return {"id": sid, "title": titel, "cols": 3, "page": "main", "controls": [anzeige] + knoepfe + wahl + [text(f"t_{sid}", hinweis, 3)]}
     sektionen = [
-        osc("OSC A", "osc_a", range(1, 7), "Analog to digital, 5 copies."),
-        osc("OSC B", "osc_b", range(7, 13), "Vocal, 3 copies."),
-        osc("OSC C", "osc_c", range(13, 18), "Bell and organ, 1 copy."),
+        osc("OSC A", "osc_a", list(range(1, 7)), OSC_TEXT[0], tabs[0]),
+        osc("OSC B", "osc_b", list(range(7, 13)), OSC_TEXT[1], tabs[1]),
+        osc("OSC C", "osc_c", list(range(13, 18)), OSC_TEXT[2], tabs[2]),
         {"id": "pm", "title": "PHASE MOD", "cols": 3, "page": "main", "controls": [c(18), c(19), c(20), text("t_pm", "In cycles: C into B, B and C into A.", 3)]},
         {"id": "unison", "title": "UNISON", "cols": 3, "page": "main", "controls": [c(21), c(22), c(23), text("t_un", "Acts on A and B.", 3)]},
         {"id": "sub", "title": "SUB / NOISE", "cols": 4, "page": "main", "controls": [c(24), c(25), c(26), c(27), text("t_sub", "The sub passes no filter and no effect.", 4)]},
         {"id": "f1", "title": "FILTER 1", "cols": 5, "page": "main", "controls": [
             {"id": "fk", "type": "filterkurve", "span": 5, "of": {"cutoff": "c29", "reso": "c30"}, "typen": [{"art": "lp", "pole": 2}]},
             c(28), c(29), c(30), c(31), c(32)]},
-        {"id": "f2", "title": "DRIVE / FILTER 2", "cols": 4, "page": "main", "controls": [c(33), c(34), c(35), c(36)]},
+        {"id": "f2", "title": "DRIVE / FILTER 2", "cols": 4, "page": "main", "controls": [
+            {"id": "fk2", "type": "filterkurve", "span": 4, "of": {"cutoff": "c34", "reso": "c35"}, "typen": [{"art": "lp", "pole": 4}]},
+            c(33), c(34), c(35), c(36)]},
         {"id": "aenv", "title": "AMP ENV", "cols": 4, "page": "main", "controls": [
             {"id": "ahue", "type": "huelle", "span": 4, "label": "Amp envelope", "of": {"a": "c41", "d": "c42", "s": "c43", "r": "c44"}},
             c(41), c(42), c(43), c(44)]},
@@ -435,13 +542,19 @@ def panel():
         {"id": "fenv", "title": "FILTER ENV", "cols": 4, "page": "mod", "controls": [
             {"id": "fhue", "type": "huelle", "span": 4, "label": "Filter envelope", "of": {"a": "c37", "d": "c38", "s": "c39", "r": "c40"}},
             c(37), c(38), c(39), c(40)]},
-        {"id": "env3", "title": "ENV 3", "cols": 3, "page": "mod", "controls": [c(45), c(46), c(47)]},
-        {"id": "lfo1", "title": "LFO 1", "cols": 3, "page": "mod", "controls": [c(48), c(49), c(50), text("t_l1", "Triangle.", 3)]},
-        {"id": "lfo2", "title": "LFO 2", "cols": 3, "page": "mod", "controls": [c(51), c(52), c(53), text("t_l2", "Sine: vibrato and warp depth.", 3)]},
+        {"id": "env3", "title": "ENV 3", "cols": 3, "page": "mod", "controls": [
+            {"id": "e3hue", "type": "huelle", "span": 3, "label": "Env 3 (attack, decay)", "of": {"a": "c45", "d": "c46", "s": 0, "r": 0.02}},
+            c(45), c(46), c(47)]},
+        {"id": "lfo1", "title": "LFO 1", "cols": 3, "page": "mod", "controls": [
+            {"id": "l1f", "type": "lfoform", "span": 3, "label": "LFO 1 shape", "formen": ["tri"]},
+            c(48), c(49), c(50), text("t_l1", "Triangle.", 3)]},
+        {"id": "lfo2", "title": "LFO 2", "cols": 3, "page": "mod", "controls": [
+            {"id": "l2f", "type": "lfoform", "span": 3, "label": "LFO 2 shape", "formen": ["sine"]},
+            c(51), c(52), c(53), text("t_l2", "Sine: vibrato and warp depth.", 3)]},
         {"id": "chaos", "title": "CHAOS", "cols": 3, "page": "mod", "controls": [c(54), c(55), c(56), text("t_ch", "Lorenz: never repeats.", 3)]},
         {"id": "fx", "title": "FX", "cols": 5, "page": "mod", "controls": [c(57), c(58), c(59), c(60), c(61), text("t_fx", "Chorus, then shift, then delay.", 5)]},
     ]
-    return {"format": "cypherdj-panel/2", "geraet": {"art": "bk", "graph": "synth-greif"}, "title": "Greif", "akzent": "violett",
+    return {"format": "cypherdj-panel/2", "geraet": {"art": "bk", "graph": NAME}, "title": TITEL, "akzent": "violett",
             "pages": [{"id": "main", "title": "Main"}, {"id": "mod", "title": "Mod"}],
             "layout": {"rows": [["osc_a", "osc_b", "osc_c"], ["pm", "unison", "sub"], ["f1", "f2", "aenv"], ["master"],
                                 ["fenv", "env3", "lfo1"], ["lfo2", "chaos", "fx"]]},
@@ -454,7 +567,7 @@ def zeile(o):
 
 def schreibe_graph(pfad, g):
     with open(pfad, "w") as f:
-        f.write('{\n  "format": "baukasten/2",\n  "name": "synth-greif",\n  "stimmen": %d,\n' % g["stimmen"])
+        f.write('{\n  "format": "baukasten/2",\n  "name": "%s",\n  "stimmen": %d,\n' % (NAME, g["stimmen"]))
         f.write('  "regler_namen": ' + zeile(g["regler_namen"]).replace('", "', '",\n    "').replace("{", "{\n    ", 1).replace("}", "\n  }") + ",\n")
         f.write('  "knoten": [\n' + ",\n".join("    " + zeile(x) for x in g["knoten"]) + "\n  ],\n")
         f.write('  "kanten": [\n' + ",\n".join("    " + zeile(x) for x in g["kanten"]) + "\n  ]\n}\n")
@@ -478,6 +591,6 @@ if __name__ == "__main__":
         print(tabelle())
         sys.exit(0)
     g = graph()
-    schreibe_graph(HIER / "demos" / "synth-greif.json", g)
-    (HIER / "paneele" / "synth-greif.json").write_text(json.dumps(panel(), indent=1, ensure_ascii=False) + "\n")
+    schreibe_graph(HIER / "demos" / f"{NAME}.json", g)
+    (HIER / "paneele" / f"{NAME}.json").write_text(json.dumps(panel(), indent=1, ensure_ascii=False) + "\n")
     print(g["name"], len(g["regler_namen"]), "knobs,", len(g["knoten"]), "nodes,", len(g["kanten"]), "edges")
