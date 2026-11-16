@@ -15,9 +15,9 @@
 #werkbank .w-karte { position: relative; text-align: left; border: 1px solid var(--line); background: var(--panel2); border-radius: 6px; padding: 8px; min-width: 0; }
 #werkbank .w-karte b { display: block; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #werkbank .w-karte span { display: block; color: var(--dim); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#werkbank .w-karte .w-marke { position: absolute; top: 6px; right: 8px; font-style: normal; font-size: 10px; font-weight: 700; color: var(--dim); text-transform: uppercase; }
+#werkbank .w-karte .w-karte-marke { position: absolute; top: 6px; right: 8px; font-style: normal; font-size: 10px; font-weight: 700; color: var(--dim); text-transform: uppercase; }
 #werkbank .w-karte.offen { border-color: var(--accent, currentColor); cursor: default; }
-#werkbank .w-karte.offen .w-marke { color: var(--accent, currentColor); }
+#werkbank .w-karte.offen .w-karte-marke { color: var(--accent, currentColor); }
 #werkbank .w-karte.kaputt { opacity: .55; cursor: not-allowed; border-style: dashed; }
 #werkbank .w-karte.vorlage { border-style: dashed; }
 #werkbank .w-karte.neu { color: var(--dim); cursor: pointer; }
@@ -34,3 +34,14 @@
 #werkbank .w-karten-leer { color: var(--dim); font-size: 11px; }
 #werkbank .w-karte.schnitt.stumm b, #werkbank .w-karte.schnitt.stumm span { opacity: .55; }
 #werkbank .w-schnitt-zeile { display: flex; gap: 6px; }
+
+/* Module cards (A 2026-11-16: cards shifted, no way to delete or keep a version): the card button with SAVE AS and DELETE over its lower right corner. */
+#werkbank .w-karte-huelle { position: relative; min-width: 0; display: grid; }
+#werkbank .w-karte-huelle > .w-karte { width: 100%; padding-bottom: 26px; }
+#werkbank .w-karte-knoepfe { position: absolute; left: 8px; bottom: 6px; display: flex; gap: 4px; }
+#werkbank .w-karte-knoepfe.name { right: 8px; }
+#werkbank .w-karte-knoepfe .w-karte-name { margin-top: 0; font-size: 11px; }
+#werkbank .w-karte-knopf { font-size: 10px; font-weight: 700; padding: 1px 6px; color: var(--dim); }
+#werkbank .w-karte-knopf:hover { color: inherit; }
+#werkbank .w-karte.offen:disabled { opacity: 1; }
+#werkbank .w-karte:has(.w-karte-marke) b { padding-right: 44px; }

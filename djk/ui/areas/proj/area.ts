@@ -233,6 +233,9 @@ export function projBereich(ctx: BereichKontext, opt: ProjOptionen = {}): Bereic
       // plan live-module task 1: bestaetigt = Andreas's confirm of a switch away from a running live container (the session ignores it for Cypher)
       schreib('/proj/neu', (d, quelle) => s.neu(d.name, quelle, d.bestaetigt === true, { werkbank: d.werkbank, vorlage: d.vorlage }), kurzeOeffnenAntwort),
       schreib('/proj/oeffnen', (d, quelle) => s.oeffnen(d.slug, quelle, d.bestaetigt === true), kurzeOeffnenAntwort),
+      // workbench shelf: SAVE AS (a copy under a new name) and DELETE (to the bin, never the open module)
+      schreib('/proj/kopie', (d, quelle) => s.kopie(d.slug, d.name, quelle)),
+      schreib('/proj/loeschen', (d, quelle) => s.loeschen(d.slug, quelle)),
       schreib('/live/oeffnen', (d, quelle) => s.liveOeffnen(quelle, d.bestaetigt === true)),
       // Spec 6.31: ?antwort=kurz (Werkzeuge) liefert rev, kern und noten_zahl je Clip statt des Projekts
       // plan 1.11 D3: a plugin knob (not a command: no history, no project write); the insert ID is in the path

@@ -3,6 +3,17 @@
 One entry per public update, newest first. Each entry names what changed for someone who plays, produces or
 builds cypher-dj.
 
+## 2026-11-16, fourth update
+
+**Studio**
+- Modules on the shelf have SAVE AS (a copy under a new name, with its own history) and DELETE (asks first; the module
+  moves to a bin folder next to the projects, so it can be put back by hand). Every change is still saved at once.
+- KIT TO TRACK now writes the hits where the slices sat in the loop, so the new drum track plays at once instead of
+  starting empty.
+- In the slice grid VELOCITY, LENGTH and REVERSE act on the hits of a step on every row, as PITCH does, so a step can be
+  reversed without first selecting its slice row.
+- Cypher Modular: the Greif preset Pluck Stab is louder (it sat too low in a mix).
+
 ## 2026-11-16, third update
 
 **Studio**

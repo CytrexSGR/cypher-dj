@@ -228,7 +228,7 @@ The lists above are the headline. Also in there:
 - **Loop workbench (STUDIO)**: modules of up to eight instrument tracks that loop together over 1 to 16 bars, with a
   notes grid (drum rows or pitch rows), velocity and length per step, level, mute, solo and meters per track, an
   insert chain of up to four effects per track, the large front panel of the instrument, an instrument swap that keeps
-  the notes, and a shelf of saved modules
+  the notes, and a shelf of saved modules (SAVE AS keeps a copy, DELETE moves a module to a bin folder)
 - **Sampler (STUDIO)**: cut a library loop, or the loop or a stem of a module, into up to 64 slices, by grid or at the
   hits found in the audio, and play them from a new instrument track in their original order. The SLICE grid has one
   row per slice, so reordering, repeating, shortening, reversing and pitching single steps are ordinary note edits. A

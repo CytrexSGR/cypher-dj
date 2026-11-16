@@ -703,6 +703,23 @@ export class ProjSitzung {
     const a = await this.aendern({ rev: o.projekt.rev, label: `Template ${vorlage.name}`, befehle: vorlageBefehle(vorlage) }, quelle);
     return a.code === 200 ? { code: 200, j: { ...(r.j as object), projekt: (a.j as { projekt: Projekt }).projekt } } : a;
   }
+  // Workbench shelf (A 2026-11-16): SAVE AS copies a module under a new name (the open one too: its project.json holds every change already), DELETE
+  // moves a module that is not open to the bin of the project folder (project/storage.ts entferne), so it can be put back by hand.
+  kopie(slug: unknown, name: unknown, quelle: Quelle): Promise<Antwort> {
+    return this.seriell(async () => {
+      this.riegel(quelle);
+      const r = this.projekte.kopiere(slug as string, name as string);
+      return { code: 200, j: { slug: r.slug, name: r.projekt.name } };
+    });
+  }
+  loeschen(slug: unknown, quelle: Quelle): Promise<Antwort> {
+    return this.seriell(async () => {
+      this.riegel(quelle);
+      if (this.offen?.slug === slug) throw new ProjFehler(409, 'projekt_offen', { text: 'the open module cannot be deleted; open another one first' });
+      const r = this.projekte.entferne(slug as string);
+      return { code: 200, j: { slug, papierkorb: r.papierkorb } };
+    });
+  }
   oeffnen(slug: unknown, quelle: Quelle, bestaetigt = false): Promise<Antwort> {
     return this.seriell(async () => {
       this.riegel(quelle); this.sperreOeffnen(); this.sperreLiveLaeuft(quelle, bestaetigt); this.sperreFremderTransport(quelle);

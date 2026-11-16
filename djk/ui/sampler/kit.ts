@@ -242,5 +242,15 @@ export function legeKit(a: { id: string; scheiben: number[]; banken?: string[]; 
     try { fs.rmSync(ordner, { recursive: true, force: true }); } catch { /* the original error is the one to report */ }
     throw e;
   }
-  return { kit, klaenge };
+  return { kit, klaenge, muster: kitMuster(s, klaenge) };
+}
+
+/** The hits of the kit where its slices sit in the cut, so that KIT TO TRACK plays at once (A, 2026-11-16: the new kit track was empty and silent).
+ *  The positions are those of the slice track (spurBefehl): a grid cut on the exact grid, a hit or hand cut on the beat of its bound. One step long,
+ *  as a drum hit of the grid; `beats` is the length of the cut, the loop of the new track. */
+export function kitMuster(s: Schnitt, klaenge: { scheibe: number; note: number }[]): { beats: number; noten: { beat: number; laenge: number; ton: number; vel: number }[] } {
+  const n = s.grenzen.length - 1;
+  const start = (i: number): number => Math.round((s.methode === 'raster' ? i * s.beats / n : s.grenzen[i] * s.beats / s.frames) * 1e6) / 1e6;
+  const noten = klaenge.map((k) => ({ beat: start(k.scheibe), laenge: 0.25, ton: k.note, vel: 100 })).sort((a, b) => a.beat - b.beat || a.ton - b.ton);
+  return { beats: s.beats, noten };
 }

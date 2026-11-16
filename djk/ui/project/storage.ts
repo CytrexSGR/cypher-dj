@@ -161,6 +161,57 @@ export class Projekte {
     return { slug, projekt };
   }
 
+  // A copy of a project under a new name (workbench shelf SAVE AS, A 2026-11-16: "speichern der module wäre auch sinnvoll"): the folder with its media
+  // (export, stems, resample, loops ...) and project.json with the new name; the history starts empty, so the copy is a version of its own. Locks and
+  // half-written files are not copied. The slug is made as in lege().
+  kopiere(slug: string, name: string): { slug: string; projekt: Projekt } {
+    const quelle = this.lies(slug);
+    const n = typeof name === 'string' ? name.trim() : '';
+    if (n.length < 1 || n.length > 80) throw new AblageFehler(400, 'name_ungueltig');
+    const basis = projektSlug(n);
+    let ziel = basis;
+    fs.mkdirSync(this.wurzel, { recursive: true });
+    for (let i = 2; ; i++) {
+      try { fs.mkdirSync(path.join(this.wurzel, ziel)); break; } catch (e) { if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e; }
+      ziel = `${basis.slice(0, 44)}-${i}`;
+    }
+    const von = this.ordner(slug), nach = this.ordner(ziel);
+    const weg = new Set(['.sperre', '.lauf', 'undo.jsonl', 'project.json']);
+    try {
+      for (const e of fs.readdirSync(von)) {
+        if (weg.has(e) || e.endsWith('.teil')) continue;
+        fs.cpSync(path.join(von, e), path.join(nach, e), { recursive: true, filter: (q) => !q.endsWith('.teil') });
+      }
+      const projekt: Projekt = { ...structuredClone(quelle), name: n };
+      this.schreibe(ziel, projekt);
+      fs.writeFileSync(path.join(nach, 'undo.jsonl'), '', { flag: 'wx' });
+      fsyncVerzeichnis(nach); fsyncVerzeichnis(this.wurzel);
+      return { slug: ziel, projekt };
+    } catch (e) {
+      fs.rmSync(nach, { recursive: true, force: true });
+      throw e;
+    }
+  }
+
+  // Removes a project from the list: its folder moves to <wurzel>/.papierkorb/<slug>-<time> (a dot folder, never listed), so nothing is lost and it can
+  // be put back by hand. A project open in a process (its `.lauf` lock is held) is refused with projekt_busy.
+  entferne(slug: string): { papierkorb: string } {
+    const von = this.ordner(slug);
+    if (!fs.existsSync(path.join(von, 'project.json'))) throw new AblageFehler(404, 'unbekannt');
+    let frei: () => void;
+    try { frei = nimmSperre(path.join(von, '.lauf')); }
+    catch (e) { if (e instanceof SperreBelegt) throw new AblageFehler(409, 'projekt_busy'); throw e; }
+    const korb = path.join(this.wurzel, '.papierkorb');
+    const nach = path.join(korb, `${slug}-${new Date().toISOString().replace(/[:.]/g, '-')}`);
+    try {
+      fs.mkdirSync(korb, { recursive: true });
+      fs.renameSync(von, nach);
+    } finally { try { frei(); } catch { /* the lock moved with the folder */ } }
+    try { fs.rmSync(path.join(nach, '.lauf'), { force: true }); } catch { /* a stale lock file in the bin does no harm */ }
+    fsyncVerzeichnis(this.wurzel);
+    return { papierkorb: nach };
+  }
+
   // Ein ungültiges Projekt wird nie geschrieben; der alte Stand bleibt.
   speichere(slug: string, projekt: Projekt): void {
     this.datei(slug);                                                  // Slug prüfen, bevor etwas angefasst wird

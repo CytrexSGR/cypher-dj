@@ -26,7 +26,19 @@ export const KIT_TEXT = {
   geaendert: 'The cut changed. Select the slices again.',
   geschrieben: (kit, namen) => `Kit ${kit}: ${namen.join(' · ')}`,
   voll: (name, note) => `${name} · note ${note}`,
+  laenger: (takte) => `The module is now ${takte} bars long, so every hit of the kit plays.`,
 };
+const MODUL_BEATS = [4, 8, 16, 32, 64];   // the module lengths of the top bar, as areas/sampler/area.ts grows them for SLICE TO TRACK
+// KIT TO TRACK writes the hits where the slices sit in the cut (muster of POST /sampler/kit), on a loop as long as the cut, so the track plays at once.
+// A module shorter than the cut grows to the first length that holds it, in the same history step (only a module length; any other loop stays).
+// `takte` is the new module length in bars, null when it stays. Without a muster (an older server) the track is the empty one of + INSTRUMENT TRACK.
+export function kitSpurBefehle(p, b, muster) {
+  if (!muster || !Array.isArray(muster.noten) || !(muster.beats > 0)) return { befehle: [b], takte: null };
+  const l = p?.loop;
+  const laenge = l?.an && l.von_beat === 0 && MODUL_BEATS.includes(l.bis_beat) && l.bis_beat < muster.beats ? MODUL_BEATS.find((x) => x >= muster.beats) ?? null : null;
+  const spur = { ...b, loop_beats: muster.beats, noten: muster.noten };
+  return { befehle: [...(laenge === null ? [] : [{ befehl: 'loop_setzen', an: true, von_beat: 0, bis_beat: laenge }]), spur], takte: laenge === null ? null : laenge / 4 };
+}
 export const KIT_BANK = /^[a-z][a-z0-9_]{0,15}$/;
 export const KIT_NAME = /^[a-z0-9_-]{1,32}$/;
 export const KIT_BANK_LISTE = ['bd', 'sd', 'hh', 'cp', 'perc'];
@@ -177,14 +189,16 @@ export function bindeSchnittKit(ctx) {
     const kit = d.geschrieben.kit;
     const b = neueSpurBefehl(st.projekt, { name: kit, geraet: { art: 'intern', name: 'kit', kit } });
     if (!b) { sage(NEU_TEXT.voll, true); return; }
+    const { befehle, takte } = kitSpurBefehle(st.projekt, b, d.geschrieben.muster);
     d.laeuft = true; zeigeZustand();
-    const ok = await ctx.aendere(`Add track ${b.name}`, [b]);
+    const ok = await ctx.aendere(`Add track ${b.name}`, befehle);
     if (dlg !== d) return;
     d.laeuft = false;
     if (!ok) { sage($('meldung')?.textContent || KIT_TEXT.nichtGelegt, true); return; }   // the writer showed the refusal in the message line already
     const neu = st.projekt?.spuren?.find((x) => x.art === 'instrument' && x.name === b.name);
     schliesse();
     if (neu) ctx.waehle(neu.id);
+    if (takte !== null) ctx.melde(KIT_TEXT.laenger(takte));
   }
 
   ctx.beiSchnittWahl?.push((wahl) => {

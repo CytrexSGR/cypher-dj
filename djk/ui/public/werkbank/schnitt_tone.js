@@ -11,7 +11,7 @@
 import { tonName } from '../production/pianoroll.js';
 
 export const TON_TEXT = {
-  knopf: 'TO TONE', titel: 'Make the selected slice, or a run of neighbouring slices, a tone on a new NOTE track',
+  knopf: 'TO TONE', titel: 'Make the selected slice, or a run of neighbouring slices, a tone on a new NOTE track. Slices with gaps between them: use TO KIT',
   wurzel: 'ROOT', wurzelTitel: 'The note at which the slice plays at its original pitch',
   erkannt: 'Detected', keinTon: 'No clear pitch', zuversicht: 'confidence',
 };

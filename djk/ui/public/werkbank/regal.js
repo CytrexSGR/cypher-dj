@@ -16,9 +16,15 @@ export function regalEintraege(liste, vorlagen, slug) {
   return { module, vorlagen: v.map(({ id, name, text }) => ({ id, name, text })) };
 }
 
-const REGAL_HINT = 'click = open the module · changes are saved as you make them';
+const REGAL_HINT = 'click = open the module · every change is saved at once · SAVE AS keeps a copy under a new name';
 const LOOPS_HINT = 'SLICE TO TRACK cuts the loop into slices and puts them on a new track in their original order';
 const SCHEIBEN_WAHL = ['auto', 'hits', '4', '8', '16', '32', '64'];   // `auto` sends no `scheiben`: the server picks the grid; `hits` cuts at the hits (method anschlag, no count)
+export const MODUL_TEXT = {
+  kopie: 'SAVE AS', kopieTitel: 'Save a copy of this module under a new name (the module itself saves every change as you make it)',
+  weg: 'DELETE', wegTitel: 'Delete this module (it moves to the bin of the project folder)',
+  wegFrage: (name) => `Delete the module "${name}"? It moves to the bin of the project folder and leaves the shelf.`,
+  kopiert: (name) => `Saved as ${name}.`,
+};
 const CUTS_HINT = 'TO TRACK puts a cut on a new track in its original order · DELETE removes a cut that no track plays';
 const KEIN_MODUL = 'Open a module first.';
 const STUMM = 'This loop is silent: there is nothing to cut';
@@ -29,7 +35,7 @@ const el = (tag, klasse, text) => { const e = document.createElement(tag); if (k
 const karteBau = (klasse, name, zeile, marke) => {
   const k = el('button', `w-karte ${klasse}`);
   k.append(el('b', '', name), el('span', '', zeile));
-  if (marke) k.append(el('i', 'w-marke', marke));
+  if (marke) k.append(el('i', 'w-karte-marke', marke));   // not w-marke: that is the marker of the cut strip (sound.css draws a line under it)
   return k;
 };
 
@@ -83,7 +89,22 @@ export function bindeRegal(ctx) {
       if (m.fehler) k.setAttribute('title', m.text);
       // the click re-checks the live state: a card drawn before a change must not reopen the open module
       k.addEventListener('click', () => { if (!m.fehler && m.slug !== st.slug) aktion(() => ctx.oeffneModul(m.slug)); });
-      return k;
+      if (m.fehler) return k;
+      // SAVE AS and DELETE sit on the card (siblings of its button: a button inside a button is invalid); the open module has no DELETE
+      const huelle = el('div', 'w-karte-huelle');
+      const knoepfe = el('div', 'w-karte-knoepfe');
+      const kopie = el('button', 'w-karte-knopf', MODUL_TEXT.kopie); kopie.type = 'button'; kopie.setAttribute('data-w', 'modul-kopie');
+      kopie.setAttribute('title', MODUL_TEXT.kopieTitel);
+      kopie.addEventListener('click', () => frageKopie(m, knoepfe));
+      knoepfe.append(kopie);
+      if (!m.offen) {
+        const weg = el('button', 'w-karte-knopf', MODUL_TEXT.weg); weg.type = 'button'; weg.setAttribute('data-w', 'modul-weg');
+        weg.setAttribute('title', MODUL_TEXT.wegTitel);
+        weg.addEventListener('click', () => loescheModul(m));
+        knoepfe.append(weg);
+      }
+      huelle.append(k, knoepfe);
+      return huelle;
     });
     const vorlagen = e.vorlagen.map((v) => {
       const k = karteBau('vorlage', v.name, v.text ?? '', 'template');
@@ -113,6 +134,34 @@ export function bindeRegal(ctx) {
   }
   // open or create, then fetch the shelf again (the open mark and the dates move)
   async function aktion(tue) { await tue(); await lade(); }
+  // SAVE AS: the buttons of the card give way to a name field (the name proposed with " copy"); Enter copies (POST /proj/kopie), Escape gives up.
+  // The open module stays open; the copy is a module of its own on the shelf.
+  function frageKopie(m, knoepfe) {
+    const feld = el('input', 'w-karte-name');
+    feld.setAttribute('data-w', 'modul-kopie-name'); feld.setAttribute('maxlength', '80'); feld.setAttribute('aria-label', MODUL_TEXT.kopieTitel);
+    feld.value = `${m.name} copy`.slice(0, 80);
+    knoepfe.classList.add('name');
+    knoepfe.replaceChildren(feld);
+    feld.focus?.(); feld.select?.();
+    feld.addEventListener('click', (ev) => ev.stopPropagation());
+    feld.addEventListener('keydown', async (ev) => {
+      ev.stopPropagation();   // the library keys of the page stay out of the field
+      if (ev.key === 'Escape') { await lade(); return; }
+      if (ev.key !== 'Enter' || feld.value.trim() === '') return;
+      feld.disabled = true;
+      const r = await ctx.holeJson('/proj/kopie', { slug: m.slug, name: feld.value.trim() });
+      if (r.status === 200) ctx.melde(MODUL_TEXT.kopiert(r.j?.name ?? feld.value.trim()));
+      else ctx.melde(refusalText(r), true);
+      await lade();
+    });
+  }
+  // DELETE: after a confirm the module moves to the bin of the project folder (POST /proj/loeschen); the open module has no DELETE.
+  async function loescheModul(m) {
+    if (!ctx.frage(MODUL_TEXT.wegFrage(m.name))) return;
+    const r = await ctx.holeJson('/proj/loeschen', { slug: m.slug });
+    if (r.status !== 200) ctx.melde(refusalText(r), true);
+    await lade();
+  }
 
   function zeichne(liste, vorlagen) {
     stand = { liste, vorlagen };
@@ -179,7 +228,7 @@ export function bindeRegal(ctx) {
     const karte = (name, beats, quelle, stumm = false) => {
       const k = el('div', `w-karte schnitt${stumm ? ' stumm' : ''}`);
       k.append(el('b', '', name), el('span', '', typeof beats === 'number' ? `${beats} beats` : ''));
-      if (stumm) { k.append(el('i', 'w-marke', 'silent')); k.setAttribute('title', STUMM); }
+      if (stumm) { k.append(el('i', 'w-karte-marke', 'silent')); k.setAttribute('title', STUMM); }
       const b = el('button', 'w-schnitt-knopf', 'SLICE TO TRACK'); b.type = 'button'; b.setAttribute('data-w', 'slice-spur');
       if (stumm) b.setAttribute('data-stumm', '');
       b.addEventListener('click', () => schneide(quelle));

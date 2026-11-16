@@ -53,7 +53,7 @@ test('the shelf strip shows the label, the tabs, the hint, module cards with a d
   const t = regal().textContent;
   assert.ok(t.includes('SHELF'));
   assert.ok(t.includes('MODULES'));
-  assert.ok(t.includes('click = open the module · changes are saved as you make them'));
+  assert.ok(t.includes('click = open the module · every change is saved at once · SAVE AS keeps a copy under a new name'));
   assert.deepEqual(regal().querySelectorAll('.w-tab').map((x) => x.textContent), ['MODULES', 'LOOPS', 'CUTS']);
   assert.deepEqual(karten().map((k) => k.querySelector('b').textContent), ['Alpha', 'Beta', 'Techno 130 · Start', '+ empty module']);
   assert.ok(karte('Alpha').textContent.includes('2026-11-15'));
@@ -311,4 +311,29 @@ test('DELETE asks first; yes sends the id and reloads; a refusal shows where the
   const m = wurzel.querySelector('[data-w="meldung"]');
   assert.equal(m.textContent, 'The cut is in use by track "l4" of the open project "Alpha"; remove it there first');
   assert.ok(m.classList.contains('fehler'));
+});
+
+test('module cards: SAVE AS asks a name and posts /proj/kopie; DELETE asks and posts /proj/loeschen; the open module has no DELETE', async () => {
+  aufbau({ aktuell: { slug: 'alpha', projekt: modul('Alpha') } });
+  w.zeige(); await ruhe();
+  const knopf = (name, w) => [...regal().querySelectorAll('.w-karte-huelle')].find((h) => h.textContent.includes(name))?.querySelector(`[data-w="${w}"]`) ?? undefined;
+  assert.equal(knopf('Alpha', 'modul-weg'), undefined, 'the open module cannot be deleted');
+  assert.ok(knopf('Alpha', 'modul-kopie'), 'the open module can be saved as a copy');
+  attrappe.antworten['POST /proj/kopie'] = { j: { slug: 'alpha-v2', name: 'Alpha v2' } };
+  knopf('Alpha', 'modul-kopie').dispatch('click'); await ruhe();
+  const feld = regal().querySelector('[data-w="modul-kopie-name"]');
+  assert.equal(feld.value, 'Alpha copy');
+  feld.value = ' Alpha v2 '; feld.dispatch('keydown', { key: 'Enter' }); await ruhe();
+  assert.deepEqual(POSTS('/proj/kopie').map((a) => a.koerper), [{ slug: 'alpha', name: 'Alpha v2' }]);
+  attrappe.antworten['POST /proj/loeschen'] = { j: { slug: 'beta' } };
+  knopf('Beta', 'modul-weg').dispatch('click'); await ruhe();
+  assert.ok(fragen.at(-1).includes('Delete the module "Beta"'));
+  assert.deepEqual(POSTS('/proj/loeschen').map((a) => a.koerper), [{ slug: 'beta' }]);
+});
+
+test('module cards: DELETE sends nothing when the question is answered no', async () => {
+  aufbau({ frage: () => false });
+  w.zeige(); await ruhe();
+  [...regal().querySelectorAll('[data-w="modul-weg"]')][0].dispatch('click'); await ruhe();
+  assert.equal(POSTS('/proj/loeschen').length, 0);
 });

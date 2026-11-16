@@ -67,7 +67,7 @@
   "knob60": 0.69327,
   "knob61": 0.25,
   "knob62": 0.0,
-  "knob63": 0.93056
+  "knob63": 1.0
  },
  "beschreibung": {
   "art": "pluck",
@@ -92,7 +92,7 @@
   "synth-greif",
   "wavetable"
  ],
- "notiz": "Measured by render, not heard yet (2026-11-16).",
+ "notiz": "Measured by render (2026-11-16). Volume raised to the top after Andreas heard it too quiet in a mix (2026-11-16).",
  "angelegt": "2026-11-16T00:00:00.000Z",
  "geaendert": "2026-11-16T00:00:00.000Z"
 }

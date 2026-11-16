@@ -29,6 +29,7 @@ export const RASTER_TEXT = {
   werte: 'STEP VALUES',
   hinweisNoten: 'of the notes',
   hinweisReihe: 'of the selected row',
+  hinweisSchritte: 'of the hits in each step, on all rows',
   hinweisAlle: 'on all rows · a value holds for its step only, other steps play the knob · shift-click removes it',
   laneNeu: '+ lane ▾',
   laneNeuTitel: 'Add a step lane for a knob of this instrument',
@@ -38,7 +39,10 @@ const SICHT_SCHLUESSEL = 'djk-wb-sicht';
 const FELDER = { vel: 'VELOCITY', laenge: 'LENGTH', rueck: 'REVERSE', pitch: 'PITCH' };
 const TABS = { drum: ['vel'], note: ['vel', 'laenge'], slice: ['vel', 'laenge', 'rueck', 'pitch'] };   // the value lanes each grid kind offers
 const knopfNr = (feld) => { const m = /^k(\d+)$/.exec(feld ?? ''); return m ? Number(m[1]) : null; };   // the field of a knob lane is `k<nr>`
-const REIHEN_ART = (art) => art === 'drum' || art === 'slice';   // one row per sound or slice, the value lane follows the selected row
+const REIHEN_ART = (art) => art === 'drum' || art === 'slice';   // one row per sound or slice
+// The value lane follows the selected row in the drum grid only. In the slice grid a step mostly holds one slice on its own row, so VELOCITY, LENGTH
+// and REVERSE act on the hits of the step on all rows, as PITCH does (A, 2026-11-16: REVERSE on step 5 did nothing while row 1 was selected).
+const LANE_REIHE = (art) => art === 'drum';
 const EPS = 1e-9;
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const klemme = (x, lo, hi) => Math.min(hi, Math.max(lo, x));
@@ -175,9 +179,9 @@ ${a.f ? `<button data-w="r-zurueck" data-a="zurueck" class="w-rknopf" title="Pre
     if (feld === 'pitch') return pitchHtml(a);
     if (knopfNr(feld) !== null) return knopfHtml(a, knopfNr(feld));
     const tabs = feldTabs(a);
-    const kopf = `<div class="w-werte" data-w="r-werte"><span class="w-etikett">${RASTER_TEXT.werte}</span>${tabs}<span class="w-hinweis" data-w="r-hinweis">${REIHEN_ART(a.art) ? RASTER_TEXT.hinweisReihe : RASTER_TEXT.hinweisNoten}</span></div>`;
-    if (a.ton === null && REIHEN_ART(a.art)) return kopf;
-    const zs = wertZellen(a.clip, REIHEN_ART(a.art) ? a.ton : null, a.f, feld, a.art);
+    const kopf = `<div class="w-werte" data-w="r-werte"><span class="w-etikett">${RASTER_TEXT.werte}</span>${tabs}<span class="w-hinweis" data-w="r-hinweis">${LANE_REIHE(a.art) ? RASTER_TEXT.hinweisReihe : a.art === 'slice' ? RASTER_TEXT.hinweisSchritte : RASTER_TEXT.hinweisNoten}</span></div>`;
+    if (a.ton === null && LANE_REIHE(a.art)) return kopf;
+    const zs = wertZellen(a.clip, LANE_REIHE(a.art) ? a.ton : null, a.f, feld, a.art);
     const hoch = feld === 'vel' ? 127 : feld === 'laenge' ? 16 : 1;
     const zellenHtml2 = zs.map((z) => `<div data-w="wert" data-schritt="${z.schritt}" data-quelle="${z.quelle}" data-da="${z.da ? 1 : 0}" class="${klassen('w-val', betontNr(z.schritt % SCHRITTE_TAKT + 1) && 'betont', z.anders && 'anders', z.wiederholung && 'wiederholung')}">${z.da ? `<i style="height:${klemme(z.wert / hoch * 100, 4, 100).toFixed(1)}%"></i>` : ''}</div>`).join('');
     return kopf + lane(a, { html: FELDER[feld] }, zellenHtml2, 'w-ln-zaehlung');
@@ -278,14 +282,14 @@ ${a.f ? `<button data-w="r-zurueck" data-a="zurueck" class="w-rknopf" title="Pre
       return;
     }
     if (ts.feld === 'rueck') {
-      if (erst) sende(`${spur.name}: reverse`, rueckBefehle(clip, ton, quelle));
+      if (erst) sende(`${spur.name}: reverse`, rueckBefehle(clip, LANE_REIHE(art) ? ton : null, quelle));
       return;
     }
     const r = el.getBoundingClientRect();
     const anteil = Number.isFinite(e.clientY) ? klemme((r.bottom - e.clientY) / (r.height || 1), 0, 1) : 1;
     const feld = ts.feld;
     const wert = feld === 'vel' ? Math.round(1 + anteil * 126) : Math.max(1, Math.ceil(anteil * 16));
-    const zeilenTon = REIHEN_ART(art) ? ton : null;
+    const zeilenTon = LANE_REIHE(art) ? ton : null;
     sende(`${spur.name}: ${feld === 'vel' ? 'velocity' : 'length'}`, wertBefehle(clip, zeilenTon, quelle, feld, wert, art), `${spur.id}:${feld}:${zeilenTon}:${quelle}`);
   }
   const wertAus = (e) => e.target?.closest?.('[data-w="wert"]') ?? null;

@@ -6,7 +6,7 @@ import { installiere, attrappe } from './helpers/pages_mock.mjs';
 
 installiere();
 const { bindeWerkbank } = await import('../public/werkbank/werkbank.js');
-const { KIT_TEXT } = await import('../public/werkbank/schnitt_kit.js');
+const { KIT_TEXT, kitSpurBefehle } = await import('../public/werkbank/schnitt_kit.js');
 const { NEU_TEXT } = await import('../public/werkbank/tracks.js');
 
 const bk = (nr, graph) => ({ id: `s${nr}`, nr, name: `T${nr}`, farbe: '#2fd6c3', art: 'instrument', geraet: { art: 'intern', name: 'bk', graph, parameter: {} }, clips: [] });
@@ -362,4 +362,14 @@ test('a proposal that is on its way when the cut changes is dropped', async () =
   tor.frei(); await ruhe();
   assert.ok(dialog().hidden);
   assert.equal(zeilen().length, 0);
+});
+
+test('kitSpurBefehle: the kit track gets the hits on a loop as long as the cut, a shorter module grows, an older answer keeps the empty track', () => {
+  const b = { befehl: 'werkbank_spur_neu', name: 'k', geraet: { art: 'intern', name: 'kit', kit: 'k' }, loop_beats: 4 };
+  const muster = { beats: 16, noten: [{ beat: 2, laenge: 0.25, ton: 36, vel: 100 }] };
+  const kurz = { loop: { an: true, von_beat: 0, bis_beat: 4 } };
+  assert.deepEqual(kitSpurBefehle(kurz, b, muster), { befehle: [{ befehl: 'loop_setzen', an: true, von_beat: 0, bis_beat: 16 }, { ...b, loop_beats: 16, noten: muster.noten }], takte: 4 });
+  assert.deepEqual(kitSpurBefehle({ loop: { an: true, von_beat: 0, bis_beat: 32 } }, b, muster).befehle, [{ ...b, loop_beats: 16, noten: muster.noten }], 'a longer module stays');
+  assert.deepEqual(kitSpurBefehle({ loop: { an: true, von_beat: 2, bis_beat: 6 } }, b, muster).takte, null, 'a loop of the person stays');
+  assert.deepEqual(kitSpurBefehle(kurz, b, undefined), { befehle: [b], takte: null });
 });

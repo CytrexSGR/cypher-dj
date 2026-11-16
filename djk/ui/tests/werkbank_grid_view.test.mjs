@@ -298,7 +298,7 @@ test('the view offers VELOCITY, LENGTH, REVERSE, PITCH for a slice track and mar
   assert.ok(zelle(0, 0).classList.contains('an') && !zelle(0, 0).classList.contains('w-rueck'));
   assert.ok(zelle(1, 2).classList.contains('an') && zelle(1, 2).classList.contains('w-rueck'), 'the reversed hit is on row 2 with its mark');
   assert.ok(!zelle(1, 0).classList.contains('an'));
-  assert.ok($w('r-hinweis').textContent.includes('of the selected row'));
+  assert.ok($w('r-hinweis').textContent.includes('on all rows'), 'the value lanes of a slice grid are not one row');
   // the track list chip
   assert.equal(alle('spur-art')[0].textContent, 'SLICE');
 });
@@ -319,9 +319,9 @@ test('slice grid: a REVERSE click on a hit sends noten_aendern, on a step withou
   sliceAufbau([{ id: 'n1', beat: 0, laenge: 0.5, ton: 0, vel: 100 }, { id: 'n2', beat: 0.5, laenge: 0.5, ton: 64 + 1, vel: 100 }]);
   await zeigen();
   alle('r-feld').find((b) => b.dataset.feld === 'rueck').dispatch('click');
-  assert.ok($w('r-hinweis').textContent.includes('of the selected row'));
+  assert.ok($w('r-hinweis').textContent.includes('on all rows'));
   assert.equal(alle('wert').length, 16, 'one value cell per step of the bar');
-  wertZelle(0).dispatch('pointerdown', { clientY: 10 }); await ruhe();   // the selected row is slice 1
+  wertZelle(0).dispatch('pointerdown', { clientY: 10 }); await ruhe();   // slice 1 starts in step 1
   assert.equal(schreibt().length, 1);
   assert.equal(schreibt()[0].koerper.label, 'Slices: reverse');
   assert.deepEqual(schreibt()[0].koerper.befehle, [{ befehl: 'noten_aendern', clip_id: 'c_s', noten: [{ id: 'n1', ton: 64 }] }]);
@@ -331,17 +331,15 @@ test('slice grid: a REVERSE click on a hit sends noten_aendern, on a step withou
   wertZelle(5).dispatch('pointerdown', { clientY: 10 }); await ruhe();   // no hit in step 6
   assert.equal(schreibt().length, n);
   assert.ok($w('meldung').textContent.includes('no note starts'));
-  // row 2 holds the reversed hit: REVERSE goes back to forward
-  alle('zeilenname').find((z) => z.textContent === '2').dispatch('click');
-  assert.ok(wertZelle(2).classList.contains('anders'), 'a reversed hit is amber in the lane');
+  // step 3 holds the reversed hit of row 2: the lane shows it while row 1 stays selected, REVERSE goes back to forward
+  assert.ok(wertZelle(2).classList.contains('anders'), 'a reversed hit on another row is amber in the lane');
   wertZelle(2).dispatch('pointerdown', { clientY: 10 }); await ruhe();
   assert.deepEqual(schreibt().at(-1).koerper.befehle, [{ befehl: 'noten_aendern', clip_id: 'c_s', noten: [{ id: 'n2', ton: 1 }] }]);
 });
 
-test('slice grid: the value lanes VELOCITY and LENGTH follow the selected row and see reversed hits', async () => {
+test('slice grid: the value lanes VELOCITY and LENGTH act on all rows and see reversed hits', async () => {
   sliceAufbau([{ id: 'n2', beat: 0.5, laenge: 0.5, ton: 64 + 1, vel: 100 }]);
   await zeigen();
-  alle('zeilenname').find((z) => z.textContent === '2').dispatch('click');
   wertZelle(2).dispatch('pointerdown', { clientY: 10 }); await ruhe();
   assert.deepEqual(schreibt().at(-1).koerper.befehle, [{ befehl: 'noten_aendern', clip_id: 'c_s', noten: [{ id: 'n2', vel: 64 }] }]);
   alle('r-feld').find((b) => b.dataset.feld === 'laenge').dispatch('click');

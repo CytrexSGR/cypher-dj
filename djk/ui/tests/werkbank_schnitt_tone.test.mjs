@@ -63,7 +63,7 @@ test('TO TONE is active for one slice or neighbours only (review focus 2)', asyn
   aufbau(mitToenen());
   w.zeige(); await ruhe();
   assert.ok(knopf('TO TONE'), 'the button is drawn after FIT');
-  assert.equal(knopf('TO TONE').getAttribute('title'), 'Make the selected slice, or a run of neighbouring slices, a tone on a new NOTE track');
+  assert.equal(knopf('TO TONE').getAttribute('title'), 'Make the selected slice, or a run of neighbouring slices, a tone on a new NOTE track. Slices with gaps between them: use TO KIT');
   assert.equal(knopf('TO TONE').disabled, true, 'nothing selected');
   w.ctx.waehleScheiben([3]); assert.equal(knopf('TO TONE').disabled, false);
   w.ctx.waehleScheiben([3, 4, 5]); assert.equal(knopf('TO TONE').disabled, false);

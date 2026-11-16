@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { AUSBLENDE_FRAMES, BANK, BANK_LISTE, ERSTE_NOTE, KLANG_MAX_FRAMES, baender, bankVorschlag, freierKitName, kitVorschlag, legeKit, nummeriere } from '../sampler/kit.ts';
+import { AUSBLENDE_FRAMES, BANK, BANK_LISTE, ERSTE_NOTE, KLANG_MAX_FRAMES, baender, bankVorschlag, freierKitName, kitMuster, kitVorschlag, legeKit, nummeriere } from '../sampler/kit.ts';
 import { SchnittFehler } from '../sampler/schnitt.ts';
 
 const wurzeln = [];
@@ -241,4 +241,12 @@ test('the kit folder follows CYPHERDJ_KIT_ORDNER when no folder is passed', () =
     assert.ok(fs.existsSync(path.join(root, 'env-kits', 'envk', 'kit.json')));
     assert.equal(freierKitName('envk', { ordner: o.ordner, bk: o.bk }), 'envk-2');
   } finally { if (alt === undefined) delete process.env.CYPHERDJ_KIT_ORDNER; else process.env.CYPHERDJ_KIT_ORDNER = alt; }
+});
+
+test('kitMuster: the hits sit where the slices sit in the cut, one step long, sorted by beat', () => {
+  const raster = { methode: 'raster', beats: 16, frames: 1600, grenzen: [0, 400, 800, 1200, 1600] };
+  assert.deepEqual(kitMuster(raster, [{ scheibe: 2, note: 36 }, { scheibe: 0, note: 37 }]), { beats: 16,
+    noten: [{ beat: 0, laenge: 0.25, ton: 37, vel: 100 }, { beat: 8, laenge: 0.25, ton: 36, vel: 100 }] });
+  const treffer = { methode: 'anschlag', beats: 8, frames: 800, grenzen: [0, 110, 430, 800] };
+  assert.deepEqual(kitMuster(treffer, [{ scheibe: 1, note: 36 }]).noten, [{ beat: 1.1, laenge: 0.25, ton: 36, vel: 100 }], 'a hit cut keeps the beat of its bound');
 });
